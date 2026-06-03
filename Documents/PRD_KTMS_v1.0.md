@@ -1,0 +1,627 @@
+# PRD — K-MARIS Trade Management System (KTMS)
+**Product Requirements Document · v1.1 · 2026-06-03**
+
+---
+
+## 0. 제품명 추천
+
+| 후보명 | 약자 | 설명 |
+|---|---|---|
+| **K-MARIS Trade Management System** | **KTMS** | ✅ 추천. Trade의 견적→수주→배송 전 사이클을 강조 |
+| K-MARIS Trade Document System | KTDS | 문서 생성에 국한된 느낌 |
+| K-MARIS Order & Quote Platform | KOQP | 직관적이나 브랜드 아이덴티티 약함 |
+
+> **추천 이유:** "TDS(Trade Document System)"는 문서 생성 도구에 머문다는 인상을 주지만, 실제 업무는 RFQ 접수 → 견적 → 수주 → 배송 → AR 회수의 **사이클 전체**를 커버해야 합니다. "Trade Management System"은 동일한 이니셜(KTMS)로 확장성 있는 포지셔닝을 제공합니다.
+
+---
+
+## 1. Executive Summary
+
+K-MARIS Energy & Solutions는 선박 엔진 부품 및 기자재 수출 전문 무역회사입니다. 현재 업무는 이메일·엑셀·PDF를 개별 조합하는 방식으로 수행되어, 견적 추적 누락·문서 재작업·납기 follow-up 지연 등 운영 비효율이 발생합니다.
+
+**KTMS**는 RFQ 접수부터 AR 회수까지 7단계 업무 사이클을 단일 웹 플랫폼으로 통합하고, 고객사에 실시간 추적 포털을 제공하여 투명성을 높이는 SaaS형 무역 관리 시스템입니다.
+
+---
+
+## 2. 배경 및 문제 정의
+
+### 2.1 현행 업무 방식의 Pain Point
+
+| 단계 | 현행 방식 | Pain Point |
+|---|---|---|
+| RFQ 접수 | 이메일 수동 확인 | 누락·지연 발생, 히스토리 분산 |
+| Vendor RFQ | 이메일로 개별 발송 | 공급사 응답 추적 불가 |
+| 견적서 작성 | 엑셀 템플릿 수작업 | 마진 계산 오류, 버전 관리 없음 |
+| 견적 follow-up | 달력·메모 의존 | 고가 건 누락 리스크 |
+| 발주서 생성 | 별도 템플릿 작업 | 견적-발주 데이터 불일치 |
+| CI/PL/Tax Invoice | 매번 처음부터 작성 | 품목 오류, 시간 낭비 |
+| 배송 추적 | 고객 문의 후 수동 답변 | 고객 경험 저하, CS 부담 |
+
+### 2.2 비즈니스 목표
+
+- 견적 제출 리드타임 **50% 단축**
+- 수주 누락 건수 **0건** (follow-up 자동화)
+- 고객 CS 문의 **30% 감소** (셀프서비스 트래킹 포털)
+- 문서 생성 오류율 **95% 감소** (데이터 자동 연결)
+
+---
+
+## 3. 사용자 및 역할
+
+| 역할 | 설명 | 주요 권한 |
+|---|---|---|
+| **Sales Manager** | 견적 작성, 수주 관리 전담 | RFQ·견적·오더 전체 CRUD |
+| **Admin / Owner** | 회사 설정, 마진 승인, AR 관리 | 전체 + 설정 + 승인 |
+| **Viewer (내부)** | 발주 현황·배송 현황 열람 | Read-only |
+| **Customer (외부)** | 자사 RFQ·오더·배송 트래킹 | 본인 건만 열람 (토큰 기반) |
+| **Vendor (외부)** | RFQ 수신·견적 제출 | 할당된 RFQ 응답 전용 |
+
+---
+
+## 4. 핵심 기능 요구사항
+
+### 4.1 모듈 구조
+
+```
+KTMS
+├── 1. RFQ Management       — 고객 RFQ 접수 및 Vendor RFQ 발송
+├── 2. Quotation            — 우리 견적 작성·PDF 생성·이메일 발송
+├── 3. Quotation Follow-up  — 견적 리스트·Level 관리·알림
+├── 4. Order Management     — 수주 등록·발주서 생성·발송
+├── 5. Order Preparation    — CI/PL 생성·배송 준비·Tax Invoice
+├── 6. Invoice & AR         — SOA 관리·미수금 follow-up
+└── 7. Tracking Portal      — 고객사 셀프서비스 추적 대시보드
+```
+
+---
+
+### 4.2 모듈 1 — RFQ Management
+
+#### 고객 RFQ 접수
+- RFQ를 시스템에 등록 (수동 입력 또는 이메일 파싱)
+- 필수 필드: RFQ No., 고객사, 선박명/IMO, 품목 리스트(Part No.·수량·납기 희망)
+- 자동 상태: `수신완료` → 이후 단계별 상태 전환
+- 이메일 알림: 접수 즉시 담당자에게 Slack/Email 알림
+
+#### Vendor RFQ 생성 및 발송
+- 고객 RFQ에서 품목 리스트를 자동 가져와 Vendor RFQ 생성
+- 복수 Vendor에게 동시 발송 가능 (이메일 연동)
+- Vendor별 응답 상태 추적: `발송됨 / 회신 대기 / 회신 완료`
+- 문서 번호 체계: `KMS-VRFQ-YYYY-NNNN`
+
+---
+
+### 4.3 모듈 2 — Quotation
+
+#### Vendor 견적 등록 및 자동 연결
+- Vendor 견적(가격·납기·비고) 시스템 등록
+- 해당 RFQ와 자동 연결, 품목별 Vendor 가격 비교 표 생성
+- 복수 Vendor 응답 시 최저가·납기 기준 정렬
+
+#### 우리 견적 작성 (마진·DC 포함)
+- Vendor 원가 기반 마진율(%) 입력 → 판매가 자동 계산
+- DC(Discount) 항목 지원
+- 통화: USD / EUR / KRW / SGD / JPY (환율 수동 입력 또는 API)
+- Incoterms 선택: FCA / FOB / CIF / DAP 등
+- VAT Rate 설정 (국내 공급 10%, 수출 0%)
+
+#### 견적서(Quotation) PDF 생성
+- 문서 번호: `KMS-QTN-YYYY-NNNN`
+- 포함 내용: 회사 정보, 고객사, 선박/엔진, 품목 테이블, 합계, 결제조건
+- 서명란 포함 (Prepared by / Approved by / Authorized)
+- Proforma Invoice 버전 동시 생성 가능: `KMS-PI-YYYY-NNNN`
+
+#### 이메일 발송
+- 시스템 내 이메일 작성 및 PDF 첨부 발송 (Gmail API 또는 SMTP)
+- 발송 기록 히스토리 저장
+- 상태 자동 전환: `이메일 발송 완료`
+
+---
+
+### 4.4 모듈 3 — Quotation Follow-up
+
+#### 견적 리스트 및 Level 관리
+
+| Level | 기준 | 재연락 주기 |
+|---|---|---|
+| **A** | 금액 USD 50k+ 또는 고객 VIP | 매 3일 |
+| **B** | 금액 USD 10k~50k | 매 7일 |
+| **C** | 금액 USD 10k 미만 | 매 14일 |
+
+- 담당자가 Level 수동 조정 가능
+- 유효기간(Valid Until) 만료 D-3 자동 알림
+- 견적 상태: `발송완료 / 협상중 / 수주확정 / 실주 / 만료`
+- 필터: 고객사별·선박별·상태별·담당자별
+
+---
+
+### 4.5 모듈 4 — Order Management
+
+#### 고객 오더 등록
+- 수주 확정 시 해당 견적에서 자동 생성 (중복 입력 없음)
+- 고객 PO No. 기재
+- 문서 번호: `KMS-ORD-YYYY-NNNN`
+
+#### 발주서(Purchase Order) 생성 및 발송
+- 수주 품목에서 자동 생성 → Vendor 발주서 PDF
+- 문서 번호: `KMS-PO-YYYY-NNNN`
+- Vendor별 분할 발주 지원 (품목이 다수 Vendor에 분산된 경우)
+- 발송 후 상태: `발주완료 / 납기확인 대기 / 납기확인완료`
+
+---
+
+### 4.6 모듈 5 — Order Preparation
+
+#### 발주 현황 리스트 및 Follow-up
+- 발주일·예상 납기일·현재 상태 테이블 뷰
+- 예상 납기 D-7, D-3 알림
+- 상태: `발주완료 / 제조중 / 출고준비 / 출고완료 / 입고완료`
+
+#### Commercial Invoice (CI) 생성
+- 문서 번호: `KMS-CI-YYYY-NNNN`
+- 수주 오더에서 품목 자동 가져오기
+- HS Code, 원산지, Gross/Net Weight, Dimension 입력
+- PDF 생성 (A4 Landscape, K-MARIS 브랜딩)
+
+#### Packing List (PL) 생성
+- 문서 번호: `KMS-PL-YYYY-NNNN`
+- CI와 연동 (품목 자동 동기화)
+- Package 번호, 치수, 중량 입력
+- CI와 함께 묶음 PDF 생성 가능
+
+#### Tax Invoice Data Sheet 생성
+- CI/PL 연계 자동 생성
+- 홈택스 입력용 데이터 시트 (XLSX)
+- 공급유형 선택: 수출(영세율) / 국내 과세
+- 실제 전자세금계산서 발행은 홈택스 별도 진행
+
+#### Shipping Advice 생성
+- 문서 번호: `KMS-SA-YYYY-NNNN`
+- B/L or AWB No., ETD/ETA, 운송사 정보 입력
+- 고객사 이메일 자동 발송 연동
+
+---
+
+### 4.7 모듈 6 — Invoice & AR
+
+#### Missing 품목 재점검
+- CI/PL 발송 전 수주 품목 대비 누락 품목 자동 검증
+- 불일치 항목 하이라이트 표시
+
+#### SOA (Statement of Account) 관리
+- 고객사별 미수금 현황 대시보드
+- 인보이스 발행일·결제 기한·수금 현황
+- 결제 기한 D-7, D-3, 초과 시 자동 알림
+- 상태: `미수 / 일부수금 / 완납 / 연체`
+
+#### AR Follow-up
+- Level별 follow-up 주기 설정 (A/B/C)
+- 수금 기록 등록 (날짜·금액·수단)
+
+---
+
+### 4.8 모듈 7 — Tracking Portal (고객사 대시보드)
+
+> **통합 전략:** 트래킹 포털은 독립 앱이 아니라, 자사 홈페이지 **www.k-maris.com** 의 확장 서비스로 제공됩니다. 고객은 홈페이지에서 버튼 클릭 한 번으로 본인의 RFQ·오더 현황을 확인합니다.
+
+---
+
+#### 7-1. www.k-maris.com 연동 — 진입 버튼 배치
+
+고객이 자연스럽게 트래킹으로 유입될 수 있도록 홈페이지 내 3개 지점에 진입점을 배치합니다.
+
+**① 상단 네비게이션 바 (Global Nav)**
+
+```
+[About]  [Services]  [Supply]  [Contact]  |  [Send RFQ]  [Track ▾]
+                                                                    ↓
+                                                 ┌─────────────────────┐
+                                                 │  Track your RFQ     │
+                                                 │  Track your Order   │
+                                                 └─────────────────────┘
+```
+
+- 현재 네비게이션(About / Services / Supply / Contact) 우측 끝에 `Track` 드롭다운 추가
+- 드롭다운 항목: **"Track your RFQ"** / **"Track your Order"**
+- 스타일: `Send RFQ` 버튼과 동일 계열이지만 Outline 스타일로 구분 (채워진 버튼 vs 테두리 버튼)
+
+**② 히어로 섹션 (Homepage)**
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│  "Marine Professional-Led Solutions"                           │
+│  Integrated Marine Supply, Bunkering & Technical Services      │
+│                                                                │
+│  [Send RFQ]  [Our Services]  |  [Track RFQ]  [Track Order]    │
+│  ← 기존 Primary CTAs →          ← 신규 Secondary CTAs →        │
+└────────────────────────────────────────────────────────────────┘
+```
+
+- 기존 CTA(`Send RFQ`, `Our Services`) 옆에 Secondary 스타일로 추가
+- 텍스트: `Track your RFQ` / `Track your Order`
+- 기존 고객이 직관적으로 자신의 진행 상황을 확인할 수 있는 진입점 역할
+
+**③ Services 페이지 — "From RFQ to Delivery" 섹션**
+
+홈페이지 Services 페이지에 이미 존재하는 **"From RFQ to Delivery"** 워크플로우 다이어그램 하단에 연동 배너 추가:
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│  Already placed an order?                                    │
+│  Track your shipment status in real time.                    │
+│  [Track your RFQ →]          [Track your Order →]           │
+└──────────────────────────────────────────────────────────────┘
+```
+
+---
+
+#### 7-2. 트래킹 포털 접근 방식
+
+| 항목 | 내용 |
+|---|---|
+| **진입 URL** | `www.k-maris.com/track/rfq` / `www.k-maris.com/track/order` |
+| **인증 방식** | 토큰 기반 (로그인 불필요) — 이메일로 발송된 고유 링크 |
+| **토큰 형식** | `www.k-maris.com/track/rfq/{secure-token-32char}` |
+| **토큰 유효기간** | RFQ: 90일 / Order: 완료 후 180일 |
+| **브랜딩** | k-maris.com 동일 헤더·푸터 유지 (일관된 브랜드 경험) |
+
+토큰은 다음 시점에 이메일로 자동 발송됩니다:
+- RFQ 수신 확인 메일 → RFQ 트래킹 링크 포함
+- 견적서 발송 메일 → 동일 RFQ 트래킹 링크 포함
+- 수주 확인 메일 → Order 트래킹 링크로 업그레이드
+- SA(Shipping Advice) 발송 메일 → Order 트래킹 링크 포함
+
+---
+
+#### 7-3. RFQ 추적 타임라인
+
+```
+●──────────●──────────●──────────●──────────○
+수신완료    공급사       견적 중     이메일       완료
+           소싱중                  발송완료
+May 28     May 29     May 30     Jun 02      진행중
+```
+
+- 완료된 단계: 채워진 원(●), 진행 중: 애니메이션 점멸, 미도달: 빈 원(○)
+- 각 단계 클릭 시 상세 메모 (예: "MAN B&W 공급사 3개사 소싱 중") 표시
+- 담당자 이름·연락처 표시
+
+---
+
+#### 7-4. 오더 추적 타임라인
+
+```
+●──────────●──────────●──────────◑──────────○──────────○
+오더 수주   발주 완료   제조/준비중  출고완료    운송중     목적지
+                                                         하차완료
+Jun 03     Jun 04     Jun 05      Jun 10     진행중
+```
+
+- 선적 정보 카드: B/L No., 운송사, Port of Loading, Port of Discharge, ETD/ETA
+- 예상 도착일 하이라이트 표시
+
+---
+
+#### 7-5. 트래킹 포털 페이지 레이아웃
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  [K-MARIS Logo]  About  Services  Supply  Contact  Track ▾  │  ← k-maris.com 동일 헤더
+├─────────────────────────────────────────────────────────────┤
+│  ░░░░░ NAVY HERO BANNER ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  │
+│  Shipment Tracking  |  MV OCEAN STAR  |  KMS-ORD-2026-0001 │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  [타임라인 스텝퍼]                                            │
+│  ●──────●──────●──────◑──────○──────○                       │
+│                                                              │
+│  ┌──────────────────┐  ┌──────────────────────────────────┐ │
+│  │  Shipment Info   │  │  Documents                       │ │
+│  │  B/L: TBD        │  │  📄 Commercial Invoice  [Download]│ │
+│  │  Carrier: TBD    │  │  📦 Packing List        [Download]│ │
+│  │  ETD: Jun 10     │  │  📋 Shipping Advice     [Download]│ │
+│  │  ETA: Jun 15     │  └──────────────────────────────────┘ │
+│  └──────────────────┘                                        │
+│                                                              │
+│  [Need help? Contact us →  sales@k-maris.com]               │
+├─────────────────────────────────────────────────────────────┤
+│  [K-MARIS Footer]  Engineering Reliability. Supplying...   │  ← k-maris.com 동일 푸터
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+#### 7-6. 고객사 알림 이메일 트래킹 링크 형식
+
+```
+Subject: [K-MARIS] Your RFQ KMS-CRFQ-2026-0001 has been received
+
+Dear Mr. John Lee,
+
+We have received your RFQ for MV OCEAN STAR.
+Track the progress of your request here:
+
+  → Track your RFQ: https://www.k-maris.com/track/rfq/abc123xyz...
+
+Our team will revert with a quotation within 2 business days.
+
+Best regards,
+K-MARIS Energy & Solutions
+```
+
+---
+
+## 5. 데이터 모델 (핵심 엔티티)
+
+```
+Customer
+  └── RFQ (1:N)
+        ├── VendorRFQ (1:N)
+        │     └── VendorQuote (1:N)
+        └── Quotation (1:1)
+              └── Order (1:1)
+                    ├── PurchaseOrder (1:N, per vendor)
+                    ├── CommercialInvoice (1:1)
+                    │     ├── PackingList (1:1)
+                    │     └── TaxInvoiceData (1:1)
+                    ├── ShippingAdvice (1:1)
+                    └── ARRecord (1:N)
+
+Vendor (M:N with RFQ via VendorRFQ)
+Vessel (M:N with Customer via RFQ)
+Item (part_no, description, maker, origin — Master DB)
+```
+
+---
+
+## 6. 문서 번호 체계
+
+| 문서 | 약자 | 번호 형식 | 예시 |
+|---|---|---|---|
+| Customer RFQ | CRFQ | KMS-CRFQ-YYYY-NNNN | KMS-CRFQ-2026-0001 |
+| Vendor RFQ | VRFQ | KMS-VRFQ-YYYY-NNNN | KMS-VRFQ-2026-0001 |
+| Quotation | QTN | KMS-QTN-YYYY-NNNN | KMS-QTN-2026-0001 |
+| Proforma Invoice | PI | KMS-PI-YYYY-NNNN | KMS-PI-2026-0001 |
+| Order | ORD | KMS-ORD-YYYY-NNNN | KMS-ORD-2026-0001 |
+| Purchase Order | PO | KMS-PO-YYYY-NNNN | KMS-PO-2026-0001 |
+| Commercial Invoice | CI | KMS-CI-YYYY-NNNN | KMS-CI-2026-0001 |
+| Packing List | PL | KMS-PL-YYYY-NNNN | KMS-PL-2026-0001 |
+| Shipping Advice | SA | KMS-SA-YYYY-NNNN | KMS-SA-2026-0001 |
+| Tax Invoice Data | TAX | KMS-TAX-YYYY-NNNN | KMS-TAX-2026-0001 |
+
+---
+
+## 7. UI/UX 설계 방향
+
+> **설계 원칙:** KTMS는 두 개의 UI 레이어를 가집니다.
+> - **내부 관리 도구 (KTMS App):** K-MARIS 직원 전용, Navy/Blue 컬러 시스템
+> - **고객 대면 트래킹 포털:** www.k-maris.com 브랜드 완전 통일, 고객 신뢰감 최우선
+
+---
+
+### 7.1 디자인 시스템
+
+#### A. KTMS 내부 앱 — 기존 `kmaris_docs.py` 팔레트 계승
+
+| 토큰 | HEX | 용도 |
+|---|---|---|
+| `NAVY` | `#0B1D3A` | 헤더 배경, 사이드바, 테이블 헤더 |
+| `BLUE` | `#0055A8` | 주요 액션 버튼, 섹션 구분선, 링크 |
+| `LIGHT_BLUE` | `#EAF3FF` | 카드 배경, 선택된 행 하이라이트 |
+| `LIGHT_GRAY` | `#F4F6F8` | 폼 배경, 라벨 셀, 짝수 행 |
+| `MID_GRAY` | `#D8DEE6` | 테이블 보더, 구분선, 비활성 상태 |
+| `DARK_GRAY` | `#3A3F44` | 본문 텍스트, 부제목 |
+
+#### B. 트래킹 포털 — www.k-maris.com 브랜드 통일
+
+| 요소 | 홈페이지 참조 | 트래킹 포털 적용 |
+|---|---|---|
+| 헤더/네비게이션 | k-maris.com 상단 바 그대로 | 동일한 Nav 컴포넌트 공유 |
+| 로고 | `kmaris_logo_transparent.png` | 동일 로고 파일 사용 |
+| 푸터 | 네이비 배경 + 화이트 로고 + 태그라인 | 동일 Footer 컴포넌트 공유 |
+| Primary 버튼 | "Send RFQ" 스타일 (채워진 버튼) | 동일 스타일 유지 |
+| Secondary 버튼 | "Our Services" 스타일 (Outline) | Track 버튼에 적용 |
+| 히어로 배너 색상 | 네이비 다크 배경 (#0B1D3A 계열) | 트래킹 페이지 상단 배너에 적용 |
+| 태그라인 | "Engineering Reliability. Supplying Performance." | 푸터에 동일 표시 |
+
+**구현 방식:** 트래킹 포털은 k-maris.com의 헤더/푸터 컴포넌트를 import하거나, 동일 HTML/CSS를 복제하여 브랜드 일관성을 유지합니다. 고객이 트래킹 페이지를 방문할 때 "다른 서비스로 이동한" 느낌 없이 자연스러운 경험을 제공합니다.
+
+---
+
+### 7.2 KTMS 내부 앱 레이아웃
+
+```
+┌─────────────────────────────────────────────────────┐
+│  [⚓ K-MARIS KTMS]  [RFQ] [Quote] [Order]           │  ← Top Nav (NAVY #0B1D3A)
+│                     [Prep] [AR] [Tracking Settings] │
+├──────────┬──────────────────────────────────────────┤
+│          │  Dashboard                                │
+│  Side    │  ┌──────────┐ ┌──────────┐ ┌──────────┐ │
+│  Nav /   │  │ Open RFQ │ │ Active   │ │ AR O/S   │ │
+│  Filter  │  │    12    │ │ Orders 7 │ │  $42k    │ │
+│          │  └──────────┘ └──────────┘ └──────────┘ │
+│          │                                          │
+│          │  [Urgent Follow-up]  [Activity Feed]     │
+└──────────┴──────────────────────────────────────────┘
+```
+
+#### 주요 페이지 레이아웃
+
+**Dashboard**
+- KPI 카드 (상단 4개): Open RFQ / Active Orders / AR Outstanding / 이번 달 견적 발송
+- 긴급 Follow-up 리스트: Level A 만료 임박 견적, 연체 AR
+- 최근 활동 피드: 상태 변경 타임라인 (모든 모듈 통합)
+- 배송 현황 맵 (Phase 3): 운항 중 선박 위치
+
+**RFQ 리스트**
+```
+┌─────┬─────────────┬──────────────┬───────┬────────┬────────┬──────────┐
+│ No. │ Customer    │ Vessel       │ Items │  금액  │ Status │  Action  │
+├─────┼─────────────┼──────────────┼───────┼────────┼────────┼──────────┤
+│0001 │ ABC Ship... │ MV OCEAN...  │   3   │$12,4k  │ 견적중  │  [열기]  │
+└─────┴─────────────┴──────────────┴───────┴────────┴────────┴──────────┘
+```
+
+**견적 상세 — Stepper UI**
+```
+  [1 RFQ 정보] → [2 Vendor RFQ] → [3 Vendor 견적] → [4 우리 견적] → [5 발송]
+       ●               ●                ●                 ◑               ○
+    완료             완료             완료             작성중          대기
+```
+
+---
+
+### 7.3 트래킹 포털 — www.k-maris.com 통합 레이아웃
+
+트래킹 포털 페이지는 k-maris.com의 헤더와 푸터를 그대로 사용하고, 중간 콘텐츠 영역만 KTMS에서 동적으로 렌더링합니다.
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│  [K-MARIS Logo]  About  Services  Supply  Contact  [Track ▾]    │  ← k-maris.com 헤더
+├──────────────────────────────────────────────────────────────────┤
+│  ░░░░░░░░░░ NAVY HERO BANNER (#0B1D3A) ░░░░░░░░░░░░░░░░░░░░░░   │
+│  Shipment Tracking                                               │
+│  MV OCEAN STAR  ·  KMS-ORD-2026-0001  ·  ABC Ship Management   │
+├──────────────────────────────────────────────────────────────────┤
+│  (흰 배경 콘텐츠 영역)                                             │
+│                                                                  │
+│  Current Status: 출고완료 — Your shipment is on the way          │
+│                                                                  │
+│  ●──────────●──────────●──────────●──────────○──────────○       │
+│  RFQ수신    견적발송    수주완료    출고완료    운송중      도착     │
+│  Jun 03     Jun 05     Jun 10     Jun 15     진행중               │
+│                                                                  │
+│  ┌───────────────────────┐  ┌───────────────────────────────┐   │
+│  │  Shipment Details     │  │  Documents                    │   │
+│  │  B/L No.:    TBD      │  │  Commercial Invoice  [↓ PDF] │   │
+│  │  Carrier:    TBD      │  │  Packing List        [↓ PDF] │   │
+│  │  Loading:    Busan    │  │  Shipping Advice     [↓ PDF] │   │
+│  │  Discharge:  SGP      │  └───────────────────────────────┘   │
+│  │  ETD:        Jun 15   │                                       │
+│  │  ETA:        Jun 20   │                                       │
+│  └───────────────────────┘                                       │
+│                                                                  │
+│  Questions? Contact us: sales@k-maris.com                        │
+├──────────────────────────────────────────────────────────────────┤
+│  [K-MARIS Footer]  Engineering Reliability. Supplying...        │  ← k-maris.com 푸터
+└──────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 8. 이메일 연동
+
+| 시나리오 | 트리거 | 수신자 | 첨부 |
+|---|---|---|---|
+| Vendor RFQ 발송 | Vendor RFQ 생성 | Vendor 이메일 | Vendor RFQ PDF |
+| 견적서 발송 | 견적 발송 버튼 | 고객사 이메일 | Quotation PDF |
+| 발주서 발송 | PO 생성 | Vendor 이메일 | PO PDF |
+| 선적 안내 | SA 생성 | 고객사 이메일 | SA + CI + PL PDF |
+| Follow-up 리마인더 | 스케줄 | 담당자 이메일 | 견적/AR 요약 |
+| 결제 독촉 | AR 만료 D-7/-3/초과 | 담당자 + 고객사 | SOA |
+
+---
+
+## 9. 개발 Phase 로드맵
+
+### Phase 1 — MVP (현재 → 2개월)
+> 기존 Streamlit MVP를 확장하는 방향
+
+- [ ] 고객/공급사/선박/품목 **Master DB** (SQLite 또는 PostgreSQL)
+- [ ] RFQ 등록 및 상태 관리
+- [ ] 견적서 생성 (기존 `kmaris_docs.py` 재사용) + 마진 계산
+- [ ] CI / PL / SA / Tax Invoice Data Sheet 연동 생성
+- [ ] 기본 이메일 발송 (SMTP / Gmail API)
+- [ ] 로그인·역할 관리 (Admin / Sales)
+
+**기술 스택 (Phase 1):**
+```
+Backend  : Python + FastAPI (또는 Streamlit 확장)
+DB       : PostgreSQL (or SQLite for local)
+Auth     : JWT + bcrypt
+PDF      : 기존 ReportLab 코드 재사용
+Email    : smtplib / Gmail API
+Frontend : Streamlit (빠른 내부 도구) or React + TailwindCSS
+```
+
+### Phase 2 — 운영 강화 (2~4개월)
+- [ ] Follow-up Level 자동 관리 + 알림
+- [ ] AR / SOA 대시보드
+- [ ] **고객 트래킹 포털 — www.k-maris.com 연동**
+  - [ ] `www.k-maris.com` 네비게이션에 `Track ▾` 드롭다운 추가
+  - [ ] 히어로 섹션에 `Track your RFQ` / `Track your Order` Secondary CTA 버튼 추가
+  - [ ] Services 페이지 "From RFQ to Delivery" 섹션 하단 트래킹 배너 추가
+  - [ ] 토큰 기반 트래킹 페이지 구현 (`/track/rfq/{token}`, `/track/order/{token}`)
+  - [ ] 이메일 발송 시 트래킹 링크 자동 포함
+- [ ] Vendor Portal (Vendor가 견적 제출 가능)
+- [ ] Google Drive 문서 자동 저장
+- [ ] 발주 현황 대시보드
+
+### Phase 3 — 고도화 (4~6개월)
+- [ ] 품목 Master DB 가격 히스토리 (Vendor별 단가 이력)
+- [ ] 환율 자동 조회 API 연동
+- [ ] 배송 추적 API 연동 (Sea-rates / Marine Traffic)
+- [ ] 모바일 최적화 (고객 포털)
+- [ ] 전자세금계산서 API 연동 (KCB/이세로 등)
+- [ ] 보고서 자동 생성 (월별 수출실적, AR 현황)
+
+---
+
+## 10. 비기능 요구사항
+
+| 항목 | 요구사항 |
+|---|---|
+| **언어** | 한국어 UI + 영문 문서 출력 (이중 언어) |
+| **보안** | HTTPS, JWT 인증, 고객 포털 토큰 만료 설정 |
+| **접근성** | 주요 기능 모바일 반응형 (고객 포털 필수) |
+| **성능** | PDF 생성 3초 이내, 페이지 로드 2초 이내 |
+| **백업** | 일 1회 DB 백업, 문서 파일 Cloud Storage |
+| **문서 보존** | 발행된 PDF 최소 7년 보관 (무역 서류 법적 의무) |
+| **다중 사용자** | 최소 10 동시 접속 지원 |
+
+---
+
+## 11. 기존 코드 재사용 계획
+
+| 기존 파일 | 재사용 방식 |
+|---|---|
+| `kmaris_docs.py` | PDF/XLSX 생성 엔진 그대로 사용, 데이터 레이어만 DB로 교체 |
+| `config/company_profile.json` | DB의 `company_settings` 테이블로 이관 |
+| `samples/sample_data.json` | 스키마 참조, 개발 테스트 데이터로 활용 |
+| `app.py` (Streamlit) | Phase 1 내부 도구로 유지, 점진적으로 새 UI로 이전 |
+
+색상 팔레트 (`NAVY #0B1D3A`, `BLUE #0055A8` 등) 및 문서 레이아웃(헤더·섹션·서명란)은 웹 UI 전체에 통일 적용합니다.
+
+---
+
+## 12. 미결 사항 (To Be Decided)
+
+| 항목 | 옵션 A | 옵션 B | 결정 필요 |
+|---|---|---|---|
+| Frontend 프레임워크 | Streamlit 확장 (빠름) | React + FastAPI (확장성) | Phase 1 시작 전 |
+| 호스팅 환경 | AWS / GCP | 자체 서버 (온프레미스) | 예산 확정 후 |
+| 트래킹 포털 URL 방식 | `www.k-maris.com/track/...` (서브패스) | `track.k-maris.com/...` (서브도메인) | 홈페이지 기술 스택 확인 후 결정 |
+| 전자세금계산서 연동 | 홈택스 API | ERP 연동 (세무사) | Phase 3 전 |
+| 환율 API | 한국은행 API | 자체 수동 입력 | Phase 2 전 |
+
+---
+
+---
+
+## 13. www.k-maris.com 연동 체크리스트
+
+트래킹 포털 개발 시 홈페이지 담당자와 협의가 필요한 항목:
+
+| 항목 | 내용 | 담당 |
+|---|---|---|
+| 홈페이지 기술 스택 확인 | 어떤 CMS/프레임워크인지 (Webflow, WordPress, Next.js 등) | 웹 담당자 |
+| 헤더/푸터 컴포넌트 공유 방법 | iframe embed vs. 공유 컴포넌트 라이브러리 vs. 디자인 복제 | 개발팀 |
+| `/track/*` 경로 라우팅 | 서브패스 방식 시 홈페이지 서버에서 KTMS로 프록시 설정 필요 | 인프라 |
+| 서브도메인 방식 선택 시 | `track.k-maris.com` DNS 레코드 추가 | 도메인 관리자 |
+| 로고·버튼 에셋 동기화 | `kmaris_logo_transparent.png` 등 에셋 버전 통일 | 디자인 담당 |
+| Nav 버튼 문구 최종 확정 | "Track your RFQ" / "Track your Order" 한영 표기 결정 | 영업/마케팅 |
+
+---
+
+*K-MARIS Energy & Solutions Co., Ltd. — Engineering Reliability. Supplying Performance.*
+*KTMS PRD v1.1 · Updated 2026-06-03 · Tracking Portal + k-maris.com Integration Added*

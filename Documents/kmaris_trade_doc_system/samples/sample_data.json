@@ -1,0 +1,72 @@
+{
+  "doc_no": "KMS-QTN-2026-0001",
+  "date": "2026-05-05",
+  "valid_until": "2026-05-20",
+  "currency": "USD",
+  "vat_rate": 0.0,
+  "customer": {
+    "name": "ABC Ship Management Pte. Ltd.",
+    "address": "10 Anson Road, Singapore",
+    "contact": "Mr. John Lee",
+    "email": "purchase@example.com",
+    "tax_id": "SG-000000"
+  },
+  "vessel": {
+    "name": "MV OCEAN STAR",
+    "imo": "9876543",
+    "engine_type": "MAN B&W 6S50MC-C",
+    "hull_no": "HN-2026-001"
+  },
+  "items": [
+    {
+      "item_no": 1,
+      "part_no": "1234-5678-90",
+      "description": "Fuel Valve Complete",
+      "maker": "MAN Energy Solutions",
+      "origin": "Germany",
+      "qty": 2,
+      "unit": "PCS",
+      "unit_price": 1250.0,
+      "lead_time": "7-10 working days",
+      "remark": "Genuine / OEM supply"
+    },
+    {
+      "item_no": 2,
+      "part_no": "9876-5432-10",
+      "description": "Gasket Kit for Main Engine",
+      "maker": "K-MARIS Sourcing",
+      "origin": "Korea",
+      "qty": 4,
+      "unit": "SET",
+      "unit_price": 180.0,
+      "lead_time": "Ex-stock",
+      "remark": "Subject to prior sale"
+    }
+  ],
+  "terms": {
+    "incoterms": "FCA Busan, Korea",
+    "payment_terms": "100% T/T in advance unless otherwise agreed",
+    "delivery_place": "Busan, Republic of Korea",
+    "shipment_method": "Air courier / Sea freight upon customer's instruction",
+    "packing": "Standard export packing",
+    "warranty": "Manufacturer's standard warranty, if applicable",
+    "remarks": "Bank charges outside Korea shall be borne by Buyer. Offer subject to stock availability."
+  },
+  "shipping": {
+    "export_ref": "KMS-EXP-2026-0001",
+    "po_no": "PO-ABC-2026-001",
+    "port_loading": "Busan, Korea",
+    "port_discharge": "Singapore",
+    "carrier": "TBD",
+    "bl_awb_no": "TBD",
+    "eta": "TBD",
+    "etd": "TBD",
+    "shipping_marks": "K-MARIS / MV OCEAN STAR / PO-ABC-2026-001"
+  },
+  "tax_invoice": {
+    "issue_date": "2026-05-05",
+    "supply_type": "Export / zero-rated or domestic taxable - check before issuance",
+    "supplier_business_no": "000-00-00000",
+    "buyer_business_no": "000-00-00000"
+  }
+}

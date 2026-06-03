@@ -1,0 +1,274 @@
+from __future__ import annotations
+import enum
+import secrets
+from datetime import datetime
+from sqlalchemy import (
+    Boolean, Column, DateTime, Enum as SAEnum,
+    Float, ForeignKey, Integer, String, Text,
+)
+from sqlalchemy.types import JSON
+from db.engine import Base
+
+
+# ── Enumerations ─────────────────────────────────────────────────────────────
+
+class UserRole(str, enum.Enum):
+    ADMIN  = "admin"
+    SALES  = "sales"
+    VIEWER = "viewer"
+
+
+class RFQStatus(str, enum.Enum):
+    RECEIVED = "수신완료"
+    SOURCING = "공급사 소싱중"
+    QUOTING  = "견적 중"
+    SENT     = "이메일 발송 완료"
+    ORDERED  = "수주완료"
+    LOST     = "실주"
+
+
+class QuotationStatus(str, enum.Enum):
+    DRAFT       = "초안"
+    SENT        = "발송완료"
+    NEGOTIATING = "협상중"
+    WON         = "수주확정"
+    LOST        = "실주"
+    EXPIRED     = "만료"
+
+
+class FollowUpLevel(str, enum.Enum):
+    A = "A"
+    B = "B"
+    C = "C"
+
+
+class OrderStatus(str, enum.Enum):
+    RECEIVED  = "오더 수주"
+    PO_SENT   = "발주 완료"
+    PREPARING = "제조/준비중"
+    SHIPPED   = "출고완료"
+    IN_TRANSIT = "운송중"
+    DELIVERED = "목적지 하차 완료"
+
+
+class ARStatus(str, enum.Enum):
+    OUTSTANDING = "미수"
+    PARTIAL     = "일부수금"
+    PAID        = "완납"
+    OVERDUE     = "연체"
+
+
+# ── Master tables ─────────────────────────────────────────────────────────────
+
+class User(Base):
+    __tablename__ = "users"
+    id            = Column(Integer, primary_key=True)
+    username      = Column(String(64), unique=True, nullable=False)
+    email         = Column(String(128))
+    password_hash = Column(String(256), nullable=False)
+    role          = Column(SAEnum(UserRole), default=UserRole.SALES)
+    is_active     = Column(Boolean, default=True)
+    created_at    = Column(DateTime, default=datetime.utcnow)
+
+
+class Customer(Base):
+    __tablename__ = "customers"
+    id         = Column(Integer, primary_key=True)
+    name       = Column(String(200), nullable=False)
+    address    = Column(String(400))
+    contact    = Column(String(100))
+    email      = Column(String(200))
+    tax_id     = Column(String(100))
+    country    = Column(String(100))
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class Vendor(Base):
+    __tablename__ = "vendors"
+    id             = Column(Integer, primary_key=True)
+    name           = Column(String(200), nullable=False)
+    address        = Column(String(400))
+    contact        = Column(String(100))
+    email          = Column(String(200))
+    country        = Column(String(100))
+    specialization = Column(String(200))
+    created_at     = Column(DateTime, default=datetime.utcnow)
+
+
+class Vessel(Base):
+    __tablename__ = "vessels"
+    id          = Column(Integer, primary_key=True)
+    name        = Column(String(200), nullable=False)
+    imo         = Column(String(20))
+    engine_type = Column(String(200))
+    hull_no     = Column(String(100))
+    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=True)
+    created_at  = Column(DateTime, default=datetime.utcnow)
+
+
+class ItemMaster(Base):
+    __tablename__ = "item_master"
+    id          = Column(Integer, primary_key=True)
+    part_no     = Column(String(100), nullable=False)
+    description = Column(String(400))
+    maker       = Column(String(200))
+    origin      = Column(String(100))
+    unit        = Column(String(20), default="PCS")
+    hs_code     = Column(String(20))
+    std_price   = Column(Float, default=0.0)
+    created_at  = Column(DateTime, default=datetime.utcnow)
+
+
+class DocSequence(Base):
+    """Monotonically increasing sequence counter per doc_type per year."""
+    __tablename__ = "doc_sequences"
+    doc_type = Column(String(20), primary_key=True)
+    year     = Column(Integer, primary_key=True)
+    last_seq = Column(Integer, default=0)
+
+
+# ── Trade flow tables ─────────────────────────────────────────────────────────
+
+class RFQ(Base):
+    __tablename__ = "rfqs"
+    id               = Column(Integer, primary_key=True)
+    rfq_no           = Column(String(40), unique=True, nullable=False)
+    customer_id      = Column(Integer, ForeignKey("customers.id"))
+    vessel_id        = Column(Integer, ForeignKey("vessels.id"), nullable=True)
+    date             = Column(String(10))   # YYYY-MM-DD
+    status           = Column(SAEnum(RFQStatus), default=RFQStatus.RECEIVED)
+    follow_up_level  = Column(SAEnum(FollowUpLevel), default=FollowUpLevel.B)
+    items            = Column(JSON, default=list)
+    notes            = Column(Text)
+    tracking_token   = Column(String(64), unique=True, default=lambda: secrets.token_urlsafe(32))
+    created_by       = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at       = Column(DateTime, default=datetime.utcnow)
+
+
+class VendorRFQ(Base):
+    __tablename__ = "vendor_rfqs"
+    id         = Column(Integer, primary_key=True)
+    vrfq_no    = Column(String(40), unique=True, nullable=False)
+    rfq_id     = Column(Integer, ForeignKey("rfqs.id"))
+    vendor_id  = Column(Integer, ForeignKey("vendors.id"))
+    sent_date  = Column(String(10))
+    status     = Column(String(40), default="발송됨")
+    items      = Column(JSON, default=list)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class VendorQuote(Base):
+    __tablename__ = "vendor_quotes"
+    id            = Column(Integer, primary_key=True)
+    vendor_rfq_id = Column(Integer, ForeignKey("vendor_rfqs.id"))
+    received_date = Column(String(10))
+    items         = Column(JSON, default=list)
+    notes         = Column(Text)
+    created_at    = Column(DateTime, default=datetime.utcnow)
+
+
+class Quotation(Base):
+    __tablename__ = "quotations"
+    id              = Column(Integer, primary_key=True)
+    qtn_no          = Column(String(40), unique=True, nullable=False)
+    rfq_id          = Column(Integer, ForeignKey("rfqs.id"), nullable=True)
+    customer_id     = Column(Integer, ForeignKey("customers.id"))
+    vessel_id       = Column(Integer, ForeignKey("vessels.id"), nullable=True)
+    date            = Column(String(10))
+    valid_until     = Column(String(10))
+    currency        = Column(String(10), default="USD")
+    vat_rate        = Column(Float, default=0.0)
+    items           = Column(JSON, default=list)
+    terms           = Column(JSON, default=dict)
+    status          = Column(SAEnum(QuotationStatus), default=QuotationStatus.DRAFT)
+    follow_up_level = Column(SAEnum(FollowUpLevel), default=FollowUpLevel.B)
+    sent_date       = Column(String(10))
+    created_by      = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at      = Column(DateTime, default=datetime.utcnow)
+
+
+class Order(Base):
+    __tablename__ = "orders"
+    id             = Column(Integer, primary_key=True)
+    ord_no         = Column(String(40), unique=True, nullable=False)
+    quotation_id   = Column(Integer, ForeignKey("quotations.id"), nullable=True)
+    customer_id    = Column(Integer, ForeignKey("customers.id"))
+    vessel_id      = Column(Integer, ForeignKey("vessels.id"), nullable=True)
+    po_no          = Column(String(100))
+    date           = Column(String(10))
+    status         = Column(SAEnum(OrderStatus), default=OrderStatus.RECEIVED)
+    items          = Column(JSON, default=list)
+    tracking_token = Column(String(64), unique=True, default=lambda: secrets.token_urlsafe(32))
+    created_at     = Column(DateTime, default=datetime.utcnow)
+
+
+class PurchaseOrder(Base):
+    __tablename__ = "purchase_orders"
+    id         = Column(Integer, primary_key=True)
+    po_no      = Column(String(40), unique=True)
+    order_id   = Column(Integer, ForeignKey("orders.id"))
+    vendor_id  = Column(Integer, ForeignKey("vendors.id"))
+    date       = Column(String(10))
+    items      = Column(JSON, default=list)
+    status     = Column(String(40), default="발주완료")
+    sent_date  = Column(String(10))
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class CommercialInvoice(Base):
+    __tablename__ = "commercial_invoices"
+    id         = Column(Integer, primary_key=True)
+    ci_no      = Column(String(40), unique=True)
+    order_id   = Column(Integer, ForeignKey("orders.id"))
+    date       = Column(String(10))
+    currency   = Column(String(10), default="USD")
+    vat_rate   = Column(Float, default=0.0)
+    items      = Column(JSON, default=list)
+    shipping   = Column(JSON, default=dict)
+    terms      = Column(JSON, default=dict)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class PackingList(Base):
+    __tablename__ = "packing_lists"
+    id         = Column(Integer, primary_key=True)
+    pl_no      = Column(String(40), unique=True)
+    ci_id      = Column(Integer, ForeignKey("commercial_invoices.id"))
+    date       = Column(String(10))
+    items      = Column(JSON, default=list)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class ShippingAdvice(Base):
+    __tablename__ = "shipping_advices"
+    id         = Column(Integer, primary_key=True)
+    sa_no      = Column(String(40), unique=True)
+    order_id   = Column(Integer, ForeignKey("orders.id"))
+    date       = Column(String(10))
+    shipping   = Column(JSON, default=dict)
+    sent_date  = Column(String(10))
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class TaxInvoiceData(Base):
+    __tablename__ = "tax_invoice_data"
+    id         = Column(Integer, primary_key=True)
+    tax_no     = Column(String(40), unique=True)
+    ci_id      = Column(Integer, ForeignKey("commercial_invoices.id"))
+    date       = Column(String(10))
+    items      = Column(JSON, default=list)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class ARRecord(Base):
+    __tablename__ = "ar_records"
+    id             = Column(Integer, primary_key=True)
+    order_id       = Column(Integer, ForeignKey("orders.id"))
+    ci_no          = Column(String(40))
+    invoice_amount = Column(Float, default=0.0)
+    paid_amount    = Column(Float, default=0.0)
+    currency       = Column(String(10), default="USD")
+    due_date       = Column(String(10))
+    status         = Column(SAEnum(ARStatus), default=ARStatus.OUTSTANDING)
+    notes          = Column(Text)
+    created_at     = Column(DateTime, default=datetime.utcnow)
