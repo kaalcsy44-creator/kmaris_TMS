@@ -27,6 +27,7 @@ Thumbs.db
 
 # Streamlit
 .streamlit/secrets.toml
+ktms/.streamlit/secrets.toml
 
 # Logs
 *.log

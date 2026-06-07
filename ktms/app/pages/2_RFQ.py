@@ -81,29 +81,108 @@ with tab_list:
 # ══════════════════════════════════════════════════════════════════════════════
 with tab_new:
     st.subheader("신규 RFQ 등록")
+
+    # ── PDF 자동 입력 ────────────────────────────────────────────────────────
+    with st.expander("📄 PDF로 자동 입력 (AI OCR)", expanded=False):
+        pdf_file = st.file_uploader(
+            "RFQ PDF 파일 업로드", type=["pdf"], key="rfq_pdf_uploader",
+            help="PDF를 업로드하면 AI가 고객사·선박·품목 정보를 자동으로 인식합니다.",
+        )
+        if pdf_file:
+            if st.button("🔍 AI로 정보 추출", key="btn_rfq_ocr", type="secondary"):
+                with st.spinner("AI가 PDF를 분석하고 있습니다..."):
+                    try:
+                        from services.pdf_parser import extract_text_from_pdf, parse_rfq_fields
+                        raw_text = extract_text_from_pdf(pdf_file)
+                        if not raw_text:
+                            st.warning("PDF에서 텍스트를 추출할 수 없습니다. 스캔 이미지 PDF는 지원되지 않습니다.")
+                        else:
+                            cust_names = list(customer_options().keys())
+                            result = parse_rfq_fields(raw_text, cust_names)
+                            st.session_state["rfq_ocr"] = result
+                    except ImportError:
+                        st.error("pdfplumber 또는 anthropic 패키지가 설치되지 않았습니다. requirements.txt를 확인하세요.")
+                    except Exception as exc:
+                        st.error(f"추출 실패: {exc}")
+
+        ocr_data = st.session_state.get("rfq_ocr", {})
+        if ocr_data and not ocr_data.get("_error"):
+            st.success("추출 완료! 아래 폼에 자동으로 반영됩니다. 내용을 검토하고 수정 후 등록하세요.")
+            col_p1, col_p2 = st.columns(2)
+            col_p1.markdown(f"**선박:** {ocr_data.get('vessel_name') or '—'}")
+            col_p1.markdown(f"**날짜:** {ocr_data.get('rfq_date') or '—'}")
+            col_p2.markdown(f"**고객사 힌트:** {ocr_data.get('customer_hint') or '—'}")
+            if ocr_data.get("notes"):
+                st.caption(f"비고: {ocr_data['notes']}")
+            ocr_items_preview = ocr_data.get("items") or []
+            if ocr_items_preview:
+                st.markdown(f"**인식된 품목 ({len(ocr_items_preview)}건)**")
+                st.dataframe(pd.DataFrame(ocr_items_preview), use_container_width=True, hide_index=True)
+            if st.button("🗑️ OCR 데이터 초기화", key="btn_clear_ocr"):
+                st.session_state.pop("rfq_ocr", None)
+                st.rerun()
+
+    # ── 폼 기본값 계산 (OCR 결과 반영) ─────────────────────────────────────
+    ocr = st.session_state.get("rfq_ocr", {})
+
+    # Date default
+    _ocr_date = date.today()
+    if ocr.get("rfq_date"):
+        try:
+            from datetime import datetime as _dt
+            _ocr_date = _dt.strptime(ocr["rfq_date"], "%Y-%m-%d").date()
+        except ValueError:
+            pass
+
+    # Items default
+    _item_cols = ["part_no", "description", "maker", "qty", "unit", "lead_time_req", "remark"]
+    _ocr_items = ocr.get("items") or []
+    if _ocr_items:
+        _default_items = pd.DataFrame(_ocr_items).reindex(columns=_item_cols).fillna("")
+    else:
+        _default_items = pd.DataFrame(columns=_item_cols)
+
+    # ── 등록 폼 ──────────────────────────────────────────────────────────────
     with st.form("new_rfq_form"):
         c1, c2 = st.columns(2)
         with c1:
             cust_opts2 = customer_options()
             if cust_opts2:
-                cust_name = st.selectbox("고객사 *", list(cust_opts2.keys()))
+                cust_keys = list(cust_opts2.keys())
+                # OCR 힌트로 고객사 자동 선택 시도
+                _cust_hint = (ocr.get("customer_hint") or "").lower()
+                _cust_idx = 0
+                if _cust_hint:
+                    for i, k in enumerate(cust_keys):
+                        if _cust_hint in k.lower() or k.lower() in _cust_hint:
+                            _cust_idx = i
+                            break
+                cust_name = st.selectbox("고객사 *", cust_keys, index=_cust_idx)
                 cust_id = cust_opts2[cust_name]
             else:
                 st.warning("고객사를 먼저 등록하세요 (⚙️ 설정 탭).")
                 cust_id = None
                 cust_name = ""
-            rfq_date = st.date_input("RFQ 수신일", value=date.today())
+            rfq_date = st.date_input("RFQ 수신일", value=_ocr_date)
             follow_level = st.selectbox("Follow-up Level", [l.value for l in FollowUpLevel], index=1)
         with c2:
             vessel_opts = vessel_options(cust_id)
-            vessel_name = st.selectbox("선박 (선택)", ["— 없음 —"] + list(vessel_opts.keys()))
-            vessel_id = vessel_opts.get(vessel_name) if vessel_name != "— 없음 —" else None
-            notes = st.text_area("비고 / 고객 요청사항", height=96)
+            vessel_keys = ["— 없음 —"] + list(vessel_opts.keys())
+            # OCR 힌트로 선박 자동 선택 시도
+            _vessel_hint = (ocr.get("vessel_name") or "").lower()
+            _vessel_idx = 0
+            if _vessel_hint:
+                for i, k in enumerate(vessel_keys):
+                    if _vessel_hint in k.lower() or k.lower() in _vessel_hint:
+                        _vessel_idx = i
+                        break
+            vessel_sel = st.selectbox("선박 (선택)", vessel_keys, index=_vessel_idx)
+            vessel_id = vessel_opts.get(vessel_sel) if vessel_sel != "— 없음 —" else None
+            notes = st.text_area("비고 / 고객 요청사항", value=ocr.get("notes") or "", height=96)
 
         st.markdown("**품목 리스트**")
-        default_items = pd.DataFrame(columns=["part_no", "description", "maker", "qty", "unit", "lead_time_req", "remark"])
         items_df = st.data_editor(
-            default_items, num_rows="dynamic", use_container_width=True,
+            _default_items, num_rows="dynamic", use_container_width=True,
             column_config={
                 "qty": st.column_config.NumberColumn("qty", min_value=0, step=1),
             },
@@ -132,6 +211,7 @@ with tab_new:
             st.success(f"✅ RFQ 등록 완료: **{rfq_no}**")
             t_url = tracking_url("rfq", rfq.tracking_token)
             st.info(f"🔗 고객 트래킹 링크: {t_url}")
+            st.session_state.pop("rfq_ocr", None)
         finally:
             session.close()
 

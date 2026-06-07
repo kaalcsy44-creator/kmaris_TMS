@@ -12,7 +12,7 @@ if str(ROOT) not in sys.path:
 # Must happen before any db import so get_engine() sees the right DATABASE_URL.
 import streamlit as st
 
-_SECRET_KEYS = ["DATABASE_URL", "SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD", "SMTP_FROM"]
+_SECRET_KEYS = ["DATABASE_URL", "SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD", "SMTP_FROM", "ANTHROPIC_API_KEY"]
 for _k in _SECRET_KEYS:
     try:
         if _k in st.secrets and _k not in os.environ:
