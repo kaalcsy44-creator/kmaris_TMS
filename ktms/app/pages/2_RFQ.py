@@ -19,6 +19,7 @@ from app.utils.helpers import (
 from db.engine import get_session
 from db.models import RFQ, VendorRFQ, RFQStatus, FollowUpLevel, Customer, Vessel
 from services.email_svc import send_email
+from services.kmaris_docs import make_vendor_rfq_quote_xlsx
 
 
 def _build_vendor_rfq_email(rfq, cust, vessel, vendor, notes: str) -> str:
@@ -468,12 +469,23 @@ with tab_detail:
             for vname in sel_vendors:
                 vid = vendor_opts[vname]
                 v = get_vendor(vid)
+                xlsx_bytes = make_vendor_rfq_quote_xlsx(
+                    rfq_no=rfq.rfq_no,
+                    vessel_name=vessel.name if vessel else "—",
+                    customer_name=cust.name if cust else "—",
+                    enquiry_date=rfq.date or date.today().isoformat(),
+                    vendor_name=vname,
+                    items=rfq.items or [],
+                )
+                safe_vname = "".join(c for c in vname if c.isalnum() or c in "._- ")[:40]
                 previews.append({
                     "vendor_name": vname,
                     "vendor_id": vid,
                     "vendor_email": (v.email or "") if v else "",
                     "subject": f"[K-MARIS] Inquiry — {rfq.rfq_no} / {vessel.name if vessel else rfq.rfq_no}",
                     "body": _build_vendor_rfq_email(rfq, cust, vessel, v, vrfq_notes),
+                    "xlsx_bytes": xlsx_bytes,
+                    "xlsx_filename": f"{rfq.rfq_no}_VendorQuoteSheet_{safe_vname}.xlsx",
                 })
             st.session_state[_preview_key] = previews
             st.rerun()
@@ -493,9 +505,21 @@ with tab_detail:
                 to_email = st.text_input(
                     "수신자 이메일", value=prev["vendor_email"], key=f"vrfq_to_{rfq.id}_{i}"
                 )
-                subject = st.text_input(
+                subj_col, xlsx_col = st.columns([3, 1])
+                subject = subj_col.text_input(
                     "제목", value=prev["subject"], key=f"vrfq_subj_{rfq.id}_{i}"
                 )
+                if prev.get("xlsx_bytes"):
+                    xlsx_col.markdown("<br>", unsafe_allow_html=True)
+                    xlsx_col.download_button(
+                        label="📥 견적서 양식 (.xlsx)",
+                        data=prev["xlsx_bytes"],
+                        file_name=prev["xlsx_filename"],
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        key=f"vrfq_xlsx_{rfq.id}_{i}",
+                        use_container_width=True,
+                        help="공급사가 단가·납기 등을 기입해서 반환하는 Excel 양식입니다. 이메일 발송 시 자동 첨부됩니다.",
+                    )
                 body = st.text_area(
                     "본문 (직접 수정 가능)", value=prev["body"],
                     height=340, key=f"vrfq_body_{rfq.id}_{i}"
@@ -526,10 +550,14 @@ with tab_detail:
                     saved += 1
 
                     if e["to_email"]:
+                        attachments = None
+                        if e.get("xlsx_bytes"):
+                            attachments = [(e["xlsx_filename"], e["xlsx_bytes"])]
                         ok = send_email(
                             to=e["to_email"],
                             subject=e["subject"],
                             body=e["body"],
+                            attachments=attachments,
                         )
                         if ok:
                             sent_ok += 1
