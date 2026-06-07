@@ -111,13 +111,13 @@ if not current_user():
 
 # ── Logged in: build navigation (Home itself NOT included → removed from sidebar) ─
 pages = [
-    st.Page("pages/1_Dashboard.py", title="대시보드", icon="📊", default=True),
-    st.Page("pages/2_RFQ.py",       title="RFQ",     icon="📋"),
-    st.Page("pages/3_Quotation.py", title="견적",     icon="💼"),
-    st.Page("pages/4_Orders.py",    title="오더",     icon="📦"),
-    st.Page("pages/5_Documents.py", title="문서",     icon="📄"),
-    st.Page("pages/6_AR.py",        title="AR",       icon="💰"),
-    st.Page("pages/7_Settings.py",  title="설정",     icon="⚙️"),
+    st.Page("pages/1_Dashboard.py", title="Dashboard",  icon=":material/dashboard:",      default=True),
+    st.Page("pages/2_RFQ.py",       title="RFQ",        icon=":material/request_quote:"),
+    st.Page("pages/3_Quotation.py", title="Quotation",  icon=":material/receipt_long:"),
+    st.Page("pages/4_Orders.py",    title="Orders",     icon=":material/inventory_2:"),
+    st.Page("pages/5_Documents.py", title="Documents",  icon=":material/folder_open:"),
+    st.Page("pages/6_AR.py",        title="AR",         icon=":material/payments:"),
+    st.Page("pages/7_Settings.py",  title="Settings",   icon=":material/settings:"),
 ]
 pg = st.navigation(pages)
 
