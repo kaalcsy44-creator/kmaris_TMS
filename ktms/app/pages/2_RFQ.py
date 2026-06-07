@@ -19,7 +19,7 @@ from app.utils.helpers import (
 from db.engine import get_session
 from db.models import RFQ, VendorRFQ, RFQStatus, FollowUpLevel, Customer, Vessel
 from services.email_svc import send_email
-from services.kmaris_docs import make_vendor_rfq_quote_xlsx
+from services.vendor_xlsx import make_vendor_rfq_quote_xlsx
 
 
 def _build_vendor_rfq_email(rfq, cust, vessel, vendor, notes: str) -> str:
