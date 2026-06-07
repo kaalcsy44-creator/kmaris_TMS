@@ -158,7 +158,21 @@ section[data-testid="stSidebar"] nav {{
 .ktms-kpi-label {{font-size:0.85rem; color:#555; margin-top:2px;}}
 .ktms-section {{
     background:{NAVY}; color:white; padding:6px 14px;
-    border-radius:6px; font-weight:600; margin:12px 0 8px;
+    border-radius:0 0 6px 6px; font-weight:600;
+    margin:0 0 6px !important;
+    position:sticky !important;
+    top:0 !important;
+    z-index:200 !important;
+}}
+
+/* ── Sticky tab bar (sits just below .ktms-section ≈38px) ── */
+[data-baseweb="tab-list"] {{
+    position:sticky !important;
+    top:38px !important;
+    z-index:199 !important;
+    background:white !important;
+    border-bottom:1px solid #e8e8e8 !important;
+    padding-bottom:4px !important;
 }}
 .badge-A {{background:#dc3545; color:white; padding:2px 8px; border-radius:12px; font-size:0.78rem;}}
 .badge-B {{background:#fd7e14; color:white; padding:2px 8px; border-radius:12px; font-size:0.78rem;}}
