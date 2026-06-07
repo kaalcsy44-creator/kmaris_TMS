@@ -1,6 +1,6 @@
 """Simple DB-backed authentication for Streamlit."""
 from __future__ import annotations
-import sys, os
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
@@ -26,7 +26,8 @@ def login(username: str, password: str):
     try:
         user = session.query(User).filter_by(username=username, is_active=True).first()
         if user and verify_password(password, user.password_hash):
-            return {"id": user.id, "username": user.username, "role": user.role.value, "email": user.email or ""}
+            return {"id": user.id, "username": user.username,
+                    "role": user.role.value, "email": user.email or ""}
         return None
     finally:
         session.close()
@@ -41,16 +42,42 @@ def current_user():
     return st.session_state.get("user")
 
 
-def require_auth():
-    """Call at the top of every page. Stops rendering if not logged in."""
-    if not st.session_state.get("user"):
-        st.warning("로그인이 필요합니다. 홈 화면으로 이동하세요.")
-        st.stop()
-
-
 def is_admin() -> bool:
     u = current_user()
     return u is not None and u["role"] == UserRole.ADMIN.value
+
+
+@st.dialog("K-MARIS KTMS", width="small")
+def _login_dialog():
+    st.markdown(
+        """
+        <div style="text-align:center;padding:4px 0 20px;">
+            <span style="font-size:2.8rem;">⚓</span>
+            <h3 style="margin:6px 0 2px;color:#0B1D3A;">K-MARIS Trade Management System</h3>
+            <p style="color:#6c757d;font-size:0.85rem;margin:0;">
+                Engineering Reliability. Supplying Performance.
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    username = st.text_input("사용자명", placeholder="username", key="dlg_uname")
+    password = st.text_input("비밀번호", type="password", placeholder="password", key="dlg_pw")
+    if st.button("로그인", type="primary", use_container_width=True, key="dlg_btn"):
+        user = login(username, password)
+        if user:
+            st.session_state["user"] = user
+            st.rerun()
+        else:
+            st.error("사용자명 또는 비밀번호가 올바르지 않습니다.")
+    st.caption("최초 로그인: admin / admin1234 — 로그인 후 즉시 변경하세요.")
+
+
+def require_auth():
+    """Call at the top of every page. Shows login dialog and stops if not logged in."""
+    if not st.session_state.get("user"):
+        _login_dialog()
+        st.stop()
 
 
 def require_admin():
