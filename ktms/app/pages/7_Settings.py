@@ -14,7 +14,10 @@ from app.utils.helpers import inject_css, NAVY
 from db.engine import get_session
 from db.models import User, UserRole, Customer, Vendor, Vessel, ItemMaster
 
-st.set_page_config(page_title="설정 — KTMS", page_icon="⚙️", layout="wide")
+try:
+    st.set_page_config(page_title="설정 — KTMS", page_icon="⚙️", layout="wide")
+except Exception:
+    pass
 require_auth()
 inject_css()
 

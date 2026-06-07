@@ -19,7 +19,10 @@ from app.utils.helpers import (
 from db.engine import get_session
 from db.models import Order, PurchaseOrder, Quotation, OrderStatus, QuotationStatus
 
-st.set_page_config(page_title="오더 관리 — KTMS", page_icon="📦", layout="wide")
+try:
+    st.set_page_config(page_title="오더 관리 — KTMS", page_icon="📦", layout="wide")
+except Exception:
+    pass
 require_auth()
 inject_css()
 

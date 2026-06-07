@@ -15,7 +15,10 @@ from app.utils.helpers import inject_css, ar_list, get_order, get_customer, stat
 from db.engine import get_session
 from db.models import ARRecord, ARStatus
 
-st.set_page_config(page_title="AR 관리 — KTMS", page_icon="💰", layout="wide")
+try:
+    st.set_page_config(page_title="AR 관리 — KTMS", page_icon="💰", layout="wide")
+except Exception:
+    pass
 require_auth()
 inject_css()
 

@@ -10,7 +10,10 @@ import streamlit as st
 from app.utils.auth import require_auth
 from app.utils.helpers import inject_css, dashboard_stats, status_badge, NAVY, BLUE
 
-st.set_page_config(page_title="Dashboard — KTMS", page_icon="📊", layout="wide")
+try:
+    st.set_page_config(page_title="Dashboard — KTMS", page_icon="📊", layout="wide")
+except Exception:
+    pass
 require_auth()
 inject_css()
 

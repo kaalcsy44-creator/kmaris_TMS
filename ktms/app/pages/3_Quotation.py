@@ -23,7 +23,10 @@ from db.models import Quotation, RFQ, QuotationStatus, FollowUpLevel, RFQStatus
 from services.pdf_svc import build_payload, generate_pdf
 from services.email_svc import send_email, quotation_email_body
 
-st.set_page_config(page_title="견적 관리 — KTMS", page_icon="📄", layout="wide")
+try:
+    st.set_page_config(page_title="견적 관리 — KTMS", page_icon="📄", layout="wide")
+except Exception:
+    pass
 require_auth()
 inject_css()
 

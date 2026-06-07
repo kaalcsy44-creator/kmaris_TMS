@@ -1,4 +1,4 @@
-"""KTMS entry point — DB init, auth dialog, redirect to Dashboard."""
+"""KTMS entry point — DB init, auth dialog, navigation."""
 from __future__ import annotations
 import os
 import sys
@@ -54,19 +54,19 @@ try:
 except Exception:
     pass
 
-# ── Page config ───────────────────────────────────────────────────────────────
+# ── Page config (called ONCE here — page files skip this) ─────────────────────
 st.set_page_config(
     page_title="KTMS — K-MARIS Trade Management",
     page_icon="⚓",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 
 from app.utils.auth import current_user, logout, _login_dialog
 from app.utils.helpers import inject_css
 inject_css()
 
-# 다이얼로그 화면 중앙 정렬
+# ── Dialog centering CSS ──────────────────────────────────────────────────────
 st.markdown(
     """
     <style>
@@ -81,34 +81,54 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# ── Already logged in → go straight to Dashboard ─────────────────────────────
-if current_user():
-    st.switch_page("pages/1_Dashboard.py")
+# ── Not logged in: show backdrop + login dialog ───────────────────────────────
+if not current_user():
+    st.markdown(
+        """
+        <div style="
+            display:flex; flex-direction:column; align-items:center;
+            justify-content:center; min-height:60vh; text-align:center;
+        ">
+            <div style="
+                background:#0B1D3A; color:white;
+                padding:32px 56px; border-radius:14px;
+                display:inline-block; margin-bottom:20px;
+            ">
+                <div style="font-size:3rem;">⚓</div>
+                <h1 style="margin:10px 0 6px;font-size:2rem;font-weight:700;">
+                    K-MARIS Trade Management System
+                </h1>
+                <p style="margin:0;opacity:0.7;font-size:1rem;">
+                    Engineering Reliability. Supplying Performance.
+                </p>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    _login_dialog()
     st.stop()
 
-# ── Not logged in: show branding backdrop + login dialog ──────────────────────
-st.markdown(
-    """
-    <div style="
-        display:flex; flex-direction:column; align-items:center;
-        justify-content:center; min-height:60vh; text-align:center;
-    ">
-        <div style="
-            background:#0B1D3A; color:white;
-            padding:32px 56px; border-radius:14px;
-            display:inline-block; margin-bottom:20px;
-        ">
-            <div style="font-size:3rem;">⚓</div>
-            <h1 style="margin:10px 0 6px;font-size:2rem;font-weight:700;">
-                K-MARIS Trade Management System
-            </h1>
-            <p style="margin:0;opacity:0.7;font-size:1rem;">
-                Engineering Reliability. Supplying Performance.
-            </p>
-        </div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+# ── Logged in: build navigation (Home itself NOT included → removed from sidebar) ─
+pages = [
+    st.Page("pages/1_Dashboard.py", title="대시보드", icon="📊", default=True),
+    st.Page("pages/2_RFQ.py",       title="RFQ",     icon="📋"),
+    st.Page("pages/3_Quotation.py", title="견적",     icon="💼"),
+    st.Page("pages/4_Orders.py",    title="오더",     icon="📦"),
+    st.Page("pages/5_Documents.py", title="문서",     icon="📄"),
+    st.Page("pages/6_AR.py",        title="AR",       icon="💰"),
+    st.Page("pages/7_Settings.py",  title="설정",     icon="⚙️"),
+]
+pg = st.navigation(pages)
 
-_login_dialog()
+# ── Sidebar: user info + logout button (pushed to bottom via CSS) ──────────────
+with st.sidebar:
+    st.markdown('<div class="sidebar-spacer"></div>', unsafe_allow_html=True)
+    st.markdown("---")
+    u = current_user()
+    st.caption(f"👤 **{u['username']}**")
+    if st.button("🔓 로그아웃", use_container_width=True, key="sidebar_logout"):
+        logout()
+        st.rerun()
+
+pg.run()
