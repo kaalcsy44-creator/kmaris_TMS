@@ -62,10 +62,10 @@ section[data-testid="stSidebar"] nav {{
     margin-top: 72px !important;
 }}
 
-/* ── Main content: pad top to clear fixed header (toolbar38 + section36 + tabs52) ── */
+/* ── Main content: pad top to clear fixed header (toolbar60 + section36 + tabs52) ── */
 .main .block-container,
 [data-testid="stMainBlockContainer"] {{
-    padding-top: 130px !important;
+    padding-top: 155px !important;
 }}
 
 /* ── Sidebar colors ── */
@@ -160,7 +160,7 @@ section[data-testid="stSidebar"] nav {{
     background:{NAVY}; color:white; padding:6px 14px;
     font-weight:600;
     position:fixed !important;
-    top:38px !important;
+    top:60px !important;
     left:210px !important;
     right:0 !important;
     z-index:1000 !important;
@@ -168,10 +168,10 @@ section[data-testid="stSidebar"] nav {{
     border-radius:0 !important;
 }}
 
-/* ── Fixed tab bar (just below title: 38px toolbar + 36px section = 74px) ── */
+/* ── Fixed tab bar (just below title: 60px toolbar + 36px section = 96px) ── */
 [data-baseweb="tab-list"] {{
     position:fixed !important;
-    top:74px !important;
+    top:96px !important;
     left:210px !important;
     right:0 !important;
     z-index:999 !important;
