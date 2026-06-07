@@ -12,7 +12,7 @@ import pandas as pd
 import streamlit as st
 from app.utils.auth import require_auth
 from app.utils.helpers import (
-    inject_css, next_doc_no, tracking_url,
+    inject_css, hint, next_doc_no, tracking_url,
     order_list, get_order, get_customer, get_vessel, get_ci_for_order, NAVY,
 )
 from db.engine import get_session
@@ -32,7 +32,7 @@ st.markdown('<div class="ktms-section">🗂️ 문서 생성 (Documents)</div>',
 # ── Order selection ───────────────────────────────────────────────────────────
 orders = order_list()
 if not orders:
-    st.info("등록된 오더가 없습니다.")
+    hint("등록된 오더가 없습니다.")
     st.stop()
 
 order_opts = {o.ord_no: o.id for o in orders}

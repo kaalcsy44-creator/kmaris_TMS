@@ -12,7 +12,7 @@ import pandas as pd
 import streamlit as st
 from app.utils.auth import require_auth, current_user
 from app.utils.helpers import (
-    inject_css, next_doc_no, status_badge, tracking_url,
+    inject_css, hint, next_doc_no, status_badge, tracking_url,
     customer_options, vessel_options, rfq_list,
     quotation_list, get_quotation, get_rfq,
     get_customer, get_vessel, apply_margin, total_amount,
@@ -70,9 +70,9 @@ with tab_list:
         sel_rows = selected.selection.rows if hasattr(selected, "selection") else []
         if sel_rows:
             st.session_state["qtn_detail_id"] = int(df.iloc[sel_rows[0]]["ID"])
-            st.info("'🔍 견적 상세' 탭에서 확인하세요.")
+            hint("'🔍 견적 상세' 탭에서 확인하세요.")
     else:
-        st.info("작성된 견적이 없습니다.")
+        hint("작성된 견적이 없습니다.")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 2 — NEW QUOTATION
@@ -90,7 +90,7 @@ with tab_new:
                 st.session_state["load_rfq_id"] = rfq_opts[sel_rfq_no]
                 st.rerun()
         else:
-            st.info("등록된 RFQ가 없습니다.")
+            hint("등록된 RFQ가 없습니다.")
 
     # Pre-fill from RFQ if selected
     prefill_rfq = None
@@ -216,7 +216,7 @@ with tab_new:
 with tab_detail:
     qtn_id = st.session_state.get("qtn_detail_id")
     if not qtn_id:
-        st.info("견적 리스트에서 항목을 선택하거나 ID를 입력하세요.")
+        hint("견적 리스트에서 항목을 선택하거나 ID를 입력하세요.")
         qtn_id = st.number_input("견적 ID", min_value=1, step=1, value=1)
         if not st.button("불러오기", key="qtn_load"):
             st.stop()

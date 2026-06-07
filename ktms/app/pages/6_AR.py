@@ -11,7 +11,7 @@ if str(ROOT) not in sys.path:
 import pandas as pd
 import streamlit as st
 from app.utils.auth import require_auth
-from app.utils.helpers import inject_css, ar_list, get_order, get_customer, status_badge, NAVY
+from app.utils.helpers import inject_css, hint, ar_list, get_order, get_customer, status_badge, NAVY
 from db.engine import get_session
 from db.models import ARRecord, ARStatus
 
@@ -47,7 +47,7 @@ st.markdown("---")
 
 # ── SOA Table ─────────────────────────────────────────────────────────────────
 if not ar_records:
-    st.info("AR 레코드가 없습니다. 문서 탭에서 Tax Invoice를 생성하면 자동 등록됩니다.")
+    hint("AR 레코드가 없습니다. 문서 탭에서 Tax Invoice를 생성하면 자동 등록됩니다.")
     st.stop()
 
 rows = []
@@ -125,7 +125,7 @@ if sel:
             finally:
                 session.close()
 else:
-    st.info("테이블에서 레코드를 선택하면 수금 등록 폼이 표시됩니다.")
+    hint("테이블에서 레코드를 선택하면 수금 등록 폼이 표시됩니다.")
 
 # ── Manual AR entry ────────────────────────────────────────────────────────────
 st.markdown("---")

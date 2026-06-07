@@ -188,6 +188,12 @@ section[data-testid="stSidebar"] nav {{
 .badge-A {{background:#dc3545; color:white; padding:2px 8px; border-radius:12px; font-size:0.78rem;}}
 .badge-B {{background:#fd7e14; color:white; padding:2px 8px; border-radius:12px; font-size:0.78rem;}}
 .badge-C {{background:#6c757d; color:white; padding:2px 8px; border-radius:12px; font-size:0.78rem;}}
+
+/* ── Tab panel: remove top separator line ── */
+[data-baseweb="tab-panel"] {{
+    border-top: none !important;
+    padding-top: 0 !important;
+}}
 </style>
 """
 
@@ -196,6 +202,14 @@ TRACKING_BASE_URL = "https://www.k-maris.com/track"
 
 def inject_css():
     st.markdown(KTMS_CSS, unsafe_allow_html=True)
+
+
+def hint(text: str) -> None:
+    st.markdown(
+        f'<p style="color:#999;font-size:0.82rem;margin:2px 0 10px 0;'
+        f'padding-left:10px;border-left:2px solid #ccc;">ℹ {text}</p>',
+        unsafe_allow_html=True,
+    )
 
 
 def tracking_url(kind: str, token: str) -> str:

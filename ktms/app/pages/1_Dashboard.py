@@ -8,7 +8,7 @@ if str(ROOT) not in sys.path:
 
 import streamlit as st
 from app.utils.auth import require_auth
-from app.utils.helpers import inject_css, dashboard_stats, status_badge, NAVY, BLUE
+from app.utils.helpers import inject_css, hint, dashboard_stats, status_badge, NAVY, BLUE
 
 try:
     st.set_page_config(page_title="Dashboard — KTMS", page_icon="📊", layout="wide")
@@ -105,4 +105,4 @@ if rfqs:
     df = pd.DataFrame(rows)
     st.dataframe(df, use_container_width=True, hide_index=True)
 else:
-    st.info("등록된 RFQ가 없습니다.")
+    hint("등록된 RFQ가 없습니다.")

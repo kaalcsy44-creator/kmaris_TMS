@@ -12,7 +12,7 @@ import pandas as pd
 import streamlit as st
 from app.utils.auth import require_auth, current_user
 from app.utils.helpers import (
-    inject_css, next_doc_no, status_badge, tracking_url,
+    inject_css, hint, next_doc_no, status_badge, tracking_url,
     customer_options, vessel_options, vendor_options,
     rfq_list, get_rfq, get_customer, get_vessel, get_vendor, NAVY, BLUE,
 )
@@ -124,9 +124,9 @@ with tab_list:
         if sel_rows:
             sel_id = df.iloc[sel_rows[0]]["ID"]
             st.session_state["rfq_detail_id"] = int(sel_id)
-            st.info(f"RFQ ID {sel_id} 선택됨 — '🔍 RFQ 상세' 탭에서 확인하세요.")
+            hint(f"RFQ ID {sel_id} 선택됨 — '🔍 RFQ 상세' 탭에서 확인하세요.")
     else:
-        st.info("등록된 RFQ가 없습니다.")
+        hint("등록된 RFQ가 없습니다.")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 2 — NEW RFQ
@@ -287,7 +287,7 @@ with tab_new:
                 cust_name = st.selectbox("고객사 *", cust_keys, index=_cust_idx)
                 cust_id = cust_opts2[cust_name]
             else:
-                st.info("위 '신규 고객사 빠른 등록'에서 먼저 등록하세요.")
+                hint("위 '신규 고객사 빠른 등록'에서 먼저 등록하세요.")
                 cust_id = None
             rfq_date = st.date_input("RFQ 수신일", value=_ocr_date)
             follow_level = st.selectbox("Follow-up Level", [l.value for l in FollowUpLevel], index=1)
@@ -346,7 +346,7 @@ with tab_new:
 with tab_detail:
     rfq_id = st.session_state.get("rfq_detail_id")
     if not rfq_id:
-        st.info("RFQ 리스트에서 항목을 선택하거나 직접 ID를 입력하세요.")
+        hint("RFQ 리스트에서 항목을 선택하거나 직접 ID를 입력하세요.")
         rfq_id = st.number_input("RFQ ID", min_value=1, step=1, value=1)
         if not st.button("불러오기"):
             st.stop()
@@ -438,7 +438,7 @@ with tab_detail:
     if rfq.items:
         st.dataframe(pd.DataFrame(rfq.items), use_container_width=True, hide_index=True)
     else:
-        st.info("품목 없음")
+        hint("품목 없음")
 
     # ── Vendor RFQ 발송 ──────────────────────────────────────────────────────
     st.markdown("---")

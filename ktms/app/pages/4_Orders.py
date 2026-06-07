@@ -12,7 +12,7 @@ import pandas as pd
 import streamlit as st
 from app.utils.auth import require_auth
 from app.utils.helpers import (
-    inject_css, next_doc_no, status_badge, tracking_url,
+    inject_css, hint, next_doc_no, status_badge, tracking_url,
     quotation_list, get_quotation, get_customer, get_vessel, get_vendor,
     vendor_options, order_list, get_order, NAVY,
 )
@@ -61,16 +61,16 @@ with tab_list:
         sel = selected.selection.rows if hasattr(selected, "selection") else []
         if sel:
             st.session_state["ord_detail_id"] = int(df.iloc[sel[0]]["ID"])
-            st.info("'🔍 오더 상세' 탭에서 확인하세요.")
+            hint("'🔍 오더 상세' 탭에서 확인하세요.")
     else:
-        st.info("등록된 오더가 없습니다.")
+        hint("등록된 오더가 없습니다.")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 2 — NEW ORDER
 # ══════════════════════════════════════════════════════════════════════════════
 with tab_new:
     st.subheader("신규 오더 등록")
-    st.info("수주 확정된 견적에서 자동 생성하거나, 독립적으로 등록할 수 있습니다.")
+    hint("수주 확정된 견적에서 자동 생성하거나, 독립적으로 등록할 수 있습니다.")
 
     with st.expander("견적서에서 불러오기", expanded=True):
         won_quotes = [q for q in quotation_list() if q.status == QuotationStatus.WON or True]
@@ -81,7 +81,7 @@ with tab_new:
                 st.session_state["load_qtn_id"] = qtn_opts[sel_qtn]
                 st.rerun()
         else:
-            st.info("견적이 없습니다.")
+            hint("견적이 없습니다.")
 
     prefill_qtn = None
     if "load_qtn_id" in st.session_state:
@@ -151,7 +151,7 @@ with tab_new:
 with tab_detail:
     ord_id = st.session_state.get("ord_detail_id")
     if not ord_id:
-        st.info("오더 리스트에서 선택하거나 ID를 입력하세요.")
+        hint("오더 리스트에서 선택하거나 ID를 입력하세요.")
         ord_id = st.number_input("오더 ID", min_value=1, step=1, value=1)
         if not st.button("불러오기", key="ord_load"):
             st.stop()
