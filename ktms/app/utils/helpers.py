@@ -39,6 +39,33 @@ section[data-testid="stSidebar"] {{
 [data-testid="stSidebar"] .stSelectbox label, [data-testid="stSidebar"] p {{color: #E8EDF5;}}
 [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {{color: white;}}
 
+/* ── Sidebar bottom: fixed user+logout area ── */
+[data-testid="stSidebarUserContent"] {{
+    position: fixed !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    width: 210px !important;
+    background-color: {NAVY} !important;
+    padding: 10px 16px 16px !important;
+    border-top: 1px solid rgba(255,255,255,0.12) !important;
+    z-index: 100 !important;
+}}
+[data-testid="stSidebarUserContent"] .stButton > button {{
+    background-color: rgba(255,255,255,0.08) !important;
+    color: #D0DCF0 !important;
+    border: 1px solid rgba(255,255,255,0.22) !important;
+    font-size: 0.78rem !important;
+    padding: 3px 8px !important;
+    height: 30px !important;
+    min-height: 30px !important;
+    border-radius: 6px !important;
+    width: 100% !important;
+}}
+[data-testid="stSidebarUserContent"] .stButton > button:hover {{
+    background-color: rgba(255,255,255,0.18) !important;
+    border-color: rgba(255,255,255,0.4) !important;
+}}
+
 .ktms-kpi {{
     background:{LIGHT_BLUE}; border-left:4px solid {BLUE};
     border-radius:8px; padding:16px 20px; margin-bottom:8px;
