@@ -24,6 +24,30 @@ NAVY = "#0B1D3A"
 BLUE = "#0055A8"
 LIGHT_BLUE = "#EAF3FF"
 
+# ── White SVG nav icons (Feather-style, URL-encoded) ─────────────────────────
+_S = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E"
+_E = "%3C/svg%3E"
+_ICONS = [
+    # Dashboard — 2×2 grid
+    _S+"%3Crect x='3' y='3' width='7' height='7' rx='1'/%3E%3Crect x='14' y='3' width='7' height='7' rx='1'/%3E%3Crect x='14' y='14' width='7' height='7' rx='1'/%3E%3Crect x='3' y='14' width='7' height='7' rx='1'/%3E"+_E,
+    # RFQ — file-text
+    _S+"%3Cpath d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/%3E%3Cpolyline points='14 2 14 8 20 8'/%3E%3Cline x1='16' y1='13' x2='8' y2='13'/%3E%3Cline x1='16' y1='17' x2='8' y2='17'/%3E"+_E,
+    # Quotation — clipboard
+    _S+"%3Cpath d='M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2'/%3E%3Crect x='9' y='3' width='6' height='4' rx='2'/%3E%3Cline x1='9' y1='12' x2='15' y2='12'/%3E%3Cline x1='9' y1='16' x2='13' y2='16'/%3E"+_E,
+    # Orders — package box
+    _S+"%3Cpath d='M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z'/%3E%3Cpolyline points='3.27 6.96 12 12.01 20.73 6.96'/%3E%3Cline x1='12' y1='22.08' x2='12' y2='12'/%3E"+_E,
+    # Documents — folder
+    _S+"%3Cpath d='M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z'/%3E"+_E,
+    # AR — credit card
+    _S+"%3Crect x='1' y='4' width='22' height='16' rx='2' ry='2'/%3E%3Cline x1='1' y1='10' x2='23' y2='10'/%3E"+_E,
+    # Settings — sliders
+    _S+"%3Cline x1='4' y1='21' x2='4' y2='14'/%3E%3Cline x1='4' y1='10' x2='4' y2='3'/%3E%3Cline x1='12' y1='21' x2='12' y2='12'/%3E%3Cline x1='12' y1='8' x2='12' y2='3'/%3E%3Cline x1='20' y1='21' x2='20' y2='16'/%3E%3Cline x1='20' y1='12' x2='20' y2='3'/%3E%3Cline x1='1' y1='14' x2='7' y2='14'/%3E%3Cline x1='9' y1='8' x2='15' y2='8'/%3E%3Cline x1='17' y1='16' x2='23' y2='16'/%3E"+_E,
+]
+_NAV_ICON_CSS = "\n".join(
+    f"[data-testid=\"stSidebar\"] nav li:nth-child({i}) a::before {{ background-image: url(\"{u}\") !important; }}"
+    for i, u in enumerate(_ICONS, 1)
+)
+
 KTMS_CSS = f"""
 <style>
 /* ── Sidebar width (≈half of 344px default) ── */
@@ -45,32 +69,34 @@ section[data-testid="stSidebar"] {{
     color: #C4CFDE !important;
     opacity: 1 !important;
 }}
-/* ── Nav icon: grayscale + brightness → monochrome visible icon ──
-   :first-child = icon span; img/svg as fallback                  */
-[data-testid="stSidebar"] nav a > *:first-child,
-[data-testid="stSidebar"] nav a img,
-[data-testid="stSidebar"] nav a svg {{
-    filter: grayscale(1) brightness(4) !important;
-}}
-/* ── Selected ── */
 [data-testid="stSidebar"] nav a[aria-current="page"],
-[data-testid="stSidebar"] nav a[aria-current="page"] *,
-[data-testid="stSidebar"] nav a[aria-selected="true"],
-[data-testid="stSidebar"] nav a[aria-selected="true"] * {{
+[data-testid="stSidebar"] nav a[aria-current="page"] * {{
     color: #FFFFFF !important;
 }}
-[data-testid="stSidebar"] nav a[aria-current="page"] > *:first-child,
-[data-testid="stSidebar"] nav a[aria-current="page"] img,
-[data-testid="stSidebar"] nav a[aria-current="page"] svg,
-[data-testid="stSidebar"] nav a[aria-selected="true"] > *:first-child {{
-    filter: grayscale(1) brightness(10) !important;
+
+/* ── Nav icons via ::before + SVG data URI ── */
+[data-testid="stSidebar"] nav li a {{
+    display: flex !important;
+    align-items: center !important;
 }}
-/* ── Hover ── */
-[data-testid="stSidebar"] nav a:hover > *:first-child,
-[data-testid="stSidebar"] nav a:hover img,
-[data-testid="stSidebar"] nav a:hover svg {{
-    filter: grayscale(1) brightness(10) !important;
+[data-testid="stSidebar"] nav li a::before {{
+    content: '' !important;
+    display: inline-block !important;
+    width: 14px !important;
+    height: 14px !important;
+    min-width: 14px !important;
+    background-size: contain !important;
+    background-repeat: no-repeat !important;
+    background-position: center !important;
+    margin-right: 10px !important;
+    opacity: 0.55 !important;
+    flex-shrink: 0 !important;
 }}
+[data-testid="stSidebar"] nav li a[aria-current="page"]::before,
+[data-testid="stSidebar"] nav li a:hover::before {{
+    opacity: 1 !important;
+}}
+{_NAV_ICON_CSS}
 
 /* ── Sidebar bottom: fixed user+logout area ── */
 [data-testid="stSidebarUserContent"] {{
