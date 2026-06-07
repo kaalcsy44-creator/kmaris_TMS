@@ -671,7 +671,7 @@ with tab_detail:
                 vrows.append({
                     "VRFQ No.": vr.vrfq_no,
                     "Vendor": v.name if v else "—",
-                    "수신자 이메일": vr.sent_to_email or (v.email if v else "—") or "—",
+                    "수신자 이메일": getattr(vr, "sent_to_email", None) or (v.email if v else "—") or "—",
                     "발송일": vr.sent_date or "—",
                     "상태": vr.status,
                 })
