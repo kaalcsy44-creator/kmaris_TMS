@@ -18,6 +18,54 @@ from app.utils.helpers import (
 )
 from db.engine import get_session
 from db.models import RFQ, VendorRFQ, RFQStatus, FollowUpLevel, Customer, Vessel
+from services.email_svc import send_email
+
+
+def _build_vendor_rfq_email(rfq, cust, vessel, vendor, notes: str) -> str:
+    """Build the vendor RFQ inquiry email body."""
+    items = rfq.items or []
+    item_lines = "\n".join(
+        f"  {i+1:>2}. Part No.: {str(item.get('part_no','—')):<20s}"
+        f"  Qty: {item.get('qty','—')} {item.get('unit',''):<5s}"
+        f"  Maker: {item.get('maker','—')}\n"
+        f"       Desc: {item.get('description','—')}"
+        for i, item in enumerate(items)
+    )
+    vendor_name = vendor.name if vendor else "Vendor"
+    vessel_str = vessel.name if vessel else "—"
+    cust_str = cust.name if cust else "—"
+
+    body = f"""Dear {vendor_name},
+
+We would like to request your best quotation for the following marine spare parts.
+
+RFQ Reference : {rfq.rfq_no}
+Vessel        : {vessel_str}
+End Customer  : {cust_str}
+Enquiry Date  : {rfq.date or date.today().isoformat()}
+
+──────────────────────── ITEM LIST ────────────────────────
+{item_lines}
+────────────────────────────────────────────────────────────
+
+Please quote for each item:
+  • Unit price (USD, CNF Busan port)
+  • Lead time
+  • Country of origin / Manufacturer
+  • Technical remarks or alternatives (if any)
+
+"""
+    if notes:
+        body += f"Additional Notes:\n{notes}\n\n"
+
+    body += """Kindly reply within 5 business days.
+
+Best regards,
+K-MARIS Energy & Solutions Co., Ltd.
+Email: sales@k-maris.com  |  www.k-maris.com
+Engineering Reliability. Supplying Performance.
+"""
+    return body
 
 try:
     st.set_page_config(page_title="RFQ 관리 — KTMS", page_icon="📋", layout="wide")
@@ -391,41 +439,123 @@ with tab_detail:
     else:
         st.info("품목 없음")
 
-    # Vendor RFQ section
+    # ── Vendor RFQ 발송 ──────────────────────────────────────────────────────
     st.markdown("---")
     st.markdown(f'<div class="ktms-section">📤 Vendor RFQ 발송</div>', unsafe_allow_html=True)
 
+    _preview_key = f"vrfq_preview_{rfq.id}"
     vendor_opts = vendor_options()
-    if vendor_opts:
-        with st.form("vendor_rfq_form"):
-            sel_vendors = st.multiselect("Vendor 선택", list(vendor_opts.keys()))
-            vrfq_notes = st.text_area("Vendor에게 전달할 메모", height=60)
-            send_vrfq = st.form_submit_button("📤 Vendor RFQ 발송", type="primary")
 
-        if send_vrfq and sel_vendors:
+    if not vendor_opts:
+        st.warning("Vendor를 먼저 등록하세요 (⚙️ 설정).")
+
+    # ── STEP 1: Vendor 선택 → 미리보기 생성 ──────────────────────────────────
+    elif not st.session_state.get(_preview_key):
+        sel_vendors = st.multiselect(
+            "Vendor 선택", list(vendor_opts.keys()), key=f"vrfq_sel_{rfq.id}"
+        )
+        vrfq_notes = st.text_area(
+            "Vendor에게 전달할 메모", height=80, key=f"vrfq_notes_{rfq.id}"
+        )
+
+        if st.button(
+            "👁️ 이메일 미리보기 생성",
+            disabled=not sel_vendors,
+            type="secondary",
+            use_container_width=False,
+        ):
+            previews = []
+            for vname in sel_vendors:
+                vid = vendor_opts[vname]
+                v = get_vendor(vid)
+                previews.append({
+                    "vendor_name": vname,
+                    "vendor_id": vid,
+                    "vendor_email": (v.email or "") if v else "",
+                    "subject": f"[K-MARIS] Inquiry — {rfq.rfq_no} / {vessel.name if vessel else rfq.rfq_no}",
+                    "body": _build_vendor_rfq_email(rfq, cust, vessel, v, vrfq_notes),
+                })
+            st.session_state[_preview_key] = previews
+            st.rerun()
+
+    # ── STEP 2: 미리보기 / 수정 / 발송 ──────────────────────────────────────
+    else:
+        previews = st.session_state[_preview_key]
+        st.info(
+            f"📧 아래 {len(previews)}개 이메일을 검토·수정 후 발송하세요. "
+            "이메일 주소가 없으면 DB 저장만 됩니다."
+        )
+
+        edited = []
+        for i, prev in enumerate(previews):
+            email_label = prev["vendor_email"] or "⚠️ 이메일 주소 없음"
+            with st.expander(f"📧 {prev['vendor_name']}  ({email_label})", expanded=True):
+                to_email = st.text_input(
+                    "수신자 이메일", value=prev["vendor_email"], key=f"vrfq_to_{rfq.id}_{i}"
+                )
+                subject = st.text_input(
+                    "제목", value=prev["subject"], key=f"vrfq_subj_{rfq.id}_{i}"
+                )
+                body = st.text_area(
+                    "본문 (직접 수정 가능)", value=prev["body"],
+                    height=340, key=f"vrfq_body_{rfq.id}_{i}"
+                )
+            edited.append({
+                **prev,
+                "to_email": to_email,
+                "subject": subject,
+                "body": body,
+            })
+
+        col_send, col_cancel, _ = st.columns([2, 1, 4])
+        if col_send.button("📤 발송 + DB 저장", type="primary", use_container_width=True):
             session = get_session()
             try:
-                for vname in sel_vendors:
-                    vid = vendor_opts[vname]
+                sent_ok, sent_fail, saved = 0, 0, 0
+                for e in edited:
                     vrfq_no = next_doc_no("vendor_rfq")
                     vrfq = VendorRFQ(
                         vrfq_no=vrfq_no,
                         rfq_id=rfq.id,
-                        vendor_id=vid,
+                        vendor_id=e["vendor_id"],
                         sent_date=date.today().isoformat(),
                         status="발송됨",
                         items=rfq.items or [],
                     )
                     session.add(vrfq)
-                # Update RFQ status
+                    saved += 1
+
+                    if e["to_email"]:
+                        ok = send_email(
+                            to=e["to_email"],
+                            subject=e["subject"],
+                            body=e["body"],
+                        )
+                        if ok:
+                            sent_ok += 1
+                        else:
+                            sent_fail += 1
+                            st.warning(
+                                f"⚠️ {e['vendor_name']} 이메일 발송 실패 "
+                                "(SMTP 설정을 확인하세요)"
+                            )
+
                 r = session.query(RFQ).get(rfq.id)
                 r.status = RFQStatus.SOURCING
                 session.commit()
-                st.success(f"✅ {len(sel_vendors)}개 Vendor에게 RFQ 발송 완료!")
+                st.success(
+                    f"✅ DB 저장 {saved}건 완료"
+                    + (f" | 이메일 발송 성공 {sent_ok}건" if sent_ok else "")
+                    + (f" | 실패 {sent_fail}건" if sent_fail else "")
+                )
+                st.session_state.pop(_preview_key, None)
+                st.rerun()
             finally:
                 session.close()
-    else:
-        st.warning("Vendor를 먼저 등록하세요 (⚙️ 설정).")
+
+        if col_cancel.button("✕ 취소", use_container_width=True):
+            st.session_state.pop(_preview_key, None)
+            st.rerun()
 
     # Existing Vendor RFQs
     session = get_session()
