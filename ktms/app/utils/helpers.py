@@ -189,20 +189,37 @@ section[data-testid="stSidebar"] nav {{
 .badge-B {{background:#fd7e14; color:white; padding:2px 8px; border-radius:12px; font-size:0.78rem;}}
 .badge-C {{background:#6c757d; color:white; padding:2px 8px; border-radius:12px; font-size:0.78rem;}}
 
-/* ── Tab panel: remove top separator line (all Streamlit selectors) ── */
+/* ── Tab panel: remove top separator line ── */
 [data-baseweb="tab-panel"],
+[data-baseweb="tab-panel"][role="tabpanel"],
+[role="tabpanel"],
 div[role="tabpanel"],
-[data-testid="stTab"] {{
+[data-testid="stTab"],
+[data-testid="stTabPanel"] {{
+    border-top: none !important;
+    border: none !important;
+    box-shadow: none !important;
+    outline: none !important;
+    padding-top: 0 !important;
+    margin-top: 0 !important;
+}}
+[data-baseweb="tab-panel"] > div,
+[role="tabpanel"] > div {{
     border-top: none !important;
     padding-top: 0 !important;
-}}
-[data-baseweb="tab-panel"] > div:first-child,
-div[role="tabpanel"] > div:first-child {{
     margin-top: 0 !important;
-    padding-top: 0 !important;
 }}
-[data-baseweb="tab-panel"] hr:first-child,
-div[role="tabpanel"] hr:first-child {{
+[data-baseweb="tab-panel"] > div > div,
+[role="tabpanel"] > div > div {{
+    border-top: none !important;
+    margin-top: 0 !important;
+}}
+[data-baseweb="tab-panel"] hr,
+[role="tabpanel"] hr {{
+    display: none !important;
+}}
+/* Baseweb internal tab-border element */
+[data-baseweb="tab-border"] {{
     display: none !important;
 }}
 </style>
