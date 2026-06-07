@@ -16,6 +16,13 @@ except Exception:
     pass
 require_auth()
 inject_css()
+st.markdown("""
+<style>
+.main .block-container, [data-testid="stMainBlockContainer"] {
+    padding-top: 105px !important;
+}
+</style>
+""", unsafe_allow_html=True)
 
 st.markdown(f'<div class="ktms-section">📊 Dashboard</div>', unsafe_allow_html=True)
 
