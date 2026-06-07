@@ -61,27 +61,36 @@ section[data-testid="stSidebar"] nav a[aria-selected="true"] svg {{
     width: 210px !important;
     background-color: {NAVY} !important;
     padding: 10px 16px 16px !important;
-    border-top: 1px solid rgba(255,255,255,0.12) !important;
+    border-top: 1px solid rgba(255,255,255,0.1) !important;
     z-index: 100 !important;
 }}
-[data-testid="stSidebarUserContent"] .stButton > button {{
+
+/* Logout button: transparent bg matching dark sidebar */
+[data-testid="stSidebarUserContent"] button,
+[data-testid="stSidebarUserContent"] [data-testid^="baseButton"] {{
+    background: transparent !important;
     background-color: transparent !important;
+    border: 1px solid rgba(255,255,255,0.2) !important;
     color: #C4CFDE !important;
-    border: 1px solid rgba(255,255,255,0.22) !important;
-    font-size: 1rem !important;
-    padding: 0 !important;
-    height: 30px !important;
-    width: 30px !important;
+    box-shadow: none !important;
+    height: 28px !important;
     min-height: 0 !important;
-    border-radius: 6px !important;
-    line-height: 1 !important;
+    padding: 0 4px !important;
+    border-radius: 5px !important;
 }}
-[data-testid="stSidebarUserContent"] .stButton > button:hover {{
-    background-color: rgba(255,255,255,0.14) !important;
+[data-testid="stSidebarUserContent"] button:hover,
+[data-testid="stSidebarUserContent"] [data-testid^="baseButton"]:hover {{
+    background: rgba(255,255,255,0.1) !important;
     color: #FFFFFF !important;
-    border-color: rgba(255,255,255,0.4) !important;
+    border-color: rgba(255,255,255,0.35) !important;
 }}
-[data-testid="stSidebarUserContent"] .stButton > button p {{
+[data-testid="stSidebarUserContent"] button svg,
+[data-testid="stSidebarUserContent"] [data-testid^="baseButton"] svg {{
+    color: #C4CFDE !important;
+    fill: #C4CFDE !important;
+}}
+[data-testid="stSidebarUserContent"] button p,
+[data-testid="stSidebarUserContent"] [data-testid^="baseButton"] p {{
     display: none !important;
 }}
 

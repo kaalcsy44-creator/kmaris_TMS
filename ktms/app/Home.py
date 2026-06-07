@@ -124,11 +124,16 @@ pg = st.navigation(pages)
 # ── Sidebar: user info + logout icon (fixed bottom) ───────────────────────────
 with st.sidebar:
     u = current_user()
+    initial = u["username"][0].upper()
     c1, c2 = st.columns([5, 1])
     with c1:
         st.markdown(
-            f'<div style="font-size:.84rem;color:#E8EDF5;font-weight:600;line-height:2.2;">'
-            f'👤 {u["username"]}</div>',
+            f'<div style="display:flex;align-items:center;gap:8px;padding:4px 0;">'
+            f'<span style="width:24px;height:24px;background:rgba(255,255,255,0.18);border-radius:50%;'
+            f'display:inline-flex;align-items:center;justify-content:center;'
+            f'font-size:.72rem;color:#E8EDF5;font-weight:700;flex-shrink:0;">{initial}</span>'
+            f'<span style="font-size:.84rem;color:#C4CFDE;font-weight:500;">{u["username"]}</span>'
+            f'</div>',
             unsafe_allow_html=True,
         )
     with c2:
