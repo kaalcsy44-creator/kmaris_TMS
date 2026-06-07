@@ -65,7 +65,7 @@ section[data-testid="stSidebar"] nav {{
 /* ── Main content: pad top to clear fixed header (toolbar60 + section36 + tabs52) ── */
 .main .block-container,
 [data-testid="stMainBlockContainer"] {{
-    padding-top: 155px !important;
+    padding-top: 105px !important;
 }}
 
 /* ── Sidebar colors ── */
