@@ -39,6 +39,20 @@ section[data-testid="stSidebar"] {{
 [data-testid="stSidebar"] .stSelectbox label, [data-testid="stSidebar"] p {{color: #E8EDF5;}}
 [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {{color: white;}}
 
+/* ── Nav icon color: same tone as menu text ── */
+section[data-testid="stSidebar"] nav a span,
+section[data-testid="stSidebar"] nav a svg,
+section[data-testid="stSidebar"] nav li span,
+section[data-testid="stSidebar"] nav li svg {{
+    color: #C4CFDE !important;
+    fill: #C4CFDE !important;
+}}
+section[data-testid="stSidebar"] nav a[aria-selected="true"] span,
+section[data-testid="stSidebar"] nav a[aria-selected="true"] svg {{
+    color: #FFFFFF !important;
+    fill: #FFFFFF !important;
+}}
+
 /* ── Sidebar bottom: fixed user+logout area ── */
 [data-testid="stSidebarUserContent"] {{
     position: fixed !important;
@@ -51,18 +65,20 @@ section[data-testid="stSidebar"] {{
     z-index: 100 !important;
 }}
 [data-testid="stSidebarUserContent"] .stButton > button {{
-    background-color: rgba(255,255,255,0.08) !important;
-    color: #D0DCF0 !important;
+    background-color: transparent !important;
+    color: #C4CFDE !important;
     border: 1px solid rgba(255,255,255,0.22) !important;
-    font-size: 0.78rem !important;
-    padding: 3px 8px !important;
+    font-size: 1rem !important;
+    padding: 0 !important;
     height: 30px !important;
-    min-height: 30px !important;
+    width: 30px !important;
+    min-height: 0 !important;
     border-radius: 6px !important;
-    width: 100% !important;
+    line-height: 1 !important;
 }}
 [data-testid="stSidebarUserContent"] .stButton > button:hover {{
-    background-color: rgba(255,255,255,0.18) !important;
+    background-color: rgba(255,255,255,0.14) !important;
+    color: #FFFFFF !important;
     border-color: rgba(255,255,255,0.4) !important;
 }}
 

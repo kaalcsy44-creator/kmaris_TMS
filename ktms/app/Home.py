@@ -121,19 +121,18 @@ pages = [
 ]
 pg = st.navigation(pages)
 
-# ── Sidebar: user info + logout (fixed bottom, horizontal layout) ─────────────
+# ── Sidebar: user info + logout icon (fixed bottom) ───────────────────────────
 with st.sidebar:
     u = current_user()
-    c1, c2 = st.columns([3, 2])
+    c1, c2 = st.columns([5, 1])
     with c1:
         st.markdown(
-            f'<div style="font-size:.67rem;color:#6B8CAE;line-height:1.8;">로그인</div>'
-            f'<div style="font-size:.84rem;color:#E8EDF5;font-weight:600;line-height:1.4;">'
+            f'<div style="font-size:.84rem;color:#E8EDF5;font-weight:600;line-height:2.2;">'
             f'👤 {u["username"]}</div>',
             unsafe_allow_html=True,
         )
     with c2:
-        if st.button("로그아웃", use_container_width=True, key="sidebar_logout"):
+        if st.button("⏻", key="sidebar_logout", help="로그아웃", use_container_width=True):
             logout()
             st.rerun()
 
