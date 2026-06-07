@@ -39,16 +39,24 @@ section[data-testid="stSidebar"] {{
 [data-testid="stSidebar"] .stSelectbox label, [data-testid="stSidebar"] p {{color: #E8EDF5;}}
 [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {{color: white;}}
 
-/* ── Nav icon color: same tone as menu text ── */
-section[data-testid="stSidebar"] nav a span,
-section[data-testid="stSidebar"] nav a svg,
-section[data-testid="stSidebar"] nav li span,
-section[data-testid="stSidebar"] nav li svg {{
+/* ── Nav items: icon + text same light tone ── */
+[data-testid="stSidebar"] nav a,
+[data-testid="stSidebar"] nav a * {{
     color: #C4CFDE !important;
     fill: #C4CFDE !important;
+    opacity: 1 !important;
 }}
-section[data-testid="stSidebar"] nav a[aria-selected="true"] span,
-section[data-testid="stSidebar"] nav a[aria-selected="true"] svg {{
+/* Selected page: white */
+[data-testid="stSidebar"] nav a[aria-current="page"],
+[data-testid="stSidebar"] nav a[aria-current="page"] *,
+[data-testid="stSidebar"] nav a[aria-selected="true"],
+[data-testid="stSidebar"] nav a[aria-selected="true"] * {{
+    color: #FFFFFF !important;
+    fill: #FFFFFF !important;
+}}
+/* Hover */
+[data-testid="stSidebar"] nav a:hover,
+[data-testid="stSidebar"] nav a:hover * {{
     color: #FFFFFF !important;
     fill: #FFFFFF !important;
 }}
