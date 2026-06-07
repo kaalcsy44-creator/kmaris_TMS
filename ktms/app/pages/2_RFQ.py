@@ -353,6 +353,34 @@ with tab_detail:
             finally:
                 session.close()
 
+        st.markdown("---")
+        st.markdown("**삭제**")
+        if st.button("🗑️ RFQ 삭제", type="secondary", use_container_width=True):
+            st.session_state["rfq_delete_confirm"] = rfq.id
+
+    # 삭제 확인 (col_actions 바깥에서 전체 폭으로 표시)
+    if st.session_state.get("rfq_delete_confirm") == rfq.id:
+        st.warning(
+            f"**{rfq.rfq_no}** 를 정말 삭제하시겠습니까?  \n"
+            "연결된 Vendor RFQ도 함께 삭제됩니다. 이 작업은 되돌릴 수 없습니다."
+        )
+        col_yes, col_no, _ = st.columns([1, 1, 4])
+        if col_yes.button("✅ 확인 삭제", type="primary", key="btn_delete_yes"):
+            session = get_session()
+            try:
+                session.query(VendorRFQ).filter_by(rfq_id=rfq.id).delete()
+                session.query(RFQ).filter_by(id=rfq.id).delete()
+                session.commit()
+                st.session_state.pop("rfq_delete_confirm", None)
+                st.session_state.pop("rfq_detail_id", None)
+                st.success(f"✅ {rfq.rfq_no} 삭제 완료.")
+                st.rerun()
+            finally:
+                session.close()
+        if col_no.button("취소", key="btn_delete_no"):
+            st.session_state.pop("rfq_delete_confirm", None)
+            st.rerun()
+
     # Items table
     st.markdown("**품목 리스트**")
     if rfq.items:
