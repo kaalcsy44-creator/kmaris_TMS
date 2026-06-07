@@ -66,6 +66,21 @@ from app.utils.auth import current_user, logout, _login_dialog
 from app.utils.helpers import inject_css
 inject_css()
 
+# 다이얼로그 화면 중앙 정렬
+st.markdown(
+    """
+    <style>
+    div[data-testid="stDialog"] > div[data-baseweb="modal"] > div {
+        align-items: center !important;
+    }
+    div[data-testid="stDialog"] div[data-baseweb="dialog"] {
+        margin-top: 0 !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 # ── Already logged in → go straight to Dashboard ─────────────────────────────
 if current_user():
     st.switch_page("pages/1_Dashboard.py")
