@@ -147,14 +147,15 @@ class RFQ(Base):
 
 class VendorRFQ(Base):
     __tablename__ = "vendor_rfqs"
-    id         = Column(Integer, primary_key=True)
-    vrfq_no    = Column(String(40), unique=True, nullable=False)
-    rfq_id     = Column(Integer, ForeignKey("rfqs.id"))
-    vendor_id  = Column(Integer, ForeignKey("vendors.id"))
-    sent_date  = Column(String(10))
-    status     = Column(String(40), default="발송됨")
-    items      = Column(JSON, default=list)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    id             = Column(Integer, primary_key=True)
+    vrfq_no        = Column(String(40), unique=True, nullable=False)
+    rfq_id         = Column(Integer, ForeignKey("rfqs.id"))
+    vendor_id      = Column(Integer, ForeignKey("vendors.id"))
+    sent_date      = Column(String(10))
+    sent_to_email  = Column(String(200))
+    status         = Column(String(40), default="발송됨")
+    items          = Column(JSON, default=list)
+    created_at     = Column(DateTime, default=datetime.utcnow)
 
 
 class VendorQuote(Base):

@@ -596,6 +596,16 @@ with tab_detail:
                 "body": body,
             })
 
+        # ── SMTP 설정 상태 사전 확인 ────────────────────────────────────────
+        import os as _os
+        _smtp_ok = bool(_os.getenv("SMTP_USER") and _os.getenv("SMTP_PASSWORD"))
+        if not _smtp_ok:
+            st.warning(
+                "⚠️ SMTP 미설정: 이메일이 발송되지 않습니다. "
+                "Settings > Secrets에 SMTP_USER / SMTP_PASSWORD를 등록하세요. "
+                "DB 저장만 진행됩니다."
+            )
+
         col_send, col_cancel, _ = st.columns([2, 1, 4])
         if col_send.button("📤 발송 + DB 저장", type="primary", use_container_width=True):
             session = get_session()
@@ -608,13 +618,14 @@ with tab_detail:
                         rfq_id=rfq.id,
                         vendor_id=e["vendor_id"],
                         sent_date=date.today().isoformat(),
+                        sent_to_email=e["to_email"] or "",
                         status="발송됨",
                         items=rfq.items or [],
                     )
                     session.add(vrfq)
                     saved += 1
 
-                    if e["to_email"]:
+                    if e["to_email"] and _smtp_ok:
                         attachments = None
                         if e.get("xlsx_bytes"):
                             attachments = [(e["xlsx_filename"], e["xlsx_bytes"])]
@@ -626,12 +637,10 @@ with tab_detail:
                         )
                         if ok:
                             sent_ok += 1
+                            vrfq.status = "이메일 발송완료"
                         else:
                             sent_fail += 1
-                            st.warning(
-                                f"⚠️ {e['vendor_name']} 이메일 발송 실패 "
-                                "(SMTP 설정을 확인하세요)"
-                            )
+                            st.warning(f"⚠️ {e['vendor_name']} SMTP 발송 실패 — 서버 오류")
 
                 r = session.query(RFQ).get(rfq.id)
                 r.status = RFQStatus.SOURCING
@@ -662,6 +671,7 @@ with tab_detail:
                 vrows.append({
                     "VRFQ No.": vr.vrfq_no,
                     "Vendor": v.name if v else "—",
+                    "수신자 이메일": vr.sent_to_email or (v.email if v else "—") or "—",
                     "발송일": vr.sent_date or "—",
                     "상태": vr.status,
                 })

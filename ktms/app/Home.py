@@ -31,6 +31,15 @@ except Exception as _e:
     st.error(f"DB 초기화 오류: {_e}")
     st.stop()
 
+# ── SQLite column migrations (idempotent) ─────────────────────────────────────
+try:
+    from sqlalchemy import text as _text
+    with get_engine().connect() as _conn:
+        _conn.execute(_text("ALTER TABLE vendor_rfqs ADD COLUMN sent_to_email VARCHAR(200)"))
+        _conn.commit()
+except Exception:
+    pass  # Column already exists — safe to ignore
+
 # ── Auto-seed admin + sample data on first cloud run ─────────────────────────
 try:
     import bcrypt as _bcrypt
