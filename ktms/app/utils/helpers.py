@@ -62,10 +62,10 @@ section[data-testid="stSidebar"] nav {{
     margin-top: 72px !important;
 }}
 
-/* ── Main content: reduce top padding ── */
+/* ── Main content: pad top to clear fixed header (title≈36px + tabs≈52px) ── */
 .main .block-container,
 [data-testid="stMainBlockContainer"] {{
-    padding-top: 1.5rem !important;
+    padding-top: 88px !important;
 }}
 
 /* ── Sidebar colors ── */
@@ -158,21 +158,32 @@ section[data-testid="stSidebar"] nav {{
 .ktms-kpi-label {{font-size:0.85rem; color:#555; margin-top:2px;}}
 .ktms-section {{
     background:{NAVY}; color:white; padding:6px 14px;
-    border-radius:0 0 6px 6px; font-weight:600;
-    margin:0 0 6px !important;
-    position:sticky !important;
+    font-weight:600;
+    position:fixed !important;
     top:0 !important;
-    z-index:200 !important;
+    left:210px !important;
+    right:0 !important;
+    z-index:1000 !important;
+    margin:0 !important;
+    border-radius:0 !important;
 }}
 
-/* ── Sticky tab bar (sits just below .ktms-section ≈38px) ── */
+/* ── Fixed tab bar (just below title ≈36px) ── */
 [data-baseweb="tab-list"] {{
-    position:sticky !important;
-    top:38px !important;
-    z-index:199 !important;
+    position:fixed !important;
+    top:36px !important;
+    left:210px !important;
+    right:0 !important;
+    z-index:999 !important;
     background:white !important;
-    border-bottom:1px solid #e8e8e8 !important;
-    padding-bottom:4px !important;
+    border-bottom:2px solid #e8e8e8 !important;
+    padding:0 1rem !important;
+}}
+
+/* ── When sidebar is collapsed: reset left to 0 ── */
+[data-testid="stSidebar"][aria-expanded="false"] ~ section .ktms-section,
+[data-testid="stSidebar"][aria-expanded="false"] ~ section [data-baseweb="tab-list"] {{
+    left:0 !important;
 }}
 .badge-A {{background:#dc3545; color:white; padding:2px 8px; border-radius:12px; font-size:0.78rem;}}
 .badge-B {{background:#fd7e14; color:white; padding:2px 8px; border-radius:12px; font-size:0.78rem;}}
