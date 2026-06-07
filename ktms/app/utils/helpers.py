@@ -81,6 +81,9 @@ section[data-testid="stSidebar"] nav a[aria-selected="true"] svg {{
     color: #FFFFFF !important;
     border-color: rgba(255,255,255,0.4) !important;
 }}
+[data-testid="stSidebarUserContent"] .stButton > button p {{
+    display: none !important;
+}}
 
 .ktms-kpi {{
     background:{LIGHT_BLUE}; border-left:4px solid {BLUE};
