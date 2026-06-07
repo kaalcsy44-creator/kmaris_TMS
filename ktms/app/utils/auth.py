@@ -49,18 +49,6 @@ def is_admin() -> bool:
 
 @st.dialog("K-MARIS KTMS", width="small")
 def _login_dialog():
-    st.markdown(
-        """
-        <div style="text-align:center;padding:4px 0 20px;">
-            <span style="font-size:2.8rem;">⚓</span>
-            <h3 style="margin:6px 0 2px;color:#0B1D3A;">K-MARIS Trade Management System</h3>
-            <p style="color:#6c757d;font-size:0.85rem;margin:0;">
-                Engineering Reliability. Supplying Performance.
-            </p>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
     username = st.text_input("사용자명", placeholder="username", key="dlg_uname")
     password = st.text_input("비밀번호", type="password", placeholder="password", key="dlg_pw")
     if st.button("로그인", type="primary", use_container_width=True, key="dlg_btn"):
