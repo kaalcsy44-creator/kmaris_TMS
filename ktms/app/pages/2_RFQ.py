@@ -17,7 +17,7 @@ from app.utils.helpers import (
     rfq_list, get_rfq, get_customer, get_vessel, get_vendor, NAVY, BLUE,
 )
 from db.engine import get_session
-from db.models import RFQ, VendorRFQ, RFQStatus, FollowUpLevel
+from db.models import RFQ, VendorRFQ, RFQStatus, FollowUpLevel, Customer, Vessel
 
 st.set_page_config(page_title="RFQ 관리 — KTMS", page_icon="📋", layout="wide")
 require_auth()
@@ -122,10 +122,87 @@ with tab_new:
                 st.session_state.pop("rfq_ocr", None)
                 st.rerun()
 
-    # ── 폼 기본값 계산 (OCR 결과 반영) ─────────────────────────────────────
+    # ── OCR 결과 및 매칭 상태 계산 ──────────────────────────────────────────
     ocr = st.session_state.get("rfq_ocr", {})
+    _cust_hint_raw = ocr.get("customer_hint") or ""
+    _vessel_hint_raw = ocr.get("vessel_name") or ""
 
-    # Date default
+    _cust_opts_now = customer_options()
+    _vessel_opts_all = vessel_options()
+
+    def _hint_matched(hint: str, options: dict) -> bool:
+        if not hint:
+            return True
+        h = hint.lower()
+        return any(h in k.lower() or k.lower() in h for k in options)
+
+    _cust_matched = _hint_matched(_cust_hint_raw, _cust_opts_now)
+    _vessel_matched = _hint_matched(_vessel_hint_raw, _vessel_opts_all)
+
+    # ── 신규 고객사 빠른 등록 ────────────────────────────────────────────────
+    _cust_expand = bool(_cust_hint_raw) and not _cust_matched
+    with st.expander("➕ 신규 고객사 빠른 등록", expanded=_cust_expand):
+        if _cust_expand:
+            st.info(f'OCR 인식: **"{_cust_hint_raw}"** — DB에 없는 고객사입니다. 등록 후 자동 선택됩니다.')
+        nc1, nc2 = st.columns(2)
+        nc_name    = nc1.text_input("고객사명 *", value=_cust_hint_raw, key="nc_name")
+        nc_country = nc2.text_input("국가", key="nc_country")
+        nc_contact = nc1.text_input("담당자", key="nc_contact")
+        nc_email   = nc2.text_input("이메일", key="nc_email")
+        nc_addr    = nc1.text_input("주소", key="nc_addr")
+        nc_taxid   = nc2.text_input("Tax ID / 사업자번호", key="nc_taxid")
+        if st.button("💾 고객사 등록", key="btn_quick_cust", type="primary"):
+            if nc_name.strip():
+                _s = get_session()
+                try:
+                    _s.add(Customer(name=nc_name.strip(), country=nc_country,
+                                    contact=nc_contact, email=nc_email,
+                                    address=nc_addr, tax_id=nc_taxid))
+                    _s.commit()
+                    st.success(f"✅ 고객사 '{nc_name.strip()}' 등록 완료! 아래 드롭다운에 반영됩니다.")
+                    st.rerun()
+                finally:
+                    _s.close()
+            else:
+                st.warning("고객사명을 입력하세요.")
+
+    # ── 신규 선박 빠른 등록 ──────────────────────────────────────────────────
+    _cust_opts_now2 = customer_options()   # 고객사 등록 후 갱신
+    _vessel_expand = bool(_vessel_hint_raw) and not _vessel_matched
+    with st.expander("🚢 신규 선박 빠른 등록", expanded=_vessel_expand):
+        if _vessel_expand:
+            st.info(f'OCR 인식: **"{_vessel_hint_raw}"** — DB에 없는 선박입니다. 등록 후 자동 선택됩니다.')
+        nv_name   = st.text_input("선박명 *", value=_vessel_hint_raw, key="nv_name")
+        nv1, nv2  = st.columns(2)
+        nv_imo    = nv1.text_input("IMO No.", key="nv_imo")
+        nv_engine = nv2.text_input("Main Engine Type", key="nv_engine")
+        nv_hull   = nv1.text_input("Hull No.", key="nv_hull")
+        _owner_opts = {"— 없음 —": None, **_cust_opts_now2}
+        # OCR 고객사 힌트로 선주 자동 매칭
+        _owner_idx = 0
+        if _cust_hint_raw:
+            for i, k in enumerate(_owner_opts):
+                if _cust_hint_raw.lower() in k.lower() or k.lower() in _cust_hint_raw.lower():
+                    _owner_idx = i
+                    break
+        nv_owner  = nv2.selectbox("선주 (고객사)", list(_owner_opts.keys()),
+                                   index=_owner_idx, key="nv_owner")
+        if st.button("💾 선박 등록", key="btn_quick_vessel", type="primary"):
+            if nv_name.strip():
+                _s = get_session()
+                try:
+                    _s.add(Vessel(name=nv_name.strip(), imo=nv_imo,
+                                  engine_type=nv_engine, hull_no=nv_hull,
+                                  customer_id=_owner_opts.get(nv_owner)))
+                    _s.commit()
+                    st.success(f"✅ 선박 '{nv_name.strip()}' 등록 완료! 아래 드롭다운에 반영됩니다.")
+                    st.rerun()
+                finally:
+                    _s.close()
+            else:
+                st.warning("선박명을 입력하세요.")
+
+    # ── 폼 기본값 계산 ───────────────────────────────────────────────────────
     _ocr_date = date.today()
     if ocr.get("rfq_date"):
         try:
@@ -134,13 +211,12 @@ with tab_new:
         except ValueError:
             pass
 
-    # Items default
     _item_cols = ["part_no", "description", "maker", "qty", "unit", "lead_time_req", "remark"]
     _ocr_items = ocr.get("items") or []
-    if _ocr_items:
-        _default_items = pd.DataFrame(_ocr_items).reindex(columns=_item_cols).fillna("")
-    else:
-        _default_items = pd.DataFrame(columns=_item_cols)
+    _default_items = (
+        pd.DataFrame(_ocr_items).reindex(columns=_item_cols).fillna("")
+        if _ocr_items else pd.DataFrame(columns=_item_cols)
+    )
 
     # ── 등록 폼 ──────────────────────────────────────────────────────────────
     with st.form("new_rfq_form"):
@@ -149,8 +225,7 @@ with tab_new:
             cust_opts2 = customer_options()
             if cust_opts2:
                 cust_keys = list(cust_opts2.keys())
-                # OCR 힌트로 고객사 자동 선택 시도
-                _cust_hint = (ocr.get("customer_hint") or "").lower()
+                _cust_hint = _cust_hint_raw.lower()
                 _cust_idx = 0
                 if _cust_hint:
                     for i, k in enumerate(cust_keys):
@@ -160,16 +235,14 @@ with tab_new:
                 cust_name = st.selectbox("고객사 *", cust_keys, index=_cust_idx)
                 cust_id = cust_opts2[cust_name]
             else:
-                st.warning("고객사를 먼저 등록하세요 (⚙️ 설정 탭).")
+                st.info("위 '신규 고객사 빠른 등록'에서 먼저 등록하세요.")
                 cust_id = None
-                cust_name = ""
             rfq_date = st.date_input("RFQ 수신일", value=_ocr_date)
             follow_level = st.selectbox("Follow-up Level", [l.value for l in FollowUpLevel], index=1)
         with c2:
             vessel_opts = vessel_options(cust_id)
             vessel_keys = ["— 없음 —"] + list(vessel_opts.keys())
-            # OCR 힌트로 선박 자동 선택 시도
-            _vessel_hint = (ocr.get("vessel_name") or "").lower()
+            _vessel_hint = _vessel_hint_raw.lower()
             _vessel_idx = 0
             if _vessel_hint:
                 for i, k in enumerate(vessel_keys):
