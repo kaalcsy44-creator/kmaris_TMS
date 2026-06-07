@@ -189,10 +189,21 @@ section[data-testid="stSidebar"] nav {{
 .badge-B {{background:#fd7e14; color:white; padding:2px 8px; border-radius:12px; font-size:0.78rem;}}
 .badge-C {{background:#6c757d; color:white; padding:2px 8px; border-radius:12px; font-size:0.78rem;}}
 
-/* ── Tab panel: remove top separator line ── */
-[data-baseweb="tab-panel"] {{
+/* ── Tab panel: remove top separator line (all Streamlit selectors) ── */
+[data-baseweb="tab-panel"],
+div[role="tabpanel"],
+[data-testid="stTab"] {{
     border-top: none !important;
     padding-top: 0 !important;
+}}
+[data-baseweb="tab-panel"] > div:first-child,
+div[role="tabpanel"] > div:first-child {{
+    margin-top: 0 !important;
+    padding-top: 0 !important;
+}}
+[data-baseweb="tab-panel"] hr:first-child,
+div[role="tabpanel"] hr:first-child {{
+    display: none !important;
 }}
 </style>
 """
