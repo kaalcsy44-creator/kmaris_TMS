@@ -23,7 +23,7 @@ from services.vendor_xlsx import make_vendor_rfq_quote_xlsx
 
 
 def _build_vendor_rfq_email(rfq, cust, vessel, vendor, notes: str) -> str:
-    """Build the vendor RFQ inquiry email body."""
+    """English vendor RFQ inquiry email."""
     items = rfq.items or []
     item_lines = "\n".join(
         f"  {i+1:>2}. Part No.: {str(item.get('part_no','—')):<20s}"
@@ -62,6 +62,56 @@ Please quote for each item:
     body += """Kindly reply within 5 business days.
 
 Best regards,
+K-MARIS Energy & Solutions Co., Ltd.
+Email: sales@k-maris.com  |  www.k-maris.com
+Engineering Reliability. Supplying Performance.
+"""
+    return body
+
+
+def _build_vendor_rfq_email_ko(rfq, cust, vessel, vendor, notes: str) -> str:
+    """Korean vendor RFQ inquiry email."""
+    items = rfq.items or []
+    item_lines = "\n".join(
+        f"  {i+1:>2}. Part No.: {str(item.get('part_no','—')):<20s}"
+        f"  수량: {item.get('qty','—')} {item.get('unit',''):<5s}"
+        f"  Maker: {item.get('maker','—')}\n"
+        f"       품명: {item.get('description','—')}"
+        for i, item in enumerate(items)
+    )
+    vendor_name = vendor.name if vendor else "공급사"
+    vessel_str = vessel.name if vessel else "—"
+    cust_str = cust.name if cust else "—"
+
+    body = f"""{vendor_name} 귀중
+
+안녕하세요,
+항상 협조해 주셔서 감사드립니다.
+
+아래 선박용 부품에 대한 견적을 요청드립니다.
+
+RFQ 번호 : {rfq.rfq_no}
+선박명    : {vessel_str}
+발주처    : {cust_str}
+문의일    : {rfq.date or date.today().isoformat()}
+
+──────────────────────── 품목 리스트 ────────────────────────
+{item_lines}
+──────────────────────────────────────────────────────────────
+
+각 품목에 대해 아래 사항을 포함하여 견적을 회신해 주시기 바랍니다:
+  • 단가 (USD, CNF 부산항 기준)
+  • 납기
+  • 원산지 / 제조사
+  • 기술적 비고 또는 대체품 (해당 시)
+
+"""
+    if notes:
+        body += f"추가 사항:\n{notes}\n\n"
+
+    body += """영업일 기준 5일 이내 회신 부탁드립니다.
+
+감사합니다.
 K-MARIS Energy & Solutions Co., Ltd.
 Email: sales@k-maris.com  |  www.k-maris.com
 Engineering Reliability. Supplying Performance.
@@ -455,6 +505,12 @@ with tab_detail:
         sel_vendors = st.multiselect(
             "Vendor 선택", list(vendor_opts.keys()), key=f"vrfq_sel_{rfq.id}"
         )
+        lang_sel = st.radio(
+            "이메일 언어",
+            ["🇺🇸 English (영문)", "🇰🇷 Korean (국문)"],
+            horizontal=True,
+            key=f"vrfq_lang_{rfq.id}",
+        )
         vrfq_notes = st.text_area(
             "Vendor에게 전달할 메모", height=80, key=f"vrfq_notes_{rfq.id}"
         )
@@ -465,6 +521,7 @@ with tab_detail:
             type="secondary",
             use_container_width=False,
         ):
+            is_korean = "Korean" in lang_sel
             previews = []
             for vname in sel_vendors:
                 vid = vendor_opts[vname]
@@ -478,12 +535,19 @@ with tab_detail:
                     items=rfq.items or [],
                 )
                 safe_vname = "".join(c for c in vname if c.isalnum() or c in "._- ")[:40]
+                if is_korean:
+                    subject = f"[K-MARIS] 견적 요청 — {rfq.rfq_no} / {vessel.name if vessel else rfq.rfq_no}"
+                    body = _build_vendor_rfq_email_ko(rfq, cust, vessel, v, vrfq_notes)
+                else:
+                    subject = f"[K-MARIS] Inquiry — {rfq.rfq_no} / {vessel.name if vessel else rfq.rfq_no}"
+                    body = _build_vendor_rfq_email(rfq, cust, vessel, v, vrfq_notes)
                 previews.append({
                     "vendor_name": vname,
                     "vendor_id": vid,
                     "vendor_email": (v.email or "") if v else "",
-                    "subject": f"[K-MARIS] Inquiry — {rfq.rfq_no} / {vessel.name if vessel else rfq.rfq_no}",
-                    "body": _build_vendor_rfq_email(rfq, cust, vessel, v, vrfq_notes),
+                    "lang": lang_sel,
+                    "subject": subject,
+                    "body": body,
                     "xlsx_bytes": xlsx_bytes,
                     "xlsx_filename": f"{rfq.rfq_no}_VendorQuoteSheet_{safe_vname}.xlsx",
                 })
@@ -501,7 +565,8 @@ with tab_detail:
         edited = []
         for i, prev in enumerate(previews):
             email_label = prev["vendor_email"] or "⚠️ 이메일 주소 없음"
-            with st.expander(f"📧 {prev['vendor_name']}  ({email_label})", expanded=True):
+            lang_badge = "🇰🇷 국문" if "Korean" in prev.get("lang", "") else "🇺🇸 영문"
+            with st.expander(f"📧 {prev['vendor_name']}  ({email_label})  [{lang_badge}]", expanded=True):
                 to_email = st.text_input(
                     "수신자 이메일", value=prev["vendor_email"], key=f"vrfq_to_{rfq.id}_{i}"
                 )
