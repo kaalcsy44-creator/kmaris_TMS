@@ -28,34 +28,16 @@ KTMS_CSS = f"""
 <style>
 /* ── Sidebar width (≈half of 344px default) ── */
 section[data-testid="stSidebar"] {{
-    min-width: 180px !important;
-    max-width: 180px !important;
-    width: 180px !important;
+    min-width: 210px !important;
+    max-width: 210px !important;
+    width: 210px !important;
 }}
-
-/* Push user content (logout area) to bottom */
-section[data-testid="stSidebar"] > div:first-child > div:first-child {{
-    display: flex !important;
-    flex-direction: column !important;
-    height: 100vh !important;
-    overflow-y: hidden !important;
-}}
-[data-testid="stSidebarUserContent"] {{
-    margin-top: auto !important;
-    padding-bottom: 12px !important;
-}}
-.sidebar-spacer {{ flex: 1; }}
 
 /* ── Sidebar colors ── */
 [data-testid="stSidebar"] {{background-color: {NAVY};}}
 [data-testid="stSidebar"] .stMarkdown, [data-testid="stSidebar"] label,
 [data-testid="stSidebar"] .stSelectbox label, [data-testid="stSidebar"] p {{color: #E8EDF5;}}
 [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {{color: white;}}
-
-/* Nav item text color */
-[data-testid="stSidebarNav"] a span, [data-testid="stSidebarNav"] li span {{color: #E8EDF5 !important;}}
-[data-testid="stSidebarNav"] a:hover span {{color: white !important;}}
-[data-testid="stSidebarNav"] [aria-selected="true"] span {{color: white !important; font-weight: 600;}}
 
 .ktms-kpi {{
     background:{LIGHT_BLUE}; border-left:4px solid {BLUE};

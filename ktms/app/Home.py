@@ -123,7 +123,6 @@ pg = st.navigation(pages)
 
 # ── Sidebar: user info + logout button (pushed to bottom via CSS) ──────────────
 with st.sidebar:
-    st.markdown('<div class="sidebar-spacer"></div>', unsafe_allow_html=True)
     st.markdown("---")
     u = current_user()
     st.caption(f"👤 **{u['username']}**")
