@@ -57,6 +57,17 @@ section[data-testid="stSidebar"] {{
     width: 210px !important;
 }}
 
+/* ── Nav: push down by ~2 items ── */
+section[data-testid="stSidebar"] nav {{
+    margin-top: 72px !important;
+}}
+
+/* ── Main content: reduce top padding ── */
+.main .block-container,
+[data-testid="stMainBlockContainer"] {{
+    padding-top: 1.5rem !important;
+}}
+
 /* ── Sidebar colors ── */
 [data-testid="stSidebar"] {{background-color: {NAVY};}}
 [data-testid="stSidebar"] .stMarkdown, [data-testid="stSidebar"] label,
