@@ -45,14 +45,14 @@ section[data-testid="stSidebar"] {{
     color: #C4CFDE !important;
     opacity: 1 !important;
 }}
-/* ── Nav icon: filter approach (works regardless of icon render type) ──
-   :first-child targets the icon element; img/svg fallback covers all cases  */
+/* ── Nav icon: grayscale + brightness → monochrome visible icon ──
+   :first-child = icon span; img/svg as fallback                  */
 [data-testid="stSidebar"] nav a > *:first-child,
 [data-testid="stSidebar"] nav a img,
 [data-testid="stSidebar"] nav a svg {{
-    filter: brightness(0) invert(0.78) !important;
+    filter: grayscale(1) brightness(4) !important;
 }}
-/* ── Selected page: white text + icon ── */
+/* ── Selected ── */
 [data-testid="stSidebar"] nav a[aria-current="page"],
 [data-testid="stSidebar"] nav a[aria-current="page"] *,
 [data-testid="stSidebar"] nav a[aria-selected="true"],
@@ -63,17 +63,13 @@ section[data-testid="stSidebar"] {{
 [data-testid="stSidebar"] nav a[aria-current="page"] img,
 [data-testid="stSidebar"] nav a[aria-current="page"] svg,
 [data-testid="stSidebar"] nav a[aria-selected="true"] > *:first-child {{
-    filter: brightness(0) invert(1) !important;
+    filter: grayscale(1) brightness(10) !important;
 }}
 /* ── Hover ── */
-[data-testid="stSidebar"] nav a:hover,
-[data-testid="stSidebar"] nav a:hover * {{
-    color: #FFFFFF !important;
-}}
 [data-testid="stSidebar"] nav a:hover > *:first-child,
 [data-testid="stSidebar"] nav a:hover img,
 [data-testid="stSidebar"] nav a:hover svg {{
-    filter: brightness(0) invert(1) !important;
+    filter: grayscale(1) brightness(10) !important;
 }}
 
 /* ── Sidebar bottom: fixed user+logout area ── */
