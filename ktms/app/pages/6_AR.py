@@ -11,7 +11,7 @@ if str(ROOT) not in sys.path:
 import pandas as pd
 import streamlit as st
 from app.utils.auth import require_auth
-from app.utils.helpers import inject_css, hint, ar_list, get_order, get_customer, status_badge, NAVY
+from app.utils.helpers import inject_css, hint, section_header, ar_list, get_order, get_customer, status_badge, NAVY
 from db.engine import get_session
 from db.models import ARRecord, ARStatus
 
@@ -22,7 +22,7 @@ except Exception:
 require_auth()
 inject_css()
 
-st.markdown('<div class="ktms-section">💰 AR 관리 (Accounts Receivable / SOA)</div>', unsafe_allow_html=True)
+section_header("ar", "AR 관리 (Accounts Receivable / SOA)")
 
 # ── Filters ───────────────────────────────────────────────────────────────────
 col_f1, col_f2 = st.columns(2)
@@ -104,7 +104,7 @@ if sel:
             new_status  = p1.selectbox("상태", [s.value for s in ARStatus],
                                        index=[s.value for s in ARStatus].index(ar.status.value))
             notes_input = p2.text_input("메모", value=ar.notes or "")
-            save_pay    = st.form_submit_button("💾 수금 등록", type="primary", use_container_width=True)
+            save_pay    = st.form_submit_button("수금 등록", type="primary", use_container_width=True)
 
         if save_pay:
             session = get_session()
@@ -120,7 +120,7 @@ if sel:
                 else:
                     a.status = ARStatus(new_status)
                 session.commit()
-                st.success(f"✅ 수금 등록 완료. 잔액: {ar.currency} {a.invoice_amount - a.paid_amount:,.2f}")
+                st.success(f"수금 등록 완료. 잔액: {ar.currency} {a.invoice_amount - a.paid_amount:,.2f}")
                 st.rerun()
             finally:
                 session.close()

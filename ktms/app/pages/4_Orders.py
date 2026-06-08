@@ -12,7 +12,7 @@ import pandas as pd
 import streamlit as st
 from app.utils.auth import require_auth
 from app.utils.helpers import (
-    inject_css, hint, next_doc_no, status_badge, tracking_url,
+    inject_css, hint, section_header, next_doc_no, status_badge, tracking_url,
     quotation_list, get_quotation, get_customer, get_vessel, get_vendor,
     vendor_options, order_list, get_order, NAVY,
 )
@@ -27,9 +27,9 @@ except Exception:
 require_auth()
 inject_css()
 
-st.markdown('<div class="ktms-section">📦 오더 관리 (Orders)</div>', unsafe_allow_html=True)
+section_header("order", "오더 관리 (Orders)")
 
-tab_list, tab_new, tab_detail = st.tabs(["📋 오더 리스트", "➕ 신규 오더 등록", "🔍 오더 상세"])
+tab_list, tab_new, tab_detail = st.tabs([":material/list: 오더 리스트", ":material/add: 신규 오더 등록", ":material/search: 오더 상세"])
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 1 — LIST
@@ -116,7 +116,7 @@ with tab_new:
                 columns=["item_no", "part_no", "description", "maker", "qty", "unit", "unit_price"]),
             num_rows="dynamic", use_container_width=True, key="ord_items",
         )
-        save_ord = st.form_submit_button("💾 오더 등록", type="primary", use_container_width=True)
+        save_ord = st.form_submit_button("오더 등록", type="primary", use_container_width=True)
 
     if save_ord and cust_id:
         ord_no = next_doc_no("order")
@@ -198,7 +198,7 @@ with tab_detail:
 
     # Purchase Orders
     st.markdown("---")
-    st.markdown(f'<div class="ktms-section">📤 Vendor 발주서 (Purchase Order)</div>', unsafe_allow_html=True)
+    section_header("po", "Vendor 발주서 (Purchase Order)")
 
     vendor_opts = vendor_options()
     with st.form("po_form"):
@@ -209,7 +209,7 @@ with tab_detail:
                 columns=["item_no", "part_no", "description", "qty", "unit", "unit_price"]),
             num_rows="dynamic", use_container_width=True, key="po_items",
         )
-        gen_po = st.form_submit_button("📤 발주서 생성", type="primary")
+        gen_po = st.form_submit_button("발주서 생성", type="primary")
 
     if gen_po and sel_vendor != "— 없음 —":
         po_no_gen = next_doc_no("po")

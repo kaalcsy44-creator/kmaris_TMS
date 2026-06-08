@@ -12,7 +12,7 @@ import pandas as pd
 import streamlit as st
 from app.utils.auth import require_auth, current_user
 from app.utils.helpers import (
-    inject_css, hint, next_doc_no, status_badge, tracking_url,
+    inject_css, hint, section_header, next_doc_no, status_badge, tracking_url,
     customer_options, vessel_options, rfq_list,
     quotation_list, get_quotation, get_rfq,
     get_customer, get_vessel, apply_margin, total_amount,
@@ -30,9 +30,9 @@ except Exception:
 require_auth()
 inject_css()
 
-st.markdown('<div class="ktms-section">📄 견적 관리 (Quotation)</div>', unsafe_allow_html=True)
+section_header("quotation", "견적 관리 (Quotation)")
 
-tab_list, tab_new, tab_detail = st.tabs(["📋 견적 리스트", "➕ 신규 견적 작성", "🔍 견적 상세"])
+tab_list, tab_new, tab_detail = st.tabs(["견적 리스트", "신규 견적 작성", "견적 상세"])
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 1 — LIST
@@ -166,7 +166,7 @@ with tab_new:
             warranty  = st.text_input("Warranty", "Manufacturer's standard warranty")
         remarks = st.text_area("Remarks", "Bank charges outside Korea shall be borne by Buyer.", height=60)
 
-        save_btn = st.form_submit_button("💾 견적 저장", type="primary", use_container_width=True)
+        save_btn = st.form_submit_button("견적 저장", type="primary", use_container_width=True)
 
     if save_btn and cust_id:
         raw_items = items_df.fillna("").to_dict(orient="records")
@@ -206,7 +206,7 @@ with tab_new:
             session.commit()
             st.session_state["qtn_detail_id"] = qtn.id
             st.session_state.pop("load_rfq_id", None)
-            st.success(f"✅ 견적 저장 완료: **{qtn_no}** — '🔍 견적 상세' 탭에서 PDF 생성 및 발송하세요.")
+            st.success(f"견적 저장 완료: **{qtn_no}** — '🔍 견적 상세' 탭에서 PDF 생성 및 발송하세요.")
         finally:
             session.close()
 
@@ -317,7 +317,7 @@ with tab_detail:
                         session.commit()
                     finally:
                         session.close()
-                    st.success(f"✅ 이메일 발송 완료 → {to_email}")
+                    st.success(f"이메일 발송 완료 → {to_email}")
                 else:
                     st.error("이메일 발송 실패. .env의 SMTP 설정을 확인하세요.")
             except Exception as e:

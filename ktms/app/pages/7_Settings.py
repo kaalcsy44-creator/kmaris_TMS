@@ -10,7 +10,7 @@ if str(ROOT) not in sys.path:
 
 import streamlit as st
 from app.utils.auth import require_auth, is_admin, hash_password, current_user
-from app.utils.helpers import inject_css, NAVY
+from app.utils.helpers import inject_css, section_header, NAVY
 from db.engine import get_session
 from db.models import User, UserRole, Customer, Vendor, Vessel, ItemMaster
 
@@ -21,7 +21,7 @@ except Exception:
 require_auth()
 inject_css()
 
-st.markdown('<div class="ktms-section">⚙️ 설정 (Settings)</div>', unsafe_allow_html=True)
+section_header("settings", "설정 (Settings)")
 
 _config_path = ROOT / "config" / "company.json"
 
@@ -53,7 +53,7 @@ with tabs[0]:
         company["bank_holder"]     = f1.text_input("예금주", company.get("bank_holder", ""))
         company["swift"]           = f2.text_input("SWIFT", company.get("swift", ""))
         company["tagline"]         = st.text_input("태그라인", company.get("tagline", ""))
-        save_co = st.form_submit_button("💾 저장", type="primary")
+        save_co = st.form_submit_button("저장", type="primary")
 
     if save_co:
         _config_path.write_text(json.dumps(company, ensure_ascii=False, indent=2), encoding="utf-8")

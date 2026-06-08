@@ -12,7 +12,7 @@ import pandas as pd
 import streamlit as st
 from app.utils.auth import require_auth
 from app.utils.helpers import (
-    inject_css, hint, next_doc_no, tracking_url,
+    inject_css, hint, section_header, next_doc_no, tracking_url,
     order_list, get_order, get_customer, get_vessel, get_ci_for_order, NAVY,
 )
 from db.engine import get_session
@@ -27,7 +27,7 @@ except Exception:
 require_auth()
 inject_css()
 
-st.markdown('<div class="ktms-section">🗂️ 문서 생성 (Documents)</div>', unsafe_allow_html=True)
+section_header("documents", "문서 생성 (Documents)")
 
 # ── Order selection ───────────────────────────────────────────────────────────
 orders = order_list()
@@ -83,7 +83,7 @@ with tab_ci:
         etd            = sc1.text_input("ETD", "")
         eta            = sc2.text_input("ETA", "")
 
-        save_ci = st.form_submit_button("💾 CI 저장 & PDF 생성", type="primary", use_container_width=True)
+        save_ci = st.form_submit_button("CI 저장 & PDF 생성", type="primary", use_container_width=True)
 
     if save_ci:
         items_data = items_df.fillna("").to_dict(orient="records")
@@ -122,7 +122,7 @@ with tab_ci:
             )
             pdf = generate_pdf("commercial_invoice", payload)
             fname = f"{ci_obj.ci_no}_CI.pdf"
-            st.success(f"✅ CI 저장 완료: {ci_obj.ci_no}")
+            st.success(f"CI 저장 완료: {ci_obj.ci_no}")
             st.download_button("⬇️ CI PDF 다운로드", data=pdf, file_name=fname, mime="application/pdf")
         except Exception as e:
             st.error(f"오류: {e}")
@@ -156,7 +156,7 @@ with tab_pl:
                 pd.DataFrame(existing_pl.items if existing_pl else pl_items),
                 num_rows="dynamic", use_container_width=True, key="pl_items",
             )
-            save_pl = st.form_submit_button("💾 PL 저장 & PDF 생성", type="primary", use_container_width=True)
+            save_pl = st.form_submit_button("PL 저장 & PDF 생성", type="primary", use_container_width=True)
 
         if save_pl:
             pl_items_data = pl_df.fillna("").to_dict(orient="records")
@@ -182,7 +182,7 @@ with tab_pl:
                     po_no=order.po_no or "", export_ref=order.ord_no,
                 )
                 pdf = generate_pdf("packing_list", payload)
-                st.success(f"✅ PL 저장 완료: {pl_obj.pl_no}")
+                st.success(f"PL 저장 완료: {pl_obj.pl_no}")
                 st.download_button("⬇️ PL PDF 다운로드", data=pdf,
                                    file_name=f"{pl_obj.pl_no}_PL.pdf", mime="application/pdf")
             except Exception as e:
@@ -209,7 +209,7 @@ with tab_sa:
         sa_marks   = st.text_input("Shipping Marks",
                                    f"K-MARIS / {vessel.name if vessel else ''} / {order.po_no or ''}")
         to_email_sa = st.text_input("수신자 이메일 (SA 발송용)", cust.email if cust and cust.email else "")
-        save_sa = st.form_submit_button("💾 SA 저장 & PDF / 발송", type="primary", use_container_width=True)
+        save_sa = st.form_submit_button("SA 저장 & PDF / 발송", type="primary", use_container_width=True)
 
     if save_sa:
         sa_shipping = {
@@ -236,7 +236,7 @@ with tab_sa:
                 po_no=order.po_no or "", export_ref=order.ord_no,
             )
             pdf = generate_pdf("shipping_advice", payload)
-            st.success(f"✅ SA 생성 완료: {sa_no}")
+            st.success(f"SA 생성 완료: {sa_no}")
             st.download_button("⬇️ SA PDF 다운로드", data=pdf,
                                file_name=f"{sa_no}_SA.pdf", mime="application/pdf")
             t_url = tracking_url("order", order.tracking_token)
@@ -268,7 +268,7 @@ with tab_tax:
             supply_type = tax_c2.selectbox("공급유형", ["수출(영세율)", "국내 과세(10%)"])
             buyer_biz   = tax_c1.text_input("매입자 사업자번호", cust.tax_id if cust else "")
             tax_vat     = 0.0 if "영세율" in supply_type else 0.1
-            save_tax    = st.form_submit_button("💾 Tax Invoice Data XLSX 생성", type="primary")
+            save_tax    = st.form_submit_button("Tax Invoice Data XLSX 생성", type="primary")
 
         if save_tax:
             tax_no = next_doc_no("tax")
@@ -307,7 +307,7 @@ with tab_tax:
                     session.commit()
                 finally:
                     session.close()
-                st.success(f"✅ Tax Invoice Data 생성: {tax_no} | AR 등록 완료")
+                st.success(f"Tax Invoice Data 생성: {tax_no} | AR 등록 완료")
                 st.download_button("⬇️ Tax Invoice XLSX 다운로드", data=xlsx,
                                    file_name=f"{tax_no}_tax_invoice.xlsx",
                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")

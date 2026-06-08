@@ -484,15 +484,43 @@ section[data-testid="stSidebar"] nav {{
 
 TRACKING_BASE_URL = "https://www.k-maris.com/track.html"
 
+# ── Feather-style SVG icons (stroke, white, 15×15) — matches k-maris.com ─────
+_SI = "xmlns='http://www.w3.org/2000/svg' width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'"
+_SECTION_ICONS: Dict[str, str] = {
+    "dashboard":  f"<svg {_SI}><rect x='3' y='3' width='7' height='7' rx='1'/><rect x='14' y='3' width='7' height='7' rx='1'/><rect x='14' y='14' width='7' height='7' rx='1'/><rect x='3' y='14' width='7' height='7' rx='1'/></svg>",
+    "rfq":        f"<svg {_SI}><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><polyline points='14 2 14 8 20 8'/><line x1='16' y1='13' x2='8' y2='13'/><line x1='16' y1='17' x2='8' y2='17'/></svg>",
+    "quotation":  f"<svg {_SI}><path d='M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2'/><rect x='9' y='3' width='6' height='4' rx='2'/><line x1='9' y1='12' x2='15' y2='12'/><line x1='9' y1='16' x2='13' y2='16'/></svg>",
+    "order":      f"<svg {_SI}><path d='M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z'/><polyline points='3.27 6.96 12 12.01 20.73 6.96'/><line x1='12' y1='22.08' x2='12' y2='12'/></svg>",
+    "documents":  f"<svg {_SI}><path d='M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z'/></svg>",
+    "ar":         f"<svg {_SI}><rect x='1' y='4' width='22' height='16' rx='2' ry='2'/><line x1='1' y1='10' x2='23' y2='10'/></svg>",
+    "settings":   f"<svg {_SI}><line x1='4' y1='21' x2='4' y2='14'/><line x1='4' y1='10' x2='4' y2='3'/><line x1='12' y1='21' x2='12' y2='12'/><line x1='12' y1='8' x2='12' y2='3'/><line x1='20' y1='21' x2='20' y2='16'/><line x1='20' y1='12' x2='20' y2='3'/><line x1='1' y1='14' x2='7' y2='14'/><line x1='9' y1='8' x2='15' y2='8'/><line x1='17' y1='16' x2='23' y2='16'/></svg>",
+    "send":       f"<svg {_SI}><line x1='22' y1='2' x2='11' y2='13'/><polygon points='22 2 15 22 11 13 2 9 22 2'/></svg>",
+    "po":         f"<svg {_SI}><path d='M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z'/></svg>",
+    "alert":      f"<svg {_SI}><polygon points='13 2 3 14 12 14 11 22 21 10 12 10 13 2'/></svg>",
+    "clock":      f"<svg {_SI}><circle cx='12' cy='12' r='10'/><polyline points='12 6 12 12 16 14'/></svg>",
+    "link":       f"<svg {_SI}><path d='M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71'/><path d='M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71'/></svg>",
+}
+
 
 def inject_css():
     st.markdown(KTMS_CSS, unsafe_allow_html=True)
 
 
+def section_header(icon: str, title: str) -> None:
+    """Render a fixed section header bar with a Feather-style SVG icon."""
+    svg = _SECTION_ICONS.get(icon, "")
+    st.markdown(
+        f'<div class="ktms-section">'
+        f'<span style="display:inline-flex;align-items:center;gap:8px;vertical-align:middle;">'
+        f'{svg}{title}</span></div>',
+        unsafe_allow_html=True,
+    )
+
+
 def hint(text: str) -> None:
     st.markdown(
-        f'<p style="color:#999;font-size:0.82rem;margin:2px 0 10px 0;'
-        f'padding-left:10px;border-left:2px solid #ccc;">ℹ {text}</p>',
+        f'<p style="color:#6B7280;font-size:0.82rem;margin:2px 0 10px 0;'
+        f'padding-left:10px;border-left:2px solid #D7E2EE;">ℹ {text}</p>',
         unsafe_allow_html=True,
     )
 

@@ -12,7 +12,7 @@ import pandas as pd
 import streamlit as st
 from app.utils.auth import require_auth, current_user
 from app.utils.helpers import (
-    inject_css, hint, next_doc_no, status_badge, tracking_url,
+    inject_css, hint, section_header, next_doc_no, status_badge, tracking_url,
     customer_options, vessel_options, vendor_options,
     rfq_list, get_rfq, get_customer, get_vessel, get_vendor, NAVY, BLUE,
 )
@@ -126,9 +126,9 @@ except Exception:
 require_auth()
 inject_css()
 
-st.markdown('<div class="ktms-section">📋 RFQ 관리</div>', unsafe_allow_html=True)
+section_header("rfq", "RFQ 관리")
 
-tab_list, tab_new, tab_detail = st.tabs(["📋 RFQ 리스트", "➕ 신규 RFQ 등록", "🔍 RFQ 상세"])
+tab_list, tab_new, tab_detail = st.tabs([":material/list: RFQ 리스트", ":material/add: 신규 RFQ 등록", ":material/search: RFQ 상세"])
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 1 — LIST
@@ -142,7 +142,7 @@ with tab_list:
         cust_sel = st.selectbox("고객사 필터", list(cust_opts.keys()))
     with col_f3:
         st.markdown("<br>", unsafe_allow_html=True)
-        refresh = st.button("🔄 새로고침", use_container_width=True)
+        refresh = st.button("새로고침", icon=":material/refresh:", use_container_width=True)
 
     rfqs = rfq_list(None if status_filter == "전체" else status_filter)
     if cust_sel != "전체" and cust_opts[cust_sel]:
@@ -192,7 +192,7 @@ with tab_new:
             help="PDF를 업로드하면 AI가 고객사·선박·품목 정보를 자동으로 인식합니다.",
         )
         if pdf_file:
-            if st.button("🔍 AI로 정보 추출", key="btn_rfq_ocr", type="secondary"):
+            if st.button("AI로 정보 추출", key="btn_rfq_ocr", type="secondary"):
                 with st.spinner("AI가 PDF를 분석하고 있습니다..."):
                     try:
                         from services.pdf_parser import extract_text_from_pdf, parse_rfq_fields
@@ -221,7 +221,7 @@ with tab_new:
             if ocr_items_preview:
                 st.markdown(f"**인식된 품목 ({len(ocr_items_preview)}건)**")
                 st.dataframe(pd.DataFrame(ocr_items_preview), use_container_width=True, hide_index=True)
-            if st.button("🗑️ OCR 데이터 초기화", key="btn_clear_ocr"):
+            if st.button("OCR 초기화", key="btn_clear_ocr"):
                 st.session_state.pop("rfq_ocr", None)
                 st.rerun()
 
@@ -254,7 +254,7 @@ with tab_new:
         nc_email   = nc2.text_input("이메일", key="nc_email")
         nc_addr    = nc1.text_input("주소", key="nc_addr")
         nc_taxid   = nc2.text_input("Tax ID / 사업자번호", key="nc_taxid")
-        if st.button("💾 고객사 등록", key="btn_quick_cust", type="primary"):
+        if st.button("고객사 등록", key="btn_quick_cust", type="primary"):
             if nc_name.strip():
                 _s = get_session()
                 try:
@@ -290,7 +290,7 @@ with tab_new:
                     break
         nv_owner  = nv2.selectbox("선주 (고객사)", list(_owner_opts.keys()),
                                    index=_owner_idx, key="nv_owner")
-        if st.button("💾 선박 등록", key="btn_quick_vessel", type="primary"):
+        if st.button("선박 등록", key="btn_quick_vessel", type="primary"):
             if nv_name.strip():
                 _s = get_session()
                 try:
@@ -364,7 +364,7 @@ with tab_new:
             },
             key="new_rfq_items",
         )
-        submitted = st.form_submit_button("💾 RFQ 등록", type="primary", use_container_width=True)
+        submitted = st.form_submit_button("RFQ 등록", type="primary", use_container_width=True)
 
     if submitted and cust_id:
         items_data = items_df.fillna("").to_dict(orient="records")
@@ -460,7 +460,7 @@ with tab_detail:
 
         st.markdown("---")
         st.markdown("**삭제**")
-        if st.button("🗑️ RFQ 삭제", type="secondary", use_container_width=True):
+        if st.button("RFQ 삭제", type="secondary", use_container_width=True):
             st.session_state["rfq_delete_confirm"] = rfq.id
 
     # 삭제 확인 (col_actions 바깥에서 전체 폭으로 표시)
@@ -470,7 +470,7 @@ with tab_detail:
             "연결된 Vendor RFQ도 함께 삭제됩니다. 이 작업은 되돌릴 수 없습니다."
         )
         col_yes, col_no, _ = st.columns([1, 1, 4])
-        if col_yes.button("✅ 확인 삭제", type="primary", key="btn_delete_yes"):
+        if col_yes.button("확인 삭제", type="primary", key="btn_delete_yes"):
             session = get_session()
             try:
                 session.query(VendorRFQ).filter_by(rfq_id=rfq.id).delete()
@@ -495,7 +495,7 @@ with tab_detail:
 
     # ── Vendor RFQ 발송 ──────────────────────────────────────────────────────
     st.markdown("---")
-    st.markdown(f'<div class="ktms-section">📤 Vendor RFQ 발송</div>', unsafe_allow_html=True)
+    section_header("send", "Vendor RFQ 발송")
 
     _preview_key = f"vrfq_preview_{rfq.id}"
     vendor_opts = vendor_options()
@@ -519,7 +519,7 @@ with tab_detail:
         )
 
         if st.button(
-            "👁️ 이메일 미리보기 생성",
+            "이메일 미리보기",
             disabled=not sel_vendors,
             type="secondary",
             use_container_width=False,
@@ -610,7 +610,7 @@ with tab_detail:
             )
 
         col_send, col_cancel, _ = st.columns([2, 1, 4])
-        if col_send.button("📤 발송 + DB 저장", type="primary", use_container_width=True):
+        if col_send.button("발송 + DB 저장", type="primary", use_container_width=True):
             session = get_session()
             try:
                 sent_ok, sent_fail, saved = 0, 0, 0
@@ -658,7 +658,7 @@ with tab_detail:
             finally:
                 session.close()
 
-        if col_cancel.button("✕ 취소", use_container_width=True):
+        if col_cancel.button("취소", use_container_width=True):
             st.session_state.pop(_preview_key, None)
             st.rerun()
 

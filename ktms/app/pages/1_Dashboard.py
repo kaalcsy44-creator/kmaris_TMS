@@ -8,7 +8,7 @@ if str(ROOT) not in sys.path:
 
 import streamlit as st
 from app.utils.auth import require_auth
-from app.utils.helpers import inject_css, hint, dashboard_stats, status_badge, NAVY, BLUE
+from app.utils.helpers import inject_css, hint, section_header, dashboard_stats, status_badge, NAVY, BLUE
 
 try:
     st.set_page_config(page_title="Dashboard — KTMS", page_icon="📊", layout="wide")
@@ -17,17 +17,17 @@ except Exception:
 require_auth()
 inject_css()
 
-st.markdown(f'<div class="ktms-section">📊 Dashboard</div>', unsafe_allow_html=True)
+section_header("dashboard", "Dashboard")
 
 stats = dashboard_stats()
 
 # ── KPI cards ─────────────────────────────────────────────────────────────────
 c1, c2, c3, c4 = st.columns(4)
 kpis = [
-    (c1, "📋 Open RFQ",        stats["open_rfq"],             "건 진행 중"),
-    (c2, "📦 Active Orders",   stats["active_orders"],         "건 배송 준비 중"),
-    (c3, "💰 AR Outstanding",  f"USD {stats['ar_outstanding_usd']:,.0f}", "미수금"),
-    (c4, "📄 이번 달 견적",     stats["monthly_quotes"],        "건 발송"),
+    (c1, "Open RFQ",       stats["open_rfq"],                        "건 진행 중"),
+    (c2, "Active Orders",  stats["active_orders"],                    "건 배송 준비 중"),
+    (c3, "AR Outstanding", f"USD {stats['ar_outstanding_usd']:,.0f}", "미수금"),
+    (c4, "이번 달 견적",    stats["monthly_quotes"],                   "건 발송"),
 ]
 for col, label, value, sub in kpis:
     with col:
@@ -45,7 +45,7 @@ st.markdown("---")
 col_left, col_right = st.columns(2)
 
 with col_left:
-    st.markdown(f'<div class="ktms-section">⚡ 긴급 Follow-up — Level A 견적</div>', unsafe_allow_html=True)
+    section_header("alert", "긴급 Follow-up — Level A 견적")
     urgent = stats["urgent_quotes"]
     if urgent:
         for q in urgent:
@@ -61,7 +61,7 @@ with col_left:
         st.success("긴급 follow-up 견적이 없습니다.")
 
 with col_right:
-    st.markdown(f'<div class="ktms-section">🔴 연체 AR</div>', unsafe_allow_html=True)
+    section_header("clock", "연체 AR")
     overdue = stats["overdue_ar"]
     if overdue:
         from app.utils.helpers import get_session, Order
@@ -83,7 +83,7 @@ with col_right:
 st.markdown("---")
 
 # ── Recent RFQ activity ───────────────────────────────────────────────────────
-st.markdown(f'<div class="ktms-section">🕐 최근 RFQ 현황</div>', unsafe_allow_html=True)
+section_header("rfq", "최근 RFQ 현황")
 from app.utils.helpers import rfq_list, get_customer, get_vessel
 
 rfqs = rfq_list()[:10]
