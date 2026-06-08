@@ -186,7 +186,7 @@ with tab_new:
     st.subheader("신규 RFQ 등록")
 
     # ── PDF 자동 입력 ────────────────────────────────────────────────────────
-    with st.expander("📄 PDF로 자동 입력 (AI OCR)", expanded=False):
+    with st.expander("PDF로 자동 입력 (AI OCR)", expanded=False):
         pdf_file = st.file_uploader(
             "RFQ PDF 파일 업로드", type=["pdf"], key="rfq_pdf_uploader",
             help="PDF를 업로드하면 AI가 고객사·선박·품목 정보를 자동으로 인식합니다.",
@@ -244,7 +244,7 @@ with tab_new:
 
     # ── 신규 고객사 빠른 등록 ────────────────────────────────────────────────
     _cust_expand = bool(_cust_hint_raw) and not _cust_matched
-    with st.expander("➕ 신규 고객사 빠른 등록", expanded=_cust_expand):
+    with st.expander("신규 고객사 빠른 등록", expanded=_cust_expand):
         if _cust_expand:
             st.info(f'OCR 인식: **"{_cust_hint_raw}"** — DB에 없는 고객사입니다. 등록 후 자동 선택됩니다.')
         nc1, nc2 = st.columns(2)
@@ -272,7 +272,7 @@ with tab_new:
     # ── 신규 선박 빠른 등록 ──────────────────────────────────────────────────
     _cust_opts_now2 = customer_options()   # 고객사 등록 후 갱신
     _vessel_expand = bool(_vessel_hint_raw) and not _vessel_matched
-    with st.expander("🚢 신규 선박 빠른 등록", expanded=_vessel_expand):
+    with st.expander("신규 선박 빠른 등록", expanded=_vessel_expand):
         if _vessel_expand:
             st.info(f'OCR 인식: **"{_vessel_hint_raw}"** — DB에 없는 선박입니다. 등록 후 자동 선택됩니다.')
         nv_name   = st.text_input("선박명 *", value=_vessel_hint_raw, key="nv_name")
@@ -569,7 +569,7 @@ with tab_detail:
         for i, prev in enumerate(previews):
             email_label = prev["vendor_email"] or "⚠️ 이메일 주소 없음"
             lang_badge = "🇰🇷 국문" if "Korean" in prev.get("lang", "") else "🇺🇸 영문"
-            with st.expander(f"📧 {prev['vendor_name']}  ({email_label})  [{lang_badge}]", expanded=True):
+            with st.expander(f"{prev['vendor_name']}  ({email_label})  [{lang_badge}]", expanded=True):
                 to_email = st.text_input(
                     "수신자 이메일", value=prev["vendor_email"], key=f"vrfq_to_{rfq.id}_{i}"
                 )

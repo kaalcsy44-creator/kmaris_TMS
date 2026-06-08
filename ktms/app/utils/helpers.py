@@ -50,6 +50,7 @@ _NAV_ICON_CSS = "\n".join(
 
 KTMS_CSS = f"""
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200');
 /* ════════════════════════════════════════════════════════════════════════════
    K-MARIS KTMS — Design System (matches k-maris.com)
    Font    : Arial, Helvetica Neue, Helvetica, sans-serif
