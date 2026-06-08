@@ -128,7 +128,7 @@ inject_css()
 
 section_header("rfq", "RFQ 관리")
 
-tab_list, tab_new, tab_detail = st.tabs([":material/list: RFQ 리스트", ":material/add: 신규 RFQ 등록", ":material/search: RFQ 상세"])
+tab_list, tab_new, tab_detail = st.tabs(["RFQ 리스트", "신규 RFQ 등록", "RFQ 상세"])
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 1 — LIST
@@ -142,7 +142,7 @@ with tab_list:
         cust_sel = st.selectbox("고객사 필터", list(cust_opts.keys()))
     with col_f3:
         st.markdown("<br>", unsafe_allow_html=True)
-        refresh = st.button("새로고침", icon=":material/refresh:", use_container_width=True)
+        refresh = st.button("새로고침", use_container_width=True)
 
     rfqs = rfq_list(None if status_filter == "전체" else status_filter)
     if cust_sel != "전체" and cust_opts[cust_sel]:

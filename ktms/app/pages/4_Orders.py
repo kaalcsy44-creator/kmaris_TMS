@@ -29,7 +29,7 @@ inject_css()
 
 section_header("order", "오더 관리 (Orders)")
 
-tab_list, tab_new, tab_detail = st.tabs([":material/list: 오더 리스트", ":material/add: 신규 오더 등록", ":material/search: 오더 상세"])
+tab_list, tab_new, tab_detail = st.tabs(["오더 리스트", "신규 오더 등록", "오더 상세"])
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 1 — LIST

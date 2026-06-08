@@ -152,7 +152,7 @@ with st.sidebar:
             unsafe_allow_html=True,
         )
     with c2:
-        if st.button(" ", icon=":material/logout:", key="sidebar_logout", help="로그아웃", use_container_width=True):
+        if st.button("⏻", key="sidebar_logout", help="로그아웃", use_container_width=True):
             logout()
             st.rerun()
 
