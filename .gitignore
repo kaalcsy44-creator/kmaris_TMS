@@ -29,5 +29,9 @@ Thumbs.db
 .streamlit/secrets.toml
 ktms/.streamlit/secrets.toml
 
+# Google Service Account keys (절대 커밋 금지)
+ktms/config/*.json
+ktms/config/
+
 # Logs
 *.log

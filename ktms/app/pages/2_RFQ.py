@@ -20,6 +20,7 @@ from db.engine import get_session
 from db.models import RFQ, VendorRFQ, RFQStatus, FollowUpLevel, Customer, Vessel
 from services.email_svc import send_email
 from services.vendor_xlsx import make_vendor_rfq_quote_xlsx
+from services.sheets_svc import upsert_rfq as _sheet_upsert_rfq
 
 
 def _build_vendor_rfq_email(rfq, cust, vessel, vendor, notes: str) -> str:
@@ -386,6 +387,7 @@ with tab_new:
             st.success(f"✅ RFQ 등록 완료: **{rfq_no}**")
             t_url = tracking_url("rfq", rfq.tracking_token)
             st.info(f"🔗 고객 트래킹 링크: {t_url}")
+            _sheet_upsert_rfq(rfq, get_customer(rfq.customer_id), get_vessel(rfq.vessel_id) if rfq.vessel_id else None)
             st.session_state.pop("rfq_ocr", None)
         finally:
             session.close()
@@ -437,6 +439,7 @@ with tab_detail:
                 r = session.query(RFQ).get(rfq.id)
                 r.status = RFQStatus(new_status)
                 session.commit()
+                _sheet_upsert_rfq(r, get_customer(r.customer_id), get_vessel(r.vessel_id) if r.vessel_id else None)
                 st.success("상태 업데이트 완료!")
                 st.rerun()
             finally:

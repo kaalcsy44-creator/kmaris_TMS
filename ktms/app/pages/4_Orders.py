@@ -18,6 +18,7 @@ from app.utils.helpers import (
 )
 from db.engine import get_session
 from db.models import Order, PurchaseOrder, Quotation, OrderStatus, QuotationStatus
+from services.sheets_svc import upsert_order as _sheet_upsert_order
 
 try:
     st.set_page_config(page_title="오더 관리 — KTMS", page_icon="📦", layout="wide")
@@ -142,6 +143,7 @@ with tab_new:
             t_url = tracking_url("order", order.tracking_token)
             st.success(f"✅ 오더 등록 완료: **{ord_no}**")
             st.info(f"🔗 고객 트래킹 링크: {t_url}")
+            _sheet_upsert_order(order, get_customer(order.customer_id), get_vessel(order.vessel_id) if order.vessel_id else None)
         finally:
             session.close()
 
@@ -184,6 +186,7 @@ with tab_detail:
                 o = s.query(Order).get(order.id)
                 o.status = OrderStatus(new_stat)
                 s.commit()
+                _sheet_upsert_order(o, get_customer(o.customer_id), get_vessel(o.vessel_id) if o.vessel_id else None)
                 st.success("업데이트!")
                 st.rerun()
             finally:

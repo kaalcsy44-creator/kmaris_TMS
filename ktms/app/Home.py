@@ -14,6 +14,7 @@ import streamlit as st
 _SECRET_KEYS = [
     "DATABASE_URL", "SMTP_HOST", "SMTP_PORT", "SMTP_USER",
     "SMTP_PASSWORD", "SMTP_FROM", "ANTHROPIC_API_KEY",
+    "GOOGLE_SHEET_ID", "GOOGLE_SA_KEY_JSON", "GOOGLE_SA_KEY_FILE",
 ]
 for _k in _SECRET_KEYS:
     try:
@@ -45,23 +46,28 @@ try:
     import bcrypt as _bcrypt
     from db.models import User, UserRole, Customer, Vendor
     _s = get_session()
-    if _s.query(User).count() == 0:
-        _pw = _bcrypt.hashpw(b"admin1234", _bcrypt.gensalt()).decode()
-        _s.add(User(username="admin", email="admin@k-maris.com",
-                    password_hash=_pw, role=UserRole.ADMIN))
-        _s.add(Customer(name="ABC Ship Management Pte. Ltd.",
-                        address="10 Anson Road, Singapore",
-                        contact="Mr. John Lee", email="purchase@example.com",
-                        tax_id="SG-000000", country="Singapore"))
-        _s.add(Vendor(name="MAN Energy Solutions",
-                      address="Teglholmsgade 41, Copenhagen, Denmark",
-                      contact="Mr. Klaus Schmidt", email="spares@man-es.com",
-                      country="Denmark",
-                      specialization="MAN B&W Engine OEM Parts"))
+    _user_count = _s.query(User).count()
+    _admin_exists = _s.query(User).filter_by(username="admin").first() is not None
+    if _user_count == 0 or not _admin_exists:
+        if not _admin_exists:
+            _pw = _bcrypt.hashpw(b"admin1234", _bcrypt.gensalt()).decode()
+            _s.add(User(username="admin", email="admin@k-maris.com",
+                        password_hash=_pw, role=UserRole.ADMIN))
+        if _s.query(Customer).count() == 0:
+            _s.add(Customer(name="ABC Ship Management Pte. Ltd.",
+                            address="10 Anson Road, Singapore",
+                            contact="Mr. John Lee", email="purchase@example.com",
+                            tax_id="SG-000000", country="Singapore"))
+            _s.add(Vendor(name="MAN Energy Solutions",
+                          address="Teglholmsgade 41, Copenhagen, Denmark",
+                          contact="Mr. Klaus Schmidt", email="spares@man-es.com",
+                          country="Denmark",
+                          specialization="MAN B&W Engine OEM Parts"))
         _s.commit()
     _s.close()
-except Exception:
-    pass
+except Exception as _seed_err:
+    st.error(f"⚠️ DB 초기 사용자 생성 실패: {_seed_err}")
+    st.stop()
 
 # ── Page config (called ONCE here — page files skip this) ─────────────────────
 st.set_page_config(
