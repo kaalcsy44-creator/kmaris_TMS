@@ -50,45 +50,290 @@ _NAV_ICON_CSS = "\n".join(
 
 KTMS_CSS = f"""
 <style>
-/* ── Sidebar width (≈half of 344px default) ── */
+/* ════════════════════════════════════════════════════════════════════════════
+   K-MARIS KTMS — Design System (matches k-maris.com)
+   Font    : Arial, Helvetica Neue, Helvetica, sans-serif
+   Navy    : #0B1D3A  |  Blue : #0055A8  |  Sky : #3BA6E0
+   Light   : #F6F8FB  |  Line : #D7E2EE  |  Text : #1F2937
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* ── Global font & body ──────────────────────────────────────────────────── */
+*, html, body, .stApp,
+[data-testid="stAppViewContainer"],
+[data-testid="stMainBlockContainer"],
+.stMarkdown, button, input, textarea, select,
+[data-baseweb="input"], [data-baseweb="select"],
+[data-baseweb="textarea"], [data-baseweb="tab"] {{
+    font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif !important;
+}}
+
+/* ── App background ──────────────────────────────────────────────────────── */
+.stApp, [data-testid="stAppViewContainer"] {{
+    background-color: #F6F8FB !important;
+}}
+.main .block-container,
+[data-testid="stMainBlockContainer"] {{
+    padding-top: 105px !important;
+    background-color: #F6F8FB !important;
+}}
+
+/* ── Headings ────────────────────────────────────────────────────────────── */
+.stMarkdown h1, .stMarkdown h2, .stMarkdown h3, .stMarkdown h4,
+h1, h2, h3, h4 {{
+    font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif !important;
+    color: {NAVY} !important;
+    font-weight: 800 !important;
+    letter-spacing: -.025em;
+    line-height: 1.14;
+}}
+.stMarkdown h1 {{ font-size: 1.9rem; }}
+.stMarkdown h2 {{ font-size: 1.45rem; }}
+.stMarkdown h3 {{ font-size: 1.1rem; letter-spacing: -.015em; }}
+.stMarkdown p  {{ color: #1F2937; line-height: 1.65; }}
+
+/* ── Metric cards (KPI) ──────────────────────────────────────────────────── */
+[data-testid="stMetric"] {{
+    background: #ffffff !important;
+    border: 1px solid #D7E2EE !important;
+    border-radius: 14px !important;
+    padding: 18px 22px !important;
+    box-shadow: 0 4px 20px rgba(11,29,58,.07) !important;
+    transition: box-shadow .2s, transform .2s;
+}}
+[data-testid="stMetric"]:hover {{
+    box-shadow: 0 10px 36px rgba(11,29,58,.14) !important;
+    transform: translateY(-2px);
+}}
+[data-testid="stMetricValue"] > div {{
+    color: {NAVY} !important;
+    font-weight: 800 !important;
+    letter-spacing: -.03em !important;
+    font-size: 2rem !important;
+}}
+[data-testid="stMetricLabel"] > div {{
+    color: #6B7280 !important;
+    font-size: 11px !important;
+    font-weight: 700 !important;
+    text-transform: uppercase !important;
+    letter-spacing: .08em !important;
+}}
+
+/* ── Primary buttons ─────────────────────────────────────────────────────── */
+[data-testid="baseButton-primary"] {{
+    background-color: {BLUE} !important;
+    color: #ffffff !important;
+    font-weight: 800 !important;
+    font-size: 14px !important;
+    border-radius: 14px !important;
+    min-height: 44px !important;
+    border: none !important;
+    box-shadow: 0 4px 16px rgba(0,85,168,.28) !important;
+    letter-spacing: -.01em !important;
+    transition: background .18s, box-shadow .18s, transform .18s !important;
+}}
+[data-testid="baseButton-primary"]:hover {{
+    background-color: #004899 !important;
+    box-shadow: 0 6px 24px rgba(0,85,168,.4) !important;
+    transform: translateY(-1px) !important;
+}}
+
+/* ── Secondary buttons ───────────────────────────────────────────────────── */
+[data-testid="baseButton-secondary"] {{
+    background-color: #ffffff !important;
+    color: {BLUE} !important;
+    font-weight: 700 !important;
+    font-size: 14px !important;
+    border-radius: 14px !important;
+    min-height: 44px !important;
+    border: 2px solid {BLUE} !important;
+    box-shadow: none !important;
+    transition: background .15s !important;
+}}
+[data-testid="baseButton-secondary"]:hover {{
+    background-color: #EBF4FF !important;
+}}
+
+/* ── Text inputs ─────────────────────────────────────────────────────────── */
+[data-baseweb="input"] > div,
+[data-baseweb="textarea"] > div {{
+    border: 1.5px solid #D7E2EE !important;
+    border-radius: 8px !important;
+    background: #ffffff !important;
+    transition: border-color .15s, box-shadow .15s !important;
+}}
+[data-baseweb="input"]:focus-within > div,
+[data-baseweb="textarea"]:focus-within > div {{
+    border-color: {BLUE} !important;
+    box-shadow: 0 0 0 3px rgba(0,85,168,.1) !important;
+}}
+[data-baseweb="input"] input,
+[data-baseweb="textarea"] textarea {{
+    color: #1F2937 !important;
+    font-size: 14px !important;
+}}
+
+/* ── Select box ──────────────────────────────────────────────────────────── */
+[data-baseweb="select"] > div:first-child {{
+    border: 1.5px solid #D7E2EE !important;
+    border-radius: 8px !important;
+    min-height: 42px !important;
+    background: #ffffff !important;
+    transition: border-color .15s, box-shadow .15s !important;
+}}
+[data-baseweb="select"]:focus-within > div:first-child {{
+    border-color: {BLUE} !important;
+    box-shadow: 0 0 0 3px rgba(0,85,168,.1) !important;
+}}
+
+/* ── Field labels ────────────────────────────────────────────────────────── */
+.stTextInput label, .stSelectbox label, .stTextArea label,
+.stDateInput label, .stNumberInput label, .stMultiSelect label,
+.stRadio > label, .stCheckbox > label, .stFileUploader label {{
+    font-weight: 700 !important;
+    font-size: 13px !important;
+    color: {NAVY} !important;
+    letter-spacing: .01em !important;
+}}
+
+/* ── Expanders ───────────────────────────────────────────────────────────── */
+[data-testid="stExpander"] {{
+    border: 1px solid #D7E2EE !important;
+    border-radius: 14px !important;
+    box-shadow: 0 4px 20px rgba(11,29,58,.07) !important;
+    background: #ffffff !important;
+    overflow: hidden !important;
+}}
+[data-testid="stExpander"] summary,
+[data-testid="stExpander"] summary p {{
+    font-weight: 700 !important;
+    color: {NAVY} !important;
+    font-size: 14px !important;
+}}
+
+/* ── Forms ───────────────────────────────────────────────────────────────── */
+[data-testid="stForm"] {{
+    background: #ffffff !important;
+    border: 1px solid #D7E2EE !important;
+    border-radius: 14px !important;
+    padding: 20px 24px !important;
+    box-shadow: 0 4px 20px rgba(11,29,58,.07) !important;
+}}
+
+/* ── DataFrames ──────────────────────────────────────────────────────────── */
+[data-testid="stDataFrame"] > div {{
+    border: 1px solid #D7E2EE !important;
+    border-radius: 14px !important;
+    overflow: hidden !important;
+    box-shadow: 0 4px 20px rgba(11,29,58,.07) !important;
+}}
+
+/* ── Alert / info boxes ──────────────────────────────────────────────────── */
+[data-testid="stAlert"] {{
+    border-radius: 10px !important;
+    border-left-width: 4px !important;
+    font-size: 13.5px !important;
+    font-weight: 600 !important;
+}}
+
+/* ── Dialog ──────────────────────────────────────────────────────────────── */
+[data-testid="stDialog"] [data-baseweb="dialog"] {{
+    border-radius: 20px !important;
+    box-shadow: 0 24px 64px rgba(11,29,58,.18) !important;
+    border: 1px solid #D7E2EE !important;
+}}
+[data-testid="stDialog"] h2 {{
+    font-weight: 800 !important;
+    letter-spacing: -.025em !important;
+    color: {NAVY} !important;
+}}
+
+/* ── Tabs ────────────────────────────────────────────────────────────────── */
+[data-baseweb="tab-list"] {{
+    position: fixed !important;
+    top: 96px !important;
+    left: 210px !important;
+    right: 0 !important;
+    z-index: 999 !important;
+    background: #ffffff !important;
+    border-bottom: 2px solid #D7E2EE !important;
+    padding: 0 1rem !important;
+}}
+[data-baseweb="tab"] {{
+    font-weight: 700 !important;
+    font-size: 13.5px !important;
+    color: #6B7280 !important;
+    letter-spacing: -.01em !important;
+}}
+[data-baseweb="tab"][aria-selected="true"] {{
+    color: {BLUE} !important;
+    font-weight: 800 !important;
+}}
+[data-baseweb="tab-highlight"] {{
+    background-color: {BLUE} !important;
+    height: 3px !important;
+    border-radius: 3px 3px 0 0 !important;
+}}
+[data-baseweb="tab-panel"],
+[data-baseweb="tab-panel"][role="tabpanel"],
+[role="tabpanel"], div[role="tabpanel"],
+[data-testid="stTab"], [data-testid="stTabPanel"] {{
+    border-top: none !important;
+    border: none !important;
+    box-shadow: none !important;
+    outline: none !important;
+    padding-top: 0 !important;
+    margin-top: 0 !important;
+}}
+[data-baseweb="tab-panel"] > div, [role="tabpanel"] > div {{
+    border-top: none !important;
+    padding-top: 0 !important;
+    margin-top: 0 !important;
+}}
+[data-baseweb="tab-panel"] > div > div, [role="tabpanel"] > div > div {{
+    border-top: none !important;
+    margin-top: 0 !important;
+}}
+[data-baseweb="tab-panel"] hr, [role="tabpanel"] hr {{ display: none !important; }}
+[data-baseweb="tab-border"] {{ display: none !important; }}
+
+/* ── Sidebar ─────────────────────────────────────────────────────────────── */
 section[data-testid="stSidebar"] {{
     min-width: 210px !important;
     max-width: 210px !important;
     width: 210px !important;
+    background-color: {NAVY} !important;
 }}
-
-/* ── Nav: push down by ~2 items ── */
 section[data-testid="stSidebar"] nav {{
     margin-top: 72px !important;
 }}
-
-/* ── Main content: pad top to clear fixed header (toolbar60 + section36 + tabs52) ── */
-.main .block-container,
-[data-testid="stMainBlockContainer"] {{
-    padding-top: 105px !important;
-}}
-
-/* ── Sidebar colors ── */
-[data-testid="stSidebar"] {{background-color: {NAVY};}}
 [data-testid="stSidebar"] .stMarkdown, [data-testid="stSidebar"] label,
-[data-testid="stSidebar"] .stSelectbox label, [data-testid="stSidebar"] p {{color: #E8EDF5;}}
-[data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {{color: white;}}
-
-/* ── Nav text color ── */
+[data-testid="stSidebar"] .stSelectbox label, [data-testid="stSidebar"] p {{
+    color: #E8EDF5 !important;
+}}
+[data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2,
+[data-testid="stSidebar"] h3 {{ color: white !important; }}
 [data-testid="stSidebar"] nav a,
 [data-testid="stSidebar"] nav a * {{
     color: #C4CFDE !important;
     opacity: 1 !important;
+    font-weight: 700 !important;
+    font-size: 14px !important;
+    letter-spacing: -.01em !important;
 }}
 [data-testid="stSidebar"] nav a[aria-current="page"],
 [data-testid="stSidebar"] nav a[aria-current="page"] * {{
     color: #FFFFFF !important;
 }}
-
-/* ── Nav icons via ::before + SVG data URI ── */
 [data-testid="stSidebar"] nav li a {{
     display: flex !important;
     align-items: center !important;
+    border-radius: 8px !important;
+}}
+[data-testid="stSidebar"] nav li a:hover {{
+    background: rgba(255,255,255,.08) !important;
+}}
+[data-testid="stSidebar"] nav li a[aria-current="page"] {{
+    background: rgba(0,85,168,.35) !important;
 }}
 [data-testid="stSidebar"] nav li a::before {{
     content: '' !important;
@@ -109,7 +354,7 @@ section[data-testid="stSidebar"] nav {{
 }}
 {_NAV_ICON_CSS}
 
-/* ── Sidebar bottom: fixed user+logout area ── */
+/* ── Sidebar bottom user/logout area ─────────────────────────────────────── */
 [data-testid="stSidebarUserContent"] {{
     position: fixed !important;
     bottom: 0 !important;
@@ -117,16 +362,14 @@ section[data-testid="stSidebar"] nav {{
     width: 210px !important;
     background-color: {NAVY} !important;
     padding: 10px 16px 16px !important;
-    border-top: 1px solid rgba(255,255,255,0.1) !important;
+    border-top: 1px solid rgba(255,255,255,.1) !important;
     z-index: 100 !important;
 }}
-
-/* Logout button: transparent bg matching dark sidebar */
 [data-testid="stSidebarUserContent"] button,
 [data-testid="stSidebarUserContent"] [data-testid^="baseButton"] {{
     background: transparent !important;
     background-color: transparent !important;
-    border: 1px solid rgba(255,255,255,0.2) !important;
+    border: 1px solid rgba(255,255,255,.2) !important;
     color: #C4CFDE !important;
     box-shadow: none !important;
     height: 28px !important;
@@ -136,9 +379,9 @@ section[data-testid="stSidebar"] nav {{
 }}
 [data-testid="stSidebarUserContent"] button:hover,
 [data-testid="stSidebarUserContent"] [data-testid^="baseButton"]:hover {{
-    background: rgba(255,255,255,0.1) !important;
+    background: rgba(255,255,255,.1) !important;
     color: #FFFFFF !important;
-    border-color: rgba(255,255,255,0.35) !important;
+    border-color: rgba(255,255,255,.35) !important;
 }}
 [data-testid="stSidebarUserContent"] button svg,
 [data-testid="stSidebarUserContent"] [data-testid^="baseButton"] svg {{
@@ -150,82 +393,96 @@ section[data-testid="stSidebar"] nav {{
     display: none !important;
 }}
 
-.ktms-kpi {{
-    background:{LIGHT_BLUE}; border-left:4px solid {BLUE};
-    border-radius:8px; padding:16px 20px; margin-bottom:8px;
-}}
-.ktms-kpi-value {{font-size:2rem; font-weight:700; color:{NAVY};}}
-.ktms-kpi-label {{font-size:0.85rem; color:#555; margin-top:2px;}}
+/* ── Section header bar ──────────────────────────────────────────────────── */
 .ktms-section {{
-    background:{NAVY}; color:white; padding:6px 14px;
-    font-weight:600;
-    position:fixed !important;
-    top:60px !important;
-    left:210px !important;
-    right:0 !important;
-    z-index:1000 !important;
-    margin:0 !important;
-    border-radius:0 !important;
+    background: {NAVY};
+    color: white;
+    padding: 7px 18px;
+    font-weight: 800;
+    font-size: 13.5px;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    position: fixed !important;
+    top: 60px !important;
+    left: 210px !important;
+    right: 0 !important;
+    z-index: 1000 !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    border-bottom: 2px solid {BLUE};
 }}
 
-/* ── Fixed tab bar (just below title: 60px toolbar + 36px section = 96px) ── */
-[data-baseweb="tab-list"] {{
-    position:fixed !important;
-    top:96px !important;
-    left:210px !important;
-    right:0 !important;
-    z-index:999 !important;
-    background:white !important;
-    border-bottom:2px solid #e8e8e8 !important;
-    padding:0 1rem !important;
-}}
-
-/* ── When sidebar is collapsed: reset left to 0 ── */
+/* ── When sidebar is collapsed ───────────────────────────────────────────── */
 [data-testid="stSidebar"][aria-expanded="false"] ~ section .ktms-section,
 [data-testid="stSidebar"][aria-expanded="false"] ~ section [data-baseweb="tab-list"] {{
-    left:0 !important;
+    left: 0 !important;
 }}
-.badge-A {{background:#dc3545; color:white; padding:2px 8px; border-radius:12px; font-size:0.78rem;}}
-.badge-B {{background:#fd7e14; color:white; padding:2px 8px; border-radius:12px; font-size:0.78rem;}}
-.badge-C {{background:#6c757d; color:white; padding:2px 8px; border-radius:12px; font-size:0.78rem;}}
 
-/* ── Tab panel: remove top separator line ── */
-[data-baseweb="tab-panel"],
-[data-baseweb="tab-panel"][role="tabpanel"],
-[role="tabpanel"],
-div[role="tabpanel"],
-[data-testid="stTab"],
-[data-testid="stTabPanel"] {{
-    border-top: none !important;
-    border: none !important;
-    box-shadow: none !important;
-    outline: none !important;
-    padding-top: 0 !important;
-    margin-top: 0 !important;
+/* ── KPI cards ───────────────────────────────────────────────────────────── */
+.ktms-kpi {{
+    background: #ffffff;
+    border: 1px solid #D7E2EE;
+    border-left: 4px solid {BLUE};
+    border-radius: 14px;
+    padding: 18px 22px;
+    margin-bottom: 8px;
+    box-shadow: 0 4px 20px rgba(11,29,58,.07);
+    transition: box-shadow .2s, transform .2s;
 }}
-[data-baseweb="tab-panel"] > div,
-[role="tabpanel"] > div {{
-    border-top: none !important;
-    padding-top: 0 !important;
-    margin-top: 0 !important;
+.ktms-kpi:hover {{
+    box-shadow: 0 10px 36px rgba(11,29,58,.14);
+    transform: translateY(-2px);
 }}
-[data-baseweb="tab-panel"] > div > div,
-[role="tabpanel"] > div > div {{
-    border-top: none !important;
-    margin-top: 0 !important;
+.ktms-kpi-value {{
+    font-size: 2rem;
+    font-weight: 800;
+    color: {NAVY};
+    letter-spacing: -.03em;
 }}
-[data-baseweb="tab-panel"] hr,
-[role="tabpanel"] hr {{
-    display: none !important;
+.ktms-kpi-label {{
+    font-size: 11px;
+    font-weight: 700;
+    color: #6B7280;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    margin-top: 4px;
 }}
-/* Baseweb internal tab-border element */
-[data-baseweb="tab-border"] {{
-    display: none !important;
+
+/* ── Follow-up level badges ──────────────────────────────────────────────── */
+.badge-A {{
+    background: rgba(220,53,69,.12);
+    color: #c0392b;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: .04em;
+    border: 1px solid rgba(220,53,69,.25);
+}}
+.badge-B {{
+    background: rgba(253,126,20,.12);
+    color: #d0681a;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: .04em;
+    border: 1px solid rgba(253,126,20,.25);
+}}
+.badge-C {{
+    background: rgba(108,117,125,.1);
+    color: #495057;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: .04em;
+    border: 1px solid rgba(108,117,125,.2);
 }}
 </style>
 """
 
-TRACKING_BASE_URL = "https://www.k-maris.com/track"
+TRACKING_BASE_URL = "https://www.k-maris.com/track.html"
 
 
 def inject_css():
@@ -241,7 +498,7 @@ def hint(text: str) -> None:
 
 
 def tracking_url(kind: str, token: str) -> str:
-    return f"{TRACKING_BASE_URL}/{kind}/{token}"
+    return f"{TRACKING_BASE_URL}?type={kind}&token={token}"
 
 
 # ── Document numbering ────────────────────────────────────────────────────────
@@ -506,19 +763,43 @@ def total_amount(items: List[Dict]) -> float:
     return sum(float(i.get("amount", 0)) for i in items)
 
 
+_STATUS_STYLES: dict[str, tuple[str, str]] = {
+    # bg, text  — matches k-maris.com tracking badge palette
+    "수신완료":           ("rgba(59,166,224,.15)",  "#1a7aad"),
+    "공급사 소싱중":       ("rgba(255,189,46,.18)",  "#a07000"),
+    "견적 중":            ("rgba(255,189,46,.18)",  "#a07000"),
+    "이메일 발송 완료":    ("rgba(72,199,131,.18)",  "#1a7a4a"),
+    "수주완료":           ("rgba(72,199,131,.85)",  "#ffffff"),
+    "실주":              ("rgba(220,53,69,.15)",   "#b02030"),
+    "초안":              ("rgba(108,117,125,.12)", "#495057"),
+    "발송완료":           ("rgba(0,85,168,.12)",    "#0055A8"),
+    "협상중":             ("rgba(255,189,46,.18)",  "#a07000"),
+    "수주확정":           ("rgba(72,199,131,.85)",  "#ffffff"),
+    "만료":              ("rgba(108,117,125,.12)", "#6B7280"),
+    "오더 수주":          ("rgba(99,179,237,.18)",  "#1a5a8a"),
+    "발주 완료":          ("rgba(255,189,46,.18)",  "#a07000"),
+    "제조/준비중":        ("rgba(255,189,46,.18)",  "#a07000"),
+    "출고완료":           ("rgba(59,166,224,.18)",  "#1a6080"),
+    "운송중":             ("rgba(59,166,224,.22)",  "#1a7aad"),
+    "목적지 하차 완료":    ("rgba(72,199,131,.85)",  "#ffffff"),
+    "미수":              ("rgba(255,189,46,.18)",  "#a07000"),
+    "일부수금":           ("rgba(99,179,237,.18)",  "#1a5a8a"),
+    "완납":              ("rgba(72,199,131,.85)",  "#ffffff"),
+    "연체":              ("rgba(220,53,69,.15)",   "#b02030"),
+}
+
+
 def status_color(status: str) -> str:
-    colors = {
-        "수신완료": "#0055A8", "공급사 소싱중": "#fd7e14", "견적 중": "#6f42c1",
-        "이메일 발송 완료": "#20c997", "수주완료": "#198754", "실주": "#dc3545",
-        "초안": "#6c757d", "발송완료": "#0055A8", "협상중": "#fd7e14",
-        "수주확정": "#198754", "만료": "#adb5bd",
-        "오더 수주": "#0055A8", "발주 완료": "#6f42c1", "제조/준비중": "#fd7e14",
-        "출고완료": "#20c997", "운송중": "#0dcaf0", "목적지 하차 완료": "#198754",
-        "미수": "#fd7e14", "일부수금": "#6f42c1", "완납": "#198754", "연체": "#dc3545",
-    }
-    return colors.get(status, "#6c757d")
+    bg, _ = _STATUS_STYLES.get(status, ("rgba(108,117,125,.12)", "#495057"))
+    return bg
 
 
 def status_badge(status: str) -> str:
-    color = status_color(status)
-    return f'<span style="background:{color};color:white;padding:2px 10px;border-radius:12px;font-size:0.8rem;">{status}</span>'
+    bg, text = _STATUS_STYLES.get(status, ("rgba(108,117,125,.12)", "#495057"))
+    return (
+        f'<span style="'
+        f'background:{bg};color:{text};'
+        f'padding:3px 10px;border-radius:999px;'
+        f'font-size:12px;font-weight:800;letter-spacing:.03em;'
+        f'">{status}</span>'
+    )
