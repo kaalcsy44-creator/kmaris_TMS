@@ -148,11 +148,19 @@ with tab_quote:
         vq_date = st.date_input("견적 수신일", value=date.today(), key="vq_tab_date")
         vq_notes = st.text_input("비고 (Vendor 메모 등)", key="vq_tab_notes")
 
-        # ── Vendor 견적 파일 업로드 (PDF/Excel → 자동 파싱) ───────────────
-        _parse_key  = f"vq_parsed_{sel_vrfq.id}"
-        _fhash_key  = f"vq_fhash_{sel_vrfq.id}"
-        _editor_key = f"vq_items_{sel_vrfq.id}"
+        # ── Session-state keys (version counter = data_editor key 변경 트리거) ──
+        _parse_key   = f"vq_parsed_{sel_vrfq.id}"
+        _fhash_key   = f"vq_fhash_{sel_vrfq.id}"
+        _ver_key     = f"vq_ver_{sel_vrfq.id}"
+        _msg_key     = f"vq_msg_{sel_vrfq.id}"
+        _ver         = st.session_state.get(_ver_key, 0)
+        _editor_key  = f"vq_items_{sel_vrfq.id}_v{_ver}"
 
+        # 파싱 완료 메시지 (이전 run에서 저장한 것) 표시
+        if _msg_key in st.session_state:
+            st.success(st.session_state.pop(_msg_key))
+
+        # ── Vendor 견적 파일 업로드 (PDF/Excel → 자동 파싱) ───────────────
         st.markdown("**Vendor 견적 파일 업로드**")
         _uploaded = st.file_uploader(
             "Vendor가 가격/납기를 입력하여 반환한 PDF 또는 Excel 파일을 업로드하면 "
@@ -166,7 +174,7 @@ with tab_quote:
             _raw = _uploaded.getvalue()
             _fhash = hashlib.md5(_raw).hexdigest()
             if st.session_state.get(_fhash_key) != _fhash:
-                # New or different file — parse it
+                # 새 파일 — 파싱 후 버전 증가 → 다음 run에서 editor 키 변경
                 with st.spinner("파일 파싱 중..."):
                     try:
                         from services.quote_response_parser import parse_vendor_quote_bytes as _pvq
@@ -174,11 +182,12 @@ with tab_quote:
                         if _parsed:
                             st.session_state[_parse_key] = _parsed
                             st.session_state[_fhash_key] = _fhash
-                            st.session_state.pop(_editor_key, None)
-                            st.success(
+                            st.session_state[_ver_key]   = _ver + 1
+                            st.session_state[_msg_key]   = (
                                 f"✅ {len(_parsed)}개 품목의 가격·납기·원산지 추출 완료 "
                                 "— 아래 표를 확인 후 저장하세요."
                             )
+                            st.rerun()  # 새 editor 키로 위젯을 새로 생성
                         else:
                             st.warning(
                                 "파일에서 견적 데이터를 추출하지 못했습니다. "
@@ -187,7 +196,6 @@ with tab_quote:
                     except Exception as _e:
                         st.error(f"파싱 오류: {_e}")
         else:
-            # File removed — clear hash so next upload re-parses
             st.session_state.pop(_fhash_key, None)
 
         st.markdown("---")
@@ -269,7 +277,8 @@ with tab_quote:
                 _ss.commit()
                 st.session_state.pop(_parse_key, None)
                 st.session_state.pop(_fhash_key, None)
-                st.success(
+                st.session_state[_ver_key] = _ver + 1  # 저장 후 폼 초기화
+                st.session_state[_msg_key] = (
                     f"✅ {sel_vrfq.vrfq_no} Vendor 견적 등록 완료! "
                     "이제 Quotation 작성 시 이 견적을 불러올 수 있습니다."
                 )
