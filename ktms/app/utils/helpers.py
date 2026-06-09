@@ -13,7 +13,7 @@ import streamlit as st
 from db.engine import get_session
 from db.models import (
     Customer, Vendor, Vessel, ItemMaster,
-    RFQ, Quotation, Order, CommercialInvoice,
+    RFQ, VendorRFQ, VendorQuote, Quotation, Order, CommercialInvoice,
     PackingList, ShippingAdvice, ARRecord,
     DocSequence, FollowUpLevel,
     RFQStatus, QuotationStatus, OrderStatus, ARStatus,
@@ -694,6 +694,48 @@ def get_rfq(rfq_id: int) -> Optional[RFQ]:
     s = get_session()
     try:
         return s.query(RFQ).get(rfq_id)
+    finally:
+        s.close()
+
+
+# ── VendorRFQ / VendorQuote helpers ──────────────────────────────────────────
+
+def vrfq_list_for_rfq(rfq_id: int) -> List[VendorRFQ]:
+    s = get_session()
+    try:
+        return s.query(VendorRFQ).filter_by(rfq_id=rfq_id).order_by(VendorRFQ.created_at.desc()).all()
+    finally:
+        s.close()
+
+
+def get_vrfq(vrfq_id: int) -> Optional[VendorRFQ]:
+    s = get_session()
+    try:
+        return s.query(VendorRFQ).get(vrfq_id)
+    finally:
+        s.close()
+
+
+def vendor_quote_list() -> List[VendorQuote]:
+    s = get_session()
+    try:
+        return s.query(VendorQuote).order_by(VendorQuote.created_at.desc()).all()
+    finally:
+        s.close()
+
+
+def vendor_quotes_for_vrfq(vrfq_id: int) -> List[VendorQuote]:
+    s = get_session()
+    try:
+        return s.query(VendorQuote).filter_by(vendor_rfq_id=vrfq_id).order_by(VendorQuote.created_at.desc()).all()
+    finally:
+        s.close()
+
+
+def get_vendor_quote(vq_id: int) -> Optional[VendorQuote]:
+    s = get_session()
+    try:
+        return s.query(VendorQuote).get(vq_id)
     finally:
         s.close()
 

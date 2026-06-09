@@ -15,11 +15,12 @@ from app.utils.helpers import (
     inject_css, hint, section_header, next_doc_no, status_badge, tracking_url,
     customer_options, vessel_options, rfq_list,
     quotation_list, get_quotation, get_rfq,
-    get_customer, get_vessel, apply_margin, total_amount,
+    get_customer, get_vessel, get_vendor, apply_margin, total_amount,
+    vendor_quote_list, get_vendor_quote, get_vrfq,
     NAVY, BLUE,
 )
 from db.engine import get_session
-from db.models import Quotation, RFQ, QuotationStatus, FollowUpLevel, RFQStatus
+from db.models import Quotation, RFQ, VendorQuote, VendorRFQ, QuotationStatus, FollowUpLevel, RFQStatus
 from services.pdf_svc import build_payload, generate_pdf
 from services.email_svc import send_email, quotation_email_body
 
@@ -80,21 +81,55 @@ with tab_list:
 with tab_new:
     st.subheader("신규 견적 작성")
 
-    with st.expander("RFQ에서 불러오기 (선택사항)", expanded=False):
+    with st.expander("공급사 견적(Vendor Quote)에서 불러오기 — 권장", expanded=True):
+        all_vqs = vendor_quote_list()
+        if all_vqs:
+            # VRFQ → Vendor 이름을 조합해 라벨 생성
+            vq_opts = {}
+            for vq in all_vqs:
+                vrfq = get_vrfq(vq.vendor_rfq_id)
+                rfq_obj = get_rfq(vrfq.rfq_id) if vrfq else None
+                vendor = get_vendor(vrfq.vendor_id) if vrfq else None
+                label = (
+                    f"{vq.received_date or '—'}  |  "
+                    f"{vendor.name if vendor else '—'}  |  "
+                    f"VRFQ: {vrfq.vrfq_no if vrfq else '—'}  |  "
+                    f"RFQ: {rfq_obj.rfq_no if rfq_obj else '—'}"
+                )
+                vq_opts[label] = vq.id
+            sel_vq_label = st.selectbox("공급사 견적 선택", ["— 직접 입력 —"] + list(vq_opts.keys()),
+                                         key="sel_vq")
+            if st.button("공급사 견적 불러오기", key="btn_load_vq"):
+                if sel_vq_label != "— 직접 입력 —":
+                    st.session_state["load_vq_id"] = vq_opts[sel_vq_label]
+                    st.session_state.pop("load_rfq_id", None)
+                    st.rerun()
+        else:
+            hint("등록된 공급사 견적이 없습니다. RFQ 관리 → 공급사 견적 수신 등록을 먼저 하세요.")
+
+    with st.expander("고객 RFQ에서 불러오기 (품목 정보만, 가격 없음)", expanded=False):
         rfqs = rfq_list()
         if rfqs:
             rfq_opts = {r.rfq_no: r.id for r in rfqs}
-            sel_rfq_no = st.selectbox("RFQ 선택", ["— 직접 입력 —"] + list(rfq_opts.keys()))
-            load_rfq_btn = st.button("RFQ 데이터 불러오기")
-            if load_rfq_btn and sel_rfq_no != "— 직접 입력 —":
-                st.session_state["load_rfq_id"] = rfq_opts[sel_rfq_no]
-                st.rerun()
+            sel_rfq_no = st.selectbox("RFQ 선택", ["— 직접 입력 —"] + list(rfq_opts.keys()),
+                                       key="sel_rfq_for_qtn")
+            if st.button("RFQ 불러오기", key="btn_load_rfq"):
+                if sel_rfq_no != "— 직접 입력 —":
+                    st.session_state["load_rfq_id"] = rfq_opts[sel_rfq_no]
+                    st.session_state.pop("load_vq_id", None)
+                    st.rerun()
         else:
             hint("등록된 RFQ가 없습니다.")
 
-    # Pre-fill from RFQ if selected
+    # Pre-fill: 공급사 견적 우선, 없으면 고객 RFQ
     prefill_rfq = None
-    if "load_rfq_id" in st.session_state:
+    prefill_vq = None
+    if "load_vq_id" in st.session_state:
+        prefill_vq = get_vendor_quote(st.session_state["load_vq_id"])
+        if prefill_vq:
+            vrfq = get_vrfq(prefill_vq.vendor_rfq_id)
+            prefill_rfq = get_rfq(vrfq.rfq_id) if vrfq else None
+    elif "load_rfq_id" in st.session_state:
         prefill_rfq = get_rfq(st.session_state["load_rfq_id"])
 
     with st.form("new_qtn_form"):
@@ -103,8 +138,9 @@ with tab_new:
             cust_opts = customer_options()
             if cust_opts:
                 default_cust = list(cust_opts.keys())[0]
-                if prefill_rfq:
-                    c = get_customer(prefill_rfq.customer_id)
+                _ref_rfq = prefill_rfq  # 공급사 견적 or RFQ 불러오기 모두 prefill_rfq에 담김
+                if _ref_rfq:
+                    c = get_customer(_ref_rfq.customer_id)
                     if c and c.name in cust_opts:
                         default_cust = c.name
                 cust_name = st.selectbox("고객사 *", list(cust_opts.keys()),
@@ -131,7 +167,24 @@ with tab_new:
                         "qty", "unit", "cost_price", "unit_price", "lead_time", "remark"]
 
         seed_items: list = []
-        if prefill_rfq and prefill_rfq.items:
+        if prefill_vq and prefill_vq.items:
+            # 공급사 견적에서 불러오기 — cost_price 자동 채움
+            for i, itm in enumerate(prefill_vq.items, 1):
+                seed_items.append({
+                    "item_no": itm.get("item_no", i),
+                    "part_no": itm.get("part_no", ""),
+                    "description": itm.get("description", ""),
+                    "maker": itm.get("maker", ""),
+                    "origin": itm.get("origin", ""),
+                    "qty": itm.get("qty", 1),
+                    "unit": itm.get("unit", "PCS"),
+                    "cost_price": float(itm.get("cost_price", 0.0)),
+                    "unit_price": 0.0,
+                    "lead_time": itm.get("lead_time", ""),
+                    "remark": itm.get("remark", ""),
+                })
+        elif prefill_rfq and prefill_rfq.items:
+            # 고객 RFQ에서 불러오기 — 품목 정보만, cost_price = 0
             for i, itm in enumerate(prefill_rfq.items, 1):
                 seed_items.append({
                     "item_no": i, "part_no": itm.get("part_no", ""),
@@ -206,6 +259,7 @@ with tab_new:
             session.commit()
             st.session_state["qtn_detail_id"] = qtn.id
             st.session_state.pop("load_rfq_id", None)
+            st.session_state.pop("load_vq_id", None)
             st.success(f"견적 저장 완료: **{qtn_no}** — '🔍 견적 상세' 탭에서 PDF 생성 및 발송하세요.")
         finally:
             session.close()
