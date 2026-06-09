@@ -9,11 +9,12 @@ import io
 from typing import Any, Dict, List, Optional
 
 
-# Ordered by specificity — more specific keywords first to avoid partial collisions
-# e.g. "unit price" must be checked before "unit"
+# Ordered by specificity — more specific keywords MUST come first.
+# CRITICAL: "part no" must be checked before "item_no" keywords ("no.", "no")
+# because "no." is a substring of "part no." and would steal the match.
 _HEADER_KEYWORDS: Dict[str, List[str]] = {
-    "item_no":      ["no.", "no"],
     "part_no":      ["part no"],
+    "item_no":      ["no.", "no"],
     "description":  ["description"],
     "qty":          ["qty"],
     "cost_price":   ["unit price", "price (usd)", "price(usd)", "unit_price"],
@@ -120,54 +121,152 @@ def _parse_excel(file_bytes: bytes) -> List[Dict]:
 
 # ── PDF parser ────────────────────────────────────────────────────────────────
 
+def _extract_tables_from_pdf(pdf) -> List[Dict]:
+    """Extract items using pdfplumber table extraction (vector-line based)."""
+    items: List[Dict] = []
+    col_map: Dict[str, int] = {}
+
+    for page in pdf.pages:
+        # Try multiple table settings to handle different PDF export styles
+        for settings in [
+            {},  # default
+            {"vertical_strategy": "lines", "horizontal_strategy": "lines"},
+            {"vertical_strategy": "lines_strict", "horizontal_strategy": "lines_strict"},
+        ]:
+            tables = page.extract_tables(settings) or []
+            if tables:
+                break
+
+        for table in tables:
+            if not table or len(table) < 2:
+                continue
+
+            header_idx: Optional[int] = None
+            for i, row in enumerate(table):
+                row_text = " ".join(str(c or "").lower() for c in row)
+                if "part no" in row_text and (
+                    "unit price" in row_text or "lead time" in row_text
+                ):
+                    header_idx = i
+                    break
+
+            if header_idx is not None:
+                col_map = _make_col_map(table[header_idx])
+
+            if not col_map:
+                continue
+
+            item_no_col = col_map.get("item_no", 0)
+            for row in table[header_idx + 1 if header_idx is not None else 0:]:
+                if not row or not any(c for c in row):
+                    continue
+                if not _is_data_row(row, item_no_col):
+                    continue
+
+                item: Dict[str, Any] = {}
+                for field, j in col_map.items():
+                    val = row[j] if j < len(row) else ""
+                    item[field] = str(val or "").strip()
+
+                if "cost_price" in item:
+                    f = _safe_float(item["cost_price"])
+                    item["cost_price"] = f if f is not None else ""
+
+                if item.get("part_no"):
+                    items.append(item)
+
+    return items
+
+
+def _extract_words_from_pdf(pdf) -> List[Dict]:
+    """Fallback: reconstruct rows from word positions when table extraction fails."""
+    items: List[Dict] = []
+    col_map: Dict[str, int] = {}
+    col_x: List[float] = []
+
+    for page in pdf.pages:
+        words = page.extract_words(x_tolerance=4, y_tolerance=4) or []
+        if not words:
+            continue
+
+        # Group words into lines by y-center (tolerance 5pt)
+        lines: Dict[int, List[Any]] = {}
+        for w in words:
+            y_key = round(w["top"] / 5) * 5
+            lines.setdefault(y_key, []).append(w)
+
+        # Sort lines by y, words within line by x
+        sorted_lines = [sorted(ws, key=lambda w: w["x0"])
+                        for _, ws in sorted(lines.items())]
+
+        # Find header line
+        header_line_idx: Optional[int] = None
+        for i, line in enumerate(sorted_lines):
+            text = " ".join(w["text"].lower() for w in line)
+            if "part" in text and ("no" in text or "no." in text) and (
+                "unit" in text or "lead" in text
+            ):
+                header_line_idx = i
+                break
+
+        if header_line_idx is None:
+            continue
+
+        # Build column x-positions from header words
+        hdr_words = sorted_lines[header_line_idx]
+        hdr_cells = [w["text"] for w in hdr_words]
+        col_map = _make_col_map(hdr_cells)
+        col_x = [w["x0"] for w in hdr_words]
+
+        if not col_map or "part_no" not in col_map:
+            continue
+
+        def _assign_col(word_x: float) -> int:
+            """Return column index (among hdr_words) closest to word_x."""
+            return min(range(len(col_x)), key=lambda i: abs(col_x[i] - word_x))
+
+        # Parse data lines
+        for line in sorted_lines[header_line_idx + 1:]:
+            if not line:
+                continue
+            # Group words into columns
+            row_cells: Dict[int, List[str]] = {}
+            for w in line:
+                ci = _assign_col(w["x0"])
+                row_cells.setdefault(ci, []).append(w["text"])
+
+            # Build pseudo-row aligned with col_map
+            max_ci = max(col_map.values()) if col_map else 0
+            pseudo_row = [""] * (max_ci + 1)
+            for ci, texts in row_cells.items():
+                if ci <= max_ci:
+                    pseudo_row[ci] = " ".join(texts)
+
+            item_no_col = col_map.get("item_no", 0)
+            if not _is_data_row(pseudo_row, item_no_col):
+                continue
+
+            item: Dict[str, Any] = {}
+            for field, j in col_map.items():
+                item[field] = pseudo_row[j] if j < len(pseudo_row) else ""
+
+            if "cost_price" in item:
+                f = _safe_float(item["cost_price"])
+                item["cost_price"] = f if f is not None else ""
+
+            if item.get("part_no"):
+                items.append(item)
+
+    return items
+
+
 def _parse_pdf(file_bytes: bytes) -> List[Dict]:
     import pdfplumber
 
-    items: List[Dict] = []
-
     with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
-        col_map: Dict[str, int] = {}
-
-        for page in pdf.pages:
-            tables = page.extract_tables() or []
-            for table in tables:
-                if not table or len(table) < 2:
-                    continue
-
-                # Locate header row
-                header_idx: Optional[int] = None
-                for i, row in enumerate(table):
-                    row_text = " ".join(str(c or "").lower() for c in row)
-                    if "part no" in row_text and (
-                        "unit price" in row_text or "lead time" in row_text
-                    ):
-                        header_idx = i
-                        break
-
-                if header_idx is not None:
-                    col_map = _make_col_map(table[header_idx])
-
-                if not col_map:
-                    continue
-
-                item_no_col = col_map.get("item_no", 0)
-                for row in table[header_idx + 1 if header_idx is not None else 0 :]:
-                    if not row or not any(c for c in row):
-                        continue
-                    if not _is_data_row(row, item_no_col):
-                        continue
-
-                    item: Dict[str, Any] = {}
-                    for field, j in col_map.items():
-                        val = row[j] if j < len(row) else ""
-                        item[field] = str(val or "").strip()
-
-                    if "cost_price" in item:
-                        f = _safe_float(item["cost_price"])
-                        item["cost_price"] = f if f is not None else ""
-
-                    if item.get("part_no"):
-                        items.append(item)
+        items = _extract_tables_from_pdf(pdf)
+        if not items:
+            items = _extract_words_from_pdf(pdf)
 
     return items
 
