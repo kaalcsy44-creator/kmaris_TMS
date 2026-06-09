@@ -129,7 +129,7 @@ inject_css()
 
 section_header("rfq", "RFQ 관리")
 
-tab_list, tab_new, tab_detail, tab_vq = st.tabs(["RFQ 리스트", "신규 RFQ 등록", "RFQ 상세", "Vendor 견적 수신"])
+tab_list, tab_new, tab_detail, tab_vq = st.tabs(["RFQ 목록", "신규 등록", "RFQ 상세", "Vendor 견적 수신"])
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 1 — LIST
@@ -496,7 +496,7 @@ with tab_detail:
 
     # ── Vendor RFQ 발송 ──────────────────────────────────────────────────────
     st.markdown("---")
-    section_header("send", "Vendor RFQ 발송")
+    st.subheader("Vendor RFQ 발송")
 
     _preview_key = f"vrfq_preview_{rfq.id}"
     vendor_opts = vendor_options()
@@ -689,7 +689,7 @@ with tab_detail:
 # ═══════════════════════════════════════════════════════════════════════════════
 with tab_vq:
     inject_css()
-    section_header("rfq", "Vendor 견적 수신 관리")
+    st.subheader("Vendor 견적 수신 관리")
 
     # ── 전체 VRFQ 목록 (모든 RFQ 대상) ────────────────────────────────────────
     _s_all = get_session()
@@ -723,7 +723,7 @@ with tab_vq:
         st.markdown("---")
 
         # ── VRFQ 선택 ─────────────────────────────────────────────────────────
-        section_header("rfq", "견적 등록 / 조회")
+        st.subheader("견적 등록 / 조회")
 
         sel_vq_label = st.selectbox(
             "견적을 받은 Vendor RFQ 선택",

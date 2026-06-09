@@ -29,7 +29,7 @@ inject_css()
 
 section_header("order", "오더 관리 (Orders)")
 
-tab_list, tab_new, tab_detail = st.tabs(["오더 리스트", "신규 오더 등록", "오더 상세"])
+tab_list, tab_new, tab_detail = st.tabs(["오더 목록", "신규 등록", "오더 상세"])
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 1 — LIST
@@ -198,7 +198,7 @@ with tab_detail:
 
     # Purchase Orders
     st.markdown("---")
-    section_header("po", "Vendor 발주서 (Purchase Order)")
+    st.subheader("Vendor 발주서 (Purchase Order)")
 
     vendor_opts = vendor_options()
     with st.form("po_form"):

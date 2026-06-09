@@ -33,7 +33,7 @@ inject_css()
 
 section_header("quotation", "견적 관리 (Quotation)")
 
-tab_list, tab_new, tab_detail = st.tabs(["견적 리스트", "신규 견적 작성", "견적 상세"])
+tab_list, tab_new, tab_detail = st.tabs(["견적 목록", "신규 등록", "견적 상세"])
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 1 — LIST
