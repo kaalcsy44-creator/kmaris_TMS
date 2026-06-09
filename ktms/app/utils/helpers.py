@@ -68,6 +68,23 @@ KTMS_CSS = f"""
     font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif !important;
 }}
 
+/* ── Restore Material Symbols font (overridden by * above) ──────────────── */
+.material-symbols-outlined,
+.material-symbols-rounded,
+.material-symbols-sharp,
+span[class*="material-symbols"],
+[data-testid="stExpanderToggleIcon"],
+[data-testid="stExpanderToggleIcon"] * {{
+    font-family: 'Material Symbols Outlined' !important;
+    font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24 !important;
+    font-size: 20px !important;
+    line-height: 1 !important;
+    letter-spacing: normal !important;
+    word-wrap: normal !important;
+    white-space: nowrap !important;
+    direction: ltr !important;
+}}
+
 /* ── App background ──────────────────────────────────────────────────────── */
 .stApp, [data-testid="stAppViewContainer"] {{
     background-color: #F6F8FB !important;
@@ -392,6 +409,29 @@ section[data-testid="stSidebar"] nav {{
 [data-testid="stSidebarUserContent"] button p,
 [data-testid="stSidebarUserContent"] [data-testid^="baseButton"] p {{
     display: none !important;
+}}
+
+/* ── Logout button SVG icon ──────────────────────────────────────────────── */
+[data-testid="stSidebarUserContent"] button {{
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}}
+[data-testid="stSidebarUserContent"] button::before {{
+    content: '' !important;
+    display: block !important;
+    width: 15px !important;
+    height: 15px !important;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4'/%3E%3Cpolyline points='16 17 21 12 16 7'/%3E%3Cline x1='21' y1='12' x2='9' y2='12'/%3E%3C/svg%3E") !important;
+    background-size: contain !important;
+    background-repeat: no-repeat !important;
+    background-position: center !important;
+    opacity: 0.65 !important;
+    transition: opacity .15s !important;
+    flex-shrink: 0 !important;
+}}
+[data-testid="stSidebarUserContent"] button:hover::before {{
+    opacity: 1 !important;
 }}
 
 /* ── Section header bar ──────────────────────────────────────────────────── */
