@@ -148,6 +148,50 @@ with tab_quote:
         vq_date = st.date_input("견적 수신일", value=date.today(), key="vq_tab_date")
         vq_notes = st.text_input("비고 (Vendor 메모 등)", key="vq_tab_notes")
 
+        # ── Vendor 견적 파일 업로드 (PDF/Excel → 자동 파싱) ───────────────
+        _parse_key  = f"vq_parsed_{sel_vrfq.id}"
+        _fhash_key  = f"vq_fhash_{sel_vrfq.id}"
+        _editor_key = f"vq_items_{sel_vrfq.id}"
+
+        st.markdown("**Vendor 견적 파일 업로드**")
+        _uploaded = st.file_uploader(
+            "Vendor가 가격/납기를 입력하여 반환한 PDF 또는 Excel 파일을 업로드하면 "
+            "Unit Price, Lead Time, Origin 등이 자동으로 채워집니다.",
+            type=["pdf", "xlsx", "xls"],
+            key=f"vq_upload_{sel_vrfq.id}",
+        )
+
+        if _uploaded is not None:
+            import hashlib
+            _raw = _uploaded.getvalue()
+            _fhash = hashlib.md5(_raw).hexdigest()
+            if st.session_state.get(_fhash_key) != _fhash:
+                # New or different file — parse it
+                with st.spinner("파일 파싱 중..."):
+                    try:
+                        from services.quote_response_parser import parse_vendor_quote_bytes as _pvq
+                        _parsed = _pvq(_raw, _uploaded.name)
+                        if _parsed:
+                            st.session_state[_parse_key] = _parsed
+                            st.session_state[_fhash_key] = _fhash
+                            st.session_state.pop(_editor_key, None)
+                            st.success(
+                                f"✅ {len(_parsed)}개 품목의 가격·납기·원산지 추출 완료 "
+                                "— 아래 표를 확인 후 저장하세요."
+                            )
+                        else:
+                            st.warning(
+                                "파일에서 견적 데이터를 추출하지 못했습니다. "
+                                "KTMS에서 발행한 Vendor Quotation Request Sheet 형식인지 확인하세요."
+                            )
+                    except Exception as _e:
+                        st.error(f"파싱 오류: {_e}")
+        else:
+            # File removed — clear hash so next upload re-parses
+            st.session_state.pop(_fhash_key, None)
+
+        st.markdown("---")
+
         vq_cols = ["item_no", "part_no", "description", "maker", "origin",
                    "qty", "unit", "cost_price", "lead_time", "remark"]
 
@@ -167,6 +211,32 @@ with tab_quote:
                 "remark": "",
             })
 
+        # ── 파싱된 데이터를 seed_rows에 병합 ────────────────────────────
+        if _parse_key in st.session_state:
+            _pmap = {
+                p.get("part_no", ""): p
+                for p in st.session_state[_parse_key]
+                if p.get("part_no")
+            }
+            _matched = 0
+            for row in seed_rows:
+                _pd = _pmap.get(row["part_no"], {})
+                if not _pd:
+                    continue
+                _matched += 1
+                if _pd.get("cost_price") not in ("", None):
+                    try:
+                        row["cost_price"] = float(_pd["cost_price"])
+                    except (ValueError, TypeError):
+                        pass
+                for _fld in ("lead_time", "origin", "remark"):
+                    if _pd.get(_fld):
+                        row[_fld] = _pd[_fld]
+                if _pd.get("manufacturer"):
+                    row["maker"] = _pd["manufacturer"]
+            if _matched:
+                hint(f"업로드 파일에서 {_matched}개 품목 데이터가 적용되었습니다.")
+
         vq_df = st.data_editor(
             pd.DataFrame(seed_rows, columns=vq_cols) if seed_rows
             else pd.DataFrame(columns=vq_cols),
@@ -176,7 +246,7 @@ with tab_quote:
                 "qty": st.column_config.NumberColumn("qty", min_value=0, step=1),
                 "cost_price": st.column_config.NumberColumn("cost_price (공급가)", format="%.2f"),
             },
-            key="vq_tab_items_editor",
+            key=_editor_key,
         )
 
         if st.button("견적 저장", type="primary", key="btn_save_vq_tab"):
@@ -197,6 +267,8 @@ with tab_quote:
                     if _rfq_upd and _rfq_upd.status == RFQStatus.SOURCING:
                         _rfq_upd.status = RFQStatus.QUOTING
                 _ss.commit()
+                st.session_state.pop(_parse_key, None)
+                st.session_state.pop(_fhash_key, None)
                 st.success(
                     f"✅ {sel_vrfq.vrfq_no} Vendor 견적 등록 완료! "
                     "이제 Quotation 작성 시 이 견적을 불러올 수 있습니다."
