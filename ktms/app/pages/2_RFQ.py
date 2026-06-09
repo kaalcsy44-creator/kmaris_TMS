@@ -129,7 +129,7 @@ inject_css()
 
 section_header("rfq", "RFQ 관리")
 
-tab_list, tab_new, tab_detail = st.tabs(["RFQ 리스트", "신규 RFQ 등록", "RFQ 상세"])
+tab_list, tab_new, tab_detail, tab_vq = st.tabs(["RFQ 리스트", "신규 RFQ 등록", "RFQ 상세", "공급사 견적 수신"])
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 1 — LIST
@@ -680,55 +680,92 @@ with tab_detail:
                 "수신된 견적": f"{len(existing_quotes)}건",
             })
         st.dataframe(pd.DataFrame(vrows), use_container_width=True, hide_index=True)
-
-    # ── 공급사 견적 수신 등록 ─────────────────────────────────────────────────
-    st.markdown("---")
-    section_header("rfq", "공급사 견적 수신 등록 (Vendor Quote)")
-
-    if not vrfqs:
-        hint("먼저 Vendor RFQ를 발송해야 공급사 견적을 등록할 수 있습니다.")
+        hint("공급사로부터 견적을 받으셨나요? '공급사 견적 수신' 탭에서 등록하세요.")
     else:
-        vrfq_opts = {}
-        for vr in vrfqs:
+        hint("발송된 Vendor RFQ가 없습니다.")
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TAB 4 — 공급사 견적 수신
+# ═══════════════════════════════════════════════════════════════════════════════
+with tab_vq:
+    inject_css()
+    section_header("rfq", "공급사 견적 수신 관리")
+
+    # ── 전체 VRFQ 목록 (모든 RFQ 대상) ────────────────────────────────────────
+    _s_all = get_session()
+    try:
+        all_vrfqs = _s_all.query(VendorRFQ).order_by(VendorRFQ.id.desc()).all()
+    finally:
+        _s_all.close()
+
+    if not all_vrfqs:
+        hint("아직 발송된 Vendor RFQ가 없습니다. RFQ 상세 탭에서 먼저 발송하세요.")
+    else:
+        # 요약 테이블
+        summary_rows = []
+        vrfq_label_map = {}
+        for vr in all_vrfqs:
             v = get_vendor(vr.vendor_id)
-            label = f"{vr.vrfq_no}  |  {v.name if v else '—'}  ({vr.sent_date or '—'})"
-            vrfq_opts[label] = vr
+            rfq_obj = get_rfq(vr.rfq_id)
+            qs = vendor_quotes_for_vrfq(vr.id)
+            label = f"{vr.vrfq_no}  |  {v.name if v else '—'}  |  {rfq_obj.rfq_no if rfq_obj else '—'}"
+            vrfq_label_map[label] = vr
+            summary_rows.append({
+                "VRFQ No.": vr.vrfq_no,
+                "RFQ No.": rfq_obj.rfq_no if rfq_obj else "—",
+                "Vendor": v.name if v else "—",
+                "발송일": vr.sent_date or "—",
+                "상태": vr.status,
+                "수신된 견적 수": len(qs),
+            })
 
-        sel_vrfq_label = st.selectbox("견적을 받은 VRFQ 선택", list(vrfq_opts.keys()),
-                                       key="vq_vrfq_sel")
-        sel_vrfq = vrfq_opts[sel_vrfq_label]
+        st.dataframe(pd.DataFrame(summary_rows), use_container_width=True, hide_index=True)
+        st.markdown("---")
 
-        # 이미 등록된 견적 목록
+        # ── VRFQ 선택 ─────────────────────────────────────────────────────────
+        section_header("rfq", "견적 등록 / 조회")
+
+        sel_vq_label = st.selectbox(
+            "견적을 받은 Vendor RFQ 선택",
+            list(vrfq_label_map.keys()),
+            key="vq_sel_vrfq_label",
+        )
+        sel_vrfq = vrfq_label_map[sel_vq_label]
+        linked_rfq = get_rfq(sel_vrfq.rfq_id)
+
+        # ── 기등록 견적 목록 ──────────────────────────────────────────────────
         existing_quotes = vendor_quotes_for_vrfq(sel_vrfq.id)
         if existing_quotes:
             with st.expander(f"기등록 견적 ({len(existing_quotes)}건)", expanded=False):
                 for eq in existing_quotes:
-                    cols = st.columns([2, 6, 1])
-                    cols[0].markdown(f"**{eq.received_date or '—'}**")
-                    cols[1].markdown(f"{eq.notes or ''}")
-                    if cols[2].button("삭제", key=f"del_vq_{eq.id}", type="secondary"):
-                        _s = get_session()
+                    c1, c2, c3 = st.columns([2, 6, 1])
+                    c1.markdown(f"**{eq.received_date or '—'}**")
+                    c2.markdown(eq.notes or "")
+                    if c3.button("삭제", key=f"del_vq_{eq.id}", type="secondary"):
+                        _ds = get_session()
                         try:
-                            _s.query(VendorQuote).filter_by(id=eq.id).delete()
-                            _s.commit()
+                            _ds.query(VendorQuote).filter_by(id=eq.id).delete()
+                            _ds.commit()
                             st.success("삭제 완료")
                             st.rerun()
                         finally:
-                            _s.close()
+                            _ds.close()
                     if eq.items:
                         st.dataframe(pd.DataFrame(eq.items), use_container_width=True, hide_index=True)
 
-        # 신규 견적 등록 폼
+        # ── 신규 견적 등록 폼 ─────────────────────────────────────────────────
         with st.expander("신규 견적 수신 등록", expanded=True):
-            vq_date = st.date_input("견적 수신일", value=date.today(), key="vq_date")
-            vq_notes = st.text_input("비고 (공급사 메모 등)", key="vq_notes")
+            vq_date = st.date_input("견적 수신일", value=date.today(), key="vq_tab_date")
+            vq_notes = st.text_input("비고 (공급사 메모 등)", key="vq_tab_notes")
 
-            # 원 RFQ 품목을 기반으로 cost_price 입력 테이블 생성
             vq_cols = ["item_no", "part_no", "description", "maker", "origin",
                        "qty", "unit", "cost_price", "lead_time", "remark"]
-            seed_vq = []
-            for i, itm in enumerate(rfq.items or [], 1):
-                seed_vq.append({
+
+            # VRFQ 자체 items 또는 RFQ items 기반으로 seed
+            base_items = sel_vrfq.items or (linked_rfq.items if linked_rfq else [])
+            seed_rows = []
+            for i, itm in enumerate(base_items, 1):
+                seed_rows.append({
                     "item_no": i,
                     "part_no": itm.get("part_no", ""),
                     "description": itm.get("description", ""),
@@ -736,13 +773,13 @@ with tab_detail:
                     "origin": "",
                     "qty": itm.get("qty", 1),
                     "unit": itm.get("unit", "PCS"),
-                    "cost_price": 0.0,
+                    "cost_price": float(itm.get("cost_price", 0.0)),
                     "lead_time": "",
                     "remark": "",
                 })
 
             vq_df = st.data_editor(
-                pd.DataFrame(seed_vq, columns=vq_cols) if seed_vq
+                pd.DataFrame(seed_rows, columns=vq_cols) if seed_rows
                 else pd.DataFrame(columns=vq_cols),
                 num_rows="dynamic",
                 use_container_width=True,
@@ -750,29 +787,31 @@ with tab_detail:
                     "qty": st.column_config.NumberColumn("qty", min_value=0, step=1),
                     "cost_price": st.column_config.NumberColumn("cost_price (공급가)", format="%.2f"),
                 },
-                key="vq_items_editor",
+                key="vq_tab_items_editor",
             )
 
-            if st.button("견적 저장", type="primary", key="btn_save_vq"):
+            if st.button("견적 저장", type="primary", key="btn_save_vq_tab"):
                 items_data = vq_df.fillna("").to_dict(orient="records")
-                _s = get_session()
+                _ss = get_session()
                 try:
-                    vq = VendorQuote(
+                    vq_new = VendorQuote(
                         vendor_rfq_id=sel_vrfq.id,
                         received_date=vq_date.isoformat(),
                         items=items_data,
                         notes=vq_notes,
                     )
-                    _s.add(vq)
-                    # VRFQ 상태 업데이트
-                    _vr = _s.query(VendorRFQ).get(sel_vrfq.id)
+                    _ss.add(vq_new)
+                    _vr = _ss.query(VendorRFQ).get(sel_vrfq.id)
                     _vr.status = "견적 수신완료"
-                    # RFQ 상태도 '견적 중'으로 자동 전환
-                    _rfq = _s.query(RFQ).get(rfq.id)
-                    if _rfq.status == RFQStatus.SOURCING:
-                        _rfq.status = RFQStatus.QUOTING
-                    _s.commit()
-                    st.success(f"✅ {sel_vrfq.vrfq_no} 공급사 견적 등록 완료! 이제 Quotation 작성 시 이 견적을 불러올 수 있습니다.")
+                    if linked_rfq:
+                        _rfq_upd = _ss.query(RFQ).get(linked_rfq.id)
+                        if _rfq_upd and _rfq_upd.status == RFQStatus.SOURCING:
+                            _rfq_upd.status = RFQStatus.QUOTING
+                    _ss.commit()
+                    st.success(
+                        f"✅ {sel_vrfq.vrfq_no} 공급사 견적 등록 완료! "
+                        "이제 Quotation 작성 시 이 견적을 불러올 수 있습니다."
+                    )
                     st.rerun()
                 finally:
-                    _s.close()
+                    _ss.close()
