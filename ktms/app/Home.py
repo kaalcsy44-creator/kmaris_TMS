@@ -126,7 +126,7 @@ if not current_user():
 
 # ── Logged in: build navigation (Home itself NOT included → removed from sidebar) ─
 pages = {
-    " ": [
+    "": [
         st.Page("pages/1_Dashboard.py", title="Dashboard", default=True),
     ],
     "RFQ 관리": [

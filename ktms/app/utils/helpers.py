@@ -279,7 +279,7 @@ h1, h2, h3, h4 {{
 [data-baseweb="tab-list"] {{
     position: fixed !important;
     top: 96px !important;
-    left: 210px !important;
+    left: 220px !important;
     right: 0 !important;
     z-index: 999 !important;
     background: #ffffff !important;
@@ -341,41 +341,29 @@ section[data-testid="stSidebar"] nav {{
 [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2,
 [data-testid="stSidebar"] h3 {{ color: white !important; }}
 
-/* ── Nav section labels (RFQ 관리, 영업 관리, 시스템) ──────────────────── */
-[data-testid="stSidebar"] nav li p {{
-    font-size: 10px !important;
-    font-weight: 800 !important;
+/* ── Nav section labels — correct testid is stNavSectionHeader ───────────── */
+[data-testid="stNavSectionHeader"] {{
+    font-size: 9px !important;
+    font-weight: 700 !important;
     text-transform: uppercase !important;
-    letter-spacing: 0.12em !important;
-    color: rgba(180,200,230,0.38) !important;
-    padding: 20px 12px 5px 14px !important;
+    letter-spacing: 0.14em !important;
+    color: rgba(180,200,230,0.42) !important;
+    padding: 14px 8px 5px 14px !important;
     margin: 0 !important;
-    pointer-events: none !important;
-    user-select: none !important;
-    border-top: 1px solid rgba(255,255,255,0.07) !important;
+    border-top: 1px solid rgba(255,255,255,0.08) !important;
 }}
-[data-testid="stSidebar"] nav li:first-child p,
-[data-testid="stSidebar"] nav li:nth-child(1) p {{
-    border-top: none !important;
-    padding-top: 4px !important;
-    color: transparent !important;
+[data-testid="stNavSectionHeader"] [data-testid="stIconMaterial"] {{
+    font-size: 14px !important;
+    color: rgba(180,200,230,0.35) !important;
 }}
 
 /* ── Nav page links ──────────────────────────────────────────────────────── */
-[data-testid="stSidebar"] nav a,
-[data-testid="stSidebar"] nav a * {{
+[data-testid="stSidebarNavLink"],
+[data-testid="stSidebar"] nav a {{
     color: #C4CFDE !important;
-    opacity: 1 !important;
     font-weight: 600 !important;
     font-size: 13.5px !important;
     letter-spacing: -.01em !important;
-}}
-[data-testid="stSidebar"] nav a[aria-current="page"],
-[data-testid="stSidebar"] nav a[aria-current="page"] * {{
-    color: #FFFFFF !important;
-    font-weight: 700 !important;
-}}
-[data-testid="stSidebar"] nav li a {{
     display: flex !important;
     align-items: center !important;
     border-radius: 0 8px 8px 0 !important;
@@ -384,15 +372,29 @@ section[data-testid="stSidebar"] nav {{
     border-left: 3px solid transparent !important;
     transition: background .15s, border-color .15s !important;
 }}
-[data-testid="stSidebar"] nav li a:hover {{
+[data-testid="stSidebarNavLink"] *,
+[data-testid="stSidebar"] nav a * {{
+    color: #C4CFDE !important;
+    opacity: 1 !important;
+}}
+[data-testid="stSidebarNavLink"]:hover,
+[data-testid="stSidebar"] nav a:hover {{
     background: rgba(255,255,255,.07) !important;
     border-left-color: rgba(0,85,168,.4) !important;
 }}
-[data-testid="stSidebar"] nav li a[aria-current="page"] {{
+[data-testid="stSidebarNavLink"][aria-current="page"],
+[data-testid="stSidebar"] nav a[aria-current="page"] {{
     background: rgba(0,85,168,.30) !important;
     border-left: 3px solid {BLUE} !important;
+    color: #FFFFFF !important;
 }}
-[data-testid="stSidebar"] nav li a::before {{
+[data-testid="stSidebarNavLink"][aria-current="page"] *,
+[data-testid="stSidebar"] nav a[aria-current="page"] * {{
+    color: #FFFFFF !important;
+    font-weight: 700 !important;
+}}
+[data-testid="stSidebarNavLink"]::before,
+[data-testid="stSidebar"] nav a::before {{
     content: '' !important;
     display: inline-block !important;
     width: 14px !important;
@@ -405,8 +407,10 @@ section[data-testid="stSidebar"] nav {{
     opacity: 0.50 !important;
     flex-shrink: 0 !important;
 }}
-[data-testid="stSidebar"] nav li a[aria-current="page"]::before,
-[data-testid="stSidebar"] nav li a:hover::before {{
+[data-testid="stSidebarNavLink"][aria-current="page"]::before,
+[data-testid="stSidebarNavLink"]:hover::before,
+[data-testid="stSidebar"] nav a[aria-current="page"]::before,
+[data-testid="stSidebar"] nav a:hover::before {{
     opacity: 1 !important;
 }}
 {_NAV_ICON_CSS}
