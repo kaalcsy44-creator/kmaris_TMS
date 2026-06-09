@@ -94,7 +94,7 @@ if rfqs:
         v = get_vessel(r.vessel_id) if r.vessel_id else None
         rows.append({
             "RFQ No.": r.rfq_no,
-            "고객사": c.name if c else "—",
+            "Customer": c.name if c else "—",
             "선박": v.name if v else "—",
             "품목수": len(r.items or []),
             "Level": r.follow_up_level.value if r.follow_up_level else "—",

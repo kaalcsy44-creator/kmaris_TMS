@@ -43,7 +43,7 @@ cust   = get_customer(order.customer_id)
 vessel = get_vessel(order.vessel_id) if order.vessel_id else None
 
 col_m1, col_m2, col_m3 = st.columns(3)
-col_m1.metric("고객사", cust.name if cust else "—")
+col_m1.metric("Customer", cust.name if cust else "—")
 col_m2.metric("선박",   vessel.name if vessel else "—")
 col_m3.metric("PO No.", order.po_no or "—")
 

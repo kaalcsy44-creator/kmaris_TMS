@@ -63,7 +63,7 @@ for r in ar_records:
     rows.append({
         "ID": r.id,
         "CI No.": r.ci_no or "—",
-        "고객사": cust.name if cust else "—",
+        "Customer": cust.name if cust else "—",
         "오더": order.ord_no if order else "—",
         "통화": r.currency,
         "Invoice": f"{r.invoice_amount:,.2f}",

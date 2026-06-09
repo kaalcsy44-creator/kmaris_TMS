@@ -54,7 +54,7 @@ with tab_list:
             rows.append({
                 "ID": q.id,
                 "견적 No.": q.qtn_no,
-                "고객사": c.name if c else "—",
+                "Customer": c.name if c else "—",
                 "품목수": len(q.items or []),
                 "통화": q.currency,
                 "합계": f"{total_amount(q.items or []):,.2f}",
@@ -81,7 +81,7 @@ with tab_list:
 with tab_new:
     st.subheader("신규 견적 작성")
 
-    with st.expander("공급사 견적(Vendor Quote)에서 불러오기 — 권장", expanded=True):
+    with st.expander("Vendor 견적에서 불러오기 — 권장", expanded=True):
         all_vqs = vendor_quote_list()
         if all_vqs:
             # VRFQ → Vendor 이름을 조합해 라벨 생성
@@ -97,15 +97,15 @@ with tab_new:
                     f"RFQ: {rfq_obj.rfq_no if rfq_obj else '—'}"
                 )
                 vq_opts[label] = vq.id
-            sel_vq_label = st.selectbox("공급사 견적 선택", ["— 직접 입력 —"] + list(vq_opts.keys()),
+            sel_vq_label = st.selectbox("Vendor 견적 선택", ["— 직접 입력 —"] + list(vq_opts.keys()),
                                          key="sel_vq")
-            if st.button("공급사 견적 불러오기", key="btn_load_vq"):
+            if st.button("Vendor 견적 불러오기", key="btn_load_vq"):
                 if sel_vq_label != "— 직접 입력 —":
                     st.session_state["load_vq_id"] = vq_opts[sel_vq_label]
                     st.session_state.pop("load_rfq_id", None)
                     st.rerun()
         else:
-            hint("등록된 공급사 견적이 없습니다. RFQ 관리 → 공급사 견적 수신 등록을 먼저 하세요.")
+            hint("등록된 Vendor 견적이 없습니다. RFQ 관리 → Vendor 견적 수신 등록을 먼저 하세요.")
 
     with st.expander("고객 RFQ에서 불러오기 (품목 정보만, 가격 없음)", expanded=False):
         rfqs = rfq_list()
@@ -143,11 +143,11 @@ with tab_new:
                     c = get_customer(_ref_rfq.customer_id)
                     if c and c.name in cust_opts:
                         default_cust = c.name
-                cust_name = st.selectbox("고객사 *", list(cust_opts.keys()),
+                cust_name = st.selectbox("Customer *", list(cust_opts.keys()),
                                          index=list(cust_opts.keys()).index(default_cust))
                 cust_id = cust_opts[cust_name]
             else:
-                st.warning("고객사를 먼저 등록하세요.")
+                st.warning("Customer를 먼저 등록하세요.")
                 cust_id = None
             qtn_date = st.date_input("견적일", value=date.today())
             valid_days = st.number_input("유효기간 (일)", min_value=1, max_value=90, value=15)
@@ -287,7 +287,7 @@ with tab_detail:
     with col_info:
         st.markdown(f"### {qtn.qtn_no}")
         m1, m2, m3, m4 = st.columns(4)
-        m1.metric("고객사",   cust.name if cust else "—")
+        m1.metric("Customer",   cust.name if cust else "—")
         m2.metric("선박",     vessel.name if vessel else "—")
         m3.metric("통화/합계", f"{qtn.currency} {total_amount(qtn.items or []):,.2f}")
         m4.metric("유효기간", qtn.valid_until or "—")

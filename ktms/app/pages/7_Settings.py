@@ -25,7 +25,7 @@ section_header("settings", "설정 (Settings)")
 
 _config_path = ROOT / "config" / "company.json"
 
-tabs = st.tabs(["🏢 회사 정보", "👤 사용자 관리", "🏭 고객사", "🔧 Vendor", "🚢 선박", "📦 품목 마스터"])
+tabs = st.tabs(["🏢 회사 정보", "👤 사용자 관리", "🏭 Customer", "🔧 Vendor", "🚢 선박", "📦 품목 마스터"])
 
 # ══════════════════════════════════════════════════════════════════════════════
 # COMPANY PROFILE
@@ -131,7 +131,7 @@ with tabs[1]:
 # CUSTOMERS
 # ══════════════════════════════════════════════════════════════════════════════
 with tabs[2]:
-    st.subheader("고객사 관리")
+    st.subheader("Customer 관리")
     import pandas as pd
     session = get_session()
     try:
@@ -141,27 +141,27 @@ with tabs[2]:
 
     if customers:
         st.dataframe(pd.DataFrame([{
-            "ID": c.id, "고객사명": c.name, "국가": c.country or "—",
+            "ID": c.id, "Customer명": c.name, "국가": c.country or "—",
             "담당자": c.contact or "—", "이메일": c.email or "—",
         } for c in customers]), use_container_width=True, hide_index=True)
 
     with st.form("add_customer"):
-        st.markdown("**신규 고객사 추가**")
+        st.markdown("**신규 Customer 추가**")
         cc1, cc2 = st.columns(2)
-        c_name    = cc1.text_input("고객사명 *")
+        c_name    = cc1.text_input("Customer명 *")
         c_country = cc2.text_input("국가")
         c_addr    = cc1.text_input("주소")
         c_contact = cc2.text_input("담당자")
         c_email   = cc1.text_input("이메일")
         c_taxid   = cc2.text_input("Tax ID / 사업자번호")
-        add_c = st.form_submit_button("고객사 추가", type="primary")
+        add_c = st.form_submit_button("Customer 추가", type="primary")
     if add_c and c_name:
         session = get_session()
         try:
             session.add(Customer(name=c_name, address=c_addr, contact=c_contact,
                                  email=c_email, tax_id=c_taxid, country=c_country))
             session.commit()
-            st.success(f"고객사 '{c_name}' 추가 완료!")
+            st.success(f"Customer '{c_name}' 추가 완료!")
             st.rerun()
         finally:
             session.close()
@@ -170,7 +170,7 @@ with tabs[2]:
 # VENDORS
 # ══════════════════════════════════════════════════════════════════════════════
 with tabs[3]:
-    st.subheader("Vendor (공급사) 관리")
+    st.subheader("Vendor 관리")
     session = get_session()
     try:
         vendors = session.query(Vendor).order_by(Vendor.name).all()
@@ -231,7 +231,7 @@ with tabs[4]:
         v_imo     = ves2.text_input("IMO No.")
         v_engine  = ves1.text_input("Main Engine Type (ex. MAN B&W 6S50MC-C)")
         v_hull    = ves2.text_input("Hull No.")
-        v_owner   = st.selectbox("선주 (고객사)", list(cust_opts.keys()))
+        v_owner   = st.selectbox("선주 (Customer)", list(cust_opts.keys()))
         add_ves   = st.form_submit_button("선박 추가", type="primary")
     if add_ves and v_name:
         session = get_session()

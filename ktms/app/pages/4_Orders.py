@@ -46,7 +46,7 @@ with tab_list:
             rows.append({
                 "ID": o.id,
                 "오더 No.": o.ord_no,
-                "고객사": c.name if c else "—",
+                "Customer": c.name if c else "—",
                 "선박": v.name if v else "—",
                 "PO No.": o.po_no or "—",
                 "품목수": len(o.items or []),
@@ -98,7 +98,7 @@ with tab_new:
                 c = get_customer(prefill_qtn.customer_id)
                 if c and c.name in cust_opts:
                     default_cust = c.name
-            cust_name = st.selectbox("고객사 *", list(cust_opts.keys()) if cust_opts else ["—"],
+            cust_name = st.selectbox("Customer *", list(cust_opts.keys()) if cust_opts else ["—"],
                                      index=list(cust_opts.keys()).index(default_cust) if default_cust in cust_opts else 0)
             cust_id = cust_opts.get(cust_name)
             ord_date = st.date_input("수주일", value=date.today())
@@ -170,7 +170,7 @@ with tab_detail:
     with col_info:
         st.markdown(f"### {order.ord_no}")
         m1, m2, m3 = st.columns(3)
-        m1.metric("고객사", cust.name if cust else "—")
+        m1.metric("Customer", cust.name if cust else "—")
         m2.metric("선박",   vessel.name if vessel else "—")
         m3.metric("PO No.", order.po_no or "—")
         st.markdown(f"**상태:** {status_badge(order.status.value)}", unsafe_allow_html=True)

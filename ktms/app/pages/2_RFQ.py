@@ -81,7 +81,7 @@ def _build_vendor_rfq_email_ko(rfq, cust, vessel, vendor, notes: str) -> str:
         f"       품명: {item.get('description','—')}"
         for i, item in enumerate(items)
     )
-    vendor_name = vendor.name if vendor else "공급사"
+    vendor_name = vendor.name if vendor else "Vendor"
     vessel_str = vessel.name if vessel else "—"
     cust_str = cust.name if cust else "—"
 
@@ -129,7 +129,7 @@ inject_css()
 
 section_header("rfq", "RFQ 관리")
 
-tab_list, tab_new, tab_detail, tab_vq = st.tabs(["RFQ 리스트", "신규 RFQ 등록", "RFQ 상세", "공급사 견적 수신"])
+tab_list, tab_new, tab_detail, tab_vq = st.tabs(["RFQ 리스트", "신규 RFQ 등록", "RFQ 상세", "Vendor 견적 수신"])
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 1 — LIST
@@ -140,7 +140,7 @@ with tab_list:
         status_filter = st.selectbox("상태 필터", ["전체"] + [s.value for s in RFQStatus])
     with col_f2:
         cust_opts = {"전체": None, **customer_options()}
-        cust_sel = st.selectbox("고객사 필터", list(cust_opts.keys()))
+        cust_sel = st.selectbox("Customer 필터", list(cust_opts.keys()))
     with col_f3:
         st.markdown("<br>", unsafe_allow_html=True)
         refresh = st.button("새로고침", use_container_width=True)
@@ -157,7 +157,7 @@ with tab_list:
             rows.append({
                 "ID": r.id,
                 "RFQ No.": r.rfq_no,
-                "고객사": c.name if c else "—",
+                "Customer": c.name if c else "—",
                 "선박": v.name if v else "—",
                 "품목수": len(r.items or []),
                 "Level": r.follow_up_level.value if r.follow_up_level else "—",
@@ -190,7 +190,7 @@ with tab_new:
     with st.expander("PDF로 자동 입력 (AI OCR)", expanded=False):
         pdf_file = st.file_uploader(
             "RFQ PDF 파일 업로드", type=["pdf"], key="rfq_pdf_uploader",
-            help="PDF를 업로드하면 AI가 고객사·선박·품목 정보를 자동으로 인식합니다.",
+            help="PDF를 업로드하면 AI가 Customer·선박·품목 정보를 자동으로 인식합니다.",
         )
         if pdf_file:
             if st.button("AI로 정보 추출", key="btn_rfq_ocr", type="secondary"):
@@ -215,7 +215,7 @@ with tab_new:
             col_p1, col_p2 = st.columns(2)
             col_p1.markdown(f"**선박:** {ocr_data.get('vessel_name') or '—'}")
             col_p1.markdown(f"**날짜:** {ocr_data.get('rfq_date') or '—'}")
-            col_p2.markdown(f"**고객사 힌트:** {ocr_data.get('customer_hint') or '—'}")
+            col_p2.markdown(f"**Customer 힌트:** {ocr_data.get('customer_hint') or '—'}")
             if ocr_data.get("notes"):
                 st.caption(f"비고: {ocr_data['notes']}")
             ocr_items_preview = ocr_data.get("items") or []
@@ -243,19 +243,19 @@ with tab_new:
     _cust_matched = _hint_matched(_cust_hint_raw, _cust_opts_now)
     _vessel_matched = _hint_matched(_vessel_hint_raw, _vessel_opts_all)
 
-    # ── 신규 고객사 빠른 등록 ────────────────────────────────────────────────
+    # ── 신규 Customer 빠른 등록 ────────────────────────────────────────────────
     _cust_expand = bool(_cust_hint_raw) and not _cust_matched
-    with st.expander("신규 고객사 빠른 등록", expanded=_cust_expand):
+    with st.expander("신규 Customer 빠른 등록", expanded=_cust_expand):
         if _cust_expand:
-            st.info(f'OCR 인식: **"{_cust_hint_raw}"** — DB에 없는 고객사입니다. 등록 후 자동 선택됩니다.')
+            st.info(f'OCR 인식: **"{_cust_hint_raw}"** — DB에 없는 Customer입니다. 등록 후 자동 선택됩니다.')
         nc1, nc2 = st.columns(2)
-        nc_name    = nc1.text_input("고객사명 *", value=_cust_hint_raw, key="nc_name")
+        nc_name    = nc1.text_input("Customer명 *", value=_cust_hint_raw, key="nc_name")
         nc_country = nc2.text_input("국가", key="nc_country")
         nc_contact = nc1.text_input("담당자", key="nc_contact")
         nc_email   = nc2.text_input("이메일", key="nc_email")
         nc_addr    = nc1.text_input("주소", key="nc_addr")
         nc_taxid   = nc2.text_input("Tax ID / 사업자번호", key="nc_taxid")
-        if st.button("고객사 등록", key="btn_quick_cust", type="primary"):
+        if st.button("Customer 등록", key="btn_quick_cust", type="primary"):
             if nc_name.strip():
                 _s = get_session()
                 try:
@@ -263,12 +263,12 @@ with tab_new:
                                     contact=nc_contact, email=nc_email,
                                     address=nc_addr, tax_id=nc_taxid))
                     _s.commit()
-                    st.success(f"✅ 고객사 '{nc_name.strip()}' 등록 완료! 아래 드롭다운에 반영됩니다.")
+                    st.success(f"✅ Customer '{nc_name.strip()}' 등록 완료! 아래 드롭다운에 반영됩니다.")
                     st.rerun()
                 finally:
                     _s.close()
             else:
-                st.warning("고객사명을 입력하세요.")
+                st.warning("Customer명을 입력하세요.")
 
     # ── 신규 선박 빠른 등록 ──────────────────────────────────────────────────
     _cust_opts_now2 = customer_options()   # 고객사 등록 후 갱신
@@ -289,7 +289,7 @@ with tab_new:
                 if _cust_hint_raw.lower() in k.lower() or k.lower() in _cust_hint_raw.lower():
                     _owner_idx = i
                     break
-        nv_owner  = nv2.selectbox("선주 (고객사)", list(_owner_opts.keys()),
+        nv_owner  = nv2.selectbox("선주 (Customer)", list(_owner_opts.keys()),
                                    index=_owner_idx, key="nv_owner")
         if st.button("선박 등록", key="btn_quick_vessel", type="primary"):
             if nv_name.strip():
@@ -336,10 +336,10 @@ with tab_new:
                         if _cust_hint in k.lower() or k.lower() in _cust_hint:
                             _cust_idx = i
                             break
-                cust_name = st.selectbox("고객사 *", cust_keys, index=_cust_idx)
+                cust_name = st.selectbox("Customer *", cust_keys, index=_cust_idx)
                 cust_id = cust_opts2[cust_name]
             else:
-                hint("위 '신규 고객사 빠른 등록'에서 먼저 등록하세요.")
+                hint("위 '신규 Customer 빠른 등록'에서 먼저 등록하세요.")
                 cust_id = None
             rfq_date = st.date_input("RFQ 수신일", value=_ocr_date)
             follow_level = st.selectbox("Follow-up Level", [l.value for l in FollowUpLevel], index=1)
@@ -416,7 +416,7 @@ with tab_detail:
     with col_info:
         st.markdown(f"### {rfq.rfq_no}")
         c1, c2, c3 = st.columns(3)
-        c1.metric("고객사", cust.name if cust else "—")
+        c1.metric("Customer", cust.name if cust else "—")
         c2.metric("선박", vessel.name if vessel else "—")
         c3.metric("품목수", len(rfq.items or []))
         st.markdown(f"**상태:** {status_badge(rfq.status.value)}&nbsp;&nbsp;"
@@ -587,7 +587,7 @@ with tab_detail:
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         key=f"vrfq_xlsx_{rfq.id}_{i}",
                         use_container_width=True,
-                        help="공급사가 단가·납기 등을 기입해서 반환하는 Excel 양식입니다. 이메일 발송 시 자동 첨부됩니다.",
+                        help="Vendor가 단가·납기 등을 기입해서 반환하는 Excel 양식입니다. 이메일 발송 시 자동 첨부됩니다.",
                     )
                 body = st.text_area(
                     "본문 (직접 수정 가능)", value=prev["body"],
@@ -680,7 +680,7 @@ with tab_detail:
                 "수신된 견적": f"{len(existing_quotes)}건",
             })
         st.dataframe(pd.DataFrame(vrows), use_container_width=True, hide_index=True)
-        hint("공급사로부터 견적을 받으셨나요? '공급사 견적 수신' 탭에서 등록하세요.")
+        hint("Vendor로부터 견적을 받으셨나요? 'Vendor 견적 수신' 탭에서 등록하세요.")
     else:
         hint("발송된 Vendor RFQ가 없습니다.")
 
@@ -689,7 +689,7 @@ with tab_detail:
 # ═══════════════════════════════════════════════════════════════════════════════
 with tab_vq:
     inject_css()
-    section_header("rfq", "공급사 견적 수신 관리")
+    section_header("rfq", "Vendor 견적 수신 관리")
 
     # ── 전체 VRFQ 목록 (모든 RFQ 대상) ────────────────────────────────────────
     _s_all = get_session()
@@ -756,7 +756,7 @@ with tab_vq:
         # ── 신규 견적 등록 폼 ─────────────────────────────────────────────────
         with st.expander("신규 견적 수신 등록", expanded=True):
             vq_date = st.date_input("견적 수신일", value=date.today(), key="vq_tab_date")
-            vq_notes = st.text_input("비고 (공급사 메모 등)", key="vq_tab_notes")
+            vq_notes = st.text_input("비고 (Vendor 메모 등)", key="vq_tab_notes")
 
             vq_cols = ["item_no", "part_no", "description", "maker", "origin",
                        "qty", "unit", "cost_price", "lead_time", "remark"]
@@ -809,7 +809,7 @@ with tab_vq:
                             _rfq_upd.status = RFQStatus.QUOTING
                     _ss.commit()
                     st.success(
-                        f"✅ {sel_vrfq.vrfq_no} 공급사 견적 등록 완료! "
+                        f"✅ {sel_vrfq.vrfq_no} Vendor 견적 등록 완료! "
                         "이제 Quotation 작성 시 이 견적을 불러올 수 있습니다."
                     )
                     st.rerun()
