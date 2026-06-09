@@ -356,6 +356,10 @@ section[data-testid="stSidebar"] nav {{
     font-size: 14px !important;
     color: rgba(180,200,230,0.35) !important;
 }}
+/* " " 더미 섹션 헤더 (Dashboard 위) 완전 숨김 */
+[data-testid="stSidebarNavItems"] > *:first-child [data-testid="stNavSectionHeader"] {{
+    display: none !important;
+}}
 
 /* ── Nav page links ──────────────────────────────────────────────────────── */
 [data-testid="stSidebarNavLink"],

@@ -126,7 +126,7 @@ if not current_user():
 
 # ── Logged in: build navigation (Home itself NOT included → removed from sidebar) ─
 pages = {
-    "": [
+    " ": [
         st.Page("pages/1_Dashboard.py", title="Dashboard", default=True),
     ],
     "RFQ 관리": [
@@ -134,13 +134,13 @@ pages = {
         st.Page("pages/3_VRFQ.py", title="VRFQ"),
     ],
     "영업 관리": [
-        st.Page("pages/3_Quotation.py", title="Quotation"),
-        st.Page("pages/4_Orders.py",    title="Orders"),
-        st.Page("pages/5_Documents.py", title="Documents"),
-        st.Page("pages/6_AR.py",        title="AR"),
+        st.Page("pages/4_Quotation.py", title="Quotation"),
+        st.Page("pages/5_Orders.py",    title="Orders"),
+        st.Page("pages/6_Documents.py", title="Documents"),
+        st.Page("pages/7_AR.py",        title="AR"),
     ],
     "시스템": [
-        st.Page("pages/7_Settings.py", title="Settings"),
+        st.Page("pages/8_Settings.py", title="Settings"),
     ],
 }
 pg = st.navigation(pages)
