@@ -28,24 +28,34 @@ LIGHT_BLUE = "#EAF3FF"
 _S = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E"
 _E = "%3C/svg%3E"
 _ICONS = [
-    # Dashboard — 2×2 grid
+    # [0] Dashboard — 2×2 grid
     _S+"%3Crect x='3' y='3' width='7' height='7' rx='1'/%3E%3Crect x='14' y='3' width='7' height='7' rx='1'/%3E%3Crect x='14' y='14' width='7' height='7' rx='1'/%3E%3Crect x='3' y='14' width='7' height='7' rx='1'/%3E"+_E,
-    # RFQ — file-text
+    # [1] CRFQ — file-text
     _S+"%3Cpath d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/%3E%3Cpolyline points='14 2 14 8 20 8'/%3E%3Cline x1='16' y1='13' x2='8' y2='13'/%3E%3Cline x1='16' y1='17' x2='8' y2='17'/%3E"+_E,
-    # Quotation — clipboard
+    # [2] VRFQ — send (paper-plane)
+    _S+"%3Cline x1='22' y1='2' x2='11' y2='13'/%3E%3Cpolygon points='22 2 15 22 11 13 2 9 22 2'/%3E"+_E,
+    # [3] Quotation — clipboard
     _S+"%3Cpath d='M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2'/%3E%3Crect x='9' y='3' width='6' height='4' rx='2'/%3E%3Cline x1='9' y1='12' x2='15' y2='12'/%3E%3Cline x1='9' y1='16' x2='13' y2='16'/%3E"+_E,
-    # Orders — package box
+    # [4] Orders — package box
     _S+"%3Cpath d='M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z'/%3E%3Cpolyline points='3.27 6.96 12 12.01 20.73 6.96'/%3E%3Cline x1='12' y1='22.08' x2='12' y2='12'/%3E"+_E,
-    # Documents — folder
+    # [5] Documents — folder
     _S+"%3Cpath d='M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z'/%3E"+_E,
-    # AR — credit card
+    # [6] AR — credit card
     _S+"%3Crect x='1' y='4' width='22' height='16' rx='2' ry='2'/%3E%3Cline x1='1' y1='10' x2='23' y2='10'/%3E"+_E,
-    # Settings — sliders
+    # [7] Settings — sliders
     _S+"%3Cline x1='4' y1='21' x2='4' y2='14'/%3E%3Cline x1='4' y1='10' x2='4' y2='3'/%3E%3Cline x1='12' y1='21' x2='12' y2='12'/%3E%3Cline x1='12' y1='8' x2='12' y2='3'/%3E%3Cline x1='20' y1='21' x2='20' y2='16'/%3E%3Cline x1='20' y1='12' x2='20' y2='3'/%3E%3Cline x1='1' y1='14' x2='7' y2='14'/%3E%3Cline x1='9' y1='8' x2='15' y2='8'/%3E%3Cline x1='17' y1='16' x2='23' y2='16'/%3E"+_E,
 ]
+# Nav layout with dict sections (each section header is a <li> with a <p>):
+#   li:1  → " " header (invisible)   li:2  → Dashboard
+#   li:3  → "RFQ 관리" header        li:4  → CRFQ   li:5 → VRFQ
+#   li:6  → "영업 관리" header        li:7  → Quotation  li:8 → Orders
+#   li:9  → Documents  li:10 → AR    li:11 → "시스템" header  li:12 → Settings
+_NAV_ICON_POSITIONS = [
+    (2, 0), (4, 1), (5, 2), (7, 3), (8, 4), (9, 5), (10, 6), (12, 7),
+]
 _NAV_ICON_CSS = "\n".join(
-    f"[data-testid=\"stSidebar\"] nav li:nth-child({i}) a::before {{ background-image: url(\"{u}\") !important; }}"
-    for i, u in enumerate(_ICONS, 1)
+    f"[data-testid=\"stSidebar\"] nav li:nth-child({pos}) a::before {{ background-image: url(\"{_ICONS[idx]}\") !important; }}"
+    for pos, idx in _NAV_ICON_POSITIONS
 )
 
 KTMS_CSS = f"""
@@ -316,9 +326,9 @@ h1, h2, h3, h4 {{
 
 /* ── Sidebar ─────────────────────────────────────────────────────────────── */
 section[data-testid="stSidebar"] {{
-    min-width: 210px !important;
-    max-width: 210px !important;
-    width: 210px !important;
+    min-width: 220px !important;
+    max-width: 220px !important;
+    width: 220px !important;
     background-color: {NAVY} !important;
 }}
 section[data-testid="stSidebar"] nav {{
@@ -330,28 +340,57 @@ section[data-testid="stSidebar"] nav {{
 }}
 [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2,
 [data-testid="stSidebar"] h3 {{ color: white !important; }}
+
+/* ── Nav section labels (RFQ 관리, 영업 관리, 시스템) ──────────────────── */
+[data-testid="stSidebar"] nav li p {{
+    font-size: 10px !important;
+    font-weight: 800 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.12em !important;
+    color: rgba(180,200,230,0.38) !important;
+    padding: 20px 12px 5px 14px !important;
+    margin: 0 !important;
+    pointer-events: none !important;
+    user-select: none !important;
+    border-top: 1px solid rgba(255,255,255,0.07) !important;
+}}
+[data-testid="stSidebar"] nav li:first-child p,
+[data-testid="stSidebar"] nav li:nth-child(1) p {{
+    border-top: none !important;
+    padding-top: 4px !important;
+    color: transparent !important;
+}}
+
+/* ── Nav page links ──────────────────────────────────────────────────────── */
 [data-testid="stSidebar"] nav a,
 [data-testid="stSidebar"] nav a * {{
     color: #C4CFDE !important;
     opacity: 1 !important;
-    font-weight: 700 !important;
-    font-size: 14px !important;
+    font-weight: 600 !important;
+    font-size: 13.5px !important;
     letter-spacing: -.01em !important;
 }}
 [data-testid="stSidebar"] nav a[aria-current="page"],
 [data-testid="stSidebar"] nav a[aria-current="page"] * {{
     color: #FFFFFF !important;
+    font-weight: 700 !important;
 }}
 [data-testid="stSidebar"] nav li a {{
     display: flex !important;
     align-items: center !important;
-    border-radius: 8px !important;
+    border-radius: 0 8px 8px 0 !important;
+    padding-left: 14px !important;
+    margin-left: 0 !important;
+    border-left: 3px solid transparent !important;
+    transition: background .15s, border-color .15s !important;
 }}
 [data-testid="stSidebar"] nav li a:hover {{
-    background: rgba(255,255,255,.08) !important;
+    background: rgba(255,255,255,.07) !important;
+    border-left-color: rgba(0,85,168,.4) !important;
 }}
 [data-testid="stSidebar"] nav li a[aria-current="page"] {{
-    background: rgba(0,85,168,.35) !important;
+    background: rgba(0,85,168,.30) !important;
+    border-left: 3px solid {BLUE} !important;
 }}
 [data-testid="stSidebar"] nav li a::before {{
     content: '' !important;
@@ -363,7 +402,7 @@ section[data-testid="stSidebar"] nav {{
     background-repeat: no-repeat !important;
     background-position: center !important;
     margin-right: 10px !important;
-    opacity: 0.55 !important;
+    opacity: 0.50 !important;
     flex-shrink: 0 !important;
 }}
 [data-testid="stSidebar"] nav li a[aria-current="page"]::before,
@@ -377,7 +416,7 @@ section[data-testid="stSidebar"] nav {{
     position: fixed !important;
     bottom: 0 !important;
     left: 0 !important;
-    width: 210px !important;
+    width: 220px !important;
     background-color: {NAVY} !important;
     padding: 10px 16px 16px !important;
     border-top: 1px solid rgba(255,255,255,.1) !important;
