@@ -73,16 +73,16 @@ KTMS_CSS = f"""
 .material-symbols-rounded,
 .material-symbols-sharp,
 span[class*="material-symbols"],
-[data-testid="stExpanderToggleIcon"],
-[data-testid="stExpanderToggleIcon"] * {{
+[data-testid="stIconMaterial"] {{
     font-family: 'Material Symbols Outlined' !important;
     font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24 !important;
-    font-size: 20px !important;
     line-height: 1 !important;
     letter-spacing: normal !important;
     word-wrap: normal !important;
     white-space: nowrap !important;
     direction: ltr !important;
+    font-feature-settings: 'liga' !important;
+    -webkit-font-feature-settings: 'liga' !important;
 }}
 
 /* ── App background ──────────────────────────────────────────────────────── */
