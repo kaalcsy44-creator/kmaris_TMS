@@ -84,7 +84,8 @@ st.markdown("---")
 
 # ── Recent RFQ activity ───────────────────────────────────────────────────────
 section_header("rfq", "최근 RFQ 현황")
-from app.utils.helpers import rfq_list, get_customer, get_vessel
+from app.utils.helpers import rfq_list, order_list, get_customer, get_vessel
+from services.tracking_status import rfq_tracking_label, order_tracking_label
 
 rfqs = rfq_list()[:10]
 if rfqs:
@@ -99,6 +100,7 @@ if rfqs:
             "품목수": len(r.items or []),
             "Level": r.follow_up_level.value if r.follow_up_level else "—",
             "상태": r.status.value,
+            "고객 추적 단계": rfq_tracking_label(r.status.value),
             "날짜": r.date or "—",
         })
     import pandas as pd
@@ -106,3 +108,29 @@ if rfqs:
     st.dataframe(df, use_container_width=True, hide_index=True)
 else:
     hint("등록된 RFQ가 없습니다.")
+
+st.markdown("---")
+
+# ── Recent Order activity ─────────────────────────────────────────────────────
+section_header("order", "최근 Order 현황")
+
+orders = order_list()[:10]
+if orders:
+    rows = []
+    for o in orders:
+        c = get_customer(o.customer_id)
+        v = get_vessel(o.vessel_id) if o.vessel_id else None
+        rows.append({
+            "Order No.": o.ord_no,
+            "Customer": c.name if c else "—",
+            "선박": v.name if v else "—",
+            "품목수": len(o.items or []),
+            "상태": o.status.value,
+            "고객 추적 단계": order_tracking_label(o.status.value),
+            "날짜": o.date or "—",
+        })
+    import pandas as pd
+    df = pd.DataFrame(rows)
+    st.dataframe(df, use_container_width=True, hide_index=True)
+else:
+    hint("등록된 Order가 없습니다.")

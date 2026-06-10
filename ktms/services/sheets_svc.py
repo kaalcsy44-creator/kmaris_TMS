@@ -23,29 +23,12 @@ try:
 except ImportError:
     _GSPREAD_OK = False
 
+from services.tracking_status import rfq_tracking_step, order_tracking_step
+
 _SCOPES = [
     "https://spreadsheets.google.com/feeds",
     "https://www.googleapis.com/auth/drive",
 ]
-
-# GAS의 status_key / status_step 값으로 매핑
-_RFQ_STATUS_MAP: dict[str, tuple[int, str]] = {
-    "수신완료":         (0, "received"),
-    "공급사 소싱중":     (1, "preparing"),
-    "견적 중":          (1, "preparing"),
-    "이메일 발송 완료":  (2, "submitted"),
-    "수주완료":         (2, "submitted"),
-    "실주":            (2, "lost"),
-}
-
-_ORD_STATUS_MAP: dict[str, tuple[int, str]] = {
-    "오더 수주":         (0, "confirmed"),
-    "발주 완료":         (1, "production"),
-    "제조/준비중":       (1, "production"),
-    "출고완료":          (2, "transit"),
-    "운송중":            (2, "transit"),
-    "목적지 하차 완료":  (3, "delivered"),
-}
 
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
@@ -125,7 +108,7 @@ def upsert_rfq(rfq, customer, vessel) -> None:
         return
 
     status_val = rfq.status.value if hasattr(rfq.status, "value") else str(rfq.status)
-    step, key = _RFQ_STATUS_MAP.get(status_val, (0, "received"))
+    step, key = rfq_tracking_step(status_val)
 
     _upsert(ws, rfq.rfq_no, [
         rfq.rfq_no,
@@ -150,7 +133,7 @@ def upsert_order(order, customer, vessel) -> None:
         return
 
     status_val = order.status.value if hasattr(order.status, "value") else str(order.status)
-    step, key = _ORD_STATUS_MAP.get(status_val, (0, "confirmed"))
+    step, key = order_tracking_step(status_val)
 
     _upsert(ws, order.ord_no, [
         order.ord_no,
