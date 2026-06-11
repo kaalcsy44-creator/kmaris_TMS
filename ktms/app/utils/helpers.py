@@ -579,18 +579,26 @@ section[data-testid="stSidebar"] nav {{
     display: flex;
     justify-content: space-between;
     align-items: center;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: 6px;
 }}
 .ktms-track-card-title {{
     font-weight: 800;
     color: #0B1D3A;
     font-size: 13.5px;
+    white-space: nowrap;
+}}
+.ktms-track-card-badge {{
+    flex-shrink: 0;
 }}
 .ktms-track-card-sub {{
+    display: block;
     color: #6B7280;
     font-size: 12px;
-    margin-left: 8px;
+    margin: 2px 0 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }}
 .ktms-track-card-meta {{
     font-size: 11px;

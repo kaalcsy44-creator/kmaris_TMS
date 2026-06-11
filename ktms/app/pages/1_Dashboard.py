@@ -91,6 +91,13 @@ from app.utils.helpers import (
 from services.tracking_status import RFQ_STEPS, ORDER_STEPS, rfq_tracking_step, order_tracking_step
 
 
+def _customer_vessel(c, v) -> str:
+    name = c.name if c else "—"
+    if v and v.name:
+        return f"{name} · {v.name}"
+    return name
+
+
 def _rfq_card_html(r) -> str:
     c = get_customer(r.customer_id)
     v = get_vessel(r.vessel_id) if r.vessel_id else None
@@ -98,12 +105,10 @@ def _rfq_card_html(r) -> str:
     return f"""
     <div class="ktms-track-card">
         <div class="ktms-track-card-head">
-            <div>
-                <span class="ktms-track-card-title">{r.rfq_no}</span>
-                <span class="ktms-track-card-sub">{c.name if c else '—'} · {v.name if v else '—'}</span>
-            </div>
-            <div>{status_badge(r.status.value)}</div>
+            <span class="ktms-track-card-title">{r.rfq_no}</span>
+            <span class="ktms-track-card-badge">{status_badge(r.status.value)}</span>
         </div>
+        <div class="ktms-track-card-sub">{_customer_vessel(c, v)}</div>
         <div class="ktms-track-card-meta">품목 {len(r.items or [])}개 · Level {r.follow_up_level.value if r.follow_up_level else '—'} · {r.date or '—'}</div>
         {tracking_stepper_html(RFQ_STEPS, step)}
     </div>
@@ -117,12 +122,10 @@ def _order_card_html(o) -> str:
     return f"""
     <div class="ktms-track-card">
         <div class="ktms-track-card-head">
-            <div>
-                <span class="ktms-track-card-title">{o.ord_no}</span>
-                <span class="ktms-track-card-sub">{c.name if c else '—'} · {v.name if v else '—'}</span>
-            </div>
-            <div>{status_badge(o.status.value)}</div>
+            <span class="ktms-track-card-title">{o.ord_no}</span>
+            <span class="ktms-track-card-badge">{status_badge(o.status.value)}</span>
         </div>
+        <div class="ktms-track-card-sub">{_customer_vessel(c, v)}</div>
         <div class="ktms-track-card-meta">품목 {len(o.items or [])}개 · {o.date or '—'}</div>
         {tracking_stepper_html(ORDER_STEPS, step)}
     </div>
@@ -133,11 +136,9 @@ def _empty_order_card_html() -> str:
     return f"""
     <div class="ktms-track-card">
         <div class="ktms-track-card-head">
-            <div>
-                <span class="ktms-track-card-title">—</span>
-                <span class="ktms-track-card-sub">아직 Order가 생성되지 않았습니다</span>
-            </div>
+            <span class="ktms-track-card-title">—</span>
         </div>
+        <div class="ktms-track-card-sub">아직 Order가 생성되지 않았습니다</div>
         <div class="ktms-track-card-meta">&nbsp;</div>
         {tracking_stepper_html(ORDER_STEPS, -1)}
     </div>
