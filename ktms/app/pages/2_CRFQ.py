@@ -415,9 +415,19 @@ with tab_detail:
     with col_info:
         st.markdown(f"### {rfq.rfq_no}")
         c1, c2, c3 = st.columns(3)
-        c1.metric("Customer", cust.name if cust else "—")
-        c2.metric("선박", vessel.name if vessel else "—")
-        c3.metric("품목수", len(rfq.items or []))
+        info_cards = [
+            (c1, "Customer", cust.name if cust else "—"),
+            (c2, "선박", vessel.name if vessel else "—"),
+            (c3, "품목수", len(rfq.items or [])),
+        ]
+        for col, label, value in info_cards:
+            with col:
+                st.markdown(f"""
+                <div class="ktms-info-card">
+                    <div class="ktms-info-label">{label}</div>
+                    <div class="ktms-info-value">{value}</div>
+                </div>
+                """, unsafe_allow_html=True)
         st.markdown(f"**상태:** {status_badge(rfq.status.value)}&nbsp;&nbsp;"
                     f"**Follow-up:** <span class='badge-{rfq.follow_up_level.value}'>{rfq.follow_up_level.value}</span>"
                     f"&nbsp;&nbsp;**날짜:** {rfq.date}", unsafe_allow_html=True)

@@ -170,9 +170,19 @@ with tab_detail:
     with col_info:
         st.markdown(f"### {order.ord_no}")
         m1, m2, m3 = st.columns(3)
-        m1.metric("Customer", cust.name if cust else "—")
-        m2.metric("선박",   vessel.name if vessel else "—")
-        m3.metric("PO No.", order.po_no or "—")
+        info_cards = [
+            (m1, "Customer", cust.name if cust else "—"),
+            (m2, "선박", vessel.name if vessel else "—"),
+            (m3, "PO No.", order.po_no or "—"),
+        ]
+        for col, label, value in info_cards:
+            with col:
+                st.markdown(f"""
+                <div class="ktms-info-card">
+                    <div class="ktms-info-label">{label}</div>
+                    <div class="ktms-info-value">{value}</div>
+                </div>
+                """, unsafe_allow_html=True)
         st.markdown(f"**상태:** {status_badge(order.status.value)}", unsafe_allow_html=True)
         t_url = tracking_url("order", order.tracking_token)
         st.markdown(f"🔗 **고객 트래킹 링크:** [{t_url}]({t_url})")

@@ -43,9 +43,19 @@ cust   = get_customer(order.customer_id)
 vessel = get_vessel(order.vessel_id) if order.vessel_id else None
 
 col_m1, col_m2, col_m3 = st.columns(3)
-col_m1.metric("Customer", cust.name if cust else "—")
-col_m2.metric("선박",   vessel.name if vessel else "—")
-col_m3.metric("PO No.", order.po_no or "—")
+info_cards = [
+    (col_m1, "Customer", cust.name if cust else "—"),
+    (col_m2, "선박", vessel.name if vessel else "—"),
+    (col_m3, "PO No.", order.po_no or "—"),
+]
+for col, label, value in info_cards:
+    with col:
+        st.markdown(f"""
+        <div class="ktms-info-card">
+            <div class="ktms-info-label">{label}</div>
+            <div class="ktms-info-value">{value}</div>
+        </div>
+        """, unsafe_allow_html=True)
 
 st.markdown("---")
 

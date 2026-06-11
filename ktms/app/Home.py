@@ -9,6 +9,10 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 import streamlit as st
+from dotenv import load_dotenv
+
+# ── Load local .env (local development) ──────────────────────────────────────
+load_dotenv(ROOT / ".env")
 
 # ── Inject Streamlit secrets → os.environ (cloud deployment) ─────────────────
 _SECRET_KEYS = [
