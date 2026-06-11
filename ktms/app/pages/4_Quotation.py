@@ -153,7 +153,13 @@ with tab_new:
             valid_days = st.number_input("유효기간 (일)", min_value=1, max_value=90, value=15)
         with c2:
             vessel_opts = vessel_options(cust_id)
-            vessel_name = st.selectbox("선박 (선택)", ["— 없음 —"] + list(vessel_opts.keys()))
+            vessel_choices = ["— 없음 —"] + list(vessel_opts.keys())
+            default_vessel_idx = 0
+            if prefill_rfq and prefill_rfq.vessel_id:
+                v = get_vessel(prefill_rfq.vessel_id)
+                if v and v.name in vessel_opts:
+                    default_vessel_idx = vessel_choices.index(v.name)
+            vessel_name = st.selectbox("선박 (선택)", vessel_choices, index=default_vessel_idx)
             vessel_id = vessel_opts.get(vessel_name) if vessel_name != "— 없음 —" else None
             currency = st.selectbox("통화", ["USD", "EUR", "KRW", "SGD", "JPY"])
             vat_rate = st.number_input("VAT Rate", 0.0, 1.0, 0.0, 0.01, format="%.2f")
@@ -202,10 +208,10 @@ with tab_new:
             seed_df, num_rows="dynamic", use_container_width=True,
             column_config={
                 "qty":        st.column_config.NumberColumn("qty", min_value=0, step=1),
-                "cost_price": st.column_config.NumberColumn("cost_price", format="%.2f"),
+                "cost_price": st.column_config.NumberColumn("cost_price", format="%,.2f"),
                 "margin_pct": st.column_config.NumberColumn("margin_pct (%)", min_value=0.0, max_value=200.0,
                                                               step=1.0, format="%.1f", default=default_margin_pct),
-                "unit_price": st.column_config.NumberColumn("unit_price (auto)", format="%.2f"),
+                "unit_price": st.column_config.NumberColumn("unit_price (auto)", format="%,.2f"),
             },
             key="qtn_items",
         )
@@ -291,10 +297,20 @@ with tab_detail:
     with col_info:
         st.markdown(f"### {qtn.qtn_no}")
         m1, m2, m3, m4 = st.columns(4)
-        m1.metric("Customer",   cust.name if cust else "—")
-        m2.metric("선박",     vessel.name if vessel else "—")
-        m3.metric("통화/합계", f"{qtn.currency} {total_amount(qtn.items or []):,.2f}")
-        m4.metric("유효기간", qtn.valid_until or "—")
+        info_cards = [
+            (m1, "Customer",  cust.name if cust else "—"),
+            (m2, "선박",      vessel.name if vessel else "—"),
+            (m3, "통화/합계", f"{qtn.currency} {total_amount(qtn.items or []):,.2f}"),
+            (m4, "유효기간",  qtn.valid_until or "—"),
+        ]
+        for col, label, value in info_cards:
+            with col:
+                st.markdown(f"""
+                <div class="ktms-info-card">
+                    <div class="ktms-info-label">{label}</div>
+                    <div class="ktms-info-value">{value}</div>
+                </div>
+                """, unsafe_allow_html=True)
         st.markdown(f"**상태:** {status_badge(qtn.status.value)}", unsafe_allow_html=True)
 
     with col_act:
@@ -313,7 +329,10 @@ with tab_detail:
 
     if qtn.items:
         st.markdown("**품목 리스트**")
-        st.dataframe(pd.DataFrame(qtn.items), use_container_width=True, hide_index=True)
+        money_cols = {c: st.column_config.NumberColumn(c, format="%,.2f")
+                       for c in ("cost_price", "unit_price", "amount") if c in qtn.items[0]}
+        st.dataframe(pd.DataFrame(qtn.items), use_container_width=True, hide_index=True,
+                     column_config=money_cols)
 
     st.markdown("---")
     col_pdf, col_email = st.columns(2)

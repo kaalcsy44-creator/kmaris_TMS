@@ -536,6 +536,32 @@ section[data-testid="stSidebar"] nav {{
     margin-top: 4px;
 }}
 
+/* ── Detail info cards (smaller value, full text visible) ────────────────── */
+.ktms-info-card {{
+    background: #ffffff;
+    border: 1px solid #D7E2EE;
+    border-left: 4px solid {BLUE};
+    border-radius: 14px;
+    padding: 14px 18px;
+    margin-bottom: 8px;
+}}
+.ktms-info-label {{
+    font-size: 11px;
+    font-weight: 700;
+    color: #6B7280;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    margin-bottom: 4px;
+}}
+.ktms-info-value {{
+    font-size: 1.05rem;
+    font-weight: 800;
+    color: {NAVY};
+    letter-spacing: -.01em;
+    word-break: break-word;
+    line-height: 1.3;
+}}
+
 /* ── Follow-up level badges ──────────────────────────────────────────────── */
 .badge-A {{
     background: rgba(220,53,69,.12);
