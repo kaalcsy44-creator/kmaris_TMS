@@ -84,28 +84,28 @@ st.markdown("---")
 
 # ── Recent RFQ activity ───────────────────────────────────────────────────────
 section_header("rfq", "최근 RFQ 현황")
-from app.utils.helpers import rfq_list, order_list, get_customer, get_vessel
-from services.tracking_status import rfq_tracking_label, order_tracking_label
+from app.utils.helpers import rfq_list, order_list, get_customer, get_vessel, status_badge, tracking_stepper_html
+from services.tracking_status import RFQ_STEPS, ORDER_STEPS, rfq_tracking_step, order_tracking_step
 
 rfqs = rfq_list()[:10]
 if rfqs:
-    rows = []
     for r in rfqs:
         c = get_customer(r.customer_id)
         v = get_vessel(r.vessel_id) if r.vessel_id else None
-        rows.append({
-            "RFQ No.": r.rfq_no,
-            "Customer": c.name if c else "—",
-            "선박": v.name if v else "—",
-            "품목수": len(r.items or []),
-            "Level": r.follow_up_level.value if r.follow_up_level else "—",
-            "상태": r.status.value,
-            "고객 추적 단계": rfq_tracking_label(r.status.value),
-            "날짜": r.date or "—",
-        })
-    import pandas as pd
-    df = pd.DataFrame(rows)
-    st.dataframe(df, use_container_width=True, hide_index=True)
+        step, _key = rfq_tracking_step(r.status.value)
+        st.markdown(f"""
+        <div class="ktms-track-card">
+            <div class="ktms-track-card-head">
+                <div>
+                    <span class="ktms-track-card-title">{r.rfq_no}</span>
+                    <span class="ktms-track-card-sub">{c.name if c else '—'} · {v.name if v else '—'}</span>
+                </div>
+                <div>{status_badge(r.status.value)}</div>
+            </div>
+            <div class="ktms-track-card-meta">품목 {len(r.items or [])}개 · Level {r.follow_up_level.value if r.follow_up_level else '—'} · {r.date or '—'}</div>
+            {tracking_stepper_html(RFQ_STEPS, step)}
+        </div>
+        """, unsafe_allow_html=True)
 else:
     hint("등록된 RFQ가 없습니다.")
 
@@ -116,21 +116,33 @@ section_header("order", "최근 Order 현황")
 
 orders = order_list()[:10]
 if orders:
-    rows = []
     for o in orders:
         c = get_customer(o.customer_id)
         v = get_vessel(o.vessel_id) if o.vessel_id else None
-        rows.append({
-            "Order No.": o.ord_no,
-            "Customer": c.name if c else "—",
-            "선박": v.name if v else "—",
-            "품목수": len(o.items or []),
-            "상태": o.status.value,
-            "고객 추적 단계": order_tracking_label(o.status.value),
-            "날짜": o.date or "—",
-        })
-    import pandas as pd
-    df = pd.DataFrame(rows)
-    st.dataframe(df, use_container_width=True, hide_index=True)
+        step, _key = order_tracking_step(o.status.value)
+        st.markdown(f"""
+        <div class="ktms-track-card">
+            <div class="ktms-track-card-head">
+                <div>
+                    <span class="ktms-track-card-title">{o.ord_no}</span>
+                    <span class="ktms-track-card-sub">{c.name if c else '—'} · {v.name if v else '—'}</span>
+                </div>
+                <div>{status_badge(o.status.value)}</div>
+            </div>
+            <div class="ktms-track-card-meta">품목 {len(o.items or [])}개 · {o.date or '—'}</div>
+            {tracking_stepper_html(ORDER_STEPS, step)}
+        </div>
+        """, unsafe_allow_html=True)
 else:
-    hint("등록된 Order가 없습니다.")
+    st.markdown(f"""
+    <div class="ktms-track-card">
+        <div class="ktms-track-card-head">
+            <div>
+                <span class="ktms-track-card-title">—</span>
+                <span class="ktms-track-card-sub">등록된 Order가 없습니다</span>
+            </div>
+        </div>
+        <div class="ktms-track-card-meta">&nbsp;</div>
+        {tracking_stepper_html(ORDER_STEPS, -1)}
+    </div>
+    """, unsafe_allow_html=True)

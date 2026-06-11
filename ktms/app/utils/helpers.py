@@ -567,6 +567,91 @@ section[data-testid="stSidebar"] nav {{
     letter-spacing: .04em;
     border: 1px solid rgba(108,117,125,.2);
 }}
+
+/* ── Customer tracking stepper (mirrors k-maris.com/track) ───────────────── */
+.ktms-track-card {{
+    border: 1px solid #E3E9F0;
+    border-radius: 8px;
+    padding: 10px 14px 12px;
+    margin-bottom: 8px;
+}}
+.ktms-track-card-head {{
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+}}
+.ktms-track-card-title {{
+    font-weight: 800;
+    color: #0B1D3A;
+    font-size: 13.5px;
+}}
+.ktms-track-card-sub {{
+    color: #6B7280;
+    font-size: 12px;
+    margin-left: 8px;
+}}
+.ktms-track-card-meta {{
+    font-size: 11px;
+    color: #9aa6b5;
+    margin: 2px 0 8px;
+}}
+.ktms-stepper {{
+    display: flex;
+    align-items: flex-start;
+}}
+.ktms-step-wrap {{
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 72px;
+}}
+.ktms-step-dot {{
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #fff;
+    border: 2px solid #D7E2EE;
+    flex-shrink: 0;
+    box-sizing: border-box;
+}}
+.ktms-step-dot.done {{
+    background: #0055A8;
+    border-color: #0055A8;
+}}
+.ktms-step-dot.current {{
+    background: #fff;
+    border-color: #0055A8;
+    border-width: 3px;
+    box-shadow: 0 0 0 4px rgba(0,85,168,.14);
+}}
+.ktms-step-line {{
+    flex: 1;
+    height: 2px;
+    background: #D7E2EE;
+    margin-top: 6px;
+    min-width: 16px;
+}}
+.ktms-step-line.done {{
+    background: #0055A8;
+}}
+.ktms-step-label {{
+    font-size: 9.5px;
+    color: #9aa6b5;
+    margin-top: 4px;
+    text-align: center;
+    line-height: 1.25;
+    padding: 0 2px;
+}}
+.ktms-step-label.done {{
+    color: #0055A8;
+    font-weight: 700;
+}}
+.ktms-step-label.current {{
+    color: #0055A8;
+    font-weight: 800;
+}}
 </style>
 """
 
@@ -961,3 +1046,25 @@ def status_badge(status: str) -> str:
         f'font-size:12px;font-weight:800;letter-spacing:.03em;'
         f'">{status}</span>'
     )
+
+
+def tracking_stepper_html(steps: List[str], current_step: int) -> str:
+    """Render a compact dot+bar stepper matching k-maris.com/track's progress bar."""
+    parts = []
+    for i, name in enumerate(steps):
+        if i > 0:
+            line_cls = "done" if i <= current_step else ""
+            parts.append(f'<div class="ktms-step-line {line_cls}"></div>')
+        if i < current_step:
+            dot_cls, label_cls = "done", "done"
+        elif i == current_step:
+            dot_cls, label_cls = "current", "current"
+        else:
+            dot_cls, label_cls = "", ""
+        parts.append(
+            f'<div class="ktms-step-wrap">'
+            f'<div class="ktms-step-dot {dot_cls}"></div>'
+            f'<div class="ktms-step-label {label_cls}">{name}</div>'
+            f'</div>'
+        )
+    return f'<div class="ktms-stepper">{"".join(parts)}</div>'
