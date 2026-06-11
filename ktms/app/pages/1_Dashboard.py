@@ -82,67 +82,89 @@ with col_right:
 
 st.markdown("---")
 
-# ── Recent RFQ activity ───────────────────────────────────────────────────────
-section_header("rfq", "최근 RFQ 현황")
-from app.utils.helpers import rfq_list, order_list, get_customer, get_vessel, status_badge, tracking_stepper_html
+# ── RFQ ↔ Order 진행 현황 (좌우 페어링) ─────────────────────────────────────────
+section_header("rfq", "RFQ ↔ Order 진행 현황")
+from app.utils.helpers import (
+    rfq_list, get_customer, get_vessel, status_badge, tracking_stepper_html,
+    get_order_for_rfq, orphan_order_list,
+)
 from services.tracking_status import RFQ_STEPS, ORDER_STEPS, rfq_tracking_step, order_tracking_step
 
-rfqs = rfq_list()[:10]
-if rfqs:
-    for r in rfqs:
-        c = get_customer(r.customer_id)
-        v = get_vessel(r.vessel_id) if r.vessel_id else None
-        step, _key = rfq_tracking_step(r.status.value)
-        st.markdown(f"""
-        <div class="ktms-track-card">
-            <div class="ktms-track-card-head">
-                <div>
-                    <span class="ktms-track-card-title">{r.rfq_no}</span>
-                    <span class="ktms-track-card-sub">{c.name if c else '—'} · {v.name if v else '—'}</span>
-                </div>
-                <div>{status_badge(r.status.value)}</div>
+
+def _rfq_card_html(r) -> str:
+    c = get_customer(r.customer_id)
+    v = get_vessel(r.vessel_id) if r.vessel_id else None
+    step, _key = rfq_tracking_step(r.status.value)
+    return f"""
+    <div class="ktms-track-card">
+        <div class="ktms-track-card-head">
+            <div>
+                <span class="ktms-track-card-title">{r.rfq_no}</span>
+                <span class="ktms-track-card-sub">{c.name if c else '—'} · {v.name if v else '—'}</span>
             </div>
-            <div class="ktms-track-card-meta">품목 {len(r.items or [])}개 · Level {r.follow_up_level.value if r.follow_up_level else '—'} · {r.date or '—'}</div>
-            {tracking_stepper_html(RFQ_STEPS, step)}
+            <div>{status_badge(r.status.value)}</div>
         </div>
-        """, unsafe_allow_html=True)
-else:
-    hint("등록된 RFQ가 없습니다.")
+        <div class="ktms-track-card-meta">품목 {len(r.items or [])}개 · Level {r.follow_up_level.value if r.follow_up_level else '—'} · {r.date or '—'}</div>
+        {tracking_stepper_html(RFQ_STEPS, step)}
+    </div>
+    """
 
-st.markdown("---")
 
-# ── Recent Order activity ─────────────────────────────────────────────────────
-section_header("order", "최근 Order 현황")
-
-orders = order_list()[:10]
-if orders:
-    for o in orders:
-        c = get_customer(o.customer_id)
-        v = get_vessel(o.vessel_id) if o.vessel_id else None
-        step, _key = order_tracking_step(o.status.value)
-        st.markdown(f"""
-        <div class="ktms-track-card">
-            <div class="ktms-track-card-head">
-                <div>
-                    <span class="ktms-track-card-title">{o.ord_no}</span>
-                    <span class="ktms-track-card-sub">{c.name if c else '—'} · {v.name if v else '—'}</span>
-                </div>
-                <div>{status_badge(o.status.value)}</div>
+def _order_card_html(o) -> str:
+    c = get_customer(o.customer_id)
+    v = get_vessel(o.vessel_id) if o.vessel_id else None
+    step, _key = order_tracking_step(o.status.value)
+    return f"""
+    <div class="ktms-track-card">
+        <div class="ktms-track-card-head">
+            <div>
+                <span class="ktms-track-card-title">{o.ord_no}</span>
+                <span class="ktms-track-card-sub">{c.name if c else '—'} · {v.name if v else '—'}</span>
             </div>
-            <div class="ktms-track-card-meta">품목 {len(o.items or [])}개 · {o.date or '—'}</div>
-            {tracking_stepper_html(ORDER_STEPS, step)}
+            <div>{status_badge(o.status.value)}</div>
         </div>
-        """, unsafe_allow_html=True)
-else:
-    st.markdown(f"""
+        <div class="ktms-track-card-meta">품목 {len(o.items or [])}개 · {o.date or '—'}</div>
+        {tracking_stepper_html(ORDER_STEPS, step)}
+    </div>
+    """
+
+
+def _empty_order_card_html() -> str:
+    return f"""
     <div class="ktms-track-card">
         <div class="ktms-track-card-head">
             <div>
                 <span class="ktms-track-card-title">—</span>
-                <span class="ktms-track-card-sub">등록된 Order가 없습니다</span>
+                <span class="ktms-track-card-sub">아직 Order가 생성되지 않았습니다</span>
             </div>
         </div>
         <div class="ktms-track-card-meta">&nbsp;</div>
         {tracking_stepper_html(ORDER_STEPS, -1)}
     </div>
-    """, unsafe_allow_html=True)
+    """
+
+
+rfqs = rfq_list()[:10]
+if rfqs:
+    col_rfq, col_order = st.columns(2)
+    with col_rfq:
+        st.markdown("**RFQ**")
+    with col_order:
+        st.markdown("**연결된 Order**")
+    for r in rfqs:
+        col_rfq, col_order = st.columns(2)
+        with col_rfq:
+            st.markdown(_rfq_card_html(r), unsafe_allow_html=True)
+        with col_order:
+            o = get_order_for_rfq(r.id)
+            st.markdown(_order_card_html(o) if o else _empty_order_card_html(), unsafe_allow_html=True)
+else:
+    hint("등록된 RFQ가 없습니다.")
+
+# ── RFQ와 연결되지 않은 Order ───────────────────────────────────────────────────
+orphans = orphan_order_list()
+if orphans:
+    st.markdown("---")
+    section_header("order", "RFQ 연결 없는 Order")
+    for o in orphans:
+        st.markdown(_order_card_html(o), unsafe_allow_html=True)

@@ -914,6 +914,37 @@ def get_order(oid: int) -> Optional[Order]:
         s.close()
 
 
+def orphan_order_list(limit: int = 10) -> List[Order]:
+    """RFQ와 연결되지 않은 Order 목록 (Quotation 없음 또는 Quotation.rfq_id 없음)."""
+    s = get_session()
+    try:
+        return (
+            s.query(Order)
+            .outerjoin(Quotation, Order.quotation_id == Quotation.id)
+            .filter((Order.quotation_id.is_(None)) | (Quotation.rfq_id.is_(None)))
+            .order_by(Order.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+    finally:
+        s.close()
+
+
+def get_order_for_rfq(rfq_id: int) -> Optional[Order]:
+    """RFQ → Quotation → Order 경로로 연결된 Order를 조회 (가장 최근 1건)."""
+    s = get_session()
+    try:
+        return (
+            s.query(Order)
+            .join(Quotation, Order.quotation_id == Quotation.id)
+            .filter(Quotation.rfq_id == rfq_id)
+            .order_by(Order.created_at.desc())
+            .first()
+        )
+    finally:
+        s.close()
+
+
 def get_ci_for_order(order_id: int) -> Optional[CommercialInvoice]:
     s = get_session()
     try:
