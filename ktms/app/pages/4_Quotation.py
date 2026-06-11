@@ -159,12 +159,13 @@ with tab_new:
             vat_rate = st.number_input("VAT Rate", 0.0, 1.0, 0.0, 0.01, format="%.2f")
         with c3:
             follow_level = st.selectbox("Follow-up Level", [l.value for l in FollowUpLevel], index=1)
-            margin_pct = st.number_input("마진율 (%)", 0.0, 200.0, 20.0, 1.0)
+            default_margin_pct = st.number_input("기본 마진율 (%)", 0.0, 200.0, 20.0, 1.0,
+                                                   help="품목별 margin_pct를 비워두면 이 값이 적용됩니다.")
             discount_pct = st.number_input("DC (%)", 0.0, 50.0, 0.0, 0.5)
 
-        st.markdown("**품목 리스트** (cost_price 입력 → 마진 적용 후 unit_price 자동 계산)")
+        st.markdown("**품목 리스트** (cost_price, margin_pct 입력 → unit_price 자동 계산. margin_pct 비우면 기본 마진율 적용)")
         default_cols = ["item_no", "part_no", "description", "maker", "origin",
-                        "qty", "unit", "cost_price", "unit_price", "lead_time", "remark"]
+                        "qty", "unit", "cost_price", "margin_pct", "unit_price", "lead_time", "remark"]
 
         seed_items: list = []
         if prefill_vq and prefill_vq.items:
@@ -179,6 +180,7 @@ with tab_new:
                     "qty": itm.get("qty", 1),
                     "unit": itm.get("unit", "PCS"),
                     "cost_price": float(itm.get("cost_price", 0.0)),
+                    "margin_pct": default_margin_pct,
                     "unit_price": 0.0,
                     "lead_time": itm.get("lead_time", ""),
                     "remark": itm.get("remark", ""),
@@ -190,7 +192,7 @@ with tab_new:
                     "item_no": i, "part_no": itm.get("part_no", ""),
                     "description": itm.get("description", ""), "maker": itm.get("maker", ""),
                     "origin": "", "qty": itm.get("qty", 1), "unit": itm.get("unit", "PCS"),
-                    "cost_price": 0.0, "unit_price": 0.0,
+                    "cost_price": 0.0, "margin_pct": default_margin_pct, "unit_price": 0.0,
                     "lead_time": itm.get("lead_time_req", ""), "remark": "",
                 })
 
@@ -201,6 +203,8 @@ with tab_new:
             column_config={
                 "qty":        st.column_config.NumberColumn("qty", min_value=0, step=1),
                 "cost_price": st.column_config.NumberColumn("cost_price", format="%.2f"),
+                "margin_pct": st.column_config.NumberColumn("margin_pct (%)", min_value=0.0, max_value=200.0,
+                                                              step=1.0, format="%.1f", default=default_margin_pct),
                 "unit_price": st.column_config.NumberColumn("unit_price (auto)", format="%.2f"),
             },
             key="qtn_items",
@@ -226,7 +230,7 @@ with tab_new:
         # Apply margin
         for item in raw_items:
             item["item_no"] = item.get("item_no") or raw_items.index(item) + 1
-        priced_items = apply_margin(raw_items, margin_pct, discount_pct)
+        priced_items = apply_margin(raw_items, default_margin_pct, discount_pct)
 
         qtn_no = next_doc_no("quotation")
         valid_until = (qtn_date + timedelta(days=int(valid_days))).isoformat()

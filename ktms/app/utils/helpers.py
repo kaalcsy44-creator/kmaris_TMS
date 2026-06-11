@@ -1026,14 +1026,18 @@ def dashboard_stats() -> Dict[str, Any]:
 
 # ── Margin calculation ────────────────────────────────────────────────────────
 
-def apply_margin(items: List[Dict], margin_pct: float, discount_pct: float = 0.0) -> List[Dict]:
+def apply_margin(items: List[Dict], default_margin_pct: float, discount_pct: float = 0.0) -> List[Dict]:
+    """품목별 margin_pct가 있으면 그 값을, 없으면 default_margin_pct를 사용해 unit_price 계산."""
     result = []
     for item in items:
         cost = float(item.get("cost_price", item.get("unit_price", 0)))
+        margin_pct = item.get("margin_pct")
+        margin_pct = float(margin_pct) if margin_pct not in (None, "") else float(default_margin_pct)
         sell = cost * (1 + margin_pct / 100) * (1 - discount_pct / 100)
         sell = round(sell, 2)
         new_item = dict(item)
         new_item["cost_price"] = cost
+        new_item["margin_pct"] = margin_pct
         new_item["unit_price"] = sell
         qty = float(new_item.get("qty", 1))
         new_item["amount"] = round(sell * qty, 2)
