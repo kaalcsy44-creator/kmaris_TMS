@@ -22,7 +22,7 @@ from app.utils.helpers import (
 from db.engine import get_session
 from db.models import Quotation, RFQ, VendorQuote, VendorRFQ, QuotationStatus, FollowUpLevel, RFQStatus
 from services.pdf_svc import build_payload, generate_pdf
-from services.email_svc import send_email, quotation_email_body
+from services.email_svc import send_email, quotation_email_body, quotation_email_subject
 
 try:
     st.set_page_config(page_title="견적 관리 — KTMS", page_icon="📄", layout="wide")
@@ -361,25 +361,62 @@ with tab_detail:
     with col_email:
         st.markdown("**이메일 발송**")
         to_email = st.text_input("수신자 이메일", value=cust.email if cust and cust.email else "")
+
+        lang_label = st.selectbox("언어", ["English", "한국어"], key=f"qtn_email_lang_{qtn.id}")
+        lang_code = "en" if lang_label == "English" else "kr"
+        attach_types = st.multiselect(
+            "첨부 문서", ["quotation", "proforma_invoice"],
+            default=["quotation"], key=f"qtn_email_attach_{qtn.id}",
+        )
+
+        subj_key = f"qtn_email_subject_{qtn.id}"
+        body_key = f"qtn_email_body_{qtn.id}"
+        track_url = tracking_url("rfq", get_rfq(qtn.rfq_id).tracking_token) if qtn.rfq_id else ""
+
+        if subj_key not in st.session_state:
+            st.session_state[subj_key] = quotation_email_subject(qtn.qtn_no, lang_code)
+        if body_key not in st.session_state:
+            st.session_state[body_key] = quotation_email_body(
+                cust.name if cust else "Customer", qtn.qtn_no, track_url, lang=lang_code,
+            )
+
+        if st.button("🔄 제목/본문 자동 생성", key=f"qtn_email_regen_{qtn.id}"):
+            st.session_state[subj_key] = quotation_email_subject(qtn.qtn_no, lang_code)
+            st.session_state[body_key] = quotation_email_body(
+                cust.name if cust else "Customer", qtn.qtn_no, track_url, lang=lang_code,
+            )
+            st.rerun()
+
+        subject = st.text_input("제목", key=subj_key)
+        body = st.text_area("본문 (수정 가능)", key=body_key, height=220)
+
+        with st.expander("📧 이메일 미리보기"):
+            st.write(f"**받는사람:** {to_email or '—'}")
+            st.write(f"**제목:** {subject}")
+            if attach_types:
+                st.write(f"**첨부파일:** {', '.join(f'{qtn.qtn_no}_{t}.pdf' for t in attach_types)}")
+            st.text(body)
+
         if st.button("📧 견적서 이메일 발송"):
             try:
-                payload = build_payload(
-                    doc_no=qtn.qtn_no, date=qtn.date or date.today().isoformat(),
-                    customer=cust, vessel=vessel,
-                    items=qtn.items or [], terms=qtn.terms or {},
-                    currency=qtn.currency, vat_rate=qtn.vat_rate,
-                    valid_until=qtn.valid_until or "",
-                )
-                pdf_bytes = generate_pdf("quotation", payload)
-                body = quotation_email_body(
-                    cust.name if cust else "Customer", qtn.qtn_no,
-                    tracking_url("rfq", get_rfq(qtn.rfq_id).tracking_token) if qtn.rfq_id else "",
-                )
+                attachments = []
+                for doc_type_sel in attach_types:
+                    doc_no = qtn.qtn_no if doc_type_sel == "quotation" else next_doc_no("proforma")
+                    payload = build_payload(
+                        doc_no=doc_no, date=qtn.date or date.today().isoformat(),
+                        customer=cust, vessel=vessel,
+                        items=qtn.items or [], terms=qtn.terms or {},
+                        currency=qtn.currency, vat_rate=qtn.vat_rate,
+                        valid_until=qtn.valid_until or "",
+                    )
+                    pdf_bytes = generate_pdf(doc_type_sel, payload)
+                    attachments.append((f"{qtn.qtn_no}_{doc_type_sel}.pdf", pdf_bytes))
+
                 ok = send_email(
                     to=to_email,
-                    subject=f"[K-MARIS] Quotation {qtn.qtn_no}",
+                    subject=subject,
                     body=body,
-                    attachments=[(f"{qtn.qtn_no}_quotation.pdf", pdf_bytes)],
+                    attachments=attachments,
                 )
                 if ok:
                     session = get_session()

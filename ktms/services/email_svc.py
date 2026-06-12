@@ -60,7 +60,34 @@ def send_email(
         return False
 
 
-def quotation_email_body(customer_name: str, doc_no: str, tracking_url: str = "") -> str:
+def quotation_email_subject(doc_no: str, lang: str = "en") -> str:
+    if lang == "kr":
+        return f"[K-MARIS] 견적서 발송 - {doc_no}"
+    return f"[K-MARIS] Quotation {doc_no}"
+
+
+def quotation_email_body(customer_name: str, doc_no: str, tracking_url: str = "", lang: str = "en") -> str:
+    if lang == "kr":
+        body = f"""{customer_name} 담당자님께,
+
+요청하신 견적서({doc_no})를 첨부 파일로 보내드립니다.
+
+추가 문의사항이나 협의가 필요하시면 언제든지 회신 부탁드립니다.
+"""
+        if tracking_url:
+            body += f"""
+아래 링크를 통해 진행 상황을 확인하실 수 있습니다:
+{tracking_url}
+"""
+        body += """
+감사합니다.
+
+케이마리스 에너지 앤 솔루션 주식회사
+sales@k-maris.com | www.k-maris.com
+Engineering Reliability. Supplying Performance.
+"""
+        return body
+
     body = f"""Dear {customer_name},
 
 Please find attached our Quotation {doc_no} as requested.
