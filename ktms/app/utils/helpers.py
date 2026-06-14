@@ -359,7 +359,7 @@ section[data-testid="stSidebar"] nav {{
     text-transform: uppercase !important;
     letter-spacing: 0.14em !important;
     color: rgba(150,158,170,0.34) !important;
-    padding: 14px 6px 5px 1px !important;
+    padding: 14px 6px 5px 3px !important;
     margin: 0 !important;
     border-top: 1px solid rgba(255,255,255,0.08) !important;
 }}
@@ -424,17 +424,7 @@ section[data-testid="stSidebar"] nav {{
 }}
 [data-testid="stSidebarNavLink"]::before,
 [data-testid="stSidebar"] nav a::before {{
-    content: '' !important;
-    display: inline-block !important;
-    width: 14px !important;
-    height: 14px !important;
-    min-width: 14px !important;
-    background-size: contain !important;
-    background-repeat: no-repeat !important;
-    background-position: center !important;
-    margin-right: 6px !important;
-    opacity: 0.50 !important;
-    flex-shrink: 0 !important;
+    display: none !important;
 }}
 [data-testid="stSidebarNavLink"][aria-current="page"]::before,
 [data-testid="stSidebarNavLink"]:hover::before,
