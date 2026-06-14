@@ -536,6 +536,62 @@ section[data-testid="stSidebar"] nav {{
     margin-top: 4px;
 }}
 
+/* ── Compact KPI cards (uniform size, half height) ───────────────────────── */
+.ktms-kpi-c {{
+    background: #ffffff;
+    border: 1px solid #D7E2EE;
+    border-left: 4px solid {BLUE};
+    border-radius: 12px;
+    padding: 11px 15px;
+    margin-bottom: 10px;
+    box-shadow: 0 2px 10px rgba(11,29,58,.05);
+    min-height: 96px;
+    display: flex;
+    flex-direction: column;
+    transition: box-shadow .18s, transform .18s;
+}}
+.ktms-kpi-c:hover {{
+    box-shadow: 0 8px 24px rgba(11,29,58,.12);
+    transform: translateY(-1px);
+}}
+.ktms-kpi-c .kc-lbl {{
+    font-size: 12px;
+    font-weight: 700;
+    color: #5b6b7f;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}}
+.ktms-kpi-c .kc-val {{
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: {NAVY};
+    letter-spacing: -.025em;
+    line-height: 1.1;
+    margin-top: 2px;
+}}
+.ktms-kpi-c .kc-sub {{
+    font-size: 11px;
+    color: #9aa6b5;
+    margin-top: 3px;
+}}
+.ktms-kpi-c .kc-foot {{
+    margin-top: auto;
+    padding-top: 6px;
+}}
+.ktms-kpi-c .kc-chip {{
+    display: inline-block;
+    font-size: 10.5px;
+    font-weight: 700;
+    padding: 1px 8px;
+    border-radius: 999px;
+    letter-spacing: .01em;
+}}
+.kc-chip.gray  {{ background:#eef1f5; color:#7a8699; }}
+.kc-chip.blue  {{ background:rgba(0,85,168,.10);  color:#0055A8; }}
+.kc-chip.amber {{ background:rgba(232,131,12,.14); color:#b5680a; }}
+.kc-chip.red   {{ background:rgba(220,53,69,.12);  color:#c0392b; }}
+
 /* ── Detail info cards (smaller value, full text visible) ────────────────── */
 .ktms-info-card {{
     background: #ffffff;
