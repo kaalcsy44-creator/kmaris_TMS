@@ -11,7 +11,7 @@ if str(ROOT) not in sys.path:
 import pandas as pd
 import streamlit as st
 from app.utils.auth import require_auth
-from app.utils.helpers import inject_css, hint, section_header, ar_list, get_order, get_customer, status_badge, NAVY
+from app.utils.helpers import inject_css, hint, section_header, ar_list, get_order, get_customer, status_badge, CURRENCIES, NAVY
 from db.engine import get_session
 from db.models import ARRecord, ARStatus
 
@@ -27,7 +27,7 @@ section_header("ar", "AR 관리 (Accounts Receivable / SOA)")
 # ── Filters ───────────────────────────────────────────────────────────────────
 col_f1, col_f2 = st.columns(2)
 status_filter = col_f1.selectbox("상태 필터", ["전체"] + [s.value for s in ARStatus])
-currency_filter = col_f2.selectbox("통화 필터", ["전체", "USD", "EUR", "KRW", "SGD"])
+currency_filter = col_f2.selectbox("통화 필터", ["전체"] + CURRENCIES)
 
 ar_records = ar_list(None if status_filter == "전체" else status_filter)
 if currency_filter != "전체":
@@ -140,7 +140,7 @@ with st.expander("직접 AR 레코드 추가", expanded=False):
             sel_ord   = mc1.selectbox("오더", list(ord_opts.keys()))
             ci_no_in  = mc2.text_input("CI No.")
             inv_amt   = mc3.number_input("Invoice 금액", min_value=0.0, step=100.0)
-            cur_in    = mc1.selectbox("통화", ["USD", "EUR", "KRW", "SGD"])
+            cur_in    = mc1.selectbox("통화", CURRENCIES)
             due_in    = mc2.date_input("결제기한", date.today())
             add_ar    = st.form_submit_button("AR 추가")
         if add_ar:

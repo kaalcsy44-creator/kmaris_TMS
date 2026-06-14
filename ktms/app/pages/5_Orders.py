@@ -108,6 +108,8 @@ with tab_new:
             vessel_opts = vessel_options(cust_id)
             vessel_name = st.selectbox("선박", ["— 없음 —"] + list(vessel_opts.keys()))
             vessel_id = vessel_opts.get(vessel_name) if vessel_name != "— 없음 —" else None
+            promised = st.date_input("약속 납기일 (선택)", value=None,
+                                     help="고객과 약속한 납기일 — 납기 준수율(OTD) 측정 기준")
 
         # Items - pre-fill from quotation
         seed_items = prefill_qtn.items if prefill_qtn and prefill_qtn.items else []
@@ -130,6 +132,7 @@ with tab_new:
                 vessel_id=vessel_id,
                 po_no=po_no,
                 date=ord_date.isoformat(),
+                promised_delivery=promised.isoformat() if promised else None,
                 status=OrderStatus.RECEIVED,
                 items=items_data,
             )
@@ -195,12 +198,56 @@ with tab_detail:
             try:
                 o = s.query(Order).get(order.id)
                 o.status = OrderStatus(new_stat)
+                # 출고/인도 시점 자동 기록 (미입력 시에만)
+                today_iso = date.today().isoformat()
+                if OrderStatus(new_stat) == OrderStatus.SHIPPED and not o.shipped_date:
+                    o.shipped_date = today_iso
+                if OrderStatus(new_stat) == OrderStatus.DELIVERED and not o.delivered_date:
+                    o.delivered_date = today_iso
                 s.commit()
                 _sheet_upsert_order(o, get_customer(o.customer_id), get_vessel(o.vessel_id) if o.vessel_id else None)
                 st.success("업데이트!")
                 st.rerun()
             finally:
                 s.close()
+
+    # ── 납기 일정 (약속/출고/인도) ────────────────────────────────────────────
+    with st.expander("📅 납기 일정 (OTD 측정)", expanded=False):
+        from datetime import datetime as _dt
+
+        def _parse(d):
+            try:
+                return _dt.strptime(d, "%Y-%m-%d").date() if d else None
+            except (TypeError, ValueError):
+                return None
+
+        with st.form("delivery_dates"):
+            d1, d2, d3 = st.columns(3)
+            promised_in  = d1.date_input("약속 납기일", value=_parse(order.promised_delivery))
+            shipped_in   = d2.date_input("실제 출고일", value=_parse(order.shipped_date))
+            delivered_in = d3.date_input("실제 인도일", value=_parse(order.delivered_date))
+            save_dates = st.form_submit_button("납기 일정 저장")
+
+        if save_dates:
+            s = get_session()
+            try:
+                o = s.query(Order).get(order.id)
+                o.promised_delivery = promised_in.isoformat() if promised_in else None
+                o.shipped_date      = shipped_in.isoformat() if shipped_in else None
+                o.delivered_date    = delivered_in.isoformat() if delivered_in else None
+                s.commit()
+                st.success("납기 일정 저장 완료")
+                st.rerun()
+            finally:
+                s.close()
+
+        pd_, dd_ = _parse(order.promised_delivery), _parse(order.delivered_date)
+        if pd_ and dd_:
+            days = (dd_ - pd_).days
+            if days <= 0:
+                st.success(f"✅ 납기 준수 (약속 대비 {-days}일 빠름)" if days < 0 else "✅ 납기 정시 준수")
+            else:
+                st.error(f"⚠️ 납기 지연 — 약속보다 {days}일 초과")
 
     if order.items:
         st.markdown("**품목 리스트**")

@@ -17,7 +17,7 @@ from app.utils.helpers import (
     quotation_list, get_quotation, get_rfq,
     get_customer, get_vessel, get_vendor, apply_margin, total_amount,
     vendor_quote_list, get_vendor_quote, get_vrfq,
-    NAVY, BLUE,
+    CURRENCIES, NAVY, BLUE,
 )
 from db.engine import get_session
 from db.models import Quotation, RFQ, VendorQuote, VendorRFQ, QuotationStatus, FollowUpLevel, RFQStatus
@@ -161,7 +161,7 @@ with tab_new:
                     default_vessel_idx = vessel_choices.index(v.name)
             vessel_name = st.selectbox("선박 (선택)", vessel_choices, index=default_vessel_idx)
             vessel_id = vessel_opts.get(vessel_name) if vessel_name != "— 없음 —" else None
-            currency = st.selectbox("통화", ["USD", "EUR", "KRW", "SGD", "JPY"])
+            currency = st.selectbox("통화", CURRENCIES)
             vat_rate = st.number_input("VAT Rate", 0.0, 1.0, 0.0, 0.01, format="%.2f")
         with c3:
             follow_level = st.selectbox("Follow-up Level", [l.value for l in FollowUpLevel], index=1)

@@ -13,7 +13,8 @@ import streamlit as st
 from app.utils.auth import require_auth
 from app.utils.helpers import (
     inject_css, hint, section_header, next_doc_no, tracking_url,
-    order_list, get_order, get_customer, get_vessel, get_ci_for_order, NAVY,
+    order_list, get_order, get_customer, get_vessel, get_ci_for_order,
+    missing_items, CURRENCIES, NAVY,
 )
 from db.engine import get_session
 from db.models import CommercialInvoice, PackingList, ShippingAdvice, TaxInvoiceData, ARRecord, ARStatus
@@ -57,6 +58,22 @@ for col, label, value in info_cards:
         </div>
         """, unsafe_allow_html=True)
 
+def render_missing_check(doc_items, doc_label: str) -> None:
+    """수주 오더 품목 대비 문서 품목 누락 검증 결과를 표시."""
+    miss = missing_items(order.items or [], doc_items or [])
+    if miss:
+        st.error(f"⚠️ {doc_label}에 누락·수량부족 품목 {len(miss)}건 — 발송 전 확인하세요.")
+        st.dataframe(
+            pd.DataFrame(miss).rename(columns={
+                "part_no": "Part No.", "description": "품명",
+                "order_qty": "오더 수량", "doc_qty": f"{doc_label} 수량",
+            }),
+            use_container_width=True, hide_index=True,
+        )
+    else:
+        st.success(f"✅ {doc_label} 품목이 수주 오더와 일치합니다.")
+
+
 st.markdown("---")
 
 tab_ci, tab_pl, tab_sa, tab_tax = st.tabs(
@@ -70,10 +87,13 @@ with tab_ci:
     existing_ci = get_ci_for_order(order.id)
     st.markdown("**Commercial Invoice** " + (f"— 기존: `{existing_ci.ci_no}`" if existing_ci else "— 미생성"))
 
+    if existing_ci:
+        render_missing_check(existing_ci.items, "CI")
+
     with st.form("ci_form"):
         c1, c2, c3 = st.columns(3)
         ci_date   = c1.date_input("CI 날짜", date.today())
-        currency  = c2.selectbox("통화", ["USD", "EUR", "KRW", "SGD"])
+        currency  = c2.selectbox("통화", CURRENCIES)
         vat_rate  = c3.number_input("VAT Rate", 0.0, 1.0, 0.0, 0.01)
 
         # Items – pre-fill from order, allow edit for weight/hs_code
@@ -133,6 +153,7 @@ with tab_ci:
             pdf = generate_pdf("commercial_invoice", payload)
             fname = f"{ci_obj.ci_no}_CI.pdf"
             st.success(f"CI 저장 완료: {ci_obj.ci_no}")
+            render_missing_check(items_data, "CI")
             st.download_button("⬇️ CI PDF 다운로드", data=pdf, file_name=fname, mime="application/pdf")
         except Exception as e:
             st.error(f"오류: {e}")
@@ -193,6 +214,7 @@ with tab_pl:
                 )
                 pdf = generate_pdf("packing_list", payload)
                 st.success(f"PL 저장 완료: {pl_obj.pl_no}")
+                render_missing_check(pl_items_data, "PL")
                 st.download_button("⬇️ PL PDF 다운로드", data=pdf,
                                    file_name=f"{pl_obj.pl_no}_PL.pdf", mime="application/pdf")
             except Exception as e:

@@ -24,6 +24,9 @@ NAVY = "#0B1D3A"
 BLUE = "#0055A8"
 LIGHT_BLUE = "#EAF3FF"
 
+# ── Shared constants (single source of truth) ────────────────────────────────
+CURRENCIES = ["USD", "EUR", "KRW", "SGD", "JPY"]
+
 # ── White SVG nav icons (Feather-style, URL-encoded) ─────────────────────────
 _S = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E"
 _E = "%3C/svg%3E"
@@ -1202,6 +1205,44 @@ def apply_margin(items: List[Dict], default_margin_pct: float, discount_pct: flo
 
 def total_amount(items: List[Dict]) -> float:
     return sum(float(i.get("amount", 0)) for i in items)
+
+
+def missing_items(order_items: List[Dict], doc_items: List[Dict]) -> List[Dict]:
+    """수주 오더 품목 대비 문서(CI/PL)에서 누락·수량부족 항목을 반환.
+
+    Part No.(없으면 description) 기준으로 매칭하여, 문서 합산 수량이 오더 수량보다
+    적은 항목을 [{part_no, description, order_qty, doc_qty}] 형태로 돌려준다.
+    """
+    def _key(it: Dict) -> str:
+        return (str(it.get("part_no", "") or "").strip().upper()
+                or str(it.get("description", "") or "").strip().upper())
+
+    def _qty(it: Dict) -> float:
+        try:
+            return float(it.get("qty", 0) or 0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    doc_qty: Dict[str, float] = {}
+    for it in (doc_items or []):
+        k = _key(it)
+        if k:
+            doc_qty[k] = doc_qty.get(k, 0.0) + _qty(it)
+
+    out: List[Dict] = []
+    for it in (order_items or []):
+        k = _key(it)
+        if not k:
+            continue
+        oq, dq = _qty(it), doc_qty.get(k, 0.0)
+        if dq + 1e-9 < oq:
+            out.append({
+                "part_no": it.get("part_no", ""),
+                "description": it.get("description", ""),
+                "order_qty": oq,
+                "doc_qty": dq,
+            })
+    return out
 
 
 _STATUS_STYLES: dict[str, tuple[str, str]] = {

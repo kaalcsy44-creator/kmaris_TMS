@@ -18,7 +18,7 @@ from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from db.engine import get_session
-from db.models import RFQ, Order, Customer, Vessel, RFQStatus, OrderStatus
+from db.models import RFQ, Order, Customer, Vessel, ShippingAdvice, RFQStatus, OrderStatus
 
 # ── App ───────────────────────────────────────────────────────────────────────
 app = FastAPI(title="KTMS Tracking API", docs_url=None, redoc_url=None)
@@ -129,8 +129,26 @@ def _order_payload(order: Order) -> dict:
     try:
         cust   = _lookup(s, Customer, id=order.customer_id)
         vessel = _lookup(s, Vessel,   id=order.vessel_id) if order.vessel_id else None
+        # Latest Shipping Advice carries the customer-facing shipment details
+        sa = (
+            s.query(ShippingAdvice)
+            .filter_by(order_id=order.id)
+            .order_by(ShippingAdvice.id.desc())
+            .first()
+        )
+        sa_info = dict(sa.shipping) if sa and sa.shipping else {}
     finally:
         s.close()
+
+    # Customer-safe shipment info (no internal refs/marks)
+    shipment = {
+        "bl_awb_no":      sa_info.get("bl_awb_no", "") or "",
+        "carrier":        sa_info.get("carrier", "") or "",
+        "port_loading":   sa_info.get("port_loading", "") or "",
+        "port_discharge": sa_info.get("port_discharge", "") or "",
+        "etd":            sa_info.get("etd", "") or "",
+        "eta":            sa_info.get("eta", "") or "",
+    }
 
     step, key = _ORD_MAP.get(order.status, (0, "confirmed"))
     items = order.items or []
@@ -160,6 +178,8 @@ def _order_payload(order: Order) -> dict:
         "status_key":   key,
         "status_step":  step,
         "steps":        ORD_STEPS,
+        "eta":          shipment["eta"],
+        "shipment":     shipment,
         "note":         "",
     }
 

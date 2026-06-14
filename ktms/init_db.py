@@ -7,13 +7,43 @@ ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
 import bcrypt
-from db.engine import Base, engine, get_session
+from sqlalchemy import text, inspect
+from db.engine import Base, get_engine, get_session
 from db.models import User, UserRole, DocSequence, Customer, Vendor
 
 
 def create_tables():
-    Base.metadata.create_all(bind=engine)
+    Base.metadata.create_all(bind=get_engine())
     print("[OK] Tables created.")
+
+
+# New columns added after the initial release. Idempotent for existing DBs.
+_MIGRATIONS = {
+    "orders": {
+        "promised_delivery": "VARCHAR(10)",
+        "shipped_date":      "VARCHAR(10)",
+        "delivered_date":    "VARCHAR(10)",
+    },
+}
+
+
+def migrate_columns():
+    """Add any missing columns to existing tables (SQLite/PostgreSQL safe)."""
+    engine = get_engine()
+    insp = inspect(engine)
+    added = 0
+    with engine.begin() as conn:
+        for table, cols in _MIGRATIONS.items():
+            if not insp.has_table(table):
+                continue
+            existing = {c["name"] for c in insp.get_columns(table)}
+            for name, ddl in cols.items():
+                if name not in existing:
+                    conn.execute(text(f'ALTER TABLE {table} ADD COLUMN {name} {ddl}'))
+                    added += 1
+                    print(f"[OK] {table}.{name} added.")
+    if added == 0:
+        print("[SKIP] No column migrations needed.")
 
 
 def seed_admin():
@@ -70,6 +100,7 @@ def seed_sample_data():
 if __name__ == "__main__":
     print("Initializing KTMS database...")
     create_tables()
+    migrate_columns()
     seed_admin()
     seed_sample_data()
     print("Done.")
