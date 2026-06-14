@@ -29,7 +29,108 @@ inject_css()
 
 section_header("order", "오더 관리 (Orders)")
 
-tab_list, tab_new, tab_detail = st.tabs(["오더 목록", "신규 등록", "오더 상세"])
+
+def render_order_detail():
+    """오더 목록에서 선택한 오더의 상세(정보·상태·납기·품목)를 인라인 표시."""
+    ord_id = st.session_state.get("ord_detail_id")
+    if not ord_id:
+        hint("위 목록에서 오더를 선택하면 상세가 여기에 표시됩니다.")
+        return
+    order = get_order(int(ord_id))
+    if not order:
+        hint("선택한 오더를 찾을 수 없습니다. 목록에서 다시 선택하세요.")
+        return
+
+    cust   = get_customer(order.customer_id)
+    vessel = get_vessel(order.vessel_id) if order.vessel_id else None
+
+    col_info, col_act = st.columns([3, 1])
+    with col_info:
+        st.markdown(f"### {order.ord_no}")
+        m1, m2, m3 = st.columns(3)
+        info_cards = [
+            (m1, "Customer", cust.name if cust else "—"),
+            (m2, "선박", vessel.name if vessel else "—"),
+            (m3, "PO No.", order.po_no or "—"),
+        ]
+        for col, label, value in info_cards:
+            with col:
+                st.markdown(f"""
+                <div class="ktms-info-card">
+                    <div class="ktms-info-label">{label}</div>
+                    <div class="ktms-info-value">{value}</div>
+                </div>
+                """, unsafe_allow_html=True)
+        st.markdown(f"**상태:** {status_badge(order.status.value)}", unsafe_allow_html=True)
+        t_url = tracking_url("order", order.tracking_token)
+        st.markdown(f"🔗 **고객 트래킹 링크:** [{t_url}]({t_url})")
+        st.caption("📨 Vendor 발주서(발주) 생성은 '오더 Vendor 발신' 탭에서 진행하세요.")
+
+    with col_act:
+        new_stat = st.selectbox("상태 변경", [s.value for s in OrderStatus],
+                                index=[s.value for s in OrderStatus].index(order.status.value))
+        if st.button("상태 업데이트", key="ord_stat"):
+            s = get_session()
+            try:
+                o = s.query(Order).get(order.id)
+                o.status = OrderStatus(new_stat)
+                # 출고/인도 시점 자동 기록 (미입력 시에만)
+                today_iso = date.today().isoformat()
+                if OrderStatus(new_stat) == OrderStatus.SHIPPED and not o.shipped_date:
+                    o.shipped_date = today_iso
+                if OrderStatus(new_stat) == OrderStatus.DELIVERED and not o.delivered_date:
+                    o.delivered_date = today_iso
+                s.commit()
+                _sheet_upsert_order(o, get_customer(o.customer_id), get_vessel(o.vessel_id) if o.vessel_id else None)
+                st.success("업데이트!")
+                st.rerun()
+            finally:
+                s.close()
+
+    # ── 납기 일정 (약속/출고/인도) ────────────────────────────────────────────
+    with st.expander("📅 납기 일정 (OTD 측정)", expanded=False):
+        from datetime import datetime as _dt
+
+        def _parse(d):
+            try:
+                return _dt.strptime(d, "%Y-%m-%d").date() if d else None
+            except (TypeError, ValueError):
+                return None
+
+        with st.form("delivery_dates"):
+            d1, d2, d3 = st.columns(3)
+            promised_in  = d1.date_input("약속 납기일", value=_parse(order.promised_delivery))
+            shipped_in   = d2.date_input("실제 출고일", value=_parse(order.shipped_date))
+            delivered_in = d3.date_input("실제 인도일", value=_parse(order.delivered_date))
+            save_dates = st.form_submit_button("납기 일정 저장")
+
+        if save_dates:
+            s = get_session()
+            try:
+                o = s.query(Order).get(order.id)
+                o.promised_delivery = promised_in.isoformat() if promised_in else None
+                o.shipped_date      = shipped_in.isoformat() if shipped_in else None
+                o.delivered_date    = delivered_in.isoformat() if delivered_in else None
+                s.commit()
+                st.success("납기 일정 저장 완료")
+                st.rerun()
+            finally:
+                s.close()
+
+        pd_, dd_ = _parse(order.promised_delivery), _parse(order.delivered_date)
+        if pd_ and dd_:
+            days = (dd_ - pd_).days
+            if days <= 0:
+                st.success(f"✅ 납기 준수 (약속 대비 {-days}일 빠름)" if days < 0 else "✅ 납기 정시 준수")
+            else:
+                st.error(f"⚠️ 납기 지연 — 약속보다 {days}일 초과")
+
+    if order.items:
+        st.markdown("**품목 리스트**")
+        st.dataframe(pd.DataFrame(order.items), use_container_width=True, hide_index=True)
+
+
+tab_new, tab_list, tab_vendor = st.tabs(["➕ 신규 등록", "📋 오더 목록", "📨 오더 Vendor 발신"])
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 1 — LIST
@@ -62,16 +163,19 @@ with tab_list:
         sel = selected.selection.rows if hasattr(selected, "selection") else []
         if sel:
             st.session_state["ord_detail_id"] = int(df.iloc[sel[0]]["ID"])
-            hint("'🔍 오더 상세' 탭에서 확인하세요.")
     else:
         hint("등록된 오더가 없습니다.")
+
+    # ── 선택한 오더 상세 (인라인) ─────────────────────────────────────────────
+    st.markdown("---")
+    render_order_detail()
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 2 — NEW ORDER
 # ══════════════════════════════════════════════════════════════════════════════
 with tab_new:
     st.subheader("신규 오더 등록")
-    hint("수주 확정된 견적에서 자동 생성하거나, 독립적으로 등록할 수 있습니다.")
+    hint("고객으로부터 받은 P/O(주문서)로 오더를 등록합니다. 수주 확정된 견적에서 불러오거나 직접 입력할 수 있습니다.")
 
     with st.expander("견적서에서 불러오기", expanded=True):
         won_quotes = [q for q in quotation_list() if q.status == QuotationStatus.WON or True]
@@ -151,111 +255,28 @@ with tab_new:
             session.close()
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 3 — DETAIL
+# TAB 3 — 오더 Vendor 발신 (선택한 오더 대상: 발주서 PO)
 # ══════════════════════════════════════════════════════════════════════════════
-with tab_detail:
+with tab_vendor:
     ord_id = st.session_state.get("ord_detail_id")
     if not ord_id:
-        hint("오더 리스트에서 선택하거나 ID를 입력하세요.")
-        ord_id = st.number_input("오더 ID", min_value=1, step=1, value=1)
-        if not st.button("불러오기", key="ord_load"):
-            st.stop()
+        hint("먼저 '오더 목록' 탭에서 오더를 선택하세요.")
+        st.stop()
 
     order = get_order(int(ord_id))
     if not order:
-        st.error("오더를 찾을 수 없습니다.")
+        st.error("선택한 오더를 찾을 수 없습니다. 목록에서 다시 선택하세요.")
         st.stop()
 
     cust   = get_customer(order.customer_id)
     vessel = get_vessel(order.vessel_id) if order.vessel_id else None
 
-    col_info, col_act = st.columns([3, 1])
-    with col_info:
-        st.markdown(f"### {order.ord_no}")
-        m1, m2, m3 = st.columns(3)
-        info_cards = [
-            (m1, "Customer", cust.name if cust else "—"),
-            (m2, "선박", vessel.name if vessel else "—"),
-            (m3, "PO No.", order.po_no or "—"),
-        ]
-        for col, label, value in info_cards:
-            with col:
-                st.markdown(f"""
-                <div class="ktms-info-card">
-                    <div class="ktms-info-label">{label}</div>
-                    <div class="ktms-info-value">{value}</div>
-                </div>
-                """, unsafe_allow_html=True)
-        st.markdown(f"**상태:** {status_badge(order.status.value)}", unsafe_allow_html=True)
-        t_url = tracking_url("order", order.tracking_token)
-        st.markdown(f"🔗 **고객 트래킹 링크:** [{t_url}]({t_url})")
-
-    with col_act:
-        new_stat = st.selectbox("상태 변경", [s.value for s in OrderStatus],
-                                index=[s.value for s in OrderStatus].index(order.status.value))
-        if st.button("상태 업데이트", key="ord_stat"):
-            s = get_session()
-            try:
-                o = s.query(Order).get(order.id)
-                o.status = OrderStatus(new_stat)
-                # 출고/인도 시점 자동 기록 (미입력 시에만)
-                today_iso = date.today().isoformat()
-                if OrderStatus(new_stat) == OrderStatus.SHIPPED and not o.shipped_date:
-                    o.shipped_date = today_iso
-                if OrderStatus(new_stat) == OrderStatus.DELIVERED and not o.delivered_date:
-                    o.delivered_date = today_iso
-                s.commit()
-                _sheet_upsert_order(o, get_customer(o.customer_id), get_vessel(o.vessel_id) if o.vessel_id else None)
-                st.success("업데이트!")
-                st.rerun()
-            finally:
-                s.close()
-
-    # ── 납기 일정 (약속/출고/인도) ────────────────────────────────────────────
-    with st.expander("📅 납기 일정 (OTD 측정)", expanded=False):
-        from datetime import datetime as _dt
-
-        def _parse(d):
-            try:
-                return _dt.strptime(d, "%Y-%m-%d").date() if d else None
-            except (TypeError, ValueError):
-                return None
-
-        with st.form("delivery_dates"):
-            d1, d2, d3 = st.columns(3)
-            promised_in  = d1.date_input("약속 납기일", value=_parse(order.promised_delivery))
-            shipped_in   = d2.date_input("실제 출고일", value=_parse(order.shipped_date))
-            delivered_in = d3.date_input("실제 인도일", value=_parse(order.delivered_date))
-            save_dates = st.form_submit_button("납기 일정 저장")
-
-        if save_dates:
-            s = get_session()
-            try:
-                o = s.query(Order).get(order.id)
-                o.promised_delivery = promised_in.isoformat() if promised_in else None
-                o.shipped_date      = shipped_in.isoformat() if shipped_in else None
-                o.delivered_date    = delivered_in.isoformat() if delivered_in else None
-                s.commit()
-                st.success("납기 일정 저장 완료")
-                st.rerun()
-            finally:
-                s.close()
-
-        pd_, dd_ = _parse(order.promised_delivery), _parse(order.delivered_date)
-        if pd_ and dd_:
-            days = (dd_ - pd_).days
-            if days <= 0:
-                st.success(f"✅ 납기 준수 (약속 대비 {-days}일 빠름)" if days < 0 else "✅ 납기 정시 준수")
-            else:
-                st.error(f"⚠️ 납기 지연 — 약속보다 {days}일 초과")
-
-    if order.items:
-        st.markdown("**품목 리스트**")
-        st.dataframe(pd.DataFrame(order.items), use_container_width=True, hide_index=True)
-
-    # Purchase Orders
-    st.markdown("---")
     st.subheader("Vendor 발주서 (Purchase Order)")
+    st.markdown(
+        f"**대상 오더:** `{order.ord_no}`  ·  {cust.name if cust else '—'}"
+        f"  ·  {vessel.name if vessel else '—'}  ·  품목 {len(order.items or [])}개"
+    )
+    st.markdown("---")
 
     vendor_opts = vendor_options()
     with st.form("po_form"):
