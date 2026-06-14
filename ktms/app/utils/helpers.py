@@ -392,7 +392,7 @@ section[data-testid="stSidebar"] nav {{
     display: flex !important;
     align-items: center !important;
     border-radius: 0 8px 8px 0 !important;
-    padding: 7px 2px 7px 0 !important;
+    padding: 7px 2px 7px 4px !important;
     margin-left: 0 !important;
     border-left: 3px solid transparent !important;
     transition: background .15s, border-color .15s !important;
