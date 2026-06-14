@@ -216,30 +216,28 @@ with tab_new:
             key="qtn_items",
         )
 
-        # Terms — 자주 쓰는 값은 드롭다운에서 선택, 없으면 '직접 입력' 선택 후 작성
+        # Terms — 드롭다운에서 선택하거나, 목록에 없으면 직접 입력(타이핑 후 Enter)
         st.markdown("**거래 조건**")
-        st.caption("자주 쓰는 값은 드롭다운에서 선택하세요. 목록에 없으면 '✏️ 직접 입력'을 선택한 뒤 아래 칸에 작성합니다.")
+        st.caption("드롭다운에서 선택하거나, 목록에 없으면 직접 입력해 추가할 수 있습니다.")
 
-        _CUSTOM = "✏️ 직접 입력"
         _INCOTERMS = ["FCA Busan, Korea", "FOB Busan, Korea", "CIF (지정 목적항)",
-                      "CFR (지정 목적항)", "DAP (지정 목적지)", "EXW Busan", _CUSTOM]
+                      "CFR (지정 목적항)", "DAP (지정 목적지)", "EXW Busan"]
         _SHIPMENT  = ["Air courier / Sea freight", "By Air (Courier)",
-                      "By Sea (FCL)", "By Sea (LCL)", _CUSTOM]
+                      "By Sea (FCL)", "By Sea (LCL)"]
         _PAYMENT   = ["100% T/T in advance", "T/T 30 days after delivery",
-                      "T/T 50% in advance, 50% before shipment", "L/C at sight", _CUSTOM]
+                      "T/T 50% in advance, 50% before shipment", "L/C at sight"]
         _PACKING   = ["Standard export packing", "Seaworthy export packing",
-                      "Wooden case packing", _CUSTOM]
-        _DELIVERY  = ["Busan, Republic of Korea", "Incheon, Republic of Korea", _CUSTOM]
+                      "Wooden case packing"]
+        _DELIVERY  = ["Busan, Republic of Korea", "Incheon, Republic of Korea"]
         _WARRANTY  = ["Manufacturer's standard warranty", "12 months from delivery",
-                      "6 months from delivery", "No warranty", _CUSTOM]
+                      "6 months from delivery", "No warranty"]
 
         def _term_field(col, label, options, key):
-            sel = col.selectbox(label, options, index=0, key=f"qtn_term_{key}")
-            custom = col.text_input(
-                f"↳ {label} 직접 입력", "", key=f"qtn_term_{key}_custom",
-                placeholder="'✏️ 직접 입력' 선택 시 여기에 작성",
+            return col.selectbox(
+                label, options, index=0, key=f"qtn_term_{key}",
+                accept_new_options=True,
+                help="목록에 없으면 직접 입력 후 Enter로 추가할 수 있습니다.",
             )
-            return custom.strip() if sel == _CUSTOM else sel
 
         tc1, tc2 = st.columns(2)
         incoterms = _term_field(tc1, "Incoterms",       _INCOTERMS, "incoterms")
