@@ -365,33 +365,38 @@ section[data-testid="stSidebar"] nav {{
 }}
 
 /* ── Nav page links ──────────────────────────────────────────────────────── */
+/* 네비게이션 컨테이너의 좌측 기본 여백 제거 (리스트 padding 포함) — 최대 내어쓰기 */
+[data-testid="stSidebarNav"],
+[data-testid="stSidebarNavItems"],
+[data-testid="stSidebar"] nav ul,
+[data-testid="stSidebar"] nav li {{
+    padding-left: 0 !important;
+    margin-left: 0 !important;
+    list-style: none !important;
+}}
 [data-testid="stSidebarNavLink"],
 [data-testid="stSidebar"] nav a {{
     color: #C4CFDE !important;
     font-weight: 600 !important;
-    font-size: 12.5px !important;
-    letter-spacing: -.015em !important;
-    line-height: 1.25 !important;
+    font-size: 11.5px !important;
+    letter-spacing: -.02em !important;
+    line-height: 1.2 !important;
     display: flex !important;
-    align-items: flex-start !important;
+    align-items: center !important;
     border-radius: 0 8px 8px 0 !important;
-    padding-left: 8px !important;
-    padding-right: 6px !important;
-    padding-top: 6px !important;
-    padding-bottom: 6px !important;
+    padding: 7px 2px 7px 3px !important;
     margin-left: 0 !important;
     border-left: 3px solid transparent !important;
     transition: background .15s, border-color .15s !important;
 }}
-/* 긴 제목이 잘리지 않도록 두 줄 줄바꿈 허용 (말줄임 해제) */
+/* 줄바꿈 없이 한 줄 유지 + 말줄임(...) 제거 */
 [data-testid="stSidebarNavLink"] *,
 [data-testid="stSidebar"] nav a * {{
     color: #C4CFDE !important;
     opacity: 1 !important;
-    white-space: normal !important;
+    white-space: nowrap !important;
     overflow: visible !important;
     text-overflow: clip !important;
-    word-break: keep-all !important;
 }}
 [data-testid="stSidebarNavLink"]:hover,
 [data-testid="stSidebar"] nav a:hover {{
@@ -419,8 +424,7 @@ section[data-testid="stSidebar"] nav {{
     background-size: contain !important;
     background-repeat: no-repeat !important;
     background-position: center !important;
-    margin-right: 8px !important;
-    margin-top: 1px !important;
+    margin-right: 6px !important;
     opacity: 0.50 !important;
     flex-shrink: 0 !important;
 }}
