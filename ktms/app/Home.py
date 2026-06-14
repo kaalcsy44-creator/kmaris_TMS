@@ -134,8 +134,8 @@ pages = {
         st.Page("pages/1_Dashboard.py", title="Dashboard", default=True),
     ],
     "RFQ 관리": [
-        st.Page("pages/2_CRFQ.py", title="CRFQ"),
-        st.Page("pages/3_VRFQ.py", title="VRFQ"),
+        st.Page("pages/2_CRFQ.py", title="Customer RFQ"),
+        st.Page("pages/3_VRFQ.py", title="Vendor 견적"),
     ],
     "영업 관리": [
         st.Page("pages/4_Quotation.py", title="Quotation"),

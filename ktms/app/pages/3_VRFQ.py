@@ -25,7 +25,7 @@ except Exception:
 require_auth()
 inject_css()
 
-section_header("send", "Vendor RFQ 관리 (VRFQ)")
+section_header("send", "Vendor 견적 관리 (VRFQ)")
 
 tab_list, tab_quote = st.tabs(["VRFQ 목록", "Vendor 견적 수신"])
 

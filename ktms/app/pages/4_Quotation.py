@@ -107,7 +107,7 @@ with tab_new:
         else:
             hint("등록된 Vendor 견적이 없습니다. RFQ 관리 → Vendor 견적 수신 등록을 먼저 하세요.")
 
-    with st.expander("고객 RFQ에서 불러오기 (품목 정보만, 가격 없음)", expanded=False):
+    with st.expander("Customer RFQ에서 불러오기 (품목 정보만, 가격 없음)", expanded=False):
         rfqs = rfq_list()
         if rfqs:
             rfq_opts = {r.rfq_no: r.id for r in rfqs}
@@ -121,7 +121,7 @@ with tab_new:
         else:
             hint("등록된 RFQ가 없습니다.")
 
-    # Pre-fill: 공급사 견적 우선, 없으면 고객 RFQ
+    # Pre-fill: 공급사 견적 우선, 없으면 Customer RFQ
     prefill_rfq = None
     prefill_vq = None
     if "load_vq_id" in st.session_state:
@@ -192,7 +192,7 @@ with tab_new:
                     "remark": itm.get("remark", ""),
                 })
         elif prefill_rfq and prefill_rfq.items:
-            # 고객 RFQ에서 불러오기 — 품목 정보만, cost_price = 0
+            # Customer RFQ에서 불러오기 — 품목 정보만, cost_price = 0
             for i, itm in enumerate(prefill_rfq.items, 1):
                 seed_items.append({
                     "item_no": i, "part_no": itm.get("part_no", ""),

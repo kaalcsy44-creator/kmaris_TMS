@@ -129,7 +129,112 @@ inject_css()
 
 section_header("rfq", "Customer RFQ 관리 (CRFQ)")
 
-tab_list, tab_new, tab_detail = st.tabs(["RFQ 목록", "신규 등록", "RFQ 상세"])
+
+def render_rfq_detail():
+    """RFQ 목록에서 선택한 RFQ의 상세(정보·상태/Level·삭제·품목)를 인라인 표시."""
+    rfq_id = st.session_state.get("rfq_detail_id")
+    if not rfq_id:
+        hint("위 목록에서 RFQ를 선택하면 상세가 여기에 표시됩니다.")
+        return
+    rfq = get_rfq(int(rfq_id))
+    if not rfq:
+        hint("선택한 RFQ를 찾을 수 없습니다. 목록에서 다시 선택하세요.")
+        return
+
+    cust = get_customer(rfq.customer_id)
+    vessel = get_vessel(rfq.vessel_id) if rfq.vessel_id else None
+
+    col_info, col_actions = st.columns([3, 1])
+    with col_info:
+        st.markdown(f"### {rfq.rfq_no}")
+        c1, c2, c3 = st.columns(3)
+        info_cards = [
+            (c1, "Customer", cust.name if cust else "—"),
+            (c2, "선박", vessel.name if vessel else "—"),
+            (c3, "품목수", len(rfq.items or [])),
+        ]
+        for col, label, value in info_cards:
+            with col:
+                st.markdown(f"""
+                <div class="ktms-info-card">
+                    <div class="ktms-info-label">{label}</div>
+                    <div class="ktms-info-value">{value}</div>
+                </div>
+                """, unsafe_allow_html=True)
+        st.markdown(f"**상태:** {status_badge(rfq.status.value)}&nbsp;&nbsp;"
+                    f"**Follow-up:** <span class='badge-{rfq.follow_up_level.value}'>{rfq.follow_up_level.value}</span>"
+                    f"&nbsp;&nbsp;**날짜:** {rfq.date}", unsafe_allow_html=True)
+        if rfq.notes:
+            st.caption(f"비고: {rfq.notes}")
+
+        t_url = tracking_url("rfq", rfq.tracking_token)
+        st.markdown(f"🔗 **고객 트래킹 링크:** [{t_url}]({t_url})")
+        st.caption("📨 Vendor RFQ 발송은 상단 'Vendor RFQ 발송' 탭에서 진행하세요.")
+
+    with col_actions:
+        st.markdown("**액션**")
+        new_status = st.selectbox("상태 변경", [s.value for s in RFQStatus],
+                                  index=[s.value for s in RFQStatus].index(rfq.status.value))
+        if st.button("상태 업데이트"):
+            session = get_session()
+            try:
+                r = session.query(RFQ).get(rfq.id)
+                r.status = RFQStatus(new_status)
+                session.commit()
+                _sheet_upsert_rfq(r, get_customer(r.customer_id), get_vessel(r.vessel_id) if r.vessel_id else None)
+                st.success("상태 업데이트 완료!")
+                st.rerun()
+            finally:
+                session.close()
+
+        new_level = st.selectbox("Level 변경", [l.value for l in FollowUpLevel],
+                                 index=[l.value for l in FollowUpLevel].index(rfq.follow_up_level.value))
+        if st.button("Level 업데이트"):
+            session = get_session()
+            try:
+                r = session.query(RFQ).get(rfq.id)
+                r.follow_up_level = FollowUpLevel(new_level)
+                session.commit()
+                st.success("Level 업데이트!")
+                st.rerun()
+            finally:
+                session.close()
+
+        st.markdown("---")
+        st.markdown("**삭제**")
+        if st.button("RFQ 삭제", type="secondary", use_container_width=True):
+            st.session_state["rfq_delete_confirm"] = rfq.id
+
+    if st.session_state.get("rfq_delete_confirm") == rfq.id:
+        st.warning(
+            f"**{rfq.rfq_no}** 를 정말 삭제하시겠습니까?  \n"
+            "연결된 Vendor RFQ도 함께 삭제됩니다. 이 작업은 되돌릴 수 없습니다."
+        )
+        col_yes, col_no, _ = st.columns([1, 1, 4])
+        if col_yes.button("확인 삭제", type="primary", key="btn_delete_yes"):
+            session = get_session()
+            try:
+                session.query(VendorRFQ).filter_by(rfq_id=rfq.id).delete()
+                session.query(RFQ).filter_by(id=rfq.id).delete()
+                session.commit()
+                st.session_state.pop("rfq_delete_confirm", None)
+                st.session_state.pop("rfq_detail_id", None)
+                st.success(f"✅ {rfq.rfq_no} 삭제 완료.")
+                st.rerun()
+            finally:
+                session.close()
+        if col_no.button("취소", key="btn_delete_no"):
+            st.session_state.pop("rfq_delete_confirm", None)
+            st.rerun()
+
+    st.markdown("**품목 리스트**")
+    if rfq.items:
+        st.dataframe(pd.DataFrame(rfq.items), use_container_width=True, hide_index=True)
+    else:
+        hint("품목 없음")
+
+
+tab_new, tab_list, tab_vendor = st.tabs(["➕ 신규 등록", "📋 RFQ 목록", "📨 Vendor RFQ 발송"])
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 1 — LIST
@@ -174,11 +279,13 @@ with tab_list:
         )
         sel_rows = selected.selection.rows if hasattr(selected, "selection") else []
         if sel_rows:
-            sel_id = df.iloc[sel_rows[0]]["ID"]
-            st.session_state["rfq_detail_id"] = int(sel_id)
-            hint(f"RFQ ID {sel_id} 선택됨 — 'RFQ 상세' 탭에서 확인하세요.")
+            st.session_state["rfq_detail_id"] = int(df.iloc[sel_rows[0]]["ID"])
     else:
         hint("등록된 RFQ가 없습니다.")
+
+    # ── 선택한 RFQ 상세 (인라인) ──────────────────────────────────────────────
+    st.markdown("---")
+    render_rfq_detail()
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 2 — NEW RFQ
@@ -393,115 +500,28 @@ with tab_new:
             session.close()
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 3 — DETAIL
+# TAB 3 — VENDOR RFQ 발송 (선택한 RFQ 대상)
 # ══════════════════════════════════════════════════════════════════════════════
-with tab_detail:
+with tab_vendor:
     rfq_id = st.session_state.get("rfq_detail_id")
     if not rfq_id:
-        hint("RFQ 목록에서 항목을 선택하거나 직접 ID를 입력하세요.")
-        rfq_id = st.number_input("RFQ ID", min_value=1, step=1, value=1)
-        if not st.button("불러오기"):
-            st.stop()
+        hint("먼저 'RFQ 목록' 탭에서 RFQ를 선택하세요.")
+        st.stop()
 
     rfq = get_rfq(int(rfq_id))
     if not rfq:
-        st.error("해당 RFQ를 찾을 수 없습니다.")
+        st.error("선택한 RFQ를 찾을 수 없습니다. 목록에서 다시 선택하세요.")
         st.stop()
 
     cust = get_customer(rfq.customer_id)
     vessel = get_vessel(rfq.vessel_id) if rfq.vessel_id else None
 
-    col_info, col_actions = st.columns([3, 1])
-    with col_info:
-        st.markdown(f"### {rfq.rfq_no}")
-        c1, c2, c3 = st.columns(3)
-        info_cards = [
-            (c1, "Customer", cust.name if cust else "—"),
-            (c2, "선박", vessel.name if vessel else "—"),
-            (c3, "품목수", len(rfq.items or [])),
-        ]
-        for col, label, value in info_cards:
-            with col:
-                st.markdown(f"""
-                <div class="ktms-info-card">
-                    <div class="ktms-info-label">{label}</div>
-                    <div class="ktms-info-value">{value}</div>
-                </div>
-                """, unsafe_allow_html=True)
-        st.markdown(f"**상태:** {status_badge(rfq.status.value)}&nbsp;&nbsp;"
-                    f"**Follow-up:** <span class='badge-{rfq.follow_up_level.value}'>{rfq.follow_up_level.value}</span>"
-                    f"&nbsp;&nbsp;**날짜:** {rfq.date}", unsafe_allow_html=True)
-        if rfq.notes:
-            st.caption(f"비고: {rfq.notes}")
-
-        t_url = tracking_url("rfq", rfq.tracking_token)
-        st.markdown(f"🔗 **고객 트래킹 링크:** [{t_url}]({t_url})")
-
-    with col_actions:
-        st.markdown("**액션**")
-        new_status = st.selectbox("상태 변경", [s.value for s in RFQStatus],
-                                  index=[s.value for s in RFQStatus].index(rfq.status.value))
-        if st.button("상태 업데이트"):
-            session = get_session()
-            try:
-                r = session.query(RFQ).get(rfq.id)
-                r.status = RFQStatus(new_status)
-                session.commit()
-                _sheet_upsert_rfq(r, get_customer(r.customer_id), get_vessel(r.vessel_id) if r.vessel_id else None)
-                st.success("상태 업데이트 완료!")
-                st.rerun()
-            finally:
-                session.close()
-
-        new_level = st.selectbox("Level 변경", [l.value for l in FollowUpLevel],
-                                 index=[l.value for l in FollowUpLevel].index(rfq.follow_up_level.value))
-        if st.button("Level 업데이트"):
-            session = get_session()
-            try:
-                r = session.query(RFQ).get(rfq.id)
-                r.follow_up_level = FollowUpLevel(new_level)
-                session.commit()
-                st.success("Level 업데이트!")
-                st.rerun()
-            finally:
-                session.close()
-
-        st.markdown("---")
-        st.markdown("**삭제**")
-        if st.button("RFQ 삭제", type="secondary", use_container_width=True):
-            st.session_state["rfq_delete_confirm"] = rfq.id
-
-    if st.session_state.get("rfq_delete_confirm") == rfq.id:
-        st.warning(
-            f"**{rfq.rfq_no}** 를 정말 삭제하시겠습니까?  \n"
-            "연결된 Vendor RFQ도 함께 삭제됩니다. 이 작업은 되돌릴 수 없습니다."
-        )
-        col_yes, col_no, _ = st.columns([1, 1, 4])
-        if col_yes.button("확인 삭제", type="primary", key="btn_delete_yes"):
-            session = get_session()
-            try:
-                session.query(VendorRFQ).filter_by(rfq_id=rfq.id).delete()
-                session.query(RFQ).filter_by(id=rfq.id).delete()
-                session.commit()
-                st.session_state.pop("rfq_delete_confirm", None)
-                st.session_state.pop("rfq_detail_id", None)
-                st.success(f"✅ {rfq.rfq_no} 삭제 완료.")
-                st.rerun()
-            finally:
-                session.close()
-        if col_no.button("취소", key="btn_delete_no"):
-            st.session_state.pop("rfq_delete_confirm", None)
-            st.rerun()
-
-    st.markdown("**품목 리스트**")
-    if rfq.items:
-        st.dataframe(pd.DataFrame(rfq.items), use_container_width=True, hide_index=True)
-    else:
-        hint("품목 없음")
-
-    # ── Vendor RFQ 발송 ──────────────────────────────────────────────────────
-    st.markdown("---")
     st.subheader("Vendor RFQ 발송")
+    st.markdown(
+        f"**대상 RFQ:** `{rfq.rfq_no}`  ·  {cust.name if cust else '—'}"
+        f"  ·  {vessel.name if vessel else '—'}  ·  품목 {len(rfq.items or [])}개"
+    )
+    st.markdown("---")
 
     _preview_key = f"vrfq_preview_{rfq.id}"
     vendor_opts = vendor_options()
