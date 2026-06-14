@@ -145,6 +145,46 @@ with tabs[2]:
             "담당자": c.contact or "—", "이메일": c.email or "—",
         } for c in customers]), use_container_width=True, hide_index=True)
 
+        with st.expander("✏️ 기존 Customer 수정 / 삭제", expanded=False):
+            _opts = {f"#{c.id} · {c.name}": c.id for c in customers}
+            _sel = st.selectbox("대상 선택", list(_opts.keys()), key="cust_edit_sel")
+            _cur = next(c for c in customers if c.id == _opts[_sel])
+            with st.form("edit_customer"):
+                ec1, ec2 = st.columns(2)
+                e_name    = ec1.text_input("Customer명 *", _cur.name or "")
+                e_country = ec2.text_input("국가", _cur.country or "")
+                e_addr    = ec1.text_input("주소", _cur.address or "")
+                e_contact = ec2.text_input("담당자", _cur.contact or "")
+                e_email   = ec1.text_input("이메일", _cur.email or "")
+                e_taxid   = ec2.text_input("Tax ID / 사업자번호", _cur.tax_id or "")
+                upd_c = st.form_submit_button("수정 저장", type="primary", use_container_width=True)
+                st.markdown("---")
+                del_confirm = st.checkbox("이 Customer를 삭제합니다 (확인)")
+                del_c = st.form_submit_button("삭제", use_container_width=True)
+            if upd_c and e_name:
+                session = get_session()
+                try:
+                    obj = session.query(Customer).get(_opts[_sel])
+                    obj.name, obj.country, obj.address = e_name, e_country, e_addr
+                    obj.contact, obj.email, obj.tax_id = e_contact, e_email, e_taxid
+                    session.commit()
+                    st.success("수정 완료!")
+                    st.rerun()
+                finally:
+                    session.close()
+            if del_c:
+                if not del_confirm:
+                    st.warning("삭제하려면 '삭제 확인'을 체크하세요.")
+                else:
+                    session = get_session()
+                    try:
+                        session.delete(session.query(Customer).get(_opts[_sel]))
+                        session.commit()
+                        st.success("삭제 완료!")
+                        st.rerun()
+                    finally:
+                        session.close()
+
     with st.form("add_customer"):
         st.markdown("**신규 Customer 추가**")
         cc1, cc2 = st.columns(2)
@@ -184,6 +224,46 @@ with tabs[3]:
             "전문분야": v.specialization or "—",
         } for v in vendors]), use_container_width=True, hide_index=True)
 
+        with st.expander("✏️ 기존 Vendor 수정 / 삭제", expanded=False):
+            _opts = {f"#{v.id} · {v.name}": v.id for v in vendors}
+            _sel = st.selectbox("대상 선택", list(_opts.keys()), key="vendor_edit_sel")
+            _cur = next(v for v in vendors if v.id == _opts[_sel])
+            with st.form("edit_vendor"):
+                ev1, ev2 = st.columns(2)
+                e_name  = ev1.text_input("Vendor명 *", _cur.name or "")
+                e_cntry = ev2.text_input("국가", _cur.country or "")
+                e_addr  = ev1.text_input("주소", _cur.address or "")
+                e_cont  = ev2.text_input("담당자", _cur.contact or "")
+                e_email = ev1.text_input("이메일", _cur.email or "")
+                e_spec  = ev2.text_input("전문분야 (ex. MAN B&W Engine OEM)", _cur.specialization or "")
+                upd_v = st.form_submit_button("수정 저장", type="primary", use_container_width=True)
+                st.markdown("---")
+                del_confirm = st.checkbox("이 Vendor를 삭제합니다 (확인)")
+                del_v = st.form_submit_button("삭제", use_container_width=True)
+            if upd_v and e_name:
+                session = get_session()
+                try:
+                    obj = session.query(Vendor).get(_opts[_sel])
+                    obj.name, obj.country, obj.address = e_name, e_cntry, e_addr
+                    obj.contact, obj.email, obj.specialization = e_cont, e_email, e_spec
+                    session.commit()
+                    st.success("수정 완료!")
+                    st.rerun()
+                finally:
+                    session.close()
+            if del_v:
+                if not del_confirm:
+                    st.warning("삭제하려면 '삭제 확인'을 체크하세요.")
+                else:
+                    session = get_session()
+                    try:
+                        session.delete(session.query(Vendor).get(_opts[_sel]))
+                        session.commit()
+                        st.success("삭제 완료!")
+                        st.rerun()
+                    finally:
+                        session.close()
+
     with st.form("add_vendor"):
         st.markdown("**신규 Vendor 추가**")
         vc1, vc2 = st.columns(2)
@@ -216,16 +296,60 @@ with tabs[4]:
     finally:
         session.close()
 
+    from app.utils.helpers import customer_options, get_customer
+    cust_opts = {"— 없음 —": None, **customer_options()}
+
     if vessels:
         st.dataframe(pd.DataFrame([{
             "ID": v.id, "선박명": v.name, "IMO": v.imo or "—",
             "엔진": v.engine_type or "—", "Hull No.": v.hull_no or "—",
+            "선주": (get_customer(v.customer_id).name if v.customer_id and get_customer(v.customer_id) else "—"),
         } for v in vessels]), use_container_width=True, hide_index=True)
+
+        with st.expander("✏️ 기존 선박 수정 / 삭제", expanded=False):
+            _opts = {f"#{v.id} · {v.name}": v.id for v in vessels}
+            _sel = st.selectbox("대상 선택", list(_opts.keys()), key="vessel_edit_sel")
+            _cur = next(v for v in vessels if v.id == _opts[_sel])
+            _cust_names = list(cust_opts.keys())
+            _cur_owner = next((n for n, cid in cust_opts.items() if cid == _cur.customer_id), "— 없음 —")
+            with st.form("edit_vessel"):
+                evs1, evs2 = st.columns(2)
+                e_name   = evs1.text_input("선박명 *", _cur.name or "")
+                e_imo    = evs2.text_input("IMO No.", _cur.imo or "")
+                e_engine = evs1.text_input("Main Engine Type", _cur.engine_type or "")
+                e_hull   = evs2.text_input("Hull No.", _cur.hull_no or "")
+                e_owner  = st.selectbox("선주 (Customer)", _cust_names,
+                                        index=_cust_names.index(_cur_owner) if _cur_owner in _cust_names else 0)
+                upd_ves = st.form_submit_button("수정 저장", type="primary", use_container_width=True)
+                st.markdown("---")
+                del_confirm = st.checkbox("이 선박을 삭제합니다 (확인)")
+                del_ves = st.form_submit_button("삭제", use_container_width=True)
+            if upd_ves and e_name:
+                session = get_session()
+                try:
+                    obj = session.query(Vessel).get(_opts[_sel])
+                    obj.name, obj.imo, obj.engine_type = e_name, e_imo, e_engine
+                    obj.hull_no, obj.customer_id = e_hull, cust_opts.get(e_owner)
+                    session.commit()
+                    st.success("수정 완료!")
+                    st.rerun()
+                finally:
+                    session.close()
+            if del_ves:
+                if not del_confirm:
+                    st.warning("삭제하려면 '삭제 확인'을 체크하세요.")
+                else:
+                    session = get_session()
+                    try:
+                        session.delete(session.query(Vessel).get(_opts[_sel]))
+                        session.commit()
+                        st.success("삭제 완료!")
+                        st.rerun()
+                    finally:
+                        session.close()
 
     with st.form("add_vessel"):
         st.markdown("**신규 선박 추가**")
-        from app.utils.helpers import customer_options
-        cust_opts = {"— 없음 —": None, **customer_options()}
         ves1, ves2 = st.columns(2)
         v_name    = ves1.text_input("선박명 *")
         v_imo     = ves2.text_input("IMO No.")
@@ -262,6 +386,47 @@ with tabs[5]:
             "Unit": i.unit, "HS Code": i.hs_code or "—",
             "기준단가": f"{i.std_price:,.2f}",
         } for i in items]), use_container_width=True, hide_index=True)
+
+        with st.expander("✏️ 기존 품목 수정 / 삭제", expanded=False):
+            _opts = {f"#{i.id} · {i.part_no}": i.id for i in items}
+            _sel = st.selectbox("대상 선택", list(_opts.keys()), key="item_edit_sel")
+            _cur = next(i for i in items if i.id == _opts[_sel])
+            with st.form("edit_item"):
+                ei1, ei2 = st.columns(2)
+                e_part  = ei1.text_input("Part No. *", _cur.part_no or "")
+                e_desc  = ei2.text_input("Description", _cur.description or "")
+                e_maker = ei1.text_input("Maker", _cur.maker or "")
+                e_orig  = ei2.text_input("Origin", _cur.origin or "")
+                e_unit  = ei1.text_input("Unit", _cur.unit or "PCS")
+                e_hs    = ei2.text_input("HS Code", _cur.hs_code or "")
+                e_price = ei1.number_input("기준단가 (USD)", 0.0, step=1.0, value=float(_cur.std_price or 0.0))
+                upd_i = st.form_submit_button("수정 저장", type="primary", use_container_width=True)
+                st.markdown("---")
+                del_confirm = st.checkbox("이 품목을 삭제합니다 (확인)")
+                del_i = st.form_submit_button("삭제", use_container_width=True)
+            if upd_i and e_part:
+                session = get_session()
+                try:
+                    obj = session.query(ItemMaster).get(_opts[_sel])
+                    obj.part_no, obj.description, obj.maker = e_part, e_desc, e_maker
+                    obj.origin, obj.unit, obj.hs_code, obj.std_price = e_orig, e_unit, e_hs, e_price
+                    session.commit()
+                    st.success("수정 완료!")
+                    st.rerun()
+                finally:
+                    session.close()
+            if del_i:
+                if not del_confirm:
+                    st.warning("삭제하려면 '삭제 확인'을 체크하세요.")
+                else:
+                    session = get_session()
+                    try:
+                        session.delete(session.query(ItemMaster).get(_opts[_sel]))
+                        session.commit()
+                        st.success("삭제 완료!")
+                        st.rerun()
+                    finally:
+                        session.close()
 
     with st.form("add_item"):
         st.markdown("**품목 추가**")
