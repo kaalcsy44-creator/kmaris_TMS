@@ -83,8 +83,8 @@ def _parse_response(raw: str) -> dict:
     )
 
 
-def parse_rfq_fields(text: str, customer_names: list[str] | None = None) -> dict:
-    """Use Claude Haiku to extract structured RFQ fields from raw PDF text."""
+def _anthropic_client():
+    """Build an Anthropic client from env or Streamlit secrets."""
     import anthropic
 
     api_key = os.environ.get("ANTHROPIC_API_KEY", "")
@@ -98,8 +98,12 @@ def parse_rfq_fields(text: str, customer_names: list[str] | None = None) -> dict
         raise ValueError(
             "ANTHROPIC_API_KEY가 설정되지 않았습니다. ktms/.streamlit/secrets.toml을 확인하세요."
         )
+    return anthropic.Anthropic(api_key=api_key)
 
-    client = anthropic.Anthropic(api_key=api_key)
+
+def parse_rfq_fields(text: str, customer_names: list[str] | None = None) -> dict:
+    """Use Claude Haiku to extract structured RFQ fields from raw PDF text."""
+    client = _anthropic_client()
     clean_text = _sanitize_text(text)[:4000]
 
     customer_hint_line = ""
@@ -119,6 +123,43 @@ JSON schema (all strings must be on one line, no embedded newlines):
   "notes": string|null,
   "items": [
     {{"part_no":string,"description":string,"maker":string,"qty":number,"unit":string,"lead_time_req":string,"remark":string}}
+  ]
+}}
+
+Document:
+{clean_text}"""
+
+    response = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=4096,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    return _parse_response(response.content[0].text)
+
+
+def parse_order_fields(text: str, customer_names: list[str] | None = None) -> dict:
+    """Use Claude Haiku to extract structured Order (customer P/O) fields from PDF text."""
+    client = _anthropic_client()
+    clean_text = _sanitize_text(text)[:4000]
+
+    customer_hint_line = ""
+    if customer_names:
+        customer_hint_line = (
+            f"\nKnown customers (for matching): {', '.join(customer_names[:30])}"
+        )
+
+    prompt = f"""Extract Purchase Order (customer order) information from the document text below.
+Output ONLY a single-line compact JSON object (no newlines, no markdown).{customer_hint_line}
+
+JSON schema (all strings on one line, no embedded newlines; dates as YYYY-MM-DD or null):
+{{
+  "customer_hint": string|null,
+  "po_no": string|null,
+  "order_date": "YYYY-MM-DD"|null,
+  "vessel_name": string|null,
+  "promised_delivery": "YYYY-MM-DD"|null,
+  "items": [
+    {{"part_no":string,"description":string,"maker":string,"qty":number,"unit":string,"unit_price":number,"remark":string}}
   ]
 }}
 

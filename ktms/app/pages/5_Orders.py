@@ -1,7 +1,7 @@
 """Order management — receive order, generate PO, track status."""
 from __future__ import annotations
 import sys
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
@@ -175,7 +175,56 @@ with tab_list:
 # ══════════════════════════════════════════════════════════════════════════════
 with tab_new:
     st.subheader("신규 오더 등록")
-    hint("고객으로부터 받은 P/O(주문서)로 오더를 등록합니다. 수주 확정된 견적에서 불러오거나 직접 입력할 수 있습니다.")
+    hint("고객 P/O(주문서)로 오더를 등록합니다. PDF 자동 인식 · 수주 확정 견적 불러오기 · 직접 입력 모두 가능합니다.")
+
+    # ── 오더 PDF 자동 입력 (AI OCR) ───────────────────────────────────────────
+    from app.utils.helpers import customer_options as _customer_options
+    with st.expander("📄 오더 PDF로 자동 입력 (AI OCR)", expanded=False):
+        ord_pdf = st.file_uploader(
+            "고객 오더(P/O) PDF 업로드", type=["pdf"], key="ord_pdf_uploader",
+            help="고객이 보낸 주문서(PDF)를 업로드하면 AI가 Customer·PO번호·선박·품목을 자동 인식합니다.",
+        )
+        if ord_pdf and st.button("AI로 정보 추출", key="btn_ord_ocr", type="secondary"):
+            with st.spinner("AI가 PDF를 분석하고 있습니다..."):
+                try:
+                    from services.pdf_parser import extract_text_from_pdf, parse_order_fields
+                    raw_text = extract_text_from_pdf(ord_pdf)
+                    if not raw_text:
+                        st.warning("PDF에서 텍스트를 추출할 수 없습니다. 스캔 이미지 PDF는 지원되지 않습니다.")
+                    else:
+                        st.session_state["order_ocr"] = parse_order_fields(
+                            raw_text, list(_customer_options().keys())
+                        )
+                        st.rerun()
+                except ImportError:
+                    st.error("pdfplumber 또는 anthropic 패키지가 설치되지 않았습니다. requirements.txt를 확인하세요.")
+                except Exception as exc:
+                    st.error(f"추출 실패: {exc}")
+
+        if st.session_state.get("order_ocr"):
+            st.success("추출 완료! 아래 폼에 자동 반영됩니다. 내용을 검토·수정 후 등록하세요.")
+            if st.button("OCR 결과 지우기", key="clear_ord_ocr"):
+                st.session_state.pop("order_ocr", None)
+                st.rerun()
+
+    ocr = st.session_state.get("order_ocr", {}) or {}
+
+    def _ocr_date(key):
+        v = ocr.get(key)
+        try:
+            return datetime.strptime(v, "%Y-%m-%d").date() if v else None
+        except (TypeError, ValueError):
+            return None
+
+    def _match(name, choices):
+        if not name:
+            return None
+        n = str(name).strip().lower()
+        for ch in choices:
+            cl = ch.lower()
+            if n == cl or n in cl or cl in n:
+                return ch
+        return None
 
     with st.expander("견적서에서 불러오기", expanded=True):
         won_quotes = [q for q in quotation_list() if q.status == QuotationStatus.WON or True]
@@ -202,21 +251,39 @@ with tab_new:
                 c = get_customer(prefill_qtn.customer_id)
                 if c and c.name in cust_opts:
                     default_cust = c.name
+            elif ocr.get("customer_hint"):
+                _m = _match(ocr["customer_hint"], list(cust_opts.keys()))
+                if _m:
+                    default_cust = _m
             cust_name = st.selectbox("Customer *", list(cust_opts.keys()) if cust_opts else ["—"],
                                      index=list(cust_opts.keys()).index(default_cust) if default_cust in cust_opts else 0)
             cust_id = cust_opts.get(cust_name)
-            ord_date = st.date_input("수주일", value=date.today())
+            ord_date = st.date_input("수주일", value=_ocr_date("order_date") or date.today())
         with c2:
-            po_no = st.text_input("고객 PO No.", value="")
+            po_no = st.text_input("고객 PO No.", value=ocr.get("po_no") or "")
             from app.utils.helpers import vessel_options
             vessel_opts = vessel_options(cust_id)
-            vessel_name = st.selectbox("선박", ["— 없음 —"] + list(vessel_opts.keys()))
+            _vchoices = ["— 없음 —"] + list(vessel_opts.keys())
+            _vmatch = _match(ocr.get("vessel_name"), list(vessel_opts.keys()))
+            vessel_name = st.selectbox("선박", _vchoices,
+                                       index=_vchoices.index(_vmatch) if _vmatch else 0)
             vessel_id = vessel_opts.get(vessel_name) if vessel_name != "— 없음 —" else None
-            promised = st.date_input("약속 납기일 (선택)", value=None,
+            promised = st.date_input("약속 납기일 (선택)", value=_ocr_date("promised_delivery"),
                                      help="고객과 약속한 납기일 — 납기 준수율(OTD) 측정 기준")
 
-        # Items - pre-fill from quotation
-        seed_items = prefill_qtn.items if prefill_qtn and prefill_qtn.items else []
+        # Items - 견적 우선, 없으면 OCR 추출 품목
+        seed_items = list(prefill_qtn.items) if prefill_qtn and prefill_qtn.items else []
+        if not seed_items and ocr.get("items"):
+            for i, it in enumerate(ocr["items"], 1):
+                seed_items.append({
+                    "item_no": i,
+                    "part_no": it.get("part_no", ""),
+                    "description": it.get("description", ""),
+                    "maker": it.get("maker", ""),
+                    "qty": it.get("qty", 1),
+                    "unit": it.get("unit", "PCS"),
+                    "unit_price": it.get("unit_price", 0) or 0,
+                })
         items_df = st.data_editor(
             pd.DataFrame(seed_items) if seed_items else pd.DataFrame(
                 columns=["item_no", "part_no", "description", "maker", "qty", "unit", "unit_price"]),
@@ -247,6 +314,7 @@ with tab_new:
             session.commit()
             st.session_state["ord_detail_id"] = order.id
             st.session_state.pop("load_qtn_id", None)
+            st.session_state.pop("order_ocr", None)
             t_url = tracking_url("order", order.tracking_token)
             st.success(f"✅ 오더 등록 완료: **{ord_no}**")
             st.info(f"🔗 고객 트래킹 링크: {t_url}")
