@@ -33,7 +33,65 @@ inject_css()
 
 section_header("quotation", "Customer Quotation 발신 (견적)")
 
-tab_new, tab_list, tab_detail = st.tabs(["➕ 신규 등록", "📋 견적 목록", "🔍 견적 상세"])
+
+def render_quotation_detail():
+    """견적 목록에서 선택한 견적의 상세(정보·상태·품목)를 인라인 표시."""
+    qtn_id = st.session_state.get("qtn_detail_id")
+    if not qtn_id:
+        hint("위 목록에서 견적을 선택하면 상세가 여기에 표시됩니다.")
+        return
+    qtn = get_quotation(int(qtn_id))
+    if not qtn:
+        hint("선택한 견적을 찾을 수 없습니다. 목록에서 다시 선택하세요.")
+        return
+
+    cust   = get_customer(qtn.customer_id)
+    vessel = get_vessel(qtn.vessel_id) if qtn.vessel_id else None
+
+    col_info, col_act = st.columns([3, 1])
+    with col_info:
+        st.markdown(f"### {qtn.qtn_no}")
+        m1, m2, m3, m4 = st.columns(4)
+        info_cards = [
+            (m1, "Customer",  cust.name if cust else "—"),
+            (m2, "선박",      vessel.name if vessel else "—"),
+            (m3, "통화/합계", f"{qtn.currency} {total_amount(qtn.items or []):,.2f}"),
+            (m4, "유효기간",  qtn.valid_until or "—"),
+        ]
+        for col, label, value in info_cards:
+            with col:
+                st.markdown(f"""
+                <div class="ktms-info-card">
+                    <div class="ktms-info-label">{label}</div>
+                    <div class="ktms-info-value">{value}</div>
+                </div>
+                """, unsafe_allow_html=True)
+        st.markdown(f"**상태:** {status_badge(qtn.status.value)}", unsafe_allow_html=True)
+        st.caption("📨 PDF 생성·이메일 발송은 'Customer Quot. 발신' 탭에서 진행하세요.")
+
+    with col_act:
+        new_stat = st.selectbox("상태 변경", [s.value for s in QuotationStatus],
+                                index=[s.value for s in QuotationStatus].index(qtn.status.value))
+        if st.button("상태 업데이트", key="qtn_stat_update"):
+            s = get_session()
+            try:
+                q = s.query(Quotation).get(qtn.id)
+                q.status = QuotationStatus(new_stat)
+                s.commit()
+                st.success("업데이트!")
+                st.rerun()
+            finally:
+                s.close()
+
+    if qtn.items:
+        st.markdown("**품목 리스트**")
+        money_cols = {c: st.column_config.NumberColumn(c, format="%,.2f")
+                       for c in ("cost_price", "unit_price", "amount") if c in qtn.items[0]}
+        st.dataframe(pd.DataFrame(qtn.items), use_container_width=True, hide_index=True,
+                     column_config=money_cols)
+
+
+tab_new, tab_list, tab_send = st.tabs(["➕ 신규 등록", "📋 견적 목록", "📨 Customer Quot. 발신"])
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 1 — LIST
@@ -71,9 +129,12 @@ with tab_list:
         sel_rows = selected.selection.rows if hasattr(selected, "selection") else []
         if sel_rows:
             st.session_state["qtn_detail_id"] = int(df.iloc[sel_rows[0]]["ID"])
-            hint("'🔍 견적 상세' 탭에서 확인하세요.")
     else:
         hint("작성된 견적이 없습니다.")
+
+    # ── 선택한 견적 상세 (인라인) ─────────────────────────────────────────────
+    st.markdown("---")
+    render_quotation_detail()
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 2 — NEW QUOTATION
@@ -294,65 +355,27 @@ with tab_new:
             session.close()
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 3 — DETAIL (PDF + EMAIL)
+# TAB 3 — Customer Quotation 발신 (선택한 견적 대상: PDF + EMAIL)
 # ══════════════════════════════════════════════════════════════════════════════
-with tab_detail:
+with tab_send:
     qtn_id = st.session_state.get("qtn_detail_id")
     if not qtn_id:
-        hint("견적 리스트에서 항목을 선택하거나 ID를 입력하세요.")
-        qtn_id = st.number_input("견적 ID", min_value=1, step=1, value=1)
-        if not st.button("불러오기", key="qtn_load"):
-            st.stop()
+        hint("먼저 '견적 목록' 탭에서 견적을 선택하세요.")
+        st.stop()
 
     qtn = get_quotation(int(qtn_id))
     if not qtn:
-        st.error("견적을 찾을 수 없습니다.")
+        st.error("선택한 견적을 찾을 수 없습니다. 목록에서 다시 선택하세요.")
         st.stop()
 
     cust   = get_customer(qtn.customer_id)
     vessel = get_vessel(qtn.vessel_id) if qtn.vessel_id else None
 
-    col_info, col_act = st.columns([3, 1])
-    with col_info:
-        st.markdown(f"### {qtn.qtn_no}")
-        m1, m2, m3, m4 = st.columns(4)
-        info_cards = [
-            (m1, "Customer",  cust.name if cust else "—"),
-            (m2, "선박",      vessel.name if vessel else "—"),
-            (m3, "통화/합계", f"{qtn.currency} {total_amount(qtn.items or []):,.2f}"),
-            (m4, "유효기간",  qtn.valid_until or "—"),
-        ]
-        for col, label, value in info_cards:
-            with col:
-                st.markdown(f"""
-                <div class="ktms-info-card">
-                    <div class="ktms-info-label">{label}</div>
-                    <div class="ktms-info-value">{value}</div>
-                </div>
-                """, unsafe_allow_html=True)
-        st.markdown(f"**상태:** {status_badge(qtn.status.value)}", unsafe_allow_html=True)
-
-    with col_act:
-        new_stat = st.selectbox("상태 변경", [s.value for s in QuotationStatus],
-                                index=[s.value for s in QuotationStatus].index(qtn.status.value))
-        if st.button("상태 업데이트", key="qtn_stat_update"):
-            s = get_session()
-            try:
-                q = s.query(Quotation).get(qtn.id)
-                q.status = QuotationStatus(new_stat)
-                s.commit()
-                st.success("업데이트!")
-                st.rerun()
-            finally:
-                s.close()
-
-    if qtn.items:
-        st.markdown("**품목 리스트**")
-        money_cols = {c: st.column_config.NumberColumn(c, format="%,.2f")
-                       for c in ("cost_price", "unit_price", "amount") if c in qtn.items[0]}
-        st.dataframe(pd.DataFrame(qtn.items), use_container_width=True, hide_index=True,
-                     column_config=money_cols)
-
+    st.subheader("Customer Quotation 발신")
+    st.markdown(
+        f"**대상 견적:** `{qtn.qtn_no}`  ·  {cust.name if cust else '—'}"
+        f"  ·  {qtn.currency} {total_amount(qtn.items or []):,.2f}  ·  유효기간 {qtn.valid_until or '—'}"
+    )
     st.markdown("---")
     col_pdf, col_email = st.columns(2)
 
