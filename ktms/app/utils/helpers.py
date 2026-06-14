@@ -334,8 +334,16 @@ section[data-testid="stSidebar"] {{
     width: 220px !important;
     background-color: {NAVY} !important;
 }}
+/* 사이드바 콘텐츠 컨테이너의 좌우 기본 여백 제거 → 메뉴를 좌끝단까지 */
+section[data-testid="stSidebar"] > div,
+section[data-testid="stSidebar"] [data-testid="stSidebarContent"] {{
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+}}
 section[data-testid="stSidebar"] nav {{
     margin-top: 72px !important;
+    padding-left: 0 !important;
+    margin-left: 0 !important;
 }}
 [data-testid="stSidebar"] .stMarkdown, [data-testid="stSidebar"] label,
 [data-testid="stSidebar"] .stSelectbox label, [data-testid="stSidebar"] p {{
@@ -350,8 +358,8 @@ section[data-testid="stSidebar"] nav {{
     font-weight: 700 !important;
     text-transform: uppercase !important;
     letter-spacing: 0.14em !important;
-    color: rgba(180,200,230,0.42) !important;
-    padding: 14px 8px 5px 14px !important;
+    color: rgba(150,158,170,0.34) !important;
+    padding: 14px 6px 5px 1px !important;
     margin: 0 !important;
     border-top: 1px solid rgba(255,255,255,0.08) !important;
 }}
@@ -384,7 +392,7 @@ section[data-testid="stSidebar"] nav {{
     display: flex !important;
     align-items: center !important;
     border-radius: 0 8px 8px 0 !important;
-    padding: 7px 2px 7px 3px !important;
+    padding: 7px 2px 7px 0 !important;
     margin-left: 0 !important;
     border-left: 3px solid transparent !important;
     transition: background .15s, border-color .15s !important;
