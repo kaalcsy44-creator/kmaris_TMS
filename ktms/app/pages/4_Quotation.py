@@ -31,9 +31,9 @@ except Exception:
 require_auth()
 inject_css()
 
-section_header("quotation", "견적 관리 (Quotation)")
+section_header("quotation", "Customer Quotation 발신 (견적)")
 
-tab_list, tab_new, tab_detail = st.tabs(["견적 목록", "신규 등록", "견적 상세"])
+tab_new, tab_list, tab_detail = st.tabs(["➕ 신규 등록", "📋 견적 목록", "🔍 견적 상세"])
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 1 — LIST

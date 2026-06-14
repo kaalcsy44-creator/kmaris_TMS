@@ -1,5 +1,6 @@
-"""Vendor RFQ Management — track VRFQs and register vendor quotes."""
+"""Vendor RFQ 발신 — compose & send vendor RFQs for a selected customer RFQ, track sent VRFQs."""
 from __future__ import annotations
+import os
 import sys
 from datetime import date
 from pathlib import Path
@@ -12,27 +13,352 @@ import pandas as pd
 import streamlit as st
 from app.utils.auth import require_auth
 from app.utils.helpers import (
-    inject_css, hint, section_header,
-    get_rfq, get_vendor, vendor_quotes_for_vrfq,
+    inject_css, hint, section_header, next_doc_no,
+    vendor_options, rfq_list, get_rfq, get_customer, get_vessel, get_vendor,
+    vrfq_list_for_rfq, vendor_quotes_for_vrfq,
 )
 from db.engine import get_session
-from db.models import VendorRFQ, VendorQuote, RFQ, RFQStatus
+from db.models import RFQ, VendorRFQ, RFQStatus
+from services.email_svc import send_email
+from services.vendor_xlsx import make_vendor_rfq_quote_xlsx
+
+
+def _build_vendor_rfq_email(rfq, cust, vessel, vendor, notes: str) -> str:
+    """English vendor RFQ inquiry email."""
+    items = rfq.items or []
+    item_lines = "\n".join(
+        f"  {i+1:>2}. Part No.: {str(item.get('part_no','—')):<20s}"
+        f"  Qty: {item.get('qty','—')} {item.get('unit',''):<5s}"
+        f"  Maker: {item.get('maker','—')}\n"
+        f"       Desc: {item.get('description','—')}"
+        for i, item in enumerate(items)
+    )
+    vendor_name = vendor.name if vendor else "Vendor"
+    vessel_str = vessel.name if vessel else "—"
+    cust_str = cust.name if cust else "—"
+
+    body = f"""Dear {vendor_name},
+
+We would like to request your best quotation for the following marine spare parts.
+
+RFQ Reference : {rfq.rfq_no}
+Vessel        : {vessel_str}
+End Customer  : {cust_str}
+Enquiry Date  : {rfq.date or date.today().isoformat()}
+
+──────────────────────── ITEM LIST ────────────────────────
+{item_lines}
+────────────────────────────────────────────────────────────
+
+Please quote for each item:
+  • Unit price (USD, CNF Busan port)
+  • Lead time
+  • Country of origin / Manufacturer
+  • Technical remarks or alternatives (if any)
+
+"""
+    if notes:
+        body += f"Additional Notes:\n{notes}\n\n"
+
+    body += """Kindly reply within 5 business days.
+
+Best regards,
+K-MARIS Energy & Solutions Co., Ltd.
+Email: sales@k-maris.com  |  www.k-maris.com
+Engineering Reliability. Supplying Performance.
+"""
+    return body
+
+
+def _build_vendor_rfq_email_ko(rfq, cust, vessel, vendor, notes: str) -> str:
+    """Korean vendor RFQ inquiry email."""
+    items = rfq.items or []
+    item_lines = "\n".join(
+        f"  {i+1:>2}. Part No.: {str(item.get('part_no','—')):<20s}"
+        f"  수량: {item.get('qty','—')} {item.get('unit',''):<5s}"
+        f"  Maker: {item.get('maker','—')}\n"
+        f"       품명: {item.get('description','—')}"
+        for i, item in enumerate(items)
+    )
+    vendor_name = vendor.name if vendor else "Vendor"
+    vessel_str = vessel.name if vessel else "—"
+    cust_str = cust.name if cust else "—"
+
+    body = f"""{vendor_name} 귀중
+
+안녕하세요,
+항상 협조해 주셔서 감사드립니다.
+
+아래 선박용 부품에 대한 견적을 요청드립니다.
+
+RFQ 번호 : {rfq.rfq_no}
+선박명    : {vessel_str}
+발주처    : {cust_str}
+문의일    : {rfq.date or date.today().isoformat()}
+
+──────────────────────── 품목 리스트 ────────────────────────
+{item_lines}
+──────────────────────────────────────────────────────────────
+
+각 품목에 대해 아래 사항을 포함하여 견적을 회신해 주시기 바랍니다:
+  • 단가 (USD, CNF 부산항 기준)
+  • 납기
+  • 원산지 / 제조사
+  • 기술적 비고 또는 대체품 (해당 시)
+
+"""
+    if notes:
+        body += f"추가 사항:\n{notes}\n\n"
+
+    body += """영업일 기준 5일 이내 회신 부탁드립니다.
+
+감사합니다.
+K-MARIS Energy & Solutions Co., Ltd.
+Email: sales@k-maris.com  |  www.k-maris.com
+Engineering Reliability. Supplying Performance.
+"""
+    return body
+
 
 try:
-    st.set_page_config(page_title="VRFQ 관리 — KTMS", page_icon="📤", layout="wide")
+    st.set_page_config(page_title="Vendor RFQ 발신 — KTMS", page_icon="📤", layout="wide")
 except Exception:
     pass
 require_auth()
 inject_css()
 
-section_header("send", "Vendor 견적 관리 (VRFQ)")
+section_header("send", "Vendor RFQ 발신")
 
-tab_list, tab_quote = st.tabs(["VRFQ 목록", "Vendor 견적 수신"])
+tab_send, tab_sent = st.tabs(["📨 Vendor RFQ 작성·발신", "📜 발신 내역"])
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 1 — VRFQ 목록
+# TAB 1 — Vendor RFQ 작성·발신 (선택한 Customer RFQ 대상)
 # ══════════════════════════════════════════════════════════════════════════════
-with tab_list:
+with tab_send:
+    rfqs = rfq_list()
+    if not rfqs:
+        hint("먼저 'Customer RFQ 수신' 메뉴에서 RFQ를 등록하세요.")
+        st.stop()
+
+    # 대상 Customer RFQ 선택 (다른 페이지에서 선택한 RFQ를 기본값으로)
+    rfq_label_map = {}
+    for r in rfqs:
+        c = get_customer(r.customer_id)
+        v = get_vessel(r.vessel_id) if r.vessel_id else None
+        label = (
+            f"{r.rfq_no}  |  {c.name if c else '—'}"
+            f"  |  {v.name if v else '—'}  |  {r.status.value}"
+        )
+        rfq_label_map[label] = r.id
+
+    labels = list(rfq_label_map.keys())
+    _presel = st.session_state.get("rfq_detail_id")
+    default_idx = 0
+    if _presel:
+        for i, rid in enumerate(rfq_label_map.values()):
+            if rid == _presel:
+                default_idx = i
+                break
+
+    sel_label = st.selectbox("대상 Customer RFQ 선택", labels, index=default_idx,
+                             key="vrfq_send_rfq_sel")
+    rfq_id = rfq_label_map[sel_label]
+    st.session_state["rfq_detail_id"] = rfq_id  # 다른 페이지와 선택 동기화
+
+    rfq = get_rfq(rfq_id)
+    cust = get_customer(rfq.customer_id)
+    vessel = get_vessel(rfq.vessel_id) if rfq.vessel_id else None
+
+    st.markdown(
+        f"**대상 RFQ:** `{rfq.rfq_no}`  ·  {cust.name if cust else '—'}"
+        f"  ·  {vessel.name if vessel else '—'}  ·  품목 {len(rfq.items or [])}개"
+    )
+    st.markdown("---")
+
+    _preview_key = f"vrfq_preview_{rfq.id}"
+    vendor_opts = vendor_options()
+
+    if not vendor_opts:
+        st.warning("Vendor를 먼저 등록하세요 (⚙️ 설정).")
+
+    elif not st.session_state.get(_preview_key):
+        sel_vendors = st.multiselect(
+            "Vendor 선택", list(vendor_opts.keys()), key=f"vrfq_sel_{rfq.id}"
+        )
+        lang_sel = st.radio(
+            "이메일 언어",
+            ["🇺🇸 English (영문)", "🇰🇷 Korean (국문)"],
+            horizontal=True,
+            key=f"vrfq_lang_{rfq.id}",
+        )
+        vrfq_notes = st.text_area(
+            "Vendor에게 전달할 메모", height=80, key=f"vrfq_notes_{rfq.id}"
+        )
+
+        if st.button(
+            "이메일 미리보기",
+            disabled=not sel_vendors,
+            type="secondary",
+            use_container_width=False,
+        ):
+            is_korean = "Korean" in lang_sel
+            previews = []
+            for vname in sel_vendors:
+                vid = vendor_opts[vname]
+                v = get_vendor(vid)
+                xlsx_bytes = make_vendor_rfq_quote_xlsx(
+                    rfq_no=rfq.rfq_no,
+                    vessel_name=vessel.name if vessel else "—",
+                    customer_name=cust.name if cust else "—",
+                    enquiry_date=rfq.date or date.today().isoformat(),
+                    vendor_name=vname,
+                    items=rfq.items or [],
+                )
+                safe_vname = "".join(c for c in vname if c.isalnum() or c in "._- ")[:40]
+                if is_korean:
+                    subject = f"[K-MARIS] 견적 요청 — {rfq.rfq_no} / {vessel.name if vessel else rfq.rfq_no}"
+                    body = _build_vendor_rfq_email_ko(rfq, cust, vessel, v, vrfq_notes)
+                else:
+                    subject = f"[K-MARIS] Inquiry — {rfq.rfq_no} / {vessel.name if vessel else rfq.rfq_no}"
+                    body = _build_vendor_rfq_email(rfq, cust, vessel, v, vrfq_notes)
+                previews.append({
+                    "vendor_name": vname,
+                    "vendor_id": vid,
+                    "vendor_email": (v.email or "") if v else "",
+                    "lang": lang_sel,
+                    "subject": subject,
+                    "body": body,
+                    "xlsx_bytes": xlsx_bytes,
+                    "xlsx_filename": f"{rfq.rfq_no}_VendorQuoteSheet_{safe_vname}.xlsx",
+                })
+            st.session_state[_preview_key] = previews
+            st.rerun()
+
+    else:
+        previews = st.session_state[_preview_key]
+        st.info(
+            f"📧 아래 {len(previews)}개 이메일을 검토·수정 후 발송하세요. "
+            "이메일 주소가 없으면 DB 저장만 됩니다."
+        )
+
+        edited = []
+        for i, prev in enumerate(previews):
+            email_label = prev["vendor_email"] or "⚠️ 이메일 주소 없음"
+            lang_badge = "🇰🇷 국문" if "Korean" in prev.get("lang", "") else "🇺🇸 영문"
+            with st.expander(f"{prev['vendor_name']}  ({email_label})  [{lang_badge}]", expanded=True):
+                to_email = st.text_input(
+                    "수신자 이메일", value=prev["vendor_email"], key=f"vrfq_to_{rfq.id}_{i}"
+                )
+                subj_col, xlsx_col = st.columns([3, 1])
+                subject = subj_col.text_input(
+                    "제목", value=prev["subject"], key=f"vrfq_subj_{rfq.id}_{i}"
+                )
+                if prev.get("xlsx_bytes"):
+                    xlsx_col.markdown("<br>", unsafe_allow_html=True)
+                    xlsx_col.download_button(
+                        label="📥 견적서 양식 (.xlsx)",
+                        data=prev["xlsx_bytes"],
+                        file_name=prev["xlsx_filename"],
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        key=f"vrfq_xlsx_{rfq.id}_{i}",
+                        use_container_width=True,
+                        help="Vendor가 단가·납기 등을 기입해서 반환하는 Excel 양식입니다. 이메일 발송 시 자동 첨부됩니다.",
+                    )
+                body = st.text_area(
+                    "본문 (직접 수정 가능)", value=prev["body"],
+                    height=340, key=f"vrfq_body_{rfq.id}_{i}"
+                )
+            edited.append({
+                **prev,
+                "to_email": to_email,
+                "subject": subject,
+                "body": body,
+            })
+
+        _smtp_ok = bool(os.getenv("SMTP_USER") and os.getenv("SMTP_PASSWORD"))
+        if not _smtp_ok:
+            st.warning(
+                "⚠️ SMTP 미설정: 이메일이 발송되지 않습니다. "
+                "Settings > Secrets에 SMTP_USER / SMTP_PASSWORD를 등록하세요. "
+                "DB 저장만 진행됩니다."
+            )
+
+        col_send, col_cancel, _ = st.columns([2, 1, 4])
+        if col_send.button("발송 + DB 저장", type="primary", use_container_width=True):
+            session = get_session()
+            try:
+                sent_ok, sent_fail, saved = 0, 0, 0
+                for e in edited:
+                    vrfq_no = next_doc_no("vendor_rfq")
+                    vrfq = VendorRFQ(
+                        vrfq_no=vrfq_no,
+                        rfq_id=rfq.id,
+                        vendor_id=e["vendor_id"],
+                        sent_date=date.today().isoformat(),
+                        sent_to_email=e["to_email"] or "",
+                        status="발송됨",
+                        items=rfq.items or [],
+                    )
+                    session.add(vrfq)
+                    saved += 1
+
+                    if e["to_email"] and _smtp_ok:
+                        attachments = None
+                        if e.get("xlsx_bytes"):
+                            attachments = [(e["xlsx_filename"], e["xlsx_bytes"])]
+                        ok = send_email(
+                            to=e["to_email"],
+                            subject=e["subject"],
+                            body=e["body"],
+                            attachments=attachments,
+                        )
+                        if ok:
+                            sent_ok += 1
+                            vrfq.status = "이메일 발송완료"
+                        else:
+                            sent_fail += 1
+                            st.warning(f"⚠️ {e['vendor_name']} SMTP 발송 실패 — 서버 오류")
+
+                r = session.query(RFQ).get(rfq.id)
+                r.status = RFQStatus.SOURCING
+                session.commit()
+                st.success(
+                    f"✅ DB 저장 {saved}건 완료"
+                    + (f" | 이메일 발송 성공 {sent_ok}건" if sent_ok else "")
+                    + (f" | 실패 {sent_fail}건" if sent_fail else "")
+                )
+                st.session_state.pop(_preview_key, None)
+                st.rerun()
+            finally:
+                session.close()
+
+        if col_cancel.button("취소", use_container_width=True):
+            st.session_state.pop(_preview_key, None)
+            st.rerun()
+
+    # ── 이 RFQ로 발송된 Vendor RFQ ────────────────────────────────────────────
+    vrfqs = vrfq_list_for_rfq(rfq.id)
+    if vrfqs:
+        st.markdown("**이 RFQ로 발송된 Vendor RFQ**")
+        vrows = []
+        for vr in vrfqs:
+            v = get_vendor(vr.vendor_id)
+            existing_quotes = vendor_quotes_for_vrfq(vr.id)
+            vrows.append({
+                "VRFQ No.": vr.vrfq_no,
+                "Vendor": v.name if v else "—",
+                "수신자 이메일": getattr(vr, "sent_to_email", None) or (v.email if v else "—") or "—",
+                "발송일": vr.sent_date or "—",
+                "상태": vr.status,
+                "수신된 견적": f"{len(existing_quotes)}건",
+            })
+        st.dataframe(pd.DataFrame(vrows), use_container_width=True, hide_index=True)
+        hint("Vendor 견적을 받으셨나요? 'Vendor Quotation 수신' 메뉴에서 등록하세요.")
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 2 — 발신 내역 (전체 VRFQ)
+# ══════════════════════════════════════════════════════════════════════════════
+with tab_sent:
     _s = get_session()
     try:
         all_vrfqs = _s.query(VendorRFQ).order_by(VendorRFQ.id.desc()).all()
@@ -40,7 +366,7 @@ with tab_list:
         _s.close()
 
     if not all_vrfqs:
-        hint("아직 발송된 Vendor RFQ가 없습니다. CRFQ 페이지에서 RFQ 상세 → Vendor RFQ 발송을 먼저 하세요.")
+        hint("아직 발송된 Vendor RFQ가 없습니다. 좌측 'Vendor RFQ 작성·발신' 탭에서 발송하세요.")
     else:
         rows = []
         for vr in all_vrfqs:
@@ -50,7 +376,7 @@ with tab_list:
             rows.append({
                 "ID": vr.id,
                 "VRFQ No.": vr.vrfq_no,
-                "CRFQ No.": rfq_obj.rfq_no if rfq_obj else "—",
+                "Customer RFQ": rfq_obj.rfq_no if rfq_obj else "—",
                 "Vendor": v.name if v else "—",
                 "수신자 이메일": vr.sent_to_email or (v.email if v else "—") or "—",
                 "발송일": vr.sent_date or "—",
@@ -70,218 +396,4 @@ with tab_list:
         if sel_rows:
             sel_vrfq_id = int(df.iloc[sel_rows[0]]["ID"])
             st.session_state["vrfq_detail_id"] = sel_vrfq_id
-            hint(f"VRFQ ID {sel_vrfq_id} 선택됨 — 'Vendor 견적 수신' 탭에서 견적을 등록하세요.")
-
-# ══════════════════════════════════════════════════════════════════════════════
-# TAB 2 — Vendor 견적 수신
-# ══════════════════════════════════════════════════════════════════════════════
-with tab_quote:
-    st.subheader("Vendor 견적 수신 등록")
-
-    # 전체 VRFQ 로드
-    _s2 = get_session()
-    try:
-        all_vrfqs2 = _s2.query(VendorRFQ).order_by(VendorRFQ.id.desc()).all()
-    finally:
-        _s2.close()
-
-    if not all_vrfqs2:
-        hint("아직 발송된 Vendor RFQ가 없습니다. CRFQ 페이지에서 먼저 Vendor RFQ를 발송하세요.")
-        st.stop()
-
-    # VRFQ 선택 (VRFQ 목록 탭에서 클릭하면 자동 선택)
-    vrfq_label_map = {}
-    for vr in all_vrfqs2:
-        v = get_vendor(vr.vendor_id)
-        rfq_obj = get_rfq(vr.rfq_id)
-        qs = vendor_quotes_for_vrfq(vr.id)
-        badge = f" ✅{len(qs)}건" if qs else ""
-        label = (
-            f"{vr.vrfq_no}  |  {v.name if v else '—'}"
-            f"  |  CRFQ: {rfq_obj.rfq_no if rfq_obj else '—'}"
-            f"  |  {vr.status}{badge}"
-        )
-        vrfq_label_map[label] = vr
-
-    # 목록 탭에서 선택된 VRFQ가 있으면 해당 항목을 기본값으로
-    _presel_id = st.session_state.get("vrfq_detail_id")
-    _default_idx = 0
-    if _presel_id:
-        for i, vr in enumerate(all_vrfqs2):
-            if vr.id == _presel_id:
-                _default_idx = i
-                break
-
-    sel_vq_label = st.selectbox(
-        "Vendor RFQ 선택",
-        list(vrfq_label_map.keys()),
-        index=_default_idx,
-        key="vq_sel_vrfq_label",
-    )
-    sel_vrfq = vrfq_label_map[sel_vq_label]
-    linked_rfq = get_rfq(sel_vrfq.rfq_id)
-
-    st.markdown("---")
-
-    # ── 기등록 견적 목록 ──────────────────────────────────────────────────────
-    existing_quotes = vendor_quotes_for_vrfq(sel_vrfq.id)
-    if existing_quotes:
-        with st.expander(f"기등록 견적 ({len(existing_quotes)}건)", expanded=False):
-            for eq in existing_quotes:
-                c1, c2, c3 = st.columns([2, 6, 1])
-                c1.markdown(f"**{eq.received_date or '—'}**")
-                c2.markdown(eq.notes or "")
-                if c3.button("삭제", key=f"del_vq_{eq.id}", type="secondary"):
-                    _ds = get_session()
-                    try:
-                        _ds.query(VendorQuote).filter_by(id=eq.id).delete()
-                        _ds.commit()
-                        st.success("삭제 완료")
-                        st.rerun()
-                    finally:
-                        _ds.close()
-                if eq.items:
-                    st.dataframe(pd.DataFrame(eq.items), use_container_width=True, hide_index=True)
-
-    # ── 신규 견적 등록 폼 ─────────────────────────────────────────────────────
-    with st.expander("신규 견적 수신 등록", expanded=True):
-        vq_date = st.date_input("견적 수신일", value=date.today(), key="vq_tab_date")
-        vq_notes = st.text_input("비고 (Vendor 메모 등)", key="vq_tab_notes")
-
-        # ── Session-state keys (version counter = data_editor key 변경 트리거) ──
-        _parse_key   = f"vq_parsed_{sel_vrfq.id}"
-        _fhash_key   = f"vq_fhash_{sel_vrfq.id}"
-        _ver_key     = f"vq_ver_{sel_vrfq.id}"
-        _msg_key     = f"vq_msg_{sel_vrfq.id}"
-        _ver         = st.session_state.get(_ver_key, 0)
-        _editor_key  = f"vq_items_{sel_vrfq.id}_v{_ver}"
-
-        # 파싱 완료 메시지 (이전 run에서 저장한 것) 표시
-        if _msg_key in st.session_state:
-            st.success(st.session_state.pop(_msg_key))
-
-        # ── Vendor 견적 파일 업로드 (PDF/Excel → 자동 파싱) ───────────────
-        st.markdown("**Vendor 견적 파일 업로드**")
-        _uploaded = st.file_uploader(
-            "Vendor가 가격/납기를 입력하여 반환한 PDF 또는 Excel 파일을 업로드하면 "
-            "Unit Price, Lead Time, Origin 등이 자동으로 채워집니다.",
-            type=["pdf", "xlsx", "xls"],
-            key=f"vq_upload_{sel_vrfq.id}",
-        )
-
-        if _uploaded is not None:
-            import hashlib
-            _raw = _uploaded.getvalue()
-            _fhash = hashlib.md5(_raw).hexdigest()
-            if st.session_state.get(_fhash_key) != _fhash:
-                # 새 파일 — 파싱 후 버전 증가 → 다음 run에서 editor 키 변경
-                with st.spinner("파일 파싱 중..."):
-                    try:
-                        from services.quote_response_parser import parse_vendor_quote_bytes as _pvq
-                        _parsed = _pvq(_raw, _uploaded.name)
-                        if _parsed:
-                            st.session_state[_parse_key] = _parsed
-                            st.session_state[_fhash_key] = _fhash
-                            st.session_state[_ver_key]   = _ver + 1
-                            st.session_state[_msg_key]   = (
-                                f"✅ {len(_parsed)}개 품목의 가격·납기·원산지 추출 완료 "
-                                "— 아래 표를 확인 후 저장하세요."
-                            )
-                            st.rerun()  # 새 editor 키로 위젯을 새로 생성
-                        else:
-                            st.warning(
-                                "파일에서 견적 데이터를 추출하지 못했습니다. "
-                                "KTMS에서 발행한 Vendor Quotation Request Sheet 형식인지 확인하세요."
-                            )
-                    except Exception as _e:
-                        st.error(f"파싱 오류: {_e}")
-        else:
-            st.session_state.pop(_fhash_key, None)
-
-        st.markdown("---")
-
-        vq_cols = ["item_no", "part_no", "description", "maker", "origin",
-                   "qty", "unit", "cost_price", "lead_time", "remark"]
-
-        base_items = sel_vrfq.items or (linked_rfq.items if linked_rfq else [])
-        seed_rows = []
-        for i, itm in enumerate(base_items, 1):
-            seed_rows.append({
-                "item_no": i,
-                "part_no": itm.get("part_no", ""),
-                "description": itm.get("description", ""),
-                "maker": itm.get("maker", ""),
-                "origin": "",
-                "qty": itm.get("qty", 1),
-                "unit": itm.get("unit", "PCS"),
-                "cost_price": float(itm.get("cost_price", 0.0)),
-                "lead_time": "",
-                "remark": "",
-            })
-
-        # ── 파싱된 데이터를 seed_rows에 병합 ────────────────────────────
-        if _parse_key in st.session_state:
-            _pmap = {
-                p.get("part_no", ""): p
-                for p in st.session_state[_parse_key]
-                if p.get("part_no")
-            }
-            _matched = 0
-            for row in seed_rows:
-                _pd = _pmap.get(row["part_no"], {})
-                if not _pd:
-                    continue
-                _matched += 1
-                if _pd.get("cost_price") not in ("", None):
-                    try:
-                        row["cost_price"] = float(_pd["cost_price"])
-                    except (ValueError, TypeError):
-                        pass
-                for _fld in ("lead_time", "origin", "remark"):
-                    if _pd.get(_fld):
-                        row[_fld] = _pd[_fld]
-                if _pd.get("manufacturer"):
-                    row["maker"] = _pd["manufacturer"]
-            if _matched:
-                hint(f"업로드 파일에서 {_matched}개 품목 데이터가 적용되었습니다.")
-
-        vq_df = st.data_editor(
-            pd.DataFrame(seed_rows, columns=vq_cols) if seed_rows
-            else pd.DataFrame(columns=vq_cols),
-            num_rows="dynamic",
-            use_container_width=True,
-            column_config={
-                "qty": st.column_config.NumberColumn("qty", min_value=0, step=1),
-                "cost_price": st.column_config.NumberColumn("cost_price (공급가)", format="%.2f"),
-            },
-            key=_editor_key,
-        )
-
-        if st.button("견적 저장", type="primary", key="btn_save_vq_tab"):
-            items_data = vq_df.fillna("").to_dict(orient="records")
-            _ss = get_session()
-            try:
-                vq_new = VendorQuote(
-                    vendor_rfq_id=sel_vrfq.id,
-                    received_date=vq_date.isoformat(),
-                    items=items_data,
-                    notes=vq_notes,
-                )
-                _ss.add(vq_new)
-                _vr = _ss.query(VendorRFQ).get(sel_vrfq.id)
-                _vr.status = "견적 수신완료"
-                if linked_rfq:
-                    _rfq_upd = _ss.query(RFQ).get(linked_rfq.id)
-                    if _rfq_upd and _rfq_upd.status == RFQStatus.SOURCING:
-                        _rfq_upd.status = RFQStatus.QUOTING
-                _ss.commit()
-                st.session_state.pop(_parse_key, None)
-                st.session_state.pop(_fhash_key, None)
-                st.session_state[_ver_key] = _ver + 1  # 저장 후 폼 초기화
-                st.session_state[_msg_key] = (
-                    f"✅ {sel_vrfq.vrfq_no} Vendor 견적 등록 완료! "
-                    "이제 Quotation 작성 시 이 견적을 불러올 수 있습니다."
-                )
-                st.rerun()
-            finally:
-                _ss.close()
+            hint(f"VRFQ ID {sel_vrfq_id} 선택됨 — 'Vendor Quotation 수신' 메뉴에서 견적을 등록하세요.")

@@ -133,12 +133,13 @@ pages = {
     " ": [
         st.Page("pages/1_Dashboard.py", title="Dashboard", default=True),
     ],
-    "RFQ 관리": [
-        st.Page("pages/2_CRFQ.py", title="Customer RFQ"),
-        st.Page("pages/3_VRFQ.py", title="Vendor 견적"),
+    "RFQ & Quotation": [
+        st.Page("pages/2_CRFQ.py",        title="Customer RFQ 수신"),
+        st.Page("pages/3_VRFQ.py",        title="Vendor RFQ 발신"),
+        st.Page("pages/vendor_quote.py",  title="Vendor Quotation 수신"),
+        st.Page("pages/4_Quotation.py",   title="Customer Quotation 발신"),
     ],
-    "영업 관리": [
-        st.Page("pages/4_Quotation.py", title="Quotation"),
+    "영업관리": [
         st.Page("pages/5_Orders.py",    title="Orders"),
         st.Page("pages/6_Documents.py", title="Documents"),
         st.Page("pages/7_AR.py",        title="AR"),
