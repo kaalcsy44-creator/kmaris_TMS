@@ -1038,6 +1038,70 @@ def dashboard_stats() -> Dict[str, Any]:
             ARRecord.status == ARStatus.OVERDUE
         ).all()
 
+        # ── 성과 KPI (첨부 KPI 시트 기준, 계산 가능한 4종) ──────────────────────
+        all_rfqs = s.query(RFQ).all()
+        all_quotes = s.query(Quotation).all()
+        total_rfq = len(all_rfqs)
+
+        # RFQ Handling Rate — 받은 RFQ 중 실제 견적(초안 제외)이 제출된 비율
+        sent_quote_rfq_ids = {
+            q.rfq_id for q in all_quotes
+            if q.rfq_id and q.status != QuotationStatus.DRAFT
+        }
+        handling_rate = (len(sent_quote_rfq_ids) / total_rfq * 100) if total_rfq else 0.0
+
+        # Quotation TAT — RFQ 접수 → 견적 제출까지 평균 시간(h)
+        rfq_created = {r.id: r.created_at for r in all_rfqs}
+        _tat = []
+        for q in all_quotes:
+            base = rfq_created.get(q.rfq_id) if q.rfq_id else None
+            if base and q.created_at and q.status != QuotationStatus.DRAFT:
+                h = (q.created_at - base).total_seconds() / 3600
+                if h >= 0:
+                    _tat.append(h)
+        quotation_tat_h = (sum(_tat) / len(_tat)) if _tat else None
+
+        # Hit Rate — 발송된 견적 대비 수주확정(PO 전환) 비율
+        _sent_like = {QuotationStatus.SENT, QuotationStatus.NEGOTIATING,
+                      QuotationStatus.WON, QuotationStatus.LOST, QuotationStatus.EXPIRED}
+        sent_quotes = [q for q in all_quotes if q.status in _sent_like]
+        won_quotes = [q for q in all_quotes if q.status == QuotationStatus.WON]
+        hit_rate = (len(won_quotes) / len(sent_quotes) * 100) if sent_quotes else 0.0
+
+        # Gross Margin — 수주확정 견적 기준(없으면 발송 견적 전체)
+        margin_basis = won_quotes or sent_quotes
+        _rev = _cost = 0.0
+        for q in margin_basis:
+            for it in (q.items or []):
+                qty = float(it.get("qty", 1) or 1)
+                _rev += float(it.get("unit_price", 0) or 0) * qty
+                _cost += float(it.get("cost_price", 0) or 0) * qty
+        gross_margin_pct = ((_rev - _cost) / _rev * 100) if _rev else 0.0
+
+        # ── 추천 운영 지표 3종 ─────────────────────────────────────────────────
+        today_iso = date.today().isoformat()
+        soon_iso = (date.today() + timedelta(days=7)).isoformat()
+
+        # 견적 만료 임박 — 발송/협상중 & 유효기간 7일 이내
+        expiring_quotes = sum(
+            1 for q in all_quotes
+            if q.status in (QuotationStatus.SENT, QuotationStatus.NEGOTIATING)
+            and q.valid_until and today_iso <= q.valid_until <= soon_iso
+        )
+
+        # 협상중 파이프라인 금액 (USD)
+        negotiating_value_usd = 0.0
+        for q in all_quotes:
+            if q.status == QuotationStatus.NEGOTIATING and (q.currency or "USD") == "USD":
+                for it in (q.items or []):
+                    amt = it.get("amount")
+                    if amt in (None, ""):
+                        amt = float(it.get("unit_price", 0) or 0) * float(it.get("qty", 1) or 1)
+                    negotiating_value_usd += float(amt or 0)
+
+        # 발주 대기 — 수주됐으나 PO 미발행 Order
+        pending_po = s.query(Order).filter(Order.status == OrderStatus.RECEIVED).count()
+
         return {
             "open_rfq": open_rfq,
             "active_orders": active_orders,
@@ -1045,6 +1109,15 @@ def dashboard_stats() -> Dict[str, Any]:
             "monthly_quotes": monthly_quotes,
             "urgent_quotes": urgent_quotes,
             "overdue_ar": overdue_ar,
+            # 성과 KPI
+            "handling_rate": handling_rate,
+            "quotation_tat_h": quotation_tat_h,
+            "hit_rate": hit_rate,
+            "gross_margin_pct": gross_margin_pct,
+            # 운영 지표
+            "expiring_quotes": expiring_quotes,
+            "negotiating_value_usd": negotiating_value_usd,
+            "pending_po": pending_po,
         }
     finally:
         s.close()
