@@ -216,17 +216,38 @@ with tab_new:
             key="qtn_items",
         )
 
-        # Terms
+        # Terms — 자주 쓰는 값은 드롭다운에서 선택, 없으면 '직접 입력' 선택 후 작성
         st.markdown("**거래 조건**")
+        st.caption("자주 쓰는 값은 드롭다운에서 선택하세요. 목록에 없으면 '✏️ 직접 입력'을 선택한 뒤 아래 칸에 작성합니다.")
+
+        _CUSTOM = "✏️ 직접 입력"
+        _INCOTERMS = ["FCA Busan, Korea", "FOB Busan, Korea", "CIF (지정 목적항)",
+                      "CFR (지정 목적항)", "DAP (지정 목적지)", "EXW Busan", _CUSTOM]
+        _SHIPMENT  = ["Air courier / Sea freight", "By Air (Courier)",
+                      "By Sea (FCL)", "By Sea (LCL)", _CUSTOM]
+        _PAYMENT   = ["100% T/T in advance", "T/T 30 days after delivery",
+                      "T/T 50% in advance, 50% before shipment", "L/C at sight", _CUSTOM]
+        _PACKING   = ["Standard export packing", "Seaworthy export packing",
+                      "Wooden case packing", _CUSTOM]
+        _DELIVERY  = ["Busan, Republic of Korea", "Incheon, Republic of Korea", _CUSTOM]
+        _WARRANTY  = ["Manufacturer's standard warranty", "12 months from delivery",
+                      "6 months from delivery", "No warranty", _CUSTOM]
+
+        def _term_field(col, label, options, key):
+            sel = col.selectbox(label, options, index=0, key=f"qtn_term_{key}")
+            custom = col.text_input(
+                f"↳ {label} 직접 입력", "", key=f"qtn_term_{key}_custom",
+                placeholder="'✏️ 직접 입력' 선택 시 여기에 작성",
+            )
+            return custom.strip() if sel == _CUSTOM else sel
+
         tc1, tc2 = st.columns(2)
-        with tc1:
-            incoterms = st.text_input("Incoterms", "FCA Busan, Korea")
-            payment   = st.text_input("Payment Terms", "100% T/T in advance")
-            delivery  = st.text_input("Delivery Place", "Busan, Republic of Korea")
-        with tc2:
-            shipment  = st.text_input("Shipment Method", "Air courier / Sea freight")
-            packing   = st.text_input("Packing", "Standard export packing")
-            warranty  = st.text_input("Warranty", "Manufacturer's standard warranty")
+        incoterms = _term_field(tc1, "Incoterms",       _INCOTERMS, "incoterms")
+        payment   = _term_field(tc1, "Payment Terms",   _PAYMENT,   "payment")
+        delivery  = _term_field(tc1, "Delivery Place",  _DELIVERY,  "delivery")
+        shipment  = _term_field(tc2, "Shipment Method", _SHIPMENT,  "shipment")
+        packing   = _term_field(tc2, "Packing",         _PACKING,   "packing")
+        warranty  = _term_field(tc2, "Warranty",        _WARRANTY,  "warranty")
         remarks = st.text_area("Remarks", "Bank charges outside Korea shall be borne by Buyer.", height=60)
 
         save_btn = st.form_submit_button("견적 저장", type="primary", use_container_width=True)
