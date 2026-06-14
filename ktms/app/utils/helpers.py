@@ -369,20 +369,29 @@ section[data-testid="stSidebar"] nav {{
 [data-testid="stSidebar"] nav a {{
     color: #C4CFDE !important;
     font-weight: 600 !important;
-    font-size: 13.5px !important;
-    letter-spacing: -.01em !important;
+    font-size: 12.5px !important;
+    letter-spacing: -.015em !important;
+    line-height: 1.25 !important;
     display: flex !important;
-    align-items: center !important;
+    align-items: flex-start !important;
     border-radius: 0 8px 8px 0 !important;
-    padding-left: 14px !important;
+    padding-left: 8px !important;
+    padding-right: 6px !important;
+    padding-top: 6px !important;
+    padding-bottom: 6px !important;
     margin-left: 0 !important;
     border-left: 3px solid transparent !important;
     transition: background .15s, border-color .15s !important;
 }}
+/* 긴 제목이 잘리지 않도록 두 줄 줄바꿈 허용 (말줄임 해제) */
 [data-testid="stSidebarNavLink"] *,
 [data-testid="stSidebar"] nav a * {{
     color: #C4CFDE !important;
     opacity: 1 !important;
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    word-break: keep-all !important;
 }}
 [data-testid="stSidebarNavLink"]:hover,
 [data-testid="stSidebar"] nav a:hover {{
@@ -410,7 +419,8 @@ section[data-testid="stSidebar"] nav {{
     background-size: contain !important;
     background-repeat: no-repeat !important;
     background-position: center !important;
-    margin-right: 10px !important;
+    margin-right: 8px !important;
+    margin-top: 1px !important;
     opacity: 0.50 !important;
     flex-shrink: 0 !important;
 }}
