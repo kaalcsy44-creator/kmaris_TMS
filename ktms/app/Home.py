@@ -81,51 +81,13 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-from app.utils.auth import current_user, logout, _login_dialog
+from app.utils.auth import current_user, logout, login_page
 from app.utils.helpers import inject_css
 inject_css()
 
-# ── Dialog centering CSS ──────────────────────────────────────────────────────
-st.markdown(
-    """
-    <style>
-    div[data-testid="stDialog"] > div[data-baseweb="modal"] > div {
-        align-items: center !important;
-    }
-    div[data-testid="stDialog"] div[data-baseweb="dialog"] {
-        margin-top: 0 !important;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
-
-# ── Not logged in: show backdrop + login dialog ───────────────────────────────
+# ── Not logged in: show full-page login (no sidebar) ──────────────────────────
 if not current_user():
-    st.markdown(
-        """
-        <div style="
-            display:flex; flex-direction:column; align-items:center;
-            justify-content:center; min-height:60vh; text-align:center;
-        ">
-            <div style="
-                background:#0B1D3A; color:white;
-                padding:32px 56px; border-radius:14px;
-                display:inline-block; margin-bottom:20px;
-            ">
-                <div style="font-size:3rem;">⚓</div>
-                <h1 style="margin:10px 0 6px;font-size:2rem;font-weight:700;">
-                    K-MARIS Trade Management System
-                </h1>
-                <p style="margin:0;opacity:0.7;font-size:1rem;">
-                    Engineering Reliability. Supplying Performance.
-                </p>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    _login_dialog()
+    login_page()
     st.stop()
 
 # ── Logged in: build navigation (Home itself NOT included → removed from sidebar) ─

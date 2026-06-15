@@ -47,24 +47,50 @@ def is_admin() -> bool:
     return u is not None and u["role"] == UserRole.ADMIN.value
 
 
-@st.dialog("K-MARIS KTMS", width="small")
-def _login_dialog():
-    username = st.text_input("사용자명", placeholder="username", key="dlg_uname")
-    password = st.text_input("비밀번호", type="password", placeholder="password", key="dlg_pw")
-    if st.button("로그인", type="primary", use_container_width=True, key="dlg_btn"):
-        user = login(username, password)
-        if user:
-            st.session_state["user"] = user
-            st.rerun()
-        else:
-            st.error("사용자명 또는 비밀번호가 올바르지 않습니다.")
-    st.caption("최초 로그인: admin / admin1234 — 로그인 후 즉시 변경하세요.")
+def login_page():
+    """Full-page centered login. Hides the sidebar so only the login box shows."""
+    # Hide the sidebar (and its collapse control) entirely on the login screen.
+    st.markdown(
+        """
+        <style>
+        [data-testid="stSidebar"],
+        [data-testid="stSidebarNav"],
+        [data-testid="stSidebarCollapsedControl"],
+        [data-testid="collapsedControl"] { display: none !important; }
+        [data-testid="stAppViewContainer"] > .main { margin-left: 0 !important; }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    _, mid, _ = st.columns([1, 1.4, 1])
+    with mid:
+        st.markdown(
+            "<div style='text-align:center;margin:8vh 0 1.2rem;'>"
+            "<div style='font-size:3rem;'>⚓</div>"
+            "<h1 style='margin:.4rem 0 .2rem;font-size:1.6rem;font-weight:700;'>K-MARIS KTMS</h1>"
+            "<p style='margin:0;opacity:.6;font-size:.9rem;'>Trade Management System</p>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
+        with st.form("login_form"):
+            username = st.text_input("사용자명", placeholder="username")
+            password = st.text_input("비밀번호", type="password", placeholder="password")
+            submitted = st.form_submit_button("로그인", type="primary", use_container_width=True)
+        if submitted:
+            user = login(username, password)
+            if user:
+                st.session_state["user"] = user
+                st.rerun()
+            else:
+                st.error("사용자명 또는 비밀번호가 올바르지 않습니다.")
+        st.caption("최초 로그인: admin / admin1234 — 로그인 후 즉시 변경하세요.")
 
 
 def require_auth():
-    """Call at the top of every page. Shows login dialog and stops if not logged in."""
+    """Call at the top of every page. Shows login page and stops if not logged in."""
     if not st.session_state.get("user"):
-        _login_dialog()
+        login_page()
         st.stop()
 
 
