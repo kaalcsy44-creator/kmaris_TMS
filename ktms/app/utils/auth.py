@@ -62,13 +62,18 @@ def login_page():
         /* Center the login content vertically and horizontally, no scroll */
         [data-testid="stAppViewContainer"] > .main { margin-left: 0 !important; }
         [data-testid="stAppViewContainer"] .block-container {
-            max-width: 440px !important;
+            max-width: 660px !important;
             min-height: 100vh;
             display: flex;
             flex-direction: column;
             justify-content: center;
             padding-top: 1rem !important;
             padding-bottom: 1rem !important;
+        }
+        /* Center the title/caption markdown blocks (Streamlit h1 default-aligns left) */
+        [data-testid="stAppViewContainer"] .block-container [data-testid="stMarkdownContainer"],
+        [data-testid="stAppViewContainer"] .block-container [data-testid="stMarkdownContainer"] * {
+            text-align: center !important;
         }
         </style>
         """,
@@ -78,8 +83,8 @@ def login_page():
     st.markdown(
         "<div style='text-align:center;margin-bottom:1.2rem;'>"
         "<div style='font-size:3rem;line-height:1;'>⚓</div>"
-        "<h1 style='margin:.5rem 0 .2rem;font-size:1.9rem;font-weight:800;letter-spacing:.02em;'>KTMS</h1>"
-        "<p style='margin:0;opacity:.6;font-size:.92rem;'>K-Maris Trade Management System</p>"
+        "<div style='margin:.5rem 0 .2rem;font-size:1.9rem;font-weight:800;'>KTMS</div>"
+        "<div style='opacity:.6;font-size:.92rem;'>K-Maris Trade Management System</div>"
         "</div>",
         unsafe_allow_html=True,
     )
