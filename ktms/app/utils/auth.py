@@ -48,43 +48,57 @@ def is_admin() -> bool:
 
 
 def login_page():
-    """Full-page centered login. Hides the sidebar so only the login box shows."""
-    # Hide the sidebar (and its collapse control) entirely on the login screen.
+    """Full-page, vertically-centered login. No sidebar, no header — just the box."""
     st.markdown(
         """
         <style>
+        /* Hide the sidebar and its collapse control */
         [data-testid="stSidebar"],
         [data-testid="stSidebarNav"],
         [data-testid="stSidebarCollapsedControl"],
         [data-testid="collapsedControl"] { display: none !important; }
+        /* Hide the top header bar (hamburger / toolbar) */
+        [data-testid="stHeader"] { display: none !important; }
+        /* Center the login content vertically and horizontally, no scroll */
         [data-testid="stAppViewContainer"] > .main { margin-left: 0 !important; }
+        [data-testid="stAppViewContainer"] .block-container {
+            max-width: 440px !important;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding-top: 1rem !important;
+            padding-bottom: 1rem !important;
+        }
         </style>
         """,
         unsafe_allow_html=True,
     )
 
-    _, mid, _ = st.columns([1, 1.4, 1])
-    with mid:
-        st.markdown(
-            "<div style='text-align:center;margin:8vh 0 1.2rem;'>"
-            "<div style='font-size:3rem;'>⚓</div>"
-            "<h1 style='margin:.4rem 0 .2rem;font-size:1.6rem;font-weight:700;'>K-MARIS KTMS</h1>"
-            "<p style='margin:0;opacity:.6;font-size:.9rem;'>Trade Management System</p>"
-            "</div>",
-            unsafe_allow_html=True,
-        )
-        with st.form("login_form"):
-            username = st.text_input("사용자명", placeholder="username")
-            password = st.text_input("비밀번호", type="password", placeholder="password")
-            submitted = st.form_submit_button("로그인", type="primary", use_container_width=True)
-        if submitted:
-            user = login(username, password)
-            if user:
-                st.session_state["user"] = user
-                st.rerun()
-            else:
-                st.error("사용자명 또는 비밀번호가 올바르지 않습니다.")
-        st.caption("최초 로그인: admin / admin1234 — 로그인 후 즉시 변경하세요.")
+    st.markdown(
+        "<div style='text-align:center;margin-bottom:1.2rem;'>"
+        "<div style='font-size:3rem;line-height:1;'>⚓</div>"
+        "<h1 style='margin:.5rem 0 .2rem;font-size:1.9rem;font-weight:800;letter-spacing:.02em;'>KTMS</h1>"
+        "<p style='margin:0;opacity:.6;font-size:.92rem;'>K-Maris Trade Management System</p>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+    with st.form("login_form"):
+        username = st.text_input("사용자명", placeholder="username")
+        password = st.text_input("비밀번호", type="password", placeholder="password")
+        submitted = st.form_submit_button("로그인", type="primary", use_container_width=True)
+    if submitted:
+        user = login(username, password)
+        if user:
+            st.session_state["user"] = user
+            st.rerun()
+        else:
+            st.error("사용자명 또는 비밀번호가 올바르지 않습니다.")
+    st.markdown(
+        "<p style='text-align:center;opacity:.55;font-size:.82rem;margin-top:.8rem;'>"
+        "최초 로그인: admin / admin1234 — 로그인 후 즉시 변경하세요.</p>",
+        unsafe_allow_html=True,
+    )
 
 
 def require_auth():
