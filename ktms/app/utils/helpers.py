@@ -993,14 +993,10 @@ def rfq_id_for_order(order: Order) -> Optional[int]:
     return None
 
 
-def vendor_quote_price_map(rfq_id: int, vendor_id: int) -> Dict[str, float]:
-    """RFQ + Vendor 기준 최신 Vendor Quote의 {part_no: cost_price} 매핑.
-
-    발주서 생성 시 수신한 Vendor 견적 단가(cost_price)를 part_no로 가져오는 데 사용한다.
-    매칭되는 견적이 없으면 빈 dict.
-    """
+def vendor_quotes_for_rfq_vendor(rfq_id: int, vendor_id: int) -> List[VendorQuote]:
+    """RFQ + Vendor로 수신된 Vendor Quote 목록 (최신순). 발주서 단가 참조 선택용."""
     if not rfq_id or not vendor_id:
-        return {}
+        return []
     s = get_session()
     try:
         vrfq_ids = [
@@ -1008,28 +1004,38 @@ def vendor_quote_price_map(rfq_id: int, vendor_id: int) -> Dict[str, float]:
             .filter_by(rfq_id=rfq_id, vendor_id=vendor_id).all()
         ]
         if not vrfq_ids:
-            return {}
-        vq = (
+            return []
+        return (
             s.query(VendorQuote)
             .filter(VendorQuote.vendor_rfq_id.in_(vrfq_ids))
             .order_by(VendorQuote.created_at.desc())
-            .first()
+            .all()
         )
-        if not vq:
-            return {}
-        pmap: Dict[str, float] = {}
-        for it in (vq.items or []):
-            pn = str(it.get("part_no", "")).strip()
-            if not pn:
-                continue
-            cp = it.get("cost_price")
-            try:
-                pmap[pn] = float(cp) if cp not in ("", None) else 0.0
-            except (ValueError, TypeError):
-                pmap[pn] = 0.0
-        return pmap
     finally:
         s.close()
+
+
+def price_map_from_quote(vq: Optional[VendorQuote]) -> Dict[str, float]:
+    """특정 Vendor Quote의 {part_no: cost_price} 매핑."""
+    pmap: Dict[str, float] = {}
+    if not vq:
+        return pmap
+    for it in (vq.items or []):
+        pn = str(it.get("part_no", "")).strip()
+        if not pn:
+            continue
+        cp = it.get("cost_price")
+        try:
+            pmap[pn] = float(cp) if cp not in ("", None) else 0.0
+        except (ValueError, TypeError):
+            pmap[pn] = 0.0
+    return pmap
+
+
+def vendor_quote_price_map(rfq_id: int, vendor_id: int) -> Dict[str, float]:
+    """RFQ + Vendor 기준 '최신' Vendor Quote의 단가 매핑 (편의 함수)."""
+    qs = vendor_quotes_for_rfq_vendor(rfq_id, vendor_id)
+    return price_map_from_quote(qs[0]) if qs else {}
 
 
 # ── Quotation helpers ─────────────────────────────────────────────────────────

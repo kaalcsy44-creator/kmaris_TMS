@@ -19,7 +19,8 @@ from app.utils.auth import require_auth
 from app.utils.helpers import (
     inject_css, hint, section_header, next_doc_no,
     get_customer, get_vessel, get_vendor, vendor_options,
-    order_list, get_order, rfq_id_for_order, vendor_quote_price_map,
+    order_list, get_order, rfq_id_for_order,
+    vendor_quotes_for_rfq_vendor, price_map_from_quote,
 )
 from db.engine import get_session
 from db.models import Order, PurchaseOrder, OrderStatus
@@ -202,16 +203,31 @@ with tab_create:
             _seed_key = f"po_seed_{order.id}_{vid}" if vid else None
             if vid:
                 _rfq_id = rfq_id_for_order(order)
-                _price_map = vendor_quote_price_map(_rfq_id, vid) if _rfq_id else {}
-                if _price_map:
+                _vqs = vendor_quotes_for_rfq_vendor(_rfq_id, vid) if _rfq_id else []
+                if _vqs:
+                    # 견적이 여러 개면 어느 견적의 단가를 참조할지 선택 (기본=최신)
+                    if len(_vqs) > 1:
+                        _vq_opts = {
+                            f"{q.received_date or '—'} · VQ#{q.id} · 품목 {len(q.items or [])}개": q.id
+                            for q in _vqs
+                        }
+                        _sel_vq_label = st.selectbox(
+                            f"참조할 Vendor 견적 ({len(_vqs)}건 수신 — 최신순)",
+                            list(_vq_opts.keys()), key=f"po_vq_sel_{order.id}_{vid}",
+                        )
+                        _sel_vq = next((q for q in _vqs if q.id == _vq_opts[_sel_vq_label]), _vqs[0])
+                    else:
+                        _sel_vq = _vqs[0]
+
+                    _price_map = price_map_from_quote(_sel_vq)
                     _hit = sum(1 for it in (order.items or [])
                                if str(it.get("part_no", "")).strip() in _price_map)
                     cols = st.columns([3, 2])
                     cols[0].caption(
-                        f"📥 이 Vendor의 수신 견적이 있습니다 — {len(_price_map)}개 품목 단가 보유 "
-                        f"(주문 품목 중 {_hit}개 매칭)"
+                        f"📥 선택 견적(VQ#{_sel_vq.id}, {_sel_vq.received_date or '—'}) — "
+                        f"단가 {len(_price_map)}개 보유 (주문 품목 중 {_hit}개 매칭)"
                     )
-                    if cols[1].button("Vendor 수신 견적 단가 불러오기", key=f"po_loadvq_{vid}"):
+                    if cols[1].button("Vendor 수신 견적 단가 불러오기", key=f"po_loadvq_{order.id}_{vid}"):
                         merged = []
                         for it in (order.items or []):
                             row = dict(it)
