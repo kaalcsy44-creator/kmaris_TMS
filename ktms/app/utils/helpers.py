@@ -980,6 +980,58 @@ def get_vendor_quote(vq_id: int) -> Optional[VendorQuote]:
         s.close()
 
 
+def rfq_id_for_order(order: Order) -> Optional[int]:
+    """Order에 연결된 RFQ id를 반환. ① Order.rfq_id 우선, 없으면 ② Quotation.rfq_id 경유."""
+    if order is None:
+        return None
+    if getattr(order, "rfq_id", None):
+        return order.rfq_id
+    if order.quotation_id:
+        q = get_quotation(order.quotation_id)
+        if q and q.rfq_id:
+            return q.rfq_id
+    return None
+
+
+def vendor_quote_price_map(rfq_id: int, vendor_id: int) -> Dict[str, float]:
+    """RFQ + Vendor 기준 최신 Vendor Quote의 {part_no: cost_price} 매핑.
+
+    발주서 생성 시 수신한 Vendor 견적 단가(cost_price)를 part_no로 가져오는 데 사용한다.
+    매칭되는 견적이 없으면 빈 dict.
+    """
+    if not rfq_id or not vendor_id:
+        return {}
+    s = get_session()
+    try:
+        vrfq_ids = [
+            v.id for v in s.query(VendorRFQ)
+            .filter_by(rfq_id=rfq_id, vendor_id=vendor_id).all()
+        ]
+        if not vrfq_ids:
+            return {}
+        vq = (
+            s.query(VendorQuote)
+            .filter(VendorQuote.vendor_rfq_id.in_(vrfq_ids))
+            .order_by(VendorQuote.created_at.desc())
+            .first()
+        )
+        if not vq:
+            return {}
+        pmap: Dict[str, float] = {}
+        for it in (vq.items or []):
+            pn = str(it.get("part_no", "")).strip()
+            if not pn:
+                continue
+            cp = it.get("cost_price")
+            try:
+                pmap[pn] = float(cp) if cp not in ("", None) else 0.0
+            except (ValueError, TypeError):
+                pmap[pn] = 0.0
+        return pmap
+    finally:
+        s.close()
+
+
 # ── Quotation helpers ─────────────────────────────────────────────────────────
 
 def quotation_list(status: str = None) -> List[Quotation]:

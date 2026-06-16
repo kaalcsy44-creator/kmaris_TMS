@@ -19,7 +19,7 @@ from app.utils.auth import require_auth
 from app.utils.helpers import (
     inject_css, hint, section_header, next_doc_no,
     get_customer, get_vessel, get_vendor, vendor_options,
-    order_list, get_order,
+    order_list, get_order, rfq_id_for_order, vendor_quote_price_map,
 )
 from db.engine import get_session
 from db.models import Order, PurchaseOrder, OrderStatus
@@ -192,19 +192,57 @@ with tab_create:
             st.markdown("---")
 
             vendor_opts = vendor_options()
+            # ── Vendor 선택 (폼 밖 — 수신 견적 단가 조회에 필요) ───────────────
+            sel_vendor = st.selectbox(
+                "Vendor 선택", ["— 없음 —"] + list(vendor_opts.keys()), key="po_vendor_sel"
+            )
+            vid = vendor_opts.get(sel_vendor) if sel_vendor != "— 없음 —" else None
+
+            # ── 수신한 Vendor 견적 단가 참조 ─────────────────────────────────
+            _seed_key = f"po_seed_{order.id}_{vid}" if vid else None
+            if vid:
+                _rfq_id = rfq_id_for_order(order)
+                _price_map = vendor_quote_price_map(_rfq_id, vid) if _rfq_id else {}
+                if _price_map:
+                    _hit = sum(1 for it in (order.items or [])
+                               if str(it.get("part_no", "")).strip() in _price_map)
+                    cols = st.columns([3, 2])
+                    cols[0].caption(
+                        f"📥 이 Vendor의 수신 견적이 있습니다 — {len(_price_map)}개 품목 단가 보유 "
+                        f"(주문 품목 중 {_hit}개 매칭)"
+                    )
+                    if cols[1].button("Vendor 수신 견적 단가 불러오기", key=f"po_loadvq_{vid}"):
+                        merged = []
+                        for it in (order.items or []):
+                            row = dict(it)
+                            pn = str(it.get("part_no", "")).strip()
+                            if pn in _price_map:
+                                row["unit_price"] = _price_map[pn]
+                            merged.append(row)
+                        st.session_state[_seed_key] = merged
+                        st.rerun()
+                elif _rfq_id is None:
+                    st.caption("⚠️ 이 오더에 연결된 RFQ가 없어 Vendor 견적을 찾을 수 없습니다. "
+                               "'Customer PO 수신 → 오더 상세 → RFQ 연결'에서 먼저 연결하세요.")
+                else:
+                    st.caption("이 Vendor로부터 수신한 견적이 없습니다. 주문 단가로 발주서를 생성합니다.")
+
+            # 견적 단가를 불러왔으면 그 값으로, 아니면 주문 품목으로 seed
+            seed_items = st.session_state.get(_seed_key) if _seed_key else None
+            if not seed_items:
+                seed_items = order.items or []
+
             with st.form("po_form"):
-                sel_vendor = st.selectbox("Vendor 선택", ["— 없음 —"] + list(vendor_opts.keys()))
                 po_date = st.date_input("발주일", date.today(), key="po_date_input")
                 po_items_df = st.data_editor(
-                    pd.DataFrame(order.items) if order.items else pd.DataFrame(
+                    pd.DataFrame(seed_items) if seed_items else pd.DataFrame(
                         columns=["item_no", "part_no", "description", "qty", "unit", "unit_price"]),
-                    num_rows="dynamic", use_container_width=True, key="po_items",
+                    num_rows="dynamic", use_container_width=True, key=f"po_items_{order.id}_{vid}",
                 )
                 gen_po = st.form_submit_button("발주서 생성", type="primary")
 
-            if gen_po and sel_vendor != "— 없음 —":
+            if gen_po and vid:
                 po_no_gen = next_doc_no("po")
-                vid = vendor_opts[sel_vendor]
                 items_data = po_items_df.fillna("").to_dict(orient="records")
                 session = get_session()
                 try:
@@ -221,10 +259,14 @@ with tab_create:
                     o = session.query(Order).get(order.id)
                     o.status = OrderStatus.PO_SENT
                     session.commit()
+                    if _seed_key:
+                        st.session_state.pop(_seed_key, None)
                     st.success(f"✅ 발주서 생성 완료: **{po_no_gen}**")
                     st.info("📨 '발주서 이메일 발송' 탭에서 Vendor에게 발주서를 송부할 수 있습니다.")
                 finally:
                     session.close()
+            elif gen_po and not vid:
+                st.error("Vendor를 먼저 선택하세요.")
 
             # 이 오더로 발행된 발주서
             session = get_session()
