@@ -1023,13 +1023,20 @@ def get_order(oid: int) -> Optional[Order]:
 
 
 def orphan_order_list(limit: int = 10) -> List[Order]:
-    """RFQ와 연결되지 않은 Order 목록 (Quotation 없음 또는 Quotation.rfq_id 없음)."""
+    """RFQ와 연결되지 않은 Order 목록.
+
+    연결 기준: ① Order.rfq_id 직접 연결, 또는 ② Quotation.rfq_id 경유 연결.
+    둘 다 없는 Order만 orphan으로 본다.
+    """
     s = get_session()
     try:
         return (
             s.query(Order)
             .outerjoin(Quotation, Order.quotation_id == Quotation.id)
-            .filter((Order.quotation_id.is_(None)) | (Quotation.rfq_id.is_(None)))
+            .filter(
+                Order.rfq_id.is_(None)
+                & ((Order.quotation_id.is_(None)) | (Quotation.rfq_id.is_(None)))
+            )
             .order_by(Order.created_at.desc())
             .limit(limit)
             .all()
@@ -1039,9 +1046,20 @@ def orphan_order_list(limit: int = 10) -> List[Order]:
 
 
 def get_order_for_rfq(rfq_id: int) -> Optional[Order]:
-    """RFQ → Quotation → Order 경로로 연결된 Order를 조회 (가장 최근 1건)."""
+    """RFQ에 연결된 Order 조회 (가장 최근 1건).
+
+    ① Order.rfq_id 직접 연결을 우선, 없으면 ② RFQ → Quotation → Order 경로로 조회.
+    """
     s = get_session()
     try:
+        direct = (
+            s.query(Order)
+            .filter(Order.rfq_id == rfq_id)
+            .order_by(Order.created_at.desc())
+            .first()
+        )
+        if direct:
+            return direct
         return (
             s.query(Order)
             .join(Quotation, Order.quotation_id == Quotation.id)

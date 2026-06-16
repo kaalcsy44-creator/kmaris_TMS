@@ -87,6 +87,33 @@ def render_order_detail():
             finally:
                 s.close()
 
+    # ── RFQ 연결 (대시보드 'RFQ ↔ Order' 진행 현황 연동) ───────────────────────
+    with st.expander("🔗 RFQ 연결 (대시보드 진행 현황 연동)", expanded=False):
+        from app.utils.helpers import rfq_list as _rfq_list
+        _rfqs = _rfq_list()
+        _opts = {"— 연결 안 함 —": None}
+        for _r in _rfqs:
+            _rc = get_customer(_r.customer_id)
+            _rv = get_vessel(_r.vessel_id) if _r.vessel_id else None
+            _opts[f"{_r.rfq_no} · {_rc.name if _rc else '—'} · {_rv.name if _rv else '—'}"] = _r.id
+        _cur_label = next(
+            (lbl for lbl, rid in _opts.items() if rid is not None and rid == order.rfq_id),
+            "— 연결 안 함 —",
+        )
+        _sel = st.selectbox("연결할 RFQ", list(_opts.keys()),
+                            index=list(_opts.keys()).index(_cur_label), key="ord_rfq_link")
+        st.caption("이 오더가 비롯된 Customer RFQ를 지정하면 대시보드에서 해당 RFQ 옆 '연결된 Order'로 표시됩니다.")
+        if st.button("RFQ 연결 저장", key="ord_rfq_link_save"):
+            s = get_session()
+            try:
+                o = s.query(Order).get(order.id)
+                o.rfq_id = _opts[_sel]
+                s.commit()
+                st.success("RFQ 연결 업데이트 완료!")
+                st.rerun()
+            finally:
+                s.close()
+
     # ── 납기 일정 (약속/출고/인도) ────────────────────────────────────────────
     with st.expander("📅 납기 일정 (OTD 측정)", expanded=False):
         from datetime import datetime as _dt
@@ -241,6 +268,33 @@ with tab_new:
     if "load_qtn_id" in st.session_state:
         prefill_qtn = get_quotation(st.session_state["load_qtn_id"])
 
+    # ── 연결할 RFQ 옵션 + 자동 추천 ───────────────────────────────────────────
+    from app.utils.helpers import rfq_list as _rfq_list
+    _all_rfqs = _rfq_list()
+    rfq_opts = {"— 연결 안 함 —": None}
+    for _r in _all_rfqs:
+        _rc = get_customer(_r.customer_id)
+        _rv = get_vessel(_r.vessel_id) if _r.vessel_id else None
+        rfq_opts[f"{_r.rfq_no} · {_rc.name if _rc else '—'} · {_rv.name if _rv else '—'} · {_r.status.value}"] = _r.id
+
+    # 기본 추천: 견적의 RFQ → OCR 고객/선박 매칭 RFQ 순
+    _default_rfq_id = None
+    if prefill_qtn and getattr(prefill_qtn, "rfq_id", None):
+        _default_rfq_id = prefill_qtn.rfq_id
+    elif ocr.get("customer_hint"):
+        _hint = str(ocr["customer_hint"]).strip().lower()
+        for _r in _all_rfqs:
+            _rc = get_customer(_r.customer_id)
+            if _rc and (_hint in _rc.name.lower() or _rc.name.lower() in _hint):
+                _default_rfq_id = _r.id
+                _rv = get_vessel(_r.vessel_id) if _r.vessel_id else None
+                if _rv and ocr.get("vessel_name") and _match(ocr["vessel_name"], [_rv.name]):
+                    break  # 선박까지 맞으면 확정
+    _rfq_default_label = next(
+        (lbl for lbl, rid in rfq_opts.items() if rid is not None and rid == _default_rfq_id),
+        "— 연결 안 함 —",
+    )
+
     with st.form("new_order_form"):
         c1, c2 = st.columns(2)
         with c1:
@@ -271,6 +325,15 @@ with tab_new:
             promised = st.date_input("약속 납기일 (선택)", value=_ocr_date("promised_delivery"),
                                      help="고객과 약속한 납기일 — 납기 준수율(OTD) 측정 기준")
 
+        sel_rfq_label = st.selectbox(
+            "연결할 RFQ (대시보드 진행 현황 연동)",
+            list(rfq_opts.keys()),
+            index=list(rfq_opts.keys()).index(_rfq_default_label),
+            help="이 오더가 비롯된 Customer RFQ를 선택하면 대시보드 'RFQ ↔ Order 진행 현황'에서 "
+                 "해당 RFQ 옆 '연결된 Order'로 표시됩니다. 견적을 불러온 경우 자동 추천됩니다.",
+        )
+        sel_rfq_id = rfq_opts[sel_rfq_label]
+
         # Items - 견적 우선, 없으면 OCR 추출 품목
         seed_items = list(prefill_qtn.items) if prefill_qtn and prefill_qtn.items else []
         if not seed_items and ocr.get("items"):
@@ -299,6 +362,7 @@ with tab_new:
             order = Order(
                 ord_no=ord_no,
                 quotation_id=prefill_qtn.id if prefill_qtn else None,
+                rfq_id=sel_rfq_id or (prefill_qtn.rfq_id if prefill_qtn else None),
                 customer_id=cust_id,
                 vessel_id=vessel_id,
                 po_no=po_no,

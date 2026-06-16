@@ -23,6 +23,7 @@ _MIGRATIONS = {
         "promised_delivery": "VARCHAR(10)",
         "shipped_date":      "VARCHAR(10)",
         "delivered_date":    "VARCHAR(10)",
+        "rfq_id":            "INTEGER",
     },
     "vendor_rfqs": {
         "sent_to_email": "VARCHAR(200)",

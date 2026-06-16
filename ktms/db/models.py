@@ -193,6 +193,7 @@ class Order(Base):
     id             = Column(Integer, primary_key=True)
     ord_no         = Column(String(40), unique=True, nullable=False)
     quotation_id   = Column(Integer, ForeignKey("quotations.id"), nullable=True)
+    rfq_id         = Column(Integer, ForeignKey("rfqs.id"), nullable=True)  # 견적 없이 등록 시 RFQ 직접 연결
     customer_id    = Column(Integer, ForeignKey("customers.id"))
     vessel_id      = Column(Integer, ForeignKey("vessels.id"), nullable=True)
     po_no          = Column(String(100))
