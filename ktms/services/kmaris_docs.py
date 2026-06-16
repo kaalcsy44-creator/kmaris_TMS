@@ -64,6 +64,7 @@ DARK_GRAY = colors.HexColor("#3A3F44")
 
 DOC_TITLES = {
     "quotation": "QUOTATION",
+    "purchase_order": "PURCHASE ORDER",
     "proforma_invoice": "PROFORMA INVOICE",
     "commercial_invoice": "COMMERCIAL INVOICE",
     "packing_list": "PACKING LIST",
@@ -72,6 +73,7 @@ DOC_TITLES = {
 
 DOC_PREFIX = {
     "quotation": "QTN",
+    "purchase_order": "PO",
     "proforma_invoice": "PI",
     "commercial_invoice": "CI",
     "packing_list": "PL",
@@ -243,8 +245,10 @@ def _info_tables(data: Dict[str, Any], doc_type: str):
     terms = data.get("terms", {})
     shipping = data.get("shipping", {})
 
+    is_po = doc_type == "purchase_order"
+    party_label = "Supplier / Seller" if is_po else "Customer / Buyer"
     left_rows = [
-        [_p("<b>Customer / Buyer</b>", s["base"]), _p(customer.get("name", ""), s["base"])],
+        [_p(f"<b>{party_label}</b>", s["base"]), _p(customer.get("name", ""), s["base"])],
         [_p("Address", s["base"]), _p(customer.get("address", ""), s["base"])],
         [_p("Contact", s["base"]), _p(customer.get("contact", ""), s["base"])],
         [_p("Email", s["base"]), _p(customer.get("email", ""), s["base"])],
@@ -290,7 +294,8 @@ def _info_tables(data: Dict[str, Any], doc_type: str):
         return table
 
     outer = Table(
-        [[box("Customer", left_rows), box("Vessel", mid_rows), box("Doc", right_rows)]],
+        [[box("Supplier" if is_po else "Customer", left_rows),
+          box("Vessel", mid_rows), box("Doc", right_rows)]],
         colWidths=[90 * mm, 90 * mm, 90 * mm],
     )
     outer.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))

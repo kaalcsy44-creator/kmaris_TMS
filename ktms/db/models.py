@@ -216,6 +216,7 @@ class PurchaseOrder(Base):
     items      = Column(JSON, default=list)
     status     = Column(String(40), default="발주완료")
     sent_date  = Column(String(10))
+    sent_to_email = Column(String(200))
     created_at = Column(DateTime, default=datetime.utcnow)
 
 

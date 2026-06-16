@@ -1,5 +1,10 @@
-"""Vendor P/O 발신 — 수주 오더 기준으로 Vendor 발주서(Purchase Order) 생성·발송."""
+"""Vendor P/O 발신 — 발주서(Purchase Order) 생성 · 이메일 발송 · 발신 내역.
+
+구조는 'Vendor RFQ 발신'(3_VRFQ.py)과 동일한 패턴:
+  탭1 발주서 생성  ·  탭2 발주서 이메일 발송(미리보기→발송)  ·  탭3 발신 내역
+"""
 from __future__ import annotations
+import os
 import sys
 from datetime import date
 from pathlib import Path
@@ -18,6 +23,127 @@ from app.utils.helpers import (
 )
 from db.engine import get_session
 from db.models import Order, PurchaseOrder, OrderStatus
+from services.email_svc import send_email
+from services.pdf_svc import build_po_payload, generate_po_pdf
+
+
+# ── 발주서 이메일 본문 빌더 (영문 / 국문) ──────────────────────────────────────
+def _po_item_lines(items, korean: bool) -> str:
+    qty_label = "수량" if korean else "Qty"
+    desc_label = "품명" if korean else "Desc"
+    return "\n".join(
+        f"  {i+1:>2}. Part No.: {str(it.get('part_no','—')):<20s}"
+        f"  {qty_label}: {it.get('qty','—')} {str(it.get('unit','')):<5s}"
+        f"  Maker: {it.get('maker','—')}\n"
+        f"       {desc_label}: {it.get('description','—')}"
+        for i, it in enumerate(items or [])
+    )
+
+
+def _build_vendor_po_email(po, vendor, order, vessel, notes: str) -> str:
+    """English purchase order email."""
+    vendor_name = vendor.name if vendor else "Vendor"
+    vessel_str = vessel.name if vessel else "—"
+    body = f"""Dear {vendor_name},
+
+Please find attached our official Purchase Order for the following marine spare parts.
+
+PO No.        : {po.po_no}
+Order Ref.    : {order.ord_no if order else '—'}
+Vessel        : {vessel_str}
+Order Date    : {po.date or date.today().isoformat()}
+
+──────────────────────── ITEM LIST ────────────────────────
+{_po_item_lines(po.items, korean=False)}
+────────────────────────────────────────────────────────────
+
+Please confirm the following upon receipt:
+  • Acceptance of this Purchase Order
+  • Confirmed delivery schedule (ex-works / shipment date)
+  • Any discrepancy in part number, quantity, or price
+
+"""
+    if notes:
+        body += f"Additional Notes:\n{notes}\n\n"
+    body += """Kindly acknowledge receipt and confirm within 3 business days.
+
+Best regards,
+K-MARIS Energy & Solutions Co., Ltd.
+Email: sales@k-maris.com  |  www.k-maris.com
+Engineering Reliability. Supplying Performance.
+"""
+    return body
+
+
+def _build_vendor_po_email_ko(po, vendor, order, vessel, notes: str) -> str:
+    """Korean purchase order email."""
+    vendor_name = vendor.name if vendor else "Vendor"
+    vessel_str = vessel.name if vessel else "—"
+    body = f"""{vendor_name} 귀중
+
+안녕하세요,
+항상 협조해 주셔서 감사드립니다.
+
+아래 선박용 부품에 대한 발주서를 첨부와 같이 송부드립니다.
+
+발주번호 : {po.po_no}
+오더참조 : {order.ord_no if order else '—'}
+선박명   : {vessel_str}
+발주일   : {po.date or date.today().isoformat()}
+
+──────────────────────── 품목 리스트 ────────────────────────
+{_po_item_lines(po.items, korean=True)}
+──────────────────────────────────────────────────────────────
+
+수령 후 아래 사항을 확인·회신해 주시기 바랍니다:
+  • 본 발주 수락 여부
+  • 확정 납기 (출고 예정일)
+  • 품번·수량·단가 상이 여부
+
+"""
+    if notes:
+        body += f"추가 사항:\n{notes}\n\n"
+    body += """영업일 기준 3일 이내 수령 확인 및 회신 부탁드립니다.
+
+감사합니다.
+K-MARIS Energy & Solutions Co., Ltd.
+Email: sales@k-maris.com  |  www.k-maris.com
+Engineering Reliability. Supplying Performance.
+"""
+    return body
+
+
+def _po_pdf_bytes(po, vendor, vessel):
+    """발주서 PDF 생성. 실패 시 None."""
+    try:
+        payload = build_po_payload(
+            po_no=po.po_no,
+            date=po.date or date.today().isoformat(),
+            vendor=vendor,
+            vessel=vessel,
+            items=po.items or [],
+        )
+        return generate_po_pdf(payload)
+    except Exception as exc:  # noqa: BLE001
+        st.warning(f"⚠️ 발주서 PDF 생성 실패: {exc}")
+        return None
+
+
+def _all_purchase_orders():
+    s = get_session()
+    try:
+        return s.query(PurchaseOrder).order_by(PurchaseOrder.id.desc()).all()
+    finally:
+        s.close()
+
+
+def _get_po(po_id: int):
+    s = get_session()
+    try:
+        return s.query(PurchaseOrder).get(po_id)
+    finally:
+        s.close()
+
 
 try:
     st.set_page_config(page_title="Vendor P/O 발신 — KTMS", page_icon="📨", layout="wide")
@@ -28,90 +154,230 @@ inject_css()
 
 section_header("send", "Vendor P/O 발신 (Purchase Order)")
 
-# ── 대상 오더 선택 ────────────────────────────────────────────────────────────
-orders = order_list()
-if not orders:
-    hint("등록된 오더가 없습니다. 먼저 'Customer PO 수신'에서 수주를 등록하세요.")
-    st.stop()
-
-ord_opts = {}
-for o in orders:
-    c = get_customer(o.customer_id)
-    label = f"{o.ord_no} · {c.name if c else '—'} · {o.status.value}"
-    ord_opts[label] = o.id
-
-# 직전에 선택한 오더를 기본값으로
-cur_id = st.session_state.get("ord_detail_id")
-labels = list(ord_opts.keys())
-default_idx = 0
-if cur_id in ord_opts.values():
-    default_idx = list(ord_opts.values()).index(cur_id)
-
-sel_label = st.selectbox("대상 오더 선택", labels, index=default_idx)
-st.session_state["ord_detail_id"] = ord_opts[sel_label]
-
-order = get_order(int(st.session_state["ord_detail_id"]))
-if not order:
-    st.error("선택한 오더를 찾을 수 없습니다. 다시 선택하세요.")
-    st.stop()
-
-cust   = get_customer(order.customer_id)
-vessel = get_vessel(order.vessel_id) if order.vessel_id else None
-
-st.markdown(
-    f"**대상 오더:** `{order.ord_no}`  ·  {cust.name if cust else '—'}"
-    f"  ·  {vessel.name if vessel else '—'}  ·  품목 {len(order.items or [])}개"
+tab_create, tab_send, tab_sent = st.tabs(
+    ["🧾 발주서 생성", "📨 발주서 이메일 발송", "📜 발신 내역"]
 )
-st.markdown("---")
 
-vendor_opts = vendor_options()
-with st.form("po_form"):
-    sel_vendor = st.selectbox("Vendor 선택", ["— 없음 —"] + list(vendor_opts.keys()))
-    po_date = st.date_input("발주일", date.today(), key="po_date_input")
-    po_items_df = st.data_editor(
-        pd.DataFrame(order.items) if order.items else pd.DataFrame(
-            columns=["item_no", "part_no", "description", "qty", "unit", "unit_price"]),
-        num_rows="dynamic", use_container_width=True, key="po_items",
-    )
-    gen_po = st.form_submit_button("발주서 생성", type="primary")
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 1 — 발주서 생성 (수주 오더 기준)
+# ══════════════════════════════════════════════════════════════════════════════
+with tab_create:
+    orders = order_list()
+    if not orders:
+        hint("등록된 오더가 없습니다. 먼저 'Customer PO 수신'에서 수주를 등록하세요.")
+    else:
+        ord_opts = {}
+        for o in orders:
+            c = get_customer(o.customer_id)
+            label = f"{o.ord_no} · {c.name if c else '—'} · {o.status.value}"
+            ord_opts[label] = o.id
 
-if gen_po and sel_vendor != "— 없음 —":
-    po_no_gen = next_doc_no("po")
-    vid = vendor_opts[sel_vendor]
-    items_data = po_items_df.fillna("").to_dict(orient="records")
-    session = get_session()
-    try:
-        po = PurchaseOrder(
-            po_no=po_no_gen,
-            order_id=order.id,
-            vendor_id=vid,
-            date=po_date.isoformat(),
-            items=items_data,
-            status="발주완료",
-            sent_date=date.today().isoformat(),
-        )
-        session.add(po)
-        o = session.query(Order).get(order.id)
-        o.status = OrderStatus.PO_SENT
-        session.commit()
-        st.success(f"✅ 발주서 생성 완료: **{po_no_gen}**")
-    finally:
-        session.close()
+        cur_id = st.session_state.get("ord_detail_id")
+        labels = list(ord_opts.keys())
+        default_idx = 0
+        if cur_id in ord_opts.values():
+            default_idx = list(ord_opts.values()).index(cur_id)
 
-# Existing POs
-session = get_session()
-try:
-    pos = session.query(PurchaseOrder).filter_by(order_id=order.id).all()
-    if pos:
-        st.markdown("**발행된 발주서**")
-        po_rows = []
+        sel_label = st.selectbox("대상 오더 선택", labels, index=default_idx, key="po_create_ord_sel")
+        st.session_state["ord_detail_id"] = ord_opts[sel_label]
+
+        order = get_order(int(st.session_state["ord_detail_id"]))
+        if order:
+            cust = get_customer(order.customer_id)
+            vessel = get_vessel(order.vessel_id) if order.vessel_id else None
+            st.markdown(
+                f"**대상 오더:** `{order.ord_no}`  ·  {cust.name if cust else '—'}"
+                f"  ·  {vessel.name if vessel else '—'}  ·  품목 {len(order.items or [])}개"
+            )
+            st.markdown("---")
+
+            vendor_opts = vendor_options()
+            with st.form("po_form"):
+                sel_vendor = st.selectbox("Vendor 선택", ["— 없음 —"] + list(vendor_opts.keys()))
+                po_date = st.date_input("발주일", date.today(), key="po_date_input")
+                po_items_df = st.data_editor(
+                    pd.DataFrame(order.items) if order.items else pd.DataFrame(
+                        columns=["item_no", "part_no", "description", "qty", "unit", "unit_price"]),
+                    num_rows="dynamic", use_container_width=True, key="po_items",
+                )
+                gen_po = st.form_submit_button("발주서 생성", type="primary")
+
+            if gen_po and sel_vendor != "— 없음 —":
+                po_no_gen = next_doc_no("po")
+                vid = vendor_opts[sel_vendor]
+                items_data = po_items_df.fillna("").to_dict(orient="records")
+                session = get_session()
+                try:
+                    po = PurchaseOrder(
+                        po_no=po_no_gen,
+                        order_id=order.id,
+                        vendor_id=vid,
+                        date=po_date.isoformat(),
+                        items=items_data,
+                        status="발주완료",
+                        sent_date=date.today().isoformat(),
+                    )
+                    session.add(po)
+                    o = session.query(Order).get(order.id)
+                    o.status = OrderStatus.PO_SENT
+                    session.commit()
+                    st.success(f"✅ 발주서 생성 완료: **{po_no_gen}**")
+                    st.info("📨 '발주서 이메일 발송' 탭에서 Vendor에게 발주서를 송부할 수 있습니다.")
+                finally:
+                    session.close()
+
+            # 이 오더로 발행된 발주서
+            session = get_session()
+            try:
+                pos = session.query(PurchaseOrder).filter_by(order_id=order.id).all()
+                if pos:
+                    st.markdown("**발행된 발주서**")
+                    po_rows = []
+                    for po in pos:
+                        v = get_vendor(po.vendor_id)
+                        po_rows.append({
+                            "PO No.": po.po_no, "Vendor": v.name if v else "—",
+                            "발주일": po.date or "—", "상태": po.status,
+                            "품목수": len(po.items or []),
+                        })
+                    st.dataframe(pd.DataFrame(po_rows), use_container_width=True, hide_index=True)
+            finally:
+                session.close()
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 2 — 발주서 이메일 발송 (발행된 발주서 대상)
+# ══════════════════════════════════════════════════════════════════════════════
+with tab_send:
+    pos = _all_purchase_orders()
+    if not pos:
+        hint("발행된 발주서가 없습니다. 먼저 '발주서 생성' 탭에서 발주서를 생성하세요.")
+    else:
+        po_opts = {}
         for po in pos:
             v = get_vendor(po.vendor_id)
-            po_rows.append({
-                "PO No.": po.po_no, "Vendor": v.name if v else "—",
-                "발주일": po.date or "—", "상태": po.status,
+            label = f"{po.po_no} · {v.name if v else '—'} · {po.status}"
+            po_opts[label] = po.id
+
+        sel_po_label = st.selectbox("발송할 발주서 선택", list(po_opts.keys()), key="po_send_sel")
+        po = _get_po(int(po_opts[sel_po_label]))
+        vendor = get_vendor(po.vendor_id) if po else None
+        order = get_order(po.order_id) if po and po.order_id else None
+        vessel = get_vessel(order.vessel_id) if order and order.vessel_id else None
+
+        st.markdown(
+            f"**발주서:** `{po.po_no}`  ·  {vendor.name if vendor else '—'}"
+            f"  ·  오더 {order.ord_no if order else '—'}  ·  품목 {len(po.items or [])}개"
+        )
+        st.markdown("---")
+
+        _preview_key = f"po_email_preview_{po.id}"
+
+        if not st.session_state.get(_preview_key):
+            lang_sel = st.radio(
+                "이메일 언어", ["🇺🇸 English (영문)", "🇰🇷 Korean (국문)"],
+                horizontal=True, key=f"po_lang_{po.id}",
+            )
+            po_notes = st.text_area("Vendor에게 전달할 메모", height=80, key=f"po_notes_{po.id}")
+
+            if st.button("이메일 미리보기", type="secondary", key=f"po_preview_btn_{po.id}"):
+                is_korean = "Korean" in lang_sel
+                if is_korean:
+                    subject = f"[K-MARIS] 발주서 송부 — {po.po_no} / {vessel.name if vessel else po.po_no}"
+                    body = _build_vendor_po_email_ko(po, vendor, order, vessel, po_notes)
+                else:
+                    subject = f"[K-MARIS] Purchase Order — {po.po_no} / {vessel.name if vessel else po.po_no}"
+                    body = _build_vendor_po_email(po, vendor, order, vessel, po_notes)
+                pdf_bytes = _po_pdf_bytes(po, vendor, vessel)
+                st.session_state[_preview_key] = {
+                    "vendor_email": (vendor.email or "") if vendor else "",
+                    "lang": lang_sel,
+                    "subject": subject,
+                    "body": body,
+                    "pdf_bytes": pdf_bytes,
+                    "pdf_filename": f"{po.po_no}_PurchaseOrder.pdf",
+                }
+                st.rerun()
+        else:
+            prev = st.session_state[_preview_key]
+            lang_badge = "🇰🇷 국문" if "Korean" in prev.get("lang", "") else "🇺🇸 영문"
+            st.info("📧 아래 이메일을 검토·수정 후 발송하세요. 이메일 주소가 없으면 상태만 갱신됩니다.")
+
+            email_label = prev["vendor_email"] or "⚠️ 이메일 주소 없음"
+            with st.expander(f"{vendor.name if vendor else '—'}  ({email_label})  [{lang_badge}]", expanded=True):
+                to_email = st.text_input("수신자 이메일", value=prev["vendor_email"], key=f"po_to_{po.id}")
+                subj_col, pdf_col = st.columns([3, 1])
+                subject = subj_col.text_input("제목", value=prev["subject"], key=f"po_subj_{po.id}")
+                if prev.get("pdf_bytes"):
+                    pdf_col.markdown("<br>", unsafe_allow_html=True)
+                    pdf_col.download_button(
+                        label="📥 발주서 (.pdf)",
+                        data=prev["pdf_bytes"],
+                        file_name=prev["pdf_filename"],
+                        mime="application/pdf",
+                        key=f"po_pdf_{po.id}",
+                        use_container_width=True,
+                        help="Vendor에게 발송되는 발주서 PDF입니다. 이메일 발송 시 자동 첨부됩니다.",
+                    )
+                body = st.text_area("본문 (직접 수정 가능)", value=prev["body"], height=340, key=f"po_body_{po.id}")
+
+            _smtp_ok = bool(os.getenv("SMTP_USER") and os.getenv("SMTP_PASSWORD"))
+            if not _smtp_ok:
+                st.warning(
+                    "⚠️ SMTP 미설정: 이메일이 발송되지 않습니다. "
+                    "Settings > Secrets에 SMTP_USER / SMTP_PASSWORD를 등록하세요. 상태만 갱신됩니다."
+                )
+
+            col_send, col_cancel, _ = st.columns([2, 1, 4])
+            if col_send.button("발송 + 상태 업데이트", type="primary", use_container_width=True, key=f"po_send_btn_{po.id}"):
+                sent_ok = False
+                if to_email and _smtp_ok:
+                    attachments = None
+                    if prev.get("pdf_bytes"):
+                        attachments = [(prev["pdf_filename"], prev["pdf_bytes"])]
+                    sent_ok = send_email(to=to_email, subject=subject, body=body, attachments=attachments)
+                    if not sent_ok:
+                        st.warning("⚠️ SMTP 발송 실패 — 서버 오류")
+
+                session = get_session()
+                try:
+                    p = session.query(PurchaseOrder).get(po.id)
+                    p.sent_to_email = to_email or ""
+                    if sent_ok:
+                        p.status = "이메일 발송완료"
+                    session.commit()
+                finally:
+                    session.close()
+
+                st.success(
+                    f"✅ 발주서 {po.po_no} 처리 완료"
+                    + (f" | 이메일 발송 성공 → {to_email}" if sent_ok else " | (이메일 미발송, 상태만 갱신)")
+                )
+                st.session_state.pop(_preview_key, None)
+                st.rerun()
+
+            if col_cancel.button("취소", use_container_width=True, key=f"po_cancel_{po.id}"):
+                st.session_state.pop(_preview_key, None)
+                st.rerun()
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 3 — 발신 내역 (전체 발주서)
+# ══════════════════════════════════════════════════════════════════════════════
+with tab_sent:
+    pos = _all_purchase_orders()
+    if not pos:
+        hint("아직 발행된 발주서가 없습니다.")
+    else:
+        rows = []
+        for po in pos:
+            v = get_vendor(po.vendor_id)
+            o = get_order(po.order_id) if po.order_id else None
+            rows.append({
+                "PO No.": po.po_no,
+                "오더 No.": o.ord_no if o else "—",
+                "Vendor": v.name if v else "—",
+                "수신자 이메일": po.sent_to_email or (v.email if v else "—") or "—",
+                "발주일": po.date or "—",
+                "상태": po.status,
                 "품목수": len(po.items or []),
             })
-        st.dataframe(pd.DataFrame(po_rows), use_container_width=True, hide_index=True)
-finally:
-    session.close()
+        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)

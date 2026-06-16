@@ -71,9 +71,49 @@ def build_payload(
     }
 
 
+def _vendor_party_dict(vendor) -> Dict[str, Any]:
+    """Vendor를 PDF의 Supplier/Seller 박스에 넣기 위한 dict (Vendor엔 tax_id 없음)."""
+    if vendor is None:
+        return {}
+    return {
+        "name": vendor.name,
+        "address": vendor.address or "",
+        "contact": vendor.contact or "",
+        "email": vendor.email or "",
+    }
+
+
+def build_po_payload(
+    po_no: str,
+    date: str,
+    vendor,
+    vessel,
+    items: list,
+    currency: str = "USD",
+    terms: Optional[dict] = None,
+) -> Dict[str, Any]:
+    """Vendor 발주서(Purchase Order) PDF payload. Supplier 박스에 Vendor 정보가 들어간다."""
+    return {
+        "doc_no": po_no,
+        "date": date,
+        "currency": currency,
+        "vat_rate": 0.0,
+        "customer": _vendor_party_dict(vendor),  # rendered as 'Supplier / Seller'
+        "vessel": _vessel_dict(vessel),
+        "items": items,
+        "terms": terms or {},
+        "shipping": {},
+    }
+
+
 def generate_pdf(doc_type: str, payload: Dict[str, Any]) -> bytes:
     company = _load_company()
     return make_pdf(doc_type, payload, company=company)
+
+
+def generate_po_pdf(payload: Dict[str, Any]) -> bytes:
+    company = _load_company()
+    return make_pdf("purchase_order", payload, company=company)
 
 
 def generate_tax_xlsx(payload: Dict[str, Any]) -> bytes:
