@@ -19,13 +19,13 @@ from db.engine import get_session
 from db.models import VendorRFQ, VendorQuote, RFQ, RFQStatus
 
 try:
-    st.set_page_config(page_title="Vendor Quotation 수신 — KTMS", page_icon="📥", layout="wide")
+    st.set_page_config(page_title="Vendor Quot. 수신 — KTMS", page_icon="📥", layout="wide")
 except Exception:
     pass
 require_auth()
 inject_css()
 
-section_header("send", "Vendor Quotation 수신")
+section_header("quotation", "Vendor Quot. 수신")
 
 tab_register, tab_list = st.tabs(["➕ 견적 수신 등록", "📋 수신 견적 목록"])
 

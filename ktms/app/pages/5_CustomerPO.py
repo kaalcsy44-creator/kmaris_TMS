@@ -1,4 +1,4 @@
-"""Order management — receive order, generate PO, track status."""
+"""Customer P/O 수신 — 고객 P/O로 수주 등록 · 오더 목록 · 납기/상태 관리."""
 from __future__ import annotations
 import sys
 from datetime import date, datetime
@@ -21,13 +21,13 @@ from db.models import Order, PurchaseOrder, Quotation, OrderStatus, QuotationSta
 from services.sheets_svc import upsert_order as _sheet_upsert_order
 
 try:
-    st.set_page_config(page_title="오더 관리 — KTMS", page_icon="📦", layout="wide")
+    st.set_page_config(page_title="Customer P/O 수신 — KTMS", page_icon="📥", layout="wide")
 except Exception:
     pass
 require_auth()
 inject_css()
 
-section_header("order", "오더 관리 (Orders)")
+section_header("order", "고객 P/O 수신 (Customer PO)")
 
 
 def render_order_detail():
@@ -64,7 +64,7 @@ def render_order_detail():
         st.markdown(f"**상태:** {status_badge(order.status.value)}", unsafe_allow_html=True)
         t_url = tracking_url("order", order.tracking_token)
         st.markdown(f"🔗 **고객 트래킹 링크:** [{t_url}]({t_url})")
-        st.caption("📨 Vendor 발주서(발주) 생성은 '오더 Vendor 발신' 탭에서 진행하세요.")
+        st.caption("📨 Vendor 발주서(발주) 생성은 좌측 메뉴 'Vendor PO 발신'에서 진행하세요.")
 
     with col_act:
         new_stat = st.selectbox("상태 변경", [s.value for s in OrderStatus],
@@ -130,10 +130,10 @@ def render_order_detail():
         st.dataframe(pd.DataFrame(order.items), use_container_width=True, hide_index=True)
 
 
-tab_new, tab_list, tab_vendor = st.tabs(["➕ 신규 등록", "📋 오더 목록", "📨 오더 Vendor 발신"])
+tab_new, tab_list = st.tabs(["➕ 신규 등록", "📋 오더 목록"])
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 1 — LIST
+# TAB — LIST
 # ══════════════════════════════════════════════════════════════════════════════
 with tab_list:
     status_filter = st.selectbox("상태 필터", ["전체"] + [s.value for s in OrderStatus])
@@ -171,7 +171,7 @@ with tab_list:
     render_order_detail()
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 2 — NEW ORDER
+# TAB — NEW ORDER
 # ══════════════════════════════════════════════════════════════════════════════
 with tab_new:
     st.subheader("신규 오더 등록")
@@ -321,79 +321,3 @@ with tab_new:
             _sheet_upsert_order(order, get_customer(order.customer_id), get_vessel(order.vessel_id) if order.vessel_id else None)
         finally:
             session.close()
-
-# ══════════════════════════════════════════════════════════════════════════════
-# TAB 3 — 오더 Vendor 발신 (선택한 오더 대상: 발주서 PO)
-# ══════════════════════════════════════════════════════════════════════════════
-with tab_vendor:
-    ord_id = st.session_state.get("ord_detail_id")
-    if not ord_id:
-        hint("먼저 '오더 목록' 탭에서 오더를 선택하세요.")
-        st.stop()
-
-    order = get_order(int(ord_id))
-    if not order:
-        st.error("선택한 오더를 찾을 수 없습니다. 목록에서 다시 선택하세요.")
-        st.stop()
-
-    cust   = get_customer(order.customer_id)
-    vessel = get_vessel(order.vessel_id) if order.vessel_id else None
-
-    st.subheader("Vendor 발주서 (Purchase Order)")
-    st.markdown(
-        f"**대상 오더:** `{order.ord_no}`  ·  {cust.name if cust else '—'}"
-        f"  ·  {vessel.name if vessel else '—'}  ·  품목 {len(order.items or [])}개"
-    )
-    st.markdown("---")
-
-    vendor_opts = vendor_options()
-    with st.form("po_form"):
-        sel_vendor = st.selectbox("Vendor 선택", ["— 없음 —"] + list(vendor_opts.keys()))
-        po_date = st.date_input("발주일", date.today(), key="po_date_input")
-        po_items_df = st.data_editor(
-            pd.DataFrame(order.items) if order.items else pd.DataFrame(
-                columns=["item_no", "part_no", "description", "qty", "unit", "unit_price"]),
-            num_rows="dynamic", use_container_width=True, key="po_items",
-        )
-        gen_po = st.form_submit_button("발주서 생성", type="primary")
-
-    if gen_po and sel_vendor != "— 없음 —":
-        po_no_gen = next_doc_no("po")
-        vid = vendor_opts[sel_vendor]
-        items_data = po_items_df.fillna("").to_dict(orient="records")
-        session = get_session()
-        try:
-            po = PurchaseOrder(
-                po_no=po_no_gen,
-                order_id=order.id,
-                vendor_id=vid,
-                date=po_date.isoformat(),
-                items=items_data,
-                status="발주완료",
-                sent_date=date.today().isoformat(),
-            )
-            session.add(po)
-            o = session.query(Order).get(order.id)
-            o.status = OrderStatus.PO_SENT
-            session.commit()
-            st.success(f"✅ 발주서 생성 완료: **{po_no_gen}**")
-        finally:
-            session.close()
-
-    # Existing POs
-    session = get_session()
-    try:
-        pos = session.query(PurchaseOrder).filter_by(order_id=order.id).all()
-        if pos:
-            st.markdown("**발행된 발주서**")
-            po_rows = []
-            for po in pos:
-                v = get_vendor(po.vendor_id)
-                po_rows.append({
-                    "PO No.": po.po_no, "Vendor": v.name if v else "—",
-                    "발주일": po.date or "—", "상태": po.status,
-                    "품목수": len(po.items or []),
-                })
-            st.dataframe(pd.DataFrame(po_rows), use_container_width=True, hide_index=True)
-    finally:
-        session.close()

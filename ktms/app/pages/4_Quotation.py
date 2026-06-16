@@ -25,13 +25,13 @@ from services.pdf_svc import build_payload, generate_pdf
 from services.email_svc import send_email, quotation_email_body, quotation_email_subject
 
 try:
-    st.set_page_config(page_title="견적 관리 — KTMS", page_icon="📄", layout="wide")
+    st.set_page_config(page_title="Customer Quot. 발신 — KTMS", page_icon="📄", layout="wide")
 except Exception:
     pass
 require_auth()
 inject_css()
 
-section_header("quotation", "Customer Quotation 발신 (견적)")
+section_header("quotation", "Customer Quot. 발신 (견적)")
 
 
 def render_quotation_detail():

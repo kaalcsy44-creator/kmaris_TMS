@@ -49,12 +49,15 @@ _ICONS = [
     _S+"%3Cline x1='4' y1='21' x2='4' y2='14'/%3E%3Cline x1='4' y1='10' x2='4' y2='3'/%3E%3Cline x1='12' y1='21' x2='12' y2='12'/%3E%3Cline x1='12' y1='8' x2='12' y2='3'/%3E%3Cline x1='20' y1='21' x2='20' y2='16'/%3E%3Cline x1='20' y1='12' x2='20' y2='3'/%3E%3Cline x1='1' y1='14' x2='7' y2='14'/%3E%3Cline x1='9' y1='8' x2='15' y2='8'/%3E%3Cline x1='17' y1='16' x2='23' y2='16'/%3E"+_E,
 ]
 # Nav layout with dict sections (each section header is a <li> with a <p>):
-#   li:1  → " " header (invisible)   li:2  → Dashboard
-#   li:3  → "RFQ 관리" header        li:4  → CRFQ   li:5 → VRFQ
-#   li:6  → "영업 관리" header        li:7  → Quotation  li:8 → Orders
-#   li:9  → Documents  li:10 → AR    li:11 → "시스템" header  li:12 → Settings
+#   li:1  → " " header (invisible)    li:2  → Dashboard
+#   li:3  → "RFQ" header              li:4  → Customer RFQ 수신   li:5  → Vendor RFQ 발신
+#   li:6  → "Quotation" header        li:7  → Vendor Quot. 수신   li:8  → Customer Quot. 발신
+#   li:9  → "P/O" header              li:10 → Customer PO 수신    li:11 → Vendor PO 발신
+#   li:12 → "선적 · 정산" header       li:13 → Documents          li:14 → AR
+#   li:15 → "시스템" header           li:16 → Settings
+# (pos, icon_idx) — icons reused: [3] clipboard for both Quot., [2] send for both 발신
 _NAV_ICON_POSITIONS = [
-    (2, 0), (4, 1), (5, 2), (7, 3), (8, 4), (9, 5), (10, 6), (12, 7),
+    (2, 0), (4, 1), (5, 2), (7, 3), (8, 3), (10, 4), (11, 2), (13, 5), (14, 6), (16, 7),
 ]
 _NAV_ICON_CSS = "\n".join(
     f"[data-testid=\"stSidebar\"] nav li:nth-child({pos}) a::before {{ background-image: url(\"{_ICONS[idx]}\") !important; }}"
