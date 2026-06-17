@@ -1,6 +1,7 @@
 """Shared DB helper functions and UI utilities."""
 from __future__ import annotations
 import sys
+import urllib.parse
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -62,6 +63,54 @@ _NAV_ICON_POSITIONS = [
 _NAV_ICON_CSS = "\n".join(
     f"[data-testid=\"stSidebar\"] nav li:nth-child({pos}) a::before {{ background-image: url(\"{_ICONS[idx]}\") !important; }}"
     for pos, idx in _NAV_ICON_POSITIONS
+)
+
+
+# ── KTMS brand logo (propeller emblem + wordmark) ────────────────────────────
+def ktms_logo_svg(
+    text_color: str = NAVY,
+    accent: str = BLUE,
+    *,
+    width: int = 150,
+    height: int = 42,
+    subtitle: str | None = None,
+) -> str:
+    """Return a self-contained KTMS logo as inline SVG markup.
+
+    A 3-blade propeller emblem (echoing the K-MARIS Energy turbine mark) set
+    beside the bold 'KTMS' wordmark. Colors are parameterized so the same mark
+    works on the navy sidebar (light text) and the white login card (navy text).
+    """
+    blade = "M24 24 C20 15 20 9 24 5 C28 9 28 15 24 24Z"
+    blades = "".join(
+        f'<path d="{blade}" fill="{accent}" transform="rotate({a} 24 24)"/>'
+        for a in (0, 120, 240)
+    )
+    sub = ""
+    if subtitle:
+        sub = (
+            f'<text x="51" y="45" font-family="Arial,Helvetica,sans-serif" '
+            f'font-size="7.6" letter-spacing="1.6" font-weight="600" '
+            f'fill="{text_color}" opacity="0.6">{subtitle}</text>'
+        )
+    return (
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
+        f'viewBox="0 0 196 52" fill="none" role="img" aria-label="KTMS">'
+        f'{blades}'
+        f'<circle cx="24" cy="24" r="3.6" fill="{text_color}"/>'
+        f'<text x="49" y="33" font-family="Arial,Helvetica,sans-serif" '
+        f'font-size="26" font-weight="800" letter-spacing="-0.6" '
+        f'fill="{text_color}">KTMS</text>'
+        f'{sub}'
+        f'</svg>'
+    )
+
+
+# Sidebar variant: white wordmark + sky-blue propeller on the navy sidebar,
+# URL-encoded as a CSS background data URI (injected into KTMS_CSS below).
+_SIDEBAR_LOGO_URI = "data:image/svg+xml," + urllib.parse.quote(
+    ktms_logo_svg(text_color="#FFFFFF", accent="#3BA6E0", width=150, height=40),
+    safe="",
 )
 
 KTMS_CSS = f"""
@@ -347,6 +396,23 @@ section[data-testid="stSidebar"] nav {{
     margin-top: 72px !important;
     padding-left: 0 !important;
     margin-left: 0 !important;
+}}
+/* ── Sidebar brand logo (top, sits in the 72px gap above the nav) ─────────── */
+[data-testid="stSidebarNav"] {{
+    position: relative !important;
+}}
+[data-testid="stSidebarNav"]::before {{
+    content: "" !important;
+    position: absolute !important;
+    top: 20px !important;
+    left: 16px !important;
+    width: 150px !important;
+    height: 40px !important;
+    background-image: url("{_SIDEBAR_LOGO_URI}") !important;
+    background-repeat: no-repeat !important;
+    background-position: left center !important;
+    background-size: contain !important;
+    pointer-events: none !important;
 }}
 [data-testid="stSidebar"] .stMarkdown, [data-testid="stSidebar"] label,
 [data-testid="stSidebar"] .stSelectbox label, [data-testid="stSidebar"] p {{
