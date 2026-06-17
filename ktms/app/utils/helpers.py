@@ -421,7 +421,7 @@ section[data-testid="stSidebar"] nav {{
 [data-testid="stSidebarNav"]::before {{
     content: "" !important;
     position: absolute !important;
-    top: 14px !important;
+    top: -60px !important;
     left: 14px !important;
     width: 124px !important;
     height: 52px !important;
