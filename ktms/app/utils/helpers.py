@@ -1,5 +1,6 @@
 """Shared DB helper functions and UI utilities."""
 from __future__ import annotations
+import base64
 import sys
 import urllib.parse
 from datetime import date, timedelta
@@ -66,58 +67,38 @@ _NAV_ICON_CSS = "\n".join(
 )
 
 
-# ── K-MARIS brand emblem (K + wind turbine + blue arc + waves) ───────────────
-_EMBLEM_VIEWBOX = "0 0 116 126"
+# ── K-MARIS brand emblem (official logo PNG, transparent background) ──────────
+_EMBLEM_PATH = Path(__file__).resolve().parent.parent / "assets" / "kmaris_emblem.png"
+_EMBLEM_B64 = base64.b64encode(_EMBLEM_PATH.read_bytes()).decode()
+_EMBLEM_DATA_URI = f"data:image/png;base64,{_EMBLEM_B64}"
+# Cropped emblem aspect ratio (width / height) — used to size without distortion.
+_EMBLEM_AR = 300 / 217
 
 
-def _emblem_inner(navy: str, blue: str) -> str:
-    """Inner SVG markup for the K-MARIS emblem (paths only, no <svg> wrapper)."""
-    blade = "M0 0 C-5 -13 -5 -22 0 -30 C5 -22 5 -13 0 0Z"
-    blades = "".join(
-        f'<path d="{blade}" fill="{navy}" stroke="#FFFFFF" stroke-width="2.4" '
-        f'stroke-linejoin="round" transform="rotate({a})"/>'
-        for a in (10, 130, 250)
-    )
+def kmaris_emblem_img(height: int = 112) -> str:
+    """Official K-MARIS emblem as an <img> tag (for light backgrounds, e.g. login)."""
+    width = round(height * _EMBLEM_AR)
     return (
-        # blue arc wrapping the right side (drawn first, behind the K)
-        f'<path d="M76 18 A42 42 0 1 1 44 98" fill="none" stroke="{blue}" '
-        f'stroke-width="7.5" stroke-linecap="round"/>'
-        # bold K — vertical stem + upper/lower arms
-        f'<rect x="24" y="24" width="15" height="70" fill="{navy}"/>'
-        f'<path d="M36 58 L70 26" fill="none" stroke="{navy}" stroke-width="15"/>'
-        f'<path d="M36 56 L72 96" fill="none" stroke="{navy}" stroke-width="15"/>'
-        # 3-blade wind turbine over the K's vertex
-        f'<g transform="translate(41,57)">{blades}</g>'
-        f'<circle cx="41" cy="57" r="5" fill="#FFFFFF"/>'
-        f'<circle cx="41" cy="57" r="2.2" fill="{navy}"/>'
-        # stacked waves (navy over blue)
-        f'<path d="M12 104 C24 97 33 97 45 103 C57 109 66 109 78 103 '
-        f'C86 99 92 99 100 103" fill="none" stroke="{navy}" stroke-width="5.4" '
-        f'stroke-linecap="round"/>'
-        f'<path d="M12 114 C24 107 33 107 45 113 C57 119 66 119 78 113 '
-        f'C86 109 92 109 100 113" fill="none" stroke="{blue}" stroke-width="5.4" '
-        f'stroke-linecap="round"/>'
-    )
-
-
-def kmaris_emblem_svg(navy: str = NAVY, blue: str = BLUE, *,
-                      width: int = 104, height: int = 112) -> str:
-    """Standalone K-MARIS emblem SVG (the 'K' logo mark, for light backgrounds)."""
-    return (
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
-        f'viewBox="{_EMBLEM_VIEWBOX}" fill="none" role="img" aria-label="K-MARIS">'
-        f'{_emblem_inner(navy, blue)}</svg>'
+        f'<img src="{_EMBLEM_DATA_URI}" alt="K-MARIS" '
+        f'width="{width}" height="{height}" '
+        f'style="display:block;width:{width}px;height:{height}px;" />'
     )
 
 
 def _sidebar_logo_svg() -> str:
     """Sidebar lockup: emblem in a white chip + white 'TMS' wordmark (on navy)."""
+    # Emblem fitted inside the 54×54 white chip, centered (keeps aspect ratio).
+    img_w = 44
+    img_h = round(img_w / _EMBLEM_AR)        # ≈ 32
+    img_x = 2 + (54 - img_w) / 2             # center horizontally in chip
+    img_y = 5 + (54 - img_h) / 2             # center vertically in chip
     return (
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="134" height="64" '
-        f'viewBox="0 0 134 64" fill="none">'
+        f'<svg xmlns="http://www.w3.org/2000/svg" '
+        f'xmlns:xlink="http://www.w3.org/1999/xlink" '
+        f'width="134" height="64" viewBox="0 0 134 64" fill="none">'
         f'<rect x="2" y="5" width="54" height="54" rx="12" fill="#FFFFFF"/>'
-        f'<svg x="6" y="9" width="46" height="46" viewBox="{_EMBLEM_VIEWBOX}">'
-        f'{_emblem_inner(NAVY, BLUE)}</svg>'
+        f'<image x="{img_x:.1f}" y="{img_y:.1f}" width="{img_w}" height="{img_h}" '
+        f'xlink:href="{_EMBLEM_DATA_URI}"/>'
         f'<text x="66" y="44" font-family="Arial,Helvetica,sans-serif" '
         f'font-size="30" font-weight="800" letter-spacing="-0.5" '
         f'fill="#FFFFFF">TMS</text>'
