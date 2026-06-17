@@ -80,12 +80,12 @@ def login_page():
         unsafe_allow_html=True,
     )
 
-    from app.utils.helpers import ktms_logo_svg, NAVY, BLUE
+    from app.utils.helpers import kmaris_emblem_svg
     st.markdown(
         f"<div style='text-align:center;margin-bottom:1.4rem;'>"
         f"<div style='display:flex;justify-content:center;'>"
-        f"{ktms_logo_svg(text_color=NAVY, accent=BLUE, width=212, height=58)}</div>"
-        f"<div style='opacity:.55;font-size:.92rem;margin-top:.55rem;'>"
+        f"{kmaris_emblem_svg(width=108, height=116)}</div>"
+        f"<div style='opacity:.55;font-size:.92rem;margin-top:.4rem;'>"
         f"K-Maris Trade Management System</div>"
         f"</div>",
         unsafe_allow_html=True,

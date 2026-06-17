@@ -66,51 +66,68 @@ _NAV_ICON_CSS = "\n".join(
 )
 
 
-# ── KTMS brand logo (propeller emblem + wordmark) ────────────────────────────
-def ktms_logo_svg(
-    text_color: str = NAVY,
-    accent: str = BLUE,
-    *,
-    width: int = 150,
-    height: int = 42,
-    subtitle: str | None = None,
-) -> str:
-    """Return a self-contained KTMS logo as inline SVG markup.
+# ── K-MARIS brand emblem (K + wind turbine + blue arc + waves) ───────────────
+_EMBLEM_VIEWBOX = "0 0 116 126"
 
-    A 3-blade propeller emblem (echoing the K-MARIS Energy turbine mark) set
-    beside the bold 'KTMS' wordmark. Colors are parameterized so the same mark
-    works on the navy sidebar (light text) and the white login card (navy text).
-    """
-    blade = "M24 24 C20 15 20 9 24 5 C28 9 28 15 24 24Z"
+
+def _emblem_inner(navy: str, blue: str) -> str:
+    """Inner SVG markup for the K-MARIS emblem (paths only, no <svg> wrapper)."""
+    blade = "M0 0 C-5 -13 -5 -22 0 -30 C5 -22 5 -13 0 0Z"
     blades = "".join(
-        f'<path d="{blade}" fill="{accent}" transform="rotate({a} 24 24)"/>'
-        for a in (0, 120, 240)
+        f'<path d="{blade}" fill="{navy}" stroke="#FFFFFF" stroke-width="2.4" '
+        f'stroke-linejoin="round" transform="rotate({a})"/>'
+        for a in (10, 130, 250)
     )
-    sub = ""
-    if subtitle:
-        sub = (
-            f'<text x="51" y="45" font-family="Arial,Helvetica,sans-serif" '
-            f'font-size="7.6" letter-spacing="1.6" font-weight="600" '
-            f'fill="{text_color}" opacity="0.6">{subtitle}</text>'
-        )
+    return (
+        # blue arc wrapping the right side (drawn first, behind the K)
+        f'<path d="M76 18 A42 42 0 1 1 44 98" fill="none" stroke="{blue}" '
+        f'stroke-width="7.5" stroke-linecap="round"/>'
+        # bold K — vertical stem + upper/lower arms
+        f'<rect x="24" y="24" width="15" height="70" fill="{navy}"/>'
+        f'<path d="M36 58 L70 26" fill="none" stroke="{navy}" stroke-width="15"/>'
+        f'<path d="M36 56 L72 96" fill="none" stroke="{navy}" stroke-width="15"/>'
+        # 3-blade wind turbine over the K's vertex
+        f'<g transform="translate(41,57)">{blades}</g>'
+        f'<circle cx="41" cy="57" r="5" fill="#FFFFFF"/>'
+        f'<circle cx="41" cy="57" r="2.2" fill="{navy}"/>'
+        # stacked waves (navy over blue)
+        f'<path d="M12 104 C24 97 33 97 45 103 C57 109 66 109 78 103 '
+        f'C86 99 92 99 100 103" fill="none" stroke="{navy}" stroke-width="5.4" '
+        f'stroke-linecap="round"/>'
+        f'<path d="M12 114 C24 107 33 107 45 113 C57 119 66 119 78 113 '
+        f'C86 109 92 109 100 113" fill="none" stroke="{blue}" stroke-width="5.4" '
+        f'stroke-linecap="round"/>'
+    )
+
+
+def kmaris_emblem_svg(navy: str = NAVY, blue: str = BLUE, *,
+                      width: int = 104, height: int = 112) -> str:
+    """Standalone K-MARIS emblem SVG (the 'K' logo mark, for light backgrounds)."""
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
-        f'viewBox="0 0 196 52" fill="none" role="img" aria-label="KTMS">'
-        f'{blades}'
-        f'<circle cx="24" cy="24" r="3.6" fill="{text_color}"/>'
-        f'<text x="49" y="33" font-family="Arial,Helvetica,sans-serif" '
-        f'font-size="26" font-weight="800" letter-spacing="-0.6" '
-        f'fill="{text_color}">KTMS</text>'
-        f'{sub}'
+        f'viewBox="{_EMBLEM_VIEWBOX}" fill="none" role="img" aria-label="K-MARIS">'
+        f'{_emblem_inner(navy, blue)}</svg>'
+    )
+
+
+def _sidebar_logo_svg() -> str:
+    """Sidebar lockup: emblem in a white chip + white 'TMS' wordmark (on navy)."""
+    return (
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="134" height="64" '
+        f'viewBox="0 0 134 64" fill="none">'
+        f'<rect x="2" y="5" width="54" height="54" rx="12" fill="#FFFFFF"/>'
+        f'<svg x="6" y="9" width="46" height="46" viewBox="{_EMBLEM_VIEWBOX}">'
+        f'{_emblem_inner(NAVY, BLUE)}</svg>'
+        f'<text x="66" y="44" font-family="Arial,Helvetica,sans-serif" '
+        f'font-size="30" font-weight="800" letter-spacing="-0.5" '
+        f'fill="#FFFFFF">TMS</text>'
         f'</svg>'
     )
 
 
-# Sidebar variant: white wordmark + sky-blue propeller on the navy sidebar,
 # URL-encoded as a CSS background data URI (injected into KTMS_CSS below).
 _SIDEBAR_LOGO_URI = "data:image/svg+xml," + urllib.parse.quote(
-    ktms_logo_svg(text_color="#FFFFFF", accent="#3BA6E0", width=150, height=40),
-    safe="",
+    _sidebar_logo_svg(), safe="",
 )
 
 KTMS_CSS = f"""
@@ -404,10 +421,10 @@ section[data-testid="stSidebar"] nav {{
 [data-testid="stSidebarNav"]::before {{
     content: "" !important;
     position: absolute !important;
-    top: 20px !important;
-    left: 16px !important;
-    width: 150px !important;
-    height: 40px !important;
+    top: 14px !important;
+    left: 14px !important;
+    width: 124px !important;
+    height: 52px !important;
     background-image: url("{_SIDEBAR_LOGO_URI}") !important;
     background-repeat: no-repeat !important;
     background-position: left center !important;
