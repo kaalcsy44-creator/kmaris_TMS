@@ -1,7 +1,7 @@
 """RFQ & Quotation — 통합 페이지.
 
-기존 4개 메뉴(Customer RFQ 수신 · Vendor RFQ 발신 · Vendor Quot. 수신 ·
-Customer Quot. 발신)의 9개 소메뉴를 한 페이지의 탭바로 합친다. 위젯 충돌과
+상단에 거래(RFQ)별 통합 현황 테이블(기존 4개 '목록/내역' 메뉴를 한 테이블로 병합)을
+두고, 그 아래 탭바에는 작업(신규 등록·발신·수신 등록) 5개만 둔다. 위젯 충돌과
 st.stop() 문제를 피하기 위해 '선택된 한 탭'만 렌더한다.
 """
 from __future__ import annotations
@@ -14,9 +14,16 @@ ROOT = _VIEWS.parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+import pandas as pd
 import streamlit as st
 from app.utils.auth import require_auth
-from app.utils.helpers import inject_css, section_header
+from app.utils.helpers import (
+    inject_css, hint, section_header,
+    rfq_list, get_customer, get_vessel, customer_options,
+    pipeline_status_label, INTERNAL_STEPS, total_amount,
+)
+from db.engine import get_session
+from db.models import VendorRFQ, VendorQuote, Quotation
 
 try:
     st.set_page_config(page_title="RFQ & Quotation — KTMS", page_icon="📨", layout="wide")
@@ -43,23 +50,104 @@ _vrfq = _load("ktms_vrfq",   "3_VRFQ.py")
 _vq   = _load("ktms_vquote", "vendor_quote.py")
 _qtn  = _load("ktms_qtn",    "4_Quotation.py")
 
-# 원래 9개 소메뉴 순서대로 (라벨, render 함수)
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 통합 현황 테이블 — 거래(RFQ) 1건당 한 행 (기존 4개 목록/내역 병합)
+# ══════════════════════════════════════════════════════════════════════════════
+def render_overview():
+    col_f1, col_f2, col_f3 = st.columns([2, 2, 1])
+    with col_f1:
+        stage_opts = ["전체"] + [f"{i}/14 {n}" for i, n in enumerate(INTERNAL_STEPS, 1)]
+        status_filter = st.selectbox("상태 필터 (14단계)", stage_opts, key="ov_status")
+    with col_f2:
+        cust_opts = {"전체": None, **customer_options()}
+        cust_sel = st.selectbox("Customer 필터", list(cust_opts.keys()), key="ov_cust")
+    with col_f3:
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.button("새로고침", use_container_width=True, key="ov_refresh")
+
+    rfqs = rfq_list()
+    if cust_sel != "전체" and cust_opts[cust_sel]:
+        rfqs = [r for r in rfqs if r.customer_id == cust_opts[cust_sel]]
+
+    s = get_session()
+    try:
+        rows = []
+        for r in rfqs:
+            stage_lbl = pipeline_status_label(r.id)
+            if status_filter != "전체" and stage_lbl != status_filter:
+                continue
+            c = get_customer(r.customer_id)
+            v = get_vessel(r.vessel_id) if r.vessel_id else None
+            vrfq_ids = [x.id for x in s.query(VendorRFQ).filter_by(rfq_id=r.id).all()]
+            n_vq = (s.query(VendorQuote)
+                    .filter(VendorQuote.vendor_rfq_id.in_(vrfq_ids)).count()
+                    if vrfq_ids else 0)
+            qtn = (s.query(Quotation).filter_by(rfq_id=r.id)
+                   .order_by(Quotation.id.desc()).first())
+            rows.append({
+                "ID": r.id,
+                "QTN_ID": qtn.id if qtn else 0,
+                "VRFQ_ID": max(vrfq_ids) if vrfq_ids else 0,
+                "RFQ No. (K-Maris)": r.rfq_no,
+                "고객 RFQ No.": r.customer_rfq_no or "—",
+                "Customer": c.name if c else "—",
+                "선박": v.name if v else "—",
+                "품목수": len(r.items or []),
+                "VRFQ 발신": len(vrfq_ids),
+                "Vendor 견적": n_vq,
+                "견적 No.": qtn.qtn_no if qtn else "—",
+                "견적 합계": f"{qtn.currency} {total_amount(qtn.items or []):,.2f}" if qtn else "—",
+                "상태": stage_lbl,
+                "날짜": r.date or "—",
+            })
+    finally:
+        s.close()
+
+    if not rows:
+        hint("표시할 RFQ가 없습니다. 'Customer RFQ · 신규 등록' 탭에서 등록하세요.")
+        return
+
+    df = pd.DataFrame(rows)
+    selected = st.dataframe(
+        df.drop(columns=["ID", "QTN_ID", "VRFQ_ID"]),
+        use_container_width=True, hide_index=True,
+        selection_mode="single-row", on_select="rerun", key="ov_table",
+    )
+    sel = selected.selection.rows if hasattr(selected, "selection") else []
+    if sel:
+        row = df.iloc[sel[0]]
+        st.session_state["rfq_detail_id"] = int(row["ID"])
+        if int(row["QTN_ID"]):
+            st.session_state["qtn_detail_id"] = int(row["QTN_ID"])
+        if int(row["VRFQ_ID"]):
+            st.session_state["vrfq_detail_id"] = int(row["VRFQ_ID"])
+
+    with st.expander("선택한 건 상세 · 액션", expanded=bool(sel)):
+        _crfq.render_rfq_detail()
+        if st.session_state.get("qtn_detail_id"):
+            st.markdown("---")
+            st.markdown("#### 견적 상세")
+            _qtn.render_quotation_detail()
+
+
+render_overview()
+st.markdown("---")
+
+
+# ── 작업 탭바 (신규 등록 · 발신 · 수신 등록) ──────────────────────────────────────
 TABS = [
-    ("Customer RFQ · 신규 등록",   _crfq.render_crfq_new),
-    ("Customer RFQ · 목록",        _crfq.render_crfq_list),
-    ("Vendor RFQ · 작성·발신",     _vrfq.render_vrfq_send),
-    ("Vendor RFQ · 발신 내역",     _vrfq.render_vrfq_sent),
-    ("Vendor Quot. · 수신 등록",   _vq.render_vquote_register),
-    ("Vendor Quot. · 목록",        _vq.render_vquote_list),
+    ("Customer RFQ · 신규 등록", _crfq.render_crfq_new),
+    ("Vendor RFQ · 작성·발신",   _vrfq.render_vrfq_send),
+    ("Vendor Quot. · 수신 등록", _vq.render_vquote_register),
     ("Customer Quot. · 신규 등록", _qtn.render_qtn_new),
-    ("Customer Quot. · 목록",      _qtn.render_qtn_list),
-    ("Customer Quot. · 발신",      _qtn.render_qtn_send),
+    ("Customer Quot. · 발신",    _qtn.render_qtn_send),
 ]
 _labels = [t[0] for t in TABS]
 _render_by_label = {label: fn for label, fn in TABS}
 
 choice = st.segmented_control(
-    "RFQ & Quotation 단계",
+    "RFQ & Quotation 작업",
     _labels,
     default=_labels[0],
     key="rfq_qtn_tab",
