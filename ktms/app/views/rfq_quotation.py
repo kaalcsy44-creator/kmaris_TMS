@@ -123,7 +123,8 @@ def render_overview():
                 vq_cell = f"{_vq_no or '—'} · {_kst(vq0.created_at)}"
                 if len(vqs) > 1:
                     vq_cell += f"  (외 {len(vqs) - 1}건)"
-                vq_amt_cell = f"{_items_cost_total(vq0.items):,.2f}"
+                _vq_cur = getattr(vq0, "currency", None) or "USD"
+                vq_amt_cell = f"{_vq_cur} {_items_cost_total(vq0.items):,.2f}"
             else:
                 vq_cell, vq_amt_cell = "—", "—"
 
