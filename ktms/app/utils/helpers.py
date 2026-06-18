@@ -1552,8 +1552,14 @@ def internal_pipeline_stage(rfq_id: int) -> int:
                 "목적지 하차 완료": 11,  # 운송 완료 · POD 수취
             }.get(ost, 5))
 
+            # 8) Customer 송품처 확인 — 전용 데이터 없음, 문서 페이지에서 수동 확인
+            if order.consignee_confirmed_date:
+                stage = max(stage, 8)
             if s.query(ShippingAdvice).filter_by(order_id=order.id).first():
                 stage = max(stage, 9)
+            # 10) Vendor 선적서류 발송 — 수동 확인
+            if order.vendor_docs_sent_date:
+                stage = max(stage, 10)
             ci = s.query(CommercialInvoice).filter_by(order_id=order.id).first()
             if ci:
                 stage = max(stage, 10)  # 선적서류(CI/PL) 발행

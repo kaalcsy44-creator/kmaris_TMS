@@ -17,7 +17,7 @@ from app.utils.helpers import (
     missing_items, CURRENCIES, NAVY,
 )
 from db.engine import get_session
-from db.models import CommercialInvoice, PackingList, ShippingAdvice, TaxInvoiceData, ARRecord, ARStatus
+from db.models import Order, CommercialInvoice, PackingList, ShippingAdvice, TaxInvoiceData, ARRecord, ARStatus
 from services.pdf_svc import build_payload, generate_pdf, generate_tax_xlsx
 from services.email_svc import send_email, shipping_advice_email_body
 
@@ -57,6 +57,38 @@ for col, label, value in info_cards:
             <div class="ktms-info-value">{value}</div>
         </div>
         """, unsafe_allow_html=True)
+
+# ── 내부 진행 단계 수동 확인 (자동 추적 안 되는 8·10단계) ────────────────────────
+def _set_order_milestone(field: str, value) -> None:
+    s = get_session()
+    try:
+        o = s.query(Order).get(order.id)
+        setattr(o, field, value)
+        s.commit()
+    finally:
+        s.close()
+    st.rerun()
+
+
+st.markdown("**내부 진행 단계 확인** — 자동 추적되지 않는 단계를 여기서 처리합니다.")
+mc1, mc2 = st.columns(2)
+with mc1:
+    if order.consignee_confirmed_date:
+        st.success(f"✅ 8) Customer 송품처 확인 — {order.consignee_confirmed_date}")
+        if st.button("확인 취소", key="undo_consignee"):
+            _set_order_milestone("consignee_confirmed_date", None)
+    else:
+        if st.button("8) Customer 송품처 확인 완료", key="do_consignee", use_container_width=True):
+            _set_order_milestone("consignee_confirmed_date", date.today().isoformat())
+with mc2:
+    if order.vendor_docs_sent_date:
+        st.success(f"✅ 10) Vendor 선적서류 발송 — {order.vendor_docs_sent_date}")
+        if st.button("발송 취소", key="undo_vdocs"):
+            _set_order_milestone("vendor_docs_sent_date", None)
+    else:
+        if st.button("10) Vendor 선적서류 발송 완료", key="do_vdocs", use_container_width=True):
+            _set_order_milestone("vendor_docs_sent_date", date.today().isoformat())
+
 
 def render_missing_check(doc_items, doc_label: str) -> None:
     """수주 오더 품목 대비 문서 품목 누락 검증 결과를 표시."""
