@@ -394,7 +394,7 @@ section[data-testid="stSidebar"] [data-testid="stSidebarContent"] {{
     padding-right: 0 !important;
 }}
 section[data-testid="stSidebar"] nav {{
-    margin-top: 72px !important;
+    margin-top: 114px !important;
     padding-left: 0 !important;
     margin-left: 0 !important;
 }}
@@ -405,7 +405,7 @@ section[data-testid="stSidebar"] nav {{
 [data-testid="stSidebarNav"]::before {{
     content: "" !important;
     position: absolute !important;
-    top: -60px !important;
+    top: -102px !important;
     left: 14px !important;
     width: 124px !important;
     height: 52px !important;
