@@ -201,8 +201,8 @@ if rfqs:
         c = get_customer(r.customer_id)
         v = get_vessel(r.vessel_id) if r.vessel_id else None
         step, _key = rfq_tracking_step(r.status.value)
-        # 토글 헤더(닫힘): RFQ 번호 · 고객사/선박 · 현재 상태
-        label = f"{r.rfq_no}  ·  {_customer_vessel(c, v)}  ·  {RFQ_STEPS[step]}"
+        # 토글 헤더(닫힘): RFQ 번호 · 고객사/선박(회색·작게) · 현재 상태
+        label = f"{r.rfq_no}  ·  :gray[{_customer_vessel(c, v)}]  ·  {RFQ_STEPS[step]}"
         with st.expander(label, expanded=False):
             col_rfq, col_order = st.columns(2)
             with col_rfq:
@@ -233,8 +233,8 @@ if rfqs:
         c = get_customer(r.customer_id)
         v = get_vessel(r.vessel_id) if r.vessel_id else None
         stage = internal_pipeline_stage(r.id)
-        # 토글 헤더(닫힘): RFQ 번호 · 고객사/선박 · 현재 단계(n/14)
-        label = (f"{r.rfq_no}  ·  {_customer_vessel(c, v)}  ·  "
+        # 토글 헤더(닫힘): RFQ 번호 · 고객사/선박(회색·작게) · 현재 단계(n/14)
+        label = (f"{r.rfq_no}  ·  :gray[{_customer_vessel(c, v)}]  ·  "
                  f"{stage}/14 {INTERNAL_STEPS[stage - 1]}")
         with st.expander(label, expanded=False):
             st.markdown(internal_progress_bar_html(stage), unsafe_allow_html=True)

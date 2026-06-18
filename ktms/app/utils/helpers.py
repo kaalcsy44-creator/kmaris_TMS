@@ -290,6 +290,11 @@ h1, h2, h3, h4 {{
     color: {NAVY} !important;
     font-size: 14px !important;
 }}
+/* 토글 라벨 안 :gray[...] 부분(고객사·선박명) — 약간 작게, 비-bold, 회색 유지 */
+[data-testid="stExpander"] summary p span[style*="color"] {{
+    font-weight: 400 !important;
+    font-size: 0.88em !important;
+}}
 
 /* ── Forms ───────────────────────────────────────────────────────────────── */
 [data-testid="stForm"] {{
