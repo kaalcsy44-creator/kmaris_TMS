@@ -37,10 +37,15 @@ except Exception as _e:
     st.stop()
 
 # ── Column migrations (idempotent, SQLite + PostgreSQL) ───────────────────────
+# Streamlit Cloud caches imported modules across reruns; force a reload so newly
+# added migration functions are always picked up (avoids stale "cannot import
+# name ..." errors after a deploy).
 try:
-    from init_db import migrate_columns, migrate_rfq_numbers
-    migrate_columns()
-    migrate_rfq_numbers()
+    import importlib
+    import init_db as _init_db
+    importlib.reload(_init_db)
+    _init_db.migrate_columns()
+    _init_db.migrate_rfq_numbers()
 except Exception as _mig_err:
     st.warning(f"⚠️ 컬럼 마이그레이션 경고: {_mig_err}")
 
