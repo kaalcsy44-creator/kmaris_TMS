@@ -16,7 +16,7 @@ from app.utils.helpers import (
     customer_options, vessel_options, rfq_list,
     quotation_list, get_quotation, get_rfq,
     get_customer, get_vessel, get_vendor, apply_margin, total_amount,
-    vendor_quote_list, get_vendor_quote, get_vrfq,
+    vendor_quote_list, get_vendor_quote, get_vrfq, pipeline_status_label,
     CURRENCIES, NAVY, BLUE,
 )
 from db.engine import get_session
@@ -171,7 +171,7 @@ with tab_new:
     with st.expander("Customer RFQ에서 불러오기 (품목 정보만, 가격 없음)", expanded=False):
         rfqs = rfq_list()
         if rfqs:
-            rfq_opts = {r.rfq_no: r.id for r in rfqs}
+            rfq_opts = {f"{r.rfq_no} · {pipeline_status_label(r.id)}": r.id for r in rfqs}
             sel_rfq_no = st.selectbox("RFQ 선택", ["— 직접 입력 —"] + list(rfq_opts.keys()),
                                        key="sel_rfq_for_qtn")
             if st.button("RFQ 불러오기", key="btn_load_rfq"):

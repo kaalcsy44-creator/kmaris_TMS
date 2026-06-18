@@ -19,7 +19,7 @@ from app.utils.auth import require_auth
 from app.utils.helpers import (
     inject_css, hint, section_header, next_doc_no,
     get_customer, get_vessel, get_vendor, vendor_options,
-    order_list, get_order, rfq_id_for_order,
+    order_list, get_order, rfq_id_for_order, pipeline_status_label,
     vendor_quotes_for_rfq_vendor, price_map_from_quote,
 )
 from db.engine import get_session
@@ -170,7 +170,9 @@ with tab_create:
         ord_opts = {}
         for o in orders:
             c = get_customer(o.customer_id)
-            label = f"{o.ord_no} · {c.name if c else '—'} · {o.status.value}"
+            _rid = rfq_id_for_order(o)
+            _status = pipeline_status_label(_rid) if _rid else o.status.value
+            label = f"{o.ord_no} · {c.name if c else '—'} · {_status}"
             ord_opts[label] = o.id
 
         cur_id = st.session_state.get("ord_detail_id")

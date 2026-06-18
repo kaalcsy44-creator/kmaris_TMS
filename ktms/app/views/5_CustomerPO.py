@@ -14,7 +14,7 @@ from app.utils.auth import require_auth
 from app.utils.helpers import (
     inject_css, hint, section_header, next_doc_no, status_badge, tracking_url,
     quotation_list, get_quotation, get_customer, get_vessel, get_vendor,
-    vendor_options, order_list, get_order, NAVY,
+    vendor_options, order_list, get_order, pipeline_status_label, NAVY,
 )
 from db.engine import get_session
 from db.models import Order, PurchaseOrder, Quotation, OrderStatus, QuotationStatus
@@ -275,7 +275,7 @@ with tab_new:
     for _r in _all_rfqs:
         _rc = get_customer(_r.customer_id)
         _rv = get_vessel(_r.vessel_id) if _r.vessel_id else None
-        rfq_opts[f"{_r.rfq_no} · {_rc.name if _rc else '—'} · {_rv.name if _rv else '—'} · {_r.status.value}"] = _r.id
+        rfq_opts[f"{_r.rfq_no} · {_rc.name if _rc else '—'} · {_rv.name if _rv else '—'} · {pipeline_status_label(_r.id)}"] = _r.id
 
     # 기본 추천: 견적의 RFQ → OCR 고객/선박 매칭 RFQ 순
     _default_rfq_id = None
