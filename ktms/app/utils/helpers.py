@@ -1553,12 +1553,13 @@ def internal_pipeline_stage(rfq_id: int) -> int:
             }.get(ost, 5))
 
             # 8) Customer 송품처 확인 — 전용 데이터 없음, 문서 페이지에서 수동 확인
-            if order.consignee_confirmed_date:
+            # getattr 폴백: 배포 직후 모듈 캐시로 신규 컬럼이 아직 매핑 안 됐어도 크래시 방지.
+            if getattr(order, "consignee_confirmed_date", None):
                 stage = max(stage, 8)
             if s.query(ShippingAdvice).filter_by(order_id=order.id).first():
                 stage = max(stage, 9)
             # 10) Vendor 선적서류 발송 — 수동 확인
-            if order.vendor_docs_sent_date:
+            if getattr(order, "vendor_docs_sent_date", None):
                 stage = max(stage, 10)
             ci = s.query(CommercialInvoice).filter_by(order_id=order.id).first()
             if ci:

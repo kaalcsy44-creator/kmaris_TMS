@@ -71,18 +71,21 @@ def _set_order_milestone(field: str, value) -> None:
 
 
 st.markdown("**내부 진행 단계 확인** — 자동 추적되지 않는 단계를 여기서 처리합니다.")
+# getattr 폴백: 배포 직후 모듈 캐시로 신규 컬럼이 아직 매핑 안 됐어도 크래시 방지.
+_consignee_date = getattr(order, "consignee_confirmed_date", None)
+_vdocs_date = getattr(order, "vendor_docs_sent_date", None)
 mc1, mc2 = st.columns(2)
 with mc1:
-    if order.consignee_confirmed_date:
-        st.success(f"✅ 8) Customer 송품처 확인 — {order.consignee_confirmed_date}")
+    if _consignee_date:
+        st.success(f"✅ 8) Customer 송품처 확인 — {_consignee_date}")
         if st.button("확인 취소", key="undo_consignee"):
             _set_order_milestone("consignee_confirmed_date", None)
     else:
         if st.button("8) Customer 송품처 확인 완료", key="do_consignee", use_container_width=True):
             _set_order_milestone("consignee_confirmed_date", date.today().isoformat())
 with mc2:
-    if order.vendor_docs_sent_date:
-        st.success(f"✅ 10) Vendor 선적서류 발송 — {order.vendor_docs_sent_date}")
+    if _vdocs_date:
+        st.success(f"✅ 10) Vendor 선적서류 발송 — {_vdocs_date}")
         if st.button("발송 취소", key="undo_vdocs"):
             _set_order_milestone("vendor_docs_sent_date", None)
     else:
