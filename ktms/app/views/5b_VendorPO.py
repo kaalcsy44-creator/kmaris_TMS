@@ -269,7 +269,7 @@ with tab_create:
                         date=po_date.isoformat(),
                         items=items_data,
                         status="발주완료",
-                        sent_date=date.today().isoformat(),
+                        # sent_date/sent_to_email은 실제 이메일 발송 성공 시에만 기록
                     )
                     session.add(po)
                     o = session.query(Order).get(order.id)
@@ -358,7 +358,7 @@ with tab_send:
         else:
             prev = st.session_state[_preview_key]
             lang_badge = "🇰🇷 국문" if "Korean" in prev.get("lang", "") else "🇺🇸 영문"
-            st.info("📧 아래 이메일을 검토·수정 후 발송하세요. 이메일 주소가 없으면 상태만 갱신됩니다.")
+            st.info("📧 아래 이메일을 검토·수정 후 발송하세요. 실제 발송에 성공해야 '발신 내역'에 기록됩니다.")
 
             email_label = prev["vendor_email"] or "⚠️ 이메일 주소 없음"
             with st.expander(f"{vendor.name if vendor else '—'}  ({email_label})  [{lang_badge}]", expanded=True):
@@ -381,49 +381,46 @@ with tab_send:
             _smtp_ok = bool(os.getenv("SMTP_USER") and os.getenv("SMTP_PASSWORD"))
             if not _smtp_ok:
                 st.warning(
-                    "⚠️ SMTP 미설정: 이메일이 발송되지 않습니다. "
-                    "Settings > Secrets에 SMTP_USER / SMTP_PASSWORD를 등록하세요. 상태만 갱신됩니다."
+                    "⚠️ SMTP 미설정: 이메일을 발송할 수 없습니다. "
+                    "Settings > Secrets에 SMTP_USER / SMTP_PASSWORD를 등록하세요."
                 )
 
             col_send, col_cancel, _ = st.columns([2, 1, 4])
-            if col_send.button("발송 + 상태 업데이트", type="primary", use_container_width=True, key=f"po_send_btn_{po.id}"):
-                sent_ok = False
-                if to_email and _smtp_ok:
-                    attachments = None
-                    if prev.get("pdf_bytes"):
-                        attachments = [(prev["pdf_filename"], prev["pdf_bytes"])]
-                    sent_ok = send_email(to=to_email, subject=subject, body=body, attachments=attachments)
-                    if not sent_ok:
-                        st.warning("⚠️ SMTP 발송 실패 — 서버 오류")
-
-                session = get_session()
-                try:
-                    p = session.query(PurchaseOrder).get(po.id)
-                    p.sent_to_email = to_email or ""
-                    if sent_ok:
+            _send_disabled = (not to_email) or (not _smtp_ok)
+            if col_send.button("이메일 발송", type="primary", use_container_width=True,
+                               disabled=_send_disabled, key=f"po_send_btn_{po.id}"):
+                attachments = None
+                if prev.get("pdf_bytes"):
+                    attachments = [(prev["pdf_filename"], prev["pdf_bytes"])]
+                sent_ok = send_email(to=to_email, subject=subject, body=body, attachments=attachments)
+                if sent_ok:
+                    session = get_session()
+                    try:
+                        p = session.query(PurchaseOrder).get(po.id)
                         p.status = "이메일 발송완료"
-                    session.commit()
-                finally:
-                    session.close()
-
-                st.success(
-                    f"✅ 발주서 {po.po_no} 처리 완료"
-                    + (f" | 이메일 발송 성공 → {to_email}" if sent_ok else " | (이메일 미발송, 상태만 갱신)")
-                )
-                st.session_state.pop(_preview_key, None)
-                st.rerun()
+                        p.sent_to_email = to_email
+                        p.sent_date = date.today().isoformat()
+                        session.commit()
+                    finally:
+                        session.close()
+                    st.success(f"✅ 발주서 {po.po_no} 이메일 발송 완료 → {to_email}")
+                    st.session_state.pop(_preview_key, None)
+                    st.rerun()
+                else:
+                    st.error("❌ 이메일 발송 실패 — SMTP 서버 오류. 발신 내역에 기록되지 않았습니다.")
 
             if col_cancel.button("취소", use_container_width=True, key=f"po_cancel_{po.id}"):
                 st.session_state.pop(_preview_key, None)
                 st.rerun()
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 3 — 발신 내역 (전체 발주서)
+# TAB 3 — 발신 내역 (실제 이메일이 발송된 발주서만)
 # ══════════════════════════════════════════════════════════════════════════════
 with tab_sent:
-    pos = _all_purchase_orders()
+    st.caption("실제로 이메일이 발송된 발주서만 표시됩니다. (생성만 하고 미발송한 발주서는 제외)")
+    pos = [p for p in _all_purchase_orders() if p.status == "이메일 발송완료"]
     if not pos:
-        hint("아직 발행된 발주서가 없습니다.")
+        hint("아직 이메일로 발송된 발주서가 없습니다. '발주서 이메일 발송' 탭에서 발송하세요.")
     else:
         rows = []
         for po in pos:
@@ -433,8 +430,8 @@ with tab_sent:
                 "PO No.": po.po_no,
                 "오더 No.": o.ord_no if o else "—",
                 "Vendor": v.name if v else "—",
-                "수신자 이메일": po.sent_to_email or (v.email if v else "—") or "—",
-                "발주일": po.date or "—",
+                "수신자 이메일": po.sent_to_email or "—",  # 실제 발송 주소만 (마스터 이메일 폴백 없음)
+                "발송일": po.sent_date or "—",
                 "상태": po.status,
                 "품목수": len(po.items or []),
             })
