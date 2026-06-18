@@ -120,25 +120,18 @@ Engineering Reliability. Supplying Performance.
     return body
 
 
-try:
-    st.set_page_config(page_title="Vendor RFQ 발신 — KTMS", page_icon="📤", layout="wide")
-except Exception:
-    pass
-require_auth()
-inject_css()
+# 페이지 셋업(set_page_config/require_auth/inject_css/section_header)은 통합 페이지
+# rfq_quotation.py 에서 처리한다. 이 모듈은 탭별 render 함수만 노출한다.
 
-section_header("send", "Vendor RFQ 발신")
-
-tab_send, tab_sent = st.tabs(["📨 Vendor RFQ 작성·발신", "📜 발신 내역"])
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 1 — Vendor RFQ 작성·발신 (선택한 Customer RFQ 대상)
+# TAB — Vendor RFQ 작성·발신 (선택한 Customer RFQ 대상)
 # ══════════════════════════════════════════════════════════════════════════════
-with tab_send:
+def render_vrfq_send():
     rfqs = rfq_list()
     if not rfqs:
         hint("먼저 'Customer RFQ 수신' 메뉴에서 RFQ를 등록하세요.")
-        st.stop()
+        return
 
     # 대상 Customer RFQ 선택 (다른 페이지에서 선택한 RFQ를 기본값으로)
     rfq_label_map = {}
@@ -356,9 +349,9 @@ with tab_send:
         hint("Vendor 견적을 받으셨나요? 'Vendor Quotation 수신' 메뉴에서 등록하세요.")
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 2 — 발신 내역 (전체 VRFQ)
+# TAB — Vendor RFQ 발신 내역 (전체 VRFQ)
 # ══════════════════════════════════════════════════════════════════════════════
-with tab_sent:
+def render_vrfq_sent():
     _s = get_session()
     try:
         all_vrfqs = _s.query(VendorRFQ).order_by(VendorRFQ.id.desc()).all()

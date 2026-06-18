@@ -21,14 +21,8 @@ from db.engine import get_session
 from db.models import RFQ, VendorRFQ, RFQStatus, FollowUpLevel, Customer, Vessel
 from services.sheets_svc import upsert_rfq as _sheet_upsert_rfq
 
-try:
-    st.set_page_config(page_title="Customer RFQ 수신 — KTMS", page_icon="📋", layout="wide")
-except Exception:
-    pass
-require_auth()
-inject_css()
-
-section_header("rfq", "Customer RFQ 수신 (CRFQ)")
+# 페이지 셋업(set_page_config/require_auth/inject_css/section_header)은 통합 페이지
+# rfq_quotation.py 에서 처리한다. 이 모듈은 탭별 render 함수만 노출한다.
 
 
 def render_rfq_detail():
@@ -128,12 +122,10 @@ def render_rfq_detail():
         hint("품목 없음")
 
 
-tab_new, tab_list = st.tabs(["➕ 신규 등록", "📋 Customer RFQ 목록"])
-
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 1 — LIST
+# TAB — Customer RFQ 목록
 # ══════════════════════════════════════════════════════════════════════════════
-with tab_list:
+def render_crfq_list():
     col_f1, col_f2, col_f3 = st.columns([2, 2, 1])
     with col_f1:
         _stage_filter_opts = ["전체"] + [f"{i}/14 {name}" for i, name in enumerate(INTERNAL_STEPS, 1)]
@@ -190,9 +182,9 @@ with tab_list:
     render_rfq_detail()
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 2 — NEW RFQ
+# TAB — Customer RFQ 신규 등록
 # ══════════════════════════════════════════════════════════════════════════════
-with tab_new:
+def render_crfq_new():
     st.subheader("신규 RFQ 등록")
 
     # ── PDF 자동 입력 ────────────────────────────────────────────────────────

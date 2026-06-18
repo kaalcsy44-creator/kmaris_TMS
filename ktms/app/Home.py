@@ -98,14 +98,7 @@ if not current_user():
 pages = {
     " ": [
         st.Page("views/1_Dashboard.py", title="Dashboard", default=True),
-    ],
-    "RFQ": [
-        st.Page("views/2_CRFQ.py",        title="Customer RFQ 수신"),
-        st.Page("views/3_VRFQ.py",        title="Vendor RFQ 발신"),
-    ],
-    "Quotation": [
-        st.Page("views/vendor_quote.py",  title="Vendor Quot. 수신"),
-        st.Page("views/4_Quotation.py",   title="Customer Quot. 발신"),
+        st.Page("views/rfq_quotation.py", title="RFQ & Quotation"),
     ],
     "P/O": [
         st.Page("views/5_CustomerPO.py",  title="Customer PO 수신"),

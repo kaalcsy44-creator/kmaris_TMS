@@ -24,14 +24,8 @@ from db.models import Quotation, RFQ, VendorQuote, VendorRFQ, QuotationStatus, F
 from services.pdf_svc import build_payload, generate_pdf
 from services.email_svc import send_email, quotation_email_body, quotation_email_subject
 
-try:
-    st.set_page_config(page_title="Customer Quot. 발신 — KTMS", page_icon="📄", layout="wide")
-except Exception:
-    pass
-require_auth()
-inject_css()
-
-section_header("quotation", "Customer Quot. 발신 (견적)")
+# 페이지 셋업(set_page_config/require_auth/inject_css/section_header)은 통합 페이지
+# rfq_quotation.py 에서 처리한다. 이 모듈은 탭별 render 함수만 노출한다.
 
 
 def render_quotation_detail():
@@ -91,12 +85,10 @@ def render_quotation_detail():
                      column_config=money_cols)
 
 
-tab_new, tab_list, tab_send = st.tabs(["➕ 신규 등록", "📋 견적 목록", "📨 Customer Quot. 발신"])
-
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 1 — LIST
+# TAB — Customer Quot. 목록
 # ══════════════════════════════════════════════════════════════════════════════
-with tab_list:
+def render_qtn_list():
     col_f1, col_f2 = st.columns(2)
     status_filter = col_f1.selectbox("상태 필터", ["전체"] + [s.value for s in QuotationStatus])
     level_filter  = col_f2.selectbox("Level 필터", ["전체", "A", "B", "C"])
@@ -137,9 +129,9 @@ with tab_list:
     render_quotation_detail()
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 2 — NEW QUOTATION
+# TAB — Customer Quot. 신규 등록
 # ══════════════════════════════════════════════════════════════════════════════
-with tab_new:
+def render_qtn_new():
     st.subheader("신규 견적 작성")
 
     with st.expander("Vendor 견적에서 불러오기 — 권장", expanded=True):
@@ -355,18 +347,18 @@ with tab_new:
             session.close()
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 3 — Customer Quotation 발신 (선택한 견적 대상: PDF + EMAIL)
+# TAB — Customer Quot. 발신 (선택한 견적 대상: PDF + EMAIL)
 # ══════════════════════════════════════════════════════════════════════════════
-with tab_send:
+def render_qtn_send():
     qtn_id = st.session_state.get("qtn_detail_id")
     if not qtn_id:
-        hint("먼저 '견적 목록' 탭에서 견적을 선택하세요.")
-        st.stop()
+        hint("먼저 'Customer Quot. 목록' 탭에서 견적을 선택하세요.")
+        return
 
     qtn = get_quotation(int(qtn_id))
     if not qtn:
         st.error("선택한 견적을 찾을 수 없습니다. 목록에서 다시 선택하세요.")
-        st.stop()
+        return
 
     cust   = get_customer(qtn.customer_id)
     vessel = get_vessel(qtn.vessel_id) if qtn.vessel_id else None

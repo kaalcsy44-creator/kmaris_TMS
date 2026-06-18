@@ -18,29 +18,21 @@ from app.utils.helpers import (
 from db.engine import get_session
 from db.models import VendorRFQ, VendorQuote, RFQ, RFQStatus
 
-try:
-    st.set_page_config(page_title="Vendor Quot. 수신 — KTMS", page_icon="📥", layout="wide")
-except Exception:
-    pass
-require_auth()
-inject_css()
+# 페이지 셋업(set_page_config/require_auth/inject_css/section_header)은 통합 페이지
+# rfq_quotation.py 에서 처리한다. 이 모듈은 탭별 render 함수만 노출한다.
 
-section_header("quotation", "Vendor Quot. 수신")
-
-tab_register, tab_list = st.tabs(["➕ 견적 수신 등록", "📋 수신 견적 목록"])
-
-# 전체 VRFQ 로드 (두 탭 공용)
-_s2 = get_session()
-try:
-    all_vrfqs2 = _s2.query(VendorRFQ).order_by(VendorRFQ.id.desc()).all()
-finally:
-    _s2.close()
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 1 — 견적 수신 등록
+# TAB — Vendor Quot. 수신 등록
 # ══════════════════════════════════════════════════════════════════════════════
-with tab_register:
+def render_vquote_register():
     st.subheader("Vendor 견적 수신 등록")
+
+    _s2 = get_session()
+    try:
+        all_vrfqs2 = _s2.query(VendorRFQ).order_by(VendorRFQ.id.desc()).all()
+    finally:
+        _s2.close()
 
     if not all_vrfqs2:
         hint("아직 발송된 Vendor RFQ가 없습니다. 'Vendor RFQ 발신' 메뉴에서 먼저 발송하세요.")
@@ -242,9 +234,9 @@ with tab_register:
                     _ss.close()
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 2 — 수신 견적 목록 (전체)
+# TAB — Vendor Quot. 목록 (전체 수신 견적)
 # ══════════════════════════════════════════════════════════════════════════════
-with tab_list:
+def render_vquote_list():
     _sl = get_session()
     try:
         all_quotes = _sl.query(VendorQuote).order_by(VendorQuote.id.desc()).all()
