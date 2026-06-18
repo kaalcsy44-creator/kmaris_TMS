@@ -145,10 +145,15 @@ def _rfq_card_html(r) -> str:
     c = get_customer(r.customer_id)
     v = get_vessel(r.vessel_id) if r.vessel_id else None
     step, _key = rfq_tracking_step(r.status.value)
+    cust_no = (
+        f'<span style="font-weight:600;color:#6B7280;font-size:12px;">'
+        f'&nbsp;· 고객 RFQ {r.customer_rfq_no}</span>'
+        if r.customer_rfq_no else ""
+    )
     return f"""
     <div class="ktms-track-card">
         <div class="ktms-track-card-head">
-            <span class="ktms-track-card-title">{r.rfq_no}</span>
+            <span class="ktms-track-card-title">{r.rfq_no}{cust_no}</span>
             <span class="ktms-track-card-badge">{status_badge(r.status.value)}</span>
         </div>
         <div class="ktms-track-card-sub">{_customer_vessel(c, v)}</div>

@@ -38,8 +38,9 @@ except Exception as _e:
 
 # ── Column migrations (idempotent, SQLite + PostgreSQL) ───────────────────────
 try:
-    from init_db import migrate_columns
+    from init_db import migrate_columns, migrate_rfq_numbers
     migrate_columns()
+    migrate_rfq_numbers()
 except Exception as _mig_err:
     st.warning(f"⚠️ 컬럼 마이그레이션 경고: {_mig_err}")
 
