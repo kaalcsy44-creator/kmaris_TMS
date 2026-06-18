@@ -15,8 +15,8 @@ import streamlit as st
 from db.engine import get_session
 from db.models import (
     Customer, Vendor, Vessel, ItemMaster,
-    RFQ, VendorRFQ, VendorQuote, Quotation, Order, CommercialInvoice,
-    PackingList, ShippingAdvice, ARRecord,
+    RFQ, VendorRFQ, VendorQuote, Quotation, Order, PurchaseOrder, CommercialInvoice,
+    PackingList, ShippingAdvice, TaxInvoiceData, ARRecord,
     DocSequence, FollowUpLevel,
     RFQStatus, QuotationStatus, OrderStatus, ARStatus,
 )
@@ -1483,3 +1483,120 @@ def tracking_stepper_html(steps: List[str], current_step: int) -> str:
             f'</div>'
         )
     return f'<div class="ktms-stepper">{"".join(parts)}</div>'
+
+
+# ── 내부 진행 현황 (14단계 파이프라인) ──────────────────────────────────────────
+# 직원용. 고객용 추적(RFQ_STEPS/ORDER_STEPS)과 별개로, 거래 한 건의 전체 흐름을
+# 14단계로 본다. 일부 단계(8 송품처 확인 등)는 전용 데이터가 없어 인접 단계의
+# 증거(주문 상태·서류 발행 여부)로 근사 추정한다.
+INTERNAL_STEPS: List[str] = [
+    "Customer RFQ 수신",
+    "Vendor RFQ 발신",
+    "Vendor Quot. 수신",
+    "Customer Quot. 발신",
+    "Customer P/O 수신",
+    "Vendor P/O 발신",
+    "Vendor 물품 준비",
+    "Customer 송품처 확인",
+    "Customer 선적서류 발송",
+    "Vendor 선적서류 발송",
+    "운송 완료 · POD 수취",
+    "Tax Invoice 작성 · 대금 청구",
+    "세금계산서 발행",
+    "대금 결제 완료",
+]
+
+
+def internal_pipeline_stage(rfq_id: int) -> int:
+    """RFQ 1건의 내부 진행 단계(1~14)를 관련 레코드 증거로 추정한다.
+
+    진행은 단조(monotonic) — 가장 멀리 도달한 단계를 반환한다. 전용 데이터가
+    없는 단계는 인접 증거로 근사한다(예: 출고완료→선적서류, ShippingAdvice→송품 단계).
+    """
+    s = get_session()
+    try:
+        stage = 1  # Customer RFQ 수신 (RFQ 레코드 존재)
+
+        vrfqs = s.query(VendorRFQ).filter_by(rfq_id=rfq_id).all()
+        if vrfqs:
+            stage = max(stage, 2)
+            vrfq_ids = [v.id for v in vrfqs]
+            if s.query(VendorQuote).filter(VendorQuote.vendor_rfq_id.in_(vrfq_ids)).first():
+                stage = max(stage, 3)
+
+        if (s.query(Quotation)
+                .filter(Quotation.rfq_id == rfq_id, Quotation.status != QuotationStatus.DRAFT)
+                .first()):
+            stage = max(stage, 4)
+
+        # Order — ① RFQ 직접 연결 우선, 없으면 ② Quotation 경유
+        order = (s.query(Order).filter(Order.rfq_id == rfq_id)
+                 .order_by(Order.created_at.desc()).first())
+        if not order:
+            order = (s.query(Order).join(Quotation, Order.quotation_id == Quotation.id)
+                     .filter(Quotation.rfq_id == rfq_id)
+                     .order_by(Order.created_at.desc()).first())
+
+        if order:
+            stage = max(stage, 5)  # Customer P/O 수신
+            if s.query(PurchaseOrder).filter_by(order_id=order.id).first():
+                stage = max(stage, 6)  # Vendor P/O 발신
+
+            ost = order.status.value if hasattr(order.status, "value") else str(order.status)
+            stage = max(stage, {
+                "오더 수주": 5,
+                "발주 완료": 6,
+                "제조/준비중": 7,    # Vendor 물품 준비
+                "출고완료": 9,       # 선적서류 발송 단계
+                "운송중": 10,
+                "목적지 하차 완료": 11,  # 운송 완료 · POD 수취
+            }.get(ost, 5))
+
+            if s.query(ShippingAdvice).filter_by(order_id=order.id).first():
+                stage = max(stage, 9)
+            ci = s.query(CommercialInvoice).filter_by(order_id=order.id).first()
+            if ci:
+                stage = max(stage, 10)  # 선적서류(CI/PL) 발행
+                if s.query(TaxInvoiceData).filter_by(ci_id=ci.id).first():
+                    stage = max(stage, 13)  # 세금계산서 발행
+
+            ars = s.query(ARRecord).filter_by(order_id=order.id).all()
+            if ars:
+                stage = max(stage, 12)  # 대금 청구
+                if any((a.status.value if hasattr(a.status, "value") else a.status) == "완납"
+                       for a in ars):
+                    stage = max(stage, 14)  # 대금 결제 완료
+        return stage
+    finally:
+        s.close()
+
+
+def internal_progress_bar_html(current_stage: int, total: int = 14) -> str:
+    """14칸 진행 막대 (collapsed 요약용)."""
+    segs = "".join(
+        f'<div style="flex:1;height:6px;border-radius:2px;'
+        f'background:{BLUE if i <= current_stage else "#D7E2EE"};"></div>'
+        for i in range(1, total + 1)
+    )
+    return f'<div style="display:flex;gap:2px;margin:6px 0 2px;">{segs}</div>'
+
+
+def internal_stepper_html(current_stage: int) -> str:
+    """14단계 세로 스텝 리스트 (done ✓ / current ● / pending ○)."""
+    rows = []
+    for i, name in enumerate(INTERNAL_STEPS, start=1):
+        if i < current_stage:
+            icon, color, chip_bg, weight = "✓", BLUE, "rgba(0,85,168,.12)", "700"
+        elif i == current_stage:
+            icon, color, chip_bg, weight = "●", BLUE, "rgba(0,85,168,.18)", "800"
+        else:
+            icon, color, chip_bg, weight = "○", "#9aa6b5", "#eef1f5", "500"
+        rows.append(
+            f'<div style="display:flex;align-items:center;gap:9px;padding:3px 0;">'
+            f'<span style="display:inline-flex;width:19px;height:19px;border-radius:50%;'
+            f'align-items:center;justify-content:center;font-size:11px;font-weight:700;'
+            f'background:{chip_bg};color:{color};flex-shrink:0;">{icon}</span>'
+            f'<span style="font-size:12.5px;color:{color};font-weight:{weight};">{i}. {name}</span>'
+            f'</div>'
+        )
+    return "<div>" + "".join(rows) + "</div>"

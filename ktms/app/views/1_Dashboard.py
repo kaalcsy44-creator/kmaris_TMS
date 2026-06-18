@@ -125,11 +125,12 @@ with col_right:
 
 st.markdown("---")
 
-# ── RFQ ↔ Order 진행 현황 (좌우 페어링) ─────────────────────────────────────────
-section_header("rfq", "RFQ ↔ Order 진행 현황")
+# ── RFQ ↔ Order 진행 현황 (고객 확인용, 건별 토글) ──────────────────────────────
+section_header("rfq", "RFQ ↔ Order 진행 현황 (고객 확인용)")
 from app.utils.helpers import (
     rfq_list, get_customer, get_vessel, status_badge, tracking_stepper_html,
     get_order_for_rfq, orphan_order_list,
+    internal_pipeline_stage, internal_stepper_html, internal_progress_bar_html, INTERNAL_STEPS,
 )
 from services.tracking_status import RFQ_STEPS, ORDER_STEPS, rfq_tracking_step, order_tracking_step
 
@@ -193,20 +194,25 @@ def _empty_order_card_html() -> str:
     """
 
 
-rfqs = rfq_list()[:10]
+hint("각 건을 펼치면 고객에게 보이는 RFQ·Order 추적 단계를 확인할 수 있습니다.")
+rfqs = rfq_list()[:20]
 if rfqs:
-    col_rfq, col_order = st.columns(2)
-    with col_rfq:
-        st.markdown("**RFQ**")
-    with col_order:
-        st.markdown("**연결된 Order**")
     for r in rfqs:
-        col_rfq, col_order = st.columns(2)
-        with col_rfq:
-            st.markdown(_rfq_card_html(r), unsafe_allow_html=True)
-        with col_order:
-            o = get_order_for_rfq(r.id)
-            st.markdown(_order_card_html(o) if o else _empty_order_card_html(), unsafe_allow_html=True)
+        c = get_customer(r.customer_id)
+        v = get_vessel(r.vessel_id) if r.vessel_id else None
+        step, _key = rfq_tracking_step(r.status.value)
+        # 토글 헤더(닫힘): RFQ 번호 · 고객사/선박 · 현재 상태
+        label = f"{r.rfq_no}  ·  {_customer_vessel(c, v)}  ·  {RFQ_STEPS[step]}"
+        with st.expander(label, expanded=False):
+            col_rfq, col_order = st.columns(2)
+            with col_rfq:
+                st.markdown("**RFQ**")
+                st.markdown(_rfq_card_html(r), unsafe_allow_html=True)
+            with col_order:
+                st.markdown("**연결된 Order**")
+                o = get_order_for_rfq(r.id)
+                st.markdown(_order_card_html(o) if o else _empty_order_card_html(),
+                            unsafe_allow_html=True)
 else:
     hint("등록된 RFQ가 없습니다.")
 
@@ -217,3 +223,21 @@ if orphans:
     section_header("order", "RFQ 연결 없는 Order")
     for o in orphans:
         st.markdown(_order_card_html(o), unsafe_allow_html=True)
+
+# ── 내부 진행 현황 (14단계 파이프라인, 직원용) ─────────────────────────────────────
+st.markdown("---")
+section_header("order", "내부 진행 현황 (14단계)")
+hint("거래 한 건의 전체 흐름(RFQ→견적→발주→선적→정산)을 14단계로 추적합니다. 각 건을 펼치면 단계별 상세를 볼 수 있습니다.")
+if rfqs:
+    for r in rfqs:
+        c = get_customer(r.customer_id)
+        v = get_vessel(r.vessel_id) if r.vessel_id else None
+        stage = internal_pipeline_stage(r.id)
+        # 토글 헤더(닫힘): RFQ 번호 · 고객사/선박 · 현재 단계(n/14)
+        label = (f"{r.rfq_no}  ·  {_customer_vessel(c, v)}  ·  "
+                 f"{stage}/14 {INTERNAL_STEPS[stage - 1]}")
+        with st.expander(label, expanded=False):
+            st.markdown(internal_progress_bar_html(stage), unsafe_allow_html=True)
+            st.markdown(internal_stepper_html(stage), unsafe_allow_html=True)
+else:
+    hint("등록된 RFQ가 없습니다.")
