@@ -35,3 +35,6 @@ ktms/config/
 
 # Logs
 *.log
+
+# Stray source assets at repo root (app uses ktms/app/assets/kmaris_emblem.png)
+/logo_K-maris.png
