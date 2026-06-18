@@ -117,7 +117,7 @@ with tab_list:
                 "통화": q.currency,
                 "합계": f"{total_amount(q.items or []):,.2f}",
                 "Level": q.follow_up_level.value if q.follow_up_level else "—",
-                "상태": q.status.value,
+                "상태": pipeline_status_label(q.rfq_id) if q.rfq_id else q.status.value,
                 "유효기간": q.valid_until or "—",
             })
         df = pd.DataFrame(rows)

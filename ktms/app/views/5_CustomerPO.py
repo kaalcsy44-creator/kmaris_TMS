@@ -14,7 +14,7 @@ from app.utils.auth import require_auth
 from app.utils.helpers import (
     inject_css, hint, section_header, next_doc_no, status_badge, tracking_url,
     quotation_list, get_quotation, get_customer, get_vessel, get_vendor,
-    vendor_options, order_list, get_order, pipeline_status_label, NAVY,
+    vendor_options, order_list, get_order, rfq_id_for_order, pipeline_status_label, NAVY,
 )
 from db.engine import get_session
 from db.models import Order, PurchaseOrder, Quotation, OrderStatus, QuotationStatus
@@ -171,6 +171,7 @@ with tab_list:
         for o in orders:
             c = get_customer(o.customer_id)
             v = get_vessel(o.vessel_id) if o.vessel_id else None
+            _rid = rfq_id_for_order(o)
             rows.append({
                 "ID": o.id,
                 "오더 No.": o.ord_no,
@@ -178,7 +179,7 @@ with tab_list:
                 "선박": v.name if v else "—",
                 "PO No.": o.po_no or "—",
                 "품목수": len(o.items or []),
-                "상태": o.status.value,
+                "상태": pipeline_status_label(_rid) if _rid else o.status.value,
                 "날짜": o.date or "—",
             })
         df = pd.DataFrame(rows)

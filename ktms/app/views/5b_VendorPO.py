@@ -428,13 +428,14 @@ with tab_sent:
         for po in pos:
             v = get_vendor(po.vendor_id)
             o = get_order(po.order_id) if po.order_id else None
+            _rid = rfq_id_for_order(o) if o else None
             rows.append({
                 "PO No.": po.po_no,
                 "오더 No.": o.ord_no if o else "—",
                 "Vendor": v.name if v else "—",
                 "수신자 이메일": po.sent_to_email or "—",  # 실제 발송 주소만 (마스터 이메일 폴백 없음)
                 "발송일": po.sent_date or "—",
-                "상태": po.status,
+                "상태": pipeline_status_label(_rid) if _rid else po.status,
                 "품목수": len(po.items or []),
             })
         st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
