@@ -906,6 +906,27 @@ def next_doc_no(doc_type: str, company_prefix: str = "KMS") -> str:
         session.close()
 
 
+def next_rfq_no(company_prefix: str = "KMS") -> str:
+    """K-Maris 내부 관리용 Customer RFQ 번호: KMS-RFQ-yymm-NNN.
+
+    시퀀스는 (연+월) 단위로 리셋된다. DocSequence는 doc_type='rfq_internal',
+    year=YYYYMM(예: 202606)으로 저장해 기존 'rfq' 시퀀스와 충돌하지 않는다.
+    """
+    session = get_session()
+    try:
+        today = date.today()
+        period = today.year * 100 + today.month   # 예: 202606
+        seq = session.query(DocSequence).filter_by(doc_type="rfq_internal", year=period).first()
+        if not seq:
+            seq = DocSequence(doc_type="rfq_internal", year=period, last_seq=0)
+            session.add(seq)
+        seq.last_seq += 1
+        session.commit()
+        return f"{company_prefix}-RFQ-{today:%y%m}-{seq.last_seq:03d}"
+    finally:
+        session.close()
+
+
 # ── Master data loaders ───────────────────────────────────────────────────────
 
 def all_customers() -> List[Customer]:

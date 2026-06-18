@@ -19,6 +19,9 @@ def create_tables():
 
 # New columns added after the initial release. Idempotent for existing DBs.
 _MIGRATIONS = {
+    "rfqs": {
+        "customer_rfq_no": "VARCHAR(100)",
+    },
     "orders": {
         "promised_delivery": "VARCHAR(10)",
         "shipped_date":      "VARCHAR(10)",

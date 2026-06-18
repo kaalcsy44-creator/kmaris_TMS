@@ -12,7 +12,7 @@ import pandas as pd
 import streamlit as st
 from app.utils.auth import require_auth, current_user
 from app.utils.helpers import (
-    inject_css, hint, section_header, next_doc_no, status_badge, tracking_url,
+    inject_css, hint, section_header, next_doc_no, next_rfq_no, status_badge, tracking_url,
     customer_options, vessel_options,
     rfq_list, get_rfq, get_customer, get_vessel, NAVY, BLUE,
 )
@@ -47,6 +47,8 @@ def render_rfq_detail():
     col_info, col_actions = st.columns([3, 1])
     with col_info:
         st.markdown(f"### {rfq.rfq_no}")
+        if rfq.customer_rfq_no:
+            st.caption(f"고객 RFQ No.: **{rfq.customer_rfq_no}**")
         c1, c2, c3 = st.columns(3)
         info_cards = [
             (c1, "Customer", cust.name if cust else "—"),
@@ -161,7 +163,8 @@ with tab_list:
             v = get_vessel(r.vessel_id) if r.vessel_id else None
             rows.append({
                 "ID": r.id,
-                "RFQ No.": r.rfq_no,
+                "RFQ No. (K-Maris)": r.rfq_no,
+                "고객 RFQ No.": r.customer_rfq_no or "—",
                 "Customer": c.name if c else "—",
                 "선박": v.name if v else "—",
                 "품목수": len(r.items or []),
@@ -223,6 +226,7 @@ with tab_new:
             col_p1.markdown(f"**선박:** {ocr_data.get('vessel_name') or '—'}")
             col_p1.markdown(f"**날짜:** {ocr_data.get('rfq_date') or '—'}")
             col_p2.markdown(f"**Customer 힌트:** {ocr_data.get('customer_hint') or '—'}")
+            col_p2.markdown(f"**고객 RFQ No.:** {ocr_data.get('customer_rfq_no') or '—'}")
             if ocr_data.get("notes"):
                 st.caption(f"비고: {ocr_data['notes']}")
             ocr_items_preview = ocr_data.get("items") or []
@@ -347,6 +351,11 @@ with tab_new:
             else:
                 hint("위 '신규 Customer 빠른 등록'에서 먼저 등록하세요.")
                 cust_id = None
+            customer_rfq_no = st.text_input(
+                "고객사 RFQ No.", value=ocr.get("customer_rfq_no") or "",
+                placeholder="고객사가 부여한 RFQ 번호 (예: RFQ-2026-123)",
+                help="K-Maris 내부 관리번호(KMS-RFQ-yymm-NNN)는 등록 시 자동으로 생성됩니다.",
+            )
             rfq_date = st.date_input("RFQ 수신일", value=_ocr_date)
             follow_level = st.selectbox("Follow-up Level", [l.value for l in FollowUpLevel], index=1)
         with c2:
@@ -375,11 +384,12 @@ with tab_new:
 
     if submitted and cust_id:
         items_data = items_df.fillna("").to_dict(orient="records")
-        rfq_no = next_doc_no("rfq")
+        rfq_no = next_rfq_no()
         session = get_session()
         try:
             rfq = RFQ(
                 rfq_no=rfq_no,
+                customer_rfq_no=(customer_rfq_no or "").strip() or None,
                 customer_id=cust_id,
                 vessel_id=vessel_id,
                 date=rfq_date.isoformat(),
@@ -391,7 +401,8 @@ with tab_new:
             )
             session.add(rfq)
             session.commit()
-            st.success(f"✅ RFQ 등록 완료: **{rfq_no}**")
+            _cust_no_txt = f" (고객 RFQ No.: {rfq.customer_rfq_no})" if rfq.customer_rfq_no else ""
+            st.success(f"✅ RFQ 등록 완료: **{rfq_no}**{_cust_no_txt}")
             t_url = tracking_url("rfq", rfq.tracking_token)
             st.info(f"🔗 고객 트래킹 링크: {t_url}")
             _sheet_upsert_rfq(rfq, get_customer(rfq.customer_id), get_vessel(rfq.vessel_id) if rfq.vessel_id else None)

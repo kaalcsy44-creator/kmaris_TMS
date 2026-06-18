@@ -132,7 +132,8 @@ class DocSequence(Base):
 class RFQ(Base):
     __tablename__ = "rfqs"
     id               = Column(Integer, primary_key=True)
-    rfq_no           = Column(String(40), unique=True, nullable=False)
+    rfq_no           = Column(String(40), unique=True, nullable=False)  # K-Maris 내부 관리번호 KMS-RFQ-yymm-NNN
+    customer_rfq_no  = Column(String(100))   # 고객사 고유 RFQ 번호
     customer_id      = Column(Integer, ForeignKey("customers.id"))
     vessel_id        = Column(Integer, ForeignKey("vessels.id"), nullable=True)
     date             = Column(String(10))   # YYYY-MM-DD

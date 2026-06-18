@@ -119,6 +119,7 @@ JSON schema (all strings must be on one line, no embedded newlines):
 {{
   "vessel_name": string|null,
   "rfq_date": "YYYY-MM-DD"|null,
+  "customer_rfq_no": string|null,
   "customer_hint": string|null,
   "notes": string|null,
   "items": [
