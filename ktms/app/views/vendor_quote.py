@@ -93,6 +93,10 @@ def render_vquote_register():
         # ── 신규 견적 등록 폼 ─────────────────────────────────────────────────
         with st.expander("신규 견적 수신 등록", expanded=True):
             vq_date = st.date_input("견적 수신일", value=date.today(), key="vq_tab_date")
+            vq_vendor_no = st.text_input(
+                "Vendor 고유 견적번호", key="vq_tab_vendor_no",
+                placeholder="Vendor가 부여한 견적 번호 (예: VQ-2026-123)",
+            )
             vq_notes = st.text_input("비고 (Vendor 메모 등)", key="vq_tab_notes")
 
             # ── Session-state keys (version counter = data_editor key 변경 트리거) ──
@@ -210,6 +214,7 @@ def render_vquote_register():
                 try:
                     vq_new = VendorQuote(
                         vendor_rfq_id=sel_vrfq.id,
+                        vendor_quote_no=(vq_vendor_no or "").strip() or None,
                         received_date=vq_date.isoformat(),
                         items=items_data,
                         notes=vq_notes,

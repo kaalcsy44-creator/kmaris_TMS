@@ -930,6 +930,23 @@ def next_rfq_no(company_prefix: str = "KMS") -> str:
         session.close()
 
 
+def next_quotation_no(company_prefix: str = "KMS") -> str:
+    """K-Maris 내부 관리용 Customer 견적 번호: KMS-QUO-yymm-NNN (월 단위 시퀀스 리셋)."""
+    session = get_session()
+    try:
+        today = date.today()
+        period = today.year * 100 + today.month   # 예: 202606
+        seq = session.query(DocSequence).filter_by(doc_type="quotation_internal", year=period).first()
+        if not seq:
+            seq = DocSequence(doc_type="quotation_internal", year=period, last_seq=0)
+            session.add(seq)
+        seq.last_seq += 1
+        session.commit()
+        return f"{company_prefix}-QUO-{today:%y%m}-{seq.last_seq:03d}"
+    finally:
+        session.close()
+
+
 # ── Master data loaders ───────────────────────────────────────────────────────
 
 def all_customers() -> List[Customer]:

@@ -7,6 +7,7 @@ st.stop() 문제를 피하기 위해 '선택된 한 탭'만 렌더한다.
 from __future__ import annotations
 import importlib.util
 import sys
+from datetime import timedelta
 from pathlib import Path
 
 _VIEWS = Path(__file__).resolve().parent
@@ -51,6 +52,24 @@ _vq   = _load("ktms_vquote", "vendor_quote.py")
 _qtn  = _load("ktms_qtn",    "4_Quotation.py")
 
 
+def _kst(dt) -> str:
+    """UTC datetime → KST(+9h) 'yy-mm-dd hh:mm'. 없으면 '—'."""
+    if not dt:
+        return "—"
+    return (dt + timedelta(hours=9)).strftime("%y-%m-%d %H:%M")
+
+
+def _items_cost_total(items) -> float:
+    """Vendor 견적 품목의 cost_price×qty 합계."""
+    tot = 0.0
+    for it in (items or []):
+        try:
+            tot += float(it.get("cost_price", 0) or 0) * float(it.get("qty", 1) or 1)
+        except (TypeError, ValueError):
+            pass
+    return tot
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # 통합 현황 테이블 — 거래(RFQ) 1건당 한 행 (기존 4개 목록/내역 병합)
 # ══════════════════════════════════════════════════════════════════════════════
@@ -79,27 +98,57 @@ def render_overview():
                 continue
             c = get_customer(r.customer_id)
             v = get_vessel(r.vessel_id) if r.vessel_id else None
-            vrfq_ids = [x.id for x in s.query(VendorRFQ).filter_by(rfq_id=r.id).all()]
-            n_vq = (s.query(VendorQuote)
-                    .filter(VendorQuote.vendor_rfq_id.in_(vrfq_ids)).count()
-                    if vrfq_ids else 0)
+
+            # 6) Vendor RFQ 발신 — 최신 1건 + (외 N건)
+            vrfqs = (s.query(VendorRFQ).filter_by(rfq_id=r.id)
+                     .order_by(VendorRFQ.id.desc()).all())
+            if vrfqs:
+                vr0 = vrfqs[0]
+                vrfq_cell = f"{vr0.vrfq_no} · {_kst(vr0.created_at)}"
+                if len(vrfqs) > 1:
+                    vrfq_cell += f"  (외 {len(vrfqs) - 1}건)"
+            else:
+                vrfq_cell = "—"
+
+            # 7) Vendor Quot. 수신 — 최신 1건 + (외 N건), 7-1) 금액
+            vrfq_ids = [x.id for x in vrfqs]
+            vqs = (s.query(VendorQuote)
+                   .filter(VendorQuote.vendor_rfq_id.in_(vrfq_ids))
+                   .order_by(VendorQuote.id.desc()).all()
+                   if vrfq_ids else [])
+            if vqs:
+                vq0 = vqs[0]
+                vq_cell = f"{vq0.vendor_quote_no or '—'} · {_kst(vq0.created_at)}"
+                if len(vqs) > 1:
+                    vq_cell += f"  (외 {len(vqs) - 1}건)"
+                vq_amt_cell = f"{_items_cost_total(vq0.items):,.2f}"
+            else:
+                vq_cell, vq_amt_cell = "—", "—"
+
+            # 8) Customer Quot. 발신 (최신), 9) 금액
             qtn = (s.query(Quotation).filter_by(rfq_id=r.id)
                    .order_by(Quotation.id.desc()).first())
+            if qtn:
+                qtn_cell = f"{qtn.qtn_no} · {_kst(qtn.created_at)}"
+                qtn_amt_cell = f"{qtn.currency} {total_amount(qtn.items or []):,.2f}"
+            else:
+                qtn_cell, qtn_amt_cell = "—", "—"
+
             rows.append({
                 "ID": r.id,
                 "QTN_ID": qtn.id if qtn else 0,
-                "VRFQ_ID": max(vrfq_ids) if vrfq_ids else 0,
-                "RFQ No. (K-Maris)": r.rfq_no,
+                "VRFQ_ID": vrfq_ids[0] if vrfq_ids else 0,  # 최신 VRFQ
                 "고객 RFQ No.": r.customer_rfq_no or "—",
                 "Customer": c.name if c else "—",
                 "선박": v.name if v else "—",
                 "품목수": len(r.items or []),
-                "VRFQ 발신": len(vrfq_ids),
-                "Vendor 견적": n_vq,
-                "견적 No.": qtn.qtn_no if qtn else "—",
-                "견적 합계": f"{qtn.currency} {total_amount(qtn.items or []):,.2f}" if qtn else "—",
+                "Customer RFQ 수신": f"{r.rfq_no} · {_kst(r.created_at)}",
+                "Vendor RFQ 발신": vrfq_cell,
+                "Vendor Quot. 수신": vq_cell,
+                "Vendor 견적 금액": vq_amt_cell,
+                "Customer Quot. 발신": qtn_cell,
+                "Customer 견적 금액": qtn_amt_cell,
                 "상태": stage_lbl,
-                "날짜": r.date or "—",
             })
     finally:
         s.close()

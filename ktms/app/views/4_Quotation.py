@@ -12,7 +12,7 @@ import pandas as pd
 import streamlit as st
 from app.utils.auth import require_auth, current_user
 from app.utils.helpers import (
-    inject_css, hint, section_header, next_doc_no, status_badge, tracking_url,
+    inject_css, hint, section_header, next_doc_no, next_quotation_no, status_badge, tracking_url,
     customer_options, vessel_options, rfq_list,
     quotation_list, get_quotation, get_rfq,
     get_customer, get_vessel, get_vendor, apply_margin, total_amount,
@@ -310,7 +310,7 @@ def render_qtn_new():
             item["item_no"] = item.get("item_no") or raw_items.index(item) + 1
         priced_items = apply_margin(raw_items, default_margin_pct, discount_pct)
 
-        qtn_no = next_doc_no("quotation")
+        qtn_no = next_quotation_no()
         valid_until = (qtn_date + timedelta(days=int(valid_days))).isoformat()
         terms = {
             "incoterms": incoterms, "payment_terms": payment,

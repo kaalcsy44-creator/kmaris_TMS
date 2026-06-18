@@ -46,6 +46,7 @@ try:
     importlib.reload(_init_db)
     _init_db.migrate_columns()
     _init_db.migrate_rfq_numbers()
+    _init_db.migrate_quotation_numbers()
 except Exception as _mig_err:
     st.warning(f"⚠️ 컬럼 마이그레이션 경고: {_mig_err}")
 

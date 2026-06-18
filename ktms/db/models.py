@@ -161,9 +161,10 @@ class VendorRFQ(Base):
 
 class VendorQuote(Base):
     __tablename__ = "vendor_quotes"
-    id            = Column(Integer, primary_key=True)
-    vendor_rfq_id = Column(Integer, ForeignKey("vendor_rfqs.id"))
-    received_date = Column(String(10))
+    id              = Column(Integer, primary_key=True)
+    vendor_rfq_id   = Column(Integer, ForeignKey("vendor_rfqs.id"))
+    vendor_quote_no = Column(String(100))   # 수신된 Vendor 고유 견적번호
+    received_date   = Column(String(10))
     items         = Column(JSON, default=list)
     notes         = Column(Text)
     created_at    = Column(DateTime, default=datetime.utcnow)

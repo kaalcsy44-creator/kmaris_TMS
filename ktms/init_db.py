@@ -11,7 +11,7 @@ from datetime import datetime, date as _date
 import bcrypt
 from sqlalchemy import text, inspect
 from db.engine import Base, get_engine, get_session
-from db.models import User, UserRole, DocSequence, Customer, Vendor, RFQ
+from db.models import User, UserRole, DocSequence, Customer, Vendor, RFQ, Quotation
 
 
 def create_tables():
@@ -23,6 +23,9 @@ def create_tables():
 _MIGRATIONS = {
     "rfqs": {
         "customer_rfq_no": "VARCHAR(100)",
+    },
+    "vendor_quotes": {
+        "vendor_quote_no": "VARCHAR(100)",
     },
     "orders": {
         "promised_delivery": "VARCHAR(10)",
@@ -108,6 +111,53 @@ def migrate_rfq_numbers():
         session.close()
 
 
+def migrate_quotation_numbers():
+    """기존 KMS-QTN-YYYY-NNNN 형식의 견적 번호를 KMS-QUO-yymm-NNN 형식으로 변환.
+
+    이미 신규 형식(KMS-QUO-)인 견적은 건너뛰므로 반복 실행해도 안전하다.
+    기간(yymm)은 견적일(date) 기준, 없으면 생성일(created_at)을 사용한다.
+    """
+    session = get_session()
+    try:
+        old = [
+            q for q in session.query(Quotation).order_by(Quotation.id).all()
+            if not (q.qtn_no or "").startswith("KMS-QUO-")
+        ]
+        if not old:
+            print("[SKIP] No quotation numbers to migrate.")
+            return
+
+        period_seq = {
+            s.year: s
+            for s in session.query(DocSequence).filter_by(doc_type="quotation_internal").all()
+        }
+        renamed = 0
+        for q in old:
+            period_date = None
+            if q.date:
+                try:
+                    period_date = datetime.strptime(q.date, "%Y-%m-%d").date()
+                except ValueError:
+                    period_date = None
+            if period_date is None:
+                period_date = q.created_at.date() if q.created_at else _date.today()
+
+            period = period_date.year * 100 + period_date.month
+            seq = period_seq.get(period)
+            if seq is None:
+                seq = DocSequence(doc_type="quotation_internal", year=period, last_seq=0)
+                session.add(seq)
+                session.flush()
+                period_seq[period] = seq
+            seq.last_seq += 1
+            q.qtn_no = f"KMS-QUO-{period_date:%y%m}-{seq.last_seq:03d}"
+            renamed += 1
+        session.commit()
+        print(f"[OK] {renamed} quotation number(s) migrated to KMS-QUO-yymm-NNN.")
+    finally:
+        session.close()
+
+
 def seed_admin():
     session = get_session()
     try:
@@ -164,6 +214,7 @@ if __name__ == "__main__":
     create_tables()
     migrate_columns()
     migrate_rfq_numbers()
+    migrate_quotation_numbers()
     seed_admin()
     seed_sample_data()
     print("Done.")
