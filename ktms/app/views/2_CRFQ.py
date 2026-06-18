@@ -12,9 +12,10 @@ import pandas as pd
 import streamlit as st
 from app.utils.auth import require_auth, current_user
 from app.utils.helpers import (
-    inject_css, hint, section_header, next_doc_no, next_rfq_no, status_badge, tracking_url,
+    inject_css, hint, section_header, next_doc_no, next_rfq_no, tracking_url,
     customer_options, vessel_options,
     rfq_list, get_rfq, get_customer, get_vessel, NAVY, BLUE,
+    INTERNAL_STEPS, pipeline_status_label,
 )
 from db.engine import get_session
 from db.models import RFQ, VendorRFQ, RFQStatus, FollowUpLevel, Customer, Vessel
@@ -63,7 +64,11 @@ def render_rfq_detail():
                     <div class="ktms-info-value">{value}</div>
                 </div>
                 """, unsafe_allow_html=True)
-        st.markdown(f"**상태:** {status_badge(rfq.status.value)}&nbsp;&nbsp;"
+        _stage_lbl = pipeline_status_label(rfq.id)
+        _stage_badge = (f"<span style='background:rgba(0,85,168,.12);color:{BLUE};"
+                        f"padding:3px 10px;border-radius:999px;font-size:12px;"
+                        f"font-weight:800;letter-spacing:.03em;'>{_stage_lbl}</span>")
+        st.markdown(f"**상태:** {_stage_badge}&nbsp;&nbsp;"
                     f"**Follow-up:** <span class='badge-{rfq.follow_up_level.value}'>{rfq.follow_up_level.value}</span>"
                     f"&nbsp;&nbsp;**날짜:** {rfq.date}", unsafe_allow_html=True)
         if rfq.notes:
@@ -75,20 +80,7 @@ def render_rfq_detail():
 
     with col_actions:
         st.markdown("**액션**")
-        new_status = st.selectbox("상태 변경", [s.value for s in RFQStatus],
-                                  index=[s.value for s in RFQStatus].index(rfq.status.value))
-        if st.button("상태 업데이트"):
-            session = get_session()
-            try:
-                r = session.query(RFQ).get(rfq.id)
-                r.status = RFQStatus(new_status)
-                session.commit()
-                _sheet_upsert_rfq(r, get_customer(r.customer_id), get_vessel(r.vessel_id) if r.vessel_id else None)
-                st.success("상태 업데이트 완료!")
-                st.rerun()
-            finally:
-                session.close()
-
+        st.caption("ℹ 상태는 14단계 진행에 따라 자동 반영됩니다.")
         new_level = st.selectbox("Level 변경", [l.value for l in FollowUpLevel],
                                  index=[l.value for l in FollowUpLevel].index(rfq.follow_up_level.value))
         if st.button("Level 업데이트"):
@@ -144,7 +136,8 @@ tab_new, tab_list = st.tabs(["➕ 신규 등록", "📋 Customer RFQ 목록"])
 with tab_list:
     col_f1, col_f2, col_f3 = st.columns([2, 2, 1])
     with col_f1:
-        status_filter = st.selectbox("상태 필터", ["전체"] + [s.value for s in RFQStatus])
+        _stage_filter_opts = ["전체"] + [f"{i}/14 {name}" for i, name in enumerate(INTERNAL_STEPS, 1)]
+        status_filter = st.selectbox("상태 필터 (14단계)", _stage_filter_opts)
     with col_f2:
         cust_opts = {"전체": None, **customer_options()}
         cust_sel = st.selectbox("Customer 필터", list(cust_opts.keys()))
@@ -152,26 +145,30 @@ with tab_list:
         st.markdown("<br>", unsafe_allow_html=True)
         refresh = st.button("새로고침", use_container_width=True)
 
-    rfqs = rfq_list(None if status_filter == "전체" else status_filter)
+    rfqs = rfq_list()
     if cust_sel != "전체" and cust_opts[cust_sel]:
         rfqs = [r for r in rfqs if r.customer_id == cust_opts[cust_sel]]
 
-    if rfqs:
-        rows = []
-        for r in rfqs:
-            c = get_customer(r.customer_id)
-            v = get_vessel(r.vessel_id) if r.vessel_id else None
-            rows.append({
-                "ID": r.id,
-                "RFQ No. (K-Maris)": r.rfq_no,
-                "고객 RFQ No.": r.customer_rfq_no or "—",
-                "Customer": c.name if c else "—",
-                "선박": v.name if v else "—",
-                "품목수": len(r.items or []),
-                "Level": r.follow_up_level.value if r.follow_up_level else "—",
-                "상태": r.status.value,
-                "날짜": r.date or "—",
-            })
+    rows = []
+    for r in rfqs:
+        stage_lbl = pipeline_status_label(r.id)
+        if status_filter != "전체" and stage_lbl != status_filter:
+            continue
+        c = get_customer(r.customer_id)
+        v = get_vessel(r.vessel_id) if r.vessel_id else None
+        rows.append({
+            "ID": r.id,
+            "RFQ No. (K-Maris)": r.rfq_no,
+            "고객 RFQ No.": r.customer_rfq_no or "—",
+            "Customer": c.name if c else "—",
+            "선박": v.name if v else "—",
+            "품목수": len(r.items or []),
+            "Level": r.follow_up_level.value if r.follow_up_level else "—",
+            "상태": stage_lbl,
+            "날짜": r.date or "—",
+        })
+
+    if rows:
         df = pd.DataFrame(rows)
         selected = st.dataframe(
             df.drop(columns=["ID"]),
@@ -183,6 +180,8 @@ with tab_list:
         sel_rows = selected.selection.rows if hasattr(selected, "selection") else []
         if sel_rows:
             st.session_state["rfq_detail_id"] = int(df.iloc[sel_rows[0]]["ID"])
+    elif status_filter != "전체" or cust_sel != "전체":
+        hint("필터 조건에 맞는 RFQ가 없습니다.")
     else:
         hint("등록된 RFQ가 없습니다.")
 

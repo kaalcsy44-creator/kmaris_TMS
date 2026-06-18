@@ -1583,6 +1583,12 @@ def internal_pipeline_stage(rfq_id: int) -> int:
         s.close()
 
 
+def pipeline_status_label(rfq_id: int) -> str:
+    """RFQ의 현재 '상태'를 14단계 진행 기준으로 표기. 예: '5/14 Customer P/O 수신'."""
+    st_ = internal_pipeline_stage(rfq_id)
+    return f"{st_}/14 {INTERNAL_STEPS[st_ - 1]}"
+
+
 def internal_progress_bar_html(current_stage: int, total: int = 14) -> str:
     """14칸 진행 막대 (collapsed 요약용)."""
     segs = "".join(
