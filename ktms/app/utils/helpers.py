@@ -394,18 +394,20 @@ section[data-testid="stSidebar"] [data-testid="stSidebarContent"] {{
     padding-right: 0 !important;
 }}
 section[data-testid="stSidebar"] nav {{
-    margin-top: 114px !important;
+    margin-top: 72px !important;
     padding-left: 0 !important;
     margin-left: 0 !important;
 }}
 /* ── Sidebar brand logo (top, sits in the 72px gap above the nav) ─────────── */
 [data-testid="stSidebarNav"] {{
     position: relative !important;
+    /* 메뉴 항목을 아래로 내림. 로고(::before)는 absolute라 영향 없이 제자리 유지 */
+    padding-top: 84px !important;
 }}
 [data-testid="stSidebarNav"]::before {{
     content: "" !important;
     position: absolute !important;
-    top: -102px !important;
+    top: -24px !important;
     left: 14px !important;
     width: 124px !important;
     height: 52px !important;
