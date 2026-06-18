@@ -15,7 +15,7 @@ from app.utils.auth import require_auth
 from app.utils.helpers import (
     inject_css, hint, section_header, next_doc_no,
     vendor_options, rfq_list, get_rfq, get_customer, get_vessel, get_vendor,
-    vrfq_list_for_rfq, vendor_quotes_for_vrfq,
+    vrfq_list_for_rfq, vendor_quotes_for_vrfq, pipeline_status_label,
 )
 from db.engine import get_session
 from db.models import RFQ, VendorRFQ, RFQStatus
@@ -147,7 +147,7 @@ with tab_send:
         v = get_vessel(r.vessel_id) if r.vessel_id else None
         label = (
             f"{r.rfq_no}  |  {c.name if c else '—'}"
-            f"  |  {v.name if v else '—'}  |  {r.status.value}"
+            f"  |  {v.name if v else '—'}  |  {pipeline_status_label(r.id)}"
         )
         rfq_label_map[label] = r.id
 
