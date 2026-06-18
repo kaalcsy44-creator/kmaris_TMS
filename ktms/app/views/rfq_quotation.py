@@ -118,7 +118,9 @@ def render_overview():
                    if vrfq_ids else [])
             if vqs:
                 vq0 = vqs[0]
-                vq_cell = f"{vq0.vendor_quote_no or '—'} · {_kst(vq0.created_at)}"
+                # getattr 폴백: 배포 직후 모듈 캐시로 신규 컬럼이 아직 매핑 안 됐어도 크래시 방지.
+                _vq_no = getattr(vq0, "vendor_quote_no", None)
+                vq_cell = f"{_vq_no or '—'} · {_kst(vq0.created_at)}"
                 if len(vqs) > 1:
                     vq_cell += f"  (외 {len(vqs) - 1}건)"
                 vq_amt_cell = f"{_items_cost_total(vq0.items):,.2f}"
