@@ -5,6 +5,7 @@
 st.stop() 문제를 피하기 위해 '선택된 한 탭'만 렌더한다.
 """
 from __future__ import annotations
+import html as _html
 import importlib.util
 import sys
 from datetime import timedelta
@@ -15,7 +16,6 @@ ROOT = _VIEWS.parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-import pandas as pd
 import streamlit as st
 from app.utils.auth import require_auth
 from app.utils.helpers import (
@@ -70,6 +70,36 @@ def _items_cost_total(items) -> float:
     return tot
 
 
+_OV_CSS = """
+<style>
+.ov-wrap { overflow-x:auto; border:1px solid #D7E2EE; border-radius:12px;
+           box-shadow:0 4px 20px rgba(11,29,58,.06); }
+.ov-table { width:100%; border-collapse:collapse; font-size:13px; }
+.ov-table th { text-align:left; padding:9px 12px; background:#F1F5FB; color:#0B1D3A;
+               font-weight:700; font-size:11.5px; white-space:nowrap;
+               border-bottom:2px solid #D7E2EE; }
+.ov-table td { padding:7px 12px; border-bottom:1px solid #EDF2F8; vertical-align:top;
+               color:#1F2937; white-space:nowrap; }
+.ov-table tr:last-child td { border-bottom:none; }
+.ov-table tbody tr:hover td { background:#F8FBFF; }
+.ov-table tbody tr.sel td { background:#EAF3FF; }
+.ov-sub { font-size:80%; color:#9AA6B5; margin-top:1px; }
+.ov-r { text-align:right; }
+.ov-chk { text-align:center; padding-left:10px; padding-right:4px; }
+.ov-box { text-decoration:none; font-size:17px; color:#9AA6B5; line-height:1; }
+.ov-box.on, .ov-box:hover { color:#0055A8; }
+</style>
+"""
+
+
+def _td(main, sub: str = "", cls: str = "") -> str:
+    m = _html.escape(str(main)) if main not in (None, "", "—") else "—"
+    inner = f"<div>{m}</div>"
+    if sub:
+        inner += f'<div class="ov-sub">{_html.escape(str(sub))}</div>'
+    return f'<td class="{cls}">{inner}</td>'
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # 통합 현황 테이블 — 거래(RFQ) 1건당 한 행 (기존 4개 목록/내역 병합)
 # ══════════════════════════════════════════════════════════════════════════════
@@ -104,11 +134,10 @@ def render_overview():
                      .order_by(VendorRFQ.id.desc()).all())
             if vrfqs:
                 vr0 = vrfqs[0]
-                vrfq_cell = f"{vr0.vrfq_no} · {_kst(vr0.created_at)}"
-                if len(vrfqs) > 1:
-                    vrfq_cell += f"  (외 {len(vrfqs) - 1}건)"
+                vrfq_main = vr0.vrfq_no + (f"  (외 {len(vrfqs) - 1}건)" if len(vrfqs) > 1 else "")
+                vrfq_sub = _kst(vr0.created_at)
             else:
-                vrfq_cell = "—"
+                vrfq_main, vrfq_sub = "—", ""
 
             # 7) Vendor Quot. 수신 — 최신 1건 + (외 N건), 7-1) 금액
             vrfq_ids = [x.id for x in vrfqs]
@@ -119,39 +148,40 @@ def render_overview():
             if vqs:
                 vq0 = vqs[0]
                 # getattr 폴백: 배포 직후 모듈 캐시로 신규 컬럼이 아직 매핑 안 됐어도 크래시 방지.
-                _vq_no = getattr(vq0, "vendor_quote_no", None)
-                vq_cell = f"{_vq_no or '—'} · {_kst(vq0.created_at)}"
-                if len(vqs) > 1:
-                    vq_cell += f"  (외 {len(vqs) - 1}건)"
+                _vq_no = getattr(vq0, "vendor_quote_no", None) or "—"
+                vq_main = str(_vq_no) + (f"  (외 {len(vqs) - 1}건)" if len(vqs) > 1 else "")
+                vq_sub = _kst(vq0.created_at)
                 _vq_cur = getattr(vq0, "currency", None) or "USD"
-                vq_amt_cell = f"{_vq_cur} {_items_cost_total(vq0.items):,.2f}"
+                vq_amt = f"{_vq_cur} {_items_cost_total(vq0.items):,.2f}"
             else:
-                vq_cell, vq_amt_cell = "—", "—"
+                vq_main, vq_sub, vq_amt = "—", "", "—"
 
             # 8) Customer Quot. 발신 (최신), 9) 금액
             qtn = (s.query(Quotation).filter_by(rfq_id=r.id)
                    .order_by(Quotation.id.desc()).first())
             if qtn:
-                qtn_cell = f"{qtn.qtn_no} · {_kst(qtn.created_at)}"
-                qtn_amt_cell = f"{qtn.currency} {total_amount(qtn.items or []):,.2f}"
+                qtn_main, qtn_sub = qtn.qtn_no, _kst(qtn.created_at)
+                qtn_amt = f"{qtn.currency} {total_amount(qtn.items or []):,.2f}"
             else:
-                qtn_cell, qtn_amt_cell = "—", "—"
+                qtn_main, qtn_sub, qtn_amt = "—", "", "—"
 
             rows.append({
                 "ID": r.id,
                 "QTN_ID": qtn.id if qtn else 0,
                 "VRFQ_ID": vrfq_ids[0] if vrfq_ids else 0,  # 최신 VRFQ
-                "고객 RFQ No.": r.customer_rfq_no or "—",
-                "Customer": c.name if c else "—",
-                "선박": v.name if v else "—",
-                "품목수": len(r.items or []),
-                "Customer RFQ 수신": f"{r.rfq_no} · {_kst(r.created_at)}",
-                "Vendor RFQ 발신": vrfq_cell,
-                "Vendor Quot. 수신": vq_cell,
-                "Vendor 견적 금액": vq_amt_cell,
-                "Customer Quot. 발신": qtn_cell,
-                "Customer 견적 금액": qtn_amt_cell,
-                "상태": stage_lbl,
+                "tds": [
+                    _td(r.customer_rfq_no or "—"),
+                    _td(c.name if c else "—"),
+                    _td(v.name if v else "—"),
+                    _td(len(r.items or []), cls="ov-r"),
+                    _td(r.rfq_no, _kst(r.created_at)),
+                    _td(vrfq_main, vrfq_sub),
+                    _td(vq_main, vq_sub),
+                    _td(vq_amt, cls="ov-r"),
+                    _td(qtn_main, qtn_sub),
+                    _td(qtn_amt, cls="ov-r"),
+                    _td(stage_lbl),
+                ],
             })
     finally:
         s.close()
@@ -160,22 +190,45 @@ def render_overview():
         hint("표시할 RFQ가 없습니다. 'Customer RFQ · 신규 등록' 탭에서 등록하세요.")
         return
 
-    df = pd.DataFrame(rows)
-    selected = st.dataframe(
-        df.drop(columns=["ID", "QTN_ID", "VRFQ_ID"]),
-        use_container_width=True, hide_index=True,
-        selection_mode="single-row", on_select="rerun", key="ov_table",
-    )
-    sel = selected.selection.rows if hasattr(selected, "selection") else []
-    if sel:
-        row = df.iloc[sel[0]]
-        st.session_state["rfq_detail_id"] = int(row["ID"])
-        if int(row["QTN_ID"]):
-            st.session_state["qtn_detail_id"] = int(row["QTN_ID"])
-        if int(row["VRFQ_ID"]):
-            st.session_state["vrfq_detail_id"] = int(row["VRFQ_ID"])
+    # 현재 선택 — query param 으로 보관. 좌측 체크박스(링크) 클릭 시 토글된다.
+    sel_id_str = st.query_params.get("ov_sel", "")
+    chosen = None
+    if sel_id_str:
+        try:
+            _rid = int(sel_id_str)
+            chosen = next((rw for rw in rows if rw["ID"] == _rid), None)
+        except ValueError:
+            chosen = None
 
-    with st.expander("선택한 건 상세 · 액션", expanded=bool(sel)):
+    headers = ["", "고객 RFQ No.", "Customer", "선박", "품목수", "Customer RFQ 수신",
+               "Vendor RFQ 발신", "Vendor Quot. 수신", "Vendor 견적 금액",
+               "Customer Quot. 발신", "Customer 견적 금액", "상태"]
+    thead = "<tr>" + "".join(f"<th>{h}</th>" for h in headers) + "</tr>"
+    body_rows = []
+    for rw in rows:
+        rid = rw["ID"]
+        is_sel = chosen is not None and rid == chosen["ID"]
+        # 선택된 행은 다시 누르면 해제(빈 값), 아니면 해당 ID로 선택
+        href = "?ov_sel=" if is_sel else f"?ov_sel={rid}"
+        box = "☑" if is_sel else "☐"
+        chk = (f'<td class="ov-chk"><a href="{href}" target="_self" '
+               f'class="ov-box{" on" if is_sel else ""}">{box}</a></td>')
+        tr_cls = ' class="sel"' if is_sel else ""
+        body_rows.append(f"<tr{tr_cls}>" + chk + "".join(rw["tds"]) + "</tr>")
+    st.markdown(
+        _OV_CSS + '<div class="ov-wrap"><table class="ov-table">'
+        f'<thead>{thead}</thead><tbody>{"".join(body_rows)}</tbody></table></div>',
+        unsafe_allow_html=True,
+    )
+
+    if chosen:
+        st.session_state["rfq_detail_id"] = chosen["ID"]
+        if chosen["QTN_ID"]:
+            st.session_state["qtn_detail_id"] = chosen["QTN_ID"]
+        if chosen["VRFQ_ID"]:
+            st.session_state["vrfq_detail_id"] = chosen["VRFQ_ID"]
+
+    with st.expander("선택한 건 상세 · 액션", expanded=bool(chosen)):
         _crfq.render_rfq_detail()
         if st.session_state.get("qtn_detail_id"):
             st.markdown("---")
