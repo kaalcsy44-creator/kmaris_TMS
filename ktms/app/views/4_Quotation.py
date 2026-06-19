@@ -352,12 +352,12 @@ def render_qtn_new():
 def render_qtn_send():
     qtn_id = st.session_state.get("qtn_detail_id")
     if not qtn_id:
-        hint("먼저 'Customer Quot. 목록' 탭에서 견적을 선택하세요.")
+        hint("위에서 신규 견적을 저장하거나 상단 통합 현황표에서 기존 견적을 선택하세요.")
         return
 
     qtn = get_quotation(int(qtn_id))
     if not qtn:
-        st.error("선택한 견적을 찾을 수 없습니다. 목록에서 다시 선택하세요.")
+        st.error("선택한 견적을 찾을 수 없습니다. 상단 통합 현황표에서 다시 선택하세요.")
         return
 
     cust   = get_customer(qtn.customer_id)
@@ -470,3 +470,9 @@ def render_qtn_send():
                     st.error("이메일 발송 실패. .env의 SMTP 설정을 확인하세요.")
             except Exception as e:
                 st.error(f"오류: {e}")
+
+
+def render_qtn_create_send():
+    render_qtn_new()
+    st.markdown("---")
+    render_qtn_send()

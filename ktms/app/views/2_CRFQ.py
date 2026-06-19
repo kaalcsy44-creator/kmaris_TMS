@@ -15,7 +15,7 @@ from app.utils.helpers import (
     inject_css, hint, section_header, next_doc_no, next_rfq_no, tracking_url,
     customer_options, vessel_options,
     rfq_list, get_rfq, get_customer, get_vessel, NAVY, BLUE,
-    INTERNAL_STEPS, pipeline_status_label,
+    INTERNAL_STEPS, pipeline_status_label, clear_cached_reference_data,
 )
 from db.engine import get_session
 from db.models import RFQ, VendorRFQ, RFQStatus, FollowUpLevel, Customer, Vessel
@@ -265,6 +265,7 @@ def render_crfq_new():
                                     contact=nc_contact, email=nc_email,
                                     address=nc_addr, tax_id=nc_taxid))
                     _s.commit()
+                    clear_cached_reference_data()
                     st.success(f"✅ Customer '{nc_name.strip()}' 등록 완료! 아래 드롭다운에 반영됩니다.")
                     st.rerun()
                 finally:
@@ -300,6 +301,7 @@ def render_crfq_new():
                                   engine_type=nv_engine, hull_no=nv_hull,
                                   customer_id=_owner_opts.get(nv_owner)))
                     _s.commit()
+                    clear_cached_reference_data()
                     st.success(f"✅ 선박 '{nv_name.strip()}' 등록 완료! 아래 드롭다운에 반영됩니다.")
                     st.rerun()
                 finally:

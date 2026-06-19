@@ -11,7 +11,7 @@ if str(ROOT) not in sys.path:
 import pandas as pd
 import streamlit as st
 from app.utils.auth import require_auth, is_admin, hash_password, current_user
-from app.utils.helpers import inject_css, section_header, customer_options, get_customer, NAVY
+from app.utils.helpers import inject_css, section_header, customer_options, get_customer, NAVY, clear_cached_reference_data
 from db.engine import get_session
 from db.models import User, UserRole, Customer, Vendor, Vessel, ItemMaster
 
@@ -129,6 +129,7 @@ def master_crud(*, model, order_by, label, list_cols, fields, key):
                 for f in fields:
                     setattr(obj, f["name"], values[f["name"]])
                 session.commit()
+                clear_cached_reference_data()
                 st.success("수정 완료!" if editing else f"{label} 추가 완료!")
             finally:
                 session.close()
@@ -144,6 +145,7 @@ def master_crud(*, model, order_by, label, list_cols, fields, key):
             try:
                 session.delete(session.query(model).get(sel_id))
                 session.commit()
+                clear_cached_reference_data()
             finally:
                 session.close()
             _reset_selection()

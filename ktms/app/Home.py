@@ -27,55 +27,54 @@ for _k in _SECRET_KEYS:
     except Exception:
         pass
 
-# ── Auto-initialize DB tables on first run ────────────────────────────────────
-try:
-    from db.engine import Base, get_engine, get_session
-    from db.models import *  # noqa: F401,F403
-    Base.metadata.create_all(bind=get_engine())
-except Exception as _e:
-    st.error(f"DB 초기화 오류: {_e}")
-    st.stop()
+@st.cache_resource(show_spinner=False)
+def _bootstrap_database() -> tuple[bool, str]:
+    """Run startup DB checks once per Streamlit process, not on every rerun."""
+    try:
+        from db.engine import Base, get_engine, get_session
+        import db.models  # noqa: F401
+        Base.metadata.create_all(bind=get_engine())
 
-# ── Column migrations (idempotent, SQLite + PostgreSQL) ───────────────────────
-# Streamlit Cloud caches imported modules across reruns; force a reload so newly
-# added migration functions are always picked up (avoids stale "cannot import
-# name ..." errors after a deploy).
-try:
-    import importlib
-    import init_db as _init_db
-    importlib.reload(_init_db)
-    _init_db.migrate_columns()
-    _init_db.migrate_rfq_numbers()
-    _init_db.migrate_quotation_numbers()
-except Exception as _mig_err:
-    st.warning(f"⚠️ 컬럼 마이그레이션 경고: {_mig_err}")
+        import importlib
+        import init_db as _init_db
+        importlib.reload(_init_db)
+        _init_db.migrate_columns()
+        _init_db.migrate_rfq_numbers()
+        _init_db.migrate_quotation_numbers()
 
-# ── Auto-seed admin + sample data on first cloud run ─────────────────────────
-try:
-    import bcrypt as _bcrypt
-    from db.models import User, UserRole, Customer, Vendor
-    _s = get_session()
-    _user_count = _s.query(User).count()
-    _admin_exists = _s.query(User).filter_by(username="admin").first() is not None
-    if _user_count == 0 or not _admin_exists:
-        if not _admin_exists:
-            _pw = _bcrypt.hashpw(b"admin1234", _bcrypt.gensalt()).decode()
-            _s.add(User(username="admin", email="admin@k-maris.com",
-                        password_hash=_pw, role=UserRole.ADMIN))
-        if _s.query(Customer).count() == 0:
-            _s.add(Customer(name="ABC Ship Management Pte. Ltd.",
-                            address="10 Anson Road, Singapore",
-                            contact="Mr. John Lee", email="purchase@example.com",
-                            tax_id="SG-000000", country="Singapore"))
-            _s.add(Vendor(name="MAN Energy Solutions",
-                          address="Teglholmsgade 41, Copenhagen, Denmark",
-                          contact="Mr. Klaus Schmidt", email="spares@man-es.com",
-                          country="Denmark",
-                          specialization="MAN B&W Engine OEM Parts"))
-        _s.commit()
-    _s.close()
-except Exception as _seed_err:
-    st.error(f"⚠️ DB 초기 사용자 생성 실패: {_seed_err}")
+        import bcrypt as _bcrypt
+        from db.models import User, UserRole, Customer, Vendor
+
+        _s = get_session()
+        try:
+            _user_count = _s.query(User).count()
+            _admin_exists = _s.query(User).filter_by(username="admin").first() is not None
+            if _user_count == 0 or not _admin_exists:
+                if not _admin_exists:
+                    _pw = _bcrypt.hashpw(b"admin1234", _bcrypt.gensalt()).decode()
+                    _s.add(User(username="admin", email="admin@k-maris.com",
+                                password_hash=_pw, role=UserRole.ADMIN))
+                if _s.query(Customer).count() == 0:
+                    _s.add(Customer(name="ABC Ship Management Pte. Ltd.",
+                                    address="10 Anson Road, Singapore",
+                                    contact="Mr. John Lee", email="purchase@example.com",
+                                    tax_id="SG-000000", country="Singapore"))
+                    _s.add(Vendor(name="MAN Energy Solutions",
+                                  address="Teglholmsgade 41, Copenhagen, Denmark",
+                                  contact="Mr. Klaus Schmidt", email="spares@man-es.com",
+                                  country="Denmark",
+                                  specialization="MAN B&W Engine OEM Parts"))
+                _s.commit()
+        finally:
+            _s.close()
+        return True, ""
+    except Exception as exc:
+        return False, str(exc)
+
+
+_boot_ok, _boot_msg = _bootstrap_database()
+if not _boot_ok:
+    st.error(f"⚠️ DB 초기화 실패: {_boot_msg}")
     st.stop()
 
 # ── Page config (called ONCE here — page files skip this) ─────────────────────

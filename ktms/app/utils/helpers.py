@@ -951,6 +951,42 @@ def next_quotation_no(company_prefix: str = "KMS") -> str:
 
 # ── Master data loaders ───────────────────────────────────────────────────────
 
+@st.cache_data(ttl=15, show_spinner=False)
+def _cached_customer_options() -> Dict[str, int]:
+    s = get_session()
+    try:
+        return {c.name: c.id for c in s.query(Customer).order_by(Customer.name).all()}
+    finally:
+        s.close()
+
+
+@st.cache_data(ttl=15, show_spinner=False)
+def _cached_vendor_options() -> Dict[str, int]:
+    s = get_session()
+    try:
+        return {v.name: v.id for v in s.query(Vendor).order_by(Vendor.name).all()}
+    finally:
+        s.close()
+
+
+@st.cache_data(ttl=15, show_spinner=False)
+def _cached_vessel_options(customer_id: int | None = None) -> Dict[str, int]:
+    s = get_session()
+    try:
+        q = s.query(Vessel)
+        if customer_id:
+            q = q.filter((Vessel.customer_id == customer_id) | (Vessel.customer_id == None))
+        return {v.name: v.id for v in q.order_by(Vessel.name).all()}
+    finally:
+        s.close()
+
+
+def clear_cached_reference_data() -> None:
+    _cached_customer_options.clear()
+    _cached_vendor_options.clear()
+    _cached_vessel_options.clear()
+
+
 def all_customers() -> List[Customer]:
     s = get_session()
     try:
@@ -1012,16 +1048,15 @@ def get_vendor(vid: int) -> Optional[Vendor]:
 # ── Selectbox helpers ─────────────────────────────────────────────────────────
 
 def customer_options() -> Dict[str, int]:
-    return {c.name: c.id for c in all_customers()}
+    return _cached_customer_options()
 
 
 def vendor_options() -> Dict[str, int]:
-    return {v.name: v.id for v in all_vendors()}
+    return _cached_vendor_options()
 
 
 def vessel_options(customer_id: int = None) -> Dict[str, int]:
-    vessels = customer_vessels(customer_id) if customer_id else all_vessels()
-    return {v.name: v.id for v in vessels}
+    return _cached_vessel_options(customer_id)
 
 
 # ── RFQ helpers ───────────────────────────────────────────────────────────────
@@ -1259,6 +1294,168 @@ def ar_list(status: str = None) -> List[ARRecord]:
 
 # ── Dashboard stats ───────────────────────────────────────────────────────────
 
+def _safe_status_value(obj) -> str:
+    return obj.value if hasattr(obj, "value") else str(obj or "")
+
+
+def _item_count(items) -> int:
+    return len(items or [])
+
+
+@st.cache_data(ttl=15, show_spinner=False)
+def dashboard_snapshot(limit: int = 20) -> Dict[str, Any]:
+    from services.tracking_status import rfq_tracking_step, order_tracking_step
+
+    s = get_session()
+    try:
+        rfqs = s.query(RFQ).order_by(RFQ.created_at.desc()).limit(limit).all()
+        rfq_ids = [r.id for r in rfqs]
+        customer_ids = {r.customer_id for r in rfqs if r.customer_id}
+        vessel_ids = {r.vessel_id for r in rfqs if r.vessel_id}
+
+        quotations = s.query(Quotation).filter(Quotation.rfq_id.in_(rfq_ids)).all() if rfq_ids else []
+        qtn_by_id = {q.id: q for q in quotations}
+        qtn_ids = list(qtn_by_id)
+
+        orders = []
+        if rfq_ids:
+            orders.extend(s.query(Order).filter(Order.rfq_id.in_(rfq_ids)).order_by(Order.created_at.desc()).all())
+        if qtn_ids:
+            orders.extend(s.query(Order).filter(Order.quotation_id.in_(qtn_ids)).order_by(Order.created_at.desc()).all())
+
+        order_by_rfq: Dict[int, Order] = {}
+        for order in orders:
+            rid = order.rfq_id or (qtn_by_id.get(order.quotation_id).rfq_id if order.quotation_id in qtn_by_id else None)
+            if rid and rid not in order_by_rfq:
+                order_by_rfq[rid] = order
+            if order.customer_id:
+                customer_ids.add(order.customer_id)
+            if order.vessel_id:
+                vessel_ids.add(order.vessel_id)
+
+        customers = {c.id: c.name for c in s.query(Customer).filter(Customer.id.in_(customer_ids)).all()} if customer_ids else {}
+        vessels = {v.id: v.name for v in s.query(Vessel).filter(Vessel.id.in_(vessel_ids)).all()} if vessel_ids else {}
+
+        vrfqs = s.query(VendorRFQ).filter(VendorRFQ.rfq_id.in_(rfq_ids)).all() if rfq_ids else []
+        vrfq_by_rfq: Dict[int, list[int]] = {}
+        for vrfq in vrfqs:
+            vrfq_by_rfq.setdefault(vrfq.rfq_id, []).append(vrfq.id)
+        vrfq_ids = [v.id for v in vrfqs]
+        quoted_vrfq_ids = {row[0] for row in s.query(VendorQuote.vendor_rfq_id).filter(VendorQuote.vendor_rfq_id.in_(vrfq_ids)).all()} if vrfq_ids else set()
+        sent_quote_rfqs = {q.rfq_id for q in quotations if q.rfq_id and q.status != QuotationStatus.DRAFT}
+
+        order_ids = [o.id for o in order_by_rfq.values()]
+        po_order_ids = {row[0] for row in s.query(PurchaseOrder.order_id).filter(PurchaseOrder.order_id.in_(order_ids)).all()} if order_ids else set()
+        sa_order_ids = {row[0] for row in s.query(ShippingAdvice.order_id).filter(ShippingAdvice.order_id.in_(order_ids)).all()} if order_ids else set()
+        cis = s.query(CommercialInvoice).filter(CommercialInvoice.order_id.in_(order_ids)).all() if order_ids else []
+        ci_by_order = {ci.order_id: ci for ci in cis}
+        ci_ids = [ci.id for ci in cis]
+        tax_ci_ids = {row[0] for row in s.query(TaxInvoiceData.ci_id).filter(TaxInvoiceData.ci_id.in_(ci_ids)).all()} if ci_ids else set()
+        ar_by_order: Dict[int, list[ARRecord]] = {}
+        if order_ids:
+            for ar in s.query(ARRecord).filter(ARRecord.order_id.in_(order_ids)).all():
+                ar_by_order.setdefault(ar.order_id, []).append(ar)
+
+        def customer_vessel(customer_id, vessel_id) -> str:
+            name = customers.get(customer_id, "—")
+            vessel = vessels.get(vessel_id)
+            return f"{name} · {vessel}" if vessel else name
+
+        def pipeline_stage(rfq_id: int) -> int:
+            stage = 1
+            ids = vrfq_by_rfq.get(rfq_id, [])
+            if ids:
+                stage = max(stage, 2)
+                if any(i in quoted_vrfq_ids for i in ids):
+                    stage = max(stage, 3)
+            if rfq_id in sent_quote_rfqs:
+                stage = max(stage, 4)
+            order = order_by_rfq.get(rfq_id)
+            if not order:
+                return stage
+            stage = max(stage, 5)
+            if order.id in po_order_ids:
+                stage = max(stage, 6)
+            stage = max(stage, {
+                OrderStatus.RECEIVED: 5,
+                OrderStatus.PO_SENT: 6,
+                OrderStatus.PREPARING: 7,
+                OrderStatus.SHIPPED: 9,
+                OrderStatus.IN_TRANSIT: 10,
+                OrderStatus.DELIVERED: 11,
+            }.get(order.status, 5))
+            if getattr(order, "consignee_confirmed_date", None):
+                stage = max(stage, 8)
+            if order.id in sa_order_ids:
+                stage = max(stage, 9)
+            if getattr(order, "vendor_docs_sent_date", None):
+                stage = max(stage, 10)
+            ci = ci_by_order.get(order.id)
+            if ci:
+                stage = max(stage, 10)
+                if ci.id in tax_ci_ids:
+                    stage = max(stage, 13)
+            ars = ar_by_order.get(order.id, [])
+            if ars:
+                stage = max(stage, 12)
+                if any(ar.status == ARStatus.PAID for ar in ars):
+                    stage = max(stage, 14)
+            return stage
+
+        rfq_rows = []
+        for r in rfqs:
+            rfq_step, _ = rfq_tracking_step(_safe_status_value(r.status))
+            order = order_by_rfq.get(r.id)
+            order_row = None
+            if order:
+                order_step, _ = order_tracking_step(_safe_status_value(order.status))
+                order_row = {
+                    "ord_no": order.ord_no,
+                    "status": _safe_status_value(order.status),
+                    "customer_vessel": customer_vessel(order.customer_id, order.vessel_id),
+                    "item_count": _item_count(order.items),
+                    "date": order.date or "—",
+                    "step": order_step,
+                }
+            rfq_rows.append({
+                "rfq_no": r.rfq_no,
+                "customer_rfq_no": r.customer_rfq_no or "",
+                "status": _safe_status_value(r.status),
+                "customer_vessel": customer_vessel(r.customer_id, r.vessel_id),
+                "item_count": _item_count(r.items),
+                "follow_up_level": _safe_status_value(r.follow_up_level) or "—",
+                "date": r.date or "—",
+                "step": rfq_step,
+                "order": order_row,
+                "stage": pipeline_stage(r.id),
+            })
+
+        orphan_rows = []
+        orphans = (
+            s.query(Order)
+            .outerjoin(Quotation, Order.quotation_id == Quotation.id)
+            .filter(Order.rfq_id.is_(None) & ((Order.quotation_id.is_(None)) | (Quotation.rfq_id.is_(None))))
+            .order_by(Order.created_at.desc())
+            .limit(10)
+            .all()
+        )
+        for order in orphans:
+            order_step, _ = order_tracking_step(_safe_status_value(order.status))
+            orphan_rows.append({
+                "ord_no": order.ord_no,
+                "status": _safe_status_value(order.status),
+                "customer_vessel": customer_vessel(order.customer_id, order.vessel_id),
+                "item_count": _item_count(order.items),
+                "date": order.date or "—",
+                "step": order_step,
+            })
+
+        return {"rfqs": rfq_rows, "orphans": orphan_rows}
+    finally:
+        s.close()
+
+
+@st.cache_data(ttl=15, show_spinner=False)
 def dashboard_stats() -> Dict[str, Any]:
     s = get_session()
     try:

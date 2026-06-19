@@ -242,11 +242,10 @@ st.markdown("---")
 
 # ── 작업 탭바 (신규 등록 · 발신 · 수신 등록) ──────────────────────────────────────
 TABS = [
-    ("Customer RFQ · 신규 등록", _crfq.render_crfq_new),
-    ("Vendor RFQ · 작성·발신",   _vrfq.render_vrfq_send),
-    ("Vendor Quot. · 수신 등록", _vq.render_vquote_register),
-    ("Customer Quot. · 신규 등록", _qtn.render_qtn_new),
-    ("Customer Quot. · 발신",    _qtn.render_qtn_send),
+    ("1. Customer RFQ 수신", _crfq.render_crfq_new),
+    ("2. Vendor RFQ 발신", _vrfq.render_vrfq_send),
+    ("3. Vendor Quot. 수신", _vq.render_vquote_register),
+    ("4. Customer Quot. 발신", _qtn.render_qtn_create_send),
 ]
 _labels = [t[0] for t in TABS]
 _render_by_label = {label: fn for label, fn in TABS}
