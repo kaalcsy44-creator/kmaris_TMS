@@ -302,6 +302,7 @@ def render_crfq_new():
                                   customer_id=_owner_opts.get(nv_owner)))
                     _s.commit()
                     clear_cached_reference_data()
+                    st.session_state["new_rfq_vessel_name"] = nv_name.strip()
                     st.success(f"✅ 선박 '{nv_name.strip()}' 등록 완료! 아래 드롭다운에 반영됩니다.")
                     st.rerun()
                 finally:
@@ -356,11 +357,14 @@ def render_crfq_new():
             vessel_keys = ["— 없음 —"] + list(vessel_opts.keys())
             _vessel_hint = _vessel_hint_raw.lower()
             _vessel_idx = 0
+            _registered_vessel = st.session_state.get("new_rfq_vessel_name", "")
             if _vessel_hint:
                 for i, k in enumerate(vessel_keys):
                     if _vessel_hint in k.lower() or k.lower() in _vessel_hint:
                         _vessel_idx = i
                         break
+            if _registered_vessel and _registered_vessel in vessel_keys:
+                _vessel_idx = vessel_keys.index(_registered_vessel)
             vessel_sel = st.selectbox("선박 (선택)", vessel_keys, index=_vessel_idx)
             vessel_id = vessel_opts.get(vessel_sel) if vessel_sel != "— 없음 —" else None
             notes = st.text_area("비고 / 고객 요청사항", value=ocr.get("notes") or "", height=96)
@@ -399,6 +403,7 @@ def render_crfq_new():
             t_url = tracking_url("rfq", rfq.tracking_token)
             st.info(f"🔗 고객 트래킹 링크: {t_url}")
             _sheet_upsert_rfq(rfq, get_customer(rfq.customer_id), get_vessel(rfq.vessel_id) if rfq.vessel_id else None)
+            st.session_state.pop("new_rfq_vessel_name", None)
             st.session_state.pop("rfq_ocr", None)
         finally:
             session.close()

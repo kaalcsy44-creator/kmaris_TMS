@@ -973,10 +973,16 @@ def _cached_vendor_options() -> Dict[str, int]:
 def _cached_vessel_options(customer_id: int | None = None) -> Dict[str, int]:
     s = get_session()
     try:
-        q = s.query(Vessel)
+        vessels = s.query(Vessel).order_by(Vessel.name).all()
         if customer_id:
-            q = q.filter((Vessel.customer_id == customer_id) | (Vessel.customer_id == None))
-        return {v.name: v.id for v in q.order_by(Vessel.name).all()}
+            vessels = sorted(
+                vessels,
+                key=lambda v: (
+                    0 if v.customer_id == customer_id else 1 if v.customer_id is None else 2,
+                    (v.name or "").lower(),
+                ),
+            )
+        return {v.name: v.id for v in vessels}
     finally:
         s.close()
 
