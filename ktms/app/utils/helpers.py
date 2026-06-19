@@ -1710,10 +1710,10 @@ def tracking_stepper_html(steps: List[str], current_step: int) -> str:
     return f'<div class="ktms-stepper">{"".join(parts)}</div>'
 
 
-# ── 내부 진행 현황 (14단계 파이프라인) ──────────────────────────────────────────
+# ── 내부 진행 현황 (12단계 파이프라인) ──────────────────────────────────────────
 # 직원용. 고객용 추적(RFQ_STEPS/ORDER_STEPS)과 별개로, 거래 한 건의 전체 흐름을
-# 14단계로 본다. 일부 단계(8 송품처 확인 등)는 전용 데이터가 없어 인접 단계의
-# 증거(주문 상태·서류 발행 여부)로 근사 추정한다.
+# 12단계로 본다. 일부 단계는 전용 데이터가 없어 인접 단계의 증거
+# (주문 상태·서류 발행 여부)로 근사 추정한다.
 INTERNAL_STEPS: List[str] = [
     "Customer RFQ 수신",
     "Vendor RFQ 발신",
@@ -1721,10 +1721,8 @@ INTERNAL_STEPS: List[str] = [
     "Customer Quot. 발신",
     "Customer P/O 수신",
     "Vendor P/O 발신",
-    "Vendor 물품 준비",
-    "Customer 송품처 확인",
-    "Customer 선적서류 발송",
-    "Vendor 선적서류 발송",
+    "Delivery Readiness",
+    "Delivery arrangement",
     "운송 완료 · POD 수취",
     "Tax Invoice 작성 · 대금 청구",
     "세금계산서 발행",
@@ -1733,10 +1731,10 @@ INTERNAL_STEPS: List[str] = [
 
 
 def internal_pipeline_stage(rfq_id: int) -> int:
-    """RFQ 1건의 내부 진행 단계(1~14)를 관련 레코드 증거로 추정한다.
+    """RFQ 1건의 내부 진행 단계(1~12)를 관련 레코드 증거로 추정한다.
 
     진행은 단조(monotonic) — 가장 멀리 도달한 단계를 반환한다. 전용 데이터가
-    없는 단계는 인접 증거로 근사한다(예: 출고완료→선적서류, ShippingAdvice→송품 단계).
+    없는 단계는 인접 증거로 근사한다(예: 출고완료·ShippingAdvice→Delivery arrangement).
     """
     s = get_session()
     try:
@@ -1771,46 +1769,46 @@ def internal_pipeline_stage(rfq_id: int) -> int:
             stage = max(stage, {
                 "오더 수주": 5,
                 "발주 완료": 6,
-                "제조/준비중": 7,    # Vendor 물품 준비
-                "출고완료": 9,       # 선적서류 발송 단계
-                "운송중": 10,
-                "목적지 하차 완료": 11,  # 운송 완료 · POD 수취
+                "제조/준비중": 7,    # Delivery Readiness
+                "출고완료": 8,       # Delivery arrangement
+                "운송중": 8,
+                "목적지 하차 완료": 9,  # 운송 완료 · POD 수취
             }.get(ost, 5))
 
-            # 8) Customer 송품처 확인 — 전용 데이터 없음, 문서 페이지에서 수동 확인
+            # 8) Delivery arrangement — 기존 수동 문서 확인 필드를 단계 근거로 재사용
             # getattr 폴백: 배포 직후 모듈 캐시로 신규 컬럼이 아직 매핑 안 됐어도 크래시 방지.
             if getattr(order, "consignee_confirmed_date", None):
                 stage = max(stage, 8)
             if s.query(ShippingAdvice).filter_by(order_id=order.id).first():
-                stage = max(stage, 9)
-            # 10) Vendor 선적서류 발송 — 수동 확인
+                stage = max(stage, 8)
             if getattr(order, "vendor_docs_sent_date", None):
-                stage = max(stage, 10)
+                stage = max(stage, 8)
             ci = s.query(CommercialInvoice).filter_by(order_id=order.id).first()
             if ci:
-                stage = max(stage, 10)  # 선적서류(CI/PL) 발행
+                stage = max(stage, 8)  # 선적서류(CI/PL) 작성
                 if s.query(TaxInvoiceData).filter_by(ci_id=ci.id).first():
-                    stage = max(stage, 13)  # 세금계산서 발행
+                    stage = max(stage, 11)  # 세금계산서 발행
 
             ars = s.query(ARRecord).filter_by(order_id=order.id).all()
             if ars:
-                stage = max(stage, 12)  # 대금 청구
+                stage = max(stage, 10)  # Tax Invoice 작성 · 대금 청구
                 if any((a.status.value if hasattr(a.status, "value") else a.status) == "완납"
                        for a in ars):
-                    stage = max(stage, 14)  # 대금 결제 완료
+                    stage = max(stage, 12)  # 대금 결제 완료
         return stage
     finally:
         s.close()
 
 
 def pipeline_status_label(rfq_id: int) -> str:
-    """RFQ의 현재 '상태'를 14단계 진행 기준으로 표기. 예: '5/14 Customer P/O 수신'."""
+    """RFQ의 현재 '상태'를 12단계 진행 기준으로 표기. 예: '5/12 Customer P/O 수신'."""
     st_ = internal_pipeline_stage(rfq_id)
-    return f"{st_}/14 {INTERNAL_STEPS[st_ - 1]}"
+    return f"{st_}/{len(INTERNAL_STEPS)} {INTERNAL_STEPS[st_ - 1]}"
 
 
-def internal_progress_bar_html(current_stage: int, total: int = 14) -> str:
-    """14칸 진행 막대 (collapsed 요약용)."""
+def internal_progress_bar_html(current_stage: int, total: int | None = None) -> str:
+    """진행 막대 (collapsed 요약용)."""
+    total = total or len(INTERNAL_STEPS)
     segs = "".join(
         f'<div style="flex:1;height:6px;border-radius:2px;'
         f'background:{BLUE if i <= current_stage else "#D7E2EE"};"></div>'
@@ -1820,7 +1818,7 @@ def internal_progress_bar_html(current_stage: int, total: int = 14) -> str:
 
 
 def internal_stepper_html(current_stage: int) -> str:
-    """14단계 세로 스텝 리스트 (done ✓ / current ● / pending ○)."""
+    """내부 진행 단계 세로 스텝 리스트 (done ✓ / current ● / pending ○)."""
     rows = []
     for i, name in enumerate(INTERNAL_STEPS, start=1):
         if i < current_stage:

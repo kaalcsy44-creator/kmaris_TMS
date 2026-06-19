@@ -198,13 +198,13 @@ if snapshot["orphans"]:
         st.markdown(order_card_html(order), unsafe_allow_html=True)
 
 st.markdown("---")
-section_header("order", "내부 진행 현황 (14단계)")
-hint("거래 건의 전체 흐름을 14단계로 추적합니다. 각 건을 펼치면 단계별 상세를 볼 수 있습니다.")
+section_header("order", "내부 진행 현황 (12단계)")
+hint("거래 건의 전체 흐름을 12단계로 추적합니다. 각 건을 펼치면 단계별 상세를 볼 수 있습니다.")
 
 if rfqs:
     for r in rfqs:
         stage = r["stage"]
-        label = f'{r["rfq_no"]} · :gray[{r["customer_vessel"]}] · {stage}/14 {INTERNAL_STEPS[stage - 1]}'
+        label = f'{r["rfq_no"]} · :gray[{r["customer_vessel"]}] · {stage}/{len(INTERNAL_STEPS)} {INTERNAL_STEPS[stage - 1]}'
         with st.expander(label, expanded=False):
             st.markdown(internal_progress_bar_html(stage), unsafe_allow_html=True)
             st.markdown(internal_stepper_html(stage), unsafe_allow_html=True)

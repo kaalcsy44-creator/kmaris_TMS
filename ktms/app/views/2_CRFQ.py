@@ -74,7 +74,7 @@ def render_rfq_detail():
 
     with col_actions:
         st.markdown("**액션**")
-        st.caption("ℹ 상태는 14단계 진행에 따라 자동 반영됩니다.")
+        st.caption("ℹ 상태는 12단계 진행에 따라 자동 반영됩니다.")
         new_level = st.selectbox("Level 변경", [l.value for l in FollowUpLevel],
                                  index=[l.value for l in FollowUpLevel].index(rfq.follow_up_level.value))
         if st.button("Level 업데이트"):
@@ -128,8 +128,8 @@ def render_rfq_detail():
 def render_crfq_list():
     col_f1, col_f2, col_f3 = st.columns([2, 2, 1])
     with col_f1:
-        _stage_filter_opts = ["전체"] + [f"{i}/14 {name}" for i, name in enumerate(INTERNAL_STEPS, 1)]
-        status_filter = st.selectbox("상태 필터 (14단계)", _stage_filter_opts)
+        _stage_filter_opts = ["전체"] + [f"{i}/{len(INTERNAL_STEPS)} {name}" for i, name in enumerate(INTERNAL_STEPS, 1)]
+        status_filter = st.selectbox("상태 필터 (12단계)", _stage_filter_opts)
     with col_f2:
         cust_opts = {"전체": None, **customer_options()}
         cust_sel = st.selectbox("Customer 필터", list(cust_opts.keys()))

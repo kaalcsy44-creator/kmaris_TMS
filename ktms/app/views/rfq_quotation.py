@@ -106,8 +106,8 @@ def _td(main, sub: str = "", cls: str = "") -> str:
 def render_overview():
     col_f1, col_f2, col_f3 = st.columns([2, 2, 1])
     with col_f1:
-        stage_opts = ["전체"] + [f"{i}/14 {n}" for i, n in enumerate(INTERNAL_STEPS, 1)]
-        status_filter = st.selectbox("상태 필터 (14단계)", stage_opts, key="ov_status")
+        stage_opts = ["전체"] + [f"{i}/{len(INTERNAL_STEPS)} {n}" for i, n in enumerate(INTERNAL_STEPS, 1)]
+        status_filter = st.selectbox("상태 필터 (12단계)", stage_opts, key="ov_status")
     with col_f2:
         cust_opts = {"전체": None, **customer_options()}
         cust_sel = st.selectbox("Customer 필터", list(cust_opts.keys()), key="ov_cust")
