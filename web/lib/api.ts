@@ -1,6 +1,11 @@
 import { API_BASE } from "./config";
 import { getToken, clearAuth } from "./auth";
-import type { RfqOverview, CustomerOption, RfqDetail } from "./types";
+import type {
+  RfqOverview,
+  CustomerOption,
+  RfqDetail,
+  DashboardData,
+} from "./types";
 
 async function get<T>(path: string): Promise<T> {
   const token = getToken();
@@ -30,4 +35,8 @@ export function fetchCustomers(): Promise<CustomerOption[]> {
 
 export function fetchRfqDetail(id: number): Promise<RfqDetail> {
   return get<RfqDetail>(`/api/admin/rfq/${id}`);
+}
+
+export function fetchDashboard(): Promise<DashboardData> {
+  return get<DashboardData>("/api/admin/dashboard");
 }

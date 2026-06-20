@@ -32,6 +32,7 @@ from db.models import (
     VendorRFQ, VendorQuote, Quotation, QuotationStatus,
     Order, PurchaseOrder, ShippingAdvice, CommercialInvoice,
     TaxInvoiceData, ARRecord,
+    RFQStatus, OrderStatus, ARStatus,
 )
 
 # ── App / CORS ────────────────────────────────────────────────────────────────
@@ -395,6 +396,64 @@ def rfq_detail(rfq_id: int):
             "vendor_rfqs": vrfq_view,
             "vendor_quotes": vquote_view,
             "quotation": qtn_view,
+        }
+    finally:
+        s.close()
+
+
+@app.get("/api/admin/dashboard", dependencies=[Depends(require_token)])
+def dashboard():
+    """운영 현황 요약 — 핵심 KPI + 12단계 분포 + 최근 RFQ."""
+    s = get_session()
+    try:
+        cust_names = {c.id: c.name for c in s.query(Customer).all()}
+        rfqs = s.query(RFQ).all()
+        orders = s.query(Order).all()
+        quotes = s.query(Quotation).all()
+        ars = s.query(ARRecord).all()
+
+        open_statuses = {RFQStatus.RECEIVED, RFQStatus.SOURCING,
+                         RFQStatus.QUOTING, RFQStatus.SENT}
+        open_rfq = sum(1 for r in rfqs if r.status in open_statuses)
+        active_orders = sum(1 for o in orders if o.status != OrderStatus.DELIVERED)
+
+        now = datetime.now(timezone.utc)
+        monthly_quotes = sum(
+            1 for q in quotes
+            if q.created_at and q.created_at.year == now.year
+            and q.created_at.month == now.month
+        )
+        ar_outstanding = sum(
+            (a.invoice_amount or 0) - (a.paid_amount or 0)
+            for a in ars if a.status != ARStatus.PAID
+        )
+
+        dist = [0] * len(INTERNAL_STEPS)
+        for r in rfqs:
+            dist[_pipeline_stage(s, r.id) - 1] += 1
+
+        recent = []
+        for r in sorted(rfqs, key=lambda x: x.id, reverse=True)[:8]:
+            stage = _pipeline_stage(s, r.id)
+            recent.append({
+                "rfq_no": r.rfq_no,
+                "customer": cust_names.get(r.customer_id, "—"),
+                "stage": stage,
+                "status": _status_label(stage),
+                "at": _kst(r.created_at),
+            })
+
+        return {
+            "kpi": {
+                "open_rfq": open_rfq,
+                "total_rfq": len(rfqs),
+                "active_orders": active_orders,
+                "monthly_quotes": monthly_quotes,
+                "ar_outstanding_usd": round(ar_outstanding, 2),
+            },
+            "steps": INTERNAL_STEPS,
+            "stage_distribution": dist,
+            "recent": recent,
         }
     finally:
         s.close()

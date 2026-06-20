@@ -3,10 +3,10 @@
 import { useEffect, useState } from "react";
 import { fetchRfqOverview, fetchCustomers } from "@/lib/api";
 import type { RfqRow, CustomerOption } from "@/lib/types";
-import { getUser, logout } from "@/lib/auth";
 import RfqTable from "@/components/RfqTable";
 import RfqDetail from "@/components/RfqDetail";
 import AuthGate from "@/components/AuthGate";
+import Nav from "@/components/Nav";
 
 export default function Page() {
   return (
@@ -52,14 +52,7 @@ function Overview() {
 
   return (
     <div className="page">
-      <div className="topbar">
-        <h1>📨 RFQ &amp; QUOTATION</h1>
-        <span className="badge">Next.js pilot</span>
-        <span className="user-chip">{getUser()?.username ?? ""}</span>
-        <button className="logout" onClick={logout}>
-          로그아웃
-        </button>
-      </div>
+      <Nav active="rfq" />
 
       <div className="toolbar">
         <div className="field">

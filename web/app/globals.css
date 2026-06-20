@@ -57,10 +57,113 @@ body {
   padding: 4px 10px;
   border-radius: 999px;
 }
+.topbar .nav {
+  display: flex;
+  gap: 4px;
+  margin-left: 18px;
+}
+.nav-link {
+  color: #b9c8de;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 8px;
+}
+.nav-link:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+.nav-link.on {
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+}
 .topbar .user-chip {
   font-size: 12px;
   font-weight: 600;
   color: #cfe0f5;
+}
+
+/* ── Dashboard ─────────────────────────────────────────────────────── */
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
+}
+.kpi-card {
+  background: #fff;
+  border: 1px solid #e3eaf3;
+  border-left: 4px solid #0055a8;
+  border-radius: 12px;
+  padding: 14px 16px;
+  box-shadow: 0 2px 10px rgba(11, 29, 58, 0.05);
+}
+.kpi-label {
+  font-size: 12px;
+  color: #45526a;
+  font-weight: 600;
+}
+.kpi-value {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--navy);
+  margin: 4px 0 2px;
+  font-variant-numeric: tabular-nums;
+}
+.kpi-sub {
+  font-size: 11px;
+  color: var(--muted);
+}
+.dash-cols {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 18px;
+}
+@media (max-width: 900px) {
+  .dash-cols {
+    grid-template-columns: 1fr;
+  }
+}
+.panel {
+  background: #fff;
+  border: 1px solid #e3eaf3;
+  border-radius: 12px;
+  padding: 16px 18px;
+  box-shadow: 0 2px 10px rgba(11, 29, 58, 0.05);
+}
+.dist-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 3px 0;
+}
+.dist-label {
+  width: 190px;
+  flex-shrink: 0;
+  font-size: 12px;
+  color: #243b5c;
+}
+.dist-track {
+  flex: 1;
+  height: 9px;
+  background: #eef2f8;
+  border-radius: 5px;
+  overflow: hidden;
+}
+.dist-fill {
+  display: block;
+  height: 100%;
+  background: var(--blue);
+  border-radius: 5px;
+}
+.dist-n {
+  width: 28px;
+  text-align: right;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--navy);
+  font-variant-numeric: tabular-nums;
 }
 .topbar .logout {
   background: rgba(255, 255, 255, 0.12);

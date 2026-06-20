@@ -25,6 +25,25 @@ export type RfqOverview = {
 
 export type CustomerOption = { id: number; name: string };
 
+export type DashboardData = {
+  kpi: {
+    open_rfq: number;
+    total_rfq: number;
+    active_orders: number;
+    monthly_quotes: number;
+    ar_outstanding_usd: number;
+  };
+  steps: string[];
+  stage_distribution: number[];
+  recent: {
+    rfq_no: string;
+    customer: string;
+    stage: number;
+    status: string;
+    at: string;
+  }[];
+};
+
 export type RfqItem = {
   part_no: string;
   description: string;
