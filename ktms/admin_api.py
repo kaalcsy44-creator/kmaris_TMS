@@ -13,19 +13,22 @@ from __future__ import annotations
 
 import os
 import sys
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+import bcrypt
+import jwt
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
 from db.engine import get_session
 from db.models import (
-    RFQ, Customer, Vessel, Vendor,
+    RFQ, Customer, Vessel, Vendor, User,
     VendorRFQ, VendorQuote, Quotation, QuotationStatus,
     Order, PurchaseOrder, ShippingAdvice, CommercialInvoice,
     TaxInvoiceData, ARRecord,
@@ -46,6 +49,9 @@ app.add_middleware(
 )
 
 ADMIN_API_TOKEN = os.environ.get("ADMIN_API_TOKEN", "dev-token")
+SECRET_KEY = os.environ.get("SECRET_KEY", "dev-secret-change-me")
+JWT_ALGO = "HS256"
+TOKEN_TTL_HOURS = 12
 
 INTERNAL_STEPS = [
     "Customer RFQ 수신",
@@ -64,12 +70,76 @@ INTERNAL_STEPS = [
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
-def require_token(authorization: str | None = Header(default=None)) -> None:
-    token = ""
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+def _bearer(authorization: str | None) -> str:
     if authorization and authorization.lower().startswith("bearer "):
-        token = authorization[7:].strip()
-    if token != ADMIN_API_TOKEN:
-        raise HTTPException(status_code=401, detail="Unauthorized")
+        return authorization[7:].strip()
+    return ""
+
+
+def _make_jwt(user: dict) -> str:
+    payload = {
+        "sub": str(user["id"]),
+        "username": user["username"],
+        "role": user["role"],
+        "exp": datetime.now(timezone.utc) + timedelta(hours=TOKEN_TTL_HOURS),
+    }
+    return jwt.encode(payload, SECRET_KEY, algorithm=JWT_ALGO)
+
+
+def _decode_jwt(token: str) -> dict | None:
+    try:
+        return jwt.decode(token, SECRET_KEY, algorithms=[JWT_ALGO])
+    except jwt.PyJWTError:
+        return None
+
+
+def require_token(authorization: str | None = Header(default=None)) -> None:
+    """Guard: accept a valid JWT, or the pilot static ADMIN_API_TOKEN."""
+    token = _bearer(authorization)
+    if token and (token == ADMIN_API_TOKEN or _decode_jwt(token)):
+        return
+    raise HTTPException(status_code=401, detail="Unauthorized")
+
+
+def get_current_user(authorization: str | None = Header(default=None)) -> dict:
+    token = _bearer(authorization)
+    claims = _decode_jwt(token) if token else None
+    if claims:
+        return {
+            "id": int(claims.get("sub", 0)),
+            "username": claims.get("username", ""),
+            "role": claims.get("role", ""),
+        }
+    if token and token == ADMIN_API_TOKEN:
+        return {"id": 0, "username": "dev", "role": "admin"}
+    raise HTTPException(status_code=401, detail="Unauthorized")
+
+
+@app.post("/api/admin/login")
+def admin_login(body: LoginRequest):
+    s = get_session()
+    try:
+        user = s.query(User).filter_by(username=body.username, is_active=True).first()
+        ok = bool(user) and bcrypt.checkpw(
+            body.password.encode(), user.password_hash.encode()
+        )
+        if not ok:
+            raise HTTPException(status_code=401, detail="사용자명 또는 비밀번호가 올바르지 않습니다.")
+        u = {"id": user.id, "username": user.username,
+             "role": user.role.value, "email": user.email or ""}
+        return {"token": _make_jwt(u), "user": u}
+    finally:
+        s.close()
+
+
+@app.get("/api/admin/me")
+def me(user: dict = Depends(get_current_user)):
+    return user
 
 
 # ── Helpers (decoupled from Streamlit) ────────────────────────────────────────

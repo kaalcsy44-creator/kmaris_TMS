@@ -3,10 +3,20 @@
 import { useEffect, useState } from "react";
 import { fetchRfqOverview, fetchCustomers } from "@/lib/api";
 import type { RfqRow, CustomerOption } from "@/lib/types";
+import { getUser, logout } from "@/lib/auth";
 import RfqTable from "@/components/RfqTable";
 import RfqDetail from "@/components/RfqDetail";
+import AuthGate from "@/components/AuthGate";
 
 export default function Page() {
+  return (
+    <AuthGate>
+      <Overview />
+    </AuthGate>
+  );
+}
+
+function Overview() {
   const [rows, setRows] = useState<RfqRow[]>([]);
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
   const [customerId, setCustomerId] = useState<number | "">("");
@@ -45,6 +55,10 @@ export default function Page() {
       <div className="topbar">
         <h1>📨 RFQ &amp; QUOTATION</h1>
         <span className="badge">Next.js pilot</span>
+        <span className="user-chip">{getUser()?.username ?? ""}</span>
+        <button className="logout" onClick={logout}>
+          로그아웃
+        </button>
       </div>
 
       <div className="toolbar">

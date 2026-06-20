@@ -1,14 +1,18 @@
+import { API_BASE } from "./config";
+import { getToken, clearAuth } from "./auth";
 import type { RfqOverview, CustomerOption, RfqDetail } from "./types";
 
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8001";
-const TOKEN = process.env.NEXT_PUBLIC_ADMIN_TOKEN ?? "dev-token";
-
 async function get<T>(path: string): Promise<T> {
+  const token = getToken();
   const res = await fetch(`${API_BASE}${path}`, {
-    headers: { Authorization: `Bearer ${TOKEN}` },
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
     cache: "no-store",
   });
+  if (res.status === 401) {
+    clearAuth();
+    if (typeof window !== "undefined") window.location.href = "/login";
+    throw new Error("인증이 필요합니다.");
+  }
   if (!res.ok) {
     throw new Error(`API ${res.status} ${res.statusText} — ${path}`);
   }
