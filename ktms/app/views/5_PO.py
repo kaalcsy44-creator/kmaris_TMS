@@ -140,11 +140,16 @@ render_po_overview()
 
 st.markdown("---")
 
-# ── 하단: 작업 탭 (신규 등록 · Vendor P/O 생성 · 이메일 발송) ──────────────────────
+def render_vendor_po_workflow() -> None:
+    _vendor_po.render_vendor_po_create_tab()
+    st.markdown("---")
+    _vendor_po.render_vendor_po_send_tab()
+
+
+# ── 하단: 작업 탭 (Customer P/O 수신 · Vendor P/O 발신) ────────────────────────
 TABS = [
-    ("Customer P/O 신규 등록", _customer_po.render_customer_po_new_tab),
-    ("Vendor P/O 생성", _vendor_po.render_vendor_po_create_tab),
-    ("Vendor P/O 이메일 발송", _vendor_po.render_vendor_po_send_tab),
+    ("5. Customer P/O 수신", _customer_po.render_customer_po_new_tab),
+    ("6. Vendor P/O 발신", render_vendor_po_workflow),
 ]
 _labels = [t[0] for t in TABS]
 _render_by_label = {label: fn for label, fn in TABS}
