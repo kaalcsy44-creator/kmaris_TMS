@@ -195,30 +195,46 @@ def render_overview():
     st.markdown(
         """
         <style>
+        .st-key-rfq_overview_grid {
+            overflow-x: auto;
+            overflow-y: hidden;
+            padding-bottom: 4px;
+        }
+        .st-key-rfq_overview_grid [data-testid="stHorizontalBlock"] {
+            min-width: 1380px;
+        }
         .rfq-grid-head {
             color: #0B1D3A;
-            font-size: 12px;
+            font-size: 10px;
             font-weight: 700;
-            line-height: 1.22;
+            line-height: 1.18;
             margin: 0;
+            white-space: nowrap;
         }
         .rfq-grid-main {
             color: #111827;
-            font-size: 13px;
-            line-height: 1.24;
+            font-size: 10px;
+            line-height: 1.2;
             margin: 0;
-            overflow-wrap: anywhere;
-            word-break: keep-all;
+            white-space: nowrap;
         }
         .rfq-grid-sub {
             color: #6B7280;
-            font-size: 11px;
-            line-height: 1.15;
-            margin-top: 3px;
+            font-size: 9px;
+            line-height: 1.12;
+            margin-top: 2px;
+            white-space: nowrap;
         }
         .rfq-grid-sep {
             border-top: 1px solid #D7E2EE;
-            margin: 6px 0;
+            margin: 5px 0;
+        }
+        .st-key-rfq_overview_grid [data-testid="stButton"] button {
+            width: 24px !important;
+            height: 24px !important;
+            min-height: 24px !important;
+            padding: 0 !important;
+            font-size: 10px !important;
         }
         </style>
         """,
@@ -239,46 +255,48 @@ def render_overview():
         st.markdown('<div class="rfq-grid-sep"></div>', unsafe_allow_html=True)
 
     selected_rfq_id = int(st.session_state.get("rfq_detail_id") or 0)
-    header_cols = st.columns([0.35, 1.35, 1.65, 1.45, 0.55, 1.55, 1.55, 1.55, 1.25, 1.55, 1.25, 1.2], gap="small")
-    for col, label in zip(
-        header_cols,
-        ["", "고객 RFQ No.", "Customer", "선박", "품목수", "1. Customer RFQ 수신",
-         "2. Vendor RFQ 발신", "3. Vendor Quot. 수신", "Vendor 견적 금액",
-         "4. Customer Quot. 발신", "Customer 견적 금액", "상태"],
-    ):
-        _header(col, label)
-
-    _sep()
+    col_widths = [0.28, 1.15, 1.55, 1.35, 0.42, 1.25, 1.35, 1.25, 1.05, 1.35, 1.1, 1.0]
     chosen = None
-    for idx, rw in enumerate(rows):
-        rid = int(rw["ID"])
-        is_selected = rid == selected_rfq_id
-        if is_selected:
-            chosen = rw
+    with st.container(key="rfq_overview_grid"):
+        header_cols = st.columns(col_widths, gap="small")
+        for col, label in zip(
+            header_cols,
+            ["", "고객 RFQ No.", "Customer", "선박", "품목수", "1. Customer RFQ 수신",
+             "2. Vendor RFQ 발신", "3. Vendor Quot. 수신", "Vendor 견적 금액",
+             "4. Customer Quot. 발신", "Customer 견적 금액", "상태"],
+        ):
+            _header(col, label)
 
-        cols = st.columns([0.35, 1.35, 1.65, 1.45, 0.55, 1.55, 1.55, 1.55, 1.25, 1.55, 1.25, 1.2], gap="small")
-        with cols[0]:
-            if st.button("✓" if is_selected else " ", key=f"rfq_row_select_{rid}", help="선택"):
-                if is_selected:
-                    st.session_state.pop("rfq_detail_id", None)
-                    st.session_state.pop("qtn_detail_id", None)
-                    st.session_state.pop("vrfq_detail_id", None)
-                else:
-                    st.session_state["rfq_detail_id"] = rid
-                st.rerun()
-        _cell(cols[1], rw["고객 RFQ No."])
-        _cell(cols[2], rw["Customer"])
-        _cell(cols[3], rw["선박"])
-        _cell(cols[4], rw["품목수"])
-        _cell(cols[5], rw["1. Customer RFQ 수신"], rw["1. Customer RFQ 수신 일시"])
-        _cell(cols[6], rw["2. Vendor RFQ 발신"], rw["2. Vendor RFQ 발신 일시"])
-        _cell(cols[7], rw["3. Vendor Quot. 수신"], rw["3. Vendor Quot. 수신 일시"])
-        _cell(cols[8], rw["Vendor 견적 금액"])
-        _cell(cols[9], rw["4. Customer Quot. 발신"], rw["4. Customer Quot. 발신 일시"])
-        _cell(cols[10], rw["Customer 견적 금액"])
-        _cell(cols[11], rw["상태"])
-        if idx < len(rows) - 1:
-            _sep()
+        _sep()
+        for idx, rw in enumerate(rows):
+            rid = int(rw["ID"])
+            is_selected = rid == selected_rfq_id
+            if is_selected:
+                chosen = rw
+
+            cols = st.columns(col_widths, gap="small")
+            with cols[0]:
+                if st.button("✓" if is_selected else " ", key=f"rfq_row_select_{rid}", help="선택"):
+                    if is_selected:
+                        st.session_state.pop("rfq_detail_id", None)
+                        st.session_state.pop("qtn_detail_id", None)
+                        st.session_state.pop("vrfq_detail_id", None)
+                    else:
+                        st.session_state["rfq_detail_id"] = rid
+                    st.rerun()
+            _cell(cols[1], rw["고객 RFQ No."])
+            _cell(cols[2], rw["Customer"])
+            _cell(cols[3], rw["선박"])
+            _cell(cols[4], rw["품목수"])
+            _cell(cols[5], rw["1. Customer RFQ 수신"], rw["1. Customer RFQ 수신 일시"])
+            _cell(cols[6], rw["2. Vendor RFQ 발신"], rw["2. Vendor RFQ 발신 일시"])
+            _cell(cols[7], rw["3. Vendor Quot. 수신"], rw["3. Vendor Quot. 수신 일시"])
+            _cell(cols[8], rw["Vendor 견적 금액"])
+            _cell(cols[9], rw["4. Customer Quot. 발신"], rw["4. Customer Quot. 발신 일시"])
+            _cell(cols[10], rw["Customer 견적 금액"])
+            _cell(cols[11], rw["상태"])
+            if idx < len(rows) - 1:
+                _sep()
 
     if chosen:
         st.session_state["rfq_detail_id"] = chosen["ID"]
