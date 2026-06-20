@@ -201,7 +201,7 @@ def render_overview():
             padding-bottom: 4px;
         }
         .st-key-rfq_overview_grid [data-testid="stHorizontalBlock"] {
-            min-width: 1380px;
+            min-width: 1580px;
         }
         .rfq-grid-head {
             color: #0B1D3A;
@@ -255,7 +255,7 @@ def render_overview():
         st.markdown('<div class="rfq-grid-sep"></div>', unsafe_allow_html=True)
 
     selected_rfq_id = int(st.session_state.get("rfq_detail_id") or 0)
-    col_widths = [0.28, 1.15, 1.55, 1.35, 0.42, 1.25, 1.35, 1.25, 1.05, 1.35, 1.1, 1.0]
+    col_widths = [0.30, 0.90, 2.80, 1.50, 0.50, 1.50, 1.80, 1.50, 1.10, 1.50, 1.10, 1.30]
     chosen = None
     with st.container(key="rfq_overview_grid"):
         header_cols = st.columns(col_widths, gap="small")
