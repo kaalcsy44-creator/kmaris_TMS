@@ -106,7 +106,7 @@ def render_po_overview() -> None:
             "선박": vessel_name(r.vessel_id),
             "고객 PO No.": _with_subline(o.po_no if o else "—", "수신일시", o.date if o else None),
             "오더 No.": o.ord_no if o else "—",
-            "품목수": len(o.items or r.items or []),
+            "품목수": len((o.items if o else None) or r.items or []),
             "Vendor PO No.": _with_subline(vendor_po_no, "발신일시", sent_date),
             "Vendor": vendor_nm,
             "수신자 이메일": sent_email,
