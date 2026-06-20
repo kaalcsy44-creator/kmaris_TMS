@@ -192,22 +192,63 @@ def render_overview():
         hint("표시할 RFQ가 없습니다. 'Customer RFQ · 신규 등록' 탭에서 등록하세요.")
         return
 
+    st.markdown(
+        """
+        <style>
+        .rfq-grid-head {
+            color: #0B1D3A;
+            font-size: 12px;
+            font-weight: 700;
+            line-height: 1.22;
+            margin: 0;
+        }
+        .rfq-grid-main {
+            color: #111827;
+            font-size: 13px;
+            line-height: 1.24;
+            margin: 0;
+            overflow-wrap: anywhere;
+            word-break: keep-all;
+        }
+        .rfq-grid-sub {
+            color: #6B7280;
+            font-size: 11px;
+            line-height: 1.15;
+            margin-top: 3px;
+        }
+        .rfq-grid-sep {
+            border-top: 1px solid #D7E2EE;
+            margin: 6px 0;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
     def _cell(col, main, sub: str = "") -> None:
-        col.write(main or "—")
+        main_text = "—" if main in (None, "") else str(main)
+        html = f'<div class="rfq-grid-main">{_html.escape(main_text)}</div>'
         if sub:
-            col.caption(sub)
+            html += f'<div class="rfq-grid-sub">{_html.escape(str(sub))}</div>'
+        col.markdown(html, unsafe_allow_html=True)
+
+    def _header(col, label: str) -> None:
+        col.markdown(f'<div class="rfq-grid-head">{_html.escape(label)}</div>', unsafe_allow_html=True)
+
+    def _sep() -> None:
+        st.markdown('<div class="rfq-grid-sep"></div>', unsafe_allow_html=True)
 
     selected_rfq_id = int(st.session_state.get("rfq_detail_id") or 0)
-    header_cols = st.columns([0.35, 1.35, 1.65, 1.45, 0.55, 1.55, 1.55, 1.55, 1.25, 1.55, 1.25, 1.2])
+    header_cols = st.columns([0.35, 1.35, 1.65, 1.45, 0.55, 1.55, 1.55, 1.55, 1.25, 1.55, 1.25, 1.2], gap="small")
     for col, label in zip(
         header_cols,
         ["", "고객 RFQ No.", "Customer", "선박", "품목수", "1. Customer RFQ 수신",
          "2. Vendor RFQ 발신", "3. Vendor Quot. 수신", "Vendor 견적 금액",
          "4. Customer Quot. 발신", "Customer 견적 금액", "상태"],
     ):
-        col.markdown(f"**{label}**")
+        _header(col, label)
 
-    st.divider()
+    _sep()
     chosen = None
     for idx, rw in enumerate(rows):
         rid = int(rw["ID"])
@@ -215,7 +256,7 @@ def render_overview():
         if is_selected:
             chosen = rw
 
-        cols = st.columns([0.35, 1.35, 1.65, 1.45, 0.55, 1.55, 1.55, 1.55, 1.25, 1.55, 1.25, 1.2])
+        cols = st.columns([0.35, 1.35, 1.65, 1.45, 0.55, 1.55, 1.55, 1.55, 1.25, 1.55, 1.25, 1.2], gap="small")
         with cols[0]:
             if st.button("✓" if is_selected else " ", key=f"rfq_row_select_{rid}", help="선택"):
                 if is_selected:
@@ -237,7 +278,7 @@ def render_overview():
         _cell(cols[10], rw["Customer 견적 금액"])
         _cell(cols[11], rw["상태"])
         if idx < len(rows) - 1:
-            st.divider()
+            _sep()
 
     if chosen:
         st.session_state["rfq_detail_id"] = chosen["ID"]
