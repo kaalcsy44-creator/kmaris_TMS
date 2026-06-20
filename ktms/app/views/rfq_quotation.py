@@ -198,11 +198,35 @@ def render_overview():
         .st-key-rfq_overview_grid {
             overflow-x: auto;
             overflow-y: hidden;
-            padding-bottom: 4px;
+            border: 1px solid #E3EAF3;
+            border-radius: 10px;
             gap: 0 !important;
         }
+        /* base row */
         .st-key-rfq_overview_grid [data-testid="stHorizontalBlock"] {
             min-width: 1580px;
+            padding: 3px 6px;
+            margin: 0 !important;
+            align-items: center;
+            background: #FFFFFF;
+            border-bottom: 1px solid #EEF2F8;
+        }
+        /* zebra */
+        .st-key-rfq_overview_grid [data-testid="stHorizontalBlock"]:nth-of-type(even) {
+            background: #F6F9FC;
+        }
+        /* header row */
+        .st-key-rfq_overview_grid [data-testid="stHorizontalBlock"]:first-of-type {
+            background: #EEF3FA;
+            border-bottom: 2px solid #D7E2EE;
+            padding: 6px 6px;
+        }
+        /* hover (data rows only) */
+        .st-key-rfq_overview_grid [data-testid="stHorizontalBlock"]:not(:first-of-type):hover {
+            background: #EAF3FF;
+        }
+        .st-key-rfq_overview_grid [data-testid="stHorizontalBlock"]:last-of-type {
+            border-bottom: none;
         }
         .st-key-rfq_overview_grid [data-testid="stVerticalBlock"] {
             gap: 0 !important;
@@ -216,10 +240,11 @@ def render_overview():
             padding: 0 !important;
         }
         .rfq-grid-head {
-            color: #0B1D3A;
+            color: #45526A;
             font-size: 10px;
             font-weight: 700;
-            line-height: 1.18;
+            letter-spacing: 0.2px;
+            line-height: 1.15;
             margin: 0;
             white-space: nowrap;
         }
@@ -231,62 +256,66 @@ def render_overview():
             white-space: nowrap;
         }
         .rfq-grid-sub {
-            color: #6B7280;
+            color: #8A95A5;
             font-size: 9px;
             line-height: 1.05;
             margin-top: 1px;
             white-space: nowrap;
+            font-variant-numeric: tabular-nums;
         }
-        .rfq-grid-sep {
-            border-top: 1px solid #D7E2EE;
-            margin: 0.7px 0;
+        .rfq-grid-r {
+            text-align: right;
+            font-variant-numeric: tabular-nums;
         }
         .st-key-rfq_overview_grid [data-testid="stButton"] button {
-            width: 24px !important;
-            height: 24px !important;
-            min-height: 24px !important;
+            width: 22px !important;
+            height: 22px !important;
+            min-height: 22px !important;
             padding: 0 !important;
             font-size: 10px !important;
+            border-radius: 6px !important;
         }
         </style>
         """,
         unsafe_allow_html=True,
     )
 
-    def _cell(col, main, sub: str = "") -> None:
+    # 우측 정렬 대상 열 인덱스: 품목수, Vendor 견적 금액, Customer 견적 금액
+    RIGHT_COLS = {4, 8, 10}
+
+    def _cell(col, main, sub: str = "", right: bool = False) -> None:
         main_text = "—" if main in (None, "") else str(main)
-        html = f'<div class="rfq-grid-main">{_html.escape(main_text)}</div>'
+        cls = "rfq-grid-main rfq-grid-r" if right else "rfq-grid-main"
+        html = f'<div class="{cls}">{_html.escape(main_text)}</div>'
         if sub:
-            html += f'<div class="rfq-grid-sub">{_html.escape(str(sub))}</div>'
+            sub_cls = "rfq-grid-sub rfq-grid-r" if right else "rfq-grid-sub"
+            html += f'<div class="{sub_cls}">{_html.escape(str(sub))}</div>'
         col.markdown(html, unsafe_allow_html=True)
 
-    def _header(col, label: str) -> None:
-        col.markdown(f'<div class="rfq-grid-head">{_html.escape(label)}</div>', unsafe_allow_html=True)
-
-    def _sep() -> None:
-        st.markdown('<div class="rfq-grid-sep"></div>', unsafe_allow_html=True)
+    def _header(col, label: str, right: bool = False) -> None:
+        cls = "rfq-grid-head rfq-grid-r" if right else "rfq-grid-head"
+        col.markdown(f'<div class="{cls}">{_html.escape(label)}</div>', unsafe_allow_html=True)
 
     selected_rfq_id = int(st.session_state.get("rfq_detail_id") or 0)
     col_widths = [0.30, 0.90, 2.80, 1.50, 0.50, 1.50, 1.80, 1.50, 1.10, 1.50, 1.10, 1.30]
     chosen = None
     with st.container(key="rfq_overview_grid"):
-        header_cols = st.columns(col_widths, gap="small")
-        for col, label in zip(
+        header_cols = st.columns(col_widths, gap="small", vertical_alignment="center")
+        for i, (col, label) in enumerate(zip(
             header_cols,
             ["", "고객 RFQ No.", "Customer", "선박", "품목수", "1. Customer RFQ 수신",
              "2. Vendor RFQ 발신", "3. Vendor Quot. 수신", "Vendor 견적 금액",
              "4. Customer Quot. 발신", "Customer 견적 금액", "상태"],
-        ):
-            _header(col, label)
+        )):
+            _header(col, label, right=i in RIGHT_COLS)
 
-        _sep()
         for idx, rw in enumerate(rows):
             rid = int(rw["ID"])
             is_selected = rid == selected_rfq_id
             if is_selected:
                 chosen = rw
 
-            cols = st.columns(col_widths, gap="small")
+            cols = st.columns(col_widths, gap="small", vertical_alignment="center")
             with cols[0]:
                 if st.button("✓" if is_selected else " ", key=f"rfq_row_select_{rid}", help="선택"):
                     if is_selected:
@@ -299,16 +328,14 @@ def render_overview():
             _cell(cols[1], rw["고객 RFQ No."])
             _cell(cols[2], rw["Customer"])
             _cell(cols[3], rw["선박"])
-            _cell(cols[4], rw["품목수"])
+            _cell(cols[4], rw["품목수"], right=True)
             _cell(cols[5], rw["1. Customer RFQ 수신"], rw["1. Customer RFQ 수신 일시"])
             _cell(cols[6], rw["2. Vendor RFQ 발신"], rw["2. Vendor RFQ 발신 일시"])
             _cell(cols[7], rw["3. Vendor Quot. 수신"], rw["3. Vendor Quot. 수신 일시"])
-            _cell(cols[8], rw["Vendor 견적 금액"])
+            _cell(cols[8], rw["Vendor 견적 금액"], right=True)
             _cell(cols[9], rw["4. Customer Quot. 발신"], rw["4. Customer Quot. 발신 일시"])
-            _cell(cols[10], rw["Customer 견적 금액"])
+            _cell(cols[10], rw["Customer 견적 금액"], right=True)
             _cell(cols[11], rw["상태"])
-            if idx < len(rows) - 1:
-                _sep()
 
     if chosen:
         st.session_state["rfq_detail_id"] = chosen["ID"]
