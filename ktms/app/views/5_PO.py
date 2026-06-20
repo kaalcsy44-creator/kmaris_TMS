@@ -36,21 +36,36 @@ _vendor_po = _load_view_module("5b_VendorPO.py", "ktms_vendor_po_view")
 
 section_header("order", "P/O")
 
-tab_c_new, tab_c_list, tab_v_create, tab_v_send, tab_v_sent = st.tabs([
-    "Customer P/O 신규 등록",
-    "Customer P/O 목록",
-    "Vendor P/O 생성",
-    "Vendor P/O 이메일 발송",
-    "Vendor P/O 발신 내역",
+# ── 상단: 목록/내역 현황 (Customer P/O 수신 · Vendor P/O 발신) ────────────────────
+tab_c_list, tab_v_sent = st.tabs([
+    "Customer P/O 수신 목록",
+    "Vendor P/O 발신 목록",
 ])
-
-with tab_c_new:
-    _customer_po.render_customer_po_new_tab()
 with tab_c_list:
     _customer_po.render_customer_po_list_tab()
-with tab_v_create:
-    _vendor_po.render_vendor_po_create_tab()
-with tab_v_send:
-    _vendor_po.render_vendor_po_send_tab()
 with tab_v_sent:
     _vendor_po.render_vendor_po_sent_tab()
+
+st.markdown("---")
+
+# ── 하단: 작업 탭 (신규 등록 · Vendor P/O 생성 · 이메일 발송) ──────────────────────
+TABS = [
+    ("Customer P/O 신규 등록", _customer_po.render_customer_po_new_tab),
+    ("Vendor P/O 생성", _vendor_po.render_vendor_po_create_tab),
+    ("Vendor P/O 이메일 발송", _vendor_po.render_vendor_po_send_tab),
+]
+_labels = [t[0] for t in TABS]
+_render_by_label = {label: fn for label, fn in TABS}
+
+choice = st.segmented_control(
+    "P/O 작업",
+    _labels,
+    default=_labels[0],
+    key="po_tab",
+    label_visibility="collapsed",
+)
+if choice not in _render_by_label:
+    choice = _labels[0]
+
+st.markdown("")
+_render_by_label[choice]()
