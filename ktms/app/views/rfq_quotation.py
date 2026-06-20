@@ -209,6 +209,11 @@ def render_overview():
         .st-key-rfq_overview_grid [data-testid="stElementContainer"] {
             margin: 0 !important;
         }
+        .st-key-rfq_overview_grid [data-testid="stMarkdown"],
+        .st-key-rfq_overview_grid [data-testid="stMarkdownContainer"] {
+            margin: 0 !important;
+            padding: 0 !important;
+        }
         .rfq-grid-head {
             color: #0B1D3A;
             font-size: 10px;
@@ -233,7 +238,7 @@ def render_overview():
         }
         .rfq-grid-sep {
             border-top: 1px solid #D7E2EE;
-            margin: 2px 0;
+            margin: 0.7px 0;
         }
         .st-key-rfq_overview_grid [data-testid="stButton"] button {
             width: 24px !important;
