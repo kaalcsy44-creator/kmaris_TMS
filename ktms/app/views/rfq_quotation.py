@@ -192,84 +192,102 @@ def render_overview():
         hint("표시할 RFQ가 없습니다. 'Customer RFQ · 신규 등록' 탭에서 등록하세요.")
         return
 
-    # ── 행 선택 (상세 보기 대상) — 표는 HTML로 렌더하므로 선택은 드롭다운으로 처리 ──
-    sel_options = {"— 선택 안 함 —": 0}
-    for rw in rows:
-        sel_options[f'{rw["1. Customer RFQ 수신"]} · {rw["Customer"]}'] = int(rw["ID"])
-    sel_labels = list(sel_options.keys())
-    # 필터로 행이 바뀌어 이전 선택이 사라졌으면 위젯 상태를 비운다.
-    if st.session_state.get("ov_detail_select") not in sel_labels:
-        st.session_state.pop("ov_detail_select", None)
-    prev_id = int(st.session_state.get("rfq_detail_id") or 0)
-    try:
-        _idx = list(sel_options.values()).index(prev_id)
-    except ValueError:
-        _idx = 0
-    sel_label = st.selectbox("상세 보기할 RFQ 선택", sel_labels, index=_idx, key="ov_detail_select")
-    selected_rfq_id = sel_options.get(sel_label, 0)
+    # ── 선택 상태 (st.button 기반 — 부분 갱신이라 페이지 리로드/로그아웃 없음) ──
+    selected_rfq_id = int(st.session_state.get("rfq_detail_id") or 0)
     chosen = next((rw for rw in rows if int(rw["ID"]) == selected_rfq_id), None)
 
-    # ── 현황 테이블 (HTML) — (헤더, 본문 key, 일시 key, 폭px, 우측정렬) ──
+    # 열 정의: (헤더, 본문 key, 일시 key, 컬럼 비율, 우측정렬)
     COLS = [
-        ("고객 RFQ No.", "고객 RFQ No.", None, 88, False),
-        ("Customer", "Customer", None, 310, False),
-        ("선박", "선박", None, 132, False),
-        ("품목수", "품목수", None, 58, True),
-        ("1. Customer RFQ 수신", "1. Customer RFQ 수신", "1. Customer RFQ 수신 일시", 150, False),
-        ("2. Vendor RFQ 발신", "2. Vendor RFQ 발신", "2. Vendor RFQ 발신 일시", 196, False),
-        ("3. Vendor Quot. 수신", "3. Vendor Quot. 수신", "3. Vendor Quot. 수신 일시", 150, False),
-        ("Vendor 견적 금액", "Vendor 견적 금액", None, 112, True),
-        ("4. Customer Quot. 발신", "4. Customer Quot. 발신", "4. Customer Quot. 발신 일시", 150, False),
-        ("Customer 견적 금액", "Customer 견적 금액", None, 122, True),
-        ("상태", "상태", None, 134, False),
+        ("고객 RFQ No.", "고객 RFQ No.", None, 0.90, False),
+        ("Customer", "Customer", None, 3.00, False),
+        ("선박", "선박", None, 1.35, False),
+        ("품목수", "품목수", None, 0.60, True),
+        ("1. Customer RFQ 수신", "1. Customer RFQ 수신", "1. Customer RFQ 수신 일시", 1.55, False),
+        ("2. Vendor RFQ 발신", "2. Vendor RFQ 발신", "2. Vendor RFQ 발신 일시", 2.00, False),
+        ("3. Vendor Quot. 수신", "3. Vendor Quot. 수신", "3. Vendor Quot. 수신 일시", 1.55, False),
+        ("Vendor 견적 금액", "Vendor 견적 금액", None, 1.15, True),
+        ("4. Customer Quot. 발신", "4. Customer Quot. 발신", "4. Customer Quot. 발신 일시", 1.55, False),
+        ("Customer 견적 금액", "Customer 견적 금액", None, 1.25, True),
+        ("상태", "상태", None, 1.35, False),
     ]
-    total_w = sum(c[3] for c in COLS)
+    col_ratios = [0.40] + [c[3] for c in COLS]
 
-    def _cell_html(main, sub, right: bool) -> str:
-        m = _html.escape(str(main)) if main not in (None, "", "—") else "—"
-        inner = f'<div class="m">{m}</div>'
-        if sub:
-            inner += f'<div class="s">{_html.escape(str(sub))}</div>'
-        return f'<td class="r">{inner}</td>' if right else f"<td>{inner}</td>"
-
-    colgroup = "".join(f'<col style="width:{w}px">' for (_h, _m, _s, w, _r) in COLS)
-    thead = "".join(
-        (f'<th class="r">{_html.escape(h)}</th>' if r else f"<th>{_html.escape(h)}</th>")
-        for (h, _m, _s, _w, r) in COLS
+    # 행마다 고유 key 컨테이너에 줄무늬/선택색을 직접 지정한다.
+    # (Streamlit DOM 래핑 때문에 nth-of-type 줄무늬가 불안정하므로 회피)
+    stripe_sel = ",".join(
+        f".st-key-rfq_ovrow_{i}" for i in range(len(rows)) if i % 2 == 1
     )
-    tbody = ""
-    for rw in rows:
-        sel = ' class="sel"' if int(rw["ID"]) == selected_rfq_id else ""
-        tds = "".join(_cell_html(rw[m], rw[s] if s else "", r) for (_h, m, s, _w, r) in COLS)
-        tbody += f"<tr{sel}>{tds}</tr>"
+    stripe_css = (stripe_sel + " { background:#F4F8FC; }") if stripe_sel else ""
+    sel_idx = next((i for i, rw in enumerate(rows) if int(rw["ID"]) == selected_rfq_id), None)
+    sel_css = (
+        ".st-key-rfq_ovrow_%d { background:#DCEBFF !important; "
+        "box-shadow:inset 3px 0 0 #0055A8; }" % sel_idx
+        if sel_idx is not None else ""
+    )
 
     st.markdown(
-        f"""
+        """
         <style>
-        .ovx-wrap {{ overflow-x:auto; border:1px solid #E3EAF3; border-radius:10px;
-                     box-shadow:0 2px 10px rgba(11,29,58,.05); }}
-        .ovx {{ border-collapse:collapse; table-layout:fixed; width:{total_w}px;
-                font-family:inherit; }}
-        .ovx th, .ovx td {{ box-sizing:border-box; padding:5px 10px; text-align:left;
-                            vertical-align:middle; white-space:nowrap; overflow:hidden;
-                            text-overflow:ellipsis; border-bottom:1px solid #E5EBF3; }}
-        .ovx thead th {{ background:#EDF2FA; color:#45526A; font-size:10px; font-weight:700;
-                         letter-spacing:.2px; border-bottom:2px solid #CBD8E8; }}
-        .ovx tbody tr:nth-child(even) {{ background:#F4F8FC; }}
-        .ovx tbody tr:hover {{ background:#EAF3FF; }}
-        .ovx tbody tr.sel {{ background:#DCEBFF; box-shadow:inset 3px 0 0 #0055A8; }}
-        .ovx tbody tr:last-child td {{ border-bottom:none; }}
-        .ovx td .m {{ font-size:10px; color:#111827; line-height:1.25; }}
-        .ovx td .s {{ font-size:9px; color:#8A95A5; line-height:1.1; margin-top:1px;
-                      font-variant-numeric:tabular-nums; }}
-        .ovx th.r, .ovx td.r {{ text-align:right; }}
-        .ovx .r .m, .ovx .r .s {{ font-variant-numeric:tabular-nums; }}
+        .st-key-rfq_overview_grid { overflow-x:auto; border:1px solid #E3EAF3;
+            border-radius:10px; box-shadow:0 2px 10px rgba(11,29,58,.05); gap:0 !important; }
+        .st-key-rfq_overview_grid [data-testid="stVerticalBlock"] { gap:0 !important; }
+        .st-key-rfq_overview_grid [data-testid="stElementContainer"],
+        .st-key-rfq_overview_grid [data-testid="stMarkdown"] { margin:0 !important; }
+        /* 헤더/행 컨테이너 — 전체 폭 확보(가로 스크롤 시 배경이 끝까지 따라오도록) */
+        .st-key-rfq_ovhead, [class*="st-key-rfq_ovrow_"] { min-width:1520px; }
+        .st-key-rfq_ovhead [data-testid="stHorizontalBlock"],
+        [class*="st-key-rfq_ovrow_"] [data-testid="stHorizontalBlock"] {
+            min-width:1520px; gap:0 !important; align-items:center; flex-wrap:nowrap; }
+        .st-key-rfq_ovhead { background:#EDF2FA; border-bottom:2px solid #CBD8E8; }
+        [class*="st-key-rfq_ovrow_"] { background:#FFFFFF; border-bottom:1px solid #E5EBF3; }
+        [class*="st-key-rfq_ovrow_"]:hover { background:#EAF3FF; }
+        .rfq-h { color:#45526A; font-size:10px; font-weight:700; letter-spacing:.2px;
+                 line-height:1.15; padding:5px 8px; white-space:normal; word-break:keep-all; }
+        .rfq-m { color:#111827; font-size:10px; line-height:1.25; padding:3px 8px;
+                 white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .rfq-s { color:#8A95A5; font-size:9px; line-height:1.1; padding:0 8px 3px;
+                 white-space:nowrap; font-variant-numeric:tabular-nums; }
+        .rfq-r { text-align:right; }
+        .st-key-rfq_overview_grid [data-testid="stButton"] button {
+            width:20px !important; height:20px !important; min-height:20px !important;
+            padding:0 !important; font-size:10px !important; border-radius:5px !important; }
         </style>
-        <div class="ovx-wrap"><table class="ovx"><colgroup>{colgroup}</colgroup>
-        <thead><tr>{thead}</tr></thead><tbody>{tbody}</tbody></table></div>
         """,
         unsafe_allow_html=True,
     )
+    st.markdown("<style>" + stripe_css + sel_css + "</style>", unsafe_allow_html=True)
+
+    def _cell(col, main, sub, right: bool) -> None:
+        rcls = " rfq-r" if right else ""
+        m = _html.escape(str(main)) if main not in (None, "", "—") else "—"
+        h = f'<div class="rfq-m{rcls}">{m}</div>'
+        if sub:
+            h += f'<div class="rfq-s{rcls}">{_html.escape(str(sub))}</div>'
+        col.markdown(h, unsafe_allow_html=True)
+
+    with st.container(key="rfq_overview_grid"):
+        with st.container(key="rfq_ovhead"):
+            hc = st.columns(col_ratios, gap="small", vertical_alignment="center")
+            hc[0].markdown('<div class="rfq-h">&nbsp;</div>', unsafe_allow_html=True)
+            for col, (h, _m, _s, _w, r) in zip(hc[1:], COLS):
+                rcls = " rfq-r" if r else ""
+                col.markdown(f'<div class="rfq-h{rcls}">{_html.escape(h)}</div>',
+                             unsafe_allow_html=True)
+
+        for idx, rw in enumerate(rows):
+            rid = int(rw["ID"])
+            is_sel = rid == selected_rfq_id
+            with st.container(key=f"rfq_ovrow_{idx}"):
+                cols = st.columns(col_ratios, gap="small", vertical_alignment="center")
+                with cols[0]:
+                    if st.button("✓" if is_sel else " ", key=f"rfq_row_select_{rid}", help="선택"):
+                        if is_sel:
+                            st.session_state.pop("rfq_detail_id", None)
+                        else:
+                            st.session_state["rfq_detail_id"] = rid
+                        st.rerun()
+                for col, (_h, m, s, _w, r) in zip(cols[1:], COLS):
+                    _cell(col, rw[m], rw[s] if s else "", r)
 
     if chosen:
         st.session_state["rfq_detail_id"] = chosen["ID"]
