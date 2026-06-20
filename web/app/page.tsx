@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { fetchRfqOverview, fetchCustomers } from "@/lib/api";
 import type { RfqRow, CustomerOption } from "@/lib/types";
 import RfqTable from "@/components/RfqTable";
@@ -74,6 +75,9 @@ function Overview() {
         <button className="btn" onClick={load}>
           새로고침
         </button>
+        <Link className="btn primary" href="/rfq/new" style={{ marginLeft: "auto" }}>
+          + 신규 RFQ
+        </Link>
       </div>
 
       {loading ? (

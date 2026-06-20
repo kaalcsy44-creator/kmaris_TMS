@@ -64,6 +64,15 @@ export function fetchRfqDetail(id: number): Promise<RfqDetail> {
   return get<RfqDetail>(`/api/admin/rfq/${id}`);
 }
 
+export function createRfq(body: {
+  customer_id: number;
+  vessel_id?: number;
+  customer_rfq_no?: string;
+  items: { part_no: string; description: string; qty: number }[];
+}): Promise<{ ok: boolean; id: number; rfq_no: string }> {
+  return post("/api/admin/rfq", body);
+}
+
 export function fetchDashboard(): Promise<DashboardData> {
   return get<DashboardData>("/api/admin/dashboard");
 }

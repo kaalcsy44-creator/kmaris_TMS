@@ -808,6 +808,67 @@ def create_vendor_quote(rfq_id: int, body: VendorQuoteCreate):
         s.close()
 
 
+def _next_rfq_no(session, company_prefix: str = "KMS") -> str:
+    """helpers.next_rfq_no 와 동일: KMS-RFQ-yymm-NNN (월 단위, 충돌 번호 건너뜀)."""
+    today = date.today()
+    period = today.year * 100 + today.month
+    seq = session.query(DocSequence).filter_by(
+        doc_type="rfq_internal", year=period).first()
+    if not seq:
+        seq = DocSequence(doc_type="rfq_internal", year=period, last_seq=0)
+        session.add(seq)
+    while True:
+        seq.last_seq += 1
+        no = f"{company_prefix}-RFQ-{today:%y%m}-{seq.last_seq:03d}"
+        if not session.query(RFQ).filter_by(rfq_no=no).first():
+            session.flush()
+            return no
+
+
+class RfqItemIn(BaseModel):
+    part_no: str = ""
+    description: str = ""
+    qty: float = 1
+
+
+class RfqCreate(BaseModel):
+    customer_id: int
+    vessel_id: int | None = None
+    customer_rfq_no: str | None = ""
+    items: list[RfqItemIn] = []
+
+
+@app.post("/api/admin/rfq", dependencies=[Depends(require_token)])
+def create_rfq(body: RfqCreate):
+    """Customer RFQ 신규 등록. 내부 관리번호(KMS-RFQ-yymm-NNN)는 자동 채번."""
+    s = get_session()
+    try:
+        cust = s.query(Customer).filter_by(id=body.customer_id).first()
+        if not cust:
+            raise HTTPException(status_code=400, detail="Customer를 선택하세요.")
+        items = [{
+            "part_no": (it.part_no or "").strip(),
+            "description": (it.description or "").strip(),
+            "qty": it.qty or 1,
+        } for it in body.items if (it.part_no or it.description)]
+
+        rfq_no = _next_rfq_no(s)
+        rfq = RFQ(
+            rfq_no=rfq_no,
+            customer_rfq_no=(body.customer_rfq_no or "").strip() or None,
+            customer_id=cust.id,
+            vessel_id=body.vessel_id,
+            date=date.today().strftime("%Y-%m-%d"),
+            status=RFQStatus.RECEIVED,
+            items=items,
+        )
+        s.add(rfq)
+        s.commit()
+        return {"ok": True, "id": rfq.id, "rfq_no": rfq_no}
+    finally:
+        s.close()
+
+
 def _next_quotation_no(session, company_prefix: str = "KMS") -> str:
     """helpers.next_quotation_no 와 동일: KMS-QUO-yymm-NNN (월 단위 시퀀스)."""
     today = date.today()
