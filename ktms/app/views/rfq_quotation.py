@@ -16,7 +16,6 @@ ROOT = _VIEWS.parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-import pandas as pd
 import streamlit as st
 from app.utils.auth import require_auth
 from app.utils.helpers import (
@@ -174,11 +173,15 @@ def render_overview():
                 "Customer": c_name,
                 "선박": v_name,
                 "품목수": len(r.items or []),
-                "Customer RFQ 수신": f"{r.rfq_no}\n{_kst(r.created_at)}",
-                "Vendor RFQ 발신": f"{vrfq_main}\n{vrfq_sub}" if vrfq_sub else vrfq_main,
-                "Vendor Quot. 수신": f"{vq_main}\n{vq_sub}" if vq_sub else vq_main,
+                "1. Customer RFQ 수신": r.rfq_no,
+                "1. Customer RFQ 수신 일시": _kst(r.created_at),
+                "2. Vendor RFQ 발신": vrfq_main,
+                "2. Vendor RFQ 발신 일시": vrfq_sub,
+                "3. Vendor Quot. 수신": vq_main,
+                "3. Vendor Quot. 수신 일시": vq_sub,
                 "Vendor 견적 금액": vq_amt,
-                "Customer Quot. 발신": f"{qtn_main}\n{qtn_sub}" if qtn_sub else qtn_main,
+                "4. Customer Quot. 발신": qtn_main,
+                "4. Customer Quot. 발신 일시": qtn_sub,
                 "Customer 견적 금액": qtn_amt,
                 "상태": stage_lbl,
             })
@@ -189,31 +192,52 @@ def render_overview():
         hint("표시할 RFQ가 없습니다. 'Customer RFQ · 신규 등록' 탭에서 등록하세요.")
         return
 
-    display_cols = [
-        "고객 RFQ No.", "Customer", "선박", "품목수", "Customer RFQ 수신",
-        "Vendor RFQ 발신", "Vendor Quot. 수신", "Vendor 견적 금액",
-        "Customer Quot. 발신", "Customer 견적 금액", "상태",
-    ]
-    df = pd.DataFrame([{col: rw[col] for col in display_cols} for rw in rows])
-    selected = st.dataframe(
-        df,
-        key="ov_select_table",
-        hide_index=True,
-        use_container_width=True,
-        selection_mode="single-row",
-        on_select="rerun",
-        column_config={
-            "품목수": st.column_config.NumberColumn("품목수", format="%d"),
-            "Vendor 견적 금액": st.column_config.TextColumn("Vendor 견적 금액"),
-            "Customer 견적 금액": st.column_config.TextColumn("Customer 견적 금액"),
-        },
-    )
+    def _cell(col, main, sub: str = "") -> None:
+        col.write(main or "—")
+        if sub:
+            col.caption(sub)
 
+    selected_rfq_id = int(st.session_state.get("rfq_detail_id") or 0)
+    header_cols = st.columns([0.35, 1.35, 1.65, 1.45, 0.55, 1.55, 1.55, 1.55, 1.25, 1.55, 1.25, 1.2])
+    for col, label in zip(
+        header_cols,
+        ["", "고객 RFQ No.", "Customer", "선박", "품목수", "1. Customer RFQ 수신",
+         "2. Vendor RFQ 발신", "3. Vendor Quot. 수신", "Vendor 견적 금액",
+         "4. Customer Quot. 발신", "Customer 견적 금액", "상태"],
+    ):
+        col.markdown(f"**{label}**")
+
+    st.divider()
     chosen = None
-    selection = getattr(selected, "selection", None)
-    selected_rows = getattr(selection, "rows", []) if selection else []
-    if selected_rows:
-        chosen = rows[selected_rows[0]]
+    for idx, rw in enumerate(rows):
+        rid = int(rw["ID"])
+        is_selected = rid == selected_rfq_id
+        if is_selected:
+            chosen = rw
+
+        cols = st.columns([0.35, 1.35, 1.65, 1.45, 0.55, 1.55, 1.55, 1.55, 1.25, 1.55, 1.25, 1.2])
+        with cols[0]:
+            if st.button("✓" if is_selected else " ", key=f"rfq_row_select_{rid}", help="선택"):
+                if is_selected:
+                    st.session_state.pop("rfq_detail_id", None)
+                    st.session_state.pop("qtn_detail_id", None)
+                    st.session_state.pop("vrfq_detail_id", None)
+                else:
+                    st.session_state["rfq_detail_id"] = rid
+                st.rerun()
+        _cell(cols[1], rw["고객 RFQ No."])
+        _cell(cols[2], rw["Customer"])
+        _cell(cols[3], rw["선박"])
+        _cell(cols[4], rw["품목수"])
+        _cell(cols[5], rw["1. Customer RFQ 수신"], rw["1. Customer RFQ 수신 일시"])
+        _cell(cols[6], rw["2. Vendor RFQ 발신"], rw["2. Vendor RFQ 발신 일시"])
+        _cell(cols[7], rw["3. Vendor Quot. 수신"], rw["3. Vendor Quot. 수신 일시"])
+        _cell(cols[8], rw["Vendor 견적 금액"])
+        _cell(cols[9], rw["4. Customer Quot. 발신"], rw["4. Customer Quot. 발신 일시"])
+        _cell(cols[10], rw["Customer 견적 금액"])
+        _cell(cols[11], rw["상태"])
+        if idx < len(rows) - 1:
+            st.divider()
 
     if chosen:
         st.session_state["rfq_detail_id"] = chosen["ID"]
