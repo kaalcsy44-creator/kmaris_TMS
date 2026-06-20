@@ -1,5 +1,6 @@
 """P/O — Customer P/O and Vendor P/O workflow tabs."""
 from __future__ import annotations
+import html as _html
 import importlib.util
 import sys
 from pathlib import Path
@@ -8,7 +9,6 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-import pandas as pd
 import streamlit as st
 from app.utils.auth import require_auth
 from app.utils.helpers import (
@@ -60,10 +60,6 @@ def _pos_by_order() -> dict[int, list]:
     return by_ord
 
 
-def _with_subline(main: str, label: str, value: str | None) -> str:
-    return f"{main or '—'}\n{label}: {value or '—'}"
-
-
 def _vendor_po_no_for_display(po: PurchaseOrder) -> str:
     """Legacy KMS-PO-YYYY-NNNN numbers are shown as KMS-PO-yymm-NNN."""
     po_no = po.po_no or "—"
@@ -73,6 +69,36 @@ def _vendor_po_no_for_display(po: PurchaseOrder) -> str:
         if len(period) == 6 and period.isdigit():
             return f"KMS-PO-{period[2:]}-{int(parts[3]):03d}"
     return po_no
+
+
+_PO_OV_CSS = """
+<style>
+.po-wrap { overflow-x:auto; border:1px solid #D7E2EE; border-radius:12px;
+           box-shadow:0 4px 20px rgba(11,29,58,.06); }
+.po-table { width:100%; border-collapse:collapse; font-size:13px; }
+.po-table th { text-align:left; padding:9px 12px; background:#F1F5FB; color:#0B1D3A;
+               font-weight:700; font-size:11.5px; white-space:nowrap;
+               border-bottom:2px solid #D7E2EE; }
+.po-table td { padding:7px 12px; border-bottom:1px solid #EDF2F8; vertical-align:top;
+               color:#1F2937; white-space:nowrap; }
+.po-table tr:last-child td { border-bottom:none; }
+.po-table tbody tr:hover td { background:#F8FBFF; }
+.po-table tbody tr.sel td { background:#EAF3FF; }
+.po-sub { font-size:80%; color:#9AA6B5; margin-top:1px; }
+.po-r { text-align:right; }
+.po-chk { text-align:center; padding-left:10px; padding-right:4px; }
+.po-box { text-decoration:none; font-size:17px; color:#9AA6B5; line-height:1; }
+.po-box.on, .po-box:hover { color:#0055A8; }
+</style>
+"""
+
+
+def _td(main, sub: str = "", cls: str = "") -> str:
+    m = _html.escape(str(main)) if main not in (None, "", "—") else "—"
+    inner = f"<div>{m}</div>"
+    if sub:
+        inner += f'<div class="po-sub">{_html.escape(str(sub))}</div>'
+    return f'<td class="{cls}">{inner}</td>'
 
 
 def render_po_overview() -> None:
@@ -101,36 +127,59 @@ def render_po_overview() -> None:
             vendor_po_no = vendor_nm = sent_email = sent_date = "—"
         rows.append({
             "ID": o.id if o else 0,
-            "고객RFQ No.": r.customer_rfq_no or r.rfq_no,
-            "Customer": customer_name(r.customer_id),
-            "선박": vessel_name(r.vessel_id),
-            "고객 PO No.": _with_subline(o.po_no if o else "—", "수신일시", o.date if o else None),
-            "오더 No.": o.ord_no if o else "—",
-            "품목수": len((o.items if o else None) or r.items or []),
-            "Vendor PO No.": _with_subline(vendor_po_no, "발신일시", sent_date),
-            "Vendor": vendor_nm,
-            "수신자 이메일": sent_email,
-            "상태": pipeline_status_label(r.id),
+            "tds": [
+                _td(r.customer_rfq_no or r.rfq_no),
+                _td(customer_name(r.customer_id)),
+                _td(vessel_name(r.vessel_id)),
+                _td(o.po_no if o else "—", f"수신일시: {o.date if o else '—'}"),
+                _td(o.ord_no if o else "—"),
+                _td(len((o.items if o else None) or r.items or []), cls="po-r"),
+                _td(vendor_po_no, f"발신일시: {sent_date}"),
+                _td(vendor_nm),
+                _td(sent_email),
+                _td(pipeline_status_label(r.id)),
+            ],
         })
 
-    df = pd.DataFrame(rows)
-    if df.empty:
+    if not rows:
         hint("필터 조건에 맞는 RFQ/P/O가 없습니다.")
         return
 
     st.caption("고객 PO No.는 'Customer P/O 신규 등록'에서 PDF 자동 인식 또는 수기 입력한 고객 주문서 번호입니다.")
-    selected = st.dataframe(
-        df.drop(columns=["ID"]),
-        use_container_width=True, hide_index=True,
-        selection_mode="single-row", on_select="rerun",
-    )
-    sel = selected.selection.rows if hasattr(selected, "selection") else []
-    if sel:
-        selected_order_id = int(df.iloc[sel[0]]["ID"])
-        if selected_order_id:
-            st.session_state["ord_detail_id"] = selected_order_id
+
+    sel_id_str = st.query_params.get("po_sel", "")
+    try:
+        selected_order_id = int(sel_id_str) if sel_id_str else 0
+    except ValueError:
+        selected_order_id = 0
+    valid_order_ids = {int(rw["ID"]) for rw in rows if int(rw["ID"])}
+    if selected_order_id and selected_order_id in valid_order_ids:
+        st.session_state["ord_detail_id"] = selected_order_id
+    elif sel_id_str == "" or selected_order_id not in valid_order_ids:
+        st.session_state.pop("ord_detail_id", None)
+
+    headers = ["", "고객RFQ No.", "Customer", "선박", "고객 PO No.", "오더 No.",
+               "품목수", "Vendor PO No.", "Vendor", "수신자 이메일", "상태"]
+    thead = "<tr>" + "".join(f"<th>{_html.escape(h)}</th>" for h in headers) + "</tr>"
+    body_rows = []
+    for rw in rows:
+        oid = int(rw["ID"])
+        is_sel = bool(oid and oid == selected_order_id)
+        if oid:
+            href = "?po_sel=" if is_sel else f"?po_sel={oid}"
+            box = "☑" if is_sel else "☐"
+            chk = (f'<td class="po-chk"><a href="{href}" target="_self" '
+                   f'class="po-box{" on" if is_sel else ""}">{box}</a></td>')
         else:
-            st.session_state.pop("ord_detail_id", None)
+            chk = '<td class="po-chk"><span class="po-box">☐</span></td>'
+        tr_cls = ' class="sel"' if is_sel else ""
+        body_rows.append(f"<tr{tr_cls}>" + chk + "".join(rw["tds"]) + "</tr>")
+
+    st.markdown(
+        _PO_OV_CSS + '<div class="po-wrap"><table class="po-table">'
+        f'<thead>{thead}</thead><tbody>{"".join(body_rows)}</tbody></table></div>',
+        unsafe_allow_html=True,
+    )
 
     st.markdown("---")
     _customer_po.render_order_detail()
