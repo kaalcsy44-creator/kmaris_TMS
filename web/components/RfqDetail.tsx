@@ -1,7 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { fetchRfqDetail, fetchVendors, createVendorRfq } from "@/lib/api";
+import {
+  fetchRfqDetail,
+  fetchVendors,
+  createVendorRfq,
+  createVendorQuote,
+  createCustomerQuote,
+} from "@/lib/api";
 import type { RfqDetail as RfqDetailT, VendorOption } from "@/lib/types";
 
 function money(n: number | null): string {
@@ -156,23 +162,27 @@ export default function RfqDetail({
 
           <div className="action-block">
             <div className="sub-h">액션</div>
-            <VendorRfqAction
-              rfqId={data.id}
-              vendors={vendors}
-              onDone={() => {
+            {(() => {
+              const after = () => {
                 reload();
                 onChanged?.();
-              }}
-            />
-            <div className="actions">
-              <button className="btn" disabled title="다음 액션에서 연결">
-                Vendor Quote 수신 등록
-              </button>
-              <button className="btn" disabled title="다음 액션에서 연결">
-                Customer Quote 발신
-              </button>
-              <span className="hint-inline">위 두 액션은 이어서 연결합니다.</span>
-            </div>
+              };
+              return (
+                <>
+                  <VendorRfqAction
+                    rfqId={data.id}
+                    vendors={vendors}
+                    onDone={after}
+                  />
+                  <VendorQuoteAction
+                    rfqId={data.id}
+                    vendorRfqs={data.vendor_rfqs}
+                    onDone={after}
+                  />
+                  <CustomerQuoteAction rfqId={data.id} onDone={after} />
+                </>
+              );
+            })()}
           </div>
         </div>
       )}
@@ -240,6 +250,150 @@ function VendorRfqAction({
         className="btn primary"
         onClick={send}
         disabled={busy || vendorId === ""}
+      >
+        {busy ? "발신 중…" : "발신"}
+      </button>
+      {msg ? <span className="action-ok">{msg}</span> : null}
+      {err ? <span className="action-err">{err}</span> : null}
+    </div>
+  );
+}
+
+function VendorQuoteAction({
+  rfqId,
+  vendorRfqs,
+  onDone,
+}: {
+  rfqId: number;
+  vendorRfqs: RfqDetailT["vendor_rfqs"];
+  onDone: () => void;
+}) {
+  const [vrfqId, setVrfqId] = useState<number | "">("");
+  const [no, setNo] = useState("");
+  const [amount, setAmount] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const disabled = vendorRfqs.length === 0;
+
+  async function submit() {
+    if (vrfqId === "" || !no.trim() || amount === "") return;
+    setBusy(true);
+    setMsg(null);
+    setErr(null);
+    try {
+      const r = await createVendorQuote(rfqId, vrfqId, no.trim(), Number(amount));
+      setMsg(`수신 등록 완료 — ${r.vendor_quote_no}`);
+      setNo("");
+      setAmount("");
+      setVrfqId("");
+      onDone();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "등록 실패");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="action-row">
+      <span className="action-name">Vendor Quote 수신</span>
+      {disabled ? (
+        <span className="hint-inline">먼저 Vendor RFQ를 발신하세요.</span>
+      ) : (
+        <>
+          <select
+            value={vrfqId}
+            onChange={(e) =>
+              setVrfqId(e.target.value === "" ? "" : Number(e.target.value))
+            }
+          >
+            <option value="">Vendor RFQ 선택…</option>
+            {vendorRfqs.map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.vrfq_no} · {v.vendor}
+              </option>
+            ))}
+          </select>
+          <input
+            className="action-input"
+            placeholder="Vendor 견적번호"
+            value={no}
+            onChange={(e) => setNo(e.target.value)}
+          />
+          <input
+            className="action-input num"
+            placeholder="총액(USD)"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            inputMode="decimal"
+          />
+          <button
+            className="btn primary"
+            onClick={submit}
+            disabled={busy || vrfqId === "" || !no.trim() || amount === ""}
+          >
+            {busy ? "등록 중…" : "등록"}
+          </button>
+        </>
+      )}
+      {msg ? <span className="action-ok">{msg}</span> : null}
+      {err ? <span className="action-err">{err}</span> : null}
+    </div>
+  );
+}
+
+function CustomerQuoteAction({
+  rfqId,
+  onDone,
+}: {
+  rfqId: number;
+  onDone: () => void;
+}) {
+  const [currency, setCurrency] = useState("USD");
+  const [amount, setAmount] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function submit() {
+    if (amount === "") return;
+    setBusy(true);
+    setMsg(null);
+    setErr(null);
+    try {
+      const r = await createCustomerQuote(rfqId, currency, Number(amount));
+      setMsg(`발신 완료 — ${r.qtn_no}`);
+      setAmount("");
+      onDone();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "발신 실패");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="action-row">
+      <span className="action-name">Customer Quote 발신</span>
+      <select value={currency} onChange={(e) => setCurrency(e.target.value)}>
+        <option>USD</option>
+        <option>EUR</option>
+        <option>KRW</option>
+        <option>SGD</option>
+      </select>
+      <input
+        className="action-input num"
+        placeholder="견적 총액"
+        value={amount}
+        onChange={(e) => setAmount(e.target.value)}
+        inputMode="decimal"
+      />
+      <button
+        className="btn primary"
+        onClick={submit}
+        disabled={busy || amount === ""}
       >
         {busy ? "발신 중…" : "발신"}
       </button>

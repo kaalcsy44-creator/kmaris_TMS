@@ -75,7 +75,7 @@ export type RfqDetail = {
   status: string;
   steps: RfqStep[];
   items: RfqItem[];
-  vendor_rfqs: { vrfq_no: string; vendor: string; at: string }[];
+  vendor_rfqs: { id: number; vrfq_no: string; vendor: string; at: string }[];
   vendor_quotes: { vendor_quote_no: string; amount: string; at: string }[];
   quotation: { qtn_no: string; amount: string; status: string; at: string } | null;
 };

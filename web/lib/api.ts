@@ -73,3 +73,24 @@ export function createVendorRfq(
 ): Promise<{ ok: boolean; vrfq_no: string; vendor: string }> {
   return post(`/api/admin/rfq/${rfqId}/vendor-rfq`, { vendor_id: vendorId });
 }
+
+export function createVendorQuote(
+  rfqId: number,
+  vendorRfqId: number,
+  vendorQuoteNo: string,
+  amount: number
+): Promise<{ ok: boolean; vendor_quote_no: string }> {
+  return post(`/api/admin/rfq/${rfqId}/vendor-quote`, {
+    vendor_rfq_id: vendorRfqId,
+    vendor_quote_no: vendorQuoteNo,
+    amount,
+  });
+}
+
+export function createCustomerQuote(
+  rfqId: number,
+  currency: string,
+  amount: number
+): Promise<{ ok: boolean; qtn_no: string }> {
+  return post(`/api/admin/rfq/${rfqId}/customer-quote`, { currency, amount });
+}

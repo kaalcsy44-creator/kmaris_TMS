@@ -586,12 +586,30 @@ table.mini .num {
 }
 .action-row select {
   height: 34px;
-  min-width: 220px;
+  min-width: 200px;
   border: 1px solid #d7e2ee;
   border-radius: 8px;
   padding: 0 10px;
   font-size: 13px;
   background: #fff;
+}
+.action-input {
+  height: 34px;
+  border: 1px solid #d7e2ee;
+  border-radius: 8px;
+  padding: 0 10px;
+  font-size: 13px;
+  width: 150px;
+}
+.action-input.num {
+  width: 120px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.action-input:focus,
+.action-row select:focus {
+  outline: none;
+  border-color: var(--blue);
 }
 .btn.primary {
   background: var(--blue);

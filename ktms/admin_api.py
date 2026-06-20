@@ -347,6 +347,7 @@ def rfq_detail(rfq_id: int):
                  .order_by(VendorRFQ.id.desc()).all())
         vendor_names = {v.id: v.name for v in s.query(Vendor).all()}
         vrfq_view = [{
+            "id": v.id,
             "vrfq_no": v.vrfq_no,
             "vendor": vendor_names.get(v.vendor_id, "—"),
             "at": _kst(v.created_at),
@@ -484,15 +485,20 @@ _DOC_PREFIX = {"vendor_rfq": "VRFQ", "quotation": "QTN"}
 
 
 def _next_doc_no(session, doc_type: str, company_prefix: str = "KMS") -> str:
-    """helpers.next_doc_no 와 동일한 연단위 시퀀스 채번 (전달받은 세션에서 commit)."""
+    """연단위 시퀀스 채번. 시퀀스가 기존 번호와 어긋나도 충돌 번호는 건너뛴다."""
     yr = date.today().year
     seq = session.query(DocSequence).filter_by(doc_type=doc_type, year=yr).first()
     if not seq:
         seq = DocSequence(doc_type=doc_type, year=yr, last_seq=0)
         session.add(seq)
-    seq.last_seq += 1
-    session.flush()
-    return f"{company_prefix}-{_DOC_PREFIX.get(doc_type, 'DOC')}-{yr}-{seq.last_seq:04d}"
+    while True:
+        seq.last_seq += 1
+        no = f"{company_prefix}-{_DOC_PREFIX.get(doc_type, 'DOC')}-{yr}-{seq.last_seq:04d}"
+        if doc_type == "vendor_rfq" and \
+                session.query(VendorRFQ).filter_by(vrfq_no=no).first():
+            continue
+        session.flush()
+        return no
 
 
 class VendorRfqCreate(BaseModel):
@@ -532,5 +538,85 @@ def create_vendor_rfq(rfq_id: int, body: VendorRfqCreate):
         s.add(vrfq)
         s.commit()
         return {"ok": True, "vrfq_no": vrfq_no, "vendor": vendor.name}
+    finally:
+        s.close()
+
+
+class VendorQuoteCreate(BaseModel):
+    vendor_rfq_id: int
+    vendor_quote_no: str
+    amount: float
+
+
+@app.post("/api/admin/rfq/{rfq_id}/vendor-quote",
+          dependencies=[Depends(require_token)])
+def create_vendor_quote(rfq_id: int, body: VendorQuoteCreate):
+    """Vendor Quote 수신 등록. amount는 견적 총액(USD)으로 단일 품목에 기록한다."""
+    s = get_session()
+    try:
+        vrfq = s.query(VendorRFQ).filter_by(id=body.vendor_rfq_id, rfq_id=rfq_id).first()
+        if not vrfq:
+            raise HTTPException(status_code=400, detail="해당 RFQ의 Vendor RFQ를 선택하세요.")
+        if not body.vendor_quote_no.strip():
+            raise HTTPException(status_code=400, detail="Vendor 견적번호를 입력하세요.")
+
+        vq = VendorQuote(
+            vendor_rfq_id=vrfq.id,
+            vendor_quote_no=body.vendor_quote_no.strip(),
+            received_date=date.today().strftime("%Y-%m-%d"),
+            items=[{"cost_price": body.amount, "qty": 1, "amount": body.amount}],
+        )
+        s.add(vq)
+        s.commit()
+        return {"ok": True, "vendor_quote_no": vq.vendor_quote_no}
+    finally:
+        s.close()
+
+
+def _next_quotation_no(session, company_prefix: str = "KMS") -> str:
+    """helpers.next_quotation_no 와 동일: KMS-QUO-yymm-NNN (월 단위 시퀀스)."""
+    today = date.today()
+    period = today.year * 100 + today.month
+    seq = session.query(DocSequence).filter_by(
+        doc_type="quotation_internal", year=period).first()
+    if not seq:
+        seq = DocSequence(doc_type="quotation_internal", year=period, last_seq=0)
+        session.add(seq)
+    while True:
+        seq.last_seq += 1
+        no = f"{company_prefix}-QUO-{today:%y%m}-{seq.last_seq:03d}"
+        if not session.query(Quotation).filter_by(qtn_no=no).first():
+            session.flush()
+            return no
+
+
+class CustomerQuoteCreate(BaseModel):
+    currency: str = "USD"
+    amount: float
+
+
+@app.post("/api/admin/rfq/{rfq_id}/customer-quote",
+          dependencies=[Depends(require_token)])
+def create_customer_quote(rfq_id: int, body: CustomerQuoteCreate):
+    """Customer Quote 발신. 견적 총액을 단일 품목에 기록하고 상태는 발송완료."""
+    s = get_session()
+    try:
+        rfq = s.query(RFQ).filter_by(id=rfq_id).first()
+        if not rfq:
+            raise HTTPException(status_code=404, detail="RFQ를 찾을 수 없습니다.")
+
+        qtn_no = _next_quotation_no(s)
+        qtn = Quotation(
+            qtn_no=qtn_no,
+            rfq_id=rfq.id,
+            customer_id=rfq.customer_id,
+            currency=(body.currency or "USD"),
+            status=QuotationStatus.SENT,
+            items=[{"amount": body.amount}],
+            date=date.today().strftime("%Y-%m-%d"),
+        )
+        s.add(qtn)
+        s.commit()
+        return {"ok": True, "qtn_no": qtn_no}
     finally:
         s.close()
