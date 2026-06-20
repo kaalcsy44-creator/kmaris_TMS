@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { fetchRfqOverview, fetchCustomers } from "@/lib/api";
 import type { RfqRow, CustomerOption } from "@/lib/types";
 import RfqTable from "@/components/RfqTable";
@@ -39,11 +39,6 @@ export default function Page() {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customerId]);
-
-  const selectedRow = useMemo(
-    () => rows.find((r) => r.id === selectedId) ?? null,
-    [rows, selectedId]
-  );
 
   return (
     <div className="page">
@@ -92,7 +87,7 @@ export default function Page() {
         />
       )}
 
-      <RfqDetail row={selectedRow} />
+      <RfqDetail rfqId={selectedId} />
     </div>
   );
 }

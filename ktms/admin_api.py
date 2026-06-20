@@ -25,7 +25,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from db.engine import get_session
 from db.models import (
-    RFQ, Customer, Vessel,
+    RFQ, Customer, Vessel, Vendor,
     VendorRFQ, VendorQuote, Quotation, QuotationStatus,
     Order, PurchaseOrder, ShippingAdvice, CommercialInvoice,
     TaxInvoiceData, ARRecord,
@@ -236,6 +236,96 @@ def rfq_overview(customer_id: int | None = None):
             })
 
         return {"steps": INTERNAL_STEPS, "rows": rows}
+    finally:
+        s.close()
+
+
+def _item_view(it: dict) -> dict:
+    qty = it.get("qty", 1) or 1
+    amount = it.get("amount")
+    unit = it.get("unit_price", it.get("price"))
+    if unit is None and amount is not None:
+        try:
+            unit = float(amount) / float(qty or 1)
+        except (TypeError, ValueError, ZeroDivisionError):
+            unit = None
+    return {
+        "part_no": it.get("part_no") or "",
+        "description": it.get("description") or "",
+        "qty": qty,
+        "unit": it.get("unit") or "",
+        "unit_price": unit,
+        "amount": amount,
+    }
+
+
+@app.get("/api/admin/rfq/{rfq_id}", dependencies=[Depends(require_token)])
+def rfq_detail(rfq_id: int):
+    """RFQ 1건 상세 — 품목, 12단계 진행, 연결 문서(Vendor RFQ/Quote/Quotation)."""
+    s = get_session()
+    try:
+        r = s.query(RFQ).filter_by(id=rfq_id).first()
+        if not r:
+            raise HTTPException(status_code=404, detail="RFQ not found")
+
+        cust = s.query(Customer).filter_by(id=r.customer_id).first()
+        vessel = s.query(Vessel).filter_by(id=r.vessel_id).first() if r.vessel_id else None
+        stage = _pipeline_stage(s, r.id)
+
+        vrfqs = (s.query(VendorRFQ).filter_by(rfq_id=r.id)
+                 .order_by(VendorRFQ.id.desc()).all())
+        vendor_names = {v.id: v.name for v in s.query(Vendor).all()}
+        vrfq_view = [{
+            "vrfq_no": v.vrfq_no,
+            "vendor": vendor_names.get(v.vendor_id, "—"),
+            "at": _kst(v.created_at),
+        } for v in vrfqs]
+
+        vrfq_ids = [v.id for v in vrfqs]
+        vqs = (s.query(VendorQuote)
+               .filter(VendorQuote.vendor_rfq_id.in_(vrfq_ids))
+               .order_by(VendorQuote.id.desc()).all() if vrfq_ids else [])
+        vquote_view = [{
+            "vendor_quote_no": getattr(q, "vendor_quote_no", None) or "—",
+            "amount": f"{getattr(q, 'currency', None) or 'USD'} {_items_cost_total(q.items):,.2f}",
+            "at": _kst(q.created_at),
+        } for q in vqs]
+
+        qtn = (s.query(Quotation).filter_by(rfq_id=r.id)
+               .order_by(Quotation.id.desc()).first())
+        qtn_view = None
+        if qtn:
+            qtn_view = {
+                "qtn_no": qtn.qtn_no,
+                "amount": f"{qtn.currency} {_total_amount(qtn.items or []):,.2f}",
+                "status": _enum_val(qtn.status),
+                "at": _kst(qtn.created_at),
+            }
+
+        steps = [{
+            "no": i,
+            "name": name,
+            "state": ("done" if i < stage else "current" if i == stage else "todo"),
+        } for i, name in enumerate(INTERNAL_STEPS, start=1)]
+
+        return {
+            "id": r.id,
+            "rfq_no": r.rfq_no,
+            "customer_rfq_no": r.customer_rfq_no or "",
+            "customer": cust.name if cust else "—",
+            "customer_contact": (cust.contact if cust else "") or "",
+            "customer_email": (cust.email if cust else "") or "",
+            "vessel": vessel.name if vessel else "",
+            "date": r.date or "",
+            "notes": r.notes or "",
+            "stage": stage,
+            "status": _status_label(stage),
+            "steps": steps,
+            "items": [_item_view(it) for it in (r.items or [])],
+            "vendor_rfqs": vrfq_view,
+            "vendor_quotes": vquote_view,
+            "quotation": qtn_view,
+        }
     finally:
         s.close()
 

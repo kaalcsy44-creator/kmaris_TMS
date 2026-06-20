@@ -24,3 +24,37 @@ export type RfqOverview = {
 };
 
 export type CustomerOption = { id: number; name: string };
+
+export type RfqItem = {
+  part_no: string;
+  description: string;
+  qty: number;
+  unit: string;
+  unit_price: number | null;
+  amount: number | null;
+};
+
+export type RfqStep = {
+  no: number;
+  name: string;
+  state: "done" | "current" | "todo";
+};
+
+export type RfqDetail = {
+  id: number;
+  rfq_no: string;
+  customer_rfq_no: string;
+  customer: string;
+  customer_contact: string;
+  customer_email: string;
+  vessel: string;
+  date: string;
+  notes: string;
+  stage: number;
+  status: string;
+  steps: RfqStep[];
+  items: RfqItem[];
+  vendor_rfqs: { vrfq_no: string; vendor: string; at: string }[];
+  vendor_quotes: { vendor_quote_no: string; amount: string; at: string }[];
+  quotation: { qtn_no: string; amount: string; status: string; at: string } | null;
+};

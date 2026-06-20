@@ -1,4 +1,4 @@
-import type { RfqOverview, CustomerOption } from "./types";
+import type { RfqOverview, CustomerOption, RfqDetail } from "./types";
 
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8001";
@@ -22,4 +22,8 @@ export function fetchRfqOverview(customerId?: number): Promise<RfqOverview> {
 
 export function fetchCustomers(): Promise<CustomerOption[]> {
   return get<CustomerOption[]>("/api/admin/customers");
+}
+
+export function fetchRfqDetail(id: number): Promise<RfqDetail> {
+  return get<RfqDetail>(`/api/admin/rfq/${id}`);
 }

@@ -233,6 +233,150 @@ table.rfq tbody tr:last-child td {
   font-size: 13px;
 }
 
+.sub-h {
+  font-size: 12px;
+  font-weight: 700;
+  color: #45526a;
+  margin-bottom: 8px;
+  letter-spacing: 0.2px;
+}
+
+.detail-cols {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 22px;
+  margin-top: 18px;
+}
+@media (max-width: 900px) {
+  .detail-cols {
+    grid-template-columns: 1fr;
+  }
+}
+
+.stepper {
+  border-right: 1px solid var(--line);
+  padding-right: 18px;
+}
+@media (max-width: 900px) {
+  .stepper {
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 12px;
+  }
+}
+.step {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 3px 0;
+}
+.step .dot {
+  display: inline-flex;
+  width: 19px;
+  height: 19px;
+  border-radius: 50%;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.step.done .dot {
+  background: rgba(0, 85, 168, 0.12);
+  color: var(--blue);
+}
+.step.current .dot {
+  background: rgba(0, 85, 168, 0.2);
+  color: var(--blue);
+}
+.step.todo .dot {
+  background: #eef1f5;
+  color: #9aa6b5;
+}
+.step .nm {
+  font-size: 12px;
+}
+.step.done .nm {
+  color: var(--blue);
+  font-weight: 600;
+}
+.step.current .nm {
+  color: var(--blue);
+  font-weight: 800;
+}
+.step.todo .nm {
+  color: #9aa6b5;
+}
+
+table.mini {
+  width: 100%;
+  border-collapse: collapse;
+}
+table.mini th,
+table.mini td {
+  font-size: 12px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+  text-align: left;
+}
+table.mini th {
+  color: #45526a;
+  font-weight: 700;
+  background: #f7fafd;
+}
+table.mini .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.chain-line {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  padding: 4px 0;
+}
+.chain-label {
+  width: 110px;
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 700;
+  color: #45526a;
+}
+.chain-empty {
+  color: #c2cad6;
+  font-size: 12px;
+}
+.chain-vals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.chain-pill {
+  font-size: 11.5px;
+  background: #eef3fa;
+  border: 1px solid #dde7f3;
+  border-radius: 6px;
+  padding: 2px 8px;
+  color: #243b5c;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 18px;
+  flex-wrap: wrap;
+}
+.actions .btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.hint-inline {
+  font-size: 12px;
+  color: var(--muted);
+}
+
 .state {
   padding: 28px;
   text-align: center;
