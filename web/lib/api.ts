@@ -8,6 +8,9 @@ import type {
   DashboardData,
   PoRow,
   ArData,
+  SettingsCustomer,
+  SettingsVendor,
+  SettingsVessel,
 } from "./types";
 
 function authHeaders(json = false): HeadersInit {
@@ -75,6 +78,39 @@ export function fetchPoOverview(): Promise<{ rows: PoRow[] }> {
 
 export function fetchArOverview(): Promise<ArData> {
   return get<ArData>("/api/admin/ar-overview");
+}
+
+export function fetchSettingsCustomers(): Promise<SettingsCustomer[]> {
+  return get<SettingsCustomer[]>("/api/admin/settings/customers");
+}
+export function fetchSettingsVendors(): Promise<SettingsVendor[]> {
+  return get<SettingsVendor[]>("/api/admin/settings/vendors");
+}
+export function fetchSettingsVessels(): Promise<SettingsVessel[]> {
+  return get<SettingsVessel[]>("/api/admin/settings/vessels");
+}
+export function createSettingsCustomer(body: {
+  name: string;
+  contact?: string;
+  email?: string;
+  country?: string;
+}): Promise<{ ok: boolean; id: number }> {
+  return post("/api/admin/settings/customers", body);
+}
+export function createSettingsVendor(body: {
+  name: string;
+  contact?: string;
+  email?: string;
+  specialization?: string;
+}): Promise<{ ok: boolean; id: number }> {
+  return post("/api/admin/settings/vendors", body);
+}
+export function createSettingsVessel(body: {
+  name: string;
+  imo?: string;
+  customer_id?: number;
+}): Promise<{ ok: boolean; id: number }> {
+  return post("/api/admin/settings/vessels", body);
 }
 
 export function recordArPayment(

@@ -615,6 +615,106 @@ def vendors():
         s.close()
 
 
+# ── Settings: master data (list + create) ─────────────────────────────────────
+class CustomerCreate(BaseModel):
+    name: str
+    contact: str | None = ""
+    email: str | None = ""
+    country: str | None = ""
+
+
+class VendorCreate(BaseModel):
+    name: str
+    contact: str | None = ""
+    email: str | None = ""
+    specialization: str | None = ""
+
+
+class VesselCreate(BaseModel):
+    name: str
+    imo: str | None = ""
+    customer_id: int | None = None
+
+
+@app.get("/api/admin/settings/customers", dependencies=[Depends(require_token)])
+def settings_customers():
+    s = get_session()
+    try:
+        return [{"id": c.id, "name": c.name, "contact": c.contact or "",
+                 "email": c.email or "", "country": c.country or ""}
+                for c in s.query(Customer).order_by(Customer.name).all()]
+    finally:
+        s.close()
+
+
+@app.post("/api/admin/settings/customers", dependencies=[Depends(require_token)])
+def create_customer(body: CustomerCreate):
+    if not body.name.strip():
+        raise HTTPException(status_code=400, detail="이름을 입력하세요.")
+    s = get_session()
+    try:
+        c = Customer(name=body.name.strip(), contact=body.contact or "",
+                     email=body.email or "", country=body.country or "")
+        s.add(c)
+        s.commit()
+        return {"ok": True, "id": c.id}
+    finally:
+        s.close()
+
+
+@app.get("/api/admin/settings/vendors", dependencies=[Depends(require_token)])
+def settings_vendors():
+    s = get_session()
+    try:
+        return [{"id": v.id, "name": v.name, "contact": v.contact or "",
+                 "email": v.email or "", "specialization": v.specialization or ""}
+                for v in s.query(Vendor).order_by(Vendor.name).all()]
+    finally:
+        s.close()
+
+
+@app.post("/api/admin/settings/vendors", dependencies=[Depends(require_token)])
+def create_vendor(body: VendorCreate):
+    if not body.name.strip():
+        raise HTTPException(status_code=400, detail="이름을 입력하세요.")
+    s = get_session()
+    try:
+        v = Vendor(name=body.name.strip(), contact=body.contact or "",
+                   email=body.email or "", specialization=body.specialization or "")
+        s.add(v)
+        s.commit()
+        return {"ok": True, "id": v.id}
+    finally:
+        s.close()
+
+
+@app.get("/api/admin/settings/vessels", dependencies=[Depends(require_token)])
+def settings_vessels():
+    s = get_session()
+    try:
+        cust_names = {c.id: c.name for c in s.query(Customer).all()}
+        return [{"id": v.id, "name": v.name, "imo": v.imo or "",
+                 "customer": cust_names.get(v.customer_id, "") if v.customer_id else ""}
+                for v in s.query(Vessel).order_by(Vessel.name).all()]
+    finally:
+        s.close()
+
+
+@app.post("/api/admin/settings/vessels", dependencies=[Depends(require_token)])
+def create_vessel(body: VesselCreate):
+    if not body.name.strip():
+        raise HTTPException(status_code=400, detail="선박명을 입력하세요.")
+    s = get_session()
+    try:
+        v = Vessel(name=body.name.strip(), imo=body.imo or "",
+                   customer_id=body.customer_id)
+        s.add(v)
+        s.commit()
+        return {"ok": True, "id": v.id}
+    finally:
+        s.close()
+
+
 # ── Write actions ─────────────────────────────────────────────────────────────
 _DOC_PREFIX = {"vendor_rfq": "VRFQ", "quotation": "QTN"}
 

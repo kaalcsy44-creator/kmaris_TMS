@@ -8,6 +8,7 @@ const TABS = [
   { href: "/po", label: "P/O 현황", key: "po" },
   { href: "/ar", label: "미수금", key: "ar" },
   { href: "/dashboard", label: "운영 현황", key: "dashboard" },
+  { href: "/settings", label: "설정", key: "settings" },
 ];
 
 export default function Nav({ active }: { active: string }) {

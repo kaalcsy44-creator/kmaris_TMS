@@ -25,6 +25,27 @@ export type RfqOverview = {
 
 export type CustomerOption = { id: number; name: string };
 
+export type SettingsCustomer = {
+  id: number;
+  name: string;
+  contact: string;
+  email: string;
+  country: string;
+};
+export type SettingsVendor = {
+  id: number;
+  name: string;
+  contact: string;
+  email: string;
+  specialization: string;
+};
+export type SettingsVessel = {
+  id: number;
+  name: string;
+  imo: string;
+  customer: string;
+};
+
 export type VendorOption = { id: number; name: string; email: string };
 
 export type PoRow = {
