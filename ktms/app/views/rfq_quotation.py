@@ -199,6 +199,7 @@ def render_overview():
             overflow-x: auto;
             overflow-y: hidden;
             padding-bottom: 4px;
+            gap: 0 !important;
         }
         .st-key-rfq_overview_grid [data-testid="stHorizontalBlock"] {
             min-width: 1580px;
