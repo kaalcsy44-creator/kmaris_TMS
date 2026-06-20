@@ -127,18 +127,16 @@ def render_po_overview() -> None:
             vendor_po_no = vendor_nm = sent_email = sent_date = "—"
         rows.append({
             "ID": o.id if o else 0,
-            "tds": [
-                _td(r.customer_rfq_no or r.rfq_no),
-                _td(customer_name(r.customer_id)),
-                _td(vessel_name(r.vessel_id)),
-                _td(o.po_no if o else "—", f"수신일시: {o.date if o else '—'}"),
-                _td(o.ord_no if o else "—"),
-                _td(len((o.items if o else None) or r.items or []), cls="po-r"),
-                _td(vendor_po_no, f"발신일시: {sent_date}"),
-                _td(vendor_nm),
-                _td(sent_email),
-                _td(pipeline_status_label(r.id)),
-            ],
+            "고객RFQ No.": r.customer_rfq_no or r.rfq_no,
+            "Customer": customer_name(r.customer_id),
+            "선박": vessel_name(r.vessel_id),
+            "고객 PO No.": f"{o.po_no if o else '—'}\n수신일시: {o.date if o else '—'}",
+            "오더 No.": o.ord_no if o else "—",
+            "품목수": len((o.items if o else None) or r.items or []),
+            "Vendor PO No.": f"{vendor_po_no}\n발신일시: {sent_date}",
+            "Vendor": vendor_nm,
+            "수신자 이메일": sent_email,
+            "상태": pipeline_status_label(r.id),
         })
 
     if not rows:
@@ -147,39 +145,42 @@ def render_po_overview() -> None:
 
     st.caption("고객 PO No.는 'Customer P/O 신규 등록'에서 PDF 자동 인식 또는 수기 입력한 고객 주문서 번호입니다.")
 
-    sel_id_str = st.query_params.get("po_sel", "")
-    try:
-        selected_order_id = int(sel_id_str) if sel_id_str else 0
-    except ValueError:
-        selected_order_id = 0
-    valid_order_ids = {int(rw["ID"]) for rw in rows if int(rw["ID"])}
-    if selected_order_id and selected_order_id in valid_order_ids:
-        st.session_state["ord_detail_id"] = selected_order_id
-    elif sel_id_str == "" or selected_order_id not in valid_order_ids:
-        st.session_state.pop("ord_detail_id", None)
+    selected_order_id = int(st.session_state.get("ord_detail_id") or 0)
+    header_cols = st.columns([0.35, 1.35, 1.7, 1.8, 1.35, 1.2, 0.65, 1.7, 1.5, 1.8, 1.2])
+    for col, label in zip(
+        header_cols,
+        ["", "고객RFQ No.", "Customer", "선박", "고객 PO No.", "오더 No.",
+         "품목수", "Vendor PO No.", "Vendor", "수신자 이메일", "상태"],
+    ):
+        col.markdown(f"**{label}**")
 
-    headers = ["", "고객RFQ No.", "Customer", "선박", "고객 PO No.", "오더 No.",
-               "품목수", "Vendor PO No.", "Vendor", "수신자 이메일", "상태"]
-    thead = "<tr>" + "".join(f"<th>{_html.escape(h)}</th>" for h in headers) + "</tr>"
-    body_rows = []
-    for rw in rows:
+    st.divider()
+    for idx, rw in enumerate(rows):
         oid = int(rw["ID"])
-        is_sel = bool(oid and oid == selected_order_id)
-        if oid:
-            href = "?po_sel=" if is_sel else f"?po_sel={oid}"
-            box = "☑" if is_sel else "☐"
-            chk = (f'<td class="po-chk"><a href="{href}" target="_self" '
-                   f'class="po-box{" on" if is_sel else ""}">{box}</a></td>')
-        else:
-            chk = '<td class="po-chk"><span class="po-box">☐</span></td>'
-        tr_cls = ' class="sel"' if is_sel else ""
-        body_rows.append(f"<tr{tr_cls}>" + chk + "".join(rw["tds"]) + "</tr>")
-
-    st.markdown(
-        _PO_OV_CSS + '<div class="po-wrap"><table class="po-table">'
-        f'<thead>{thead}</thead><tbody>{"".join(body_rows)}</tbody></table></div>',
-        unsafe_allow_html=True,
-    )
+        is_selected = bool(oid and oid == selected_order_id)
+        cols = st.columns([0.35, 1.35, 1.7, 1.8, 1.35, 1.2, 0.65, 1.7, 1.5, 1.8, 1.2])
+        with cols[0]:
+            if oid:
+                if st.button("✓" if is_selected else " ", key=f"po_row_select_{oid}", help="선택"):
+                    if is_selected:
+                        st.session_state.pop("ord_detail_id", None)
+                    else:
+                        st.session_state["ord_detail_id"] = oid
+                    st.rerun()
+            else:
+                st.caption("—")
+        cols[1].write(rw["고객RFQ No."])
+        cols[2].write(rw["Customer"])
+        cols[3].write(rw["선박"])
+        cols[4].write(rw["고객 PO No."])
+        cols[5].write(rw["오더 No."])
+        cols[6].write(rw["품목수"])
+        cols[7].write(rw["Vendor PO No."])
+        cols[8].write(rw["Vendor"])
+        cols[9].write(rw["수신자 이메일"])
+        cols[10].write(rw["상태"])
+        if idx < len(rows) - 1:
+            st.divider()
 
     st.markdown("---")
     _customer_po.render_order_detail()

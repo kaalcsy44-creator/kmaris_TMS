@@ -16,6 +16,7 @@ ROOT = _VIEWS.parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+import pandas as pd
 import streamlit as st
 from app.utils.auth import require_auth
 from app.utils.helpers import (
@@ -169,19 +170,17 @@ def render_overview():
                 "ID": r.id,
                 "QTN_ID": qtn.id if qtn else 0,
                 "VRFQ_ID": vrfq_ids[0] if vrfq_ids else 0,  # 최신 VRFQ
-                "tds": [
-                    _td(r.customer_rfq_no or "—"),
-                    _td(c_name),
-                    _td(v_name),
-                    _td(len(r.items or []), cls="ov-r"),
-                    _td(r.rfq_no, _kst(r.created_at)),
-                    _td(vrfq_main, vrfq_sub),
-                    _td(vq_main, vq_sub),
-                    _td(vq_amt, cls="ov-r"),
-                    _td(qtn_main, qtn_sub),
-                    _td(qtn_amt, cls="ov-r"),
-                    _td(stage_lbl),
-                ],
+                "고객 RFQ No.": r.customer_rfq_no or "—",
+                "Customer": c_name,
+                "선박": v_name,
+                "품목수": len(r.items or []),
+                "Customer RFQ 수신": f"{r.rfq_no}\n{_kst(r.created_at)}",
+                "Vendor RFQ 발신": f"{vrfq_main}\n{vrfq_sub}" if vrfq_sub else vrfq_main,
+                "Vendor Quot. 수신": f"{vq_main}\n{vq_sub}" if vq_sub else vq_main,
+                "Vendor 견적 금액": vq_amt,
+                "Customer Quot. 발신": f"{qtn_main}\n{qtn_sub}" if qtn_sub else qtn_main,
+                "Customer 견적 금액": qtn_amt,
+                "상태": stage_lbl,
             })
     finally:
         s.close()
@@ -190,43 +189,46 @@ def render_overview():
         hint("표시할 RFQ가 없습니다. 'Customer RFQ · 신규 등록' 탭에서 등록하세요.")
         return
 
-    # 현재 선택 — query param 으로 보관. 좌측 체크박스(링크) 클릭 시 토글된다.
-    sel_id_str = st.query_params.get("ov_sel", "")
-    chosen = None
-    if sel_id_str:
-        try:
-            _rid = int(sel_id_str)
-            chosen = next((rw for rw in rows if rw["ID"] == _rid), None)
-        except ValueError:
-            chosen = None
-
-    headers = ["", "고객 RFQ No.", "Customer", "선박", "품목수", "Customer RFQ 수신",
-               "Vendor RFQ 발신", "Vendor Quot. 수신", "Vendor 견적 금액",
-               "Customer Quot. 발신", "Customer 견적 금액", "상태"]
-    thead = "<tr>" + "".join(f"<th>{h}</th>" for h in headers) + "</tr>"
-    body_rows = []
-    for rw in rows:
-        rid = rw["ID"]
-        is_sel = chosen is not None and rid == chosen["ID"]
-        # 선택된 행은 다시 누르면 해제(빈 값), 아니면 해당 ID로 선택
-        href = "?ov_sel=" if is_sel else f"?ov_sel={rid}"
-        box = "☑" if is_sel else "☐"
-        chk = (f'<td class="ov-chk"><a href="{href}" target="_self" '
-               f'class="ov-box{" on" if is_sel else ""}">{box}</a></td>')
-        tr_cls = ' class="sel"' if is_sel else ""
-        body_rows.append(f"<tr{tr_cls}>" + chk + "".join(rw["tds"]) + "</tr>")
-    st.markdown(
-        _OV_CSS + '<div class="ov-wrap"><table class="ov-table">'
-        f'<thead>{thead}</thead><tbody>{"".join(body_rows)}</tbody></table></div>',
-        unsafe_allow_html=True,
+    display_cols = [
+        "고객 RFQ No.", "Customer", "선박", "품목수", "Customer RFQ 수신",
+        "Vendor RFQ 발신", "Vendor Quot. 수신", "Vendor 견적 금액",
+        "Customer Quot. 발신", "Customer 견적 금액", "상태",
+    ]
+    df = pd.DataFrame([{col: rw[col] for col in display_cols} for rw in rows])
+    selected = st.dataframe(
+        df,
+        key="ov_select_table",
+        hide_index=True,
+        use_container_width=True,
+        selection_mode="single-row",
+        on_select="rerun",
+        column_config={
+            "품목수": st.column_config.NumberColumn("품목수", format="%d"),
+            "Vendor 견적 금액": st.column_config.TextColumn("Vendor 견적 금액"),
+            "Customer 견적 금액": st.column_config.TextColumn("Customer 견적 금액"),
+        },
     )
+
+    chosen = None
+    selection = getattr(selected, "selection", None)
+    selected_rows = getattr(selection, "rows", []) if selection else []
+    if selected_rows:
+        chosen = rows[selected_rows[0]]
 
     if chosen:
         st.session_state["rfq_detail_id"] = chosen["ID"]
         if chosen["QTN_ID"]:
             st.session_state["qtn_detail_id"] = chosen["QTN_ID"]
+        else:
+            st.session_state.pop("qtn_detail_id", None)
         if chosen["VRFQ_ID"]:
             st.session_state["vrfq_detail_id"] = chosen["VRFQ_ID"]
+        else:
+            st.session_state.pop("vrfq_detail_id", None)
+    else:
+        st.session_state.pop("rfq_detail_id", None)
+        st.session_state.pop("qtn_detail_id", None)
+        st.session_state.pop("vrfq_detail_id", None)
 
     with st.expander("선택한 건 상세 · 액션", expanded=bool(chosen)):
         _crfq.render_rfq_detail()
