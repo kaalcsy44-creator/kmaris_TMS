@@ -786,6 +786,29 @@ table.mini .num {
   background: #fdecea;
   color: #b42318;
 }
+.doc-pill {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: #f1f3f5;
+  color: #adb5bd;
+  white-space: nowrap;
+}
+.doc-pill.on {
+  background: #e7f5ec;
+  color: #1a7a4a;
+}
+.check-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #495057;
+  cursor: pointer;
+  user-select: none;
+}
 .action-ok {
   font-size: 12.5px;
   color: #1a7a4a;

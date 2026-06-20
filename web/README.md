@@ -45,11 +45,16 @@ npm run dev      # http://localhost:3000
   숫자 우측정렬 / 가로 스크롤 / sticky 헤더 / 12단계 progress bar
 - **RFQ 상세 패널** — 품목 테이블 · 12단계 세로 스텝 · 연결문서(Vendor RFQ/Quote/Quotation)
 - **운영 현황(Dashboard)** — KPI 카드 · 12단계 분포 차트 · 최근 RFQ
-- 상단 공용 네비게이션(RFQ ↔ Dashboard), Customer 필터, 새로고침
+- **견적 현황(Quotation)** — 견적 목록(금액/Level/유효기간/파이프라인), Customer·상태 필터
+- **VRFQ 발신 내역** — VendorRFQ 1건당 1행(고객 RFQ·Vendor·수신 견적 수)
+- **문서 현황(Documents)** — 오더별 CI/PL/SA/Tax 생성 여부·문서번호
+- **Vendor P/O 발신 내역** — 발주서 1건당 1행, 이메일 발송완료 필터
+- **P/O 현황 · 미수금(AR) · 설정(마스터 데이터)** — 조회 + 일부 쓰기 액션
+- 상단 공용 네비게이션, Customer 필터, 새로고침
 
 ## 아직 안 된 것 (다음 단계)
 
-- 상세 패널의 실제 액션(신규 등록·발신·수신) 쓰기 API + 폼
-- 나머지 화면(CRFQ/VRFQ/Quotation/PO/Documents/AR/Settings) 이관
+- 무거운 쓰기 흐름(견적 PDF·이메일, 문서 CI/PL/SA/Tax 생성, 발주서 PDF·발송)은
+  현재 데스크톱(Streamlit) 앱에 남아 있음 — 현황 조회만 Next.js로 이관
 - 토큰 저장을 localStorage → httpOnly 쿠키로, 리프레시 토큰
 - 배포: web → Vercel, admin_api → 상시 호스트(Railway/Render 등)

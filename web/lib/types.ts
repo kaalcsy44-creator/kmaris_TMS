@@ -65,6 +65,66 @@ export type PoRow = {
   status: string;
 };
 
+export type QtnRow = {
+  id: number;
+  qtn_no: string;
+  rfq_no: string;
+  customer: string;
+  vessel: string;
+  currency: string;
+  amount: number;
+  item_count: number;
+  status: string;
+  level: string;
+  valid_until: string;
+  sent_date: string;
+  date: string;
+  stage: number;
+  pipeline: string;
+};
+
+export type VrfqRow = {
+  id: number;
+  vrfq_no: string;
+  customer_rfq_no: string;
+  vendor: string;
+  vendor_email: string;
+  sent_date: string;
+  status: string;
+  item_count: number;
+  quote_count: number;
+};
+
+export type DocRow = {
+  id: number;
+  ord_no: string;
+  customer: string;
+  vessel: string;
+  po_no: string;
+  ci_no: string;
+  pl_no: string;
+  sa_no: string;
+  tax_no: string;
+  has_ci: boolean;
+  has_pl: boolean;
+  has_sa: boolean;
+  has_tax: boolean;
+};
+
+export type VendorPoRow = {
+  id: number;
+  po_no: string;
+  ord_no: string;
+  customer: string;
+  vendor: string;
+  vendor_email: string;
+  date: string;
+  sent_date: string;
+  status: string;
+  item_count: number;
+  sent: boolean;
+};
+
 export type ArRow = {
   id: number;
   ci_no: string;

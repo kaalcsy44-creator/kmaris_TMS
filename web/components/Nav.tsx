@@ -5,7 +5,11 @@ import { getUser, logout } from "@/lib/auth";
 
 const TABS = [
   { href: "/", label: "RFQ & Quotation", key: "rfq" },
+  { href: "/vrfq", label: "VRFQ 발신", key: "vrfq" },
+  { href: "/quotation", label: "견적 현황", key: "quotation" },
   { href: "/po", label: "P/O 현황", key: "po" },
+  { href: "/vendor-po", label: "Vendor P/O", key: "vendorpo" },
+  { href: "/documents", label: "문서", key: "documents" },
   { href: "/ar", label: "미수금", key: "ar" },
   { href: "/dashboard", label: "운영 현황", key: "dashboard" },
   { href: "/settings", label: "설정", key: "settings" },

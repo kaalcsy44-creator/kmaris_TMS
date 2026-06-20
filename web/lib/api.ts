@@ -7,6 +7,10 @@ import type {
   RfqDetail,
   DashboardData,
   PoRow,
+  QtnRow,
+  VrfqRow,
+  DocRow,
+  VendorPoRow,
   ArData,
   SettingsCustomer,
   SettingsVendor,
@@ -83,6 +87,23 @@ export function fetchVendors(): Promise<VendorOption[]> {
 
 export function fetchPoOverview(): Promise<{ rows: PoRow[] }> {
   return get<{ rows: PoRow[] }>("/api/admin/po-overview");
+}
+
+export function fetchQuotationOverview(customerId?: number): Promise<{ rows: QtnRow[] }> {
+  const q = customerId ? `?customer_id=${customerId}` : "";
+  return get<{ rows: QtnRow[] }>(`/api/admin/quotation-overview${q}`);
+}
+
+export function fetchVrfqOverview(): Promise<{ rows: VrfqRow[] }> {
+  return get<{ rows: VrfqRow[] }>("/api/admin/vrfq-overview");
+}
+
+export function fetchDocumentsOverview(): Promise<{ rows: DocRow[] }> {
+  return get<{ rows: DocRow[] }>("/api/admin/documents-overview");
+}
+
+export function fetchVendorPoOverview(): Promise<{ rows: VendorPoRow[] }> {
+  return get<{ rows: VendorPoRow[] }>("/api/admin/vendor-po-overview");
 }
 
 export function fetchArOverview(): Promise<ArData> {

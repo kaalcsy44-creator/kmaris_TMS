@@ -31,7 +31,7 @@ from db.models import (
     RFQ, Customer, Vessel, Vendor, User, DocSequence,
     VendorRFQ, VendorQuote, Quotation, QuotationStatus,
     Order, PurchaseOrder, ShippingAdvice, CommercialInvoice,
-    TaxInvoiceData, ARRecord,
+    PackingList, TaxInvoiceData, ARRecord,
     RFQStatus, OrderStatus, ARStatus,
 )
 
@@ -591,6 +591,167 @@ def ar_payment(ar_id: int, body: ARPayment):
             ar.status = ARStatus.OUTSTANDING
         s.commit()
         return {"ok": True, "paid_amount": ar.paid_amount, "status": _enum_val(ar.status)}
+    finally:
+        s.close()
+
+
+def _quotation_total(items) -> float:
+    """견적 총액 — amount 합계, 없으면 unit_price*qty 로 보정."""
+    amt = _total_amount(items)
+    if amt:
+        return amt
+    tot = 0.0
+    for it in (items or []):
+        try:
+            tot += float(it.get("unit_price", 0) or 0) * float(it.get("qty", 1) or 1)
+        except (TypeError, ValueError):
+            pass
+    return tot
+
+
+@app.get("/api/admin/quotation-overview", dependencies=[Depends(require_token)])
+def quotation_overview(customer_id: int | None = None):
+    """Customer Quotation 현황 — 견적 목록(고객/선박/금액/상태/파이프라인)."""
+    s = get_session()
+    try:
+        cust_names = {c.id: c.name for c in s.query(Customer).all()}
+        vessel_names = {v.id: v.name for v in s.query(Vessel).all()}
+        rfq_nos = {r.id: (r.rfq_no or "") for r in s.query(RFQ).all()}
+
+        q = s.query(Quotation)
+        if customer_id:
+            q = q.filter(Quotation.customer_id == customer_id)
+
+        rows = []
+        for qt in q.order_by(Quotation.id.desc()).all():
+            stage = _pipeline_stage(s, qt.rfq_id) if qt.rfq_id else 0
+            rows.append({
+                "id": qt.id,
+                "qtn_no": qt.qtn_no,
+                "rfq_no": rfq_nos.get(qt.rfq_id, "") if qt.rfq_id else "",
+                "customer": cust_names.get(qt.customer_id, "—"),
+                "vessel": vessel_names.get(qt.vessel_id, "") if qt.vessel_id else "",
+                "currency": qt.currency or "USD",
+                "amount": round(_quotation_total(qt.items or []), 2),
+                "item_count": len(qt.items or []),
+                "status": _enum_val(qt.status),
+                "level": _enum_val(qt.follow_up_level) if qt.follow_up_level else "",
+                "valid_until": qt.valid_until or "",
+                "sent_date": qt.sent_date or "",
+                "date": qt.date or "",
+                "stage": stage,
+                "pipeline": _status_label(stage) if stage else "",
+            })
+        return {"rows": rows}
+    finally:
+        s.close()
+
+
+@app.get("/api/admin/vrfq-overview", dependencies=[Depends(require_token)])
+def vrfq_overview():
+    """Vendor RFQ 발신 내역 — VendorRFQ 1건당 1행(고객 RFQ·Vendor·수신 견적 수)."""
+    s = get_session()
+    try:
+        vendor_names = {v.id: v.name for v in s.query(Vendor).all()}
+        vendor_emails = {v.id: (v.email or "") for v in s.query(Vendor).all()}
+        rfq_nos = {r.id: (r.rfq_no or "") for r in s.query(RFQ).all()}
+
+        quote_counts: dict[int, int] = {}
+        for vq in s.query(VendorQuote).all():
+            quote_counts[vq.vendor_rfq_id] = quote_counts.get(vq.vendor_rfq_id, 0) + 1
+
+        rows = []
+        for vr in s.query(VendorRFQ).order_by(VendorRFQ.id.desc()).all():
+            rows.append({
+                "id": vr.id,
+                "vrfq_no": vr.vrfq_no,
+                "customer_rfq_no": rfq_nos.get(vr.rfq_id, "—"),
+                "vendor": vendor_names.get(vr.vendor_id, "—"),
+                "vendor_email": vr.sent_to_email or vendor_emails.get(vr.vendor_id, "") or "",
+                "sent_date": vr.sent_date or "",
+                "status": vr.status or "",
+                "item_count": len(vr.items or []),
+                "quote_count": quote_counts.get(vr.id, 0),
+            })
+        return {"rows": rows}
+    finally:
+        s.close()
+
+
+@app.get("/api/admin/documents-overview", dependencies=[Depends(require_token)])
+def documents_overview():
+    """문서 현황 — 오더별 CI/PL/SA/Tax 생성 여부와 문서번호."""
+    s = get_session()
+    try:
+        cust_names = {c.id: c.name for c in s.query(Customer).all()}
+        vessel_names = {v.id: v.name for v in s.query(Vessel).all()}
+
+        # ci_id → pl/tax 존재 매핑
+        ci_by_order: dict[int, CommercialInvoice] = {}
+        for ci in s.query(CommercialInvoice).all():
+            # 오더당 최신 CI 1건
+            if ci.order_id not in ci_by_order or ci.id > ci_by_order[ci.order_id].id:
+                ci_by_order[ci.order_id] = ci
+        pl_ci_ids = {pl.ci_id for pl in s.query(PackingList).all()}
+        pl_no_by_ci = {pl.ci_id: pl.pl_no for pl in s.query(PackingList).all()}
+        tax_ci_ids = {tx.ci_id for tx in s.query(TaxInvoiceData).all()}
+        tax_no_by_ci = {tx.ci_id: tx.tax_no for tx in s.query(TaxInvoiceData).all()}
+        sa_by_order: dict[int, ShippingAdvice] = {}
+        for sa in s.query(ShippingAdvice).all():
+            if sa.order_id not in sa_by_order or sa.id > sa_by_order[sa.order_id].id:
+                sa_by_order[sa.order_id] = sa
+
+        rows = []
+        for o in s.query(Order).order_by(Order.id.desc()).all():
+            ci = ci_by_order.get(o.id)
+            sa = sa_by_order.get(o.id)
+            ci_id = ci.id if ci else None
+            rows.append({
+                "id": o.id,
+                "ord_no": o.ord_no,
+                "customer": cust_names.get(o.customer_id, "—"),
+                "vessel": vessel_names.get(o.vessel_id, "") if o.vessel_id else "",
+                "po_no": o.po_no or "",
+                "ci_no": ci.ci_no if ci else "",
+                "pl_no": pl_no_by_ci.get(ci_id, "") if ci_id else "",
+                "sa_no": sa.sa_no if sa else "",
+                "tax_no": tax_no_by_ci.get(ci_id, "") if ci_id else "",
+                "has_ci": bool(ci),
+                "has_pl": bool(ci_id and ci_id in pl_ci_ids),
+                "has_sa": bool(sa),
+                "has_tax": bool(ci_id and ci_id in tax_ci_ids),
+            })
+        return {"rows": rows}
+    finally:
+        s.close()
+
+
+@app.get("/api/admin/vendor-po-overview", dependencies=[Depends(require_token)])
+def vendor_po_overview():
+    """Vendor P/O 발신 내역 — PurchaseOrder 1건당 1행(생성·발송 포함 전체)."""
+    s = get_session()
+    try:
+        vendor_names = {v.id: v.name for v in s.query(Vendor).all()}
+        ord_map = {o.id: o for o in s.query(Order).all()}
+        cust_names = {c.id: c.name for c in s.query(Customer).all()}
+
+        rows = []
+        for po in s.query(PurchaseOrder).order_by(PurchaseOrder.id.desc()).all():
+            o = ord_map.get(po.order_id)
+            rows.append({
+                "id": po.id,
+                "po_no": po.po_no or "",
+                "ord_no": o.ord_no if o else "—",
+                "customer": cust_names.get(o.customer_id, "—") if o else "—",
+                "vendor": vendor_names.get(po.vendor_id, "—"),
+                "vendor_email": po.sent_to_email or "",
+                "date": po.date or "",
+                "sent_date": po.sent_date or "",
+                "status": po.status or "",
+                "item_count": len(po.items or []),
+                "sent": (po.status == "이메일 발송완료"),
+            })
+        return {"rows": rows}
     finally:
         s.close()
 
