@@ -27,6 +27,23 @@ export type CustomerOption = { id: number; name: string };
 
 export type VendorOption = { id: number; name: string; email: string };
 
+export type PoRow = {
+  id: number;
+  customer_rfq_no: string;
+  customer: string;
+  vessel: string;
+  customer_po_no: string;
+  customer_po_at: string;
+  ord_no: string;
+  item_count: number;
+  vendor_po_no: string;
+  vendor_po_at: string;
+  vendor: string;
+  vendor_email: string;
+  stage: number;
+  status: string;
+};
+
 export type DashboardData = {
   kpi: {
     open_rfq: number;

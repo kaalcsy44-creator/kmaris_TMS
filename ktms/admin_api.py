@@ -460,6 +460,63 @@ def dashboard():
         s.close()
 
 
+def _order_for_rfq(s, rfq_id: int):
+    """RFQ에 연결된 Order — 직접 연결 우선, 없으면 Quotation 경유."""
+    order = (s.query(Order).filter(Order.rfq_id == rfq_id)
+             .order_by(Order.created_at.desc()).first())
+    if not order:
+        order = (s.query(Order).join(Quotation, Order.quotation_id == Quotation.id)
+                 .filter(Quotation.rfq_id == rfq_id)
+                 .order_by(Order.created_at.desc()).first())
+    return order
+
+
+@app.get("/api/admin/po-overview", dependencies=[Depends(require_token)])
+def po_overview():
+    """고객 P/O · Vendor P/O 현황 — RFQ → Order → PurchaseOrder 체인."""
+    s = get_session()
+    try:
+        cust_names = {c.id: c.name for c in s.query(Customer).all()}
+        vessel_names = {v.id: v.name for v in s.query(Vessel).all()}
+        vendor_names = {v.id: v.name for v in s.query(Vendor).all()}
+
+        rows = []
+        for r in s.query(RFQ).order_by(RFQ.id.desc()).all():
+            o = _order_for_rfq(s, r.id)
+            vpos = (s.query(PurchaseOrder).filter_by(order_id=o.id)
+                    .order_by(PurchaseOrder.id.desc()).all()) if o else []
+            if vpos:
+                vp0 = vpos[0]
+                vendor_po_no = (vp0.po_no or "—") + (
+                    f"  (외 {len(vpos) - 1}건)" if len(vpos) > 1 else "")
+                vendor_nm = vendor_names.get(vp0.vendor_id, "—")
+                vendor_email = vp0.sent_to_email or "—"
+                vendor_po_at = vp0.sent_date or "미발신"
+            else:
+                vendor_po_no = vendor_nm = vendor_email = vendor_po_at = ""
+
+            stage = _pipeline_stage(s, r.id)
+            rows.append({
+                "id": o.id if o else 0,
+                "customer_rfq_no": r.customer_rfq_no or r.rfq_no,
+                "customer": cust_names.get(r.customer_id, "—"),
+                "vessel": vessel_names.get(r.vessel_id, "") if r.vessel_id else "",
+                "customer_po_no": (o.po_no if o else "") or "",
+                "customer_po_at": (o.date if o else "") or "",
+                "ord_no": (o.ord_no if o else "") or "",
+                "item_count": len((o.items if o else None) or r.items or []),
+                "vendor_po_no": vendor_po_no,
+                "vendor_po_at": vendor_po_at,
+                "vendor": vendor_nm,
+                "vendor_email": vendor_email,
+                "stage": stage,
+                "status": _status_label(stage),
+            })
+        return {"rows": rows}
+    finally:
+        s.close()
+
+
 @app.get("/api/admin/customers", dependencies=[Depends(require_token)])
 def customers():
     s = get_session()

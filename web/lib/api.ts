@@ -6,6 +6,7 @@ import type {
   VendorOption,
   RfqDetail,
   DashboardData,
+  PoRow,
 } from "./types";
 
 function authHeaders(json = false): HeadersInit {
@@ -65,6 +66,10 @@ export function fetchDashboard(): Promise<DashboardData> {
 
 export function fetchVendors(): Promise<VendorOption[]> {
   return get<VendorOption[]>("/api/admin/vendors");
+}
+
+export function fetchPoOverview(): Promise<{ rows: PoRow[] }> {
+  return get<{ rows: PoRow[] }>("/api/admin/po-overview");
 }
 
 export function createVendorRfq(
