@@ -52,9 +52,30 @@ npm run dev      # http://localhost:3000
 - **P/O 현황 · 미수금(AR) · 설정(마스터 데이터)** — 조회 + 일부 쓰기 액션
 - 상단 공용 네비게이션, Customer 필터, 새로고침
 
+## 3) 배포 (Vercel)
+
+프론트엔드는 Vercel에 배포되어 있다: **https://ktms-web.vercel.app**
+(프로젝트 `ktms-web`, Root Directory = `web`, Next.js 자동 감지)
+
+```bash
+cd web
+vercel --prod        # 프로덕션 재배포 (CLI 로그인 필요)
+```
+
+- 환경변수 `NEXT_PUBLIC_API_BASE` (Production)는 현재 **placeholder**다.
+  백엔드를 상시 호스트에 올린 뒤 실제 URL로 교체해야 한다:
+  ```bash
+  vercel env rm NEXT_PUBLIC_API_BASE production
+  printf 'https://<backend-host>' | vercel env add NEXT_PUBLIC_API_BASE production
+  vercel --prod        # NEXT_PUBLIC_* 는 빌드 타임에 인라인되므로 재배포 필수
+  ```
+- 백엔드 CORS는 이미 `https://*.vercel.app` 를 허용한다(admin_api.py).
+- 백엔드를 올리기 전까지 배포된 사이트는 로그인/데이터 조회가 동작하지 않는다(정상).
+
 ## 아직 안 된 것 (다음 단계)
 
+- **백엔드 호스팅**: `admin_api` → 상시 호스트(Railway/Render 등) + 운영 Postgres,
+  그 후 위의 `NEXT_PUBLIC_API_BASE` 교체·재배포
 - 무거운 쓰기 흐름(견적 PDF·이메일, 문서 CI/PL/SA/Tax 생성, 발주서 PDF·발송)은
   현재 데스크톱(Streamlit) 앱에 남아 있음 — 현황 조회만 Next.js로 이관
 - 토큰 저장을 localStorage → httpOnly 쿠키로, 리프레시 토큰
-- 배포: web → Vercel, admin_api → 상시 호스트(Railway/Render 등)
