@@ -94,7 +94,7 @@ function Overview() {
         />
       )}
 
-      <RfqDetail rfqId={selectedId} />
+      <RfqDetail rfqId={selectedId} onChanged={load} />
     </div>
   );
 }

@@ -25,6 +25,8 @@ export type RfqOverview = {
 
 export type CustomerOption = { id: number; name: string };
 
+export type VendorOption = { id: number; name: string; email: string };
+
 export type DashboardData = {
   kpi: {
     open_rfq: number;

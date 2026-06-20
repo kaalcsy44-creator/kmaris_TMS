@@ -566,6 +566,56 @@ table.mini .num {
   color: var(--muted);
 }
 
+.action-block {
+  margin-top: 18px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+.action-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.action-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--navy);
+  width: 130px;
+}
+.action-row select {
+  height: 34px;
+  min-width: 220px;
+  border: 1px solid #d7e2ee;
+  border-radius: 8px;
+  padding: 0 10px;
+  font-size: 13px;
+  background: #fff;
+}
+.btn.primary {
+  background: var(--blue);
+  color: #fff;
+  border-color: var(--blue);
+}
+.btn.primary:hover:not(:disabled) {
+  background: #00468c;
+}
+.btn.primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.action-ok {
+  font-size: 12.5px;
+  color: #1a7a4a;
+  font-weight: 600;
+}
+.action-err {
+  font-size: 12.5px;
+  color: #b42318;
+  font-weight: 600;
+}
+
 .state {
   padding: 28px;
   text-align: center;

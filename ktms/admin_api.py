@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import os
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -28,7 +28,7 @@ from pydantic import BaseModel
 
 from db.engine import get_session
 from db.models import (
-    RFQ, Customer, Vessel, Vendor, User,
+    RFQ, Customer, Vessel, Vendor, User, DocSequence,
     VendorRFQ, VendorQuote, Quotation, QuotationStatus,
     Order, PurchaseOrder, ShippingAdvice, CommercialInvoice,
     TaxInvoiceData, ARRecord,
@@ -465,5 +465,72 @@ def customers():
     try:
         return [{"id": c.id, "name": c.name}
                 for c in s.query(Customer).order_by(Customer.name).all()]
+    finally:
+        s.close()
+
+
+@app.get("/api/admin/vendors", dependencies=[Depends(require_token)])
+def vendors():
+    s = get_session()
+    try:
+        return [{"id": v.id, "name": v.name, "email": v.email or ""}
+                for v in s.query(Vendor).order_by(Vendor.name).all()]
+    finally:
+        s.close()
+
+
+# ── Write actions ─────────────────────────────────────────────────────────────
+_DOC_PREFIX = {"vendor_rfq": "VRFQ", "quotation": "QTN"}
+
+
+def _next_doc_no(session, doc_type: str, company_prefix: str = "KMS") -> str:
+    """helpers.next_doc_no 와 동일한 연단위 시퀀스 채번 (전달받은 세션에서 commit)."""
+    yr = date.today().year
+    seq = session.query(DocSequence).filter_by(doc_type=doc_type, year=yr).first()
+    if not seq:
+        seq = DocSequence(doc_type=doc_type, year=yr, last_seq=0)
+        session.add(seq)
+    seq.last_seq += 1
+    session.flush()
+    return f"{company_prefix}-{_DOC_PREFIX.get(doc_type, 'DOC')}-{yr}-{seq.last_seq:04d}"
+
+
+class VendorRfqCreate(BaseModel):
+    vendor_id: int
+
+
+@app.post("/api/admin/rfq/{rfq_id}/vendor-rfq",
+          dependencies=[Depends(require_token)])
+def create_vendor_rfq(rfq_id: int, body: VendorRfqCreate):
+    """RFQ로부터 Vendor RFQ 발신(생성). 품목은 RFQ 품목을 그대로 이관한다."""
+    s = get_session()
+    try:
+        rfq = s.query(RFQ).filter_by(id=rfq_id).first()
+        if not rfq:
+            raise HTTPException(status_code=404, detail="RFQ를 찾을 수 없습니다.")
+        vendor = s.query(Vendor).filter_by(id=body.vendor_id).first()
+        if not vendor:
+            raise HTTPException(status_code=400, detail="Vendor를 선택하세요.")
+
+        # 요청 품목(가격 제외)만 이관
+        req_items = [{
+            "part_no": it.get("part_no", ""),
+            "description": it.get("description", ""),
+            "qty": it.get("qty", 1),
+        } for it in (rfq.items or [])]
+
+        vrfq_no = _next_doc_no(s, "vendor_rfq")
+        vrfq = VendorRFQ(
+            vrfq_no=vrfq_no,
+            rfq_id=rfq.id,
+            vendor_id=vendor.id,
+            sent_date=date.today().strftime("%Y-%m-%d"),
+            sent_to_email=vendor.email or "",
+            status="발송됨",
+            items=req_items,
+        )
+        s.add(vrfq)
+        s.commit()
+        return {"ok": True, "vrfq_no": vrfq_no, "vendor": vendor.name}
     finally:
         s.close()

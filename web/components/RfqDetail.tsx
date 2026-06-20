@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { fetchRfqDetail } from "@/lib/api";
-import type { RfqDetail as RfqDetailT } from "@/lib/types";
+import { fetchRfqDetail, fetchVendors, createVendorRfq } from "@/lib/api";
+import type { RfqDetail as RfqDetailT, VendorOption } from "@/lib/types";
 
 function money(n: number | null): string {
   if (n === null || n === undefined) return "—";
@@ -12,27 +12,42 @@ function money(n: number | null): string {
   });
 }
 
-export default function RfqDetail({ rfqId }: { rfqId: number | null }) {
+export default function RfqDetail({
+  rfqId,
+  onChanged,
+}: {
+  rfqId: number | null;
+  onChanged?: () => void;
+}) {
   const [data, setData] = useState<RfqDetailT | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [vendors, setVendors] = useState<VendorOption[]>([]);
+
+  function reload() {
+    if (rfqId === null) return;
+    setLoading(true);
+    setError(null);
+    fetchRfqDetail(rfqId)
+      .then(setData)
+      .catch((e) => setError(e instanceof Error ? e.message : "오류"))
+      .finally(() => setLoading(false));
+  }
 
   useEffect(() => {
     if (rfqId === null) {
       setData(null);
       return;
     }
-    let alive = true;
-    setLoading(true);
-    setError(null);
-    fetchRfqDetail(rfqId)
-      .then((d) => alive && setData(d))
-      .catch((e) => alive && setError(e instanceof Error ? e.message : "오류"))
-      .finally(() => alive && setLoading(false));
-    return () => {
-      alive = false;
-    };
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rfqId]);
+
+  useEffect(() => {
+    fetchVendors()
+      .then(setVendors)
+      .catch(() => setVendors([]));
+  }, []);
 
   return (
     <div className="detail">
@@ -139,19 +154,25 @@ export default function RfqDetail({ rfqId }: { rfqId: number | null }) {
             </div>
           </div>
 
-          <div className="actions">
-            <button className="btn" disabled title="다음 단계에서 연결">
-              Vendor RFQ 발신
-            </button>
-            <button className="btn" disabled title="다음 단계에서 연결">
-              Vendor Quote 수신 등록
-            </button>
-            <button className="btn" disabled title="다음 단계에서 연결">
-              Customer Quote 발신
-            </button>
-            <span className="hint-inline">
-              액션은 다음 단계(쓰기 API + 폼)에서 연결됩니다.
-            </span>
+          <div className="action-block">
+            <div className="sub-h">액션</div>
+            <VendorRfqAction
+              rfqId={data.id}
+              vendors={vendors}
+              onDone={() => {
+                reload();
+                onChanged?.();
+              }}
+            />
+            <div className="actions">
+              <button className="btn" disabled title="다음 액션에서 연결">
+                Vendor Quote 수신 등록
+              </button>
+              <button className="btn" disabled title="다음 액션에서 연결">
+                Customer Quote 발신
+              </button>
+              <span className="hint-inline">위 두 액션은 이어서 연결합니다.</span>
+            </div>
           </div>
         </div>
       )}
@@ -164,6 +185,66 @@ function KV({ k, v }: { k: string; v: string }) {
     <div className="kv">
       <div className="k">{k}</div>
       <div className="v">{v && v !== "—" ? v : "—"}</div>
+    </div>
+  );
+}
+
+function VendorRfqAction({
+  rfqId,
+  vendors,
+  onDone,
+}: {
+  rfqId: number;
+  vendors: VendorOption[];
+  onDone: () => void;
+}) {
+  const [vendorId, setVendorId] = useState<number | "">("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function send() {
+    if (vendorId === "") return;
+    setBusy(true);
+    setMsg(null);
+    setErr(null);
+    try {
+      const r = await createVendorRfq(rfqId, vendorId);
+      setMsg(`발신 완료 — ${r.vrfq_no} (${r.vendor})`);
+      setVendorId("");
+      onDone();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "발신 실패");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="action-row">
+      <span className="action-name">Vendor RFQ 발신</span>
+      <select
+        value={vendorId}
+        onChange={(e) =>
+          setVendorId(e.target.value === "" ? "" : Number(e.target.value))
+        }
+      >
+        <option value="">Vendor 선택…</option>
+        {vendors.map((v) => (
+          <option key={v.id} value={v.id}>
+            {v.name}
+          </option>
+        ))}
+      </select>
+      <button
+        className="btn primary"
+        onClick={send}
+        disabled={busy || vendorId === ""}
+      >
+        {busy ? "발신 중…" : "발신"}
+      </button>
+      {msg ? <span className="action-ok">{msg}</span> : null}
+      {err ? <span className="action-err">{err}</span> : null}
     </div>
   );
 }
