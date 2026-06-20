@@ -1,0 +1,33 @@
+# Render Blueprint for the KTMS admin API (FastAPI backend).
+#
+# Setup: Render dashboard -> New -> Blueprint -> connect this repo.
+# Render reads this file and provisions the web service below.
+# You will be prompted to paste DATABASE_URL (the Neon connection string).
+#
+# Pairs with the Vercel frontend (web/) via NEXT_PUBLIC_API_BASE, which must
+# be set to this service's URL (e.g. https://ktms-admin-api.onrender.com).
+services:
+  - type: web
+    name: ktms-admin-api
+    runtime: python
+    plan: free
+    rootDir: ktms
+    buildCommand: pip install -r requirements-api.txt
+    # init_db.py is idempotent (create-if-missing tables/admin), so it is safe
+    # to run on every boot. Then start uvicorn bound to Render's $PORT.
+    startCommand: python init_db.py && uvicorn admin_api:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      # Neon Postgres connection string — paste at blueprint setup.
+      # Format: postgresql://USER:PASSWORD@HOST/DB?sslmode=require
+      - key: DATABASE_URL
+        sync: false
+      # JWT signing secret — generated and stored in Render only.
+      - key: SECRET_KEY
+        generateValue: true
+      # Pilot static bearer fallback — generated (frontend uses login JWT,
+      # so this is just a non-guessable fallback, not "dev-token").
+      - key: ADMIN_API_TOKEN
+        generateValue: true
+      - key: PYTHON_VERSION
+        value: "3.12.8"

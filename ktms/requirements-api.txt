@@ -1,0 +1,13 @@
+# Lean dependency set for the admin_api (FastAPI) deployment on Render.
+# The full requirements.txt (streamlit, pandas, reportlab, pdfplumber, ...) is
+# only needed by the desktop Streamlit app — NOT by this API. Keeping this
+# minimal makes the Render build small and fast.
+#
+# Verified import graph: admin_api.py / init_db.py / db.models / db.engine
+# pull only the packages below.
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+sqlalchemy>=2.0.0
+psycopg2-binary>=2.9.0
+bcrypt>=4.1.0
+PyJWT>=2.8.0
