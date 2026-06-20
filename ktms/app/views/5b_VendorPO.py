@@ -17,7 +17,7 @@ import pandas as pd
 import streamlit as st
 from app.utils.auth import require_auth
 from app.utils.helpers import (
-    inject_css, hint, section_header, next_doc_no,
+    inject_css, hint, section_header, next_po_no,
     get_customer, get_vessel, get_vendor, vendor_options,
     order_list, get_order, rfq_id_for_order, pipeline_status_label,
     vendor_quotes_for_rfq_vendor, price_map_from_quote,
@@ -247,7 +247,7 @@ def render_vendor_po_create_tab() -> None:
                 gen_po = st.form_submit_button("발주서 생성", type="primary")
 
             if gen_po and vid:
-                po_no_gen = next_doc_no("po")
+                po_no_gen = next_po_no()
                 items_data = po_items_df.fillna("").to_dict(orient="records")
                 session = get_session()
                 try:
