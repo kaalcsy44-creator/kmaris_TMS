@@ -6,6 +6,7 @@ import { getUser, logout } from "@/lib/auth";
 const TABS = [
   { href: "/", label: "RFQ & Quotation", key: "rfq" },
   { href: "/po", label: "P/O 현황", key: "po" },
+  { href: "/ar", label: "미수금", key: "ar" },
   { href: "/dashboard", label: "운영 현황", key: "dashboard" },
 ];
 

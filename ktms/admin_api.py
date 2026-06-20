@@ -517,6 +517,84 @@ def po_overview():
         s.close()
 
 
+@app.get("/api/admin/ar-overview", dependencies=[Depends(require_token)])
+def ar_overview():
+    """미수금(AR) 현황 — 청구/수금/연체."""
+    s = get_session()
+    try:
+        cust_names = {c.id: c.name for c in s.query(Customer).all()}
+        ord_map = {o.id: o for o in s.query(Order).all()}
+        today_str = date.today().isoformat()
+
+        rows = []
+        out_usd = 0.0
+        overdue_usd = 0.0
+        for r in s.query(ARRecord).order_by(ARRecord.id.desc()).all():
+            o = ord_map.get(r.order_id)
+            cust = cust_names.get(o.customer_id, "—") if o else "—"
+            outstanding = (r.invoice_amount or 0) - (r.paid_amount or 0)
+            overdue = (r.status != ARStatus.PAID and r.due_date
+                       and r.due_date < today_str)
+            status = "연체" if overdue else _enum_val(r.status)
+            if (r.currency or "USD") == "USD" and r.status != ARStatus.PAID:
+                out_usd += outstanding
+                if overdue:
+                    overdue_usd += outstanding
+            rows.append({
+                "id": r.id,
+                "ci_no": r.ci_no or "",
+                "customer": cust,
+                "ord_no": o.ord_no if o else "",
+                "currency": r.currency or "USD",
+                "invoice_amount": round(r.invoice_amount or 0, 2),
+                "paid_amount": round(r.paid_amount or 0, 2),
+                "outstanding": round(outstanding, 2),
+                "due_date": r.due_date or "",
+                "status": status,
+                "overdue": bool(overdue),
+            })
+        return {
+            "kpi": {
+                "outstanding_usd": round(out_usd, 2),
+                "overdue_usd": round(overdue_usd, 2),
+                "count": len(rows),
+            },
+            "rows": rows,
+        }
+    finally:
+        s.close()
+
+
+class ARPayment(BaseModel):
+    amount: float
+    due_date: str | None = None
+
+
+@app.post("/api/admin/ar/{ar_id}/payment", dependencies=[Depends(require_token)])
+def ar_payment(ar_id: int, body: ARPayment):
+    """수금 등록 — paid_amount 누적 후 상태 자동 갱신."""
+    s = get_session()
+    try:
+        ar = s.query(ARRecord).filter_by(id=ar_id).first()
+        if not ar:
+            raise HTTPException(status_code=404, detail="AR 레코드를 찾을 수 없습니다.")
+        if body.amount <= 0:
+            raise HTTPException(status_code=400, detail="수금액은 0보다 커야 합니다.")
+        ar.paid_amount = (ar.paid_amount or 0) + body.amount
+        if body.due_date:
+            ar.due_date = body.due_date
+        if ar.paid_amount >= (ar.invoice_amount or 0):
+            ar.status = ARStatus.PAID
+        elif ar.paid_amount > 0:
+            ar.status = ARStatus.PARTIAL
+        else:
+            ar.status = ARStatus.OUTSTANDING
+        s.commit()
+        return {"ok": True, "paid_amount": ar.paid_amount, "status": _enum_val(ar.status)}
+    finally:
+        s.close()
+
+
 @app.get("/api/admin/customers", dependencies=[Depends(require_token)])
 def customers():
     s = get_session()

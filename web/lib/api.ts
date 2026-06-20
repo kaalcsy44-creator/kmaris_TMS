@@ -7,6 +7,7 @@ import type {
   RfqDetail,
   DashboardData,
   PoRow,
+  ArData,
 } from "./types";
 
 function authHeaders(json = false): HeadersInit {
@@ -70,6 +71,21 @@ export function fetchVendors(): Promise<VendorOption[]> {
 
 export function fetchPoOverview(): Promise<{ rows: PoRow[] }> {
   return get<{ rows: PoRow[] }>("/api/admin/po-overview");
+}
+
+export function fetchArOverview(): Promise<ArData> {
+  return get<ArData>("/api/admin/ar-overview");
+}
+
+export function recordArPayment(
+  arId: number,
+  amount: number,
+  dueDate?: string
+): Promise<{ ok: boolean; paid_amount: number; status: string }> {
+  return post(`/api/admin/ar/${arId}/payment`, {
+    amount,
+    due_date: dueDate ?? null,
+  });
 }
 
 export function createVendorRfq(

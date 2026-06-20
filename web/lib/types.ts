@@ -44,6 +44,25 @@ export type PoRow = {
   status: string;
 };
 
+export type ArRow = {
+  id: number;
+  ci_no: string;
+  customer: string;
+  ord_no: string;
+  currency: string;
+  invoice_amount: number;
+  paid_amount: number;
+  outstanding: number;
+  due_date: string;
+  status: string;
+  overdue: boolean;
+};
+
+export type ArData = {
+  kpi: { outstanding_usd: number; overdue_usd: number; count: number };
+  rows: ArRow[];
+};
+
 export type DashboardData = {
   kpi: {
     open_rfq: number;

@@ -19,8 +19,9 @@ if str(ROOT) not in sys.path:
 
 from db.engine import Base, get_engine, get_session
 from db.models import (
-    Customer, Vessel, RFQ, RFQStatus,
+    Customer, Vessel, Vendor, RFQ, RFQStatus,
     VendorRFQ, VendorQuote, Quotation, QuotationStatus,
+    Order, OrderStatus, PurchaseOrder, ARRecord, ARStatus,
 )
 
 Base.metadata.create_all(get_engine())
@@ -104,8 +105,45 @@ def main() -> None:
                 ))
             created += 1
 
+        # Order + Vendor PO — PO 화면 데모용 (없을 때 1건만)
+        now = datetime.utcnow()
+        order = s.query(Order).first()
+        if order is None:
+            anglo = s.query(RFQ).filter_by(rfq_no="KMS-RFQ-2405-001").first()
+            vendor = s.query(Vendor).first()
+            if anglo:
+                order = Order(
+                    ord_no="KMS-ORD-2606-001", rfq_id=anglo.id,
+                    customer_id=anglo.customer_id, vessel_id=anglo.vessel_id,
+                    po_no="PO-AE-77231", date=now.strftime("%Y-%m-%d"),
+                    status=OrderStatus.PO_SENT, items=_items(22), created_at=now,
+                )
+                s.add(order)
+                s.flush()
+                if vendor:
+                    s.add(PurchaseOrder(
+                        po_no="KMS-PO-2606-001", order_id=order.id,
+                        vendor_id=vendor.id, date=now.strftime("%Y-%m-%d"),
+                        sent_date=now.strftime("%Y-%m-%d"),
+                        sent_to_email=vendor.email or "", status="발주완료",
+                        items=_items(22),
+                    ))
+                created += 1
+
+        # AR — 미수금 화면 데모용 (없을 때 1건만, 과거 만기 → 연체)
+        if order is not None and s.query(ARRecord).count() == 0:
+            s.add(ARRecord(
+                order_id=order.id, ci_no="KMS-CI-2606-001",
+                invoice_amount=117600.0, paid_amount=40000.0,
+                currency="USD", due_date="2026-05-31",
+                status=ARStatus.PARTIAL,
+            ))
+            created += 1
+
         s.commit()
-        print(f"Seeded {created} new RFQ(s). Total RFQs: {s.query(RFQ).count()}")
+        print(f"Seeded {created} new record group(s). "
+              f"RFQs: {s.query(RFQ).count()}, Orders: {s.query(Order).count()}, "
+              f"AR: {s.query(ARRecord).count()}")
     finally:
         s.close()
 
