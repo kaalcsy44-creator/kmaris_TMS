@@ -203,6 +203,12 @@ def render_overview():
         .st-key-rfq_overview_grid [data-testid="stHorizontalBlock"] {
             min-width: 1580px;
         }
+        .st-key-rfq_overview_grid [data-testid="stVerticalBlock"] {
+            gap: 0 !important;
+        }
+        .st-key-rfq_overview_grid [data-testid="stElementContainer"] {
+            margin: 0 !important;
+        }
         .rfq-grid-head {
             color: #0B1D3A;
             font-size: 10px;
@@ -221,13 +227,13 @@ def render_overview():
         .rfq-grid-sub {
             color: #6B7280;
             font-size: 9px;
-            line-height: 1.12;
-            margin-top: 2px;
+            line-height: 1.05;
+            margin-top: 1px;
             white-space: nowrap;
         }
         .rfq-grid-sep {
             border-top: 1px solid #D7E2EE;
-            margin: 5px 0;
+            margin: 2px 0;
         }
         .st-key-rfq_overview_grid [data-testid="stButton"] button {
             width: 24px !important;
