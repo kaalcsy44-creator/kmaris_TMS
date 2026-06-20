@@ -17,13 +17,13 @@ import pandas as pd
 import streamlit as st
 from app.utils.auth import require_auth
 from app.utils.helpers import (
-    inject_css, hint, section_header, next_po_no,
+    inject_css, hint, section_header,
     get_customer, get_vessel, get_vendor, vendor_options,
     order_list, get_order, rfq_id_for_order, pipeline_status_label,
     vendor_quotes_for_rfq_vendor, price_map_from_quote,
 )
 from db.engine import get_session
-from db.models import Order, PurchaseOrder, OrderStatus
+from db.models import DocSequence, Order, PurchaseOrder, OrderStatus
 from services.email_svc import send_email
 from services.pdf_svc import build_po_payload, generate_po_pdf
 
@@ -146,6 +146,23 @@ def _get_po(po_id: int):
         s.close()
 
 
+def _next_po_no(company_prefix: str = "KMS") -> str:
+    """Vendor Purchase Order 번호: KMS-PO-yymm-NNN (월 단위 시퀀스 리셋)."""
+    session = get_session()
+    try:
+        today = date.today()
+        period = today.year * 100 + today.month
+        seq = session.query(DocSequence).filter_by(doc_type="po_internal", year=period).first()
+        if not seq:
+            seq = DocSequence(doc_type="po_internal", year=period, last_seq=0)
+            session.add(seq)
+        seq.last_seq += 1
+        session.commit()
+        return f"{company_prefix}-PO-{today:%y%m}-{seq.last_seq:03d}"
+    finally:
+        session.close()
+
+
 
 
 
@@ -247,7 +264,7 @@ def render_vendor_po_create_tab() -> None:
                 gen_po = st.form_submit_button("발주서 생성", type="primary")
 
             if gen_po and vid:
-                po_no_gen = next_po_no()
+                po_no_gen = _next_po_no()
                 items_data = po_items_df.fillna("").to_dict(orient="records")
                 session = get_session()
                 try:
