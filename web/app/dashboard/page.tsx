@@ -3,14 +3,13 @@
 import { useEffect, useState } from "react";
 import { fetchDashboard } from "@/lib/api";
 import type { DashboardData } from "@/lib/types";
-import AuthGate from "@/components/AuthGate";
-import Nav from "@/components/Nav";
+import AppShell, { SectionHead } from "@/components/AppShell";
 
 export default function DashboardPage() {
   return (
-    <AuthGate>
+    <AppShell active="dashboard">
       <Dashboard />
-    </AuthGate>
+    </AppShell>
   );
 }
 
@@ -25,8 +24,8 @@ function Dashboard() {
   }, []);
 
   return (
-    <div className="page">
-      <Nav active="dashboard" />
+    <>
+      <SectionHead title="운영 현황" sub="Dashboard" />
 
       {error ? (
         <div className="state error">API 오류: {error}</div>
@@ -104,7 +103,7 @@ function Dashboard() {
           </div>
         </>
       )}
-    </div>
+    </>
   );
 }
 

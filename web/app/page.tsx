@@ -1,104 +1,36 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
-import { fetchRfqOverview, fetchCustomers } from "@/lib/api";
-import type { RfqRow, CustomerOption } from "@/lib/types";
-import RfqTable from "@/components/RfqTable";
-import RfqDetail from "@/components/RfqDetail";
-import AuthGate from "@/components/AuthGate";
-import Nav from "@/components/Nav";
+import { useState } from "react";
+import AppShell, { SectionHead } from "@/components/AppShell";
+import RfqScreen from "@/components/screens/RfqScreen";
+import VrfqScreen from "@/components/screens/VrfqScreen";
+import QuotationScreen from "@/components/screens/QuotationScreen";
+
+const TABS = [
+  { key: "rfq", label: "RFQ 현황" },
+  { key: "vrfq", label: "Vendor RFQ 발신" },
+  { key: "quotation", label: "견적 현황" },
+];
 
 export default function Page() {
+  const [tab, setTab] = useState("rfq");
   return (
-    <AuthGate>
-      <Overview />
-    </AuthGate>
-  );
-}
-
-function Overview() {
-  const [rows, setRows] = useState<RfqRow[]>([]);
-  const [customers, setCustomers] = useState<CustomerOption[]>([]);
-  const [customerId, setCustomerId] = useState<number | "">("");
-  const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  async function load() {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await fetchRfqOverview(
-        customerId === "" ? undefined : customerId
-      );
-      setRows(data.rows);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "불러오기 실패");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    fetchCustomers()
-      .then(setCustomers)
-      .catch(() => setCustomers([]));
-  }, []);
-
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [customerId]);
-
-  return (
-    <div className="page">
-      <Nav active="rfq" />
-
-      <div className="toolbar">
-        <div className="field">
-          <label>Customer 필터</label>
-          <select
-            value={customerId}
-            onChange={(e) =>
-              setCustomerId(e.target.value === "" ? "" : Number(e.target.value))
-            }
+    <AppShell active="rfq">
+      <SectionHead title="RFQ & Quotation" sub="고객 RFQ · Vendor RFQ · 견적" />
+      <div className="page-tabs">
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            className={tab === t.key ? "on" : ""}
+            onClick={() => setTab(t.key)}
           >
-            <option value="">전체</option>
-            {customers.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <button className="btn" onClick={load}>
-          새로고침
-        </button>
-        <Link className="btn primary" href="/rfq/new" style={{ marginLeft: "auto" }}>
-          + 신규 RFQ
-        </Link>
+            {t.label}
+          </button>
+        ))}
       </div>
-
-      {loading ? (
-        <div className="state">불러오는 중…</div>
-      ) : error ? (
-        <div className="state error">
-          API 오류: {error}
-          <br />
-          백엔드(admin_api.py)가 실행 중인지, 토큰이 맞는지 확인하세요.
-        </div>
-      ) : rows.length === 0 ? (
-        <div className="state">표시할 RFQ가 없습니다.</div>
-      ) : (
-        <RfqTable
-          rows={rows}
-          selectedId={selectedId}
-          onSelect={setSelectedId}
-        />
-      )}
-
-      <RfqDetail rfqId={selectedId} onChanged={load} />
-    </div>
+      {tab === "rfq" && <RfqScreen />}
+      {tab === "vrfq" && <VrfqScreen />}
+      {tab === "quotation" && <QuotationScreen />}
+    </AppShell>
   );
 }

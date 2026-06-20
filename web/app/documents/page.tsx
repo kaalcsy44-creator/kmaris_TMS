@@ -3,14 +3,13 @@
 import { useEffect, useState } from "react";
 import { fetchDocumentsOverview } from "@/lib/api";
 import type { DocRow } from "@/lib/types";
-import AuthGate from "@/components/AuthGate";
-import Nav from "@/components/Nav";
+import AppShell, { SectionHead } from "@/components/AppShell";
 
 export default function DocumentsPage() {
   return (
-    <AuthGate>
+    <AppShell active="documents">
       <DocumentsOverview />
-    </AuthGate>
+    </AppShell>
   );
 }
 
@@ -50,8 +49,8 @@ function DocumentsOverview() {
   useEffect(load, []);
 
   return (
-    <div className="page">
-      <Nav active="documents" />
+    <>
+      <SectionHead title="문서 (Documents)" sub="오더별 CI · PL · SA · Tax 현황" />
 
       <div className="toolbar">
         <button className="btn" onClick={load}>
@@ -100,6 +99,6 @@ function DocumentsOverview() {
           </table>
         </div>
       )}
-    </div>
+    </>
   );
 }

@@ -3,16 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { fetchVendorPoOverview } from "@/lib/api";
 import type { VendorPoRow } from "@/lib/types";
-import AuthGate from "@/components/AuthGate";
-import Nav from "@/components/Nav";
-
-export default function VendorPoPage() {
-  return (
-    <AuthGate>
-      <VendorPoOverview />
-    </AuthGate>
-  );
-}
 
 function Cell({ main, sub, num }: { main: string; sub?: string; num?: boolean }) {
   const empty = !main || main === "—";
@@ -24,7 +14,7 @@ function Cell({ main, sub, num }: { main: string; sub?: string; num?: boolean })
   );
 }
 
-function VendorPoOverview() {
+export default function VendorPoScreen() {
   const [rows, setRows] = useState<VendorPoRow[]>([]);
   const [sentOnly, setSentOnly] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -47,9 +37,7 @@ function VendorPoOverview() {
   );
 
   return (
-    <div className="page">
-      <Nav active="vendorpo" />
-
+    <>
       <div className="toolbar">
         <button className="btn" onClick={load}>
           새로고침
@@ -112,6 +100,6 @@ function VendorPoOverview() {
           </table>
         </div>
       )}
-    </div>
+    </>
   );
 }

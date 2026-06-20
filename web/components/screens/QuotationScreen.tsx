@@ -3,16 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { fetchQuotationOverview, fetchCustomers } from "@/lib/api";
 import type { QtnRow, CustomerOption } from "@/lib/types";
-import AuthGate from "@/components/AuthGate";
-import Nav from "@/components/Nav";
-
-export default function QuotationPage() {
-  return (
-    <AuthGate>
-      <QuotationOverview />
-    </AuthGate>
-  );
-}
 
 const TOTAL_STEPS = 12;
 const STATUSES = ["초안", "발송완료", "협상중", "수주확정", "실주", "만료"];
@@ -34,7 +24,7 @@ function Cell({ main, sub, num }: { main: string; sub?: string; num?: boolean })
   );
 }
 
-function QuotationOverview() {
+export default function QuotationScreen() {
   const [rows, setRows] = useState<QtnRow[]>([]);
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
   const [customerId, setCustomerId] = useState<number | "">("");
@@ -74,9 +64,7 @@ function QuotationOverview() {
   );
 
   return (
-    <div className="page">
-      <Nav active="quotation" />
-
+    <>
       <div className="toolbar">
         <div className="field">
           <label>Customer 필터</label>
@@ -109,18 +97,14 @@ function QuotationOverview() {
           새로고침
         </button>
         <span className="hint-inline" style={{ marginLeft: "auto" }}>
-          견적 신규 작성·발송은 RFQ 상세 패널의 Customer Quote 액션에서 진행합니다.
+          견적 신규 작성·발송은 RFQ 탭의 Customer Quote 액션에서 진행합니다.
         </span>
       </div>
 
       {loading ? (
         <div className="state">불러오는 중…</div>
       ) : error ? (
-        <div className="state error">
-          API 오류: {error}
-          <br />
-          백엔드(admin_api.py)가 실행 중인지, 토큰이 맞는지 확인하세요.
-        </div>
+        <div className="state error">API 오류: {error}</div>
       ) : filtered.length === 0 ? (
         <div className="state">표시할 견적이 없습니다.</div>
       ) : (
@@ -158,10 +142,7 @@ function QuotationOverview() {
                     {r.stage ? (
                       <div className="bar">
                         {Array.from({ length: TOTAL_STEPS }).map((_, k) => (
-                          <span
-                            key={k}
-                            className={`seg${k < r.stage ? " on" : ""}`}
-                          />
+                          <span key={k} className={`seg${k < r.stage ? " on" : ""}`} />
                         ))}
                       </div>
                     ) : null}
@@ -172,6 +153,6 @@ function QuotationOverview() {
           </table>
         </div>
       )}
-    </div>
+    </>
   );
 }

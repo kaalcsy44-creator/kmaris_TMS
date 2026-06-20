@@ -16,24 +16,23 @@ import type {
   SettingsVessel,
   CustomerOption,
 } from "@/lib/types";
-import AuthGate from "@/components/AuthGate";
-import Nav from "@/components/Nav";
+import AppShell, { SectionHead } from "@/components/AppShell";
 
 type Tab = "customers" | "vendors" | "vessels";
 
 export default function SettingsPage() {
   return (
-    <AuthGate>
+    <AppShell active="settings">
       <Settings />
-    </AuthGate>
+    </AppShell>
   );
 }
 
 function Settings() {
   const [tab, setTab] = useState<Tab>("customers");
   return (
-    <div className="page">
-      <Nav active="settings" />
+    <>
+      <SectionHead title="설정 (Settings)" sub="고객 · 벤더 · 선박 마스터" />
       <div className="seg-tabs">
         <button
           className={tab === "customers" ? "on" : ""}
@@ -57,7 +56,7 @@ function Settings() {
       {tab === "customers" && <Customers />}
       {tab === "vendors" && <Vendors />}
       {tab === "vessels" && <Vessels />}
-    </div>
+    </>
   );
 }
 

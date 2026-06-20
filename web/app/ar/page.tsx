@@ -3,14 +3,13 @@
 import { useEffect, useState } from "react";
 import { fetchArOverview, recordArPayment } from "@/lib/api";
 import type { ArData, ArRow } from "@/lib/types";
-import AuthGate from "@/components/AuthGate";
-import Nav from "@/components/Nav";
+import AppShell, { SectionHead } from "@/components/AppShell";
 
 export default function ArPage() {
   return (
-    <AuthGate>
+    <AppShell active="ar">
       <ArOverview />
-    </AuthGate>
+    </AppShell>
   );
 }
 
@@ -35,8 +34,8 @@ function ArOverview() {
   useEffect(load, []);
 
   return (
-    <div className="page">
-      <Nav active="ar" />
+    <>
+      <SectionHead title="미수금 (AR)" sub="청구 · 수금 · 연체" />
 
       {error ? (
         <div className="state error">API 오류: {error}</div>
@@ -88,7 +87,7 @@ function ArOverview() {
           )}
         </>
       )}
-    </div>
+    </>
   );
 }
 

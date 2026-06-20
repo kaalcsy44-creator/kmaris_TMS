@@ -8,14 +8,13 @@ import {
   createRfq,
 } from "@/lib/api";
 import type { CustomerOption, SettingsVessel } from "@/lib/types";
-import AuthGate from "@/components/AuthGate";
-import Nav from "@/components/Nav";
+import AppShell, { SectionHead } from "@/components/AppShell";
 
 export default function NewRfqPage() {
   return (
-    <AuthGate>
+    <AppShell active="rfq">
       <NewRfq />
-    </AuthGate>
+    </AppShell>
   );
 }
 
@@ -80,10 +79,9 @@ function NewRfq() {
   }
 
   return (
-    <div className="page">
-      <Nav active="rfq" />
+    <>
+      <SectionHead title="Customer RFQ 신규 등록" sub="RFQ & Quotation" />
       <div className="panel form-panel">
-        <h2 className="form-title">Customer RFQ 신규 등록</h2>
 
         <div className="form-grid">
           <Field label="Customer *">
@@ -192,7 +190,7 @@ function NewRfq() {
           {err ? <span className="action-err">{err}</span> : null}
         </div>
       </div>
-    </div>
+    </>
   );
 }
 
