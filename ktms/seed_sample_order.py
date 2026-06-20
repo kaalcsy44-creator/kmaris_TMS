@@ -9,7 +9,7 @@
   - Order   : 상태 '오더 수주'(= Order Confirmed). 품목 2건 포함.
 
 재실행 시 po_no='SAMPLE-PO-001' 오더가 이미 있으면 건너뜁니다(중복 방지).
-생성 후 'Customer PO 수신 → 오더 상세 → 상태 변경'으로 5~7단계를 테스트하세요.
+생성 후 'P/O → Customer P/O 목록 → 오더 상세 → 상태 변경'으로 5~7단계를 테스트하세요.
 """
 from __future__ import annotations
 import sys
@@ -106,9 +106,9 @@ def seed_sample_order() -> None:
         print(f"     상태     : {order.status.value}  (= Order Confirmed)")
         print(f"     트래킹   : {tracking_url('order', order.tracking_token)}")
         print()
-        print("다음 단계: 'Customer PO 수신 → 오더 목록 → 오더 선택 → 상태 변경'으로")
+        print("다음 단계: 'P/O → Customer P/O 목록 → 오더 선택 → 상태 변경'으로")
         print("  제조/준비중 → 출고완료 → 운송중 → 목적지 하차 완료 순서로 테스트하세요.")
-        print("  (또는 'Vendor PO 발신 → 발주서 생성'으로 '발주 완료' 전이 테스트)")
+        print("  (또는 'P/O → Vendor P/O 생성'으로 '발주 완료' 전이 테스트)")
     finally:
         session.close()
 

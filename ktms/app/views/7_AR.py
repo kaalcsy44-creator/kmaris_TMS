@@ -11,7 +11,7 @@ if str(ROOT) not in sys.path:
 import pandas as pd
 import streamlit as st
 from app.utils.auth import require_auth
-from app.utils.helpers import inject_css, hint, section_header, ar_list, get_order, get_customer, status_badge, CURRENCIES, NAVY
+from app.utils.helpers import inject_css, hint, section_header, ar_list, get_order, customer_name, status_badge, CURRENCIES, NAVY
 from db.engine import get_session
 from db.models import ARRecord, ARStatus
 
@@ -53,7 +53,7 @@ if not ar_records:
 rows = []
 for r in ar_records:
     order = get_order(r.order_id)
-    cust  = get_customer(order.customer_id) if order else None
+    cust_nm = customer_name(order.customer_id) if order else "—"
     outstanding = r.invoice_amount - r.paid_amount
     today_str = date.today().isoformat()
     if r.status not in (ARStatus.PAID,) and r.due_date and r.due_date < today_str:
@@ -63,7 +63,7 @@ for r in ar_records:
     rows.append({
         "ID": r.id,
         "CI No.": r.ci_no or "—",
-        "Customer": cust.name if cust else "—",
+        "Customer": cust_nm,
         "오더": order.ord_no if order else "—",
         "통화": r.currency,
         "Invoice": f"{r.invoice_amount:,.2f}",

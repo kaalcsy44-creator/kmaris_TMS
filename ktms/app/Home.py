@@ -99,10 +99,7 @@ pages = {
     " ": [
         st.Page("views/1_Dashboard.py", title="Dashboard", default=True),
         st.Page("views/rfq_quotation.py", title="RFQ & Quotation"),
-    ],
-    "P/O": [
-        st.Page("views/5_CustomerPO.py",  title="Customer PO 수신"),
-        st.Page("views/5b_VendorPO.py",   title="Vendor PO 발신"),
+        st.Page("views/5_PO.py", title="P/O"),
     ],
     "선적 · 정산": [
         st.Page("views/6_Documents.py", title="Documents"),

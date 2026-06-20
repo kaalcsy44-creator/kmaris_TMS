@@ -51,13 +51,11 @@ _ICONS = [
     _S+"%3Cline x1='4' y1='21' x2='4' y2='14'/%3E%3Cline x1='4' y1='10' x2='4' y2='3'/%3E%3Cline x1='12' y1='21' x2='12' y2='12'/%3E%3Cline x1='12' y1='8' x2='12' y2='3'/%3E%3Cline x1='20' y1='21' x2='20' y2='16'/%3E%3Cline x1='20' y1='12' x2='20' y2='3'/%3E%3Cline x1='1' y1='14' x2='7' y2='14'/%3E%3Cline x1='9' y1='8' x2='15' y2='8'/%3E%3Cline x1='17' y1='16' x2='23' y2='16'/%3E"+_E,
 ]
 # Nav layout with dict sections (each section header is a <li> with a <p>):
-#   li:1  → " " header (invisible)    li:2  → Dashboard   li:3  → RFQ & Quotation
-#   li:4  → "P/O" header              li:5  → Customer PO 수신    li:6  → Vendor PO 발신
-#   li:7  → "선적 · 정산" header       li:8  → Documents          li:9  → AR
-#   li:10 → "시스템" header           li:11 → Settings
-# (pos, icon_idx) — [1] file-text for RFQ & Quotation, [4] package / [2] send for P/O
+#   li:1  → " " header (invisible)    li:2  → Dashboard   li:3  → RFQ & Quotation   li:4 → P/O
+#   li:5  → "선적 · 정산" header       li:6  → Documents   li:7  → AR
+#   li:8  → "시스템" header           li:9  → Settings
 _NAV_ICON_POSITIONS = [
-    (2, 0), (3, 1), (5, 4), (6, 2), (8, 5), (9, 6), (11, 7),
+    (2, 0), (3, 1), (4, 4), (6, 5), (7, 6), (9, 7),
 ]
 _NAV_ICON_CSS = "\n".join(
     f"[data-testid=\"stSidebar\"] nav li:nth-child({pos}) a::before {{ background-image: url(\"{_ICONS[idx]}\") !important; }}"
@@ -987,10 +985,52 @@ def _cached_vessel_options(customer_id: int | None = None) -> Dict[str, int]:
         s.close()
 
 
+@st.cache_data(ttl=15, show_spinner=False)
+def _cached_customer_name_map() -> Dict[int, str]:
+    """{customer_id: name} — 목록 루프에서 행마다 get_customer() 하는 N+1을 제거한다."""
+    s = get_session()
+    try:
+        return {c.id: c.name for c in s.query(Customer).all()}
+    finally:
+        s.close()
+
+
+@st.cache_data(ttl=15, show_spinner=False)
+def _cached_vessel_name_map() -> Dict[int, str]:
+    """{vessel_id: name} — 목록 루프 N+1 제거용."""
+    s = get_session()
+    try:
+        return {v.id: v.name for v in s.query(Vessel).all()}
+    finally:
+        s.close()
+
+
+def customer_name(cid: int | None) -> str:
+    """캐시된 맵에서 고객명을 조회 (목록 루프용, DB 세션 미발생)."""
+    if not cid:
+        return "—"
+    return _cached_customer_name_map().get(cid, "—")
+
+
+def vessel_name(vid: int | None) -> str:
+    """캐시된 맵에서 선박명을 조회 (목록 루프용, DB 세션 미발생)."""
+    if not vid:
+        return "—"
+    return _cached_vessel_name_map().get(vid, "—")
+
+
 def clear_cached_reference_data() -> None:
     _cached_customer_options.clear()
     _cached_vendor_options.clear()
     _cached_vessel_options.clear()
+    _cached_customer_name_map.clear()
+    _cached_vessel_name_map.clear()
+    clear_pipeline_cache()
+
+
+def clear_pipeline_cache() -> None:
+    """RFQ 진행단계 캐시 무효화 — 상태/주문/견적 등 변경 직후 호출해 즉시 반영."""
+    internal_pipeline_stage.clear()
 
 
 def all_customers() -> List[Customer]:
@@ -1308,6 +1348,7 @@ def _item_count(items) -> int:
     return len(items or [])
 
 
+@st.cache_data(ttl=15, show_spinner=False)
 @st.cache_data(ttl=15, show_spinner=False)
 def dashboard_snapshot(limit: int = 20) -> Dict[str, Any]:
     from services.tracking_status import rfq_tracking_step, order_tracking_step
@@ -1730,8 +1771,13 @@ INTERNAL_STEPS: List[str] = [
 ]
 
 
+@st.cache_data(ttl=20, show_spinner=False)
 def internal_pipeline_stage(rfq_id: int) -> int:
     """RFQ 1건의 내부 진행 단계(1~12)를 관련 레코드 증거로 추정한다.
+
+    NOTE: 행마다 ~12개 쿼리를 새 세션으로 실행하므로 목록(overview/PO/대시보드)에서
+    N+1의 핵심 비용이었다. ttl=20s 캐시로 같은 rerun·연속 클릭에서 재계산을 막는다.
+    데이터 변경 직후 즉시 반영이 필요하면 clear_pipeline_cache()를 호출한다.
 
     진행은 단조(monotonic) — 가장 멀리 도달한 단계를 반환한다. 전용 데이터가
     없는 단계는 인접 증거로 근사한다(예: 출고완료·ShippingAdvice→Delivery arrangement).

@@ -14,21 +14,12 @@ from app.utils.auth import require_auth
 from app.utils.helpers import (
     inject_css, hint, section_header, next_doc_no, status_badge, tracking_url,
     quotation_list, get_quotation, get_customer, get_vessel, get_vendor,
+    customer_name, vessel_name, clear_pipeline_cache,
     vendor_options, order_list, get_order, rfq_id_for_order, pipeline_status_label, NAVY,
 )
 from db.engine import get_session
 from db.models import Order, PurchaseOrder, Quotation, OrderStatus, QuotationStatus
 from services.sheets_svc import upsert_order as _sheet_upsert_order
-
-try:
-    st.set_page_config(page_title="Customer P/O 수신 — KTMS", page_icon="📥", layout="wide")
-except Exception:
-    pass
-require_auth()
-inject_css()
-
-section_header("order", "고객 P/O 수신 (Customer PO)")
-
 
 def render_order_detail():
     """오더 목록에서 선택한 오더의 상세(정보·상태·납기·품목)를 인라인 표시."""
@@ -64,7 +55,7 @@ def render_order_detail():
         st.markdown(f"**상태:** {status_badge(order.status.value)}", unsafe_allow_html=True)
         t_url = tracking_url("order", order.tracking_token)
         st.markdown(f"🔗 **고객 트래킹 링크:** [{t_url}]({t_url})")
-        st.caption("📨 Vendor 발주서(발주) 생성은 좌측 메뉴 'Vendor PO 발신'에서 진행하세요.")
+        st.caption("📨 Vendor 발주서(발주) 생성은 'Vendor P/O 생성' 탭에서 진행하세요.")
 
     with col_act:
         new_stat = st.selectbox("상태 변경", [s.value for s in OrderStatus],
@@ -82,6 +73,7 @@ def render_order_detail():
                     o.delivered_date = today_iso
                 s.commit()
                 _sheet_upsert_order(o, get_customer(o.customer_id), get_vessel(o.vessel_id) if o.vessel_id else None)
+                clear_pipeline_cache()
                 st.success("업데이트!")
                 st.rerun()
             finally:
@@ -109,6 +101,7 @@ def render_order_detail():
                 o = s.query(Order).get(order.id)
                 o.rfq_id = _opts[_sel]
                 s.commit()
+                clear_pipeline_cache()
                 st.success("RFQ 연결 업데이트 완료!")
                 st.rerun()
             finally:
@@ -157,26 +150,21 @@ def render_order_detail():
         st.dataframe(pd.DataFrame(order.items), use_container_width=True, hide_index=True)
 
 
-tab_new, tab_list = st.tabs(["➕ 신규 등록", "📋 오더 목록"])
 
-# ══════════════════════════════════════════════════════════════════════════════
-# TAB — LIST
-# ══════════════════════════════════════════════════════════════════════════════
-with tab_list:
+
+def render_customer_po_list_tab() -> None:
     status_filter = st.selectbox("상태 필터", ["전체"] + [s.value for s in OrderStatus])
     orders = order_list(None if status_filter == "전체" else status_filter)
 
     if orders:
         rows = []
         for o in orders:
-            c = get_customer(o.customer_id)
-            v = get_vessel(o.vessel_id) if o.vessel_id else None
             _rid = rfq_id_for_order(o)
             rows.append({
                 "ID": o.id,
                 "오더 No.": o.ord_no,
-                "Customer": c.name if c else "—",
-                "선박": v.name if v else "—",
+                "Customer": customer_name(o.customer_id),
+                "선박": vessel_name(o.vessel_id),
                 "PO No.": o.po_no or "—",
                 "품목수": len(o.items or []),
                 "상태": pipeline_status_label(_rid) if _rid else o.status.value,
@@ -198,10 +186,12 @@ with tab_list:
     st.markdown("---")
     render_order_detail()
 
-# ══════════════════════════════════════════════════════════════════════════════
-# TAB — NEW ORDER
-# ══════════════════════════════════════════════════════════════════════════════
-with tab_new:
+    # ══════════════════════════════════════════════════════════════════════════════
+    # TAB — NEW ORDER
+    # ══════════════════════════════════════════════════════════════════════════════
+
+
+def render_customer_po_new_tab() -> None:
     st.subheader("신규 오더 등록")
     hint("고객 P/O(주문서)로 오더를 등록합니다. PDF 자동 인식 · 수주 확정 견적 불러오기 · 직접 입력 모두 가능합니다.")
 
@@ -386,3 +376,27 @@ with tab_new:
             _sheet_upsert_order(order, get_customer(order.customer_id), get_vessel(order.vessel_id) if order.vessel_id else None)
         finally:
             session.close()
+
+
+
+def render_customer_po_tabs() -> None:
+    tab_new, tab_list = st.tabs(["➕ 신규 등록", "📋 오더 목록"])
+    with tab_new:
+        render_customer_po_new_tab()
+    with tab_list:
+        render_customer_po_list_tab()
+
+
+def render_customer_po_page() -> None:
+    require_auth()
+    inject_css()
+    section_header("order", "고객 P/O 수신 (Customer PO)")
+    render_customer_po_tabs()
+
+
+if __name__ == "__main__":
+    try:
+        st.set_page_config(page_title="Customer P/O 수신 — KTMS", page_icon="📥", layout="wide")
+    except Exception:
+        pass
+    render_customer_po_page()

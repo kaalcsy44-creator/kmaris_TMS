@@ -20,7 +20,7 @@ import streamlit as st
 from app.utils.auth import require_auth
 from app.utils.helpers import (
     inject_css, hint, section_header,
-    rfq_list, get_customer, get_vessel, customer_options,
+    rfq_list, customer_name, vessel_name, customer_options,
     pipeline_status_label, INTERNAL_STEPS, total_amount,
 )
 from db.engine import get_session
@@ -126,8 +126,8 @@ def render_overview():
             stage_lbl = pipeline_status_label(r.id)
             if status_filter != "전체" and stage_lbl != status_filter:
                 continue
-            c = get_customer(r.customer_id)
-            v = get_vessel(r.vessel_id) if r.vessel_id else None
+            c_name = customer_name(r.customer_id)
+            v_name = vessel_name(r.vessel_id)
 
             # 6) Vendor RFQ 발신 — 최신 1건 + (외 N건)
             vrfqs = (s.query(VendorRFQ).filter_by(rfq_id=r.id)
@@ -171,8 +171,8 @@ def render_overview():
                 "VRFQ_ID": vrfq_ids[0] if vrfq_ids else 0,  # 최신 VRFQ
                 "tds": [
                     _td(r.customer_rfq_no or "—"),
-                    _td(c.name if c else "—"),
-                    _td(v.name if v else "—"),
+                    _td(c_name),
+                    _td(v_name),
                     _td(len(r.items or []), cls="ov-r"),
                     _td(r.rfq_no, _kst(r.created_at)),
                     _td(vrfq_main, vrfq_sub),

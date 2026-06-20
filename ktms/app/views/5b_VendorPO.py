@@ -146,26 +146,13 @@ def _get_po(po_id: int):
         s.close()
 
 
-try:
-    st.set_page_config(page_title="Vendor P/O 발신 — KTMS", page_icon="📨", layout="wide")
-except Exception:
-    pass
-require_auth()
-inject_css()
 
-section_header("send", "Vendor P/O 발신 (Purchase Order)")
 
-tab_create, tab_send, tab_sent = st.tabs(
-    ["🧾 발주서 생성", "📨 발주서 이메일 발송", "📜 발신 내역"]
-)
 
-# ══════════════════════════════════════════════════════════════════════════════
-# TAB 1 — 발주서 생성 (수주 오더 기준)
-# ══════════════════════════════════════════════════════════════════════════════
-with tab_create:
+def render_vendor_po_create_tab() -> None:
     orders = order_list()
     if not orders:
-        hint("등록된 오더가 없습니다. 먼저 'Customer PO 수신'에서 수주를 등록하세요.")
+        hint("등록된 오더가 없습니다. 먼저 'Customer P/O 신규 등록' 탭에서 수주를 등록하세요.")
     else:
         ord_opts = {}
         for o in orders:
@@ -241,7 +228,7 @@ with tab_create:
                         st.rerun()
                 elif _rfq_id is None:
                     st.caption("⚠️ 이 오더에 연결된 RFQ가 없어 Vendor 견적을 찾을 수 없습니다. "
-                               "'Customer PO 수신 → 오더 상세 → RFQ 연결'에서 먼저 연결하세요.")
+                               "'Customer P/O 목록 → 오더 상세 → RFQ 연결'에서 먼저 연결하세요.")
                 else:
                     st.caption("이 Vendor로부터 수신한 견적이 없습니다. 주문 단가로 발주서를 생성합니다.")
 
@@ -304,10 +291,12 @@ with tab_create:
             finally:
                 session.close()
 
-# ══════════════════════════════════════════════════════════════════════════════
-# TAB 2 — 발주서 이메일 발송 (발행된 발주서 대상)
-# ══════════════════════════════════════════════════════════════════════════════
-with tab_send:
+    # ══════════════════════════════════════════════════════════════════════════════
+    # TAB 2 — 발주서 이메일 발송 (발행된 발주서 대상)
+    # ══════════════════════════════════════════════════════════════════════════════
+
+
+def render_vendor_po_send_tab() -> None:
     pos = _all_purchase_orders()
     if not pos:
         hint("발행된 발주서가 없습니다. 먼저 '발주서 생성' 탭에서 발주서를 생성하세요.")
@@ -415,10 +404,12 @@ with tab_send:
                 st.session_state.pop(_preview_key, None)
                 st.rerun()
 
-# ══════════════════════════════════════════════════════════════════════════════
-# TAB 3 — 발신 내역 (실제 이메일이 발송된 발주서만)
-# ══════════════════════════════════════════════════════════════════════════════
-with tab_sent:
+    # ══════════════════════════════════════════════════════════════════════════════
+    # TAB 3 — 발신 내역 (실제 이메일이 발송된 발주서만)
+    # ══════════════════════════════════════════════════════════════════════════════
+
+
+def render_vendor_po_sent_tab() -> None:
     st.caption("실제로 이메일이 발송된 발주서만 표시됩니다. (생성만 하고 미발송한 발주서는 제외)")
     pos = [p for p in _all_purchase_orders() if p.status == "이메일 발송완료"]
     if not pos:
@@ -439,3 +430,32 @@ with tab_sent:
                 "품목수": len(po.items or []),
             })
         st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+
+
+
+
+def render_vendor_po_tabs() -> None:
+    tab_create, tab_send, tab_sent = st.tabs([
+        "🧾 발주서 생성", "📨 발주서 이메일 발송", "📜 발신 내역"
+    ])
+    with tab_create:
+        render_vendor_po_create_tab()
+    with tab_send:
+        render_vendor_po_send_tab()
+    with tab_sent:
+        render_vendor_po_sent_tab()
+
+
+def render_vendor_po_page() -> None:
+    require_auth()
+    inject_css()
+    section_header("send", "Vendor P/O 발신 (Purchase Order)")
+    render_vendor_po_tabs()
+
+
+if __name__ == "__main__":
+    try:
+        st.set_page_config(page_title="Vendor P/O 발신 — KTMS", page_icon="📨", layout="wide")
+    except Exception:
+        pass
+    render_vendor_po_page()
