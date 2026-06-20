@@ -204,16 +204,17 @@ def render_overview():
         }
         /* base row */
         .st-key-rfq_overview_grid [data-testid="stHorizontalBlock"] {
-            min-width: 1580px;
+            min-width: 1470px;
             padding: 3px 6px;
             margin: 0 !important;
+            gap: 0.4rem !important;
             align-items: center;
             background: #FFFFFF;
-            border-bottom: 1px solid #EEF2F8;
+            border-bottom: 1px solid #D5DFEC;
         }
         /* zebra */
         .st-key-rfq_overview_grid [data-testid="stHorizontalBlock"]:nth-of-type(even) {
-            background: #F6F9FC;
+            background: #EDF2F9;
         }
         /* header row */
         .st-key-rfq_overview_grid [data-testid="stHorizontalBlock"]:first-of-type {
@@ -297,7 +298,7 @@ def render_overview():
         col.markdown(f'<div class="{cls}">{_html.escape(label)}</div>', unsafe_allow_html=True)
 
     selected_rfq_id = int(st.session_state.get("rfq_detail_id") or 0)
-    col_widths = [0.30, 0.90, 2.80, 1.50, 0.50, 1.50, 1.80, 1.50, 1.10, 1.50, 1.10, 1.30]
+    col_widths = [0.30, 0.60, 2.80, 1.30, 0.45, 1.45, 1.75, 1.45, 1.05, 1.45, 1.05, 1.20]
     chosen = None
     with st.container(key="rfq_overview_grid"):
         header_cols = st.columns(col_widths, gap="small", vertical_alignment="center")
