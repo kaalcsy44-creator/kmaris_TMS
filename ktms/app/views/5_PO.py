@@ -8,9 +8,16 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+import pandas as pd
 import streamlit as st
 from app.utils.auth import require_auth
-from app.utils.helpers import inject_css, section_header
+from app.utils.helpers import (
+    inject_css, hint, section_header,
+    customer_name, vessel_name, order_list, get_vendor,
+    rfq_id_for_order, pipeline_status_label,
+)
+from db.engine import get_session
+from db.models import PurchaseOrder, OrderStatus
 
 
 def _load_view_module(filename: str, module_name: str):
@@ -36,15 +43,75 @@ _vendor_po = _load_view_module("5b_VendorPO.py", "ktms_vendor_po_view")
 
 section_header("order", "P/O")
 
-# ── 상단: 목록/내역 현황 (Customer P/O 수신 · Vendor P/O 발신) ────────────────────
-tab_c_list, tab_v_sent = st.tabs([
-    "Customer P/O 수신 목록",
-    "Vendor P/O 발신 목록",
-])
-with tab_c_list:
-    _customer_po.render_customer_po_list_tab()
-with tab_v_sent:
-    _vendor_po.render_vendor_po_sent_tab()
+
+# ── 상단: 통합 현황 (Customer P/O 수신 + Vendor P/O 발신을 한 테이블로 병합) ────────
+def _sent_pos_by_order() -> dict[int, list]:
+    """오더 ID → 이메일 발송완료된 Vendor P/O 목록(최신순)."""
+    s = get_session()
+    try:
+        pos = (s.query(PurchaseOrder)
+               .filter(PurchaseOrder.status == "이메일 발송완료")
+               .order_by(PurchaseOrder.id.desc()).all())
+    finally:
+        s.close()
+    by_ord: dict[int, list] = {}
+    for po in pos:
+        if po.order_id:
+            by_ord.setdefault(po.order_id, []).append(po)
+    return by_ord
+
+
+def render_po_overview() -> None:
+    status_filter = st.selectbox("상태 필터", ["전체"] + [s.value for s in OrderStatus], key="po_ov_status")
+    orders = order_list(None if status_filter == "전체" else status_filter)
+    if not orders:
+        hint("등록된 오더가 없습니다.")
+        return
+
+    sent_by_ord = _sent_pos_by_order()
+    rows = []
+    for o in orders:
+        _rid = rfq_id_for_order(o)
+        vpos = sent_by_ord.get(o.id, [])
+        if vpos:
+            vp0 = vpos[0]
+            v = get_vendor(vp0.vendor_id)
+            vendor_po_no = vp0.po_no + (f"  (외 {len(vpos) - 1}건)" if len(vpos) > 1 else "")
+            vendor_nm = v.name if v else "—"
+            sent_email = vp0.sent_to_email or "—"
+            sent_date = vp0.sent_date or "—"
+        else:
+            vendor_po_no = vendor_nm = sent_email = sent_date = "—"
+        rows.append({
+            "ID": o.id,
+            "오더 No.": o.ord_no,
+            "Customer": customer_name(o.customer_id),
+            "선박": vessel_name(o.vessel_id),
+            "고객 PO No.": o.po_no or "—",
+            "품목수": len(o.items or []),
+            "등록일": o.date or "—",
+            "Vendor PO No.": vendor_po_no,
+            "Vendor": vendor_nm,
+            "수신자 이메일": sent_email,
+            "발송일": sent_date,
+            "상태": pipeline_status_label(_rid) if _rid else o.status.value,
+        })
+
+    df = pd.DataFrame(rows)
+    selected = st.dataframe(
+        df.drop(columns=["ID"]),
+        use_container_width=True, hide_index=True,
+        selection_mode="single-row", on_select="rerun",
+    )
+    sel = selected.selection.rows if hasattr(selected, "selection") else []
+    if sel:
+        st.session_state["ord_detail_id"] = int(df.iloc[sel[0]]["ID"])
+
+    st.markdown("---")
+    _customer_po.render_order_detail()
+
+
+render_po_overview()
 
 st.markdown("---")
 
