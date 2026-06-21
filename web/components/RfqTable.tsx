@@ -39,18 +39,21 @@ export default function RfqTable({
       <table className="rfq">
         <thead>
           <tr>
-            <th className="chk"></th>
-            <th>고객 RFQ No.</th>
-            <th>Customer</th>
-            <th>선박</th>
-            <th className="num">품목수</th>
-            <th>1. Customer RFQ 수신</th>
-            <th>2. Vendor RFQ 발신</th>
-            <th>3. Vendor Quot. No.</th>
+            <th className="chk" rowSpan={2}></th>
+            <th rowSpan={2}>고객 RFQ No.</th>
+            <th rowSpan={2}>Customer</th>
+            <th rowSpan={2}>선박</th>
+            <th className="num" rowSpan={2}>품목수</th>
+            <th rowSpan={2}>1. Customer RFQ 수신</th>
+            <th rowSpan={2}>2. Vendor RFQ 발신</th>
+            <th className="grp" colSpan={2}>3. Vendor Quot. 수신</th>
+            <th rowSpan={2}>4. Customer Quot. 발신</th>
+            <th className="num" rowSpan={2}>Customer 견적 금액</th>
+            <th rowSpan={2}>상태</th>
+          </tr>
+          <tr className="grp-sub">
+            <th>Vendor Quot. No.</th>
             <th className="num">Vendor 견적 금액</th>
-            <th>4. Customer Quot. 발신</th>
-            <th className="num">Customer 견적 금액</th>
-            <th>상태</th>
           </tr>
         </thead>
         <tbody>

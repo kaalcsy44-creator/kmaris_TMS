@@ -936,6 +936,16 @@ table.rfq thead th {
   border-bottom: 2px solid var(--line-strong);
   z-index: 1;
 }
+/* 2행 그룹 헤더: "3. Vendor Quot. 수신" 아래 No./금액 2열 묶음 */
+table.rfq thead th.grp {
+  text-align: center;
+  border-bottom: 1px solid var(--line);
+}
+table.rfq thead tr.grp-sub th {
+  top: 30px;
+  font-weight: 600;
+  color: #5b6678;
+}
 table.rfq tbody tr {
   cursor: pointer;
 }
