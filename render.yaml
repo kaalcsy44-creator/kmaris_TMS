@@ -29,5 +29,23 @@ services:
       # so this is just a non-guessable fallback, not "dev-token").
       - key: ADMIN_API_TOKEN
         generateValue: true
+      # Anthropic key for RFQ/Order PDF OCR (services/pdf_parser.py). Without
+      # it the /api/admin/ocr/* endpoints return an error. Paste at setup.
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      # SMTP for outbound email (Vendor RFQ / Quotation / Vendor PO / SA).
+      # SMTP_USER + SMTP_PASSWORD are required for sending; without them the
+      # API still saves to DB but reports smtp_configured=false. HOST/PORT/FROM
+      # have code defaults (smtp.gmail.com:587) — override only if needed.
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_FROM
+        sync: false
+      # Public customer tracking link base (services use TRACKING_BASE_URL;
+      # defaults to https://www.k-maris.com/track).
+      - key: TRACKING_BASE_URL
+        sync: false
       - key: PYTHON_VERSION
         value: "3.12.8"
