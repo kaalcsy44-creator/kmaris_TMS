@@ -753,6 +753,27 @@ table.mini.wide td {
   border-color: var(--blue);
   color: var(--blue);
 }
+.btn.primary {
+  background: var(--blue);
+  color: #fff;
+  border-color: var(--blue);
+}
+.btn.primary:hover {
+  background: #00468c;
+  color: #fff;
+}
+.btn.danger {
+  border-color: #e4b9b3;
+  color: #b42318;
+}
+.btn.danger:hover {
+  border-color: #b42318;
+  color: #b42318;
+}
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
 a.btn {
   display: inline-flex;
   align-items: center;
@@ -1248,6 +1269,22 @@ table.mini .num {
   background: #e7f5ec;
   color: #1a7a4a;
 }
+.doc-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+  margin: 14px 0;
+}
+.doc-tab {
+  display: grid;
+  gap: 14px;
+}
+.milestone-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+}
 .check-inline {
   display: inline-flex;
   align-items: center;
@@ -1256,6 +1293,15 @@ table.mini .num {
   color: #495057;
   cursor: pointer;
   user-select: none;
+}
+.vendor-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  border: 1px solid #d7e2ee;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #fff;
 }
 .action-ok {
   font-size: 12.5px;

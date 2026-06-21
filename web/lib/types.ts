@@ -31,6 +31,8 @@ export type SettingsCustomer = {
   contact: string;
   email: string;
   country: string;
+  address: string;
+  tax_id: string;
 };
 export type SettingsVendor = {
   id: number;
@@ -38,12 +40,53 @@ export type SettingsVendor = {
   contact: string;
   email: string;
   specialization: string;
+  country: string;
+  address: string;
 };
 export type SettingsVessel = {
   id: number;
   name: string;
   imo: string;
+  engine_type: string;
+  hull_no: string;
+  customer_id: number | null;
   customer: string;
+};
+
+export type SettingsItem = {
+  id: number;
+  part_no: string;
+  description: string;
+  maker: string;
+  origin: string;
+  unit: string;
+  hs_code: string;
+  std_price: number;
+};
+
+export type SettingsUser = {
+  id: number;
+  username: string;
+  email: string;
+  role: "admin" | "sales" | "viewer" | string;
+  is_active: boolean;
+};
+
+export type CompanyProfile = {
+  company_name_en: string;
+  company_name_kr: string;
+  address: string;
+  business_no: string;
+  phone: string;
+  general_email: string;
+  sales_email: string;
+  tax_email: string;
+  website: string;
+  bank_name: string;
+  bank_account: string;
+  bank_holder: string;
+  swift: string;
+  tagline: string;
 };
 
 export type VendorOption = { id: number; name: string; email: string };
@@ -221,6 +264,40 @@ export type VendorPoPreview = {
   smtp_configured: boolean;
 };
 
+export type VendorRfqPreview = {
+  vendor_id: number;
+  vendor_name: string;
+  to: string;
+  subject: string;
+  body: string;
+  xlsx_filename: string;
+};
+
+export type VendorQuoteItem = {
+  item_no?: number | string;
+  part_no: string;
+  description: string;
+  maker?: string;
+  manufacturer?: string;
+  origin?: string;
+  qty: number;
+  unit: string;
+  cost_price: number | null;
+  lead_time?: string;
+  remark?: string;
+};
+
+export type CustomerQuoteItem = {
+  part_no: string;
+  description: string;
+  qty: number;
+  unit: string;
+  cost_price: number | null;
+  margin_pct: number | null;
+  unit_price: number | null;
+  amount: number | null;
+};
+
 export type QtnRow = {
   id: number;
   qtn_no: string;
@@ -267,6 +344,73 @@ export type DocRow = {
   has_tax: boolean;
 };
 
+export type DocumentWorkItem = {
+  item_no?: number | string;
+  part_no?: string;
+  description?: string;
+  maker?: string;
+  origin?: string;
+  qty: number;
+  unit?: string;
+  unit_price?: number | null;
+  amount?: number | null;
+  hs_code?: string;
+  remark?: string;
+  package?: string;
+  net_weight?: string | number;
+  gross_weight?: string | number;
+  dimension?: string;
+};
+
+export type DocumentDetail = {
+  order: {
+    id: number;
+    ord_no: string;
+    po_no: string;
+    date: string;
+    status: string;
+    customer: string;
+    customer_email: string;
+    customer_tax_id: string;
+    vessel: string;
+    tracking_token: string;
+    consignee_confirmed_date: string;
+    vendor_docs_sent_date: string;
+    items: DocumentWorkItem[];
+  };
+  ci: null | {
+    id: number;
+    ci_no: string;
+    date: string;
+    currency: string;
+    vat_rate: number;
+    items: DocumentWorkItem[];
+    shipping: Record<string, string>;
+    missing: { part_no: string; description: string; order_qty: number; doc_qty: number }[];
+  };
+  pl: null | {
+    id: number;
+    pl_no: string;
+    date: string;
+    items: DocumentWorkItem[];
+    missing: { part_no: string; description: string; order_qty: number; doc_qty: number }[];
+  };
+  sa: null | {
+    id: number;
+    sa_no: string;
+    date: string;
+    shipping: Record<string, string>;
+    sent_date: string;
+  };
+  tax: null | {
+    id: number;
+    tax_no: string;
+    date: string;
+    items: DocumentWorkItem[];
+  };
+  smtp_configured: boolean;
+};
+
 export type VendorPoRow = {
   id: number;
   po_no: string;
@@ -283,6 +427,7 @@ export type VendorPoRow = {
 
 export type ArRow = {
   id: number;
+  order_id: number;
   ci_no: string;
   customer: string;
   ord_no: string;
@@ -293,6 +438,7 @@ export type ArRow = {
   due_date: string;
   status: string;
   overdue: boolean;
+  notes: string;
 };
 
 export type ArData = {

@@ -13,6 +13,11 @@ import type {
   RfqOcrResult,
   OrderOcrResult,
   VendorPoPreview,
+  VendorRfqPreview,
+  VendorQuoteItem,
+  CustomerQuoteItem,
+  DocumentDetail,
+  DocumentWorkItem,
   QtnRow,
   VrfqRow,
   DocRow,
@@ -21,6 +26,9 @@ import type {
   SettingsCustomer,
   SettingsVendor,
   SettingsVessel,
+  SettingsItem,
+  SettingsUser,
+  CompanyProfile,
 } from "./types";
 
 function authHeaders(json = false): HeadersInit {
@@ -57,6 +65,23 @@ async function post<T>(path: string, body: unknown): Promise<T> {
     method: "POST",
     headers: authHeaders(true),
     body: JSON.stringify(body),
+  });
+  return handle<T>(res, path);
+}
+
+async function put<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "PUT",
+    headers: authHeaders(true),
+    body: JSON.stringify(body),
+  });
+  return handle<T>(res, path);
+}
+
+async function del<T>(path: string): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "DELETE",
+    headers: authHeaders(),
   });
   return handle<T>(res, path);
 }
@@ -180,6 +205,73 @@ export function fetchDocumentsOverview(): Promise<{ rows: DocRow[] }> {
   return get<{ rows: DocRow[] }>("/api/admin/documents-overview");
 }
 
+export function fetchDocumentDetail(orderId: number): Promise<DocumentDetail> {
+  return get<DocumentDetail>(`/api/admin/documents/${orderId}`);
+}
+
+export function updateDocumentMilestone(
+  orderId: number,
+  field: "consignee_confirmed_date" | "vendor_docs_sent_date",
+  value: boolean
+): Promise<{ ok: boolean; value: string }> {
+  return post(`/api/admin/documents/${orderId}/milestone`, { field, value });
+}
+
+export function saveCommercialInvoice(
+  orderId: number,
+  body: {
+    date?: string;
+    currency: string;
+    vat_rate: number;
+    items: DocumentWorkItem[];
+    shipping: Record<string, string>;
+  }
+): Promise<{ ok: boolean; id: number; ci_no: string }> {
+  return post(`/api/admin/documents/${orderId}/ci`, body);
+}
+
+export function savePackingList(
+  orderId: number,
+  body: { date?: string; items: DocumentWorkItem[] }
+): Promise<{ ok: boolean; id: number; pl_no: string }> {
+  return post(`/api/admin/documents/${orderId}/pl`, body);
+}
+
+export function saveShippingAdvice(
+  orderId: number,
+  body: { date?: string; shipping: Record<string, string> }
+): Promise<{ ok: boolean; id: number; sa_no: string }> {
+  return post(`/api/admin/documents/${orderId}/sa`, body);
+}
+
+export function sendShippingAdvice(
+  orderId: number,
+  to: string,
+  subject: string,
+  body: string
+): Promise<{ ok: boolean; sent_date: string }> {
+  return post(`/api/admin/documents/${orderId}/sa/send`, { to, subject, body });
+}
+
+export function saveTaxInvoice(
+  orderId: number,
+  body: {
+    date?: string;
+    supply_type: string;
+    buyer_business_no: string;
+    vat_rate: number;
+  }
+): Promise<{ ok: boolean; id: number; tax_no: string; ar_id: number }> {
+  return post(`/api/admin/documents/${orderId}/tax`, body);
+}
+
+export function documentDownloadUrl(
+  orderId: number,
+  kind: "ci/pdf" | "pl/pdf" | "sa/pdf" | "tax/xlsx"
+): string {
+  return `${API_BASE}/api/admin/documents/${orderId}/${kind}`;
+}
+
 export function fetchVendorPoOverview(): Promise<{ rows: VendorPoRow[] }> {
   return get<{ rows: VendorPoRow[] }>("/api/admin/vendor-po-overview");
 }
@@ -197,28 +289,105 @@ export function fetchSettingsVendors(): Promise<SettingsVendor[]> {
 export function fetchSettingsVessels(): Promise<SettingsVessel[]> {
   return get<SettingsVessel[]>("/api/admin/settings/vessels");
 }
+export function fetchSettingsItems(): Promise<SettingsItem[]> {
+  return get<SettingsItem[]>("/api/admin/settings/items");
+}
+export function fetchSettingsUsers(): Promise<SettingsUser[]> {
+  return get<SettingsUser[]>("/api/admin/settings/users");
+}
+export function fetchCompanyProfile(): Promise<CompanyProfile> {
+  return get<CompanyProfile>("/api/admin/settings/company");
+}
+export function updateCompanyProfile(body: CompanyProfile): Promise<{ ok: boolean }> {
+  return put("/api/admin/settings/company", body);
+}
 export function createSettingsCustomer(body: {
   name: string;
   contact?: string;
   email?: string;
   country?: string;
+  address?: string;
+  tax_id?: string;
 }): Promise<{ ok: boolean; id: number }> {
   return post("/api/admin/settings/customers", body);
+}
+export function updateSettingsCustomer(
+  id: number,
+  body: Omit<SettingsCustomer, "id">
+): Promise<{ ok: boolean; id: number }> {
+  return put(`/api/admin/settings/customers/${id}`, body);
+}
+export function deleteSettingsCustomer(id: number): Promise<{ ok: boolean }> {
+  return del(`/api/admin/settings/customers/${id}`);
 }
 export function createSettingsVendor(body: {
   name: string;
   contact?: string;
   email?: string;
   specialization?: string;
+  country?: string;
+  address?: string;
 }): Promise<{ ok: boolean; id: number }> {
   return post("/api/admin/settings/vendors", body);
+}
+export function updateSettingsVendor(
+  id: number,
+  body: Omit<SettingsVendor, "id">
+): Promise<{ ok: boolean; id: number }> {
+  return put(`/api/admin/settings/vendors/${id}`, body);
+}
+export function deleteSettingsVendor(id: number): Promise<{ ok: boolean }> {
+  return del(`/api/admin/settings/vendors/${id}`);
 }
 export function createSettingsVessel(body: {
   name: string;
   imo?: string;
   customer_id?: number;
+  engine_type?: string;
+  hull_no?: string;
 }): Promise<{ ok: boolean; id: number }> {
   return post("/api/admin/settings/vessels", body);
+}
+export function updateSettingsVessel(
+  id: number,
+  body: Omit<SettingsVessel, "id" | "customer">
+): Promise<{ ok: boolean; id: number }> {
+  return put(`/api/admin/settings/vessels/${id}`, body);
+}
+export function deleteSettingsVessel(id: number): Promise<{ ok: boolean }> {
+  return del(`/api/admin/settings/vessels/${id}`);
+}
+
+export function createSettingsItem(body: Omit<SettingsItem, "id">): Promise<{ ok: boolean; id: number }> {
+  return post("/api/admin/settings/items", body);
+}
+export function updateSettingsItem(id: number, body: Omit<SettingsItem, "id">): Promise<{ ok: boolean; id: number }> {
+  return put(`/api/admin/settings/items/${id}`, body);
+}
+export function deleteSettingsItem(id: number): Promise<{ ok: boolean }> {
+  return del(`/api/admin/settings/items/${id}`);
+}
+
+export function createSettingsUser(body: {
+  username: string;
+  email?: string;
+  password?: string;
+  role: string;
+  is_active: boolean;
+}): Promise<{ ok: boolean; id: number }> {
+  return post("/api/admin/settings/users", body);
+}
+export function updateSettingsUser(
+  id: number,
+  body: {
+    username: string;
+    email?: string;
+    password?: string;
+    role: string;
+    is_active: boolean;
+  }
+): Promise<{ ok: boolean; id: number }> {
+  return put(`/api/admin/settings/users/${id}`, body);
 }
 
 export function recordArPayment(
@@ -232,6 +401,39 @@ export function recordArPayment(
   });
 }
 
+export function createArRecord(body: {
+  order_id: number;
+  ci_no?: string;
+  invoice_amount: number;
+  paid_amount?: number;
+  currency: string;
+  due_date?: string;
+  status?: string;
+  notes?: string;
+}): Promise<{ ok: boolean; id: number }> {
+  return post("/api/admin/ar", body);
+}
+
+export function updateArRecord(
+  arId: number,
+  body: {
+    order_id: number;
+    ci_no?: string;
+    invoice_amount: number;
+    paid_amount?: number;
+    currency: string;
+    due_date?: string;
+    status?: string;
+    notes?: string;
+  }
+): Promise<{ ok: boolean; id: number; status: string }> {
+  return put(`/api/admin/ar/${arId}`, body);
+}
+
+export function deleteArRecord(arId: number): Promise<{ ok: boolean }> {
+  return del(`/api/admin/ar/${arId}`);
+}
+
 export function createVendorRfq(
   rfqId: number,
   vendorId: number
@@ -239,23 +441,100 @@ export function createVendorRfq(
   return post(`/api/admin/rfq/${rfqId}/vendor-rfq`, { vendor_id: vendorId });
 }
 
+export function previewVendorRfq(
+  rfqId: number,
+  vendorIds: number[],
+  lang: "en" | "ko",
+  notes: string
+): Promise<{ previews: VendorRfqPreview[]; smtp_configured: boolean }> {
+  return post(`/api/admin/rfq/${rfqId}/vendor-rfq-preview`, {
+    vendor_ids: vendorIds,
+    lang,
+    notes,
+  });
+}
+
+export function sendVendorRfq(
+  rfqId: number,
+  items: { vendor_id: number; to: string; subject: string; body: string }[]
+): Promise<{
+  ok: boolean;
+  saved: number;
+  sent_ok: number;
+  sent_fail: number;
+  smtp_configured: boolean;
+}> {
+  return post(`/api/admin/rfq/${rfqId}/vendor-rfq-send`, { items });
+}
+
+export function vendorRfqXlsxUrl(rfqId: number, vendorId: number): string {
+  return `${API_BASE}/api/admin/rfq/${rfqId}/vendor-rfq-xlsx/${vendorId}`;
+}
+
 export function createVendorQuote(
   rfqId: number,
   vendorRfqId: number,
   vendorQuoteNo: string,
-  amount: number
+  amount: number,
+  items?: VendorQuoteItem[],
+  receivedDate?: string,
+  notes?: string
 ): Promise<{ ok: boolean; vendor_quote_no: string }> {
   return post(`/api/admin/rfq/${rfqId}/vendor-quote`, {
     vendor_rfq_id: vendorRfqId,
     vendor_quote_no: vendorQuoteNo,
     amount,
+    items,
+    received_date: receivedDate,
+    notes,
   });
+}
+
+export function parseVendorQuoteFile(file: File): Promise<{ items: Partial<VendorQuoteItem>[] }> {
+  const fd = new FormData();
+  fd.append("file", file);
+  return postForm<{ items: Partial<VendorQuoteItem>[] }>("/api/admin/vendor-quote-parse", fd);
 }
 
 export function createCustomerQuote(
   rfqId: number,
   currency: string,
-  amount: number
-): Promise<{ ok: boolean; qtn_no: string }> {
-  return post(`/api/admin/rfq/${rfqId}/customer-quote`, { currency, amount });
+  amount: number,
+  items?: CustomerQuoteItem[],
+  validUntil?: string,
+  remarks?: string
+): Promise<{ ok: boolean; id: number; qtn_no: string }> {
+  return post(`/api/admin/rfq/${rfqId}/customer-quote`, {
+    currency,
+    amount,
+    items,
+    valid_until: validUntil,
+    remarks,
+  });
+}
+
+export function quotationPdfUrl(qtnId: number, docType = "quotation"): string {
+  return `${API_BASE}/api/admin/quotations/${qtnId}/pdf?doc_type=${encodeURIComponent(docType)}`;
+}
+
+export function previewQuotationEmail(
+  qtnId: number,
+  lang: "en" | "ko"
+): Promise<{ to: string; subject: string; body: string; smtp_configured: boolean }> {
+  return post(`/api/admin/quotations/${qtnId}/email-preview`, { lang });
+}
+
+export function sendQuotationEmail(
+  qtnId: number,
+  to: string,
+  subject: string,
+  body: string,
+  docType = "quotation"
+): Promise<{ ok: boolean; sent_date: string }> {
+  return post(`/api/admin/quotations/${qtnId}/send`, {
+    to,
+    subject,
+    body,
+    doc_type: docType,
+  });
 }

@@ -30,13 +30,21 @@ from db.engine import get_session
 from services.tracking_status import (
     rfq_tracking_step, order_tracking_step, RFQ_STEPS, ORDER_STEPS,
 )
-from services.email_svc import send_email
-from services.pdf_svc import build_po_payload, generate_po_pdf
+from services.email_svc import (
+    quotation_email_body, quotation_email_subject, send_email,
+    shipping_advice_email_body,
+)
+from services.pdf_svc import (
+    build_payload, build_po_payload, generate_pdf, generate_po_pdf,
+    generate_tax_xlsx,
+)
 from services.pdf_parser import (
     extract_text_from_pdf, parse_order_fields, parse_rfq_fields,
 )
+from services.vendor_xlsx import make_vendor_rfq_quote_xlsx
+from services.quote_response_parser import parse_vendor_quote_bytes
 from db.models import (
-    RFQ, Customer, Vessel, Vendor, User, DocSequence,
+    RFQ, Customer, Vessel, Vendor, User, UserRole, ItemMaster, DocSequence,
     VendorRFQ, VendorQuote, Quotation, QuotationStatus, FollowUpLevel,
     Order, PurchaseOrder, ShippingAdvice, CommercialInvoice,
     PackingList, TaxInvoiceData, ARRecord,
@@ -409,6 +417,89 @@ Please confirm the following upon receipt:
     if notes:
         body += f"Additional Notes:\n{notes}\n\n"
     body += """Kindly acknowledge receipt and confirm within 3 business days.
+
+Best regards,
+K-MARIS Energy & Solutions Co., Ltd.
+Email: sales@k-maris.com  |  www.k-maris.com
+Engineering Reliability. Supplying Performance.
+"""
+    return body
+
+
+def _vendor_rfq_email_body(rfq, cust, vessel, vendor, notes: str, lang: str) -> str:
+    items = rfq.items or []
+    if lang == "ko":
+        item_lines = "\n".join(
+            f"  {i+1:>2}. Part No.: {str(item.get('part_no','—')):<20s}"
+            f"  수량: {item.get('qty','—')} {item.get('unit',''):<5s}"
+            f"  Maker: {item.get('maker','—')}\n"
+            f"       품명: {item.get('description','—')}"
+            for i, item in enumerate(items)
+        )
+        body = f"""{vendor.name if vendor else 'Vendor'} 귀중
+
+안녕하세요,
+항상 협조해 주셔서 감사드립니다.
+
+아래 선박용 부품에 대한 견적을 요청드립니다.
+
+RFQ 번호 : {rfq.rfq_no}
+선박명    : {vessel.name if vessel else '—'}
+발주처    : {cust.name if cust else '—'}
+문의일    : {rfq.date or date.today().isoformat()}
+
+──────────────────────── 품목 리스트 ────────────────────────
+{item_lines}
+──────────────────────────────────────────────────────────────
+
+각 품목에 대해 아래 사항을 포함하여 견적을 회신해 주시기 바랍니다:
+  • 단가 (USD, CNF 부산항 기준)
+  • 납기
+  • 원산지 / 제조사
+  • 기술적 비고 또는 대체품 (해당 시)
+
+"""
+        if notes:
+            body += f"추가 사항:\n{notes}\n\n"
+        body += """영업일 기준 5일 이내 회신 부탁드립니다.
+
+감사합니다.
+K-MARIS Energy & Solutions Co., Ltd.
+Email: sales@k-maris.com  |  www.k-maris.com
+Engineering Reliability. Supplying Performance.
+"""
+        return body
+
+    item_lines = "\n".join(
+        f"  {i+1:>2}. Part No.: {str(item.get('part_no','—')):<20s}"
+        f"  Qty: {item.get('qty','—')} {item.get('unit',''):<5s}"
+        f"  Maker: {item.get('maker','—')}\n"
+        f"       Desc: {item.get('description','—')}"
+        for i, item in enumerate(items)
+    )
+    body = f"""Dear {vendor.name if vendor else 'Vendor'},
+
+We would like to request your best quotation for the following marine spare parts.
+
+RFQ Reference : {rfq.rfq_no}
+Vessel        : {vessel.name if vessel else '—'}
+End Customer  : {cust.name if cust else '—'}
+Enquiry Date  : {rfq.date or date.today().isoformat()}
+
+──────────────────────── ITEM LIST ────────────────────────
+{item_lines}
+────────────────────────────────────────────────────────────
+
+Please quote for each item:
+  • Unit price (USD, CNF Busan port)
+  • Lead time
+  • Country of origin / Manufacturer
+  • Technical remarks or alternatives (if any)
+
+"""
+    if notes:
+        body += f"Additional Notes:\n{notes}\n\n"
+    body += """Kindly reply within 5 business days.
 
 Best regards,
 K-MARIS Energy & Solutions Co., Ltd.
@@ -1245,6 +1336,7 @@ def ar_overview():
                     overdue_usd += outstanding
             rows.append({
                 "id": r.id,
+                "order_id": r.order_id,
                 "ci_no": r.ci_no or "",
                 "customer": cust,
                 "ord_no": o.ord_no if o else "",
@@ -1255,6 +1347,7 @@ def ar_overview():
                 "due_date": r.due_date or "",
                 "status": status,
                 "overdue": bool(overdue),
+                "notes": r.notes or "",
             })
         return {
             "kpi": {
@@ -1271,6 +1364,90 @@ def ar_overview():
 class ARPayment(BaseModel):
     amount: float
     due_date: str | None = None
+
+
+class ARSave(BaseModel):
+    order_id: int
+    ci_no: str | None = ""
+    invoice_amount: float = 0.0
+    paid_amount: float = 0.0
+    currency: str = "USD"
+    due_date: str | None = None
+    status: str = ""
+    notes: str | None = ""
+
+
+def _ar_status_from_text(value: str | None, paid: float, invoice: float) -> ARStatus:
+    if paid >= invoice and invoice > 0:
+        return ARStatus.PAID
+    if paid > 0:
+        return ARStatus.PARTIAL
+    if value:
+        for status in ARStatus:
+            if value in {status.value, status.name}:
+                return status
+    return ARStatus.OUTSTANDING
+
+
+@app.post("/api/admin/ar", dependencies=[Depends(require_token)])
+def create_ar(body: ARSave):
+    s = get_session()
+    try:
+        order = s.query(Order).filter_by(id=body.order_id).first()
+        if not order:
+            raise HTTPException(status_code=404, detail="Order를 찾을 수 없습니다.")
+        ar = ARRecord(
+            order_id=body.order_id,
+            ci_no=body.ci_no or "",
+            invoice_amount=body.invoice_amount or 0.0,
+            paid_amount=body.paid_amount or 0.0,
+            currency=body.currency or "USD",
+            due_date=body.due_date,
+            status=_ar_status_from_text(body.status, body.paid_amount or 0.0, body.invoice_amount or 0.0),
+            notes=body.notes or "",
+        )
+        s.add(ar)
+        s.commit()
+        return {"ok": True, "id": ar.id}
+    finally:
+        s.close()
+
+
+@app.put("/api/admin/ar/{ar_id}", dependencies=[Depends(require_token)])
+def update_ar(ar_id: int, body: ARSave):
+    s = get_session()
+    try:
+        ar = s.query(ARRecord).filter_by(id=ar_id).first()
+        if not ar:
+            raise HTTPException(status_code=404, detail="AR 레코드를 찾을 수 없습니다.")
+        if not s.query(Order).filter_by(id=body.order_id).first():
+            raise HTTPException(status_code=404, detail="Order를 찾을 수 없습니다.")
+        ar.order_id = body.order_id
+        ar.ci_no = body.ci_no or ""
+        ar.invoice_amount = body.invoice_amount or 0.0
+        ar.paid_amount = body.paid_amount or 0.0
+        ar.currency = body.currency or "USD"
+        ar.due_date = body.due_date
+        ar.status = _ar_status_from_text(body.status, ar.paid_amount or 0.0, ar.invoice_amount or 0.0)
+        ar.notes = body.notes or ""
+        s.commit()
+        return {"ok": True, "id": ar.id, "status": _enum_val(ar.status)}
+    finally:
+        s.close()
+
+
+@app.delete("/api/admin/ar/{ar_id}", dependencies=[Depends(require_token)])
+def delete_ar(ar_id: int):
+    s = get_session()
+    try:
+        ar = s.query(ARRecord).filter_by(id=ar_id).first()
+        if not ar:
+            raise HTTPException(status_code=404, detail="AR 레코드를 찾을 수 없습니다.")
+        s.delete(ar)
+        s.commit()
+        return {"ok": True}
+    finally:
+        s.close()
 
 
 @app.post("/api/admin/ar/{ar_id}/payment", dependencies=[Depends(require_token)])
@@ -1429,6 +1606,486 @@ def documents_overview():
         s.close()
 
 
+def _customer_for_order(session, order: Order):
+    return session.query(Customer).filter_by(id=order.customer_id).first()
+
+
+def _vessel_for_order(session, order: Order):
+    if not order.vessel_id:
+        return None
+    return session.query(Vessel).filter_by(id=order.vessel_id).first()
+
+
+def _latest_ci(session, order_id: int):
+    return (
+        session.query(CommercialInvoice)
+        .filter_by(order_id=order_id)
+        .order_by(CommercialInvoice.id.desc())
+        .first()
+    )
+
+
+def _latest_pl(session, ci_id: int | None):
+    if not ci_id:
+        return None
+    return (
+        session.query(PackingList)
+        .filter_by(ci_id=ci_id)
+        .order_by(PackingList.id.desc())
+        .first()
+    )
+
+
+def _latest_sa(session, order_id: int):
+    return (
+        session.query(ShippingAdvice)
+        .filter_by(order_id=order_id)
+        .order_by(ShippingAdvice.id.desc())
+        .first()
+    )
+
+
+def _latest_tax(session, ci_id: int | None):
+    if not ci_id:
+        return None
+    return (
+        session.query(TaxInvoiceData)
+        .filter_by(ci_id=ci_id)
+        .order_by(TaxInvoiceData.id.desc())
+        .first()
+    )
+
+
+def _missing_items(order_items: list[dict], doc_items: list[dict]) -> list[dict]:
+    def key(item: dict) -> str:
+        return (
+            str(item.get("part_no") or "").strip().upper()
+            or str(item.get("description") or "").strip().upper()
+        )
+
+    def qty(item: dict) -> float:
+        try:
+            return float(item.get("qty", 0) or 0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    doc_qty: dict[str, float] = {}
+    for item in doc_items or []:
+        k = key(item)
+        if k:
+            doc_qty[k] = doc_qty.get(k, 0.0) + qty(item)
+
+    missing: list[dict] = []
+    for item in order_items or []:
+        k = key(item)
+        if not k:
+            continue
+        oq = qty(item)
+        dq = doc_qty.get(k, 0.0)
+        if dq < oq:
+            missing.append({
+                "part_no": item.get("part_no", ""),
+                "description": item.get("description", ""),
+                "order_qty": oq,
+                "doc_qty": dq,
+            })
+    return missing
+
+
+def _doc_file_response(data: bytes, filename: str, media_type: str) -> Response:
+    return Response(
+        content=data,
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+def _tracking_url(kind: str, token: str | None) -> str:
+    if not token:
+        return ""
+    base = os.getenv("TRACKING_BASE_URL", "https://www.k-maris.com/track")
+    return f"{base}?type={kind}&token={token}"
+
+
+def _document_detail_payload(session, order: Order) -> dict:
+    cust = _customer_for_order(session, order)
+    vessel = _vessel_for_order(session, order)
+    ci = _latest_ci(session, order.id)
+    pl = _latest_pl(session, ci.id if ci else None)
+    sa = _latest_sa(session, order.id)
+    tax = _latest_tax(session, ci.id if ci else None)
+    return {
+        "order": {
+            "id": order.id,
+            "ord_no": order.ord_no,
+            "po_no": order.po_no or "",
+            "date": order.date or "",
+            "status": _enum_val(order.status),
+            "customer": cust.name if cust else "",
+            "customer_email": cust.email if cust else "",
+            "customer_tax_id": cust.tax_id if cust else "",
+            "vessel": vessel.name if vessel else "",
+            "tracking_token": order.tracking_token or "",
+            "consignee_confirmed_date": order.consignee_confirmed_date or "",
+            "vendor_docs_sent_date": order.vendor_docs_sent_date or "",
+            "items": order.items or [],
+        },
+        "ci": None if not ci else {
+            "id": ci.id,
+            "ci_no": ci.ci_no or "",
+            "date": ci.date or "",
+            "currency": ci.currency or "USD",
+            "vat_rate": ci.vat_rate or 0.0,
+            "items": ci.items or [],
+            "shipping": ci.shipping or {},
+            "missing": _missing_items(order.items or [], ci.items or []),
+        },
+        "pl": None if not pl else {
+            "id": pl.id,
+            "pl_no": pl.pl_no or "",
+            "date": pl.date or "",
+            "items": pl.items or [],
+            "missing": _missing_items(order.items or [], pl.items or []),
+        },
+        "sa": None if not sa else {
+            "id": sa.id,
+            "sa_no": sa.sa_no or "",
+            "date": sa.date or "",
+            "shipping": sa.shipping or {},
+            "sent_date": sa.sent_date or "",
+        },
+        "tax": None if not tax else {
+            "id": tax.id,
+            "tax_no": tax.tax_no or "",
+            "date": tax.date or "",
+            "items": tax.items or [],
+        },
+        "smtp_configured": bool(os.getenv("SMTP_USER") and os.getenv("SMTP_PASSWORD")),
+    }
+
+
+class DocumentMilestoneUpdate(BaseModel):
+    field: str
+    value: bool
+
+
+class CommercialInvoiceSave(BaseModel):
+    date: str | None = None
+    currency: str = "USD"
+    vat_rate: float = 0.0
+    items: list[dict] = []
+    shipping: dict = {}
+
+
+class PackingListSave(BaseModel):
+    date: str | None = None
+    items: list[dict] = []
+
+
+class ShippingAdviceSave(BaseModel):
+    date: str | None = None
+    shipping: dict = {}
+
+
+class ShippingAdviceSend(BaseModel):
+    to: str
+    subject: str | None = None
+    body: str | None = None
+
+
+class TaxInvoiceSave(BaseModel):
+    date: str | None = None
+    supply_type: str = "Export / Zero-rated"
+    buyer_business_no: str = ""
+    vat_rate: float = 0.0
+
+
+@app.get("/api/admin/documents/{order_id}", dependencies=[Depends(require_token)])
+def document_detail(order_id: int):
+    s = get_session()
+    try:
+        order = s.query(Order).filter_by(id=order_id).first()
+        if not order:
+            raise HTTPException(status_code=404, detail="Order瑜?李얠쓣 ???놁뒿?덈떎.")
+        return _document_detail_payload(s, order)
+    finally:
+        s.close()
+
+
+@app.post("/api/admin/documents/{order_id}/milestone",
+          dependencies=[Depends(require_token)])
+def document_milestone(order_id: int, body: DocumentMilestoneUpdate):
+    if body.field not in {"consignee_confirmed_date", "vendor_docs_sent_date"}:
+        raise HTTPException(status_code=400, detail="Invalid milestone field")
+    s = get_session()
+    try:
+        order = s.query(Order).filter_by(id=order_id).first()
+        if not order:
+            raise HTTPException(status_code=404, detail="Order瑜?李얠쓣 ???놁뒿?덈떎.")
+        setattr(order, body.field, date.today().isoformat() if body.value else None)
+        s.commit()
+        return {"ok": True, "value": getattr(order, body.field) or ""}
+    finally:
+        s.close()
+
+
+@app.post("/api/admin/documents/{order_id}/ci",
+          dependencies=[Depends(require_token)])
+def save_commercial_invoice(order_id: int, body: CommercialInvoiceSave):
+    s = get_session()
+    try:
+        order = s.query(Order).filter_by(id=order_id).first()
+        if not order:
+            raise HTTPException(status_code=404, detail="Order瑜?李얠쓣 ???놁뒿?덈떎.")
+        ci = _latest_ci(s, order_id)
+        if not ci:
+            ci = CommercialInvoice(
+                ci_no=_next_doc_no(s, "ci"),
+                order_id=order.id,
+                date=body.date or date.today().isoformat(),
+            )
+            s.add(ci)
+        ci.date = body.date or ci.date or date.today().isoformat()
+        ci.currency = body.currency or "USD"
+        ci.vat_rate = body.vat_rate or 0.0
+        ci.items = body.items or []
+        ci.shipping = body.shipping or {}
+        s.commit()
+        return {"ok": True, "id": ci.id, "ci_no": ci.ci_no}
+    finally:
+        s.close()
+
+
+@app.get("/api/admin/documents/{order_id}/ci/pdf",
+         dependencies=[Depends(require_token)])
+def commercial_invoice_pdf(order_id: int):
+    s = get_session()
+    try:
+        order = s.query(Order).filter_by(id=order_id).first()
+        ci = _latest_ci(s, order_id) if order else None
+        if not order or not ci:
+            raise HTTPException(status_code=404, detail="Commercial Invoice瑜?李얠쓣 ???놁뒿?덈떎.")
+        payload = build_payload(
+            doc_no=ci.ci_no, date=ci.date,
+            customer=_customer_for_order(s, order),
+            vessel=_vessel_for_order(s, order),
+            items=ci.items or [], terms=ci.terms or {},
+            currency=ci.currency or "USD", vat_rate=ci.vat_rate or 0.0,
+            shipping=ci.shipping or {}, po_no=order.po_no or "",
+            export_ref=order.ord_no,
+        )
+        pdf = generate_pdf("commercial_invoice", payload)
+        return _doc_file_response(pdf, f"{ci.ci_no}_CI.pdf", "application/pdf")
+    finally:
+        s.close()
+
+
+@app.post("/api/admin/documents/{order_id}/pl",
+          dependencies=[Depends(require_token)])
+def save_packing_list(order_id: int, body: PackingListSave):
+    s = get_session()
+    try:
+        order = s.query(Order).filter_by(id=order_id).first()
+        ci = _latest_ci(s, order_id) if order else None
+        if not order or not ci:
+            raise HTTPException(status_code=400, detail="먼저 Commercial Invoice를 생성하세요.")
+        pl = _latest_pl(s, ci.id)
+        if not pl:
+            pl = PackingList(
+                pl_no=_next_doc_no(s, "pl"),
+                ci_id=ci.id,
+                date=body.date or date.today().isoformat(),
+            )
+            s.add(pl)
+        pl.date = body.date or pl.date or date.today().isoformat()
+        pl.items = body.items or []
+        s.commit()
+        return {"ok": True, "id": pl.id, "pl_no": pl.pl_no}
+    finally:
+        s.close()
+
+
+@app.get("/api/admin/documents/{order_id}/pl/pdf",
+         dependencies=[Depends(require_token)])
+def packing_list_pdf(order_id: int):
+    s = get_session()
+    try:
+        order = s.query(Order).filter_by(id=order_id).first()
+        ci = _latest_ci(s, order_id) if order else None
+        pl = _latest_pl(s, ci.id if ci else None)
+        if not order or not ci or not pl:
+            raise HTTPException(status_code=404, detail="Packing List瑜?李얠쓣 ???놁뒿?덈떎.")
+        payload = build_payload(
+            doc_no=pl.pl_no, date=pl.date,
+            customer=_customer_for_order(s, order),
+            vessel=_vessel_for_order(s, order),
+            items=pl.items or [], terms={},
+            currency=ci.currency or "USD",
+            shipping=ci.shipping or {}, po_no=order.po_no or "",
+            export_ref=order.ord_no,
+        )
+        pdf = generate_pdf("packing_list", payload)
+        return _doc_file_response(pdf, f"{pl.pl_no}_PL.pdf", "application/pdf")
+    finally:
+        s.close()
+
+
+@app.post("/api/admin/documents/{order_id}/sa",
+          dependencies=[Depends(require_token)])
+def save_shipping_advice(order_id: int, body: ShippingAdviceSave):
+    s = get_session()
+    try:
+        order = s.query(Order).filter_by(id=order_id).first()
+        if not order:
+            raise HTTPException(status_code=404, detail="Order瑜?李얠쓣 ???놁뒿?덈떎.")
+        sa = _latest_sa(s, order_id)
+        if not sa:
+            sa = ShippingAdvice(
+                sa_no=_next_doc_no(s, "sa"),
+                order_id=order.id,
+                date=body.date or date.today().isoformat(),
+            )
+            s.add(sa)
+        sa.date = body.date or sa.date or date.today().isoformat()
+        sa.shipping = body.shipping or {}
+        s.commit()
+        return {"ok": True, "id": sa.id, "sa_no": sa.sa_no}
+    finally:
+        s.close()
+
+
+@app.get("/api/admin/documents/{order_id}/sa/pdf",
+         dependencies=[Depends(require_token)])
+def shipping_advice_pdf(order_id: int):
+    s = get_session()
+    try:
+        order = s.query(Order).filter_by(id=order_id).first()
+        sa = _latest_sa(s, order_id) if order else None
+        ci = _latest_ci(s, order_id) if order else None
+        if not order or not sa:
+            raise HTTPException(status_code=404, detail="Shipping Advice瑜?李얠쓣 ???놁뒿?덈떎.")
+        payload = build_payload(
+            doc_no=sa.sa_no, date=sa.date,
+            customer=_customer_for_order(s, order),
+            vessel=_vessel_for_order(s, order),
+            items=(ci.items if ci else order.items) or [], terms={},
+            currency=(ci.currency if ci else "USD") or "USD",
+            shipping=sa.shipping or {}, po_no=order.po_no or "",
+            export_ref=order.ord_no,
+        )
+        pdf = generate_pdf("shipping_advice", payload)
+        return _doc_file_response(pdf, f"{sa.sa_no}_SA.pdf", "application/pdf")
+    finally:
+        s.close()
+
+
+@app.post("/api/admin/documents/{order_id}/sa/send",
+          dependencies=[Depends(require_token)])
+def send_shipping_advice(order_id: int, body: ShippingAdviceSend):
+    s = get_session()
+    try:
+        order = s.query(Order).filter_by(id=order_id).first()
+        sa = _latest_sa(s, order_id) if order else None
+        ci = _latest_ci(s, order_id) if order else None
+        if not order or not sa:
+            raise HTTPException(status_code=404, detail="Shipping Advice瑜?李얠쓣 ???놁뒿?덈떎.")
+        cust = _customer_for_order(s, order)
+        payload = build_payload(
+            doc_no=sa.sa_no, date=sa.date, customer=cust,
+            vessel=_vessel_for_order(s, order),
+            items=(ci.items if ci else order.items) or [], terms={},
+            currency=(ci.currency if ci else "USD") or "USD",
+            shipping=sa.shipping or {}, po_no=order.po_no or "",
+            export_ref=order.ord_no,
+        )
+        pdf = generate_pdf("shipping_advice", payload)
+        subject = body.subject or f"[K-MARIS] Shipping Advice {sa.sa_no}"
+        mail_body = body.body or shipping_advice_email_body(
+            cust.name if cust else "Customer", sa.sa_no,
+            _tracking_url("order", order.tracking_token),
+        )
+        ok = send_email(body.to, subject, mail_body, [(f"{sa.sa_no}_SA.pdf", pdf)])
+        if ok:
+            sa.sent_date = date.today().isoformat()
+            s.commit()
+        return {"ok": ok, "sent_date": sa.sent_date or ""}
+    finally:
+        s.close()
+
+
+@app.post("/api/admin/documents/{order_id}/tax",
+          dependencies=[Depends(require_token)])
+def save_tax_invoice(order_id: int, body: TaxInvoiceSave):
+    s = get_session()
+    try:
+        order = s.query(Order).filter_by(id=order_id).first()
+        ci = _latest_ci(s, order_id) if order else None
+        if not order or not ci:
+            raise HTTPException(status_code=400, detail="먼저 Commercial Invoice를 생성하세요.")
+        tax = _latest_tax(s, ci.id)
+        if not tax:
+            tax = TaxInvoiceData(
+                tax_no=_next_doc_no(s, "tax"),
+                ci_id=ci.id,
+                date=body.date or date.today().isoformat(),
+            )
+            s.add(tax)
+        tax.date = body.date or tax.date or date.today().isoformat()
+        tax.items = ci.items or []
+
+        ar = s.query(ARRecord).filter_by(order_id=order.id, ci_no=ci.ci_no).first()
+        if not ar:
+            ar = ARRecord(
+                order_id=order.id,
+                ci_no=ci.ci_no,
+                invoice_amount=_total_amount(ci.items or []),
+                paid_amount=0.0,
+                currency=ci.currency or "USD",
+                status=ARStatus.OUTSTANDING,
+            )
+            s.add(ar)
+        else:
+            ar.invoice_amount = _total_amount(ci.items or [])
+            ar.currency = ci.currency or "USD"
+        s.commit()
+        return {"ok": True, "id": tax.id, "tax_no": tax.tax_no, "ar_id": ar.id}
+    finally:
+        s.close()
+
+
+@app.get("/api/admin/documents/{order_id}/tax/xlsx",
+         dependencies=[Depends(require_token)])
+def tax_invoice_xlsx(order_id: int):
+    s = get_session()
+    try:
+        order = s.query(Order).filter_by(id=order_id).first()
+        ci = _latest_ci(s, order_id) if order else None
+        tax = _latest_tax(s, ci.id if ci else None)
+        if not order or not ci or not tax:
+            raise HTTPException(status_code=404, detail="Tax Invoice Data瑜?李얠쓣 ???놁뒿?덈떎.")
+        cust = _customer_for_order(s, order)
+        payload = build_payload(
+            doc_no=tax.tax_no, date=tax.date,
+            customer=cust,
+            vessel=_vessel_for_order(s, order),
+            items=ci.items or [], terms={},
+            currency="KRW", vat_rate=0.0,
+            tax_invoice={
+                "issue_date": tax.date,
+                "supply_type": "Export / Zero-rated",
+                "buyer_business_no": cust.tax_id if cust else "",
+            },
+        )
+        xlsx = generate_tax_xlsx(payload)
+        return _doc_file_response(
+            xlsx,
+            f"{tax.tax_no}_tax_invoice.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+    finally:
+        s.close()
+
+
 @app.get("/api/admin/vendor-po-overview", dependencies=[Depends(require_token)])
 def vendor_po_overview():
     """Vendor P/O 발신 내역 — PurchaseOrder 1건당 1행(생성·발송 포함 전체)."""
@@ -1485,6 +2142,8 @@ class CustomerCreate(BaseModel):
     contact: str | None = ""
     email: str | None = ""
     country: str | None = ""
+    address: str | None = ""
+    tax_id: str | None = ""
 
 
 class VendorCreate(BaseModel):
@@ -1492,12 +2151,67 @@ class VendorCreate(BaseModel):
     contact: str | None = ""
     email: str | None = ""
     specialization: str | None = ""
+    country: str | None = ""
+    address: str | None = ""
 
 
 class VesselCreate(BaseModel):
     name: str
     imo: str | None = ""
     customer_id: int | None = None
+    engine_type: str | None = ""
+    hull_no: str | None = ""
+
+
+class ItemMasterSave(BaseModel):
+    part_no: str
+    description: str | None = ""
+    maker: str | None = ""
+    origin: str | None = ""
+    unit: str | None = "PCS"
+    hs_code: str | None = ""
+    std_price: float | None = 0.0
+
+
+class UserSave(BaseModel):
+    username: str
+    email: str | None = ""
+    password: str | None = None
+    role: str = "sales"
+    is_active: bool = True
+
+
+class CompanyProfile(BaseModel):
+    company_name_en: str | None = ""
+    company_name_kr: str | None = ""
+    address: str | None = ""
+    business_no: str | None = ""
+    phone: str | None = ""
+    general_email: str | None = ""
+    sales_email: str | None = ""
+    tax_email: str | None = ""
+    website: str | None = ""
+    bank_name: str | None = ""
+    bank_account: str | None = ""
+    bank_holder: str | None = ""
+    swift: str | None = ""
+    tagline: str | None = ""
+
+
+_COMPANY_CONFIG = ROOT / "config" / "company.json"
+
+
+def _read_company_profile() -> dict:
+    try:
+        import json
+        return json.loads(_COMPANY_CONFIG.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _write_company_profile(data: dict) -> None:
+    import json
+    _COMPANY_CONFIG.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 @app.get("/api/admin/settings/customers", dependencies=[Depends(require_token)])
@@ -1505,7 +2219,8 @@ def settings_customers():
     s = get_session()
     try:
         return [{"id": c.id, "name": c.name, "contact": c.contact or "",
-                 "email": c.email or "", "country": c.country or ""}
+                 "email": c.email or "", "country": c.country or "",
+                 "address": c.address or "", "tax_id": c.tax_id or ""}
                 for c in s.query(Customer).order_by(Customer.name).all()]
     finally:
         s.close()
@@ -1518,10 +2233,44 @@ def create_customer(body: CustomerCreate):
     s = get_session()
     try:
         c = Customer(name=body.name.strip(), contact=body.contact or "",
-                     email=body.email or "", country=body.country or "")
+                     email=body.email or "", country=body.country or "",
+                     address=body.address or "", tax_id=body.tax_id or "")
         s.add(c)
         s.commit()
         return {"ok": True, "id": c.id}
+    finally:
+        s.close()
+
+
+@app.put("/api/admin/settings/customers/{row_id}", dependencies=[Depends(require_token)])
+def update_customer(row_id: int, body: CustomerCreate):
+    s = get_session()
+    try:
+        c = s.query(Customer).filter_by(id=row_id).first()
+        if not c:
+            raise HTTPException(status_code=404, detail="Customer를 찾을 수 없습니다.")
+        c.name = body.name.strip()
+        c.contact = body.contact or ""
+        c.email = body.email or ""
+        c.country = body.country or ""
+        c.address = body.address or ""
+        c.tax_id = body.tax_id or ""
+        s.commit()
+        return {"ok": True, "id": c.id}
+    finally:
+        s.close()
+
+
+@app.delete("/api/admin/settings/customers/{row_id}", dependencies=[Depends(require_token)])
+def delete_customer(row_id: int):
+    s = get_session()
+    try:
+        c = s.query(Customer).filter_by(id=row_id).first()
+        if not c:
+            raise HTTPException(status_code=404, detail="Customer를 찾을 수 없습니다.")
+        s.delete(c)
+        s.commit()
+        return {"ok": True}
     finally:
         s.close()
 
@@ -1531,7 +2280,8 @@ def settings_vendors():
     s = get_session()
     try:
         return [{"id": v.id, "name": v.name, "contact": v.contact or "",
-                 "email": v.email or "", "specialization": v.specialization or ""}
+                 "email": v.email or "", "specialization": v.specialization or "",
+                 "country": v.country or "", "address": v.address or ""}
                 for v in s.query(Vendor).order_by(Vendor.name).all()]
     finally:
         s.close()
@@ -1544,10 +2294,44 @@ def create_vendor(body: VendorCreate):
     s = get_session()
     try:
         v = Vendor(name=body.name.strip(), contact=body.contact or "",
-                   email=body.email or "", specialization=body.specialization or "")
+                   email=body.email or "", specialization=body.specialization or "",
+                   country=body.country or "", address=body.address or "")
         s.add(v)
         s.commit()
         return {"ok": True, "id": v.id}
+    finally:
+        s.close()
+
+
+@app.put("/api/admin/settings/vendors/{row_id}", dependencies=[Depends(require_token)])
+def update_vendor(row_id: int, body: VendorCreate):
+    s = get_session()
+    try:
+        v = s.query(Vendor).filter_by(id=row_id).first()
+        if not v:
+            raise HTTPException(status_code=404, detail="Vendor를 찾을 수 없습니다.")
+        v.name = body.name.strip()
+        v.contact = body.contact or ""
+        v.email = body.email or ""
+        v.specialization = body.specialization or ""
+        v.country = body.country or ""
+        v.address = body.address or ""
+        s.commit()
+        return {"ok": True, "id": v.id}
+    finally:
+        s.close()
+
+
+@app.delete("/api/admin/settings/vendors/{row_id}", dependencies=[Depends(require_token)])
+def delete_vendor(row_id: int):
+    s = get_session()
+    try:
+        v = s.query(Vendor).filter_by(id=row_id).first()
+        if not v:
+            raise HTTPException(status_code=404, detail="Vendor를 찾을 수 없습니다.")
+        s.delete(v)
+        s.commit()
+        return {"ok": True}
     finally:
         s.close()
 
@@ -1558,7 +2342,8 @@ def settings_vessels():
     try:
         cust_names = {c.id: c.name for c in s.query(Customer).all()}
         return [{"id": v.id, "name": v.name, "imo": v.imo or "",
-                 "customer": cust_names.get(v.customer_id, "") if v.customer_id else ""}
+                 "engine_type": v.engine_type or "", "hull_no": v.hull_no or "",
+                 "customer_id": v.customer_id, "customer": cust_names.get(v.customer_id, "") if v.customer_id else ""}
                 for v in s.query(Vessel).order_by(Vessel.name).all()]
     finally:
         s.close()
@@ -1571,7 +2356,9 @@ def create_vessel(body: VesselCreate):
     s = get_session()
     try:
         v = Vessel(name=body.name.strip(), imo=body.imo or "",
-                   customer_id=body.customer_id)
+                   customer_id=body.customer_id,
+                   engine_type=body.engine_type or "",
+                   hull_no=body.hull_no or "")
         s.add(v)
         s.commit()
         return {"ok": True, "id": v.id}
@@ -1579,8 +2366,184 @@ def create_vessel(body: VesselCreate):
         s.close()
 
 
+@app.put("/api/admin/settings/vessels/{row_id}", dependencies=[Depends(require_token)])
+def update_vessel(row_id: int, body: VesselCreate):
+    s = get_session()
+    try:
+        v = s.query(Vessel).filter_by(id=row_id).first()
+        if not v:
+            raise HTTPException(status_code=404, detail="Vessel을 찾을 수 없습니다.")
+        v.name = body.name.strip()
+        v.imo = body.imo or ""
+        v.customer_id = body.customer_id
+        v.engine_type = body.engine_type or ""
+        v.hull_no = body.hull_no or ""
+        s.commit()
+        return {"ok": True, "id": v.id}
+    finally:
+        s.close()
+
+
+@app.delete("/api/admin/settings/vessels/{row_id}", dependencies=[Depends(require_token)])
+def delete_vessel(row_id: int):
+    s = get_session()
+    try:
+        v = s.query(Vessel).filter_by(id=row_id).first()
+        if not v:
+            raise HTTPException(status_code=404, detail="Vessel을 찾을 수 없습니다.")
+        s.delete(v)
+        s.commit()
+        return {"ok": True}
+    finally:
+        s.close()
+
+
+@app.get("/api/admin/settings/items", dependencies=[Depends(require_token)])
+def settings_items():
+    s = get_session()
+    try:
+        return [{
+            "id": i.id, "part_no": i.part_no or "",
+            "description": i.description or "", "maker": i.maker or "",
+            "origin": i.origin or "", "unit": i.unit or "PCS",
+            "hs_code": i.hs_code or "", "std_price": i.std_price or 0.0,
+        } for i in s.query(ItemMaster).order_by(ItemMaster.part_no).all()]
+    finally:
+        s.close()
+
+
+@app.post("/api/admin/settings/items", dependencies=[Depends(require_token)])
+def create_item(body: ItemMasterSave):
+    if not body.part_no.strip():
+        raise HTTPException(status_code=400, detail="Part No.를 입력하세요.")
+    s = get_session()
+    try:
+        item = ItemMaster(
+            part_no=body.part_no.strip(), description=body.description or "",
+            maker=body.maker or "", origin=body.origin or "",
+            unit=body.unit or "PCS", hs_code=body.hs_code or "",
+            std_price=body.std_price or 0.0,
+        )
+        s.add(item)
+        s.commit()
+        return {"ok": True, "id": item.id}
+    finally:
+        s.close()
+
+
+@app.put("/api/admin/settings/items/{row_id}", dependencies=[Depends(require_token)])
+def update_item(row_id: int, body: ItemMasterSave):
+    s = get_session()
+    try:
+        item = s.query(ItemMaster).filter_by(id=row_id).first()
+        if not item:
+            raise HTTPException(status_code=404, detail="Item을 찾을 수 없습니다.")
+        item.part_no = body.part_no.strip()
+        item.description = body.description or ""
+        item.maker = body.maker or ""
+        item.origin = body.origin or ""
+        item.unit = body.unit or "PCS"
+        item.hs_code = body.hs_code or ""
+        item.std_price = body.std_price or 0.0
+        s.commit()
+        return {"ok": True, "id": item.id}
+    finally:
+        s.close()
+
+
+@app.delete("/api/admin/settings/items/{row_id}", dependencies=[Depends(require_token)])
+def delete_item(row_id: int):
+    s = get_session()
+    try:
+        item = s.query(ItemMaster).filter_by(id=row_id).first()
+        if not item:
+            raise HTTPException(status_code=404, detail="Item을 찾을 수 없습니다.")
+        s.delete(item)
+        s.commit()
+        return {"ok": True}
+    finally:
+        s.close()
+
+
+@app.get("/api/admin/settings/company", dependencies=[Depends(require_token)])
+def settings_company():
+    return _read_company_profile()
+
+
+@app.put("/api/admin/settings/company", dependencies=[Depends(require_token)])
+def update_company(body: CompanyProfile):
+    data = body.dict()
+    _write_company_profile(data)
+    return {"ok": True}
+
+
+@app.get("/api/admin/settings/users", dependencies=[Depends(require_token)])
+def settings_users(user: dict = Depends(get_current_user)):
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+    s = get_session()
+    try:
+        return [{
+            "id": u.id, "username": u.username,
+            "email": u.email or "", "role": _enum_val(u.role),
+            "is_active": bool(u.is_active),
+        } for u in s.query(User).order_by(User.username).all()]
+    finally:
+        s.close()
+
+
+@app.post("/api/admin/settings/users", dependencies=[Depends(require_token)])
+def create_user(body: UserSave, user: dict = Depends(get_current_user)):
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+    if not body.username.strip() or not body.password:
+        raise HTTPException(status_code=400, detail="사용자명과 비밀번호를 입력하세요.")
+    s = get_session()
+    try:
+        u = User(
+            username=body.username.strip(),
+            email=body.email or "",
+            password_hash=bcrypt.hashpw(body.password.encode(), bcrypt.gensalt()).decode(),
+            role=UserRole(body.role),
+            is_active=body.is_active,
+        )
+        s.add(u)
+        s.commit()
+        return {"ok": True, "id": u.id}
+    finally:
+        s.close()
+
+
+@app.put("/api/admin/settings/users/{row_id}", dependencies=[Depends(require_token)])
+def update_user(row_id: int, body: UserSave, user: dict = Depends(get_current_user)):
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+    s = get_session()
+    try:
+        u = s.query(User).filter_by(id=row_id).first()
+        if not u:
+            raise HTTPException(status_code=404, detail="User를 찾을 수 없습니다.")
+        u.username = body.username.strip()
+        u.email = body.email or ""
+        u.role = UserRole(body.role)
+        u.is_active = body.is_active
+        if body.password:
+            u.password_hash = bcrypt.hashpw(body.password.encode(), bcrypt.gensalt()).decode()
+        s.commit()
+        return {"ok": True, "id": u.id}
+    finally:
+        s.close()
+
+
 # ── Write actions ─────────────────────────────────────────────────────────────
-_DOC_PREFIX = {"vendor_rfq": "VRFQ", "quotation": "QTN"}
+_DOC_PREFIX = {
+    "vendor_rfq": "VRFQ",
+    "quotation": "QTN",
+    "ci": "CI",
+    "pl": "PL",
+    "sa": "SA",
+    "tax": "TAX",
+}
 
 
 def _next_doc_no(session, doc_type: str, company_prefix: str = "KMS") -> str:
@@ -1596,12 +2559,186 @@ def _next_doc_no(session, doc_type: str, company_prefix: str = "KMS") -> str:
         if doc_type == "vendor_rfq" and \
                 session.query(VendorRFQ).filter_by(vrfq_no=no).first():
             continue
+        if doc_type == "ci" and \
+                session.query(CommercialInvoice).filter_by(ci_no=no).first():
+            continue
+        if doc_type == "pl" and \
+                session.query(PackingList).filter_by(pl_no=no).first():
+            continue
+        if doc_type == "sa" and \
+                session.query(ShippingAdvice).filter_by(sa_no=no).first():
+            continue
+        if doc_type == "tax" and \
+                session.query(TaxInvoiceData).filter_by(tax_no=no).first():
+            continue
         session.flush()
         return no
 
 
 class VendorRfqCreate(BaseModel):
     vendor_id: int
+
+
+class VendorRfqPreviewRequest(BaseModel):
+    vendor_ids: list[int]
+    lang: str = "en"
+    notes: str = ""
+
+
+@app.post("/api/admin/rfq/{rfq_id}/vendor-rfq-preview",
+          dependencies=[Depends(require_token)])
+def vendor_rfq_preview(rfq_id: int, body: VendorRfqPreviewRequest):
+    s = get_session()
+    try:
+        rfq = s.query(RFQ).filter_by(id=rfq_id).first()
+        if not rfq:
+            raise HTTPException(status_code=404, detail="RFQ를 찾을 수 없습니다.")
+        cust = s.query(Customer).filter_by(id=rfq.customer_id).first()
+        vessel = s.query(Vessel).filter_by(id=rfq.vessel_id).first() if rfq.vessel_id else None
+        lang = "ko" if body.lang == "ko" else "en"
+        previews = []
+        for vid in body.vendor_ids:
+            vendor = s.query(Vendor).filter_by(id=vid).first()
+            if not vendor:
+                continue
+            safe_vname = "".join(c for c in vendor.name if c.isalnum() or c in "._- ")[:40]
+            previews.append({
+                "vendor_id": vendor.id,
+                "vendor_name": vendor.name,
+                "to": vendor.email or "",
+                "subject": (
+                    f"[K-MARIS] 견적 요청 — {rfq.rfq_no} / {vessel.name if vessel else rfq.rfq_no}"
+                    if lang == "ko"
+                    else f"[K-MARIS] Inquiry — {rfq.rfq_no} / {vessel.name if vessel else rfq.rfq_no}"
+                ),
+                "body": _vendor_rfq_email_body(rfq, cust, vessel, vendor, body.notes, lang),
+                "xlsx_filename": f"{rfq.rfq_no}_VendorQuoteSheet_{safe_vname}.xlsx",
+            })
+        return {
+            "previews": previews,
+            "smtp_configured": bool(os.getenv("SMTP_USER") and os.getenv("SMTP_PASSWORD")),
+        }
+    finally:
+        s.close()
+
+
+@app.get("/api/admin/rfq/{rfq_id}/vendor-rfq-xlsx/{vendor_id}",
+         dependencies=[Depends(require_token)])
+def vendor_rfq_xlsx(rfq_id: int, vendor_id: int):
+    s = get_session()
+    try:
+        rfq = s.query(RFQ).filter_by(id=rfq_id).first()
+        if not rfq:
+            raise HTTPException(status_code=404, detail="RFQ를 찾을 수 없습니다.")
+        vendor = s.query(Vendor).filter_by(id=vendor_id).first()
+        if not vendor:
+            raise HTTPException(status_code=404, detail="Vendor를 찾을 수 없습니다.")
+        cust = s.query(Customer).filter_by(id=rfq.customer_id).first()
+        vessel = s.query(Vessel).filter_by(id=rfq.vessel_id).first() if rfq.vessel_id else None
+        xlsx = make_vendor_rfq_quote_xlsx(
+            rfq_no=rfq.rfq_no,
+            vessel_name=vessel.name if vessel else "—",
+            customer_name=cust.name if cust else "—",
+            enquiry_date=rfq.date or date.today().isoformat(),
+            vendor_name=vendor.name,
+            items=rfq.items or [],
+        )
+        safe_vname = "".join(c for c in vendor.name if c.isalnum() or c in "._- ")[:40]
+        filename = f"{rfq.rfq_no}_VendorQuoteSheet_{safe_vname}.xlsx"
+        return Response(
+            content=xlsx,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    finally:
+        s.close()
+
+
+class VendorRfqSendItem(BaseModel):
+    vendor_id: int
+    to: str = ""
+    subject: str
+    body: str
+
+
+class VendorRfqSendRequest(BaseModel):
+    items: list[VendorRfqSendItem]
+
+
+@app.post("/api/admin/rfq/{rfq_id}/vendor-rfq-send",
+          dependencies=[Depends(require_token)])
+def vendor_rfq_send(rfq_id: int, body: VendorRfqSendRequest):
+    s = get_session()
+    try:
+        rfq = s.query(RFQ).filter_by(id=rfq_id).first()
+        if not rfq:
+            raise HTTPException(status_code=404, detail="RFQ를 찾을 수 없습니다.")
+        cust = s.query(Customer).filter_by(id=rfq.customer_id).first()
+        vessel = s.query(Vessel).filter_by(id=rfq.vessel_id).first() if rfq.vessel_id else None
+        smtp_ok = bool(os.getenv("SMTP_USER") and os.getenv("SMTP_PASSWORD"))
+        saved = sent_ok = sent_fail = 0
+        result_rows = []
+        for item in body.items:
+            vendor = s.query(Vendor).filter_by(id=item.vendor_id).first()
+            if not vendor:
+                continue
+            vrfq_no = _next_doc_no(s, "vendor_rfq")
+            vrfq = VendorRFQ(
+                vrfq_no=vrfq_no,
+                rfq_id=rfq.id,
+                vendor_id=vendor.id,
+                sent_date=date.today().isoformat(),
+                sent_to_email=item.to or "",
+                status="발송됨",
+                items=rfq.items or [],
+            )
+            s.add(vrfq)
+            saved += 1
+
+            sent = False
+            if item.to and smtp_ok:
+                safe_vname = "".join(c for c in vendor.name if c.isalnum() or c in "._- ")[:40]
+                xlsx = make_vendor_rfq_quote_xlsx(
+                    rfq_no=rfq.rfq_no,
+                    vessel_name=vessel.name if vessel else "—",
+                    customer_name=cust.name if cust else "—",
+                    enquiry_date=rfq.date or date.today().isoformat(),
+                    vendor_name=vendor.name,
+                    items=rfq.items or [],
+                )
+                sent = send_email(
+                    to=item.to,
+                    subject=item.subject,
+                    body=item.body,
+                    attachments=[(
+                        f"{rfq.rfq_no}_VendorQuoteSheet_{safe_vname}.xlsx",
+                        xlsx,
+                    )],
+                )
+                if sent:
+                    vrfq.status = "이메일 발송완료"
+                    sent_ok += 1
+                else:
+                    sent_fail += 1
+
+            result_rows.append({
+                "vendor": vendor.name,
+                "vrfq_no": vrfq_no,
+                "email_sent": sent,
+            })
+
+        rfq.status = RFQStatus.SOURCING
+        s.commit()
+        return {
+            "ok": True,
+            "saved": saved,
+            "sent_ok": sent_ok,
+            "sent_fail": sent_fail,
+            "smtp_configured": smtp_ok,
+            "rows": result_rows,
+        }
+    finally:
+        s.close()
 
 
 @app.post("/api/admin/rfq/{rfq_id}/vendor-rfq",
@@ -1644,13 +2781,30 @@ def create_vendor_rfq(rfq_id: int, body: VendorRfqCreate):
 class VendorQuoteCreate(BaseModel):
     vendor_rfq_id: int
     vendor_quote_no: str
-    amount: float
+    amount: float | None = None
+    received_date: str | None = None
+    notes: str = ""
+    items: list[dict] | None = None
+
+
+@app.post("/api/admin/vendor-quote-parse", dependencies=[Depends(require_token)])
+def vendor_quote_parse(file: UploadFile = File(...)):
+    """Vendor 견적 응답 파일(PDF/XLSX) 파싱."""
+    name = file.filename or ""
+    if not name.lower().endswith((".pdf", ".xlsx", ".xls")):
+        raise HTTPException(status_code=400, detail="PDF 또는 Excel 파일만 업로드할 수 있습니다.")
+    try:
+        raw = file.file.read()
+        items = parse_vendor_quote_bytes(raw, name)
+        return {"items": items}
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Vendor 견적 파싱 실패: {exc}") from exc
 
 
 @app.post("/api/admin/rfq/{rfq_id}/vendor-quote",
           dependencies=[Depends(require_token)])
 def create_vendor_quote(rfq_id: int, body: VendorQuoteCreate):
-    """Vendor Quote 수신 등록. amount는 견적 총액(USD)으로 단일 품목에 기록한다."""
+    """Vendor Quote 수신 등록. 품목 단위 items가 있으면 그대로 저장한다."""
     s = get_session()
     try:
         vrfq = s.query(VendorRFQ).filter_by(id=body.vendor_rfq_id, rfq_id=rfq_id).first()
@@ -1659,13 +2813,23 @@ def create_vendor_quote(rfq_id: int, body: VendorQuoteCreate):
         if not body.vendor_quote_no.strip():
             raise HTTPException(status_code=400, detail="Vendor 견적번호를 입력하세요.")
 
+        items = body.items
+        if not items:
+            amount = float(body.amount or 0)
+            items = [{"cost_price": amount, "qty": 1, "amount": amount}]
+
         vq = VendorQuote(
             vendor_rfq_id=vrfq.id,
             vendor_quote_no=body.vendor_quote_no.strip(),
-            received_date=date.today().strftime("%Y-%m-%d"),
-            items=[{"cost_price": body.amount, "qty": 1, "amount": body.amount}],
+            received_date=body.received_date or date.today().strftime("%Y-%m-%d"),
+            items=items,
+            notes=body.notes or "",
         )
         s.add(vq)
+        vrfq.status = "견적 수신완료"
+        rfq = s.query(RFQ).filter_by(id=rfq_id).first()
+        if rfq and rfq.status == RFQStatus.SOURCING:
+            rfq.status = RFQStatus.QUOTING
         s.commit()
         return {"ok": True, "vendor_quote_no": vq.vendor_quote_no}
     finally:
@@ -1752,31 +2916,142 @@ def _next_quotation_no(session, company_prefix: str = "KMS") -> str:
 
 class CustomerQuoteCreate(BaseModel):
     currency: str = "USD"
-    amount: float
+    amount: float | None = None
+    items: list[dict] | None = None
+    valid_until: str | None = None
+    remarks: str = ""
 
 
 @app.post("/api/admin/rfq/{rfq_id}/customer-quote",
           dependencies=[Depends(require_token)])
 def create_customer_quote(rfq_id: int, body: CustomerQuoteCreate):
-    """Customer Quote 발신. 견적 총액을 단일 품목에 기록하고 상태는 발송완료."""
+    """Customer Quote 발신. 품목 단위 items가 있으면 그대로 저장한다."""
     s = get_session()
     try:
         rfq = s.query(RFQ).filter_by(id=rfq_id).first()
         if not rfq:
             raise HTTPException(status_code=404, detail="RFQ를 찾을 수 없습니다.")
 
+        items = body.items
+        if not items:
+            amount = float(body.amount or 0)
+            items = [{"amount": amount, "qty": 1, "unit_price": amount}]
+
         qtn_no = _next_quotation_no(s)
         qtn = Quotation(
             qtn_no=qtn_no,
             rfq_id=rfq.id,
             customer_id=rfq.customer_id,
+            vessel_id=rfq.vessel_id,
             currency=(body.currency or "USD"),
             status=QuotationStatus.SENT,
-            items=[{"amount": body.amount}],
+            valid_until=body.valid_until,
+            items=items,
+            terms={"remarks": body.remarks} if body.remarks else {},
             date=date.today().strftime("%Y-%m-%d"),
+            sent_date=date.today().strftime("%Y-%m-%d"),
         )
         s.add(qtn)
         s.commit()
-        return {"ok": True, "qtn_no": qtn_no}
+        return {"ok": True, "id": qtn.id, "qtn_no": qtn_no}
+    finally:
+        s.close()
+
+
+@app.get("/api/admin/quotations/{qtn_id}/pdf", dependencies=[Depends(require_token)])
+def quotation_pdf(qtn_id: int, doc_type: str = "quotation"):
+    s = get_session()
+    try:
+        qtn = s.query(Quotation).filter_by(id=qtn_id).first()
+        if not qtn:
+            raise HTTPException(status_code=404, detail="견적서를 찾을 수 없습니다.")
+        cust = s.query(Customer).filter_by(id=qtn.customer_id).first()
+        vessel = s.query(Vessel).filter_by(id=qtn.vessel_id).first() if qtn.vessel_id else None
+        payload = build_payload(
+            doc_no=qtn.qtn_no,
+            date=qtn.date or date.today().isoformat(),
+            customer=cust,
+            vessel=vessel,
+            items=qtn.items or [],
+            terms=qtn.terms or {},
+            currency=qtn.currency or "USD",
+            vat_rate=qtn.vat_rate or 0.0,
+            valid_until=qtn.valid_until or "",
+        )
+        pdf = generate_pdf(doc_type, payload)
+        return Response(
+            content=pdf,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{qtn.qtn_no}.pdf"'},
+        )
+    finally:
+        s.close()
+
+
+class QuotationEmailPreviewReq(BaseModel):
+    lang: str = "en"
+
+
+@app.post("/api/admin/quotations/{qtn_id}/email-preview", dependencies=[Depends(require_token)])
+def quotation_email_preview(qtn_id: int, body: QuotationEmailPreviewReq):
+    s = get_session()
+    try:
+        qtn = s.query(Quotation).filter_by(id=qtn_id).first()
+        if not qtn:
+            raise HTTPException(status_code=404, detail="견적서를 찾을 수 없습니다.")
+        cust = s.query(Customer).filter_by(id=qtn.customer_id).first()
+        lang = "kr" if body.lang in ("ko", "kr") else "en"
+        return {
+            "to": (cust.email if cust else "") or "",
+            "subject": quotation_email_subject(qtn.qtn_no, lang),
+            "body": quotation_email_body(cust.name if cust else "Customer", qtn.qtn_no, "", lang),
+            "smtp_configured": bool(os.getenv("SMTP_USER") and os.getenv("SMTP_PASSWORD")),
+        }
+    finally:
+        s.close()
+
+
+class QuotationSendReq(BaseModel):
+    to: str
+    subject: str
+    body: str
+    doc_type: str = "quotation"
+
+
+@app.post("/api/admin/quotations/{qtn_id}/send", dependencies=[Depends(require_token)])
+def quotation_send(qtn_id: int, body: QuotationSendReq):
+    s = get_session()
+    try:
+        qtn = s.query(Quotation).filter_by(id=qtn_id).first()
+        if not qtn:
+            raise HTTPException(status_code=404, detail="견적서를 찾을 수 없습니다.")
+        if not body.to.strip():
+            raise HTTPException(status_code=400, detail="수신자 이메일을 입력하세요.")
+        cust = s.query(Customer).filter_by(id=qtn.customer_id).first()
+        vessel = s.query(Vessel).filter_by(id=qtn.vessel_id).first() if qtn.vessel_id else None
+        payload = build_payload(
+            doc_no=qtn.qtn_no,
+            date=qtn.date or date.today().isoformat(),
+            customer=cust,
+            vessel=vessel,
+            items=qtn.items or [],
+            terms=qtn.terms or {},
+            currency=qtn.currency or "USD",
+            vat_rate=qtn.vat_rate or 0.0,
+            valid_until=qtn.valid_until or "",
+        )
+        pdf = generate_pdf(body.doc_type, payload)
+        sent = send_email(
+            to=body.to.strip(),
+            subject=body.subject,
+            body=body.body,
+            attachments=[(f"{qtn.qtn_no}.pdf", pdf)],
+        )
+        if not sent:
+            raise HTTPException(status_code=400, detail="이메일 발송 실패 — SMTP 설정 또는 서버 상태를 확인하세요.")
+        qtn.status = QuotationStatus.SENT
+        qtn.sent_date = date.today().isoformat()
+        s.commit()
+        return {"ok": True, "sent_date": qtn.sent_date}
     finally:
         s.close()
