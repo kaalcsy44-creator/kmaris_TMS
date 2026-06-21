@@ -1,46 +1,34 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import Link from "next/link";
 import { fetchRfqOverview, fetchCustomers } from "@/lib/api";
-import type { RfqRow, CustomerOption } from "@/lib/types";
+import { useCachedData, invalidateCache } from "@/lib/useCachedData";
 import RfqTable from "@/components/RfqTable";
 import RfqDetail from "@/components/RfqDetail";
 import RfqActionTabs from "@/components/RfqActionTabs";
 
 export default function RfqScreen() {
-  const [rows, setRows] = useState<RfqRow[]>([]);
-  const [customers, setCustomers] = useState<CustomerOption[]>([]);
   const [customerId, setCustomerId] = useState<number | "">("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
-  async function load() {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await fetchRfqOverview(
-        customerId === "" ? undefined : customerId
-      );
-      setRows(data.rows);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "불러오기 실패");
-    } finally {
-      setLoading(false);
-    }
-  }
+  const { data: customers = [] } = useCachedData("customers", fetchCustomers);
 
-  useEffect(() => {
-    fetchCustomers()
-      .then(setCustomers)
-      .catch(() => setCustomers([]));
-  }, []);
+  const {
+    data: overview,
+    error,
+    loading,
+    refresh,
+  } = useCachedData(`rfq:overview:${customerId}`, () =>
+    fetchRfqOverview(customerId === "" ? undefined : customerId)
+  );
+  const rows = overview?.rows ?? [];
 
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [customerId]);
+  // 액션(생성·수정·삭제) 후: 현재 RFQ 목록 강제 새로고침 + 대시보드 캐시 무효화
+  const load = useCallback(() => {
+    invalidateCache("dashboard");
+    return refresh();
+  }, [refresh]);
 
   return (
     <>
@@ -69,11 +57,11 @@ export default function RfqScreen() {
         </Link>
       </div>
 
-      {loading ? (
+      {loading && rows.length === 0 ? (
         <div className="state">불러오는 중…</div>
-      ) : error ? (
+      ) : error && rows.length === 0 ? (
         <div className="state error">
-          API 오류: {error}
+          API 오류: {error.message}
           <br />
           백엔드(admin_api.py)가 실행 중인지, 토큰이 맞는지 확인하세요.
         </div>

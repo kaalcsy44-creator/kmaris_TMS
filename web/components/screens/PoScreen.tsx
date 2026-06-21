@@ -13,9 +13,9 @@ import {
   vendorPoPdfUrl,
 } from "@/lib/api";
 import { getToken } from "@/lib/auth";
+import { useCachedData, invalidateCache } from "@/lib/useCachedData";
 import type {
   PoDetail as PoDetailT,
-  PoRow,
   PoWorkItem,
   PoWorkOptions,
   VendorPoPreview,
@@ -34,26 +34,29 @@ function Cell({ main, sub, num }: { main: string; sub?: string; num?: boolean })
 }
 
 export default function PoScreen() {
-  const [rows, setRows] = useState<PoRow[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
+  const {
+    data: overview,
+    error,
+    loading,
+    refresh,
+  } = useCachedData("po:overview", fetchPoOverview);
+  const rows = overview?.rows ?? [];
+
+  // 목록 갱신 시 선택 행이 사라졌으면 선택 해제
+  useEffect(() => {
+    if (!overview) return;
+    setSelectedId((cur) =>
+      cur && overview.rows.some((r) => r.id === cur) ? cur : null
+    );
+  }, [overview]);
+
+  // 새로고침 / 액션 후: P/O 목록 강제 새로고침 + 대시보드 캐시 무효화
   function load() {
-    setLoading(true);
-    setError(null);
-    fetchPoOverview()
-      .then((d) => {
-        setRows(d.rows);
-        setSelectedId((cur) =>
-          cur && d.rows.some((r) => r.id === cur) ? cur : null
-        );
-      })
-      .catch((e) => setError(e instanceof Error ? e.message : "오류"))
-      .finally(() => setLoading(false));
+    invalidateCache("dashboard");
+    return refresh();
   }
-
-  useEffect(load, []);
 
   return (
     <>
@@ -66,10 +69,10 @@ export default function PoScreen() {
         </span>
       </div>
 
-      {loading ? (
+      {loading && rows.length === 0 ? (
         <div className="state">불러오는 중…</div>
-      ) : error ? (
-        <div className="state error">API 오류: {error}</div>
+      ) : error && rows.length === 0 ? (
+        <div className="state error">API 오류: {error.message}</div>
       ) : rows.length === 0 ? (
         <div className="state">표시할 P/O가 없습니다.</div>
       ) : (

@@ -11,7 +11,8 @@ import {
   updateArRecord,
 } from "@/lib/api";
 import { getToken } from "@/lib/auth";
-import type { ArData, ArRow, PoWorkOptions } from "@/lib/types";
+import { useCachedData, invalidateCache } from "@/lib/useCachedData";
+import type { ArRow, PoWorkOptions } from "@/lib/types";
 import AppShell, { SectionHead } from "@/components/AppShell";
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -53,22 +54,21 @@ function money(n: number) {
 }
 
 function ArOverview() {
-  const [data, setData] = useState<ArData | null>(null);
-  const [options, setOptions] = useState<PoWorkOptions | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { data, error: loadError, refresh } = useCachedData(
+    "ar:overview",
+    fetchArOverview
+  );
+  const { data: options } = useCachedData("ar:workoptions", fetchPoWorkOptions);
+  const [error, setError] = useState<string | null>(null); // 수기 메시지(SOA 내보내기 등)
   const [status, setStatus] = useState("전체");
   const [currency, setCurrency] = useState("전체");
   const [selectedId, setSelectedId] = useState<number | null>(null);
 
   function load() {
     setError(null);
-    fetchArOverview()
-      .then(setData)
-      .catch((e) => setError(e instanceof Error ? e.message : "오류"));
-    fetchPoWorkOptions().then(setOptions).catch(() => setOptions(null));
+    invalidateCache("dashboard");
+    return refresh();
   }
-
-  useEffect(load, []);
 
   async function exportSoa() {
     const res = await fetch(arSoaXlsxUrl(status, currency), {
@@ -113,7 +113,9 @@ function ArOverview() {
     <>
       <SectionHead title="AR 관리" sub="Accounts Receivable / SOA · 청구 · 수금 · 연체" />
 
-      {error ? <div className="state error">API 오류: {error}</div> : null}
+      {error || (loadError && !data) ? (
+        <div className="state error">API 오류: {error ?? loadError?.message}</div>
+      ) : null}
       {!data ? (
         <div className="state">불러오는 중...</div>
       ) : (
@@ -180,7 +182,7 @@ function ArOverview() {
             </div>
           )}
 
-          <ArEditPanel selected={selected} options={options} onChanged={load} clearSelection={() => setSelectedId(null)} />
+          <ArEditPanel selected={selected} options={options ?? null} onChanged={load} clearSelection={() => setSelectedId(null)} />
         </>
       )}
     </>

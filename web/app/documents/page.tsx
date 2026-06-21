@@ -13,7 +13,8 @@ import {
   updateDocumentMilestone,
 } from "@/lib/api";
 import { getToken } from "@/lib/auth";
-import type { DocRow, DocumentDetail, DocumentWorkItem } from "@/lib/types";
+import type { DocumentDetail, DocumentWorkItem } from "@/lib/types";
+import { useCachedData, invalidateCache } from "@/lib/useCachedData";
 import AppShell, { SectionHead } from "@/components/AppShell";
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -45,24 +46,25 @@ function DocPill({ has, no, label }: { has: boolean; no: string; label: string }
 }
 
 function DocumentsOverview() {
-  const [rows, setRows] = useState<DocRow[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+
+  const {
+    data: overview,
+    error,
+    loading,
+    refresh,
+  } = useCachedData("documents:overview", fetchDocumentsOverview);
+  const rows = overview?.rows ?? [];
+
+  useEffect(() => {
+    if (!overview) return;
+    setSelectedId((prev) => prev ?? overview.rows[0]?.id ?? null);
+  }, [overview]);
 
   function load() {
-    setLoading(true);
-    setError(null);
-    fetchDocumentsOverview()
-      .then((d) => {
-        setRows(d.rows);
-        setSelectedId((prev) => prev ?? d.rows[0]?.id ?? null);
-      })
-      .catch((e) => setError(e instanceof Error ? e.message : "오류"))
-      .finally(() => setLoading(false));
+    invalidateCache("dashboard");
+    return refresh();
   }
-
-  useEffect(load, []);
 
   const selected = rows.find((r) => r.id === selectedId) ?? null;
 
@@ -79,10 +81,10 @@ function DocumentsOverview() {
         </span>
       </div>
 
-      {loading ? (
+      {loading && rows.length === 0 ? (
         <div className="state">불러오는 중...</div>
-      ) : error ? (
-        <div className="state error">API 오류: {error}</div>
+      ) : error && rows.length === 0 ? (
+        <div className="state error">API 오류: {error.message}</div>
       ) : rows.length === 0 ? (
         <div className="state">등록된 오더가 없습니다.</div>
       ) : (

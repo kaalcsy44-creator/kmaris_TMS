@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { fetchDashboard } from "@/lib/api";
-import type { DashboardData } from "@/lib/types";
+import { useCachedData } from "@/lib/useCachedData";
 
 function Stepper({ steps, current }: { steps: string[]; current: number }) {
   return (
@@ -37,18 +37,11 @@ function SubHead({ title, sub }: { title: string; sub?: string }) {
 type Tab = "summary" | "progress";
 
 export default function DashboardScreen() {
-  const [data, setData] = useState<DashboardData | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { data, error } = useCachedData("dashboard", fetchDashboard);
   const [tab, setTab] = useState<Tab>("summary");
 
-  useEffect(() => {
-    fetchDashboard()
-      .then(setData)
-      .catch((e) => setError(e instanceof Error ? e.message : "오류"));
-  }, []);
-
-  if (error) {
-    return <div className="state error">API 오류: {error}</div>;
+  if (error && !data) {
+    return <div className="state error">API 오류: {error.message}</div>;
   }
   if (!data) {
     return <div className="state">불러오는 중…</div>;
