@@ -25,11 +25,11 @@ Then remove Streamlit-only app code after every operational workflow is covered 
 | Auth/login | `Home.py`, utils auth | Done | Next login/JWT flow exists. |
 | Dashboard | `1_Dashboard.py` | Done | KPI/status overview exists in Next. |
 | RFQ overview table | `rfq_quotation.py` | Done | Merged overview table, selection, detail panel exist. |
-| RFQ detail | `2_CRFQ.py` | Partial | Detail exists; Streamlit level update/delete not fully ported. |
-| Customer RFQ registration | `2_CRFQ.py` | Partial | Basic registration and RFQ PDF OCR upload exist. Quick Customer/Vessel create and full notes/level/date parity still needed. |
+| RFQ detail | `2_CRFQ.py` | Done | Detail shows follow-up level/notes; inline Level update + delete-with-confirm (PUT /rfq/{id}/level, DELETE /rfq/{id}) ported. |
+| Customer RFQ registration | `2_CRFQ.py` | Done/Partial | Registration + RFQ PDF OCR + quick Customer/Vessel create (auto-open/prefill from OCR hints) now exist. Remaining: explicit RFQ date/level fields on the new-RFQ form. |
 | Vendor RFQ send | `3_VRFQ.py` | Done/Partial | Multi-vendor select, email preview, XLSX quote-sheet download, SMTP send + DB save now exist. Remaining parity: sent-history subview polish and production SMTP verification. |
 | Vendor Quote receive | `vendor_quote.py`, `3_VRFQ.py` | Done/Partial | PDF/XLSX response parser upload and item-level quote capture now exist. Remaining parity: richer parser feedback and uploaded-file edge-case verification. |
-| Customer Quotation create/send | `4_Quotation.py` | Done/Partial | Item/margin editor, PDF download, email preview/send now exist. Remaining parity: vendor quote import selector, PI document option polish, full terms editor. |
+| Customer Quotation create/send | `4_Quotation.py` | Done | Item/margin editor, PDF download, email preview/send, vendor-quote import selector (cost import + margin), full terms editor, and Proforma Invoice doc-type option now exist. |
 | P/O overview table | `5_PO.py` | Done | Checkbox selection, detail panel, tab shell exist. |
 | Customer P/O registration | `5_CustomerPO.py` | Partial | Form, quote/RFQ linkage, item editor, order PDF OCR upload exist. Missing quick Customer/Vessel create and status/date edit parity. |
 | Vendor P/O workflow | `5b_VendorPO.py` | Done/Partial | Create, email preview, PDF download, SMTP send, sent list exist. Vendor quote price import not fully ported. |
@@ -56,10 +56,11 @@ Do not remove Streamlit until:
 
 ## Recommended Implementation Order
 
-1. Finish remaining RFQ & Quotation polish.
-   - Vendor quote import selector for Customer Quotation.
-   - PI document option and full terms editor.
-   - Production SMTP/OCR verification.
+1. ~~Finish remaining RFQ & Quotation polish.~~ **DONE (2026-06-21)**
+   - ~~Vendor quote import selector for Customer Quotation.~~
+   - ~~PI document option and full terms editor.~~
+   - ~~RFQ detail level update/delete + quick Customer/Vessel create.~~
+   - Production SMTP/OCR verification → moved to Step 5 smoke checklist.
 2. Finish Documents polish.
    - Production SMTP smoke test.
    - Optional combined CI/PL/SA email package.
