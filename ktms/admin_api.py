@@ -880,26 +880,6 @@ def vendor_po_overview():
         s.close()
 
 
-# TEMP(pilot): one-off seeding of demo data into the prod DB. Token-guarded +
-# idempotent (seed_pilot skips existing rows). Remove once the DB is populated.
-@app.post("/api/admin/seed-pilot", dependencies=[Depends(require_token)])
-def seed_pilot_endpoint():
-    import seed_pilot
-    seed_pilot.main()
-    s = get_session()
-    try:
-        return {
-            "ok": True,
-            "rfqs": s.query(RFQ).count(),
-            "quotations": s.query(Quotation).count(),
-            "orders": s.query(Order).count(),
-            "purchase_orders": s.query(PurchaseOrder).count(),
-            "ar": s.query(ARRecord).count(),
-        }
-    finally:
-        s.close()
-
-
 @app.get("/api/admin/customers", dependencies=[Depends(require_token)])
 def customers():
     s = get_session()

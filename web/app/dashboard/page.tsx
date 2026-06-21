@@ -7,11 +7,11 @@ import AppShell, { SectionHead } from "@/components/AppShell";
 
 function Stepper({ steps, current }: { steps: string[]; current: number }) {
   return (
-    <div className="stepper">
+    <div className="hstepper">
       {steps.map((label, i) => {
         const state = i < current ? "done" : i === current ? "current" : "todo";
         return (
-          <div className={`step ${state}`} key={i}>
+          <div className={`hstep ${state}`} key={i}>
             <span className="dot">{i < current ? "✓" : i + 1}</span>
             <span className="lbl">{label}</span>
           </div>

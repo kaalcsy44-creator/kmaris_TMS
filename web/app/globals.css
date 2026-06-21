@@ -388,19 +388,19 @@ body {
   color: #8a95a5;
   margin-top: 1px;
 }
-.stepper {
+.hstepper {
   display: flex;
   align-items: flex-start;
   margin-top: 12px;
 }
-.stepper .step {
+.hstepper .hstep {
   flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   position: relative;
 }
-.stepper .step::before {
+.hstepper .hstep::before {
   content: "";
   position: absolute;
   top: 9px;
@@ -409,14 +409,14 @@ body {
   height: 2px;
   background: #dde5ef;
 }
-.stepper .step:first-child::before {
+.hstepper .hstep:first-child::before {
   display: none;
 }
-.stepper .step.done::before,
-.stepper .step.current::before {
+.hstepper .hstep.done::before,
+.hstepper .hstep.current::before {
   background: #1a7a4a;
 }
-.stepper .step .dot {
+.hstepper .hstep .dot {
   width: 19px;
   height: 19px;
   border-radius: 50%;
@@ -429,14 +429,14 @@ body {
   justify-content: center;
   z-index: 1;
 }
-.stepper .step.done .dot {
+.hstepper .hstep.done .dot {
   background: #1a7a4a;
 }
-.stepper .step.current .dot {
+.hstepper .hstep.current .dot {
   background: #0055a8;
   box-shadow: 0 0 0 3px rgba(0, 85, 168, 0.18);
 }
-.stepper .step .lbl {
+.hstepper .hstep .lbl {
   font-size: 10px;
   color: #6b7280;
   margin-top: 6px;
@@ -444,7 +444,7 @@ body {
   line-height: 1.2;
   padding: 0 2px;
 }
-.stepper .step.current .lbl {
+.hstepper .hstep.current .lbl {
   color: #0055a8;
   font-weight: 700;
 }
