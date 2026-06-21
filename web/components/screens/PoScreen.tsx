@@ -129,12 +129,18 @@ export default function PoScreen() {
                       ) : null}
                       <div className="s">품목 {r.item_count}</div>
                     </td>
-                    <Cell main={r.kmaris_rfq_no} />
+                    <Cell
+                      main={r.kmaris_rfq_no}
+                      sub={r.vrfq_at ? `발신: ${r.vrfq_at}` : undefined}
+                    />
                     <Cell
                       main={r.customer_po_no}
                       sub={r.customer_po_at ? `수신: ${r.customer_po_at}` : undefined}
                     />
-                    <Cell main={r.ord_no} />
+                    <Cell
+                      main={r.ord_no}
+                      sub={r.vendor_po_at ? `발신: ${r.vendor_po_at}` : undefined}
+                    />
                     <Cell main={r.vendor} />
                     <Cell main={r.vendor_email} />
                     <td className="status">

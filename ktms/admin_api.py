@@ -813,9 +813,15 @@ def po_overview():
                     f"  (외 {len(vpos) - 1}건)" if len(vpos) > 1 else "")
                 vendor_nm = vendor_names.get(vp0.vendor_id, "—")
                 vendor_email = vp0.sent_to_email or "—"
-                vendor_po_at = vp0.sent_date or "미발신"
+                # Vendor P/O 발신 일시 (시·분) — created_at 기준, 앱 전반 규칙과 동일
+                vendor_po_at = _kst(vp0.created_at)
             else:
                 vendor_po_no = vendor_nm = vendor_email = vendor_po_at = ""
+
+            # Vendor RFQ 발신 일시 (시·분) — Vendor RFQ를 보낸 거래에서만
+            vrfqs = (s.query(VendorRFQ).filter_by(rfq_id=r.id)
+                     .order_by(VendorRFQ.id.desc()).all())
+            vrfq_at = _kst(vrfqs[0].created_at) if vrfqs else ""
 
             stage = _pipeline_stage(s, r.id)
             rows.append({
@@ -823,10 +829,12 @@ def po_overview():
                 "customer_rfq_no": r.customer_rfq_no or "",
                 "crfq_at": _kst(r.created_at),
                 "kmaris_rfq_no": r.rfq_no,
+                "vrfq_at": vrfq_at,
                 "customer": cust_names.get(r.customer_id, "—"),
                 "vessel": vessel_names.get(r.vessel_id, "") if r.vessel_id else "",
                 "customer_po_no": (o.po_no if o else "") or "",
-                "customer_po_at": (o.date if o else "") or "",
+                # 고객 P/O 수신 일시 (시·분) — 시스템 수신(created_at) 기준
+                "customer_po_at": _kst(o.created_at) if o else "",
                 "ord_no": (o.ord_no if o else "") or "",
                 "item_count": len((o.items if o else None) or r.items or []),
                 "vendor_po_no": vendor_po_no,
