@@ -46,8 +46,7 @@ export default function RfqTable({
             <th className="grp">1. Customer RFQ 수신</th>
             <th className="grp" colSpan={2}>2. Vendor RFQ 발신</th>
             <th className="grp" colSpan={2}>3. Vendor Quot. 수신</th>
-            <th rowSpan={2}>4. Customer Quot. 발신</th>
-            <th className="num" rowSpan={2}>Customer 견적 금액</th>
+            <th className="grp" colSpan={2}>4. Customer Quot. 발신</th>
             <th rowSpan={2}>상태</th>
           </tr>
           <tr className="grp-sub">
@@ -56,6 +55,8 @@ export default function RfqTable({
             <th>Vendor</th>
             <th>Vendor Quot. No.</th>
             <th className="num">Vendor 견적 금액</th>
+            <th>K-Maris Quot. No.</th>
+            <th className="num">견적 금액</th>
           </tr>
         </thead>
         <tbody>
