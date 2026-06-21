@@ -61,11 +61,11 @@ export default function PoScreen() {
             <thead>
               <tr>
                 <th className="chk"></th>
-                <th>고객 RFQ No.</th>
+                <th>K-Maris RFQ No.</th>
                 <th>Customer</th>
                 <th>선박</th>
                 <th>고객 P/O No.</th>
-                <th>오더 No.</th>
+                <th>K-Maris ORD No.</th>
                 <th className="num">품목수</th>
                 <th>Vendor P/O No.</th>
                 <th>Vendor</th>
