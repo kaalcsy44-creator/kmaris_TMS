@@ -40,10 +40,7 @@ export default function RfqTable({
         <thead>
           <tr>
             <th className="chk" rowSpan={2}></th>
-            <th rowSpan={2}>Customer</th>
-            <th rowSpan={2}>선박</th>
-            <th className="num" rowSpan={2}>품목수</th>
-            <th className="grp">1. Customer RFQ 수신</th>
+            <th className="grp" colSpan={4}>1. Customer RFQ 수신</th>
             <th className="grp" colSpan={2}>2. Vendor RFQ 발신</th>
             <th className="grp" colSpan={2}>3. Vendor Quot. 수신</th>
             <th className="grp" colSpan={2}>4. Customer Quot. 발신</th>
@@ -51,6 +48,9 @@ export default function RfqTable({
           </tr>
           <tr className="grp-sub">
             <th>고객 RFQ No.</th>
+            <th>Customer</th>
+            <th>선박</th>
+            <th className="num">품목수</th>
             <th>K-Maris RFQ No.</th>
             <th>Vendor</th>
             <th>Vendor Quot. No.</th>
@@ -76,10 +76,10 @@ export default function RfqTable({
                     onClick={(e) => e.stopPropagation()}
                   />
                 </td>
+                <Cell main={r.customer_rfq_no} sub={r.crfq_at} />
                 <Cell main={r.customer} />
                 <Cell main={r.vessel} />
                 <Cell main={String(r.item_count)} num />
-                <Cell main={r.customer_rfq_no} sub={r.crfq_at} />
                 <Cell main={r.vrfq_kmaris_no} sub={r.vrfq_at} />
                 <Cell main={r.vrfq_vendors} />
                 <Cell main={r.vquote_no} sub={r.vquote_at} />
