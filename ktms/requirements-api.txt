@@ -1,10 +1,12 @@
-# Lean dependency set for the admin_api (FastAPI) deployment on Render.
-# The full requirements.txt (streamlit, pandas, reportlab, pdfplumber, ...) is
-# only needed by the desktop Streamlit app — NOT by this API. Keeping this
-# minimal makes the Render build small and fast.
+# Dependency set for the admin_api (FastAPI) deployment on Render.
+# Excludes streamlit/pandas (desktop Streamlit app only) but MUST include every
+# package the API import graph touches — admin_api.py imports services.pdf_svc
+# (PDF generation) and services.pdf_parser (OCR), which pull reportlab,
+# pdfplumber, anthropic, openpyxl. Missing any of these = the API won't start.
 #
-# Verified import graph: admin_api.py / init_db.py / db.models / db.engine
-# pull only the packages below.
+# Verified import graph: admin_api.py / init_db.py / db.* / services.{pdf_svc,
+# kmaris_docs, pdf_parser, email_svc, vendor_xlsx, quote_response_parser,
+# tracking_status} pull the packages below.
 fastapi>=0.111.0
 uvicorn[standard]>=0.29.0
 sqlalchemy>=2.0.0
@@ -15,3 +17,7 @@ python-multipart>=0.0.9
 pdfplumber>=0.11.0
 anthropic>=0.40.0
 openpyxl>=3.1.0
+# admin_api imports services.pdf_svc -> services.kmaris_docs which needs
+# reportlab for Quotation/CI/PL/SA/Vendor-PO PDF generation. Required at import
+# time, so the API will not start without it.
+reportlab>=4.0.0
