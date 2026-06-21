@@ -402,6 +402,18 @@ export function updateSettingsUser(
 ): Promise<{ ok: boolean; id: number }> {
   return put(`/api/admin/settings/users/${id}`, body);
 }
+export function deleteSettingsUser(id: number): Promise<{ ok: boolean }> {
+  return del(`/api/admin/settings/users/${id}`);
+}
+export function changeMyPassword(
+  oldPassword: string,
+  newPassword: string
+): Promise<{ ok: boolean }> {
+  return post("/api/admin/me/password", {
+    old_password: oldPassword,
+    new_password: newPassword,
+  });
+}
 
 export function recordArPayment(
   arId: number,

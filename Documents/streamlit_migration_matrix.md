@@ -35,7 +35,7 @@ Then remove Streamlit-only app code after every operational workflow is covered 
 | Vendor P/O workflow | `5b_VendorPO.py` | Done/Partial | Create, email preview, PDF download, SMTP send, sent list exist. Vendor quote price import not fully ported. |
 | Documents overview/workflow | `6_Documents.py` | Done | Overview, row selection, milestones, CI/PL/SA/Tax creation, CI/PL/SA PDF download, Tax XLSX download, SA SMTP send, Tax-to-AR creation, CI/PL/SA missing-item validation, and an explicit acknowledgement gate before SA send now exist. Optional: combined CI/PL/SA email package; production SMTP verification → Step 5. |
 | AR overview/payment | `7_AR.py` | Done/Partial | Overview, status/currency filters, inline payment, manual AR add, edit, delete now exist. Remaining parity: SOA export/reporting and production payment smoke tests. |
-| Settings master data | `8_Settings.py` | Done/Partial | Company profile, user list/create/update, Customer/Vendor/Vessel/Item Master list/create/update/delete now exist. Remaining parity: user delete/own password-change UX and production permission smoke tests. |
+| Settings master data | `8_Settings.py` | Done | Company profile, user list/create/update/delete (self + last-admin guarded) + disable via is_active, own password-change flow, and Customer/Vendor/Vessel/Item Master CRUD now exist. Remaining: production admin permission smoke test → Step 5. |
 | PDF/OCR services | `services/pdf_parser.py` | Partial | RFQ and Order OCR API exists. Need production Render deploy and `ANTHROPIC_API_KEY` verification. |
 | PDF document generation | `services/pdf_svc.py`, `kmaris_docs.py` | Done/Partial | Vendor P/O, Quotation, CI, PL, SA PDF APIs and Tax XLSX API exist. Remaining parity: PI option polish and production smoke tests. |
 | Email sending | `services/email_svc.py` | Done/Partial | Vendor RFQ, Quotation, Vendor P/O, and SA send APIs exist. Remaining parity: production SMTP verification and combined CI/PL/SA attachment package options. |
@@ -66,9 +66,11 @@ Do not remove Streamlit until:
      CI-vs-order missing-item check + explicit acknowledgement.
    - Optional combined CI/PL/SA email package — deferred (nice-to-have).
    - Production SMTP smoke test → Step 5.
-3. Finish Settings polish.
-   - User delete/disable UX and own password-change flow.
-   - Production admin permission smoke test.
+3. ~~Finish Settings polish.~~ **DONE (2026-06-21)**
+   - ~~User delete/disable UX and own password-change flow.~~ DELETE
+     /settings/users/{id} (self + last-admin guarded), is_active disable,
+     POST /me/password self-service change.
+   - Production admin permission smoke test → Step 5.
 4. Finish AR polish.
    - SOA export/reporting.
    - Production payment/update smoke test.

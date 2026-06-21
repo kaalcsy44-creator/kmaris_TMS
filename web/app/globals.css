@@ -1082,6 +1082,11 @@ table.rfq tbody tr:last-child td {
   padding: 14px;
 }
 
+.subpanel {
+  border-top: 1px solid #e6eaf0;
+  padding-top: 16px;
+}
+
 .detail-cols {
   display: grid;
   grid-template-columns: 280px 1fr;

@@ -2536,6 +2536,59 @@ def update_user(row_id: int, body: UserSave, user: dict = Depends(get_current_us
         s.close()
 
 
+@app.delete("/api/admin/settings/users/{row_id}", dependencies=[Depends(require_token)])
+def delete_user(row_id: int, user: dict = Depends(get_current_user)):
+    """사용자 삭제(admin 전용). 본인 계정과 마지막 활성 관리자 계정은 lockout
+    방지를 위해 삭제를 막는다. 비활성화는 update_user 의 is_active 로 가능."""
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+    if row_id == user.get("id"):
+        raise HTTPException(status_code=400, detail="본인 계정은 삭제할 수 없습니다.")
+    s = get_session()
+    try:
+        u = s.query(User).filter_by(id=row_id).first()
+        if not u:
+            raise HTTPException(status_code=404, detail="User를 찾을 수 없습니다.")
+        if _enum_val(u.role) == "admin" and u.is_active:
+            active_admins = (s.query(User)
+                             .filter(User.role == UserRole.ADMIN, User.is_active.is_(True))
+                             .count())
+            if active_admins <= 1:
+                raise HTTPException(status_code=400,
+                    detail="마지막 활성 관리자 계정은 삭제할 수 없습니다.")
+        s.delete(u)
+        s.commit()
+        return {"ok": True}
+    finally:
+        s.close()
+
+
+class PasswordChangeReq(BaseModel):
+    old_password: str
+    new_password: str
+
+
+@app.post("/api/admin/me/password", dependencies=[Depends(require_token)])
+def change_my_password(body: PasswordChangeReq, user: dict = Depends(get_current_user)):
+    """로그인한 본인의 비밀번호 변경 — 현재 비밀번호 확인 후 교체
+    (Streamlit 8_Settings.py 비밀번호 변경 패리티)."""
+    if not body.new_password or len(body.new_password) < 4:
+        raise HTTPException(status_code=400, detail="새 비밀번호는 4자 이상이어야 합니다.")
+    uid = user.get("id")
+    s = get_session()
+    try:
+        u = s.query(User).filter_by(id=uid).first()
+        if not u:
+            raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+        if not bcrypt.checkpw(body.old_password.encode(), u.password_hash.encode()):
+            raise HTTPException(status_code=400, detail="현재 비밀번호가 올바르지 않습니다.")
+        u.password_hash = bcrypt.hashpw(body.new_password.encode(), bcrypt.gensalt()).decode()
+        s.commit()
+        return {"ok": True}
+    finally:
+        s.close()
+
+
 # ── Write actions ─────────────────────────────────────────────────────────────
 _DOC_PREFIX = {
     "vendor_rfq": "VRFQ",

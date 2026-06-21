@@ -8,8 +8,10 @@ import {
   createSettingsUser,
   createSettingsVendor,
   createSettingsVessel,
+  changeMyPassword,
   deleteSettingsCustomer,
   deleteSettingsItem,
+  deleteSettingsUser,
   deleteSettingsVendor,
   deleteSettingsVessel,
   fetchCompanyProfile,
@@ -35,6 +37,7 @@ import type {
   SettingsVendor,
   SettingsVessel,
 } from "@/lib/types";
+import { getUser } from "@/lib/auth";
 import AppShell, { SectionHead } from "@/components/AppShell";
 
 type Tab = "company" | "users" | "customers" | "vendors" | "vessels" | "items";
@@ -161,7 +164,11 @@ function UsersTab() {
   const [selected, setSelected] = useState<SettingsUser | null>(null);
   const [password, setPassword] = useState("");
   const [err, setErr] = useState("");
+  const [msg, setMsg] = useState("");
+  const [confirmDel, setConfirmDel] = useState(false);
   const form = selected ?? { id: 0, username: "", email: "", role: "sales", is_active: true };
+  const me = getUser();
+  const isSelf = !!form.id && me?.id === form.id;
 
   function load() {
     fetchSettingsUsers().then(setRows).catch((e) => setErr(e instanceof Error ? e.message : "사용자 조회 실패"));
@@ -171,15 +178,32 @@ function UsersTab() {
 
   async function save() {
     setErr("");
+    setMsg("");
     try {
       const body = { username: form.username, email: form.email, role: form.role, is_active: form.is_active, password };
       if (form.id) await updateSettingsUser(form.id, body);
       else await createSettingsUser(body);
       setSelected(null);
       setPassword("");
+      setConfirmDel(false);
       load();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "저장 실패");
+    }
+  }
+
+  async function remove() {
+    if (!form.id) return;
+    setErr("");
+    setMsg("");
+    try {
+      await deleteSettingsUser(form.id);
+      setSelected(null);
+      setPassword("");
+      setConfirmDel(false);
+      load();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "삭제 실패");
     }
   }
 
@@ -197,6 +221,7 @@ function UsersTab() {
         onSelect={(r) => {
           setSelected(r);
           setPassword("");
+          setConfirmDel(false);
         }}
       />
       <div className="form-grid">
@@ -213,17 +238,79 @@ function UsersTab() {
         <TextField label={form.id ? "새 비밀번호 (변경 시)" : "비밀번호 *"} value={password} onChange={setPassword} type="password" />
         <label className="check-inline">
           <input type="checkbox" checked={form.is_active} onChange={(e) => setSelected({ ...form, is_active: e.target.checked })} />
-          활성
+          활성 (비활성화 시 로그인 차단)
         </label>
       </div>
       <div className="form-actions">
         <button className="btn primary" onClick={save} disabled={!form.username.trim() || (!form.id && !password)}>
           {form.id ? "사용자 수정" : "사용자 추가"}
         </button>
-        <button className="btn" onClick={() => { setSelected(null); setPassword(""); }}>
+        <button className="btn" onClick={() => { setSelected(null); setPassword(""); setConfirmDel(false); }}>
           신규 입력
         </button>
+        {form.id && !isSelf ? (
+          !confirmDel ? (
+            <button className="btn danger" onClick={() => setConfirmDel(true)}>
+              사용자 삭제
+            </button>
+          ) : (
+            <>
+              <span className="action-err">정말 삭제하시겠습니까?</span>
+              <button className="btn danger" onClick={remove}>확인 삭제</button>
+              <button className="btn" onClick={() => setConfirmDel(false)}>취소</button>
+            </>
+          )
+        ) : null}
+        {isSelf ? <span className="hint-inline">본인 계정은 비활성화/비밀번호 변경만 가능합니다.</span> : null}
         {err ? <span className="action-err">{err}</span> : null}
+        {msg ? <span className="action-ok">{msg}</span> : null}
+      </div>
+
+      <MyPasswordChange />
+    </div>
+  );
+}
+
+function MyPasswordChange() {
+  const [oldPw, setOldPw] = useState("");
+  const [newPw, setNewPw] = useState("");
+  const [newPw2, setNewPw2] = useState("");
+  const [err, setErr] = useState("");
+  const [msg, setMsg] = useState("");
+  const me = getUser();
+
+  async function submit() {
+    setErr("");
+    setMsg("");
+    if (newPw !== newPw2) {
+      setErr("새 비밀번호가 일치하지 않습니다.");
+      return;
+    }
+    try {
+      await changeMyPassword(oldPw, newPw);
+      setMsg("비밀번호가 변경되었습니다.");
+      setOldPw("");
+      setNewPw("");
+      setNewPw2("");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "변경 실패");
+    }
+  }
+
+  return (
+    <div className="subpanel" style={{ marginTop: 20 }}>
+      <div className="sub-h">내 비밀번호 변경{me ? ` — ${me.username}` : ""}</div>
+      <div className="form-grid">
+        <TextField label="현재 비밀번호" value={oldPw} onChange={setOldPw} type="password" />
+        <TextField label="새 비밀번호" value={newPw} onChange={setNewPw} type="password" />
+        <TextField label="새 비밀번호 확인" value={newPw2} onChange={setNewPw2} type="password" />
+      </div>
+      <div className="form-actions">
+        <button className="btn primary" onClick={submit} disabled={!oldPw || !newPw || !newPw2}>
+          비밀번호 변경
+        </button>
+        {err ? <span className="action-err">{err}</span> : null}
+        {msg ? <span className="action-ok">{msg}</span> : null}
       </div>
     </div>
   );
