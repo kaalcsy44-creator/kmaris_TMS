@@ -415,6 +415,14 @@ export function changeMyPassword(
   });
 }
 
+export function arSoaXlsxUrl(status?: string, currency?: string): string {
+  const p = new URLSearchParams();
+  if (status && status !== "전체") p.set("status", status);
+  if (currency && currency !== "전체") p.set("currency", currency);
+  const qs = p.toString();
+  return `${API_BASE}/api/admin/ar/soa.xlsx${qs ? `?${qs}` : ""}`;
+}
+
 export function recordArPayment(
   arId: number,
   amount: number,

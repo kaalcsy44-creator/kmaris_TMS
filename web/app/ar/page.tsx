@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
+  arSoaXlsxUrl,
   createArRecord,
   deleteArRecord,
   fetchArOverview,
@@ -9,6 +10,7 @@ import {
   recordArPayment,
   updateArRecord,
 } from "@/lib/api";
+import { getToken } from "@/lib/auth";
 import type { ArData, ArRow, PoWorkOptions } from "@/lib/types";
 import AppShell, { SectionHead } from "@/components/AppShell";
 
@@ -68,6 +70,23 @@ function ArOverview() {
 
   useEffect(load, []);
 
+  async function exportSoa() {
+    const res = await fetch(arSoaXlsxUrl(status, currency), {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    });
+    if (!res.ok) {
+      setError("SOA 내보내기 실패");
+      return;
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `SOA_${today()}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   const statuses = useMemo(() => (data ? Array.from(new Set(data.rows.map((r) => r.status))) : []), [data]);
   const currencies = useMemo(() => (data ? Array.from(new Set(data.rows.map((r) => r.currency))) : []), [data]);
   const rows = useMemo(
@@ -115,6 +134,9 @@ function ArOverview() {
               </select>
             </div>
             <button className="btn" onClick={load}>새로고침</button>
+            <button className="btn" onClick={exportSoa} disabled={!data || data.rows.length === 0} style={{ marginLeft: "auto" }}>
+              SOA 내보내기 (XLSX)
+            </button>
           </div>
 
           <div className="kpi-row">

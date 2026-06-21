@@ -1362,6 +1362,85 @@ def ar_overview():
         s.close()
 
 
+@app.get("/api/admin/ar/soa.xlsx", dependencies=[Depends(require_token)])
+def ar_soa_xlsx(status: str | None = None, currency: str | None = None):
+    """Statement of Account (SOA) XLSX 내보내기 — AR 현황을 엑셀로 추출한다.
+    AR 페이지의 status/currency 필터를 그대로 적용하고 통화별 합계를 덧붙인다."""
+    import io
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill
+
+    s = get_session()
+    try:
+        cust_names = {c.id: c.name for c in s.query(Customer).all()}
+        ord_map = {o.id: o for o in s.query(Order).all()}
+        today_str = date.today().isoformat()
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "SOA"
+        ws.append(["Statement of Account (Accounts Receivable)"])
+        ws.append([f"Generated: {today_str}"])
+        active_filters = []
+        if status:
+            active_filters.append(f"Status={status}")
+        if currency:
+            active_filters.append(f"Currency={currency}")
+        ws.append(["Filter: " + (", ".join(active_filters) if active_filters else "All")])
+        ws.append([])
+
+        headers = ["CI No.", "Customer", "Order", "Currency", "Invoice",
+                   "Paid", "Outstanding", "Due Date", "Status"]
+        ws.append(headers)
+        head_row = ws.max_row
+        for c in range(1, len(headers) + 1):
+            cell = ws.cell(row=head_row, column=c)
+            cell.font = Font(bold=True, color="FFFFFF")
+            cell.fill = PatternFill("solid", fgColor="1F3A5F")
+
+        totals: dict[str, list[float]] = {}
+        for r in s.query(ARRecord).order_by(ARRecord.id.desc()).all():
+            o = ord_map.get(r.order_id)
+            cust = cust_names.get(o.customer_id, "—") if o else "—"
+            cur = r.currency or "USD"
+            overdue = (r.status != ARStatus.PAID and r.due_date and r.due_date < today_str)
+            st_label = "연체" if overdue else _enum_val(r.status)
+            if status and status not in (st_label, _enum_val(r.status)):
+                continue
+            if currency and cur != currency:
+                continue
+            invoice = round(r.invoice_amount or 0, 2)
+            paid = round(r.paid_amount or 0, 2)
+            outstanding = round(invoice - paid, 2)
+            ws.append([r.ci_no or "—", cust, o.ord_no if o else "—", cur,
+                       invoice, paid, outstanding, r.due_date or "—", st_label])
+            t = totals.setdefault(cur, [0.0, 0.0, 0.0])
+            t[0] += invoice
+            t[1] += paid
+            t[2] += outstanding
+
+        ws.append([])
+        for cur, (inv, paid, out) in sorted(totals.items()):
+            ws.append([f"TOTAL ({cur})", "", "", cur, round(inv, 2),
+                       round(paid, 2), round(out, 2), "", ""])
+            total_row = ws.max_row
+            for c in range(1, len(headers) + 1):
+                ws.cell(row=total_row, column=c).font = Font(bold=True)
+
+        for col, width in zip("ABCDEFGHI", [16, 22, 14, 9, 14, 14, 14, 12, 10]):
+            ws.column_dimensions[col].width = width
+
+        buf = io.BytesIO()
+        wb.save(buf)
+        return Response(
+            content=buf.getvalue(),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f'attachment; filename="SOA_{today_str}.xlsx"'},
+        )
+    finally:
+        s.close()
+
+
 class ARPayment(BaseModel):
     amount: float
     due_date: str | None = None

@@ -34,7 +34,7 @@ Then remove Streamlit-only app code after every operational workflow is covered 
 | Customer P/O registration | `5_CustomerPO.py` | Partial | Form, quote/RFQ linkage, item editor, order PDF OCR upload exist. Missing quick Customer/Vessel create and status/date edit parity. |
 | Vendor P/O workflow | `5b_VendorPO.py` | Done/Partial | Create, email preview, PDF download, SMTP send, sent list exist. Vendor quote price import not fully ported. |
 | Documents overview/workflow | `6_Documents.py` | Done | Overview, row selection, milestones, CI/PL/SA/Tax creation, CI/PL/SA PDF download, Tax XLSX download, SA SMTP send, Tax-to-AR creation, CI/PL/SA missing-item validation, and an explicit acknowledgement gate before SA send now exist. Optional: combined CI/PL/SA email package; production SMTP verification → Step 5. |
-| AR overview/payment | `7_AR.py` | Done/Partial | Overview, status/currency filters, inline payment, manual AR add, edit, delete now exist. Remaining parity: SOA export/reporting and production payment smoke tests. |
+| AR overview/payment | `7_AR.py` | Done | Overview, status/currency filters, inline payment, manual AR add/edit/delete, and SOA XLSX export (filter-aware, per-currency totals) now exist. Streamlit had no export; this exceeds parity. Remaining: production payment smoke test → Step 5. |
 | Settings master data | `8_Settings.py` | Done | Company profile, user list/create/update/delete (self + last-admin guarded) + disable via is_active, own password-change flow, and Customer/Vendor/Vessel/Item Master CRUD now exist. Remaining: production admin permission smoke test → Step 5. |
 | PDF/OCR services | `services/pdf_parser.py` | Partial | RFQ and Order OCR API exists. Need production Render deploy and `ANTHROPIC_API_KEY` verification. |
 | PDF document generation | `services/pdf_svc.py`, `kmaris_docs.py` | Done/Partial | Vendor P/O, Quotation, CI, PL, SA PDF APIs and Tax XLSX API exist. Remaining parity: PI option polish and production smoke tests. |
@@ -71,8 +71,9 @@ Do not remove Streamlit until:
      /settings/users/{id} (self + last-admin guarded), is_active disable,
      POST /me/password self-service change.
    - Production admin permission smoke test → Step 5.
-4. Finish AR polish.
-   - SOA export/reporting.
-   - Production payment/update smoke test.
+4. ~~Finish AR polish.~~ **DONE (2026-06-21)**
+   - ~~SOA export/reporting.~~ GET /api/admin/ar/soa.xlsx (filter-aware,
+     per-currency totals).
+   - Production payment/update smoke test → Step 5.
 5. Add production smoke checklist.
 6. Remove Streamlit files and dependencies.
