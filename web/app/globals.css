@@ -283,6 +283,27 @@ body {
   border-bottom-color: var(--blue);
 }
 
+/* Dashboard 섹션 소제목 — 탭(대제목) 아래 한 단계 낮은 회색 라벨 */
+.dash-subhead {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 26px 0 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+}
+.dash-subhead .t {
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+}
+.dash-subhead .s {
+  font-size: 11px;
+  font-weight: 500;
+  color: #aab4c2;
+}
+
 /* ── Dashboard KPI chips + alert cards ────────────────────────────────── */
 .kc-foot {
   margin-top: 8px;

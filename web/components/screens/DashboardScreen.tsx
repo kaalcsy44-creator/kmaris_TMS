@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { fetchDashboard } from "@/lib/api";
 import type { DashboardData } from "@/lib/types";
-import { SectionHead } from "@/components/AppShell";
 
 function Stepper({ steps, current }: { steps: string[]; current: number }) {
   return (
@@ -25,6 +24,16 @@ function num(n: number) {
   return n.toLocaleString();
 }
 
+/** 탭(대제목) 아래 한 단계 낮은 섹션 소제목 (작은 회색 라벨). */
+function SubHead({ title, sub }: { title: string; sub?: string }) {
+  return (
+    <div className="dash-subhead">
+      <span className="t">{title}</span>
+      {sub ? <span className="s">{sub}</span> : null}
+    </div>
+  );
+}
+
 type Tab = "summary" | "progress";
 
 export default function DashboardScreen() {
@@ -39,20 +48,10 @@ export default function DashboardScreen() {
   }, []);
 
   if (error) {
-    return (
-      <>
-        <SectionHead title="운영 현황" sub="Dashboard" />
-        <div className="state error">API 오류: {error}</div>
-      </>
-    );
+    return <div className="state error">API 오류: {error}</div>;
   }
   if (!data) {
-    return (
-      <>
-        <SectionHead title="운영 현황" sub="Dashboard" />
-        <div className="state">불러오는 중…</div>
-      </>
-    );
+    return <div className="state">불러오는 중…</div>;
   }
 
   const { kpi, ops, perf, alerts } = data;
@@ -60,8 +59,6 @@ export default function DashboardScreen() {
 
   return (
     <>
-      <SectionHead title="운영 현황" sub="Dashboard" />
-
       <div className="page-tabs">
         <button
           className={tab === "summary" ? "on" : ""}
@@ -79,7 +76,7 @@ export default function DashboardScreen() {
 
       {tab === "summary" && (
         <>
-      {/* 운영 KPI */}
+      <SubHead title="운영 현황" sub="Operational status" />
       <div className="kpi-row">
         <Kpi
           label="Open RFQ"
@@ -114,7 +111,7 @@ export default function DashboardScreen() {
         />
       </div>
 
-      <SectionHead title="영업 성과 KPI" sub="Sales performance" />
+      <SubHead title="영업 성과 KPI" sub="Sales performance" />
       <div className="kpi-row">
         <Kpi
           label="RFQ Handling Rate"
@@ -147,7 +144,7 @@ export default function DashboardScreen() {
 
       <div className="dash-two">
         <div>
-          <SectionHead title="긴급 Follow-up · Level A 견적" />
+          <SubHead title="긴급 Follow-up · Level A 견적" />
           {alerts.urgent_quotes.length === 0 ? (
             <div className="alert-ok">긴급 follow-up 견적이 없습니다.</div>
           ) : (
@@ -164,7 +161,7 @@ export default function DashboardScreen() {
         </div>
 
         <div>
-          <SectionHead title="연체 AR" />
+          <SubHead title="연체 AR" />
           {alerts.overdue_ar.length === 0 ? (
             <div className="alert-ok">연체 AR이 없습니다.</div>
           ) : (
@@ -191,7 +188,7 @@ export default function DashboardScreen() {
       {tab === "progress" && (
         <>
       {/* 고객 트래킹용 현황 — 고객에게 노출되는 RFQ/Order 추적 단계 */}
-      <SectionHead
+      <SubHead
         title="RFQ · Order 진행 현황"
         sub="고객 추적 단계 (k-maris.com/track 미리보기)"
       />
@@ -243,9 +240,7 @@ export default function DashboardScreen() {
       )}
 
       {/* 회사 내부 확인용 현황판 — 내부 12단계 */}
-      <div style={{ marginTop: 22 }}>
-        <SectionHead title="내부 진행 현황 (12단계)" sub="회사 내부 확인용" />
-      </div>
+      <SubHead title="내부 진행 현황 (12단계)" sub="회사 내부 확인용" />
       {data.snapshot.length === 0 ? (
         <div className="state">등록된 RFQ가 없습니다.</div>
       ) : (
