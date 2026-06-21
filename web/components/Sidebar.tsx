@@ -13,8 +13,8 @@ type Group = { title?: string; items: Item[] };
 const GROUPS: Group[] = [
   {
     items: [
-      { href: "/dashboard", label: "Dashboard", key: "dashboard" },
-      { href: "/", label: "RFQ & Quotation", key: "rfq" },
+      { href: "/", label: "Dashboard", key: "dashboard" },
+      { href: "/rfq", label: "RFQ & Quotation", key: "rfq" },
       { href: "/po", label: "P/O", key: "po" },
     ],
   },

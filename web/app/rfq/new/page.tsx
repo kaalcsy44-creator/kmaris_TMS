@@ -11,9 +11,9 @@ export default function NewRfqPage() {
       <SectionHead title="Customer RFQ 신규 등록" sub="RFQ & Quotation" />
       <NewRfqForm
         onCreated={(rfqNo) =>
-          router.replace(`/?created=${encodeURIComponent(rfqNo)}`)
+          router.replace(`/rfq?created=${encodeURIComponent(rfqNo)}`)
         }
-        onCancel={() => router.replace("/")}
+        onCancel={() => router.replace("/rfq")}
       />
     </AppShell>
   );
