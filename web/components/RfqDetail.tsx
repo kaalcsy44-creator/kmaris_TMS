@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { fetchRfqDetail } from "@/lib/api";
+import { fetchRfqDetail, updateRfqLevel, deleteRfq } from "@/lib/api";
 import type { RfqDetail as RfqDetailT } from "@/lib/types";
+
+const LEVELS = ["A", "B", "C"];
 
 function money(n: number | null): string {
   if (n === null || n === undefined) return "—";
@@ -12,12 +14,25 @@ function money(n: number | null): string {
   });
 }
 
-export default function RfqDetail({ rfqId }: { rfqId: number | null }) {
+export default function RfqDetail({
+  rfqId,
+  onChanged,
+  onDeleted,
+}: {
+  rfqId: number | null;
+  onChanged?: () => void;
+  onDeleted?: () => void;
+}) {
   const [data, setData] = useState<RfqDetailT | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [level, setLevel] = useState("B");
+  const [busy, setBusy] = useState(false);
+  const [actMsg, setActMsg] = useState<string | null>(null);
+  const [actErr, setActErr] = useState<string | null>(null);
+  const [confirmDel, setConfirmDel] = useState(false);
 
-  useEffect(() => {
+  function reload() {
     if (rfqId === null) {
       setData(null);
       return;
@@ -25,10 +40,55 @@ export default function RfqDetail({ rfqId }: { rfqId: number | null }) {
     setLoading(true);
     setError(null);
     fetchRfqDetail(rfqId)
-      .then(setData)
+      .then((d) => {
+        setData(d);
+        setLevel(d.follow_up_level || "B");
+      })
       .catch((e) => setError(e instanceof Error ? e.message : "오류"))
       .finally(() => setLoading(false));
+  }
+
+  useEffect(() => {
+    setActMsg(null);
+    setActErr(null);
+    setConfirmDel(false);
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rfqId]);
+
+  async function saveLevel() {
+    if (rfqId === null) return;
+    setBusy(true);
+    setActMsg(null);
+    setActErr(null);
+    try {
+      await updateRfqLevel(rfqId, level);
+      setActMsg("Level 업데이트 완료");
+      reload();
+      onChanged?.();
+    } catch (e) {
+      setActErr(e instanceof Error ? e.message : "Level 업데이트 실패");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function doDelete() {
+    if (rfqId === null) return;
+    setBusy(true);
+    setActMsg(null);
+    setActErr(null);
+    try {
+      const r = await deleteRfq(rfqId);
+      setConfirmDel(false);
+      onDeleted?.();
+      setActMsg(`${r.rfq_no} 삭제 완료`);
+    } catch (e) {
+      setActErr(e instanceof Error ? e.message : "삭제 실패");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <div className="detail">
@@ -54,6 +114,48 @@ export default function RfqDetail({ rfqId }: { rfqId: number | null }) {
             <KV k="선박" v={data.vessel} />
             <KV k="접수일" v={data.date} />
             <KV k="상태" v={data.status} />
+            <KV k="Follow-up" v={data.follow_up_level} />
+            <KV k="비고" v={data.notes} />
+          </div>
+
+          {/* 액션: Level 변경 / 삭제 (Streamlit 2_CRFQ render_rfq_detail 패리티) */}
+          <div className="detail-actions">
+            <div className="form-field">
+              <label>Level 변경</label>
+              <div className="action-row">
+                <select value={level} onChange={(e) => setLevel(e.target.value)} disabled={busy}>
+                  {LEVELS.map((l) => (
+                    <option key={l} value={l}>
+                      {l}
+                    </option>
+                  ))}
+                </select>
+                <button className="btn" onClick={saveLevel} disabled={busy || level === data.follow_up_level}>
+                  Level 업데이트
+                </button>
+              </div>
+              <span className="hint-inline">상태(12단계)는 진행에 따라 자동 반영됩니다.</span>
+            </div>
+            <div className="form-field">
+              <label>삭제</label>
+              {!confirmDel ? (
+                <button className="btn danger" onClick={() => setConfirmDel(true)} disabled={busy}>
+                  RFQ 삭제
+                </button>
+              ) : (
+                <div className="action-row">
+                  <span className="action-err">연결된 Vendor RFQ/Quote도 함께 삭제됩니다. 진행하시겠습니까?</span>
+                  <button className="btn danger" onClick={doDelete} disabled={busy}>
+                    확인 삭제
+                  </button>
+                  <button className="btn" onClick={() => setConfirmDel(false)} disabled={busy}>
+                    취소
+                  </button>
+                </div>
+              )}
+            </div>
+            {actMsg ? <span className="action-ok">{actMsg}</span> : null}
+            {actErr ? <span className="action-err">{actErr}</span> : null}
           </div>
 
           <div className="detail-cols">

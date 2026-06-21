@@ -119,6 +119,17 @@ export function createRfq(body: {
   return post("/api/admin/rfq", body);
 }
 
+export function updateRfqLevel(
+  rfqId: number,
+  followUpLevel: string
+): Promise<{ ok: boolean; follow_up_level: string }> {
+  return put(`/api/admin/rfq/${rfqId}/level`, { follow_up_level: followUpLevel });
+}
+
+export function deleteRfq(rfqId: number): Promise<{ ok: boolean; rfq_no: string }> {
+  return del(`/api/admin/rfq/${rfqId}`);
+}
+
 export function parseRfqPdf(file: File): Promise<RfqOcrResult> {
   const fd = new FormData();
   fd.append("file", file);

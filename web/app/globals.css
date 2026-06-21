@@ -1037,6 +1037,42 @@ table.rfq tbody tr:last-child td {
   letter-spacing: 0.2px;
 }
 
+.detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 26px;
+  margin-top: 18px;
+  padding: 14px 16px;
+  background: #f8fafc;
+  border: 1px solid #e6eaf0;
+  border-radius: 10px;
+}
+.detail-actions .form-field {
+  min-width: 220px;
+}
+
+.quick-create {
+  margin-top: 12px;
+  border: 1px solid #e6eaf0;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+.quick-create > summary {
+  cursor: pointer;
+  padding: 10px 14px;
+  font-weight: 700;
+  font-size: 13px;
+  color: #334155;
+  user-select: none;
+}
+.quick-create[open] > summary {
+  border-bottom: 1px solid #e6eaf0;
+}
+.quick-create-body {
+  padding: 14px;
+}
+
 .detail-cols {
   display: grid;
   grid-template-columns: 280px 1fr;

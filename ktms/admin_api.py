@@ -569,6 +569,7 @@ def rfq_detail(rfq_id: int):
             "vessel": vessel.name if vessel else "",
             "date": r.date or "",
             "notes": r.notes or "",
+            "follow_up_level": _enum_val(r.follow_up_level) if r.follow_up_level else "B",
             "stage": stage,
             "status": _status_label(stage),
             "steps": steps,
@@ -2923,6 +2924,60 @@ def create_rfq(body: RfqCreate):
         s.add(rfq)
         s.commit()
         return {"ok": True, "id": rfq.id, "rfq_no": rfq_no}
+    finally:
+        s.close()
+
+
+class RfqLevelUpdate(BaseModel):
+    follow_up_level: str
+
+
+@app.put("/api/admin/rfq/{rfq_id}/level", dependencies=[Depends(require_token)])
+def update_rfq_level(rfq_id: int, body: RfqLevelUpdate):
+    """RFQ Follow-up Level(A/B/C) 변경. 상태(12단계)는 진행에 따라 자동 반영되므로
+    여기서는 Level 만 수정한다 (Streamlit 2_CRFQ.py render_rfq_detail 패리티)."""
+    s = get_session()
+    try:
+        rfq = s.query(RFQ).filter_by(id=rfq_id).first()
+        if not rfq:
+            raise HTTPException(status_code=404, detail="RFQ를 찾을 수 없습니다.")
+        try:
+            rfq.follow_up_level = FollowUpLevel(body.follow_up_level)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="잘못된 Level 값입니다.")
+        s.commit()
+        return {"ok": True, "follow_up_level": _enum_val(rfq.follow_up_level)}
+    finally:
+        s.close()
+
+
+@app.delete("/api/admin/rfq/{rfq_id}", dependencies=[Depends(require_token)])
+def delete_rfq(rfq_id: int):
+    """RFQ 삭제. 연결된 Vendor RFQ/Quote 도 함께 삭제한다. 단, 이미 Customer
+    Quotation 이나 Order 로 진행된 건은 데이터 보호를 위해 삭제를 막는다."""
+    s = get_session()
+    try:
+        rfq = s.query(RFQ).filter_by(id=rfq_id).first()
+        if not rfq:
+            raise HTTPException(status_code=404, detail="RFQ를 찾을 수 없습니다.")
+
+        if s.query(Quotation).filter_by(rfq_id=rfq_id).first():
+            raise HTTPException(status_code=400,
+                detail="이미 Customer Quotation 이 연결된 RFQ 입니다. 먼저 견적을 정리하세요.")
+        if s.query(Order).filter_by(rfq_id=rfq_id).first():
+            raise HTTPException(status_code=400,
+                detail="이미 Order 로 진행된 RFQ 입니다. 삭제할 수 없습니다.")
+
+        rfq_no = rfq.rfq_no
+        vrfq_ids = [v.id for v in s.query(VendorRFQ).filter_by(rfq_id=rfq_id).all()]
+        if vrfq_ids:
+            (s.query(VendorQuote)
+             .filter(VendorQuote.vendor_rfq_id.in_(vrfq_ids))
+             .delete(synchronize_session=False))
+        s.query(VendorRFQ).filter_by(rfq_id=rfq_id).delete(synchronize_session=False)
+        s.query(RFQ).filter_by(id=rfq_id).delete(synchronize_session=False)
+        s.commit()
+        return {"ok": True, "rfq_no": rfq_no}
     finally:
         s.close()
 

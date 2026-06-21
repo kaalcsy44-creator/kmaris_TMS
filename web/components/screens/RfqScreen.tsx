@@ -83,7 +83,14 @@ export default function RfqScreen() {
         <RfqTable rows={rows} selectedId={selectedId} onSelect={setSelectedId} />
       )}
 
-      <RfqDetail rfqId={selectedId} />
+      <RfqDetail
+        rfqId={selectedId}
+        onChanged={load}
+        onDeleted={() => {
+          setSelectedId(null);
+          load();
+        }}
+      />
       <RfqActionTabs
         rfqId={selectedId}
         rfqNo={rows.find((r) => r.id === selectedId)?.crfq_no}

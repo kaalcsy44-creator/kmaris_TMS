@@ -558,6 +558,7 @@ export type RfqDetail = {
   vessel: string;
   date: string;
   notes: string;
+  follow_up_level: string;
   stage: number;
   status: string;
   steps: RfqStep[];

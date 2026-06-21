@@ -6,6 +6,8 @@ import {
   fetchSettingsVessels,
   createRfq,
   parseRfqPdf,
+  createSettingsCustomer,
+  createSettingsVessel,
 } from "@/lib/api";
 import type { CustomerOption, SettingsVessel } from "@/lib/types";
 
@@ -31,11 +33,40 @@ export default function NewRfqForm({
   const [err, setErr] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [ocrMsg, setOcrMsg] = useState<string | null>(null);
+  // OCR 이 인식했지만 DB 에 없는 Customer/선박 — 빠른 등록 폼의 기본값/자동 열기에 사용
+  const [custHint, setCustHint] = useState("");
+  const [vesselHint, setVesselHint] = useState("");
+
+  function reloadCustomers(): Promise<CustomerOption[]> {
+    return fetchCustomers()
+      .then((cs) => {
+        setCustomers(cs);
+        return cs;
+      })
+      .catch(() => {
+        setCustomers([]);
+        return [];
+      });
+  }
+  function reloadVessels(): Promise<SettingsVessel[]> {
+    return fetchSettingsVessels()
+      .then((vs) => {
+        setVessels(vs);
+        return vs;
+      })
+      .catch(() => {
+        setVessels([]);
+        return [];
+      });
+  }
 
   useEffect(() => {
-    fetchCustomers().then(setCustomers).catch(() => setCustomers([]));
-    fetchSettingsVessels().then(setVessels).catch(() => setVessels([]));
+    reloadCustomers();
+    reloadVessels();
   }, []);
+
+  const custUnmatched = custHint.trim() !== "" && !matchName(custHint, customers);
+  const vesselUnmatched = vesselHint.trim() !== "" && !matchName(vesselHint, vessels);
 
   function setItem(i: number, key: keyof ItemRow, val: string) {
     setItems((prev) =>
@@ -67,6 +98,8 @@ export default function NewRfqForm({
       const r = await parseRfqPdf(file);
       const cust = matchName(r.customer_hint, customers);
       const vessel = matchName(r.vessel_name, vessels);
+      setCustHint(cust ? "" : r.customer_hint ?? "");
+      setVesselHint(vessel ? "" : r.vessel_name ?? "");
       if (cust) setCustomerId(cust.id);
       if (vessel) setVesselId(vessel.id);
       if (r.customer_rfq_no) setCustRfqNo(r.customer_rfq_no);
@@ -141,6 +174,34 @@ export default function NewRfqForm({
         {ocrBusy ? <span className="hint-inline">AI가 PDF를 분석 중…</span> : null}
         {ocrMsg ? <span className="action-ok">{ocrMsg}</span> : null}
       </div>
+
+      <details className="quick-create" open={custUnmatched}>
+        <summary>신규 Customer 빠른 등록</summary>
+        <QuickCustomerCreate
+          defaultName={custHint}
+          unmatchedHint={custUnmatched ? custHint : ""}
+          onCreated={async (id) => {
+            await reloadCustomers();
+            setCustomerId(id);
+            setCustHint("");
+          }}
+        />
+      </details>
+
+      <details className="quick-create" open={vesselUnmatched}>
+        <summary>신규 선박 빠른 등록</summary>
+        <QuickVesselCreate
+          defaultName={vesselHint}
+          unmatchedHint={vesselUnmatched ? vesselHint : ""}
+          customers={customers}
+          defaultOwnerId={customerId === "" ? undefined : customerId}
+          onCreated={async (id) => {
+            await reloadVessels();
+            setVesselId(id);
+            setVesselHint("");
+          }}
+        />
+      </details>
 
       <div className="form-grid">
         <Field label="Customer *">
@@ -266,6 +327,174 @@ function Field({
     <div className="form-field">
       <label>{label}</label>
       {children}
+    </div>
+  );
+}
+
+function QuickCustomerCreate({
+  defaultName,
+  unmatchedHint,
+  onCreated,
+}: {
+  defaultName: string;
+  unmatchedHint: string;
+  onCreated: (id: number) => void | Promise<void>;
+}) {
+  const [name, setName] = useState(defaultName);
+  const [country, setCountry] = useState("");
+  const [contact, setContact] = useState("");
+  const [email, setEmail] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    setName(defaultName);
+  }, [defaultName]);
+
+  async function submit() {
+    if (!name.trim()) {
+      setErr("Customer명을 입력하세요.");
+      return;
+    }
+    setBusy(true);
+    setErr(null);
+    try {
+      const r = await createSettingsCustomer({
+        name: name.trim(),
+        country,
+        contact,
+        email,
+      });
+      await onCreated(r.id);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "등록 실패");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="quick-create-body">
+      {unmatchedHint ? (
+        <span className="hint-inline">
+          OCR 인식: “{unmatchedHint}” — DB에 없는 Customer입니다. 등록하면 자동 선택됩니다.
+        </span>
+      ) : null}
+      <div className="form-grid">
+        <Field label="Customer명 *">
+          <input value={name} onChange={(e) => setName(e.target.value)} />
+        </Field>
+        <Field label="국가">
+          <input value={country} onChange={(e) => setCountry(e.target.value)} />
+        </Field>
+        <Field label="담당자">
+          <input value={contact} onChange={(e) => setContact(e.target.value)} />
+        </Field>
+        <Field label="이메일">
+          <input value={email} onChange={(e) => setEmail(e.target.value)} />
+        </Field>
+      </div>
+      <div className="form-actions">
+        <button className="btn primary" onClick={submit} disabled={busy || !name.trim()}>
+          {busy ? "등록 중…" : "Customer 등록"}
+        </button>
+        {err ? <span className="action-err">{err}</span> : null}
+      </div>
+    </div>
+  );
+}
+
+function QuickVesselCreate({
+  defaultName,
+  unmatchedHint,
+  customers,
+  defaultOwnerId,
+  onCreated,
+}: {
+  defaultName: string;
+  unmatchedHint: string;
+  customers: CustomerOption[];
+  defaultOwnerId?: number;
+  onCreated: (id: number) => void | Promise<void>;
+}) {
+  const [name, setName] = useState(defaultName);
+  const [imo, setImo] = useState("");
+  const [engine, setEngine] = useState("");
+  const [hull, setHull] = useState("");
+  const [ownerId, setOwnerId] = useState<number | "">(defaultOwnerId ?? "");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    setName(defaultName);
+  }, [defaultName]);
+  useEffect(() => {
+    setOwnerId(defaultOwnerId ?? "");
+  }, [defaultOwnerId]);
+
+  async function submit() {
+    if (!name.trim()) {
+      setErr("선박명을 입력하세요.");
+      return;
+    }
+    setBusy(true);
+    setErr(null);
+    try {
+      const r = await createSettingsVessel({
+        name: name.trim(),
+        imo,
+        engine_type: engine,
+        hull_no: hull,
+        customer_id: ownerId === "" ? undefined : ownerId,
+      });
+      await onCreated(r.id);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "등록 실패");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="quick-create-body">
+      {unmatchedHint ? (
+        <span className="hint-inline">
+          OCR 인식: “{unmatchedHint}” — DB에 없는 선박입니다. 등록하면 자동 선택됩니다.
+        </span>
+      ) : null}
+      <div className="form-grid">
+        <Field label="선박명 *">
+          <input value={name} onChange={(e) => setName(e.target.value)} />
+        </Field>
+        <Field label="IMO No.">
+          <input value={imo} onChange={(e) => setImo(e.target.value)} />
+        </Field>
+        <Field label="Main Engine Type">
+          <input value={engine} onChange={(e) => setEngine(e.target.value)} />
+        </Field>
+        <Field label="Hull No.">
+          <input value={hull} onChange={(e) => setHull(e.target.value)} />
+        </Field>
+        <Field label="선주 (Customer)">
+          <select
+            value={ownerId}
+            onChange={(e) => setOwnerId(e.target.value === "" ? "" : Number(e.target.value))}
+          >
+            <option value="">— 없음 —</option>
+            {customers.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+      </div>
+      <div className="form-actions">
+        <button className="btn primary" onClick={submit} disabled={busy || !name.trim()}>
+          {busy ? "등록 중…" : "선박 등록"}
+        </button>
+        {err ? <span className="action-err">{err}</span> : null}
+      </div>
     </div>
   );
 }
