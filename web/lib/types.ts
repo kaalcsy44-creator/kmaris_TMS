@@ -6,6 +6,7 @@ export type RfqRow = {
   item_count: number;
   crfq_no: string;
   crfq_at: string;
+  vrfq_kmaris_no: string;
   vrfq_vendors: string;
   vrfq_at: string;
   vquote_no: string;

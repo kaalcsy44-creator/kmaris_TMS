@@ -317,6 +317,9 @@ def rfq_overview(customer_id: int | None = None):
                 "item_count": len(r.items or []),
                 "crfq_no": r.rfq_no,
                 "crfq_at": _kst(r.created_at),
+                # K-Maris RFQ No.는 Vendor RFQ 발신 시점의 번호(= rfq_no). Vendor
+                # RFQ를 보낸 거래에서만 표시한다.
+                "vrfq_kmaris_no": (r.rfq_no if vrfqs else ""),
                 "vrfq_vendors": vrfq_vendors,
                 "vrfq_at": vrfq_at,
                 "vquote_no": vq_main,
