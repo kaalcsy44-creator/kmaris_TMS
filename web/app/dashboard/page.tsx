@@ -5,6 +5,22 @@ import { fetchDashboard } from "@/lib/api";
 import type { DashboardData } from "@/lib/types";
 import AppShell, { SectionHead } from "@/components/AppShell";
 
+function Stepper({ steps, current }: { steps: string[]; current: number }) {
+  return (
+    <div className="stepper">
+      {steps.map((label, i) => {
+        const state = i < current ? "done" : i === current ? "current" : "todo";
+        return (
+          <div className={`step ${state}`} key={i}>
+            <span className="dot">{i < current ? "✓" : i + 1}</span>
+            <span className="lbl">{label}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   return (
     <AppShell active="dashboard">
@@ -158,50 +174,79 @@ function Dashboard() {
         </div>
       </div>
 
-      <div className="dash-cols" style={{ marginTop: 22 }}>
-        <div className="panel">
-          <div className="sub-h">내부 진행 12단계 분포</div>
-          {data.steps.map((name, i) => {
-            const n = data.stage_distribution[i] ?? 0;
-            const max = Math.max(1, ...data.stage_distribution);
-            return (
-              <div key={i} className="dist-row">
-                <span className="dist-label">
-                  {i + 1}. {name}
+      {/* 고객 트래킹용 현황 — 고객에게 노출되는 RFQ/Order 추적 단계 */}
+      <SectionHead
+        title="RFQ · Order 진행 현황"
+        sub="고객 추적 단계 (k-maris.com/track 미리보기)"
+      />
+      {data.snapshot.length === 0 ? (
+        <div className="state">등록된 RFQ가 없습니다.</div>
+      ) : (
+        data.snapshot.map((r) => (
+          <div className="track-row" key={`t-${r.rfq_no}`}>
+            <div className="track-card">
+              <div className="track-card-head">
+                <span className="track-card-title">
+                  {r.rfq_no}
+                  {r.customer_rfq_no ? (
+                    <small> · Customer RFQ {r.customer_rfq_no}</small>
+                  ) : null}
                 </span>
-                <span className="dist-track">
-                  <span className="dist-fill" style={{ width: `${(n / max) * 100}%` }} />
-                </span>
-                <span className="dist-n">{n}</span>
+                <span className="track-card-badge">{r.status}</span>
               </div>
-            );
-          })}
-        </div>
+              <div className="track-card-sub">{r.customer_vessel}</div>
+              <div className="track-card-meta">
+                Items {r.item_count} · Level {r.follow_up_level} · {r.date}
+              </div>
+              <Stepper steps={data.rfq_steps} current={r.step} />
+            </div>
 
-        <div className="panel">
-          <div className="sub-h">최근 RFQ</div>
-          <table className="mini">
-            <thead>
-              <tr>
-                <th>RFQ No.</th>
-                <th>Customer</th>
-                <th>상태</th>
-                <th>접수</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.recent.map((r) => (
-                <tr key={r.rfq_no}>
-                  <td>{r.rfq_no}</td>
-                  <td>{r.customer}</td>
-                  <td>{r.status}</td>
-                  <td>{r.at}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+            {r.order ? (
+              <div className="track-card">
+                <div className="track-card-head">
+                  <span className="track-card-title">{r.order.ord_no}</span>
+                  <span className="track-card-badge">{r.order.status}</span>
+                </div>
+                <div className="track-card-sub">{r.order.customer_vessel}</div>
+                <div className="track-card-meta">
+                  Items {r.order.item_count} · {r.order.date}
+                </div>
+                <Stepper steps={data.order_steps} current={r.order.step} />
+              </div>
+            ) : (
+              <div className="track-card empty">
+                <div className="track-card-head">
+                  <span className="track-card-title">No linked order</span>
+                </div>
+                <div className="track-card-sub">아직 오더가 생성되지 않았습니다.</div>
+                <Stepper steps={data.order_steps} current={-1} />
+              </div>
+            )}
+          </div>
+        ))
+      )}
+
+      {/* 회사 내부 확인용 현황판 — 내부 12단계 */}
+      <div style={{ marginTop: 22 }}>
+        <SectionHead title="내부 진행 현황 (12단계)" sub="회사 내부 확인용" />
       </div>
+      {data.snapshot.length === 0 ? (
+        <div className="state">등록된 RFQ가 없습니다.</div>
+      ) : (
+        data.snapshot.map((r) => (
+          <div className="intl-card" key={`i-${r.rfq_no}`}>
+            <div className="intl-head">
+              {r.rfq_no} <span className="gray">· {r.customer_vessel}</span> ·{" "}
+              {r.stage}/12 {data.steps[r.stage - 1]}
+            </div>
+            <div className="intl-bar">
+              {Array.from({ length: 12 }).map((_, k) => (
+                <span key={k} className={`seg${k < r.stage ? " on" : ""}`} />
+              ))}
+            </div>
+          </div>
+        ))
+      )}
     </>
   );
 }

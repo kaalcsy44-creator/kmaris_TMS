@@ -183,6 +183,31 @@ export type DashboardData = {
     status: string;
     at: string;
   }[];
+  rfq_steps: string[];
+  order_steps: string[];
+  snapshot: SnapshotRfq[];
+};
+
+export type SnapshotOrder = {
+  ord_no: string;
+  customer_vessel: string;
+  status: string;
+  item_count: number;
+  date: string;
+  step: number;
+};
+
+export type SnapshotRfq = {
+  rfq_no: string;
+  customer_rfq_no: string;
+  customer_vessel: string;
+  status: string;
+  item_count: number;
+  follow_up_level: string;
+  date: string;
+  step: number;
+  stage: number;
+  order: SnapshotOrder | null;
 };
 
 export type RfqItem = {

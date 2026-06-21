@@ -27,6 +27,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from db.engine import get_session
+from services.tracking_status import (
+    rfq_tracking_step, order_tracking_step, RFQ_STEPS, ORDER_STEPS,
+)
 from db.models import (
     RFQ, Customer, Vessel, Vendor, User, DocSequence,
     VendorRFQ, VendorQuote, Quotation, QuotationStatus, FollowUpLevel,
@@ -408,6 +411,7 @@ def dashboard():
     s = get_session()
     try:
         cust_names = {c.id: c.name for c in s.query(Customer).all()}
+        vessel_names = {v.id: v.name for v in s.query(Vessel).all()}
         rfqs = s.query(RFQ).all()
         orders = s.query(Order).all()
         quotes = s.query(Quotation).all()
@@ -504,6 +508,39 @@ def dashboard():
                 "at": _kst(r.created_at),
             })
 
+        # ── Snapshot: 고객 추적(RFQ/Order) + 내부 12단계 (per-RFQ) ───────────────
+        def _cv(cid, vid) -> str:
+            nm = cust_names.get(cid, "—")
+            vn = vessel_names.get(vid) if vid else None
+            return f"{nm} · {vn}" if vn else nm
+
+        snapshot = []
+        for r in sorted(rfqs, key=lambda x: x.id, reverse=True)[:20]:
+            o = _order_for_rfq(s, r.id)
+            order_row = None
+            if o:
+                order_row = {
+                    "ord_no": o.ord_no,
+                    "customer_vessel": _cv(o.customer_id, o.vessel_id),
+                    "status": _enum_val(o.status),
+                    "item_count": len(o.items or []),
+                    "date": o.date or "—",
+                    "step": order_tracking_step(_enum_val(o.status))[0],
+                }
+            _lvl = getattr(r, "follow_up_level", None)
+            snapshot.append({
+                "rfq_no": r.rfq_no,
+                "customer_rfq_no": r.customer_rfq_no or "",
+                "customer_vessel": _cv(r.customer_id, r.vessel_id),
+                "status": _enum_val(r.status),
+                "item_count": len(r.items or []),
+                "follow_up_level": _enum_val(_lvl) if _lvl else "—",
+                "date": r.date or "—",
+                "step": rfq_tracking_step(_enum_val(r.status))[0],
+                "stage": _pipeline_stage(s, r.id),
+                "order": order_row,
+            })
+
         return {
             "kpi": {
                 "open_rfq": open_rfq,
@@ -539,6 +576,9 @@ def dashboard():
             "steps": INTERNAL_STEPS,
             "stage_distribution": dist,
             "recent": recent,
+            "snapshot": snapshot,
+            "rfq_steps": RFQ_STEPS,
+            "order_steps": ORDER_STEPS,
         }
     finally:
         s.close()
