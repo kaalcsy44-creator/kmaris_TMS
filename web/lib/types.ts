@@ -65,6 +65,53 @@ export type PoRow = {
   status: string;
 };
 
+export type PoDetail = {
+  id: number;
+  ord_no: string;
+  customer_po_no: string;
+  customer_po_at: string;
+  rfq_no: string;
+  customer_rfq_no: string;
+  quotation_no: string;
+  customer: string;
+  customer_contact: string;
+  customer_email: string;
+  vessel: string;
+  status: string;
+  order_status: string;
+  stage: number;
+  promised_delivery: string;
+  shipped_date: string;
+  delivered_date: string;
+  tracking_token: string;
+  steps: RfqStep[];
+  items: RfqItem[];
+  vendor_pos: {
+    id: number;
+    po_no: string;
+    vendor: string;
+    vendor_email: string;
+    date: string;
+    sent_date: string;
+    status: string;
+    item_count: number;
+  }[];
+  documents: {
+    ci_no: string;
+    pl_no: string;
+    sa_no: string;
+    tax_no: string;
+    ar: {
+      ci_no: string;
+      currency: string;
+      invoice_amount: number;
+      paid_amount: number;
+      due_date: string;
+      status: string;
+    }[];
+  };
+};
+
 export type QtnRow = {
   id: number;
   qtn_no: string;

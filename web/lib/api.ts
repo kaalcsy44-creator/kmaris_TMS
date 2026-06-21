@@ -7,6 +7,7 @@ import type {
   RfqDetail,
   DashboardData,
   PoRow,
+  PoDetail,
   QtnRow,
   VrfqRow,
   DocRow,
@@ -87,6 +88,10 @@ export function fetchVendors(): Promise<VendorOption[]> {
 
 export function fetchPoOverview(): Promise<{ rows: PoRow[] }> {
   return get<{ rows: PoRow[] }>("/api/admin/po-overview");
+}
+
+export function fetchPoDetail(id: number): Promise<PoDetail> {
+  return get<PoDetail>(`/api/admin/order/${id}`);
 }
 
 export function fetchQuotationOverview(customerId?: number): Promise<{ rows: QtnRow[] }> {

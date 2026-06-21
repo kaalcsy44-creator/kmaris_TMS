@@ -595,6 +595,17 @@ def _order_for_rfq(s, rfq_id: int):
     return order
 
 
+def _rfq_for_order(s, order: Order):
+    """Order에 연결된 RFQ — 직접 연결 우선, 없으면 Quotation 경유."""
+    if order.rfq_id:
+        return s.query(RFQ).filter_by(id=order.rfq_id).first()
+    if order.quotation_id:
+        qtn = s.query(Quotation).filter_by(id=order.quotation_id).first()
+        if qtn and qtn.rfq_id:
+            return s.query(RFQ).filter_by(id=qtn.rfq_id).first()
+    return None
+
+
 @app.get("/api/admin/po-overview", dependencies=[Depends(require_token)])
 def po_overview():
     """고객 P/O · Vendor P/O 현황 — RFQ → Order → PurchaseOrder 체인."""
@@ -637,6 +648,91 @@ def po_overview():
                 "status": _status_label(stage),
             })
         return {"rows": rows}
+    finally:
+        s.close()
+
+
+@app.get("/api/admin/order/{order_id}", dependencies=[Depends(require_token)])
+def order_detail(order_id: int):
+    """Order 1건 상세 — 고객 P/O, Vendor P/O, 품목, 연결 문서."""
+    s = get_session()
+    try:
+        o = s.query(Order).filter_by(id=order_id).first()
+        if not o:
+            raise HTTPException(status_code=404, detail="Order not found")
+
+        cust = s.query(Customer).filter_by(id=o.customer_id).first()
+        vessel = s.query(Vessel).filter_by(id=o.vessel_id).first() if o.vessel_id else None
+        rfq = _rfq_for_order(s, o)
+        qtn = s.query(Quotation).filter_by(id=o.quotation_id).first() if o.quotation_id else None
+        stage = _pipeline_stage(s, rfq.id) if rfq else 5
+
+        steps = [{
+            "no": i,
+            "name": name,
+            "state": ("done" if i < stage else "current" if i == stage else "todo"),
+        } for i, name in enumerate(INTERNAL_STEPS, start=1)]
+
+        vendor_names = {v.id: v.name for v in s.query(Vendor).all()}
+        vendor_emails = {v.id: v.email for v in s.query(Vendor).all()}
+        vpos = (s.query(PurchaseOrder).filter_by(order_id=o.id)
+                .order_by(PurchaseOrder.id.desc()).all())
+        vendor_po_view = [{
+            "id": po.id,
+            "po_no": po.po_no or "",
+            "vendor": vendor_names.get(po.vendor_id, "—"),
+            "vendor_email": po.sent_to_email or vendor_emails.get(po.vendor_id, "") or "",
+            "date": po.date or "",
+            "sent_date": po.sent_date or "",
+            "status": po.status or "",
+            "item_count": len(po.items or []),
+        } for po in vpos]
+
+        ci = s.query(CommercialInvoice).filter_by(order_id=o.id).order_by(CommercialInvoice.id.desc()).first()
+        sa = s.query(ShippingAdvice).filter_by(order_id=o.id).order_by(ShippingAdvice.id.desc()).first()
+        pl = (s.query(PackingList).filter_by(ci_id=ci.id).order_by(PackingList.id.desc()).first()
+              if ci else None)
+        tax = (s.query(TaxInvoiceData).filter_by(ci_id=ci.id).order_by(TaxInvoiceData.id.desc()).first()
+               if ci else None)
+        ars = s.query(ARRecord).filter_by(order_id=o.id).order_by(ARRecord.id.desc()).all()
+
+        return {
+            "id": o.id,
+            "ord_no": o.ord_no,
+            "customer_po_no": o.po_no or "",
+            "customer_po_at": o.date or "",
+            "rfq_no": rfq.rfq_no if rfq else "",
+            "customer_rfq_no": (rfq.customer_rfq_no or rfq.rfq_no) if rfq else "",
+            "quotation_no": qtn.qtn_no if qtn else "",
+            "customer": cust.name if cust else "—",
+            "customer_contact": (cust.contact if cust else "") or "",
+            "customer_email": (cust.email if cust else "") or "",
+            "vessel": vessel.name if vessel else "",
+            "status": _status_label(stage) if rfq else _enum_val(o.status),
+            "order_status": _enum_val(o.status),
+            "stage": stage,
+            "promised_delivery": o.promised_delivery or "",
+            "shipped_date": o.shipped_date or "",
+            "delivered_date": o.delivered_date or "",
+            "tracking_token": o.tracking_token or "",
+            "steps": steps,
+            "items": [_item_view(it) for it in (o.items or [])],
+            "vendor_pos": vendor_po_view,
+            "documents": {
+                "ci_no": ci.ci_no if ci else "",
+                "pl_no": pl.pl_no if pl else "",
+                "sa_no": sa.sa_no if sa else "",
+                "tax_no": tax.tax_no if tax else "",
+                "ar": [{
+                    "ci_no": ar.ci_no or "",
+                    "currency": ar.currency or "USD",
+                    "invoice_amount": round(ar.invoice_amount or 0, 2),
+                    "paid_amount": round(ar.paid_amount or 0, 2),
+                    "due_date": ar.due_date or "",
+                    "status": _enum_val(ar.status),
+                } for ar in ars],
+            },
+        }
     finally:
         s.close()
 
