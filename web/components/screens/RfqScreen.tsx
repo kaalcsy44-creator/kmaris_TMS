@@ -6,6 +6,7 @@ import { fetchRfqOverview, fetchCustomers } from "@/lib/api";
 import type { RfqRow, CustomerOption } from "@/lib/types";
 import RfqTable from "@/components/RfqTable";
 import RfqDetail from "@/components/RfqDetail";
+import RfqActionTabs from "@/components/RfqActionTabs";
 
 export default function RfqScreen() {
   const [rows, setRows] = useState<RfqRow[]>([]);
@@ -82,7 +83,12 @@ export default function RfqScreen() {
         <RfqTable rows={rows} selectedId={selectedId} onSelect={setSelectedId} />
       )}
 
-      <RfqDetail rfqId={selectedId} onChanged={load} />
+      <RfqDetail rfqId={selectedId} />
+      <RfqActionTabs
+        rfqId={selectedId}
+        rfqNo={rows.find((r) => r.id === selectedId)?.crfq_no}
+        onChanged={load}
+      />
     </>
   );
 }
