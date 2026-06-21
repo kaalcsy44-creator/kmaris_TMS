@@ -298,6 +298,27 @@ export type CustomerQuoteItem = {
   amount: number | null;
 };
 
+export type QuotationTerms = {
+  incoterms?: string;
+  payment_terms?: string;
+  delivery_place?: string;
+  shipment_method?: string;
+  packing?: string;
+  warranty?: string;
+  remarks?: string;
+};
+
+// Customer Quotation 작성 시 공급사 견적에서 cost 불러오기용
+export type VendorQuoteForImport = {
+  id: number;
+  vendor_quote_no: string;
+  vendor: string;
+  vrfq_no: string;
+  received_date: string;
+  currency: string;
+  items: VendorQuoteItem[];
+};
+
 export type QtnRow = {
   id: number;
   qtn_no: string;

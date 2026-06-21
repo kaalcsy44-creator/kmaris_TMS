@@ -2836,6 +2836,36 @@ def create_vendor_quote(rfq_id: int, body: VendorQuoteCreate):
         s.close()
 
 
+@app.get("/api/admin/rfq/{rfq_id}/vendor-quotes",
+         dependencies=[Depends(require_token)])
+def rfq_vendor_quotes(rfq_id: int):
+    """해당 RFQ의 Vendor 견적 목록(품목 포함). Customer Quotation 작성 시
+    공급사 견적에서 cost_price/품목 정보를 불러오기 위한 selector 데이터."""
+    s = get_session()
+    try:
+        vrfqs = s.query(VendorRFQ).filter_by(rfq_id=rfq_id).all()
+        vrfq_map = {v.id: v for v in vrfqs}
+        vendor_names = {v.id: v.name for v in s.query(Vendor).all()}
+        vqs = (s.query(VendorQuote)
+               .filter(VendorQuote.vendor_rfq_id.in_(list(vrfq_map.keys())))
+               .order_by(VendorQuote.id.desc()).all() if vrfq_map else [])
+        out = []
+        for q in vqs:
+            vrfq = vrfq_map.get(q.vendor_rfq_id)
+            out.append({
+                "id": q.id,
+                "vendor_quote_no": getattr(q, "vendor_quote_no", None) or "—",
+                "vendor": vendor_names.get(vrfq.vendor_id, "—") if vrfq else "—",
+                "vrfq_no": vrfq.vrfq_no if vrfq else "—",
+                "received_date": q.received_date or "",
+                "currency": getattr(q, "currency", None) or "USD",
+                "items": q.items or [],
+            })
+        return {"vendor_quotes": out}
+    finally:
+        s.close()
+
+
 def _next_rfq_no(session, company_prefix: str = "KMS") -> str:
     """helpers.next_rfq_no 와 동일: KMS-RFQ-yymm-NNN (월 단위, 충돌 번호 건너뜀)."""
     today = date.today()
@@ -2920,6 +2950,7 @@ class CustomerQuoteCreate(BaseModel):
     items: list[dict] | None = None
     valid_until: str | None = None
     remarks: str = ""
+    terms: dict | None = None
 
 
 @app.post("/api/admin/rfq/{rfq_id}/customer-quote",
@@ -2937,6 +2968,10 @@ def create_customer_quote(rfq_id: int, body: CustomerQuoteCreate):
             amount = float(body.amount or 0)
             items = [{"amount": amount, "qty": 1, "unit_price": amount}]
 
+        terms = dict(body.terms or {})
+        if body.remarks and not terms.get("remarks"):
+            terms["remarks"] = body.remarks
+
         qtn_no = _next_quotation_no(s)
         qtn = Quotation(
             qtn_no=qtn_no,
@@ -2947,7 +2982,7 @@ def create_customer_quote(rfq_id: int, body: CustomerQuoteCreate):
             status=QuotationStatus.SENT,
             valid_until=body.valid_until,
             items=items,
-            terms={"remarks": body.remarks} if body.remarks else {},
+            terms=terms,
             date=date.today().strftime("%Y-%m-%d"),
             sent_date=date.today().strftime("%Y-%m-%d"),
         )

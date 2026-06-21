@@ -16,6 +16,8 @@ import type {
   VendorRfqPreview,
   VendorQuoteItem,
   CustomerQuoteItem,
+  QuotationTerms,
+  VendorQuoteForImport,
   DocumentDetail,
   DocumentWorkItem,
   QtnRow,
@@ -496,13 +498,20 @@ export function parseVendorQuoteFile(file: File): Promise<{ items: Partial<Vendo
   return postForm<{ items: Partial<VendorQuoteItem>[] }>("/api/admin/vendor-quote-parse", fd);
 }
 
+export function fetchRfqVendorQuotes(
+  rfqId: number
+): Promise<{ vendor_quotes: VendorQuoteForImport[] }> {
+  return get(`/api/admin/rfq/${rfqId}/vendor-quotes`);
+}
+
 export function createCustomerQuote(
   rfqId: number,
   currency: string,
   amount: number,
   items?: CustomerQuoteItem[],
   validUntil?: string,
-  remarks?: string
+  remarks?: string,
+  terms?: QuotationTerms
 ): Promise<{ ok: boolean; id: number; qtn_no: string }> {
   return post(`/api/admin/rfq/${rfqId}/customer-quote`, {
     currency,
@@ -510,6 +519,7 @@ export function createCustomerQuote(
     items,
     valid_until: validUntil,
     remarks,
+    terms,
   });
 }
 

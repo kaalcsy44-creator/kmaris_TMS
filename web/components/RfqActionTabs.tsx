@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import {
   fetchVendors,
   fetchRfqDetail,
+  fetchRfqVendorQuotes,
   createVendorRfq,
   previewVendorRfq,
   sendVendorRfq,
@@ -22,6 +23,8 @@ import type {
   VendorRfqPreview,
   VendorQuoteItem,
   CustomerQuoteItem,
+  QuotationTerms,
+  VendorQuoteForImport,
 } from "@/lib/types";
 import NewRfqForm from "./screens/NewRfqForm";
 
@@ -580,6 +583,16 @@ function cleanVendorQuoteItems(items: VendorQuoteItem[]): VendorQuoteItem[] {
   return items.map(normalizeVendorQuoteItem).filter((it) => it.part_no || it.description);
 }
 
+// Streamlit 4_Quotation.py 의 거래 조건 프리셋 — datalist 로 드롭다운 + 자유 입력 모두 지원.
+const TERM_PRESETS = {
+  incoterms: ["FCA Busan, Korea", "FOB Busan, Korea", "CIF (지정 목적항)", "CFR (지정 목적항)", "DAP (지정 목적지)", "EXW Busan"],
+  shipment_method: ["Air courier / Sea freight", "By Air (Courier)", "By Sea (FCL)", "By Sea (LCL)"],
+  payment_terms: ["100% T/T in advance", "T/T 30 days after delivery", "T/T 50% in advance, 50% before shipment", "L/C at sight"],
+  packing: ["Standard export packing", "Seaworthy export packing", "Wooden case packing"],
+  delivery_place: ["Busan, Republic of Korea", "Incheon, Republic of Korea"],
+  warranty: ["Manufacturer's standard warranty", "12 months from delivery", "6 months from delivery", "No warranty"],
+} as const;
+
 function CustomerQuoteAction({
   rfqId,
   onDone,
@@ -590,7 +603,13 @@ function CustomerQuoteAction({
   const [currency, setCurrency] = useState("USD");
   const [items, setItems] = useState<CustomerQuoteItem[]>([]);
   const [validUntil, setValidUntil] = useState("");
-  const [remarks, setRemarks] = useState("Bank charges outside Korea shall be borne by Buyer.");
+  const [defaultMargin, setDefaultMargin] = useState(20);
+  const [terms, setTerms] = useState<QuotationTerms>({
+    remarks: "Bank charges outside Korea shall be borne by Buyer.",
+  });
+  const [vendorQuotes, setVendorQuotes] = useState<VendorQuoteForImport[]>([]);
+  const [importVqId, setImportVqId] = useState<number | "">("");
+  const [docType, setDocType] = useState<"quotation" | "proforma_invoice">("quotation");
   const [qtn, setQtn] = useState<{ id: number; qtn_no: string } | null>(null);
   const [email, setEmail] = useState<{ to: string; subject: string; body: string; smtp_configured: boolean } | null>(null);
   const [to, setTo] = useState("");
@@ -600,6 +619,7 @@ function CustomerQuoteAction({
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
+  // RFQ 품목 정보로 기본 seed (cost 없음) — 공급사 견적을 불러오면 cost 가 채워진다.
   useEffect(() => {
     fetchRfqDetail(rfqId)
       .then((d) =>
@@ -609,15 +629,44 @@ function CustomerQuoteAction({
             description: it.description,
             qty: Number(it.qty || 1),
             unit: it.unit || "PCS",
-            cost_price: it.unit_price || 0,
+            cost_price: 0,
             margin_pct: 20,
-            unit_price: calcUnitPrice(it.unit_price || 0, 20),
-            amount: calcUnitPrice(it.unit_price || 0, 20) * Number(it.qty || 1),
+            unit_price: 0,
+            amount: 0,
           }))
         )
       )
       .catch(() => setItems([]));
+    fetchRfqVendorQuotes(rfqId)
+      .then((d) => setVendorQuotes(d.vendor_quotes))
+      .catch(() => setVendorQuotes([]));
   }, [rfqId]);
+
+  // 선택한 공급사 견적의 품목·cost_price 를 불러와 기본 마진을 적용한다.
+  function importFromVendorQuote() {
+    if (importVqId === "") return;
+    const vq = vendorQuotes.find((v) => v.id === importVqId);
+    if (!vq) return;
+    setItems(
+      vq.items.map((it) => {
+        const cost = Number(it.cost_price ?? 0);
+        const unit = calcUnitPrice(cost, defaultMargin);
+        const qty = Number(it.qty || 1);
+        return {
+          part_no: it.part_no || "",
+          description: it.description || "",
+          qty,
+          unit: it.unit || "PCS",
+          cost_price: cost,
+          margin_pct: defaultMargin,
+          unit_price: unit,
+          amount: unit * qty,
+        };
+      })
+    );
+    if (vq.currency) setCurrency(vq.currency);
+    setMsg(`${vq.vendor_quote_no} (${vq.vendor}) 견적에서 ${vq.items.length}개 품목을 불러왔습니다.`);
+  }
 
   const total = items.reduce((sum, it) => sum + Number(it.amount || 0), 0);
 
@@ -626,7 +675,7 @@ function CustomerQuoteAction({
     setMsg(null);
     setErr(null);
     try {
-      const r = await createCustomerQuote(rfqId, currency, total, items, validUntil, remarks);
+      const r = await createCustomerQuote(rfqId, currency, total, items, validUntil, undefined, terms);
       setQtn({ id: r.id, qtn_no: r.qtn_no });
       setMsg(`발신 완료 — ${r.qtn_no}`);
       onDone();
@@ -656,7 +705,7 @@ function CustomerQuoteAction({
 
   async function downloadPdf() {
     if (!qtn) return;
-    const res = await fetch(quotationPdfUrl(qtn.id), {
+    const res = await fetch(quotationPdfUrl(qtn.id, docType), {
       headers: { Authorization: `Bearer ${getToken()}` },
     });
     if (!res.ok) {
@@ -667,7 +716,7 @@ function CustomerQuoteAction({
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${qtn.qtn_no}.pdf`;
+    a.download = `${qtn.qtn_no}_${docType}.pdf`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -677,7 +726,7 @@ function CustomerQuoteAction({
     setBusy(true);
     setErr(null);
     try {
-      const r = await sendQuotationEmail(qtn.id, to, subject, body);
+      const r = await sendQuotationEmail(qtn.id, to, subject, body, docType);
       setMsg(`이메일 발송 완료: ${r.sent_date}`);
       onDone();
     } catch (e) {
@@ -690,6 +739,45 @@ function CustomerQuoteAction({
   return (
     <div>
       <div className="sub-h">Customer Quotation 작성·발신</div>
+
+      <div className="po-work-note">
+        <b>Vendor 견적에서 불러오기 — 권장</b>
+        <span>공급사 견적을 선택하면 품목과 원가(cost)를 그대로 불러와 기본 마진을 적용합니다.</span>
+      </div>
+      <div className="form-grid">
+        <div className="form-field">
+          <label>Vendor 견적 선택</label>
+          <select
+            value={importVqId}
+            onChange={(e) => setImportVqId(e.target.value === "" ? "" : Number(e.target.value))}
+            disabled={vendorQuotes.length === 0}
+          >
+            <option value="">
+              {vendorQuotes.length === 0 ? "수신된 Vendor 견적 없음" : "— 직접 입력 —"}
+            </option>
+            {vendorQuotes.map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.received_date || "—"} · {v.vendor} · {v.vendor_quote_no}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="form-field">
+          <label>기본 마진율 (%)</label>
+          <input
+            className="num"
+            type="number"
+            value={defaultMargin}
+            onChange={(e) => setDefaultMargin(Number(e.target.value))}
+          />
+        </div>
+        <div className="form-field" style={{ alignSelf: "end" }}>
+          <button className="btn" onClick={importFromVendorQuote} disabled={importVqId === ""}>
+            Vendor 견적 불러오기
+          </button>
+        </div>
+      </div>
+
       <div className="form-grid">
         <div className="form-field">
           <label>통화</label>
@@ -705,19 +793,36 @@ function CustomerQuoteAction({
           <input type="date" value={validUntil} onChange={(e) => setValidUntil(e.target.value)} />
         </div>
       </div>
+
       <CustomerQuoteItemEditor items={items} onChange={setItems} />
-      <div className="form-field" style={{ marginTop: 12 }}>
-        <label>Remarks</label>
-        <input value={remarks} onChange={(e) => setRemarks(e.target.value)} />
-      </div>
+
+      <QuotationTermsEditor terms={terms} onChange={setTerms} />
+
       <div className="form-actions">
         <span className="action-name">합계: {currency} {total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
         <button className="btn primary" onClick={submit} disabled={busy || items.length === 0}>
           {busy ? "저장 중…" : "견적 저장"}
         </button>
-        {qtn ? <button className="btn" onClick={downloadPdf}>PDF 다운로드</button> : null}
-        {qtn ? <button className="btn" onClick={makeEmailPreview}>이메일 미리보기</button> : null}
       </div>
+
+      {qtn ? (
+        <div className="panel" style={{ boxShadow: "none" }}>
+          <div className="sub-h">발신 — {qtn.qtn_no}</div>
+          <div className="form-grid">
+            <div className="form-field">
+              <label>문서 종류</label>
+              <select value={docType} onChange={(e) => setDocType(e.target.value as "quotation" | "proforma_invoice")}>
+                <option value="quotation">Quotation (견적서)</option>
+                <option value="proforma_invoice">Proforma Invoice (PI)</option>
+              </select>
+            </div>
+          </div>
+          <div className="form-actions">
+            <button className="btn" onClick={downloadPdf}>PDF 다운로드</button>
+            <button className="btn" onClick={makeEmailPreview} disabled={busy}>이메일 미리보기</button>
+          </div>
+        </div>
+      ) : null}
 
       {email ? (
         <div className="panel" style={{ boxShadow: "none" }}>
@@ -737,12 +842,60 @@ function CustomerQuoteAction({
             <textarea className="po-textarea" value={body} onChange={(e) => setBody(e.target.value)} />
           </div>
           <button className="btn primary" onClick={sendEmail} disabled={busy || !to || !email.smtp_configured}>
-            이메일 발송
+            {docType === "proforma_invoice" ? "PI 이메일 발송" : "견적서 이메일 발송"}
           </button>
         </div>
       ) : null}
       {msg ? <span className="action-ok">{msg}</span> : null}
       {err ? <span className="action-err">{err}</span> : null}
+    </div>
+  );
+}
+
+function QuotationTermsEditor({
+  terms,
+  onChange,
+}: {
+  terms: QuotationTerms;
+  onChange: (terms: QuotationTerms) => void;
+}) {
+  function field(key: keyof QuotationTerms, label: string) {
+    const presets = (TERM_PRESETS as Record<string, readonly string[]>)[key];
+    const listId = `qtn-term-${key}`;
+    return (
+      <div className="form-field">
+        <label>{label}</label>
+        <input
+          list={presets ? listId : undefined}
+          value={terms[key] ?? ""}
+          onChange={(e) => onChange({ ...terms, [key]: e.target.value })}
+        />
+        {presets ? (
+          <datalist id={listId}>
+            {presets.map((p) => (
+              <option key={p} value={p} />
+            ))}
+          </datalist>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ marginTop: 12 }}>
+      <div className="sub-h">거래 조건</div>
+      <div className="form-grid">
+        {field("incoterms", "Incoterms")}
+        {field("shipment_method", "Shipment Method")}
+        {field("payment_terms", "Payment Terms")}
+        {field("packing", "Packing")}
+        {field("delivery_place", "Delivery Place")}
+        {field("warranty", "Warranty")}
+      </div>
+      <div className="form-field" style={{ marginTop: 8 }}>
+        <label>Remarks</label>
+        <input value={terms.remarks ?? ""} onChange={(e) => onChange({ ...terms, remarks: e.target.value })} />
+      </div>
     </div>
   );
 }
