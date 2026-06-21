@@ -29,7 +29,7 @@ from pydantic import BaseModel
 from db.engine import get_session
 from db.models import (
     RFQ, Customer, Vessel, Vendor, User, DocSequence,
-    VendorRFQ, VendorQuote, Quotation, QuotationStatus,
+    VendorRFQ, VendorQuote, Quotation, QuotationStatus, FollowUpLevel,
     Order, PurchaseOrder, ShippingAdvice, CommercialInvoice,
     PackingList, TaxInvoiceData, ARRecord,
     RFQStatus, OrderStatus, ARStatus,
@@ -413,10 +413,16 @@ def dashboard():
         quotes = s.query(Quotation).all()
         ars = s.query(ARRecord).all()
 
-        open_statuses = {RFQStatus.RECEIVED, RFQStatus.SOURCING,
-                         RFQStatus.QUOTING, RFQStatus.SENT}
-        open_rfq = sum(1 for r in rfqs if r.status in open_statuses)
-        active_orders = sum(1 for o in orders if o.status != OrderStatus.DELIVERED)
+        today_iso = date.today().isoformat()
+        soon_iso = (date.today() + timedelta(days=7)).isoformat()
+        urgent_cutoff = (date.today() + timedelta(days=3)).isoformat()
+
+        # ── 운영 KPI ──────────────────────────────────────────────────────────
+        open_rfq = sum(1 for r in rfqs if r.status in
+                       {RFQStatus.RECEIVED, RFQStatus.SOURCING, RFQStatus.QUOTING})
+        active_orders = sum(1 for o in orders if o.status in
+                            {OrderStatus.RECEIVED, OrderStatus.PO_SENT, OrderStatus.PREPARING,
+                             OrderStatus.SHIPPED, OrderStatus.IN_TRANSIT})
 
         now = datetime.now(timezone.utc)
         monthly_quotes = sum(
@@ -426,8 +432,62 @@ def dashboard():
         )
         ar_outstanding = sum(
             (a.invoice_amount or 0) - (a.paid_amount or 0)
-            for a in ars if a.status != ARStatus.PAID
+            for a in ars
+            if a.status in {ARStatus.OUTSTANDING, ARStatus.PARTIAL, ARStatus.OVERDUE}
+            and (a.currency or "USD") == "USD"
         )
+
+        urgent = [q for q in quotes
+                  if q.status == QuotationStatus.SENT
+                  and q.follow_up_level == FollowUpLevel.A
+                  and q.valid_until and q.valid_until <= urgent_cutoff]
+        overdue = [a for a in ars if a.status == ARStatus.OVERDUE]
+        pending_po = sum(1 for o in orders if o.status == OrderStatus.RECEIVED)
+        expiring = sum(
+            1 for q in quotes
+            if q.status in (QuotationStatus.SENT, QuotationStatus.NEGOTIATING)
+            and q.valid_until and today_iso <= q.valid_until <= soon_iso
+        )
+
+        # ── 영업 성과 KPI ─────────────────────────────────────────────────────
+        total_rfq = len(rfqs)
+        sent_quote_rfq_ids = {q.rfq_id for q in quotes
+                              if q.rfq_id and q.status != QuotationStatus.DRAFT}
+        handling_rate = (len(sent_quote_rfq_ids) / total_rfq * 100) if total_rfq else 0.0
+
+        rfq_created = {r.id: r.created_at for r in rfqs}
+        _tat = []
+        for q in quotes:
+            base = rfq_created.get(q.rfq_id) if q.rfq_id else None
+            if base and q.created_at and q.status != QuotationStatus.DRAFT:
+                h = (q.created_at - base).total_seconds() / 3600
+                if h >= 0:
+                    _tat.append(h)
+        quotation_tat_h = (sum(_tat) / len(_tat)) if _tat else None
+
+        _sent_like = {QuotationStatus.SENT, QuotationStatus.NEGOTIATING,
+                      QuotationStatus.WON, QuotationStatus.LOST, QuotationStatus.EXPIRED}
+        sent_quotes = [q for q in quotes if q.status in _sent_like]
+        won_quotes = [q for q in quotes if q.status == QuotationStatus.WON]
+        hit_rate = (len(won_quotes) / len(sent_quotes) * 100) if sent_quotes else 0.0
+
+        margin_basis = won_quotes or sent_quotes
+        _rev = _cost = 0.0
+        for q in margin_basis:
+            for it in (q.items or []):
+                qty = float(it.get("qty", 1) or 1)
+                _rev += float(it.get("unit_price", 0) or 0) * qty
+                _cost += float(it.get("cost_price", 0) or 0) * qty
+        gross_margin_pct = ((_rev - _cost) / _rev * 100) if _rev else 0.0
+
+        negotiating_value_usd = 0.0
+        for q in quotes:
+            if q.status == QuotationStatus.NEGOTIATING and (q.currency or "USD") == "USD":
+                for it in (q.items or []):
+                    amt = it.get("amount")
+                    if amt in (None, ""):
+                        amt = float(it.get("unit_price", 0) or 0) * float(it.get("qty", 1) or 1)
+                    negotiating_value_usd += float(amt or 0)
 
         dist = [0] * len(INTERNAL_STEPS)
         for r in rfqs:
@@ -451,6 +511,30 @@ def dashboard():
                 "active_orders": active_orders,
                 "monthly_quotes": monthly_quotes,
                 "ar_outstanding_usd": round(ar_outstanding, 2),
+            },
+            "ops": {
+                "urgent": len(urgent),
+                "pending_po": pending_po,
+                "overdue": len(overdue),
+                "expiring": expiring,
+            },
+            "perf": {
+                "handling_rate": round(handling_rate, 0),
+                "quotation_tat_h": round(quotation_tat_h, 0) if quotation_tat_h is not None else None,
+                "hit_rate": round(hit_rate, 0),
+                "gross_margin_pct": round(gross_margin_pct, 1),
+                "negotiating_value_usd": round(negotiating_value_usd, 0),
+            },
+            "alerts": {
+                "urgent_quotes": [
+                    {"qtn_no": q.qtn_no, "valid_until": q.valid_until or "",
+                     "status": _enum_val(q.status)} for q in urgent
+                ],
+                "overdue_ar": [
+                    {"ci_no": a.ci_no or "", "currency": a.currency or "USD",
+                     "outstanding": round((a.invoice_amount or 0) - (a.paid_amount or 0), 2),
+                     "due_date": a.due_date or ""} for a in overdue
+                ],
             },
             "steps": INTERNAL_STEPS,
             "stage_distribution": dist,

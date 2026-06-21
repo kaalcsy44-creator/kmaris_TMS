@@ -265,6 +265,76 @@ body {
   border-bottom-color: var(--blue);
 }
 
+/* ── Dashboard KPI chips + alert cards ────────────────────────────────── */
+.kc-foot {
+  margin-top: 8px;
+}
+.kc-chip {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: #eef1f5;
+  color: #5a6b85;
+}
+.kc-chip.red {
+  background: #fdecea;
+  color: #b42318;
+}
+.kc-chip.amber {
+  background: #fff4e0;
+  color: #9a6700;
+}
+.kc-chip.blue {
+  background: #e7f0fb;
+  color: #0055a8;
+}
+.dash-two {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  margin-top: 4px;
+}
+.alert-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.alert-card.danger {
+  border-color: #f5c2c7;
+  background: #fff5f5;
+}
+.alert-card .a-main {
+  font-weight: 700;
+  color: var(--navy);
+  font-size: 13.5px;
+}
+.alert-card .a-sub {
+  font-size: 12px;
+  color: #6b7280;
+}
+.alert-card .a-right {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #dc3545;
+  white-space: nowrap;
+}
+.alert-ok {
+  border: 1px solid #cfe9d8;
+  background: #f1faf4;
+  color: #1a7a4a;
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
 /* ── Settings ──────────────────────────────────────────────────────── */
 .seg-tabs {
   display: inline-flex;

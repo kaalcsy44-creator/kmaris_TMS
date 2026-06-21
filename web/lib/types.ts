@@ -152,6 +152,28 @@ export type DashboardData = {
     monthly_quotes: number;
     ar_outstanding_usd: number;
   };
+  ops: {
+    urgent: number;
+    pending_po: number;
+    overdue: number;
+    expiring: number;
+  };
+  perf: {
+    handling_rate: number;
+    quotation_tat_h: number | null;
+    hit_rate: number;
+    gross_margin_pct: number;
+    negotiating_value_usd: number;
+  };
+  alerts: {
+    urgent_quotes: { qtn_no: string; valid_until: string; status: string }[];
+    overdue_ar: {
+      ci_no: string;
+      currency: string;
+      outstanding: number;
+      due_date: string;
+    }[];
+  };
   steps: string[];
   stage_distribution: number[];
   recent: {
