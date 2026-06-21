@@ -36,5 +36,9 @@ ktms/config/
 # Logs
 *.log
 
+# Stray Next.js build output (web/ has its own .gitignore; this catches a
+# root-level .next created by accidentally running next build from repo root)
+/.next/
+
 # Stray source assets at repo root (app uses ktms/app/assets/kmaris_emblem.png)
 /logo_K-maris.png
