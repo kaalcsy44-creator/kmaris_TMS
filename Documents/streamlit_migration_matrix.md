@@ -33,7 +33,7 @@ Then remove Streamlit-only app code after every operational workflow is covered 
 | P/O overview table | `5_PO.py` | Done | Checkbox selection, detail panel, tab shell exist. |
 | Customer P/O registration | `5_CustomerPO.py` | Partial | Form, quote/RFQ linkage, item editor, order PDF OCR upload exist. Missing quick Customer/Vessel create and status/date edit parity. |
 | Vendor P/O workflow | `5b_VendorPO.py` | Done/Partial | Create, email preview, PDF download, SMTP send, sent list exist. Vendor quote price import not fully ported. |
-| Documents overview/workflow | `6_Documents.py` | Done/Partial | Overview, row selection, milestones, CI/PL/SA/Tax creation, CI/PL/SA PDF download, Tax XLSX download, SA SMTP send, and Tax-to-AR creation now exist. Remaining parity: production SMTP verification, richer validation, and CI/PL/SA email package polish. |
+| Documents overview/workflow | `6_Documents.py` | Done | Overview, row selection, milestones, CI/PL/SA/Tax creation, CI/PL/SA PDF download, Tax XLSX download, SA SMTP send, Tax-to-AR creation, CI/PL/SA missing-item validation, and an explicit acknowledgement gate before SA send now exist. Optional: combined CI/PL/SA email package; production SMTP verification → Step 5. |
 | AR overview/payment | `7_AR.py` | Done/Partial | Overview, status/currency filters, inline payment, manual AR add, edit, delete now exist. Remaining parity: SOA export/reporting and production payment smoke tests. |
 | Settings master data | `8_Settings.py` | Done/Partial | Company profile, user list/create/update, Customer/Vendor/Vessel/Item Master list/create/update/delete now exist. Remaining parity: user delete/own password-change UX and production permission smoke tests. |
 | PDF/OCR services | `services/pdf_parser.py` | Partial | RFQ and Order OCR API exists. Need production Render deploy and `ANTHROPIC_API_KEY` verification. |
@@ -61,10 +61,11 @@ Do not remove Streamlit until:
    - ~~PI document option and full terms editor.~~
    - ~~RFQ detail level update/delete + quick Customer/Vessel create.~~
    - Production SMTP/OCR verification → moved to Step 5 smoke checklist.
-2. Finish Documents polish.
-   - Production SMTP smoke test.
-   - Optional combined CI/PL/SA email package.
-   - Stronger missing-item validation before send.
+2. ~~Finish Documents polish.~~ **DONE (2026-06-21)**
+   - ~~Stronger missing-item validation before send.~~ SA send now gated on a
+     CI-vs-order missing-item check + explicit acknowledgement.
+   - Optional combined CI/PL/SA email package — deferred (nice-to-have).
+   - Production SMTP smoke test → Step 5.
 3. Finish Settings polish.
    - User delete/disable UX and own password-change flow.
    - Production admin permission smoke test.

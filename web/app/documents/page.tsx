@@ -375,6 +375,10 @@ function ShippingAdviceTab({ data, onChanged }: { data: DocumentDetail; onChange
   const [subject, setSubject] = useState(data.sa?.sa_no ? `[K-MARIS] Shipping Advice ${data.sa.sa_no}` : "");
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
+  const [ackMissing, setAckMissing] = useState(false);
+
+  // SA 는 CI 기준으로 발송되므로 CI 가 오더와 일치하는지 발송 전 검증한다.
+  const ciMissing = data.ci?.missing || [];
 
   async function save() {
     setBusy(true);
@@ -402,6 +406,11 @@ function ShippingAdviceTab({ data, onChanged }: { data: DocumentDetail; onChange
         <Field label="SA Date" value={date} onChange={setDate} type="date" />
       </div>
       <ShippingFields shipping={shipping} setShipping={setShipping} />
+      {data.ci ? (
+        <MissingWarning missing={ciMissing} />
+      ) : (
+        <div className="alert-warn">CI가 아직 없습니다. SA는 CI 품목 기준으로 발송됩니다 — 먼저 CI를 생성하세요.</div>
+      )}
       <div className="form-grid">
         <Field label="수신자 이메일" value={to} onChange={setTo} />
         <Field label="제목" value={subject} onChange={setSubject} />
@@ -412,12 +421,22 @@ function ShippingAdviceTab({ data, onChanged }: { data: DocumentDetail; onChange
         value={body}
         onChange={(e) => setBody(e.target.value)}
       />
+      {ciMissing.length > 0 ? (
+        <label className="check-inline" style={{ marginTop: 8 }}>
+          <input type="checkbox" checked={ackMissing} onChange={(e) => setAckMissing(e.target.checked)} />
+          누락/수량부족 품목 {ciMissing.length}건을 확인했으며 그대로 발송합니다.
+        </label>
+      ) : null}
       <div className="form-actions">
         <button className="btn primary" disabled={busy} onClick={save}>
           SA 저장
         </button>
         <DownloadButton orderId={data.order.id} kind="sa/pdf" disabled={!data.sa} label="SA PDF 다운로드" />
-        <button className="btn" disabled={busy || !data.sa || !to.trim()} onClick={send}>
+        <button
+          className="btn"
+          disabled={busy || !data.sa || !to.trim() || (ciMissing.length > 0 && !ackMissing)}
+          onClick={send}
+        >
           SA 이메일 발송
         </button>
         <span className="hint-inline">

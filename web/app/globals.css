@@ -352,6 +352,15 @@ body {
   font-size: 13px;
   font-weight: 600;
 }
+.alert-warn {
+  border: 1px solid #f3e2c0;
+  background: #fdf8ee;
+  color: #9a6a16;
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-size: 13px;
+  font-weight: 600;
+}
 
 /* ── Tracking cards + stepper (Dashboard 고객 트래킹 / 내부 12단계) ──────── */
 .track-row {
