@@ -83,10 +83,8 @@ export default function PoScreen() {
                 <th className="chk"></th>
                 <th>K-Maris RFQ No.</th>
                 <th>Customer</th>
-                <th>선박</th>
                 <th>고객 P/O No.</th>
                 <th>K-Maris ORD No.</th>
-                <th className="num">품목수</th>
                 <th>Vendor P/O No.</th>
                 <th>Vendor</th>
                 <th>수신자 이메일</th>
@@ -116,14 +114,20 @@ export default function PoScreen() {
                       />
                     </td>
                     <Cell main={r.customer_rfq_no} />
-                    <Cell main={r.customer} />
-                    <Cell main={r.vessel} />
+                    <td className="cell">
+                      <div className="m">
+                        {r.customer || <span className="dash">—</span>}
+                      </div>
+                      {r.vessel && r.vessel !== "—" ? (
+                        <div className="s">{r.vessel}</div>
+                      ) : null}
+                      <div className="s">품목 {r.item_count}</div>
+                    </td>
                     <Cell
                       main={r.customer_po_no}
                       sub={r.customer_po_at ? `수신: ${r.customer_po_at}` : undefined}
                     />
                     <Cell main={r.ord_no} />
-                    <Cell main={String(r.item_count)} num />
                     <Cell
                       main={r.vendor_po_no}
                       sub={r.vendor_po_at ? `발신: ${r.vendor_po_at}` : undefined}
