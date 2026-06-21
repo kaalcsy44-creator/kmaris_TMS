@@ -36,12 +36,17 @@ services:
       # SMTP for outbound email (Vendor RFQ / Quotation / Vendor PO / SA).
       # SMTP_USER + SMTP_PASSWORD are required for sending; without them the
       # API still saves to DB but reports smtp_configured=false. HOST/PORT/FROM
-      # have code defaults (smtp.gmail.com:587) — override only if needed.
+      # have code defaults (smtp.gmail.com:587) — set them if using a non-Gmail
+      # relay.
       - key: SMTP_USER
         sync: false
       - key: SMTP_PASSWORD
         sync: false
       - key: SMTP_FROM
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
         sync: false
       # Public customer tracking link base (services use TRACKING_BASE_URL;
       # defaults to https://www.k-maris.com/track).
