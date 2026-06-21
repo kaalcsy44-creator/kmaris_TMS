@@ -260,6 +260,7 @@ def rfq_overview(customer_id: int | None = None):
     try:
         cust_names = {c.id: c.name for c in s.query(Customer).all()}
         vessel_names = {v.id: v.name for v in s.query(Vessel).all()}
+        vendor_names = {v.id: v.name for v in s.query(Vendor).all()}
 
         q = s.query(RFQ).order_by(RFQ.id.desc())
         if customer_id:
@@ -274,10 +275,16 @@ def rfq_overview(customer_id: int | None = None):
                      .order_by(VendorRFQ.id.desc()).all())
             if vrfqs:
                 vr0 = vrfqs[0]
-                vrfq_main = vr0.vrfq_no + (f"  (외 {len(vrfqs) - 1}건)" if len(vrfqs) > 1 else "")
                 vrfq_at = _kst(vr0.created_at)
+                # "2. Vendor RFQ 발신" 칼럼은 발송한 Vendor사 이름을 표시한다.
+                _vnames = []
+                for x in vrfqs:
+                    nm = vendor_names.get(x.vendor_id, "—")
+                    if nm not in _vnames:
+                        _vnames.append(nm)
+                vrfq_vendors = _vnames[0] + (f"  (외 {len(_vnames) - 1}곳)" if len(_vnames) > 1 else "")
             else:
-                vrfq_main, vrfq_at = "", ""
+                vrfq_at, vrfq_vendors = "", ""
 
             vrfq_ids = [x.id for x in vrfqs]
             vqs = (s.query(VendorQuote)
@@ -310,7 +317,7 @@ def rfq_overview(customer_id: int | None = None):
                 "item_count": len(r.items or []),
                 "crfq_no": r.rfq_no,
                 "crfq_at": _kst(r.created_at),
-                "vrfq_no": vrfq_main,
+                "vrfq_vendors": vrfq_vendors,
                 "vrfq_at": vrfq_at,
                 "vquote_no": vq_main,
                 "vquote_at": vq_at,
@@ -2708,6 +2715,19 @@ def _next_doc_no(session, doc_type: str, company_prefix: str = "KMS") -> str:
         return no
 
 
+def _vrfq_no_for_rfq(session, rfq) -> str:
+    """Vendor RFQ 번호는 별도 채번(KMS-VRFQ-…) 없이 K-Maris RFQ No.를 그대로
+    사용한다. 한 RFQ를 여러 Vendor로 발송할 때는 vrfq_no UNIQUE 제약을 지키기
+    위해 -2, -3 … 접미사를 붙인다 (별도 시퀀스를 만들지 않음)."""
+    base = rfq.rfq_no
+    if not session.query(VendorRFQ).filter_by(vrfq_no=base).first():
+        return base
+    n = 2
+    while session.query(VendorRFQ).filter_by(vrfq_no=f"{base}-{n}").first():
+        n += 1
+    return f"{base}-{n}"
+
+
 class VendorRfqCreate(BaseModel):
     vendor_id: int
 
@@ -2815,7 +2835,7 @@ def vendor_rfq_send(rfq_id: int, body: VendorRfqSendRequest):
             vendor = s.query(Vendor).filter_by(id=item.vendor_id).first()
             if not vendor:
                 continue
-            vrfq_no = _next_doc_no(s, "vendor_rfq")
+            vrfq_no = _vrfq_no_for_rfq(s, rfq)
             vrfq = VendorRFQ(
                 vrfq_no=vrfq_no,
                 rfq_id=rfq.id,
@@ -2894,7 +2914,7 @@ def create_vendor_rfq(rfq_id: int, body: VendorRfqCreate):
             "qty": it.get("qty", 1),
         } for it in (rfq.items or [])]
 
-        vrfq_no = _next_doc_no(s, "vendor_rfq")
+        vrfq_no = _vrfq_no_for_rfq(s, rfq)
         vrfq = VendorRFQ(
             vrfq_no=vrfq_no,
             rfq_id=rfq.id,

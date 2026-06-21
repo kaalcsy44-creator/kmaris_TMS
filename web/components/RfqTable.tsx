@@ -46,7 +46,7 @@ export default function RfqTable({
             <th className="num">품목수</th>
             <th>1. Customer RFQ 수신</th>
             <th>2. Vendor RFQ 발신</th>
-            <th>3. Vendor Quot. 수신</th>
+            <th>3. Vendor Quot. No.</th>
             <th className="num">Vendor 견적 금액</th>
             <th>4. Customer Quot. 발신</th>
             <th className="num">Customer 견적 금액</th>
@@ -75,7 +75,7 @@ export default function RfqTable({
                 <Cell main={r.vessel} />
                 <Cell main={String(r.item_count)} num />
                 <Cell main={r.crfq_no} sub={r.crfq_at} />
-                <Cell main={r.vrfq_no} sub={r.vrfq_at} />
+                <Cell main={r.vrfq_vendors} sub={r.vrfq_at} />
                 <Cell main={r.vquote_no} sub={r.vquote_at} />
                 <Cell main={r.vendor_amount} num />
                 <Cell main={r.cquote_no} sub={r.cquote_at} />
