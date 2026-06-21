@@ -1,7 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { fetchCustomers, fetchSettingsVessels, createRfq } from "@/lib/api";
+import {
+  fetchCustomers,
+  fetchSettingsVessels,
+  createRfq,
+  parseRfqPdf,
+} from "@/lib/api";
 import type { CustomerOption, SettingsVessel } from "@/lib/types";
 
 type ItemRow = { part_no: string; description: string; qty: string };
@@ -22,8 +27,10 @@ export default function NewRfqForm({
     { part_no: "", description: "", qty: "1" },
   ]);
   const [busy, setBusy] = useState(false);
+  const [ocrBusy, setOcrBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [ocrMsg, setOcrMsg] = useState<string | null>(null);
 
   useEffect(() => {
     fetchCustomers().then(setCustomers).catch(() => setCustomers([]));
@@ -40,6 +47,48 @@ export default function NewRfqForm({
   }
   function removeItem(i: number) {
     setItems((prev) => prev.filter((_, idx) => idx !== i));
+  }
+
+  function matchName<T extends { name: string }>(hint: string | null | undefined, rows: T[]) {
+    if (!hint) return undefined;
+    const h = hint.trim().toLowerCase();
+    return rows.find((r) => {
+      const n = r.name.toLowerCase();
+      return h === n || h.includes(n) || n.includes(h);
+    });
+  }
+
+  async function uploadOcr(file: File | null) {
+    if (!file) return;
+    setOcrBusy(true);
+    setErr(null);
+    setOcrMsg(null);
+    try {
+      const r = await parseRfqPdf(file);
+      const cust = matchName(r.customer_hint, customers);
+      const vessel = matchName(r.vessel_name, vessels);
+      if (cust) setCustomerId(cust.id);
+      if (vessel) setVesselId(vessel.id);
+      if (r.customer_rfq_no) setCustRfqNo(r.customer_rfq_no);
+      if (r.items?.length) {
+        setItems(
+          r.items.map((it) => ({
+            part_no: it.part_no ?? "",
+            description: it.description ?? "",
+            qty: String(it.qty ?? 1),
+          }))
+        );
+      }
+      setOcrMsg(
+        `추출 완료: ${r.items?.length ?? 0}개 품목${
+          r.customer_hint ? ` · Customer 힌트 ${r.customer_hint}` : ""
+        }`
+      );
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "OCR 추출 실패");
+    } finally {
+      setOcrBusy(false);
+    }
   }
 
   async function submit() {
@@ -78,6 +127,21 @@ export default function NewRfqForm({
 
   return (
     <div className="panel form-panel">
+      <div className="po-work-note">
+        <b>PDF로 자동 입력 (AI OCR)</b>
+        <span>RFQ PDF를 업로드하면 Customer, 선박, 고객 RFQ No., 품목을 자동 추출해 아래 폼에 반영합니다.</span>
+      </div>
+      <div className="action-row">
+        <input
+          type="file"
+          accept="application/pdf"
+          onChange={(e) => uploadOcr(e.target.files?.[0] ?? null)}
+          disabled={ocrBusy}
+        />
+        {ocrBusy ? <span className="hint-inline">AI가 PDF를 분석 중…</span> : null}
+        {ocrMsg ? <span className="action-ok">{ocrMsg}</span> : null}
+      </div>
+
       <div className="form-grid">
         <Field label="Customer *">
           <select

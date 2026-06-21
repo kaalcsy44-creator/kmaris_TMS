@@ -799,6 +799,41 @@ a.btn.primary:hover {
   font-size: 13px;
   background: #fff;
 }
+.form-field textarea,
+.po-textarea {
+  width: 100%;
+  min-height: 240px;
+  border: 1px solid #d7e2ee;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.45;
+  background: #fff;
+  color: var(--ink);
+  resize: vertical;
+}
+.po-textarea.small {
+  min-height: 78px;
+}
+.po-work-note {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fbff;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+}
+.po-work-note b {
+  color: var(--navy);
+  font-size: 13px;
+  white-space: nowrap;
+}
+.po-work-note span {
+  color: var(--muted);
+  font-size: 12.5px;
+}
 table.mini.wide input {
   width: 100%;
   height: 30px;

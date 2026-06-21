@@ -112,6 +112,115 @@ export type PoDetail = {
   };
 };
 
+export type PoWorkItem = {
+  part_no: string;
+  description: string;
+  maker?: string;
+  qty: number;
+  unit: string;
+  unit_price: number | null;
+  amount: number | null;
+};
+
+export type RfqOcrResult = {
+  vessel_name?: string | null;
+  rfq_date?: string | null;
+  customer_rfq_no?: string | null;
+  customer_hint?: string | null;
+  notes?: string | null;
+  items?: {
+    part_no?: string;
+    description?: string;
+    maker?: string;
+    qty?: number;
+    unit?: string;
+    lead_time_req?: string;
+    remark?: string;
+  }[];
+};
+
+export type OrderOcrResult = {
+  customer_hint?: string | null;
+  po_no?: string | null;
+  order_date?: string | null;
+  vessel_name?: string | null;
+  promised_delivery?: string | null;
+  items?: {
+    part_no?: string;
+    description?: string;
+    maker?: string;
+    qty?: number;
+    unit?: string;
+    unit_price?: number;
+    remark?: string;
+  }[];
+};
+
+export type PoWorkOptions = {
+  customers: CustomerOption[];
+  vessels: { id: number; name: string; customer_id: number | null }[];
+  vendors: VendorOption[];
+  rfqs: {
+    id: number;
+    rfq_no: string;
+    customer_rfq_no: string;
+    customer_id: number;
+    customer: string;
+    vessel_id: number | null;
+    vessel: string;
+    status: string;
+    items: PoWorkItem[];
+  }[];
+  quotations: {
+    id: number;
+    qtn_no: string;
+    rfq_id: number | null;
+    customer_id: number;
+    customer: string;
+    vessel_id: number | null;
+    vessel: string;
+    status: string;
+    currency: string;
+    amount: number;
+    items: PoWorkItem[];
+  }[];
+  orders: {
+    id: number;
+    ord_no: string;
+    customer_id: number;
+    customer: string;
+    vessel_id: number | null;
+    vessel: string;
+    po_no: string;
+    date: string;
+    status: string;
+    items: PoWorkItem[];
+  }[];
+  purchase_orders: {
+    id: number;
+    po_no: string;
+    order_id: number;
+    ord_no: string;
+    vendor_id: number;
+    vendor: string;
+    vendor_email: string;
+    date: string;
+    sent_date: string;
+    status: string;
+    sent: boolean;
+    items: PoWorkItem[];
+  }[];
+  smtp_configured: boolean;
+};
+
+export type VendorPoPreview = {
+  to: string;
+  subject: string;
+  body: string;
+  pdf_filename: string;
+  smtp_configured: boolean;
+};
+
 export type QtnRow = {
   id: number;
   qtn_no: string;

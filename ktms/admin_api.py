@@ -22,13 +22,18 @@ if str(ROOT) not in sys.path:
 
 import bcrypt
 import jwt
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, File, Header, HTTPException, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from db.engine import get_session
 from services.tracking_status import (
     rfq_tracking_step, order_tracking_step, RFQ_STEPS, ORDER_STEPS,
+)
+from services.email_svc import send_email
+from services.pdf_svc import build_po_payload, generate_po_pdf
+from services.pdf_parser import (
+    extract_text_from_pdf, parse_order_fields, parse_rfq_fields,
 )
 from db.models import (
     RFQ, Customer, Vessel, Vendor, User, DocSequence,
@@ -331,6 +336,86 @@ def _item_view(it: dict) -> dict:
         "unit_price": unit,
         "amount": amount,
     }
+
+
+def _po_item_lines(items, korean: bool) -> str:
+    qty_label = "수량" if korean else "Qty"
+    desc_label = "품명" if korean else "Desc"
+    return "\n".join(
+        f"  {i+1:>2}. Part No.: {str(it.get('part_no','—')):<20s}"
+        f"  {qty_label}: {it.get('qty','—')} {str(it.get('unit','')):<5s}"
+        f"  Maker: {it.get('maker','—')}\n"
+        f"       {desc_label}: {it.get('description','—')}"
+        for i, it in enumerate(items or [])
+    )
+
+
+def _vendor_po_email_body(po, vendor, order, vessel, notes: str, lang: str) -> str:
+    vendor_name = vendor.name if vendor else "Vendor"
+    vessel_str = vessel.name if vessel else "—"
+    if lang == "ko":
+        body = f"""{vendor_name} 귀중
+
+안녕하세요,
+항상 협조해 주셔서 감사드립니다.
+
+아래 선박용 부품에 대한 발주서를 첨부와 같이 송부드립니다.
+
+발주번호 : {po.po_no}
+오더참조 : {order.ord_no if order else '—'}
+선박명   : {vessel_str}
+발주일   : {po.date or date.today().isoformat()}
+
+──────────────────────── 품목 리스트 ────────────────────────
+{_po_item_lines(po.items, korean=True)}
+──────────────────────────────────────────────────────────────
+
+수령 후 아래 사항을 확인·회신해 주시기 바랍니다:
+  • 본 발주 수락 여부
+  • 확정 납기 (출고 예정일)
+  • 품번·수량·단가 상이 여부
+
+"""
+        if notes:
+            body += f"추가 사항:\n{notes}\n\n"
+        body += """영업일 기준 3일 이내 수령 확인 및 회신 부탁드립니다.
+
+감사합니다.
+K-MARIS Energy & Solutions Co., Ltd.
+Email: sales@k-maris.com  |  www.k-maris.com
+Engineering Reliability. Supplying Performance.
+"""
+        return body
+
+    body = f"""Dear {vendor_name},
+
+Please find attached our official Purchase Order for the following marine spare parts.
+
+PO No.        : {po.po_no}
+Order Ref.    : {order.ord_no if order else '—'}
+Vessel        : {vessel_str}
+Order Date    : {po.date or date.today().isoformat()}
+
+──────────────────────── ITEM LIST ────────────────────────
+{_po_item_lines(po.items, korean=False)}
+────────────────────────────────────────────────────────────
+
+Please confirm the following upon receipt:
+  • Acceptance of this Purchase Order
+  • Confirmed delivery schedule (ex-works / shipment date)
+  • Any discrepancy in part number, quantity, or price
+
+"""
+    if notes:
+        body += f"Additional Notes:\n{notes}\n\n"
+    body += """Kindly acknowledge receipt and confirm within 3 business days.
+
+Best regards,
+K-MARIS Energy & Solutions Co., Ltd.
+Email: sales@k-maris.com  |  www.k-maris.com
+Engineering Reliability. Supplying Performance.
+"""
+    return body
 
 
 @app.get("/api/admin/rfq/{rfq_id}", dependencies=[Depends(require_token)])
@@ -733,6 +818,404 @@ def order_detail(order_id: int):
                 } for ar in ars],
             },
         }
+    finally:
+        s.close()
+
+
+@app.get("/api/admin/po-work-options", dependencies=[Depends(require_token)])
+def po_work_options():
+    """P/O 작업 탭용 옵션 — Streamlit Customer P/O / Vendor P/O 탭 데이터."""
+    s = get_session()
+    try:
+        customers = [{"id": c.id, "name": c.name} for c in s.query(Customer).order_by(Customer.name).all()]
+        vessels = [{
+            "id": v.id,
+            "name": v.name,
+            "customer_id": v.customer_id,
+        } for v in s.query(Vessel).order_by(Vessel.name).all()]
+        vendors = [{
+            "id": v.id,
+            "name": v.name,
+            "email": v.email or "",
+        } for v in s.query(Vendor).order_by(Vendor.name).all()]
+
+        cust_names = {c["id"]: c["name"] for c in customers}
+        vessel_names = {v["id"]: v["name"] for v in vessels}
+
+        rfqs = []
+        for r in s.query(RFQ).order_by(RFQ.id.desc()).all():
+            stage = _pipeline_stage(s, r.id)
+            rfqs.append({
+                "id": r.id,
+                "rfq_no": r.rfq_no,
+                "customer_rfq_no": r.customer_rfq_no or "",
+                "customer_id": r.customer_id,
+                "customer": cust_names.get(r.customer_id, "—"),
+                "vessel_id": r.vessel_id,
+                "vessel": vessel_names.get(r.vessel_id, "") if r.vessel_id else "",
+                "status": _status_label(stage),
+                "items": [_item_view(it) for it in (r.items or [])],
+            })
+
+        quotations = []
+        for q in s.query(Quotation).order_by(Quotation.id.desc()).all():
+            quotations.append({
+                "id": q.id,
+                "qtn_no": q.qtn_no,
+                "rfq_id": q.rfq_id,
+                "customer_id": q.customer_id,
+                "customer": cust_names.get(q.customer_id, "—"),
+                "vessel_id": q.vessel_id,
+                "vessel": vessel_names.get(q.vessel_id, "") if q.vessel_id else "",
+                "status": _enum_val(q.status),
+                "currency": q.currency or "USD",
+                "amount": round(_total_amount(q.items or []), 2),
+                "items": [_item_view(it) for it in (q.items or [])],
+            })
+
+        orders = []
+        for o in s.query(Order).order_by(Order.id.desc()).all():
+            rfq = _rfq_for_order(s, o)
+            stage = _pipeline_stage(s, rfq.id) if rfq else 5
+            orders.append({
+                "id": o.id,
+                "ord_no": o.ord_no,
+                "customer_id": o.customer_id,
+                "customer": cust_names.get(o.customer_id, "—"),
+                "vessel_id": o.vessel_id,
+                "vessel": vessel_names.get(o.vessel_id, "") if o.vessel_id else "",
+                "po_no": o.po_no or "",
+                "date": o.date or "",
+                "status": _status_label(stage) if rfq else _enum_val(o.status),
+                "items": [_item_view(it) for it in (o.items or [])],
+            })
+
+        purchase_orders = []
+        for po in s.query(PurchaseOrder).order_by(PurchaseOrder.id.desc()).all():
+            o = s.query(Order).filter_by(id=po.order_id).first()
+            vendor = s.query(Vendor).filter_by(id=po.vendor_id).first()
+            purchase_orders.append({
+                "id": po.id,
+                "po_no": po.po_no or "",
+                "order_id": po.order_id,
+                "ord_no": o.ord_no if o else "",
+                "vendor_id": po.vendor_id,
+                "vendor": vendor.name if vendor else "—",
+                "vendor_email": po.sent_to_email or (vendor.email if vendor else "") or "",
+                "date": po.date or "",
+                "sent_date": po.sent_date or "",
+                "status": po.status or "",
+                "sent": po.status == "이메일 발송완료",
+                "items": [_item_view(it) for it in (po.items or [])],
+            })
+
+        return {
+            "customers": customers,
+            "vessels": vessels,
+            "vendors": vendors,
+            "rfqs": rfqs,
+            "quotations": quotations,
+            "orders": orders,
+            "purchase_orders": purchase_orders,
+            "smtp_configured": bool(os.getenv("SMTP_USER") and os.getenv("SMTP_PASSWORD")),
+        }
+    finally:
+        s.close()
+
+
+@app.post("/api/admin/ocr/rfq", dependencies=[Depends(require_token)])
+def ocr_rfq_pdf(file: UploadFile = File(...)):
+    """Customer RFQ PDF OCR — Streamlit 'PDF로 자동 입력'과 동일 파서."""
+    if not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="PDF 파일만 업로드할 수 있습니다.")
+    s = get_session()
+    try:
+        customer_names = [c.name for c in s.query(Customer).order_by(Customer.name).all()]
+    finally:
+        s.close()
+    try:
+        file.file.seek(0)
+        raw_text = extract_text_from_pdf(file.file)
+        if not raw_text:
+            raise HTTPException(status_code=400, detail="PDF에서 텍스트를 추출할 수 없습니다.")
+        return parse_rfq_fields(raw_text, customer_names)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"OCR 추출 실패: {exc}") from exc
+
+
+@app.post("/api/admin/ocr/order", dependencies=[Depends(require_token)])
+def ocr_order_pdf(file: UploadFile = File(...)):
+    """Customer P/O PDF OCR — Streamlit '오더 PDF 자동 입력'과 동일 파서."""
+    if not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="PDF 파일만 업로드할 수 있습니다.")
+    s = get_session()
+    try:
+        customer_names = [c.name for c in s.query(Customer).order_by(Customer.name).all()]
+    finally:
+        s.close()
+    try:
+        file.file.seek(0)
+        raw_text = extract_text_from_pdf(file.file)
+        if not raw_text:
+            raise HTTPException(status_code=400, detail="PDF에서 텍스트를 추출할 수 없습니다.")
+        return parse_order_fields(raw_text, customer_names)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"OCR 추출 실패: {exc}") from exc
+
+
+def _next_order_no(session, company_prefix: str = "KMS") -> str:
+    today = date.today()
+    period = today.year * 100 + today.month
+    seq = session.query(DocSequence).filter_by(doc_type="order_internal", year=period).first()
+    if not seq:
+        seq = DocSequence(doc_type="order_internal", year=period, last_seq=0)
+        session.add(seq)
+    while True:
+        seq.last_seq += 1
+        no = f"{company_prefix}-ORD-{today:%y%m}-{seq.last_seq:03d}"
+        if not session.query(Order).filter_by(ord_no=no).first():
+            session.flush()
+            return no
+
+
+def _next_po_no(session, company_prefix: str = "KMS") -> str:
+    today = date.today()
+    period = today.year * 100 + today.month
+    seq = session.query(DocSequence).filter_by(doc_type="po_internal", year=period).first()
+    if not seq:
+        seq = DocSequence(doc_type="po_internal", year=period, last_seq=0)
+        session.add(seq)
+    while True:
+        seq.last_seq += 1
+        no = f"{company_prefix}-PO-{today:%y%m}-{seq.last_seq:03d}"
+        if not session.query(PurchaseOrder).filter_by(po_no=no).first():
+            session.flush()
+            return no
+
+
+class PoWorkItem(BaseModel):
+    part_no: str = ""
+    description: str = ""
+    maker: str = ""
+    qty: float = 1
+    unit: str = "PCS"
+    unit_price: float | None = 0
+    amount: float | None = None
+
+
+class OrderCreate(BaseModel):
+    customer_id: int
+    vessel_id: int | None = None
+    quotation_id: int | None = None
+    rfq_id: int | None = None
+    po_no: str = ""
+    date: str | None = None
+    promised_delivery: str | None = None
+    items: list[PoWorkItem] = []
+
+
+@app.post("/api/admin/orders", dependencies=[Depends(require_token)])
+def create_order(body: OrderCreate):
+    """Customer P/O 수신 탭 — 신규 오더 등록."""
+    s = get_session()
+    try:
+        cust = s.query(Customer).filter_by(id=body.customer_id).first()
+        if not cust:
+            raise HTTPException(status_code=400, detail="Customer를 선택하세요.")
+        qtn = s.query(Quotation).filter_by(id=body.quotation_id).first() if body.quotation_id else None
+        rfq_id = body.rfq_id or (qtn.rfq_id if qtn else None)
+        items = []
+        for it in body.items:
+            if not (it.part_no or it.description):
+                continue
+            qty = it.qty or 1
+            unit_price = it.unit_price or 0
+            items.append({
+                "part_no": it.part_no.strip(),
+                "description": it.description.strip(),
+                "maker": it.maker.strip(),
+                "qty": qty,
+                "unit": it.unit or "PCS",
+                "unit_price": unit_price,
+                "amount": it.amount if it.amount is not None else qty * unit_price,
+            })
+
+        ord_no = _next_order_no(s)
+        order = Order(
+            ord_no=ord_no,
+            quotation_id=qtn.id if qtn else None,
+            rfq_id=rfq_id,
+            customer_id=cust.id,
+            vessel_id=body.vessel_id,
+            po_no=(body.po_no or "").strip(),
+            date=body.date or date.today().isoformat(),
+            promised_delivery=body.promised_delivery or None,
+            status=OrderStatus.RECEIVED,
+            items=items,
+        )
+        s.add(order)
+        if qtn:
+            qtn.status = QuotationStatus.WON
+        s.commit()
+        return {"ok": True, "id": order.id, "ord_no": order.ord_no}
+    finally:
+        s.close()
+
+
+class PurchaseOrderCreate(BaseModel):
+    order_id: int
+    vendor_id: int
+    date: str | None = None
+    items: list[PoWorkItem] = []
+
+
+@app.post("/api/admin/vendor-pos", dependencies=[Depends(require_token)])
+def create_purchase_order(body: PurchaseOrderCreate):
+    """Vendor P/O 발신 탭 — 발주서 생성."""
+    s = get_session()
+    try:
+        order = s.query(Order).filter_by(id=body.order_id).first()
+        if not order:
+            raise HTTPException(status_code=404, detail="오더를 찾을 수 없습니다.")
+        vendor = s.query(Vendor).filter_by(id=body.vendor_id).first()
+        if not vendor:
+            raise HTTPException(status_code=400, detail="Vendor를 선택하세요.")
+
+        items = []
+        for it in body.items:
+            if not (it.part_no or it.description):
+                continue
+            qty = it.qty or 1
+            unit_price = it.unit_price or 0
+            items.append({
+                "part_no": it.part_no.strip(),
+                "description": it.description.strip(),
+                "maker": it.maker.strip(),
+                "qty": qty,
+                "unit": it.unit or "PCS",
+                "unit_price": unit_price,
+                "amount": it.amount if it.amount is not None else qty * unit_price,
+            })
+
+        po_no = _next_po_no(s)
+        po = PurchaseOrder(
+            po_no=po_no,
+            order_id=order.id,
+            vendor_id=vendor.id,
+            date=body.date or date.today().isoformat(),
+            items=items,
+            status="발주완료",
+        )
+        s.add(po)
+        order.status = OrderStatus.PO_SENT
+        s.commit()
+        return {"ok": True, "id": po.id, "po_no": po.po_no}
+    finally:
+        s.close()
+
+
+class VendorPoPreview(BaseModel):
+    lang: str = "en"
+    notes: str = ""
+
+
+@app.post("/api/admin/vendor-pos/{po_id}/preview", dependencies=[Depends(require_token)])
+def vendor_po_preview(po_id: int, body: VendorPoPreview):
+    s = get_session()
+    try:
+        po = s.query(PurchaseOrder).filter_by(id=po_id).first()
+        if not po:
+            raise HTTPException(status_code=404, detail="발주서를 찾을 수 없습니다.")
+        vendor = s.query(Vendor).filter_by(id=po.vendor_id).first()
+        order = s.query(Order).filter_by(id=po.order_id).first()
+        vessel = s.query(Vessel).filter_by(id=order.vessel_id).first() if order and order.vessel_id else None
+        lang = "ko" if body.lang == "ko" else "en"
+        subject = (
+            f"[K-MARIS] 발주서 송부 — {po.po_no} / {vessel.name if vessel else po.po_no}"
+            if lang == "ko"
+            else f"[K-MARIS] Purchase Order — {po.po_no} / {vessel.name if vessel else po.po_no}"
+        )
+        return {
+            "to": (vendor.email if vendor else "") or "",
+            "subject": subject,
+            "body": _vendor_po_email_body(po, vendor, order, vessel, body.notes, lang),
+            "pdf_filename": f"{po.po_no}_PurchaseOrder.pdf",
+            "smtp_configured": bool(os.getenv("SMTP_USER") and os.getenv("SMTP_PASSWORD")),
+        }
+    finally:
+        s.close()
+
+
+@app.get("/api/admin/vendor-pos/{po_id}/pdf", dependencies=[Depends(require_token)])
+def vendor_po_pdf(po_id: int):
+    s = get_session()
+    try:
+        po = s.query(PurchaseOrder).filter_by(id=po_id).first()
+        if not po:
+            raise HTTPException(status_code=404, detail="발주서를 찾을 수 없습니다.")
+        vendor = s.query(Vendor).filter_by(id=po.vendor_id).first()
+        order = s.query(Order).filter_by(id=po.order_id).first()
+        vessel = s.query(Vessel).filter_by(id=order.vessel_id).first() if order and order.vessel_id else None
+        payload = build_po_payload(
+            po_no=po.po_no,
+            date=po.date or date.today().isoformat(),
+            vendor=vendor,
+            vessel=vessel,
+            items=po.items or [],
+        )
+        pdf = generate_po_pdf(payload)
+        return Response(
+            content=pdf,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{po.po_no}_PurchaseOrder.pdf"'},
+        )
+    finally:
+        s.close()
+
+
+class VendorPoSend(BaseModel):
+    to: str
+    subject: str
+    body: str
+
+
+@app.post("/api/admin/vendor-pos/{po_id}/send", dependencies=[Depends(require_token)])
+def vendor_po_send(po_id: int, body: VendorPoSend):
+    s = get_session()
+    try:
+        po = s.query(PurchaseOrder).filter_by(id=po_id).first()
+        if not po:
+            raise HTTPException(status_code=404, detail="발주서를 찾을 수 없습니다.")
+        if not body.to.strip():
+            raise HTTPException(status_code=400, detail="수신자 이메일을 입력하세요.")
+        vendor = s.query(Vendor).filter_by(id=po.vendor_id).first()
+        order = s.query(Order).filter_by(id=po.order_id).first()
+        vessel = s.query(Vessel).filter_by(id=order.vessel_id).first() if order and order.vessel_id else None
+        payload = build_po_payload(
+            po_no=po.po_no,
+            date=po.date or date.today().isoformat(),
+            vendor=vendor,
+            vessel=vessel,
+            items=po.items or [],
+        )
+        pdf = generate_po_pdf(payload)
+        sent = send_email(
+            to=body.to.strip(),
+            subject=body.subject,
+            body=body.body,
+            attachments=[(f"{po.po_no}_PurchaseOrder.pdf", pdf)],
+        )
+        if not sent:
+            raise HTTPException(status_code=400, detail="이메일 발송 실패 — SMTP 설정 또는 서버 상태를 확인하세요.")
+        po.status = "이메일 발송완료"
+        po.sent_to_email = body.to.strip()
+        po.sent_date = date.today().isoformat()
+        s.commit()
+        return {"ok": True, "sent_date": po.sent_date}
     finally:
         s.close()
 

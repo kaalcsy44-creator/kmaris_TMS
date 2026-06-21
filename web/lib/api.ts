@@ -8,6 +8,11 @@ import type {
   DashboardData,
   PoRow,
   PoDetail,
+  PoWorkItem,
+  PoWorkOptions,
+  RfqOcrResult,
+  OrderOcrResult,
+  VendorPoPreview,
   QtnRow,
   VrfqRow,
   DocRow,
@@ -56,6 +61,15 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   return handle<T>(res, path);
 }
 
+async function postForm<T>(path: string, body: FormData): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    headers: authHeaders(),
+    body,
+  });
+  return handle<T>(res, path);
+}
+
 export function fetchRfqOverview(customerId?: number): Promise<RfqOverview> {
   const q = customerId ? `?customer_id=${customerId}` : "";
   return get<RfqOverview>(`/api/admin/rfq-overview${q}`);
@@ -78,6 +92,18 @@ export function createRfq(body: {
   return post("/api/admin/rfq", body);
 }
 
+export function parseRfqPdf(file: File): Promise<RfqOcrResult> {
+  const fd = new FormData();
+  fd.append("file", file);
+  return postForm<RfqOcrResult>("/api/admin/ocr/rfq", fd);
+}
+
+export function parseOrderPdf(file: File): Promise<OrderOcrResult> {
+  const fd = new FormData();
+  fd.append("file", file);
+  return postForm<OrderOcrResult>("/api/admin/ocr/order", fd);
+}
+
 export function fetchDashboard(): Promise<DashboardData> {
   return get<DashboardData>("/api/admin/dashboard");
 }
@@ -92,6 +118,53 @@ export function fetchPoOverview(): Promise<{ rows: PoRow[] }> {
 
 export function fetchPoDetail(id: number): Promise<PoDetail> {
   return get<PoDetail>(`/api/admin/order/${id}`);
+}
+
+export function fetchPoWorkOptions(): Promise<PoWorkOptions> {
+  return get<PoWorkOptions>("/api/admin/po-work-options");
+}
+
+export function createOrder(body: {
+  customer_id: number;
+  vessel_id?: number | null;
+  quotation_id?: number | null;
+  rfq_id?: number | null;
+  po_no?: string;
+  date?: string;
+  promised_delivery?: string | null;
+  items: PoWorkItem[];
+}): Promise<{ ok: boolean; id: number; ord_no: string }> {
+  return post("/api/admin/orders", body);
+}
+
+export function createPurchaseOrder(body: {
+  order_id: number;
+  vendor_id: number;
+  date?: string;
+  items: PoWorkItem[];
+}): Promise<{ ok: boolean; id: number; po_no: string }> {
+  return post("/api/admin/vendor-pos", body);
+}
+
+export function previewVendorPo(
+  poId: number,
+  lang: "en" | "ko",
+  notes: string
+): Promise<VendorPoPreview> {
+  return post(`/api/admin/vendor-pos/${poId}/preview`, { lang, notes });
+}
+
+export function sendVendorPo(
+  poId: number,
+  to: string,
+  subject: string,
+  body: string
+): Promise<{ ok: boolean; sent_date: string }> {
+  return post(`/api/admin/vendor-pos/${poId}/send`, { to, subject, body });
+}
+
+export function vendorPoPdfUrl(poId: number): string {
+  return `${API_BASE}/api/admin/vendor-pos/${poId}/pdf`;
 }
 
 export function fetchQuotationOverview(customerId?: number): Promise<{ rows: QtnRow[] }> {
