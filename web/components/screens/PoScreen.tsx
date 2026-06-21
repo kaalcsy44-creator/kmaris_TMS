@@ -80,16 +80,21 @@ export default function PoScreen() {
           <table className="rfq">
             <thead>
               <tr>
-                <th className="chk"></th>
+                <th className="chk" rowSpan={2}></th>
+                <th className="grp" colSpan={2}>1. Customer RFQ 수신</th>
+                <th className="grp">2. Vendor RFQ 발신</th>
+                <th className="grp">5. Customer P/O 수신</th>
+                <th className="grp" colSpan={3}>6. Vendor P/O 발신</th>
+                <th rowSpan={2}>상태</th>
+              </tr>
+              <tr className="grp-sub">
                 <th>고객 RFQ No.</th>
                 <th>Customer</th>
                 <th>K-Maris RFQ No.</th>
                 <th>고객 P/O No.</th>
                 <th>K-Maris ORD No.</th>
-                <th>Vendor P/O No.</th>
                 <th>Vendor</th>
                 <th>수신자 이메일</th>
-                <th>상태</th>
               </tr>
             </thead>
             <tbody>
@@ -130,10 +135,6 @@ export default function PoScreen() {
                       sub={r.customer_po_at ? `수신: ${r.customer_po_at}` : undefined}
                     />
                     <Cell main={r.ord_no} />
-                    <Cell
-                      main={r.vendor_po_no}
-                      sub={r.vendor_po_at ? `발신: ${r.vendor_po_at}` : undefined}
-                    />
                     <Cell main={r.vendor} />
                     <Cell main={r.vendor_email} />
                     <td className="status">
