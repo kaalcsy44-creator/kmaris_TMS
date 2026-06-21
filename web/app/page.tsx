@@ -1,36 +1,20 @@
 "use client";
 
-import { useState } from "react";
 import AppShell, { SectionHead } from "@/components/AppShell";
 import RfqScreen from "@/components/screens/RfqScreen";
-import VrfqScreen from "@/components/screens/VrfqScreen";
-import QuotationScreen from "@/components/screens/QuotationScreen";
 
-const TABS = [
-  { key: "rfq", label: "RFQ 현황" },
-  { key: "vrfq", label: "Vendor RFQ 발신" },
-  { key: "quotation", label: "견적 현황" },
-];
-
+// 원본 Streamlit rfq_quotation.py 와 동일한 매크로 구조:
+//   거래(RFQ) 1건당 한 행으로 12단계(Customer RFQ 수신 → Vendor RFQ 발신 →
+//   Vendor Quot. 수신 → Customer Quot. 발신)를 병합한 통합 현황 테이블 + 선택 상세/액션.
+//   (기존의 분리된 VRFQ/견적 목록 탭은 이 한 테이블로 병합됨)
 export default function Page() {
-  const [tab, setTab] = useState("rfq");
   return (
     <AppShell active="rfq">
-      <SectionHead title="RFQ & Quotation" sub="고객 RFQ · Vendor RFQ · 견적" />
-      <div className="page-tabs">
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            className={tab === t.key ? "on" : ""}
-            onClick={() => setTab(t.key)}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
-      {tab === "rfq" && <RfqScreen />}
-      {tab === "vrfq" && <VrfqScreen />}
-      {tab === "quotation" && <QuotationScreen />}
+      <SectionHead
+        title="RFQ & Quotation"
+        sub="거래(RFQ)별 통합 파이프라인 현황 · 행을 선택하면 상세/액션"
+      />
+      <RfqScreen />
     </AppShell>
   );
 }

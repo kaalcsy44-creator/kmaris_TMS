@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { fetchArOverview, recordArPayment } from "@/lib/api";
 import type { ArData, ArRow } from "@/lib/types";
 import AppShell, { SectionHead } from "@/components/AppShell";
@@ -23,6 +23,8 @@ function money(n: number) {
 function ArOverview() {
   const [data, setData] = useState<ArData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState("전체");
+  const [currency, setCurrency] = useState("전체");
 
   function load() {
     setError(null);
@@ -33,9 +35,39 @@ function ArOverview() {
 
   useEffect(load, []);
 
+  const statuses = useMemo(
+    () => (data ? Array.from(new Set(data.rows.map((r) => r.status))) : []),
+    [data]
+  );
+  const currencies = useMemo(
+    () => (data ? Array.from(new Set(data.rows.map((r) => r.currency))) : []),
+    [data]
+  );
+  const rows = useMemo(
+    () =>
+      (data?.rows ?? []).filter(
+        (r) =>
+          (status === "전체" || r.status === status) &&
+          (currency === "전체" || r.currency === currency)
+      ),
+    [data, status, currency]
+  );
+  // 원본 7_AR.py 처럼 필터된 레코드 기준으로 KPI 재계산
+  const kpi = useMemo(() => {
+    let out = 0;
+    let over = 0;
+    for (const r of rows) {
+      if (r.currency === "USD") {
+        out += r.outstanding;
+        if (r.overdue) over += r.outstanding;
+      }
+    }
+    return { outstanding_usd: out, overdue_usd: over, count: rows.length };
+  }, [rows]);
+
   return (
     <>
-      <SectionHead title="미수금 (AR)" sub="청구 · 수금 · 연체" />
+      <SectionHead title="AR 관리" sub="Accounts Receivable / SOA · 청구·수금·연체" />
 
       {error ? (
         <div className="state error">API 오류: {error}</div>
@@ -43,22 +75,50 @@ function ArOverview() {
         <div className="state">불러오는 중…</div>
       ) : (
         <>
+          <div className="toolbar">
+            <div className="field">
+              <label>상태 필터</label>
+              <select value={status} onChange={(e) => setStatus(e.target.value)}>
+                <option value="전체">전체</option>
+                {statuses.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label>통화 필터</label>
+              <select value={currency} onChange={(e) => setCurrency(e.target.value)}>
+                <option value="전체">전체</option>
+                {currencies.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button className="btn" onClick={load}>
+              새로고침
+            </button>
+          </div>
+
           <div className="kpi-row">
             <Kpi
               label="USD 미수금"
-              value={`USD ${money(data.kpi.outstanding_usd)}`}
+              value={`USD ${money(kpi.outstanding_usd)}`}
               sub="미완납 합계"
             />
             <Kpi
               label="USD 연체"
-              value={`USD ${money(data.kpi.overdue_usd)}`}
+              value={`USD ${money(kpi.overdue_usd)}`}
               sub="만기 경과"
               accent="#dc3545"
             />
-            <Kpi label="건수" value={data.kpi.count} sub="AR 레코드" />
+            <Kpi label="건수" value={kpi.count} sub="AR 레코드" />
           </div>
 
-          {data.rows.length === 0 ? (
+          {rows.length === 0 ? (
             <div className="state">AR 레코드가 없습니다.</div>
           ) : (
             <div className="table-wrap">
@@ -78,7 +138,7 @@ function ArOverview() {
                   </tr>
                 </thead>
                 <tbody>
-                  {data.rows.map((r) => (
+                  {rows.map((r) => (
                     <ArRowView key={r.id} r={r} onPaid={load} />
                   ))}
                 </tbody>
