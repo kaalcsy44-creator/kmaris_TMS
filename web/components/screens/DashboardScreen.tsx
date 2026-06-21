@@ -25,9 +25,12 @@ function num(n: number) {
   return n.toLocaleString();
 }
 
+type Tab = "summary" | "progress";
+
 export default function DashboardScreen() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [tab, setTab] = useState<Tab>("summary");
 
   useEffect(() => {
     fetchDashboard()
@@ -59,6 +62,23 @@ export default function DashboardScreen() {
     <>
       <SectionHead title="운영 현황" sub="Dashboard" />
 
+      <div className="page-tabs">
+        <button
+          className={tab === "summary" ? "on" : ""}
+          onClick={() => setTab("summary")}
+        >
+          운영 · 성과 현황
+        </button>
+        <button
+          className={tab === "progress" ? "on" : ""}
+          onClick={() => setTab("progress")}
+        >
+          진행 현황
+        </button>
+      </div>
+
+      {tab === "summary" && (
+        <>
       {/* 운영 KPI */}
       <div className="kpi-row">
         <Kpi
@@ -165,7 +185,11 @@ export default function DashboardScreen() {
           )}
         </div>
       </div>
+        </>
+      )}
 
+      {tab === "progress" && (
+        <>
       {/* 고객 트래킹용 현황 — 고객에게 노출되는 RFQ/Order 추적 단계 */}
       <SectionHead
         title="RFQ · Order 진행 현황"
@@ -238,6 +262,8 @@ export default function DashboardScreen() {
             </div>
           </div>
         ))
+      )}
+        </>
       )}
     </>
   );
