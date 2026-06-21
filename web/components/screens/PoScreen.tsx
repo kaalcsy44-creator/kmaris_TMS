@@ -81,8 +81,9 @@ export default function PoScreen() {
             <thead>
               <tr>
                 <th className="chk"></th>
-                <th>K-Maris RFQ No.</th>
+                <th>고객 RFQ No.</th>
                 <th>Customer</th>
+                <th>K-Maris RFQ No.</th>
                 <th>고객 P/O No.</th>
                 <th>K-Maris ORD No.</th>
                 <th>Vendor P/O No.</th>
@@ -113,7 +114,7 @@ export default function PoScreen() {
                         onClick={(e) => e.stopPropagation()}
                       />
                     </td>
-                    <Cell main={r.customer_rfq_no} />
+                    <Cell main={r.customer_rfq_no} sub={r.crfq_at} />
                     <td className="cell">
                       <div className="m">
                         {r.customer || <span className="dash">—</span>}
@@ -123,6 +124,7 @@ export default function PoScreen() {
                       ) : null}
                       <div className="s">품목 {r.item_count}</div>
                     </td>
+                    <Cell main={r.kmaris_rfq_no} />
                     <Cell
                       main={r.customer_po_no}
                       sub={r.customer_po_at ? `수신: ${r.customer_po_at}` : undefined}

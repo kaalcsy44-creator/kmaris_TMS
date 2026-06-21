@@ -820,7 +820,9 @@ def po_overview():
             stage = _pipeline_stage(s, r.id)
             rows.append({
                 "id": o.id if o else 0,
-                "customer_rfq_no": r.customer_rfq_no or r.rfq_no,
+                "customer_rfq_no": r.customer_rfq_no or "",
+                "crfq_at": _kst(r.created_at),
+                "kmaris_rfq_no": r.rfq_no,
                 "customer": cust_names.get(r.customer_id, "—"),
                 "vessel": vessel_names.get(r.vessel_id, "") if r.vessel_id else "",
                 "customer_po_no": (o.po_no if o else "") or "",

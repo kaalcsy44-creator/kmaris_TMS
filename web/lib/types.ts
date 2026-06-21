@@ -95,6 +95,8 @@ export type VendorOption = { id: number; name: string; email: string };
 export type PoRow = {
   id: number;
   customer_rfq_no: string;
+  crfq_at: string;
+  kmaris_rfq_no: string;
   customer: string;
   vessel: string;
   customer_po_no: string;
