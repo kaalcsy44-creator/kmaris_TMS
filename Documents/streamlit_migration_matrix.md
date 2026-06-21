@@ -78,4 +78,9 @@ Do not remove Streamlit until:
 5. ~~Add production smoke checklist.~~ **DONE (2026-06-21)** — see
    `Documents/production_smoke_checklist.md`. `render.yaml` updated with
    `ANTHROPIC_API_KEY` + SMTP env vars.
-6. Remove Streamlit files and dependencies. **(pending production smoke run)**
+6. Remove Streamlit files and dependencies. **ON HOLD (user request, 2026-06-21).**
+   Streamlit is retained as reference/backup. The API runtime is already
+   Streamlit-free (verified: no `streamlit` module in the `admin_api` import
+   graph; `pdf_parser` only lazy-imports `st.secrets` as an OCR-key fallback).
+   When ready: run the smoke checklist, then remove `ktms/app/**`, `.streamlit`,
+   Streamlit-only deps in `requirements.txt`, and the `st.secrets` fallback.
