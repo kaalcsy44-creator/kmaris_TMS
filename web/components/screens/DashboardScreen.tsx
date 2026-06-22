@@ -34,7 +34,7 @@ function SubHead({ title, sub }: { title: string; sub?: string }) {
   );
 }
 
-type Tab = "summary" | "progress";
+type Tab = "summary" | "progress-customer" | "progress-internal";
 
 export default function DashboardScreen() {
   const { data, error } = useCachedData("dashboard", fetchDashboard);
@@ -60,10 +60,16 @@ export default function DashboardScreen() {
           운영 · 성과 현황
         </button>
         <button
-          className={tab === "progress" ? "on" : ""}
-          onClick={() => setTab("progress")}
+          className={tab === "progress-customer" ? "on" : ""}
+          onClick={() => setTab("progress-customer")}
         >
-          진행 현황
+          진행 현황 (고객확인용)
+        </button>
+        <button
+          className={tab === "progress-internal" ? "on" : ""}
+          onClick={() => setTab("progress-internal")}
+        >
+          진행 현황 (내부확인용)
         </button>
       </div>
 
@@ -178,7 +184,7 @@ export default function DashboardScreen() {
         </>
       )}
 
-      {tab === "progress" && (
+      {tab === "progress-customer" && (
         <>
       {/* 고객 트래킹용 현황 — 고객에게 노출되는 RFQ/Order 추적 단계 */}
       <SubHead
@@ -231,7 +237,11 @@ export default function DashboardScreen() {
           </div>
         ))
       )}
+        </>
+      )}
 
+      {tab === "progress-internal" && (
+        <>
       {/* 회사 내부 확인용 현황판 — 내부 12단계 */}
       <SubHead title="내부 진행 현황 (12단계)" sub="회사 내부 확인용" />
       {data.snapshot.length === 0 ? (
