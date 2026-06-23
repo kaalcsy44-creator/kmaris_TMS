@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import {
   createSettingsCustomer,
@@ -98,20 +98,62 @@ function Settings() {
   );
 }
 
+const COMPANY_FIELDS: { key: keyof CompanyProfile; label: string }[] = [
+  { key: "company_name_en", label: "Company Name (EN)" },
+  { key: "company_name_kr", label: "Company Name (KR)" },
+  { key: "address", label: "Address" },
+  { key: "business_no", label: "Business No." },
+  { key: "phone", label: "Phone" },
+  { key: "general_email", label: "General Email" },
+  { key: "sales_email", label: "Sales Email" },
+  { key: "tax_email", label: "Tax Email" },
+  { key: "website", label: "Website" },
+  { key: "bank_name", label: "Bank Name" },
+  { key: "bank_account", label: "Bank Account" },
+  { key: "bank_holder", label: "Bank Holder" },
+  { key: "swift", label: "SWIFT" },
+  { key: "tagline", label: "Tagline" },
+];
+
 function CompanyTab() {
   const [form, setForm] = useState<CompanyProfile>(emptyCompany);
+  const [saved, setSaved] = useState<CompanyProfile>(emptyCompany); // 마지막 저장값(읽기 화면·취소용)
+  const [editing, setEditing] = useState(false);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    fetchCompanyProfile().then((d) => setForm({ ...emptyCompany, ...d })).catch(() => setForm(emptyCompany));
+    fetchCompanyProfile()
+      .then((d) => {
+        const merged = { ...emptyCompany, ...d };
+        setForm(merged);
+        setSaved(merged);
+      })
+      .catch(() => {
+        setForm(emptyCompany);
+        setSaved(emptyCompany);
+      });
   }, []);
+
+  function startEdit() {
+    setForm(saved);
+    setMsg("");
+    setEditing(true);
+  }
+
+  function cancel() {
+    setForm(saved);
+    setEditing(false);
+    setMsg("");
+  }
 
   async function save() {
     setBusy(true);
     setMsg("");
     try {
       await updateCompanyProfile(form);
+      setSaved(form);
+      setEditing(false);
       setMsg("저장 완료");
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "저장 실패");
@@ -120,27 +162,33 @@ function CompanyTab() {
     }
   }
 
-  const fields: { key: keyof CompanyProfile; label: string }[] = [
-    { key: "company_name_en", label: "Company Name (EN)" },
-    { key: "company_name_kr", label: "Company Name (KR)" },
-    { key: "address", label: "Address" },
-    { key: "business_no", label: "Business No." },
-    { key: "phone", label: "Phone" },
-    { key: "general_email", label: "General Email" },
-    { key: "sales_email", label: "Sales Email" },
-    { key: "tax_email", label: "Tax Email" },
-    { key: "website", label: "Website" },
-    { key: "bank_name", label: "Bank Name" },
-    { key: "bank_account", label: "Bank Account" },
-    { key: "bank_holder", label: "Bank Holder" },
-    { key: "swift", label: "SWIFT" },
-    { key: "tagline", label: "Tagline" },
-  ];
+  // 저장 후/기본: 정리된 읽기 화면
+  if (!editing) {
+    return (
+      <div className="panel">
+        <dl className="company-view">
+          {COMPANY_FIELDS.map((f) => (
+            <div key={f.key}>
+              <dt>{f.label}</dt>
+              <dd>{saved[f.key] ? saved[f.key] : <span className="dash">—</span>}</dd>
+            </div>
+          ))}
+        </dl>
+        <div className="form-actions">
+          <button className="btn primary" onClick={startEdit}>
+            ✎ 회사 정보 수정
+          </button>
+          {msg ? <span className="hint-inline">{msg}</span> : null}
+        </div>
+      </div>
+    );
+  }
 
+  // 수정: 입력 폼
   return (
     <div className="panel">
       <div className="form-grid">
-        {fields.map((f) => (
+        {COMPANY_FIELDS.map((f) => (
           <TextField
             key={f.key}
             label={f.label}
@@ -151,7 +199,10 @@ function CompanyTab() {
       </div>
       <div className="form-actions">
         <button className="btn primary" disabled={busy} onClick={save}>
-          회사 정보 저장
+          {busy ? "저장 중…" : "회사 정보 저장"}
+        </button>
+        <button className="btn" disabled={busy} onClick={cancel}>
+          취소
         </button>
         {msg ? <span className="hint-inline">{msg}</span> : null}
       </div>
@@ -159,16 +210,18 @@ function CompanyTab() {
   );
 }
 
+const EMPTY_USER: SettingsUser = { id: 0, username: "", email: "", role: "sales", is_active: true };
+
 function UsersTab() {
+  const NEW_ID = -1;
   const [rows, setRows] = useState<SettingsUser[]>([]);
-  const [selected, setSelected] = useState<SettingsUser | null>(null);
+  const [editId, setEditId] = useState<number | null>(null);
+  const [form, setForm] = useState<SettingsUser>(EMPTY_USER);
   const [password, setPassword] = useState("");
   const [err, setErr] = useState("");
-  const [msg, setMsg] = useState("");
-  const [confirmDel, setConfirmDel] = useState(false);
-  const form = selected ?? { id: 0, username: "", email: "", role: "sales", is_active: true };
   const me = getUser();
-  const isSelf = !!form.id && me?.id === form.id;
+  const isEdit = !!editId && editId > 0;
+  const isSelf = isEdit && me?.id === editId;
 
   function load() {
     fetchSettingsUsers().then(setRows).catch((e) => setErr(e instanceof Error ? e.message : "사용자 조회 실패"));
@@ -176,16 +229,32 @@ function UsersTab() {
 
   useEffect(load, []);
 
+  function openNew() {
+    setForm(EMPTY_USER);
+    setPassword("");
+    setErr("");
+    setEditId(NEW_ID);
+  }
+  function openEdit(u: SettingsUser) {
+    setForm(u);
+    setPassword("");
+    setErr("");
+    setEditId(u.id);
+  }
+  function cancel() {
+    setForm(EMPTY_USER);
+    setPassword("");
+    setErr("");
+    setEditId(null);
+  }
+
   async function save() {
     setErr("");
-    setMsg("");
     try {
       const body = { username: form.username, email: form.email, role: form.role, is_active: form.is_active, password };
-      if (form.id) await updateSettingsUser(form.id, body);
+      if (isEdit) await updateSettingsUser(editId, body);
       else await createSettingsUser(body);
-      setSelected(null);
-      setPassword("");
-      setConfirmDel(false);
+      cancel();
       load();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "저장 실패");
@@ -193,78 +262,110 @@ function UsersTab() {
   }
 
   async function remove() {
-    if (!form.id) return;
+    if (!isEdit || !confirm("이 사용자를 삭제할까요?")) return;
     setErr("");
-    setMsg("");
     try {
-      await deleteSettingsUser(form.id);
-      setSelected(null);
-      setPassword("");
-      setConfirmDel(false);
+      await deleteSettingsUser(editId);
+      cancel();
       load();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "삭제 실패");
     }
   }
 
-  return (
-    <div className="panel">
-      <EditableTable
-        rows={rows}
-        selectedId={selected?.id ?? 0}
-        columns={[
-          ["username", "사용자명"],
-          ["email", "Email"],
-          ["role", "Role"],
-          ["is_active", "Active"],
-        ]}
-        onSelect={(r) => {
-          setSelected(r);
-          setPassword("");
-          setConfirmDel(false);
-        }}
-      />
+  const editorTitle = isEdit ? `✎ ${form.username || "사용자"} 수정` : "+ 신규 사용자";
+  const editor = editId !== null ? (
+    <div className="ms-editor">
+      <div className="ms-editor-head">{editorTitle}</div>
       <div className="form-grid">
-        <TextField label="사용자명 *" value={form.username} onChange={(v) => setSelected({ ...form, username: v })} />
-        <TextField label="Email" value={form.email} onChange={(v) => setSelected({ ...form, email: v })} />
+        <TextField label="사용자명 *" value={form.username} onChange={(v) => setForm({ ...form, username: v })} />
+        <TextField label="Email" value={form.email} onChange={(v) => setForm({ ...form, email: v })} />
         <label className="form-field">
           <span>Role</span>
-          <select value={form.role} onChange={(e) => setSelected({ ...form, role: e.target.value })}>
+          <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
             <option value="admin">admin</option>
             <option value="sales">sales</option>
             <option value="viewer">viewer</option>
           </select>
         </label>
-        <TextField label={form.id ? "새 비밀번호 (변경 시)" : "비밀번호 *"} value={password} onChange={setPassword} type="password" />
+        <TextField
+          label={isEdit ? "새 비밀번호 (변경 시)" : "비밀번호 *"}
+          value={password}
+          onChange={setPassword}
+          type="password"
+        />
         <label className="check-inline">
-          <input type="checkbox" checked={form.is_active} onChange={(e) => setSelected({ ...form, is_active: e.target.checked })} />
+          <input
+            type="checkbox"
+            checked={form.is_active}
+            onChange={(e) => setForm({ ...form, is_active: e.target.checked })}
+          />
           활성 (비활성화 시 로그인 차단)
         </label>
       </div>
       <div className="form-actions">
-        <button className="btn primary" onClick={save} disabled={!form.username.trim() || (!form.id && !password)}>
-          {form.id ? "사용자 수정" : "사용자 추가"}
+        <button className="btn primary" onClick={save} disabled={!form.username.trim() || (!isEdit && !password)}>
+          {isEdit ? "수정 저장" : "신규 추가"}
         </button>
-        <button className="btn" onClick={() => { setSelected(null); setPassword(""); setConfirmDel(false); }}>
-          신규 입력
+        <button className="btn" onClick={cancel}>
+          취소
         </button>
-        {form.id && !isSelf ? (
-          !confirmDel ? (
-            <button className="btn danger" onClick={() => setConfirmDel(true)}>
-              사용자 삭제
-            </button>
-          ) : (
-            <>
-              <span className="action-err">정말 삭제하시겠습니까?</span>
-              <button className="btn danger" onClick={remove}>확인 삭제</button>
-              <button className="btn" onClick={() => setConfirmDel(false)}>취소</button>
-            </>
-          )
+        {isEdit && !isSelf ? (
+          <button className="btn danger" onClick={remove}>
+            삭제
+          </button>
         ) : null}
         {isSelf ? <span className="hint-inline">본인 계정은 비활성화/비밀번호 변경만 가능합니다.</span> : null}
         {err ? <span className="action-err">{err}</span> : null}
-        {msg ? <span className="action-ok">{msg}</span> : null}
       </div>
+    </div>
+  ) : null;
+
+  return (
+    <div className="panel">
+      <div className="ms-toolbar">
+        <h3 className="form-title">사용자 관리</h3>
+        <button className="btn primary" onClick={openNew} disabled={editId === NEW_ID}>
+          + 사용자 추가
+        </button>
+      </div>
+
+      {editor}
+
+      {rows.length === 0 ? (
+        <div className="state">등록된 사용자가 없습니다.</div>
+      ) : (
+        <div className="table-wrap">
+          <table className="mini wide ms-table">
+            <thead>
+              <tr>
+                <th>사용자명</th>
+                <th>Email</th>
+                <th>Role</th>
+                <th>상태</th>
+                <th className="ms-actcol"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((u) => (
+                <tr key={u.id} className={u.id === editId ? "sel" : ""} onClick={() => openEdit(u)}>
+                  <td>{u.username}</td>
+                  <td>{u.email || "—"}</td>
+                  <td>{u.role}</td>
+                  <td>
+                    <span className={`status-badge${u.is_active ? " on" : " off"}`}>
+                      {u.is_active ? "✓ 활성" : "— 비활성"}
+                    </span>
+                  </td>
+                  <td className="ms-actcol" onClick={(e) => { e.stopPropagation(); openEdit(u); }}>
+                    <span className="ms-edit-btn" title="수정">✎</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       <MyPasswordChange />
     </div>
@@ -320,7 +421,7 @@ function CustomersTab() {
   return (
     <MasterSection<SettingsCustomer>
       title="Customer 관리"
-      empty={{ id: 0, name: "", contact: "", email: "", country: "", address: "", tax_id: "" }}
+      empty={{ id: 0, name: "", contact: "", contact_phone: "", email: "", country: "", address: "", tax_id: "" }}
       load={fetchSettingsCustomers}
       create={createSettingsCustomer}
       update={updateSettingsCustomer}
@@ -328,18 +429,21 @@ function CustomersTab() {
       columns={[
         ["name", "Customer"],
         ["country", "Country"],
-        ["contact", "Contact"],
+        ["contact", "담당자"],
         ["email", "Email"],
       ]}
       fields={[
         ["name", "Customer *"],
         ["country", "Country"],
         ["address", "Address"],
-        ["contact", "Contact"],
-        ["email", "Email"],
+        ["contact", "담당자 이름"],
+        ["contact_phone", "담당자 연락처"],
+        ["email", "담당자 이메일"],
         ["tax_id", "Tax ID / Business No."],
       ]}
       required="name"
+      allowCopy
+      copyHint="같은 고객사의 다른 담당자를 등록하려면 담당자(Contact)·이메일만 바꿔 저장하세요."
     />
   );
 }
@@ -348,7 +452,7 @@ function VendorsTab() {
   return (
     <MasterSection<SettingsVendor>
       title="Vendor 관리"
-      empty={{ id: 0, name: "", contact: "", email: "", specialization: "", country: "", address: "" }}
+      empty={{ id: 0, name: "", contact: "", contact_phone: "", email: "", specialization: "", country: "", address: "" }}
       load={fetchSettingsVendors}
       create={createSettingsVendor}
       update={updateSettingsVendor}
@@ -356,7 +460,7 @@ function VendorsTab() {
       columns={[
         ["name", "Vendor"],
         ["country", "Country"],
-        ["contact", "Contact"],
+        ["contact", "담당자"],
         ["email", "Email"],
         ["specialization", "Specialization"],
       ]}
@@ -364,11 +468,14 @@ function VendorsTab() {
         ["name", "Vendor *"],
         ["country", "Country"],
         ["address", "Address"],
-        ["contact", "Contact"],
-        ["email", "Email"],
+        ["contact", "담당자 이름"],
+        ["contact_phone", "담당자 연락처"],
+        ["email", "담당자 이메일"],
         ["specialization", "Specialization"],
       ]}
       required="name"
+      allowCopy
+      copyHint="같은 Vendor의 다른 담당자를 등록하려면 담당자(Contact)·이메일만 바꿔 저장하세요."
     />
   );
 }
@@ -470,6 +577,8 @@ function MasterSection<T extends { id: number }>({
   required,
   numeric = [],
   extraForm,
+  allowCopy = false,
+  copyHint,
 }: {
   title: string;
   empty: T;
@@ -482,11 +591,16 @@ function MasterSection<T extends { id: number }>({
   required: keyof T;
   numeric?: (keyof T)[];
   extraForm?: (form: T, setForm: (next: T) => void) => ReactNode;
+  allowCopy?: boolean; // 기존 항목 정보를 복사해 새 레코드로 등록 허용
+  copyHint?: string; // 복사 모드 안내 문구
 }) {
+  const NEW_ID = -1; // editId 센티넬: 신규 등록 편집기
   const [rows, setRows] = useState<T[]>([]);
+  const [editId, setEditId] = useState<number | null>(null); // null=닫힘, -1=신규, >0=수정
   const [form, setForm] = useState<T>(empty);
+  const [q, setQ] = useState("");
   const [err, setErr] = useState("");
-  const selected = useMemo(() => rows.find((r) => r.id === form.id) ?? null, [rows, form.id]);
+  const [copying, setCopying] = useState(false); // 복사 모드(기존 정보 복제 → 새 레코드)
 
   function refresh() {
     load().then(setRows).catch((e) => setErr(e instanceof Error ? e.message : "조회 실패"));
@@ -494,13 +608,39 @@ function MasterSection<T extends { id: number }>({
 
   useEffect(refresh, []);
 
+  function openNew() {
+    setForm(empty);
+    setErr("");
+    setCopying(false);
+    setEditId(NEW_ID);
+  }
+  function openEdit(row: T) {
+    setForm(row);
+    setErr("");
+    setCopying(false);
+    setEditId(row.id);
+  }
+  // 현재 편집 중인 항목의 정보를 그대로 둔 채 '신규 등록'으로 전환한다(저장 시 새 레코드 생성).
+  function copyAsNew() {
+    setForm({ ...form, id: 0 });
+    setErr("");
+    setCopying(true);
+    setEditId(NEW_ID);
+  }
+  function cancel() {
+    setForm(empty);
+    setErr("");
+    setCopying(false);
+    setEditId(null);
+  }
+
   async function save() {
     setErr("");
     try {
       const body = stripId(form);
-      if (form.id) await update(form.id, body);
+      if (editId && editId > 0) await update(editId, body);
       else await create(body);
-      setForm(empty);
+      cancel();
       refresh();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "저장 실패");
@@ -508,11 +648,11 @@ function MasterSection<T extends { id: number }>({
   }
 
   async function delRow() {
-    if (!form.id || !confirm("선택한 항목을 삭제할까요?")) return;
+    if (!editId || editId < 0 || !confirm("선택한 항목을 삭제할까요?")) return;
     setErr("");
     try {
-      await remove(form.id);
-      setForm(empty);
+      await remove(editId);
+      cancel();
       refresh();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "삭제 실패");
@@ -520,11 +660,21 @@ function MasterSection<T extends { id: number }>({
   }
 
   const requiredValue = String(form[required] ?? "").trim();
+  const ql = q.trim().toLowerCase();
+  const filtered = ql
+    ? rows.filter((r) => columns.some(([key]) => String(r[key] ?? "").toLowerCase().includes(ql)))
+    : rows;
+  const isEdit = !!editId && editId > 0;
 
-  return (
-    <div className="panel">
-      <h3 className="form-title">{title}</h3>
-      <EditableTable rows={rows} selectedId={form.id} columns={columns} onSelect={setForm} />
+  const editorTitle = isEdit
+    ? `✎ ${String(form[required] ?? "") || "항목"} 수정`
+    : copying
+    ? `📋 복사하여 새로 등록${String(form[required] ?? "") ? ` — ${String(form[required])}` : ""}`
+    : "+ 신규 등록";
+  const editor = editId !== null ? (
+    <div className="ms-editor">
+      <div className="ms-editor-head">{editorTitle}</div>
+      {copying && copyHint ? <div className="ms-copy-hint">{copyHint}</div> : null}
       <div className="form-grid">
         {fields.map(([key, label]) => (
           <TextField
@@ -539,46 +689,83 @@ function MasterSection<T extends { id: number }>({
       </div>
       <div className="form-actions">
         <button className="btn primary" disabled={!requiredValue} onClick={save}>
-          {selected ? "수정 저장" : "신규 추가"}
+          {isEdit ? "수정 저장" : "신규 추가"}
         </button>
-        <button className="btn" onClick={() => setForm(empty)}>신규 입력</button>
-        <button className="btn danger" disabled={!form.id} onClick={delRow}>삭제</button>
+        {isEdit && allowCopy ? (
+          <button className="btn" onClick={copyAsNew} title="이 정보를 복사해 새 레코드로 등록">
+            📋 복사하여 새로 등록
+          </button>
+        ) : null}
+        <button className="btn" onClick={cancel}>
+          취소
+        </button>
+        {isEdit ? (
+          <button className="btn danger" onClick={delRow}>
+            삭제
+          </button>
+        ) : null}
         {err ? <span className="action-err">{err}</span> : null}
       </div>
     </div>
-  );
-}
+  ) : null;
 
-function EditableTable<T extends { id: number }>({
-  rows,
-  selectedId,
-  columns,
-  onSelect,
-}: {
-  rows: T[];
-  selectedId: number;
-  columns: [keyof T, string][];
-  onSelect: (row: T) => void;
-}) {
-  if (rows.length === 0) return <div className="state">등록된 항목이 없습니다.</div>;
   return (
-    <div className="table-wrap">
-      <table className="mini wide">
-        <thead>
-          <tr>
-            {columns.map(([, label]) => <th key={label}>{label}</th>)}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.id} className={row.id === selectedId ? "sel" : ""} onClick={() => onSelect(row)}>
-              {columns.map(([key]) => (
-                <td key={String(key)}>{String(row[key] ?? "") || "-"}</td>
+    <div className="panel">
+      <div className="ms-toolbar">
+        <h3 className="form-title">{title}</h3>
+        <input
+          className="ms-search"
+          placeholder="🔍 검색…"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+        />
+        <button className="btn primary" onClick={openNew} disabled={editId === NEW_ID}>
+          + 신규 등록
+        </button>
+      </div>
+
+      {editor}
+
+      {filtered.length === 0 ? (
+        <div className="state">{ql ? "검색 결과가 없습니다." : "등록된 항목이 없습니다."}</div>
+      ) : (
+        <div className="table-wrap">
+          <table className="mini wide ms-table">
+            <thead>
+              <tr>
+                {columns.map(([, label]) => (
+                  <th key={label}>{label}</th>
+                ))}
+                <th className="ms-actcol"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((row) => (
+                <tr
+                  key={row.id}
+                  className={row.id === editId ? "sel" : ""}
+                  onClick={() => openEdit(row)}
+                >
+                  {columns.map(([key]) => (
+                    <td key={String(key)}>{String(row[key] ?? "") || "—"}</td>
+                  ))}
+                  <td
+                    className="ms-actcol"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openEdit(row);
+                    }}
+                  >
+                    <span className="ms-edit-btn" title="수정">
+                      ✎
+                    </span>
+                  </td>
+                </tr>
               ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

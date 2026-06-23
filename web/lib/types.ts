@@ -1,6 +1,7 @@
 export type RfqRow = {
   id: number;
   customer_rfq_no: string;
+  work_type: string;
   customer: string;
   vessel: string;
   item_count: number;
@@ -30,6 +31,7 @@ export type SettingsCustomer = {
   id: number;
   name: string;
   contact: string;
+  contact_phone: string;
   email: string;
   country: string;
   address: string;
@@ -39,6 +41,7 @@ export type SettingsVendor = {
   id: number;
   name: string;
   contact: string;
+  contact_phone: string;
   email: string;
   specialization: string;
   country: string;
@@ -549,8 +552,11 @@ export type PipelineRow = {
   order_id: number;
   customer_rfq_no: string;
   kmaris_rfq_no: string;
+  work_type: string;
   customer: string;
+  customer_id: number;
   vessel: string;
+  vessel_id: number;
   project_title: string;
   item_count: number;
   crfq_at: string;
@@ -573,6 +579,15 @@ export type PipelineRow = {
   status: string;
   stage_dates: Record<string, string>;
   stage_auto: Record<string, string>;
+  stage_notes: Record<string, StageNote[]>;
+};
+
+export type StageNote = {
+  text: string;
+  at: string;
+  datetime?: string; // 활동 일시 "YYYY-MM-DDTHH:MM"
+  party?: string; // Customer / Vendor / 기타
+  channel?: string; // 이메일 / 통화 / 문자 / 방문 / 기타
 };
 
 export type PipelineData = {

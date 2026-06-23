@@ -25,6 +25,14 @@ _MIGRATIONS = {
         "customer_rfq_no": "VARCHAR(100)",
         "project_title": "VARCHAR(200)",
         "stage_dates": "JSON",
+        "work_type": "VARCHAR(20)",
+        "stage_notes": "JSON",
+    },
+    "customers": {
+        "contact_phone": "VARCHAR(50)",
+    },
+    "vendors": {
+        "contact_phone": "VARCHAR(50)",
     },
     "vendor_quotes": {
         "vendor_quote_no": "VARCHAR(100)",
@@ -63,6 +71,15 @@ def migrate_columns():
                     print(f"[OK] {table}.{name} added.")
     if added == 0:
         print("[SKIP] No column migrations needed.")
+    # 신규 work_type 컬럼 백필: 기존 RFQ는 모두 부품공급으로 간주.
+    # SQLAlchemy Enum 은 멤버 '이름'(PARTS/SERVICE)을 저장하므로 값(한글)이 아닌 이름으로 채운다.
+    if insp.has_table("rfqs"):
+        with engine.begin() as conn:
+            conn.execute(text(
+                "UPDATE rfqs SET work_type='PARTS' "
+                "WHERE work_type IS NULL OR work_type='' OR work_type='부품공급'"
+            ))
+            conn.execute(text("UPDATE rfqs SET work_type='SERVICE' WHERE work_type='서비스'"))
 
 
 def migrate_rfq_numbers():

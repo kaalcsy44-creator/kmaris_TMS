@@ -243,6 +243,31 @@ body {
 .action-tabs {
   margin-top: 22px;
 }
+.project-select {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 14px 0 16px;
+  padding: 12px 14px;
+  background: #f3f6fb;
+  border: 1px solid #dde4ef;
+  border-radius: 8px;
+}
+.project-select label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #45526a;
+}
+.project-select select {
+  min-width: 320px;
+  max-width: 100%;
+  padding: 7px 10px;
+  font-size: 13px;
+  border: 1px solid #c7d0de;
+  border-radius: 6px;
+  background: #fff;
+}
 .action-ctx {
   font-size: 12.5px;
   color: #5a6b85;
@@ -567,10 +592,38 @@ body {
   font-size: 12.5px;
   color: var(--navy);
 }
+.intl-customer {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #1d3a6b;
+}
+.intl-customer::after {
+  content: "·";
+  margin-left: 8px;
+  color: #c2cdde;
+  font-weight: 400;
+}
 .intl-vessel {
   font-size: 12.5px;
   font-weight: 600;
   color: #2b3a4d;
+}
+.wt-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 3px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.wt-badge.parts {
+  background: #e4edfb;
+  color: #1d4ed8;
+}
+.wt-badge.service {
+  background: #e3f5ea;
+  color: #137a44;
 }
 .intl-proj {
   font-size: 12px;
@@ -599,6 +652,119 @@ body {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px 18px;
   margin: 0 0 14px;
+}
+/* Settings 마스터 데이터 — 목록 + 인라인 편집 */
+.ms-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.ms-toolbar .form-title {
+  margin: 0;
+  flex-shrink: 0;
+}
+.ms-search {
+  flex: 1;
+  max-width: 280px;
+  margin-left: auto;
+  padding: 7px 11px;
+  font-size: 13px;
+  border: 1px solid #c7d0de;
+  border-radius: 7px;
+  background: #fff;
+}
+.ms-toolbar .btn {
+  flex-shrink: 0;
+}
+.ms-table th.ms-actcol,
+.ms-table td.ms-actcol {
+  width: 38px;
+  text-align: center;
+}
+.ms-table tbody tr {
+  cursor: pointer;
+}
+.ms-edit-btn {
+  color: #8a97ab;
+  font-size: 12px;
+}
+.ms-table tbody tr:hover .ms-edit-btn {
+  color: var(--navy);
+}
+.ms-editor {
+  padding: 14px 16px;
+  background: #f3f6fb;
+  border: 1px solid #dde4ef;
+  border-radius: 8px;
+  margin: 0 0 16px;
+}
+.ms-editor-head {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--navy);
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e0e7f1;
+}
+.ms-copy-hint {
+  font-size: 12px;
+  color: #1d4ed8;
+  background: #eaf1fd;
+  border: 1px solid #cfe0fb;
+  border-radius: 6px;
+  padding: 7px 10px;
+  margin-bottom: 12px;
+}
+.status-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 9px;
+  border-radius: 999px;
+}
+.status-badge.on {
+  background: #e3f5ea;
+  color: #137a44;
+}
+.status-badge.off {
+  background: #f0e3e3;
+  color: #a3505c;
+}
+
+/* Settings 회사 정보 — 정리된 읽기 화면 */
+.company-view {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px 28px;
+  margin: 4px 0 18px;
+}
+.company-view > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.company-view dt {
+  font-size: 11px;
+  color: #8a95a5;
+  font-weight: 600;
+}
+.company-view dd {
+  margin: 0;
+  font-size: 13.5px;
+  color: #1f2b3d;
+  word-break: break-word;
+}
+.intl-edit {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  background: #f3f6fb;
+  border: 1px solid #dde4ef;
+  border-radius: 8px;
+}
+.intl-edit .form-field {
+  margin-bottom: 10px;
 }
 .intl-meta div {
   display: flex;
@@ -764,6 +930,143 @@ body {
   color: #2b3a4d;
   font-weight: 600;
   word-break: break-word;
+}
+/* 단계별 코멘트/활동이력 */
+.pl-notes {
+  margin-top: 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.pl-note {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 11.5px;
+  color: #3a4858;
+  background: #eef3fa;
+  border-radius: 5px;
+  padding: 3px 6px;
+}
+.pl-note-at {
+  color: #9aa6b6;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.pl-note-text {
+  flex: 1;
+  word-break: break-word;
+}
+.pl-note-tag {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.pl-note-tag.party {
+  background: #dfe9fb;
+  color: #1d4ed8;
+}
+.pl-note-tag.channel {
+  background: #e6e9ef;
+  color: #4a5568;
+}
+.pl-note-form {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.pl-note-fields {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+.pl-note-fields input,
+.pl-note-fields select {
+  font-size: 11.5px;
+  padding: 4px 7px;
+  border: 1px solid #c7d0de;
+  border-radius: 5px;
+  background: #fff;
+}
+.pl-note-fields input[type="datetime-local"] {
+  flex: 1;
+  min-width: 150px;
+}
+.pl-note-edit,
+.pl-note-del {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0 2px;
+  flex-shrink: 0;
+}
+.pl-note-edit {
+  color: #8a97ab;
+  font-size: 11px;
+}
+.pl-note-edit:hover {
+  color: var(--navy);
+}
+.pl-note-del {
+  color: #b9a0a0;
+  font-size: 13px;
+}
+.pl-note-del:hover {
+  color: #c0392b;
+}
+.pl-note-add {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+}
+.pl-note-add input {
+  flex: 1;
+  min-width: 0;
+  font-size: 11.5px;
+  padding: 4px 7px;
+  border: 1px solid #c7d0de;
+  border-radius: 5px;
+}
+.pl-note-btn {
+  border: 1px solid #c7d0de;
+  background: #fff;
+  color: #45526a;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 9px;
+  border-radius: 5px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.pl-note-btn.primary {
+  background: var(--navy);
+  border-color: var(--navy);
+  color: #fff;
+}
+.pl-note-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.pl-note-toggle {
+  align-self: flex-start;
+  border: 1px dashed #c2cdde;
+  background: transparent;
+  color: #6b7891;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.pl-note-toggle:hover {
+  border-color: var(--navy);
+  color: var(--navy);
 }
 .pl-row.done {
   background: #f7faff;

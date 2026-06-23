@@ -18,6 +18,11 @@ class UserRole(str, enum.Enum):
     VIEWER = "viewer"
 
 
+class WorkType(str, enum.Enum):
+    PARTS   = "부품공급"
+    SERVICE = "서비스"
+
+
 class RFQStatus(str, enum.Enum):
     RECEIVED = "수신완료"
     SOURCING = "공급사 소싱중"
@@ -76,7 +81,8 @@ class Customer(Base):
     id         = Column(Integer, primary_key=True)
     name       = Column(String(200), nullable=False)
     address    = Column(String(400))
-    contact    = Column(String(100))
+    contact    = Column(String(100))   # 담당자 이름
+    contact_phone = Column(String(50)) # 담당자 연락처
     email      = Column(String(200))
     tax_id     = Column(String(100))
     country    = Column(String(100))
@@ -88,7 +94,8 @@ class Vendor(Base):
     id             = Column(Integer, primary_key=True)
     name           = Column(String(200), nullable=False)
     address        = Column(String(400))
-    contact        = Column(String(100))
+    contact        = Column(String(100))   # 담당자 이름
+    contact_phone  = Column(String(50))    # 담당자 연락처
     email          = Column(String(200))
     country        = Column(String(100))
     specialization = Column(String(200))
@@ -135,6 +142,7 @@ class RFQ(Base):
     rfq_no           = Column(String(40), unique=True, nullable=False)  # K-Maris 내부 관리번호 KMS-RFQ-yymm-NNN
     customer_rfq_no  = Column(String(100))   # 고객사 고유 RFQ 번호
     project_title    = Column(String(200))   # 프로젝트 제목(내부 식별용, 선택)
+    work_type        = Column(SAEnum(WorkType), default=WorkType.PARTS, nullable=False)  # 업무 타입: 부품공급/서비스
     customer_id      = Column(Integer, ForeignKey("customers.id"))
     vessel_id        = Column(Integer, ForeignKey("vessels.id"), nullable=True)
     date             = Column(String(10))   # YYYY-MM-DD
@@ -145,6 +153,8 @@ class RFQ(Base):
     # 내부 12단계 완료 일시(수동 입력/보정값). {"1": "YYYY-MM-DDTHH:MM", ...} (KST 기준).
     # 비어있는 단계는 이벤트 레코드 created_at 에서 자동 동기화해 표시한다.
     stage_dates      = Column(JSON, default=dict)
+    # 단계별 코멘트/활동이력. {"1": [{"text": "...", "at": "YYYY-MM-DDTHH:MM"}], ...} (KST).
+    stage_notes      = Column(JSON, default=dict)
     tracking_token   = Column(String(64), unique=True, default=lambda: secrets.token_urlsafe(32))
     created_by       = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at       = Column(DateTime, default=datetime.utcnow)

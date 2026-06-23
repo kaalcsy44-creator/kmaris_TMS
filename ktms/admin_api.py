@@ -48,7 +48,7 @@ from db.models import (
     VendorRFQ, VendorQuote, Quotation, QuotationStatus, FollowUpLevel,
     Order, PurchaseOrder, ShippingAdvice, CommercialInvoice,
     PackingList, TaxInvoiceData, ARRecord,
-    RFQStatus, OrderStatus, ARStatus,
+    RFQStatus, OrderStatus, ARStatus, WorkType,
 )
 
 # ── App / CORS ────────────────────────────────────────────────────────────────
@@ -182,6 +182,20 @@ def _total_amount(items) -> float:
 
 def _enum_val(v) -> str:
     return v.value if hasattr(v, "value") else str(v)
+
+
+def _coerce_work_type(v) -> WorkType | None:
+    """필터 파라미터(한글 값 '부품공급'/'서비스' 또는 이름 'PARTS'/'SERVICE')를 WorkType 으로.
+    빈값/전체/미인식은 None(필터 없음)."""
+    if not v or v == "전체":
+        return None
+    try:
+        return WorkType(v)            # 값('부품공급')으로 조회
+    except ValueError:
+        try:
+            return WorkType[v]        # 이름('PARTS')으로 조회
+        except KeyError:
+            return None
 
 
 def _pipeline_stage(s, rfq_id: int) -> int:
@@ -331,7 +345,7 @@ def health():
 
 
 @app.get("/api/admin/pipeline", dependencies=[Depends(require_token)])
-def pipeline_overview(customer_id: int | None = None):
+def pipeline_overview(customer_id: int | None = None, work_type: str | None = None):
     """거래(RFQ) 1건 = 1행으로, RFQ→Quote(1~4)와 Order→Vendor PO(5~6) 체인을 한 번에
     합친 통합 파이프라인. 진행현황(내부확인용)이 RFQ표·PO표를 대체하는 단일 목록으로 쓴다."""
     s = get_session()
@@ -343,6 +357,9 @@ def pipeline_overview(customer_id: int | None = None):
         q = s.query(RFQ).order_by(RFQ.id.desc())
         if customer_id:
             q = q.filter(RFQ.customer_id == customer_id)
+        wt = _coerce_work_type(work_type)
+        if wt is not None:
+            q = q.filter(RFQ.work_type == wt)
         rfqs = q.all()
 
         rows = []
@@ -406,8 +423,11 @@ def pipeline_overview(customer_id: int | None = None):
                 # 식별
                 "customer_rfq_no": r.customer_rfq_no or "",
                 "kmaris_rfq_no": r.rfq_no,
+                "work_type": _enum_val(r.work_type) if r.work_type else "부품공급",
                 "customer": cust_names.get(r.customer_id, "—"),
+                "customer_id": r.customer_id or 0,
                 "vessel": (vessel_names.get(r.vessel_id) if r.vessel_id else "") or "",
+                "vessel_id": r.vessel_id or 0,
                 "project_title": getattr(r, "project_title", None) or "",
                 "item_count": len((o.items if o else None) or r.items or []),
                 "crfq_at": _kst(r.created_at),
@@ -433,6 +453,7 @@ def pipeline_overview(customer_id: int | None = None):
                 "status": _status_label(stage),
                 "stage_dates": getattr(r, "stage_dates", None) or {},
                 "stage_auto": _stage_auto_times(s, r, o),
+                "stage_notes": getattr(r, "stage_notes", None) or {},
             })
 
         return {"steps": INTERNAL_STEPS, "rows": rows}
@@ -441,7 +462,7 @@ def pipeline_overview(customer_id: int | None = None):
 
 
 @app.get("/api/admin/rfq-overview", dependencies=[Depends(require_token)])
-def rfq_overview(customer_id: int | None = None):
+def rfq_overview(customer_id: int | None = None, work_type: str | None = None):
     """RFQ 거래별 통합 현황 — Streamlit render_overview 와 동일한 행 데이터를 JSON으로."""
     s = get_session()
     try:
@@ -452,6 +473,9 @@ def rfq_overview(customer_id: int | None = None):
         q = s.query(RFQ).order_by(RFQ.id.desc())
         if customer_id:
             q = q.filter(RFQ.customer_id == customer_id)
+        wt = _coerce_work_type(work_type)
+        if wt is not None:
+            q = q.filter(RFQ.work_type == wt)
         rfqs = q.all()
 
         rows = []
@@ -499,6 +523,7 @@ def rfq_overview(customer_id: int | None = None):
             rows.append({
                 "id": r.id,
                 "customer_rfq_no": r.customer_rfq_no or "",
+                "work_type": _enum_val(r.work_type) if r.work_type else "부품공급",
                 "customer": cust_names.get(r.customer_id, "—"),
                 "vessel": vessel_names.get(r.vessel_id, "") if r.vessel_id else "",
                 "item_count": len(r.items or []),
@@ -2433,6 +2458,7 @@ def vendors():
 class CustomerCreate(BaseModel):
     name: str
     contact: str | None = ""
+    contact_phone: str | None = ""
     email: str | None = ""
     country: str | None = ""
     address: str | None = ""
@@ -2442,6 +2468,7 @@ class CustomerCreate(BaseModel):
 class VendorCreate(BaseModel):
     name: str
     contact: str | None = ""
+    contact_phone: str | None = ""
     email: str | None = ""
     specialization: str | None = ""
     country: str | None = ""
@@ -2512,6 +2539,7 @@ def settings_customers():
     s = get_session()
     try:
         return [{"id": c.id, "name": c.name, "contact": c.contact or "",
+                 "contact_phone": getattr(c, "contact_phone", None) or "",
                  "email": c.email or "", "country": c.country or "",
                  "address": c.address or "", "tax_id": c.tax_id or ""}
                 for c in s.query(Customer).order_by(Customer.name).all()]
@@ -2526,6 +2554,7 @@ def create_customer(body: CustomerCreate):
     s = get_session()
     try:
         c = Customer(name=body.name.strip(), contact=body.contact or "",
+                     contact_phone=body.contact_phone or "",
                      email=body.email or "", country=body.country or "",
                      address=body.address or "", tax_id=body.tax_id or "")
         s.add(c)
@@ -2544,6 +2573,7 @@ def update_customer(row_id: int, body: CustomerCreate):
             raise HTTPException(status_code=404, detail="Customer를 찾을 수 없습니다.")
         c.name = body.name.strip()
         c.contact = body.contact or ""
+        c.contact_phone = body.contact_phone or ""
         c.email = body.email or ""
         c.country = body.country or ""
         c.address = body.address or ""
@@ -2573,6 +2603,7 @@ def settings_vendors():
     s = get_session()
     try:
         return [{"id": v.id, "name": v.name, "contact": v.contact or "",
+                 "contact_phone": getattr(v, "contact_phone", None) or "",
                  "email": v.email or "", "specialization": v.specialization or "",
                  "country": v.country or "", "address": v.address or ""}
                 for v in s.query(Vendor).order_by(Vendor.name).all()]
@@ -2587,6 +2618,7 @@ def create_vendor(body: VendorCreate):
     s = get_session()
     try:
         v = Vendor(name=body.name.strip(), contact=body.contact or "",
+                   contact_phone=body.contact_phone or "",
                    email=body.email or "", specialization=body.specialization or "",
                    country=body.country or "", address=body.address or "")
         s.add(v)
@@ -2605,6 +2637,7 @@ def update_vendor(row_id: int, body: VendorCreate):
             raise HTTPException(status_code=404, detail="Vendor를 찾을 수 없습니다.")
         v.name = body.name.strip()
         v.contact = body.contact or ""
+        v.contact_phone = body.contact_phone or ""
         v.email = body.email or ""
         v.specialization = body.specialization or ""
         v.country = body.country or ""
@@ -3253,6 +3286,7 @@ class RfqCreate(BaseModel):
     vessel_id: int | None = None
     customer_rfq_no: str | None = ""
     project_title: str | None = ""
+    work_type: str | None = "부품공급"
     items: list[RfqItemIn] = []
 
 
@@ -3270,11 +3304,17 @@ def create_rfq(body: RfqCreate):
             "qty": it.qty or 1,
         } for it in body.items if (it.part_no or it.description)]
 
+        try:
+            work_type = WorkType(body.work_type) if body.work_type else WorkType.PARTS
+        except ValueError:
+            work_type = WorkType.PARTS
+
         rfq_no = _next_rfq_no(s)
         rfq = RFQ(
             rfq_no=rfq_no,
             customer_rfq_no=(body.customer_rfq_no or "").strip() or None,
             project_title=(body.project_title or "").strip() or None,
+            work_type=work_type,
             customer_id=cust.id,
             vessel_id=body.vessel_id,
             date=date.today().strftime("%Y-%m-%d"),
@@ -3284,6 +3324,54 @@ def create_rfq(body: RfqCreate):
         s.add(rfq)
         s.commit()
         return {"ok": True, "id": rfq.id, "rfq_no": rfq_no}
+    finally:
+        s.close()
+
+
+class RfqUpdate(BaseModel):
+    """RFQ 헤더 필드 부분 수정. 보낸 필드만 반영(None=변경 안 함)."""
+    customer_id: int | None = None
+    vessel_id: int | None = None        # 0 → 선박 미지정으로 해제
+    customer_rfq_no: str | None = None
+    project_title: str | None = None
+    work_type: str | None = None
+
+
+@app.patch("/api/admin/rfq/{rfq_id}", dependencies=[Depends(require_token)])
+def update_rfq(rfq_id: int, body: RfqUpdate):
+    """업무 타입·고객사·선박·고객 RFQ No.·프로젝트 제목 등 RFQ 헤더 필드를 수정한다."""
+    s = get_session()
+    try:
+        rfq = s.query(RFQ).filter_by(id=rfq_id).first()
+        if not rfq:
+            raise HTTPException(status_code=404, detail="RFQ를 찾을 수 없습니다.")
+
+        if body.customer_id is not None:
+            cust = s.query(Customer).filter_by(id=body.customer_id).first()
+            if not cust:
+                raise HTTPException(status_code=400, detail="Customer를 찾을 수 없습니다.")
+            rfq.customer_id = body.customer_id
+        if body.vessel_id is not None:
+            # 0/음수 → 선박 미지정으로 해제
+            if body.vessel_id <= 0:
+                rfq.vessel_id = None
+            else:
+                vessel = s.query(Vessel).filter_by(id=body.vessel_id).first()
+                if not vessel:
+                    raise HTTPException(status_code=400, detail="선박을 찾을 수 없습니다.")
+                rfq.vessel_id = body.vessel_id
+        if body.customer_rfq_no is not None:
+            rfq.customer_rfq_no = body.customer_rfq_no.strip() or None
+        if body.project_title is not None:
+            rfq.project_title = body.project_title.strip() or None
+        if body.work_type is not None:
+            wt = _coerce_work_type(body.work_type)
+            if wt is None:
+                raise HTTPException(status_code=400, detail="잘못된 업무 타입입니다.")
+            rfq.work_type = wt
+
+        s.commit()
+        return {"ok": True, "id": rfq.id}
     finally:
         s.close()
 
@@ -3337,6 +3425,116 @@ def update_rfq_stage_date(rfq_id: int, body: StageDateUpdate):
         rfq.stage_dates = dates
         s.commit()
         return {"ok": True, "stage_dates": dates}
+    finally:
+        s.close()
+
+
+class StageNoteAdd(BaseModel):
+    stage: int                       # 1~12
+    text: str
+    datetime: str | None = None      # 활동 일시 "YYYY-MM-DDTHH:MM" (KST). 비우면 현재시각
+    party: str | None = None         # 소통 상대: Customer / Vendor / 기타
+    channel: str | None = None       # 소통 수단: 이메일 / 통화 / 문자 / 방문 / 기타
+
+
+@app.post("/api/admin/rfq/{rfq_id}/stage-note", dependencies=[Depends(require_token)])
+def add_rfq_stage_note(rfq_id: int, body: StageNoteAdd):
+    """내부 12단계 중 한 단계에 코멘트/활동이력을 추가한다(누적 기록).
+    날짜·시각·소통 상대(Customer/Vendor)·소통 수단(이메일/통화/문자 등)·내용을 함께 저장."""
+    if not (1 <= body.stage <= len(INTERNAL_STEPS)):
+        raise HTTPException(status_code=400, detail="잘못된 단계 번호입니다.")
+    text = (body.text or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="활동 내용을 입력하세요.")
+    s = get_session()
+    try:
+        rfq = s.query(RFQ).filter_by(id=rfq_id).first()
+        if not rfq:
+            raise HTTPException(status_code=404, detail="RFQ를 찾을 수 없습니다.")
+        notes = dict(getattr(rfq, "stage_notes", None) or {})
+        key = str(body.stage)
+        log = list(notes.get(key, []))
+        log.append({
+            "text": text,
+            "datetime": (body.datetime or "").strip() or _kst_iso(datetime.utcnow()),
+            "party": (body.party or "").strip(),
+            "channel": (body.channel or "").strip(),
+            "at": _kst_iso(datetime.utcnow()),   # 기록 생성 시각(감사용)
+        })
+        notes[key] = log
+        rfq.stage_notes = notes  # JSON 컬럼은 새 dict 재할당이 필요
+        s.commit()
+        return {"ok": True, "stage": body.stage, "notes": log}
+    finally:
+        s.close()
+
+
+class StageNoteUpdate(BaseModel):
+    stage: int
+    index: int                       # 해당 단계 로그 내 인덱스
+    text: str
+    datetime: str | None = None
+    party: str | None = None
+    channel: str | None = None
+
+
+@app.post("/api/admin/rfq/{rfq_id}/stage-note-update", dependencies=[Depends(require_token)])
+def update_rfq_stage_note(rfq_id: int, body: StageNoteUpdate):
+    """기존 활동 기록 1건을 수정한다. 생성 시각(at)은 유지한다."""
+    text = (body.text or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="활동 내용을 입력하세요.")
+    s = get_session()
+    try:
+        rfq = s.query(RFQ).filter_by(id=rfq_id).first()
+        if not rfq:
+            raise HTTPException(status_code=404, detail="RFQ를 찾을 수 없습니다.")
+        notes = dict(getattr(rfq, "stage_notes", None) or {})
+        key = str(body.stage)
+        log = list(notes.get(key, []))
+        if not (0 <= body.index < len(log)):
+            raise HTTPException(status_code=400, detail="잘못된 기록 인덱스입니다.")
+        old = log[body.index]
+        log[body.index] = {
+            "text": text,
+            "datetime": (body.datetime or "").strip() or old.get("datetime") or _kst_iso(datetime.utcnow()),
+            "party": (body.party or "").strip(),
+            "channel": (body.channel or "").strip(),
+            "at": old.get("at") or _kst_iso(datetime.utcnow()),  # 생성 시각 유지
+        }
+        notes[key] = log
+        rfq.stage_notes = notes
+        s.commit()
+        return {"ok": True, "stage": body.stage, "notes": log}
+    finally:
+        s.close()
+
+
+class StageNoteDelete(BaseModel):
+    stage: int
+    index: int                 # 해당 단계 로그 내 인덱스
+
+
+@app.post("/api/admin/rfq/{rfq_id}/stage-note-delete", dependencies=[Depends(require_token)])
+def delete_rfq_stage_note(rfq_id: int, body: StageNoteDelete):
+    """단계 코멘트 1건 삭제."""
+    s = get_session()
+    try:
+        rfq = s.query(RFQ).filter_by(id=rfq_id).first()
+        if not rfq:
+            raise HTTPException(status_code=404, detail="RFQ를 찾을 수 없습니다.")
+        notes = dict(getattr(rfq, "stage_notes", None) or {})
+        key = str(body.stage)
+        log = list(notes.get(key, []))
+        if 0 <= body.index < len(log):
+            log.pop(body.index)
+            if log:
+                notes[key] = log
+            else:
+                notes.pop(key, None)
+            rfq.stage_notes = notes
+            s.commit()
+        return {"ok": True, "stage": body.stage, "notes": notes.get(key, [])}
     finally:
         s.close()
 

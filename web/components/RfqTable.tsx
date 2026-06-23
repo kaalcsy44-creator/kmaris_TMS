@@ -1,4 +1,5 @@
 import type { RfqRow } from "@/lib/types";
+import WorkTypeBadge from "@/components/WorkTypeBadge";
 
 const TOTAL_STEPS = 12;
 
@@ -76,8 +77,9 @@ export default function RfqTable({
                 </td>
                 <Cell main={r.customer_rfq_no} sub={r.crfq_at} />
                 <td className="cell">
-                  <div className="m">
+                  <div className="m" style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                     {r.customer || <span className="dash">—</span>}
+                    <WorkTypeBadge type={r.work_type} />
                   </div>
                   {r.vessel && r.vessel !== "—" ? (
                     <div className="s">{r.vessel}</div>

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   arSoaXlsxUrl,
   createArRecord,
@@ -44,7 +45,9 @@ const emptyForm: ArForm = {
 export default function ArPage() {
   return (
     <AppShell active="ar">
-      <ArOverview />
+      <Suspense fallback={<div className="state">불러오는 중...</div>}>
+        <ArOverview />
+      </Suspense>
     </AppShell>
   );
 }
@@ -54,6 +57,8 @@ function money(n: number) {
 }
 
 function ArOverview() {
+  const params = useSearchParams();
+  const orderParam = params.get("order");
   const { data, error: loadError, refresh } = useCachedData(
     "ar:overview",
     fetchArOverview
@@ -63,6 +68,15 @@ function ArOverview() {
   const [status, setStatus] = useState("전체");
   const [currency, setCurrency] = useState("전체");
   const [selectedId, setSelectedId] = useState<number | null>(null);
+
+  // 진행현황의 "AR 작업"으로 넘어온 ?order=<id> 가 있으면 해당 오더의 AR 레코드를 자동 선택.
+  // 아직 AR 레코드가 없으면 신규 입력 폼에 그 오더를 미리 채운다(ArEditPanel 의 fallbackOrderId).
+  const orderId = orderParam ? Number(orderParam) : null;
+  useEffect(() => {
+    if (orderId === null || !data) return;
+    const match = data.rows.find((r) => r.order_id === orderId);
+    setSelectedId(match ? match.id : null);
+  }, [orderId, data]);
 
   function load() {
     setError(null);
@@ -182,7 +196,7 @@ function ArOverview() {
             </div>
           )}
 
-          <ArEditPanel selected={selected} options={options ?? null} onChanged={load} clearSelection={() => setSelectedId(null)} />
+          <ArEditPanel selected={selected} options={options ?? null} onChanged={load} clearSelection={() => setSelectedId(null)} fallbackOrderId={selected ? null : orderId} />
         </>
       )}
     </>
@@ -261,11 +275,13 @@ function ArEditPanel({
   options,
   onChanged,
   clearSelection,
+  fallbackOrderId = null,
 }: {
   selected: ArRow | null;
   options: PoWorkOptions | null;
   onChanged: () => void;
   clearSelection: () => void;
+  fallbackOrderId?: number | null;
 }) {
   const [form, setForm] = useState<ArForm>(emptyForm);
   const [err, setErr] = useState("");
@@ -284,9 +300,10 @@ function ArEditPanel({
         notes: selected.notes,
       });
     } else {
-      setForm(emptyForm);
+      // 선택 레코드가 없으면 빈 폼 — 단, AR 작업으로 넘어온 오더가 있으면 미리 채운다.
+      setForm({ ...emptyForm, order_id: fallbackOrderId ?? "" });
     }
-  }, [selected]);
+  }, [selected, fallbackOrderId]);
 
   async function save() {
     if (form.order_id === "") return;

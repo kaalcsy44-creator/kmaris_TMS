@@ -26,6 +26,7 @@ export default function NewRfqForm({
   const [vesselId, setVesselId] = useState<number | "">("");
   const [custRfqNo, setCustRfqNo] = useState("");
   const [projectTitle, setProjectTitle] = useState("");
+  const [workType, setWorkType] = useState("부품공급");
   const [items, setItems] = useState<ItemRow[]>([
     { part_no: "", description: "", qty: "1" },
   ]);
@@ -139,6 +140,7 @@ export default function NewRfqForm({
         vessel_id: vesselId === "" ? undefined : vesselId,
         customer_rfq_no: custRfqNo,
         project_title: projectTitle,
+        work_type: workType,
         items: items
           .filter((it) => it.part_no.trim() || it.description.trim())
           .map((it) => ({
@@ -152,6 +154,7 @@ export default function NewRfqForm({
       setVesselId("");
       setCustRfqNo("");
       setProjectTitle("");
+      setWorkType("부품공급");
       setItems([{ part_no: "", description: "", qty: "1" }]);
       onCreated?.(r.rfq_no);
     } catch (e) {
@@ -205,6 +208,22 @@ export default function NewRfqForm({
           }}
         />
       </details>
+
+      <div className="form-field" style={{ marginBottom: 4 }}>
+        <label>업무 타입</label>
+        <div className="seg-tabs">
+          {["부품공급", "서비스"].map((t) => (
+            <button
+              key={t}
+              type="button"
+              className={workType === t ? "on" : ""}
+              onClick={() => setWorkType(t)}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+      </div>
 
       <div className="form-grid">
         <Field label="Customer *">

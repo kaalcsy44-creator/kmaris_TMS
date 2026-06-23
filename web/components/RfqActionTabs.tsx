@@ -19,6 +19,7 @@ import {
 import { getToken } from "@/lib/auth";
 import type {
   VendorOption,
+  RfqRow,
   RfqDetail as RfqDetailT,
   VendorRfqPreview,
   VendorQuoteItem,
@@ -27,6 +28,7 @@ import type {
   VendorQuoteForImport,
 } from "@/lib/types";
 import NewRfqForm from "./screens/NewRfqForm";
+import RfqTable from "./RfqTable";
 
 // 원본 rfq_quotation.py 하단의 작업 segmented control(4탭)을 복원.
 const TABS = [
@@ -38,11 +40,13 @@ const TABS = [
 
 export default function RfqActionTabs({
   rfqId,
-  rfqNo,
+  rows,
+  onSelect,
   onChanged,
 }: {
   rfqId: number | null;
-  rfqNo?: string;
+  rows: RfqRow[];
+  onSelect: (id: number | null) => void;
   onChanged: () => void;
 }) {
   const [tab, setTab] = useState("new");
@@ -68,7 +72,6 @@ export default function RfqActionTabs({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rfqId]);
 
-  const needsRfq = tab !== "new";
   const after = () => {
     onChanged();
     reloadVrfqs();
@@ -88,17 +91,18 @@ export default function RfqActionTabs({
         ))}
       </div>
 
-      {needsRfq && rfqNo ? (
-        <div className="action-ctx">
-          대상 RFQ: <b>{rfqNo}</b>
-        </div>
-      ) : null}
+      <ProjectSelect rows={rows} rfqId={rfqId} onSelect={onSelect} />
 
       {tab === "new" ? (
-        <NewRfqForm onCreated={() => onChanged()} />
+        <CustomerRfqReceive
+          rows={rows}
+          rfqId={rfqId}
+          onSelect={onSelect}
+          onChanged={onChanged}
+        />
       ) : rfqId === null ? (
         <div className="panel">
-          <div className="empty">위 표에서 RFQ를 먼저 선택하세요.</div>
+          <div className="empty">상단에서 진행중인 프로젝트를 먼저 선택하세요.</div>
         </div>
       ) : (
         <div className="panel action-panel">
@@ -118,6 +122,84 @@ export default function RfqActionTabs({
         </div>
       )}
     </div>
+  );
+}
+
+// 각 탭 상단에 위치하는 "진행중인 프로젝트" 셀렉터. 선택한 RFQ가 2~4번 탭의 작업 대상이 된다.
+function ProjectSelect({
+  rows,
+  rfqId,
+  onSelect,
+}: {
+  rows: RfqRow[];
+  rfqId: number | null;
+  onSelect: (id: number | null) => void;
+}) {
+  return (
+    <div className="project-select">
+      <label>진행중인 프로젝트</label>
+      <select
+        value={rfqId ?? ""}
+        onChange={(e) =>
+          onSelect(e.target.value === "" ? null : Number(e.target.value))
+        }
+      >
+        <option value="">선택…</option>
+        {rows.map((r) => {
+          const no = r.crfq_no || r.customer_rfq_no || `RFQ-${r.id}`;
+          const vessel = r.vessel && r.vessel !== "—" ? ` · ${r.vessel}` : "";
+          return (
+            <option key={r.id} value={r.id}>
+              {no} · {r.customer}
+              {vessel}
+            </option>
+          );
+        })}
+      </select>
+      {rows.length === 0 ? (
+        <span className="hint-inline">등록된 프로젝트가 없습니다.</span>
+      ) : null}
+    </div>
+  );
+}
+
+// 1. Customer RFQ 수신 탭 — P/O 화면과 동일하게 "신규 등록 / RFQ 목록" 세그먼트 토글 제공.
+function CustomerRfqReceive({
+  rows,
+  rfqId,
+  onSelect,
+  onChanged,
+}: {
+  rows: RfqRow[];
+  rfqId: number | null;
+  onSelect: (id: number | null) => void;
+  onChanged: () => void;
+}) {
+  const [sub, setSub] = useState<"new" | "list">("new");
+
+  return (
+    <>
+      <div className="seg-tabs">
+        <button className={sub === "new" ? "on" : ""} onClick={() => setSub("new")}>
+          신규 등록
+        </button>
+        <button className={sub === "list" ? "on" : ""} onClick={() => setSub("list")}>
+          RFQ 목록
+        </button>
+      </div>
+      {sub === "new" ? (
+        <NewRfqForm onCreated={() => onChanged()} />
+      ) : (
+        <div className="panel">
+          <div className="sub-h">등록된 RFQ 목록</div>
+          {rows.length === 0 ? (
+            <div className="empty">등록된 RFQ가 없습니다.</div>
+          ) : (
+            <RfqTable rows={rows} selectedId={rfqId} onSelect={onSelect} />
+          )}
+        </div>
+      )}
+    </>
   );
 }
 
