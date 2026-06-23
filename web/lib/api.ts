@@ -574,7 +574,8 @@ export function previewVendorRfq(
 export function sendVendorRfq(
   rfqId: number,
   items: { vendor_id: number; to: string; subject: string; body: string }[],
-  rfqNo?: { mode: "auto" | "manual"; value: string }
+  rfqNo?: { mode: "auto" | "manual"; value: string },
+  sentAt?: string
 ): Promise<{
   ok: boolean;
   saved: number;
@@ -584,6 +585,7 @@ export function sendVendorRfq(
     items,
     rfq_no_mode: rfqNo?.mode ?? "auto",
     rfq_no: rfqNo?.value ?? "",
+    sent_at: sentAt ?? "",
   });
 }
 

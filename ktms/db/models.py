@@ -171,6 +171,7 @@ class VendorRFQ(Base):
     rfq_id         = Column(Integer, ForeignKey("rfqs.id"))
     vendor_id      = Column(Integer, ForeignKey("vendors.id"))
     sent_date      = Column(String(10))
+    sent_at        = Column(String(16))   # 발신 일시 "YYYY-MM-DDTHH:MM" (KST)
     sent_to_email  = Column(String(200))
     status         = Column(String(40), default="발송됨")
     items          = Column(JSON, default=list)

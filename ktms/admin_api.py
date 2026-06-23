@@ -273,6 +273,11 @@ def _fmt_received(iso: str) -> str:
     return f"{iso[2:10]} {iso[11:16]}"
 
 
+def _vrfq_sent_iso(v) -> str:
+    """Vendor RFQ 발신 일시(iso) — 수동 입력(sent_at) 우선, 없으면 생성 시각."""
+    return (getattr(v, "sent_at", None) or "") or _kst_iso(v.created_at)
+
+
 def _date_iso(d: str | None) -> str:
     """'YYYY-MM-DD' 문자열 → 'YYYY-MM-DDT00:00' (시각 정보가 없는 단계용)."""
     if not d:
@@ -296,7 +301,7 @@ def _stage_auto_times(s, rfq, order) -> dict[str, str]:
     # 2) Vendor RFQ 발신 · 3) Vendor Quot. 수신
     vrfqs = s.query(VendorRFQ).filter_by(rfq_id=rfq.id).all()
     if vrfqs:
-        _set(2, _kst_iso(min((v.created_at for v in vrfqs if v.created_at), default=None)))
+        _set(2, min((_vrfq_sent_iso(v) for v in vrfqs), default=""))
         vrfq_ids = [v.id for v in vrfqs]
         vqs = (s.query(VendorQuote)
                .filter(VendorQuote.vendor_rfq_id.in_(vrfq_ids)).all())
@@ -392,7 +397,7 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
                     if nm not in _vnames:
                         _vnames.append(nm)
                 vrfq_vendors = _vnames[0] + (f"  (외 {len(_vnames) - 1}곳)" if len(_vnames) > 1 else "")
-                vrfq_at = _kst(vrfqs[0].created_at)
+                vrfq_at = _fmt_received(_vrfq_sent_iso(vrfqs[0]))
             else:
                 vrfq_vendors, vrfq_at = "", ""
 
@@ -503,7 +508,7 @@ def rfq_overview(customer_id: int | None = None, work_type: str | None = None):
                      .order_by(VendorRFQ.id.desc()).all())
             if vrfqs:
                 vr0 = vrfqs[0]
-                vrfq_at = _kst(vr0.created_at)
+                vrfq_at = _fmt_received(_vrfq_sent_iso(vr0))
                 # "2. Vendor RFQ 발신" 칼럼은 발송한 Vendor사 이름을 표시한다.
                 _vnames = []
                 for x in vrfqs:
@@ -767,7 +772,7 @@ def rfq_detail(rfq_id: int):
             "id": v.id,
             "vrfq_no": v.vrfq_no,
             "vendor": vendor_names.get(v.vendor_id, "—"),
-            "at": _kst(v.created_at),
+            "at": _fmt_received(_vrfq_sent_iso(v)),
         } for v in vrfqs]
 
         vrfq_ids = [v.id for v in vrfqs]
@@ -1061,7 +1066,7 @@ def po_overview():
             # Vendor RFQ 발신 일시 (시·분) — Vendor RFQ를 보낸 거래에서만
             vrfqs = (s.query(VendorRFQ).filter_by(rfq_id=r.id)
                      .order_by(VendorRFQ.id.desc()).all())
-            vrfq_at = _kst(vrfqs[0].created_at) if vrfqs else ""
+            vrfq_at = _fmt_received(_vrfq_sent_iso(vrfqs[0])) if vrfqs else ""
 
             stage = _pipeline_stage(s, r.id)
             rows.append({
@@ -3118,6 +3123,7 @@ class VendorRfqSendRequest(BaseModel):
     items: list[VendorRfqSendItem]
     rfq_no_mode: str = "auto"
     rfq_no: str = ""
+    sent_at: str = ""        # 발신 일시 "YYYY-MM-DDTHH:MM"(비우면 현재)
 
 
 @app.post("/api/admin/rfq/{rfq_id}/vendor-rfq-send",
@@ -3133,6 +3139,7 @@ def vendor_rfq_send(rfq_id: int, body: VendorRfqSendRequest):
             raise HTTPException(status_code=404, detail="RFQ를 찾을 수 없습니다.")
         # 케이마리스 RFQ No. 부여(미발급이면)
         _assign_rfq_no(s, rfq, body.rfq_no_mode, body.rfq_no)
+        sent_at = (body.sent_at or "").strip() or _kst_iso(datetime.utcnow())
         saved = 0
         result_rows = []
         for item in body.items:
@@ -3144,7 +3151,8 @@ def vendor_rfq_send(rfq_id: int, body: VendorRfqSendRequest):
                 vrfq_no=vrfq_no,
                 rfq_id=rfq.id,
                 vendor_id=vendor.id,
-                sent_date=date.today().isoformat(),
+                sent_date=sent_at[:10],
+                sent_at=sent_at,
                 sent_to_email=item.to or "",
                 status="발신완료",
                 items=rfq.items or [],

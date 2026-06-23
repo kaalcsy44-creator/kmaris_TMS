@@ -53,6 +53,7 @@ _MIGRATIONS = {
     },
     "vendor_rfqs": {
         "sent_to_email": "VARCHAR(200)",
+        "sent_at": "VARCHAR(16)",
     },
     "purchase_orders": {
         "sent_to_email": "VARCHAR(200)",

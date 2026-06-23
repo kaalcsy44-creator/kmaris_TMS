@@ -31,6 +31,15 @@ import type {
 import NewRfqForm from "./screens/NewRfqForm";
 import RfqTable from "./RfqTable";
 
+/** 현재 시각 "YYYY-MM-DDTHH:MM" (datetime-local 기본값). */
+function nowLocalDt(): string {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(
+    d.getMinutes()
+  )}`;
+}
+
 // 원본 rfq_quotation.py 하단의 작업 segmented control(4탭)을 복원.
 const TABS = [
   { key: "new", label: "1. Customer RFQ 수신" },
@@ -229,6 +238,7 @@ function VendorRfqAction({
   const [rfqNoMode, setRfqNoMode] = useState<"auto" | "manual">("auto");
   const [manualNo, setManualNo] = useState("");
   const rfqNoArg = unassigned ? { mode: rfqNoMode, value: manualNo.trim() } : undefined;
+  const [sentAt, setSentAt] = useState(nowLocalDt());
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -324,7 +334,7 @@ function VendorRfqAction({
           body: p?.body ?? "",
         };
       });
-      const r = await sendVendorRfq(rfqId, items, rfqNoArg);
+      const r = await sendVendorRfq(rfqId, items, rfqNoArg, sentAt || undefined);
       setMsg(`케이마리스 RFQ No. ${r.rfq_no} · 발신 완료 (Vendor RFQ ${r.saved}건 기록)`);
       setPreviews([]);
       setVendorIds([]);
@@ -405,6 +415,14 @@ function VendorRfqAction({
             <option value="en">English (영문)</option>
             <option value="ko">Korean (국문)</option>
           </select>
+        </div>
+        <div className="form-field">
+          <label>발신 일시 (발신 완료 기록)</label>
+          <input
+            type="datetime-local"
+            value={sentAt}
+            onChange={(e) => setSentAt(e.target.value)}
+          />
         </div>
       </div>
       <div className="form-field">
