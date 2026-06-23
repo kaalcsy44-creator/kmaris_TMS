@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   createOrder,
   createPurchaseOrder,
@@ -21,151 +22,35 @@ import type {
   VendorPoPreview,
 } from "@/lib/types";
 
-const TOTAL_STEPS = 12;
-
-function Cell({ main, sub, num }: { main: string; sub?: string; num?: boolean }) {
-  const empty = !main || main === "—";
-  return (
-    <td className={`cell${num ? " num" : ""}`}>
-      <div className="m">{empty ? <span className="dash">—</span> : main}</div>
-      {sub ? <div className="s">{sub}</div> : null}
-    </td>
-  );
-}
-
 export default function PoScreen() {
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const params = useSearchParams();
+  const orderParam = params.get("order");
+  const [selectedId, setSelectedId] = useState<number | null>(
+    orderParam ? Number(orderParam) : null
+  );
 
-  const {
-    data: overview,
-    error,
-    loading,
-    refresh,
-  } = useCachedData("po:overview", fetchPoOverview);
-  const rows = overview?.rows ?? [];
-
-  // 목록 갱신 시 선택 행이 사라졌으면 선택 해제
   useEffect(() => {
-    if (!overview) return;
-    setSelectedId((cur) =>
-      cur && overview.rows.some((r) => r.id === cur) ? cur : null
-    );
-  }, [overview]);
+    setSelectedId(orderParam ? Number(orderParam) : null);
+  }, [orderParam]);
 
-  // 새로고침 / 액션 후: P/O 목록 강제 새로고침 + 대시보드 캐시 무효화
+  // orderNo 표시·검증용으로만 overview 를 사용한다(테이블은 렌더하지 않음).
+  const { data: overview, refresh } = useCachedData("po:overview", fetchPoOverview);
+  const rows = overview?.rows ?? [];
+  const selected = rows.find((r) => r.id === selectedId);
+
+  // 액션 후: overview 새로고침 + 대시보드/파이프라인 캐시 무효화
   function load() {
     invalidateCache("dashboard");
+    invalidateCache("pipeline");
     return refresh();
   }
 
   return (
-    <>
-      <div className="toolbar">
-        <button className="btn" onClick={load}>
-          새로고침
-        </button>
-        <span className="hint-inline">
-          고객 P/O 수신 → Vendor P/O 발신 흐름. 고객 PO No.는 PDF 자동 인식/수기 입력 값입니다.
-        </span>
-      </div>
-
-      {loading && rows.length === 0 ? (
-        <div className="state">불러오는 중…</div>
-      ) : error && rows.length === 0 ? (
-        <div className="state error">API 오류: {error.message}</div>
-      ) : rows.length === 0 ? (
-        <div className="state">표시할 P/O가 없습니다.</div>
-      ) : (
-        <div className="table-wrap">
-          <table className="rfq">
-            <thead>
-              <tr>
-                <th className="chk" rowSpan={2}></th>
-                <th className="grp" colSpan={2}>1. Customer RFQ 수신</th>
-                <th className="grp">2. Vendor RFQ 발신</th>
-                <th className="grp">5. Customer P/O 수신</th>
-                <th className="grp" colSpan={3}>6. Vendor P/O 발신</th>
-                <th rowSpan={2}>상태</th>
-              </tr>
-              <tr className="grp-sub">
-                <th>고객 RFQ No.</th>
-                <th>Customer</th>
-                <th>K-Maris RFQ No.</th>
-                <th>고객 P/O No.</th>
-                <th>K-Maris ORD No.</th>
-                <th>Vendor</th>
-                <th>수신자 이메일</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r, i) => {
-                const selectable = r.id > 0;
-                const sel = selectable && r.id === selectedId;
-                const toggle = () => {
-                  if (selectable) setSelectedId(sel ? null : r.id);
-                };
-                return (
-                  <tr
-                    key={r.id || `r${i}`}
-                    className={sel ? "sel" : ""}
-                    onClick={toggle}
-                  >
-                    <td className="chk">
-                      <input
-                        type="checkbox"
-                        checked={sel}
-                        disabled={!selectable}
-                        onChange={toggle}
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                    </td>
-                    <Cell main={r.customer_rfq_no} sub={r.crfq_at} />
-                    <td className="cell">
-                      <div className="m">
-                        {r.customer || <span className="dash">—</span>}
-                      </div>
-                      {r.vessel && r.vessel !== "—" ? (
-                        <div className="s">{r.vessel}</div>
-                      ) : null}
-                      <div className="s">품목 {r.item_count}</div>
-                    </td>
-                    <Cell
-                      main={r.kmaris_rfq_no}
-                      sub={r.vrfq_at ? `발신: ${r.vrfq_at}` : undefined}
-                    />
-                    <Cell
-                      main={r.customer_po_no}
-                      sub={r.customer_po_at ? `수신: ${r.customer_po_at}` : undefined}
-                    />
-                    <Cell
-                      main={r.ord_no}
-                      sub={r.vendor_po_at ? `발신: ${r.vendor_po_at}` : undefined}
-                    />
-                    <Cell main={r.vendor} />
-                    <Cell main={r.vendor_email} />
-                    <td className="status">
-                      <div className="lbl">{r.status}</div>
-                      <div className="bar">
-                        {Array.from({ length: TOTAL_STEPS }).map((_, k) => (
-                          <span key={k} className={`seg${k < r.stage ? " on" : ""}`} />
-                        ))}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      <PoDetail orderId={selectedId} />
-      <PoActionTabs
-        orderId={selectedId}
-        orderNo={rows.find((r) => r.id === selectedId)?.ord_no}
-        onChanged={load}
-      />
-    </>
+    <PoActionTabs
+      orderId={selectedId}
+      orderNo={selected?.ord_no}
+      onChanged={load}
+    />
   );
 }
 

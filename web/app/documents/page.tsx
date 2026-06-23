@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   documentDownloadUrl,
   fetchDocumentDetail,
-  fetchDocumentsOverview,
   saveCommercialInvoice,
   savePackingList,
   saveShippingAdvice,
@@ -14,136 +14,85 @@ import {
 } from "@/lib/api";
 import { getToken } from "@/lib/auth";
 import type { DocumentDetail, DocumentWorkItem } from "@/lib/types";
+import { fetchDocumentsOverview } from "@/lib/api";
 import { useCachedData, invalidateCache } from "@/lib/useCachedData";
 import AppShell, { SectionHead } from "@/components/AppShell";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
+// 목록은 진행현황(내부확인용) 통합 목록으로 이전됨. 이 화면은 문서(CI/PL/SA/Tax) 작업
+// 전용이며, 대상 오더는 진행현황의 "문서 작업"으로 넘어온 ?order=<id> 로 선택된다.
 export default function DocumentsPage() {
   return (
     <AppShell active="documents">
-      <DocumentsOverview />
+      <SectionHead title="문서 (Documents)" sub="오더별 CI · PL · SA · Tax 생성 및 발송" />
+      <Suspense fallback={<div className="state">불러오는 중…</div>}>
+        <DocumentsOverview />
+      </Suspense>
     </AppShell>
   );
 }
 
-function Cell({ main }: { main: string }) {
-  return (
-    <td className="cell">
-      <div className="m">{main ? main : <span className="dash">-</span>}</div>
-    </td>
-  );
-}
-
-function DocPill({ has, no, label }: { has: boolean; no: string; label: string }) {
-  return (
-    <td className="cell">
-      <span className={`doc-pill${has ? " on" : ""}`} title={no || `${label} 미생성`}>
-        {has ? no || label : `- ${label}`}
-      </span>
-    </td>
-  );
-}
-
 function DocumentsOverview() {
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const params = useSearchParams();
+  const orderParam = params.get("order");
+  const [selectedId, setSelectedId] = useState<number | null>(
+    orderParam ? Number(orderParam) : null
+  );
 
-  const {
-    data: overview,
-    error,
-    loading,
-    refresh,
-  } = useCachedData("documents:overview", fetchDocumentsOverview);
-  const rows = overview?.rows ?? [];
+  // 작업 대상 오더 목록(선택자 + 기본값 산정용). 테이블은 렌더하지 않는다.
+  const { data: overview, refresh } = useCachedData(
+    "documents:overview",
+    fetchDocumentsOverview
+  );
+  const orders = overview?.rows ?? [];
 
+  // ?order= 가 있으면 그 오더, 없으면 첫 번째 오더를 자동 선택.
   useEffect(() => {
-    if (!overview) return;
-    setSelectedId((prev) => prev ?? overview.rows[0]?.id ?? null);
-  }, [overview]);
+    if (orderParam) {
+      setSelectedId(Number(orderParam));
+      return;
+    }
+    setSelectedId((prev) => prev ?? orders[0]?.id ?? null);
+  }, [orderParam, overview]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function load() {
     invalidateCache("dashboard");
+    invalidateCache("pipeline");
     return refresh();
   }
 
-  const selected = rows.find((r) => r.id === selectedId) ?? null;
-
   return (
     <>
-      <SectionHead title="문서 (Documents)" sub="오더별 CI · PL · SA · Tax 생성 및 발송" />
-
-      <div className="toolbar">
-        <button className="btn" onClick={load}>
-          새로고침
-        </button>
-        <span className="hint-inline">
-          행을 선택하면 아래에서 Commercial Invoice, Packing List, Shipping Advice, Tax Invoice Data를 생성합니다.
-        </span>
-      </div>
-
-      {loading && rows.length === 0 ? (
-        <div className="state">불러오는 중...</div>
-      ) : error && rows.length === 0 ? (
-        <div className="state error">API 오류: {error.message}</div>
-      ) : rows.length === 0 ? (
-        <div className="state">등록된 오더가 없습니다.</div>
-      ) : (
-        <div className="table-wrap">
-          <table className="rfq">
-            <thead>
-              <tr>
-                <th style={{ width: 44 }}></th>
-                <th>오더 No.</th>
-                <th>Customer</th>
-                <th>선박</th>
-                <th>PO No.</th>
-                <th>Commercial Invoice</th>
-                <th>Packing List</th>
-                <th>Shipping Advice</th>
-                <th>Tax Invoice</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => {
-                const sel = r.id === selectedId;
-                return (
-                  <tr key={r.id} className={sel ? "sel" : ""} onClick={() => setSelectedId(sel ? null : r.id)}>
-                    <td className="select-cell">
-                      <input
-                        type="checkbox"
-                        checked={sel}
-                        onChange={() => setSelectedId(sel ? null : r.id)}
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                    </td>
-                    <Cell main={r.ord_no} />
-                    <Cell main={r.customer} />
-                    <Cell main={r.vessel} />
-                    <Cell main={r.po_no} />
-                    <DocPill has={r.has_ci} no={r.ci_no} label="CI" />
-                    <DocPill has={r.has_pl} no={r.pl_no} label="PL" />
-                    <DocPill has={r.has_sa} no={r.sa_no} label="SA" />
-                    <DocPill has={r.has_tax} no={r.tax_no} label="Tax" />
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+      {orders.length > 1 ? (
+        <div className="toolbar">
+          <label className="field">
+            <span>작업 대상 오더</span>
+            <select
+              value={selectedId ?? ""}
+              onChange={(e) =>
+                setSelectedId(e.target.value === "" ? null : Number(e.target.value))
+              }
+            >
+              {orders.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.ord_no} · {o.customer}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
-      )}
-
-      <DocumentWorkPanel orderId={selectedId} ordNo={selected?.ord_no ?? ""} onChanged={load} />
+      ) : null}
+      <DocumentWorkPanel orderId={selectedId} onChanged={load} />
     </>
   );
 }
 
 function DocumentWorkPanel({
   orderId,
-  ordNo,
   onChanged,
 }: {
   orderId: number | null;
-  ordNo: string;
   onChanged: () => void;
 }) {
   const [data, setData] = useState<DocumentDetail | null>(null);
@@ -173,28 +122,20 @@ function DocumentWorkPanel({
 
   if (orderId === null) {
     return (
-      <div className="action-tabs">
-        <h3>선택한 오더 상세</h3>
-        <p className="muted">위 목록에서 체크박스를 선택하면 상세 작업이 표시됩니다.</p>
+      <div className="state">
+        진행현황(내부확인용)에서 거래의 <b>문서 작업</b> 버튼으로 들어오면 해당 오더의
+        CI · PL · SA · Tax 작업이 표시됩니다.
       </div>
     );
   }
 
   return (
     <div className="action-tabs">
-      <div className="po-work-note">
-        <b>대상 오더: {ordNo}</b>
-        <span>{data ? `${data.order.customer} · ${data.order.vessel || "-"}` : "상세 로딩 중"}</span>
-      </div>
-
       {error ? <div className="state error">API 오류: {error}</div> : null}
       {loading && !data ? <div className="state">상세 불러오는 중...</div> : null}
 
       {data ? (
         <>
-          <OrderMilestones data={data} onChanged={afterChange} />
-          <DocumentSummary data={data} />
-
           <div className="page-tabs">
             {[
               ["ci", "Commercial Invoice"],
@@ -214,30 +155,6 @@ function DocumentWorkPanel({
           {tab === "tax" && <TaxInvoiceTab key={`tax-${data.order.id}-${data.tax?.id ?? 0}`} data={data} onChanged={afterChange} />}
         </>
       ) : null}
-    </div>
-  );
-}
-
-function DocumentSummary({ data }: { data: DocumentDetail }) {
-  return (
-    <div className="doc-summary">
-      <KV k="Customer" v={data.order.customer} />
-      <KV k="선박" v={data.order.vessel || "-"} />
-      <KV k="Customer PO No." v={data.order.po_no || "-"} />
-      <KV k="Status" v={data.order.status} />
-      <KV k="CI" v={data.ci?.ci_no || "미생성"} />
-      <KV k="PL" v={data.pl?.pl_no || "미생성"} />
-      <KV k="SA" v={data.sa?.sa_no || "미생성"} />
-      <KV k="Tax" v={data.tax?.tax_no || "미생성"} />
-    </div>
-  );
-}
-
-function KV({ k, v }: { k: string; v: string }) {
-  return (
-    <div className="kv">
-      <span>{k}</span>
-      <b>{v}</b>
     </div>
   );
 }
@@ -404,6 +321,8 @@ function ShippingAdviceTab({ data, onChanged }: { data: DocumentDetail; onChange
 
   return (
     <div className="doc-tab">
+      {/* 8단계(Delivery arrangement) 마일스톤 — Customer 확인 / Vendor 서류 확인 */}
+      <OrderMilestones data={data} onChanged={onChanged} />
       <div className="form-grid">
         <Field label="SA Date" value={date} onChange={setDate} type="date" />
       </div>

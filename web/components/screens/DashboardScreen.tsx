@@ -1,24 +1,7 @@
 "use client";
 
-import { useState } from "react";
 import { fetchDashboard } from "@/lib/api";
 import { useCachedData } from "@/lib/useCachedData";
-
-function Stepper({ steps, current }: { steps: string[]; current: number }) {
-  return (
-    <div className="hstepper">
-      {steps.map((label, i) => {
-        const state = i < current ? "done" : i === current ? "current" : "todo";
-        return (
-          <div className={`hstep ${state}`} key={i}>
-            <span className="dot">{i < current ? "✓" : i + 1}</span>
-            <span className="lbl">{label}</span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
 
 function num(n: number) {
   return n.toLocaleString();
@@ -34,11 +17,8 @@ function SubHead({ title, sub }: { title: string; sub?: string }) {
   );
 }
 
-type Tab = "summary" | "progress-customer" | "progress-internal";
-
 export default function DashboardScreen() {
   const { data, error } = useCachedData("dashboard", fetchDashboard);
-  const [tab, setTab] = useState<Tab>("summary");
 
   if (error && !data) {
     return <div className="state error">API 오류: {error.message}</div>;
@@ -52,29 +32,6 @@ export default function DashboardScreen() {
 
   return (
     <>
-      <div className="page-tabs">
-        <button
-          className={tab === "summary" ? "on" : ""}
-          onClick={() => setTab("summary")}
-        >
-          운영 · 성과 현황
-        </button>
-        <button
-          className={tab === "progress-customer" ? "on" : ""}
-          onClick={() => setTab("progress-customer")}
-        >
-          진행 현황 (고객확인용)
-        </button>
-        <button
-          className={tab === "progress-internal" ? "on" : ""}
-          onClick={() => setTab("progress-internal")}
-        >
-          진행 현황 (내부확인용)
-        </button>
-      </div>
-
-      {tab === "summary" && (
-        <>
       <SubHead title="운영 현황" sub="Operational status" />
       <div className="kpi-row">
         <Kpi
@@ -181,88 +138,6 @@ export default function DashboardScreen() {
           )}
         </div>
       </div>
-        </>
-      )}
-
-      {tab === "progress-customer" && (
-        <>
-      {/* 고객 트래킹용 현황 — 고객에게 노출되는 RFQ/Order 추적 단계 */}
-      <SubHead
-        title="RFQ · Order 진행 현황"
-        sub="고객 추적 단계 (k-maris.com/track 미리보기)"
-      />
-      {data.snapshot.length === 0 ? (
-        <div className="state">등록된 RFQ가 없습니다.</div>
-      ) : (
-        data.snapshot.map((r) => (
-          <div className="track-row" key={`t-${r.rfq_no}`}>
-            <div className="track-card">
-              <div className="track-card-head">
-                <span className="track-card-title">
-                  {r.rfq_no}
-                  {r.customer_rfq_no ? (
-                    <small> · Customer RFQ {r.customer_rfq_no}</small>
-                  ) : null}
-                </span>
-                <span className="track-card-badge">{r.status}</span>
-              </div>
-              <div className="track-card-sub">{r.customer_vessel}</div>
-              <div className="track-card-meta">
-                Items {r.item_count} · Level {r.follow_up_level} · {r.date}
-              </div>
-              <Stepper steps={data.rfq_steps} current={r.step} />
-            </div>
-
-            {r.order ? (
-              <div className="track-card">
-                <div className="track-card-head">
-                  <span className="track-card-title">{r.order.ord_no}</span>
-                  <span className="track-card-badge">{r.order.status}</span>
-                </div>
-                <div className="track-card-sub">{r.order.customer_vessel}</div>
-                <div className="track-card-meta">
-                  Items {r.order.item_count} · {r.order.date}
-                </div>
-                <Stepper steps={data.order_steps} current={r.order.step} />
-              </div>
-            ) : (
-              <div className="track-card empty">
-                <div className="track-card-head">
-                  <span className="track-card-title">No linked order</span>
-                </div>
-                <div className="track-card-sub">아직 오더가 생성되지 않았습니다.</div>
-                <Stepper steps={data.order_steps} current={-1} />
-              </div>
-            )}
-          </div>
-        ))
-      )}
-        </>
-      )}
-
-      {tab === "progress-internal" && (
-        <>
-      {/* 회사 내부 확인용 현황판 — 내부 12단계 */}
-      <SubHead title="내부 진행 현황 (12단계)" sub="회사 내부 확인용" />
-      {data.snapshot.length === 0 ? (
-        <div className="state">등록된 RFQ가 없습니다.</div>
-      ) : (
-        data.snapshot.map((r) => (
-          <div className="intl-card" key={`i-${r.rfq_no}`}>
-            <div className="intl-head">
-              {r.rfq_no} <span className="gray">· {r.customer_vessel}</span> ·{" "}
-              {r.stage}/12 {data.steps[r.stage - 1]}
-            </div>
-            <div className="intl-bar">
-              {Array.from({ length: 12 }).map((_, k) => (
-                <span key={k} className={`seg${k < r.stage ? " on" : ""}`} />
-              ))}
-            </div>
-          </div>
-        ))
-      )}
-        </>
-      )}
     </>
   );
 }

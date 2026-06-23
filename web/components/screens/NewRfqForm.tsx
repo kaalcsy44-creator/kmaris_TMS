@@ -25,6 +25,7 @@ export default function NewRfqForm({
   const [customerId, setCustomerId] = useState<number | "">("");
   const [vesselId, setVesselId] = useState<number | "">("");
   const [custRfqNo, setCustRfqNo] = useState("");
+  const [projectTitle, setProjectTitle] = useState("");
   const [items, setItems] = useState<ItemRow[]>([
     { part_no: "", description: "", qty: "1" },
   ]);
@@ -137,6 +138,7 @@ export default function NewRfqForm({
         customer_id: customerId,
         vessel_id: vesselId === "" ? undefined : vesselId,
         customer_rfq_no: custRfqNo,
+        project_title: projectTitle,
         items: items
           .filter((it) => it.part_no.trim() || it.description.trim())
           .map((it) => ({
@@ -149,6 +151,7 @@ export default function NewRfqForm({
       setCustomerId("");
       setVesselId("");
       setCustRfqNo("");
+      setProjectTitle("");
       setItems([{ part_no: "", description: "", qty: "1" }]);
       onCreated?.(r.rfq_no);
     } catch (e) {
@@ -239,6 +242,13 @@ export default function NewRfqForm({
             value={custRfqNo}
             onChange={(e) => setCustRfqNo(e.target.value)}
             placeholder="고객사 고유 번호(선택)"
+          />
+        </Field>
+        <Field label="프로젝트 제목">
+          <input
+            value={projectTitle}
+            onChange={(e) => setProjectTitle(e.target.value)}
+            placeholder="내부 식별용 제목(선택)"
           />
         </Field>
       </div>

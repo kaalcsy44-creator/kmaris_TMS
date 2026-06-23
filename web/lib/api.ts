@@ -31,6 +31,7 @@ import type {
   SettingsItem,
   SettingsUser,
   CompanyProfile,
+  PipelineData,
 } from "./types";
 
 function authHeaders(json = false): HeadersInit {
@@ -114,6 +115,7 @@ export function createRfq(body: {
   customer_id: number;
   vessel_id?: number;
   customer_rfq_no?: string;
+  project_title?: string;
   items: { part_no: string; description: string; qty: number }[];
 }): Promise<{ ok: boolean; id: number; rfq_no: string }> {
   return post("/api/admin/rfq", body);
@@ -124,6 +126,14 @@ export function updateRfqLevel(
   followUpLevel: string
 ): Promise<{ ok: boolean; follow_up_level: string }> {
   return put(`/api/admin/rfq/${rfqId}/level`, { follow_up_level: followUpLevel });
+}
+
+export function updateRfqStageDate(
+  rfqId: number,
+  stage: number,
+  value: string | null
+): Promise<{ ok: boolean; stage_dates: Record<string, string> }> {
+  return put(`/api/admin/rfq/${rfqId}/stage-date`, { stage, value });
 }
 
 export function deleteRfq(rfqId: number): Promise<{ ok: boolean; rfq_no: string }> {
@@ -140,6 +150,11 @@ export function parseOrderPdf(file: File): Promise<OrderOcrResult> {
   const fd = new FormData();
   fd.append("file", file);
   return postForm<OrderOcrResult>("/api/admin/ocr/order", fd);
+}
+
+export function fetchPipeline(customerId?: number): Promise<PipelineData> {
+  const qs = customerId ? `?customer_id=${customerId}` : "";
+  return get<PipelineData>(`/api/admin/pipeline${qs}`);
 }
 
 export function fetchDashboard(): Promise<DashboardData> {

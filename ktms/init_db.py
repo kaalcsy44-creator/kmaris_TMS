@@ -23,6 +23,8 @@ def create_tables():
 _MIGRATIONS = {
     "rfqs": {
         "customer_rfq_no": "VARCHAR(100)",
+        "project_title": "VARCHAR(200)",
+        "stage_dates": "JSON",
     },
     "vendor_quotes": {
         "vendor_quote_no": "VARCHAR(100)",

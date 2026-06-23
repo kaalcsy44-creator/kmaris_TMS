@@ -134,6 +134,7 @@ class RFQ(Base):
     id               = Column(Integer, primary_key=True)
     rfq_no           = Column(String(40), unique=True, nullable=False)  # K-Maris 내부 관리번호 KMS-RFQ-yymm-NNN
     customer_rfq_no  = Column(String(100))   # 고객사 고유 RFQ 번호
+    project_title    = Column(String(200))   # 프로젝트 제목(내부 식별용, 선택)
     customer_id      = Column(Integer, ForeignKey("customers.id"))
     vessel_id        = Column(Integer, ForeignKey("vessels.id"), nullable=True)
     date             = Column(String(10))   # YYYY-MM-DD
@@ -141,6 +142,9 @@ class RFQ(Base):
     follow_up_level  = Column(SAEnum(FollowUpLevel), default=FollowUpLevel.B)
     items            = Column(JSON, default=list)
     notes            = Column(Text)
+    # 내부 12단계 완료 일시(수동 입력/보정값). {"1": "YYYY-MM-DDTHH:MM", ...} (KST 기준).
+    # 비어있는 단계는 이벤트 레코드 created_at 에서 자동 동기화해 표시한다.
+    stage_dates      = Column(JSON, default=dict)
     tracking_token   = Column(String(64), unique=True, default=lambda: secrets.token_urlsafe(32))
     created_by       = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at       = Column(DateTime, default=datetime.utcnow)

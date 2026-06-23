@@ -1,89 +1,43 @@
 "use client";
 
-import { useCallback, useState } from "react";
-import Link from "next/link";
-import { fetchRfqOverview, fetchCustomers } from "@/lib/api";
+import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { fetchRfqOverview } from "@/lib/api";
 import { useCachedData, invalidateCache } from "@/lib/useCachedData";
-import RfqTable from "@/components/RfqTable";
-import RfqDetail from "@/components/RfqDetail";
 import RfqActionTabs from "@/components/RfqActionTabs";
 
+// 목록 테이블은 진행현황(내부확인용) 통합 목록으로 이전됨. 이 화면은 작업(상세·액션)
+// 전용이며, 대상 RFQ는 진행현황에서 "RFQ·견적 작업"으로 넘어온 ?rfq=<id> 로 선택된다.
 export default function RfqScreen() {
-  const [customerId, setCustomerId] = useState<number | "">("");
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const params = useSearchParams();
+  const rfqParam = params.get("rfq");
+  const [selectedId, setSelectedId] = useState<number | null>(
+    rfqParam ? Number(rfqParam) : null
+  );
 
-  const { data: customers = [] } = useCachedData("customers", fetchCustomers);
+  useEffect(() => {
+    setSelectedId(rfqParam ? Number(rfqParam) : null);
+  }, [rfqParam]);
 
-  const {
-    data: overview,
-    error,
-    loading,
-    refresh,
-  } = useCachedData(`rfq:overview:${customerId}`, () =>
-    fetchRfqOverview(customerId === "" ? undefined : customerId)
+  // rfqNo 표시·검증용으로만 overview 를 사용한다(테이블은 렌더하지 않음).
+  const { data: overview, refresh } = useCachedData("rfq:overview:", () =>
+    fetchRfqOverview()
   );
   const rows = overview?.rows ?? [];
+  const selected = rows.find((r) => r.id === selectedId);
 
-  // 액션(생성·수정·삭제) 후: 현재 RFQ 목록 강제 새로고침 + 대시보드 캐시 무효화
+  // 액션(생성·수정·삭제) 후: overview 새로고침 + 대시보드/파이프라인 캐시 무효화
   const load = useCallback(() => {
     invalidateCache("dashboard");
+    invalidateCache("pipeline");
     return refresh();
   }, [refresh]);
 
   return (
-    <>
-      <div className="toolbar">
-        <div className="field">
-          <label>Customer 필터</label>
-          <select
-            value={customerId}
-            onChange={(e) =>
-              setCustomerId(e.target.value === "" ? "" : Number(e.target.value))
-            }
-          >
-            <option value="">전체</option>
-            {customers.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <button className="btn" onClick={load}>
-          새로고침
-        </button>
-        <Link className="btn primary" href="/rfq/new" style={{ marginLeft: "auto" }}>
-          + 신규 RFQ
-        </Link>
-      </div>
-
-      {loading && rows.length === 0 ? (
-        <div className="state">불러오는 중…</div>
-      ) : error && rows.length === 0 ? (
-        <div className="state error">
-          API 오류: {error.message}
-          <br />
-          백엔드(admin_api.py)가 실행 중인지, 토큰이 맞는지 확인하세요.
-        </div>
-      ) : rows.length === 0 ? (
-        <div className="state">표시할 RFQ가 없습니다.</div>
-      ) : (
-        <RfqTable rows={rows} selectedId={selectedId} onSelect={setSelectedId} />
-      )}
-
-      <RfqDetail
-        rfqId={selectedId}
-        onChanged={load}
-        onDeleted={() => {
-          setSelectedId(null);
-          load();
-        }}
-      />
-      <RfqActionTabs
-        rfqId={selectedId}
-        rfqNo={rows.find((r) => r.id === selectedId)?.crfq_no}
-        onChanged={load}
-      />
-    </>
+    <RfqActionTabs
+      rfqId={selectedId}
+      rfqNo={selected?.crfq_no}
+      onChanged={load}
+    />
   );
 }

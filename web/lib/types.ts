@@ -525,9 +525,15 @@ export type SnapshotOrder = {
 };
 
 export type SnapshotRfq = {
+  id: number;
   rfq_no: string;
   customer_rfq_no: string;
+  project_title: string;
+  customer: string;
+  vessel: string;
   customer_vessel: string;
+  stage_dates: Record<string, string>;
+  stage_auto: Record<string, string>;
   status: string;
   item_count: number;
   follow_up_level: string;
@@ -535,6 +541,43 @@ export type SnapshotRfq = {
   step: number;
   stage: number;
   order: SnapshotOrder | null;
+};
+
+/** 통합 파이프라인 1행 = 거래(RFQ) 1건. RFQ→Quote(1~4) + Order→Vendor PO(5~6) 체인. */
+export type PipelineRow = {
+  rfq_id: number;
+  order_id: number;
+  customer_rfq_no: string;
+  kmaris_rfq_no: string;
+  customer: string;
+  vessel: string;
+  project_title: string;
+  item_count: number;
+  crfq_at: string;
+  vrfq_vendors: string;
+  vrfq_at: string;
+  vquote_no: string;
+  vquote_at: string;
+  vendor_amount: string;
+  cquote_no: string;
+  cquote_at: string;
+  customer_amount: string;
+  customer_po_no: string;
+  customer_po_at: string;
+  ord_no: string;
+  vendor_po_no: string;
+  vendor_po_at: string;
+  vendor: string;
+  vendor_email: string;
+  stage: number;
+  status: string;
+  stage_dates: Record<string, string>;
+  stage_auto: Record<string, string>;
+};
+
+export type PipelineData = {
+  steps: string[];
+  rows: PipelineRow[];
 };
 
 export type RfqItem = {

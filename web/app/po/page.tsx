@@ -1,19 +1,21 @@
 "use client";
 
+import { Suspense } from "react";
 import AppShell, { SectionHead } from "@/components/AppShell";
 import PoScreen from "@/components/screens/PoScreen";
 
-// 원본 Streamlit 5_PO.py 와 동일한 매크로 구조: 고객 P/O 수신 + Vendor P/O 발신을
-// 거래(RFQ/오더) 1건당 한 행으로 병합한 통합 현황 테이블. (분리된 Vendor P/O
-// 목록 탭은 이 한 테이블의 Vendor P/O 컬럼으로 병합됨)
+// P/O 작업 화면. 목록은 진행현황(내부확인용) 통합 목록으로 이전됨. 대상 오더는
+// 진행현황에서 넘어온 ?order=<id> 로 선택된다.
 export default function PoPage() {
   return (
     <AppShell active="po">
       <SectionHead
         title="P/O"
-        sub="고객 P/O 수신 → Vendor P/O 발신 통합 현황"
+        sub="고객 P/O 수신 → Vendor P/O 발신 작업"
       />
-      <PoScreen />
+      <Suspense fallback={<div className="state">불러오는 중…</div>}>
+        <PoScreen />
+      </Suspense>
     </AppShell>
   );
 }

@@ -243,6 +243,83 @@ def _pipeline_stage(s, rfq_id: int) -> int:
     return stage
 
 
+def _kst_iso(dt) -> str:
+    """UTC datetime → KST 'YYYY-MM-DDTHH:MM' (datetime-local 입력과 호환)."""
+    if not dt:
+        return ""
+    return (dt + timedelta(hours=9)).strftime("%Y-%m-%dT%H:%M")
+
+
+def _date_iso(d: str | None) -> str:
+    """'YYYY-MM-DD' 문자열 → 'YYYY-MM-DDT00:00' (시각 정보가 없는 단계용)."""
+    if not d:
+        return ""
+    d = d.strip()
+    return f"{d}T00:00" if len(d) == 10 else ""
+
+
+def _stage_auto_times(s, rfq, order) -> dict[str, str]:
+    """내부 12단계 중, 근거 레코드가 존재하는 단계의 완료 일시를 자동 추출.
+    수동 입력(stage_dates)이 없을 때 표시·기본값으로 사용된다. (7·12단계는 근거 없음)"""
+    auto: dict[str, str] = {}
+
+    def _set(stage: int, val: str):
+        if val:
+            auto[str(stage)] = val
+
+    # 1) Customer RFQ 수신
+    _set(1, _kst_iso(rfq.created_at))
+
+    # 2) Vendor RFQ 발신 · 3) Vendor Quot. 수신
+    vrfqs = s.query(VendorRFQ).filter_by(rfq_id=rfq.id).all()
+    if vrfqs:
+        _set(2, _kst_iso(min((v.created_at for v in vrfqs if v.created_at), default=None)))
+        vrfq_ids = [v.id for v in vrfqs]
+        vqs = (s.query(VendorQuote)
+               .filter(VendorQuote.vendor_rfq_id.in_(vrfq_ids)).all())
+        if vqs:
+            _set(3, _kst_iso(min((q.created_at for q in vqs if q.created_at), default=None)))
+
+    # 4) Customer Quot. 발신
+    quo = (s.query(Quotation)
+           .filter(Quotation.rfq_id == rfq.id, Quotation.status != QuotationStatus.DRAFT)
+           .order_by(Quotation.created_at.asc()).first())
+    if quo:
+        _set(4, _date_iso(quo.sent_date) or _kst_iso(quo.created_at))
+
+    if order:
+        # 5) Customer P/O 수신
+        _set(5, _kst_iso(order.created_at))
+        # 6) Vendor P/O 발신
+        po = (s.query(PurchaseOrder).filter_by(order_id=order.id)
+              .order_by(PurchaseOrder.created_at.asc()).first())
+        if po:
+            _set(6, _date_iso(po.sent_date) or _kst_iso(po.created_at))
+        # 8) Delivery arrangement
+        sa = (s.query(ShippingAdvice).filter_by(order_id=order.id)
+              .order_by(ShippingAdvice.created_at.asc()).first())
+        _set(8, (_kst_iso(sa.created_at) if sa else "")
+             or _date_iso(getattr(order, "consignee_confirmed_date", None))
+             or _date_iso(getattr(order, "vendor_docs_sent_date", None))
+             or _date_iso(getattr(order, "shipped_date", None)))
+        # 9) 운송 완료 · POD 수취
+        _set(9, _date_iso(getattr(order, "delivered_date", None)))
+        # 10) Tax Invoice 작성 · 대금 청구
+        ci = (s.query(CommercialInvoice).filter_by(order_id=order.id)
+              .order_by(CommercialInvoice.created_at.asc()).first())
+        ars = s.query(ARRecord).filter_by(order_id=order.id).all()
+        _set(10, _kst_iso(min((a.created_at for a in ars if a.created_at), default=None))
+             or (_kst_iso(ci.created_at) if ci else ""))
+        # 11) 세금계산서 발행
+        if ci:
+            tax = (s.query(TaxInvoiceData).filter_by(ci_id=ci.id)
+                   .order_by(TaxInvoiceData.created_at.asc()).first())
+            if tax:
+                _set(11, _date_iso(tax.date) or _kst_iso(tax.created_at))
+
+    return auto
+
+
 def _status_label(stage: int) -> str:
     return f"{stage}/{len(INTERNAL_STEPS)} {INTERNAL_STEPS[stage - 1]}"
 
@@ -251,6 +328,116 @@ def _status_label(stage: int) -> str:
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/api/admin/pipeline", dependencies=[Depends(require_token)])
+def pipeline_overview(customer_id: int | None = None):
+    """거래(RFQ) 1건 = 1행으로, RFQ→Quote(1~4)와 Order→Vendor PO(5~6) 체인을 한 번에
+    합친 통합 파이프라인. 진행현황(내부확인용)이 RFQ표·PO표를 대체하는 단일 목록으로 쓴다."""
+    s = get_session()
+    try:
+        cust_names = {c.id: c.name for c in s.query(Customer).all()}
+        vessel_names = {v.id: v.name for v in s.query(Vessel).all()}
+        vendor_names = {v.id: v.name for v in s.query(Vendor).all()}
+
+        q = s.query(RFQ).order_by(RFQ.id.desc())
+        if customer_id:
+            q = q.filter(RFQ.customer_id == customer_id)
+        rfqs = q.all()
+
+        rows = []
+        for r in rfqs:
+            stage = _pipeline_stage(s, r.id)
+
+            # 2) Vendor RFQ 발신
+            vrfqs = (s.query(VendorRFQ).filter_by(rfq_id=r.id)
+                     .order_by(VendorRFQ.id.desc()).all())
+            if vrfqs:
+                _vnames = []
+                for x in vrfqs:
+                    nm = vendor_names.get(x.vendor_id, "—")
+                    if nm not in _vnames:
+                        _vnames.append(nm)
+                vrfq_vendors = _vnames[0] + (f"  (외 {len(_vnames) - 1}곳)" if len(_vnames) > 1 else "")
+                vrfq_at = _kst(vrfqs[0].created_at)
+            else:
+                vrfq_vendors, vrfq_at = "", ""
+
+            # 3) Vendor Quot. 수신
+            vrfq_ids = [x.id for x in vrfqs]
+            vqs = (s.query(VendorQuote)
+                   .filter(VendorQuote.vendor_rfq_id.in_(vrfq_ids))
+                   .order_by(VendorQuote.id.desc()).all() if vrfq_ids else [])
+            if vqs:
+                vq0 = vqs[0]
+                _vq_no = getattr(vq0, "vendor_quote_no", None) or "—"
+                vquote_no = str(_vq_no) + (f"  (외 {len(vqs) - 1}건)" if len(vqs) > 1 else "")
+                vquote_at = _kst(vq0.created_at)
+                _cur = getattr(vq0, "currency", None) or "USD"
+                vendor_amount = f"{_cur} {_items_cost_total(vq0.items):,.2f}"
+            else:
+                vquote_no, vquote_at, vendor_amount = "", "", ""
+
+            # 4) Customer Quot. 발신
+            qtn = (s.query(Quotation).filter_by(rfq_id=r.id)
+                   .order_by(Quotation.id.desc()).first())
+            if qtn:
+                cquote_no, cquote_at = qtn.qtn_no, _kst(qtn.created_at)
+                customer_amount = f"{qtn.currency} {_total_amount(qtn.items or []):,.2f}"
+            else:
+                cquote_no, cquote_at, customer_amount = "", "", ""
+
+            # 5) Customer P/O 수신 · 6) Vendor P/O 발신
+            o = _order_for_rfq(s, r.id)
+            vpos = (s.query(PurchaseOrder).filter_by(order_id=o.id)
+                    .order_by(PurchaseOrder.id.desc()).all()) if o else []
+            if vpos:
+                vp0 = vpos[0]
+                vendor_po_no = (vp0.po_no or "—") + (f"  (외 {len(vpos) - 1}건)" if len(vpos) > 1 else "")
+                vendor_po_vendor = vendor_names.get(vp0.vendor_id, "—")
+                vendor_po_email = vp0.sent_to_email or "—"
+                vendor_po_at = _kst(vp0.created_at)
+            else:
+                vendor_po_no = vendor_po_vendor = vendor_po_email = vendor_po_at = ""
+
+            rows.append({
+                "rfq_id": r.id,
+                "order_id": o.id if o else 0,
+                # 식별
+                "customer_rfq_no": r.customer_rfq_no or "",
+                "kmaris_rfq_no": r.rfq_no,
+                "customer": cust_names.get(r.customer_id, "—"),
+                "vessel": (vessel_names.get(r.vessel_id) if r.vessel_id else "") or "",
+                "project_title": getattr(r, "project_title", None) or "",
+                "item_count": len((o.items if o else None) or r.items or []),
+                "crfq_at": _kst(r.created_at),
+                # 1~4 RFQ 체인
+                "vrfq_vendors": vrfq_vendors,
+                "vrfq_at": vrfq_at,
+                "vquote_no": vquote_no,
+                "vquote_at": vquote_at,
+                "vendor_amount": vendor_amount,
+                "cquote_no": cquote_no,
+                "cquote_at": cquote_at,
+                "customer_amount": customer_amount,
+                # 5~6 PO 체인
+                "customer_po_no": (o.po_no if o else "") or "",
+                "customer_po_at": _kst(o.created_at) if o else "",
+                "ord_no": (o.ord_no if o else "") or "",
+                "vendor_po_no": vendor_po_no,
+                "vendor_po_at": vendor_po_at,
+                "vendor": vendor_po_vendor,
+                "vendor_email": vendor_po_email,
+                # 상태 · 단계 일시
+                "stage": stage,
+                "status": _status_label(stage),
+                "stage_dates": getattr(r, "stage_dates", None) or {},
+                "stage_auto": _stage_auto_times(s, r, o),
+            })
+
+        return {"steps": INTERNAL_STEPS, "rows": rows}
+    finally:
+        s.close()
 
 
 @app.get("/api/admin/rfq-overview", dependencies=[Depends(require_token)])
@@ -716,9 +903,15 @@ def dashboard():
                 }
             _lvl = getattr(r, "follow_up_level", None)
             snapshot.append({
+                "id": r.id,
                 "rfq_no": r.rfq_no,
                 "customer_rfq_no": r.customer_rfq_no or "",
+                "project_title": getattr(r, "project_title", None) or "",
+                "customer": cust_names.get(r.customer_id, "—"),
+                "vessel": (vessel_names.get(r.vessel_id) if r.vessel_id else "") or "",
                 "customer_vessel": _cv(r.customer_id, r.vessel_id),
+                "stage_dates": getattr(r, "stage_dates", None) or {},
+                "stage_auto": _stage_auto_times(s, r, o),
                 "status": _enum_val(r.status),
                 "item_count": len(r.items or []),
                 "follow_up_level": _enum_val(_lvl) if _lvl else "—",
@@ -3059,6 +3252,7 @@ class RfqCreate(BaseModel):
     customer_id: int
     vessel_id: int | None = None
     customer_rfq_no: str | None = ""
+    project_title: str | None = ""
     items: list[RfqItemIn] = []
 
 
@@ -3080,6 +3274,7 @@ def create_rfq(body: RfqCreate):
         rfq = RFQ(
             rfq_no=rfq_no,
             customer_rfq_no=(body.customer_rfq_no or "").strip() or None,
+            project_title=(body.project_title or "").strip() or None,
             customer_id=cust.id,
             vessel_id=body.vessel_id,
             date=date.today().strftime("%Y-%m-%d"),
@@ -3112,6 +3307,36 @@ def update_rfq_level(rfq_id: int, body: RfqLevelUpdate):
             raise HTTPException(status_code=400, detail="잘못된 Level 값입니다.")
         s.commit()
         return {"ok": True, "follow_up_level": _enum_val(rfq.follow_up_level)}
+    finally:
+        s.close()
+
+
+class StageDateUpdate(BaseModel):
+    stage: int                 # 1~12
+    value: str | None = None   # "YYYY-MM-DDTHH:MM" (KST) 또는 빈값/None → 해제
+
+
+@app.put("/api/admin/rfq/{rfq_id}/stage-date", dependencies=[Depends(require_token)])
+def update_rfq_stage_date(rfq_id: int, body: StageDateUpdate):
+    """내부 12단계 중 한 단계의 완료 일시를 수동 입력/수정/해제한다."""
+    if not (1 <= body.stage <= len(INTERNAL_STEPS)):
+        raise HTTPException(status_code=400, detail="잘못된 단계 번호입니다.")
+    s = get_session()
+    try:
+        rfq = s.query(RFQ).filter_by(id=rfq_id).first()
+        if not rfq:
+            raise HTTPException(status_code=404, detail="RFQ를 찾을 수 없습니다.")
+        # JSON 컬럼은 새 dict 로 재할당해야 변경이 감지된다.
+        dates = dict(getattr(rfq, "stage_dates", None) or {})
+        key = str(body.stage)
+        val = (body.value or "").strip()
+        if val:
+            dates[key] = val
+        else:
+            dates.pop(key, None)
+        rfq.stage_dates = dates
+        s.commit()
+        return {"ok": True, "stage_dates": dates}
     finally:
         s.close()
 
