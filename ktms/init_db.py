@@ -95,14 +95,18 @@ def migrate_rfq_numbers():
     """
     session = get_session()
     try:
+        all_rfqs = session.query(RFQ).order_by(RFQ.id).all()
+        # 신규 형식(KMS-RFQ-)·미발급(TMP-) 은 변환 대상에서 제외한다.
         old = [
-            r for r in session.query(RFQ).order_by(RFQ.id).all()
-            if not (r.rfq_no or "").startswith("KMS-RFQ-")
+            r for r in all_rfqs
+            if not (r.rfq_no or "").startswith(("KMS-RFQ-", "TMP-"))
         ]
         if not old:
             print("[SKIP] No RFQ numbers to migrate.")
             return
 
+        # 이미 사용 중인 번호(변환 대상 제외) — 충돌 방지용.
+        used = {r.rfq_no for r in all_rfqs if r not in old and r.rfq_no}
         # 기간별 마지막 시퀀스를 DocSequence에서 로드(신규 형식과 연속되도록).
         period_seq = {
             s.year: s
@@ -126,8 +130,14 @@ def migrate_rfq_numbers():
                 session.add(seq)
                 session.flush()
                 period_seq[period] = seq
-            seq.last_seq += 1
-            r.rfq_no = f"KMS-RFQ-{period_date:%y%m}-{seq.last_seq:03d}"
+            # 이미 존재하는 번호는 건너뛰며 채번(UniqueViolation 방지).
+            while True:
+                seq.last_seq += 1
+                cand = f"KMS-RFQ-{period_date:%y%m}-{seq.last_seq:03d}"
+                if cand not in used:
+                    break
+            r.rfq_no = cand
+            used.add(cand)
             renamed += 1
         session.commit()
         print(f"[OK] {renamed} RFQ number(s) migrated to KMS-RFQ-yymm-NNN.")
@@ -143,14 +153,13 @@ def migrate_quotation_numbers():
     """
     session = get_session()
     try:
-        old = [
-            q for q in session.query(Quotation).order_by(Quotation.id).all()
-            if not (q.qtn_no or "").startswith("KMS-QUO-")
-        ]
+        all_qtns = session.query(Quotation).order_by(Quotation.id).all()
+        old = [q for q in all_qtns if not (q.qtn_no or "").startswith("KMS-QUO-")]
         if not old:
             print("[SKIP] No quotation numbers to migrate.")
             return
 
+        used = {q.qtn_no for q in all_qtns if q not in old and q.qtn_no}
         period_seq = {
             s.year: s
             for s in session.query(DocSequence).filter_by(doc_type="quotation_internal").all()
@@ -173,8 +182,14 @@ def migrate_quotation_numbers():
                 session.add(seq)
                 session.flush()
                 period_seq[period] = seq
-            seq.last_seq += 1
-            q.qtn_no = f"KMS-QUO-{period_date:%y%m}-{seq.last_seq:03d}"
+            # 이미 존재하는 번호는 건너뛰며 채번(UniqueViolation 방지).
+            while True:
+                seq.last_seq += 1
+                cand = f"KMS-QUO-{period_date:%y%m}-{seq.last_seq:03d}"
+                if cand not in used:
+                    break
+            q.qtn_no = cand
+            used.add(cand)
             renamed += 1
         session.commit()
         print(f"[OK] {renamed} quotation number(s) migrated to KMS-QUO-yymm-NNN.")
