@@ -1086,6 +1086,33 @@ body {
   color: var(--navy);
   font-weight: 600;
 }
+
+/* 서비스 프로젝트 카드 — 파란 계열 강조색을 녹색 계열로 */
+.intl-card.service.open {
+  border-color: #16a05a;
+  box-shadow: 0 1px 6px rgba(20, 122, 68, 0.1);
+}
+.intl-card.service .intl-bar .seg.on {
+  background: #16a05a;
+}
+.intl-card.service .intl-stage,
+.intl-card.service .intl-caret.on {
+  color: #11824a;
+}
+.intl-card.service .pl-row.done {
+  background: #f5fbf7;
+}
+.intl-card.service .pl-row.done .pl-no {
+  background: #cdeeda;
+  color: #11824a;
+}
+.intl-card.service .pl-row.current {
+  background: #edf7f0;
+}
+.intl-card.service .pl-row.current .pl-no {
+  background: #16a05a;
+  color: #fff;
+}
 .pl-actions {
   display: flex;
   gap: 10px;

@@ -312,8 +312,10 @@ function PipelineCard({
 
   const poHref = r.order_id > 0 ? `/po?order=${r.order_id}` : `/po?rfq=${r.rfq_id}`;
 
+  const isService = (r.work_type || "부품공급") === "서비스";
+
   return (
-    <div className={`intl-card${open ? " open" : ""}`}>
+    <div className={`intl-card${open ? " open" : ""}${isService ? " service" : ""}`}>
       <button
         type="button"
         className="intl-toggle"

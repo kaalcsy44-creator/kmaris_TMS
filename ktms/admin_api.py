@@ -2478,6 +2478,8 @@ class VendorCreate(BaseModel):
 class VesselCreate(BaseModel):
     name: str
     imo: str | None = ""
+    vessel_type: str | None = ""
+    ais_flag: str | None = ""
     customer_id: int | None = None
     engine_type: str | None = ""
     hull_no: str | None = ""
@@ -2668,6 +2670,8 @@ def settings_vessels():
     try:
         cust_names = {c.id: c.name for c in s.query(Customer).all()}
         return [{"id": v.id, "name": v.name, "imo": v.imo or "",
+                 "vessel_type": getattr(v, "vessel_type", None) or "",
+                 "ais_flag": getattr(v, "ais_flag", None) or "",
                  "engine_type": v.engine_type or "", "hull_no": v.hull_no or "",
                  "customer_id": v.customer_id, "customer": cust_names.get(v.customer_id, "") if v.customer_id else ""}
                 for v in s.query(Vessel).order_by(Vessel.name).all()]
@@ -2682,6 +2686,8 @@ def create_vessel(body: VesselCreate):
     s = get_session()
     try:
         v = Vessel(name=body.name.strip(), imo=body.imo or "",
+                   vessel_type=body.vessel_type or "",
+                   ais_flag=body.ais_flag or "",
                    customer_id=body.customer_id,
                    engine_type=body.engine_type or "",
                    hull_no=body.hull_no or "")
@@ -2701,6 +2707,8 @@ def update_vessel(row_id: int, body: VesselCreate):
             raise HTTPException(status_code=404, detail="Vessel을 찾을 수 없습니다.")
         v.name = body.name.strip()
         v.imo = body.imo or ""
+        v.vessel_type = body.vessel_type or ""
+        v.ais_flag = body.ais_flag or ""
         v.customer_id = body.customer_id
         v.engine_type = body.engine_type or ""
         v.hull_no = body.hull_no or ""

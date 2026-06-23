@@ -107,6 +107,8 @@ class Vessel(Base):
     id          = Column(Integer, primary_key=True)
     name        = Column(String(200), nullable=False)
     imo         = Column(String(20))
+    vessel_type = Column(String(60))   # 선박 타입 (Container Ship, Bulk Carrier 등)
+    ais_flag    = Column(String(60))   # AIS Flag (기국)
     engine_type = Column(String(200))
     hull_no     = Column(String(100))
     customer_id = Column(Integer, ForeignKey("customers.id"), nullable=True)

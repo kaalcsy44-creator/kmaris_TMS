@@ -34,6 +34,10 @@ _MIGRATIONS = {
     "vendors": {
         "contact_phone": "VARCHAR(50)",
     },
+    "vessels": {
+        "vessel_type": "VARCHAR(60)",
+        "ais_flag": "VARCHAR(60)",
+    },
     "vendor_quotes": {
         "vendor_quote_no": "VARCHAR(100)",
     },

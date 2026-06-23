@@ -6,15 +6,22 @@ import { getUser, logout } from "@/lib/auth";
 type Item = { href: string; label: string; key: string };
 type Group = { title?: string; items: Item[] };
 
-// Mirrors the original Streamlit navigation (app/Home.py st.navigation):
-//   (no group) Dashboard · RFQ & Quotation · P/O
+// 사이드바 네비게이션 그룹:
+//   현황        Dashboard · Progress
+//   견적 · 발주  RFQ & Quotation · P/O
 //   선적 · 정산  Documents · AR
 //   시스템      Settings
 const GROUPS: Group[] = [
   {
+    title: "현황",
     items: [
       { href: "/", label: "Dashboard", key: "dashboard" },
       { href: "/progress", label: "Progress", key: "progress" },
+    ],
+  },
+  {
+    title: "견적 · 발주",
+    items: [
       { href: "/rfq", label: "RFQ & Quotation", key: "rfq" },
       { href: "/po", label: "P/O", key: "po" },
     ],

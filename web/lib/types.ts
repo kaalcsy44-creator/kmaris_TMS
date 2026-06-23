@@ -51,6 +51,8 @@ export type SettingsVessel = {
   id: number;
   name: string;
   imo: string;
+  vessel_type: string;
+  ais_flag: string;
   engine_type: string;
   hull_no: string;
   customer_id: number | null;

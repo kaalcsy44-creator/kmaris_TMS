@@ -421,6 +421,8 @@ export function deleteSettingsVendor(id: number): Promise<{ ok: boolean }> {
 export function createSettingsVessel(body: {
   name: string;
   imo?: string;
+  vessel_type?: string;
+  ais_flag?: string;
   customer_id?: number;
   engine_type?: string;
   hull_no?: string;

@@ -1,31 +1,7 @@
 import type { RfqRow } from "@/lib/types";
 import WorkTypeBadge from "@/components/WorkTypeBadge";
 
-const TOTAL_STEPS = 12;
-
-function Cell({ main, sub, num }: { main: string; sub?: string; num?: boolean }) {
-  const empty = !main || main === "—" || main === "";
-  return (
-    <td className={`cell${num ? " num" : ""}`}>
-      <div className="m">{empty ? <span className="dash">—</span> : main}</div>
-      {sub ? <div className="s">{sub}</div> : null}
-    </td>
-  );
-}
-
-function Status({ stage, label }: { stage: number; label: string }) {
-  return (
-    <td className="status">
-      <div className="lbl">{label}</div>
-      <div className="bar">
-        {Array.from({ length: TOTAL_STEPS }).map((_, i) => (
-          <span key={i} className={`seg${i < stage ? " on" : ""}`} />
-        ))}
-      </div>
-    </td>
-  );
-}
-
+// 등록된 RFQ 목록 — 1열 고객 RFQ No., 2열 Customer 만 표시. 행 선택 시 작업 대상이 된다.
 export default function RfqTable({
   rows,
   selectedId,
@@ -40,22 +16,9 @@ export default function RfqTable({
       <table className="rfq">
         <thead>
           <tr>
-            <th className="chk" rowSpan={2}></th>
-            <th className="grp" colSpan={2}>1. Customer RFQ 수신</th>
-            <th className="grp" colSpan={2}>2. Vendor RFQ 발신</th>
-            <th className="grp" colSpan={2}>3. Vendor Quot. 수신</th>
-            <th className="grp" colSpan={2}>4. Customer Quot. 발신</th>
-            <th rowSpan={2}>상태</th>
-          </tr>
-          <tr className="grp-sub">
+            <th className="chk"></th>
             <th>고객 RFQ No.</th>
             <th>Customer</th>
-            <th>K-Maris RFQ No.</th>
-            <th>Vendor</th>
-            <th>Vendor Quot. No.</th>
-            <th className="num">Vendor 견적 금액</th>
-            <th>K-Maris Quot. No.</th>
-            <th className="num">견적 금액</th>
           </tr>
         </thead>
         <tbody>
@@ -75,9 +38,17 @@ export default function RfqTable({
                     onClick={(e) => e.stopPropagation()}
                   />
                 </td>
-                <Cell main={r.customer_rfq_no} sub={r.crfq_at} />
                 <td className="cell">
-                  <div className="m" style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                  <div className="m">
+                    {r.customer_rfq_no || <span className="dash">—</span>}
+                  </div>
+                  {r.crfq_at ? <div className="s">{r.crfq_at}</div> : null}
+                </td>
+                <td className="cell">
+                  <div
+                    className="m"
+                    style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}
+                  >
                     {r.customer || <span className="dash">—</span>}
                     <WorkTypeBadge type={r.work_type} />
                   </div>
@@ -86,13 +57,6 @@ export default function RfqTable({
                   ) : null}
                   <div className="s">품목 {r.item_count}</div>
                 </td>
-                <Cell main={r.vrfq_kmaris_no} sub={r.vrfq_at} />
-                <Cell main={r.vrfq_vendors} />
-                <Cell main={r.vquote_no} sub={r.vquote_at} />
-                <Cell main={r.vendor_amount} num />
-                <Cell main={r.cquote_no} sub={r.cquote_at} />
-                <Cell main={r.customer_amount} num />
-                <Status stage={r.stage} label={r.status} />
               </tr>
             );
           })}

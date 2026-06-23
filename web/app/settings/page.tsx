@@ -489,7 +489,7 @@ function VesselsTab() {
   return (
     <MasterSection<SettingsVessel>
       title="선박 관리"
-      empty={{ id: 0, name: "", imo: "", engine_type: "", hull_no: "", customer_id: null, customer: "" }}
+      empty={{ id: 0, name: "", imo: "", vessel_type: "", ais_flag: "", engine_type: "", hull_no: "", customer_id: null, customer: "" }}
       load={fetchSettingsVessels}
       create={(body) => {
         const { customer: _customer, ...payload } = body;
@@ -503,34 +503,67 @@ function VesselsTab() {
       columns={[
         ["name", "Vessel"],
         ["imo", "IMO"],
-        ["engine_type", "Engine"],
-        ["hull_no", "Hull No."],
+        ["vessel_type", "선박 타입"],
+        ["ais_flag", "AIS Flag"],
         ["customer", "Customer"],
       ]}
       fields={[
         ["name", "Vessel *"],
         ["imo", "IMO No."],
+        ["ais_flag", "AIS Flag (기국)"],
         ["engine_type", "Main Engine Type"],
         ["hull_no", "Hull No."],
       ]}
       required="name"
       extraForm={(form, setForm) => (
-        <label className="form-field">
-          <span>소유 Customer</span>
-          <select
-            value={form.customer_id ?? ""}
-            onChange={(e) => setForm({ ...form, customer_id: e.target.value ? Number(e.target.value) : null })}
-          >
-            <option value="">없음</option>
-            {customers.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
-        </label>
+        <>
+          <label className="form-field">
+            <span>선박 타입</span>
+            <input
+              list="vessel-type-list"
+              value={form.vessel_type ?? ""}
+              onChange={(e) => setForm({ ...form, vessel_type: e.target.value })}
+              placeholder="선택 또는 직접 입력"
+            />
+            <datalist id="vessel-type-list">
+              {VESSEL_TYPES.map((t) => (
+                <option key={t} value={t} />
+              ))}
+            </datalist>
+          </label>
+          <label className="form-field">
+            <span>소유 Customer</span>
+            <select
+              value={form.customer_id ?? ""}
+              onChange={(e) => setForm({ ...form, customer_id: e.target.value ? Number(e.target.value) : null })}
+            >
+              <option value="">없음</option>
+              {customers.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </label>
+        </>
       )}
     />
   );
 }
+
+const VESSEL_TYPES = [
+  "Container Ship",
+  "Crude Oil Tanker",
+  "Product Tanker",
+  "Chemical Tanker",
+  "Bulk Carrier",
+  "Bunkering Tanker",
+  "LNG Carrier",
+  "LPG Carrier",
+  "General Cargo",
+  "Car Carrier (PCTC)",
+  "Reefer",
+  "Passenger / Ro-Pax",
+  "Tug / Offshore",
+];
 
 function ItemsTab() {
   return (
