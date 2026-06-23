@@ -234,6 +234,7 @@ function PipelineCard({
   const [fVesselId, setFVesselId] = useState<number | "">(r.vessel_id || "");
   const [fCustRfqNo, setFCustRfqNo] = useState(r.customer_rfq_no || "");
   const [fProjectTitle, setFProjectTitle] = useState(r.project_title || "");
+  const [fReceivedAt, setFReceivedAt] = useState(r.received_at || "");
   const stageLabel = steps[r.stage - 1] ?? "";
 
   function startEdit() {
@@ -243,6 +244,7 @@ function PipelineCard({
     setFVesselId(r.vessel_id || "");
     setFCustRfqNo(r.customer_rfq_no || "");
     setFProjectTitle(r.project_title || "");
+    setFReceivedAt(r.received_at || "");
     setEditing(true);
     setOpen(true);
   }
@@ -256,6 +258,7 @@ function PipelineCard({
         customer_rfq_no: fCustRfqNo,
         project_title: fProjectTitle,
         work_type: fWorkType,
+        received_at: fReceivedAt || undefined,
       });
       setEditing(false);
       onChanged();
@@ -412,6 +415,14 @@ function PipelineCard({
                     value={fProjectTitle}
                     onChange={(e) => setFProjectTitle(e.target.value)}
                     placeholder="내부 식별용 제목(선택)"
+                  />
+                </div>
+                <div className="form-field">
+                  <label>RFQ 수신 일시</label>
+                  <input
+                    type="datetime-local"
+                    value={fReceivedAt}
+                    onChange={(e) => setFReceivedAt(e.target.value)}
                   />
                 </div>
               </div>

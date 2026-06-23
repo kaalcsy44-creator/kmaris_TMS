@@ -27,6 +27,7 @@ _MIGRATIONS = {
         "stage_dates": "JSON",
         "work_type": "VARCHAR(20)",
         "stage_notes": "JSON",
+        "received_at": "VARCHAR(16)",
     },
     "customers": {
         "contact_phone": "VARCHAR(50)",

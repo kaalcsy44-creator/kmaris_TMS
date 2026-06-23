@@ -12,6 +12,7 @@ Auth:         send  Authorization: Bearer <ADMIN_API_TOKEN>
 from __future__ import annotations
 
 import os
+import secrets
 import sys
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -264,6 +265,13 @@ def _kst_iso(dt) -> str:
     return (dt + timedelta(hours=9)).strftime("%Y-%m-%dT%H:%M")
 
 
+def _fmt_received(iso: str) -> str:
+    """'YYYY-MM-DDTHH:MM' → 'yy-mm-dd HH:MM' (목록 표시용). 빈값이면 ''."""
+    if not iso or len(iso) < 16:
+        return ""
+    return f"{iso[2:10]} {iso[11:16]}"
+
+
 def _date_iso(d: str | None) -> str:
     """'YYYY-MM-DD' 문자열 → 'YYYY-MM-DDT00:00' (시각 정보가 없는 단계용)."""
     if not d:
@@ -281,8 +289,8 @@ def _stage_auto_times(s, rfq, order) -> dict[str, str]:
         if val:
             auto[str(stage)] = val
 
-    # 1) Customer RFQ 수신
-    _set(1, _kst_iso(rfq.created_at))
+    # 1) Customer RFQ 수신 — 수신 일시(received_at) 우선, 없으면 생성 시각
+    _set(1, (getattr(rfq, "received_at", None) or "") or _kst_iso(rfq.created_at))
 
     # 2) Vendor RFQ 발신 · 3) Vendor Quot. 수신
     vrfqs = s.query(VendorRFQ).filter_by(rfq_id=rfq.id).all()
@@ -422,15 +430,16 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
                 "order_id": o.id if o else 0,
                 # 식별
                 "customer_rfq_no": r.customer_rfq_no or "",
-                "kmaris_rfq_no": r.rfq_no,
+                "kmaris_rfq_no": _rfq_no_disp(r.rfq_no),
                 "work_type": _enum_val(r.work_type) if r.work_type else "부품공급",
                 "customer": cust_names.get(r.customer_id, "—"),
                 "customer_id": r.customer_id or 0,
                 "vessel": (vessel_names.get(r.vessel_id) if r.vessel_id else "") or "",
                 "vessel_id": r.vessel_id or 0,
                 "project_title": getattr(r, "project_title", None) or "",
+                "received_at": getattr(r, "received_at", None) or "",
                 "item_count": len((o.items if o else None) or r.items or []),
-                "crfq_at": _kst(r.created_at),
+                "crfq_at": _fmt_received(getattr(r, "received_at", None) or "") or _kst(r.created_at),
                 # 1~4 RFQ 체인
                 "vrfq_vendors": vrfq_vendors,
                 "vrfq_at": vrfq_at,
@@ -527,11 +536,10 @@ def rfq_overview(customer_id: int | None = None, work_type: str | None = None):
                 "customer": cust_names.get(r.customer_id, "—"),
                 "vessel": vessel_names.get(r.vessel_id, "") if r.vessel_id else "",
                 "item_count": len(r.items or []),
-                "crfq_no": r.rfq_no,
-                "crfq_at": _kst(r.created_at),
-                # K-Maris RFQ No.는 Vendor RFQ 발신 시점의 번호(= rfq_no). Vendor
-                # RFQ를 보낸 거래에서만 표시한다.
-                "vrfq_kmaris_no": (r.rfq_no if vrfqs else ""),
+                "crfq_no": _rfq_no_disp(r.rfq_no),
+                "crfq_at": _fmt_received(getattr(r, "received_at", None) or "") or _kst(r.created_at),
+                # K-Maris RFQ No.는 Vendor RFQ 발신 시점에 부여된다. 발신한 거래에서만 표시.
+                "vrfq_kmaris_no": (_rfq_no_disp(r.rfq_no) if vrfqs else ""),
                 "vrfq_vendors": vrfq_vendors,
                 "vrfq_at": vrfq_at,
                 "vquote_no": vq_main,
@@ -783,7 +791,7 @@ def rfq_detail(rfq_id: int):
 
         return {
             "id": r.id,
-            "rfq_no": r.rfq_no,
+            "rfq_no": _rfq_no_disp(r.rfq_no),
             "customer_rfq_no": r.customer_rfq_no or "",
             "customer": cust.name if cust else "—",
             "customer_contact": (cust.contact if cust else "") or "",
@@ -900,7 +908,7 @@ def dashboard():
         for r in sorted(rfqs, key=lambda x: x.id, reverse=True)[:8]:
             stage = _pipeline_stage(s, r.id)
             recent.append({
-                "rfq_no": r.rfq_no,
+                "rfq_no": _rfq_no_disp(r.rfq_no),
                 "customer": cust_names.get(r.customer_id, "—"),
                 "stage": stage,
                 "status": _status_label(stage),
@@ -929,7 +937,7 @@ def dashboard():
             _lvl = getattr(r, "follow_up_level", None)
             snapshot.append({
                 "id": r.id,
-                "rfq_no": r.rfq_no,
+                "rfq_no": _rfq_no_disp(r.rfq_no),
                 "customer_rfq_no": r.customer_rfq_no or "",
                 "project_title": getattr(r, "project_title", None) or "",
                 "customer": cust_names.get(r.customer_id, "—"),
@@ -1046,7 +1054,7 @@ def po_overview():
                 "id": o.id if o else 0,
                 "customer_rfq_no": r.customer_rfq_no or "",
                 "crfq_at": _kst(r.created_at),
-                "kmaris_rfq_no": r.rfq_no,
+                "kmaris_rfq_no": _rfq_no_disp(r.rfq_no),
                 "vrfq_at": vrfq_at,
                 "customer": cust_names.get(r.customer_id, "—"),
                 "vessel": vessel_names.get(r.vessel_id, "") if r.vessel_id else "",
@@ -1116,8 +1124,8 @@ def order_detail(order_id: int):
             "ord_no": o.ord_no,
             "customer_po_no": o.po_no or "",
             "customer_po_at": o.date or "",
-            "rfq_no": rfq.rfq_no if rfq else "",
-            "customer_rfq_no": (rfq.customer_rfq_no or rfq.rfq_no) if rfq else "",
+            "rfq_no": _rfq_no_disp(rfq.rfq_no) if rfq else "",
+            "customer_rfq_no": (rfq.customer_rfq_no or _rfq_no_disp(rfq.rfq_no)) if rfq else "",
             "quotation_no": qtn.qtn_no if qtn else "",
             "customer": cust.name if cust else "—",
             "customer_contact": (cust.contact if cust else "") or "",
@@ -1177,7 +1185,7 @@ def po_work_options():
             stage = _pipeline_stage(s, r.id)
             rfqs.append({
                 "id": r.id,
-                "rfq_no": r.rfq_no,
+                "rfq_no": _rfq_no_disp(r.rfq_no),
                 "customer_rfq_no": r.customer_rfq_no or "",
                 "customer_id": r.customer_id,
                 "customer": cust_names.get(r.customer_id, "—"),
@@ -1814,7 +1822,7 @@ def quotation_overview(customer_id: int | None = None):
     try:
         cust_names = {c.id: c.name for c in s.query(Customer).all()}
         vessel_names = {v.id: v.name for v in s.query(Vessel).all()}
-        rfq_nos = {r.id: (r.rfq_no or "") for r in s.query(RFQ).all()}
+        rfq_nos = {r.id: _rfq_no_disp(r.rfq_no) for r in s.query(RFQ).all()}
 
         q = s.query(Quotation)
         if customer_id:
@@ -1852,7 +1860,7 @@ def vrfq_overview():
     try:
         vendor_names = {v.id: v.name for v in s.query(Vendor).all()}
         vendor_emails = {v.id: (v.email or "") for v in s.query(Vendor).all()}
-        rfq_nos = {r.id: (r.rfq_no or "") for r in s.query(RFQ).all()}
+        rfq_nos = {r.id: _rfq_no_disp(r.rfq_no) for r in s.query(RFQ).all()}
 
         quote_counts: dict[int, int] = {}
         for vq in s.query(VendorQuote).all():
@@ -2983,6 +2991,8 @@ class VendorRfqPreviewRequest(BaseModel):
     vendor_ids: list[int]
     lang: str = "en"
     notes: str = ""
+    rfq_no_mode: str = "auto"   # 케이마리스 RFQ No. 발번: auto/manual
+    rfq_no: str = ""            # manual 일 때 직접 입력값
 
 
 @app.post("/api/admin/rfq/{rfq_id}/vendor-rfq-preview",
@@ -2993,6 +3003,9 @@ def vendor_rfq_preview(rfq_id: int, body: VendorRfqPreviewRequest):
         rfq = s.query(RFQ).filter_by(id=rfq_id).first()
         if not rfq:
             raise HTTPException(status_code=404, detail="RFQ를 찾을 수 없습니다.")
+        # Vendor RFQ 발신 단계 진입 시 케이마리스 RFQ No. 부여(미발급이면).
+        _assign_rfq_no(s, rfq, body.rfq_no_mode, body.rfq_no)
+        s.commit()
         cust = s.query(Customer).filter_by(id=rfq.customer_id).first()
         vessel = s.query(Vessel).filter_by(id=rfq.vessel_id).first() if rfq.vessel_id else None
         lang = "ko" if body.lang == "ko" else "en"
@@ -3063,20 +3076,24 @@ class VendorRfqSendItem(BaseModel):
 
 class VendorRfqSendRequest(BaseModel):
     items: list[VendorRfqSendItem]
+    rfq_no_mode: str = "auto"
+    rfq_no: str = ""
 
 
 @app.post("/api/admin/rfq/{rfq_id}/vendor-rfq-send",
           dependencies=[Depends(require_token)])
 def vendor_rfq_send(rfq_id: int, body: VendorRfqSendRequest):
+    """Vendor RFQ '발신 완료' 기록 — 시스템이 직접 이메일을 발송하지 않고, 선택한
+    Vendor별 VendorRFQ 레코드를 저장(2단계 완료)한다. 케이마리스 RFQ No.도 부여한다.
+    이메일은 '이메일 생성'에서 만든 초안을 사용자가 직접 발송한다."""
     s = get_session()
     try:
         rfq = s.query(RFQ).filter_by(id=rfq_id).first()
         if not rfq:
             raise HTTPException(status_code=404, detail="RFQ를 찾을 수 없습니다.")
-        cust = s.query(Customer).filter_by(id=rfq.customer_id).first()
-        vessel = s.query(Vessel).filter_by(id=rfq.vessel_id).first() if rfq.vessel_id else None
-        smtp_ok = bool(os.getenv("SMTP_USER") and os.getenv("SMTP_PASSWORD"))
-        saved = sent_ok = sent_fail = 0
+        # 케이마리스 RFQ No. 부여(미발급이면)
+        _assign_rfq_no(s, rfq, body.rfq_no_mode, body.rfq_no)
+        saved = 0
         result_rows = []
         for item in body.items:
             vendor = s.query(Vendor).filter_by(id=item.vendor_id).first()
@@ -3089,53 +3106,20 @@ def vendor_rfq_send(rfq_id: int, body: VendorRfqSendRequest):
                 vendor_id=vendor.id,
                 sent_date=date.today().isoformat(),
                 sent_to_email=item.to or "",
-                status="발송됨",
+                status="발신완료",
                 items=rfq.items or [],
             )
             s.add(vrfq)
             saved += 1
-
-            sent = False
-            if item.to and smtp_ok:
-                safe_vname = "".join(c for c in vendor.name if c.isalnum() or c in "._- ")[:40]
-                xlsx = make_vendor_rfq_quote_xlsx(
-                    rfq_no=rfq.rfq_no,
-                    vessel_name=vessel.name if vessel else "—",
-                    customer_name=cust.name if cust else "—",
-                    enquiry_date=rfq.date or date.today().isoformat(),
-                    vendor_name=vendor.name,
-                    items=rfq.items or [],
-                )
-                sent = send_email(
-                    to=item.to,
-                    subject=item.subject,
-                    body=item.body,
-                    attachments=[(
-                        f"{rfq.rfq_no}_VendorQuoteSheet_{safe_vname}.xlsx",
-                        xlsx,
-                    )],
-                )
-                if sent:
-                    vrfq.status = "이메일 발송완료"
-                    sent_ok += 1
-                else:
-                    sent_fail += 1
-
-            result_rows.append({
-                "vendor": vendor.name,
-                "vrfq_no": vrfq_no,
-                "email_sent": sent,
-            })
+            result_rows.append({"vendor": vendor.name, "vrfq_no": vrfq_no})
 
         rfq.status = RFQStatus.SOURCING
         s.commit()
         return {
             "ok": True,
             "saved": saved,
-            "sent_ok": sent_ok,
-            "sent_fail": sent_fail,
-            "smtp_configured": smtp_ok,
             "rows": result_rows,
+            "rfq_no": rfq.rfq_no,
         }
     finally:
         s.close()
@@ -3153,6 +3137,7 @@ def create_vendor_rfq(rfq_id: int, body: VendorRfqCreate):
         vendor = s.query(Vendor).filter_by(id=body.vendor_id).first()
         if not vendor:
             raise HTTPException(status_code=400, detail="Vendor를 선택하세요.")
+        _assign_rfq_no(s, rfq)   # 미발급이면 케이마리스 RFQ No. 자동 부여
 
         # 요청 품목(가격 제외)만 이관
         req_items = [{
@@ -3283,6 +3268,42 @@ def _next_rfq_no(session, company_prefix: str = "KMS") -> str:
             return no
 
 
+# ── K-Maris RFQ No. 이연 발번 ──────────────────────────────────────────────
+# 케이마리스 RFQ No.는 Vendor RFQ 발신 시점에 부여한다. 그 전까지는 임시 토큰
+# (TMP-...)을 보유하며, 사용자에게는 "미발급"으로 표시된다.
+_RFQ_TMP_PREFIX = "TMP-"
+
+
+def _rfq_unassigned(rfq_no) -> bool:
+    return (not rfq_no) or str(rfq_no).startswith(_RFQ_TMP_PREFIX)
+
+
+def _rfq_no_disp(rfq_no) -> str:
+    """사용자 표시용: 미발급(임시 토큰/빈값)이면 '미발급'."""
+    return "미발급" if _rfq_unassigned(rfq_no) else rfq_no
+
+
+def _new_tmp_rfq_no(session) -> str:
+    while True:
+        cand = _RFQ_TMP_PREFIX + secrets.token_hex(5)
+        if not session.query(RFQ).filter_by(rfq_no=cand).first():
+            return cand
+
+
+def _assign_rfq_no(session, rfq, mode: str = "auto", manual: str = "") -> str:
+    """RFQ 가 아직 미발급이면 케이마리스 RFQ No.를 부여(자동 채번/수동). 이미 발급됐으면 유지."""
+    if not _rfq_unassigned(rfq.rfq_no):
+        return rfq.rfq_no
+    manual = (manual or "").strip()
+    if mode == "manual" and manual:
+        if session.query(RFQ).filter_by(rfq_no=manual).first():
+            raise HTTPException(status_code=400, detail=f"이미 존재하는 RFQ No.입니다: {manual}")
+        rfq.rfq_no = manual
+    else:
+        rfq.rfq_no = _next_rfq_no(session)
+    return rfq.rfq_no
+
+
 class RfqItemIn(BaseModel):
     part_no: str = ""
     description: str = ""
@@ -3294,6 +3315,7 @@ class RfqCreate(BaseModel):
     vessel_id: int | None = None
     customer_rfq_no: str | None = ""
     rfq_no: str | None = None          # K-Maris RFQ No. 수동 지정(비우면 자동 채번)
+    received_at: str | None = None     # RFQ 수신 일시 "YYYY-MM-DDTHH:MM"(비우면 현재)
     project_title: str | None = ""
     work_type: str | None = "부품공급"
     items: list[RfqItemIn] = []
@@ -3301,8 +3323,8 @@ class RfqCreate(BaseModel):
 
 @app.post("/api/admin/rfq", dependencies=[Depends(require_token)])
 def create_rfq(body: RfqCreate):
-    """Customer RFQ 신규 등록. K-Maris RFQ No.는 자동 채번(KMS-RFQ-yymm-NNN)
-    또는 body.rfq_no 로 수동 지정 가능."""
+    """Customer RFQ 신규 등록. 케이마리스 RFQ No.는 기본적으로 미발급(임시) 상태로
+    두고 Vendor RFQ 발신 시점에 부여한다. body.rfq_no 로 수동 선지정도 가능."""
     s = get_session()
     try:
         cust = s.query(Customer).filter_by(id=body.customer_id).first()
@@ -3325,7 +3347,9 @@ def create_rfq(body: RfqCreate):
                 raise HTTPException(status_code=400, detail=f"이미 존재하는 RFQ No.입니다: {manual_no}")
             rfq_no = manual_no
         else:
-            rfq_no = _next_rfq_no(s)
+            rfq_no = _new_tmp_rfq_no(s)   # 미발급 — Vendor RFQ 발신 시 부여
+
+        received_at = (body.received_at or "").strip() or _kst_iso(datetime.utcnow())
         rfq = RFQ(
             rfq_no=rfq_no,
             customer_rfq_no=(body.customer_rfq_no or "").strip() or None,
@@ -3333,13 +3357,14 @@ def create_rfq(body: RfqCreate):
             work_type=work_type,
             customer_id=cust.id,
             vessel_id=body.vessel_id,
-            date=date.today().strftime("%Y-%m-%d"),
+            date=received_at[:10],
+            received_at=received_at,
             status=RFQStatus.RECEIVED,
             items=items,
         )
         s.add(rfq)
         s.commit()
-        return {"ok": True, "id": rfq.id, "rfq_no": rfq_no}
+        return {"ok": True, "id": rfq.id, "rfq_no": _rfq_no_disp(rfq_no)}
     finally:
         s.close()
 
@@ -3351,6 +3376,7 @@ class RfqUpdate(BaseModel):
     customer_rfq_no: str | None = None
     project_title: str | None = None
     work_type: str | None = None
+    received_at: str | None = None      # "YYYY-MM-DDTHH:MM"
 
 
 @app.patch("/api/admin/rfq/{rfq_id}", dependencies=[Depends(require_token)])
@@ -3385,6 +3411,11 @@ def update_rfq(rfq_id: int, body: RfqUpdate):
             if wt is None:
                 raise HTTPException(status_code=400, detail="잘못된 업무 타입입니다.")
             rfq.work_type = wt
+        if body.received_at is not None:
+            recv = body.received_at.strip()
+            if recv:
+                rfq.received_at = recv
+                rfq.date = recv[:10]
 
         s.commit()
         return {"ok": True, "id": rfq.id}

@@ -560,6 +560,7 @@ export type PipelineRow = {
   vessel: string;
   vessel_id: number;
   project_title: string;
+  received_at: string;
   item_count: number;
   crfq_at: string;
   vrfq_vendors: string;

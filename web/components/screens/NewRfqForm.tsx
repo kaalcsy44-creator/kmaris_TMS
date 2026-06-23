@@ -13,6 +13,15 @@ import type { CustomerOption, SettingsVessel } from "@/lib/types";
 
 type ItemRow = { part_no: string; description: string; qty: string };
 
+/** 현재 시각 "YYYY-MM-DDTHH:MM" (datetime-local 기본값). */
+function nowLocal(): string {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(
+    d.getMinutes()
+  )}`;
+}
+
 export default function NewRfqForm({
   onCreated,
   onCancel,
@@ -27,9 +36,7 @@ export default function NewRfqForm({
   const [custRfqNo, setCustRfqNo] = useState("");
   const [projectTitle, setProjectTitle] = useState("");
   const [workType, setWorkType] = useState("부품공급");
-  // K-Maris RFQ No. 채번 방식: 자동(서버 생성) / 수동(직접 입력)
-  const [rfqNoMode, setRfqNoMode] = useState<"auto" | "manual">("auto");
-  const [rfqNo, setRfqNo] = useState("");
+  const [receivedAt, setReceivedAt] = useState(nowLocal());
   const [items, setItems] = useState<ItemRow[]>([
     { part_no: "", description: "", qty: "1" },
   ]);
@@ -134,10 +141,6 @@ export default function NewRfqForm({
       setErr("Customer를 선택하세요.");
       return;
     }
-    if (rfqNoMode === "manual" && !rfqNo.trim()) {
-      setErr("케이마리스 RFQ No.를 입력하세요. (또는 자동으로 변경)");
-      return;
-    }
     setBusy(true);
     setErr(null);
     setMsg(null);
@@ -146,7 +149,7 @@ export default function NewRfqForm({
         customer_id: customerId,
         vessel_id: vesselId === "" ? undefined : vesselId,
         customer_rfq_no: custRfqNo,
-        rfq_no: rfqNoMode === "manual" ? rfqNo.trim() : undefined,
+        received_at: receivedAt || undefined,
         project_title: projectTitle,
         work_type: workType,
         items: items
@@ -163,8 +166,7 @@ export default function NewRfqForm({
       setCustRfqNo("");
       setProjectTitle("");
       setWorkType("부품공급");
-      setRfqNoMode("auto");
-      setRfqNo("");
+      setReceivedAt(nowLocal());
       setItems([{ part_no: "", description: "", qty: "1" }]);
       onCreated?.(r.rfq_no);
     } catch (e) {
@@ -225,6 +227,13 @@ export default function NewRfqForm({
         기본 정보
       </div>
       <div className="form-grid">
+        <Field label="RFQ 수신 일시">
+          <input
+            type="datetime-local"
+            value={receivedAt}
+            onChange={(e) => setReceivedAt(e.target.value)}
+          />
+        </Field>
         <Field label="업무 타입">
           <select value={workType} onChange={(e) => setWorkType(e.target.value)}>
             <option value="부품공급">부품공급</option>
@@ -267,22 +276,6 @@ export default function NewRfqForm({
             onChange={(e) => setCustRfqNo(e.target.value)}
             placeholder="고객사 고유 번호(선택)"
           />
-        </Field>
-        <Field label="케이마리스 RFQ No.">
-          <input
-            value={rfqNoMode === "manual" ? rfqNo : ""}
-            onChange={(e) => setRfqNo(e.target.value)}
-            disabled={rfqNoMode === "auto"}
-            placeholder={rfqNoMode === "auto" ? "자동 생성 (KMS-RFQ-yymm-NNN)" : "예: KMS-RFQ-2606-001"}
-          />
-          <label className="check-inline" style={{ marginTop: 6, fontSize: 12 }}>
-            <input
-              type="checkbox"
-              checked={rfqNoMode === "manual"}
-              onChange={(e) => setRfqNoMode(e.target.checked ? "manual" : "auto")}
-            />
-            직접 입력
-          </label>
         </Field>
         <Field label="프로젝트 제목">
           <input

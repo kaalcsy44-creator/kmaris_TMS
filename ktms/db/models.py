@@ -147,7 +147,8 @@ class RFQ(Base):
     work_type        = Column(SAEnum(WorkType), default=WorkType.PARTS, nullable=False)  # 업무 타입: 부품공급/서비스
     customer_id      = Column(Integer, ForeignKey("customers.id"))
     vessel_id        = Column(Integer, ForeignKey("vessels.id"), nullable=True)
-    date             = Column(String(10))   # YYYY-MM-DD
+    date             = Column(String(10))   # YYYY-MM-DD (수신일)
+    received_at      = Column(String(16))   # RFQ 수신 일시 "YYYY-MM-DDTHH:MM" (KST)
     status           = Column(SAEnum(RFQStatus), default=RFQStatus.RECEIVED)
     follow_up_level  = Column(SAEnum(FollowUpLevel), default=FollowUpLevel.B)
     items            = Column(JSON, default=list)

@@ -107,7 +107,12 @@ export default function RfqActionTabs({
       ) : (
         <div className="panel action-panel">
           {tab === "vrfq" && (
-            <VendorRfqAction rfqId={rfqId} vendors={vendors} onDone={after} />
+            <VendorRfqAction
+              rfqId={rfqId}
+              vendors={vendors}
+              kmarisNo={rows.find((r) => r.id === rfqId)?.crfq_no ?? ""}
+              onDone={after}
+            />
           )}
           {tab === "vquote" && (
             <VendorQuoteAction
@@ -206,17 +211,23 @@ function CustomerRfqReceive({
 function VendorRfqAction({
   rfqId,
   vendors,
+  kmarisNo,
   onDone,
 }: {
   rfqId: number;
   vendors: VendorOption[];
+  kmarisNo: string;
   onDone: () => void;
 }) {
   const [vendorIds, setVendorIds] = useState<number[]>([]);
   const [lang, setLang] = useState<"en" | "ko">("en");
   const [notes, setNotes] = useState("");
   const [previews, setPreviews] = useState<VendorRfqPreview[]>([]);
-  const [smtpConfigured, setSmtpConfigured] = useState(false);
+  // 케이마리스 RFQ No.는 이 단계(Vendor RFQ 발신)에서 부여된다.
+  const unassigned = !kmarisNo || kmarisNo === "미발급";
+  const [rfqNoMode, setRfqNoMode] = useState<"auto" | "manual">("auto");
+  const [manualNo, setManualNo] = useState("");
+  const rfqNoArg = unassigned ? { mode: rfqNoMode, value: manualNo.trim() } : undefined;
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -229,13 +240,16 @@ function VendorRfqAction({
 
   async function makePreview() {
     if (vendorIds.length === 0) return;
+    if (unassigned && rfqNoMode === "manual" && !manualNo.trim()) {
+      setErr("케이마리스 RFQ No.를 입력하세요. (또는 자동으로 변경)");
+      return;
+    }
     setBusy(true);
     setMsg(null);
     setErr(null);
     try {
-      const r = await previewVendorRfq(rfqId, vendorIds, lang, notes);
+      const r = await previewVendorRfq(rfqId, vendorIds, lang, notes, rfqNoArg);
       setPreviews(r.previews);
-      setSmtpConfigured(r.smtp_configured);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "미리보기 생성 실패");
     } finally {
@@ -279,13 +293,10 @@ function VendorRfqAction({
           to: p.to,
           subject: p.subject,
           body: p.body,
-        }))
+        })),
+        rfqNoArg
       );
-      setMsg(
-        `DB 저장 ${r.saved}건 완료` +
-          (r.sent_ok ? ` · 이메일 발송 ${r.sent_ok}건` : "") +
-          (r.sent_fail ? ` · 실패 ${r.sent_fail}건` : "")
-      );
+      setMsg(`케이마리스 RFQ No. ${r.rfq_no} · 발신 완료 (Vendor RFQ ${r.saved}건 기록)`);
       setPreviews([]);
       setVendorIds([]);
       onDone();
@@ -301,10 +312,50 @@ function VendorRfqAction({
       <div className="sub-h">Vendor RFQ 작성·발신</div>
       <div className="po-work-note">
         <b>견적 요청 메일</b>
-        <span>Vendor별 이메일을 미리보고, 견적 응답용 Excel 양식을 첨부해 발송/DB 저장합니다.</span>
+        <span>이메일 초안과 견적 응답용 Excel 양식을 생성합니다. 메일은 직접 발송하고, 보낸 뒤 "발신 완료"로 기록하세요.</span>
       </div>
       {previews.length === 0 ? (
         <>
+          <div className="form-field">
+            <label>케이마리스 RFQ No.</label>
+            {unassigned ? (
+              <>
+                <div className="seg-tabs">
+                  {(
+                    [
+                      ["auto", "자동 생성"],
+                      ["manual", "직접 입력"],
+                    ] as const
+                  ).map(([m, lbl]) => (
+                    <button
+                      key={m}
+                      type="button"
+                      className={rfqNoMode === m ? "on" : ""}
+                      onClick={() => setRfqNoMode(m)}
+                    >
+                      {lbl}
+                    </button>
+                  ))}
+                </div>
+                {rfqNoMode === "manual" ? (
+                  <input
+                    style={{ marginTop: 8, maxWidth: 320 }}
+                    value={manualNo}
+                    onChange={(e) => setManualNo(e.target.value)}
+                    placeholder="예: KMS-RFQ-2606-001"
+                  />
+                ) : (
+                  <span className="hint-inline" style={{ marginTop: 8, display: "inline-block" }}>
+                    발신 시 KMS-RFQ-yymm-NNN 형식으로 자동 부여됩니다.
+                  </span>
+                )}
+              </>
+            ) : (
+              <div className="action-ctx" style={{ margin: 0 }}>
+                발급됨: <b>{kmarisNo}</b>
+              </div>
+            )}
+          </div>
           <div className="form-field">
             <label>Vendor 선택</label>
             <div className="vendor-checks">
@@ -338,18 +389,17 @@ function VendorRfqAction({
             />
           </div>
           <div className="form-actions">
-            <button className="btn" onClick={makePreview} disabled={busy || vendorIds.length === 0}>
-              {busy ? "생성 중…" : "이메일 미리보기"}
+            <button className="btn primary" onClick={makePreview} disabled={busy || vendorIds.length === 0}>
+              {busy ? "생성 중…" : "이메일 생성"}
             </button>
           </div>
         </>
       ) : (
         <>
-          {!smtpConfigured ? (
-            <div className="action-err">
-              SMTP 미설정: 이메일은 발송되지 않고 DB 저장만 가능합니다.
-            </div>
-          ) : null}
+          <div className="po-work-note">
+            <b>이메일 직접 발송</b>
+            <span>아래 초안(제목·본문)을 복사하고 Excel 양식을 첨부해 직접 발송한 뒤, "발신 완료"를 눌러 기록하세요. 시스템은 메일을 발송하지 않습니다.</span>
+          </div>
           {previews.map((p, i) => (
             <div key={p.vendor_id} className="panel" style={{ boxShadow: "none" }}>
               <div className="sub-h">{p.vendor_name}</div>
@@ -378,7 +428,7 @@ function VendorRfqAction({
           ))}
           <div className="form-actions">
             <button className="btn primary" onClick={sendAll} disabled={busy}>
-              {busy ? "처리 중…" : "발송 + DB 저장"}
+              {busy ? "처리 중…" : "발신 완료"}
             </button>
             <button className="btn" onClick={() => setPreviews([])}>
               취소

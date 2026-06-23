@@ -126,6 +126,7 @@ export function createRfq(body: {
   vessel_id?: number;
   customer_rfq_no?: string;
   rfq_no?: string;
+  received_at?: string;
   project_title?: string;
   work_type?: string;
   items: { part_no: string; description: string; qty: number }[];
@@ -141,6 +142,7 @@ export function updateRfq(
     customer_rfq_no?: string;
     project_title?: string;
     work_type?: string;
+    received_at?: string;
   }
 ): Promise<{ ok: boolean; id: number }> {
   return patch(`/api/admin/rfq/${rfqId}`, body);
@@ -547,26 +549,32 @@ export function previewVendorRfq(
   rfqId: number,
   vendorIds: number[],
   lang: "en" | "ko",
-  notes: string
+  notes: string,
+  rfqNo?: { mode: "auto" | "manual"; value: string }
 ): Promise<{ previews: VendorRfqPreview[]; smtp_configured: boolean }> {
   return post(`/api/admin/rfq/${rfqId}/vendor-rfq-preview`, {
     vendor_ids: vendorIds,
     lang,
     notes,
+    rfq_no_mode: rfqNo?.mode ?? "auto",
+    rfq_no: rfqNo?.value ?? "",
   });
 }
 
 export function sendVendorRfq(
   rfqId: number,
-  items: { vendor_id: number; to: string; subject: string; body: string }[]
+  items: { vendor_id: number; to: string; subject: string; body: string }[],
+  rfqNo?: { mode: "auto" | "manual"; value: string }
 ): Promise<{
   ok: boolean;
   saved: number;
-  sent_ok: number;
-  sent_fail: number;
-  smtp_configured: boolean;
+  rfq_no: string;
 }> {
-  return post(`/api/admin/rfq/${rfqId}/vendor-rfq-send`, { items });
+  return post(`/api/admin/rfq/${rfqId}/vendor-rfq-send`, {
+    items,
+    rfq_no_mode: rfqNo?.mode ?? "auto",
+    rfq_no: rfqNo?.value ?? "",
+  });
 }
 
 export function vendorRfqXlsxUrl(rfqId: number, vendorId: number): string {
