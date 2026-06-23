@@ -173,6 +173,13 @@ export function deleteRfqStageNote(
   return post(`/api/admin/rfq/${rfqId}/stage-note-delete`, { stage, index });
 }
 
+export function assignRfqNo(
+  rfqId: number,
+  body: { mode: "auto" | "manual"; rfq_no?: string }
+): Promise<{ ok: boolean; rfq_no: string }> {
+  return post(`/api/admin/rfq/${rfqId}/assign-no`, body);
+}
+
 export function updateRfqLevel(
   rfqId: number,
   followUpLevel: string

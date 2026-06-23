@@ -6,6 +6,7 @@ import {
   fetchRfqDetail,
   fetchRfqVendorQuotes,
   createVendorRfq,
+  assignRfqNo,
   previewVendorRfq,
   sendVendorRfq,
   vendorRfqXlsxUrl,
@@ -238,6 +239,26 @@ function VendorRfqAction({
     );
   }
 
+  // RFQ 생성 — 케이마리스 RFQ No. 단독 발번(선택)
+  async function generateRfqNo() {
+    if (rfqNoMode === "manual" && !manualNo.trim()) {
+      setErr("케이마리스 RFQ No.를 입력하세요. (또는 자동으로 변경)");
+      return;
+    }
+    setBusy(true);
+    setMsg(null);
+    setErr(null);
+    try {
+      const r = await assignRfqNo(rfqId, { mode: rfqNoMode, rfq_no: manualNo.trim() });
+      setMsg(`케이마리스 RFQ No. 발급: ${r.rfq_no}`);
+      onDone(); // 목록 새로고침 → 발급 상태 반영
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "RFQ 생성 실패");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function makePreview() {
     if (vendorIds.length === 0) return;
     if (unassigned && rfqNoMode === "manual" && !manualNo.trim()) {
@@ -280,22 +301,30 @@ function VendorRfqAction({
     URL.revokeObjectURL(url);
   }
 
+  // 발신 완료 — 선택한 Vendor의 RFQ 발신을 기록(이메일 생성 여부와 무관). 초안이 있으면 그 내용을 함께 보낸다.
   async function sendAll() {
-    if (previews.length === 0) return;
+    if (vendorIds.length === 0) {
+      setErr("Vendor를 선택하세요.");
+      return;
+    }
+    if (unassigned && rfqNoMode === "manual" && !manualNo.trim()) {
+      setErr("케이마리스 RFQ No.를 입력하세요. (또는 자동으로 변경)");
+      return;
+    }
     setBusy(true);
     setMsg(null);
     setErr(null);
     try {
-      const r = await sendVendorRfq(
-        rfqId,
-        previews.map((p) => ({
-          vendor_id: p.vendor_id,
-          to: p.to,
-          subject: p.subject,
-          body: p.body,
-        })),
-        rfqNoArg
-      );
+      const items = vendorIds.map((vid) => {
+        const p = previews.find((x) => x.vendor_id === vid);
+        return {
+          vendor_id: vid,
+          to: p?.to ?? "",
+          subject: p?.subject ?? "",
+          body: p?.body ?? "",
+        };
+      });
+      const r = await sendVendorRfq(rfqId, items, rfqNoArg);
       setMsg(`케이마리스 RFQ No. ${r.rfq_no} · 발신 완료 (Vendor RFQ ${r.saved}건 기록)`);
       setPreviews([]);
       setVendorIds([]);
@@ -314,88 +343,97 @@ function VendorRfqAction({
         <b>견적 요청 메일</b>
         <span>이메일 초안과 견적 응답용 Excel 양식을 생성합니다. 메일은 직접 발송하고, 보낸 뒤 "발신 완료"로 기록하세요.</span>
       </div>
-      {previews.length === 0 ? (
-        <>
-          <div className="form-field">
-            <label>케이마리스 RFQ No.</label>
-            {unassigned ? (
-              <>
-                <div className="seg-tabs">
-                  {(
-                    [
-                      ["auto", "자동 생성"],
-                      ["manual", "직접 입력"],
-                    ] as const
-                  ).map(([m, lbl]) => (
-                    <button
-                      key={m}
-                      type="button"
-                      className={rfqNoMode === m ? "on" : ""}
-                      onClick={() => setRfqNoMode(m)}
-                    >
-                      {lbl}
-                    </button>
-                  ))}
-                </div>
-                {rfqNoMode === "manual" ? (
-                  <input
-                    style={{ marginTop: 8, maxWidth: 320 }}
-                    value={manualNo}
-                    onChange={(e) => setManualNo(e.target.value)}
-                    placeholder="예: KMS-RFQ-2606-001"
-                  />
-                ) : (
-                  <span className="hint-inline" style={{ marginTop: 8, display: "inline-block" }}>
-                    발신 시 KMS-RFQ-yymm-NNN 형식으로 자동 부여됩니다.
-                  </span>
-                )}
-              </>
-            ) : (
-              <div className="action-ctx" style={{ margin: 0 }}>
-                발급됨: <b>{kmarisNo}</b>
-              </div>
-            )}
-          </div>
-          <div className="form-field">
-            <label>Vendor 선택</label>
-            <div className="vendor-checks">
-              {vendors.map((v) => (
-                <label key={v.id} className="check-inline">
-                  <input
-                    type="checkbox"
-                    checked={vendorIds.includes(v.id)}
-                    onChange={() => toggleVendor(v.id)}
-                  />
-                  {v.name}
-                </label>
+      <div className="form-field">
+        <label>케이마리스 RFQ No.</label>
+        {unassigned ? (
+          <>
+            <div className="seg-tabs">
+              {(
+                [
+                  ["auto", "자동 생성"],
+                  ["manual", "직접 입력"],
+                ] as const
+              ).map(([m, lbl]) => (
+                <button
+                  key={m}
+                  type="button"
+                  className={rfqNoMode === m ? "on" : ""}
+                  onClick={() => setRfqNoMode(m)}
+                >
+                  {lbl}
+                </button>
               ))}
             </div>
+            {rfqNoMode === "manual" ? (
+              <input
+                style={{ marginTop: 8, maxWidth: 320 }}
+                value={manualNo}
+                onChange={(e) => setManualNo(e.target.value)}
+                placeholder="예: KMS-RFQ-2606-001"
+              />
+            ) : (
+              <span className="hint-inline" style={{ marginTop: 8, display: "inline-block" }}>
+                "RFQ 생성" 또는 발신 시 KMS-RFQ-yymm-NNN 형식으로 부여됩니다.
+              </span>
+            )}
+          </>
+        ) : (
+          <div className="action-ctx" style={{ margin: 0 }}>
+            발급됨: <b>{kmarisNo}</b>
           </div>
-          <div className="form-grid">
-            <div className="form-field">
-              <label>이메일 언어</label>
-              <select value={lang} onChange={(e) => setLang(e.target.value as "en" | "ko")}>
-                <option value="en">English (영문)</option>
-                <option value="ko">Korean (국문)</option>
-              </select>
-            </div>
-          </div>
-          <div className="form-field">
-            <label>Vendor에게 전달할 메모</label>
-            <textarea
-              className="po-textarea small"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-            />
-          </div>
-          <div className="form-actions">
-            <button className="btn primary" onClick={makePreview} disabled={busy || vendorIds.length === 0}>
-              {busy ? "생성 중…" : "이메일 생성"}
-            </button>
-          </div>
-        </>
-      ) : (
-        <>
+        )}
+      </div>
+      <div className="form-field">
+        <label>Vendor 선택</label>
+        <div className="vendor-checks">
+          {vendors.map((v) => (
+            <label key={v.id} className="check-inline">
+              <input
+                type="checkbox"
+                checked={vendorIds.includes(v.id)}
+                onChange={() => toggleVendor(v.id)}
+              />
+              {v.name}
+            </label>
+          ))}
+        </div>
+      </div>
+      <div className="form-grid">
+        <div className="form-field">
+          <label>이메일 언어</label>
+          <select value={lang} onChange={(e) => setLang(e.target.value as "en" | "ko")}>
+            <option value="en">English (영문)</option>
+            <option value="ko">Korean (국문)</option>
+          </select>
+        </div>
+      </div>
+      <div className="form-field">
+        <label>Vendor에게 전달할 메모</label>
+        <textarea
+          className="po-textarea small"
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+        />
+      </div>
+
+      {/* 3개 버튼 동시 표시: RFQ 생성(선택) · 이메일 생성(선택) · 발신 완료(필수) */}
+      <div className="form-actions">
+        <button className="btn" onClick={generateRfqNo} disabled={busy || !unassigned}>
+          RFQ 생성
+        </button>
+        <button className="btn" onClick={makePreview} disabled={busy || vendorIds.length === 0}>
+          이메일 생성
+        </button>
+        <button className="btn primary" onClick={sendAll} disabled={busy || vendorIds.length === 0}>
+          발신 완료
+        </button>
+        <span className="hint-inline">
+          RFQ 생성·이메일 생성은 선택, 발신 완료는 필수입니다.
+        </span>
+      </div>
+
+      {previews.length > 0 ? (
+        <div style={{ marginTop: 14 }}>
           <div className="po-work-note">
             <b>이메일 직접 발송</b>
             <span>아래 초안(제목·본문)을 복사하고 Excel 양식을 첨부해 직접 발송한 뒤, "발신 완료"를 눌러 기록하세요. 시스템은 메일을 발송하지 않습니다.</span>
@@ -427,15 +465,12 @@ function VendorRfqAction({
             </div>
           ))}
           <div className="form-actions">
-            <button className="btn primary" onClick={sendAll} disabled={busy}>
-              {busy ? "처리 중…" : "발신 완료"}
-            </button>
             <button className="btn" onClick={() => setPreviews([])}>
-              취소
+              초안 닫기
             </button>
           </div>
-        </>
-      )}
+        </div>
+      ) : null}
       {msg ? <span className="action-ok">{msg}</span> : null}
       {err ? <span className="action-err">{err}</span> : null}
     </>

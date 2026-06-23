@@ -3369,6 +3369,26 @@ def create_rfq(body: RfqCreate):
         s.close()
 
 
+class RfqAssignNo(BaseModel):
+    mode: str = "auto"     # auto/manual
+    rfq_no: str = ""       # manual 일 때 직접 입력값
+
+
+@app.post("/api/admin/rfq/{rfq_id}/assign-no", dependencies=[Depends(require_token)])
+def assign_rfq_no_endpoint(rfq_id: int, body: RfqAssignNo):
+    """케이마리스 RFQ No. 단독 발번(미발급이면 부여, 이미 발급됐으면 유지)."""
+    s = get_session()
+    try:
+        rfq = s.query(RFQ).filter_by(id=rfq_id).first()
+        if not rfq:
+            raise HTTPException(status_code=404, detail="RFQ를 찾을 수 없습니다.")
+        no = _assign_rfq_no(s, rfq, body.mode, body.rfq_no)
+        s.commit()
+        return {"ok": True, "rfq_no": no}
+    finally:
+        s.close()
+
+
 class RfqUpdate(BaseModel):
     """RFQ 헤더 필드 부분 수정. 보낸 필드만 반영(None=변경 안 함)."""
     customer_id: int | None = None
