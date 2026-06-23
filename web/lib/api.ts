@@ -143,6 +143,7 @@ export function updateRfq(
     project_title?: string;
     work_type?: string;
     received_at?: string;
+    items?: { part_no: string; description: string; qty: number }[];
   }
 ): Promise<{ ok: boolean; id: number }> {
   return patch(`/api/admin/rfq/${rfqId}`, body);

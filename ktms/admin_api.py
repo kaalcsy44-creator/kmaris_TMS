@@ -801,9 +801,14 @@ def rfq_detail(rfq_id: int):
             "rfq_no": _rfq_no_disp(r.rfq_no),
             "customer_rfq_no": r.customer_rfq_no or "",
             "customer": cust.name if cust else "—",
+            "customer_id": r.customer_id or 0,
             "customer_contact": (cust.contact if cust else "") or "",
             "customer_email": (cust.email if cust else "") or "",
             "vessel": vessel.name if vessel else "",
+            "vessel_id": r.vessel_id or 0,
+            "project_title": getattr(r, "project_title", None) or "",
+            "work_type": _enum_val(r.work_type) if r.work_type else "부품공급",
+            "received_at": getattr(r, "received_at", None) or "",
             "date": r.date or "",
             "notes": r.notes or "",
             "follow_up_level": _enum_val(r.follow_up_level) if r.follow_up_level else "B",
@@ -3404,6 +3409,7 @@ class RfqUpdate(BaseModel):
     project_title: str | None = None
     work_type: str | None = None
     received_at: str | None = None      # "YYYY-MM-DDTHH:MM"
+    items: list[RfqItemIn] | None = None  # 보내면 품목 전체 교체
 
 
 @app.patch("/api/admin/rfq/{rfq_id}", dependencies=[Depends(require_token)])
@@ -3443,6 +3449,12 @@ def update_rfq(rfq_id: int, body: RfqUpdate):
             if recv:
                 rfq.received_at = recv
                 rfq.date = recv[:10]
+        if body.items is not None:
+            rfq.items = [{
+                "part_no": (it.part_no or "").strip(),
+                "description": (it.description or "").strip(),
+                "qty": it.qty or 1,
+            } for it in body.items if (it.part_no or it.description)]
 
         s.commit()
         return {"ok": True, "id": rfq.id}

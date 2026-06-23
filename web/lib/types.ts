@@ -618,9 +618,14 @@ export type RfqDetail = {
   rfq_no: string;
   customer_rfq_no: string;
   customer: string;
+  customer_id: number;
   customer_contact: string;
   customer_email: string;
   vessel: string;
+  vessel_id: number;
+  project_title: string;
+  work_type: string;
+  received_at: string;
   date: string;
   notes: string;
   follow_up_level: string;

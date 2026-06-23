@@ -30,7 +30,7 @@ body {
 .page {
   max-width: 1480px;
   margin: 0 auto;
-  padding: 24px 28px 64px;
+  padding: 0 28px 64px;
 }
 
 .topbar {
@@ -87,7 +87,8 @@ body {
 /* ── App shell: left navy sidebar + main ──────────────────────────────── */
 .shell {
   display: flex;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
 }
 .sidebar {
   width: 224px;
@@ -213,6 +214,8 @@ body {
 .shell-main {
   flex: 1;
   min-width: 0;
+  height: 100vh;
+  overflow-y: auto;
 }
 .shell-main .page {
   max-width: 1360px;
@@ -224,8 +227,14 @@ body {
   align-items: center;
   gap: 10px;
   margin-bottom: 18px;
+  padding-top: 24px;
   padding-bottom: 12px;
   border-bottom: 2px solid var(--blue);
+  /* 상단 바 고정 — 아래 콘텐츠만 스크롤 */
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: var(--page-bg);
 }
 .section-head h2 {
   font-size: 19px;
@@ -288,6 +297,12 @@ body {
   gap: 2px;
   border-bottom: 1px solid var(--line-strong);
   margin-bottom: 18px;
+  /* 4개 탭 고정 — 상단 바(section-head) 바로 아래에 붙어 고정 */
+  position: sticky;
+  top: 62px;
+  z-index: 29;
+  background: var(--page-bg);
+  padding-top: 6px;
 }
 .page-tabs button {
   border: none;
@@ -1439,6 +1454,30 @@ a.btn.primary:hover {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 14px;
+}
+/* RFQ 신규/수정 모드 바 */
+.rfq-mode-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px dashed #dde4ef;
+}
+.rfq-mode-tag {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+.rfq-mode-tag.new {
+  background: #e4edfb;
+  color: #1d4ed8;
+}
+.rfq-mode-tag.edit {
+  background: #fde7d6;
+  color: #b5701a;
 }
 /* 컴팩트 OCR 업로드 바 */
 .ocr-bar {

@@ -194,7 +194,7 @@ function CustomerRfqReceive({
         </button>
       </div>
       {sub === "new" ? (
-        <NewRfqForm onCreated={() => onChanged()} />
+        <NewRfqForm selectedRfqId={rfqId} onCreated={() => onChanged()} />
       ) : (
         <div className="panel">
           <div className="sub-h">등록된 RFQ 목록</div>

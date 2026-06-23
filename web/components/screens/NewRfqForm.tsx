@@ -5,6 +5,8 @@ import {
   fetchCustomers,
   fetchSettingsVessels,
   createRfq,
+  updateRfq,
+  fetchRfqDetail,
   parseRfqPdf,
   createSettingsCustomer,
   createSettingsVessel,
@@ -25,10 +27,13 @@ function nowLocal(): string {
 export default function NewRfqForm({
   onCreated,
   onCancel,
+  selectedRfqId,
 }: {
   onCreated?: (rfqNo: string) => void;
   onCancel?: () => void;
+  selectedRfqId?: number | null; // 상단에서 선택된 RFQ — 불러와 수정 가능
 }) {
+  const [editId, setEditId] = useState<number | null>(null); // null=신규, >0=수정
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
   const [vessels, setVessels] = useState<SettingsVessel[]>([]);
   const [customerId, setCustomerId] = useState<number | "">("");
@@ -136,6 +141,49 @@ export default function NewRfqForm({
     }
   }
 
+  function resetForm() {
+    setEditId(null);
+    setCustomerId("");
+    setVesselId("");
+    setCustRfqNo("");
+    setProjectTitle("");
+    setWorkType("부품공급");
+    setReceivedAt(nowLocal());
+    setItems([{ part_no: "", description: "", qty: "1" }]);
+    setErr(null);
+    setMsg(null);
+  }
+
+  // 기존 RFQ를 불러와 폼에 채우고 수정 모드로 전환.
+  async function loadRfq(id: number) {
+    setBusy(true);
+    setErr(null);
+    setMsg(null);
+    try {
+      const d = await fetchRfqDetail(id);
+      setEditId(id);
+      setCustomerId(d.customer_id || "");
+      setVesselId(d.vessel_id || "");
+      setCustRfqNo(d.customer_rfq_no || "");
+      setProjectTitle(d.project_title || "");
+      setWorkType(d.work_type || "부품공급");
+      setReceivedAt(d.received_at || nowLocal());
+      setItems(
+        d.items.length
+          ? d.items.map((it) => ({
+              part_no: it.part_no || "",
+              description: it.description || "",
+              qty: String(it.qty ?? 1),
+            }))
+          : [{ part_no: "", description: "", qty: "1" }]
+      );
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "RFQ 불러오기 실패");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function submit() {
     if (customerId === "") {
       setErr("Customer를 선택하세요.");
@@ -144,33 +192,42 @@ export default function NewRfqForm({
     setBusy(true);
     setErr(null);
     setMsg(null);
+    const cleanItems = items
+      .filter((it) => it.part_no.trim() || it.description.trim())
+      .map((it) => ({
+        part_no: it.part_no,
+        description: it.description,
+        qty: Number(it.qty) || 1,
+      }));
     try {
-      const r = await createRfq({
-        customer_id: customerId,
-        vessel_id: vesselId === "" ? undefined : vesselId,
-        customer_rfq_no: custRfqNo,
-        received_at: receivedAt || undefined,
-        project_title: projectTitle,
-        work_type: workType,
-        items: items
-          .filter((it) => it.part_no.trim() || it.description.trim())
-          .map((it) => ({
-            part_no: it.part_no,
-            description: it.description,
-            qty: Number(it.qty) || 1,
-          })),
-      });
-      setMsg(`등록 완료 — ${r.rfq_no}`);
-      setCustomerId("");
-      setVesselId("");
-      setCustRfqNo("");
-      setProjectTitle("");
-      setWorkType("부품공급");
-      setReceivedAt(nowLocal());
-      setItems([{ part_no: "", description: "", qty: "1" }]);
-      onCreated?.(r.rfq_no);
+      if (editId) {
+        await updateRfq(editId, {
+          customer_id: customerId,
+          vessel_id: vesselId === "" ? 0 : vesselId,
+          customer_rfq_no: custRfqNo,
+          received_at: receivedAt || undefined,
+          project_title: projectTitle,
+          work_type: workType,
+          items: cleanItems,
+        });
+        setMsg("수정 완료");
+        onCreated?.(""); // 목록·상위 새로고침
+      } else {
+        const r = await createRfq({
+          customer_id: customerId,
+          vessel_id: vesselId === "" ? undefined : vesselId,
+          customer_rfq_no: custRfqNo,
+          received_at: receivedAt || undefined,
+          project_title: projectTitle,
+          work_type: workType,
+          items: cleanItems,
+        });
+        setMsg(`등록 완료 — ${r.rfq_no}`);
+        resetForm();
+        onCreated?.(r.rfq_no);
+      }
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "등록 실패");
+      setErr(e instanceof Error ? e.message : editId ? "수정 실패" : "등록 실패");
     } finally {
       setBusy(false);
     }
@@ -178,6 +235,35 @@ export default function NewRfqForm({
 
   return (
     <div className="panel form-panel">
+      <div className="rfq-mode-bar">
+        {editId ? (
+          <>
+            <span className="rfq-mode-tag edit">✎ 수정 모드</span>
+            <span className="hint-inline">기존 RFQ를 불러와 편집 중입니다.</span>
+            <button className="btn" style={{ marginLeft: "auto" }} onClick={resetForm}>
+              + 새 RFQ 작성
+            </button>
+          </>
+        ) : (
+          <>
+            <span className="rfq-mode-tag new">+ 신규 등록</span>
+            {selectedRfqId ? (
+              <button
+                className="btn"
+                style={{ marginLeft: "auto" }}
+                onClick={() => loadRfq(selectedRfqId)}
+                disabled={busy}
+              >
+                📂 선택한 RFQ 불러와 수정
+              </button>
+            ) : (
+              <span className="hint-inline">
+                상단 "진행중인 프로젝트"를 고르면 불러와 수정할 수 있습니다.
+              </span>
+            )}
+          </>
+        )}
+      </div>
       <div className="ocr-bar">
         <span className="ocr-bar-label">📄 RFQ PDF 자동 입력</span>
         <input
@@ -350,7 +436,7 @@ export default function NewRfqForm({
           onClick={submit}
           disabled={busy || customerId === ""}
         >
-          {busy ? "등록 중…" : "RFQ 등록"}
+          {busy ? "처리 중…" : editId ? "RFQ 수정 저장" : "RFQ 등록"}
         </button>
         {msg ? <span className="action-ok">{msg}</span> : null}
         {err ? <span className="action-err">{err}</span> : null}
