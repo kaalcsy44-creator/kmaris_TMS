@@ -3293,6 +3293,7 @@ class RfqCreate(BaseModel):
     customer_id: int
     vessel_id: int | None = None
     customer_rfq_no: str | None = ""
+    rfq_no: str | None = None          # K-Maris RFQ No. 수동 지정(비우면 자동 채번)
     project_title: str | None = ""
     work_type: str | None = "부품공급"
     items: list[RfqItemIn] = []
@@ -3300,7 +3301,8 @@ class RfqCreate(BaseModel):
 
 @app.post("/api/admin/rfq", dependencies=[Depends(require_token)])
 def create_rfq(body: RfqCreate):
-    """Customer RFQ 신규 등록. 내부 관리번호(KMS-RFQ-yymm-NNN)는 자동 채번."""
+    """Customer RFQ 신규 등록. K-Maris RFQ No.는 자동 채번(KMS-RFQ-yymm-NNN)
+    또는 body.rfq_no 로 수동 지정 가능."""
     s = get_session()
     try:
         cust = s.query(Customer).filter_by(id=body.customer_id).first()
@@ -3317,7 +3319,13 @@ def create_rfq(body: RfqCreate):
         except ValueError:
             work_type = WorkType.PARTS
 
-        rfq_no = _next_rfq_no(s)
+        manual_no = (body.rfq_no or "").strip()
+        if manual_no:
+            if s.query(RFQ).filter_by(rfq_no=manual_no).first():
+                raise HTTPException(status_code=400, detail=f"이미 존재하는 RFQ No.입니다: {manual_no}")
+            rfq_no = manual_no
+        else:
+            rfq_no = _next_rfq_no(s)
         rfq = RFQ(
             rfq_no=rfq_no,
             customer_rfq_no=(body.customer_rfq_no or "").strip() or None,

@@ -125,6 +125,7 @@ export function createRfq(body: {
   customer_id: number;
   vessel_id?: number;
   customer_rfq_no?: string;
+  rfq_no?: string;
   project_title?: string;
   work_type?: string;
   items: { part_no: string; description: string; qty: number }[];

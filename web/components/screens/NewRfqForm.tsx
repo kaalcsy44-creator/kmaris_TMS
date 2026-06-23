@@ -27,6 +27,9 @@ export default function NewRfqForm({
   const [custRfqNo, setCustRfqNo] = useState("");
   const [projectTitle, setProjectTitle] = useState("");
   const [workType, setWorkType] = useState("부품공급");
+  // K-Maris RFQ No. 채번 방식: 자동(서버 생성) / 수동(직접 입력)
+  const [rfqNoMode, setRfqNoMode] = useState<"auto" | "manual">("auto");
+  const [rfqNo, setRfqNo] = useState("");
   const [items, setItems] = useState<ItemRow[]>([
     { part_no: "", description: "", qty: "1" },
   ]);
@@ -131,6 +134,10 @@ export default function NewRfqForm({
       setErr("Customer를 선택하세요.");
       return;
     }
+    if (rfqNoMode === "manual" && !rfqNo.trim()) {
+      setErr("케이마리스 RFQ No.를 입력하세요. (또는 자동으로 변경)");
+      return;
+    }
     setBusy(true);
     setErr(null);
     setMsg(null);
@@ -139,6 +146,7 @@ export default function NewRfqForm({
         customer_id: customerId,
         vessel_id: vesselId === "" ? undefined : vesselId,
         customer_rfq_no: custRfqNo,
+        rfq_no: rfqNoMode === "manual" ? rfqNo.trim() : undefined,
         project_title: projectTitle,
         work_type: workType,
         items: items
@@ -155,6 +163,8 @@ export default function NewRfqForm({
       setCustRfqNo("");
       setProjectTitle("");
       setWorkType("부품공급");
+      setRfqNoMode("auto");
+      setRfqNo("");
       setItems([{ part_no: "", description: "", qty: "1" }]);
       onCreated?.(r.rfq_no);
     } catch (e) {
@@ -166,19 +176,21 @@ export default function NewRfqForm({
 
   return (
     <div className="panel form-panel">
-      <div className="po-work-note">
-        <b>PDF로 자동 입력 (AI OCR)</b>
-        <span>RFQ PDF를 업로드하면 Customer, 선박, 고객 RFQ No., 품목을 자동 추출해 아래 폼에 반영합니다.</span>
-      </div>
-      <div className="action-row">
+      <div className="ocr-bar">
+        <span className="ocr-bar-label">📄 RFQ PDF 자동 입력</span>
         <input
           type="file"
           accept="application/pdf"
           onChange={(e) => uploadOcr(e.target.files?.[0] ?? null)}
           disabled={ocrBusy}
         />
-        {ocrBusy ? <span className="hint-inline">AI가 PDF를 분석 중…</span> : null}
-        {ocrMsg ? <span className="action-ok">{ocrMsg}</span> : null}
+        {ocrBusy ? (
+          <span className="hint-inline">AI 분석 중…</span>
+        ) : ocrMsg ? (
+          <span className="action-ok">{ocrMsg}</span>
+        ) : (
+          <span className="hint-inline">업로드하면 Customer·선박·품목을 자동 입력</span>
+        )}
       </div>
 
       <details className="quick-create" open={custUnmatched}>
@@ -209,23 +221,16 @@ export default function NewRfqForm({
         />
       </details>
 
-      <div className="form-field" style={{ marginBottom: 4 }}>
-        <label>업무 타입</label>
-        <div className="seg-tabs">
-          {["부품공급", "서비스"].map((t) => (
-            <button
-              key={t}
-              type="button"
-              className={workType === t ? "on" : ""}
-              onClick={() => setWorkType(t)}
-            >
-              {t}
-            </button>
-          ))}
-        </div>
+      <div className="sub-h" style={{ marginTop: 16 }}>
+        기본 정보
       </div>
-
       <div className="form-grid">
+        <Field label="업무 타입">
+          <select value={workType} onChange={(e) => setWorkType(e.target.value)}>
+            <option value="부품공급">부품공급</option>
+            <option value="서비스">서비스</option>
+          </select>
+        </Field>
         <Field label="Customer *">
           <select
             value={customerId}
@@ -262,6 +267,22 @@ export default function NewRfqForm({
             onChange={(e) => setCustRfqNo(e.target.value)}
             placeholder="고객사 고유 번호(선택)"
           />
+        </Field>
+        <Field label="케이마리스 RFQ No.">
+          <input
+            value={rfqNoMode === "manual" ? rfqNo : ""}
+            onChange={(e) => setRfqNo(e.target.value)}
+            disabled={rfqNoMode === "auto"}
+            placeholder={rfqNoMode === "auto" ? "자동 생성 (KMS-RFQ-yymm-NNN)" : "예: KMS-RFQ-2606-001"}
+          />
+          <label className="check-inline" style={{ marginTop: 6, fontSize: 12 }}>
+            <input
+              type="checkbox"
+              checked={rfqNoMode === "manual"}
+              onChange={(e) => setRfqNoMode(e.target.checked ? "manual" : "auto")}
+            />
+            직접 입력
+          </label>
         </Field>
         <Field label="프로젝트 제목">
           <input
