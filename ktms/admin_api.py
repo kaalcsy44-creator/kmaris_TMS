@@ -27,7 +27,7 @@ from fastapi import Depends, FastAPI, File, Header, HTTPException, Response, Upl
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from db.engine import get_session
+from db.engine import get_session, get_engine
 from services.tracking_status import (
     rfq_tracking_step, order_tracking_step, RFQ_STEPS, ORDER_STEPS,
 )
@@ -349,7 +349,14 @@ def _status_label(stage: int) -> str:
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    # DB 백엔드 종류만 노출(자격증명 X). sqlite 면 임시 디스크일 수 있어 재배포 시
+    # 데이터가 사라질 수 있으므로 persistent=false 로 경고.
+    backend = get_engine().url.get_backend_name()
+    return {
+        "status": "ok",
+        "db": backend,
+        "persistent": backend != "sqlite",
+    }
 
 
 @app.get("/api/admin/pipeline", dependencies=[Depends(require_token)])
