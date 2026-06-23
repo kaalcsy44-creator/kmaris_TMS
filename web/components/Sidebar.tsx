@@ -39,12 +39,26 @@ const GROUPS: Group[] = [
   },
 ];
 
-export default function Sidebar({ active }: { active: string }) {
+export default function Sidebar({
+  active,
+  open = false,
+  onClose,
+}: {
+  active: string;
+  open?: boolean;
+  onClose?: () => void;
+}) {
   const user = getUser();
   const initial = (user?.username ?? "?").charAt(0).toUpperCase();
 
   return (
-    <aside className="sidebar">
+    <>
+      <div
+        className={`sidebar-backdrop${open ? " on" : ""}`}
+        onClick={onClose}
+        aria-hidden
+      />
+      <aside className={`sidebar${open ? " open" : ""}`}>
       <div className="sidebar-brand">
         <span className="mark">TMS</span>
         <span className="name">
@@ -62,6 +76,7 @@ export default function Sidebar({ active }: { active: string }) {
                 key={it.key}
                 href={it.href}
                 className={`sidebar-link${it.key === active ? " on" : ""}`}
+                onClick={onClose}
               >
                 {it.label}
               </Link>
@@ -77,6 +92,7 @@ export default function Sidebar({ active }: { active: string }) {
           로그아웃
         </button>
       </div>
-    </aside>
+      </aside>
+    </>
   );
 }

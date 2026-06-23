@@ -2083,3 +2083,189 @@ table.mini .num {
 .state.error {
   color: #b42318;
 }
+
+/* ── Mobile top bar + drawer (hidden on desktop) ───────────────────────── */
+.mobile-topbar {
+  display: none;
+}
+.sidebar-backdrop {
+  display: none;
+}
+
+/* ── Responsive: tablet / phone ────────────────────────────────────────── */
+@media (max-width: 768px) {
+  /* Shell flows vertically; the fixed-height/overflow desktop frame is off */
+  .shell {
+    flex-direction: column;
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
+  }
+  .shell-main {
+    height: auto;
+    overflow: visible;
+  }
+
+  /* Top bar with hamburger */
+  .mobile-topbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background: var(--navy);
+    color: #fff;
+    padding: 10px 14px;
+  }
+  .mobile-burger {
+    display: inline-flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 4px;
+    width: 38px;
+    height: 38px;
+    padding: 9px;
+    background: rgba(255, 255, 255, 0.12);
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .mobile-burger span {
+    display: block;
+    width: 100%;
+    height: 2px;
+    background: #fff;
+    border-radius: 2px;
+  }
+  .mobile-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+  }
+  .mobile-brand .mark {
+    width: 26px;
+    height: 26px;
+    border-radius: 7px;
+    background: var(--blue);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 800;
+  }
+
+  /* Sidebar becomes an off-canvas drawer */
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    width: 260px;
+    max-width: 82vw;
+    z-index: 60;
+    transform: translateX(-100%);
+    transition: transform 0.22s ease;
+  }
+  .sidebar.open {
+    transform: translateX(0);
+    box-shadow: 0 0 40px rgba(0, 0, 0, 0.45);
+  }
+  .sidebar-backdrop.on {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.42);
+    z-index: 55;
+  }
+
+  /* Content area: tighter padding, full width */
+  .page,
+  .shell-main .page {
+    max-width: 100%;
+    padding: 0 14px 48px;
+  }
+
+  /* Sticky page header/tabs would collide with the sticky top bar — let them flow */
+  .section-head {
+    position: static;
+    padding-top: 14px;
+    margin-bottom: 14px;
+  }
+  .section-head h2 {
+    font-size: 17px;
+  }
+  .page-tabs {
+    position: static;
+    top: auto;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    white-space: nowrap;
+  }
+  .page-tabs button {
+    padding: 9px 13px;
+    font-size: 13px;
+  }
+
+  /* Multi-column grids collapse */
+  .dash-two,
+  .track-row {
+    grid-template-columns: 1fr;
+  }
+  .company-view,
+  .intl-meta {
+    grid-template-columns: 1fr 1fr;
+  }
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Toolbars / fields stack and fill */
+  .ms-toolbar {
+    flex-wrap: wrap;
+  }
+  .ms-search {
+    width: 100%;
+    max-width: none;
+    margin-left: 0;
+  }
+  .field {
+    flex: 1 1 100%;
+  }
+  .field select,
+  .field input {
+    min-width: 0;
+    width: 100%;
+  }
+  .detail-cols {
+    gap: 16px;
+  }
+
+  /* Wide data tables scroll horizontally instead of overflowing the page */
+  table.mini.wide {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    white-space: nowrap;
+  }
+
+  /* Login card fits small screens */
+  .login-box {
+    width: 100%;
+    max-width: 360px;
+  }
+}
+
+@media (max-width: 480px) {
+  .company-view,
+  .intl-meta {
+    grid-template-columns: 1fr;
+  }
+  .kpi-value {
+    font-size: 21px;
+  }
+}
