@@ -138,6 +138,75 @@ Document:
     return _parse_response(response.content[0].text)
 
 
+_RFQ_SCHEMA = """{
+  "vessel_name": string|null,
+  "rfq_date": "YYYY-MM-DD"|null,
+  "customer_rfq_no": string|null,
+  "customer_hint": string|null,
+  "contact_person": string|null,
+  "notes": string|null,
+  "items": [
+    {"part_no":string,"description":string,"maker":string,"qty":number,"unit":string,"lead_time_req":string,"remark":string}
+  ]
+}"""
+
+_ORDER_SCHEMA = """{
+  "customer_hint": string|null,
+  "po_no": string|null,
+  "order_date": "YYYY-MM-DD"|null,
+  "vessel_name": string|null,
+  "promised_delivery": "YYYY-MM-DD"|null,
+  "items": [
+    {"part_no":string,"description":string,"maker":string,"qty":number,"unit":string,"unit_price":number,"remark":string}
+  ]
+}"""
+
+
+def _customer_hint_line(customer_names: list[str] | None) -> str:
+    if customer_names:
+        return f"\nKnown customers (for matching): {', '.join(customer_names[:30])}"
+    return ""
+
+
+def _parse_image(image_bytes: bytes, media_type: str, prompt: str) -> dict:
+    """첨부 이미지(스크린샷/사진)를 Claude 비전으로 읽어 구조화 JSON 추출."""
+    import base64
+    client = _anthropic_client()
+    b64 = base64.standard_b64encode(image_bytes).decode()
+    response = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=4096,
+        messages=[{
+            "role": "user",
+            "content": [
+                {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": b64}},
+                {"type": "text", "text": prompt},
+            ],
+        }],
+    )
+    return _parse_response(response.content[0].text)
+
+
+def parse_rfq_image(image_bytes: bytes, media_type: str, customer_names: list[str] | None = None) -> dict:
+    """RFQ 이미지(스크린샷/사진)에서 필드를 추출."""
+    prompt = f"""Extract RFQ information from the attached image (a screenshot or photo of an RFQ document).
+Output ONLY a single-line compact JSON object (no newlines, no markdown).{_customer_hint_line(customer_names)}
+
+JSON schema (all strings on one line, no embedded newlines):
+{_RFQ_SCHEMA}"""
+    return _parse_image(image_bytes, media_type, prompt)
+
+
+def parse_order_image(image_bytes: bytes, media_type: str, customer_names: list[str] | None = None) -> dict:
+    """고객 P/O 이미지에서 필드를 추출."""
+    prompt = f"""Extract Purchase Order (customer order) information from the attached image (a screenshot or photo).
+Output ONLY a single-line compact JSON object (no newlines, no markdown).{_customer_hint_line(customer_names)}
+
+JSON schema (all strings on one line; dates as YYYY-MM-DD or null):
+{_ORDER_SCHEMA}"""
+    return _parse_image(image_bytes, media_type, prompt)
+
+
 def parse_order_fields(text: str, customer_names: list[str] | None = None) -> dict:
     """Use Claude Haiku to extract structured Order (customer P/O) fields from PDF text."""
     client = _anthropic_client()

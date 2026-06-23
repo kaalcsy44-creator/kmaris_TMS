@@ -143,6 +143,7 @@ class RFQ(Base):
     id               = Column(Integer, primary_key=True)
     rfq_no           = Column(String(40), unique=True, nullable=False)  # K-Maris 내부 관리번호 KMS-RFQ-yymm-NNN
     customer_rfq_no  = Column(String(100))   # 고객사 고유 RFQ 번호
+    contact_person   = Column(String(100))   # 이 RFQ를 보낸 고객 담당자
     project_title    = Column(String(200))   # 프로젝트 제목(내부 식별용, 선택)
     work_type        = Column(SAEnum(WorkType), default=WorkType.PARTS, nullable=False)  # 업무 타입: 부품공급/서비스
     customer_id      = Column(Integer, ForeignKey("customers.id"))

@@ -41,6 +41,7 @@ from services.pdf_svc import (
 )
 from services.pdf_parser import (
     extract_text_from_pdf, parse_order_fields, parse_rfq_fields,
+    parse_rfq_image, parse_order_image,
 )
 from services.vendor_xlsx import make_vendor_rfq_quote_xlsx
 from services.quote_response_parser import parse_vendor_quote_bytes
@@ -800,6 +801,7 @@ def rfq_detail(rfq_id: int):
             "id": r.id,
             "rfq_no": _rfq_no_disp(r.rfq_no),
             "customer_rfq_no": r.customer_rfq_no or "",
+            "contact_person": getattr(r, "contact_person", None) or "",
             "customer": cust.name if cust else "—",
             "customer_id": r.customer_id or 0,
             "customer_contact": (cust.contact if cust else "") or "",
@@ -1273,22 +1275,44 @@ def po_work_options():
         s.close()
 
 
+_IMAGE_MEDIA = {
+    ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+    ".webp": "image/webp", ".gif": "image/gif",
+}
+
+
+def _ocr_image_media_type(file: UploadFile) -> str | None:
+    """업로드가 이미지면 Claude 비전용 media_type 반환, 아니면 None."""
+    fname = (file.filename or "").lower()
+    for ext, mt in _IMAGE_MEDIA.items():
+        if fname.endswith(ext):
+            return mt
+    ct = (file.content_type or "").lower()
+    if ct.startswith("image/") and ct in _IMAGE_MEDIA.values():
+        return ct
+    return None
+
+
 @app.post("/api/admin/ocr/rfq", dependencies=[Depends(require_token)])
 def ocr_rfq_pdf(file: UploadFile = File(...)):
-    """Customer RFQ PDF OCR — Streamlit 'PDF로 자동 입력'과 동일 파서."""
-    if not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="PDF 파일만 업로드할 수 있습니다.")
+    """Customer RFQ 자동 입력 — PDF(텍스트 추출) 또는 이미지/캡쳐(Claude 비전) 지원."""
     s = get_session()
     try:
         customer_names = [c.name for c in s.query(Customer).order_by(Customer.name).all()]
     finally:
         s.close()
+    fname = (file.filename or "").lower()
+    img_media = _ocr_image_media_type(file)
     try:
         file.file.seek(0)
-        raw_text = extract_text_from_pdf(file.file)
-        if not raw_text:
-            raise HTTPException(status_code=400, detail="PDF에서 텍스트를 추출할 수 없습니다.")
-        return parse_rfq_fields(raw_text, customer_names)
+        if img_media:
+            return parse_rfq_image(file.file.read(), img_media, customer_names)
+        if fname.endswith(".pdf"):
+            raw_text = extract_text_from_pdf(file.file)
+            if not raw_text:
+                raise HTTPException(status_code=400, detail="PDF에서 텍스트를 추출할 수 없습니다.")
+            return parse_rfq_fields(raw_text, customer_names)
+        raise HTTPException(status_code=400, detail="PDF 또는 이미지(PNG·JPG·WEBP) 파일만 업로드할 수 있습니다.")
     except HTTPException:
         raise
     except Exception as exc:
@@ -1297,20 +1321,24 @@ def ocr_rfq_pdf(file: UploadFile = File(...)):
 
 @app.post("/api/admin/ocr/order", dependencies=[Depends(require_token)])
 def ocr_order_pdf(file: UploadFile = File(...)):
-    """Customer P/O PDF OCR — Streamlit '오더 PDF 자동 입력'과 동일 파서."""
-    if not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="PDF 파일만 업로드할 수 있습니다.")
+    """Customer P/O 자동 입력 — PDF 또는 이미지/캡쳐 지원."""
     s = get_session()
     try:
         customer_names = [c.name for c in s.query(Customer).order_by(Customer.name).all()]
     finally:
         s.close()
+    fname = (file.filename or "").lower()
+    img_media = _ocr_image_media_type(file)
     try:
         file.file.seek(0)
-        raw_text = extract_text_from_pdf(file.file)
-        if not raw_text:
-            raise HTTPException(status_code=400, detail="PDF에서 텍스트를 추출할 수 없습니다.")
-        return parse_order_fields(raw_text, customer_names)
+        if img_media:
+            return parse_order_image(file.file.read(), img_media, customer_names)
+        if fname.endswith(".pdf"):
+            raw_text = extract_text_from_pdf(file.file)
+            if not raw_text:
+                raise HTTPException(status_code=400, detail="PDF에서 텍스트를 추출할 수 없습니다.")
+            return parse_order_fields(raw_text, customer_names)
+        raise HTTPException(status_code=400, detail="PDF 또는 이미지(PNG·JPG·WEBP) 파일만 업로드할 수 있습니다.")
     except HTTPException:
         raise
     except Exception as exc:
@@ -2458,7 +2486,7 @@ def vendor_po_overview():
 def customers():
     s = get_session()
     try:
-        return [{"id": c.id, "name": c.name}
+        return [{"id": c.id, "name": c.name, "contact": c.contact or ""}
                 for c in s.query(Customer).order_by(Customer.name).all()]
     finally:
         s.close()
@@ -3326,6 +3354,7 @@ class RfqCreate(BaseModel):
     customer_id: int
     vessel_id: int | None = None
     customer_rfq_no: str | None = ""
+    contact_person: str | None = ""    # 고객 담당자
     rfq_no: str | None = None          # K-Maris RFQ No. 수동 지정(비우면 자동 채번)
     received_at: str | None = None     # RFQ 수신 일시 "YYYY-MM-DDTHH:MM"(비우면 현재)
     project_title: str | None = ""
@@ -3365,6 +3394,7 @@ def create_rfq(body: RfqCreate):
         rfq = RFQ(
             rfq_no=rfq_no,
             customer_rfq_no=(body.customer_rfq_no or "").strip() or None,
+            contact_person=(body.contact_person or "").strip() or None,
             project_title=(body.project_title or "").strip() or None,
             work_type=work_type,
             customer_id=cust.id,
@@ -3406,6 +3436,7 @@ class RfqUpdate(BaseModel):
     customer_id: int | None = None
     vessel_id: int | None = None        # 0 → 선박 미지정으로 해제
     customer_rfq_no: str | None = None
+    contact_person: str | None = None
     project_title: str | None = None
     work_type: str | None = None
     received_at: str | None = None      # "YYYY-MM-DDTHH:MM"
@@ -3437,6 +3468,8 @@ def update_rfq(rfq_id: int, body: RfqUpdate):
                 rfq.vessel_id = body.vessel_id
         if body.customer_rfq_no is not None:
             rfq.customer_rfq_no = body.customer_rfq_no.strip() or None
+        if body.contact_person is not None:
+            rfq.contact_person = body.contact_person.strip() or None
         if body.project_title is not None:
             rfq.project_title = body.project_title.strip() or None
         if body.work_type is not None:

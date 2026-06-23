@@ -25,7 +25,7 @@ export type RfqOverview = {
   rows: RfqRow[];
 };
 
-export type CustomerOption = { id: number; name: string };
+export type CustomerOption = { id: number; name: string; contact?: string };
 
 export type SettingsCustomer = {
   id: number;
@@ -179,6 +179,7 @@ export type RfqOcrResult = {
   rfq_date?: string | null;
   customer_rfq_no?: string | null;
   customer_hint?: string | null;
+  contact_person?: string | null;
   notes?: string | null;
   items?: {
     part_no?: string;
@@ -619,6 +620,7 @@ export type RfqDetail = {
   customer_rfq_no: string;
   customer: string;
   customer_id: number;
+  contact_person: string;
   customer_contact: string;
   customer_email: string;
   vessel: string;

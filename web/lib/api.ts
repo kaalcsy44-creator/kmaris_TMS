@@ -125,6 +125,7 @@ export function createRfq(body: {
   customer_id: number;
   vessel_id?: number;
   customer_rfq_no?: string;
+  contact_person?: string;
   rfq_no?: string;
   received_at?: string;
   project_title?: string;
@@ -140,6 +141,7 @@ export function updateRfq(
     customer_id?: number;
     vessel_id?: number;
     customer_rfq_no?: string;
+    contact_person?: string;
     project_title?: string;
     work_type?: string;
     received_at?: string;

@@ -39,6 +39,7 @@ export default function NewRfqForm({
   const [customerId, setCustomerId] = useState<number | "">("");
   const [vesselId, setVesselId] = useState<number | "">("");
   const [custRfqNo, setCustRfqNo] = useState("");
+  const [contactPerson, setContactPerson] = useState("");
   const [projectTitle, setProjectTitle] = useState("");
   const [workType, setWorkType] = useState("부품공급");
   const [receivedAt, setReceivedAt] = useState(nowLocal());
@@ -106,6 +107,22 @@ export default function NewRfqForm({
     });
   }
 
+  // 캡쳐본 붙여넣기(Ctrl+V) → 이미지면 바로 OCR
+  function handlePaste(e: React.ClipboardEvent) {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const it of Array.from(items)) {
+      if (it.type.startsWith("image/")) {
+        const blob = it.getAsFile();
+        if (blob) {
+          e.preventDefault();
+          uploadOcr(blob);
+        }
+        return;
+      }
+    }
+  }
+
   async function uploadOcr(file: File | null) {
     if (!file) return;
     setOcrBusy(true);
@@ -120,6 +137,9 @@ export default function NewRfqForm({
       if (cust) setCustomerId(cust.id);
       if (vessel) setVesselId(vessel.id);
       if (r.customer_rfq_no) setCustRfqNo(r.customer_rfq_no);
+      // 담당자: OCR 추출값 우선, 없으면 매칭된 Customer의 담당자
+      if (r.contact_person) setContactPerson(r.contact_person);
+      else if (cust?.contact) setContactPerson(cust.contact);
       if (r.items?.length) {
         setItems(
           r.items.map((it) => ({
@@ -146,6 +166,7 @@ export default function NewRfqForm({
     setCustomerId("");
     setVesselId("");
     setCustRfqNo("");
+    setContactPerson("");
     setProjectTitle("");
     setWorkType("부품공급");
     setReceivedAt(nowLocal());
@@ -165,6 +186,7 @@ export default function NewRfqForm({
       setCustomerId(d.customer_id || "");
       setVesselId(d.vessel_id || "");
       setCustRfqNo(d.customer_rfq_no || "");
+      setContactPerson(d.contact_person || "");
       setProjectTitle(d.project_title || "");
       setWorkType(d.work_type || "부품공급");
       setReceivedAt(d.received_at || nowLocal());
@@ -205,6 +227,7 @@ export default function NewRfqForm({
           customer_id: customerId,
           vessel_id: vesselId === "" ? 0 : vesselId,
           customer_rfq_no: custRfqNo,
+          contact_person: contactPerson,
           received_at: receivedAt || undefined,
           project_title: projectTitle,
           work_type: workType,
@@ -217,6 +240,7 @@ export default function NewRfqForm({
           customer_id: customerId,
           vessel_id: vesselId === "" ? undefined : vesselId,
           customer_rfq_no: custRfqNo,
+          contact_person: contactPerson,
           received_at: receivedAt || undefined,
           project_title: projectTitle,
           work_type: workType,
@@ -234,7 +258,7 @@ export default function NewRfqForm({
   }
 
   return (
-    <div className="panel form-panel">
+    <div className="panel form-panel" onPaste={handlePaste}>
       <div className="rfq-mode-bar">
         {editId ? (
           <>
@@ -265,10 +289,10 @@ export default function NewRfqForm({
         )}
       </div>
       <div className="ocr-bar">
-        <span className="ocr-bar-label">📄 RFQ PDF 자동 입력</span>
+        <span className="ocr-bar-label">📄 RFQ 자동 입력 (PDF·이미지)</span>
         <input
           type="file"
-          accept="application/pdf"
+          accept="application/pdf,image/png,image/jpeg,image/webp"
           onChange={(e) => uploadOcr(e.target.files?.[0] ?? null)}
           disabled={ocrBusy}
         />
@@ -277,7 +301,7 @@ export default function NewRfqForm({
         ) : ocrMsg ? (
           <span className="action-ok">{ocrMsg}</span>
         ) : (
-          <span className="hint-inline">업로드하면 Customer·선박·품목을 자동 입력</span>
+          <span className="hint-inline">PDF·이미지 업로드 또는 캡쳐 후 Ctrl+V 붙여넣기 → 자동 입력</span>
         )}
       </div>
 
@@ -329,17 +353,29 @@ export default function NewRfqForm({
         <Field label="Customer *">
           <select
             value={customerId}
-            onChange={(e) =>
-              setCustomerId(e.target.value === "" ? "" : Number(e.target.value))
-            }
+            onChange={(e) => {
+              const id = e.target.value === "" ? "" : Number(e.target.value);
+              setCustomerId(id);
+              // 선택한 Customer의 담당자를 함께 채운다(있으면).
+              const c = id === "" ? undefined : customers.find((x) => x.id === id);
+              if (c?.contact) setContactPerson(c.contact);
+            }}
           >
             <option value="">선택…</option>
             {customers.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
+                {c.contact ? ` — ${c.contact}` : ""}
               </option>
             ))}
           </select>
+        </Field>
+        <Field label="고객 담당자">
+          <input
+            value={contactPerson}
+            onChange={(e) => setContactPerson(e.target.value)}
+            placeholder="담당자 이름·직책(선택)"
+          />
         </Field>
         <Field label="선박">
           <select
