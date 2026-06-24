@@ -11,6 +11,7 @@ Auth:         send  Authorization: Bearer <ADMIN_API_TOKEN>
 """
 from __future__ import annotations
 
+import io
 import os
 import secrets
 import sys
@@ -42,6 +43,7 @@ from services.pdf_svc import (
 from services.pdf_parser import (
     extract_text_from_pdf, parse_order_fields, parse_rfq_fields,
     parse_rfq_image, parse_order_image,
+    parse_vendor_quote_text, parse_vendor_quote_image,
 )
 from services.vendor_xlsx import make_vendor_rfq_quote_xlsx
 from services.quote_response_parser import parse_vendor_quote_bytes
@@ -1878,6 +1880,7 @@ def quotation_overview(customer_id: int | None = None):
             stage = _pipeline_stage(s, qt.rfq_id) if qt.rfq_id else 0
             rows.append({
                 "id": qt.id,
+                "rfq_id": qt.rfq_id,
                 "qtn_no": qt.qtn_no,
                 "rfq_no": rfq_nos.get(qt.rfq_id, "") if qt.rfq_id else "",
                 "customer": cust_names.get(qt.customer_id, "—"),
@@ -1915,6 +1918,7 @@ def vrfq_overview():
         for vr in s.query(VendorRFQ).order_by(VendorRFQ.id.desc()).all():
             rows.append({
                 "id": vr.id,
+                "rfq_id": vr.rfq_id,
                 "vrfq_no": vr.vrfq_no,
                 "customer_rfq_no": rfq_nos.get(vr.rfq_id, "—"),
                 "vendor": vendor_names.get(vr.vendor_id, "—"),
@@ -1923,6 +1927,44 @@ def vrfq_overview():
                 "status": vr.status or "",
                 "item_count": len(vr.items or []),
                 "quote_count": quote_counts.get(vr.id, 0),
+            })
+        return {"rows": rows}
+    finally:
+        s.close()
+
+
+@app.get("/api/admin/vendor-quote-overview", dependencies=[Depends(require_token)])
+def vendor_quote_overview():
+    """Vendor Quote 수신 내역 — VendorQuote 1건당 1행(전체 프로젝트)."""
+    s = get_session()
+    try:
+        vendor_names = {v.id: v.name for v in s.query(Vendor).all()}
+        rfq_nos = {r.id: _rfq_no_disp(r.rfq_no) for r in s.query(RFQ).all()}
+        # vendor_rfq_id → (rfq_id, vendor_id, vrfq_no)
+        vrfq_map = {vr.id: vr for vr in s.query(VendorRFQ).all()}
+
+        rows = []
+        for q in s.query(VendorQuote).order_by(VendorQuote.id.desc()).all():
+            vr = vrfq_map.get(q.vendor_rfq_id)
+            items = q.items or []
+            amount = 0.0
+            for it in items:
+                amt = it.get("amount")
+                if amt is None:
+                    amt = float(it.get("cost_price", 0) or 0) * float(it.get("qty", 1) or 1)
+                amount += float(amt or 0)
+            rows.append({
+                "id": q.id,
+                "rfq_id": vr.rfq_id if vr else None,
+                "vendor_quote_no": getattr(q, "vendor_quote_no", None) or "—",
+                "vrfq_no": vr.vrfq_no if vr else "—",
+                "customer_rfq_no": rfq_nos.get(vr.rfq_id, "—") if vr else "—",
+                "vendor": vendor_names.get(vr.vendor_id, "—") if vr else "—",
+                "received_at": getattr(q, "received_at", None) or "",
+                "received_date": q.received_date or "",
+                "item_count": len(items),
+                "amount": round(amount, 2),
+                "currency": getattr(q, "currency", None) or "USD",
             })
         return {"rows": rows}
     finally:
@@ -3216,20 +3258,47 @@ class VendorQuoteCreate(BaseModel):
     vendor_quote_no: str
     amount: float | None = None
     received_date: str | None = None
+    received_at: str | None = None     # 견적 수신 일시 "YYYY-MM-DDTHH:MM"(비우면 현재)
     notes: str = ""
     items: list[dict] | None = None
 
 
 @app.post("/api/admin/vendor-quote-parse", dependencies=[Depends(require_token)])
 def vendor_quote_parse(file: UploadFile = File(...)):
-    """Vendor 견적 응답 파일(PDF/XLSX) 파싱."""
+    """Vendor 견적 응답 파일(PDF/Excel/이미지) → 품목 리스트 자동 추출.
+
+    정형 양식(KTMS 견적요청 시트)은 표 파서로 먼저 시도하고, 비정형 PDF는
+    Claude 텍스트 파서로, 이미지/캡쳐는 Claude 비전으로 추출한다.
+    """
     name = file.filename or ""
-    if not name.lower().endswith((".pdf", ".xlsx", ".xls")):
-        raise HTTPException(status_code=400, detail="PDF 또는 Excel 파일만 업로드할 수 있습니다.")
+    lower = name.lower()
+    img_media = _ocr_image_media_type(file)
     try:
+        file.file.seek(0)
         raw = file.file.read()
-        items = parse_vendor_quote_bytes(raw, name)
-        return {"items": items}
+
+        # 1) 이미지/캡쳐 → Claude 비전
+        if img_media:
+            return parse_vendor_quote_image(raw, img_media)
+
+        # 2) Excel/정형 PDF → 표 파서 우선
+        if lower.endswith((".xlsx", ".xls", ".pdf")):
+            items = parse_vendor_quote_bytes(raw, name)
+            if items:
+                return {"items": items}
+            # 3) 비정형 PDF → Claude 텍스트 파서로 폴백
+            if lower.endswith(".pdf"):
+                text = extract_text_from_pdf(io.BytesIO(raw))
+                if text:
+                    return parse_vendor_quote_text(text)
+            return {"items": []}
+
+        raise HTTPException(
+            status_code=400,
+            detail="PDF·Excel 또는 이미지(PNG·JPG·WEBP) 파일만 업로드할 수 있습니다.",
+        )
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Vendor 견적 파싱 실패: {exc}") from exc
 
@@ -3251,10 +3320,16 @@ def create_vendor_quote(rfq_id: int, body: VendorQuoteCreate):
             amount = float(body.amount or 0)
             items = [{"cost_price": amount, "qty": 1, "amount": amount}]
 
+        # 수신 일시: 수동 입력(received_at) 우선, 없으면 날짜만, 둘 다 없으면 현재(KST)
+        received_at = (body.received_at or "").strip()
+        if not received_at:
+            received_at = _date_iso(body.received_date) or _kst_iso(datetime.utcnow())
+
         vq = VendorQuote(
             vendor_rfq_id=vrfq.id,
             vendor_quote_no=body.vendor_quote_no.strip(),
-            received_date=body.received_date or date.today().strftime("%Y-%m-%d"),
+            received_date=received_at[:10],
+            received_at=received_at,
             items=items,
             notes=body.notes or "",
         )
@@ -3291,6 +3366,7 @@ def rfq_vendor_quotes(rfq_id: int):
                 "vendor": vendor_names.get(vrfq.vendor_id, "—") if vrfq else "—",
                 "vrfq_no": vrfq.vrfq_no if vrfq else "—",
                 "received_date": q.received_date or "",
+                "received_at": getattr(q, "received_at", None) or "",
                 "currency": getattr(q, "currency", None) or "USD",
                 "items": q.items or [],
             })

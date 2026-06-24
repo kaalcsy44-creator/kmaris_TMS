@@ -83,20 +83,32 @@ def _parse_response(raw: str) -> dict:
     )
 
 
+def _secret_from_toml(key: str) -> str:
+    """로컬 ktms/secrets.toml에서 키를 직접 읽는다(env var 미설정 로컬 dev 대비)."""
+    try:
+        import tomllib  # Python 3.11+
+    except ModuleNotFoundError:
+        return ""
+    # services/pdf_parser.py → ktms/secrets.toml
+    path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "secrets.toml")
+    try:
+        with open(path, "rb") as fh:
+            return str(tomllib.load(fh).get(key, "") or "")
+    except (OSError, ValueError):
+        return ""
+
+
 def _anthropic_client():
-    """Build an Anthropic client from env or Streamlit secrets."""
+    """Build an Anthropic client. Key resolution order:
+    1) ANTHROPIC_API_KEY env var (production / Render)
+    2) local secrets.toml read directly (local FastAPI dev)
+    """
     import anthropic
 
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-    if not api_key:
-        try:
-            import streamlit as st
-            api_key = st.secrets.get("ANTHROPIC_API_KEY", "")
-        except Exception:
-            pass
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "") or _secret_from_toml("ANTHROPIC_API_KEY")
     if not api_key:
         raise ValueError(
-            "ANTHROPIC_API_KEY가 설정되지 않았습니다. ktms/.streamlit/secrets.toml을 확인하세요."
+            "ANTHROPIC_API_KEY가 설정되지 않았습니다. 환경변수 또는 ktms/secrets.toml을 확인하세요."
         )
     return anthropic.Anthropic(api_key=api_key)
 
@@ -204,6 +216,54 @@ Output ONLY a single-line compact JSON object (no newlines, no markdown).{_custo
 
 JSON schema (all strings on one line; dates as YYYY-MM-DD or null):
 {_ORDER_SCHEMA}"""
+    return _parse_image(image_bytes, media_type, prompt)
+
+
+_VQ_SCHEMA = """{
+  "items": [
+    {"part_no":string,"description":string,"maker":string,"origin":string,"qty":number,"unit":string,"cost_price":number,"lead_time":string,"remark":string}
+  ]
+}"""
+
+_VQ_INSTRUCTIONS = (
+    "Extract the quoted line items from a vendor's quotation. "
+    "For each item capture: part_no (part/model number), description (item name), "
+    "maker (manufacturer/brand), origin (country of origin), qty (quantity, default 1), "
+    "unit (e.g. PCS/SET, default PCS), cost_price (unit price as a number, no currency "
+    "symbols or thousands separators; 0 if missing), lead_time (delivery lead time text), "
+    "remark (technical remarks or alternatives). Use empty string for missing text fields "
+    "and 0 for missing numbers. Do NOT invent rows that are not in the document."
+)
+
+
+def parse_vendor_quote_text(text: str) -> dict:
+    """Vendor 견적 PDF 텍스트에서 품목 리스트를 Claude로 추출."""
+    client = _anthropic_client()
+    clean_text = _sanitize_text(text)[:8000]
+    prompt = f"""{_VQ_INSTRUCTIONS}
+Output ONLY a single-line compact JSON object (no newlines, no markdown).
+
+JSON schema (all strings on one line, no embedded newlines):
+{_VQ_SCHEMA}
+
+Document:
+{clean_text}"""
+    response = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=4096,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    return _parse_response(response.content[0].text)
+
+
+def parse_vendor_quote_image(image_bytes: bytes, media_type: str) -> dict:
+    """Vendor 견적 이미지(스크린샷/사진)에서 품목 리스트를 Claude 비전으로 추출."""
+    prompt = f"""{_VQ_INSTRUCTIONS}
+The attached file is a screenshot or photo of a vendor quotation.
+Output ONLY a single-line compact JSON object (no newlines, no markdown).
+
+JSON schema (all strings on one line, no embedded newlines):
+{_VQ_SCHEMA}"""
     return _parse_image(image_bytes, media_type, prompt)
 
 

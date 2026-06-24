@@ -184,6 +184,7 @@ class VendorQuote(Base):
     vendor_rfq_id   = Column(Integer, ForeignKey("vendor_rfqs.id"))
     vendor_quote_no = Column(String(100))   # 수신된 Vendor 고유 견적번호
     received_date   = Column(String(10))
+    received_at     = Column(String(16))    # 견적 수신 일시 "YYYY-MM-DDTHH:MM"
     items         = Column(JSON, default=list)
     notes         = Column(Text)
     created_at    = Column(DateTime, default=datetime.utcnow)

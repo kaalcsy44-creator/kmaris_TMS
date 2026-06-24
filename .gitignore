@@ -25,9 +25,9 @@ Thumbs.db
 .vscode/
 .idea/
 
-# Streamlit
-.streamlit/secrets.toml
-ktms/.streamlit/secrets.toml
+# Local secrets (API keys / SMTP) — never commit
+ktms/secrets.toml
+secrets.toml
 
 # Google Service Account keys (절대 커밋 금지)
 ktms/config/*.json
@@ -40,5 +40,5 @@ ktms/config/
 # root-level .next created by accidentally running next build from repo root)
 /.next/
 
-# Stray source assets at repo root (app uses ktms/app/assets/kmaris_emblem.png)
+# Stray source asset at repo root
 /logo_K-maris.png

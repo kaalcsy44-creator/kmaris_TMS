@@ -24,7 +24,11 @@ function Cell({ main, sub, num }: { main: string; sub?: string; num?: boolean })
   );
 }
 
-export default function QuotationScreen() {
+export default function QuotationScreen({
+  onSelect,
+}: {
+  onSelect?: (rfqId: number) => void;
+}) {
   const [rows, setRows] = useState<QtnRow[]>([]);
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
   const [customerId, setCustomerId] = useState<number | "">("");
@@ -97,7 +101,9 @@ export default function QuotationScreen() {
           새로고침
         </button>
         <span className="hint-inline" style={{ marginLeft: "auto" }}>
-          견적 신규 작성·발송은 RFQ 탭의 Customer Quote 액션에서 진행합니다.
+          {onSelect
+            ? "행을 클릭하면 해당 프로젝트의 작업 화면으로 이동합니다."
+            : "견적 신규 작성·발송은 RFQ 탭의 Customer Quote 액션에서 진행합니다."}
         </span>
       </div>
 
@@ -125,7 +131,13 @@ export default function QuotationScreen() {
             </thead>
             <tbody>
               {filtered.map((r) => (
-                <tr key={r.id}>
+                <tr
+                  key={r.id}
+                  onClick={
+                    onSelect && r.rfq_id ? () => onSelect(r.rfq_id!) : undefined
+                  }
+                  style={onSelect && r.rfq_id ? { cursor: "pointer" } : undefined}
+                >
                   <Cell
                     main={r.qtn_no}
                     sub={r.sent_date ? `발신: ${r.sent_date}` : undefined}

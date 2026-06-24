@@ -319,18 +319,34 @@ export type QuotationTerms = {
 };
 
 // Customer Quotation 작성 시 공급사 견적에서 cost 불러오기용
+export type VendorQuoteOverviewRow = {
+  id: number;
+  rfq_id: number | null;
+  vendor_quote_no: string;
+  vrfq_no: string;
+  customer_rfq_no: string;
+  vendor: string;
+  received_at: string;
+  received_date: string;
+  item_count: number;
+  amount: number;
+  currency: string;
+};
+
 export type VendorQuoteForImport = {
   id: number;
   vendor_quote_no: string;
   vendor: string;
   vrfq_no: string;
   received_date: string;
+  received_at?: string;
   currency: string;
   items: VendorQuoteItem[];
 };
 
 export type QtnRow = {
   id: number;
+  rfq_id: number | null;
   qtn_no: string;
   rfq_no: string;
   customer: string;
@@ -349,6 +365,7 @@ export type QtnRow = {
 
 export type VrfqRow = {
   id: number;
+  rfq_id: number | null;
   vrfq_no: string;
   customer_rfq_no: string;
   vendor: string;

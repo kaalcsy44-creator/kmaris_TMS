@@ -1,8 +1,22 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { fetchVrfqOverview } from "@/lib/api";
-import type { VrfqRow } from "@/lib/types";
+import { fetchVendorQuoteOverview } from "@/lib/api";
+import type { VendorQuoteOverviewRow } from "@/lib/types";
+
+function money(n: number) {
+  return n.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+/** "YYYY-MM-DDTHH:MM" → "YY-MM-DD HH:MM" (없으면 received_date). */
+function fmtReceived(r: VendorQuoteOverviewRow): string {
+  const iso = r.received_at;
+  if (iso && iso.length >= 16) return `${iso.slice(2, 10)} ${iso.slice(11, 16)}`;
+  return r.received_date || "—";
+}
 
 function Cell({ main, sub, num }: { main: string; sub?: string; num?: boolean }) {
   const empty = !main || main === "—";
@@ -14,19 +28,19 @@ function Cell({ main, sub, num }: { main: string; sub?: string; num?: boolean })
   );
 }
 
-export default function VrfqScreen({
+export default function VendorQuoteScreen({
   onSelect,
 }: {
   onSelect?: (rfqId: number) => void;
 }) {
-  const [rows, setRows] = useState<VrfqRow[]>([]);
+  const [rows, setRows] = useState<VendorQuoteOverviewRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   function load() {
     setLoading(true);
     setError(null);
-    fetchVrfqOverview()
+    fetchVendorQuoteOverview()
       .then((d) => setRows(d.rows))
       .catch((e) => setError(e instanceof Error ? e.message : "오류"))
       .finally(() => setLoading(false));
@@ -41,7 +55,7 @@ export default function VrfqScreen({
           새로고침
         </button>
         <span className="hint-inline">
-          Vendor RFQ 발신 내역(전체)
+          Vendor 견적 수신 내역(전체)
           {onSelect ? " — 행을 클릭하면 해당 프로젝트의 작업 화면으로 이동합니다." : "."}
         </span>
       </div>
@@ -51,20 +65,19 @@ export default function VrfqScreen({
       ) : error ? (
         <div className="state error">API 오류: {error}</div>
       ) : rows.length === 0 ? (
-        <div className="state">발송된 Vendor RFQ가 없습니다.</div>
+        <div className="state">수신된 Vendor 견적이 없습니다.</div>
       ) : (
         <div className="table-wrap">
           <table className="rfq">
             <thead>
               <tr>
+                <th>수신일시</th>
+                <th>Vendor 견적번호</th>
+                <th>Vendor</th>
                 <th>VRFQ No.</th>
                 <th>고객 RFQ No.</th>
-                <th>Vendor</th>
-                <th>수신자 이메일</th>
-                <th>발송일</th>
                 <th className="num">품목수</th>
-                <th className="num">수신 견적</th>
-                <th>상태</th>
+                <th className="num">금액</th>
               </tr>
             </thead>
             <tbody>
@@ -76,16 +89,13 @@ export default function VrfqScreen({
                   }
                   style={onSelect && r.rfq_id ? { cursor: "pointer" } : undefined}
                 >
+                  <Cell main={fmtReceived(r)} />
+                  <Cell main={r.vendor_quote_no} />
+                  <Cell main={r.vendor} />
                   <Cell main={r.vrfq_no} />
                   <Cell main={r.customer_rfq_no} />
-                  <Cell main={r.vendor} />
-                  <Cell main={r.vendor_email} />
-                  <Cell main={r.sent_date} />
                   <Cell main={String(r.item_count)} num />
-                  <Cell main={`${r.quote_count}건`} num />
-                  <td className="cell">
-                    <span className="ar-badge">{r.status}</span>
-                  </td>
+                  <Cell main={`${r.currency} ${money(r.amount)}`} num />
                 </tr>
               ))}
             </tbody>

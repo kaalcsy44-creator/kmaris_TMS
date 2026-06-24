@@ -18,6 +18,7 @@ import type {
   CustomerQuoteItem,
   QuotationTerms,
   VendorQuoteForImport,
+  VendorQuoteOverviewRow,
   DocumentDetail,
   DocumentWorkItem,
   QtnRow,
@@ -289,6 +290,14 @@ export function fetchQuotationOverview(customerId?: number): Promise<{ rows: Qtn
 
 export function fetchVrfqOverview(): Promise<{ rows: VrfqRow[] }> {
   return get<{ rows: VrfqRow[] }>("/api/admin/vrfq-overview");
+}
+
+export function fetchVendorQuoteOverview(): Promise<{
+  rows: VendorQuoteOverviewRow[];
+}> {
+  return get<{ rows: VendorQuoteOverviewRow[] }>(
+    "/api/admin/vendor-quote-overview"
+  );
 }
 
 export function fetchDocumentsOverview(): Promise<{ rows: DocRow[] }> {
@@ -599,7 +608,7 @@ export function createVendorQuote(
   vendorQuoteNo: string,
   amount: number,
   items?: VendorQuoteItem[],
-  receivedDate?: string,
+  receivedAt?: string,
   notes?: string
 ): Promise<{ ok: boolean; vendor_quote_no: string }> {
   return post(`/api/admin/rfq/${rfqId}/vendor-quote`, {
@@ -607,7 +616,7 @@ export function createVendorQuote(
     vendor_quote_no: vendorQuoteNo,
     amount,
     items,
-    received_date: receivedDate,
+    received_at: receivedAt,
     notes,
   });
 }

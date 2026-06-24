@@ -30,6 +30,9 @@ import type {
 } from "@/lib/types";
 import NewRfqForm from "./screens/NewRfqForm";
 import RfqTable from "./RfqTable";
+import VrfqScreen from "./screens/VrfqScreen";
+import VendorQuoteScreen from "./screens/VendorQuoteScreen";
+import QuotationScreen from "./screens/QuotationScreen";
 
 /** 현재 시각 "YYYY-MM-DDTHH:MM" (datetime-local 기본값). */
 function nowLocalDt(): string {
@@ -60,6 +63,8 @@ export default function RfqActionTabs({
   onChanged: () => void;
 }) {
   const [tab, setTab] = useState("new");
+  // 2·3·4번 탭 내부 세그먼트: 작업(work) / 목록(list)
+  const [sub, setSub] = useState<"work" | "list">("work");
   const [vendors, setVendors] = useState<VendorOption[]>([]);
   const [vendorRfqs, setVendorRfqs] = useState<RfqDetailT["vendor_rfqs"]>([]);
 
@@ -87,6 +92,18 @@ export default function RfqActionTabs({
     reloadVrfqs();
   };
 
+  // 메인 탭 변경 시 세그먼트는 항상 '신규 등록'으로 초기화
+  function changeTab(key: string) {
+    setTab(key);
+    setSub("work");
+  }
+
+  // 목록 행 클릭 → 해당 프로젝트 선택 + '신규 등록' 화면으로 드릴인
+  function drillIn(id: number) {
+    onSelect(id);
+    setSub("work");
+  }
+
   return (
     <div className="action-tabs">
       <div className="page-tabs">
@@ -94,47 +111,75 @@ export default function RfqActionTabs({
           <button
             key={t.key}
             className={tab === t.key ? "on" : ""}
-            onClick={() => setTab(t.key)}
+            onClick={() => changeTab(t.key)}
           >
             {t.label}
           </button>
         ))}
       </div>
 
-      <ProjectSelect rows={rows} rfqId={rfqId} onSelect={onSelect} />
+      {/* 모든 탭 공통: 메인 탭 바로 아래 세그먼트(신규 등록 / 목록) */}
+      <div className="seg-tabs">
+        <button className={sub === "work" ? "on" : ""} onClick={() => setSub("work")}>
+          신규 등록
+        </button>
+        <button className={sub === "list" ? "on" : ""} onClick={() => setSub("list")}>
+          {tab === "vrfq" || tab === "cquote" ? "발신 목록" : "수신 목록"}
+        </button>
+      </div>
 
-      {tab === "new" ? (
-        <CustomerRfqReceive
-          rows={rows}
-          rfqId={rfqId}
-          onSelect={onSelect}
-          onChanged={onChanged}
-        />
-      ) : rfqId === null ? (
+      {sub === "list" ? (
         <div className="panel">
-          <div className="empty">상단에서 진행중인 프로젝트를 먼저 선택하세요.</div>
+          {tab === "new" &&
+            (rows.length === 0 ? (
+              <div className="empty">등록된 RFQ가 없습니다.</div>
+            ) : (
+              <RfqTable
+                rows={rows}
+                selectedId={rfqId}
+                onSelect={(id) => {
+                  onSelect(id);
+                  if (id !== null) setSub("work");
+                }}
+              />
+            ))}
+          {tab === "vrfq" && <VrfqScreen onSelect={drillIn} />}
+          {tab === "vquote" && <VendorQuoteScreen onSelect={drillIn} />}
+          {tab === "cquote" && <QuotationScreen onSelect={drillIn} />}
         </div>
       ) : (
-        <div className="panel action-panel">
-          {tab === "vrfq" && (
-            <VendorRfqAction
-              rfqId={rfqId}
-              vendors={vendors}
-              kmarisNo={rows.find((r) => r.id === rfqId)?.crfq_no ?? ""}
-              onDone={after}
-            />
+        <>
+          {/* '진행중인 프로젝트' 선택은 신규 등록(작업) 화면 내부에 위치 */}
+          <ProjectSelect rows={rows} rfqId={rfqId} onSelect={onSelect} />
+          {tab === "new" ? (
+            <NewRfqForm selectedRfqId={rfqId} onCreated={() => onChanged()} />
+          ) : rfqId === null ? (
+            <div className="panel">
+              <div className="empty">진행중인 프로젝트를 먼저 선택하세요.</div>
+            </div>
+          ) : (
+            <div className="panel action-panel">
+              {tab === "vrfq" && (
+                <VendorRfqAction
+                  rfqId={rfqId}
+                  vendors={vendors}
+                  kmarisNo={rows.find((r) => r.id === rfqId)?.crfq_no ?? ""}
+                  onDone={after}
+                />
+              )}
+              {tab === "vquote" && (
+                <VendorQuoteAction
+                  rfqId={rfqId}
+                  vendorRfqs={vendorRfqs}
+                  onDone={after}
+                />
+              )}
+              {tab === "cquote" && (
+                <CustomerQuoteAction rfqId={rfqId} onDone={onChanged} />
+              )}
+            </div>
           )}
-          {tab === "vquote" && (
-            <VendorQuoteAction
-              rfqId={rfqId}
-              vendorRfqs={vendorRfqs}
-              onDone={after}
-            />
-          )}
-          {tab === "cquote" && (
-            <CustomerQuoteAction rfqId={rfqId} onDone={onChanged} />
-          )}
-        </div>
+        </>
       )}
     </div>
   );
@@ -175,46 +220,6 @@ function ProjectSelect({
         <span className="hint-inline">등록된 프로젝트가 없습니다.</span>
       ) : null}
     </div>
-  );
-}
-
-// 1. Customer RFQ 수신 탭 — P/O 화면과 동일하게 "신규 등록 / RFQ 목록" 세그먼트 토글 제공.
-function CustomerRfqReceive({
-  rows,
-  rfqId,
-  onSelect,
-  onChanged,
-}: {
-  rows: RfqRow[];
-  rfqId: number | null;
-  onSelect: (id: number | null) => void;
-  onChanged: () => void;
-}) {
-  const [sub, setSub] = useState<"new" | "list">("new");
-
-  return (
-    <>
-      <div className="seg-tabs">
-        <button className={sub === "new" ? "on" : ""} onClick={() => setSub("new")}>
-          신규 등록
-        </button>
-        <button className={sub === "list" ? "on" : ""} onClick={() => setSub("list")}>
-          RFQ 목록
-        </button>
-      </div>
-      {sub === "new" ? (
-        <NewRfqForm selectedRfqId={rfqId} onCreated={() => onChanged()} />
-      ) : (
-        <div className="panel">
-          <div className="sub-h">등록된 RFQ 목록</div>
-          {rows.length === 0 ? (
-            <div className="empty">등록된 RFQ가 없습니다.</div>
-          ) : (
-            <RfqTable rows={rows} selectedId={rfqId} onSelect={onSelect} />
-          )}
-        </div>
-      )}
-    </>
   );
 }
 
@@ -506,7 +511,7 @@ function VendorQuoteAction({
 }) {
   const [vrfqId, setVrfqId] = useState<number | "">("");
   const [no, setNo] = useState("");
-  const [receivedDate, setReceivedDate] = useState(new Date().toISOString().slice(0, 10));
+  const [receivedAt, setReceivedAt] = useState(nowLocalDt());
   const [notes, setNotes] = useState("");
   const [items, setItems] = useState<VendorQuoteItem[]>([]);
   const [parseMsg, setParseMsg] = useState<string | null>(null);
@@ -534,7 +539,11 @@ function VendorQuoteAction({
       const r = await parseVendorQuoteFile(file);
       const parsed = r.items || [];
       setItems((prev) => mergeParsedItems(prev.length ? prev : [], parsed));
-      setParseMsg(`${parsed.length}개 품목의 가격·납기·원산지 추출 완료`);
+      setParseMsg(
+        parsed.length
+          ? `${parsed.length}개 품목 자동 입력 완료 — 내용을 확인·수정하세요`
+          : "품목을 추출하지 못했습니다. 직접 입력하거나 다른 파일을 시도하세요."
+      );
     } catch (e) {
       setErr(e instanceof Error ? e.message : "파일 파싱 실패");
     } finally {
@@ -559,7 +568,7 @@ function VendorQuoteAction({
         no.trim(),
         amount,
         clean,
-        receivedDate,
+        receivedAt,
         notes
       );
       setMsg(`수신 등록 완료 — ${r.vendor_quote_no}`);
@@ -567,6 +576,7 @@ function VendorQuoteAction({
       setNotes("");
       setItems([]);
       setVrfqId("");
+      setReceivedAt(nowLocalDt());
       onDone();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "등록 실패");
@@ -604,26 +614,27 @@ function VendorQuoteAction({
               <input value={no} onChange={(e) => setNo(e.target.value)} />
             </div>
             <div className="form-field">
-              <label>견적 수신일</label>
+              <label>견적 수신일시</label>
               <input
-                type="date"
-                value={receivedDate}
-                onChange={(e) => setReceivedDate(e.target.value)}
+                type="datetime-local"
+                value={receivedAt}
+                onChange={(e) => setReceivedAt(e.target.value)}
               />
             </div>
           </div>
 
           <div className="po-work-note" style={{ marginTop: 12 }}>
             <b>Vendor 견적 파일 업로드</b>
-            <span>Vendor가 반환한 PDF 또는 Excel 파일을 업로드하면 Unit Price, Lead Time, Origin 등이 자동으로 채워집니다.</span>
+            <span>Vendor가 반환한 PDF · Excel · 이미지(스크린샷/사진)를 업로드하면 품명·Part No.·Maker·Origin·Unit Price·Lead Time 등 품목 리스트가 자동으로 채워집니다.</span>
           </div>
           <div className="action-row">
             <input
               type="file"
-              accept=".pdf,.xlsx,.xls,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              accept=".pdf,.xlsx,.xls,.png,.jpg,.jpeg,.webp,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,image/*"
               disabled={busy || vrfqId === ""}
               onChange={(e) => parseFile(e.target.files?.[0] ?? null)}
             />
+            {busy ? <span className="hint-inline">분석 중…</span> : null}
             {parseMsg ? <span className="action-ok">{parseMsg}</span> : null}
           </div>
 
