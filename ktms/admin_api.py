@@ -3230,6 +3230,10 @@ def vendor_rfq_send(rfq_id: int, body: VendorRfqSendRequest):
                 items=rfq.items or [],
             )
             s.add(vrfq)
+            # 세션이 autoflush=False 이므로 명시적 flush 가 없으면 다음 Vendor 의
+            # _vrfq_no_for_rfq() 가 방금 추가한 행을 보지 못해 같은 vrfq_no 를
+            # 재발급 → UNIQUE 충돌(여러 Vendor 동시 발신 시 500)이 난다.
+            s.flush()
             saved += 1
             result_rows.append({"vendor": vendor.name, "vrfq_no": vrfq_no})
 
