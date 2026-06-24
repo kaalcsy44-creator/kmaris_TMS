@@ -24,8 +24,9 @@ if str(ROOT) not in sys.path:
 
 import bcrypt
 import jwt
-from fastapi import Depends, FastAPI, File, Header, HTTPException, Response, UploadFile
+from fastapi import Depends, FastAPI, File, Header, HTTPException, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from db.engine import get_session, get_engine
@@ -68,6 +69,35 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+def _sync_schema() -> None:
+    """배포된 DB 스키마를 모델과 동기화한다.
+
+    모델에 추가된 신규 컬럼(예: vendor_rfqs.sent_at / sent_to_email)이 운영 DB에
+    누락되면 INSERT 시 500이 나고, CORSMiddleware가 500 응답에 CORS 헤더를 붙이지
+    않아 프런트엔드에는 "Failed to fetch"로만 보인다. 시작 시 누락 컬럼을 자동
+    추가해 스키마 드리프트를 방지한다."""
+    try:
+        from db.engine import Base
+        from init_db import migrate_columns
+
+        Base.metadata.create_all(bind=get_engine())
+        migrate_columns()
+    except Exception as exc:  # 스키마 동기화 실패가 앱 기동을 막지 않도록 로그만 남긴다.
+        print(f"[WARN] startup schema sync skipped: {exc}", file=sys.stderr)
+
+
+@app.exception_handler(Exception)
+async def _unhandled_exception_handler(request: Request, exc: Exception):
+    """처리되지 않은 예외를 JSON 500으로 변환한다.
+
+    이렇게 응답으로 돌려주면 CORSMiddleware가 Access-Control-Allow-Origin 헤더를
+    붙여, 프런트엔드가 "Failed to fetch" 대신 실제 오류 메시지를 받을 수 있다."""
+    print(f"[ERROR] {request.method} {request.url.path}: {exc!r}", file=sys.stderr)
+    return JSONResponse(status_code=500, content={"detail": f"서버 오류: {exc}"})
+
 
 ADMIN_API_TOKEN = os.environ.get("ADMIN_API_TOKEN", "dev-token")
 SECRET_KEY = os.environ.get("SECRET_KEY", "dev-secret-change-me")
