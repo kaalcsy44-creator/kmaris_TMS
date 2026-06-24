@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import io
 import os
+import re
 import secrets
 import sys
 from datetime import date, datetime, timedelta, timezone
@@ -59,12 +60,22 @@ from db.models import (
 # ── App / CORS ────────────────────────────────────────────────────────────────
 app = FastAPI(title="KTMS Admin API", docs_url=None, redoc_url=None)
 
+_ALLOWED_ORIGINS = {"http://localhost:3000", "http://127.0.0.1:3000"}
+_ALLOWED_ORIGIN_RE = re.compile(r"https://.*\.vercel\.app$")
+
+
+def _allow_origin(origin: str | None) -> str | None:
+    """요청 Origin 이 허용 대상이면 그대로 돌려준다(에러 응답에 CORS 헤더용)."""
+    if not origin:
+        return None
+    if origin in _ALLOWED_ORIGINS or _ALLOWED_ORIGIN_RE.match(origin):
+        return origin
+    return None
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ],
+    allow_origins=list(_ALLOWED_ORIGINS),
     allow_origin_regex=r"https://.*\.vercel\.app",
     allow_methods=["*"],
     allow_headers=["*"],
@@ -93,10 +104,19 @@ def _sync_schema() -> None:
 async def _unhandled_exception_handler(request: Request, exc: Exception):
     """처리되지 않은 예외를 JSON 500으로 변환한다.
 
-    이렇게 응답으로 돌려주면 CORSMiddleware가 Access-Control-Allow-Origin 헤더를
-    붙여, 프런트엔드가 "Failed to fetch" 대신 실제 오류 메시지를 받을 수 있다."""
+    catch-all 예외 핸들러의 응답은 CORSMiddleware 바깥(ServerErrorMiddleware)에서
+    생성되어 Access-Control-Allow-Origin 헤더가 자동으로 붙지 않는다. 그러면
+    프런트엔드는 진짜 500 메시지 대신 "Failed to fetch"만 보게 되므로, 여기서
+    Origin 을 검증해 CORS 헤더를 직접 부착한다."""
     print(f"[ERROR] {request.method} {request.url.path}: {exc!r}", file=sys.stderr)
-    return JSONResponse(status_code=500, content={"detail": f"서버 오류: {exc}"})
+    headers = {}
+    origin = _allow_origin(request.headers.get("origin"))
+    if origin:
+        headers["Access-Control-Allow-Origin"] = origin
+        headers["Vary"] = "Origin"
+    return JSONResponse(
+        status_code=500, content={"detail": f"서버 오류: {exc}"}, headers=headers
+    )
 
 
 ADMIN_API_TOKEN = os.environ.get("ADMIN_API_TOKEN", "dev-token")
