@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   fetchVendors,
   fetchRfqDetail,
@@ -185,7 +185,36 @@ export default function RfqActionTabs({
   );
 }
 
+// 옵션 한 줄을 세그먼트별로 색·굵기를 달리해 표시한다. 기본 <select>는 옵션
+// 내부 스타일링을 지원하지 않으므로 커스텀 드롭다운(ProjectSelect)에서 쓴다.
+// RFQ번호=회색, 고객사=진하게, 선박명=기본, 프로젝트명=회색.
+function ProjectOptionLabel({ r }: { r: RfqRow }) {
+  const no = r.crfq_no || r.customer_rfq_no || `RFQ-${r.id}`;
+  const vessel = r.vessel && r.vessel !== "—" ? r.vessel : "";
+  const title = r.project_title || "";
+  return (
+    <span className="proj-label">
+      <span className="proj-no">{no}</span>
+      <span className="proj-sep"> · </span>
+      <span className="proj-cust">{r.customer}</span>
+      {vessel ? (
+        <>
+          <span className="proj-sep"> · </span>
+          <span className="proj-vessel">{vessel}</span>
+        </>
+      ) : null}
+      {title ? (
+        <>
+          <span className="proj-sep"> · </span>
+          <span className="proj-title">{title}</span>
+        </>
+      ) : null}
+    </span>
+  );
+}
+
 // 각 탭 상단에 위치하는 "진행중인 프로젝트" 셀렉터. 선택한 RFQ가 2~4번 탭의 작업 대상이 된다.
+// 세그먼트별 색 구분을 위해 기본 <select> 대신 커스텀 드롭다운으로 구현했다.
 function ProjectSelect({
   rows,
   rfqId,
@@ -195,29 +224,76 @@ function ProjectSelect({
   rfqId: number | null;
   onSelect: (id: number | null) => void;
 }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const selected = rows.find((r) => r.id === rfqId) ?? null;
+
+  useEffect(() => {
+    if (!open) return;
+    function onDoc(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
   return (
     <div className="project-select">
       <label>진행중인 프로젝트</label>
-      <select
-        value={rfqId ?? ""}
-        onChange={(e) =>
-          onSelect(e.target.value === "" ? null : Number(e.target.value))
-        }
-      >
-        <option value="">선택…</option>
-        {rows.map((r) => {
-          const no = r.crfq_no || r.customer_rfq_no || `RFQ-${r.id}`;
-          const vessel = r.vessel && r.vessel !== "—" ? ` · ${r.vessel}` : "";
-          const title = r.project_title ? ` · ${r.project_title}` : "";
-          return (
-            <option key={r.id} value={r.id}>
-              {no} · {r.customer}
-              {vessel}
-              {title}
-            </option>
-          );
-        })}
-      </select>
+      <div className="proj-combo" ref={ref}>
+        <button
+          type="button"
+          className="proj-combo-btn"
+          onClick={() => setOpen((o) => !o)}
+          aria-haspopup="listbox"
+          aria-expanded={open}
+        >
+          {selected ? (
+            <ProjectOptionLabel r={selected} />
+          ) : (
+            <span className="proj-placeholder">선택…</span>
+          )}
+          <span className="proj-caret" aria-hidden>
+            ▾
+          </span>
+        </button>
+        {open ? (
+          <ul className="proj-combo-list" role="listbox">
+            <li
+              className="proj-combo-item"
+              role="option"
+              aria-selected={rfqId === null}
+              onClick={() => {
+                onSelect(null);
+                setOpen(false);
+              }}
+            >
+              <span className="proj-placeholder">선택…</span>
+            </li>
+            {rows.map((r) => (
+              <li
+                key={r.id}
+                className={"proj-combo-item" + (r.id === rfqId ? " on" : "")}
+                role="option"
+                aria-selected={r.id === rfqId}
+                onClick={() => {
+                  onSelect(r.id);
+                  setOpen(false);
+                }}
+              >
+                <ProjectOptionLabel r={r} />
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
       {rows.length === 0 ? (
         <span className="hint-inline">등록된 프로젝트가 없습니다.</span>
       ) : null}

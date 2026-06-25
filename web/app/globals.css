@@ -277,6 +277,89 @@ body {
   border-radius: 6px;
   background: #fff;
 }
+
+/* 커스텀 드롭다운(ProjectSelect) — 옵션을 세그먼트별 색으로 구분 */
+.proj-combo {
+  position: relative;
+  min-width: 320px;
+  max-width: 100%;
+  flex: 1;
+}
+.proj-combo-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  font-size: 13px;
+  text-align: left;
+  border: 1px solid #c7d0de;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+}
+.proj-combo-btn .proj-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.proj-caret {
+  color: #8a96a8;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+.proj-combo-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  max-height: 320px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid #c7d0de;
+  border-radius: 6px;
+  box-shadow: 0 6px 20px rgba(20, 35, 65, 0.15);
+}
+.proj-combo-item {
+  padding: 7px 9px;
+  font-size: 13px;
+  border-radius: 5px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.proj-combo-item:hover {
+  background: #eef3fb;
+}
+.proj-combo-item.on {
+  background: #e1ebfb;
+}
+.proj-placeholder {
+  color: #8a96a8;
+}
+/* 세그먼트별 스타일: RFQ번호=회색, 고객사=진하게, 선박명=기본, 프로젝트명=회색 */
+.proj-no {
+  color: #8a96a8;
+}
+.proj-sep {
+  color: #c2cad8;
+}
+.proj-cust {
+  font-weight: 700;
+  color: #1f2a3d;
+}
+.proj-vessel {
+  color: #45526a;
+}
+.proj-title {
+  color: #8a96a8;
+}
 .action-ctx {
   font-size: 12.5px;
   color: #5a6b85;
