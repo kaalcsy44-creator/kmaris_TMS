@@ -1,6 +1,7 @@
 export type RfqRow = {
   id: number;
   customer_rfq_no: string;
+  project_title: string;
   work_type: string;
   customer: string;
   vessel: string;

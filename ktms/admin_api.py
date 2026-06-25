@@ -597,6 +597,7 @@ def rfq_overview(customer_id: int | None = None, work_type: str | None = None):
             rows.append({
                 "id": r.id,
                 "customer_rfq_no": r.customer_rfq_no or "",
+                "project_title": getattr(r, "project_title", None) or "",
                 "work_type": _enum_val(r.work_type) if r.work_type else "부품공급",
                 "customer": cust_names.get(r.customer_id, "—"),
                 "vessel": vessel_names.get(r.vessel_id, "") if r.vessel_id else "",

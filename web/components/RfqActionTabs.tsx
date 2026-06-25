@@ -208,10 +208,12 @@ function ProjectSelect({
         {rows.map((r) => {
           const no = r.crfq_no || r.customer_rfq_no || `RFQ-${r.id}`;
           const vessel = r.vessel && r.vessel !== "—" ? ` · ${r.vessel}` : "";
+          const title = r.project_title ? ` · ${r.project_title}` : "";
           return (
             <option key={r.id} value={r.id}>
               {no} · {r.customer}
               {vessel}
+              {title}
             </option>
           );
         })}
