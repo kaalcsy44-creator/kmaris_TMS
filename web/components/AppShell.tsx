@@ -1,62 +1,38 @@
 "use client";
 
-import { useState } from "react";
 import AuthGate from "./AuthGate";
-import Sidebar from "./Sidebar";
+import TopNav from "./TopNav";
 
 /**
- * Authed layout shell: left navy sidebar + main content area.
- * Replaces the old top `Nav`. `active` is the sidebar item key.
- * On mobile the sidebar collapses into an off-canvas drawer toggled
- * from the top bar hamburger.
+ * Authed layout shell: top navy nav bar + main content area below.
+ * `active` is the nav item key. The horizontal menu collapses into a
+ * hamburger-toggled panel on mobile.
  */
 export default function AppShell({
   active,
   children,
+  wide = false,
 }: {
   active: string;
   children: React.ReactNode;
+  wide?: boolean;
 }) {
-  const [navOpen, setNavOpen] = useState(false);
-
   return (
     <AuthGate>
       <div className="shell">
-        <header className="mobile-topbar">
-          <button
-            type="button"
-            className="mobile-burger"
-            aria-label="메뉴 열기"
-            onClick={() => setNavOpen(true)}
-          >
-            <span />
-            <span />
-            <span />
-          </button>
-          <span className="mobile-brand">
-            <span className="mark">TMS</span>
-            K-MARIS
-          </span>
-        </header>
-        <Sidebar
-          active={active}
-          open={navOpen}
-          onClose={() => setNavOpen(false)}
-        />
+        <TopNav active={active} />
         <main className="shell-main">
-          <div className="page">{children}</div>
+          <div className={`page${wide ? " page-wide" : ""}`}>{children}</div>
         </main>
       </div>
     </AuthGate>
   );
 }
 
-/** Page title header (mirrors Streamlit section_header). */
-export function SectionHead({ title, sub }: { title: string; sub?: string }) {
-  return (
-    <div className="section-head">
-      <h2>{title}</h2>
-      {sub ? <span className="sub">{sub}</span> : null}
-    </div>
-  );
+/**
+ * Page title header — 상단 네비게이션이 이미 현재 페이지를 표시하므로 제목 바는 비표시.
+ * (호출부 호환을 위해 시그니처는 유지하고 아무것도 렌더하지 않는다.)
+ */
+export function SectionHead(_props: { title: string; sub?: string }) {
+  return null;
 }

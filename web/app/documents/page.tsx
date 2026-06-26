@@ -11,6 +11,9 @@ import {
   saveTaxInvoice,
   sendShippingAdvice,
   updateDocumentMilestone,
+  uploadPod,
+  podDownloadUrl,
+  deletePod,
 } from "@/lib/api";
 import { getToken } from "@/lib/auth";
 import type { DocumentDetail, DocumentWorkItem } from "@/lib/types";
@@ -24,7 +27,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 // 전용이며, 대상 오더는 진행현황의 "문서 작업"으로 넘어온 ?order=<id> 로 선택된다.
 export default function DocumentsPage() {
   return (
-    <AppShell active="documents">
+    <AppShell active="documents" wide>
       <SectionHead title="문서 (Documents)" sub="오더별 CI · PL · SA · Tax 생성 및 발송" />
       <Suspense fallback={<div className="state">불러오는 중…</div>}>
         <DocumentsOverview />
@@ -88,6 +91,14 @@ function DocumentsOverview() {
   );
 }
 
+type StageTab = "s7" | "s8" | "s9" | "s10";
+const STAGE_TABS: { key: StageTab; label: string }[] = [
+  { key: "s7", label: "7. Delivery Readiness" },
+  { key: "s8", label: "8. Delivery arrangement" },
+  { key: "s9", label: "9. 운송 완료 · POD 수취" },
+  { key: "s10", label: "10. Tax Invoice 작성 · 대금 청구" },
+];
+
 function DocumentWorkPanel({
   orderId,
   onChanged,
@@ -96,7 +107,8 @@ function DocumentWorkPanel({
   onChanged: () => void;
 }) {
   const [data, setData] = useState<DocumentDetail | null>(null);
-  const [tab, setTab] = useState<"ci" | "pl" | "sa" | "tax">("ci");
+  const [tab, setTab] = useState<StageTab>("s7");
+  const [readyDoc, setReadyDoc] = useState<"ci" | "pl">("ci"); // 7단계 하위(CI/PL)
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -123,8 +135,8 @@ function DocumentWorkPanel({
   if (orderId === null) {
     return (
       <div className="state">
-        진행현황(내부확인용)에서 거래의 <b>문서 작업</b> 버튼으로 들어오면 해당 오더의
-        CI · PL · SA · Tax 작업이 표시됩니다.
+        진행현황(내부확인용)에서 거래의 <b>Documents</b> 버튼으로 들어오면 해당 오더의
+        7~10단계(선적 · 인도 · 세금계산서) 작업이 표시됩니다.
       </div>
     );
   }
@@ -137,26 +149,126 @@ function DocumentWorkPanel({
       {data ? (
         <>
           <div className="page-tabs">
-            {[
-              ["ci", "Commercial Invoice"],
-              ["pl", "Packing List"],
-              ["sa", "Shipping Advice"],
-              ["tax", "Tax Invoice Data"],
-            ].map(([key, label]) => (
-              <button key={key} className={tab === key ? "on" : ""} onClick={() => setTab(key as typeof tab)}>
-                {label}
+            {STAGE_TABS.map((t) => (
+              <button key={t.key} className={tab === t.key ? "on" : ""} onClick={() => setTab(t.key)}>
+                {t.label}
               </button>
             ))}
           </div>
 
-          {tab === "ci" && <CommercialInvoiceTab key={`ci-${data.order.id}-${data.ci?.id ?? 0}`} data={data} onChanged={afterChange} />}
-          {tab === "pl" && <PackingListTab key={`pl-${data.order.id}-${data.pl?.id ?? 0}`} data={data} onChanged={afterChange} />}
-          {tab === "sa" && <ShippingAdviceTab key={`sa-${data.order.id}-${data.sa?.id ?? 0}`} data={data} onChanged={afterChange} />}
-          {tab === "tax" && <TaxInvoiceTab key={`tax-${data.order.id}-${data.tax?.id ?? 0}`} data={data} onChanged={afterChange} />}
+          {tab === "s7" && (
+            <>
+              <div className="seg-tabs" style={{ marginBottom: 14 }}>
+                <button className={readyDoc === "ci" ? "on" : ""} onClick={() => setReadyDoc("ci")}>
+                  Commercial Invoice
+                </button>
+                <button className={readyDoc === "pl" ? "on" : ""} onClick={() => setReadyDoc("pl")}>
+                  Packing List
+                </button>
+              </div>
+              {readyDoc === "ci" ? (
+                <CommercialInvoiceTab key={`ci-${data.order.id}-${data.ci?.id ?? 0}`} data={data} onChanged={afterChange} />
+              ) : (
+                <PackingListTab key={`pl-${data.order.id}-${data.pl?.id ?? 0}`} data={data} onChanged={afterChange} />
+              )}
+            </>
+          )}
+          {tab === "s8" && <ShippingAdviceTab key={`sa-${data.order.id}-${data.sa?.id ?? 0}`} data={data} onChanged={afterChange} />}
+          {tab === "s9" && <PodTab key={`pod-${data.order.id}`} data={data} onChanged={afterChange} />}
+          {tab === "s10" && <TaxInvoiceTab key={`tax-${data.order.id}-${data.tax?.id ?? 0}`} data={data} onChanged={afterChange} />}
         </>
       ) : null}
     </div>
   );
+}
+
+/** 9) 운송 완료 · POD 수취 — 인도 증빙(POD) 파일 업로드/다운로드/삭제. 업로드 시 9단계 완료. */
+function PodTab({ data, onChanged }: { data: DocumentDetail; onChanged: () => void }) {
+  const pod = data.pod;
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function onPick(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      await uploadPod(data.order.id, file);
+      onChanged();
+    } catch (x) {
+      setErr(x instanceof Error ? x.message : "업로드 실패");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function download() {
+    const res = await fetch(podDownloadUrl(data.order.id), {
+      headers: getToken() ? { Authorization: `Bearer ${getToken()}` } : {},
+    });
+    if (!res.ok) {
+      setErr("다운로드 실패");
+      return;
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = pod?.filename || "POD";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function remove() {
+    if (!confirm("POD 파일을 삭제할까요? (9단계 완료가 해제됩니다)")) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      await deletePod(data.order.id);
+      onChanged();
+    } catch (x) {
+      setErr(x instanceof Error ? x.message : "삭제 실패");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="doc-tab">
+      <h3>POD (인도 증빙) 수취</h3>
+      {pod ? (
+        <div className="pod-current">
+          <span className="pod-file">📄 {pod.filename}</span>
+          {pod.uploaded_at ? <span className="pod-when">업로드 {fmtDateTime(pod.uploaded_at)}</span> : null}
+          <button className="btn" onClick={download} disabled={busy}>
+            다운로드
+          </button>
+          <button className="btn danger" onClick={remove} disabled={busy}>
+            삭제
+          </button>
+        </div>
+      ) : (
+        <div className="state">
+          아직 POD 파일이 없습니다. 인도 증빙(PDF · 이미지)을 업로드하면 <b>9단계가 완료</b>됩니다.
+        </div>
+      )}
+      <div className="form-actions">
+        <label className="btn primary" style={{ cursor: busy ? "default" : "pointer" }}>
+          {busy ? "처리 중…" : pod ? "POD 파일 교체" : "POD 파일 업로드"}
+          <input type="file" hidden accept=".pdf,image/*" onChange={onPick} disabled={busy} />
+        </label>
+        {err ? <span className="action-err">{err}</span> : null}
+      </div>
+    </div>
+  );
+}
+
+/** "YYYY-MM-DDTHH:MM" → "yy-mm-dd HH:MM". */
+function fmtDateTime(iso: string): string {
+  if (!iso || iso.length < 16) return iso || "";
+  return `${iso.slice(2, 10)} ${iso.slice(11, 16)}`;
 }
 
 function OrderMilestones({ data, onChanged }: { data: DocumentDetail; onChanged: () => void }) {

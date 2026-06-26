@@ -5,8 +5,10 @@ import { useSearchParams } from "next/navigation";
 import {
   arSoaXlsxUrl,
   createArRecord,
+  completeOrderStage,
   deleteArRecord,
   fetchArOverview,
+  fetchDocumentDetail,
   fetchPoWorkOptions,
   recordArPayment,
   updateArRecord,
@@ -14,7 +16,7 @@ import {
 import { getToken } from "@/lib/auth";
 import { useCachedData, invalidateCache } from "@/lib/useCachedData";
 import type { ArRow, PoWorkOptions } from "@/lib/types";
-import AppShell, { SectionHead } from "@/components/AppShell";
+import AppShell from "@/components/AppShell";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -44,7 +46,7 @@ const emptyForm: ArForm = {
 
 export default function ArPage() {
   return (
-    <AppShell active="ar">
+    <AppShell active="ar" wide>
       <Suspense fallback={<div className="state">불러오는 중...</div>}>
         <ArOverview />
       </Suspense>
@@ -54,6 +56,61 @@ export default function ArPage() {
 
 function money(n: number) {
   return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+/** 단계 완료 토글 — 현황판(파이프라인) 단계 완료 콜. 오더 기준(?order=). */
+function StageCompleteBar({ orderId, stage, label }: { orderId: number; stage: 11 | 12; label: string }) {
+  const [done, setDone] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    setDone(null);
+    fetchDocumentDetail(orderId)
+      .then((d) => {
+        if (alive) setDone(Boolean(d.stage_done[String(stage) as "11" | "12"]));
+      })
+      .catch(() => {
+        if (alive) setDone(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [orderId, stage]);
+
+  async function toggle() {
+    setBusy(true);
+    try {
+      const r = await completeOrderStage(orderId, stage, !done);
+      setDone(r.done);
+      invalidateCache("pipeline");
+      invalidateCache("dashboard");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="stage-complete-bar">
+      <span className="scb-label">
+        {stage}. {label}
+      </span>
+      {done === null ? (
+        <span className="scb-status muted">확인 중…</span>
+      ) : (
+        <>
+          <span className={`scb-status${done ? " done" : ""}`}>{done ? "✓ 완료됨" : "미완료"}</span>
+          <button
+            className={`btn${done ? "" : " primary"}`}
+            onClick={toggle}
+            disabled={busy}
+          >
+            {busy ? "처리 중…" : done ? "완료 취소" : "이 단계 완료"}
+          </button>
+        </>
+      )}
+    </div>
+  );
 }
 
 function ArOverview() {
@@ -68,6 +125,7 @@ function ArOverview() {
   const [status, setStatus] = useState("전체");
   const [currency, setCurrency] = useState("전체");
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [stageTab, setStageTab] = useState<11 | 12>(11);
 
   // 진행현황의 "AR 작업"으로 넘어온 ?order=<id> 가 있으면 해당 오더의 AR 레코드를 자동 선택.
   // 아직 AR 레코드가 없으면 신규 입력 폼에 그 오더를 미리 채운다(ArEditPanel 의 fallbackOrderId).
@@ -125,7 +183,22 @@ function ArOverview() {
 
   return (
     <>
-      <SectionHead title="AR 관리" sub="Accounts Receivable / SOA · 청구 · 수금 · 연체" />
+      <div className="page-tabs">
+        <button className={stageTab === 11 ? "on" : ""} onClick={() => setStageTab(11)}>
+          11. 세금계산서 발행
+        </button>
+        <button className={stageTab === 12 ? "on" : ""} onClick={() => setStageTab(12)}>
+          12. 대금 결제 완료
+        </button>
+      </div>
+
+      {orderId !== null ? (
+        <StageCompleteBar
+          orderId={orderId}
+          stage={stageTab}
+          label={stageTab === 11 ? "세금계산서 발행" : "대금 결제 완료"}
+        />
+      ) : null}
 
       {error || (loadError && !data) ? (
         <div className="state error">API 오류: {error ?? loadError?.message}</div>

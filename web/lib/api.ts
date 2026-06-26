@@ -371,6 +371,33 @@ export function documentDownloadUrl(
   return `${API_BASE}/api/admin/documents/${orderId}/${kind}`;
 }
 
+// ── 9) POD(인도 증빙) 파일 + 단계 완료 콜 ─────────────────────────────────────
+export function uploadPod(
+  orderId: number,
+  file: File
+): Promise<{ ok: boolean; filename: string; uploaded_at: string }> {
+  const fd = new FormData();
+  fd.append("file", file);
+  return postForm(`/api/admin/documents/${orderId}/pod`, fd);
+}
+
+export function podDownloadUrl(orderId: number): string {
+  return `${API_BASE}/api/admin/documents/${orderId}/pod/file`;
+}
+
+export function deletePod(orderId: number): Promise<{ ok: boolean; deleted: number }> {
+  return del(`/api/admin/documents/${orderId}/pod`);
+}
+
+/** 11·12 등 수동 완료 단계 토글 — 완료 시 현황판 단계가 해당 단계로 진행. */
+export function completeOrderStage(
+  orderId: number,
+  stage: number,
+  done: boolean
+): Promise<{ ok: boolean; stage: number; done: boolean }> {
+  return post(`/api/admin/orders/${orderId}/stage/${stage}/complete`, { done });
+}
+
 export function fetchVendorPoOverview(): Promise<{ rows: VendorPoRow[] }> {
   return get<{ rows: VendorPoRow[] }>("/api/admin/vendor-po-overview");
 }

@@ -4,7 +4,7 @@ import secrets
 from datetime import datetime
 from sqlalchemy import (
     Boolean, Column, DateTime, Enum as SAEnum,
-    Float, ForeignKey, Integer, String, Text,
+    Float, ForeignKey, Integer, LargeBinary, String, Text,
 )
 from sqlalchemy.types import JSON
 from db.engine import Base
@@ -229,6 +229,18 @@ class Order(Base):
     items          = Column(JSON, default=list)
     tracking_token = Column(String(64), unique=True, default=lambda: secrets.token_urlsafe(32))
     created_at     = Column(DateTime, default=datetime.utcnow)
+
+
+class DeliveryProof(Base):
+    """9) 운송 완료 · POD 수취 — 인도 증빙(POD) 파일 1건/오더. DB BLOB 저장(Render 파일시스템 휘발 회피)."""
+    __tablename__ = "delivery_proofs"
+    id          = Column(Integer, primary_key=True)
+    order_id    = Column(Integer, ForeignKey("orders.id"), index=True)
+    filename    = Column(String(255))
+    mime        = Column(String(120))
+    data        = Column(LargeBinary)
+    uploaded_at = Column(String(16))   # 업로드 일시 "YYYY-MM-DDTHH:MM" (KST)
+    created_at  = Column(DateTime, default=datetime.utcnow)
 
 
 class PurchaseOrder(Base):

@@ -414,6 +414,7 @@ export type DocumentWorkItem = {
 export type DocumentDetail = {
   order: {
     id: number;
+    rfq_id: number;
     ord_no: string;
     po_no: string;
     date: string;
@@ -427,6 +428,8 @@ export type DocumentDetail = {
     vendor_docs_sent_date: string;
     items: DocumentWorkItem[];
   };
+  pod: null | { id: number; filename: string; uploaded_at: string };
+  stage_done: { "9": boolean; "11": boolean; "12": boolean };
   ci: null | {
     id: number;
     ci_no: string;
@@ -580,6 +583,7 @@ export type PipelineRow = {
   vessel_id: number;
   project_title: string;
   received_at: string;
+  assignee: string; // 담당자 = RFQ 등록자(created_by) username
   item_count: number;
   crfq_at: string;
   vrfq_vendors: string;

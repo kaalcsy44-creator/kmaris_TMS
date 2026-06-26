@@ -7,7 +7,7 @@ import ProgressScreen from "@/components/screens/ProgressScreen";
 // 기존 Dashboard 의 진행 현황 탭을 좌측 메뉴 별도 페이지로 분리했다.
 export default function Page() {
   return (
-    <AppShell active="progress">
+    <AppShell active="progress" wide>
       <ProgressScreen />
     </AppShell>
   );

@@ -53,7 +53,7 @@ from db.models import (
     RFQ, Customer, Vessel, Vendor, User, UserRole, ItemMaster, DocSequence,
     VendorRFQ, VendorQuote, Quotation, QuotationStatus, FollowUpLevel,
     Order, PurchaseOrder, ShippingAdvice, CommercialInvoice,
-    PackingList, TaxInvoiceData, ARRecord,
+    PackingList, TaxInvoiceData, ARRecord, DeliveryProof,
     RFQStatus, OrderStatus, ARStatus, WorkType,
 )
 
@@ -297,17 +297,29 @@ def _pipeline_stage(s, rfq_id: int) -> int:
             stage = max(stage, 8)
         if getattr(order, "vendor_docs_sent_date", None):
             stage = max(stage, 8)
+        # 9) 운송 완료 · POD 수취 — POD 파일 업로드 시 완료
+        if s.query(DeliveryProof).filter_by(order_id=order.id).first():
+            stage = max(stage, 9)
         ci = s.query(CommercialInvoice).filter_by(order_id=order.id).first()
         if ci:
             stage = max(stage, 8)
+            # 10) Tax Invoice 작성 · 대금 청구 — Tax Invoice Data 생성 시
             if s.query(TaxInvoiceData).filter_by(ci_id=ci.id).first():
-                stage = max(stage, 11)
+                stage = max(stage, 10)
 
         ars = s.query(ARRecord).filter_by(order_id=order.id).all()
         if ars:
             stage = max(stage, 10)
             if any(_enum_val(a.status) == "완납" for a in ars):
                 stage = max(stage, 12)
+
+    # 수동 완료(완료 버튼/POD)로 stage_dates 에 표시된 9·11·12 단계를 반영.
+    # (자동 근거가 약하거나 없는 단계만 — 의도치 않은 점프 방지)
+    rfq_obj = s.query(RFQ).filter_by(id=rfq_id).first()
+    sd = (getattr(rfq_obj, "stage_dates", None) or {}) if rfq_obj else {}
+    for k in ("9", "11", "12"):
+        if sd.get(k):
+            stage = max(stage, int(k))
     return stage
 
 
@@ -382,20 +394,21 @@ def _stage_auto_times(s, rfq, order) -> dict[str, str]:
              or _date_iso(getattr(order, "consignee_confirmed_date", None))
              or _date_iso(getattr(order, "vendor_docs_sent_date", None))
              or _date_iso(getattr(order, "shipped_date", None)))
-        # 9) 운송 완료 · POD 수취
-        _set(9, _date_iso(getattr(order, "delivered_date", None)))
-        # 10) Tax Invoice 작성 · 대금 청구
+        # 9) 운송 완료 · POD 수취 — POD 업로드 일시 우선, 없으면 인도일
+        pod = (s.query(DeliveryProof).filter_by(order_id=order.id)
+               .order_by(DeliveryProof.created_at.asc()).first())
+        _set(9, (getattr(pod, "uploaded_at", "") if pod else "")
+             or _date_iso(getattr(order, "delivered_date", None)))
+        # 10) Tax Invoice 작성 · 대금 청구 — Tax Invoice Data 생성 시점 우선
         ci = (s.query(CommercialInvoice).filter_by(order_id=order.id)
               .order_by(CommercialInvoice.created_at.asc()).first())
         ars = s.query(ARRecord).filter_by(order_id=order.id).all()
-        _set(10, _kst_iso(min((a.created_at for a in ars if a.created_at), default=None))
+        tax = (s.query(TaxInvoiceData).filter_by(ci_id=ci.id)
+               .order_by(TaxInvoiceData.created_at.asc()).first()) if ci else None
+        _set(10, (_date_iso(tax.date) or _kst_iso(tax.created_at) if tax else "")
+             or _kst_iso(min((a.created_at for a in ars if a.created_at), default=None))
              or (_kst_iso(ci.created_at) if ci else ""))
-        # 11) 세금계산서 발행
-        if ci:
-            tax = (s.query(TaxInvoiceData).filter_by(ci_id=ci.id)
-                   .order_by(TaxInvoiceData.created_at.asc()).first())
-            if tax:
-                _set(11, _date_iso(tax.date) or _kst_iso(tax.created_at))
+        # 11) 세금계산서 발행 · 12) 대금 결제 완료 — 수동 완료(stage_dates)로만 표시
 
     return auto
 
@@ -426,6 +439,7 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
         cust_names = {c.id: c.name for c in s.query(Customer).all()}
         vessel_names = {v.id: v.name for v in s.query(Vessel).all()}
         vendor_names = {v.id: v.name for v in s.query(Vendor).all()}
+        user_names = {u.id: u.username for u in s.query(User).all()}
 
         q = s.query(RFQ).order_by(RFQ.id.desc())
         if customer_id:
@@ -503,6 +517,8 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
                 "vessel_id": r.vessel_id or 0,
                 "project_title": getattr(r, "project_title", None) or "",
                 "received_at": getattr(r, "received_at", None) or "",
+                # 담당자 = RFQ를 시스템에 등록한 내부 직원(created_by). 없으면 빈값.
+                "assignee": user_names.get(getattr(r, "created_by", None), "") or "",
                 "item_count": len((o.items if o else None) or r.items or []),
                 "crfq_at": _fmt_received(getattr(r, "received_at", None) or "") or _kst(r.created_at),
                 # 1~4 RFQ 체인
@@ -2171,6 +2187,19 @@ def _tracking_url(kind: str, token: str | None) -> str:
     return f"{base}?type={kind}&token={token}"
 
 
+def _rfq_for_order(session, order: Order):
+    """오더 → 연결된 RFQ(단계 완료 표시는 RFQ.stage_dates 에 저장됨)."""
+    if getattr(order, "rfq_id", None):
+        rfq = session.query(RFQ).filter_by(id=order.rfq_id).first()
+        if rfq:
+            return rfq
+    if getattr(order, "quotation_id", None):
+        q = session.query(Quotation).filter_by(id=order.quotation_id).first()
+        if q and q.rfq_id:
+            return session.query(RFQ).filter_by(id=q.rfq_id).first()
+    return None
+
+
 def _document_detail_payload(session, order: Order) -> dict:
     cust = _customer_for_order(session, order)
     vessel = _vessel_for_order(session, order)
@@ -2178,9 +2207,14 @@ def _document_detail_payload(session, order: Order) -> dict:
     pl = _latest_pl(session, ci.id if ci else None)
     sa = _latest_sa(session, order.id)
     tax = _latest_tax(session, ci.id if ci else None)
+    pod = (session.query(DeliveryProof).filter_by(order_id=order.id)
+           .order_by(DeliveryProof.created_at.desc()).first())
+    rfq = _rfq_for_order(session, order)
+    sd = (getattr(rfq, "stage_dates", None) or {}) if rfq else {}
     return {
         "order": {
             "id": order.id,
+            "rfq_id": rfq.id if rfq else 0,
             "ord_no": order.ord_no,
             "po_no": order.po_no or "",
             "date": order.date or "",
@@ -2194,6 +2228,13 @@ def _document_detail_payload(session, order: Order) -> dict:
             "vendor_docs_sent_date": order.vendor_docs_sent_date or "",
             "items": order.items or [],
         },
+        "pod": None if not pod else {
+            "id": pod.id,
+            "filename": pod.filename or "POD",
+            "uploaded_at": pod.uploaded_at or "",
+        },
+        # 수동 완료(완료 버튼) 단계 상태 — 9·11·12
+        "stage_done": {k: bool(sd.get(k)) for k in ("9", "11", "12")},
         "ci": None if not ci else {
             "id": ci.id,
             "ci_no": ci.ci_no or "",
@@ -2546,6 +2587,94 @@ def tax_invoice_xlsx(order_id: int):
             f"{tax.tax_no}_tax_invoice.xlsx",
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
+    finally:
+        s.close()
+
+
+# ── 9) 운송 완료 · POD 수취 — 인도 증빙(POD) 파일 ───────────────────────────────
+@app.post("/api/admin/documents/{order_id}/pod", dependencies=[Depends(require_token)])
+def upload_pod(order_id: int, file: UploadFile = File(...)):
+    """POD(인도 증빙) 파일 업로드 — 오더당 1건(기존 파일 교체). 업로드 시 9단계 완료."""
+    s = get_session()
+    try:
+        order = s.query(Order).filter_by(id=order_id).first()
+        if not order:
+            raise HTTPException(status_code=404, detail="Order를 찾을 수 없습니다.")
+        file.file.seek(0)
+        data = file.file.read()
+        if not data:
+            raise HTTPException(status_code=400, detail="빈 파일입니다.")
+        s.query(DeliveryProof).filter_by(order_id=order_id).delete()
+        proof = DeliveryProof(
+            order_id=order_id,
+            filename=file.filename or "POD",
+            mime=file.content_type or "application/octet-stream",
+            data=data,
+            uploaded_at=_kst_iso(datetime.utcnow()),
+        )
+        s.add(proof)
+        s.commit()
+        return {"ok": True, "filename": proof.filename, "uploaded_at": proof.uploaded_at}
+    finally:
+        s.close()
+
+
+@app.get("/api/admin/documents/{order_id}/pod/file", dependencies=[Depends(require_token)])
+def download_pod(order_id: int):
+    s = get_session()
+    try:
+        proof = (s.query(DeliveryProof).filter_by(order_id=order_id)
+                 .order_by(DeliveryProof.created_at.desc()).first())
+        if not proof or not proof.data:
+            raise HTTPException(status_code=404, detail="POD 파일이 없습니다.")
+        return Response(
+            content=proof.data,
+            media_type=proof.mime or "application/octet-stream",
+            headers={"Content-Disposition": f'attachment; filename="{proof.filename or "POD"}"'},
+        )
+    finally:
+        s.close()
+
+
+@app.delete("/api/admin/documents/{order_id}/pod", dependencies=[Depends(require_token)])
+def delete_pod(order_id: int):
+    s = get_session()
+    try:
+        n = s.query(DeliveryProof).filter_by(order_id=order_id).delete()
+        s.commit()
+        return {"ok": True, "deleted": n}
+    finally:
+        s.close()
+
+
+# ── 단계 완료 콜 — 오더 기준으로 RFQ.stage_dates 에 완료 표시(9·11·12) ──────────
+class StageCompleteBody(BaseModel):
+    done: bool = True
+
+
+@app.post("/api/admin/orders/{order_id}/stage/{stage}/complete",
+          dependencies=[Depends(require_token)])
+def complete_order_stage(order_id: int, stage: int, body: StageCompleteBody):
+    """11·12 등 수동 완료 단계를 토글한다. 완료 시 RFQ.stage_dates[stage]=현재시각."""
+    if not (1 <= stage <= len(INTERNAL_STEPS)):
+        raise HTTPException(status_code=400, detail="잘못된 단계 번호입니다.")
+    s = get_session()
+    try:
+        order = s.query(Order).filter_by(id=order_id).first()
+        if not order:
+            raise HTTPException(status_code=404, detail="Order를 찾을 수 없습니다.")
+        rfq = _rfq_for_order(s, order)
+        if not rfq:
+            raise HTTPException(status_code=400, detail="연결된 RFQ가 없습니다.")
+        dates = dict(getattr(rfq, "stage_dates", None) or {})
+        key = str(stage)
+        if body.done:
+            dates[key] = _kst_iso(datetime.utcnow())
+        else:
+            dates.pop(key, None)
+        rfq.stage_dates = dates
+        s.commit()
+        return {"ok": True, "stage": _pipeline_stage(s, rfq.id), "done": body.done}
     finally:
         s.close()
 

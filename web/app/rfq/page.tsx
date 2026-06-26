@@ -8,7 +8,7 @@ import RfqScreen from "@/components/screens/RfqScreen";
 // 진행현황에서 넘어온 ?rfq=<id> 로 선택된다.
 export default function Page() {
   return (
-    <AppShell active="rfq">
+    <AppShell active="rfq" wide>
       <SectionHead
         title="RFQ & Quotation"
         sub="RFQ 수신 → Vendor RFQ → Vendor 견적 → Customer 견적 작업"

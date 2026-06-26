@@ -8,7 +8,7 @@ import PoScreen from "@/components/screens/PoScreen";
 // 진행현황에서 넘어온 ?order=<id> 로 선택된다.
 export default function PoPage() {
   return (
-    <AppShell active="po">
+    <AppShell active="po" wide>
       <SectionHead
         title="P/O"
         sub="고객 P/O 수신 → Vendor P/O 발신 작업"

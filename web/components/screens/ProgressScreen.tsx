@@ -3,7 +3,6 @@
 import { useState } from "react";
 import Link from "next/link";
 import {
-  fetchDashboard,
   fetchPipeline,
   deleteRfq,
   updateRfq,
@@ -19,6 +18,23 @@ import WorkTypeBadge from "@/components/WorkTypeBadge";
 
 const WORK_TYPES = ["부품공급", "서비스"];
 
+// 고객확인용 7단계(RFQ 3 + Order 4) — 내부확인용과 동일한 표를 쓰되 단계만 7개.
+const CUSTOMER_STEPS = [
+  "RFQ Received",
+  "Preparing Quotation",
+  "Quotation Submitted",
+  "Order Confirmed",
+  "Under Production",
+  "In Transit",
+  "Delivered",
+];
+// 내부 12단계 → 고객 7단계 매핑(인덱스 = 내부단계-1). 필요 시 경계 조정.
+const CUSTOMER_STAGE_MAP = [1, 2, 2, 3, 4, 5, 5, 6, 7, 7, 7, 7];
+function customerStage(internal: number): number {
+  if (internal <= 0) return 0;
+  return CUSTOMER_STAGE_MAP[Math.min(internal, 12) - 1] ?? 0;
+}
+
 /** "YYYY-MM-DDTHH:MM" → "yy-mm-dd HH:MM" (표시용). 빈값이면 "". */
 function fmtStageDate(iso: string): string {
   if (!iso) return "";
@@ -28,41 +44,11 @@ function fmtStageDate(iso: string): string {
   return `${y.slice(2)}-${mo}-${d} ${h}:${mi}`;
 }
 
-function Stepper({ steps, current }: { steps: string[]; current: number }) {
-  return (
-    <div className="hstepper">
-      {steps.map((label, i) => {
-        const state = i < current ? "done" : i === current ? "current" : "todo";
-        return (
-          <div className={`hstep ${state}`} key={i}>
-            <span className="dot">{i < current ? "✓" : i + 1}</span>
-            <span className="lbl">{label}</span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-/** 탭(대제목) 아래 한 단계 낮은 섹션 소제목 (작은 회색 라벨). */
-function SubHead({ title, sub }: { title: string; sub?: string }) {
-  return (
-    <div className="dash-subhead">
-      <span className="t">{title}</span>
-      {sub ? <span className="s">{sub}</span> : null}
-    </div>
-  );
-}
-
 type Tab = "customer" | "internal";
-type WorkFilter = "전체" | "부품공급" | "서비스";
-const WORK_FILTERS: WorkFilter[] = ["전체", "부품공급", "서비스"];
 
 export default function ProgressScreen() {
   const [tab, setTab] = useState<Tab>("internal");
-  const [workFilter, setWorkFilter] = useState<WorkFilter>("전체");
-  // 고객확인용 = dashboard snapshot, 내부확인용 = 통합 파이프라인.
-  const { data, error } = useCachedData("dashboard", fetchDashboard);
+  // 내부확인용·고객확인용 모두 통합 파이프라인(rows) 사용. 단계 체계만 12 vs 7로 다름.
   const {
     data: pipeline,
     error: pipeError,
@@ -97,106 +83,44 @@ export default function ProgressScreen() {
 
       {tab === "customer" && (
         <>
-          {/* 고객 트래킹용 현황 — 고객에게 노출되는 RFQ/Order 추적 단계 */}
-          <SubHead
-            title="RFQ · Order 진행 현황"
-            sub="고객 추적 단계 (k-maris.com/track 미리보기)"
-          />
-          {error && !data ? (
-            <div className="state error">API 오류: {error.message}</div>
-          ) : !data ? (
+          {/* 고객 트래킹용 현황 — 내부확인용과 동일한 표, 단계만 7단계(고객 추적) */}
+          {pipeError && !pipeline ? (
+            <div className="state error">API 오류: {pipeError.message}</div>
+          ) : !pipeline ? (
             <div className="state">불러오는 중…</div>
-          ) : data.snapshot.length === 0 ? (
-            <div className="state">등록된 RFQ가 없습니다.</div>
+          ) : pipeline.rows.length === 0 ? (
+            <div className="state">등록된 거래가 없습니다.</div>
           ) : (
-            data.snapshot.map((r) => (
-              <div className="track-row" key={`t-${r.rfq_no}`}>
-                <div className="track-card">
-                  <div className="track-card-head">
-                    <span className="track-card-title">
-                      {r.rfq_no}
-                      {r.customer_rfq_no ? (
-                        <small> · Customer RFQ {r.customer_rfq_no}</small>
-                      ) : null}
-                    </span>
-                    <span className="track-card-badge">{r.status}</span>
-                  </div>
-                  <div className="track-card-sub">{r.customer_vessel}</div>
-                  <div className="track-card-meta">
-                    Items {r.item_count} · Level {r.follow_up_level} · {r.date}
-                  </div>
-                  <Stepper steps={data.rfq_steps} current={r.step} />
-                </div>
-
-                {r.order ? (
-                  <div className="track-card">
-                    <div className="track-card-head">
-                      <span className="track-card-title">{r.order.ord_no}</span>
-                      <span className="track-card-badge">{r.order.status}</span>
-                    </div>
-                    <div className="track-card-sub">{r.order.customer_vessel}</div>
-                    <div className="track-card-meta">
-                      Items {r.order.item_count} · {r.order.date}
-                    </div>
-                    <Stepper steps={data.order_steps} current={r.order.step} />
-                  </div>
-                ) : (
-                  <div className="track-card empty">
-                    <div className="track-card-head">
-                      <span className="track-card-title">No linked order</span>
-                    </div>
-                    <div className="track-card-sub">
-                      아직 오더가 생성되지 않았습니다.
-                    </div>
-                    <Stepper steps={data.order_steps} current={-1} />
-                  </div>
-                )}
-              </div>
-            ))
+            <PipelineTable
+              rows={pipeline.rows}
+              steps={CUSTOMER_STEPS}
+              stageOf={(r) => customerStage(r.stage)}
+              customers={customers ?? []}
+              vessels={vessels ?? []}
+              onChanged={reloadPipeline}
+            />
           )}
         </>
       )}
 
       {tab === "internal" && (
         <>
-          {/* 통합 파이프라인 — RFQ표·PO표를 흡수한 단일 목록. 행 클릭 시 상세 토글 */}
-          <SubHead
-            title="통합 진행 현황 (12단계)"
-            sub="RFQ · 견적 · P/O 전 구간 · 회사 내부 확인용"
-          />
-          <div className="seg-tabs" style={{ marginBottom: 14 }}>
-            {WORK_FILTERS.map((f) => (
-              <button
-                key={f}
-                className={workFilter === f ? "on" : ""}
-                onClick={() => setWorkFilter(f)}
-              >
-                {f}
-              </button>
-            ))}
-          </div>
+          {/* 통합 파이프라인 — RFQ표·PO표를 흡수한 단일 목록. 행 클릭 시 상세 모달 */}
           {pipeError && !pipeline ? (
             <div className="state error">API 오류: {pipeError.message}</div>
           ) : !pipeline ? (
             <div className="state">불러오는 중…</div>
-          ) : (() => {
-            const rows = pipeline.rows.filter(
-              (r) => workFilter === "전체" || (r.work_type || "부품공급") === workFilter
-            );
-            if (rows.length === 0) {
-              return <div className="state">해당하는 거래가 없습니다.</div>;
-            }
-            return rows.map((r) => (
-              <PipelineCard
-                key={`p-${r.rfq_id}`}
-                r={r}
-                steps={pipeline.steps}
-                customers={customers ?? []}
-                vessels={vessels ?? []}
-                onChanged={reloadPipeline}
-              />
-            ));
-          })()}
+          ) : pipeline.rows.length === 0 ? (
+            <div className="state">등록된 거래가 없습니다.</div>
+          ) : (
+            <PipelineTable
+              rows={pipeline.rows}
+              steps={pipeline.steps}
+              customers={customers ?? []}
+              vessels={vessels ?? []}
+              onChanged={reloadPipeline}
+            />
+          )}
         </>
       )}
     </>
@@ -208,23 +132,455 @@ function joinDot(...parts: (string | undefined)[]): string {
   return parts.filter((p) => p && p.trim()).join(" · ");
 }
 
-/** 통합 파이프라인 카드 — RFQ표·PO표를 흡수한 단일 행. 클릭하면 전 구간 문서 체인이 펼쳐진다.
- *  접힘: RFQ No. · 선박명 · 프로젝트 제목 + 12단계 진행바
- *  펼침: 핵심 메타 + 6구간 문서 체인 + 12단계 완료 일시 + RFQ/P·O 작업 바로가기 */
-function PipelineCard({
+/** 완료한 단계 라벨: "N. 라벨" (stage가 0이면 "미시작"). */
+function doneStageLabel(stage: number, steps: string[]): string {
+  if (stage <= 0) return "미시작";
+  return `${stage}. ${steps[stage - 1] ?? ""}`;
+}
+
+/** 다음 단계 라벨: stage+1 (12단계 완료면 "완료"). */
+function nextStageLabel(stage: number, steps: string[]): string {
+  if (stage >= steps.length) return "완료";
+  const n = Math.max(stage, 0);
+  return `${n + 1}. ${steps[n] ?? ""}`;
+}
+
+/** 완료 단계 시각화 — steps.length 칸 세그먼트 바를 현재 단계까지 채우고 N/총 + 단계명 표시. */
+function StageBar({ stage, steps }: { stage: number; steps: string[] }) {
+  const total = steps.length;
+  const filled = Math.max(0, Math.min(stage, total));
+  const label = stage <= 0 ? "미시작" : steps[stage - 1] ?? "";
+  return (
+    <div className="pl-stage">
+      <div className="pl-stage-top">
+        <span className="pl-stage-segs">
+          {Array.from({ length: total }).map((_, i) => (
+            <span key={i} className={`seg${i < filled ? " on" : ""}`} />
+          ))}
+        </span>
+        <span className="pl-stage-num">
+          {filled}/{total}
+        </span>
+      </div>
+      <div className="pl-stage-label">{label}</div>
+    </div>
+  );
+}
+
+type ColKey =
+  | "received_at"
+  | "customer"
+  | "work_type"
+  | "vessel"
+  | "project_title"
+  | "done"
+  | "next"
+  | "assignee";
+
+const PIPELINE_COLUMNS: { key: ColKey; label: string }[] = [
+  { key: "received_at", label: "최초 RFQ 수신 등록 일시" },
+  { key: "customer", label: "고객사" },
+  { key: "work_type", label: "업무 타입" },
+  { key: "vessel", label: "선박" },
+  { key: "project_title", label: "프로젝트명" },
+  { key: "done", label: "완료한 단계" },
+  { key: "next", label: "다음 단계" },
+  { key: "assignee", label: "담당자" },
+];
+
+/** 한 행에서 컬럼별 텍스트 값(검색·문자열 정렬용). */
+function cellText(r: PipelineRow, key: ColKey, steps: string[]): string {
+  switch (key) {
+    case "received_at":
+      return r.received_at ? fmtStageDate(r.received_at) : "";
+    case "customer":
+      return r.customer || "";
+    case "work_type":
+      return r.work_type || "부품공급";
+    case "vessel":
+      return r.vessel || "";
+    case "project_title":
+      return r.project_title || "";
+    case "done":
+      return doneStageLabel(r.stage, steps);
+    case "next":
+      return nextStageLabel(r.stage, steps);
+    case "assignee":
+      return r.assignee || "";
+  }
+}
+
+type SortDir = "asc" | "desc";
+
+/** 통합 파이프라인 테이블 — 거래 1건 = 1행. 헤더 클릭 정렬 + 컬럼별 검색, 행 클릭 시 상세 모달.
+ *  열: 최초 RFQ 수신 등록 일시 · 고객사 · 업무 타입 · 선박 · 프로젝트명 · 완료한 단계 · 다음 단계 · 담당자 */
+function PipelineTable({
+  rows,
+  steps,
+  customers,
+  vessels,
+  onChanged,
+  stageOf = (r) => r.stage,
+}: {
+  rows: PipelineRow[];
+  steps: string[];
+  customers: CustomerOption[];
+  vessels: SettingsVessel[];
+  onChanged: () => void;
+  // 단계 체계 추상화: 내부확인용=12단계(r.stage), 고객확인용=7단계(매핑값)
+  stageOf?: (r: PipelineRow) => number;
+}) {
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [sortKey, setSortKey] = useState<ColKey | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+  // 패싯 필터: 각 값 "전체"는 미적용. 빈 문자열("")은 "미지정" 값 자체를 의미.
+  const [fWorkType, setFWorkType] = useState("전체");
+  const [fCustomer, setFCustomer] = useState("전체");
+  const [fVessel, setFVessel] = useState("전체");
+  const [fAssignee, setFAssignee] = useState("전체");
+  const [fStage, setFStage] = useState("전체"); // 단계 번호 문자열
+  const [fFrom, setFFrom] = useState(""); // 수신일 From "YYYY-MM-DD"
+  const [fTo, setFTo] = useState(""); // 수신일 To
+  // 헤더 클릭 시 뜨는 컬럼 메뉴(정렬+필터). fixed 위치라 가로 스크롤에 잘리지 않는다.
+  const [openCol, setOpenCol] = useState<ColKey | null>(null);
+  const [menuPos, setMenuPos] = useState<{ left: number; top: number }>({ left: 0, top: 0 });
+
+  function openMenu(key: ColKey, e: React.MouseEvent<HTMLElement>) {
+    if (openCol === key) {
+      setOpenCol(null);
+      return;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    const width = 240;
+    const left = Math.max(12, Math.min(rect.left, window.innerWidth - width - 12));
+    setMenuPos({ left, top: rect.bottom + 4 });
+    setOpenCol(key);
+  }
+  function applySort(key: ColKey, dir: SortDir) {
+    setSortKey(key);
+    setSortDir(dir);
+    setOpenCol(null);
+  }
+
+  // 컬럼별 필터 값/세터/활성여부 — 메뉴에서 공통 사용
+  function colValue(key: ColKey): string {
+    switch (key) {
+      case "customer": return fCustomer;
+      case "work_type": return fWorkType;
+      case "vessel": return fVessel;
+      case "assignee": return fAssignee;
+      case "done": return fStage;
+      default: return "전체";
+    }
+  }
+  function setColValue(key: ColKey, v: string) {
+    switch (key) {
+      case "customer": setFCustomer(v); break;
+      case "work_type": setFWorkType(v); break;
+      case "vessel": setFVessel(v); break;
+      case "assignee": setFAssignee(v); break;
+      case "done": setFStage(v); break;
+    }
+    setOpenCol(null);
+  }
+  function isColFiltered(key: ColKey): boolean {
+    switch (key) {
+      case "received_at": return !!(fFrom || fTo);
+      case "customer": return fCustomer !== "전체";
+      case "work_type": return fWorkType !== "전체";
+      case "vessel": return fVessel !== "전체";
+      case "assignee": return fAssignee !== "전체";
+      case "done": return fStage !== "전체";
+      default: return false;
+    }
+  }
+
+  // 드롭다운 옵션: 현재 데이터에 실제 존재하는 값만(한글 정렬). 빈 값은 "" 으로 포함(미지정).
+  function distinct(getVal: (r: PipelineRow) => string): string[] {
+    return Array.from(new Set(rows.map(getVal))).sort((a, b) => a.localeCompare(b, "ko"));
+  }
+  const workTypeOpts = distinct((r) => r.work_type || "부품공급");
+  const customerOpts = distinct((r) => r.customer || "");
+  const vesselOpts = distinct((r) => r.vessel || "");
+  const assigneeOpts = distinct((r) => r.assignee || "");
+  // 단계 옵션: 데이터에 존재하는 stage 번호를 오름차순으로
+  const stageOpts = Array.from(new Set(rows.map((r) => stageOf(r)))).sort((a, b) => a - b);
+
+  // 메뉴 값 목록(전체 + 데이터 고유값). 날짜·필터없는 컬럼은 빈 배열.
+  function colOptions(key: ColKey): { v: string; label: string }[] {
+    const all = { v: "전체", label: "전체" };
+    switch (key) {
+      case "customer":
+        return [all, ...customerOpts.map((v) => ({ v, label: v || "미지정" }))];
+      case "work_type":
+        return [all, ...workTypeOpts.map((v) => ({ v, label: v }))];
+      case "vessel":
+        return [all, ...vesselOpts.map((v) => ({ v, label: v || "선박 미지정" }))];
+      case "assignee":
+        return [all, ...assigneeOpts.map((v) => ({ v, label: v || "미지정" }))];
+      case "done":
+        return [all, ...stageOpts.map((s) => ({ v: String(s), label: doneStageLabel(s, steps) }))];
+      default:
+        return [];
+    }
+  }
+
+  const filtersActive =
+    fWorkType !== "전체" ||
+    fCustomer !== "전체" ||
+    fVessel !== "전체" ||
+    fAssignee !== "전체" ||
+    fStage !== "전체" ||
+    fFrom !== "" ||
+    fTo !== "";
+
+  function resetFilters() {
+    setFWorkType("전체");
+    setFCustomer("전체");
+    setFVessel("전체");
+    setFAssignee("전체");
+    setFStage("전체");
+    setFFrom("");
+    setFTo("");
+  }
+
+  // 수신일(received_at "YYYY-MM-DDTHH:MM")의 날짜부가 [from, to] 범위인지. 날짜 없으면 범위 지정 시 제외.
+  function inDateRange(received: string): boolean {
+    if (!fFrom && !fTo) return true;
+    const d = (received || "").slice(0, 10);
+    if (!d) return false;
+    if (fFrom && d < fFrom) return false;
+    if (fTo && d > fTo) return false;
+    return true;
+  }
+
+  // 1) 필터: 선택한 조건들의 교집합(AND)
+  let displayRows = rows.filter(
+    (r) =>
+      (fWorkType === "전체" || (r.work_type || "부품공급") === fWorkType) &&
+      (fCustomer === "전체" || (r.customer || "") === fCustomer) &&
+      (fVessel === "전체" || (r.vessel || "") === fVessel) &&
+      (fAssignee === "전체" || (r.assignee || "") === fAssignee) &&
+      (fStage === "전체" || stageOf(r) === Number(fStage)) &&
+      inDateRange(r.received_at)
+  );
+  // 2) 정렬: 완료/다음 단계는 단계 번호(숫자), 그 외는 표시 문자열(한글 로케일)
+  if (sortKey) {
+    const key = sortKey;
+    const dir = sortDir === "asc" ? 1 : -1;
+    displayRows = [...displayRows].sort((a, b) => {
+      let cmp: number;
+      if (key === "done" || key === "next") {
+        cmp = stageOf(a) - stageOf(b);
+      } else {
+        cmp = cellText(a, key, steps).localeCompare(cellText(b, key, steps), "ko");
+      }
+      return cmp * dir;
+    });
+  }
+
+  // 새로고침 후에도 rfq_id로 다시 찾으므로 모달이 최신 값으로 유지된다(삭제되면 null → 자동 닫힘).
+  const selected = rows.find((r) => r.rfq_id === selectedId) ?? null;
+
+  // 헤더 클릭 시 뜨는 컬럼 메뉴: 정렬(오름/내림) + 필터(값 목록 / 날짜는 기간)
+  function renderColMenu(col: ColKey) {
+    const opts = colOptions(col);
+    return (
+      <>
+        <div className="pl-menu-backdrop" onClick={() => setOpenCol(null)} />
+        <div
+          className="pl-col-menu"
+          style={{ left: menuPos.left, top: menuPos.top }}
+          role="menu"
+        >
+          <div className="pl-menu-sort">
+            <button
+              className={sortKey === col && sortDir === "asc" ? "on" : ""}
+              onClick={() => applySort(col, "asc")}
+            >
+              <span className="ic">▲</span> 오름차순
+            </button>
+            <button
+              className={sortKey === col && sortDir === "desc" ? "on" : ""}
+              onClick={() => applySort(col, "desc")}
+            >
+              <span className="ic">▼</span> 내림차순
+            </button>
+          </div>
+
+          {col === "received_at" ? (
+            <>
+              <div className="pl-menu-divider" />
+              <div className="pl-menu-date">
+                <span className="pl-menu-cap">수신 기간</span>
+                <input type="date" value={fFrom} onChange={(e) => setFFrom(e.target.value)} aria-label="수신 From" />
+                <span className="pl-menu-tilde">~</span>
+                <input type="date" value={fTo} onChange={(e) => setFTo(e.target.value)} aria-label="수신 To" />
+                {fFrom || fTo ? (
+                  <button
+                    className="pl-menu-clear"
+                    onClick={() => {
+                      setFFrom("");
+                      setFTo("");
+                    }}
+                  >
+                    기간 해제
+                  </button>
+                ) : null}
+              </div>
+            </>
+          ) : opts.length > 0 ? (
+            <>
+              <div className="pl-menu-divider" />
+              <div className="pl-menu-list">
+                {opts.map((o) => (
+                  <button
+                    key={o.v}
+                    className={`pl-menu-opt${colValue(col) === o.v ? " on" : ""}`}
+                    onClick={() => setColValue(col, o.v)}
+                  >
+                    <span className="chk">{colValue(col) === o.v ? "✓" : ""}</span>
+                    <span className="lbl">{o.label}</span>
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : null}
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <div className="pl-toolbar">
+        {filtersActive ? (
+          <button type="button" className="pl-filter-reset" onClick={resetFilters}>
+            필터 초기화
+          </button>
+        ) : null}
+        <span className="pl-search-count">
+          {displayRows.length} / {rows.length}건
+        </span>
+      </div>
+
+      <div className="pl-table-wrap">
+        <table className="pipeline">
+          <colgroup>
+            <col className="plc-date" />
+            <col className="plc-customer" />
+            <col className="plc-work" />
+            <col className="plc-vessel" />
+            <col className="plc-project" />
+            <col className="plc-done" />
+            <col className="plc-next" />
+            <col className="plc-assignee" />
+          </colgroup>
+          <thead>
+            <tr>
+              {PIPELINE_COLUMNS.map((c) => {
+                const sorted = sortKey === c.key;
+                const filtered = isColFiltered(c.key);
+                return (
+                  <th
+                    key={c.key}
+                    className={`pl-th${openCol === c.key ? " open" : ""}${
+                      sorted || filtered ? " active" : ""
+                    }`}
+                    aria-sort={
+                      sorted ? (sortDir === "asc" ? "ascending" : "descending") : "none"
+                    }
+                  >
+                    <button
+                      type="button"
+                      className="pl-th-btn"
+                      onClick={(e) => openMenu(c.key, e)}
+                    >
+                      <span className="pl-th-label">{c.label}</span>
+                      {filtered ? <span className="pl-th-dot" title="필터 적용 중" /> : null}
+                      <span className="pl-th-caret">
+                        {sorted ? (sortDir === "asc" ? "▲" : "▼") : "▾"}
+                      </span>
+                    </button>
+                  </th>
+                );
+              })}
+            </tr>
+          </thead>
+          <tbody>
+            {displayRows.length === 0 ? (
+              <tr>
+                <td className="pl-empty" colSpan={PIPELINE_COLUMNS.length}>
+                  조건에 맞는 거래가 없습니다.
+                </td>
+              </tr>
+            ) : (
+              displayRows.map((r) => {
+                const isService = (r.work_type || "부품공급") === "서비스";
+                return (
+                  <tr
+                    key={`p-${r.rfq_id}`}
+                    className={`${isService ? "service " : ""}${
+                      selectedId === r.rfq_id ? "sel" : ""
+                    }`}
+                    onClick={() => setSelectedId(r.rfq_id)}
+                  >
+                    <td className="nowrap">{r.received_at ? fmtStageDate(r.received_at) : "—"}</td>
+                    <td className="strong">{r.customer || "고객사 미지정"}</td>
+                    <td>
+                      <WorkTypeBadge type={r.work_type} />
+                    </td>
+                    <td>{r.vessel || <span className="muted">선박 미지정</span>}</td>
+                    <td>
+                      {r.project_title || <span className="muted">제목 없음</span>}
+                    </td>
+                    <td className="pl-td-done">
+                      <StageBar stage={stageOf(r)} steps={steps} />
+                    </td>
+                    <td className="pl-td-next">{nextStageLabel(stageOf(r), steps)}</td>
+                    <td>{r.assignee || <span className="muted">—</span>}</td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {openCol ? renderColMenu(openCol) : null}
+
+      {selected ? (
+        <PipelineModal
+          r={selected}
+          steps={steps}
+          customers={customers}
+          vessels={vessels}
+          onChanged={onChanged}
+          onClose={() => setSelectedId(null)}
+        />
+      ) : null}
+    </>
+  );
+}
+
+/** 통합 파이프라인 상세 모달 — 테이블 행 클릭 시 전 구간 문서 체인을 팝업으로 보여준다.
+ *  헤더: RFQ No. · 업무 타입 · 고객사 · 선박 · 프로젝트 제목 + 닫기
+ *  본문: 핵심 메타 + 6구간 문서 체인 + 12단계 완료 일시 + RFQ/P·O 작업 바로가기 */
+function PipelineModal({
   r,
   steps,
   customers,
   vessels,
   onChanged,
+  onClose,
 }: {
   r: PipelineRow;
   steps: string[];
   customers: CustomerOption[];
   vessels: SettingsVessel[];
   onChanged: () => void;
+  onClose: () => void;
 }) {
-  const [open, setOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -246,7 +602,6 @@ function PipelineCard({
     setFProjectTitle(r.project_title || "");
     setFReceivedAt(r.received_at || "");
     setEditing(true);
-    setOpen(true);
   }
 
   async function handleSave() {
@@ -318,39 +673,49 @@ function PipelineCard({
   const isService = (r.work_type || "부품공급") === "서비스";
 
   return (
-    <div className={`intl-card${open ? " open" : ""}${isService ? " service" : ""}`}>
-      <button
-        type="button"
-        className="intl-toggle"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
+    <div
+      className={`pl-modal-backdrop${isService ? " service" : ""}`}
+      onClick={onClose}
+      role="presentation"
+    >
+      <div
+        className={`pl-modal${isService ? " service" : ""}`}
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
       >
-        <span className={`intl-caret${open ? " on" : ""}`}>▸</span>
-        <span className="intl-title">
-          <b>{r.kmaris_rfq_no}</b>
-          <WorkTypeBadge type={r.work_type} />
-          <span className="intl-customer">{r.customer || "고객사 미지정"}</span>
-          <span className="intl-vessel">{r.vessel || "선박 미지정"}</span>
-          {r.project_title ? (
-            <span className="intl-proj">{r.project_title}</span>
-          ) : (
-            <span className="intl-proj muted">제목 없음</span>
-          )}
-        </span>
-        <span className="intl-stage">
-          {r.stage}/12 {stageLabel}
-        </span>
-      </button>
+        <div className="pl-modal-head">
+          <span className="intl-title">
+            <span className="pl-recv-label">최초 RFQ 수신 일시</span>
+            <b>{r.received_at ? fmtStageDate(r.received_at) : "—"}</b>
+            <WorkTypeBadge type={r.work_type} />
+          </span>
+          <button
+            type="button"
+            className="pl-modal-close"
+            onClick={onClose}
+            aria-label="닫기"
+          >
+            ×
+          </button>
+        </div>
 
-      <div className="intl-bar">
-        {Array.from({ length: 12 }).map((_, k) => (
-          <span key={k} className={`seg${k < r.stage ? " on" : ""}`} />
-        ))}
-      </div>
+        <div className="intl-bar">
+          {Array.from({ length: 12 }).map((_, k) => (
+            <span key={k} className={`seg${k < r.stage ? " on" : ""}`} />
+          ))}
+        </div>
 
-      {open ? (
-        <div className="intl-detail">
-          {editing ? (
+        {/* 현재 단계 — 단계 바 바로 아래(해당 단계) */}
+        <div className="pl-curstage">
+          <span className="dt">현재 단계</span>
+          <span className="num">{r.stage}/12</span>
+          <span className="name">{stageLabel}</span>
+        </div>
+
+        <div className="pl-modal-body">
+          <div className="intl-detail">
+            {editing ? (
             <div className="intl-edit">
               <div className="form-field">
                 <label>업무 타입</label>
@@ -445,12 +810,6 @@ function PipelineCard({
                 <dt>품목 수</dt>
                 <dd>{r.item_count}</dd>
               </div>
-              <div>
-                <dt>현재 단계</dt>
-                <dd>
-                  {r.stage}/12 {stageLabel}
-                </dd>
-              </div>
             </dl>
           )}
 
@@ -486,23 +845,23 @@ function PipelineCard({
 
           <div className="pl-actions">
             <Link className="btn" href={`/rfq?rfq=${r.rfq_id}`}>
-              RFQ · 견적 작업 →
+              RFQ &amp; Quotation →
             </Link>
             <Link className="btn" href={poHref}>
-              P/O 작업 →
+              P/O →
             </Link>
             <Link
               className="btn"
               href={r.order_id > 0 ? `/documents?order=${r.order_id}` : "/documents"}
               title={r.order_id > 0 ? undefined : "오더 미생성 — 문서 페이지에서 대상 오더를 선택하세요"}
             >
-              문서 작업 (CI·PL·SA·Tax) →
+              Documents →
             </Link>
             <Link
               className="btn"
               href={r.order_id > 0 ? `/ar?order=${r.order_id}` : "/ar"}
             >
-              AR 작업 →
+              AR →
             </Link>
             {editing ? (
               <>
@@ -539,8 +898,9 @@ function PipelineCard({
               {deleting ? "삭제 중…" : "삭제"}
             </button>
           </div>
+          </div>
         </div>
-      ) : null}
+      </div>
     </div>
   );
 }
