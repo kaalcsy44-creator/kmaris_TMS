@@ -30,6 +30,7 @@ import {
   deleteCustomerQuotation,
 } from "@/lib/api";
 import { getToken } from "@/lib/auth";
+import { tr } from "@/lib/labels";
 import type {
   VendorOption,
   RfqRow,
@@ -63,10 +64,10 @@ function nowLocalDt(): string {
 
 // 원본 rfq_quotation.py 하단의 작업 segmented control(4탭)을 복원.
 const TABS = [
-  { key: "new", label: "1. Customer RFQ 수신" },
-  { key: "vrfq", label: "2. Vendor RFQ 발신" },
-  { key: "vquote", label: "3. Vendor Quot. 수신" },
-  { key: "cquote", label: "4. Customer Quot. 발신" },
+  { key: "new", label: "1. Customer RFQ Received" },
+  { key: "vrfq", label: "2. Vendor RFQ Sent" },
+  { key: "vquote", label: "3. Vendor Quote Received" },
+  { key: "cquote", label: "4. Customer Quote Sent" },
 ];
 
 function money(n: number) {
@@ -152,7 +153,7 @@ function CustomerRfqList({
   const columns: ColumnDef<RfqRow>[] = [
     {
       key: "customer_rfq_no",
-      label: "고객 RFQ No.",
+      label: "Customer RFQ No.",
       text: (r) => r.customer_rfq_no || "",
       render: (r) => (
         <div>
@@ -164,15 +165,15 @@ function CustomerRfqList({
     { key: "customer", label: "Customer", text: (r) => r.customer || "", filter: "facet" },
     {
       key: "work_type",
-      label: "업무 타입",
+      label: "Work type",
       text: (r) => r.work_type || "부품공급",
       filter: "facet",
       render: (r) => <WorkTypeBadge type={r.work_type} />,
     },
-    { key: "vessel", label: "선박", text: (r) => (r.vessel && r.vessel !== "—" ? r.vessel : ""), filter: "facet" },
+    { key: "vessel", label: "Vessel", text: (r) => (r.vessel && r.vessel !== "—" ? r.vessel : ""), filter: "facet" },
     {
       key: "item_count",
-      label: "품목수",
+      label: "Items",
       numeric: true,
       text: (r) => String(r.item_count),
       sortValue: (r) => r.item_count,
@@ -186,7 +187,7 @@ function CustomerRfqList({
         columns={columns}
         getRowKey={(r) => r.id}
         onRowClick={(r) => setDetailId(r.id)}
-        empty="등록된 RFQ가 없습니다."
+        empty="No RFQs registered."
         actions={
           <button className="btn primary" onClick={() => setAdding(true)}>
             + 신규 등록
@@ -195,7 +196,7 @@ function CustomerRfqList({
       />
 
       {adding ? (
-        <Modal title="Customer RFQ 신규 등록" onClose={() => setAdding(false)} wide>
+        <Modal title="New Customer RFQ" onClose={() => setAdding(false)} wide>
           <NewRfqForm
             onCreated={() => {
               setAdding(false);
@@ -207,7 +208,7 @@ function CustomerRfqList({
       ) : null}
 
       {detailId !== null ? (
-        <Modal title="Customer RFQ 상세" onClose={() => setDetailId(null)} wide>
+        <Modal title="Customer RFQ details" onClose={() => setDetailId(null)} wide>
           <NewRfqForm
             autoLoadId={detailId}
             onCreated={() => {
@@ -250,7 +251,7 @@ function VendorRfqList({
   function load() {
     fetchVrfqOverview()
       .then((d) => setRows(d.rows))
-      .catch((e) => setError(e instanceof Error ? e.message : "오류"));
+      .catch((e) => setError(e instanceof Error ? e.message : "Error"));
   }
   useEffect(load, []);
 
@@ -261,22 +262,22 @@ function VendorRfqList({
 
   const columns: ColumnDef<VrfqRow>[] = [
     { key: "vrfq_no", label: "VRFQ No.", text: (r) => r.vrfq_no || "" },
-    { key: "customer_rfq_no", label: "고객 RFQ No.", text: (r) => r.customer_rfq_no || "" },
+    { key: "customer_rfq_no", label: "Customer RFQ No.", text: (r) => r.customer_rfq_no || "" },
     { key: "vendor", label: "Vendor", text: (r) => r.vendor || "", filter: "facet" },
-    { key: "vendor_email", label: "수신자 이메일", text: (r) => r.vendor_email || "" },
-    { key: "sent_date", label: "발송일", text: (r) => r.sent_date || "", filter: "date" },
-    { key: "item_count", label: "품목수", numeric: true, text: (r) => String(r.item_count), sortValue: (r) => r.item_count },
-    { key: "quote_count", label: "수신 견적", numeric: true, text: (r) => `${r.quote_count}건`, sortValue: (r) => r.quote_count },
+    { key: "vendor_email", label: "Recipient email", text: (r) => r.vendor_email || "" },
+    { key: "sent_date", label: "Sent date", text: (r) => r.sent_date || "", filter: "date" },
+    { key: "item_count", label: "Items", numeric: true, text: (r) => String(r.item_count), sortValue: (r) => r.item_count },
+    { key: "quote_count", label: "Quotes received", numeric: true, text: (r) => `${r.quote_count}`, sortValue: (r) => r.quote_count },
     {
       key: "status",
-      label: "상태",
-      text: (r) => r.status || "",
+      label: "Status",
+      text: (r) => tr(r.status) || "",
       filter: "facet",
-      render: (r) => <span className="ar-badge">{r.status}</span>,
+      render: (r) => <span className="ar-badge">{tr(r.status)}</span>,
     },
   ];
 
-  if (error) return <div className="state error">API 오류: {error}</div>;
+  if (error) return <div className="state error">API error: {error}</div>;
 
   const kmarisNo = pickRfqId !== null ? projects.find((p) => p.id === pickRfqId)?.crfq_no ?? "" : "";
 
@@ -287,7 +288,7 @@ function VendorRfqList({
         columns={columns}
         getRowKey={(r) => r.id}
         onRowClick={(r) => setDetailId(r.id)}
-        empty="발송된 Vendor RFQ가 없습니다."
+        empty="No Vendor RFQs sent."
         actions={
           <button className="btn primary" onClick={() => { setPickRfqId(null); setAdding(true); }}>
             + 신규 등록
@@ -296,10 +297,10 @@ function VendorRfqList({
       />
 
       {adding ? (
-        <Modal title="Vendor RFQ 발신" onClose={() => setAdding(false)} wide>
+        <Modal title="Vendor RFQ Sent" onClose={() => setAdding(false)} wide>
           <ProjectPicker projects={projects} rfqId={pickRfqId} onSelect={setPickRfqId} />
           {pickRfqId === null ? (
-            <div className="empty">진행중인 프로젝트를 먼저 선택하세요.</div>
+            <div className="empty">Select an active project first.</div>
           ) : (
             <VendorRfqAction
               rfqId={pickRfqId}
@@ -359,7 +360,7 @@ function VendorRfqDetailModal({
         setSentAt(data.sent_at || "");
         setItems(data.items || []);
       })
-      .catch((e) => setErr(e instanceof Error ? e.message : "오류"));
+      .catch((e) => setErr(e instanceof Error ? e.message : "Error"));
   }, [id]);
 
   async function save() {
@@ -378,14 +379,14 @@ function VendorRfqDetailModal({
       onChanged();
       onClose();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "수정 실패");
+      setErr(e instanceof Error ? e.message : "Update failed");
     } finally {
       setBusy(false);
     }
   }
 
   async function remove() {
-    if (!window.confirm("이 Vendor RFQ를 삭제할까요?")) return;
+    if (!window.confirm("Delete this Vendor RFQ?")) return;
     setBusy(true);
     setErr(null);
     try {
@@ -393,32 +394,32 @@ function VendorRfqDetailModal({
       onChanged();
       onClose();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "삭제 실패");
+      setErr(e instanceof Error ? e.message : "Delete failed");
       setBusy(false);
     }
   }
 
   return (
-    <Modal title={d ? `Vendor RFQ — ${d.vrfq_no}` : "Vendor RFQ 상세"} onClose={onClose} wide>
+    <Modal title={d ? `Vendor RFQ — ${d.vrfq_no}` : "Vendor RFQ details"} onClose={onClose} wide>
       {!d ? (
-        <div className="empty">불러오는 중…</div>
+        <div className="empty">Loading…</div>
       ) : (
         <>
           {editing ? (
             <>
-              <div className="form-section-title">프로젝트 기본 정보</div>
+              <div className="form-section-title">Project info</div>
               <dl className="intl-meta">
-                <div><dt>고객사</dt><dd>{d.customer || "—"}</dd></div>
-                <div><dt>선박</dt><dd>{d.vessel || "—"}</dd></div>
-                <div><dt>프로젝트명</dt><dd>{d.project_title || "—"}</dd></div>
-                <div><dt>품목 수</dt><dd>{items.length}</dd></div>
+                <div><dt>Customer</dt><dd>{d.customer || "—"}</dd></div>
+                <div><dt>Vessel</dt><dd>{d.vessel || "—"}</dd></div>
+                <div><dt>Project</dt><dd>{d.project_title || "—"}</dd></div>
+                <div><dt>Items</dt><dd>{items.length}</dd></div>
                 <div><dt>Customer RFQ No.</dt><dd>{d.customer_rfq_no || "—"}</dd></div>
                 <div><dt>K-Maris RFQ No.</dt><dd>{d.kmaris_rfq_no || "—"}</dd></div>
-                <div><dt>수신일</dt><dd>{d.received_at || "—"}</dd></div>
-                <div><dt>업무 유형</dt><dd>{d.work_type || "—"}</dd></div>
+                <div><dt>Received</dt><dd>{d.received_at || "—"}</dd></div>
+                <div><dt>Work type</dt><dd>{d.work_type || "—"}</dd></div>
               </dl>
 
-              <div className="form-section-title">이 Vendor 발송 정보</div>
+              <div className="form-section-title">This vendor send info</div>
               <div className="form-grid">
                 <div className="form-field">
                   <label>VRFQ No.</label>
@@ -427,22 +428,22 @@ function VendorRfqDetailModal({
                 <div className="form-field">
                   <label>Vendor</label>
                   <select value={vendorId} onChange={(e) => setVendorId(e.target.value === "" ? "" : Number(e.target.value))}>
-                    <option value="">선택…</option>
+                    <option value="">Select…</option>
                     {vendors.map((v) => (
                       <option key={v.id} value={v.id}>{v.name}</option>
                     ))}
                   </select>
                 </div>
                 <div className="form-field">
-                  <label>수신 담당자 이메일</label>
+                  <label>Recipient email</label>
                   <input value={email} onChange={(e) => setEmail(e.target.value)} />
                 </div>
                 <div className="form-field">
-                  <label>발신 일시</label>
+                  <label>Sent at</label>
                   <input type="datetime-local" value={sentAt} onChange={(e) => setSentAt(e.target.value)} />
                 </div>
                 <div className="form-field">
-                  <label>상태</label>
+                  <label>Status</label>
                   <input value={status} onChange={(e) => setStatus(e.target.value)} />
                 </div>
               </div>
@@ -451,26 +452,26 @@ function VendorRfqDetailModal({
             </>
           ) : (
             <>
-              <div className="form-section-title">프로젝트 기본 정보</div>
+              <div className="form-section-title">Project info</div>
               <dl className="intl-meta">
-                <div><dt>고객사</dt><dd>{d.customer || "—"}</dd></div>
-                <div><dt>선박</dt><dd>{d.vessel || "—"}</dd></div>
-                <div><dt>프로젝트명</dt><dd>{d.project_title || "—"}</dd></div>
-                <div><dt>품목 수</dt><dd>{d.items.length}</dd></div>
+                <div><dt>Customer</dt><dd>{d.customer || "—"}</dd></div>
+                <div><dt>Vessel</dt><dd>{d.vessel || "—"}</dd></div>
+                <div><dt>Project</dt><dd>{d.project_title || "—"}</dd></div>
+                <div><dt>Items</dt><dd>{d.items.length}</dd></div>
                 <div><dt>Customer RFQ No.</dt><dd>{d.customer_rfq_no || "—"}</dd></div>
                 <div><dt>K-Maris RFQ No.</dt><dd>{d.kmaris_rfq_no || "—"}</dd></div>
-                <div><dt>수신 담당자</dt><dd>{d.customer_contact || "—"}</dd></div>
-                <div><dt>수신 이메일</dt><dd>{d.customer_email || "—"}</dd></div>
+                <div><dt>Contact</dt><dd>{d.customer_contact || "—"}</dd></div>
+                <div><dt>Email</dt><dd>{d.customer_email || "—"}</dd></div>
               </dl>
 
-              <div className="form-section-title">이 Vendor 발송 정보</div>
+              <div className="form-section-title">This vendor send info</div>
               <dl className="intl-meta">
                 <div><dt>VRFQ No.</dt><dd>{d.vrfq_no || "—"}</dd></div>
                 <div><dt>Vendor</dt><dd>{d.vendor}</dd></div>
-                <div><dt>수신 담당자 이메일</dt><dd>{d.vendor_email || "—"}</dd></div>
-                <div><dt>발신 일시</dt><dd>{d.sent_at || d.sent_date || "—"}</dd></div>
-                <div><dt>상태</dt><dd>{d.status}</dd></div>
-                <div><dt>수신 견적</dt><dd>{d.quote_count}건</dd></div>
+                <div><dt>Recipient email</dt><dd>{d.vendor_email || "—"}</dd></div>
+                <div><dt>Sent at</dt><dd>{d.sent_at || d.sent_date || "—"}</dd></div>
+                <div><dt>Status</dt><dd>{tr(d.status)}</dd></div>
+                <div><dt>Quotes received</dt><dd>{d.quote_count}</dd></div>
               </dl>
 
               <ProjectVendorRfqList rows={d.project_vendor_rfqs || []} />
@@ -480,13 +481,13 @@ function VendorRfqDetailModal({
           <div className="form-actions">
             {editing ? (
               <>
-                <button className="btn primary" onClick={save} disabled={busy}>{busy ? "저장 중…" : "저장"}</button>
-                <button className="btn" onClick={() => setEditing(false)} disabled={busy}>취소</button>
+                <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
+                <button className="btn" onClick={() => setEditing(false)} disabled={busy}>Cancel</button>
               </>
             ) : (
-              <button className="btn" onClick={() => setEditing(true)} style={{ marginLeft: "auto" }}>✎ 수정</button>
+              <button className="btn" onClick={() => setEditing(true)} style={{ marginLeft: "auto" }}>✎ Edit</button>
             )}
-            <button className="btn danger" onClick={remove} disabled={busy || editing}>삭제</button>
+            <button className="btn danger" onClick={remove} disabled={busy || editing}>Delete</button>
           </div>
           {err ? <span className="action-err">{err}</span> : null}
         </>
@@ -503,17 +504,17 @@ function ProjectVendorRfqList({
   if (!rows.length) return null;
   return (
     <>
-      <div className="form-section-title">같은 프로젝트 Vendor 발송 현황</div>
+      <div className="form-section-title">Vendor sends for this project</div>
       <div className="table-wrap compact">
         <table className="mini wide">
           <thead>
             <tr>
               <th>VRFQ No.</th>
               <th>Vendor</th>
-              <th>수신 담당자</th>
-              <th>발신 일시</th>
-              <th>견적</th>
-              <th>상태</th>
+              <th>Contact</th>
+              <th>Sent at</th>
+              <th>Quote</th>
+              <th>Status</th>
             </tr>
           </thead>
           <tbody>
@@ -523,8 +524,8 @@ function ProjectVendorRfqList({
                 <td>{r.vendor}</td>
                 <td>{r.vendor_email || "—"}</td>
                 <td>{r.sent_at || "—"}</td>
-                <td>{r.quote_count}건</td>
-                <td>{r.status || "—"}</td>
+                <td>{r.quote_count}</td>
+                <td>{tr(r.status) || "—"}</td>
               </tr>
             ))}
           </tbody>
@@ -556,7 +557,7 @@ function VendorRfqItemEditor({
 
   return (
     <>
-      <div className="form-section-title">발송 품목</div>
+      <div className="form-section-title">Items sent</div>
       <div className="table-wrap compact">
         <table className="mini wide">
           <thead>
@@ -601,7 +602,7 @@ function VendorQuoteList({
   function load() {
     fetchVendorQuoteOverview()
       .then((d) => setRows(d.rows))
-      .catch((e) => setError(e instanceof Error ? e.message : "오류"));
+      .catch((e) => setError(e instanceof Error ? e.message : "Error"));
   }
   useEffect(load, []);
 
@@ -624,26 +625,26 @@ function VendorQuoteList({
   const columns: ColumnDef<VendorQuoteOverviewRow>[] = [
     {
       key: "received_at",
-      label: "수신일시",
+      label: "Received at",
       text: (r) => (r.received_at && r.received_at.length >= 16 ? `${r.received_at.slice(2, 10)} ${r.received_at.slice(11, 16)}` : r.received_date || ""),
       filter: "date",
       sortValue: (r) => Date.parse(r.received_at || r.received_date || "") || 0,
     },
-    { key: "vendor_quote_no", label: "Vendor 견적번호", text: (r) => r.vendor_quote_no || "" },
+    { key: "vendor_quote_no", label: "Vendor quote no.", text: (r) => r.vendor_quote_no || "" },
     { key: "vendor", label: "Vendor", text: (r) => r.vendor || "", filter: "facet" },
     { key: "vrfq_no", label: "VRFQ No.", text: (r) => r.vrfq_no || "" },
-    { key: "customer_rfq_no", label: "고객 RFQ No.", text: (r) => r.customer_rfq_no || "" },
-    { key: "item_count", label: "품목수", numeric: true, text: (r) => String(r.item_count), sortValue: (r) => r.item_count },
+    { key: "customer_rfq_no", label: "Customer RFQ No.", text: (r) => r.customer_rfq_no || "" },
+    { key: "item_count", label: "Items", numeric: true, text: (r) => String(r.item_count), sortValue: (r) => r.item_count },
     {
       key: "amount",
-      label: "금액",
+      label: "Amount",
       numeric: true,
       text: (r) => `${r.currency} ${money(r.amount)}`,
       sortValue: (r) => r.amount,
     },
   ];
 
-  if (error) return <div className="state error">API 오류: {error}</div>;
+  if (error) return <div className="state error">API error: {error}</div>;
 
   return (
     <>
@@ -652,7 +653,7 @@ function VendorQuoteList({
         columns={columns}
         getRowKey={(r) => r.id}
         onRowClick={(r) => setDetailId(r.id)}
-        empty="수신된 Vendor 견적이 없습니다."
+        empty="No Vendor quotes received."
         actions={
           <button className="btn primary" onClick={() => { setPickRfqId(null); setAdding(true); }}>
             + 신규 등록
@@ -661,10 +662,10 @@ function VendorQuoteList({
       />
 
       {adding ? (
-        <Modal title="Vendor Quote 수신 등록" onClose={() => setAdding(false)} wide>
+        <Modal title="Register Vendor Quote" onClose={() => setAdding(false)} wide>
           <ProjectPicker projects={projects} rfqId={pickRfqId} onSelect={setPickRfqId} />
           {pickRfqId === null ? (
-            <div className="empty">진행중인 프로젝트를 먼저 선택하세요.</div>
+            <div className="empty">Select an active project first.</div>
           ) : (
             <VendorQuoteAction
               rfqId={pickRfqId}
@@ -712,7 +713,7 @@ function VendorQuoteDetailModal({
         setNotes(data.notes || "");
         setItems((data.items || []).map(normalizeVendorQuoteItem));
       })
-      .catch((e) => setErr(e instanceof Error ? e.message : "오류"));
+      .catch((e) => setErr(e instanceof Error ? e.message : "Error"));
   }, [id]);
 
   async function save() {
@@ -729,14 +730,14 @@ function VendorQuoteDetailModal({
       onChanged();
       onClose();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "수정 실패");
+      setErr(e instanceof Error ? e.message : "Update failed");
     } finally {
       setBusy(false);
     }
   }
 
   async function remove() {
-    if (!window.confirm("이 Vendor 견적을 삭제할까요?")) return;
+    if (!window.confirm("Delete this Vendor quote?")) return;
     setBusy(true);
     setErr(null);
     try {
@@ -744,35 +745,35 @@ function VendorQuoteDetailModal({
       onChanged();
       onClose();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "삭제 실패");
+      setErr(e instanceof Error ? e.message : "Delete failed");
       setBusy(false);
     }
   }
 
   return (
-    <Modal title={d ? `Vendor 견적 — ${d.vendor_quote_no}` : "Vendor 견적 상세"} onClose={onClose} wide>
+    <Modal title={d ? `Vendor quote — ${d.vendor_quote_no}` : "Vendor quote details"} onClose={onClose} wide>
       {!d ? (
-        <div className="empty">불러오는 중…</div>
+        <div className="empty">Loading…</div>
       ) : editing ? (
         <>
           <div className="form-grid">
             <div className="form-field">
-              <label>Vendor 견적번호</label>
+              <label>Vendor quote no.</label>
               <input value={no} onChange={(e) => setNo(e.target.value)} />
             </div>
             <div className="form-field">
-              <label>견적 수신일시</label>
+              <label>Quote received at</label>
               <input type="datetime-local" value={receivedAt} onChange={(e) => setReceivedAt(e.target.value)} />
             </div>
             <div className="form-field">
-              <label>비고</label>
+              <label>Notes</label>
               <input value={notes} onChange={(e) => setNotes(e.target.value)} />
             </div>
           </div>
           <VendorQuoteItemEditor items={items} onChange={setItems} />
           <div className="form-actions">
-            <button className="btn primary" onClick={save} disabled={busy}>{busy ? "저장 중…" : "저장"}</button>
-            <button className="btn" onClick={() => setEditing(false)} disabled={busy}>취소</button>
+            <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
+            <button className="btn" onClick={() => setEditing(false)} disabled={busy}>Cancel</button>
           </div>
           {err ? <span className="action-err">{err}</span> : null}
         </>
@@ -781,14 +782,14 @@ function VendorQuoteDetailModal({
           <dl className="intl-meta">
             <div><dt>Vendor</dt><dd>{d.vendor}</dd></div>
             <div><dt>VRFQ No.</dt><dd>{d.vrfq_no}</dd></div>
-            <div><dt>고객 RFQ No.</dt><dd>{d.customer_rfq_no || "—"}</dd></div>
-            <div><dt>수신일</dt><dd>{d.received_date || "—"}</dd></div>
-            <div><dt>비고</dt><dd>{d.notes || "—"}</dd></div>
-            <div><dt>품목 수</dt><dd>{d.items.length}</dd></div>
+            <div><dt>Customer RFQ No.</dt><dd>{d.customer_rfq_no || "—"}</dd></div>
+            <div><dt>Received</dt><dd>{d.received_date || "—"}</dd></div>
+            <div><dt>Notes</dt><dd>{d.notes || "—"}</dd></div>
+            <div><dt>Items</dt><dd>{d.items.length}</dd></div>
           </dl>
           <div className="form-actions">
-            <button className="btn" onClick={() => setEditing(true)} style={{ marginLeft: "auto" }}>✎ 수정</button>
-            <button className="btn danger" onClick={remove} disabled={busy}>삭제</button>
+            <button className="btn" onClick={() => setEditing(true)} style={{ marginLeft: "auto" }}>✎ Edit</button>
+            <button className="btn danger" onClick={remove} disabled={busy}>Delete</button>
           </div>
           {err ? <span className="action-err">{err}</span> : null}
         </>
@@ -814,7 +815,7 @@ function CustomerQuoteList({
   function load() {
     fetchQuotationOverview()
       .then((d) => setRows(d.rows))
-      .catch((e) => setError(e instanceof Error ? e.message : "오류"));
+      .catch((e) => setError(e instanceof Error ? e.message : "Error"));
   }
   useEffect(load, []);
 
@@ -826,26 +827,26 @@ function CustomerQuoteList({
   const columns: ColumnDef<QtnRow>[] = [
     {
       key: "qtn_no",
-      label: "견적 No.",
+      label: "Quote No.",
       text: (r) => r.qtn_no || "",
       render: (r) => (
         <div>
           <div className="m">{r.qtn_no || <span className="dash">—</span>}</div>
-          {r.sent_date ? <div className="s">발신: {r.sent_date}</div> : null}
+          {r.sent_date ? <div className="s">Sent: {r.sent_date}</div> : null}
         </div>
       ),
     },
     { key: "rfq_no", label: "RFQ No.", text: (r) => r.rfq_no || "" },
     { key: "customer", label: "Customer", text: (r) => r.customer || "", filter: "facet" },
-    { key: "vessel", label: "선박", text: (r) => r.vessel || "", filter: "facet" },
-    { key: "item_count", label: "품목수", numeric: true, text: (r) => String(r.item_count), sortValue: (r) => r.item_count },
-    { key: "amount", label: "합계", numeric: true, text: (r) => `${r.currency} ${money(r.amount)}`, sortValue: (r) => r.amount },
+    { key: "vessel", label: "Vessel", text: (r) => r.vessel || "", filter: "facet" },
+    { key: "item_count", label: "Items", numeric: true, text: (r) => String(r.item_count), sortValue: (r) => r.item_count },
+    { key: "amount", label: "Total", numeric: true, text: (r) => `${r.currency} ${money(r.amount)}`, sortValue: (r) => r.amount },
     { key: "level", label: "Level", text: (r) => r.level || "" },
-    { key: "valid_until", label: "유효기간", text: (r) => r.valid_until || "", filter: "date" },
-    { key: "status", label: "상태", text: (r) => r.status || "", filter: "facet", render: (r) => <span className="ar-badge">{r.status}</span> },
+    { key: "valid_until", label: "Valid until", text: (r) => r.valid_until || "", filter: "date" },
+    { key: "status", label: "Status", text: (r) => tr(r.status) || "", filter: "facet", render: (r) => <span className="ar-badge">{tr(r.status)}</span> },
   ];
 
-  if (error) return <div className="state error">API 오류: {error}</div>;
+  if (error) return <div className="state error">API error: {error}</div>;
 
   return (
     <>
@@ -854,7 +855,7 @@ function CustomerQuoteList({
         columns={columns}
         getRowKey={(r) => r.id}
         onRowClick={(r) => setDetailId(r.id)}
-        empty="표시할 견적이 없습니다."
+        empty="No quotations to display."
         actions={
           <button className="btn primary" onClick={() => { setPickRfqId(null); setAdding(true); }}>
             + 신규 등록
@@ -863,10 +864,10 @@ function CustomerQuoteList({
       />
 
       {adding ? (
-        <Modal title="Customer Quotation 작성·발신" onClose={() => setAdding(false)} wide>
+        <Modal title="Create & Send Customer Quotation" onClose={() => setAdding(false)} wide>
           <ProjectPicker projects={projects} rfqId={pickRfqId} onSelect={setPickRfqId} />
           {pickRfqId === null ? (
-            <div className="empty">진행중인 프로젝트를 먼저 선택하세요.</div>
+            <div className="empty">Select an active project first.</div>
           ) : (
             <CustomerQuoteAction
               rfqId={pickRfqId}
@@ -915,7 +916,7 @@ function CustomerQuoteDetailModal({
         setTerms(data.terms || {});
         setItems(data.items || []);
       })
-      .catch((e) => setErr(e instanceof Error ? e.message : "오류"));
+      .catch((e) => setErr(e instanceof Error ? e.message : "Error"));
   }, [id]);
 
   const total = items.reduce((sum, it) => sum + Number(it.amount || 0), 0);
@@ -935,14 +936,14 @@ function CustomerQuoteDetailModal({
       onChanged();
       onClose();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "수정 실패");
+      setErr(e instanceof Error ? e.message : "Update failed");
     } finally {
       setBusy(false);
     }
   }
 
   async function remove() {
-    if (!window.confirm("이 견적서를 삭제할까요?")) return;
+    if (!window.confirm("Delete this quotation?")) return;
     setBusy(true);
     setErr(null);
     try {
@@ -950,7 +951,7 @@ function CustomerQuoteDetailModal({
       onChanged();
       onClose();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "삭제 실패");
+      setErr(e instanceof Error ? e.message : "Delete failed");
       setBusy(false);
     }
   }
@@ -958,14 +959,14 @@ function CustomerQuoteDetailModal({
   const STATUSES = ["초안", "발송완료", "협상중", "수주확정", "실주", "만료"];
 
   return (
-    <Modal title={d ? `견적서 — ${d.qtn_no}` : "견적서 상세"} onClose={onClose} wide>
+    <Modal title={d ? `Quotation — ${d.qtn_no}` : "Quotation details"} onClose={onClose} wide>
       {!d ? (
-        <div className="empty">불러오는 중…</div>
+        <div className="empty">Loading…</div>
       ) : editing ? (
         <>
           <div className="form-grid">
             <div className="form-field">
-              <label>통화</label>
+              <label>Currency</label>
               <select value={currency} onChange={(e) => setCurrency(e.target.value)}>
                 <option>USD</option>
                 <option>EUR</option>
@@ -974,14 +975,14 @@ function CustomerQuoteDetailModal({
               </select>
             </div>
             <div className="form-field">
-              <label>유효기간</label>
+              <label>Valid until</label>
               <input type="date" value={validUntil} onChange={(e) => setValidUntil(e.target.value)} />
             </div>
             <div className="form-field">
-              <label>상태</label>
+              <label>Status</label>
               <select value={status} onChange={(e) => setStatus(e.target.value)}>
                 {STATUSES.map((s) => (
-                  <option key={s} value={s}>{s}</option>
+                  <option key={s} value={s}>{tr(s)}</option>
                 ))}
               </select>
             </div>
@@ -989,9 +990,9 @@ function CustomerQuoteDetailModal({
           <CustomerQuoteItemEditor items={items} onChange={setItems} />
           <QuotationTermsEditor terms={terms} onChange={setTerms} />
           <div className="form-actions">
-            <span className="action-name">합계: {currency} {money(total)}</span>
-            <button className="btn primary" onClick={save} disabled={busy}>{busy ? "저장 중…" : "저장"}</button>
-            <button className="btn" onClick={() => setEditing(false)} disabled={busy}>취소</button>
+            <span className="action-name">Total: {currency} {money(total)}</span>
+            <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
+            <button className="btn" onClick={() => setEditing(false)} disabled={busy}>Cancel</button>
           </div>
           {err ? <span className="action-err">{err}</span> : null}
         </>
@@ -1000,15 +1001,15 @@ function CustomerQuoteDetailModal({
           <dl className="intl-meta">
             <div><dt>RFQ No.</dt><dd>{d.rfq_no || "—"}</dd></div>
             <div><dt>Customer</dt><dd>{d.customer}</dd></div>
-            <div><dt>선박</dt><dd>{d.vessel || "—"}</dd></div>
-            <div><dt>합계</dt><dd>{d.currency} {money(d.amount)}</dd></div>
-            <div><dt>유효기간</dt><dd>{d.valid_until || "—"}</dd></div>
-            <div><dt>상태</dt><dd>{d.status}</dd></div>
-            <div><dt>품목 수</dt><dd>{d.items.length}</dd></div>
+            <div><dt>Vessel</dt><dd>{d.vessel || "—"}</dd></div>
+            <div><dt>Total</dt><dd>{d.currency} {money(d.amount)}</dd></div>
+            <div><dt>Valid until</dt><dd>{d.valid_until || "—"}</dd></div>
+            <div><dt>Status</dt><dd>{tr(d.status)}</dd></div>
+            <div><dt>Items</dt><dd>{d.items.length}</dd></div>
           </dl>
           <div className="form-actions">
-            <button className="btn" onClick={() => setEditing(true)} style={{ marginLeft: "auto" }}>✎ 수정</button>
-            <button className="btn danger" onClick={remove} disabled={busy}>삭제</button>
+            <button className="btn" onClick={() => setEditing(true)} style={{ marginLeft: "auto" }}>✎ Edit</button>
+            <button className="btn danger" onClick={remove} disabled={busy}>Delete</button>
           </div>
           {err ? <span className="action-err">{err}</span> : null}
         </>
@@ -1078,7 +1079,7 @@ function ProjectSelect({
 
   return (
     <div className="project-select">
-      <label>진행중인 프로젝트</label>
+      <label>Active project</label>
       <div className="proj-combo" ref={ref}>
         <button
           type="button"
@@ -1090,7 +1091,7 @@ function ProjectSelect({
           {selected ? (
             <ProjectOptionLabel r={selected} />
           ) : (
-            <span className="proj-placeholder">선택…</span>
+            <span className="proj-placeholder">Select…</span>
           )}
           <span className="proj-caret" aria-hidden>
             ▾
@@ -1107,7 +1108,7 @@ function ProjectSelect({
                 setOpen(false);
               }}
             >
-              <span className="proj-placeholder">선택…</span>
+              <span className="proj-placeholder">Select…</span>
             </li>
             {rows.map((r) => (
               <li
@@ -1127,7 +1128,7 @@ function ProjectSelect({
         ) : null}
       </div>
       {rows.length === 0 ? (
-        <span className="hint-inline">등록된 프로젝트가 없습니다.</span>
+        <span className="hint-inline">No projects registered.</span>
       ) : null}
     </div>
   );
@@ -1149,7 +1150,7 @@ function VendorRfqAction({
   const [notes, setNotes] = useState("");
   const [previews, setPreviews] = useState<VendorRfqPreview[]>([]);
   // 케이마리스 RFQ No.는 이 단계(Vendor RFQ 발신)에서 부여된다.
-  const unassigned = !kmarisNo || kmarisNo === "미발급";
+  const unassigned = !kmarisNo || kmarisNo === "Not issued";
   const [rfqNoMode, setRfqNoMode] = useState<"auto" | "manual">("auto");
   const [manualNo, setManualNo] = useState("");
   const rfqNoArg = unassigned ? { mode: rfqNoMode, value: manualNo.trim() } : undefined;
@@ -1167,7 +1168,7 @@ function VendorRfqAction({
   // RFQ 생성 — 케이마리스 RFQ No. 단독 발번(선택)
   async function generateRfqNo() {
     if (rfqNoMode === "manual" && !manualNo.trim()) {
-      setErr("케이마리스 RFQ No.를 입력하세요. (또는 자동으로 변경)");
+      setErr("Enter the K-Maris RFQ No. (or switch to auto)");
       return;
     }
     setBusy(true);
@@ -1175,10 +1176,10 @@ function VendorRfqAction({
     setErr(null);
     try {
       const r = await assignRfqNo(rfqId, { mode: rfqNoMode, rfq_no: manualNo.trim() });
-      setMsg(`케이마리스 RFQ No. 발급: ${r.rfq_no}`);
+      setMsg(`K-Maris RFQ No. issued: ${r.rfq_no}`);
       onDone(); // 목록 새로고침 → 발급 상태 반영
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "RFQ 생성 실패");
+      setErr(e instanceof Error ? e.message : "RFQ creation failed");
     } finally {
       setBusy(false);
     }
@@ -1187,7 +1188,7 @@ function VendorRfqAction({
   async function makePreview() {
     if (vendorIds.length === 0) return;
     if (unassigned && rfqNoMode === "manual" && !manualNo.trim()) {
-      setErr("케이마리스 RFQ No.를 입력하세요. (또는 자동으로 변경)");
+      setErr("Enter the K-Maris RFQ No. (or switch to auto)");
       return;
     }
     setBusy(true);
@@ -1197,7 +1198,7 @@ function VendorRfqAction({
       const r = await previewVendorRfq(rfqId, vendorIds, lang, notes, rfqNoArg);
       setPreviews(r.previews);
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "미리보기 생성 실패");
+      setErr(e instanceof Error ? e.message : "Preview generation failed");
     } finally {
       setBusy(false);
     }
@@ -1214,7 +1215,7 @@ function VendorRfqAction({
       headers: { Authorization: `Bearer ${getToken()}` },
     });
     if (!res.ok) {
-      setErr("XLSX 다운로드 실패");
+      setErr("XLSX download failed");
       return;
     }
     const blob = await res.blob();
@@ -1229,11 +1230,11 @@ function VendorRfqAction({
   // 발신 완료 — 선택한 Vendor의 RFQ 발신을 기록(이메일 생성 여부와 무관). 초안이 있으면 그 내용을 함께 보낸다.
   async function sendAll() {
     if (vendorIds.length === 0) {
-      setErr("Vendor를 선택하세요.");
+      setErr("Select a vendor.");
       return;
     }
     if (unassigned && rfqNoMode === "manual" && !manualNo.trim()) {
-      setErr("케이마리스 RFQ No.를 입력하세요. (또는 자동으로 변경)");
+      setErr("Enter the K-Maris RFQ No. (or switch to auto)");
       return;
     }
     setBusy(true);
@@ -1250,12 +1251,12 @@ function VendorRfqAction({
         };
       });
       const r = await sendVendorRfq(rfqId, items, rfqNoArg, sentAt || undefined);
-      setMsg(`케이마리스 RFQ No. ${r.rfq_no} · 발신 완료 (Vendor RFQ ${r.saved}건 기록)`);
+      setMsg(`K-Maris RFQ No. ${r.rfq_no} · sent (${r.saved} Vendor RFQ recorded)`);
       setPreviews([]);
       setVendorIds([]);
       onDone();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "발신 실패");
+      setErr(e instanceof Error ? e.message : "Send failed");
     } finally {
       setBusy(false);
     }
@@ -1263,20 +1264,20 @@ function VendorRfqAction({
 
   return (
     <>
-      <div className="sub-h">Vendor RFQ 작성·발신</div>
+      <div className="sub-h">Create & Send Vendor RFQ</div>
       <div className="po-work-note">
-        <b>견적 요청 메일</b>
-        <span>이메일 초안과 견적 응답용 Excel 양식을 생성합니다. 메일은 직접 발송하고, 보낸 뒤 "발신 완료"로 기록하세요.</span>
+        <b>RFQ request email</b>
+        <span>Generates an email draft and an Excel response form. Send the email yourself, then mark it as "Sent".</span>
       </div>
       <div className="form-field">
-        <label>케이마리스 RFQ No.</label>
+        <label>K-Maris RFQ No.</label>
         {unassigned ? (
           <>
             <div className="seg-tabs">
               {(
                 [
-                  ["auto", "자동 생성"],
-                  ["manual", "직접 입력"],
+                  ["auto", "Auto-generate"],
+                  ["manual", "Manual"],
                 ] as const
               ).map(([m, lbl]) => (
                 <button
@@ -1294,11 +1295,11 @@ function VendorRfqAction({
                 style={{ marginTop: 8, maxWidth: 320 }}
                 value={manualNo}
                 onChange={(e) => setManualNo(e.target.value)}
-                placeholder="예: KMS-RFQ-2606-001"
+                placeholder="e.g. KMS-RFQ-2606-001"
               />
             ) : (
               <span className="hint-inline" style={{ marginTop: 8, display: "inline-block" }}>
-                "RFQ 생성" 또는 발신 시 KMS-RFQ-yymm-NNN 형식으로 부여됩니다.
+                Assigned as KMS-RFQ-yymm-NNN on "Create RFQ" or send.
               </span>
             )}
           </>
@@ -1309,7 +1310,7 @@ function VendorRfqAction({
         )}
       </div>
       <div className="form-field">
-        <label>Vendor 선택</label>
+        <label>Select vendor</label>
         <div className="vendor-checks">
           {vendors.map((v) => (
             <label key={v.id} className="check-inline">
@@ -1325,14 +1326,14 @@ function VendorRfqAction({
       </div>
       <div className="form-grid">
         <div className="form-field">
-          <label>이메일 언어</label>
+          <label>Email language</label>
           <select value={lang} onChange={(e) => setLang(e.target.value as "en" | "ko")}>
-            <option value="en">English (영문)</option>
-            <option value="ko">Korean (국문)</option>
+            <option value="en">English</option>
+            <option value="ko">Korean</option>
           </select>
         </div>
         <div className="form-field">
-          <label>발신 일시 (발신 완료 기록)</label>
+          <label>Sent at (mark as sent)</label>
           <input
             type="datetime-local"
             value={sentAt}
@@ -1341,7 +1342,7 @@ function VendorRfqAction({
         </div>
       </div>
       <div className="form-field">
-        <label>Vendor에게 전달할 메모</label>
+        <label>Note to vendor</label>
         <textarea
           className="po-textarea small"
           value={notes}
@@ -1368,24 +1369,24 @@ function VendorRfqAction({
       {previews.length > 0 ? (
         <div style={{ marginTop: 14 }}>
           <div className="po-work-note">
-            <b>이메일 직접 발송</b>
-            <span>아래 초안(제목·본문)을 복사하고 Excel 양식을 첨부해 직접 발송한 뒤, "발신 완료"를 눌러 기록하세요. 시스템은 메일을 발송하지 않습니다.</span>
+            <b>Send email yourself</b>
+            <span>Copy the draft (subject/body), attach the Excel form, send it yourself, then click "Sent" to record it. The system does not send mail.</span>
           </div>
           {previews.map((p, i) => (
             <div key={p.vendor_id} className="panel" style={{ boxShadow: "none" }}>
               <div className="sub-h">{p.vendor_name}</div>
               <div className="form-grid">
                 <div className="form-field">
-                  <label>수신자 이메일</label>
+                  <label>Recipient email</label>
                   <input value={p.to} onChange={(e) => patchPreview(i, "to", e.target.value)} />
                 </div>
                 <div className="form-field">
-                  <label>제목</label>
+                  <label>Subject</label>
                   <input value={p.subject} onChange={(e) => patchPreview(i, "subject", e.target.value)} />
                 </div>
               </div>
               <div className="form-field">
-                <label>본문</label>
+                <label>Body</label>
                 <textarea
                   className="po-textarea"
                   value={p.body}
@@ -1451,11 +1452,11 @@ function VendorQuoteAction({
       setItems((prev) => mergeParsedItems(prev.length ? prev : [], parsed));
       setParseMsg(
         parsed.length
-          ? `${parsed.length}개 품목 자동 입력 완료 — 내용을 확인·수정하세요`
-          : "품목을 추출하지 못했습니다. 직접 입력하거나 다른 파일을 시도하세요."
+          ? `Auto-filled ${parsed.length} item(s) — review and edit`
+          : "Could not extract items. Enter manually or try another file."
       );
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "파일 파싱 실패");
+      setErr(e instanceof Error ? e.message : "File parsing failed");
     } finally {
       setBusy(false);
     }
@@ -1481,7 +1482,7 @@ function VendorQuoteAction({
         receivedAt,
         notes
       );
-      setMsg(`수신 등록 완료 — ${r.vendor_quote_no}`);
+      setMsg(`Registered — ${r.vendor_quote_no}`);
       setNo("");
       setNotes("");
       setItems([]);
@@ -1489,7 +1490,7 @@ function VendorQuoteAction({
       setReceivedAt(nowLocalDt());
       onDone();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "등록 실패");
+      setErr(e instanceof Error ? e.message : "Registration failed");
     } finally {
       setBusy(false);
     }
@@ -1497,21 +1498,21 @@ function VendorQuoteAction({
 
   return (
     <div>
-      <div className="sub-h">Vendor Quote 수신 등록</div>
+      <div className="sub-h">Register Vendor Quote</div>
       {disabled ? (
-        <span className="hint-inline">먼저 Vendor RFQ를 발신하세요.</span>
+        <span className="hint-inline">Send a Vendor RFQ first.</span>
       ) : (
         <>
           <div className="form-grid">
             <div className="form-field">
-              <label>Vendor RFQ 선택</label>
+              <label>Select Vendor RFQ</label>
               <select
                 value={vrfqId}
                 onChange={(e) =>
                   setVrfqId(e.target.value === "" ? "" : Number(e.target.value))
                 }
               >
-                <option value="">Vendor RFQ 선택…</option>
+                <option value="">Select Vendor RFQ…</option>
                 {vendorRfqs.map((v) => (
                   <option key={v.id} value={v.id}>
                     {v.vrfq_no} · {v.vendor}
@@ -1520,11 +1521,11 @@ function VendorQuoteAction({
               </select>
             </div>
             <div className="form-field">
-              <label>Vendor 견적번호</label>
+              <label>Vendor quote no.</label>
               <input value={no} onChange={(e) => setNo(e.target.value)} />
             </div>
             <div className="form-field">
-              <label>견적 수신일시</label>
+              <label>Quote received at</label>
               <input
                 type="datetime-local"
                 value={receivedAt}
@@ -1534,8 +1535,8 @@ function VendorQuoteAction({
           </div>
 
           <div className="po-work-note" style={{ marginTop: 12 }}>
-            <b>Vendor 견적 파일 업로드</b>
-            <span>Vendor가 반환한 PDF · Excel · 이미지(스크린샷/사진)를 업로드하면 품명·Part No.·Maker·Origin·Unit Price·Lead Time 등 품목 리스트가 자동으로 채워집니다.</span>
+            <b>Upload Vendor quote file</b>
+            <span>Upload the PDF · Excel · image (screenshot/photo) returned by the vendor to auto-fill the item list (Description, Part No., Maker, Origin, Unit Price, Lead Time, etc.).</span>
           </div>
           <div className="action-row">
             <input
@@ -1544,14 +1545,14 @@ function VendorQuoteAction({
               disabled={busy || vrfqId === ""}
               onChange={(e) => parseFile(e.target.files?.[0] ?? null)}
             />
-            {busy ? <span className="hint-inline">분석 중…</span> : null}
+            {busy ? <span className="hint-inline">Analyzing…</span> : null}
             {parseMsg ? <span className="action-ok">{parseMsg}</span> : null}
           </div>
 
           <VendorQuoteItemEditor items={items} onChange={setItems} />
 
           <div className="form-field" style={{ marginTop: 12 }}>
-            <label>비고</label>
+            <label>Notes</label>
             <input value={notes} onChange={(e) => setNotes(e.target.value)} />
           </div>
 
@@ -1561,7 +1562,7 @@ function VendorQuoteAction({
               onClick={submit}
               disabled={busy || vrfqId === "" || !no.trim()}
             >
-              {busy ? "등록 중…" : "견적 저장"}
+              {busy ? "Saving…" : "Save quote"}
             </button>
           </div>
         </>
@@ -1609,13 +1610,13 @@ function VendorQuoteItemEditor({
 
   return (
     <div style={{ marginTop: 12 }}>
-      <div className="sub-h">견적 품목</div>
+      <div className="sub-h">Quote items</div>
       <div className="table-wrap">
         <table className="mini wide">
           <thead>
             <tr>
               <th>Part No.</th>
-              <th>품명</th>
+              <th>Description</th>
               <th>Maker</th>
               <th>Origin</th>
               <th className="num">Qty</th>
@@ -1646,7 +1647,7 @@ function VendorQuoteItemEditor({
           </tbody>
         </table>
       </div>
-      <button className="btn" style={{ marginTop: 8 }} onClick={add}>품목 추가</button>
+      <button className="btn" style={{ marginTop: 8 }} onClick={add}>Add item</button>
     </div>
   );
 }
@@ -1691,7 +1692,7 @@ function cleanVendorQuoteItems(items: VendorQuoteItem[]): VendorQuoteItem[] {
 
 // Streamlit 4_Quotation.py 의 거래 조건 프리셋 — datalist 로 드롭다운 + 자유 입력 모두 지원.
 const TERM_PRESETS = {
-  incoterms: ["FCA Busan, Korea", "FOB Busan, Korea", "CIF (지정 목적항)", "CFR (지정 목적항)", "DAP (지정 목적지)", "EXW Busan"],
+  incoterms: ["FCA Busan, Korea", "FOB Busan, Korea", "CIF (named port of destination)", "CFR (named port of destination)", "DAP (named destination)", "EXW Busan"],
   shipment_method: ["Air courier / Sea freight", "By Air (Courier)", "By Sea (FCL)", "By Sea (LCL)"],
   payment_terms: ["100% T/T in advance", "T/T 30 days after delivery", "T/T 50% in advance, 50% before shipment", "L/C at sight"],
   packing: ["Standard export packing", "Seaworthy export packing", "Wooden case packing"],
@@ -1771,7 +1772,7 @@ function CustomerQuoteAction({
       })
     );
     if (vq.currency) setCurrency(vq.currency);
-    setMsg(`${vq.vendor_quote_no} (${vq.vendor}) 견적에서 ${vq.items.length}개 품목을 불러왔습니다.`);
+    setMsg(`Loaded ${vq.items.length} item(s) from quote ${vq.vendor_quote_no} (${vq.vendor}).`);
   }
 
   const total = items.reduce((sum, it) => sum + Number(it.amount || 0), 0);
@@ -1783,10 +1784,10 @@ function CustomerQuoteAction({
     try {
       const r = await createCustomerQuote(rfqId, currency, total, items, validUntil, undefined, terms);
       setQtn({ id: r.id, qtn_no: r.qtn_no });
-      setMsg(`발신 완료 — ${r.qtn_no}`);
+      setMsg(`Sent — ${r.qtn_no}`);
       onDone();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "발신 실패");
+      setErr(e instanceof Error ? e.message : "Send failed");
     } finally {
       setBusy(false);
     }
@@ -1803,7 +1804,7 @@ function CustomerQuoteAction({
       setSubject(p.subject);
       setBody(p.body);
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "이메일 미리보기 실패");
+      setErr(e instanceof Error ? e.message : "Email preview failed");
     } finally {
       setBusy(false);
     }
@@ -1815,7 +1816,7 @@ function CustomerQuoteAction({
       headers: { Authorization: `Bearer ${getToken()}` },
     });
     if (!res.ok) {
-      setErr("PDF 다운로드 실패");
+      setErr("PDF download failed");
       return;
     }
     const blob = await res.blob();
@@ -1833,10 +1834,10 @@ function CustomerQuoteAction({
     setErr(null);
     try {
       const r = await sendQuotationEmail(qtn.id, to, subject, body, docType);
-      setMsg(`이메일 발송 완료: ${r.sent_date}`);
+      setMsg(`Email sent: ${r.sent_date}`);
       onDone();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "이메일 발송 실패");
+      setErr(e instanceof Error ? e.message : "Email sending failed");
     } finally {
       setBusy(false);
     }
@@ -1844,22 +1845,22 @@ function CustomerQuoteAction({
 
   return (
     <div>
-      <div className="sub-h">Customer Quotation 작성·발신</div>
+      <div className="sub-h">Create & Send Customer Quotation</div>
 
       <div className="po-work-note">
-        <b>Vendor 견적에서 불러오기 — 권장</b>
-        <span>공급사 견적을 선택하면 품목과 원가(cost)를 그대로 불러와 기본 마진을 적용합니다.</span>
+        <b>Load from Vendor quote — recommended</b>
+        <span>Selecting a supplier quote loads its items and cost, then applies the default margin.</span>
       </div>
       <div className="form-grid">
         <div className="form-field">
-          <label>Vendor 견적 선택</label>
+          <label>Select Vendor quote</label>
           <select
             value={importVqId}
             onChange={(e) => setImportVqId(e.target.value === "" ? "" : Number(e.target.value))}
             disabled={vendorQuotes.length === 0}
           >
             <option value="">
-              {vendorQuotes.length === 0 ? "수신된 Vendor 견적 없음" : "— 직접 입력 —"}
+              {vendorQuotes.length === 0 ? "No Vendor quote received" : "— Manual entry —"}
             </option>
             {vendorQuotes.map((v) => (
               <option key={v.id} value={v.id}>
@@ -1869,7 +1870,7 @@ function CustomerQuoteAction({
           </select>
         </div>
         <div className="form-field">
-          <label>기본 마진율 (%)</label>
+          <label>Default margin (%)</label>
           <input
             className="num"
             type="number"
@@ -1886,7 +1887,7 @@ function CustomerQuoteAction({
 
       <div className="form-grid">
         <div className="form-field">
-          <label>통화</label>
+          <label>Currency</label>
           <select value={currency} onChange={(e) => setCurrency(e.target.value)}>
             <option>USD</option>
             <option>EUR</option>
@@ -1895,7 +1896,7 @@ function CustomerQuoteAction({
           </select>
         </div>
         <div className="form-field">
-          <label>유효기간</label>
+          <label>Valid until</label>
           <input type="date" value={validUntil} onChange={(e) => setValidUntil(e.target.value)} />
         </div>
       </div>
@@ -1905,50 +1906,50 @@ function CustomerQuoteAction({
       <QuotationTermsEditor terms={terms} onChange={setTerms} />
 
       <div className="form-actions">
-        <span className="action-name">합계: {currency} {total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+        <span className="action-name">Total: {currency} {total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
         <button className="btn primary" onClick={submit} disabled={busy || items.length === 0}>
-          {busy ? "저장 중…" : "견적 저장"}
+          {busy ? "Saving…" : "Save quote"}
         </button>
       </div>
 
       {qtn ? (
         <div className="panel" style={{ boxShadow: "none" }}>
-          <div className="sub-h">발신 — {qtn.qtn_no}</div>
+          <div className="sub-h">Send — {qtn.qtn_no}</div>
           <div className="form-grid">
             <div className="form-field">
-              <label>문서 종류</label>
+              <label>Document type</label>
               <select value={docType} onChange={(e) => setDocType(e.target.value as "quotation" | "proforma_invoice")}>
-                <option value="quotation">Quotation (견적서)</option>
+                <option value="quotation">Quotation</option>
                 <option value="proforma_invoice">Proforma Invoice (PI)</option>
               </select>
             </div>
           </div>
           <div className="form-actions">
-            <button className="btn" onClick={downloadPdf}>PDF 다운로드</button>
-            <button className="btn" onClick={makeEmailPreview} disabled={busy}>이메일 미리보기</button>
+            <button className="btn" onClick={downloadPdf}>Download PDF</button>
+            <button className="btn" onClick={makeEmailPreview} disabled={busy}>Preview email</button>
           </div>
         </div>
       ) : null}
 
       {email ? (
         <div className="panel" style={{ boxShadow: "none" }}>
-          {!email.smtp_configured ? <div className="action-err">SMTP 미설정: 실제 발송할 수 없습니다.</div> : null}
+          {!email.smtp_configured ? <div className="action-err">SMTP not configured: real sending is unavailable.</div> : null}
           <div className="form-grid">
             <div className="form-field">
-              <label>수신자 이메일</label>
+              <label>Recipient email</label>
               <input value={to} onChange={(e) => setTo(e.target.value)} />
             </div>
             <div className="form-field">
-              <label>제목</label>
+              <label>Subject</label>
               <input value={subject} onChange={(e) => setSubject(e.target.value)} />
             </div>
           </div>
           <div className="form-field">
-            <label>본문</label>
+            <label>Body</label>
             <textarea className="po-textarea" value={body} onChange={(e) => setBody(e.target.value)} />
           </div>
           <button className="btn primary" onClick={sendEmail} disabled={busy || !to || !email.smtp_configured}>
-            {docType === "proforma_invoice" ? "PI 이메일 발송" : "견적서 이메일 발송"}
+            {docType === "proforma_invoice" ? "Send PI email" : "Send quotation email"}
           </button>
         </div>
       ) : null}
@@ -1989,7 +1990,7 @@ function QuotationTermsEditor({
 
   return (
     <div style={{ marginTop: 12 }}>
-      <div className="sub-h">거래 조건</div>
+      <div className="sub-h">Terms</div>
       <div className="form-grid">
         {field("incoterms", "Incoterms")}
         {field("shipment_method", "Shipment Method")}
@@ -2038,13 +2039,13 @@ function CustomerQuoteItemEditor({
 
   return (
     <div style={{ marginTop: 12 }}>
-      <div className="sub-h">견적 품목</div>
+      <div className="sub-h">Quote items</div>
       <div className="table-wrap">
         <table className="mini wide">
           <thead>
             <tr>
               <th>Part No.</th>
-              <th>품명</th>
+              <th>Description</th>
               <th className="num">Qty</th>
               <th>Unit</th>
               <th className="num">Cost</th>

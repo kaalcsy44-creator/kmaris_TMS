@@ -44,7 +44,7 @@ export default function RfqDetail({
         setData(d);
         setLevel(d.follow_up_level || "B");
       })
-      .catch((e) => setError(e instanceof Error ? e.message : "오류"))
+      .catch((e) => setError(e instanceof Error ? e.message : "Error"))
       .finally(() => setLoading(false));
   }
 
@@ -63,11 +63,11 @@ export default function RfqDetail({
     setActErr(null);
     try {
       await updateRfqLevel(rfqId, level);
-      setActMsg("Level 업데이트 완료");
+      setActMsg("Level updated");
       reload();
       onChanged?.();
     } catch (e) {
-      setActErr(e instanceof Error ? e.message : "Level 업데이트 실패");
+      setActErr(e instanceof Error ? e.message : "Level update failed");
     } finally {
       setBusy(false);
     }
@@ -82,9 +82,9 @@ export default function RfqDetail({
       const r = await deleteRfq(rfqId);
       setConfirmDel(false);
       onDeleted?.();
-      setActMsg(`${r.rfq_no} 삭제 완료`);
+      setActMsg(`${r.rfq_no} deleted`);
     } catch (e) {
-      setActErr(e instanceof Error ? e.message : "삭제 실패");
+      setActErr(e instanceof Error ? e.message : "Delete failed");
     } finally {
       setBusy(false);
     }
@@ -92,12 +92,12 @@ export default function RfqDetail({
 
   return (
     <div className="detail">
-      <h2>선택한 건 상세</h2>
+      <h2>Selected details</h2>
 
       {rfqId === null ? (
-        <div className="empty">위 표에서 행을 선택하면 상세가 표시됩니다.</div>
+        <div className="empty">Select a row in the table above to see details.</div>
       ) : loading ? (
-        <div className="empty">불러오는 중…</div>
+        <div className="empty">Loading…</div>
       ) : error ? (
         <div className="empty" style={{ color: "#b42318" }}>
           상세 불러오기 오류: {error}
@@ -107,21 +107,21 @@ export default function RfqDetail({
           {/* 요약 */}
           <div className="grid">
             <KV k="K-Maris RFQ No." v={data.rfq_no} />
-            <KV k="고객 RFQ No." v={data.customer_rfq_no} />
+            <KV k="Customer RFQ No." v={data.customer_rfq_no} />
             <KV k="Customer" v={data.customer} />
-            <KV k="담당자" v={data.customer_contact} />
-            <KV k="이메일" v={data.customer_email} />
-            <KV k="선박" v={data.vessel} />
-            <KV k="접수일" v={data.date} />
-            <KV k="상태" v={data.status} />
+            <KV k="Contact" v={data.customer_contact} />
+            <KV k="Email" v={data.customer_email} />
+            <KV k="Vessel" v={data.vessel} />
+            <KV k="Received" v={data.date} />
+            <KV k="Status" v={data.status} />
             <KV k="Follow-up" v={data.follow_up_level} />
-            <KV k="비고" v={data.notes} />
+            <KV k="Notes" v={data.notes} />
           </div>
 
           {/* 액션: Level 변경 / 삭제 (Streamlit 2_CRFQ render_rfq_detail 패리티) */}
           <div className="detail-actions">
             <div className="form-field">
-              <label>Level 변경</label>
+              <label>Change level</label>
               <div className="action-row">
                 <select value={level} onChange={(e) => setLevel(e.target.value)} disabled={busy}>
                   {LEVELS.map((l) => (
@@ -134,17 +134,17 @@ export default function RfqDetail({
                   Level 업데이트
                 </button>
               </div>
-              <span className="hint-inline">상태(12단계)는 진행에 따라 자동 반영됩니다.</span>
+              <span className="hint-inline">Status (12 stages) updates automatically as work progresses.</span>
             </div>
             <div className="form-field">
-              <label>삭제</label>
+              <label>Delete</label>
               {!confirmDel ? (
                 <button className="btn danger" onClick={() => setConfirmDel(true)} disabled={busy}>
                   RFQ 삭제
                 </button>
               ) : (
                 <div className="action-row">
-                  <span className="action-err">연결된 Vendor RFQ/Quote도 함께 삭제됩니다. 진행하시겠습니까?</span>
+                  <span className="action-err">Linked Vendor RFQs/Quotes will also be deleted. Proceed?</span>
                   <button className="btn danger" onClick={doDelete} disabled={busy}>
                     확인 삭제
                   </button>
@@ -161,7 +161,7 @@ export default function RfqDetail({
           <div className="detail-cols">
             {/* 12-step stepper */}
             <div className="stepper">
-              <div className="sub-h">진행 단계 (12)</div>
+              <div className="sub-h">Pipeline stages (12)</div>
               {data.steps.map((st) => (
                 <div key={st.no} className={`step ${st.state}`}>
                   <span className="dot">
@@ -176,18 +176,18 @@ export default function RfqDetail({
 
             {/* 품목 + 연결문서 */}
             <div className="detail-right">
-              <div className="sub-h">품목 ({data.items.length})</div>
+              <div className="sub-h">Items ({data.items.length})</div>
               {data.items.length === 0 ? (
-                <div className="empty">등록된 품목이 없습니다.</div>
+                <div className="empty">No items registered.</div>
               ) : (
                 <table className="mini">
                   <thead>
                     <tr>
                       <th>Part No.</th>
-                      <th>품명</th>
-                      <th className="num">수량</th>
-                      <th className="num">단가</th>
-                      <th className="num">금액</th>
+                      <th>Description</th>
+                      <th className="num">Qty</th>
+                      <th className="num">Unit price</th>
+                      <th className="num">Amount</th>
                     </tr>
                   </thead>
                   <tbody>

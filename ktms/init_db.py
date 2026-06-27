@@ -51,6 +51,7 @@ _MIGRATIONS = {
         "rfq_id":            "INTEGER",
         "consignee_confirmed_date": "VARCHAR(10)",
         "vendor_docs_sent_date":    "VARCHAR(10)",
+        "trade_type":        "VARCHAR(10) DEFAULT '수출'",
     },
     "vendor_rfqs": {
         "sent_to_email": "VARCHAR(200)",

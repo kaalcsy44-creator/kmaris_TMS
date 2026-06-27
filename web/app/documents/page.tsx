@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   documentDownloadUrl,
   fetchDocumentDetail,
@@ -14,12 +14,16 @@ import {
   uploadPod,
   podDownloadUrl,
   deletePod,
+  completeOrderStage,
+  addRfqStageNote,
 } from "@/lib/api";
 import { getToken } from "@/lib/auth";
-import type { DocumentDetail, DocumentWorkItem } from "@/lib/types";
+import type { DocRow, DocumentDetail, DocumentWorkItem } from "@/lib/types";
 import { fetchDocumentsOverview } from "@/lib/api";
 import { useCachedData, invalidateCache } from "@/lib/useCachedData";
 import AppShell, { SectionHead } from "@/components/AppShell";
+import FilterTable, { ColumnDef } from "@/components/common/FilterTable";
+import Modal from "@/components/common/Modal";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -28,35 +32,127 @@ const today = () => new Date().toISOString().slice(0, 10);
 export default function DocumentsPage() {
   return (
     <AppShell active="documents" wide>
-      <SectionHead title="문서 (Documents)" sub="오더별 CI · PL · SA · Tax 생성 및 발송" />
-      <Suspense fallback={<div className="state">불러오는 중…</div>}>
+      <SectionHead title="Documents" sub="Create & send CI · PL · SA · Tax per order" />
+      <Suspense fallback={<div className="state">Loading…</div>}>
         <DocumentsOverview />
       </Suspense>
     </AppShell>
   );
 }
 
+type StageTab = "s7" | "s8" | "s9" | "s10";
+type WorkView = "parts" | "service";
+const STAGE_KEYS: StageTab[] = ["s7", "s8", "s9", "s10"];
+// 업무유형(부품공급/서비스)에 따라 7~9단계 명칭이 달라진다(10은 공통).
+const STAGE_LABELS: Record<WorkView, Record<StageTab, string>> = {
+  parts: {
+    s7: "7. Delivery Readiness",
+    s8: "8. Delivery arrangement",
+    s9: "9. Delivery Complete · POD",
+    s10: "10. Tax Invoice · Billing",
+  },
+  service: {
+    s7: "7. Service Readiness",
+    s8: "8. Service Arrangement",
+    s9: "9. Service Complete · Report",
+    s10: "10. Tax Invoice · Billing",
+  },
+};
+
+// 문서 종류별 목록 설정 — 각 단계 목록의 컬럼/존재여부/라벨을 한 곳에서 정의한다.
+type DocKind = "ci" | "pl" | "sa" | "pod" | "tax";
+const KIND_CFG: Record<
+  DocKind,
+  {
+    label: string;
+    short: string;
+    has: (r: DocRow) => boolean;
+    docCol: ColumnDef<DocRow>;
+    extra?: ColumnDef<DocRow>[];
+  }
+> = {
+  ci: {
+    label: "Commercial Invoice",
+    short: "CI",
+    has: (r) => r.has_ci,
+    docCol: { key: "ci_no", label: "CI No.", text: (r) => r.ci_no || "" },
+  },
+  pl: {
+    label: "Packing List",
+    short: "PL",
+    has: (r) => r.has_pl,
+    docCol: { key: "pl_no", label: "PL No.", text: (r) => r.pl_no || "" },
+  },
+  sa: {
+    label: "Shipping Advice",
+    short: "SA",
+    has: (r) => r.has_sa,
+    docCol: { key: "sa_no", label: "SA No.", text: (r) => r.sa_no || "" },
+    extra: [
+      {
+        key: "sa_sent",
+        label: "Sent date",
+        text: (r) => r.sa_sent_date || "",
+        filter: "date",
+        render: (r) => r.sa_sent_date || <span className="muted">Not sent</span>,
+      },
+    ],
+  },
+  pod: {
+    label: "POD",
+    short: "POD",
+    has: (r) => r.has_pod,
+    docCol: { key: "pod", label: "POD file", text: (r) => r.pod_filename || "" },
+  },
+  tax: {
+    label: "Tax Invoice",
+    short: "Tax",
+    has: (r) => r.has_tax,
+    docCol: { key: "tax_no", label: "Tax No.", text: (r) => r.tax_no || "" },
+  },
+};
+
+type SvcStage = 7 | 8 | 9;
+type Editing =
+  | { orderId: number; kind: DocKind }
+  | { orderId: number; svc: SvcStage };
+
 function DocumentsOverview() {
   const params = useSearchParams();
+  const router = useRouter();
   const orderParam = params.get("order");
-  const [selectedId, setSelectedId] = useState<number | null>(
-    orderParam ? Number(orderParam) : null
-  );
+  const viewParam = params.get("view");
 
-  // 작업 대상 오더 목록(선택자 + 기본값 산정용). 테이블은 렌더하지 않는다.
+  const [workView, setWorkView] = useState<WorkView>(viewParam === "service" ? "service" : "parts");
+  const [stage, setStage] = useState<StageTab>("s7");
+  const [readyDoc, setReadyDoc] = useState<"ci" | "pl">("ci"); // 7단계 하위(CI/PL)
+  const [editing, setEditing] = useState<Editing | null>(null);
+
   const { data: overview, refresh } = useCachedData(
     "documents:overview",
     fetchDocumentsOverview
   );
   const orders = overview?.rows ?? [];
+  const partsOrders = orders.filter((o) => o.work_type !== "서비스");
+  const serviceOrders = orders.filter((o) => o.work_type === "서비스");
 
-  // ?order= 가 있으면 그 오더, 없으면 첫 번째 오더를 자동 선택.
+  // 상단 Documents 호버 메뉴(?view=parts|service)로 업무유형 전환.
   useEffect(() => {
-    if (orderParam) {
-      setSelectedId(Number(orderParam));
-      return;
+    if (viewParam === "service" || viewParam === "parts") setWorkView(viewParam);
+  }, [viewParam]);
+
+  // 진행현황 등에서 ?order=<id> 로 들어오면 해당 오더 작업 모달을 연다(업무유형 자동 선택).
+  useEffect(() => {
+    if (!orderParam) return;
+    const id = Number(orderParam);
+    const row = orders.find((o) => o.id === id);
+    if (row?.work_type === "서비스") {
+      setWorkView("service");
+      setEditing({ orderId: id, svc: 7 });
+    } else {
+      setWorkView("parts");
+      setEditing({ orderId: id, kind: "ci" });
     }
-    setSelectedId((prev) => prev ?? orders[0]?.id ?? null);
   }, [orderParam, overview]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function load() {
@@ -65,63 +161,342 @@ function DocumentsOverview() {
     return refresh();
   }
 
+  function open(orderId: number, kind: DocKind) {
+    setEditing({ orderId, kind });
+  }
+  function openSvc(orderId: number, svc: SvcStage) {
+    setEditing({ orderId, svc });
+  }
+  function close() {
+    setEditing(null);
+    if (orderParam) router.replace("/documents");
+  }
+
+  // 현재 단계에 해당하는 (부품공급) 문서 종류. 7단계는 CI/PL seg-tab.
+  const stageKinds: DocKind[] =
+    stage === "s7" ? [readyDoc] : stage === "s8" ? ["sa"] : stage === "s9" ? ["pod"] : ["tax"];
+  const svcStage: SvcStage | null =
+    stage === "s7" ? 7 : stage === "s8" ? 8 : stage === "s9" ? 9 : null;
+
   return (
-    <>
-      {orders.length > 1 ? (
-        <div className="toolbar">
-          <label className="field">
-            <span>작업 대상 오더</span>
-            <select
-              value={selectedId ?? ""}
-              onChange={(e) =>
-                setSelectedId(e.target.value === "" ? null : Number(e.target.value))
-              }
-            >
-              {orders.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.ord_no} · {o.customer}
-                </option>
-              ))}
-            </select>
-          </label>
+    <div className="action-tabs">
+      <div className="page-tabs">
+        {STAGE_KEYS.map((key) => (
+          <button key={key} className={stage === key ? "on" : ""} onClick={() => setStage(key)}>
+            {STAGE_LABELS[workView][key]}
+          </button>
+        ))}
+      </div>
+
+      {workView === "parts" ? (
+        <>
+          {stage === "s7" ? (
+            <div className="seg-tabs" style={{ margin: "14px 0" }}>
+              <button className={readyDoc === "ci" ? "on" : ""} onClick={() => setReadyDoc("ci")}>
+                Commercial Invoice
+              </button>
+              <button className={readyDoc === "pl" ? "on" : ""} onClick={() => setReadyDoc("pl")}>
+                Packing List
+              </button>
+            </div>
+          ) : null}
+
+          {partsOrders.some((o) => o.trade_type === "내수") ? (
+            <div className="alert-warn" style={{ margin: "12px 0" }}>
+              Domestic orders skip CI · PL · SA · POD. Handle billing (tax invoice · payment) in the{" "}
+              <b>AR</b> menu.
+            </div>
+          ) : null}
+
+          {stageKinds.map((kind) => (
+            <StageList key={kind} kind={kind} orders={partsOrders} onOpen={open} />
+          ))}
+        </>
+      ) : svcStage ? (
+        <div style={{ marginTop: 14 }}>
+          <ServiceStageList svc={svcStage} orders={serviceOrders} onOpen={openSvc} />
         </div>
+      ) : (
+        <div className="alert-warn" style={{ margin: "14px 0" }}>
+          Tax invoice · billing for service orders (stages 10–12) is handled in the <b>AR</b> menu.
+        </div>
+      )}
+
+      {editing ? (
+        "kind" in editing ? (
+          <DocEditorModal
+            orderId={editing.orderId}
+            kind={editing.kind}
+            ordNo={orders.find((o) => o.id === editing.orderId)?.ord_no}
+            onClose={close}
+            onChanged={load}
+          />
+        ) : (
+          <ServiceEditorModal
+            orderId={editing.orderId}
+            svc={editing.svc}
+            ordNo={orders.find((o) => o.id === editing.orderId)?.ord_no}
+            onClose={close}
+            onChanged={load}
+          />
+        )
       ) : null}
-      <DocumentWorkPanel orderId={selectedId} onChanged={load} />
-    </>
+    </div>
   );
 }
 
-type StageTab = "s7" | "s8" | "s9" | "s10";
-const STAGE_TABS: { key: StageTab; label: string }[] = [
-  { key: "s7", label: "7. Delivery Readiness" },
-  { key: "s8", label: "8. Delivery arrangement" },
-  { key: "s9", label: "9. 운송 완료 · POD 수취" },
-  { key: "s10", label: "10. Tax Invoice 작성 · 대금 청구" },
-];
+// ── 서비스 업무 7·8·9단계 ──────────────────────────────────────────────────
+const SVC_CFG: Record<SvcStage, { label: string; done: (r: DocRow) => boolean }> = {
+  7: { label: "Service Readiness", done: (r) => r.svc_ready_done },
+  8: { label: "Service Arrangement", done: (r) => r.svc_arr_done },
+  9: { label: "Service Complete · Report", done: (r) => r.has_pod },
+};
 
-function DocumentWorkPanel({
+function ServiceStageList({
+  svc,
+  orders,
+  onOpen,
+}: {
+  svc: SvcStage;
+  orders: DocRow[];
+  onOpen: (orderId: number, svc: SvcStage) => void;
+}) {
+  const cfg = SVC_CFG[svc];
+  const columns: ColumnDef<DocRow>[] = [
+    { key: "ord_no", label: "ORD No.", text: (r) => r.ord_no || "" },
+    { key: "customer", label: "Customer", text: (r) => r.customer || "", filter: "facet" },
+    { key: "vessel", label: "Vessel", text: (r) => r.vessel || "", filter: "facet" },
+    { key: "po_no", label: "PO No.", text: (r) => r.po_no || "" },
+    ...(svc === 9
+      ? [{ key: "report", label: "Report file", text: (r: DocRow) => r.pod_filename || "" }]
+      : []),
+    {
+      key: "done",
+      label: "Status",
+      text: (r) => (cfg.done(r) ? "Done" : "Pending"),
+      filter: "facet",
+      render: (r) => (
+        <span className={`ar-badge${cfg.done(r) ? "" : " overdue"}`}>
+          {cfg.done(r) ? "Done" : "Pending"}
+        </span>
+      ),
+    },
+  ];
+
+  return (
+    <FilterTable
+      rows={orders}
+      columns={columns}
+      getRowKey={(r) => r.id}
+      onRowClick={(r) => onOpen(r.id, svc)}
+      empty={`No service orders for ${cfg.label}.`}
+    />
+  );
+}
+
+// 서비스 단계 작업 모달 — 7·8단계는 완료체크+메모, 9단계는 리포트 파일 업로드.
+function ServiceEditorModal({
   orderId,
+  svc,
+  ordNo,
+  onClose,
   onChanged,
 }: {
-  orderId: number | null;
+  orderId: number;
+  svc: SvcStage;
+  ordNo?: string;
+  onClose: () => void;
   onChanged: () => void;
 }) {
   const [data, setData] = useState<DocumentDetail | null>(null);
-  const [tab, setTab] = useState<StageTab>("s7");
-  const [readyDoc, setReadyDoc] = useState<"ci" | "pl">("ci"); // 7단계 하위(CI/PL)
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   function load() {
-    if (orderId === null) {
-      setData(null);
-      return;
-    }
     setLoading(true);
     setError(null);
     fetchDocumentDetail(orderId)
       .then(setData)
-      .catch((e) => setError(e instanceof Error ? e.message : "오류"))
+      .catch((e) => setError(e instanceof Error ? e.message : "Error"))
+      .finally(() => setLoading(false));
+  }
+  useEffect(load, [orderId]);
+
+  function afterChange() {
+    load();
+    onChanged();
+  }
+
+  const title = `${SVC_CFG[svc].label}${ordNo ? ` — ${ordNo}` : ""}`;
+
+  return (
+    <Modal title={title} onClose={onClose} wide>
+      {error ? <div className="state error">API error: {error}</div> : null}
+      {loading && !data ? <div className="state">Loading details...</div> : null}
+      {data ? (
+        svc === 9 ? (
+          <PodTab key={`rep-${data.order.id}`} data={data} onChanged={afterChange} docLabel="Service Report" />
+        ) : (
+          <ServiceMilestoneTab key={`svc${svc}-${data.order.id}`} data={data} svc={svc} onChanged={afterChange} />
+        )
+      ) : null}
+    </Modal>
+  );
+}
+
+// 서비스 7·8단계 — 단계 완료 토글 + 메모(활동 기록으로 저장).
+function ServiceMilestoneTab({
+  data,
+  svc,
+  onChanged,
+}: {
+  data: DocumentDetail;
+  svc: 7 | 8;
+  onChanged: () => void;
+}) {
+  const done = Boolean(data.stage_done[String(svc) as "7" | "8"]);
+  const [memo, setMemo] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function save(complete: boolean) {
+    setBusy(true);
+    setErr(null);
+    try {
+      if (memo.trim() && data.order.rfq_id) {
+        await addRfqStageNote(data.order.rfq_id, svc, { text: memo.trim() });
+      }
+      await completeOrderStage(data.order.id, svc, complete);
+      onChanged();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="doc-tab">
+      <div className="milestone-row" style={{ marginBottom: 12 }}>
+        <span className={`ar-badge${done ? "" : " overdue"}`}>{done ? "Done" : "Pending"}</span>
+      </div>
+      <label className="form-field">
+        <span>Note (added to activity log)</span>
+        <textarea
+          className="po-textarea small"
+          placeholder="A note here is added to the Progress activity log for this stage. (optional)"
+          value={memo}
+          onChange={(e) => setMemo(e.target.value)}
+        />
+      </label>
+      <div className="form-actions">
+        <button className="btn primary" disabled={busy} onClick={() => save(true)}>
+          {busy ? "Working…" : "Complete this stage"}
+        </button>
+        {done ? (
+          <button className="btn" disabled={busy} onClick={() => save(false)}>
+            Undo completion
+          </button>
+        ) : null}
+        {err ? <span className="action-err">{err}</span> : null}
+      </div>
+    </div>
+  );
+}
+
+// 단계별 문서 목록 — RFQ·P/O 와 동일한 FilterTable 정렬·필터 UX.
+// 행 클릭 시 해당 오더 작업 모달, "+ 등록" 으로 아직 없는 오더를 골라 작성한다.
+function StageList({
+  kind,
+  orders,
+  onOpen,
+}: {
+  kind: DocKind;
+  orders: DocRow[];
+  onOpen: (orderId: number, kind: DocKind) => void;
+}) {
+  const cfg = KIND_CFG[kind];
+  const [registering, setRegistering] = useState(false);
+
+  const columns: ColumnDef<DocRow>[] = [
+    cfg.docCol,
+    { key: "ord_no", label: "ORD No.", text: (r) => r.ord_no || "" },
+    { key: "customer", label: "Customer", text: (r) => r.customer || "", filter: "facet" },
+    { key: "vessel", label: "Vessel", text: (r) => r.vessel || "", filter: "facet" },
+    { key: "po_no", label: "PO No.", text: (r) => r.po_no || "" },
+    ...(cfg.extra ?? []),
+  ];
+
+  // 내수(국내공급) 오더는 CI/PL/SA/POD/Tax(수출 문서)를 생략 → 목록·등록 대상에서 제외.
+  const exportOrders = orders.filter((r) => r.trade_type !== "내수");
+  const listRows = exportOrders.filter(cfg.has);
+  const registerable = exportOrders.filter((r) => !cfg.has(r));
+
+  return (
+    <>
+      <FilterTable
+        rows={listRows}
+        columns={columns}
+        getRowKey={(r) => r.id}
+        onRowClick={(r) => onOpen(r.id, kind)}
+        empty={`No ${cfg.label} registered.`}
+        actions={
+          <button className="btn primary" onClick={() => setRegistering(true)}>
+            + New {cfg.short}
+          </button>
+        }
+      />
+
+      {registering ? (
+        <Modal title={`New ${cfg.label} — select order`} onClose={() => setRegistering(false)} wide>
+          <p className="state" style={{ marginTop: 0 }}>
+            Select an order to create a {cfg.label} for.
+          </p>
+          <FilterTable
+            rows={registerable}
+            columns={[
+              { key: "ord_no", label: "ORD No.", text: (r) => r.ord_no || "" },
+              { key: "customer", label: "Customer", text: (r) => r.customer || "", filter: "facet" },
+              { key: "vessel", label: "Vessel", text: (r) => r.vessel || "", filter: "facet" },
+              { key: "po_no", label: "PO No.", text: (r) => r.po_no || "" },
+            ]}
+            getRowKey={(r) => r.id}
+            onRowClick={(r) => {
+              setRegistering(false);
+              onOpen(r.id, kind);
+            }}
+            empty={`No orders available to create a ${cfg.label}.`}
+          />
+        </Modal>
+      ) : null}
+    </>
+  );
+}
+
+// 오더 작업 모달 — 클릭한 문서 한 종류의 편집기만 띄운다(다른 단계 탭은 보이지 않음).
+function DocEditorModal({
+  orderId,
+  kind,
+  ordNo,
+  onClose,
+  onChanged,
+}: {
+  orderId: number;
+  kind: DocKind;
+  ordNo?: string;
+  onClose: () => void;
+  onChanged: () => void;
+}) {
+  const [data, setData] = useState<DocumentDetail | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function load() {
+    setLoading(true);
+    setError(null);
+    fetchDocumentDetail(orderId)
+      .then(setData)
+      .catch((e) => setError(e instanceof Error ? e.message : "Error"))
       .finally(() => setLoading(false));
   }
 
@@ -132,58 +507,39 @@ function DocumentWorkPanel({
     onChanged();
   }
 
-  if (orderId === null) {
-    return (
-      <div className="state">
-        진행현황(내부확인용)에서 거래의 <b>Documents</b> 버튼으로 들어오면 해당 오더의
-        7~10단계(선적 · 인도 · 세금계산서) 작업이 표시됩니다.
-      </div>
-    );
-  }
+  const title = `${KIND_CFG[kind].label}${ordNo ? ` — ${ordNo}` : ""}`;
 
   return (
-    <div className="action-tabs">
-      {error ? <div className="state error">API 오류: {error}</div> : null}
-      {loading && !data ? <div className="state">상세 불러오는 중...</div> : null}
-
+    <Modal title={title} onClose={onClose} wide>
+      {error ? <div className="state error">API error: {error}</div> : null}
+      {loading && !data ? <div className="state">Loading details...</div> : null}
       {data ? (
-        <>
-          <div className="page-tabs">
-            {STAGE_TABS.map((t) => (
-              <button key={t.key} className={tab === t.key ? "on" : ""} onClick={() => setTab(t.key)}>
-                {t.label}
-              </button>
-            ))}
-          </div>
-
-          {tab === "s7" && (
-            <>
-              <div className="seg-tabs" style={{ marginBottom: 14 }}>
-                <button className={readyDoc === "ci" ? "on" : ""} onClick={() => setReadyDoc("ci")}>
-                  Commercial Invoice
-                </button>
-                <button className={readyDoc === "pl" ? "on" : ""} onClick={() => setReadyDoc("pl")}>
-                  Packing List
-                </button>
-              </div>
-              {readyDoc === "ci" ? (
-                <CommercialInvoiceTab key={`ci-${data.order.id}-${data.ci?.id ?? 0}`} data={data} onChanged={afterChange} />
-              ) : (
-                <PackingListTab key={`pl-${data.order.id}-${data.pl?.id ?? 0}`} data={data} onChanged={afterChange} />
-              )}
-            </>
-          )}
-          {tab === "s8" && <ShippingAdviceTab key={`sa-${data.order.id}-${data.sa?.id ?? 0}`} data={data} onChanged={afterChange} />}
-          {tab === "s9" && <PodTab key={`pod-${data.order.id}`} data={data} onChanged={afterChange} />}
-          {tab === "s10" && <TaxInvoiceTab key={`tax-${data.order.id}-${data.tax?.id ?? 0}`} data={data} onChanged={afterChange} />}
-        </>
+        kind === "ci" ? (
+          <CommercialInvoiceTab key={`ci-${data.order.id}-${data.ci?.id ?? 0}`} data={data} onChanged={afterChange} />
+        ) : kind === "pl" ? (
+          <PackingListTab key={`pl-${data.order.id}-${data.pl?.id ?? 0}`} data={data} onChanged={afterChange} />
+        ) : kind === "sa" ? (
+          <ShippingAdviceTab key={`sa-${data.order.id}-${data.sa?.id ?? 0}`} data={data} onChanged={afterChange} />
+        ) : kind === "pod" ? (
+          <PodTab key={`pod-${data.order.id}`} data={data} onChanged={afterChange} />
+        ) : (
+          <TaxInvoiceTab key={`tax-${data.order.id}-${data.tax?.id ?? 0}`} data={data} onChanged={afterChange} />
+        )
       ) : null}
-    </div>
+    </Modal>
   );
 }
 
 /** 9) 운송 완료 · POD 수취 — 인도 증빙(POD) 파일 업로드/다운로드/삭제. 업로드 시 9단계 완료. */
-function PodTab({ data, onChanged }: { data: DocumentDetail; onChanged: () => void }) {
+function PodTab({
+  data,
+  onChanged,
+  docLabel = "POD (proof of delivery)",
+}: {
+  data: DocumentDetail;
+  onChanged: () => void;
+  docLabel?: string;
+}) {
   const pod = data.pod;
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -198,7 +554,7 @@ function PodTab({ data, onChanged }: { data: DocumentDetail; onChanged: () => vo
       await uploadPod(data.order.id, file);
       onChanged();
     } catch (x) {
-      setErr(x instanceof Error ? x.message : "업로드 실패");
+      setErr(x instanceof Error ? x.message : "Upload failed");
     } finally {
       setBusy(false);
     }
@@ -209,7 +565,7 @@ function PodTab({ data, onChanged }: { data: DocumentDetail; onChanged: () => vo
       headers: getToken() ? { Authorization: `Bearer ${getToken()}` } : {},
     });
     if (!res.ok) {
-      setErr("다운로드 실패");
+      setErr("Download failed");
       return;
     }
     const blob = await res.blob();
@@ -222,14 +578,14 @@ function PodTab({ data, onChanged }: { data: DocumentDetail; onChanged: () => vo
   }
 
   async function remove() {
-    if (!confirm("POD 파일을 삭제할까요? (9단계 완료가 해제됩니다)")) return;
+    if (!confirm("Delete the POD file? (stage 9 completion will be undone)")) return;
     setBusy(true);
     setErr(null);
     try {
       await deletePod(data.order.id);
       onChanged();
     } catch (x) {
-      setErr(x instanceof Error ? x.message : "삭제 실패");
+      setErr(x instanceof Error ? x.message : "Delete failed");
     } finally {
       setBusy(false);
     }
@@ -237,26 +593,26 @@ function PodTab({ data, onChanged }: { data: DocumentDetail; onChanged: () => vo
 
   return (
     <div className="doc-tab">
-      <h3>POD (인도 증빙) 수취</h3>
+      <h3>{docLabel}</h3>
       {pod ? (
         <div className="pod-current">
           <span className="pod-file">📄 {pod.filename}</span>
-          {pod.uploaded_at ? <span className="pod-when">업로드 {fmtDateTime(pod.uploaded_at)}</span> : null}
+          {pod.uploaded_at ? <span className="pod-when">Uploaded {fmtDateTime(pod.uploaded_at)}</span> : null}
           <button className="btn" onClick={download} disabled={busy}>
-            다운로드
+            Download
           </button>
           <button className="btn danger" onClick={remove} disabled={busy}>
-            삭제
+            Delete
           </button>
         </div>
       ) : (
         <div className="state">
-          아직 POD 파일이 없습니다. 인도 증빙(PDF · 이미지)을 업로드하면 <b>9단계가 완료</b>됩니다.
+          No {docLabel} file yet. Uploading a file (PDF · image) will <b>complete stage 9</b>.
         </div>
       )}
       <div className="form-actions">
         <label className="btn primary" style={{ cursor: busy ? "default" : "pointer" }}>
-          {busy ? "처리 중…" : pod ? "POD 파일 교체" : "POD 파일 업로드"}
+          {busy ? "Working…" : pod ? `Replace ${docLabel} file` : `Upload ${docLabel} file`}
           <input type="file" hidden accept=".pdf,image/*" onChange={onPick} disabled={busy} />
         </label>
         {err ? <span className="action-err">{err}</span> : null}
@@ -291,14 +647,14 @@ function OrderMilestones({ data, onChanged }: { data: DocumentDetail; onChanged:
         disabled={busy}
         onClick={() => toggle("consignee_confirmed_date", !data.order.consignee_confirmed_date)}
       >
-        Customer 확인 {data.order.consignee_confirmed_date || "미완료"}
+        Customer confirmed {data.order.consignee_confirmed_date || "pending"}
       </button>
       <button
         className="btn"
         disabled={busy}
         onClick={() => toggle("vendor_docs_sent_date", !data.order.vendor_docs_sent_date)}
       >
-        Vendor 서류 확인 {data.order.vendor_docs_sent_date || "미완료"}
+        Vendor docs confirmed {data.order.vendor_docs_sent_date || "pending"}
       </button>
     </div>
   );
@@ -344,10 +700,10 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
       <MissingWarning missing={data.ci?.missing || []} />
       <div className="form-actions">
         <button className="btn primary" disabled={busy} onClick={save}>
-          CI 저장
+          Save CI
         </button>
-        <DownloadButton orderId={data.order.id} kind="ci/pdf" disabled={!data.ci} label="CI PDF 다운로드" />
-        <span className="hint-inline">합계 {currency} {total.toLocaleString()}</span>
+        <DownloadButton orderId={data.order.id} kind="ci/pdf" disabled={!data.ci} label="Download CI PDF" />
+        <span className="hint-inline">Total {currency} {total.toLocaleString()}</span>
       </div>
     </div>
   );
@@ -370,7 +726,7 @@ function PackingListTab({ data, onChanged }: { data: DocumentDetail; onChanged: 
   }
 
   if (!data.ci) {
-    return <div className="state">먼저 Commercial Invoice를 생성하세요.</div>;
+    return <div className="state">Create a Commercial Invoice first.</div>;
   }
 
   return (
@@ -382,9 +738,9 @@ function PackingListTab({ data, onChanged }: { data: DocumentDetail; onChanged: 
       <MissingWarning missing={data.pl?.missing || []} />
       <div className="form-actions">
         <button className="btn primary" disabled={busy} onClick={save}>
-          PL 저장
+          Save PL
         </button>
-        <DownloadButton orderId={data.order.id} kind="pl/pdf" disabled={!data.pl} label="PL PDF 다운로드" />
+        <DownloadButton orderId={data.order.id} kind="pl/pdf" disabled={!data.pl} label="Download PL PDF" />
       </div>
     </div>
   );
@@ -442,38 +798,38 @@ function ShippingAdviceTab({ data, onChanged }: { data: DocumentDetail; onChange
       {data.ci ? (
         <MissingWarning missing={ciMissing} />
       ) : (
-        <div className="alert-warn">CI가 아직 없습니다. SA는 CI 품목 기준으로 발송됩니다 — 먼저 CI를 생성하세요.</div>
+        <div className="alert-warn">No CI yet. The SA is sent based on CI items — create a CI first.</div>
       )}
       <div className="form-grid">
-        <Field label="수신자 이메일" value={to} onChange={setTo} />
-        <Field label="제목" value={subject} onChange={setSubject} />
+        <Field label="Recipient email" value={to} onChange={setTo} />
+        <Field label="Subject" value={subject} onChange={setSubject} />
       </div>
       <textarea
         className="po-textarea small"
-        placeholder="본문을 비워두면 기본 Shipping Advice 메일 본문으로 발송합니다."
+        placeholder="Leave the body empty to send the default Shipping Advice email body."
         value={body}
         onChange={(e) => setBody(e.target.value)}
       />
       {ciMissing.length > 0 ? (
         <label className="check-inline" style={{ marginTop: 8 }}>
           <input type="checkbox" checked={ackMissing} onChange={(e) => setAckMissing(e.target.checked)} />
-          누락/수량부족 품목 {ciMissing.length}건을 확인했으며 그대로 발송합니다.
+          I have reviewed {ciMissing.length} missing/short-quantity item(s) and will send as is.
         </label>
       ) : null}
       <div className="form-actions">
         <button className="btn primary" disabled={busy} onClick={save}>
-          SA 저장
+          Save SA
         </button>
-        <DownloadButton orderId={data.order.id} kind="sa/pdf" disabled={!data.sa} label="SA PDF 다운로드" />
+        <DownloadButton orderId={data.order.id} kind="sa/pdf" disabled={!data.sa} label="Download SA PDF" />
         <button
           className="btn"
           disabled={busy || !data.sa || !to.trim() || (ciMissing.length > 0 && !ackMissing)}
           onClick={send}
         >
-          SA 이메일 발송
+          Send SA email
         </button>
         <span className="hint-inline">
-          SMTP {data.smtp_configured ? "설정됨" : "미설정"} {data.sa?.sent_date ? `· 발송 ${data.sa.sent_date}` : ""}
+          SMTP {data.smtp_configured ? "configured" : "not configured"} {data.sa?.sent_date ? `· sent ${data.sa.sent_date}` : ""}
         </span>
       </div>
     </div>
@@ -503,7 +859,7 @@ function TaxInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChanged: (
   }
 
   if (!data.ci) {
-    return <div className="state">먼저 Commercial Invoice를 생성하세요.</div>;
+    return <div className="state">Create a Commercial Invoice first.</div>;
   }
 
   return (
@@ -516,9 +872,9 @@ function TaxInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChanged: (
       </div>
       <div className="form-actions">
         <button className="btn primary" disabled={busy} onClick={save}>
-          Tax Invoice Data 생성 + AR 등록
+          Create Tax Invoice Data + register AR
         </button>
-        <DownloadButton orderId={data.order.id} kind="tax/xlsx" disabled={!data.tax} label="Tax XLSX 다운로드" />
+        <DownloadButton orderId={data.order.id} kind="tax/xlsx" disabled={!data.tax} label="Download Tax XLSX" />
       </div>
     </div>
   );
@@ -651,7 +1007,7 @@ function ItemEditor({
         </tbody>
       </table>
       <button className="btn" style={{ marginTop: 10 }} onClick={() => setItems([...items, blankItem(packing)])}>
-        행 추가
+        Add row
       </button>
     </div>
   );
@@ -662,10 +1018,10 @@ function MissingWarning({
 }: {
   missing: { part_no: string; description: string; order_qty: number; doc_qty: number }[];
 }) {
-  if (missing.length === 0) return <div className="alert-ok">문서 품목이 오더와 일치합니다.</div>;
+  if (missing.length === 0) return <div className="alert-ok">Document items match the order.</div>;
   return (
     <div className="state error">
-      누락 또는 수량 부족 품목 {missing.length}건:{" "}
+      {missing.length} missing or short-quantity item(s):{" "}
       {missing.map((m) => `${m.part_no || m.description} (${m.doc_qty}/${m.order_qty})`).join(", ")}
     </div>
   );

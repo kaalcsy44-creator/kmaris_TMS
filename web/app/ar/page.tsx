@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   arSoaXlsxUrl,
   createArRecord,
@@ -15,8 +15,11 @@ import {
 } from "@/lib/api";
 import { getToken } from "@/lib/auth";
 import { useCachedData, invalidateCache } from "@/lib/useCachedData";
-import type { ArRow, PoWorkOptions } from "@/lib/types";
+import type { ArRow, DocumentDetail, PoWorkOptions } from "@/lib/types";
+import { tr } from "@/lib/labels";
 import AppShell from "@/components/AppShell";
+import FilterTable, { ColumnDef } from "@/components/common/FilterTable";
+import Modal from "@/components/common/Modal";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -47,7 +50,7 @@ const emptyForm: ArForm = {
 export default function ArPage() {
   return (
     <AppShell active="ar" wide>
-      <Suspense fallback={<div className="state">불러오는 중...</div>}>
+      <Suspense fallback={<div className="state">Loading...</div>}>
         <ArOverview />
       </Suspense>
     </AppShell>
@@ -58,96 +61,59 @@ function money(n: number) {
   return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-/** 단계 완료 토글 — 현황판(파이프라인) 단계 완료 콜. 오더 기준(?order=). */
-function StageCompleteBar({ orderId, stage, label }: { orderId: number; stage: 11 | 12; label: string }) {
-  const [done, setDone] = useState<boolean | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    let alive = true;
-    setDone(null);
-    fetchDocumentDetail(orderId)
-      .then((d) => {
-        if (alive) setDone(Boolean(d.stage_done[String(stage) as "11" | "12"]));
-      })
-      .catch(() => {
-        if (alive) setDone(false);
-      });
-    return () => {
-      alive = false;
-    };
-  }, [orderId, stage]);
-
-  async function toggle() {
-    setBusy(true);
-    try {
-      const r = await completeOrderStage(orderId, stage, !done);
-      setDone(r.done);
-      invalidateCache("pipeline");
-      invalidateCache("dashboard");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="stage-complete-bar">
-      <span className="scb-label">
-        {stage}. {label}
-      </span>
-      {done === null ? (
-        <span className="scb-status muted">확인 중…</span>
-      ) : (
-        <>
-          <span className={`scb-status${done ? " done" : ""}`}>{done ? "✓ 완료됨" : "미완료"}</span>
-          <button
-            className={`btn${done ? "" : " primary"}`}
-            onClick={toggle}
-            disabled={busy}
-          >
-            {busy ? "처리 중…" : done ? "완료 취소" : "이 단계 완료"}
-          </button>
-        </>
-      )}
-    </div>
-  );
-}
+type StageTab = 11 | 12;
 
 function ArOverview() {
   const params = useSearchParams();
+  const router = useRouter();
   const orderParam = params.get("order");
-  const { data, error: loadError, refresh } = useCachedData(
-    "ar:overview",
-    fetchArOverview
-  );
+  const { data, error: loadError, refresh } = useCachedData("ar:overview", fetchArOverview);
   const { data: options } = useCachedData("ar:workoptions", fetchPoWorkOptions);
-  const [error, setError] = useState<string | null>(null); // 수기 메시지(SOA 내보내기 등)
-  const [status, setStatus] = useState("전체");
-  const [currency, setCurrency] = useState("전체");
-  const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [stageTab, setStageTab] = useState<11 | 12>(11);
+  const [error, setError] = useState<string | null>(null); // manual messages (SOA export, etc.)
+  const [stageTab, setStageTab] = useState<StageTab>(11);
+  const [editing, setEditing] = useState<ArRow | null>(null); // stage-action popup target
+  const [picking, setPicking] = useState(false); // stage-action target picker
+  const [adding, setAdding] = useState(false);
 
-  // 진행현황의 "AR 작업"으로 넘어온 ?order=<id> 가 있으면 해당 오더의 AR 레코드를 자동 선택.
-  // 아직 AR 레코드가 없으면 신규 입력 폼에 그 오더를 미리 채운다(ArEditPanel 의 fallbackOrderId).
+  const stageLabel = stageTab === 11 ? "Issue Tax Invoice" : "Record Payment";
+
+  const rows = useMemo(() => data?.rows ?? [], [data]);
+
+  // ?order=<id> from Progress "AR work" → auto-open that AR record popup.
   const orderId = orderParam ? Number(orderParam) : null;
   useEffect(() => {
-    if (orderId === null || !data) return;
-    const match = data.rows.find((r) => r.order_id === orderId);
-    setSelectedId(match ? match.id : null);
-  }, [orderId, data]);
+    if (orderId === null) return;
+    const match = rows.find((r) => r.order_id === orderId);
+    if (match) setEditing(match);
+    else if (rows.length || data) setAdding(true);
+  }, [orderId, rows, data]);
 
   function load() {
     setError(null);
     invalidateCache("dashboard");
+    invalidateCache("pipeline");
     return refresh();
   }
 
+  function closePopup() {
+    setEditing(null);
+    setAdding(false);
+    setPicking(false);
+    if (orderParam) router.replace("/ar");
+  }
+
+  // Only pending targets (not issued / not paid) — for the top-right action picker.
+  const pendingRows = useMemo(
+    () => rows.filter((r) => (stageTab === 11 ? !r.tax_issued : !r.paid_done)),
+    [rows, stageTab]
+  );
+
   async function exportSoa() {
-    const res = await fetch(arSoaXlsxUrl(status, currency), {
+    const res = await fetch(arSoaXlsxUrl("전체", "전체"), {
       headers: { Authorization: `Bearer ${getToken()}` },
     });
     if (!res.ok) {
-      setError("SOA 내보내기 실패");
+      setError("SOA export failed");
       return;
     }
     const blob = await res.blob();
@@ -159,273 +125,405 @@ function ArOverview() {
     URL.revokeObjectURL(url);
   }
 
-  const statuses = useMemo(() => (data ? Array.from(new Set(data.rows.map((r) => r.status))) : []), [data]);
-  const currencies = useMemo(() => (data ? Array.from(new Set(data.rows.map((r) => r.currency))) : []), [data]);
-  const rows = useMemo(
-    () =>
-      (data?.rows ?? []).filter(
-        (r) => (status === "전체" || r.status === status) && (currency === "전체" || r.currency === currency)
-      ),
-    [data, status, currency]
-  );
-  const selected = rows.find((r) => r.id === selectedId) ?? null;
-  const kpi = useMemo(() => {
-    let out = 0;
-    let over = 0;
-    for (const r of rows) {
-      if (r.currency === "USD") {
-        out += r.outstanding;
-        if (r.overdue) over += r.outstanding;
-      }
-    }
-    return { outstanding_usd: out, overdue_usd: over, count: rows.length };
-  }, [rows]);
+  // Common columns + stage status column (11: tax invoice, 12: payment).
+  const stageCol: ColumnDef<ArRow> =
+    stageTab === 11
+      ? {
+          key: "tax",
+          label: "Tax Invoice",
+          text: (r) => (r.tax_issued ? "Issued" : "Not issued"),
+          filter: "facet",
+          render: (r) => (
+            <span className={`ar-badge${r.tax_issued ? "" : " overdue"}`}>
+              {r.tax_issued ? "Issued" : "Not issued"}
+            </span>
+          ),
+        }
+      : {
+          key: "pay",
+          label: "Payment",
+          text: (r) => (r.paid_done ? "Done" : "Pending"),
+          filter: "facet",
+          render: (r) => (
+            <span className={`ar-badge${r.paid_done ? "" : " overdue"}`}>
+              {r.paid_done ? "Done" : "Pending"}
+            </span>
+          ),
+        };
+
+  const columns: ColumnDef<ArRow>[] = [
+    { key: "ci_no", label: "CI No.", text: (r) => r.ci_no || "" },
+    { key: "customer", label: "Customer", text: (r) => r.customer || "", filter: "facet" },
+    { key: "ord_no", label: "Order", text: (r) => r.ord_no || "" },
+    { key: "currency", label: "Currency", text: (r) => r.currency || "", filter: "facet" },
+    { key: "invoice", label: "Invoice", numeric: true, text: (r) => money(r.invoice_amount), sortValue: (r) => r.invoice_amount },
+    { key: "paid", label: "Paid", numeric: true, text: (r) => money(r.paid_amount), sortValue: (r) => r.paid_amount },
+    { key: "outstanding", label: "Outstanding", numeric: true, text: (r) => money(r.outstanding), sortValue: (r) => r.outstanding, render: (r) => <b>{money(r.outstanding)}</b> },
+    { key: "due_date", label: "Due date", text: (r) => r.due_date || "", filter: "date" },
+    { key: "status", label: "Status", text: (r) => tr(r.status), filter: "facet", render: (r) => <span className={`ar-badge${r.overdue ? " overdue" : ""}`}>{tr(r.status)}</span> },
+    stageCol,
+  ];
 
   return (
-    <>
+    <div className="action-tabs">
       <div className="page-tabs">
         <button className={stageTab === 11 ? "on" : ""} onClick={() => setStageTab(11)}>
-          11. 세금계산서 발행
+          11. Issue Tax Invoice
         </button>
         <button className={stageTab === 12 ? "on" : ""} onClick={() => setStageTab(12)}>
-          12. 대금 결제 완료
+          12. Payment Completed
         </button>
       </div>
 
-      {orderId !== null ? (
-        <StageCompleteBar
-          orderId={orderId}
-          stage={stageTab}
-          label={stageTab === 11 ? "세금계산서 발행" : "대금 결제 완료"}
-        />
-      ) : null}
-
       {error || (loadError && !data) ? (
-        <div className="state error">API 오류: {error ?? loadError?.message}</div>
+        <div className="state error">API error: {error ?? loadError?.message}</div>
       ) : null}
+
       {!data ? (
-        <div className="state">불러오는 중...</div>
+        <div className="state">Loading...</div>
       ) : (
-        <>
-          <div className="toolbar">
-            <div className="field">
-              <label>상태 필터</label>
-              <select value={status} onChange={(e) => setStatus(e.target.value)}>
-                <option value="전체">전체</option>
-                {statuses.map((s) => <option key={s} value={s}>{s}</option>)}
-              </select>
-            </div>
-            <div className="field">
-              <label>통화 필터</label>
-              <select value={currency} onChange={(e) => setCurrency(e.target.value)}>
-                <option value="전체">전체</option>
-                {currencies.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-            <button className="btn" onClick={load}>새로고침</button>
-            <button className="btn" onClick={exportSoa} disabled={!data || data.rows.length === 0} style={{ marginLeft: "auto" }}>
-              SOA 내보내기 (XLSX)
-            </button>
-          </div>
-
-          <div className="kpi-row">
-            <Kpi label="USD 미수금" value={`USD ${money(kpi.outstanding_usd)}`} sub="필터 기준 미수 합계" />
-            <Kpi label="USD 연체" value={`USD ${money(kpi.overdue_usd)}`} sub="만기 경과" accent="#dc3545" />
-            <Kpi label="건수" value={kpi.count} sub="AR 레코드" />
-          </div>
-
-          {rows.length === 0 ? (
-            <div className="state">AR 레코드가 없습니다. Tax Invoice 생성 시 자동 등록되거나 아래에서 직접 추가할 수 있습니다.</div>
-          ) : (
-            <div className="table-wrap">
-              <table className="rfq">
-                <thead>
-                  <tr>
-                    <th style={{ width: 44 }}></th>
-                    <th>CI No.</th>
-                    <th>Customer</th>
-                    <th>오더</th>
-                    <th>통화</th>
-                    <th className="num">Invoice</th>
-                    <th className="num">수금</th>
-                    <th className="num">미수금</th>
-                    <th>만기일</th>
-                    <th>상태</th>
-                    <th>수금 등록</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((r) => (
-                    <ArRowView
-                      key={r.id}
-                      r={r}
-                      selected={r.id === selectedId}
-                      onSelect={() => setSelectedId(r.id === selectedId ? null : r.id)}
-                      onPaid={load}
-                    />
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          <ArEditPanel selected={selected} options={options ?? null} onChanged={load} clearSelection={() => setSelectedId(null)} fallbackOrderId={selected ? null : orderId} />
-        </>
+        <FilterTable
+          key={stageTab}
+          rows={rows}
+          columns={columns}
+          getRowKey={(r) => r.id}
+          onRowClick={(r) => setEditing(r)}
+          empty="No AR records. They are created automatically when a Tax Invoice is generated, or you can add one directly."
+          actions={
+            <>
+              <button className="btn" onClick={() => setAdding(true)}>
+                + Add AR record
+              </button>
+              <button className="btn" onClick={exportSoa} disabled={rows.length === 0}>
+                Export SOA (XLSX)
+              </button>
+              <button className="btn primary" onClick={() => setPicking(true)} disabled={rows.length === 0}>
+                {stageLabel}
+              </button>
+            </>
+          }
+        />
       )}
-    </>
+
+      {picking ? (
+        <Modal title={`${stageLabel} — select target`} onClose={() => setPicking(false)} wide>
+          <p className="state" style={{ marginTop: 0 }}>
+            Select an AR record to {stageTab === 11 ? "issue a tax invoice for" : "record payment for"}.
+          </p>
+          <FilterTable
+            rows={pendingRows}
+            columns={[
+              { key: "ci_no", label: "CI No.", text: (r) => r.ci_no || "" },
+              { key: "customer", label: "Customer", text: (r) => r.customer || "", filter: "facet" },
+              { key: "ord_no", label: "Order", text: (r) => r.ord_no || "" },
+              { key: "currency", label: "Currency", text: (r) => r.currency || "", filter: "facet" },
+              { key: "invoice", label: "Invoice", numeric: true, text: (r) => money(r.invoice_amount), sortValue: (r) => r.invoice_amount },
+              { key: "outstanding", label: "Outstanding", numeric: true, text: (r) => money(r.outstanding), sortValue: (r) => r.outstanding },
+              { key: "due_date", label: "Due date", text: (r) => r.due_date || "", filter: "date" },
+            ]}
+            getRowKey={(r) => r.id}
+            onRowClick={(r) => {
+              setPicking(false);
+              setEditing(r);
+            }}
+            empty={`No AR records pending ${stageLabel.toLowerCase()}.`}
+          />
+        </Modal>
+      ) : null}
+
+      {editing ? (
+        stageTab === 11 ? (
+          <TaxIssueModal row={editing} onChanged={load} onClose={closePopup} />
+        ) : (
+          <PaymentModal row={editing} onChanged={load} onClose={closePopup} />
+        )
+      ) : null}
+
+      {adding ? (
+        <Modal title="Add AR record" onClose={closePopup} wide>
+          <ArAddForm
+            options={options ?? null}
+            fallbackOrderId={orderId}
+            onChanged={() => {
+              setAdding(false);
+              load();
+            }}
+          />
+        </Modal>
+      ) : null}
+    </div>
   );
 }
 
-function ArRowView({
-  r,
-  selected,
-  onSelect,
-  onPaid,
+/** Fetches order/document detail to show key deal info (shared popup header). */
+function OrderInfoBlock({
+  orderId,
+  detail,
 }: {
-  r: ArRow;
-  selected: boolean;
-  onSelect: () => void;
-  onPaid: () => void;
+  orderId: number;
+  detail?: DocumentDetail | null;
 }) {
-  const [amount, setAmount] = useState("");
+  const [fetched, setFetched] = useState<DocumentDetail | null>(null);
+  const d = detail ?? fetched;
+
+  useEffect(() => {
+    if (detail !== undefined) return; // parent passes detail directly → skip fetch
+    let alive = true;
+    fetchDocumentDetail(orderId)
+      .then((x) => alive && setFetched(x))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [orderId, detail]);
+
+  if (!d) return null;
+  return (
+    <div className="detail" style={{ marginBottom: 12 }}>
+      <div className="grid">
+        <KV k="Order No." v={d.order.ord_no} />
+        <KV k="Trade type" v={tr(d.order.trade_type)} />
+        <KV k="Project" v={d.order.project_title} />
+        <KV k="Customer" v={d.order.customer} />
+        <KV k="Vendor" v={d.order.vendor} />
+        <KV k="Vessel" v={d.order.vessel} />
+        <KV k="PO No." v={d.order.po_no} />
+        <KV k="Items" v={`${d.order.items.length}`} />
+        <KV k="Customer Tax ID" v={d.order.customer_tax_id} />
+      </div>
+    </div>
+  );
+}
+
+function ciTotal(d: DocumentDetail | null): number {
+  if (!d?.ci?.items) return 0;
+  return d.ci.items.reduce((s, it) => s + num(it.amount), 0);
+}
+
+/** 11) Issue Tax Invoice — save billing details, then complete stage 11. */
+function TaxIssueModal({
+  row,
+  onChanged,
+  onClose,
+}: {
+  row: ArRow;
+  onChanged: () => void;
+  onClose: () => void;
+}) {
+  const [detail, setDetail] = useState<DocumentDetail | null>(null);
+  const [ciNo, setCiNo] = useState(row.ci_no);
+  const [invoice, setInvoice] = useState(row.invoice_amount);
+  const [currency, setCurrency] = useState(row.currency);
+  const [dueDate, setDueDate] = useState(row.due_date || today());
+  const [notes, setNotes] = useState(row.notes);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  async function pay() {
-    if (amount === "") return;
+  // Fetch order/CI detail to auto-fill empty fields (user input is preserved).
+  useEffect(() => {
+    let alive = true;
+    fetchDocumentDetail(row.order_id)
+      .then((d) => {
+        if (!alive) return;
+        setDetail(d);
+        setCiNo((v) => v || d.ci?.ci_no || "");
+        setCurrency((v) => v || d.ci?.currency || "USD");
+        setInvoice((v) => (v ? v : ciTotal(d)));
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [row.order_id]);
+
+  async function save(complete: boolean) {
     setBusy(true);
     setErr(null);
     try {
-      await recordArPayment(r.id, Number(amount));
-      setAmount("");
-      onPaid();
+      await updateArRecord(row.id, {
+        order_id: row.order_id,
+        ci_no: ciNo,
+        invoice_amount: invoice,
+        paid_amount: row.paid_amount,
+        currency,
+        due_date: dueDate,
+        status: row.status,
+        notes,
+      });
+      await completeOrderStage(row.order_id, 11, complete);
+      onChanged();
+      onClose();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "수금 실패");
+      setErr(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove() {
+    if (!confirm("Delete this AR record?")) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      await deleteArRecord(row.id);
+      onChanged();
+      onClose();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Delete failed");
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <tr className={selected ? "sel" : ""} onClick={onSelect}>
-      <td className="select-cell">
-        <input type="checkbox" checked={selected} onChange={onSelect} onClick={(e) => e.stopPropagation()} />
-      </td>
-      <td className="cell">{r.ci_no || <span className="dash">-</span>}</td>
-      <td className="cell">{r.customer}</td>
-      <td className="cell">{r.ord_no || <span className="dash">-</span>}</td>
-      <td className="cell">{r.currency}</td>
-      <td className="cell num">{money(r.invoice_amount)}</td>
-      <td className="cell num">{money(r.paid_amount)}</td>
-      <td className="cell num"><b>{money(r.outstanding)}</b></td>
-      <td className="cell">{r.due_date || "-"}</td>
-      <td className="cell"><span className={`ar-badge${r.overdue ? " overdue" : ""}`}>{r.status}</span></td>
-      <td className="cell" onClick={(e) => e.stopPropagation()}>
-        {r.outstanding <= 0 ? (
-          <span className="dash">-</span>
-        ) : (
-          <span className="pay-cell">
-            <input
-              className="action-input num"
-              placeholder="수금액"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              inputMode="decimal"
-            />
-            <button className="btn primary" onClick={pay} disabled={busy || amount === ""}>
-              {busy ? "..." : "등록"}
-            </button>
-            {err ? <span className="action-err">{err}</span> : null}
-          </span>
-        )}
-      </td>
-    </tr>
+    <Modal title={`Issue Tax Invoice — ${row.ord_no || row.ci_no || "AR"}`} onClose={onClose} wide>
+      <OrderInfoBlock orderId={row.order_id} detail={detail} />
+      <div className="milestone-row" style={{ marginBottom: 12 }}>
+        <span className={`ar-badge${row.tax_issued ? "" : " overdue"}`}>
+          {row.tax_issued ? `Issued (${row.tax_issued_date || "done"})` : "Not issued"}
+        </span>
+      </div>
+      <div className="form-grid">
+        <Field label="CI No." value={ciNo} onChange={setCiNo} />
+        <Field label="Invoice amount" value={String(invoice)} onChange={(v) => setInvoice(num(v))} type="number" />
+        <Field label="Currency" value={currency} onChange={setCurrency} />
+        <Field label="Due date" value={dueDate} onChange={setDueDate} type="date" />
+        <Field label="Notes" value={notes} onChange={setNotes} />
+      </div>
+      <div className="form-actions">
+        <button className="btn primary" disabled={busy} onClick={() => save(true)}>
+          {busy ? "Working…" : "Complete tax invoice issuance"}
+        </button>
+        {row.tax_issued ? (
+          <button className="btn" disabled={busy} onClick={() => save(false)}>
+            Undo issuance
+          </button>
+        ) : null}
+        <button className="btn danger" disabled={busy} onClick={remove} style={{ marginLeft: "auto" }}>
+          Delete
+        </button>
+        {err ? <span className="action-err">{err}</span> : null}
+      </div>
+    </Modal>
   );
 }
 
-function ArEditPanel({
-  selected,
-  options,
+/** 12) Payment Completed — record payment, then complete stage 12. */
+function PaymentModal({
+  row,
   onChanged,
-  clearSelection,
-  fallbackOrderId = null,
+  onClose,
 }: {
-  selected: ArRow | null;
-  options: PoWorkOptions | null;
+  row: ArRow;
   onChanged: () => void;
-  clearSelection: () => void;
-  fallbackOrderId?: number | null;
+  onClose: () => void;
 }) {
-  const [form, setForm] = useState<ArForm>(emptyForm);
-  const [err, setErr] = useState("");
+  const [amount, setAmount] = useState(row.outstanding > 0 ? String(row.outstanding) : "");
+  const [dueDate, setDueDate] = useState(row.due_date || today());
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (selected) {
-      setForm({
-        id: selected.id,
-        order_id: selected.order_id,
-        ci_no: selected.ci_no,
-        invoice_amount: selected.invoice_amount,
-        paid_amount: selected.paid_amount,
-        currency: selected.currency,
-        due_date: selected.due_date || today(),
-        status: selected.status,
-        notes: selected.notes,
-      });
-    } else {
-      // 선택 레코드가 없으면 빈 폼 — 단, AR 작업으로 넘어온 오더가 있으면 미리 채운다.
-      setForm({ ...emptyForm, order_id: fallbackOrderId ?? "" });
-    }
-  }, [selected, fallbackOrderId]);
-
-  async function save() {
-    if (form.order_id === "") return;
-    setErr("");
-    const body = {
-      order_id: form.order_id,
-      ci_no: form.ci_no,
-      invoice_amount: form.invoice_amount,
-      paid_amount: form.paid_amount,
-      currency: form.currency,
-      due_date: form.due_date,
-      status: form.status,
-      notes: form.notes,
-    };
+  async function save(complete: boolean) {
+    setBusy(true);
+    setErr(null);
     try {
-      if (form.id) await updateArRecord(form.id, body);
-      else await createArRecord(body);
-      setForm(emptyForm);
-      clearSelection();
+      const amt = num(amount);
+      if (amt > 0) await recordArPayment(row.id, amt, dueDate);
+      await completeOrderStage(row.order_id, 12, complete);
       onChanged();
+      onClose();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "저장 실패");
-    }
-  }
-
-  async function remove() {
-    if (!form.id || !confirm("선택한 AR 레코드를 삭제할까요?")) return;
-    setErr("");
-    try {
-      await deleteArRecord(form.id);
-      setForm(emptyForm);
-      clearSelection();
-      onChanged();
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "삭제 실패");
+      setErr(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setBusy(false);
     }
   }
 
   return (
-    <div className="action-tabs">
-      <h3>{form.id ? `${form.ci_no || "AR"} 수정` : "직접 AR 레코드 추가"}</h3>
+    <Modal title={`Record Payment — ${row.ord_no || row.ci_no || "AR"}`} onClose={onClose} wide>
+      <OrderInfoBlock orderId={row.order_id} />
+      <div className="milestone-row" style={{ marginBottom: 12 }}>
+        <span className={`ar-badge${row.paid_done ? "" : " overdue"}`}>
+          {row.paid_done ? `Paid (${row.paid_date || "done"})` : "Pending"}
+        </span>
+      </div>
+      <div className="detail" style={{ marginBottom: 12 }}>
+        <div className="grid">
+          <KV k="Invoice amount" v={`${row.currency} ${money(row.invoice_amount)}`} />
+          <KV k="Paid to date" v={`${row.currency} ${money(row.paid_amount)}`} />
+          <KV k="Outstanding" v={`${row.currency} ${money(row.outstanding)}`} />
+          <KV k="Status" v={tr(row.status)} />
+        </div>
+      </div>
+      <div className="form-grid">
+        <Field label="Payment amount" value={amount} onChange={setAmount} type="number" />
+        <Field label="Payment date / due" value={dueDate} onChange={setDueDate} type="date" />
+      </div>
+      <p className="hint-inline" style={{ display: "block", margin: "6px 0 0" }}>
+        Leave the amount empty to only mark payment complete. Entering an amount records the payment first.
+      </p>
+      <div className="form-actions">
+        <button className="btn primary" disabled={busy} onClick={() => save(true)}>
+          {busy ? "Working…" : "Complete payment"}
+        </button>
+        {row.paid_done ? (
+          <button className="btn" disabled={busy} onClick={() => save(false)}>
+            Undo completion
+          </button>
+        ) : null}
+        {err ? <span className="action-err">{err}</span> : null}
+      </div>
+    </Modal>
+  );
+}
+
+/** Direct AR record creation form (inside modal). */
+function ArAddForm({
+  options,
+  fallbackOrderId,
+  onChanged,
+}: {
+  options: PoWorkOptions | null;
+  fallbackOrderId: number | null;
+  onChanged: () => void;
+}) {
+  const [form, setForm] = useState<ArForm>({ ...emptyForm, order_id: fallbackOrderId ?? "" });
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function save() {
+    if (form.order_id === "") return;
+    setErr("");
+    setBusy(true);
+    try {
+      await createArRecord({
+        order_id: form.order_id,
+        ci_no: form.ci_no,
+        invoice_amount: form.invoice_amount,
+        paid_amount: form.paid_amount,
+        currency: form.currency,
+        due_date: form.due_date,
+        status: form.status,
+        notes: form.notes,
+      });
+      onChanged();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div>
       <div className="form-grid">
         <label className="form-field">
-          <span>오더 *</span>
+          <span>Order *</span>
           <select
             value={form.order_id}
             onChange={(e) => setForm({ ...form, order_id: e.target.value ? Number(e.target.value) : "" })}
           >
-            <option value="">선택</option>
+            <option value="">Select</option>
             {(options?.orders || []).map((o) => (
               <option key={o.id} value={o.id}>
                 {o.ord_no} · {o.customer} · {o.vessel || "-"}
@@ -434,29 +532,36 @@ function ArEditPanel({
           </select>
         </label>
         <Field label="CI No." value={form.ci_no} onChange={(v) => setForm({ ...form, ci_no: v })} />
-        <Field label="Invoice 금액" value={String(form.invoice_amount)} onChange={(v) => setForm({ ...form, invoice_amount: num(v) })} type="number" />
-        <Field label="수금액" value={String(form.paid_amount)} onChange={(v) => setForm({ ...form, paid_amount: num(v) })} type="number" />
-        <Field label="통화" value={form.currency} onChange={(v) => setForm({ ...form, currency: v })} />
-        <Field label="결제기한" value={form.due_date} onChange={(v) => setForm({ ...form, due_date: v })} type="date" />
+        <Field label="Invoice amount" value={String(form.invoice_amount)} onChange={(v) => setForm({ ...form, invoice_amount: num(v) })} type="number" />
+        <Field label="Paid amount" value={String(form.paid_amount)} onChange={(v) => setForm({ ...form, paid_amount: num(v) })} type="number" />
+        <Field label="Currency" value={form.currency} onChange={(v) => setForm({ ...form, currency: v })} />
+        <Field label="Due date" value={form.due_date} onChange={(v) => setForm({ ...form, due_date: v })} type="date" />
         <label className="form-field">
-          <span>상태</span>
+          <span>Status</span>
           <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
-            <option value="미수">미수</option>
-            <option value="일부수금">일부수금</option>
-            <option value="완납">완납</option>
-            <option value="연체">연체</option>
+            <option value="미수">{tr("미수")}</option>
+            <option value="일부수금">{tr("일부수금")}</option>
+            <option value="완납">{tr("완납")}</option>
+            <option value="연체">{tr("연체")}</option>
           </select>
         </label>
-        <Field label="메모" value={form.notes} onChange={(v) => setForm({ ...form, notes: v })} />
+        <Field label="Notes" value={form.notes} onChange={(v) => setForm({ ...form, notes: v })} />
       </div>
       <div className="form-actions">
-        <button className="btn primary" disabled={form.order_id === ""} onClick={save}>
-          {form.id ? "수정 저장" : "AR 추가"}
+        <button className="btn primary" disabled={form.order_id === "" || busy} onClick={save}>
+          {busy ? "Working…" : "Add AR"}
         </button>
-        <button className="btn" onClick={() => { setForm(emptyForm); clearSelection(); }}>신규 입력</button>
-        <button className="btn danger" disabled={!form.id} onClick={remove}>삭제</button>
         {err ? <span className="action-err">{err}</span> : null}
       </div>
+    </div>
+  );
+}
+
+function KV({ k, v }: { k: string; v: string }) {
+  return (
+    <div className="kv">
+      <span className="k">{k}</span>
+      <span className="v">{v || "-"}</span>
     </div>
   );
 }
@@ -477,26 +582,6 @@ function Field({
       <span>{label}</span>
       <input type={type} value={value} onChange={(e) => onChange(e.target.value)} />
     </label>
-  );
-}
-
-function Kpi({
-  label,
-  value,
-  sub,
-  accent = "#0055a8",
-}: {
-  label: string;
-  value: string | number;
-  sub: string;
-  accent?: string;
-}) {
-  return (
-    <div className="kpi-card" style={{ borderLeftColor: accent }}>
-      <div className="kpi-label">{label}</div>
-      <div className="kpi-value">{value}</div>
-      <div className="kpi-sub">{sub}</div>
-    </div>
   );
 }
 

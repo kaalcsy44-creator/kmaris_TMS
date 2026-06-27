@@ -21,6 +21,7 @@ import { getToken } from "@/lib/auth";
 import { useCachedData, invalidateCache } from "@/lib/useCachedData";
 import FilterTable, { ColumnDef } from "@/components/common/FilterTable";
 import Modal from "@/components/common/Modal";
+import { tr } from "@/lib/labels";
 import type {
   PoDetail as PoDetailT,
   PoWorkItem,
@@ -49,7 +50,7 @@ export default function PoScreen() {
     return refresh();
   }
 
-  if (!options) return <div className="state">불러오는 중…</div>;
+  if (!options) return <div className="state">Loading…</div>;
 
   return <PoActionTabs options={options} deepOrderId={deepOrderId} onChanged={load} />;
 }
@@ -68,45 +69,46 @@ function PoDetail({ orderId }: { orderId: number | null }) {
     setError(null);
     fetchPoDetail(orderId)
       .then(setData)
-      .catch((e) => setError(e instanceof Error ? e.message : "오류"))
+      .catch((e) => setError(e instanceof Error ? e.message : "Error"))
       .finally(() => setLoading(false));
   }, [orderId]);
 
   return (
     <div className="detail">
-      <h2>선택한 오더 상세</h2>
+      <h2>Selected order details</h2>
 
       {orderId === null ? (
-        <div className="empty">위 목록에서 체크박스를 선택하면 상세가 표시됩니다.</div>
+        <div className="empty">Select a row above to see details.</div>
       ) : loading ? (
-        <div className="empty">불러오는 중…</div>
+        <div className="empty">Loading…</div>
       ) : error ? (
         <div className="empty" style={{ color: "#b42318" }}>
-          상세 불러오기 오류: {error}
+          Detail load error: {error}
         </div>
       ) : !data ? null : (
         <div className="detail-body">
           <div className="grid">
-            <KV k="오더 No." v={data.ord_no} />
-            <KV k="고객 P/O No." v={data.customer_po_no} />
-            <KV k="고객 P/O 수신일" v={data.customer_po_at} />
-            <KV k="고객 RFQ No." v={data.customer_rfq_no} />
+            <KV k="Order No." v={data.ord_no} />
+            <KV k="Customer P/O No." v={data.customer_po_no} />
+            <KV k="Customer P/O received" v={data.customer_po_at} />
+            <KV k="Customer RFQ No." v={data.customer_rfq_no} />
             <KV k="K-Maris RFQ No." v={data.rfq_no} />
             <KV k="Quotation No." v={data.quotation_no} />
             <KV k="Customer" v={data.customer} />
-            <KV k="담당자" v={data.customer_contact} />
-            <KV k="이메일" v={data.customer_email} />
-            <KV k="선박" v={data.vessel} />
-            <KV k="오더 상태" v={data.order_status} />
-            <KV k="통합 상태" v={data.status} />
-            <KV k="약속 납기일" v={data.promised_delivery} />
-            <KV k="출고일" v={data.shipped_date} />
-            <KV k="인도일" v={data.delivered_date} />
+            <KV k="Trade type" v={tr(data.trade_type)} />
+            <KV k="Contact" v={data.customer_contact} />
+            <KV k="Email" v={data.customer_email} />
+            <KV k="Vessel" v={data.vessel} />
+            <KV k="Order status" v={tr(data.order_status)} />
+            <KV k="Pipeline status" v={data.status} />
+            <KV k="Promised delivery" v={data.promised_delivery} />
+            <KV k="Shipped date" v={data.shipped_date} />
+            <KV k="Delivered date" v={data.delivered_date} />
           </div>
 
           <div className="detail-cols">
             <div className="stepper">
-              <div className="sub-h">진행 단계 (12)</div>
+              <div className="sub-h">Pipeline stages (12)</div>
               {data.steps.map((st) => (
                 <div key={st.no} className={`step ${st.state}`}>
                   <span className="dot">
@@ -120,18 +122,18 @@ function PoDetail({ orderId }: { orderId: number | null }) {
             </div>
 
             <div className="detail-right">
-              <div className="sub-h">품목 ({data.items.length})</div>
+              <div className="sub-h">Items ({data.items.length})</div>
               {data.items.length === 0 ? (
-                <div className="empty">등록된 품목이 없습니다.</div>
+                <div className="empty">No items registered.</div>
               ) : (
                 <table className="mini">
                   <thead>
                     <tr>
                       <th>Part No.</th>
-                      <th>품명</th>
-                      <th className="num">수량</th>
-                      <th className="num">단가</th>
-                      <th className="num">금액</th>
+                      <th>Description</th>
+                      <th className="num">Qty</th>
+                      <th className="num">Unit price</th>
+                      <th className="num">Amount</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -152,7 +154,7 @@ function PoDetail({ orderId }: { orderId: number | null }) {
               )}
 
               <div className="sub-h" style={{ marginTop: 14 }}>
-                연결 문서
+                Linked documents
               </div>
               <div className="chain">
                 <ChainLine
@@ -160,7 +162,7 @@ function PoDetail({ orderId }: { orderId: number | null }) {
                   rows={data.vendor_pos.map(
                     (p) =>
                       `${p.po_no || "—"} · ${p.vendor} · ${p.status || "—"}${
-                        p.sent_date ? ` · 발신 ${p.sent_date}` : ""
+                        p.sent_date ? ` · sent ${p.sent_date}` : ""
                       }`
                   )}
                 />
@@ -201,8 +203,8 @@ function PoActionTabs({
 }) {
   const [tab, setTab] = useState("customer");
   const tabs = [
-    { key: "customer", label: "5. Customer P/O 수신" },
-    { key: "vendor", label: "6. Vendor P/O 발신" },
+    { key: "customer", label: "5. Customer P/O Received" },
+    { key: "vendor", label: "6. Vendor P/O Sent" },
   ];
 
   return (
@@ -248,11 +250,12 @@ function CustomerPoTab({
   const columns: ColumnDef<OrderOpt>[] = [
     { key: "ord_no", label: "K-Maris ORD No.", text: (o) => o.ord_no || "" },
     { key: "customer", label: "Customer", text: (o) => o.customer || "", filter: "facet" },
-    { key: "vessel", label: "선박", text: (o) => o.vessel || "", filter: "facet" },
+    { key: "trade_type", label: "Trade type", text: (o) => tr(o.trade_type || "수출"), filter: "facet", render: (o) => <span className="ar-badge">{tr(o.trade_type || "수출")}</span> },
+    { key: "vessel", label: "Vessel", text: (o) => o.vessel || "", filter: "facet" },
     { key: "po_no", label: "PO No.", text: (o) => o.po_no || "" },
-    { key: "items", label: "품목수", numeric: true, text: (o) => String(o.items.length), sortValue: (o) => o.items.length },
-    { key: "status", label: "상태", text: (o) => o.status || "", filter: "facet", render: (o) => <span className="ar-badge">{o.status}</span> },
-    { key: "date", label: "날짜", text: (o) => o.date || "", filter: "date" },
+    { key: "items", label: "Items", numeric: true, text: (o) => String(o.items.length), sortValue: (o) => o.items.length },
+    { key: "status", label: "Status", text: (o) => o.status || "", filter: "facet", render: (o) => <span className="ar-badge">{o.status}</span> },
+    { key: "date", label: "Date", text: (o) => o.date || "", filter: "date" },
   ];
 
   return (
@@ -262,16 +265,16 @@ function CustomerPoTab({
         columns={columns}
         getRowKey={(o) => o.id}
         onRowClick={(o) => setDetailId(o.id)}
-        empty="등록된 오더가 없습니다."
+        empty="No orders registered."
         actions={
           <button className="btn primary" onClick={() => setAdding(true)}>
-            + 신규 등록
+            + New order
           </button>
         }
       />
 
       {adding ? (
-        <Modal title="신규 오더 등록" onClose={() => setAdding(false)} wide>
+        <Modal title="New order" onClose={() => setAdding(false)} wide>
           <CustomerPoNewForm
             options={options}
             onChanged={() => {
@@ -311,6 +314,7 @@ function OrderDetailModal({
   const [vesselId, setVesselId] = useState<number | "">("");
   const [poNo, setPoNo] = useState("");
   const [date, setDate] = useState("");
+  const [tradeType, setTradeType] = useState("수출");
   const [promised, setPromised] = useState("");
   const [items, setItems] = useState<PoWorkItem[]>([]);
   const [busy, setBusy] = useState(false);
@@ -325,11 +329,12 @@ function OrderDetailModal({
         setVesselId(ves?.id ?? "");
         setPoNo(d.customer_po_no || "");
         setDate(d.customer_po_at || "");
+        setTradeType(d.trade_type || "수출");
         setPromised(d.promised_delivery || "");
         setItems(d.items.length ? d.items.map(normalizeItem) : [blankItem()]);
         setEditing(true);
       })
-      .catch((e) => setErr(e instanceof Error ? e.message : "불러오기 실패"));
+      .catch((e) => setErr(e instanceof Error ? e.message : "Load failed"));
   }
 
   async function save() {
@@ -341,6 +346,7 @@ function OrderDetailModal({
         vessel_id: vesselId === "" ? 0 : vesselId,
         po_no: poNo,
         date,
+        trade_type: tradeType,
         promised_delivery: promised || null,
         items: cleanItems(items),
       });
@@ -348,14 +354,14 @@ function OrderDetailModal({
       onChanged();
       onClose();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "수정 실패");
+      setErr(e instanceof Error ? e.message : "Update failed");
     } finally {
       setBusy(false);
     }
   }
 
   async function remove() {
-    if (!window.confirm("이 오더를 삭제할까요?\n발주서·문서·AR이 연결된 경우 삭제할 수 없습니다.")) return;
+    if (!window.confirm("Delete this order?\nIt cannot be deleted if linked to a PO, document, or AR.")) return;
     setBusy(true);
     setErr(null);
     try {
@@ -363,7 +369,7 @@ function OrderDetailModal({
       onChanged();
       onClose();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "삭제 실패");
+      setErr(e instanceof Error ? e.message : "Delete failed");
       setBusy(false);
     }
   }
@@ -371,45 +377,52 @@ function OrderDetailModal({
   const vessels = options.vessels.filter((v) => customerId === "" || v.customer_id === customerId);
 
   return (
-    <Modal title="오더 상세" onClose={onClose} wide>
+    <Modal title="Order details" onClose={onClose} wide>
       {editing ? (
         <>
           <div className="form-grid">
             <div className="form-field">
               <label>Customer</label>
               <select value={customerId} onChange={(e) => { setCustomerId(e.target.value ? Number(e.target.value) : ""); setVesselId(""); }}>
-                <option value="">선택…</option>
+                <option value="">Select…</option>
                 {options.customers.map((c) => (
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
               </select>
             </div>
             <div className="form-field">
-              <label>선박</label>
+              <label>Vessel</label>
               <select value={vesselId} onChange={(e) => setVesselId(e.target.value ? Number(e.target.value) : "")}>
-                <option value="">— 없음 —</option>
+                <option value="">— None —</option>
                 {vessels.map((v) => (
                   <option key={v.id} value={v.id}>{v.name}</option>
                 ))}
               </select>
             </div>
             <div className="form-field">
-              <label>고객 PO No.</label>
+              <label>Customer PO No.</label>
               <input value={poNo} onChange={(e) => setPoNo(e.target.value)} />
             </div>
             <div className="form-field">
-              <label>수주일</label>
+              <label>Order date</label>
               <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
             </div>
             <div className="form-field">
-              <label>약속 납기일</label>
+              <label>Trade type</label>
+              <select value={tradeType} onChange={(e) => setTradeType(e.target.value)}>
+                <option value="수출">{tr("수출")}</option>
+                <option value="내수">{tr("내수")}</option>
+              </select>
+            </div>
+            <div className="form-field">
+              <label>Promised delivery</label>
               <input type="date" value={promised} onChange={(e) => setPromised(e.target.value)} />
             </div>
           </div>
           <ItemEditor items={items} onChange={setItems} />
           <div className="form-actions">
-            <button className="btn primary" onClick={save} disabled={busy}>{busy ? "저장 중…" : "저장"}</button>
-            <button className="btn" onClick={() => setEditing(false)} disabled={busy}>취소</button>
+            <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
+            <button className="btn" onClick={() => setEditing(false)} disabled={busy}>Cancel</button>
             {err ? <span className="action-err">{err}</span> : null}
           </div>
         </>
@@ -417,8 +430,8 @@ function OrderDetailModal({
         <>
           <PoDetail orderId={orderId} />
           <div className="form-actions">
-            <button className="btn" onClick={startEdit} style={{ marginLeft: "auto" }}>✎ 수정</button>
-            <button className="btn danger" onClick={remove} disabled={busy}>삭제</button>
+            <button className="btn" onClick={startEdit} style={{ marginLeft: "auto" }}>✎ Edit</button>
+            <button className="btn danger" onClick={remove} disabled={busy}>Delete</button>
             {err ? <span className="action-err">{err}</span> : null}
           </div>
         </>
@@ -443,11 +456,11 @@ function VendorPoTab({
     { key: "po_no", label: "PO No.", text: (p) => p.po_no || "" },
     { key: "ord_no", label: "K-Maris ORD No.", text: (p) => p.ord_no || "" },
     { key: "vendor", label: "Vendor", text: (p) => p.vendor || "", filter: "facet" },
-    { key: "vendor_email", label: "수신자 이메일", text: (p) => p.vendor_email || "" },
-    { key: "date", label: "발주일", text: (p) => p.date || "", filter: "date" },
-    { key: "sent_date", label: "발송일", text: (p) => p.sent_date || "" },
-    { key: "status", label: "상태", text: (p) => p.status || "", filter: "facet", render: (p) => <span className="ar-badge">{p.status}</span> },
-    { key: "items", label: "품목수", numeric: true, text: (p) => String(p.items.length), sortValue: (p) => p.items.length },
+    { key: "vendor_email", label: "Recipient email", text: (p) => p.vendor_email || "" },
+    { key: "date", label: "PO date", text: (p) => p.date || "", filter: "date" },
+    { key: "sent_date", label: "Sent date", text: (p) => p.sent_date || "" },
+    { key: "status", label: "Status", text: (p) => p.status || "", filter: "facet", render: (p) => <span className="ar-badge">{tr(p.status)}</span> },
+    { key: "items", label: "Items", numeric: true, text: (p) => String(p.items.length), sortValue: (p) => p.items.length },
   ];
 
   return (
@@ -457,21 +470,21 @@ function VendorPoTab({
         columns={columns}
         getRowKey={(p) => p.id}
         onRowClick={(p) => setDetailId(p.id)}
-        empty="발행된 발주서가 없습니다."
+        empty="No purchase orders issued."
         actions={
           <>
             <button className="btn" onClick={() => setSending(true)} style={{ marginRight: 8 }}>
-              ✉ 이메일 발송
+              ✉ Send email
             </button>
             <button className="btn primary" onClick={() => setAdding(true)}>
-              + 신규 등록
+              + New
             </button>
           </>
         }
       />
 
       {adding ? (
-        <Modal title="발주서 생성" onClose={() => setAdding(false)} wide>
+        <Modal title="Create PO" onClose={() => setAdding(false)} wide>
           <VendorPoCreate
             options={options}
             selectedOrderId={null}
@@ -484,7 +497,7 @@ function VendorPoTab({
       ) : null}
 
       {sending ? (
-        <Modal title="발주서 이메일 발송" onClose={() => setSending(false)} wide>
+        <Modal title="Send PO email" onClose={() => setSending(false)} wide>
           <VendorPoSend
             options={options}
             onChanged={() => {
@@ -536,7 +549,7 @@ function VendorPoDetailModal({
         setStatus(data.status || "");
         setItems(data.items.length ? data.items.map(normalizeItem) : [blankItem()]);
       })
-      .catch((e) => setErr(e instanceof Error ? e.message : "오류"));
+      .catch((e) => setErr(e instanceof Error ? e.message : "Error"));
   }, [id]);
 
   async function save() {
@@ -553,14 +566,14 @@ function VendorPoDetailModal({
       onChanged();
       onClose();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "수정 실패");
+      setErr(e instanceof Error ? e.message : "Update failed");
     } finally {
       setBusy(false);
     }
   }
 
   async function remove() {
-    if (!window.confirm("이 발주서를 삭제할까요?")) return;
+    if (!window.confirm("Delete this purchase order?")) return;
     setBusy(true);
     setErr(null);
     try {
@@ -568,57 +581,57 @@ function VendorPoDetailModal({
       onChanged();
       onClose();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "삭제 실패");
+      setErr(e instanceof Error ? e.message : "Delete failed");
       setBusy(false);
     }
   }
 
   return (
-    <Modal title={d ? `발주서 — ${d.po_no}` : "발주서 상세"} onClose={onClose} wide>
+    <Modal title={d ? `Purchase order — ${d.po_no}` : "PO details"} onClose={onClose} wide>
       {!d ? (
-        <div className="empty">불러오는 중…</div>
+        <div className="empty">Loading…</div>
       ) : editing ? (
         <>
           <div className="form-grid">
             <div className="form-field">
               <label>Vendor</label>
               <select value={vendorId} onChange={(e) => setVendorId(e.target.value ? Number(e.target.value) : "")}>
-                <option value="">선택…</option>
+                <option value="">Select…</option>
                 {options.vendors.map((v) => (
                   <option key={v.id} value={v.id}>{v.name}</option>
                 ))}
               </select>
             </div>
             <div className="form-field">
-              <label>발주일</label>
+              <label>PO date</label>
               <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
             </div>
             <div className="form-field">
-              <label>상태</label>
+              <label>Status</label>
               <input value={status} onChange={(e) => setStatus(e.target.value)} />
             </div>
           </div>
           <ItemEditor items={items} onChange={setItems} />
           <div className="form-actions">
-            <button className="btn primary" onClick={save} disabled={busy}>{busy ? "저장 중…" : "저장"}</button>
-            <button className="btn" onClick={() => setEditing(false)} disabled={busy}>취소</button>
+            <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
+            <button className="btn" onClick={() => setEditing(false)} disabled={busy}>Cancel</button>
             {err ? <span className="action-err">{err}</span> : null}
           </div>
         </>
       ) : (
         <>
           <dl className="intl-meta">
-            <div><dt>오더 No.</dt><dd>{d.ord_no || "—"}</dd></div>
+            <div><dt>Order No.</dt><dd>{d.ord_no || "—"}</dd></div>
             <div><dt>Vendor</dt><dd>{d.vendor}</dd></div>
-            <div><dt>수신자 이메일</dt><dd>{d.vendor_email || "—"}</dd></div>
-            <div><dt>발주일</dt><dd>{d.date || "—"}</dd></div>
-            <div><dt>발송일</dt><dd>{d.sent_date || "—"}</dd></div>
-            <div><dt>상태</dt><dd>{d.status}</dd></div>
-            <div><dt>품목 수</dt><dd>{d.items.length}</dd></div>
+            <div><dt>Recipient email</dt><dd>{d.vendor_email || "—"}</dd></div>
+            <div><dt>PO date</dt><dd>{d.date || "—"}</dd></div>
+            <div><dt>Sent date</dt><dd>{d.sent_date || "—"}</dd></div>
+            <div><dt>Status</dt><dd>{tr(d.status)}</dd></div>
+            <div><dt>Items</dt><dd>{d.items.length}</dd></div>
           </dl>
           <div className="form-actions">
-            <button className="btn" onClick={() => setEditing(true)} style={{ marginLeft: "auto" }}>✎ 수정</button>
-            <button className="btn danger" onClick={remove} disabled={busy}>삭제</button>
+            <button className="btn" onClick={() => setEditing(true)} style={{ marginLeft: "auto" }}>✎ Edit</button>
+            <button className="btn danger" onClick={remove} disabled={busy}>Delete</button>
             {err ? <span className="action-err">{err}</span> : null}
           </div>
         </>
@@ -643,6 +656,7 @@ function CustomerPoNewForm({
   const [rfqId, setRfqId] = useState<number | "">("");
   const [poNo, setPoNo] = useState("");
   const [date, setDate] = useState(today);
+  const [tradeType, setTradeType] = useState("수출");
   const [promised, setPromised] = useState("");
   const [items, setItems] = useState<PoWorkItem[]>([blankItem()]);
   const [busy, setBusy] = useState(false);
@@ -707,12 +721,12 @@ function CustomerPoNewForm({
         );
       }
       setOcrMsg(
-        `추출 완료: ${r.items?.length ?? 0}개 품목${
-          r.customer_hint ? ` · Customer 힌트 ${r.customer_hint}` : ""
+        `Extracted: ${r.items?.length ?? 0} item(s)${
+          r.customer_hint ? ` · Customer hint ${r.customer_hint}` : ""
         }`
       );
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "OCR 추출 실패");
+      setErr(e instanceof Error ? e.message : "OCR extraction failed");
     } finally {
       setOcrBusy(false);
     }
@@ -731,16 +745,17 @@ function CustomerPoNewForm({
         rfq_id: rfqId === "" ? null : rfqId,
         po_no: poNo,
         date,
+        trade_type: tradeType,
         promised_delivery: promised || null,
         items: cleanItems(items),
       });
-      setMsg(`오더 등록 완료: ${r.ord_no}`);
+      setMsg(`Order created: ${r.ord_no}`);
       setPoNo("");
       setPromised("");
       setItems([blankItem()]);
       onChanged();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "오더 등록 실패");
+      setErr(e instanceof Error ? e.message : "Order creation failed");
     } finally {
       setBusy(false);
     }
@@ -754,13 +769,13 @@ function CustomerPoNewForm({
           className={`tool-btn${showOcr ? " on" : ""}`}
           onClick={() => setShowOcr((v) => !v)}
         >
-          📄 PDF 자동 입력
+          📄 Auto-fill from PDF
         </button>
       </div>
 
       {showOcr ? (
         <div className="ocr-bar">
-          <span className="ocr-bar-label">📄 오더 PDF 자동 입력</span>
+          <span className="ocr-bar-label">📄 Auto-fill from order PDF</span>
           <input
             type="file"
             accept="application/pdf"
@@ -768,12 +783,12 @@ function CustomerPoNewForm({
             disabled={ocrBusy}
           />
           {ocrBusy ? (
-            <span className="hint-inline">AI가 PDF를 분석 중…</span>
+            <span className="hint-inline">AI is analyzing the PDF…</span>
           ) : ocrMsg ? (
             <span className="action-ok">{ocrMsg}</span>
           ) : (
             <span className="hint-inline">
-              고객 P/O PDF 업로드 → Customer·PO번호·선박·납기·품목 자동 추출
+              Upload a customer P/O PDF → auto-extract customer, PO no., vessel, delivery, items
             </span>
           )}
         </div>
@@ -781,12 +796,12 @@ function CustomerPoNewForm({
 
       <div className="form-grid">
         <div className="form-field">
-          <label>견적서에서 불러오기</label>
+          <label>Load from quotation</label>
           <select
             value={quotationId}
             onChange={(e) => loadQuotation(e.target.value ? Number(e.target.value) : "")}
           >
-            <option value="">— 없음 —</option>
+            <option value="">— None —</option>
             {options.quotations.map((q) => (
               <option key={q.id} value={q.id}>
                 {q.qtn_no} · {q.customer} · {q.currency} {money(q.amount)}
@@ -811,20 +826,27 @@ function CustomerPoNewForm({
           </select>
         </div>
         <div className="form-field">
-          <label>수주일</label>
+          <label>Order date</label>
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
         </div>
         <div className="form-field">
-          <label>고객 PO No.</label>
+          <label>Trade type *</label>
+          <select value={tradeType} onChange={(e) => setTradeType(e.target.value)}>
+            <option value="수출">수출</option>
+            <option value="내수">내수 (국내공급)</option>
+          </select>
+        </div>
+        <div className="form-field">
+          <label>Customer PO No.</label>
           <input value={poNo} onChange={(e) => setPoNo(e.target.value)} />
         </div>
         <div className="form-field">
-          <label>선박</label>
+          <label>Vessel</label>
           <select
             value={vesselId}
             onChange={(e) => setVesselId(e.target.value ? Number(e.target.value) : "")}
           >
-            <option value="">— 없음 —</option>
+            <option value="">— None —</option>
             {vessels.map((v) => (
               <option key={v.id} value={v.id}>
                 {v.name}
@@ -833,7 +855,7 @@ function CustomerPoNewForm({
           </select>
         </div>
         <div className="form-field">
-          <label>약속 납기일</label>
+          <label>Promised delivery</label>
           <input
             type="date"
             value={promised}
@@ -843,12 +865,12 @@ function CustomerPoNewForm({
       </div>
 
       <div className="form-field" style={{ marginTop: 14 }}>
-        <label>연결할 RFQ</label>
+        <label>Link RFQ</label>
         <select value={rfqId} onChange={(e) => setRfqId(e.target.value ? Number(e.target.value) : "")}>
-          <option value="">— 연결 안 함 —</option>
+          <option value="">— None —</option>
           {options.rfqs.map((r) => (
             <option key={r.id} value={r.id}>
-              {r.rfq_no} · {r.customer} · {r.vessel || "—"} · {r.status}
+              {r.rfq_no} · {r.customer} · {r.vessel || "—"} · {tr(r.status)}
             </option>
           ))}
         </select>
@@ -862,7 +884,7 @@ function CustomerPoNewForm({
           onClick={submit}
           disabled={busy || customerId === ""}
         >
-          {busy ? "등록 중…" : "오더 등록"}
+          {busy ? "Saving…" : "Create order"}
         </button>
         {msg ? <span className="action-ok">{msg}</span> : null}
         {err ? <span className="action-err">{err}</span> : null}
@@ -913,36 +935,36 @@ function VendorPoCreate({
         date,
         items: cleanItems(items),
       });
-      setMsg(`발주서 생성 완료: ${r.po_no}`);
+      setMsg(`PO created: ${r.po_no}`);
       onChanged();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "발주서 생성 실패");
+      setErr(e instanceof Error ? e.message : "PO creation failed");
     } finally {
       setBusy(false);
     }
   }
 
   if (options.orders.length === 0) {
-    return <div className="empty">등록된 오더가 없습니다. 먼저 Customer P/O 수신 탭에서 수주를 등록하세요.</div>;
+    return <div className="empty">No orders registered. Register an order in the Customer P/O Received tab first.</div>;
   }
 
   return (
     <>
       <div className="form-grid">
         <div className="form-field">
-          <label>대상 오더 선택</label>
+          <label>Select target order</label>
           <select value={orderId} onChange={(e) => setOrderId(Number(e.target.value))}>
             {options.orders.map((o) => (
               <option key={o.id} value={o.id}>
-                {o.ord_no} · {o.customer} · {o.status}
+                {o.ord_no} · {o.customer} · {tr(o.status)}
               </option>
             ))}
           </select>
         </div>
         <div className="form-field">
-          <label>Vendor 선택</label>
+          <label>Select vendor</label>
           <select value={vendorId} onChange={(e) => setVendorId(e.target.value ? Number(e.target.value) : "")}>
-            <option value="">— 없음 —</option>
+            <option value="">— None —</option>
             {options.vendors.map((v) => (
               <option key={v.id} value={v.id}>
                 {v.name}
@@ -951,14 +973,14 @@ function VendorPoCreate({
           </select>
         </div>
         <div className="form-field">
-          <label>발주일</label>
+          <label>PO date</label>
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
         </div>
       </div>
 
       {order ? (
         <div className="action-ctx">
-          대상 오더: <b>{order.ord_no}</b> · {order.customer} · {order.vessel || "—"} · 품목 {order.items.length}개
+          Target order: <b>{order.ord_no}</b> · {order.customer} · {order.vessel || "—"} · {order.items.length} item(s)
         </div>
       ) : null}
 
@@ -970,7 +992,7 @@ function VendorPoCreate({
           onClick={submit}
           disabled={busy || orderId === "" || vendorId === ""}
         >
-          {busy ? "생성 중…" : "발주서 생성"}
+          {busy ? "Creating…" : "Create PO"}
         </button>
         {msg ? <span className="action-ok">{msg}</span> : null}
         {err ? <span className="action-err">{err}</span> : null}
@@ -1013,7 +1035,7 @@ function VendorPoSend({
       setSubject(p.subject);
       setBody(p.body);
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "미리보기 생성 실패");
+      setErr(e instanceof Error ? e.message : "Preview generation failed");
     } finally {
       setBusy(false);
     }
@@ -1026,11 +1048,11 @@ function VendorPoSend({
     setErr(null);
     try {
       const r = await sendVendorPo(poId, to, subject, body);
-      setMsg(`이메일 발송 완료: ${r.sent_date}`);
+      setMsg(`Email sent: ${r.sent_date}`);
       setPreview(null);
       onChanged();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "이메일 발송 실패");
+      setErr(e instanceof Error ? e.message : "Email sending failed");
     } finally {
       setBusy(false);
     }
@@ -1042,7 +1064,7 @@ function VendorPoSend({
       headers: { Authorization: `Bearer ${getToken()}` },
     });
     if (!res.ok) {
-      setErr("PDF 다운로드 실패");
+      setErr("PDF download failed");
       return;
     }
     const blob = await res.blob();
@@ -1055,14 +1077,14 @@ function VendorPoSend({
   }
 
   if (options.purchase_orders.length === 0) {
-    return <div className="empty">발행된 발주서가 없습니다. 먼저 발주서 생성 탭에서 발주서를 생성하세요.</div>;
+    return <div className="empty">No purchase orders issued. Create one in the Create PO tab first.</div>;
   }
 
   return (
     <>
       <div className="form-grid">
         <div className="form-field">
-          <label>발송할 발주서 선택</label>
+          <label>Select PO to send</label>
           <select
             value={poId}
             onChange={(e) => {
@@ -1072,28 +1094,28 @@ function VendorPoSend({
           >
             {options.purchase_orders.map((p) => (
               <option key={p.id} value={p.id}>
-                {p.po_no} · {p.vendor} · {p.status}
+                {p.po_no} · {p.vendor} · {tr(p.status)}
               </option>
             ))}
           </select>
         </div>
         <div className="form-field">
-          <label>이메일 언어</label>
+          <label>Email language</label>
           <select value={lang} onChange={(e) => setLang(e.target.value as "en" | "ko")}>
-            <option value="en">English (영문)</option>
-            <option value="ko">Korean (국문)</option>
+            <option value="en">English</option>
+            <option value="ko">Korean</option>
           </select>
         </div>
       </div>
 
       {po ? (
         <div className="action-ctx">
-          발주서: <b>{po.po_no}</b> · {po.vendor} · 오더 {po.ord_no} · 품목 {po.items.length}개
+          PO: <b>{po.po_no}</b> · {po.vendor} · order {po.ord_no} · {po.items.length} item(s)
         </div>
       ) : null}
 
       <div className="form-field">
-        <label>Vendor에게 전달할 메모</label>
+        <label>Note to vendor</label>
         <textarea
           className="po-textarea small"
           value={notes}
@@ -1104,28 +1126,28 @@ function VendorPoSend({
       {!preview ? (
         <div className="form-actions">
           <button className="btn" onClick={makePreview} disabled={busy || poId === ""}>
-            {busy ? "생성 중…" : "이메일 미리보기"}
+            {busy ? "Creating…" : "Preview email"}
           </button>
           {err ? <span className="action-err">{err}</span> : null}
         </div>
       ) : (
         <>
           <div className="po-work-note">
-            <b>이메일 미리보기</b>
-            <span>아래 이메일을 검토·수정 후 발송하세요. 실제 발송에 성공해야 발신 내역에 기록됩니다.</span>
+            <b>Email preview</b>
+            <span>Review and edit the email below before sending. It is recorded only after a successful send.</span>
           </div>
           <div className="form-grid">
             <div className="form-field">
-              <label>수신자 이메일</label>
+              <label>Recipient email</label>
               <input value={to} onChange={(e) => setTo(e.target.value)} />
             </div>
             <div className="form-field">
-              <label>제목</label>
+              <label>Subject</label>
               <input value={subject} onChange={(e) => setSubject(e.target.value)} />
             </div>
           </div>
           <div className="form-field">
-            <label>본문</label>
+            <label>Body</label>
             <textarea
               className="po-textarea"
               value={body}
@@ -1134,22 +1156,22 @@ function VendorPoSend({
           </div>
           {!preview.smtp_configured ? (
             <div className="action-err">
-              SMTP 미설정: SMTP_USER / SMTP_PASSWORD가 없으면 실제 발송할 수 없습니다.
+              SMTP not configured: without SMTP_USER / SMTP_PASSWORD, real sending is unavailable.
             </div>
           ) : null}
           <div className="form-actions">
             <button className="btn" onClick={downloadPdf} disabled={poId === ""}>
-              발주서 PDF 다운로드
+              Download PO PDF
             </button>
             <button
               className="btn primary"
               onClick={send}
               disabled={busy || !to || !preview.smtp_configured}
             >
-              {busy ? "발송 중…" : "이메일 발송"}
+              {busy ? "Sending…" : "Send email"}
             </button>
             <button className="btn" onClick={() => setPreview(null)}>
-              취소
+              Cancel
             </button>
             {msg ? <span className="action-ok">{msg}</span> : null}
             {err ? <span className="action-err">{err}</span> : null}
@@ -1169,16 +1191,16 @@ function IssuedPoTable({
   return (
     <>
       <div className="sub-h" style={{ marginTop: 16 }}>
-        발행된 발주서
+        Issued purchase orders
       </div>
       <table className="mini wide">
         <thead>
           <tr>
             <th>PO No.</th>
             <th>Vendor</th>
-            <th>발주일</th>
-            <th>상태</th>
-            <th className="num">품목수</th>
+            <th>PO date</th>
+            <th>Status</th>
+            <th className="num">Items</th>
           </tr>
         </thead>
         <tbody>
@@ -1218,18 +1240,18 @@ function ItemEditor({
 
   return (
     <div style={{ marginTop: 16 }}>
-      <div className="sub-h">품목 리스트</div>
+      <div className="sub-h">Item list</div>
       <div className="table-wrap">
         <table className="mini wide">
           <thead>
             <tr>
               <th>Part No.</th>
-              <th>품명</th>
+              <th>Description</th>
               <th>Maker</th>
-              <th className="num">수량</th>
+              <th className="num">Qty</th>
               <th>Unit</th>
-              <th className="num">단가</th>
-              <th className="num">금액</th>
+              <th className="num">Unit price</th>
+              <th className="num">Amount</th>
               <th></th>
             </tr>
           </thead>
@@ -1284,7 +1306,7 @@ function ItemEditor({
         </table>
       </div>
       <button className="btn" style={{ marginTop: 10 }} onClick={() => onChange([...items, blankItem()])}>
-        품목 추가
+        Add item
       </button>
     </div>
   );

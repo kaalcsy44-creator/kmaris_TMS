@@ -70,17 +70,17 @@ export default function SettingsPage() {
 function Settings() {
   const [tab, setTab] = useState<Tab>("company");
   const tabs: { key: Tab; label: string }[] = [
-    { key: "company", label: "회사 정보" },
-    { key: "users", label: "사용자" },
+    { key: "company", label: "Company" },
+    { key: "users", label: "Users" },
     { key: "customers", label: "Customer" },
     { key: "vendors", label: "Vendor" },
-    { key: "vessels", label: "선박" },
+    { key: "vessels", label: "Vessels" },
     { key: "items", label: "Item Master" },
   ];
 
   return (
     <>
-      <SectionHead title="Settings" sub="회사정보 · 사용자 · 마스터 데이터 관리" />
+      <SectionHead title="Settings" sub="Company · users · master data" />
       <div className="page-tabs">
         {tabs.map((t) => (
           <button key={t.key} className={tab === t.key ? "on" : ""} onClick={() => setTab(t.key)}>
@@ -154,9 +154,9 @@ function CompanyTab() {
       await updateCompanyProfile(form);
       setSaved(form);
       setEditing(false);
-      setMsg("저장 완료");
+      setMsg("Saved");
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : "저장 실패");
+      setMsg(e instanceof Error ? e.message : "Save failed");
     } finally {
       setBusy(false);
     }
@@ -176,7 +176,7 @@ function CompanyTab() {
         </dl>
         <div className="form-actions">
           <button className="btn primary" onClick={startEdit}>
-            ✎ 회사 정보 수정
+            ✎ Edit company info
           </button>
           {msg ? <span className="hint-inline">{msg}</span> : null}
         </div>
@@ -199,10 +199,10 @@ function CompanyTab() {
       </div>
       <div className="form-actions">
         <button className="btn primary" disabled={busy} onClick={save}>
-          {busy ? "저장 중…" : "회사 정보 저장"}
+          {busy ? "Saving…" : "Save company info"}
         </button>
         <button className="btn" disabled={busy} onClick={cancel}>
-          취소
+          Cancel
         </button>
         {msg ? <span className="hint-inline">{msg}</span> : null}
       </div>
@@ -224,7 +224,7 @@ function UsersTab() {
   const isSelf = isEdit && me?.id === editId;
 
   function load() {
-    fetchSettingsUsers().then(setRows).catch((e) => setErr(e instanceof Error ? e.message : "사용자 조회 실패"));
+    fetchSettingsUsers().then(setRows).catch((e) => setErr(e instanceof Error ? e.message : "Failed to load users"));
   }
 
   useEffect(load, []);
@@ -257,28 +257,28 @@ function UsersTab() {
       cancel();
       load();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "저장 실패");
+      setErr(e instanceof Error ? e.message : "Save failed");
     }
   }
 
   async function remove() {
-    if (!isEdit || !confirm("이 사용자를 삭제할까요?")) return;
+    if (!isEdit || !confirm("Delete this user?")) return;
     setErr("");
     try {
       await deleteSettingsUser(editId);
       cancel();
       load();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "삭제 실패");
+      setErr(e instanceof Error ? e.message : "Delete failed");
     }
   }
 
-  const editorTitle = isEdit ? `✎ ${form.username || "사용자"} 수정` : "+ 신규 사용자";
+  const editorTitle = isEdit ? `✎ Edit ${form.username || "user"}` : "+ New user";
   const editor = editId !== null ? (
     <div className="ms-editor">
       <div className="ms-editor-head">{editorTitle}</div>
       <div className="form-grid">
-        <TextField label="사용자명 *" value={form.username} onChange={(v) => setForm({ ...form, username: v })} />
+        <TextField label="Username *" value={form.username} onChange={(v) => setForm({ ...form, username: v })} />
         <TextField label="Email" value={form.email} onChange={(v) => setForm({ ...form, email: v })} />
         <label className="form-field">
           <span>Role</span>
@@ -289,7 +289,7 @@ function UsersTab() {
           </select>
         </label>
         <TextField
-          label={isEdit ? "새 비밀번호 (변경 시)" : "비밀번호 *"}
+          label={isEdit ? "New password (if changing)" : "Password *"}
           value={password}
           onChange={setPassword}
           type="password"
@@ -300,22 +300,22 @@ function UsersTab() {
             checked={form.is_active}
             onChange={(e) => setForm({ ...form, is_active: e.target.checked })}
           />
-          활성 (비활성화 시 로그인 차단)
+          Active (inactive blocks login)
         </label>
       </div>
       <div className="form-actions">
         <button className="btn primary" onClick={save} disabled={!form.username.trim() || (!isEdit && !password)}>
-          {isEdit ? "수정 저장" : "신규 추가"}
+          {isEdit ? "Save" : "Add"}
         </button>
         <button className="btn" onClick={cancel}>
-          취소
+          Cancel
         </button>
         {isEdit && !isSelf ? (
           <button className="btn danger" onClick={remove}>
-            삭제
+            Delete
           </button>
         ) : null}
-        {isSelf ? <span className="hint-inline">본인 계정은 비활성화/비밀번호 변경만 가능합니다.</span> : null}
+        {isSelf ? <span className="hint-inline">For your own account, only deactivation/password change is allowed.</span> : null}
         {err ? <span className="action-err">{err}</span> : null}
       </div>
     </div>
@@ -324,25 +324,25 @@ function UsersTab() {
   return (
     <div className="panel">
       <div className="ms-toolbar">
-        <h3 className="form-title">사용자 관리</h3>
+        <h3 className="form-title">User management</h3>
         <button className="btn primary" onClick={openNew} disabled={editId === NEW_ID}>
-          + 사용자 추가
+          + Add user
         </button>
       </div>
 
       {editor}
 
       {rows.length === 0 ? (
-        <div className="state">등록된 사용자가 없습니다.</div>
+        <div className="state">No users registered.</div>
       ) : (
         <div className="table-wrap">
           <table className="mini wide ms-table">
             <thead>
               <tr>
-                <th>사용자명</th>
+                <th>Username</th>
                 <th>Email</th>
                 <th>Role</th>
-                <th>상태</th>
+                <th>Status</th>
                 <th className="ms-actcol"></th>
               </tr>
             </thead>
@@ -354,11 +354,11 @@ function UsersTab() {
                   <td>{u.role}</td>
                   <td>
                     <span className={`status-badge${u.is_active ? " on" : " off"}`}>
-                      {u.is_active ? "✓ 활성" : "— 비활성"}
+                      {u.is_active ? "✓ Active" : "— Inactive"}
                     </span>
                   </td>
                   <td className="ms-actcol" onClick={(e) => { e.stopPropagation(); openEdit(u); }}>
-                    <span className="ms-edit-btn" title="수정">✎</span>
+                    <span className="ms-edit-btn" title="Edit">✎</span>
                   </td>
                 </tr>
               ))}
@@ -384,31 +384,31 @@ function MyPasswordChange() {
     setErr("");
     setMsg("");
     if (newPw !== newPw2) {
-      setErr("새 비밀번호가 일치하지 않습니다.");
+      setErr("New passwords do not match.");
       return;
     }
     try {
       await changeMyPassword(oldPw, newPw);
-      setMsg("비밀번호가 변경되었습니다.");
+      setMsg("Password changed.");
       setOldPw("");
       setNewPw("");
       setNewPw2("");
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "변경 실패");
+      setErr(e instanceof Error ? e.message : "Change failed");
     }
   }
 
   return (
     <div className="subpanel" style={{ marginTop: 20 }}>
-      <div className="sub-h">내 비밀번호 변경{me ? ` — ${me.username}` : ""}</div>
+      <div className="sub-h">Change my password{me ? ` — ${me.username}` : ""}</div>
       <div className="form-grid">
-        <TextField label="현재 비밀번호" value={oldPw} onChange={setOldPw} type="password" />
-        <TextField label="새 비밀번호" value={newPw} onChange={setNewPw} type="password" />
-        <TextField label="새 비밀번호 확인" value={newPw2} onChange={setNewPw2} type="password" />
+        <TextField label="Current password" value={oldPw} onChange={setOldPw} type="password" />
+        <TextField label="New password" value={newPw} onChange={setNewPw} type="password" />
+        <TextField label="Confirm new password" value={newPw2} onChange={setNewPw2} type="password" />
       </div>
       <div className="form-actions">
         <button className="btn primary" onClick={submit} disabled={!oldPw || !newPw || !newPw2}>
-          비밀번호 변경
+          Change password
         </button>
         {err ? <span className="action-err">{err}</span> : null}
         {msg ? <span className="action-ok">{msg}</span> : null}
@@ -420,7 +420,7 @@ function MyPasswordChange() {
 function CustomersTab() {
   return (
     <MasterSection<SettingsCustomer>
-      title="Customer 관리"
+      title="Customer Management"
       empty={{ id: 0, name: "", contact: "", contact_phone: "", email: "", country: "", address: "", tax_id: "" }}
       load={fetchSettingsCustomers}
       create={createSettingsCustomer}
@@ -429,21 +429,21 @@ function CustomersTab() {
       columns={[
         ["name", "Customer"],
         ["country", "Country"],
-        ["contact", "담당자"],
+        ["contact", "Contact"],
         ["email", "Email"],
       ]}
       fields={[
         ["name", "Customer *"],
         ["country", "Country"],
         ["address", "Address"],
-        ["contact", "담당자 이름"],
-        ["contact_phone", "담당자 연락처"],
-        ["email", "담당자 이메일"],
+        ["contact", "Contact name"],
+        ["contact_phone", "Contact phone"],
+        ["email", "Contact email"],
         ["tax_id", "Tax ID / Business No."],
       ]}
       required="name"
       allowCopy
-      copyHint="같은 고객사의 다른 담당자를 등록하려면 담당자(Contact)·이메일만 바꿔 저장하세요."
+      copyHint="To register another contact for the same customer, change only the contact/email and save."
     />
   );
 }
@@ -451,7 +451,7 @@ function CustomersTab() {
 function VendorsTab() {
   return (
     <MasterSection<SettingsVendor>
-      title="Vendor 관리"
+      title="Vendor Management"
       empty={{ id: 0, name: "", contact: "", contact_phone: "", email: "", specialization: "", country: "", address: "" }}
       load={fetchSettingsVendors}
       create={createSettingsVendor}
@@ -460,7 +460,7 @@ function VendorsTab() {
       columns={[
         ["name", "Vendor"],
         ["country", "Country"],
-        ["contact", "담당자"],
+        ["contact", "Contact"],
         ["email", "Email"],
         ["specialization", "Specialization"],
       ]}
@@ -468,14 +468,14 @@ function VendorsTab() {
         ["name", "Vendor *"],
         ["country", "Country"],
         ["address", "Address"],
-        ["contact", "담당자 이름"],
-        ["contact_phone", "담당자 연락처"],
-        ["email", "담당자 이메일"],
+        ["contact", "Contact name"],
+        ["contact_phone", "Contact phone"],
+        ["email", "Contact email"],
         ["specialization", "Specialization"],
       ]}
       required="name"
       allowCopy
-      copyHint="같은 Vendor의 다른 담당자를 등록하려면 담당자(Contact)·이메일만 바꿔 저장하세요."
+      copyHint="To register another contact for the same vendor, change only the contact/email and save."
     />
   );
 }
@@ -488,7 +488,7 @@ function VesselsTab() {
 
   return (
     <MasterSection<SettingsVessel>
-      title="선박 관리"
+      title="Vessel Management"
       empty={{ id: 0, name: "", imo: "", vessel_type: "", ais_flag: "", engine_type: "", hull_no: "", customer_id: null, customer: "" }}
       load={fetchSettingsVessels}
       create={(body) => {
@@ -503,14 +503,14 @@ function VesselsTab() {
       columns={[
         ["name", "Vessel"],
         ["imo", "IMO"],
-        ["vessel_type", "선박 타입"],
+        ["vessel_type", "Vessel type"],
         ["ais_flag", "AIS Flag"],
         ["customer", "Customer"],
       ]}
       fields={[
         ["name", "Vessel *"],
         ["imo", "IMO No."],
-        ["ais_flag", "AIS Flag (기국)"],
+        ["ais_flag", "AIS Flag (flag state)"],
         ["engine_type", "Main Engine Type"],
         ["hull_no", "Hull No."],
       ]}
@@ -518,12 +518,12 @@ function VesselsTab() {
       extraForm={(form, setForm) => (
         <>
           <label className="form-field">
-            <span>선박 타입</span>
+            <span>Vessel type</span>
             <input
               list="vessel-type-list"
               value={form.vessel_type ?? ""}
               onChange={(e) => setForm({ ...form, vessel_type: e.target.value })}
-              placeholder="선택 또는 직접 입력"
+              placeholder="Select or type"
             />
             <datalist id="vessel-type-list">
               {VESSEL_TYPES.map((t) => (
@@ -532,12 +532,12 @@ function VesselsTab() {
             </datalist>
           </label>
           <label className="form-field">
-            <span>소유 Customer</span>
+            <span>Owner Customer</span>
             <select
               value={form.customer_id ?? ""}
               onChange={(e) => setForm({ ...form, customer_id: e.target.value ? Number(e.target.value) : null })}
             >
-              <option value="">없음</option>
+              <option value="">None</option>
               {customers.map((c) => (
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
@@ -636,7 +636,7 @@ function MasterSection<T extends { id: number }>({
   const [copying, setCopying] = useState(false); // 복사 모드(기존 정보 복제 → 새 레코드)
 
   function refresh() {
-    load().then(setRows).catch((e) => setErr(e instanceof Error ? e.message : "조회 실패"));
+    load().then(setRows).catch((e) => setErr(e instanceof Error ? e.message : "Load failed"));
   }
 
   useEffect(refresh, []);
@@ -676,19 +676,19 @@ function MasterSection<T extends { id: number }>({
       cancel();
       refresh();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "저장 실패");
+      setErr(e instanceof Error ? e.message : "Save failed");
     }
   }
 
   async function delRow() {
-    if (!editId || editId < 0 || !confirm("선택한 항목을 삭제할까요?")) return;
+    if (!editId || editId < 0 || !confirm("Delete the selected item?")) return;
     setErr("");
     try {
       await remove(editId);
       cancel();
       refresh();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "삭제 실패");
+      setErr(e instanceof Error ? e.message : "Delete failed");
     }
   }
 
@@ -700,10 +700,10 @@ function MasterSection<T extends { id: number }>({
   const isEdit = !!editId && editId > 0;
 
   const editorTitle = isEdit
-    ? `✎ ${String(form[required] ?? "") || "항목"} 수정`
+    ? `✎ Edit ${String(form[required] ?? "") || "item"}`
     : copying
-    ? `📋 복사하여 새로 등록${String(form[required] ?? "") ? ` — ${String(form[required])}` : ""}`
-    : "+ 신규 등록";
+    ? `📋 Copy as new${String(form[required] ?? "") ? ` — ${String(form[required])}` : ""}`
+    : "+ New";
   const editor = editId !== null ? (
     <div className="ms-editor">
       <div className="ms-editor-head">{editorTitle}</div>
@@ -722,19 +722,19 @@ function MasterSection<T extends { id: number }>({
       </div>
       <div className="form-actions">
         <button className="btn primary" disabled={!requiredValue} onClick={save}>
-          {isEdit ? "수정 저장" : "신규 추가"}
+          {isEdit ? "Save" : "Add"}
         </button>
         {isEdit && allowCopy ? (
-          <button className="btn" onClick={copyAsNew} title="이 정보를 복사해 새 레코드로 등록">
-            📋 복사하여 새로 등록
+          <button className="btn" onClick={copyAsNew} title="Copy this info into a new record">
+            📋 Copy as new
           </button>
         ) : null}
         <button className="btn" onClick={cancel}>
-          취소
+          Cancel
         </button>
         {isEdit ? (
           <button className="btn danger" onClick={delRow}>
-            삭제
+            Delete
           </button>
         ) : null}
         {err ? <span className="action-err">{err}</span> : null}
@@ -748,19 +748,19 @@ function MasterSection<T extends { id: number }>({
         <h3 className="form-title">{title}</h3>
         <input
           className="ms-search"
-          placeholder="🔍 검색…"
+          placeholder="🔍 Search…"
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
         <button className="btn primary" onClick={openNew} disabled={editId === NEW_ID}>
-          + 신규 등록
+          + New
         </button>
       </div>
 
       {editor}
 
       {filtered.length === 0 ? (
-        <div className="state">{ql ? "검색 결과가 없습니다." : "등록된 항목이 없습니다."}</div>
+        <div className="state">{ql ? "No search results." : "No items registered."}</div>
       ) : (
         <div className="table-wrap">
           <table className="mini wide ms-table">
@@ -789,7 +789,7 @@ function MasterSection<T extends { id: number }>({
                       openEdit(row);
                     }}
                   >
-                    <span className="ms-edit-btn" title="수정">
+                    <span className="ms-edit-btn" title="Edit">
                       ✎
                     </span>
                   </td>

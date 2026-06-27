@@ -1,6 +1,8 @@
-// 업무 타입(부품공급/서비스) 배지. 색상으로 한눈에 구분한다.
+// Work-type badge (Parts/Service), color-coded for quick scanning.
+import { tr } from "@/lib/labels";
+
 export default function WorkTypeBadge({ type }: { type?: string }) {
   const t = type || "부품공급";
   const cls = t === "서비스" ? "wt-badge service" : "wt-badge parts";
-  return <span className={cls}>{t}</span>;
+  return <span className={cls}>{tr(t)}</span>;
 }

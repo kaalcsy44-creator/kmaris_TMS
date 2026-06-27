@@ -19,7 +19,7 @@ export default function LoginPage() {
       await login(username, password);
       router.replace("/");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "로그인 실패");
+      setError(err instanceof Error ? err.message : "Login failed");
     } finally {
       setBusy(false);
     }
@@ -29,14 +29,14 @@ export default function LoginPage() {
     <div className="login-wrap">
       <form className="login-box" onSubmit={submit}>
         <div className="login-brand">K-Maris Trade Management System</div>
-        <label>사용자명</label>
+        <label>Username</label>
         <input
           value={username}
           onChange={(e) => setUsername(e.target.value)}
           placeholder="username"
           autoFocus
         />
-        <label>비밀번호</label>
+        <label>Password</label>
         <input
           type="password"
           value={password}
@@ -45,9 +45,9 @@ export default function LoginPage() {
         />
         {error ? <div className="login-error">{error}</div> : null}
         <button className="login-btn" type="submit" disabled={busy}>
-          {busy ? "로그인 중…" : "로그인"}
+          {busy ? "Signing in…" : "Sign in"}
         </button>
-        <div className="login-hint">최초 로그인: admin / admin1234</div>
+        <div className="login-hint">First login: admin / admin1234</div>
       </form>
     </div>
   );

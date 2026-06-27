@@ -2,6 +2,7 @@
 
 import { fetchDashboard } from "@/lib/api";
 import { useCachedData } from "@/lib/useCachedData";
+import { tr } from "@/lib/labels";
 
 function num(n: number) {
   return n.toLocaleString();
@@ -21,10 +22,10 @@ export default function DashboardScreen() {
   const { data, error } = useCachedData("dashboard", fetchDashboard);
 
   if (error && !data) {
-    return <div className="state error">API 오류: {error.message}</div>;
+    return <div className="state error">API error: {error.message}</div>;
   }
   if (!data) {
-    return <div className="state">불러오는 중…</div>;
+    return <div className="state">Loading…</div>;
   }
 
   const { kpi, ops, perf, alerts } = data;
@@ -32,18 +33,18 @@ export default function DashboardScreen() {
 
   return (
     <>
-      <SubHead title="운영 현황" sub="Operational status" />
+      <SubHead title="Operational Status" sub="Operational status" />
       <div className="kpi-row">
         <Kpi
           label="Open RFQ"
           value={kpi.open_rfq}
-          sub="진행 중"
+          sub="In progress"
           chip={{ text: `Urgent ${ops.urgent}`, tone: ops.urgent ? "red" : "gray" }}
         />
         <Kpi
           label="Active Orders"
           value={kpi.active_orders}
-          sub="배송 준비/진행"
+          sub="Preparing/in progress"
           chip={{
             text: `PO pending ${ops.pending_po}`,
             tone: ops.pending_po ? "amber" : "gray",
@@ -52,14 +53,14 @@ export default function DashboardScreen() {
         <Kpi
           label="AR Outstanding"
           value={`USD ${num(Math.round(kpi.ar_outstanding_usd))}`}
-          sub="미수금"
+          sub="Outstanding"
           accent={ops.overdue ? "#dc3545" : "#0055a8"}
           chip={{ text: `Overdue ${ops.overdue}`, tone: ops.overdue ? "red" : "gray" }}
         />
         <Kpi
           label="This Month Quotes"
           value={kpi.monthly_quotes}
-          sub="견적"
+          sub="Quotes"
           chip={{
             text: `Expiring ${ops.expiring}`,
             tone: ops.expiring ? "amber" : "gray",
@@ -67,23 +68,23 @@ export default function DashboardScreen() {
         />
       </div>
 
-      <SubHead title="영업 성과 KPI" sub="Sales performance" />
+      <SubHead title="Sales Performance KPIs" sub="Sales performance" />
       <div className="kpi-row">
         <Kpi
           label="RFQ Handling Rate"
           value={`${perf.handling_rate}%`}
-          sub="견적 제출률"
+          sub="Quote submission rate"
         />
         <Kpi
           label="Quotation TAT"
           value={tat === null ? "—" : `${num(tat)}h`}
-          sub="평균 응답시간"
+          sub="Avg. response time"
           accent="#2e8b57"
         />
         <Kpi
           label="Hit Rate"
           value={`${perf.hit_rate}%`}
-          sub="PO 전환율"
+          sub="PO conversion rate"
           accent="#e8830c"
           chip={{
             text: `Negotiating USD ${num(Math.round(perf.negotiating_value_usd))}`,
@@ -93,22 +94,22 @@ export default function DashboardScreen() {
         <Kpi
           label="Gross Margin"
           value={`${perf.gross_margin_pct}%`}
-          sub="매출이익률"
+          sub="Gross margin %"
           accent="#1a7a4a"
         />
       </div>
 
       <div className="dash-two">
         <div>
-          <SubHead title="긴급 Follow-up · Level A 견적" />
+          <SubHead title="Urgent Follow-up · Level A Quotes" />
           {alerts.urgent_quotes.length === 0 ? (
-            <div className="alert-ok">긴급 follow-up 견적이 없습니다.</div>
+            <div className="alert-ok">No urgent follow-up quotes.</div>
           ) : (
             alerts.urgent_quotes.map((q) => (
               <div className="alert-card" key={q.qtn_no}>
                 <div>
                   <div className="a-main">{q.qtn_no}</div>
-                  <div className="a-sub">상태: {q.status}</div>
+                  <div className="a-sub">Status: {tr(q.status)}</div>
                 </div>
                 <div className="a-right">Valid until: {q.valid_until || "—"}</div>
               </div>
@@ -117,9 +118,9 @@ export default function DashboardScreen() {
         </div>
 
         <div>
-          <SubHead title="연체 AR" />
+          <SubHead title="Overdue AR" />
           {alerts.overdue_ar.length === 0 ? (
-            <div className="alert-ok">연체 AR이 없습니다.</div>
+            <div className="alert-ok">No overdue AR.</div>
           ) : (
             alerts.overdue_ar.map((ar, i) => (
               <div className="alert-card danger" key={`${ar.ci_no}-${i}`}>

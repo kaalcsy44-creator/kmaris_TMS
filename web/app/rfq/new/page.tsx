@@ -8,7 +8,7 @@ export default function NewRfqPage() {
   const router = useRouter();
   return (
     <AppShell active="rfq">
-      <SectionHead title="Customer RFQ 신규 등록" sub="RFQ & Quotation" />
+      <SectionHead title="New Customer RFQ" sub="RFQ & Quotation" />
       <NewRfqForm
         onCreated={(rfqNo) =>
           router.replace(`/rfq?created=${encodeURIComponent(rfqNo)}`)

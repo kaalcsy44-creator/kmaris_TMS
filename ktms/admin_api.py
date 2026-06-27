@@ -125,19 +125,35 @@ JWT_ALGO = "HS256"
 TOKEN_TTL_HOURS = 12
 
 INTERNAL_STEPS = [
-    "Customer RFQ 수신",
-    "Vendor RFQ 발신",
-    "Vendor Quot. 수신",
-    "Customer Quot. 발신",
-    "Customer P/O 수신",
-    "Vendor P/O 발신",
+    "Customer RFQ Received",
+    "Vendor RFQ Sent",
+    "Vendor Quote Received",
+    "Customer Quote Sent",
+    "Customer P/O Received",
+    "Vendor P/O Sent",
     "Delivery Readiness",
-    "Delivery arrangement",
-    "운송 완료 · POD 수취",
-    "Tax Invoice 작성 · 대금 청구",
-    "세금계산서 발행",
-    "대금 결제 완료",
+    "Delivery Arrangement",
+    "Delivery Complete · POD",
+    "Tax Invoice · Billing",
+    "Tax Invoice Issued",
+    "Payment Completed",
 ]
+
+# 업무타입 "서비스"는 7·8·9단계(운송)를 서비스 관점 명칭으로 별도 관리한다.
+SERVICE_STEP_OVERRIDES = {
+    7: "Service Readiness",
+    8: "Service Arrangement",
+    9: "Service Complete · Report",
+}
+
+
+def steps_for(work_type) -> list[str]:
+    """업무타입에 맞는 12단계 명칭. 서비스면 7·8·9단계를 서비스 명칭으로 치환."""
+    wt = _enum_val(work_type) if work_type else WorkType.PARTS.value
+    if wt == WorkType.SERVICE.value:
+        return [SERVICE_STEP_OVERRIDES.get(i, name)
+                for i, name in enumerate(INTERNAL_STEPS, start=1)]
+    return list(INTERNAL_STEPS)
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
@@ -291,21 +307,28 @@ def _pipeline_stage(s, rfq_id: int) -> int:
             "목적지 하차 완료": 9,
         }.get(ost, 5))
 
-        if getattr(order, "consignee_confirmed_date", None):
-            stage = max(stage, 8)
-        if s.query(ShippingAdvice).filter_by(order_id=order.id).first():
-            stage = max(stage, 8)
-        if getattr(order, "vendor_docs_sent_date", None):
-            stage = max(stage, 8)
-        # 9) 운송 완료 · POD 수취 — POD 파일 업로드 시 완료
-        if s.query(DeliveryProof).filter_by(order_id=order.id).first():
-            stage = max(stage, 9)
-        ci = s.query(CommercialInvoice).filter_by(order_id=order.id).first()
-        if ci:
-            stage = max(stage, 8)
-            # 10) Tax Invoice 작성 · 대금 청구 — Tax Invoice Data 생성 시
-            if s.query(TaxInvoiceData).filter_by(ci_id=ci.id).first():
-                stage = max(stage, 10)
+        is_domestic = (getattr(order, "trade_type", "수출") == "내수")
+        if is_domestic:
+            # 내수(국내공급): 7·8·9단계(CI/PL/SA/POD)는 해당 없음 → 건너뛴다.
+            # 발주(6) 이후에는 곧바로 대금청구(10) 준비 단계로 본다.
+            if stage >= 6:
+                stage = max(stage, 9)
+        else:
+            if getattr(order, "consignee_confirmed_date", None):
+                stage = max(stage, 8)
+            if s.query(ShippingAdvice).filter_by(order_id=order.id).first():
+                stage = max(stage, 8)
+            if getattr(order, "vendor_docs_sent_date", None):
+                stage = max(stage, 8)
+            # 9) 운송 완료 · POD 수취 — POD 파일 업로드 시 완료
+            if s.query(DeliveryProof).filter_by(order_id=order.id).first():
+                stage = max(stage, 9)
+            ci = s.query(CommercialInvoice).filter_by(order_id=order.id).first()
+            if ci:
+                stage = max(stage, 8)
+                # 10) Tax Invoice 작성 · 대금 청구 — Tax Invoice Data 생성 시
+                if s.query(TaxInvoiceData).filter_by(ci_id=ci.id).first():
+                    stage = max(stage, 10)
 
         ars = s.query(ARRecord).filter_by(order_id=order.id).all()
         if ars:
@@ -313,11 +336,14 @@ def _pipeline_stage(s, rfq_id: int) -> int:
             if any(_enum_val(a.status) == "완납" for a in ars):
                 stage = max(stage, 12)
 
-    # 수동 완료(완료 버튼/POD)로 stage_dates 에 표시된 9·11·12 단계를 반영.
+    # 수동 완료(완료 버튼/POD)로 stage_dates 에 표시된 단계를 반영.
     # (자동 근거가 약하거나 없는 단계만 — 의도치 않은 점프 방지)
     rfq_obj = s.query(RFQ).filter_by(id=rfq_id).first()
     sd = (getattr(rfq_obj, "stage_dates", None) or {}) if rfq_obj else {}
-    for k in ("9", "11", "12"):
+    # 서비스 업무는 7·8단계(Service Readiness/arrangement)도 수동 완료로 진행한다.
+    is_service = bool(rfq_obj and _enum_val(rfq_obj.work_type) == "서비스")
+    manual_keys = ("7", "8", "9", "11", "12") if is_service else ("9", "11", "12")
+    for k in manual_keys:
         if sd.get(k):
             stage = max(stage, int(k))
     return stage
@@ -413,8 +439,9 @@ def _stage_auto_times(s, rfq, order) -> dict[str, str]:
     return auto
 
 
-def _status_label(stage: int) -> str:
-    return f"{stage}/{len(INTERNAL_STEPS)} {INTERNAL_STEPS[stage - 1]}"
+def _status_label(stage: int, work_type=None) -> str:
+    steps = steps_for(work_type)
+    return f"{stage}/{len(steps)} {steps[stage - 1]}"
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -511,6 +538,7 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
                 "customer_rfq_no": r.customer_rfq_no or "",
                 "kmaris_rfq_no": _rfq_no_disp(r.rfq_no),
                 "work_type": _enum_val(r.work_type) if r.work_type else "부품공급",
+                "trade_type": (o.trade_type if o else "수출") or "수출",
                 "customer": cust_names.get(r.customer_id, "—"),
                 "customer_id": r.customer_id or 0,
                 "vessel": (vessel_names.get(r.vessel_id) if r.vessel_id else "") or "",
@@ -540,7 +568,7 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
                 "vendor_email": vendor_po_email,
                 # 상태 · 단계 일시
                 "stage": stage,
-                "status": _status_label(stage),
+                "status": _status_label(stage, r.work_type),
                 "stage_dates": getattr(r, "stage_dates", None) or {},
                 "stage_auto": _stage_auto_times(s, r, o),
                 "stage_notes": getattr(r, "stage_notes", None) or {},
@@ -631,7 +659,7 @@ def rfq_overview(customer_id: int | None = None, work_type: str | None = None):
                 "cquote_at": qtn_at,
                 "customer_amount": customer_amount,
                 "stage": stage,
-                "status": _status_label(stage),
+                "status": _status_label(stage, r.work_type),
             })
 
         return {"steps": INTERNAL_STEPS, "rows": rows}
@@ -869,7 +897,7 @@ def rfq_detail(rfq_id: int):
             "no": i,
             "name": name,
             "state": ("done" if i < stage else "current" if i == stage else "todo"),
-        } for i, name in enumerate(INTERNAL_STEPS, start=1)]
+        } for i, name in enumerate(steps_for(r.work_type), start=1)]
 
         return {
             "id": r.id,
@@ -889,7 +917,7 @@ def rfq_detail(rfq_id: int):
             "notes": r.notes or "",
             "follow_up_level": _enum_val(r.follow_up_level) if r.follow_up_level else "B",
             "stage": stage,
-            "status": _status_label(stage),
+            "status": _status_label(stage, r.work_type),
             "steps": steps,
             "items": [_item_view(it) for it in (r.items or [])],
             "vendor_rfqs": vrfq_view,
@@ -999,7 +1027,7 @@ def dashboard():
                 "rfq_no": _rfq_no_disp(r.rfq_no),
                 "customer": cust_names.get(r.customer_id, "—"),
                 "stage": stage,
-                "status": _status_label(stage),
+                "status": _status_label(stage, r.work_type),
                 "at": _kst(r.created_at),
             })
 
@@ -1156,7 +1184,7 @@ def po_overview():
                 "vendor": vendor_nm,
                 "vendor_email": vendor_email,
                 "stage": stage,
-                "status": _status_label(stage),
+                "status": _status_label(stage, r.work_type),
             })
         return {"rows": rows}
     finally:
@@ -1182,7 +1210,7 @@ def order_detail(order_id: int):
             "no": i,
             "name": name,
             "state": ("done" if i < stage else "current" if i == stage else "todo"),
-        } for i, name in enumerate(INTERNAL_STEPS, start=1)]
+        } for i, name in enumerate(steps_for(rfq.work_type if rfq else None), start=1)]
 
         vendor_names = {v.id: v.name for v in s.query(Vendor).all()}
         vendor_emails = {v.id: v.email for v in s.query(Vendor).all()}
@@ -1219,7 +1247,8 @@ def order_detail(order_id: int):
             "customer_contact": (cust.contact if cust else "") or "",
             "customer_email": (cust.email if cust else "") or "",
             "vessel": vessel.name if vessel else "",
-            "status": _status_label(stage) if rfq else _enum_val(o.status),
+            "trade_type": o.trade_type or "수출",
+            "status": _status_label(stage, rfq.work_type) if rfq else _enum_val(o.status),
             "order_status": _enum_val(o.status),
             "stage": stage,
             "promised_delivery": o.promised_delivery or "",
@@ -1279,7 +1308,7 @@ def po_work_options():
                 "customer": cust_names.get(r.customer_id, "—"),
                 "vessel_id": r.vessel_id,
                 "vessel": vessel_names.get(r.vessel_id, "") if r.vessel_id else "",
-                "status": _status_label(stage),
+                "status": _status_label(stage, r.work_type),
                 "items": [_item_view(it) for it in (r.items or [])],
             })
 
@@ -1312,7 +1341,8 @@ def po_work_options():
                 "vessel": vessel_names.get(o.vessel_id, "") if o.vessel_id else "",
                 "po_no": o.po_no or "",
                 "date": o.date or "",
-                "status": _status_label(stage) if rfq else _enum_val(o.status),
+                "trade_type": o.trade_type or "수출",
+                "status": _status_label(stage, rfq.work_type) if rfq else _enum_val(o.status),
                 "items": [_item_view(it) for it in (o.items or [])],
             })
 
@@ -1466,6 +1496,7 @@ class OrderCreate(BaseModel):
     rfq_id: int | None = None
     po_no: str = ""
     date: str | None = None
+    trade_type: str = "수출"
     promised_delivery: str | None = None
     items: list[PoWorkItem] = []
 
@@ -1505,6 +1536,7 @@ def create_order(body: OrderCreate):
             vessel_id=body.vessel_id,
             po_no=(body.po_no or "").strip(),
             date=body.date or date.today().isoformat(),
+            trade_type=(body.trade_type or "수출").strip() or "수출",
             promised_delivery=body.promised_delivery or None,
             status=OrderStatus.RECEIVED,
             items=items,
@@ -1523,6 +1555,7 @@ class OrderUpdate(BaseModel):
     vessel_id: int | None = None       # 0 = 선박 미지정 해제
     po_no: str | None = None
     date: str | None = None
+    trade_type: str | None = None
     promised_delivery: str | None = None
     items: list[PoWorkItem] | None = None
 
@@ -1543,6 +1576,8 @@ def update_order(order_id: int, body: OrderUpdate):
             order.po_no = body.po_no.strip()
         if body.date is not None:
             order.date = body.date or order.date
+        if body.trade_type is not None:
+            order.trade_type = (body.trade_type or "수출").strip() or "수출"
         if body.promised_delivery is not None:
             order.promised_delivery = body.promised_delivery or None
         if body.items is not None:
@@ -1861,6 +1896,9 @@ def ar_overview():
                 out_usd += outstanding
                 if overdue:
                     overdue_usd += outstanding
+            # 11) 세금계산서 발행 · 12) 대금 결제 완료 — RFQ.stage_dates 의 수동 완료 표시
+            rfq = _rfq_for_order(s, o) if o else None
+            sd = (getattr(rfq, "stage_dates", None) or {}) if rfq else {}
             rows.append({
                 "id": r.id,
                 "order_id": r.order_id,
@@ -1875,6 +1913,10 @@ def ar_overview():
                 "status": status,
                 "overdue": bool(overdue),
                 "notes": r.notes or "",
+                "tax_issued": bool(sd.get("11")),
+                "tax_issued_date": sd.get("11", "") or "",
+                "paid_done": bool(sd.get("12")),
+                "paid_date": sd.get("12", "") or "",
             })
         return {
             "kpi": {
@@ -2102,7 +2144,9 @@ def quotation_overview(customer_id: int | None = None):
     try:
         cust_names = {c.id: c.name for c in s.query(Customer).all()}
         vessel_names = {v.id: v.name for v in s.query(Vessel).all()}
-        rfq_nos = {r.id: _rfq_no_disp(r.rfq_no) for r in s.query(RFQ).all()}
+        rfqs_all = s.query(RFQ).all()
+        rfq_nos = {r.id: _rfq_no_disp(r.rfq_no) for r in rfqs_all}
+        rfq_wt = {r.id: r.work_type for r in rfqs_all}
 
         q = s.query(Quotation)
         if customer_id:
@@ -2127,7 +2171,7 @@ def quotation_overview(customer_id: int | None = None):
                 "sent_date": qt.sent_date or "",
                 "date": qt.date or "",
                 "stage": stage,
-                "pipeline": _status_label(stage) if stage else "",
+                "pipeline": _status_label(stage, rfq_wt.get(qt.rfq_id)) if stage else "",
             })
         return {"rows": rows}
     finally:
@@ -2226,26 +2270,43 @@ def documents_overview():
         for sa in s.query(ShippingAdvice).all():
             if sa.order_id not in sa_by_order or sa.id > sa_by_order[sa.order_id].id:
                 sa_by_order[sa.order_id] = sa
+        pod_by_order: dict[int, DeliveryProof] = {}
+        for pod in s.query(DeliveryProof).all():
+            if pod.order_id not in pod_by_order or pod.id > pod_by_order[pod.order_id].id:
+                pod_by_order[pod.order_id] = pod
 
         rows = []
         for o in s.query(Order).order_by(Order.id.desc()).all():
             ci = ci_by_order.get(o.id)
             sa = sa_by_order.get(o.id)
+            pod = pod_by_order.get(o.id)
             ci_id = ci.id if ci else None
+            # 업무타입(서비스)·서비스 단계(7·8 수동완료) 상태 — RFQ.stage_dates 기준
+            rfq = _rfq_for_order(s, o)
+            wt = _enum_val(rfq.work_type) if (rfq and rfq.work_type) else "부품공급"
+            sd = (getattr(rfq, "stage_dates", None) or {}) if rfq else {}
             rows.append({
                 "id": o.id,
                 "ord_no": o.ord_no,
                 "customer": cust_names.get(o.customer_id, "—"),
                 "vessel": vessel_names.get(o.vessel_id, "") if o.vessel_id else "",
                 "po_no": o.po_no or "",
+                "trade_type": o.trade_type or "수출",
+                "work_type": wt,
                 "ci_no": ci.ci_no if ci else "",
                 "pl_no": pl_no_by_ci.get(ci_id, "") if ci_id else "",
                 "sa_no": sa.sa_no if sa else "",
+                "sa_sent_date": (sa.sent_date or "") if sa else "",
                 "tax_no": tax_no_by_ci.get(ci_id, "") if ci_id else "",
+                "pod_filename": (pod.filename or "") if pod else "",
                 "has_ci": bool(ci),
                 "has_pl": bool(ci_id and ci_id in pl_ci_ids),
                 "has_sa": bool(sa),
+                "has_pod": bool(pod),
                 "has_tax": bool(ci_id and ci_id in tax_ci_ids),
+                # 서비스 단계 수동 완료 상태(7·8). 9(리포트)는 has_pod 로 표시.
+                "svc_ready_done": bool(sd.get("7")),
+                "svc_arr_done": bool(sd.get("8")),
             })
         return {"rows": rows}
     finally:
@@ -2377,6 +2438,24 @@ def _document_detail_payload(session, order: Order) -> dict:
            .order_by(DeliveryProof.created_at.desc()).first())
     rfq = _rfq_for_order(session, order)
     sd = (getattr(rfq, "stage_dates", None) or {}) if rfq else {}
+    # 발주된 Vendor(들) — 이 오더의 PurchaseOrder vendor_id → Vendor.name (중복 제거)
+    vendor_ids = [
+        po.vendor_id
+        for po in session.query(PurchaseOrder).filter_by(order_id=order.id).all()
+        if po.vendor_id
+    ]
+    vendor_names: list[str] = []
+    if vendor_ids:
+        name_by_id = {
+            v.id: v.name
+            for v in session.query(Vendor).filter(Vendor.id.in_(set(vendor_ids))).all()
+        }
+        seen = set()
+        for vid in vendor_ids:
+            nm = name_by_id.get(vid)
+            if nm and nm not in seen:
+                seen.add(nm)
+                vendor_names.append(nm)
     return {
         "order": {
             "id": order.id,
@@ -2389,6 +2468,9 @@ def _document_detail_payload(session, order: Order) -> dict:
             "customer_email": cust.email if cust else "",
             "customer_tax_id": cust.tax_id if cust else "",
             "vessel": vessel.name if vessel else "",
+            "project_title": (rfq.project_title or "") if rfq else "",
+            "vendor": ", ".join(vendor_names),
+            "trade_type": order.trade_type or "수출",
             "tracking_token": order.tracking_token or "",
             "consignee_confirmed_date": order.consignee_confirmed_date or "",
             "vendor_docs_sent_date": order.vendor_docs_sent_date or "",
@@ -2399,8 +2481,8 @@ def _document_detail_payload(session, order: Order) -> dict:
             "filename": pod.filename or "POD",
             "uploaded_at": pod.uploaded_at or "",
         },
-        # 수동 완료(완료 버튼) 단계 상태 — 9·11·12
-        "stage_done": {k: bool(sd.get(k)) for k in ("9", "11", "12")},
+        # 수동 완료(완료 버튼) 단계 상태 — 7·8(서비스) · 9 · 11 · 12
+        "stage_done": {k: bool(sd.get(k)) for k in ("7", "8", "9", "11", "12")},
         "ci": None if not ci else {
             "id": ci.id,
             "ci_no": ci.ci_no or "",

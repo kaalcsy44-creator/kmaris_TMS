@@ -21,7 +21,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
   }, [router]);
 
   if (!ready) {
-    return <div className="state">확인 중…</div>;
+    return <div className="state">Checking…</div>;
   }
   return <>{children}</>;
 }

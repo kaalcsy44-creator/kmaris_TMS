@@ -33,7 +33,7 @@ export default function FilterTable<T>({
   getRowKey,
   onRowClick,
   rowClassName,
-  empty = "표시할 항목이 없습니다.",
+  empty = "No items to display.",
   actions,
 }: {
   rows: T[];
@@ -140,7 +140,7 @@ export default function FilterTable<T>({
   function renderColMenu(col: ColumnDef<T>) {
     const opts =
       col.filter === "facet"
-        ? [{ v: "전체", label: "전체" }, ...distinct(col).map((v) => ({ v, label: v || col.emptyLabel || "미지정" }))]
+        ? [{ v: "전체", label: "All" }, ...distinct(col).map((v) => ({ v, label: v || col.emptyLabel || "Unspecified" }))]
         : [];
     const d = dateRange(col.key);
     return (
@@ -152,13 +152,13 @@ export default function FilterTable<T>({
               className={sortKey === col.key && sortDir === "asc" ? "on" : ""}
               onClick={() => applySort(col.key, "asc")}
             >
-              <span className="ic">▲</span> 오름차순
+              <span className="ic">▲</span> Ascending
             </button>
             <button
               className={sortKey === col.key && sortDir === "desc" ? "on" : ""}
               onClick={() => applySort(col.key, "desc")}
             >
-              <span className="ic">▼</span> 내림차순
+              <span className="ic">▼</span> Descending
             </button>
           </div>
 
@@ -166,7 +166,7 @@ export default function FilterTable<T>({
             <>
               <div className="pl-menu-divider" />
               <div className="pl-menu-date">
-                <span className="pl-menu-cap">기간</span>
+                <span className="pl-menu-cap">Range</span>
                 <input
                   type="date"
                   value={d.from}
@@ -182,7 +182,7 @@ export default function FilterTable<T>({
                 />
                 {d.from || d.to ? (
                   <button className="pl-menu-clear" onClick={() => setDate(col.key, { from: "", to: "" })}>
-                    기간 해제
+                    Clear range
                   </button>
                 ) : null}
               </div>
@@ -214,11 +214,11 @@ export default function FilterTable<T>({
       <div className="pl-toolbar">
         {filtersActive ? (
           <button type="button" className="pl-filter-reset" onClick={resetFilters}>
-            필터 초기화
+            Reset filters
           </button>
         ) : null}
         <span className="pl-search-count">
-          {displayRows.length} / {rows.length}건
+          {displayRows.length} / {rows.length}
         </span>
         {actions ? <span className="pl-toolbar-actions">{actions}</span> : null}
       </div>
@@ -243,7 +243,7 @@ export default function FilterTable<T>({
                       onClick={(e) => (hasMenu ? openMenu(c.key, e) : undefined)}
                     >
                       <span className="pl-th-label">{c.label}</span>
-                      {filtered ? <span className="pl-th-dot" title="필터 적용 중" /> : null}
+                      {filtered ? <span className="pl-th-dot" title="Filter applied" /> : null}
                       <span className="pl-th-caret">{sorted ? (sortDir === "asc" ? "▲" : "▼") : "▾"}</span>
                     </button>
                   </th>

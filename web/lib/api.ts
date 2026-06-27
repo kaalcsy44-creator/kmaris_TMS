@@ -252,6 +252,7 @@ export function createOrder(body: {
   rfq_id?: number | null;
   po_no?: string;
   date?: string;
+  trade_type?: string;
   promised_delivery?: string | null;
   items: PoWorkItem[];
 }): Promise<{ ok: boolean; id: number; ord_no: string }> {
@@ -790,6 +791,7 @@ export function updateOrder(
     vessel_id?: number;
     po_no?: string;
     date?: string;
+    trade_type?: string;
     promised_delivery?: string | null;
     items?: PoWorkItem[];
   }

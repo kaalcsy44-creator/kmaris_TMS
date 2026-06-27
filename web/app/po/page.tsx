@@ -11,9 +11,9 @@ export default function PoPage() {
     <AppShell active="po" wide>
       <SectionHead
         title="P/O"
-        sub="고객 P/O 수신 → Vendor P/O 발신 작업"
+        sub="Customer P/O received → Vendor P/O sent"
       />
-      <Suspense fallback={<div className="state">불러오는 중…</div>}>
+      <Suspense fallback={<div className="state">Loading…</div>}>
         <PoScreen />
       </Suspense>
     </AppShell>

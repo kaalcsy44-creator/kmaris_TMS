@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { tr } from "@/lib/labels";
 import {
   fetchCustomers,
   fetchSettingsVessels,
@@ -98,7 +99,7 @@ export default function NewRfqForm({
     if (!editId) return;
     if (
       !window.confirm(
-        "이 RFQ를 삭제할까요?\n연결된 Vendor RFQ/견적도 함께 삭제됩니다.\n(이미 견적·오더로 진행된 건은 삭제할 수 없습니다.)"
+        "Delete this RFQ?\nLinked Vendor RFQs/quotes will also be deleted.\n(RFQs already advanced to a quote/order cannot be deleted.)"
       )
     )
       return;
@@ -108,7 +109,7 @@ export default function NewRfqForm({
       await deleteRfq(editId);
       onDeleted?.();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "삭제 실패");
+      setErr(e instanceof Error ? e.message : "Delete failed");
       setBusy(false);
     }
   }
@@ -193,12 +194,12 @@ export default function NewRfqForm({
         );
       }
       setOcrMsg(
-        `추출 완료: ${r.items?.length ?? 0}개 품목${
-          r.customer_hint ? ` · Customer 힌트 ${r.customer_hint}` : ""
+        `Extracted: ${r.items?.length ?? 0} item(s)${
+          r.customer_hint ? ` · Customer hint ${r.customer_hint}` : ""
         }`
       );
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "OCR 추출 실패");
+      setErr(e instanceof Error ? e.message : "OCR extraction failed");
     } finally {
       setOcrBusy(false);
     }
@@ -243,7 +244,7 @@ export default function NewRfqForm({
           : [{ part_no: "", description: "", qty: "1" }]
       );
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "RFQ 불러오기 실패");
+      setErr(e instanceof Error ? e.message : "Failed to load RFQ");
     } finally {
       setBusy(false);
     }
@@ -251,7 +252,7 @@ export default function NewRfqForm({
 
   async function submit() {
     if (customerId === "") {
-      setErr("Customer를 선택하세요.");
+      setErr("Select a customer.");
       return;
     }
     setBusy(true);
@@ -276,7 +277,7 @@ export default function NewRfqForm({
           work_type: workType,
           items: cleanItems,
         });
-        setMsg("수정 완료");
+        setMsg("Updated");
         onCreated?.(""); // 목록·상위 새로고침
       } else {
         const r = await createRfq({
@@ -289,12 +290,12 @@ export default function NewRfqForm({
           work_type: workType,
           items: cleanItems,
         });
-        setMsg(`등록 완료 — ${r.rfq_no}`);
+        setMsg(`Created — ${r.rfq_no}`);
         resetForm();
         onCreated?.(r.rfq_no);
       }
     } catch (e) {
-      setErr(e instanceof Error ? e.message : editId ? "수정 실패" : "등록 실패");
+      setErr(e instanceof Error ? e.message : editId ? "Update failed" : "Create failed");
     } finally {
       setBusy(false);
     }
@@ -305,15 +306,15 @@ export default function NewRfqForm({
       <div className="rfq-mode-bar">
         {editId ? (
           <>
-            <span className="rfq-mode-tag edit">✎ 수정 모드</span>
-            <span className="hint-inline">기존 RFQ를 불러와 편집 중입니다.</span>
+            <span className="rfq-mode-tag edit">✎ Edit mode</span>
+            <span className="hint-inline">Editing an existing RFQ.</span>
             <button className="btn" style={{ marginLeft: "auto" }} onClick={resetForm}>
-              + 새 RFQ 작성
+              + New RFQ
             </button>
           </>
         ) : (
           <>
-            <span className="rfq-mode-tag new">+ 신규 등록</span>
+            <span className="rfq-mode-tag new">+ New</span>
             {selectedRfqId ? (
               <button
                 className="btn"
@@ -321,11 +322,11 @@ export default function NewRfqForm({
                 onClick={() => loadRfq(selectedRfqId)}
                 disabled={busy}
               >
-                📂 선택한 RFQ 불러와 수정
+                📂 Load & edit selected RFQ
               </button>
             ) : (
               <span className="hint-inline">
-                상단 "진행중인 프로젝트"를 고르면 불러와 수정할 수 있습니다.
+                Pick an "Active project" above to load and edit it.
               </span>
             )}
           </>
@@ -338,27 +339,27 @@ export default function NewRfqForm({
           className={`tool-btn${showOcr ? " on" : ""}`}
           onClick={() => setShowOcr((v) => !v)}
         >
-          📄 자동 입력
+          📄 Auto-fill
         </button>
         <button
           type="button"
           className={`tool-btn${showCust ? " on" : ""}`}
           onClick={() => setShowCust((v) => !v)}
         >
-          ＋ 신규 Customer
+          ＋ New Customer
         </button>
         <button
           type="button"
           className={`tool-btn${showVessel ? " on" : ""}`}
           onClick={() => setShowVessel((v) => !v)}
         >
-          ＋ 신규 선박
+          ＋ New Vessel
         </button>
       </div>
 
       {showOcr ? (
         <div className="ocr-bar">
-          <span className="ocr-bar-label">📄 RFQ 자동 입력 (PDF·이미지)</span>
+          <span className="ocr-bar-label">📄 RFQ auto-fill (PDF·image)</span>
           <input
             type="file"
             accept="application/pdf,image/png,image/jpeg,image/webp"
@@ -366,11 +367,11 @@ export default function NewRfqForm({
             disabled={ocrBusy}
           />
           {ocrBusy ? (
-            <span className="hint-inline">AI 분석 중…</span>
+            <span className="hint-inline">AI analyzing…</span>
           ) : ocrMsg ? (
             <span className="action-ok">{ocrMsg}</span>
           ) : (
-            <span className="hint-inline">PDF·이미지 업로드 또는 캡쳐 후 Ctrl+V 붙여넣기 → 자동 입력</span>
+            <span className="hint-inline">Upload a PDF/image or paste a screenshot with Ctrl+V → auto-fill</span>
           )}
         </div>
       ) : null}
@@ -408,20 +409,20 @@ export default function NewRfqForm({
       ) : null}
 
       <div className="sub-h" style={{ marginTop: 16 }}>
-        기본 정보
+        Basic info
       </div>
       <div className="form-grid">
-        <Field label="RFQ 수신 일시">
+        <Field label="RFQ received at">
           <input
             type="datetime-local"
             value={receivedAt}
             onChange={(e) => setReceivedAt(e.target.value)}
           />
         </Field>
-        <Field label="업무 타입">
+        <Field label="Work type">
           <select value={workType} onChange={(e) => setWorkType(e.target.value)}>
-            <option value="부품공급">부품공급</option>
-            <option value="서비스">서비스</option>
+            <option value="부품공급">{tr("부품공급")}</option>
+            <option value="서비스">{tr("서비스")}</option>
           </select>
         </Field>
         <Field label="Customer *">
@@ -435,7 +436,7 @@ export default function NewRfqForm({
               if (c?.contact) setContactPerson(c.contact);
             }}
           >
-            <option value="">선택…</option>
+            <option value="">Select…</option>
             {customers.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
@@ -444,21 +445,21 @@ export default function NewRfqForm({
             ))}
           </select>
         </Field>
-        <Field label="고객 담당자">
+        <Field label="Customer contact">
           <input
             value={contactPerson}
             onChange={(e) => setContactPerson(e.target.value)}
-            placeholder="담당자 이름·직책(선택)"
+            placeholder="Contact name/title (optional)"
           />
         </Field>
-        <Field label="선박">
+        <Field label="Vessel">
           <select
             value={vesselId}
             onChange={(e) =>
               setVesselId(e.target.value === "" ? "" : Number(e.target.value))
             }
           >
-            <option value="">선택…</option>
+            <option value="">Select…</option>
             {vessels.map((v) => (
               <option key={v.id} value={v.id}>
                 {v.name}
@@ -466,31 +467,31 @@ export default function NewRfqForm({
             ))}
           </select>
         </Field>
-        <Field label="고객 RFQ No.">
+        <Field label="Customer RFQ No.">
           <input
             value={custRfqNo}
             onChange={(e) => setCustRfqNo(e.target.value)}
-            placeholder="고객사 고유 번호(선택)"
+            placeholder="Customer reference no. (optional)"
           />
         </Field>
-        <Field label="프로젝트 제목">
+        <Field label="Project title">
           <input
             value={projectTitle}
             onChange={(e) => setProjectTitle(e.target.value)}
-            placeholder="내부 식별용 제목(선택)"
+            placeholder="Internal reference title (optional)"
           />
         </Field>
       </div>
 
       <div className="sub-h" style={{ marginTop: 18 }}>
-        품목
+        Items
       </div>
       <table className="mini wide">
         <thead>
           <tr>
             <th style={{ width: 160 }}>Part No.</th>
-            <th>품명</th>
-            <th style={{ width: 90 }}>수량</th>
+            <th>Description</th>
+            <th style={{ width: 90 }}>Qty</th>
             <th style={{ width: 50 }}></th>
           </tr>
         </thead>
@@ -522,7 +523,7 @@ export default function NewRfqForm({
                   className="row-del"
                   onClick={() => removeItem(i)}
                   disabled={items.length === 1}
-                  title="삭제"
+                  title="Delete"
                 >
                   ✕
                 </button>
@@ -532,13 +533,13 @@ export default function NewRfqForm({
         </tbody>
       </table>
       <button className="btn" onClick={addItem} style={{ marginTop: 8 }}>
-        + 품목 추가
+        + Add item
       </button>
 
       <div className="form-actions">
         {onCancel ? (
           <button className="btn" onClick={onCancel}>
-            취소
+            Cancel
           </button>
         ) : null}
         <button
@@ -546,11 +547,11 @@ export default function NewRfqForm({
           onClick={submit}
           disabled={busy || customerId === ""}
         >
-          {busy ? "처리 중…" : editId ? "RFQ 수정 저장" : "RFQ 등록"}
+          {busy ? "Working…" : editId ? "Save RFQ" : "Create RFQ"}
         </button>
         {onDeleted && editId ? (
           <button className="btn danger" onClick={handleDelete} disabled={busy}>
-            삭제
+            Delete
           </button>
         ) : null}
         {msg ? <span className="action-ok">{msg}</span> : null}
@@ -597,7 +598,7 @@ function QuickCustomerCreate({
 
   async function submit() {
     if (!name.trim()) {
-      setErr("Customer명을 입력하세요.");
+      setErr("Enter a customer name.");
       return;
     }
     setBusy(true);
@@ -611,7 +612,7 @@ function QuickCustomerCreate({
       });
       await onCreated(r.id);
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "등록 실패");
+      setErr(e instanceof Error ? e.message : "Create failed");
     } finally {
       setBusy(false);
     }
@@ -621,26 +622,26 @@ function QuickCustomerCreate({
     <div className="quick-create-body">
       {unmatchedHint ? (
         <span className="hint-inline">
-          OCR 인식: “{unmatchedHint}” — DB에 없는 Customer입니다. 등록하면 자동 선택됩니다.
+          OCR detected: “{unmatchedHint}” — not in the DB. Creating it will auto-select it.
         </span>
       ) : null}
       <div className="form-grid">
-        <Field label="Customer명 *">
+        <Field label="Customer name *">
           <input value={name} onChange={(e) => setName(e.target.value)} />
         </Field>
-        <Field label="국가">
+        <Field label="Country">
           <input value={country} onChange={(e) => setCountry(e.target.value)} />
         </Field>
-        <Field label="담당자">
+        <Field label="Contact">
           <input value={contact} onChange={(e) => setContact(e.target.value)} />
         </Field>
-        <Field label="이메일">
+        <Field label="Email">
           <input value={email} onChange={(e) => setEmail(e.target.value)} />
         </Field>
       </div>
       <div className="form-actions">
         <button className="btn primary" onClick={submit} disabled={busy || !name.trim()}>
-          {busy ? "등록 중…" : "Customer 등록"}
+          {busy ? "Saving…" : "Create Customer"}
         </button>
         {err ? <span className="action-err">{err}</span> : null}
       </div>
@@ -678,7 +679,7 @@ function QuickVesselCreate({
 
   async function submit() {
     if (!name.trim()) {
-      setErr("선박명을 입력하세요.");
+      setErr("Enter a vessel name.");
       return;
     }
     setBusy(true);
@@ -693,7 +694,7 @@ function QuickVesselCreate({
       });
       await onCreated(r.id);
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "등록 실패");
+      setErr(e instanceof Error ? e.message : "Create failed");
     } finally {
       setBusy(false);
     }
@@ -703,11 +704,11 @@ function QuickVesselCreate({
     <div className="quick-create-body">
       {unmatchedHint ? (
         <span className="hint-inline">
-          OCR 인식: “{unmatchedHint}” — DB에 없는 선박입니다. 등록하면 자동 선택됩니다.
+          OCR detected: “{unmatchedHint}” — not in the DB. Creating it will auto-select it.
         </span>
       ) : null}
       <div className="form-grid">
-        <Field label="선박명 *">
+        <Field label="Vessel name *">
           <input value={name} onChange={(e) => setName(e.target.value)} />
         </Field>
         <Field label="IMO No.">
@@ -719,12 +720,12 @@ function QuickVesselCreate({
         <Field label="Hull No.">
           <input value={hull} onChange={(e) => setHull(e.target.value)} />
         </Field>
-        <Field label="선주 (Customer)">
+        <Field label="Owner (Customer)">
           <select
             value={ownerId}
             onChange={(e) => setOwnerId(e.target.value === "" ? "" : Number(e.target.value))}
           >
-            <option value="">— 없음 —</option>
+            <option value="">— None —</option>
             {customers.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
@@ -735,7 +736,7 @@ function QuickVesselCreate({
       </div>
       <div className="form-actions">
         <button className="btn primary" onClick={submit} disabled={busy || !name.trim()}>
-          {busy ? "등록 중…" : "선박 등록"}
+          {busy ? "Saving…" : "Create Vessel"}
         </button>
         {err ? <span className="action-err">{err}</span> : null}
       </div>

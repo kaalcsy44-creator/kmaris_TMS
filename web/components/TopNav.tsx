@@ -4,7 +4,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { getUser, logout } from "@/lib/auth";
 
-type Item = { href: string; label: string; key: string };
+type SubItem = { href: string; label: string };
+type Item = { href: string; label: string; key: string; sub?: SubItem[] };
 
 // 평면 상단 메뉴 — 페이지 자체가 주요 메뉴. 설정은 우측 톱니 아이콘으로 분리.
 const ITEMS: Item[] = [
@@ -12,7 +13,15 @@ const ITEMS: Item[] = [
   { href: "/progress", label: "Progress", key: "progress" },
   { href: "/rfq", label: "RFQ & Quotation", key: "rfq" },
   { href: "/po", label: "P/O", key: "po" },
-  { href: "/documents", label: "Documents", key: "documents" },
+  {
+    href: "/documents",
+    label: "Documents",
+    key: "documents",
+    sub: [
+      { href: "/documents?view=parts", label: "Parts (Delivery)" },
+      { href: "/documents?view=service", label: "Service" },
+    ],
+  },
   { href: "/ar", label: "AR", key: "ar" },
 ];
 
@@ -35,7 +44,7 @@ export default function TopNav({ active }: { active: string }) {
         <button
           type="button"
           className="topnav-burger"
-          aria-label="메뉴 열기"
+          aria-label="Open menu"
           aria-expanded={open}
           onClick={() => setOpen((v) => !v)}
         >
@@ -45,16 +54,40 @@ export default function TopNav({ active }: { active: string }) {
         </button>
 
         <nav className="topnav-menu">
-          {ITEMS.map((it) => (
-            <Link
-              key={it.key}
-              href={it.href}
-              className={`topnav-link${it.key === active ? " on" : ""}`}
-              onClick={() => setOpen(false)}
-            >
-              {it.label}
-            </Link>
-          ))}
+          {ITEMS.map((it) =>
+            it.sub ? (
+              <div key={it.key} className="topnav-item has-sub">
+                <Link
+                  href={it.href}
+                  className={`topnav-link${it.key === active ? " on" : ""}`}
+                  onClick={() => setOpen(false)}
+                >
+                  {it.label}
+                </Link>
+                <div className="topnav-sub">
+                  {it.sub.map((s) => (
+                    <Link
+                      key={s.href}
+                      href={s.href}
+                      className="topnav-sub-link"
+                      onClick={() => setOpen(false)}
+                    >
+                      {s.label}
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <Link
+                key={it.key}
+                href={it.href}
+                className={`topnav-link${it.key === active ? " on" : ""}`}
+                onClick={() => setOpen(false)}
+              >
+                {it.label}
+              </Link>
+            )
+          )}
         </nav>
 
         <div className="topnav-right">
@@ -77,7 +110,7 @@ export default function TopNav({ active }: { active: string }) {
             <span className="uname">{user?.username ?? ""}</span>
           </span>
           <button className="topnav-logout" onClick={logout}>
-            로그아웃
+            Logout
           </button>
         </div>
       </div>

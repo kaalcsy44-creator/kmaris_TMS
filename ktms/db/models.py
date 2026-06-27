@@ -220,6 +220,7 @@ class Order(Base):
     vessel_id      = Column(Integer, ForeignKey("vessels.id"), nullable=True)
     po_no          = Column(String(100))
     date           = Column(String(10))
+    trade_type     = Column(String(10), default="수출", nullable=False)  # 거래구분: 수출/내수(국내공급)
     status         = Column(SAEnum(OrderStatus), default=OrderStatus.RECEIVED)
     promised_delivery = Column(String(10))   # 약속 납기일 YYYY-MM-DD (납기 준수 측정 기준)
     shipped_date      = Column(String(10))   # 실제 출고일 (출고→송장 Cycle Time 기준)

@@ -15,6 +15,7 @@ import {
 import { useCachedData, invalidateCache } from "@/lib/useCachedData";
 import type { PipelineRow, CustomerOption, SettingsVessel, StageNote } from "@/lib/types";
 import WorkTypeBadge from "@/components/WorkTypeBadge";
+import { tr } from "@/lib/labels";
 
 const WORK_TYPES = ["부품공급", "서비스"];
 
@@ -33,6 +34,18 @@ const CUSTOMER_STAGE_MAP = [1, 2, 2, 3, 4, 5, 5, 6, 7, 7, 7, 7];
 function customerStage(internal: number): number {
   if (internal <= 0) return 0;
   return CUSTOMER_STAGE_MAP[Math.min(internal, 12) - 1] ?? 0;
+}
+
+// 업무타입 "서비스"는 내부 12단계 중 7·8·9단계(운송)를 서비스 명칭으로 표시한다.
+const SERVICE_STEP_OVERRIDES: Record<number, string> = {
+  7: "Service Readiness",
+  8: "Service arrangement",
+  9: "Service Complete · Report",
+};
+function resolveSteps(baseSteps: string[], workType?: string | null): string[] {
+  // 내부 12단계에만 적용(고객확인용 7단계는 그대로).
+  if (baseSteps.length !== 12 || (workType || "부품공급") !== "서비스") return baseSteps;
+  return baseSteps.map((name, i) => SERVICE_STEP_OVERRIDES[i + 1] ?? name);
 }
 
 /** "YYYY-MM-DDTHH:MM" → "yy-mm-dd HH:MM" (표시용). 빈값이면 "". */
@@ -71,13 +84,13 @@ export default function ProgressScreen() {
           className={tab === "internal" ? "on" : ""}
           onClick={() => setTab("internal")}
         >
-          진행 현황 (내부확인용)
+          Progress (Internal)
         </button>
         <button
           className={tab === "customer" ? "on" : ""}
           onClick={() => setTab("customer")}
         >
-          진행 현황 (고객확인용)
+          Progress (Customer)
         </button>
       </div>
 
@@ -85,11 +98,11 @@ export default function ProgressScreen() {
         <>
           {/* 고객 트래킹용 현황 — 내부확인용과 동일한 표, 단계만 7단계(고객 추적) */}
           {pipeError && !pipeline ? (
-            <div className="state error">API 오류: {pipeError.message}</div>
+            <div className="state error">API error: {pipeError.message}</div>
           ) : !pipeline ? (
-            <div className="state">불러오는 중…</div>
+            <div className="state">Loading…</div>
           ) : pipeline.rows.length === 0 ? (
-            <div className="state">등록된 거래가 없습니다.</div>
+            <div className="state">No deals registered.</div>
           ) : (
             <PipelineTable
               rows={pipeline.rows}
@@ -107,11 +120,11 @@ export default function ProgressScreen() {
         <>
           {/* 통합 파이프라인 — RFQ표·PO표를 흡수한 단일 목록. 행 클릭 시 상세 모달 */}
           {pipeError && !pipeline ? (
-            <div className="state error">API 오류: {pipeError.message}</div>
+            <div className="state error">API error: {pipeError.message}</div>
           ) : !pipeline ? (
-            <div className="state">불러오는 중…</div>
+            <div className="state">Loading…</div>
           ) : pipeline.rows.length === 0 ? (
-            <div className="state">등록된 거래가 없습니다.</div>
+            <div className="state">No deals registered.</div>
           ) : (
             <PipelineTable
               rows={pipeline.rows}
@@ -134,13 +147,13 @@ function joinDot(...parts: (string | undefined)[]): string {
 
 /** 완료한 단계 라벨: "N. 라벨" (stage가 0이면 "미시작"). */
 function doneStageLabel(stage: number, steps: string[]): string {
-  if (stage <= 0) return "미시작";
+  if (stage <= 0) return "Not started";
   return `${stage}. ${steps[stage - 1] ?? ""}`;
 }
 
 /** 다음 단계 라벨: stage+1 (12단계 완료면 "완료"). */
 function nextStageLabel(stage: number, steps: string[]): string {
-  if (stage >= steps.length) return "완료";
+  if (stage >= steps.length) return "Done";
   const n = Math.max(stage, 0);
   return `${n + 1}. ${steps[n] ?? ""}`;
 }
@@ -149,7 +162,7 @@ function nextStageLabel(stage: number, steps: string[]): string {
 function StageBar({ stage, steps }: { stage: number; steps: string[] }) {
   const total = steps.length;
   const filled = Math.max(0, Math.min(stage, total));
-  const label = stage <= 0 ? "미시작" : steps[stage - 1] ?? "";
+  const label = stage <= 0 ? "Not started" : steps[stage - 1] ?? "";
   return (
     <div className="pl-stage">
       <div className="pl-stage-top">
@@ -178,14 +191,14 @@ type ColKey =
   | "assignee";
 
 const PIPELINE_COLUMNS: { key: ColKey; label: string }[] = [
-  { key: "received_at", label: "최초 RFQ 수신 등록 일시" },
-  { key: "customer", label: "고객사" },
-  { key: "work_type", label: "업무 타입" },
-  { key: "vessel", label: "선박" },
-  { key: "project_title", label: "프로젝트명" },
-  { key: "done", label: "완료한 단계" },
-  { key: "next", label: "다음 단계" },
-  { key: "assignee", label: "담당자" },
+  { key: "received_at", label: "First RFQ received at" },
+  { key: "customer", label: "Customer" },
+  { key: "work_type", label: "Work type" },
+  { key: "vessel", label: "Vessel" },
+  { key: "project_title", label: "Project" },
+  { key: "done", label: "Completed stage" },
+  { key: "next", label: "Next stage" },
+  { key: "assignee", label: "Owner" },
 ];
 
 /** 한 행에서 컬럼별 텍스트 값(검색·문자열 정렬용). */
@@ -308,16 +321,16 @@ function PipelineTable({
 
   // 메뉴 값 목록(전체 + 데이터 고유값). 날짜·필터없는 컬럼은 빈 배열.
   function colOptions(key: ColKey): { v: string; label: string }[] {
-    const all = { v: "전체", label: "전체" };
+    const all = { v: "전체", label: "All" };
     switch (key) {
       case "customer":
-        return [all, ...customerOpts.map((v) => ({ v, label: v || "미지정" }))];
+        return [all, ...customerOpts.map((v) => ({ v, label: v || "Unspecified" }))];
       case "work_type":
-        return [all, ...workTypeOpts.map((v) => ({ v, label: v }))];
+        return [all, ...workTypeOpts.map((v) => ({ v, label: tr(v) }))];
       case "vessel":
-        return [all, ...vesselOpts.map((v) => ({ v, label: v || "선박 미지정" }))];
+        return [all, ...vesselOpts.map((v) => ({ v, label: v || "No vessel" }))];
       case "assignee":
-        return [all, ...assigneeOpts.map((v) => ({ v, label: v || "미지정" }))];
+        return [all, ...assigneeOpts.map((v) => ({ v, label: v || "Unspecified" }))];
       case "done":
         return [all, ...stageOpts.map((s) => ({ v: String(s), label: doneStageLabel(s, steps) }))];
       default:
@@ -398,13 +411,13 @@ function PipelineTable({
               className={sortKey === col && sortDir === "asc" ? "on" : ""}
               onClick={() => applySort(col, "asc")}
             >
-              <span className="ic">▲</span> 오름차순
+              <span className="ic">▲</span> Ascending
             </button>
             <button
               className={sortKey === col && sortDir === "desc" ? "on" : ""}
               onClick={() => applySort(col, "desc")}
             >
-              <span className="ic">▼</span> 내림차순
+              <span className="ic">▼</span> Descending
             </button>
           </div>
 
@@ -412,10 +425,10 @@ function PipelineTable({
             <>
               <div className="pl-menu-divider" />
               <div className="pl-menu-date">
-                <span className="pl-menu-cap">수신 기간</span>
-                <input type="date" value={fFrom} onChange={(e) => setFFrom(e.target.value)} aria-label="수신 From" />
+                <span className="pl-menu-cap">Received range</span>
+                <input type="date" value={fFrom} onChange={(e) => setFFrom(e.target.value)} aria-label="Received from" />
                 <span className="pl-menu-tilde">~</span>
-                <input type="date" value={fTo} onChange={(e) => setFTo(e.target.value)} aria-label="수신 To" />
+                <input type="date" value={fTo} onChange={(e) => setFTo(e.target.value)} aria-label="Received to" />
                 {fFrom || fTo ? (
                   <button
                     className="pl-menu-clear"
@@ -424,7 +437,7 @@ function PipelineTable({
                       setFTo("");
                     }}
                   >
-                    기간 해제
+                    Clear range
                   </button>
                 ) : null}
               </div>
@@ -456,11 +469,11 @@ function PipelineTable({
       <div className="pl-toolbar">
         {filtersActive ? (
           <button type="button" className="pl-filter-reset" onClick={resetFilters}>
-            필터 초기화
+            Reset filters
           </button>
         ) : null}
         <span className="pl-search-count">
-          {displayRows.length} / {rows.length}건
+          {displayRows.length} / {rows.length}
         </span>
       </div>
 
@@ -497,7 +510,7 @@ function PipelineTable({
                       onClick={(e) => openMenu(c.key, e)}
                     >
                       <span className="pl-th-label">{c.label}</span>
-                      {filtered ? <span className="pl-th-dot" title="필터 적용 중" /> : null}
+                      {filtered ? <span className="pl-th-dot" title="Filter applied" /> : null}
                       <span className="pl-th-caret">
                         {sorted ? (sortDir === "asc" ? "▲" : "▼") : "▾"}
                       </span>
@@ -511,7 +524,7 @@ function PipelineTable({
             {displayRows.length === 0 ? (
               <tr>
                 <td className="pl-empty" colSpan={PIPELINE_COLUMNS.length}>
-                  조건에 맞는 거래가 없습니다.
+                  No deals match the filters.
                 </td>
               </tr>
             ) : (
@@ -526,18 +539,18 @@ function PipelineTable({
                     onClick={() => setSelectedId(r.rfq_id)}
                   >
                     <td className="nowrap">{r.received_at ? fmtStageDate(r.received_at) : "—"}</td>
-                    <td className="strong">{r.customer || "고객사 미지정"}</td>
+                    <td className="strong">{r.customer || "No customer"}</td>
                     <td>
                       <WorkTypeBadge type={r.work_type} />
                     </td>
-                    <td>{r.vessel || <span className="muted">선박 미지정</span>}</td>
+                    <td>{r.vessel || <span className="muted">No vessel</span>}</td>
                     <td>
-                      {r.project_title || <span className="muted">제목 없음</span>}
+                      {r.project_title || <span className="muted">No title</span>}
                     </td>
                     <td className="pl-td-done">
-                      <StageBar stage={stageOf(r)} steps={steps} />
+                      <StageBar stage={stageOf(r)} steps={resolveSteps(steps, r.work_type)} />
                     </td>
-                    <td className="pl-td-next">{nextStageLabel(stageOf(r), steps)}</td>
+                    <td className="pl-td-next">{nextStageLabel(stageOf(r), resolveSteps(steps, r.work_type))}</td>
                     <td>{r.assignee || <span className="muted">—</span>}</td>
                   </tr>
                 );
@@ -591,7 +604,8 @@ function PipelineModal({
   const [fCustRfqNo, setFCustRfqNo] = useState(r.customer_rfq_no || "");
   const [fProjectTitle, setFProjectTitle] = useState(r.project_title || "");
   const [fReceivedAt, setFReceivedAt] = useState(r.received_at || "");
-  const stageLabel = steps[r.stage - 1] ?? "";
+  const rSteps = resolveSteps(steps, fWorkType);
+  const stageLabel = rSteps[r.stage - 1] ?? "";
 
   function startEdit() {
     // 현재 저장값으로 seed 후 편집 모드 진입(목록은 상위에서 미리 로드됨)
@@ -618,7 +632,7 @@ function PipelineModal({
       setEditing(false);
       onChanged();
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : "수정 실패");
+      window.alert(e instanceof Error ? e.message : "Update failed");
     } finally {
       setSaving(false);
     }
@@ -631,7 +645,7 @@ function PipelineModal({
 
   async function handleDelete() {
     const ok = window.confirm(
-      `${r.kmaris_rfq_no} 거래를 삭제할까요?\n연결된 Vendor RFQ/견적도 함께 삭제됩니다.\n(이미 Customer 견적·오더로 진행된 건은 삭제할 수 없습니다.)`
+      `Delete deal ${r.kmaris_rfq_no}?\nLinked Vendor RFQs/quotes will also be deleted.\n(Deals already advanced to a customer quote/order cannot be deleted.)`
     );
     if (!ok) return;
     setDeleting(true);
@@ -639,7 +653,7 @@ function PipelineModal({
       await deleteRfq(r.rfq_id);
       onChanged();
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : "삭제 실패");
+      window.alert(e instanceof Error ? e.message : "Delete failed");
     } finally {
       setDeleting(false);
     }
@@ -659,12 +673,13 @@ function PipelineModal({
     5: joinDot(r.customer_po_no, r.ord_no),
     6: joinDot(r.vendor_po_no, r.vendor),
   };
-  const chain = steps.map((label, i) => ({
-    no: i + 1,
-    label,
-    value: docValue[i + 1] ?? "",
-    at: effective(i + 1),
-  }));
+  const isDomestic = (r.trade_type || "수출") === "내수";
+  const chain = rSteps.map((label, i) => {
+    const no = i + 1;
+    // 내수(국내공급)는 7·8·9단계(CI/PL/SA/POD)를 생략한다.
+    const skip = isDomestic && (no === 7 || no === 8 || no === 9);
+    return { no, label, value: docValue[no] ?? "", at: effective(no), skip };
+  });
   const leftChain = chain.slice(0, 6);
   const rightChain = chain.slice(6, 12);
 
@@ -686,7 +701,7 @@ function PipelineModal({
       >
         <div className="pl-modal-head">
           <span className="intl-title">
-            <span className="pl-recv-label">최초 RFQ 수신 일시</span>
+            <span className="pl-recv-label">First RFQ received at</span>
             <b>{r.received_at ? fmtStageDate(r.received_at) : "—"}</b>
             <WorkTypeBadge type={r.work_type} />
           </span>
@@ -694,7 +709,7 @@ function PipelineModal({
             type="button"
             className="pl-modal-close"
             onClick={onClose}
-            aria-label="닫기"
+            aria-label="Close"
           >
             ×
           </button>
@@ -708,7 +723,7 @@ function PipelineModal({
 
         {/* 현재 단계 — 단계 바 바로 아래(해당 단계) */}
         <div className="pl-curstage">
-          <span className="dt">현재 단계</span>
+          <span className="dt">Current stage</span>
           <span className="num">{r.stage}/12</span>
           <span className="name">{stageLabel}</span>
         </div>
@@ -718,7 +733,7 @@ function PipelineModal({
             {editing ? (
             <div className="intl-edit">
               <div className="form-field">
-                <label>업무 타입</label>
+                <label>Work type</label>
                 <div className="seg-tabs">
                   {WORK_TYPES.map((t) => (
                     <button
@@ -727,14 +742,14 @@ function PipelineModal({
                       className={fWorkType === t ? "on" : ""}
                       onClick={() => setFWorkType(t)}
                     >
-                      {t}
+                      {tr(t)}
                     </button>
                   ))}
                 </div>
               </div>
               <div className="form-grid">
                 <div className="form-field">
-                  <label>고객사</label>
+                  <label>Customer</label>
                   <select
                     value={fCustomerId}
                     onChange={(e) => {
@@ -742,7 +757,7 @@ function PipelineModal({
                       setFVesselId("");
                     }}
                   >
-                    <option value="">선택…</option>
+                    <option value="">Select…</option>
                     {customers.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name}
@@ -751,14 +766,14 @@ function PipelineModal({
                   </select>
                 </div>
                 <div className="form-field">
-                  <label>선박명</label>
+                  <label>Vessel</label>
                   <select
                     value={fVesselId}
                     onChange={(e) =>
                       setFVesselId(e.target.value === "" ? "" : Number(e.target.value))
                     }
                   >
-                    <option value="">— 선박 미지정 —</option>
+                    <option value="">— No vessel —</option>
                     {vesselOptions.map((v) => (
                       <option key={v.id} value={v.id}>
                         {v.name}
@@ -767,23 +782,23 @@ function PipelineModal({
                   </select>
                 </div>
                 <div className="form-field">
-                  <label>고객 RFQ No.</label>
+                  <label>Customer RFQ No.</label>
                   <input
                     value={fCustRfqNo}
                     onChange={(e) => setFCustRfqNo(e.target.value)}
-                    placeholder="고객사 고유 번호(선택)"
+                    placeholder="Customer's reference no. (optional)"
                   />
                 </div>
                 <div className="form-field">
-                  <label>프로젝트 제목</label>
+                  <label>Project title</label>
                   <input
                     value={fProjectTitle}
                     onChange={(e) => setFProjectTitle(e.target.value)}
-                    placeholder="내부 식별용 제목(선택)"
+                    placeholder="Internal reference title (optional)"
                   />
                 </div>
                 <div className="form-field">
-                  <label>RFQ 수신 일시</label>
+                  <label>RFQ received at</label>
                   <input
                     type="datetime-local"
                     value={fReceivedAt}
@@ -795,19 +810,23 @@ function PipelineModal({
           ) : (
             <dl className="intl-meta">
               <div>
-                <dt>고객사</dt>
+                <dt>Customer</dt>
                 <dd>{r.customer || "—"}</dd>
               </div>
               <div>
-                <dt>선박명</dt>
+                <dt>Trade type</dt>
+                <dd>{tr(r.trade_type || "수출")}</dd>
+              </div>
+              <div>
+                <dt>Vessel</dt>
                 <dd>{r.vessel || "—"}</dd>
               </div>
               <div>
-                <dt>프로젝트 제목</dt>
+                <dt>Project title</dt>
                 <dd>{r.project_title || "—"}</dd>
               </div>
               <div>
-                <dt>품목 수</dt>
+                <dt>Items</dt>
                 <dd>{r.item_count}</dd>
               </div>
             </dl>
@@ -818,23 +837,33 @@ function PipelineModal({
             {[leftChain, rightChain].map((col, ci) => (
               <div className="pl-col" key={ci}>
                 {col.map((c) => {
-                  const state =
-                    c.no < r.stage ? "done" : c.no === r.stage ? "current" : "todo";
+                  const state = c.skip
+                    ? "skip"
+                    : c.no < r.stage
+                    ? "done"
+                    : c.no === r.stage
+                    ? "current"
+                    : "todo";
                   return (
-                    <div className={`pl-row ${state}`} key={c.no}>
+                    <div className={`pl-row ${state}`} key={c.no} style={c.skip ? { opacity: 0.5 } : undefined}>
                       <span className="pl-no">{c.no}</span>
                       <div className="pl-main">
                         <div className="pl-top">
-                          <span className="pl-label">{c.label}</span>
+                          <span className="pl-label">
+                            {c.label}
+                            {c.skip ? " (skipped · Domestic)" : ""}
+                          </span>
                           <span className="pl-at">{c.at ? fmtStageDate(c.at) : ""}</span>
                         </div>
-                        {c.value ? <div className="pl-value">{c.value}</div> : null}
-                        <StageNotes
-                          rfqId={r.rfq_id}
-                          stage={c.no}
-                          notes={r.stage_notes?.[String(c.no)] ?? []}
-                          onChanged={onChanged}
-                        />
+                        {!c.skip && c.value ? <div className="pl-value">{c.value}</div> : null}
+                        {!c.skip ? (
+                          <StageNotes
+                            rfqId={r.rfq_id}
+                            stage={c.no}
+                            notes={r.stage_notes?.[String(c.no)] ?? []}
+                            onChanged={onChanged}
+                          />
+                        ) : null}
                       </div>
                     </div>
                   );
@@ -853,7 +882,7 @@ function PipelineModal({
             <Link
               className="btn"
               href={r.order_id > 0 ? `/documents?order=${r.order_id}` : "/documents"}
-              title={r.order_id > 0 ? undefined : "오더 미생성 — 문서 페이지에서 대상 오더를 선택하세요"}
+              title={r.order_id > 0 ? undefined : "No order yet — select a target order on the Documents page"}
             >
               Documents →
             </Link>
@@ -871,14 +900,14 @@ function PipelineModal({
                   disabled={saving}
                   style={{ marginLeft: "auto" }}
                 >
-                  {saving ? "저장 중…" : "저장"}
+                  {saving ? "Saving…" : "Save"}
                 </button>
                 <button
                   className="btn"
                   onClick={() => setEditing(false)}
                   disabled={saving}
                 >
-                  취소
+                  Cancel
                 </button>
               </>
             ) : (
@@ -887,7 +916,7 @@ function PipelineModal({
                 onClick={startEdit}
                 style={{ marginLeft: "auto" }}
               >
-                ✎ 수정
+                ✎ Edit
               </button>
             )}
             <button
@@ -895,7 +924,7 @@ function PipelineModal({
               onClick={handleDelete}
               disabled={deleting || editing}
             >
-              {deleting ? "삭제 중…" : "삭제"}
+              {deleting ? "Deleting…" : "Delete"}
             </button>
           </div>
           </div>
@@ -905,8 +934,8 @@ function PipelineModal({
   );
 }
 
-const NOTE_PARTIES = ["Customer", "Vendor", "내부", "기타"];
-const NOTE_CHANNELS = ["이메일", "통화", "문자", "메신저", "방문", "기타"];
+const NOTE_PARTIES = ["Customer", "Vendor", "Internal", "Other"];
+const NOTE_CHANNELS = ["Email", "Call", "SMS", "Messenger", "Visit", "Other"];
 
 /** datetime-local 기본값(현재 시각, 분 단위) "YYYY-MM-DDTHH:MM". */
 function nowLocalInput(): string {
@@ -931,7 +960,7 @@ function NoteForm({
 }) {
   const [dt, setDt] = useState(initial?.datetime || initial?.at || nowLocalInput());
   const [party, setParty] = useState(initial?.party || "Customer");
-  const [channel, setChannel] = useState(initial?.channel || "이메일");
+  const [channel, setChannel] = useState(initial?.channel || "Email");
   const [text, setText] = useState(initial?.text || "");
   const [busy, setBusy] = useState(false);
 
@@ -953,16 +982,16 @@ function NoteForm({
           type="datetime-local"
           value={dt}
           onChange={(e) => setDt(e.target.value)}
-          title="활동 일시"
+          title="Activity time"
         />
-        <select value={party} onChange={(e) => setParty(e.target.value)} title="소통 상대">
+        <select value={party} onChange={(e) => setParty(e.target.value)} title="Party">
           {NOTE_PARTIES.map((p) => (
             <option key={p} value={p}>
               {p}
             </option>
           ))}
         </select>
-        <select value={channel} onChange={(e) => setChannel(e.target.value)} title="소통 수단">
+        <select value={channel} onChange={(e) => setChannel(e.target.value)} title="Channel">
           {NOTE_CHANNELS.map((c) => (
             <option key={c} value={c}>
               {c}
@@ -978,14 +1007,14 @@ function NoteForm({
             if (e.key === "Enter") go();
             if (e.key === "Escape") onCancel();
           }}
-          placeholder="활동 내용 입력 후 Enter"
+          placeholder="Type the activity and press Enter"
           autoFocus
         />
         <button className="pl-note-btn primary" onClick={go} disabled={busy || !text.trim()}>
           {submitLabel}
         </button>
         <button className="pl-note-btn" onClick={onCancel}>
-          취소
+          Cancel
         </button>
       </div>
     </div>
@@ -1013,7 +1042,7 @@ function StageNotes({
       setAdding(false);
       onChanged();
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : "활동 추가 실패");
+      window.alert(e instanceof Error ? e.message : "Failed to add activity");
     }
   }
 
@@ -1026,17 +1055,17 @@ function StageNotes({
       setEditIndex(null);
       onChanged();
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : "수정 실패");
+      window.alert(e instanceof Error ? e.message : "Update failed");
     }
   }
 
   async function remove(index: number) {
-    if (!window.confirm("이 활동 기록을 삭제할까요?")) return;
+    if (!window.confirm("Delete this activity log entry?")) return;
     try {
       await deleteRfqStageNote(rfqId, stage, index);
       onChanged();
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : "삭제 실패");
+      window.alert(e instanceof Error ? e.message : "Delete failed");
     }
   }
 
@@ -1047,7 +1076,7 @@ function StageNotes({
           <NoteForm
             key={i}
             initial={n}
-            submitLabel="저장"
+            submitLabel="Save"
             onSubmit={(p) => submitEdit(i, p)}
             onCancel={() => setEditIndex(null)}
           />
@@ -1059,7 +1088,7 @@ function StageNotes({
             <span className="pl-note-text">{n.text}</span>
             <button
               className="pl-note-edit"
-              title="수정"
+              title="Edit"
               onClick={() => {
                 setAdding(false);
                 setEditIndex(i);
@@ -1067,7 +1096,7 @@ function StageNotes({
             >
               ✎
             </button>
-            <button className="pl-note-del" title="삭제" onClick={() => remove(i)}>
+            <button className="pl-note-del" title="Delete" onClick={() => remove(i)}>
               ×
             </button>
           </div>
@@ -1076,7 +1105,7 @@ function StageNotes({
       {adding ? (
         <NoteForm
           initial={null}
-          submitLabel="추가"
+          submitLabel="Add"
           onSubmit={submitAdd}
           onCancel={() => setAdding(false)}
         />
@@ -1088,7 +1117,7 @@ function StageNotes({
             setAdding(true);
           }}
         >
-          + 활동 기록
+          + Activity log
         </button>
       )}
     </div>

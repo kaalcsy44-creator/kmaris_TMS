@@ -11,9 +11,9 @@ export default function Page() {
     <AppShell active="rfq" wide>
       <SectionHead
         title="RFQ & Quotation"
-        sub="RFQ 수신 → Vendor RFQ → Vendor 견적 → Customer 견적 작업"
+        sub="RFQ received → Vendor RFQ → Vendor quote → Customer quote"
       />
-      <Suspense fallback={<div className="state">불러오는 중…</div>}>
+      <Suspense fallback={<div className="state">Loading…</div>}>
         <RfqScreen />
       </Suspense>
     </AppShell>

@@ -130,6 +130,7 @@ export type PoDetail = {
   customer_contact: string;
   customer_email: string;
   vessel: string;
+  trade_type: string;
   status: string;
   order_status: string;
   stage: number;
@@ -247,6 +248,7 @@ export type PoWorkOptions = {
     vessel: string;
     po_no: string;
     date: string;
+    trade_type: string;
     status: string;
     items: PoWorkItem[];
   }[];
@@ -383,14 +385,21 @@ export type DocRow = {
   customer: string;
   vessel: string;
   po_no: string;
+  trade_type: string;
+  work_type: string;
   ci_no: string;
   pl_no: string;
   sa_no: string;
+  sa_sent_date: string;
   tax_no: string;
+  pod_filename: string;
   has_ci: boolean;
   has_pl: boolean;
   has_sa: boolean;
+  has_pod: boolean;
   has_tax: boolean;
+  svc_ready_done: boolean;
+  svc_arr_done: boolean;
 };
 
 export type DocumentWorkItem = {
@@ -423,13 +432,16 @@ export type DocumentDetail = {
     customer_email: string;
     customer_tax_id: string;
     vessel: string;
+    project_title: string;
+    vendor: string;
+    trade_type: string;
     tracking_token: string;
     consignee_confirmed_date: string;
     vendor_docs_sent_date: string;
     items: DocumentWorkItem[];
   };
   pod: null | { id: number; filename: string; uploaded_at: string };
-  stage_done: { "9": boolean; "11": boolean; "12": boolean };
+  stage_done: { "7": boolean; "8": boolean; "9": boolean; "11": boolean; "12": boolean };
   ci: null | {
     id: number;
     ci_no: string;
@@ -491,6 +503,10 @@ export type ArRow = {
   status: string;
   overdue: boolean;
   notes: string;
+  tax_issued: boolean;
+  tax_issued_date: string;
+  paid_done: boolean;
+  paid_date: string;
 };
 
 export type ArData = {
@@ -577,6 +593,7 @@ export type PipelineRow = {
   customer_rfq_no: string;
   kmaris_rfq_no: string;
   work_type: string;
+  trade_type: string;
   customer: string;
   customer_id: number;
   vessel: string;

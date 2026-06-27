@@ -36,7 +36,7 @@ export default function Modal({
           <span className="intl-title">
             <b>{title}</b>
           </span>
-          <button type="button" className="pl-modal-close" onClick={onClose} aria-label="닫기">
+          <button type="button" className="pl-modal-close" onClick={onClose} aria-label="Close">
             ×
           </button>
         </div>
