@@ -36,6 +36,8 @@ export default function FilterTable<T>({
   empty = "No items to display.",
   actions,
   leftActions,
+  defaultSortKey = null,
+  defaultSortDir = "asc",
 }: {
   rows: T[];
   columns: ColumnDef<T>[];
@@ -47,9 +49,13 @@ export default function FilterTable<T>({
   actions?: React.ReactNode;
   /** 툴바 좌측 슬롯(예: CI/PL 토글). */
   leftActions?: React.ReactNode;
+  /** 초기 정렬 컬럼 key(미지정 시 정렬 없음). */
+  defaultSortKey?: string | null;
+  /** 초기 정렬 방향(기본 오름차순). */
+  defaultSortDir?: SortDir;
 }) {
-  const [sortKey, setSortKey] = useState<string | null>(null);
-  const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [sortKey, setSortKey] = useState<string | null>(defaultSortKey);
+  const [sortDir, setSortDir] = useState<SortDir>(defaultSortDir);
   const [facets, setFacets] = useState<Record<string, string>>({});
   const [dates, setDates] = useState<Record<string, { from: string; to: string }>>({});
   const [openCol, setOpenCol] = useState<string | null>(null);

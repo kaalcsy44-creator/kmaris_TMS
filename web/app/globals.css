@@ -593,6 +593,63 @@ body {
   gap: 18px;
   margin-top: 4px;
 }
+
+/* ── Home 탭: 업무 핵심 목록 박스 그리드 ──────────────────────────────── */
+.home-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(440px, 1fr));
+  gap: 18px;
+  margin-top: 18px;
+  align-items: start;
+}
+.home-card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+  overflow: hidden;
+}
+.home-card-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--line);
+  background: #f8fafc;
+}
+.home-card-head h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--navy);
+}
+.home-card-sub {
+  font-size: 11px;
+  font-weight: 500;
+  color: #aab4c2;
+}
+.home-card-body {
+  padding: 10px 14px 14px;
+}
+/* 박스 안 표는 높이를 제한하고 세로 스크롤(헤더는 sticky) */
+.home-card-body .pl-table-wrap {
+  max-height: 340px;
+  overflow-y: auto;
+}
+.home-card-body .pipeline thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.home-late {
+  color: #b42318;
+}
+.home-card-body .pipeline tbody tr.danger td {
+  background: #fff7f7;
+}
+.home-card-body .pipeline tbody tr.danger:hover td {
+  background: #ffeded;
+}
 .alert-card {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -2938,6 +2995,9 @@ table.mini .num {
   /* Multi-column grids collapse */
   .dash-two,
   .track-row {
+    grid-template-columns: 1fr;
+  }
+  .home-grid {
     grid-template-columns: 1fr;
   }
   .company-view,
