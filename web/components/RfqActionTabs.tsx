@@ -79,14 +79,22 @@ export default function RfqActionTabs({
   rows,
   onSelect,
   onChanged,
+  initialTab,
 }: {
   rfqId: number | null;
   rows: RfqRow[];
   onSelect: (id: number | null) => void;
   onChanged: () => void;
+  initialTab?: string | null;
 }) {
-  const [tab, setTab] = useState("new");
+  const validTab = TABS.some((t) => t.key === initialTab) ? (initialTab as string) : "new";
+  const [tab, setTab] = useState(validTab);
   const [vendors, setVendors] = useState<VendorOption[]>([]);
+
+  // 진행현황 단계 행에서 ?tab=... 으로 들어오면 해당 탭으로 전환.
+  useEffect(() => {
+    if (initialTab && TABS.some((t) => t.key === initialTab)) setTab(initialTab);
+  }, [initialTab]);
 
   useEffect(() => {
     fetchVendors().then(setVendors).catch(() => setVendors([]));
@@ -110,15 +118,32 @@ export default function RfqActionTabs({
         <CustomerRfqList rows={rows} deepLinkId={rfqId} onSelect={onSelect} onChanged={onChanged} />
       )}
       {tab === "vrfq" && (
-        <VendorRfqList projects={rows} vendors={vendors} onChanged={onChanged} />
+        <VendorRfqList projects={rows} vendors={vendors} onChanged={onChanged} deepRfqId={rfqId} />
       )}
-      {tab === "vquote" && <VendorQuoteList projects={rows} onChanged={onChanged} />}
-      {tab === "cquote" && <CustomerQuoteList projects={rows} onChanged={onChanged} />}
+      {tab === "vquote" && <VendorQuoteList projects={rows} onChanged={onChanged} deepRfqId={rfqId} />}
+      {tab === "cquote" && <CustomerQuoteList projects={rows} onChanged={onChanged} deepRfqId={rfqId} />}
     </div>
   );
 }
 
 // 신규 등록 모달 상단의 '진행중인 프로젝트(RFQ)' 선택기 — 2~4번 탭 등록 폼에서 사용.
+// 선택한 프로젝트(RFQ)의 기본 정보 — Active project 드롭다운과 입력 폼 사이에 표시.
+function RfqProjectInfo({ project }: { project?: RfqRow }) {
+  if (!project) return null;
+  return (
+    <dl className="intl-meta" style={{ margin: "12px 0" }}>
+      <div><dt>First RFQ received</dt><dd>{project.crfq_at || "—"}</dd></div>
+      <div><dt>Customer</dt><dd>{project.customer || "—"}</dd></div>
+      <div><dt>Work type</dt><dd>{tr(project.work_type)}</dd></div>
+      <div><dt>Vessel</dt><dd>{project.vessel || "—"}</dd></div>
+      <div><dt>Project title</dt><dd>{project.project_title || "—"}</dd></div>
+      <div><dt>Items</dt><dd>{project.item_count}</dd></div>
+      <div><dt>Current stage</dt><dd>{project.status || "—"}</dd></div>
+      <div><dt>Vendor</dt><dd>{project.vrfq_vendors || "—"}</dd></div>
+    </dl>
+  );
+}
+
 function ProjectPicker({
   projects,
   rfqId,
@@ -190,7 +215,7 @@ function CustomerRfqList({
         empty="No RFQs registered."
         actions={
           <button className="btn primary" onClick={() => setAdding(true)}>
-            + 신규 등록
+            + New
           </button>
         }
       />
@@ -237,16 +262,20 @@ function VendorRfqList({
   projects,
   vendors,
   onChanged,
+  deepRfqId,
 }: {
   projects: RfqRow[];
   vendors: VendorOption[];
   onChanged: () => void;
+  deepRfqId?: number | null;
 }) {
   const [rows, setRows] = useState<VrfqRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [detailId, setDetailId] = useState<number | null>(null);
   const [pickRfqId, setPickRfqId] = useState<number | null>(null);
+  const [autoEdit, setAutoEdit] = useState(false);
+  const autoRef = useRef<number | null>(null);
 
   function load() {
     fetchVrfqOverview()
@@ -254,6 +283,15 @@ function VendorRfqList({
       .catch((e) => setError(e instanceof Error ? e.message : "Error"));
   }
   useEffect(load, []);
+
+  // Progress 단계 진입(deepRfqId) → 해당 딜의 최신 레코드를 1회 자동으로 편집 모드로 오픈.
+  useEffect(() => {
+    if (!deepRfqId || autoRef.current === deepRfqId || rows.length === 0) return;
+    const match = rows.find((r) => r.rfq_id === deepRfqId);
+    autoRef.current = deepRfqId;
+    if (match) { setAutoEdit(true); setDetailId(match.id); }
+    else { setPickRfqId(deepRfqId); setAdding(true); }
+  }, [deepRfqId, rows]);
 
   const refresh = () => {
     load();
@@ -287,31 +325,29 @@ function VendorRfqList({
         rows={rows}
         columns={columns}
         getRowKey={(r) => r.id}
-        onRowClick={(r) => setDetailId(r.id)}
+        onRowClick={(r) => { setAutoEdit(true); setDetailId(r.id); }}
         empty="No Vendor RFQs sent."
         actions={
           <button className="btn primary" onClick={() => { setPickRfqId(null); setAdding(true); }}>
-            + 신규 등록
+            + New
           </button>
         }
       />
 
       {adding ? (
         <Modal title="Vendor RFQ Sent" onClose={() => setAdding(false)} wide>
-          <ProjectPicker projects={projects} rfqId={pickRfqId} onSelect={setPickRfqId} />
-          {pickRfqId === null ? (
-            <div className="empty">Select an active project first.</div>
-          ) : (
-            <VendorRfqAction
-              rfqId={pickRfqId}
-              vendors={vendors}
-              kmarisNo={kmarisNo}
-              onDone={() => {
-                setAdding(false);
-                refresh();
-              }}
-            />
-          )}
+          {/* 신규 등록 대상 = 아직 1단계(Customer RFQ)에만 머문 프로젝트 */}
+          <ProjectPicker projects={projects.filter((p) => p.stage < 2)} rfqId={pickRfqId} onSelect={setPickRfqId} />
+          <RfqProjectInfo project={projects.find((p) => p.id === pickRfqId)} />
+          <VendorRfqAction
+            rfqId={pickRfqId ?? 0}
+            vendors={vendors}
+            kmarisNo={kmarisNo}
+            onDone={() => {
+              setAdding(false);
+              refresh();
+            }}
+          />
         </Modal>
       ) : null}
 
@@ -319,7 +355,8 @@ function VendorRfqList({
         <VendorRfqDetailModal
           id={detailId}
           vendors={vendors}
-          onClose={() => setDetailId(null)}
+          autoEdit={autoEdit}
+          onClose={() => { setDetailId(null); setAutoEdit(false); }}
           onChanged={refresh}
         />
       ) : null}
@@ -330,16 +367,18 @@ function VendorRfqList({
 function VendorRfqDetailModal({
   id,
   vendors,
+  autoEdit,
   onClose,
   onChanged,
 }: {
   id: number;
   vendors: VendorOption[];
+  autoEdit?: boolean;
   onClose: () => void;
   onChanged: () => void;
 }) {
   const [d, setD] = useState<VendorRfqDetail | null>(null);
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(!!autoEdit);
   const [vrfqNo, setVrfqNo] = useState("");
   const [vendorId, setVendorId] = useState<number | "">("");
   const [email, setEmail] = useState("");
@@ -588,9 +627,11 @@ function VendorRfqItemEditor({
 function VendorQuoteList({
   projects,
   onChanged,
+  deepRfqId,
 }: {
   projects: RfqRow[];
   onChanged: () => void;
+  deepRfqId?: number | null;
 }) {
   const [rows, setRows] = useState<VendorQuoteOverviewRow[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -598,6 +639,15 @@ function VendorQuoteList({
   const [detailId, setDetailId] = useState<number | null>(null);
   const [pickRfqId, setPickRfqId] = useState<number | null>(null);
   const [vendorRfqs, setVendorRfqs] = useState<RfqDetailT["vendor_rfqs"]>([]);
+  const [autoEdit, setAutoEdit] = useState(false);
+  const autoRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!deepRfqId || autoRef.current === deepRfqId || rows.length === 0) return;
+    const match = rows.find((r) => r.rfq_id === deepRfqId);
+    autoRef.current = deepRfqId;
+    if (match) { setAutoEdit(true); setDetailId(match.id); }
+  }, [deepRfqId, rows]);
 
   function load() {
     fetchVendorQuoteOverview()
@@ -652,35 +702,33 @@ function VendorQuoteList({
         rows={rows}
         columns={columns}
         getRowKey={(r) => r.id}
-        onRowClick={(r) => setDetailId(r.id)}
+        onRowClick={(r) => { setAutoEdit(true); setDetailId(r.id); }}
         empty="No Vendor quotes received."
         actions={
           <button className="btn primary" onClick={() => { setPickRfqId(null); setAdding(true); }}>
-            + 신규 등록
+            + New
           </button>
         }
       />
 
       {adding ? (
         <Modal title="Register Vendor Quote" onClose={() => setAdding(false)} wide>
-          <ProjectPicker projects={projects} rfqId={pickRfqId} onSelect={setPickRfqId} />
-          {pickRfqId === null ? (
-            <div className="empty">Select an active project first.</div>
-          ) : (
-            <VendorQuoteAction
-              rfqId={pickRfqId}
-              vendorRfqs={vendorRfqs}
-              onDone={() => {
-                setAdding(false);
-                refresh();
-              }}
-            />
-          )}
+          {/* 신규 등록 대상 = Vendor RFQ까지(2단계) 진행, 견적 미수신 프로젝트 */}
+          <ProjectPicker projects={projects.filter((p) => p.stage === 2)} rfqId={pickRfqId} onSelect={setPickRfqId} />
+          <RfqProjectInfo project={projects.find((p) => p.id === pickRfqId)} />
+          <VendorQuoteAction
+            rfqId={pickRfqId ?? 0}
+            vendorRfqs={vendorRfqs}
+            onDone={() => {
+              setAdding(false);
+              refresh();
+            }}
+          />
         </Modal>
       ) : null}
 
       {detailId !== null ? (
-        <VendorQuoteDetailModal id={detailId} onClose={() => setDetailId(null)} onChanged={refresh} />
+        <VendorQuoteDetailModal id={detailId} autoEdit={autoEdit} onClose={() => { setDetailId(null); setAutoEdit(false); }} onChanged={refresh} />
       ) : null}
     </>
   );
@@ -688,15 +736,17 @@ function VendorQuoteList({
 
 function VendorQuoteDetailModal({
   id,
+  autoEdit,
   onClose,
   onChanged,
 }: {
   id: number;
+  autoEdit?: boolean;
   onClose: () => void;
   onChanged: () => void;
 }) {
   const [d, setD] = useState<VendorQuoteDetail | null>(null);
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(!!autoEdit);
   const [no, setNo] = useState("");
   const [receivedAt, setReceivedAt] = useState("");
   const [notes, setNotes] = useState("");
@@ -802,15 +852,26 @@ function VendorQuoteDetailModal({
 function CustomerQuoteList({
   projects,
   onChanged,
+  deepRfqId,
 }: {
   projects: RfqRow[];
   onChanged: () => void;
+  deepRfqId?: number | null;
 }) {
   const [rows, setRows] = useState<QtnRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [detailId, setDetailId] = useState<number | null>(null);
   const [pickRfqId, setPickRfqId] = useState<number | null>(null);
+  const [autoEdit, setAutoEdit] = useState(false);
+  const autoRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!deepRfqId || autoRef.current === deepRfqId || rows.length === 0) return;
+    const match = rows.find((r) => r.rfq_id === deepRfqId);
+    autoRef.current = deepRfqId;
+    if (match) { setAutoEdit(true); setDetailId(match.id); }
+  }, [deepRfqId, rows]);
 
   function load() {
     fetchQuotationOverview()
@@ -854,34 +915,32 @@ function CustomerQuoteList({
         rows={rows}
         columns={columns}
         getRowKey={(r) => r.id}
-        onRowClick={(r) => setDetailId(r.id)}
+        onRowClick={(r) => { setAutoEdit(true); setDetailId(r.id); }}
         empty="No quotations to display."
         actions={
           <button className="btn primary" onClick={() => { setPickRfqId(null); setAdding(true); }}>
-            + 신규 등록
+            + New
           </button>
         }
       />
 
       {adding ? (
         <Modal title="Create & Send Customer Quotation" onClose={() => setAdding(false)} wide>
-          <ProjectPicker projects={projects} rfqId={pickRfqId} onSelect={setPickRfqId} />
-          {pickRfqId === null ? (
-            <div className="empty">Select an active project first.</div>
-          ) : (
-            <CustomerQuoteAction
-              rfqId={pickRfqId}
-              onDone={() => {
-                setAdding(false);
-                refresh();
-              }}
-            />
-          )}
+          {/* 신규 등록 대상 = Vendor 견적까지(3단계) 진행, 고객 견적 미발송 프로젝트 */}
+          <ProjectPicker projects={projects.filter((p) => p.stage === 3)} rfqId={pickRfqId} onSelect={setPickRfqId} />
+          <RfqProjectInfo project={projects.find((p) => p.id === pickRfqId)} />
+          <CustomerQuoteAction
+            rfqId={pickRfqId ?? 0}
+            onDone={() => {
+              setAdding(false);
+              refresh();
+            }}
+          />
         </Modal>
       ) : null}
 
       {detailId !== null ? (
-        <CustomerQuoteDetailModal id={detailId} onClose={() => setDetailId(null)} onChanged={refresh} />
+        <CustomerQuoteDetailModal id={detailId} autoEdit={autoEdit} onClose={() => { setDetailId(null); setAutoEdit(false); }} onChanged={refresh} />
       ) : null}
     </>
   );
@@ -889,15 +948,17 @@ function CustomerQuoteList({
 
 function CustomerQuoteDetailModal({
   id,
+  autoEdit,
   onClose,
   onChanged,
 }: {
   id: number;
+  autoEdit?: boolean;
   onClose: () => void;
   onChanged: () => void;
 }) {
   const [d, setD] = useState<CustomerQuotationDetail | null>(null);
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(!!autoEdit);
   const [currency, setCurrency] = useState("USD");
   const [validUntil, setValidUntil] = useState("");
   const [status, setStatus] = useState("");
@@ -1305,7 +1366,7 @@ function VendorRfqAction({
           </>
         ) : (
           <div className="action-ctx" style={{ margin: 0 }}>
-            발급됨: <b>{kmarisNo}</b>
+            Issued: <b>{kmarisNo}</b>
           </div>
         )}
       </div>
@@ -1353,16 +1414,16 @@ function VendorRfqAction({
       {/* 3개 버튼 동시 표시: RFQ 생성(선택) · 이메일 생성(선택) · 발신 완료(필수) */}
       <div className="form-actions">
         <button className="btn" onClick={generateRfqNo} disabled={busy || !unassigned}>
-          RFQ 생성
+          Create RFQ
         </button>
         <button className="btn" onClick={makePreview} disabled={busy || vendorIds.length === 0}>
-          이메일 생성
+          Generate email
         </button>
         <button className="btn primary" onClick={sendAll} disabled={busy || vendorIds.length === 0}>
-          발신 완료
+          Mark as sent
         </button>
         <span className="hint-inline">
-          RFQ 생성·이메일 생성은 선택, 발신 완료는 필수입니다.
+          Create RFQ and Generate email are optional; Mark as sent is required.
         </span>
       </div>
 
@@ -1394,13 +1455,13 @@ function VendorRfqAction({
                 />
               </div>
               <button className="btn" onClick={() => downloadXlsx(p)}>
-                견적서 양식 XLSX 다운로드
+                Download quote form XLSX
               </button>
             </div>
           ))}
           <div className="form-actions">
             <button className="btn" onClick={() => setPreviews([])}>
-              초안 닫기
+              Close draft
             </button>
           </div>
         </div>
@@ -1429,8 +1490,6 @@ function VendorQuoteAction({
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
-
-  const disabled = vendorRfqs.length === 0;
 
   useEffect(() => {
     if (vrfqId === "") {
@@ -1499,10 +1558,10 @@ function VendorQuoteAction({
   return (
     <div>
       <div className="sub-h">Register Vendor Quote</div>
-      {disabled ? (
-        <span className="hint-inline">Send a Vendor RFQ first.</span>
-      ) : (
-        <>
+      {vendorRfqs.length === 0 ? (
+        <span className="hint-inline">Select a project with a sent Vendor RFQ to enable saving.</span>
+      ) : null}
+      <>
           <div className="form-grid">
             <div className="form-field">
               <label>Select Vendor RFQ</label>
@@ -1566,7 +1625,6 @@ function VendorQuoteAction({
             </button>
           </div>
         </>
-      )}
       {msg ? <span className="action-ok">{msg}</span> : null}
       {err ? <span className="action-err">{err}</span> : null}
     </div>
@@ -1728,6 +1786,11 @@ function CustomerQuoteAction({
 
   // RFQ 품목 정보로 기본 seed (cost 없음) — 공급사 견적을 불러오면 cost 가 채워진다.
   useEffect(() => {
+    if (!rfqId) {
+      setItems([]);
+      setVendorQuotes([]);
+      return;
+    }
     fetchRfqDetail(rfqId)
       .then((d) =>
         setItems(
@@ -1880,7 +1943,7 @@ function CustomerQuoteAction({
         </div>
         <div className="form-field" style={{ alignSelf: "end" }}>
           <button className="btn" onClick={importFromVendorQuote} disabled={importVqId === ""}>
-            Vendor 견적 불러오기
+            Load Vendor quote
           </button>
         </div>
       </div>

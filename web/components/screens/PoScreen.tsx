@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   createOrder,
@@ -36,6 +36,7 @@ type PoOpt = PoWorkOptions["purchase_orders"][number];
 export default function PoScreen() {
   const params = useSearchParams();
   const orderParam = params.get("order");
+  const tabParam = params.get("tab");
   const deepOrderId = orderParam ? Number(orderParam) : null;
 
   const { data: options, refresh } = useCachedData(
@@ -52,7 +53,7 @@ export default function PoScreen() {
 
   if (!options) return <div className="state">Loading…</div>;
 
-  return <PoActionTabs options={options} deepOrderId={deepOrderId} onChanged={load} />;
+  return <PoActionTabs options={options} deepOrderId={deepOrderId} initialTab={tabParam} onChanged={load} />;
 }
 
 function PoDetail({ orderId }: { orderId: number | null }) {
@@ -195,13 +196,18 @@ function PoDetail({ orderId }: { orderId: number | null }) {
 function PoActionTabs({
   options,
   deepOrderId,
+  initialTab,
   onChanged,
 }: {
   options: PoWorkOptions;
   deepOrderId: number | null;
+  initialTab?: string | null;
   onChanged: () => void;
 }) {
-  const [tab, setTab] = useState("customer");
+  const [tab, setTab] = useState(initialTab === "vendor" ? "vendor" : "customer");
+  useEffect(() => {
+    if (initialTab === "vendor" || initialTab === "customer") setTab(initialTab);
+  }, [initialTab]);
   const tabs = [
     { key: "customer", label: "5. Customer P/O Received" },
     { key: "vendor", label: "6. Vendor P/O Sent" },
@@ -224,7 +230,7 @@ function PoActionTabs({
       {tab === "customer" ? (
         <CustomerPoTab options={options} deepOrderId={deepOrderId} onChanged={onChanged} />
       ) : (
-        <VendorPoTab options={options} onChanged={onChanged} />
+        <VendorPoTab options={options} deepOrderId={deepOrderId} onChanged={onChanged} />
       )}
     </div>
   );
@@ -443,14 +449,25 @@ function OrderDetailModal({
 // ── 6. Vendor P/O 발신 ──────────────────────────────────────────────────────
 function VendorPoTab({
   options,
+  deepOrderId,
   onChanged,
 }: {
   options: PoWorkOptions;
+  deepOrderId?: number | null;
   onChanged: () => void;
 }) {
   const [adding, setAdding] = useState(false);
   const [sending, setSending] = useState(false);
   const [detailId, setDetailId] = useState<number | null>(null);
+  const autoRef = useRef<number | null>(null);
+
+  // Progress 6단계 진입 → 해당 오더의 최신 발주서 상세를 1회 자동 오픈.
+  useEffect(() => {
+    if (!deepOrderId || autoRef.current === deepOrderId) return;
+    const match = options.purchase_orders.find((p) => p.order_id === deepOrderId);
+    autoRef.current = deepOrderId;
+    if (match) setDetailId(match.id);
+  }, [deepOrderId, options.purchase_orders]);
 
   const columns: ColumnDef<PoOpt>[] = [
     { key: "po_no", label: "PO No.", text: (p) => p.po_no || "" },

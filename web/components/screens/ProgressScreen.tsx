@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   fetchPipeline,
   deleteRfq,
@@ -594,6 +595,7 @@ function PipelineModal({
   onChanged: () => void;
   onClose: () => void;
 }) {
+  const router = useRouter();
   const [deleting, setDeleting] = useState(false);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -686,6 +688,25 @@ function PipelineModal({
   const poHref = r.order_id > 0 ? `/po?order=${r.order_id}` : `/po?rfq=${r.rfq_id}`;
 
   const isService = (r.work_type || "부품공급") === "서비스";
+
+  // 단계 번호 → 해당 단계 작업 화면 링크. 오더가 필요한 5~12단계는 오더 없으면 null(비활성).
+  function stageHref(no: number): string | null {
+    const view = isService ? "service" : "parts";
+    if (no <= 4) {
+      const tab = { 1: "new", 2: "vrfq", 3: "vquote", 4: "cquote" }[no] ?? "new";
+      return `/rfq?rfq=${r.rfq_id}&tab=${tab}`;
+    }
+    if (r.order_id <= 0) return null;
+    if (no === 5) return `/po?order=${r.order_id}&tab=customer`;
+    if (no === 6) return `/po?order=${r.order_id}&tab=vendor`;
+    if (no >= 7 && no <= 9) return `/documents?order=${r.order_id}&view=${view}&stage=${no}`;
+    if (no === 10) {
+      // 내수·서비스는 대금청구를 AR에서 처리, 그 외(수출 부품)는 Documents 10단계(Tax).
+      if (isService || r.trade_type === "내수") return `/ar?order=${r.order_id}`;
+      return `/documents?order=${r.order_id}&view=parts&stage=10`;
+    }
+    return `/ar?order=${r.order_id}&stage=${no}`; // 11, 12
+  }
 
   return (
     <div
@@ -844,8 +865,16 @@ function PipelineModal({
                     : c.no === r.stage
                     ? "current"
                     : "todo";
+                  const href = c.skip ? null : stageHref(c.no);
                   return (
-                    <div className={`pl-row ${state}`} key={c.no} style={c.skip ? { opacity: 0.5 } : undefined}>
+                    <div
+                      className={`pl-row ${state}${href ? " clickable" : ""}`}
+                      key={c.no}
+                      style={c.skip ? { opacity: 0.5 } : undefined}
+                      onClick={href ? () => router.push(href) : undefined}
+                      role={href ? "link" : undefined}
+                      title={href ? "Open this stage" : undefined}
+                    >
                       <span className="pl-no">{c.no}</span>
                       <div className="pl-main">
                         <div className="pl-top">
@@ -857,12 +886,14 @@ function PipelineModal({
                         </div>
                         {!c.skip && c.value ? <div className="pl-value">{c.value}</div> : null}
                         {!c.skip ? (
-                          <StageNotes
-                            rfqId={r.rfq_id}
-                            stage={c.no}
-                            notes={r.stage_notes?.[String(c.no)] ?? []}
-                            onChanged={onChanged}
-                          />
+                          <div onClick={(e) => e.stopPropagation()}>
+                            <StageNotes
+                              rfqId={r.rfq_id}
+                              stage={c.no}
+                              notes={r.stage_notes?.[String(c.no)] ?? []}
+                              onChanged={onChanged}
+                            />
+                          </div>
                         ) : null}
                       </div>
                     </div>

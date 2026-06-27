@@ -11,6 +11,7 @@ import RfqActionTabs from "@/components/RfqActionTabs";
 export default function RfqScreen() {
   const params = useSearchParams();
   const rfqParam = params.get("rfq");
+  const tabParam = params.get("tab");
   const [selectedId, setSelectedId] = useState<number | null>(
     rfqParam ? Number(rfqParam) : null
   );
@@ -38,6 +39,7 @@ export default function RfqScreen() {
       rows={rows}
       onSelect={setSelectedId}
       onChanged={load}
+      initialTab={tabParam}
     />
   );
 }

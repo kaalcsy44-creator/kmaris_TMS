@@ -1124,6 +1124,14 @@ body {
 .pl-col > .pl-row:first-child {
   border-top: 0;
 }
+.pl-row.clickable {
+  cursor: pointer;
+  border-radius: 8px;
+}
+.pl-row.clickable:hover {
+  background: #eef4fc;
+  box-shadow: inset 0 0 0 1px var(--blue);
+}
 .pl-row .pl-no {
   margin-top: 1px;
   width: 19px;

@@ -2285,6 +2285,7 @@ def documents_overview():
             rfq = _rfq_for_order(s, o)
             wt = _enum_val(rfq.work_type) if (rfq and rfq.work_type) else "부품공급"
             sd = (getattr(rfq, "stage_dates", None) or {}) if rfq else {}
+            svc = getattr(o, "service_info", None) or {}
             rows.append({
                 "id": o.id,
                 "ord_no": o.ord_no,
@@ -2307,6 +2308,7 @@ def documents_overview():
                 # 서비스 단계 수동 완료 상태(7·8). 9(리포트)는 has_pod 로 표시.
                 "svc_ready_done": bool(sd.get("7")),
                 "svc_arr_done": bool(sd.get("8")),
+                "svc_billed": bool(svc.get("10")),
             })
         return {"rows": rows}
     finally:
@@ -2471,6 +2473,7 @@ def _document_detail_payload(session, order: Order) -> dict:
             "project_title": (rfq.project_title or "") if rfq else "",
             "vendor": ", ".join(vendor_names),
             "trade_type": order.trade_type or "수출",
+            "service_info": getattr(order, "service_info", None) or {},
             "tracking_token": order.tracking_token or "",
             "consignee_confirmed_date": order.consignee_confirmed_date or "",
             "vendor_docs_sent_date": order.vendor_docs_sent_date or "",
@@ -2561,6 +2564,89 @@ def document_detail(order_id: int):
         if not order:
             raise HTTPException(status_code=404, detail="Order瑜?李얠쓣 ???놁뒿?덈떎.")
         return _document_detail_payload(s, order)
+    finally:
+        s.close()
+
+
+class ServiceStageSave(BaseModel):
+    stage: int                      # 7~10
+    data: dict = {}
+    complete: bool = True
+
+
+@app.post("/api/admin/documents/{order_id}/service",
+          dependencies=[Depends(require_token)])
+def save_service_stage(order_id: int, body: ServiceStageSave):
+    """서비스 업무 7~10단계 입력값 저장 + 단계 완료 처리.
+    7·8·9 는 RFQ.stage_dates 로 완료, 10 은 청구내역으로 AR 레코드를 생성/갱신한다."""
+    if body.stage not in (7, 8, 9, 10):
+        raise HTTPException(status_code=400, detail="잘못된 서비스 단계입니다.")
+    s = get_session()
+    try:
+        order = s.query(Order).filter_by(id=order_id).first()
+        if not order:
+            raise HTTPException(status_code=404, detail="Order를 찾을 수 없습니다.")
+        info = dict(getattr(order, "service_info", None) or {})
+        info[str(body.stage)] = body.data
+        order.service_info = info
+
+        if body.stage in (7, 8, 9):
+            rfq = _rfq_for_order(s, order)
+            if rfq:
+                dates = dict(getattr(rfq, "stage_dates", None) or {})
+                if body.complete:
+                    dates[str(body.stage)] = _kst_iso(datetime.utcnow())
+                else:
+                    dates.pop(str(body.stage), None)
+                rfq.stage_dates = dates
+        elif body.stage == 10 and body.complete:
+            def _f(v) -> float:
+                try:
+                    return float(v or 0)
+                except (TypeError, ValueError):
+                    return 0.0
+            d = body.data or {}
+            total = sum(_f(d.get(k)) for k in ("labor_cost", "travel_cost", "material_cost", "other_cost"))
+            ar = s.query(ARRecord).filter_by(order_id=order.id).first()
+            if not ar:
+                ar = ARRecord(order_id=order.id, ci_no="",
+                              invoice_amount=total, paid_amount=0.0,
+                              currency=d.get("currency", "USD"),
+                              status=ARStatus.OUTSTANDING)
+                s.add(ar)
+            else:
+                ar.invoice_amount = total
+                ar.currency = d.get("currency", "USD")
+        s.commit()
+        return {"ok": True}
+    finally:
+        s.close()
+
+
+@app.delete("/api/admin/documents/{order_id}/service/{stage}",
+            dependencies=[Depends(require_token)])
+def delete_service_stage(order_id: int, stage: int):
+    """서비스 단계 입력값 삭제 + 완료 해제. 10단계는 연결 AR 레코드도 삭제한다."""
+    if stage not in (7, 8, 9, 10):
+        raise HTTPException(status_code=400, detail="잘못된 서비스 단계입니다.")
+    s = get_session()
+    try:
+        order = s.query(Order).filter_by(id=order_id).first()
+        if not order:
+            raise HTTPException(status_code=404, detail="Order를 찾을 수 없습니다.")
+        info = dict(getattr(order, "service_info", None) or {})
+        info.pop(str(stage), None)
+        order.service_info = info
+        if stage in (7, 8, 9):
+            rfq = _rfq_for_order(s, order)
+            if rfq:
+                dates = dict(getattr(rfq, "stage_dates", None) or {})
+                dates.pop(str(stage), None)
+                rfq.stage_dates = dates
+        if stage == 10:
+            s.query(ARRecord).filter_by(order_id=order.id).delete(synchronize_session=False)
+        s.commit()
+        return {"ok": True}
     finally:
         s.close()
 

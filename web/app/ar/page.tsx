@@ -67,17 +67,21 @@ function ArOverview() {
   const params = useSearchParams();
   const router = useRouter();
   const orderParam = params.get("order");
+  const stageParam = params.get("stage");
   const { data, error: loadError, refresh } = useCachedData("ar:overview", fetchArOverview);
   const { data: options } = useCachedData("ar:workoptions", fetchPoWorkOptions);
   const [error, setError] = useState<string | null>(null); // manual messages (SOA export, etc.)
   const [stageTab, setStageTab] = useState<StageTab>(11);
   const [editing, setEditing] = useState<ArRow | null>(null); // stage-action popup target
-  const [picking, setPicking] = useState(false); // stage-action target picker
   const [adding, setAdding] = useState(false);
 
-  const stageLabel = stageTab === 11 ? "Issue Tax Invoice" : "Record Payment";
-
   const rows = useMemo(() => data?.rows ?? [], [data]);
+
+  // Progress stage row → ?stage=11|12 selects the tab.
+  useEffect(() => {
+    if (stageParam === "12") setStageTab(12);
+    else if (stageParam === "11") setStageTab(11);
+  }, [stageParam]);
 
   // ?order=<id> from Progress "AR work" → auto-open that AR record popup.
   const orderId = orderParam ? Number(orderParam) : null;
@@ -98,15 +102,8 @@ function ArOverview() {
   function closePopup() {
     setEditing(null);
     setAdding(false);
-    setPicking(false);
     if (orderParam) router.replace("/ar");
   }
-
-  // Only pending targets (not issued / not paid) — for the top-right action picker.
-  const pendingRows = useMemo(
-    () => rows.filter((r) => (stageTab === 11 ? !r.tax_issued : !r.paid_done)),
-    [rows, stageTab]
-  );
 
   async function exportSoa() {
     const res = await fetch(arSoaXlsxUrl("전체", "전체"), {
@@ -126,6 +123,7 @@ function ArOverview() {
   }
 
   // Common columns + stage status column (11: tax invoice, 12: payment).
+  const actBtnStyle = { padding: "3px 12px", fontSize: 12 } as const;
   const stageCol: ColumnDef<ArRow> =
     stageTab === 11
       ? {
@@ -133,22 +131,42 @@ function ArOverview() {
           label: "Tax Invoice",
           text: (r) => (r.tax_issued ? "Issued" : "Not issued"),
           filter: "facet",
-          render: (r) => (
-            <span className={`ar-badge${r.tax_issued ? "" : " overdue"}`}>
-              {r.tax_issued ? "Issued" : "Not issued"}
-            </span>
-          ),
+          render: (r) =>
+            r.tax_issued ? (
+              <span className="ar-badge">Issued</span>
+            ) : (
+              <button
+                className="btn primary"
+                style={actBtnStyle}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setEditing(r);
+                }}
+              >
+                Issue
+              </button>
+            ),
         }
       : {
           key: "pay",
           label: "Payment",
           text: (r) => (r.paid_done ? "Done" : "Pending"),
           filter: "facet",
-          render: (r) => (
-            <span className={`ar-badge${r.paid_done ? "" : " overdue"}`}>
-              {r.paid_done ? "Done" : "Pending"}
-            </span>
-          ),
+          render: (r) =>
+            r.paid_done ? (
+              <span className="ar-badge">Paid</span>
+            ) : (
+              <button
+                className="btn primary"
+                style={actBtnStyle}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setEditing(r);
+                }}
+              >
+                Record
+              </button>
+            ),
         };
 
   const columns: ColumnDef<ArRow>[] = [
@@ -197,39 +215,10 @@ function ArOverview() {
               <button className="btn" onClick={exportSoa} disabled={rows.length === 0}>
                 Export SOA (XLSX)
               </button>
-              <button className="btn primary" onClick={() => setPicking(true)} disabled={rows.length === 0}>
-                {stageLabel}
-              </button>
             </>
           }
         />
       )}
-
-      {picking ? (
-        <Modal title={`${stageLabel} — select target`} onClose={() => setPicking(false)} wide>
-          <p className="state" style={{ marginTop: 0 }}>
-            Select an AR record to {stageTab === 11 ? "issue a tax invoice for" : "record payment for"}.
-          </p>
-          <FilterTable
-            rows={pendingRows}
-            columns={[
-              { key: "ci_no", label: "CI No.", text: (r) => r.ci_no || "" },
-              { key: "customer", label: "Customer", text: (r) => r.customer || "", filter: "facet" },
-              { key: "ord_no", label: "Order", text: (r) => r.ord_no || "" },
-              { key: "currency", label: "Currency", text: (r) => r.currency || "", filter: "facet" },
-              { key: "invoice", label: "Invoice", numeric: true, text: (r) => money(r.invoice_amount), sortValue: (r) => r.invoice_amount },
-              { key: "outstanding", label: "Outstanding", numeric: true, text: (r) => money(r.outstanding), sortValue: (r) => r.outstanding },
-              { key: "due_date", label: "Due date", text: (r) => r.due_date || "", filter: "date" },
-            ]}
-            getRowKey={(r) => r.id}
-            onRowClick={(r) => {
-              setPicking(false);
-              setEditing(r);
-            }}
-            empty={`No AR records pending ${stageLabel.toLowerCase()}.`}
-          />
-        </Modal>
-      ) : null}
 
       {editing ? (
         stageTab === 11 ? (
@@ -279,19 +268,17 @@ function OrderInfoBlock({
 
   if (!d) return null;
   return (
-    <div className="detail" style={{ marginBottom: 12 }}>
-      <div className="grid">
-        <KV k="Order No." v={d.order.ord_no} />
-        <KV k="Trade type" v={tr(d.order.trade_type)} />
-        <KV k="Project" v={d.order.project_title} />
-        <KV k="Customer" v={d.order.customer} />
-        <KV k="Vendor" v={d.order.vendor} />
-        <KV k="Vessel" v={d.order.vessel} />
-        <KV k="PO No." v={d.order.po_no} />
-        <KV k="Items" v={`${d.order.items.length}`} />
-        <KV k="Customer Tax ID" v={d.order.customer_tax_id} />
-      </div>
-    </div>
+    <dl className="intl-meta" style={{ margin: "0 0 14px" }}>
+      <div><dt>Order No.</dt><dd>{d.order.ord_no || "—"}</dd></div>
+      <div><dt>Trade type</dt><dd>{tr(d.order.trade_type) || "—"}</dd></div>
+      <div><dt>Project</dt><dd>{d.order.project_title || "—"}</dd></div>
+      <div><dt>Customer</dt><dd>{d.order.customer || "—"}</dd></div>
+      <div><dt>Vendor</dt><dd>{d.order.vendor || "—"}</dd></div>
+      <div><dt>Vessel</dt><dd>{d.order.vessel || "—"}</dd></div>
+      <div><dt>PO No.</dt><dd>{d.order.po_no || "—"}</dd></div>
+      <div><dt>Items</dt><dd>{d.order.items.length}</dd></div>
+      <div><dt>Customer Tax ID</dt><dd>{d.order.customer_tax_id || "—"}</dd></div>
+    </dl>
   );
 }
 
@@ -447,14 +434,12 @@ function PaymentModal({
           {row.paid_done ? `Paid (${row.paid_date || "done"})` : "Pending"}
         </span>
       </div>
-      <div className="detail" style={{ marginBottom: 12 }}>
-        <div className="grid">
-          <KV k="Invoice amount" v={`${row.currency} ${money(row.invoice_amount)}`} />
-          <KV k="Paid to date" v={`${row.currency} ${money(row.paid_amount)}`} />
-          <KV k="Outstanding" v={`${row.currency} ${money(row.outstanding)}`} />
-          <KV k="Status" v={tr(row.status)} />
-        </div>
-      </div>
+      <dl className="intl-meta" style={{ margin: "0 0 14px" }}>
+        <div><dt>Invoice amount</dt><dd>{row.currency} {money(row.invoice_amount)}</dd></div>
+        <div><dt>Paid to date</dt><dd>{row.currency} {money(row.paid_amount)}</dd></div>
+        <div><dt>Outstanding</dt><dd>{row.currency} {money(row.outstanding)}</dd></div>
+        <div><dt>Status</dt><dd>{tr(row.status)}</dd></div>
+      </dl>
       <div className="form-grid">
         <Field label="Payment amount" value={amount} onChange={setAmount} type="number" />
         <Field label="Payment date / due" value={dueDate} onChange={setDueDate} type="date" />
@@ -488,8 +473,33 @@ function ArAddForm({
   onChanged: () => void;
 }) {
   const [form, setForm] = useState<ArForm>({ ...emptyForm, order_id: fallbackOrderId ?? "" });
+  const [detail, setDetail] = useState<DocumentDetail | null>(null);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+
+  // 오더 선택 시 해당 프로젝트/CI 정보를 불러와 기본정보 표시 + 빈 항목 자동 입력.
+  useEffect(() => {
+    if (form.order_id === "") {
+      setDetail(null);
+      return;
+    }
+    let alive = true;
+    fetchDocumentDetail(form.order_id)
+      .then((d) => {
+        if (!alive) return;
+        setDetail(d);
+        setForm((f) => ({
+          ...f,
+          ci_no: f.ci_no || d.ci?.ci_no || "",
+          currency: d.ci?.currency || f.currency,
+          invoice_amount: f.invoice_amount || ciTotal(d),
+        }));
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [form.order_id]);
 
   async function save() {
     if (form.order_id === "") return;
@@ -516,21 +526,22 @@ function ArAddForm({
 
   return (
     <div>
+      <div className="project-select">
+        <label>Order *</label>
+        <select
+          value={form.order_id}
+          onChange={(e) => setForm({ ...form, order_id: e.target.value ? Number(e.target.value) : "" })}
+        >
+          <option value="">Select…</option>
+          {(options?.orders || []).map((o) => (
+            <option key={o.id} value={o.id}>
+              {o.ord_no} · {o.customer} · {o.vessel || "-"}
+            </option>
+          ))}
+        </select>
+      </div>
+      {form.order_id !== "" ? <OrderInfoBlock orderId={form.order_id} detail={detail} /> : null}
       <div className="form-grid">
-        <label className="form-field">
-          <span>Order *</span>
-          <select
-            value={form.order_id}
-            onChange={(e) => setForm({ ...form, order_id: e.target.value ? Number(e.target.value) : "" })}
-          >
-            <option value="">Select</option>
-            {(options?.orders || []).map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.ord_no} · {o.customer} · {o.vessel || "-"}
-              </option>
-            ))}
-          </select>
-        </label>
         <Field label="CI No." value={form.ci_no} onChange={(v) => setForm({ ...form, ci_no: v })} />
         <Field label="Invoice amount" value={String(form.invoice_amount)} onChange={(v) => setForm({ ...form, invoice_amount: num(v) })} type="number" />
         <Field label="Paid amount" value={String(form.paid_amount)} onChange={(v) => setForm({ ...form, paid_amount: num(v) })} type="number" />
@@ -553,15 +564,6 @@ function ArAddForm({
         </button>
         {err ? <span className="action-err">{err}</span> : null}
       </div>
-    </div>
-  );
-}
-
-function KV({ k, v }: { k: string; v: string }) {
-  return (
-    <div className="kv">
-      <span className="k">{k}</span>
-      <span className="v">{v || "-"}</span>
     </div>
   );
 }

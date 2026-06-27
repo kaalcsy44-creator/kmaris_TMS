@@ -35,6 +35,7 @@ export default function FilterTable<T>({
   rowClassName,
   empty = "No items to display.",
   actions,
+  leftActions,
 }: {
   rows: T[];
   columns: ColumnDef<T>[];
@@ -44,6 +45,8 @@ export default function FilterTable<T>({
   empty?: string;
   /** 툴바 우측 슬롯(예: "+ 신규 등록" 버튼). */
   actions?: React.ReactNode;
+  /** 툴바 좌측 슬롯(예: CI/PL 토글). */
+  leftActions?: React.ReactNode;
 }) {
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>("asc");
@@ -212,6 +215,7 @@ export default function FilterTable<T>({
   return (
     <>
       <div className="pl-toolbar">
+        {leftActions ? <span className="pl-toolbar-left">{leftActions}</span> : null}
         {filtersActive ? (
           <button type="button" className="pl-filter-reset" onClick={resetFilters}>
             Reset filters

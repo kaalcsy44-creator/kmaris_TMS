@@ -52,6 +52,7 @@ _MIGRATIONS = {
         "consignee_confirmed_date": "VARCHAR(10)",
         "vendor_docs_sent_date":    "VARCHAR(10)",
         "trade_type":        "VARCHAR(10) DEFAULT '수출'",
+        "service_info":      "JSON",
     },
     "vendor_rfqs": {
         "sent_to_email": "VARCHAR(200)",

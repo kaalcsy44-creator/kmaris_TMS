@@ -400,6 +400,7 @@ export type DocRow = {
   has_tax: boolean;
   svc_ready_done: boolean;
   svc_arr_done: boolean;
+  svc_billed: boolean;
 };
 
 export type DocumentWorkItem = {
@@ -435,6 +436,7 @@ export type DocumentDetail = {
     project_title: string;
     vendor: string;
     trade_type: string;
+    service_info: Record<string, Record<string, string>>;
     tracking_token: string;
     consignee_confirmed_date: string;
     vendor_docs_sent_date: string;

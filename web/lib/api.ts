@@ -335,6 +335,19 @@ export function saveCommercialInvoice(
   return post(`/api/admin/documents/${orderId}/ci`, body);
 }
 
+export function saveServiceStage(
+  orderId: number,
+  stage: number,
+  data: Record<string, string>,
+  complete = true
+): Promise<{ ok: boolean }> {
+  return post(`/api/admin/documents/${orderId}/service`, { stage, data, complete });
+}
+
+export function deleteServiceStage(orderId: number, stage: number): Promise<{ ok: boolean }> {
+  return del(`/api/admin/documents/${orderId}/service/${stage}`);
+}
+
 export function savePackingList(
   orderId: number,
   body: { date?: string; items: DocumentWorkItem[] }
