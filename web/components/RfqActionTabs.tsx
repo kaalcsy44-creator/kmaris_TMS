@@ -16,6 +16,18 @@ import {
   quotationPdfUrl,
   previewQuotationEmail,
   sendQuotationEmail,
+  fetchVrfqOverview,
+  fetchVendorQuoteOverview,
+  fetchQuotationOverview,
+  fetchVendorRfqDetail,
+  updateVendorRfq,
+  deleteVendorRfq,
+  fetchVendorQuoteDetail,
+  updateVendorQuote,
+  deleteVendorQuote,
+  fetchCustomerQuotationDetail,
+  updateCustomerQuotation,
+  deleteCustomerQuotation,
 } from "@/lib/api";
 import { getToken } from "@/lib/auth";
 import type {
@@ -27,12 +39,18 @@ import type {
   CustomerQuoteItem,
   QuotationTerms,
   VendorQuoteForImport,
+  VrfqRow,
+  VendorQuoteOverviewRow,
+  QtnRow,
+  VendorRfqDetail,
+  VendorQuoteDetail,
+  CustomerQuotationDetail,
+  RfqItem,
 } from "@/lib/types";
 import NewRfqForm from "./screens/NewRfqForm";
-import RfqTable from "./RfqTable";
-import VrfqScreen from "./screens/VrfqScreen";
-import VendorQuoteScreen from "./screens/VendorQuoteScreen";
-import QuotationScreen from "./screens/QuotationScreen";
+import WorkTypeBadge from "./WorkTypeBadge";
+import FilterTable, { ColumnDef } from "./common/FilterTable";
+import Modal from "./common/Modal";
 
 /** 현재 시각 "YYYY-MM-DDTHH:MM" (datetime-local 기본값). */
 function nowLocalDt(): string {
@@ -51,6 +69,10 @@ const TABS = [
   { key: "cquote", label: "4. Customer Quot. 발신" },
 ];
 
+function money(n: number) {
+  return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 export default function RfqActionTabs({
   rfqId,
   rows,
@@ -63,46 +85,11 @@ export default function RfqActionTabs({
   onChanged: () => void;
 }) {
   const [tab, setTab] = useState("new");
-  // 2·3·4번 탭 내부 세그먼트: 작업(work) / 목록(list)
-  const [sub, setSub] = useState<"work" | "list">("work");
   const [vendors, setVendors] = useState<VendorOption[]>([]);
-  const [vendorRfqs, setVendorRfqs] = useState<RfqDetailT["vendor_rfqs"]>([]);
 
   useEffect(() => {
     fetchVendors().then(setVendors).catch(() => setVendors([]));
   }, []);
-
-  function reloadVrfqs() {
-    if (rfqId === null) {
-      setVendorRfqs([]);
-      return;
-    }
-    fetchRfqDetail(rfqId)
-      .then((d) => setVendorRfqs(d.vendor_rfqs))
-      .catch(() => setVendorRfqs([]));
-  }
-
-  useEffect(() => {
-    reloadVrfqs();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rfqId]);
-
-  const after = () => {
-    onChanged();
-    reloadVrfqs();
-  };
-
-  // 메인 탭 변경 시 세그먼트는 항상 '신규 등록'으로 초기화
-  function changeTab(key: string) {
-    setTab(key);
-    setSub("work");
-  }
-
-  // 목록 행 클릭 → 해당 프로젝트 선택 + '신규 등록' 화면으로 드릴인
-  function drillIn(id: number) {
-    onSelect(id);
-    setSub("work");
-  }
 
   return (
     <div className="action-tabs">
@@ -111,77 +98,922 @@ export default function RfqActionTabs({
           <button
             key={t.key}
             className={tab === t.key ? "on" : ""}
-            onClick={() => changeTab(t.key)}
+            onClick={() => setTab(t.key)}
           >
             {t.label}
           </button>
         ))}
       </div>
 
-      {/* 모든 탭 공통: 메인 탭 바로 아래 세그먼트(신규 등록 / 목록) */}
-      <div className="seg-tabs">
-        <button className={sub === "work" ? "on" : ""} onClick={() => setSub("work")}>
-          신규 등록
-        </button>
-        <button className={sub === "list" ? "on" : ""} onClick={() => setSub("list")}>
-          {tab === "vrfq" || tab === "cquote" ? "발신 목록" : "수신 목록"}
-        </button>
-      </div>
+      {tab === "new" && (
+        <CustomerRfqList rows={rows} deepLinkId={rfqId} onSelect={onSelect} onChanged={onChanged} />
+      )}
+      {tab === "vrfq" && (
+        <VendorRfqList projects={rows} vendors={vendors} onChanged={onChanged} />
+      )}
+      {tab === "vquote" && <VendorQuoteList projects={rows} onChanged={onChanged} />}
+      {tab === "cquote" && <CustomerQuoteList projects={rows} onChanged={onChanged} />}
+    </div>
+  );
+}
 
-      {sub === "list" ? (
-        <div className="panel">
-          {tab === "new" &&
-            (rows.length === 0 ? (
-              <div className="empty">등록된 RFQ가 없습니다.</div>
-            ) : (
-              <RfqTable
-                rows={rows}
-                selectedId={rfqId}
-                onSelect={(id) => {
-                  onSelect(id);
-                  if (id !== null) setSub("work");
-                }}
-              />
-            ))}
-          {tab === "vrfq" && <VrfqScreen onSelect={drillIn} />}
-          {tab === "vquote" && <VendorQuoteScreen onSelect={drillIn} />}
-          {tab === "cquote" && <QuotationScreen onSelect={drillIn} />}
+// 신규 등록 모달 상단의 '진행중인 프로젝트(RFQ)' 선택기 — 2~4번 탭 등록 폼에서 사용.
+function ProjectPicker({
+  projects,
+  rfqId,
+  onSelect,
+}: {
+  projects: RfqRow[];
+  rfqId: number | null;
+  onSelect: (id: number | null) => void;
+}) {
+  return <ProjectSelect rows={projects} rfqId={rfqId} onSelect={onSelect} />;
+}
+
+// ── 1. Customer RFQ 수신 ────────────────────────────────────────────────────
+function CustomerRfqList({
+  rows,
+  deepLinkId,
+  onSelect,
+  onChanged,
+}: {
+  rows: RfqRow[];
+  deepLinkId: number | null;
+  onSelect: (id: number | null) => void;
+  onChanged: () => void;
+}) {
+  const [adding, setAdding] = useState(false);
+  const [detailId, setDetailId] = useState<number | null>(deepLinkId);
+
+  useEffect(() => {
+    setDetailId(deepLinkId);
+  }, [deepLinkId]);
+
+  const columns: ColumnDef<RfqRow>[] = [
+    {
+      key: "customer_rfq_no",
+      label: "고객 RFQ No.",
+      text: (r) => r.customer_rfq_no || "",
+      render: (r) => (
+        <div>
+          <div className="m">{r.customer_rfq_no || <span className="dash">—</span>}</div>
+          {r.crfq_at ? <div className="s">{r.crfq_at}</div> : null}
         </div>
+      ),
+    },
+    { key: "customer", label: "Customer", text: (r) => r.customer || "", filter: "facet" },
+    {
+      key: "work_type",
+      label: "업무 타입",
+      text: (r) => r.work_type || "부품공급",
+      filter: "facet",
+      render: (r) => <WorkTypeBadge type={r.work_type} />,
+    },
+    { key: "vessel", label: "선박", text: (r) => (r.vessel && r.vessel !== "—" ? r.vessel : ""), filter: "facet" },
+    {
+      key: "item_count",
+      label: "품목수",
+      numeric: true,
+      text: (r) => String(r.item_count),
+      sortValue: (r) => r.item_count,
+    },
+  ];
+
+  return (
+    <>
+      <FilterTable
+        rows={rows}
+        columns={columns}
+        getRowKey={(r) => r.id}
+        onRowClick={(r) => setDetailId(r.id)}
+        empty="등록된 RFQ가 없습니다."
+        actions={
+          <button className="btn primary" onClick={() => setAdding(true)}>
+            + 신규 등록
+          </button>
+        }
+      />
+
+      {adding ? (
+        <Modal title="Customer RFQ 신규 등록" onClose={() => setAdding(false)} wide>
+          <NewRfqForm
+            onCreated={() => {
+              setAdding(false);
+              onChanged();
+            }}
+            onCancel={() => setAdding(false)}
+          />
+        </Modal>
+      ) : null}
+
+      {detailId !== null ? (
+        <Modal title="Customer RFQ 상세" onClose={() => setDetailId(null)} wide>
+          <NewRfqForm
+            autoLoadId={detailId}
+            onCreated={() => {
+              setDetailId(null);
+              onSelect(null);
+              onChanged();
+            }}
+            onCancel={() => {
+              setDetailId(null);
+              onSelect(null);
+            }}
+            onDeleted={() => {
+              setDetailId(null);
+              onSelect(null);
+              onChanged();
+            }}
+          />
+        </Modal>
+      ) : null}
+    </>
+  );
+}
+
+// ── 2. Vendor RFQ 발신 ──────────────────────────────────────────────────────
+function VendorRfqList({
+  projects,
+  vendors,
+  onChanged,
+}: {
+  projects: RfqRow[];
+  vendors: VendorOption[];
+  onChanged: () => void;
+}) {
+  const [rows, setRows] = useState<VrfqRow[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [detailId, setDetailId] = useState<number | null>(null);
+  const [pickRfqId, setPickRfqId] = useState<number | null>(null);
+
+  function load() {
+    fetchVrfqOverview()
+      .then((d) => setRows(d.rows))
+      .catch((e) => setError(e instanceof Error ? e.message : "오류"));
+  }
+  useEffect(load, []);
+
+  const refresh = () => {
+    load();
+    onChanged();
+  };
+
+  const columns: ColumnDef<VrfqRow>[] = [
+    { key: "vrfq_no", label: "VRFQ No.", text: (r) => r.vrfq_no || "" },
+    { key: "customer_rfq_no", label: "고객 RFQ No.", text: (r) => r.customer_rfq_no || "" },
+    { key: "vendor", label: "Vendor", text: (r) => r.vendor || "", filter: "facet" },
+    { key: "vendor_email", label: "수신자 이메일", text: (r) => r.vendor_email || "" },
+    { key: "sent_date", label: "발송일", text: (r) => r.sent_date || "", filter: "date" },
+    { key: "item_count", label: "품목수", numeric: true, text: (r) => String(r.item_count), sortValue: (r) => r.item_count },
+    { key: "quote_count", label: "수신 견적", numeric: true, text: (r) => `${r.quote_count}건`, sortValue: (r) => r.quote_count },
+    {
+      key: "status",
+      label: "상태",
+      text: (r) => r.status || "",
+      filter: "facet",
+      render: (r) => <span className="ar-badge">{r.status}</span>,
+    },
+  ];
+
+  if (error) return <div className="state error">API 오류: {error}</div>;
+
+  const kmarisNo = pickRfqId !== null ? projects.find((p) => p.id === pickRfqId)?.crfq_no ?? "" : "";
+
+  return (
+    <>
+      <FilterTable
+        rows={rows}
+        columns={columns}
+        getRowKey={(r) => r.id}
+        onRowClick={(r) => setDetailId(r.id)}
+        empty="발송된 Vendor RFQ가 없습니다."
+        actions={
+          <button className="btn primary" onClick={() => { setPickRfqId(null); setAdding(true); }}>
+            + 신규 등록
+          </button>
+        }
+      />
+
+      {adding ? (
+        <Modal title="Vendor RFQ 발신" onClose={() => setAdding(false)} wide>
+          <ProjectPicker projects={projects} rfqId={pickRfqId} onSelect={setPickRfqId} />
+          {pickRfqId === null ? (
+            <div className="empty">진행중인 프로젝트를 먼저 선택하세요.</div>
+          ) : (
+            <VendorRfqAction
+              rfqId={pickRfqId}
+              vendors={vendors}
+              kmarisNo={kmarisNo}
+              onDone={() => {
+                setAdding(false);
+                refresh();
+              }}
+            />
+          )}
+        </Modal>
+      ) : null}
+
+      {detailId !== null ? (
+        <VendorRfqDetailModal
+          id={detailId}
+          vendors={vendors}
+          onClose={() => setDetailId(null)}
+          onChanged={refresh}
+        />
+      ) : null}
+    </>
+  );
+}
+
+function VendorRfqDetailModal({
+  id,
+  vendors,
+  onClose,
+  onChanged,
+}: {
+  id: number;
+  vendors: VendorOption[];
+  onClose: () => void;
+  onChanged: () => void;
+}) {
+  const [d, setD] = useState<VendorRfqDetail | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [vrfqNo, setVrfqNo] = useState("");
+  const [vendorId, setVendorId] = useState<number | "">("");
+  const [email, setEmail] = useState("");
+  const [status, setStatus] = useState("");
+  const [sentAt, setSentAt] = useState("");
+  const [items, setItems] = useState<RfqItem[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchVendorRfqDetail(id)
+      .then((data) => {
+        setD(data);
+        setVrfqNo(data.vrfq_no || "");
+        setVendorId(data.vendor_id || "");
+        setEmail(data.vendor_email || "");
+        setStatus(data.status || "");
+        setSentAt(data.sent_at || "");
+        setItems(data.items || []);
+      })
+      .catch((e) => setErr(e instanceof Error ? e.message : "오류"));
+  }, [id]);
+
+  async function save() {
+    setBusy(true);
+    setErr(null);
+    try {
+      await updateVendorRfq(id, {
+        vrfq_no: vrfqNo,
+        vendor_id: vendorId === "" ? undefined : vendorId,
+        sent_to_email: email,
+        status,
+        sent_at: sentAt,
+        items,
+      });
+      setEditing(false);
+      onChanged();
+      onClose();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "수정 실패");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove() {
+    if (!window.confirm("이 Vendor RFQ를 삭제할까요?")) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      await deleteVendorRfq(id);
+      onChanged();
+      onClose();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "삭제 실패");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal title={d ? `Vendor RFQ — ${d.vrfq_no}` : "Vendor RFQ 상세"} onClose={onClose} wide>
+      {!d ? (
+        <div className="empty">불러오는 중…</div>
       ) : (
         <>
-          {/* '진행중인 프로젝트' 선택은 신규 등록(작업) 화면 내부에 위치 */}
-          <ProjectSelect rows={rows} rfqId={rfqId} onSelect={onSelect} />
-          {tab === "new" ? (
-            <NewRfqForm selectedRfqId={rfqId} onCreated={() => onChanged()} />
-          ) : rfqId === null ? (
-            <div className="panel">
-              <div className="empty">진행중인 프로젝트를 먼저 선택하세요.</div>
-            </div>
+          {editing ? (
+            <>
+              <div className="form-section-title">프로젝트 기본 정보</div>
+              <dl className="intl-meta">
+                <div><dt>고객사</dt><dd>{d.customer || "—"}</dd></div>
+                <div><dt>선박</dt><dd>{d.vessel || "—"}</dd></div>
+                <div><dt>프로젝트명</dt><dd>{d.project_title || "—"}</dd></div>
+                <div><dt>품목 수</dt><dd>{items.length}</dd></div>
+                <div><dt>Customer RFQ No.</dt><dd>{d.customer_rfq_no || "—"}</dd></div>
+                <div><dt>K-Maris RFQ No.</dt><dd>{d.kmaris_rfq_no || "—"}</dd></div>
+                <div><dt>수신일</dt><dd>{d.received_at || "—"}</dd></div>
+                <div><dt>업무 유형</dt><dd>{d.work_type || "—"}</dd></div>
+              </dl>
+
+              <div className="form-section-title">이 Vendor 발송 정보</div>
+              <div className="form-grid">
+                <div className="form-field">
+                  <label>VRFQ No.</label>
+                  <input value={vrfqNo} onChange={(e) => setVrfqNo(e.target.value)} />
+                </div>
+                <div className="form-field">
+                  <label>Vendor</label>
+                  <select value={vendorId} onChange={(e) => setVendorId(e.target.value === "" ? "" : Number(e.target.value))}>
+                    <option value="">선택…</option>
+                    {vendors.map((v) => (
+                      <option key={v.id} value={v.id}>{v.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-field">
+                  <label>수신 담당자 이메일</label>
+                  <input value={email} onChange={(e) => setEmail(e.target.value)} />
+                </div>
+                <div className="form-field">
+                  <label>발신 일시</label>
+                  <input type="datetime-local" value={sentAt} onChange={(e) => setSentAt(e.target.value)} />
+                </div>
+                <div className="form-field">
+                  <label>상태</label>
+                  <input value={status} onChange={(e) => setStatus(e.target.value)} />
+                </div>
+              </div>
+
+              <VendorRfqItemEditor items={items} onChange={setItems} />
+            </>
           ) : (
-            <div className="panel action-panel">
-              {tab === "vrfq" && (
-                <VendorRfqAction
-                  rfqId={rfqId}
-                  vendors={vendors}
-                  kmarisNo={rows.find((r) => r.id === rfqId)?.crfq_no ?? ""}
-                  onDone={after}
-                />
-              )}
-              {tab === "vquote" && (
-                <VendorQuoteAction
-                  rfqId={rfqId}
-                  vendorRfqs={vendorRfqs}
-                  onDone={after}
-                />
-              )}
-              {tab === "cquote" && (
-                <CustomerQuoteAction rfqId={rfqId} onDone={onChanged} />
-              )}
-            </div>
+            <>
+              <div className="form-section-title">프로젝트 기본 정보</div>
+              <dl className="intl-meta">
+                <div><dt>고객사</dt><dd>{d.customer || "—"}</dd></div>
+                <div><dt>선박</dt><dd>{d.vessel || "—"}</dd></div>
+                <div><dt>프로젝트명</dt><dd>{d.project_title || "—"}</dd></div>
+                <div><dt>품목 수</dt><dd>{d.items.length}</dd></div>
+                <div><dt>Customer RFQ No.</dt><dd>{d.customer_rfq_no || "—"}</dd></div>
+                <div><dt>K-Maris RFQ No.</dt><dd>{d.kmaris_rfq_no || "—"}</dd></div>
+                <div><dt>수신 담당자</dt><dd>{d.customer_contact || "—"}</dd></div>
+                <div><dt>수신 이메일</dt><dd>{d.customer_email || "—"}</dd></div>
+              </dl>
+
+              <div className="form-section-title">이 Vendor 발송 정보</div>
+              <dl className="intl-meta">
+                <div><dt>VRFQ No.</dt><dd>{d.vrfq_no || "—"}</dd></div>
+                <div><dt>Vendor</dt><dd>{d.vendor}</dd></div>
+                <div><dt>수신 담당자 이메일</dt><dd>{d.vendor_email || "—"}</dd></div>
+                <div><dt>발신 일시</dt><dd>{d.sent_at || d.sent_date || "—"}</dd></div>
+                <div><dt>상태</dt><dd>{d.status}</dd></div>
+                <div><dt>수신 견적</dt><dd>{d.quote_count}건</dd></div>
+              </dl>
+
+              <ProjectVendorRfqList rows={d.project_vendor_rfqs || []} />
+            </>
           )}
+
+          <div className="form-actions">
+            {editing ? (
+              <>
+                <button className="btn primary" onClick={save} disabled={busy}>{busy ? "저장 중…" : "저장"}</button>
+                <button className="btn" onClick={() => setEditing(false)} disabled={busy}>취소</button>
+              </>
+            ) : (
+              <button className="btn" onClick={() => setEditing(true)} style={{ marginLeft: "auto" }}>✎ 수정</button>
+            )}
+            <button className="btn danger" onClick={remove} disabled={busy || editing}>삭제</button>
+          </div>
+          {err ? <span className="action-err">{err}</span> : null}
         </>
       )}
-    </div>
+    </Modal>
+  );
+}
+
+function ProjectVendorRfqList({
+  rows,
+}: {
+  rows: VendorRfqDetail["project_vendor_rfqs"];
+}) {
+  if (!rows.length) return null;
+  return (
+    <>
+      <div className="form-section-title">같은 프로젝트 Vendor 발송 현황</div>
+      <div className="table-wrap compact">
+        <table className="mini wide">
+          <thead>
+            <tr>
+              <th>VRFQ No.</th>
+              <th>Vendor</th>
+              <th>수신 담당자</th>
+              <th>발신 일시</th>
+              <th>견적</th>
+              <th>상태</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.id} className={r.current ? "sel" : ""}>
+                <td>{r.vrfq_no}</td>
+                <td>{r.vendor}</td>
+                <td>{r.vendor_email || "—"}</td>
+                <td>{r.sent_at || "—"}</td>
+                <td>{r.quote_count}건</td>
+                <td>{r.status || "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
+function VendorRfqItemEditor({
+  items,
+  onChange,
+}: {
+  items: RfqItem[];
+  onChange: (items: RfqItem[]) => void;
+}) {
+  function patch(i: number, key: keyof RfqItem, value: string) {
+    onChange(
+      items.map((it, idx) =>
+        idx === i
+          ? {
+              ...it,
+              [key]: key === "qty" ? Number(value) || 0 : value,
+            }
+          : it
+      )
+    );
+  }
+
+  return (
+    <>
+      <div className="form-section-title">발송 품목</div>
+      <div className="table-wrap compact">
+        <table className="mini wide">
+          <thead>
+            <tr>
+              <th>Part No.</th>
+              <th>Description</th>
+              <th>Qty</th>
+              <th>Unit</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((it, i) => (
+              <tr key={i}>
+                <td><input value={it.part_no || ""} onChange={(e) => patch(i, "part_no", e.target.value)} /></td>
+                <td><input value={it.description || ""} onChange={(e) => patch(i, "description", e.target.value)} /></td>
+                <td><input className="num" type="number" value={it.qty || 0} onChange={(e) => patch(i, "qty", e.target.value)} /></td>
+                <td><input value={it.unit || ""} onChange={(e) => patch(i, "unit", e.target.value)} /></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
+// ── 3. Vendor Quot. 수신 ────────────────────────────────────────────────────
+function VendorQuoteList({
+  projects,
+  onChanged,
+}: {
+  projects: RfqRow[];
+  onChanged: () => void;
+}) {
+  const [rows, setRows] = useState<VendorQuoteOverviewRow[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [detailId, setDetailId] = useState<number | null>(null);
+  const [pickRfqId, setPickRfqId] = useState<number | null>(null);
+  const [vendorRfqs, setVendorRfqs] = useState<RfqDetailT["vendor_rfqs"]>([]);
+
+  function load() {
+    fetchVendorQuoteOverview()
+      .then((d) => setRows(d.rows))
+      .catch((e) => setError(e instanceof Error ? e.message : "오류"));
+  }
+  useEffect(load, []);
+
+  // 모달에서 프로젝트 선택 시 해당 RFQ의 Vendor RFQ 목록 로드
+  useEffect(() => {
+    if (pickRfqId === null) {
+      setVendorRfqs([]);
+      return;
+    }
+    fetchRfqDetail(pickRfqId)
+      .then((d) => setVendorRfqs(d.vendor_rfqs))
+      .catch(() => setVendorRfqs([]));
+  }, [pickRfqId]);
+
+  const refresh = () => {
+    load();
+    onChanged();
+  };
+
+  const columns: ColumnDef<VendorQuoteOverviewRow>[] = [
+    {
+      key: "received_at",
+      label: "수신일시",
+      text: (r) => (r.received_at && r.received_at.length >= 16 ? `${r.received_at.slice(2, 10)} ${r.received_at.slice(11, 16)}` : r.received_date || ""),
+      filter: "date",
+      sortValue: (r) => Date.parse(r.received_at || r.received_date || "") || 0,
+    },
+    { key: "vendor_quote_no", label: "Vendor 견적번호", text: (r) => r.vendor_quote_no || "" },
+    { key: "vendor", label: "Vendor", text: (r) => r.vendor || "", filter: "facet" },
+    { key: "vrfq_no", label: "VRFQ No.", text: (r) => r.vrfq_no || "" },
+    { key: "customer_rfq_no", label: "고객 RFQ No.", text: (r) => r.customer_rfq_no || "" },
+    { key: "item_count", label: "품목수", numeric: true, text: (r) => String(r.item_count), sortValue: (r) => r.item_count },
+    {
+      key: "amount",
+      label: "금액",
+      numeric: true,
+      text: (r) => `${r.currency} ${money(r.amount)}`,
+      sortValue: (r) => r.amount,
+    },
+  ];
+
+  if (error) return <div className="state error">API 오류: {error}</div>;
+
+  return (
+    <>
+      <FilterTable
+        rows={rows}
+        columns={columns}
+        getRowKey={(r) => r.id}
+        onRowClick={(r) => setDetailId(r.id)}
+        empty="수신된 Vendor 견적이 없습니다."
+        actions={
+          <button className="btn primary" onClick={() => { setPickRfqId(null); setAdding(true); }}>
+            + 신규 등록
+          </button>
+        }
+      />
+
+      {adding ? (
+        <Modal title="Vendor Quote 수신 등록" onClose={() => setAdding(false)} wide>
+          <ProjectPicker projects={projects} rfqId={pickRfqId} onSelect={setPickRfqId} />
+          {pickRfqId === null ? (
+            <div className="empty">진행중인 프로젝트를 먼저 선택하세요.</div>
+          ) : (
+            <VendorQuoteAction
+              rfqId={pickRfqId}
+              vendorRfqs={vendorRfqs}
+              onDone={() => {
+                setAdding(false);
+                refresh();
+              }}
+            />
+          )}
+        </Modal>
+      ) : null}
+
+      {detailId !== null ? (
+        <VendorQuoteDetailModal id={detailId} onClose={() => setDetailId(null)} onChanged={refresh} />
+      ) : null}
+    </>
+  );
+}
+
+function VendorQuoteDetailModal({
+  id,
+  onClose,
+  onChanged,
+}: {
+  id: number;
+  onClose: () => void;
+  onChanged: () => void;
+}) {
+  const [d, setD] = useState<VendorQuoteDetail | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [no, setNo] = useState("");
+  const [receivedAt, setReceivedAt] = useState("");
+  const [notes, setNotes] = useState("");
+  const [items, setItems] = useState<VendorQuoteItem[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchVendorQuoteDetail(id)
+      .then((data) => {
+        setD(data);
+        setNo(data.vendor_quote_no || "");
+        setReceivedAt(data.received_at || "");
+        setNotes(data.notes || "");
+        setItems((data.items || []).map(normalizeVendorQuoteItem));
+      })
+      .catch((e) => setErr(e instanceof Error ? e.message : "오류"));
+  }, [id]);
+
+  async function save() {
+    setBusy(true);
+    setErr(null);
+    try {
+      await updateVendorQuote(id, {
+        vendor_quote_no: no.trim(),
+        received_at: receivedAt,
+        notes,
+        items: cleanVendorQuoteItems(items),
+      });
+      setEditing(false);
+      onChanged();
+      onClose();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "수정 실패");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove() {
+    if (!window.confirm("이 Vendor 견적을 삭제할까요?")) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      await deleteVendorQuote(id);
+      onChanged();
+      onClose();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "삭제 실패");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal title={d ? `Vendor 견적 — ${d.vendor_quote_no}` : "Vendor 견적 상세"} onClose={onClose} wide>
+      {!d ? (
+        <div className="empty">불러오는 중…</div>
+      ) : editing ? (
+        <>
+          <div className="form-grid">
+            <div className="form-field">
+              <label>Vendor 견적번호</label>
+              <input value={no} onChange={(e) => setNo(e.target.value)} />
+            </div>
+            <div className="form-field">
+              <label>견적 수신일시</label>
+              <input type="datetime-local" value={receivedAt} onChange={(e) => setReceivedAt(e.target.value)} />
+            </div>
+            <div className="form-field">
+              <label>비고</label>
+              <input value={notes} onChange={(e) => setNotes(e.target.value)} />
+            </div>
+          </div>
+          <VendorQuoteItemEditor items={items} onChange={setItems} />
+          <div className="form-actions">
+            <button className="btn primary" onClick={save} disabled={busy}>{busy ? "저장 중…" : "저장"}</button>
+            <button className="btn" onClick={() => setEditing(false)} disabled={busy}>취소</button>
+          </div>
+          {err ? <span className="action-err">{err}</span> : null}
+        </>
+      ) : (
+        <>
+          <dl className="intl-meta">
+            <div><dt>Vendor</dt><dd>{d.vendor}</dd></div>
+            <div><dt>VRFQ No.</dt><dd>{d.vrfq_no}</dd></div>
+            <div><dt>고객 RFQ No.</dt><dd>{d.customer_rfq_no || "—"}</dd></div>
+            <div><dt>수신일</dt><dd>{d.received_date || "—"}</dd></div>
+            <div><dt>비고</dt><dd>{d.notes || "—"}</dd></div>
+            <div><dt>품목 수</dt><dd>{d.items.length}</dd></div>
+          </dl>
+          <div className="form-actions">
+            <button className="btn" onClick={() => setEditing(true)} style={{ marginLeft: "auto" }}>✎ 수정</button>
+            <button className="btn danger" onClick={remove} disabled={busy}>삭제</button>
+          </div>
+          {err ? <span className="action-err">{err}</span> : null}
+        </>
+      )}
+    </Modal>
+  );
+}
+
+// ── 4. Customer Quot. 발신 ──────────────────────────────────────────────────
+function CustomerQuoteList({
+  projects,
+  onChanged,
+}: {
+  projects: RfqRow[];
+  onChanged: () => void;
+}) {
+  const [rows, setRows] = useState<QtnRow[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [detailId, setDetailId] = useState<number | null>(null);
+  const [pickRfqId, setPickRfqId] = useState<number | null>(null);
+
+  function load() {
+    fetchQuotationOverview()
+      .then((d) => setRows(d.rows))
+      .catch((e) => setError(e instanceof Error ? e.message : "오류"));
+  }
+  useEffect(load, []);
+
+  const refresh = () => {
+    load();
+    onChanged();
+  };
+
+  const columns: ColumnDef<QtnRow>[] = [
+    {
+      key: "qtn_no",
+      label: "견적 No.",
+      text: (r) => r.qtn_no || "",
+      render: (r) => (
+        <div>
+          <div className="m">{r.qtn_no || <span className="dash">—</span>}</div>
+          {r.sent_date ? <div className="s">발신: {r.sent_date}</div> : null}
+        </div>
+      ),
+    },
+    { key: "rfq_no", label: "RFQ No.", text: (r) => r.rfq_no || "" },
+    { key: "customer", label: "Customer", text: (r) => r.customer || "", filter: "facet" },
+    { key: "vessel", label: "선박", text: (r) => r.vessel || "", filter: "facet" },
+    { key: "item_count", label: "품목수", numeric: true, text: (r) => String(r.item_count), sortValue: (r) => r.item_count },
+    { key: "amount", label: "합계", numeric: true, text: (r) => `${r.currency} ${money(r.amount)}`, sortValue: (r) => r.amount },
+    { key: "level", label: "Level", text: (r) => r.level || "" },
+    { key: "valid_until", label: "유효기간", text: (r) => r.valid_until || "", filter: "date" },
+    { key: "status", label: "상태", text: (r) => r.status || "", filter: "facet", render: (r) => <span className="ar-badge">{r.status}</span> },
+  ];
+
+  if (error) return <div className="state error">API 오류: {error}</div>;
+
+  return (
+    <>
+      <FilterTable
+        rows={rows}
+        columns={columns}
+        getRowKey={(r) => r.id}
+        onRowClick={(r) => setDetailId(r.id)}
+        empty="표시할 견적이 없습니다."
+        actions={
+          <button className="btn primary" onClick={() => { setPickRfqId(null); setAdding(true); }}>
+            + 신규 등록
+          </button>
+        }
+      />
+
+      {adding ? (
+        <Modal title="Customer Quotation 작성·발신" onClose={() => setAdding(false)} wide>
+          <ProjectPicker projects={projects} rfqId={pickRfqId} onSelect={setPickRfqId} />
+          {pickRfqId === null ? (
+            <div className="empty">진행중인 프로젝트를 먼저 선택하세요.</div>
+          ) : (
+            <CustomerQuoteAction
+              rfqId={pickRfqId}
+              onDone={() => {
+                setAdding(false);
+                refresh();
+              }}
+            />
+          )}
+        </Modal>
+      ) : null}
+
+      {detailId !== null ? (
+        <CustomerQuoteDetailModal id={detailId} onClose={() => setDetailId(null)} onChanged={refresh} />
+      ) : null}
+    </>
+  );
+}
+
+function CustomerQuoteDetailModal({
+  id,
+  onClose,
+  onChanged,
+}: {
+  id: number;
+  onClose: () => void;
+  onChanged: () => void;
+}) {
+  const [d, setD] = useState<CustomerQuotationDetail | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [currency, setCurrency] = useState("USD");
+  const [validUntil, setValidUntil] = useState("");
+  const [status, setStatus] = useState("");
+  const [terms, setTerms] = useState<QuotationTerms>({});
+  const [items, setItems] = useState<CustomerQuoteItem[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchCustomerQuotationDetail(id)
+      .then((data) => {
+        setD(data);
+        setCurrency(data.currency || "USD");
+        setValidUntil(data.valid_until || "");
+        setStatus(data.status || "");
+        setTerms(data.terms || {});
+        setItems(data.items || []);
+      })
+      .catch((e) => setErr(e instanceof Error ? e.message : "오류"));
+  }, [id]);
+
+  const total = items.reduce((sum, it) => sum + Number(it.amount || 0), 0);
+
+  async function save() {
+    setBusy(true);
+    setErr(null);
+    try {
+      await updateCustomerQuotation(id, {
+        currency,
+        valid_until: validUntil,
+        status,
+        terms,
+        items,
+      });
+      setEditing(false);
+      onChanged();
+      onClose();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "수정 실패");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove() {
+    if (!window.confirm("이 견적서를 삭제할까요?")) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      await deleteCustomerQuotation(id);
+      onChanged();
+      onClose();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "삭제 실패");
+      setBusy(false);
+    }
+  }
+
+  const STATUSES = ["초안", "발송완료", "협상중", "수주확정", "실주", "만료"];
+
+  return (
+    <Modal title={d ? `견적서 — ${d.qtn_no}` : "견적서 상세"} onClose={onClose} wide>
+      {!d ? (
+        <div className="empty">불러오는 중…</div>
+      ) : editing ? (
+        <>
+          <div className="form-grid">
+            <div className="form-field">
+              <label>통화</label>
+              <select value={currency} onChange={(e) => setCurrency(e.target.value)}>
+                <option>USD</option>
+                <option>EUR</option>
+                <option>KRW</option>
+                <option>SGD</option>
+              </select>
+            </div>
+            <div className="form-field">
+              <label>유효기간</label>
+              <input type="date" value={validUntil} onChange={(e) => setValidUntil(e.target.value)} />
+            </div>
+            <div className="form-field">
+              <label>상태</label>
+              <select value={status} onChange={(e) => setStatus(e.target.value)}>
+                {STATUSES.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <CustomerQuoteItemEditor items={items} onChange={setItems} />
+          <QuotationTermsEditor terms={terms} onChange={setTerms} />
+          <div className="form-actions">
+            <span className="action-name">합계: {currency} {money(total)}</span>
+            <button className="btn primary" onClick={save} disabled={busy}>{busy ? "저장 중…" : "저장"}</button>
+            <button className="btn" onClick={() => setEditing(false)} disabled={busy}>취소</button>
+          </div>
+          {err ? <span className="action-err">{err}</span> : null}
+        </>
+      ) : (
+        <>
+          <dl className="intl-meta">
+            <div><dt>RFQ No.</dt><dd>{d.rfq_no || "—"}</dd></div>
+            <div><dt>Customer</dt><dd>{d.customer}</dd></div>
+            <div><dt>선박</dt><dd>{d.vessel || "—"}</dd></div>
+            <div><dt>합계</dt><dd>{d.currency} {money(d.amount)}</dd></div>
+            <div><dt>유효기간</dt><dd>{d.valid_until || "—"}</dd></div>
+            <div><dt>상태</dt><dd>{d.status}</dd></div>
+            <div><dt>품목 수</dt><dd>{d.items.length}</dd></div>
+          </dl>
+          <div className="form-actions">
+            <button className="btn" onClick={() => setEditing(true)} style={{ marginLeft: "auto" }}>✎ 수정</button>
+            <button className="btn danger" onClick={remove} disabled={busy}>삭제</button>
+          </div>
+          {err ? <span className="action-err">{err}</span> : null}
+        </>
+      )}
+    </Modal>
   );
 }
 

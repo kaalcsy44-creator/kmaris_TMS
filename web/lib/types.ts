@@ -661,3 +661,85 @@ export type RfqDetail = {
   vendor_quotes: { vendor_quote_no: string; amount: string; at: string }[];
   quotation: { qtn_no: string; amount: string; status: string; at: string } | null;
 };
+
+// ── 목록 행 클릭 상세(수정·삭제)용 단건 상세 타입 ───────────────────────────
+export type VendorRfqDetail = {
+  id: number;
+  vrfq_no: string;
+  rfq_id: number | null;
+  customer_rfq_no: string;
+  kmaris_rfq_no: string;
+  customer: string;
+  customer_contact: string;
+  customer_email: string;
+  vessel: string;
+  project_title: string;
+  work_type: string;
+  received_at: string;
+  vendor_id: number;
+  vendor: string;
+  vendor_email: string;
+  sent_date: string;
+  sent_at: string;
+  status: string;
+  quote_count: number;
+  items: RfqItem[];
+  project_vendor_rfqs: {
+    id: number;
+    vrfq_no: string;
+    vendor: string;
+    vendor_email: string;
+    sent_at: string;
+    status: string;
+    quote_count: number;
+    current: boolean;
+  }[];
+};
+
+export type VendorQuoteDetail = {
+  id: number;
+  vendor_quote_no: string;
+  vendor_rfq_id: number;
+  vrfq_no: string;
+  rfq_id: number | null;
+  customer_rfq_no: string;
+  vendor: string;
+  received_date: string;
+  received_at: string;
+  notes: string;
+  currency: string;
+  items: VendorQuoteItem[];
+};
+
+export type CustomerQuotationDetail = {
+  id: number;
+  qtn_no: string;
+  rfq_id: number | null;
+  rfq_no: string;
+  customer: string;
+  vessel: string;
+  currency: string;
+  amount: number;
+  valid_until: string;
+  status: string;
+  level: string;
+  sent_date: string;
+  date: string;
+  terms: QuotationTerms;
+  items: CustomerQuoteItem[];
+};
+
+export type PurchaseOrderDetail = {
+  id: number;
+  po_no: string;
+  order_id: number;
+  ord_no: string;
+  vendor_id: number;
+  vendor: string;
+  vendor_email: string;
+  date: string;
+  sent_date: string;
+  status: string;
+  sent: boolean;
+  items: PoWorkItem[];
+};

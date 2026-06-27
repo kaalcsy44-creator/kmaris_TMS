@@ -34,6 +34,10 @@ import type {
   CompanyProfile,
   PipelineData,
   StageNote,
+  VendorRfqDetail,
+  VendorQuoteDetail,
+  CustomerQuotationDetail,
+  PurchaseOrderDetail,
 } from "./types";
 
 function authHeaders(json = false): HeadersInit {
@@ -142,6 +146,7 @@ export function updateRfq(
     customer_id?: number;
     vessel_id?: number;
     customer_rfq_no?: string;
+    rfq_no?: string;
     contact_person?: string;
     project_title?: string;
     work_type?: string;
@@ -703,4 +708,117 @@ export function sendQuotationEmail(
     body,
     doc_type: docType,
   });
+}
+
+// ── 목록 행 클릭 상세(보기·수정·삭제) ───────────────────────────────────────
+
+export function fetchVendorRfqDetail(id: number): Promise<VendorRfqDetail> {
+  return get<VendorRfqDetail>(`/api/admin/vendor-rfq/${id}`);
+}
+
+export function updateVendorRfq(
+  id: number,
+  body: {
+    vrfq_no?: string;
+    vendor_id?: number;
+    sent_date?: string;
+    sent_at?: string;
+    sent_to_email?: string;
+    status?: string;
+    items?: { part_no: string; description: string; qty: number; unit?: string }[];
+  }
+): Promise<{ ok: boolean; vrfq_no: string }> {
+  return put(`/api/admin/vendor-rfq/${id}`, body);
+}
+
+export function deleteVendorRfq(id: number): Promise<{ ok: boolean; vrfq_no: string }> {
+  return del(`/api/admin/vendor-rfq/${id}`);
+}
+
+export function fetchVendorQuoteDetail(id: number): Promise<VendorQuoteDetail> {
+  return get<VendorQuoteDetail>(`/api/admin/vendor-quote/${id}`);
+}
+
+export function updateVendorQuote(
+  id: number,
+  body: {
+    vendor_quote_no?: string;
+    received_date?: string;
+    received_at?: string;
+    notes?: string;
+    items?: VendorQuoteItem[];
+  }
+): Promise<{ ok: boolean; vendor_quote_no: string }> {
+  return put(`/api/admin/vendor-quote/${id}`, body);
+}
+
+export function deleteVendorQuote(
+  id: number
+): Promise<{ ok: boolean; vendor_quote_no: string }> {
+  return del(`/api/admin/vendor-quote/${id}`);
+}
+
+export function fetchCustomerQuotationDetail(
+  id: number
+): Promise<CustomerQuotationDetail> {
+  return get<CustomerQuotationDetail>(`/api/admin/quotation/${id}`);
+}
+
+export function updateCustomerQuotation(
+  id: number,
+  body: {
+    currency?: string;
+    items?: CustomerQuoteItem[];
+    valid_until?: string;
+    status?: string;
+    terms?: QuotationTerms;
+  }
+): Promise<{ ok: boolean; qtn_no: string }> {
+  return put(`/api/admin/quotation/${id}`, body);
+}
+
+export function deleteCustomerQuotation(
+  id: number
+): Promise<{ ok: boolean; qtn_no: string }> {
+  return del(`/api/admin/quotation/${id}`);
+}
+
+export function updateOrder(
+  id: number,
+  body: {
+    customer_id?: number;
+    vessel_id?: number;
+    po_no?: string;
+    date?: string;
+    promised_delivery?: string | null;
+    items?: PoWorkItem[];
+  }
+): Promise<{ ok: boolean; id: number; ord_no: string }> {
+  return put(`/api/admin/orders/${id}`, body);
+}
+
+export function deleteOrder(id: number): Promise<{ ok: boolean; ord_no: string }> {
+  return del(`/api/admin/orders/${id}`);
+}
+
+export function fetchVendorPoDetail(id: number): Promise<PurchaseOrderDetail> {
+  return get<PurchaseOrderDetail>(`/api/admin/vendor-pos/${id}`);
+}
+
+export function updatePurchaseOrder(
+  id: number,
+  body: {
+    vendor_id?: number;
+    date?: string;
+    status?: string;
+    items?: PoWorkItem[];
+  }
+): Promise<{ ok: boolean; id: number; po_no: string }> {
+  return put(`/api/admin/vendor-pos/${id}`, body);
+}
+
+export function deletePurchaseOrder(
+  id: number
+): Promise<{ ok: boolean; po_no: string }> {
+  return del(`/api/admin/vendor-pos/${id}`);
 }

@@ -1340,6 +1340,11 @@ body {
   color: var(--muted);
   white-space: nowrap;
 }
+.pl-toolbar-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
 .pl-table-wrap {
   overflow-x: auto;
   border: 1px solid var(--line);
@@ -2125,6 +2130,13 @@ a.btn.primary:hover {
   color: var(--navy);
   margin: 0 0 16px;
 }
+.form-section-title {
+  margin: 18px 0 10px;
+  padding-top: 4px;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--navy);
+}
 .form-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -2153,6 +2165,43 @@ a.btn.primary:hover {
 .rfq-mode-tag.edit {
   background: #fde7d6;
   color: #b5701a;
+}
+/* 보조 도구 토글 버튼 모음 — 자동입력·빠른등록을 평소엔 접어둔다 */
+.form-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.tool-btn {
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong, #d4dbe6);
+  border-radius: 7px;
+  background: #fff;
+  color: #45526a;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.tool-btn:hover {
+  background: #f0f4fa;
+  border-color: var(--blue, #2563eb);
+  color: var(--blue, #2563eb);
+}
+.tool-btn.on {
+  background: #e4edfb;
+  border-color: var(--blue, #2563eb);
+  color: #1d4ed8;
+}
+.quick-create-panel {
+  margin-bottom: 14px;
+  border: 1px solid #e6eaf0;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+.quick-create-panel .quick-create-body {
+  padding: 14px;
 }
 /* 컴팩트 OCR 업로드 바 */
 .ocr-bar {
@@ -2555,6 +2604,11 @@ table.mini th {
   color: #45526a;
   font-weight: 700;
   background: #f7fafd;
+}
+table.mini tr.sel td {
+  background: #eef5ff;
+  color: var(--navy);
+  font-weight: 700;
 }
 table.mini .num {
   text-align: right;

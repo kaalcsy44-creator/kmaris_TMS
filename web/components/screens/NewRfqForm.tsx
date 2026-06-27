@@ -7,6 +7,7 @@ import {
   createRfq,
   updateRfq,
   fetchRfqDetail,
+  deleteRfq,
   parseRfqPdf,
   createSettingsCustomer,
   createSettingsVessel,
@@ -27,11 +28,15 @@ function nowLocal(): string {
 export default function NewRfqForm({
   onCreated,
   onCancel,
+  onDeleted,
   selectedRfqId,
+  autoLoadId,
 }: {
   onCreated?: (rfqNo: string) => void;
   onCancel?: () => void;
+  onDeleted?: () => void;        // 삭제 후 콜백(있으면 삭제 버튼 표시)
   selectedRfqId?: number | null; // 상단에서 선택된 RFQ — 불러와 수정 가능
+  autoLoadId?: number | null;    // 마운트 시 해당 RFQ를 즉시 불러와 수정 모드 진입
 }) {
   const [editId, setEditId] = useState<number | null>(null); // null=신규, >0=수정
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
@@ -83,8 +88,45 @@ export default function NewRfqForm({
     reloadVessels();
   }, []);
 
+  // 상세 모달 진입 시: 지정된 RFQ를 즉시 불러와 수정 모드로 전환.
+  useEffect(() => {
+    if (autoLoadId) loadRfq(autoLoadId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoLoadId]);
+
+  async function handleDelete() {
+    if (!editId) return;
+    if (
+      !window.confirm(
+        "이 RFQ를 삭제할까요?\n연결된 Vendor RFQ/견적도 함께 삭제됩니다.\n(이미 견적·오더로 진행된 건은 삭제할 수 없습니다.)"
+      )
+    )
+      return;
+    setBusy(true);
+    setErr(null);
+    try {
+      await deleteRfq(editId);
+      onDeleted?.();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "삭제 실패");
+      setBusy(false);
+    }
+  }
+
   const custUnmatched = custHint.trim() !== "" && !matchName(custHint, customers);
   const vesselUnmatched = vesselHint.trim() !== "" && !matchName(vesselHint, vessels);
+
+  // 상단 도구(자동입력·빠른등록)는 기본 접힘 — 필요할 때만 버튼으로 펼친다.
+  const [showOcr, setShowOcr] = useState(false);
+  const [showCust, setShowCust] = useState(false);
+  const [showVessel, setShowVessel] = useState(false);
+  // OCR이 DB에 없는 Customer/선박을 인식하면 해당 빠른등록 패널을 자동으로 펼친다.
+  useEffect(() => {
+    if (custUnmatched) setShowCust(true);
+  }, [custUnmatched]);
+  useEffect(() => {
+    if (vesselUnmatched) setShowVessel(true);
+  }, [vesselUnmatched]);
 
   function setItem(i: number, key: keyof ItemRow, val: string) {
     setItems((prev) =>
@@ -116,6 +158,7 @@ export default function NewRfqForm({
         const blob = it.getAsFile();
         if (blob) {
           e.preventDefault();
+          setShowOcr(true);
           uploadOcr(blob);
         }
         return;
@@ -288,50 +331,81 @@ export default function NewRfqForm({
           </>
         )}
       </div>
-      <div className="ocr-bar">
-        <span className="ocr-bar-label">📄 RFQ 자동 입력 (PDF·이미지)</span>
-        <input
-          type="file"
-          accept="application/pdf,image/png,image/jpeg,image/webp"
-          onChange={(e) => uploadOcr(e.target.files?.[0] ?? null)}
-          disabled={ocrBusy}
-        />
-        {ocrBusy ? (
-          <span className="hint-inline">AI 분석 중…</span>
-        ) : ocrMsg ? (
-          <span className="action-ok">{ocrMsg}</span>
-        ) : (
-          <span className="hint-inline">PDF·이미지 업로드 또는 캡쳐 후 Ctrl+V 붙여넣기 → 자동 입력</span>
-        )}
+      {/* 도구 모음 — 평소엔 접혀 있고, 버튼으로 필요한 패널만 펼친다. */}
+      <div className="form-tools">
+        <button
+          type="button"
+          className={`tool-btn${showOcr ? " on" : ""}`}
+          onClick={() => setShowOcr((v) => !v)}
+        >
+          📄 자동 입력
+        </button>
+        <button
+          type="button"
+          className={`tool-btn${showCust ? " on" : ""}`}
+          onClick={() => setShowCust((v) => !v)}
+        >
+          ＋ 신규 Customer
+        </button>
+        <button
+          type="button"
+          className={`tool-btn${showVessel ? " on" : ""}`}
+          onClick={() => setShowVessel((v) => !v)}
+        >
+          ＋ 신규 선박
+        </button>
       </div>
 
-      <details className="quick-create" open={custUnmatched}>
-        <summary>신규 Customer 빠른 등록</summary>
-        <QuickCustomerCreate
-          defaultName={custHint}
-          unmatchedHint={custUnmatched ? custHint : ""}
-          onCreated={async (id) => {
-            await reloadCustomers();
-            setCustomerId(id);
-            setCustHint("");
-          }}
-        />
-      </details>
+      {showOcr ? (
+        <div className="ocr-bar">
+          <span className="ocr-bar-label">📄 RFQ 자동 입력 (PDF·이미지)</span>
+          <input
+            type="file"
+            accept="application/pdf,image/png,image/jpeg,image/webp"
+            onChange={(e) => uploadOcr(e.target.files?.[0] ?? null)}
+            disabled={ocrBusy}
+          />
+          {ocrBusy ? (
+            <span className="hint-inline">AI 분석 중…</span>
+          ) : ocrMsg ? (
+            <span className="action-ok">{ocrMsg}</span>
+          ) : (
+            <span className="hint-inline">PDF·이미지 업로드 또는 캡쳐 후 Ctrl+V 붙여넣기 → 자동 입력</span>
+          )}
+        </div>
+      ) : null}
 
-      <details className="quick-create" open={vesselUnmatched}>
-        <summary>신규 선박 빠른 등록</summary>
-        <QuickVesselCreate
-          defaultName={vesselHint}
-          unmatchedHint={vesselUnmatched ? vesselHint : ""}
-          customers={customers}
-          defaultOwnerId={customerId === "" ? undefined : customerId}
-          onCreated={async (id) => {
-            await reloadVessels();
-            setVesselId(id);
-            setVesselHint("");
-          }}
-        />
-      </details>
+      {showCust ? (
+        <div className="quick-create-panel">
+          <QuickCustomerCreate
+            defaultName={custHint}
+            unmatchedHint={custUnmatched ? custHint : ""}
+            onCreated={async (id) => {
+              await reloadCustomers();
+              setCustomerId(id);
+              setCustHint("");
+              setShowCust(false);
+            }}
+          />
+        </div>
+      ) : null}
+
+      {showVessel ? (
+        <div className="quick-create-panel">
+          <QuickVesselCreate
+            defaultName={vesselHint}
+            unmatchedHint={vesselUnmatched ? vesselHint : ""}
+            customers={customers}
+            defaultOwnerId={customerId === "" ? undefined : customerId}
+            onCreated={async (id) => {
+              await reloadVessels();
+              setVesselId(id);
+              setVesselHint("");
+              setShowVessel(false);
+            }}
+          />
+        </div>
+      ) : null}
 
       <div className="sub-h" style={{ marginTop: 16 }}>
         기본 정보
@@ -474,6 +548,11 @@ export default function NewRfqForm({
         >
           {busy ? "처리 중…" : editId ? "RFQ 수정 저장" : "RFQ 등록"}
         </button>
+        {onDeleted && editId ? (
+          <button className="btn danger" onClick={handleDelete} disabled={busy}>
+            삭제
+          </button>
+        ) : null}
         {msg ? <span className="action-ok">{msg}</span> : null}
         {err ? <span className="action-err">{err}</span> : null}
       </div>

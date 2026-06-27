@@ -1518,6 +1518,84 @@ def create_order(body: OrderCreate):
         s.close()
 
 
+class OrderUpdate(BaseModel):
+    customer_id: int | None = None
+    vessel_id: int | None = None       # 0 = 선박 미지정 해제
+    po_no: str | None = None
+    date: str | None = None
+    promised_delivery: str | None = None
+    items: list[PoWorkItem] | None = None
+
+
+@app.put("/api/admin/orders/{order_id}", dependencies=[Depends(require_token)])
+def update_order(order_id: int, body: OrderUpdate):
+    """오더 수정 — 헤더 필드 + 품목 리스트 교체."""
+    s = get_session()
+    try:
+        order = s.query(Order).filter_by(id=order_id).first()
+        if not order:
+            raise HTTPException(status_code=404, detail="오더를 찾을 수 없습니다.")
+        if body.customer_id is not None:
+            order.customer_id = body.customer_id
+        if body.vessel_id is not None:
+            order.vessel_id = body.vessel_id or None
+        if body.po_no is not None:
+            order.po_no = body.po_no.strip()
+        if body.date is not None:
+            order.date = body.date or order.date
+        if body.promised_delivery is not None:
+            order.promised_delivery = body.promised_delivery or None
+        if body.items is not None:
+            items = []
+            for it in body.items:
+                if not (it.part_no or it.description):
+                    continue
+                qty = it.qty or 1
+                unit_price = it.unit_price or 0
+                items.append({
+                    "part_no": it.part_no.strip(),
+                    "description": it.description.strip(),
+                    "maker": it.maker.strip(),
+                    "qty": qty,
+                    "unit": it.unit or "PCS",
+                    "unit_price": unit_price,
+                    "amount": it.amount if it.amount is not None else qty * unit_price,
+                })
+            order.items = items
+        s.commit()
+        return {"ok": True, "id": order.id, "ord_no": order.ord_no}
+    finally:
+        s.close()
+
+
+@app.delete("/api/admin/orders/{order_id}", dependencies=[Depends(require_token)])
+def delete_order(order_id: int):
+    """오더 삭제 — 발주서·문서·AR 등 다운스트림이 있으면 데이터 보호를 위해 거부한다."""
+    s = get_session()
+    try:
+        order = s.query(Order).filter_by(id=order_id).first()
+        if not order:
+            raise HTTPException(status_code=404, detail="오더를 찾을 수 없습니다.")
+        if s.query(PurchaseOrder).filter_by(order_id=order_id).first():
+            raise HTTPException(status_code=400,
+                detail="발주서(Vendor P/O)가 연결된 오더입니다. 먼저 발주서를 삭제하세요.")
+        if s.query(CommercialInvoice).filter_by(order_id=order_id).first() or \
+           s.query(ShippingAdvice).filter_by(order_id=order_id).first():
+            raise HTTPException(status_code=400,
+                detail="선적/송장 문서가 연결된 오더입니다. 삭제할 수 없습니다.")
+        if s.query(ARRecord).filter_by(order_id=order_id).first():
+            raise HTTPException(status_code=400,
+                detail="AR(미수금) 기록이 연결된 오더입니다. 삭제할 수 없습니다.")
+        ord_no = order.ord_no
+        # 연결된 견적 상태(수주확정)는 되돌리지 않는다(별도 화면에서 관리).
+        s.query(DeliveryProof).filter_by(order_id=order_id).delete(synchronize_session=False)
+        s.query(Order).filter_by(id=order_id).delete(synchronize_session=False)
+        s.commit()
+        return {"ok": True, "ord_no": ord_no}
+    finally:
+        s.close()
+
+
 class PurchaseOrderCreate(BaseModel):
     order_id: int
     vendor_id: int
@@ -1566,6 +1644,94 @@ def create_purchase_order(body: PurchaseOrderCreate):
         order.status = OrderStatus.PO_SENT
         s.commit()
         return {"ok": True, "id": po.id, "po_no": po.po_no}
+    finally:
+        s.close()
+
+
+class PurchaseOrderUpdate(BaseModel):
+    vendor_id: int | None = None
+    date: str | None = None
+    status: str | None = None
+    items: list[PoWorkItem] | None = None
+
+
+@app.get("/api/admin/vendor-pos/{po_id}", dependencies=[Depends(require_token)])
+def vendor_po_detail(po_id: int):
+    """Vendor P/O(발주서) 1건 상세."""
+    s = get_session()
+    try:
+        po = s.query(PurchaseOrder).filter_by(id=po_id).first()
+        if not po:
+            raise HTTPException(status_code=404, detail="발주서를 찾을 수 없습니다.")
+        order = s.query(Order).filter_by(id=po.order_id).first()
+        vendor = s.query(Vendor).filter_by(id=po.vendor_id).first()
+        return {
+            "id": po.id,
+            "po_no": po.po_no or "",
+            "order_id": po.order_id,
+            "ord_no": order.ord_no if order else "",
+            "vendor_id": po.vendor_id or 0,
+            "vendor": vendor.name if vendor else "—",
+            "vendor_email": po.sent_to_email or (vendor.email if vendor else "") or "",
+            "date": po.date or "",
+            "sent_date": po.sent_date or "",
+            "status": po.status or "",
+            "sent": po.status == "이메일 발송완료",
+            "items": [_item_view(it) for it in (po.items or [])],
+        }
+    finally:
+        s.close()
+
+
+@app.put("/api/admin/vendor-pos/{po_id}", dependencies=[Depends(require_token)])
+def update_purchase_order(po_id: int, body: PurchaseOrderUpdate):
+    """발주서 수정 — Vendor·발주일·상태·품목 교체."""
+    s = get_session()
+    try:
+        po = s.query(PurchaseOrder).filter_by(id=po_id).first()
+        if not po:
+            raise HTTPException(status_code=404, detail="발주서를 찾을 수 없습니다.")
+        if body.vendor_id is not None:
+            po.vendor_id = body.vendor_id
+        if body.date is not None:
+            po.date = body.date or po.date
+        if body.status is not None:
+            po.status = body.status.strip() or po.status
+        if body.items is not None:
+            items = []
+            for it in body.items:
+                if not (it.part_no or it.description):
+                    continue
+                qty = it.qty or 1
+                unit_price = it.unit_price or 0
+                items.append({
+                    "part_no": it.part_no.strip(),
+                    "description": it.description.strip(),
+                    "maker": it.maker.strip(),
+                    "qty": qty,
+                    "unit": it.unit or "PCS",
+                    "unit_price": unit_price,
+                    "amount": it.amount if it.amount is not None else qty * unit_price,
+                })
+            po.items = items
+        s.commit()
+        return {"ok": True, "id": po.id, "po_no": po.po_no}
+    finally:
+        s.close()
+
+
+@app.delete("/api/admin/vendor-pos/{po_id}", dependencies=[Depends(require_token)])
+def delete_purchase_order(po_id: int):
+    """발주서 삭제."""
+    s = get_session()
+    try:
+        po = s.query(PurchaseOrder).filter_by(id=po_id).first()
+        if not po:
+            raise HTTPException(status_code=404, detail="발주서를 찾을 수 없습니다.")
+        po_no = po.po_no
+        s.query(PurchaseOrder).filter_by(id=po_id).delete(synchronize_session=False)
+        s.commit()
+        return {"ok": True, "po_no": po_no}
     finally:
         s.close()
 
@@ -3437,6 +3603,136 @@ def create_vendor_rfq(rfq_id: int, body: VendorRfqCreate):
         s.close()
 
 
+class VendorRfqUpdate(BaseModel):
+    vrfq_no: str | None = None
+    vendor_id: int | None = None
+    sent_date: str | None = None
+    sent_at: str | None = None
+    sent_to_email: str | None = None
+    status: str | None = None
+    items: list[dict] | None = None
+
+
+@app.get("/api/admin/vendor-rfq/{vrfq_id}", dependencies=[Depends(require_token)])
+def vendor_rfq_detail(vrfq_id: int):
+    """Vendor RFQ(발신) 1건 상세."""
+    s = get_session()
+    try:
+        vr = s.query(VendorRFQ).filter_by(id=vrfq_id).first()
+        if not vr:
+            raise HTTPException(status_code=404, detail="Vendor RFQ를 찾을 수 없습니다.")
+        vendor = s.query(Vendor).filter_by(id=vr.vendor_id).first()
+        rfq = s.query(RFQ).filter_by(id=vr.rfq_id).first() if vr.rfq_id else None
+        customer = s.query(Customer).filter_by(id=rfq.customer_id).first() if rfq else None
+        vessel = s.query(Vessel).filter_by(id=rfq.vessel_id).first() if rfq and rfq.vessel_id else None
+        vendor_names = {v.id: v.name for v in s.query(Vendor).all()}
+        vendor_emails = {v.id: (v.email or "") for v in s.query(Vendor).all()}
+        quote_count = s.query(VendorQuote).filter_by(vendor_rfq_id=vr.id).count()
+        sibling_vrfqs = []
+        if rfq:
+            quote_counts: dict[int, int] = {}
+            for q in s.query(VendorQuote).filter(VendorQuote.vendor_rfq_id.in_(
+                [x.id for x in s.query(VendorRFQ).filter_by(rfq_id=rfq.id).all()]
+            )).all():
+                quote_counts[q.vendor_rfq_id] = quote_counts.get(q.vendor_rfq_id, 0) + 1
+            for x in s.query(VendorRFQ).filter_by(rfq_id=rfq.id).order_by(VendorRFQ.id.desc()).all():
+                sibling_vrfqs.append({
+                    "id": x.id,
+                    "vrfq_no": x.vrfq_no,
+                    "vendor": vendor_names.get(x.vendor_id, "—"),
+                    "vendor_email": x.sent_to_email or vendor_emails.get(x.vendor_id, "") or "",
+                    "sent_at": x.sent_at or "",
+                    "status": x.status or "",
+                    "quote_count": quote_counts.get(x.id, 0),
+                    "current": x.id == vr.id,
+                })
+        return {
+            "id": vr.id,
+            "vrfq_no": vr.vrfq_no,
+            "rfq_id": vr.rfq_id,
+            "customer_rfq_no": rfq.customer_rfq_no if rfq else "",
+            "kmaris_rfq_no": _rfq_no_disp(rfq.rfq_no) if rfq else "",
+            "customer": customer.name if customer else "",
+            "customer_contact": getattr(customer, "contact", "") if customer else "",
+            "customer_email": getattr(customer, "email", "") if customer else "",
+            "vessel": vessel.name if vessel else "—",
+            "project_title": rfq.project_title if rfq else "",
+            "work_type": rfq.work_type if rfq else "",
+            "received_at": rfq.received_at if rfq else "",
+            "vendor_id": vr.vendor_id or 0,
+            "vendor": vendor.name if vendor else "—",
+            "vendor_email": vr.sent_to_email or (vendor.email if vendor else "") or "",
+            "sent_date": vr.sent_date or "",
+            "sent_at": vr.sent_at or "",
+            "status": vr.status or "",
+            "quote_count": quote_count,
+            "items": [_item_view(it) for it in (vr.items or [])],
+            "project_vendor_rfqs": sibling_vrfqs,
+        }
+    finally:
+        s.close()
+
+
+@app.put("/api/admin/vendor-rfq/{vrfq_id}", dependencies=[Depends(require_token)])
+def update_vendor_rfq(vrfq_id: int, body: VendorRfqUpdate):
+    """Vendor RFQ 수정 — Vendor·발신정보·상태·품목 교체."""
+    s = get_session()
+    try:
+        vr = s.query(VendorRFQ).filter_by(id=vrfq_id).first()
+        if not vr:
+            raise HTTPException(status_code=404, detail="Vendor RFQ를 찾을 수 없습니다.")
+        if body.vrfq_no is not None:
+            no = body.vrfq_no.strip()
+            if not no:
+                raise HTTPException(status_code=400, detail="VRFQ No.를 입력하세요.")
+            dup = s.query(VendorRFQ).filter(VendorRFQ.vrfq_no == no, VendorRFQ.id != vrfq_id).first()
+            if dup:
+                raise HTTPException(status_code=400, detail="이미 사용 중인 VRFQ No.입니다.")
+            vr.vrfq_no = no
+        if body.vendor_id is not None:
+            vr.vendor_id = body.vendor_id
+        if body.sent_to_email is not None:
+            vr.sent_to_email = body.sent_to_email.strip()
+        if body.status is not None:
+            vr.status = body.status.strip() or vr.status
+        if body.sent_at is not None:
+            vr.sent_at = body.sent_at.strip()
+            if body.sent_at.strip():
+                vr.sent_date = body.sent_at.strip()[:10]
+        if body.sent_date is not None:
+            vr.sent_date = body.sent_date.strip()
+        if body.items is not None:
+            vr.items = [{
+                "part_no": (it.get("part_no") or "").strip(),
+                "description": (it.get("description") or "").strip(),
+                "qty": it.get("qty", 1) or 1,
+                "unit": (it.get("unit") or "").strip(),
+            } for it in body.items if (it.get("part_no") or it.get("description"))]
+        s.commit()
+        return {"ok": True, "vrfq_no": vr.vrfq_no}
+    finally:
+        s.close()
+
+
+@app.delete("/api/admin/vendor-rfq/{vrfq_id}", dependencies=[Depends(require_token)])
+def delete_vendor_rfq(vrfq_id: int):
+    """Vendor RFQ 삭제 — 수신된 Vendor 견적이 있으면 거부한다."""
+    s = get_session()
+    try:
+        vr = s.query(VendorRFQ).filter_by(id=vrfq_id).first()
+        if not vr:
+            raise HTTPException(status_code=404, detail="Vendor RFQ를 찾을 수 없습니다.")
+        if s.query(VendorQuote).filter_by(vendor_rfq_id=vrfq_id).first():
+            raise HTTPException(status_code=400,
+                detail="수신된 Vendor 견적이 있는 Vendor RFQ 입니다. 먼저 견적을 삭제하세요.")
+        vrfq_no = vr.vrfq_no
+        s.query(VendorRFQ).filter_by(id=vrfq_id).delete(synchronize_session=False)
+        s.commit()
+        return {"ok": True, "vrfq_no": vrfq_no}
+    finally:
+        s.close()
+
+
 class VendorQuoteCreate(BaseModel):
     vendor_rfq_id: int
     vendor_quote_no: str
@@ -3555,6 +3851,84 @@ def rfq_vendor_quotes(rfq_id: int):
                 "items": q.items or [],
             })
         return {"vendor_quotes": out}
+    finally:
+        s.close()
+
+
+class VendorQuoteUpdate(BaseModel):
+    vendor_quote_no: str | None = None
+    received_date: str | None = None
+    received_at: str | None = None
+    notes: str | None = None
+    items: list[dict] | None = None
+
+
+@app.get("/api/admin/vendor-quote/{vq_id}", dependencies=[Depends(require_token)])
+def vendor_quote_detail(vq_id: int):
+    """Vendor Quote(수신 견적) 1건 상세 — 원본 품목(cost_price 등) 포함."""
+    s = get_session()
+    try:
+        q = s.query(VendorQuote).filter_by(id=vq_id).first()
+        if not q:
+            raise HTTPException(status_code=404, detail="Vendor 견적을 찾을 수 없습니다.")
+        vr = s.query(VendorRFQ).filter_by(id=q.vendor_rfq_id).first()
+        vendor = s.query(Vendor).filter_by(id=vr.vendor_id).first() if vr else None
+        rfq = s.query(RFQ).filter_by(id=vr.rfq_id).first() if vr and vr.rfq_id else None
+        return {
+            "id": q.id,
+            "vendor_quote_no": q.vendor_quote_no or "",
+            "vendor_rfq_id": q.vendor_rfq_id,
+            "vrfq_no": vr.vrfq_no if vr else "—",
+            "rfq_id": vr.rfq_id if vr else None,
+            "customer_rfq_no": _rfq_no_disp(rfq.rfq_no) if rfq else "",
+            "vendor": vendor.name if vendor else "—",
+            "received_date": q.received_date or "",
+            "received_at": q.received_at or "",
+            "notes": q.notes or "",
+            "currency": getattr(q, "currency", None) or "USD",
+            "items": q.items or [],
+        }
+    finally:
+        s.close()
+
+
+@app.put("/api/admin/vendor-quote/{vq_id}", dependencies=[Depends(require_token)])
+def update_vendor_quote(vq_id: int, body: VendorQuoteUpdate):
+    """Vendor Quote 수정 — 견적번호·수신일시·비고·품목 교체."""
+    s = get_session()
+    try:
+        q = s.query(VendorQuote).filter_by(id=vq_id).first()
+        if not q:
+            raise HTTPException(status_code=404, detail="Vendor 견적을 찾을 수 없습니다.")
+        if body.vendor_quote_no is not None:
+            q.vendor_quote_no = body.vendor_quote_no.strip()
+        if body.notes is not None:
+            q.notes = body.notes
+        if body.received_at is not None and body.received_at.strip():
+            q.received_at = body.received_at.strip()
+            q.received_date = body.received_at.strip()[:10]
+        elif body.received_date is not None:
+            q.received_date = body.received_date.strip()
+        if body.items is not None:
+            q.items = body.items
+        s.commit()
+        return {"ok": True, "vendor_quote_no": q.vendor_quote_no}
+    finally:
+        s.close()
+
+
+@app.delete("/api/admin/vendor-quote/{vq_id}", dependencies=[Depends(require_token)])
+def delete_vendor_quote(vq_id: int):
+    """Vendor Quote 삭제."""
+    s = get_session()
+    try:
+        q = s.query(VendorQuote).filter_by(id=vq_id).first()
+        if not q:
+            raise HTTPException(status_code=404, detail="Vendor 견적을 찾을 수 없습니다.")
+        no = q.vendor_quote_no or ""
+        s.query(VendorQuote).filter_by(id=vq_id).delete(synchronize_session=False)
+        s.commit()
+        return {"ok": True, "vendor_quote_no": no}
     finally:
         s.close()
 
@@ -3704,6 +4078,7 @@ class RfqUpdate(BaseModel):
     customer_id: int | None = None
     vessel_id: int | None = None        # 0 → 선박 미지정으로 해제
     customer_rfq_no: str | None = None
+    rfq_no: str | None = None           # K-Maris RFQ No. 수동 수정(빈값이면 변경 안 함)
     contact_person: str | None = None
     project_title: str | None = None
     work_type: str | None = None
@@ -3736,6 +4111,13 @@ def update_rfq(rfq_id: int, body: RfqUpdate):
                 rfq.vessel_id = body.vessel_id
         if body.customer_rfq_no is not None:
             rfq.customer_rfq_no = body.customer_rfq_no.strip() or None
+        if body.rfq_no is not None:
+            new_no = body.rfq_no.strip()
+            if new_no and new_no != rfq.rfq_no:
+                dup = s.query(RFQ).filter(RFQ.rfq_no == new_no, RFQ.id != rfq_id).first()
+                if dup:
+                    raise HTTPException(status_code=400, detail=f"이미 존재하는 RFQ No.입니다: {new_no}")
+                rfq.rfq_no = new_no
         if body.contact_person is not None:
             rfq.contact_person = body.contact_person.strip() or None
         if body.project_title is not None:
@@ -4019,6 +4401,92 @@ def create_customer_quote(rfq_id: int, body: CustomerQuoteCreate):
         s.add(qtn)
         s.commit()
         return {"ok": True, "id": qtn.id, "qtn_no": qtn_no}
+    finally:
+        s.close()
+
+
+class CustomerQuoteUpdate(BaseModel):
+    currency: str | None = None
+    items: list[dict] | None = None
+    valid_until: str | None = None
+    status: str | None = None
+    terms: dict | None = None
+
+
+@app.get("/api/admin/quotation/{qtn_id}", dependencies=[Depends(require_token)])
+def customer_quotation_detail(qtn_id: int):
+    """Customer Quotation 1건 상세 — 원본 품목(cost/margin 등)·거래조건 포함."""
+    s = get_session()
+    try:
+        qtn = s.query(Quotation).filter_by(id=qtn_id).first()
+        if not qtn:
+            raise HTTPException(status_code=404, detail="견적서를 찾을 수 없습니다.")
+        cust = s.query(Customer).filter_by(id=qtn.customer_id).first()
+        vessel = s.query(Vessel).filter_by(id=qtn.vessel_id).first() if qtn.vessel_id else None
+        rfq = s.query(RFQ).filter_by(id=qtn.rfq_id).first() if qtn.rfq_id else None
+        return {
+            "id": qtn.id,
+            "qtn_no": qtn.qtn_no,
+            "rfq_id": qtn.rfq_id,
+            "rfq_no": _rfq_no_disp(rfq.rfq_no) if rfq else "",
+            "customer": cust.name if cust else "—",
+            "vessel": vessel.name if vessel else "",
+            "currency": qtn.currency or "USD",
+            "amount": round(_quotation_total(qtn.items or []), 2),
+            "valid_until": qtn.valid_until or "",
+            "status": _enum_val(qtn.status),
+            "level": _enum_val(qtn.follow_up_level) if qtn.follow_up_level else "",
+            "sent_date": qtn.sent_date or "",
+            "date": qtn.date or "",
+            "terms": qtn.terms or {},
+            "items": qtn.items or [],
+        }
+    finally:
+        s.close()
+
+
+@app.put("/api/admin/quotation/{qtn_id}", dependencies=[Depends(require_token)])
+def update_customer_quotation(qtn_id: int, body: CustomerQuoteUpdate):
+    """Customer Quotation 수정 — 통화·유효기간·상태·거래조건·품목 교체."""
+    s = get_session()
+    try:
+        qtn = s.query(Quotation).filter_by(id=qtn_id).first()
+        if not qtn:
+            raise HTTPException(status_code=404, detail="견적서를 찾을 수 없습니다.")
+        if body.currency is not None:
+            qtn.currency = body.currency or "USD"
+        if body.valid_until is not None:
+            qtn.valid_until = body.valid_until or None
+        if body.terms is not None:
+            qtn.terms = body.terms
+        if body.items is not None:
+            qtn.items = body.items
+        if body.status is not None and body.status.strip():
+            try:
+                qtn.status = QuotationStatus(body.status.strip())
+            except ValueError:
+                pass
+        s.commit()
+        return {"ok": True, "qtn_no": qtn.qtn_no}
+    finally:
+        s.close()
+
+
+@app.delete("/api/admin/quotation/{qtn_id}", dependencies=[Depends(require_token)])
+def delete_customer_quotation(qtn_id: int):
+    """Customer Quotation 삭제 — 오더로 진행된 견적은 거부한다."""
+    s = get_session()
+    try:
+        qtn = s.query(Quotation).filter_by(id=qtn_id).first()
+        if not qtn:
+            raise HTTPException(status_code=404, detail="견적서를 찾을 수 없습니다.")
+        if s.query(Order).filter_by(quotation_id=qtn_id).first():
+            raise HTTPException(status_code=400,
+                detail="이미 오더로 진행된 견적입니다. 삭제할 수 없습니다.")
+        qtn_no = qtn.qtn_no
+        s.query(Quotation).filter_by(id=qtn_id).delete(synchronize_session=False)
+        s.commit()
+        return {"ok": True, "qtn_no": qtn_no}
     finally:
         s.close()
 
