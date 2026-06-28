@@ -470,7 +470,7 @@ export type DocumentDetail = {
     work_type: string;
     vendor: string;
     trade_type: string;
-    service_info: Record<string, Record<string, string>>;
+    service_info: Record<string, Record<string, unknown>>;
     tracking_token: string;
     consignee_confirmed_date: string;
     vendor_docs_sent_date: string;

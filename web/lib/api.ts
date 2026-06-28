@@ -346,7 +346,7 @@ export function saveCommercialInvoice(
 export function saveServiceStage(
   orderId: number,
   stage: number,
-  data: Record<string, string>,
+  data: Record<string, unknown>,
   complete = true
 ): Promise<{ ok: boolean }> {
   return post(`/api/admin/documents/${orderId}/service`, { stage, data, complete });
@@ -386,6 +386,7 @@ export function saveTaxInvoice(
     supply_type: string;
     buyer_business_no: string;
     vat_rate: number;
+    items?: DocumentWorkItem[];
   }
 ): Promise<{ ok: boolean; id: number; tax_no: string; ar_id: number }> {
   return post(`/api/admin/documents/${orderId}/tax`, body);

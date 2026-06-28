@@ -27,6 +27,7 @@ import FilterTable, { ColumnDef } from "@/components/common/FilterTable";
 import { identityColumns, projectNoColumn } from "@/components/common/identityColumns";
 import Modal from "@/components/common/Modal";
 import { ModalTitle } from "@/components/common/BaseMeta";
+import CurrencyToggle from "@/components/common/CurrencyToggle";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -581,7 +582,7 @@ function ServiceStageForm({
   const hasSaved = !!data.order.service_info?.[String(svc)];
   const [form, setForm] = useState<Record<string, string>>(() => {
     const init: Record<string, string> = {};
-    for (const f of fields) init[f.key] = saved[f.key] ?? "";
+    for (const f of fields) init[f.key] = String(saved[f.key] ?? "");
     return init;
   });
   const done = Boolean(data.stage_done[String(svc) as "7" | "8" | "9"]) || (svc === 9 && !!data.pod);
@@ -658,19 +659,26 @@ function ServiceStageForm({
 // 서비스 10단계 — 청구 요금 내역 입력 → 저장 시 AR 레코드 자동 생성.
 function ServiceBillingForm({ data, onChanged, onClose }: { data: DocumentDetail; onChanged: () => void; onClose: () => void }) {
   const saved = data.order.service_info?.["10"] ?? {};
-  const [labor, setLabor] = useState(saved.labor_cost ?? "");
-  const [travel, setTravel] = useState(saved.travel_cost ?? "");
-  const [material, setMaterial] = useState(saved.material_cost ?? "");
-  const [other, setOther] = useState(saved.other_cost ?? "");
-  const [currency, setCurrency] = useState(saved.currency ?? "USD");
-  const [vatRate, setVatRate] = useState(saved.vat_rate ?? "0");
+  const savedText = (key: string, fallback = "") => String(saved[key] ?? fallback);
+  const savedItems = Array.isArray(saved.items) ? (saved.items as DocumentWorkItem[]) : [];
+  const [labor, setLabor] = useState(savedText("labor_cost"));
+  const [travel, setTravel] = useState(savedText("travel_cost"));
+  const [material, setMaterial] = useState(savedText("material_cost"));
+  const [other, setOther] = useState(savedText("other_cost"));
+  const [currency, setCurrency] = useState(savedText("currency", "USD"));
+  const [vatRate, setVatRate] = useState(savedText("vat_rate", "0"));
+  const [items, setItems] = useState<DocumentWorkItem[]>(
+    normalizeItems(savedItems.length ? savedItems : data.order.items)
+  );
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  const total = useMemo(
+  const itemTotal = useMemo(() => items.reduce((sum, item) => sum + num(item.amount), 0), [items]);
+  const extraTotal = useMemo(
     () => num(labor) + num(travel) + num(material) + num(other),
     [labor, travel, material, other]
   );
+  const total = itemTotal + extraTotal;
   const billed = !!data.order.service_info?.["10"];
 
   async function save() {
@@ -684,6 +692,7 @@ function ServiceBillingForm({ data, onChanged, onClose }: { data: DocumentDetail
         other_cost: other,
         currency,
         vat_rate: vatRate,
+        items,
       });
       onChanged();
     } catch (e) {
@@ -714,12 +723,19 @@ function ServiceBillingForm({ data, onChanged, onClose }: { data: DocumentDetail
         <span className={`ar-badge${billed ? "" : " overdue"}`}>{billed ? "Billed" : "Pending"}</span>
       </div>
       <div className="form-grid">
+        <label className="form-field">
+          <span>Currency</span>
+          <CurrencyToggle value={currency} onChange={setCurrency} />
+        </label>
+        <Field label="VAT Rate" value={String(vatRate)} onChange={setVatRate} type="number" />
+      </div>
+      <ItemEditor items={items} setItems={setItems} packing={false} />
+      <div className="sub-h" style={{ marginTop: 14 }}>Additional cost</div>
+      <div className="form-grid">
         <Field label="Labor cost" value={String(labor)} onChange={setLabor} type="number" />
         <Field label="Travel cost" value={String(travel)} onChange={setTravel} type="number" />
         <Field label="Material cost" value={String(material)} onChange={setMaterial} type="number" />
         <Field label="Other cost" value={String(other)} onChange={setOther} type="number" />
-        <Field label="Currency" value={currency} onChange={setCurrency} />
-        <Field label="VAT Rate" value={String(vatRate)} onChange={setVatRate} type="number" />
       </div>
       <div className="form-actions" style={{ marginTop: 14 }}>
         <button className="btn primary" disabled={busy || data.order.id === 0} onClick={save}>
@@ -1118,7 +1134,10 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
     <div className="doc-tab">
       <div className="form-grid">
         <Field label="CI Date" value={date} onChange={setDate} type="date" />
-        <Field label="Currency" value={currency} onChange={setCurrency} />
+        <label className="form-field">
+          <span>Currency</span>
+          <CurrencyToggle value={currency} onChange={setCurrency} />
+        </label>
         <Field label="VAT Rate" value={String(vatRate)} onChange={(v) => setVatRate(num(v))} type="number" />
       </div>
       <ShippingFields shipping={shipping} setShipping={setShipping} />
@@ -1267,7 +1286,10 @@ function TaxInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChanged: (
   const [supplyType, setSupplyType] = useState("Export / Zero-rated");
   const [buyerNo, setBuyerNo] = useState(data.order.customer_tax_id || "");
   const [vatRate, setVatRate] = useState(0);
+  const [items, setItems] = useState<DocumentWorkItem[]>(normalizeItems(data.tax?.items || data.ci?.items || data.order.items));
   const [busy, setBusy] = useState(false);
+  const currency = data.ci?.currency || "USD";
+  const total = useMemo(() => items.reduce((sum, item) => sum + num(item.amount), 0), [items]);
 
   async function save() {
     setBusy(true);
@@ -1277,6 +1299,7 @@ function TaxInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChanged: (
         supply_type: supplyType,
         buyer_business_no: buyerNo,
         vat_rate: vatRate,
+        items,
       });
       onChanged();
     } finally {
@@ -1296,11 +1319,13 @@ function TaxInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChanged: (
         <Field label="Buyer Business No." value={buyerNo} onChange={setBuyerNo} />
         <Field label="VAT Rate" value={String(vatRate)} onChange={(v) => setVatRate(num(v))} type="number" />
       </div>
+      <ItemEditor items={items} setItems={setItems} packing={false} />
       <div className="form-actions">
         <button className="btn primary" disabled={busy} onClick={save}>
           Create Tax Invoice Data + register AR
         </button>
         <DownloadButton orderId={data.order.id} kind="tax/xlsx" disabled={!data.tax} label="Download Tax XLSX" />
+        <span className="hint-inline">Total {currency} {total.toLocaleString()}</span>
       </div>
     </div>
   );

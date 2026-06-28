@@ -22,6 +22,7 @@ import FilterTable, { ColumnDef } from "@/components/common/FilterTable";
 import { identityColumns, projectNoColumn, fmtRfqDateTime } from "@/components/common/identityColumns";
 import Modal from "@/components/common/Modal";
 import { ModalTitle } from "@/components/common/BaseMeta";
+import CurrencyToggle from "@/components/common/CurrencyToggle";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -393,7 +394,10 @@ function TaxIssueModal({
       <div className="form-grid">
         <Field label="CI No." value={ciNo} onChange={setCiNo} />
         <Field label="Invoice amount" value={String(invoice)} onChange={(v) => setInvoice(num(v))} type="number" />
-        <Field label="Currency" value={currency} onChange={setCurrency} />
+        <label className="form-field">
+          <span>Currency</span>
+          <CurrencyToggle value={currency} onChange={setCurrency} />
+        </label>
         <Field label="Due date" value={dueDate} onChange={setDueDate} type="date" />
         <Field label="Notes" value={notes} onChange={setNotes} />
       </div>
@@ -565,7 +569,10 @@ function ArAddForm({
         <Field label="CI No." value={form.ci_no} onChange={(v) => setForm({ ...form, ci_no: v })} />
         <Field label="Invoice amount" value={String(form.invoice_amount)} onChange={(v) => setForm({ ...form, invoice_amount: num(v) })} type="number" />
         <Field label="Paid amount" value={String(form.paid_amount)} onChange={(v) => setForm({ ...form, paid_amount: num(v) })} type="number" />
-        <Field label="Currency" value={form.currency} onChange={(v) => setForm({ ...form, currency: v })} />
+        <label className="form-field">
+          <span>Currency</span>
+          <CurrencyToggle value={form.currency} onChange={(v) => setForm({ ...form, currency: v })} />
+        </label>
         <Field label="Due date" value={form.due_date} onChange={(v) => setForm({ ...form, due_date: v })} type="date" />
         <label className="form-field">
           <span>Status</span>

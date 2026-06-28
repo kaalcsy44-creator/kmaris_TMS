@@ -2968,6 +2968,7 @@ class TaxInvoiceSave(BaseModel):
     supply_type: str = "Export / Zero-rated"
     buyer_business_no: str = ""
     vat_rate: float = 0.0
+    items: list[dict] = []
 
 
 @app.get("/api/admin/documents/{order_id}", dependencies=[Depends(require_token)])
@@ -3020,7 +3021,8 @@ def save_service_stage(order_id: int, body: ServiceStageSave):
                 except (TypeError, ValueError):
                     return 0.0
             d = body.data or {}
-            total = sum(_f(d.get(k)) for k in ("labor_cost", "travel_cost", "material_cost", "other_cost"))
+            service_items = d.get("items") if isinstance(d.get("items"), list) else []
+            total = _total_amount(service_items) + sum(_f(d.get(k)) for k in ("labor_cost", "travel_cost", "material_cost", "other_cost"))
             ar = s.query(ARRecord).filter_by(order_id=order.id).first()
             if not ar:
                 ar = ARRecord(order_id=order.id, ci_no="",
@@ -3284,21 +3286,22 @@ def save_tax_invoice(order_id: int, body: TaxInvoiceSave):
             )
             s.add(tax)
         tax.date = body.date or tax.date or date.today().isoformat()
-        tax.items = ci.items or []
+        tax.items = body.items or ci.items or []
 
         ar = s.query(ARRecord).filter_by(order_id=order.id, ci_no=ci.ci_no).first()
+        invoice_amount = _total_amount(tax.items or [])
         if not ar:
             ar = ARRecord(
                 order_id=order.id,
                 ci_no=ci.ci_no,
-                invoice_amount=_total_amount(ci.items or []),
+                invoice_amount=invoice_amount,
                 paid_amount=0.0,
                 currency=ci.currency or "USD",
                 status=ARStatus.OUTSTANDING,
             )
             s.add(ar)
         else:
-            ar.invoice_amount = _total_amount(ci.items or [])
+            ar.invoice_amount = invoice_amount
             ar.currency = ci.currency or "USD"
         s.commit()
         return {"ok": True, "id": tax.id, "tax_no": tax.tax_no, "ar_id": ar.id}
@@ -3321,7 +3324,7 @@ def tax_invoice_xlsx(order_id: int):
             doc_no=tax.tax_no, date=tax.date,
             customer=cust,
             vessel=_vessel_for_order(s, order),
-            items=ci.items or [], terms={},
+            items=tax.items or [], terms={},
             currency="KRW", vat_rate=0.0,
             tax_invoice={
                 "issue_date": tax.date,

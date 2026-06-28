@@ -54,6 +54,7 @@ import FilterTable, { ColumnDef } from "./common/FilterTable";
 import { identityColumns, projectNoColumn } from "./common/identityColumns";
 import Modal from "./common/Modal";
 import BaseMetaRows, { ModalTitle } from "./common/BaseMeta";
+import CurrencyToggle from "./common/CurrencyToggle";
 
 /** 현재 시각 "YYYY-MM-DDTHH:MM" (datetime-local 기본값). */
 function nowLocalDt(): string {
@@ -1079,12 +1080,7 @@ function CustomerQuoteDetailModal({
           <div className="form-grid">
             <div className="form-field">
               <label>Currency</label>
-              <select value={currency} onChange={(e) => setCurrency(e.target.value)}>
-                <option>USD</option>
-                <option>EUR</option>
-                <option>KRW</option>
-                <option>SGD</option>
-              </select>
+              <CurrencyToggle value={currency} onChange={setCurrency} />
             </div>
             <div className="form-field">
               <label>Valid until</label>
@@ -1972,12 +1968,7 @@ function CustomerQuoteAction({
       <div className="form-grid">
         <div className="form-field">
           <label>Currency</label>
-          <select value={currency} onChange={(e) => setCurrency(e.target.value)}>
-            <option>USD</option>
-            <option>EUR</option>
-            <option>KRW</option>
-            <option>SGD</option>
-          </select>
+          <CurrencyToggle value={currency} onChange={setCurrency} />
         </div>
         <div className="form-field">
           <label>Valid until</label>
