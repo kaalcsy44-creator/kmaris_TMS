@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 // 공용 모달 — Progress 상세 모달과 동일한 pl-modal* 스타일을 재사용한다.
 // 신규 등록 폼·상세(보기/수정) 양쪽에서 사용. 배경 클릭/ESC 로 닫힌다.
@@ -15,6 +15,8 @@ export default function Modal({
   wide?: boolean;
   children: React.ReactNode;
 }) {
+  const backdropMouseDown = useRef(false);
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") onClose();
@@ -23,8 +25,24 @@ export default function Modal({
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  function onBackdropMouseDown(e: React.MouseEvent<HTMLDivElement>) {
+    backdropMouseDown.current = e.target === e.currentTarget;
+  }
+
+  function onBackdropClick(e: React.MouseEvent<HTMLDivElement>) {
+    if (backdropMouseDown.current && e.target === e.currentTarget) {
+      onClose();
+    }
+    backdropMouseDown.current = false;
+  }
+
   return (
-    <div className="pl-modal-backdrop" onClick={onClose} role="presentation">
+    <div
+      className="pl-modal-backdrop"
+      onMouseDown={onBackdropMouseDown}
+      onClick={onBackdropClick}
+      role="presentation"
+    >
       <div
         className="pl-modal"
         style={wide ? { maxWidth: 1120 } : undefined}

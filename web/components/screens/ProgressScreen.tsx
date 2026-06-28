@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -643,6 +643,7 @@ function PipelineModal({
   onClose: () => void;
 }) {
   const router = useRouter();
+  const backdropMouseDown = useRef(false);
   const canEdit = can("rfq", "edit");
   const canDelete = can("rfq", "delete");
   const [deleting, setDeleting] = useState(false);
@@ -739,6 +740,17 @@ function PipelineModal({
   const isService = (r.work_type || "부품공급") === "서비스";
 
   // 단계 번호 → 해당 단계 작업 화면 링크. 오더가 필요한 5~12단계는 오더 없으면 null(비활성).
+  function onBackdropMouseDown(e: React.MouseEvent<HTMLDivElement>) {
+    backdropMouseDown.current = e.target === e.currentTarget;
+  }
+
+  function onBackdropClick(e: React.MouseEvent<HTMLDivElement>) {
+    if (backdropMouseDown.current && e.target === e.currentTarget) {
+      onClose();
+    }
+    backdropMouseDown.current = false;
+  }
+
   function stageHref(no: number): string | null {
     const view = isService ? "service" : "parts";
     if (no <= 4) {
@@ -760,7 +772,8 @@ function PipelineModal({
   return (
     <div
       className={`pl-modal-backdrop${isService ? " service" : ""}`}
-      onClick={onClose}
+      onMouseDown={onBackdropMouseDown}
+      onClick={onBackdropClick}
       role="presentation"
     >
       <div
