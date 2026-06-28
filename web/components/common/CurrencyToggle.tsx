@@ -11,17 +11,12 @@ export default function CurrencyToggle({
 }) {
   const selected = value || "USD";
   return (
-    <div className="seg-tabs currency-toggle">
+    <select className="currency-select" value={selected} onChange={(e) => onChange(e.target.value)}>
       {CURRENCIES.map((currency) => (
-        <button
-          key={currency}
-          type="button"
-          className={selected === currency ? "on" : ""}
-          onClick={() => onChange(currency)}
-        >
+        <option key={currency} value={currency}>
           {currency}
-        </button>
+        </option>
       ))}
-    </div>
+    </select>
   );
 }
