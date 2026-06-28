@@ -363,6 +363,37 @@ def _fmt_received(iso: str) -> str:
     return f"{iso[2:10]} {iso[11:16]}"
 
 
+def _first_rfq_iso(rfq) -> str:
+    """RFQ 최초 수신 일시(iso 'YYYY-MM-DDTHH:MM') — 수동 received_at 우선, 없으면 생성시각.
+    모든 단계 목록의 공통 식별 컬럼('First RFQ at')에서 정렬·필터·표시에 쓴다."""
+    if not rfq:
+        return ""
+    return (getattr(rfq, "received_at", None) or "") or _kst_iso(rfq.created_at)
+
+
+def _project_no_map(s) -> dict[int, str]:
+    """프로젝트(=RFQ)별 내부 관리번호 {rfq_id: 'yymmdd-nn'}.
+    최초 RFQ 수신 일시 기준으로, 같은 날짜 안에서 수신 순서대로 01,02,… 부여한다.
+    (수신 일시 동률은 RFQ id 순. 저장값이 아니라 매 조회 시 결정적으로 산출.)
+    같은 세션 안에서는 한 번만 계산하고 캐시한다(요청마다 세션은 새로 생성)."""
+    cached = getattr(s, "_proj_no_cache", None)
+    if cached is not None:
+        return cached
+    triples = [(_first_rfq_iso(r), r.id) for r in s.query(RFQ).all()]
+    triples.sort(key=lambda t: (t[0] or "9999-99-99T99:99", t[1]))
+    counters: dict[str, int] = {}
+    out: dict[int, str] = {}
+    for iso, rid in triples:
+        yymmdd = (iso[2:4] + iso[5:7] + iso[8:10]) if len(iso) >= 10 else "000000"
+        counters[yymmdd] = counters.get(yymmdd, 0) + 1
+        out[rid] = f"{yymmdd}-{counters[yymmdd]:02d}"
+    try:
+        s._proj_no_cache = out
+    except Exception:
+        pass
+    return out
+
+
 def _vrfq_sent_iso(v) -> str:
     """Vendor RFQ 발신 일시(iso) — 수동 입력(sent_at) 우선, 없으면 생성 시각."""
     return (getattr(v, "sent_at", None) or "") or _kst_iso(v.created_at)
@@ -545,6 +576,8 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
                 "vessel_id": r.vessel_id or 0,
                 "project_title": getattr(r, "project_title", None) or "",
                 "received_at": getattr(r, "received_at", None) or "",
+                "first_rfq_at": _first_rfq_iso(r),
+                "project_no": _project_no_map(s).get(r.id, ""),
                 # 담당자 = RFQ를 시스템에 등록한 내부 직원(created_by). 없으면 빈값.
                 "assignee": user_names.get(getattr(r, "created_by", None), "") or "",
                 "item_count": len((o.items if o else None) or r.items or []),
@@ -648,6 +681,8 @@ def rfq_overview(customer_id: int | None = None, work_type: str | None = None):
                 "item_count": len(r.items or []),
                 "crfq_no": _rfq_no_disp(r.rfq_no),
                 "crfq_at": _fmt_received(getattr(r, "received_at", None) or "") or _kst(r.created_at),
+                "first_rfq_at": _first_rfq_iso(r),
+                "project_no": _project_no_map(s).get(r.id, ""),
                 # K-Maris RFQ No.는 Vendor RFQ 발신 시점에 부여된다. 발신한 거래에서만 표시.
                 "vrfq_kmaris_no": (_rfq_no_disp(r.rfq_no) if vrfqs else ""),
                 "vrfq_vendors": vrfq_vendors,
@@ -913,6 +948,8 @@ def rfq_detail(rfq_id: int):
             "project_title": getattr(r, "project_title", None) or "",
             "work_type": _enum_val(r.work_type) if r.work_type else "부품공급",
             "received_at": getattr(r, "received_at", None) or "",
+            "first_rfq_at": _first_rfq_iso(r),
+            "project_no": _project_no_map(s).get(r.id, ""),
             "date": r.date or "",
             "notes": r.notes or "",
             "follow_up_level": _enum_val(r.follow_up_level) if r.follow_up_level else "B",
@@ -1243,6 +1280,8 @@ def order_detail(order_id: int):
             "rfq_no": _rfq_no_disp(rfq.rfq_no) if rfq else "",
             "customer_rfq_no": (rfq.customer_rfq_no or _rfq_no_disp(rfq.rfq_no)) if rfq else "",
             "quotation_no": qtn.qtn_no if qtn else "",
+            "project_no": _project_no_map(s).get(rfq.id, "") if rfq else "",
+            "first_rfq_at": _first_rfq_iso(rfq),
             "customer": cust.name if cust else "—",
             "customer_contact": (cust.contact if cust else "") or "",
             "customer_email": (cust.email if cust else "") or "",
@@ -1344,12 +1383,17 @@ def po_work_options():
                 "trade_type": o.trade_type or "수출",
                 "status": _status_label(stage, rfq.work_type) if rfq else _enum_val(o.status),
                 "items": [_item_view(it) for it in (o.items or [])],
+                # 공통 식별 컬럼
+                "work_type": (_enum_val(rfq.work_type) if rfq and rfq.work_type else "부품공급"),
+                "first_rfq_at": _first_rfq_iso(rfq),
+                "project_no": _project_no_map(s).get(rfq.id, "") if rfq else "",
             })
 
         purchase_orders = []
         for po in s.query(PurchaseOrder).order_by(PurchaseOrder.id.desc()).all():
             o = s.query(Order).filter_by(id=po.order_id).first()
             vendor = s.query(Vendor).filter_by(id=po.vendor_id).first()
+            rfq = _rfq_for_order(s, o) if o else None
             purchase_orders.append({
                 "id": po.id,
                 "po_no": po.po_no or "",
@@ -1363,6 +1407,13 @@ def po_work_options():
                 "status": po.status or "",
                 "sent": po.status == "이메일 발송완료",
                 "items": [_item_view(it) for it in (po.items or [])],
+                # 공통 식별 컬럼
+                "customer": cust_names.get(o.customer_id, "—") if o else "—",
+                "vessel": (vessel_names.get(o.vessel_id, "") if o and o.vessel_id else ""),
+                "trade_type": (o.trade_type or "수출") if o else "수출",
+                "work_type": (_enum_val(rfq.work_type) if rfq and rfq.work_type else "부품공급"),
+                "first_rfq_at": _first_rfq_iso(rfq),
+                "project_no": _project_no_map(s).get(rfq.id, "") if rfq else "",
             })
 
         return {
@@ -1879,7 +1930,18 @@ def ar_overview():
     s = get_session()
     try:
         cust_names = {c.id: c.name for c in s.query(Customer).all()}
+        vessel_names = {v.id: v.name for v in s.query(Vessel).all()}
+        vendor_names = {v.id: v.name for v in s.query(Vendor).all()}
         ord_map = {o.id: o for o in s.query(Order).all()}
+        # order_id → 발주 Vendor 이름들(중복 제거, 발주 순)
+        po_vendors_by_order: dict[int, list[str]] = {}
+        for po in s.query(PurchaseOrder).order_by(PurchaseOrder.id).all():
+            nm = vendor_names.get(po.vendor_id)
+            if not nm:
+                continue
+            lst = po_vendors_by_order.setdefault(po.order_id, [])
+            if nm not in lst:
+                lst.append(nm)
         today_str = date.today().isoformat()
 
         rows = []
@@ -1917,6 +1979,13 @@ def ar_overview():
                 "tax_issued_date": sd.get("11", "") or "",
                 "paid_done": bool(sd.get("12")),
                 "paid_date": sd.get("12", "") or "",
+                # 공통 식별 컬럼
+                "vessel": (vessel_names.get(o.vessel_id, "") if o and o.vessel_id else ""),
+                "trade_type": (o.trade_type or "수출") if o else "수출",
+                "work_type": (_enum_val(rfq.work_type) if rfq and rfq.work_type else "부품공급"),
+                "vendor": (lambda v: (v[0] + (f"  (외 {len(v) - 1}곳)" if len(v) > 1 else "")) if v else "")(po_vendors_by_order.get(r.order_id, [])),
+                "first_rfq_at": _first_rfq_iso(rfq),
+                "project_no": _project_no_map(s).get(rfq.id, "") if rfq else "",
             })
         return {
             "kpi": {
@@ -2145,6 +2214,7 @@ def quotation_overview(customer_id: int | None = None):
         cust_names = {c.id: c.name for c in s.query(Customer).all()}
         vessel_names = {v.id: v.name for v in s.query(Vessel).all()}
         rfqs_all = s.query(RFQ).all()
+        rfq_map = {r.id: r for r in rfqs_all}
         rfq_nos = {r.id: _rfq_no_disp(r.rfq_no) for r in rfqs_all}
         rfq_wt = {r.id: r.work_type for r in rfqs_all}
 
@@ -2172,6 +2242,10 @@ def quotation_overview(customer_id: int | None = None):
                 "date": qt.date or "",
                 "stage": stage,
                 "pipeline": _status_label(stage, rfq_wt.get(qt.rfq_id)) if stage else "",
+                # 공통 식별 컬럼
+                "work_type": (_enum_val(rfq_wt.get(qt.rfq_id)) if rfq_wt.get(qt.rfq_id) else "부품공급"),
+                "first_rfq_at": _first_rfq_iso(rfq_map.get(qt.rfq_id)),
+                "project_no": _project_no_map(s).get(qt.rfq_id, "") if qt.rfq_id else "",
             })
         return {"rows": rows}
     finally:
@@ -2185,7 +2259,10 @@ def vrfq_overview():
     try:
         vendor_names = {v.id: v.name for v in s.query(Vendor).all()}
         vendor_emails = {v.id: (v.email or "") for v in s.query(Vendor).all()}
-        rfq_nos = {r.id: _rfq_no_disp(r.rfq_no) for r in s.query(RFQ).all()}
+        cust_names = {c.id: c.name for c in s.query(Customer).all()}
+        vessel_names = {v.id: v.name for v in s.query(Vessel).all()}
+        rfq_map = {r.id: r for r in s.query(RFQ).all()}
+        rfq_nos = {rid: _rfq_no_disp(r.rfq_no) for rid, r in rfq_map.items()}
 
         quote_counts: dict[int, int] = {}
         for vq in s.query(VendorQuote).all():
@@ -2193,6 +2270,7 @@ def vrfq_overview():
 
         rows = []
         for vr in s.query(VendorRFQ).order_by(VendorRFQ.id.desc()).all():
+            rfq = rfq_map.get(vr.rfq_id)
             rows.append({
                 "id": vr.id,
                 "rfq_id": vr.rfq_id,
@@ -2204,6 +2282,12 @@ def vrfq_overview():
                 "status": vr.status or "",
                 "item_count": len(vr.items or []),
                 "quote_count": quote_counts.get(vr.id, 0),
+                # 공통 식별 컬럼
+                "customer": cust_names.get(rfq.customer_id, "—") if rfq else "—",
+                "vessel": (vessel_names.get(rfq.vessel_id, "") if rfq and rfq.vessel_id else ""),
+                "work_type": (_enum_val(rfq.work_type) if rfq and rfq.work_type else "부품공급"),
+                "first_rfq_at": _first_rfq_iso(rfq),
+                "project_no": _project_no_map(s).get(vr.rfq_id, "") if vr.rfq_id else "",
             })
         return {"rows": rows}
     finally:
@@ -2216,13 +2300,17 @@ def vendor_quote_overview():
     s = get_session()
     try:
         vendor_names = {v.id: v.name for v in s.query(Vendor).all()}
-        rfq_nos = {r.id: _rfq_no_disp(r.rfq_no) for r in s.query(RFQ).all()}
+        cust_names = {c.id: c.name for c in s.query(Customer).all()}
+        vessel_names = {v.id: v.name for v in s.query(Vessel).all()}
+        rfq_map = {r.id: r for r in s.query(RFQ).all()}
+        rfq_nos = {rid: _rfq_no_disp(r.rfq_no) for rid, r in rfq_map.items()}
         # vendor_rfq_id → (rfq_id, vendor_id, vrfq_no)
         vrfq_map = {vr.id: vr for vr in s.query(VendorRFQ).all()}
 
         rows = []
         for q in s.query(VendorQuote).order_by(VendorQuote.id.desc()).all():
             vr = vrfq_map.get(q.vendor_rfq_id)
+            rfq = rfq_map.get(vr.rfq_id) if vr else None
             items = q.items or []
             amount = 0.0
             for it in items:
@@ -2242,6 +2330,12 @@ def vendor_quote_overview():
                 "item_count": len(items),
                 "amount": round(amount, 2),
                 "currency": getattr(q, "currency", None) or "USD",
+                # 공통 식별 컬럼
+                "customer": cust_names.get(rfq.customer_id, "—") if rfq else "—",
+                "vessel": (vessel_names.get(rfq.vessel_id, "") if rfq and rfq.vessel_id else ""),
+                "work_type": (_enum_val(rfq.work_type) if rfq and rfq.work_type else "부품공급"),
+                "first_rfq_at": _first_rfq_iso(rfq),
+                "project_no": _project_no_map(s).get(rfq.id, "") if rfq else "",
             })
         return {"rows": rows}
     finally:
@@ -2255,6 +2349,16 @@ def documents_overview():
     try:
         cust_names = {c.id: c.name for c in s.query(Customer).all()}
         vessel_names = {v.id: v.name for v in s.query(Vessel).all()}
+        vendor_names = {v.id: v.name for v in s.query(Vendor).all()}
+        # order_id → 발주 Vendor 이름들(중복 제거, 발주 순). 표시는 첫 벤더 + 외 N곳.
+        po_vendors_by_order: dict[int, list[str]] = {}
+        for po in s.query(PurchaseOrder).order_by(PurchaseOrder.id).all():
+            nm = vendor_names.get(po.vendor_id)
+            if not nm:
+                continue
+            lst = po_vendors_by_order.setdefault(po.order_id, [])
+            if nm not in lst:
+                lst.append(nm)
 
         # ci_id → pl/tax 존재 매핑
         ci_by_order: dict[int, CommercialInvoice] = {}
@@ -2294,6 +2398,9 @@ def documents_overview():
                 "po_no": o.po_no or "",
                 "trade_type": o.trade_type or "수출",
                 "work_type": wt,
+                "vendor": (lambda v: (v[0] + (f"  (외 {len(v) - 1}곳)" if len(v) > 1 else "")) if v else "")(po_vendors_by_order.get(o.id, [])),
+                "first_rfq_at": _first_rfq_iso(rfq),
+                "project_no": _project_no_map(s).get(rfq.id, "") if rfq else "",
                 "ci_no": ci.ci_no if ci else "",
                 "pl_no": pl_no_by_ci.get(ci_id, "") if ci_id else "",
                 "sa_no": sa.sa_no if sa else "",
@@ -2471,6 +2578,8 @@ def _document_detail_payload(session, order: Order) -> dict:
             "customer_tax_id": cust.tax_id if cust else "",
             "vessel": vessel.name if vessel else "",
             "project_title": (rfq.project_title or "") if rfq else "",
+            "project_no": _project_no_map(session).get(rfq.id, "") if rfq else "",
+            "first_rfq_at": _first_rfq_iso(rfq),
             "vendor": ", ".join(vendor_names),
             "trade_type": order.trade_type or "수출",
             "service_info": getattr(order, "service_info", None) or {},

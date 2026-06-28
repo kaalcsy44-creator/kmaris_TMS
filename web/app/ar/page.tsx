@@ -19,6 +19,7 @@ import type { ArRow, DocumentDetail, PoWorkOptions } from "@/lib/types";
 import { tr } from "@/lib/labels";
 import AppShell from "@/components/AppShell";
 import FilterTable, { ColumnDef } from "@/components/common/FilterTable";
+import { identityColumns, projectNoColumn, fmtRfqDateTime } from "@/components/common/identityColumns";
 import Modal from "@/components/common/Modal";
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -133,7 +134,10 @@ function ArOverview() {
           filter: "facet",
           render: (r) =>
             r.tax_issued ? (
-              <span className="ar-badge">Issued</span>
+              <div>
+                <span className="ar-badge">Issued</span>
+                {r.tax_issued_date ? <div className="pn-at">{fmtRfqDateTime(r.tax_issued_date)}</div> : null}
+              </div>
             ) : (
               <button
                 className="btn primary"
@@ -154,7 +158,10 @@ function ArOverview() {
           filter: "facet",
           render: (r) =>
             r.paid_done ? (
-              <span className="ar-badge">Paid</span>
+              <div>
+                <span className="ar-badge">Paid</span>
+                {r.paid_date ? <div className="pn-at">{fmtRfqDateTime(r.paid_date)}</div> : null}
+              </div>
             ) : (
               <button
                 className="btn primary"
@@ -170,15 +177,24 @@ function ArOverview() {
         };
 
   const columns: ColumnDef<ArRow>[] = [
+    projectNoColumn<ArRow>({ projectNo: (r) => r.project_no, firstRfqAt: (r) => r.first_rfq_at }),
+    ...identityColumns<ArRow>({
+      customer: (r) => r.customer,
+      vessel: (r) => r.vessel,
+      workType: (r) => r.work_type,
+      tradeType: (r) => r.trade_type,
+    }),
+    { key: "vendor", label: "Vendor", text: (r) => r.vendor || "", filter: "facet" },
     { key: "ci_no", label: "CI No.", text: (r) => r.ci_no || "" },
-    { key: "customer", label: "Customer", text: (r) => r.customer || "", filter: "facet" },
     { key: "ord_no", label: "Order", text: (r) => r.ord_no || "" },
     { key: "currency", label: "Currency", text: (r) => r.currency || "", filter: "facet" },
     { key: "invoice", label: "Invoice", numeric: true, text: (r) => money(r.invoice_amount), sortValue: (r) => r.invoice_amount },
-    { key: "paid", label: "Paid", numeric: true, text: (r) => money(r.paid_amount), sortValue: (r) => r.paid_amount },
+    // Paid 컬럼은 12단계(수금)에서만 표시
+    ...(stageTab === 12
+      ? [{ key: "paid", label: "Paid", numeric: true, text: (r: ArRow) => money(r.paid_amount), sortValue: (r: ArRow) => r.paid_amount } as ColumnDef<ArRow>]
+      : []),
     { key: "outstanding", label: "Outstanding", numeric: true, text: (r) => money(r.outstanding), sortValue: (r) => r.outstanding, render: (r) => <b>{money(r.outstanding)}</b> },
     { key: "due_date", label: "Due date", text: (r) => r.due_date || "", filter: "date" },
-    { key: "status", label: "Status", text: (r) => tr(r.status), filter: "facet", render: (r) => <span className={`ar-badge${r.overdue ? " overdue" : ""}`}>{tr(r.status)}</span> },
     stageCol,
   ];
 

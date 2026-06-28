@@ -24,6 +24,7 @@ import { useCachedData, invalidateCache } from "@/lib/useCachedData";
 import { tr } from "@/lib/labels";
 import AppShell, { SectionHead } from "@/components/AppShell";
 import FilterTable, { ColumnDef } from "@/components/common/FilterTable";
+import { identityColumns, projectNoColumn } from "@/components/common/identityColumns";
 import Modal from "@/components/common/Modal";
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -315,9 +316,15 @@ function ServiceStageList({
     svc === 8 ? r.svc_ready_done : svc === 9 ? r.svc_arr_done : svc === 10 ? r.has_pod : true;
   const registerable = orders.filter((r) => !cfg.done(r) && svcPriorOk(r));
   const columns: ColumnDef<DocRow>[] = [
+    projectNoColumn<DocRow>({ projectNo: (r) => r.project_no, firstRfqAt: (r) => r.first_rfq_at }),
+    ...identityColumns<DocRow>({
+      customer: (r) => r.customer,
+      vessel: (r) => r.vessel,
+      workType: (r) => r.work_type,
+      tradeType: (r) => r.trade_type,
+    }),
+    { key: "vendor", label: "Vendor", text: (r) => r.vendor || "", filter: "facet" },
     { key: "ord_no", label: "ORD No.", text: (r) => r.ord_no || "" },
-    { key: "customer", label: "Customer", text: (r) => r.customer || "", filter: "facet" },
-    { key: "vessel", label: "Vessel", text: (r) => r.vessel || "", filter: "facet" },
     { key: "po_no", label: "PO No.", text: (r) => r.po_no || "" },
     ...(svc === 9
       ? [{ key: "report", label: "Report file", text: (r: DocRow) => r.pod_filename || "" }]
@@ -780,10 +787,16 @@ function StageList({
   const [registering, setRegistering] = useState(false);
 
   const columns: ColumnDef<DocRow>[] = [
+    projectNoColumn<DocRow>({ projectNo: (r) => r.project_no, firstRfqAt: (r) => r.first_rfq_at }),
+    ...identityColumns<DocRow>({
+      customer: (r) => r.customer,
+      vessel: (r) => r.vessel,
+      workType: (r) => r.work_type,
+      tradeType: (r) => r.trade_type,
+    }),
+    { key: "vendor", label: "Vendor", text: (r) => r.vendor || "", filter: "facet" },
     cfg.docCol,
     { key: "ord_no", label: "ORD No.", text: (r) => r.ord_no || "" },
-    { key: "customer", label: "Customer", text: (r) => r.customer || "", filter: "facet" },
-    { key: "vessel", label: "Vessel", text: (r) => r.vessel || "", filter: "facet" },
     { key: "po_no", label: "PO No.", text: (r) => r.po_no || "" },
     ...(cfg.extra ?? []),
   ];
@@ -1501,6 +1514,7 @@ function DocOrderInfo({ order }: { order: DocumentDetail["order"] }) {
   if (!order.id) return null;
   return (
     <dl className="intl-meta" style={{ margin: "0 0 14px" }}>
+      <div><dt>Project No.</dt><dd><b>{order.project_no || "—"}</b></dd></div>
       <div><dt>Order No.</dt><dd>{order.ord_no || "—"}</dd></div>
       <div><dt>Trade type</dt><dd>{tr(order.trade_type) || "—"}</dd></div>
       <div><dt>Project</dt><dd>{order.project_title || "—"}</dd></div>
@@ -1520,7 +1534,7 @@ function emptyDocDetail(): DocumentDetail {
     order: {
       id: 0, rfq_id: 0, ord_no: "", po_no: "", date: "", status: "",
       customer: "", customer_email: "", customer_tax_id: "", vessel: "",
-      project_title: "", vendor: "", trade_type: "", service_info: {},
+      project_title: "", project_no: "", first_rfq_at: "", vendor: "", trade_type: "", service_info: {},
       tracking_token: "", consignee_confirmed_date: "", vendor_docs_sent_date: "",
       items: [],
     },

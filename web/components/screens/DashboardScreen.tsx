@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   fetchDashboard,
@@ -58,15 +58,33 @@ export default function DashboardScreen() {
 function HomeCard({
   title,
   sub,
+  dragging,
+  onDragStart,
+  onDragOver,
+  onDragEnd,
   children,
 }: {
   title: string;
   sub?: string;
+  dragging?: boolean;
+  onDragStart?: () => void;
+  onDragOver?: (e: React.DragEvent) => void;
+  onDragEnd?: () => void;
   children: React.ReactNode;
 }) {
   return (
-    <section className="home-card">
-      <div className="home-card-head">
+    <section
+      className={`home-card${dragging ? " dragging" : ""}`}
+      onDragOver={onDragOver}
+    >
+      <div
+        className="home-card-head"
+        draggable
+        onDragStart={onDragStart}
+        onDragEnd={onDragEnd}
+        title="Drag to reorder"
+      >
+        <span className="home-card-grip" aria-hidden>⠿</span>
         <h3>{title}</h3>
         {sub ? <span className="home-card-sub">{sub}</span> : null}
       </div>
@@ -211,83 +229,171 @@ function HomeTab() {
     { key: "notes", label: "Notes", text: () => "" },
   ];
 
-  return (
-    <div className="home-grid">
-      <HomeCard title="Quote Submissions" sub="견적제출 리스트">
-        {!qtn ? (
-          <div className="state">Loading…</div>
-        ) : (
-          <FilterTable
-            rows={qtnRows}
-            columns={quoteCols}
-            getRowKey={(r) => r.id}
-            defaultSortKey="date"
-            defaultSortDir="desc"
-            onRowClick={(r) => router.push(r.rfq_id ? `/rfq?rfq=${r.rfq_id}&tab=cquote` : "/rfq")}
-            empty="No quotations submitted yet."
-          />
-        )}
-      </HomeCard>
-
-      <HomeCard title="Activity Log" sub="담당자 활동 기록">
-        {!pipeline ? (
-          <div className="state">Loading…</div>
-        ) : (
-          <FilterTable
-            rows={activityRows}
-            columns={activityCols}
-            getRowKey={(r) => r.id}
-            defaultSortKey="datetime"
-            defaultSortDir="desc"
-            onRowClick={(r) => router.push(`/rfq?rfq=${r.rfq_id}`)}
-            empty="No activity recorded yet."
-          />
-        )}
-      </HomeCard>
-
-      <HomeCard title="Sales" sub="매출리스트">
-        {!ar ? (
-          <div className="state">Loading…</div>
-        ) : (
-          <FilterTable
-            rows={arRows}
-            columns={salesCols}
-            getRowKey={(r) => r.id}
-            defaultSortKey="date"
-            defaultSortDir="desc"
-            onRowClick={(r) => router.push(`/ar?order=${r.order_id}`)}
-            empty="No sales records yet."
-          />
-        )}
-      </HomeCard>
-
-      <HomeCard title="Delays" sub="지연 리스트 (견적·배송 등)">
-        {!qtn || !ar ? (
-          <div className="state">Loading…</div>
-        ) : (
-          <FilterTable
-            rows={delayRows}
-            columns={delayCols}
-            getRowKey={(r) => r.id}
-            defaultSortKey="due"
-            defaultSortDir="asc"
-            rowClassName={() => "danger"}
-            onRowClick={(r) => router.push(r.href)}
-            empty="No delayed items. 🎉"
-          />
-        )}
-      </HomeCard>
-
-      <HomeCard title="Schedule" sub="일정 관리">
+  // ── 박스(카드) 정의 — id 별 제목/내용. 순서는 order 상태가 정한다. ───────
+  const cards: Record<string, { title: string; sub: string; body: React.ReactNode }> = {
+    quotes: {
+      title: "Quote Submissions",
+      sub: "견적제출 리스트",
+      body: !qtn ? (
+        <div className="state">Loading…</div>
+      ) : (
+        <FilterTable
+          rows={qtnRows}
+          columns={quoteCols}
+          getRowKey={(r) => r.id}
+          defaultSortKey="date"
+          defaultSortDir="desc"
+          onRowClick={(r) => router.push(r.rfq_id ? `/rfq?rfq=${r.rfq_id}&tab=cquote` : "/rfq")}
+          empty="No quotations submitted yet."
+        />
+      ),
+    },
+    activity: {
+      title: "Activity Log",
+      sub: "담당자 활동 기록",
+      body: !pipeline ? (
+        <div className="state">Loading…</div>
+      ) : (
+        <FilterTable
+          rows={activityRows}
+          columns={activityCols}
+          getRowKey={(r) => r.id}
+          defaultSortKey="datetime"
+          defaultSortDir="desc"
+          onRowClick={(r) => router.push(`/rfq?rfq=${r.rfq_id}`)}
+          empty="No activity recorded yet."
+        />
+      ),
+    },
+    sales: {
+      title: "Sales",
+      sub: "매출리스트",
+      body: !ar ? (
+        <div className="state">Loading…</div>
+      ) : (
+        <FilterTable
+          rows={arRows}
+          columns={salesCols}
+          getRowKey={(r) => r.id}
+          defaultSortKey="date"
+          defaultSortDir="desc"
+          onRowClick={(r) => router.push(`/ar?order=${r.order_id}`)}
+          empty="No sales records yet."
+        />
+      ),
+    },
+    delays: {
+      title: "Delays",
+      sub: "지연 리스트 (견적·배송 등)",
+      body: !qtn || !ar ? (
+        <div className="state">Loading…</div>
+      ) : (
+        <FilterTable
+          rows={delayRows}
+          columns={delayCols}
+          getRowKey={(r) => r.id}
+          defaultSortKey="due"
+          defaultSortDir="asc"
+          rowClassName={() => "danger"}
+          onRowClick={(r) => router.push(r.href)}
+          empty="No delayed items. 🎉"
+        />
+      ),
+    },
+    schedule: {
+      title: "Schedule",
+      sub: "일정 관리",
+      body: (
         <FilterTable
           rows={[] as never[]}
           columns={scheduleCols}
           getRowKey={() => 0}
           empty="No schedule data yet — coming soon."
         />
-      </HomeCard>
+      ),
+    },
+  };
+
+  const order = useHomeOrder(Object.keys(cards));
+  const { ids, dragId, onDragStart, onDragOver, onDragEnd } = order;
+
+  return (
+    <div className="home-grid">
+      {ids.map((id) => {
+        const c = cards[id];
+        if (!c) return null;
+        return (
+          <HomeCard
+            key={id}
+            title={c.title}
+            sub={c.sub}
+            dragging={dragId === id}
+            onDragStart={() => onDragStart(id)}
+            onDragOver={(e) => onDragOver(e, id)}
+            onDragEnd={onDragEnd}
+          >
+            {c.body}
+          </HomeCard>
+        );
+      })}
     </div>
   );
+}
+
+/* 박스 순서를 드래그앤드롭으로 바꾸고 localStorage 에 보존하는 훅. */
+const HOME_ORDER_KEY = "ktms:home-order";
+
+function useHomeOrder(defaults: string[]) {
+  const [ids, setIds] = useState<string[]>(defaults);
+  const [dragId, setDragId] = useState<string | null>(null);
+
+  // 최초 마운트 시 저장된 순서를 불러와 현재 카드 목록과 정합성을 맞춘다.
+  useEffect(() => {
+    let saved: string[] = [];
+    try {
+      saved = JSON.parse(localStorage.getItem(HOME_ORDER_KEY) || "[]");
+    } catch {
+      saved = [];
+    }
+    const known = new Set(defaults);
+    const merged = [
+      ...saved.filter((id) => known.has(id)),
+      ...defaults.filter((id) => !saved.includes(id)),
+    ];
+    setIds(merged);
+    // defaults 는 매 렌더 새 배열이라 의존성에서 제외(키 집합은 고정).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function onDragStart(id: string) {
+    setDragId(id);
+  }
+  function onDragOver(e: React.DragEvent, overId: string) {
+    e.preventDefault();
+    if (!dragId || dragId === overId) return;
+    setIds((prev) => {
+      const from = prev.indexOf(dragId);
+      const to = prev.indexOf(overId);
+      if (from < 0 || to < 0) return prev;
+      const next = [...prev];
+      next.splice(from, 1);
+      next.splice(to, 0, dragId);
+      return next;
+    });
+  }
+  function onDragEnd() {
+    setDragId(null);
+    setIds((prev) => {
+      try {
+        localStorage.setItem(HOME_ORDER_KEY, JSON.stringify(prev));
+      } catch {
+        /* ignore */
+      }
+      return prev;
+    });
+  }
+
+  return { ids, dragId, onDragStart, onDragOver, onDragEnd };
 }
 
 /** "YYYY-MM-DDTHH:MM" → "yy-mm-dd HH:MM". 시각 없으면 날짜만. */

@@ -159,11 +159,12 @@ function nextStageLabel(stage: number, steps: string[]): string {
   return `${n + 1}. ${steps[n] ?? ""}`;
 }
 
-/** 완료 단계 시각화 — steps.length 칸 세그먼트 바를 현재 단계까지 채우고 N/총 + 단계명 표시. */
+/** 단계 시각화 — steps.length 칸 세그먼트 바(현재 단계까지 채움) + 아래에 완료/다음 단계. */
 function StageBar({ stage, steps }: { stage: number; steps: string[] }) {
   const total = steps.length;
   const filled = Math.max(0, Math.min(stage, total));
-  const label = stage <= 0 ? "Not started" : steps[stage - 1] ?? "";
+  const done = doneStageLabel(stage, steps);
+  const next = nextStageLabel(stage, steps);
   return (
     <div className="pl-stage">
       <div className="pl-stage-top">
@@ -176,7 +177,11 @@ function StageBar({ stage, steps }: { stage: number; steps: string[] }) {
           {filled}/{total}
         </span>
       </div>
-      <div className="pl-stage-label">{label}</div>
+      <div className="pl-stage-meta">
+        <span className="pl-stage-done" title={done}>{done}</span>
+        <span className="pl-stage-arrow">→</span>
+        <span className="pl-stage-next" title={next}>{next}</span>
+      </div>
     </div>
   );
 }
@@ -184,23 +189,28 @@ function StageBar({ stage, steps }: { stage: number; steps: string[] }) {
 type ColKey =
   | "received_at"
   | "customer"
+  | "vendor"
   | "work_type"
   | "vessel"
   | "project_title"
-  | "done"
-  | "next"
+  | "stage"
   | "assignee";
 
 const PIPELINE_COLUMNS: { key: ColKey; label: string }[] = [
-  { key: "received_at", label: "First RFQ received at" },
+  { key: "received_at", label: "Project No." },
   { key: "customer", label: "Customer" },
-  { key: "work_type", label: "Work type" },
+  { key: "vendor", label: "Vendor" },
+  { key: "work_type", label: "Type" },
   { key: "vessel", label: "Vessel" },
   { key: "project_title", label: "Project" },
-  { key: "done", label: "Completed stage" },
-  { key: "next", label: "Next stage" },
-  { key: "assignee", label: "Owner" },
+  { key: "stage", label: "Stage" },
+  { key: "assignee", label: "PIC" },
 ];
+
+/** 거래의 벤더 표시값 — 확정 벤더(PO) 우선, 없으면 RFQ 발송 벤더 목록. */
+function vendorOf(r: PipelineRow): string {
+  return r.vendor || r.vrfq_vendors || "";
+}
 
 /** 한 행에서 컬럼별 텍스트 값(검색·문자열 정렬용). */
 function cellText(r: PipelineRow, key: ColKey, steps: string[]): string {
@@ -209,16 +219,16 @@ function cellText(r: PipelineRow, key: ColKey, steps: string[]): string {
       return r.received_at ? fmtStageDate(r.received_at) : "";
     case "customer":
       return r.customer || "";
+    case "vendor":
+      return vendorOf(r);
     case "work_type":
       return r.work_type || "부품공급";
     case "vessel":
       return r.vessel || "";
     case "project_title":
       return r.project_title || "";
-    case "done":
+    case "stage":
       return doneStageLabel(r.stage, steps);
-    case "next":
-      return nextStageLabel(r.stage, steps);
     case "assignee":
       return r.assignee || "";
   }
@@ -250,6 +260,7 @@ function PipelineTable({
   // 패싯 필터: 각 값 "전체"는 미적용. 빈 문자열("")은 "미지정" 값 자체를 의미.
   const [fWorkType, setFWorkType] = useState("전체");
   const [fCustomer, setFCustomer] = useState("전체");
+  const [fVendor, setFVendor] = useState("전체");
   const [fVessel, setFVessel] = useState("전체");
   const [fAssignee, setFAssignee] = useState("전체");
   const [fStage, setFStage] = useState("전체"); // 단계 번호 문자열
@@ -280,20 +291,22 @@ function PipelineTable({
   function colValue(key: ColKey): string {
     switch (key) {
       case "customer": return fCustomer;
+      case "vendor": return fVendor;
       case "work_type": return fWorkType;
       case "vessel": return fVessel;
       case "assignee": return fAssignee;
-      case "done": return fStage;
+      case "stage": return fStage;
       default: return "전체";
     }
   }
   function setColValue(key: ColKey, v: string) {
     switch (key) {
       case "customer": setFCustomer(v); break;
+      case "vendor": setFVendor(v); break;
       case "work_type": setFWorkType(v); break;
       case "vessel": setFVessel(v); break;
       case "assignee": setFAssignee(v); break;
-      case "done": setFStage(v); break;
+      case "stage": setFStage(v); break;
     }
     setOpenCol(null);
   }
@@ -301,10 +314,11 @@ function PipelineTable({
     switch (key) {
       case "received_at": return !!(fFrom || fTo);
       case "customer": return fCustomer !== "전체";
+      case "vendor": return fVendor !== "전체";
       case "work_type": return fWorkType !== "전체";
       case "vessel": return fVessel !== "전체";
       case "assignee": return fAssignee !== "전체";
-      case "done": return fStage !== "전체";
+      case "stage": return fStage !== "전체";
       default: return false;
     }
   }
@@ -315,6 +329,7 @@ function PipelineTable({
   }
   const workTypeOpts = distinct((r) => r.work_type || "부품공급");
   const customerOpts = distinct((r) => r.customer || "");
+  const vendorOpts = distinct(vendorOf);
   const vesselOpts = distinct((r) => r.vessel || "");
   const assigneeOpts = distinct((r) => r.assignee || "");
   // 단계 옵션: 데이터에 존재하는 stage 번호를 오름차순으로
@@ -326,13 +341,15 @@ function PipelineTable({
     switch (key) {
       case "customer":
         return [all, ...customerOpts.map((v) => ({ v, label: v || "Unspecified" }))];
+      case "vendor":
+        return [all, ...vendorOpts.map((v) => ({ v, label: v || "Unspecified" }))];
       case "work_type":
         return [all, ...workTypeOpts.map((v) => ({ v, label: tr(v) }))];
       case "vessel":
         return [all, ...vesselOpts.map((v) => ({ v, label: v || "No vessel" }))];
       case "assignee":
         return [all, ...assigneeOpts.map((v) => ({ v, label: v || "Unspecified" }))];
-      case "done":
+      case "stage":
         return [all, ...stageOpts.map((s) => ({ v: String(s), label: doneStageLabel(s, steps) }))];
       default:
         return [];
@@ -342,6 +359,7 @@ function PipelineTable({
   const filtersActive =
     fWorkType !== "전체" ||
     fCustomer !== "전체" ||
+    fVendor !== "전체" ||
     fVessel !== "전체" ||
     fAssignee !== "전체" ||
     fStage !== "전체" ||
@@ -351,6 +369,7 @@ function PipelineTable({
   function resetFilters() {
     setFWorkType("전체");
     setFCustomer("전체");
+    setFVendor("전체");
     setFVessel("전체");
     setFAssignee("전체");
     setFStage("전체");
@@ -373,6 +392,7 @@ function PipelineTable({
     (r) =>
       (fWorkType === "전체" || (r.work_type || "부품공급") === fWorkType) &&
       (fCustomer === "전체" || (r.customer || "") === fCustomer) &&
+      (fVendor === "전체" || vendorOf(r) === fVendor) &&
       (fVessel === "전체" || (r.vessel || "") === fVessel) &&
       (fAssignee === "전체" || (r.assignee || "") === fAssignee) &&
       (fStage === "전체" || stageOf(r) === Number(fStage)) &&
@@ -384,7 +404,7 @@ function PipelineTable({
     const dir = sortDir === "asc" ? 1 : -1;
     displayRows = [...displayRows].sort((a, b) => {
       let cmp: number;
-      if (key === "done" || key === "next") {
+      if (key === "stage") {
         cmp = stageOf(a) - stageOf(b);
       } else {
         cmp = cellText(a, key, steps).localeCompare(cellText(b, key, steps), "ko");
@@ -483,11 +503,11 @@ function PipelineTable({
           <colgroup>
             <col className="plc-date" />
             <col className="plc-customer" />
+            <col className="plc-vendor" />
             <col className="plc-work" />
             <col className="plc-vessel" />
             <col className="plc-project" />
-            <col className="plc-done" />
-            <col className="plc-next" />
+            <col className="plc-stage" />
             <col className="plc-assignee" />
           </colgroup>
           <thead>
@@ -539,8 +559,14 @@ function PipelineTable({
                     }`}
                     onClick={() => setSelectedId(r.rfq_id)}
                   >
-                    <td className="nowrap">{r.received_at ? fmtStageDate(r.received_at) : "—"}</td>
+                    <td className="nowrap">
+                      <div className="proj-cell">
+                        <div className="pn">{r.project_no || <span className="muted">—</span>}</div>
+                        {r.received_at ? <div className="pn-at">{fmtStageDate(r.received_at)}</div> : null}
+                      </div>
+                    </td>
                     <td className="strong">{r.customer || "No customer"}</td>
+                    <td className="pl-td-vendor">{vendorOf(r) || <span className="muted">—</span>}</td>
                     <td>
                       <WorkTypeBadge type={r.work_type} />
                     </td>
@@ -548,10 +574,9 @@ function PipelineTable({
                     <td>
                       {r.project_title || <span className="muted">No title</span>}
                     </td>
-                    <td className="pl-td-done">
+                    <td className="pl-td-stage">
                       <StageBar stage={stageOf(r)} steps={resolveSteps(steps, r.work_type)} />
                     </td>
-                    <td className="pl-td-next">{nextStageLabel(stageOf(r), resolveSteps(steps, r.work_type))}</td>
                     <td>{r.assignee || <span className="muted">—</span>}</td>
                   </tr>
                 );
@@ -722,8 +747,9 @@ function PipelineModal({
       >
         <div className="pl-modal-head">
           <span className="intl-title">
-            <span className="pl-recv-label">First RFQ received at</span>
-            <b>{r.received_at ? fmtStageDate(r.received_at) : "—"}</b>
+            <span className="pl-recv-label">Project No.</span>
+            <b>{r.project_no || "—"}</b>
+            {r.received_at ? <span className="pl-recv-at">First RFQ {fmtStageDate(r.received_at)}</span> : null}
             <WorkTypeBadge type={r.work_type} />
           </span>
           <button

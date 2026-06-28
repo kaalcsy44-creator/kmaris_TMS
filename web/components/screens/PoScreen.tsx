@@ -20,6 +20,7 @@ import {
 import { getToken } from "@/lib/auth";
 import { useCachedData, invalidateCache } from "@/lib/useCachedData";
 import FilterTable, { ColumnDef } from "@/components/common/FilterTable";
+import { identityColumns, projectNoColumn } from "@/components/common/identityColumns";
 import Modal from "@/components/common/Modal";
 import { tr } from "@/lib/labels";
 import type {
@@ -89,6 +90,7 @@ function PoDetail({ orderId }: { orderId: number | null }) {
       ) : !data ? null : (
         <div className="detail-body">
           <div className="grid">
+            <KV k="Project No." v={data.project_no} />
             <KV k="Order No." v={data.ord_no} />
             <KV k="Customer P/O No." v={data.customer_po_no} />
             <KV k="Customer P/O received" v={data.customer_po_at} />
@@ -254,10 +256,14 @@ function CustomerPoTab({
   }, [deepOrderId]);
 
   const columns: ColumnDef<OrderOpt>[] = [
+    projectNoColumn<OrderOpt>({ projectNo: (o) => o.project_no, firstRfqAt: (o) => o.first_rfq_at }),
+    ...identityColumns<OrderOpt>({
+      customer: (o) => o.customer,
+      vessel: (o) => o.vessel,
+      workType: (o) => o.work_type,
+      tradeType: (o) => o.trade_type,
+    }),
     { key: "ord_no", label: "K-Maris ORD No.", text: (o) => o.ord_no || "" },
-    { key: "customer", label: "Customer", text: (o) => o.customer || "", filter: "facet" },
-    { key: "trade_type", label: "Trade type", text: (o) => tr(o.trade_type || "수출"), filter: "facet", render: (o) => <span className="ar-badge">{tr(o.trade_type || "수출")}</span> },
-    { key: "vessel", label: "Vessel", text: (o) => o.vessel || "", filter: "facet" },
     { key: "po_no", label: "PO No.", text: (o) => o.po_no || "" },
     { key: "items", label: "Items", numeric: true, text: (o) => String(o.items.length), sortValue: (o) => o.items.length },
     { key: "status", label: "Status", text: (o) => o.status || "", filter: "facet", render: (o) => <span className="ar-badge">{o.status}</span> },
@@ -470,6 +476,13 @@ function VendorPoTab({
   }, [deepOrderId, options.purchase_orders]);
 
   const columns: ColumnDef<PoOpt>[] = [
+    projectNoColumn<PoOpt>({ projectNo: (p) => p.project_no, firstRfqAt: (p) => p.first_rfq_at }),
+    ...identityColumns<PoOpt>({
+      customer: (p) => p.customer,
+      vessel: (p) => p.vessel,
+      workType: (p) => p.work_type,
+      tradeType: (p) => p.trade_type,
+    }),
     { key: "po_no", label: "PO No.", text: (p) => p.po_no || "" },
     { key: "ord_no", label: "K-Maris ORD No.", text: (p) => p.ord_no || "" },
     { key: "vendor", label: "Vendor", text: (p) => p.vendor || "", filter: "facet" },

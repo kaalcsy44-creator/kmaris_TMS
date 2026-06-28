@@ -51,6 +51,7 @@ import type {
 import NewRfqForm from "./screens/NewRfqForm";
 import WorkTypeBadge from "./WorkTypeBadge";
 import FilterTable, { ColumnDef } from "./common/FilterTable";
+import { identityColumns, projectNoColumn } from "./common/identityColumns";
 import Modal from "./common/Modal";
 
 /** 현재 시각 "YYYY-MM-DDTHH:MM" (datetime-local 기본값). */
@@ -176,26 +177,18 @@ function CustomerRfqList({
   }, [deepLinkId]);
 
   const columns: ColumnDef<RfqRow>[] = [
+    projectNoColumn<RfqRow>({ projectNo: (r) => r.project_no, firstRfqAt: (r) => r.first_rfq_at }),
+    ...identityColumns<RfqRow>({
+      customer: (r) => r.customer,
+      vessel: (r) => (r.vessel && r.vessel !== "—" ? r.vessel : ""),
+      workType: (r) => r.work_type,
+    }),
     {
       key: "customer_rfq_no",
       label: "Customer RFQ No.",
       text: (r) => r.customer_rfq_no || "",
-      render: (r) => (
-        <div>
-          <div className="m">{r.customer_rfq_no || <span className="dash">—</span>}</div>
-          {r.crfq_at ? <div className="s">{r.crfq_at}</div> : null}
-        </div>
-      ),
+      render: (r) => r.customer_rfq_no || <span className="dash">—</span>,
     },
-    { key: "customer", label: "Customer", text: (r) => r.customer || "", filter: "facet" },
-    {
-      key: "work_type",
-      label: "Work type",
-      text: (r) => r.work_type || "부품공급",
-      filter: "facet",
-      render: (r) => <WorkTypeBadge type={r.work_type} />,
-    },
-    { key: "vessel", label: "Vessel", text: (r) => (r.vessel && r.vessel !== "—" ? r.vessel : ""), filter: "facet" },
     {
       key: "item_count",
       label: "Items",
@@ -299,6 +292,12 @@ function VendorRfqList({
   };
 
   const columns: ColumnDef<VrfqRow>[] = [
+    projectNoColumn<VrfqRow>({ projectNo: (r) => r.project_no, firstRfqAt: (r) => r.first_rfq_at }),
+    ...identityColumns<VrfqRow>({
+      customer: (r) => r.customer,
+      vessel: (r) => r.vessel,
+      workType: (r) => r.work_type,
+    }),
     { key: "vrfq_no", label: "VRFQ No.", text: (r) => r.vrfq_no || "" },
     { key: "customer_rfq_no", label: "Customer RFQ No.", text: (r) => r.customer_rfq_no || "" },
     { key: "vendor", label: "Vendor", text: (r) => r.vendor || "", filter: "facet" },
@@ -673,14 +672,20 @@ function VendorQuoteList({
   };
 
   const columns: ColumnDef<VendorQuoteOverviewRow>[] = [
+    projectNoColumn<VendorQuoteOverviewRow>({ projectNo: (r) => r.project_no, firstRfqAt: (r) => r.first_rfq_at }),
+    ...identityColumns<VendorQuoteOverviewRow>({
+      customer: (r) => r.customer,
+      vessel: (r) => r.vessel,
+      workType: (r) => r.work_type,
+    }),
+    { key: "vendor_quote_no", label: "Vendor quote no.", text: (r) => r.vendor_quote_no || "" },
     {
       key: "received_at",
-      label: "Received at",
+      label: "Quote received",
       text: (r) => (r.received_at && r.received_at.length >= 16 ? `${r.received_at.slice(2, 10)} ${r.received_at.slice(11, 16)}` : r.received_date || ""),
       filter: "date",
       sortValue: (r) => Date.parse(r.received_at || r.received_date || "") || 0,
     },
-    { key: "vendor_quote_no", label: "Vendor quote no.", text: (r) => r.vendor_quote_no || "" },
     { key: "vendor", label: "Vendor", text: (r) => r.vendor || "", filter: "facet" },
     { key: "vrfq_no", label: "VRFQ No.", text: (r) => r.vrfq_no || "" },
     { key: "customer_rfq_no", label: "Customer RFQ No.", text: (r) => r.customer_rfq_no || "" },
@@ -886,6 +891,12 @@ function CustomerQuoteList({
   };
 
   const columns: ColumnDef<QtnRow>[] = [
+    projectNoColumn<QtnRow>({ projectNo: (r) => r.project_no, firstRfqAt: (r) => r.first_rfq_at }),
+    ...identityColumns<QtnRow>({
+      customer: (r) => r.customer,
+      vessel: (r) => r.vessel,
+      workType: (r) => r.work_type,
+    }),
     {
       key: "qtn_no",
       label: "Quote No.",
@@ -898,8 +909,6 @@ function CustomerQuoteList({
       ),
     },
     { key: "rfq_no", label: "RFQ No.", text: (r) => r.rfq_no || "" },
-    { key: "customer", label: "Customer", text: (r) => r.customer || "", filter: "facet" },
-    { key: "vessel", label: "Vessel", text: (r) => r.vessel || "", filter: "facet" },
     { key: "item_count", label: "Items", numeric: true, text: (r) => String(r.item_count), sortValue: (r) => r.item_count },
     { key: "amount", label: "Total", numeric: true, text: (r) => `${r.currency} ${money(r.amount)}`, sortValue: (r) => r.amount },
     { key: "level", label: "Level", text: (r) => r.level || "" },

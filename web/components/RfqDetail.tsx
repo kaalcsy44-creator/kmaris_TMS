@@ -106,6 +106,7 @@ export default function RfqDetail({
         <div className="detail-body">
           {/* 요약 */}
           <div className="grid">
+            <KV k="Project No." v={data.project_no} />
             <KV k="K-Maris RFQ No." v={data.rfq_no} />
             <KV k="Customer RFQ No." v={data.customer_rfq_no} />
             <KV k="Customer" v={data.customer} />

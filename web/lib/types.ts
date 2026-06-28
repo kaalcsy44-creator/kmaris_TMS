@@ -19,6 +19,8 @@ export type RfqRow = {
   customer_amount: string;
   stage: number;
   status: string;
+  first_rfq_at: string;
+  project_no: string;
 };
 
 export type RfqOverview = {
@@ -126,6 +128,8 @@ export type PoDetail = {
   rfq_no: string;
   customer_rfq_no: string;
   quotation_no: string;
+  project_no: string;
+  first_rfq_at: string;
   customer: string;
   customer_contact: string;
   customer_email: string;
@@ -251,6 +255,9 @@ export type PoWorkOptions = {
     trade_type: string;
     status: string;
     items: PoWorkItem[];
+    work_type: string;
+    first_rfq_at: string;
+  project_no: string;
   }[];
   purchase_orders: {
     id: number;
@@ -265,6 +272,12 @@ export type PoWorkOptions = {
     status: string;
     sent: boolean;
     items: PoWorkItem[];
+    customer: string;
+    vessel: string;
+    trade_type: string;
+    work_type: string;
+    first_rfq_at: string;
+  project_no: string;
   }[];
   smtp_configured: boolean;
 };
@@ -334,6 +347,11 @@ export type VendorQuoteOverviewRow = {
   item_count: number;
   amount: number;
   currency: string;
+  customer: string;
+  vessel: string;
+  work_type: string;
+  first_rfq_at: string;
+  project_no: string;
 };
 
 export type VendorQuoteForImport = {
@@ -364,6 +382,9 @@ export type QtnRow = {
   date: string;
   stage: number;
   pipeline: string;
+  work_type: string;
+  first_rfq_at: string;
+  project_no: string;
 };
 
 export type VrfqRow = {
@@ -377,6 +398,11 @@ export type VrfqRow = {
   status: string;
   item_count: number;
   quote_count: number;
+  customer: string;
+  vessel: string;
+  work_type: string;
+  first_rfq_at: string;
+  project_no: string;
 };
 
 export type DocRow = {
@@ -387,6 +413,7 @@ export type DocRow = {
   po_no: string;
   trade_type: string;
   work_type: string;
+  vendor: string;
   ci_no: string;
   pl_no: string;
   sa_no: string;
@@ -401,6 +428,8 @@ export type DocRow = {
   svc_ready_done: boolean;
   svc_arr_done: boolean;
   svc_billed: boolean;
+  first_rfq_at: string;
+  project_no: string;
 };
 
 export type DocumentWorkItem = {
@@ -434,6 +463,8 @@ export type DocumentDetail = {
     customer_tax_id: string;
     vessel: string;
     project_title: string;
+    project_no: string;
+    first_rfq_at: string;
     vendor: string;
     trade_type: string;
     service_info: Record<string, Record<string, string>>;
@@ -509,6 +540,12 @@ export type ArRow = {
   tax_issued_date: string;
   paid_done: boolean;
   paid_date: string;
+  vessel: string;
+  work_type: string;
+  trade_type: string;
+  vendor: string;
+  first_rfq_at: string;
+  project_no: string;
 };
 
 export type ArData = {
@@ -602,6 +639,8 @@ export type PipelineRow = {
   vessel_id: number;
   project_title: string;
   received_at: string;
+  first_rfq_at: string;
+  project_no: string;
   assignee: string; // 담당자 = RFQ 등록자(created_by) username
   item_count: number;
   crfq_at: string;
@@ -659,6 +698,8 @@ export type RfqDetail = {
   id: number;
   rfq_no: string;
   customer_rfq_no: string;
+  project_no: string;
+  first_rfq_at: string;
   customer: string;
   customer_id: number;
   contact_person: string;
