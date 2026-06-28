@@ -285,7 +285,10 @@ function OrderInfoBlock({
   if (!d) return null;
   return (
     <dl className="intl-meta" style={{ margin: "0 0 14px" }}>
+      <div><dt>Project No.</dt><dd><b>{d.order.project_no || "—"}</b></dd></div>
+      <div><dt>First RFQ at</dt><dd>{(d.order.first_rfq_at || "").replace("T", " ") || "—"}</dd></div>
       <div><dt>Order No.</dt><dd>{d.order.ord_no || "—"}</dd></div>
+      <div><dt>Type</dt><dd>{tr(d.order.work_type) || "—"}</dd></div>
       <div><dt>Trade type</dt><dd>{tr(d.order.trade_type) || "—"}</dd></div>
       <div><dt>Project</dt><dd>{d.order.project_title || "—"}</dd></div>
       <div><dt>Customer</dt><dd>{d.order.customer || "—"}</dd></div>

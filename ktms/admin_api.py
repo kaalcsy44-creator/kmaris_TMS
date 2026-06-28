@@ -1447,6 +1447,28 @@ def _rfq_for_order(s, order: Order):
     return None
 
 
+def _base_meta(s, rfq, order=None) -> dict:
+    """모든 상세 팝업 공통 기본정보.
+    Project No.·최초 RFQ 수신일시·고객·선박·업무타입·거래구분(오더 있을 때만)."""
+    customer = vessel = None
+    if rfq and rfq.customer_id:
+        customer = s.query(Customer).filter_by(id=rfq.customer_id).first()
+    if order and not customer and getattr(order, "customer_id", None):
+        customer = s.query(Customer).filter_by(id=order.customer_id).first()
+    vid = (rfq.vessel_id if rfq else None) or (getattr(order, "vessel_id", None) if order else None)
+    if vid:
+        vessel = s.query(Vessel).filter_by(id=vid).first()
+    return {
+        "project_no": _project_no_map(s).get(rfq.id, "") if rfq else "",
+        "first_rfq_at": _first_rfq_iso(rfq) if rfq else "",
+        "customer": customer.name if customer else "—",
+        "vessel": vessel.name if vessel else "",
+        "work_type": _enum_val(rfq.work_type) if (rfq and rfq.work_type) else "부품공급",
+        "trade_type": (getattr(order, "trade_type", "") or "") if order else "",
+        "project_title": (rfq.project_title or "") if rfq else "",
+    }
+
+
 @app.get("/api/admin/po-overview", dependencies=[Depends(require_token)])
 def po_overview():
     """고객 P/O · Vendor P/O 현황 — RFQ → Order → PurchaseOrder 체인."""
@@ -1561,7 +1583,9 @@ def order_detail(order_id: int):
             "customer_contact": (cust.contact if cust else "") or "",
             "customer_email": (cust.email if cust else "") or "",
             "vessel": vessel.name if vessel else "",
+            "work_type": _enum_val(rfq.work_type) if (rfq and rfq.work_type) else "부품공급",
             "trade_type": o.trade_type or "수출",
+            "project_title": (rfq.project_title or "") if rfq else "",
             "status": _status_label(stage, rfq.work_type) if rfq else _enum_val(o.status),
             "order_status": _enum_val(o.status),
             "stage": stage,
@@ -2026,11 +2050,13 @@ def vendor_po_detail(po_id: int):
             raise HTTPException(status_code=404, detail="발주서를 찾을 수 없습니다.")
         order = s.query(Order).filter_by(id=po.order_id).first()
         vendor = s.query(Vendor).filter_by(id=po.vendor_id).first()
+        rfq = _rfq_for_order(s, order) if order else None
         return {
             "id": po.id,
             "po_no": po.po_no or "",
             "order_id": po.order_id,
             "ord_no": order.ord_no if order else "",
+            **_base_meta(s, rfq, order),   # 공통 기본정보
             "vendor_id": po.vendor_id or 0,
             "vendor": vendor.name if vendor else "—",
             "vendor_email": po.sent_to_email or (vendor.email if vendor else "") or "",
@@ -2858,6 +2884,7 @@ def _document_detail_payload(session, order: Order) -> dict:
             "project_title": (rfq.project_title or "") if rfq else "",
             "project_no": _project_no_map(session).get(rfq.id, "") if rfq else "",
             "first_rfq_at": _first_rfq_iso(rfq),
+            "work_type": _enum_val(rfq.work_type) if (rfq and rfq.work_type) else "부품공급",
             "vendor": ", ".join(vendor_names),
             "trade_type": order.trade_type or "수출",
             "service_info": getattr(order, "service_info", None) or {},
@@ -4263,6 +4290,8 @@ def vendor_rfq_detail(vrfq_id: int):
             "rfq_id": vr.rfq_id,
             "customer_rfq_no": rfq.customer_rfq_no if rfq else "",
             "kmaris_rfq_no": _rfq_no_disp(rfq.rfq_no) if rfq else "",
+            "project_no": _project_no_map(s).get(rfq.id, "") if rfq else "",
+            "first_rfq_at": _first_rfq_iso(rfq) if rfq else "",
             "customer": customer.name if customer else "",
             "customer_contact": getattr(customer, "contact", "") if customer else "",
             "customer_email": getattr(customer, "email", "") if customer else "",
@@ -4492,6 +4521,7 @@ def vendor_quote_detail(vq_id: int):
             "vrfq_no": vr.vrfq_no if vr else "—",
             "rfq_id": vr.rfq_id if vr else None,
             "customer_rfq_no": _rfq_no_disp(rfq.rfq_no) if rfq else "",
+            **_base_meta(s, rfq),   # 공통 기본정보(고객·선박·업무·Project No.·최초 RFQ)
             "vendor": vendor.name if vendor else "—",
             "received_date": q.received_date or "",
             "received_at": q.received_at or "",
@@ -5043,8 +5073,7 @@ def customer_quotation_detail(qtn_id: int):
             "qtn_no": qtn.qtn_no,
             "rfq_id": qtn.rfq_id,
             "rfq_no": _rfq_no_disp(rfq.rfq_no) if rfq else "",
-            "customer": cust.name if cust else "—",
-            "vessel": vessel.name if vessel else "",
+            **_base_meta(s, rfq),   # 공통 기본정보(고객·선박·업무·Project No.·최초 RFQ)
             "currency": qtn.currency or "USD",
             "amount": round(_quotation_total(qtn.items or []), 2),
             "valid_until": qtn.valid_until or "",

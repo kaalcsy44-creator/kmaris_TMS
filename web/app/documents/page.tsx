@@ -1515,7 +1515,9 @@ function DocOrderInfo({ order }: { order: DocumentDetail["order"] }) {
   return (
     <dl className="intl-meta" style={{ margin: "0 0 14px" }}>
       <div><dt>Project No.</dt><dd><b>{order.project_no || "—"}</b></dd></div>
+      <div><dt>First RFQ at</dt><dd>{(order.first_rfq_at || "").replace("T", " ") || "—"}</dd></div>
       <div><dt>Order No.</dt><dd>{order.ord_no || "—"}</dd></div>
+      <div><dt>Type</dt><dd>{tr(order.work_type) || "—"}</dd></div>
       <div><dt>Trade type</dt><dd>{tr(order.trade_type) || "—"}</dd></div>
       <div><dt>Project</dt><dd>{order.project_title || "—"}</dd></div>
       <div><dt>Customer</dt><dd>{order.customer || "—"}</dd></div>
@@ -1534,7 +1536,7 @@ function emptyDocDetail(): DocumentDetail {
     order: {
       id: 0, rfq_id: 0, ord_no: "", po_no: "", date: "", status: "",
       customer: "", customer_email: "", customer_tax_id: "", vessel: "",
-      project_title: "", project_no: "", first_rfq_at: "", vendor: "", trade_type: "", service_info: {},
+      project_title: "", project_no: "", first_rfq_at: "", work_type: "", vendor: "", trade_type: "", service_info: {},
       tracking_token: "", consignee_confirmed_date: "", vendor_docs_sent_date: "",
       items: [],
     },

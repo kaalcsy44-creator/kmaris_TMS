@@ -134,7 +134,9 @@ export type PoDetail = {
   customer_contact: string;
   customer_email: string;
   vessel: string;
+  work_type: string;
   trade_type: string;
+  project_title: string;
   status: string;
   order_status: string;
   stage: number;
@@ -465,6 +467,7 @@ export type DocumentDetail = {
     project_title: string;
     project_no: string;
     first_rfq_at: string;
+    work_type: string;
     vendor: string;
     trade_type: string;
     service_info: Record<string, Record<string, string>>;
@@ -729,6 +732,8 @@ export type VendorRfqDetail = {
   rfq_id: number | null;
   customer_rfq_no: string;
   kmaris_rfq_no: string;
+  project_no: string;
+  first_rfq_at: string;
   customer: string;
   customer_contact: string;
   customer_email: string;
@@ -763,6 +768,12 @@ export type VendorQuoteDetail = {
   vrfq_no: string;
   rfq_id: number | null;
   customer_rfq_no: string;
+  project_no: string;
+  first_rfq_at: string;
+  customer: string;
+  vessel: string;
+  work_type: string;
+  project_title: string;
   vendor: string;
   received_date: string;
   received_at: string;
@@ -776,8 +787,12 @@ export type CustomerQuotationDetail = {
   qtn_no: string;
   rfq_id: number | null;
   rfq_no: string;
+  project_no: string;
+  first_rfq_at: string;
   customer: string;
   vessel: string;
+  work_type: string;
+  project_title: string;
   currency: string;
   amount: number;
   valid_until: string;
@@ -794,6 +809,13 @@ export type PurchaseOrderDetail = {
   po_no: string;
   order_id: number;
   ord_no: string;
+  project_no: string;
+  first_rfq_at: string;
+  customer: string;
+  vessel: string;
+  work_type: string;
+  trade_type: string;
+  project_title: string;
   vendor_id: number;
   vendor: string;
   vendor_email: string;

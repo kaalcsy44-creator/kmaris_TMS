@@ -53,6 +53,7 @@ import WorkTypeBadge from "./WorkTypeBadge";
 import FilterTable, { ColumnDef } from "./common/FilterTable";
 import { identityColumns, projectNoColumn } from "./common/identityColumns";
 import Modal from "./common/Modal";
+import BaseMetaRows from "./common/BaseMeta";
 
 /** 현재 시각 "YYYY-MM-DDTHH:MM" (datetime-local 기본값). */
 function nowLocalDt(): string {
@@ -447,14 +448,10 @@ function VendorRfqDetailModal({
             <>
               <div className="form-section-title">Project info</div>
               <dl className="intl-meta">
-                <div><dt>Customer</dt><dd>{d.customer || "—"}</dd></div>
-                <div><dt>Vessel</dt><dd>{d.vessel || "—"}</dd></div>
-                <div><dt>Project</dt><dd>{d.project_title || "—"}</dd></div>
-                <div><dt>Items</dt><dd>{items.length}</dd></div>
+                <BaseMetaRows info={d} />
                 <div><dt>Customer RFQ No.</dt><dd>{d.customer_rfq_no || "—"}</dd></div>
                 <div><dt>K-Maris RFQ No.</dt><dd>{d.kmaris_rfq_no || "—"}</dd></div>
-                <div><dt>Received</dt><dd>{d.received_at || "—"}</dd></div>
-                <div><dt>Work type</dt><dd>{d.work_type || "—"}</dd></div>
+                <div><dt>Items</dt><dd>{items.length}</dd></div>
               </dl>
 
               <div className="form-section-title">This vendor send info</div>
@@ -492,14 +489,12 @@ function VendorRfqDetailModal({
             <>
               <div className="form-section-title">Project info</div>
               <dl className="intl-meta">
-                <div><dt>Customer</dt><dd>{d.customer || "—"}</dd></div>
-                <div><dt>Vessel</dt><dd>{d.vessel || "—"}</dd></div>
-                <div><dt>Project</dt><dd>{d.project_title || "—"}</dd></div>
-                <div><dt>Items</dt><dd>{d.items.length}</dd></div>
+                <BaseMetaRows info={d} />
                 <div><dt>Customer RFQ No.</dt><dd>{d.customer_rfq_no || "—"}</dd></div>
                 <div><dt>K-Maris RFQ No.</dt><dd>{d.kmaris_rfq_no || "—"}</dd></div>
                 <div><dt>Contact</dt><dd>{d.customer_contact || "—"}</dd></div>
                 <div><dt>Email</dt><dd>{d.customer_email || "—"}</dd></div>
+                <div><dt>Items</dt><dd>{d.items.length}</dd></div>
               </dl>
 
               <div className="form-section-title">This vendor send info</div>
@@ -835,6 +830,7 @@ function VendorQuoteDetailModal({
       ) : (
         <>
           <dl className="intl-meta">
+            <BaseMetaRows info={d} />
             <div><dt>Vendor</dt><dd>{d.vendor}</dd></div>
             <div><dt>VRFQ No.</dt><dd>{d.vrfq_no}</dd></div>
             <div><dt>Customer RFQ No.</dt><dd>{d.customer_rfq_no || "—"}</dd></div>
@@ -1069,9 +1065,8 @@ function CustomerQuoteDetailModal({
       ) : (
         <>
           <dl className="intl-meta">
+            <BaseMetaRows info={d} />
             <div><dt>RFQ No.</dt><dd>{d.rfq_no || "—"}</dd></div>
-            <div><dt>Customer</dt><dd>{d.customer}</dd></div>
-            <div><dt>Vessel</dt><dd>{d.vessel || "—"}</dd></div>
             <div><dt>Total</dt><dd>{d.currency} {money(d.amount)}</dd></div>
             <div><dt>Valid until</dt><dd>{d.valid_until || "—"}</dd></div>
             <div><dt>Status</dt><dd>{tr(d.status)}</dd></div>

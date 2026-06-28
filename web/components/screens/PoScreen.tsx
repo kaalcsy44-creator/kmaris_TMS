@@ -22,6 +22,7 @@ import { useCachedData, invalidateCache } from "@/lib/useCachedData";
 import FilterTable, { ColumnDef } from "@/components/common/FilterTable";
 import { identityColumns, projectNoColumn } from "@/components/common/identityColumns";
 import Modal from "@/components/common/Modal";
+import BaseMetaRows from "@/components/common/BaseMeta";
 import { tr } from "@/lib/labels";
 import type {
   PoDetail as PoDetailT,
@@ -91,6 +92,7 @@ function PoDetail({ orderId }: { orderId: number | null }) {
         <div className="detail-body">
           <div className="grid">
             <KV k="Project No." v={data.project_no} />
+            <KV k="First RFQ at" v={(data.first_rfq_at || "").replace("T", " ")} />
             <KV k="Order No." v={data.ord_no} />
             <KV k="Customer P/O No." v={data.customer_po_no} />
             <KV k="Customer P/O received" v={data.customer_po_at} />
@@ -98,10 +100,12 @@ function PoDetail({ orderId }: { orderId: number | null }) {
             <KV k="K-Maris RFQ No." v={data.rfq_no} />
             <KV k="Quotation No." v={data.quotation_no} />
             <KV k="Customer" v={data.customer} />
+            <KV k="Type" v={tr(data.work_type)} />
             <KV k="Trade type" v={tr(data.trade_type)} />
             <KV k="Contact" v={data.customer_contact} />
             <KV k="Email" v={data.customer_email} />
             <KV k="Vessel" v={data.vessel} />
+            <KV k="Project" v={data.project_title} />
             <KV k="Order status" v={tr(data.order_status)} />
             <KV k="Pipeline status" v={data.status} />
             <KV k="Promised delivery" v={data.promised_delivery} />
@@ -651,6 +655,7 @@ function VendorPoDetailModal({
       ) : (
         <>
           <dl className="intl-meta">
+            <BaseMetaRows info={d} />
             <div><dt>Order No.</dt><dd>{d.ord_no || "—"}</dd></div>
             <div><dt>Vendor</dt><dd>{d.vendor}</dd></div>
             <div><dt>Recipient email</dt><dd>{d.vendor_email || "—"}</dd></div>
