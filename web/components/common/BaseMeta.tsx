@@ -1,5 +1,20 @@
 import { tr } from "@/lib/labels";
 
+/** 모달 제목 옆에 붙는 Project No. 칩. 단계별 팝업 제목 공통 표기. */
+export function ProjectChip({ no }: { no?: string }) {
+  return <span className="modal-proj-chip">Project No. {no || "—"}</span>;
+}
+
+/** 단계 팝업 제목 = 단계명 + Project No. 칩. */
+export function ModalTitle({ label, projectNo }: { label: string; projectNo?: string }) {
+  return (
+    <span className="modal-title-row">
+      <span>{label}</span>
+      <ProjectChip no={projectNo} />
+    </span>
+  );
+}
+
 /** 모든 상세 팝업이 공통으로 표시하는 거래 기본정보 필드. */
 export type BaseMetaInfo = {
   project_no?: string;

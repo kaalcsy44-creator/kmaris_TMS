@@ -26,6 +26,7 @@ import AppShell, { SectionHead } from "@/components/AppShell";
 import FilterTable, { ColumnDef } from "@/components/common/FilterTable";
 import { identityColumns, projectNoColumn } from "@/components/common/identityColumns";
 import Modal from "@/components/common/Modal";
+import { ModalTitle } from "@/components/common/BaseMeta";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -240,6 +241,7 @@ function DocumentsOverview() {
             orderId={editing.orderId}
             kind={editing.kind}
             ordNo={orders.find((o) => o.id === editing.orderId)?.ord_no}
+            projectNo={orders.find((o) => o.id === editing.orderId)?.project_no}
             onClose={close}
             onChanged={load}
           />
@@ -248,6 +250,7 @@ function DocumentsOverview() {
             orderId={editing.orderId}
             svc={editing.svc}
             ordNo={orders.find((o) => o.id === editing.orderId)?.ord_no}
+            projectNo={orders.find((o) => o.id === editing.orderId)?.project_no}
             onClose={close}
             onChanged={load}
           />
@@ -381,9 +384,10 @@ function ServiceNewModal({
   onChanged: () => void;
 }) {
   const [orderId, setOrderId] = useState<number | "">(orders.length === 1 ? orders[0].id : "");
+  const selectedOrder = orderId === "" ? null : orders.find((o) => o.id === orderId);
 
   return (
-    <Modal title={`${SVC_CFG[svc].label} — new entry`} onClose={onClose} wide>
+    <Modal title={<ModalTitle label={`${SVC_CFG[svc].label} — new entry`} projectNo={selectedOrder?.project_no} />} onClose={onClose} wide>
       <div className="project-select">
         <label>Service order *</label>
         <select value={orderId} onChange={(e) => setOrderId(e.target.value ? Number(e.target.value) : "")}>
@@ -464,18 +468,20 @@ function ServiceEditorModal({
   orderId,
   svc,
   ordNo,
+  projectNo,
   onClose,
   onChanged,
 }: {
   orderId: number;
   svc: SvcStage;
   ordNo?: string;
+  projectNo?: string;
   onClose: () => void;
   onChanged: () => void;
 }) {
   const title = `${SVC_CFG[svc].label}${ordNo ? ` — ${ordNo}` : ""}`;
   return (
-    <Modal title={title} onClose={onClose} wide>
+    <Modal title={<ModalTitle label={title} projectNo={projectNo} />} onClose={onClose} wide>
       <ServiceStageEditor orderId={orderId} svc={svc} onChanged={onChanged} onClose={onClose} />
     </Modal>
   );
@@ -896,18 +902,20 @@ function DocEditorModal({
   orderId,
   kind,
   ordNo,
+  projectNo,
   onClose,
   onChanged,
 }: {
   orderId: number;
   kind: DocKind;
   ordNo?: string;
+  projectNo?: string;
   onClose: () => void;
   onChanged: () => void;
 }) {
   const title = `${KIND_CFG[kind].label}${ordNo ? ` — ${ordNo}` : ""}`;
   return (
-    <Modal title={title} onClose={onClose} wide>
+    <Modal title={<ModalTitle label={title} projectNo={projectNo} />} onClose={onClose} wide>
       <DocEditorContent orderId={orderId} kind={kind} onChanged={onChanged} />
     </Modal>
   );
@@ -928,9 +936,10 @@ function DocNewModal({
 }) {
   const cfg = KIND_CFG[kind];
   const [orderId, setOrderId] = useState<number | "">(orders.length === 1 ? orders[0].id : "");
+  const selectedOrder = orderId === "" ? null : orders.find((o) => o.id === orderId);
 
   return (
-    <Modal title={`New ${cfg.label} — new entry`} onClose={onClose} wide>
+    <Modal title={<ModalTitle label={`New ${cfg.label} — new entry`} projectNo={selectedOrder?.project_no} />} onClose={onClose} wide>
       <div className="project-select">
         <label>Order *</label>
         <select value={orderId} onChange={(e) => setOrderId(e.target.value ? Number(e.target.value) : "")}>

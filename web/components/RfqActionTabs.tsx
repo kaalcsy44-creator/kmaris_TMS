@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   fetchVendors,
   fetchRfqDetail,
@@ -53,7 +53,7 @@ import WorkTypeBadge from "./WorkTypeBadge";
 import FilterTable, { ColumnDef } from "./common/FilterTable";
 import { identityColumns, projectNoColumn } from "./common/identityColumns";
 import Modal from "./common/Modal";
-import BaseMetaRows from "./common/BaseMeta";
+import BaseMetaRows, { ModalTitle } from "./common/BaseMeta";
 
 /** 현재 시각 "YYYY-MM-DDTHH:MM" (datetime-local 기본값). */
 function nowLocalDt(): string {
@@ -93,6 +93,16 @@ export default function RfqActionTabs({
   const [tab, setTab] = useState(validTab);
   const [vendors, setVendors] = useState<VendorOption[]>([]);
 
+  // 딥링크(URL ?tab=&rfq=)로 특정 단계에 직접 들어온 경우에만 1회 자동으로 해당
+  // 레코드를 연다. 마운트 시점의 값만 사용하므로, 사용자가 단순히 탭을 전환할 때는
+  // (목록 컴포넌트가 remount 되어도) 자동으로 열리지 않는다.
+  const [autoOpen, setAutoOpen] = useState<{ tab: string; id: number } | null>(
+    rfqId ? { tab: validTab, id: rfqId } : null
+  );
+  const consumeAutoOpen = useCallback(() => setAutoOpen(null), []);
+  const autoFor = (key: string) =>
+    autoOpen && autoOpen.tab === key ? autoOpen.id : null;
+
   // 진행현황 단계 행에서 ?tab=... 으로 들어오면 해당 탭으로 전환.
   useEffect(() => {
     if (initialTab && TABS.some((t) => t.key === initialTab)) setTab(initialTab);
@@ -117,13 +127,39 @@ export default function RfqActionTabs({
       </div>
 
       {tab === "new" && (
-        <CustomerRfqList rows={rows} deepLinkId={rfqId} onSelect={onSelect} onChanged={onChanged} />
+        <CustomerRfqList
+          rows={rows}
+          autoOpenId={autoFor("new")}
+          onAutoConsumed={consumeAutoOpen}
+          onSelect={onSelect}
+          onChanged={onChanged}
+        />
       )}
       {tab === "vrfq" && (
-        <VendorRfqList projects={rows} vendors={vendors} onChanged={onChanged} deepRfqId={rfqId} />
+        <VendorRfqList
+          projects={rows}
+          vendors={vendors}
+          onChanged={onChanged}
+          autoEditId={autoFor("vrfq")}
+          onAutoConsumed={consumeAutoOpen}
+        />
       )}
-      {tab === "vquote" && <VendorQuoteList projects={rows} onChanged={onChanged} deepRfqId={rfqId} />}
-      {tab === "cquote" && <CustomerQuoteList projects={rows} onChanged={onChanged} deepRfqId={rfqId} />}
+      {tab === "vquote" && (
+        <VendorQuoteList
+          projects={rows}
+          onChanged={onChanged}
+          autoEditId={autoFor("vquote")}
+          onAutoConsumed={consumeAutoOpen}
+        />
+      )}
+      {tab === "cquote" && (
+        <CustomerQuoteList
+          projects={rows}
+          onChanged={onChanged}
+          autoEditId={autoFor("cquote")}
+          onAutoConsumed={consumeAutoOpen}
+        />
+      )}
     </div>
   );
 }
@@ -161,21 +197,26 @@ function ProjectPicker({
 // ── 1. Customer RFQ 수신 ────────────────────────────────────────────────────
 function CustomerRfqList({
   rows,
-  deepLinkId,
+  autoOpenId,
+  onAutoConsumed,
   onSelect,
   onChanged,
 }: {
   rows: RfqRow[];
-  deepLinkId: number | null;
+  autoOpenId: number | null;
+  onAutoConsumed: () => void;
   onSelect: (id: number | null) => void;
   onChanged: () => void;
 }) {
   const [adding, setAdding] = useState(false);
-  const [detailId, setDetailId] = useState<number | null>(deepLinkId);
+  const [detailId, setDetailId] = useState<number | null>(null);
 
+  // 딥링크 도착 시 1회만 상세를 연다(탭 전환으로 인한 재오픈 방지).
   useEffect(() => {
-    setDetailId(deepLinkId);
-  }, [deepLinkId]);
+    if (!autoOpenId) return;
+    setDetailId(autoOpenId);
+    onAutoConsumed();
+  }, [autoOpenId, onAutoConsumed]);
 
   const columns: ColumnDef<RfqRow>[] = [
     projectNoColumn<RfqRow>({ projectNo: (r) => r.project_no, firstRfqAt: (r) => r.first_rfq_at }),
@@ -256,12 +297,14 @@ function VendorRfqList({
   projects,
   vendors,
   onChanged,
-  deepRfqId,
+  autoEditId,
+  onAutoConsumed,
 }: {
   projects: RfqRow[];
   vendors: VendorOption[];
   onChanged: () => void;
-  deepRfqId?: number | null;
+  autoEditId?: number | null;
+  onAutoConsumed?: () => void;
 }) {
   const [rows, setRows] = useState<VrfqRow[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -269,7 +312,6 @@ function VendorRfqList({
   const [detailId, setDetailId] = useState<number | null>(null);
   const [pickRfqId, setPickRfqId] = useState<number | null>(null);
   const [autoEdit, setAutoEdit] = useState(false);
-  const autoRef = useRef<number | null>(null);
 
   function load() {
     fetchVrfqOverview()
@@ -278,14 +320,14 @@ function VendorRfqList({
   }
   useEffect(load, []);
 
-  // Progress 단계 진입(deepRfqId) → 해당 딜의 최신 레코드를 1회 자동으로 편집 모드로 오픈.
+  // 딥링크(Progress 단계 진입)로만 1회 자동 편집 오픈. 행이 로드된 뒤 처리.
   useEffect(() => {
-    if (!deepRfqId || autoRef.current === deepRfqId || rows.length === 0) return;
-    const match = rows.find((r) => r.rfq_id === deepRfqId);
-    autoRef.current = deepRfqId;
+    if (!autoEditId || rows.length === 0) return;
+    const match = rows.find((r) => r.rfq_id === autoEditId);
     if (match) { setAutoEdit(true); setDetailId(match.id); }
-    else { setPickRfqId(deepRfqId); setAdding(true); }
-  }, [deepRfqId, rows]);
+    else { setPickRfqId(autoEditId); setAdding(true); }
+    onAutoConsumed?.();
+  }, [autoEditId, rows, onAutoConsumed]);
 
   const refresh = () => {
     load();
@@ -439,7 +481,7 @@ function VendorRfqDetailModal({
   }
 
   return (
-    <Modal title={d ? `Vendor RFQ — ${d.vrfq_no}` : "Vendor RFQ details"} onClose={onClose} wide>
+    <Modal title={d ? <ModalTitle label={`Vendor RFQ — ${d.vrfq_no}`} projectNo={d.project_no} /> : "Vendor RFQ details"} onClose={onClose} wide>
       {!d ? (
         <div className="empty">Loading…</div>
       ) : (
@@ -621,11 +663,13 @@ function VendorRfqItemEditor({
 function VendorQuoteList({
   projects,
   onChanged,
-  deepRfqId,
+  autoEditId,
+  onAutoConsumed,
 }: {
   projects: RfqRow[];
   onChanged: () => void;
-  deepRfqId?: number | null;
+  autoEditId?: number | null;
+  onAutoConsumed?: () => void;
 }) {
   const [rows, setRows] = useState<VendorQuoteOverviewRow[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -634,14 +678,14 @@ function VendorQuoteList({
   const [pickRfqId, setPickRfqId] = useState<number | null>(null);
   const [vendorRfqs, setVendorRfqs] = useState<RfqDetailT["vendor_rfqs"]>([]);
   const [autoEdit, setAutoEdit] = useState(false);
-  const autoRef = useRef<number | null>(null);
 
+  // 딥링크로만 1회 자동 편집 오픈(탭 전환 시 재오픈 방지).
   useEffect(() => {
-    if (!deepRfqId || autoRef.current === deepRfqId || rows.length === 0) return;
-    const match = rows.find((r) => r.rfq_id === deepRfqId);
-    autoRef.current = deepRfqId;
+    if (!autoEditId || rows.length === 0) return;
+    const match = rows.find((r) => r.rfq_id === autoEditId);
     if (match) { setAutoEdit(true); setDetailId(match.id); }
-  }, [deepRfqId, rows]);
+    onAutoConsumed?.();
+  }, [autoEditId, rows, onAutoConsumed]);
 
   function load() {
     fetchVendorQuoteOverview()
@@ -801,7 +845,7 @@ function VendorQuoteDetailModal({
   }
 
   return (
-    <Modal title={d ? `Vendor quote — ${d.vendor_quote_no}` : "Vendor quote details"} onClose={onClose} wide>
+    <Modal title={d ? <ModalTitle label={`Vendor quote — ${d.vendor_quote_no}`} projectNo={d.project_no} /> : "Vendor quote details"} onClose={onClose} wide>
       {!d ? (
         <div className="empty">Loading…</div>
       ) : editing ? (
@@ -853,11 +897,13 @@ function VendorQuoteDetailModal({
 function CustomerQuoteList({
   projects,
   onChanged,
-  deepRfqId,
+  autoEditId,
+  onAutoConsumed,
 }: {
   projects: RfqRow[];
   onChanged: () => void;
-  deepRfqId?: number | null;
+  autoEditId?: number | null;
+  onAutoConsumed?: () => void;
 }) {
   const [rows, setRows] = useState<QtnRow[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -865,14 +911,14 @@ function CustomerQuoteList({
   const [detailId, setDetailId] = useState<number | null>(null);
   const [pickRfqId, setPickRfqId] = useState<number | null>(null);
   const [autoEdit, setAutoEdit] = useState(false);
-  const autoRef = useRef<number | null>(null);
 
+  // 딥링크로만 1회 자동 편집 오픈(탭 전환 시 재오픈 방지).
   useEffect(() => {
-    if (!deepRfqId || autoRef.current === deepRfqId || rows.length === 0) return;
-    const match = rows.find((r) => r.rfq_id === deepRfqId);
-    autoRef.current = deepRfqId;
+    if (!autoEditId || rows.length === 0) return;
+    const match = rows.find((r) => r.rfq_id === autoEditId);
     if (match) { setAutoEdit(true); setDetailId(match.id); }
-  }, [deepRfqId, rows]);
+    onAutoConsumed?.();
+  }, [autoEditId, rows, onAutoConsumed]);
 
   function load() {
     fetchQuotationOverview()
@@ -1025,7 +1071,7 @@ function CustomerQuoteDetailModal({
   const STATUSES = ["초안", "발송완료", "협상중", "수주확정", "실주", "만료"];
 
   return (
-    <Modal title={d ? `Quotation — ${d.qtn_no}` : "Quotation details"} onClose={onClose} wide>
+    <Modal title={d ? <ModalTitle label={`Quotation — ${d.qtn_no}`} projectNo={d.project_no} /> : "Quotation details"} onClose={onClose} wide>
       {!d ? (
         <div className="empty">Loading…</div>
       ) : editing ? (
@@ -1215,10 +1261,9 @@ function VendorRfqAction({
   const [notes, setNotes] = useState("");
   const [previews, setPreviews] = useState<VendorRfqPreview[]>([]);
   // 케이마리스 RFQ No.는 이 단계(Vendor RFQ 발신)에서 부여된다.
-  const unassigned = !kmarisNo || kmarisNo === "Not issued";
-  const [rfqNoMode, setRfqNoMode] = useState<"auto" | "manual">("auto");
+  const unassigned = !kmarisNo || kmarisNo === "Not issued" || kmarisNo === "-";
   const [manualNo, setManualNo] = useState("");
-  const rfqNoArg = unassigned ? { mode: rfqNoMode, value: manualNo.trim() } : undefined;
+  const rfqNoArg = unassigned && manualNo.trim() ? { mode: "manual" as const, value: manualNo.trim() } : undefined;
   const [sentAt, setSentAt] = useState(nowLocalDt());
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -1232,16 +1277,16 @@ function VendorRfqAction({
 
   // RFQ 생성 — 케이마리스 RFQ No. 단독 발번(선택)
   async function generateRfqNo() {
-    if (rfqNoMode === "manual" && !manualNo.trim()) {
-      setErr("Enter the K-Maris RFQ No. (or switch to auto)");
+    if (!manualNo.trim()) {
+      setErr("Enter the K-Maris RFQ No. or leave it as '-'.");
       return;
     }
     setBusy(true);
     setMsg(null);
     setErr(null);
     try {
-      const r = await assignRfqNo(rfqId, { mode: rfqNoMode, rfq_no: manualNo.trim() });
-      setMsg(`K-Maris RFQ No. issued: ${r.rfq_no}`);
+      const r = await assignRfqNo(rfqId, { mode: "manual", rfq_no: manualNo.trim() });
+      setMsg(`K-Maris RFQ No. saved: ${r.rfq_no}`);
       onDone(); // 목록 새로고침 → 발급 상태 반영
     } catch (e) {
       setErr(e instanceof Error ? e.message : "RFQ creation failed");
@@ -1252,10 +1297,6 @@ function VendorRfqAction({
 
   async function makePreview() {
     if (vendorIds.length === 0) return;
-    if (unassigned && rfqNoMode === "manual" && !manualNo.trim()) {
-      setErr("Enter the K-Maris RFQ No. (or switch to auto)");
-      return;
-    }
     setBusy(true);
     setMsg(null);
     setErr(null);
@@ -1298,10 +1339,6 @@ function VendorRfqAction({
       setErr("Select a vendor.");
       return;
     }
-    if (unassigned && rfqNoMode === "manual" && !manualNo.trim()) {
-      setErr("Enter the K-Maris RFQ No. (or switch to auto)");
-      return;
-    }
     setBusy(true);
     setMsg(null);
     setErr(null);
@@ -1316,7 +1353,7 @@ function VendorRfqAction({
         };
       });
       const r = await sendVendorRfq(rfqId, items, rfqNoArg, sentAt || undefined);
-      setMsg(`K-Maris RFQ No. ${r.rfq_no} · sent (${r.saved} Vendor RFQ recorded)`);
+      setMsg(`K-Maris RFQ No. ${r.rfq_no || "-"} · sent (${r.saved} Vendor RFQ recorded)`);
       setPreviews([]);
       setVendorIds([]);
       onDone();
@@ -1338,35 +1375,15 @@ function VendorRfqAction({
         <label>K-Maris RFQ No.</label>
         {unassigned ? (
           <>
-            <div className="seg-tabs">
-              {(
-                [
-                  ["auto", "Auto-generate"],
-                  ["manual", "Manual"],
-                ] as const
-              ).map(([m, lbl]) => (
-                <button
-                  key={m}
-                  type="button"
-                  className={rfqNoMode === m ? "on" : ""}
-                  onClick={() => setRfqNoMode(m)}
-                >
-                  {lbl}
-                </button>
-              ))}
-            </div>
-            {rfqNoMode === "manual" ? (
-              <input
-                style={{ marginTop: 8, maxWidth: 320 }}
-                value={manualNo}
-                onChange={(e) => setManualNo(e.target.value)}
-                placeholder="e.g. KMS-RFQ-2606-001"
-              />
-            ) : (
-              <span className="hint-inline" style={{ marginTop: 8, display: "inline-block" }}>
-                Assigned as KMS-RFQ-yymm-NNN on "Create RFQ" or send.
-              </span>
-            )}
+            <input
+              style={{ maxWidth: 320 }}
+              value={manualNo}
+              onChange={(e) => setManualNo(e.target.value)}
+              placeholder="Optional"
+            />
+            <span className="hint-inline" style={{ marginTop: 8, display: "inline-block" }}>
+              Leave blank to keep K-Maris RFQ No. as "-".
+            </span>
           </>
         ) : (
           <div className="action-ctx" style={{ margin: 0 }}>

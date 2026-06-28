@@ -2084,6 +2084,24 @@ table.pipeline tbody tr.service .pl-stage-done {
 .pl-modal-head .intl-title {
   flex: 1;
 }
+.modal-title-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.modal-proj-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #eef5ff;
+  color: #255c99;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+}
 .pl-modal-head .intl-stage {
   flex: none;
 }

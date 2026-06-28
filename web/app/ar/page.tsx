@@ -21,6 +21,7 @@ import AppShell from "@/components/AppShell";
 import FilterTable, { ColumnDef } from "@/components/common/FilterTable";
 import { identityColumns, projectNoColumn, fmtRfqDateTime } from "@/components/common/identityColumns";
 import Modal from "@/components/common/Modal";
+import { ModalTitle } from "@/components/common/BaseMeta";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -382,7 +383,7 @@ function TaxIssueModal({
   }
 
   return (
-    <Modal title={`Issue Tax Invoice — ${row.ord_no || row.ci_no || "AR"}`} onClose={onClose} wide>
+    <Modal title={<ModalTitle label={`Issue Tax Invoice — ${row.ord_no || row.ci_no || "AR"}`} projectNo={row.project_no} />} onClose={onClose} wide>
       <OrderInfoBlock orderId={row.order_id} detail={detail} />
       <div className="milestone-row" style={{ marginBottom: 12 }}>
         <span className={`ar-badge${row.tax_issued ? "" : " overdue"}`}>
@@ -446,7 +447,7 @@ function PaymentModal({
   }
 
   return (
-    <Modal title={`Record Payment — ${row.ord_no || row.ci_no || "AR"}`} onClose={onClose} wide>
+    <Modal title={<ModalTitle label={`Record Payment — ${row.ord_no || row.ci_no || "AR"}`} projectNo={row.project_no} />} onClose={onClose} wide>
       <OrderInfoBlock orderId={row.order_id} />
       <div className="milestone-row" style={{ marginBottom: 12 }}>
         <span className={`ar-badge${row.paid_done ? "" : " overdue"}`}>

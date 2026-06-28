@@ -4197,7 +4197,7 @@ def vendor_rfq_send(rfq_id: int, body: VendorRfqSendRequest):
             "ok": True,
             "saved": saved,
             "rows": result_rows,
-            "rfq_no": rfq.rfq_no,
+            "rfq_no": _rfq_no_disp(rfq.rfq_no),
         }
     finally:
         s.close()
@@ -4602,8 +4602,8 @@ def _rfq_unassigned(rfq_no) -> bool:
 
 
 def _rfq_no_disp(rfq_no) -> str:
-    """사용자 표시용: 미발급(임시 토큰/빈값)이면 '미발급'."""
-    return "미발급" if _rfq_unassigned(rfq_no) else rfq_no
+    """사용자 표시용: 미발급(임시 토큰/빈값)이면 '-'."""
+    return "-" if _rfq_unassigned(rfq_no) else rfq_no
 
 
 def _new_tmp_rfq_no(session) -> str:
@@ -4614,7 +4614,7 @@ def _new_tmp_rfq_no(session) -> str:
 
 
 def _assign_rfq_no(session, rfq, mode: str = "auto", manual: str = "") -> str:
-    """RFQ 가 아직 미발급이면 케이마리스 RFQ No.를 부여(자동 채번/수동). 이미 발급됐으면 유지."""
+    """RFQ 가 아직 미발급이면 수동 입력값만 부여한다. 비워두면 임시 토큰을 유지한다."""
     if not _rfq_unassigned(rfq.rfq_no):
         return rfq.rfq_no
     manual = (manual or "").strip()
@@ -4622,8 +4622,6 @@ def _assign_rfq_no(session, rfq, mode: str = "auto", manual: str = "") -> str:
         if session.query(RFQ).filter_by(rfq_no=manual).first():
             raise HTTPException(status_code=400, detail=f"이미 존재하는 RFQ No.입니다: {manual}")
         rfq.rfq_no = manual
-    else:
-        rfq.rfq_no = _next_rfq_no(session)
     return rfq.rfq_no
 
 
@@ -4710,7 +4708,7 @@ def assign_rfq_no_endpoint(rfq_id: int, body: RfqAssignNo):
             raise HTTPException(status_code=404, detail="RFQ를 찾을 수 없습니다.")
         no = _assign_rfq_no(s, rfq, body.mode, body.rfq_no)
         s.commit()
-        return {"ok": True, "rfq_no": no}
+        return {"ok": True, "rfq_no": _rfq_no_disp(no)}
     finally:
         s.close()
 

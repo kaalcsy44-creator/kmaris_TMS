@@ -22,7 +22,7 @@ import { useCachedData, invalidateCache } from "@/lib/useCachedData";
 import FilterTable, { ColumnDef } from "@/components/common/FilterTable";
 import { identityColumns, projectNoColumn } from "@/components/common/identityColumns";
 import Modal from "@/components/common/Modal";
-import BaseMetaRows from "@/components/common/BaseMeta";
+import BaseMetaRows, { ModalTitle } from "@/components/common/BaseMeta";
 import { tr } from "@/lib/labels";
 import type {
   PoDetail as PoDetailT,
@@ -325,6 +325,7 @@ function OrderDetailModal({
   onClose: () => void;
   onChanged: () => void;
 }) {
+  const order = options.orders.find((o) => o.id === orderId);
   const [editing, setEditing] = useState(false);
   const [customerId, setCustomerId] = useState<number | "">("");
   const [vesselId, setVesselId] = useState<number | "">("");
@@ -393,7 +394,7 @@ function OrderDetailModal({
   const vessels = options.vessels.filter((v) => customerId === "" || v.customer_id === customerId);
 
   return (
-    <Modal title="Order details" onClose={onClose} wide>
+    <Modal title={<ModalTitle label="Order details" projectNo={order?.project_no} />} onClose={onClose} wide>
       {editing ? (
         <>
           <div className="form-grid">
@@ -621,7 +622,7 @@ function VendorPoDetailModal({
   }
 
   return (
-    <Modal title={d ? `Purchase order — ${d.po_no}` : "PO details"} onClose={onClose} wide>
+    <Modal title={d ? <ModalTitle label={`Purchase order — ${d.po_no}`} projectNo={d.project_no} /> : "PO details"} onClose={onClose} wide>
       {!d ? (
         <div className="empty">Loading…</div>
       ) : editing ? (
