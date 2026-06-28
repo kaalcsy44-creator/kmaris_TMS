@@ -1057,6 +1057,173 @@ body {
   color: #a3505c;
 }
 
+/* ── 역할/권한 (Users 탭) ─────────────────────────────────────────── */
+.role-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 9px;
+  border-radius: 999px;
+  text-transform: capitalize;
+  background: #eef1f5;
+  color: #5c6b7d;
+}
+.role-badge.role-admin {
+  background: #eae3f7;
+  color: #6b3fa3;
+}
+.role-badge.role-sales {
+  background: #e3eefb;
+  color: #245fa8;
+}
+.role-badge.role-viewer {
+  background: #eef1f5;
+  color: #6a7686;
+}
+/* 역할 권한 범례 — 3개 카드 */
+.role-legend {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 4px 0 16px;
+}
+.role-legend-card {
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #fff;
+  overflow: hidden;
+}
+.role-legend-head {
+  font-size: 12.5px;
+  font-weight: 800;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.role-legend-head.role-admin {
+  background: #f3eefb;
+  color: #6b3fa3;
+}
+.role-legend-head.role-sales {
+  background: #eef4fc;
+  color: #245fa8;
+}
+.role-legend-head.role-viewer {
+  background: #f4f6f9;
+  color: #5c6b7d;
+}
+.role-legend-card ul {
+  margin: 0;
+  padding: 10px 12px 12px 26px;
+  font-size: 12px;
+  color: #44515f;
+  line-height: 1.5;
+}
+.role-legend-card li {
+  margin-bottom: 4px;
+}
+/* 편집기 안 선택 역할 권한 안내 */
+.role-perm-note {
+  margin: 2px 0 10px;
+  padding: 10px 14px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 8px;
+  background: #f8fafc;
+}
+.role-perm-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--blue);
+}
+.role-perm-note ul {
+  margin: 6px 0 0;
+  padding-left: 20px;
+  font-size: 12px;
+  color: #44515f;
+  line-height: 1.5;
+}
+@media (max-width: 760px) {
+  .role-legend {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 권한 매트릭스 편집 */
+.perm-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.perm-card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  overflow: hidden;
+}
+.perm-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 800;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.perm-card-head.role-admin { background: #f3eefb; color: #6b3fa3; }
+.perm-card-head.role-sales { background: #eef4fc; color: #245fa8; }
+.perm-card-head.role-viewer { background: #f4f6f9; color: #5c6b7d; }
+.perm-locked {
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.7;
+}
+table.perm-matrix {
+  width: 100%;
+}
+table.perm-matrix th,
+table.perm-matrix td {
+  text-align: center;
+  padding: 7px 8px;
+}
+table.perm-matrix th:first-child,
+table.perm-matrix td.perm-mod {
+  text-align: left;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.perm-cell input {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+.perm-cell input:disabled {
+  cursor: not-allowed;
+}
+.perm-na {
+  color: var(--muted);
+}
+.perm-scope {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+}
+.perm-scope-label {
+  font-weight: 700;
+  color: #44515f;
+}
+.perm-scope label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+.perm-card .form-actions {
+  padding: 0 14px 14px;
+}
+
 /* Settings 회사 정보 — 정리된 읽기 화면 */
 .company-view {
   display: grid;
@@ -1474,6 +1641,39 @@ body {
   margin-left: auto;
   font-size: 12px;
   color: var(--muted);
+  white-space: nowrap;
+}
+/* 담당자 범위: "내 담당만" 토글 / sales 잠금 배지 */
+.pl-mine-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  background: #fff;
+  color: #5c6b7d;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+}
+.pl-mine-toggle input {
+  cursor: pointer;
+}
+.pl-scope-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--blue);
+  border-radius: 7px;
+  background: #eef4ff;
+  color: var(--blue);
+  font-size: 12px;
+  font-weight: 600;
   white-space: nowrap;
 }
 .pl-toolbar-actions {

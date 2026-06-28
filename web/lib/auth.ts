@@ -2,6 +2,8 @@ import { API_BASE } from "./config";
 
 const TOKEN_KEY = "ktms_token";
 const USER_KEY = "ktms_user";
+const PERMS_KEY = "ktms_perms";
+const SCOPE_KEY = "ktms_scope";
 
 export type AuthUser = {
   id: number;
@@ -9,6 +11,12 @@ export type AuthUser = {
   role: string;
   email?: string;
 };
+
+// 권한 그리드: {module: {action: bool}}
+export type PermGrid = Record<string, Record<string, boolean>>;
+export type PermModule =
+  | "dashboard" | "progress" | "rfq" | "po" | "documents" | "ar" | "settings";
+export type PermAction = "view" | "create" | "edit" | "delete";
 
 export function getToken(): string {
   if (typeof window === "undefined") return "";
@@ -21,10 +29,64 @@ export function getUser(): AuthUser | null {
   return raw ? (JSON.parse(raw) as AuthUser) : null;
 }
 
+/** 현재 사용자 역할(admin | sales | viewer). 비로그인 시 빈 문자열. */
+export function getRole(): string {
+  return getUser()?.role ?? "";
+}
+
+/** 관리자 여부 — 사용자/권한/회사 설정 관리 권한. (항상 전체 권한) */
+export function isAdmin(): boolean {
+  return getRole() === "admin";
+}
+
+/** 저장된 권한 그리드. 없으면 null. */
+export function getPerms(): PermGrid | null {
+  if (typeof window === "undefined") return null;
+  const raw = localStorage.getItem(PERMS_KEY);
+  return raw ? (JSON.parse(raw) as PermGrid) : null;
+}
+
+/** 데이터 범위: "own"(본인 담당만) | "all"(전체). 기본 all. */
+export function dataScope(): "own" | "all" {
+  if (typeof window === "undefined") return "all";
+  return localStorage.getItem(SCOPE_KEY) === "own" ? "own" : "all";
+}
+
+/** 본인 담당 건만 강제로 보이는 역할인지(데이터 범위 own). */
+export function isOwnScoped(): boolean {
+  return dataScope() === "own" && !isAdmin();
+}
+
+/**
+ * 페이지×동작 권한 확인. admin 은 항상 true.
+ * 권한 정보가 아직 없으면(구버전 토큰 등) 보수적으로 admin 만 허용.
+ */
+export function can(module: PermModule, action: PermAction): boolean {
+  if (isAdmin()) return true;
+  const perms = getPerms();
+  if (!perms) return false;
+  return !!perms[module]?.[action];
+}
+
 export function clearAuth(): void {
   if (typeof window === "undefined") return;
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(USER_KEY);
+  localStorage.removeItem(PERMS_KEY);
+  localStorage.removeItem(SCOPE_KEY);
+}
+
+function storeAuth(data: {
+  token?: string;
+  user?: AuthUser;
+  permissions?: PermGrid;
+  scope?: string;
+}): void {
+  if (data.token) localStorage.setItem(TOKEN_KEY, data.token);
+  if (data.user) localStorage.setItem(USER_KEY, JSON.stringify(data.user));
+  if (data.permissions)
+    localStorage.setItem(PERMS_KEY, JSON.stringify(data.permissions));
+  if (data.scope) localStorage.setItem(SCOPE_KEY, data.scope);
 }
 
 export async function login(
@@ -40,10 +102,27 @@ export async function login(
     const e = (await res.json().catch(() => ({}))) as { detail?: string };
     throw new Error(e.detail ?? "로그인 실패");
   }
-  const data = (await res.json()) as { token: string; user: AuthUser };
-  localStorage.setItem(TOKEN_KEY, data.token);
-  localStorage.setItem(USER_KEY, JSON.stringify(data.user));
+  const data = (await res.json()) as {
+    token: string;
+    user: AuthUser;
+    permissions?: PermGrid;
+    scope?: string;
+  };
+  storeAuth(data);
   return data.user;
+}
+
+/** 권한이 바뀌었을 수 있을 때 최신 권한을 다시 받아 저장. */
+export async function refreshPermissions(): Promise<void> {
+  const token = getToken();
+  if (!token) return;
+  const res = await fetch(`${API_BASE}/api/admin/me/permissions`, {
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
+  if (!res.ok) return;
+  const data = (await res.json()) as { permissions?: PermGrid; scope?: string };
+  storeAuth({ permissions: data.permissions, scope: data.scope });
 }
 
 export function logout(): void {

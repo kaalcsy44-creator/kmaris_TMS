@@ -50,7 +50,7 @@ from services.pdf_parser import (
 from services.vendor_xlsx import make_vendor_rfq_quote_xlsx
 from services.quote_response_parser import parse_vendor_quote_bytes
 from db.models import (
-    RFQ, Customer, Vessel, Vendor, User, UserRole, ItemMaster, DocSequence,
+    RFQ, Customer, Vessel, Vendor, User, UserRole, RolePermission, ItemMaster, DocSequence,
     VendorRFQ, VendorQuote, Quotation, QuotationStatus, FollowUpLevel,
     Order, PurchaseOrder, ShippingAdvice, CommercialInvoice,
     PackingList, TaxInvoiceData, ARRecord, DeliveryProof,
@@ -98,6 +98,10 @@ def _sync_schema() -> None:
         migrate_columns()
     except Exception as exc:  # 스키마 동기화 실패가 앱 기동을 막지 않도록 로그만 남긴다.
         print(f"[WARN] startup schema sync skipped: {exc}", file=sys.stderr)
+    try:
+        _seed_perms()   # 역할 권한 기본값 시드 + 캐시 로드
+    except Exception as exc:
+        print(f"[WARN] permission seed skipped: {exc}", file=sys.stderr)
 
 
 @app.exception_handler(Exception)
@@ -185,26 +189,275 @@ def _decode_jwt(token: str) -> dict | None:
         return None
 
 
-def require_token(authorization: str | None = Header(default=None)) -> None:
-    """Guard: accept a valid JWT, or the pilot static ADMIN_API_TOKEN."""
+def _user_from_auth(authorization: str | None) -> dict | None:
+    """Authorization 헤더에서 사용자(dict) 또는 None 을 돌려준다.
+    - 유효한 JWT → 토큰 claims 기반 사용자
+    - 파일럿 정적 ADMIN_API_TOKEN → admin 권한의 'dev' 사용자(id=0)
+    예외를 던지지 않으므로 미들웨어에서 안전하게 쓸 수 있다."""
     token = _bearer(authorization)
-    if token and (token == ADMIN_API_TOKEN or _decode_jwt(token)):
-        return
-    raise HTTPException(status_code=401, detail="Unauthorized")
-
-
-def get_current_user(authorization: str | None = Header(default=None)) -> dict:
-    token = _bearer(authorization)
-    claims = _decode_jwt(token) if token else None
+    if not token:
+        return None
+    claims = _decode_jwt(token)
     if claims:
         return {
             "id": int(claims.get("sub", 0)),
             "username": claims.get("username", ""),
             "role": claims.get("role", ""),
         }
-    if token and token == ADMIN_API_TOKEN:
-        return {"id": 0, "username": "dev", "role": "admin"}
+    if token == ADMIN_API_TOKEN:
+        return {"id": 0, "username": "dev", "role": UserRole.ADMIN.value}
+    return None
+
+
+def require_token(authorization: str | None = Header(default=None)) -> None:
+    """Guard: accept a valid JWT, or the pilot static ADMIN_API_TOKEN."""
+    if _user_from_auth(authorization) is not None:
+        return
     raise HTTPException(status_code=401, detail="Unauthorized")
+
+
+def get_current_user(authorization: str | None = Header(default=None)) -> dict:
+    user = _user_from_auth(authorization)
+    if user is not None:
+        return user
+    raise HTTPException(status_code=401, detail="Unauthorized")
+
+
+def _authz_error(request: Request, status: int, detail: str) -> JSONResponse:
+    """권한 오류 응답에 CORS 헤더를 직접 부착해 돌려준다.
+    (role 가드 미들웨어는 CORSMiddleware 바깥에서 동작하므로 수동 부착이 필요하다.)"""
+    headers: dict[str, str] = {}
+    origin = _allow_origin(request.headers.get("origin"))
+    if origin:
+        headers["Access-Control-Allow-Origin"] = origin
+        headers["Vary"] = "Origin"
+    return JSONResponse(status_code=status, content={"detail": detail}, headers=headers)
+
+
+# ── 권한 매트릭스 (역할 × 페이지 × 동작) ───────────────────────────────────────
+# 페이지(모듈)와 동작의 정본. 프런트 매트릭스 UI와 동일한 순서.
+PERM_MODULES = ["dashboard", "progress", "rfq", "po", "documents", "ar", "settings"]
+PERM_ACTIONS = ["view", "create", "edit", "delete"]
+# dashboard 는 열람만 의미가 있다(입력/수정/삭제 없음) — UI에서 view만 노출.
+PERM_VIEW_ONLY = {"dashboard"}
+
+
+def _perm_grid(value_map) -> dict:
+    """{module: {action: bool}} 전체 그리드 생성. value_map(module,action)->bool."""
+    return {m: {a: bool(value_map(m, a)) for a in PERM_ACTIONS} for m in PERM_MODULES}
+
+
+def _full_perms(value: bool = True) -> dict:
+    return _perm_grid(lambda m, a: value)
+
+
+# 기본 권한(시드) — 기존 동작과 동일하게 맞춘다.
+def _default_perms(role: str) -> dict:
+    biz = ["progress", "rfq", "po", "documents", "ar"]
+    if role == UserRole.SALES.value:
+        return _perm_grid(lambda m, a: (
+            (m == "dashboard" and a == "view") or
+            (m in biz)  # 거래 모듈 전체(열람·입력·수정·삭제)
+        ))
+    if role == UserRole.VIEWER.value:
+        return _perm_grid(lambda m, a: (
+            a == "view" and (m == "dashboard" or m in biz)  # 읽기 전용
+        ))
+    # 알 수 없는 역할: 대시보드 열람만.
+    return _perm_grid(lambda m, a: (m == "dashboard" and a == "view"))
+
+
+def _default_scope(role: str) -> str:
+    return "own" if role == UserRole.SALES.value else "all"
+
+
+def _normalize_perms(perms: dict | None) -> dict:
+    """저장값을 전체 그리드로 정규화(누락 키는 False, dashboard 는 view만)."""
+    perms = perms or {}
+    def val(m, a):
+        if m in PERM_VIEW_ONLY and a != "view":
+            return False
+        return bool((perms.get(m) or {}).get(a, False))
+    return _perm_grid(val)
+
+
+# 역할별 권한 캐시(요청마다 DB 조회를 피한다). PUT 시 _reload_perms() 로 갱신.
+_PERM_CACHE: dict[str, dict] = {}
+
+
+def _reload_perms() -> None:
+    """DB(role_permissions)에서 sales/viewer 등 편집 가능한 역할 권한을 캐시에 로드."""
+    cache: dict[str, dict] = {}
+    try:
+        s = get_session()
+        try:
+            for rp in s.query(RolePermission).all():
+                cache[rp.role] = {
+                    "perms": _normalize_perms(rp.perms),
+                    "scope": rp.scope or _default_scope(rp.role),
+                }
+        finally:
+            s.close()
+    except Exception as exc:  # DB 미준비 시 기본값으로 동작.
+        print(f"[WARN] permission cache load failed: {exc}", file=sys.stderr)
+    _PERM_CACHE.clear()
+    _PERM_CACHE.update(cache)
+
+
+def _seed_perms() -> None:
+    """sales/viewer 기본 권한 행이 없으면 시드(관리자가 편집할 베이스라인)."""
+    s = get_session()
+    try:
+        for role in (UserRole.SALES.value, UserRole.VIEWER.value):
+            if not s.query(RolePermission).filter_by(role=role).first():
+                s.add(RolePermission(role=role, perms=_default_perms(role),
+                                     scope=_default_scope(role)))
+        s.commit()
+    finally:
+        s.close()
+    _reload_perms()
+
+
+def _perms_for(role: str) -> dict:
+    """역할의 효과적 권한 그리드. admin 은 항상 전체 권한."""
+    if role == UserRole.ADMIN.value:
+        return _full_perms(True)
+    entry = _PERM_CACHE.get(role)
+    if entry:
+        return entry["perms"]
+    return _default_perms(role)
+
+
+def _scope_for(role: str) -> str:
+    if role == UserRole.ADMIN.value:
+        return "all"
+    entry = _PERM_CACHE.get(role)
+    return entry["scope"] if entry else _default_scope(role)
+
+
+def _can(role: str, module: str, action: str) -> bool:
+    if role == UserRole.ADMIN.value:
+        return True
+    return bool(_perms_for(role).get(module, {}).get(action, False))
+
+
+# ── 엔드포인트 → (모듈, 동작) 매핑 ─────────────────────────────────────────────
+# 권한 검사에서 제외(공개/공통 참조). 로그인·본인정보·드롭다운용 마스터 조회 등.
+_PERM_EXEMPT = {
+    "/api/admin/login", "/api/admin/me", "/api/admin/me/permissions",
+    "/api/admin/me/password", "/api/admin/customers", "/api/admin/vendors",
+    "/api/admin/po-work-options", "/api/admin/health",
+}
+# 항상 admin 전용(권한 부여 대상 아님 — 권한 상승 방지).
+_ADMIN_ONLY_PREFIXES = ("/api/admin/settings/users", "/api/admin/settings/permissions")
+# 신규 레코드 생성(POST) — 그 외 POST 는 edit 으로 본다.
+_CREATE_POST_EXACT = {
+    "/api/admin/rfq", "/api/admin/orders", "/api/admin/vendor-pos", "/api/admin/ar",
+}
+_CREATE_POST_SUFFIX = ("/vendor-rfq", "/customer-quote", "/vendor-quote",
+                       "/ci", "/pl", "/sa", "/tax")
+
+
+def _route_module(path: str) -> str | None:
+    if path == "/api/admin/dashboard":
+        return "dashboard"
+    if path == "/api/admin/pipeline":
+        return "progress"
+    if path.startswith(("/api/admin/rfq", "/api/admin/quotation", "/api/admin/vrfq",
+                        "/api/admin/vendor-rfq", "/api/admin/vendor-quote")):
+        return "rfq"
+    if path.startswith(("/api/admin/po-", "/api/admin/orders", "/api/admin/order/",
+                        "/api/admin/vendor-po")):
+        return "po"
+    if path.startswith("/api/admin/documents"):
+        return "documents"
+    if path.startswith("/api/admin/ar"):
+        return "ar"
+    if path.startswith("/api/admin/settings"):
+        return "settings"
+    return None
+
+
+def _route_action(method: str, path: str) -> str:
+    if method == "GET":
+        return "view"
+    if method in ("PUT", "PATCH"):
+        return "edit"
+    if method == "DELETE":
+        return "delete"
+    if method == "POST":
+        if path in _CREATE_POST_EXACT or path.endswith(_CREATE_POST_SUFFIX):
+            return "create"
+        if path.startswith("/api/admin/settings/"):
+            rest = path[len("/api/admin/settings/"):]
+            return "create" if "/" not in rest else "edit"
+        return "edit"
+    return "view"
+
+
+def _route_perm(method: str, path: str):
+    """요청에 필요한 (module, action) 반환. None=검사 제외, ('__admin__','')=admin 전용."""
+    if method == "OPTIONS":
+        return None
+    if path in _PERM_EXEMPT or not path.startswith("/api/admin/"):
+        return None
+    if path.startswith(_ADMIN_ONLY_PREFIXES):
+        return ("__admin__", "")
+    module = _route_module(path)
+    if module is None:
+        return None
+    # 설정 페이지의 마스터 데이터 조회(GET)는 화면 공통 참조이므로 열람 검사 제외.
+    if module == "settings" and method == "GET":
+        return None
+    return (module, _route_action(method, path))
+
+
+_PERM_DENY_MSG = {
+    "view": "이 페이지를 열람할 권한이 없습니다.",
+    "create": "등록(입력) 권한이 없습니다.",
+    "edit": "수정 권한이 없습니다.",
+    "delete": "삭제 권한이 없습니다.",
+}
+
+
+@app.middleware("http")
+async def _perm_guard(request: Request, call_next):
+    """역할×페이지×동작 권한 매트릭스를 모든 /api/admin 요청에 적용한다.
+
+    admin 은 항상 전체 허용(잠금 방지). 정적 ADMIN_API_TOKEN 도 admin 으로 취급.
+    settings/users·settings/permissions 는 매트릭스와 무관하게 admin 전용.
+    인증(토큰 유효성)은 별도로 각 엔드포인트의 require_token 도 검사한다."""
+    need = _route_perm(request.method, request.url.path)
+    if need is None:
+        return await call_next(request)
+    user = _user_from_auth(request.headers.get("authorization"))
+    if user is None:
+        return _authz_error(request, 401, "Unauthorized")
+    role = user.get("role", "")
+    if role == UserRole.ADMIN.value:
+        return await call_next(request)
+    module, action = need
+    if module == "__admin__":
+        return _authz_error(request, 403, "관리자 권한이 필요합니다.")
+    if not _can(role, module, action):
+        return _authz_error(request, 403, _PERM_DENY_MSG.get(action, "권한이 없습니다."))
+    return await call_next(request)
+
+
+def _apply_owner_filter(q, model, user: dict, mine: int, assignee: int | None):
+    """담당자(소유자=created_by) 필터.
+    - 데이터 범위가 'own' 인 역할: 항상 본인 담당 건으로 강제 제한(파라미터 무시).
+    - 'all' 역할(admin 포함): assignee 지정 시 해당 담당자, mine=1 이면 본인, 아니면 전체.
+    """
+    role = user.get("role", "")
+    uid = user.get("id") or 0
+    if role != UserRole.ADMIN.value and _scope_for(role) == "own":
+        return q.filter(model.created_by == uid)
+    if assignee:
+        return q.filter(model.created_by == assignee)
+    if mine:
+        return q.filter(model.created_by == uid)
+    return q
 
 
 @app.post("/api/admin/login")
@@ -217,9 +470,11 @@ def admin_login(body: LoginRequest):
         )
         if not ok:
             raise HTTPException(status_code=401, detail="사용자명 또는 비밀번호가 올바르지 않습니다.")
+        role = user.role.value
         u = {"id": user.id, "username": user.username,
-             "role": user.role.value, "email": user.email or ""}
-        return {"token": _make_jwt(u), "user": u}
+             "role": role, "email": user.email or ""}
+        return {"token": _make_jwt(u), "user": u,
+                "permissions": _perms_for(role), "scope": _scope_for(role)}
     finally:
         s.close()
 
@@ -227,6 +482,20 @@ def admin_login(body: LoginRequest):
 @app.get("/api/admin/me")
 def me(user: dict = Depends(get_current_user)):
     return user
+
+
+@app.get("/api/admin/me/permissions")
+def my_permissions(user: dict = Depends(get_current_user)):
+    """현재 사용자의 효과적 권한 그리드 + 데이터 범위 + 메타데이터."""
+    role = user.get("role", "")
+    return {
+        "role": role,
+        "permissions": _perms_for(role),
+        "scope": _scope_for(role),
+        "modules": PERM_MODULES,
+        "actions": PERM_ACTIONS,
+        "view_only": sorted(PERM_VIEW_ONLY),
+    }
 
 
 # ── Helpers (decoupled from Streamlit) ────────────────────────────────────────
@@ -489,7 +758,9 @@ def health():
 
 
 @app.get("/api/admin/pipeline", dependencies=[Depends(require_token)])
-def pipeline_overview(customer_id: int | None = None, work_type: str | None = None):
+def pipeline_overview(customer_id: int | None = None, work_type: str | None = None,
+                      mine: int = 0, assignee: int | None = None,
+                      user: dict = Depends(get_current_user)):
     """거래(RFQ) 1건 = 1행으로, RFQ→Quote(1~4)와 Order→Vendor PO(5~6) 체인을 한 번에
     합친 통합 파이프라인. 진행현황(내부확인용)이 RFQ표·PO표를 대체하는 단일 목록으로 쓴다."""
     s = get_session()
@@ -505,6 +776,7 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
         wt = _coerce_work_type(work_type)
         if wt is not None:
             q = q.filter(RFQ.work_type == wt)
+        q = _apply_owner_filter(q, RFQ, user, mine, assignee)
         rfqs = q.all()
 
         rows = []
@@ -613,7 +885,9 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
 
 
 @app.get("/api/admin/rfq-overview", dependencies=[Depends(require_token)])
-def rfq_overview(customer_id: int | None = None, work_type: str | None = None):
+def rfq_overview(customer_id: int | None = None, work_type: str | None = None,
+                 mine: int = 0, assignee: int | None = None,
+                 user: dict = Depends(get_current_user)):
     """RFQ 거래별 통합 현황 — Streamlit render_overview 와 동일한 행 데이터를 JSON으로."""
     s = get_session()
     try:
@@ -627,6 +901,7 @@ def rfq_overview(customer_id: int | None = None, work_type: str | None = None):
         wt = _coerce_work_type(work_type)
         if wt is not None:
             q = q.filter(RFQ.work_type == wt)
+        q = _apply_owner_filter(q, RFQ, user, mine, assignee)
         rfqs = q.all()
 
         rows = []
@@ -2207,7 +2482,9 @@ def _quotation_total(items) -> float:
 
 
 @app.get("/api/admin/quotation-overview", dependencies=[Depends(require_token)])
-def quotation_overview(customer_id: int | None = None):
+def quotation_overview(customer_id: int | None = None,
+                       mine: int = 0, assignee: int | None = None,
+                       user: dict = Depends(get_current_user)):
     """Customer Quotation 현황 — 견적 목록(고객/선박/금액/상태/파이프라인)."""
     s = get_session()
     try:
@@ -2221,6 +2498,7 @@ def quotation_overview(customer_id: int | None = None):
         q = s.query(Quotation)
         if customer_id:
             q = q.filter(Quotation.customer_id == customer_id)
+        q = _apply_owner_filter(q, Quotation, user, mine, assignee)
 
         rows = []
         for qt in q.order_by(Quotation.id.desc()).all():
@@ -3529,6 +3807,62 @@ def update_company(body: CompanyProfile):
     return {"ok": True}
 
 
+class RolePermSave(BaseModel):
+    role: str
+    perms: dict
+    scope: str = "all"
+
+
+@app.get("/api/admin/settings/permissions", dependencies=[Depends(require_token)])
+def settings_permissions(user: dict = Depends(get_current_user)):
+    """역할별 권한 매트릭스(admin 전용 조회). admin 행은 전체 고정(편집 불가)."""
+    if user.get("role") != UserRole.ADMIN.value:
+        raise HTTPException(status_code=403, detail="Admin only")
+    editable = [UserRole.SALES.value, UserRole.VIEWER.value]
+    roles = [{
+        "role": UserRole.ADMIN.value, "perms": _full_perms(True),
+        "scope": "all", "editable": False,
+    }]
+    for r in editable:
+        roles.append({
+            "role": r, "perms": _perms_for(r), "scope": _scope_for(r), "editable": True,
+        })
+    return {
+        "roles": roles,
+        "modules": PERM_MODULES,
+        "actions": PERM_ACTIONS,
+        "view_only": sorted(PERM_VIEW_ONLY),
+    }
+
+
+@app.put("/api/admin/settings/permissions", dependencies=[Depends(require_token)])
+def update_permissions(body: RolePermSave, user: dict = Depends(get_current_user)):
+    """역할 권한 저장(admin 전용). admin 역할은 변경 불가(잠금 방지)."""
+    if user.get("role") != UserRole.ADMIN.value:
+        raise HTTPException(status_code=403, detail="Admin only")
+    role = (body.role or "").strip()
+    if role == UserRole.ADMIN.value:
+        raise HTTPException(status_code=400, detail="admin 역할의 권한은 변경할 수 없습니다.")
+    if role not in (UserRole.SALES.value, UserRole.VIEWER.value):
+        raise HTTPException(status_code=400, detail=f"알 수 없는 역할: {role}")
+    scope = "own" if body.scope == "own" else "all"
+    perms = _normalize_perms(body.perms)
+    s = get_session()
+    try:
+        rp = s.query(RolePermission).filter_by(role=role).first()
+        if rp:
+            rp.perms = perms
+            rp.scope = scope
+            rp.updated_at = datetime.utcnow()
+        else:
+            s.add(RolePermission(role=role, perms=perms, scope=scope))
+        s.commit()
+    finally:
+        s.close()
+    _reload_perms()
+    return {"ok": True, "role": role, "perms": _perms_for(role), "scope": _scope_for(role)}
+
+
 @app.get("/api/admin/settings/users", dependencies=[Depends(require_token)])
 def settings_users(user: dict = Depends(get_current_user)):
     if user.get("role") != "admin":
@@ -4282,7 +4616,7 @@ class RfqCreate(BaseModel):
 
 
 @app.post("/api/admin/rfq", dependencies=[Depends(require_token)])
-def create_rfq(body: RfqCreate):
+def create_rfq(body: RfqCreate, user: dict = Depends(get_current_user)):
     """Customer RFQ 신규 등록. 케이마리스 RFQ No.는 기본적으로 미발급(임시) 상태로
     두고 Vendor RFQ 발신 시점에 부여한다. body.rfq_no 로 수동 선지정도 가능."""
     s = get_session()
@@ -4322,6 +4656,7 @@ def create_rfq(body: RfqCreate):
             received_at=received_at,
             status=RFQStatus.RECEIVED,
             items=items,
+            created_by=(user.get("id") or None),   # 담당자 = 등록한 내부 직원
         )
         s.add(rfq)
         s.commit()
@@ -4644,7 +4979,8 @@ class CustomerQuoteCreate(BaseModel):
 
 @app.post("/api/admin/rfq/{rfq_id}/customer-quote",
           dependencies=[Depends(require_token)])
-def create_customer_quote(rfq_id: int, body: CustomerQuoteCreate):
+def create_customer_quote(rfq_id: int, body: CustomerQuoteCreate,
+                          user: dict = Depends(get_current_user)):
     """Customer Quote 발신. 품목 단위 items가 있으면 그대로 저장한다."""
     s = get_session()
     try:
@@ -4674,6 +5010,7 @@ def create_customer_quote(rfq_id: int, body: CustomerQuoteCreate):
             terms=terms,
             date=date.today().strftime("%Y-%m-%d"),
             sent_date=date.today().strftime("%Y-%m-%d"),
+            created_by=(user.get("id") or None),   # 담당자 = 발행한 내부 직원
         )
         s.add(qtn)
         s.commit()

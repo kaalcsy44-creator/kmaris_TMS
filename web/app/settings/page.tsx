@@ -27,7 +27,11 @@ import {
   updateSettingsUser,
   updateSettingsVendor,
   updateSettingsVessel,
+  fetchRolePermissions,
+  updateRolePermissions,
 } from "@/lib/api";
+import type { PermissionsConfig, RolePermRow } from "@/lib/api";
+import type { PermGrid } from "@/lib/auth";
 import type {
   CompanyProfile,
   CustomerOption,
@@ -37,10 +41,12 @@ import type {
   SettingsVendor,
   SettingsVessel,
 } from "@/lib/types";
-import { getUser } from "@/lib/auth";
+import { getUser, isAdmin } from "@/lib/auth";
 import AppShell, { SectionHead } from "@/components/AppShell";
 
-type Tab = "company" | "users" | "customers" | "vendors" | "vessels" | "items";
+type Tab =
+  | "company" | "users" | "permissions"
+  | "customers" | "vendors" | "vessels" | "items";
 
 const emptyCompany: CompanyProfile = {
   company_name_en: "",
@@ -69,9 +75,27 @@ export default function SettingsPage() {
 
 function Settings() {
   const [tab, setTab] = useState<Tab>("company");
+  const admin = isAdmin();
+
+  // 비관리자(sales/viewer)는 회사·사용자·마스터 데이터 설정에 접근할 수 없다.
+  // 본인 비밀번호 변경만 제공한다. (서버에서도 settings/* 쓰기는 admin 전용)
+  if (!admin) {
+    return (
+      <>
+        <SectionHead title="My Account" sub="Password" />
+        <h3 className="form-title">My account</h3>
+        <p className="hint-inline" style={{ display: "block", marginBottom: 8 }}>
+          Company, user, and master-data settings are available to administrators only.
+        </p>
+        <MyPasswordChange />
+      </>
+    );
+  }
+
   const tabs: { key: Tab; label: string }[] = [
     { key: "company", label: "Company" },
     { key: "users", label: "Users" },
+    { key: "permissions", label: "Permissions" },
     { key: "customers", label: "Customer" },
     { key: "vendors", label: "Vendor" },
     { key: "vessels", label: "Vessels" },
@@ -90,6 +114,7 @@ function Settings() {
       </div>
       {tab === "company" && <CompanyTab />}
       {tab === "users" && <UsersTab />}
+      {tab === "permissions" && <PermissionsTab />}
       {tab === "customers" && <CustomersTab />}
       {tab === "vendors" && <VendorsTab />}
       {tab === "vessels" && <VesselsTab />}
@@ -212,6 +237,38 @@ function CompanyTab() {
 
 const EMPTY_USER: SettingsUser = { id: 0, username: "", email: "", role: "sales", is_active: true };
 
+// 역할별 권한 설명 — admin 이 계정에 권한을 부여할 때 참고. (백엔드 RBAC 와 일치)
+const ROLE_INFO: { key: string; title: string; perms: string[] }[] = [
+  {
+    key: "admin",
+    title: "Admin · 관리자",
+    perms: [
+      "All deals: create / edit / delete",
+      "Settings: company, users, master data (customers·vendors·vessels·items)",
+      "Assign roles to other accounts",
+    ],
+  },
+  {
+    key: "sales",
+    title: "Sales · 영업담당",
+    perms: [
+      "Deals: create / edit / delete (RFQ·Quotation·P/O·AR·Documents)",
+      "Sees ONLY their own deals (담당 건만 표시)",
+      "No access to settings",
+    ],
+  },
+  {
+    key: "viewer",
+    title: "Viewer · 읽기 전용",
+    perms: [
+      "Read-only — can view all screens",
+      "Cannot create / edit / delete anything",
+      "No access to settings",
+    ],
+  },
+];
+const ROLE_BY_KEY = Object.fromEntries(ROLE_INFO.map((r) => [r.key, r]));
+
 function UsersTab() {
   const NEW_ID = -1;
   const [rows, setRows] = useState<SettingsUser[]>([]);
@@ -303,6 +360,16 @@ function UsersTab() {
           Active (inactive blocks login)
         </label>
       </div>
+      {ROLE_BY_KEY[form.role] ? (
+        <div className="role-perm-note">
+          <span className="role-perm-title">{ROLE_BY_KEY[form.role].title} can:</span>
+          <ul>
+            {ROLE_BY_KEY[form.role].perms.map((p) => (
+              <li key={p}>{p}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       <div className="form-actions">
         <button className="btn primary" onClick={save} disabled={!form.username.trim() || (!isEdit && !password)}>
           {isEdit ? "Save" : "Add"}
@@ -330,6 +397,20 @@ function UsersTab() {
         </button>
       </div>
 
+      {/* 역할별 권한 범례 — admin 이 어떤 권한을 부여하는지 한눈에 본다. */}
+      <div className="role-legend">
+        {ROLE_INFO.map((r) => (
+          <div key={r.key} className="role-legend-card">
+            <div className={`role-legend-head role-${r.key}`}>{r.title}</div>
+            <ul>
+              {r.perms.map((p) => (
+                <li key={p}>{p}</li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+
       {editor}
 
       {rows.length === 0 ? (
@@ -351,7 +432,7 @@ function UsersTab() {
                 <tr key={u.id} className={u.id === editId ? "sel" : ""} onClick={() => openEdit(u)}>
                   <td>{u.username}</td>
                   <td>{u.email || "—"}</td>
-                  <td>{u.role}</td>
+                  <td><span className={`role-badge role-${u.role}`}>{u.role}</span></td>
                   <td>
                     <span className={`status-badge${u.is_active ? " on" : " off"}`}>
                       {u.is_active ? "✓ Active" : "— Inactive"}
@@ -368,6 +449,207 @@ function UsersTab() {
       )}
 
       <MyPasswordChange />
+    </div>
+  );
+}
+
+// ── 권한 매트릭스 편집 (admin 전용) ──────────────────────────────────────────
+const MODULE_LABEL: Record<string, string> = {
+  dashboard: "Dashboard",
+  progress: "Progress",
+  rfq: "RFQ & Quotation",
+  po: "P/O",
+  documents: "Documents",
+  ar: "AR",
+  settings: "Settings · master data",
+};
+const ACTION_LABEL: Record<string, string> = {
+  view: "View 열람",
+  create: "Create 입력",
+  edit: "Edit 수정",
+  delete: "Delete 삭제",
+};
+const PERM_ROLE_LABEL: Record<string, string> = {
+  admin: "Admin · 관리자",
+  sales: "Sales · 영업담당",
+  viewer: "Viewer · 읽기 전용",
+};
+
+function clonePerms(p: PermGrid): PermGrid {
+  return JSON.parse(JSON.stringify(p));
+}
+
+function PermissionsTab() {
+  const [cfg, setCfg] = useState<PermissionsConfig | null>(null);
+  const [draft, setDraft] = useState<Record<string, { perms: PermGrid; scope: string }>>({});
+  const [savingRole, setSavingRole] = useState<string | null>(null);
+  const [msg, setMsg] = useState("");
+  const [err, setErr] = useState("");
+
+  function loadInto(c: PermissionsConfig) {
+    const d: Record<string, { perms: PermGrid; scope: string }> = {};
+    c.roles.filter((r) => r.editable).forEach((r) => {
+      d[r.role] = { perms: clonePerms(r.perms), scope: r.scope };
+    });
+    setDraft(d);
+  }
+
+  useEffect(() => {
+    fetchRolePermissions()
+      .then((c) => {
+        setCfg(c);
+        loadInto(c);
+      })
+      .catch((e) => setErr(e instanceof Error ? e.message : "Failed to load"));
+  }, []);
+
+  if (err && !cfg) return <div className="state error">{err}</div>;
+  if (!cfg) return <div className="state">Loading…</div>;
+
+  const viewOnly = new Set(cfg.view_only);
+
+  function toggle(role: string, module: string, action: string) {
+    setDraft((prev) => {
+      const cur = prev[role];
+      if (!cur) return prev;
+      const next = clonePerms(cur.perms);
+      next[module] = { ...(next[module] || {}) };
+      next[module][action] = !next[module][action];
+      // 열람을 끄면 입력/수정/삭제도 무의미하므로 함께 해제.
+      if (action === "view" && !next[module][action]) {
+        ["create", "edit", "delete"].forEach((a) => (next[module][a] = false));
+      }
+      return { ...prev, [role]: { ...cur, perms: next } };
+    });
+    setMsg("");
+  }
+
+  function setScope(role: string, scope: string) {
+    setDraft((prev) =>
+      prev[role] ? { ...prev, [role]: { ...prev[role], scope } } : prev
+    );
+    setMsg("");
+  }
+
+  async function save(role: string) {
+    const d = draft[role];
+    if (!d) return;
+    setSavingRole(role);
+    setErr("");
+    setMsg("");
+    try {
+      await updateRolePermissions({ role, perms: d.perms, scope: d.scope });
+      setMsg(`${PERM_ROLE_LABEL[role] ?? role} permissions saved.`);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setSavingRole(null);
+    }
+  }
+
+  function RoleCard({ row }: { row: RolePermRow }) {
+    const editable = row.editable;
+    const state = editable ? draft[row.role] : { perms: row.perms, scope: row.scope };
+    if (!state) return null;
+    return (
+      <div className="perm-card">
+        <div className={`perm-card-head role-${row.role}`}>
+          <span>{PERM_ROLE_LABEL[row.role] ?? row.role}</span>
+          {!editable ? <span className="perm-locked">always full access</span> : null}
+        </div>
+        <div className="table-wrap">
+          <table className="mini perm-matrix">
+            <thead>
+              <tr>
+                <th>Page</th>
+                {cfg!.actions.map((a) => (
+                  <th key={a}>{ACTION_LABEL[a] ?? a}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {cfg!.modules.map((m) => (
+                <tr key={m}>
+                  <td className="perm-mod">{MODULE_LABEL[m] ?? m}</td>
+                  {cfg!.actions.map((a) => {
+                    const na = viewOnly.has(m) && a !== "view";
+                    return (
+                      <td key={a} className="perm-cell">
+                        {na ? (
+                          <span className="perm-na">—</span>
+                        ) : (
+                          <input
+                            type="checkbox"
+                            checked={!!state.perms[m]?.[a]}
+                            disabled={!editable}
+                            onChange={() => toggle(row.role, m, a)}
+                          />
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="perm-scope">
+          <span className="perm-scope-label">Data scope 데이터 범위:</span>
+          <label>
+            <input
+              type="radio"
+              name={`scope-${row.role}`}
+              checked={state.scope === "all"}
+              disabled={!editable}
+              onChange={() => setScope(row.role, "all")}
+            />
+            All deals 전체
+          </label>
+          <label>
+            <input
+              type="radio"
+              name={`scope-${row.role}`}
+              checked={state.scope === "own"}
+              disabled={!editable}
+              onChange={() => setScope(row.role, "own")}
+            />
+            Own deals only 본인 담당만
+          </label>
+        </div>
+        {editable ? (
+          <div className="form-actions">
+            <button
+              className="btn primary"
+              onClick={() => save(row.role)}
+              disabled={savingRole === row.role}
+            >
+              {savingRole === row.role ? "Saving…" : "Save"}
+            </button>
+            <button className="btn" onClick={() => loadInto(cfg!)} disabled={savingRole === row.role}>
+              Reset
+            </button>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <div className="panel">
+      <div className="ms-toolbar">
+        <h3 className="form-title">Role permissions · 역할 권한</h3>
+      </div>
+      <p className="hint-inline" style={{ display: "block", marginBottom: 12 }}>
+        Set per-page View / Create / Edit / Delete for each role, plus whether they see all deals or only their own.
+        Admin always has full access. (페이지별 열람·입력·수정·삭제 권한을 역할마다 지정)
+      </p>
+      {msg ? <div className="action-ok" style={{ marginBottom: 10 }}>{msg}</div> : null}
+      {err ? <div className="action-err" style={{ marginBottom: 10 }}>{err}</div> : null}
+      <div className="perm-cards">
+        {cfg.roles.map((r) => (
+          <RoleCard key={r.role} row={r} />
+        ))}
+      </div>
     </div>
   );
 }

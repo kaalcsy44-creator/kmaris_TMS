@@ -1,12 +1,33 @@
 "use client";
 
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import AuthGate from "./AuthGate";
 import TopNav from "./TopNav";
+import { can, isAdmin } from "@/lib/auth";
+import type { PermModule } from "@/lib/auth";
+
+// active 키 → 권한 모듈(동일). 가드 대상 메뉴 목록.
+const NAV_MODULES: PermModule[] = [
+  "dashboard", "progress", "rfq", "po", "documents", "ar", "settings",
+];
+// 열람 권한이 있는 첫 메뉴로 보낸다(차단된 페이지 접근 시).
+function firstAllowed(): string {
+  const order: { key: PermModule; href: string }[] = [
+    { key: "dashboard", href: "/" },
+    { key: "progress", href: "/progress" },
+    { key: "rfq", href: "/rfq" },
+    { key: "po", href: "/po" },
+    { key: "documents", href: "/documents" },
+    { key: "ar", href: "/ar" },
+  ];
+  const hit = order.find((o) => can(o.key, "view"));
+  return hit ? hit.href : "/login";
+}
 
 /**
  * Authed layout shell: top navy nav bar + main content area below.
- * `active` is the nav item key. The horizontal menu collapses into a
- * hamburger-toggled panel on mobile.
+ * `active` is the nav item key (= permission module).
  */
 export default function AppShell({
   active,
@@ -19,13 +40,43 @@ export default function AppShell({
 }) {
   return (
     <AuthGate>
-      <div className="shell">
-        <TopNav active={active} />
-        <main className="shell-main">
-          <div className={`page${wide ? " page-wide" : ""}`}>{children}</div>
-        </main>
-      </div>
+      <ShellInner active={active} wide={wide}>
+        {children}
+      </ShellInner>
     </AuthGate>
+  );
+}
+
+/** AuthGate(권한 로드 완료) 내부에서만 마운트 → 최신 권한으로 열람 가드. */
+function ShellInner({
+  active,
+  wide,
+  children,
+}: {
+  active: string;
+  wide: boolean;
+  children: React.ReactNode;
+}) {
+  const router = useRouter();
+  const mod = active as PermModule;
+  const guarded = NAV_MODULES.includes(mod);
+  const settingsOk =
+    mod === "settings" ? isAdmin() || can("settings", "view") : true;
+  const allowed = !guarded || (can(mod, "view") && settingsOk);
+
+  useEffect(() => {
+    if (!allowed) router.replace(firstAllowed());
+  }, [allowed, router]);
+
+  if (!allowed) return <div className="state">Redirecting…</div>;
+
+  return (
+    <div className="shell">
+      <TopNav active={active} />
+      <main className="shell-main">
+        <div className={`page${wide ? " page-wide" : ""}`}>{children}</div>
+      </main>
+    </div>
   );
 }
 

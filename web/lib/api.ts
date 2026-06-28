@@ -1,5 +1,6 @@
 import { API_BASE } from "./config";
 import { getToken, clearAuth } from "./auth";
+import type { PermGrid } from "./auth";
 import type {
   RfqOverview,
   CustomerOption,
@@ -220,9 +221,16 @@ export function parseOrderPdf(file: File): Promise<OrderOcrResult> {
   return postForm<OrderOcrResult>("/api/admin/ocr/order", fd);
 }
 
-export function fetchPipeline(customerId?: number): Promise<PipelineData> {
-  const qs = customerId ? `?customer_id=${customerId}` : "";
-  return get<PipelineData>(`/api/admin/pipeline${qs}`);
+export function fetchPipeline(
+  customerId?: number,
+  owner?: { mine?: boolean; assignee?: number }
+): Promise<PipelineData> {
+  const p = new URLSearchParams();
+  if (customerId) p.set("customer_id", String(customerId));
+  if (owner?.mine) p.set("mine", "1");
+  if (owner?.assignee) p.set("assignee", String(owner.assignee));
+  const qs = p.toString();
+  return get<PipelineData>(`/api/admin/pipeline${qs ? `?${qs}` : ""}`);
 }
 
 export function fetchDashboard(): Promise<DashboardData> {
@@ -541,6 +549,31 @@ export function updateSettingsUser(
 export function deleteSettingsUser(id: number): Promise<{ ok: boolean }> {
   return del(`/api/admin/settings/users/${id}`);
 }
+// ── 역할 권한 매트릭스 (admin 전용) ──────────────────────────────────────────
+export type RolePermRow = {
+  role: string;
+  perms: PermGrid;
+  scope: "own" | "all";
+  editable: boolean;
+};
+export type PermissionsConfig = {
+  roles: RolePermRow[];
+  modules: string[];
+  actions: string[];
+  view_only: string[];
+};
+
+export function fetchRolePermissions(): Promise<PermissionsConfig> {
+  return get<PermissionsConfig>("/api/admin/settings/permissions");
+}
+export function updateRolePermissions(body: {
+  role: string;
+  perms: PermGrid;
+  scope: string;
+}): Promise<{ ok: boolean; role: string; perms: PermGrid; scope: string }> {
+  return put("/api/admin/settings/permissions", body);
+}
+
 export function changeMyPassword(
   oldPassword: string,
   newPassword: string

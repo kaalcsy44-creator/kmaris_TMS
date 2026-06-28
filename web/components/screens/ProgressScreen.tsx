@@ -17,6 +17,7 @@ import { useCachedData, invalidateCache } from "@/lib/useCachedData";
 import type { PipelineRow, CustomerOption, SettingsVessel, StageNote } from "@/lib/types";
 import WorkTypeBadge from "@/components/WorkTypeBadge";
 import { tr } from "@/lib/labels";
+import { getUser, can, isOwnScoped } from "@/lib/auth";
 
 const WORK_TYPES = ["부품공급", "서비스"];
 
@@ -257,6 +258,11 @@ function PipelineTable({
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [sortKey, setSortKey] = useState<ColKey | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>("asc");
+  // 담당자(PIC) 범위: sales 는 서버에서 본인 건만 내려오므로 항상 잠금 표시.
+  // admin/viewer 는 "내 담당만" 토글로 본인(username) 건만 클라이언트 필터.
+  const me = getUser();
+  const salesScoped = isOwnScoped();
+  const [mineOnly, setMineOnly] = useState(false);
   // 패싯 필터: 각 값 "전체"는 미적용. 빈 문자열("")은 "미지정" 값 자체를 의미.
   const [fWorkType, setFWorkType] = useState("전체");
   const [fCustomer, setFCustomer] = useState("전체");
@@ -388,6 +394,7 @@ function PipelineTable({
   }
 
   // 1) 필터: 선택한 조건들의 교집합(AND)
+  const myName = me?.username || "";
   let displayRows = rows.filter(
     (r) =>
       (fWorkType === "전체" || (r.work_type || "부품공급") === fWorkType) &&
@@ -396,6 +403,7 @@ function PipelineTable({
       (fVessel === "전체" || (r.vessel || "") === fVessel) &&
       (fAssignee === "전체" || (r.assignee || "") === fAssignee) &&
       (fStage === "전체" || stageOf(r) === Number(fStage)) &&
+      (!mineOnly || (r.assignee || "") === myName) &&
       inDateRange(r.received_at)
   );
   // 2) 정렬: 완료/다음 단계는 단계 번호(숫자), 그 외는 표시 문자열(한글 로케일)
@@ -488,6 +496,20 @@ function PipelineTable({
   return (
     <>
       <div className="pl-toolbar">
+        {salesScoped ? (
+          <span className="pl-scope-badge" title="Sales accounts see only their own deals">
+            🔒 My deals only
+          </span>
+        ) : (
+          <label className="pl-mine-toggle">
+            <input
+              type="checkbox"
+              checked={mineOnly}
+              onChange={(e) => setMineOnly(e.target.checked)}
+            />
+            My deals only
+          </label>
+        )}
         {filtersActive ? (
           <button type="button" className="pl-filter-reset" onClick={resetFilters}>
             Reset filters
@@ -621,6 +643,8 @@ function PipelineModal({
   onClose: () => void;
 }) {
   const router = useRouter();
+  const canEdit = can("rfq", "edit");
+  const canDelete = can("rfq", "delete");
   const [deleting, setDeleting] = useState(false);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -949,7 +973,7 @@ function PipelineModal({
             >
               AR →
             </Link>
-            {editing ? (
+            {canEdit && editing ? (
               <>
                 <button
                   className="btn primary"
@@ -967,7 +991,7 @@ function PipelineModal({
                   Cancel
                 </button>
               </>
-            ) : (
+            ) : canEdit ? (
               <button
                 className="btn"
                 onClick={startEdit}
@@ -975,14 +999,17 @@ function PipelineModal({
               >
                 ✎ Edit
               </button>
-            )}
-            <button
-              className="btn danger"
-              onClick={handleDelete}
-              disabled={deleting || editing}
-            >
-              {deleting ? "Deleting…" : "Delete"}
-            </button>
+            ) : null}
+            {canDelete ? (
+              <button
+                className="btn danger"
+                onClick={handleDelete}
+                disabled={deleting || editing}
+                style={canEdit ? undefined : { marginLeft: "auto" }}
+              >
+                {deleting ? "Deleting…" : "Delete"}
+              </button>
+            ) : null}
           </div>
           </div>
         </div>
@@ -1090,6 +1117,7 @@ function StageNotes({
   notes: StageNote[];
   onChanged: () => void;
 }) {
+  const writable = can("rfq", "edit");
   const [adding, setAdding] = useState(false);
   const [editIndex, setEditIndex] = useState<number | null>(null);
 
@@ -1143,23 +1171,27 @@ function StageNotes({
             {n.party ? <span className="pl-note-tag party">{n.party}</span> : null}
             {n.channel ? <span className="pl-note-tag channel">{n.channel}</span> : null}
             <span className="pl-note-text">{n.text}</span>
-            <button
-              className="pl-note-edit"
-              title="Edit"
-              onClick={() => {
-                setAdding(false);
-                setEditIndex(i);
-              }}
-            >
-              ✎
-            </button>
-            <button className="pl-note-del" title="Delete" onClick={() => remove(i)}>
-              ×
-            </button>
+            {writable ? (
+              <>
+                <button
+                  className="pl-note-edit"
+                  title="Edit"
+                  onClick={() => {
+                    setAdding(false);
+                    setEditIndex(i);
+                  }}
+                >
+                  ✎
+                </button>
+                <button className="pl-note-del" title="Delete" onClick={() => remove(i)}>
+                  ×
+                </button>
+              </>
+            ) : null}
           </div>
         )
       )}
-      {adding ? (
+      {!writable ? null : adding ? (
         <NoteForm
           initial={null}
           submitLabel="Add"

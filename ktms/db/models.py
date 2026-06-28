@@ -76,6 +76,21 @@ class User(Base):
     created_at    = Column(DateTime, default=datetime.utcnow)
 
 
+class RolePermission(Base):
+    """역할별 페이지×동작 권한 매트릭스(편집 가능). role=PK, perms=JSON.
+
+    perms 구조: {module: {action: bool}}
+      module ∈ dashboard·progress·rfq·po·documents·ar·settings
+      action ∈ view·create·edit·delete
+    scope: 데이터 범위 "own"(본인 담당만) | "all"(전체).
+    admin 역할은 항상 전체 권한이므로 저장/적용 대상에서 제외(코드에서 우회)."""
+    __tablename__ = "role_permissions"
+    role       = Column(String(32), primary_key=True)
+    perms      = Column(JSON, default=dict)
+    scope      = Column(String(8), default="all")
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
+
 class Customer(Base):
     __tablename__ = "customers"
     id         = Column(Integer, primary_key=True)
