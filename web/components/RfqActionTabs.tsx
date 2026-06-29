@@ -57,6 +57,7 @@ import BaseMetaRows, { ModalTitle } from "./common/BaseMeta";
 import CurrencyToggle from "./common/CurrencyToggle";
 import {
   amountInputValue,
+  DualCurrencyAmount,
   dualCurrencyText,
   fxRateText,
   gridCellProps,
@@ -743,6 +744,7 @@ function VendorQuoteList({
       label: "Amount",
       numeric: true,
       text: (r) => dualCurrencyText(r.amount, r.currency),
+      render: (r) => <DualCurrencyAmount value={r.amount} currency={r.currency} />,
       sortValue: (r) => r.amount,
     },
   ];
@@ -1042,7 +1044,14 @@ function CustomerQuoteList({
     },
     { key: "rfq_no", label: "RFQ No.", text: (r) => r.rfq_no || "" },
     { key: "item_count", label: "Items", numeric: true, text: (r) => String(r.item_count), sortValue: (r) => r.item_count },
-    { key: "amount", label: "Total", numeric: true, text: (r) => dualCurrencyText(r.amount, r.currency), sortValue: (r) => r.amount },
+    {
+      key: "amount",
+      label: "Total",
+      numeric: true,
+      text: (r) => dualCurrencyText(r.amount, r.currency),
+      render: (r) => <DualCurrencyAmount value={r.amount} currency={r.currency} />,
+      sortValue: (r) => r.amount,
+    },
     { key: "level", label: "Level", text: (r) => r.level || "" },
     { key: "valid_until", label: "Valid until", text: (r) => r.valid_until || "", filter: "date" },
     { key: "status", label: "Status", text: (r) => tr(r.status) || "", filter: "facet", render: (r) => <span className="ar-badge">{tr(r.status)}</span> },
@@ -1897,7 +1906,7 @@ function VendorQuoteItemEditor({
             <tr>
               <td colSpan={7} className="total-label">Total</td>
               <td className="num total-value">
-                <span className="dual-amount">{dualCurrencyText(total, currency)}</span>
+                <DualCurrencyAmount value={total} currency={currency} />
                 <span className="fx-note">{fxRateText()}</span>
               </td>
               <td colSpan={3}></td>
@@ -2340,7 +2349,7 @@ function CustomerQuoteItemEditor({
             <tr>
               <td colSpan={8} className="total-label">Total</td>
               <td className="num total-value">
-                <span className="dual-amount">{dualCurrencyText(total, currency)}</span>
+                <DualCurrencyAmount value={total} currency={currency} />
                 <span className="fx-note">{fxRateText()}</span>
               </td>
             </tr>

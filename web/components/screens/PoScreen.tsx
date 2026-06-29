@@ -25,6 +25,7 @@ import Modal from "@/components/common/Modal";
 import BaseMetaRows, { ModalTitle } from "@/components/common/BaseMeta";
 import {
   amountInputValue,
+  DualCurrencyAmount,
   dualCurrencyText,
   fxRateText,
   gridCellProps,
@@ -160,8 +161,8 @@ function PoDetail({ orderId }: { orderId: number | null }) {
                           {it.qty}
                           {it.unit ? ` ${it.unit}` : ""}
                         </td>
-                        <td className="num">{dualCurrencyText(it.unit_price, data.currency)}</td>
-                        <td className="num">{dualCurrencyText(it.amount, data.currency)}</td>
+                        <td className="num"><DualCurrencyAmount value={it.unit_price} currency={data.currency} /></td>
+                        <td className="num"><DualCurrencyAmount value={it.amount} currency={data.currency} /></td>
                       </tr>
                     ))}
                   </tbody>
@@ -1481,7 +1482,7 @@ function ItemEditor({
             <tr>
               <td colSpan={7} className="total-label">Total</td>
               <td className="num total-value">
-                <span className="dual-amount">{dualCurrencyText(total, currency)}</span>
+                <DualCurrencyAmount value={total} currency={currency} />
                 <span className="fx-note">{fxRateText()}</span>
               </td>
               <td></td>

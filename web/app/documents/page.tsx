@@ -30,6 +30,7 @@ import { ModalTitle } from "@/components/common/BaseMeta";
 import CurrencyToggle from "@/components/common/CurrencyToggle";
 import {
   amountInputValue,
+  DualCurrencyAmount,
   dualCurrencyText,
   fxRateText,
   gridCellProps,
@@ -1510,7 +1511,7 @@ function ItemEditor({
             <tr>
               <td colSpan={7} className="total-label">Total</td>
               <td className="num total-value">
-                <span className="dual-amount">{dualCurrencyText(total, currency)}</span>
+                <DualCurrencyAmount value={total} currency={currency} />
                 <span className="fx-note">{fxRateText()}</span>
               </td>
               <td colSpan={3}></td>

@@ -81,10 +81,10 @@ def _dual_money(value, currency: str = "USD") -> str:
         amount = 0.0
     cur = (currency or "USD").upper()
     if cur == "KRW":
-        return f"KRW {amount:,.0f} / USD {amount / USD_KRW_RATE:,.2f}"
+        return f"KRW {amount:,.0f} USD {amount / USD_KRW_RATE:,.0f}"
     if cur == "USD":
-        return f"USD {amount:,.2f} / KRW {round(amount * USD_KRW_RATE):,}"
-    return f"{cur} {amount:,.2f}"
+        return f"USD {amount:,.0f} KRW {round(amount * USD_KRW_RATE):,}"
+    return f"{cur} {amount:,.0f}"
 
 
 app.add_middleware(

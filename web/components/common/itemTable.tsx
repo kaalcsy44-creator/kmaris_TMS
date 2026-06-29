@@ -18,8 +18,8 @@ export function amountInputValue(value: number | string | null | undefined): str
 
 export function moneyText(value: number | string | null | undefined): string {
   const parsed = toNumber(value);
-  if (!Number.isFinite(parsed)) return "0.00";
-  return parsed.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (!Number.isFinite(parsed)) return "0";
+  return Math.round(parsed).toLocaleString();
 }
 
 export function fxRateText(): string {
@@ -35,14 +35,46 @@ export function dualCurrencyText(
 ): string {
   const amount = toNumber(value);
   const cur = (currency || "USD").toUpperCase();
-  if (!Number.isFinite(amount)) return `${cur} 0.00 / KRW 0`;
+  if (!Number.isFinite(amount)) return `${cur} 0 KRW 0`;
   if (cur === "KRW") {
-    return `KRW ${Math.round(amount).toLocaleString()} / USD ${moneyText(amount / USD_KRW_RATE)}`;
+    return `KRW ${Math.round(amount).toLocaleString()} USD ${moneyText(amount / USD_KRW_RATE)}`;
   }
   if (cur === "USD") {
-    return `USD ${moneyText(amount)} / KRW ${Math.round(amount * USD_KRW_RATE).toLocaleString()}`;
+    return `USD ${moneyText(amount)} KRW ${Math.round(amount * USD_KRW_RATE).toLocaleString()}`;
   }
   return `${cur} ${moneyText(amount)}`;
+}
+
+export function DualCurrencyAmount({
+  value,
+  currency = "USD",
+}: {
+  value: number | string | null | undefined;
+  currency?: string;
+}) {
+  const amount = toNumber(value);
+  const cur = (currency || "USD").toUpperCase();
+  if (cur === "KRW") {
+    return (
+      <span className="dual-amount">
+        <span className="dual-line primary">KRW {Math.round(amount).toLocaleString()}</span>
+        <span className="dual-line converted">USD {moneyText(amount / USD_KRW_RATE)}</span>
+      </span>
+    );
+  }
+  if (cur === "USD") {
+    return (
+      <span className="dual-amount">
+        <span className="dual-line primary">USD {moneyText(amount)}</span>
+        <span className="dual-line converted">KRW {Math.round(amount * USD_KRW_RATE).toLocaleString()}</span>
+      </span>
+    );
+  }
+  return (
+    <span className="dual-amount">
+      <span className="dual-line primary">{cur} {moneyText(amount)}</span>
+    </span>
+  );
 }
 
 function toNumber(value: number | string | null | undefined): number {

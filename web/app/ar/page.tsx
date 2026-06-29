@@ -23,7 +23,7 @@ import { identityColumns, projectNoColumn, fmtRfqDateTime } from "@/components/c
 import Modal from "@/components/common/Modal";
 import { ModalTitle } from "@/components/common/BaseMeta";
 import CurrencyToggle from "@/components/common/CurrencyToggle";
-import { dualCurrencyText } from "@/components/common/itemTable";
+import { DualCurrencyAmount, dualCurrencyText } from "@/components/common/itemTable";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -191,12 +191,33 @@ function ArOverview() {
     { key: "ci_no", label: "CI No.", text: (r) => r.ci_no || "" },
     { key: "ord_no", label: "Order", text: (r) => r.ord_no || "" },
     { key: "currency", label: "Currency", text: (r) => r.currency || "", filter: "facet" },
-    { key: "invoice", label: "Invoice", numeric: true, text: (r) => dualCurrencyText(r.invoice_amount, r.currency), sortValue: (r) => r.invoice_amount },
+    {
+      key: "invoice",
+      label: "Invoice",
+      numeric: true,
+      text: (r) => dualCurrencyText(r.invoice_amount, r.currency),
+      render: (r) => <DualCurrencyAmount value={r.invoice_amount} currency={r.currency} />,
+      sortValue: (r) => r.invoice_amount,
+    },
     // Paid 컬럼은 12단계(수금)에서만 표시
     ...(stageTab === 12
-      ? [{ key: "paid", label: "Paid", numeric: true, text: (r: ArRow) => dualCurrencyText(r.paid_amount, r.currency), sortValue: (r: ArRow) => r.paid_amount } as ColumnDef<ArRow>]
+      ? [{
+          key: "paid",
+          label: "Paid",
+          numeric: true,
+          text: (r: ArRow) => dualCurrencyText(r.paid_amount, r.currency),
+          render: (r: ArRow) => <DualCurrencyAmount value={r.paid_amount} currency={r.currency} />,
+          sortValue: (r: ArRow) => r.paid_amount,
+        } as ColumnDef<ArRow>]
       : []),
-    { key: "outstanding", label: "Outstanding", numeric: true, text: (r) => dualCurrencyText(r.outstanding, r.currency), sortValue: (r) => r.outstanding, render: (r) => <b>{dualCurrencyText(r.outstanding, r.currency)}</b> },
+    {
+      key: "outstanding",
+      label: "Outstanding",
+      numeric: true,
+      text: (r) => dualCurrencyText(r.outstanding, r.currency),
+      sortValue: (r) => r.outstanding,
+      render: (r) => <b><DualCurrencyAmount value={r.outstanding} currency={r.currency} /></b>,
+    },
     { key: "due_date", label: "Due date", text: (r) => r.due_date || "", filter: "date" },
     stageCol,
   ];

@@ -12,7 +12,7 @@ import { useCachedData } from "@/lib/useCachedData";
 import type { QtnRow, PipelineRow, ArRow } from "@/lib/types";
 import { tr } from "@/lib/labels";
 import FilterTable, { ColumnDef } from "@/components/common/FilterTable";
-import { dualCurrencyText } from "@/components/common/itemTable";
+import { DualCurrencyAmount, dualCurrencyText } from "@/components/common/itemTable";
 
 function num(n: number) {
   return n.toLocaleString();
@@ -190,7 +190,14 @@ function HomeTab() {
     { key: "qtn_no", label: "Quote No.", text: (r) => r.qtn_no || "" },
     { key: "customer", label: "Customer", text: (r) => r.customer || "", filter: "facet" },
     { key: "vessel", label: "Vessel", text: (r) => r.vessel || "" },
-    { key: "amount", label: "Amount", numeric: true, text: (r) => dualCurrencyText(r.amount, r.currency), sortValue: (r) => r.amount },
+    {
+      key: "amount",
+      label: "Amount",
+      numeric: true,
+      text: (r) => dualCurrencyText(r.amount, r.currency),
+      render: (r) => <DualCurrencyAmount value={r.amount} currency={r.currency} />,
+      sortValue: (r) => r.amount,
+    },
     { key: "valid_until", label: "Valid until", text: (r) => r.valid_until || "", filter: "date" },
     { key: "status", label: "Status", text: (r) => tr(r.status), filter: "facet" },
   ];
@@ -208,8 +215,22 @@ function HomeTab() {
     { key: "date", label: "Date", text: (r) => (r.tax_issued_date || r.due_date || "").slice(0, 10), filter: "date" },
     { key: "ci_no", label: "CI No.", text: (r) => r.ci_no || "" },
     { key: "customer", label: "Customer", text: (r) => r.customer || "", filter: "facet" },
-    { key: "amount", label: "Invoice", numeric: true, text: (r) => dualCurrencyText(r.invoice_amount, r.currency), sortValue: (r) => r.invoice_amount },
-    { key: "paid", label: "Paid", numeric: true, text: (r) => dualCurrencyText(r.paid_amount, r.currency), sortValue: (r) => r.paid_amount },
+    {
+      key: "amount",
+      label: "Invoice",
+      numeric: true,
+      text: (r) => dualCurrencyText(r.invoice_amount, r.currency),
+      render: (r) => <DualCurrencyAmount value={r.invoice_amount} currency={r.currency} />,
+      sortValue: (r) => r.invoice_amount,
+    },
+    {
+      key: "paid",
+      label: "Paid",
+      numeric: true,
+      text: (r) => dualCurrencyText(r.paid_amount, r.currency),
+      render: (r) => <DualCurrencyAmount value={r.paid_amount} currency={r.currency} />,
+      sortValue: (r) => r.paid_amount,
+    },
     { key: "status", label: "Status", text: (r) => tr(r.status), filter: "facet", render: (r) => <span className={`ar-badge${r.overdue ? " overdue" : ""}`}>{tr(r.status)}</span> },
   ];
 
@@ -530,7 +551,7 @@ function StatisticsTab() {
                   <div className="a-main">{ar.ci_no || "N/A"}</div>
                   <div className="a-sub">Due: {ar.due_date || "—"}</div>
                 </div>
-                <div className="a-right">{dualCurrencyText(ar.outstanding, ar.currency)}</div>
+                <div className="a-right"><DualCurrencyAmount value={ar.outstanding} currency={ar.currency} /></div>
               </div>
             ))
           )}

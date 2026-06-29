@@ -47,6 +47,7 @@ _MIGRATIONS = {
     "vendor_quotes": {
         "vendor_quote_no": "VARCHAR(100)",
         "received_at": "VARCHAR(16)",
+        "currency": "VARCHAR(10) DEFAULT 'USD'",
     },
     "orders": {
         "promised_delivery": "VARCHAR(10)",
