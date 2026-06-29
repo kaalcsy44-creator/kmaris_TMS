@@ -29,6 +29,7 @@ from fastapi import Depends, FastAPI, File, Header, HTTPException, Request, Resp
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from sqlalchemy import text
 
 from db.engine import get_session, get_engine
 from services.tracking_status import (
@@ -4573,7 +4574,13 @@ def update_vendor_quote(vq_id: int, body: VendorQuoteUpdate):
         if body.notes is not None:
             q.notes = body.notes
         if body.currency is not None:
-            q.currency = body.currency or "USD"
+            cur = (body.currency or "USD").strip().upper() or "USD"
+            q.currency = cur
+            s.flush()
+            s.execute(
+                text("UPDATE vendor_quotes SET currency = :currency WHERE id = :id"),
+                {"currency": cur, "id": vq_id},
+            )
         if body.received_at is not None and body.received_at.strip():
             q.received_at = body.received_at.strip()
             q.received_date = body.received_at.strip()[:10]
@@ -4582,7 +4589,11 @@ def update_vendor_quote(vq_id: int, body: VendorQuoteUpdate):
         if body.items is not None:
             q.items = body.items
         s.commit()
-        return {"ok": True, "vendor_quote_no": q.vendor_quote_no, "currency": q.currency or "USD"}
+        saved_currency = (
+            s.execute(text("SELECT currency FROM vendor_quotes WHERE id = :id"), {"id": vq_id}).scalar()
+            or "USD"
+        )
+        return {"ok": True, "vendor_quote_no": q.vendor_quote_no, "currency": saved_currency}
     finally:
         s.close()
 
