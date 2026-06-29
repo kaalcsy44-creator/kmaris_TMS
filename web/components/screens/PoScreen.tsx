@@ -334,6 +334,9 @@ function OrderDetailModal({
   const [tradeType, setTradeType] = useState("수출");
   const [promised, setPromised] = useState("");
   const [items, setItems] = useState<PoWorkItem[]>([]);
+  const [quotationId, setQuotationId] = useState<number | "">("");
+  const [ocrBusy, setOcrBusy] = useState(false);
+  const [ocrMsg, setOcrMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -349,9 +352,71 @@ function OrderDetailModal({
         setTradeType(d.trade_type || "수출");
         setPromised(d.promised_delivery || "");
         setItems(d.items.length ? d.items.map(normalizeItem) : [blankItem()]);
+        setQuotationId("");
+        setOcrMsg(null);
         setEditing(true);
       })
       .catch((e) => setErr(e instanceof Error ? e.message : "Load failed"));
+  }
+
+  function loadQuotation(id: number | "") {
+    setQuotationId(id);
+    if (id === "") return;
+    const q = options.quotations.find((x) => x.id === id);
+    if (!q) return;
+    setCustomerId(q.customer_id);
+    setVesselId(q.vessel_id ?? "");
+    setItems(q.items.length ? q.items.map(normalizeItem) : [blankItem()]);
+    setOcrMsg(`Loaded ${q.items.length} item(s) from quotation ${q.qtn_no}.`);
+  }
+
+  function matchByName<T extends { name: string }>(
+    hint: string | null | undefined,
+    rows: T[]
+  ) {
+    if (!hint) return undefined;
+    const h = hint.trim().toLowerCase();
+    return rows.find((r) => {
+      const n = r.name.toLowerCase();
+      return h === n || h.includes(n) || n.includes(h);
+    });
+  }
+
+  async function uploadOrderFile(file: File | null) {
+    if (!file) return;
+    setOcrBusy(true);
+    setErr(null);
+    setOcrMsg(null);
+    try {
+      const r = await parseOrderPdf(file);
+      const cust = matchByName(r.customer_hint, options.customers);
+      if (cust) setCustomerId(cust.id);
+      const vessel = matchByName(r.vessel_name, options.vessels);
+      if (vessel) setVesselId(vessel.id);
+      if (r.po_no) setPoNo(r.po_no);
+      if (r.order_date) setDate(r.order_date);
+      if (r.promised_delivery) setPromised(r.promised_delivery);
+      if (r.items?.length) {
+        setItems(
+          r.items.map((it) =>
+            normalizeItem({
+              part_no: it.part_no ?? "",
+              description: it.description ?? "",
+              maker: it.maker ?? "",
+              qty: it.qty ?? 1,
+              unit: it.unit ?? "PCS",
+              unit_price: it.unit_price ?? 0,
+              amount: (it.qty ?? 1) * (it.unit_price ?? 0),
+            })
+          )
+        );
+      }
+      setOcrMsg(`Extracted ${r.items?.length ?? 0} item(s) from file.`);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "File parsing failed");
+    } finally {
+      setOcrBusy(false);
+    }
   }
 
   async function save() {
@@ -397,6 +462,38 @@ function OrderDetailModal({
     <Modal title={<ModalTitle label="Order details" projectNo={order?.project_no} />} onClose={onClose} wide>
       {editing ? (
         <>
+          <div className="po-work-note">
+            <b>Auto-fill order items</b>
+            <span>Upload a customer P/O PDF or image, or load item/amount data from a previous quotation.</span>
+          </div>
+          <div className="form-grid">
+            <div className="form-field">
+              <label>Upload customer P/O</label>
+              <input
+                type="file"
+                accept=".pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/*"
+                onChange={(e) => uploadOrderFile(e.target.files?.[0] ?? null)}
+                disabled={ocrBusy || busy}
+              />
+            </div>
+            <div className="form-field">
+              <label>Load from quotation</label>
+              <select
+                value={quotationId}
+                onChange={(e) => loadQuotation(e.target.value ? Number(e.target.value) : "")}
+              >
+                <option value="">Manual entry</option>
+                {options.quotations.map((q) => (
+                  <option key={q.id} value={q.id}>
+                    {q.qtn_no} · {q.customer} · {q.currency} {money(q.amount)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          {ocrBusy ? <span className="hint-inline">Analyzing…</span> : null}
+          {ocrMsg ? <span className="action-ok">{ocrMsg}</span> : null}
+
           <div className="form-grid">
             <div className="form-field">
               <label>Customer</label>
@@ -621,12 +718,32 @@ function VendorPoDetailModal({
     }
   }
 
+  function loadOrderItems() {
+    if (!d) return;
+    const order = options.orders.find((o) => o.id === d.order_id);
+    if (!order) {
+      setErr("Linked order items are not available.");
+      return;
+    }
+    setItems(order.items.length ? order.items.map(normalizeItem) : [blankItem()]);
+  }
+
   return (
     <Modal title={d ? <ModalTitle label={`Purchase order — ${d.po_no}`} projectNo={d.project_no} /> : "PO details"} onClose={onClose} wide>
       {!d ? (
         <div className="empty">Loading…</div>
       ) : editing ? (
         <>
+          <div className="po-work-note">
+            <b>Load from previous step</b>
+            <span>Reload the item list and amounts from the linked Customer P/O order.</span>
+          </div>
+          <div className="form-actions" style={{ marginTop: 0 }}>
+            <button className="btn" onClick={loadOrderItems} disabled={busy}>
+              Load order items
+            </button>
+          </div>
+
           <div className="form-grid">
             <div className="form-field">
               <label>Vendor</label>

@@ -729,6 +729,15 @@ function ServiceBillingForm({ data, onChanged, onClose }: { data: DocumentDetail
         </label>
         <Field label="VAT Rate" value={String(vatRate)} onChange={setVatRate} type="number" />
       </div>
+      <div className="po-work-note">
+        <b>Load from previous step</b>
+        <span>Reload item and amount data from the linked order.</span>
+      </div>
+      <div className="form-actions" style={{ marginTop: 0 }}>
+        <button className="btn" disabled={busy} onClick={() => setItems(normalizeItems(data.order.items))}>
+          Load order items
+        </button>
+      </div>
       <ItemEditor items={items} setItems={setItems} packing={false} />
       <div className="sub-h" style={{ marginTop: 14 }}>Additional cost</div>
       <div className="form-grid">
@@ -1141,6 +1150,15 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
         <Field label="VAT Rate" value={String(vatRate)} onChange={(v) => setVatRate(num(v))} type="number" />
       </div>
       <ShippingFields shipping={shipping} setShipping={setShipping} />
+      <div className="po-work-note">
+        <b>Load from previous step</b>
+        <span>Reload item and amount data from the linked order.</span>
+      </div>
+      <div className="form-actions" style={{ marginTop: 0 }}>
+        <button className="btn" disabled={busy} onClick={() => setItems(normalizeItems(data.order.items))}>
+          Load order items
+        </button>
+      </div>
       <ItemEditor items={items} setItems={setItems} packing={false} />
       <MissingWarning missing={data.ci?.missing || []} />
       <div className="form-actions">
@@ -1178,6 +1196,15 @@ function PackingListTab({ data, onChanged }: { data: DocumentDetail; onChanged: 
     <div className="doc-tab">
       <div className="form-grid">
         <Field label="PL Date" value={date} onChange={setDate} type="date" />
+      </div>
+      <div className="po-work-note">
+        <b>Load from previous step</b>
+        <span>Reload packing items from the Commercial Invoice.</span>
+      </div>
+      <div className="form-actions" style={{ marginTop: 0 }}>
+        <button className="btn" disabled={busy} onClick={() => setItems(normalizeItems(data.ci?.items || data.order.items, true))}>
+          Load CI items
+        </button>
       </div>
       <ItemEditor items={items} setItems={setItems} packing />
       <MissingWarning missing={data.pl?.missing || []} />
@@ -1318,6 +1345,15 @@ function TaxInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChanged: (
         <Field label="Supply Type" value={supplyType} onChange={setSupplyType} />
         <Field label="Buyer Business No." value={buyerNo} onChange={setBuyerNo} />
         <Field label="VAT Rate" value={String(vatRate)} onChange={(v) => setVatRate(num(v))} type="number" />
+      </div>
+      <div className="po-work-note">
+        <b>Load from previous step</b>
+        <span>Reload item and amount data from the Commercial Invoice.</span>
+      </div>
+      <div className="form-actions" style={{ marginTop: 0 }}>
+        <button className="btn" disabled={busy} onClick={() => setItems(normalizeItems(data.ci?.items || data.order.items))}>
+          Load CI items
+        </button>
       </div>
       <ItemEditor items={items} setItems={setItems} packing={false} />
       <div className="form-actions">

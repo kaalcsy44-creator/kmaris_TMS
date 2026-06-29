@@ -727,8 +727,6 @@ function VendorQuoteList({
       sortValue: (r) => Date.parse(r.received_at || r.received_date || "") || 0,
     },
     { key: "vendor", label: "Vendor", text: (r) => r.vendor || "", filter: "facet" },
-    { key: "vrfq_no", label: "VRFQ No.", text: (r) => r.vrfq_no || "" },
-    { key: "customer_rfq_no", label: "Customer RFQ No.", text: (r) => r.customer_rfq_no || "" },
     { key: "item_count", label: "Items", numeric: true, text: (r) => String(r.item_count), sortValue: (r) => r.item_count },
     {
       key: "amount",
@@ -796,6 +794,7 @@ function VendorQuoteDetailModal({
   const [receivedAt, setReceivedAt] = useState("");
   const [notes, setNotes] = useState("");
   const [items, setItems] = useState<VendorQuoteItem[]>([]);
+  const [parseMsg, setParseMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -807,9 +806,57 @@ function VendorQuoteDetailModal({
         setReceivedAt(data.received_at || "");
         setNotes(data.notes || "");
         setItems((data.items || []).map(normalizeVendorQuoteItem));
+        setParseMsg(null);
       })
       .catch((e) => setErr(e instanceof Error ? e.message : "Error"));
   }, [id]);
+
+  async function parseFile(file: File | null) {
+    if (!file) return;
+    setBusy(true);
+    setErr(null);
+    setParseMsg(null);
+    try {
+      const r = await parseVendorQuoteFile(file);
+      const parsed = r.items || [];
+      setItems((prev) => mergeParsedItems(prev.length ? prev : [], parsed));
+      setParseMsg(
+        parsed.length
+          ? `Auto-filled ${parsed.length} item(s) — review and edit`
+          : "Could not extract items. Enter manually or try another file."
+      );
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "File parsing failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function loadVendorRfqItems() {
+    if (!d) return;
+    setBusy(true);
+    setErr(null);
+    setParseMsg(null);
+    try {
+      const vrfq = await fetchVendorRfqDetail(d.vendor_rfq_id);
+      setItems(
+        (vrfq.items || []).map((it) =>
+          normalizeVendorQuoteItem({
+            part_no: it.part_no,
+            description: it.description,
+            qty: it.qty,
+            unit: it.unit,
+            cost_price: 0,
+          })
+        )
+      );
+      setParseMsg(`Loaded ${vrfq.items.length} item(s) from Vendor RFQ.`);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Failed to load Vendor RFQ items");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function save() {
     setBusy(true);
@@ -851,6 +898,14 @@ function VendorQuoteDetailModal({
         <div className="empty">Loading…</div>
       ) : editing ? (
         <>
+          <div className="form-section-title">Project info</div>
+          <dl className="intl-meta">
+            <BaseMetaRows info={d} />
+            <div><dt>Vendor</dt><dd>{d.vendor}</dd></div>
+            <div><dt>Items</dt><dd>{items.length}</dd></div>
+          </dl>
+
+          <div className="form-section-title">Vendor quote info</div>
           <div className="form-grid">
             <div className="form-field">
               <label>Vendor quote no.</label>
@@ -865,6 +920,24 @@ function VendorQuoteDetailModal({
               <input value={notes} onChange={(e) => setNotes(e.target.value)} />
             </div>
           </div>
+
+          <div className="po-work-note" style={{ marginTop: 12 }}>
+            <b>Auto-fill quote items</b>
+            <span>Upload the vendor quote file (PDF, JPG/PNG, Excel) or load the original Vendor RFQ item list.</span>
+          </div>
+          <div className="action-row">
+            <input
+              type="file"
+              accept=".pdf,.xlsx,.xls,.png,.jpg,.jpeg,.webp,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,image/*"
+              disabled={busy}
+              onChange={(e) => parseFile(e.target.files?.[0] ?? null)}
+            />
+            <button className="btn" onClick={loadVendorRfqItems} disabled={busy}>
+              Load Vendor RFQ items
+            </button>
+            {busy ? <span className="hint-inline">Analyzing…</span> : null}
+            {parseMsg ? <span className="action-ok">{parseMsg}</span> : null}
+          </div>
           <VendorQuoteItemEditor items={items} onChange={setItems} />
           <div className="form-actions">
             <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
@@ -877,8 +950,6 @@ function VendorQuoteDetailModal({
           <dl className="intl-meta">
             <BaseMetaRows info={d} />
             <div><dt>Vendor</dt><dd>{d.vendor}</dd></div>
-            <div><dt>VRFQ No.</dt><dd>{d.vrfq_no}</dd></div>
-            <div><dt>Customer RFQ No.</dt><dd>{d.customer_rfq_no || "—"}</dd></div>
             <div><dt>Received</dt><dd>{d.received_date || "—"}</dd></div>
             <div><dt>Notes</dt><dd>{d.notes || "—"}</dd></div>
             <div><dt>Items</dt><dd>{d.items.length}</dd></div>
@@ -1016,6 +1087,10 @@ function CustomerQuoteDetailModal({
   const [status, setStatus] = useState("");
   const [terms, setTerms] = useState<QuotationTerms>({});
   const [items, setItems] = useState<CustomerQuoteItem[]>([]);
+  const [vendorQuotes, setVendorQuotes] = useState<VendorQuoteForImport[]>([]);
+  const [importVqId, setImportVqId] = useState<number | "">("");
+  const [defaultMargin, setDefaultMargin] = useState(20);
+  const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -1028,6 +1103,14 @@ function CustomerQuoteDetailModal({
         setStatus(data.status || "");
         setTerms(data.terms || {});
         setItems(data.items || []);
+        setMsg(null);
+        if (data.rfq_id) {
+          fetchRfqVendorQuotes(data.rfq_id)
+            .then((r) => setVendorQuotes(r.vendor_quotes))
+            .catch(() => setVendorQuotes([]));
+        } else {
+          setVendorQuotes([]);
+        }
       })
       .catch((e) => setErr(e instanceof Error ? e.message : "Error"));
   }, [id]);
@@ -1069,6 +1152,15 @@ function CustomerQuoteDetailModal({
     }
   }
 
+  function importFromVendorQuote() {
+    if (importVqId === "") return;
+    const vq = vendorQuotes.find((v) => v.id === importVqId);
+    if (!vq) return;
+    setItems(customerQuoteItemsFromVendorQuote(vq, defaultMargin));
+    if (vq.currency) setCurrency(vq.currency);
+    setMsg(`Loaded ${vq.items.length} item(s) from quote ${vq.vendor_quote_no} (${vq.vendor}).`);
+  }
+
   const STATUSES = ["초안", "발송완료", "협상중", "수주확정", "실주", "만료"];
 
   return (
@@ -1077,6 +1169,52 @@ function CustomerQuoteDetailModal({
         <div className="empty">Loading…</div>
       ) : editing ? (
         <>
+          <div className="form-section-title">Project info</div>
+          <dl className="intl-meta">
+            <BaseMetaRows info={d} />
+            <div><dt>RFQ No.</dt><dd>{d.rfq_no || "—"}</dd></div>
+            <div><dt>Items</dt><dd>{items.length}</dd></div>
+          </dl>
+
+          <div className="form-section-title">Quotation info</div>
+          <div className="po-work-note" style={{ marginTop: 12 }}>
+            <b>Load from Vendor quote</b>
+            <span>Select a previous Vendor Quote to auto-fill item costs, sales prices, and amounts using the default margin.</span>
+          </div>
+          <div className="form-grid">
+            <div className="form-field">
+              <label>Select Vendor quote</label>
+              <select
+                value={importVqId}
+                onChange={(e) => setImportVqId(e.target.value === "" ? "" : Number(e.target.value))}
+                disabled={vendorQuotes.length === 0}
+              >
+                <option value="">
+                  {vendorQuotes.length === 0 ? "No Vendor quote received" : "Manual entry"}
+                </option>
+                {vendorQuotes.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.received_date || "—"} · {v.vendor} · {v.vendor_quote_no}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="form-field">
+              <label>Default margin (%)</label>
+              <input
+                className="num"
+                type="number"
+                value={defaultMargin}
+                onChange={(e) => setDefaultMargin(Number(e.target.value))}
+              />
+            </div>
+            <div className="form-field" style={{ alignSelf: "end" }}>
+              <button className="btn" onClick={importFromVendorQuote} disabled={importVqId === ""}>
+                Load Vendor quote
+              </button>
+            </div>
+          </div>
+
           <div className="form-grid">
             <div className="form-field">
               <label>Currency</label>
@@ -1102,6 +1240,7 @@ function CustomerQuoteDetailModal({
             <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
             <button className="btn" onClick={() => setEditing(false)} disabled={busy}>Cancel</button>
           </div>
+          {msg ? <span className="action-ok">{msg}</span> : null}
           {err ? <span className="action-err">{err}</span> : null}
         </>
       ) : (
@@ -1765,6 +1904,27 @@ function cleanVendorQuoteItems(items: VendorQuoteItem[]): VendorQuoteItem[] {
   return items.map(normalizeVendorQuoteItem).filter((it) => it.part_no || it.description);
 }
 
+function customerQuoteItemsFromVendorQuote(
+  vq: VendorQuoteForImport,
+  defaultMargin: number
+): CustomerQuoteItem[] {
+  return vq.items.map((it) => {
+    const cost = Number(it.cost_price ?? 0);
+    const unit = calcUnitPrice(cost, defaultMargin);
+    const qty = Number(it.qty || 1);
+    return {
+      part_no: it.part_no || "",
+      description: it.description || "",
+      qty,
+      unit: it.unit || "PCS",
+      cost_price: cost,
+      margin_pct: defaultMargin,
+      unit_price: unit,
+      amount: unit * qty,
+    };
+  });
+}
+
 // Streamlit 4_Quotation.py 의 거래 조건 프리셋 — datalist 로 드롭다운 + 자유 입력 모두 지원.
 const TERM_PRESETS = {
   incoterms: ["FCA Busan, Korea", "FOB Busan, Korea", "CIF (named port of destination)", "CFR (named port of destination)", "DAP (named destination)", "EXW Busan"],
@@ -1834,23 +1994,7 @@ function CustomerQuoteAction({
     if (importVqId === "") return;
     const vq = vendorQuotes.find((v) => v.id === importVqId);
     if (!vq) return;
-    setItems(
-      vq.items.map((it) => {
-        const cost = Number(it.cost_price ?? 0);
-        const unit = calcUnitPrice(cost, defaultMargin);
-        const qty = Number(it.qty || 1);
-        return {
-          part_no: it.part_no || "",
-          description: it.description || "",
-          qty,
-          unit: it.unit || "PCS",
-          cost_price: cost,
-          margin_pct: defaultMargin,
-          unit_price: unit,
-          amount: unit * qty,
-        };
-      })
-    );
+    setItems(customerQuoteItemsFromVendorQuote(vq, defaultMargin));
     if (vq.currency) setCurrency(vq.currency);
     setMsg(`Loaded ${vq.items.length} item(s) from quote ${vq.vendor_quote_no} (${vq.vendor}).`);
   }
