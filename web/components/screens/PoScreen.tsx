@@ -23,7 +23,14 @@ import FilterTable, { ColumnDef } from "@/components/common/FilterTable";
 import { identityColumns, projectNoColumn } from "@/components/common/identityColumns";
 import Modal from "@/components/common/Modal";
 import BaseMetaRows, { ModalTitle } from "@/components/common/BaseMeta";
-import { amountInputValue, gridCellProps, itemRowClass, parseAmountInput } from "@/components/common/itemTable";
+import {
+  amountInputValue,
+  dualCurrencyText,
+  fxRateText,
+  gridCellProps,
+  itemRowClass,
+  parseAmountInput,
+} from "@/components/common/itemTable";
 import { tr } from "@/lib/labels";
 import type {
   PoDetail as PoDetailT,
@@ -153,8 +160,8 @@ function PoDetail({ orderId }: { orderId: number | null }) {
                           {it.qty}
                           {it.unit ? ` ${it.unit}` : ""}
                         </td>
-                        <td className="num">{money(it.unit_price)}</td>
-                        <td className="num">{money(it.amount)}</td>
+                        <td className="num">{dualCurrencyText(it.unit_price, data.currency)}</td>
+                        <td className="num">{dualCurrencyText(it.amount, data.currency)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -332,6 +339,7 @@ function OrderDetailModal({
   const [vesselId, setVesselId] = useState<number | "">("");
   const [poNo, setPoNo] = useState("");
   const [date, setDate] = useState("");
+  const [currency, setCurrency] = useState("USD");
   const [tradeType, setTradeType] = useState("수출");
   const [promised, setPromised] = useState("");
   const [items, setItems] = useState<PoWorkItem[]>([]);
@@ -351,6 +359,7 @@ function OrderDetailModal({
         setPoNo(d.customer_po_no || "");
         setDate(d.customer_po_at || "");
         setTradeType(d.trade_type || "수출");
+        setCurrency(d.currency || "USD");
         setPromised(d.promised_delivery || "");
         setItems(d.items.length ? d.items.map(normalizeItem) : [blankItem()]);
         setQuotationId("");
@@ -367,6 +376,7 @@ function OrderDetailModal({
     if (!q) return;
     setCustomerId(q.customer_id);
     setVesselId(q.vessel_id ?? "");
+    setCurrency(q.currency || "USD");
     setItems(q.items.length ? q.items.map(normalizeItem) : [blankItem()]);
     setOcrMsg(`Loaded ${q.items.length} item(s) from quotation ${q.qtn_no}.`);
   }
@@ -486,7 +496,7 @@ function OrderDetailModal({
                 <option value="">Manual entry</option>
                 {options.quotations.map((q) => (
                   <option key={q.id} value={q.id}>
-                    {q.qtn_no} · {q.customer} · {q.currency} {money(q.amount)}
+                    {q.qtn_no} · {q.customer} · {dualCurrencyText(q.amount, q.currency)}
                   </option>
                 ))}
               </select>
@@ -534,7 +544,7 @@ function OrderDetailModal({
               <input type="date" value={promised} onChange={(e) => setPromised(e.target.value)} />
             </div>
           </div>
-          <ItemEditor items={items} onChange={setItems} />
+          <ItemEditor items={items} onChange={setItems} currency={currency} />
           <div className="form-actions">
             <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
             <button className="btn" onClick={() => setEditing(false)} disabled={busy}>Cancel</button>
@@ -764,7 +774,7 @@ function VendorPoDetailModal({
               <input value={status} onChange={(e) => setStatus(e.target.value)} />
             </div>
           </div>
-          <ItemEditor items={items} onChange={setItems} />
+          <ItemEditor items={items} onChange={setItems} currency={d.currency || "USD"} />
           <div className="form-actions">
             <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
             <button className="btn" onClick={() => setEditing(false)} disabled={busy}>Cancel</button>
@@ -810,6 +820,7 @@ function CustomerPoNewForm({
   const [rfqId, setRfqId] = useState<number | "">("");
   const [poNo, setPoNo] = useState("");
   const [date, setDate] = useState(today);
+  const [currency, setCurrency] = useState("USD");
   const [tradeType, setTradeType] = useState("수출");
   const [promised, setPromised] = useState("");
   const [items, setItems] = useState<PoWorkItem[]>([blankItem()]);
@@ -832,6 +843,7 @@ function CustomerPoNewForm({
     setCustomerId(q.customer_id);
     setVesselId(q.vessel_id ?? "");
     setRfqId(q.rfq_id ?? "");
+    setCurrency(q.currency || "USD");
     setItems(q.items.length ? q.items.map(normalizeItem) : [blankItem()]);
   }
 
@@ -958,7 +970,7 @@ function CustomerPoNewForm({
             <option value="">— None —</option>
             {options.quotations.map((q) => (
               <option key={q.id} value={q.id}>
-                {q.qtn_no} · {q.customer} · {q.currency} {money(q.amount)}
+                {q.qtn_no} · {q.customer} · {dualCurrencyText(q.amount, q.currency)}
               </option>
             ))}
           </select>
@@ -1030,7 +1042,7 @@ function CustomerPoNewForm({
         </select>
       </div>
 
-      <ItemEditor items={items} onChange={setItems} />
+      <ItemEditor items={items} onChange={setItems} currency={currency} />
 
       <div className="form-actions">
         <button
@@ -1138,7 +1150,7 @@ function VendorPoCreate({
         </div>
       ) : null}
 
-      <ItemEditor items={items} onChange={setItems} />
+      <ItemEditor items={items} onChange={setItems} currency={order?.currency || "USD"} />
 
       <div className="form-actions">
         <button
@@ -1376,9 +1388,11 @@ function IssuedPoTable({
 function ItemEditor({
   items,
   onChange,
+  currency = "USD",
 }: {
   items: PoWorkItem[];
   onChange: (items: PoWorkItem[]) => void;
+  currency?: string;
 }) {
   function patch(i: number, key: keyof PoWorkItem, value: string) {
     onChange(
@@ -1466,7 +1480,10 @@ function ItemEditor({
           <tfoot>
             <tr>
               <td colSpan={7} className="total-label">Total</td>
-              <td className="num total-value">{amountInputValue(total)}</td>
+              <td className="num total-value">
+                <span className="dual-amount">{dualCurrencyText(total, currency)}</span>
+                <span className="fx-note">{fxRateText()}</span>
+              </td>
               <td></td>
             </tr>
           </tfoot>

@@ -1,5 +1,7 @@
 import type { KeyboardEvent } from "react";
 
+export const USD_KRW_RATE = 1543.41;
+
 export function parseAmountInput(value: string): number | null {
   const normalized = value.replace(/,/g, "").trim();
   if (normalized === "") return null;
@@ -12,6 +14,40 @@ export function amountInputValue(value: number | string | null | undefined): str
   const parsed = typeof value === "number" ? value : Number(String(value).replace(/,/g, ""));
   if (!Number.isFinite(parsed)) return "";
   return parsed.toLocaleString(undefined, { maximumFractionDigits: 6 });
+}
+
+export function moneyText(value: number | string | null | undefined): string {
+  const parsed = toNumber(value);
+  if (!Number.isFinite(parsed)) return "0.00";
+  return parsed.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+export function fxRateText(): string {
+  return `FX 1 USD = KRW ${USD_KRW_RATE.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+export function dualCurrencyText(
+  value: number | string | null | undefined,
+  currency = "USD"
+): string {
+  const amount = toNumber(value);
+  const cur = (currency || "USD").toUpperCase();
+  if (!Number.isFinite(amount)) return `${cur} 0.00 / KRW 0`;
+  if (cur === "KRW") {
+    return `KRW ${Math.round(amount).toLocaleString()} / USD ${moneyText(amount / USD_KRW_RATE)}`;
+  }
+  if (cur === "USD") {
+    return `USD ${moneyText(amount)} / KRW ${Math.round(amount * USD_KRW_RATE).toLocaleString()}`;
+  }
+  return `${cur} ${moneyText(amount)}`;
+}
+
+function toNumber(value: number | string | null | undefined): number {
+  if (value === null || value === undefined || value === "") return 0;
+  return typeof value === "number" ? value : Number(String(value).replace(/,/g, ""));
 }
 
 export function itemRowClass(index: number): string | undefined {

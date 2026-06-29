@@ -62,6 +62,7 @@ app = FastAPI(title="KTMS Admin API", docs_url=None, redoc_url=None)
 
 _ALLOWED_ORIGINS = {"http://localhost:3000", "http://127.0.0.1:3000"}
 _ALLOWED_ORIGIN_RE = re.compile(r"https://.*\.vercel\.app$")
+USD_KRW_RATE = 1543.41
 
 
 def _allow_origin(origin: str | None) -> str | None:
@@ -71,6 +72,19 @@ def _allow_origin(origin: str | None) -> str | None:
     if origin in _ALLOWED_ORIGINS or _ALLOWED_ORIGIN_RE.match(origin):
         return origin
     return None
+
+
+def _dual_money(value, currency: str = "USD") -> str:
+    try:
+        amount = float(value or 0)
+    except Exception:
+        amount = 0.0
+    cur = (currency or "USD").upper()
+    if cur == "KRW":
+        return f"KRW {amount:,.0f} / USD {amount / USD_KRW_RATE:,.2f}"
+    if cur == "USD":
+        return f"USD {amount:,.2f} / KRW {round(amount * USD_KRW_RATE):,}"
+    return f"{cur} {amount:,.2f}"
 
 
 app.add_middleware(
@@ -808,7 +822,7 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
                 vquote_no = str(_vq_no) + (f"  (외 {len(vqs) - 1}건)" if len(vqs) > 1 else "")
                 vquote_at = _kst(vq0.created_at)
                 _cur = getattr(vq0, "currency", None) or "USD"
-                vendor_amount = f"{_cur} {_items_cost_total(vq0.items):,.2f}"
+                vendor_amount = _dual_money(_items_cost_total(vq0.items), _cur)
             else:
                 vquote_no, vquote_at, vendor_amount = "", "", ""
 
@@ -817,7 +831,7 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
                    .order_by(Quotation.id.desc()).first())
             if qtn:
                 cquote_no, cquote_at = qtn.qtn_no, _kst(qtn.created_at)
-                customer_amount = f"{qtn.currency} {_total_amount(qtn.items or []):,.2f}"
+                customer_amount = _dual_money(_total_amount(qtn.items or []), qtn.currency)
             else:
                 cquote_no, cquote_at, customer_amount = "", "", ""
 
@@ -934,7 +948,7 @@ def rfq_overview(customer_id: int | None = None, work_type: str | None = None,
                 vq_main = str(_vq_no) + (f"  (외 {len(vqs) - 1}건)" if len(vqs) > 1 else "")
                 vq_at = _kst(vq0.created_at)
                 _cur = getattr(vq0, "currency", None) or "USD"
-                vendor_amount = f"{_cur} {_items_cost_total(vq0.items):,.2f}"
+                vendor_amount = _dual_money(_items_cost_total(vq0.items), _cur)
             else:
                 vq_main, vq_at, vendor_amount = "", "", ""
 
@@ -942,7 +956,7 @@ def rfq_overview(customer_id: int | None = None, work_type: str | None = None,
                    .order_by(Quotation.id.desc()).first())
             if qtn:
                 qtn_main, qtn_at = qtn.qtn_no, _kst(qtn.created_at)
-                customer_amount = f"{qtn.currency} {_total_amount(qtn.items or []):,.2f}"
+                customer_amount = _dual_money(_total_amount(qtn.items or []), qtn.currency)
             else:
                 qtn_main, qtn_at, customer_amount = "", "", ""
 
@@ -1188,7 +1202,7 @@ def rfq_detail(rfq_id: int):
                .order_by(VendorQuote.id.desc()).all() if vrfq_ids else [])
         vquote_view = [{
             "vendor_quote_no": getattr(q, "vendor_quote_no", None) or "—",
-            "amount": f"{getattr(q, 'currency', None) or 'USD'} {_items_cost_total(q.items):,.2f}",
+            "amount": _dual_money(_items_cost_total(q.items), getattr(q, "currency", None) or "USD"),
             "at": _kst(q.created_at),
         } for q in vqs]
 
@@ -1198,7 +1212,7 @@ def rfq_detail(rfq_id: int):
         if qtn:
             qtn_view = {
                 "qtn_no": qtn.qtn_no,
-                "amount": f"{qtn.currency} {_total_amount(qtn.items or []):,.2f}",
+                "amount": _dual_money(_total_amount(qtn.items or []), qtn.currency),
                 "status": _enum_val(qtn.status),
                 "at": _kst(qtn.created_at),
             }
@@ -1577,6 +1591,7 @@ def order_detail(order_id: int):
             "rfq_no": _rfq_no_disp(rfq.rfq_no) if rfq else "",
             "customer_rfq_no": (rfq.customer_rfq_no or _rfq_no_disp(rfq.rfq_no)) if rfq else "",
             "quotation_no": qtn.qtn_no if qtn else "",
+            "currency": (qtn.currency if qtn else "USD") or "USD",
             "project_no": _project_no_map(s).get(rfq.id, "") if rfq else "",
             "first_rfq_at": _first_rfq_iso(rfq),
             "customer": cust.name if cust else "—",
@@ -1669,6 +1684,7 @@ def po_work_options():
         orders = []
         for o in s.query(Order).order_by(Order.id.desc()).all():
             rfq = _rfq_for_order(s, o)
+            qtn = s.query(Quotation).filter_by(id=o.quotation_id).first() if o.quotation_id else None
             stage = _pipeline_stage(s, rfq.id) if rfq else 5
             orders.append({
                 "id": o.id,
@@ -1680,6 +1696,7 @@ def po_work_options():
                 "po_no": o.po_no or "",
                 "date": o.date or "",
                 "trade_type": o.trade_type or "수출",
+                "currency": (qtn.currency if qtn else "USD") or "USD",
                 "status": _status_label(stage, rfq.work_type) if rfq else _enum_val(o.status),
                 "items": [_item_view(it) for it in (o.items or [])],
                 # 공통 식별 컬럼
@@ -1693,6 +1710,7 @@ def po_work_options():
             o = s.query(Order).filter_by(id=po.order_id).first()
             vendor = s.query(Vendor).filter_by(id=po.vendor_id).first()
             rfq = _rfq_for_order(s, o) if o else None
+            qtn = s.query(Quotation).filter_by(id=o.quotation_id).first() if o and o.quotation_id else None
             purchase_orders.append({
                 "id": po.id,
                 "po_no": po.po_no or "",
@@ -1706,6 +1724,7 @@ def po_work_options():
                 "status": po.status or "",
                 "sent": po.status == "이메일 발송완료",
                 "items": [_item_view(it) for it in (po.items or [])],
+                "currency": (qtn.currency if qtn else "USD") or "USD",
                 # 공통 식별 컬럼
                 "customer": cust_names.get(o.customer_id, "—") if o else "—",
                 "vessel": (vessel_names.get(o.vessel_id, "") if o and o.vessel_id else ""),
@@ -2051,6 +2070,7 @@ def vendor_po_detail(po_id: int):
         order = s.query(Order).filter_by(id=po.order_id).first()
         vendor = s.query(Vendor).filter_by(id=po.vendor_id).first()
         rfq = _rfq_for_order(s, order) if order else None
+        qtn = s.query(Quotation).filter_by(id=order.quotation_id).first() if order and order.quotation_id else None
         return {
             "id": po.id,
             "po_no": po.po_no or "",
@@ -2064,6 +2084,7 @@ def vendor_po_detail(po_id: int):
             "sent_date": po.sent_date or "",
             "status": po.status or "",
             "sent": po.status == "이메일 발송완료",
+            "currency": (qtn.currency if qtn else "USD") or "USD",
             "items": [_item_view(it) for it in (po.items or [])],
         }
     finally:

@@ -55,7 +55,14 @@ import { identityColumns, projectNoColumn } from "./common/identityColumns";
 import Modal from "./common/Modal";
 import BaseMetaRows, { ModalTitle } from "./common/BaseMeta";
 import CurrencyToggle from "./common/CurrencyToggle";
-import { amountInputValue, gridCellProps, itemRowClass, parseAmountInput } from "./common/itemTable";
+import {
+  amountInputValue,
+  dualCurrencyText,
+  fxRateText,
+  gridCellProps,
+  itemRowClass,
+  parseAmountInput,
+} from "./common/itemTable";
 
 /** 현재 시각 "YYYY-MM-DDTHH:MM" (datetime-local 기본값). */
 function nowLocalDt(): string {
@@ -735,7 +742,7 @@ function VendorQuoteList({
       key: "amount",
       label: "Amount",
       numeric: true,
-      text: (r) => `${r.currency} ${money(r.amount)}`,
+      text: (r) => dualCurrencyText(r.amount, r.currency),
       sortValue: (r) => r.amount,
     },
   ];
@@ -948,7 +955,7 @@ function VendorQuoteDetailModal({
             {busy ? <span className="hint-inline">Analyzing…</span> : null}
             {parseMsg ? <span className="action-ok">{parseMsg}</span> : null}
           </div>
-          <VendorQuoteItemEditor items={items} onChange={setItems} />
+          <VendorQuoteItemEditor items={items} onChange={setItems} currency={currency} />
           <div className="form-actions">
             <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
             <button className="btn" onClick={() => setEditing(false)} disabled={busy}>Cancel</button>
@@ -1035,7 +1042,7 @@ function CustomerQuoteList({
     },
     { key: "rfq_no", label: "RFQ No.", text: (r) => r.rfq_no || "" },
     { key: "item_count", label: "Items", numeric: true, text: (r) => String(r.item_count), sortValue: (r) => r.item_count },
-    { key: "amount", label: "Total", numeric: true, text: (r) => `${r.currency} ${money(r.amount)}`, sortValue: (r) => r.amount },
+    { key: "amount", label: "Total", numeric: true, text: (r) => dualCurrencyText(r.amount, r.currency), sortValue: (r) => r.amount },
     { key: "level", label: "Level", text: (r) => r.level || "" },
     { key: "valid_until", label: "Valid until", text: (r) => r.valid_until || "", filter: "date" },
     { key: "status", label: "Status", text: (r) => tr(r.status) || "", filter: "facet", render: (r) => <span className="ar-badge">{tr(r.status)}</span> },
@@ -1244,10 +1251,10 @@ function CustomerQuoteDetailModal({
               </select>
             </div>
           </div>
-          <CustomerQuoteItemEditor items={items} onChange={setItems} />
+          <CustomerQuoteItemEditor items={items} onChange={setItems} currency={currency} />
           <QuotationTermsEditor terms={terms} onChange={setTerms} />
           <div className="form-actions">
-            <span className="action-name">Total: {currency} {money(total)}</span>
+            <span className="action-name">Total: {dualCurrencyText(total, currency)} · {fxRateText()}</span>
             <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
             <button className="btn" onClick={() => setEditing(false)} disabled={busy}>Cancel</button>
           </div>
@@ -1259,7 +1266,7 @@ function CustomerQuoteDetailModal({
           <dl className="intl-meta">
             <BaseMetaRows info={d} />
             <div><dt>RFQ No.</dt><dd>{d.rfq_no || "—"}</dd></div>
-            <div><dt>Total</dt><dd>{d.currency} {money(d.amount)}</dd></div>
+            <div><dt>Total</dt><dd>{dualCurrencyText(d.amount, d.currency)}<br /><span className="fx-note">{fxRateText()}</span></dd></div>
             <div><dt>Valid until</dt><dd>{d.valid_until || "—"}</dd></div>
             <div><dt>Status</dt><dd>{tr(d.status)}</dd></div>
             <div><dt>Items</dt><dd>{d.items.length}</dd></div>
@@ -1782,7 +1789,7 @@ function VendorQuoteAction({
             {parseMsg ? <span className="action-ok">{parseMsg}</span> : null}
           </div>
 
-          <VendorQuoteItemEditor items={items} onChange={setItems} />
+          <VendorQuoteItemEditor items={items} onChange={setItems} currency={currency} />
 
           <div className="form-field" style={{ marginTop: 12 }}>
             <label>Notes</label>
@@ -1808,9 +1815,11 @@ function VendorQuoteAction({
 function VendorQuoteItemEditor({
   items,
   onChange,
+  currency = "USD",
 }: {
   items: VendorQuoteItem[];
   onChange: (items: VendorQuoteItem[]) => void;
+  currency?: string;
 }) {
   function add() {
     onChange([
@@ -1887,7 +1896,10 @@ function VendorQuoteItemEditor({
           <tfoot>
             <tr>
               <td colSpan={7} className="total-label">Total</td>
-              <td className="num total-value">{amountInputValue(total)}</td>
+              <td className="num total-value">
+                <span className="dual-amount">{dualCurrencyText(total, currency)}</span>
+                <span className="fx-note">{fxRateText()}</span>
+              </td>
               <td colSpan={3}></td>
             </tr>
           </tfoot>
@@ -2152,12 +2164,12 @@ function CustomerQuoteAction({
         </div>
       </div>
 
-      <CustomerQuoteItemEditor items={items} onChange={setItems} />
+      <CustomerQuoteItemEditor items={items} onChange={setItems} currency={currency} />
 
       <QuotationTermsEditor terms={terms} onChange={setTerms} />
 
       <div className="form-actions">
-        <span className="action-name">Total: {currency} {total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+        <span className="action-name">Total: {dualCurrencyText(total, currency)} · {fxRateText()}</span>
         <button className="btn primary" onClick={submit} disabled={busy || items.length === 0}>
           {busy ? "Saving…" : "Save quote"}
         </button>
@@ -2261,9 +2273,11 @@ function QuotationTermsEditor({
 function CustomerQuoteItemEditor({
   items,
   onChange,
+  currency = "USD",
 }: {
   items: CustomerQuoteItem[];
   onChange: (items: CustomerQuoteItem[]) => void;
+  currency?: string;
 }) {
   function patch(i: number, key: keyof CustomerQuoteItem, value: string) {
     onChange(
@@ -2325,7 +2339,10 @@ function CustomerQuoteItemEditor({
           <tfoot>
             <tr>
               <td colSpan={8} className="total-label">Total</td>
-              <td className="num total-value">{amountInputValue(total)}</td>
+              <td className="num total-value">
+                <span className="dual-amount">{dualCurrencyText(total, currency)}</span>
+                <span className="fx-note">{fxRateText()}</span>
+              </td>
             </tr>
           </tfoot>
         </table>

@@ -28,7 +28,14 @@ import { identityColumns, projectNoColumn } from "@/components/common/identityCo
 import Modal from "@/components/common/Modal";
 import { ModalTitle } from "@/components/common/BaseMeta";
 import CurrencyToggle from "@/components/common/CurrencyToggle";
-import { amountInputValue, gridCellProps, itemRowClass, parseAmountInput } from "@/components/common/itemTable";
+import {
+  amountInputValue,
+  dualCurrencyText,
+  fxRateText,
+  gridCellProps,
+  itemRowClass,
+  parseAmountInput,
+} from "@/components/common/itemTable";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -739,7 +746,7 @@ function ServiceBillingForm({ data, onChanged, onClose }: { data: DocumentDetail
           Load order items
         </button>
       </div>
-      <ItemEditor items={items} setItems={setItems} packing={false} />
+      <ItemEditor items={items} setItems={setItems} packing={false} currency={currency} />
       <div className="sub-h" style={{ marginTop: 14 }}>Additional cost</div>
       <div className="form-grid">
         <Field label="Labor cost" value={String(labor)} onChange={setLabor} type="number" />
@@ -751,7 +758,7 @@ function ServiceBillingForm({ data, onChanged, onClose }: { data: DocumentDetail
         <button className="btn primary" disabled={busy || data.order.id === 0} onClick={save}>
           {busy ? "Working…" : "Save billing + register AR"}
         </button>
-        <span className="hint-inline">Total {currency} {total.toLocaleString()}</span>
+        <span className="hint-inline">Total {dualCurrencyText(total, currency)} · {fxRateText()}</span>
         {billed ? (
           <button className="btn danger" disabled={busy} onClick={remove} style={{ marginLeft: "auto" }}>
             Delete
@@ -1160,14 +1167,14 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
           Load order items
         </button>
       </div>
-      <ItemEditor items={items} setItems={setItems} packing={false} />
+      <ItemEditor items={items} setItems={setItems} packing={false} currency={currency} />
       <MissingWarning missing={data.ci?.missing || []} />
       <div className="form-actions">
         <button className="btn primary" disabled={busy || data.order.id === 0} onClick={save}>
           Save CI
         </button>
         <DownloadButton orderId={data.order.id} kind="ci/pdf" disabled={!data.ci} label="Download CI PDF" />
-        <span className="hint-inline">Total {currency} {total.toLocaleString()}</span>
+        <span className="hint-inline">Total {dualCurrencyText(total, currency)} · {fxRateText()}</span>
       </div>
     </div>
   );
@@ -1356,13 +1363,13 @@ function TaxInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChanged: (
           Load CI items
         </button>
       </div>
-      <ItemEditor items={items} setItems={setItems} packing={false} />
+      <ItemEditor items={items} setItems={setItems} packing={false} currency={currency} />
       <div className="form-actions">
         <button className="btn primary" disabled={busy} onClick={save}>
           Create Tax Invoice Data + register AR
         </button>
         <DownloadButton orderId={data.order.id} kind="tax/xlsx" disabled={!data.tax} label="Download Tax XLSX" />
-        <span className="hint-inline">Total {currency} {total.toLocaleString()}</span>
+        <span className="hint-inline">Total {dualCurrencyText(total, currency)} · {fxRateText()}</span>
       </div>
     </div>
   );
@@ -1421,10 +1428,12 @@ function ItemEditor({
   items,
   setItems,
   packing,
+  currency = "USD",
 }: {
   items: DocumentWorkItem[];
   setItems: (items: DocumentWorkItem[]) => void;
   packing: boolean;
+  currency?: string;
 }) {
   function patch(i: number, key: keyof DocumentWorkItem, value: string) {
     const next = [...items];
@@ -1500,7 +1509,10 @@ function ItemEditor({
           <tfoot>
             <tr>
               <td colSpan={7} className="total-label">Total</td>
-              <td className="num total-value">{amountInputValue(total)}</td>
+              <td className="num total-value">
+                <span className="dual-amount">{dualCurrencyText(total, currency)}</span>
+                <span className="fx-note">{fxRateText()}</span>
+              </td>
               <td colSpan={3}></td>
             </tr>
           </tfoot>

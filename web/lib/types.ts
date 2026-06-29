@@ -128,6 +128,7 @@ export type PoDetail = {
   rfq_no: string;
   customer_rfq_no: string;
   quotation_no: string;
+  currency: string;
   project_no: string;
   first_rfq_at: string;
   customer: string;
@@ -255,6 +256,7 @@ export type PoWorkOptions = {
     po_no: string;
     date: string;
     trade_type: string;
+    currency: string;
     status: string;
     items: PoWorkItem[];
     work_type: string;
@@ -277,6 +279,7 @@ export type PoWorkOptions = {
     customer: string;
     vessel: string;
     trade_type: string;
+    currency: string;
     work_type: string;
     first_rfq_at: string;
   project_no: string;
@@ -823,5 +826,6 @@ export type PurchaseOrderDetail = {
   sent_date: string;
   status: string;
   sent: boolean;
+  currency: string;
   items: PoWorkItem[];
 };

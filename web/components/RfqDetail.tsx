@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { fetchRfqDetail, updateRfqLevel, deleteRfq } from "@/lib/api";
 import type { RfqDetail as RfqDetailT } from "@/lib/types";
+import { dualCurrencyText } from "@/components/common/itemTable";
 
 const LEVELS = ["A", "B", "C"];
 
@@ -200,8 +201,8 @@ export default function RfqDetail({
                           {it.qty}
                           {it.unit ? ` ${it.unit}` : ""}
                         </td>
-                        <td className="num">{money(it.unit_price)}</td>
-                        <td className="num">{money(it.amount)}</td>
+                        <td className="num">{dualCurrencyText(it.unit_price, "USD")}</td>
+                        <td className="num">{dualCurrencyText(it.amount, "USD")}</td>
                       </tr>
                     ))}
                   </tbody>
