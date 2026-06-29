@@ -1069,14 +1069,16 @@ function CustomerQuoteList({
       key: "qtn_no",
       label: "Quote No.",
       text: (r) => r.qtn_no || "",
-      render: (r) => (
-        <div>
-          <div className="m">{r.qtn_no || <span className="dash">—</span>}</div>
-          {r.sent_date ? <div className="s">Sent: {r.sent_date}</div> : null}
-        </div>
-      ),
+      render: (r) => {
+        const sent = (r.sent_at || r.sent_date || "").slice(0, 10);
+        return (
+          <div>
+            <div className="m">{r.qtn_no || <span className="dash">—</span>}</div>
+            {sent ? <div className="s">Sent: {sent}</div> : null}
+          </div>
+        );
+      },
     },
-    { key: "rfq_no", label: "RFQ No.", text: (r) => r.rfq_no || "" },
     { key: "item_count", label: "Items", numeric: true, text: (r) => String(r.item_count), sortValue: (r) => r.item_count },
     {
       key: "amount",
