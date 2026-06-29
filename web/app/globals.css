@@ -2712,21 +2712,31 @@ table.mini tfoot .total-value {
   align-items: flex-start;
   gap: 2px;
   font-variant-numeric: tabular-nums;
+  min-width: 122px;
 }
 .num .dual-amount,
 .total-value .dual-amount {
   align-items: flex-end;
 }
 .dual-line {
-  display: block;
+  display: grid;
+  grid-template-columns: 34px minmax(74px, 1fr);
+  column-gap: 8px;
+  width: 100%;
   white-space: nowrap;
+}
+.dual-cur {
+  text-align: left;
+}
+.dual-num {
+  text-align: right;
 }
 .dual-line.primary {
   color: inherit;
 }
 .dual-line.converted {
   color: var(--muted);
-  font-weight: 600;
+  font-weight: 400;
 }
 .fx-note {
   display: block;

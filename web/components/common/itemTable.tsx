@@ -57,22 +57,37 @@ export function DualCurrencyAmount({
   if (cur === "KRW") {
     return (
       <span className="dual-amount">
-        <span className="dual-line primary">KRW {Math.round(amount).toLocaleString()}</span>
-        <span className="dual-line converted">USD {moneyText(amount / USD_KRW_RATE)}</span>
+        <span className="dual-line primary">
+          <span className="dual-cur">KRW</span>
+          <span className="dual-num">{Math.round(amount).toLocaleString()}</span>
+        </span>
+        <span className="dual-line converted">
+          <span className="dual-cur">USD</span>
+          <span className="dual-num">{moneyText(amount / USD_KRW_RATE)}</span>
+        </span>
       </span>
     );
   }
   if (cur === "USD") {
     return (
       <span className="dual-amount">
-        <span className="dual-line primary">USD {moneyText(amount)}</span>
-        <span className="dual-line converted">KRW {Math.round(amount * USD_KRW_RATE).toLocaleString()}</span>
+        <span className="dual-line primary">
+          <span className="dual-cur">USD</span>
+          <span className="dual-num">{moneyText(amount)}</span>
+        </span>
+        <span className="dual-line converted">
+          <span className="dual-cur">KRW</span>
+          <span className="dual-num">{Math.round(amount * USD_KRW_RATE).toLocaleString()}</span>
+        </span>
       </span>
     );
   }
   return (
     <span className="dual-amount">
-      <span className="dual-line primary">{cur} {moneyText(amount)}</span>
+      <span className="dual-line primary">
+        <span className="dual-cur">{cur}</span>
+        <span className="dual-num">{moneyText(amount)}</span>
+      </span>
     </span>
   );
 }
