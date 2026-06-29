@@ -1719,6 +1719,7 @@ def po_work_options():
                 "po_no": po.po_no or "",
                 "order_id": po.order_id,
                 "ord_no": o.ord_no if o else "",
+                "customer_po_no": (o.po_no if o else "") or "",
                 "vendor_id": po.vendor_id,
                 "vendor": vendor.name if vendor else "—",
                 "vendor_email": po.sent_to_email or (vendor.email if vendor else "") or "",
@@ -1849,6 +1850,21 @@ def _next_po_no(session, company_prefix: str = "KMS") -> str:
         if not session.query(PurchaseOrder).filter_by(po_no=no).first():
             session.flush()
             return no
+
+
+def _km_po_no(session, order) -> str:
+    """K-Maris PO No. = 고객 PO No.(order.po_no) 앞에 'KM-' 접두.
+    동일 오더에 다중 발주 시 충돌하면 -2, -3 … 으로 유일성 보장.
+    고객 PO No.가 비어 있으면 기존 KMS-PO 채번으로 폴백."""
+    base = ((order.po_no if order else "") or "").strip()
+    if not base:
+        return _next_po_no(session)
+    candidate = f"KM-{base}"
+    no, n = candidate, 1
+    while session.query(PurchaseOrder).filter_by(po_no=no).first():
+        n += 1
+        no = f"{candidate}-{n}"
+    return no
 
 
 class PoWorkItem(BaseModel):
@@ -2006,6 +2022,7 @@ def delete_order(order_id: int):
 class PurchaseOrderCreate(BaseModel):
     order_id: int
     vendor_id: int
+    po_no: str | None = None
     date: str | None = None
     items: list[PoWorkItem] = []
 
@@ -2038,7 +2055,9 @@ def create_purchase_order(body: PurchaseOrderCreate):
                 "amount": it.amount if it.amount is not None else qty * unit_price,
             })
 
-        po_no = _next_po_no(s)
+        po_no = (body.po_no or "").strip() or _km_po_no(s, order)
+        if s.query(PurchaseOrder).filter_by(po_no=po_no).first():
+            raise HTTPException(status_code=400, detail=f"이미 존재하는 PO No. 입니다: {po_no}")
         po = PurchaseOrder(
             po_no=po_no,
             order_id=order.id,
@@ -2057,6 +2076,7 @@ def create_purchase_order(body: PurchaseOrderCreate):
 
 class PurchaseOrderUpdate(BaseModel):
     vendor_id: int | None = None
+    po_no: str | None = None
     date: str | None = None
     status: str | None = None
     items: list[PoWorkItem] | None = None
@@ -2079,6 +2099,7 @@ def vendor_po_detail(po_id: int):
             "po_no": po.po_no or "",
             "order_id": po.order_id,
             "ord_no": order.ord_no if order else "",
+            "customer_po_no": (order.po_no if order else "") or "",
             **_base_meta(s, rfq, order),   # 공통 기본정보
             "vendor_id": po.vendor_id or 0,
             "vendor": vendor.name if vendor else "—",
@@ -2104,6 +2125,12 @@ def update_purchase_order(po_id: int, body: PurchaseOrderUpdate):
             raise HTTPException(status_code=404, detail="발주서를 찾을 수 없습니다.")
         if body.vendor_id is not None:
             po.vendor_id = body.vendor_id
+        if body.po_no is not None:
+            new_no = body.po_no.strip()
+            if new_no and new_no != po.po_no:
+                if s.query(PurchaseOrder).filter(PurchaseOrder.po_no == new_no, PurchaseOrder.id != po.id).first():
+                    raise HTTPException(status_code=400, detail=f"이미 존재하는 PO No. 입니다: {new_no}")
+                po.po_no = new_no
         if body.date is not None:
             po.date = body.date or po.date
         if body.status is not None:

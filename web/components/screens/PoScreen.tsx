@@ -276,7 +276,6 @@ function CustomerPoTab({
       workType: (o) => o.work_type,
       tradeType: (o) => o.trade_type,
     }),
-    { key: "ord_no", label: "K-Maris ORD No.", text: (o) => o.ord_no || "" },
     { key: "po_no", label: "PO No.", text: (o) => o.po_no || "" },
     { key: "items", label: "Items", numeric: true, text: (o) => String(o.items.length), sortValue: (o) => o.items.length },
     { key: "status", label: "Status", text: (o) => o.status || "", filter: "facet", render: (o) => <span className="ar-badge">{o.status}</span> },
@@ -597,8 +596,8 @@ function VendorPoTab({
       workType: (p) => p.work_type,
       tradeType: (p) => p.trade_type,
     }),
-    { key: "po_no", label: "PO No.", text: (p) => p.po_no || "" },
-    { key: "ord_no", label: "K-Maris ORD No.", text: (p) => p.ord_no || "" },
+    { key: "customer_po_no", label: "PO No.", text: (p) => p.customer_po_no || "" },
+    { key: "po_no", label: "K-Maris PO No.", text: (p) => p.po_no || "" },
     { key: "vendor", label: "Vendor", text: (p) => p.vendor || "", filter: "facet" },
     { key: "vendor_email", label: "Recipient email", text: (p) => p.vendor_email || "" },
     { key: "date", label: "PO date", text: (p) => p.date || "", filter: "date" },
@@ -678,6 +677,7 @@ function VendorPoDetailModal({
   const [d, setD] = useState<PurchaseOrderDetail | null>(null);
   const [editing, setEditing] = useState(false);
   const [vendorId, setVendorId] = useState<number | "">("");
+  const [poNo, setPoNo] = useState("");
   const [date, setDate] = useState("");
   const [status, setStatus] = useState("");
   const [items, setItems] = useState<PoWorkItem[]>([]);
@@ -689,6 +689,7 @@ function VendorPoDetailModal({
       .then((data) => {
         setD(data);
         setVendorId(data.vendor_id || "");
+        setPoNo(data.po_no || (data.customer_po_no ? `KM-${data.customer_po_no}` : ""));
         setDate(data.date || "");
         setStatus(data.status || "");
         setItems(data.items.length ? data.items.map(normalizeItem) : [blankItem()]);
@@ -702,6 +703,7 @@ function VendorPoDetailModal({
     try {
       await updatePurchaseOrder(id, {
         vendor_id: vendorId === "" ? undefined : vendorId,
+        po_no: poNo.trim() || undefined,
         date,
         status,
         items: cleanItems(items),
@@ -767,6 +769,14 @@ function VendorPoDetailModal({
               </select>
             </div>
             <div className="form-field">
+              <label>K-Maris PO No.</label>
+              <input
+                value={poNo}
+                onChange={(e) => setPoNo(e.target.value)}
+                placeholder={d.customer_po_no ? `KM-${d.customer_po_no}` : "KM-…"}
+              />
+            </div>
+            <div className="form-field">
               <label>PO date</label>
               <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
             </div>
@@ -786,7 +796,8 @@ function VendorPoDetailModal({
         <>
           <dl className="intl-meta">
             <BaseMetaRows info={d} />
-            <div><dt>Order No.</dt><dd>{d.ord_no || "—"}</dd></div>
+            <div><dt>PO No.</dt><dd>{d.customer_po_no || "—"}</dd></div>
+            <div><dt>K-Maris PO No.</dt><dd>{d.po_no || "—"}</dd></div>
             <div><dt>Vendor</dt><dd>{d.vendor}</dd></div>
             <div><dt>Recipient email</dt><dd>{d.vendor_email || "—"}</dd></div>
             <div><dt>PO date</dt><dd>{d.date || "—"}</dd></div>
@@ -1073,6 +1084,7 @@ function VendorPoCreate({
   const defaultOrder = selectedOrderId ?? options.orders[0]?.id ?? "";
   const [orderId, setOrderId] = useState<number | "">(defaultOrder);
   const [vendorId, setVendorId] = useState<number | "">("");
+  const [poNo, setPoNo] = useState("");
   const [date, setDate] = useState(today);
   const [items, setItems] = useState<PoWorkItem[]>([blankItem()]);
   const [busy, setBusy] = useState(false);
@@ -1086,7 +1098,10 @@ function VendorPoCreate({
   const order = options.orders.find((o) => o.id === orderId);
 
   useEffect(() => {
-    if (order) setItems(order.items.length ? order.items.map(normalizeItem) : [blankItem()]);
+    if (order) {
+      setItems(order.items.length ? order.items.map(normalizeItem) : [blankItem()]);
+      setPoNo(order.po_no ? `KM-${order.po_no}` : "");
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderId]);
 
@@ -1099,6 +1114,7 @@ function VendorPoCreate({
       const r = await createPurchaseOrder({
         order_id: orderId,
         vendor_id: vendorId,
+        po_no: poNo.trim() || undefined,
         date,
         items: cleanItems(items),
       });
@@ -1140,6 +1156,14 @@ function VendorPoCreate({
           </select>
         </div>
         <div className="form-field">
+          <label>K-Maris PO No.</label>
+          <input
+            value={poNo}
+            onChange={(e) => setPoNo(e.target.value)}
+            placeholder={order?.po_no ? `KM-${order.po_no}` : "KM-…"}
+          />
+        </div>
+        <div className="form-field">
           <label>PO date</label>
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
         </div>
@@ -1147,7 +1171,7 @@ function VendorPoCreate({
 
       {order ? (
         <div className="action-ctx">
-          Target order: <b>{order.ord_no}</b> · {order.customer} · {order.vessel || "—"} · {order.items.length} item(s)
+          Target order: <b>{order.ord_no}</b> · PO No. {order.po_no || "—"} · {order.customer} · {order.vessel || "—"} · {order.items.length} item(s)
         </div>
       ) : null}
 
@@ -1363,7 +1387,7 @@ function IssuedPoTable({
       <table className="mini wide">
         <thead>
           <tr>
-            <th>PO No.</th>
+            <th>K-Maris PO No.</th>
             <th>Vendor</th>
             <th>PO date</th>
             <th>Status</th>

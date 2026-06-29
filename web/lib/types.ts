@@ -268,6 +268,7 @@ export type PoWorkOptions = {
     po_no: string;
     order_id: number;
     ord_no: string;
+    customer_po_no: string;
     vendor_id: number;
     vendor: string;
     vendor_email: string;
@@ -814,6 +815,7 @@ export type PurchaseOrderDetail = {
   po_no: string;
   order_id: number;
   ord_no: string;
+  customer_po_no: string;
   project_no: string;
   first_rfq_at: string;
   customer: string;
