@@ -23,6 +23,7 @@ import FilterTable, { ColumnDef } from "@/components/common/FilterTable";
 import { identityColumns, projectNoColumn } from "@/components/common/identityColumns";
 import Modal from "@/components/common/Modal";
 import BaseMetaRows, { ModalTitle } from "@/components/common/BaseMeta";
+import { amountInputValue, gridCellProps, itemRowClass, parseAmountInput } from "@/components/common/itemTable";
 import { tr } from "@/lib/labels";
 import type {
   PoDetail as PoDetailT,
@@ -1384,12 +1385,13 @@ function ItemEditor({
       items.map((it, idx) => {
         if (idx !== i) return it;
         if (key === "qty" || key === "unit_price" || key === "amount") {
-          return { ...it, [key]: value === "" ? null : Number(value) };
+          return { ...it, [key]: parseAmountInput(value) };
         }
         return { ...it, [key]: value };
       })
     );
   }
+  const total = items.reduce((sum, it) => sum + Number(it.amount || 0), 0);
 
   return (
     <div style={{ marginTop: 16 }}>
@@ -1398,6 +1400,7 @@ function ItemEditor({
         <table className="mini wide">
           <thead>
             <tr>
+              <th className="seq">No.</th>
               <th>Part No.</th>
               <th>Description</th>
               <th>Maker</th>
@@ -1410,37 +1413,41 @@ function ItemEditor({
           </thead>
           <tbody>
             {items.map((it, i) => (
-              <tr key={i}>
+              <tr key={i} className={itemRowClass(i)}>
+                <td className="seq">{i + 1}</td>
                 <td>
-                  <input value={it.part_no} onChange={(e) => patch(i, "part_no", e.target.value)} />
+                  <input {...gridCellProps(i, 0)} value={it.part_no} onChange={(e) => patch(i, "part_no", e.target.value)} />
                 </td>
                 <td>
-                  <input value={it.description} onChange={(e) => patch(i, "description", e.target.value)} />
+                  <input {...gridCellProps(i, 1)} value={it.description} onChange={(e) => patch(i, "description", e.target.value)} />
                 </td>
                 <td>
-                  <input value={it.maker ?? ""} onChange={(e) => patch(i, "maker", e.target.value)} />
+                  <input {...gridCellProps(i, 2)} value={it.maker ?? ""} onChange={(e) => patch(i, "maker", e.target.value)} />
                 </td>
                 <td>
                   <input
+                    {...gridCellProps(i, 3)}
                     className="num"
-                    value={it.qty ?? ""}
+                    value={amountInputValue(it.qty)}
                     onChange={(e) => patch(i, "qty", e.target.value)}
                   />
                 </td>
                 <td>
-                  <input value={it.unit} onChange={(e) => patch(i, "unit", e.target.value)} />
+                  <input {...gridCellProps(i, 4)} value={it.unit} onChange={(e) => patch(i, "unit", e.target.value)} />
                 </td>
                 <td>
                   <input
+                    {...gridCellProps(i, 5)}
                     className="num"
-                    value={it.unit_price ?? ""}
+                    value={amountInputValue(it.unit_price)}
                     onChange={(e) => patch(i, "unit_price", e.target.value)}
                   />
                 </td>
                 <td>
                   <input
+                    {...gridCellProps(i, 6)}
                     className="num"
-                    value={it.amount ?? ""}
+                    value={amountInputValue(it.amount)}
                     onChange={(e) => patch(i, "amount", e.target.value)}
                   />
                 </td>
@@ -1456,6 +1463,13 @@ function ItemEditor({
               </tr>
             ))}
           </tbody>
+          <tfoot>
+            <tr>
+              <td colSpan={7} className="total-label">Total</td>
+              <td className="num total-value">{amountInputValue(total)}</td>
+              <td></td>
+            </tr>
+          </tfoot>
         </table>
       </div>
       <button className="btn" style={{ marginTop: 10 }} onClick={() => onChange([...items, blankItem()])}>

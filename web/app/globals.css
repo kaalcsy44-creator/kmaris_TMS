@@ -2682,6 +2682,30 @@ table.mini.wide input.num {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+table.mini .seq {
+  width: 52px;
+  min-width: 52px;
+  text-align: center;
+  color: #607089;
+  font-variant-numeric: tabular-nums;
+}
+table.mini tbody tr.item-group-break td {
+  border-top: 2px solid #8db7e8;
+  background: #f8fbff;
+}
+table.mini tfoot td {
+  border-top: 2px solid var(--line-strong);
+  background: #f3f7fc;
+  font-weight: 800;
+}
+table.mini tfoot .total-label {
+  text-align: right;
+  color: var(--navy);
+}
+table.mini tfoot .total-value {
+  color: var(--navy);
+  font-variant-numeric: tabular-nums;
+}
 .row-del {
   border: 1px solid #e4b9b3;
   background: #fff;

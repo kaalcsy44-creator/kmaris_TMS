@@ -4380,6 +4380,7 @@ class VendorQuoteCreate(BaseModel):
     vendor_rfq_id: int
     vendor_quote_no: str
     amount: float | None = None
+    currency: str = "USD"
     received_date: str | None = None
     received_at: str | None = None     # 견적 수신 일시 "YYYY-MM-DDTHH:MM"(비우면 현재)
     notes: str = ""
@@ -4453,6 +4454,7 @@ def create_vendor_quote(rfq_id: int, body: VendorQuoteCreate):
             vendor_quote_no=body.vendor_quote_no.strip(),
             received_date=received_at[:10],
             received_at=received_at,
+            currency=body.currency or "USD",
             items=items,
             notes=body.notes or "",
         )
@@ -4502,6 +4504,7 @@ class VendorQuoteUpdate(BaseModel):
     vendor_quote_no: str | None = None
     received_date: str | None = None
     received_at: str | None = None
+    currency: str | None = None
     notes: str | None = None
     items: list[dict] | None = None
 
@@ -4548,6 +4551,8 @@ def update_vendor_quote(vq_id: int, body: VendorQuoteUpdate):
             q.vendor_quote_no = body.vendor_quote_no.strip()
         if body.notes is not None:
             q.notes = body.notes
+        if body.currency is not None:
+            q.currency = body.currency or "USD"
         if body.received_at is not None and body.received_at.strip():
             q.received_at = body.received_at.strip()
             q.received_date = body.received_at.strip()[:10]

@@ -28,6 +28,7 @@ import { identityColumns, projectNoColumn } from "@/components/common/identityCo
 import Modal from "@/components/common/Modal";
 import { ModalTitle } from "@/components/common/BaseMeta";
 import CurrencyToggle from "@/components/common/CurrencyToggle";
+import { amountInputValue, gridCellProps, itemRowClass, parseAmountInput } from "@/components/common/itemTable";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -1427,19 +1428,21 @@ function ItemEditor({
 }) {
   function patch(i: number, key: keyof DocumentWorkItem, value: string) {
     const next = [...items];
-    const item = { ...next[i], [key]: ["qty", "unit_price", "amount"].includes(String(key)) ? num(value) : value };
+    const item = { ...next[i], [key]: ["qty", "unit_price", "amount"].includes(String(key)) ? parseAmountInput(value) || 0 : value };
     if (!packing && (key === "qty" || key === "unit_price")) {
       item.amount = num(item.qty) * num(item.unit_price);
     }
     next[i] = item;
     setItems(next);
   }
+  const total = items.reduce((sum, item) => sum + num(item.amount), 0);
 
   return (
     <div className="table-wrap">
       <table className="mini wide">
         <thead>
           <tr>
+            <th className="seq">No.</th>
             <th>Part No.</th>
             <th>Description</th>
             <th>Maker</th>
@@ -1465,33 +1468,43 @@ function ItemEditor({
         </thead>
         <tbody>
           {items.map((item, i) => (
-            <tr key={i}>
-              <td><input value={item.part_no || ""} onChange={(e) => patch(i, "part_no", e.target.value)} /></td>
-              <td><input value={item.description || ""} onChange={(e) => patch(i, "description", e.target.value)} /></td>
-              <td><input value={item.maker || ""} onChange={(e) => patch(i, "maker", e.target.value)} /></td>
-              <td><input className="num" value={item.qty ?? 0} onChange={(e) => patch(i, "qty", e.target.value)} /></td>
-              <td><input value={item.unit || "PCS"} onChange={(e) => patch(i, "unit", e.target.value)} /></td>
+            <tr key={i} className={itemRowClass(i)}>
+              <td className="seq">{i + 1}</td>
+              <td><input {...gridCellProps(i, 0)} value={item.part_no || ""} onChange={(e) => patch(i, "part_no", e.target.value)} /></td>
+              <td><input {...gridCellProps(i, 1)} value={item.description || ""} onChange={(e) => patch(i, "description", e.target.value)} /></td>
+              <td><input {...gridCellProps(i, 2)} value={item.maker || ""} onChange={(e) => patch(i, "maker", e.target.value)} /></td>
+              <td><input {...gridCellProps(i, 3)} className="num" value={amountInputValue(item.qty)} onChange={(e) => patch(i, "qty", e.target.value)} /></td>
+              <td><input {...gridCellProps(i, 4)} value={item.unit || "PCS"} onChange={(e) => patch(i, "unit", e.target.value)} /></td>
               {packing ? (
                 <>
-                  <td><input value={item.package || ""} onChange={(e) => patch(i, "package", e.target.value)} /></td>
-                  <td><input value={String(item.net_weight || "")} onChange={(e) => patch(i, "net_weight", e.target.value)} /></td>
-                  <td><input value={String(item.gross_weight || "")} onChange={(e) => patch(i, "gross_weight", e.target.value)} /></td>
-                  <td><input value={item.dimension || ""} onChange={(e) => patch(i, "dimension", e.target.value)} /></td>
+                  <td><input {...gridCellProps(i, 5)} value={item.package || ""} onChange={(e) => patch(i, "package", e.target.value)} /></td>
+                  <td><input {...gridCellProps(i, 6)} value={String(item.net_weight || "")} onChange={(e) => patch(i, "net_weight", e.target.value)} /></td>
+                  <td><input {...gridCellProps(i, 7)} value={String(item.gross_weight || "")} onChange={(e) => patch(i, "gross_weight", e.target.value)} /></td>
+                  <td><input {...gridCellProps(i, 8)} value={item.dimension || ""} onChange={(e) => patch(i, "dimension", e.target.value)} /></td>
                 </>
               ) : (
                 <>
-                  <td><input className="num" value={item.unit_price ?? 0} onChange={(e) => patch(i, "unit_price", e.target.value)} /></td>
-                  <td><input className="num" value={item.amount ?? 0} onChange={(e) => patch(i, "amount", e.target.value)} /></td>
-                  <td><input value={item.hs_code || ""} onChange={(e) => patch(i, "hs_code", e.target.value)} /></td>
+                  <td><input {...gridCellProps(i, 5)} className="num" value={amountInputValue(item.unit_price)} onChange={(e) => patch(i, "unit_price", e.target.value)} /></td>
+                  <td><input {...gridCellProps(i, 6)} className="num" value={amountInputValue(item.amount)} onChange={(e) => patch(i, "amount", e.target.value)} /></td>
+                  <td><input {...gridCellProps(i, 7)} value={item.hs_code || ""} onChange={(e) => patch(i, "hs_code", e.target.value)} /></td>
                 </>
               )}
-              <td><input value={item.remark || ""} onChange={(e) => patch(i, "remark", e.target.value)} /></td>
+              <td><input {...gridCellProps(i, packing ? 9 : 8)} value={item.remark || ""} onChange={(e) => patch(i, "remark", e.target.value)} /></td>
               <td>
                 <button className="row-del" onClick={() => setItems(items.filter((_, idx) => idx !== i))}>×</button>
               </td>
             </tr>
           ))}
         </tbody>
+        {!packing ? (
+          <tfoot>
+            <tr>
+              <td colSpan={7} className="total-label">Total</td>
+              <td className="num total-value">{amountInputValue(total)}</td>
+              <td colSpan={3}></td>
+            </tr>
+          </tfoot>
+        ) : null}
       </table>
       <button className="btn" style={{ marginTop: 10 }} onClick={() => setItems([...items, blankItem(packing)])}>
         Add row

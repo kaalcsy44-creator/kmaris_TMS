@@ -55,6 +55,7 @@ import { identityColumns, projectNoColumn } from "./common/identityColumns";
 import Modal from "./common/Modal";
 import BaseMetaRows, { ModalTitle } from "./common/BaseMeta";
 import CurrencyToggle from "./common/CurrencyToggle";
+import { amountInputValue, gridCellProps, itemRowClass, parseAmountInput } from "./common/itemTable";
 
 /** 현재 시각 "YYYY-MM-DDTHH:MM" (datetime-local 기본값). */
 function nowLocalDt(): string {
@@ -624,7 +625,7 @@ function VendorRfqItemEditor({
         idx === i
           ? {
               ...it,
-              [key]: key === "qty" ? Number(value) || 0 : value,
+              [key]: key === "qty" ? parseAmountInput(value) || 0 : value,
             }
           : it
       )
@@ -638,6 +639,7 @@ function VendorRfqItemEditor({
         <table className="mini wide">
           <thead>
             <tr>
+              <th className="seq">No.</th>
               <th>Part No.</th>
               <th>Description</th>
               <th>Qty</th>
@@ -646,11 +648,12 @@ function VendorRfqItemEditor({
           </thead>
           <tbody>
             {items.map((it, i) => (
-              <tr key={i}>
-                <td><input value={it.part_no || ""} onChange={(e) => patch(i, "part_no", e.target.value)} /></td>
-                <td><input value={it.description || ""} onChange={(e) => patch(i, "description", e.target.value)} /></td>
-                <td><input className="num" type="number" value={it.qty || 0} onChange={(e) => patch(i, "qty", e.target.value)} /></td>
-                <td><input value={it.unit || ""} onChange={(e) => patch(i, "unit", e.target.value)} /></td>
+              <tr key={i} className={itemRowClass(i)}>
+                <td className="seq">{i + 1}</td>
+                <td><input {...gridCellProps(i, 0)} value={it.part_no || ""} onChange={(e) => patch(i, "part_no", e.target.value)} /></td>
+                <td><input {...gridCellProps(i, 1)} value={it.description || ""} onChange={(e) => patch(i, "description", e.target.value)} /></td>
+                <td><input {...gridCellProps(i, 2)} className="num" value={amountInputValue(it.qty)} onChange={(e) => patch(i, "qty", e.target.value)} /></td>
+                <td><input {...gridCellProps(i, 3)} value={it.unit || ""} onChange={(e) => patch(i, "unit", e.target.value)} /></td>
               </tr>
             ))}
           </tbody>
@@ -792,6 +795,7 @@ function VendorQuoteDetailModal({
   const [editing, setEditing] = useState(!!autoEdit);
   const [no, setNo] = useState("");
   const [receivedAt, setReceivedAt] = useState("");
+  const [currency, setCurrency] = useState("USD");
   const [notes, setNotes] = useState("");
   const [items, setItems] = useState<VendorQuoteItem[]>([]);
   const [parseMsg, setParseMsg] = useState<string | null>(null);
@@ -804,6 +808,7 @@ function VendorQuoteDetailModal({
         setD(data);
         setNo(data.vendor_quote_no || "");
         setReceivedAt(data.received_at || "");
+        setCurrency(data.currency || "USD");
         setNotes(data.notes || "");
         setItems((data.items || []).map(normalizeVendorQuoteItem));
         setParseMsg(null);
@@ -865,6 +870,7 @@ function VendorQuoteDetailModal({
       await updateVendorQuote(id, {
         vendor_quote_no: no.trim(),
         received_at: receivedAt,
+        currency,
         notes,
         items: cleanVendorQuoteItems(items),
       });
@@ -916,6 +922,10 @@ function VendorQuoteDetailModal({
               <input type="datetime-local" value={receivedAt} onChange={(e) => setReceivedAt(e.target.value)} />
             </div>
             <div className="form-field">
+              <label>Currency</label>
+              <CurrencyToggle value={currency} onChange={setCurrency} />
+            </div>
+            <div className="form-field">
               <label>Notes</label>
               <input value={notes} onChange={(e) => setNotes(e.target.value)} />
             </div>
@@ -952,6 +962,7 @@ function VendorQuoteDetailModal({
             <div><dt>Vendor</dt><dd>{d.vendor}</dd></div>
             <div><dt>Received</dt><dd>{d.received_date || "—"}</dd></div>
             <div><dt>Notes</dt><dd>{d.notes || "—"}</dd></div>
+            <div><dt>Currency</dt><dd>{d.currency || "USD"}</dd></div>
             <div><dt>Items</dt><dd>{d.items.length}</dd></div>
           </dl>
           <div className="form-actions">
@@ -1640,6 +1651,7 @@ function VendorQuoteAction({
   const [vrfqId, setVrfqId] = useState<number | "">("");
   const [no, setNo] = useState("");
   const [receivedAt, setReceivedAt] = useState(nowLocalDt());
+  const [currency, setCurrency] = useState("USD");
   const [notes, setNotes] = useState("");
   const [items, setItems] = useState<VendorQuoteItem[]>([]);
   const [parseMsg, setParseMsg] = useState<string | null>(null);
@@ -1693,12 +1705,14 @@ function VendorQuoteAction({
         vrfqId,
         no.trim(),
         amount,
+        currency,
         clean,
         receivedAt,
         notes
       );
       setMsg(`Registered — ${r.vendor_quote_no}`);
       setNo("");
+      setCurrency("USD");
       setNotes("");
       setItems([]);
       setVrfqId("");
@@ -1746,6 +1760,10 @@ function VendorQuoteAction({
                 value={receivedAt}
                 onChange={(e) => setReceivedAt(e.target.value)}
               />
+            </div>
+            <div className="form-field">
+              <label>Currency</label>
+              <CurrencyToggle value={currency} onChange={setCurrency} />
             </div>
           </div>
 
@@ -1815,12 +1833,17 @@ function VendorQuoteItemEditor({
       items.map((it, idx) => {
         if (idx !== i) return it;
         if (key === "qty" || key === "cost_price") {
-          return { ...it, [key]: value === "" ? null : Number(value) };
+          return { ...it, [key]: parseAmountInput(value) };
         }
         return { ...it, [key]: value };
       })
     );
   }
+
+  const total = items.reduce(
+    (sum, it) => sum + Number(it.cost_price || 0) * Number(it.qty || 1),
+    0
+  );
 
   return (
     <div style={{ marginTop: 12 }}>
@@ -1829,6 +1852,7 @@ function VendorQuoteItemEditor({
         <table className="mini wide">
           <thead>
             <tr>
+              <th className="seq">No.</th>
               <th>Part No.</th>
               <th>Description</th>
               <th>Maker</th>
@@ -1843,22 +1867,30 @@ function VendorQuoteItemEditor({
           </thead>
           <tbody>
             {items.map((it, i) => (
-              <tr key={i}>
-                <td><input value={it.part_no} onChange={(e) => patch(i, "part_no", e.target.value)} /></td>
-                <td><input value={it.description} onChange={(e) => patch(i, "description", e.target.value)} /></td>
-                <td><input value={it.maker ?? ""} onChange={(e) => patch(i, "maker", e.target.value)} /></td>
-                <td><input value={it.origin ?? ""} onChange={(e) => patch(i, "origin", e.target.value)} /></td>
-                <td><input className="num" value={it.qty ?? ""} onChange={(e) => patch(i, "qty", e.target.value)} /></td>
-                <td><input value={it.unit} onChange={(e) => patch(i, "unit", e.target.value)} /></td>
-                <td><input className="num" value={it.cost_price ?? ""} onChange={(e) => patch(i, "cost_price", e.target.value)} /></td>
-                <td><input value={it.lead_time ?? ""} onChange={(e) => patch(i, "lead_time", e.target.value)} /></td>
-                <td><input value={it.remark ?? ""} onChange={(e) => patch(i, "remark", e.target.value)} /></td>
+              <tr key={i} className={itemRowClass(i)}>
+                <td className="seq">{i + 1}</td>
+                <td><input {...gridCellProps(i, 0)} value={it.part_no} onChange={(e) => patch(i, "part_no", e.target.value)} /></td>
+                <td><input {...gridCellProps(i, 1)} value={it.description} onChange={(e) => patch(i, "description", e.target.value)} /></td>
+                <td><input {...gridCellProps(i, 2)} value={it.maker ?? ""} onChange={(e) => patch(i, "maker", e.target.value)} /></td>
+                <td><input {...gridCellProps(i, 3)} value={it.origin ?? ""} onChange={(e) => patch(i, "origin", e.target.value)} /></td>
+                <td><input {...gridCellProps(i, 4)} className="num" value={amountInputValue(it.qty)} onChange={(e) => patch(i, "qty", e.target.value)} /></td>
+                <td><input {...gridCellProps(i, 5)} value={it.unit} onChange={(e) => patch(i, "unit", e.target.value)} /></td>
+                <td><input {...gridCellProps(i, 6)} className="num" value={amountInputValue(it.cost_price)} onChange={(e) => patch(i, "cost_price", e.target.value)} /></td>
+                <td><input {...gridCellProps(i, 7)} value={it.lead_time ?? ""} onChange={(e) => patch(i, "lead_time", e.target.value)} /></td>
+                <td><input {...gridCellProps(i, 8)} value={it.remark ?? ""} onChange={(e) => patch(i, "remark", e.target.value)} /></td>
                 <td>
                   <button className="row-del" disabled={items.length === 0} onClick={() => onChange(items.filter((_, idx) => idx !== i))}>×</button>
                 </td>
               </tr>
             ))}
           </tbody>
+          <tfoot>
+            <tr>
+              <td colSpan={7} className="total-label">Total</td>
+              <td className="num total-value">{amountInputValue(total)}</td>
+              <td colSpan={3}></td>
+            </tr>
+          </tfoot>
         </table>
       </div>
       <button className="btn" style={{ marginTop: 8 }} onClick={add}>Add item</button>
@@ -2239,7 +2271,7 @@ function CustomerQuoteItemEditor({
         if (idx !== i) return it;
         const next: CustomerQuoteItem = { ...it };
         if (key === "qty" || key === "cost_price" || key === "margin_pct" || key === "unit_price" || key === "amount") {
-          (next[key] as number | null) = value === "" ? null : Number(value);
+          (next[key] as number | null) = parseAmountInput(value);
         } else {
           (next[key] as string) = value;
         }
@@ -2255,6 +2287,7 @@ function CustomerQuoteItemEditor({
       })
     );
   }
+  const total = items.reduce((sum, it) => sum + Number(it.amount || 0), 0);
 
   return (
     <div style={{ marginTop: 12 }}>
@@ -2263,6 +2296,7 @@ function CustomerQuoteItemEditor({
         <table className="mini wide">
           <thead>
             <tr>
+              <th className="seq">No.</th>
               <th>Part No.</th>
               <th>Description</th>
               <th className="num">Qty</th>
@@ -2275,18 +2309,25 @@ function CustomerQuoteItemEditor({
           </thead>
           <tbody>
             {items.map((it, i) => (
-              <tr key={i}>
-                <td><input value={it.part_no} onChange={(e) => patch(i, "part_no", e.target.value)} /></td>
-                <td><input value={it.description} onChange={(e) => patch(i, "description", e.target.value)} /></td>
-                <td><input className="num" value={it.qty ?? ""} onChange={(e) => patch(i, "qty", e.target.value)} /></td>
-                <td><input value={it.unit} onChange={(e) => patch(i, "unit", e.target.value)} /></td>
-                <td><input className="num" value={it.cost_price ?? ""} onChange={(e) => patch(i, "cost_price", e.target.value)} /></td>
-                <td><input className="num" value={it.margin_pct ?? ""} onChange={(e) => patch(i, "margin_pct", e.target.value)} /></td>
-                <td><input className="num" value={it.unit_price ?? ""} onChange={(e) => patch(i, "unit_price", e.target.value)} /></td>
-                <td><input className="num" value={it.amount ?? ""} onChange={(e) => patch(i, "amount", e.target.value)} /></td>
+              <tr key={i} className={itemRowClass(i)}>
+                <td className="seq">{i + 1}</td>
+                <td><input {...gridCellProps(i, 0)} value={it.part_no} onChange={(e) => patch(i, "part_no", e.target.value)} /></td>
+                <td><input {...gridCellProps(i, 1)} value={it.description} onChange={(e) => patch(i, "description", e.target.value)} /></td>
+                <td><input {...gridCellProps(i, 2)} className="num" value={amountInputValue(it.qty)} onChange={(e) => patch(i, "qty", e.target.value)} /></td>
+                <td><input {...gridCellProps(i, 3)} value={it.unit} onChange={(e) => patch(i, "unit", e.target.value)} /></td>
+                <td><input {...gridCellProps(i, 4)} className="num" value={amountInputValue(it.cost_price)} onChange={(e) => patch(i, "cost_price", e.target.value)} /></td>
+                <td><input {...gridCellProps(i, 5)} className="num" value={amountInputValue(it.margin_pct)} onChange={(e) => patch(i, "margin_pct", e.target.value)} /></td>
+                <td><input {...gridCellProps(i, 6)} className="num" value={amountInputValue(it.unit_price)} onChange={(e) => patch(i, "unit_price", e.target.value)} /></td>
+                <td><input {...gridCellProps(i, 7)} className="num" value={amountInputValue(it.amount)} onChange={(e) => patch(i, "amount", e.target.value)} /></td>
               </tr>
             ))}
           </tbody>
+          <tfoot>
+            <tr>
+              <td colSpan={8} className="total-label">Total</td>
+              <td className="num total-value">{amountInputValue(total)}</td>
+            </tr>
+          </tfoot>
         </table>
       </div>
     </div>

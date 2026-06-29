@@ -687,6 +687,7 @@ export function createVendorQuote(
   vendorRfqId: number,
   vendorQuoteNo: string,
   amount: number,
+  currency: string,
   items?: VendorQuoteItem[],
   receivedAt?: string,
   notes?: string
@@ -695,6 +696,7 @@ export function createVendorQuote(
     vendor_rfq_id: vendorRfqId,
     vendor_quote_no: vendorQuoteNo,
     amount,
+    currency,
     items,
     received_at: receivedAt,
     notes,
@@ -793,6 +795,7 @@ export function updateVendorQuote(
     vendor_quote_no?: string;
     received_date?: string;
     received_at?: string;
+    currency?: string;
     notes?: string;
     items?: VendorQuoteItem[];
   }
