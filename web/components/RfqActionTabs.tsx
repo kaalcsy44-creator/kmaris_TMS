@@ -1143,7 +1143,9 @@ function CustomerQuoteDetailModal({
 }) {
   const [d, setD] = useState<CustomerQuotationDetail | null>(null);
   const [editing, setEditing] = useState(!!autoEdit);
+  const [qtnNo, setQtnNo] = useState("");
   const [currency, setCurrency] = useState("USD");
+  const [sentAt, setSentAt] = useState("");
   const [validUntil, setValidUntil] = useState("");
   const [status, setStatus] = useState("");
   const [terms, setTerms] = useState<QuotationTerms>({});
@@ -1159,7 +1161,9 @@ function CustomerQuoteDetailModal({
     fetchCustomerQuotationDetail(id)
       .then((data) => {
         setD(data);
+        setQtnNo(data.qtn_no || "");
         setCurrency(data.currency || "USD");
+        setSentAt(data.sent_at || data.sent_date || "");
         setValidUntil(data.valid_until || "");
         setStatus(data.status || "");
         setTerms(data.terms || {});
@@ -1183,7 +1187,9 @@ function CustomerQuoteDetailModal({
     setErr(null);
     try {
       await updateCustomerQuotation(id, {
+        qtn_no: qtnNo,
         currency,
+        sent_at: sentAt,
         valid_until: validUntil,
         status,
         terms,
@@ -1278,8 +1284,16 @@ function CustomerQuoteDetailModal({
 
           <div className="form-grid">
             <div className="form-field">
+              <label>Quotation No.</label>
+              <input value={qtnNo} onChange={(e) => setQtnNo(e.target.value)} placeholder="KMS-QUO-2606-001" />
+            </div>
+            <div className="form-field">
               <label>Currency</label>
               <CurrencyToggle value={currency} onChange={setCurrency} />
+            </div>
+            <div className="form-field">
+              <label>Sent at</label>
+              <input type="datetime-local" value={sentAt} onChange={(e) => setSentAt(e.target.value)} />
             </div>
             <div className="form-field">
               <label>Valid until</label>
@@ -1310,6 +1324,7 @@ function CustomerQuoteDetailModal({
             <BaseMetaRows info={d} />
             <div><dt>RFQ No.</dt><dd>{d.rfq_no || "—"}</dd></div>
             <div><dt>Total</dt><dd>{dualCurrencyText(d.amount, d.currency)}<br /><span className="fx-note">{fxRateText()}</span></dd></div>
+            <div><dt>Sent at</dt><dd>{d.sent_at || d.sent_date || "—"}</dd></div>
             <div><dt>Valid until</dt><dd>{d.valid_until || "—"}</dd></div>
             <div><dt>Status</dt><dd>{tr(d.status)}</dd></div>
             <div><dt>Items</dt><dd>{d.items.length}</dd></div>
@@ -2029,7 +2044,9 @@ function CustomerQuoteAction({
   rfqId: number;
   onDone: () => void;
 }) {
+  const [qtnNo, setQtnNo] = useState("");
   const [currency, setCurrency] = useState("USD");
+  const [sentAt, setSentAt] = useState(nowLocalDt());
   const [items, setItems] = useState<CustomerQuoteItem[]>([]);
   const [validUntil, setValidUntil] = useState("");
   const [defaultMargin, setDefaultMargin] = useState(20);
@@ -2093,7 +2110,7 @@ function CustomerQuoteAction({
     setMsg(null);
     setErr(null);
     try {
-      const r = await createCustomerQuote(rfqId, currency, total, items, validUntil, undefined, terms);
+      const r = await createCustomerQuote(rfqId, currency, total, items, validUntil, undefined, terms, qtnNo, sentAt);
       setQtn({ id: r.id, qtn_no: r.qtn_no });
       setMsg(`Sent — ${r.qtn_no}`);
       onDone();
@@ -2198,8 +2215,16 @@ function CustomerQuoteAction({
 
       <div className="form-grid">
         <div className="form-field">
+          <label>Quotation No.</label>
+          <input value={qtnNo} onChange={(e) => setQtnNo(e.target.value)} placeholder="Blank = auto-generate" />
+        </div>
+        <div className="form-field">
           <label>Currency</label>
           <CurrencyToggle value={currency} onChange={setCurrency} />
+        </div>
+        <div className="form-field">
+          <label>Sent at</label>
+          <input type="datetime-local" value={sentAt} onChange={(e) => setSentAt(e.target.value)} />
         </div>
         <div className="form-field">
           <label>Valid until</label>

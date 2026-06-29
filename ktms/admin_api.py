@@ -2566,7 +2566,8 @@ def quotation_overview(customer_id: int | None = None,
                 "status": _enum_val(qt.status),
                 "level": _enum_val(qt.follow_up_level) if qt.follow_up_level else "",
                 "valid_until": qt.valid_until or "",
-                "sent_date": qt.sent_date or "",
+                "sent_at": getattr(qt, "sent_at", None) or "",
+                "sent_date": getattr(qt, "sent_at", None) or qt.sent_date or "",
                 "date": qt.date or "",
                 "stage": stage,
                 "pipeline": _status_label(stage, rfq_wt.get(qt.rfq_id)) if stage else "",
@@ -5039,9 +5040,11 @@ def _next_quotation_no(session, company_prefix: str = "KMS") -> str:
 
 
 class CustomerQuoteCreate(BaseModel):
+    qtn_no: str | None = None
     currency: str = "USD"
     amount: float | None = None
     items: list[dict] | None = None
+    sent_at: str | None = None
     valid_until: str | None = None
     remarks: str = ""
     terms: dict | None = None
@@ -5067,7 +5070,10 @@ def create_customer_quote(rfq_id: int, body: CustomerQuoteCreate,
         if body.remarks and not terms.get("remarks"):
             terms["remarks"] = body.remarks
 
-        qtn_no = _next_quotation_no(s)
+        qtn_no = (body.qtn_no or "").strip() or _next_quotation_no(s)
+        if s.query(Quotation).filter_by(qtn_no=qtn_no).first():
+            raise HTTPException(status_code=409, detail="Quotation No. already exists.")
+        sent_at = (body.sent_at or "").strip()
         qtn = Quotation(
             qtn_no=qtn_no,
             rfq_id=rfq.id,
@@ -5079,7 +5085,8 @@ def create_customer_quote(rfq_id: int, body: CustomerQuoteCreate,
             items=items,
             terms=terms,
             date=date.today().strftime("%Y-%m-%d"),
-            sent_date=date.today().strftime("%Y-%m-%d"),
+            sent_date=(sent_at[:10] if sent_at else date.today().strftime("%Y-%m-%d")),
+            sent_at=(sent_at or None),
             created_by=(user.get("id") or None),   # 담당자 = 발행한 내부 직원
         )
         s.add(qtn)
@@ -5090,8 +5097,10 @@ def create_customer_quote(rfq_id: int, body: CustomerQuoteCreate,
 
 
 class CustomerQuoteUpdate(BaseModel):
+    qtn_no: str | None = None
     currency: str | None = None
     items: list[dict] | None = None
+    sent_at: str | None = None
     valid_until: str | None = None
     status: str | None = None
     terms: dict | None = None
@@ -5119,7 +5128,8 @@ def customer_quotation_detail(qtn_id: int):
             "valid_until": qtn.valid_until or "",
             "status": _enum_val(qtn.status),
             "level": _enum_val(qtn.follow_up_level) if qtn.follow_up_level else "",
-            "sent_date": qtn.sent_date or "",
+            "sent_at": getattr(qtn, "sent_at", None) or "",
+            "sent_date": getattr(qtn, "sent_at", None) or qtn.sent_date or "",
             "date": qtn.date or "",
             "terms": qtn.terms or {},
             "items": qtn.items or [],
@@ -5136,6 +5146,17 @@ def update_customer_quotation(qtn_id: int, body: CustomerQuoteUpdate):
         qtn = s.query(Quotation).filter_by(id=qtn_id).first()
         if not qtn:
             raise HTTPException(status_code=404, detail="견적서를 찾을 수 없습니다.")
+        if body.qtn_no is not None:
+            qtn_no = body.qtn_no.strip()
+            if qtn_no:
+                dup = s.query(Quotation).filter(Quotation.qtn_no == qtn_no, Quotation.id != qtn_id).first()
+                if dup:
+                    raise HTTPException(status_code=409, detail="Quotation No. already exists.")
+                qtn.qtn_no = qtn_no
+        if body.sent_at is not None:
+            sent_at = body.sent_at.strip()
+            qtn.sent_at = sent_at or None
+            qtn.sent_date = sent_at[:10] if sent_at else None
         if body.currency is not None:
             qtn.currency = body.currency or "USD"
         if body.valid_until is not None:
@@ -5266,8 +5287,9 @@ def quotation_send(qtn_id: int, body: QuotationSendReq):
         if not sent:
             raise HTTPException(status_code=400, detail="이메일 발송 실패 — SMTP 설정 또는 서버 상태를 확인하세요.")
         qtn.status = QuotationStatus.SENT
-        qtn.sent_date = date.today().isoformat()
+        qtn.sent_at = _kst_iso(datetime.utcnow())
+        qtn.sent_date = qtn.sent_at[:10]
         s.commit()
-        return {"ok": True, "sent_date": qtn.sent_date}
+        return {"ok": True, "sent_date": qtn.sent_at}
     finally:
         s.close()

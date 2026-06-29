@@ -33,6 +33,7 @@ _MIGRATIONS = {
     },
     "quotations": {
         "created_by": "INTEGER",
+        "sent_at": "VARCHAR(16)",
     },
     "customers": {
         "contact_phone": "VARCHAR(50)",

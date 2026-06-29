@@ -383,6 +383,7 @@ export type QtnRow = {
   status: string;
   level: string;
   valid_until: string;
+  sent_at: string;
   sent_date: string;
   date: string;
   stage: number;
@@ -799,6 +800,7 @@ export type CustomerQuotationDetail = {
   currency: string;
   amount: number;
   valid_until: string;
+  sent_at: string;
   status: string;
   level: string;
   sent_date: string;

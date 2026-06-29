@@ -221,6 +221,7 @@ class Quotation(Base):
     status          = Column(SAEnum(QuotationStatus), default=QuotationStatus.DRAFT)
     follow_up_level = Column(SAEnum(FollowUpLevel), default=FollowUpLevel.B)
     sent_date       = Column(String(10))
+    sent_at         = Column(String(16))
     created_by      = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at      = Column(DateTime, default=datetime.utcnow)
 

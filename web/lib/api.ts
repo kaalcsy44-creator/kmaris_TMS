@@ -722,12 +722,16 @@ export function createCustomerQuote(
   items?: CustomerQuoteItem[],
   validUntil?: string,
   remarks?: string,
-  terms?: QuotationTerms
+  terms?: QuotationTerms,
+  qtnNo?: string,
+  sentAt?: string
 ): Promise<{ ok: boolean; id: number; qtn_no: string }> {
   return post(`/api/admin/rfq/${rfqId}/customer-quote`, {
+    qtn_no: qtnNo,
     currency,
     amount,
     items,
+    sent_at: sentAt,
     valid_until: validUntil,
     remarks,
     terms,
@@ -818,8 +822,10 @@ export function fetchCustomerQuotationDetail(
 export function updateCustomerQuotation(
   id: number,
   body: {
+    qtn_no?: string;
     currency?: string;
     items?: CustomerQuoteItem[];
+    sent_at?: string;
     valid_until?: string;
     status?: string;
     terms?: QuotationTerms;
