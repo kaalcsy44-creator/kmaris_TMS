@@ -799,7 +799,7 @@ export function updateVendorQuote(
     notes?: string;
     items?: VendorQuoteItem[];
   }
-): Promise<{ ok: boolean; vendor_quote_no: string; currency: string }> {
+): Promise<{ ok: boolean; vendor_quote_no: string; currency?: string }> {
   return put(`/api/admin/vendor-quote/${id}`, body);
 }
 
