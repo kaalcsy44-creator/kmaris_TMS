@@ -74,6 +74,15 @@ function nowLocalDt(): string {
   )}`;
 }
 
+// datetime-local 입력은 "YYYY-MM-DDTHH:mm" 형식만 표시한다.
+// 옛 데이터처럼 날짜만("YYYY-MM-DD") 들어오면 자정 시각을 붙여 편집 가능하게 만든다.
+function toLocalDt(v?: string): string {
+  const s = (v || "").trim();
+  if (!s) return "";
+  if (s.length === 10) return `${s}T00:00`;
+  return s.slice(0, 16);
+}
+
 // 원본 rfq_quotation.py 하단의 작업 segmented control(4탭)을 복원.
 const TABS = [
   { key: "new", label: "1. Customer RFQ Received" },
@@ -470,7 +479,7 @@ function VendorRfqDetailModal({
         setVendorId(data.vendor_id || "");
         setEmail(data.vendor_email || "");
         setStatus(data.status || "");
-        setSentAt(data.sent_at || "");
+        setSentAt(toLocalDt(data.sent_at));
         setItems(data.items || []);
       })
       .catch((e) => setErr(e instanceof Error ? e.message : "Error"));
@@ -1165,7 +1174,7 @@ function CustomerQuoteDetailModal({
         setD(data);
         setQtnNo(data.qtn_no || "");
         setCurrency(data.currency || "USD");
-        setSentAt(data.sent_at || data.sent_date || "");
+        setSentAt(toLocalDt(data.sent_at || data.sent_date));
         setValidUntil(data.valid_until || "");
         setStatus(data.status || "");
         setTerms(data.terms || {});
