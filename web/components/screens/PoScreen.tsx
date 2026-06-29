@@ -689,7 +689,13 @@ function VendorPoDetailModal({
       .then((data) => {
         setD(data);
         setVendorId(data.vendor_id || "");
-        setPoNo(data.po_no || (data.customer_po_no ? `KM-${data.customer_po_no}` : ""));
+        // 5단계 PO No. → "KM-" 형태로 자동 제안. 이미 KM-로 저장돼 있으면 그대로 유지.
+        const kmFromStage5 = data.customer_po_no ? `KM-${data.customer_po_no}` : "";
+        setPoNo(
+          data.po_no && data.po_no.startsWith("KM-")
+            ? data.po_no
+            : kmFromStage5 || data.po_no || ""
+        );
         setDate(data.date || "");
         setStatus(data.status || "");
         setItems(data.items.length ? data.items.map(normalizeItem) : [blankItem()]);
