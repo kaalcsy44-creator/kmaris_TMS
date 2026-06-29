@@ -5287,9 +5287,11 @@ def quotation_send(qtn_id: int, body: QuotationSendReq):
         if not sent:
             raise HTTPException(status_code=400, detail="이메일 발송 실패 — SMTP 설정 또는 서버 상태를 확인하세요.")
         qtn.status = QuotationStatus.SENT
-        qtn.sent_at = _kst_iso(datetime.utcnow())
-        qtn.sent_date = qtn.sent_at[:10]
+        # 사용자가 발송일시를 직접 입력했으면 보존하고, 비어 있을 때만 발송 시각으로 채운다.
+        if not (getattr(qtn, "sent_at", None) or qtn.sent_date):
+            qtn.sent_at = _kst_iso(datetime.utcnow())
+            qtn.sent_date = qtn.sent_at[:10]
         s.commit()
-        return {"ok": True, "sent_date": qtn.sent_at}
+        return {"ok": True, "sent_date": qtn.sent_at or qtn.sent_date}
     finally:
         s.close()
