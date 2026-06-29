@@ -27,6 +27,10 @@ export type ColumnDef<T> = {
 
 type SortDir = "asc" | "desc";
 
+function colClass(key: string): string {
+  return `pl-col-${key.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+}
+
 export default function FilterTable<T>({
   rows,
   columns,
@@ -235,6 +239,11 @@ export default function FilterTable<T>({
 
       <div className="pl-table-wrap">
         <table className="pipeline">
+          <colgroup>
+            {columns.map((c) => (
+              <col key={c.key} className={colClass(c.key)} />
+            ))}
+          </colgroup>
           <thead>
             <tr>
               {columns.map((c) => {
@@ -244,7 +253,7 @@ export default function FilterTable<T>({
                 return (
                   <th
                     key={c.key}
-                    className={`pl-th${openCol === c.key ? " open" : ""}${sorted || filtered ? " active" : ""}`}
+                    className={`pl-th ${colClass(c.key)}${openCol === c.key ? " open" : ""}${sorted || filtered ? " active" : ""}`}
                     aria-sort={sorted ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
                   >
                     <button
@@ -277,7 +286,7 @@ export default function FilterTable<T>({
                   style={onRowClick ? { cursor: "pointer" } : undefined}
                 >
                   {columns.map((c) => (
-                    <td key={c.key} className={c.numeric ? "num" : undefined}>
+                    <td key={c.key} className={`${colClass(c.key)}${c.numeric ? " num" : ""}`}>
                       {c.render ? c.render(r) : c.text(r) || <span className="muted">—</span>}
                     </td>
                   ))}

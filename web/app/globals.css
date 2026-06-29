@@ -1921,6 +1921,46 @@ table.pipeline col.plc-project {
 table.pipeline col.plc-assignee {
   width: 84px;
 }
+table.pipeline col.pl-col-project_no {
+  width: 132px;
+}
+table.pipeline col.pl-col-customer {
+  width: 190px;
+}
+table.pipeline col.pl-col-vessel {
+  width: 150px;
+}
+table.pipeline col.pl-col-work_type,
+table.pipeline col.pl-col-trade_type,
+table.pipeline col.pl-col-currency,
+table.pipeline col.pl-col-item_count {
+  width: 92px;
+}
+table.pipeline col.pl-col-vendor {
+  width: 180px;
+}
+table.pipeline col.pl-col-vendor_quote_no,
+table.pipeline col.pl-col-qtn_no,
+table.pipeline col.pl-col-rfq_no,
+table.pipeline col.pl-col-ci_no,
+table.pipeline col.pl-col-ord_no {
+  width: 150px;
+}
+table.pipeline col.pl-col-received_at,
+table.pipeline col.pl-col-valid_until,
+table.pipeline col.pl-col-due_date {
+  width: 128px;
+}
+table.pipeline col.pl-col-amount,
+table.pipeline col.pl-col-invoice,
+table.pipeline col.pl-col-paid,
+table.pipeline col.pl-col-outstanding {
+  width: 158px;
+}
+table.pipeline col.pl-col-status,
+table.pipeline col.pl-col-level {
+  width: 116px;
+}
 /* 고정 레이아웃에서 넘치는 텍스트는 말줄임 */
 table.pipeline tbody td.strong,
 table.pipeline td.pl-td-vendor {
@@ -1936,6 +1976,12 @@ table.pipeline td {
   text-align: left;
   vertical-align: middle;
   border-bottom: 1px solid var(--line);
+  line-height: 1.35;
+}
+table.pipeline tbody td {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: normal;
 }
 table.pipeline thead th {
   position: sticky;
@@ -2261,7 +2307,40 @@ table.pipeline tbody tr.service .pl-stage-done {
 table.mini.wide th,
 table.mini.wide td {
   font-size: 13px;
-  padding: 8px 12px;
+  padding: 8px 10px;
+  vertical-align: middle;
+}
+table.mini.wide {
+  min-width: 1180px;
+  table-layout: auto;
+}
+table.mini.wide th,
+table.mini.wide td {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+table.mini.wide th:nth-child(2),
+table.mini.wide td:nth-child(2) {
+  min-width: 140px;
+}
+table.mini.wide th:nth-child(3),
+table.mini.wide td:nth-child(3) {
+  min-width: 180px;
+}
+table.mini.wide th:nth-child(4),
+table.mini.wide td:nth-child(4),
+table.mini.wide th:nth-child(5),
+table.mini.wide td:nth-child(5) {
+  min-width: 110px;
+}
+table.mini.wide th.num,
+table.mini.wide td:has(input.num) {
+  min-width: 104px;
+}
+table.mini.wide th:last-child,
+table.mini.wide td:last-child {
+  min-width: 44px;
+  width: 44px;
 }
 
 /* ── Dashboard ─────────────────────────────────────────────────────── */
@@ -2672,6 +2751,7 @@ a.btn.primary:hover {
 }
 table.mini.wide input {
   width: 100%;
+  min-width: 0;
   height: 30px;
   border: 1px solid #d7e2ee;
   border-radius: 6px;
@@ -2681,6 +2761,15 @@ table.mini.wide input {
 table.mini.wide input.num {
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+table.mini.wide td:nth-child(2) input {
+  min-width: 118px;
+}
+table.mini.wide td:nth-child(3) input {
+  min-width: 158px;
+}
+table.mini.wide td:has(input.num) input {
+  min-width: 88px;
 }
 table.mini .seq {
   width: 52px;
@@ -2707,29 +2796,18 @@ table.mini tfoot .total-value {
   font-variant-numeric: tabular-nums;
 }
 .dual-amount {
-  display: inline-flex;
+  display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 2px;
   font-variant-numeric: tabular-nums;
-  min-width: 122px;
-}
-.num .dual-amount,
-.total-value .dual-amount {
-  align-items: flex-end;
-}
-.dual-line {
-  display: grid;
-  grid-template-columns: 34px minmax(74px, 1fr);
-  column-gap: 8px;
-  width: 100%;
-  white-space: nowrap;
-}
-.dual-cur {
+  min-width: 0;
   text-align: left;
 }
-.dual-num {
-  text-align: right;
+.dual-line {
+  display: block;
+  white-space: nowrap;
+  text-align: left;
 }
 .dual-line.primary {
   color: inherit;
