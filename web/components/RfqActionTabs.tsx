@@ -876,13 +876,16 @@ function VendorQuoteDetailModal({
     setBusy(true);
     setErr(null);
     try {
-      await updateVendorQuote(id, {
+      const saved = await updateVendorQuote(id, {
         vendor_quote_no: no.trim(),
         received_at: receivedAt,
         currency,
         notes,
         items: cleanVendorQuoteItems(items),
       });
+      if ((saved.currency || "USD") !== currency) {
+        throw new Error(`Currency save failed. Saved as ${saved.currency || "USD"}, requested ${currency}.`);
+      }
       setEditing(false);
       onChanged();
       onClose();

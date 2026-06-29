@@ -4582,7 +4582,7 @@ def update_vendor_quote(vq_id: int, body: VendorQuoteUpdate):
         if body.items is not None:
             q.items = body.items
         s.commit()
-        return {"ok": True, "vendor_quote_no": q.vendor_quote_no}
+        return {"ok": True, "vendor_quote_no": q.vendor_quote_no, "currency": q.currency or "USD"}
     finally:
         s.close()
 

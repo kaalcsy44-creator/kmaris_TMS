@@ -310,7 +310,7 @@ export function fetchVendorQuoteOverview(): Promise<{
   rows: VendorQuoteOverviewRow[];
 }> {
   return get<{ rows: VendorQuoteOverviewRow[] }>(
-    "/api/admin/vendor-quote-overview"
+    `/api/admin/vendor-quote-overview?_=${Date.now()}`
   );
 }
 
@@ -799,7 +799,7 @@ export function updateVendorQuote(
     notes?: string;
     items?: VendorQuoteItem[];
   }
-): Promise<{ ok: boolean; vendor_quote_no: string }> {
+): Promise<{ ok: boolean; vendor_quote_no: string; currency: string }> {
   return put(`/api/admin/vendor-quote/${id}`, body);
 }
 
