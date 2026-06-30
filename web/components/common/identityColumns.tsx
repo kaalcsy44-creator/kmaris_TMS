@@ -53,7 +53,8 @@ export function identityColumns<T>(a: IdentityAccessors<T>): ColumnDef<T>[] {
       key: "work_type",
       label: "Type",
       filter: "facet",
-      text: (r) => a.workType(r) || "부품공급",
+      // 표시·필터·검색·정렬용 텍스트는 영문(렌더는 배지 그대로).
+      text: (r) => tr(a.workType(r) || "부품공급"),
       render: (r) => <WorkTypeBadge type={a.workType(r)} />,
     },
   ];
@@ -63,7 +64,7 @@ export function identityColumns<T>(a: IdentityAccessors<T>): ColumnDef<T>[] {
       key: "trade_type",
       label: "Trade",
       filter: "facet",
-      text: (r) => trade(r) || "수출",
+      text: (r) => tr(trade(r) || "수출"),
       render: (r) => <span className="ar-badge">{tr(trade(r) || "수출")}</span>,
     });
   }

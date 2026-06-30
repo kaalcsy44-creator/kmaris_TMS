@@ -254,7 +254,7 @@ function HomeTab() {
   const cards: Record<string, { title: string; sub: string; body: React.ReactNode }> = {
     quotes: {
       title: "Quote Submissions",
-      sub: "견적제출 리스트",
+      sub: "Submitted quotes",
       body: !qtn ? (
         <div className="state">Loading…</div>
       ) : (
@@ -272,7 +272,7 @@ function HomeTab() {
     },
     activity: {
       title: "Activity Log",
-      sub: "담당자 활동 기록",
+      sub: "PIC activity log",
       body: !pipeline ? (
         <div className="state">Loading…</div>
       ) : (
@@ -290,7 +290,7 @@ function HomeTab() {
     },
     sales: {
       title: "Sales",
-      sub: "매출리스트",
+      sub: "Sales list",
       body: !ar ? (
         <div className="state">Loading…</div>
       ) : (
@@ -308,7 +308,7 @@ function HomeTab() {
     },
     delays: {
       title: "Delays",
-      sub: "지연 리스트 (견적·배송 등)",
+      sub: "Overdue items (quotes, delivery)",
       body: !qtn || !ar ? (
         <div className="state">Loading…</div>
       ) : (
@@ -327,7 +327,7 @@ function HomeTab() {
     },
     schedule: {
       title: "Schedule",
-      sub: "일정 관리",
+      sub: "Schedule",
       body: (
         <FilterTable
           rows={[] as never[]}

@@ -39,6 +39,10 @@ const LABELS: Record<string, string> = {
   // Vendor PO status
   발주완료: "PO placed",
   "이메일 발송완료": "Email sent",
+  // Vendor RFQ / Vendor Quote status (free-text)
+  발송됨: "Sent",
+  발신완료: "Sent",
+  "견적 수신완료": "Quote received",
 };
 
 /** 한글 저장값 → 영문 표시. 매핑이 없으면 원문 그대로. */

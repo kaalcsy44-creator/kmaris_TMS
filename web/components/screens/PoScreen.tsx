@@ -888,8 +888,8 @@ function CustomerPoNewForm({
         <div className="form-field">
           <label>Trade type *</label>
           <select value={tradeType} onChange={(e) => setTradeType(e.target.value)}>
-            <option value="수출">수출</option>
-            <option value="내수">내수 (국내공급)</option>
+            <option value="수출">{tr("수출")}</option>
+            <option value="내수">{tr("내수")}</option>
           </select>
         </div>
         <div className="form-field">

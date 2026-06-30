@@ -241,7 +241,7 @@ const EMPTY_USER: SettingsUser = { id: 0, username: "", email: "", role: "sales"
 const ROLE_INFO: { key: string; title: string; perms: string[] }[] = [
   {
     key: "admin",
-    title: "Admin · 관리자",
+    title: "Admin",
     perms: [
       "All deals: create / edit / delete",
       "Settings: company, users, master data (customers·vendors·vessels·items)",
@@ -250,16 +250,16 @@ const ROLE_INFO: { key: string; title: string; perms: string[] }[] = [
   },
   {
     key: "sales",
-    title: "Sales · 영업담당",
+    title: "Sales",
     perms: [
       "Deals: create / edit / delete (RFQ·Quotation·P/O·AR·Documents)",
-      "Sees ONLY their own deals (담당 건만 표시)",
+      "Sees ONLY their own deals",
       "No access to settings",
     ],
   },
   {
     key: "viewer",
-    title: "Viewer · 읽기 전용",
+    title: "Viewer",
     perms: [
       "Read-only — can view all screens",
       "Cannot create / edit / delete anything",
@@ -464,15 +464,15 @@ const MODULE_LABEL: Record<string, string> = {
   settings: "Settings · master data",
 };
 const ACTION_LABEL: Record<string, string> = {
-  view: "View 열람",
-  create: "Create 입력",
-  edit: "Edit 수정",
-  delete: "Delete 삭제",
+  view: "View",
+  create: "Create",
+  edit: "Edit",
+  delete: "Delete",
 };
 const PERM_ROLE_LABEL: Record<string, string> = {
-  admin: "Admin · 관리자",
-  sales: "Sales · 영업담당",
-  viewer: "Viewer · 읽기 전용",
+  admin: "Admin",
+  sales: "Sales",
+  viewer: "Viewer",
 };
 
 function clonePerms(p: PermGrid): PermGrid {
@@ -594,7 +594,7 @@ function PermissionsTab() {
           </table>
         </div>
         <div className="perm-scope">
-          <span className="perm-scope-label">Data scope 데이터 범위:</span>
+          <span className="perm-scope-label">Data scope:</span>
           <label>
             <input
               type="radio"
@@ -603,7 +603,7 @@ function PermissionsTab() {
               disabled={!editable}
               onChange={() => setScope(row.role, "all")}
             />
-            All deals 전체
+            All deals
           </label>
           <label>
             <input
@@ -613,7 +613,7 @@ function PermissionsTab() {
               disabled={!editable}
               onChange={() => setScope(row.role, "own")}
             />
-            Own deals only 본인 담당만
+            Own deals only
           </label>
         </div>
         {editable ? (
@@ -637,7 +637,7 @@ function PermissionsTab() {
   return (
     <div className="panel">
       <div className="ms-toolbar">
-        <h3 className="form-title">Role permissions · 역할 권한</h3>
+        <h3 className="form-title">Role permissions</h3>
       </div>
       <p className="hint-inline" style={{ display: "block", marginBottom: 12 }}>
         Set per-page View / Create / Edit / Delete for each role, plus whether they see all deals or only their own.
