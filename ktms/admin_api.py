@@ -713,7 +713,13 @@ def _stage_auto_times(s, rfq, order) -> dict[str, str]:
         vqs = (s.query(VendorQuote)
                .filter(VendorQuote.vendor_rfq_id.in_(vrfq_ids)).all())
         if vqs:
-            _set(3, _kst_iso(min((q.created_at for q in vqs if q.created_at), default=None)))
+            # 3단계 일시 = 실제 견적 수신일시(received_at 수동입력) 우선,
+            # 없으면 수신일(received_date), 그래도 없으면 레코드 생성시각.
+            def _vq_recv(q) -> str:
+                return ((getattr(q, "received_at", None) or "").strip()
+                        or _date_iso(q.received_date)
+                        or _kst_iso(q.created_at))
+            _set(3, min((r for r in (_vq_recv(q) for q in vqs) if r), default=""))
 
     # 4) Customer Quot. 발신
     quo = (s.query(Quotation)
