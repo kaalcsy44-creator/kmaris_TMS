@@ -3084,6 +3084,10 @@ table.rfq tbody tr:last-child td {
   gap: 22px;
   margin-top: 18px;
 }
+/* Pipeline stages 컬럼 없이 Items를 전체 폭으로 표시할 때 */
+.detail-cols-single {
+  margin-top: 18px;
+}
 @media (max-width: 900px) {
   .detail-cols {
     grid-template-columns: 1fr;

@@ -122,21 +122,7 @@ function PoDetail({ orderId }: { orderId: number | null }) {
             <KV k="Delivered date" v={data.delivered_date} />
           </div>
 
-          <div className="detail-cols">
-            <div className="stepper">
-              <div className="sub-h">Pipeline stages (12)</div>
-              {data.steps.map((st) => (
-                <div key={st.no} className={`step ${st.state}`}>
-                  <span className="dot">
-                    {st.state === "done" ? "✓" : st.state === "current" ? "•" : ""}
-                  </span>
-                  <span className="nm">
-                    {st.no}. {st.name}
-                  </span>
-                </div>
-              ))}
-            </div>
-
+          <div className="detail-cols-single">
             <div className="detail-right">
               <div className="sub-h">Items ({data.items.length})</div>
               {data.items.length === 0 ? (
