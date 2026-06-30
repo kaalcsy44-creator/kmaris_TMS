@@ -677,15 +677,21 @@ function VendorRfqItemEditor({
             </tr>
           </thead>
           <tbody>
-            {items.map((it, i) => (
-              <tr key={i} className={itemRowClass(i)}>
-                <td className="seq">{i + 1}</td>
-                <td><input {...gridCellProps(i, 0)} value={it.part_no || ""} onChange={(e) => patch(i, "part_no", e.target.value)} /></td>
-                <td><input {...gridCellProps(i, 1)} value={it.description || ""} onChange={(e) => patch(i, "description", e.target.value)} /></td>
-                <td><input {...gridCellProps(i, 2)} className="num" value={amountInputValue(it.qty)} onChange={(e) => patch(i, "qty", e.target.value)} /></td>
-                <td><input {...gridCellProps(i, 3)} value={it.unit || ""} onChange={(e) => patch(i, "unit", e.target.value)} /></td>
+            {items.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="mini-empty">No items (service request).</td>
               </tr>
-            ))}
+            ) : (
+              items.map((it, i) => (
+                <tr key={i} className={itemRowClass(i)}>
+                  <td className="seq">{i + 1}</td>
+                  <td><input {...gridCellProps(i, 0)} value={it.part_no || ""} onChange={(e) => patch(i, "part_no", e.target.value)} /></td>
+                  <td><input {...gridCellProps(i, 1)} value={it.description || ""} onChange={(e) => patch(i, "description", e.target.value)} /></td>
+                  <td><input {...gridCellProps(i, 2)} className="num" value={amountInputValue(it.qty)} onChange={(e) => patch(i, "qty", e.target.value)} /></td>
+                  <td><input {...gridCellProps(i, 3)} value={it.unit || ""} onChange={(e) => patch(i, "unit", e.target.value)} /></td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>

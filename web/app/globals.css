@@ -2234,7 +2234,50 @@ table.pipeline tbody tr.service .pl-stage-done {
   border-radius: 12px;
   border-top: 4px solid var(--blue);
   box-shadow: 0 12px 40px rgba(11, 29, 58, 0.28);
-  padding: 18px 22px 20px;
+  padding: 18px 22px 0;
+  /* 헤더 고정 · 본문 스크롤 · 푸터 고정을 위한 세로 플렉스 + 높이 상한 */
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 96px);
+}
+/* 본문만 스크롤(헤더/중간 단계바는 위에 고정, 액션 버튼은 아래 고정) */
+.pl-modal-body {
+  overflow-y: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding-bottom: 2px;
+}
+/* 하단 액션 영역 — 본문 맨 아래에 달라붙어 스크롤과 무관하게 항상 보임. 우측 정렬. */
+.pl-modal-body .form-actions,
+.pl-modal-body .pl-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  background: #fff;
+  margin-left: -22px;
+  margin-right: -22px;
+  padding: 12px 22px;
+  border-top: 1px solid var(--line);
+}
+/* 모달 푸터 내 버튼은 gap 으로만 간격 — 떠다니는 auto 마진 제거(일관 우측정렬). */
+.pl-modal-body .form-actions > .btn,
+.pl-modal-body .pl-actions > .btn,
+.pl-modal-body .form-actions > button {
+  margin-left: 0 !important;
+}
+/* 팝업 안의 품목 표는 1180px 강제폭 대신 컨테이너 폭에 맞춘다(넓은 내용일 때만 가로 스크롤). */
+.pl-modal table.mini.wide,
+.pl-modal table.rfq {
+  min-width: 100%;
+}
+/* 품목 표 빈 상태 안내 행 */
+table.mini td.mini-empty {
+  text-align: center;
+  color: var(--muted);
+  padding: 14px 8px;
+  font-size: 13px;
 }
 .pl-modal.service {
   border-top-color: #16a05a;
