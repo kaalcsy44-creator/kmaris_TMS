@@ -27,6 +27,12 @@ import { DualCurrencyAmount, dualCurrencyText } from "@/components/common/itemTa
 
 const today = () => new Date().toISOString().slice(0, 10);
 
+/** 현재 로컬(KST) 벽시계를 datetime-local 입력 형식 'YYYY-MM-DDTHH:MM' 으로. */
+const nowLocal = () => {
+  const d = new Date();
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+};
+
 type ArForm = {
   id: number;
   order_id: number | "";
@@ -344,6 +350,7 @@ function TaxIssueModal({
   const [currency, setCurrency] = useState(row.currency);
   const [dueDate, setDueDate] = useState(row.due_date || today());
   const [notes, setNotes] = useState(row.notes);
+  const [issuedAt, setIssuedAt] = useState(row.tax_issued_date || nowLocal());
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -378,7 +385,7 @@ function TaxIssueModal({
         status: row.status,
         notes,
       });
-      await completeOrderStage(row.order_id, 11, complete);
+      await completeOrderStage(row.order_id, 11, complete, complete ? issuedAt : undefined);
       onChanged();
       onClose();
     } catch (e) {
@@ -419,11 +426,12 @@ function TaxIssueModal({
           <CurrencyToggle value={currency} onChange={setCurrency} />
         </label>
         <Field label="Due date" value={dueDate} onChange={setDueDate} type="date" />
+        <Field label="Issued at" value={issuedAt} onChange={setIssuedAt} type="datetime-local" />
         <Field label="Notes" value={notes} onChange={setNotes} />
       </div>
       <div className="form-actions">
         <button className="btn primary" disabled={busy} onClick={() => save(true)}>
-          {busy ? "Working…" : "Complete tax invoice issuance"}
+          {busy ? "Working…" : row.tax_issued ? "Save issued date & details" : "Complete tax invoice issuance"}
         </button>
         {row.tax_issued ? (
           <button className="btn" disabled={busy} onClick={() => save(false)}>
@@ -451,6 +459,7 @@ function PaymentModal({
 }) {
   const [amount, setAmount] = useState(row.outstanding > 0 ? String(row.outstanding) : "");
   const [dueDate, setDueDate] = useState(row.due_date || today());
+  const [paidAt, setPaidAt] = useState(row.paid_date || nowLocal());
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -460,7 +469,7 @@ function PaymentModal({
     try {
       const amt = num(amount);
       if (amt > 0) await recordArPayment(row.id, amt, dueDate);
-      await completeOrderStage(row.order_id, 12, complete);
+      await completeOrderStage(row.order_id, 12, complete, complete ? paidAt : undefined);
       onChanged();
       onClose();
     } catch (e) {
@@ -487,13 +496,14 @@ function PaymentModal({
       <div className="form-grid">
         <Field label="Payment amount" value={amount} onChange={setAmount} type="number" />
         <Field label="Payment date / due" value={dueDate} onChange={setDueDate} type="date" />
+        <Field label="Paid at" value={paidAt} onChange={setPaidAt} type="datetime-local" />
       </div>
       <p className="hint-inline" style={{ display: "block", margin: "6px 0 0" }}>
         Leave the amount empty to only mark payment complete. Entering an amount records the payment first.
       </p>
       <div className="form-actions">
         <button className="btn primary" disabled={busy} onClick={() => save(true)}>
-          {busy ? "Working…" : "Complete payment"}
+          {busy ? "Working…" : row.paid_done ? "Save paid date" : "Complete payment"}
         </button>
         {row.paid_done ? (
           <button className="btn" disabled={busy} onClick={() => save(false)}>

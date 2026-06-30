@@ -424,9 +424,13 @@ export function deletePod(orderId: number): Promise<{ ok: boolean; deleted: numb
 export function completeOrderStage(
   orderId: number,
   stage: number,
-  done: boolean
+  done: boolean,
+  at?: string
 ): Promise<{ ok: boolean; stage: number; done: boolean }> {
-  return post(`/api/admin/orders/${orderId}/stage/${stage}/complete`, { done });
+  return post(`/api/admin/orders/${orderId}/stage/${stage}/complete`, {
+    done,
+    at: at ?? null,
+  });
 }
 
 export function fetchVendorPoOverview(): Promise<{ rows: VendorPoRow[] }> {

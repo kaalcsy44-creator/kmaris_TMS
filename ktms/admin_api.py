@@ -3428,12 +3428,13 @@ def delete_pod(order_id: int):
 # ── 단계 완료 콜 — 오더 기준으로 RFQ.stage_dates 에 완료 표시(9·11·12) ──────────
 class StageCompleteBody(BaseModel):
     done: bool = True
+    at: str | None = None  # 'YYYY-MM-DDTHH:MM' (KST 벽시계) — 생략 시 현재시각
 
 
 @app.post("/api/admin/orders/{order_id}/stage/{stage}/complete",
           dependencies=[Depends(require_token)])
 def complete_order_stage(order_id: int, stage: int, body: StageCompleteBody):
-    """11·12 등 수동 완료 단계를 토글한다. 완료 시 RFQ.stage_dates[stage]=현재시각."""
+    """11·12 등 수동 완료 단계를 토글한다. 완료 시 RFQ.stage_dates[stage]=지정 시각(없으면 현재)."""
     if not (1 <= stage <= len(INTERNAL_STEPS)):
         raise HTTPException(status_code=400, detail="잘못된 단계 번호입니다.")
     s = get_session()
@@ -3447,7 +3448,7 @@ def complete_order_stage(order_id: int, stage: int, body: StageCompleteBody):
         dates = dict(getattr(rfq, "stage_dates", None) or {})
         key = str(stage)
         if body.done:
-            dates[key] = _kst_iso(datetime.utcnow())
+            dates[key] = (body.at or "").strip()[:16] or _kst_iso(datetime.utcnow())
         else:
             dates.pop(key, None)
         rfq.stage_dates = dates
