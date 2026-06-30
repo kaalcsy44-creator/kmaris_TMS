@@ -204,7 +204,7 @@ function HomeTab() {
 
   const activityCols: ColumnDef<ActivityRow>[] = [
     { key: "datetime", label: "Date / time", text: (r) => r.datetime || "", filter: "date", render: (r) => fmtDateTime(r.datetime) },
-    { key: "owner", label: "Owner", text: (r) => r.owner || "", filter: "facet" },
+    { key: "owner", label: "PIC", text: (r) => r.owner || "", filter: "facet" },
     { key: "customer", label: "Customer", text: (r) => r.customer || "", filter: "facet" },
     { key: "party", label: "Party", text: (r) => r.party || "", filter: "facet" },
     { key: "channel", label: "Channel", text: (r) => r.channel || "", filter: "facet" },
