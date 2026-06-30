@@ -539,7 +539,16 @@ function VendorRfqDetailModal({
               <div className="form-grid">
                 <div className="form-field">
                   <label>Vendor</label>
-                  <select value={vendorId} onChange={(e) => setVendorId(e.target.value === "" ? "" : Number(e.target.value))}>
+                  <select
+                    value={vendorId}
+                    onChange={(e) => {
+                      const id = e.target.value === "" ? "" : Number(e.target.value);
+                      setVendorId(id);
+                      // 벤더 선택 시 저장된 해당 벤더 이메일로 자동 변경.
+                      const v = vendors.find((x) => x.id === id);
+                      if (v) setEmail(v.email || "");
+                    }}
+                  >
                     <option value="">Select…</option>
                     {vendors.map((v) => (
                       <option key={v.id} value={v.id}>{v.name}</option>
