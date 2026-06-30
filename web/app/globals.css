@@ -2462,6 +2462,52 @@ table.mini.wide td:last-child {
   width: 44px;
 }
 
+/* ── RFQ 품목 편집 표(팝업 내) — 컨테이너 폭에 맞춰 넘치지 않게. ──────── */
+table.mini.items-edit {
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+table.mini.items-edit th,
+table.mini.items-edit td {
+  padding: 6px 8px;
+  vertical-align: middle;
+  font-size: 13px;
+}
+table.mini.items-edit th {
+  text-align: left;
+  white-space: nowrap;
+}
+table.mini.items-edit th.num {
+  text-align: right;
+}
+table.mini.items-edit td.seq,
+table.mini.items-edit th.seq {
+  width: 44px;
+  min-width: 44px;
+  text-align: center;
+  color: #607089;
+  font-variant-numeric: tabular-nums;
+}
+table.mini.items-edit input {
+  width: 100%;
+  min-width: 0;
+  height: 30px;
+  border: 1px solid #d7e2ee;
+  border-radius: 6px;
+  padding: 0 8px;
+  font-size: 13px;
+  box-sizing: border-box;
+}
+table.mini.items-edit input.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+table.mini.items-edit td:last-child {
+  text-align: center;
+}
+
 /* ── Dashboard ─────────────────────────────────────────────────────── */
 .kpi-row {
   display: grid;

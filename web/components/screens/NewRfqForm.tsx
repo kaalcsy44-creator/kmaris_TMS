@@ -486,18 +486,27 @@ export default function NewRfqForm({
       <div className="sub-h" style={{ marginTop: 18 }}>
         Items
       </div>
-      <table className="mini wide">
+      <table className="mini items-edit">
+        <colgroup>
+          <col style={{ width: 44 }} />
+          <col style={{ width: 160 }} />
+          <col />
+          <col style={{ width: 84 }} />
+          <col style={{ width: 44 }} />
+        </colgroup>
         <thead>
           <tr>
-            <th style={{ width: 160 }}>Part No.</th>
+            <th className="seq">#</th>
+            <th>Part No.</th>
             <th>Description</th>
-            <th style={{ width: 90 }}>Qty</th>
-            <th style={{ width: 50 }}></th>
+            <th className="num">Qty</th>
+            <th></th>
           </tr>
         </thead>
         <tbody>
           {items.map((it, i) => (
             <tr key={i}>
+              <td className="seq">{i + 1}</td>
               <td>
                 <input
                   value={it.part_no}
