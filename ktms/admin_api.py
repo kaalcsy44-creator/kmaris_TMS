@@ -868,8 +868,9 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
                 "received_at": getattr(r, "received_at", None) or "",
                 "first_rfq_at": _first_rfq_iso(r),
                 "project_no": _project_no_map(s).get(r.id, ""),
-                # 담당자 = RFQ를 시스템에 등록한 내부 직원(created_by). 없으면 빈값.
+                # 담당자(PIC) = created_by 직원. 직접 지정 가능(설정 시 created_by 갱신).
                 "assignee": user_names.get(getattr(r, "created_by", None), "") or "",
+                "assignee_id": getattr(r, "created_by", None) or 0,
                 "item_count": len((o.items if o else None) or r.items or []),
                 "crfq_at": _fmt_received(getattr(r, "received_at", None) or "") or _kst(r.created_at),
                 # 1~4 RFQ 체인
@@ -3921,6 +3922,18 @@ def update_permissions(body: RolePermSave, user: dict = Depends(get_current_user
     return {"ok": True, "role": role, "perms": _perms_for(role), "scope": _scope_for(role)}
 
 
+@app.get("/api/admin/assignable-users", dependencies=[Depends(require_token)])
+def assignable_users():
+    """담당자(PIC) 지정용 직원 목록 — id/username 만. (admin 외 편집자도 사용)"""
+    s = get_session()
+    try:
+        return [{"id": u.id, "username": u.username}
+                for u in s.query(User).filter_by(is_active=True)
+                .order_by(User.username).all()]
+    finally:
+        s.close()
+
+
 @app.get("/api/admin/settings/users", dependencies=[Depends(require_token)])
 def settings_users(user: dict = Depends(get_current_user)):
     if user.get("role") != "admin":
@@ -4684,6 +4697,7 @@ class RfqUpdate(BaseModel):
     project_title: str | None = None
     work_type: str | None = None
     received_at: str | None = None      # "YYYY-MM-DDTHH:MM"
+    assignee_id: int | None = None      # 담당자(PIC) = created_by. 0 → 미지정 해제
     items: list[RfqItemIn] | None = None  # 보내면 품목 전체 교체
 
 
@@ -4733,6 +4747,14 @@ def update_rfq(rfq_id: int, body: RfqUpdate):
             if recv:
                 rfq.received_at = recv
                 rfq.date = recv[:10]
+        if body.assignee_id is not None:
+            # 0/음수 → 담당자 미지정 해제. 그 외엔 해당 직원이 존재할 때만 지정.
+            if body.assignee_id <= 0:
+                rfq.created_by = None
+            elif s.query(User).filter_by(id=body.assignee_id).first():
+                rfq.created_by = body.assignee_id
+            else:
+                raise HTTPException(status_code=400, detail="담당자(사용자)를 찾을 수 없습니다.")
         if body.items is not None:
             rfq.items = [{
                 "part_no": (it.part_no or "").strip(),

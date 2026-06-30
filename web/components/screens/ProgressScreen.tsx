@@ -9,6 +9,7 @@ import {
   updateRfq,
   fetchCustomers,
   fetchSettingsVessels,
+  fetchAssignableUsers,
   addRfqStageNote,
   updateRfqStageNote,
   deleteRfqStageNote,
@@ -646,6 +647,7 @@ function PipelineModal({
   const backdropMouseDown = useRef(false);
   const canEdit = can("rfq", "edit");
   const canDelete = can("rfq", "delete");
+  const { data: users } = useCachedData("assignable-users", fetchAssignableUsers);
   const [deleting, setDeleting] = useState(false);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -656,6 +658,7 @@ function PipelineModal({
   const [fCustRfqNo, setFCustRfqNo] = useState(r.customer_rfq_no || "");
   const [fProjectTitle, setFProjectTitle] = useState(r.project_title || "");
   const [fReceivedAt, setFReceivedAt] = useState(r.received_at || "");
+  const [fAssigneeId, setFAssigneeId] = useState<number | "">(r.assignee_id || "");
   const rSteps = resolveSteps(steps, fWorkType);
   const stageLabel = rSteps[r.stage - 1] ?? "";
 
@@ -667,6 +670,7 @@ function PipelineModal({
     setFCustRfqNo(r.customer_rfq_no || "");
     setFProjectTitle(r.project_title || "");
     setFReceivedAt(r.received_at || "");
+    setFAssigneeId(r.assignee_id || "");
     setEditing(true);
   }
 
@@ -680,6 +684,7 @@ function PipelineModal({
         project_title: fProjectTitle,
         work_type: fWorkType,
         received_at: fReceivedAt || undefined,
+        assignee_id: fAssigneeId === "" ? 0 : fAssigneeId, // 0 = 담당자 미지정
       });
       setEditing(false);
       onChanged();
@@ -889,6 +894,22 @@ function PipelineModal({
                     onChange={(e) => setFReceivedAt(e.target.value)}
                   />
                 </div>
+                <div className="form-field">
+                  <label>PIC</label>
+                  <select
+                    value={fAssigneeId}
+                    onChange={(e) =>
+                      setFAssigneeId(e.target.value === "" ? "" : Number(e.target.value))
+                    }
+                  >
+                    <option value="">— Unassigned —</option>
+                    {(users ?? []).map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.username}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </div>
           ) : (
@@ -912,6 +933,10 @@ function PipelineModal({
               <div>
                 <dt>Items</dt>
                 <dd>{r.item_count}</dd>
+              </div>
+              <div>
+                <dt>PIC</dt>
+                <dd>{r.assignee || "—"}</dd>
               </div>
             </dl>
           )}

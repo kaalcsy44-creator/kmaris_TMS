@@ -637,7 +637,8 @@ export type PipelineRow = {
   received_at: string;
   first_rfq_at: string;
   project_no: string;
-  assignee: string; // 담당자 = RFQ 등록자(created_by) username
+  assignee: string; // 담당자(PIC) = created_by username
+  assignee_id: number; // 담당자(PIC) = created_by user id (0 = 미지정)
   item_count: number;
   crfq_at: string;
   vrfq_vendors: string;

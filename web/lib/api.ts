@@ -152,10 +152,15 @@ export function updateRfq(
     project_title?: string;
     work_type?: string;
     received_at?: string;
+    assignee_id?: number;
     items?: { part_no: string; description: string; qty: number }[];
   }
 ): Promise<{ ok: boolean; id: number }> {
   return patch(`/api/admin/rfq/${rfqId}`, body);
+}
+
+export function fetchAssignableUsers(): Promise<{ id: number; username: string }[]> {
+  return get<{ id: number; username: string }[]>("/api/admin/assignable-users");
 }
 
 export function addRfqStageNote(
