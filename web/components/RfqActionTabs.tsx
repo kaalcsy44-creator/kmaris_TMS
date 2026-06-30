@@ -1766,7 +1766,7 @@ function VendorQuoteAction({
   }
 
   async function submit() {
-    if (vrfqId === "" || !no.trim()) return;
+    if (vrfqId === "") return;
     setBusy(true);
     setMsg(null);
     setErr(null);
@@ -1869,7 +1869,7 @@ function VendorQuoteAction({
             <button
               className="btn primary"
               onClick={submit}
-              disabled={busy || vrfqId === "" || !no.trim()}
+              disabled={busy || vrfqId === ""}
             >
               {busy ? "Saving…" : "Save quote"}
             </button>

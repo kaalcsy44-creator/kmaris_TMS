@@ -334,6 +334,7 @@ export function updateDocumentMilestone(
 export function saveCommercialInvoice(
   orderId: number,
   body: {
+    ci_no?: string;
     date?: string;
     currency: string;
     vat_rate: number;
@@ -359,14 +360,14 @@ export function deleteServiceStage(orderId: number, stage: number): Promise<{ ok
 
 export function savePackingList(
   orderId: number,
-  body: { date?: string; items: DocumentWorkItem[] }
+  body: { pl_no?: string; date?: string; items: DocumentWorkItem[] }
 ): Promise<{ ok: boolean; id: number; pl_no: string }> {
   return post(`/api/admin/documents/${orderId}/pl`, body);
 }
 
 export function saveShippingAdvice(
   orderId: number,
-  body: { date?: string; shipping: Record<string, string> }
+  body: { sa_no?: string; date?: string; shipping: Record<string, string> }
 ): Promise<{ ok: boolean; id: number; sa_no: string }> {
   return post(`/api/admin/documents/${orderId}/sa`, body);
 }
@@ -383,6 +384,7 @@ export function sendShippingAdvice(
 export function saveTaxInvoice(
   orderId: number,
   body: {
+    tax_no?: string;
     date?: string;
     supply_type: string;
     buyer_business_no: string;

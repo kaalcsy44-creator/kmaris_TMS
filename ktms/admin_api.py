@@ -2997,6 +2997,7 @@ class DocumentMilestoneUpdate(BaseModel):
 
 
 class CommercialInvoiceSave(BaseModel):
+    ci_no: str | None = None
     date: str | None = None
     currency: str = "USD"
     vat_rate: float = 0.0
@@ -3005,11 +3006,13 @@ class CommercialInvoiceSave(BaseModel):
 
 
 class PackingListSave(BaseModel):
+    pl_no: str | None = None
     date: str | None = None
     items: list[dict] = []
 
 
 class ShippingAdviceSave(BaseModel):
+    sa_no: str | None = None
     date: str | None = None
     shipping: dict = {}
 
@@ -3021,6 +3024,7 @@ class ShippingAdviceSend(BaseModel):
 
 
 class TaxInvoiceSave(BaseModel):
+    tax_no: str | None = None
     date: str | None = None
     supply_type: str = "Export / Zero-rated"
     buyer_business_no: str = ""
@@ -3141,6 +3145,17 @@ def document_milestone(order_id: int, body: DocumentMilestoneUpdate):
         s.close()
 
 
+def _manual_doc_no(session, Model, col, body_val, current_id):
+    """수동 문서번호 처리. 비우면 None(번호 없음), 입력 시 중복 검사."""
+    no = (body_val or "").strip() or None
+    if no:
+        dup = session.query(Model).filter(
+            getattr(Model, col) == no, Model.id != (current_id or 0)).first()
+        if dup:
+            raise HTTPException(status_code=400, detail=f"이미 존재하는 번호입니다: {no}")
+    return no
+
+
 @app.post("/api/admin/documents/{order_id}/ci",
           dependencies=[Depends(require_token)])
 def save_commercial_invoice(order_id: int, body: CommercialInvoiceSave):
@@ -3152,11 +3167,13 @@ def save_commercial_invoice(order_id: int, body: CommercialInvoiceSave):
         ci = _latest_ci(s, order_id)
         if not ci:
             ci = CommercialInvoice(
-                ci_no=_next_doc_no(s, "ci"),
+                ci_no=_manual_doc_no(s, CommercialInvoice, "ci_no", body.ci_no, None),
                 order_id=order.id,
                 date=body.date or date.today().isoformat(),
             )
             s.add(ci)
+        elif body.ci_no is not None:
+            ci.ci_no = _manual_doc_no(s, CommercialInvoice, "ci_no", body.ci_no, ci.id)
         ci.date = body.date or ci.date or date.today().isoformat()
         ci.currency = body.currency or "USD"
         ci.vat_rate = body.vat_rate or 0.0
@@ -3204,11 +3221,13 @@ def save_packing_list(order_id: int, body: PackingListSave):
         pl = _latest_pl(s, ci.id)
         if not pl:
             pl = PackingList(
-                pl_no=_next_doc_no(s, "pl"),
+                pl_no=_manual_doc_no(s, PackingList, "pl_no", body.pl_no, None),
                 ci_id=ci.id,
                 date=body.date or date.today().isoformat(),
             )
             s.add(pl)
+        elif body.pl_no is not None:
+            pl.pl_no = _manual_doc_no(s, PackingList, "pl_no", body.pl_no, pl.id)
         pl.date = body.date or pl.date or date.today().isoformat()
         pl.items = body.items or []
         s.commit()
@@ -3253,11 +3272,13 @@ def save_shipping_advice(order_id: int, body: ShippingAdviceSave):
         sa = _latest_sa(s, order_id)
         if not sa:
             sa = ShippingAdvice(
-                sa_no=_next_doc_no(s, "sa"),
+                sa_no=_manual_doc_no(s, ShippingAdvice, "sa_no", body.sa_no, None),
                 order_id=order.id,
                 date=body.date or date.today().isoformat(),
             )
             s.add(sa)
+        elif body.sa_no is not None:
+            sa.sa_no = _manual_doc_no(s, ShippingAdvice, "sa_no", body.sa_no, sa.id)
         sa.date = body.date or sa.date or date.today().isoformat()
         sa.shipping = body.shipping or {}
         s.commit()
@@ -3337,11 +3358,13 @@ def save_tax_invoice(order_id: int, body: TaxInvoiceSave):
         tax = _latest_tax(s, ci.id)
         if not tax:
             tax = TaxInvoiceData(
-                tax_no=_next_doc_no(s, "tax"),
+                tax_no=_manual_doc_no(s, TaxInvoiceData, "tax_no", body.tax_no, None),
                 ci_id=ci.id,
                 date=body.date or date.today().isoformat(),
             )
             s.add(tax)
+        elif body.tax_no is not None:
+            tax.tax_no = _manual_doc_no(s, TaxInvoiceData, "tax_no", body.tax_no, tax.id)
         tax.date = body.date or tax.date or date.today().isoformat()
         tax.items = body.items or ci.items or []
 
@@ -4493,8 +4516,7 @@ def create_vendor_quote(rfq_id: int, body: VendorQuoteCreate):
         vrfq = s.query(VendorRFQ).filter_by(id=body.vendor_rfq_id, rfq_id=rfq_id).first()
         if not vrfq:
             raise HTTPException(status_code=400, detail="해당 RFQ의 Vendor RFQ를 선택하세요.")
-        if not body.vendor_quote_no.strip():
-            raise HTTPException(status_code=400, detail="Vendor 견적번호를 입력하세요.")
+        # Vendor 견적번호는 선택 입력(비워도 등록 가능).
 
         items = body.items
         if not items:
@@ -4649,21 +4671,6 @@ def delete_vendor_quote(vq_id: int):
         s.close()
 
 
-def _next_rfq_no(session, company_prefix: str = "KMS") -> str:
-    """helpers.next_rfq_no 와 동일: KMS-RFQ-yymm-NNN (월 단위, 충돌 번호 건너뜀)."""
-    today = date.today()
-    period = today.year * 100 + today.month
-    seq = session.query(DocSequence).filter_by(
-        doc_type="rfq_internal", year=period).first()
-    if not seq:
-        seq = DocSequence(doc_type="rfq_internal", year=period, last_seq=0)
-        session.add(seq)
-    while True:
-        seq.last_seq += 1
-        no = f"{company_prefix}-RFQ-{today:%y%m}-{seq.last_seq:03d}"
-        if not session.query(RFQ).filter_by(rfq_no=no).first():
-            session.flush()
-            return no
 
 
 # ── K-Maris RFQ No. 이연 발번 ──────────────────────────────────────────────

@@ -1121,6 +1121,7 @@ function OrderMilestones({ data, onChanged }: { data: DocumentDetail; onChanged:
 }
 
 function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChanged: () => void }) {
+  const [ciNo, setCiNo] = useState(data.ci?.ci_no || "");
   const [date, setDate] = useState(data.ci?.date || today());
   const [currency, setCurrency] = useState(data.ci?.currency || "USD");
   const [vatRate, setVatRate] = useState(data.ci?.vat_rate ?? 0);
@@ -1141,7 +1142,7 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
   async function save() {
     setBusy(true);
     try {
-      await saveCommercialInvoice(data.order.id, { date, currency, vat_rate: vatRate, items, shipping });
+      await saveCommercialInvoice(data.order.id, { ci_no: ciNo, date, currency, vat_rate: vatRate, items, shipping });
       onChanged();
     } finally {
       setBusy(false);
@@ -1151,6 +1152,7 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
   return (
     <div className="doc-tab">
       <div className="form-grid">
+        <Field label="CI No." value={ciNo} onChange={setCiNo} />
         <Field label="CI Date" value={date} onChange={setDate} type="date" />
         <label className="form-field">
           <span>Currency</span>
@@ -1182,6 +1184,7 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
 }
 
 function PackingListTab({ data, onChanged }: { data: DocumentDetail; onChanged: () => void }) {
+  const [plNo, setPlNo] = useState(data.pl?.pl_no || "");
   const [date, setDate] = useState(data.pl?.date || today());
   const seed = data.pl?.items || data.ci?.items || data.order.items;
   const [items, setItems] = useState<DocumentWorkItem[]>(normalizeItems(seed, true));
@@ -1190,7 +1193,7 @@ function PackingListTab({ data, onChanged }: { data: DocumentDetail; onChanged: 
   async function save() {
     setBusy(true);
     try {
-      await savePackingList(data.order.id, { date, items });
+      await savePackingList(data.order.id, { pl_no: plNo, date, items });
       onChanged();
     } finally {
       setBusy(false);
@@ -1204,6 +1207,7 @@ function PackingListTab({ data, onChanged }: { data: DocumentDetail; onChanged: 
   return (
     <div className="doc-tab">
       <div className="form-grid">
+        <Field label="PL No." value={plNo} onChange={setPlNo} />
         <Field label="PL Date" value={date} onChange={setDate} type="date" />
       </div>
       <div className="po-work-note">
@@ -1228,6 +1232,7 @@ function PackingListTab({ data, onChanged }: { data: DocumentDetail; onChanged: 
 }
 
 function ShippingAdviceTab({ data, onChanged }: { data: DocumentDetail; onChanged: () => void }) {
+  const [saNo, setSaNo] = useState(data.sa?.sa_no || "");
   const [date, setDate] = useState(data.sa?.date || today());
   const [shipping, setShipping] = useState<Record<string, string>>({
     port_loading: data.ci?.shipping.port_loading || "Busan, Korea",
@@ -1251,7 +1256,7 @@ function ShippingAdviceTab({ data, onChanged }: { data: DocumentDetail; onChange
   async function save() {
     setBusy(true);
     try {
-      await saveShippingAdvice(data.order.id, { date, shipping });
+      await saveShippingAdvice(data.order.id, { sa_no: saNo, date, shipping });
       onChanged();
     } finally {
       setBusy(false);
@@ -1273,6 +1278,7 @@ function ShippingAdviceTab({ data, onChanged }: { data: DocumentDetail; onChange
       {/* 8단계(Delivery arrangement) 마일스톤 — Customer 확인 / Vendor 서류 확인 */}
       <OrderMilestones data={data} onChanged={onChanged} />
       <div className="form-grid">
+        <Field label="SA No." value={saNo} onChange={setSaNo} />
         <Field label="SA Date" value={date} onChange={setDate} type="date" />
       </div>
       <ShippingFields shipping={shipping} setShipping={setShipping} />
@@ -1318,6 +1324,7 @@ function ShippingAdviceTab({ data, onChanged }: { data: DocumentDetail; onChange
 }
 
 function TaxInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChanged: () => void }) {
+  const [taxNo, setTaxNo] = useState(data.tax?.tax_no || "");
   const [date, setDate] = useState(data.tax?.date || today());
   const [supplyType, setSupplyType] = useState("Export / Zero-rated");
   const [buyerNo, setBuyerNo] = useState(data.order.customer_tax_id || "");
@@ -1331,6 +1338,7 @@ function TaxInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChanged: (
     setBusy(true);
     try {
       await saveTaxInvoice(data.order.id, {
+        tax_no: taxNo,
         date,
         supply_type: supplyType,
         buyer_business_no: buyerNo,
@@ -1350,6 +1358,7 @@ function TaxInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChanged: (
   return (
     <div className="doc-tab">
       <div className="form-grid">
+        <Field label="Tax No." value={taxNo} onChange={setTaxNo} />
         <Field label="Issue Date" value={date} onChange={setDate} type="date" />
         <Field label="Supply Type" value={supplyType} onChange={setSupplyType} />
         <Field label="Buyer Business No." value={buyerNo} onChange={setBuyerNo} />
