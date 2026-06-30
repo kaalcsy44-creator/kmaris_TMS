@@ -87,7 +87,7 @@ def main() -> None:
             # Anglo-Eastern row → exercise vendor RFQ / quote / customer quote columns
             if rfq_no == "KMS-RFQ-2405-001":
                 vrfq = VendorRFQ(
-                    vrfq_no="KMS-VRFQ-2026-0005", rfq_id=rfq.id,
+                    rfq_id=rfq.id,
                     items=_items(5), created_at=created_at + timedelta(days=4),
                 )
                 s.add(vrfq)
@@ -113,7 +113,7 @@ def main() -> None:
             vendor = s.query(Vendor).first()
             if anglo:
                 order = Order(
-                    ord_no="KMS-ORD-2606-001", rfq_id=anglo.id,
+                    rfq_id=anglo.id,
                     customer_id=anglo.customer_id, vessel_id=anglo.vessel_id,
                     po_no="PO-AE-77231", date=now.strftime("%Y-%m-%d"),
                     status=OrderStatus.PO_SENT, items=_items(22), created_at=now,

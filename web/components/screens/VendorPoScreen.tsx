@@ -68,7 +68,6 @@ export default function VendorPoScreen() {
             <thead>
               <tr>
                 <th>PO No.</th>
-                <th>Order No.</th>
                 <th>Customer</th>
                 <th>Vendor</th>
                 <th>Recipient email</th>
@@ -81,7 +80,6 @@ export default function VendorPoScreen() {
               {filtered.map((r) => (
                 <tr key={r.id}>
                   <Cell main={r.po_no} />
-                  <Cell main={r.ord_no} />
                   <Cell main={r.customer} />
                   <Cell main={r.vendor} />
                   <Cell main={r.vendor_email} />

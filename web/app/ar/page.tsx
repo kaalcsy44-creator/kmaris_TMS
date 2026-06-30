@@ -189,7 +189,6 @@ function ArOverview() {
     }),
     { key: "vendor", label: "Vendor", text: (r) => r.vendor || "", filter: "facet" },
     { key: "ci_no", label: "CI No.", text: (r) => r.ci_no || "" },
-    { key: "ord_no", label: "Order", text: (r) => r.ord_no || "" },
     { key: "currency", label: "Currency", text: (r) => r.currency || "", filter: "facet" },
     {
       key: "invoice",
@@ -311,7 +310,6 @@ function OrderInfoBlock({
     <dl className="intl-meta" style={{ margin: "0 0 14px" }}>
       <div><dt>Project No.</dt><dd><b>{d.order.project_no || "—"}</b></dd></div>
       <div><dt>First RFQ at</dt><dd>{(d.order.first_rfq_at || "").replace("T", " ") || "—"}</dd></div>
-      <div><dt>Order No.</dt><dd>{d.order.ord_no || "—"}</dd></div>
       <div><dt>Type</dt><dd>{tr(d.order.work_type) || "—"}</dd></div>
       <div><dt>Trade type</dt><dd>{tr(d.order.trade_type) || "—"}</dd></div>
       <div><dt>Project</dt><dd>{d.order.project_title || "—"}</dd></div>
@@ -406,7 +404,7 @@ function TaxIssueModal({
   }
 
   return (
-    <Modal title={<ModalTitle label={`Issue Tax Invoice — ${row.ord_no || row.ci_no || "AR"}`} projectNo={row.project_no} />} onClose={onClose} wide>
+    <Modal title={<ModalTitle label={`Issue Tax Invoice — ${row.ci_no || "AR"}`} projectNo={row.project_no} />} onClose={onClose} wide>
       <OrderInfoBlock orderId={row.order_id} detail={detail} />
       <div className="milestone-row" style={{ marginBottom: 12 }}>
         <span className={`ar-badge${row.tax_issued ? "" : " overdue"}`}>
@@ -473,7 +471,7 @@ function PaymentModal({
   }
 
   return (
-    <Modal title={<ModalTitle label={`Record Payment — ${row.ord_no || row.ci_no || "AR"}`} projectNo={row.project_no} />} onClose={onClose} wide>
+    <Modal title={<ModalTitle label={`Record Payment — ${row.ci_no || "AR"}`} projectNo={row.project_no} />} onClose={onClose} wide>
       <OrderInfoBlock orderId={row.order_id} />
       <div className="milestone-row" style={{ marginBottom: 12 }}>
         <span className={`ar-badge${row.paid_done ? "" : " overdue"}`}>
@@ -581,7 +579,7 @@ function ArAddForm({
           <option value="">Select…</option>
           {(options?.orders || []).map((o) => (
             <option key={o.id} value={o.id}>
-              {o.ord_no} · {o.customer} · {o.vessel || "-"}
+              {o.project_no} · {o.customer} · {o.vessel || "-"}
             </option>
           ))}
         </select>

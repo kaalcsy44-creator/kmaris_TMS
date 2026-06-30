@@ -216,7 +216,7 @@ export default function RfqDetail({
                 <ChainLine
                   label="Vendor RFQ"
                   rows={data.vendor_rfqs.map(
-                    (v) => `${v.vrfq_no} · ${v.vendor} · ${v.at}`
+                    (v) => `${v.vendor} · ${v.at}`
                   )}
                 />
                 <ChainLine

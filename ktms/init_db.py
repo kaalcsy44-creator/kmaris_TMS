@@ -118,6 +118,27 @@ def migrate_relax_not_null():
                 print(f"[SKIP] {table}.{col} NOT NULL (sqlite — 모델 재생성 시 반영).")
 
 
+def migrate_drop_columns():
+    """수동입력 전환 과정에서 폐지된 번호 컬럼 제거. 멱등(이미 없으면 건너뜀).
+      - orders.ord_no      (K-Maris Order No. — Project No.로 대체)
+      - vendor_rfqs.vrfq_no (Vendor RFQ No. — 폐지)
+    Postgres 는 DROP COLUMN 이 제약까지 함께 제거한다. SQLite 는 best-effort."""
+    engine = get_engine()
+    insp = inspect(engine)
+    targets = [("orders", "ord_no"), ("vendor_rfqs", "vrfq_no")]
+    with engine.begin() as conn:
+        for table, col in targets:
+            if not insp.has_table(table):
+                continue
+            if col not in {c["name"] for c in insp.get_columns(table)}:
+                continue
+            try:
+                conn.execute(text(f"ALTER TABLE {table} DROP COLUMN {col}"))
+                print(f"[OK] {table}.{col} dropped.")
+            except Exception as e:  # noqa: BLE001
+                print(f"[WARN] {table}.{col} drop skipped: {e}")
+
+
 def migrate_rfq_numbers():
     """기존 KMS-CRFQ-YYYY-NNNN 형식의 RFQ 번호를 KMS-RFQ-yymm-NNN 형식으로 변환.
 
@@ -127,10 +148,11 @@ def migrate_rfq_numbers():
     session = get_session()
     try:
         all_rfqs = session.query(RFQ).order_by(RFQ.id).all()
-        # 신규 형식(KMS-RFQ-)·미발급(TMP-) 은 변환 대상에서 제외한다.
+        # 레거시 자동형식(KMS-CRFQ-…) 만 변환한다. 수동 입력값·신규형식(KMS-RFQ-)·
+        # 미발급(TMP-) 은 손대지 않는다(수동 채번 전환 후 임의 번호 보존).
         old = [
             r for r in all_rfqs
-            if not (r.rfq_no or "").startswith(("KMS-RFQ-", "TMP-"))
+            if (r.rfq_no or "").startswith("KMS-CRFQ-")
         ]
         if not old:
             print("[SKIP] No RFQ numbers to migrate.")
@@ -185,7 +207,8 @@ def migrate_quotation_numbers():
     session = get_session()
     try:
         all_qtns = session.query(Quotation).order_by(Quotation.id).all()
-        old = [q for q in all_qtns if not (q.qtn_no or "").startswith("KMS-QUO-")]
+        # 레거시 자동형식(KMS-QTN-…) 만 변환. 수동 입력값·빈값·신규형식은 보존.
+        old = [q for q in all_qtns if (q.qtn_no or "").startswith("KMS-QTN-")]
         if not old:
             print("[SKIP] No quotation numbers to migrate.")
             return
@@ -284,6 +307,7 @@ if __name__ == "__main__":
     create_tables()
     migrate_columns()
     migrate_relax_not_null()
+    migrate_drop_columns()
     migrate_rfq_numbers()
     migrate_quotation_numbers()
     seed_admin()

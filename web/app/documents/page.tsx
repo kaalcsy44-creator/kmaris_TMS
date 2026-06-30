@@ -250,7 +250,6 @@ function DocumentsOverview() {
           <DocEditorModal
             orderId={editing.orderId}
             kind={editing.kind}
-            ordNo={orders.find((o) => o.id === editing.orderId)?.ord_no}
             projectNo={orders.find((o) => o.id === editing.orderId)?.project_no}
             onClose={close}
             onChanged={load}
@@ -259,7 +258,6 @@ function DocumentsOverview() {
           <ServiceEditorModal
             orderId={editing.orderId}
             svc={editing.svc}
-            ordNo={orders.find((o) => o.id === editing.orderId)?.ord_no}
             projectNo={orders.find((o) => o.id === editing.orderId)?.project_no}
             onClose={close}
             onChanged={load}
@@ -337,7 +335,6 @@ function ServiceStageList({
       tradeType: (r) => r.trade_type,
     }),
     { key: "vendor", label: "Vendor", text: (r) => r.vendor || "", filter: "facet" },
-    { key: "ord_no", label: "ORD No.", text: (r) => r.ord_no || "" },
     { key: "po_no", label: "PO No.", text: (r) => r.po_no || "" },
     ...(svc === 9
       ? [{ key: "report", label: "Report file", text: (r: DocRow) => r.pod_filename || "" }]
@@ -404,7 +401,7 @@ function ServiceNewModal({
           <option value="">Select…</option>
           {orders.map((o) => (
             <option key={o.id} value={o.id}>
-              {o.ord_no} · {o.customer} · {o.vessel || "-"}
+              {o.project_no} · {o.customer} · {o.vessel || "-"}
             </option>
           ))}
         </select>
@@ -477,19 +474,17 @@ function ServiceStageEditor({
 function ServiceEditorModal({
   orderId,
   svc,
-  ordNo,
   projectNo,
   onClose,
   onChanged,
 }: {
   orderId: number;
   svc: SvcStage;
-  ordNo?: string;
   projectNo?: string;
   onClose: () => void;
   onChanged: () => void;
 }) {
-  const title = `${SVC_CFG[svc].label}${ordNo ? ` — ${ordNo}` : ""}`;
+  const title = `${SVC_CFG[svc].label}${projectNo ? ` — ${projectNo}` : ""}`;
   return (
     <Modal title={<ModalTitle label={title} projectNo={projectNo} />} onClose={onClose} wide>
       <ServiceStageEditor orderId={orderId} svc={svc} onChanged={onChanged} onClose={onClose} />
@@ -836,7 +831,6 @@ function StageList({
     }),
     { key: "vendor", label: "Vendor", text: (r) => r.vendor || "", filter: "facet" },
     cfg.docCol,
-    { key: "ord_no", label: "ORD No.", text: (r) => r.ord_no || "" },
     { key: "po_no", label: "PO No.", text: (r) => r.po_no || "" },
     ...(cfg.extra ?? []),
   ];
@@ -935,19 +929,17 @@ function DocEditorContent({
 function DocEditorModal({
   orderId,
   kind,
-  ordNo,
   projectNo,
   onClose,
   onChanged,
 }: {
   orderId: number;
   kind: DocKind;
-  ordNo?: string;
   projectNo?: string;
   onClose: () => void;
   onChanged: () => void;
 }) {
-  const title = `${KIND_CFG[kind].label}${ordNo ? ` — ${ordNo}` : ""}`;
+  const title = `${KIND_CFG[kind].label}${projectNo ? ` — ${projectNo}` : ""}`;
   return (
     <Modal title={<ModalTitle label={title} projectNo={projectNo} />} onClose={onClose} wide>
       <DocEditorContent orderId={orderId} kind={kind} onChanged={onChanged} />
@@ -980,7 +972,7 @@ function DocNewModal({
           <option value="">Select…</option>
           {orders.map((o) => (
             <option key={o.id} value={o.id}>
-              {o.ord_no} · {o.customer} · {o.vessel || "-"}
+              {o.project_no} · {o.customer} · {o.vessel || "-"}
             </option>
           ))}
         </select>
@@ -1621,7 +1613,6 @@ function DocOrderInfo({ order }: { order: DocumentDetail["order"] }) {
     <dl className="intl-meta" style={{ margin: "0 0 14px" }}>
       <div><dt>Project No.</dt><dd><b>{order.project_no || "—"}</b></dd></div>
       <div><dt>First RFQ at</dt><dd>{(order.first_rfq_at || "").replace("T", " ") || "—"}</dd></div>
-      <div><dt>Order No.</dt><dd>{order.ord_no || "—"}</dd></div>
       <div><dt>Type</dt><dd>{tr(order.work_type) || "—"}</dd></div>
       <div><dt>Trade type</dt><dd>{tr(order.trade_type) || "—"}</dd></div>
       <div><dt>Project</dt><dd>{order.project_title || "—"}</dd></div>
@@ -1639,7 +1630,7 @@ function DocOrderInfo({ order }: { order: DocumentDetail["order"] }) {
 function emptyDocDetail(): DocumentDetail {
   return {
     order: {
-      id: 0, rfq_id: 0, ord_no: "", po_no: "", date: "", status: "",
+      id: 0, rfq_id: 0, po_no: "", date: "", status: "",
       customer: "", customer_email: "", customer_tax_id: "", vessel: "",
       project_title: "", project_no: "", first_rfq_at: "", work_type: "", vendor: "", trade_type: "", service_info: {},
       tracking_token: "", consignee_confirmed_date: "", vendor_docs_sent_date: "",

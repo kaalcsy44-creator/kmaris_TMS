@@ -102,7 +102,6 @@ function PoDetail({ orderId }: { orderId: number | null }) {
           <div className="grid">
             <KV k="Project No." v={data.project_no} />
             <KV k="First RFQ at" v={(data.first_rfq_at || "").replace("T", " ")} />
-            <KV k="Order No." v={data.ord_no} />
             <KV k="Customer P/O No." v={data.customer_po_no} />
             <KV k="Customer P/O received" v={data.customer_po_at} />
             <KV k="Customer RFQ No." v={data.customer_rfq_no} />
@@ -926,7 +925,7 @@ function CustomerPoNewForm({
         promised_delivery: promised || null,
         items: cleanItems(items),
       });
-      setMsg(`Order created: ${r.ord_no}`);
+      setMsg(`Order created: ${r.project_no}`);
       setPoNo("");
       setPromised("");
       setItems([blankItem()]);
@@ -1138,7 +1137,7 @@ function VendorPoCreate({
           <select value={orderId} onChange={(e) => setOrderId(Number(e.target.value))}>
             {options.orders.map((o) => (
               <option key={o.id} value={o.id}>
-                {o.ord_no} · {o.customer} · {tr(o.status)}
+                {o.project_no} · {o.customer} · {tr(o.status)}
               </option>
             ))}
           </select>
@@ -1170,7 +1169,7 @@ function VendorPoCreate({
 
       {order ? (
         <div className="action-ctx">
-          Target order: <b>{order.ord_no}</b> · PO No. {order.po_no || "—"} · {order.customer} · {order.vessel || "—"} · {order.items.length} item(s)
+          Target order: <b>{order.project_no || "—"}</b> · PO No. {order.po_no || "—"} · {order.customer} · {order.vessel || "—"} · {order.items.length} item(s)
         </div>
       ) : null}
 
@@ -1300,7 +1299,7 @@ function VendorPoSend({
 
       {po ? (
         <div className="action-ctx">
-          PO: <b>{po.po_no}</b> · {po.vendor} · order {po.ord_no} · {po.items.length} item(s)
+          PO: <b>{po.po_no}</b> · {po.vendor} · {po.project_no} · {po.items.length} item(s)
         </div>
       ) : null}
 

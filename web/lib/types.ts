@@ -110,7 +110,6 @@ export type PoRow = {
   vessel: string;
   customer_po_no: string;
   customer_po_at: string;
-  ord_no: string;
   item_count: number;
   vendor_po_no: string;
   vendor_po_at: string;
@@ -122,7 +121,6 @@ export type PoRow = {
 
 export type PoDetail = {
   id: number;
-  ord_no: string;
   customer_po_no: string;
   customer_po_at: string;
   rfq_no: string;
@@ -248,7 +246,6 @@ export type PoWorkOptions = {
   }[];
   orders: {
     id: number;
-    ord_no: string;
     customer_id: number;
     customer: string;
     vessel_id: number | null;
@@ -267,7 +264,6 @@ export type PoWorkOptions = {
     id: number;
     po_no: string;
     order_id: number;
-    ord_no: string;
     customer_po_no: string;
     vendor_id: number;
     vendor: string;
@@ -345,7 +341,6 @@ export type VendorQuoteOverviewRow = {
   id: number;
   rfq_id: number | null;
   vendor_quote_no: string;
-  vrfq_no: string;
   customer_rfq_no: string;
   vendor: string;
   received_at: string;
@@ -364,7 +359,6 @@ export type VendorQuoteForImport = {
   id: number;
   vendor_quote_no: string;
   vendor: string;
-  vrfq_no: string;
   received_date: string;
   received_at?: string;
   currency: string;
@@ -397,7 +391,6 @@ export type QtnRow = {
 export type VrfqRow = {
   id: number;
   rfq_id: number | null;
-  vrfq_no: string;
   customer_rfq_no: string;
   vendor: string;
   vendor_email: string;
@@ -414,7 +407,6 @@ export type VrfqRow = {
 
 export type DocRow = {
   id: number;
-  ord_no: string;
   customer: string;
   vessel: string;
   po_no: string;
@@ -461,7 +453,6 @@ export type DocumentDetail = {
   order: {
     id: number;
     rfq_id: number;
-    ord_no: string;
     po_no: string;
     date: string;
     status: string;
@@ -519,7 +510,6 @@ export type DocumentDetail = {
 export type VendorPoRow = {
   id: number;
   po_no: string;
-  ord_no: string;
   customer: string;
   vendor: string;
   vendor_email: string;
@@ -535,7 +525,6 @@ export type ArRow = {
   order_id: number;
   ci_no: string;
   customer: string;
-  ord_no: string;
   currency: string;
   invoice_amount: number;
   paid_amount: number;
@@ -606,7 +595,6 @@ export type DashboardData = {
 };
 
 export type SnapshotOrder = {
-  ord_no: string;
   customer_vessel: string;
   status: string;
   item_count: number;
@@ -662,7 +650,6 @@ export type PipelineRow = {
   customer_amount: string;
   customer_po_no: string;
   customer_po_at: string;
-  ord_no: string;
   vendor_po_no: string;
   vendor_po_at: string;
   vendor: string;
@@ -725,7 +712,7 @@ export type RfqDetail = {
   status: string;
   steps: RfqStep[];
   items: RfqItem[];
-  vendor_rfqs: { id: number; vrfq_no: string; vendor: string; at: string }[];
+  vendor_rfqs: { id: number; vendor: string; at: string }[];
   vendor_quotes: { vendor_quote_no: string; amount: string; at: string }[];
   quotation: { qtn_no: string; amount: string; status: string; at: string } | null;
 };
@@ -733,7 +720,6 @@ export type RfqDetail = {
 // ── 목록 행 클릭 상세(수정·삭제)용 단건 상세 타입 ───────────────────────────
 export type VendorRfqDetail = {
   id: number;
-  vrfq_no: string;
   rfq_id: number | null;
   customer_rfq_no: string;
   kmaris_rfq_no: string;
@@ -756,7 +742,6 @@ export type VendorRfqDetail = {
   items: RfqItem[];
   project_vendor_rfqs: {
     id: number;
-    vrfq_no: string;
     vendor: string;
     vendor_email: string;
     sent_at: string;
@@ -770,7 +755,6 @@ export type VendorQuoteDetail = {
   id: number;
   vendor_quote_no: string;
   vendor_rfq_id: number;
-  vrfq_no: string;
   rfq_id: number | null;
   customer_rfq_no: string;
   project_no: string;
@@ -814,7 +798,6 @@ export type PurchaseOrderDetail = {
   id: number;
   po_no: string;
   order_id: number;
-  ord_no: string;
   customer_po_no: string;
   project_no: string;
   first_rfq_at: string;

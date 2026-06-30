@@ -59,8 +59,8 @@ def build_body(stats: dict) -> tuple[str, bool]:
         for ar in overdue:
             order = get_order(ar.order_id)
             outstanding = (ar.invoice_amount or 0) - (ar.paid_amount or 0)
-            ord_no = order.ord_no if order else "—"
-            lines.append(f"  - {ar.ci_no or 'N/A'} | 오더 {ord_no} | {ar.currency} {outstanding:,.2f} | 만기 {ar.due_date}")
+            po_ref = (order.po_no if order else "") or "—"
+            lines.append(f"  - {ar.ci_no or 'N/A'} | PO {po_ref} | {ar.currency} {outstanding:,.2f} | 만기 {ar.due_date}")
     else:
         lines.append("  (없음)")
     lines.append("")

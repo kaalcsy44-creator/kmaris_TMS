@@ -126,7 +126,7 @@ def upsert_rfq(rfq, customer, vessel) -> None:
 def upsert_order(order, customer, vessel) -> None:
     """Order 생성·상태 변경 시 Google Sheet 'Orders' 시트에 동기화.
 
-    Sheet 컬럼: A=ord_no B=company C=vessel D=item_summary E=date F=status_key G=status_step H=note
+    Sheet 컬럼: A=po_no B=company C=vessel D=item_summary E=date F=status_key G=status_step H=note
     """
     ws = _worksheet("Orders")
     if ws is None:
@@ -135,8 +135,9 @@ def upsert_order(order, customer, vessel) -> None:
     status_val = order.status.value if hasattr(order.status, "value") else str(order.status)
     step, key = order_tracking_step(status_val)
 
-    _upsert(ws, order.ord_no, [
-        order.ord_no,
+    order_ref = order.po_no or f"ORDER-{order.id}"
+    _upsert(ws, order_ref, [
+        order_ref,
         customer.name if customer else "—",
         vessel.name if vessel else "—",
         _item_summary(order.items or []),
@@ -145,4 +146,4 @@ def upsert_order(order, customer, vessel) -> None:
         step,
         "",
     ])
-    log.info(f"sheets_svc: Order {order.ord_no} 동기화 완료 (step={step}, key={key})")
+    log.info(f"sheets_svc: Order {order_ref} 동기화 완료 (step={step}, key={key})")

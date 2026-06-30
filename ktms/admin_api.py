@@ -883,7 +883,6 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
                 # 5~6 PO 체인
                 "customer_po_no": (o.po_no if o else "") or "",
                 "customer_po_at": _kst(o.created_at) if o else "",
-                "ord_no": (o.ord_no if o else "") or "",
                 "vendor_po_no": vendor_po_no,
                 "vendor_po_at": vendor_po_at,
                 "vendor": vendor_po_vendor,
@@ -1025,7 +1024,7 @@ def _po_item_lines(items, korean: bool) -> str:
     )
 
 
-def _vendor_po_email_body(po, vendor, order, vessel, notes: str, lang: str) -> str:
+def _vendor_po_email_body(po, vendor, order, vessel, notes: str, lang: str, project_no: str = "") -> str:
     vendor_name = vendor.name if vendor else "Vendor"
     vessel_str = vessel.name if vessel else "—"
     if lang == "ko":
@@ -1037,7 +1036,7 @@ def _vendor_po_email_body(po, vendor, order, vessel, notes: str, lang: str) -> s
 아래 선박용 부품에 대한 발주서를 첨부와 같이 송부드립니다.
 
 발주번호 : {po.po_no}
-오더참조 : {order.ord_no if order else '—'}
+프로젝트 : {project_no or '—'}
 선박명   : {vessel_str}
 발주일   : {po.date or date.today().isoformat()}
 
@@ -1067,7 +1066,7 @@ Engineering Reliability. Supplying Performance.
 Please find attached our official Purchase Order for the following marine spare parts.
 
 PO No.        : {po.po_no}
-Order Ref.    : {order.ord_no if order else '—'}
+Project No.   : {project_no or '—'}
 Vessel        : {vessel_str}
 Order Date    : {po.date or date.today().isoformat()}
 
@@ -1194,7 +1193,6 @@ def rfq_detail(rfq_id: int):
         vendor_names = {v.id: v.name for v in s.query(Vendor).all()}
         vrfq_view = [{
             "id": v.id,
-            "vrfq_no": v.vrfq_no,
             "vendor": vendor_names.get(v.vendor_id, "—"),
             "at": _fmt_received(_vrfq_sent_iso(v)),
         } for v in vrfqs]
@@ -1372,7 +1370,6 @@ def dashboard():
             order_row = None
             if o:
                 order_row = {
-                    "ord_no": o.ord_no,
                     "customer_vessel": _cv(o.customer_id, o.vessel_id),
                     "status": _enum_val(o.status),
                     "item_count": len(o.items or []),
@@ -1464,6 +1461,12 @@ def _rfq_for_order(s, order: Order):
     return None
 
 
+def _project_no_for_order(s, order) -> str:
+    """오더의 Project No.(yymmdd-nn). 연결 RFQ 기준, 없으면 ''. (ord_no 대체)"""
+    rfq = _rfq_for_order(s, order) if order else None
+    return _project_no_map(s).get(rfq.id, "") if rfq else ""
+
+
 def _base_meta(s, rfq, order=None) -> dict:
     """모든 상세 팝업 공통 기본정보.
     Project No.·최초 RFQ 수신일시·고객·선박·업무타입·거래구분(오더 있을 때만)."""
@@ -1528,7 +1531,6 @@ def po_overview():
                 "customer_po_no": (o.po_no if o else "") or "",
                 # 고객 P/O 수신 일시 (시·분) — 시스템 수신(created_at) 기준
                 "customer_po_at": _kst(o.created_at) if o else "",
-                "ord_no": (o.ord_no if o else "") or "",
                 "item_count": len((o.items if o else None) or r.items or []),
                 "vendor_po_no": vendor_po_no,
                 "vendor_po_at": vendor_po_at,
@@ -1588,7 +1590,6 @@ def order_detail(order_id: int):
 
         return {
             "id": o.id,
-            "ord_no": o.ord_no,
             "customer_po_no": o.po_no or "",
             "customer_po_at": o.date or "",
             "rfq_no": _rfq_no_disp(rfq.rfq_no) if rfq else "",
@@ -1691,7 +1692,6 @@ def po_work_options():
             stage = _pipeline_stage(s, rfq.id) if rfq else 5
             orders.append({
                 "id": o.id,
-                "ord_no": o.ord_no,
                 "customer_id": o.customer_id,
                 "customer": cust_names.get(o.customer_id, "—"),
                 "vessel_id": o.vessel_id,
@@ -1718,7 +1718,6 @@ def po_work_options():
                 "id": po.id,
                 "po_no": po.po_no or "",
                 "order_id": po.order_id,
-                "ord_no": o.ord_no if o else "",
                 "customer_po_no": (o.po_no if o else "") or "",
                 "vendor_id": po.vendor_id,
                 "vendor": vendor.name if vendor else "—",
@@ -1822,50 +1821,6 @@ def ocr_order_pdf(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail=f"OCR 추출 실패: {exc}") from exc
 
 
-def _next_order_no(session, company_prefix: str = "KMS") -> str:
-    today = date.today()
-    period = today.year * 100 + today.month
-    seq = session.query(DocSequence).filter_by(doc_type="order_internal", year=period).first()
-    if not seq:
-        seq = DocSequence(doc_type="order_internal", year=period, last_seq=0)
-        session.add(seq)
-    while True:
-        seq.last_seq += 1
-        no = f"{company_prefix}-ORD-{today:%y%m}-{seq.last_seq:03d}"
-        if not session.query(Order).filter_by(ord_no=no).first():
-            session.flush()
-            return no
-
-
-def _next_po_no(session, company_prefix: str = "KMS") -> str:
-    today = date.today()
-    period = today.year * 100 + today.month
-    seq = session.query(DocSequence).filter_by(doc_type="po_internal", year=period).first()
-    if not seq:
-        seq = DocSequence(doc_type="po_internal", year=period, last_seq=0)
-        session.add(seq)
-    while True:
-        seq.last_seq += 1
-        no = f"{company_prefix}-PO-{today:%y%m}-{seq.last_seq:03d}"
-        if not session.query(PurchaseOrder).filter_by(po_no=no).first():
-            session.flush()
-            return no
-
-
-def _km_po_no(session, order) -> str:
-    """K-Maris PO No. = 고객 PO No.(order.po_no) 앞에 'KM-' 접두.
-    동일 오더에 다중 발주 시 충돌하면 -2, -3 … 으로 유일성 보장.
-    고객 PO No.가 비어 있으면 기존 KMS-PO 채번으로 폴백."""
-    base = ((order.po_no if order else "") or "").strip()
-    if not base:
-        return _next_po_no(session)
-    candidate = f"KM-{base}"
-    no, n = candidate, 1
-    while session.query(PurchaseOrder).filter_by(po_no=no).first():
-        n += 1
-        no = f"{candidate}-{n}"
-    return no
-
 
 class PoWorkItem(BaseModel):
     part_no: str = ""
@@ -1915,9 +1870,7 @@ def create_order(body: OrderCreate):
                 "amount": it.amount if it.amount is not None else qty * unit_price,
             })
 
-        ord_no = _next_order_no(s)
         order = Order(
-            ord_no=ord_no,
             quotation_id=qtn.id if qtn else None,
             rfq_id=rfq_id,
             customer_id=cust.id,
@@ -1933,7 +1886,7 @@ def create_order(body: OrderCreate):
         if qtn:
             qtn.status = QuotationStatus.WON
         s.commit()
-        return {"ok": True, "id": order.id, "ord_no": order.ord_no}
+        return {"ok": True, "id": order.id, "project_no": _project_no_for_order(s, order)}
     finally:
         s.close()
 
@@ -1986,7 +1939,7 @@ def update_order(order_id: int, body: OrderUpdate):
                 })
             order.items = items
         s.commit()
-        return {"ok": True, "id": order.id, "ord_no": order.ord_no}
+        return {"ok": True, "id": order.id, "project_no": _project_no_for_order(s, order)}
     finally:
         s.close()
 
@@ -2009,12 +1962,12 @@ def delete_order(order_id: int):
         if s.query(ARRecord).filter_by(order_id=order_id).first():
             raise HTTPException(status_code=400,
                 detail="AR(미수금) 기록이 연결된 오더입니다. 삭제할 수 없습니다.")
-        ord_no = order.ord_no
+        project_no = _project_no_for_order(s, order)
         # 연결된 견적 상태(수주확정)는 되돌리지 않는다(별도 화면에서 관리).
         s.query(DeliveryProof).filter_by(order_id=order_id).delete(synchronize_session=False)
         s.query(Order).filter_by(id=order_id).delete(synchronize_session=False)
         s.commit()
-        return {"ok": True, "ord_no": ord_no}
+        return {"ok": True, "project_no": project_no}
     finally:
         s.close()
 
@@ -2100,7 +2053,6 @@ def vendor_po_detail(po_id: int):
             "id": po.id,
             "po_no": po.po_no or "",
             "order_id": po.order_id,
-            "ord_no": order.ord_no if order else "",
             "customer_po_no": (order.po_no if order else "") or "",
             **_base_meta(s, rfq, order),   # 공통 기본정보
             "vendor_id": po.vendor_id or 0,
@@ -2203,7 +2155,7 @@ def vendor_po_preview(po_id: int, body: VendorPoPreview):
         return {
             "to": (vendor.email if vendor else "") or "",
             "subject": subject,
-            "body": _vendor_po_email_body(po, vendor, order, vessel, body.notes, lang),
+            "body": _vendor_po_email_body(po, vendor, order, vessel, body.notes, lang, _project_no_for_order(s, order)),
             "pdf_filename": f"{po.po_no}_PurchaseOrder.pdf",
             "smtp_configured": bool(os.getenv("SMTP_USER") and os.getenv("SMTP_PASSWORD")),
         }
@@ -2323,7 +2275,6 @@ def ar_overview():
                 "order_id": r.order_id,
                 "ci_no": r.ci_no or "",
                 "customer": cust,
-                "ord_no": o.ord_no if o else "",
                 "currency": r.currency or "USD",
                 "invoice_amount": round(r.invoice_amount or 0, 2),
                 "paid_amount": round(r.paid_amount or 0, 2),
@@ -2383,7 +2334,7 @@ def ar_soa_xlsx(status: str | None = None, currency: str | None = None):
         ws.append(["Filter: " + (", ".join(active_filters) if active_filters else "All")])
         ws.append([])
 
-        headers = ["CI No.", "Customer", "Order", "Currency", "Invoice",
+        headers = ["CI No.", "Customer", "Project No.", "Currency", "Invoice",
                    "Paid", "Outstanding", "Due Date", "Status"]
         ws.append(headers)
         head_row = ws.max_row
@@ -2406,7 +2357,7 @@ def ar_soa_xlsx(status: str | None = None, currency: str | None = None):
             invoice = round(r.invoice_amount or 0, 2)
             paid = round(r.paid_amount or 0, 2)
             outstanding = round(invoice - paid, 2)
-            ws.append([r.ci_no or "—", cust, o.ord_no if o else "—", cur,
+            ws.append([r.ci_no or "—", cust, _project_no_for_order(s, o) if o else "—", cur,
                        invoice, paid, outstanding, r.due_date or "—", st_label])
             t = totals.setdefault(cur, [0.0, 0.0, 0.0])
             t[0] += invoice
@@ -2635,7 +2586,6 @@ def vrfq_overview():
             rows.append({
                 "id": vr.id,
                 "rfq_id": vr.rfq_id,
-                "vrfq_no": vr.vrfq_no,
                 "customer_rfq_no": rfq_nos.get(vr.rfq_id, "—"),
                 "vendor": vendor_names.get(vr.vendor_id, "—"),
                 "vendor_email": vr.sent_to_email or vendor_emails.get(vr.vendor_id, "") or "",
@@ -2683,7 +2633,6 @@ def vendor_quote_overview():
                 "id": q.id,
                 "rfq_id": vr.rfq_id if vr else None,
                 "vendor_quote_no": getattr(q, "vendor_quote_no", None) or "—",
-                "vrfq_no": vr.vrfq_no if vr else "—",
                 "customer_rfq_no": rfq_nos.get(vr.rfq_id, "—") if vr else "—",
                 "vendor": vendor_names.get(vr.vendor_id, "—") if vr else "—",
                 "received_at": getattr(q, "received_at", None) or "",
@@ -2753,7 +2702,6 @@ def documents_overview():
             svc = getattr(o, "service_info", None) or {}
             rows.append({
                 "id": o.id,
-                "ord_no": o.ord_no,
                 "customer": cust_names.get(o.customer_id, "—"),
                 "vessel": vessel_names.get(o.vessel_id, "") if o.vessel_id else "",
                 "po_no": o.po_no or "",
@@ -2930,7 +2878,6 @@ def _document_detail_payload(session, order: Order) -> dict:
         "order": {
             "id": order.id,
             "rfq_id": rfq.id if rfq else 0,
-            "ord_no": order.ord_no,
             "po_no": order.po_no or "",
             "date": order.date or "",
             "status": _enum_val(order.status),
@@ -3201,7 +3148,7 @@ def commercial_invoice_pdf(order_id: int):
             items=ci.items or [], terms=ci.terms or {},
             currency=ci.currency or "USD", vat_rate=ci.vat_rate or 0.0,
             shipping=ci.shipping or {}, po_no=order.po_no or "",
-            export_ref=order.ord_no,
+            export_ref=_project_no_for_order(s, order),
         )
         pdf = generate_pdf("commercial_invoice", payload)
         return _doc_file_response(pdf, f"{ci.ci_no}_CI.pdf", "application/pdf")
@@ -3253,7 +3200,7 @@ def packing_list_pdf(order_id: int):
             items=pl.items or [], terms={},
             currency=ci.currency or "USD",
             shipping=ci.shipping or {}, po_no=order.po_no or "",
-            export_ref=order.ord_no,
+            export_ref=_project_no_for_order(s, order),
         )
         pdf = generate_pdf("packing_list", payload)
         return _doc_file_response(pdf, f"{pl.pl_no}_PL.pdf", "application/pdf")
@@ -3304,7 +3251,7 @@ def shipping_advice_pdf(order_id: int):
             items=(ci.items if ci else order.items) or [], terms={},
             currency=(ci.currency if ci else "USD") or "USD",
             shipping=sa.shipping or {}, po_no=order.po_no or "",
-            export_ref=order.ord_no,
+            export_ref=_project_no_for_order(s, order),
         )
         pdf = generate_pdf("shipping_advice", payload)
         return _doc_file_response(pdf, f"{sa.sa_no}_SA.pdf", "application/pdf")
@@ -3329,7 +3276,7 @@ def send_shipping_advice(order_id: int, body: ShippingAdviceSend):
             items=(ci.items if ci else order.items) or [], terms={},
             currency=(ci.currency if ci else "USD") or "USD",
             shipping=sa.shipping or {}, po_no=order.po_no or "",
-            export_ref=order.ord_no,
+            export_ref=_project_no_for_order(s, order),
         )
         pdf = generate_pdf("shipping_advice", payload)
         subject = body.subject or f"[K-MARIS] Shipping Advice {sa.sa_no}"
@@ -3525,7 +3472,6 @@ def vendor_po_overview():
             rows.append({
                 "id": po.id,
                 "po_no": po.po_no or "",
-                "ord_no": o.ord_no if o else "—",
                 "customer": cust_names.get(o.customer_id, "—") if o else "—",
                 "vendor": vendor_names.get(po.vendor_id, "—"),
                 "vendor_email": po.sent_to_email or "",
@@ -4085,56 +4031,8 @@ def change_my_password(body: PasswordChangeReq, user: dict = Depends(get_current
 
 
 # ── Write actions ─────────────────────────────────────────────────────────────
-_DOC_PREFIX = {
-    "vendor_rfq": "VRFQ",
-    "quotation": "QTN",
-    "ci": "CI",
-    "pl": "PL",
-    "sa": "SA",
-    "tax": "TAX",
-}
 
 
-def _next_doc_no(session, doc_type: str, company_prefix: str = "KMS") -> str:
-    """연단위 시퀀스 채번. 시퀀스가 기존 번호와 어긋나도 충돌 번호는 건너뛴다."""
-    yr = date.today().year
-    seq = session.query(DocSequence).filter_by(doc_type=doc_type, year=yr).first()
-    if not seq:
-        seq = DocSequence(doc_type=doc_type, year=yr, last_seq=0)
-        session.add(seq)
-    while True:
-        seq.last_seq += 1
-        no = f"{company_prefix}-{_DOC_PREFIX.get(doc_type, 'DOC')}-{yr}-{seq.last_seq:04d}"
-        if doc_type == "vendor_rfq" and \
-                session.query(VendorRFQ).filter_by(vrfq_no=no).first():
-            continue
-        if doc_type == "ci" and \
-                session.query(CommercialInvoice).filter_by(ci_no=no).first():
-            continue
-        if doc_type == "pl" and \
-                session.query(PackingList).filter_by(pl_no=no).first():
-            continue
-        if doc_type == "sa" and \
-                session.query(ShippingAdvice).filter_by(sa_no=no).first():
-            continue
-        if doc_type == "tax" and \
-                session.query(TaxInvoiceData).filter_by(tax_no=no).first():
-            continue
-        session.flush()
-        return no
-
-
-def _vrfq_no_for_rfq(session, rfq) -> str:
-    """Vendor RFQ 번호는 별도 채번(KMS-VRFQ-…) 없이 K-Maris RFQ No.를 그대로
-    사용한다. 한 RFQ를 여러 Vendor로 발송할 때는 vrfq_no UNIQUE 제약을 지키기
-    위해 -2, -3 … 접미사를 붙인다 (별도 시퀀스를 만들지 않음)."""
-    base = rfq.rfq_no
-    if not session.query(VendorRFQ).filter_by(vrfq_no=base).first():
-        return base
-    n = 2
-    while session.query(VendorRFQ).filter_by(vrfq_no=f"{base}-{n}").first():
-        n += 1
-    return f"{base}-{n}"
 
 
 class VendorRfqCreate(BaseModel):
@@ -4255,9 +4153,7 @@ def vendor_rfq_send(rfq_id: int, body: VendorRfqSendRequest):
             vendor = s.query(Vendor).filter_by(id=item.vendor_id).first()
             if not vendor:
                 continue
-            vrfq_no = _vrfq_no_for_rfq(s, rfq)
             vrfq = VendorRFQ(
-                vrfq_no=vrfq_no,
                 rfq_id=rfq.id,
                 vendor_id=vendor.id,
                 sent_date=sent_at[:10],
@@ -4267,12 +4163,9 @@ def vendor_rfq_send(rfq_id: int, body: VendorRfqSendRequest):
                 items=rfq.items or [],
             )
             s.add(vrfq)
-            # 세션이 autoflush=False 이므로 명시적 flush 가 없으면 다음 Vendor 의
-            # _vrfq_no_for_rfq() 가 방금 추가한 행을 보지 못해 같은 vrfq_no 를
-            # 재발급 → UNIQUE 충돌(여러 Vendor 동시 발신 시 500)이 난다.
             s.flush()
             saved += 1
-            result_rows.append({"vendor": vendor.name, "vrfq_no": vrfq_no})
+            result_rows.append({"vendor": vendor.name})
 
         rfq.status = RFQStatus.SOURCING
         s.commit()
@@ -4307,9 +4200,7 @@ def create_vendor_rfq(rfq_id: int, body: VendorRfqCreate):
             "qty": it.get("qty", 1),
         } for it in (rfq.items or [])]
 
-        vrfq_no = _vrfq_no_for_rfq(s, rfq)
         vrfq = VendorRFQ(
-            vrfq_no=vrfq_no,
             rfq_id=rfq.id,
             vendor_id=vendor.id,
             sent_date=date.today().strftime("%Y-%m-%d"),
@@ -4319,13 +4210,12 @@ def create_vendor_rfq(rfq_id: int, body: VendorRfqCreate):
         )
         s.add(vrfq)
         s.commit()
-        return {"ok": True, "vrfq_no": vrfq_no, "vendor": vendor.name}
+        return {"ok": True, "id": vrfq.id, "vendor": vendor.name}
     finally:
         s.close()
 
 
 class VendorRfqUpdate(BaseModel):
-    vrfq_no: str | None = None
     vendor_id: int | None = None
     sent_date: str | None = None
     sent_at: str | None = None
@@ -4359,7 +4249,6 @@ def vendor_rfq_detail(vrfq_id: int):
             for x in s.query(VendorRFQ).filter_by(rfq_id=rfq.id).order_by(VendorRFQ.id.desc()).all():
                 sibling_vrfqs.append({
                     "id": x.id,
-                    "vrfq_no": x.vrfq_no,
                     "vendor": vendor_names.get(x.vendor_id, "—"),
                     "vendor_email": x.sent_to_email or vendor_emails.get(x.vendor_id, "") or "",
                     "sent_at": x.sent_at or "",
@@ -4369,7 +4258,6 @@ def vendor_rfq_detail(vrfq_id: int):
                 })
         return {
             "id": vr.id,
-            "vrfq_no": vr.vrfq_no,
             "rfq_id": vr.rfq_id,
             "customer_rfq_no": rfq.customer_rfq_no if rfq else "",
             "kmaris_rfq_no": _rfq_no_disp(rfq.rfq_no) if rfq else "",
@@ -4404,14 +4292,6 @@ def update_vendor_rfq(vrfq_id: int, body: VendorRfqUpdate):
         vr = s.query(VendorRFQ).filter_by(id=vrfq_id).first()
         if not vr:
             raise HTTPException(status_code=404, detail="Vendor RFQ를 찾을 수 없습니다.")
-        if body.vrfq_no is not None:
-            no = body.vrfq_no.strip()
-            if not no:
-                raise HTTPException(status_code=400, detail="VRFQ No.를 입력하세요.")
-            dup = s.query(VendorRFQ).filter(VendorRFQ.vrfq_no == no, VendorRFQ.id != vrfq_id).first()
-            if dup:
-                raise HTTPException(status_code=400, detail="이미 사용 중인 VRFQ No.입니다.")
-            vr.vrfq_no = no
         if body.vendor_id is not None:
             vr.vendor_id = body.vendor_id
         if body.sent_to_email is not None:
@@ -4432,7 +4312,7 @@ def update_vendor_rfq(vrfq_id: int, body: VendorRfqUpdate):
                 "unit": (it.get("unit") or "").strip(),
             } for it in body.items if (it.get("part_no") or it.get("description"))]
         s.commit()
-        return {"ok": True, "vrfq_no": vr.vrfq_no}
+        return {"ok": True, "id": vr.id}
     finally:
         s.close()
 
@@ -4448,10 +4328,9 @@ def delete_vendor_rfq(vrfq_id: int):
         if s.query(VendorQuote).filter_by(vendor_rfq_id=vrfq_id).first():
             raise HTTPException(status_code=400,
                 detail="수신된 Vendor 견적이 있는 Vendor RFQ 입니다. 먼저 견적을 삭제하세요.")
-        vrfq_no = vr.vrfq_no
         s.query(VendorRFQ).filter_by(id=vrfq_id).delete(synchronize_session=False)
         s.commit()
-        return {"ok": True, "vrfq_no": vrfq_no}
+        return {"ok": True, "id": vrfq_id}
     finally:
         s.close()
 
@@ -4568,7 +4447,6 @@ def rfq_vendor_quotes(rfq_id: int):
                 "id": q.id,
                 "vendor_quote_no": getattr(q, "vendor_quote_no", None) or "—",
                 "vendor": vendor_names.get(vrfq.vendor_id, "—") if vrfq else "—",
-                "vrfq_no": vrfq.vrfq_no if vrfq else "—",
                 "received_date": q.received_date or "",
                 "received_at": getattr(q, "received_at", None) or "",
                 "currency": getattr(q, "currency", None) or "USD",
@@ -4603,7 +4481,6 @@ def vendor_quote_detail(vq_id: int):
             "id": q.id,
             "vendor_quote_no": q.vendor_quote_no or "",
             "vendor_rfq_id": q.vendor_rfq_id,
-            "vrfq_no": vr.vrfq_no if vr else "—",
             "rfq_id": vr.rfq_id if vr else None,
             "customer_rfq_no": _rfq_no_disp(rfq.rfq_no) if rfq else "",
             **_base_meta(s, rfq),   # 공통 기본정보(고객·선박·업무·Project No.·최초 RFQ)
@@ -5061,21 +4938,6 @@ def delete_rfq(rfq_id: int):
         s.close()
 
 
-def _next_quotation_no(session, company_prefix: str = "KMS") -> str:
-    """helpers.next_quotation_no 와 동일: KMS-QUO-yymm-NNN (월 단위 시퀀스)."""
-    today = date.today()
-    period = today.year * 100 + today.month
-    seq = session.query(DocSequence).filter_by(
-        doc_type="quotation_internal", year=period).first()
-    if not seq:
-        seq = DocSequence(doc_type="quotation_internal", year=period, last_seq=0)
-        session.add(seq)
-    while True:
-        seq.last_seq += 1
-        no = f"{company_prefix}-QUO-{today:%y%m}-{seq.last_seq:03d}"
-        if not session.query(Quotation).filter_by(qtn_no=no).first():
-            session.flush()
-            return no
 
 
 class CustomerQuoteCreate(BaseModel):

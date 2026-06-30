@@ -382,7 +382,6 @@ function VendorRfqList({
       vessel: (r) => r.vessel,
       workType: (r) => r.work_type,
     }),
-    { key: "vrfq_no", label: "VRFQ No.", text: (r) => r.vrfq_no || "" },
     { key: "customer_rfq_no", label: "Customer RFQ No.", text: (r) => r.customer_rfq_no || "" },
     { key: "vendor", label: "Vendor", text: (r) => r.vendor || "", filter: "facet" },
     { key: "vendor_email", label: "Recipient email", text: (r) => r.vendor_email || "" },
@@ -462,7 +461,6 @@ function VendorRfqDetailModal({
 }) {
   const [d, setD] = useState<VendorRfqDetail | null>(null);
   const [editing, setEditing] = useState(!!autoEdit);
-  const [vrfqNo, setVrfqNo] = useState("");
   const [vendorId, setVendorId] = useState<number | "">("");
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState("");
@@ -475,7 +473,6 @@ function VendorRfqDetailModal({
     fetchVendorRfqDetail(id)
       .then((data) => {
         setD(data);
-        setVrfqNo(data.vrfq_no || "");
         setVendorId(data.vendor_id || "");
         setEmail(data.vendor_email || "");
         setStatus(data.status || "");
@@ -490,7 +487,6 @@ function VendorRfqDetailModal({
     setErr(null);
     try {
       await updateVendorRfq(id, {
-        vrfq_no: vrfqNo,
         vendor_id: vendorId === "" ? undefined : vendorId,
         sent_to_email: email,
         status,
@@ -522,7 +518,7 @@ function VendorRfqDetailModal({
   }
 
   return (
-    <Modal title={d ? <ModalTitle label={`Vendor RFQ — ${d.vrfq_no}`} projectNo={d.project_no} /> : "Vendor RFQ details"} onClose={onClose} wide>
+    <Modal title={d ? <ModalTitle label="Vendor RFQ" projectNo={d.project_no} /> : "Vendor RFQ details"} onClose={onClose} wide>
       {!d ? (
         <div className="empty">Loading…</div>
       ) : (
@@ -539,10 +535,6 @@ function VendorRfqDetailModal({
 
               <div className="form-section-title">This vendor send info</div>
               <div className="form-grid">
-                <div className="form-field">
-                  <label>VRFQ No.</label>
-                  <input value={vrfqNo} onChange={(e) => setVrfqNo(e.target.value)} />
-                </div>
                 <div className="form-field">
                   <label>Vendor</label>
                   <select value={vendorId} onChange={(e) => setVendorId(e.target.value === "" ? "" : Number(e.target.value))}>
@@ -582,7 +574,6 @@ function VendorRfqDetailModal({
 
               <div className="form-section-title">This vendor send info</div>
               <dl className="intl-meta">
-                <div><dt>VRFQ No.</dt><dd>{d.vrfq_no || "—"}</dd></div>
                 <div><dt>Vendor</dt><dd>{d.vendor}</dd></div>
                 <div><dt>Recipient email</dt><dd>{d.vendor_email || "—"}</dd></div>
                 <div><dt>Sent at</dt><dd>{d.sent_at || d.sent_date || "—"}</dd></div>
@@ -625,7 +616,6 @@ function ProjectVendorRfqList({
         <table className="mini wide">
           <thead>
             <tr>
-              <th>VRFQ No.</th>
               <th>Vendor</th>
               <th>Contact</th>
               <th>Sent at</th>
@@ -636,7 +626,6 @@ function ProjectVendorRfqList({
           <tbody>
             {rows.map((r) => (
               <tr key={r.id} className={r.current ? "sel" : ""}>
-                <td>{r.vrfq_no}</td>
                 <td>{r.vendor}</td>
                 <td>{r.vendor_email || "—"}</td>
                 <td>{r.sent_at || "—"}</td>
@@ -1820,7 +1809,7 @@ function VendorQuoteAction({
                 <option value="">Select Vendor RFQ…</option>
                 {vendorRfqs.map((v) => (
                   <option key={v.id} value={v.id}>
-                    {v.vrfq_no} · {v.vendor}
+                    {v.vendor}
                   </option>
                 ))}
               </select>

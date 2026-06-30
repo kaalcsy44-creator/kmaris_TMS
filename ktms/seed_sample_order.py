@@ -68,16 +68,14 @@ def seed_sample_order() -> None:
     try:
         existing = session.query(Order).filter_by(po_no=SAMPLE_PO_NO).first()
         if existing:
-            print(f"[SKIP] 샘플 오더가 이미 있습니다: {existing.ord_no} (po_no={SAMPLE_PO_NO})")
+            print(f"[SKIP] 샘플 오더가 이미 있습니다: (po_no={SAMPLE_PO_NO})")
             print(f"       트래킹: {tracking_url('order', existing.tracking_token)}")
             return
 
         cust = _get_or_create_customer(session)
         vsl = _get_or_create_vessel(session, cust.id)
 
-        ord_no = next_doc_no("order")
         order = Order(
-            ord_no=ord_no,
             customer_id=cust.id,
             vessel_id=vsl.id,
             po_no=SAMPLE_PO_NO,
@@ -100,7 +98,7 @@ def seed_sample_order() -> None:
         session.add(order)
         session.commit()
 
-        print(f"[OK] 샘플 오더 생성 완료: {ord_no}")
+        print(f"[OK] 샘플 오더 생성 완료: (po_no={SAMPLE_PO_NO})")
         print(f"     Customer : {cust.name}")
         print(f"     Vessel   : {vsl.name}")
         print(f"     상태     : {order.status.value}  (= Order Confirmed)")

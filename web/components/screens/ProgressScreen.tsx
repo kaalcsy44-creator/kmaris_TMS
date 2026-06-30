@@ -722,7 +722,7 @@ function PipelineModal({
     2: r.vrfq_vendors,
     3: joinDot(r.vquote_no, r.vendor_amount),
     4: joinDot(r.cquote_no, r.customer_amount),
-    5: joinDot(r.customer_po_no, r.ord_no),
+    5: r.customer_po_no || "",
     6: joinDot(r.vendor_po_no, r.vendor),
   };
   const isDomestic = (r.trade_type || "수출") === "내수";

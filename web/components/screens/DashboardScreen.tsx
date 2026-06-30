@@ -172,7 +172,7 @@ function HomeTab() {
         out.push({
           id: `ar-${a.id}`,
           kind: "AR overdue",
-          ref: a.ci_no || a.ord_no || "—",
+          ref: a.ci_no || a.project_no || "—",
           customer: a.customer || "",
           due: a.due_date,
           days: daysBetween(t, a.due_date),

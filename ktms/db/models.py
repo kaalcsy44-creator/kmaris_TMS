@@ -182,7 +182,6 @@ class RFQ(Base):
 class VendorRFQ(Base):
     __tablename__ = "vendor_rfqs"
     id             = Column(Integer, primary_key=True)
-    vrfq_no        = Column(String(40), unique=True, nullable=False)
     rfq_id         = Column(Integer, ForeignKey("rfqs.id"))
     vendor_id      = Column(Integer, ForeignKey("vendors.id"))
     sent_date      = Column(String(10))
@@ -229,7 +228,6 @@ class Quotation(Base):
 class Order(Base):
     __tablename__ = "orders"
     id             = Column(Integer, primary_key=True)
-    ord_no         = Column(String(40), unique=True, nullable=False)
     quotation_id   = Column(Integer, ForeignKey("quotations.id"), nullable=True)
     rfq_id         = Column(Integer, ForeignKey("rfqs.id"), nullable=True)  # 견적 없이 등록 시 RFQ 직접 연결
     customer_id    = Column(Integer, ForeignKey("customers.id"))

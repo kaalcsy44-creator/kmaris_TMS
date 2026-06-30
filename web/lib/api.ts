@@ -263,7 +263,7 @@ export function createOrder(body: {
   trade_type?: string;
   promised_delivery?: string | null;
   items: PoWorkItem[];
-}): Promise<{ ok: boolean; id: number; ord_no: string }> {
+}): Promise<{ ok: boolean; id: number; project_no: string }> {
   return post("/api/admin/orders", body);
 }
 
@@ -643,7 +643,7 @@ export function deleteArRecord(arId: number): Promise<{ ok: boolean }> {
 export function createVendorRfq(
   rfqId: number,
   vendorId: number
-): Promise<{ ok: boolean; vrfq_no: string; vendor: string }> {
+): Promise<{ ok: boolean; id: number; vendor: string }> {
   return post(`/api/admin/rfq/${rfqId}/vendor-rfq`, { vendor_id: vendorId });
 }
 
@@ -776,7 +776,6 @@ export function fetchVendorRfqDetail(id: number): Promise<VendorRfqDetail> {
 export function updateVendorRfq(
   id: number,
   body: {
-    vrfq_no?: string;
     vendor_id?: number;
     sent_date?: string;
     sent_at?: string;
@@ -784,11 +783,11 @@ export function updateVendorRfq(
     status?: string;
     items?: { part_no: string; description: string; qty: number; unit?: string }[];
   }
-): Promise<{ ok: boolean; vrfq_no: string }> {
+): Promise<{ ok: boolean; id: number }> {
   return put(`/api/admin/vendor-rfq/${id}`, body);
 }
 
-export function deleteVendorRfq(id: number): Promise<{ ok: boolean; vrfq_no: string }> {
+export function deleteVendorRfq(id: number): Promise<{ ok: boolean; id: number }> {
   return del(`/api/admin/vendor-rfq/${id}`);
 }
 
@@ -854,11 +853,11 @@ export function updateOrder(
     promised_delivery?: string | null;
     items?: PoWorkItem[];
   }
-): Promise<{ ok: boolean; id: number; ord_no: string }> {
+): Promise<{ ok: boolean; id: number; project_no: string }> {
   return put(`/api/admin/orders/${id}`, body);
 }
 
-export function deleteOrder(id: number): Promise<{ ok: boolean; ord_no: string }> {
+export function deleteOrder(id: number): Promise<{ ok: boolean; project_no: string }> {
   return del(`/api/admin/orders/${id}`);
 }
 

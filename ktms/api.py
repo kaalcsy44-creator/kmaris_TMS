@@ -167,7 +167,7 @@ def _order_payload(order: Order) -> dict:
     return {
         "found":        True,
         "type":         "order",
-        "number":       order.ord_no,
+        "number":       order.po_no or "—",
         "company":      cust.name   if cust   else "—",
         "vessel":       vessel.name if vessel else "—",
         "item_summary": summary,
@@ -198,7 +198,7 @@ def track(
     ?type=rfq&token={tracking_token}
     ?type=rfq&no={rfq_no}            e.g. KMS-CRFQ-2026-0001
     ?type=order&token={tracking_token}
-    ?type=order&no={ord_no}          e.g. KMS-ORD-2026-0001
+    ?type=order&no={po_no}           고객 PO 번호로 조회
     """
     if not token and not no:
         return NOT_FOUND
@@ -215,7 +215,7 @@ def track(
         else:  # order
             order = (
                 _lookup(s, Order, tracking_token=token) if token
-                else _lookup(s, Order, ord_no=no.upper())
+                else _lookup(s, Order, po_no=no)
             )
             return _order_payload(order) if order else NOT_FOUND
     finally:
