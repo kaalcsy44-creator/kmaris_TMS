@@ -2055,8 +2055,9 @@ def create_purchase_order(body: PurchaseOrderCreate):
                 "amount": it.amount if it.amount is not None else qty * unit_price,
             })
 
-        po_no = (body.po_no or "").strip() or _km_po_no(s, order)
-        if s.query(PurchaseOrder).filter_by(po_no=po_no).first():
+        # 수동 입력. 비우면 번호 없이 저장(나중에 편집에서 채움).
+        po_no = (body.po_no or "").strip() or None
+        if po_no and s.query(PurchaseOrder).filter_by(po_no=po_no).first():
             raise HTTPException(status_code=400, detail=f"이미 존재하는 PO No. 입니다: {po_no}")
         po = PurchaseOrder(
             po_no=po_no,
@@ -5101,8 +5102,9 @@ def create_customer_quote(rfq_id: int, body: CustomerQuoteCreate,
         if body.remarks and not terms.get("remarks"):
             terms["remarks"] = body.remarks
 
-        qtn_no = (body.qtn_no or "").strip() or _next_quotation_no(s)
-        if s.query(Quotation).filter_by(qtn_no=qtn_no).first():
+        # 수동 입력. 비우면 번호 없이 저장(나중에 편집에서 채움).
+        qtn_no = (body.qtn_no or "").strip() or None
+        if qtn_no and s.query(Quotation).filter_by(qtn_no=qtn_no).first():
             raise HTTPException(status_code=409, detail="Quotation No. already exists.")
         sent_at = (body.sent_at or "").strip()
         qtn = Quotation(
@@ -5122,7 +5124,7 @@ def create_customer_quote(rfq_id: int, body: CustomerQuoteCreate,
         )
         s.add(qtn)
         s.commit()
-        return {"ok": True, "id": qtn.id, "qtn_no": qtn_no}
+        return {"ok": True, "id": qtn.id, "qtn_no": qtn.qtn_no or ""}
     finally:
         s.close()
 

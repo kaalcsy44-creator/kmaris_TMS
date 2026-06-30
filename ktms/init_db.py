@@ -98,6 +98,26 @@ def migrate_columns():
             conn.execute(text("UPDATE rfqs SET work_type='SERVICE' WHERE work_type='서비스'"))
 
 
+def migrate_relax_not_null():
+    """수동·선택 입력으로 전환된 번호 컬럼의 NOT NULL 제약 해제. 멱등.
+    신규 DB는 모델에서 이미 nullable 이라 ALTER 가 필요 없다."""
+    engine = get_engine()
+    insp = inspect(engine)
+    targets = [("quotations", "qtn_no")]
+    with engine.begin() as conn:
+        for table, col in targets:
+            if not insp.has_table(table):
+                continue
+            info = {c["name"]: c for c in insp.get_columns(table)}.get(col)
+            if info is None or info.get("nullable", True):
+                continue
+            if engine.dialect.name == "postgresql":
+                conn.execute(text(f"ALTER TABLE {table} ALTER COLUMN {col} DROP NOT NULL"))
+                print(f"[OK] {table}.{col} NOT NULL dropped.")
+            else:
+                print(f"[SKIP] {table}.{col} NOT NULL (sqlite — 모델 재생성 시 반영).")
+
+
 def migrate_rfq_numbers():
     """기존 KMS-CRFQ-YYYY-NNNN 형식의 RFQ 번호를 KMS-RFQ-yymm-NNN 형식으로 변환.
 
@@ -263,6 +283,7 @@ if __name__ == "__main__":
     print("Initializing KTMS database...")
     create_tables()
     migrate_columns()
+    migrate_relax_not_null()
     migrate_rfq_numbers()
     migrate_quotation_numbers()
     seed_admin()

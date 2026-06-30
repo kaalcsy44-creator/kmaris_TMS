@@ -208,7 +208,7 @@ class VendorQuote(Base):
 class Quotation(Base):
     __tablename__ = "quotations"
     id              = Column(Integer, primary_key=True)
-    qtn_no          = Column(String(40), unique=True, nullable=False)
+    qtn_no          = Column(String(40), unique=True, nullable=True)   # 수동·선택 입력
     rfq_id          = Column(Integer, ForeignKey("rfqs.id"), nullable=True)
     customer_id     = Column(Integer, ForeignKey("customers.id"))
     vessel_id       = Column(Integer, ForeignKey("vessels.id"), nullable=True)
