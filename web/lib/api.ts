@@ -870,6 +870,7 @@ export function updatePurchaseOrder(
     vendor_id?: number;
     po_no?: string;
     date?: string;
+    sent_date?: string;
     status?: string;
     items?: PoWorkItem[];
   }

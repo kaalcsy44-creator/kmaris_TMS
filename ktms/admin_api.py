@@ -2078,6 +2078,7 @@ class PurchaseOrderUpdate(BaseModel):
     vendor_id: int | None = None
     po_no: str | None = None
     date: str | None = None
+    sent_date: str | None = None
     status: str | None = None
     items: list[PoWorkItem] | None = None
 
@@ -2133,6 +2134,9 @@ def update_purchase_order(po_id: int, body: PurchaseOrderUpdate):
                 po.po_no = new_no
         if body.date is not None:
             po.date = body.date or po.date
+        if body.sent_date is not None:
+            # 메일 발송 없이도 수동으로 발송일 입력 가능 (빈 값이면 해제)
+            po.sent_date = body.sent_date.strip() or None
         if body.status is not None:
             po.status = body.status.strip() or po.status
         if body.items is not None:

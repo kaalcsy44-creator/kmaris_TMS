@@ -600,8 +600,7 @@ function VendorPoTab({
     { key: "po_no", label: "K-Maris PO No.", text: (p) => p.po_no || "" },
     { key: "vendor", label: "Vendor", text: (p) => p.vendor || "", filter: "facet" },
     { key: "vendor_email", label: "Recipient email", text: (p) => p.vendor_email || "" },
-    { key: "date", label: "PO date", text: (p) => p.date || "", filter: "date" },
-    { key: "sent_date", label: "Sent date", text: (p) => p.sent_date || "" },
+    { key: "sent_date", label: "Sent date", text: (p) => p.sent_date || "", filter: "date" },
     { key: "status", label: "Status", text: (p) => p.status || "", filter: "facet", render: (p) => <span className="ar-badge">{tr(p.status)}</span> },
     { key: "items", label: "Items", numeric: true, text: (p) => String(p.items.length), sortValue: (p) => p.items.length },
   ];
@@ -678,7 +677,7 @@ function VendorPoDetailModal({
   const [editing, setEditing] = useState(false);
   const [vendorId, setVendorId] = useState<number | "">("");
   const [poNo, setPoNo] = useState("");
-  const [date, setDate] = useState("");
+  const [sentDate, setSentDate] = useState("");
   const [status, setStatus] = useState("");
   const [items, setItems] = useState<PoWorkItem[]>([]);
   const [busy, setBusy] = useState(false);
@@ -696,7 +695,7 @@ function VendorPoDetailModal({
             ? data.po_no
             : kmFromStage5 || data.po_no || ""
         );
-        setDate(data.date || "");
+        setSentDate(data.sent_date || "");
         setStatus(data.status || "");
         setItems(data.items.length ? data.items.map(normalizeItem) : [blankItem()]);
       })
@@ -710,7 +709,7 @@ function VendorPoDetailModal({
       await updatePurchaseOrder(id, {
         vendor_id: vendorId === "" ? undefined : vendorId,
         po_no: poNo.trim() || undefined,
-        date,
+        sent_date: sentDate,
         status,
         items: cleanItems(items),
       });
@@ -783,8 +782,8 @@ function VendorPoDetailModal({
               />
             </div>
             <div className="form-field">
-              <label>PO date</label>
-              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+              <label>Sent date</label>
+              <input type="date" value={sentDate} onChange={(e) => setSentDate(e.target.value)} />
             </div>
             <div className="form-field">
               <label>Status</label>
@@ -806,7 +805,6 @@ function VendorPoDetailModal({
             <div><dt>K-Maris PO No.</dt><dd>{d.po_no || "—"}</dd></div>
             <div><dt>Vendor</dt><dd>{d.vendor}</dd></div>
             <div><dt>Recipient email</dt><dd>{d.vendor_email || "—"}</dd></div>
-            <div><dt>PO date</dt><dd>{d.date || "—"}</dd></div>
             <div><dt>Sent date</dt><dd>{d.sent_date || "—"}</dd></div>
             <div><dt>Status</dt><dd>{tr(d.status)}</dd></div>
             <div><dt>Items</dt><dd>{d.items.length}</dd></div>
