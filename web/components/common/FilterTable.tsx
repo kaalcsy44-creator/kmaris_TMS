@@ -1,10 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { useColumnLayout } from "./useColumnLayout";
+import { ColumnResizer, ColumnsButton, dragHandleProps } from "./tableLayout";
 
 // Progress(진행현황) 표의 컬럼 헤더 정렬·필터 UX를 제네릭으로 추출한 공용 테이블.
 // ProgressScreen 의 PipelineTable 과 동일한 pl-* CSS 클래스를 그대로 사용해
 // 시각·동작이 일치한다. 각 목록 화면은 ColumnDef 배열만 정의하면 된다.
+// tableId 를 주면 컬럼 폭 조절·순서 변경·표시/숨김(브라우저에 저장)이 활성화된다.
 
 export type FilterKind = "facet" | "date" | "none";
 
@@ -42,6 +45,7 @@ export default function FilterTable<T>({
   leftActions,
   defaultSortKey = null,
   defaultSortDir = "asc",
+  tableId,
 }: {
   rows: T[];
   columns: ColumnDef<T>[];
@@ -57,6 +61,8 @@ export default function FilterTable<T>({
   defaultSortKey?: string | null;
   /** 초기 정렬 방향(기본 오름차순). */
   defaultSortDir?: SortDir;
+  /** 지정 시 컬럼 폭·순서·표시여부 커스터마이즈를 활성화(localStorage 저장 키). */
+  tableId?: string;
 }) {
   const [sortKey, setSortKey] = useState<string | null>(defaultSortKey);
   const [sortDir, setSortDir] = useState<SortDir>(defaultSortDir);
@@ -64,8 +70,19 @@ export default function FilterTable<T>({
   const [dates, setDates] = useState<Record<string, { from: string; to: string }>>({});
   const [openCol, setOpenCol] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ left: number; top: number }>({ left: 0, top: 0 });
+  const [dragKey, setDragKey] = useState<string | null>(null);
 
   const colByKey = (k: string) => columns.find((c) => c.key === k)!;
+
+  // 컬럼 레이아웃(폭·순서·표시) — tableId 없으면 코드 정의 그대로 사용.
+  const layout = useColumnLayout(tableId ?? "__off__", columns);
+  const customize = !!tableId;
+  const orderedColumns = customize
+    ? layout.visibleKeys
+        .map((k) => columns.find((c) => c.key === k))
+        .filter((c): c is ColumnDef<T> => !!c)
+    : columns;
+  const drag = { active: dragKey, set: setDragKey };
 
   function openMenu(key: string, e: React.MouseEvent<HTMLElement>) {
     if (openCol === key) {
@@ -234,37 +251,49 @@ export default function FilterTable<T>({
         <span className="pl-search-count">
           {displayRows.length} / {rows.length}
         </span>
+        {customize ? <ColumnsButton cols={columns} layout={layout} /> : null}
         {actions ? <span className="pl-toolbar-actions">{actions}</span> : null}
       </div>
 
       <div className="pl-table-wrap">
-        <table className="pipeline">
+        <table className={`pipeline${customize ? " customizable" : ""}`}>
           <colgroup>
-            {columns.map((c) => (
-              <col key={c.key} className={colClass(c.key)} />
-            ))}
+            {orderedColumns.map((c) => {
+              const w = customize ? layout.widths[c.key] : undefined;
+              return (
+                <col
+                  key={c.key}
+                  className={colClass(c.key)}
+                  style={w ? { width: w, minWidth: w } : undefined}
+                />
+              );
+            })}
           </colgroup>
           <thead>
             <tr>
-              {columns.map((c) => {
+              {orderedColumns.map((c) => {
                 const sorted = sortKey === c.key;
                 const filtered = isColFiltered(c);
                 const hasMenu = (c.filter && c.filter !== "none") || true;
                 return (
                   <th
                     key={c.key}
-                    className={`pl-th ${colClass(c.key)}${openCol === c.key ? " open" : ""}${sorted || filtered ? " active" : ""}`}
+                    className={`pl-th ${colClass(c.key)}${openCol === c.key ? " open" : ""}${sorted || filtered ? " active" : ""}${dragKey === c.key ? " dragging" : ""}`}
                     aria-sort={sorted ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
                   >
                     <button
                       type="button"
                       className="pl-th-btn"
                       onClick={(e) => (hasMenu ? openMenu(c.key, e) : undefined)}
+                      {...(customize ? dragHandleProps(c.key, layout, drag) : {})}
                     >
                       <span className="pl-th-label">{c.label}</span>
                       {filtered ? <span className="pl-th-dot" title="Filter applied" /> : null}
                       <span className="pl-th-caret">{sorted ? (sortDir === "asc" ? "▲" : "▼") : "▾"}</span>
                     </button>
+                    {customize ? (
+                      <ColumnResizer onResize={(px) => layout.setWidth(c.key, px)} />
+                    ) : null}
                   </th>
                 );
               })}
@@ -273,7 +302,7 @@ export default function FilterTable<T>({
           <tbody>
             {displayRows.length === 0 ? (
               <tr>
-                <td className="pl-empty" colSpan={columns.length}>
+                <td className="pl-empty" colSpan={orderedColumns.length}>
                   {empty}
                 </td>
               </tr>
@@ -285,7 +314,7 @@ export default function FilterTable<T>({
                   onClick={onRowClick ? () => onRowClick(r) : undefined}
                   style={onRowClick ? { cursor: "pointer" } : undefined}
                 >
-                  {columns.map((c) => (
+                  {orderedColumns.map((c) => (
                     <td key={c.key} className={`${colClass(c.key)}${c.numeric ? " num" : ""}`}>
                       {c.render ? c.render(r) : c.text(r) || <span className="muted">—</span>}
                     </td>

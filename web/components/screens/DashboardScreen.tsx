@@ -259,6 +259,7 @@ function HomeTab() {
         <div className="state">Loading…</div>
       ) : (
         <FilterTable
+          tableId="dash-quotes"
           rows={qtnRows}
           columns={quoteCols}
           getRowKey={(r) => r.id}
@@ -276,6 +277,7 @@ function HomeTab() {
         <div className="state">Loading…</div>
       ) : (
         <FilterTable
+          tableId="dash-activity"
           rows={activityRows}
           columns={activityCols}
           getRowKey={(r) => r.id}
@@ -293,6 +295,7 @@ function HomeTab() {
         <div className="state">Loading…</div>
       ) : (
         <FilterTable
+          tableId="dash-sales"
           rows={arRows}
           columns={salesCols}
           getRowKey={(r) => r.id}
@@ -310,6 +313,7 @@ function HomeTab() {
         <div className="state">Loading…</div>
       ) : (
         <FilterTable
+          tableId="dash-delays"
           rows={delayRows}
           columns={delayCols}
           getRowKey={(r) => r.id}

@@ -15,6 +15,8 @@ import {
   deleteRfqStageNote,
 } from "@/lib/api";
 import { useCachedData, invalidateCache } from "@/lib/useCachedData";
+import { useColumnLayout } from "@/components/common/useColumnLayout";
+import { ColumnResizer, ColumnsButton, dragHandleProps } from "@/components/common/tableLayout";
 import type { PipelineRow, CustomerOption, SettingsVessel, StageNote } from "@/lib/types";
 import WorkTypeBadge from "@/components/WorkTypeBadge";
 import { tr } from "@/lib/labels";
@@ -108,6 +110,7 @@ export default function ProgressScreen() {
             <div className="state">No deals registered.</div>
           ) : (
             <PipelineTable
+              tableId="progress-customer"
               rows={pipeline.rows}
               steps={CUSTOMER_STEPS}
               stageOf={(r) => customerStage(r.stage)}
@@ -130,6 +133,7 @@ export default function ProgressScreen() {
             <div className="state">No deals registered.</div>
           ) : (
             <PipelineTable
+              tableId="progress-internal"
               rows={pipeline.rows}
               steps={pipeline.steps}
               customers={customers ?? []}
@@ -209,6 +213,18 @@ const PIPELINE_COLUMNS: { key: ColKey; label: string }[] = [
   { key: "assignee", label: "PIC" },
 ];
 
+// 컬럼 key → 기본 폭 CSS 클래스(table-layout: fixed 기준폭).
+const PLC_CLASS: Record<ColKey, string> = {
+  received_at: "plc-date",
+  customer: "plc-customer",
+  vendor: "plc-vendor",
+  work_type: "plc-work",
+  vessel: "plc-vessel",
+  project_title: "plc-project",
+  stage: "plc-stage",
+  assignee: "plc-assignee",
+};
+
 /** 거래의 벤더 표시값 — 확정 벤더(PO) 우선, 없으면 RFQ 발송 벤더 목록. */
 function vendorOf(r: PipelineRow): string {
   return r.vendor || r.vrfq_vendors || "";
@@ -247,6 +263,7 @@ function PipelineTable({
   vessels,
   onChanged,
   stageOf = (r) => r.stage,
+  tableId = "progress-internal",
 }: {
   rows: PipelineRow[];
   steps: string[];
@@ -255,10 +272,19 @@ function PipelineTable({
   onChanged: () => void;
   // 단계 체계 추상화: 내부확인용=12단계(r.stage), 고객확인용=7단계(매핑값)
   stageOf?: (r: PipelineRow) => number;
+  // 컬럼 커스터마이즈 저장 키(내부/고객 뷰 별도)
+  tableId?: string;
 }) {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [sortKey, setSortKey] = useState<ColKey | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [dragKey, setDragKey] = useState<string | null>(null);
+  // 컬럼 폭·순서·표시여부 (localStorage 저장)
+  const layout = useColumnLayout(tableId, PIPELINE_COLUMNS);
+  const drag = { active: dragKey, set: setDragKey };
+  const orderedColumns = layout.visibleKeys
+    .map((k) => PIPELINE_COLUMNS.find((c) => c.key === k))
+    .filter((c): c is { key: ColKey; label: string } => !!c);
   // 담당자(PIC) 범위: sales 는 서버에서 본인 건만 내려오므로 항상 잠금 표시.
   // admin/viewer 는 "내 담당만" 토글로 본인(username) 건만 클라이언트 필터.
   const me = getUser();
@@ -519,23 +545,26 @@ function PipelineTable({
         <span className="pl-search-count">
           {displayRows.length} / {rows.length}
         </span>
+        <ColumnsButton cols={PIPELINE_COLUMNS} layout={layout} />
       </div>
 
       <div className="pl-table-wrap">
-        <table className="pipeline">
+        <table className="pipeline customizable">
           <colgroup>
-            <col className="plc-date" />
-            <col className="plc-customer" />
-            <col className="plc-vendor" />
-            <col className="plc-work" />
-            <col className="plc-vessel" />
-            <col className="plc-project" />
-            <col className="plc-stage" />
-            <col className="plc-assignee" />
+            {orderedColumns.map((c) => {
+              const w = layout.widths[c.key];
+              return (
+                <col
+                  key={c.key}
+                  className={PLC_CLASS[c.key]}
+                  style={w ? { width: w, minWidth: w } : undefined}
+                />
+              );
+            })}
           </colgroup>
           <thead>
             <tr>
-              {PIPELINE_COLUMNS.map((c) => {
+              {orderedColumns.map((c) => {
                 const sorted = sortKey === c.key;
                 const filtered = isColFiltered(c.key);
                 return (
@@ -543,7 +572,7 @@ function PipelineTable({
                     key={c.key}
                     className={`pl-th${openCol === c.key ? " open" : ""}${
                       sorted || filtered ? " active" : ""
-                    }`}
+                    }${dragKey === c.key ? " dragging" : ""}`}
                     aria-sort={
                       sorted ? (sortDir === "asc" ? "ascending" : "descending") : "none"
                     }
@@ -552,6 +581,7 @@ function PipelineTable({
                       type="button"
                       className="pl-th-btn"
                       onClick={(e) => openMenu(c.key, e)}
+                      {...dragHandleProps(c.key, layout, drag)}
                     >
                       <span className="pl-th-label">{c.label}</span>
                       {filtered ? <span className="pl-th-dot" title="Filter applied" /> : null}
@@ -559,6 +589,7 @@ function PipelineTable({
                         {sorted ? (sortDir === "asc" ? "▲" : "▼") : "▾"}
                       </span>
                     </button>
+                    <ColumnResizer onResize={(px) => layout.setWidth(c.key, px)} />
                   </th>
                 );
               })}
@@ -567,7 +598,7 @@ function PipelineTable({
           <tbody>
             {displayRows.length === 0 ? (
               <tr>
-                <td className="pl-empty" colSpan={PIPELINE_COLUMNS.length}>
+                <td className="pl-empty" colSpan={orderedColumns.length}>
                   No deals match the filters.
                 </td>
               </tr>
@@ -582,25 +613,15 @@ function PipelineTable({
                     }`}
                     onClick={() => setSelectedId(r.rfq_id)}
                   >
-                    <td className="nowrap">
-                      <div className="proj-cell">
-                        <div className="pn">{r.project_no || <span className="muted">—</span>}</div>
-                        {r.received_at ? <div className="pn-at">{fmtStageDate(r.received_at)}</div> : null}
-                      </div>
-                    </td>
-                    <td className="strong">{r.customer || "No customer"}</td>
-                    <td className="pl-td-vendor">{vendorOf(r) || <span className="muted">—</span>}</td>
-                    <td>
-                      <WorkTypeBadge type={r.work_type} />
-                    </td>
-                    <td>{r.vessel || <span className="muted">No vessel</span>}</td>
-                    <td>
-                      {r.project_title || <span className="muted">No title</span>}
-                    </td>
-                    <td className="pl-td-stage">
-                      <StageBar stage={stageOf(r)} steps={resolveSteps(steps, r.work_type)} />
-                    </td>
-                    <td>{r.assignee || <span className="muted">—</span>}</td>
+                    {orderedColumns.map((c) => (
+                      <PipelineCell
+                        key={c.key}
+                        colKey={c.key}
+                        r={r}
+                        steps={steps}
+                        stage={stageOf(r)}
+                      />
+                    ))}
                   </tr>
                 );
               })
@@ -623,6 +644,55 @@ function PipelineTable({
       ) : null}
     </>
   );
+}
+
+/** 파이프라인 테이블 셀 — 컬럼 key 에 따라 내용/클래스를 렌더(순서 변경에 대응). */
+function PipelineCell({
+  colKey,
+  r,
+  steps,
+  stage,
+}: {
+  colKey: ColKey;
+  r: PipelineRow;
+  steps: string[];
+  stage: number;
+}) {
+  switch (colKey) {
+    case "received_at":
+      return (
+        <td className="nowrap">
+          <div className="proj-cell">
+            <div className="pn">{r.project_no || <span className="muted">—</span>}</div>
+            {r.received_at ? <div className="pn-at">{fmtStageDate(r.received_at)}</div> : null}
+          </div>
+        </td>
+      );
+    case "customer":
+      return <td className="strong">{r.customer || "No customer"}</td>;
+    case "vendor":
+      return <td className="pl-td-vendor">{vendorOf(r) || <span className="muted">—</span>}</td>;
+    case "work_type":
+      return (
+        <td>
+          <WorkTypeBadge type={r.work_type} />
+        </td>
+      );
+    case "vessel":
+      return <td>{r.vessel || <span className="muted">No vessel</span>}</td>;
+    case "project_title":
+      return <td>{r.project_title || <span className="muted">No title</span>}</td>;
+    case "stage":
+      return (
+        <td className="pl-td-stage">
+          <StageBar stage={stage} steps={resolveSteps(steps, r.work_type)} />
+        </td>
+      );
+    case "assignee":
+      return <td>{r.assignee || <span className="muted">—</span>}</td>;
+    default:
+      return <td />;
+  }
 }
 
 /** 통합 파이프라인 상세 모달 — 테이블 행 클릭 시 전 구간 문서 체인을 팝업으로 보여준다.

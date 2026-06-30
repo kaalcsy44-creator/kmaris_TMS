@@ -284,6 +284,7 @@ function CustomerRfqList({
   return (
     <>
       <FilterTable
+        tableId="rfq-list"
         rows={rows}
         columns={columns}
         getRowKey={(r) => r.id}
@@ -404,6 +405,7 @@ function VendorRfqList({
   return (
     <>
       <FilterTable
+        tableId="vendor-rfq-list"
         rows={rows}
         columns={columns}
         getRowKey={(r) => r.id}
@@ -777,6 +779,7 @@ function VendorQuoteList({
   return (
     <>
       <FilterTable
+        tableId="vendor-quote-list"
         rows={rows}
         columns={columns}
         getRowKey={(r) => r.id}
@@ -1096,6 +1099,7 @@ function CustomerQuoteList({
   return (
     <>
       <FilterTable
+        tableId="quotation-list"
         rows={rows}
         columns={columns}
         getRowKey={(r) => r.id}

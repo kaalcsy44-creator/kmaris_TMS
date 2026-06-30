@@ -247,6 +247,7 @@ function ArOverview() {
       ) : (
         <FilterTable
           key={stageTab}
+          tableId={`ar-stage-${stageTab}`}
           rows={rows}
           columns={columns}
           getRowKey={(r) => r.id}

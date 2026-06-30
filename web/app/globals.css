@@ -1691,6 +1691,110 @@ table.perm-matrix td.perm-mod {
 table.pipeline thead th.pl-th {
   padding: 0;
   white-space: nowrap;
+  position: relative;
+}
+
+/* ── 컬럼 커스터마이즈(폭 조절·드래그 재정렬·표시/숨김) ───────────────── */
+/* 폭 조절 핸들 — 헤더 셀 우측 가장자리 */
+.pl-col-resizer {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  width: 7px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 3;
+  touch-action: none;
+}
+.pl-col-resizer::after {
+  content: "";
+  position: absolute;
+  top: 20%;
+  left: 3px;
+  width: 2px;
+  height: 60%;
+  background: transparent;
+  border-radius: 2px;
+}
+.pl-col-resizer:hover::after,
+body.col-resizing .pl-col-resizer::after {
+  background: var(--blue);
+}
+body.col-resizing {
+  cursor: col-resize !important;
+  user-select: none;
+}
+/* 드래그 재정렬 — 끌고 있는 헤더 */
+table.pipeline.customizable thead th.pl-th .pl-th-btn {
+  cursor: grab;
+}
+table.pipeline thead th.pl-th.dragging {
+  opacity: 0.5;
+  background: #dbe6f6;
+}
+/* Columns 버튼 + 표시/숨김 메뉴 */
+.pl-cols-btn-wrap {
+  position: relative;
+  display: inline-flex;
+}
+.pl-cols-btn {
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 7px;
+  padding: 5px 11px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #44546a;
+  cursor: pointer;
+}
+.pl-cols-btn:hover {
+  background: #eef3fb;
+  color: var(--blue);
+}
+.pl-cols-menu {
+  position: absolute;
+  top: calc(100% + 5px);
+  right: 0;
+  z-index: 60;
+  width: 220px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  box-shadow: 0 10px 28px rgba(20, 40, 80, 0.16);
+  padding: 8px;
+}
+.pl-cols-menu-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  font-weight: 700;
+  color: #8595a8;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  padding: 4px 6px 8px;
+}
+.pl-cols-menu-list {
+  max-height: 320px;
+  overflow-y: auto;
+}
+.pl-cols-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 6px;
+  font-size: 13px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.pl-cols-menu-item:hover {
+  background: #eef3fb;
+}
+.pl-cols-menu-item input {
+  cursor: pointer;
+}
+.pl-cols-menu-item input:disabled {
+  cursor: not-allowed;
 }
 .pl-th-btn {
   display: flex;

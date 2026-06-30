@@ -358,6 +358,7 @@ function ServiceStageList({
   return (
     <>
       <FilterTable
+        tableId={`docs-svc-${svc}`}
         rows={listRows}
         columns={columns}
         getRowKey={(r) => r.id}
@@ -846,6 +847,7 @@ function StageList({
   return (
     <>
       <FilterTable
+        tableId={`docs-${kind}`}
         rows={listRows}
         columns={columns}
         getRowKey={(r) => r.id}

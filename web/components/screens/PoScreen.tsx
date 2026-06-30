@@ -279,6 +279,7 @@ function CustomerPoTab({
   return (
     <>
       <FilterTable
+        tableId="po-orders"
         rows={options.orders}
         columns={columns}
         getRowKey={(o) => o.id}
@@ -602,6 +603,7 @@ function VendorPoTab({
   return (
     <>
       <FilterTable
+        tableId="po-purchase-orders"
         rows={options.purchase_orders}
         columns={columns}
         getRowKey={(p) => p.id}
