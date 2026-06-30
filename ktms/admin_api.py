@@ -2583,7 +2583,6 @@ def vrfq_overview():
         cust_names = {c.id: c.name for c in s.query(Customer).all()}
         vessel_names = {v.id: v.name for v in s.query(Vessel).all()}
         rfq_map = {r.id: r for r in s.query(RFQ).all()}
-        rfq_nos = {rid: _rfq_no_disp(r.rfq_no) for rid, r in rfq_map.items()}
 
         quote_counts: dict[int, int] = {}
         for vq in s.query(VendorQuote).all():
@@ -2595,7 +2594,8 @@ def vrfq_overview():
             rows.append({
                 "id": vr.id,
                 "rfq_id": vr.rfq_id,
-                "customer_rfq_no": rfq_nos.get(vr.rfq_id, "—"),
+                # 고객 RFQ No.는 1단계의 고객 참조번호(없으면 "—"). K-Maris RFQ No.가 아님.
+                "customer_rfq_no": (rfq.customer_rfq_no or "—") if rfq else "—",
                 "vendor": vendor_names.get(vr.vendor_id, "—"),
                 "vendor_email": vr.sent_to_email or vendor_emails.get(vr.vendor_id, "") or "",
                 "sent_date": vr.sent_date or "",
@@ -2623,7 +2623,6 @@ def vendor_quote_overview():
         cust_names = {c.id: c.name for c in s.query(Customer).all()}
         vessel_names = {v.id: v.name for v in s.query(Vessel).all()}
         rfq_map = {r.id: r for r in s.query(RFQ).all()}
-        rfq_nos = {rid: _rfq_no_disp(r.rfq_no) for rid, r in rfq_map.items()}
         # vendor_rfq_id → (rfq_id, vendor_id, vrfq_no)
         vrfq_map = {vr.id: vr for vr in s.query(VendorRFQ).all()}
 
@@ -2642,7 +2641,7 @@ def vendor_quote_overview():
                 "id": q.id,
                 "rfq_id": vr.rfq_id if vr else None,
                 "vendor_quote_no": getattr(q, "vendor_quote_no", None) or "—",
-                "customer_rfq_no": rfq_nos.get(vr.rfq_id, "—") if vr else "—",
+                "customer_rfq_no": (rfq.customer_rfq_no or "—") if rfq else "—",
                 "vendor": vendor_names.get(vr.vendor_id, "—") if vr else "—",
                 "received_at": getattr(q, "received_at", None) or "",
                 "received_date": q.received_date or "",
