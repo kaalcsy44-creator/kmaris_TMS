@@ -420,8 +420,9 @@ function VendorRfqList({
 
       {adding ? (
         <Modal title="Vendor RFQ Sent" onClose={() => setAdding(false)} wide>
-          {/* 신규 등록 대상 = 아직 1단계(Customer RFQ)에만 머문 프로젝트 */}
-          <ProjectPicker projects={projects.filter((p) => p.stage < 2)} rfqId={pickRfqId} onSelect={setPickRfqId} />
+          {/* 대상 = 고객 RFQ가 있고 아직 미수주(고객 P/O 전, stage<5)인 프로젝트.
+              이미 Vendor RFQ를 보낸 건도 계속 노출 — 여러 벤더에 반복 발송 가능. */}
+          <ProjectPicker projects={projects.filter((p) => p.stage >= 1 && p.stage < 5)} rfqId={pickRfqId} onSelect={setPickRfqId} />
           <RfqProjectInfo project={projects.find((p) => p.id === pickRfqId)} />
           <VendorRfqAction
             rfqId={pickRfqId ?? 0}
@@ -809,8 +810,9 @@ function VendorQuoteList({
 
       {adding ? (
         <Modal title="Register Vendor Quote" onClose={() => setAdding(false)} wide>
-          {/* 신규 등록 대상 = Vendor RFQ까지(2단계) 진행, 견적 미수신 프로젝트 */}
-          <ProjectPicker projects={projects.filter((p) => p.stage === 2)} rfqId={pickRfqId} onSelect={setPickRfqId} />
+          {/* 대상 = Vendor RFQ를 보낸(stage>=2) 미수주 프로젝트. 이미 일부 견적을
+              받은 건도 계속 노출 — 여러 벤더에서 추가 견적 수신 가능. */}
+          <ProjectPicker projects={projects.filter((p) => p.stage >= 2 && p.stage < 5)} rfqId={pickRfqId} onSelect={setPickRfqId} />
           <RfqProjectInfo project={projects.find((p) => p.id === pickRfqId)} />
           <VendorQuoteAction
             rfqId={pickRfqId ?? 0}
