@@ -90,28 +90,6 @@ const TABS = [
   { key: "vquote", label: "3. Vendor Quote Received" },
   { key: "cquote", label: "4. Customer Quote Sent" },
 ];
-const VENDOR_QUOTE_CURRENCY_OVERRIDES = "ktms:vendorQuoteCurrencyOverrides";
-
-function readVendorQuoteCurrencyOverrides(): Record<string, string> {
-  if (typeof window === "undefined") return {};
-  try {
-    return JSON.parse(window.localStorage.getItem(VENDOR_QUOTE_CURRENCY_OVERRIDES) || "{}");
-  } catch {
-    return {};
-  }
-}
-
-function vendorQuoteCurrencyOverride(id: number): string | undefined {
-  return readVendorQuoteCurrencyOverrides()[String(id)];
-}
-
-function setVendorQuoteCurrencyOverride(id: number, currency: string | null) {
-  if (typeof window === "undefined") return;
-  const overrides = readVendorQuoteCurrencyOverrides();
-  if (currency) overrides[String(id)] = currency;
-  else delete overrides[String(id)];
-  window.localStorage.setItem(VENDOR_QUOTE_CURRENCY_OVERRIDES, JSON.stringify(overrides));
-}
 
 function money(n: number) {
   return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -739,10 +717,7 @@ function VendorQuoteList({
 
   function load() {
     fetchVendorQuoteOverview()
-      .then((d) => {
-        const overrides = readVendorQuoteCurrencyOverrides();
-        setRows(d.rows.map((row) => ({ ...row, currency: overrides[String(row.id)] || row.currency })));
-      })
+      .then((d) => setRows(d.rows))
       .catch((e) => setError(e instanceof Error ? e.message : "Error"));
   }
   useEffect(load, []);
@@ -857,12 +832,10 @@ function VendorQuoteDetailModal({
   useEffect(() => {
     fetchVendorQuoteDetail(id)
       .then((data) => {
-        const overrideCurrency = vendorQuoteCurrencyOverride(data.id);
-        const effectiveCurrency = overrideCurrency || data.currency || "USD";
         setD(data);
         setNo(data.vendor_quote_no || "");
         setReceivedAt(data.received_at || "");
-        setCurrency(effectiveCurrency);
+        setCurrency(data.currency || "USD");
         setNotes(data.notes || "");
         setItems((data.items || []).map(normalizeVendorQuoteItem));
         setParseMsg(null);
@@ -929,12 +902,7 @@ function VendorQuoteDetailModal({
         items: cleanVendorQuoteItems(items),
       });
       const persisted = await fetchVendorQuoteDetail(id);
-      if ((persisted.currency || "USD") !== currency) {
-        setVendorQuoteCurrencyOverride(id, currency);
-      } else {
-        setVendorQuoteCurrencyOverride(id, null);
-      }
-      setD({ ...persisted, currency });
+      setD(persisted);
       setEditing(false);
       onChanged();
       onClose();

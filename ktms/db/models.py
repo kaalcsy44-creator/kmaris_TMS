@@ -199,6 +199,7 @@ class VendorQuote(Base):
     vendor_quote_no = Column(String(100))   # 수신된 Vendor 고유 견적번호
     received_date   = Column(String(10))
     received_at     = Column(String(16))    # 견적 수신 일시 "YYYY-MM-DDTHH:MM"
+    currency      = Column(String(10), default="USD")  # 견적 통화(USD/KRW)
     items         = Column(JSON, default=list)
     notes         = Column(Text)
     created_at    = Column(DateTime, default=datetime.utcnow)
