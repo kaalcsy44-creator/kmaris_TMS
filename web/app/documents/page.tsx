@@ -591,6 +591,7 @@ function ServiceStageForm({
     return init;
   });
   const done = Boolean(data.stage_done[String(svc) as "7" | "8" | "9"]) || (svc === 9 && !!data.pod);
+  const [complete, setComplete] = useState(done); // 7·8단계: 저장 시 단계 완료 여부
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -598,13 +599,14 @@ function ServiceStageForm({
     setForm((p) => ({ ...p, [key]: v }));
   }
 
-  async function save(complete: boolean) {
+  async function save() {
     setBusy(true);
     setErr(null);
     try {
       // 9단계는 리포트 파일(POD) 업로드가 완료 근거이므로 stage_dates 완료는 생략(파일 기준).
       await saveServiceStage(data.order.id, svc, form, svc === 9 ? false : complete);
       onChanged();
+      onClose();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Save failed");
     } finally {
@@ -641,17 +643,22 @@ function ServiceStageForm({
         ))}
       </div>
 
+      {svc !== 9 ? (
+        <label className="stage-complete-check">
+          <input type="checkbox" checked={complete} onChange={(e) => setComplete(e.target.checked)} />
+          <span>Mark this stage as complete</span>
+        </label>
+      ) : null}
+
       <div className="form-actions" style={{ marginTop: 14 }}>
-        <button className="btn primary" disabled={busy || data.order.id === 0} onClick={() => save(true)}>
-          {busy ? "Working…" : svc === 9 ? "Save" : "Save & complete this stage"}
+        <button className="btn primary" disabled={busy || data.order.id === 0} onClick={save}>
+          {busy ? "Working…" : "Save"}
         </button>
-        {svc !== 9 && done ? (
-          <button className="btn" disabled={busy} onClick={() => save(false)}>
-            Save (keep incomplete)
-          </button>
-        ) : null}
+        <button className="btn" disabled={busy} onClick={onClose}>
+          Cancel
+        </button>
         {hasSaved ? (
-          <button className="btn danger" disabled={busy} onClick={remove} style={{ marginLeft: "auto" }}>
+          <button className="btn danger" disabled={busy} onClick={remove}>
             Delete
           </button>
         ) : null}

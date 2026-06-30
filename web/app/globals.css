@@ -2280,6 +2280,23 @@ table.pipeline tbody tr.service .pl-stage-done {
 .pl-modal table.rfq {
   min-width: 100%;
 }
+/* 서비스 단계 '완료로 표시' 체크박스 — 푸터 바로 위 */
+.stage-complete-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #344563;
+  cursor: pointer;
+}
+.stage-complete-check input {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
 /* 품목 표 빈 상태 안내 행 */
 table.mini td.mini-empty {
   text-align: center;
