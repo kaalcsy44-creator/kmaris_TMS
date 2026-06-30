@@ -2261,11 +2261,19 @@ table.pipeline tbody tr.service .pl-stage-done {
   padding: 12px 22px;
   border-top: 1px solid var(--line);
 }
-/* 모달 푸터 내 버튼은 gap 으로만 간격 — 떠다니는 auto 마진 제거(일관 우측정렬). */
+/* 모달 푸터 내 버튼은 gap 으로만 간격 — 떠다니는 auto 마진 제거. */
 .pl-modal-body .form-actions > .btn,
 .pl-modal-body .pl-actions > .btn,
 .pl-modal-body .form-actions > button {
   margin-left: 0 !important;
+}
+/* 편집 팝업 푸터 버튼 규약: 삭제(danger)=좌측끝, 취소/저장=우측끝(저장이 맨 오른쪽). */
+.pl-modal-body .form-actions .btn.danger {
+  order: -1;
+  margin-right: auto !important;
+}
+.pl-modal-body .form-actions .btn.primary {
+  order: 1;
 }
 /* 팝업 안의 품목 표는 1180px 강제폭 대신 컨테이너 폭에 맞춘다(넓은 내용일 때만 가로 스크롤). */
 .pl-modal table.mini.wide,
