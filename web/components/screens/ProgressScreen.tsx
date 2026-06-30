@@ -726,18 +726,18 @@ function PipelineModal({
     6: joinDot(r.vendor_po_no, r.vendor),
   };
   const isDomestic = (r.trade_type || "수출") === "내수";
+  const isService = (r.work_type || "부품공급") === "서비스";
   const chain = rSteps.map((label, i) => {
     const no = i + 1;
-    // 내수(국내공급)는 7·8·9단계(CI/PL/SA/POD)를 생략한다.
-    const skip = isDomestic && (no === 7 || no === 8 || no === 9);
+    // 내수 부품공급은 7·8·9단계(CI/PL/SA/POD)를 생략한다.
+    // 서비스는 7·8·9가 Service Readiness/arrangement/Complete 단계이므로 내수여도 생략하지 않는다.
+    const skip = isDomestic && !isService && (no === 7 || no === 8 || no === 9);
     return { no, label, value: docValue[no] ?? "", at: effective(no), skip };
   });
   const leftChain = chain.slice(0, 6);
   const rightChain = chain.slice(6, 12);
 
   const poHref = r.order_id > 0 ? `/po?order=${r.order_id}` : `/po?rfq=${r.rfq_id}`;
-
-  const isService = (r.work_type || "부품공급") === "서비스";
 
   // 단계 번호 → 해당 단계 작업 화면 링크. 오더가 필요한 5~12단계는 오더 없으면 null(비활성).
   function onBackdropMouseDown(e: React.MouseEvent<HTMLDivElement>) {

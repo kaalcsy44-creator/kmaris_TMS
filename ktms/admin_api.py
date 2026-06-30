@@ -557,6 +557,8 @@ def _pipeline_stage(s, rfq_id: int) -> int:
     """RFQ 1건의 내부 진행 단계(1~12) — helpers.internal_pipeline_stage 와 동일 로직.
     (FastAPI에서 돌도록 st.cache_data 제거, 세션은 호출측에서 공유)"""
     stage = 1
+    rfq_obj = s.query(RFQ).filter_by(id=rfq_id).first()
+    is_service = bool(rfq_obj and _enum_val(rfq_obj.work_type) == "서비스")
 
     vrfqs = s.query(VendorRFQ).filter_by(rfq_id=rfq_id).all()
     if vrfqs:
@@ -593,9 +595,10 @@ def _pipeline_stage(s, rfq_id: int) -> int:
         }.get(ost, 5))
 
         is_domestic = (getattr(order, "trade_type", "수출") == "내수")
-        if is_domestic:
-            # 내수(국내공급): 7·8·9단계(CI/PL/SA/POD)는 해당 없음 → 건너뛴다.
+        if is_domestic and not is_service:
+            # 내수 부품공급: 7·8·9단계(CI/PL/SA/POD)는 해당 없음 → 건너뛴다.
             # 발주(6) 이후에는 곧바로 대금청구(10) 준비 단계로 본다.
+            # (서비스는 7·8·9가 실제 작업 단계이므로 수동 완료로만 진행)
             if stage >= 6:
                 stage = max(stage, 9)
         else:
@@ -623,10 +626,8 @@ def _pipeline_stage(s, rfq_id: int) -> int:
 
     # 수동 완료(완료 버튼/POD)로 stage_dates 에 표시된 단계를 반영.
     # (자동 근거가 약하거나 없는 단계만 — 의도치 않은 점프 방지)
-    rfq_obj = s.query(RFQ).filter_by(id=rfq_id).first()
     sd = (getattr(rfq_obj, "stage_dates", None) or {}) if rfq_obj else {}
     # 서비스 업무는 7·8단계(Service Readiness/arrangement)도 수동 완료로 진행한다.
-    is_service = bool(rfq_obj and _enum_val(rfq_obj.work_type) == "서비스")
     manual_keys = ("7", "8", "9", "11", "12") if is_service else ("9", "11", "12")
     for k in manual_keys:
         if sd.get(k):
