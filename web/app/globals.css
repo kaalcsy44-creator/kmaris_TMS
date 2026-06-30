@@ -2070,13 +2070,15 @@ table.pipeline col.pl-col-pay {
   width: 116px;
 }
 /* 고정 레이아웃에서 넘치는 텍스트는 말줄임 */
-table.pipeline tbody td.strong,
-table.pipeline td.pl-td-vendor {
+table.pipeline tbody td.strong {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Vendor 셀: 복수 벤더를 줄바꿈으로 모두 표시 + 컬럼이 좁아지면 자동 줄바꿈 */
 table.pipeline td.pl-td-vendor {
-  white-space: nowrap;
+  white-space: pre-line;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 table.pipeline th,
 table.pipeline td {

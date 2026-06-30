@@ -810,7 +810,8 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
                     nm = vendor_names.get(x.vendor_id, "—")
                     if nm not in _vnames:
                         _vnames.append(nm)
-                vrfq_vendors = _vnames[0] + (f"  (외 {len(_vnames) - 1}곳)" if len(_vnames) > 1 else "")
+                # 복수 벤더는 모두 줄바꿈으로 기재(프런트 white-space:pre-line).
+                vrfq_vendors = "\n".join(_vnames)
                 vrfq_at = _fmt_received(_vrfq_sent_iso(vrfqs[0]))
             else:
                 vrfq_vendors, vrfq_at = "", ""
@@ -846,7 +847,13 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
             if vpos:
                 vp0 = vpos[0]
                 vendor_po_no = (vp0.po_no or "—") + (f"  (외 {len(vpos) - 1}건)" if len(vpos) > 1 else "")
-                vendor_po_vendor = vendor_names.get(vp0.vendor_id, "—")
+                # 발주서가 복수 벤더로 나간 경우 모두 줄바꿈으로 기재.
+                _po_vnames: list[str] = []
+                for vp in vpos:
+                    nm = vendor_names.get(vp.vendor_id, "—")
+                    if nm not in _po_vnames:
+                        _po_vnames.append(nm)
+                vendor_po_vendor = "\n".join(_po_vnames)
                 vendor_po_email = vp0.sent_to_email or "—"
                 vendor_po_at = _kst(vp0.created_at)
             else:
