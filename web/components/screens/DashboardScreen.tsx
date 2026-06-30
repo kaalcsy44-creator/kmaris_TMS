@@ -213,7 +213,6 @@ function HomeTab() {
 
   const salesCols: ColumnDef<ArRow>[] = [
     { key: "date", label: "Date", text: (r) => (r.tax_issued_date || r.due_date || "").slice(0, 10), filter: "date" },
-    { key: "ci_no", label: "CI No.", text: (r) => r.ci_no || "" },
     { key: "customer", label: "Customer", text: (r) => r.customer || "", filter: "facet" },
     {
       key: "amount",
