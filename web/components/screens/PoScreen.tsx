@@ -67,132 +67,6 @@ export default function PoScreen() {
   return <PoActionTabs options={options} deepOrderId={deepOrderId} initialTab={tabParam} onChanged={load} />;
 }
 
-function PoDetail({ orderId }: { orderId: number | null }) {
-  const [data, setData] = useState<PoDetailT | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (orderId === null) {
-      setData(null);
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    fetchPoDetail(orderId)
-      .then(setData)
-      .catch((e) => setError(e instanceof Error ? e.message : "Error"))
-      .finally(() => setLoading(false));
-  }, [orderId]);
-
-  return (
-    <div className="detail">
-      <h2>Selected order details</h2>
-
-      {orderId === null ? (
-        <div className="empty">Select a row above to see details.</div>
-      ) : loading ? (
-        <div className="empty">Loading…</div>
-      ) : error ? (
-        <div className="empty" style={{ color: "#b42318" }}>
-          Detail load error: {error}
-        </div>
-      ) : !data ? null : (
-        <div className="detail-body">
-          <div className="grid">
-            <KV k="Project No." v={data.project_no} />
-            <KV k="First RFQ at" v={(data.first_rfq_at || "").replace("T", " ")} />
-            <KV k="Customer P/O No." v={data.customer_po_no} />
-            <KV k="Customer P/O received" v={data.customer_po_at} />
-            <KV k="Customer RFQ No." v={data.customer_rfq_no} />
-            <KV k="K-Maris RFQ No." v={data.rfq_no} />
-            <KV k="Quotation No." v={data.quotation_no} />
-            <KV k="Customer" v={data.customer} />
-            <KV k="Type" v={tr(data.work_type)} />
-            <KV k="Trade type" v={tr(data.trade_type)} />
-            <KV k="Contact" v={data.customer_contact} />
-            <KV k="Email" v={data.customer_email} />
-            <KV k="Vessel" v={data.vessel} />
-            <KV k="Project" v={data.project_title} />
-            <KV k="Order status" v={tr(data.order_status)} />
-            <KV k="Pipeline status" v={data.status} />
-            <KV k="Promised delivery" v={data.promised_delivery} />
-            <KV k="Shipped date" v={data.shipped_date} />
-            <KV k="Delivered date" v={data.delivered_date} />
-          </div>
-
-          <div className="detail-cols-single">
-            <div className="detail-right">
-              <div className="sub-h">Items ({data.items.length})</div>
-              {data.items.length === 0 ? (
-                <div className="empty">No items registered.</div>
-              ) : (
-                <table className="mini">
-                  <thead>
-                    <tr>
-                      <th>Part No.</th>
-                      <th>Description</th>
-                      <th className="num">Qty</th>
-                      <th className="num">Unit price</th>
-                      <th className="num">Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.items.map((it, i) => (
-                      <tr key={i}>
-                        <td>{it.part_no || "—"}</td>
-                        <td>{it.description || "—"}</td>
-                        <td className="num">
-                          {it.qty}
-                          {it.unit ? ` ${it.unit}` : ""}
-                        </td>
-                        <td className="num"><DualCurrencyAmount value={it.unit_price} currency={data.currency} /></td>
-                        <td className="num"><DualCurrencyAmount value={it.amount} currency={data.currency} /></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-
-              <div className="sub-h" style={{ marginTop: 14 }}>
-                Linked documents
-              </div>
-              <div className="chain">
-                <ChainLine
-                  label="Vendor P/O"
-                  rows={data.vendor_pos.map(
-                    (p) =>
-                      `${p.po_no || "—"} · ${p.vendor} · ${p.status || "—"}${
-                        p.sent_date ? ` · sent ${p.sent_date}` : ""
-                      }`
-                  )}
-                />
-                <ChainLine
-                  label="Shipping"
-                  rows={data.documents.sa_no ? [data.documents.sa_no] : []}
-                />
-                <ChainLine
-                  label="Invoice"
-                  rows={[data.documents.ci_no, data.documents.pl_no, data.documents.tax_no].filter(Boolean)}
-                />
-                <ChainLine
-                  label="AR"
-                  rows={data.documents.ar.map(
-                    (a) =>
-                      `${a.ci_no || "—"} · ${a.currency} ${money(a.paid_amount)}/${money(
-                        a.invoice_amount
-                      )} · ${a.status}`
-                  )}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 function PoActionTabs({
   options,
   deepOrderId,
@@ -329,7 +203,7 @@ function OrderDetailModal({
   onChanged: () => void;
 }) {
   const order = options.orders.find((o) => o.id === orderId);
-  const [editing, setEditing] = useState(false);
+  const [detail, setDetail] = useState<PoDetailT | null>(null);
   const [customerId, setCustomerId] = useState<number | "">("");
   const [vesselId, setVesselId] = useState<number | "">("");
   const [poNo, setPoNo] = useState("");
@@ -344,11 +218,13 @@ function OrderDetailModal({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  function startEdit() {
+  // 행 클릭 시 읽기전용 단계를 건너뛰고 바로 편집: 상세를 불러와 필드를 채운다.
+  useEffect(() => {
     fetchPoDetail(orderId)
       .then((d) => {
         const cust = options.customers.find((c) => c.name === d.customer);
         const ves = options.vessels.find((v) => v.name === d.vessel);
+        setDetail(d);
         setCustomerId(cust?.id ?? "");
         setVesselId(ves?.id ?? "");
         setPoNo(d.customer_po_no || "");
@@ -359,10 +235,10 @@ function OrderDetailModal({
         setItems(d.items.length ? d.items.map(normalizeItem) : [blankItem()]);
         setQuotationId("");
         setOcrMsg(null);
-        setEditing(true);
       })
       .catch((e) => setErr(e instanceof Error ? e.message : "Load failed"));
-  }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderId]);
 
   function loadQuotation(id: number | "") {
     setQuotationId(id);
@@ -438,7 +314,6 @@ function OrderDetailModal({
         promised_delivery: promised || null,
         items: cleanItems(items),
       });
-      setEditing(false);
       onChanged();
       onClose();
     } catch (e) {
@@ -465,9 +340,27 @@ function OrderDetailModal({
   const vessels = options.vessels.filter((v) => customerId === "" || v.customer_id === customerId);
 
   return (
-    <Modal title={<ModalTitle label="Order details" projectNo={order?.project_no} />} onClose={onClose} wide>
-      {editing ? (
+    <Modal title={<ModalTitle label="Edit order" projectNo={order?.project_no} />} onClose={onClose} wide>
+      {!detail ? (
+        <div className="empty">Loading…</div>
+      ) : (
         <>
+          <div className="form-section-title">Order info</div>
+          <dl className="intl-meta">
+            <BaseMetaRows info={detail} />
+            <div><dt>Customer P/O No.</dt><dd>{detail.customer_po_no || "—"}</dd></div>
+            <div><dt>Customer P/O received</dt><dd>{detail.customer_po_at || "—"}</dd></div>
+            <div><dt>Customer RFQ No.</dt><dd>{detail.customer_rfq_no || "—"}</dd></div>
+            <div><dt>K-Maris RFQ No.</dt><dd>{detail.rfq_no || "—"}</dd></div>
+            <div><dt>Quotation No.</dt><dd>{detail.quotation_no || "—"}</dd></div>
+            <div><dt>Contact</dt><dd>{detail.customer_contact || "—"}</dd></div>
+            <div><dt>Email</dt><dd>{detail.customer_email || "—"}</dd></div>
+            <div><dt>Order status</dt><dd>{tr(detail.order_status)}</dd></div>
+            <div><dt>Pipeline status</dt><dd>{detail.status || "—"}</dd></div>
+            <div><dt>Shipped date</dt><dd>{detail.shipped_date || "—"}</dd></div>
+            <div><dt>Delivered date</dt><dd>{detail.delivered_date || "—"}</dd></div>
+          </dl>
+
           <div className="po-work-note">
             <b>Auto-fill order items</b>
             <span>Upload a customer P/O PDF or image, or load item/amount data from a previous quotation.</span>
@@ -542,15 +435,7 @@ function OrderDetailModal({
           <ItemEditor items={items} onChange={setItems} currency={currency} />
           <div className="form-actions">
             <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
-            <button className="btn" onClick={() => setEditing(false)} disabled={busy}>Cancel</button>
-            {err ? <span className="action-err">{err}</span> : null}
-          </div>
-        </>
-      ) : (
-        <>
-          <PoDetail orderId={orderId} />
-          <div className="form-actions">
-            <button className="btn" onClick={startEdit} style={{ marginLeft: "auto" }}>✎ Edit</button>
+            <button className="btn" onClick={onClose} disabled={busy}>Cancel</button>
             <button className="btn danger" onClick={remove} disabled={busy}>Delete</button>
             {err ? <span className="action-err">{err}</span> : null}
           </div>
@@ -670,7 +555,6 @@ function VendorPoDetailModal({
   onChanged: () => void;
 }) {
   const [d, setD] = useState<PurchaseOrderDetail | null>(null);
-  const [editing, setEditing] = useState(false);
   const [vendorId, setVendorId] = useState<number | "">("");
   const [poNo, setPoNo] = useState("");
   const [sentDate, setSentDate] = useState("");
@@ -709,7 +593,6 @@ function VendorPoDetailModal({
         status,
         items: cleanItems(items),
       });
-      setEditing(false);
       onChanged();
       onClose();
     } catch (e) {
@@ -744,11 +627,23 @@ function VendorPoDetailModal({
   }
 
   return (
-    <Modal title={d ? <ModalTitle label={`Purchase order — ${d.po_no}`} projectNo={d.project_no} /> : "PO details"} onClose={onClose} wide>
+    <Modal title={d ? <ModalTitle label={`Edit purchase order — ${d.po_no}`} projectNo={d.project_no} /> : "PO details"} onClose={onClose} wide>
       {!d ? (
         <div className="empty">Loading…</div>
-      ) : editing ? (
+      ) : (
         <>
+          <div className="form-section-title">Purchase order info</div>
+          <dl className="intl-meta">
+            <BaseMetaRows info={d} />
+            <div><dt>PO No.</dt><dd>{d.customer_po_no || "—"}</dd></div>
+            <div><dt>K-Maris PO No.</dt><dd>{d.po_no || "—"}</dd></div>
+            <div><dt>Vendor</dt><dd>{d.vendor}</dd></div>
+            <div><dt>Recipient email</dt><dd>{d.vendor_email || "—"}</dd></div>
+            <div><dt>Sent date</dt><dd>{d.sent_date || "—"}</dd></div>
+            <div><dt>Status</dt><dd>{tr(d.status)}</dd></div>
+            <div><dt>Items</dt><dd>{d.items.length}</dd></div>
+          </dl>
+
           <div className="po-work-note">
             <b>Load from previous step</b>
             <span>Reload the item list and amounts from the linked Customer P/O order.</span>
@@ -789,24 +684,7 @@ function VendorPoDetailModal({
           <ItemEditor items={items} onChange={setItems} currency={d.currency || "USD"} />
           <div className="form-actions">
             <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
-            <button className="btn" onClick={() => setEditing(false)} disabled={busy}>Cancel</button>
-            {err ? <span className="action-err">{err}</span> : null}
-          </div>
-        </>
-      ) : (
-        <>
-          <dl className="intl-meta">
-            <BaseMetaRows info={d} />
-            <div><dt>PO No.</dt><dd>{d.customer_po_no || "—"}</dd></div>
-            <div><dt>K-Maris PO No.</dt><dd>{d.po_no || "—"}</dd></div>
-            <div><dt>Vendor</dt><dd>{d.vendor}</dd></div>
-            <div><dt>Recipient email</dt><dd>{d.vendor_email || "—"}</dd></div>
-            <div><dt>Sent date</dt><dd>{d.sent_date || "—"}</dd></div>
-            <div><dt>Status</dt><dd>{tr(d.status)}</dd></div>
-            <div><dt>Items</dt><dd>{d.items.length}</dd></div>
-          </dl>
-          <div className="form-actions">
-            <button className="btn" onClick={() => setEditing(true)} style={{ marginLeft: "auto" }}>✎ Edit</button>
+            <button className="btn" onClick={onClose} disabled={busy}>Cancel</button>
             <button className="btn danger" onClick={remove} disabled={busy}>Delete</button>
             {err ? <span className="action-err">{err}</span> : null}
           </div>
@@ -1521,14 +1399,6 @@ function ItemEditor({
   );
 }
 
-function money(n: number | null): string {
-  if (n === null || n === undefined) return "—";
-  return n.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
-
 function blankItem(): PoWorkItem {
   return {
     part_no: "",
@@ -1561,30 +1431,3 @@ function cleanItems(items: PoWorkItem[]): PoWorkItem[] {
     .filter((it) => it.part_no.trim() || it.description.trim());
 }
 
-function KV({ k, v }: { k: string; v: string }) {
-  return (
-    <div className="kv">
-      <div className="k">{k}</div>
-      <div className="v">{v && v !== "—" ? v : "—"}</div>
-    </div>
-  );
-}
-
-function ChainLine({ label, rows }: { label: string; rows: string[] }) {
-  return (
-    <div className="chain-line">
-      <span className="chain-label">{label}</span>
-      {rows.length === 0 ? (
-        <span className="chain-empty">—</span>
-      ) : (
-        <span className="chain-vals">
-          {rows.map((r, i) => (
-            <span key={i} className="chain-pill">
-              {r}
-            </span>
-          ))}
-        </span>
-      )}
-    </div>
-  );
-}
