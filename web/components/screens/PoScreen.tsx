@@ -276,10 +276,19 @@ function CustomerPoTab({
       workType: (o) => o.work_type,
       tradeType: (o) => o.trade_type,
     }),
-    { key: "po_no", label: "PO No.", text: (o) => o.po_no || "" },
+    {
+      key: "po_no",
+      label: "PO No.",
+      text: (o) => o.po_no || "",
+      render: (o) => (
+        <div className="proj-cell">
+          <div className="pn">{o.po_no || <span className="muted">—</span>}</div>
+          {o.date ? <div className="pn-at">{o.date}</div> : null}
+        </div>
+      ),
+    },
     { key: "items", label: "Items", numeric: true, text: (o) => String(o.items.length), sortValue: (o) => o.items.length },
     { key: "status", label: "Status", text: (o) => o.status || "", filter: "facet", render: (o) => <span className="ar-badge">{o.status}</span> },
-    { key: "date", label: "Date", text: (o) => o.date || "", filter: "date" },
   ];
 
   return (
