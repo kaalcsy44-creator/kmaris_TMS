@@ -1490,9 +1490,9 @@ function ItemEditor({
           {items.map((item, i) => (
             <tr key={i} className={itemRowClass(i)}>
               <td className="seq">{i + 1}</td>
-              <td><input {...gridCellProps(i, 0)} value={item.part_no || ""} onChange={(e) => patch(i, "part_no", e.target.value)} /></td>
+              <td><textarea {...gridCellProps(i, 0)} className="wrapcell" rows={1} value={item.part_no || ""} onChange={(e) => patch(i, "part_no", e.target.value)} /></td>
               <td><textarea {...gridCellProps(i, 1)} className="desc" rows={1} value={item.description || ""} onChange={(e) => patch(i, "description", e.target.value)} /></td>
-              <td><input {...gridCellProps(i, 2)} value={item.maker || ""} onChange={(e) => patch(i, "maker", e.target.value)} /></td>
+              <td><textarea {...gridCellProps(i, 2)} className="wrapcell" rows={1} value={item.maker || ""} onChange={(e) => patch(i, "maker", e.target.value)} /></td>
               <td><input {...gridCellProps(i, 3)} className="num" value={amountInputValue(item.qty)} onChange={(e) => patch(i, "qty", e.target.value)} /></td>
               <td><input {...gridCellProps(i, 4)} value={item.unit || "PCS"} onChange={(e) => patch(i, "unit", e.target.value)} /></td>
               {packing ? (
@@ -1509,7 +1509,7 @@ function ItemEditor({
                   <td><input {...gridCellProps(i, 7)} value={item.hs_code || ""} onChange={(e) => patch(i, "hs_code", e.target.value)} /></td>
                 </>
               )}
-              <td><input {...gridCellProps(i, packing ? 9 : 8)} value={item.remark || ""} onChange={(e) => patch(i, "remark", e.target.value)} /></td>
+              <td><textarea {...gridCellProps(i, packing ? 9 : 8)} className="wrapcell" rows={1} value={item.remark || ""} onChange={(e) => patch(i, "remark", e.target.value)} /></td>
               <td>
                 <button className="row-del" onClick={() => setItems(items.filter((_, idx) => idx !== i))}>×</button>
               </td>

@@ -663,21 +663,23 @@ function VendorRfqItemEditor({
               <th>Description</th>
               <th>Qty</th>
               <th>Unit</th>
+              <th>Remark</th>
             </tr>
           </thead>
           <tbody>
             {items.length === 0 ? (
               <tr>
-                <td colSpan={5} className="mini-empty">No items (service request).</td>
+                <td colSpan={6} className="mini-empty">No items (service request).</td>
               </tr>
             ) : (
               items.map((it, i) => (
                 <tr key={i} className={itemRowClass(i)}>
                   <td className="seq">{i + 1}</td>
-                  <td><input {...gridCellProps(i, 0)} value={it.part_no || ""} onChange={(e) => patch(i, "part_no", e.target.value)} /></td>
+                  <td><textarea {...gridCellProps(i, 0)} className="wrapcell" rows={1} value={it.part_no || ""} onChange={(e) => patch(i, "part_no", e.target.value)} /></td>
                   <td><textarea {...gridCellProps(i, 1)} className="desc" rows={1} value={it.description || ""} onChange={(e) => patch(i, "description", e.target.value)} /></td>
                   <td><input {...gridCellProps(i, 2)} className="num" value={amountInputValue(it.qty)} onChange={(e) => patch(i, "qty", e.target.value)} /></td>
                   <td><input {...gridCellProps(i, 3)} value={it.unit || ""} onChange={(e) => patch(i, "unit", e.target.value)} /></td>
+                  <td><textarea {...gridCellProps(i, 4)} className="wrapcell" rows={1} value={it.remark ?? ""} onChange={(e) => patch(i, "remark", e.target.value)} /></td>
                 </tr>
               ))
             )}
@@ -1944,16 +1946,16 @@ function VendorQuoteItemEditor({
             {items.map((it, i) => (
               <tr key={i} className={itemRowClass(i)}>
                 <td className="seq">{i + 1}</td>
-                <td><input {...gridCellProps(i, 0)} value={it.part_no} onChange={(e) => patch(i, "part_no", e.target.value)} /></td>
+                <td><textarea {...gridCellProps(i, 0)} className="wrapcell" rows={1} value={it.part_no} onChange={(e) => patch(i, "part_no", e.target.value)} /></td>
                 <td><textarea {...gridCellProps(i, 1)} className="desc" rows={1} value={it.description} onChange={(e) => patch(i, "description", e.target.value)} /></td>
-                <td><input {...gridCellProps(i, 2)} value={it.maker ?? ""} onChange={(e) => patch(i, "maker", e.target.value)} /></td>
-                <td><input {...gridCellProps(i, 3)} value={it.origin ?? ""} onChange={(e) => patch(i, "origin", e.target.value)} /></td>
+                <td><textarea {...gridCellProps(i, 2)} className="wrapcell" rows={1} value={it.maker ?? ""} onChange={(e) => patch(i, "maker", e.target.value)} /></td>
+                <td><textarea {...gridCellProps(i, 3)} className="wrapcell" rows={1} value={it.origin ?? ""} onChange={(e) => patch(i, "origin", e.target.value)} /></td>
                 <td><input {...gridCellProps(i, 4)} className="num" value={amountInputValue(it.qty)} onChange={(e) => patch(i, "qty", e.target.value)} /></td>
                 <td><input {...gridCellProps(i, 5)} value={it.unit} onChange={(e) => patch(i, "unit", e.target.value)} /></td>
                 <td><input {...gridCellProps(i, 6)} className="num" value={amountInputValue(it.cost_price)} onChange={(e) => patch(i, "cost_price", e.target.value)} /></td>
                 <td className="num">{amountInputValue(Number(it.cost_price || 0) * Number(it.qty || 1))}</td>
-                <td><input {...gridCellProps(i, 7)} value={it.lead_time ?? ""} onChange={(e) => patch(i, "lead_time", e.target.value)} /></td>
-                <td><input {...gridCellProps(i, 8)} value={it.remark ?? ""} onChange={(e) => patch(i, "remark", e.target.value)} /></td>
+                <td><textarea {...gridCellProps(i, 7)} className="wrapcell" rows={1} value={it.lead_time ?? ""} onChange={(e) => patch(i, "lead_time", e.target.value)} /></td>
+                <td><textarea {...gridCellProps(i, 8)} className="wrapcell" rows={1} value={it.remark ?? ""} onChange={(e) => patch(i, "remark", e.target.value)} /></td>
                 <td>
                   <button className="row-del" disabled={items.length === 0} onClick={() => onChange(items.filter((_, idx) => idx !== i))}>×</button>
                 </td>
@@ -2050,6 +2052,7 @@ function customerQuoteItemsFromVendorQuote(
       margin_pct: defaultMargin,
       unit_price: unit,
       amount: unit * qty,
+      remark: it.remark ?? "",
     };
   });
 }
@@ -2459,13 +2462,14 @@ function CustomerQuoteItemEditor({
               <th className="num">Margin %</th>
               <th className="num">Unit Price ({saleCur})</th>
               <th className="num">Amount ({saleCur})</th>
+              <th>Remark</th>
             </tr>
           </thead>
           <tbody>
             {items.map((it, i) => (
               <tr key={i} className={itemRowClass(i)}>
                 <td className="seq">{i + 1}</td>
-                <td><input {...gridCellProps(i, 0)} value={it.part_no} onChange={(e) => patch(i, "part_no", e.target.value)} /></td>
+                <td><textarea {...gridCellProps(i, 0)} className="wrapcell" rows={1} value={it.part_no} onChange={(e) => patch(i, "part_no", e.target.value)} /></td>
                 <td><textarea {...gridCellProps(i, 1)} className="desc" rows={1} value={it.description} onChange={(e) => patch(i, "description", e.target.value)} /></td>
                 <td><input {...gridCellProps(i, 2)} className="num" value={amountInputValue(it.qty)} onChange={(e) => patch(i, "qty", e.target.value)} /></td>
                 <td><input {...gridCellProps(i, 3)} value={it.unit} onChange={(e) => patch(i, "unit", e.target.value)} /></td>
@@ -2473,6 +2477,7 @@ function CustomerQuoteItemEditor({
                 <td><input {...gridCellProps(i, 5)} className="num" value={amountInputValue(it.margin_pct)} onChange={(e) => patch(i, "margin_pct", e.target.value)} /></td>
                 <td><input {...gridCellProps(i, 6)} className="num" value={amountInputValue(it.unit_price)} onChange={(e) => patch(i, "unit_price", e.target.value)} /></td>
                 <td><input {...gridCellProps(i, 7)} className="num" value={amountInputValue(it.amount)} onChange={(e) => patch(i, "amount", e.target.value)} /></td>
+                <td><textarea {...gridCellProps(i, 8)} className="wrapcell" rows={1} value={it.remark ?? ""} onChange={(e) => patch(i, "remark", e.target.value)} /></td>
               </tr>
             ))}
           </tbody>
@@ -2483,6 +2488,7 @@ function CustomerQuoteItemEditor({
                 <DualCurrencyAmount value={total} currency={currency} />
                 <span className="fx-note">{fxRateText()}</span>
               </td>
+              <td></td>
             </tr>
           </tfoot>
         </table>

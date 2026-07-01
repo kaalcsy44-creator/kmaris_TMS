@@ -15,7 +15,7 @@ import {
 } from "@/lib/api";
 import type { CustomerOption, SettingsVessel } from "@/lib/types";
 
-type ItemRow = { part_no: string; description: string; qty: string };
+type ItemRow = { part_no: string; description: string; qty: string; remark: string };
 
 /** 현재 시각 "YYYY-MM-DDTHH:MM" (datetime-local 기본값). */
 function nowLocal(): string {
@@ -50,7 +50,7 @@ export default function NewRfqForm({
   const [workType, setWorkType] = useState("부품공급");
   const [receivedAt, setReceivedAt] = useState(nowLocal());
   const [items, setItems] = useState<ItemRow[]>([
-    { part_no: "", description: "", qty: "1" },
+    { part_no: "", description: "", qty: "1", remark: "" },
   ]);
   const [busy, setBusy] = useState(false);
   const [ocrBusy, setOcrBusy] = useState(false);
@@ -135,7 +135,7 @@ export default function NewRfqForm({
     );
   }
   function addItem() {
-    setItems((prev) => [...prev, { part_no: "", description: "", qty: "1" }]);
+    setItems((prev) => [...prev, { part_no: "", description: "", qty: "1", remark: "" }]);
   }
   function removeItem(i: number) {
     setItems((prev) => prev.filter((_, idx) => idx !== i));
@@ -190,6 +190,7 @@ export default function NewRfqForm({
             part_no: it.part_no ?? "",
             description: it.description ?? "",
             qty: String(it.qty ?? 1),
+            remark: it.remark ?? "",
           }))
         );
       }
@@ -214,7 +215,7 @@ export default function NewRfqForm({
     setProjectTitle("");
     setWorkType("부품공급");
     setReceivedAt(nowLocal());
-    setItems([{ part_no: "", description: "", qty: "1" }]);
+    setItems([{ part_no: "", description: "", qty: "1", remark: "" }]);
     setErr(null);
     setMsg(null);
   }
@@ -240,8 +241,9 @@ export default function NewRfqForm({
               part_no: it.part_no || "",
               description: it.description || "",
               qty: String(it.qty ?? 1),
+              remark: it.remark ?? "",
             }))
-          : [{ part_no: "", description: "", qty: "1" }]
+          : [{ part_no: "", description: "", qty: "1", remark: "" }]
       );
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Failed to load RFQ");
@@ -264,6 +266,7 @@ export default function NewRfqForm({
         part_no: it.part_no,
         description: it.description,
         qty: Number(it.qty) || 1,
+        remark: it.remark,
       }));
     try {
       if (editId) {
@@ -492,6 +495,7 @@ export default function NewRfqForm({
           <col style={{ width: 160 }} />
           <col />
           <col style={{ width: 84 }} />
+          <col style={{ width: 160 }} />
           <col style={{ width: 44 }} />
         </colgroup>
         <thead>
@@ -500,6 +504,7 @@ export default function NewRfqForm({
             <th>Part No.</th>
             <th>Description</th>
             <th className="num">Qty</th>
+            <th>Remark</th>
             <th></th>
           </tr>
         </thead>
@@ -508,7 +513,9 @@ export default function NewRfqForm({
             <tr key={i}>
               <td className="seq">{i + 1}</td>
               <td>
-                <input
+                <textarea
+                  className="wrapcell"
+                  rows={1}
                   value={it.part_no}
                   onChange={(e) => setItem(i, "part_no", e.target.value)}
                 />
@@ -527,6 +534,14 @@ export default function NewRfqForm({
                   value={it.qty}
                   onChange={(e) => setItem(i, "qty", e.target.value)}
                   inputMode="decimal"
+                />
+              </td>
+              <td>
+                <textarea
+                  className="wrapcell"
+                  rows={1}
+                  value={it.remark}
+                  onChange={(e) => setItem(i, "remark", e.target.value)}
                 />
               </td>
               <td>

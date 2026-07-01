@@ -1325,6 +1325,7 @@ function ItemEditor({
               <th>Unit</th>
               <th className="num">Unit price</th>
               <th className="num">Amount</th>
+              <th>Remark</th>
               <th></th>
             </tr>
           </thead>
@@ -1333,13 +1334,13 @@ function ItemEditor({
               <tr key={i} className={itemRowClass(i)}>
                 <td className="seq">{i + 1}</td>
                 <td>
-                  <input {...gridCellProps(i, 0)} value={it.part_no} onChange={(e) => patch(i, "part_no", e.target.value)} />
+                  <textarea {...gridCellProps(i, 0)} className="wrapcell" rows={1} value={it.part_no} onChange={(e) => patch(i, "part_no", e.target.value)} />
                 </td>
                 <td>
                   <textarea {...gridCellProps(i, 1)} className="desc" rows={1} value={it.description} onChange={(e) => patch(i, "description", e.target.value)} />
                 </td>
                 <td>
-                  <input {...gridCellProps(i, 2)} value={it.maker ?? ""} onChange={(e) => patch(i, "maker", e.target.value)} />
+                  <textarea {...gridCellProps(i, 2)} className="wrapcell" rows={1} value={it.maker ?? ""} onChange={(e) => patch(i, "maker", e.target.value)} />
                 </td>
                 <td>
                   <input
@@ -1369,6 +1370,9 @@ function ItemEditor({
                   />
                 </td>
                 <td>
+                  <textarea {...gridCellProps(i, 7)} className="wrapcell" rows={1} value={it.remark ?? ""} onChange={(e) => patch(i, "remark", e.target.value)} />
+                </td>
+                <td>
                   <button
                     className="row-del"
                     onClick={() => onChange(items.filter((_, idx) => idx !== i))}
@@ -1387,6 +1391,7 @@ function ItemEditor({
                 <DualCurrencyAmount value={total} currency={currency} />
                 <span className="fx-note">{fxRateText()}</span>
               </td>
+              <td></td>
               <td></td>
             </tr>
           </tfoot>
@@ -1408,6 +1413,7 @@ function blankItem(): PoWorkItem {
     unit: "PCS",
     unit_price: 0,
     amount: 0,
+    remark: "",
   };
 }
 
@@ -1422,6 +1428,7 @@ function normalizeItem(it: Partial<PoWorkItem>): PoWorkItem {
     unit: it.unit ?? "PCS",
     unit_price: unitPrice,
     amount: it.amount ?? qty * Number(unitPrice ?? 0),
+    remark: it.remark ?? "",
   };
 }
 

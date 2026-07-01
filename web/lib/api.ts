@@ -136,7 +136,7 @@ export function createRfq(body: {
   received_at?: string;
   project_title?: string;
   work_type?: string;
-  items: { part_no: string; description: string; qty: number }[];
+  items: { part_no: string; description: string; qty: number; remark?: string }[];
 }): Promise<{ ok: boolean; id: number; rfq_no: string }> {
   return post("/api/admin/rfq", body);
 }
@@ -153,7 +153,7 @@ export function updateRfq(
     work_type?: string;
     received_at?: string;
     assignee_id?: number;
-    items?: { part_no: string; description: string; qty: number }[];
+    items?: { part_no: string; description: string; qty: number; remark?: string }[];
   }
 ): Promise<{ ok: boolean; id: number }> {
   return patch(`/api/admin/rfq/${rfqId}`, body);
@@ -798,7 +798,7 @@ export function updateVendorRfq(
     sent_at?: string;
     sent_to_email?: string;
     status?: string;
-    items?: { part_no: string; description: string; qty: number; unit?: string }[];
+    items?: { part_no: string; description: string; qty: number; unit?: string; remark?: string }[];
   }
 ): Promise<{ ok: boolean; id: number }> {
   return put(`/api/admin/vendor-rfq/${id}`, body);

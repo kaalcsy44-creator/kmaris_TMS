@@ -1847,6 +1847,7 @@ class PoWorkItem(BaseModel):
     unit: str = "PCS"
     unit_price: float | None = 0
     amount: float | None = None
+    remark: str | None = ""
 
 
 class OrderCreate(BaseModel):
@@ -1885,6 +1886,7 @@ def create_order(body: OrderCreate):
                 "unit": it.unit or "PCS",
                 "unit_price": unit_price,
                 "amount": it.amount if it.amount is not None else qty * unit_price,
+                "remark": (it.remark or "").strip(),
             })
 
         order = Order(
@@ -1953,6 +1955,7 @@ def update_order(order_id: int, body: OrderUpdate):
                     "unit": it.unit or "PCS",
                     "unit_price": unit_price,
                     "amount": it.amount if it.amount is not None else qty * unit_price,
+                    "remark": (it.remark or "").strip(),
                 })
             order.items = items
         s.commit()
@@ -2124,6 +2127,7 @@ def update_purchase_order(po_id: int, body: PurchaseOrderUpdate):
                     "unit": it.unit or "PCS",
                     "unit_price": unit_price,
                     "amount": it.amount if it.amount is not None else qty * unit_price,
+                    "remark": (it.remark or "").strip(),
                 })
             po.items = items
         s.commit()
@@ -4352,6 +4356,7 @@ def update_vendor_rfq(vrfq_id: int, body: VendorRfqUpdate):
                 "description": (it.get("description") or "").strip(),
                 "qty": it.get("qty", 1) or 1,
                 "unit": (it.get("unit") or "").strip(),
+                "remark": (it.get("remark") or "").strip(),
             } for it in body.items if (it.get("part_no") or it.get("description"))]
         s.commit()
         return {"ok": True, "id": vr.id}
@@ -4637,6 +4642,7 @@ class RfqItemIn(BaseModel):
     part_no: str = ""
     description: str = ""
     qty: float = 1
+    remark: str | None = ""
 
 
 class RfqCreate(BaseModel):
@@ -4664,6 +4670,7 @@ def create_rfq(body: RfqCreate, user: dict = Depends(get_current_user)):
             "part_no": (it.part_no or "").strip(),
             "description": (it.description or "").strip(),
             "qty": it.qty or 1,
+            "remark": (it.remark or "").strip(),
         } for it in body.items if (it.part_no or it.description)]
 
         try:
@@ -4794,6 +4801,7 @@ def update_rfq(rfq_id: int, body: RfqUpdate):
                 "part_no": (it.part_no or "").strip(),
                 "description": (it.description or "").strip(),
                 "qty": it.qty or 1,
+                "remark": (it.remark or "").strip(),
             } for it in body.items if (it.part_no or it.description)]
 
         s.commit()

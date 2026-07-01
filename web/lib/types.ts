@@ -181,6 +181,7 @@ export type PoWorkItem = {
   unit: string;
   unit_price: number | null;
   amount: number | null;
+  remark?: string;
 };
 
 export type RfqOcrResult = {
@@ -326,6 +327,7 @@ export type CustomerQuoteItem = {
   margin_pct: number | null;
   unit_price: number | null;
   amount: number | null;
+  remark?: string;
 };
 
 export type QuotationTerms = {
@@ -694,6 +696,7 @@ export type RfqItem = {
   unit: string;
   unit_price: number | null;
   amount: number | null;
+  remark?: string;
 };
 
 export type RfqStep = {
