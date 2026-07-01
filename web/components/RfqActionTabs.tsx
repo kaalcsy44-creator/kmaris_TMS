@@ -29,7 +29,7 @@ import {
   updateCustomerQuotation,
   deleteCustomerQuotation,
 } from "@/lib/api";
-import { getToken } from "@/lib/auth";
+import { getToken, can, canEditDeal } from "@/lib/auth";
 import { tr } from "@/lib/labels";
 import type {
   VendorOption,
@@ -451,6 +451,10 @@ function VendorRfqDetailModal({
 }) {
   const [d, setD] = useState<VendorRfqDetail | null>(null);
   const [editing, setEditing] = useState(!!autoEdit);
+  // 편집 권한 = 역할 권한(rfq.edit) × 담당(PIC) 소유권. 없으면 읽기전용(뷰어) 모드.
+  const canEditThis = can("rfq", "edit") && canEditDeal(d?.assignee_id);
+  const canDeleteThis = can("rfq", "delete") && canEditDeal(d?.assignee_id);
+  const showEdit = editing && canEditThis;
   const [vendorId, setVendorId] = useState<number | "">("");
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState("");
@@ -513,7 +517,7 @@ function VendorRfqDetailModal({
         <div className="empty">Loading…</div>
       ) : (
         <>
-          {editing ? (
+          {showEdit ? (
             <>
               <div className="form-section-title">Project info</div>
               <dl className="intl-meta">
@@ -585,7 +589,9 @@ function VendorRfqDetailModal({
           )}
 
           <div className="form-actions">
-            {editing ? (
+            {!canEditThis ? (
+              <span className="hint-inline" style={{ marginLeft: "auto" }}>View only — no edit permission for this deal</span>
+            ) : showEdit ? (
               <>
                 <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
                 <button className="btn" onClick={() => setEditing(false)} disabled={busy}>Cancel</button>
@@ -593,7 +599,9 @@ function VendorRfqDetailModal({
             ) : (
               <button className="btn" onClick={() => setEditing(true)} style={{ marginLeft: "auto" }}>✎ Edit</button>
             )}
-            <button className="btn danger" onClick={remove} disabled={busy || editing}>Delete</button>
+            {canDeleteThis ? (
+              <button className="btn danger" onClick={remove} disabled={busy || showEdit}>Delete</button>
+            ) : null}
           </div>
           {err ? <span className="action-err">{err}</span> : null}
         </>
@@ -841,6 +849,9 @@ function VendorQuoteDetailModal({
   const [parseMsg, setParseMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // 편집 권한 = 역할 권한(rfq.edit) × 담당(PIC) 소유권. 없으면 읽기전용.
+  const canEditThis = can("rfq", "edit") && canEditDeal(d?.assignee_id);
+  const canDeleteThis = can("rfq", "delete") && canEditDeal(d?.assignee_id);
 
   useEffect(() => {
     fetchVendorQuoteDetail(id)
@@ -878,8 +889,9 @@ function VendorQuoteDetailModal({
     }
   }
 
-  // 캡쳐본 붙여넣기(Ctrl+V) → 이미지면 바로 파싱
+  // 캡쳐본 붙여넣기(Ctrl+V) → 이미지면 바로 파싱 (편집 권한 없으면 무시)
   function handlePaste(e: React.ClipboardEvent) {
+    if (!canEditThis) return;
     const img = imageFromClipboard(e);
     if (img) {
       e.preventDefault();
@@ -961,6 +973,7 @@ function VendorQuoteDetailModal({
             <div><dt>Items</dt><dd>{items.length}</dd></div>
           </dl>
 
+          <fieldset className="form-fieldset" disabled={!canEditThis}>
           <div className="form-section-title">Vendor quote info</div>
           <div className="form-grid">
             <div className="form-field">
@@ -1000,9 +1013,17 @@ function VendorQuoteDetailModal({
           </div>
           <VendorQuoteItemEditor items={items} onChange={setItems} currency={currency} />
           <QuotationTermsEditor terms={terms} onChange={setTerms} />
+          </fieldset>
           <div className="form-actions">
-            <button className="btn danger" onClick={remove} disabled={busy} style={{ marginRight: "auto" }}>Delete</button>
-            <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
+            {!canEditThis ? (
+              <span className="hint-inline" style={{ marginRight: "auto" }}>View only — no edit permission for this deal</span>
+            ) : null}
+            {canDeleteThis ? (
+              <button className="btn danger" onClick={remove} disabled={busy} style={{ marginRight: "auto" }}>Delete</button>
+            ) : null}
+            {canEditThis ? (
+              <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
+            ) : null}
             <button className="btn" onClick={onClose} disabled={busy}>Cancel</button>
           </div>
           {err ? <span className="action-err">{err}</span> : null}
@@ -1154,6 +1175,9 @@ function CustomerQuoteDetailModal({
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // 편집 권한 = 역할 권한(rfq.edit) × 담당(PIC) 소유권. 없으면 읽기전용.
+  const canEditThis = can("rfq", "edit") && canEditDeal(d?.assignee_id);
+  const canDeleteThis = can("rfq", "delete") && canEditDeal(d?.assignee_id);
 
   useEffect(() => {
     fetchCustomerQuotationDetail(id)
@@ -1252,6 +1276,7 @@ function CustomerQuoteDetailModal({
             <div><dt>Items</dt><dd>{items.length}</dd></div>
           </dl>
 
+          <fieldset className="form-fieldset" disabled={!canEditThis}>
           <div className="form-section-title">Quotation info</div>
           <div className="po-work-note" style={{ marginTop: 12 }}>
             <b>Load from Vendor quote</b>
@@ -1351,10 +1376,18 @@ function CustomerQuoteDetailModal({
             currency={currency}
           />
           <QuotationTermsEditor terms={terms} onChange={setTerms} />
+          </fieldset>
           <div className="form-actions">
             <span className="action-name">Final: {dualCurrencyText(finalTotal, currency)} · {fxRateText()}</span>
-            <button className="btn danger" onClick={remove} disabled={busy} style={{ marginRight: "auto" }}>Delete</button>
-            <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
+            {!canEditThis ? (
+              <span className="hint-inline" style={{ marginRight: "auto" }}>View only — no edit permission for this deal</span>
+            ) : null}
+            {canDeleteThis ? (
+              <button className="btn danger" onClick={remove} disabled={busy} style={{ marginRight: "auto" }}>Delete</button>
+            ) : null}
+            {canEditThis ? (
+              <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
+            ) : null}
             <button className="btn" onClick={onClose} disabled={busy}>Cancel</button>
           </div>
           {msg ? <span className="action-ok">{msg}</span> : null}

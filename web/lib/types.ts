@@ -740,6 +740,7 @@ export type RfqDetail = {
 export type VendorRfqDetail = {
   id: number;
   rfq_id: number | null;
+  assignee_id: number; // 담당자(PIC) = RFQ.created_by (0 = 미지정)
   customer_rfq_no: string;
   kmaris_rfq_no: string;
   project_no: string;
@@ -775,6 +776,7 @@ export type VendorQuoteDetail = {
   vendor_quote_no: string;
   vendor_rfq_id: number;
   rfq_id: number | null;
+  assignee_id: number; // 담당자(PIC) = RFQ.created_by (0 = 미지정)
   customer_rfq_no: string;
   project_no: string;
   first_rfq_at: string;
@@ -795,6 +797,7 @@ export type CustomerQuotationDetail = {
   id: number;
   qtn_no: string;
   rfq_id: number | null;
+  assignee_id: number; // 담당자(PIC) = RFQ.created_by (0 = 미지정)
   rfq_no: string;
   project_no: string;
   first_rfq_at: string;

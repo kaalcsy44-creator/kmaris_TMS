@@ -4379,6 +4379,7 @@ def vendor_rfq_detail(vrfq_id: int):
         return {
             "id": vr.id,
             "rfq_id": vr.rfq_id,
+            "assignee_id": (rfq.created_by or 0) if rfq else 0,
             "customer_rfq_no": rfq.customer_rfq_no if rfq else "",
             "kmaris_rfq_no": _rfq_no_disp(rfq.rfq_no) if rfq else "",
             "project_no": _project_no_map(s).get(rfq.id, "") if rfq else "",
@@ -4618,6 +4619,7 @@ def vendor_quote_detail(vq_id: int):
             "vendor_quote_no": q.vendor_quote_no or "",
             "vendor_rfq_id": q.vendor_rfq_id,
             "rfq_id": vr.rfq_id if vr else None,
+            "assignee_id": (rfq.created_by or 0) if rfq else 0,
             "customer_rfq_no": _rfq_no_disp(rfq.rfq_no) if rfq else "",
             **_base_meta(s, rfq),   # 공통 기본정보(고객·선박·업무·Project No.·최초 RFQ)
             "vendor": vendor.name if vendor else "—",
@@ -5193,6 +5195,7 @@ def customer_quotation_detail(qtn_id: int):
             "id": qtn.id,
             "qtn_no": qtn.qtn_no,
             "rfq_id": qtn.rfq_id,
+            "assignee_id": (rfq.created_by or 0) if rfq else 0,
             "rfq_no": _rfq_no_disp(rfq.rfq_no) if rfq else "",
             **_base_meta(s, rfq),   # 공통 기본정보(고객·선박·업무·Project No.·최초 RFQ)
             "currency": qtn.currency or "USD",

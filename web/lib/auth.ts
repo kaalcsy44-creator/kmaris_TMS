@@ -51,7 +51,7 @@ export function getUserId(): number {
  */
 export function canEditDeal(assigneeId: number | null | undefined): boolean {
   if (isAdmin()) return true;
-  if (assigneeId == null) return true;
+  if (assigneeId == null || assigneeId === 0) return true; // 담당자 미지정 = 열림(백엔드와 일치)
   return getUserId() === assigneeId;
 }
 
