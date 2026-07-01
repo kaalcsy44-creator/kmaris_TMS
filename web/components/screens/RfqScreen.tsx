@@ -20,6 +20,19 @@ export default function RfqScreen() {
     setSelectedId(rfqParam ? Number(rfqParam) : null);
   }, [rfqParam]);
 
+  // 딥링크(?rfq=)로 특정 레코드를 자동으로 연 뒤에는 URL 에서 rfq 를 제거한다.
+  // 그러지 않으면 F5 새로고침마다 같은 상세/편집 모달이 다시 열린다(1회만 의도).
+  // tab 은 남겨 같은 목록 탭에 머무르게 하고, replaceState 라 재렌더는 없다.
+  useEffect(() => {
+    if (typeof window === "undefined" || !rfqParam) return;
+    const sp = new URLSearchParams(window.location.search);
+    sp.delete("rfq");
+    const qs = sp.toString();
+    window.history.replaceState(null, "", qs ? `${window.location.pathname}?${qs}` : window.location.pathname);
+    // 최초 마운트에서 1회만 정리.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // overview 는 프로젝트 셀렉터 목록·rfqNo 표시용으로 사용한다.
   const { data: overview, refresh } = useCachedData("rfq:overview:", () =>
     fetchRfqOverview()
