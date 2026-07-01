@@ -14,6 +14,7 @@ import {
   createSettingsVessel,
 } from "@/lib/api";
 import type { CustomerOption, SettingsVessel } from "@/lib/types";
+import { can, canEditDeal } from "@/lib/auth";
 
 type ItemRow = { part_no: string; description: string; qty: string; remark: string };
 
@@ -43,6 +44,7 @@ export default function NewRfqForm({
   autoLoadId?: number | null;    // 마운트 시 해당 RFQ를 즉시 불러와 수정 모드 진입
 }) {
   const [editId, setEditId] = useState<number | null>(null); // null=신규, >0=수정
+  const [assigneeId, setAssigneeId] = useState<number>(0);   // 편집 대상 RFQ의 담당자(PIC)
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
   const [vessels, setVessels] = useState<SettingsVessel[]>([]);
   const [customerId, setCustomerId] = useState<number | "">("");
@@ -155,8 +157,16 @@ export default function NewRfqForm({
     });
   }
 
-  // 캡쳐본 붙여넣기(Ctrl+V) → 이미지면 바로 OCR
+  // 편집 권한: 기존 RFQ 수정은 역할(rfq.edit) × 담당(PIC), 신규는 rfq.create.
+  const canEditThis =
+    editId != null
+      ? can("rfq", "edit") && canEditDeal(assigneeId)
+      : can("rfq", "create");
+  const canDeleteThis = can("rfq", "delete") && canEditDeal(assigneeId);
+
+  // 캡쳐본 붙여넣기(Ctrl+V) → 이미지면 바로 OCR (편집 권한 없으면 무시)
   function handlePaste(e: React.ClipboardEvent) {
+    if (!canEditThis) return;
     const items = e.clipboardData?.items;
     if (!items) return;
     for (const it of Array.from(items)) {
@@ -213,6 +223,7 @@ export default function NewRfqForm({
 
   function resetForm() {
     setEditId(null);
+    setAssigneeId(0);
     setCustomerId("");
     setVesselId("");
     setCustRfqNo("");
@@ -235,6 +246,7 @@ export default function NewRfqForm({
     try {
       const d = await fetchRfqDetail(id);
       setEditId(id);
+      setAssigneeId(d.assignee_id ?? 0);
       setCustomerId(d.customer_id || "");
       setVesselId(d.vessel_id || "");
       setCustRfqNo(d.customer_rfq_no || "");
@@ -322,11 +334,22 @@ export default function NewRfqForm({
       <div className="rfq-mode-bar">
         {editId ? (
           <>
-            <span className="rfq-mode-tag edit">✎ Edit mode</span>
-            <span className="hint-inline">Editing an existing RFQ.</span>
-            <button className="btn" style={{ marginLeft: "auto" }} onClick={resetForm}>
-              + New RFQ
-            </button>
+            {canEditThis ? (
+              <>
+                <span className="rfq-mode-tag edit">✎ Edit mode</span>
+                <span className="hint-inline">Editing an existing RFQ.</span>
+              </>
+            ) : (
+              <>
+                <span className="rfq-mode-tag">🔒 View only</span>
+                <span className="hint-inline">No edit permission for this deal (assigned to another PIC).</span>
+              </>
+            )}
+            {can("rfq", "create") ? (
+              <button className="btn" style={{ marginLeft: "auto" }} onClick={resetForm}>
+                + New RFQ
+              </button>
+            ) : null}
           </>
         ) : (
           <>
@@ -348,6 +371,7 @@ export default function NewRfqForm({
           </>
         )}
       </div>
+      <fieldset className="form-fieldset" disabled={!canEditThis}>
       {/* 도구 모음 — 평소엔 접혀 있고, 버튼으로 필요한 패널만 펼친다. */}
       <div className="form-tools">
         <button
@@ -595,6 +619,7 @@ export default function NewRfqForm({
       <button className="btn" onClick={addItem} style={{ marginTop: 8 }}>
         + Add item
       </button>
+      </fieldset>
 
       <div className="form-actions">
         {onCancel ? (
@@ -602,14 +627,18 @@ export default function NewRfqForm({
             Cancel
           </button>
         ) : null}
-        <button
-          className="btn primary"
-          onClick={submit}
-          disabled={busy || customerId === ""}
-        >
-          {busy ? "Working…" : editId ? "Save RFQ" : "Create RFQ"}
-        </button>
-        {onDeleted && editId ? (
+        {!canEditThis ? (
+          <span className="hint-inline">View only — no edit permission for this deal</span>
+        ) : (
+          <button
+            className="btn primary"
+            onClick={submit}
+            disabled={busy || customerId === ""}
+          >
+            {busy ? "Working…" : editId ? "Save RFQ" : "Create RFQ"}
+          </button>
+        )}
+        {onDeleted && editId && canDeleteThis ? (
           <button className="btn danger" onClick={handleDelete} disabled={busy}>
             Delete
           </button>

@@ -278,9 +278,11 @@ function CustomerRfqList({
         defaultSortDir="desc"
         empty="No RFQs registered."
         actions={
-          <button className="btn primary" onClick={() => setAdding(true)}>
-            + New
-          </button>
+          can("rfq", "create") ? (
+            <button className="btn primary" onClick={() => setAdding(true)}>
+              + New
+            </button>
+          ) : null
         }
       />
 

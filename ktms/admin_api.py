@@ -1305,6 +1305,7 @@ def rfq_detail(rfq_id: int):
         return {
             "id": r.id,
             "rfq_no": _rfq_no_disp(r.rfq_no),
+            "assignee_id": r.created_by or 0,   # 담당자(PIC)
             "customer_rfq_no": r.customer_rfq_no or "",
             "contact_person": getattr(r, "contact_person", None) or "",
             "customer": cust.name if cust else "—",
