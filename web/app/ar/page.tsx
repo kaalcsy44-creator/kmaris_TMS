@@ -13,7 +13,7 @@ import {
   recordArPayment,
   updateArRecord,
 } from "@/lib/api";
-import { getToken, can, canEditDeal } from "@/lib/auth";
+import { getToken, can, canEditDeal, editBlockReason } from "@/lib/auth";
 import { useCachedData, invalidateCache } from "@/lib/useCachedData";
 import type { ArRow, DocumentDetail, PoWorkOptions } from "@/lib/types";
 import { tr } from "@/lib/labels";
@@ -442,7 +442,7 @@ function TaxIssueModal({
       </fieldset>
       <div className="form-actions">
         {!canEditThis ? (
-          <span className="hint-inline">View only — no edit permission for this deal</span>
+          <span className="hint-inline">{editBlockReason("ar", row.assignee_id)}</span>
         ) : (
           <>
             <button className="btn primary" disabled={busy} onClick={() => save(true)}>
@@ -526,7 +526,7 @@ function PaymentModal({
       </fieldset>
       <div className="form-actions">
         {!canEditThis ? (
-          <span className="hint-inline">View only — no edit permission for this deal</span>
+          <span className="hint-inline">{editBlockReason("ar", row.assignee_id)}</span>
         ) : (
           <>
             <button className="btn primary" disabled={busy} onClick={() => save(true)}>

@@ -17,7 +17,7 @@ import {
   updatePurchaseOrder,
   deletePurchaseOrder,
 } from "@/lib/api";
-import { getToken, can, canEditDeal } from "@/lib/auth";
+import { getToken, can, canEditDeal, editBlockReason } from "@/lib/auth";
 import { useCachedData, invalidateCache } from "@/lib/useCachedData";
 import FilterTable, { ColumnDef } from "@/components/common/FilterTable";
 import { identityColumns, projectNoColumn } from "@/components/common/identityColumns";
@@ -445,7 +445,7 @@ function OrderDetailModal({
           </fieldset>
           <div className="form-actions">
             {!canEditThis ? (
-              <span className="hint-inline">View only — no edit permission for this deal</span>
+              <span className="hint-inline">{editBlockReason("po", detail?.assignee_id)}</span>
             ) : (
               <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
             )}
@@ -711,7 +711,7 @@ function VendorPoDetailModal({
           </fieldset>
           <div className="form-actions">
             {!canEditThis ? (
-              <span className="hint-inline">View only — no edit permission for this deal</span>
+              <span className="hint-inline">{editBlockReason("po", d?.assignee_id)}</span>
             ) : (
               <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
             )}

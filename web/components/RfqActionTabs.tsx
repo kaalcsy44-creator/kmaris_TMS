@@ -29,7 +29,7 @@ import {
   updateCustomerQuotation,
   deleteCustomerQuotation,
 } from "@/lib/api";
-import { getToken, can, canEditDeal } from "@/lib/auth";
+import { getToken, can, canEditDeal, editBlockReason } from "@/lib/auth";
 import { tr } from "@/lib/labels";
 import type {
   VendorOption,
@@ -592,7 +592,7 @@ function VendorRfqDetailModal({
 
           <div className="form-actions">
             {!canEditThis ? (
-              <span className="hint-inline" style={{ marginLeft: "auto" }}>View only — no edit permission for this deal</span>
+              <span className="hint-inline" style={{ marginLeft: "auto" }}>{editBlockReason("rfq", d?.assignee_id)}</span>
             ) : showEdit ? (
               <>
                 <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
@@ -1018,7 +1018,7 @@ function VendorQuoteDetailModal({
           </fieldset>
           <div className="form-actions">
             {!canEditThis ? (
-              <span className="hint-inline" style={{ marginRight: "auto" }}>View only — no edit permission for this deal</span>
+              <span className="hint-inline" style={{ marginRight: "auto" }}>{editBlockReason("rfq", d?.assignee_id)}</span>
             ) : null}
             {canDeleteThis ? (
               <button className="btn danger" onClick={remove} disabled={busy} style={{ marginRight: "auto" }}>Delete</button>
@@ -1382,7 +1382,7 @@ function CustomerQuoteDetailModal({
           <div className="form-actions">
             <span className="action-name">Final: {dualCurrencyText(finalTotal, currency)} · {fxRateText()}</span>
             {!canEditThis ? (
-              <span className="hint-inline" style={{ marginRight: "auto" }}>View only — no edit permission for this deal</span>
+              <span className="hint-inline" style={{ marginRight: "auto" }}>{editBlockReason("rfq", d?.assignee_id)}</span>
             ) : null}
             {canDeleteThis ? (
               <button className="btn danger" onClick={remove} disabled={busy} style={{ marginRight: "auto" }}>Delete</button>

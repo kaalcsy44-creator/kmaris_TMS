@@ -17,7 +17,7 @@ import {
   saveServiceStage,
   deleteServiceStage,
 } from "@/lib/api";
-import { getToken, can, canEditDeal } from "@/lib/auth";
+import { getToken, can, canEditDeal, editBlockReason } from "@/lib/auth";
 import type { DocRow, DocumentDetail, DocumentWorkItem } from "@/lib/types";
 import { fetchDocumentsOverview } from "@/lib/api";
 import { useCachedData, invalidateCache } from "@/lib/useCachedData";
@@ -665,7 +665,7 @@ function ServiceStageForm({
 
       <div className="form-actions" style={{ marginTop: 14 }}>
         {!editable ? (
-          <span className="hint-inline">View only — no edit permission for this deal</span>
+          <span className="hint-inline">{editBlockReason("documents", data.order.assignee_id)}</span>
         ) : (
           <button className="btn primary" disabled={busy || data.order.id === 0} onClick={save}>
             {busy ? "Working…" : "Save"}
@@ -780,7 +780,7 @@ function ServiceBillingForm({ data, onChanged, onClose }: { data: DocumentDetail
       </fieldset>
       <div className="form-actions" style={{ marginTop: 14 }}>
         {!editable ? (
-          <span className="hint-inline">View only — no edit permission for this deal</span>
+          <span className="hint-inline">{editBlockReason("documents", data.order.assignee_id)}</span>
         ) : (
           <button className="btn primary" disabled={busy || data.order.id === 0} onClick={save}>
             {busy ? "Working…" : "Save billing + register AR"}
@@ -1109,7 +1109,7 @@ function PodTab({
             <input type="file" hidden accept=".pdf,image/*" onChange={onPick} disabled={busy} />
           </label>
         ) : (
-          <span className="hint-inline">View only — no edit permission for this deal</span>
+          <span className="hint-inline">{editBlockReason("documents", data.order.assignee_id)}</span>
         )}
         {err ? <span className="action-err">{err}</span> : null}
       </div>
@@ -1218,7 +1218,7 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
             Save CI
           </button>
         ) : (
-          <span className="hint-inline">View only — no edit permission for this deal</span>
+          <span className="hint-inline">{editBlockReason("documents", data.order.assignee_id)}</span>
         )}
         <DownloadButton orderId={data.order.id} kind="ci/pdf" disabled={!data.ci} label="Download CI PDF" />
         <span className="hint-inline">Total {dualCurrencyText(total, currency)} · {fxRateText()}</span>
@@ -1274,7 +1274,7 @@ function PackingListTab({ data, onChanged }: { data: DocumentDetail; onChanged: 
             Save PL
           </button>
         ) : (
-          <span className="hint-inline">View only — no edit permission for this deal</span>
+          <span className="hint-inline">{editBlockReason("documents", data.order.assignee_id)}</span>
         )}
         <DownloadButton orderId={data.order.id} kind="pl/pdf" disabled={!data.pl} label="Download PL PDF" />
       </div>
@@ -1374,7 +1374,7 @@ function ShippingAdviceTab({ data, onChanged }: { data: DocumentDetail; onChange
           </>
         ) : (
           <>
-            <span className="hint-inline">View only — no edit permission for this deal</span>
+            <span className="hint-inline">{editBlockReason("documents", data.order.assignee_id)}</span>
             <DownloadButton orderId={data.order.id} kind="sa/pdf" disabled={!data.sa} label="Download SA PDF" />
           </>
         )}
@@ -1446,7 +1446,7 @@ function TaxInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChanged: (
             Create Tax Invoice Data + register AR
           </button>
         ) : (
-          <span className="hint-inline">View only — no edit permission for this deal</span>
+          <span className="hint-inline">{editBlockReason("documents", data.order.assignee_id)}</span>
         )}
         <DownloadButton orderId={data.order.id} kind="tax/xlsx" disabled={!data.tax} label="Download Tax XLSX" />
         <span className="hint-inline">Total {dualCurrencyText(total, currency)} · {fxRateText()}</span>

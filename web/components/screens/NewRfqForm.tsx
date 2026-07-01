@@ -14,7 +14,7 @@ import {
   createSettingsVessel,
 } from "@/lib/api";
 import type { CustomerOption, SettingsVessel } from "@/lib/types";
-import { can, canEditDeal } from "@/lib/auth";
+import { can, canEditDeal, editBlockReason } from "@/lib/auth";
 
 type ItemRow = { part_no: string; description: string; qty: string; remark: string };
 
@@ -342,7 +342,7 @@ export default function NewRfqForm({
             ) : (
               <>
                 <span className="rfq-mode-tag">🔒 View only</span>
-                <span className="hint-inline">No edit permission for this deal (assigned to another PIC).</span>
+                <span className="hint-inline">{editBlockReason("rfq", assigneeId).replace(/^View only — /, "")}</span>
               </>
             )}
             {can("rfq", "create") ? (
@@ -628,7 +628,7 @@ export default function NewRfqForm({
           </button>
         ) : null}
         {!canEditThis ? (
-          <span className="hint-inline">View only — no edit permission for this deal</span>
+          <span className="hint-inline">{editBlockReason("rfq", assigneeId)}</span>
         ) : (
           <button
             className="btn primary"

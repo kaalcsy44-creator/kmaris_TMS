@@ -55,6 +55,22 @@ export function canEditDeal(assigneeId: number | null | undefined): boolean {
   return getUserId() === assigneeId;
 }
 
+/**
+ * 편집이 막힌 정확한 사유 문구(편집 가능하면 ""). 역할 권한 부족과 담당(PIC) 불일치를
+ * 구분해, "담당인데 왜 안 되지?" 같은 오해를 없앤다.
+ */
+export function editBlockReason(
+  module: PermModule,
+  assigneeId: number | null | undefined
+): string {
+  if (isAdmin()) return "";
+  const roleOk = can(module, "edit");
+  const ownOk = canEditDeal(assigneeId);
+  if (roleOk && ownOk) return "";
+  if (!ownOk) return "View only — assigned to another PIC";
+  return "View only — your role has no edit permission for this page";
+}
+
 /** 저장된 권한 그리드. 없으면 null. */
 export function getPerms(): PermGrid | null {
   if (typeof window === "undefined") return null;
