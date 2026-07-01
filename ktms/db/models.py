@@ -215,7 +215,8 @@ class Quotation(Base):
     vessel_id       = Column(Integer, ForeignKey("vessels.id"), nullable=True)
     date            = Column(String(10))
     valid_until     = Column(String(10))
-    currency        = Column(String(10), default="USD")
+    currency        = Column(String(10), default="USD")   # 판매(단가) 통화
+    cost_currency   = Column(String(10))                   # 원가(공급사 제시가) 통화
     vat_rate        = Column(Float, default=0.0)
     items           = Column(JSON, default=list)
     terms           = Column(JSON, default=dict)

@@ -57,6 +57,7 @@ import BaseMetaRows, { ModalTitle } from "./common/BaseMeta";
 import CurrencyToggle from "./common/CurrencyToggle";
 import {
   amountInputValue,
+  convertCurrency,
   DualCurrencyAmount,
   dualCurrencyText,
   fxRateText,
@@ -1138,6 +1139,7 @@ function CustomerQuoteDetailModal({
   const [editing, setEditing] = useState(!!autoEdit);
   const [qtnNo, setQtnNo] = useState("");
   const [currency, setCurrency] = useState("USD");
+  const [costCurrency, setCostCurrency] = useState("USD");
   const [sentAt, setSentAt] = useState("");
   const [validUntil, setValidUntil] = useState("");
   const [status, setStatus] = useState("");
@@ -1156,6 +1158,7 @@ function CustomerQuoteDetailModal({
         setD(data);
         setQtnNo(data.qtn_no || "");
         setCurrency(data.currency || "USD");
+        setCostCurrency(data.cost_currency || data.currency || "USD");
         setSentAt(toLocalDt(data.sent_at || data.sent_date));
         setValidUntil(data.valid_until || "");
         setStatus(data.status || "");
@@ -1182,6 +1185,7 @@ function CustomerQuoteDetailModal({
       await updateCustomerQuotation(id, {
         qtn_no: qtnNo,
         currency,
+        cost_currency: costCurrency,
         sent_at: sentAt,
         valid_until: validUntil,
         status,
@@ -1216,8 +1220,10 @@ function CustomerQuoteDetailModal({
     if (importVqId === "") return;
     const vq = vendorQuotes.find((v) => v.id === importVqId);
     if (!vq) return;
-    setItems(customerQuoteItemsFromVendorQuote(vq, defaultMargin));
-    if (vq.currency) setCurrency(vq.currency);
+    // 원가 통화 = 공급사 견적 통화. 판매 통화(currency)는 사용자가 정한 값을 유지하고
+    // 단가는 판매 통화로 환산해 계산한다.
+    setItems(customerQuoteItemsFromVendorQuote(vq, defaultMargin, currency));
+    if (vq.currency) setCostCurrency(vq.currency);
     setTerms((prev) => mergeTermsFromVendorQuote(prev, vq.terms));
     setMsg(`Loaded ${vq.items.length} item(s) from quote ${vq.vendor_quote_no} (${vq.vendor}).`);
   }
@@ -1282,8 +1288,18 @@ function CustomerQuoteDetailModal({
               <input value={qtnNo} onChange={(e) => setQtnNo(e.target.value)} placeholder="KMS-QUO-2606-001" />
             </div>
             <div className="form-field">
-              <label>Currency</label>
-              <CurrencyToggle value={currency} onChange={setCurrency} />
+              <label>Cost currency (vendor)</label>
+              <CurrencyToggle
+                value={costCurrency}
+                onChange={(c) => { setCostCurrency(c); setItems((prev) => recomputeCustomerQuoteItems(prev, c, currency)); }}
+              />
+            </div>
+            <div className="form-field">
+              <label>Sale currency (unit price)</label>
+              <CurrencyToggle
+                value={currency}
+                onChange={(c) => { setCurrency(c); setItems((prev) => recomputeCustomerQuoteItems(prev, costCurrency, c)); }}
+              />
             </div>
             <div className="form-field">
               <label>Sent at</label>
@@ -1302,7 +1318,7 @@ function CustomerQuoteDetailModal({
               </select>
             </div>
           </div>
-          <CustomerQuoteItemEditor items={items} onChange={setItems} currency={currency} />
+          <CustomerQuoteItemEditor items={items} onChange={setItems} currency={currency} costCurrency={costCurrency} />
           <QuotationTermsEditor terms={terms} onChange={setTerms} />
           <div className="form-actions">
             <span className="action-name">Total: {dualCurrencyText(total, currency)} · {fxRateText()}</span>
@@ -2024,11 +2040,13 @@ function mergeTermsFromVendorQuote(
 
 function customerQuoteItemsFromVendorQuote(
   vq: VendorQuoteForImport,
-  defaultMargin: number
+  defaultMargin: number,
+  saleCurrency = "USD"
 ): CustomerQuoteItem[] {
+  // 원가는 공급사 견적 통화(vq.currency), 단가는 판매 통화 기준으로 환산해 계산.
   return vq.items.map((it) => {
     const cost = Number(it.cost_price ?? 0);
-    const unit = calcUnitPrice(cost, defaultMargin);
+    const unit = calcUnitPrice(cost, defaultMargin, vq.currency, saleCurrency);
     const qty = Number(it.qty || 1);
     return {
       part_no: it.part_no || "",
@@ -2062,6 +2080,7 @@ function CustomerQuoteAction({
 }) {
   const [qtnNo, setQtnNo] = useState("");
   const [currency, setCurrency] = useState("USD");
+  const [costCurrency, setCostCurrency] = useState("USD");
   const [sentAt, setSentAt] = useState(nowLocalDt());
   const [items, setItems] = useState<CustomerQuoteItem[]>([]);
   const [validUntil, setValidUntil] = useState("");
@@ -2114,8 +2133,9 @@ function CustomerQuoteAction({
     if (importVqId === "") return;
     const vq = vendorQuotes.find((v) => v.id === importVqId);
     if (!vq) return;
-    setItems(customerQuoteItemsFromVendorQuote(vq, defaultMargin));
-    if (vq.currency) setCurrency(vq.currency);
+    // 원가 통화 = 공급사 견적 통화. 판매 통화(currency)는 사용자 선택값을 유지.
+    setItems(customerQuoteItemsFromVendorQuote(vq, defaultMargin, currency));
+    if (vq.currency) setCostCurrency(vq.currency);
     setTerms((prev) => mergeTermsFromVendorQuote(prev, vq.terms));
     setMsg(`Loaded ${vq.items.length} item(s) from quote ${vq.vendor_quote_no} (${vq.vendor}).`);
   }
@@ -2127,7 +2147,7 @@ function CustomerQuoteAction({
     setMsg(null);
     setErr(null);
     try {
-      const r = await createCustomerQuote(rfqId, currency, total, items, validUntil, undefined, terms, qtnNo, sentAt);
+      const r = await createCustomerQuote(rfqId, currency, total, items, validUntil, undefined, terms, qtnNo, sentAt, costCurrency);
       setQtn({ id: r.id, qtn_no: r.qtn_no });
       setMsg(`Sent — ${r.qtn_no}`);
       onDone();
@@ -2236,8 +2256,18 @@ function CustomerQuoteAction({
           <input value={qtnNo} onChange={(e) => setQtnNo(e.target.value)} placeholder="Blank = auto-generate" />
         </div>
         <div className="form-field">
-          <label>Currency</label>
-          <CurrencyToggle value={currency} onChange={setCurrency} />
+          <label>Cost currency (vendor)</label>
+          <CurrencyToggle
+            value={costCurrency}
+            onChange={(c) => { setCostCurrency(c); setItems((prev) => recomputeCustomerQuoteItems(prev, c, currency)); }}
+          />
+        </div>
+        <div className="form-field">
+          <label>Sale currency (unit price)</label>
+          <CurrencyToggle
+            value={currency}
+            onChange={(c) => { setCurrency(c); setItems((prev) => recomputeCustomerQuoteItems(prev, costCurrency, c)); }}
+          />
         </div>
         <div className="form-field">
           <label>Sent at</label>
@@ -2249,7 +2279,7 @@ function CustomerQuoteAction({
         </div>
       </div>
 
-      <CustomerQuoteItemEditor items={items} onChange={setItems} currency={currency} />
+      <CustomerQuoteItemEditor items={items} onChange={setItems} currency={currency} costCurrency={costCurrency} />
 
       <QuotationTermsEditor terms={terms} onChange={setTerms} />
 
@@ -2359,10 +2389,12 @@ function CustomerQuoteItemEditor({
   items,
   onChange,
   currency = "USD",
+  costCurrency = "USD",
 }: {
   items: CustomerQuoteItem[];
   onChange: (items: CustomerQuoteItem[]) => void;
   currency?: string;
+  costCurrency?: string;
 }) {
   function patch(i: number, key: keyof CustomerQuoteItem, value: string) {
     onChange(
@@ -2375,7 +2407,7 @@ function CustomerQuoteItemEditor({
           (next[key] as string) = value;
         }
         if (key === "cost_price" || key === "margin_pct" || key === "qty") {
-          const unit = calcUnitPrice(Number(next.cost_price || 0), Number(next.margin_pct || 0));
+          const unit = calcUnitPrice(Number(next.cost_price || 0), Number(next.margin_pct || 0), costCurrency, currency);
           next.unit_price = unit;
           next.amount = unit * Number(next.qty || 1);
         }
@@ -2386,6 +2418,8 @@ function CustomerQuoteItemEditor({
       })
     );
   }
+  const costCur = (costCurrency || "USD").toUpperCase();
+  const saleCur = (currency || "USD").toUpperCase();
   const total = items.reduce((sum, it) => sum + Number(it.amount || 0), 0);
 
   return (
@@ -2400,10 +2434,10 @@ function CustomerQuoteItemEditor({
               <th>Description</th>
               <th className="num">Qty</th>
               <th>Unit</th>
-              <th className="num">Cost</th>
+              <th className="num">Cost ({costCur})</th>
               <th className="num">Margin %</th>
-              <th className="num">Unit Price</th>
-              <th className="num">Amount</th>
+              <th className="num">Unit Price ({saleCur})</th>
+              <th className="num">Amount ({saleCur})</th>
             </tr>
           </thead>
           <tbody>
@@ -2436,6 +2470,25 @@ function CustomerQuoteItemEditor({
   );
 }
 
-function calcUnitPrice(cost: number, marginPct: number) {
-  return Number((cost * (1 + marginPct / 100)).toFixed(2));
+// 단가 = (원가를 판매통화로 환산) × (1 + 마진%). costCur/saleCur 를 주면 환율 적용.
+function calcUnitPrice(
+  cost: number,
+  marginPct: number,
+  costCur?: string,
+  saleCur?: string
+) {
+  const converted = convertCurrency(cost, costCur, saleCur);
+  return Number((converted * (1 + marginPct / 100)).toFixed(2));
+}
+
+// 통화 토글 변경 시 원가×마진 공식으로 단가·금액을 판매통화 기준으로 재환산.
+function recomputeCustomerQuoteItems(
+  items: CustomerQuoteItem[],
+  costCur: string,
+  saleCur: string
+): CustomerQuoteItem[] {
+  return items.map((it) => {
+    const unit = calcUnitPrice(Number(it.cost_price || 0), Number(it.margin_pct || 0), costCur, saleCur);
+    return { ...it, unit_price: unit, amount: unit * Number(it.qty || 1) };
+  });
 }

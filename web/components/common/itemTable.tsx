@@ -16,6 +16,20 @@ export function amountInputValue(value: number | string | null | undefined): str
   return parsed.toLocaleString(undefined, { maximumFractionDigits: 6 });
 }
 
+// USD↔KRW 고정환율 변환. 그 외 통화쌍은 환율이 없으므로 원값을 그대로 둔다.
+export function convertCurrency(
+  amount: number,
+  from: string | undefined,
+  to: string | undefined
+): number {
+  const f = (from || "USD").toUpperCase();
+  const t = (to || "USD").toUpperCase();
+  if (!Number.isFinite(amount) || f === t) return amount;
+  if (f === "KRW" && t === "USD") return amount / USD_KRW_RATE;
+  if (f === "USD" && t === "KRW") return amount * USD_KRW_RATE;
+  return amount;
+}
+
 export function moneyText(value: number | string | null | undefined): string {
   const parsed = toNumber(value);
   if (!Number.isFinite(parsed)) return "0";

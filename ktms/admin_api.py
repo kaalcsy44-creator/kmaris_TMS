@@ -4986,6 +4986,7 @@ def delete_rfq(rfq_id: int):
 class CustomerQuoteCreate(BaseModel):
     qtn_no: str | None = None
     currency: str = "USD"
+    cost_currency: str | None = None
     amount: float | None = None
     items: list[dict] | None = None
     sent_at: str | None = None
@@ -5025,6 +5026,7 @@ def create_customer_quote(rfq_id: int, body: CustomerQuoteCreate,
             customer_id=rfq.customer_id,
             vessel_id=rfq.vessel_id,
             currency=(body.currency or "USD"),
+            cost_currency=(body.cost_currency or None),
             status=QuotationStatus.SENT,
             valid_until=body.valid_until,
             items=items,
@@ -5044,6 +5046,7 @@ def create_customer_quote(rfq_id: int, body: CustomerQuoteCreate,
 class CustomerQuoteUpdate(BaseModel):
     qtn_no: str | None = None
     currency: str | None = None
+    cost_currency: str | None = None
     items: list[dict] | None = None
     sent_at: str | None = None
     valid_until: str | None = None
@@ -5069,6 +5072,7 @@ def customer_quotation_detail(qtn_id: int):
             "rfq_no": _rfq_no_disp(rfq.rfq_no) if rfq else "",
             **_base_meta(s, rfq),   # 공통 기본정보(고객·선박·업무·Project No.·최초 RFQ)
             "currency": qtn.currency or "USD",
+            "cost_currency": getattr(qtn, "cost_currency", None) or "",
             "amount": round(_quotation_total(qtn.items or []), 2),
             "valid_until": qtn.valid_until or "",
             "status": _enum_val(qtn.status),
@@ -5104,6 +5108,8 @@ def update_customer_quotation(qtn_id: int, body: CustomerQuoteUpdate):
             qtn.sent_date = sent_at[:10] if sent_at else None
         if body.currency is not None:
             qtn.currency = body.currency or "USD"
+        if body.cost_currency is not None:
+            qtn.cost_currency = body.cost_currency or None
         if body.valid_until is not None:
             qtn.valid_until = body.valid_until or None
         if body.terms is not None:

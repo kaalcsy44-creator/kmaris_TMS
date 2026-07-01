@@ -34,6 +34,7 @@ _MIGRATIONS = {
     "quotations": {
         "created_by": "INTEGER",
         "sent_at": "VARCHAR(16)",
+        "cost_currency": "VARCHAR(10)",
     },
     "customers": {
         "contact_phone": "VARCHAR(50)",
