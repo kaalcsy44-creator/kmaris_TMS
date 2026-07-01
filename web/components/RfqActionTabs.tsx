@@ -707,13 +707,12 @@ function VendorQuoteList({
   const [detailId, setDetailId] = useState<number | null>(null);
   const [pickRfqId, setPickRfqId] = useState<number | null>(null);
   const [vendorRfqs, setVendorRfqs] = useState<RfqDetailT["vendor_rfqs"]>([]);
-  const [autoEdit, setAutoEdit] = useState(false);
 
-  // 딥링크로만 1회 자동 편집 오픈(탭 전환 시 재오픈 방지).
+  // 딥링크로만 1회 자동 오픈(탭 전환 시 재오픈 방지).
   useEffect(() => {
     if (!autoEditId || rows.length === 0) return;
     const match = rows.find((r) => r.rfq_id === autoEditId);
-    if (match) { setAutoEdit(true); setDetailId(match.id); }
+    if (match) setDetailId(match.id);
     onAutoConsumed?.();
   }, [autoEditId, rows, onAutoConsumed]);
 
@@ -776,7 +775,7 @@ function VendorQuoteList({
         rows={rows}
         columns={columns}
         getRowKey={(r) => r.id}
-        onRowClick={(r) => { setAutoEdit(true); setDetailId(r.id); }}
+        onRowClick={(r) => setDetailId(r.id)}
         empty="No Vendor quotes received."
         actions={
           <button className="btn primary" onClick={() => { setPickRfqId(null); setAdding(true); }}>
@@ -803,7 +802,7 @@ function VendorQuoteList({
       ) : null}
 
       {detailId !== null ? (
-        <VendorQuoteDetailModal id={detailId} autoEdit={autoEdit} onClose={() => { setDetailId(null); setAutoEdit(false); }} onChanged={refresh} />
+        <VendorQuoteDetailModal id={detailId} onClose={() => setDetailId(null)} onChanged={refresh} />
       ) : null}
     </>
   );
@@ -811,17 +810,14 @@ function VendorQuoteList({
 
 function VendorQuoteDetailModal({
   id,
-  autoEdit,
   onClose,
   onChanged,
 }: {
   id: number;
-  autoEdit?: boolean;
   onClose: () => void;
   onChanged: () => void;
 }) {
   const [d, setD] = useState<VendorQuoteDetail | null>(null);
-  const [editing, setEditing] = useState(!!autoEdit);
   const [no, setNo] = useState("");
   const [receivedAt, setReceivedAt] = useState("");
   const [currency, setCurrency] = useState("USD");
@@ -906,9 +902,6 @@ function VendorQuoteDetailModal({
         items: cleanVendorQuoteItems(items),
         terms,
       });
-      const persisted = await fetchVendorQuoteDetail(id);
-      setD(persisted);
-      setEditing(false);
       onChanged();
       onClose();
     } catch (e) {
@@ -936,7 +929,7 @@ function VendorQuoteDetailModal({
     <Modal title={d ? <ModalTitle label={`Vendor quote — ${d.vendor_quote_no}`} projectNo={d.project_no} /> : "Vendor quote details"} onClose={onClose} wide>
       {!d ? (
         <div className="empty">Loading…</div>
-      ) : editing ? (
+      ) : (
         <>
           <div className="form-section-title">Project info</div>
           <dl className="intl-meta">
@@ -985,24 +978,9 @@ function VendorQuoteDetailModal({
           <VendorQuoteItemEditor items={items} onChange={setItems} currency={currency} />
           <QuotationTermsEditor terms={terms} onChange={setTerms} />
           <div className="form-actions">
+            <button className="btn danger" onClick={remove} disabled={busy} style={{ marginRight: "auto" }}>Delete</button>
             <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
-            <button className="btn" onClick={() => setEditing(false)} disabled={busy}>Cancel</button>
-          </div>
-          {err ? <span className="action-err">{err}</span> : null}
-        </>
-      ) : (
-        <>
-          <dl className="intl-meta">
-            <BaseMetaRows info={d} />
-            <div><dt>Vendor</dt><dd>{d.vendor}</dd></div>
-            <div><dt>Received</dt><dd>{d.received_date || "—"}</dd></div>
-            <div><dt>Notes</dt><dd>{d.notes || "—"}</dd></div>
-            <div><dt>Currency</dt><dd>{d.currency || "USD"}</dd></div>
-            <div><dt>Items</dt><dd>{d.items.length}</dd></div>
-          </dl>
-          <div className="form-actions">
-            <button className="btn" onClick={() => setEditing(true)} style={{ marginLeft: "auto" }}>✎ Edit</button>
-            <button className="btn danger" onClick={remove} disabled={busy}>Delete</button>
+            <button className="btn" onClick={onClose} disabled={busy}>Cancel</button>
           </div>
           {err ? <span className="action-err">{err}</span> : null}
         </>
@@ -1028,13 +1006,12 @@ function CustomerQuoteList({
   const [adding, setAdding] = useState(false);
   const [detailId, setDetailId] = useState<number | null>(null);
   const [pickRfqId, setPickRfqId] = useState<number | null>(null);
-  const [autoEdit, setAutoEdit] = useState(false);
 
-  // 딥링크로만 1회 자동 편집 오픈(탭 전환 시 재오픈 방지).
+  // 딥링크로만 1회 자동 오픈(탭 전환 시 재오픈 방지).
   useEffect(() => {
     if (!autoEditId || rows.length === 0) return;
     const match = rows.find((r) => r.rfq_id === autoEditId);
-    if (match) { setAutoEdit(true); setDetailId(match.id); }
+    if (match) setDetailId(match.id);
     onAutoConsumed?.();
   }, [autoEditId, rows, onAutoConsumed]);
 
@@ -1094,7 +1071,7 @@ function CustomerQuoteList({
         rows={rows}
         columns={columns}
         getRowKey={(r) => r.id}
-        onRowClick={(r) => { setAutoEdit(true); setDetailId(r.id); }}
+        onRowClick={(r) => setDetailId(r.id)}
         empty="No quotations to display."
         actions={
           <button className="btn primary" onClick={() => { setPickRfqId(null); setAdding(true); }}>
@@ -1119,7 +1096,7 @@ function CustomerQuoteList({
       ) : null}
 
       {detailId !== null ? (
-        <CustomerQuoteDetailModal id={detailId} autoEdit={autoEdit} onClose={() => { setDetailId(null); setAutoEdit(false); }} onChanged={refresh} />
+        <CustomerQuoteDetailModal id={detailId} onClose={() => setDetailId(null)} onChanged={refresh} />
       ) : null}
     </>
   );
@@ -1127,21 +1104,19 @@ function CustomerQuoteList({
 
 function CustomerQuoteDetailModal({
   id,
-  autoEdit,
   onClose,
   onChanged,
 }: {
   id: number;
-  autoEdit?: boolean;
   onClose: () => void;
   onChanged: () => void;
 }) {
   const [d, setD] = useState<CustomerQuotationDetail | null>(null);
-  const [editing, setEditing] = useState(!!autoEdit);
   const [qtnNo, setQtnNo] = useState("");
   const [currency, setCurrency] = useState("USD");
   const [costCurrency, setCostCurrency] = useState("USD");
   const [roundDigits, setRoundDigits] = useState<number>(DEFAULT_ROUND_DIGITS);
+  const [discountPct, setDiscountPct] = useState<number>(0);
   const [sentAt, setSentAt] = useState("");
   const [validUntil, setValidUntil] = useState("");
   const [status, setStatus] = useState("");
@@ -1164,6 +1139,7 @@ function CustomerQuoteDetailModal({
         setRoundDigits(
           typeof data.round_digits === "number" ? data.round_digits : DEFAULT_ROUND_DIGITS
         );
+        setDiscountPct(Number(data.discount_pct || 0));
         setSentAt(toLocalDt(data.sent_at || data.sent_date));
         setValidUntil(data.valid_until || "");
         setStatus(data.status || "");
@@ -1182,6 +1158,7 @@ function CustomerQuoteDetailModal({
   }, [id]);
 
   const total = items.reduce((sum, it) => sum + Number(it.amount || 0), 0);
+  const finalTotal = total * (1 - Number(discountPct || 0) / 100);
 
   async function save() {
     setBusy(true);
@@ -1192,13 +1169,13 @@ function CustomerQuoteDetailModal({
         currency,
         cost_currency: costCurrency,
         round_digits: roundDigits,
+        discount_pct: discountPct,
         sent_at: sentAt,
         valid_until: validUntil,
         status,
         terms,
         items,
       });
-      setEditing(false);
       onChanged();
       onClose();
     } catch (e) {
@@ -1240,7 +1217,7 @@ function CustomerQuoteDetailModal({
     <Modal title={d ? <ModalTitle label={`Quotation — ${d.qtn_no}`} projectNo={d.project_no} /> : "Quotation details"} onClose={onClose} wide>
       {!d ? (
         <div className="empty">Loading…</div>
-      ) : editing ? (
+      ) : (
         <>
           <div className="form-section-title">Project info</div>
           <dl className="intl-meta">
@@ -1341,30 +1318,20 @@ function CustomerQuoteDetailModal({
             </div>
           </div>
           <CustomerQuoteItemEditor items={items} onChange={setItems} currency={currency} costCurrency={costCurrency} roundDigits={roundDigits} />
+          <DiscountSummary
+            subtotal={total}
+            discountPct={discountPct}
+            onDiscountChange={setDiscountPct}
+            currency={currency}
+          />
           <QuotationTermsEditor terms={terms} onChange={setTerms} />
           <div className="form-actions">
-            <span className="action-name">Total: {dualCurrencyText(total, currency)} · {fxRateText()}</span>
+            <span className="action-name">Final: {dualCurrencyText(finalTotal, currency)} · {fxRateText()}</span>
+            <button className="btn danger" onClick={remove} disabled={busy} style={{ marginRight: "auto" }}>Delete</button>
             <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
-            <button className="btn" onClick={() => setEditing(false)} disabled={busy}>Cancel</button>
+            <button className="btn" onClick={onClose} disabled={busy}>Cancel</button>
           </div>
           {msg ? <span className="action-ok">{msg}</span> : null}
-          {err ? <span className="action-err">{err}</span> : null}
-        </>
-      ) : (
-        <>
-          <dl className="intl-meta">
-            <BaseMetaRows info={d} />
-            <div><dt>RFQ No.</dt><dd>{d.rfq_no || "—"}</dd></div>
-            <div><dt>Total</dt><dd>{dualCurrencyText(d.amount, d.currency)}<br /><span className="fx-note">{fxRateText()}</span></dd></div>
-            <div><dt>Sent at</dt><dd>{d.sent_at || d.sent_date || "—"}</dd></div>
-            <div><dt>Valid until</dt><dd>{d.valid_until || "—"}</dd></div>
-            <div><dt>Status</dt><dd>{tr(d.status)}</dd></div>
-            <div><dt>Items</dt><dd>{d.items.length}</dd></div>
-          </dl>
-          <div className="form-actions">
-            <button className="btn" onClick={() => setEditing(true)} style={{ marginLeft: "auto" }}>✎ Edit</button>
-            <button className="btn danger" onClick={remove} disabled={busy}>Delete</button>
-          </div>
           {err ? <span className="action-err">{err}</span> : null}
         </>
       )}
@@ -2105,6 +2072,7 @@ function CustomerQuoteAction({
   const [currency, setCurrency] = useState("USD");
   const [costCurrency, setCostCurrency] = useState("USD");
   const [roundDigits, setRoundDigits] = useState<number>(DEFAULT_ROUND_DIGITS);
+  const [discountPct, setDiscountPct] = useState<number>(0);
   const [sentAt, setSentAt] = useState(nowLocalDt());
   const [items, setItems] = useState<CustomerQuoteItem[]>([]);
   const [validUntil, setValidUntil] = useState("");
@@ -2165,13 +2133,14 @@ function CustomerQuoteAction({
   }
 
   const total = items.reduce((sum, it) => sum + Number(it.amount || 0), 0);
+  const finalTotal = total * (1 - Number(discountPct || 0) / 100);
 
   async function submit() {
     setBusy(true);
     setMsg(null);
     setErr(null);
     try {
-      const r = await createCustomerQuote(rfqId, currency, total, items, validUntil, undefined, terms, qtnNo, sentAt, costCurrency, roundDigits);
+      const r = await createCustomerQuote(rfqId, currency, finalTotal, items, validUntil, undefined, terms, qtnNo, sentAt, costCurrency, roundDigits, discountPct);
       setQtn({ id: r.id, qtn_no: r.qtn_no });
       setMsg(`Sent — ${r.qtn_no}`);
       onDone();
@@ -2321,10 +2290,17 @@ function CustomerQuoteAction({
 
       <CustomerQuoteItemEditor items={items} onChange={setItems} currency={currency} costCurrency={costCurrency} roundDigits={roundDigits} />
 
+      <DiscountSummary
+        subtotal={total}
+        discountPct={discountPct}
+        onDiscountChange={setDiscountPct}
+        currency={currency}
+      />
+
       <QuotationTermsEditor terms={terms} onChange={setTerms} />
 
       <div className="form-actions">
-        <span className="action-name">Total: {dualCurrencyText(total, currency)} · {fxRateText()}</span>
+        <span className="action-name">Final: {dualCurrencyText(finalTotal, currency)} · {fxRateText()}</span>
         <button className="btn primary" onClick={submit} disabled={busy || items.length === 0}>
           {busy ? "Saving…" : "Save quote"}
         </button>
@@ -2507,6 +2483,47 @@ function CustomerQuoteItemEditor({
             </tr>
           </tfoot>
         </table>
+      </div>
+    </div>
+  );
+}
+
+// 소계 · 할인율 입력 · 최종금액 요약. 할인율은 견적 총액(소계)에 적용된다.
+function DiscountSummary({
+  subtotal,
+  discountPct,
+  onDiscountChange,
+  currency = "USD",
+}: {
+  subtotal: number;
+  discountPct: number;
+  onDiscountChange: (v: number) => void;
+  currency?: string;
+}) {
+  const discountAmt = subtotal * (Number(discountPct || 0) / 100);
+  const finalTotal = subtotal - discountAmt;
+  return (
+    <div className="form-grid" style={{ marginTop: 12 }}>
+      <div className="form-field">
+        <label>Subtotal</label>
+        <div className="static-value"><DualCurrencyAmount value={subtotal} currency={currency} /></div>
+      </div>
+      <div className="form-field">
+        <label>Discount (%)</label>
+        <input
+          className="num"
+          type="number"
+          value={discountPct}
+          onChange={(e) => onDiscountChange(Number(e.target.value) || 0)}
+        />
+      </div>
+      <div className="form-field">
+        <label>Discount amount</label>
+        <div className="static-value">- {dualCurrencyText(discountAmt, currency)}</div>
+      </div>
+      <div className="form-field">
+        <label>Final total</label>
+        <div className="static-value"><b><DualCurrencyAmount value={finalTotal} currency={currency} /></b></div>
       </div>
     </div>
   );

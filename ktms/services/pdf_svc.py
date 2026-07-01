@@ -51,6 +51,7 @@ def build_payload(
     po_no: str = "",
     export_ref: str = "",
     tax_invoice: Optional[dict] = None,
+    discount_pct: float = 0.0,
 ) -> Dict[str, Any]:
     return {
         "doc_no": doc_no,
@@ -58,6 +59,7 @@ def build_payload(
         "valid_until": valid_until,
         "currency": currency,
         "vat_rate": vat_rate,
+        "discount_pct": discount_pct,
         "customer": _customer_dict(customer),
         "vessel": _vessel_dict(vessel),
         "items": items,

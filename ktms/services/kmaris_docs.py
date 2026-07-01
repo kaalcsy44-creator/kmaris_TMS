@@ -139,11 +139,22 @@ def normalize_items(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return normalized
 
 
-def calc_totals(items: List[Dict[str, Any]], vat_rate: float = 0.0) -> Dict[str, float]:
+def calc_totals(
+    items: List[Dict[str, Any]], vat_rate: float = 0.0, discount_pct: float = 0.0
+) -> Dict[str, float]:
     subtotal = sum(_num(item.get("amount", 0)) for item in normalize_items(items))
-    vat = subtotal * _num(vat_rate)
-    total = subtotal + vat
-    return {"subtotal": subtotal, "vat": vat, "total": total}
+    discount = subtotal * (_num(discount_pct) / 100.0)
+    discounted = subtotal - discount
+    vat = discounted * _num(vat_rate)
+    total = discounted + vat
+    return {
+        "subtotal": subtotal,
+        "discount_pct": _num(discount_pct),
+        "discount": discount,
+        "discounted": discounted,
+        "vat": vat,
+        "total": total,
+    }
 
 
 def _styles() -> Dict[str, ParagraphStyle]:
@@ -369,12 +380,23 @@ def _items_table(data: Dict[str, Any], doc_type: str):
 def _totals_table(data: Dict[str, Any]):
     s = _styles()
     currency = data.get("currency", "USD")
-    totals = calc_totals(data.get("items", []), _num(data.get("vat_rate", 0)))
+    totals = calc_totals(
+        data.get("items", []), _num(data.get("vat_rate", 0)), _num(data.get("discount_pct", 0))
+    )
     rows = [
         [_p("Subtotal", s["base"]), _p(_money(totals["subtotal"], currency), s["right"])],
-        [_p("VAT", s["base"]), _p(_money(totals["vat"], currency), s["right"])],
-        [_p("Total", s["base"]), _p(f"<b>{_money(totals['total'], currency)}</b>", s["right"])],
     ]
+    if totals.get("discount_pct"):
+        rows.append(
+            [
+                _p(f"Discount ({_num(totals['discount_pct']):g}%)", s["base"]),
+                _p(f"-{_money(totals['discount'], currency)}", s["right"]),
+            ]
+        )
+    rows.append([_p("VAT", s["base"]), _p(_money(totals["vat"], currency), s["right"])])
+    rows.append(
+        [_p("Total", s["base"]), _p(f"<b>{_money(totals['total'], currency)}</b>", s["right"])]
+    )
     table = Table(rows, colWidths=[35 * mm, 45 * mm])
     table.setStyle(
         TableStyle(

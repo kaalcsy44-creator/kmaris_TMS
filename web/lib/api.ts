@@ -740,13 +740,15 @@ export function createCustomerQuote(
   qtnNo?: string,
   sentAt?: string,
   costCurrency?: string,
-  roundDigits?: number
+  roundDigits?: number,
+  discountPct?: number
 ): Promise<{ ok: boolean; id: number; qtn_no: string }> {
   return post(`/api/admin/rfq/${rfqId}/customer-quote`, {
     qtn_no: qtnNo,
     currency,
     cost_currency: costCurrency,
     round_digits: roundDigits,
+    discount_pct: discountPct,
     amount,
     items,
     sent_at: sentAt,
@@ -844,6 +846,7 @@ export function updateCustomerQuotation(
     currency?: string;
     cost_currency?: string;
     round_digits?: number;
+    discount_pct?: number;
     items?: CustomerQuoteItem[];
     sent_at?: string;
     valid_until?: string;

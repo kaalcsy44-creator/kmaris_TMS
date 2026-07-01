@@ -218,6 +218,7 @@ class Quotation(Base):
     currency        = Column(String(10), default="USD")   # 판매(단가) 통화
     cost_currency   = Column(String(10))                   # 원가(공급사 제시가) 통화
     round_digits    = Column(Integer)                      # 단가 올림 자릿수(ROUNDUP num_digits)
+    discount_pct    = Column(Float, default=0.0)            # 총액 할인율(%) — 최종금액 산출용
     vat_rate        = Column(Float, default=0.0)
     items           = Column(JSON, default=list)
     terms           = Column(JSON, default=dict)

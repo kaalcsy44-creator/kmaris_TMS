@@ -788,6 +788,7 @@ export type CustomerQuotationDetail = {
   currency: string;
   cost_currency?: string;
   round_digits?: number;
+  discount_pct?: number;
   amount: number;
   valid_until: string;
   sent_at: string;

@@ -2515,18 +2515,22 @@ def ar_payment(ar_id: int, body: ARPayment):
         s.close()
 
 
-def _quotation_total(items) -> float:
-    """견적 총액 — amount 합계, 없으면 unit_price*qty 로 보정."""
+def _quotation_total(items, discount_pct: float = 0.0) -> float:
+    """견적 최종 총액 — amount 합계(없으면 unit_price*qty 보정)에 할인율 적용."""
     amt = _total_amount(items)
-    if amt:
-        return amt
-    tot = 0.0
-    for it in (items or []):
-        try:
-            tot += float(it.get("unit_price", 0) or 0) * float(it.get("qty", 1) or 1)
-        except (TypeError, ValueError):
-            pass
-    return tot
+    if not amt:
+        tot = 0.0
+        for it in (items or []):
+            try:
+                tot += float(it.get("unit_price", 0) or 0) * float(it.get("qty", 1) or 1)
+            except (TypeError, ValueError):
+                pass
+        amt = tot
+    try:
+        disc = float(discount_pct or 0)
+    except (TypeError, ValueError):
+        disc = 0.0
+    return amt * (1 - disc / 100.0)
 
 
 @app.get("/api/admin/quotation-overview", dependencies=[Depends(require_token)])
@@ -2559,7 +2563,7 @@ def quotation_overview(customer_id: int | None = None,
                 "customer": cust_names.get(qt.customer_id, "—"),
                 "vessel": vessel_names.get(qt.vessel_id, "") if qt.vessel_id else "",
                 "currency": qt.currency or "USD",
-                "amount": round(_quotation_total(qt.items or []), 2),
+                "amount": round(_quotation_total(qt.items or [], getattr(qt, "discount_pct", 0) or 0), 2),
                 "item_count": len(qt.items or []),
                 "status": _enum_val(qt.status),
                 "level": _enum_val(qt.follow_up_level) if qt.follow_up_level else "",
@@ -4988,6 +4992,7 @@ class CustomerQuoteCreate(BaseModel):
     currency: str = "USD"
     cost_currency: str | None = None
     round_digits: int | None = None
+    discount_pct: float | None = None
     amount: float | None = None
     items: list[dict] | None = None
     sent_at: str | None = None
@@ -5029,6 +5034,7 @@ def create_customer_quote(rfq_id: int, body: CustomerQuoteCreate,
             currency=(body.currency or "USD"),
             cost_currency=(body.cost_currency or None),
             round_digits=body.round_digits,
+            discount_pct=(body.discount_pct or 0.0),
             status=QuotationStatus.SENT,
             valid_until=body.valid_until,
             items=items,
@@ -5050,6 +5056,7 @@ class CustomerQuoteUpdate(BaseModel):
     currency: str | None = None
     cost_currency: str | None = None
     round_digits: int | None = None
+    discount_pct: float | None = None
     items: list[dict] | None = None
     sent_at: str | None = None
     valid_until: str | None = None
@@ -5077,7 +5084,8 @@ def customer_quotation_detail(qtn_id: int):
             "currency": qtn.currency or "USD",
             "cost_currency": getattr(qtn, "cost_currency", None) or "",
             "round_digits": getattr(qtn, "round_digits", None),
-            "amount": round(_quotation_total(qtn.items or []), 2),
+            "discount_pct": getattr(qtn, "discount_pct", 0) or 0,
+            "amount": round(_quotation_total(qtn.items or [], getattr(qtn, "discount_pct", 0) or 0), 2),
             "valid_until": qtn.valid_until or "",
             "status": _enum_val(qtn.status),
             "level": _enum_val(qtn.follow_up_level) if qtn.follow_up_level else "",
@@ -5116,6 +5124,8 @@ def update_customer_quotation(qtn_id: int, body: CustomerQuoteUpdate):
             qtn.cost_currency = body.cost_currency or None
         if body.round_digits is not None:
             qtn.round_digits = body.round_digits
+        if body.discount_pct is not None:
+            qtn.discount_pct = body.discount_pct
         if body.valid_until is not None:
             qtn.valid_until = body.valid_until or None
         if body.terms is not None:
@@ -5171,6 +5181,7 @@ def quotation_pdf(qtn_id: int, doc_type: str = "quotation"):
             currency=qtn.currency or "USD",
             vat_rate=qtn.vat_rate or 0.0,
             valid_until=qtn.valid_until or "",
+            discount_pct=getattr(qtn, "discount_pct", 0) or 0.0,
         )
         pdf = generate_pdf(doc_type, payload)
         return Response(
@@ -5233,6 +5244,7 @@ def quotation_send(qtn_id: int, body: QuotationSendReq):
             currency=qtn.currency or "USD",
             vat_rate=qtn.vat_rate or 0.0,
             valid_until=qtn.valid_until or "",
+            discount_pct=getattr(qtn, "discount_pct", 0) or 0.0,
         )
         pdf = generate_pdf(body.doc_type, payload)
         sent = send_email(
