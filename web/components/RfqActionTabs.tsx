@@ -825,6 +825,7 @@ function VendorQuoteDetailModal({
   const [currency, setCurrency] = useState("USD");
   const [notes, setNotes] = useState("");
   const [items, setItems] = useState<VendorQuoteItem[]>([]);
+  const [terms, setTerms] = useState<QuotationTerms>({});
   const [parseMsg, setParseMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -838,6 +839,7 @@ function VendorQuoteDetailModal({
         setCurrency(data.currency || "USD");
         setNotes(data.notes || "");
         setItems((data.items || []).map(normalizeVendorQuoteItem));
+        setTerms(data.terms || {});
         setParseMsg(null);
       })
       .catch((e) => setErr(e instanceof Error ? e.message : "Error"));
@@ -900,6 +902,7 @@ function VendorQuoteDetailModal({
         currency,
         notes,
         items: cleanVendorQuoteItems(items),
+        terms,
       });
       const persisted = await fetchVendorQuoteDetail(id);
       setD(persisted);
@@ -978,6 +981,7 @@ function VendorQuoteDetailModal({
             {parseMsg ? <span className="action-ok">{parseMsg}</span> : null}
           </div>
           <VendorQuoteItemEditor items={items} onChange={setItems} currency={currency} />
+          <QuotationTermsEditor terms={terms} onChange={setTerms} />
           <div className="form-actions">
             <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
             <button className="btn" onClick={() => setEditing(false)} disabled={busy}>Cancel</button>
@@ -1214,6 +1218,7 @@ function CustomerQuoteDetailModal({
     if (!vq) return;
     setItems(customerQuoteItemsFromVendorQuote(vq, defaultMargin));
     if (vq.currency) setCurrency(vq.currency);
+    setTerms((prev) => mergeTermsFromVendorQuote(prev, vq.terms));
     setMsg(`Loaded ${vq.items.length} item(s) from quote ${vq.vendor_quote_no} (${vq.vendor}).`);
   }
 
@@ -1708,6 +1713,7 @@ function VendorQuoteAction({
   const [currency, setCurrency] = useState("USD");
   const [notes, setNotes] = useState("");
   const [items, setItems] = useState<VendorQuoteItem[]>([]);
+  const [terms, setTerms] = useState<QuotationTerms>({});
   const [parseMsg, setParseMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -1762,13 +1768,15 @@ function VendorQuoteAction({
         currency,
         clean,
         receivedAt,
-        notes
+        notes,
+        terms
       );
       setMsg(`Registered — ${r.vendor_quote_no}`);
       setNo("");
       setCurrency("USD");
       setNotes("");
       setItems([]);
+      setTerms({});
       setVrfqId("");
       setReceivedAt(nowLocalDt());
       onDone();
@@ -1837,6 +1845,8 @@ function VendorQuoteAction({
           </div>
 
           <VendorQuoteItemEditor items={items} onChange={setItems} currency={currency} />
+
+          <QuotationTermsEditor terms={terms} onChange={setTerms} />
 
           <div className="form-field" style={{ marginTop: 12 }}>
             <label>Notes</label>
@@ -1997,6 +2007,21 @@ function cleanVendorQuoteItems(items: VendorQuoteItem[]): VendorQuoteItem[] {
   return items.map(normalizeVendorQuoteItem).filter((it) => it.part_no || it.description);
 }
 
+// 공급사 견적의 거래조건을 고객 견적으로 병합 — 값이 있는 항목만 덮어써
+// 사용자가 이미 입력한 조건을 빈 값으로 지우지 않는다.
+function mergeTermsFromVendorQuote(
+  prev: QuotationTerms,
+  vqTerms?: QuotationTerms
+): QuotationTerms {
+  if (!vqTerms) return prev;
+  const next = { ...prev };
+  (Object.keys(vqTerms) as (keyof QuotationTerms)[]).forEach((k) => {
+    const v = vqTerms[k];
+    if (v != null && String(v).trim() !== "") next[k] = v;
+  });
+  return next;
+}
+
 function customerQuoteItemsFromVendorQuote(
   vq: VendorQuoteForImport,
   defaultMargin: number
@@ -2091,6 +2116,7 @@ function CustomerQuoteAction({
     if (!vq) return;
     setItems(customerQuoteItemsFromVendorQuote(vq, defaultMargin));
     if (vq.currency) setCurrency(vq.currency);
+    setTerms((prev) => mergeTermsFromVendorQuote(prev, vq.terms));
     setMsg(`Loaded ${vq.items.length} item(s) from quote ${vq.vendor_quote_no} (${vq.vendor}).`);
   }
 

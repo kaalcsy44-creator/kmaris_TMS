@@ -702,7 +702,8 @@ export function createVendorQuote(
   currency: string,
   items?: VendorQuoteItem[],
   receivedAt?: string,
-  notes?: string
+  notes?: string,
+  terms?: QuotationTerms
 ): Promise<{ ok: boolean; vendor_quote_no: string }> {
   return post(`/api/admin/rfq/${rfqId}/vendor-quote`, {
     vendor_rfq_id: vendorRfqId,
@@ -712,6 +713,7 @@ export function createVendorQuote(
     items,
     received_at: receivedAt,
     notes,
+    terms,
   });
 }
 
@@ -813,6 +815,7 @@ export function updateVendorQuote(
     currency?: string;
     notes?: string;
     items?: VendorQuoteItem[];
+    terms?: QuotationTerms;
   }
 ): Promise<{ ok: boolean; vendor_quote_no: string; currency?: string }> {
   return put(`/api/admin/vendor-quote/${id}`, body);

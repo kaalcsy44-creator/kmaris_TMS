@@ -4371,6 +4371,7 @@ class VendorQuoteCreate(BaseModel):
     received_at: str | None = None     # 견적 수신 일시 "YYYY-MM-DDTHH:MM"(비우면 현재)
     notes: str = ""
     items: list[dict] | None = None
+    terms: dict | None = None
 
 
 @app.post("/api/admin/vendor-quote-parse", dependencies=[Depends(require_token)])
@@ -4441,6 +4442,7 @@ def create_vendor_quote(rfq_id: int, body: VendorQuoteCreate):
             received_at=received_at,
             currency=body.currency or "USD",
             items=items,
+            terms=body.terms or {},
             notes=body.notes or "",
         )
         s.add(vq)
@@ -4478,6 +4480,7 @@ def rfq_vendor_quotes(rfq_id: int):
                 "received_at": getattr(q, "received_at", None) or "",
                 "currency": getattr(q, "currency", None) or "USD",
                 "items": q.items or [],
+                "terms": getattr(q, "terms", None) or {},
             })
         return {"vendor_quotes": out}
     finally:
@@ -4491,6 +4494,7 @@ class VendorQuoteUpdate(BaseModel):
     currency: str | None = None
     notes: str | None = None
     items: list[dict] | None = None
+    terms: dict | None = None
 
 
 @app.get("/api/admin/vendor-quote/{vq_id}", dependencies=[Depends(require_token)])
@@ -4517,6 +4521,7 @@ def vendor_quote_detail(vq_id: int):
             "notes": q.notes or "",
             "currency": getattr(q, "currency", None) or "USD",
             "items": q.items or [],
+            "terms": getattr(q, "terms", None) or {},
         }
     finally:
         s.close()
@@ -4549,6 +4554,8 @@ def update_vendor_quote(vq_id: int, body: VendorQuoteUpdate):
             q.received_date = body.received_date.strip()
         if body.items is not None:
             q.items = body.items
+        if body.terms is not None:
+            q.terms = body.terms
         s.commit()
         saved_currency = (
             s.execute(text("SELECT currency FROM vendor_quotes WHERE id = :id"), {"id": vq_id}).scalar()

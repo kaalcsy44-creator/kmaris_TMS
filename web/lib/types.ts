@@ -363,6 +363,7 @@ export type VendorQuoteForImport = {
   received_at?: string;
   currency: string;
   items: VendorQuoteItem[];
+  terms?: QuotationTerms;
 };
 
 export type QtnRow = {
@@ -770,6 +771,7 @@ export type VendorQuoteDetail = {
   notes: string;
   currency: string;
   items: VendorQuoteItem[];
+  terms: QuotationTerms;
 };
 
 export type CustomerQuotationDetail = {
