@@ -272,7 +272,7 @@ function PipelineTable({
   steps: string[];
   customers: CustomerOption[];
   vessels: SettingsVessel[];
-  onChanged: () => void;
+  onChanged: () => void | Promise<unknown>;
   // 단계 체계 추상화: 내부확인용=12단계(r.stage), 고객확인용=7단계(매핑값)
   stageOf?: (r: PipelineRow) => number;
   // 컬럼 커스터마이즈 저장 키(내부/고객 뷰 별도)
@@ -714,7 +714,7 @@ function PipelineModal({
   steps: string[];
   customers: CustomerOption[];
   vessels: SettingsVessel[];
-  onChanged: () => void;
+  onChanged: () => void | Promise<unknown>;
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -760,8 +760,10 @@ function PipelineModal({
         received_at: fReceivedAt || undefined,
         assignee_id: fAssigneeId === "" ? 0 : fAssigneeId, // 0 = 담당자 미지정
       });
+      // 목록 새로고침이 끝난 뒤에 편집 모드를 닫는다. 그래야 보기 모드로 돌아갈 때
+      // 이미 갱신된 값(예: PIC)이 반영되어, "한 번에 안 바뀐다"는 착시가 없어진다.
+      await onChanged();
       setEditing(false);
-      onChanged();
     } catch (e) {
       window.alert(e instanceof Error ? e.message : "Update failed");
     } finally {
