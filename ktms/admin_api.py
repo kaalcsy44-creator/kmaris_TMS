@@ -47,9 +47,10 @@ from services.pdf_parser import (
     extract_text_from_pdf, parse_order_fields, parse_rfq_fields,
     parse_rfq_image, parse_order_image,
     parse_vendor_quote_text, parse_vendor_quote_image,
+    parse_vendor_quote_pdf_document,
 )
 from services.vendor_xlsx import make_vendor_rfq_quote_xlsx
-from services.quote_response_parser import parse_vendor_quote_bytes
+from services.quote_response_parser import parse_vendor_quote_bytes, excel_to_text
 from db.models import (
     RFQ, Customer, Vessel, Vendor, User, UserRole, RolePermission, ItemMaster, DocSequence,
     VendorRFQ, VendorQuote, Quotation, QuotationStatus, FollowUpLevel,
@@ -4430,11 +4431,22 @@ def vendor_quote_parse(file: UploadFile = File(...)):
             items = parse_vendor_quote_bytes(raw, name)
             if items:
                 return {"items": items}
-            # 3) 비정형 PDF → Claude 텍스트 파서로 폴백
+
+            # 3) 표 파서 실패 → Claude 폴백
             if lower.endswith(".pdf"):
+                # 3a) 텍스트가 있으면 텍스트 파서
                 text = extract_text_from_pdf(io.BytesIO(raw))
                 if text:
-                    return parse_vendor_quote_text(text)
+                    result = parse_vendor_quote_text(text)
+                    if result.get("items"):
+                        return result
+                # 3b) 텍스트 없음(스캔본)·텍스트 파서 실패 → PDF 비전 파서
+                return parse_vendor_quote_pdf_document(raw)
+
+            # Excel 비정형 → 셀 전체를 텍스트로 덤프해 Claude 텍스트 파서로 폴백
+            xls_text = excel_to_text(raw)
+            if xls_text:
+                return parse_vendor_quote_text(xls_text)
             return {"items": []}
 
         raise HTTPException(

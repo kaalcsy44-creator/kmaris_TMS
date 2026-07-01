@@ -267,6 +267,34 @@ JSON schema (all strings on one line, no embedded newlines):
     return _parse_image(image_bytes, media_type, prompt)
 
 
+def parse_vendor_quote_pdf_document(pdf_bytes: bytes) -> dict:
+    """Vendor 견적 PDF 전체를 Claude에 document(비전)로 넘겨 품목을 추출.
+
+    스캔본(텍스트 없음)이나 표 파서·텍스트 파서가 실패하는 비정형 PDF 대비 폴백.
+    """
+    import base64
+    client = _anthropic_client()
+    b64 = base64.standard_b64encode(pdf_bytes).decode()
+    prompt = f"""{_VQ_INSTRUCTIONS}
+The attached file is a vendor quotation PDF (it may be scanned or non-standard).
+Output ONLY a single-line compact JSON object (no newlines, no markdown).
+
+JSON schema (all strings on one line, no embedded newlines):
+{_VQ_SCHEMA}"""
+    response = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=4096,
+        messages=[{
+            "role": "user",
+            "content": [
+                {"type": "document", "source": {"type": "base64", "media_type": "application/pdf", "data": b64}},
+                {"type": "text", "text": prompt},
+            ],
+        }],
+    )
+    return _parse_response(response.content[0].text)
+
+
 def parse_order_fields(text: str, customer_names: list[str] | None = None) -> dict:
     """Use Claude Haiku to extract structured Order (customer P/O) fields from PDF text."""
     client = _anthropic_client()

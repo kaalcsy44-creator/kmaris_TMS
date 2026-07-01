@@ -53,6 +53,7 @@ import WorkTypeBadge from "./WorkTypeBadge";
 import FilterTable, { ColumnDef } from "./common/FilterTable";
 import { identityColumns, projectNoColumn, statusColumns } from "./common/identityColumns";
 import VendorName from "./common/VendorName";
+import { imageFromClipboard } from "@/lib/imagePaste";
 import Modal from "./common/Modal";
 import BaseMetaRows, { ModalTitle } from "./common/BaseMeta";
 import CurrencyToggle from "./common/CurrencyToggle";
@@ -875,6 +876,15 @@ function VendorQuoteDetailModal({
     }
   }
 
+  // 캡쳐본 붙여넣기(Ctrl+V) → 이미지면 바로 파싱
+  function handlePaste(e: React.ClipboardEvent) {
+    const img = imageFromClipboard(e);
+    if (img) {
+      e.preventDefault();
+      parseFile(img);
+    }
+  }
+
   async function loadVendorRfqItems() {
     if (!d) return;
     setBusy(true);
@@ -941,7 +951,7 @@ function VendorQuoteDetailModal({
       {!d ? (
         <div className="empty">Loading…</div>
       ) : (
-        <>
+        <div onPaste={handlePaste}>
           <div className="form-section-title">Project info</div>
           <dl className="intl-meta">
             <BaseMetaRows info={d} />
@@ -971,7 +981,7 @@ function VendorQuoteDetailModal({
 
           <div className="po-work-note" style={{ marginTop: 12 }}>
             <b>Auto-fill quote items</b>
-            <span>Upload the vendor quote file (PDF, JPG/PNG, Excel) or load the original Vendor RFQ item list.</span>
+            <span>Upload the vendor quote file (PDF, JPG/PNG, Excel), paste a screenshot with Ctrl+V, or load the original Vendor RFQ item list.</span>
           </div>
           <div className="action-row">
             <input
@@ -994,7 +1004,7 @@ function VendorQuoteDetailModal({
             <button className="btn" onClick={onClose} disabled={busy}>Cancel</button>
           </div>
           {err ? <span className="action-err">{err}</span> : null}
-        </>
+        </div>
       )}
     </Modal>
   );
@@ -1768,6 +1778,15 @@ function VendorQuoteAction({
     }
   }
 
+  // 캡쳐본 붙여넣기(Ctrl+V) → 이미지면 바로 파싱
+  function handlePaste(e: React.ClipboardEvent) {
+    const img = imageFromClipboard(e);
+    if (img) {
+      e.preventDefault();
+      parseFile(img);
+    }
+  }
+
   async function submit() {
     if (vrfqId === "") return;
     setBusy(true);
@@ -1807,7 +1826,7 @@ function VendorQuoteAction({
   }
 
   return (
-    <div>
+    <div onPaste={handlePaste}>
       <div className="sub-h">Register Vendor Quote</div>
       {vendorRfqs.length === 0 ? (
         <span className="hint-inline">Select a project with a sent Vendor RFQ to enable saving.</span>
@@ -1850,7 +1869,7 @@ function VendorQuoteAction({
 
           <div className="po-work-note" style={{ marginTop: 12 }}>
             <b>Upload Vendor quote file</b>
-            <span>Upload the PDF · Excel · image (screenshot/photo) returned by the vendor to auto-fill the item list (Description, Part No., Maker, Origin, Unit Price, Lead Time, etc.).</span>
+            <span>Upload the PDF · Excel · image (screenshot/photo) returned by the vendor — or paste a screenshot with Ctrl+V anywhere in this form — to auto-fill the item list (Description, Part No., Maker, Origin, Unit Price, Lead Time, etc.).</span>
           </div>
           <div className="action-row">
             <input

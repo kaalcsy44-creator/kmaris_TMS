@@ -273,6 +273,23 @@ def _parse_pdf(file_bytes: bytes) -> List[Dict]:
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
+def excel_to_text(file_bytes: bytes, max_rows: int = 200) -> str:
+    """Excel 전체 시트를 탭 구분 텍스트로 덤프(비정형 Excel의 AI 폴백 입력용)."""
+    import openpyxl
+    wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
+    lines: List[str] = []
+    for ws in wb.worksheets:
+        if len(wb.worksheets) > 1:
+            lines.append(f"# Sheet: {ws.title}")
+        for r, row in enumerate(ws.iter_rows(values_only=True)):
+            if r >= max_rows:
+                break
+            cells = ["" if c is None else str(c).strip() for c in row]
+            if any(cells):
+                lines.append("\t".join(cells))
+    return "\n".join(lines).strip()
+
+
 def parse_vendor_quote_bytes(file_bytes: bytes, filename: str = "") -> List[Dict]:
     """Parse vendor quote response from raw bytes.
 
