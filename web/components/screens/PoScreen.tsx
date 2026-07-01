@@ -21,6 +21,7 @@ import { getToken } from "@/lib/auth";
 import { useCachedData, invalidateCache } from "@/lib/useCachedData";
 import FilterTable, { ColumnDef } from "@/components/common/FilterTable";
 import { identityColumns, projectNoColumn } from "@/components/common/identityColumns";
+import VendorName from "@/components/common/VendorName";
 import Modal from "@/components/common/Modal";
 import BaseMetaRows, { ModalTitle } from "@/components/common/BaseMeta";
 import {
@@ -480,7 +481,7 @@ function VendorPoTab({
     }),
     { key: "customer_po_no", label: "PO No.", text: (p) => p.customer_po_no || "" },
     { key: "po_no", label: "K-Maris PO No.", text: (p) => p.po_no || "" },
-    { key: "vendor", label: "Vendor", text: (p) => p.vendor || "", filter: "facet" },
+    { key: "vendor", label: "Vendor", text: (p) => p.vendor || "", filter: "facet", render: (p) => <VendorName name={p.vendor || ""} /> },
     { key: "vendor_email", label: "Recipient email", text: (p) => p.vendor_email || "" },
     { key: "sent_date", label: "Sent date", text: (p) => p.sent_date || "", filter: "date" },
     { key: "status", label: "Status", text: (p) => p.status || "", filter: "facet", render: (p) => <span className="ar-badge">{tr(p.status)}</span> },

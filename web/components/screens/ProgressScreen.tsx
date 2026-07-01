@@ -20,6 +20,7 @@ import { ColumnResizer, ColumnsButton, dragHandleProps } from "@/components/comm
 import type { PipelineRow, CustomerOption, SettingsVessel, StageNote } from "@/lib/types";
 import WorkTypeBadge from "@/components/WorkTypeBadge";
 import CustomerName from "@/components/common/CustomerName";
+import VendorName from "@/components/common/VendorName";
 import { tr } from "@/lib/labels";
 import { getUser, can, isOwnScoped } from "@/lib/auth";
 
@@ -674,7 +675,7 @@ function PipelineCell({
     case "customer":
       return <td className="strong">{r.customer ? <CustomerName name={r.customer} /> : "No customer"}</td>;
     case "vendor":
-      return <td className="pl-td-vendor">{vendorOf(r) || <span className="muted">—</span>}</td>;
+      return <td className="pl-td-vendor">{vendorOf(r) ? <VendorName name={vendorOf(r)} /> : <span className="muted">—</span>}</td>;
     case "work_type":
       return (
         <td>

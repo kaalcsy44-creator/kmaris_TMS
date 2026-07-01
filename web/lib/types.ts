@@ -52,6 +52,7 @@ export type SettingsVendor = {
   specialization: string;
   country: string;
   address: string;
+  logo: string;
 };
 export type SettingsVessel = {
   id: number;
@@ -101,7 +102,7 @@ export type CompanyProfile = {
   tagline: string;
 };
 
-export type VendorOption = { id: number; name: string; email: string };
+export type VendorOption = { id: number; name: string; email: string; logo?: string };
 
 export type PoRow = {
   id: number;

@@ -44,6 +44,7 @@ import type {
 import { getUser, isAdmin } from "@/lib/auth";
 import AppShell, { SectionHead } from "@/components/AppShell";
 import { invalidateCustomerLogos } from "@/lib/customerLogos";
+import { invalidateVendorLogos } from "@/lib/vendorLogos";
 import { fileToLogoDataUrl, imageFromClipboard } from "@/lib/imagePaste";
 
 type Tab =
@@ -811,13 +812,19 @@ function VendorsTab() {
   return (
     <MasterSection<SettingsVendor>
       title="Vendor Management"
-      empty={{ id: 0, name: "", contact: "", contact_phone: "", email: "", specialization: "", country: "", address: "" }}
+      empty={{ id: 0, name: "", contact: "", contact_phone: "", email: "", specialization: "", country: "", address: "", logo: "" }}
       load={fetchSettingsVendors}
       create={createSettingsVendor}
       update={updateSettingsVendor}
       remove={deleteSettingsVendor}
+      onSaved={invalidateVendorLogos}
       columns={[
-        ["name", "Vendor"],
+        ["name", "Vendor", (r) => (
+          <span className="cust-name">
+            {r.logo ? <img className="cust-logo" src={r.logo} alt="" /> : null}
+            <span className="cust-name-text">{r.name || "—"}</span>
+          </span>
+        )],
         ["country", "Country"],
         ["contact", "Contact"],
         ["email", "Email"],
@@ -833,6 +840,12 @@ function VendorsTab() {
         ["specialization", "Specialization"],
       ]}
       required="name"
+      extraForm={(form, setForm) => (
+        <LogoPasteField
+          value={form.logo}
+          onChange={(logo) => setForm({ ...form, logo })}
+        />
+      )}
       allowCopy
       copyHint="To register another contact for the same vendor, change only the contact/email and save."
     />

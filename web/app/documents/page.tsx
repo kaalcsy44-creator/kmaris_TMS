@@ -25,6 +25,7 @@ import { tr } from "@/lib/labels";
 import AppShell, { SectionHead } from "@/components/AppShell";
 import FilterTable, { ColumnDef } from "@/components/common/FilterTable";
 import { identityColumns, projectNoColumn } from "@/components/common/identityColumns";
+import VendorName from "@/components/common/VendorName";
 import Modal from "@/components/common/Modal";
 import { ModalTitle } from "@/components/common/BaseMeta";
 import CurrencyToggle from "@/components/common/CurrencyToggle";
@@ -334,7 +335,7 @@ function ServiceStageList({
       workType: (r) => r.work_type,
       tradeType: (r) => r.trade_type,
     }),
-    { key: "vendor", label: "Vendor", text: (r) => r.vendor || "", filter: "facet" },
+    { key: "vendor", label: "Vendor", text: (r) => r.vendor || "", filter: "facet", render: (r) => <VendorName name={r.vendor || ""} /> },
     { key: "po_no", label: "PO No.", text: (r) => r.po_no || "" },
     ...(svc === 9
       ? [{ key: "report", label: "Report file", text: (r: DocRow) => r.pod_filename || "" }]
@@ -839,7 +840,7 @@ function StageList({
       workType: (r) => r.work_type,
       tradeType: (r) => r.trade_type,
     }),
-    { key: "vendor", label: "Vendor", text: (r) => r.vendor || "", filter: "facet" },
+    { key: "vendor", label: "Vendor", text: (r) => r.vendor || "", filter: "facet", render: (r) => <VendorName name={r.vendor || ""} /> },
     cfg.docCol,
     { key: "po_no", label: "PO No.", text: (r) => r.po_no || "" },
     ...(cfg.extra ?? []),

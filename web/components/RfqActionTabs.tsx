@@ -52,6 +52,7 @@ import NewRfqForm from "./screens/NewRfqForm";
 import WorkTypeBadge from "./WorkTypeBadge";
 import FilterTable, { ColumnDef } from "./common/FilterTable";
 import { identityColumns, projectNoColumn, statusColumns } from "./common/identityColumns";
+import VendorName from "./common/VendorName";
 import Modal from "./common/Modal";
 import BaseMetaRows, { ModalTitle } from "./common/BaseMeta";
 import CurrencyToggle from "./common/CurrencyToggle";
@@ -371,7 +372,7 @@ function VendorRfqList({
       workType: (r) => r.work_type,
     }),
     { key: "customer_rfq_no", label: "Customer RFQ No.", text: (r) => r.customer_rfq_no || "" },
-    { key: "vendor", label: "Vendor", text: (r) => r.vendor || "", filter: "facet" },
+    { key: "vendor", label: "Vendor", text: (r) => r.vendor || "", filter: "facet", render: (r) => <VendorName name={r.vendor || ""} /> },
     { key: "vendor_email", label: "Recipient email", text: (r) => r.vendor_email || "" },
     { key: "sent_date", label: "Sent date", text: (r) => r.sent_date || "", filter: "date" },
     { key: "item_count", label: "Items", numeric: true, text: (r) => String(r.item_count), sortValue: (r) => r.item_count },
@@ -761,7 +762,7 @@ function VendorQuoteList({
       filter: "date",
       sortValue: (r) => Date.parse(r.received_at || r.received_date || "") || 0,
     },
-    { key: "vendor", label: "Vendor", text: (r) => r.vendor || "", filter: "facet" },
+    { key: "vendor", label: "Vendor", text: (r) => r.vendor || "", filter: "facet", render: (r) => <VendorName name={r.vendor || ""} /> },
     { key: "item_count", label: "Items", numeric: true, text: (r) => String(r.item_count), sortValue: (r) => r.item_count },
     {
       key: "amount",

@@ -115,6 +115,7 @@ class Vendor(Base):
     email          = Column(String(200))
     country        = Column(String(100))
     specialization = Column(String(200))
+    logo           = Column(Text)          # 회사 로고 이미지(data URL, 캡쳐 붙여넣기)
     created_at     = Column(DateTime, default=datetime.utcnow)
 
 

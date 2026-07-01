@@ -3536,7 +3536,8 @@ def customers():
 def vendors():
     s = get_session()
     try:
-        return [{"id": v.id, "name": v.name, "email": v.email or ""}
+        return [{"id": v.id, "name": v.name, "email": v.email or "",
+                 "logo": getattr(v, "logo", None) or ""}
                 for v in s.query(Vendor).order_by(Vendor.name).all()]
     finally:
         s.close()
@@ -3562,6 +3563,7 @@ class VendorCreate(BaseModel):
     specialization: str | None = ""
     country: str | None = ""
     address: str | None = ""
+    logo: str | None = ""    # 회사 로고 data URL(붙여넣기). None=변경 안 함(수정 시)
 
 
 class VesselCreate(BaseModel):
@@ -3700,7 +3702,8 @@ def settings_vendors():
         return [{"id": v.id, "name": v.name, "contact": v.contact or "",
                  "contact_phone": getattr(v, "contact_phone", None) or "",
                  "email": v.email or "", "specialization": v.specialization or "",
-                 "country": v.country or "", "address": v.address or ""}
+                 "country": v.country or "", "address": v.address or "",
+                 "logo": getattr(v, "logo", None) or ""}
                 for v in s.query(Vendor).order_by(Vendor.name).all()]
     finally:
         s.close()
@@ -3715,7 +3718,8 @@ def create_vendor(body: VendorCreate):
         v = Vendor(name=body.name.strip(), contact=body.contact or "",
                    contact_phone=body.contact_phone or "",
                    email=body.email or "", specialization=body.specialization or "",
-                   country=body.country or "", address=body.address or "")
+                   country=body.country or "", address=body.address or "",
+                   logo=body.logo or "")
         s.add(v)
         s.commit()
         return {"ok": True, "id": v.id}
@@ -3737,6 +3741,8 @@ def update_vendor(row_id: int, body: VendorCreate):
         v.specialization = body.specialization or ""
         v.country = body.country or ""
         v.address = body.address or ""
+        if body.logo is not None:
+            v.logo = body.logo
         s.commit()
         return {"ok": True, "id": v.id}
     finally:

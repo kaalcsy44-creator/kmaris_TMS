@@ -20,6 +20,7 @@ import { tr } from "@/lib/labels";
 import AppShell from "@/components/AppShell";
 import FilterTable, { ColumnDef } from "@/components/common/FilterTable";
 import { identityColumns, projectNoColumn, fmtRfqDateTime } from "@/components/common/identityColumns";
+import VendorName from "@/components/common/VendorName";
 import Modal from "@/components/common/Modal";
 import { ModalTitle } from "@/components/common/BaseMeta";
 import CurrencyToggle from "@/components/common/CurrencyToggle";
@@ -193,7 +194,7 @@ function ArOverview() {
       workType: (r) => r.work_type,
       tradeType: (r) => r.trade_type,
     }),
-    { key: "vendor", label: "Vendor", text: (r) => r.vendor || "", filter: "facet" },
+    { key: "vendor", label: "Vendor", text: (r) => r.vendor || "", filter: "facet", render: (r) => <VendorName name={r.vendor || ""} /> },
     { key: "ci_no", label: "CI No.", text: (r) => r.ci_no || "" },
     { key: "currency", label: "Currency", text: (r) => r.currency || "", filter: "facet" },
     {

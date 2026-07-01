@@ -500,6 +500,7 @@ export function createSettingsVendor(body: {
   specialization?: string;
   country?: string;
   address?: string;
+  logo?: string;
 }): Promise<{ ok: boolean; id: number }> {
   return post("/api/admin/settings/vendors", body);
 }
