@@ -43,6 +43,8 @@ import type {
 } from "@/lib/types";
 import { getUser, isAdmin } from "@/lib/auth";
 import AppShell, { SectionHead } from "@/components/AppShell";
+import { invalidateCustomerLogos } from "@/lib/customerLogos";
+import { fileToLogoDataUrl, imageFromClipboard } from "@/lib/imagePaste";
 
 type Tab =
   | "company" | "users" | "permissions"
@@ -703,13 +705,19 @@ function CustomersTab() {
   return (
     <MasterSection<SettingsCustomer>
       title="Customer Management"
-      empty={{ id: 0, name: "", contact: "", contact_phone: "", email: "", country: "", address: "", tax_id: "" }}
+      empty={{ id: 0, name: "", contact: "", contact_phone: "", email: "", country: "", address: "", tax_id: "", logo: "" }}
       load={fetchSettingsCustomers}
       create={createSettingsCustomer}
       update={updateSettingsCustomer}
       remove={deleteSettingsCustomer}
+      onSaved={invalidateCustomerLogos}
       columns={[
-        ["name", "Customer"],
+        ["name", "Customer", (r) => (
+          <span className="cust-name">
+            {r.logo ? <img className="cust-logo" src={r.logo} alt="" /> : null}
+            <span className="cust-name-text">{r.name || "—"}</span>
+          </span>
+        )],
         ["country", "Country"],
         ["contact", "Contact"],
         ["email", "Email"],
@@ -724,9 +732,78 @@ function CustomersTab() {
         ["tax_id", "Tax ID / Business No."],
       ]}
       required="name"
+      extraForm={(form, setForm) => (
+        <LogoPasteField
+          value={form.logo}
+          onChange={(logo) => setForm({ ...form, logo })}
+        />
+      )}
       allowCopy
       copyHint="To register another contact for the same customer, change only the contact/email and save."
     />
+  );
+}
+
+// 회사 로고 붙여넣기 필드 — 캡쳐본을 Ctrl+V 로 붙이거나 파일 선택으로 등록.
+// 이미지는 96px 로 축소한 data URL 로 저장된다.
+function LogoPasteField({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (dataUrl: string) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  async function useFile(file: File | null) {
+    if (!file) return;
+    setBusy(true);
+    setErr("");
+    try {
+      onChange(await fileToLogoDataUrl(file));
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Image error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <label className="form-field logo-field">
+      <span>Company logo</span>
+      <div
+        className="logo-drop"
+        tabIndex={0}
+        onPaste={(e) => {
+          const img = imageFromClipboard(e);
+          if (img) {
+            e.preventDefault();
+            useFile(img);
+          }
+        }}
+      >
+        {value ? (
+          <img className="logo-preview" src={value} alt="logo" />
+        ) : (
+          <span className="logo-hint">Click here and paste (Ctrl+V), or choose a file</span>
+        )}
+      </div>
+      <div className="logo-actions">
+        <input
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/svg+xml"
+          onChange={(e) => useFile(e.target.files?.[0] ?? null)}
+        />
+        {value ? (
+          <button type="button" className="btn" onClick={() => onChange("")}>
+            Remove
+          </button>
+        ) : null}
+        {busy ? <span className="hint-inline">Processing…</span> : null}
+        {err ? <span className="action-err">{err}</span> : null}
+      </div>
+    </label>
   );
 }
 
@@ -894,6 +971,7 @@ function MasterSection<T extends { id: number }>({
   extraForm,
   allowCopy = false,
   copyHint,
+  onSaved,
 }: {
   title: string;
   empty: T;
@@ -901,13 +979,15 @@ function MasterSection<T extends { id: number }>({
   create: (body: Omit<T, "id">) => Promise<unknown>;
   update: (id: number, body: Omit<T, "id">) => Promise<unknown>;
   remove: (id: number) => Promise<unknown>;
-  columns: [keyof T, string][];
+  // 각 컬럼: [키, 헤더라벨, (선택)셀 커스텀 렌더]
+  columns: [keyof T, string, ((row: T) => ReactNode)?][];
   fields: [keyof T, string][];
   required: keyof T;
   numeric?: (keyof T)[];
   extraForm?: (form: T, setForm: (next: T) => void) => ReactNode;
   allowCopy?: boolean; // 기존 항목 정보를 복사해 새 레코드로 등록 허용
   copyHint?: string; // 복사 모드 안내 문구
+  onSaved?: () => void; // 생성/수정/삭제 성공 후 호출(예: 로고 캐시 무효화)
 }) {
   const NEW_ID = -1; // editId 센티넬: 신규 등록 편집기
   const [rows, setRows] = useState<T[]>([]);
@@ -957,6 +1037,7 @@ function MasterSection<T extends { id: number }>({
       else await create(body);
       cancel();
       refresh();
+      onSaved?.();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Save failed");
     }
@@ -969,6 +1050,7 @@ function MasterSection<T extends { id: number }>({
       await remove(editId);
       cancel();
       refresh();
+      onSaved?.();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Delete failed");
     }
@@ -1061,8 +1143,10 @@ function MasterSection<T extends { id: number }>({
                   className={row.id === editId ? "sel" : ""}
                   onClick={() => openEdit(row)}
                 >
-                  {columns.map(([key]) => (
-                    <td key={String(key)}>{String(row[key] ?? "") || "—"}</td>
+                  {columns.map(([key, , renderCell]) => (
+                    <td key={String(key)}>
+                      {renderCell ? renderCell(row) : String(row[key] ?? "") || "—"}
+                    </td>
                   ))}
                   <td
                     className="ms-actcol"

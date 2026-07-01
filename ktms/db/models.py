@@ -101,6 +101,7 @@ class Customer(Base):
     email      = Column(String(200))
     tax_id     = Column(String(100))
     country    = Column(String(100))
+    logo       = Column(Text)          # 회사 로고 이미지(data URL, 캡쳐 붙여넣기)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 

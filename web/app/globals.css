@@ -3781,3 +3781,60 @@ table.mini .num {
     font-size: 21px;
   }
 }
+
+/* ── Customer logo (고객명 좌측 로고) ─────────────────────────────────────── */
+.cust-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+.cust-logo {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  border-radius: 3px;
+  background: #fff;
+}
+.cust-name-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 고객 관리 폼의 로고 붙여넣기 필드 */
+.logo-field {
+  grid-column: 1 / -1;
+}
+.logo-drop {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 84px;
+  padding: 10px;
+  border: 1.5px dashed #c4ccd8;
+  border-radius: 8px;
+  background: #f7f9fc;
+  cursor: text;
+  outline: none;
+}
+.logo-drop:focus {
+  border-color: #2563eb;
+  background: #eef4ff;
+}
+.logo-hint {
+  color: #8a94a6;
+  font-size: 13px;
+}
+.logo-preview {
+  max-height: 72px;
+  max-width: 220px;
+  object-fit: contain;
+}
+.logo-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}

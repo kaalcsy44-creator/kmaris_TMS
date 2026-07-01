@@ -30,7 +30,7 @@ export type RfqOverview = {
   rows: RfqRow[];
 };
 
-export type CustomerOption = { id: number; name: string; contact?: string };
+export type CustomerOption = { id: number; name: string; contact?: string; logo?: string };
 
 export type SettingsCustomer = {
   id: number;
@@ -41,6 +41,7 @@ export type SettingsCustomer = {
   country: string;
   address: string;
   tax_id: string;
+  logo: string;
 };
 export type SettingsVendor = {
   id: number;

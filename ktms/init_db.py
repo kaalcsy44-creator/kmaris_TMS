@@ -41,6 +41,7 @@ _MIGRATIONS = {
     },
     "customers": {
         "contact_phone": "VARCHAR(50)",
+        "logo": "TEXT",
     },
     "vendors": {
         "contact_phone": "VARCHAR(50)",

@@ -479,6 +479,7 @@ export function createSettingsCustomer(body: {
   country?: string;
   address?: string;
   tax_id?: string;
+  logo?: string;
 }): Promise<{ ok: boolean; id: number }> {
   return post("/api/admin/settings/customers", body);
 }

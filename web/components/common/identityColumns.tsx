@@ -5,6 +5,7 @@
 import { ColumnDef } from "./FilterTable";
 import { tr } from "@/lib/labels";
 import WorkTypeBadge from "@/components/WorkTypeBadge";
+import CustomerName from "./CustomerName";
 
 /** "YYYY-MM-DDTHH:MM" → "yy-mm-dd HH:MM". 시각 없으면 날짜만. 빈값이면 "". */
 export function fmtRfqDateTime(iso: string): string {
@@ -51,7 +52,13 @@ export type IdentityAccessors<T> = {
  *  수신 일시는 projectNoColumn 에서 관리번호 아래에 병기하므로 여기에는 포함하지 않는다. */
 export function identityColumns<T>(a: IdentityAccessors<T>): ColumnDef<T>[] {
   const cols: ColumnDef<T>[] = [
-    { key: "customer", label: "Customer", filter: "facet", text: (r) => a.customer(r) || "" },
+    {
+      key: "customer",
+      label: "Customer",
+      filter: "facet",
+      text: (r) => a.customer(r) || "",
+      render: (r) => <CustomerName name={a.customer(r) || ""} />,
+    },
   ];
   if (a.projectTitle) {
     const pt = a.projectTitle;

@@ -3525,7 +3525,8 @@ def vendor_po_overview():
 def customers():
     s = get_session()
     try:
-        return [{"id": c.id, "name": c.name, "contact": c.contact or ""}
+        return [{"id": c.id, "name": c.name, "contact": c.contact or "",
+                 "logo": getattr(c, "logo", None) or ""}
                 for c in s.query(Customer).order_by(Customer.name).all()]
     finally:
         s.close()
@@ -3550,6 +3551,7 @@ class CustomerCreate(BaseModel):
     country: str | None = ""
     address: str | None = ""
     tax_id: str | None = ""
+    logo: str | None = ""    # 회사 로고 data URL(붙여넣기). None=변경 안 함(수정 시)
 
 
 class VendorCreate(BaseModel):
@@ -3630,7 +3632,8 @@ def settings_customers():
         return [{"id": c.id, "name": c.name, "contact": c.contact or "",
                  "contact_phone": getattr(c, "contact_phone", None) or "",
                  "email": c.email or "", "country": c.country or "",
-                 "address": c.address or "", "tax_id": c.tax_id or ""}
+                 "address": c.address or "", "tax_id": c.tax_id or "",
+                 "logo": getattr(c, "logo", None) or ""}
                 for c in s.query(Customer).order_by(Customer.name).all()]
     finally:
         s.close()
@@ -3645,7 +3648,8 @@ def create_customer(body: CustomerCreate):
         c = Customer(name=body.name.strip(), contact=body.contact or "",
                      contact_phone=body.contact_phone or "",
                      email=body.email or "", country=body.country or "",
-                     address=body.address or "", tax_id=body.tax_id or "")
+                     address=body.address or "", tax_id=body.tax_id or "",
+                     logo=body.logo or "")
         s.add(c)
         s.commit()
         return {"ok": True, "id": c.id}
@@ -3667,6 +3671,8 @@ def update_customer(row_id: int, body: CustomerCreate):
         c.country = body.country or ""
         c.address = body.address or ""
         c.tax_id = body.tax_id or ""
+        if body.logo is not None:
+            c.logo = body.logo
         s.commit()
         return {"ok": True, "id": c.id}
     finally:

@@ -19,6 +19,7 @@ import { useColumnLayout } from "@/components/common/useColumnLayout";
 import { ColumnResizer, ColumnsButton, dragHandleProps } from "@/components/common/tableLayout";
 import type { PipelineRow, CustomerOption, SettingsVessel, StageNote } from "@/lib/types";
 import WorkTypeBadge from "@/components/WorkTypeBadge";
+import CustomerName from "@/components/common/CustomerName";
 import { tr } from "@/lib/labels";
 import { getUser, can, isOwnScoped } from "@/lib/auth";
 
@@ -671,7 +672,7 @@ function PipelineCell({
         </td>
       );
     case "customer":
-      return <td className="strong">{r.customer || "No customer"}</td>;
+      return <td className="strong">{r.customer ? <CustomerName name={r.customer} /> : "No customer"}</td>;
     case "vendor":
       return <td className="pl-td-vendor">{vendorOf(r) || <span className="muted">—</span>}</td>;
     case "work_type":

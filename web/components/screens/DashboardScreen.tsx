@@ -12,6 +12,7 @@ import { useCachedData } from "@/lib/useCachedData";
 import type { QtnRow, PipelineRow, ArRow } from "@/lib/types";
 import { tr } from "@/lib/labels";
 import FilterTable, { ColumnDef } from "@/components/common/FilterTable";
+import CustomerName from "@/components/common/CustomerName";
 import { DualCurrencyAmount, dualCurrencyText } from "@/components/common/itemTable";
 
 function num(n: number) {
@@ -188,7 +189,7 @@ function HomeTab() {
   const quoteCols: ColumnDef<QtnRow>[] = [
     { key: "date", label: "Date", text: (r) => (r.sent_date || r.date || "").slice(0, 10), filter: "date" },
     { key: "qtn_no", label: "Quote No.", text: (r) => r.qtn_no || "" },
-    { key: "customer", label: "Customer", text: (r) => r.customer || "", filter: "facet" },
+    { key: "customer", label: "Customer", text: (r) => r.customer || "", filter: "facet", render: (r) => <CustomerName name={r.customer || ""} /> },
     { key: "vessel", label: "Vessel", text: (r) => r.vessel || "" },
     {
       key: "amount",
@@ -205,7 +206,7 @@ function HomeTab() {
   const activityCols: ColumnDef<ActivityRow>[] = [
     { key: "datetime", label: "Date / time", text: (r) => r.datetime || "", filter: "date", render: (r) => fmtDateTime(r.datetime) },
     { key: "owner", label: "PIC", text: (r) => r.owner || "", filter: "facet" },
-    { key: "customer", label: "Customer", text: (r) => r.customer || "", filter: "facet" },
+    { key: "customer", label: "Customer", text: (r) => r.customer || "", filter: "facet", render: (r) => <CustomerName name={r.customer || ""} /> },
     { key: "party", label: "Party", text: (r) => r.party || "", filter: "facet" },
     { key: "channel", label: "Channel", text: (r) => r.channel || "", filter: "facet" },
     { key: "text", label: "Activity", text: (r) => r.text || "" },
@@ -213,7 +214,7 @@ function HomeTab() {
 
   const salesCols: ColumnDef<ArRow>[] = [
     { key: "date", label: "Date", text: (r) => (r.tax_issued_date || r.due_date || "").slice(0, 10), filter: "date" },
-    { key: "customer", label: "Customer", text: (r) => r.customer || "", filter: "facet" },
+    { key: "customer", label: "Customer", text: (r) => r.customer || "", filter: "facet", render: (r) => <CustomerName name={r.customer || ""} /> },
     {
       key: "amount",
       label: "Invoice",
@@ -238,7 +239,7 @@ function HomeTab() {
     { key: "days", label: "Days late", numeric: true, text: (r) => `${r.days}d`, sortValue: (r) => r.days, render: (r) => <b className="home-late">{r.days}d</b> },
     { key: "kind", label: "Type", text: (r) => r.kind, filter: "facet" },
     { key: "ref", label: "Ref.", text: (r) => r.ref },
-    { key: "customer", label: "Customer", text: (r) => r.customer || "", filter: "facet" },
+    { key: "customer", label: "Customer", text: (r) => r.customer || "", filter: "facet", render: (r) => <CustomerName name={r.customer || ""} /> },
     { key: "amount", label: "Amount", numeric: true, text: (r) => r.amount },
   ];
 
