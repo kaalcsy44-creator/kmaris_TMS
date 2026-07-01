@@ -2356,6 +2356,7 @@ def ar_overview():
             rows.append({
                 "id": r.id,
                 "order_id": r.order_id,
+                "assignee_id": (rfq.created_by or 0) if rfq else 0,
                 "ci_no": r.ci_no or "",
                 "customer": cust,
                 "currency": r.currency or "USD",

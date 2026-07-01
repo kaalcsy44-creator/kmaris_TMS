@@ -539,6 +539,7 @@ export type VendorPoRow = {
 export type ArRow = {
   id: number;
   order_id: number;
+  assignee_id: number; // 담당자(PIC) = RFQ.created_by (0 = 미지정)
   ci_no: string;
   customer: string;
   currency: string;

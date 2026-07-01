@@ -13,7 +13,7 @@ import {
   recordArPayment,
   updateArRecord,
 } from "@/lib/api";
-import { getToken } from "@/lib/auth";
+import { getToken, can, canEditDeal } from "@/lib/auth";
 import { useCachedData, invalidateCache } from "@/lib/useCachedData";
 import type { ArRow, DocumentDetail, PoWorkOptions } from "@/lib/types";
 import { tr } from "@/lib/labels";
@@ -258,9 +258,11 @@ function ArOverview() {
           empty="No AR records. They are created automatically when a Tax Invoice is generated, or you can add one directly."
           actions={
             <>
-              <button className="btn" onClick={() => setAdding(true)}>
-                + Add AR record
-              </button>
+              {can("ar", "create") ? (
+                <button className="btn" onClick={() => setAdding(true)}>
+                  + Add AR record
+                </button>
+              ) : null}
               <button className="btn" onClick={exportSoa} disabled={rows.length === 0}>
                 Export SOA (XLSX)
               </button>
@@ -357,6 +359,9 @@ function TaxIssueModal({
   const [issuedAt, setIssuedAt] = useState(row.tax_issued_date || nowLocal());
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // 편집 권한 = 역할 권한(ar.edit) × 담당(PIC) 소유권. 없으면 읽기전용.
+  const canEditThis = can("ar", "edit") && canEditDeal(row.assignee_id);
+  const canDeleteThis = can("ar", "delete") && canEditDeal(row.assignee_id);
 
   // Fetch order/CI detail to auto-fill empty fields (user input is preserved).
   useEffect(() => {
@@ -422,29 +427,39 @@ function TaxIssueModal({
           {row.tax_issued ? `Issued (${row.tax_issued_date || "done"})` : "Not issued"}
         </span>
       </div>
-      <div className="form-grid">
-        <Field label="CI No." value={ciNo} onChange={setCiNo} />
-        <Field label="Invoice amount" value={String(invoice)} onChange={(v) => setInvoice(num(v))} type="number" />
-        <label className="form-field">
-          <span>Currency</span>
-          <CurrencyToggle value={currency} onChange={setCurrency} />
-        </label>
-        <Field label="Due date" value={dueDate} onChange={setDueDate} type="date" />
-        <Field label="Issued at" value={issuedAt} onChange={setIssuedAt} type="datetime-local" />
-        <Field label="Notes" value={notes} onChange={setNotes} />
-      </div>
+      <fieldset className="form-fieldset" disabled={!canEditThis}>
+        <div className="form-grid">
+          <Field label="CI No." value={ciNo} onChange={setCiNo} />
+          <Field label="Invoice amount" value={String(invoice)} onChange={(v) => setInvoice(num(v))} type="number" />
+          <label className="form-field">
+            <span>Currency</span>
+            <CurrencyToggle value={currency} onChange={setCurrency} />
+          </label>
+          <Field label="Due date" value={dueDate} onChange={setDueDate} type="date" />
+          <Field label="Issued at" value={issuedAt} onChange={setIssuedAt} type="datetime-local" />
+          <Field label="Notes" value={notes} onChange={setNotes} />
+        </div>
+      </fieldset>
       <div className="form-actions">
-        <button className="btn primary" disabled={busy} onClick={() => save(true)}>
-          {busy ? "Working…" : row.tax_issued ? "Save issued date & details" : "Complete tax invoice issuance"}
-        </button>
-        {row.tax_issued ? (
-          <button className="btn" disabled={busy} onClick={() => save(false)}>
-            Undo issuance
+        {!canEditThis ? (
+          <span className="hint-inline">View only — no edit permission for this deal</span>
+        ) : (
+          <>
+            <button className="btn primary" disabled={busy} onClick={() => save(true)}>
+              {busy ? "Working…" : row.tax_issued ? "Save issued date & details" : "Complete tax invoice issuance"}
+            </button>
+            {row.tax_issued ? (
+              <button className="btn" disabled={busy} onClick={() => save(false)}>
+                Undo issuance
+              </button>
+            ) : null}
+          </>
+        )}
+        {canDeleteThis ? (
+          <button className="btn danger" disabled={busy} onClick={remove} style={{ marginLeft: "auto" }}>
+            Delete
           </button>
         ) : null}
-        <button className="btn danger" disabled={busy} onClick={remove} style={{ marginLeft: "auto" }}>
-          Delete
-        </button>
         {err ? <span className="action-err">{err}</span> : null}
       </div>
     </Modal>
@@ -466,6 +481,8 @@ function PaymentModal({
   const [paidAt, setPaidAt] = useState(row.paid_date || nowLocal());
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // 편집 권한 = 역할 권한(ar.edit) × 담당(PIC) 소유권. 없으면 읽기전용.
+  const canEditThis = can("ar", "edit") && canEditDeal(row.assignee_id);
 
   async function save(complete: boolean) {
     setBusy(true);
@@ -497,23 +514,31 @@ function PaymentModal({
         <div><dt>Outstanding</dt><dd>{dualCurrencyText(row.outstanding, row.currency)}</dd></div>
         <div><dt>Status</dt><dd>{tr(row.status)}</dd></div>
       </dl>
-      <div className="form-grid">
-        <Field label="Payment amount" value={amount} onChange={setAmount} type="number" />
-        <Field label="Payment date / due" value={dueDate} onChange={setDueDate} type="date" />
-        <Field label="Paid at" value={paidAt} onChange={setPaidAt} type="datetime-local" />
-      </div>
-      <p className="hint-inline" style={{ display: "block", margin: "6px 0 0" }}>
-        Leave the amount empty to only mark payment complete. Entering an amount records the payment first.
-      </p>
+      <fieldset className="form-fieldset" disabled={!canEditThis}>
+        <div className="form-grid">
+          <Field label="Payment amount" value={amount} onChange={setAmount} type="number" />
+          <Field label="Payment date / due" value={dueDate} onChange={setDueDate} type="date" />
+          <Field label="Paid at" value={paidAt} onChange={setPaidAt} type="datetime-local" />
+        </div>
+        <p className="hint-inline" style={{ display: "block", margin: "6px 0 0" }}>
+          Leave the amount empty to only mark payment complete. Entering an amount records the payment first.
+        </p>
+      </fieldset>
       <div className="form-actions">
-        <button className="btn primary" disabled={busy} onClick={() => save(true)}>
-          {busy ? "Working…" : row.paid_done ? "Save paid date" : "Complete payment"}
-        </button>
-        {row.paid_done ? (
-          <button className="btn" disabled={busy} onClick={() => save(false)}>
-            Undo completion
-          </button>
-        ) : null}
+        {!canEditThis ? (
+          <span className="hint-inline">View only — no edit permission for this deal</span>
+        ) : (
+          <>
+            <button className="btn primary" disabled={busy} onClick={() => save(true)}>
+              {busy ? "Working…" : row.paid_done ? "Save paid date" : "Complete payment"}
+            </button>
+            {row.paid_done ? (
+              <button className="btn" disabled={busy} onClick={() => save(false)}>
+                Undo completion
+              </button>
+            ) : null}
+          </>
+        )}
         {err ? <span className="action-err">{err}</span> : null}
       </div>
     </Modal>
