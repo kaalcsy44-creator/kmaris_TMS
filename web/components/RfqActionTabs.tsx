@@ -64,6 +64,7 @@ import {
   gridCellProps,
   itemRowClass,
   parseAmountInput,
+  roundUp,
 } from "./common/itemTable";
 
 /** 현재 시각 "YYYY-MM-DDTHH:MM" (datetime-local 기본값). */
@@ -1140,6 +1141,7 @@ function CustomerQuoteDetailModal({
   const [qtnNo, setQtnNo] = useState("");
   const [currency, setCurrency] = useState("USD");
   const [costCurrency, setCostCurrency] = useState("USD");
+  const [roundDigits, setRoundDigits] = useState<number>(DEFAULT_ROUND_DIGITS);
   const [sentAt, setSentAt] = useState("");
   const [validUntil, setValidUntil] = useState("");
   const [status, setStatus] = useState("");
@@ -1159,6 +1161,9 @@ function CustomerQuoteDetailModal({
         setQtnNo(data.qtn_no || "");
         setCurrency(data.currency || "USD");
         setCostCurrency(data.cost_currency || data.currency || "USD");
+        setRoundDigits(
+          typeof data.round_digits === "number" ? data.round_digits : DEFAULT_ROUND_DIGITS
+        );
         setSentAt(toLocalDt(data.sent_at || data.sent_date));
         setValidUntil(data.valid_until || "");
         setStatus(data.status || "");
@@ -1186,6 +1191,7 @@ function CustomerQuoteDetailModal({
         qtn_no: qtnNo,
         currency,
         cost_currency: costCurrency,
+        round_digits: roundDigits,
         sent_at: sentAt,
         valid_until: validUntil,
         status,
@@ -1222,7 +1228,7 @@ function CustomerQuoteDetailModal({
     if (!vq) return;
     // 원가 통화 = 공급사 견적 통화. 판매 통화(currency)는 사용자가 정한 값을 유지하고
     // 단가는 판매 통화로 환산해 계산한다.
-    setItems(customerQuoteItemsFromVendorQuote(vq, defaultMargin, currency));
+    setItems(customerQuoteItemsFromVendorQuote(vq, defaultMargin, currency, roundDigits));
     if (vq.currency) setCostCurrency(vq.currency);
     setTerms((prev) => mergeTermsFromVendorQuote(prev, vq.terms));
     setMsg(`Loaded ${vq.items.length} item(s) from quote ${vq.vendor_quote_no} (${vq.vendor}).`);
@@ -1276,6 +1282,15 @@ function CustomerQuoteDetailModal({
               />
             </div>
             <div className="form-field" style={{ alignSelf: "end" }}>
+              <button
+                className="btn"
+                onClick={() => setItems((prev) => applyMarginToAll(prev, defaultMargin, costCurrency, currency, roundDigits))}
+                disabled={items.length === 0}
+              >
+                Apply margin to all
+              </button>
+            </div>
+            <div className="form-field" style={{ alignSelf: "end" }}>
               <button className="btn" onClick={importFromVendorQuote} disabled={importVqId === ""}>
                 Load Vendor quote
               </button>
@@ -1291,14 +1306,21 @@ function CustomerQuoteDetailModal({
               <label>Cost currency (vendor)</label>
               <CurrencyToggle
                 value={costCurrency}
-                onChange={(c) => { setCostCurrency(c); setItems((prev) => recomputeCustomerQuoteItems(prev, c, currency)); }}
+                onChange={(c) => { setCostCurrency(c); setItems((prev) => recomputeCustomerQuoteItems(prev, c, currency, roundDigits)); }}
               />
             </div>
             <div className="form-field">
               <label>Sale currency (unit price)</label>
               <CurrencyToggle
                 value={currency}
-                onChange={(c) => { setCurrency(c); setItems((prev) => recomputeCustomerQuoteItems(prev, costCurrency, c)); }}
+                onChange={(c) => { setCurrency(c); setItems((prev) => recomputeCustomerQuoteItems(prev, costCurrency, c, roundDigits)); }}
+              />
+            </div>
+            <div className="form-field">
+              <label>Round unit price up to</label>
+              <RoundUnitSelect
+                value={roundDigits}
+                onChange={(d) => { setRoundDigits(d); setItems((prev) => recomputeCustomerQuoteItems(prev, costCurrency, currency, d)); }}
               />
             </div>
             <div className="form-field">
@@ -1318,7 +1340,7 @@ function CustomerQuoteDetailModal({
               </select>
             </div>
           </div>
-          <CustomerQuoteItemEditor items={items} onChange={setItems} currency={currency} costCurrency={costCurrency} />
+          <CustomerQuoteItemEditor items={items} onChange={setItems} currency={currency} costCurrency={costCurrency} roundDigits={roundDigits} />
           <QuotationTermsEditor terms={terms} onChange={setTerms} />
           <div className="form-actions">
             <span className="action-name">Total: {dualCurrencyText(total, currency)} · {fxRateText()}</span>
@@ -2041,12 +2063,13 @@ function mergeTermsFromVendorQuote(
 function customerQuoteItemsFromVendorQuote(
   vq: VendorQuoteForImport,
   defaultMargin: number,
-  saleCurrency = "USD"
+  saleCurrency = "USD",
+  roundDigits: number = DEFAULT_ROUND_DIGITS
 ): CustomerQuoteItem[] {
   // 원가는 공급사 견적 통화(vq.currency), 단가는 판매 통화 기준으로 환산해 계산.
   return vq.items.map((it) => {
     const cost = Number(it.cost_price ?? 0);
-    const unit = calcUnitPrice(cost, defaultMargin, vq.currency, saleCurrency);
+    const unit = calcUnitPrice(cost, defaultMargin, vq.currency, saleCurrency, roundDigits);
     const qty = Number(it.qty || 1);
     return {
       part_no: it.part_no || "",
@@ -2081,6 +2104,7 @@ function CustomerQuoteAction({
   const [qtnNo, setQtnNo] = useState("");
   const [currency, setCurrency] = useState("USD");
   const [costCurrency, setCostCurrency] = useState("USD");
+  const [roundDigits, setRoundDigits] = useState<number>(DEFAULT_ROUND_DIGITS);
   const [sentAt, setSentAt] = useState(nowLocalDt());
   const [items, setItems] = useState<CustomerQuoteItem[]>([]);
   const [validUntil, setValidUntil] = useState("");
@@ -2134,7 +2158,7 @@ function CustomerQuoteAction({
     const vq = vendorQuotes.find((v) => v.id === importVqId);
     if (!vq) return;
     // 원가 통화 = 공급사 견적 통화. 판매 통화(currency)는 사용자 선택값을 유지.
-    setItems(customerQuoteItemsFromVendorQuote(vq, defaultMargin, currency));
+    setItems(customerQuoteItemsFromVendorQuote(vq, defaultMargin, currency, roundDigits));
     if (vq.currency) setCostCurrency(vq.currency);
     setTerms((prev) => mergeTermsFromVendorQuote(prev, vq.terms));
     setMsg(`Loaded ${vq.items.length} item(s) from quote ${vq.vendor_quote_no} (${vq.vendor}).`);
@@ -2147,7 +2171,7 @@ function CustomerQuoteAction({
     setMsg(null);
     setErr(null);
     try {
-      const r = await createCustomerQuote(rfqId, currency, total, items, validUntil, undefined, terms, qtnNo, sentAt, costCurrency);
+      const r = await createCustomerQuote(rfqId, currency, total, items, validUntil, undefined, terms, qtnNo, sentAt, costCurrency, roundDigits);
       setQtn({ id: r.id, qtn_no: r.qtn_no });
       setMsg(`Sent — ${r.qtn_no}`);
       onDone();
@@ -2244,6 +2268,15 @@ function CustomerQuoteAction({
           />
         </div>
         <div className="form-field" style={{ alignSelf: "end" }}>
+          <button
+            className="btn"
+            onClick={() => setItems((prev) => applyMarginToAll(prev, defaultMargin, costCurrency, currency, roundDigits))}
+            disabled={items.length === 0}
+          >
+            Apply margin to all
+          </button>
+        </div>
+        <div className="form-field" style={{ alignSelf: "end" }}>
           <button className="btn" onClick={importFromVendorQuote} disabled={importVqId === ""}>
             Load Vendor quote
           </button>
@@ -2259,14 +2292,21 @@ function CustomerQuoteAction({
           <label>Cost currency (vendor)</label>
           <CurrencyToggle
             value={costCurrency}
-            onChange={(c) => { setCostCurrency(c); setItems((prev) => recomputeCustomerQuoteItems(prev, c, currency)); }}
+            onChange={(c) => { setCostCurrency(c); setItems((prev) => recomputeCustomerQuoteItems(prev, c, currency, roundDigits)); }}
           />
         </div>
         <div className="form-field">
           <label>Sale currency (unit price)</label>
           <CurrencyToggle
             value={currency}
-            onChange={(c) => { setCurrency(c); setItems((prev) => recomputeCustomerQuoteItems(prev, costCurrency, c)); }}
+            onChange={(c) => { setCurrency(c); setItems((prev) => recomputeCustomerQuoteItems(prev, costCurrency, c, roundDigits)); }}
+          />
+        </div>
+        <div className="form-field">
+          <label>Round unit price up to</label>
+          <RoundUnitSelect
+            value={roundDigits}
+            onChange={(d) => { setRoundDigits(d); setItems((prev) => recomputeCustomerQuoteItems(prev, costCurrency, currency, d)); }}
           />
         </div>
         <div className="form-field">
@@ -2279,7 +2319,7 @@ function CustomerQuoteAction({
         </div>
       </div>
 
-      <CustomerQuoteItemEditor items={items} onChange={setItems} currency={currency} costCurrency={costCurrency} />
+      <CustomerQuoteItemEditor items={items} onChange={setItems} currency={currency} costCurrency={costCurrency} roundDigits={roundDigits} />
 
       <QuotationTermsEditor terms={terms} onChange={setTerms} />
 
@@ -2390,11 +2430,13 @@ function CustomerQuoteItemEditor({
   onChange,
   currency = "USD",
   costCurrency = "USD",
+  roundDigits = DEFAULT_ROUND_DIGITS,
 }: {
   items: CustomerQuoteItem[];
   onChange: (items: CustomerQuoteItem[]) => void;
   currency?: string;
   costCurrency?: string;
+  roundDigits?: number;
 }) {
   function patch(i: number, key: keyof CustomerQuoteItem, value: string) {
     onChange(
@@ -2407,7 +2449,7 @@ function CustomerQuoteItemEditor({
           (next[key] as string) = value;
         }
         if (key === "cost_price" || key === "margin_pct" || key === "qty") {
-          const unit = calcUnitPrice(Number(next.cost_price || 0), Number(next.margin_pct || 0), costCurrency, currency);
+          const unit = calcUnitPrice(Number(next.cost_price || 0), Number(next.margin_pct || 0), costCurrency, currency, roundDigits);
           next.unit_price = unit;
           next.amount = unit * Number(next.qty || 1);
         }
@@ -2470,25 +2512,66 @@ function CustomerQuoteItemEditor({
   );
 }
 
-// 단가 = (원가를 판매통화로 환산) × (1 + 마진%). costCur/saleCur 를 주면 환율 적용.
+// 자릿수(ROUNDUP num_digits) 기본값 — 엑셀 템플릿과 동일하게 1,000단위 올림.
+const DEFAULT_ROUND_DIGITS = -3;
+
+// 단가 = ROUNDUP( (원가를 판매통화로 환산) / (1 - 마진%), roundDigits ).
+// 엑셀 =ROUNDUP(cost/(1-markup), -3) 방식(판매가 기준 마진). costCur/saleCur 로 환율 적용.
 function calcUnitPrice(
   cost: number,
   marginPct: number,
   costCur?: string,
-  saleCur?: string
+  saleCur?: string,
+  roundDigits: number = DEFAULT_ROUND_DIGITS
 ) {
   const converted = convertCurrency(cost, costCur, saleCur);
-  return Number((converted * (1 + marginPct / 100)).toFixed(2));
+  const denom = 1 - Number(marginPct || 0) / 100;
+  const priced = denom > 0 ? converted / denom : converted;
+  return roundUp(priced, roundDigits);
 }
 
-// 통화 토글 변경 시 원가×마진 공식으로 단가·금액을 판매통화 기준으로 재환산.
+// 단가 올림 단위 선택지 — 값은 Excel ROUNDUP 의 num_digits.
+const ROUND_DIGIT_OPTIONS: { value: number; label: string }[] = [
+  { value: -3, label: "1,000" },
+  { value: -2, label: "100" },
+  { value: -1, label: "10" },
+  { value: 0, label: "1" },
+  { value: 2, label: "0.01" },
+];
+
+function RoundUnitSelect({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  return (
+    <select className="currency-select" value={value} onChange={(e) => onChange(Number(e.target.value))}>
+      {ROUND_DIGIT_OPTIONS.map((o) => (
+        <option key={o.value} value={o.value}>{o.label}</option>
+      ))}
+    </select>
+  );
+}
+
+// 모든 품목 마진을 지정값으로 통일하고 단가·금액을 재계산.
+function applyMarginToAll(
+  items: CustomerQuoteItem[],
+  marginPct: number,
+  costCur: string,
+  saleCur: string,
+  roundDigits: number
+): CustomerQuoteItem[] {
+  return items.map((it) => {
+    const unit = calcUnitPrice(Number(it.cost_price || 0), marginPct, costCur, saleCur, roundDigits);
+    return { ...it, margin_pct: marginPct, unit_price: unit, amount: unit * Number(it.qty || 1) };
+  });
+}
+
+// 통화·자릿수·마진 변경 시 단가·금액을 판매통화 기준으로 재환산.
 function recomputeCustomerQuoteItems(
   items: CustomerQuoteItem[],
   costCur: string,
-  saleCur: string
+  saleCur: string,
+  roundDigits: number = DEFAULT_ROUND_DIGITS
 ): CustomerQuoteItem[] {
   return items.map((it) => {
-    const unit = calcUnitPrice(Number(it.cost_price || 0), Number(it.margin_pct || 0), costCur, saleCur);
+    const unit = calcUnitPrice(Number(it.cost_price || 0), Number(it.margin_pct || 0), costCur, saleCur, roundDigits);
     return { ...it, unit_price: unit, amount: unit * Number(it.qty || 1) };
   });
 }

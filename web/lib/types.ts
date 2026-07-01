@@ -787,6 +787,7 @@ export type CustomerQuotationDetail = {
   project_title: string;
   currency: string;
   cost_currency?: string;
+  round_digits?: number;
   amount: number;
   valid_until: string;
   sent_at: string;

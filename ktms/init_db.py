@@ -35,6 +35,7 @@ _MIGRATIONS = {
         "created_by": "INTEGER",
         "sent_at": "VARCHAR(16)",
         "cost_currency": "VARCHAR(10)",
+        "round_digits": "INTEGER",
     },
     "customers": {
         "contact_phone": "VARCHAR(50)",

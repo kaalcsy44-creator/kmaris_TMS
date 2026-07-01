@@ -16,6 +16,16 @@ export function amountInputValue(value: number | string | null | undefined): str
   return parsed.toLocaleString(undefined, { maximumFractionDigits: 6 });
 }
 
+// Excel ROUNDUP(value, digits) 과 동일 — 0에서 먼 쪽으로 올림.
+// digits 음수면 정수부(예: -3 → 1,000 단위)에서 올린다.
+export function roundUp(value: number, digits = 0): number {
+  if (!Number.isFinite(value) || value === 0) return 0;
+  const factor = Math.pow(10, digits);
+  const scaled = value * factor;
+  const rounded = value >= 0 ? Math.ceil(scaled) : Math.floor(scaled);
+  return rounded / factor;
+}
+
 // USD↔KRW 고정환율 변환. 그 외 통화쌍은 환율이 없으므로 원값을 그대로 둔다.
 export function convertCurrency(
   amount: number,
