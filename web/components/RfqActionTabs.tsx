@@ -1916,6 +1916,7 @@ function VendorQuoteItemEditor({
               <th className="num">Qty</th>
               <th>Unit</th>
               <th className="num">Unit Price</th>
+              <th className="num">Amount</th>
               <th>Lead Time</th>
               <th>Remark</th>
               <th></th>
@@ -1932,6 +1933,7 @@ function VendorQuoteItemEditor({
                 <td><input {...gridCellProps(i, 4)} className="num" value={amountInputValue(it.qty)} onChange={(e) => patch(i, "qty", e.target.value)} /></td>
                 <td><input {...gridCellProps(i, 5)} value={it.unit} onChange={(e) => patch(i, "unit", e.target.value)} /></td>
                 <td><input {...gridCellProps(i, 6)} className="num" value={amountInputValue(it.cost_price)} onChange={(e) => patch(i, "cost_price", e.target.value)} /></td>
+                <td className="num">{amountInputValue(Number(it.cost_price || 0) * Number(it.qty || 1))}</td>
                 <td><input {...gridCellProps(i, 7)} value={it.lead_time ?? ""} onChange={(e) => patch(i, "lead_time", e.target.value)} /></td>
                 <td><input {...gridCellProps(i, 8)} value={it.remark ?? ""} onChange={(e) => patch(i, "remark", e.target.value)} /></td>
                 <td>
@@ -1942,7 +1944,7 @@ function VendorQuoteItemEditor({
           </tbody>
           <tfoot>
             <tr>
-              <td colSpan={7} className="total-label">Total</td>
+              <td colSpan={8} className="total-label">Total</td>
               <td className="num total-value">
                 <DualCurrencyAmount value={total} currency={currency} />
                 <span className="fx-note">{fxRateText()}</span>
