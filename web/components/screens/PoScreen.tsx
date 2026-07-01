@@ -17,7 +17,7 @@ import {
   updatePurchaseOrder,
   deletePurchaseOrder,
 } from "@/lib/api";
-import { getToken } from "@/lib/auth";
+import { getToken, can, canEditDeal } from "@/lib/auth";
 import { useCachedData, invalidateCache } from "@/lib/useCachedData";
 import FilterTable, { ColumnDef } from "@/components/common/FilterTable";
 import { identityColumns, projectNoColumn } from "@/components/common/identityColumns";
@@ -163,9 +163,11 @@ function CustomerPoTab({
         defaultSortDir="desc"
         empty="No orders registered."
         actions={
-          <button className="btn primary" onClick={() => setAdding(true)}>
-            + New order
-          </button>
+          can("po", "create") ? (
+            <button className="btn primary" onClick={() => setAdding(true)}>
+              + New order
+            </button>
+          ) : null
         }
       />
 
@@ -341,6 +343,9 @@ function OrderDetailModal({
   }
 
   const vessels = options.vessels.filter((v) => customerId === "" || v.customer_id === customerId);
+  // 편집 권한 = 역할 권한(po.edit) × 담당(PIC) 소유권. 없으면 읽기전용.
+  const canEditThis = can("po", "edit") && canEditDeal(detail?.assignee_id);
+  const canDeleteThis = can("po", "delete") && canEditDeal(detail?.assignee_id);
 
   return (
     <Modal title={<ModalTitle label="Edit order" projectNo={order?.project_no} />} onClose={onClose} wide>
@@ -364,6 +369,7 @@ function OrderDetailModal({
             <div><dt>Delivered date</dt><dd>{detail.delivered_date || "—"}</dd></div>
           </dl>
 
+          <fieldset className="form-fieldset" disabled={!canEditThis}>
           <div className="po-work-note">
             <b>Auto-fill order items</b>
             <span>Upload a customer P/O PDF or image, or load item/amount data from a previous quotation.</span>
@@ -436,10 +442,17 @@ function OrderDetailModal({
             </div>
           </div>
           <ItemEditor items={items} onChange={setItems} currency={currency} />
+          </fieldset>
           <div className="form-actions">
-            <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
+            {!canEditThis ? (
+              <span className="hint-inline">View only — no edit permission for this deal</span>
+            ) : (
+              <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
+            )}
             <button className="btn" onClick={onClose} disabled={busy}>Cancel</button>
-            <button className="btn danger" onClick={remove} disabled={busy}>Delete</button>
+            {canDeleteThis ? (
+              <button className="btn danger" onClick={remove} disabled={busy}>Delete</button>
+            ) : null}
             {err ? <span className="action-err">{err}</span> : null}
           </div>
         </>
@@ -501,12 +514,16 @@ function VendorPoTab({
         empty="No purchase orders issued."
         actions={
           <>
-            <button className="btn" onClick={() => setSending(true)} style={{ marginRight: 8 }}>
-              ✉ Send email
-            </button>
-            <button className="btn primary" onClick={() => setAdding(true)}>
-              + New
-            </button>
+            {can("po", "edit") ? (
+              <button className="btn" onClick={() => setSending(true)} style={{ marginRight: 8 }}>
+                ✉ Send email
+              </button>
+            ) : null}
+            {can("po", "create") ? (
+              <button className="btn primary" onClick={() => setAdding(true)}>
+                + New
+              </button>
+            ) : null}
           </>
         }
       />
@@ -567,6 +584,9 @@ function VendorPoDetailModal({
   const [items, setItems] = useState<PoWorkItem[]>([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // 편집 권한 = 역할 권한(po.edit) × 담당(PIC) 소유권. 없으면 읽기전용.
+  const canEditThis = can("po", "edit") && canEditDeal(d?.assignee_id);
+  const canDeleteThis = can("po", "delete") && canEditDeal(d?.assignee_id);
 
   useEffect(() => {
     fetchVendorPoDetail(id)
@@ -649,6 +669,7 @@ function VendorPoDetailModal({
             <div><dt>Items</dt><dd>{d.items.length}</dd></div>
           </dl>
 
+          <fieldset className="form-fieldset" disabled={!canEditThis}>
           <div className="po-work-note">
             <b>Load from previous step</b>
             <span>Reload the item list and amounts from the linked Customer P/O order.</span>
@@ -687,10 +708,17 @@ function VendorPoDetailModal({
             </div>
           </div>
           <ItemEditor items={items} onChange={setItems} currency={d.currency || "USD"} />
+          </fieldset>
           <div className="form-actions">
-            <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
+            {!canEditThis ? (
+              <span className="hint-inline">View only — no edit permission for this deal</span>
+            ) : (
+              <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
+            )}
             <button className="btn" onClick={onClose} disabled={busy}>Cancel</button>
-            <button className="btn danger" onClick={remove} disabled={busy}>Delete</button>
+            {canDeleteThis ? (
+              <button className="btn danger" onClick={remove} disabled={busy}>Delete</button>
+            ) : null}
             {err ? <span className="action-err">{err}</span> : null}
           </div>
         </>

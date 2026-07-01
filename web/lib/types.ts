@@ -125,6 +125,7 @@ export type PoRow = {
 
 export type PoDetail = {
   id: number;
+  assignee_id: number; // 담당자(PIC) = RFQ.created_by (0 = 미지정)
   customer_po_no: string;
   customer_po_at: string;
   rfq_no: string;
@@ -469,6 +470,7 @@ export type DocumentDetail = {
   order: {
     id: number;
     rfq_id: number;
+    assignee_id: number; // 담당자(PIC) = RFQ.created_by (0 = 미지정)
     po_no: string;
     date: string;
     status: string;
@@ -826,6 +828,7 @@ export type PurchaseOrderDetail = {
   id: number;
   po_no: string;
   order_id: number;
+  assignee_id: number; // 담당자(PIC) = RFQ.created_by (0 = 미지정)
   customer_po_no: string;
   project_no: string;
   first_rfq_at: string;

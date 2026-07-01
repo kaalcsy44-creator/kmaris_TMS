@@ -1670,6 +1670,7 @@ def order_detail(order_id: int):
 
         return {
             "id": o.id,
+            "assignee_id": (rfq.created_by or 0) if rfq else 0,
             "customer_po_no": o.po_no or "",
             "customer_po_at": o.date or "",
             "rfq_no": _rfq_no_disp(rfq.rfq_no) if rfq else "",
@@ -2136,6 +2137,7 @@ def vendor_po_detail(po_id: int):
             "id": po.id,
             "po_no": po.po_no or "",
             "order_id": po.order_id,
+            "assignee_id": (rfq.created_by or 0) if rfq else 0,
             "customer_po_no": (order.po_no if order else "") or "",
             **_base_meta(s, rfq, order),   # 공통 기본정보
             "vendor_id": po.vendor_id or 0,
@@ -2975,6 +2977,7 @@ def _document_detail_payload(session, order: Order) -> dict:
         "order": {
             "id": order.id,
             "rfq_id": rfq.id if rfq else 0,
+            "assignee_id": (rfq.created_by or 0) if rfq else 0,
             "po_no": order.po_no or "",
             "date": order.date or "",
             "status": _enum_val(order.status),

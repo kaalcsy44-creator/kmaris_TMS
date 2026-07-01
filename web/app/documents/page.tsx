@@ -17,7 +17,7 @@ import {
   saveServiceStage,
   deleteServiceStage,
 } from "@/lib/api";
-import { getToken } from "@/lib/auth";
+import { getToken, can, canEditDeal } from "@/lib/auth";
 import type { DocRow, DocumentDetail, DocumentWorkItem } from "@/lib/types";
 import { fetchDocumentsOverview } from "@/lib/api";
 import { useCachedData, invalidateCache } from "@/lib/useCachedData";
@@ -40,6 +40,11 @@ import {
 } from "@/components/common/itemTable";
 
 const today = () => new Date().toISOString().slice(0, 10);
+
+// 문서 편집 권한 = 역할 권한(documents.edit) × 담당(PIC) 소유권. 없으면 읽기전용.
+function canEditDoc(data: DocumentDetail | null | undefined): boolean {
+  return can("documents", "edit") && canEditDeal(data?.order.assignee_id);
+}
 
 // 목록은 진행현황(내부확인용) 통합 목록으로 이전됨. 이 화면은 문서(CI/PL/SA/Tax) 작업
 // 전용이며, 대상 오더는 진행현황의 "문서 작업"으로 넘어온 ?order=<id> 로 선택된다.
@@ -368,9 +373,11 @@ function ServiceStageList({
         defaultSortDir="desc"
         empty={`No ${cfg.label} entered yet.`}
         actions={
-          <button className="btn primary" onClick={() => setRegistering(true)} disabled={registerable.length === 0}>
-            + {cfg.btn}
-          </button>
+          can("documents", "create") ? (
+            <button className="btn primary" onClick={() => setRegistering(true)} disabled={registerable.length === 0}>
+              + {cfg.btn}
+            </button>
+          ) : null
         }
       />
 
@@ -597,6 +604,7 @@ function ServiceStageForm({
   const [complete, setComplete] = useState(done); // 7·8단계: 저장 시 단계 완료 여부
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const editable = canEditDoc(data);
 
   function set(key: string, v: string) {
     setForm((p) => ({ ...p, [key]: v }));
@@ -638,6 +646,7 @@ function ServiceStageForm({
         <span className={`ar-badge${done ? "" : " overdue"}`}>{done ? "Done" : "Pending"}</span>
       </div>
 
+      <fieldset className="form-fieldset" disabled={!editable}>
       {svc === 9 ? <ServiceReportUpload data={data} onChanged={onChanged} /> : null}
 
       <div className="form-grid">
@@ -652,15 +661,20 @@ function ServiceStageForm({
           <span>Mark this stage as complete</span>
         </label>
       ) : null}
+      </fieldset>
 
       <div className="form-actions" style={{ marginTop: 14 }}>
-        <button className="btn primary" disabled={busy || data.order.id === 0} onClick={save}>
-          {busy ? "Working…" : "Save"}
-        </button>
+        {!editable ? (
+          <span className="hint-inline">View only — no edit permission for this deal</span>
+        ) : (
+          <button className="btn primary" disabled={busy || data.order.id === 0} onClick={save}>
+            {busy ? "Working…" : "Save"}
+          </button>
+        )}
         <button className="btn" disabled={busy} onClick={onClose}>
           Cancel
         </button>
-        {hasSaved ? (
+        {hasSaved && editable ? (
           <button className="btn danger" disabled={busy} onClick={remove}>
             Delete
           </button>
@@ -687,6 +701,7 @@ function ServiceBillingForm({ data, onChanged, onClose }: { data: DocumentDetail
   );
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const editable = canEditDoc(data);
 
   const itemTotal = useMemo(() => items.reduce((sum, item) => sum + num(item.amount), 0), [items]);
   const extraTotal = useMemo(
@@ -737,6 +752,7 @@ function ServiceBillingForm({ data, onChanged, onClose }: { data: DocumentDetail
       <div className="milestone-row" style={{ marginBottom: 12 }}>
         <span className={`ar-badge${billed ? "" : " overdue"}`}>{billed ? "Billed" : "Pending"}</span>
       </div>
+      <fieldset className="form-fieldset" disabled={!editable}>
       <div className="form-grid">
         <label className="form-field">
           <span>Currency</span>
@@ -761,12 +777,17 @@ function ServiceBillingForm({ data, onChanged, onClose }: { data: DocumentDetail
         <Field label="Material cost" value={String(material)} onChange={setMaterial} type="number" />
         <Field label="Other cost" value={String(other)} onChange={setOther} type="number" />
       </div>
+      </fieldset>
       <div className="form-actions" style={{ marginTop: 14 }}>
-        <button className="btn primary" disabled={busy || data.order.id === 0} onClick={save}>
-          {busy ? "Working…" : "Save billing + register AR"}
-        </button>
+        {!editable ? (
+          <span className="hint-inline">View only — no edit permission for this deal</span>
+        ) : (
+          <button className="btn primary" disabled={busy || data.order.id === 0} onClick={save}>
+            {busy ? "Working…" : "Save billing + register AR"}
+          </button>
+        )}
         <span className="hint-inline">Total {dualCurrencyText(total, currency)} · {fxRateText()}</span>
-        {billed ? (
+        {billed && editable ? (
           <button className="btn danger" disabled={busy} onClick={remove} style={{ marginLeft: "auto" }}>
             Delete
           </button>
@@ -867,9 +888,11 @@ function StageList({
         empty={`No ${cfg.label} registered.`}
         leftActions={leftActions}
         actions={
-          <button className="btn primary" onClick={() => setRegistering(true)}>
-            + New {cfg.short}
-          </button>
+          can("documents", "create") ? (
+            <button className="btn primary" onClick={() => setRegistering(true)}>
+              + New {cfg.short}
+            </button>
+          ) : null
         }
       />
 
@@ -1009,6 +1032,7 @@ function PodTab({
   const pod = data.pod;
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const editable = canEditDoc(data);
 
   async function onPick(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -1067,9 +1091,11 @@ function PodTab({
           <button className="btn" onClick={download} disabled={busy}>
             Download
           </button>
-          <button className="btn danger" onClick={remove} disabled={busy}>
-            Delete
-          </button>
+          {editable ? (
+            <button className="btn danger" onClick={remove} disabled={busy}>
+              Delete
+            </button>
+          ) : null}
         </div>
       ) : (
         <div className="state">
@@ -1077,10 +1103,14 @@ function PodTab({
         </div>
       )}
       <div className="form-actions">
-        <label className="btn primary" style={{ cursor: busy ? "default" : "pointer" }}>
-          {busy ? "Working…" : pod ? `Replace ${docLabel} file` : `Upload ${docLabel} file`}
-          <input type="file" hidden accept=".pdf,image/*" onChange={onPick} disabled={busy} />
-        </label>
+        {editable ? (
+          <label className="btn primary" style={{ cursor: busy ? "default" : "pointer" }}>
+            {busy ? "Working…" : pod ? `Replace ${docLabel} file` : `Upload ${docLabel} file`}
+            <input type="file" hidden accept=".pdf,image/*" onChange={onPick} disabled={busy} />
+          </label>
+        ) : (
+          <span className="hint-inline">View only — no edit permission for this deal</span>
+        )}
         {err ? <span className="action-err">{err}</span> : null}
       </div>
     </div>
@@ -1095,6 +1125,7 @@ function fmtDateTime(iso: string): string {
 
 function OrderMilestones({ data, onChanged }: { data: DocumentDetail; onChanged: () => void }) {
   const [busy, setBusy] = useState(false);
+  const editable = canEditDoc(data);
 
   async function toggle(field: "consignee_confirmed_date" | "vendor_docs_sent_date", value: boolean) {
     setBusy(true);
@@ -1110,14 +1141,14 @@ function OrderMilestones({ data, onChanged }: { data: DocumentDetail; onChanged:
     <div className="milestone-row">
       <button
         className="btn"
-        disabled={busy}
+        disabled={busy || !editable}
         onClick={() => toggle("consignee_confirmed_date", !data.order.consignee_confirmed_date)}
       >
         Customer confirmed {data.order.consignee_confirmed_date || "pending"}
       </button>
       <button
         className="btn"
-        disabled={busy}
+        disabled={busy || !editable}
         onClick={() => toggle("vendor_docs_sent_date", !data.order.vendor_docs_sent_date)}
       >
         Vendor docs confirmed {data.order.vendor_docs_sent_date || "pending"}
@@ -1144,6 +1175,7 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
   });
   const [busy, setBusy] = useState(false);
   const total = useMemo(() => items.reduce((sum, i) => sum + num(i.amount), 0), [items]);
+  const editable = canEditDoc(data);
 
   async function save() {
     setBusy(true);
@@ -1157,6 +1189,7 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
 
   return (
     <div className="doc-tab">
+      <fieldset className="form-fieldset" disabled={!editable}>
       <div className="form-grid">
         <Field label="CI No." value={ciNo} onChange={setCiNo} />
         <Field label="CI Date" value={date} onChange={setDate} type="date" />
@@ -1178,10 +1211,15 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
       </div>
       <ItemEditor items={items} setItems={setItems} packing={false} currency={currency} />
       <MissingWarning missing={data.ci?.missing || []} />
+      </fieldset>
       <div className="form-actions">
-        <button className="btn primary" disabled={busy || data.order.id === 0} onClick={save}>
-          Save CI
-        </button>
+        {editable ? (
+          <button className="btn primary" disabled={busy || data.order.id === 0} onClick={save}>
+            Save CI
+          </button>
+        ) : (
+          <span className="hint-inline">View only — no edit permission for this deal</span>
+        )}
         <DownloadButton orderId={data.order.id} kind="ci/pdf" disabled={!data.ci} label="Download CI PDF" />
         <span className="hint-inline">Total {dualCurrencyText(total, currency)} · {fxRateText()}</span>
       </div>
@@ -1195,6 +1233,7 @@ function PackingListTab({ data, onChanged }: { data: DocumentDetail; onChanged: 
   const seed = data.pl?.items || data.ci?.items || data.order.items;
   const [items, setItems] = useState<DocumentWorkItem[]>(normalizeItems(seed, true));
   const [busy, setBusy] = useState(false);
+  const editable = canEditDoc(data);
 
   async function save() {
     setBusy(true);
@@ -1212,6 +1251,7 @@ function PackingListTab({ data, onChanged }: { data: DocumentDetail; onChanged: 
 
   return (
     <div className="doc-tab">
+      <fieldset className="form-fieldset" disabled={!editable}>
       <div className="form-grid">
         <Field label="PL No." value={plNo} onChange={setPlNo} />
         <Field label="PL Date" value={date} onChange={setDate} type="date" />
@@ -1227,10 +1267,15 @@ function PackingListTab({ data, onChanged }: { data: DocumentDetail; onChanged: 
       </div>
       <ItemEditor items={items} setItems={setItems} packing />
       <MissingWarning missing={data.pl?.missing || []} />
+      </fieldset>
       <div className="form-actions">
-        <button className="btn primary" disabled={busy} onClick={save}>
-          Save PL
-        </button>
+        {editable ? (
+          <button className="btn primary" disabled={busy} onClick={save}>
+            Save PL
+          </button>
+        ) : (
+          <span className="hint-inline">View only — no edit permission for this deal</span>
+        )}
         <DownloadButton orderId={data.order.id} kind="pl/pdf" disabled={!data.pl} label="Download PL PDF" />
       </div>
     </div>
@@ -1255,6 +1300,7 @@ function ShippingAdviceTab({ data, onChanged }: { data: DocumentDetail; onChange
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
   const [ackMissing, setAckMissing] = useState(false);
+  const editable = canEditDoc(data);
 
   // SA 는 CI 기준으로 발송되므로 CI 가 오더와 일치하는지 발송 전 검증한다.
   const ciMissing = data.ci?.missing || [];
@@ -1283,6 +1329,7 @@ function ShippingAdviceTab({ data, onChanged }: { data: DocumentDetail; onChange
     <div className="doc-tab">
       {/* 8단계(Delivery arrangement) 마일스톤 — Customer 확인 / Vendor 서류 확인 */}
       <OrderMilestones data={data} onChanged={onChanged} />
+      <fieldset className="form-fieldset" disabled={!editable}>
       <div className="form-grid">
         <Field label="SA No." value={saNo} onChange={setSaNo} />
         <Field label="SA Date" value={date} onChange={setDate} type="date" />
@@ -1309,18 +1356,28 @@ function ShippingAdviceTab({ data, onChanged }: { data: DocumentDetail; onChange
           I have reviewed {ciMissing.length} missing/short-quantity item(s) and will send as is.
         </label>
       ) : null}
+      </fieldset>
       <div className="form-actions">
-        <button className="btn primary" disabled={busy || data.order.id === 0} onClick={save}>
-          Save SA
-        </button>
-        <DownloadButton orderId={data.order.id} kind="sa/pdf" disabled={!data.sa} label="Download SA PDF" />
-        <button
-          className="btn"
-          disabled={busy || !data.sa || !to.trim() || (ciMissing.length > 0 && !ackMissing)}
-          onClick={send}
-        >
-          Send SA email
-        </button>
+        {editable ? (
+          <>
+            <button className="btn primary" disabled={busy || data.order.id === 0} onClick={save}>
+              Save SA
+            </button>
+            <DownloadButton orderId={data.order.id} kind="sa/pdf" disabled={!data.sa} label="Download SA PDF" />
+            <button
+              className="btn"
+              disabled={busy || !data.sa || !to.trim() || (ciMissing.length > 0 && !ackMissing)}
+              onClick={send}
+            >
+              Send SA email
+            </button>
+          </>
+        ) : (
+          <>
+            <span className="hint-inline">View only — no edit permission for this deal</span>
+            <DownloadButton orderId={data.order.id} kind="sa/pdf" disabled={!data.sa} label="Download SA PDF" />
+          </>
+        )}
         <span className="hint-inline">
           SMTP {data.smtp_configured ? "configured" : "not configured"} {data.sa?.sent_date ? `· sent ${data.sa.sent_date}` : ""}
         </span>
@@ -1339,6 +1396,7 @@ function TaxInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChanged: (
   const [busy, setBusy] = useState(false);
   const currency = data.ci?.currency || "USD";
   const total = useMemo(() => items.reduce((sum, item) => sum + num(item.amount), 0), [items]);
+  const editable = canEditDoc(data);
 
   async function save() {
     setBusy(true);
@@ -1363,6 +1421,7 @@ function TaxInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChanged: (
 
   return (
     <div className="doc-tab">
+      <fieldset className="form-fieldset" disabled={!editable}>
       <div className="form-grid">
         <Field label="Tax No." value={taxNo} onChange={setTaxNo} />
         <Field label="Issue Date" value={date} onChange={setDate} type="date" />
@@ -1380,10 +1439,15 @@ function TaxInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChanged: (
         </button>
       </div>
       <ItemEditor items={items} setItems={setItems} packing={false} currency={currency} />
+      </fieldset>
       <div className="form-actions">
-        <button className="btn primary" disabled={busy} onClick={save}>
-          Create Tax Invoice Data + register AR
-        </button>
+        {editable ? (
+          <button className="btn primary" disabled={busy} onClick={save}>
+            Create Tax Invoice Data + register AR
+          </button>
+        ) : (
+          <span className="hint-inline">View only — no edit permission for this deal</span>
+        )}
         <DownloadButton orderId={data.order.id} kind="tax/xlsx" disabled={!data.tax} label="Download Tax XLSX" />
         <span className="hint-inline">Total {dualCurrencyText(total, currency)} · {fxRateText()}</span>
       </div>
@@ -1644,7 +1708,7 @@ function DocOrderInfo({ order }: { order: DocumentDetail["order"] }) {
 function emptyDocDetail(): DocumentDetail {
   return {
     order: {
-      id: 0, rfq_id: 0, po_no: "", date: "", status: "",
+      id: 0, rfq_id: 0, assignee_id: 0, po_no: "", date: "", status: "",
       customer: "", customer_email: "", customer_tax_id: "", vessel: "",
       project_title: "", project_no: "", first_rfq_at: "", work_type: "", vendor: "", trade_type: "", service_info: {},
       tracking_token: "", consignee_confirmed_date: "", vendor_docs_sent_date: "",
