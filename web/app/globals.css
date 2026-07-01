@@ -2172,6 +2172,46 @@ table.pipeline td.pl-td-stage {
 .pl-stage-segs .seg.on {
   background: var(--blue);
 }
+/* 4개 중분류 그룹핑: 진행바 위 라벨 + 그룹 사이 구분 간격 */
+.pl-stage-segwrap {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 150px;
+}
+.pl-stage-phases {
+  display: flex;
+  gap: 8px;
+}
+.pl-stage-phases .ph {
+  flex-basis: 0;
+  min-width: 0;
+  font-size: 9.5px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.2px;
+  color: #a6b2c1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pl-stage-phases .ph.on {
+  color: var(--blue);
+  font-weight: 800;
+}
+.pl-stage-segs.grouped {
+  gap: 8px;
+}
+.pl-stage-segs.grouped .seg-group {
+  display: flex;
+  gap: 2px;
+  flex-basis: 0;
+  min-width: 0;
+}
+table.pipeline tbody tr.service .pl-stage-phases .ph.on {
+  color: #11824a;
+}
 .pl-stage-num {
   flex: none;
   font-size: 11px;

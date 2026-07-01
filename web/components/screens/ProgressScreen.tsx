@@ -55,6 +55,26 @@ function resolveSteps(baseSteps: string[], workType?: string | null): string[] {
   return baseSteps.map((name, i) => SERVICE_STEP_OVERRIDES[i + 1] ?? name);
 }
 
+// 내부 12단계 → 4개 중분류(영역). 경계는 모달 하단 이동 버튼(stageHref)과 동일.
+//   RFQ & Quotation: 1–4 / PO: 5–6 / Documents: 7–9 / AR: 10–12
+const STAGE_PHASES: { label: string; count: number }[] = [
+  { label: "RFQ & Quotation", count: 4 },
+  { label: "PO", count: 2 },
+  { label: "Documents", count: 3 },
+  { label: "AR", count: 3 },
+];
+
+/** 현재 단계(stage)가 속한 중분류 인덱스. 미시작(0)이면 -1. */
+function phaseIndexOfStage(stage: number): number {
+  if (stage <= 0) return -1;
+  let acc = 0;
+  for (let i = 0; i < STAGE_PHASES.length; i++) {
+    acc += STAGE_PHASES[i].count;
+    if (stage <= acc) return i;
+  }
+  return STAGE_PHASES.length - 1;
+}
+
 /** "YYYY-MM-DDTHH:MM" → "yy-mm-dd HH:MM" (표시용). 빈값이면 "". */
 function fmtStageDate(iso: string): string {
   if (!iso) return "";
@@ -173,14 +193,47 @@ function StageBar({ stage, steps }: { stage: number; steps: string[] }) {
   const filled = Math.max(0, Math.min(stage, total));
   const done = doneStageLabel(stage, steps);
   const next = nextStageLabel(stage, steps);
+  // 내부 12단계에서만 4개 중분류로 그룹핑(고객확인용 7단계는 기존 평면 바 유지).
+  const grouped = total === 12;
+  const curPhase = grouped ? phaseIndexOfStage(stage) : -1;
   return (
     <div className="pl-stage">
       <div className="pl-stage-top">
-        <span className="pl-stage-segs">
-          {Array.from({ length: total }).map((_, i) => (
-            <span key={i} className={`seg${i < filled ? " on" : ""}`} />
-          ))}
-        </span>
+        {grouped ? (
+          <span className="pl-stage-segwrap">
+            <span className="pl-stage-phases">
+              {STAGE_PHASES.map((p, pi) => (
+                <span
+                  key={p.label}
+                  className={`ph${pi === curPhase ? " on" : ""}`}
+                  style={{ flexGrow: p.count }}
+                  title={p.label}
+                >
+                  {p.label}
+                </span>
+              ))}
+            </span>
+            <span className="pl-stage-segs grouped">
+              {STAGE_PHASES.map((p, pi) => {
+                const start = STAGE_PHASES.slice(0, pi).reduce((s, x) => s + x.count, 0);
+                return (
+                  <span key={p.label} className="seg-group" style={{ flexGrow: p.count }}>
+                    {Array.from({ length: p.count }).map((_, k) => {
+                      const gi = start + k;
+                      return <span key={gi} className={`seg${gi < filled ? " on" : ""}`} />;
+                    })}
+                  </span>
+                );
+              })}
+            </span>
+          </span>
+        ) : (
+          <span className="pl-stage-segs">
+            {Array.from({ length: total }).map((_, i) => (
+              <span key={i} className={`seg${i < filled ? " on" : ""}`} />
+            ))}
+          </span>
+        )}
         <span className="pl-stage-num">
           {filled}/{total}
         </span>
