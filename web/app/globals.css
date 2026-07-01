@@ -2131,6 +2131,22 @@ table.pipeline tbody tr.sel {
 table.pipeline tbody tr:last-child td {
   border-bottom: none;
 }
+/* 그룹핑(같은 프로젝트 묶음): 교대 배경 + 그룹 첫 행 위 굵은 구분선 + 내부 연한 선 */
+table.pipeline tbody tr.grp-0 {
+  background: #fff;
+}
+table.pipeline tbody tr.grp-1 {
+  background: #eef4fb;
+}
+table.pipeline tbody tr.grp > td {
+  border-bottom-color: #edf1f7;
+}
+table.pipeline tbody tr.grp.group-start > td {
+  border-top: 2px solid #cddced;
+}
+table.pipeline tbody tr.grp:hover {
+  background: var(--hover);
+}
 table.pipeline td.nowrap {
   white-space: nowrap;
   color: #4a5568;

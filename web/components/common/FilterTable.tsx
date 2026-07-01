@@ -46,6 +46,8 @@ export default function FilterTable<T>({
   defaultSortKey = null,
   defaultSortDir = "asc",
   tableId,
+  groupBy,
+  groupMergeKeys,
 }: {
   rows: T[];
   columns: ColumnDef<T>[];
@@ -53,6 +55,10 @@ export default function FilterTable<T>({
   onRowClick?: (row: T) => void;
   rowClassName?: (row: T) => string;
   empty?: string;
+  /** 지정 시 같은 그룹 키의 행들을 인접·줄무늬 묶음으로 표시(예: 프로젝트 단위). */
+  groupBy?: (row: T) => string | number;
+  /** 그룹 연속 행에서 값을 비우는(병합 표시) 컬럼 key 목록(그룹 첫 행에만 표시). */
+  groupMergeKeys?: string[];
   /** 툴바 우측 슬롯(예: "+ 신규 등록" 버튼). */
   actions?: React.ReactNode;
   /** 툴바 좌측 슬롯(예: CI/PL 토글). */
@@ -164,6 +170,30 @@ export default function FilterTable<T>({
       if (col.sortValue) cmp = col.sortValue(a) - col.sortValue(b);
       else cmp = col.text(a).localeCompare(col.text(b), "ko");
       return cmp * dir;
+    });
+  }
+
+  // 3) 그룹핑: 같은 그룹 키의 행을 인접하게 모은다(정렬 순서에서 그룹 첫 등장 순 유지).
+  //    각 그룹에 교대 배경(줄무늬)과 첫 행 구분선을 부여하고, 반복 컬럼은 첫 행에만 표시.
+  const mergeSet = new Set(groupMergeKeys ?? []);
+  const rowMeta = new Map<T, { first: boolean; parity: 0 | 1 }>();
+  if (groupBy) {
+    const order: (string | number)[] = [];
+    const buckets = new Map<string | number, T[]>();
+    for (const r of displayRows) {
+      const k = groupBy(r);
+      if (!buckets.has(k)) {
+        buckets.set(k, []);
+        order.push(k);
+      }
+      buckets.get(k)!.push(r);
+    }
+    displayRows = order.flatMap((k) => buckets.get(k)!);
+    order.forEach((k, gi) => {
+      const members = buckets.get(k)!;
+      members.forEach((r, ri) => {
+        rowMeta.set(r, { first: ri === 0, parity: (gi % 2) as 0 | 1 });
+      });
     });
   }
 
@@ -307,20 +337,30 @@ export default function FilterTable<T>({
                 </td>
               </tr>
             ) : (
-              displayRows.map((r) => (
-                <tr
-                  key={getRowKey(r)}
-                  className={rowClassName ? rowClassName(r) : undefined}
-                  onClick={onRowClick ? () => onRowClick(r) : undefined}
-                  style={onRowClick ? { cursor: "pointer" } : undefined}
-                >
-                  {orderedColumns.map((c) => (
-                    <td key={c.key} className={`${colClass(c.key)}${c.numeric ? " num" : ""}`}>
-                      {c.render ? c.render(r) : c.text(r) || <span className="muted">—</span>}
-                    </td>
-                  ))}
-                </tr>
-              ))
+              displayRows.map((r) => {
+                const gm = groupBy ? rowMeta.get(r) : undefined;
+                const groupCls = gm
+                  ? ` grp grp-${gm.parity}${gm.first ? " group-start" : " group-cont"}`
+                  : "";
+                return (
+                  <tr
+                    key={getRowKey(r)}
+                    className={`${rowClassName ? rowClassName(r) : ""}${groupCls}`.trim() || undefined}
+                    onClick={onRowClick ? () => onRowClick(r) : undefined}
+                    style={onRowClick ? { cursor: "pointer" } : undefined}
+                  >
+                    {orderedColumns.map((c) => {
+                      // 그룹 연속 행이면서 병합 대상 컬럼은 비워 "묶음" 느낌을 준다.
+                      const merged = gm && !gm.first && mergeSet.has(c.key);
+                      return (
+                        <td key={c.key} className={`${colClass(c.key)}${c.numeric ? " num" : ""}${merged ? " grp-merged" : ""}`}>
+                          {merged ? null : c.render ? c.render(r) : c.text(r) || <span className="muted">—</span>}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>

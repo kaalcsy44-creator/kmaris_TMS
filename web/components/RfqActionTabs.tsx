@@ -395,6 +395,8 @@ function VendorRfqList({
         onRowClick={(r) => { setAutoEdit(true); setDetailId(r.id); }}
         defaultSortKey="project_no"
         defaultSortDir="desc"
+        groupBy={(r) => r.rfq_id ?? `row-${r.id}`}
+        groupMergeKeys={["project_no", "customer", "project_title", "contact_person", "vessel", "work_type", "trade_type", "customer_rfq_no"]}
         empty="No Vendor RFQs sent."
         actions={
           <button className="btn primary" onClick={() => { setPickRfqId(null); setAdding(true); }}>
