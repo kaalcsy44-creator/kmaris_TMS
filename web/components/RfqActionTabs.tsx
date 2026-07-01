@@ -2429,7 +2429,12 @@ function QuotationTermsEditor({
       </div>
       <div className="form-field" style={{ marginTop: 8 }}>
         <label>Remarks</label>
-        <input value={terms.remarks ?? ""} onChange={(e) => onChange({ ...terms, remarks: e.target.value })} />
+        <textarea
+          rows={3}
+          style={{ minHeight: 72 }}
+          value={terms.remarks ?? ""}
+          onChange={(e) => onChange({ ...terms, remarks: e.target.value })}
+        />
       </div>
     </div>
   );
