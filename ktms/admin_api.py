@@ -436,6 +436,60 @@ _PERM_DENY_MSG = {
     "delete": "삭제 권한이 없습니다.",
 }
 
+# 경로 첫 리소스/ID → 그 딜의 담당자(PIC=RFQ.created_by) 조회용. (소유권 게이트)
+_DEAL_PATH_RE = re.compile(r"^/api/admin/([a-z-]+)/(\d+)")
+
+
+def _deal_owner_from_path(path: str) -> int | None:
+    """요청 경로가 가리키는 딜의 담당자(PIC=RFQ.created_by)를 반환. 판별 불가 시 None.
+
+    모든 하위 문서(Vendor RFQ/Quote·Quotation·Order·Vendor PO·Documents·AR)는
+    rfq_id/order_id 로 RFQ 에 연결되므로 소유권은 항상 RFQ.created_by 로 귀결된다.
+    None(신규 등록처럼 대상 딜이 없거나, PIC 미지정)이면 소유권 검사를 건너뛴다.
+    """
+    m = _DEAL_PATH_RE.match(path)
+    if not m:
+        return None
+    res, rid = m.group(1), int(m.group(2))
+    s = get_session()
+    try:
+        rfq_id: int | None = None
+        if res == "rfq":
+            r = s.query(RFQ).filter_by(id=rid).first()
+            return r.created_by if r else None
+        if res == "vendor-rfq":
+            v = s.query(VendorRFQ).filter_by(id=rid).first()
+            rfq_id = v.rfq_id if v else None
+        elif res == "vendor-quote":
+            vq = s.query(VendorQuote).filter_by(id=rid).first()
+            if vq:
+                vr = s.query(VendorRFQ).filter_by(id=vq.vendor_rfq_id).first()
+                rfq_id = vr.rfq_id if vr else None
+        elif res == "quotation":
+            q = s.query(Quotation).filter_by(id=rid).first()
+            rfq_id = q.rfq_id if q else None
+        elif res in ("orders", "order", "documents"):
+            o = s.query(Order).filter_by(id=rid).first()
+            rfq_id = o.rfq_id if o else None
+        elif res == "vendor-pos":
+            vp = s.query(PurchaseOrder).filter_by(id=rid).first()
+            if vp:
+                o = s.query(Order).filter_by(id=vp.order_id).first()
+                rfq_id = o.rfq_id if o else None
+        elif res == "ar":
+            ar = s.query(ARRecord).filter_by(id=rid).first()
+            if ar:
+                o = s.query(Order).filter_by(id=ar.order_id).first()
+                rfq_id = o.rfq_id if o else None
+        else:
+            return None
+        if rfq_id is None:
+            return None
+        r = s.query(RFQ).filter_by(id=rfq_id).first()
+        return r.created_by if r else None
+    finally:
+        s.close()
+
 
 @app.middleware("http")
 async def _perm_guard(request: Request, call_next):
@@ -458,6 +512,12 @@ async def _perm_guard(request: Request, call_next):
         return _authz_error(request, 403, "관리자 권한이 필요합니다.")
     if not _can(role, module, action):
         return _authz_error(request, 403, _PERM_DENY_MSG.get(action, "권한이 없습니다."))
+    # 담당(PIC) 소유권 게이트: 비관리자는 본인이 담당인 딜만 편집/삭제(및 하위 등록) 가능.
+    # 조회(view)는 기존 데이터 범위 그대로. 대상 딜이 없거나 PIC 미지정이면 통과.
+    if action != "view" and module in ("rfq", "po", "documents", "ar"):
+        owner = _deal_owner_from_path(request.url.path)
+        if owner is not None and owner != (user.get("id") or 0):
+            return _authz_error(request, 403, "담당자(PIC)만 이 건을 수정·삭제할 수 있습니다.")
     return await call_next(request)
 
 

@@ -39,6 +39,22 @@ export function isAdmin(): boolean {
   return getRole() === "admin";
 }
 
+/** 현재 로그인 사용자 id(비로그인 시 0). */
+export function getUserId(): number {
+  return getUser()?.id ?? 0;
+}
+
+/**
+ * 딜(건) 편집 가능 여부 — 담당자(PIC=assignee_id) 기준.
+ * admin 은 전체 편집. 비관리자는 본인이 PIC 인 건만. PIC 미지정(null) 건은 열려 있음.
+ * (백엔드가 최종 강제하며, 이 함수는 UI 버튼 활성/비활성용.)
+ */
+export function canEditDeal(assigneeId: number | null | undefined): boolean {
+  if (isAdmin()) return true;
+  if (assigneeId == null) return true;
+  return getUserId() === assigneeId;
+}
+
 /** 저장된 권한 그리드. 없으면 null. */
 export function getPerms(): PermGrid | null {
   if (typeof window === "undefined") return null;

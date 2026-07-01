@@ -22,7 +22,7 @@ import WorkTypeBadge from "@/components/WorkTypeBadge";
 import CustomerName from "@/components/common/CustomerName";
 import VendorName from "@/components/common/VendorName";
 import { tr } from "@/lib/labels";
-import { getUser, can, isOwnScoped } from "@/lib/auth";
+import { getUser, can, isOwnScoped, canEditDeal } from "@/lib/auth";
 
 const WORK_TYPES = ["부품공급", "서비스"];
 
@@ -772,8 +772,10 @@ function PipelineModal({
 }) {
   const router = useRouter();
   const backdropMouseDown = useRef(false);
-  const canEdit = can("rfq", "edit");
-  const canDelete = can("rfq", "delete");
+  // 담당(PIC) 소유권: 비관리자는 본인이 담당인 딜만 편집/삭제. 남의 건은 조회만.
+  const ownsDeal = canEditDeal(r.assignee_id);
+  const canEdit = can("rfq", "edit") && ownsDeal;
+  const canDelete = can("rfq", "delete") && ownsDeal;
   const { data: users } = useCachedData("assignable-users", fetchAssignableUsers);
   const [deleting, setDeleting] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -1142,6 +1144,11 @@ function PipelineModal({
                 AR →
               </Link>
             </div>
+            {!ownsDeal && can("rfq", "edit") ? (
+              <span className="hint-inline" style={{ marginLeft: "auto" }} title={r.assignee ? `PIC: ${r.assignee}` : undefined}>
+                View only — assigned to {r.assignee || "another PIC"}
+              </span>
+            ) : null}
             {canEdit && editing ? (
               <>
                 <button
