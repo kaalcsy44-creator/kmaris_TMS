@@ -1336,7 +1336,7 @@ function ItemEditor({
                   <input {...gridCellProps(i, 0)} value={it.part_no} onChange={(e) => patch(i, "part_no", e.target.value)} />
                 </td>
                 <td>
-                  <input {...gridCellProps(i, 1)} value={it.description} onChange={(e) => patch(i, "description", e.target.value)} />
+                  <textarea {...gridCellProps(i, 1)} className="desc" rows={1} value={it.description} onChange={(e) => patch(i, "description", e.target.value)} />
                 </td>
                 <td>
                   <input {...gridCellProps(i, 2)} value={it.maker ?? ""} onChange={(e) => patch(i, "maker", e.target.value)} />

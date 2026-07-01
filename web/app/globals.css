@@ -3006,6 +3006,37 @@ table.mini.wide td:nth-child(3) input {
 table.mini.wide td:has(input.num) input {
   min-width: 88px;
 }
+/* 짧은 텍스트 칸(Unit·HS Code·Remark·Part No.·Maker·Origin 등)도 충분한 폭 확보. */
+table.mini.wide input:not(.num) {
+  min-width: 96px;
+}
+/* Description 칸 — 여러 줄 입력·표시가 가능한 textarea. 내용이 길면 줄바꿈되어 보인다. */
+table.mini textarea.desc {
+  width: 100%;
+  min-width: 220px;
+  min-height: 30px;
+  max-height: 160px;
+  border: 1px solid #d7e2ee;
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-size: 13px;
+  font-family: inherit;
+  line-height: 1.35;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  resize: vertical;
+  box-sizing: border-box;
+  vertical-align: middle;
+  field-sizing: content; /* 지원 브라우저에서 내용 길이에 맞춰 자동 높이 */
+}
+table.mini textarea.desc:focus {
+  outline: none;
+  border-color: var(--blue);
+}
+/* 좌우 스크롤 표(wide)에서는 설명 칸이 넉넉한 폭을 유지하도록. */
+table.mini.wide td:has(textarea.desc) {
+  min-width: 280px;
+}
 table.mini .seq {
   width: 52px;
   min-width: 52px;

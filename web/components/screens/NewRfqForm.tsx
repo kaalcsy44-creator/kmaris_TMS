@@ -514,7 +514,9 @@ export default function NewRfqForm({
                 />
               </td>
               <td>
-                <input
+                <textarea
+                  className="desc"
+                  rows={1}
                   value={it.description}
                   onChange={(e) => setItem(i, "description", e.target.value)}
                 />

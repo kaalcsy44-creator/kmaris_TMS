@@ -2,6 +2,8 @@ export type RfqRow = {
   id: number;
   customer_rfq_no: string;
   project_title: string;
+  contact_person?: string;
+  level?: string;
   work_type: string;
   customer: string;
   vessel: string;
@@ -349,6 +351,10 @@ export type VendorQuoteOverviewRow = {
   amount: number;
   currency: string;
   customer: string;
+  project_title?: string;
+  contact_person?: string;
+  level?: string;
+  status?: string;
   vessel: string;
   work_type: string;
   first_rfq_at: string;
@@ -372,6 +378,8 @@ export type QtnRow = {
   qtn_no: string;
   rfq_no: string;
   customer: string;
+  project_title?: string;
+  contact_person?: string;
   vessel: string;
   currency: string;
   amount: number;
@@ -400,6 +408,9 @@ export type VrfqRow = {
   item_count: number;
   quote_count: number;
   customer: string;
+  project_title?: string;
+  contact_person?: string;
+  level?: string;
   vessel: string;
   work_type: string;
   first_rfq_at: string;

@@ -118,12 +118,16 @@ export function gridCellProps(row: number, col: number) {
   };
 }
 
-function handleGridKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+type GridCell = HTMLInputElement | HTMLTextAreaElement;
+
+function handleGridKeyDown(event: KeyboardEvent<GridCell>) {
   const key = event.key;
   if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(key)) return;
   if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
 
   const input = event.currentTarget;
+  // 여러 줄 textarea(설명 칸)에서는 위/아래로 셀 이동하지 않고 줄 이동을 그대로 둔다.
+  if (input.tagName === "TEXTAREA" && (key === "ArrowUp" || key === "ArrowDown")) return;
   if ((key === "ArrowLeft" || key === "ArrowRight") && !shouldMoveHorizontally(input, key)) {
     return;
   }
@@ -147,17 +151,18 @@ function handleGridKeyDown(event: KeyboardEvent<HTMLInputElement>) {
   next.select();
 }
 
-function shouldMoveHorizontally(input: HTMLInputElement, key: string): boolean {
+function shouldMoveHorizontally(input: GridCell, key: string): boolean {
   const start = input.selectionStart ?? 0;
   const end = input.selectionEnd ?? 0;
   if (start !== end) return true;
   return key === "ArrowLeft" ? start === 0 : end === input.value.length;
 }
 
-function findGridInput(from: HTMLInputElement, row: number, col: number): HTMLInputElement | null {
+function findGridInput(from: GridCell, row: number, col: number): GridCell | null {
   const table = from.closest("table");
   if (!table) return null;
-  return table.querySelector<HTMLInputElement>(
-    `input[data-grid-row="${row}"][data-grid-col="${col}"]:not(:disabled)`
+  return table.querySelector<GridCell>(
+    `input[data-grid-row="${row}"][data-grid-col="${col}"]:not(:disabled),` +
+      `textarea[data-grid-row="${row}"][data-grid-col="${col}"]:not(:disabled)`
   );
 }

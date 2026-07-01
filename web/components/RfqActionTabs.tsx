@@ -51,7 +51,7 @@ import type {
 import NewRfqForm from "./screens/NewRfqForm";
 import WorkTypeBadge from "./WorkTypeBadge";
 import FilterTable, { ColumnDef } from "./common/FilterTable";
-import { identityColumns, projectNoColumn } from "./common/identityColumns";
+import { identityColumns, projectNoColumn, statusColumns } from "./common/identityColumns";
 import Modal from "./common/Modal";
 import BaseMetaRows, { ModalTitle } from "./common/BaseMeta";
 import CurrencyToggle from "./common/CurrencyToggle";
@@ -243,6 +243,8 @@ function CustomerRfqList({
     projectNoColumn<RfqRow>({ projectNo: (r) => r.project_no, firstRfqAt: (r) => r.first_rfq_at }),
     ...identityColumns<RfqRow>({
       customer: (r) => r.customer,
+      projectTitle: (r) => r.project_title,
+      contactPerson: (r) => r.contact_person || "",
       vessel: (r) => (r.vessel && r.vessel !== "—" ? r.vessel : ""),
       workType: (r) => r.work_type,
     }),
@@ -259,6 +261,7 @@ function CustomerRfqList({
       text: (r) => String(r.item_count),
       sortValue: (r) => r.item_count,
     },
+    ...statusColumns<RfqRow>({ level: (r) => r.level || "", status: (r) => r.status || "" }),
   ];
 
   return (
@@ -360,6 +363,8 @@ function VendorRfqList({
     projectNoColumn<VrfqRow>({ projectNo: (r) => r.project_no, firstRfqAt: (r) => r.first_rfq_at }),
     ...identityColumns<VrfqRow>({
       customer: (r) => r.customer,
+      projectTitle: (r) => r.project_title || "",
+      contactPerson: (r) => r.contact_person || "",
       vessel: (r) => r.vessel,
       workType: (r) => r.work_type,
     }),
@@ -369,13 +374,7 @@ function VendorRfqList({
     { key: "sent_date", label: "Sent date", text: (r) => r.sent_date || "", filter: "date" },
     { key: "item_count", label: "Items", numeric: true, text: (r) => String(r.item_count), sortValue: (r) => r.item_count },
     { key: "quote_count", label: "Quotes received", numeric: true, text: (r) => `${r.quote_count}`, sortValue: (r) => r.quote_count },
-    {
-      key: "status",
-      label: "Status",
-      text: (r) => tr(r.status) || "",
-      filter: "facet",
-      render: (r) => <span className="ar-badge">{tr(r.status)}</span>,
-    },
+    ...statusColumns<VrfqRow>({ level: (r) => r.level || "", status: (r) => r.status || "" }),
   ];
 
   if (error) return <div className="state error">API error: {error}</div>;
@@ -676,7 +675,7 @@ function VendorRfqItemEditor({
                 <tr key={i} className={itemRowClass(i)}>
                   <td className="seq">{i + 1}</td>
                   <td><input {...gridCellProps(i, 0)} value={it.part_no || ""} onChange={(e) => patch(i, "part_no", e.target.value)} /></td>
-                  <td><input {...gridCellProps(i, 1)} value={it.description || ""} onChange={(e) => patch(i, "description", e.target.value)} /></td>
+                  <td><textarea {...gridCellProps(i, 1)} className="desc" rows={1} value={it.description || ""} onChange={(e) => patch(i, "description", e.target.value)} /></td>
                   <td><input {...gridCellProps(i, 2)} className="num" value={amountInputValue(it.qty)} onChange={(e) => patch(i, "qty", e.target.value)} /></td>
                   <td><input {...gridCellProps(i, 3)} value={it.unit || ""} onChange={(e) => patch(i, "unit", e.target.value)} /></td>
                 </tr>
@@ -743,6 +742,8 @@ function VendorQuoteList({
     projectNoColumn<VendorQuoteOverviewRow>({ projectNo: (r) => r.project_no, firstRfqAt: (r) => r.first_rfq_at }),
     ...identityColumns<VendorQuoteOverviewRow>({
       customer: (r) => r.customer,
+      projectTitle: (r) => r.project_title || "",
+      contactPerson: (r) => r.contact_person || "",
       vessel: (r) => r.vessel,
       workType: (r) => r.work_type,
     }),
@@ -764,6 +765,7 @@ function VendorQuoteList({
       render: (r) => <DualCurrencyAmount value={r.amount} currency={r.currency} />,
       sortValue: (r) => r.amount,
     },
+    ...statusColumns<VendorQuoteOverviewRow>({ level: (r) => r.level || "", status: (r) => r.status || "" }),
   ];
 
   if (error) return <div className="state error">API error: {error}</div>;
@@ -1031,6 +1033,8 @@ function CustomerQuoteList({
     projectNoColumn<QtnRow>({ projectNo: (r) => r.project_no, firstRfqAt: (r) => r.first_rfq_at }),
     ...identityColumns<QtnRow>({
       customer: (r) => r.customer,
+      projectTitle: (r) => r.project_title || "",
+      contactPerson: (r) => r.contact_person || "",
       vessel: (r) => r.vessel,
       workType: (r) => r.work_type,
     }),
@@ -1057,9 +1061,8 @@ function CustomerQuoteList({
       render: (r) => <DualCurrencyAmount value={r.amount} currency={r.currency} />,
       sortValue: (r) => r.amount,
     },
-    { key: "level", label: "Level", text: (r) => r.level || "" },
     { key: "valid_until", label: "Valid until", text: (r) => r.valid_until || "", filter: "date" },
-    { key: "status", label: "Status", text: (r) => tr(r.status) || "", filter: "facet", render: (r) => <span className="ar-badge">{tr(r.status)}</span> },
+    ...statusColumns<QtnRow>({ level: (r) => r.level || "", status: (r) => r.status || "" }),
   ];
 
   if (error) return <div className="state error">API error: {error}</div>;
@@ -1942,7 +1945,7 @@ function VendorQuoteItemEditor({
               <tr key={i} className={itemRowClass(i)}>
                 <td className="seq">{i + 1}</td>
                 <td><input {...gridCellProps(i, 0)} value={it.part_no} onChange={(e) => patch(i, "part_no", e.target.value)} /></td>
-                <td><input {...gridCellProps(i, 1)} value={it.description} onChange={(e) => patch(i, "description", e.target.value)} /></td>
+                <td><textarea {...gridCellProps(i, 1)} className="desc" rows={1} value={it.description} onChange={(e) => patch(i, "description", e.target.value)} /></td>
                 <td><input {...gridCellProps(i, 2)} value={it.maker ?? ""} onChange={(e) => patch(i, "maker", e.target.value)} /></td>
                 <td><input {...gridCellProps(i, 3)} value={it.origin ?? ""} onChange={(e) => patch(i, "origin", e.target.value)} /></td>
                 <td><input {...gridCellProps(i, 4)} className="num" value={amountInputValue(it.qty)} onChange={(e) => patch(i, "qty", e.target.value)} /></td>
@@ -2463,7 +2466,7 @@ function CustomerQuoteItemEditor({
               <tr key={i} className={itemRowClass(i)}>
                 <td className="seq">{i + 1}</td>
                 <td><input {...gridCellProps(i, 0)} value={it.part_no} onChange={(e) => patch(i, "part_no", e.target.value)} /></td>
-                <td><input {...gridCellProps(i, 1)} value={it.description} onChange={(e) => patch(i, "description", e.target.value)} /></td>
+                <td><textarea {...gridCellProps(i, 1)} className="desc" rows={1} value={it.description} onChange={(e) => patch(i, "description", e.target.value)} /></td>
                 <td><input {...gridCellProps(i, 2)} className="num" value={amountInputValue(it.qty)} onChange={(e) => patch(i, "qty", e.target.value)} /></td>
                 <td><input {...gridCellProps(i, 3)} value={it.unit} onChange={(e) => patch(i, "unit", e.target.value)} /></td>
                 <td><input {...gridCellProps(i, 4)} className="num" value={amountInputValue(it.cost_price)} onChange={(e) => patch(i, "cost_price", e.target.value)} /></td>
