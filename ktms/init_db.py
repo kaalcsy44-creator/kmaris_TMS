@@ -29,6 +29,7 @@ _MIGRATIONS = {
         "stage_notes": "JSON",
         "received_at": "VARCHAR(16)",
         "contact_person": "VARCHAR(100)",
+        "request_channel": "VARCHAR(40)",
         "created_by": "INTEGER",
     },
     "quotations": {

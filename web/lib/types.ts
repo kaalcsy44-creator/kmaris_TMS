@@ -723,6 +723,7 @@ export type RfqDetail = {
   received_at: string;
   date: string;
   notes: string;
+  request_channel: string;
   follow_up_level: string;
   stage: number;
   status: string;

@@ -17,6 +17,9 @@ import type { CustomerOption, SettingsVessel } from "@/lib/types";
 
 type ItemRow = { part_no: string; description: string; qty: string; remark: string };
 
+// 고객이 RFQ를 보내온 수단(요청 수단). 자유 텍스트 컬럼이라 프리셋 외 값도 저장 가능.
+const REQUEST_CHANNELS = ["Email", "Phone", "SMS", "WhatsApp", "WeChat", "Other"];
+
 /** 현재 시각 "YYYY-MM-DDTHH:MM" (datetime-local 기본값). */
 function nowLocal(): string {
   const d = new Date();
@@ -48,6 +51,8 @@ export default function NewRfqForm({
   const [contactPerson, setContactPerson] = useState("");
   const [projectTitle, setProjectTitle] = useState("");
   const [workType, setWorkType] = useState("부품공급");
+  const [requestChannel, setRequestChannel] = useState("");
+  const [notes, setNotes] = useState("");
   const [receivedAt, setReceivedAt] = useState(nowLocal());
   const [items, setItems] = useState<ItemRow[]>([
     { part_no: "", description: "", qty: "1", remark: "" },
@@ -214,6 +219,8 @@ export default function NewRfqForm({
     setContactPerson("");
     setProjectTitle("");
     setWorkType("부품공급");
+    setRequestChannel("");
+    setNotes("");
     setReceivedAt(nowLocal());
     setItems([{ part_no: "", description: "", qty: "1", remark: "" }]);
     setErr(null);
@@ -234,6 +241,8 @@ export default function NewRfqForm({
       setContactPerson(d.contact_person || "");
       setProjectTitle(d.project_title || "");
       setWorkType(d.work_type || "부품공급");
+      setRequestChannel(d.request_channel || "");
+      setNotes(d.notes || "");
       setReceivedAt(d.received_at || nowLocal());
       setItems(
         d.items.length
@@ -278,6 +287,8 @@ export default function NewRfqForm({
           received_at: receivedAt || undefined,
           project_title: projectTitle,
           work_type: workType,
+          request_channel: requestChannel,
+          notes,
           items: cleanItems,
         });
         setMsg("Updated");
@@ -291,6 +302,8 @@ export default function NewRfqForm({
           received_at: receivedAt || undefined,
           project_title: projectTitle,
           work_type: workType,
+          request_channel: requestChannel,
+          notes,
           items: cleanItems,
         });
         setMsg(`Created — ${r.rfq_no}`);
@@ -484,6 +497,27 @@ export default function NewRfqForm({
             placeholder="Internal reference title (optional)"
           />
         </Field>
+        <Field label="Request method">
+          <select value={requestChannel} onChange={(e) => setRequestChannel(e.target.value)}>
+            <option value="">Select…</option>
+            {REQUEST_CHANNELS.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        </Field>
+      </div>
+
+      <div className="form-field" style={{ marginTop: 12 }}>
+        <label>Notes</label>
+        <textarea
+          className="wrapcell"
+          rows={2}
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="Internal memo (optional)"
+        />
       </div>
 
       <div className="sub-h" style={{ marginTop: 18 }}>

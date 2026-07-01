@@ -167,6 +167,7 @@ class RFQ(Base):
     received_at      = Column(String(16))   # RFQ 수신 일시 "YYYY-MM-DDTHH:MM" (KST)
     status           = Column(SAEnum(RFQStatus), default=RFQStatus.RECEIVED)
     follow_up_level  = Column(SAEnum(FollowUpLevel), default=FollowUpLevel.B)
+    request_channel  = Column(String(40))   # 고객 요청 수단: Email/Phone/SMS/WhatsApp/WeChat 등
     items            = Column(JSON, default=list)
     notes            = Column(Text)
     # 내부 12단계 완료 일시(수동 입력/보정값). {"1": "YYYY-MM-DDTHH:MM", ...} (KST 기준).

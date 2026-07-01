@@ -363,6 +363,8 @@ function ServiceStageList({
         columns={columns}
         getRowKey={(r) => r.id}
         onRowClick={(r) => onOpen(r.id, svc)}
+        defaultSortKey="project_no"
+        defaultSortDir="desc"
         empty={`No ${cfg.label} entered yet.`}
         actions={
           <button className="btn primary" onClick={() => setRegistering(true)} disabled={registerable.length === 0}>
@@ -859,6 +861,8 @@ function StageList({
         columns={columns}
         getRowKey={(r) => r.id}
         onRowClick={(r) => onOpen(r.id, kind)}
+        defaultSortKey="project_no"
+        defaultSortDir="desc"
         empty={`No ${cfg.label} registered.`}
         leftActions={leftActions}
         actions={

@@ -234,7 +234,8 @@ function vendorOf(r: PipelineRow): string {
 function cellText(r: PipelineRow, key: ColKey, steps: string[]): string {
   switch (key) {
     case "received_at":
-      return r.received_at ? fmtStageDate(r.received_at) : "";
+      // "Project No." 컬럼 — 정렬/검색은 화면에 표시되는 관리번호(yymmdd-nn) 기준.
+      return r.project_no || "";
     case "customer":
       return r.customer || "";
     case "vendor":
@@ -276,8 +277,9 @@ function PipelineTable({
   tableId?: string;
 }) {
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [sortKey, setSortKey] = useState<ColKey | null>(null);
-  const [sortDir, setSortDir] = useState<SortDir>("asc");
+  // 기본 정렬: 관리번호(Project No.) 내림차순 — 최근 프로젝트가 맨 위.
+  const [sortKey, setSortKey] = useState<ColKey | null>("received_at");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [dragKey, setDragKey] = useState<string | null>(null);
   // 컬럼 폭·순서·표시여부 (localStorage 저장)
   const layout = useColumnLayout(tableId, PIPELINE_COLUMNS);

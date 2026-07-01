@@ -136,6 +136,8 @@ export function createRfq(body: {
   received_at?: string;
   project_title?: string;
   work_type?: string;
+  request_channel?: string;
+  notes?: string;
   items: { part_no: string; description: string; qty: number; remark?: string }[];
 }): Promise<{ ok: boolean; id: number; rfq_no: string }> {
   return post("/api/admin/rfq", body);
@@ -151,6 +153,8 @@ export function updateRfq(
     contact_person?: string;
     project_title?: string;
     work_type?: string;
+    request_channel?: string;
+    notes?: string;
     received_at?: string;
     assignee_id?: number;
     items?: { part_no: string; description: string; qty: number; remark?: string }[];

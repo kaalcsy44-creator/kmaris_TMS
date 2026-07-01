@@ -158,6 +158,8 @@ function CustomerPoTab({
         columns={columns}
         getRowKey={(o) => o.id}
         onRowClick={(o) => setDetailId(o.id)}
+        defaultSortKey="project_no"
+        defaultSortDir="desc"
         empty="No orders registered."
         actions={
           <button className="btn primary" onClick={() => setAdding(true)}>
@@ -493,6 +495,8 @@ function VendorPoTab({
         columns={columns}
         getRowKey={(p) => p.id}
         onRowClick={(p) => setDetailId(p.id)}
+        defaultSortKey="project_no"
+        defaultSortDir="desc"
         empty="No purchase orders issued."
         actions={
           <>

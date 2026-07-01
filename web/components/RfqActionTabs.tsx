@@ -272,6 +272,8 @@ function CustomerRfqList({
         columns={columns}
         getRowKey={(r) => r.id}
         onRowClick={(r) => setDetailId(r.id)}
+        defaultSortKey="project_no"
+        defaultSortDir="desc"
         empty="No RFQs registered."
         actions={
           <button className="btn primary" onClick={() => setAdding(true)}>
@@ -389,6 +391,8 @@ function VendorRfqList({
         columns={columns}
         getRowKey={(r) => r.id}
         onRowClick={(r) => { setAutoEdit(true); setDetailId(r.id); }}
+        defaultSortKey="project_no"
+        defaultSortDir="desc"
         empty="No Vendor RFQs sent."
         actions={
           <button className="btn primary" onClick={() => { setPickRfqId(null); setAdding(true); }}>
@@ -780,6 +784,8 @@ function VendorQuoteList({
         columns={columns}
         getRowKey={(r) => r.id}
         onRowClick={(r) => setDetailId(r.id)}
+        defaultSortKey="project_no"
+        defaultSortDir="desc"
         empty="No Vendor quotes received."
         actions={
           <button className="btn primary" onClick={() => { setPickRfqId(null); setAdding(true); }}>
@@ -1077,6 +1083,8 @@ function CustomerQuoteList({
         columns={columns}
         getRowKey={(r) => r.id}
         onRowClick={(r) => setDetailId(r.id)}
+        defaultSortKey="project_no"
+        defaultSortDir="desc"
         empty="No quotations to display."
         actions={
           <button className="btn primary" onClick={() => { setPickRfqId(null); setAdding(true); }}>

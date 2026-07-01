@@ -1259,6 +1259,7 @@ def rfq_detail(rfq_id: int):
             "project_no": _project_no_map(s).get(r.id, ""),
             "date": r.date or "",
             "notes": r.notes or "",
+            "request_channel": getattr(r, "request_channel", None) or "",
             "follow_up_level": _enum_val(r.follow_up_level) if r.follow_up_level else "B",
             "stage": stage,
             "status": _status_label(stage, r.work_type),
@@ -4654,6 +4655,8 @@ class RfqCreate(BaseModel):
     received_at: str | None = None     # RFQ 수신 일시 "YYYY-MM-DDTHH:MM"(비우면 현재)
     project_title: str | None = ""
     work_type: str | None = "부품공급"
+    request_channel: str | None = ""   # 고객 요청 수단: Email/Phone/SMS/WhatsApp/WeChat 등
+    notes: str | None = ""             # 내부 메모(자유 서술)
     items: list[RfqItemIn] = []
 
 
@@ -4693,6 +4696,8 @@ def create_rfq(body: RfqCreate, user: dict = Depends(get_current_user)):
             contact_person=(body.contact_person or "").strip() or None,
             project_title=(body.project_title or "").strip() or None,
             work_type=work_type,
+            request_channel=(body.request_channel or "").strip() or None,
+            notes=(body.notes or "").strip() or None,
             customer_id=cust.id,
             vessel_id=body.vessel_id,
             date=received_at[:10],
@@ -4737,6 +4742,8 @@ class RfqUpdate(BaseModel):
     contact_person: str | None = None
     project_title: str | None = None
     work_type: str | None = None
+    request_channel: str | None = None  # 고객 요청 수단
+    notes: str | None = None            # 내부 메모(자유 서술)
     received_at: str | None = None      # "YYYY-MM-DDTHH:MM"
     assignee_id: int | None = None      # 담당자(PIC) = created_by. 0 → 미지정 해제
     items: list[RfqItemIn] | None = None  # 보내면 품목 전체 교체
@@ -4778,6 +4785,10 @@ def update_rfq(rfq_id: int, body: RfqUpdate):
             rfq.contact_person = body.contact_person.strip() or None
         if body.project_title is not None:
             rfq.project_title = body.project_title.strip() or None
+        if body.request_channel is not None:
+            rfq.request_channel = body.request_channel.strip() or None
+        if body.notes is not None:
+            rfq.notes = body.notes.strip() or None
         if body.work_type is not None:
             wt = _coerce_work_type(body.work_type)
             if wt is None:

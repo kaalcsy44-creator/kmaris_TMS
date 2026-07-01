@@ -252,6 +252,8 @@ function ArOverview() {
           columns={columns}
           getRowKey={(r) => r.id}
           onRowClick={(r) => setEditing(r)}
+          defaultSortKey="project_no"
+          defaultSortDir="desc"
           empty="No AR records. They are created automatically when a Tax Invoice is generated, or you can add one directly."
           actions={
             <>
