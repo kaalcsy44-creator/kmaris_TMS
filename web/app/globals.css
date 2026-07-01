@@ -2431,6 +2431,18 @@ table.mini td.mini-empty {
   margin-top: 4px;
   flex-wrap: wrap;
 }
+/* 좌측 화면이동 링크(RFQ·P/O·Documents·AR)는 좌측에 몰아두고 약간 작게. */
+.pl-nav-links {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-right: auto;
+}
+.pl-nav-links .btn {
+  height: 30px;
+  padding: 0 11px;
+  font-size: 12px;
+}
 .pl-actions .btn.disabled {
   opacity: 0.5;
   cursor: default;

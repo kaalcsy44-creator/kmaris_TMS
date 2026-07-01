@@ -1066,25 +1066,27 @@ function PipelineModal({
           </div>
 
           <div className="pl-actions">
-            <Link className="btn" href={`/rfq?rfq=${r.rfq_id}`}>
-              RFQ &amp; Quotation →
-            </Link>
-            <Link className="btn" href={poHref}>
-              P/O →
-            </Link>
-            <Link
-              className="btn"
-              href={r.order_id > 0 ? `/documents?order=${r.order_id}` : "/documents"}
-              title={r.order_id > 0 ? undefined : "No order yet — select a target order on the Documents page"}
-            >
-              Documents →
-            </Link>
-            <Link
-              className="btn"
-              href={r.order_id > 0 ? `/ar?order=${r.order_id}` : "/ar"}
-            >
-              AR →
-            </Link>
+            <div className="pl-nav-links">
+              <Link className="btn" href={`/rfq?rfq=${r.rfq_id}`}>
+                RFQ &amp; Quotation →
+              </Link>
+              <Link className="btn" href={poHref}>
+                P/O →
+              </Link>
+              <Link
+                className="btn"
+                href={r.order_id > 0 ? `/documents?order=${r.order_id}` : "/documents"}
+                title={r.order_id > 0 ? undefined : "No order yet — select a target order on the Documents page"}
+              >
+                Documents →
+              </Link>
+              <Link
+                className="btn"
+                href={r.order_id > 0 ? `/ar?order=${r.order_id}` : "/ar"}
+              >
+                AR →
+              </Link>
+            </div>
             {canEdit && editing ? (
               <>
                 <button
