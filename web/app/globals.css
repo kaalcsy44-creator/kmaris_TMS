@@ -3802,6 +3802,13 @@ table.mini .num {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* 한 셀에 여러 벤더가 들어갈 때(vrfq_vendors) 각 벤더를 로고와 함께 세로로 쌓는다. */
+.cust-name-multi {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
 
 /* 고객 관리 폼의 로고 붙여넣기 필드 */
 .logo-field {
