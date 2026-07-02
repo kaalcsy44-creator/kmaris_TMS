@@ -383,6 +383,8 @@ export type QtnRow = {
   qtn_no: string;
   rfq_no: string;
   customer: string;
+  assignee?: string;      // 담당자(PIC) username
+  assignee_id?: number;   // 담당자(PIC) = RFQ.created_by (0 = 미지정)
   project_title?: string;
   contact_person?: string;
   vessel: string;
@@ -542,6 +544,7 @@ export type ArRow = {
   id: number;
   order_id: number;
   assignee_id: number; // 담당자(PIC) = RFQ.created_by (0 = 미지정)
+  assignee?: string;   // 담당자(PIC) username
   ci_no: string;
   customer: string;
   currency: string;

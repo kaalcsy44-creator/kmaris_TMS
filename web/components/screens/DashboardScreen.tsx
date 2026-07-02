@@ -113,6 +113,7 @@ type DelayRow = {
   kind: string;
   ref: string;
   customer: string;
+  pic: string;
   due: string;
   days: number;
   amount: string;
@@ -169,6 +170,7 @@ function HomeTab() {
           kind: "Quote expired",
           ref: q.qtn_no || "—",
           customer: q.customer || "",
+          pic: q.assignee || "",
           due: q.valid_until,
           days: daysBetween(t, q.valid_until),
           amount: dualCurrencyText(q.amount, q.currency),
@@ -183,6 +185,7 @@ function HomeTab() {
           kind: "AR overdue",
           ref: a.ci_no || a.project_no || "—",
           customer: a.customer || "",
+          pic: a.assignee || "",
           due: a.due_date,
           days: daysBetween(t, a.due_date),
           amount: dualCurrencyText(a.outstanding, a.currency),
@@ -209,6 +212,7 @@ function HomeTab() {
     },
     { key: "valid_until", label: "Valid until", text: (r) => r.valid_until || "", filter: "date" },
     { key: "status", label: "Status", text: (r) => tr(r.status), filter: "facet" },
+    { key: "pic", label: "PIC", text: (r) => r.assignee || "", filter: "facet" },
   ];
 
   const activityCols: ColumnDef<ActivityRow>[] = [
@@ -240,6 +244,7 @@ function HomeTab() {
       sortValue: (r) => r.paid_amount,
     },
     { key: "status", label: "Status", text: (r) => tr(r.status), filter: "facet", render: (r) => <span className={`ar-badge${r.overdue ? " overdue" : ""}`}>{tr(r.status)}</span> },
+    { key: "pic", label: "PIC", text: (r) => r.assignee || "", filter: "facet" },
   ];
 
   const delayCols: ColumnDef<DelayRow>[] = [
@@ -249,6 +254,7 @@ function HomeTab() {
     { key: "ref", label: "Ref.", text: (r) => r.ref },
     { key: "customer", label: "Customer", text: (r) => r.customer || "", filter: "facet", render: (r) => <CustomerName name={r.customer || ""} /> },
     { key: "amount", label: "Amount", numeric: true, text: (r) => r.amount },
+    { key: "pic", label: "PIC", text: (r) => r.pic || "", filter: "facet" },
   ];
 
   // 마케팅(잠정 고객사) — 최근 활동 목록 컬럼.
@@ -258,6 +264,7 @@ function HomeTab() {
     { key: "activity_type", label: "Activity", text: (r) => r.activity_type || "", filter: "facet" },
     { key: "channel", label: "Channel", text: (r) => r.channel || "", filter: "facet" },
     { key: "next_action_date", label: "Follow-up", text: (r) => r.next_action_date || "", filter: "date" },
+    { key: "pic", label: "PIC", text: (r) => r.owner || "", filter: "facet" },
   ];
 
   // 일정 관리 — 백엔드 일정 데이터 미구현. 자리(빈 표)만 둔다.
@@ -366,7 +373,7 @@ function HomeTab() {
               <MarketingCardBody
                 data={marketing}
                 columns={marketingCols}
-                onRowClick={() => router.push("/marketing")}
+                onRowClick={(r) => router.push(`/marketing?id=${r.id}`)}
               />
             ),
           },

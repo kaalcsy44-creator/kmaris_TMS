@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   fetchMarketing,
   fetchCustomers,
@@ -80,12 +81,22 @@ function formToBody(f: Form): MarketingSave {
 }
 
 export default function MarketingScreen() {
+  const router = useRouter();
+  const params = useSearchParams();
+  const idParam = params.get("id");
   const { data, error, refresh } = useCachedData("marketing", fetchMarketing);
   const { data: customers } = useCachedData("settings:customers", fetchCustomers);
   const [editing, setEditing] = useState<MarketingRow | null>(null);
   const [adding, setAdding] = useState(false);
 
   const rows = useMemo(() => data?.rows ?? [], [data]);
+
+  // 대시보드 Marketing 카드에서 ?id=<id> 로 넘어오면 해당 활동을 자동으로 연다.
+  useEffect(() => {
+    if (!idParam) return;
+    const match = rows.find((r) => r.id === Number(idParam));
+    if (match) setEditing(match);
+  }, [idParam, rows]);
 
   function reload() {
     invalidateCache("marketing-overview");
@@ -96,6 +107,7 @@ export default function MarketingScreen() {
   function close() {
     setEditing(null);
     setAdding(false);
+    if (idParam) router.replace("/marketing");
   }
 
   const columns: ColumnDef<MarketingRow>[] = [

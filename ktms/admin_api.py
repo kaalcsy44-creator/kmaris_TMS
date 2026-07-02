@@ -2334,6 +2334,7 @@ def ar_overview():
         cust_names = {c.id: c.name for c in s.query(Customer).all()}
         vessel_names = {v.id: v.name for v in s.query(Vessel).all()}
         vendor_names = {v.id: v.name for v in s.query(Vendor).all()}
+        user_names = {u.id: u.username for u in s.query(User).all()}
         ord_map = {o.id: o for o in s.query(Order).all()}
         # order_id → 발주 Vendor 이름들(중복 제거, 발주 순)
         po_vendors_by_order: dict[int, list[str]] = {}
@@ -2367,6 +2368,7 @@ def ar_overview():
                 "id": r.id,
                 "order_id": r.order_id,
                 "assignee_id": (rfq.created_by or 0) if rfq else 0,
+                "assignee": (user_names.get(rfq.created_by, "") or "") if rfq else "",
                 "ci_no": r.ci_no or "",
                 "customer": cust,
                 "currency": r.currency or "USD",
@@ -2621,6 +2623,7 @@ def quotation_overview(customer_id: int | None = None,
     try:
         cust_names = {c.id: c.name for c in s.query(Customer).all()}
         vessel_names = {v.id: v.name for v in s.query(Vessel).all()}
+        user_names = {u.id: u.username for u in s.query(User).all()}
         rfqs_all = s.query(RFQ).all()
         rfq_map = {r.id: r for r in rfqs_all}
         rfq_nos = {r.id: _rfq_no_disp(r.rfq_no) for r in rfqs_all}
@@ -2640,6 +2643,8 @@ def quotation_overview(customer_id: int | None = None,
                 "qtn_no": qt.qtn_no,
                 "rfq_no": rfq_nos.get(qt.rfq_id, "") if qt.rfq_id else "",
                 "customer": cust_names.get(qt.customer_id, "—"),
+                "assignee": (user_names.get(getattr(rfq_map.get(qt.rfq_id), "created_by", None), "") or "") if qt.rfq_id else "",
+                "assignee_id": (getattr(rfq_map.get(qt.rfq_id), "created_by", None) or 0) if qt.rfq_id else 0,
                 "project_title": (getattr(rfq_map.get(qt.rfq_id), "project_title", None) or "") if qt.rfq_id else "",
                 "contact_person": (getattr(rfq_map.get(qt.rfq_id), "contact_person", None) or "") if qt.rfq_id else "",
                 "vessel": vessel_names.get(qt.vessel_id, "") if qt.vessel_id else "",
