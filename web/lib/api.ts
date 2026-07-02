@@ -728,12 +728,22 @@ export function createVendorRfq(
   return post(`/api/admin/rfq/${rfqId}/vendor-rfq`, { vendor_id: vendorId });
 }
 
+// 발신 화면에서 선택·편집한 품목(오버라이드). 없으면 RFQ 원본을 사용.
+export type VendorRfqItemOverride = {
+  part_no: string;
+  description: string;
+  qty: number;
+  unit?: string;
+  remark?: string;
+};
+
 export function previewVendorRfq(
   rfqId: number,
   vendorIds: number[],
   lang: "en" | "ko",
   notes: string,
-  rfqNo?: { mode: "auto" | "manual"; value: string }
+  rfqNo?: { mode: "auto" | "manual"; value: string },
+  items?: VendorRfqItemOverride[]
 ): Promise<{ previews: VendorRfqPreview[]; smtp_configured: boolean }> {
   return post(`/api/admin/rfq/${rfqId}/vendor-rfq-preview`, {
     vendor_ids: vendorIds,
@@ -741,6 +751,7 @@ export function previewVendorRfq(
     notes,
     rfq_no_mode: rfqNo?.mode ?? "auto",
     rfq_no: rfqNo?.value ?? "",
+    items,
   });
 }
 
@@ -748,7 +759,8 @@ export function sendVendorRfq(
   rfqId: number,
   items: { vendor_id: number; to: string; subject: string; body: string }[],
   rfqNo?: { mode: "auto" | "manual"; value: string },
-  sentAt?: string
+  sentAt?: string,
+  rfqItems?: VendorRfqItemOverride[]
 ): Promise<{
   ok: boolean;
   saved: number;
@@ -759,6 +771,7 @@ export function sendVendorRfq(
     rfq_no_mode: rfqNo?.mode ?? "auto",
     rfq_no: rfqNo?.value ?? "",
     sent_at: sentAt ?? "",
+    rfq_items: rfqItems,
   });
 }
 

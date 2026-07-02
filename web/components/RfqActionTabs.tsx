@@ -1520,6 +1520,9 @@ function ProjectSelect({
   );
 }
 
+// 발신 화면 품목 편집용 — RFQ 품목 + '보낼지' 선택 플래그.
+type EditableRfqItem = RfqItem & { _include: boolean };
+
 function VendorRfqAction({
   rfqId,
   vendors,
@@ -1535,6 +1538,8 @@ function VendorRfqAction({
   const [lang, setLang] = useState<"en" | "ko">("en");
   const [notes, setNotes] = useState("");
   const [previews, setPreviews] = useState<VendorRfqPreview[]>([]);
+  // 선택한 프로젝트(Customer RFQ)의 품목 — 벤더에게 보낼 품목을 선택·편집한다.
+  const [rfqItems, setRfqItems] = useState<EditableRfqItem[]>([]);
   // 케이마리스 RFQ No.는 이 단계(Vendor RFQ 발신)에서 부여된다.
   const unassigned = !kmarisNo || kmarisNo === "Not issued" || kmarisNo === "-";
   const [manualNo, setManualNo] = useState("");
@@ -1543,6 +1548,54 @@ function VendorRfqAction({
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+
+  // 프로젝트 선택 시 해당 Customer RFQ의 품목 목록을 불러온다(기본 전체 선택).
+  useEffect(() => {
+    if (!rfqId) {
+      setRfqItems([]);
+      return;
+    }
+    let alive = true;
+    fetchRfqDetail(rfqId)
+      .then((d) => { if (alive) setRfqItems((d.items || []).map((it) => ({ ...it, _include: true }))); })
+      .catch(() => { if (alive) setRfqItems([]); });
+    return () => { alive = false; };
+  }, [rfqId]);
+
+  // 선택(_include)되고 실제 내용이 있는 품목만 벤더에게 보낸다.
+  const effectiveItems = rfqItems
+    .filter((it) => it._include)
+    .map(({ part_no, description, qty, unit, remark }) => ({
+      part_no: part_no || "",
+      description: description || "",
+      qty: qty || 0,
+      unit: unit || "",
+      remark: remark || "",
+    }))
+    .filter((it) => it.part_no || it.description || it.qty);
+
+  function patchItem(i: number, key: keyof RfqItem, value: string) {
+    setRfqItems((prev) =>
+      prev.map((it, idx) =>
+        idx === i ? { ...it, [key]: key === "qty" ? parseAmountInput(value) || 0 : value } : it
+      )
+    );
+  }
+  function toggleItem(i: number) {
+    setRfqItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, _include: !it._include } : it)));
+  }
+  function setAllItems(include: boolean) {
+    setRfqItems((prev) => prev.map((it) => ({ ...it, _include: include })));
+  }
+  function addItem() {
+    setRfqItems((prev) => [
+      ...prev,
+      { part_no: "", description: "", qty: 1, unit: "", unit_price: null, amount: null, remark: "", _include: true },
+    ]);
+  }
+  function removeItem(i: number) {
+    setRfqItems((prev) => prev.filter((_, idx) => idx !== i));
+  }
 
   function toggleVendor(id: number) {
     setVendorIds((prev) =>
@@ -1576,7 +1629,7 @@ function VendorRfqAction({
     setMsg(null);
     setErr(null);
     try {
-      const r = await previewVendorRfq(rfqId, vendorIds, lang, notes, rfqNoArg);
+      const r = await previewVendorRfq(rfqId, vendorIds, lang, notes, rfqNoArg, effectiveItems);
       setPreviews(r.previews);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Preview generation failed");
@@ -1592,8 +1645,14 @@ function VendorRfqAction({
   }
 
   async function downloadXlsx(p: VendorRfqPreview) {
+    // POST 로 선택·편집한 품목을 함께 보내 XLSX 양식에 반영한다.
     const res = await fetch(vendorRfqXlsxUrl(rfqId, p.vendor_id), {
-      headers: { Authorization: `Bearer ${getToken()}` },
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${getToken()}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ items: effectiveItems }),
     });
     if (!res.ok) {
       setErr("XLSX download failed");
@@ -1627,7 +1686,7 @@ function VendorRfqAction({
           body: p?.body ?? "",
         };
       });
-      const r = await sendVendorRfq(rfqId, items, rfqNoArg, sentAt || undefined);
+      const r = await sendVendorRfq(rfqId, items, rfqNoArg, sentAt || undefined, effectiveItems);
       setMsg(`K-Maris RFQ No. ${r.rfq_no || "-"} · sent (${r.saved} Vendor RFQ recorded)`);
       setPreviews([]);
       setVendorIds([]);
@@ -1646,6 +1705,70 @@ function VendorRfqAction({
         <b>RFQ request email</b>
         <span>Generates an email draft and an Excel response form. Send the email yourself, then mark it as "Sent".</span>
       </div>
+
+      {rfqId ? (
+        <>
+          <div className="form-section-title">
+            Items to send ({effectiveItems.length}/{rfqItems.length} selected)
+          </div>
+          <div className="po-work-note">
+            <b>Select &amp; edit items</b>
+            <span>Uncheck items you don&apos;t want to send, edit any cell, or add rows. Only checked items go into the email, XLSX form, and the Vendor RFQ record.</span>
+          </div>
+          <div className="table-wrap compact">
+            <table className="mini wide">
+              <thead>
+                <tr>
+                  <th className="seq">
+                    <input
+                      type="checkbox"
+                      checked={rfqItems.length > 0 && rfqItems.every((it) => it._include)}
+                      ref={(el) => {
+                        if (el) el.indeterminate = rfqItems.some((it) => it._include) && !rfqItems.every((it) => it._include);
+                      }}
+                      onChange={(e) => setAllItems(e.target.checked)}
+                      title="Select all"
+                    />
+                  </th>
+                  <th className="seq">No.</th>
+                  <th>Part No.</th>
+                  <th>Description</th>
+                  <th>Qty</th>
+                  <th>Unit</th>
+                  <th>Remark</th>
+                  <th className="seq"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {rfqItems.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="mini-empty">No items (service request).</td>
+                  </tr>
+                ) : (
+                  rfqItems.map((it, i) => (
+                    <tr key={i} className={itemRowClass(i)} style={it._include ? undefined : { opacity: 0.45 }}>
+                      <td className="seq">
+                        <input type="checkbox" checked={it._include} onChange={() => toggleItem(i)} />
+                      </td>
+                      <td className="seq">{i + 1}</td>
+                      <td><textarea {...gridCellProps(i, 0)} className="wrapcell" rows={1} value={it.part_no || ""} onChange={(e) => patchItem(i, "part_no", e.target.value)} /></td>
+                      <td><textarea {...gridCellProps(i, 1)} className="desc" rows={1} value={it.description || ""} onChange={(e) => patchItem(i, "description", e.target.value)} /></td>
+                      <td><input {...gridCellProps(i, 2)} className="num" value={amountInputValue(it.qty)} onChange={(e) => patchItem(i, "qty", e.target.value)} /></td>
+                      <td><input {...gridCellProps(i, 3)} value={it.unit || ""} onChange={(e) => patchItem(i, "unit", e.target.value)} /></td>
+                      <td><textarea {...gridCellProps(i, 4)} className="wrapcell" rows={1} value={it.remark ?? ""} onChange={(e) => patchItem(i, "remark", e.target.value)} /></td>
+                      <td>
+                        <button className="row-del" title="Remove row" onClick={() => removeItem(i)}>×</button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+          <button className="btn" style={{ marginTop: 8 }} onClick={addItem}>Add item</button>
+        </>
+      ) : null}
+
       <div className="form-field">
         <label>K-Maris RFQ No.</label>
         {unassigned ? (

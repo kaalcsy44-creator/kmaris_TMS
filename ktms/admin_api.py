@@ -1180,8 +1180,34 @@ Engineering Reliability. Supplying Performance.
     return body
 
 
-def _vendor_rfq_email_body(rfq, cust, vessel, vendor, notes: str, lang: str) -> str:
-    items = rfq.items or []
+def _sanitize_vendor_rfq_items(raw) -> list[dict]:
+    """발신 화면에서 넘어온 품목(선택·편집본)을 저장/문서용 dict 리스트로 정규화.
+    빈 행(부품번호·품명·수량이 모두 비어 있음)은 제거한다."""
+    out: list[dict] = []
+    for it in (raw or []):
+        part_no = str(it.get("part_no", "") or "").strip()
+        desc = str(it.get("description", "") or "").strip()
+        unit = str(it.get("unit", "") or "").strip()
+        remark = str(it.get("remark", "") or "").strip()
+        try:
+            qty = float(it.get("qty") or 0)
+        except (TypeError, ValueError):
+            qty = 0
+        if not part_no and not desc and not qty:
+            continue
+        row = {"part_no": part_no, "description": desc, "qty": qty, "unit": unit}
+        if remark:
+            row["remark"] = remark
+        out.append(row)
+    return out
+
+
+def _vendor_rfq_email_body(rfq, cust, vessel, vendor, notes: str, lang: str,
+                           items=None) -> str:
+    # items 를 명시적으로 주면(발신 화면에서 선택·편집한 품목) 그것을 쓰고,
+    # 없으면 RFQ 원본 품목을 사용한다.
+    items = rfq.items if items is None else items
+    items = items or []
     if lang == "ko":
         item_lines = "\n".join(
             f"  {i+1:>2}. Part No.: {str(item.get('part_no','—')):<20s}"
@@ -4698,6 +4724,7 @@ class VendorRfqPreviewRequest(BaseModel):
     notes: str = ""
     rfq_no_mode: str = "auto"   # 케이마리스 RFQ No. 발번: auto/manual
     rfq_no: str = ""            # manual 일 때 직접 입력값
+    items: list[dict] | None = None   # 발신 화면에서 선택·편집한 품목(없으면 RFQ 원본)
 
 
 @app.post("/api/admin/rfq/{rfq_id}/vendor-rfq-preview",
@@ -4714,6 +4741,7 @@ def vendor_rfq_preview(rfq_id: int, body: VendorRfqPreviewRequest):
         cust = s.query(Customer).filter_by(id=rfq.customer_id).first()
         vessel = s.query(Vessel).filter_by(id=rfq.vessel_id).first() if rfq.vessel_id else None
         lang = "ko" if body.lang == "ko" else "en"
+        items = _sanitize_vendor_rfq_items(body.items) if body.items is not None else None
         previews = []
         for vid in body.vendor_ids:
             vendor = s.query(Vendor).filter_by(id=vid).first()
@@ -4729,7 +4757,7 @@ def vendor_rfq_preview(rfq_id: int, body: VendorRfqPreviewRequest):
                     if lang == "ko"
                     else f"[K-MARIS] Inquiry — {rfq.rfq_no} / {vessel.name if vessel else rfq.rfq_no}"
                 ),
-                "body": _vendor_rfq_email_body(rfq, cust, vessel, vendor, body.notes, lang),
+                "body": _vendor_rfq_email_body(rfq, cust, vessel, vendor, body.notes, lang, items),
                 "xlsx_filename": f"{rfq.rfq_no}_VendorQuoteSheet_{safe_vname}.xlsx",
             })
         return {
@@ -4772,6 +4800,45 @@ def vendor_rfq_xlsx(rfq_id: int, vendor_id: int):
         s.close()
 
 
+class VendorRfqXlsxRequest(BaseModel):
+    items: list[dict] | None = None   # 선택·편집한 품목(없으면 RFQ 원본)
+
+
+@app.post("/api/admin/rfq/{rfq_id}/vendor-rfq-xlsx/{vendor_id}",
+          dependencies=[Depends(require_token)])
+def vendor_rfq_xlsx_post(rfq_id: int, vendor_id: int, body: VendorRfqXlsxRequest):
+    """XLSX 견적 양식 — 발신 화면에서 선택·편집한 품목을 반영해 생성(POST)."""
+    s = get_session()
+    try:
+        rfq = s.query(RFQ).filter_by(id=rfq_id).first()
+        if not rfq:
+            raise HTTPException(status_code=404, detail="RFQ를 찾을 수 없습니다.")
+        vendor = s.query(Vendor).filter_by(id=vendor_id).first()
+        if not vendor:
+            raise HTTPException(status_code=404, detail="Vendor를 찾을 수 없습니다.")
+        cust = s.query(Customer).filter_by(id=rfq.customer_id).first()
+        vessel = s.query(Vessel).filter_by(id=rfq.vessel_id).first() if rfq.vessel_id else None
+        items = (_sanitize_vendor_rfq_items(body.items)
+                 if body.items is not None else (rfq.items or []))
+        xlsx = make_vendor_rfq_quote_xlsx(
+            rfq_no=rfq.rfq_no,
+            vessel_name=vessel.name if vessel else "—",
+            customer_name=cust.name if cust else "—",
+            enquiry_date=rfq.date or date.today().isoformat(),
+            vendor_name=vendor.name,
+            items=items,
+        )
+        safe_vname = "".join(c for c in vendor.name if c.isalnum() or c in "._- ")[:40]
+        filename = f"{rfq.rfq_no}_VendorQuoteSheet_{safe_vname}.xlsx"
+        return Response(
+            content=xlsx,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    finally:
+        s.close()
+
+
 class VendorRfqSendItem(BaseModel):
     vendor_id: int
     to: str = ""
@@ -4784,6 +4851,7 @@ class VendorRfqSendRequest(BaseModel):
     rfq_no_mode: str = "auto"
     rfq_no: str = ""
     sent_at: str = ""        # 발신 일시 "YYYY-MM-DDTHH:MM"(비우면 현재)
+    rfq_items: list[dict] | None = None   # 선택·편집한 품목(없으면 RFQ 원본을 그대로 저장)
 
 
 @app.post("/api/admin/rfq/{rfq_id}/vendor-rfq-send",
@@ -4800,6 +4868,9 @@ def vendor_rfq_send(rfq_id: int, body: VendorRfqSendRequest):
         # 케이마리스 RFQ No. 부여(미발급이면)
         _assign_rfq_no(s, rfq, body.rfq_no_mode, body.rfq_no)
         sent_at = (body.sent_at or "").strip() or _kst_iso(datetime.utcnow())
+        # 발신 화면에서 선택·편집한 품목이 오면 그것을, 없으면 RFQ 원본을 저장.
+        sent_items = (_sanitize_vendor_rfq_items(body.rfq_items)
+                      if body.rfq_items is not None else (rfq.items or []))
         saved = 0
         result_rows = []
         for item in body.items:
@@ -4813,7 +4884,7 @@ def vendor_rfq_send(rfq_id: int, body: VendorRfqSendRequest):
                 sent_at=sent_at,
                 sent_to_email=item.to or "",
                 status="발신완료",
-                items=rfq.items or [],
+                items=sent_items,
             )
             s.add(vrfq)
             s.flush()
