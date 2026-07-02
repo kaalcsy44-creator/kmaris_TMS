@@ -983,6 +983,127 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
         s.close()
 
 
+def _search_href(stage: int, rfq_id: int, order_id: int, is_service: bool) -> str:
+    """검색 결과 클릭 시 이동할 화면. ProgressScreen.stageHref 와 동일한 단계→페이지 규칙."""
+    view = "service" if is_service else "parts"
+    if stage <= 4:
+        tab = {1: "new", 2: "vrfq", 3: "vquote", 4: "cquote"}.get(stage, "new")
+        return f"/rfq?rfq={rfq_id}&tab={tab}"
+    if order_id <= 0:
+        return f"/rfq?rfq={rfq_id}"
+    if stage == 5:
+        return f"/po?order={order_id}&tab=customer"
+    if stage == 6:
+        return f"/po?order={order_id}&tab=vendor"
+    if 7 <= stage <= 9:
+        return f"/documents?order={order_id}&view={view}&stage={stage}"
+    if stage == 10 and is_service:
+        return f"/ar?order={order_id}"
+    return f"/documents?order={order_id}&view={view}"
+
+
+@app.get("/api/admin/search", dependencies=[Depends(require_token)])
+def global_search(q: str = "", limit: int = 40, user: dict = Depends(get_current_user)):
+    """전역 통합 검색 — RFQ(프로젝트) 1건을 단위로 식별자·품목·연락처·관련 문서번호까지
+    훑어 매칭 결과를 반환한다. 본인 담당 스코프(own)는 파이프라인과 동일하게 강제된다."""
+    term = (q or "").strip().lower()
+    if len(term) < 2:
+        return {"results": [], "query": q}
+    tokens = [t for t in term.split() if t]
+
+    s = get_session()
+    try:
+        cust = {c.id: c for c in s.query(Customer).all()}
+        vessels = {v.id: v for v in s.query(Vessel).all()}
+        vendor_names = {v.id: v.name for v in s.query(Vendor).all()}
+        user_names = {u.id: u.username for u in s.query(User).all()}
+        proj_map = _project_no_map(s)
+
+        base = s.query(RFQ).order_by(RFQ.id.desc())
+        base = _apply_owner_filter(base, RFQ, user, 0, None)
+        rfqs = base.all()
+
+        results = []
+        for r in rfqs:
+            # 검색 대상 텍스트를 (분류 라벨, 텍스트) 쌍으로 모은다.
+            fields: list[tuple[str, str]] = []
+
+            def add(label: str, *vals) -> None:
+                for v in vals:
+                    if v:
+                        fields.append((label, str(v)))
+
+            c = cust.get(r.customer_id)
+            ves = vessels.get(r.vessel_id) if r.vessel_id else None
+            proj_no = proj_map.get(r.id, "")
+            add("Customer RFQ No.", r.customer_rfq_no)
+            add("K-Maris RFQ No.", _rfq_no_disp(r.rfq_no))
+            add("Project No.", proj_no)
+            add("Project title", getattr(r, "project_title", None))
+            add("Customer", c.name if c else None)
+            add("Contact", getattr(c, "contact", None), getattr(c, "email", None))
+            add("Vessel", ves.name if ves else None, getattr(ves, "imo", None) if ves else None)
+            add("PIC", user_names.get(getattr(r, "created_by", None)))
+            add("Notes", getattr(r, "notes", None))
+            for it in (r.items or []):
+                add("Item", it.get("part_no"), it.get("description"))
+
+            # 관련 문서(벤더 RFQ·벤더 견적·고객 견적·오더·벤더 PO)
+            vrfqs = s.query(VendorRFQ).filter_by(rfq_id=r.id).all()
+            for x in vrfqs:
+                add("Vendor", vendor_names.get(x.vendor_id), x.sent_to_email)
+            vrfq_ids = [x.id for x in vrfqs]
+            vqs = (s.query(VendorQuote).filter(VendorQuote.vendor_rfq_id.in_(vrfq_ids)).all()
+                   if vrfq_ids else [])
+            for vq in vqs:
+                add("Vendor quote No.", getattr(vq, "vendor_quote_no", None))
+                for it in (vq.items or []):
+                    add("Item", it.get("part_no"), it.get("description"))
+            qtn = s.query(Quotation).filter_by(rfq_id=r.id).order_by(Quotation.id.desc()).first()
+            if qtn:
+                add("Quotation No.", qtn.qtn_no)
+            o = _order_for_rfq(s, r.id)
+            if o:
+                add("Customer PO No.", o.po_no)
+                for vp in s.query(PurchaseOrder).filter_by(order_id=o.id).all():
+                    add("Vendor PO No.", vp.po_no)
+                    add("Vendor", vendor_names.get(vp.vendor_id))
+
+            blob = "\n".join(t.lower() for _, t in fields)
+            if not all(tok in blob for tok in tokens):
+                continue
+
+            # 매칭 필드/스니펫 = 첫 토큰을 포함하는 첫 항목.
+            primary = tokens[0]
+            matched_label, matched_text = "", ""
+            for label, text in fields:
+                if primary in text.lower():
+                    matched_label, matched_text = label, text
+                    break
+
+            stage = _pipeline_stage(s, r.id)
+            is_service = (_enum_val(r.work_type) if r.work_type else "부품공급") == "서비스"
+            results.append({
+                "rfq_id": r.id,
+                "order_id": o.id if o else 0,
+                "project_no": proj_no,
+                "customer": c.name if c else "—",
+                "vessel": (ves.name if ves else "") or "",
+                "project_title": getattr(r, "project_title", None) or "",
+                "status": _status_label(stage, r.work_type),
+                "stage": stage,
+                "matched_label": matched_label,
+                "matched_text": matched_text,
+                "href": _search_href(stage, r.id, o.id if o else 0, is_service),
+            })
+            if len(results) >= limit:
+                break
+
+        return {"results": results, "query": q}
+    finally:
+        s.close()
+
+
 @app.get("/api/admin/rfq-overview", dependencies=[Depends(require_token)])
 def rfq_overview(customer_id: int | None = None, work_type: str | None = None,
                  mine: int = 0, assignee: int | None = None,

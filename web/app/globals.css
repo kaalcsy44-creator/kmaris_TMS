@@ -266,6 +266,126 @@ body {
   background: rgba(255, 255, 255, 0.1);
   color: #fff;
 }
+
+/* ── 전역 검색(GlobalSearch) ─────────────────────────────────────────────── */
+.gsearch {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.gsearch-icon {
+  position: absolute;
+  left: 9px;
+  color: #8fa0b6;
+  pointer-events: none;
+}
+.gsearch-input {
+  width: 210px;
+  height: 32px;
+  padding: 0 10px 0 30px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.08);
+  color: #eaf0f8;
+  font-size: 13px;
+  transition: width 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+.gsearch-input::placeholder {
+  color: #8fa0b6;
+}
+.gsearch-input:focus {
+  outline: none;
+  width: 300px;
+  background: #fff;
+  color: #1a2536;
+  border-color: var(--blue);
+}
+.gsearch-input:focus + .gsearch-icon,
+.gsearch:focus-within .gsearch-icon {
+  color: #6b7c93;
+}
+.gsearch-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  width: 460px;
+  max-width: 80vw;
+  max-height: 70vh;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  box-shadow: 0 14px 40px rgba(11, 29, 58, 0.22);
+  z-index: 200;
+  padding: 6px;
+}
+.gsearch-empty {
+  padding: 16px 12px;
+  color: #7b8aa0;
+  font-size: 13px;
+  text-align: center;
+}
+.gsearch-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border: none;
+  background: transparent;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.gsearch-item.on,
+.gsearch-item:hover {
+  background: #eff5ff;
+}
+.gsearch-item-main {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+.gsearch-proj {
+  font-weight: 700;
+  color: #0b2452;
+  font-variant-numeric: tabular-nums;
+}
+.gsearch-cust {
+  font-weight: 600;
+  color: #1a2536;
+}
+.gsearch-vessel {
+  color: #5a6b82;
+}
+.gsearch-status {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 600;
+  color: #4a6a9a;
+  background: #eef2f8;
+  padding: 2px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.gsearch-item-sub {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 3px;
+}
+.gsearch-title {
+  font-size: 12px;
+  color: #5a6b82;
+}
+.gsearch-match {
+  font-size: 11.5px;
+  color: #7b8aa0;
+}
+.gsearch-match b {
+  color: #4a6a9a;
+  font-weight: 600;
+}
 .topnav-burger {
   display: none;
   flex-direction: column;
@@ -3831,6 +3951,16 @@ table.mini .num {
   }
   .topnav-user .uname {
     display: none;
+  }
+  /* 좁은 화면: 검색 입력 축소, 포커스 시에도 화면폭 안에서 확장. */
+  .gsearch-input {
+    width: 130px;
+  }
+  .gsearch-input:focus {
+    width: 180px;
+  }
+  .gsearch-panel {
+    width: 88vw;
   }
 
   /* Content area: tighter padding, full width */

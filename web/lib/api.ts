@@ -43,6 +43,7 @@ import type {
   MarketingOverview,
   ScheduleRow,
   StatisticsData,
+  SearchData,
 } from "./types";
 
 function authHeaders(json = false): HeadersInit {
@@ -125,6 +126,10 @@ export function fetchRfqOverview(customerId?: number): Promise<RfqOverview> {
 
 export function fetchCustomers(): Promise<CustomerOption[]> {
   return get<CustomerOption[]>("/api/admin/customers");
+}
+
+export function globalSearch(q: string): Promise<SearchData> {
+  return get<SearchData>(`/api/admin/search?q=${encodeURIComponent(q)}`);
 }
 
 export function fetchRfqDetail(id: number): Promise<RfqDetail> {

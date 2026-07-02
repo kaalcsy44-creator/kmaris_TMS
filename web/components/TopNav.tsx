@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { getUser, isAdmin, can, logout } from "@/lib/auth";
 import type { PermModule } from "@/lib/auth";
+import GlobalSearch from "./GlobalSearch";
 
 type SubItem = { href: string; label: string };
 type Item = { href: string; label: string; key: string; sub?: SubItem[] };
@@ -97,6 +98,7 @@ export default function TopNav({ active }: { active: string }) {
         </nav>
 
         <div className="topnav-right">
+          <GlobalSearch />
           {showSettings ? (
             <Link
               href="/settings"

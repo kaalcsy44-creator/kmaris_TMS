@@ -903,6 +903,22 @@ export type ScheduleRow = {
   owner: string;
 };
 
+// ── 전역 검색 ─────────────────────────────────────────────────────────────────
+export type SearchResult = {
+  rfq_id: number;
+  order_id: number;
+  project_no: string;
+  customer: string;
+  vessel: string;
+  project_title: string;
+  status: string;
+  stage: number;
+  matched_label: string; // 매칭된 필드 분류(예: "Item", "Vendor PO No.")
+  matched_text: string;  // 매칭된 원본 텍스트(스니펫)
+  href: string;          // 클릭 시 이동할 화면 경로
+};
+export type SearchData = { results: SearchResult[]; query: string };
+
 // ── 통계 대시보드 ─────────────────────────────────────────────────────────────
 export type CurrencyKey = "USD" | "KRW";
 export type StatSeries = Record<CurrencyKey, number[]>;
