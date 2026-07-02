@@ -10,6 +10,7 @@ import {
   fetchMarketingOverview,
   fetchSchedule,
   fetchCustomers,
+  fetchStatistics,
   createSchedule,
   updateSchedule,
   deleteSchedule,
@@ -19,8 +20,12 @@ import { useCachedData, invalidateCache } from "@/lib/useCachedData";
 import { can, canEditDeal } from "@/lib/auth";
 import type {
   QtnRow, PipelineRow, ArRow, MarketingRow, MarketingOverview,
-  ScheduleRow, CustomerOption,
+  ScheduleRow, CustomerOption, StatisticsData, StatAlertRow, CurrencyKey,
 } from "@/lib/types";
+import {
+  ResponsiveContainer, LineChart, Line, BarChart, Bar,
+  XAxis, YAxis, Tooltip, CartesianGrid, Legend, Cell,
+} from "recharts";
 import { tr } from "@/lib/labels";
 import FilterTable, { ColumnDef } from "@/components/common/FilterTable";
 import CustomerName from "@/components/common/CustomerName";
@@ -702,123 +707,239 @@ function SubHead({ title, sub }: { title: string; sub?: string }) {
   );
 }
 
+/* 통화별 금액 포맷 — KRW 는 정수, USD 는 정수(대시보드 요약용). */
+function fmtMoney(cur: CurrencyKey, n: number): string {
+  return `${cur} ${Math.round(n).toLocaleString()}`;
+}
+
+/* 전월 대비 증감 배지. prev=0 이면 표시 안 함. */
+function DeltaChip({ cur, prev }: { cur: number; prev: number }) {
+  if (!prev) return null;
+  const pct = ((cur - prev) / Math.abs(prev)) * 100;
+  const up = pct >= 0;
+  return (
+    <span className={`kc-chip ${up ? "blue" : "red"}`}>
+      {up ? "▲" : "▼"} {Math.abs(Math.round(pct))}% MoM
+    </span>
+  );
+}
+
+const CHART_COLORS = ["#0055a8", "#2e8b57", "#e8830c", "#8e44ad", "#16a085",
+  "#c0392b", "#2980b9", "#d35400", "#27ae60", "#7f8c8d"];
+
 function StatisticsTab() {
   const { data, error } = useCachedData("dashboard", fetchDashboard);
+  const { data: stat } = useCachedData("statistics", () => fetchStatistics(12));
+  const [cur, setCur] = useState<CurrencyKey>("USD");
 
   if (error && !data) {
     return <div className="state error">API error: {error.message}</div>;
   }
-  if (!data) {
+  if (!data || !stat) {
     return <div className="state">Loading…</div>;
   }
 
-  const { kpi, ops, perf, alerts } = data;
-  const tat = perf.quotation_tat_h;
+  const { ops, perf } = data;
+  const k = stat.kpi[cur];
+
+  // 차트 데이터 변환 ---------------------------------------------------------
+  const monthLabel = (m: string) => m.slice(2); // "2026-07" → "26-07"
+  const trendData = stat.months.map((m, i) => ({
+    month: monthLabel(m),
+    revenue: stat.series.revenue[cur][i],
+  }));
+  const quoteVsOrder = stat.months.map((m, i) => ({
+    month: monthLabel(m),
+    quote: stat.series.quote[cur][i],
+    order: stat.series.order[cur][i],
+  }));
+  const custTop = stat.customer_top[cur].map((r) => ({ name: r.name, amount: r.amount }));
+  const itemTop = stat.item_top[cur].map((r) => ({
+    name: r.part_no + (r.description ? ` · ${r.description.slice(0, 20)}` : ""),
+    amount: r.amount,
+  }));
+
+  const compact = (n: number) => {
+    if (Math.abs(n) >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+    if (Math.abs(n) >= 1_000) return `${Math.round(n / 1_000)}K`;
+    return String(Math.round(n));
+  };
 
   return (
     <>
-      <SubHead title="Operational Status" sub="Operational status" />
+      <div className="stat-toolbar">
+        <div className="stat-cur-toggle">
+          {(["USD", "KRW"] as CurrencyKey[]).map((c) => (
+            <button key={c} className={cur === c ? "on" : ""} onClick={() => setCur(c)}>
+              {c}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ① 금액 KPI 스트립 ------------------------------------------------- */}
+      <SubHead title="This Month" sub={`${stat.months[stat.months.length - 1]} · ${cur}`} />
       <div className="kpi-row">
-        <Kpi
-          label="Open RFQ"
-          value={kpi.open_rfq}
-          sub="In progress"
-          chip={{ text: `Urgent ${ops.urgent}`, tone: ops.urgent ? "red" : "gray" }}
-        />
-        <Kpi
-          label="Active Orders"
-          value={kpi.active_orders}
-          sub="Preparing/in progress"
-          chip={{
-            text: `PO pending ${ops.pending_po}`,
-            tone: ops.pending_po ? "amber" : "gray",
-          }}
-        />
-        <Kpi
-          label="AR Outstanding"
-          value={`USD ${num(Math.round(kpi.ar_outstanding_usd))}`}
-          sub="Outstanding"
+        <Kpi label="Revenue" value={fmtMoney(cur, k.revenue)} sub="Tax-invoiced"
+          chipNode={<DeltaChip cur={k.revenue} prev={k.revenue_prev} />} />
+        <Kpi label="Orders Won" value={fmtMoney(cur, k.order)} sub="Order value" accent="#2e8b57"
+          chipNode={<DeltaChip cur={k.order} prev={k.order_prev} />} />
+        <Kpi label="Quoted" value={fmtMoney(cur, k.quote)} sub="Quote value" accent="#e8830c"
+          chipNode={<DeltaChip cur={k.quote} prev={k.quote_prev} />} />
+        <Kpi label="Hit Rate" value={`${perf.hit_rate}%`} sub="PO conversion" accent="#8e44ad" />
+      </div>
+      <div className="kpi-row">
+        <Kpi label="Gross Margin" value={`${perf.gross_margin_pct}%`} sub="Gross margin %" accent="#1a7a4a" />
+        <Kpi label="AR Outstanding" value={`USD ${num(Math.round(data.kpi.ar_outstanding_usd))}`} sub="Outstanding (USD)"
           accent={ops.overdue ? "#dc3545" : "#0055a8"}
-          chip={{ text: `Overdue ${ops.overdue}`, tone: ops.overdue ? "red" : "gray" }}
-        />
-        <Kpi
-          label="This Month Quotes"
-          value={kpi.monthly_quotes}
-          sub="Quotes"
-          chip={{
-            text: `Expiring ${ops.expiring}`,
-            tone: ops.expiring ? "amber" : "gray",
-          }}
-        />
+          chip={{ text: `Overdue ${ops.overdue}`, tone: ops.overdue ? "red" : "gray" }} />
+        <Kpi label="Delivery Delays" value={stat.delivery_delays} sub="Past promised date"
+          accent={stat.delivery_delays ? "#dc3545" : "#0055a8"} />
+        <Kpi label="Urgent" value={ops.urgent} sub="Level A · expiring"
+          accent={ops.urgent ? "#e8830c" : "#0055a8"}
+          chip={{ text: `Expiring ${ops.expiring}`, tone: ops.expiring ? "amber" : "gray" }} />
       </div>
 
-      <SubHead title="Sales Performance KPIs" sub="Sales performance" />
-      <div className="kpi-row">
-        <Kpi
-          label="RFQ Handling Rate"
-          value={`${perf.handling_rate}%`}
-          sub="Quote submission rate"
-        />
-        <Kpi
-          label="Quotation TAT"
-          value={tat === null ? "—" : `${num(tat)}h`}
-          sub="Avg. response time"
-          accent="#2e8b57"
-        />
-        <Kpi
-          label="Hit Rate"
-          value={`${perf.hit_rate}%`}
-          sub="PO conversion rate"
-          accent="#e8830c"
-          chip={{
-            text: `Negotiating USD ${num(Math.round(perf.negotiating_value_usd))}`,
-            tone: "blue",
-          }}
-        />
-        <Kpi
-          label="Gross Margin"
-          value={`${perf.gross_margin_pct}%`}
-          sub="Gross margin %"
-          accent="#1a7a4a"
-        />
+      {/* ② 추이·구성 차트 (2×2) ------------------------------------------- */}
+      <div className="stat-charts">
+        <div className="stat-chart">
+          <SubHead title="Monthly Revenue" sub="Tax-invoiced trend" />
+          <ResponsiveContainer width="100%" height={240}>
+            <LineChart data={trendData} margin={{ top: 8, right: 16, bottom: 0, left: 8 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#eef1f5" />
+              <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+              <YAxis tickFormatter={compact} tick={{ fontSize: 11 }} width={44} />
+              <Tooltip formatter={(v) => fmtMoney(cur, Number(v) || 0)} />
+              <Line type="monotone" dataKey="revenue" stroke="#0055a8" strokeWidth={2} dot={{ r: 2 }} name="Revenue" />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="stat-chart">
+          <SubHead title="Quote vs Order" sub="Monthly value" />
+          <ResponsiveContainer width="100%" height={240}>
+            <BarChart data={quoteVsOrder} margin={{ top: 8, right: 16, bottom: 0, left: 8 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#eef1f5" />
+              <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+              <YAxis tickFormatter={compact} tick={{ fontSize: 11 }} width={44} />
+              <Tooltip formatter={(v) => fmtMoney(cur, Number(v) || 0)} />
+              <Legend wrapperStyle={{ fontSize: 12 }} />
+              <Bar dataKey="quote" fill="#e8830c" name="Quoted" radius={[3, 3, 0, 0]} />
+              <Bar dataKey="order" fill="#2e8b57" name="Won" radius={[3, 3, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="stat-chart">
+          <SubHead title="Top 10 Customers" sub="By revenue" />
+          <ResponsiveContainer width="100%" height={280}>
+            <BarChart data={custTop} layout="vertical" margin={{ top: 4, right: 24, bottom: 0, left: 8 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#eef1f5" />
+              <XAxis type="number" tickFormatter={compact} tick={{ fontSize: 11 }} />
+              <YAxis type="category" dataKey="name" width={140} tick={{ fontSize: 11 }} />
+              <Tooltip formatter={(v) => fmtMoney(cur, Number(v) || 0)} />
+              <Bar dataKey="amount" name="Revenue" radius={[0, 3, 3, 0]}>
+                {custTop.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="stat-chart">
+          <SubHead title="Top 10 Items" sub="By invoiced amount" />
+          <ResponsiveContainer width="100%" height={280}>
+            <BarChart data={itemTop} layout="vertical" margin={{ top: 4, right: 24, bottom: 0, left: 8 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#eef1f5" />
+              <XAxis type="number" tickFormatter={compact} tick={{ fontSize: 11 }} />
+              <YAxis type="category" dataKey="name" width={160} tick={{ fontSize: 10 }} />
+              <Tooltip formatter={(v) => fmtMoney(cur, Number(v) || 0)} />
+              <Bar dataKey="amount" name="Revenue" radius={[0, 3, 3, 0]}>
+                {itemTop.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
       </div>
 
-      <div className="dash-two">
-        <div>
-          <SubHead title="Urgent Follow-up · Level A Quotes" />
-          {alerts.urgent_quotes.length === 0 ? (
-            <div className="alert-ok">No urgent follow-up quotes.</div>
-          ) : (
-            alerts.urgent_quotes.map((q) => (
-              <div className="alert-card" key={q.qtn_no}>
-                <div>
-                  <div className="a-main">{q.qtn_no}</div>
-                  <div className="a-sub">Status: {tr(q.status)}</div>
-                </div>
-                <div className="a-right">Valid until: {q.valid_until || "—"}</div>
-              </div>
-            ))
-          )}
-        </div>
+      {/* ③ 파이프라인 12단계 분포 ----------------------------------------- */}
+      <SubHead title="Pipeline Distribution" sub="Deals per internal stage" />
+      <ResponsiveContainer width="100%" height={220}>
+        <BarChart
+          data={data.stage_distribution.map((c, i) => ({ stage: `${i + 1}`, count: c }))}
+          margin={{ top: 8, right: 16, bottom: 0, left: 8 }}
+        >
+          <CartesianGrid strokeDasharray="3 3" stroke="#eef1f5" />
+          <XAxis dataKey="stage" tick={{ fontSize: 11 }} />
+          <YAxis allowDecimals={false} tick={{ fontSize: 11 }} width={32} />
+          <Tooltip formatter={(v, _n, p) => [`${Number(v) || 0} deals`, `Stage ${p?.payload?.stage ?? ""}`]} />
+          <Bar dataKey="count" fill="#0055a8" radius={[3, 3, 0, 0]} />
+        </BarChart>
+      </ResponsiveContainer>
 
-        <div>
-          <SubHead title="Overdue AR" />
-          {alerts.overdue_ar.length === 0 ? (
-            <div className="alert-ok">No overdue AR.</div>
-          ) : (
-            alerts.overdue_ar.map((ar, i) => (
-              <div className="alert-card danger" key={`${ar.ci_no}-${i}`}>
-                <div>
-                  <div className="a-main">{ar.ci_no || "N/A"}</div>
-                  <div className="a-sub">Due: {ar.due_date || "—"}</div>
-                </div>
-                <div className="a-right"><DualCurrencyAmount value={ar.outstanding} currency={ar.currency} /></div>
-              </div>
-            ))
-          )}
-        </div>
+      {/* ④ 업무 알림 (6) --------------------------------------------------- */}
+      <SubHead title="Action Items" sub="Follow-ups & exceptions" />
+      <div className="stat-alerts">
+        <AlertCard title="Due Today" rows={stat.alerts.today_delivery} kind="delivery" />
+        <AlertCard title="Delivery This Week" rows={stat.alerts.week_delivery} kind="delivery" />
+        <AlertCard title="Unanswered Quotes" rows={stat.alerts.unanswered_quotes} kind="quote" />
+        <AlertCard title="Vendor PO Not Received" rows={stat.alerts.unreceived_po} kind="po" />
+        <AlertCard title="Uninvoiced (Delivered)" rows={stat.alerts.uninvoiced} kind="doc" />
+        <AlertCard title="Long Overdue AR" rows={stat.alerts.long_overdue_ar} kind="ar" danger />
       </div>
     </>
+  );
+}
+
+/* 업무 알림 카드 — 행 클릭 시 관련 페이지로 이동. */
+function AlertCard({
+  title,
+  rows,
+  kind,
+  danger,
+}: {
+  title: string;
+  rows: StatAlertRow[];
+  kind: "delivery" | "quote" | "po" | "doc" | "ar";
+  danger?: boolean;
+}) {
+  const router = useRouter();
+  function go(r: StatAlertRow) {
+    if (kind === "quote" && r.rfq_id) router.push(`/rfq?rfq=${r.rfq_id}&tab=cquote`);
+    else if (kind === "ar" && r.order_id) router.push(`/ar?order=${r.order_id}`);
+    else if (kind === "po") router.push("/po");
+    else router.push("/documents");
+  }
+  return (
+    <div className="stat-alert">
+      <div className="dash-subhead"><span className="t">{title}</span><span className="s">{rows.length}</span></div>
+      {rows.length === 0 ? (
+        <div className="alert-ok">Nothing here. 🎉</div>
+      ) : (
+        rows.slice(0, 6).map((r, i) => (
+          <div
+            className={`alert-card${danger ? " danger" : ""}`}
+            key={i}
+            role="button"
+            onClick={() => go(r)}
+          >
+            <div>
+              <div className="a-main">
+                <CustomerName name={r.customer || "—"} />
+              </div>
+              <div className="a-sub">
+                {r.project_no || r.qtn_no || r.ci_no || r.po_no || ""}
+                {r.status ? ` · ${tr(r.status)}` : ""}
+              </div>
+            </div>
+            <div className="a-right">
+              {r.outstanding != null && r.currency
+                ? <DualCurrencyAmount value={r.outstanding} currency={r.currency} />
+                : (r.date ? r.date.slice(0, 10) : "")}
+            </div>
+          </div>
+        ))
+      )}
+    </div>
   );
 }
 
@@ -830,19 +951,23 @@ function Kpi({
   sub,
   accent = "#0055a8",
   chip,
+  chipNode,
 }: {
   label: string;
   value: string | number;
   sub: string;
   accent?: string;
   chip?: Chip;
+  chipNode?: React.ReactNode;
 }) {
   return (
     <div className="kpi-card" style={{ borderLeftColor: accent }}>
       <div className="kpi-label">{label}</div>
       <div className="kpi-value">{value}</div>
       <div className="kpi-sub">{sub}</div>
-      {chip ? (
+      {chipNode ? (
+        <div className="kc-foot">{chipNode}</div>
+      ) : chip ? (
         <div className="kc-foot">
           <span className={`kc-chip ${chip.tone}`}>{chip.text}</span>
         </div>

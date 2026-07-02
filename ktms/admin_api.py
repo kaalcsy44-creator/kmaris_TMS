@@ -1529,6 +1529,221 @@ def dashboard():
         s.close()
 
 
+def _cur2(c: str | None) -> str:
+    """통계 집계용 통화 정규화 — USD/KRW 만 구분, 그 외는 USD 로 취급."""
+    return c if c in ("USD", "KRW") else "USD"
+
+
+def _month_key(v: str | None) -> str:
+    """'YYYY-MM-DD…' 또는 'YYYY-MM…' → 'YYYY-MM'. 비정상값이면 ''."""
+    if not v or len(v) < 7:
+        return ""
+    return v[:7]
+
+
+@app.get("/api/admin/statistics", dependencies=[Depends(require_token)])
+def statistics(months: int = 12):
+    """통계 대시보드 — 월별 시계열(매출·견적·수주), 랭킹(고객·품목), KPI, 업무알림.
+
+    금액은 USD/KRW 통화별로 분리 집계(환산 없음, 프런트 토글로 전환).
+    매출 인식 시점은 세금계산서 발행일(RFQ.stage_dates["11"]) 기준.
+    """
+    months = max(1, min(int(months or 12), 36))
+    s = get_session()
+    try:
+        cust_names = {c.id: c.name for c in s.query(Customer).all()}
+        orders_all = s.query(Order).all()
+        order_map = {o.id: o for o in orders_all}
+        rfq_map = {r.id: r for r in s.query(RFQ).all()}
+
+        # ── 월 버킷(최근 N개월, KST) ───────────────────────────────────────────
+        now_kst = datetime.now(timezone.utc) + timedelta(hours=9)
+        month_labels: list[str] = []
+        y, m = now_kst.year, now_kst.month
+        for _ in range(months):
+            month_labels.append(f"{y:04d}-{m:02d}")
+            m -= 1
+            if m == 0:
+                m = 12
+                y -= 1
+        month_labels.reverse()
+        month_set = set(month_labels)
+        cur_month = month_labels[-1]
+        prev_month = month_labels[-2] if len(month_labels) >= 2 else ""
+
+        CURS = ("USD", "KRW")
+        # series[currency][metric] = {month: amount}
+        def _blank():
+            return {cur: {mo: 0.0 for mo in month_labels} for cur in CURS}
+        rev_series = _blank()
+        quote_series = _blank()
+        order_series = _blank()
+        cust_rev: dict[str, dict[str, float]] = {c: {} for c in CURS}
+        item_rev: dict[str, dict[str, dict]] = {c: {} for c in CURS}
+
+        # RFQ.id → 세금계산서 발행월(stage_dates["11"]) 매핑
+        def _issue_month(rfq) -> str:
+            sd = (getattr(rfq, "stage_dates", None) or {}) if rfq else {}
+            return _month_key(sd.get("11") or "")
+
+        # ── 매출(세금계산서 발행 기준) + 고객사 랭킹 ─────────────────────────────
+        for a in s.query(ARRecord).all():
+            o = order_map.get(a.order_id)
+            rfq = _rfq_for_order(s, o) if o else None
+            mo = _issue_month(rfq)
+            if not mo or mo not in month_set:
+                continue
+            cur = _cur2(a.currency)
+            amt = float(a.invoice_amount or 0)
+            rev_series[cur][mo] += amt
+            cname = cust_names.get(o.customer_id, "—") if o else "—"
+            cust_rev[cur][cname] = cust_rev[cur].get(cname, 0.0) + amt
+
+        # ── 견적금액(발송월 기준) ───────────────────────────────────────────────
+        for q in s.query(Quotation).all():
+            mo = _month_key(getattr(q, "sent_at", None) or q.sent_date or q.date or "")
+            if not mo or mo not in month_set:
+                continue
+            cur = _cur2(q.currency)
+            quote_series[cur][mo] += _quotation_total(q.items or [], getattr(q, "discount_pct", 0) or 0)
+
+        # ── 수주금액(오더 수주월 기준) ──────────────────────────────────────────
+        for o in orders_all:
+            mo = _month_key(o.date or (o.created_at.isoformat() if o.created_at else ""))
+            if not mo or mo not in month_set:
+                continue
+            qtn = s.query(Quotation).filter_by(id=o.quotation_id).first() if o.quotation_id else None
+            if qtn:
+                cur = _cur2(qtn.currency)
+                amt = _quotation_total(qtn.items or [], getattr(qtn, "discount_pct", 0) or 0)
+            else:
+                cur = "USD"
+                amt = _total_amount(o.items or [])
+            order_series[cur][mo] += amt
+
+        # ── 품목별 매출(청구 품목=CI items 기준, 기간 내) ────────────────────────
+        for ci in s.query(CommercialInvoice).all():
+            mo = _month_key(ci.date or "")
+            if not mo or mo not in month_set:
+                continue
+            cur = _cur2(ci.currency)
+            for it in (ci.items or []):
+                pn = (it.get("part_no") or "").strip() or "—"
+                amt = it.get("amount")
+                if amt in (None, ""):
+                    amt = float(it.get("unit_price", 0) or 0) * float(it.get("qty", 1) or 1)
+                rec = item_rev[cur].setdefault(pn, {"part_no": pn, "description": it.get("description") or "", "amount": 0.0})
+                rec["amount"] += float(amt or 0)
+
+        def _series_list(series):
+            return {cur: [round(series[cur][mo], 2) for mo in month_labels] for cur in CURS}
+
+        def _top(dmap, key_field, n=10):
+            out = {}
+            for cur in CURS:
+                if key_field == "customer":
+                    items = [{"name": k, "amount": round(v, 2)} for k, v in dmap[cur].items()]
+                else:
+                    items = [{"part_no": r["part_no"], "description": r["description"], "amount": round(r["amount"], 2)} for r in dmap[cur].values()]
+                items.sort(key=lambda x: x["amount"], reverse=True)
+                out[cur] = items[:n]
+            return out
+
+        # ── KPI(이번 달 + 전월대비) ─────────────────────────────────────────────
+        def _kpi():
+            out = {}
+            for cur in CURS:
+                out[cur] = {
+                    "revenue": round(rev_series[cur][cur_month], 2),
+                    "revenue_prev": round(rev_series[cur].get(prev_month, 0.0), 2) if prev_month else 0.0,
+                    "order": round(order_series[cur][cur_month], 2),
+                    "order_prev": round(order_series[cur].get(prev_month, 0.0), 2) if prev_month else 0.0,
+                    "quote": round(quote_series[cur][cur_month], 2),
+                    "quote_prev": round(quote_series[cur].get(prev_month, 0.0), 2) if prev_month else 0.0,
+                }
+            return out
+
+        # ── 업무 알림 ───────────────────────────────────────────────────────────
+        today_iso = now_kst.strftime("%Y-%m-%d")
+        week_iso = (now_kst + timedelta(days=7)).strftime("%Y-%m-%d")
+        cutoff60 = (now_kst - timedelta(days=60)).strftime("%Y-%m-%d")
+
+        def _cust_of(o):
+            return cust_names.get(o.customer_id, "—") if o else "—"
+
+        today_delivery, week_delivery, uninvoiced, unreceived_po = [], [], [], []
+        for o in orders_all:
+            pd = o.promised_delivery or ""
+            delivered = bool(o.delivered_date)
+            rfq = _rfq_for_order(s, o)
+            pno = _project_no_map(s).get(rfq.id, "") if rfq else ""
+            if pd and not delivered:
+                if pd[:10] == today_iso:
+                    today_delivery.append({"order_id": o.id, "project_no": pno, "customer": _cust_of(o), "date": pd})
+                elif today_iso < pd[:10] <= week_iso:
+                    week_delivery.append({"order_id": o.id, "project_no": pno, "customer": _cust_of(o), "date": pd})
+            # 미청구: 인도완료(delivered_date) 이나 세금계산서(11단계) 미발행
+            sd = (getattr(rfq, "stage_dates", None) or {}) if rfq else {}
+            if delivered and not sd.get("11"):
+                uninvoiced.append({"order_id": o.id, "project_no": pno, "customer": _cust_of(o), "date": o.delivered_date or ""})
+
+        # 미입고 발주: 발송된 Vendor P/O 인데 해당 오더가 아직 미인도
+        for po in s.query(PurchaseOrder).all():
+            o = order_map.get(po.order_id)
+            sent = (po.status == "이메일 발송완료") or bool(po.sent_date)
+            if sent and o and not o.delivered_date:
+                rfq = _rfq_for_order(s, o)
+                pno = _project_no_map(s).get(rfq.id, "") if rfq else ""
+                unreceived_po.append({"order_id": o.id, "po_no": po.po_no or "", "project_no": pno, "customer": _cust_of(o), "date": po.sent_date or ""})
+
+        # 미회신 견적: 발송/협상 상태 & 발송 후 7일 경과(수주·실주 아님)
+        unanswered = []
+        wk_ago = (now_kst - timedelta(days=7)).strftime("%Y-%m-%d")
+        for q in s.query(Quotation).all():
+            if q.status in (QuotationStatus.SENT, QuotationStatus.NEGOTIATING):
+                sd = (getattr(q, "sent_at", None) or q.sent_date or q.date or "")[:10]
+                if sd and sd <= wk_ago:
+                    unanswered.append({"rfq_id": q.rfq_id, "qtn_no": q.qtn_no or "", "customer": cust_names.get(q.customer_id, "—"), "date": sd, "status": _enum_val(q.status)})
+
+        # 장기 미수금: 연체 & 만기 60일 초과
+        long_overdue = []
+        for a in s.query(ARRecord).all():
+            outstanding = (a.invoice_amount or 0) - (a.paid_amount or 0)
+            if a.status != ARStatus.PAID and a.due_date and a.due_date < cutoff60 and outstanding > 0:
+                o = order_map.get(a.order_id)
+                long_overdue.append({"order_id": a.order_id, "ci_no": a.ci_no or "", "customer": _cust_of(o), "due_date": a.due_date, "currency": _cur2(a.currency), "outstanding": round(outstanding, 2)})
+
+        # 납기 지연 건수: 약속납기 지난 미인도 오더
+        delivery_delays = sum(
+            1 for o in orders_all
+            if o.promised_delivery and not o.delivered_date and o.promised_delivery[:10] < today_iso
+        )
+
+        return {
+            "months": month_labels,
+            "currencies": list(CURS),
+            "series": {
+                "revenue": _series_list(rev_series),
+                "quote": _series_list(quote_series),
+                "order": _series_list(order_series),
+            },
+            "customer_top": _top(cust_rev, "customer"),
+            "item_top": _top(item_rev, "item"),
+            "kpi": _kpi(),
+            "delivery_delays": delivery_delays,
+            "alerts": {
+                "today_delivery": today_delivery,
+                "week_delivery": week_delivery,
+                "unanswered_quotes": unanswered,
+                "unreceived_po": unreceived_po,
+                "uninvoiced": uninvoiced,
+                "long_overdue_ar": long_overdue,
+            },
+        }
+    finally:
+        s.close()
+
+
 def _order_for_rfq(s, rfq_id: int):
     """RFQ에 연결된 Order — 직접 연결 우선, 없으면 Quotation 경유."""
     order = (s.query(Order).filter(Order.rfq_id == rfq_id)

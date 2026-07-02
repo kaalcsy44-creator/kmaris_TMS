@@ -42,6 +42,7 @@ import type {
   MarketingRow,
   MarketingOverview,
   ScheduleRow,
+  StatisticsData,
 } from "./types";
 
 function authHeaders(json = false): HeadersInit {
@@ -247,6 +248,10 @@ export function fetchPipeline(
 
 export function fetchDashboard(): Promise<DashboardData> {
   return get<DashboardData>("/api/admin/dashboard");
+}
+
+export function fetchStatistics(months = 12): Promise<StatisticsData> {
+  return get<StatisticsData>(`/api/admin/statistics?months=${months}`);
 }
 
 export function fetchVendors(): Promise<VendorOption[]> {

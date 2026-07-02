@@ -903,6 +903,47 @@ export type ScheduleRow = {
   owner: string;
 };
 
+// ── 통계 대시보드 ─────────────────────────────────────────────────────────────
+export type CurrencyKey = "USD" | "KRW";
+export type StatSeries = Record<CurrencyKey, number[]>;
+export type StatCustomerTop = Record<CurrencyKey, { name: string; amount: number }[]>;
+export type StatItemTop = Record<CurrencyKey, { part_no: string; description: string; amount: number }[]>;
+export type StatKpiCur = {
+  revenue: number; revenue_prev: number;
+  order: number; order_prev: number;
+  quote: number; quote_prev: number;
+};
+export type StatAlertRow = {
+  order_id?: number;
+  rfq_id?: number | null;
+  ci_no?: string;
+  po_no?: string;
+  qtn_no?: string;
+  project_no?: string;
+  customer: string;
+  date?: string;
+  status?: string;
+  currency?: CurrencyKey;
+  outstanding?: number;
+};
+export type StatisticsData = {
+  months: string[];
+  currencies: CurrencyKey[];
+  series: { revenue: StatSeries; quote: StatSeries; order: StatSeries };
+  customer_top: StatCustomerTop;
+  item_top: StatItemTop;
+  kpi: Record<CurrencyKey, StatKpiCur>;
+  delivery_delays: number;
+  alerts: {
+    today_delivery: StatAlertRow[];
+    week_delivery: StatAlertRow[];
+    unanswered_quotes: StatAlertRow[];
+    unreceived_po: StatAlertRow[];
+    uninvoiced: StatAlertRow[];
+    long_overdue_ar: StatAlertRow[];
+  };
+};
+
 export type MarketingOverview = {
   recent: MarketingRow[];
   follow_ups: MarketingRow[];
