@@ -19,8 +19,8 @@ import Modal from "@/components/common/Modal";
 const today = () => new Date().toISOString().slice(0, 10);
 
 // 발송수단·활동유형 선택지 — RFQ request_channel 과 톤을 맞춘다(자유 확장 가능).
-const CHANNELS = ["Email", "전화", "방문", "전시회", "WhatsApp", "WeChat", "기타"];
-const ACTIVITY_TYPES = ["홍보자료 발송", "소개메일", "방문", "미팅", "샘플 발송", "팔로업", "기타"];
+const CHANNELS = ["Email", "Phone", "Visit", "Exhibition", "WhatsApp", "WeChat", "Other"];
+const ACTIVITY_TYPES = ["Brochure sent", "Intro email", "Visit", "Meeting", "Sample sent", "Follow-up", "Other"];
 
 type Form = {
   customer_id: number | "";
@@ -38,7 +38,7 @@ const emptyForm: Form = {
   prospect_name: "",
   activity_date: today(),
   channel: "Email",
-  activity_type: "홍보자료 발송",
+  activity_type: "Brochure sent",
   subject: "",
   notes: "",
   next_action_date: "",
