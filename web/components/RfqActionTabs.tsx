@@ -1706,6 +1706,58 @@ function VendorRfqAction({
         <span>Generates an email draft and an Excel response form. Send the email yourself, then mark it as "Sent".</span>
       </div>
 
+      <div className="form-field">
+        <label>K-Maris RFQ No.</label>
+        {unassigned ? (
+          <>
+            <input
+              style={{ maxWidth: 320 }}
+              value={manualNo}
+              onChange={(e) => setManualNo(e.target.value)}
+              placeholder="Optional"
+            />
+            <span className="hint-inline" style={{ marginTop: 8, display: "inline-block" }}>
+              Leave blank to keep K-Maris RFQ No. as "-".
+            </span>
+          </>
+        ) : (
+          <div className="action-ctx" style={{ margin: 0 }}>
+            Issued: <b>{kmarisNo}</b>
+          </div>
+        )}
+      </div>
+      <div className="form-field">
+        <label>Select vendor</label>
+        <div className="vendor-checks">
+          {vendors.map((v) => (
+            <label key={v.id} className="check-inline">
+              <input
+                type="checkbox"
+                checked={vendorIds.includes(v.id)}
+                onChange={() => toggleVendor(v.id)}
+              />
+              {v.name}
+            </label>
+          ))}
+        </div>
+      </div>
+      <div className="form-grid">
+        <div className="form-field">
+          <label>Email language</label>
+          <select value={lang} onChange={(e) => setLang(e.target.value as "en" | "ko")}>
+            <option value="en">English</option>
+            <option value="ko">Korean</option>
+          </select>
+        </div>
+        <div className="form-field">
+          <label>Sent at (mark as sent)</label>
+          <input
+            type="datetime-local"
+            value={sentAt}
+            onChange={(e) => setSentAt(e.target.value)}
+          />
+        </div>
+      </div>
       {rfqId ? (
         <>
           <div className="form-section-title">
@@ -1769,58 +1821,6 @@ function VendorRfqAction({
         </>
       ) : null}
 
-      <div className="form-field">
-        <label>K-Maris RFQ No.</label>
-        {unassigned ? (
-          <>
-            <input
-              style={{ maxWidth: 320 }}
-              value={manualNo}
-              onChange={(e) => setManualNo(e.target.value)}
-              placeholder="Optional"
-            />
-            <span className="hint-inline" style={{ marginTop: 8, display: "inline-block" }}>
-              Leave blank to keep K-Maris RFQ No. as "-".
-            </span>
-          </>
-        ) : (
-          <div className="action-ctx" style={{ margin: 0 }}>
-            Issued: <b>{kmarisNo}</b>
-          </div>
-        )}
-      </div>
-      <div className="form-field">
-        <label>Select vendor</label>
-        <div className="vendor-checks">
-          {vendors.map((v) => (
-            <label key={v.id} className="check-inline">
-              <input
-                type="checkbox"
-                checked={vendorIds.includes(v.id)}
-                onChange={() => toggleVendor(v.id)}
-              />
-              {v.name}
-            </label>
-          ))}
-        </div>
-      </div>
-      <div className="form-grid">
-        <div className="form-field">
-          <label>Email language</label>
-          <select value={lang} onChange={(e) => setLang(e.target.value as "en" | "ko")}>
-            <option value="en">English</option>
-            <option value="ko">Korean</option>
-          </select>
-        </div>
-        <div className="form-field">
-          <label>Sent at (mark as sent)</label>
-          <input
-            type="datetime-local"
-            value={sentAt}
-            onChange={(e) => setSentAt(e.target.value)}
-          />
-        </div>
-      </div>
       <div className="form-field">
         <label>Note to vendor</label>
         <textarea

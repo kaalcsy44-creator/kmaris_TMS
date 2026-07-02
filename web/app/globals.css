@@ -3133,6 +3133,16 @@ table.mini.wide input.num {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+/* 표 안 체크박스(행 선택 등)는 입력칸 스타일(100% 너비·30px 높이)에서 제외. */
+table.mini.wide input[type="checkbox"] {
+  width: 16px;
+  min-width: 0;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  accent-color: var(--blue);
+}
 table.mini.wide td:nth-child(2) input {
   min-width: 118px;
 }
