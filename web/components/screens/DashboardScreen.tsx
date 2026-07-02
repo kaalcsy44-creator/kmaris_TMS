@@ -8,13 +8,23 @@ import {
   fetchPipeline,
   fetchArOverview,
   fetchMarketingOverview,
+  fetchSchedule,
+  fetchCustomers,
+  createSchedule,
+  updateSchedule,
+  deleteSchedule,
+  type ScheduleSave,
 } from "@/lib/api";
-import { useCachedData } from "@/lib/useCachedData";
-import { can } from "@/lib/auth";
-import type { QtnRow, PipelineRow, ArRow, MarketingRow, MarketingOverview } from "@/lib/types";
+import { useCachedData, invalidateCache } from "@/lib/useCachedData";
+import { can, canEditDeal } from "@/lib/auth";
+import type {
+  QtnRow, PipelineRow, ArRow, MarketingRow, MarketingOverview,
+  ScheduleRow, CustomerOption,
+} from "@/lib/types";
 import { tr } from "@/lib/labels";
 import FilterTable, { ColumnDef } from "@/components/common/FilterTable";
 import CustomerName from "@/components/common/CustomerName";
+import Modal from "@/components/common/Modal";
 import { DualCurrencyAmount, dualCurrencyText } from "@/components/common/itemTable";
 
 function num(n: number) {
@@ -131,9 +141,16 @@ function HomeTab() {
     "home:marketing",
     () => (canMarketing ? fetchMarketingOverview() : Promise.resolve(null)),
   );
+  const { data: schedule, refresh: refreshSchedule } = useCachedData("home:schedule", fetchSchedule);
+  const { data: customers } = useCachedData("settings:customers", fetchCustomers);
+
+  // 일정 등록/수정 모달 상태.
+  const [schedAdding, setSchedAdding] = useState(false);
+  const [schedEditing, setSchedEditing] = useState<ScheduleRow | null>(null);
 
   const qtnRows = useMemo(() => qtn?.rows ?? [], [qtn]);
   const arRows = useMemo(() => ar?.rows ?? [], [ar]);
+  const schedRows = useMemo(() => schedule?.rows ?? [], [schedule]);
 
   // 담당자 활동 기록 — 파이프라인 단계별 stage_notes 를 한 줄씩 펼친다.
   const activityRows = useMemo<ActivityRow[]>(() => {
@@ -267,12 +284,14 @@ function HomeTab() {
     { key: "pic", label: "PIC", text: (r) => r.owner || "", filter: "facet" },
   ];
 
-  // 일정 관리 — 백엔드 일정 데이터 미구현. 자리(빈 표)만 둔다.
-  const scheduleCols: ColumnDef<never>[] = [
-    { key: "date", label: "Date", text: () => "", filter: "date" },
-    { key: "title", label: "Title", text: () => "" },
-    { key: "type", label: "Type", text: () => "", filter: "facet" },
-    { key: "notes", label: "Notes", text: () => "" },
+  // 일정 관리 — 대시보드 카드 내에서 직접 등록/수정.
+  const scheduleCols: ColumnDef<ScheduleRow>[] = [
+    { key: "date", label: "Date", text: (r) => r.date || "", filter: "date" },
+    { key: "title", label: "Title", text: (r) => r.title || "" },
+    { key: "event_type", label: "Type", text: (r) => r.event_type || "", filter: "facet" },
+    { key: "customer", label: "Customer", text: (r) => r.customer || "", filter: "facet", render: (r) => (r.customer ? <CustomerName name={r.customer} /> : <>—</>) },
+    { key: "notes", label: "Notes", text: (r) => r.notes || "" },
+    { key: "pic", label: "PIC", text: (r) => r.owner || "", filter: "facet" },
   ];
 
   // ── 박스(카드) 정의 — id 별 제목/내용. 순서는 order 상태가 정한다. ───────
@@ -353,12 +372,23 @@ function HomeTab() {
     schedule: {
       title: "Schedule",
       sub: "Schedule",
-      body: (
+      body: !schedule ? (
+        <div className="state">Loading…</div>
+      ) : (
         <FilterTable
-          rows={[] as never[]}
+          tableId="dash-schedule"
+          rows={schedRows}
           columns={scheduleCols}
-          getRowKey={() => 0}
-          empty="No schedule data yet — coming soon."
+          getRowKey={(r) => r.id}
+          defaultSortKey="date"
+          defaultSortDir="asc"
+          onRowClick={(r) => setSchedEditing(r)}
+          empty="No schedule yet. Click + Add to create one."
+          actions={
+            <button className="btn" onClick={() => setSchedAdding(true)}>
+              + Add
+            </button>
+          }
         />
       ),
     },
@@ -384,6 +414,12 @@ function HomeTab() {
   const order = useHomeOrder(Object.keys(cards));
   const { ids, dragId, onDragStart, onDragOver, onDragEnd } = order;
 
+  function reloadSchedule() {
+    setSchedAdding(false);
+    setSchedEditing(null);
+    return refreshSchedule();
+  }
+
   return (
     <div className="home-grid">
       {ids.map((id) => {
@@ -403,6 +439,147 @@ function HomeTab() {
           </HomeCard>
         );
       })}
+
+      {schedAdding ? (
+        <Modal title="Add schedule" onClose={() => setSchedAdding(false)} wide>
+          <ScheduleForm customers={customers ?? []} canEdit onChanged={reloadSchedule} />
+        </Modal>
+      ) : null}
+      {schedEditing ? (
+        <Modal title="Schedule" onClose={() => setSchedEditing(null)} wide>
+          <ScheduleForm
+            row={schedEditing}
+            customers={customers ?? []}
+            canEdit={canEditDeal(schedEditing.owner_id)}
+            onChanged={reloadSchedule}
+          />
+        </Modal>
+      ) : null}
+    </div>
+  );
+}
+
+/* 일정 등록/수정 폼 — 대시보드 Schedule 카드의 모달 본문. */
+const SCHEDULE_TYPES = ["Meeting", "Business trip", "Delivery", "Deadline", "Other"];
+
+function ScheduleForm({
+  row,
+  customers,
+  canEdit,
+  onChanged,
+}: {
+  row?: ScheduleRow;
+  customers: CustomerOption[];
+  canEdit: boolean;
+  onChanged: () => void;
+}) {
+  const [date, setDate] = useState(row?.date || today());
+  const [title, setTitle] = useState(row?.title ?? "");
+  const [eventType, setEventType] = useState(row?.event_type || "Meeting");
+  const [customerId, setCustomerId] = useState<number | "">(row?.customer_id ?? "");
+  const [notes, setNotes] = useState(row?.notes ?? "");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  const valid = title.trim() !== "" && date.trim() !== "";
+
+  function body(): ScheduleSave {
+    return {
+      date,
+      title: title.trim(),
+      event_type: eventType,
+      notes,
+      customer_id: customerId === "" ? null : customerId,
+    };
+  }
+
+  async function save() {
+    if (!valid) {
+      setErr("날짜와 제목을 입력하세요.");
+      return;
+    }
+    setBusy(true);
+    setErr("");
+    try {
+      if (row) await updateSchedule(row.id, body());
+      else await createSchedule(body());
+      invalidateCache("dashboard");
+      onChanged();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove() {
+    if (!row) return;
+    if (!confirm("Delete this schedule?")) return;
+    setBusy(true);
+    setErr("");
+    try {
+      await deleteSchedule(row.id);
+      onChanged();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Delete failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div>
+      <fieldset className="form-fieldset" disabled={!canEdit}>
+        <div className="form-grid">
+          <label className="form-field">
+            <span>Date</span>
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          </label>
+          <label className="form-field">
+            <span>Type</span>
+            <select value={eventType} onChange={(e) => setEventType(e.target.value)}>
+              {SCHEDULE_TYPES.map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+          </label>
+          <label className="form-field">
+            <span>Title</span>
+            <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} />
+          </label>
+          <label className="form-field">
+            <span>Customer (optional)</span>
+            <select
+              value={customerId}
+              onChange={(e) => setCustomerId(e.target.value ? Number(e.target.value) : "")}
+            >
+              <option value="">—</option>
+              {customers.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <label className="form-field" style={{ marginTop: 10 }}>
+          <span>Notes</span>
+          <textarea rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} />
+        </label>
+      </fieldset>
+      <div className="form-actions">
+        {canEdit ? (
+          <button className="btn primary" disabled={busy || !valid} onClick={save}>
+            {busy ? "Working…" : row ? "Save" : "Add schedule"}
+          </button>
+        ) : (
+          <span className="hint-inline">View only — created by another PIC</span>
+        )}
+        {row && canEdit ? (
+          <button className="btn danger" disabled={busy} onClick={remove} style={{ marginLeft: "auto" }}>
+            Delete
+          </button>
+        ) : null}
+        {err ? <span className="action-err">{err}</span> : null}
+      </div>
     </div>
   );
 }

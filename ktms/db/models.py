@@ -360,3 +360,19 @@ class MarketingActivity(Base):
     next_action_date = Column(String(10))    # 후속 예정일 YYYY-MM-DD (대시보드 Follow-up)
     owner_id         = Column(Integer, ForeignKey("users.id"), nullable=True)  # 담당자(PIC)
     created_at       = Column(DateTime, default=datetime.utcnow)
+
+
+class ScheduleEvent(Base):
+    """대시보드 Schedule 카드에서 직접 입력·관리하는 일정. 별도 메뉴 없이 카드 내 모달로 등록.
+
+    작성자(owner_id)만(또는 admin) 수정·삭제할 수 있고, 목록은 팀 공용으로 전체 표시한다.
+    """
+    __tablename__ = "schedule_events"
+    id          = Column(Integer, primary_key=True)
+    date        = Column(String(10))    # 일정일 YYYY-MM-DD
+    title       = Column(String(200))   # 제목
+    event_type  = Column(String(40))    # 유형: 미팅/출장/납기/기타 등
+    notes       = Column(Text)          # 메모
+    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=True)  # 관련 고객사(선택)
+    owner_id    = Column(Integer, ForeignKey("users.id"), nullable=True)      # 담당자(PIC)
+    created_at  = Column(DateTime, default=datetime.utcnow)

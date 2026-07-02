@@ -56,7 +56,7 @@ from db.models import (
     VendorRFQ, VendorQuote, Quotation, QuotationStatus, FollowUpLevel,
     Order, PurchaseOrder, ShippingAdvice, CommercialInvoice,
     PackingList, TaxInvoiceData, ARRecord, DeliveryProof,
-    RFQStatus, OrderStatus, ARStatus, WorkType, MarketingActivity,
+    RFQStatus, OrderStatus, ARStatus, WorkType, MarketingActivity, ScheduleEvent,
 )
 
 # ── App / CORS ────────────────────────────────────────────────────────────────
@@ -3768,6 +3768,109 @@ def marketing_overview(user: dict = Depends(get_current_user)):
                 "by_type": by_type,
             },
         }
+    finally:
+        s.close()
+
+
+# ── 일정(Schedule) — 대시보드 카드 내에서 직접 관리 ──────────────────────────
+class ScheduleEventCreate(BaseModel):
+    date: str | None = ""
+    title: str | None = ""
+    event_type: str | None = ""
+    notes: str | None = ""
+    customer_id: int | None = None
+
+
+def _schedule_row(e: ScheduleEvent, cust_names: dict, user_names: dict) -> dict:
+    return {
+        "id": e.id,
+        "date": e.date or "",
+        "title": e.title or "",
+        "event_type": e.event_type or "",
+        "notes": e.notes or "",
+        "customer_id": e.customer_id,
+        "customer": cust_names.get(e.customer_id, "") if e.customer_id else "",
+        "owner_id": e.owner_id or 0,
+        "owner": user_names.get(e.owner_id, "") if e.owner_id else "",
+    }
+
+
+@app.get("/api/admin/schedule", dependencies=[Depends(require_token)])
+def schedule_list():
+    """일정 목록 — 팀 공용(전체), 날짜 오름차순."""
+    s = get_session()
+    try:
+        cust_names = {c.id: c.name for c in s.query(Customer).all()}
+        user_names = {u.id: u.username for u in s.query(User).all()}
+        events = s.query(ScheduleEvent).order_by(ScheduleEvent.date, ScheduleEvent.id).all()
+        return {"rows": [_schedule_row(e, cust_names, user_names) for e in events]}
+    finally:
+        s.close()
+
+
+@app.post("/api/admin/schedule", dependencies=[Depends(require_token)])
+def create_schedule(body: ScheduleEventCreate, user: dict = Depends(get_current_user)):
+    if not (body.title or "").strip():
+        raise HTTPException(status_code=400, detail="일정 제목을 입력하세요.")
+    if not (body.date or "").strip():
+        raise HTTPException(status_code=400, detail="일정 날짜를 입력하세요.")
+    s = get_session()
+    try:
+        e = ScheduleEvent(
+            date=body.date or "",
+            title=(body.title or "").strip(),
+            event_type=body.event_type or "",
+            notes=body.notes or "",
+            customer_id=body.customer_id or None,
+            owner_id=user.get("id") or None,
+        )
+        s.add(e)
+        s.commit()
+        return {"ok": True, "id": e.id}
+    finally:
+        s.close()
+
+
+def _schedule_guard(e: ScheduleEvent, user: dict) -> None:
+    """작성자(owner) 또는 admin 만 수정·삭제 가능."""
+    if user.get("role") == UserRole.ADMIN.value:
+        return
+    if (e.owner_id or 0) != (user.get("id") or 0):
+        raise HTTPException(status_code=403, detail="작성자(PIC)만 이 일정을 수정·삭제할 수 있습니다.")
+
+
+@app.put("/api/admin/schedule/{row_id}", dependencies=[Depends(require_token)])
+def update_schedule(row_id: int, body: ScheduleEventCreate, user: dict = Depends(get_current_user)):
+    if not (body.title or "").strip():
+        raise HTTPException(status_code=400, detail="일정 제목을 입력하세요.")
+    s = get_session()
+    try:
+        e = s.query(ScheduleEvent).filter_by(id=row_id).first()
+        if not e:
+            raise HTTPException(status_code=404, detail="일정을 찾을 수 없습니다.")
+        _schedule_guard(e, user)
+        e.date = body.date or ""
+        e.title = (body.title or "").strip()
+        e.event_type = body.event_type or ""
+        e.notes = body.notes or ""
+        e.customer_id = body.customer_id or None
+        s.commit()
+        return {"ok": True, "id": e.id}
+    finally:
+        s.close()
+
+
+@app.delete("/api/admin/schedule/{row_id}", dependencies=[Depends(require_token)])
+def delete_schedule(row_id: int, user: dict = Depends(get_current_user)):
+    s = get_session()
+    try:
+        e = s.query(ScheduleEvent).filter_by(id=row_id).first()
+        if not e:
+            raise HTTPException(status_code=404, detail="일정을 찾을 수 없습니다.")
+        _schedule_guard(e, user)
+        s.delete(e)
+        s.commit()
+        return {"ok": True}
     finally:
         s.close()
 

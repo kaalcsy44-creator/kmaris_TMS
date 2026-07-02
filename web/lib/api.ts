@@ -41,6 +41,7 @@ import type {
   PurchaseOrderDetail,
   MarketingRow,
   MarketingOverview,
+  ScheduleRow,
 } from "./types";
 
 function authHeaders(json = false): HeadersInit {
@@ -483,6 +484,31 @@ export function updateMarketing(
 }
 export function deleteMarketing(id: number): Promise<{ ok: boolean }> {
   return del(`/api/admin/marketing/${id}`);
+}
+
+// ── 일정(Schedule) ────────────────────────────────────────────────────────────
+export type ScheduleSave = {
+  date?: string;
+  title?: string;
+  event_type?: string;
+  notes?: string;
+  customer_id?: number | null;
+};
+
+export function fetchSchedule(): Promise<{ rows: ScheduleRow[] }> {
+  return get<{ rows: ScheduleRow[] }>("/api/admin/schedule");
+}
+export function createSchedule(body: ScheduleSave): Promise<{ ok: boolean; id: number }> {
+  return post("/api/admin/schedule", body);
+}
+export function updateSchedule(
+  id: number,
+  body: ScheduleSave
+): Promise<{ ok: boolean; id: number }> {
+  return put(`/api/admin/schedule/${id}`, body);
+}
+export function deleteSchedule(id: number): Promise<{ ok: boolean }> {
+  return del(`/api/admin/schedule/${id}`);
 }
 
 export function fetchSettingsCustomers(): Promise<SettingsCustomer[]> {

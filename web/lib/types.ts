@@ -870,6 +870,19 @@ export type MarketingRow = {
   owner: string;
 };
 
+// ── 일정(Schedule) ────────────────────────────────────────────────────────────
+export type ScheduleRow = {
+  id: number;
+  date: string;
+  title: string;
+  event_type: string;
+  notes: string;
+  customer_id: number | null;
+  customer: string;
+  owner_id: number;
+  owner: string;
+};
+
 export type MarketingOverview = {
   recent: MarketingRow[];
   follow_ups: MarketingRow[];
