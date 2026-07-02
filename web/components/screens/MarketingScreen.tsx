@@ -49,17 +49,18 @@ const emptyForm: Form = {
 };
 
 function rowToForm(r: MarketingRow): Form {
+  // 구버전 응답(신규 필드 누락)에도 안전하도록 모든 문자열 필드를 ?? "" 로 보정.
   return {
     customer_id: r.customer_id ?? "",
-    prospect_name: r.prospect_name,
-    contact_person: r.contact_person,
-    recipient_email: r.recipient_email,
+    prospect_name: r.prospect_name ?? "",
+    contact_person: r.contact_person ?? "",
+    recipient_email: r.recipient_email ?? "",
     activity_date: r.activity_date || today(),
-    channel: r.channel,
-    activity_type: r.activity_type,
-    subject: r.subject,
-    notes: r.notes,
-    next_action_date: r.next_action_date,
+    channel: r.channel ?? "",
+    activity_type: r.activity_type ?? "",
+    subject: r.subject ?? "",
+    notes: r.notes ?? "",
+    next_action_date: r.next_action_date ?? "",
   };
 }
 
