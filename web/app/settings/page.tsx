@@ -41,7 +41,7 @@ import type {
   SettingsVendor,
   SettingsVessel,
 } from "@/lib/types";
-import { getUser, isAdmin } from "@/lib/auth";
+import { getUser, isAdmin, can } from "@/lib/auth";
 import AppShell, { SectionHead } from "@/components/AppShell";
 import { invalidateCustomerLogos } from "@/lib/customerLogos";
 import { invalidateVendorLogos } from "@/lib/vendorLogos";
@@ -49,7 +49,7 @@ import { fileToLogoDataUrl, imageFromClipboard } from "@/lib/imagePaste";
 
 type Tab =
   | "company" | "users" | "permissions"
-  | "customers" | "vendors" | "vessels" | "items";
+  | "customers" | "vendors" | "vessels" | "items" | "account";
 
 const emptyCompany: CompanyProfile = {
   company_name_en: "",
@@ -77,12 +77,14 @@ export default function SettingsPage() {
 }
 
 function Settings() {
-  const [tab, setTab] = useState<Tab>("company");
   const admin = isAdmin();
+  // 마스터 데이터(고객사·Vendor·선박·품목) 관리 = "settings" 권한. admin 은 항상 허용.
+  // 회사/사용자/권한 설정은 admin 전용으로 유지한다.
+  const canMaster = admin || can("settings", "view");
+  const [tab, setTab] = useState<Tab>(admin ? "company" : canMaster ? "customers" : "account");
 
-  // 비관리자(sales/viewer)는 회사·사용자·마스터 데이터 설정에 접근할 수 없다.
-  // 본인 비밀번호 변경만 제공한다. (서버에서도 settings/* 쓰기는 admin 전용)
-  if (!admin) {
+  // 마스터 데이터 권한도 없는 사용자(예: 권한 없는 viewer)는 본인 비밀번호 변경만.
+  if (!admin && !canMaster) {
     return (
       <>
         <SectionHead title="My Account" sub="Password" />
@@ -95,19 +97,31 @@ function Settings() {
     );
   }
 
-  const tabs: { key: Tab; label: string }[] = [
-    { key: "company", label: "Company" },
-    { key: "users", label: "Users" },
-    { key: "permissions", label: "Permissions" },
-    { key: "customers", label: "Customer" },
-    { key: "vendors", label: "Vendor" },
-    { key: "vessels", label: "Vessels" },
-    { key: "items", label: "Item Master" },
-  ];
+  // admin: 전체 탭. 비관리자(마스터 권한 보유): 마스터 데이터 탭 + 내 계정만.
+  const tabs: { key: Tab; label: string }[] = admin
+    ? [
+        { key: "company", label: "Company" },
+        { key: "users", label: "Users" },
+        { key: "permissions", label: "Permissions" },
+        { key: "customers", label: "Customer" },
+        { key: "vendors", label: "Vendor" },
+        { key: "vessels", label: "Vessels" },
+        { key: "items", label: "Item Master" },
+      ]
+    : [
+        { key: "customers", label: "Customer" },
+        { key: "vendors", label: "Vendor" },
+        { key: "vessels", label: "Vessels" },
+        { key: "items", label: "Item Master" },
+        { key: "account", label: "My Account" },
+      ];
 
   return (
     <>
-      <SectionHead title="Settings" sub="Company · users · master data" />
+      <SectionHead
+        title="Settings"
+        sub={admin ? "Company · users · master data" : "Master data"}
+      />
       <div className="page-tabs">
         {tabs.map((t) => (
           <button key={t.key} className={tab === t.key ? "on" : ""} onClick={() => setTab(t.key)}>
@@ -115,13 +129,18 @@ function Settings() {
           </button>
         ))}
       </div>
-      {tab === "company" && <CompanyTab />}
-      {tab === "users" && <UsersTab />}
-      {tab === "permissions" && <PermissionsTab />}
+      {admin && tab === "company" && <CompanyTab />}
+      {admin && tab === "users" && <UsersTab />}
+      {admin && tab === "permissions" && <PermissionsTab />}
       {tab === "customers" && <CustomersTab />}
       {tab === "vendors" && <VendorsTab />}
       {tab === "vessels" && <VesselsTab />}
       {tab === "items" && <ItemsTab />}
+      {tab === "account" && (
+        <div className="panel">
+          <MyPasswordChange />
+        </div>
+      )}
     </>
   );
 }
@@ -257,7 +276,8 @@ const ROLE_INFO: { key: string; title: string; perms: string[] }[] = [
     perms: [
       "Deals: create / edit / delete (RFQ·Quotation·P/O·AR·Documents)",
       "Sees ONLY their own deals",
-      "No access to settings",
+      "Master data (customer·vendor·vessel·item) if granted in Permissions",
+      "No company / user / permission settings",
     ],
   },
   {
@@ -1010,6 +1030,10 @@ function MasterSection<T extends { id: number }>({
   const [q, setQ] = useState("");
   const [err, setErr] = useState("");
   const [copying, setCopying] = useState(false); // 복사 모드(기존 정보 복제 → 새 레코드)
+  // 마스터 데이터 입력·수정·삭제 권한(= "settings" 모듈). admin 은 항상 true.
+  const canCreate = can("settings", "create");
+  const canEdit = can("settings", "edit");
+  const canDelete = can("settings", "delete");
 
   function refresh() {
     load().then(setRows).catch((e) => setErr(e instanceof Error ? e.message : "Load failed"));
@@ -1099,10 +1123,12 @@ function MasterSection<T extends { id: number }>({
         {extraForm?.(form, setForm)}
       </div>
       <div className="form-actions">
-        <button className="btn primary" disabled={!requiredValue} onClick={save}>
-          {isEdit ? "Save" : "Add"}
-        </button>
-        {isEdit && allowCopy ? (
+        {(isEdit ? canEdit : canCreate) ? (
+          <button className="btn primary" disabled={!requiredValue} onClick={save}>
+            {isEdit ? "Save" : "Add"}
+          </button>
+        ) : null}
+        {isEdit && allowCopy && canCreate ? (
           <button className="btn" onClick={copyAsNew} title="Copy this info into a new record">
             📋 Copy as new
           </button>
@@ -1110,10 +1136,13 @@ function MasterSection<T extends { id: number }>({
         <button className="btn" onClick={cancel}>
           Cancel
         </button>
-        {isEdit ? (
+        {isEdit && canDelete ? (
           <button className="btn danger" onClick={delRow}>
             Delete
           </button>
+        ) : null}
+        {isEdit && !canEdit ? (
+          <span className="hint-inline">View only — your role cannot edit master data.</span>
         ) : null}
         {err ? <span className="action-err">{err}</span> : null}
       </div>
@@ -1130,9 +1159,11 @@ function MasterSection<T extends { id: number }>({
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
-        <button className="btn primary" onClick={openNew} disabled={editId === NEW_ID}>
-          + New
-        </button>
+        {canCreate ? (
+          <button className="btn primary" onClick={openNew} disabled={editId === NEW_ID}>
+            + New
+          </button>
+        ) : null}
       </div>
 
       {editor}
