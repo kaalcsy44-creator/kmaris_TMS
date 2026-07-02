@@ -338,3 +338,23 @@ class ARRecord(Base):
     status         = Column(SAEnum(ARStatus), default=ARStatus.OUTSTANDING)
     notes          = Column(Text)
     created_at     = Column(DateTime, default=datetime.utcnow)
+
+
+class MarketingActivity(Base):
+    """잠정(잠재) 고객사 대상 마케팅 활동 기록. RFQ 파이프라인과 무관하게 독립 관리.
+
+    대상은 기존 Customer(customer_id) 연결 또는 미등록 잠정사(prospect_name) 자유입력
+    둘 중 하나로 지정한다. 대시보드 마케팅 카드가 최근 활동·후속 예정·월간 집계를 요약한다.
+    """
+    __tablename__ = "marketing_activities"
+    id               = Column(Integer, primary_key=True)
+    customer_id      = Column(Integer, ForeignKey("customers.id"), nullable=True)  # 기존 고객사 연결(선택)
+    prospect_name    = Column(String(200))   # 미등록 잠정사 자유입력(customer_id 없을 때)
+    activity_date    = Column(String(10))    # 활동일 YYYY-MM-DD
+    channel          = Column(String(40))    # 발송수단: Email/전화/방문/전시회/WhatsApp 등
+    activity_type    = Column(String(40))    # 홍보자료 발송/소개메일/방문/미팅/팔로업 등
+    subject          = Column(String(200))   # 제목·요약
+    notes            = Column(Text)          # 상세 내용
+    next_action_date = Column(String(10))    # 후속 예정일 YYYY-MM-DD (대시보드 Follow-up)
+    owner_id         = Column(Integer, ForeignKey("users.id"), nullable=True)  # 담당자(PIC)
+    created_at       = Column(DateTime, default=datetime.utcnow)

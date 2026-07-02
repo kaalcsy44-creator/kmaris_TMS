@@ -39,6 +39,8 @@ import type {
   VendorQuoteDetail,
   CustomerQuotationDetail,
   PurchaseOrderDetail,
+  MarketingRow,
+  MarketingOverview,
 } from "./types";
 
 function authHeaders(json = false): HeadersInit {
@@ -448,6 +450,37 @@ export function fetchVendorPoOverview(): Promise<{ rows: VendorPoRow[] }> {
 
 export function fetchArOverview(): Promise<ArData> {
   return get<ArData>("/api/admin/ar-overview");
+}
+
+// ── 마케팅 활동(잠정 고객사) ──────────────────────────────────────────────────
+export type MarketingSave = {
+  customer_id?: number | null;
+  prospect_name?: string;
+  activity_date?: string;
+  channel?: string;
+  activity_type?: string;
+  subject?: string;
+  notes?: string;
+  next_action_date?: string;
+};
+
+export function fetchMarketing(): Promise<{ rows: MarketingRow[] }> {
+  return get<{ rows: MarketingRow[] }>("/api/admin/marketing");
+}
+export function fetchMarketingOverview(): Promise<MarketingOverview> {
+  return get<MarketingOverview>("/api/admin/marketing-overview");
+}
+export function createMarketing(body: MarketingSave): Promise<{ ok: boolean; id: number }> {
+  return post("/api/admin/marketing", body);
+}
+export function updateMarketing(
+  id: number,
+  body: MarketingSave
+): Promise<{ ok: boolean; id: number }> {
+  return put(`/api/admin/marketing/${id}`, body);
+}
+export function deleteMarketing(id: number): Promise<{ ok: boolean }> {
+  return del(`/api/admin/marketing/${id}`);
 }
 
 export function fetchSettingsCustomers(): Promise<SettingsCustomer[]> {

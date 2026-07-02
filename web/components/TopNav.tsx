@@ -24,6 +24,7 @@ const ITEMS: Item[] = [
     ],
   },
   { href: "/ar", label: "AR", key: "ar" },
+  { href: "/marketing", label: "Marketing", key: "marketing" },
 ];
 
 export default function TopNav({ active }: { active: string }) {

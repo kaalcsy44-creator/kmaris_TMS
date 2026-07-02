@@ -56,7 +56,7 @@ from db.models import (
     VendorRFQ, VendorQuote, Quotation, QuotationStatus, FollowUpLevel,
     Order, PurchaseOrder, ShippingAdvice, CommercialInvoice,
     PackingList, TaxInvoiceData, ARRecord, DeliveryProof,
-    RFQStatus, OrderStatus, ARStatus, WorkType,
+    RFQStatus, OrderStatus, ARStatus, WorkType, MarketingActivity,
 )
 
 # ── App / CORS ────────────────────────────────────────────────────────────────
@@ -253,7 +253,7 @@ def _authz_error(request: Request, status: int, detail: str) -> JSONResponse:
 
 # ── 권한 매트릭스 (역할 × 페이지 × 동작) ───────────────────────────────────────
 # 페이지(모듈)와 동작의 정본. 프런트 매트릭스 UI와 동일한 순서.
-PERM_MODULES = ["dashboard", "progress", "rfq", "po", "documents", "ar", "settings"]
+PERM_MODULES = ["dashboard", "progress", "rfq", "po", "documents", "ar", "marketing", "settings"]
 PERM_ACTIONS = ["view", "create", "edit", "delete"]
 # dashboard 는 열람만 의미가 있다(입력/수정/삭제 없음) — UI에서 view만 노출.
 PERM_VIEW_ONLY = {"dashboard"}
@@ -270,7 +270,7 @@ def _full_perms(value: bool = True) -> dict:
 
 # 기본 권한(시드) — 기존 동작과 동일하게 맞춘다.
 def _default_perms(role: str) -> dict:
-    biz = ["progress", "rfq", "po", "documents", "ar"]
+    biz = ["progress", "rfq", "po", "documents", "ar", "marketing"]
     if role == UserRole.SALES.value:
         return _perm_grid(lambda m, a: (
             (m == "dashboard" and a == "view") or
@@ -370,6 +370,7 @@ _ADMIN_ONLY_PREFIXES = ("/api/admin/settings/users", "/api/admin/settings/permis
 # 신규 레코드 생성(POST) — 그 외 POST 는 edit 으로 본다.
 _CREATE_POST_EXACT = {
     "/api/admin/rfq", "/api/admin/orders", "/api/admin/vendor-pos", "/api/admin/ar",
+    "/api/admin/marketing",
 }
 _CREATE_POST_SUFFIX = ("/vendor-rfq", "/customer-quote", "/vendor-quote",
                        "/ci", "/pl", "/sa", "/tax")
@@ -390,6 +391,8 @@ def _route_module(path: str) -> str | None:
         return "documents"
     if path.startswith("/api/admin/ar"):
         return "ar"
+    if path.startswith("/api/admin/marketing"):
+        return "marketing"
     if path.startswith("/api/admin/settings"):
         return "settings"
     return None
@@ -457,6 +460,10 @@ def _deal_owner_from_path(path: str) -> int | None:
         if res == "rfq":
             r = s.query(RFQ).filter_by(id=rid).first()
             return r.created_by if r else None
+        if res == "marketing":
+            # 마케팅 활동은 RFQ 딜이 아니라 owner_id(작성 담당자)로 소유권을 판별한다.
+            m = s.query(MarketingActivity).filter_by(id=rid).first()
+            return m.owner_id if m else None
         if res == "vendor-rfq":
             v = s.query(VendorRFQ).filter_by(id=rid).first()
             rfq_id = v.rfq_id if v else None
@@ -514,7 +521,7 @@ async def _perm_guard(request: Request, call_next):
         return _authz_error(request, 403, _PERM_DENY_MSG.get(action, "권한이 없습니다."))
     # 담당(PIC) 소유권 게이트: 비관리자는 본인이 담당인 딜만 편집/삭제(및 하위 등록) 가능.
     # 조회(view)는 기존 데이터 범위 그대로. 대상 딜이 없거나 PIC 미지정이면 통과.
-    if action != "view" and module in ("rfq", "po", "documents", "ar"):
+    if action != "view" and module in ("rfq", "po", "documents", "ar", "marketing"):
         owner = _deal_owner_from_path(request.url.path)
         if owner is not None and owner != (user.get("id") or 0):
             return _authz_error(request, 403, "담당자(PIC)만 이 건을 수정·삭제할 수 있습니다.")
@@ -3583,6 +3590,171 @@ def vendor_po_overview():
                 "sent": (po.status == "이메일 발송완료"),
             })
         return {"rows": rows}
+    finally:
+        s.close()
+
+
+# ── 마케팅 활동 (잠정 고객사 대상) ───────────────────────────────────────────
+class MarketingActivityCreate(BaseModel):
+    customer_id: int | None = None
+    prospect_name: str | None = ""
+    activity_date: str | None = ""
+    channel: str | None = ""
+    activity_type: str | None = ""
+    subject: str | None = ""
+    notes: str | None = ""
+    next_action_date: str | None = ""
+
+
+def _marketing_target_name(m: MarketingActivity, cust_names: dict) -> str:
+    """활동 대상 표기명 — 연결 고객사가 있으면 그 이름, 없으면 잠정사 자유입력."""
+    if m.customer_id and m.customer_id in cust_names:
+        return cust_names[m.customer_id]
+    return m.prospect_name or "—"
+
+
+def _marketing_row(m: MarketingActivity, cust_names: dict, user_names: dict) -> dict:
+    return {
+        "id": m.id,
+        "customer_id": m.customer_id,
+        "customer": _marketing_target_name(m, cust_names),
+        "prospect_name": m.prospect_name or "",
+        "is_prospect": not bool(m.customer_id),
+        "activity_date": m.activity_date or "",
+        "channel": m.channel or "",
+        "activity_type": m.activity_type or "",
+        "subject": m.subject or "",
+        "notes": m.notes or "",
+        "next_action_date": m.next_action_date or "",
+        "owner_id": m.owner_id or 0,
+        "owner": user_names.get(m.owner_id, "") if m.owner_id else "",
+    }
+
+
+def _marketing_scoped(s, user: dict):
+    """조회 범위 적용된 MarketingActivity 쿼리. 'own' 역할은 본인 담당 건만."""
+    q = s.query(MarketingActivity).order_by(MarketingActivity.id.desc())
+    role = user.get("role", "")
+    if role != UserRole.ADMIN.value and _scope_for(role) == "own":
+        q = q.filter(MarketingActivity.owner_id == (user.get("id") or 0))
+    return q
+
+
+@app.get("/api/admin/marketing", dependencies=[Depends(require_token)])
+def marketing_list(user: dict = Depends(get_current_user)):
+    """잠정 고객사 마케팅 활동 목록."""
+    s = get_session()
+    try:
+        cust_names = {c.id: c.name for c in s.query(Customer).all()}
+        user_names = {u.id: u.username for u in s.query(User).all()}
+        rows = [_marketing_row(m, cust_names, user_names)
+                for m in _marketing_scoped(s, user).all()]
+        return {"rows": rows}
+    finally:
+        s.close()
+
+
+@app.post("/api/admin/marketing", dependencies=[Depends(require_token)])
+def create_marketing(body: MarketingActivityCreate, user: dict = Depends(get_current_user)):
+    if not (body.customer_id or (body.prospect_name or "").strip()):
+        raise HTTPException(status_code=400, detail="대상 고객사(선택) 또는 잠정사 이름을 입력하세요.")
+    s = get_session()
+    try:
+        m = MarketingActivity(
+            customer_id=body.customer_id or None,
+            prospect_name=(body.prospect_name or "").strip(),
+            activity_date=body.activity_date or "",
+            channel=body.channel or "",
+            activity_type=body.activity_type or "",
+            subject=body.subject or "",
+            notes=body.notes or "",
+            next_action_date=body.next_action_date or "",
+            owner_id=user.get("id") or None,
+        )
+        s.add(m)
+        s.commit()
+        return {"ok": True, "id": m.id}
+    finally:
+        s.close()
+
+
+@app.put("/api/admin/marketing/{row_id}", dependencies=[Depends(require_token)])
+def update_marketing(row_id: int, body: MarketingActivityCreate):
+    if not (body.customer_id or (body.prospect_name or "").strip()):
+        raise HTTPException(status_code=400, detail="대상 고객사(선택) 또는 잠정사 이름을 입력하세요.")
+    s = get_session()
+    try:
+        m = s.query(MarketingActivity).filter_by(id=row_id).first()
+        if not m:
+            raise HTTPException(status_code=404, detail="마케팅 활동을 찾을 수 없습니다.")
+        m.customer_id = body.customer_id or None
+        m.prospect_name = (body.prospect_name or "").strip()
+        m.activity_date = body.activity_date or ""
+        m.channel = body.channel or ""
+        m.activity_type = body.activity_type or ""
+        m.subject = body.subject or ""
+        m.notes = body.notes or ""
+        m.next_action_date = body.next_action_date or ""
+        s.commit()
+        return {"ok": True, "id": m.id}
+    finally:
+        s.close()
+
+
+@app.delete("/api/admin/marketing/{row_id}", dependencies=[Depends(require_token)])
+def delete_marketing(row_id: int):
+    s = get_session()
+    try:
+        m = s.query(MarketingActivity).filter_by(id=row_id).first()
+        if not m:
+            raise HTTPException(status_code=404, detail="마케팅 활동을 찾을 수 없습니다.")
+        s.delete(m)
+        s.commit()
+        return {"ok": True}
+    finally:
+        s.close()
+
+
+@app.get("/api/admin/marketing-overview", dependencies=[Depends(require_token)])
+def marketing_overview(user: dict = Depends(get_current_user)):
+    """대시보드 마케팅 카드용 요약.
+      - recent:      최근 활동 목록(최신순)
+      - follow_ups:  후속 예정(next_action_date 있는 건, 예정일 오름차순)
+      - month:       이번 달 활동 집계(총건수 + 채널별·유형별)
+    """
+    s = get_session()
+    try:
+        cust_names = {c.id: c.name for c in s.query(Customer).all()}
+        user_names = {u.id: u.username for u in s.query(User).all()}
+        items = _marketing_scoped(s, user).all()
+        rows = [_marketing_row(m, cust_names, user_names) for m in items]
+
+        today = (datetime.utcnow() + timedelta(hours=9)).strftime("%Y-%m-%d")
+        month = today[:7]
+
+        follow_ups = sorted(
+            (r for r in rows if r["next_action_date"]),
+            key=lambda r: r["next_action_date"],
+        )
+        this_month = [r for r in rows if (r["activity_date"] or "")[:7] == month]
+        by_channel: dict[str, int] = {}
+        by_type: dict[str, int] = {}
+        for r in this_month:
+            if r["channel"]:
+                by_channel[r["channel"]] = by_channel.get(r["channel"], 0) + 1
+            if r["activity_type"]:
+                by_type[r["activity_type"]] = by_type.get(r["activity_type"], 0) + 1
+
+        return {
+            "recent": rows[:20],
+            "follow_ups": follow_ups[:20],
+            "month": {
+                "period": month,
+                "total": len(this_month),
+                "by_channel": by_channel,
+                "by_type": by_type,
+            },
+        }
     finally:
         s.close()
 

@@ -15,7 +15,7 @@ export type AuthUser = {
 // 권한 그리드: {module: {action: bool}}
 export type PermGrid = Record<string, Record<string, boolean>>;
 export type PermModule =
-  | "dashboard" | "progress" | "rfq" | "po" | "documents" | "ar" | "settings";
+  | "dashboard" | "progress" | "rfq" | "po" | "documents" | "ar" | "marketing" | "settings";
 export type PermAction = "view" | "create" | "edit" | "delete";
 
 export function getToken(): string {

@@ -847,3 +847,31 @@ export type PurchaseOrderDetail = {
   currency: string;
   items: PoWorkItem[];
 };
+
+// ── 마케팅 활동(잠정 고객사) ──────────────────────────────────────────────────
+export type MarketingRow = {
+  id: number;
+  customer_id: number | null;
+  customer: string;        // 대상 표기명(연결 고객사 또는 잠정사)
+  prospect_name: string;
+  is_prospect: boolean;    // 미등록 잠정사 여부
+  activity_date: string;
+  channel: string;
+  activity_type: string;
+  subject: string;
+  notes: string;
+  next_action_date: string;
+  owner_id: number;
+  owner: string;
+};
+
+export type MarketingOverview = {
+  recent: MarketingRow[];
+  follow_ups: MarketingRow[];
+  month: {
+    period: string;
+    total: number;
+    by_channel: Record<string, number>;
+    by_type: Record<string, number>;
+  };
+};

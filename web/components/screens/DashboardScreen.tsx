@@ -7,9 +7,11 @@ import {
   fetchQuotationOverview,
   fetchPipeline,
   fetchArOverview,
+  fetchMarketingOverview,
 } from "@/lib/api";
 import { useCachedData } from "@/lib/useCachedData";
-import type { QtnRow, PipelineRow, ArRow } from "@/lib/types";
+import { can } from "@/lib/auth";
+import type { QtnRow, PipelineRow, ArRow, MarketingRow, MarketingOverview } from "@/lib/types";
 import { tr } from "@/lib/labels";
 import FilterTable, { ColumnDef } from "@/components/common/FilterTable";
 import CustomerName from "@/components/common/CustomerName";
@@ -122,6 +124,12 @@ function HomeTab() {
   const { data: qtn } = useCachedData("home:quotations", () => fetchQuotationOverview());
   const { data: pipeline } = useCachedData("pipeline", () => fetchPipeline());
   const { data: ar } = useCachedData("ar:overview", fetchArOverview);
+  // 마케팅 요약 — 열람 권한이 있을 때만 로드(없으면 카드 미표시).
+  const canMarketing = can("marketing", "view");
+  const { data: marketing } = useCachedData(
+    "home:marketing",
+    () => (canMarketing ? fetchMarketingOverview() : Promise.resolve(null)),
+  );
 
   const qtnRows = useMemo(() => qtn?.rows ?? [], [qtn]);
   const arRows = useMemo(() => ar?.rows ?? [], [ar]);
@@ -243,6 +251,15 @@ function HomeTab() {
     { key: "amount", label: "Amount", numeric: true, text: (r) => r.amount },
   ];
 
+  // 마케팅(잠정 고객사) — 최근 활동 목록 컬럼.
+  const marketingCols: ColumnDef<MarketingRow>[] = [
+    { key: "activity_date", label: "Date", text: (r) => r.activity_date || "", filter: "date" },
+    { key: "customer", label: "Target", text: (r) => r.customer || "", filter: "facet", render: (r) => (r.is_prospect ? <span>{r.customer || "—"}</span> : <CustomerName name={r.customer || ""} />) },
+    { key: "activity_type", label: "Activity", text: (r) => r.activity_type || "", filter: "facet" },
+    { key: "channel", label: "Channel", text: (r) => r.channel || "", filter: "facet" },
+    { key: "next_action_date", label: "Follow-up", text: (r) => r.next_action_date || "", filter: "date" },
+  ];
+
   // 일정 관리 — 백엔드 일정 데이터 미구현. 자리(빈 표)만 둔다.
   const scheduleCols: ColumnDef<never>[] = [
     { key: "date", label: "Date", text: () => "", filter: "date" },
@@ -338,6 +355,23 @@ function HomeTab() {
         />
       ),
     },
+    ...(canMarketing
+      ? {
+          marketing: {
+            title: "Marketing",
+            sub: "Prospect outreach",
+            body: !marketing ? (
+              <div className="state">Loading…</div>
+            ) : (
+              <MarketingCardBody
+                data={marketing}
+                columns={marketingCols}
+                onRowClick={() => router.push("/marketing")}
+              />
+            ),
+          },
+        }
+      : {}),
   };
 
   const order = useHomeOrder(Object.keys(cards));
@@ -420,6 +454,45 @@ function useHomeOrder(defaults: string[]) {
   }
 
   return { ids, dragId, onDragStart, onDragOver, onDragEnd };
+}
+
+/* 마케팅 카드 본문 — 이번 달 집계 + 후속 예정 요약을 상단에, 최근 활동표를 아래에. */
+function MarketingCardBody({
+  data,
+  columns,
+  onRowClick,
+}: {
+  data: MarketingOverview;
+  columns: ColumnDef<MarketingRow>[];
+  onRowClick: (r: MarketingRow) => void;
+}) {
+  const t = today();
+  const dueFollowUps = data.follow_ups.filter((r) => r.next_action_date && r.next_action_date <= t).length;
+  const topChannels = Object.entries(data.month.by_channel)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([k, v]) => `${k} ${v}`)
+    .join(" · ");
+
+  return (
+    <>
+      <div className="home-marketing-summary" style={{ display: "flex", gap: 16, flexWrap: "wrap", padding: "0 4px 8px", fontSize: 13 }}>
+        <span>This month: <b>{data.month.total}</b></span>
+        <span>Follow-ups: <b>{data.follow_ups.length}</b>{dueFollowUps > 0 ? <b className="home-late"> ({dueFollowUps} due)</b> : null}</span>
+        {topChannels ? <span style={{ color: "#64748b" }}>{topChannels}</span> : null}
+      </div>
+      <FilterTable
+        tableId="dash-marketing"
+        rows={data.recent}
+        columns={columns}
+        getRowKey={(r) => r.id}
+        defaultSortKey="activity_date"
+        defaultSortDir="desc"
+        onRowClick={onRowClick}
+        empty="No marketing activities yet."
+      />
+    </>
+  );
 }
 
 /** "YYYY-MM-DDTHH:MM" → "yy-mm-dd HH:MM". 시각 없으면 날짜만. */
