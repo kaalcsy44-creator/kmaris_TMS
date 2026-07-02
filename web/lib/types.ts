@@ -855,6 +855,8 @@ export type MarketingRow = {
   customer: string;        // 대상 표기명(연결 고객사 또는 잠정사)
   prospect_name: string;
   is_prospect: boolean;    // 미등록 잠정사 여부
+  contact_person: string;  // 고객사 담당자
+  recipient_email: string; // 고객 수신 이메일 주소
   activity_date: string;
   channel: string;
   activity_type: string;

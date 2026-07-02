@@ -25,6 +25,8 @@ const ACTIVITY_TYPES = ["Brochure sent", "Intro email", "Visit", "Meeting", "Sam
 type Form = {
   customer_id: number | "";
   prospect_name: string;
+  contact_person: string;
+  recipient_email: string;
   activity_date: string;
   channel: string;
   activity_type: string;
@@ -36,6 +38,8 @@ type Form = {
 const emptyForm: Form = {
   customer_id: "",
   prospect_name: "",
+  contact_person: "",
+  recipient_email: "",
   activity_date: today(),
   channel: "Email",
   activity_type: "Brochure sent",
@@ -48,6 +52,8 @@ function rowToForm(r: MarketingRow): Form {
   return {
     customer_id: r.customer_id ?? "",
     prospect_name: r.prospect_name,
+    contact_person: r.contact_person,
+    recipient_email: r.recipient_email,
     activity_date: r.activity_date || today(),
     channel: r.channel,
     activity_type: r.activity_type,
@@ -61,6 +67,8 @@ function formToBody(f: Form): MarketingSave {
   return {
     customer_id: f.customer_id === "" ? null : f.customer_id,
     prospect_name: f.prospect_name.trim(),
+    contact_person: f.contact_person.trim(),
+    recipient_email: f.recipient_email.trim(),
     activity_date: f.activity_date,
     channel: f.channel,
     activity_type: f.activity_type,
@@ -107,6 +115,8 @@ export default function MarketingScreen() {
         </span>
       ),
     },
+    { key: "contact_person", label: "Contact", text: (r) => r.contact_person || "" },
+    { key: "recipient_email", label: "Email", text: (r) => r.recipient_email || "" },
     { key: "activity_type", label: "Activity", text: (r) => r.activity_type || "", filter: "facet" },
     { key: "channel", label: "Channel", text: (r) => r.channel || "", filter: "facet" },
     { key: "subject", label: "Subject", text: (r) => r.subject || "" },
@@ -259,6 +269,17 @@ function MarketingForm({
               onChange={(v) => setForm({ ...form, prospect_name: v })}
             />
           ) : null}
+          <Field
+            label="Contact person"
+            value={form.contact_person}
+            onChange={(v) => setForm({ ...form, contact_person: v })}
+          />
+          <Field
+            label="Recipient email"
+            type="email"
+            value={form.recipient_email}
+            onChange={(v) => setForm({ ...form, recipient_email: v })}
+          />
           <Field
             label="Activity date"
             type="date"

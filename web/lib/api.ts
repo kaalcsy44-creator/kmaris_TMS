@@ -456,6 +456,8 @@ export function fetchArOverview(): Promise<ArData> {
 export type MarketingSave = {
   customer_id?: number | null;
   prospect_name?: string;
+  contact_person?: string;
+  recipient_email?: string;
   activity_date?: string;
   channel?: string;
   activity_type?: string;

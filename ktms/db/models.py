@@ -350,6 +350,8 @@ class MarketingActivity(Base):
     id               = Column(Integer, primary_key=True)
     customer_id      = Column(Integer, ForeignKey("customers.id"), nullable=True)  # 기존 고객사 연결(선택)
     prospect_name    = Column(String(200))   # 미등록 잠정사 자유입력(customer_id 없을 때)
+    contact_person   = Column(String(100))   # 고객사 담당자
+    recipient_email  = Column(String(200))   # 고객 수신 이메일 주소
     activity_date    = Column(String(10))    # 활동일 YYYY-MM-DD
     channel          = Column(String(40))    # 발송수단: Email/전화/방문/전시회/WhatsApp 등
     activity_type    = Column(String(40))    # 홍보자료 발송/소개메일/방문/미팅/팔로업 등

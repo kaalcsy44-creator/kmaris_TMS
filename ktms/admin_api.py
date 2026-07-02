@@ -3598,6 +3598,8 @@ def vendor_po_overview():
 class MarketingActivityCreate(BaseModel):
     customer_id: int | None = None
     prospect_name: str | None = ""
+    contact_person: str | None = ""
+    recipient_email: str | None = ""
     activity_date: str | None = ""
     channel: str | None = ""
     activity_type: str | None = ""
@@ -3620,6 +3622,8 @@ def _marketing_row(m: MarketingActivity, cust_names: dict, user_names: dict) -> 
         "customer": _marketing_target_name(m, cust_names),
         "prospect_name": m.prospect_name or "",
         "is_prospect": not bool(m.customer_id),
+        "contact_person": m.contact_person or "",
+        "recipient_email": m.recipient_email or "",
         "activity_date": m.activity_date or "",
         "channel": m.channel or "",
         "activity_type": m.activity_type or "",
@@ -3663,6 +3667,8 @@ def create_marketing(body: MarketingActivityCreate, user: dict = Depends(get_cur
         m = MarketingActivity(
             customer_id=body.customer_id or None,
             prospect_name=(body.prospect_name or "").strip(),
+            contact_person=body.contact_person or "",
+            recipient_email=body.recipient_email or "",
             activity_date=body.activity_date or "",
             channel=body.channel or "",
             activity_type=body.activity_type or "",
@@ -3689,6 +3695,8 @@ def update_marketing(row_id: int, body: MarketingActivityCreate):
             raise HTTPException(status_code=404, detail="마케팅 활동을 찾을 수 없습니다.")
         m.customer_id = body.customer_id or None
         m.prospect_name = (body.prospect_name or "").strip()
+        m.contact_person = body.contact_person or ""
+        m.recipient_email = body.recipient_email or ""
         m.activity_date = body.activity_date or ""
         m.channel = body.channel or ""
         m.activity_type = body.activity_type or ""

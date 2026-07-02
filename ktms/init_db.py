@@ -74,6 +74,10 @@ _MIGRATIONS = {
     "purchase_orders": {
         "sent_to_email": "VARCHAR(200)",
     },
+    "marketing_activities": {
+        "contact_person": "VARCHAR(100)",
+        "recipient_email": "VARCHAR(200)",
+    },
 }
 
 
