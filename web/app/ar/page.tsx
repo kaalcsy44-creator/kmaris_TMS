@@ -190,9 +190,12 @@ function ArOverview() {
     projectNoColumn<ArRow>({ projectNo: (r) => r.project_no, firstRfqAt: (r) => r.first_rfq_at }),
     ...identityColumns<ArRow>({
       customer: (r) => r.customer,
+      projectTitle: (r) => r.project_title || "",
+      contactPerson: (r) => r.contact_person || "",
       vessel: (r) => r.vessel,
       workType: (r) => r.work_type,
       tradeType: (r) => r.trade_type,
+      pic: (r) => r.assignee || "",
     }),
     { key: "vendor", label: "Vendor", text: (r) => r.vendor || "", filter: "facet", render: (r) => <VendorName name={r.vendor || ""} /> },
     { key: "ci_no", label: "CI No.", text: (r) => r.ci_no || "" },

@@ -993,6 +993,7 @@ def rfq_overview(customer_id: int | None = None, work_type: str | None = None,
         cust_names = {c.id: c.name for c in s.query(Customer).all()}
         vessel_names = {v.id: v.name for v in s.query(Vessel).all()}
         vendor_names = {v.id: v.name for v in s.query(Vendor).all()}
+        user_names = {u.id: u.username for u in s.query(User).all()}
 
         q = s.query(RFQ).order_by(RFQ.id.desc())
         if customer_id:
@@ -1050,6 +1051,8 @@ def rfq_overview(customer_id: int | None = None, work_type: str | None = None,
                 "customer_rfq_no": r.customer_rfq_no or "",
                 "project_title": getattr(r, "project_title", None) or "",
                 "contact_person": getattr(r, "contact_person", None) or "",
+                "assignee": user_names.get(getattr(r, "created_by", None), "") or "",
+                "assignee_id": getattr(r, "created_by", None) or 0,
                 "level": _enum_val(r.follow_up_level) if r.follow_up_level else "B",
                 "work_type": _enum_val(r.work_type) if r.work_type else "부품공급",
                 "customer": cust_names.get(r.customer_id, "—"),
@@ -1741,6 +1744,7 @@ def po_work_options():
 
         cust_names = {c["id"]: c["name"] for c in customers}
         vessel_names = {v["id"]: v["name"] for v in vessels}
+        user_names = {u.id: u.username for u in s.query(User).all()}
 
         rfqs = []
         for r in s.query(RFQ).order_by(RFQ.id.desc()).all():
@@ -1791,6 +1795,10 @@ def po_work_options():
                 "status": _status_label(stage, rfq.work_type) if rfq else _enum_val(o.status),
                 "items": [_item_view(it) for it in (o.items or [])],
                 # 공통 식별 컬럼
+                "project_title": (getattr(rfq, "project_title", None) or "") if rfq else "",
+                "contact_person": (getattr(rfq, "contact_person", None) or "") if rfq else "",
+                "assignee": (user_names.get(rfq.created_by, "") or "") if rfq else "",
+                "assignee_id": (rfq.created_by or 0) if rfq else 0,
                 "work_type": (_enum_val(rfq.work_type) if rfq and rfq.work_type else "부품공급"),
                 "first_rfq_at": _first_rfq_iso(rfq),
                 "project_no": _project_no_map(s).get(rfq.id, "") if rfq else "",
@@ -1818,6 +1826,10 @@ def po_work_options():
                 "currency": (qtn.currency if qtn else "USD") or "USD",
                 # 공통 식별 컬럼
                 "customer": cust_names.get(o.customer_id, "—") if o else "—",
+                "project_title": (getattr(rfq, "project_title", None) or "") if rfq else "",
+                "contact_person": (getattr(rfq, "contact_person", None) or "") if rfq else "",
+                "assignee": (user_names.get(rfq.created_by, "") or "") if rfq else "",
+                "assignee_id": (rfq.created_by or 0) if rfq else 0,
                 "vessel": (vessel_names.get(o.vessel_id, "") if o and o.vessel_id else ""),
                 "trade_type": (o.trade_type or "수출") if o else "수출",
                 "work_type": (_enum_val(rfq.work_type) if rfq and rfq.work_type else "부품공급"),
@@ -2369,6 +2381,8 @@ def ar_overview():
                 "order_id": r.order_id,
                 "assignee_id": (rfq.created_by or 0) if rfq else 0,
                 "assignee": (user_names.get(rfq.created_by, "") or "") if rfq else "",
+                "project_title": (getattr(rfq, "project_title", None) or "") if rfq else "",
+                "contact_person": (getattr(rfq, "contact_person", None) or "") if rfq else "",
                 "ci_no": r.ci_no or "",
                 "customer": cust,
                 "currency": r.currency or "USD",
@@ -2678,6 +2692,7 @@ def vrfq_overview():
         vendor_emails = {v.id: (v.email or "") for v in s.query(Vendor).all()}
         cust_names = {c.id: c.name for c in s.query(Customer).all()}
         vessel_names = {v.id: v.name for v in s.query(Vessel).all()}
+        user_names = {u.id: u.username for u in s.query(User).all()}
         rfq_map = {r.id: r for r in s.query(RFQ).all()}
 
         quote_counts: dict[int, int] = {}
@@ -2702,6 +2717,8 @@ def vrfq_overview():
                 "customer": cust_names.get(rfq.customer_id, "—") if rfq else "—",
                 "project_title": (getattr(rfq, "project_title", None) or "") if rfq else "",
                 "contact_person": (getattr(rfq, "contact_person", None) or "") if rfq else "",
+                "assignee": (user_names.get(rfq.created_by, "") or "") if rfq else "",
+                "assignee_id": (rfq.created_by or 0) if rfq else 0,
                 "level": (_enum_val(rfq.follow_up_level) if rfq and rfq.follow_up_level else "B"),
                 "vessel": (vessel_names.get(rfq.vessel_id, "") if rfq and rfq.vessel_id else ""),
                 "work_type": (_enum_val(rfq.work_type) if rfq and rfq.work_type else "부품공급"),
@@ -2721,6 +2738,7 @@ def vendor_quote_overview():
         vendor_names = {v.id: v.name for v in s.query(Vendor).all()}
         cust_names = {c.id: c.name for c in s.query(Customer).all()}
         vessel_names = {v.id: v.name for v in s.query(Vessel).all()}
+        user_names = {u.id: u.username for u in s.query(User).all()}
         rfq_map = {r.id: r for r in s.query(RFQ).all()}
         # vendor_rfq_id → (rfq_id, vendor_id, vrfq_no)
         vrfq_map = {vr.id: vr for vr in s.query(VendorRFQ).all()}
@@ -2751,6 +2769,8 @@ def vendor_quote_overview():
                 "customer": cust_names.get(rfq.customer_id, "—") if rfq else "—",
                 "project_title": (getattr(rfq, "project_title", None) or "") if rfq else "",
                 "contact_person": (getattr(rfq, "contact_person", None) or "") if rfq else "",
+                "assignee": (user_names.get(rfq.created_by, "") or "") if rfq else "",
+                "assignee_id": (rfq.created_by or 0) if rfq else 0,
                 "level": (_enum_val(rfq.follow_up_level) if rfq and rfq.follow_up_level else "B"),
                 "status": (_status_label(_pipeline_stage(s, rfq.id), rfq.work_type) if rfq else ""),
                 "vessel": (vessel_names.get(rfq.vessel_id, "") if rfq and rfq.vessel_id else ""),
@@ -2771,6 +2791,7 @@ def documents_overview():
         cust_names = {c.id: c.name for c in s.query(Customer).all()}
         vessel_names = {v.id: v.name for v in s.query(Vessel).all()}
         vendor_names = {v.id: v.name for v in s.query(Vendor).all()}
+        user_names = {u.id: u.username for u in s.query(User).all()}
         # order_id → 발주 Vendor 이름들(중복 제거, 발주 순). 표시는 첫 벤더 + 외 N곳.
         po_vendors_by_order: dict[int, list[str]] = {}
         for po in s.query(PurchaseOrder).order_by(PurchaseOrder.id).all():
@@ -2814,6 +2835,10 @@ def documents_overview():
             rows.append({
                 "id": o.id,
                 "customer": cust_names.get(o.customer_id, "—"),
+                "project_title": (getattr(rfq, "project_title", None) or "") if rfq else "",
+                "contact_person": (getattr(rfq, "contact_person", None) or "") if rfq else "",
+                "assignee": (user_names.get(rfq.created_by, "") or "") if rfq else "",
+                "assignee_id": (rfq.created_by or 0) if rfq else 0,
                 "vessel": vessel_names.get(o.vessel_id, "") if o.vessel_id else "",
                 "po_no": o.po_no or "",
                 "trade_type": o.trade_type or "수출",

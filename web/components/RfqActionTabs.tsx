@@ -249,6 +249,7 @@ function CustomerRfqList({
       contactPerson: (r) => r.contact_person || "",
       vessel: (r) => (r.vessel && r.vessel !== "—" ? r.vessel : ""),
       workType: (r) => r.work_type,
+      pic: (r) => r.assignee || "",
     }),
     {
       key: "customer_rfq_no",
@@ -373,6 +374,7 @@ function VendorRfqList({
       contactPerson: (r) => r.contact_person || "",
       vessel: (r) => r.vessel,
       workType: (r) => r.work_type,
+      pic: (r) => r.assignee || "",
     }),
     { key: "customer_rfq_no", label: "Customer RFQ No.", text: (r) => r.customer_rfq_no || "" },
     { key: "vendor", label: "Vendor", text: (r) => r.vendor || "", filter: "facet", render: (r) => <VendorName name={r.vendor || ""} /> },
@@ -766,6 +768,7 @@ function VendorQuoteList({
       contactPerson: (r) => r.contact_person || "",
       vessel: (r) => r.vessel,
       workType: (r) => r.work_type,
+      pic: (r) => r.assignee || "",
     }),
     { key: "vendor_quote_no", label: "Vendor quote no.", text: (r) => r.vendor_quote_no || "" },
     {
@@ -1081,6 +1084,7 @@ function CustomerQuoteList({
       contactPerson: (r) => r.contact_person || "",
       vessel: (r) => r.vessel,
       workType: (r) => r.work_type,
+      pic: (r) => r.assignee || "",
     }),
     {
       key: "qtn_no",

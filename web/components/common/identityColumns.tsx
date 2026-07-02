@@ -46,6 +46,8 @@ export type IdentityAccessors<T> = {
   workType: (r: T) => string;
   /** 거래구분 원문("수출"/"내수"). 주면 Trade 컬럼 추가(오더 존재 단계 5~12). */
   tradeType?: (r: T) => string;
+  /** 담당자(PIC=RFQ.created_by username). 주면 마지막에 PIC 컬럼 추가. */
+  pic?: (r: T) => string;
 };
 
 /** 공통 식별 컬럼(Customer · [Project] · [Contact] · Vessel · Type · [Trade]). 최초 RFQ
@@ -96,6 +98,16 @@ export function identityColumns<T>(a: IdentityAccessors<T>): ColumnDef<T>[] {
       filter: "facet",
       text: (r) => tr(trade(r) || "수출"),
       render: (r) => <span className="ar-badge">{tr(trade(r) || "수출")}</span>,
+    });
+  }
+  if (a.pic) {
+    const pic = a.pic;
+    cols.push({
+      key: "pic",
+      label: "PIC",
+      filter: "facet",
+      text: (r) => pic(r) || "",
+      render: (r) => pic(r) || <span className="dash">—</span>,
     });
   }
   return cols;

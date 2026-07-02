@@ -132,9 +132,12 @@ function CustomerPoTab({
     projectNoColumn<OrderOpt>({ projectNo: (o) => o.project_no, firstRfqAt: (o) => o.first_rfq_at }),
     ...identityColumns<OrderOpt>({
       customer: (o) => o.customer,
+      projectTitle: (o) => o.project_title || "",
+      contactPerson: (o) => o.contact_person || "",
       vessel: (o) => o.vessel,
       workType: (o) => o.work_type,
       tradeType: (o) => o.trade_type,
+      pic: (o) => o.assignee || "",
     }),
     {
       key: "po_no",
@@ -488,9 +491,12 @@ function VendorPoTab({
     projectNoColumn<PoOpt>({ projectNo: (p) => p.project_no, firstRfqAt: (p) => p.first_rfq_at }),
     ...identityColumns<PoOpt>({
       customer: (p) => p.customer,
+      projectTitle: (p) => p.project_title || "",
+      contactPerson: (p) => p.contact_person || "",
       vessel: (p) => p.vessel,
       workType: (p) => p.work_type,
       tradeType: (p) => p.trade_type,
+      pic: (p) => p.assignee || "",
     }),
     { key: "customer_po_no", label: "PO No.", text: (p) => p.customer_po_no || "" },
     { key: "po_no", label: "K-Maris PO No.", text: (p) => p.po_no || "" },

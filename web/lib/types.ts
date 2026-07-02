@@ -3,6 +3,8 @@ export type RfqRow = {
   customer_rfq_no: string;
   project_title: string;
   contact_person?: string;
+  assignee?: string;      // 담당자(PIC) username
+  assignee_id?: number;   // 담당자(PIC) = RFQ.created_by (0 = 미지정)
   level?: string;
   work_type: string;
   customer: string;
@@ -262,6 +264,10 @@ export type PoWorkOptions = {
     currency: string;
     status: string;
     items: PoWorkItem[];
+    project_title?: string;
+    contact_person?: string;
+    assignee?: string;
+    assignee_id?: number;
     work_type: string;
     first_rfq_at: string;
   project_no: string;
@@ -280,6 +286,10 @@ export type PoWorkOptions = {
     sent: boolean;
     items: PoWorkItem[];
     customer: string;
+    project_title?: string;
+    contact_person?: string;
+    assignee?: string;
+    assignee_id?: number;
     vessel: string;
     trade_type: string;
     currency: string;
@@ -358,6 +368,8 @@ export type VendorQuoteOverviewRow = {
   customer: string;
   project_title?: string;
   contact_person?: string;
+  assignee?: string;      // 담당자(PIC) username
+  assignee_id?: number;   // 담당자(PIC) = RFQ.created_by (0 = 미지정)
   level?: string;
   status?: string;
   vessel: string;
@@ -417,6 +429,8 @@ export type VrfqRow = {
   customer: string;
   project_title?: string;
   contact_person?: string;
+  assignee?: string;      // 담당자(PIC) username
+  assignee_id?: number;   // 담당자(PIC) = RFQ.created_by (0 = 미지정)
   level?: string;
   vessel: string;
   work_type: string;
@@ -427,6 +441,10 @@ export type VrfqRow = {
 export type DocRow = {
   id: number;
   customer: string;
+  project_title?: string;
+  contact_person?: string;
+  assignee?: string;      // 담당자(PIC) username
+  assignee_id?: number;   // 담당자(PIC) = RFQ.created_by (0 = 미지정)
   vessel: string;
   po_no: string;
   trade_type: string;
@@ -545,6 +563,8 @@ export type ArRow = {
   order_id: number;
   assignee_id: number; // 담당자(PIC) = RFQ.created_by (0 = 미지정)
   assignee?: string;   // 담당자(PIC) username
+  project_title?: string;
+  contact_person?: string;
   ci_no: string;
   customer: string;
   currency: string;
