@@ -4,6 +4,7 @@ from __future__ import annotations
 from _core import (
     Customer,
     Depends,
+    _deal_identity,
     File,
     HTTPException,
     RFQ,
@@ -85,17 +86,9 @@ def vrfq_overview():
                 "status": vr.status or "",
                 "item_count": len(vr.items or []),
                 "quote_count": quote_counts.get(vr.id, 0),
-                # 공통 식별 컬럼
-                "customer": cust_names.get(rfq.customer_id, "—") if rfq else "—",
-                "project_title": (getattr(rfq, "project_title", None) or "") if rfq else "",
-                "contact_person": (getattr(rfq, "contact_person", None) or "") if rfq else "",
-                "assignee": (user_names.get(rfq.created_by, "") or "") if rfq else "",
-                "assignee_id": (rfq.created_by or 0) if rfq else 0,
-                "level": (_enum_val(rfq.follow_up_level) if rfq and rfq.follow_up_level else "B"),
-                "vessel": (vessel_names.get(rfq.vessel_id, "") if rfq and rfq.vessel_id else ""),
-                "work_type": (_enum_val(rfq.work_type) if rfq and rfq.work_type else "부품공급"),
-                "first_rfq_at": _first_rfq_iso(rfq),
-                "project_no": _project_no_map(s).get(vr.rfq_id, "") if vr.rfq_id else "",
+                # 공통 식별 컬럼(Deal identity)
+                **_deal_identity(s, rfq, cust_names=cust_names,
+                                 vessel_names=vessel_names, user_names=user_names),
             })
         return {"rows": rows}
     finally:
@@ -137,18 +130,10 @@ def vendor_quote_overview():
                 "item_count": len(items),
                 "amount": round(amount, 2),
                 "currency": getattr(q, "currency", None) or "USD",
-                # 공통 식별 컬럼
-                "customer": cust_names.get(rfq.customer_id, "—") if rfq else "—",
-                "project_title": (getattr(rfq, "project_title", None) or "") if rfq else "",
-                "contact_person": (getattr(rfq, "contact_person", None) or "") if rfq else "",
-                "assignee": (user_names.get(rfq.created_by, "") or "") if rfq else "",
-                "assignee_id": (rfq.created_by or 0) if rfq else 0,
-                "level": (_enum_val(rfq.follow_up_level) if rfq and rfq.follow_up_level else "B"),
+                # 공통 식별 컬럼(Deal identity)
+                **_deal_identity(s, rfq, cust_names=cust_names,
+                                 vessel_names=vessel_names, user_names=user_names),
                 "status": (_status_label(_pipeline_stage(s, rfq.id), rfq.work_type) if rfq else ""),
-                "vessel": (vessel_names.get(rfq.vessel_id, "") if rfq and rfq.vessel_id else ""),
-                "work_type": (_enum_val(rfq.work_type) if rfq and rfq.work_type else "부품공급"),
-                "first_rfq_at": _first_rfq_iso(rfq),
-                "project_no": _project_no_map(s).get(rfq.id, "") if rfq else "",
             })
         return {"rows": rows}
     finally:

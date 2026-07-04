@@ -1089,6 +1089,29 @@ def _project_no_for_order(s, order) -> str:
     return _project_no_map(s).get(rfq.id, "") if rfq else ""
 
 
+def _deal_identity(s, rfq, *, cust_names, vessel_names, user_names) -> dict:
+    """목록(overview) 행 공통 'Deal 식별' 블록 — 여러 엔드포인트에 반복되던 필드를 통합.
+
+    이름은 미리 로드한 맵(cust_names/vessel_names/user_names)에서 조회해 N+1을 피한다.
+    rfq 가 없으면 각 필드의 기본값을 돌려준다. (customer/vessel 소스가 RFQ 아닌 Order
+    기준인 일부 목록은 현행대로 별도 처리 — 이 헬퍼는 RFQ 기준 식별에 한정.)
+
+    반환 키: customer·project_title·contact_person·assignee·assignee_id·level·
+    vessel·work_type·first_rfq_at·project_no."""
+    return {
+        "customer": cust_names.get(rfq.customer_id, "—") if rfq else "—",
+        "project_title": (getattr(rfq, "project_title", None) or "") if rfq else "",
+        "contact_person": (getattr(rfq, "contact_person", None) or "") if rfq else "",
+        "assignee": (user_names.get(rfq.created_by, "") or "") if rfq else "",
+        "assignee_id": (rfq.created_by or 0) if rfq else 0,
+        "level": (_enum_val(rfq.follow_up_level) if rfq and rfq.follow_up_level else "B"),
+        "vessel": (vessel_names.get(rfq.vessel_id, "") if rfq and rfq.vessel_id else ""),
+        "work_type": (_enum_val(rfq.work_type) if rfq and rfq.work_type else "부품공급"),
+        "first_rfq_at": _first_rfq_iso(rfq) if rfq else "",
+        "project_no": _project_no_map(s).get(rfq.id, "") if rfq else "",
+    }
+
+
 def _base_meta(s, rfq, order=None) -> dict:
     """모든 상세 팝업 공통 기본정보.
     Project No.·최초 RFQ 수신일시·고객·선박·업무타입·거래구분(오더 있을 때만)."""
