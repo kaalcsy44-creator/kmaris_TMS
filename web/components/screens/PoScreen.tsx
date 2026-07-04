@@ -68,7 +68,7 @@ export default function PoScreen() {
   return <PoActionTabs options={options} deepOrderId={deepOrderId} initialTab={tabParam} onChanged={load} />;
 }
 
-function PoActionTabs({
+export function PoActionTabs({
   options,
   deepOrderId,
   initialTab,
@@ -1476,4 +1476,3 @@ function cleanItems(items: PoWorkItem[]): PoWorkItem[] {
     .map(normalizeItem)
     .filter((it) => it.part_no.trim() || it.description.trim());
 }
-

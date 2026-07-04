@@ -135,12 +135,22 @@ type Editing =
   | { orderId: number; kind: DocKind }
   | { orderId: number; svc: SvcStage };
 
-function DocumentsOverview() {
+export function DocumentsOverview({
+  initialOrderId = null,
+  initialStage = null,
+  initialView = null,
+  embedded = false,
+}: {
+  initialOrderId?: number | null;
+  initialStage?: number | null;
+  initialView?: WorkView | null;
+  embedded?: boolean;
+} = {}) {
   const params = useSearchParams();
   const router = useRouter();
-  const orderParam = params.get("order");
-  const viewParam = params.get("view");
-  const stageParam = params.get("stage");
+  const orderParam = initialOrderId !== null ? String(initialOrderId) : params.get("order");
+  const viewParam = initialView ?? params.get("view");
+  const stageParam = initialStage !== null ? String(initialStage) : params.get("stage");
 
   const [workView, setWorkView] = useState<WorkView>(viewParam === "service" ? "service" : "parts");
   const [stage, setStage] = useState<StageTab>("s7");
@@ -193,7 +203,7 @@ function DocumentsOverview() {
   }
   function close() {
     setEditing(null);
-    if (orderParam) router.replace("/documents");
+    if (orderParam && !embedded) router.replace("/documents");
   }
 
   // 현재 단계에 해당하는 (부품공급) 문서 종류. 7단계는 CI/PL/SA seg-tab.

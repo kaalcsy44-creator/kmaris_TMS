@@ -1,10 +1,11 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { Suspense, useCallback, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
   fetchPipeline,
+  fetchRfqOverview,
+  fetchPoWorkOptions,
   deleteRfq,
   updateRfq,
   fetchCustomers,
@@ -21,6 +22,10 @@ import type { PipelineRow, CustomerOption, SettingsVessel, StageNote } from "@/l
 import WorkTypeBadge from "@/components/WorkTypeBadge";
 import CustomerName from "@/components/common/CustomerName";
 import VendorName from "@/components/common/VendorName";
+import RfqActionTabs from "@/components/RfqActionTabs";
+import { PoActionTabs } from "@/components/screens/PoScreen";
+import { DocumentsOverview } from "@/app/documents/page";
+import { ArOverview } from "@/app/ar/page";
 import { tr } from "@/lib/labels";
 import { getUser, can, isOwnScoped, canEditDeal } from "@/lib/auth";
 
@@ -97,6 +102,7 @@ function fmtStageDate(iso: string): string {
 }
 
 type Tab = "customer" | "internal";
+type WorkspaceTab = "overview" | "rfq" | "po" | "documents" | "ar" | "timeline";
 
 export default function ProgressScreen() {
   const [tab, setTab] = useState<Tab>("internal");
@@ -954,7 +960,6 @@ function PipelineModal({
   onChanged: () => void | Promise<unknown>;
   onClose: () => void;
 }) {
-  const router = useRouter();
   const backdropMouseDown = useRef(false);
   // 담당(PIC) 소유권: 비관리자는 본인이 담당인 딜만 편집/삭제. 남의 건은 조회만.
   const ownsDeal = canEditDeal(r.assignee_id);
@@ -965,7 +970,7 @@ function PipelineModal({
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   // 단계 상세 표시: 단계별 그룹(stages, 편집 가능) / 시간순 여정(timeline, 읽기전용)
-  const [detailView, setDetailView] = useState<"stages" | "timeline">("stages");
+  const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>("overview");
   // 편집 필드(편집 진입 시 r 값으로 seed)
   const [fWorkType, setFWorkType] = useState(r.work_type || "부품공급");
   const [fCustomerId, setFCustomerId] = useState<number | "">(r.customer_id || "");
@@ -1089,6 +1094,21 @@ function PipelineModal({
       return `/documents?order=${r.order_id}&view=parts&stage=9`;
     }
     return `/ar?order=${r.order_id}&stage=${no}`; // 10, 11
+  }
+
+  function tabForStage(no: number): WorkspaceTab | null {
+    if (no <= 4) return "rfq";
+    if (no <= 6) return "po";
+    if (no <= 9) {
+      if (no === 9 && (isService || r.trade_type === "?댁닔")) return "ar";
+      return "documents";
+    }
+    return "ar";
+  }
+
+  function openStageInWorkspace(no: number) {
+    const tab = tabForStage(no);
+    if (tab) setWorkspaceTab(tab);
   }
 
   return (
@@ -1269,25 +1289,57 @@ function PipelineModal({
           <div className="pl-detail-toggle" role="tablist" aria-label="Stage detail view">
             <button
               type="button"
-              className={detailView === "stages" ? "on" : ""}
-              aria-pressed={detailView === "stages"}
-              onClick={() => setDetailView("stages")}
+              className={workspaceTab === "overview" ? "on" : ""}
+              aria-pressed={workspaceTab === "overview"}
+              onClick={() => setWorkspaceTab("overview")}
             >
-              Stages
+              Overview
             </button>
             <button
               type="button"
-              className={detailView === "timeline" ? "on" : ""}
-              aria-pressed={detailView === "timeline"}
-              onClick={() => setDetailView("timeline")}
+              className={workspaceTab === "timeline" ? "on" : ""}
+              aria-pressed={workspaceTab === "timeline"}
+              onClick={() => setWorkspaceTab("timeline")}
             >
               Timeline
             </button>
+            <button
+              type="button"
+              className={workspaceTab === "rfq" ? "on" : ""}
+              aria-pressed={workspaceTab === "rfq"}
+              onClick={() => setWorkspaceTab("rfq")}
+            >
+              RFQ / Quote
+            </button>
+            <button
+              type="button"
+              className={workspaceTab === "po" ? "on" : ""}
+              aria-pressed={workspaceTab === "po"}
+              onClick={() => setWorkspaceTab("po")}
+            >
+              P/O
+            </button>
+            <button
+              type="button"
+              className={workspaceTab === "documents" ? "on" : ""}
+              aria-pressed={workspaceTab === "documents"}
+              onClick={() => setWorkspaceTab("documents")}
+            >
+              Documents
+            </button>
+            <button
+              type="button"
+              className={workspaceTab === "ar" ? "on" : ""}
+              aria-pressed={workspaceTab === "ar"}
+              onClick={() => setWorkspaceTab("ar")}
+            >
+              AR
+            </button>
           </div>
 
-          {detailView === "timeline" ? (
+          {workspaceTab === "timeline" ? (
             <DealTimeline chain={chain} stageNotes={r.stage_notes} steps={rSteps} />
-          ) : (
+          ) : workspaceTab === "overview" ? (
           /* 12단계 체인 — 1~6 / 7~12 두 열. 일시는 자동 동기화(읽기전용) */
           <div className="pl-chain">
             {[leftChain, rightChain].map((col, ci) => (
@@ -1306,9 +1358,9 @@ function PipelineModal({
                       className={`pl-row ${state}${href ? " clickable" : ""}`}
                       key={c.no}
                       style={c.skip ? { opacity: 0.5 } : undefined}
-                      onClick={href ? () => router.push(href) : undefined}
-                      role={href ? "link" : undefined}
-                      title={href ? "Open this stage" : undefined}
+                      onClick={href ? () => openStageInWorkspace(c.no) : undefined}
+                      role={href ? "button" : undefined}
+                      title={href ? "Open this stage in the project workspace" : undefined}
                     >
                       <span className="pl-no">{c.no}</span>
                       <div className="pl-main">
@@ -1337,6 +1389,12 @@ function PipelineModal({
               </div>
             ))}
           </div>
+          ) : (
+            <WorkspacePanel
+              tab={workspaceTab}
+              row={r}
+              onChanged={onChanged}
+            />
           )}
 
           <div className="pl-actions">
@@ -1406,6 +1464,118 @@ function PipelineModal({
           </div>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function WorkspacePanel({
+  tab,
+  row,
+  onChanged,
+}: {
+  tab: Exclude<WorkspaceTab, "overview" | "timeline">;
+  row: PipelineRow;
+  onChanged: () => void | Promise<unknown>;
+}) {
+  if (tab === "rfq") {
+    return <ProjectRfqWorkspace row={row} onChanged={onChanged} />;
+  }
+  if (tab === "po") {
+    return <ProjectPoWorkspace row={row} onChanged={onChanged} />;
+  }
+  if (tab === "documents") {
+    return row.order_id > 0 ? (
+      <div className="project-work-panel embedded-workspace">
+        <Suspense fallback={<div className="state">Loading...</div>}>
+          <DocumentsOverview
+            initialOrderId={row.order_id}
+            initialStage={Math.min(Math.max(row.stage, 7), 9)}
+            initialView={row.work_type === "서비스" ? "service" : "parts"}
+            embedded
+          />
+        </Suspense>
+      </div>
+    ) : (
+      <MissingOrderPanel />
+    );
+  }
+  return row.order_id > 0 ? (
+    <div className="project-work-panel embedded-workspace">
+      <Suspense fallback={<div className="state">Loading...</div>}>
+        <ArOverview
+          initialOrderId={row.order_id}
+          initialStage={row.stage >= 11 ? 11 : 10}
+          embedded
+        />
+      </Suspense>
+    </div>
+  ) : (
+    <MissingOrderPanel />
+  );
+}
+
+function ProjectRfqWorkspace({
+  row,
+  onChanged,
+}: {
+  row: PipelineRow;
+  onChanged: () => void | Promise<unknown>;
+}) {
+  const { data: overview, refresh } = useCachedData("rfq:overview:", () => fetchRfqOverview());
+  const rows = overview?.rows ?? [];
+  const load = useCallback(() => {
+    invalidateCache("dashboard");
+    invalidateCache("pipeline");
+    onChanged();
+    return refresh();
+  }, [onChanged, refresh]);
+  const initialTab = row.stage <= 1 ? "new" : row.stage === 2 ? "vrfq" : row.stage === 3 ? "vquote" : "cquote";
+  return (
+    <div className="project-work-panel embedded-workspace">
+      <RfqActionTabs
+        rfqId={row.rfq_id}
+        rows={rows}
+        onSelect={() => undefined}
+        onChanged={load}
+        initialTab={initialTab}
+      />
+    </div>
+  );
+}
+
+function ProjectPoWorkspace({
+  row,
+  onChanged,
+}: {
+  row: PipelineRow;
+  onChanged: () => void | Promise<unknown>;
+}) {
+  const { data: options, refresh } = useCachedData("po:work-options", fetchPoWorkOptions);
+  const load = useCallback(() => {
+    invalidateCache("dashboard");
+    invalidateCache("pipeline");
+    onChanged();
+    return refresh();
+  }, [onChanged, refresh]);
+  if (!options) return <div className="state">Loading...</div>;
+  return (
+    <div className="project-work-panel embedded-workspace">
+      <PoActionTabs
+        options={options}
+        deepOrderId={row.order_id > 0 ? row.order_id : null}
+        initialTab={row.stage >= 6 ? "vendor" : "customer"}
+        onChanged={load}
+      />
+    </div>
+  );
+}
+
+function MissingOrderPanel() {
+  return (
+    <div className="project-work-panel">
+      <div className="project-work-empty">
+        Customer P/O is not created yet. Create or register the order before working on this area.
       </div>
     </div>
   );

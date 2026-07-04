@@ -74,11 +74,19 @@ function money(n: number) {
 
 type StageTab = 10 | 11;
 
-function ArOverview() {
+export function ArOverview({
+  initialOrderId = null,
+  initialStage = null,
+  embedded = false,
+}: {
+  initialOrderId?: number | null;
+  initialStage?: StageTab | null;
+  embedded?: boolean;
+} = {}) {
   const params = useSearchParams();
   const router = useRouter();
-  const orderParam = params.get("order");
-  const stageParam = params.get("stage");
+  const orderParam = initialOrderId !== null ? String(initialOrderId) : params.get("order");
+  const stageParam = initialStage !== null ? String(initialStage) : params.get("stage");
   const { data, error: loadError, refresh } = useCachedData("ar:overview", fetchArOverview);
   const { data: options } = useCachedData("ar:workoptions", fetchPoWorkOptions);
   const [error, setError] = useState<string | null>(null); // manual messages (SOA export, etc.)
@@ -113,7 +121,7 @@ function ArOverview() {
   function closePopup() {
     setEditing(null);
     setAdding(false);
-    if (orderParam) router.replace("/ar");
+    if (orderParam && !embedded) router.replace("/ar");
   }
 
   async function exportSoa() {
