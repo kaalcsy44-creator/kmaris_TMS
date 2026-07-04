@@ -1022,6 +1022,52 @@ def global_search(q: str = "", limit: int = 40, user: dict = Depends(get_current
         base = s.query(RFQ).order_by(RFQ.id.desc())
         base = _apply_owner_filter(base, RFQ, user, 0, None)
         rfqs = base.all()
+        rfq_ids = [r.id for r in rfqs]
+
+        # 관련 문서를 RFQ마다 개별 조회하면(N+1) 스코프가 커질수록 검색이 느려진다.
+        # 스코프 내 벤더RFQ·벤더견적·견적·오더·벤더PO를 한 번에 벌크 로드해
+        # rfq_id / order_id 기준 맵으로 만들어 이후 메모리에서만 매칭한다.
+        vrfq_by_rfq: dict[int, list] = {}
+        all_vrfqs = (s.query(VendorRFQ).filter(VendorRFQ.rfq_id.in_(rfq_ids)).all()
+                     if rfq_ids else [])
+        for x in all_vrfqs:
+            vrfq_by_rfq.setdefault(x.rfq_id, []).append(x)
+        vrfq_rfq = {x.id: x.rfq_id for x in all_vrfqs}
+
+        vq_by_rfq: dict[int, list] = {}
+        vrfq_ids = list(vrfq_rfq)
+        all_vqs = (s.query(VendorQuote).filter(VendorQuote.vendor_rfq_id.in_(vrfq_ids)).all()
+                   if vrfq_ids else [])
+        for vq in all_vqs:
+            rid = vrfq_rfq.get(vq.vendor_rfq_id)
+            if rid:
+                vq_by_rfq.setdefault(rid, []).append(vq)
+
+        qtn_latest_by_rfq: dict[int, Quotation] = {}
+        qtn_rfq: dict[int, int] = {}
+        all_qtns = (s.query(Quotation).filter(Quotation.rfq_id.in_(rfq_ids))
+                    .order_by(Quotation.id.asc()).all() if rfq_ids else [])
+        for qt in all_qtns:
+            qtn_rfq[qt.id] = qt.rfq_id
+            qtn_latest_by_rfq[qt.rfq_id] = qt  # asc 정렬 → 마지막(최고 id)이 최신으로 남는다
+
+        # 오더: 직접 연결(rfq_id) 우선, 없으면 Quotation 경유. (_order_for_rfq 벌크판)
+        order_by_rfq: dict[int, Order] = {}
+        for o in (s.query(Order).filter(Order.rfq_id.in_(rfq_ids))
+                  .order_by(Order.created_at.desc()).all() if rfq_ids else []):
+            order_by_rfq.setdefault(o.rfq_id, o)  # created_at desc → 첫 항목이 최신
+        all_qtn_ids = list(qtn_rfq)
+        for o in (s.query(Order).filter(Order.quotation_id.in_(all_qtn_ids))
+                  .order_by(Order.created_at.desc()).all() if all_qtn_ids else []):
+            rid = qtn_rfq.get(o.quotation_id)
+            if rid and rid not in order_by_rfq:
+                order_by_rfq[rid] = o
+
+        po_by_order: dict[int, list] = {}
+        order_ids = [o.id for o in order_by_rfq.values()]
+        for vp in (s.query(PurchaseOrder).filter(PurchaseOrder.order_id.in_(order_ids)).all()
+                   if order_ids else []):
+            po_by_order.setdefault(vp.order_id, []).append(vp)
 
         results = []
         for r in rfqs:
@@ -1048,24 +1094,20 @@ def global_search(q: str = "", limit: int = 40, user: dict = Depends(get_current
             for it in (r.items or []):
                 add("Item", it.get("part_no"), it.get("description"))
 
-            # 관련 문서(벤더 RFQ·벤더 견적·고객 견적·오더·벤더 PO)
-            vrfqs = s.query(VendorRFQ).filter_by(rfq_id=r.id).all()
-            for x in vrfqs:
+            # 관련 문서(벤더 RFQ·벤더 견적·고객 견적·오더·벤더 PO) — 벌크 맵에서 조회.
+            for x in vrfq_by_rfq.get(r.id, []):
                 add("Vendor", vendor_names.get(x.vendor_id), x.sent_to_email)
-            vrfq_ids = [x.id for x in vrfqs]
-            vqs = (s.query(VendorQuote).filter(VendorQuote.vendor_rfq_id.in_(vrfq_ids)).all()
-                   if vrfq_ids else [])
-            for vq in vqs:
+            for vq in vq_by_rfq.get(r.id, []):
                 add("Vendor quote No.", getattr(vq, "vendor_quote_no", None))
                 for it in (vq.items or []):
                     add("Item", it.get("part_no"), it.get("description"))
-            qtn = s.query(Quotation).filter_by(rfq_id=r.id).order_by(Quotation.id.desc()).first()
+            qtn = qtn_latest_by_rfq.get(r.id)
             if qtn:
                 add("Quotation No.", qtn.qtn_no)
-            o = _order_for_rfq(s, r.id)
+            o = order_by_rfq.get(r.id)
             if o:
                 add("Customer PO No.", o.po_no)
-                for vp in s.query(PurchaseOrder).filter_by(order_id=o.id).all():
+                for vp in po_by_order.get(o.id, []):
                     add("Vendor PO No.", vp.po_no)
                     add("Vendor", vendor_names.get(vp.vendor_id))
 
