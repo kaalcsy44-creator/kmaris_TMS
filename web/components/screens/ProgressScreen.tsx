@@ -102,7 +102,8 @@ function fmtStageDate(iso: string): string {
 }
 
 type Tab = "customer" | "internal";
-type WorkspaceTab = "overview" | "rfq" | "po" | "documents" | "ar" | "timeline";
+type WorkspaceArea = "rfq" | "po" | "documents" | "ar";
+type StageTabKey = number | "timeline";
 
 export default function ProgressScreen() {
   const [tab, setTab] = useState<Tab>("internal");
@@ -970,7 +971,9 @@ function PipelineModal({
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   // 단계 상세 표시: 단계별 그룹(stages, 편집 가능) / 시간순 여정(timeline, 읽기전용)
-  const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>("overview");
+  const [selectedStage, setSelectedStage] = useState<StageTabKey>(
+    Math.min(Math.max(r.stage || 1, 1), 11)
+  );
   // 편집 필드(편집 진입 시 r 값으로 seed)
   const [fWorkType, setFWorkType] = useState(r.work_type || "부품공급");
   const [fCustomerId, setFCustomerId] = useState<number | "">(r.customer_id || "");
@@ -1096,19 +1099,18 @@ function PipelineModal({
     return `/ar?order=${r.order_id}&stage=${no}`; // 10, 11
   }
 
-  function tabForStage(no: number): WorkspaceTab | null {
+  function areaForStage(no: number): WorkspaceArea {
     if (no <= 4) return "rfq";
     if (no <= 6) return "po";
     if (no <= 9) {
-      if (no === 9 && (isService || r.trade_type === "?댁닔")) return "ar";
+      if (no === 9 && (isService || r.trade_type === "내수")) return "ar";
       return "documents";
     }
     return "ar";
   }
 
   function openStageInWorkspace(no: number) {
-    const tab = tabForStage(no);
-    if (tab) setWorkspaceTab(tab);
+    setSelectedStage(no);
   }
 
   return (
@@ -1156,6 +1158,8 @@ function PipelineModal({
 
         <div className="pl-modal-body">
           <div className="intl-detail">
+            <div className="project-workspace-layout">
+              <aside className="project-info-pane">
             {editing ? (
             <div className="intl-edit">
               <div className="form-field">
@@ -1284,119 +1288,51 @@ function PipelineModal({
               <span className="pl-next-text">{r.next_action}</span>
             </div>
           ) : null}
+              </aside>
+
+              <section className="project-stage-pane">
 
           {/* 단계 상세 — 단계별(편집) / 시간순 여정(읽기전용) 토글 */}
-          <div className="pl-detail-toggle" role="tablist" aria-label="Stage detail view">
+          <div className="project-stage-tabs" role="tablist" aria-label="Project stages">
+            {rSteps.map((label, i) => {
+              const no = i + 1;
+              return (
+                <button
+                  key={no}
+                  type="button"
+                  className={selectedStage === no ? "on" : ""}
+                  aria-pressed={selectedStage === no}
+                  onClick={() => setSelectedStage(no)}
+                  title={label}
+                >
+                  <span>{no}</span>
+                  <b>{label}</b>
+                </button>
+              );
+            })}
             <button
               type="button"
-              className={workspaceTab === "overview" ? "on" : ""}
-              aria-pressed={workspaceTab === "overview"}
-              onClick={() => setWorkspaceTab("overview")}
+              className={selectedStage === "timeline" ? "on" : ""}
+              aria-pressed={selectedStage === "timeline"}
+              onClick={() => setSelectedStage("timeline")}
             >
-              Overview
-            </button>
-            <button
-              type="button"
-              className={workspaceTab === "timeline" ? "on" : ""}
-              aria-pressed={workspaceTab === "timeline"}
-              onClick={() => setWorkspaceTab("timeline")}
-            >
-              Timeline
-            </button>
-            <button
-              type="button"
-              className={workspaceTab === "rfq" ? "on" : ""}
-              aria-pressed={workspaceTab === "rfq"}
-              onClick={() => setWorkspaceTab("rfq")}
-            >
-              RFQ / Quote
-            </button>
-            <button
-              type="button"
-              className={workspaceTab === "po" ? "on" : ""}
-              aria-pressed={workspaceTab === "po"}
-              onClick={() => setWorkspaceTab("po")}
-            >
-              P/O
-            </button>
-            <button
-              type="button"
-              className={workspaceTab === "documents" ? "on" : ""}
-              aria-pressed={workspaceTab === "documents"}
-              onClick={() => setWorkspaceTab("documents")}
-            >
-              Documents
-            </button>
-            <button
-              type="button"
-              className={workspaceTab === "ar" ? "on" : ""}
-              aria-pressed={workspaceTab === "ar"}
-              onClick={() => setWorkspaceTab("ar")}
-            >
-              AR
+              <span>TL</span>
+              <b>Timeline</b>
             </button>
           </div>
 
-          {workspaceTab === "timeline" ? (
+          {selectedStage === "timeline" ? (
             <DealTimeline chain={chain} stageNotes={r.stage_notes} steps={rSteps} />
-          ) : workspaceTab === "overview" ? (
-          /* 12단계 체인 — 1~6 / 7~12 두 열. 일시는 자동 동기화(읽기전용) */
-          <div className="pl-chain">
-            {[leftChain, rightChain].map((col, ci) => (
-              <div className="pl-col" key={ci}>
-                {col.map((c) => {
-                  const state = c.skip
-                    ? "skip"
-                    : c.no < r.stage
-                    ? "done"
-                    : c.no === r.stage
-                    ? "current"
-                    : "todo";
-                  const href = c.skip ? null : stageHref(c.no);
-                  return (
-                    <div
-                      className={`pl-row ${state}${href ? " clickable" : ""}`}
-                      key={c.no}
-                      style={c.skip ? { opacity: 0.5 } : undefined}
-                      onClick={href ? () => openStageInWorkspace(c.no) : undefined}
-                      role={href ? "button" : undefined}
-                      title={href ? "Open this stage in the project workspace" : undefined}
-                    >
-                      <span className="pl-no">{c.no}</span>
-                      <div className="pl-main">
-                        <div className="pl-top">
-                          <span className="pl-label">
-                            {c.label}
-                            {c.skip ? " (skipped · Domestic)" : ""}
-                          </span>
-                          <span className="pl-at">{c.at ? fmtStageDate(c.at) : ""}</span>
-                        </div>
-                        {!c.skip && c.value ? <div className="pl-value">{c.value}</div> : null}
-                        {!c.skip ? (
-                          <div onClick={(e) => e.stopPropagation()}>
-                            <StageNotes
-                              rfqId={r.rfq_id}
-                              stage={c.no}
-                              notes={r.stage_notes?.[String(c.no)] ?? []}
-                              onChanged={onChanged}
-                            />
-                          </div>
-                        ) : null}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
-          </div>
           ) : (
             <WorkspacePanel
-              tab={workspaceTab}
+              stage={selectedStage}
+              area={areaForStage(selectedStage)}
               row={r}
               onChanged={onChanged}
             />
           )}
-
+              </section>
+            </div>
           <div className="pl-actions">
             <div className="pl-nav-links">
               <Link className="btn" href={`/rfq?rfq=${r.rfq_id}`}>
@@ -1470,27 +1406,29 @@ function PipelineModal({
 }
 
 function WorkspacePanel({
-  tab,
+  stage,
+  area,
   row,
   onChanged,
 }: {
-  tab: Exclude<WorkspaceTab, "overview" | "timeline">;
+  stage: number;
+  area: WorkspaceArea;
   row: PipelineRow;
   onChanged: () => void | Promise<unknown>;
 }) {
-  if (tab === "rfq") {
-    return <ProjectRfqWorkspace row={row} onChanged={onChanged} />;
+  if (area === "rfq") {
+    return <ProjectRfqWorkspace row={row} stage={stage} onChanged={onChanged} />;
   }
-  if (tab === "po") {
-    return <ProjectPoWorkspace row={row} onChanged={onChanged} />;
+  if (area === "po") {
+    return <ProjectPoWorkspace row={row} stage={stage} onChanged={onChanged} />;
   }
-  if (tab === "documents") {
+  if (area === "documents") {
     return row.order_id > 0 ? (
       <div className="project-work-panel embedded-workspace">
         <Suspense fallback={<div className="state">Loading...</div>}>
           <DocumentsOverview
             initialOrderId={row.order_id}
-            initialStage={Math.min(Math.max(row.stage, 7), 9)}
+            initialStage={Math.min(Math.max(stage, 7), 9)}
             initialView={row.work_type === "서비스" ? "service" : "parts"}
             embedded
           />
@@ -1505,7 +1443,7 @@ function WorkspacePanel({
       <Suspense fallback={<div className="state">Loading...</div>}>
         <ArOverview
           initialOrderId={row.order_id}
-          initialStage={row.stage >= 11 ? 11 : 10}
+          initialStage={stage >= 11 ? 11 : 10}
           embedded
         />
       </Suspense>
@@ -1517,9 +1455,11 @@ function WorkspacePanel({
 
 function ProjectRfqWorkspace({
   row,
+  stage,
   onChanged,
 }: {
   row: PipelineRow;
+  stage: number;
   onChanged: () => void | Promise<unknown>;
 }) {
   const { data: overview, refresh } = useCachedData("rfq:overview:", () => fetchRfqOverview());
@@ -1530,7 +1470,7 @@ function ProjectRfqWorkspace({
     onChanged();
     return refresh();
   }, [onChanged, refresh]);
-  const initialTab = row.stage <= 1 ? "new" : row.stage === 2 ? "vrfq" : row.stage === 3 ? "vquote" : "cquote";
+  const initialTab = stage <= 1 ? "new" : stage === 2 ? "vrfq" : stage === 3 ? "vquote" : "cquote";
   return (
     <div className="project-work-panel embedded-workspace">
       <RfqActionTabs
@@ -1546,9 +1486,11 @@ function ProjectRfqWorkspace({
 
 function ProjectPoWorkspace({
   row,
+  stage,
   onChanged,
 }: {
   row: PipelineRow;
+  stage: number;
   onChanged: () => void | Promise<unknown>;
 }) {
   const { data: options, refresh } = useCachedData("po:work-options", fetchPoWorkOptions);
@@ -1564,7 +1506,7 @@ function ProjectPoWorkspace({
       <PoActionTabs
         options={options}
         deepOrderId={row.order_id > 0 ? row.order_id : null}
-        initialTab={row.stage >= 6 ? "vendor" : "customer"}
+        initialTab={stage >= 6 ? "vendor" : "customer"}
         onChanged={load}
       />
     </div>
