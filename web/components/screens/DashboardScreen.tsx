@@ -729,9 +729,9 @@ const CHART_COLORS = ["#0055a8", "#2e8b57", "#e8830c", "#8e44ad", "#16a085",
 
 // 파이프라인 4개 중분류(phase) 순서형 파랑 램프(light→dark) — dataviz 검증 통과.
 // 단계는 순서형이므로 임의 카테고리색이 아니라 단일 색조 심도로 진행감을 준다.
-const PHASE_RAMP = ["#86b6ef", "#5598e7", "#2a78d6", "#184f95"];
-const PHASE_LABELS = ["RFQ & Quotation", "P/O", "Documents", "AR"];
-const PHASE_BOUNDS = [4, 6, 9, 12]; // 각 phase 의 단계 상한(누적): 1–4 / 5–6 / 7–9 / 10–12
+const PHASE_RAMP = ["#86b6ef", "#5598e7", "#2a78d6", "#1c5cab", "#0d366b"];
+const PHASE_LABELS = ["RFQ", "Quote", "P/O", "Documents", "AR"];
+const PHASE_BOUNDS = [2, 4, 6, 9, 12]; // 각 phase 의 단계 상한(누적): 1–2 / 3–4 / 5–6 / 7–9 / 10–12
 /** 1-based 단계 번호 → phase 인덱스(0..3). */
 function phaseOfStage(stage: number): number {
   const i = PHASE_BOUNDS.findIndex((b) => stage <= b);

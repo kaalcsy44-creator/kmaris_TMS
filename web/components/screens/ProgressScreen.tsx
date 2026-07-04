@@ -55,20 +55,22 @@ function resolveSteps(baseSteps: string[], workType?: string | null): string[] {
   return baseSteps.map((name, i) => SERVICE_STEP_OVERRIDES[i + 1] ?? name);
 }
 
-// 내부 12단계 → 4개 중분류(영역). 경계는 모달 하단 이동 버튼(stageHref)과 동일.
-//   RFQ & Quotation: 1–4 / PO: 5–6 / Documents: 7–9 / AR: 10–12
+// 내부 12단계 → 5개 중분류(영역): RFQ 1–2 / Quote 3–4 / PO 5–6 / Docs 7–9 / AR 10–12.
 const STAGE_PHASES: { label: string; count: number }[] = [
-  { label: "RFQ & Quotation", count: 4 },
+  { label: "RFQ", count: 2 },
+  { label: "Quote", count: 2 },
   { label: "PO", count: 2 },
   { label: "Documents", count: 3 },
   { label: "AR", count: 3 },
 ];
-// 4개 중분류 accent(보드 컬럼과 동일) — 타임라인 점 색상에 사용.
-const PHASE_ACCENTS = ["#0055a8", "#0e7490", "#4f46e5", "#b45309"];
+// 5개 중분류 accent(보드 컬럼과 동일) — 타임라인 점 색상에 사용.
+const PHASE_ACCENTS = ["#0055a8", "#0e7490", "#4f46e5", "#7e22ce", "#b45309"];
 // 각 중분류(phase) → 담당 워크스페이스 화면 + 단계 범위. 보드를 허브로: 컬럼 헤더에서
 // 해당 단계 작업 화면으로 바로 이동(모달의 단계별 딥링크와 함께 양방향 연결).
+// RFQ·Quote 는 같은 'RFQ & Quotation' 화면(/rfq)에서 다뤄진다.
 const PHASE_WORKSPACE: { href: string; range: string }[] = [
-  { href: "/rfq", range: "1–4" },
+  { href: "/rfq", range: "1–2" },
+  { href: "/rfq", range: "3–4" },
   { href: "/po", range: "5–6" },
   { href: "/documents", range: "7–9" },
   { href: "/ar", range: "10–12" },
@@ -859,6 +861,9 @@ function BoardCard({
         <WorkTypeBadge type={r.work_type} />
       </div>
       <div className="pl-card-cust" title={r.customer || ""}>{r.customer || "—"}</div>
+      {r.project_title ? (
+        <div className="pl-card-proj" title={r.project_title}>{r.project_title}</div>
+      ) : null}
       {r.vessel ? <div className="pl-card-sub" title={r.vessel}>{r.vessel}</div> : null}
       <div className="pl-card-bar" title={`${filled}/${total} ${steps[filled - 1] ?? ""}`}>
         {Array.from({ length: total }).map((_, i) => (

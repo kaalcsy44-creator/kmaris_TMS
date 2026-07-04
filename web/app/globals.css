@@ -4167,10 +4167,11 @@ table.mini .num {
   max-height: 72vh;
 }
 /* 4개 중분류 accent 색 (RFQ&Quotation·PO·Documents·AR) */
-.pl-board-col[data-accent="0"] { --accent: #0055a8; }
-.pl-board-col[data-accent="1"] { --accent: #0e7490; }
-.pl-board-col[data-accent="2"] { --accent: #4f46e5; }
-.pl-board-col[data-accent="3"] { --accent: #b45309; }
+.pl-board-col[data-accent="0"] { --accent: #0055a8; }  /* RFQ */
+.pl-board-col[data-accent="1"] { --accent: #0e7490; }  /* Quote */
+.pl-board-col[data-accent="2"] { --accent: #4f46e5; }  /* PO */
+.pl-board-col[data-accent="3"] { --accent: #7e22ce; }  /* Documents */
+.pl-board-col[data-accent="4"] { --accent: #b45309; }  /* AR */
 .pl-board-head {
   display: flex;
   align-items: center;
@@ -4270,6 +4271,16 @@ table.mini .num {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+/* 프로젝트명(건별 식별) — 고객명 아래, 선박 위 */
+.pl-card-proj {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--blue);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 1px;
 }
 .pl-card-sub {
   font-size: 11.5px;
