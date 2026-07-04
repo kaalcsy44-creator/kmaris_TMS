@@ -808,6 +808,57 @@ def _status_label(stage: int, work_type=None) -> str:
     return f"{stage}/{len(steps)} {steps[stage - 1]}"
 
 
+# ── 다음 액션(Next action) 도출 — stage 단일 소스 기반(P3) ────────────────────
+# 정체(stalled) 기준: 마지막 활동 이후 경과일. warn=7일↑, urgent=14일↑.
+STALL_WARN_DAYS = 7
+STALL_URGENT_DAYS = 14
+
+
+def _last_activity_iso(stage_dates, stage_auto, stage_notes) -> str:
+    """거래의 마지막 활동 일시(iso 문자열) — 단계 완료 일시(수동/자동)와 단계 노트 중 최신.
+    'YYYY-MM-DDTHH:MM' 포맷이 일관되어 문자열 비교(max)로 최신을 구한다. 없으면 ''."""
+    times: list[str] = []
+    for d in (stage_dates or {}, stage_auto or {}):
+        times.extend(v for v in d.values() if v)
+    for notes in (stage_notes or {}).values():
+        for n in notes or []:
+            v = ((n.get("datetime") or n.get("at") or "") if isinstance(n, dict) else "")
+            if v:
+                times.append(v)
+    return max(times) if times else ""
+
+
+def _days_since_iso(iso: str, today_iso: str) -> int | None:
+    """iso('YYYY-MM-DD…')와 오늘('YYYY-MM-DD') 사이 경과 일수(≥0). 파싱 불가면 None."""
+    d, t = (iso or "")[:10], (today_iso or "")[:10]
+    if len(d) < 10 or len(t) < 10:
+        return None
+    try:
+        return max(0, (date.fromisoformat(t) - date.fromisoformat(d)).days)
+    except Exception:
+        return None
+
+
+def _next_action(stage: int, steps: list[str], *, lost: bool = False,
+                 stalled_days: int | None = None) -> dict:
+    """거래의 '다음 액션' 도출 — stage(단일 소스) 기준 + 실주/정체 예외.
+
+    반환 {"text": str, "level": "normal"|"warn"|"urgent"}.
+      · 실주 → 종결   · 마지막 단계 → 완료
+      · 그 외 → 'Next: N+1. 다음단계명'
+      · 현재 단계에서 STALL_WARN_DAYS 이상 정체 시 팔로업 권고(경과일에 따라 warn/urgent)"""
+    total = len(steps)
+    if lost:
+        return {"text": "Closed — lost", "level": "normal"}
+    if stage >= total:
+        return {"text": "Complete", "level": "normal"}
+    if stalled_days is not None and stalled_days >= STALL_WARN_DAYS:
+        level = "urgent" if stalled_days >= STALL_URGENT_DAYS else "warn"
+        return {"text": f"Follow up · stalled {stalled_days}d", "level": level}
+    nxt = steps[stage] if 0 <= stage < total else ""  # steps[stage] = (stage+1)번째 단계명
+    return {"text": (f"Next: {stage + 1}. {nxt}" if nxt else "Next step"), "level": "normal"}
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 @app.get("/health")
 def health():

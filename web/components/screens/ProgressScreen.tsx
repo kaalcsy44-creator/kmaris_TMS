@@ -850,6 +850,11 @@ function BoardCard({
         {age != null ? <span className="pl-card-age" title="Days since first RFQ">{age}d</span> : null}
       </div>
       {amount ? <div className="pl-card-amt" title={amount}>{amount}</div> : null}
+      {r.next_action ? (
+        <div className={`pl-card-next lv-${r.next_level || "normal"}`} title="Recommended next action">
+          {r.next_action}
+        </div>
+      ) : null}
     </button>
   );
 }
@@ -1224,6 +1229,13 @@ function PipelineModal({
               </div>
             </dl>
           )}
+
+          {r.next_action ? (
+            <div className={`pl-next-banner lv-${r.next_level || "normal"}`}>
+              <span className="pl-next-label">Next action</span>
+              <span className="pl-next-text">{r.next_action}</span>
+            </div>
+          ) : null}
 
           {/* 단계 상세 — 단계별(편집) / 시간순 여정(읽기전용) 토글 */}
           <div className="pl-detail-toggle" role="tablist" aria-label="Stage detail view">

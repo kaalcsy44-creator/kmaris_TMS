@@ -4320,6 +4320,46 @@ table.mini .num {
   text-overflow: ellipsis;
 }
 
+/* ── 다음 액션(P3): 보드 카드 칩 + 모달 배너 (긴급도별 시맨틱 색) ─────────── */
+.pl-card-next {
+  margin-top: 6px;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 3px 7px;
+  border-radius: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: var(--head-bg);
+  color: var(--blue);
+}
+.pl-card-next.lv-warn { background: #fff3e0; color: #9a5b00; }
+.pl-card-next.lv-urgent { background: #fdeaea; color: #b42318; }
+
+.pl-next-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 2px 0 10px;
+  padding: 8px 12px;
+  border-radius: 9px;
+  background: var(--head-bg);
+  border: 1px solid var(--line-strong);
+}
+.pl-next-banner.lv-warn { background: #fff3e0; border-color: #f2cf97; }
+.pl-next-banner.lv-urgent { background: #fdeaea; border-color: #f2b8b3; }
+.pl-next-label {
+  flex: none;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .6px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.pl-next-banner.lv-warn .pl-next-label { color: #9a5b00; }
+.pl-next-banner.lv-urgent .pl-next-label { color: #b42318; }
+.pl-next-text { font-size: 13px; font-weight: 700; color: var(--ink); }
+
 /* ── Progress 모달: Stages / Timeline 토글 + 여정 타임라인 ─────────────────── */
 .pl-detail-toggle {
   display: inline-flex;

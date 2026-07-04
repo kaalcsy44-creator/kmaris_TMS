@@ -702,6 +702,8 @@ export type PipelineRow = {
   stage_dates: Record<string, string>;
   stage_auto: Record<string, string>;
   stage_notes: Record<string, StageNote[]>;
+  next_action?: string;           // 다음 액션 권고(P3)
+  next_level?: "normal" | "warn" | "urgent";  // 긴급도
 };
 
 export type StageNote = {

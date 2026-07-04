@@ -41,6 +41,10 @@ from _core import (
     _rfq_no_disp,
     _search_href,
     _stage_auto_times,
+    _next_action,
+    _last_activity_iso,
+    _days_since_iso,
+    steps_for,
     _status_label,
     _total_amount,
     _vrfq_sent_iso,
@@ -81,6 +85,7 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
         rfqs = q.all()
 
         rows = []
+        today_iso = (datetime.utcnow() + timedelta(hours=9)).date().isoformat()  # KST
         for r in rfqs:
             stage = _pipeline_stage(s, r.id)
 
@@ -142,6 +147,17 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
             else:
                 vendor_po_no = vendor_po_vendor = vendor_po_email = vendor_po_at = ""
 
+            # 단계 일시·노트 + 다음 액션(P3). stage_auto 는 한 번만 계산해 재사용.
+            _sd = getattr(r, "stage_dates", None) or {}
+            _auto = _stage_auto_times(s, r, o)
+            _sn = getattr(r, "stage_notes", None) or {}
+            _lost = _enum_val(r.status) == RFQStatus.LOST.value
+            _stalled = (
+                _days_since_iso(_last_activity_iso(_sd, _auto, _sn), today_iso)
+                if (stage < 12 and not _lost) else None
+            )
+            _na = _next_action(stage, steps_for(r.work_type), lost=_lost, stalled_days=_stalled)
+
             rows.append({
                 "rfq_id": r.id,
                 "order_id": o.id if o else 0,
@@ -182,9 +198,12 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
                 # 상태 · 단계 일시
                 "stage": stage,
                 "status": _status_label(stage, r.work_type),
-                "stage_dates": getattr(r, "stage_dates", None) or {},
-                "stage_auto": _stage_auto_times(s, r, o),
-                "stage_notes": getattr(r, "stage_notes", None) or {},
+                "stage_dates": _sd,
+                "stage_auto": _auto,
+                "stage_notes": _sn,
+                # 다음 액션(P3) — stage 단일 소스 + 실주/정체 예외
+                "next_action": _na["text"],
+                "next_level": _na["level"],
             })
 
         return {"steps": INTERNAL_STEPS, "rows": rows}
