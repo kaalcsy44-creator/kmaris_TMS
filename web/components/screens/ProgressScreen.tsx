@@ -332,6 +332,8 @@ function PipelineTable({
   tableId?: string;
 }) {
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  // 목록 표시 방식: 표(table) / 칸반 보드(board). 같은 데이터·같은 상세 모달 재사용.
+  const [view, setView] = useState<"table" | "board">("table");
   // 기본 정렬: 관리번호(Project No.) 내림차순 — 최근 프로젝트가 맨 위.
   const [sortKey, setSortKey] = useState<ColKey | null>("received_at");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -602,9 +604,36 @@ function PipelineTable({
         <span className="pl-search-count">
           {displayRows.length} / {rows.length}
         </span>
-        <ColumnsButton cols={PIPELINE_COLUMNS} layout={layout} />
+        <span className="pl-view-toggle" role="tablist" aria-label="View mode">
+          <button
+            type="button"
+            className={view === "table" ? "on" : ""}
+            aria-pressed={view === "table"}
+            onClick={() => setView("table")}
+          >
+            ▤ Table
+          </button>
+          <button
+            type="button"
+            className={view === "board" ? "on" : ""}
+            aria-pressed={view === "board"}
+            onClick={() => setView("board")}
+          >
+            ▦ Board
+          </button>
+        </span>
+        {view === "table" ? <ColumnsButton cols={PIPELINE_COLUMNS} layout={layout} /> : null}
       </div>
 
+      {view === "board" ? (
+        <PipelineBoard
+          rows={displayRows}
+          steps={steps}
+          stageOf={stageOf}
+          selectedId={selectedId}
+          onSelect={setSelectedId}
+        />
+      ) : (
       <div className="pl-table-wrap">
         <table className="pipeline customizable">
           <colgroup>
@@ -686,6 +715,7 @@ function PipelineTable({
           </tbody>
         </table>
       </div>
+      )}
 
       {openCol ? renderColMenu(openCol) : null}
 
@@ -700,6 +730,125 @@ function PipelineTable({
         />
       ) : null}
     </>
+  );
+}
+
+/** first_rfq_at('YYYY-MM-DD…') 로부터 경과 일수. 파싱 불가면 null. */
+function daysSince(iso: string): number | null {
+  const t = Date.parse((iso || "").slice(0, 10));
+  if (Number.isNaN(t)) return null;
+  return Math.max(0, Math.floor((Date.now() - t) / 86_400_000));
+}
+
+/**
+ * 칸반 보드 — 테이블과 동일한 데이터(displayRows)를 단계 영역별 컬럼으로 시각화.
+ * 12단계는 4개 중분류(RFQ&Quotation·PO·Documents·AR)로, 고객 7단계는 단계별 컬럼으로.
+ * 카드 클릭 시 테이블과 동일한 상세 모달(onSelect)을 연다.
+ */
+function PipelineBoard({
+  rows,
+  steps,
+  stageOf,
+  selectedId,
+  onSelect,
+}: {
+  rows: PipelineRow[];
+  steps: string[];
+  stageOf: (r: PipelineRow) => number;
+  selectedId: number | null;
+  onSelect: (id: number) => void;
+}) {
+  const grouped = steps.length === 12;
+  const cols = grouped
+    ? STAGE_PHASES.map((p, pi) => ({
+        label: p.label,
+        accent: pi,
+        match: (st: number) => phaseIndexOfStage(st) === pi,
+      }))
+    : steps.map((label, i) => ({
+        label: `${i + 1}. ${label}`,
+        accent: i % 4,
+        match: (st: number) => st === i + 1,
+      }));
+
+  return (
+    <div className="pl-board">
+      {cols.map((col, ci) => {
+        const cards = rows.filter((r) => col.match(stageOf(r)));
+        return (
+          <section key={ci} className="pl-board-col" data-accent={col.accent}>
+            <header className="pl-board-head">
+              <span className="pl-board-title" title={col.label}>{col.label}</span>
+              <span className="pl-board-count">{cards.length}</span>
+            </header>
+            <div className="pl-board-list">
+              {cards.length === 0 ? (
+                <div className="pl-board-empty">—</div>
+              ) : (
+                cards.map((r) => (
+                  <BoardCard
+                    key={`b-${r.rfq_id}`}
+                    r={r}
+                    steps={steps}
+                    stage={stageOf(r)}
+                    sel={selectedId === r.rfq_id}
+                    onClick={() => onSelect(r.rfq_id)}
+                  />
+                ))
+              )}
+            </div>
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
+/** 보드 1장 = 거래 1건. 관리번호·고객·선박·진행바·PIC·경과일·금액. */
+function BoardCard({
+  r,
+  steps,
+  stage,
+  sel,
+  onClick,
+}: {
+  r: PipelineRow;
+  steps: string[];
+  stage: number;
+  sel: boolean;
+  onClick: () => void;
+}) {
+  const isService = (r.work_type || "부품공급") === "서비스";
+  const total = steps.length;
+  const filled = Math.max(0, Math.min(stage, total));
+  const amount = r.customer_amount || r.vendor_amount || "";
+  const age = daysSince(r.first_rfq_at);
+  return (
+    <button
+      type="button"
+      className={`pl-card${sel ? " sel" : ""}${isService ? " service" : ""}`}
+      onClick={onClick}
+    >
+      <div className="pl-card-top">
+        <span className="pl-card-no">{r.project_no || "—"}</span>
+        <WorkTypeBadge type={r.work_type} />
+      </div>
+      <div className="pl-card-cust" title={r.customer || ""}>{r.customer || "—"}</div>
+      {r.vessel ? <div className="pl-card-sub" title={r.vessel}>{r.vessel}</div> : null}
+      <div className="pl-card-bar" title={`${filled}/${total} ${steps[filled - 1] ?? ""}`}>
+        {Array.from({ length: total }).map((_, i) => (
+          <span key={i} className={`seg${i < filled ? " on" : ""}`} />
+        ))}
+      </div>
+      <div className="pl-card-stage">
+        {filled}/{total} · {steps[filled - 1] ?? ""}
+      </div>
+      <div className="pl-card-foot">
+        <span className={`pl-card-pic${r.assignee ? "" : " none"}`}>{r.assignee || "—"}</span>
+        {age != null ? <span className="pl-card-age" title="Days since first RFQ">{age}d</span> : null}
+      </div>
+      {amount ? <div className="pl-card-amt" title={amount}>{amount}</div> : null}
+    </button>
   );
 }
 

@@ -4121,3 +4121,201 @@ table.mini .num {
   gap: 10px;
   margin-top: 8px;
 }
+
+/* ── Progress: Table / Board 뷰 토글 ─────────────────────────────────────── */
+.pl-view-toggle {
+  display: inline-flex;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.pl-view-toggle button {
+  border: 0;
+  background: #fff;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 5px 12px;
+  cursor: pointer;
+  line-height: 1;
+}
+.pl-view-toggle button + button {
+  border-left: 1px solid var(--line);
+}
+.pl-view-toggle button.on {
+  background: var(--navy);
+  color: #fff;
+}
+
+/* ── Progress: 칸반 보드 ──────────────────────────────────────────────────── */
+.pl-board {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  overflow-x: auto;
+  padding: 4px 2px 12px;
+}
+.pl-board-col {
+  flex: 1 1 0;
+  min-width: 210px;
+  background: var(--page-bg);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  border-top: 3px solid var(--accent, var(--blue));
+  display: flex;
+  flex-direction: column;
+  max-height: 72vh;
+}
+/* 4개 중분류 accent 색 (RFQ&Quotation·PO·Documents·AR) */
+.pl-board-col[data-accent="0"] { --accent: #0055a8; }
+.pl-board-col[data-accent="1"] { --accent: #0e7490; }
+.pl-board-col[data-accent="2"] { --accent: #4f46e5; }
+.pl-board-col[data-accent="3"] { --accent: #b45309; }
+.pl-board-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+}
+.pl-board-title {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--accent, var(--ink));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pl-board-count {
+  flex: none;
+  font-size: 11px;
+  font-weight: 800;
+  color: #fff;
+  background: var(--accent, var(--blue));
+  border-radius: 999px;
+  min-width: 20px;
+  text-align: center;
+  padding: 1px 7px;
+}
+.pl-board-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  overflow-y: auto;
+}
+.pl-board-empty {
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+  padding: 14px 0;
+}
+.pl-card {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: #fff;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  padding: 9px 10px;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(11, 29, 58, 0.04);
+  transition: box-shadow 0.12s, border-color 0.12s, transform 0.06s;
+}
+.pl-card:hover {
+  border-color: var(--blue);
+  box-shadow: 0 4px 12px rgba(11, 29, 58, 0.12);
+}
+.pl-card:active { transform: translateY(1px); }
+.pl-card.sel {
+  border-color: var(--blue);
+  background: var(--sel);
+}
+.pl-card.service:hover { border-color: #11824a; }
+.pl-card.service.sel { border-color: #11824a; background: #e3f5eb; }
+.pl-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.pl-card-no {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--blue);
+}
+.pl-card-cust {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pl-card-sub {
+  font-size: 11.5px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 2px;
+}
+.pl-card-bar {
+  display: flex;
+  gap: 2px;
+  margin: 6px 0 4px;
+}
+.pl-card-bar .seg {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--line-strong);
+}
+.pl-card-bar .seg.on { background: var(--blue); }
+.pl-card.service .pl-card-bar .seg.on { background: #11824a; }
+.pl-card-stage {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pl-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-top: 6px;
+}
+.pl-card-pic {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pl-card-pic.none { color: var(--muted); font-weight: 500; }
+.pl-card-age {
+  flex: none;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+  background: var(--head-bg);
+  border-radius: 6px;
+  padding: 1px 5px;
+}
+.pl-card-amt {
+  margin-top: 5px;
+  padding-top: 5px;
+  border-top: 1px dashed var(--line);
+  font-size: 10.5px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
