@@ -590,10 +590,10 @@ def _deal_progress(s, rfq, order) -> tuple[int, dict[str, str]]:
     조회하고, 그 동일한 데이터로부터 (1) 단계 번호(1~12)와 (2) 단계별 자동 완료 일시를
     함께 산출한다. `_pipeline_stage`·`_stage_auto_times` 는 이 함수의 얇은 래퍼다.
 
-    동작은 종전 두 개의 독립 함수와 **완전히 동일**하다(특성화 테스트로 검증).
-    단, 번호 트리거와 일시 트리거는 6·8·9·10단계에서 여전히 다르다(기존 불일치를
-    의도적으로 보존 — P2 드리프트 리포트 참고). 두 규칙을 한 함수에 나란히 두어
-    차이가 한눈에 보이도록 했다.
+    번호·일시 규칙을 한 함수에 나란히 두어 차이가 한눈에 보이도록 했다.
+    P2b에서 8·10단계의 번호-일시 드리프트를 정리했다(CI 증거는 8단계 일시로,
+    10단계는 Tax/AR 근거만). 6·9단계는 상태/수동으로만 도달 시 자동 일시 근거가
+    없어 공란일 수 있으나(누락일 뿐 오기가 아님) 그대로 둔다.
 
     (오더당 CI는 upsert로 유일하므로 번호·일시 경로가 같은 CI를 공유해도 안전하다.)
     """
@@ -715,18 +715,21 @@ def _deal_progress(s, rfq, order) -> tuple[int, dict[str, str]]:
         # 6) Vendor P/O 발신
         if pos:
             _set(6, _date_iso(pos[0].sent_date) or _kst_iso(pos[0].created_at))
-        # 8) Delivery arrangement
+        # 8) Delivery arrangement — 운송통지·수하인 확인·벤더서류·출고일·CI 생성이 근거.
+        #    (P2b: CI 존재는 번호를 8로 올리므로, CI 생성시각을 8단계 일시 폴백으로 사용.)
         _set(8, (_kst_iso(sa.created_at) if sa else "")
              or _date_iso(getattr(order, "consignee_confirmed_date", None))
              or _date_iso(getattr(order, "vendor_docs_sent_date", None))
-             or _date_iso(getattr(order, "shipped_date", None)))
+             or _date_iso(getattr(order, "shipped_date", None))
+             or (_kst_iso(ci.created_at) if ci else ""))
         # 9) 운송 완료 · POD 수취 — POD 업로드 일시 우선, 없으면 인도일
         _set(9, (getattr(pod, "uploaded_at", "") if pod else "")
              or _date_iso(getattr(order, "delivered_date", None)))
-        # 10) Tax Invoice 작성 · 대금 청구 — Tax Invoice Data 생성 시점 우선
+        # 10) Tax Invoice 작성 · 대금 청구 — Tax/AR 근거만.
+        #    (P2b: 기존 CI 생성시각 폴백 제거 — CI는 8단계 근거라 10단계 일시로 쓰면
+        #     번호=8 거래가 10칸에 일시가 찍히는 드리프트가 생김.)
         _set(10, (_date_iso(tax.date) or _kst_iso(tax.created_at) if tax else "")
-             or _kst_iso(min((a.created_at for a in ars if a.created_at), default=None))
-             or (_kst_iso(ci.created_at) if ci else ""))
+             or _kst_iso(min((a.created_at for a in ars if a.created_at), default=None)))
         # 11) 세금계산서 발행 · 12) 대금 결제 완료 — 수동 완료(stage_dates)로만 표시
 
     return stage, auto
