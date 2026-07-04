@@ -22,26 +22,35 @@ export default function GlobalSearch() {
   const [active, setActive] = useState(0);
   const boxRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  // 매 요청에 순번을 매겨, 늦게 도착한 이전 검색 응답이 최신 결과를 덮어쓰지 않게 한다.
+  const reqSeq = useRef(0);
 
   // 입력 디바운스(250ms) 후 검색. 2글자 미만은 조회하지 않는다.
   useEffect(() => {
     const term = q.trim();
     if (term.length < 2) {
+      reqSeq.current += 1; // 진행 중이던 응답도 무효화
       setResults([]);
       setOpen(false);
       setBusy(false);
       return;
     }
     setBusy(true);
+    const seq = (reqSeq.current += 1);
     const t = setTimeout(() => {
       globalSearch(term)
         .then((d) => {
+          if (seq !== reqSeq.current) return; // 더 최신 검색이 있으면 이 응답은 버린다
           setResults(d.results);
           setActive(0);
           setOpen(true);
         })
-        .catch(() => setResults([]))
-        .finally(() => setBusy(false));
+        .catch(() => {
+          if (seq === reqSeq.current) setResults([]);
+        })
+        .finally(() => {
+          if (seq === reqSeq.current) setBusy(false);
+        });
     }, 250);
     return () => clearTimeout(t);
   }, [q]);
