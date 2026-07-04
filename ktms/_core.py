@@ -583,37 +583,60 @@ def _coerce_work_type(v) -> WorkType | None:
             return None
 
 
-def _pipeline_stage(s, rfq_id: int) -> int:
-    """RFQ 1건의 내부 진행 단계(1~12) — helpers.internal_pipeline_stage 와 동일 로직.
-    (FastAPI에서 돌도록 st.cache_data 제거, 세션은 호출측에서 공유)"""
-    stage = 1
-    rfq_obj = s.query(RFQ).filter_by(id=rfq_id).first()
-    is_service = bool(rfq_obj and _enum_val(rfq_obj.work_type) == "서비스")
+def _deal_progress(s, rfq, order) -> tuple[int, dict[str, str]]:
+    """거래(RFQ) 1건의 내부 12단계 진행 — 단일 진실원(single source of truth).
 
+    자식 레코드(Vendor RFQ/Quote, Quotation, PO, SA, CI, Tax, AR, POD)를 **한 번만**
+    조회하고, 그 동일한 데이터로부터 (1) 단계 번호(1~12)와 (2) 단계별 자동 완료 일시를
+    함께 산출한다. `_pipeline_stage`·`_stage_auto_times` 는 이 함수의 얇은 래퍼다.
+
+    동작은 종전 두 개의 독립 함수와 **완전히 동일**하다(특성화 테스트로 검증).
+    단, 번호 트리거와 일시 트리거는 6·8·9·10단계에서 여전히 다르다(기존 불일치를
+    의도적으로 보존 — P2 드리프트 리포트 참고). 두 규칙을 한 함수에 나란히 두어
+    차이가 한눈에 보이도록 했다.
+
+    (오더당 CI는 upsert로 유일하므로 번호·일시 경로가 같은 CI를 공유해도 안전하다.)
+    """
+    if rfq is None:
+        return 1, {}
+    rfq_id = rfq.id
+    is_service = _enum_val(rfq.work_type) == "서비스"
+
+    # ── 자식 레코드 1회 조회(번호·일시 공용) ──────────────────────────────────
     vrfqs = s.query(VendorRFQ).filter_by(rfq_id=rfq_id).all()
+    vrfq_ids = [v.id for v in vrfqs]
+    vquotes = (s.query(VendorQuote).filter(VendorQuote.vendor_rfq_id.in_(vrfq_ids)).all()
+               if vrfq_ids else [])
+    quo = (s.query(Quotation)
+           .filter(Quotation.rfq_id == rfq_id, Quotation.status != QuotationStatus.DRAFT)
+           .order_by(Quotation.created_at.asc()).first())
+    if order:
+        pos = (s.query(PurchaseOrder).filter_by(order_id=order.id)
+               .order_by(PurchaseOrder.created_at.asc()).all())
+        sa = (s.query(ShippingAdvice).filter_by(order_id=order.id)
+              .order_by(ShippingAdvice.created_at.asc()).first())
+        ci = (s.query(CommercialInvoice).filter_by(order_id=order.id)
+              .order_by(CommercialInvoice.created_at.asc()).first())
+        tax = (s.query(TaxInvoiceData).filter_by(ci_id=ci.id)
+               .order_by(TaxInvoiceData.created_at.asc()).first()) if ci else None
+        ars = s.query(ARRecord).filter_by(order_id=order.id).all()
+        pod = (s.query(DeliveryProof).filter_by(order_id=order.id)
+               .order_by(DeliveryProof.created_at.asc()).first())
+    else:
+        pos, sa, ci, tax, ars, pod = [], None, None, None, [], None
+
+    # ── (1) 단계 번호 ─────────────────────────────────────────────────────────
+    stage = 1
     if vrfqs:
         stage = max(stage, 2)
-        vrfq_ids = [v.id for v in vrfqs]
-        if s.query(VendorQuote).filter(VendorQuote.vendor_rfq_id.in_(vrfq_ids)).first():
+        if vquotes:
             stage = max(stage, 3)
-
-    if (s.query(Quotation)
-            .filter(Quotation.rfq_id == rfq_id, Quotation.status != QuotationStatus.DRAFT)
-            .first()):
+    if quo:
         stage = max(stage, 4)
-
-    order = (s.query(Order).filter(Order.rfq_id == rfq_id)
-             .order_by(Order.created_at.desc()).first())
-    if not order:
-        order = (s.query(Order).join(Quotation, Order.quotation_id == Quotation.id)
-                 .filter(Quotation.rfq_id == rfq_id)
-                 .order_by(Order.created_at.desc()).first())
-
     if order:
         stage = max(stage, 5)
-        if s.query(PurchaseOrder).filter_by(order_id=order.id).first():
+        if pos:
             stage = max(stage, 6)
-
         ost = _enum_val(order.status)
         stage = max(stage, {
             "오더 수주": 5,
@@ -634,21 +657,19 @@ def _pipeline_stage(s, rfq_id: int) -> int:
         else:
             if getattr(order, "consignee_confirmed_date", None):
                 stage = max(stage, 8)
-            if s.query(ShippingAdvice).filter_by(order_id=order.id).first():
+            if sa:
                 stage = max(stage, 8)
             if getattr(order, "vendor_docs_sent_date", None):
                 stage = max(stage, 8)
             # 9) 운송 완료 · POD 수취 — POD 파일 업로드 시 완료
-            if s.query(DeliveryProof).filter_by(order_id=order.id).first():
+            if pod:
                 stage = max(stage, 9)
-            ci = s.query(CommercialInvoice).filter_by(order_id=order.id).first()
             if ci:
                 stage = max(stage, 8)
                 # 10) Tax Invoice 작성 · 대금 청구 — Tax Invoice Data 생성 시
-                if s.query(TaxInvoiceData).filter_by(ci_id=ci.id).first():
+                if tax:
                     stage = max(stage, 10)
 
-        ars = s.query(ARRecord).filter_by(order_id=order.id).all()
         if ars:
             stage = max(stage, 10)
             if any(_enum_val(a.status) == "완납" for a in ars):
@@ -656,13 +677,67 @@ def _pipeline_stage(s, rfq_id: int) -> int:
 
     # 수동 완료(완료 버튼/POD)로 stage_dates 에 표시된 단계를 반영.
     # (자동 근거가 약하거나 없는 단계만 — 의도치 않은 점프 방지)
-    sd = (getattr(rfq_obj, "stage_dates", None) or {}) if rfq_obj else {}
+    sd = getattr(rfq, "stage_dates", None) or {}
     # 서비스 업무는 7·8단계(Service Readiness/arrangement)도 수동 완료로 진행한다.
     manual_keys = ("7", "8", "9", "11", "12") if is_service else ("9", "11", "12")
     for k in manual_keys:
         if sd.get(k):
             stage = max(stage, int(k))
-    return stage
+
+    # ── (2) 단계별 자동 완료 일시 ─────────────────────────────────────────────
+    # 근거 레코드가 존재하는 단계만 채운다(수동 stage_dates 미입력 시 표시·기본값).
+    # 7·11·12단계는 근거 레코드가 없어 자동값 없음(수동 완료로만 표시).
+    auto: dict[str, str] = {}
+
+    def _set(stg: int, val: str):
+        if val:
+            auto[str(stg)] = val
+
+    # 1) Customer RFQ 수신 — 수신 일시(received_at) 우선, 없으면 생성 시각
+    _set(1, (getattr(rfq, "received_at", None) or "") or _kst_iso(rfq.created_at))
+    # 2) Vendor RFQ 발신 · 3) Vendor Quot. 수신
+    if vrfqs:
+        _set(2, min((_vrfq_sent_iso(v) for v in vrfqs), default=""))
+        if vquotes:
+            # 3단계 일시 = 실제 견적 수신일시(received_at 수동입력) 우선,
+            # 없으면 수신일(received_date), 그래도 없으면 레코드 생성시각.
+            def _vq_recv(q) -> str:
+                return ((getattr(q, "received_at", None) or "").strip()
+                        or _date_iso(q.received_date)
+                        or _kst_iso(q.created_at))
+            _set(3, min((r for r in (_vq_recv(q) for q in vquotes) if r), default=""))
+    # 4) Customer Quot. 발신
+    if quo:
+        _set(4, _date_iso(quo.sent_date) or _kst_iso(quo.created_at))
+    if order:
+        # 5) Customer P/O 수신
+        _set(5, _kst_iso(order.created_at))
+        # 6) Vendor P/O 발신
+        if pos:
+            _set(6, _date_iso(pos[0].sent_date) or _kst_iso(pos[0].created_at))
+        # 8) Delivery arrangement
+        _set(8, (_kst_iso(sa.created_at) if sa else "")
+             or _date_iso(getattr(order, "consignee_confirmed_date", None))
+             or _date_iso(getattr(order, "vendor_docs_sent_date", None))
+             or _date_iso(getattr(order, "shipped_date", None)))
+        # 9) 운송 완료 · POD 수취 — POD 업로드 일시 우선, 없으면 인도일
+        _set(9, (getattr(pod, "uploaded_at", "") if pod else "")
+             or _date_iso(getattr(order, "delivered_date", None)))
+        # 10) Tax Invoice 작성 · 대금 청구 — Tax Invoice Data 생성 시점 우선
+        _set(10, (_date_iso(tax.date) or _kst_iso(tax.created_at) if tax else "")
+             or _kst_iso(min((a.created_at for a in ars if a.created_at), default=None))
+             or (_kst_iso(ci.created_at) if ci else ""))
+        # 11) 세금계산서 발행 · 12) 대금 결제 완료 — 수동 완료(stage_dates)로만 표시
+
+    return stage, auto
+
+
+def _pipeline_stage(s, rfq_id: int) -> int:
+    """RFQ 1건의 내부 진행 단계(1~12). `_deal_progress` 위임(단일 소스)."""
+    rfq = s.query(RFQ).filter_by(id=rfq_id).first()
+    if rfq is None:
+        return 1
+    return _deal_progress(s, rfq, _order_for_rfq(s, rfq_id))[0]
 
 
 def _kst_iso(dt) -> str:
@@ -724,72 +799,8 @@ def _date_iso(d: str | None) -> str:
 
 
 def _stage_auto_times(s, rfq, order) -> dict[str, str]:
-    """내부 12단계 중, 근거 레코드가 존재하는 단계의 완료 일시를 자동 추출.
-    수동 입력(stage_dates)이 없을 때 표시·기본값으로 사용된다. (7·12단계는 근거 없음)"""
-    auto: dict[str, str] = {}
-
-    def _set(stage: int, val: str):
-        if val:
-            auto[str(stage)] = val
-
-    # 1) Customer RFQ 수신 — 수신 일시(received_at) 우선, 없으면 생성 시각
-    _set(1, (getattr(rfq, "received_at", None) or "") or _kst_iso(rfq.created_at))
-
-    # 2) Vendor RFQ 발신 · 3) Vendor Quot. 수신
-    vrfqs = s.query(VendorRFQ).filter_by(rfq_id=rfq.id).all()
-    if vrfqs:
-        _set(2, min((_vrfq_sent_iso(v) for v in vrfqs), default=""))
-        vrfq_ids = [v.id for v in vrfqs]
-        vqs = (s.query(VendorQuote)
-               .filter(VendorQuote.vendor_rfq_id.in_(vrfq_ids)).all())
-        if vqs:
-            # 3단계 일시 = 실제 견적 수신일시(received_at 수동입력) 우선,
-            # 없으면 수신일(received_date), 그래도 없으면 레코드 생성시각.
-            def _vq_recv(q) -> str:
-                return ((getattr(q, "received_at", None) or "").strip()
-                        or _date_iso(q.received_date)
-                        or _kst_iso(q.created_at))
-            _set(3, min((r for r in (_vq_recv(q) for q in vqs) if r), default=""))
-
-    # 4) Customer Quot. 발신
-    quo = (s.query(Quotation)
-           .filter(Quotation.rfq_id == rfq.id, Quotation.status != QuotationStatus.DRAFT)
-           .order_by(Quotation.created_at.asc()).first())
-    if quo:
-        _set(4, _date_iso(quo.sent_date) or _kst_iso(quo.created_at))
-
-    if order:
-        # 5) Customer P/O 수신
-        _set(5, _kst_iso(order.created_at))
-        # 6) Vendor P/O 발신
-        po = (s.query(PurchaseOrder).filter_by(order_id=order.id)
-              .order_by(PurchaseOrder.created_at.asc()).first())
-        if po:
-            _set(6, _date_iso(po.sent_date) or _kst_iso(po.created_at))
-        # 8) Delivery arrangement
-        sa = (s.query(ShippingAdvice).filter_by(order_id=order.id)
-              .order_by(ShippingAdvice.created_at.asc()).first())
-        _set(8, (_kst_iso(sa.created_at) if sa else "")
-             or _date_iso(getattr(order, "consignee_confirmed_date", None))
-             or _date_iso(getattr(order, "vendor_docs_sent_date", None))
-             or _date_iso(getattr(order, "shipped_date", None)))
-        # 9) 운송 완료 · POD 수취 — POD 업로드 일시 우선, 없으면 인도일
-        pod = (s.query(DeliveryProof).filter_by(order_id=order.id)
-               .order_by(DeliveryProof.created_at.asc()).first())
-        _set(9, (getattr(pod, "uploaded_at", "") if pod else "")
-             or _date_iso(getattr(order, "delivered_date", None)))
-        # 10) Tax Invoice 작성 · 대금 청구 — Tax Invoice Data 생성 시점 우선
-        ci = (s.query(CommercialInvoice).filter_by(order_id=order.id)
-              .order_by(CommercialInvoice.created_at.asc()).first())
-        ars = s.query(ARRecord).filter_by(order_id=order.id).all()
-        tax = (s.query(TaxInvoiceData).filter_by(ci_id=ci.id)
-               .order_by(TaxInvoiceData.created_at.asc()).first()) if ci else None
-        _set(10, (_date_iso(tax.date) or _kst_iso(tax.created_at) if tax else "")
-             or _kst_iso(min((a.created_at for a in ars if a.created_at), default=None))
-             or (_kst_iso(ci.created_at) if ci else ""))
-        # 11) 세금계산서 발행 · 12) 대금 결제 완료 — 수동 완료(stage_dates)로만 표시
-
-    return auto
+    """내부 12단계 중, 근거 레코드가 존재하는 단계의 완료 일시. `_deal_progress` 위임."""
+    return _deal_progress(s, rfq, order)[1]
 
 
 def _status_label(stage: int, work_type=None) -> str:
