@@ -65,6 +65,14 @@ const STAGE_PHASES: { label: string; count: number }[] = [
 ];
 // 4개 중분류 accent(보드 컬럼과 동일) — 타임라인 점 색상에 사용.
 const PHASE_ACCENTS = ["#0055a8", "#0e7490", "#4f46e5", "#b45309"];
+// 각 중분류(phase) → 담당 워크스페이스 화면 + 단계 범위. 보드를 허브로: 컬럼 헤더에서
+// 해당 단계 작업 화면으로 바로 이동(모달의 단계별 딥링크와 함께 양방향 연결).
+const PHASE_WORKSPACE: { href: string; range: string }[] = [
+  { href: "/rfq", range: "1–4" },
+  { href: "/po", range: "5–6" },
+  { href: "/documents", range: "7–9" },
+  { href: "/ar", range: "10–12" },
+];
 
 /** 현재 단계(stage)가 속한 중분류 인덱스. 미시작(0)이면 -1. */
 function phaseIndexOfStage(stage: number): number {
@@ -765,11 +773,15 @@ function PipelineBoard({
     ? STAGE_PHASES.map((p, pi) => ({
         label: p.label,
         accent: pi,
+        href: PHASE_WORKSPACE[pi]?.href as string | undefined,
+        range: PHASE_WORKSPACE[pi]?.range as string | undefined,
         match: (st: number) => phaseIndexOfStage(st) === pi,
       }))
     : steps.map((label, i) => ({
         label: `${i + 1}. ${label}`,
         accent: i % 4,
+        href: undefined as string | undefined,
+        range: undefined as string | undefined,
         match: (st: number) => st === i + 1,
       }));
 
@@ -780,7 +792,18 @@ function PipelineBoard({
         return (
           <section key={ci} className="pl-board-col" data-accent={col.accent}>
             <header className="pl-board-head">
-              <span className="pl-board-title" title={col.label}>{col.label}</span>
+              {col.href ? (
+                <Link
+                  href={col.href}
+                  className="pl-board-title link"
+                  title={`${col.label} — open workspace`}
+                >
+                  {col.label}
+                  {col.range ? <span className="pl-board-range">{col.range}</span> : null}
+                </Link>
+              ) : (
+                <span className="pl-board-title" title={col.label}>{col.label}</span>
+              )}
               <span className="pl-board-count">{cards.length}</span>
             </header>
             <div className="pl-board-list">

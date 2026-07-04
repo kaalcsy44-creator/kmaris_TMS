@@ -4187,6 +4187,22 @@ table.mini .num {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* 컬럼 헤더 → 담당 워크스페이스 링크(보드를 허브로) */
+.pl-board-title.link {
+  text-decoration: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+.pl-board-title.link:hover { text-decoration: underline; }
+.pl-board-range {
+  flex: none;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+}
 .pl-board-count {
   flex: none;
   font-size: 11px;
