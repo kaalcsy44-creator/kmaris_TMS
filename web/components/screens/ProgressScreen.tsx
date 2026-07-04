@@ -54,13 +54,14 @@ function resolveSteps(baseSteps: string[], workType?: string | null): string[] {
   return baseSteps.map((name, i) => SERVICE_STEP_OVERRIDES[i + 1] ?? name);
 }
 
-// 내부 11단계 → 5개 중분류(영역): RFQ 1–2 / Quote 3–4 / PO 5–6 / Docs 7–8 / AR 9–11.
+// 내부 11단계 → 5개 중분류(영역): RFQ 1–2 / Quote 3–4 / PO 5–6 / Docs 7–9 / AR 10–11.
+// (7 Readiness · 8 Complete·POD · 9 Tax·Billing 은 모두 Documents 페이지 탭 → Documents.)
 const STAGE_PHASES: { label: string; count: number }[] = [
   { label: "RFQ", count: 2 },
   { label: "Quote", count: 2 },
   { label: "PO", count: 2 },
-  { label: "Documents", count: 2 },
-  { label: "AR", count: 3 },
+  { label: "Documents", count: 3 },
+  { label: "AR", count: 2 },
 ];
 // 5개 중분류 accent(보드 컬럼과 동일) — 타임라인 점 색상에 사용.
 const PHASE_ACCENTS = ["#0055a8", "#0e7490", "#4f46e5", "#7e22ce", "#b45309"];
@@ -71,8 +72,8 @@ const PHASE_WORKSPACE: { href: string; range: string }[] = [
   { href: "/rfq", range: "1–2" },
   { href: "/rfq", range: "3–4" },
   { href: "/po", range: "5–6" },
-  { href: "/documents", range: "7–8" },
-  { href: "/ar", range: "9–11" },
+  { href: "/documents", range: "7–9" },
+  { href: "/ar", range: "10–11" },
 ];
 
 /** 현재 단계(stage)가 속한 중분류 인덱스. 미시작(0)이면 -1. */
