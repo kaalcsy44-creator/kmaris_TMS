@@ -4319,3 +4319,25 @@ table.mini .num {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* ── Statistics: 파이프라인 퍼널 범례 ──────────────────────────────────────── */
+.funnel-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin: 2px 2px 8px;
+}
+.funnel-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.funnel-legend-item .sw {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  flex: none;
+}

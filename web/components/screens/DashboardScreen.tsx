@@ -24,7 +24,7 @@ import type {
 } from "@/lib/types";
 import {
   ResponsiveContainer, LineChart, Line, BarChart, Bar,
-  XAxis, YAxis, Tooltip, CartesianGrid, Legend, Cell,
+  XAxis, YAxis, Tooltip, CartesianGrid, Legend, Cell, LabelList,
 } from "recharts";
 import { tr } from "@/lib/labels";
 import FilterTable, { ColumnDef } from "@/components/common/FilterTable";
@@ -727,6 +727,17 @@ function DeltaChip({ cur, prev }: { cur: number; prev: number }) {
 const CHART_COLORS = ["#0055a8", "#2e8b57", "#e8830c", "#8e44ad", "#16a085",
   "#c0392b", "#2980b9", "#d35400", "#27ae60", "#7f8c8d"];
 
+// 파이프라인 4개 중분류(phase) 순서형 파랑 램프(light→dark) — dataviz 검증 통과.
+// 단계는 순서형이므로 임의 카테고리색이 아니라 단일 색조 심도로 진행감을 준다.
+const PHASE_RAMP = ["#86b6ef", "#5598e7", "#2a78d6", "#184f95"];
+const PHASE_LABELS = ["RFQ & Quotation", "P/O", "Documents", "AR"];
+const PHASE_BOUNDS = [4, 6, 9, 12]; // 각 phase 의 단계 상한(누적): 1–4 / 5–6 / 7–9 / 10–12
+/** 1-based 단계 번호 → phase 인덱스(0..3). */
+function phaseOfStage(stage: number): number {
+  const i = PHASE_BOUNDS.findIndex((b) => stage <= b);
+  return i < 0 ? PHASE_BOUNDS.length - 1 : i;
+}
+
 function StatisticsTab() {
   const { data, error } = useCachedData("dashboard", fetchDashboard);
   const { data: stat } = useCachedData("statistics", () => fetchStatistics(12));
@@ -861,20 +872,66 @@ function StatisticsTab() {
         </div>
       </div>
 
-      {/* ③ 파이프라인 12단계 분포 ----------------------------------------- */}
-      <SubHead title="Pipeline Distribution" sub="Deals per internal stage" />
-      <ResponsiveContainer width="100%" height={220}>
-        <BarChart
-          data={data.stage_distribution.map((c, i) => ({ stage: `${i + 1}`, count: c }))}
-          margin={{ top: 8, right: 16, bottom: 0, left: 8 }}
-        >
-          <CartesianGrid strokeDasharray="3 3" stroke="#eef1f5" />
-          <XAxis dataKey="stage" tick={{ fontSize: 11 }} />
-          <YAxis allowDecimals={false} tick={{ fontSize: 11 }} width={32} />
-          <Tooltip formatter={(v, _n, p) => [`${Number(v) || 0} deals`, `Stage ${p?.payload?.stage ?? ""}`]} />
-          <Bar dataKey="count" fill="#0055a8" radius={[3, 3, 0, 0]} />
-        </BarChart>
-      </ResponsiveContainer>
+      {/* ③ 파이프라인 12단계 분포(퍼널) ------------------------------------ */}
+      <SubHead title="Pipeline Distribution" sub="Deals currently at each stage" />
+      {(() => {
+        const steps = data.steps;
+        const funnelData = data.stage_distribution.map((count, i) => ({
+          name: `${i + 1}. ${steps[i] ?? ""}`,
+          count,
+          phase: phaseOfStage(i + 1),
+        }));
+        const rowH = 26;
+        return (
+          <>
+            {/* phase 범례 — 색이 나타내는 4개 중분류 */}
+            <div className="funnel-legend">
+              {PHASE_LABELS.map((lb, i) => (
+                <span key={lb} className="funnel-legend-item">
+                  <span className="sw" style={{ background: PHASE_RAMP[i] }} />
+                  {lb}
+                </span>
+              ))}
+            </div>
+            <ResponsiveContainer width="100%" height={funnelData.length * rowH + 36}>
+              <BarChart
+                data={funnelData}
+                layout="vertical"
+                margin={{ top: 4, right: 44, bottom: 4, left: 8 }}
+                barCategoryGap={4}
+              >
+                <CartesianGrid horizontal={false} strokeDasharray="3 3" stroke="#eef1f5" />
+                <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} />
+                <YAxis
+                  type="category"
+                  dataKey="name"
+                  width={176}
+                  interval={0}
+                  tick={{ fontSize: 11 }}
+                />
+                <Tooltip
+                  cursor={{ fill: "rgba(42,120,214,0.06)" }}
+                  formatter={(v) => [`${Number(v) || 0} deals`, "Count"]}
+                />
+                <Bar dataKey="count" radius={[0, 3, 3, 0]} background={{ fill: "#f1f5fb" }}>
+                  {funnelData.map((d, i) => (
+                    <Cell key={i} fill={PHASE_RAMP[d.phase]} />
+                  ))}
+                  <LabelList
+                    dataKey="count"
+                    position="right"
+                    formatter={(v) => {
+                      const n = Number(v) || 0;
+                      return n ? String(n) : "";
+                    }}
+                    style={{ fontSize: 11, fontWeight: 700, fill: "#111827" }}
+                  />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </>
+        );
+      })()}
 
       {/* ④ 업무 알림 (6) --------------------------------------------------- */}
       <SubHead title="Action Items" sub="Follow-ups & exceptions" />
