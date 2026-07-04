@@ -63,6 +63,8 @@ const STAGE_PHASES: { label: string; count: number }[] = [
   { label: "Documents", count: 3 },
   { label: "AR", count: 3 },
 ];
+// 4개 중분류 accent(보드 컬럼과 동일) — 타임라인 점 색상에 사용.
+const PHASE_ACCENTS = ["#0055a8", "#0e7490", "#4f46e5", "#b45309"];
 
 /** 현재 단계(stage)가 속한 중분류 인덱스. 미시작(0)이면 -1. */
 function phaseIndexOfStage(stage: number): number {
@@ -929,6 +931,8 @@ function PipelineModal({
   const [deleting, setDeleting] = useState(false);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  // 단계 상세 표시: 단계별 그룹(stages, 편집 가능) / 시간순 여정(timeline, 읽기전용)
+  const [detailView, setDetailView] = useState<"stages" | "timeline">("stages");
   // 편집 필드(편집 진입 시 r 값으로 seed)
   const [fWorkType, setFWorkType] = useState(r.work_type || "부품공급");
   const [fCustomerId, setFCustomerId] = useState<number | "">(r.customer_id || "");
@@ -1221,7 +1225,30 @@ function PipelineModal({
             </dl>
           )}
 
-          {/* 12단계 체인 — 1~6 / 7~12 두 열. 일시는 자동 동기화(읽기전용) */}
+          {/* 단계 상세 — 단계별(편집) / 시간순 여정(읽기전용) 토글 */}
+          <div className="pl-detail-toggle" role="tablist" aria-label="Stage detail view">
+            <button
+              type="button"
+              className={detailView === "stages" ? "on" : ""}
+              aria-pressed={detailView === "stages"}
+              onClick={() => setDetailView("stages")}
+            >
+              Stages
+            </button>
+            <button
+              type="button"
+              className={detailView === "timeline" ? "on" : ""}
+              aria-pressed={detailView === "timeline"}
+              onClick={() => setDetailView("timeline")}
+            >
+              Timeline
+            </button>
+          </div>
+
+          {detailView === "timeline" ? (
+            <DealTimeline chain={chain} stageNotes={r.stage_notes} steps={rSteps} />
+          ) : (
+          /* 12단계 체인 — 1~6 / 7~12 두 열. 일시는 자동 동기화(읽기전용) */
           <div className="pl-chain">
             {[leftChain, rightChain].map((col, ci) => (
               <div className="pl-col" key={ci}>
@@ -1270,6 +1297,7 @@ function PipelineModal({
               </div>
             ))}
           </div>
+          )}
 
           <div className="pl-actions">
             <div className="pl-nav-links">
@@ -1431,6 +1459,86 @@ function NoteForm({
 }
 
 /** 단계별 코멘트/활동이력 — 일시·상대·수단·내용 구조화 입력 + 기록 표시/수정/삭제. */
+/**
+ * 거래 여정 타임라인 — 단계 완료 일시 + 모든 단계 노트를 시간순으로 병합해
+ * 하나의 세로 타임라인으로. 단계별 그룹(pl-chain)과 달리 "언제 무슨 일이 있었나"를
+ * 시간순으로 보여준다(읽기전용). 점 색상은 4개 중분류(phase)로 구분.
+ */
+function DealTimeline({
+  chain,
+  stageNotes,
+  steps,
+}: {
+  chain: { no: number; label: string; value: string; at: string; skip: boolean }[];
+  stageNotes: Record<string, StageNote[]> | undefined;
+  steps: string[];
+}) {
+  type Ev = {
+    key: string; sort: number; at: string; kind: "stage" | "note";
+    no: number; label: string; value?: string; note?: StageNote;
+  };
+  const parse = (s: string) => {
+    const t = Date.parse((s || "").replace(" ", "T"));
+    return Number.isNaN(t) ? Number.POSITIVE_INFINITY : t;
+  };
+  const events: Ev[] = [];
+  chain.forEach((c) => {
+    if (c.skip || !c.at) return;
+    events.push({ key: `s${c.no}`, sort: parse(c.at), at: c.at, kind: "stage", no: c.no, label: c.label, value: c.value });
+  });
+  Object.entries(stageNotes ?? {}).forEach(([k, notes]) => {
+    const no = Number(k);
+    (notes ?? []).forEach((n, i) => {
+      const at = n.datetime || n.at || "";
+      events.push({ key: `n${k}-${i}`, sort: parse(at), at, kind: "note", no, label: steps[no - 1] ?? "", note: n });
+    });
+  });
+  events.sort((a, b) => a.sort - b.sort);
+
+  if (events.length === 0) {
+    return (
+      <div className="pl-tl-empty">
+        No dated activity yet. Stage completions and notes will appear here in order.
+      </div>
+    );
+  }
+  return (
+    <div className="pl-timeline">
+      {events.map((e) => {
+        const accent = PHASE_ACCENTS[Math.max(0, phaseIndexOfStage(e.no))] ?? PHASE_ACCENTS[0];
+        return (
+          <div className={`pl-tl-item ${e.kind}`} key={e.key}>
+            <span
+              className="pl-tl-dot"
+              style={{ background: e.kind === "stage" ? accent : "var(--surface, #fff)", borderColor: accent }}
+            />
+            <div className="pl-tl-body">
+              <div className="pl-tl-head">
+                <span className="pl-tl-stage" style={{ color: accent }}>
+                  {e.no}. {e.label}
+                </span>
+                <span className="pl-tl-at">{e.at ? fmtStageDate(e.at) : ""}</span>
+              </div>
+              {e.kind === "stage" ? (
+                <div className="pl-tl-text done">
+                  Stage completed{e.value ? ` · ${e.value}` : ""}
+                </div>
+              ) : (
+                <div className="pl-tl-text">
+                  {e.note?.party || e.note?.channel ? (
+                    <span className="pl-tl-meta">{joinDot(e.note?.party, e.note?.channel)} </span>
+                  ) : null}
+                  {e.note?.text || ""}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function StageNotes({
   rfqId,
   stage,

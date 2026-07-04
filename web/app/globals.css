@@ -4320,6 +4320,106 @@ table.mini .num {
   text-overflow: ellipsis;
 }
 
+/* ── Progress 모달: Stages / Timeline 토글 + 여정 타임라인 ─────────────────── */
+.pl-detail-toggle {
+  display: inline-flex;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  overflow: hidden;
+  margin: 4px 0 12px;
+}
+.pl-detail-toggle button {
+  border: 0;
+  background: #fff;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 5px 14px;
+  cursor: pointer;
+  line-height: 1;
+}
+.pl-detail-toggle button + button { border-left: 1px solid var(--line); }
+.pl-detail-toggle button.on { background: var(--navy); color: #fff; }
+
+.pl-tl-empty {
+  color: var(--muted);
+  font-size: 12.5px;
+  padding: 18px 4px;
+}
+.pl-timeline {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 4px 0 4px 6px;
+}
+/* 세로 연결선 */
+.pl-timeline::before {
+  content: "";
+  position: absolute;
+  left: 11px;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  background: var(--line);
+}
+.pl-tl-item {
+  position: relative;
+  display: grid;
+  grid-template-columns: 22px 1fr;
+  gap: 8px;
+  align-items: start;
+}
+.pl-tl-dot {
+  width: 11px;
+  height: 11px;
+  margin-top: 3px;
+  margin-left: 3px;
+  border-radius: 50%;
+  border: 2px solid var(--blue);
+  background: #fff;
+  z-index: 1;
+}
+.pl-tl-body {
+  min-width: 0;
+  background: var(--zebra);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 7px 10px;
+}
+.pl-tl-item.stage .pl-tl-body { background: #fff; }
+.pl-tl-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.pl-tl-stage {
+  font-size: 11.5px;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pl-tl-at {
+  flex: none;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.pl-tl-text {
+  font-size: 12px;
+  color: var(--ink);
+  margin-top: 2px;
+  word-break: break-word;
+}
+.pl-tl-text.done { color: var(--muted); font-style: italic; }
+.pl-tl-meta {
+  font-weight: 700;
+  color: var(--blue);
+}
+
 /* ── Statistics: 파이프라인 퍼널 범례 ──────────────────────────────────────── */
 .funnel-legend {
   display: flex;
