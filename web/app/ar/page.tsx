@@ -72,7 +72,7 @@ function money(n: number) {
   return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-type StageTab = 11 | 12;
+type StageTab = 10 | 11;
 
 function ArOverview() {
   const params = useSearchParams();
@@ -82,16 +82,16 @@ function ArOverview() {
   const { data, error: loadError, refresh } = useCachedData("ar:overview", fetchArOverview);
   const { data: options } = useCachedData("ar:workoptions", fetchPoWorkOptions);
   const [error, setError] = useState<string | null>(null); // manual messages (SOA export, etc.)
-  const [stageTab, setStageTab] = useState<StageTab>(11);
+  const [stageTab, setStageTab] = useState<StageTab>(10);
   const [editing, setEditing] = useState<ArRow | null>(null); // stage-action popup target
   const [adding, setAdding] = useState(false);
 
   const rows = useMemo(() => data?.rows ?? [], [data]);
 
-  // Progress stage row → ?stage=11|12 selects the tab.
+  // Progress stage row → ?stage=10|11 selects the tab.
   useEffect(() => {
-    if (stageParam === "12") setStageTab(12);
-    else if (stageParam === "11") setStageTab(11);
+    if (stageParam === "11") setStageTab(11);
+    else if (stageParam === "10") setStageTab(10);
   }, [stageParam]);
 
   // ?order=<id> from Progress "AR work" → auto-open that AR record popup.
@@ -133,10 +133,10 @@ function ArOverview() {
     URL.revokeObjectURL(url);
   }
 
-  // Common columns + stage status column (11: tax invoice, 12: payment).
+  // Common columns + stage status column (10: tax invoice, 11: payment).
   const actBtnStyle = { padding: "3px 12px", fontSize: 12 } as const;
   const stageCol: ColumnDef<ArRow> =
-    stageTab === 11
+    stageTab === 10
       ? {
           key: "tax",
           label: "Tax Invoice",
@@ -208,8 +208,8 @@ function ArOverview() {
       render: (r) => <DualCurrencyAmount value={r.invoice_amount} currency={r.currency} />,
       sortValue: (r) => r.invoice_amount,
     },
-    // Paid 컬럼은 12단계(수금)에서만 표시
-    ...(stageTab === 12
+    // Paid 컬럼은 11단계(수금)에서만 표시
+    ...(stageTab === 11
       ? [{
           key: "paid",
           label: "Paid",
@@ -234,11 +234,11 @@ function ArOverview() {
   return (
     <div className="action-tabs">
       <div className="page-tabs">
-        <button className={stageTab === 11 ? "on" : ""} onClick={() => setStageTab(11)}>
-          11. Issue Tax Invoice
+        <button className={stageTab === 10 ? "on" : ""} onClick={() => setStageTab(10)}>
+          10. Issue Tax Invoice
         </button>
-        <button className={stageTab === 12 ? "on" : ""} onClick={() => setStageTab(12)}>
-          12. Payment Completed
+        <button className={stageTab === 11 ? "on" : ""} onClick={() => setStageTab(11)}>
+          11. Payment Completed
         </button>
       </div>
 
@@ -275,7 +275,7 @@ function ArOverview() {
       )}
 
       {editing ? (
-        stageTab === 11 ? (
+        stageTab === 10 ? (
           <TaxIssueModal row={editing} onChanged={load} onClose={closePopup} />
         ) : (
           <PaymentModal row={editing} onChanged={load} onClose={closePopup} />
@@ -343,7 +343,7 @@ function ciTotal(d: DocumentDetail | null): number {
   return d.ci.items.reduce((s, it) => s + num(it.amount), 0);
 }
 
-/** 11) Issue Tax Invoice — save billing details, then complete stage 11. */
+/** 10) Issue Tax Invoice — save billing details, then complete stage 10. */
 function TaxIssueModal({
   row,
   onChanged,
@@ -397,7 +397,7 @@ function TaxIssueModal({
         status: row.status,
         notes,
       });
-      await completeOrderStage(row.order_id, 11, complete, complete ? issuedAt : undefined);
+      await completeOrderStage(row.order_id, 10, complete, complete ? issuedAt : undefined);
       onChanged();
       onClose();
     } catch (e) {
@@ -469,7 +469,7 @@ function TaxIssueModal({
   );
 }
 
-/** 12) Payment Completed — record payment, then complete stage 12. */
+/** 11) Payment Completed — record payment, then complete stage 11. */
 function PaymentModal({
   row,
   onChanged,
@@ -493,7 +493,7 @@ function PaymentModal({
     try {
       const amt = num(amount);
       if (amt > 0) await recordArPayment(row.id, amt, dueDate);
-      await completeOrderStage(row.order_id, 12, complete, complete ? paidAt : undefined);
+      await completeOrderStage(row.order_id, 11, complete, complete ? paidAt : undefined);
       onChanged();
       onClose();
     } catch (e) {

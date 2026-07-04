@@ -723,7 +723,7 @@ def vendor_po_send(po_id: int, body: VendorPoSend):
 @app.post("/api/admin/orders/{order_id}/stage/{stage}/complete",
           dependencies=[Depends(require_token)])
 def complete_order_stage(order_id: int, stage: int, body: StageCompleteBody):
-    """11·12 등 수동 완료 단계를 토글한다. 완료 시 RFQ.stage_dates[stage]=지정 시각(없으면 현재)."""
+    """10·11 등 수동 완료 단계를 토글한다. 완료 시 RFQ.stage_dates[stage]=지정 시각(없으면 현재)."""
     if not (1 <= stage <= len(INTERNAL_STEPS)):
         raise HTTPException(status_code=400, detail="잘못된 단계 번호입니다.")
     s = get_session()

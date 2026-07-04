@@ -462,7 +462,6 @@ export type DocRow = {
   has_pod: boolean;
   has_tax: boolean;
   svc_ready_done: boolean;
-  svc_arr_done: boolean;
   svc_billed: boolean;
   first_rfq_at: string;
   project_no: string;
@@ -511,7 +510,7 @@ export type DocumentDetail = {
     items: DocumentWorkItem[];
   };
   pod: null | { id: number; filename: string; uploaded_at: string };
-  stage_done: { "7": boolean; "8": boolean; "9": boolean; "11": boolean; "12": boolean };
+  stage_done: { "7": boolean; "8": boolean; "10": boolean; "11": boolean };
   ci: null | {
     id: number;
     ci_no: string;

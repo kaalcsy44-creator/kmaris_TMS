@@ -36,31 +36,30 @@ const CUSTOMER_STEPS = [
   "In Transit",
   "Delivered",
 ];
-// 내부 12단계 → 고객 7단계 매핑(인덱스 = 내부단계-1). 필요 시 경계 조정.
-const CUSTOMER_STAGE_MAP = [1, 2, 2, 3, 4, 5, 5, 6, 7, 7, 7, 7];
+// 내부 11단계 → 고객 7단계 매핑(인덱스 = 내부단계-1). 필요 시 경계 조정.
+const CUSTOMER_STAGE_MAP = [1, 2, 2, 3, 4, 5, 6, 7, 7, 7, 7];
 function customerStage(internal: number): number {
   if (internal <= 0) return 0;
-  return CUSTOMER_STAGE_MAP[Math.min(internal, 12) - 1] ?? 0;
+  return CUSTOMER_STAGE_MAP[Math.min(internal, 11) - 1] ?? 0;
 }
 
-// 업무타입 "서비스"는 내부 12단계 중 7·8·9단계(운송)를 서비스 명칭으로 표시한다.
+// 업무타입 "서비스"는 내부 11단계 중 7·8단계를 서비스 명칭으로 표시한다.
 const SERVICE_STEP_OVERRIDES: Record<number, string> = {
   7: "Service Readiness",
-  8: "Service arrangement",
-  9: "Service Complete · Report",
+  8: "Service Complete · Report",
 };
 function resolveSteps(baseSteps: string[], workType?: string | null): string[] {
-  // 내부 12단계에만 적용(고객확인용 7단계는 그대로).
-  if (baseSteps.length !== 12 || (workType || "부품공급") !== "서비스") return baseSteps;
+  // 내부 11단계에만 적용(고객확인용 7단계는 그대로).
+  if (baseSteps.length !== 11 || (workType || "부품공급") !== "서비스") return baseSteps;
   return baseSteps.map((name, i) => SERVICE_STEP_OVERRIDES[i + 1] ?? name);
 }
 
-// 내부 12단계 → 5개 중분류(영역): RFQ 1–2 / Quote 3–4 / PO 5–6 / Docs 7–9 / AR 10–12.
+// 내부 11단계 → 5개 중분류(영역): RFQ 1–2 / Quote 3–4 / PO 5–6 / Docs 7–8 / AR 9–11.
 const STAGE_PHASES: { label: string; count: number }[] = [
   { label: "RFQ", count: 2 },
   { label: "Quote", count: 2 },
   { label: "PO", count: 2 },
-  { label: "Documents", count: 3 },
+  { label: "Documents", count: 2 },
   { label: "AR", count: 3 },
 ];
 // 5개 중분류 accent(보드 컬럼과 동일) — 타임라인 점 색상에 사용.
@@ -72,8 +71,8 @@ const PHASE_WORKSPACE: { href: string; range: string }[] = [
   { href: "/rfq", range: "1–2" },
   { href: "/rfq", range: "3–4" },
   { href: "/po", range: "5–6" },
-  { href: "/documents", range: "7–9" },
-  { href: "/ar", range: "10–12" },
+  { href: "/documents", range: "7–8" },
+  { href: "/ar", range: "9–11" },
 ];
 
 /** 현재 단계(stage)가 속한 중분류 인덱스. 미시작(0)이면 -1. */
@@ -206,7 +205,7 @@ function StageBar({ stage, steps }: { stage: number; steps: string[] }) {
   const done = doneStageLabel(stage, steps);
   const next = nextStageLabel(stage, steps);
   // 내부 12단계에서만 4개 중분류로 그룹핑(고객확인용 7단계는 기존 평면 바 유지).
-  const grouped = total === 12;
+  const grouped = total === 11;
   const curPhase = grouped ? phaseIndexOfStage(stage) : -1;
   return (
     <div className="pl-stage">
@@ -770,7 +769,7 @@ function PipelineBoard({
   selectedId: number | null;
   onSelect: (id: number) => void;
 }) {
-  const grouped = steps.length === 12;
+  const grouped = steps.length === 11;
   const cols = grouped
     ? STAGE_PHASES.map((p, pi) => ({
         label: p.label,
@@ -1053,11 +1052,11 @@ function PipelineModal({
     const no = i + 1;
     // 내수 부품공급은 7·8·9단계(CI/PL/SA/POD)를 생략한다.
     // 서비스는 7·8·9가 Service Readiness/arrangement/Complete 단계이므로 내수여도 생략하지 않는다.
-    const skip = isDomestic && !isService && (no === 7 || no === 8 || no === 9);
+    const skip = isDomestic && !isService && (no === 7 || no === 8);
     return { no, label, value: docValue[no] ?? "", at: effective(no), skip };
   });
   const leftChain = chain.slice(0, 6);
-  const rightChain = chain.slice(6, 12);
+  const rightChain = chain.slice(6, 11);
 
   const poHref = r.order_id > 0 ? `/po?order=${r.order_id}` : `/po?rfq=${r.rfq_id}`;
 
@@ -1082,13 +1081,13 @@ function PipelineModal({
     if (r.order_id <= 0) return null;
     if (no === 5) return `/po?order=${r.order_id}&tab=customer`;
     if (no === 6) return `/po?order=${r.order_id}&tab=vendor`;
-    if (no >= 7 && no <= 9) return `/documents?order=${r.order_id}&view=${view}&stage=${no}`;
-    if (no === 10) {
-      // 내수·서비스는 대금청구를 AR에서 처리, 그 외(수출 부품)는 Documents 10단계(Tax).
+    if (no >= 7 && no <= 8) return `/documents?order=${r.order_id}&view=${view}&stage=${no}`;
+    if (no === 9) {
+      // 내수·서비스는 대금청구를 AR에서 처리, 그 외(수출 부품)는 Documents 9단계(Tax).
       if (isService || r.trade_type === "내수") return `/ar?order=${r.order_id}`;
-      return `/documents?order=${r.order_id}&view=parts&stage=10`;
+      return `/documents?order=${r.order_id}&view=parts&stage=9`;
     }
-    return `/ar?order=${r.order_id}&stage=${no}`; // 11, 12
+    return `/ar?order=${r.order_id}&stage=${no}`; // 10, 11
   }
 
   return (
@@ -1122,7 +1121,7 @@ function PipelineModal({
         </div>
 
         <div className="intl-bar">
-          {Array.from({ length: 12 }).map((_, k) => (
+          {Array.from({ length: 11 }).map((_, k) => (
             <span key={k} className={`seg${k < r.stage ? " on" : ""}`} />
           ))}
         </div>
@@ -1130,7 +1129,7 @@ function PipelineModal({
         {/* 현재 단계 — 단계 바 바로 아래(해당 단계) */}
         <div className="pl-curstage">
           <span className="dt">Current stage</span>
-          <span className="num">{r.stage}/12</span>
+          <span className="num">{r.stage}/11</span>
           <span className="name">{stageLabel}</span>
         </div>
 

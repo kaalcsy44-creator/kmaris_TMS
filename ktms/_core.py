@@ -146,30 +146,28 @@ JWT_ALGO = "HS256"
 TOKEN_TTL_HOURS = 12
 
 INTERNAL_STEPS = [
-    "Customer RFQ Received",
-    "Vendor RFQ Sent",
-    "Vendor Quote Received",
-    "Customer Quote Sent",
-    "Customer P/O Received",
-    "Vendor P/O Sent",
-    "Delivery Readiness",
-    "Delivery Arrangement",
-    "Delivery Complete · POD",
-    "Tax Invoice · Billing",
-    "Tax Invoice Issued",
-    "Payment Completed",
+    "Customer RFQ Received",      # 1
+    "Vendor RFQ Sent",            # 2
+    "Vendor Quote Received",      # 3
+    "Customer Quote Sent",        # 4
+    "Customer P/O Received",      # 5
+    "Vendor P/O Sent",            # 6
+    "Delivery Readiness",         # 7  (구 'Delivery Arrangement'(구 8)를 흡수)
+    "Delivery Complete · POD",    # 8  (구 9)
+    "Tax Invoice · Billing",      # 9  (구 10)
+    "Tax Invoice Issued",         # 10 (구 11)
+    "Payment Completed",          # 11 (구 12)
 ]
 
-# 업무타입 "서비스"는 7·8·9단계(운송)를 서비스 관점 명칭으로 별도 관리한다.
+# 업무타입 "서비스"는 7·8단계를 서비스 관점 명칭으로 별도 관리한다.
 SERVICE_STEP_OVERRIDES = {
     7: "Service Readiness",
-    8: "Service Arrangement",
-    9: "Service Complete · Report",
+    8: "Service Complete · Report",   # 구 9
 }
 
 
 def steps_for(work_type) -> list[str]:
-    """업무타입에 맞는 12단계 명칭. 서비스면 7·8·9단계를 서비스 명칭으로 치환."""
+    """업무타입에 맞는 11단계 명칭. 서비스면 7·8단계를 서비스 명칭으로 치환."""
     wt = _enum_val(work_type) if work_type else WorkType.PARTS.value
     if wt == WorkType.SERVICE.value:
         return [SERVICE_STEP_OVERRIDES.get(i, name)
@@ -587,7 +585,7 @@ def _deal_progress(s, rfq, order) -> tuple[int, dict[str, str]]:
     """거래(RFQ) 1건의 내부 12단계 진행 — 단일 진실원(single source of truth).
 
     자식 레코드(Vendor RFQ/Quote, Quotation, PO, SA, CI, Tax, AR, POD)를 **한 번만**
-    조회하고, 그 동일한 데이터로부터 (1) 단계 번호(1~12)와 (2) 단계별 자동 완료 일시를
+    조회하고, 그 동일한 데이터로부터 (1) 단계 번호(1~11)와 (2) 단계별 자동 완료 일시를
     함께 산출한다. `_pipeline_stage`·`_stage_auto_times` 는 이 함수의 얇은 래퍼다.
 
     번호·일시 규칙을 한 함수에 나란히 두어 차이가 한눈에 보이도록 했다.
@@ -642,51 +640,52 @@ def _deal_progress(s, rfq, order) -> tuple[int, dict[str, str]]:
             "오더 수주": 5,
             "발주 완료": 6,
             "제조/준비중": 7,
-            "출고완료": 8,
-            "운송중": 8,
-            "목적지 하차 완료": 9,
+            "출고완료": 7,        # 구 8(Arrangement)를 7(Readiness)로 흡수
+            "운송중": 7,
+            "목적지 하차 완료": 8,  # 구 9
         }.get(ost, 5))
 
         is_domestic = (getattr(order, "trade_type", "수출") == "내수")
         if is_domestic and not is_service:
-            # 내수 부품공급: 7·8·9단계(CI/PL/SA/POD)는 해당 없음 → 건너뛴다.
-            # 발주(6) 이후에는 곧바로 대금청구(10) 준비 단계로 본다.
-            # (서비스는 7·8·9가 실제 작업 단계이므로 수동 완료로만 진행)
+            # 내수 부품공급: 7·8단계(CI/PL/SA/POD)는 해당 없음 → 건너뛴다.
+            # 발주(6) 이후에는 곧바로 대금청구(9) 준비 단계로 본다.
+            # (서비스는 7·8이 실제 작업 단계이므로 수동 완료로만 진행)
             if stage >= 6:
-                stage = max(stage, 9)
+                stage = max(stage, 8)
         else:
+            # 7) Delivery Readiness — 운송통지·수하인 확인·벤더서류·CI 준비 근거(구 8 흡수)
             if getattr(order, "consignee_confirmed_date", None):
-                stage = max(stage, 8)
+                stage = max(stage, 7)
             if sa:
-                stage = max(stage, 8)
+                stage = max(stage, 7)
             if getattr(order, "vendor_docs_sent_date", None):
-                stage = max(stage, 8)
-            # 9) 운송 완료 · POD 수취 — POD 파일 업로드 시 완료
-            if pod:
-                stage = max(stage, 9)
+                stage = max(stage, 7)
             if ci:
+                stage = max(stage, 7)
+            # 8) 운송 완료 · POD 수취 — POD 파일 업로드 시 완료 (구 9)
+            if pod:
                 stage = max(stage, 8)
-                # 10) Tax Invoice 작성 · 대금 청구 — Tax Invoice Data 생성 시
-                if tax:
-                    stage = max(stage, 10)
+            # 9) Tax Invoice 작성 · 대금 청구 — Tax Invoice Data 생성 시 (구 10)
+            if ci and tax:
+                stage = max(stage, 9)
 
         if ars:
-            stage = max(stage, 10)
+            stage = max(stage, 9)
             if any(_enum_val(a.status) == "완납" for a in ars):
-                stage = max(stage, 12)
+                stage = max(stage, 11)
 
     # 수동 완료(완료 버튼/POD)로 stage_dates 에 표시된 단계를 반영.
     # (자동 근거가 약하거나 없는 단계만 — 의도치 않은 점프 방지)
     sd = getattr(rfq, "stage_dates", None) or {}
-    # 서비스 업무는 7·8단계(Service Readiness/arrangement)도 수동 완료로 진행한다.
-    manual_keys = ("7", "8", "9", "11", "12") if is_service else ("9", "11", "12")
+    # 서비스 업무는 7·8단계(Service Readiness/Complete)도 수동 완료로 진행한다.
+    manual_keys = ("7", "8", "10", "11") if is_service else ("8", "10", "11")
     for k in manual_keys:
         if sd.get(k):
             stage = max(stage, int(k))
 
     # ── (2) 단계별 자동 완료 일시 ─────────────────────────────────────────────
     # 근거 레코드가 존재하는 단계만 채운다(수동 stage_dates 미입력 시 표시·기본값).
-    # 7·11·12단계는 근거 레코드가 없어 자동값 없음(수동 완료로만 표시).
+    # 10·11단계는 근거 레코드가 없어 자동값 없음(수동 완료로만 표시).
     auto: dict[str, str] = {}
 
     def _set(stg: int, val: str):
@@ -715,28 +714,26 @@ def _deal_progress(s, rfq, order) -> tuple[int, dict[str, str]]:
         # 6) Vendor P/O 발신
         if pos:
             _set(6, _date_iso(pos[0].sent_date) or _kst_iso(pos[0].created_at))
-        # 8) Delivery arrangement — 운송통지·수하인 확인·벤더서류·출고일·CI 생성이 근거.
-        #    (P2b: CI 존재는 번호를 8로 올리므로, CI 생성시각을 8단계 일시 폴백으로 사용.)
-        _set(8, (_kst_iso(sa.created_at) if sa else "")
+        # 7) Delivery Readiness — 운송통지·수하인 확인·벤더서류·출고일·CI 생성이 근거
+        #    (구 8 'Arrangement' 흡수. CI 존재는 번호를 7로 올리므로 CI 생성시각을 폴백으로.)
+        _set(7, (_kst_iso(sa.created_at) if sa else "")
              or _date_iso(getattr(order, "consignee_confirmed_date", None))
              or _date_iso(getattr(order, "vendor_docs_sent_date", None))
              or _date_iso(getattr(order, "shipped_date", None))
              or (_kst_iso(ci.created_at) if ci else ""))
-        # 9) 운송 완료 · POD 수취 — POD 업로드 일시 우선, 없으면 인도일
-        _set(9, (getattr(pod, "uploaded_at", "") if pod else "")
+        # 8) 운송 완료 · POD 수취 — POD 업로드 일시 우선, 없으면 인도일 (구 9)
+        _set(8, (getattr(pod, "uploaded_at", "") if pod else "")
              or _date_iso(getattr(order, "delivered_date", None)))
-        # 10) Tax Invoice 작성 · 대금 청구 — Tax/AR 근거만.
-        #    (P2b: 기존 CI 생성시각 폴백 제거 — CI는 8단계 근거라 10단계 일시로 쓰면
-        #     번호=8 거래가 10칸에 일시가 찍히는 드리프트가 생김.)
-        _set(10, (_date_iso(tax.date) or _kst_iso(tax.created_at) if tax else "")
+        # 9) Tax Invoice 작성 · 대금 청구 — Tax/AR 근거만 (구 10)
+        _set(9, (_date_iso(tax.date) or _kst_iso(tax.created_at) if tax else "")
              or _kst_iso(min((a.created_at for a in ars if a.created_at), default=None)))
-        # 11) 세금계산서 발행 · 12) 대금 결제 완료 — 수동 완료(stage_dates)로만 표시
+        # 10) 세금계산서 발행 · 11) 대금 결제 완료 — 수동 완료(stage_dates)로만 표시
 
     return stage, auto
 
 
 def _pipeline_stage(s, rfq_id: int) -> int:
-    """RFQ 1건의 내부 진행 단계(1~12). `_deal_progress` 위임(단일 소스)."""
+    """RFQ 1건의 내부 진행 단계(1~11). `_deal_progress` 위임(단일 소스)."""
     rfq = s.query(RFQ).filter_by(id=rfq_id).first()
     if rfq is None:
         return 1
@@ -888,9 +885,9 @@ def _search_href(stage: int, rfq_id: int, order_id: int, is_service: bool) -> st
         return f"/po?order={order_id}&tab=customer"
     if stage == 6:
         return f"/po?order={order_id}&tab=vendor"
-    if 7 <= stage <= 9:
+    if 7 <= stage <= 8:
         return f"/documents?order={order_id}&view={view}&stage={stage}"
-    if stage == 10 and is_service:
+    if stage == 9 and is_service:
         return f"/ar?order={order_id}"
     return f"/documents?order={order_id}&view={view}"
 
@@ -1486,8 +1483,8 @@ def _document_detail_payload(session, order: Order) -> dict:
             "filename": pod.filename or "POD",
             "uploaded_at": pod.uploaded_at or "",
         },
-        # 수동 완료(완료 버튼) 단계 상태 — 7·8(서비스) · 9 · 11 · 12
-        "stage_done": {k: bool(sd.get(k)) for k in ("7", "8", "9", "11", "12")},
+        # 수동 완료(완료 버튼) 단계 상태 — 7·8(서비스) · 10 · 11
+        "stage_done": {k: bool(sd.get(k)) for k in ("7", "8", "10", "11")},
         "ci": None if not ci else {
             "id": ci.id,
             "ci_no": ci.ci_no or "",
@@ -1580,7 +1577,7 @@ def _manual_doc_no(session, Model, col, body_val, current_id):
     return no
 
 
-# ── 단계 완료 콜 — 오더 기준으로 RFQ.stage_dates 에 완료 표시(9·11·12) ──────────
+# ── 단계 완료 콜 — 오더 기준으로 RFQ.stage_dates 에 완료 표시(8·10·11) ──────────
 class StageCompleteBody(BaseModel):
     done: bool = True
     at: str | None = None  # 'YYYY-MM-DDTHH:MM' (KST 벽시계) — 생략 시 현재시각
@@ -1913,12 +1910,12 @@ class RfqLevelUpdate(BaseModel):
 
 
 class StageDateUpdate(BaseModel):
-    stage: int                 # 1~12
+    stage: int                 # 1~11
     value: str | None = None   # "YYYY-MM-DDTHH:MM" (KST) 또는 빈값/None → 해제
 
 
 class StageNoteAdd(BaseModel):
-    stage: int                       # 1~12
+    stage: int                       # 1~11
     text: str
     datetime: str | None = None      # 활동 일시 "YYYY-MM-DDTHH:MM" (KST). 비우면 현재시각
     party: str | None = None         # 소통 상대: Customer / Vendor / 기타

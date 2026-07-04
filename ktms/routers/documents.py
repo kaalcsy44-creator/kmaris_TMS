@@ -132,10 +132,9 @@ def documents_overview():
                 "has_sa": bool(sa),
                 "has_pod": bool(pod),
                 "has_tax": bool(ci_id and ci_id in tax_ci_ids),
-                # 서비스 단계 수동 완료 상태(7·8). 9(리포트)는 has_pod 로 표시.
+                # 서비스 단계 수동 완료 상태(7). 8(Complete·Report)은 has_pod, 9(Billing)은 svc_billed.
                 "svc_ready_done": bool(sd.get("7")),
-                "svc_arr_done": bool(sd.get("8")),
-                "svc_billed": bool(svc.get("10")),
+                "svc_billed": bool(svc.get("9")),
             })
         return {"rows": rows}
     finally:
@@ -157,9 +156,9 @@ def document_detail(order_id: int):
 @app.post("/api/admin/documents/{order_id}/service",
           dependencies=[Depends(require_token)])
 def save_service_stage(order_id: int, body: ServiceStageSave):
-    """서비스 업무 7~10단계 입력값 저장 + 단계 완료 처리.
-    7·8·9 는 RFQ.stage_dates 로 완료, 10 은 청구내역으로 AR 레코드를 생성/갱신한다."""
-    if body.stage not in (7, 8, 9, 10):
+    """서비스 업무 7~9단계 입력값 저장 + 단계 완료 처리.
+    7·8 은 RFQ.stage_dates 로 완료, 9 는 청구내역으로 AR 레코드를 생성/갱신한다."""
+    if body.stage not in (7, 8, 9):
         raise HTTPException(status_code=400, detail="잘못된 서비스 단계입니다.")
     s = get_session()
     try:
@@ -170,7 +169,7 @@ def save_service_stage(order_id: int, body: ServiceStageSave):
         info[str(body.stage)] = body.data
         order.service_info = info
 
-        if body.stage in (7, 8, 9):
+        if body.stage in (7, 8):
             rfq = _rfq_for_order(s, order)
             if rfq:
                 dates = dict(getattr(rfq, "stage_dates", None) or {})
@@ -179,7 +178,7 @@ def save_service_stage(order_id: int, body: ServiceStageSave):
                 else:
                     dates.pop(str(body.stage), None)
                 rfq.stage_dates = dates
-        elif body.stage == 10 and body.complete:
+        elif body.stage == 9 and body.complete:
             def _f(v) -> float:
                 try:
                     return float(v or 0)
@@ -207,8 +206,8 @@ def save_service_stage(order_id: int, body: ServiceStageSave):
 @app.delete("/api/admin/documents/{order_id}/service/{stage}",
             dependencies=[Depends(require_token)])
 def delete_service_stage(order_id: int, stage: int):
-    """서비스 단계 입력값 삭제 + 완료 해제. 10단계는 연결 AR 레코드도 삭제한다."""
-    if stage not in (7, 8, 9, 10):
+    """서비스 단계 입력값 삭제 + 완료 해제. 9단계는 연결 AR 레코드도 삭제한다."""
+    if stage not in (7, 8, 9):
         raise HTTPException(status_code=400, detail="잘못된 서비스 단계입니다.")
     s = get_session()
     try:
@@ -218,13 +217,13 @@ def delete_service_stage(order_id: int, stage: int):
         info = dict(getattr(order, "service_info", None) or {})
         info.pop(str(stage), None)
         order.service_info = info
-        if stage in (7, 8, 9):
+        if stage in (7, 8):
             rfq = _rfq_for_order(s, order)
             if rfq:
                 dates = dict(getattr(rfq, "stage_dates", None) or {})
                 dates.pop(str(stage), None)
                 rfq.stage_dates = dates
-        if stage == 10:
+        if stage == 9:
             s.query(ARRecord).filter_by(order_id=order.id).delete(synchronize_session=False)
         s.commit()
         return {"ok": True}

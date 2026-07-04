@@ -11,7 +11,7 @@ from datetime import datetime, date as _date
 import bcrypt
 from sqlalchemy import text, inspect
 from db.engine import Base, get_engine, get_session
-from db.models import User, UserRole, DocSequence, Customer, Vendor, RFQ, Quotation
+from db.models import User, UserRole, DocSequence, Customer, Vendor, RFQ, Quotation, Order
 
 
 def create_tables():
@@ -313,6 +313,74 @@ def seed_sample_data():
         session.close()
 
 
+def migrate_remove_stage_8():
+    """1회성: '단계 8'(Delivery/Service Arrangement) 제거에 따른 저장 데이터 재번호.
+
+    구 8(Arrangement) → 7(Readiness)로 흡수, 9→8·10→9·11→10·12→11.
+    대상: RFQ.stage_dates, RFQ.stage_notes, Order.service_info (모두 단계번호 키).
+    applied_migrations 마커로 가드 → 매 부팅 실행돼도 1회만 적용(재실행 안전)."""
+    eng = get_engine()
+    with eng.begin() as conn:
+        conn.execute(text(
+            "CREATE TABLE IF NOT EXISTS applied_migrations (name VARCHAR(100) PRIMARY KEY)"))
+        if conn.execute(text(
+                "SELECT 1 FROM applied_migrations WHERE name='remove_stage_8'")).first():
+            return  # 이미 적용됨
+
+    def target(n: int) -> int:
+        return n if n <= 7 else (7 if n == 8 else n - 1)
+
+    def renum(d, kind: str):
+        """d(단계키 dict)를 재번호. kind: 'date'|'notes'|'info'. (변경여부, 결과) 반환."""
+        if not isinstance(d, dict) or not d:
+            return d, False
+        out: dict = {}
+        changed = False
+        for k in sorted(d.keys(), key=lambda x: int(x) if str(x).isdigit() else 999):
+            v = d[k]
+            if not str(k).isdigit():
+                out[k] = v
+                continue
+            tk = str(target(int(k)))
+            if tk != str(k):
+                changed = True
+            if tk in out:  # 7·8이 모두 7로 → 병합
+                changed = True
+                if kind == "notes":
+                    out[tk] = (out[tk] or []) + (v or [])
+                elif kind == "info":
+                    out[tk] = {**(v or {}), **(out[tk] or {})}  # 7(Readiness) 우선
+                else:  # date: 먼저 처리된 7 값 유지
+                    out[tk] = out[tk] or v
+            else:
+                out[tk] = v
+        return out, changed
+
+    s = get_session()
+    n_rfq = n_ord = 0
+    try:
+        for r in s.query(RFQ).all():
+            sd, c1 = renum(getattr(r, "stage_dates", None) or {}, "date")
+            sn, c2 = renum(getattr(r, "stage_notes", None) or {}, "notes")
+            if c1:
+                r.stage_dates = sd
+            if c2:
+                r.stage_notes = sn
+            if c1 or c2:
+                n_rfq += 1
+        for o in s.query(Order).all():
+            si, c = renum(getattr(o, "service_info", None) or {}, "info")
+            if c:
+                o.service_info = si
+                n_ord += 1
+        s.commit()
+    finally:
+        s.close()
+    with eng.begin() as conn:
+        conn.execute(text("INSERT INTO applied_migrations (name) VALUES ('remove_stage_8')"))
+    print(f"[OK] remove_stage_8 migration applied: {n_rfq} RFQs, {n_ord} orders renumbered.")
+
+
 if __name__ == "__main__":
     print("Initializing KTMS database...")
     create_tables()
@@ -321,6 +389,7 @@ if __name__ == "__main__":
     migrate_drop_columns()
     migrate_rfq_numbers()
     migrate_quotation_numbers()
+    migrate_remove_stage_8()
     seed_admin()
     seed_sample_data()
     print("Done.")

@@ -59,22 +59,21 @@ export default function DocumentsPage() {
   );
 }
 
-type StageTab = "s7" | "s8" | "s9" | "s10";
+type StageTab = "s7" | "s8" | "s9";
 type WorkView = "parts" | "service";
-const STAGE_KEYS: StageTab[] = ["s7", "s8", "s9", "s10"];
-// 업무유형(부품공급/서비스)에 따라 7~9단계 명칭이 달라진다(10은 공통).
+const STAGE_KEYS: StageTab[] = ["s7", "s8", "s9"];
+// 업무유형(부품공급/서비스)에 따라 7·8단계 명칭이 달라진다(9는 공통).
+// (구 8 'Arrangement' 단계는 7 Readiness 로 흡수 → 11단계 체계)
 const STAGE_LABELS: Record<WorkView, Record<StageTab, string>> = {
   parts: {
     s7: "7. Delivery Readiness",
-    s8: "8. Delivery arrangement",
-    s9: "9. Delivery Complete · POD",
-    s10: "10. Tax Invoice · Billing",
+    s8: "8. Delivery Complete · POD",
+    s9: "9. Tax Invoice · Billing",
   },
   service: {
     s7: "7. Service Readiness",
-    s8: "8. Service Arrangement",
-    s9: "9. Service Complete · Report",
-    s10: "10. Tax Invoice · Billing",
+    s8: "8. Service Complete · Report",
+    s9: "9. Tax Invoice · Billing",
   },
 };
 
@@ -131,7 +130,7 @@ const KIND_CFG: Record<
   },
 };
 
-type SvcStage = 7 | 8 | 9 | 10;
+type SvcStage = 7 | 8 | 9;
 type Editing =
   | { orderId: number; kind: DocKind }
   | { orderId: number; svc: SvcStage };
@@ -145,7 +144,7 @@ function DocumentsOverview() {
 
   const [workView, setWorkView] = useState<WorkView>(viewParam === "service" ? "service" : "parts");
   const [stage, setStage] = useState<StageTab>("s7");
-  const [readyDoc, setReadyDoc] = useState<"ci" | "pl">("ci"); // 7단계 하위(CI/PL)
+  const [readyDoc, setReadyDoc] = useState<"ci" | "pl" | "sa">("ci"); // 7단계 하위(CI/PL/SA)
   const [editing, setEditing] = useState<Editing | null>(null);
 
   const { data: overview, refresh } = useCachedData(
@@ -167,16 +166,15 @@ function DocumentsOverview() {
     const id = Number(orderParam);
     const row = orders.find((o) => o.id === id);
     const isSvc = row?.work_type === "서비스";
-    const sn = Number(stageParam); // 7~10, 없으면 NaN
+    const sn = Number(stageParam); // 7~9, 없으면 NaN
     setWorkView(isSvc ? "service" : "parts");
     if (sn >= 7 && sn <= 9) setStage((`s${sn}` as StageTab));
-    else if (sn === 10) setStage("s10");
     if (isSvc) {
-      // 서비스: 7·8·9 단계 편집기(10단계는 AR에서 처리하므로 기본 7)
-      setEditing({ orderId: id, svc: (sn >= 7 && sn <= 9 ? (sn as SvcStage) : 7) });
+      // 서비스: 7·8 단계 편집기(9단계 청구는 AR에서 처리하므로 기본 7)
+      setEditing({ orderId: id, svc: (sn === 8 ? 8 : 7) });
     } else {
-      // 부품공급: 단계 → 문서 종류 매핑
-      const kind: DocKind = sn === 8 ? "sa" : sn === 9 ? "pod" : sn === 10 ? "tax" : "ci";
+      // 부품공급: 단계 → 문서 종류 매핑 (SA는 7단계 Readiness 로 흡수)
+      const kind: DocKind = sn === 8 ? "pod" : sn === 9 ? "tax" : "ci";
       setEditing({ orderId: id, kind });
     }
   }, [orderParam, stageParam, overview]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -198,11 +196,11 @@ function DocumentsOverview() {
     if (orderParam) router.replace("/documents");
   }
 
-  // 현재 단계에 해당하는 (부품공급) 문서 종류. 7단계는 CI/PL seg-tab.
+  // 현재 단계에 해당하는 (부품공급) 문서 종류. 7단계는 CI/PL/SA seg-tab.
   const stageKinds: DocKind[] =
-    stage === "s7" ? [readyDoc] : stage === "s8" ? ["sa"] : stage === "s9" ? ["pod"] : ["tax"];
+    stage === "s7" ? [readyDoc] : stage === "s8" ? ["pod"] : ["tax"];
   const svcStage: SvcStage =
-    stage === "s7" ? 7 : stage === "s8" ? 8 : stage === "s9" ? 9 : 10;
+    stage === "s7" ? 7 : stage === "s8" ? 8 : 9;
 
   return (
     <div className="action-tabs">
@@ -239,6 +237,9 @@ function DocumentsOverview() {
                     <button className={readyDoc === "pl" ? "on" : ""} onClick={() => setReadyDoc("pl")}>
                       Packing List
                     </button>
+                    <button className={readyDoc === "sa" ? "on" : ""} onClick={() => setReadyDoc("sa")}>
+                      Shipping Advice
+                    </button>
                   </div>
                 ) : undefined
               }
@@ -274,17 +275,16 @@ function DocumentsOverview() {
   );
 }
 
-// ── 서비스 업무 7·8·9·10단계 ─────────────────────────────────────────────────
+// ── 서비스 업무 7·8·9단계 (구 8 'Arrangement'는 7 Readiness 로 흡수) ─────────────
 const SVC_CFG: Record<SvcStage, { label: string; btn: string; done: (r: DocRow) => boolean }> = {
   7: { label: "Service Readiness", btn: "Service Readiness", done: (r) => r.svc_ready_done },
-  8: { label: "Service Arrangement", btn: "Service Arrangement", done: (r) => r.svc_arr_done },
-  9: { label: "Service Complete · Report", btn: "Service Report", done: (r) => r.has_pod },
-  10: { label: "Tax Invoice · Billing", btn: "Tax Invoice · Billing", done: (r) => r.svc_billed },
+  8: { label: "Service Complete · Report", btn: "Service Report", done: (r) => r.has_pod },
+  9: { label: "Tax Invoice · Billing", btn: "Tax Invoice · Billing", done: (r) => r.svc_billed },
 };
 
-// 서비스 단계별 입력 필드 스키마(7·8·9·10). 10은 청구 폼으로 별도 처리.
+// 서비스 단계별 입력 필드 스키마(7·8). 9는 청구 폼으로 별도 처리.
 type SvcField = { key: string; label: string; type?: "text" | "date" | "number" | "textarea" | "select"; options?: string[] };
-const SVC_FIELDS: Record<7 | 8 | 9, SvcField[]> = {
+const SVC_FIELDS: Record<7 | 8, SvcField[]> = {
   7: [
     { key: "service_type", label: "Service type", type: "select", options: ["Inspection", "Repair", "Commissioning", "Overhaul", "Survey", "Other"] },
     { key: "scope", label: "Scope", type: "textarea" },
@@ -293,9 +293,7 @@ const SVC_FIELDS: Record<7 | 8 | 9, SvcField[]> = {
     { key: "location", label: "Location (port / yard / onboard)" },
     { key: "engineers", label: "Assigned engineer(s)" },
     { key: "materials", label: "Required spares / tools", type: "textarea" },
-    { key: "notes", label: "Notes", type: "textarea" },
-  ],
-  8: [
+    // 구 8 'Service Arrangement' 흡수 — 파견/비자/숙소/현장연락/확정일정
     { key: "dispatch_from", label: "Dispatch from", type: "date" },
     { key: "dispatch_to", label: "Return on", type: "date" },
     { key: "visa_status", label: "Visa / permit status" },
@@ -304,7 +302,7 @@ const SVC_FIELDS: Record<7 | 8 | 9, SvcField[]> = {
     { key: "confirmed_schedule", label: "Confirmed schedule" },
     { key: "notes", label: "Notes", type: "textarea" },
   ],
-  9: [
+  8: [
     { key: "performed_date", label: "Service performed date", type: "date" },
     { key: "work_summary", label: "Work performed summary", type: "textarea" },
     { key: "findings", label: "Findings / recommendations", type: "textarea" },
@@ -330,7 +328,7 @@ function ServiceStageList({
   const listRows = orders.filter(cfg.done); // 입력 완료된 오더 → 클릭해 수정/삭제
   // 신규 등록 대상 = 직전 서비스 단계까지 완료, 이 단계는 미완료인 오더만.
   const svcPriorOk = (r: DocRow) =>
-    svc === 8 ? r.svc_ready_done : svc === 9 ? r.svc_arr_done : svc === 10 ? r.has_pod : true;
+    svc === 8 ? r.svc_ready_done : svc === 9 ? r.has_pod : true;
   const registerable = orders.filter((r) => !cfg.done(r) && svcPriorOk(r));
   const columns: ColumnDef<DocRow>[] = [
     projectNoColumn<DocRow>({ projectNo: (r) => r.project_no, firstRfqAt: (r) => r.first_rfq_at }),
@@ -345,10 +343,10 @@ function ServiceStageList({
     }),
     { key: "vendor", label: "Vendor", text: (r) => r.vendor || "", filter: "facet", render: (r) => <VendorName name={r.vendor || ""} /> },
     { key: "po_no", label: "PO No.", text: (r) => r.po_no || "" },
-    ...(svc === 9
+    ...(svc === 8
       ? [{ key: "report", label: "Report file", text: (r: DocRow) => r.pod_filename || "" }]
       : []),
-    ...(svc === 10
+    ...(svc === 9
       ? [{ key: "tax_no", label: "Tax No.", text: (r: DocRow) => r.tax_no || "" }]
       : []),
     {
@@ -473,8 +471,8 @@ function ServiceStageEditor({
       {data ? (
         <>
           <DocOrderInfo order={data.order} />
-          {svc === 10 ? (
-            <ServiceBillingForm key={`svc10-${data.order.id}`} data={data} onChanged={afterChange} onClose={onClose} />
+          {svc === 9 ? (
+            <ServiceBillingForm key={`svc9-${data.order.id}`} data={data} onChanged={afterChange} onClose={onClose} />
           ) : (
             <ServiceStageForm key={`svc${svc}-${data.order.id}`} data={data} svc={svc} onChanged={afterChange} onClose={onClose} />
           )}
@@ -576,7 +574,7 @@ function ServiceReportUpload({ data, onChanged }: { data: DocumentDetail; onChan
           </button>
         </span>
       ) : (
-        <span className="hint-inline">PDF · image. Uploading completes stage 9.</span>
+        <span className="hint-inline">PDF · image. Uploading completes stage 8.</span>
       )}
       {err ? <span className="action-err">{err}</span> : null}
     </div>
@@ -595,7 +593,7 @@ function ServiceStageForm({
   onChanged: () => void;
   onClose: () => void;
 }) {
-  const fields = SVC_FIELDS[svc];
+  const fields = SVC_FIELDS[svc as 7 | 8];
   const saved = data.order.service_info?.[String(svc)] ?? {};
   const hasSaved = !!data.order.service_info?.[String(svc)];
   const [form, setForm] = useState<Record<string, string>>(() => {
@@ -603,7 +601,7 @@ function ServiceStageForm({
     for (const f of fields) init[f.key] = String(saved[f.key] ?? "");
     return init;
   });
-  const done = Boolean(data.stage_done[String(svc) as "7" | "8" | "9"]) || (svc === 9 && !!data.pod);
+  const done = Boolean(data.stage_done[String(svc) as "7" | "8"]) || (svc === 8 && !!data.pod);
   const [complete, setComplete] = useState(done); // 7·8단계: 저장 시 단계 완료 여부
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -617,8 +615,8 @@ function ServiceStageForm({
     setBusy(true);
     setErr(null);
     try {
-      // 9단계는 리포트 파일(POD) 업로드가 완료 근거이므로 stage_dates 완료는 생략(파일 기준).
-      await saveServiceStage(data.order.id, svc, form, svc === 9 ? false : complete);
+      // 8단계(Complete·Report)는 리포트 파일(POD) 업로드가 완료 근거이므로 stage_dates 완료는 생략(파일 기준).
+      await saveServiceStage(data.order.id, svc, form, svc === 8 ? false : complete);
       onChanged();
       onClose();
     } catch (e) {
@@ -650,7 +648,7 @@ function ServiceStageForm({
       </div>
 
       <fieldset className="form-fieldset" disabled={!editable}>
-      {svc === 9 ? <ServiceReportUpload data={data} onChanged={onChanged} /> : null}
+      {svc === 8 ? <ServiceReportUpload data={data} onChanged={onChanged} /> : null}
 
       <div className="form-grid">
         {fields.map((f) => (
@@ -1074,7 +1072,7 @@ function PodTab({
   }
 
   async function remove() {
-    if (!confirm("Delete the POD file? (stage 9 completion will be undone)")) return;
+    if (!confirm("Delete the POD file? (stage 8 completion will be undone)")) return;
     setBusy(true);
     setErr(null);
     try {
@@ -1105,7 +1103,7 @@ function PodTab({
         </div>
       ) : (
         <div className="state">
-          No {docLabel} file yet. Uploading a file (PDF · image) will <b>complete stage 9</b>.
+          No {docLabel} file yet. Uploading a file (PDF · image) will <b>complete stage 8</b>.
         </div>
       )}
       <div className="form-actions">
@@ -1721,7 +1719,7 @@ function emptyDocDetail(): DocumentDetail {
       items: [],
     },
     pod: null,
-    stage_done: { "7": false, "8": false, "9": false, "11": false, "12": false },
+    stage_done: { "7": false, "8": false, "10": false, "11": false },
     ci: null, pl: null, sa: null, tax: null,
     smtp_configured: false,
   };
