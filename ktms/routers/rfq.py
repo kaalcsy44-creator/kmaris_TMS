@@ -30,6 +30,7 @@ from _core import (
     WorkType,
     _apply_owner_filter,
     _assign_rfq_no,
+    _next_kmaris_rfq_no,
     _coerce_work_type,
     _dual_money,
     _enum_val,
@@ -148,6 +149,17 @@ def rfq_overview(customer_id: int | None = None, work_type: str | None = None,
             })
 
         return {"steps": INTERNAL_STEPS, "rows": rows}
+    finally:
+        s.close()
+
+
+@app.get("/api/admin/rfq/next-no", dependencies=[Depends(require_token)])
+def next_rfq_no_endpoint():
+    """자동채번 미리보기 — 다음에 생성될 K-Maris RFQ No.(할당하지 않음).
+    ('/rfq/{rfq_id}' 보다 먼저 등록해 'next-no' 가 int 파싱으로 가려지지 않게 한다.)"""
+    s = get_session()
+    try:
+        return {"rfq_no": _next_kmaris_rfq_no(s)}
     finally:
         s.close()
 

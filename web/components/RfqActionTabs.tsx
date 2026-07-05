@@ -7,6 +7,7 @@ import {
   fetchRfqVendorQuotes,
   createVendorRfq,
   assignRfqNo,
+  fetchNextRfqNo,
   previewVendorRfq,
   sendVendorRfq,
   vendorRfqXlsxUrl,
@@ -716,8 +717,16 @@ function VendorRfqDetailModal({
   // K-Maris RFQ No. — 자동생성 / 직접 입력 토글. 미지정이면 auto 기본.
   const [noMode, setNoMode] = useState<"auto" | "manual">("auto");
   const [manualNo, setManualNo] = useState("");
+  const [autoNo, setAutoNo] = useState(""); // 자동채번 미리보기(다음 KMS-RFQ 번호)
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  // 미지정이면 다음 자동채번 번호를 미리 불러와 토글에서 보여준다.
+  useEffect(() => {
+    const cur = (d?.kmaris_rfq_no || "").trim();
+    if (!d || (cur && cur !== "-")) return;
+    fetchNextRfqNo().then((r) => setAutoNo(r.rfq_no)).catch(() => setAutoNo(""));
+  }, [d?.kmaris_rfq_no, d]);
 
   useEffect(() => {
     fetchVendorRfqDetail(id)
@@ -818,22 +827,6 @@ function VendorRfqDetailModal({
               <div className="form-section-title">This vendor send info</div>
               <div className="form-grid">
                 <div className="form-field">
-                  <label>K-Maris RFQ No.</label>
-                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                    <select value={noMode} onChange={(e) => setNoMode(e.target.value as "auto" | "manual")} style={{ flex: "0 0 auto", width: 150 }}>
-                      <option value="auto">Auto-generate</option>
-                      <option value="manual">Manual entry</option>
-                    </select>
-                    {noMode === "manual" ? (
-                      <input value={manualNo} onChange={(e) => setManualNo(e.target.value)} placeholder="KMS-RFQ-…" style={{ flex: 1 }} />
-                    ) : (
-                      <span className="hint-inline">
-                        {d.kmaris_rfq_no && d.kmaris_rfq_no !== "-" ? d.kmaris_rfq_no : "Auto on save"}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <div className="form-field">
                   <label>Vendor</label>
                   <select
                     value={vendorId}
@@ -850,6 +843,22 @@ function VendorRfqDetailModal({
                       <option key={v.id} value={v.id}>{v.name}</option>
                     ))}
                   </select>
+                </div>
+                <div className="form-field">
+                  <label>K-Maris RFQ No.</label>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <select value={noMode} onChange={(e) => setNoMode(e.target.value as "auto" | "manual")} style={{ flex: "0 0 auto", width: 150 }}>
+                      <option value="auto">Auto-generate</option>
+                      <option value="manual">Manual entry</option>
+                    </select>
+                    {noMode === "manual" ? (
+                      <input value={manualNo} onChange={(e) => setManualNo(e.target.value)} placeholder="KMS-RFQ-…" style={{ flex: 1 }} />
+                    ) : (
+                      <span className="hint-inline">
+                        {d.kmaris_rfq_no && d.kmaris_rfq_no !== "-" ? d.kmaris_rfq_no : (autoNo || "Auto on save")}
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div className="form-field">
                   <label>Recipient email</label>
@@ -1910,11 +1919,12 @@ function VendorRfqAction({
   const unassigned = !kmarisNo || kmarisNo === "Not issued" || kmarisNo === "-";
   const [noMode, setNoMode] = useState<"auto" | "manual">("auto");
   const [manualNo, setManualNo] = useState("");
+  const [autoNo, setAutoNo] = useState(""); // 자동채번 미리보기(다음 KMS-RFQ 번호)
+  // manual 은 빈값이어도 명시적으로 manual 로 보내 백엔드 기본값(auto)으로 새지 않게 한다
+  // (manual+빈값 = 아직 미지정 유지, auto = 자동채번).
   const rfqNoArg = unassigned
     ? noMode === "manual"
-      ? manualNo.trim()
-        ? { mode: "manual" as const, value: manualNo.trim() }
-        : undefined
+      ? { mode: "manual" as const, value: manualNo.trim() }
       : { mode: "auto" as const, value: "" }
     : undefined;
   const [sentAt, setSentAt] = useState(nowLocalDt());
@@ -1934,6 +1944,14 @@ function VendorRfqAction({
       .catch(() => { if (alive) setRfqItems([]); });
     return () => { alive = false; };
   }, [rfqId]);
+
+  // 미지정이면 다음 자동채번 번호를 미리 불러와 토글에서 보여준다.
+  useEffect(() => {
+    if (!unassigned) return;
+    let alive = true;
+    fetchNextRfqNo().then((r) => { if (alive) setAutoNo(r.rfq_no); }).catch(() => undefined);
+    return () => { alive = false; };
+  }, [unassigned]);
 
   // "Load customer RFQ" — Customer RFQ 품목으로 다시 채운다(편집·삭제 후 원복용).
   function loadCustomerRfqItems() {
@@ -2095,7 +2113,7 @@ function VendorRfqAction({
                 placeholder="KMS-RFQ-…"
               />
             ) : (
-              <span className="hint-inline">Auto-generated on send</span>
+              <span className="hint-inline">{autoNo ? `${autoNo} (auto)` : "Auto-generated on send"}</span>
             )}
           </div>
         ) : (

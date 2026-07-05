@@ -1857,15 +1857,32 @@ def _new_tmp_rfq_no(session) -> str:
             return cand
 
 
+def _next_kmaris_rfq_no(session) -> str:
+    """자동 채번 K-Maris RFQ No. — 'KMS-RFQ-yymm-nnn'. 이번 달(KST) 마지막 순번 +1."""
+    yymm = (datetime.utcnow() + timedelta(hours=9)).strftime("%y%m")
+    prefix = f"KMS-RFQ-{yymm}-"
+    mx = 0
+    for (no,) in session.query(RFQ.rfq_no).filter(RFQ.rfq_no.like(prefix + "%")).all():
+        tail = str(no or "")[len(prefix):]
+        if tail.isdigit():
+            mx = max(mx, int(tail))
+    return f"{prefix}{mx + 1:03d}"
+
+
 def _assign_rfq_no(session, rfq, mode: str = "auto", manual: str = "") -> str:
-    """RFQ 가 아직 미발급이면 수동 입력값만 부여한다. 비워두면 임시 토큰을 유지한다."""
+    """미발급 RFQ 에 K-Maris RFQ No. 를 부여한다.
+    - manual: 입력값이 있으면 그 값(중복 검사). 비우면 그대로 미발급 유지.
+    - auto: 'KMS-RFQ-yymm-nnn' 다음 순번을 자동 생성."""
     if not _rfq_unassigned(rfq.rfq_no):
         return rfq.rfq_no
     manual = (manual or "").strip()
-    if mode == "manual" and manual:
-        if session.query(RFQ).filter_by(rfq_no=manual).first():
-            raise HTTPException(status_code=400, detail=f"이미 존재하는 RFQ No.입니다: {manual}")
-        rfq.rfq_no = manual
+    if mode == "manual":
+        if manual:
+            if session.query(RFQ).filter_by(rfq_no=manual).first():
+                raise HTTPException(status_code=400, detail=f"이미 존재하는 RFQ No.입니다: {manual}")
+            rfq.rfq_no = manual
+    else:  # auto
+        rfq.rfq_no = _next_kmaris_rfq_no(session)
     return rfq.rfq_no
 
 
@@ -2071,6 +2088,7 @@ __all__ = [
     "_apply_owner_filter",
     "_ar_status_from_text",
     "_assign_rfq_no",
+    "_next_kmaris_rfq_no",
     "_base_meta",
     "_coerce_work_type",
     "_cur2",
