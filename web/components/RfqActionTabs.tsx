@@ -678,13 +678,17 @@ function VendorRfqDetailModal({
         <>
           {showEdit ? (
             <>
-              <div className="form-section-title">Project info</div>
-              <dl className="intl-meta">
-                <BaseMetaRows info={d} />
-                <div><dt>Customer RFQ No.</dt><dd>{d.customer_rfq_no || "—"}</dd></div>
-                <div><dt>K-Maris RFQ No.</dt><dd>{d.kmaris_rfq_no || "—"}</dd></div>
-                <div><dt>Items</dt><dd>{items.length}</dd></div>
-              </dl>
+              {!inline ? (
+                <>
+                  <div className="form-section-title">Project info</div>
+                  <dl className="intl-meta">
+                    <BaseMetaRows info={d} />
+                    <div><dt>Customer RFQ No.</dt><dd>{d.customer_rfq_no || "—"}</dd></div>
+                    <div><dt>K-Maris RFQ No.</dt><dd>{d.kmaris_rfq_no || "—"}</dd></div>
+                    <div><dt>Items</dt><dd>{items.length}</dd></div>
+                  </dl>
+                </>
+              ) : null}
 
               <div className="form-section-title">This vendor send info</div>
               <div className="form-grid">
@@ -724,15 +728,19 @@ function VendorRfqDetailModal({
             </>
           ) : (
             <>
-              <div className="form-section-title">Project info</div>
-              <dl className="intl-meta">
-                <BaseMetaRows info={d} />
-                <div><dt>Customer RFQ No.</dt><dd>{d.customer_rfq_no || "—"}</dd></div>
-                <div><dt>K-Maris RFQ No.</dt><dd>{d.kmaris_rfq_no || "—"}</dd></div>
-                <div><dt>Contact</dt><dd>{d.customer_contact || "—"}</dd></div>
-                <div><dt>Email</dt><dd>{d.customer_email || "—"}</dd></div>
-                <div><dt>Items</dt><dd>{d.items.length}</dd></div>
-              </dl>
+              {!inline ? (
+                <>
+                  <div className="form-section-title">Project info</div>
+                  <dl className="intl-meta">
+                    <BaseMetaRows info={d} />
+                    <div><dt>Customer RFQ No.</dt><dd>{d.customer_rfq_no || "—"}</dd></div>
+                    <div><dt>K-Maris RFQ No.</dt><dd>{d.kmaris_rfq_no || "—"}</dd></div>
+                    <div><dt>Contact</dt><dd>{d.customer_contact || "—"}</dd></div>
+                    <div><dt>Email</dt><dd>{d.customer_email || "—"}</dd></div>
+                    <div><dt>Items</dt><dd>{d.items.length}</dd></div>
+                  </dl>
+                </>
+              ) : null}
 
               <div className="form-section-title">This vendor send info</div>
               <dl className="intl-meta">
@@ -1128,12 +1136,16 @@ function VendorQuoteDetailModal({
         <div className="empty">Loading…</div>
       ) : (
         <div onPaste={handlePaste}>
-          <div className="form-section-title">Project info</div>
-          <dl className="intl-meta">
-            <BaseMetaRows info={d} />
-            <div><dt>Vendor</dt><dd>{d.vendor}</dd></div>
-            <div><dt>Items</dt><dd>{items.length}</dd></div>
-          </dl>
+          {!inline ? (
+            <>
+              <div className="form-section-title">Project info</div>
+              <dl className="intl-meta">
+                <BaseMetaRows info={d} />
+                <div><dt>Vendor</dt><dd>{d.vendor}</dd></div>
+                <div><dt>Items</dt><dd>{items.length}</dd></div>
+              </dl>
+            </>
+          ) : null}
 
           <fieldset className="form-fieldset" disabled={!canEditThis}>
           <div className="form-section-title">Vendor quote info</div>
@@ -1434,12 +1446,16 @@ function CustomerQuoteDetailModal({
         <div className="empty">Loading…</div>
       ) : (
         <>
-          <div className="form-section-title">Project info</div>
-          <dl className="intl-meta">
-            <BaseMetaRows info={d} />
-            <div><dt>RFQ No.</dt><dd>{d.rfq_no || "—"}</dd></div>
-            <div><dt>Items</dt><dd>{items.length}</dd></div>
-          </dl>
+          {!inline ? (
+            <>
+              <div className="form-section-title">Project info</div>
+              <dl className="intl-meta">
+                <BaseMetaRows info={d} />
+                <div><dt>RFQ No.</dt><dd>{d.rfq_no || "—"}</dd></div>
+                <div><dt>Items</dt><dd>{items.length}</dd></div>
+              </dl>
+            </>
+          ) : null}
 
           <fieldset className="form-fieldset" disabled={!canEditThis}>
           <div className="form-section-title">Quotation info</div>

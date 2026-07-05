@@ -500,11 +500,13 @@ function ServiceStageEditor({
   svc,
   onChanged,
   onClose,
+  hideInfo,
 }: {
   orderId: number;
   svc: SvcStage;
   onChanged: () => void;
   onClose: () => void;
+  hideInfo?: boolean;
 }) {
   const [data, setData] = useState<DocumentDetail | null>(orderId ? null : emptyDocDetail());
   const [loading, setLoading] = useState(false);
@@ -535,7 +537,7 @@ function ServiceStageEditor({
       {loading && !data ? <div className="state">Loading details...</div> : null}
       {data ? (
         <>
-          <DocOrderInfo order={data.order} />
+          {hideInfo ? null : <DocOrderInfo order={data.order} />}
           {svc === 9 ? (
             <ServiceBillingForm key={`svc9-${data.order.id}`} data={data} onChanged={afterChange} onClose={onClose} />
           ) : (
@@ -566,7 +568,7 @@ function ServiceEditorModal({
   const title = `${SVC_CFG[svc].label}${projectNo ? ` — ${projectNo}` : ""}`;
   return (
     <Modal title={<ModalTitle label={title} projectNo={projectNo} />} onClose={onClose} wide inline={inline}>
-      <ServiceStageEditor orderId={orderId} svc={svc} onChanged={onChanged} onClose={onClose} />
+      <ServiceStageEditor orderId={orderId} svc={svc} onChanged={onChanged} onClose={onClose} hideInfo={inline} />
     </Modal>
   );
 }
@@ -980,10 +982,12 @@ function DocEditorContent({
   orderId,
   kind,
   onChanged,
+  hideInfo,
 }: {
   orderId: number;
   kind: DocKind;
   onChanged: () => void;
+  hideInfo?: boolean;
 }) {
   const [data, setData] = useState<DocumentDetail | null>(orderId ? null : emptyDocDetail());
   const [loading, setLoading] = useState(false);
@@ -1015,7 +1019,7 @@ function DocEditorContent({
       {loading && !data ? <div className="state">Loading details...</div> : null}
       {data ? (
         <>
-          <DocOrderInfo order={data.order} />
+          {hideInfo ? null : <DocOrderInfo order={data.order} />}
           {kind === "ci" ? (
             <CommercialInvoiceTab key={`ci-${data.order.id}-${data.ci?.id ?? 0}`} data={data} onChanged={afterChange} />
           ) : kind === "pl" ? (
@@ -1052,7 +1056,7 @@ function DocEditorModal({
   const title = `${KIND_CFG[kind].label}${projectNo ? ` — ${projectNo}` : ""}`;
   return (
     <Modal title={<ModalTitle label={title} projectNo={projectNo} />} onClose={onClose} wide inline={inline}>
-      <DocEditorContent orderId={orderId} kind={kind} onChanged={onChanged} />
+      <DocEditorContent orderId={orderId} kind={kind} onChanged={onChanged} hideInfo={inline} />
     </Modal>
   );
 }

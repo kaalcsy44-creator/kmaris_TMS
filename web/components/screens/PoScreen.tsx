@@ -385,21 +385,25 @@ function OrderDetailModal({
         <div className="empty">Loading…</div>
       ) : (
         <>
-          <div className="form-section-title">Order info</div>
-          <dl className="intl-meta">
-            <BaseMetaRows info={detail} />
-            <div><dt>Customer P/O No.</dt><dd>{detail.customer_po_no || "—"}</dd></div>
-            <div><dt>Customer P/O received</dt><dd>{detail.customer_po_at || "—"}</dd></div>
-            <div><dt>Customer RFQ No.</dt><dd>{detail.customer_rfq_no || "—"}</dd></div>
-            <div><dt>K-Maris RFQ No.</dt><dd>{detail.rfq_no || "—"}</dd></div>
-            <div><dt>Quotation No.</dt><dd>{detail.quotation_no || "—"}</dd></div>
-            <div><dt>Contact</dt><dd>{detail.customer_contact || "—"}</dd></div>
-            <div><dt>Email</dt><dd>{detail.customer_email || "—"}</dd></div>
-            <div><dt>Order status</dt><dd>{tr(detail.order_status)}</dd></div>
-            <div><dt>Pipeline status</dt><dd>{detail.status || "—"}</dd></div>
-            <div><dt>Shipped date</dt><dd>{detail.shipped_date || "—"}</dd></div>
-            <div><dt>Delivered date</dt><dd>{detail.delivered_date || "—"}</dd></div>
-          </dl>
+          {!inline ? (
+            <>
+              <div className="form-section-title">Order info</div>
+              <dl className="intl-meta">
+                <BaseMetaRows info={detail} />
+                <div><dt>Customer P/O No.</dt><dd>{detail.customer_po_no || "—"}</dd></div>
+                <div><dt>Customer P/O received</dt><dd>{detail.customer_po_at || "—"}</dd></div>
+                <div><dt>Customer RFQ No.</dt><dd>{detail.customer_rfq_no || "—"}</dd></div>
+                <div><dt>K-Maris RFQ No.</dt><dd>{detail.rfq_no || "—"}</dd></div>
+                <div><dt>Quotation No.</dt><dd>{detail.quotation_no || "—"}</dd></div>
+                <div><dt>Contact</dt><dd>{detail.customer_contact || "—"}</dd></div>
+                <div><dt>Email</dt><dd>{detail.customer_email || "—"}</dd></div>
+                <div><dt>Order status</dt><dd>{tr(detail.order_status)}</dd></div>
+                <div><dt>Pipeline status</dt><dd>{detail.status || "—"}</dd></div>
+                <div><dt>Shipped date</dt><dd>{detail.shipped_date || "—"}</dd></div>
+                <div><dt>Delivered date</dt><dd>{detail.delivered_date || "—"}</dd></div>
+              </dl>
+            </>
+          ) : null}
 
           <fieldset className="form-fieldset" disabled={!canEditThis}>
           <div className="po-work-note">
@@ -736,17 +740,21 @@ function VendorPoDetailModal({
         <div className="empty">Loading…</div>
       ) : (
         <>
-          <div className="form-section-title">Purchase order info</div>
-          <dl className="intl-meta">
-            <BaseMetaRows info={d} />
-            <div><dt>PO No.</dt><dd>{d.customer_po_no || "—"}</dd></div>
-            <div><dt>K-Maris PO No.</dt><dd>{d.po_no || "—"}</dd></div>
-            <div><dt>Vendor</dt><dd>{d.vendor}</dd></div>
-            <div><dt>Recipient email</dt><dd>{d.vendor_email || "—"}</dd></div>
-            <div><dt>Sent date</dt><dd>{d.sent_date || "—"}</dd></div>
-            <div><dt>Status</dt><dd>{tr(d.status)}</dd></div>
-            <div><dt>Items</dt><dd>{d.items.length}</dd></div>
-          </dl>
+          {!inline ? (
+            <>
+              <div className="form-section-title">Purchase order info</div>
+              <dl className="intl-meta">
+                <BaseMetaRows info={d} />
+                <div><dt>PO No.</dt><dd>{d.customer_po_no || "—"}</dd></div>
+                <div><dt>K-Maris PO No.</dt><dd>{d.po_no || "—"}</dd></div>
+                <div><dt>Vendor</dt><dd>{d.vendor}</dd></div>
+                <div><dt>Recipient email</dt><dd>{d.vendor_email || "—"}</dd></div>
+                <div><dt>Sent date</dt><dd>{d.sent_date || "—"}</dd></div>
+                <div><dt>Status</dt><dd>{tr(d.status)}</dd></div>
+                <div><dt>Items</dt><dd>{d.items.length}</dd></div>
+              </dl>
+            </>
+          ) : null}
 
           <fieldset className="form-fieldset" disabled={!canEditThis}>
           <div className="po-work-note">

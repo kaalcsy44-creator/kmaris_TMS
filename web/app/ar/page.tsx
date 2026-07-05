@@ -458,7 +458,7 @@ function TaxIssueModal({
 
   return (
     <Modal title={<ModalTitle label={`Issue Tax Invoice — ${row.ci_no || "AR"}`} projectNo={row.project_no} />} onClose={onClose} wide inline={inline}>
-      <OrderInfoBlock orderId={row.order_id} detail={detail} />
+      {!inline ? <OrderInfoBlock orderId={row.order_id} detail={detail} /> : null}
       <div className="milestone-row" style={{ marginBottom: 12 }}>
         <span className={`ar-badge${row.tax_issued ? "" : " overdue"}`}>
           {row.tax_issued ? `Issued (${row.tax_issued_date || "done"})` : "Not issued"}
@@ -541,7 +541,7 @@ function PaymentModal({
 
   return (
     <Modal title={<ModalTitle label={`Record Payment — ${row.ci_no || "AR"}`} projectNo={row.project_no} />} onClose={onClose} wide inline={inline}>
-      <OrderInfoBlock orderId={row.order_id} />
+      {!inline ? <OrderInfoBlock orderId={row.order_id} /> : null}
       <div className="milestone-row" style={{ marginBottom: 12 }}>
         <span className={`ar-badge${row.paid_done ? "" : " overdue"}`}>
           {row.paid_done ? `Paid (${row.paid_date || "done"})` : "Pending"}

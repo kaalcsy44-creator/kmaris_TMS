@@ -4511,6 +4511,49 @@ table.mini .num {
   background: var(--blue);
   color: #fff;
 }
+/* 진행상태 통합: 완료 단계(done)·현재 단계(current)를 번호 칩 색으로 표시. */
+.project-stage-tabs button.done span,
+.project-stage-tabs button.current span {
+  background: var(--blue);
+  color: #fff;
+}
+.project-stage-tabs button.done {
+  border-color: #bcd7fb;
+  color: var(--ink);
+}
+.project-stage-tabs button.current {
+  border-color: var(--blue);
+  box-shadow: inset 0 0 0 1px var(--blue);
+  color: var(--ink);
+}
+/* 헤더 현재단계 칩 — 진행 바·current stage 문구를 대체해 헤더에 통합. */
+.pl-stage-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 11px;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: var(--blue);
+  font-size: 12.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.pl-modal.service .pl-stage-chip {
+  background: #e9f7ef;
+  color: #157347;
+}
+/* 딜(프로젝트) 액션 — 좌측 정보 패널 하단. 단계 편집(우측)과 분리. */
+.pl-deal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.pl-deal-actions .hint-inline {
+  flex: 1 1 100%;
+}
 .embedded-workspace {
   padding: 0;
   border: 0;

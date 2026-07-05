@@ -1103,8 +1103,11 @@ function PipelineModal({
           <span className="intl-title">
             <span className="pl-recv-label">Project No.</span>
             <b>{r.project_no || "—"}</b>
-            {r.received_at ? <span className="pl-recv-at">First RFQ {fmtStageDate(r.received_at)}</span> : null}
             <WorkTypeBadge type={r.work_type} />
+            <span className="pl-stage-chip">
+              Stage {r.stage}/11 · {stageLabel}
+            </span>
+            {r.received_at ? <span className="pl-recv-at">First RFQ {fmtStageDate(r.received_at)}</span> : null}
           </span>
           <button
             type="button"
@@ -1116,29 +1119,23 @@ function PipelineModal({
           </button>
         </div>
 
-        <div className="intl-bar">
-          {Array.from({ length: 11 }).map((_, k) => (
-            <span key={k} className={`seg${k < r.stage ? " on" : ""}`} />
-          ))}
-        </div>
-
-        {/* 현재 단계 — 단계 바 바로 아래(해당 단계) */}
-        <div className="pl-curstage">
-          <span className="dt">Current stage</span>
-          <span className="num">{r.stage}/11</span>
-          <span className="name">{stageLabel}</span>
-        </div>
-
-        {/* 단계 탭(11단계 + Timeline) — 진행 바 바로 아래 전체 폭. 헤더 영역에 고정되어
-            본문(작업 패널)이 스크롤돼도 항상 보인다. 이 한 벌이 유일한 단계 선택기. */}
+        {/* 단계 스트립 — 진행상태(완료/현재)와 탐색(선택)을 하나로 통합.
+            기존 분리형 진행 바·current stage 문구를 대체한다. */}
         <div className="project-stage-tabs" role="tablist" aria-label="Project stages">
           {rSteps.map((label, i) => {
             const no = i + 1;
+            const cls = [
+              selectedStage === no ? "on" : "",
+              no < r.stage ? "done" : "",
+              no === r.stage ? "current" : "",
+            ]
+              .filter(Boolean)
+              .join(" ");
             return (
               <button
                 key={no}
                 type="button"
-                className={selectedStage === no ? "on" : ""}
+                className={cls}
                 aria-pressed={selectedStage === no}
                 onClick={() => setSelectedStage(no)}
                 title={label}
@@ -1271,8 +1268,16 @@ function PipelineModal({
                 <dd>{r.vessel || "—"}</dd>
               </div>
               <div>
+                <dt>Vendor</dt>
+                <dd>{r.vendor || "—"}</dd>
+              </div>
+              <div>
                 <dt>Project title</dt>
                 <dd>{r.project_title || "—"}</dd>
+              </div>
+              <div>
+                <dt>Customer P/O No.</dt>
+                <dd>{r.customer_po_no || "—"}</dd>
               </div>
               <div>
                 <dt>Items</dt>
@@ -1291,6 +1296,35 @@ function PipelineModal({
               <span className="pl-next-text">{r.next_action}</span>
             </div>
           ) : null}
+
+          {/* 딜(프로젝트) 수준 액션 — 좌측 기본정보와 함께. 단계 레코드 편집(우측)과
+              분리되어 하단 버튼 중복을 없앤다. */}
+          <div className="pl-deal-actions">
+            {!ownsDeal && can("rfq", "edit") ? (
+              <span className="hint-inline" title={r.assignee ? `PIC: ${r.assignee}` : undefined}>
+                View only — assigned to {r.assignee || "another PIC"}
+              </span>
+            ) : null}
+            {canEdit && editing ? (
+              <>
+                <button className="btn primary" onClick={handleSave} disabled={saving}>
+                  {saving ? "Saving…" : "Save"}
+                </button>
+                <button className="btn" onClick={() => setEditing(false)} disabled={saving}>
+                  Cancel
+                </button>
+              </>
+            ) : canEdit ? (
+              <button className="btn" onClick={startEdit}>
+                ✎ Edit project info
+              </button>
+            ) : null}
+            {canDelete ? (
+              <button className="btn danger" onClick={handleDelete} disabled={deleting || editing}>
+                {deleting ? "Deleting…" : "Delete project"}
+              </button>
+            ) : null}
+          </div>
               </aside>
 
               <section className="project-stage-pane">
@@ -1307,50 +1341,6 @@ function PipelineModal({
           )}
               </section>
             </div>
-          <div className="pl-actions">
-            {!ownsDeal && can("rfq", "edit") ? (
-              <span className="hint-inline" style={{ marginLeft: "auto" }} title={r.assignee ? `PIC: ${r.assignee}` : undefined}>
-                View only — assigned to {r.assignee || "another PIC"}
-              </span>
-            ) : null}
-            {canEdit && editing ? (
-              <>
-                <button
-                  className="btn primary"
-                  onClick={handleSave}
-                  disabled={saving}
-                  style={{ marginLeft: "auto" }}
-                >
-                  {saving ? "Saving…" : "Save"}
-                </button>
-                <button
-                  className="btn"
-                  onClick={() => setEditing(false)}
-                  disabled={saving}
-                >
-                  Cancel
-                </button>
-              </>
-            ) : canEdit ? (
-              <button
-                className="btn"
-                onClick={startEdit}
-                style={{ marginLeft: "auto" }}
-              >
-                ✎ Edit
-              </button>
-            ) : null}
-            {canDelete ? (
-              <button
-                className="btn danger"
-                onClick={handleDelete}
-                disabled={deleting || editing}
-                style={canEdit ? undefined : { marginLeft: "auto" }}
-              >
-                {deleting ? "Deleting…" : "Delete"}
-              </button>
-            ) : null}
-          </div>
           </div>
         </div>
       </div>
