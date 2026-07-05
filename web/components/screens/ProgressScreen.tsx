@@ -1545,7 +1545,7 @@ function WorkspacePanel({
     );
   }
   return row.order_id > 0 ? (
-    <div className="project-work-panel embedded-workspace">
+    <div className="project-work-panel embedded-workspace stage-fill">
       <Suspense fallback={<div className="state">Loading details…</div>}>
         <ArOverview
           initialOrderId={row.order_id}

@@ -4829,6 +4829,55 @@ table.mini .num {
   border-color: var(--blue);
   box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.35);
 }
+/* ── Service 프로젝트: 편집 모달 내부도 녹색(#16a05a) 톤으로 통일 ──────────────
+   완료 단계탭 음영, 현재/선택 강조, 스테이지 번호, 이전/다음·주요 액션 버튼. */
+.pl-modal.service .project-stage-tabs button.done {
+  background: #16a05a;
+  border-color: #16a05a;
+}
+.pl-modal.service .project-stage-tabs button.done .st-no {
+  color: #16a05a;
+}
+.pl-modal.service .project-stage-tabs button.current .st-no,
+.pl-modal.service .project-stage-tabs button.on .st-no {
+  background: #16a05a;
+}
+.pl-modal.service .project-stage-tabs button.current {
+  border-color: #16a05a;
+}
+.pl-modal.service .project-stage-tabs button.on {
+  border-color: #16a05a;
+  box-shadow: 0 0 0 2px rgba(22, 160, 90, 0.35);
+}
+.pl-modal.service .project-stage-tabs button.current .st-label,
+.pl-modal.service .project-stage-tabs button.on .st-label {
+  color: var(--navy);
+}
+.pl-modal.service .stage-pane-no {
+  background: #16a05a;
+}
+.pl-modal.service .stage-pane-prev,
+.pl-modal.service .stage-pane-next {
+  border-color: #16a05a;
+  color: #16a05a;
+}
+.pl-modal.service .stage-pane-prev:hover:not(:disabled),
+.pl-modal.service .stage-pane-next:hover:not(:disabled) {
+  background: #16a05a;
+  color: #fff;
+}
+.pl-modal.service .stage-pane-prev:disabled,
+.pl-modal.service .stage-pane-next:disabled {
+  border-color: var(--line);
+  color: var(--muted);
+}
+.pl-modal.service .btn.primary {
+  background: #16a05a;
+  border-color: #16a05a;
+}
+.pl-modal.service .btn.primary:hover:not(:disabled) {
+  background: #11824a;
+}
 /* 헤더 현재단계 칩 — 진행 바·current stage 문구를 대체해 헤더에 통합. */
 .pl-stage-chip {
   display: inline-flex;
@@ -4920,6 +4969,34 @@ table.mini .num {
   padding: 12px 4px;
   background: #fff;
   border-top: 1px solid var(--line);
+}
+/* 짧은 내용 단계(AR 9·10·11 등): 내용이 스테이지 창을 채우지 못해도 주요 액션 바가
+   중간에 뜨지 않고 창 바닥에 붙도록, 스테이지 창~편집기까지 flex 열로 연결하고
+   액션 바를 margin-top:auto 로 밀어 내린다(내용이 길면 기존 sticky 로 자연히 하단 유지). */
+.project-stage-pane:has(> .stage-fill) {
+  display: flex;
+  flex-direction: column;
+}
+.embedded-workspace.stage-fill {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.stage-fill > .action-tabs.embedded {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.stage-fill .action-tabs.embedded > .embedded-detail {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.stage-fill .embedded-detail > .form-actions:has(.btn.primary) {
+  margin-top: auto;
 }
 .embedded-record-wrap,
 .embedded-po-list {
