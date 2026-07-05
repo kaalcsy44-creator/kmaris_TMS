@@ -2394,6 +2394,29 @@ table.pipeline tbody tr.service .pl-stage-done {
 }
 
 /* ── 진행현황 상세 모달 ─────────────────────────────────────────────────── */
+/* 신규 RFQ 등록 플로팅 버튼 — Progress 화면 우측 하단 고정. 작고 눈에 띄게. */
+.progress-fab {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 90;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 16px;
+  border: none;
+  border-radius: 999px;
+  background: var(--blue);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(0, 85, 168, 0.35);
+}
+.progress-fab:hover {
+  background: #00468c;
+}
+
 .pl-modal-backdrop {
   position: fixed;
   inset: 0;

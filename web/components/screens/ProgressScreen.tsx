@@ -23,6 +23,8 @@ import WorkTypeBadge from "@/components/WorkTypeBadge";
 import CustomerName from "@/components/common/CustomerName";
 import VendorName from "@/components/common/VendorName";
 import RfqActionTabs from "@/components/RfqActionTabs";
+import NewRfqForm from "@/components/screens/NewRfqForm";
+import Modal from "@/components/common/Modal";
 import { PoActionTabs } from "@/components/screens/PoScreen";
 import { DocumentsOverview } from "@/app/documents/page";
 import { ArOverview } from "@/app/ar/page";
@@ -107,6 +109,8 @@ type StageTabKey = number;
 
 export default function ProgressScreen() {
   const [tab, setTab] = useState<Tab>("internal");
+  // 신규 RFQ 등록 팝업 — 화면 우측 하단 버튼으로 연다.
+  const [newRfqOpen, setNewRfqOpen] = useState(false);
   // 내부확인용·고객확인용 모두 통합 파이프라인(rows) 사용. 단계 체계만 12 vs 7로 다름.
   const {
     data: pipeline,
@@ -184,6 +188,29 @@ export default function ProgressScreen() {
           )}
         </>
       )}
+
+      {/* 신규 RFQ 등록 — 화면 우측 하단 플로팅 버튼 → 기본정보 입력 팝업. */}
+      {can("rfq", "create") ? (
+        <button
+          type="button"
+          className="progress-fab"
+          onClick={() => setNewRfqOpen(true)}
+          title="Register a new RFQ"
+        >
+          + New RFQ
+        </button>
+      ) : null}
+      {newRfqOpen ? (
+        <Modal title="New Customer RFQ" onClose={() => setNewRfqOpen(false)} wide>
+          <NewRfqForm
+            onCreated={() => {
+              setNewRfqOpen(false);
+              reloadPipeline();
+            }}
+            onCancel={() => setNewRfqOpen(false)}
+          />
+        </Modal>
+      ) : null}
     </>
   );
 }
