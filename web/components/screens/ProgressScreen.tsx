@@ -1532,7 +1532,7 @@ function WorkspacePanel({
   if (area === "documents") {
     return row.order_id > 0 ? (
       <div className="project-work-panel embedded-workspace">
-        <Suspense fallback={<div className="state">Loading...</div>}>
+        <Suspense fallback={<div className="state">Loading details…</div>}>
           <DocumentsOverview
             initialOrderId={row.order_id}
             initialStage={Math.min(Math.max(stage, 7), 9)}
@@ -1546,7 +1546,7 @@ function WorkspacePanel({
   }
   return row.order_id > 0 ? (
     <div className="project-work-panel embedded-workspace">
-      <Suspense fallback={<div className="state">Loading...</div>}>
+      <Suspense fallback={<div className="state">Loading details…</div>}>
         <ArOverview
           initialOrderId={row.order_id}
           initialStage={stage >= 11 ? 11 : 10}
@@ -1606,7 +1606,7 @@ function ProjectPoWorkspace({
     onChanged();
     return refresh();
   }, [onChanged, refresh]);
-  if (!options) return <div className="state">Loading...</div>;
+  if (!options) return <div className="state">Loading details…</div>;
   return (
     <div className="project-work-panel embedded-workspace">
       <PoActionTabs

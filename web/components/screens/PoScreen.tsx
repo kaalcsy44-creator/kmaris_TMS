@@ -64,7 +64,7 @@ export default function PoScreen() {
     return refresh();
   }
 
-  if (!options) return <div className="state">Loading…</div>;
+  if (!options) return <div className="state">Loading details…</div>;
 
   return <PoActionTabs options={options} deepOrderId={deepOrderId} initialTab={tabParam} onChanged={load} />;
 }
@@ -382,7 +382,7 @@ function OrderDetailModal({
   return (
     <Modal title={<ModalTitle label="Edit order" projectNo={order?.project_no} />} onClose={onClose} wide inline={inline}>
       {!detail ? (
-        <div className="empty">Loading…</div>
+        <div className="state">Loading details…</div>
       ) : (
         <>
           {!inline ? (
@@ -762,7 +762,7 @@ function VendorPoDetailModal({
   return (
     <Modal title={d ? <ModalTitle label={`Edit purchase order — ${d.po_no}`} projectNo={d.project_no} /> : "PO details"} onClose={onClose} wide inline={inline}>
       {!d ? (
-        <div className="empty">Loading…</div>
+        <div className="state">Loading details…</div>
       ) : (
         <>
           {!inline ? (

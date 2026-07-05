@@ -306,7 +306,7 @@ function EmbeddedVendorRfq({
   }, []);
   useEffect(() => { load(); }, [load]);
   const mine = rows.filter((r) => r.rfq_id === rfqId);
-  if (!loaded) return <EmptyStage text="Loading…" />;
+  if (!loaded) return <div className="state">Loading details…</div>;
 
   if (adding || mine.length === 0) {
     return (
@@ -358,7 +358,7 @@ function EmbeddedVendorQuote({ rfqId, onChanged }: { rfqId: number | null; onCha
     fetchRfqDetail(rfqId).then((d) => setVendorRfqs(d.vendor_rfqs)).catch(() => setVendorRfqs([]));
   }, [rfqId]);
   const mine = rows.filter((r) => r.rfq_id === rfqId);
-  if (!loaded) return <EmptyStage text="Loading…" />;
+  if (!loaded) return <div className="state">Loading details…</div>;
 
   if (adding || mine.length === 0) {
     if (vendorRfqs.length === 0)
@@ -400,7 +400,7 @@ function EmbeddedCustomerQuote({ rfqId, onChanged }: { rfqId: number | null; onC
   }, []);
   useEffect(() => { load(); }, [load]);
   const mine = rows.filter((r) => r.rfq_id === rfqId);
-  if (!loaded) return <EmptyStage text="Loading…" />;
+  if (!loaded) return <div className="state">Loading details…</div>;
 
   if (adding || mine.length === 0) {
     return (
@@ -759,7 +759,7 @@ function VendorRfqDetailModal({
   return (
     <Modal title={d ? <ModalTitle label="Vendor RFQ" projectNo={d.project_no} /> : "Vendor RFQ details"} onClose={onClose} wide inline={inline}>
       {!d ? (
-        <div className="empty">Loading…</div>
+        <div className="state">Loading details…</div>
       ) : (
         <>
           {showEdit ? (
@@ -1233,7 +1233,7 @@ function VendorQuoteDetailModal({
   return (
     <Modal title={d ? <ModalTitle label={`Vendor quote — ${d.vendor_quote_no}`} projectNo={d.project_no} /> : "Vendor quote details"} onClose={onClose} wide inline={inline}>
       {!d ? (
-        <div className="empty">Loading…</div>
+        <div className="state">Loading details…</div>
       ) : (
         <div onPaste={handlePaste}>
           {!inline ? (
@@ -1548,7 +1548,7 @@ function CustomerQuoteDetailModal({
   return (
     <Modal title={d ? <ModalTitle label={`Quotation — ${d.qtn_no}`} projectNo={d.project_no} /> : "Quotation details"} onClose={onClose} wide inline={inline}>
       {!d ? (
-        <div className="empty">Loading…</div>
+        <div className="state">Loading details…</div>
       ) : (
         <>
           {!inline ? (

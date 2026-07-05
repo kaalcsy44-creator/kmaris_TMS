@@ -224,7 +224,7 @@ function ServiceStageEditor({
   return (
     <>
       {error ? <div className="state error">API error: {error}</div> : null}
-      {loading && !data ? <div className="state">Loading details...</div> : null}
+      {loading && !data ? <div className="state">Loading details…</div> : null}
       {data ? (
         <>
           {hideInfo ? null : <DocOrderInfo order={data.order} />}
@@ -635,7 +635,7 @@ function DocEditorContent({
   return (
     <>
       {error ? <div className="state error">API error: {error}</div> : null}
-      {loading && !data ? <div className="state">Loading details...</div> : null}
+      {loading && !data ? <div className="state">Loading details…</div> : null}
       {data ? (
         <>
           {hideInfo ? null : <DocOrderInfo order={data.order} />}

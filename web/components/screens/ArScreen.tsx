@@ -81,7 +81,7 @@ export function ArOverview({
     return refresh();
   }
 
-  if (!data) return <div className="state">Loading...</div>;
+  if (!data) return <div className="state">Loading details…</div>;
   const match = orderId ? rows.find((r) => r.order_id === orderId) : undefined;
   if (!match) {
     if (!orderId) {
