@@ -275,20 +275,22 @@ function OrderDetailModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderId]);
 
-  // "Load customer RFQ" — 연결된 Customer RFQ(1단계) 품목으로 채운다.
-  // (별도 Customer P/O 파일이 없을 때, RFQ 요청 품목을 그대로 불러오기 위함.)
-  function loadCustomerRfqItems() {
+  // "Load customer quote" — 이 프로젝트의 고객 견적(4단계) 품목·금액으로 채운다.
+  // (별도 Customer P/O 파일이 없을 때, 견적 그대로 주문 품목으로 불러오기 위함.)
+  function loadCustomerQuoteItems() {
+    const qno = detail?.quotation_no && detail.quotation_no !== "-" ? detail.quotation_no : "";
     const rno = detail?.rfq_no && detail.rfq_no !== "-" ? detail.rfq_no : "";
-    const crno = detail?.customer_rfq_no && detail.customer_rfq_no !== "-" ? detail.customer_rfq_no : "";
-    const rfq = options.rfqs.find(
-      (r) => (rno && r.rfq_no === rno) || (crno && r.customer_rfq_no === crno)
+    const rfqIdOfProject = rno ? options.rfqs.find((r) => r.rfq_no === rno)?.id : undefined;
+    const q = options.quotations.find(
+      (x) => (qno && x.qtn_no === qno) || (rfqIdOfProject != null && x.rfq_id === rfqIdOfProject)
     );
-    if (!rfq) {
-      setErr("Linked Customer RFQ not found.");
+    if (!q) {
+      setErr("Linked customer quotation not found.");
       return;
     }
-    setItems(rfq.items.length ? rfq.items.map(normalizeItem) : [blankItem()]);
-    setOcrMsg(`Loaded ${rfq.items.length} item(s) from Customer RFQ.`);
+    setCurrency(q.currency || currency);
+    setItems(q.items.length ? q.items.map(normalizeItem) : [blankItem()]);
+    setOcrMsg(`Loaded ${q.items.length} item(s) from quotation ${q.qtn_no}.`);
   }
 
   function matchByName<T extends { name: string }>(
@@ -483,11 +485,11 @@ function OrderDetailModal({
               canEditThis ? (
                 <button
                   className="btn sm"
-                  onClick={loadCustomerRfqItems}
+                  onClick={loadCustomerQuoteItems}
                   disabled={busy}
-                  title="Load the customer's ordered items from the linked Customer RFQ (when there is no separate P/O file)"
+                  title="Load items and amounts from this project's customer quotation (when there is no separate P/O file)"
                 >
-                  Load customer PO
+                  Load customer quote
                 </button>
               ) : null
             }
