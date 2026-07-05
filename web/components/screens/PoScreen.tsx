@@ -16,6 +16,7 @@ import {
   fetchVendorPoDetail,
   updatePurchaseOrder,
   deletePurchaseOrder,
+  fetchVendorQuoteOverview,
 } from "@/lib/api";
 import { getToken, can, canEditDeal, editBlockReason } from "@/lib/auth";
 import { useCachedData, invalidateCache } from "@/lib/useCachedData";
@@ -682,9 +683,29 @@ function VendorPoDetailModal({
   const [items, setItems] = useState<PoWorkItem[]>([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // 이 프로젝트에 견적을 준 벤더(이름) — Vendor 드롭다운을 이들로 좁힌다.
+  const [quotedVendors, setQuotedVendors] = useState<Set<string>>(new Set());
   // 편집 권한 = 역할 권한(po.edit) × 담당(PIC) 소유권. 없으면 읽기전용.
   const canEditThis = can("po", "edit") && canEditDeal(d?.assignee_id);
   const canDeleteThis = can("po", "delete") && canEditDeal(d?.assignee_id);
+
+  // 프로젝트별 벤더 견적을 불러와 견적 제출 벤더 목록을 만든다(드롭다운 스코프용).
+  useEffect(() => {
+    if (!d?.project_no) return;
+    let alive = true;
+    fetchVendorQuoteOverview()
+      .then((r) => {
+        if (!alive) return;
+        setQuotedVendors(new Set(r.rows.filter((x) => x.project_no === d.project_no).map((x) => x.vendor)));
+      })
+      .catch(() => { if (alive) setQuotedVendors(new Set()); });
+    return () => { alive = false; };
+  }, [d?.project_no]);
+
+  // 드롭다운 후보: 견적 준 벤더 + 현재 선택 벤더(숨겨지지 않게). 견적 정보가 없으면 전체.
+  const vendorChoices = options.vendors.filter(
+    (v) => quotedVendors.size === 0 || quotedVendors.has(v.name) || v.id === vendorId
+  );
 
   useEffect(() => {
     fetchVendorPoDetail(id)
@@ -777,7 +798,7 @@ function VendorPoDetailModal({
               <label>Vendor</label>
               <select value={vendorId} onChange={(e) => setVendorId(e.target.value ? Number(e.target.value) : "")}>
                 <option value="">Select…</option>
-                {options.vendors.map((v) => (
+                {vendorChoices.map((v) => (
                   <option key={v.id} value={v.id}>{v.name}</option>
                 ))}
               </select>
@@ -794,10 +815,6 @@ function VendorPoDetailModal({
               <label>Sent date</label>
               <input type="date" value={sentDate} onChange={(e) => setSentDate(e.target.value)} />
             </div>
-            <div className="form-field">
-              <label>Status</label>
-              <input value={status} onChange={(e) => setStatus(e.target.value)} />
-            </div>
           </div>
           <ItemEditor
             items={items}
@@ -806,7 +823,7 @@ function VendorPoDetailModal({
             headerActions={
               canEditThis ? (
                 <button className="btn sm" onClick={loadOrderItems} disabled={busy} title="Reload items from the linked Customer P/O">
-                  Load order items
+                  Load customer P/O
                 </button>
               ) : null
             }
