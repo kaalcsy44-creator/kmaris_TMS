@@ -2752,7 +2752,7 @@ function CustomerQuoteAction({
             onClick={() => setItems((prev) => applyMarginToAll(prev, defaultMargin, costCurrency, currency, roundDigits))}
             disabled={items.length === 0}
           >
-            Apply margin to all
+            Apply
           </button>
         </div>
       </div>
