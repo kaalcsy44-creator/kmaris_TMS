@@ -1064,12 +1064,7 @@ function PipelineModal({
     const skip = isDomestic && !isService && (no === 7 || no === 8);
     return { no, label, value: docValue[no] ?? "", at: effective(no), skip };
   });
-  const leftChain = chain.slice(0, 6);
-  const rightChain = chain.slice(6, 11);
 
-  const poHref = r.order_id > 0 ? `/po?order=${r.order_id}` : `/po?rfq=${r.rfq_id}`;
-
-  // 단계 번호 → 해당 단계 작업 화면 링크. 오더가 필요한 5~12단계는 오더 없으면 null(비활성).
   function onBackdropMouseDown(e: React.MouseEvent<HTMLDivElement>) {
     backdropMouseDown.current = e.target === e.currentTarget;
   }
@@ -1081,24 +1076,6 @@ function PipelineModal({
     backdropMouseDown.current = false;
   }
 
-  function stageHref(no: number): string | null {
-    const view = isService ? "service" : "parts";
-    if (no <= 4) {
-      const tab = { 1: "new", 2: "vrfq", 3: "vquote", 4: "cquote" }[no] ?? "new";
-      return `/rfq?rfq=${r.rfq_id}&tab=${tab}`;
-    }
-    if (r.order_id <= 0) return null;
-    if (no === 5) return `/po?order=${r.order_id}&tab=customer`;
-    if (no === 6) return `/po?order=${r.order_id}&tab=vendor`;
-    if (no >= 7 && no <= 8) return `/documents?order=${r.order_id}&view=${view}&stage=${no}`;
-    if (no === 9) {
-      // 내수·서비스는 대금청구를 AR에서 처리, 그 외(수출 부품)는 Documents 9단계(Tax).
-      if (isService || r.trade_type === "내수") return `/ar?order=${r.order_id}`;
-      return `/documents?order=${r.order_id}&view=parts&stage=9`;
-    }
-    return `/ar?order=${r.order_id}&stage=${no}`; // 10, 11
-  }
-
   function areaForStage(no: number): WorkspaceArea {
     if (no <= 4) return "rfq";
     if (no <= 6) return "po";
@@ -1107,10 +1084,6 @@ function PipelineModal({
       return "documents";
     }
     return "ar";
-  }
-
-  function openStageInWorkspace(no: number) {
-    setSelectedStage(no);
   }
 
   return (
@@ -1154,6 +1127,36 @@ function PipelineModal({
           <span className="dt">Current stage</span>
           <span className="num">{r.stage}/11</span>
           <span className="name">{stageLabel}</span>
+        </div>
+
+        {/* 단계 탭(11단계 + Timeline) — 진행 바 바로 아래 전체 폭. 헤더 영역에 고정되어
+            본문(작업 패널)이 스크롤돼도 항상 보인다. 이 한 벌이 유일한 단계 선택기. */}
+        <div className="project-stage-tabs" role="tablist" aria-label="Project stages">
+          {rSteps.map((label, i) => {
+            const no = i + 1;
+            return (
+              <button
+                key={no}
+                type="button"
+                className={selectedStage === no ? "on" : ""}
+                aria-pressed={selectedStage === no}
+                onClick={() => setSelectedStage(no)}
+                title={label}
+              >
+                <span>{no}</span>
+                <b>{label}</b>
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            className={selectedStage === "timeline" ? "on" : ""}
+            aria-pressed={selectedStage === "timeline"}
+            onClick={() => setSelectedStage("timeline")}
+          >
+            <span>TL</span>
+            <b>Timeline</b>
+          </button>
         </div>
 
         <div className="pl-modal-body">
@@ -1292,35 +1295,6 @@ function PipelineModal({
 
               <section className="project-stage-pane">
 
-          {/* 단계 상세 — 단계별(편집) / 시간순 여정(읽기전용) 토글 */}
-          <div className="project-stage-tabs" role="tablist" aria-label="Project stages">
-            {rSteps.map((label, i) => {
-              const no = i + 1;
-              return (
-                <button
-                  key={no}
-                  type="button"
-                  className={selectedStage === no ? "on" : ""}
-                  aria-pressed={selectedStage === no}
-                  onClick={() => setSelectedStage(no)}
-                  title={label}
-                >
-                  <span>{no}</span>
-                  <b>{label}</b>
-                </button>
-              );
-            })}
-            <button
-              type="button"
-              className={selectedStage === "timeline" ? "on" : ""}
-              aria-pressed={selectedStage === "timeline"}
-              onClick={() => setSelectedStage("timeline")}
-            >
-              <span>TL</span>
-              <b>Timeline</b>
-            </button>
-          </div>
-
           {selectedStage === "timeline" ? (
             <DealTimeline chain={chain} stageNotes={r.stage_notes} steps={rSteps} />
           ) : (
@@ -1334,27 +1308,6 @@ function PipelineModal({
               </section>
             </div>
           <div className="pl-actions">
-            <div className="pl-nav-links">
-              <Link className="btn" href={`/rfq?rfq=${r.rfq_id}`}>
-                RFQ &amp; Quotation →
-              </Link>
-              <Link className="btn" href={poHref}>
-                P/O →
-              </Link>
-              <Link
-                className="btn"
-                href={r.order_id > 0 ? `/documents?order=${r.order_id}` : "/documents"}
-                title={r.order_id > 0 ? undefined : "No order yet — select a target order on the Documents page"}
-              >
-                Documents →
-              </Link>
-              <Link
-                className="btn"
-                href={r.order_id > 0 ? `/ar?order=${r.order_id}` : "/ar"}
-              >
-                AR →
-              </Link>
-            </div>
             {!ownsDeal && can("rfq", "edit") ? (
               <span className="hint-inline" style={{ marginLeft: "auto" }} title={r.assignee ? `PIC: ${r.assignee}` : undefined}>
                 View only — assigned to {r.assignee || "another PIC"}
@@ -1479,6 +1432,7 @@ function ProjectRfqWorkspace({
         onSelect={() => undefined}
         onChanged={load}
         initialTab={initialTab}
+        embedded
       />
     </div>
   );
@@ -1508,6 +1462,7 @@ function ProjectPoWorkspace({
         deepOrderId={row.order_id > 0 ? row.order_id : null}
         initialTab={stage >= 6 ? "vendor" : "customer"}
         onChanged={load}
+        embedded
       />
     </div>
   );

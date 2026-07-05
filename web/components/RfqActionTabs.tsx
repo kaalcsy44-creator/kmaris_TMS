@@ -105,12 +105,16 @@ export default function RfqActionTabs({
   onSelect,
   onChanged,
   initialTab,
+  embedded,
 }: {
   rfqId: number | null;
   rows: RfqRow[];
   onSelect: (id: number | null) => void;
   onChanged: () => void;
   initialTab?: string | null;
+  // embedded: 프로젝트 워크스페이스 내부. 내부 탭바·전역 목록·생성 없이 이 프로젝트(rfqId)의
+  // 단건 상세를 인라인으로 표시. 단계(new/vrfq/vquote/cquote)는 initialTab이 결정.
+  embedded?: boolean;
 }) {
   const validTab = TABS.some((t) => t.key === initialTab) ? (initialTab as string) : "new";
   const [tab, setTab] = useState(validTab);
@@ -134,6 +138,26 @@ export default function RfqActionTabs({
   useEffect(() => {
     fetchVendors().then(setVendors).catch(() => setVendors([]));
   }, []);
+
+  // 프로젝트 워크스페이스: 내부 탭바 없이 이 프로젝트(rfqId)의 해당 단계 상세를 인라인으로.
+  if (embedded) {
+    return (
+      <div className="action-tabs embedded">
+        {tab === "new" && (
+          <EmbeddedCustomerRfq rfqId={rfqId} onChanged={onChanged} />
+        )}
+        {tab === "vrfq" && (
+          <EmbeddedVendorRfq rfqId={rfqId} vendors={vendors} onChanged={onChanged} />
+        )}
+        {tab === "vquote" && (
+          <EmbeddedVendorQuote rfqId={rfqId} onChanged={onChanged} />
+        )}
+        {tab === "cquote" && (
+          <EmbeddedCustomerQuote rfqId={rfqId} onChanged={onChanged} />
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="action-tabs">
@@ -183,6 +207,135 @@ export default function RfqActionTabs({
           onAutoConsumed={consumeAutoOpen}
         />
       )}
+    </div>
+  );
+}
+
+// ── 프로젝트 워크스페이스 임베드 뷰(단건 인라인) ────────────────────────────────
+// 각 단계에서 이 프로젝트의 레코드만 조회해 상세 편집 폼을 인라인으로 렌더한다.
+// 여러 벤더가 있을 수 있는 vrfq/vquote는 컴팩트 선택기 + 인라인 상세.
+
+function EmptyStage({ text }: { text: string }) {
+  return (
+    <div className="project-work-panel">
+      <div className="project-work-empty">{text}</div>
+    </div>
+  );
+}
+
+function RecordPicker<T extends { id: number }>({
+  rows,
+  selectedId,
+  label,
+  onSelect,
+}: {
+  rows: T[];
+  selectedId: number;
+  label: (r: T) => string;
+  onSelect: (id: number) => void;
+}) {
+  if (rows.length <= 1) return null;
+  return (
+    <div className="embedded-record-picker" role="tablist">
+      {rows.map((r) => (
+        <button
+          key={r.id}
+          type="button"
+          className={r.id === selectedId ? "on" : ""}
+          onClick={() => onSelect(r.id)}
+        >
+          {label(r)}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// 1. Customer RFQ — 프로젝트 자체 레코드이므로 rfqId로 상세 폼을 바로 로드.
+function EmbeddedCustomerRfq({ rfqId, onChanged }: { rfqId: number | null; onChanged: () => void }) {
+  if (!rfqId) return <EmptyStage text="No Customer RFQ for this project." />;
+  return (
+    <div className="embedded-detail">
+      <NewRfqForm
+        autoLoadId={rfqId}
+        onCreated={onChanged}
+        onCancel={() => undefined}
+        onDeleted={onChanged}
+      />
+    </div>
+  );
+}
+
+// 2. Vendor RFQ — 이 프로젝트의 Vendor RFQ 발송건들(멀티벤더) 중 선택 + 인라인 상세.
+function EmbeddedVendorRfq({
+  rfqId,
+  vendors,
+  onChanged,
+}: {
+  rfqId: number | null;
+  vendors: VendorOption[];
+  onChanged: () => void;
+}) {
+  const [rows, setRows] = useState<VrfqRow[]>([]);
+  const [selId, setSelId] = useState<number | null>(null);
+  useEffect(() => {
+    fetchVrfqOverview().then((d) => setRows(d.rows)).catch(() => setRows([]));
+  }, []);
+  const mine = rows.filter((r) => r.rfq_id === rfqId);
+  if (rows.length && mine.length === 0)
+    return <EmptyStage text="No Vendor RFQ has been sent for this project yet." />;
+  if (mine.length === 0) return <EmptyStage text="Loading…" />;
+  const selected = mine.find((r) => r.id === selId) ?? mine[0];
+  return (
+    <div className="embedded-record-wrap">
+      <RecordPicker rows={mine} selectedId={selected.id} label={(r) => r.vendor || `RFQ ${r.id}`} onSelect={setSelId} />
+      <VendorRfqDetailModal
+        id={selected.id}
+        vendors={vendors}
+        onClose={onChanged}
+        onChanged={onChanged}
+        inline
+      />
+    </div>
+  );
+}
+
+// 3. Vendor Quote — 이 프로젝트의 수신 견적건들 중 선택 + 인라인 상세.
+function EmbeddedVendorQuote({ rfqId, onChanged }: { rfqId: number | null; onChanged: () => void }) {
+  const [rows, setRows] = useState<VendorQuoteOverviewRow[]>([]);
+  const [selId, setSelId] = useState<number | null>(null);
+  useEffect(() => {
+    fetchVendorQuoteOverview().then((d) => setRows(d.rows)).catch(() => setRows([]));
+  }, []);
+  const mine = rows.filter((r) => r.rfq_id === rfqId);
+  if (rows.length && mine.length === 0)
+    return <EmptyStage text="No Vendor quote has been received for this project yet." />;
+  if (mine.length === 0) return <EmptyStage text="Loading…" />;
+  const selected = mine.find((r) => r.id === selId) ?? mine[0];
+  return (
+    <div className="embedded-record-wrap">
+      <RecordPicker rows={mine} selectedId={selected.id} label={(r) => `${r.vendor || ""} ${r.vendor_quote_no || ""}`.trim() || `Quote ${r.id}`} onSelect={setSelId} />
+      <VendorQuoteDetailModal id={selected.id} onClose={onChanged} onChanged={onChanged} inline />
+    </div>
+  );
+}
+
+// 4. Customer Quote — 이 프로젝트의 견적서(대개 1건) 인라인 상세.
+function EmbeddedCustomerQuote({ rfqId, onChanged }: { rfqId: number | null; onChanged: () => void }) {
+  const [rows, setRows] = useState<QtnRow[]>([]);
+  const [selId, setSelId] = useState<number | null>(null);
+  useEffect(() => {
+    fetchQuotationOverview().then((d) => setRows(d.rows)).catch(() => setRows([]));
+  }, []);
+  const mine = rows.filter((r) => r.rfq_id === rfqId);
+  if (rows.length && mine.length === 0)
+    return <EmptyStage text="No Customer quotation has been sent for this project yet." />;
+  if (mine.length === 0) return <EmptyStage text="Loading…" />;
+  const selected = mine.find((r) => r.id === selId) ?? mine[0];
+  return (
+    <div className="embedded-record-wrap">
+      <RecordPicker rows={mine} selectedId={selected.id} label={(r) => r.qtn_no || `Quote ${r.id}`} onSelect={setSelId} />
+      <CustomerQuoteDetailModal id={selected.id} onClose={onChanged} onChanged={onChanged} inline />
     </div>
   );
 }
@@ -446,12 +599,14 @@ function VendorRfqDetailModal({
   autoEdit,
   onClose,
   onChanged,
+  inline,
 }: {
   id: number;
   vendors: VendorOption[];
   autoEdit?: boolean;
   onClose: () => void;
   onChanged: () => void;
+  inline?: boolean;
 }) {
   const [d, setD] = useState<VendorRfqDetail | null>(null);
   const [editing, setEditing] = useState(!!autoEdit);
@@ -516,7 +671,7 @@ function VendorRfqDetailModal({
   }
 
   return (
-    <Modal title={d ? <ModalTitle label="Vendor RFQ" projectNo={d.project_no} /> : "Vendor RFQ details"} onClose={onClose} wide>
+    <Modal title={d ? <ModalTitle label="Vendor RFQ" projectNo={d.project_no} /> : "Vendor RFQ details"} onClose={onClose} wide inline={inline}>
       {!d ? (
         <div className="empty">Loading…</div>
       ) : (
@@ -839,10 +994,12 @@ function VendorQuoteDetailModal({
   id,
   onClose,
   onChanged,
+  inline,
 }: {
   id: number;
   onClose: () => void;
   onChanged: () => void;
+  inline?: boolean;
 }) {
   const [d, setD] = useState<VendorQuoteDetail | null>(null);
   const [no, setNo] = useState("");
@@ -966,7 +1123,7 @@ function VendorQuoteDetailModal({
   }
 
   return (
-    <Modal title={d ? <ModalTitle label={`Vendor quote — ${d.vendor_quote_no}`} projectNo={d.project_no} /> : "Vendor quote details"} onClose={onClose} wide>
+    <Modal title={d ? <ModalTitle label={`Vendor quote — ${d.vendor_quote_no}`} projectNo={d.project_no} /> : "Vendor quote details"} onClose={onClose} wide inline={inline}>
       {!d ? (
         <div className="empty">Loading…</div>
       ) : (
@@ -1159,10 +1316,12 @@ function CustomerQuoteDetailModal({
   id,
   onClose,
   onChanged,
+  inline,
 }: {
   id: number;
   onClose: () => void;
   onChanged: () => void;
+  inline?: boolean;
 }) {
   const [d, setD] = useState<CustomerQuotationDetail | null>(null);
   const [qtnNo, setQtnNo] = useState("");
@@ -1270,7 +1429,7 @@ function CustomerQuoteDetailModal({
   const STATUSES = ["초안", "발송완료", "협상중", "수주확정", "실주", "만료"];
 
   return (
-    <Modal title={d ? <ModalTitle label={`Quotation — ${d.qtn_no}`} projectNo={d.project_no} /> : "Quotation details"} onClose={onClose} wide>
+    <Modal title={d ? <ModalTitle label={`Quotation — ${d.qtn_no}`} projectNo={d.project_no} /> : "Quotation details"} onClose={onClose} wide inline={inline}>
       {!d ? (
         <div className="empty">Loading…</div>
       ) : (

@@ -2407,7 +2407,7 @@ table.pipeline tbody tr.service .pl-stage-done {
 }
 .pl-modal {
   width: 100%;
-  max-width: 920px;
+  max-width: 1320px;
   background: #fff;
   border-radius: 12px;
   border-top: 4px solid var(--blue);
@@ -4452,6 +4452,16 @@ table.mini .num {
 .project-stage-pane {
   min-width: 0;
 }
+/* 단계 탭 — 진행 바 바로 아래, 헤더 영역에 고정된 전체 폭 스트립(가로 스크롤). */
+.pl-modal > .project-stage-tabs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 4px 0 10px;
+  margin: 6px 0 0;
+  border-bottom: 1px solid var(--line);
+  flex: 0 0 auto;
+}
 .project-stage-tabs {
   display: flex;
   gap: 6px;
@@ -4507,6 +4517,47 @@ table.mini .num {
 }
 .embedded-workspace .action-tabs {
   margin: 0;
+}
+/* 임베드 단건 상세 — 오버레이 없이 흐름 안에 렌더된 상세 폼 본문. */
+.embedded-detail {
+  min-width: 0;
+}
+/* 임베드 상세의 액션바는 흐름 안에 두어(비-sticky) 바깥 프로젝트 액션바(Edit/Delete)와
+   겹치지 않게 한다. 표준 모달용 sticky·음수 마진을 상쇄. */
+.embedded-workspace .form-actions,
+.embedded-detail .form-actions {
+  position: static;
+  margin-left: 0;
+  margin-right: 0;
+  padding-left: 0;
+  padding-right: 0;
+}
+.embedded-record-wrap,
+.embedded-po-list {
+  min-width: 0;
+}
+/* 멀티벤더 단계: 이 프로젝트의 레코드만 고르는 컴팩트 선택기. */
+.embedded-record-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.embedded-record-picker button {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.embedded-record-picker button.on {
+  border-color: var(--blue);
+  background: #eff6ff;
+  color: var(--ink);
 }
 @media (max-width: 980px) {
   .project-workspace-layout {

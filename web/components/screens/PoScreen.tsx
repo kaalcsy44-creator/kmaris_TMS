@@ -73,11 +73,15 @@ export function PoActionTabs({
   deepOrderId,
   initialTab,
   onChanged,
+  embedded,
 }: {
   options: PoWorkOptions;
   deepOrderId: number | null;
   initialTab?: string | null;
   onChanged: () => void;
+  // embedded: 프로젝트 워크스페이스 내부. 내부 탭바·전역 목록·생성 없이 이 프로젝트의
+  // 단건 상세를 인라인으로 보여준다. 어느 단계(customer/vendor)인지는 initialTab이 결정.
+  embedded?: boolean;
 }) {
   const [tab, setTab] = useState(initialTab === "vendor" ? "vendor" : "customer");
   useEffect(() => {
@@ -90,22 +94,24 @@ export function PoActionTabs({
 
   return (
     <div className="action-tabs">
-      <div className="page-tabs">
-        {tabs.map((t) => (
-          <button
-            key={t.key}
-            className={tab === t.key ? "on" : ""}
-            onClick={() => setTab(t.key)}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      {embedded ? null : (
+        <div className="page-tabs">
+          {tabs.map((t) => (
+            <button
+              key={t.key}
+              className={tab === t.key ? "on" : ""}
+              onClick={() => setTab(t.key)}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {tab === "customer" ? (
-        <CustomerPoTab options={options} deepOrderId={deepOrderId} onChanged={onChanged} />
+        <CustomerPoTab options={options} deepOrderId={deepOrderId} onChanged={onChanged} embedded={embedded} />
       ) : (
-        <VendorPoTab options={options} deepOrderId={deepOrderId} onChanged={onChanged} />
+        <VendorPoTab options={options} deepOrderId={deepOrderId} onChanged={onChanged} embedded={embedded} />
       )}
     </div>
   );
@@ -116,10 +122,12 @@ function CustomerPoTab({
   options,
   deepOrderId,
   onChanged,
+  embedded,
 }: {
   options: PoWorkOptions;
   deepOrderId: number | null;
   onChanged: () => void;
+  embedded?: boolean;
 }) {
   const [adding, setAdding] = useState(false);
   const [detailId, setDetailId] = useState<number | null>(deepOrderId);
@@ -127,6 +135,25 @@ function CustomerPoTab({
   useEffect(() => {
     setDetailId(deepOrderId);
   }, [deepOrderId]);
+
+  // 프로젝트 워크스페이스: 목록·New 없이 이 프로젝트 오더의 편집 폼을 바로 인라인 표시.
+  if (embedded) {
+    return deepOrderId && deepOrderId > 0 ? (
+      <OrderDetailModal
+        orderId={deepOrderId}
+        options={options}
+        onClose={onChanged}
+        onChanged={onChanged}
+        inline
+      />
+    ) : (
+      <div className="project-work-panel">
+        <div className="project-work-empty">
+          Customer P/O is not registered yet. Register the order on the P/O page to begin.
+        </div>
+      </div>
+    );
+  }
 
   const columns: ColumnDef<OrderOpt>[] = [
     projectNoColumn<OrderOpt>({ projectNo: (o) => o.project_no, firstRfqAt: (o) => o.first_rfq_at }),
@@ -204,11 +231,13 @@ function OrderDetailModal({
   options,
   onClose,
   onChanged,
+  inline,
 }: {
   orderId: number;
   options: PoWorkOptions;
   onClose: () => void;
   onChanged: () => void;
+  inline?: boolean;
 }) {
   const order = options.orders.find((o) => o.id === orderId);
   const [detail, setDetail] = useState<PoDetailT | null>(null);
@@ -351,7 +380,7 @@ function OrderDetailModal({
   const canDeleteThis = can("po", "delete") && canEditDeal(detail?.assignee_id);
 
   return (
-    <Modal title={<ModalTitle label="Edit order" projectNo={order?.project_no} />} onClose={onClose} wide>
+    <Modal title={<ModalTitle label="Edit order" projectNo={order?.project_no} />} onClose={onClose} wide inline={inline}>
       {!detail ? (
         <div className="empty">Loading…</div>
       ) : (
@@ -469,10 +498,12 @@ function VendorPoTab({
   options,
   deepOrderId,
   onChanged,
+  embedded,
 }: {
   options: PoWorkOptions;
   deepOrderId?: number | null;
   onChanged: () => void;
+  embedded?: boolean;
 }) {
   const [adding, setAdding] = useState(false);
   const [sending, setSending] = useState(false);
@@ -486,6 +517,46 @@ function VendorPoTab({
     autoRef.current = deepOrderId;
     if (match) setDetailId(match.id);
   }, [deepOrderId, options.purchase_orders]);
+
+  // 프로젝트 워크스페이스: 이 오더의 발주서(POs)만. 여러 벤더면 컴팩트 선택 + 인라인 상세.
+  if (embedded) {
+    const pos = options.purchase_orders.filter((p) => deepOrderId && p.order_id === deepOrderId);
+    if (pos.length === 0) {
+      return (
+        <div className="project-work-panel">
+          <div className="project-work-empty">
+            No purchase order issued for this project yet. Issue one on the P/O page.
+          </div>
+        </div>
+      );
+    }
+    const selected = pos.find((p) => p.id === detailId) ?? pos[0];
+    return (
+      <div className="embedded-po-list">
+        {pos.length > 1 ? (
+          <div className="embedded-record-picker" role="tablist" aria-label="Vendor POs">
+            {pos.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                className={p.id === selected.id ? "on" : ""}
+                onClick={() => setDetailId(p.id)}
+              >
+                {p.vendor || p.po_no || `PO ${p.id}`}
+              </button>
+            ))}
+          </div>
+        ) : null}
+        <VendorPoDetailModal
+          id={selected.id}
+          options={options}
+          onClose={onChanged}
+          onChanged={onChanged}
+          inline
+        />
+      </div>
+    );
+  }
 
   const columns: ColumnDef<PoOpt>[] = [
     projectNoColumn<PoOpt>({ projectNo: (p) => p.project_no, firstRfqAt: (p) => p.first_rfq_at }),
@@ -576,11 +647,13 @@ function VendorPoDetailModal({
   options,
   onClose,
   onChanged,
+  inline,
 }: {
   id: number;
   options: PoWorkOptions;
   onClose: () => void;
   onChanged: () => void;
+  inline?: boolean;
 }) {
   const [d, setD] = useState<PurchaseOrderDetail | null>(null);
   const [vendorId, setVendorId] = useState<number | "">("");
@@ -658,7 +731,7 @@ function VendorPoDetailModal({
   }
 
   return (
-    <Modal title={d ? <ModalTitle label={`Edit purchase order — ${d.po_no}`} projectNo={d.project_no} /> : "PO details"} onClose={onClose} wide>
+    <Modal title={d ? <ModalTitle label={`Edit purchase order — ${d.po_no}`} projectNo={d.project_no} /> : "PO details"} onClose={onClose} wide inline={inline}>
       {!d ? (
         <div className="empty">Loading…</div>
       ) : (

@@ -8,22 +8,30 @@ export default function Modal({
   title,
   onClose,
   wide,
+  inline,
   children,
 }: {
   title: React.ReactNode;
   onClose: () => void;
   wide?: boolean;
+  // inline: 오버레이·헤더·닫기 없이 본문만 흐름 안에 렌더(프로젝트 워크스페이스 임베드용).
+  inline?: boolean;
   children: React.ReactNode;
 }) {
   const backdropMouseDown = useRef(false);
 
   useEffect(() => {
+    if (inline) return; // 임베드 모드에선 ESC 닫기 비활성(닫을 오버레이가 없음)
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") onClose();
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [onClose, inline]);
+
+  if (inline) {
+    return <div className="embedded-detail">{children}</div>;
+  }
 
   function onBackdropMouseDown(e: React.MouseEvent<HTMLDivElement>) {
     backdropMouseDown.current = e.target === e.currentTarget;
