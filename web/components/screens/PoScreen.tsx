@@ -378,7 +378,6 @@ function OrderDetailModal({
     }
   }
 
-  const vessels = options.vessels.filter((v) => customerId === "" || v.customer_id === customerId);
   // 편집 권한 = 역할 권한(po.edit) × 담당(PIC) 소유권. 없으면 읽기전용.
   const canEditThis = can("po", "edit") && canEditDeal(detail?.assignee_id);
   const canDeleteThis = can("po", "delete") && canEditDeal(detail?.assignee_id);
@@ -440,37 +439,12 @@ function OrderDetailModal({
 
           <div className="form-grid">
             <div className="form-field">
-              <label>Customer</label>
-              <select value={customerId} onChange={(e) => { setCustomerId(e.target.value ? Number(e.target.value) : ""); setVesselId(""); }}>
-                <option value="">Select…</option>
-                {options.customers.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-            </div>
-            <div className="form-field">
-              <label>Vessel</label>
-              <select value={vesselId} onChange={(e) => setVesselId(e.target.value ? Number(e.target.value) : "")}>
-                <option value="">— None —</option>
-                {vessels.map((v) => (
-                  <option key={v.id} value={v.id}>{v.name}</option>
-                ))}
-              </select>
-            </div>
-            <div className="form-field">
               <label>Customer PO No.</label>
               <input value={poNo} onChange={(e) => setPoNo(e.target.value)} />
             </div>
             <div className="form-field">
               <label>Order date</label>
               <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-            </div>
-            <div className="form-field">
-              <label>Trade type</label>
-              <select value={tradeType} onChange={(e) => setTradeType(e.target.value)}>
-                <option value="수출">{tr("수출")}</option>
-                <option value="내수">{tr("내수")}</option>
-              </select>
             </div>
             <div className="form-field">
               <label>Promised delivery</label>
