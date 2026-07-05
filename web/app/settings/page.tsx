@@ -356,7 +356,7 @@ function UsersTab() {
 
   const editorTitle = isEdit ? `✎ Edit ${form.username || "user"}` : "+ New user";
   const editor = editId !== null ? (
-    <Modal title={editorTitle} onClose={cancel} wide>
+    <Modal title={editorTitle} onClose={cancel} form>
       <div className="form-grid">
         <TextField label="Username *" value={form.username} onChange={(v) => setForm({ ...form, username: v })} />
         <TextField label="Email" value={form.email} onChange={(v) => setForm({ ...form, email: v })} />
@@ -1107,7 +1107,7 @@ function MasterSection<T extends { id: number }>({
     ? `📋 Copy as new${String(form[required] ?? "") ? ` — ${String(form[required])}` : ""}`
     : "+ New";
   const editor = editId !== null ? (
-    <Modal title={editorTitle} onClose={cancel} wide>
+    <Modal title={editorTitle} onClose={cancel} form>
       {copying && copyHint ? <div className="ms-copy-hint">{copyHint}</div> : null}
       <div className="form-grid">
         {fields.map(([key, label]) => (

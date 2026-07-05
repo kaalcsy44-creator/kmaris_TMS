@@ -2459,6 +2459,30 @@ table.pipeline tbody tr.service .pl-stage-done {
   display: flex;
   overflow: hidden;
 }
+/* 입력 폼 전용 팝업(마스터 등록/수정) — 좁은 폭 + 본문을 세로 블록으로 스택.
+   기본 pl-modal-body 는 Progress 상세용 좌우 2단 flex 라서, 폼에선 그 배치를 끈다. */
+.pl-modal.pl-modal--form {
+  max-width: 560px;
+}
+.pl-modal--form .pl-modal-body {
+  display: block;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+/* 폼 변형 푸터는 본문(입력칸) 폭에 맞춰 정렬 — 전체 폭 full-bleed 음수마진 상쇄. */
+.pl-modal--form .pl-modal-body .form-actions {
+  margin-left: 0;
+  margin-right: 0;
+  padding-left: 0;
+  padding-right: 0;
+}
+.pl-modal--form .form-grid {
+  grid-template-columns: 1fr 1fr;
+}
+/* 로고 붙여넣기 필드는 폭 전체를 쓴다(2단 그리드에서 한 줄 차지). */
+.pl-modal--form .form-grid .logo-field {
+  grid-column: 1 / -1;
+}
 /* 하단 액션 영역 — 본문 맨 아래에 달라붙어 스크롤과 무관하게 항상 보임. 우측 정렬. */
 .pl-modal-body .form-actions,
 .pl-modal-body .pl-actions {
@@ -4154,7 +4178,8 @@ table.mini .num {
   .intl-meta {
     grid-template-columns: 1fr 1fr;
   }
-  .form-grid {
+  .form-grid,
+  .pl-modal--form .form-grid {
     grid-template-columns: 1fr;
   }
 
