@@ -2418,12 +2418,12 @@ table.pipeline tbody tr.service .pl-stage-done {
   flex-direction: column;
   max-height: calc(100vh - 96px);
 }
-/* 본문만 스크롤(헤더/중간 단계바는 위에 고정, 액션 버튼은 아래 고정) */
+/* 본문은 스크롤하지 않는다 — 좌측바/우측 상세부분이 각각 독립 스크롤한다. */
 .pl-modal-body {
-  overflow-y: auto;
   flex: 1 1 auto;
   min-height: 0;
-  padding-bottom: 2px;
+  display: flex;
+  overflow: hidden;
 }
 /* 하단 액션 영역 — 본문 맨 아래에 달라붙어 스크롤과 무관하게 항상 보임. 우측 정렬. */
 .pl-modal-body .form-actions,
@@ -2487,9 +2487,9 @@ table.mini td.mini-empty {
 }
 .pl-modal-head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   margin-bottom: 12px;
 }
 .pl-modal-head .intl-title {
@@ -2580,6 +2580,10 @@ table.mini td.mini-empty {
   margin-top: 0;
   border-top: 0;
   padding-top: 4px;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  width: 100%;
 }
 .pl-modal.service .intl-bar .seg.on {
   background: #16a05a;
@@ -4418,16 +4422,19 @@ table.mini .num {
   display: grid;
   grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
   gap: 14px;
-  align-items: start;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
 }
+/* 좌측 정보바 — 우측 상세부분과 독립적으로 스크롤. */
 .project-info-pane {
-  position: sticky;
-  top: 0;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #fff;
   padding: 14px;
   min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
 }
 .project-info-pane .intl-meta {
   display: block;
@@ -4449,8 +4456,11 @@ table.mini .num {
 .project-info-pane .pl-next-banner {
   margin-top: 12px;
 }
+/* 우측 상세 편집부분 — 좌측바와 독립 스크롤, 하단 액션바는 sticky 로 고정. */
 .project-stage-pane {
   min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
 }
 /* 단계 탭 — 진행 바 바로 아래, 헤더 영역에 고정된 전체 폭 스트립(가로 스크롤). */
 .pl-modal > .project-stage-tabs {
@@ -4585,6 +4595,36 @@ table.mini .num {
   background: #e9f7ef;
   color: #157347;
 }
+/* 헤더: 프로젝트명(스테이지 칩 대체) + 우측 PIC 칩 + 닫기. */
+.pl-head-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+}
+.pl-proj-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--navy);
+}
+.pl-pic-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 11px;
+  border-radius: 999px;
+  background: var(--zebra);
+  color: var(--ink);
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.pl-pic-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+}
 /* 딜(프로젝트) 액션 — 좌측 정보 패널 하단. 단계 편집(우측)과 분리. */
 .pl-deal-actions {
   display: flex;
@@ -4610,13 +4650,26 @@ table.mini .num {
 }
 /* 임베드 상세의 액션바는 흐름 안에 두어(비-sticky) 바깥 프로젝트 액션바(Edit/Delete)와
    겹치지 않게 한다. 표준 모달용 sticky·음수 마진을 상쇄. */
+/* 임베드 내 모든 form-actions 는 기본적으로 흐름 안에 둔다(표준 모달용 sticky·음수마진 상쇄).
+   편집기 중간의 보조 액션바(예: "Load order items")가 바닥에 붙는 것을 막는다. */
 .embedded-workspace .form-actions,
 .embedded-detail .form-actions {
   position: static;
-  margin-left: 0;
-  margin-right: 0;
-  padding-left: 0;
-  padding-right: 0;
+  margin: 8px 0 0;
+  padding: 0;
+  background: transparent;
+  border-top: 0;
+}
+/* 주 저장 바(.btn.primary 포함)만 우측 스크롤 컨테이너(.project-stage-pane) 바닥에 고정. */
+.embedded-workspace .form-actions:has(.btn.primary),
+.embedded-detail .form-actions:has(.btn.primary) {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  margin-top: 12px;
+  padding: 12px 4px;
+  background: #fff;
+  border-top: 1px solid var(--line);
 }
 .embedded-record-wrap,
 .embedded-po-list {

@@ -983,7 +983,6 @@ function PipelineModal({
   const [fReceivedAt, setFReceivedAt] = useState(r.received_at || "");
   const [fAssigneeId, setFAssigneeId] = useState<number | "">(r.assignee_id || "");
   const rSteps = resolveSteps(steps, fWorkType);
-  const stageLabel = rSteps[r.stage - 1] ?? "";
 
   function startEdit() {
     // 현재 저장값으로 seed 후 편집 모드 진입(목록은 상위에서 미리 로드됨)
@@ -1104,19 +1103,23 @@ function PipelineModal({
             <span className="pl-recv-label">Project No.</span>
             <b>{r.project_no || "—"}</b>
             <WorkTypeBadge type={r.work_type} />
-            <span className="pl-stage-chip">
-              Stage {r.stage}/11 · {stageLabel}
-            </span>
+            {r.project_title ? <span className="pl-proj-name">{r.project_title}</span> : null}
             {r.received_at ? <span className="pl-recv-at">First RFQ {fmtStageDate(r.received_at)}</span> : null}
           </span>
-          <button
-            type="button"
-            className="pl-modal-close"
-            onClick={onClose}
-            aria-label="Close"
-          >
-            ×
-          </button>
+          <span className="pl-head-right">
+            <span className="pl-pic-chip">
+              <span className="pl-pic-label">PIC</span>
+              {r.assignee || "—"}
+            </span>
+            <button
+              type="button"
+              className="pl-modal-close"
+              onClick={onClose}
+              aria-label="Close"
+            >
+              ×
+            </button>
+          </span>
         </div>
 
         {/* 단계 스트립 — 진행상태(완료 음영/현재)와 탐색(선택)을 통합하고, 각 단계의
