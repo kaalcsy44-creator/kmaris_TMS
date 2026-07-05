@@ -27,7 +27,6 @@ import BaseMetaRows, { ModalTitle } from "@/components/common/BaseMeta";
 import {
   amountInputValue,
   DualCurrencyAmount,
-  dualCurrencyText,
   fxRateText,
   gridCellProps,
   itemRowClass,
@@ -486,9 +485,9 @@ function OrderDetailModal({
                   className="btn sm"
                   onClick={loadCustomerRfqItems}
                   disabled={busy}
-                  title="Load items from the linked Customer RFQ (when there is no separate P/O file)"
+                  title="Load the customer's ordered items from the linked Customer RFQ (when there is no separate P/O file)"
                 >
-                  Load customer RFQ
+                  Load customer PO
                 </button>
               ) : null
             }
@@ -868,7 +867,6 @@ function CustomerPoNewForm({
   onChanged: () => void;
 }) {
   const today = new Date().toISOString().slice(0, 10);
-  const [quotationId, setQuotationId] = useState<number | "">("");
   const [customerId, setCustomerId] = useState<number | "">(
     options.customers[0]?.id ?? ""
   );
@@ -890,18 +888,6 @@ function CustomerPoNewForm({
   const vessels = options.vessels.filter(
     (v) => customerId === "" || v.customer_id === customerId
   );
-
-  function loadQuotation(id: number | "") {
-    setQuotationId(id);
-    if (id === "") return;
-    const q = options.quotations.find((x) => x.id === id);
-    if (!q) return;
-    setCustomerId(q.customer_id);
-    setVesselId(q.vessel_id ?? "");
-    setRfqId(q.rfq_id ?? "");
-    setCurrency(q.currency || "USD");
-    setItems(q.items.length ? q.items.map(normalizeItem) : [blankItem()]);
-  }
 
   function matchByName<T extends { name: string }>(
     hint: string | null | undefined,
@@ -963,7 +949,7 @@ function CustomerPoNewForm({
       const r = await createOrder({
         customer_id: customerId,
         vessel_id: vesselId === "" ? null : vesselId,
-        quotation_id: quotationId === "" ? null : quotationId,
+        quotation_id: null,
         rfq_id: rfqId === "" ? null : rfqId,
         po_no: poNo,
         date,
@@ -1017,20 +1003,6 @@ function CustomerPoNewForm({
       ) : null}
 
       <div className="form-grid">
-        <div className="form-field">
-          <label>Load from quotation</label>
-          <select
-            value={quotationId}
-            onChange={(e) => loadQuotation(e.target.value ? Number(e.target.value) : "")}
-          >
-            <option value="">— None —</option>
-            {options.quotations.map((q) => (
-              <option key={q.id} value={q.id}>
-                {q.qtn_no} · {q.customer} · {dualCurrencyText(q.amount, q.currency)}
-              </option>
-            ))}
-          </select>
-        </div>
         <div className="form-field">
           <label>Customer *</label>
           <select
