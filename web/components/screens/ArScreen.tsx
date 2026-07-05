@@ -1,9 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
 import {
-  arSoaXlsxUrl,
   createArRecord,
   completeOrderStage,
   deleteArRecord,
@@ -13,17 +11,14 @@ import {
   recordArPayment,
   updateArRecord,
 } from "@/lib/api";
-import { getToken, can, canEditDeal, editBlockReason } from "@/lib/auth";
+import { can, canEditDeal, editBlockReason } from "@/lib/auth";
 import { useCachedData, invalidateCache } from "@/lib/useCachedData";
 import type { ArRow, DocumentDetail, PoWorkOptions } from "@/lib/types";
 import { tr } from "@/lib/labels";
-import FilterTable, { ColumnDef } from "@/components/common/FilterTable";
-import { identityColumns, projectNoColumn, fmtRfqDateTime } from "@/components/common/identityColumns";
-import VendorName from "@/components/common/VendorName";
 import Modal from "@/components/common/Modal";
 import { ModalTitle } from "@/components/common/BaseMeta";
 import CurrencyToggle from "@/components/common/CurrencyToggle";
-import { DualCurrencyAmount, dualCurrencyText } from "@/components/common/itemTable";
+import { dualCurrencyText } from "@/components/common/itemTable";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -57,272 +52,61 @@ const emptyForm: ArForm = {
   notes: "",
 };
 
-function money(n: number) {
-  return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
 type StageTab = 10 | 11;
 
+// 프로젝트 팝업(진행현황) 내 AR 작업 — 이 오더의 세금계산서 발행(10)·수금 완료(11)를
+// 인라인으로 편집한다. 전역 목록·SOA 내보내기는 진행현황 통합 목록으로 이전됨.
 export function ArOverview({
   initialOrderId = null,
   initialStage = null,
-  embedded = false,
 }: {
   initialOrderId?: number | null;
   initialStage?: StageTab | null;
-  embedded?: boolean;
 } = {}) {
-  const params = useSearchParams();
-  const router = useRouter();
-  const orderParam = initialOrderId !== null ? String(initialOrderId) : params.get("order");
-  const stageParam = initialStage !== null ? String(initialStage) : params.get("stage");
-  const { data, error: loadError, refresh } = useCachedData("ar:overview", fetchArOverview);
+  const { data, refresh } = useCachedData("ar:overview", fetchArOverview);
   const { data: options } = useCachedData("ar:workoptions", fetchPoWorkOptions);
-  const [error, setError] = useState<string | null>(null); // manual messages (SOA export, etc.)
-  const [stageTab, setStageTab] = useState<StageTab>(10);
-  const [editing, setEditing] = useState<ArRow | null>(null); // stage-action popup target
-  const [adding, setAdding] = useState(false);
-
+  const [stageTab, setStageTab] = useState<StageTab>(initialStage === 11 ? 11 : 10);
   const rows = useMemo(() => data?.rows ?? [], [data]);
+  const orderId = initialOrderId ?? null;
 
-  // Progress stage row → ?stage=10|11 selects the tab.
+  // 딥링크 단계(?stage=10|11) 변화 시 탭 동기화.
   useEffect(() => {
-    if (stageParam === "11") setStageTab(11);
-    else if (stageParam === "10") setStageTab(10);
-  }, [stageParam]);
-
-  // ?order=<id> from Progress "AR work" → auto-open that AR record popup.
-  const orderId = orderParam ? Number(orderParam) : null;
-  useEffect(() => {
-    if (orderId === null) return;
-    const match = rows.find((r) => r.order_id === orderId);
-    if (match) setEditing(match);
-    else if (rows.length || data) setAdding(true);
-  }, [orderId, rows, data]);
+    if (initialStage === 11) setStageTab(11);
+    else if (initialStage === 10) setStageTab(10);
+  }, [initialStage]);
 
   function load() {
-    setError(null);
     invalidateCache("dashboard");
     invalidateCache("pipeline");
     return refresh();
   }
 
-  function closePopup() {
-    setEditing(null);
-    setAdding(false);
-    if (orderParam && !embedded) router.replace("/progress");
-  }
-
-  async function exportSoa() {
-    const res = await fetch(arSoaXlsxUrl("전체", "전체"), {
-      headers: { Authorization: `Bearer ${getToken()}` },
-    });
-    if (!res.ok) {
-      setError("SOA export failed");
-      return;
-    }
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `SOA_${today()}.xlsx`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
-  // Common columns + stage status column (10: tax invoice, 11: payment).
-  const actBtnStyle = { padding: "3px 12px", fontSize: 12 } as const;
-  const stageCol: ColumnDef<ArRow> =
-    stageTab === 10
-      ? {
-          key: "tax",
-          label: "Tax Invoice",
-          text: (r) => (r.tax_issued ? "Issued" : "Not issued"),
-          filter: "facet",
-          render: (r) =>
-            r.tax_issued ? (
-              <div>
-                <span className="ar-badge">Issued</span>
-                {r.tax_issued_date ? <div className="pn-at">{fmtRfqDateTime(r.tax_issued_date)}</div> : null}
-              </div>
-            ) : (
-              <button
-                className="btn primary"
-                style={actBtnStyle}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setEditing(r);
-                }}
-              >
-                Issue
-              </button>
-            ),
-        }
-      : {
-          key: "pay",
-          label: "Payment",
-          text: (r) => (r.paid_done ? "Done" : "Pending"),
-          filter: "facet",
-          render: (r) =>
-            r.paid_done ? (
-              <div>
-                <span className="ar-badge">Paid</span>
-                {r.paid_date ? <div className="pn-at">{fmtRfqDateTime(r.paid_date)}</div> : null}
-              </div>
-            ) : (
-              <button
-                className="btn primary"
-                style={actBtnStyle}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setEditing(r);
-                }}
-              >
-                Record
-              </button>
-            ),
-        };
-
-  const columns: ColumnDef<ArRow>[] = [
-    projectNoColumn<ArRow>({ projectNo: (r) => r.project_no, firstRfqAt: (r) => r.first_rfq_at }),
-    ...identityColumns<ArRow>({
-      customer: (r) => r.customer,
-      projectTitle: (r) => r.project_title || "",
-      contactPerson: (r) => r.contact_person || "",
-      vessel: (r) => r.vessel,
-      workType: (r) => r.work_type,
-      tradeType: (r) => r.trade_type,
-      pic: (r) => r.assignee || "",
-    }),
-    { key: "vendor", label: "Vendor", text: (r) => r.vendor || "", filter: "facet", render: (r) => <VendorName name={r.vendor || ""} /> },
-    { key: "ci_no", label: "CI No.", text: (r) => r.ci_no || "" },
-    { key: "currency", label: "Currency", text: (r) => r.currency || "", filter: "facet" },
-    {
-      key: "invoice",
-      label: "Invoice",
-      numeric: true,
-      text: (r) => dualCurrencyText(r.invoice_amount, r.currency),
-      render: (r) => <DualCurrencyAmount value={r.invoice_amount} currency={r.currency} />,
-      sortValue: (r) => r.invoice_amount,
-    },
-    // Paid 컬럼은 11단계(수금)에서만 표시
-    ...(stageTab === 11
-      ? [{
-          key: "paid",
-          label: "Paid",
-          numeric: true,
-          text: (r: ArRow) => dualCurrencyText(r.paid_amount, r.currency),
-          render: (r: ArRow) => <DualCurrencyAmount value={r.paid_amount} currency={r.currency} />,
-          sortValue: (r: ArRow) => r.paid_amount,
-        } as ColumnDef<ArRow>]
-      : []),
-    {
-      key: "outstanding",
-      label: "Outstanding",
-      numeric: true,
-      text: (r) => dualCurrencyText(r.outstanding, r.currency),
-      sortValue: (r) => r.outstanding,
-      render: (r) => <b><DualCurrencyAmount value={r.outstanding} currency={r.currency} /></b>,
-    },
-    { key: "due_date", label: "Due date", text: (r) => r.due_date || "", filter: "date" },
-    stageCol,
-  ];
-
-  // 프로젝트 워크스페이스: 내부 단계 탭바·전역 목록·Add 없이 이 오더의 AR 작업을 인라인.
-  if (embedded) {
-    if (!data) return <div className="state">Loading...</div>;
-    const match = orderId ? rows.find((r) => r.order_id === orderId) : undefined;
-    if (!match) {
-      if (!orderId) {
-        return (
-          <div className="project-work-panel">
-            <div className="project-work-empty">
-              Register the Customer P/O (stage 5) first — AR is tracked against an order.
-            </div>
-          </div>
-        );
-      }
+  if (!data) return <div className="state">Loading...</div>;
+  const match = orderId ? rows.find((r) => r.order_id === orderId) : undefined;
+  if (!match) {
+    if (!orderId) {
       return (
-        <div className="embedded-detail">
-          <div className="form-section-title" style={{ marginTop: 0 }}>Add AR record</div>
-          <ArAddForm options={options ?? null} fallbackOrderId={orderId} onChanged={load} />
+        <div className="project-work-panel">
+          <div className="project-work-empty">
+            Register the Customer P/O (stage 5) first — AR is tracked against an order.
+          </div>
         </div>
       );
     }
     return (
-      <div className="action-tabs embedded">
-        {stageTab === 10 ? (
-          <TaxIssueModal row={match} onChanged={load} onClose={load} inline />
-        ) : (
-          <PaymentModal row={match} onChanged={load} onClose={load} inline />
-        )}
+      <div className="embedded-detail">
+        <div className="form-section-title" style={{ marginTop: 0 }}>Add AR record</div>
+        <ArAddForm options={options ?? null} fallbackOrderId={orderId} onChanged={load} />
       </div>
     );
   }
-
   return (
-    <div className="action-tabs">
-      <div className="page-tabs">
-        <button className={stageTab === 10 ? "on" : ""} onClick={() => setStageTab(10)}>
-          10. Issue Tax Invoice
-        </button>
-        <button className={stageTab === 11 ? "on" : ""} onClick={() => setStageTab(11)}>
-          11. Payment Completed
-        </button>
-      </div>
-
-      {error || (loadError && !data) ? (
-        <div className="state error">API error: {error ?? loadError?.message}</div>
-      ) : null}
-
-      {!data ? (
-        <div className="state">Loading...</div>
+    <div className="action-tabs embedded">
+      {stageTab === 10 ? (
+        <TaxIssueModal row={match} onChanged={load} onClose={load} inline />
       ) : (
-        <FilterTable
-          key={stageTab}
-          tableId={`ar-stage-${stageTab}`}
-          rows={rows}
-          columns={columns}
-          getRowKey={(r) => r.id}
-          onRowClick={(r) => setEditing(r)}
-          defaultSortKey="project_no"
-          defaultSortDir="desc"
-          empty="No AR records. They are created automatically when a Tax Invoice is generated, or you can add one directly."
-          actions={
-            <>
-              {can("ar", "create") ? (
-                <button className="btn" onClick={() => setAdding(true)}>
-                  + Add AR record
-                </button>
-              ) : null}
-              <button className="btn" onClick={exportSoa} disabled={rows.length === 0}>
-                Export SOA (XLSX)
-              </button>
-            </>
-          }
-        />
+        <PaymentModal row={match} onChanged={load} onClose={load} inline />
       )}
-
-      {editing ? (
-        stageTab === 10 ? (
-          <TaxIssueModal row={editing} onChanged={load} onClose={closePopup} />
-        ) : (
-          <PaymentModal row={editing} onChanged={load} onClose={closePopup} />
-        )
-      ) : null}
-
-      {adding ? (
-        <Modal title="Add AR record" onClose={closePopup} wide>
-          <ArAddForm
-            options={options ?? null}
-            fallbackOrderId={orderId}
-            onChanged={() => {
-              setAdding(false);
-              load();
-            }}
-          />
-        </Modal>
-      ) : null}
     </div>
   );
 }

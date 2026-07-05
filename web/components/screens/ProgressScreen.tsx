@@ -1537,7 +1537,6 @@ function WorkspacePanel({
             initialOrderId={row.order_id}
             initialStage={Math.min(Math.max(stage, 7), 9)}
             initialView={row.work_type === "서비스" ? "service" : "parts"}
-            embedded
           />
         </Suspense>
       </div>
@@ -1551,7 +1550,6 @@ function WorkspacePanel({
         <ArOverview
           initialOrderId={row.order_id}
           initialStage={stage >= 11 ? 11 : 10}
-          embedded
         />
       </Suspense>
     </div>

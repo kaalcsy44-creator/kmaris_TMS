@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
 import {
   documentDownloadUrl,
   fetchDocumentDetail,
@@ -22,9 +21,6 @@ import type { DocRow, DocumentDetail, DocumentWorkItem } from "@/lib/types";
 import { fetchDocumentsOverview } from "@/lib/api";
 import { useCachedData, invalidateCache } from "@/lib/useCachedData";
 import { tr } from "@/lib/labels";
-import FilterTable, { ColumnDef } from "@/components/common/FilterTable";
-import { identityColumns, projectNoColumn } from "@/components/common/identityColumns";
-import VendorName from "@/components/common/VendorName";
 import Modal from "@/components/common/Modal";
 import { ModalTitle } from "@/components/common/BaseMeta";
 import CurrencyToggle from "@/components/common/CurrencyToggle";
@@ -47,133 +43,50 @@ function canEditDoc(data: DocumentDetail | null | undefined): boolean {
 
 type StageTab = "s7" | "s8" | "s9";
 type WorkView = "parts" | "service";
-const STAGE_KEYS: StageTab[] = ["s7", "s8", "s9"];
-// 업무유형(부품공급/서비스)에 따라 7·8단계 명칭이 달라진다(9는 공통).
-// (구 8 'Arrangement' 단계는 7 Readiness 로 흡수 → 11단계 체계)
-const STAGE_LABELS: Record<WorkView, Record<StageTab, string>> = {
-  parts: {
-    s7: "7. Delivery Readiness",
-    s8: "8. Delivery Complete · POD",
-    s9: "9. Tax Invoice · Billing",
-  },
-  service: {
-    s7: "7. Service Readiness",
-    s8: "8. Service Complete · Report",
-    s9: "9. Tax Invoice · Billing",
-  },
-};
 
-// 문서 종류별 목록 설정 — 각 단계 목록의 컬럼/존재여부/라벨을 한 곳에서 정의한다.
+// 문서 종류 → 표시 라벨(작업 모달 제목 등).
 type DocKind = "ci" | "pl" | "sa" | "pod" | "tax";
-const KIND_CFG: Record<
-  DocKind,
-  {
-    label: string;
-    short: string;
-    has: (r: DocRow) => boolean;
-    docCol: ColumnDef<DocRow>;
-    extra?: ColumnDef<DocRow>[];
-  }
-> = {
-  ci: {
-    label: "Commercial Invoice",
-    short: "CI",
-    has: (r) => r.has_ci,
-    docCol: { key: "ci_no", label: "CI No.", text: (r) => r.ci_no || "" },
-  },
-  pl: {
-    label: "Packing List",
-    short: "PL",
-    has: (r) => r.has_pl,
-    docCol: { key: "pl_no", label: "PL No.", text: (r) => r.pl_no || "" },
-  },
-  sa: {
-    label: "Shipping Advice",
-    short: "SA",
-    has: (r) => r.has_sa,
-    docCol: { key: "sa_no", label: "SA No.", text: (r) => r.sa_no || "" },
-    extra: [
-      {
-        key: "sa_sent",
-        label: "Sent date",
-        text: (r) => r.sa_sent_date || "",
-        filter: "date",
-        render: (r) => r.sa_sent_date || <span className="muted">Not sent</span>,
-      },
-    ],
-  },
-  pod: {
-    label: "POD",
-    short: "POD",
-    has: (r) => r.has_pod,
-    docCol: { key: "pod", label: "POD file", text: (r) => r.pod_filename || "" },
-  },
-  tax: {
-    label: "Tax Invoice",
-    short: "Tax",
-    has: (r) => r.has_tax,
-    docCol: { key: "tax_no", label: "Tax No.", text: (r) => r.tax_no || "" },
-  },
+const KIND_CFG: Record<DocKind, { label: string }> = {
+  ci: { label: "Commercial Invoice" },
+  pl: { label: "Packing List" },
+  sa: { label: "Shipping Advice" },
+  pod: { label: "POD" },
+  tax: { label: "Tax Invoice" },
 };
 
 type SvcStage = 7 | 8 | 9;
-type Editing =
-  | { orderId: number; kind: DocKind }
-  | { orderId: number; svc: SvcStage };
 
+// 프로젝트 팝업(진행현황) 내 문서 작업 — 이 오더의 문서(CI/PL/SA/POD/Tax) 또는 서비스
+// 단계를 인라인으로 편집한다. 전역 목록·신규 등록은 진행현황 통합 목록으로 이전됨.
 export function DocumentsOverview({
   initialOrderId = null,
   initialStage = null,
   initialView = null,
-  embedded = false,
 }: {
   initialOrderId?: number | null;
   initialStage?: number | null;
   initialView?: WorkView | null;
-  embedded?: boolean;
 } = {}) {
-  const params = useSearchParams();
-  const router = useRouter();
-  const orderParam = initialOrderId !== null ? String(initialOrderId) : params.get("order");
-  const viewParam = initialView ?? params.get("view");
-  const stageParam = initialStage !== null ? String(initialStage) : params.get("stage");
-
-  const [workView, setWorkView] = useState<WorkView>(viewParam === "service" ? "service" : "parts");
-  const [stage, setStage] = useState<StageTab>("s7");
+  const stageFromProp = (s: number | null): StageTab =>
+    s === 8 ? "s8" : s === 9 ? "s9" : "s7";
+  const [workView, setWorkView] = useState<WorkView>(initialView === "service" ? "service" : "parts");
+  const [stage, setStage] = useState<StageTab>(stageFromProp(initialStage));
   const [readyDoc, setReadyDoc] = useState<"ci" | "pl" | "sa">("ci"); // 7단계 하위(CI/PL/SA)
-  const [editing, setEditing] = useState<Editing | null>(null);
 
   const { data: overview, refresh } = useCachedData(
     "documents:overview",
     fetchDocumentsOverview
   );
   const orders = overview?.rows ?? [];
-  const partsOrders = orders.filter((o) => o.work_type !== "서비스");
-  const serviceOrders = orders.filter((o) => o.work_type === "서비스");
+  const orderId = initialOrderId ?? 0;
 
-  // 상단 Documents 호버 메뉴(?view=parts|service)로 업무유형 전환.
+  // 딥링크(업무유형·단계) 변화 시 동기화.
   useEffect(() => {
-    if (viewParam === "service" || viewParam === "parts") setWorkView(viewParam);
-  }, [viewParam]);
-
-  // 진행현황 등에서 ?order=<id>(&stage=7~10) 로 들어오면 해당 단계 작업 모달을 연다.
+    if (initialView === "service" || initialView === "parts") setWorkView(initialView);
+  }, [initialView]);
   useEffect(() => {
-    if (!orderParam) return;
-    const id = Number(orderParam);
-    const row = orders.find((o) => o.id === id);
-    const isSvc = row?.work_type === "서비스";
-    const sn = Number(stageParam); // 7~9, 없으면 NaN
-    setWorkView(isSvc ? "service" : "parts");
-    if (sn >= 7 && sn <= 9) setStage((`s${sn}` as StageTab));
-    if (isSvc) {
-      // 서비스: 7·8 단계 편집기(9단계 청구는 AR에서 처리하므로 기본 7)
-      setEditing({ orderId: id, svc: (sn === 8 ? 8 : 7) });
-    } else {
-      // 부품공급: 단계 → 문서 종류 매핑 (SA는 7단계 Readiness 로 흡수)
-      const kind: DocKind = sn === 8 ? "pod" : sn === 9 ? "tax" : "ci";
-      setEditing({ orderId: id, kind });
-    }
-  }, [orderParam, stageParam, overview]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (initialStage && initialStage >= 7 && initialStage <= 9) setStage(stageFromProp(initialStage));
+  }, [initialStage]);
 
   function load() {
     invalidateCache("dashboard");
@@ -181,69 +94,22 @@ export function DocumentsOverview({
     return refresh();
   }
 
-  function open(orderId: number, kind: DocKind) {
-    setEditing({ orderId, kind });
-  }
-  function openSvc(orderId: number, svc: SvcStage) {
-    setEditing({ orderId, svc });
-  }
-  function close() {
-    setEditing(null);
-    if (orderParam && !embedded) router.replace("/progress");
-  }
+  const svcStage: SvcStage = stage === "s7" ? 7 : stage === "s8" ? 8 : 9;
 
-  // 현재 단계에 해당하는 (부품공급) 문서 종류. 7단계는 CI/PL/SA seg-tab.
-  const stageKinds: DocKind[] =
-    stage === "s7" ? [readyDoc] : stage === "s8" ? ["pod"] : ["tax"];
-  const svcStage: SvcStage =
-    stage === "s7" ? 7 : stage === "s8" ? 8 : 9;
-
-  // 프로젝트 워크스페이스: 내부 단계 탭바·전역 목록·New 없이 이 오더의 문서를 인라인 편집.
-  // (7단계 부품공급은 CI/PL/SA 하위 선택기는 유지 — 단계 내 문서 종류 선택이라 중복 아님.)
-  if (embedded) {
-    const orderId = orderParam ? Number(orderParam) : 0;
-    if (!orderId) {
-      return (
-        <div className="project-work-panel">
-          <div className="project-work-empty">No order for this project yet.</div>
-        </div>
-      );
-    }
-    const projectNo = orders.find((o) => o.id === orderId)?.project_no;
-    if (workView === "service") {
-      return (
-        <div className="action-tabs embedded">
-          <ServiceEditorModal
-            orderId={orderId}
-            svc={svcStage}
-            projectNo={projectNo}
-            onClose={load}
-            onChanged={load}
-            inline
-          />
-        </div>
-      );
-    }
-    const kind: DocKind = stage === "s7" ? readyDoc : stage === "s8" ? "pod" : "tax";
+  if (!orderId) {
+    return (
+      <div className="project-work-panel">
+        <div className="project-work-empty">No order for this project yet.</div>
+      </div>
+    );
+  }
+  const projectNo = orders.find((o) => o.id === orderId)?.project_no;
+  if (workView === "service") {
     return (
       <div className="action-tabs embedded">
-        {stage === "s7" ? (
-          <div className="seg-tabs" style={{ marginBottom: 12 }}>
-            <button className={readyDoc === "ci" ? "on" : ""} onClick={() => setReadyDoc("ci")}>
-              Commercial Invoice
-            </button>
-            <button className={readyDoc === "pl" ? "on" : ""} onClick={() => setReadyDoc("pl")}>
-              Packing List
-            </button>
-            <button className={readyDoc === "sa" ? "on" : ""} onClick={() => setReadyDoc("sa")}>
-              Shipping Advice
-            </button>
-          </div>
-        ) : null}
-        <DocEditorModal
-          key={kind}
+        <ServiceEditorModal
           orderId={orderId}
-          kind={kind}
+          svc={svcStage}
           projectNo={projectNo}
           onClose={load}
           onChanged={load}
@@ -252,76 +118,31 @@ export function DocumentsOverview({
       </div>
     );
   }
-
+  const kind: DocKind = stage === "s7" ? readyDoc : stage === "s8" ? "pod" : "tax";
   return (
-    <div className="action-tabs">
-      <div className="page-tabs">
-        {STAGE_KEYS.map((key) => (
-          <button key={key} className={stage === key ? "on" : ""} onClick={() => setStage(key)}>
-            {STAGE_LABELS[workView][key]}
+    <div className="action-tabs embedded">
+      {stage === "s7" ? (
+        <div className="seg-tabs" style={{ marginBottom: 12 }}>
+          <button className={readyDoc === "ci" ? "on" : ""} onClick={() => setReadyDoc("ci")}>
+            Commercial Invoice
           </button>
-        ))}
-      </div>
-
-      {workView === "parts" ? (
-        <>
-          {partsOrders.some((o) => o.trade_type === "내수") ? (
-            <div className="alert-warn" style={{ margin: "12px 0" }}>
-              Domestic orders skip CI · PL · SA · POD. Handle billing (tax invoice · payment) in the{" "}
-              <b>AR</b> menu.
-            </div>
-          ) : null}
-
-          {stageKinds.map((kind) => (
-            <StageList
-              key={kind}
-              kind={kind}
-              orders={partsOrders}
-              onOpen={open}
-              onChanged={load}
-              leftActions={
-                stage === "s7" ? (
-                  <div className="seg-tabs">
-                    <button className={readyDoc === "ci" ? "on" : ""} onClick={() => setReadyDoc("ci")}>
-                      Commercial Invoice
-                    </button>
-                    <button className={readyDoc === "pl" ? "on" : ""} onClick={() => setReadyDoc("pl")}>
-                      Packing List
-                    </button>
-                    <button className={readyDoc === "sa" ? "on" : ""} onClick={() => setReadyDoc("sa")}>
-                      Shipping Advice
-                    </button>
-                  </div>
-                ) : undefined
-              }
-            />
-          ))}
-        </>
-      ) : (
-        <div style={{ marginTop: 14 }}>
-          <ServiceStageList svc={svcStage} orders={serviceOrders} onOpen={openSvc} onChanged={load} />
+          <button className={readyDoc === "pl" ? "on" : ""} onClick={() => setReadyDoc("pl")}>
+            Packing List
+          </button>
+          <button className={readyDoc === "sa" ? "on" : ""} onClick={() => setReadyDoc("sa")}>
+            Shipping Advice
+          </button>
         </div>
-      )}
-
-      {editing ? (
-        "kind" in editing ? (
-          <DocEditorModal
-            orderId={editing.orderId}
-            kind={editing.kind}
-            projectNo={orders.find((o) => o.id === editing.orderId)?.project_no}
-            onClose={close}
-            onChanged={load}
-          />
-        ) : (
-          <ServiceEditorModal
-            orderId={editing.orderId}
-            svc={editing.svc}
-            projectNo={orders.find((o) => o.id === editing.orderId)?.project_no}
-            onClose={close}
-            onChanged={load}
-          />
-        )
       ) : null}
+      <DocEditorModal
+        key={kind}
+        orderId={orderId}
+        kind={kind}
+        projectNo={projectNo}
+        onClose={load}
+        onChanged={load}
+        inline
+      />
     </div>
   );
 }
@@ -362,123 +183,6 @@ const SVC_FIELDS: Record<7 | 8, SvcField[]> = {
     { key: "notes", label: "Notes", type: "textarea" },
   ],
 };
-
-function ServiceStageList({
-  svc,
-  orders,
-  onOpen,
-  onChanged,
-}: {
-  svc: SvcStage;
-  orders: DocRow[];
-  onOpen: (orderId: number, svc: SvcStage) => void;
-  onChanged: () => void;
-}) {
-  const cfg = SVC_CFG[svc];
-  const [registering, setRegistering] = useState(false);
-  const listRows = orders.filter(cfg.done); // 입력 완료된 오더 → 클릭해 수정/삭제
-  // 신규 등록 대상 = 직전 서비스 단계까지 완료, 이 단계는 미완료인 오더만.
-  const svcPriorOk = (r: DocRow) =>
-    svc === 8 ? r.svc_ready_done : svc === 9 ? r.has_pod : true;
-  const registerable = orders.filter((r) => !cfg.done(r) && svcPriorOk(r));
-  const columns: ColumnDef<DocRow>[] = [
-    projectNoColumn<DocRow>({ projectNo: (r) => r.project_no, firstRfqAt: (r) => r.first_rfq_at }),
-    ...identityColumns<DocRow>({
-      customer: (r) => r.customer,
-      projectTitle: (r) => r.project_title || "",
-      contactPerson: (r) => r.contact_person || "",
-      vessel: (r) => r.vessel,
-      workType: (r) => r.work_type,
-      tradeType: (r) => r.trade_type,
-      pic: (r) => r.assignee || "",
-    }),
-    { key: "vendor", label: "Vendor", text: (r) => r.vendor || "", filter: "facet", render: (r) => <VendorName name={r.vendor || ""} /> },
-    { key: "po_no", label: "PO No.", text: (r) => r.po_no || "" },
-    ...(svc === 8
-      ? [{ key: "report", label: "Report file", text: (r: DocRow) => r.pod_filename || "" }]
-      : []),
-    ...(svc === 9
-      ? [{ key: "tax_no", label: "Tax No.", text: (r: DocRow) => r.tax_no || "" }]
-      : []),
-    {
-      key: "done",
-      label: "Status",
-      text: (r) => (cfg.done(r) ? "Done" : "Pending"),
-      filter: "facet",
-      render: (r) => (
-        <span className={`ar-badge${cfg.done(r) ? "" : " overdue"}`}>
-          {cfg.done(r) ? "Done" : "Pending"}
-        </span>
-      ),
-    },
-  ];
-
-  return (
-    <>
-      <FilterTable
-        tableId={`docs-svc-${svc}`}
-        rows={listRows}
-        columns={columns}
-        getRowKey={(r) => r.id}
-        onRowClick={(r) => onOpen(r.id, svc)}
-        defaultSortKey="project_no"
-        defaultSortDir="desc"
-        empty={`No ${cfg.label} entered yet.`}
-        actions={
-          can("documents", "create") ? (
-            <button className="btn primary" onClick={() => setRegistering(true)} disabled={registerable.length === 0}>
-              + {cfg.btn}
-            </button>
-          ) : null
-        }
-      />
-
-      {registering ? (
-        <ServiceNewModal svc={svc} orders={registerable} onClose={() => setRegistering(false)} onChanged={onChanged} />
-      ) : null}
-    </>
-  );
-}
-
-// 신규 입력 — 추가 버튼 클릭 시 바로 편집 폼 팝업. 상단 드롭다운으로 대상 오더 선택
-// (후보가 1건이면 자동 선택). 선택하면 해당 단계 편집기가 바로 표시된다.
-function ServiceNewModal({
-  svc,
-  orders,
-  onClose,
-  onChanged,
-}: {
-  svc: SvcStage;
-  orders: DocRow[];
-  onClose: () => void;
-  onChanged: () => void;
-}) {
-  const [orderId, setOrderId] = useState<number | "">(orders.length === 1 ? orders[0].id : "");
-  const selectedOrder = orderId === "" ? null : orders.find((o) => o.id === orderId);
-
-  return (
-    <Modal title={<ModalTitle label={`${SVC_CFG[svc].label} — new entry`} projectNo={selectedOrder?.project_no} />} onClose={onClose} wide>
-      <div className="project-select">
-        <label>Service order *</label>
-        <select value={orderId} onChange={(e) => setOrderId(e.target.value ? Number(e.target.value) : "")}>
-          <option value="">Select…</option>
-          {orders.map((o) => (
-            <option key={o.id} value={o.id}>
-              {o.project_no} · {o.customer} · {o.vessel || "-"}
-            </option>
-          ))}
-        </select>
-      </div>
-      <ServiceStageEditor
-        key={`${svc}-${orderId || 0}`}
-        orderId={orderId === "" ? 0 : orderId}
-        svc={svc}
-        onChanged={onChanged}
-        onClose={onClose}
-      />
-    </Modal>
-  );
-}
 
 // 서비스 단계 편집기(모달 없는 본문) — 상세 로드 후 단계별 폼 렌더. 신규/수정 공용.
 function ServiceStageEditor({
@@ -891,77 +595,6 @@ function SvcFieldInput({
   return <Field label={field.label} value={value} onChange={onChange} type={field.type ?? "text"} />;
 }
 
-// 단계별 문서 목록 — RFQ·P/O 와 동일한 FilterTable 정렬·필터 UX.
-// 행 클릭 시 해당 오더 작업 모달, "+ 등록" 으로 아직 없는 오더를 골라 작성한다.
-function StageList({
-  kind,
-  orders,
-  onOpen,
-  onChanged,
-  leftActions,
-}: {
-  kind: DocKind;
-  orders: DocRow[];
-  onOpen: (orderId: number, kind: DocKind) => void;
-  onChanged: () => void;
-  leftActions?: React.ReactNode;
-}) {
-  const cfg = KIND_CFG[kind];
-  const [registering, setRegistering] = useState(false);
-
-  const columns: ColumnDef<DocRow>[] = [
-    projectNoColumn<DocRow>({ projectNo: (r) => r.project_no, firstRfqAt: (r) => r.first_rfq_at }),
-    ...identityColumns<DocRow>({
-      customer: (r) => r.customer,
-      projectTitle: (r) => r.project_title || "",
-      contactPerson: (r) => r.contact_person || "",
-      vessel: (r) => r.vessel,
-      workType: (r) => r.work_type,
-      tradeType: (r) => r.trade_type,
-      pic: (r) => r.assignee || "",
-    }),
-    { key: "vendor", label: "Vendor", text: (r) => r.vendor || "", filter: "facet", render: (r) => <VendorName name={r.vendor || ""} /> },
-    cfg.docCol,
-    { key: "po_no", label: "PO No.", text: (r) => r.po_no || "" },
-    ...(cfg.extra ?? []),
-  ];
-
-  // 내수(국내공급) 오더는 CI/PL/SA/POD/Tax(수출 문서)를 생략 → 목록·등록 대상에서 제외.
-  const exportOrders = orders.filter((r) => r.trade_type !== "내수");
-  const listRows = exportOrders.filter(cfg.has);
-  // 신규 등록 대상 = 아직 이 문서가 없고, 선행 조건(CI 존재)을 충족한 오더만.
-  const priorOk = (r: DocRow) =>
-    kind === "pl" || kind === "sa" || kind === "tax" ? r.has_ci : true;
-  const registerable = exportOrders.filter((r) => !cfg.has(r) && priorOk(r));
-
-  return (
-    <>
-      <FilterTable
-        tableId={`docs-${kind}`}
-        rows={listRows}
-        columns={columns}
-        getRowKey={(r) => r.id}
-        onRowClick={(r) => onOpen(r.id, kind)}
-        defaultSortKey="project_no"
-        defaultSortDir="desc"
-        empty={`No ${cfg.label} registered.`}
-        leftActions={leftActions}
-        actions={
-          can("documents", "create") ? (
-            <button className="btn primary" onClick={() => setRegistering(true)}>
-              + New {cfg.short}
-            </button>
-          ) : null
-        }
-      />
-
-      {registering ? (
-        <DocNewModal kind={kind} orders={registerable} onClose={() => setRegistering(false)} onChanged={onChanged} />
-      ) : null}
-    </>
-  );
-}
-
 // 오더 작업 모달 — 클릭한 문서 한 종류의 편집기만 띄운다(다른 단계 탭은 보이지 않음).
 // 문서 편집기 본문(모달 없음) — 상세 로드 후 종류별 편집기 렌더. 행 클릭·신규 추가 공용.
 function DocEditorContent({
@@ -1043,41 +676,6 @@ function DocEditorModal({
   return (
     <Modal title={<ModalTitle label={title} projectNo={projectNo} />} onClose={onClose} wide inline={inline}>
       <DocEditorContent orderId={orderId} kind={kind} onChanged={onChanged} hideInfo={inline} />
-    </Modal>
-  );
-}
-
-// 신규 추가 — 서비스 신규추가와 동일 패턴: 상단 오더 드롭다운(후보 1건이면 자동 선택)
-// → 선택 시 해당 문서 편집기를 바로 표시.
-function DocNewModal({
-  kind,
-  orders,
-  onClose,
-  onChanged,
-}: {
-  kind: DocKind;
-  orders: DocRow[];
-  onClose: () => void;
-  onChanged: () => void;
-}) {
-  const cfg = KIND_CFG[kind];
-  const [orderId, setOrderId] = useState<number | "">(orders.length === 1 ? orders[0].id : "");
-  const selectedOrder = orderId === "" ? null : orders.find((o) => o.id === orderId);
-
-  return (
-    <Modal title={<ModalTitle label={`New ${cfg.label} — new entry`} projectNo={selectedOrder?.project_no} />} onClose={onClose} wide>
-      <div className="project-select">
-        <label>Order *</label>
-        <select value={orderId} onChange={(e) => setOrderId(e.target.value ? Number(e.target.value) : "")}>
-          <option value="">Select…</option>
-          {orders.map((o) => (
-            <option key={o.id} value={o.id}>
-              {o.project_no} · {o.customer} · {o.vessel || "-"}
-            </option>
-          ))}
-        </select>
-      </div>
-      <DocEditorContent key={`${kind}-${orderId || 0}`} orderId={orderId === "" ? 0 : orderId} kind={kind} onChanged={onChanged} />
     </Modal>
   );
 }
