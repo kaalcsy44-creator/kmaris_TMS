@@ -4698,6 +4698,30 @@ table.mini .num {
   background: #eff6ff;
   color: var(--ink);
 }
+/* 레코드 선택기 + "새로 등록" 버튼을 한 줄로. */
+.embedded-record-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.embedded-record-bar .embedded-record-picker {
+  margin-bottom: 0;
+}
+/* 등록 폼 상단 바(뒤로 + 제목). */
+.embedded-add-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.btn.sm {
+  padding: 4px 12px;
+  font-size: 12px;
+  flex: 0 0 auto;
+}
 @media (max-width: 980px) {
   .project-workspace-layout {
     grid-template-columns: 1fr;

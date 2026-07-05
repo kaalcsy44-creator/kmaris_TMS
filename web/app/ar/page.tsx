@@ -244,11 +244,19 @@ export function ArOverview({
     if (!data) return <div className="state">Loading...</div>;
     const match = orderId ? rows.find((r) => r.order_id === orderId) : undefined;
     if (!match) {
-      return (
-        <div className="project-work-panel">
-          <div className="project-work-empty">
-            No AR record for this project yet. It is created automatically when a Tax Invoice is issued.
+      if (!orderId) {
+        return (
+          <div className="project-work-panel">
+            <div className="project-work-empty">
+              Register the Customer P/O (stage 5) first — AR is tracked against an order.
+            </div>
           </div>
+        );
+      }
+      return (
+        <div className="embedded-detail">
+          <div className="form-section-title" style={{ marginTop: 0 }}>Add AR record</div>
+          <ArAddForm options={options ?? null} fallbackOrderId={orderId} onChanged={load} />
         </div>
       );
     }

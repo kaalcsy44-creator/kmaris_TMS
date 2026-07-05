@@ -141,13 +141,14 @@ export default function RfqActionTabs({
 
   // 프로젝트 워크스페이스: 내부 탭바 없이 이 프로젝트(rfqId)의 해당 단계 상세를 인라인으로.
   if (embedded) {
+    const project = rows.find((p) => p.id === rfqId);
     return (
       <div className="action-tabs embedded">
         {tab === "new" && (
           <EmbeddedCustomerRfq rfqId={rfqId} onChanged={onChanged} />
         )}
         {tab === "vrfq" && (
-          <EmbeddedVendorRfq rfqId={rfqId} vendors={vendors} onChanged={onChanged} />
+          <EmbeddedVendorRfq rfqId={rfqId} project={project} vendors={vendors} onChanged={onChanged} />
         )}
         {tab === "vquote" && (
           <EmbeddedVendorQuote rfqId={rfqId} onChanged={onChanged} />
@@ -266,76 +267,159 @@ function EmbeddedCustomerRfq({ rfqId, onChanged }: { rfqId: number | null; onCha
   );
 }
 
-// 2. Vendor RFQ — 이 프로젝트의 Vendor RFQ 발송건들(멀티벤더) 중 선택 + 인라인 상세.
+// 등록 폼 상단 바(뒤로 가기) — 레코드가 있는데 신규 추가로 진입한 경우.
+function EmbeddedAddBar({ label, onBack }: { label: string; onBack?: () => void }) {
+  return (
+    <div className="embedded-add-head">
+      {onBack ? (
+        <button type="button" className="btn" onClick={onBack}>
+          ← Back
+        </button>
+      ) : null}
+      <span className="form-section-title" style={{ margin: 0 }}>{label}</span>
+    </div>
+  );
+}
+
+// 2. Vendor RFQ — 멀티벤더. 없으면(또는 +New) 등록 폼, 있으면 선택 + 인라인 상세.
 function EmbeddedVendorRfq({
   rfqId,
+  project,
   vendors,
   onChanged,
 }: {
   rfqId: number | null;
+  project?: RfqRow;
   vendors: VendorOption[];
   onChanged: () => void;
 }) {
   const [rows, setRows] = useState<VrfqRow[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [selId, setSelId] = useState<number | null>(null);
-  useEffect(() => {
-    fetchVrfqOverview().then((d) => setRows(d.rows)).catch(() => setRows([]));
+  const [adding, setAdding] = useState(false);
+  const load = useCallback(() => {
+    fetchVrfqOverview()
+      .then((d) => setRows(d.rows))
+      .catch(() => setRows([]))
+      .finally(() => setLoaded(true));
   }, []);
+  useEffect(() => { load(); }, [load]);
   const mine = rows.filter((r) => r.rfq_id === rfqId);
-  if (rows.length && mine.length === 0)
-    return <EmptyStage text="No Vendor RFQ has been sent for this project yet." />;
-  if (mine.length === 0) return <EmptyStage text="Loading…" />;
+  if (!loaded) return <EmptyStage text="Loading…" />;
+
+  if (adding || mine.length === 0) {
+    return (
+      <div className="embedded-detail">
+        <EmbeddedAddBar label="Send a Vendor RFQ" onBack={mine.length ? () => setAdding(false) : undefined} />
+        <VendorRfqAction
+          rfqId={rfqId ?? 0}
+          vendors={vendors}
+          kmarisNo={project?.crfq_no ?? ""}
+          onDone={() => { setAdding(false); load(); onChanged(); }}
+        />
+      </div>
+    );
+  }
   const selected = mine.find((r) => r.id === selId) ?? mine[0];
   return (
     <div className="embedded-record-wrap">
-      <RecordPicker rows={mine} selectedId={selected.id} label={(r) => r.vendor || `RFQ ${r.id}`} onSelect={setSelId} />
+      <div className="embedded-record-bar">
+        <RecordPicker rows={mine} selectedId={selected.id} label={(r) => r.vendor || `RFQ ${r.id}`} onSelect={setSelId} />
+        <button type="button" className="btn primary sm" onClick={() => setAdding(true)}>+ Send another</button>
+      </div>
       <VendorRfqDetailModal
         id={selected.id}
         vendors={vendors}
-        onClose={onChanged}
-        onChanged={onChanged}
+        onClose={() => { load(); onChanged(); }}
+        onChanged={() => { load(); onChanged(); }}
         inline
       />
     </div>
   );
 }
 
-// 3. Vendor Quote — 이 프로젝트의 수신 견적건들 중 선택 + 인라인 상세.
+// 3. Vendor Quote — 멀티벤더. 등록 폼(이 프로젝트의 Vendor RFQ에서 선택) 또는 인라인 상세.
 function EmbeddedVendorQuote({ rfqId, onChanged }: { rfqId: number | null; onChanged: () => void }) {
   const [rows, setRows] = useState<VendorQuoteOverviewRow[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [selId, setSelId] = useState<number | null>(null);
-  useEffect(() => {
-    fetchVendorQuoteOverview().then((d) => setRows(d.rows)).catch(() => setRows([]));
+  const [adding, setAdding] = useState(false);
+  const [vendorRfqs, setVendorRfqs] = useState<RfqDetailT["vendor_rfqs"]>([]);
+  const load = useCallback(() => {
+    fetchVendorQuoteOverview()
+      .then((d) => setRows(d.rows))
+      .catch(() => setRows([]))
+      .finally(() => setLoaded(true));
   }, []);
+  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    if (!rfqId) return;
+    fetchRfqDetail(rfqId).then((d) => setVendorRfqs(d.vendor_rfqs)).catch(() => setVendorRfqs([]));
+  }, [rfqId]);
   const mine = rows.filter((r) => r.rfq_id === rfqId);
-  if (rows.length && mine.length === 0)
-    return <EmptyStage text="No Vendor quote has been received for this project yet." />;
-  if (mine.length === 0) return <EmptyStage text="Loading…" />;
+  if (!loaded) return <EmptyStage text="Loading…" />;
+
+  if (adding || mine.length === 0) {
+    if (vendorRfqs.length === 0)
+      return <EmptyStage text="Send a Vendor RFQ first (stage 2) — a quote is registered against a sent RFQ." />;
+    return (
+      <div className="embedded-detail">
+        <EmbeddedAddBar label="Register a Vendor quote" onBack={mine.length ? () => setAdding(false) : undefined} />
+        <VendorQuoteAction
+          rfqId={rfqId ?? 0}
+          vendorRfqs={vendorRfqs}
+          onDone={() => { setAdding(false); load(); onChanged(); }}
+        />
+      </div>
+    );
+  }
   const selected = mine.find((r) => r.id === selId) ?? mine[0];
   return (
     <div className="embedded-record-wrap">
-      <RecordPicker rows={mine} selectedId={selected.id} label={(r) => `${r.vendor || ""} ${r.vendor_quote_no || ""}`.trim() || `Quote ${r.id}`} onSelect={setSelId} />
-      <VendorQuoteDetailModal id={selected.id} onClose={onChanged} onChanged={onChanged} inline />
+      <div className="embedded-record-bar">
+        <RecordPicker rows={mine} selectedId={selected.id} label={(r) => `${r.vendor || ""} ${r.vendor_quote_no || ""}`.trim() || `Quote ${r.id}`} onSelect={setSelId} />
+        <button type="button" className="btn primary sm" onClick={() => setAdding(true)}>+ Register another</button>
+      </div>
+      <VendorQuoteDetailModal id={selected.id} onClose={() => { load(); onChanged(); }} onChanged={() => { load(); onChanged(); }} inline />
     </div>
   );
 }
 
-// 4. Customer Quote — 이 프로젝트의 견적서(대개 1건) 인라인 상세.
+// 4. Customer Quote — 대개 1건. 없으면 등록 폼, 있으면 인라인 상세.
 function EmbeddedCustomerQuote({ rfqId, onChanged }: { rfqId: number | null; onChanged: () => void }) {
   const [rows, setRows] = useState<QtnRow[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [selId, setSelId] = useState<number | null>(null);
-  useEffect(() => {
-    fetchQuotationOverview().then((d) => setRows(d.rows)).catch(() => setRows([]));
+  const [adding, setAdding] = useState(false);
+  const load = useCallback(() => {
+    fetchQuotationOverview()
+      .then((d) => setRows(d.rows))
+      .catch(() => setRows([]))
+      .finally(() => setLoaded(true));
   }, []);
+  useEffect(() => { load(); }, [load]);
   const mine = rows.filter((r) => r.rfq_id === rfqId);
-  if (rows.length && mine.length === 0)
-    return <EmptyStage text="No Customer quotation has been sent for this project yet." />;
-  if (mine.length === 0) return <EmptyStage text="Loading…" />;
+  if (!loaded) return <EmptyStage text="Loading…" />;
+
+  if (adding || mine.length === 0) {
+    return (
+      <div className="embedded-detail">
+        <EmbeddedAddBar label="Create & send a Customer quotation" onBack={mine.length ? () => setAdding(false) : undefined} />
+        <CustomerQuoteAction
+          rfqId={rfqId ?? 0}
+          onDone={() => { setAdding(false); load(); onChanged(); }}
+        />
+      </div>
+    );
+  }
   const selected = mine.find((r) => r.id === selId) ?? mine[0];
   return (
     <div className="embedded-record-wrap">
-      <RecordPicker rows={mine} selectedId={selected.id} label={(r) => r.qtn_no || `Quote ${r.id}`} onSelect={setSelId} />
-      <CustomerQuoteDetailModal id={selected.id} onClose={onChanged} onChanged={onChanged} inline />
+      <div className="embedded-record-bar">
+        <RecordPicker rows={mine} selectedId={selected.id} label={(r) => r.qtn_no || `Quote ${r.id}`} onSelect={setSelId} />
+        <button type="button" className="btn primary sm" onClick={() => setAdding(true)}>+ New quotation</button>
+      </div>
+      <CustomerQuoteDetailModal id={selected.id} onClose={() => { load(); onChanged(); }} onChanged={() => { load(); onChanged(); }} inline />
     </div>
   );
 }

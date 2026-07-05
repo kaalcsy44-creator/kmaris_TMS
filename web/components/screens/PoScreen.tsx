@@ -136,7 +136,7 @@ function CustomerPoTab({
     setDetailId(deepOrderId);
   }, [deepOrderId]);
 
-  // 프로젝트 워크스페이스: 목록·New 없이 이 프로젝트 오더의 편집 폼을 바로 인라인 표시.
+  // 프로젝트 워크스페이스: 오더가 있으면 편집, 없으면 이 자리에서 바로 등록(주문 생성).
   if (embedded) {
     return deepOrderId && deepOrderId > 0 ? (
       <OrderDetailModal
@@ -147,10 +147,9 @@ function CustomerPoTab({
         inline
       />
     ) : (
-      <div className="project-work-panel">
-        <div className="project-work-empty">
-          Customer P/O is not registered yet. Register the order on the P/O page to begin.
-        </div>
+      <div className="embedded-detail">
+        <div className="form-section-title" style={{ marginTop: 0 }}>Register Customer P/O (create order)</div>
+        <CustomerPoNewForm options={options} onChanged={onChanged} />
       </div>
     );
   }
@@ -522,35 +521,55 @@ function VendorPoTab({
     if (match) setDetailId(match.id);
   }, [deepOrderId, options.purchase_orders]);
 
-  // 프로젝트 워크스페이스: 이 오더의 발주서(POs)만. 여러 벤더면 컴팩트 선택 + 인라인 상세.
+  // 프로젝트 워크스페이스: 이 오더의 발주서(POs). 없거나 +New면 등록 폼, 있으면 선택 + 상세.
   if (embedded) {
-    const pos = options.purchase_orders.filter((p) => deepOrderId && p.order_id === deepOrderId);
-    if (pos.length === 0) {
+    if (!deepOrderId || deepOrderId <= 0) {
       return (
         <div className="project-work-panel">
           <div className="project-work-empty">
-            No purchase order issued for this project yet. Issue one on the P/O page.
+            Register the Customer P/O (stage 5) first — a Vendor P/O is issued against an order.
           </div>
+        </div>
+      );
+    }
+    const pos = options.purchase_orders.filter((p) => p.order_id === deepOrderId);
+    if (pos.length === 0 || adding) {
+      return (
+        <div className="embedded-detail">
+          <div className="embedded-add-head">
+            {pos.length ? (
+              <button type="button" className="btn" onClick={() => setAdding(false)}>← Back</button>
+            ) : null}
+            <span className="form-section-title" style={{ margin: 0 }}>Issue a Vendor P/O</span>
+          </div>
+          <VendorPoCreate
+            options={options}
+            selectedOrderId={deepOrderId}
+            onChanged={() => { setAdding(false); onChanged(); }}
+          />
         </div>
       );
     }
     const selected = pos.find((p) => p.id === detailId) ?? pos[0];
     return (
       <div className="embedded-po-list">
-        {pos.length > 1 ? (
-          <div className="embedded-record-picker" role="tablist" aria-label="Vendor POs">
-            {pos.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                className={p.id === selected.id ? "on" : ""}
-                onClick={() => setDetailId(p.id)}
-              >
-                {p.vendor || p.po_no || `PO ${p.id}`}
-              </button>
-            ))}
-          </div>
-        ) : null}
+        <div className="embedded-record-bar">
+          {pos.length > 1 ? (
+            <div className="embedded-record-picker" role="tablist" aria-label="Vendor POs">
+              {pos.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  className={p.id === selected.id ? "on" : ""}
+                  onClick={() => setDetailId(p.id)}
+                >
+                  {p.vendor || p.po_no || `PO ${p.id}`}
+                </button>
+              ))}
+            </div>
+          ) : <span />}
+          <button type="button" className="btn primary sm" onClick={() => setAdding(true)}>+ Issue another</button>
+        </div>
         <VendorPoDetailModal
           id={selected.id}
           options={options}
