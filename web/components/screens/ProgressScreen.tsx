@@ -70,7 +70,8 @@ const STAGE_PHASES: { label: string; count: number }[] = [
   { label: "AR", count: 2 },
 ];
 // 5개 중분류 accent(보드 컬럼과 동일) — 타임라인 점 색상에 사용.
-const PHASE_ACCENTS = ["#0055a8", "#0e7490", "#4f46e5", "#7e22ce", "#b45309"];
+// RFQ~AR 중분류 색은 구분하지 않고 단일 파란색으로 통일(보드 컬럼과 동일).
+const PHASE_ACCENTS = ["#0055a8", "#0055a8", "#0055a8", "#0055a8", "#0055a8"];
 // 각 중분류(phase) → 담당 워크스페이스 화면 + 단계 범위. 보드를 허브로: 컬럼 헤더에서
 // 해당 단계 작업 화면으로 바로 이동(모달의 단계별 딥링크와 함께 양방향 연결).
 // RFQ·Quote 는 같은 'RFQ & Quotation' 화면(/rfq)에서 다뤄진다.

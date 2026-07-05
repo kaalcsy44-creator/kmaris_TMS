@@ -4278,13 +4278,9 @@ table.mini .num {
   display: flex;
   flex-direction: column;
   max-height: 72vh;
+  /* RFQ~AR 5개 중분류 — 색을 구분하지 않고 단일 파란색으로 통일. */
+  --accent: var(--blue);
 }
-/* 4개 중분류 accent 색 (RFQ&Quotation·PO·Documents·AR) */
-.pl-board-col[data-accent="0"] { --accent: #0055a8; }  /* RFQ */
-.pl-board-col[data-accent="1"] { --accent: #0e7490; }  /* Quote */
-.pl-board-col[data-accent="2"] { --accent: #4f46e5; }  /* PO */
-.pl-board-col[data-accent="3"] { --accent: #7e22ce; }  /* Documents */
-.pl-board-col[data-accent="4"] { --accent: #b45309; }  /* AR */
 .pl-board-head {
   display: flex;
   align-items: center;
