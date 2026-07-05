@@ -413,6 +413,7 @@ function EmbeddedCustomerQuote({ rfqId, onChanged }: { rfqId: number | null; onC
         <CustomerQuoteAction
           rfqId={rfqId ?? 0}
           onDone={() => { setAdding(false); load(); onChanged(); }}
+          onCancel={mine.length ? () => setAdding(false) : undefined}
         />
       </div>
     );
@@ -1568,10 +1569,6 @@ function CustomerQuoteDetailModal({
 
           <fieldset className="form-fieldset" disabled={!canEditThis}>
           <div className="form-section-title">Quotation info</div>
-          <div className="po-work-note" style={{ marginTop: 12 }}>
-            <b>Load from Vendor quote</b>
-            <span>Select a previous Vendor Quote to auto-fill item costs, sales prices, and amounts using the default margin.</span>
-          </div>
           <div className="form-grid">
             <div className="form-field">
               <label>Select Vendor quote</label>
@@ -2538,9 +2535,11 @@ const TERM_PRESETS = {
 function CustomerQuoteAction({
   rfqId,
   onDone,
+  onCancel,
 }: {
   rfqId: number;
   onDone: () => void;
+  onCancel?: () => void;
 }) {
   const [qtnNo, setQtnNo] = useState("");
   const [currency, setCurrency] = useState("USD");
@@ -2677,10 +2676,6 @@ function CustomerQuoteAction({
 
   return (
     <div>
-      <div className="po-work-note">
-        <b>Load from Vendor quote — recommended</b>
-        <span>Selecting a supplier quote loads its items and cost, then applies the default margin.</span>
-      </div>
       <div className="form-grid">
         <div className="form-field">
           <label>Select Vendor quote</label>
@@ -2780,8 +2775,11 @@ function CustomerQuoteAction({
       <div className="form-actions">
         <StageTotal label="Final" value={finalTotal} currency={currency} />
         <button className="btn primary" onClick={submit} disabled={busy || items.length === 0}>
-          {busy ? "Saving…" : "Save quote"}
+          {busy ? "Saving…" : "Save"}
         </button>
+        {onCancel ? (
+          <button className="btn" onClick={onCancel} disabled={busy}>Cancel</button>
+        ) : null}
       </div>
 
       {qtn ? (
