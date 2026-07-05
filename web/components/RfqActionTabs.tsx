@@ -1127,6 +1127,7 @@ function VendorQuoteDetailModal({
   const [parseMsg, setParseMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [showOcr, setShowOcr] = useState(false); // Auto-fill 도구 접힘/펼침(1단계와 동일 포맷)
   // 편집 권한 = 역할 권한(rfq.edit) × 담당(PIC) 소유권. 없으면 읽기전용.
   const canEditThis = can("rfq", "edit") && canEditDeal(d?.assignee_id);
   const canDeleteThis = can("rfq", "delete") && canEditDeal(d?.assignee_id);
@@ -1276,24 +1277,43 @@ function VendorQuoteDetailModal({
             </div>
           </div>
 
-          <div className="po-work-note" style={{ marginTop: 12 }}>
-            <b>Auto-fill quote items</b>
-            <span>Upload the vendor quote file (PDF, JPG/PNG, Excel), paste a screenshot with Ctrl+V, or load the original Vendor RFQ item list.</span>
-          </div>
-          <div className="action-row">
-            <input
-              type="file"
-              accept=".pdf,.xlsx,.xls,.png,.jpg,.jpeg,.webp,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,image/*"
-              disabled={busy}
-              onChange={(e) => parseFile(e.target.files?.[0] ?? null)}
-            />
-            <button className="btn" onClick={loadVendorRfqItems} disabled={busy}>
-              Load Vendor RFQ items
+          <div className="form-tools">
+            <button
+              type="button"
+              className={`tool-btn${showOcr ? " on" : ""}`}
+              onClick={() => setShowOcr((v) => !v)}
+            >
+              📄 Auto-fill
             </button>
-            {busy ? <span className="hint-inline">Analyzing…</span> : null}
-            {parseMsg ? <span className="action-ok">{parseMsg}</span> : null}
           </div>
-          <VendorQuoteItemEditor items={items} onChange={setItems} currency={currency} />
+          {showOcr ? (
+            <div className="ocr-bar">
+              <span className="ocr-bar-label">📄 Vendor quote auto-fill (PDF·Excel·image)</span>
+              <input
+                type="file"
+                accept=".pdf,.xlsx,.xls,.png,.jpg,.jpeg,.webp,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,image/*"
+                disabled={busy}
+                onChange={(e) => parseFile(e.target.files?.[0] ?? null)}
+              />
+              {busy ? (
+                <span className="hint-inline">Analyzing…</span>
+              ) : parseMsg ? (
+                <span className="action-ok">{parseMsg}</span>
+              ) : (
+                <span className="hint-inline">Upload a file or paste a screenshot with Ctrl+V → auto-fill</span>
+              )}
+            </div>
+          ) : null}
+          <VendorQuoteItemEditor
+            items={items}
+            onChange={setItems}
+            currency={currency}
+            headerActions={
+              <button className="btn sm" onClick={loadVendorRfqItems} disabled={busy}>
+                Load Vendor RFQ items
+              </button>
+            }
+          />
           <QuotationTermsEditor terms={terms} onChange={setTerms} />
           </fieldset>
           <div className="form-actions">
@@ -2180,6 +2200,7 @@ function VendorQuoteAction({
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [showOcr, setShowOcr] = useState(false); // Auto-fill 도구 접힘/펼침(1단계와 동일 포맷)
 
   useEffect(() => {
     if (vrfqId === "") {
@@ -2300,20 +2321,33 @@ function VendorQuoteAction({
             </div>
           </div>
 
-          <div className="po-work-note" style={{ marginTop: 12 }}>
-            <b>Upload Vendor quote file</b>
-            <span>Upload the PDF · Excel · image (screenshot/photo) returned by the vendor — or paste a screenshot with Ctrl+V anywhere in this form — to auto-fill the item list (Description, Part No., Maker, Origin, Unit Price, Lead Time, etc.).</span>
+          <div className="form-tools">
+            <button
+              type="button"
+              className={`tool-btn${showOcr ? " on" : ""}`}
+              onClick={() => setShowOcr((v) => !v)}
+            >
+              📄 Auto-fill
+            </button>
           </div>
-          <div className="action-row">
-            <input
-              type="file"
-              accept=".pdf,.xlsx,.xls,.png,.jpg,.jpeg,.webp,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,image/*"
-              disabled={busy || vrfqId === ""}
-              onChange={(e) => parseFile(e.target.files?.[0] ?? null)}
-            />
-            {busy ? <span className="hint-inline">Analyzing…</span> : null}
-            {parseMsg ? <span className="action-ok">{parseMsg}</span> : null}
-          </div>
+          {showOcr ? (
+            <div className="ocr-bar">
+              <span className="ocr-bar-label">📄 Vendor quote auto-fill (PDF·Excel·image)</span>
+              <input
+                type="file"
+                accept=".pdf,.xlsx,.xls,.png,.jpg,.jpeg,.webp,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,image/*"
+                disabled={busy || vrfqId === ""}
+                onChange={(e) => parseFile(e.target.files?.[0] ?? null)}
+              />
+              {busy ? (
+                <span className="hint-inline">Analyzing…</span>
+              ) : parseMsg ? (
+                <span className="action-ok">{parseMsg}</span>
+              ) : (
+                <span className="hint-inline">Select a Vendor RFQ, then upload a file or paste with Ctrl+V → auto-fill</span>
+              )}
+            </div>
+          ) : null}
 
           <VendorQuoteItemEditor items={items} onChange={setItems} currency={currency} />
 
@@ -2349,10 +2383,13 @@ function VendorQuoteItemEditor({
   items,
   onChange,
   currency = "USD",
+  headerActions,
 }: {
   items: VendorQuoteItem[];
   onChange: (items: VendorQuoteItem[]) => void;
   currency?: string;
+  // 품목표 헤더의 "+ Add" 옆 보조 액션(예: "Load Vendor RFQ items").
+  headerActions?: React.ReactNode;
 }) {
   function add() {
     onChange([
@@ -2391,7 +2428,10 @@ function VendorQuoteItemEditor({
     <div style={{ marginTop: 12 }}>
       <div className="items-head">
         <div className="sub-h">Item list</div>
-        <button className="btn sm items-head-add" onClick={add}>+ Add</button>
+        <div className="items-head-actions">
+          {headerActions}
+          <button className="btn sm items-head-add" onClick={add}>+ Add</button>
+        </div>
       </div>
       <div className="table-wrap item-scroll">
         <table className="mini wide lead-tools">
