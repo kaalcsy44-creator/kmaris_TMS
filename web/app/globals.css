@@ -4269,12 +4269,15 @@ table.mini .num {
   color: var(--blue);
 }
 .pl-card-cust {
+  display: flex;
+  align-items: center;
+  min-width: 0;
   font-size: 13px;
   font-weight: 700;
   color: var(--ink);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+}
+.pl-card-cust .cust-name {
+  min-width: 0;
 }
 /* 프로젝트명(건별 식별) — 고객명 아래, 선박 위 */
 .pl-card-proj {

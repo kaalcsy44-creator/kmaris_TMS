@@ -867,7 +867,9 @@ function BoardCard({
         <span className="pl-card-no">{r.project_no || "—"}</span>
         <WorkTypeBadge type={r.work_type} />
       </div>
-      <div className="pl-card-cust" title={r.customer || ""}>{r.customer || "—"}</div>
+      <div className="pl-card-cust" title={r.customer || ""}>
+        {r.customer ? <CustomerName name={r.customer} /> : "—"}
+      </div>
       {r.project_title ? (
         <div className="pl-card-proj" title={r.project_title}>{r.project_title}</div>
       ) : null}
@@ -1256,7 +1258,7 @@ function PipelineModal({
             <dl className="intl-meta">
               <div>
                 <dt>Customer</dt>
-                <dd>{r.customer || "—"}</dd>
+                <dd>{r.customer ? <CustomerName name={r.customer} /> : "—"}</dd>
               </div>
               <div>
                 <dt>Trade type</dt>
