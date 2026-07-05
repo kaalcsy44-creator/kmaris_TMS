@@ -1119,15 +1119,16 @@ function PipelineModal({
           </button>
         </div>
 
-        {/* 단계 스트립 — 진행상태(완료/현재)와 탐색(선택)을 하나로 통합.
-            기존 분리형 진행 바·current stage 문구를 대체한다. */}
+        {/* 단계 스트립 — 진행상태(완료 음영/현재)와 탐색(선택)을 통합하고, 각 단계의
+            주요 결과물(번호·Vendor·금액 등)과 완료 일시를 카드에 함께 노출한다. */}
         <div className="project-stage-tabs" role="tablist" aria-label="Project stages">
-          {rSteps.map((label, i) => {
-            const no = i + 1;
+          {chain.map((c) => {
+            const no = c.no;
             const cls = [
               selectedStage === no ? "on" : "",
               no < r.stage ? "done" : "",
               no === r.stage ? "current" : "",
+              c.skip ? "skip" : "",
             ]
               .filter(Boolean)
               .join(" ");
@@ -1138,21 +1139,27 @@ function PipelineModal({
                 className={cls}
                 aria-pressed={selectedStage === no}
                 onClick={() => setSelectedStage(no)}
-                title={label}
+                title={c.value ? `${c.label} — ${c.value}` : c.label}
               >
-                <span>{no}</span>
-                <b>{label}</b>
+                <span className="st-head">
+                  <span className="st-no">{no}</span>
+                  <b className="st-label">{c.label}</b>
+                </span>
+                <em className="st-val">{c.skip ? "N/A" : c.value || ""}</em>
+                <time className="st-at">{c.at ? fmtStageDate(c.at) : ""}</time>
               </button>
             );
           })}
           <button
             type="button"
-            className={selectedStage === "timeline" ? "on" : ""}
+            className={`st-timeline${selectedStage === "timeline" ? " on" : ""}`}
             aria-pressed={selectedStage === "timeline"}
             onClick={() => setSelectedStage("timeline")}
           >
-            <span>TL</span>
-            <b>Timeline</b>
+            <span className="st-head">
+              <span className="st-no">TL</span>
+              <b className="st-label">Timeline</b>
+            </span>
           </button>
         </div>
 
