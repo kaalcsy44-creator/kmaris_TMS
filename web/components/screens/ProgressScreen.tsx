@@ -1425,15 +1425,27 @@ export function PipelineModal({
                 <span className="stage-pane-no">{selectedStage}</span>
                 <span>{rSteps[selectedStage - 1] ?? ""}</span>
               </h3>
-              {!isNewProject && selectedStage < rSteps.length ? (
-                <button
-                  type="button"
-                  className="stage-pane-next"
-                  onClick={() => setSelectedStage((s) => Math.min(s + 1, rSteps.length))}
-                  title={`Next: ${selectedStage + 1}. ${rSteps[selectedStage] ?? ""}`}
-                >
-                  Next<span aria-hidden> →</span>
-                </button>
+              {!isNewProject ? (
+                <div className="stage-pane-nav">
+                  <button
+                    type="button"
+                    className="stage-pane-prev"
+                    onClick={() => setSelectedStage((s) => Math.max(s - 1, 1))}
+                    disabled={selectedStage <= 1}
+                    title={selectedStage > 1 ? `Prev: ${selectedStage - 1}. ${rSteps[selectedStage - 2] ?? ""}` : undefined}
+                  >
+                    <span aria-hidden>← </span>Prev
+                  </button>
+                  <button
+                    type="button"
+                    className="stage-pane-next"
+                    onClick={() => setSelectedStage((s) => Math.min(s + 1, rSteps.length))}
+                    disabled={selectedStage >= rSteps.length}
+                    title={selectedStage < rSteps.length ? `Next: ${selectedStage + 1}. ${rSteps[selectedStage] ?? ""}` : undefined}
+                  >
+                    Next<span aria-hidden> →</span>
+                  </button>
+                </div>
               ) : null}
             </div>
             {isNewProject ? (

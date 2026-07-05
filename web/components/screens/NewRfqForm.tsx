@@ -544,31 +544,44 @@ export default function NewRfqForm({
         />
       </div>
 
-      <div className="sub-h" style={{ marginTop: 18 }}>
-        Items
+      <div className="items-head" style={{ marginTop: 18 }}>
+        <div className="sub-h">Item list</div>
+        <button type="button" className="btn sm items-head-add" onClick={addItem}>+ Add</button>
       </div>
+      <div className="table-wrap item-scroll">
       <table className="mini items-edit">
         <colgroup>
+          <col style={{ width: 44 }} />
           <col style={{ width: 44 }} />
           <col style={{ width: 160 }} />
           <col />
           <col style={{ width: 84 }} />
           <col style={{ width: 160 }} />
-          <col style={{ width: 44 }} />
         </colgroup>
         <thead>
           <tr>
+            <th className="row-tools"></th>
             <th className="seq">#</th>
             <th>Part No.</th>
             <th>Description</th>
             <th className="num">Qty</th>
             <th>Remark</th>
-            <th></th>
           </tr>
         </thead>
         <tbody>
           {items.map((it, i) => (
             <tr key={i}>
+              <td className="row-tools">
+                <button
+                  type="button"
+                  className="row-del"
+                  onClick={() => removeItem(i)}
+                  disabled={items.length === 1}
+                  title="Delete"
+                >
+                  ✕
+                </button>
+              </td>
               <td className="seq">{i + 1}</td>
               <td>
                 <textarea
@@ -602,23 +615,11 @@ export default function NewRfqForm({
                   onChange={(e) => setItem(i, "remark", e.target.value)}
                 />
               </td>
-              <td>
-                <button
-                  className="row-del"
-                  onClick={() => removeItem(i)}
-                  disabled={items.length === 1}
-                  title="Delete"
-                >
-                  ✕
-                </button>
-              </td>
             </tr>
           ))}
         </tbody>
       </table>
-      <button className="btn" onClick={addItem} style={{ marginTop: 8 }}>
-        + Add item
-      </button>
+      </div>
       </fieldset>
 
       <div className="form-actions">

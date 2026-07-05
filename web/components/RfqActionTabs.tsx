@@ -693,7 +693,8 @@ function VendorRfqDetailModal({
   inline?: boolean;
 }) {
   const [d, setD] = useState<VendorRfqDetail | null>(null);
-  const [editing, setEditing] = useState(!!autoEdit);
+  // 프로젝트 모달 내 임베드(inline)에서는 읽기전용 개요를 건너뛰고 바로 편집 화면으로.
+  const [editing, setEditing] = useState(!!autoEdit || !!inline);
   // 편집 권한 = 역할 권한(rfq.edit) × 담당(PIC) 소유권. 없으면 읽기전용(뷰어) 모드.
   const canEditThis = can("rfq", "edit") && canEditDeal(d?.assignee_id);
   const canDeleteThis = can("rfq", "delete") && canEditDeal(d?.assignee_id);
@@ -928,7 +929,7 @@ function VendorRfqItemEditor({
   return (
     <>
       <div className="items-head">
-        <div className="form-section-title">Items sent</div>
+        <div className="form-section-title">Item list</div>
         <button className="btn sm items-head-add" onClick={add}>+ Add</button>
       </div>
       <div className="table-wrap compact item-scroll">
@@ -2035,7 +2036,7 @@ function VendorRfqAction({
         <>
           <div className="items-head">
             <div className="form-section-title">
-              Items to send ({effectiveItems.length}/{rfqItems.length} selected)
+              Item list ({effectiveItems.length}/{rfqItems.length} selected)
             </div>
             <button className="btn sm items-head-add" onClick={addItem}>+ Add</button>
           </div>
@@ -2391,7 +2392,7 @@ function VendorQuoteItemEditor({
   return (
     <div style={{ marginTop: 12 }}>
       <div className="items-head">
-        <div className="sub-h">Quote items</div>
+        <div className="sub-h">Item list</div>
         <button className="btn sm items-head-add" onClick={add}>+ Add</button>
       </div>
       <div className="table-wrap item-scroll">
@@ -2941,7 +2942,7 @@ function CustomerQuoteItemEditor({
   return (
     <div style={{ marginTop: 12 }}>
       <div className="items-head">
-        <div className="sub-h">Quote items</div>
+        <div className="sub-h">Item list</div>
         <button className="btn sm items-head-add" onClick={add}>+ Add</button>
       </div>
       <div className="table-wrap item-scroll">

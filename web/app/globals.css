@@ -2803,6 +2803,13 @@ table.mini.items-edit input.num {
 table.mini.items-edit td:last-child {
   text-align: center;
 }
+/* 맨 좌측 행 삭제열 — items-edit 변형도 통일 포맷(가운데 정렬). */
+table.mini.items-edit th.row-tools,
+table.mini.items-edit td.row-tools {
+  text-align: center;
+  padding-left: 6px;
+  padding-right: 6px;
+}
 
 /* ── Dashboard ─────────────────────────────────────────────────────── */
 .kpi-row {
@@ -4610,6 +4617,14 @@ table.mini .num {
   font-size: 11px;
   font-weight: 800;
 }
+/* 이전/다음 단계 이동 — 헤더 우측에 나란히. */
+.stage-pane-nav {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.stage-pane-prev,
 .stage-pane-next {
   flex: 0 0 auto;
   display: inline-flex;
@@ -4624,9 +4639,18 @@ table.mini .num {
   font-weight: 700;
   cursor: pointer;
 }
-.stage-pane-next:hover {
+.stage-pane-prev:hover:not(:disabled),
+.stage-pane-next:hover:not(:disabled) {
   background: var(--blue);
   color: #fff;
+}
+.stage-pane-prev:disabled,
+.stage-pane-next:disabled {
+  border-color: var(--line);
+  color: var(--muted);
+  background: #fff;
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 /* 단계 상세 폼 섹션 제목 통일 — 컴포넌트마다 sub-h / form-section-title 를 섞어 쓰던 것을
    같은 서체·색·간격으로 정규화해 11개 단계의 제목 스타일을 일관되게 만든다(JSX 무변경). */
