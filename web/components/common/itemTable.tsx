@@ -69,6 +69,42 @@ export function dualCurrencyText(
   return `${cur} ${moneyText(amount)}`;
 }
 
+// 단계 편집기 하단 고정바용 총액 표기 — 주요 통화는 진하게, 나머지 통화·환율은 회색+non-bold.
+// 3·4·5·6 단계(견적·PO) 저장 바에서 동일한 양식으로 사용한다.
+export function StageTotal({
+  value,
+  currency = "USD",
+  label = "Total",
+}: {
+  value: number | string | null | undefined;
+  currency?: string;
+  label?: string;
+}) {
+  const amount = toNumber(value);
+  const cur = (currency || "USD").toUpperCase();
+  let primary: string;
+  let secondary = "";
+  if (cur === "KRW") {
+    primary = `KRW ${Math.round(amount).toLocaleString()}`;
+    secondary = `USD ${moneyText(amount / USD_KRW_RATE)}`;
+  } else if (cur === "USD") {
+    primary = `USD ${moneyText(amount)}`;
+    secondary = `KRW ${Math.round(amount * USD_KRW_RATE).toLocaleString()}`;
+  } else {
+    primary = `${cur} ${moneyText(amount)}`;
+  }
+  return (
+    <span className="stage-total">
+      <span className="stage-total-label">{label}</span>
+      <b className="stage-total-main">{primary}</b>
+      <span className="stage-total-sub">
+        {secondary ? `${secondary} · ` : ""}
+        {fxRateText()}
+      </span>
+    </span>
+  );
+}
+
 export function DualCurrencyAmount({
   value,
   currency = "USD",

@@ -3410,6 +3410,33 @@ table.mini tfoot .total-value {
   font-weight: 600;
   white-space: nowrap;
 }
+/* 단계 편집기 하단바 총액 — 총액을 좌측에 두고(margin-right:auto) 액션 버튼을 우측으로. */
+.form-actions .stage-total {
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 3px 8px;
+  margin-right: auto;
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+.stage-total-label {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.stage-total-main {
+  color: var(--navy);
+  font-weight: 700;
+  font-size: 14px;
+}
+.stage-total-sub {
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 12px;
+}
 .row-del {
   border: 1px solid #e4b9b3;
   background: #fff;

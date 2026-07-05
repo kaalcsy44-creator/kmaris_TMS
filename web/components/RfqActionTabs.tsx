@@ -67,6 +67,7 @@ import {
   itemRowClass,
   parseAmountInput,
   roundUp,
+  StageTotal,
 } from "./common/itemTable";
 
 /** 현재 시각 "YYYY-MM-DDTHH:MM" (datetime-local 기본값). */
@@ -1288,6 +1289,11 @@ function VendorQuoteDetailModal({
           <QuotationTermsEditor terms={terms} onChange={setTerms} />
           </fieldset>
           <div className="form-actions">
+            <StageTotal
+              label="Total"
+              value={items.reduce((s, it) => s + Number(it.cost_price || 0) * Number(it.qty || 1), 0)}
+              currency={currency}
+            />
             {!canEditThis ? (
               <span className="hint-inline" style={{ marginRight: "auto" }}>{editBlockReason("rfq", d?.assignee_id)}</span>
             ) : null}
@@ -1658,7 +1664,7 @@ function CustomerQuoteDetailModal({
           <QuotationTermsEditor terms={terms} onChange={setTerms} />
           </fieldset>
           <div className="form-actions">
-            <span className="action-name">Final: {dualCurrencyText(finalTotal, currency)} · {fxRateText()}</span>
+            <StageTotal label="Final" value={finalTotal} currency={currency} />
             {!canEditThis ? (
               <span className="hint-inline" style={{ marginRight: "auto" }}>{editBlockReason("rfq", d?.assignee_id)}</span>
             ) : null}
@@ -2332,6 +2338,11 @@ function VendorQuoteAction({
           </div>
 
           <div className="form-actions">
+            <StageTotal
+              label="Total"
+              value={items.reduce((s, it) => s + Number(it.cost_price || 0) * Number(it.qty || 1), 0)}
+              currency={currency}
+            />
             <button
               className="btn primary"
               onClick={submit}
@@ -2776,7 +2787,7 @@ function CustomerQuoteAction({
       <QuotationTermsEditor terms={terms} onChange={setTerms} />
 
       <div className="form-actions">
-        <span className="action-name">Final: {dualCurrencyText(finalTotal, currency)} · {fxRateText()}</span>
+        <StageTotal label="Final" value={finalTotal} currency={currency} />
         <button className="btn primary" onClick={submit} disabled={busy || items.length === 0}>
           {busy ? "Saving…" : "Save quote"}
         </button>

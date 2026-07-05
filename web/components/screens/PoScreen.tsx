@@ -32,6 +32,7 @@ import {
   gridCellProps,
   itemRowClass,
   parseAmountInput,
+  StageTotal,
 } from "@/components/common/itemTable";
 import { tr } from "@/lib/labels";
 import type {
@@ -479,6 +480,11 @@ function OrderDetailModal({
           <ItemEditor items={items} onChange={setItems} currency={currency} />
           </fieldset>
           <div className="form-actions">
+            <StageTotal
+              label="Total"
+              value={items.reduce((s, it) => s + Number(it.amount || 0), 0)}
+              currency={currency}
+            />
             {!canEditThis ? (
               <span className="hint-inline">{editBlockReason("po", detail?.assignee_id)}</span>
             ) : (
@@ -816,6 +822,11 @@ function VendorPoDetailModal({
           <ItemEditor items={items} onChange={setItems} currency={d.currency || "USD"} />
           </fieldset>
           <div className="form-actions">
+            <StageTotal
+              label="Total"
+              value={items.reduce((s, it) => s + Number(it.amount || 0), 0)}
+              currency={d.currency || "USD"}
+            />
             {!canEditThis ? (
               <span className="hint-inline">{editBlockReason("po", d?.assignee_id)}</span>
             ) : (
@@ -1074,6 +1085,11 @@ function CustomerPoNewForm({
       <ItemEditor items={items} onChange={setItems} currency={currency} />
 
       <div className="form-actions">
+        <StageTotal
+          label="Total"
+          value={items.reduce((s, it) => s + Number(it.amount || 0), 0)}
+          currency={currency}
+        />
         <button
           className="btn primary"
           onClick={submit}
@@ -1195,6 +1211,11 @@ function VendorPoCreate({
       <ItemEditor items={items} onChange={setItems} currency={order?.currency || "USD"} />
 
       <div className="form-actions">
+        <StageTotal
+          label="Total"
+          value={items.reduce((s, it) => s + Number(it.amount || 0), 0)}
+          currency={order?.currency || "USD"}
+        />
         <button
           className="btn primary"
           onClick={submit}
