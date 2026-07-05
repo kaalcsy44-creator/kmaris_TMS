@@ -713,6 +713,9 @@ function VendorRfqDetailModal({
   const [status, setStatus] = useState("");
   const [sentAt, setSentAt] = useState("");
   const [items, setItems] = useState<RfqItem[]>([]);
+  // K-Maris RFQ No. — 자동생성 / 직접 입력 토글. 미지정이면 auto 기본.
+  const [noMode, setNoMode] = useState<"auto" | "manual">("auto");
+  const [manualNo, setManualNo] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -725,9 +728,27 @@ function VendorRfqDetailModal({
         setStatus(data.status || "");
         setSentAt(toLocalDt(data.sent_at));
         setItems(data.items || []);
+        const cur = (data.kmaris_rfq_no || "").trim();
+        const assigned = !!cur && cur !== "-";
+        setNoMode(assigned ? "manual" : "auto");
+        setManualNo(assigned ? cur : "");
       })
       .catch((e) => setErr(e instanceof Error ? e.message : "Error"));
   }, [id]);
+
+  async function loadCustomerRfqItems() {
+    if (!d?.rfq_id) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const rfq = await fetchRfqDetail(d.rfq_id);
+      setItems(rfq.items || []);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Failed to load Customer RFQ items");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function save() {
     setBusy(true);
@@ -740,6 +761,16 @@ function VendorRfqDetailModal({
         sent_at: sentAt,
         items,
       });
+      // K-Maris RFQ No. 배정: manual 은 값이 바뀐 경우만, auto 는 미지정일 때만(오배정 방지).
+      if (d?.rfq_id) {
+        const cur = (d.kmaris_rfq_no || "").trim();
+        const unassigned = !cur || cur === "-";
+        if (noMode === "manual" && manualNo.trim() && manualNo.trim() !== cur) {
+          await assignRfqNo(d.rfq_id, { mode: "manual", rfq_no: manualNo.trim() });
+        } else if (noMode === "auto" && unassigned) {
+          await assignRfqNo(d.rfq_id, { mode: "auto" });
+        }
+      }
       setEditing(false);
       onChanged();
       onClose();
@@ -787,6 +818,22 @@ function VendorRfqDetailModal({
               <div className="form-section-title">This vendor send info</div>
               <div className="form-grid">
                 <div className="form-field">
+                  <label>K-Maris RFQ No.</label>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <select value={noMode} onChange={(e) => setNoMode(e.target.value as "auto" | "manual")} style={{ flex: "0 0 auto", width: 150 }}>
+                      <option value="auto">Auto-generate</option>
+                      <option value="manual">Manual entry</option>
+                    </select>
+                    {noMode === "manual" ? (
+                      <input value={manualNo} onChange={(e) => setManualNo(e.target.value)} placeholder="KMS-RFQ-…" style={{ flex: 1 }} />
+                    ) : (
+                      <span className="hint-inline">
+                        {d.kmaris_rfq_no && d.kmaris_rfq_no !== "-" ? d.kmaris_rfq_no : "Auto on save"}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="form-field">
                   <label>Vendor</label>
                   <select
                     value={vendorId}
@@ -812,13 +859,19 @@ function VendorRfqDetailModal({
                   <label>Sent at</label>
                   <input type="datetime-local" value={sentAt} onChange={(e) => setSentAt(e.target.value)} />
                 </div>
-                <div className="form-field">
-                  <label>Status</label>
-                  <input value={status} onChange={(e) => setStatus(e.target.value)} />
-                </div>
               </div>
 
-              <VendorRfqItemEditor items={items} onChange={setItems} />
+              <VendorRfqItemEditor
+                items={items}
+                onChange={setItems}
+                headerActions={
+                  d.rfq_id ? (
+                    <button className="btn sm" onClick={loadCustomerRfqItems} disabled={busy} title="Load items from the Customer RFQ">
+                      Load customer RFQ
+                    </button>
+                  ) : null
+                }
+              />
             </>
           ) : (
             <>
@@ -911,9 +964,12 @@ function ProjectVendorRfqList({
 function VendorRfqItemEditor({
   items,
   onChange,
+  headerActions,
 }: {
   items: RfqItem[];
   onChange: (items: RfqItem[]) => void;
+  // 품목표 헤더의 "+ Add" 옆 보조 액션(예: "Load customer RFQ").
+  headerActions?: React.ReactNode;
 }) {
   function patch(i: number, key: keyof RfqItem, value: string) {
     onChange(
@@ -939,7 +995,10 @@ function VendorRfqItemEditor({
     <>
       <div className="items-head">
         <div className="form-section-title">Item list</div>
-        <button className="btn sm items-head-add" onClick={add}>+ Add</button>
+        <div className="items-head-actions">
+          {headerActions}
+          <button className="btn sm items-head-add" onClick={add}>+ Add</button>
+        </div>
       </div>
       <div className="table-wrap compact item-scroll">
         <table className="mini wide lead-tools">
@@ -1849,8 +1908,15 @@ function VendorRfqAction({
   const [rfqItems, setRfqItems] = useState<RfqItem[]>([]);
   // 케이마리스 RFQ No.는 이 단계(Vendor RFQ 발신)에서 부여된다.
   const unassigned = !kmarisNo || kmarisNo === "Not issued" || kmarisNo === "-";
+  const [noMode, setNoMode] = useState<"auto" | "manual">("auto");
   const [manualNo, setManualNo] = useState("");
-  const rfqNoArg = unassigned && manualNo.trim() ? { mode: "manual" as const, value: manualNo.trim() } : undefined;
+  const rfqNoArg = unassigned
+    ? noMode === "manual"
+      ? manualNo.trim()
+        ? { mode: "manual" as const, value: manualNo.trim() }
+        : undefined
+      : { mode: "auto" as const, value: "" }
+    : undefined;
   const [sentAt, setSentAt] = useState(nowLocalDt());
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -1911,17 +1977,20 @@ function VendorRfqAction({
     );
   }
 
-  // RFQ 생성 — 케이마리스 RFQ No. 단독 발번(선택)
+  // RFQ 생성 — 케이마리스 RFQ No. 단독 발번(자동생성 / 직접 입력)
   async function generateRfqNo() {
-    if (!manualNo.trim()) {
-      setErr("Enter the K-Maris RFQ No. or leave it as '-'.");
+    if (noMode === "manual" && !manualNo.trim()) {
+      setErr("Enter the K-Maris RFQ No. or switch to Auto-generate.");
       return;
     }
     setBusy(true);
     setMsg(null);
     setErr(null);
     try {
-      const r = await assignRfqNo(rfqId, { mode: "manual", rfq_no: manualNo.trim() });
+      const r = await assignRfqNo(
+        rfqId,
+        noMode === "manual" ? { mode: "manual", rfq_no: manualNo.trim() } : { mode: "auto" }
+      );
       setMsg(`K-Maris RFQ No. saved: ${r.rfq_no}`);
       onDone(); // 목록 새로고침 → 발급 상태 반영
     } catch (e) {
@@ -2013,17 +2082,22 @@ function VendorRfqAction({
       <div className="form-field">
         <label>K-Maris RFQ No.</label>
         {unassigned ? (
-          <>
-            <input
-              style={{ maxWidth: 320 }}
-              value={manualNo}
-              onChange={(e) => setManualNo(e.target.value)}
-              placeholder="Optional"
-            />
-            <span className="hint-inline" style={{ marginTop: 8, display: "inline-block" }}>
-              Leave blank to keep K-Maris RFQ No. as "-".
-            </span>
-          </>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <select value={noMode} onChange={(e) => setNoMode(e.target.value as "auto" | "manual")} style={{ flex: "0 0 auto", width: 150 }}>
+              <option value="auto">Auto-generate</option>
+              <option value="manual">Manual entry</option>
+            </select>
+            {noMode === "manual" ? (
+              <input
+                style={{ flex: 1, maxWidth: 320 }}
+                value={manualNo}
+                onChange={(e) => setManualNo(e.target.value)}
+                placeholder="KMS-RFQ-…"
+              />
+            ) : (
+              <span className="hint-inline">Auto-generated on send</span>
+            )}
+          </div>
         ) : (
           <div className="action-ctx" style={{ margin: 0 }}>
             Issued: <b>{kmarisNo}</b>
