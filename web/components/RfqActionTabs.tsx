@@ -311,7 +311,11 @@ function EmbeddedVendorRfq({
   if (adding || mine.length === 0) {
     return (
       <div className="embedded-detail">
-        <EmbeddedAddBar label="Send a Vendor RFQ" onBack={mine.length ? () => setAdding(false) : undefined} />
+        {mine.length ? (
+          <div className="embedded-add-head">
+            <button type="button" className="btn" onClick={() => setAdding(false)}>← Back</button>
+          </div>
+        ) : null}
         <VendorRfqAction
           rfqId={rfqId ?? 0}
           vendors={vendors}
@@ -1806,9 +1810,6 @@ function ProjectSelect({
   );
 }
 
-// 발신 화면 품목 편집용 — RFQ 품목 + '보낼지' 선택 플래그.
-type EditableRfqItem = RfqItem & { _include: boolean };
-
 function VendorRfqAction({
   rfqId,
   vendors,
@@ -1824,8 +1825,8 @@ function VendorRfqAction({
   const [lang, setLang] = useState<"en" | "ko">("en");
   const [notes, setNotes] = useState("");
   const [previews, setPreviews] = useState<VendorRfqPreview[]>([]);
-  // 선택한 프로젝트(Customer RFQ)의 품목 — 벤더에게 보낼 품목을 선택·편집한다.
-  const [rfqItems, setRfqItems] = useState<EditableRfqItem[]>([]);
+  // 선택한 프로젝트(Customer RFQ)의 품목 — 벤더에게 보낼 품목을 편집한다(행 삭제로 제외).
+  const [rfqItems, setRfqItems] = useState<RfqItem[]>([]);
   // 케이마리스 RFQ No.는 이 단계(Vendor RFQ 발신)에서 부여된다.
   const unassigned = !kmarisNo || kmarisNo === "Not issued" || kmarisNo === "-";
   const [manualNo, setManualNo] = useState("");
@@ -1835,7 +1836,7 @@ function VendorRfqAction({
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  // 프로젝트 선택 시 해당 Customer RFQ의 품목 목록을 불러온다(기본 전체 선택).
+  // 프로젝트 선택 시 해당 Customer RFQ의 품목 목록을 불러온다(수동 재적재 가능).
   useEffect(() => {
     if (!rfqId) {
       setRfqItems([]);
@@ -1843,14 +1844,21 @@ function VendorRfqAction({
     }
     let alive = true;
     fetchRfqDetail(rfqId)
-      .then((d) => { if (alive) setRfqItems((d.items || []).map((it) => ({ ...it, _include: true }))); })
+      .then((d) => { if (alive) setRfqItems(d.items || []); })
       .catch(() => { if (alive) setRfqItems([]); });
     return () => { alive = false; };
   }, [rfqId]);
 
-  // 선택(_include)되고 실제 내용이 있는 품목만 벤더에게 보낸다.
+  // "Load customer RFQ" — Customer RFQ 품목으로 다시 채운다(편집·삭제 후 원복용).
+  function loadCustomerRfqItems() {
+    if (!rfqId) return;
+    fetchRfqDetail(rfqId)
+      .then((d) => setRfqItems(d.items || []))
+      .catch(() => undefined);
+  }
+
+  // 실제 내용이 있는 품목만 벤더에게 보낸다(행을 삭제해 제외).
   const effectiveItems = rfqItems
-    .filter((it) => it._include)
     .map(({ part_no, description, qty, unit, remark }) => ({
       part_no: part_no || "",
       description: description || "",
@@ -1867,16 +1875,10 @@ function VendorRfqAction({
       )
     );
   }
-  function toggleItem(i: number) {
-    setRfqItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, _include: !it._include } : it)));
-  }
-  function setAllItems(include: boolean) {
-    setRfqItems((prev) => prev.map((it) => ({ ...it, _include: include })));
-  }
   function addItem() {
     setRfqItems((prev) => [
       ...prev,
-      { part_no: "", description: "", qty: 1, unit: "", unit_price: null, amount: null, remark: "", _include: true },
+      { part_no: "", description: "", qty: 1, unit: "", unit_price: null, amount: null, remark: "" },
     ]);
   }
   function removeItem(i: number) {
@@ -1987,10 +1989,6 @@ function VendorRfqAction({
   return (
     <>
       <div className="sub-h">Create & Send Vendor RFQ</div>
-      <div className="po-work-note">
-        <b>RFQ request email</b>
-        <span>Generates an email draft and an Excel response form. Send the email yourself, then mark it as "Sent".</span>
-      </div>
 
       <div className="form-field">
         <label>K-Maris RFQ No.</label>
@@ -2047,49 +2045,35 @@ function VendorRfqAction({
       {rfqId ? (
         <>
           <div className="items-head">
-            <div className="form-section-title">
-              Item list ({effectiveItems.length}/{rfqItems.length} selected)
+            <div className="form-section-title">Item list</div>
+            <div className="items-head-actions">
+              <button className="btn sm" onClick={loadCustomerRfqItems}>Load customer RFQ</button>
+              <button className="btn sm items-head-add" onClick={addItem}>+ Add</button>
             </div>
-            <button className="btn sm items-head-add" onClick={addItem}>+ Add</button>
-          </div>
-          <div className="po-work-note">
-            <b>Select &amp; edit items</b>
-            <span>Uncheck items you don&apos;t want to send, edit any cell, or add rows. Only checked items go into the email, XLSX form, and the Vendor RFQ record.</span>
           </div>
           <div className="table-wrap compact item-scroll">
-            <table className="mini wide">
+            <table className="mini wide lead-tools">
               <thead>
                 <tr>
-                  <th className="seq">
-                    <input
-                      type="checkbox"
-                      checked={rfqItems.length > 0 && rfqItems.every((it) => it._include)}
-                      ref={(el) => {
-                        if (el) el.indeterminate = rfqItems.some((it) => it._include) && !rfqItems.every((it) => it._include);
-                      }}
-                      onChange={(e) => setAllItems(e.target.checked)}
-                      title="Select all"
-                    />
-                  </th>
+                  <th className="row-tools"></th>
                   <th className="seq">No.</th>
                   <th>Part No.</th>
                   <th>Description</th>
                   <th>Qty</th>
                   <th>Unit</th>
                   <th>Remark</th>
-                  <th className="seq"></th>
                 </tr>
               </thead>
               <tbody>
                 {rfqItems.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="mini-empty">No items (service request).</td>
+                    <td colSpan={7} className="mini-empty">No items (service request).</td>
                   </tr>
                 ) : (
                   rfqItems.map((it, i) => (
-                    <tr key={i} className={itemRowClass(i)} style={it._include ? undefined : { opacity: 0.45 }}>
-                      <td className="seq">
-                        <input type="checkbox" checked={it._include} onChange={() => toggleItem(i)} />
+                    <tr key={i} className={itemRowClass(i)}>
+                      <td className="row-tools">
+                        <button className="row-del" title="Remove row" onClick={() => removeItem(i)}>×</button>
                       </td>
                       <td className="seq">{i + 1}</td>
                       <td><textarea {...gridCellProps(i, 0)} className="wrapcell" rows={1} value={it.part_no || ""} onChange={(e) => patchItem(i, "part_no", e.target.value)} /></td>
@@ -2097,9 +2081,6 @@ function VendorRfqAction({
                       <td><input {...gridCellProps(i, 2)} className="num" value={amountInputValue(it.qty)} onChange={(e) => patchItem(i, "qty", e.target.value)} /></td>
                       <td><input {...gridCellProps(i, 3)} value={it.unit || ""} onChange={(e) => patchItem(i, "unit", e.target.value)} /></td>
                       <td><textarea {...gridCellProps(i, 4)} className="wrapcell" rows={1} value={it.remark ?? ""} onChange={(e) => patchItem(i, "remark", e.target.value)} /></td>
-                      <td>
-                        <button className="row-del" title="Remove row" onClick={() => removeItem(i)}>×</button>
-                      </td>
                     </tr>
                   ))
                 )}
