@@ -249,7 +249,6 @@ function OrderDetailModal({
   const [tradeType, setTradeType] = useState("수출");
   const [promised, setPromised] = useState("");
   const [items, setItems] = useState<PoWorkItem[]>([]);
-  const [quotationId, setQuotationId] = useState<number | "">("");
   const [ocrBusy, setOcrBusy] = useState(false);
   const [ocrMsg, setOcrMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -271,24 +270,11 @@ function OrderDetailModal({
         setCurrency(d.currency || "USD");
         setPromised(d.promised_delivery || "");
         setItems(d.items.length ? d.items.map(normalizeItem) : [blankItem()]);
-        setQuotationId("");
         setOcrMsg(null);
       })
       .catch((e) => setErr(e instanceof Error ? e.message : "Load failed"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderId]);
-
-  function loadQuotation(id: number | "") {
-    setQuotationId(id);
-    if (id === "") return;
-    const q = options.quotations.find((x) => x.id === id);
-    if (!q) return;
-    setCustomerId(q.customer_id);
-    setVesselId(q.vessel_id ?? "");
-    setCurrency(q.currency || "USD");
-    setItems(q.items.length ? q.items.map(normalizeItem) : [blankItem()]);
-    setOcrMsg(`Loaded ${q.items.length} item(s) from quotation ${q.qtn_no}.`);
-  }
 
   // "Load customer RFQ" — 연결된 Customer RFQ(1단계) 품목으로 채운다.
   // (별도 Customer P/O 파일이 없을 때, RFQ 요청 품목을 그대로 불러오기 위함.)
@@ -441,24 +427,12 @@ function OrderDetailModal({
                 onChange={(e) => uploadOrderFile(e.target.files?.[0] ?? null)}
                 disabled={ocrBusy || busy}
               />
-              <select
-                value={quotationId}
-                onChange={(e) => loadQuotation(e.target.value ? Number(e.target.value) : "")}
-                title="Load items from a quotation"
-              >
-                <option value="">Load from quotation…</option>
-                {options.quotations.map((q) => (
-                  <option key={q.id} value={q.id}>
-                    {q.qtn_no} · {q.customer} · {dualCurrencyText(q.amount, q.currency)}
-                  </option>
-                ))}
-              </select>
               {ocrBusy ? (
                 <span className="hint-inline">Analyzing…</span>
               ) : ocrMsg ? (
                 <span className="action-ok">{ocrMsg}</span>
               ) : (
-                <span className="hint-inline">Upload a customer P/O PDF/image, or load from a quotation → auto-fill</span>
+                <span className="hint-inline">Upload a customer P/O PDF/image → auto-fill</span>
               )}
             </div>
           ) : null}
