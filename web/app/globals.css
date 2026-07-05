@@ -4567,6 +4567,83 @@ table.mini .num {
   min-height: 0;
   overflow-y: auto;
 }
+/* 단계 상세 공통 헤더 — 모든 단계에서 동일한 제목(좌) + 다음단계 이동(우상단).
+   스크롤 컨테이너 상단에 고정해 어느 위치로 스크롤해도 제목·이동이 보인다. */
+.stage-pane-head {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: #fff;
+  border-bottom: 1px solid var(--line);
+  padding: 2px 2px 10px;
+  margin-bottom: 12px;
+}
+.stage-pane-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--navy);
+  min-width: 0;
+}
+.stage-pane-title > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stage-pane-no {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--blue);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+}
+.stage-pane-next {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--blue);
+  background: #fff;
+  color: var(--blue);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.stage-pane-next:hover {
+  background: var(--blue);
+  color: #fff;
+}
+/* 단계 상세 폼 섹션 제목 통일 — 컴포넌트마다 sub-h / form-section-title 를 섞어 쓰던 것을
+   같은 서체·색·간격으로 정규화해 11개 단계의 제목 스타일을 일관되게 만든다(JSX 무변경). */
+.project-stage-pane .sub-h,
+.project-stage-pane .form-section-title {
+  margin: 14px 0 8px;
+  padding-top: 0;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--navy);
+  letter-spacing: 0;
+}
+/* items-head 안의 제목은 flex 정렬(제목 좌 · +Add 우)을 유지하려 margin 제거. */
+.project-stage-pane .items-head .sub-h,
+.project-stage-pane .items-head .form-section-title {
+  margin: 0;
+}
 /* 단계 탭 — 진행 바 바로 아래, 헤더 영역에 고정된 전체 폭 스트립(가로 스크롤). */
 .pl-modal > .project-stage-tabs {
   display: flex;

@@ -1418,6 +1418,24 @@ export function PipelineModal({
               </aside>
 
               <section className="project-stage-pane">
+            {/* 단계 상세 공통 헤더 — 모든 단계에서 동일한 위치·서체의 제목(좌) +
+                다음 단계로 이동하는 → 버튼(우상단). 11개 단계 UI 일관성의 기준. */}
+            <div className="stage-pane-head">
+              <h3 className="stage-pane-title">
+                <span className="stage-pane-no">{selectedStage}</span>
+                <span>{rSteps[selectedStage - 1] ?? ""}</span>
+              </h3>
+              {!isNewProject && selectedStage < rSteps.length ? (
+                <button
+                  type="button"
+                  className="stage-pane-next"
+                  onClick={() => setSelectedStage((s) => Math.min(s + 1, rSteps.length))}
+                  title={`Next: ${selectedStage + 1}. ${rSteps[selectedStage] ?? ""}`}
+                >
+                  Next<span aria-hidden> →</span>
+                </button>
+              ) : null}
+            </div>
             {isNewProject ? (
               <div className="project-work-panel embedded-workspace embedded-detail">
                 <NewRfqForm
