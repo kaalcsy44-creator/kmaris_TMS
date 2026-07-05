@@ -43,6 +43,7 @@ import type {
 } from "@/lib/types";
 import { getUser, isAdmin, can } from "@/lib/auth";
 import AppShell, { SectionHead } from "@/components/AppShell";
+import Modal from "@/components/common/Modal";
 import { invalidateCustomerLogos } from "@/lib/customerLogos";
 import { invalidateVendorLogos } from "@/lib/vendorLogos";
 import { fileToLogoDataUrl, imageFromClipboard } from "@/lib/imagePaste";
@@ -355,8 +356,7 @@ function UsersTab() {
 
   const editorTitle = isEdit ? `✎ Edit ${form.username || "user"}` : "+ New user";
   const editor = editId !== null ? (
-    <div className="ms-editor">
-      <div className="ms-editor-head">{editorTitle}</div>
+    <Modal title={editorTitle} onClose={cancel} wide>
       <div className="form-grid">
         <TextField label="Username *" value={form.username} onChange={(v) => setForm({ ...form, username: v })} />
         <TextField label="Email" value={form.email} onChange={(v) => setForm({ ...form, email: v })} />
@@ -408,7 +408,7 @@ function UsersTab() {
         {isSelf ? <span className="hint-inline">For your own account, only deactivation/password change is allowed.</span> : null}
         {err ? <span className="action-err">{err}</span> : null}
       </div>
-    </div>
+    </Modal>
   ) : null;
 
   return (
@@ -1107,8 +1107,7 @@ function MasterSection<T extends { id: number }>({
     ? `📋 Copy as new${String(form[required] ?? "") ? ` — ${String(form[required])}` : ""}`
     : "+ New";
   const editor = editId !== null ? (
-    <div className="ms-editor">
-      <div className="ms-editor-head">{editorTitle}</div>
+    <Modal title={editorTitle} onClose={cancel} wide>
       {copying && copyHint ? <div className="ms-copy-hint">{copyHint}</div> : null}
       <div className="form-grid">
         {fields.map(([key, label]) => (
@@ -1146,7 +1145,7 @@ function MasterSection<T extends { id: number }>({
         ) : null}
         {err ? <span className="action-err">{err}</span> : null}
       </div>
-    </div>
+    </Modal>
   ) : null;
 
   return (
