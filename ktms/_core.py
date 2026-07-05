@@ -52,7 +52,7 @@ from services.pdf_parser import (
 from services.vendor_xlsx import make_vendor_rfq_quote_xlsx
 from services.quote_response_parser import parse_vendor_quote_bytes, excel_to_text
 from db.models import (
-    RFQ, Customer, Vessel, Vendor, User, UserRole, RolePermission, ItemMaster, DocSequence,
+    RFQ, Customer, Vessel, Vendor, User, UserRole, RolePermission, ItemMaster, ItemCategory, DocSequence,
     VendorRFQ, VendorQuote, Quotation, QuotationStatus, FollowUpLevel,
     Order, PurchaseOrder, ShippingAdvice, CommercialInvoice,
     PackingList, TaxInvoiceData, ARRecord, DeliveryProof,
@@ -1711,6 +1711,14 @@ class ItemMasterSave(BaseModel):
     unit: str | None = "PCS"
     hs_code: str | None = ""
     std_price: float | None = 0.0
+    category_id: int | None = None   # 분류 노드 id(가장 깊은 선택). None=미분류
+
+
+class ItemCategorySave(BaseModel):
+    name: str
+    parent_id: int | None = None     # None=대분류(level 1)
+    sort_order: int | None = 0
+    active: bool | None = True
 
 
 class UserSave(BaseModel):
@@ -2019,6 +2027,8 @@ __all__ = [
     "FollowUpLevel",
     "HTTPException",
     "INTERNAL_STEPS",
+    "ItemCategory",
+    "ItemCategorySave",
     "ItemMaster",
     "ItemMasterSave",
     "LoginRequest",

@@ -29,6 +29,10 @@ import {
   updateSettingsVessel,
   fetchRolePermissions,
   updateRolePermissions,
+  fetchItemCategories,
+  createItemCategory,
+  updateItemCategory,
+  deleteItemCategory,
 } from "@/lib/api";
 import type { PermissionsConfig, RolePermRow } from "@/lib/api";
 import type { PermGrid } from "@/lib/auth";
@@ -37,6 +41,7 @@ import type {
   CustomerOption,
   SettingsCustomer,
   SettingsItem,
+  ItemCategory,
   SettingsUser,
   SettingsVendor,
   SettingsVessel,
@@ -50,7 +55,7 @@ import { fileToLogoDataUrl, imageFromClipboard } from "@/lib/imagePaste";
 
 type Tab =
   | "company" | "users" | "permissions"
-  | "customers" | "vendors" | "vessels" | "items" | "account";
+  | "customers" | "vendors" | "vessels" | "items" | "categories" | "account";
 
 const emptyCompany: CompanyProfile = {
   company_name_en: "",
@@ -108,12 +113,14 @@ function Settings() {
         { key: "vendors", label: "Vendor" },
         { key: "vessels", label: "Vessels" },
         { key: "items", label: "Item Master" },
+        { key: "categories", label: "Item 분류" },
       ]
     : [
         { key: "customers", label: "Customer" },
         { key: "vendors", label: "Vendor" },
         { key: "vessels", label: "Vessels" },
         { key: "items", label: "Item Master" },
+        { key: "categories", label: "Item 분류" },
         { key: "account", label: "My Account" },
       ];
 
@@ -137,6 +144,7 @@ function Settings() {
       {tab === "vendors" && <VendorsTab />}
       {tab === "vessels" && <VesselsTab />}
       {tab === "items" && <ItemsTab />}
+      {tab === "categories" && <CategoriesTab />}
       {tab === "account" && (
         <div className="panel">
           <MyPasswordChange />
@@ -962,13 +970,16 @@ function ItemsTab() {
   return (
     <MasterSection<SettingsItem>
       title="Item Master"
-      empty={{ id: 0, part_no: "", description: "", maker: "", origin: "", unit: "PCS", hs_code: "", std_price: 0 }}
+      empty={{ id: 0, part_no: "", description: "", maker: "", origin: "", unit: "PCS", hs_code: "", std_price: 0, category_id: null, category_path: "" }}
       load={fetchSettingsItems}
       create={createSettingsItem}
       update={updateSettingsItem}
       remove={deleteSettingsItem}
       columns={[
         ["part_no", "Part No."],
+        ["category_path", "분류", (r) => r.category_path
+          ? <span className="cat-path">{r.category_path}</span>
+          : <span className="dash">미분류</span>],
         ["description", "Description"],
         ["maker", "Maker"],
         ["origin", "Origin"],
@@ -987,7 +998,268 @@ function ItemsTab() {
       ]}
       required="part_no"
       numeric={["std_price"]}
+      extraForm={(form, setForm) => (
+        <CategoryPicker
+          value={form.category_id}
+          onChange={(category_id) => setForm({ ...form, category_id })}
+        />
+      )}
     />
+  );
+}
+
+// 품목 분류 캐스케이딩 선택(대>중>소). value=가장 깊은 선택 노드 id. 미분류=null.
+// 저장은 항상 '가장 깊게 선택된' 노드를 value 로 둔다(대만 선택→대 id, 소까지→소 id).
+function CategoryPicker({
+  value,
+  onChange,
+}: {
+  value: number | null;
+  onChange: (id: number | null) => void;
+}) {
+  const [cats, setCats] = useState<ItemCategory[]>([]);
+  useEffect(() => {
+    fetchItemCategories().then(setCats).catch(() => setCats([]));
+  }, []);
+
+  const byId = new Map(cats.map((c) => [c.id, c]));
+  // 현재 value 로부터 조상 체인 [대, 중, 소] 복원.
+  const chain: number[] = [];
+  let cur = value != null ? byId.get(value) : undefined;
+  let guard = 0;
+  while (cur && guard++ < 5) {
+    chain.unshift(cur.id);
+    cur = cur.parent_id != null ? byId.get(cur.parent_id) : undefined;
+  }
+  const l1 = chain[0] ?? null;
+  const l2 = chain[1] ?? null;
+  const l3 = chain[2] ?? null;
+
+  const opts = (level: number, parent: number | null) =>
+    cats
+      .filter((c) => c.level === level && (c.parent_id ?? null) === parent && c.active)
+      .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name));
+
+  const l1Opts = opts(1, null);
+  const l2Opts = l1 != null ? opts(2, l1) : [];
+  const l3Opts = l2 != null ? opts(3, l2) : [];
+
+  return (
+    <label className="form-field cat-picker">
+      <span>분류 (대 · 중 · 소)</span>
+      <div className="cat-picker-row">
+        <select value={l1 ?? ""} onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}>
+          <option value="">대분류</option>
+          {l1Opts.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+        <select
+          value={l2 ?? ""}
+          disabled={l1 == null || l2Opts.length === 0}
+          onChange={(e) => onChange(e.target.value ? Number(e.target.value) : l1)}
+        >
+          <option value="">{l1 == null ? "—" : "중분류"}</option>
+          {l2Opts.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+        <select
+          value={l3 ?? ""}
+          disabled={l2 == null || l3Opts.length === 0}
+          onChange={(e) => onChange(e.target.value ? Number(e.target.value) : l2)}
+        >
+          <option value="">{l2 == null ? "—" : "소분류"}</option>
+          {l3Opts.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+      </div>
+      {value == null ? <span className="hint-inline">미분류 — 대분류부터 선택하세요.</span> : null}
+    </label>
+  );
+}
+
+const LEVEL_LABEL: Record<number, string> = { 1: "대분류", 2: "중분류", 3: "소분류" };
+const CHILD_LABEL: Record<number, string> = { 1: "+ 중분류", 2: "+ 소분류" };
+
+type CatEditor = {
+  id: number | null;        // null=신규
+  parent_id: number | null;
+  level: number;
+  name: string;
+  active: boolean;
+  parentPath: string;       // 상위 경로 표시용
+};
+
+// 품목 분류 트리(대>중>소) 관리 탭. 마스터 데이터 권한(settings)으로 편집.
+function CategoriesTab() {
+  const [rows, setRows] = useState<ItemCategory[]>([]);
+  const [editor, setEditor] = useState<CatEditor | null>(null);
+  const [err, setErr] = useState("");
+  const canCreate = can("settings", "create");
+  const canEdit = can("settings", "edit");
+  const canDelete = can("settings", "delete");
+
+  function refresh() {
+    fetchItemCategories().then(setRows).catch((e) => setErr(e instanceof Error ? e.message : "Load failed"));
+  }
+  useEffect(refresh, []);
+
+  const byId = new Map(rows.map((c) => [c.id, c]));
+  const childrenOf = (pid: number | null) =>
+    rows
+      .filter((c) => (c.parent_id ?? null) === pid)
+      .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name));
+
+  function openNew(parent: ItemCategory | null) {
+    setErr("");
+    setEditor({
+      id: null,
+      parent_id: parent ? parent.id : null,
+      level: parent ? (parent.level || 1) + 1 : 1,
+      name: "",
+      active: true,
+      parentPath: parent ? parent.path : "",
+    });
+  }
+  function openEdit(node: ItemCategory) {
+    setErr("");
+    const parent = node.parent_id != null ? byId.get(node.parent_id) : undefined;
+    setEditor({
+      id: node.id,
+      parent_id: node.parent_id,
+      level: node.level,
+      name: node.name,
+      active: node.active,
+      parentPath: parent ? parent.path : "",
+    });
+  }
+  function cancel() {
+    setEditor(null);
+    setErr("");
+  }
+
+  async function save() {
+    if (!editor) return;
+    setErr("");
+    try {
+      if (editor.id == null) {
+        const siblings = childrenOf(editor.parent_id).length;
+        await createItemCategory({
+          name: editor.name.trim(),
+          parent_id: editor.parent_id,
+          sort_order: siblings,
+          active: editor.active,
+        });
+      } else {
+        await updateItemCategory(editor.id, { name: editor.name.trim(), active: editor.active });
+      }
+      cancel();
+      refresh();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Save failed");
+    }
+  }
+
+  async function del(node: ItemCategory) {
+    if (!confirm(`'${node.name}' 분류를 삭제할까요?`)) return;
+    setErr("");
+    try {
+      await deleteItemCategory(node.id);
+      refresh();
+    } catch (e) {
+      // 하위 분류/사용 중 품목이 있으면 백엔드가 막는다.
+      alert(e instanceof Error ? e.message : "Delete failed");
+    }
+  }
+
+  function NodeRow({ node }: { node: ItemCategory }) {
+    const kids = childrenOf(node.id);
+    return (
+      <li className={`cat-node cat-l${node.level}${node.active ? "" : " off"}`}>
+        <div className="cat-node-row">
+          <span className="cat-node-name">
+            {node.name}
+            {!node.active ? <span className="cat-inactive">비활성</span> : null}
+          </span>
+          <span className="cat-node-actions">
+            {node.level < 3 && canCreate ? (
+              <button className="btn tiny" onClick={() => openNew(node)}>{CHILD_LABEL[node.level]}</button>
+            ) : null}
+            {canEdit ? (
+              <button className="btn tiny" onClick={() => openEdit(node)} title="수정">✎</button>
+            ) : null}
+            {canDelete ? (
+              <button className="btn tiny danger" onClick={() => del(node)} title="삭제">🗑</button>
+            ) : null}
+          </span>
+        </div>
+        {kids.length ? (
+          <ul className="cat-children">
+            {kids.map((k) => <NodeRow key={k.id} node={k} />)}
+          </ul>
+        ) : null}
+      </li>
+    );
+  }
+
+  const roots = childrenOf(null);
+  const editorTitle = editor
+    ? editor.id == null
+      ? `+ ${LEVEL_LABEL[editor.level] ?? "분류"} 추가`
+      : `✎ ${LEVEL_LABEL[editor.level] ?? "분류"} 수정 — ${editor.name || ""}`
+    : "";
+
+  return (
+    <div className="panel">
+      <div className="ms-toolbar">
+        <h3 className="form-title">Item 분류 (대 · 중 · 소)</h3>
+        {canCreate ? (
+          <button className="btn primary" onClick={() => openNew(null)}>+ 대분류</button>
+        ) : null}
+      </div>
+      <p className="hint-inline" style={{ display: "block", marginBottom: 12 }}>
+        품목 분류 체계를 관리합니다. 대분류 &gt; 중분류 &gt; 소분류(최대 3단계). 하위 분류나 사용 중인 품목이 있는 분류는 삭제할 수 없습니다.
+      </p>
+
+      {err ? <div className="action-err" style={{ marginBottom: 10 }}>{err}</div> : null}
+
+      {roots.length === 0 ? (
+        <div className="state">분류가 없습니다. &quot;+ 대분류&quot;로 시작하세요.</div>
+      ) : (
+        <ul className="cat-tree">
+          {roots.map((r) => <NodeRow key={r.id} node={r} />)}
+        </ul>
+      )}
+
+      {editor ? (
+        <Modal title={editorTitle} onClose={cancel} form>
+          <div className="form-grid">
+            {editor.parentPath ? (
+              <div className="form-field" style={{ gridColumn: "1 / -1" }}>
+                <span>상위 분류</span>
+                <div className="cat-parent-path">{editor.parentPath}</div>
+              </div>
+            ) : null}
+            <TextField
+              label={`${LEVEL_LABEL[editor.level] ?? "분류"}명 *`}
+              value={editor.name}
+              onChange={(v) => setEditor({ ...editor, name: v })}
+            />
+            <label className="check-inline">
+              <input
+                type="checkbox"
+                checked={editor.active}
+                onChange={(e) => setEditor({ ...editor, active: e.target.checked })}
+              />
+              활성 (비활성 시 선택 목록에서 숨김)
+            </label>
+          </div>
+          <div className="form-actions">
+            <button className="btn primary" onClick={save} disabled={!editor.name.trim()}>
+              {editor.id == null ? "추가" : "저장"}
+            </button>
+            <button className="btn" onClick={cancel}>취소</button>
+            {err ? <span className="action-err">{err}</span> : null}
+          </div>
+        </Modal>
+      ) : null}
+    </div>
   );
 }
 

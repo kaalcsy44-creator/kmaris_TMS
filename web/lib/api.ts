@@ -31,6 +31,7 @@ import type {
   SettingsVendor,
   SettingsVessel,
   SettingsItem,
+  ItemCategory,
   SettingsUser,
   CompanyProfile,
   PipelineData,
@@ -618,6 +619,28 @@ export function updateSettingsItem(id: number, body: Omit<SettingsItem, "id">): 
 }
 export function deleteSettingsItem(id: number): Promise<{ ok: boolean }> {
   return del(`/api/admin/settings/items/${id}`);
+}
+
+// ── 품목 분류 트리(대>중>소) ──────────────────────────────────────────────────
+export function fetchItemCategories(): Promise<ItemCategory[]> {
+  return get<ItemCategory[]>("/api/admin/settings/item-categories");
+}
+export function createItemCategory(body: {
+  name: string;
+  parent_id?: number | null;
+  sort_order?: number;
+  active?: boolean;
+}): Promise<{ ok: boolean; id: number }> {
+  return post("/api/admin/settings/item-categories", body);
+}
+export function updateItemCategory(
+  id: number,
+  body: { name?: string; sort_order?: number; active?: boolean }
+): Promise<{ ok: boolean; id: number }> {
+  return put(`/api/admin/settings/item-categories/${id}`, body);
+}
+export function deleteItemCategory(id: number): Promise<{ ok: boolean }> {
+  return del(`/api/admin/settings/item-categories/${id}`);
 }
 
 export function createSettingsUser(body: {

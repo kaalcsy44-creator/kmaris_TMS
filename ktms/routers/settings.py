@@ -7,6 +7,8 @@ from _core import (
     CustomerCreate,
     Depends,
     HTTPException,
+    ItemCategory,
+    ItemCategorySave,
     ItemMaster,
     ItemMasterSave,
     PERM_ACTIONS,
@@ -265,15 +267,122 @@ def delete_vessel(row_id: int):
         s.close()
 
 
+# ── Item categories (품목 분류 트리: 대>중>소) ─────────────────────────────────
+
+def _category_maps(s):
+    """(cat_by_id, path_str) 헬퍼용 원천. cat_by_id: {id: ItemCategory}."""
+    cats = s.query(ItemCategory).all()
+    return {c.id: c for c in cats}
+
+
+def _category_path(cat_by_id, cid):
+    """분류 id → '대 > 중 > 소' 문자열. 없으면 ''. 순환 방어(최대 5뎁스)."""
+    if not cid or cid not in cat_by_id:
+        return ""
+    names = []
+    cur = cat_by_id.get(cid)
+    seen = set()
+    while cur is not None and cur.id not in seen and len(names) < 5:
+        seen.add(cur.id)
+        names.append(cur.name)
+        cur = cat_by_id.get(cur.parent_id) if cur.parent_id else None
+    return " > ".join(reversed(names))
+
+
+@app.get("/api/admin/settings/item-categories", dependencies=[Depends(require_token)])
+def settings_item_categories():
+    """분류 트리 전체를 flat 리스트로 반환(프론트에서 parent_id 로 트리 구성)."""
+    s = get_session()
+    try:
+        cats = (s.query(ItemCategory)
+                .order_by(ItemCategory.level, ItemCategory.sort_order, ItemCategory.name)
+                .all())
+        cat_by_id = {c.id: c for c in cats}
+        return [{
+            "id": c.id, "parent_id": c.parent_id, "level": c.level or 1,
+            "name": c.name or "", "sort_order": c.sort_order or 0,
+            "active": bool(c.active), "path": _category_path(cat_by_id, c.id),
+        } for c in cats]
+    finally:
+        s.close()
+
+
+@app.post("/api/admin/settings/item-categories", dependencies=[Depends(require_token)])
+def create_item_category(body: ItemCategorySave):
+    if not (body.name or "").strip():
+        raise HTTPException(status_code=400, detail="분류명을 입력하세요.")
+    s = get_session()
+    try:
+        level = 1
+        if body.parent_id:
+            parent = s.query(ItemCategory).filter_by(id=body.parent_id).first()
+            if not parent:
+                raise HTTPException(status_code=400, detail="상위 분류를 찾을 수 없습니다.")
+            level = (parent.level or 1) + 1
+            if level > 3:
+                raise HTTPException(status_code=400, detail="분류는 최대 3단계(대>중>소)까지입니다.")
+        c = ItemCategory(
+            name=body.name.strip(), parent_id=body.parent_id,
+            level=level, sort_order=body.sort_order or 0,
+            active=True if body.active is None else bool(body.active),
+        )
+        s.add(c)
+        s.commit()
+        return {"ok": True, "id": c.id}
+    finally:
+        s.close()
+
+
+@app.put("/api/admin/settings/item-categories/{row_id}", dependencies=[Depends(require_token)])
+def update_item_category(row_id: int, body: ItemCategorySave):
+    s = get_session()
+    try:
+        c = s.query(ItemCategory).filter_by(id=row_id).first()
+        if not c:
+            raise HTTPException(status_code=404, detail="분류를 찾을 수 없습니다.")
+        if (body.name or "").strip():
+            c.name = body.name.strip()
+        if body.sort_order is not None:
+            c.sort_order = body.sort_order
+        if body.active is not None:
+            c.active = bool(body.active)
+        s.commit()
+        return {"ok": True, "id": c.id}
+    finally:
+        s.close()
+
+
+@app.delete("/api/admin/settings/item-categories/{row_id}", dependencies=[Depends(require_token)])
+def delete_item_category(row_id: int):
+    """분류 삭제. 하위 분류나 이 분류를 참조하는 품목이 있으면 막는다(데이터 보호)."""
+    s = get_session()
+    try:
+        c = s.query(ItemCategory).filter_by(id=row_id).first()
+        if not c:
+            raise HTTPException(status_code=404, detail="분류를 찾을 수 없습니다.")
+        if s.query(ItemCategory).filter_by(parent_id=row_id).count() > 0:
+            raise HTTPException(status_code=400, detail="하위 분류가 있어 삭제할 수 없습니다. 먼저 하위 분류를 삭제하세요.")
+        if s.query(ItemMaster).filter_by(category_id=row_id).count() > 0:
+            raise HTTPException(status_code=400, detail="이 분류를 사용하는 품목이 있어 삭제할 수 없습니다.")
+        s.delete(c)
+        s.commit()
+        return {"ok": True}
+    finally:
+        s.close()
+
+
 @app.get("/api/admin/settings/items", dependencies=[Depends(require_token)])
 def settings_items():
     s = get_session()
     try:
+        cat_by_id = _category_maps(s)
         return [{
             "id": i.id, "part_no": i.part_no or "",
             "description": i.description or "", "maker": i.maker or "",
             "origin": i.origin or "", "unit": i.unit or "PCS",
             "hs_code": i.hs_code or "", "std_price": i.std_price or 0.0,
+            "category_id": i.category_id,
+            "category_path": _category_path(cat_by_id, i.category_id),
         } for i in s.query(ItemMaster).order_by(ItemMaster.part_no).all()]
     finally:
         s.close()
@@ -289,7 +398,7 @@ def create_item(body: ItemMasterSave):
             part_no=body.part_no.strip(), description=body.description or "",
             maker=body.maker or "", origin=body.origin or "",
             unit=body.unit or "PCS", hs_code=body.hs_code or "",
-            std_price=body.std_price or 0.0,
+            std_price=body.std_price or 0.0, category_id=body.category_id,
         )
         s.add(item)
         s.commit()
@@ -312,6 +421,7 @@ def update_item(row_id: int, body: ItemMasterSave):
         item.unit = body.unit or "PCS"
         item.hs_code = body.hs_code or ""
         item.std_price = body.std_price or 0.0
+        item.category_id = body.category_id
         s.commit()
         return {"ok": True, "id": item.id}
     finally:

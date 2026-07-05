@@ -132,6 +132,22 @@ class Vessel(Base):
     created_at  = Column(DateTime, default=datetime.utcnow)
 
 
+class ItemCategory(Base):
+    """품목 분류(대>중>소) 트리. 자기참조 parent_id 로 계층을 이룬다.
+
+    level: 1=대분류, 2=중분류, 3=소분류. (손그림: 서비스/부품 > 엔진/기타 > 2·4stroke/BWTS…)
+    벙커링·선용품 등 신규 분류는 Settings에서 코드 수정 없이 추가한다.
+    sort_order 로 형제 노드 표시 순서를 제어(작을수록 먼저)."""
+    __tablename__ = "item_categories"
+    id         = Column(Integer, primary_key=True)
+    parent_id  = Column(Integer, ForeignKey("item_categories.id"), nullable=True)
+    level      = Column(Integer, default=1)   # 1=대,2=중,3=소
+    name       = Column(String(100), nullable=False)
+    sort_order = Column(Integer, default=0)
+    active     = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 class ItemMaster(Base):
     __tablename__ = "item_master"
     id          = Column(Integer, primary_key=True)
@@ -142,6 +158,8 @@ class ItemMaster(Base):
     unit        = Column(String(20), default="PCS")
     hs_code     = Column(String(20))
     std_price   = Column(Float, default=0.0)
+    # 분류(가장 깊은 선택 노드). 보통 소분류 id, 소분류 없으면 중분류 id. NULL=미분류.
+    category_id = Column(Integer, ForeignKey("item_categories.id"), nullable=True)
     created_at  = Column(DateTime, default=datetime.utcnow)
 
 

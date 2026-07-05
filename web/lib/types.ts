@@ -77,6 +77,19 @@ export type SettingsItem = {
   unit: string;
   hs_code: string;
   std_price: number;
+  category_id: number | null;    // 분류 노드 id(가장 깊은 선택). null=미분류
+  category_path: string;         // 표시용 "대 > 중 > 소" (백엔드 계산, 읽기전용)
+};
+
+// 품목 분류 트리 노드(대>중>소). parent_id 로 계층 구성.
+export type ItemCategory = {
+  id: number;
+  parent_id: number | null;
+  level: number;      // 1=대, 2=중, 3=소
+  name: string;
+  sort_order: number;
+  active: boolean;
+  path: string;       // "대 > 중 > 소"
 };
 
 export type SettingsUser = {

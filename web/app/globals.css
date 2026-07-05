@@ -5266,3 +5266,113 @@ table.mini .num {
   border-radius: 3px;
   flex: none;
 }
+
+/* ── 품목 분류(대>중>소) ─────────────────────────────────────────────────────── */
+/* Item Master 목록의 분류 경로 셀 */
+.cat-path {
+  font-size: 12px;
+  color: #33507a;
+  background: #eef3fb;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 1px 8px;
+  white-space: nowrap;
+}
+/* Item Master 폼의 분류 캐스케이딩 선택 */
+.cat-picker {
+  grid-column: 1 / -1;
+}
+.cat-picker-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+}
+.cat-picker-row select {
+  min-width: 0;
+}
+
+/* 작은 인라인 버튼(분류 트리 액션) */
+.btn.tiny {
+  height: 26px;
+  padding: 0 8px;
+  font-size: 12px;
+  line-height: 1;
+}
+
+/* 분류 관리 트리 */
+.cat-tree,
+.cat-children {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.cat-children {
+  margin-left: 18px;
+  border-left: 1px dashed var(--line-strong);
+  padding-left: 10px;
+}
+.cat-node-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 8px;
+  border-radius: 7px;
+}
+.cat-node-row:hover {
+  background: #f4f7fc;
+}
+.cat-node-name {
+  font-size: 13.5px;
+  color: #223;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cat-l1 > .cat-node-row .cat-node-name {
+  font-weight: 700;
+  color: var(--blue);
+}
+.cat-l2 > .cat-node-row .cat-node-name {
+  font-weight: 600;
+}
+.cat-node.off > .cat-node-row .cat-node-name {
+  opacity: 0.5;
+  text-decoration: line-through;
+}
+.cat-inactive {
+  font-size: 11px;
+  font-weight: 600;
+  color: #9aa7bd;
+  background: #eef1f6;
+  border-radius: 4px;
+  padding: 1px 6px;
+  text-decoration: none;
+}
+.cat-node-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.cat-node-row:hover .cat-node-actions {
+  opacity: 1;
+}
+/* 상위 분류 경로(모달 내 표시) */
+.cat-parent-path {
+  font-size: 13px;
+  color: #33507a;
+  background: #eef3fb;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 7px 10px;
+}
+@media (max-width: 720px) {
+  .cat-picker-row {
+    grid-template-columns: 1fr;
+  }
+  /* 터치 환경에선 액션 버튼 항상 노출 */
+  .cat-node-actions {
+    opacity: 1;
+  }
+}

@@ -11,7 +11,9 @@ from datetime import datetime, date as _date
 import bcrypt
 from sqlalchemy import text, inspect
 from db.engine import Base, get_engine, get_session
-from db.models import User, UserRole, DocSequence, Customer, Vendor, RFQ, Quotation, Order
+from db.models import (
+    User, UserRole, DocSequence, Customer, Vendor, RFQ, Quotation, Order, ItemCategory,
+)
 
 
 def create_tables():
@@ -77,6 +79,10 @@ _MIGRATIONS = {
     "marketing_activities": {
         "contact_person": "VARCHAR(100)",
         "recipient_email": "VARCHAR(200)",
+    },
+    "item_master": {
+        # 품목 분류 연결(대>중>소 트리의 가장 깊은 노드 id). FK 는 신규 DB 모델에서만 강제.
+        "category_id": "INTEGER",
     },
 }
 
@@ -313,6 +319,37 @@ def seed_sample_data():
         session.close()
 
 
+def seed_item_categories():
+    """품목 분류 트리(대>중>소) 기본값 seed. 이미 분류가 있으면 건너뜀(멱등).
+
+    손그림 기준: 서비스/부품 > 엔진·기타 > 2·4stroke / BWTS·Incinerator·…
+    벙커링·선용품 등은 이후 Settings에서 관리자가 추가한다."""
+    session = get_session()
+    try:
+        if session.query(ItemCategory).count() > 0:
+            print("[SKIP] Item categories already exist.")
+            return
+        equipment = ["BWTS", "Incinerator", "Elevator", "Life boat", "Crane", "ETC"]
+        tree = {
+            "서비스": {"엔진": ["2 stroke", "4 stroke"], "기타장비": list(equipment)},
+            "부품":   {"엔진": ["2 stroke", "4 stroke"], "기타":     list(equipment)},
+        }
+        for i, (l1, mids) in enumerate(tree.items()):
+            n1 = ItemCategory(name=l1, parent_id=None, level=1, sort_order=i)
+            session.add(n1)
+            session.flush()
+            for j, (l2, subs) in enumerate(mids.items()):
+                n2 = ItemCategory(name=l2, parent_id=n1.id, level=2, sort_order=j)
+                session.add(n2)
+                session.flush()
+                for k, l3 in enumerate(subs):
+                    session.add(ItemCategory(name=l3, parent_id=n2.id, level=3, sort_order=k))
+        session.commit()
+        print("[OK] Item categories seeded (서비스/부품 > 엔진·기타 > …).")
+    finally:
+        session.close()
+
+
 def migrate_remove_stage_8():
     """1회성: '단계 8'(Delivery/Service Arrangement) 제거에 따른 저장 데이터 재번호.
 
@@ -392,4 +429,5 @@ if __name__ == "__main__":
     migrate_remove_stage_8()
     seed_admin()
     seed_sample_data()
+    seed_item_categories()
     print("Done.")
