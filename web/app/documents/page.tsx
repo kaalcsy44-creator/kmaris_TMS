@@ -212,6 +212,61 @@ export function DocumentsOverview({
   const svcStage: SvcStage =
     stage === "s7" ? 7 : stage === "s8" ? 8 : 9;
 
+  // 프로젝트 워크스페이스: 내부 단계 탭바·전역 목록·New 없이 이 오더의 문서를 인라인 편집.
+  // (7단계 부품공급은 CI/PL/SA 하위 선택기는 유지 — 단계 내 문서 종류 선택이라 중복 아님.)
+  if (embedded) {
+    const orderId = orderParam ? Number(orderParam) : 0;
+    if (!orderId) {
+      return (
+        <div className="project-work-panel">
+          <div className="project-work-empty">No order for this project yet.</div>
+        </div>
+      );
+    }
+    const projectNo = orders.find((o) => o.id === orderId)?.project_no;
+    if (workView === "service") {
+      return (
+        <div className="action-tabs embedded">
+          <ServiceEditorModal
+            orderId={orderId}
+            svc={svcStage}
+            projectNo={projectNo}
+            onClose={load}
+            onChanged={load}
+            inline
+          />
+        </div>
+      );
+    }
+    const kind: DocKind = stage === "s7" ? readyDoc : stage === "s8" ? "pod" : "tax";
+    return (
+      <div className="action-tabs embedded">
+        {stage === "s7" ? (
+          <div className="seg-tabs" style={{ marginBottom: 12 }}>
+            <button className={readyDoc === "ci" ? "on" : ""} onClick={() => setReadyDoc("ci")}>
+              Commercial Invoice
+            </button>
+            <button className={readyDoc === "pl" ? "on" : ""} onClick={() => setReadyDoc("pl")}>
+              Packing List
+            </button>
+            <button className={readyDoc === "sa" ? "on" : ""} onClick={() => setReadyDoc("sa")}>
+              Shipping Advice
+            </button>
+          </div>
+        ) : null}
+        <DocEditorModal
+          key={kind}
+          orderId={orderId}
+          kind={kind}
+          projectNo={projectNo}
+          onClose={load}
+          onChanged={load}
+          inline
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="action-tabs">
       <div className="page-tabs">
@@ -499,16 +554,18 @@ function ServiceEditorModal({
   projectNo,
   onClose,
   onChanged,
+  inline,
 }: {
   orderId: number;
   svc: SvcStage;
   projectNo?: string;
   onClose: () => void;
   onChanged: () => void;
+  inline?: boolean;
 }) {
   const title = `${SVC_CFG[svc].label}${projectNo ? ` — ${projectNo}` : ""}`;
   return (
-    <Modal title={<ModalTitle label={title} projectNo={projectNo} />} onClose={onClose} wide>
+    <Modal title={<ModalTitle label={title} projectNo={projectNo} />} onClose={onClose} wide inline={inline}>
       <ServiceStageEditor orderId={orderId} svc={svc} onChanged={onChanged} onClose={onClose} />
     </Modal>
   );
@@ -983,16 +1040,18 @@ function DocEditorModal({
   projectNo,
   onClose,
   onChanged,
+  inline,
 }: {
   orderId: number;
   kind: DocKind;
   projectNo?: string;
   onClose: () => void;
   onChanged: () => void;
+  inline?: boolean;
 }) {
   const title = `${KIND_CFG[kind].label}${projectNo ? ` — ${projectNo}` : ""}`;
   return (
-    <Modal title={<ModalTitle label={title} projectNo={projectNo} />} onClose={onClose} wide>
+    <Modal title={<ModalTitle label={title} projectNo={projectNo} />} onClose={onClose} wide inline={inline}>
       <DocEditorContent orderId={orderId} kind={kind} onChanged={onChanged} />
     </Modal>
   );

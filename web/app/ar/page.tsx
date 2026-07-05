@@ -239,6 +239,30 @@ export function ArOverview({
     stageCol,
   ];
 
+  // 프로젝트 워크스페이스: 내부 단계 탭바·전역 목록·Add 없이 이 오더의 AR 작업을 인라인.
+  if (embedded) {
+    if (!data) return <div className="state">Loading...</div>;
+    const match = orderId ? rows.find((r) => r.order_id === orderId) : undefined;
+    if (!match) {
+      return (
+        <div className="project-work-panel">
+          <div className="project-work-empty">
+            No AR record for this project yet. It is created automatically when a Tax Invoice is issued.
+          </div>
+        </div>
+      );
+    }
+    return (
+      <div className="action-tabs embedded">
+        {stageTab === 10 ? (
+          <TaxIssueModal row={match} onChanged={load} onClose={load} inline />
+        ) : (
+          <PaymentModal row={match} onChanged={load} onClose={load} inline />
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="action-tabs">
       <div className="page-tabs">
@@ -356,10 +380,12 @@ function TaxIssueModal({
   row,
   onChanged,
   onClose,
+  inline,
 }: {
   row: ArRow;
   onChanged: () => void;
   onClose: () => void;
+  inline?: boolean;
 }) {
   const [detail, setDetail] = useState<DocumentDetail | null>(null);
   const [ciNo, setCiNo] = useState(row.ci_no);
@@ -431,7 +457,7 @@ function TaxIssueModal({
   }
 
   return (
-    <Modal title={<ModalTitle label={`Issue Tax Invoice — ${row.ci_no || "AR"}`} projectNo={row.project_no} />} onClose={onClose} wide>
+    <Modal title={<ModalTitle label={`Issue Tax Invoice — ${row.ci_no || "AR"}`} projectNo={row.project_no} />} onClose={onClose} wide inline={inline}>
       <OrderInfoBlock orderId={row.order_id} detail={detail} />
       <div className="milestone-row" style={{ marginBottom: 12 }}>
         <span className={`ar-badge${row.tax_issued ? "" : " overdue"}`}>
@@ -482,10 +508,12 @@ function PaymentModal({
   row,
   onChanged,
   onClose,
+  inline,
 }: {
   row: ArRow;
   onChanged: () => void;
   onClose: () => void;
+  inline?: boolean;
 }) {
   const [amount, setAmount] = useState(row.outstanding > 0 ? String(row.outstanding) : "");
   const [dueDate, setDueDate] = useState(row.due_date || today());
@@ -512,7 +540,7 @@ function PaymentModal({
   }
 
   return (
-    <Modal title={<ModalTitle label={`Record Payment — ${row.ci_no || "AR"}`} projectNo={row.project_no} />} onClose={onClose} wide>
+    <Modal title={<ModalTitle label={`Record Payment — ${row.ci_no || "AR"}`} projectNo={row.project_no} />} onClose={onClose} wide inline={inline}>
       <OrderInfoBlock orderId={row.order_id} />
       <div className="milestone-row" style={{ marginBottom: 12 }}>
         <span className={`ar-badge${row.paid_done ? "" : " overdue"}`}>
