@@ -917,14 +917,22 @@ function VendorRfqItemEditor({
       )
     );
   }
+  function add() {
+    const last = items[items.length - 1];
+    onChange([
+      ...items,
+      { part_no: "", description: "", qty: 1, unit: last?.unit || "PCS", unit_price: null, amount: null, remark: "" },
+    ]);
+  }
 
   return (
     <>
       <div className="form-section-title">Items sent</div>
-      <div className="table-wrap compact">
-        <table className="mini wide">
+      <div className="table-wrap compact item-scroll">
+        <table className="mini wide lead-tools">
           <thead>
             <tr>
+              <th className="row-tools"></th>
               <th className="seq">No.</th>
               <th>Part No.</th>
               <th>Description</th>
@@ -936,11 +944,14 @@ function VendorRfqItemEditor({
           <tbody>
             {items.length === 0 ? (
               <tr>
-                <td colSpan={6} className="mini-empty">No items (service request).</td>
+                <td colSpan={7} className="mini-empty">No items (service request).</td>
               </tr>
             ) : (
               items.map((it, i) => (
                 <tr key={i} className={itemRowClass(i)}>
+                  <td className="row-tools">
+                    <button className="row-del" onClick={() => onChange(items.filter((_, idx) => idx !== i))}>×</button>
+                  </td>
                   <td className="seq">{i + 1}</td>
                   <td><textarea {...gridCellProps(i, 0)} className="wrapcell" rows={1} value={it.part_no || ""} onChange={(e) => patch(i, "part_no", e.target.value)} /></td>
                   <td><textarea {...gridCellProps(i, 1)} className="desc" rows={1} value={it.description || ""} onChange={(e) => patch(i, "description", e.target.value)} /></td>
@@ -953,6 +964,7 @@ function VendorRfqItemEditor({
           </tbody>
         </table>
       </div>
+      <button className="btn" style={{ marginTop: 8 }} onClick={add}>Add item</button>
     </>
   );
 }
@@ -2026,7 +2038,7 @@ function VendorRfqAction({
             <b>Select &amp; edit items</b>
             <span>Uncheck items you don&apos;t want to send, edit any cell, or add rows. Only checked items go into the email, XLSX form, and the Vendor RFQ record.</span>
           </div>
-          <div className="table-wrap compact">
+          <div className="table-wrap compact item-scroll">
             <table className="mini wide">
               <thead>
                 <tr>
@@ -2375,10 +2387,11 @@ function VendorQuoteItemEditor({
   return (
     <div style={{ marginTop: 12 }}>
       <div className="sub-h">Quote items</div>
-      <div className="table-wrap">
-        <table className="mini wide">
+      <div className="table-wrap item-scroll">
+        <table className="mini wide lead-tools">
           <thead>
             <tr>
+              <th className="row-tools"></th>
               <th className="seq">No.</th>
               <th>Part No.</th>
               <th>Description</th>
@@ -2390,12 +2403,14 @@ function VendorQuoteItemEditor({
               <th className="num">Amount</th>
               <th>Lead Time</th>
               <th>Remark</th>
-              <th></th>
             </tr>
           </thead>
           <tbody>
             {items.map((it, i) => (
               <tr key={i} className={itemRowClass(i)}>
+                <td className="row-tools">
+                  <button className="row-del" disabled={items.length === 1} onClick={() => onChange(items.filter((_, idx) => idx !== i))}>×</button>
+                </td>
                 <td className="seq">{i + 1}</td>
                 <td><textarea {...gridCellProps(i, 0)} className="wrapcell" rows={1} value={it.part_no} onChange={(e) => patch(i, "part_no", e.target.value)} /></td>
                 <td><textarea {...gridCellProps(i, 1)} className="desc" rows={1} value={it.description} onChange={(e) => patch(i, "description", e.target.value)} /></td>
@@ -2407,20 +2422,17 @@ function VendorQuoteItemEditor({
                 <td className="num">{amountInputValue(Number(it.cost_price || 0) * Number(it.qty || 1))}</td>
                 <td><textarea {...gridCellProps(i, 7)} className="wrapcell" rows={1} value={it.lead_time ?? ""} onChange={(e) => patch(i, "lead_time", e.target.value)} /></td>
                 <td><textarea {...gridCellProps(i, 8)} className="wrapcell" rows={1} value={it.remark ?? ""} onChange={(e) => patch(i, "remark", e.target.value)} /></td>
-                <td>
-                  <button className="row-del" disabled={items.length === 0} onClick={() => onChange(items.filter((_, idx) => idx !== i))}>×</button>
-                </td>
               </tr>
             ))}
           </tbody>
           <tfoot>
             <tr>
-              <td colSpan={8} className="total-label">Total</td>
+              <td colSpan={9} className="total-label">Total</td>
               <td className="num total-value">
                 <DualCurrencyAmount value={total} currency={currency} />
                 <span className="fx-note">{fxRateText()}</span>
               </td>
-              <td colSpan={3}></td>
+              <td colSpan={2}></td>
             </tr>
           </tfoot>
         </table>
@@ -2898,6 +2910,24 @@ function CustomerQuoteItemEditor({
       })
     );
   }
+  // 새 품목은 마지막 행의 단위·마진을 이어받아 견적 기준과 맞춘다.
+  function add() {
+    const last = items[items.length - 1];
+    onChange([
+      ...items,
+      {
+        part_no: "",
+        description: "",
+        qty: 1,
+        unit: last?.unit || "PCS",
+        cost_price: 0,
+        margin_pct: last?.margin_pct ?? 0,
+        unit_price: 0,
+        amount: 0,
+        remark: "",
+      },
+    ]);
+  }
   const costCur = (costCurrency || "USD").toUpperCase();
   const saleCur = (currency || "USD").toUpperCase();
   const total = items.reduce((sum, it) => sum + Number(it.amount || 0), 0);
@@ -2905,10 +2935,11 @@ function CustomerQuoteItemEditor({
   return (
     <div style={{ marginTop: 12 }}>
       <div className="sub-h">Quote items</div>
-      <div className="table-wrap">
-        <table className="mini wide">
+      <div className="table-wrap item-scroll">
+        <table className="mini wide lead-tools">
           <thead>
             <tr>
+              <th className="row-tools"></th>
               <th className="seq">No.</th>
               <th>Part No.</th>
               <th>Description</th>
@@ -2924,6 +2955,9 @@ function CustomerQuoteItemEditor({
           <tbody>
             {items.map((it, i) => (
               <tr key={i} className={itemRowClass(i)}>
+                <td className="row-tools">
+                  <button className="row-del" disabled={items.length === 1} onClick={() => onChange(items.filter((_, idx) => idx !== i))}>×</button>
+                </td>
                 <td className="seq">{i + 1}</td>
                 <td><textarea {...gridCellProps(i, 0)} className="wrapcell" rows={1} value={it.part_no} onChange={(e) => patch(i, "part_no", e.target.value)} /></td>
                 <td><textarea {...gridCellProps(i, 1)} className="desc" rows={1} value={it.description} onChange={(e) => patch(i, "description", e.target.value)} /></td>
@@ -2939,7 +2973,7 @@ function CustomerQuoteItemEditor({
           </tbody>
           <tfoot>
             <tr>
-              <td colSpan={8} className="total-label">Total</td>
+              <td colSpan={9} className="total-label">Total</td>
               <td className="num total-value">
                 <DualCurrencyAmount value={total} currency={currency} />
                 <span className="fx-note">{fxRateText()}</span>
@@ -2949,6 +2983,7 @@ function CustomerQuoteItemEditor({
           </tfoot>
         </table>
       </div>
+      <button className="btn" style={{ marginTop: 8 }} onClick={add}>Add item</button>
     </div>
   );
 }

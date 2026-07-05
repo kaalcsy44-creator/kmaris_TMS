@@ -1452,10 +1452,11 @@ function ItemEditor({
   return (
     <div style={{ marginTop: 16 }}>
       <div className="sub-h">Item list</div>
-      <div className="table-wrap">
-        <table className="mini wide">
+      <div className="table-wrap item-scroll">
+        <table className="mini wide lead-tools">
           <thead>
             <tr>
+              <th className="row-tools"></th>
               <th className="seq">No.</th>
               <th>Part No.</th>
               <th>Description</th>
@@ -1465,12 +1466,20 @@ function ItemEditor({
               <th className="num">Unit price</th>
               <th className="num">Amount</th>
               <th>Remark</th>
-              <th></th>
             </tr>
           </thead>
           <tbody>
             {items.map((it, i) => (
               <tr key={i} className={itemRowClass(i)}>
+                <td className="row-tools">
+                  <button
+                    className="row-del"
+                    onClick={() => onChange(items.filter((_, idx) => idx !== i))}
+                    disabled={items.length === 1}
+                  >
+                    ×
+                  </button>
+                </td>
                 <td className="seq">{i + 1}</td>
                 <td>
                   <textarea {...gridCellProps(i, 0)} className="wrapcell" rows={1} value={it.part_no} onChange={(e) => patch(i, "part_no", e.target.value)} />
@@ -1511,26 +1520,16 @@ function ItemEditor({
                 <td>
                   <textarea {...gridCellProps(i, 7)} className="wrapcell" rows={1} value={it.remark ?? ""} onChange={(e) => patch(i, "remark", e.target.value)} />
                 </td>
-                <td>
-                  <button
-                    className="row-del"
-                    onClick={() => onChange(items.filter((_, idx) => idx !== i))}
-                    disabled={items.length === 1}
-                  >
-                    ×
-                  </button>
-                </td>
               </tr>
             ))}
           </tbody>
           <tfoot>
             <tr>
-              <td colSpan={7} className="total-label">Total</td>
+              <td colSpan={8} className="total-label">Total</td>
               <td className="num total-value">
                 <DualCurrencyAmount value={total} currency={currency} />
                 <span className="fx-note">{fxRateText()}</span>
               </td>
-              <td></td>
               <td></td>
             </tr>
           </tfoot>
