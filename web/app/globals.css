@@ -2416,6 +2416,17 @@ table.pipeline tbody tr.service .pl-stage-done {
 .progress-fab:hover {
   background: #00468c;
 }
+/* 신규 RFQ 등록 모드 — 좌측 정보 패널 안내문. */
+.intl-new-hint {
+  padding: 6px 2px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+.intl-new-hint .muted {
+  color: var(--muted);
+  font-size: 12px;
+}
 
 .pl-modal-backdrop {
   position: fixed;

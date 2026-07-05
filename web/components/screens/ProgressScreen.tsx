@@ -24,7 +24,6 @@ import CustomerName from "@/components/common/CustomerName";
 import VendorName from "@/components/common/VendorName";
 import RfqActionTabs from "@/components/RfqActionTabs";
 import NewRfqForm from "@/components/screens/NewRfqForm";
-import Modal from "@/components/common/Modal";
 import { PoActionTabs } from "@/components/screens/PoScreen";
 import { DocumentsOverview } from "@/app/documents/page";
 import { ArOverview } from "@/app/ar/page";
@@ -201,18 +200,62 @@ export default function ProgressScreen() {
         </button>
       ) : null}
       {newRfqOpen ? (
-        <Modal title="New Customer RFQ" onClose={() => setNewRfqOpen(false)} wide>
-          <NewRfqForm
-            onCreated={() => {
-              setNewRfqOpen(false);
-              reloadPipeline();
-            }}
-            onCancel={() => setNewRfqOpen(false)}
-          />
-        </Modal>
+        <PipelineModal
+          isNew
+          r={blankPipelineRow()}
+          steps={pipeline?.steps ?? []}
+          customers={customers ?? []}
+          vessels={vessels ?? []}
+          onChanged={reloadPipeline}
+          onClose={() => setNewRfqOpen(false)}
+        />
       ) : null}
     </>
   );
+}
+
+/** 신규 프로젝트용 빈 PipelineRow — "+ New RFQ" 팝업을 기존 프로젝트 모달과 동일한
+ *  껍데기(단계 탭·좌측 정보·우측 상세)로 열기 위한 시드. 저장 전까지 rfq_id=0. */
+function blankPipelineRow(): PipelineRow {
+  return {
+    rfq_id: 0,
+    order_id: 0,
+    customer_rfq_no: "",
+    kmaris_rfq_no: "",
+    work_type: "부품공급",
+    trade_type: "수출",
+    customer: "",
+    customer_id: 0,
+    vessel: "",
+    vessel_id: 0,
+    project_title: "",
+    received_at: "",
+    first_rfq_at: "",
+    project_no: "",
+    assignee: "",
+    assignee_id: 0,
+    item_count: 0,
+    crfq_at: "",
+    vrfq_vendors: "",
+    vrfq_at: "",
+    vquote_no: "",
+    vquote_at: "",
+    vendor_amount: "",
+    cquote_no: "",
+    cquote_at: "",
+    customer_amount: "",
+    customer_po_no: "",
+    customer_po_at: "",
+    vendor_po_no: "",
+    vendor_po_at: "",
+    vendor: "",
+    vendor_email: "",
+    stage: 0,
+    status: "",
+    stage_dates: {},
+    stage_auto: {},
+    stage_notes: {},
+  };
 }
 
 /** ` · ` 로 빈값을 건너뛰며 이어붙인다. */
@@ -982,6 +1025,7 @@ export function PipelineModal({
   vessels,
   onChanged,
   onClose,
+  isNew,
 }: {
   r: PipelineRow;
   steps: string[];
@@ -989,7 +1033,11 @@ export function PipelineModal({
   vessels: SettingsVessel[];
   onChanged: () => void | Promise<unknown>;
   onClose: () => void;
+  // isNew: 신규 RFQ 등록 모드 — 저장된 프로젝트가 없으므로 좌측/딜 액션은 안내로 대체하고
+  // 우측 상세 자리에 신규 RFQ 기본정보 입력 폼(NewRfqForm)을 넣는다.
+  isNew?: boolean;
 }) {
+  const isNewProject = !!isNew;
   const backdropMouseDown = useRef(false);
   // 담당(PIC) 소유권: 비관리자는 본인이 담당인 딜만 편집/삭제. 남의 건은 조회만.
   const ownsDeal = canEditDeal(r.assignee_id);
@@ -1128,13 +1176,20 @@ export function PipelineModal({
         aria-modal="true"
       >
         <div className="pl-modal-head">
-          <span className="intl-title">
-            <span className="pl-recv-label">Project No.</span>
-            <b>{r.project_no || "—"}</b>
-            <WorkTypeBadge type={r.work_type} />
-            {r.project_title ? <span className="pl-proj-name">{r.project_title}</span> : null}
-            {r.received_at ? <span className="pl-recv-at">First RFQ {fmtStageDate(r.received_at)}</span> : null}
-          </span>
+          {isNewProject ? (
+            <span className="intl-title">
+              <b>New Customer RFQ</b>
+              <span className="pl-proj-name">Register a new project</span>
+            </span>
+          ) : (
+            <span className="intl-title">
+              <span className="pl-recv-label">Project No.</span>
+              <b>{r.project_no || "—"}</b>
+              <WorkTypeBadge type={r.work_type} />
+              {r.project_title ? <span className="pl-proj-name">{r.project_title}</span> : null}
+              {r.received_at ? <span className="pl-recv-at">First RFQ {fmtStageDate(r.received_at)}</span> : null}
+            </span>
+          )}
           <span className="pl-head-right">
             <span className="pl-pic-chip">
               <span className="pl-pic-label">PIC</span>
@@ -1188,7 +1243,12 @@ export function PipelineModal({
           <div className="intl-detail">
             <div className="project-workspace-layout">
               <aside className="project-info-pane">
-            {editing ? (
+            {isNewProject ? (
+            <div className="intl-new-hint">
+              <p>Fill in the basic info on the right and click <b>Create RFQ</b>.</p>
+              <p className="muted">Once created, this project appears on the board with its stages.</p>
+            </div>
+          ) : editing ? (
             <div className="intl-edit">
               <div className="form-field">
                 <label>Work type</label>
@@ -1318,7 +1378,7 @@ export function PipelineModal({
             </dl>
           )}
 
-          {r.next_action ? (
+          {!isNewProject && r.next_action ? (
             <div className={`pl-next-banner lv-${r.next_level || "normal"}`}>
               <span className="pl-next-label">Next action</span>
               <span className="pl-next-text">{r.next_action}</span>
@@ -1326,7 +1386,8 @@ export function PipelineModal({
           ) : null}
 
           {/* 딜(프로젝트) 수준 액션 — 좌측 기본정보와 함께. 단계 레코드 편집(우측)과
-              분리되어 하단 버튼 중복을 없앤다. */}
+              분리되어 하단 버튼 중복을 없앤다. 신규 등록 모드에서는 감춘다. */}
+          {!isNewProject ? (
           <div className="pl-deal-actions">
             {!ownsDeal && can("rfq", "edit") ? (
               <span className="hint-inline" title={r.assignee ? `PIC: ${r.assignee}` : undefined}>
@@ -1353,15 +1414,28 @@ export function PipelineModal({
               </button>
             ) : null}
           </div>
+          ) : null}
               </aside>
 
               <section className="project-stage-pane">
-            <WorkspacePanel
-              stage={selectedStage}
-              area={areaForStage(selectedStage)}
-              row={r}
-              onChanged={onChanged}
-            />
+            {isNewProject ? (
+              <div className="project-work-panel embedded-workspace embedded-detail">
+                <NewRfqForm
+                  onCreated={() => {
+                    onChanged();
+                    onClose();
+                  }}
+                  onCancel={onClose}
+                />
+              </div>
+            ) : (
+              <WorkspacePanel
+                stage={selectedStage}
+                area={areaForStage(selectedStage)}
+                row={r}
+                onChanged={onChanged}
+              />
+            )}
               </section>
             </div>
           </div>
