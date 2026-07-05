@@ -396,6 +396,8 @@ function EmbeddedCustomerQuote({ rfqId, onChanged }: { rfqId: number | null; onC
   const [loaded, setLoaded] = useState(false);
   const [selId, setSelId] = useState<number | null>(null);
   const [adding, setAdding] = useState(false);
+  // Cancel(첫 견적) 시 폼을 초기화하려고 remount 하기 위한 key.
+  const [formSeq, setFormSeq] = useState(0);
   const load = useCallback(() => {
     fetchQuotationOverview()
       .then((d) => setRows(d.rows))
@@ -411,9 +413,10 @@ function EmbeddedCustomerQuote({ rfqId, onChanged }: { rfqId: number | null; onC
       <div className="embedded-detail">
         <EmbeddedAddBar label="Create & send a Customer quotation" onBack={mine.length ? () => setAdding(false) : undefined} />
         <CustomerQuoteAction
+          key={formSeq}
           rfqId={rfqId ?? 0}
           onDone={() => { setAdding(false); load(); onChanged(); }}
-          onCancel={mine.length ? () => setAdding(false) : undefined}
+          onCancel={mine.length ? () => setAdding(false) : () => setFormSeq((s) => s + 1)}
         />
       </div>
     );
@@ -2774,6 +2777,14 @@ function CustomerQuoteAction({
 
       <div className="form-actions">
         <StageTotal label="Final" value={finalTotal} currency={currency} />
+        <button
+          className="btn danger"
+          disabled
+          title="No saved quotation to delete yet"
+          style={{ marginRight: "auto" }}
+        >
+          Delete
+        </button>
         <button className="btn primary" onClick={submit} disabled={busy || items.length === 0}>
           {busy ? "Saving…" : "Save"}
         </button>
