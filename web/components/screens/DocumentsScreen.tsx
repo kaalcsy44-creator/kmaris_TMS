@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   documentDownloadUrl,
@@ -22,7 +22,6 @@ import type { DocRow, DocumentDetail, DocumentWorkItem } from "@/lib/types";
 import { fetchDocumentsOverview } from "@/lib/api";
 import { useCachedData, invalidateCache } from "@/lib/useCachedData";
 import { tr } from "@/lib/labels";
-import AppShell, { SectionHead } from "@/components/AppShell";
 import FilterTable, { ColumnDef } from "@/components/common/FilterTable";
 import { identityColumns, projectNoColumn } from "@/components/common/identityColumns";
 import VendorName from "@/components/common/VendorName";
@@ -44,19 +43,6 @@ const today = () => new Date().toISOString().slice(0, 10);
 // 문서 편집 권한 = 역할 권한(documents.edit) × 담당(PIC) 소유권. 없으면 읽기전용.
 function canEditDoc(data: DocumentDetail | null | undefined): boolean {
   return can("documents", "edit") && canEditDeal(data?.order.assignee_id);
-}
-
-// 목록은 진행현황(내부확인용) 통합 목록으로 이전됨. 이 화면은 문서(CI/PL/SA/Tax) 작업
-// 전용이며, 대상 오더는 진행현황의 "문서 작업"으로 넘어온 ?order=<id> 로 선택된다.
-export default function DocumentsPage() {
-  return (
-    <AppShell active="documents" wide>
-      <SectionHead title="Documents" sub="Create & send CI · PL · SA · Tax per order" />
-      <Suspense fallback={<div className="state">Loading…</div>}>
-        <DocumentsOverview />
-      </Suspense>
-    </AppShell>
-  );
 }
 
 type StageTab = "s7" | "s8" | "s9";
@@ -203,7 +189,7 @@ export function DocumentsOverview({
   }
   function close() {
     setEditing(null);
-    if (orderParam && !embedded) router.replace("/documents");
+    if (orderParam && !embedded) router.replace("/progress");
   }
 
   // 현재 단계에 해당하는 (부품공급) 문서 종류. 7단계는 CI/PL/SA seg-tab.

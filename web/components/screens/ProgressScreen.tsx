@@ -1,7 +1,7 @@
 "use client";
 
-import { Suspense, useCallback, useRef, useState } from "react";
-import Link from "next/link";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   fetchPipeline,
   fetchRfqOverview,
@@ -25,8 +25,8 @@ import VendorName from "@/components/common/VendorName";
 import RfqActionTabs from "@/components/RfqActionTabs";
 import NewRfqForm from "@/components/screens/NewRfqForm";
 import { PoActionTabs } from "@/components/screens/PoScreen";
-import { DocumentsOverview } from "@/app/documents/page";
-import { ArOverview } from "@/app/ar/page";
+import { DocumentsOverview } from "@/components/screens/DocumentsScreen";
+import { ArOverview } from "@/components/screens/ArScreen";
 import { tr } from "@/lib/labels";
 import { getUser, can, isOwnScoped, canEditDeal } from "@/lib/auth";
 
@@ -72,16 +72,6 @@ const STAGE_PHASES: { label: string; count: number }[] = [
 // 5개 중분류 accent(보드 컬럼과 동일) — 타임라인 점 색상에 사용.
 // RFQ~AR 중분류 색은 구분하지 않고 단일 파란색으로 통일(보드 컬럼과 동일).
 const PHASE_ACCENTS = ["#0055a8", "#0055a8", "#0055a8", "#0055a8", "#0055a8"];
-// 각 중분류(phase) → 담당 워크스페이스 화면 + 단계 범위. 보드를 허브로: 컬럼 헤더에서
-// 해당 단계 작업 화면으로 바로 이동(모달의 단계별 딥링크와 함께 양방향 연결).
-// RFQ·Quote 는 같은 'RFQ & Quotation' 화면(/rfq)에서 다뤄진다.
-const PHASE_WORKSPACE: { href: string; range: string }[] = [
-  { href: "/rfq", range: "1–2" },
-  { href: "/rfq", range: "3–4" },
-  { href: "/po", range: "5–6" },
-  { href: "/documents", range: "7–9" },
-  { href: "/ar", range: "10–11" },
-];
 
 /** 현재 단계(stage)가 속한 중분류 인덱스. 미시작(0)이면 -1. */
 function phaseIndexOfStage(stage: number): number {
@@ -111,6 +101,29 @@ export default function ProgressScreen() {
   const [tab, setTab] = useState<Tab>("internal");
   // 신규 RFQ 등록 팝업 — 화면 우측 하단 버튼으로 연다.
   const [newRfqOpen, setNewRfqOpen] = useState(false);
+  // 딥링크(?rfq=<id> | ?order=<id> [&stage=N]) — 대시보드·전역검색 등에서 넘어오면
+  // 내부확인용 목록의 해당 프로젝트 팝업을 그 단계로 연다. (모든 단계 작업의 단일 진입점)
+  const router = useRouter();
+  const params = useSearchParams();
+  const deepRfq = params.get("rfq");
+  const deepOrder = params.get("order");
+  const deepStage = params.get("stage");
+  const [deepLink, setDeepLink] = useState<{
+    rfqId: number | null;
+    orderId: number | null;
+    stage: number | null;
+  } | null>(null);
+  useEffect(() => {
+    if (!deepRfq && !deepOrder) return;
+    setTab("internal");
+    setDeepLink({
+      rfqId: deepRfq ? Number(deepRfq) : null,
+      orderId: deepOrder ? Number(deepOrder) : null,
+      stage: deepStage ? Number(deepStage) : null,
+    });
+    // URL 정리 — 새로고침마다 같은 팝업이 다시 열리지 않도록 파라미터를 제거한다.
+    router.replace("/progress", { scroll: false });
+  }, [deepRfq, deepOrder, deepStage, router]);
   // 내부확인용·고객확인용 모두 통합 파이프라인(rows) 사용. 단계 체계만 12 vs 7로 다름.
   const {
     data: pipeline,
@@ -184,6 +197,9 @@ export default function ProgressScreen() {
               customers={customers ?? []}
               vessels={vessels ?? []}
               onChanged={reloadPipeline}
+              openRfqId={deepLink?.rfqId ?? null}
+              openOrderId={deepLink?.orderId ?? null}
+              openStage={deepLink?.stage ?? null}
             />
           )}
         </>
@@ -410,6 +426,9 @@ function PipelineTable({
   onChanged,
   stageOf = (r) => r.stage,
   tableId = "progress-internal",
+  openRfqId = null,
+  openOrderId = null,
+  openStage = null,
 }: {
   rows: PipelineRow[];
   steps: string[];
@@ -420,8 +439,32 @@ function PipelineTable({
   stageOf?: (r: PipelineRow) => number;
   // 컬럼 커스터마이즈 저장 키(내부/고객 뷰 별도)
   tableId?: string;
+  // 딥링크: rfq_id(우선) 또는 order_id 로 해당 프로젝트 팝업을 openStage 단계로 1회 자동 오픈.
+  openRfqId?: number | null;
+  openOrderId?: number | null;
+  openStage?: number | null;
 }) {
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  // 딥링크로 열 때만 지정 단계로 진입. 수동 오픈 시엔 null → 해당 프로젝트의 현재 단계로.
+  const [deepStage, setDeepStage] = useState<number | null>(null);
+  // 딥링크 1회 소비 가드(행 로드 지연·재렌더 시 닫은 팝업이 다시 열리지 않도록).
+  const deepConsumed = useRef(false);
+  // 목록·상세 모달 공용 오픈 헬퍼(수동 오픈은 지정 단계 없음).
+  const openRow = useCallback((id: number) => {
+    setSelectedId(id);
+    setDeepStage(null);
+  }, []);
+  useEffect(() => {
+    if (deepConsumed.current) return;
+    if (!openRfqId && !openOrderId) return;
+    if (rows.length === 0) return; // 목록 로드 대기
+    const id =
+      openRfqId ?? rows.find((r) => r.order_id === openOrderId)?.rfq_id ?? null;
+    if (!id) return;
+    deepConsumed.current = true;
+    setSelectedId(id);
+    setDeepStage(openStage && openStage > 0 ? openStage : null);
+  }, [openRfqId, openOrderId, openStage, rows]);
   // 목록 표시 방식: 표(table) / 칸반 보드(board). 같은 데이터·같은 상세 모달 재사용.
   const [view, setView] = useState<"table" | "board">("table");
   // 기본 정렬: 관리번호(Project No.) 내림차순 — 최근 프로젝트가 맨 위.
@@ -721,7 +764,7 @@ function PipelineTable({
           steps={steps}
           stageOf={stageOf}
           selectedId={selectedId}
-          onSelect={setSelectedId}
+          onSelect={openRow}
         />
       ) : (
       <div className="pl-table-wrap">
@@ -787,7 +830,7 @@ function PipelineTable({
                     className={`${isService ? "service " : ""}${
                       selectedId === r.rfq_id ? "sel" : ""
                     }`}
-                    onClick={() => setSelectedId(r.rfq_id)}
+                    onClick={() => openRow(r.rfq_id)}
                   >
                     {orderedColumns.map((c) => (
                       <PipelineCell
@@ -816,7 +859,11 @@ function PipelineTable({
           customers={customers}
           vessels={vessels}
           onChanged={onChanged}
-          onClose={() => setSelectedId(null)}
+          initialStage={deepStage}
+          onClose={() => {
+            setSelectedId(null);
+            setDeepStage(null);
+          }}
         />
       ) : null}
     </>
@@ -853,15 +900,11 @@ function PipelineBoard({
     ? STAGE_PHASES.map((p, pi) => ({
         label: p.label,
         accent: pi,
-        href: PHASE_WORKSPACE[pi]?.href as string | undefined,
-        range: PHASE_WORKSPACE[pi]?.range as string | undefined,
         match: (st: number) => phaseIndexOfStage(st) === pi,
       }))
     : steps.map((label, i) => ({
         label: `${i + 1}. ${label}`,
         accent: i % 4,
-        href: undefined as string | undefined,
-        range: undefined as string | undefined,
         match: (st: number) => st === i + 1,
       }));
 
@@ -872,18 +915,8 @@ function PipelineBoard({
         return (
           <section key={ci} className="pl-board-col" data-accent={col.accent}>
             <header className="pl-board-head">
-              {col.href ? (
-                <Link
-                  href={col.href}
-                  className="pl-board-title link"
-                  title={`${col.label} — open workspace`}
-                >
-                  {col.label}
-                  {col.range ? <span className="pl-board-range">{col.range}</span> : null}
-                </Link>
-              ) : (
-                <span className="pl-board-title" title={col.label}>{col.label}</span>
-              )}
+              {/* 단계 작업은 카드 클릭 → 프로젝트 팝업에서 처리(별도 작업 페이지 없음). */}
+              <span className="pl-board-title" title={col.label}>{col.label}</span>
               <span className="pl-board-count">{cards.length}</span>
             </header>
             <div className="pl-board-list">
@@ -1027,6 +1060,7 @@ export function PipelineModal({
   onChanged,
   onClose,
   isNew,
+  initialStage = null,
 }: {
   r: PipelineRow;
   steps: string[];
@@ -1037,6 +1071,8 @@ export function PipelineModal({
   // isNew: 신규 RFQ 등록 모드 — 저장된 프로젝트가 없으므로 좌측/딜 액션은 안내로 대체하고
   // 우측 상세 자리에 신규 RFQ 기본정보 입력 폼(NewRfqForm)을 넣는다.
   isNew?: boolean;
+  // 딥링크로 열 때 진입할 단계(1~11). null 이면 프로젝트의 현재 단계로 연다.
+  initialStage?: number | null;
 }) {
   const isNewProject = !!isNew;
   const backdropMouseDown = useRef(false);
@@ -1050,7 +1086,7 @@ export function PipelineModal({
   const [saving, setSaving] = useState(false);
   // 단계 상세 표시: 단계별 그룹(stages, 편집 가능) / 시간순 여정(timeline, 읽기전용)
   const [selectedStage, setSelectedStage] = useState<StageTabKey>(
-    Math.min(Math.max(r.stage || 1, 1), 11)
+    Math.min(Math.max(initialStage || r.stage || 1, 1), 11)
   );
   // 편집 필드(편집 진입 시 r 값으로 seed)
   const [fWorkType, setFWorkType] = useState(r.work_type || "부품공급");

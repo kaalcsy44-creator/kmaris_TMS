@@ -237,7 +237,7 @@ function HomeTab() {
           due: q.valid_until,
           days: daysBetween(t, q.valid_until),
           amount: dualCurrencyText(q.amount, q.currency),
-          href: q.rfq_id ? `/rfq?rfq=${q.rfq_id}&tab=cquote` : "/rfq",
+          href: q.rfq_id ? `/progress?rfq=${q.rfq_id}&stage=4` : "/progress",
           rfq_id: q.rfq_id || undefined,
         });
       }
@@ -253,7 +253,7 @@ function HomeTab() {
           due: a.due_date,
           days: daysBetween(t, a.due_date),
           amount: dualCurrencyText(a.outstanding, a.currency),
-          href: `/ar?order=${a.order_id}`,
+          href: `/progress?order=${a.order_id}&stage=11`,
           order_id: a.order_id || undefined,
         });
       }
@@ -357,7 +357,7 @@ function HomeTab() {
           getRowKey={(r) => r.id}
           defaultSortKey="date"
           defaultSortDir="desc"
-          onRowClick={(r) => openByRfqId(r.rfq_id, r.rfq_id ? `/rfq?rfq=${r.rfq_id}&tab=cquote` : "/rfq")}
+          onRowClick={(r) => openByRfqId(r.rfq_id, r.rfq_id ? `/progress?rfq=${r.rfq_id}&stage=4` : "/progress")}
           empty="No quotations submitted yet."
         />
       ),
@@ -375,7 +375,7 @@ function HomeTab() {
           getRowKey={(r) => r.id}
           defaultSortKey="datetime"
           defaultSortDir="desc"
-          onRowClick={(r) => openByRfqId(r.rfq_id, `/rfq?rfq=${r.rfq_id}`)}
+          onRowClick={(r) => openByRfqId(r.rfq_id, `/progress?rfq=${r.rfq_id}`)}
           empty="No activity recorded yet."
         />
       ),
@@ -393,7 +393,7 @@ function HomeTab() {
           getRowKey={(r) => r.id}
           defaultSortKey="date"
           defaultSortDir="desc"
-          onRowClick={(r) => openByOrderId(r.order_id, `/ar?order=${r.order_id}`)}
+          onRowClick={(r) => openByOrderId(r.order_id, `/progress?order=${r.order_id}&stage=11`)}
           empty="No sales records yet."
         />
       ),
@@ -1015,10 +1015,12 @@ function AlertCard({
 }) {
   const router = useRouter();
   function go(r: StatAlertRow) {
-    if (kind === "quote" && r.rfq_id) router.push(`/rfq?rfq=${r.rfq_id}&tab=cquote`);
-    else if (kind === "ar" && r.order_id) router.push(`/ar?order=${r.order_id}`);
-    else if (kind === "po") router.push("/po");
-    else router.push("/documents");
+    // 모든 단계 작업은 진행현황(Progress) 프로젝트 팝업으로 통합됨 → 딥링크로 해당 단계를 연다.
+    if (kind === "quote" && r.rfq_id) router.push(`/progress?rfq=${r.rfq_id}&stage=4`);
+    else if (kind === "ar" && r.order_id) router.push(`/progress?order=${r.order_id}&stage=11`);
+    else if (r.rfq_id) router.push(`/progress?rfq=${r.rfq_id}`);
+    else if (r.order_id) router.push(`/progress?order=${r.order_id}`);
+    else router.push("/progress");
   }
   return (
     <div className="stat-alert">

@@ -10,21 +10,11 @@ type SubItem = { href: string; label: string };
 type Item = { href: string; label: string; key: string; sub?: SubItem[] };
 
 // 평면 상단 메뉴 — 페이지 자체가 주요 메뉴. 설정은 우측 톱니 아이콘으로 분리.
+// RFQ·견적 / P/O / Documents / AR 은 진행현황(Progress) 프로젝트 팝업의 단계별 작업으로
+// 통합되어 상단 메뉴에서 제거했다. 라우트(/rfq·/po·/documents·/ar)는 딥링크용으로 유지된다.
 const ITEMS: Item[] = [
   { href: "/", label: "Dashboard", key: "dashboard" },
   { href: "/progress", label: "Progress", key: "progress" },
-  { href: "/rfq", label: "RFQ & Quotation", key: "rfq" },
-  { href: "/po", label: "P/O", key: "po" },
-  {
-    href: "/documents",
-    label: "Documents",
-    key: "documents",
-    sub: [
-      { href: "/documents?view=parts", label: "Parts (Delivery)" },
-      { href: "/documents?view=service", label: "Service" },
-    ],
-  },
-  { href: "/ar", label: "AR", key: "ar" },
   { href: "/marketing", label: "Marketing", key: "marketing" },
 ];
 

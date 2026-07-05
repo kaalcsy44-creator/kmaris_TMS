@@ -888,22 +888,14 @@ def health():
 
 
 def _search_href(stage: int, rfq_id: int, order_id: int, is_service: bool) -> str:
-    """검색 결과 클릭 시 이동할 화면. ProgressScreen.stageHref 와 동일한 단계→페이지 규칙."""
-    view = "service" if is_service else "parts"
-    if stage <= 4:
-        tab = {1: "new", 2: "vrfq", 3: "vquote", 4: "cquote"}.get(stage, "new")
-        return f"/rfq?rfq={rfq_id}&tab={tab}"
-    if order_id <= 0:
-        return f"/rfq?rfq={rfq_id}"
-    if stage == 5:
-        return f"/po?order={order_id}&tab=customer"
-    if stage == 6:
-        return f"/po?order={order_id}&tab=vendor"
-    if 7 <= stage <= 8:
-        return f"/documents?order={order_id}&view={view}&stage={stage}"
-    if stage == 9 and is_service:
-        return f"/ar?order={order_id}"
-    return f"/documents?order={order_id}&view={view}"
+    """검색 결과 클릭 시 이동할 화면. 모든 단계 작업이 진행현황(Progress) 프로젝트 팝업으로
+    통합되었으므로, rfq_id(우선) 또는 order_id + 단계를 딥링크로 넘겨 해당 단계로 연다."""
+    st = stage if stage and stage > 0 else 1
+    if rfq_id and rfq_id > 0:
+        return f"/progress?rfq={rfq_id}&stage={st}"
+    if order_id and order_id > 0:
+        return f"/progress?order={order_id}&stage={st}"
+    return "/progress"
 
 
 def _item_view(it: dict) -> dict:

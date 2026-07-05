@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   arSoaXlsxUrl,
@@ -17,7 +17,6 @@ import { getToken, can, canEditDeal, editBlockReason } from "@/lib/auth";
 import { useCachedData, invalidateCache } from "@/lib/useCachedData";
 import type { ArRow, DocumentDetail, PoWorkOptions } from "@/lib/types";
 import { tr } from "@/lib/labels";
-import AppShell from "@/components/AppShell";
 import FilterTable, { ColumnDef } from "@/components/common/FilterTable";
 import { identityColumns, projectNoColumn, fmtRfqDateTime } from "@/components/common/identityColumns";
 import VendorName from "@/components/common/VendorName";
@@ -57,16 +56,6 @@ const emptyForm: ArForm = {
   status: "미수",
   notes: "",
 };
-
-export default function ArPage() {
-  return (
-    <AppShell active="ar" wide>
-      <Suspense fallback={<div className="state">Loading...</div>}>
-        <ArOverview />
-      </Suspense>
-    </AppShell>
-  );
-}
 
 function money(n: number) {
   return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -121,7 +110,7 @@ export function ArOverview({
   function closePopup() {
     setEditing(null);
     setAdding(false);
-    if (orderParam && !embedded) router.replace("/ar");
+    if (orderParam && !embedded) router.replace("/progress");
   }
 
   async function exportSoa() {
