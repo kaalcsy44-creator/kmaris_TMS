@@ -1604,11 +1604,6 @@ function CustomerQuoteDetailModal({
                 Apply margin to all
               </button>
             </div>
-            <div className="form-field" style={{ alignSelf: "end" }}>
-              <button className="btn" onClick={importFromVendorQuote} disabled={importVqId === ""}>
-                Load Vendor quote
-              </button>
-            </div>
           </div>
 
           <div className="form-grid">
@@ -1654,7 +1649,18 @@ function CustomerQuoteDetailModal({
               </select>
             </div>
           </div>
-          <CustomerQuoteItemEditor items={items} onChange={setItems} currency={currency} costCurrency={costCurrency} roundDigits={roundDigits} />
+          <CustomerQuoteItemEditor
+            items={items}
+            onChange={setItems}
+            currency={currency}
+            costCurrency={costCurrency}
+            roundDigits={roundDigits}
+            headerActions={
+              <button className="btn sm" onClick={importFromVendorQuote} disabled={importVqId === ""}>
+                Load Vendor quote
+              </button>
+            }
+          />
           <DiscountSummary
             subtotal={total}
             discountPct={discountPct}
@@ -2690,8 +2696,6 @@ function CustomerQuoteAction({
 
   return (
     <div>
-      <div className="sub-h">Create & Send Customer Quotation</div>
-
       <div className="po-work-note">
         <b>Load from Vendor quote — recommended</b>
         <span>Selecting a supplier quote loads its items and cost, then applies the default margin.</span>
@@ -2732,11 +2736,6 @@ function CustomerQuoteAction({
             Apply margin to all
           </button>
         </div>
-        <div className="form-field" style={{ alignSelf: "end" }}>
-          <button className="btn" onClick={importFromVendorQuote} disabled={importVqId === ""}>
-            Load Vendor quote
-          </button>
-        </div>
       </div>
 
       <div className="form-grid">
@@ -2775,7 +2774,18 @@ function CustomerQuoteAction({
         </div>
       </div>
 
-      <CustomerQuoteItemEditor items={items} onChange={setItems} currency={currency} costCurrency={costCurrency} roundDigits={roundDigits} />
+      <CustomerQuoteItemEditor
+        items={items}
+        onChange={setItems}
+        currency={currency}
+        costCurrency={costCurrency}
+        roundDigits={roundDigits}
+        headerActions={
+          <button className="btn sm" onClick={importFromVendorQuote} disabled={importVqId === ""}>
+            Load Vendor quote
+          </button>
+        }
+      />
 
       <DiscountSummary
         subtotal={total}
@@ -2899,12 +2909,15 @@ function CustomerQuoteItemEditor({
   currency = "USD",
   costCurrency = "USD",
   roundDigits = DEFAULT_ROUND_DIGITS,
+  headerActions,
 }: {
   items: CustomerQuoteItem[];
   onChange: (items: CustomerQuoteItem[]) => void;
   currency?: string;
   costCurrency?: string;
   roundDigits?: number;
+  // 품목표 헤더의 "+ Add" 옆 보조 액션(예: "Load Vendor quote").
+  headerActions?: React.ReactNode;
 }) {
   function patch(i: number, key: keyof CustomerQuoteItem, value: string) {
     onChange(
@@ -2954,7 +2967,10 @@ function CustomerQuoteItemEditor({
     <div style={{ marginTop: 12 }}>
       <div className="items-head">
         <div className="sub-h">Item list</div>
-        <button className="btn sm items-head-add" onClick={add}>+ Add</button>
+        <div className="items-head-actions">
+          {headerActions}
+          <button className="btn sm items-head-add" onClick={add}>+ Add</button>
+        </div>
       </div>
       <div className="table-wrap item-scroll">
         <table className="mini wide lead-tools">
