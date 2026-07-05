@@ -34,13 +34,11 @@ export default function NewRfqForm({
   onCreated,
   onCancel,
   onDeleted,
-  selectedRfqId,
   autoLoadId,
 }: {
   onCreated?: (rfqNo: string) => void;
   onCancel?: () => void;
   onDeleted?: () => void;        // 삭제 후 콜백(있으면 삭제 버튼 표시)
-  selectedRfqId?: number | null; // 상단에서 선택된 RFQ — 불러와 수정 가능
   autoLoadId?: number | null;    // 마운트 시 해당 RFQ를 즉시 불러와 수정 모드 진입
 }) {
   const [editId, setEditId] = useState<number | null>(null); // null=신규, >0=수정
@@ -331,46 +329,6 @@ export default function NewRfqForm({
 
   return (
     <div className="panel form-panel" onPaste={handlePaste}>
-      <div className="rfq-mode-bar">
-        {editId ? (
-          <>
-            {canEditThis ? (
-              <>
-                <span className="rfq-mode-tag edit">✎ Edit mode</span>
-                <span className="hint-inline">Editing an existing RFQ.</span>
-              </>
-            ) : (
-              <>
-                <span className="rfq-mode-tag">🔒 View only</span>
-                <span className="hint-inline">{editBlockReason("rfq", assigneeId).replace(/^View only — /, "")}</span>
-              </>
-            )}
-            {can("rfq", "create") ? (
-              <button className="btn" style={{ marginLeft: "auto" }} onClick={resetForm}>
-                + New RFQ
-              </button>
-            ) : null}
-          </>
-        ) : (
-          <>
-            <span className="rfq-mode-tag new">+ New</span>
-            {selectedRfqId ? (
-              <button
-                className="btn"
-                style={{ marginLeft: "auto" }}
-                onClick={() => loadRfq(selectedRfqId)}
-                disabled={busy}
-              >
-                📂 Load & edit selected RFQ
-              </button>
-            ) : (
-              <span className="hint-inline">
-                Pick an "Active project" above to load and edit it.
-              </span>
-            )}
-          </>
-        )}
-      </div>
       <fieldset className="form-fieldset" disabled={!canEditThis}>
       {/* 도구 모음 — 평소엔 접혀 있고, 버튼으로 필요한 패널만 펼친다. */}
       <div className="form-tools">
