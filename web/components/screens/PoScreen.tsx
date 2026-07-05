@@ -1451,7 +1451,10 @@ function ItemEditor({
 
   return (
     <div style={{ marginTop: 16 }}>
-      <div className="sub-h">Item list</div>
+      <div className="items-head">
+        <div className="sub-h">Item list</div>
+        <button className="btn sm items-head-add" onClick={() => onChange([...items, blankItem()])}>+ Add</button>
+      </div>
       <div className="table-wrap item-scroll">
         <table className="mini wide lead-tools">
           <thead>
@@ -1535,9 +1538,6 @@ function ItemEditor({
           </tfoot>
         </table>
       </div>
-      <button className="btn" style={{ marginTop: 10 }} onClick={() => onChange([...items, blankItem()])}>
-        Add item
-      </button>
     </div>
   );
 }

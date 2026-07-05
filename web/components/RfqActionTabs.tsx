@@ -927,7 +927,10 @@ function VendorRfqItemEditor({
 
   return (
     <>
-      <div className="form-section-title">Items sent</div>
+      <div className="items-head">
+        <div className="form-section-title">Items sent</div>
+        <button className="btn sm items-head-add" onClick={add}>+ Add</button>
+      </div>
       <div className="table-wrap compact item-scroll">
         <table className="mini wide lead-tools">
           <thead>
@@ -964,7 +967,6 @@ function VendorRfqItemEditor({
           </tbody>
         </table>
       </div>
-      <button className="btn" style={{ marginTop: 8 }} onClick={add}>Add item</button>
     </>
   );
 }
@@ -2031,8 +2033,11 @@ function VendorRfqAction({
       </div>
       {rfqId ? (
         <>
-          <div className="form-section-title">
-            Items to send ({effectiveItems.length}/{rfqItems.length} selected)
+          <div className="items-head">
+            <div className="form-section-title">
+              Items to send ({effectiveItems.length}/{rfqItems.length} selected)
+            </div>
+            <button className="btn sm items-head-add" onClick={addItem}>+ Add</button>
           </div>
           <div className="po-work-note">
             <b>Select &amp; edit items</b>
@@ -2088,7 +2093,6 @@ function VendorRfqAction({
               </tbody>
             </table>
           </div>
-          <button className="btn" style={{ marginTop: 8 }} onClick={addItem}>Add item</button>
         </>
       ) : null}
 
@@ -2386,7 +2390,10 @@ function VendorQuoteItemEditor({
 
   return (
     <div style={{ marginTop: 12 }}>
-      <div className="sub-h">Quote items</div>
+      <div className="items-head">
+        <div className="sub-h">Quote items</div>
+        <button className="btn sm items-head-add" onClick={add}>+ Add</button>
+      </div>
       <div className="table-wrap item-scroll">
         <table className="mini wide lead-tools">
           <thead>
@@ -2437,7 +2444,6 @@ function VendorQuoteItemEditor({
           </tfoot>
         </table>
       </div>
-      <button className="btn" style={{ marginTop: 8 }} onClick={add}>Add item</button>
     </div>
   );
 }
@@ -2934,7 +2940,10 @@ function CustomerQuoteItemEditor({
 
   return (
     <div style={{ marginTop: 12 }}>
-      <div className="sub-h">Quote items</div>
+      <div className="items-head">
+        <div className="sub-h">Quote items</div>
+        <button className="btn sm items-head-add" onClick={add}>+ Add</button>
+      </div>
       <div className="table-wrap item-scroll">
         <table className="mini wide lead-tools">
           <thead>
@@ -2983,7 +2992,6 @@ function CustomerQuoteItemEditor({
           </tfoot>
         </table>
       </div>
-      <button className="btn" style={{ marginTop: 8 }} onClick={add}>Add item</button>
     </div>
   );
 }

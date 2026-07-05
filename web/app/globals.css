@@ -3382,6 +3382,23 @@ table.mini tfoot .total-value {
   opacity: 0.4;
   cursor: not-allowed;
 }
+/* 품목 표 헤더 — 제목(좌) + Add 버튼(우상단). */
+.items-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 14px 0 8px;
+}
+.items-head > .sub-h,
+.items-head > .form-section-title {
+  margin: 0;
+  padding-top: 0;
+}
+.items-head .items-head-add {
+  flex: 0 0 auto;
+}
+
 /* ── 품목 편집 표 — 목록만 세로 스크롤(헤더·합계 고정) ─────────────────────
    폼 전체가 아니라 품목 표 안에서만 스크롤되게 한다. 어떤 mini 표에도 안전. */
 .table-wrap.item-scroll {
