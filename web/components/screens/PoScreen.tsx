@@ -254,6 +254,7 @@ function OrderDetailModal({
   const [ocrMsg, setOcrMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [showOcr, setShowOcr] = useState(false); // Auto-fill 도구 접힘/펼침(1단계와 동일 포맷)
 
   // 행 클릭 시 읽기전용 단계를 건너뛰고 바로 편집: 상세를 불러와 필드를 채운다.
   useEffect(() => {
@@ -287,6 +288,22 @@ function OrderDetailModal({
     setCurrency(q.currency || "USD");
     setItems(q.items.length ? q.items.map(normalizeItem) : [blankItem()]);
     setOcrMsg(`Loaded ${q.items.length} item(s) from quotation ${q.qtn_no}.`);
+  }
+
+  // "Load customer RFQ" — 연결된 Customer RFQ(1단계) 품목으로 채운다.
+  // (별도 Customer P/O 파일이 없을 때, RFQ 요청 품목을 그대로 불러오기 위함.)
+  function loadCustomerRfqItems() {
+    const rno = detail?.rfq_no && detail.rfq_no !== "-" ? detail.rfq_no : "";
+    const crno = detail?.customer_rfq_no && detail.customer_rfq_no !== "-" ? detail.customer_rfq_no : "";
+    const rfq = options.rfqs.find(
+      (r) => (rno && r.rfq_no === rno) || (crno && r.customer_rfq_no === crno)
+    );
+    if (!rfq) {
+      setErr("Linked Customer RFQ not found.");
+      return;
+    }
+    setItems(rfq.items.length ? rfq.items.map(normalizeItem) : [blankItem()]);
+    setOcrMsg(`Loaded ${rfq.items.length} item(s) from Customer RFQ.`);
   }
 
   function matchByName<T extends { name: string }>(
@@ -406,37 +423,45 @@ function OrderDetailModal({
           ) : null}
 
           <fieldset className="form-fieldset" disabled={!canEditThis}>
-          <div className="po-work-note">
-            <b>Auto-fill order items</b>
-            <span>Upload a customer P/O PDF or image, or load item/amount data from a previous quotation.</span>
+          <div className="form-tools">
+            <button
+              type="button"
+              className={`tool-btn${showOcr ? " on" : ""}`}
+              onClick={() => setShowOcr((v) => !v)}
+            >
+              📄 Auto-fill
+            </button>
           </div>
-          <div className="form-grid">
-            <div className="form-field">
-              <label>Upload customer P/O</label>
+          {showOcr ? (
+            <div className="ocr-bar">
+              <span className="ocr-bar-label">📄 Customer P/O auto-fill</span>
               <input
                 type="file"
                 accept=".pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/*"
                 onChange={(e) => uploadOrderFile(e.target.files?.[0] ?? null)}
                 disabled={ocrBusy || busy}
               />
-            </div>
-            <div className="form-field">
-              <label>Load from quotation</label>
               <select
                 value={quotationId}
                 onChange={(e) => loadQuotation(e.target.value ? Number(e.target.value) : "")}
+                title="Load items from a quotation"
               >
-                <option value="">Manual entry</option>
+                <option value="">Load from quotation…</option>
                 {options.quotations.map((q) => (
                   <option key={q.id} value={q.id}>
                     {q.qtn_no} · {q.customer} · {dualCurrencyText(q.amount, q.currency)}
                   </option>
                 ))}
               </select>
+              {ocrBusy ? (
+                <span className="hint-inline">Analyzing…</span>
+              ) : ocrMsg ? (
+                <span className="action-ok">{ocrMsg}</span>
+              ) : (
+                <span className="hint-inline">Upload a customer P/O PDF/image, or load from a quotation → auto-fill</span>
+              )}
             </div>
-          </div>
-          {ocrBusy ? <span className="hint-inline">Analyzing…</span> : null}
-          {ocrMsg ? <span className="action-ok">{ocrMsg}</span> : null}
+          ) : null}
 
           <div className="form-grid">
             <div className="form-field">
@@ -477,7 +502,23 @@ function OrderDetailModal({
               <input type="date" value={promised} onChange={(e) => setPromised(e.target.value)} />
             </div>
           </div>
-          <ItemEditor items={items} onChange={setItems} currency={currency} />
+          <ItemEditor
+            items={items}
+            onChange={setItems}
+            currency={currency}
+            headerActions={
+              canEditThis ? (
+                <button
+                  className="btn sm"
+                  onClick={loadCustomerRfqItems}
+                  disabled={busy}
+                  title="Load items from the linked Customer RFQ (when there is no separate P/O file)"
+                >
+                  Load customer RFQ
+                </button>
+              ) : null
+            }
+          />
           </fieldset>
           <div className="form-actions">
             <StageTotal
