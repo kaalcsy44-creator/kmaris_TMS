@@ -10,6 +10,7 @@ import {
   fetchMarketingOverview,
   fetchSchedule,
   fetchCustomers,
+  fetchSettingsVessels,
   fetchStatistics,
   createSchedule,
   updateSchedule,
@@ -22,6 +23,7 @@ import type {
   QtnRow, PipelineRow, ArRow, MarketingRow, MarketingOverview,
   ScheduleRow, CustomerOption, StatisticsData, StatAlertRow, CurrencyKey,
 } from "@/lib/types";
+import { PipelineModal } from "@/components/screens/ProgressScreen";
 import {
   ResponsiveContainer, LineChart, Line, BarChart, Bar,
   XAxis, YAxis, Tooltip, CartesianGrid, Legend, Cell, LabelList,
@@ -133,13 +135,17 @@ type DelayRow = {
   days: number;
   amount: string;
   href: string;
+  rfq_id?: number;
+  order_id?: number;
 };
 
 function HomeTab() {
   const router = useRouter();
-  const { data: qtn } = useCachedData("home:quotations", () => fetchQuotationOverview());
-  const { data: pipeline } = useCachedData("pipeline", () => fetchPipeline());
-  const { data: ar } = useCachedData("ar:overview", fetchArOverview);
+  const { data: qtn, refresh: refreshQtn } = useCachedData("home:quotations", () => fetchQuotationOverview());
+  const { data: pipeline, refresh: refreshPipeline } = useCachedData("pipeline", () => fetchPipeline());
+  const { data: ar, refresh: refreshAr } = useCachedData("ar:overview", fetchArOverview);
+  // 프로젝트 상세 팝업(Progress 화면과 동일한 모달)용 — 편집 셀렉터에 쓰는 고객사·선박 목록.
+  const { data: vessels } = useCachedData("settings:vessels", fetchSettingsVessels);
   // 마케팅 요약 — 열람 권한이 있을 때만 로드(없으면 카드 미표시).
   const canMarketing = can("marketing", "view");
   const { data: marketing } = useCachedData(
@@ -156,6 +162,41 @@ function HomeTab() {
   const qtnRows = useMemo(() => qtn?.rows ?? [], [qtn]);
   const arRows = useMemo(() => ar?.rows ?? [], [ar]);
   const schedRows = useMemo(() => schedule?.rows ?? [], [schedule]);
+
+  // 대시보드 목록에서 프로젝트 행 클릭 → Progress 화면과 동일한 상세 팝업을 연다.
+  // rfq_id 만 보관하고 최신 파이프라인에서 행을 다시 찾는다(모달 내 편집/삭제가
+  // 저장 후 즉시 반영되고, 삭제되면 자동으로 닫히도록).
+  const [openRfqId, setOpenRfqId] = useState<number | null>(null);
+  const pipeRows = useMemo(() => pipeline?.rows ?? [], [pipeline]);
+  const steps = useMemo(() => pipeline?.steps ?? [], [pipeline]);
+  const byRfqId = useMemo(() => {
+    const m = new Map<number, PipelineRow>();
+    for (const r of pipeRows) m.set(r.rfq_id, r);
+    return m;
+  }, [pipeRows]);
+  const byOrderId = useMemo(() => {
+    const m = new Map<number, PipelineRow>();
+    for (const r of pipeRows) if (r.order_id) m.set(r.order_id, r);
+    return m;
+  }, [pipeRows]);
+  const openProject = openRfqId != null ? byRfqId.get(openRfqId) ?? null : null;
+
+  // rfq_id/order_id 로 프로젝트를 찾아 팝업을 연다. 파이프라인에 없으면(권한/필터 등)
+  // 기존처럼 해당 워크스페이스로 이동(fallback).
+  function openByRfqId(rfqId: number | null | undefined, fallback: string) {
+    if (rfqId && byRfqId.has(rfqId)) setOpenRfqId(rfqId);
+    else router.push(fallback);
+  }
+  function openByOrderId(orderId: number | null | undefined, fallback: string) {
+    const row = orderId ? byOrderId.get(orderId) : undefined;
+    if (row) setOpenRfqId(row.rfq_id);
+    else router.push(fallback);
+  }
+
+  async function reloadAfterProjectEdit() {
+    invalidateCache("dashboard");
+    await Promise.all([refreshPipeline(), refreshQtn(), refreshAr()]);
+  }
 
   // 담당자 활동 기록 — 파이프라인 단계별 stage_notes 를 한 줄씩 펼친다.
   const activityRows = useMemo<ActivityRow[]>(() => {
@@ -197,6 +238,7 @@ function HomeTab() {
           days: daysBetween(t, q.valid_until),
           amount: dualCurrencyText(q.amount, q.currency),
           href: q.rfq_id ? `/rfq?rfq=${q.rfq_id}&tab=cquote` : "/rfq",
+          rfq_id: q.rfq_id || undefined,
         });
       }
     }
@@ -212,6 +254,7 @@ function HomeTab() {
           days: daysBetween(t, a.due_date),
           amount: dualCurrencyText(a.outstanding, a.currency),
           href: `/ar?order=${a.order_id}`,
+          order_id: a.order_id || undefined,
         });
       }
     }
@@ -314,7 +357,7 @@ function HomeTab() {
           getRowKey={(r) => r.id}
           defaultSortKey="date"
           defaultSortDir="desc"
-          onRowClick={(r) => router.push(r.rfq_id ? `/rfq?rfq=${r.rfq_id}&tab=cquote` : "/rfq")}
+          onRowClick={(r) => openByRfqId(r.rfq_id, r.rfq_id ? `/rfq?rfq=${r.rfq_id}&tab=cquote` : "/rfq")}
           empty="No quotations submitted yet."
         />
       ),
@@ -332,7 +375,7 @@ function HomeTab() {
           getRowKey={(r) => r.id}
           defaultSortKey="datetime"
           defaultSortDir="desc"
-          onRowClick={(r) => router.push(`/rfq?rfq=${r.rfq_id}`)}
+          onRowClick={(r) => openByRfqId(r.rfq_id, `/rfq?rfq=${r.rfq_id}`)}
           empty="No activity recorded yet."
         />
       ),
@@ -350,7 +393,7 @@ function HomeTab() {
           getRowKey={(r) => r.id}
           defaultSortKey="date"
           defaultSortDir="desc"
-          onRowClick={(r) => router.push(`/ar?order=${r.order_id}`)}
+          onRowClick={(r) => openByOrderId(r.order_id, `/ar?order=${r.order_id}`)}
           empty="No sales records yet."
         />
       ),
@@ -369,7 +412,7 @@ function HomeTab() {
           defaultSortKey="due"
           defaultSortDir="asc"
           rowClassName={() => "danger"}
-          onRowClick={(r) => router.push(r.href)}
+          onRowClick={(r) => (r.rfq_id ? openByRfqId(r.rfq_id, r.href) : openByOrderId(r.order_id, r.href))}
           empty="No delayed items. 🎉"
         />
       ),
@@ -459,6 +502,17 @@ function HomeTab() {
             onChanged={reloadSchedule}
           />
         </Modal>
+      ) : null}
+
+      {openProject ? (
+        <PipelineModal
+          r={openProject}
+          steps={steps}
+          customers={customers ?? []}
+          vessels={vessels ?? []}
+          onChanged={reloadAfterProjectEdit}
+          onClose={() => setOpenRfqId(null)}
+        />
       ) : null}
     </div>
   );

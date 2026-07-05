@@ -948,7 +948,7 @@ function PipelineCell({
 /** 통합 파이프라인 상세 모달 — 테이블 행 클릭 시 전 구간 문서 체인을 팝업으로 보여준다.
  *  헤더: RFQ No. · 업무 타입 · 고객사 · 선박 · 프로젝트 제목 + 닫기
  *  본문: 핵심 메타 + 6구간 문서 체인 + 12단계 완료 일시 + RFQ/P·O 작업 바로가기 */
-function PipelineModal({
+export function PipelineModal({
   r,
   steps,
   customers,
