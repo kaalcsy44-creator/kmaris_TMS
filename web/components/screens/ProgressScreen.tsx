@@ -103,7 +103,7 @@ function fmtStageDate(iso: string): string {
 
 type Tab = "customer" | "internal";
 type WorkspaceArea = "rfq" | "po" | "documents" | "ar";
-type StageTabKey = number | "timeline";
+type StageTabKey = number;
 
 export default function ProgressScreen() {
   const [tab, setTab] = useState<Tab>("internal");
@@ -1126,7 +1126,7 @@ function PipelineModal({
             const no = c.no;
             const cls = [
               selectedStage === no ? "on" : "",
-              no < r.stage ? "done" : "",
+              no <= r.stage ? "done" : "",
               no === r.stage ? "current" : "",
               c.skip ? "skip" : "",
             ]
@@ -1150,17 +1150,6 @@ function PipelineModal({
               </button>
             );
           })}
-          <button
-            type="button"
-            className={`st-timeline${selectedStage === "timeline" ? " on" : ""}`}
-            aria-pressed={selectedStage === "timeline"}
-            onClick={() => setSelectedStage("timeline")}
-          >
-            <span className="st-head">
-              <span className="st-no">TL</span>
-              <b className="st-label">Timeline</b>
-            </span>
-          </button>
         </div>
 
         <div className="pl-modal-body">
@@ -1335,17 +1324,12 @@ function PipelineModal({
               </aside>
 
               <section className="project-stage-pane">
-
-          {selectedStage === "timeline" ? (
-            <DealTimeline chain={chain} stageNotes={r.stage_notes} steps={rSteps} />
-          ) : (
             <WorkspacePanel
               stage={selectedStage}
               area={areaForStage(selectedStage)}
               row={r}
               onChanged={onChanged}
             />
-          )}
               </section>
             </div>
           </div>
