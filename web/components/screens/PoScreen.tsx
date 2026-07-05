@@ -41,6 +41,7 @@ import type {
   PoWorkOptions,
   VendorPoPreview,
   PurchaseOrderDetail,
+  VendorQuoteOverviewRow,
 } from "@/lib/types";
 
 type OrderOpt = PoWorkOptions["orders"][number];
@@ -1104,12 +1105,29 @@ function VendorPoCreate({
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  // 프로젝트별 벤더 견적 — 선택한 order의 프로젝트에 견적을 준 벤더로 목록을 좁힌다.
+  const [vendorQuotes, setVendorQuotes] = useState<VendorQuoteOverviewRow[]>([]);
 
   useEffect(() => {
     if (selectedOrderId) setOrderId(selectedOrderId);
   }, [selectedOrderId]);
 
+  useEffect(() => {
+    let alive = true;
+    fetchVendorQuoteOverview()
+      .then((r) => { if (alive) setVendorQuotes(r.rows); })
+      .catch(() => undefined);
+    return () => { alive = false; };
+  }, []);
+
   const order = options.orders.find((o) => o.id === orderId);
+  // 견적 준 벤더(이름) + 현재 선택. 견적 정보 없으면 전체.
+  const quotedVendors = new Set(
+    order ? vendorQuotes.filter((x) => x.project_no === order.project_no).map((x) => x.vendor) : []
+  );
+  const vendorChoices = options.vendors.filter(
+    (v) => quotedVendors.size === 0 || quotedVendors.has(v.name) || v.id === vendorId
+  );
 
   useEffect(() => {
     if (order) {
@@ -1162,7 +1180,7 @@ function VendorPoCreate({
           <label>Select vendor</label>
           <select value={vendorId} onChange={(e) => setVendorId(e.target.value ? Number(e.target.value) : "")}>
             <option value="">— None —</option>
-            {options.vendors.map((v) => (
+            {vendorChoices.map((v) => (
               <option key={v.id} value={v.id}>
                 {v.name}
               </option>
