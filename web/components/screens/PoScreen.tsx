@@ -782,16 +782,6 @@ function VendorPoDetailModal({
           ) : null}
 
           <fieldset className="form-fieldset" disabled={!canEditThis}>
-          <div className="po-work-note">
-            <b>Load from previous step</b>
-            <span>Reload the item list and amounts from the linked Customer P/O order.</span>
-          </div>
-          <div className="form-actions" style={{ marginTop: 0 }}>
-            <button className="btn" onClick={loadOrderItems} disabled={busy}>
-              Load order items
-            </button>
-          </div>
-
           <div className="form-grid">
             <div className="form-field">
               <label>Vendor</label>
@@ -819,7 +809,18 @@ function VendorPoDetailModal({
               <input value={status} onChange={(e) => setStatus(e.target.value)} />
             </div>
           </div>
-          <ItemEditor items={items} onChange={setItems} currency={d.currency || "USD"} />
+          <ItemEditor
+            items={items}
+            onChange={setItems}
+            currency={d.currency || "USD"}
+            headerActions={
+              canEditThis ? (
+                <button className="btn sm" onClick={loadOrderItems} disabled={busy} title="Reload items from the linked Customer P/O">
+                  Load order items
+                </button>
+              ) : null
+            }
+          />
           </fieldset>
           <div className="form-actions">
             <StageTotal
@@ -1452,10 +1453,13 @@ function ItemEditor({
   items,
   onChange,
   currency = "USD",
+  headerActions,
 }: {
   items: PoWorkItem[];
   onChange: (items: PoWorkItem[]) => void;
   currency?: string;
+  // 품목표 헤더의 "+ Add" 옆에 넣을 보조 액션(예: "Load order items").
+  headerActions?: React.ReactNode;
 }) {
   function patch(i: number, key: keyof PoWorkItem, value: string) {
     onChange(
@@ -1474,7 +1478,10 @@ function ItemEditor({
     <div style={{ marginTop: 16 }}>
       <div className="items-head">
         <div className="sub-h">Item list</div>
-        <button className="btn sm items-head-add" onClick={() => onChange([...items, blankItem()])}>+ Add</button>
+        <div className="items-head-actions">
+          {headerActions}
+          <button className="btn sm items-head-add" onClick={() => onChange([...items, blankItem()])}>+ Add</button>
+        </div>
       </div>
       <div className="table-wrap item-scroll">
         <table className="mini wide lead-tools">

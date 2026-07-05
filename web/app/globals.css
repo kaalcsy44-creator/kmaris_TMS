@@ -3466,6 +3466,12 @@ table.mini tfoot .total-value {
 .items-head .items-head-add {
   flex: 0 0 auto;
 }
+.items-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
 
 /* ── 품목 편집 표 — 목록만 세로 스크롤(헤더·합계 고정) ─────────────────────
    폼 전체가 아니라 품목 표 안에서만 스크롤되게 한다. 어떤 mini 표에도 안전. */
