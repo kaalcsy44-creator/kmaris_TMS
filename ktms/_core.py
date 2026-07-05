@@ -865,9 +865,23 @@ def health():
     # DB 백엔드 종류만 노출(자격증명 X). sqlite 면 임시 디스크일 수 있어 재배포 시
     # 데이터가 사라질 수 있으므로 persistent=false 로 경고.
     backend = get_engine().url.get_backend_name()
+    # 가벼운 SELECT 1 으로 DB를 함께 깨운다(Neon 은 유휴 시 컴퓨트를 잠재우므로,
+    # keep-alive 핑이 백엔드뿐 아니라 DB 콜드 스타트까지 예방하게 한다).
+    # DB 장애가 서버 liveness(=Render health check)를 깨뜨리지 않도록 예외는 삼킨다.
+    db_ok = False
+    try:
+        s = get_session()
+        try:
+            s.execute(text("SELECT 1"))
+            db_ok = True
+        finally:
+            s.close()
+    except Exception:
+        db_ok = False
     return {
         "status": "ok",
         "db": backend,
+        "db_ok": db_ok,
         "persistent": backend != "sqlite",
         "build": API_BUILD,
     }

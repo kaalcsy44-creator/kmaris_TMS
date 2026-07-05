@@ -10,7 +10,10 @@ services:
   - type: web
     name: ktms-admin-api
     runtime: python
-    plan: free
+    # starter: 무료 플랜과 달리 유휴 시 서버를 잠재우지 않아 콜드 스타트(최초
+    # 로딩 30~50초 지연)가 사라진다. 적용하려면 Render 대시보드에 결제수단이
+    # 등록돼 있어야 하며, 블루프린트 동기화 시 요금제가 반영된다.
+    plan: starter
     rootDir: ktms
     buildCommand: pip install -r requirements-api.txt
     # init_db.py is idempotent (create-if-missing tables/admin), so it is safe
