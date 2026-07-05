@@ -846,19 +846,19 @@ function VendorRfqDetailModal({
                 </div>
                 <div className="form-field">
                   <label>K-Maris RFQ No.</label>
-                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                    <select value={noMode} onChange={(e) => setNoMode(e.target.value as "auto" | "manual")} style={{ flex: "0 0 auto", width: 150 }}>
-                      <option value="auto">Auto-generate</option>
-                      <option value="manual">Manual entry</option>
+                  {d.kmaris_rfq_no && d.kmaris_rfq_no !== "-" ? (
+                    <input value={d.kmaris_rfq_no} disabled />
+                  ) : noMode === "auto" ? (
+                    <select value="auto" onChange={(e) => { if (e.target.value === "manual") setNoMode("manual"); }}>
+                      <option value="auto">{autoNo ? `${autoNo} (auto)` : "Auto-generate"}</option>
+                      <option value="manual">Manual entry…</option>
                     </select>
-                    {noMode === "manual" ? (
-                      <input value={manualNo} onChange={(e) => setManualNo(e.target.value)} placeholder="KMS-RFQ-…" style={{ flex: 1 }} />
-                    ) : (
-                      <span className="hint-inline">
-                        {d.kmaris_rfq_no && d.kmaris_rfq_no !== "-" ? d.kmaris_rfq_no : (autoNo || "Auto on save")}
-                      </span>
-                    )}
-                  </div>
+                  ) : (
+                    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                      <input value={manualNo} onChange={(e) => setManualNo(e.target.value)} placeholder="KMS-RFQ-…" autoFocus style={{ flex: 1 }} />
+                      <button type="button" className="btn sm" onClick={() => setNoMode("auto")} title="Use auto number">auto</button>
+                    </div>
+                  )}
                 </div>
                 <div className="form-field">
                   <label>Recipient email</label>
@@ -2100,22 +2100,17 @@ function VendorRfqAction({
       <div className="form-field">
         <label>K-Maris RFQ No.</label>
         {unassigned ? (
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <select value={noMode} onChange={(e) => setNoMode(e.target.value as "auto" | "manual")} style={{ flex: "0 0 auto", width: 150 }}>
-              <option value="auto">Auto-generate</option>
-              <option value="manual">Manual entry</option>
+          noMode === "auto" ? (
+            <select value="auto" onChange={(e) => { if (e.target.value === "manual") setNoMode("manual"); }} style={{ maxWidth: 320 }}>
+              <option value="auto">{autoNo ? `${autoNo} (auto)` : "Auto-generate"}</option>
+              <option value="manual">Manual entry…</option>
             </select>
-            {noMode === "manual" ? (
-              <input
-                style={{ flex: 1, maxWidth: 320 }}
-                value={manualNo}
-                onChange={(e) => setManualNo(e.target.value)}
-                placeholder="KMS-RFQ-…"
-              />
-            ) : (
-              <span className="hint-inline">{autoNo ? `${autoNo} (auto)` : "Auto-generated on send"}</span>
-            )}
-          </div>
+          ) : (
+            <div style={{ display: "flex", gap: 6, alignItems: "center", maxWidth: 320 }}>
+              <input value={manualNo} onChange={(e) => setManualNo(e.target.value)} placeholder="KMS-RFQ-…" autoFocus style={{ flex: 1 }} />
+              <button type="button" className="btn sm" onClick={() => setNoMode("auto")} title="Use auto number">auto</button>
+            </div>
+          )
         ) : (
           <div className="action-ctx" style={{ margin: 0 }}>
             Issued: <b>{kmarisNo}</b>
