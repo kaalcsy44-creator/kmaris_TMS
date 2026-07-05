@@ -4517,7 +4517,7 @@ table.mini .num {
   font-size: 10.5px;
   font-weight: 800;
 }
-/* 단계 제목 — 굵고 진하게(주요). 좁은 폭에서 2줄까지 표시. */
+/* 단계 제목 — 미완료 단계는 회색톤으로 옅게(완료 단계에서 override). 좁은 폭에서 2줄까지 표시. */
 .project-stage-tabs .st-label {
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -4525,7 +4525,7 @@ table.mini .num {
   overflow: hidden;
   font-size: 10.5px;
   font-weight: 700;
-  color: var(--ink);
+  color: var(--muted);
   line-height: 1.15;
 }
 /* 주요 결과물 — 제목과 구분되게 이탤릭·연한색(타임라인 스타일 참고). */
@@ -4555,27 +4555,42 @@ table.mini .num {
   color: var(--muted);
   font-style: normal;
 }
-/* 완료 단계(done): 번호 원형과 같은 파란 계열 음영으로 명시. */
-.project-stage-tabs button.done {
-  background: #e8f1fe;
-  border-color: #cfe1fb;
-  color: var(--ink);
-}
-.project-stage-tabs button.done .st-no,
+/* 미완료 단계에서 보고 있는/현재 번호 원형만 파란 배경으로 강조. */
 .project-stage-tabs button.current .st-no,
 .project-stage-tabs button.on .st-no {
   background: var(--blue);
   color: #fff;
 }
-.project-stage-tabs button.done .st-label,
 .project-stage-tabs button.current .st-label,
 .project-stage-tabs button.on .st-label {
   color: var(--navy);
 }
-/* 현재 단계(current): 완료 음영 + 진한 파란 테두리로 활성 표시. */
+/* 완료 단계(done): "+New quotation" 버튼과 동일한 파란 배경으로 색상 반전 — 미완료와 명확히 구분. */
+.project-stage-tabs button.done {
+  background: var(--blue);
+  border-color: var(--blue);
+  color: #fff;
+}
+/* 반전된 완료 박스에서는 요소 색을 뒤집는다: 번호는 흰 배경·파란 글씨, 텍스트는 흰색 계열. */
+.project-stage-tabs button.done .st-no {
+  background: #fff;
+  color: var(--blue);
+}
+.project-stage-tabs button.done .st-label {
+  color: #fff;
+}
+.project-stage-tabs button.done .st-val {
+  color: rgba(255, 255, 255, 0.9);
+}
+.project-stage-tabs button.done .st-at {
+  color: rgba(255, 255, 255, 0.82);
+}
+.project-stage-tabs button.done.skip .st-val {
+  color: rgba(255, 255, 255, 0.9);
+}
+/* 현재 단계(current): 완료 반전 배경 + 진한 파란 테두리로 활성 표시. */
 .project-stage-tabs button.current {
   border-color: var(--blue);
-  color: var(--ink);
 }
 /* 보고 있는 단계(on): 파란 아웃라인으로 선택을 뚜렷하게(음영과 무관하게 우선). */
 .project-stage-tabs button.on {
