@@ -10,6 +10,11 @@ services:
   - type: web
     name: ktms-admin-api
     runtime: python
+    # DB(Neon)가 싱가포르에 있으므로 API 도 같은 리전으로 둬야 DB 왕복 지연이 사라진다.
+    # 기존 Oregon(US West) ↔ Neon Singapore 는 태평양 횡단이라 쿼리마다 ~1초 손해.
+    # 주의: Render 는 기존 서비스의 리전을 in-place 로 변경할 수 없다. 이 값은
+    #       서비스 재생성(블루프린트로 신규 생성)으로만 적용된다.
+    region: singapore
     # starter: 무료 플랜과 달리 유휴 시 서버를 잠재우지 않아 콜드 스타트(최초
     # 로딩 30~50초 지연)가 사라진다. 적용하려면 Render 대시보드에 결제수단이
     # 등록돼 있어야 하며, 블루프린트 동기화 시 요금제가 반영된다.
