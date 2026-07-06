@@ -2368,7 +2368,6 @@ function VendorQuoteAction({
 
   return (
     <div onPaste={handlePaste}>
-      <div className="sub-h">Register Vendor Quote</div>
       {vendorRfqs.length === 0 ? (
         <span className="hint-inline">Select a project with a sent Vendor RFQ to enable saving.</span>
       ) : null}
