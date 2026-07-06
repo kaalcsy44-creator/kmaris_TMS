@@ -4257,6 +4257,93 @@ table.mini .num {
   min-width: 0;
 }
 
+/* ── 로고가 붙는 고객사 선택 드롭다운(CustomerSelect) ─────────────────────────── */
+.cust-select {
+  position: relative;
+  min-width: 320px;
+  max-width: 100%;
+  flex: 1;
+}
+.cust-select-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  font-size: 13px;
+  text-align: left;
+  border: 1px solid #c7d0de;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+}
+.cust-select-btn:disabled {
+  background: #f1f4f9;
+  color: #8a96a8;
+  cursor: not-allowed;
+}
+.cust-select-val {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+.cust-select-caret {
+  color: #8a96a8;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+.cust-select-placeholder {
+  color: #8a96a8;
+}
+/* 메뉴는 body 로 portal + position:fixed(인라인 스타일). 여기선 그 외 표현만. */
+.cust-select-menu {
+  z-index: 2000;
+  padding: 6px;
+  background: #fff;
+  border: 1px solid #c7d0de;
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(20, 35, 65, 0.22);
+}
+.cust-select-search {
+  width: 100%;
+  padding: 6px 9px;
+  margin-bottom: 6px;
+  font-size: 13px;
+  border: 1px solid var(--line-strong, #cbd8e8);
+  border-radius: 6px;
+}
+.cust-select-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.cust-select-opt {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 6px 8px;
+  font-size: 13px;
+  text-align: left;
+  background: none;
+  border: 0;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.cust-select-opt:hover {
+  background: #eef3fb;
+}
+.cust-select-opt.on {
+  background: #e1ebfb;
+}
+.cust-select-empty {
+  padding: 10px 8px;
+  font-size: 13px;
+  color: #8a96a8;
+  text-align: center;
+}
+
 /* 고객 관리 폼의 로고 붙여넣기 필드 */
 .logo-field {
   grid-column: 1 / -1;

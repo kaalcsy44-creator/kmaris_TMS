@@ -15,6 +15,7 @@ import type { MarketingRow, CustomerOption } from "@/lib/types";
 import { can, canEditDeal, editBlockReason } from "@/lib/auth";
 import FilterTable, { ColumnDef } from "@/components/common/FilterTable";
 import CustomerName from "@/components/common/CustomerName";
+import CustomerSelect from "@/components/common/CustomerSelect";
 import Modal from "@/components/common/Modal";
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -260,19 +261,13 @@ function MarketingForm({
       <fieldset className="form-fieldset" disabled={!canEdit}>
         <div className="project-select">
           <label>Customer (registered)</label>
-          <select
+          <CustomerSelect
             value={form.customer_id}
-            onChange={(e) =>
-              setForm({ ...form, customer_id: e.target.value ? Number(e.target.value) : "" })
-            }
-          >
-            <option value="">— Prospect (not registered) —</option>
-            {customers.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+            options={customers}
+            onChange={(id) => setForm({ ...form, customer_id: id })}
+            emptyLabel="— Prospect (not registered) —"
+            disabled={!canEdit}
+          />
         </div>
         <div className="form-grid">
           {form.customer_id === "" ? (
