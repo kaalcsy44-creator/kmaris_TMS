@@ -2328,6 +2328,42 @@ function VendorQuoteAction({
     }
   }
 
+  // "Load Vendor RFQ" — 선택한 Vendor RFQ에 보낸 품목을 그대로 불러와 단가만 입력하게 한다.
+  async function loadVendorRfqItems() {
+    if (vrfqId === "") return;
+    const hasData = items.some((it) => it.part_no || it.description || Number(it.qty) || Number(it.cost_price));
+    if (hasData && !confirm("Replace the current items with the selected Vendor RFQ items?")) return;
+    setBusy(true);
+    setErr(null);
+    setParseMsg(null);
+    try {
+      const d = await fetchVendorRfqDetail(vrfqId);
+      const loaded: VendorQuoteItem[] = (d.items || [])
+        .filter((it) => it.part_no || it.description || it.qty)
+        .map((it) => ({
+          part_no: it.part_no || "",
+          description: it.description || "",
+          maker: "",
+          origin: "",
+          qty: it.qty || 1,
+          unit: it.unit || "PCS",
+          cost_price: null,
+          lead_time: "",
+          remark: it.remark || "",
+        }));
+      setItems(loaded);
+      setParseMsg(
+        loaded.length
+          ? `Loaded ${loaded.length} item(s) from Vendor RFQ — enter unit prices`
+          : "The selected Vendor RFQ has no items."
+      );
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Failed to load Vendor RFQ items");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function submit() {
     if (vrfqId === "") return;
     setBusy(true);
@@ -2435,7 +2471,22 @@ function VendorQuoteAction({
             </div>
           ) : null}
 
-          <VendorQuoteItemEditor items={items} onChange={setItems} currency={currency} />
+          <VendorQuoteItemEditor
+            items={items}
+            onChange={setItems}
+            currency={currency}
+            headerActions={
+              <button
+                type="button"
+                className="btn sm"
+                onClick={loadVendorRfqItems}
+                disabled={busy || vrfqId === ""}
+                title={vrfqId === "" ? "Select a Vendor RFQ first" : "Load items from the selected Vendor RFQ"}
+              >
+                Load Vendor RFQ
+              </button>
+            }
+          />
 
           <QuotationTermsEditor terms={terms} onChange={setTerms} />
 
