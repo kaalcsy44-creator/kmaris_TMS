@@ -15,6 +15,7 @@ import {
 } from "@/lib/api";
 import type { CustomerOption, SettingsVessel } from "@/lib/types";
 import { can, canEditDeal, editBlockReason } from "@/lib/auth";
+import CustomerName from "@/components/common/CustomerName";
 
 type ItemRow = { part_no: string; description: string; qty: string; remark: string };
 
@@ -46,6 +47,7 @@ export default function NewRfqForm({
   embedded?: boolean;
 }) {
   const [editId, setEditId] = useState<number | null>(null); // null=신규, >0=수정
+  const [loadedRfqNo, setLoadedRfqNo] = useState("");        // 로드된 K-Maris RFQ No.(상단 헤드라인용)
   const [assigneeId, setAssigneeId] = useState<number>(0);   // 편집 대상 RFQ의 담당자(PIC)
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
   const [vessels, setVessels] = useState<SettingsVessel[]>([]);
@@ -248,6 +250,7 @@ export default function NewRfqForm({
     try {
       const d = await fetchRfqDetail(id);
       setEditId(id);
+      setLoadedRfqNo(d.rfq_no || "");
       setAssigneeId(d.assignee_id ?? 0);
       setCustomerId(d.customer_id || "");
       setVesselId(d.vessel_id || "");
@@ -331,8 +334,18 @@ export default function NewRfqForm({
     }
   }
 
+  const customerName = customerId === "" ? "" : (customers.find((c) => c.id === customerId)?.name || "");
+
   return (
     <div className={embedded ? undefined : "panel form-panel"} onPaste={handlePaste}>
+      {embedded && editId ? (
+        <div className="embedded-record-bar">
+          <span className="embedded-record-current">
+            <CustomerName name={customerName} />
+            {loadedRfqNo ? <b className="rec-doc-no">{loadedRfqNo}</b> : null}
+          </span>
+        </div>
+      ) : null}
       <fieldset className="form-fieldset" disabled={!canEditThis}>
       {/* 도구 모음 — 평소엔 접혀 있고, 버튼으로 필요한 패널만 펼친다. */}
       <div className="form-tools">

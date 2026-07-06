@@ -5191,15 +5191,31 @@ table.mini .num {
 .embedded-record-bar .embedded-record-picker {
   margin-bottom: 0;
 }
-/* 레코드가 1건일 때(선택 탭 없음) 현재 Vendor 를 좌측에 표시. */
+/* 레코드가 1건일 때(선택 탭 없음) 상단에 표시하는 통일 헤드라인:
+   [로고] 회사이름(작게) + 등록번호(RFQ·견적, 크게 강조). 모든 단계 동일 포맷. */
 .embedded-record-current {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  font-weight: 700;
-  color: #1f2a3d;
 }
-.embedded-record-current .rec-quote-no {
+/* 로고 옆 회사이름은 작게 — 보조 정보로 둔다. */
+.embedded-record-current .cust-name-text {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.embedded-record-current .cust-logo {
+  width: 18px;
+  height: 18px;
+}
+/* 등록번호(RFQ·견적)는 크게 강조. */
+.embedded-record-current .rec-doc-no {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--blue);
+}
+/* 선택 탭(멀티 레코드) 안에서 번호를 칩으로 표시. */
+.rec-quote-no {
   font-weight: 500;
   font-size: 12.5px;
   color: #5b6b85;
@@ -5207,18 +5223,6 @@ table.mini .num {
   border: 1px solid var(--line);
   border-radius: 999px;
   padding: 2px 9px;
-}
-/* 단건 문서(견적 등) 번호를 상단에 라벨과 함께 표시. */
-.embedded-record-current .rec-doc-label {
-  font-weight: 600;
-  font-size: 12px;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
-}
-.embedded-record-current .rec-doc-no {
-  font-size: 15px;
-  color: var(--blue);
 }
 /* 등록 폼 상단 바(뒤로 + 제목). */
 .embedded-add-head {

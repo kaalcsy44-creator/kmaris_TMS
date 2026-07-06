@@ -55,6 +55,7 @@ import WorkTypeBadge from "./WorkTypeBadge";
 import FilterTable, { ColumnDef } from "./common/FilterTable";
 import { identityColumns, projectNoColumn, statusColumns } from "./common/identityColumns";
 import VendorName from "./common/VendorName";
+import CustomerName from "./common/CustomerName";
 import { imageFromClipboard } from "@/lib/imagePaste";
 import Modal from "./common/Modal";
 import BaseMetaRows, { ModalTitle } from "./common/BaseMeta";
@@ -400,7 +401,7 @@ function EmbeddedVendorQuote({ rfqId, onChanged }: { rfqId: number | null; onCha
         ) : (
           <span className="embedded-record-current">
             <VendorName name={selected.vendor || ""} />
-            {selected.vendor_quote_no ? <span className="rec-quote-no">{selected.vendor_quote_no}</span> : null}
+            {selected.vendor_quote_no ? <b className="rec-doc-no">{selected.vendor_quote_no}</b> : null}
           </span>
         )}
         <button type="button" className="btn primary sm" onClick={() => setAdding(true)}>+ Register another</button>
@@ -449,7 +450,7 @@ function EmbeddedCustomerQuote({ rfqId, onChanged }: { rfqId: number | null; onC
           <RecordPicker rows={mine} selectedId={selected.id} label={(r) => r.qtn_no || `Quote ${r.id}`} onSelect={setSelId} />
         ) : (
           <span className="embedded-record-current">
-            <span className="rec-doc-label">Quotation No.</span>
+            <CustomerName name={selected.customer || ""} />
             <b className="rec-doc-no">{selected.qtn_no || `Quote ${selected.id}`}</b>
           </span>
         )}
