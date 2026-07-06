@@ -737,6 +737,7 @@ function PipelineTable({
         <span className="pl-search-count">
           {displayRows.length} / {rows.length}
         </span>
+        {view === "table" ? <ColumnsButton cols={PIPELINE_COLUMNS} layout={layout} /> : null}
         <span className="pl-view-toggle" role="tablist" aria-label="View mode">
           <button
             type="button"
@@ -755,7 +756,6 @@ function PipelineTable({
             ▦ Board
           </button>
         </span>
-        {view === "table" ? <ColumnsButton cols={PIPELINE_COLUMNS} layout={layout} /> : null}
       </div>
 
       {view === "board" ? (

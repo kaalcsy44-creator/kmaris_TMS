@@ -126,6 +126,7 @@ export type PoRow = {
   kmaris_rfq_no: string;
   vrfq_at: string;
   customer: string;
+  project_title: string;
   vessel: string;
   customer_po_no: string;
   customer_po_at: string;

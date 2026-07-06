@@ -121,6 +121,7 @@ type ActivityRow = {
   datetime: string;
   owner: string;
   customer: string;
+  project_title: string;
   party: string;
   channel: string;
   text: string;
@@ -132,6 +133,7 @@ type DelayRow = {
   kind: string;
   ref: string;
   customer: string;
+  project_title: string;
   pic: string;
   due: string;
   days: number;
@@ -224,6 +226,7 @@ function HomeTab() {
             datetime: n.datetime || n.at || "",
             owner: r.assignee || "",
             customer: r.customer || "",
+            project_title: r.project_title || "",
             party: n.party || "",
             channel: n.channel || "",
             text: n.text || "",
@@ -247,6 +250,7 @@ function HomeTab() {
           kind: "Quote expired",
           ref: q.qtn_no || "—",
           customer: q.customer || "",
+          project_title: q.project_title || "",
           pic: q.assignee || "",
           due: q.valid_until,
           days: daysBetween(t, q.valid_until),
@@ -263,6 +267,7 @@ function HomeTab() {
           kind: "AR overdue",
           ref: a.ci_no || a.project_no || "—",
           customer: a.customer || "",
+          project_title: a.project_title || "",
           pic: a.assignee || "",
           due: a.due_date,
           days: daysBetween(t, a.due_date),
@@ -280,6 +285,7 @@ function HomeTab() {
     { key: "date", label: "Date", text: (r) => (r.sent_date || r.date || "").slice(0, 10), filter: "date" },
     { key: "qtn_no", label: "Quote No.", text: (r) => r.qtn_no || "" },
     { key: "customer", label: "Customer", text: (r) => r.customer || "", filter: "facet", render: (r) => <CustomerName name={r.customer || ""} /> },
+    { key: "project", label: "Project", text: (r) => r.project_title || "" },
     { key: "vessel", label: "Vessel", text: (r) => r.vessel || "" },
     {
       key: "amount",
@@ -298,6 +304,7 @@ function HomeTab() {
     { key: "datetime", label: "Date / time", text: (r) => r.datetime || "", filter: "date", render: (r) => fmtDateTime(r.datetime) },
     { key: "owner", label: "PIC", text: (r) => r.owner || "", filter: "facet" },
     { key: "customer", label: "Customer", text: (r) => r.customer || "", filter: "facet", render: (r) => <CustomerName name={r.customer || ""} /> },
+    { key: "project", label: "Project", text: (r) => r.project_title || "" },
     { key: "party", label: "Party", text: (r) => r.party || "", filter: "facet" },
     { key: "channel", label: "Channel", text: (r) => r.channel || "", filter: "facet" },
     { key: "text", label: "Activity", text: (r) => r.text || "" },
@@ -306,6 +313,7 @@ function HomeTab() {
   const salesCols: ColumnDef<ArRow>[] = [
     { key: "date", label: "Date", text: (r) => (r.tax_issued_date || r.due_date || "").slice(0, 10), filter: "date" },
     { key: "customer", label: "Customer", text: (r) => r.customer || "", filter: "facet", render: (r) => <CustomerName name={r.customer || ""} /> },
+    { key: "project", label: "Project", text: (r) => r.project_title || "" },
     {
       key: "amount",
       label: "Invoice",
@@ -331,6 +339,7 @@ function HomeTab() {
     { key: "customer_po_at", label: "Received", text: (r) => (r.customer_po_at || "").slice(0, 10), filter: "date" },
     { key: "customer_po_no", label: "PO No.", text: (r) => r.customer_po_no || "" },
     { key: "customer", label: "Customer", text: (r) => r.customer || "", filter: "facet", render: (r) => <CustomerName name={r.customer || ""} /> },
+    { key: "project", label: "Project", text: (r) => r.project_title || "" },
     { key: "vessel", label: "Vessel", text: (r) => r.vessel || "" },
     { key: "items", label: "Items", numeric: true, text: (r) => String(r.item_count), sortValue: (r) => r.item_count },
     { key: "status", label: "Status", text: (r) => tr(r.status), filter: "facet", render: (r) => <span className="ar-badge">{tr(r.status)}</span> },
@@ -340,6 +349,7 @@ function HomeTab() {
     { key: "due", label: "Due date", text: (r) => r.due || "", filter: "date" },
     { key: "days", label: "Days late", numeric: true, text: (r) => `${r.days}d`, sortValue: (r) => r.days, render: (r) => <b className="home-late">{r.days}d</b> },
     { key: "kind", label: "Type", text: (r) => r.kind, filter: "facet" },
+    { key: "project", label: "Project", text: (r) => r.project_title || "" },
     { key: "ref", label: "Ref.", text: (r) => r.ref },
     { key: "customer", label: "Customer", text: (r) => r.customer || "", filter: "facet", render: (r) => <CustomerName name={r.customer || ""} /> },
     { key: "amount", label: "Amount", numeric: true, text: (r) => r.amount },

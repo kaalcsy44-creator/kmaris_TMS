@@ -34,6 +34,12 @@ function colClass(key: string): string {
   return `pl-col-${key.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
 }
 
+// 날짜 표시는 4자리 연도를 2자리로 줄인다. "2026-07-03" → "26-07-03".
+// (필터·정렬은 원본 text() 기준으로 동작하고, 표시값만 축약한다.)
+function shortYear(s: string): string {
+  return s.replace(/\b\d{2}(\d{2}-\d{2}-\d{2})(?![\d-])/g, "$1");
+}
+
 export default function FilterTable<T>({
   rows,
   columns,
@@ -354,7 +360,7 @@ export default function FilterTable<T>({
                       const merged = gm && !gm.first && mergeSet.has(c.key);
                       return (
                         <td key={c.key} className={`${colClass(c.key)}${c.numeric ? " num" : ""}${merged ? " grp-merged" : ""}`}>
-                          {merged ? null : c.render ? c.render(r) : c.text(r) || <span className="muted">—</span>}
+                          {merged ? null : c.render ? c.render(r) : (c.filter === "date" ? shortYear(c.text(r)) : c.text(r)) || <span className="muted">—</span>}
                         </td>
                       );
                     })}

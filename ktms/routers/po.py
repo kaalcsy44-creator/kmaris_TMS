@@ -106,6 +106,7 @@ def po_overview():
                 "kmaris_rfq_no": _rfq_no_disp(r.rfq_no),
                 "vrfq_at": vrfq_at,
                 "customer": cust_names.get(r.customer_id, "—"),
+                "project_title": getattr(r, "project_title", None) or "",
                 "vessel": vessel_names.get(r.vessel_id, "") if r.vessel_id else "",
                 "customer_po_no": (o.po_no if o else "") or "",
                 # 고객 P/O 수신 일시 (시·분) — 시스템 수신(created_at) 기준
