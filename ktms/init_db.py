@@ -351,6 +351,52 @@ def seed_item_categories():
         session.close()
 
 
+# 기존(seed 후) 한글 분류명 → 영문 변환용 매핑. 이름 정확 일치로만 변환한다.
+# L3(2 stroke·BWTS 등)는 이미 영문이라 대상 아님.
+_CATEGORY_RENAME = {
+    "서비스": "Service",
+    "부품": "Parts",
+    "부품공급": "Parts",
+    "엔진": "Engine",
+    "기타장비": "Other Equipment",
+    "기타 기자재": "Other Equipment",
+    "기타기자재": "Other Equipment",
+    "기타": "Other",
+    "벙커링": "Bunkering",
+    "선용품": "Provisions",
+}
+
+
+def migrate_translate_categories():
+    """1회성: 기존 한글 품목 분류명을 영문으로 변환. applied_migrations 마커로 가드.
+
+    이름 정확 일치로만 변환하므로 트리 구조·사용자 편집(가지치기 등)은 보존된다.
+    매핑에 없는(관리자가 새로 만든) 이름은 손대지 않는다. 재실행 안전."""
+    eng = get_engine()
+    with eng.begin() as conn:
+        conn.execute(text(
+            "CREATE TABLE IF NOT EXISTS applied_migrations (name VARCHAR(100) PRIMARY KEY)"))
+        if conn.execute(text(
+                "SELECT 1 FROM applied_migrations WHERE name='translate_item_categories'")).first():
+            return  # 이미 적용됨
+
+    s = get_session()
+    n = 0
+    try:
+        for c in s.query(ItemCategory).all():
+            new = _CATEGORY_RENAME.get((c.name or "").strip())
+            if new and new != c.name:
+                c.name = new
+                n += 1
+        s.commit()
+    finally:
+        s.close()
+    with eng.begin() as conn:
+        conn.execute(text(
+            "INSERT INTO applied_migrations (name) VALUES ('translate_item_categories')"))
+    print(f"[OK] translate_item_categories applied: {n} categories renamed.")
+
+
 def migrate_remove_stage_8():
     """1회성: '단계 8'(Delivery/Service Arrangement) 제거에 따른 저장 데이터 재번호.
 
@@ -431,4 +477,5 @@ if __name__ == "__main__":
     seed_admin()
     seed_sample_data()
     seed_item_categories()
+    migrate_translate_categories()
     print("Done.")
