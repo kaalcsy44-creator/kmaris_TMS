@@ -491,17 +491,6 @@ export default function NewRfqForm({
         </Field>
       </div>
 
-      <div className="form-field" style={{ marginTop: 12 }}>
-        <label>Notes</label>
-        <textarea
-          className="wrapcell"
-          rows={2}
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          placeholder="Internal memo (optional)"
-        />
-      </div>
-
       <div className="items-head" style={{ marginTop: 18 }}>
         <div className="sub-h">Item list</div>
         <button type="button" className="btn sm items-head-add" onClick={addItem}>+ Add</button>
@@ -577,6 +566,17 @@ export default function NewRfqForm({
           ))}
         </tbody>
       </table>
+      </div>
+
+      <div className="form-field" style={{ marginTop: 18, maxWidth: "33%", minWidth: 240 }}>
+        <label>Notes</label>
+        <textarea
+          className="wrapcell"
+          rows={3}
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="Internal memo (optional)"
+        />
       </div>
       </fieldset>
 
