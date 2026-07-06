@@ -320,10 +320,11 @@ def seed_sample_data():
 
 
 def seed_item_categories():
-    """품목 분류 트리(대>중>소) 기본값 seed. 이미 분류가 있으면 건너뜀(멱등).
+    """Seed the default item category tree (Main>Sub>Detail). Idempotent — skips
+    if any category already exists.
 
-    손그림 기준: 서비스/부품 > 엔진·기타 > 2·4stroke / BWTS·Incinerator·…
-    벙커링·선용품 등은 이후 Settings에서 관리자가 추가한다."""
+    Default: Service/Parts > Engine·Other > 2·4 stroke / BWTS·Incinerator·…
+    Bunkering·Provisions and others are added later by admins in Settings."""
     session = get_session()
     try:
         if session.query(ItemCategory).count() > 0:
@@ -331,8 +332,8 @@ def seed_item_categories():
             return
         equipment = ["BWTS", "Incinerator", "Elevator", "Life boat", "Crane", "ETC"]
         tree = {
-            "서비스": {"엔진": ["2 stroke", "4 stroke"], "기타장비": list(equipment)},
-            "부품":   {"엔진": ["2 stroke", "4 stroke"], "기타":     list(equipment)},
+            "Service": {"Engine": ["2 stroke", "4 stroke"], "Other Equipment": list(equipment)},
+            "Parts":   {"Engine": ["2 stroke", "4 stroke"], "Other":           list(equipment)},
         }
         for i, (l1, mids) in enumerate(tree.items()):
             n1 = ItemCategory(name=l1, parent_id=None, level=1, sort_order=i)
@@ -345,7 +346,7 @@ def seed_item_categories():
                 for k, l3 in enumerate(subs):
                     session.add(ItemCategory(name=l3, parent_id=n2.id, level=3, sort_order=k))
         session.commit()
-        print("[OK] Item categories seeded (서비스/부품 > 엔진·기타 > …).")
+        print("[OK] Item categories seeded (Service/Parts > Engine·Other > …).")
     finally:
         session.close()
 

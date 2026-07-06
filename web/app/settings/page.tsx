@@ -113,14 +113,14 @@ function Settings() {
         { key: "vendors", label: "Vendor" },
         { key: "vessels", label: "Vessels" },
         { key: "items", label: "Item Master" },
-        { key: "categories", label: "Item 분류" },
+        { key: "categories", label: "Item Category" },
       ]
     : [
         { key: "customers", label: "Customer" },
         { key: "vendors", label: "Vendor" },
         { key: "vessels", label: "Vessels" },
         { key: "items", label: "Item Master" },
-        { key: "categories", label: "Item 분류" },
+        { key: "categories", label: "Item Category" },
         { key: "account", label: "My Account" },
       ];
 
@@ -977,9 +977,9 @@ function ItemsTab() {
       remove={deleteSettingsItem}
       columns={[
         ["part_no", "Part No."],
-        ["category_path", "분류", (r) => r.category_path
+        ["category_path", "Category", (r) => r.category_path
           ? <span className="cat-path">{r.category_path}</span>
-          : <span className="dash">미분류</span>],
+          : <span className="dash">Unclassified</span>],
         ["description", "Description"],
         ["maker", "Maker"],
         ["origin", "Origin"],
@@ -1023,7 +1023,7 @@ function CategoryPicker({
   }, []);
 
   const byId = new Map(cats.map((c) => [c.id, c]));
-  // 현재 value 로부터 조상 체인 [대, 중, 소] 복원.
+  // Rebuild the ancestor chain [main, sub, detail] from the current value.
   const chain: number[] = [];
   let cur = value != null ? byId.get(value) : undefined;
   let guard = 0;
@@ -1046,10 +1046,10 @@ function CategoryPicker({
 
   return (
     <label className="form-field cat-picker">
-      <span>분류 (대 · 중 · 소)</span>
+      <span>Category (Main · Sub · Detail)</span>
       <div className="cat-picker-row">
         <select value={l1 ?? ""} onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}>
-          <option value="">대분류</option>
+          <option value="">Main</option>
           {l1Opts.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
         <select
@@ -1057,7 +1057,7 @@ function CategoryPicker({
           disabled={l1 == null || l2Opts.length === 0}
           onChange={(e) => onChange(e.target.value ? Number(e.target.value) : l1)}
         >
-          <option value="">{l1 == null ? "—" : "중분류"}</option>
+          <option value="">{l1 == null ? "—" : "Sub"}</option>
           {l2Opts.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
         <select
@@ -1065,28 +1065,28 @@ function CategoryPicker({
           disabled={l2 == null || l3Opts.length === 0}
           onChange={(e) => onChange(e.target.value ? Number(e.target.value) : l2)}
         >
-          <option value="">{l2 == null ? "—" : "소분류"}</option>
+          <option value="">{l2 == null ? "—" : "Detail"}</option>
           {l3Opts.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
       </div>
-      {value == null ? <span className="hint-inline">미분류 — 대분류부터 선택하세요.</span> : null}
+      {value == null ? <span className="hint-inline">Unclassified — pick a Main category first.</span> : null}
     </label>
   );
 }
 
-const LEVEL_LABEL: Record<number, string> = { 1: "대분류", 2: "중분류", 3: "소분류" };
-const CHILD_LABEL: Record<number, string> = { 1: "+ 중분류", 2: "+ 소분류" };
+const LEVEL_LABEL: Record<number, string> = { 1: "Main", 2: "Sub", 3: "Detail" };
+const CHILD_LABEL: Record<number, string> = { 1: "+ Sub", 2: "+ Detail" };
 
 type CatEditor = {
-  id: number | null;        // null=신규
+  id: number | null;        // null = new
   parent_id: number | null;
   level: number;
   name: string;
   active: boolean;
-  parentPath: string;       // 상위 경로 표시용
+  parentPath: string;       // parent path for display
 };
 
-// 품목 분류 트리(대>중>소) 관리 탭. 마스터 데이터 권한(settings)으로 편집.
+// Item category tree (Main > Sub > Detail) management tab. Edited with "settings" master-data permission.
 function CategoriesTab() {
   const [rows, setRows] = useState<ItemCategory[]>([]);
   const [editor, setEditor] = useState<CatEditor | null>(null);
@@ -1157,35 +1157,71 @@ function CategoriesTab() {
   }
 
   async function del(node: ItemCategory) {
-    if (!confirm(`'${node.name}' 분류를 삭제할까요?`)) return;
+    if (!confirm(`Delete category "${node.name}"?`)) return;
     setErr("");
     try {
       await deleteItemCategory(node.id);
       refresh();
     } catch (e) {
-      // 하위 분류/사용 중 품목이 있으면 백엔드가 막는다.
+      // Backend blocks deletion when child categories or items in use exist.
       alert(e instanceof Error ? e.message : "Delete failed");
+    }
+  }
+
+  // Move a node up/down within its sibling group. Reassigns sort_order by new
+  // position (self-healing) and persists only the rows whose order changed.
+  async function move(node: ItemCategory, dir: -1 | 1) {
+    const sibs = childrenOf(node.parent_id);
+    const idx = sibs.findIndex((c) => c.id === node.id);
+    const target = idx + dir;
+    if (idx < 0 || target < 0 || target >= sibs.length) return;
+    const arr = [...sibs];
+    [arr[idx], arr[target]] = [arr[target], arr[idx]];
+    setErr("");
+    try {
+      await Promise.all(
+        arr
+          .map((c, i) =>
+            c.sort_order === i
+              ? null
+              : updateItemCategory(c.id, { name: c.name, sort_order: i, active: c.active })
+          )
+          .filter((p): p is Promise<{ ok: boolean; id: number }> => p !== null)
+      );
+      refresh();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Reorder failed");
     }
   }
 
   function NodeRow({ node }: { node: ItemCategory }) {
     const kids = childrenOf(node.id);
+    const sibs = childrenOf(node.parent_id);
+    const pos = sibs.findIndex((c) => c.id === node.id);
+    const isFirst = pos <= 0;
+    const isLast = pos >= sibs.length - 1;
     return (
       <li className={`cat-node cat-l${node.level}${node.active ? "" : " off"}`}>
         <div className="cat-node-row">
           <span className="cat-node-name">
             {node.name}
-            {!node.active ? <span className="cat-inactive">비활성</span> : null}
+            {!node.active ? <span className="cat-inactive">Inactive</span> : null}
           </span>
           <span className="cat-node-actions">
+            {canEdit ? (
+              <>
+                <button className="btn tiny" disabled={isFirst} onClick={() => move(node, -1)} title="Move up">▲</button>
+                <button className="btn tiny" disabled={isLast} onClick={() => move(node, 1)} title="Move down">▼</button>
+              </>
+            ) : null}
             {node.level < 3 && canCreate ? (
               <button className="btn tiny" onClick={() => openNew(node)}>{CHILD_LABEL[node.level]}</button>
             ) : null}
             {canEdit ? (
-              <button className="btn tiny" onClick={() => openEdit(node)} title="수정">✎</button>
+              <button className="btn tiny" onClick={() => openEdit(node)} title="Edit">✎</button>
             ) : null}
             {canDelete ? (
-              <button className="btn tiny danger" onClick={() => del(node)} title="삭제">🗑</button>
+              <button className="btn tiny danger" onClick={() => del(node)} title="Delete">🗑</button>
             ) : null}
           </span>
         </div>
@@ -1201,26 +1237,26 @@ function CategoriesTab() {
   const roots = childrenOf(null);
   const editorTitle = editor
     ? editor.id == null
-      ? `+ ${LEVEL_LABEL[editor.level] ?? "분류"} 추가`
-      : `✎ ${LEVEL_LABEL[editor.level] ?? "분류"} 수정 — ${editor.name || ""}`
+      ? `+ Add ${LEVEL_LABEL[editor.level] ?? "category"}`
+      : `✎ Edit ${LEVEL_LABEL[editor.level] ?? "category"} — ${editor.name || ""}`
     : "";
 
   return (
     <div className="panel">
       <div className="ms-toolbar">
-        <h3 className="form-title">Item 분류 (대 · 중 · 소)</h3>
+        <h3 className="form-title">Item Categories (Main · Sub · Detail)</h3>
         {canCreate ? (
-          <button className="btn primary" onClick={() => openNew(null)}>+ 대분류</button>
+          <button className="btn primary" onClick={() => openNew(null)}>+ Main</button>
         ) : null}
       </div>
       <p className="hint-inline" style={{ display: "block", marginBottom: 12 }}>
-        품목 분류 체계를 관리합니다. 대분류 &gt; 중분류 &gt; 소분류(최대 3단계). 하위 분류나 사용 중인 품목이 있는 분류는 삭제할 수 없습니다.
+        Manage the item classification. Main &gt; Sub &gt; Detail (up to 3 levels). Use ▲ ▼ to reorder. A category that has child categories or items in use cannot be deleted.
       </p>
 
       {err ? <div className="action-err" style={{ marginBottom: 10 }}>{err}</div> : null}
 
       {roots.length === 0 ? (
-        <div className="state">분류가 없습니다. &quot;+ 대분류&quot;로 시작하세요.</div>
+        <div className="state">No categories yet. Start with &quot;+ Main&quot;.</div>
       ) : (
         <ul className="cat-tree">
           {roots.map((r) => <NodeRow key={r.id} node={r} />)}
@@ -1232,12 +1268,12 @@ function CategoriesTab() {
           <div className="form-grid">
             {editor.parentPath ? (
               <div className="form-field" style={{ gridColumn: "1 / -1" }}>
-                <span>상위 분류</span>
+                <span>Parent category</span>
                 <div className="cat-parent-path">{editor.parentPath}</div>
               </div>
             ) : null}
             <TextField
-              label={`${LEVEL_LABEL[editor.level] ?? "분류"}명 *`}
+              label={`${LEVEL_LABEL[editor.level] ?? "Category"} name *`}
               value={editor.name}
               onChange={(v) => setEditor({ ...editor, name: v })}
             />
@@ -1247,14 +1283,14 @@ function CategoriesTab() {
                 checked={editor.active}
                 onChange={(e) => setEditor({ ...editor, active: e.target.checked })}
               />
-              활성 (비활성 시 선택 목록에서 숨김)
+              Active (inactive is hidden from pickers)
             </label>
           </div>
           <div className="form-actions">
             <button className="btn primary" onClick={save} disabled={!editor.name.trim()}>
-              {editor.id == null ? "추가" : "저장"}
+              {editor.id == null ? "Add" : "Save"}
             </button>
-            <button className="btn" onClick={cancel}>취소</button>
+            <button className="btn" onClick={cancel}>Cancel</button>
             {err ? <span className="action-err">{err}</span> : null}
           </div>
         </Modal>
