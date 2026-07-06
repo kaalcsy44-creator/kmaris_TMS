@@ -260,6 +260,7 @@ class Order(Base):
     vessel_id      = Column(Integer, ForeignKey("vessels.id"), nullable=True)
     po_no          = Column(String(100))
     date           = Column(String(10))
+    currency       = Column(String(10), default="USD")  # 주문 통화(USD/KRW). 미지정 시 연결 견적 통화 사용
     trade_type     = Column(String(10), default="수출", nullable=False)  # 거래구분: 수출/내수(국내공급)
     service_info   = Column(JSON, default=dict)  # 서비스 업무 7~10단계 입력값 {"7":{...},...}
     status         = Column(SAEnum(OrderStatus), default=OrderStatus.RECEIVED)

@@ -25,6 +25,7 @@ import { identityColumns, projectNoColumn } from "@/components/common/identityCo
 import VendorName from "@/components/common/VendorName";
 import Modal from "@/components/common/Modal";
 import BaseMetaRows, { ModalTitle } from "@/components/common/BaseMeta";
+import CurrencyToggle from "@/components/common/CurrencyToggle";
 import {
   amountInputValue,
   DualCurrencyAmount,
@@ -353,6 +354,7 @@ function OrderDetailModal({
         vessel_id: vesselId === "" ? 0 : vesselId,
         po_no: poNo,
         date,
+        currency,
         trade_type: tradeType,
         promised_delivery: promised || null,
         items: cleanItems(items),
@@ -447,6 +449,10 @@ function OrderDetailModal({
             <div className="form-field">
               <label>Order date</label>
               <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            </div>
+            <div className="form-field">
+              <label>Currency</label>
+              <CurrencyToggle value={currency} onChange={setCurrency} />
             </div>
             <div className="form-field">
               <label>Promised delivery</label>
@@ -947,6 +953,7 @@ function CustomerPoNewForm({
         rfq_id: rfqId === "" ? null : rfqId,
         po_no: poNo,
         date,
+        currency,
         trade_type: tradeType,
         promised_delivery: promised || null,
         items: cleanItems(items),
@@ -1023,6 +1030,10 @@ function CustomerPoNewForm({
             <option value="수출">{tr("수출")}</option>
             <option value="내수">{tr("내수")}</option>
           </select>
+        </div>
+        <div className="form-field">
+          <label>Currency</label>
+          <CurrencyToggle value={currency} onChange={setCurrency} />
         </div>
         <div className="form-field">
           <label>Customer PO No.</label>

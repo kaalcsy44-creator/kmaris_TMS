@@ -174,7 +174,7 @@ def order_detail(order_id: int):
             "rfq_no": _rfq_no_disp(rfq.rfq_no) if rfq else "",
             "customer_rfq_no": (rfq.customer_rfq_no or _rfq_no_disp(rfq.rfq_no)) if rfq else "",
             "quotation_no": qtn.qtn_no if qtn else "",
-            "currency": (qtn.currency if qtn else "USD") or "USD",
+            "currency": o.currency or (qtn.currency if qtn else None) or "USD",
             "project_no": _project_no_map(s).get(rfq.id, "") if rfq else "",
             "first_rfq_at": _first_rfq_iso(rfq),
             "customer": cust.name if cust else "—",
@@ -279,7 +279,7 @@ def po_work_options():
                 "po_no": o.po_no or "",
                 "date": o.date or "",
                 "trade_type": o.trade_type or "수출",
-                "currency": (qtn.currency if qtn else "USD") or "USD",
+                "currency": o.currency or (qtn.currency if qtn else None) or "USD",
                 "status": _status_label(stage, rfq.work_type) if rfq else _enum_val(o.status),
                 "items": [_item_view(it) for it in (o.items or [])],
                 # 공통 식별 컬럼
@@ -399,6 +399,7 @@ def create_order(body: OrderCreate):
             vessel_id=body.vessel_id,
             po_no=(body.po_no or "").strip(),
             date=body.date or date.today().isoformat(),
+            currency=(body.currency or (qtn.currency if qtn else None) or "USD"),
             trade_type=(body.trade_type or "수출").strip() or "수출",
             promised_delivery=body.promised_delivery or None,
             status=OrderStatus.RECEIVED,
@@ -429,6 +430,8 @@ def update_order(order_id: int, body: OrderUpdate):
             order.po_no = body.po_no.strip()
         if body.date is not None:
             order.date = body.date or order.date
+        if body.currency is not None:
+            order.currency = body.currency or "USD"
         if body.trade_type is not None:
             order.trade_type = (body.trade_type or "수출").strip() or "수출"
         if body.promised_delivery is not None:

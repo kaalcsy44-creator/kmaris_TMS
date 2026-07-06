@@ -1228,6 +1228,7 @@ class OrderCreate(BaseModel):
     rfq_id: int | None = None
     po_no: str = ""
     date: str | None = None
+    currency: str | None = "USD"
     trade_type: str = "수출"
     promised_delivery: str | None = None
     items: list[PoWorkItem] = []
@@ -1238,6 +1239,7 @@ class OrderUpdate(BaseModel):
     vessel_id: int | None = None       # 0 = 선박 미지정 해제
     po_no: str | None = None
     date: str | None = None
+    currency: str | None = None
     trade_type: str | None = None
     promised_delivery: str | None = None
     items: list[PoWorkItem] | None = None
