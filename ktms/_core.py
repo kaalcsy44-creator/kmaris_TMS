@@ -1597,10 +1597,11 @@ class MarketingActivityCreate(BaseModel):
     recipient_email: str | None = ""
     activity_date: str | None = ""
     channel: str | None = ""
-    activity_type: str | None = ""
+    activity_type: str | None = ""   # 복수 선택 시 ", " 로 join된 문자열
     subject: str | None = ""
     notes: str | None = ""
     next_action_date: str | None = ""
+    owner_id: int | None = None      # 담당자(PIC). None/0=미지정(생성 시 작성자로 대체)
 
 
 def _marketing_target_name(m: MarketingActivity, cust_names: dict) -> str:

@@ -481,6 +481,7 @@ export type MarketingSave = {
   subject?: string;
   notes?: string;
   next_action_date?: string;
+  owner_id?: number | null;
 };
 
 export function fetchMarketing(): Promise<{ rows: MarketingRow[] }> {

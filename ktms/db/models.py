@@ -372,7 +372,7 @@ class MarketingActivity(Base):
     recipient_email  = Column(String(200))   # 고객 수신 이메일 주소
     activity_date    = Column(String(10))    # 활동일 YYYY-MM-DD
     channel          = Column(String(40))    # 발송수단: Email/전화/방문/전시회/WhatsApp 등
-    activity_type    = Column(String(40))    # 홍보자료 발송/소개메일/방문/미팅/팔로업 등
+    activity_type    = Column(String(200))   # 활동유형(복수 선택 가능, ", " 로 join). 예: "Brochure sent, Meeting"
     subject          = Column(String(200))   # 제목·요약
     notes            = Column(Text)          # 상세 내용
     next_action_date = Column(String(10))    # 후속 예정일 YYYY-MM-DD (대시보드 Follow-up)

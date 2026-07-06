@@ -367,6 +367,30 @@ _CATEGORY_RENAME = {
 }
 
 
+def migrate_widen_activity_type():
+    """marketing_activities.activity_type 를 VARCHAR(200)으로 확장(복수 선택 join 대비).
+
+    Postgres 만 VARCHAR 길이를 강제하므로 대상. SQLite 는 길이 무시라 no-op.
+    applied_migrations 마커로 1회만 실행."""
+    eng = get_engine()
+    insp = inspect(eng)
+    if not insp.has_table("marketing_activities"):
+        return
+    if eng.dialect.name != "postgresql":
+        return
+    with eng.begin() as conn:
+        conn.execute(text(
+            "CREATE TABLE IF NOT EXISTS applied_migrations (name VARCHAR(100) PRIMARY KEY)"))
+        if conn.execute(text(
+                "SELECT 1 FROM applied_migrations WHERE name='widen_activity_type'")).first():
+            return
+        conn.execute(text(
+            "ALTER TABLE marketing_activities ALTER COLUMN activity_type TYPE VARCHAR(200)"))
+        conn.execute(text(
+            "INSERT INTO applied_migrations (name) VALUES ('widen_activity_type')"))
+    print("[OK] marketing_activities.activity_type widened to VARCHAR(200).")
+
+
 def migrate_translate_categories():
     """1회성: 기존 한글 품목 분류명을 영문으로 변환. applied_migrations 마커로 가드.
 
@@ -478,4 +502,5 @@ if __name__ == "__main__":
     seed_sample_data()
     seed_item_categories()
     migrate_translate_categories()
+    migrate_widen_activity_type()
     print("Done.")

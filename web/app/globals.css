@@ -4043,6 +4043,37 @@ table.mini .num {
   cursor: pointer;
   user-select: none;
 }
+/* 복수 선택 체크박스 묶음(예: Activity type) — 칩 형태로 나열 */
+.check-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.check-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px 5px 9px;
+  font-size: 13px;
+  color: #45526a;
+  background: #fff;
+  border: 1px solid #c7d0de;
+  border-radius: 999px;
+  cursor: pointer;
+  user-select: none;
+}
+.check-chip:hover {
+  border-color: var(--blue, #0055a8);
+}
+.check-chip.on {
+  background: #e4edfb;
+  border-color: var(--blue, #0055a8);
+  color: #1d4ed8;
+  font-weight: 600;
+}
+.check-chip input {
+  margin: 0;
+}
 .vendor-checks {
   display: flex;
   flex-wrap: wrap;

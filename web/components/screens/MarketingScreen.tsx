@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import {
   fetchMarketing,
   fetchCustomers,
+  fetchAssignableUsers,
   createMarketing,
   updateMarketing,
   deleteMarketing,
@@ -12,7 +13,7 @@ import {
 } from "@/lib/api";
 import { useCachedData, invalidateCache } from "@/lib/useCachedData";
 import type { MarketingRow, CustomerOption } from "@/lib/types";
-import { can, canEditDeal, editBlockReason } from "@/lib/auth";
+import { can, canEditDeal, editBlockReason, getUser } from "@/lib/auth";
 import FilterTable, { ColumnDef } from "@/components/common/FilterTable";
 import CustomerName from "@/components/common/CustomerName";
 import CustomerSelect from "@/components/common/CustomerSelect";
@@ -23,6 +24,17 @@ const today = () => new Date().toISOString().slice(0, 10);
 // 발송수단·활동유형 선택지 — RFQ request_channel 과 톤을 맞춘다(자유 확장 가능).
 const CHANNELS = ["Email", "Phone", "Visit", "Exhibition", "WhatsApp", "WeChat", "Other"];
 const ACTIVITY_TYPES = ["Brochure sent", "Intro email", "Visit", "Meeting", "Sample sent", "Follow-up", "Other"];
+
+// 활동유형은 복수 선택 가능 — 내부적으로 ", " join 문자열로 저장한다.
+function parseTypes(s: string): string[] {
+  return s ? s.split(",").map((x) => x.trim()).filter(Boolean) : [];
+}
+function toggleType(s: string, t: string): string {
+  const cur = parseTypes(s);
+  const next = cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t];
+  // 정규 순서(ACTIVITY_TYPES)로 정렬해 join — 표시 일관성 유지.
+  return ACTIVITY_TYPES.filter((x) => next.includes(x)).join(", ");
+}
 
 type Form = {
   customer_id: number | "";
@@ -35,6 +47,7 @@ type Form = {
   subject: string;
   notes: string;
   next_action_date: string;
+  owner_id: number | "";
 };
 
 const emptyForm: Form = {
@@ -48,6 +61,7 @@ const emptyForm: Form = {
   subject: "",
   notes: "",
   next_action_date: "",
+  owner_id: "",
 };
 
 function rowToForm(r: MarketingRow): Form {
@@ -63,6 +77,7 @@ function rowToForm(r: MarketingRow): Form {
     subject: r.subject ?? "",
     notes: r.notes ?? "",
     next_action_date: r.next_action_date ?? "",
+    owner_id: r.owner_id || "",
   };
 }
 
@@ -78,6 +93,7 @@ function formToBody(f: Form): MarketingSave {
     subject: f.subject,
     notes: f.notes,
     next_action_date: f.next_action_date,
+    owner_id: f.owner_id === "" ? null : f.owner_id,
   };
 }
 
@@ -169,7 +185,7 @@ export default function MarketingScreen() {
       {adding ? (
         <Modal title="Add marketing activity" onClose={close} wide>
           <MarketingForm
-            initial={emptyForm}
+            initial={{ ...emptyForm, owner_id: getUser()?.id ?? "" }}
             customers={customers ?? []}
             canEdit
             onChanged={() => {
@@ -220,6 +236,7 @@ function MarketingForm({
   const [form, setForm] = useState<Form>(initial);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const { data: users } = useCachedData("assignable-users", fetchAssignableUsers);
 
   const valid = form.customer_id !== "" || form.prospect_name.trim() !== "";
 
@@ -295,17 +312,6 @@ function MarketingForm({
             onChange={(v) => setForm({ ...form, activity_date: v })}
           />
           <label className="form-field">
-            <span>Activity type</span>
-            <select
-              value={form.activity_type}
-              onChange={(e) => setForm({ ...form, activity_type: e.target.value })}
-            >
-              {ACTIVITY_TYPES.map((t) => (
-                <option key={t} value={t}>{t}</option>
-              ))}
-            </select>
-          </label>
-          <label className="form-field">
             <span>Channel</span>
             <select
               value={form.channel}
@@ -316,6 +322,38 @@ function MarketingForm({
               ))}
             </select>
           </label>
+          <label className="form-field">
+            <span>PIC</span>
+            <select
+              value={form.owner_id}
+              onChange={(e) =>
+                setForm({ ...form, owner_id: e.target.value === "" ? "" : Number(e.target.value) })
+              }
+            >
+              <option value="">— Unassigned —</option>
+              {(users ?? []).map((u) => (
+                <option key={u.id} value={u.id}>{u.username}</option>
+              ))}
+            </select>
+          </label>
+          <div className="form-field" style={{ gridColumn: "1 / -1" }}>
+            <span>Activity type (multiple)</span>
+            <div className="check-group">
+              {ACTIVITY_TYPES.map((t) => {
+                const checked = parseTypes(form.activity_type).includes(t);
+                return (
+                  <label key={t} className={`check-chip${checked ? " on" : ""}`}>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => setForm({ ...form, activity_type: toggleType(form.activity_type, t) })}
+                    />
+                    {t}
+                  </label>
+                );
+              })}
+            </div>
+          </div>
           <Field
             label="Subject"
             value={form.subject}

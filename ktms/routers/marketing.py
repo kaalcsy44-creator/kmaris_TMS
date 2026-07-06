@@ -55,7 +55,8 @@ def create_marketing(body: MarketingActivityCreate, user: dict = Depends(get_cur
             subject=body.subject or "",
             notes=body.notes or "",
             next_action_date=body.next_action_date or "",
-            owner_id=user.get("id") or None,
+            # 담당자(PIC): 지정값 우선, 없으면 작성자 본인.
+            owner_id=body.owner_id or user.get("id") or None,
         )
         s.add(m)
         s.commit()
@@ -83,6 +84,7 @@ def update_marketing(row_id: int, body: MarketingActivityCreate):
         m.subject = body.subject or ""
         m.notes = body.notes or ""
         m.next_action_date = body.next_action_date or ""
+        m.owner_id = body.owner_id or None   # 담당자(PIC) 재지정(미지정 허용)
         s.commit()
         return {"ok": True, "id": m.id}
     finally:
