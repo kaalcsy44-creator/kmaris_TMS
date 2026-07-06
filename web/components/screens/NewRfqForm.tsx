@@ -250,7 +250,8 @@ export default function NewRfqForm({
     try {
       const d = await fetchRfqDetail(id);
       setEditId(id);
-      setLoadedRfqNo(d.rfq_no || "");
+      // 미발급 RFQ 는 상세 API 가 "-" 로 내려준다 → 배지는 빈칸으로(번호는 2단계 발송 시 부여).
+      setLoadedRfqNo(d.rfq_no && d.rfq_no !== "-" ? d.rfq_no : "");
       setAssigneeId(d.assignee_id ?? 0);
       setCustomerId(d.customer_id || "");
       setVesselId(d.vessel_id || "");
