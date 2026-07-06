@@ -1408,10 +1408,7 @@ export function PipelineModal({
                 <dt>Items</dt>
                 <dd>{r.item_count}</dd>
               </div>
-              <div>
-                <dt>PIC</dt>
-                <dd>{r.assignee || "—"}</dd>
-              </div>
+              {/* PIC 는 상단 헤더(pl-pic-chip)에 이미 표시되므로 좌측 패널에선 생략. */}
             </dl>
           )}
 
