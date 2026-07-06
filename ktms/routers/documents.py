@@ -314,8 +314,9 @@ def delete_commercial_invoice(order_id: int):
         if s.query(TaxInvoiceData).filter_by(ci_id=ci.id).first():
             raise HTTPException(status_code=400,
                 detail="세금계산서가 있어 삭제할 수 없습니다. 먼저 9단계 세금계산서를 삭제하세요.")
-        for pl in s.query(PackingList).filter_by(ci_id=ci.id).all():
-            s.delete(pl)
+        # 하위 Packing List 를 CI 삭제보다 먼저 DB 에 반영해야 FK 제약(Postgres)에 안 걸린다.
+        s.query(PackingList).filter_by(ci_id=ci.id).delete(synchronize_session=False)
+        s.flush()
         s.delete(ci)
         s.commit()
         return {"ok": True}
