@@ -5208,11 +5208,28 @@ table.mini .num {
   width: 18px;
   height: 18px;
 }
-/* 등록번호(RFQ·견적)는 크게 강조. */
-.embedded-record-current .rec-doc-no {
-  font-size: 15px;
+/* 등록번호(RFQ·견적) 배지 — 번호가 없어도 배지(빈칸)는 항상 표시해 레이아웃을 고정.
+   모든 단계 동일 포맷(1~4). */
+.rec-doc-no {
+  display: inline-flex;
+  align-items: center;
+  min-width: 92px;
+  min-height: 24px;
+  padding: 2px 10px;
+  font-size: 14px;
   font-weight: 700;
   color: var(--blue);
+  background: #eff4fc;
+  border: 1px solid #d5e3f5;
+  border-radius: 6px;
+}
+/* 2단계: 벤더 선택 탭(또는 단일 벤더) + K-Maris RFQ No. 배지 묶음. */
+.vrfq-head-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  min-width: 0;
 }
 /* 선택 탭(멀티 레코드) 안에서 번호를 칩으로 표시. */
 .rec-quote-no {

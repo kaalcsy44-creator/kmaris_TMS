@@ -333,7 +333,14 @@ function EmbeddedVendorRfq({
   return (
     <div className="embedded-record-wrap">
       <div className="embedded-record-bar">
-        <RecordPicker rows={mine} selectedId={selected.id} label={(r) => r.vendor ? <VendorName name={r.vendor} /> : `RFQ ${r.id}`} onSelect={setSelId} />
+        <div className="vrfq-head-left">
+          {mine.length > 1 ? (
+            <RecordPicker rows={mine} selectedId={selected.id} label={(r) => r.vendor ? <VendorName name={r.vendor} /> : `RFQ ${r.id}`} onSelect={setSelId} />
+          ) : (
+            <span className="embedded-record-current"><VendorName name={selected.vendor || ""} /></span>
+          )}
+          <b className="rec-doc-no">{project?.vrfq_kmaris_no || ""}</b>
+        </div>
         <button type="button" className="btn primary sm" onClick={() => setAdding(true)}>+ Send another</button>
       </div>
       <VendorRfqDetailModal
@@ -401,7 +408,7 @@ function EmbeddedVendorQuote({ rfqId, onChanged }: { rfqId: number | null; onCha
         ) : (
           <span className="embedded-record-current">
             <VendorName name={selected.vendor || ""} />
-            {selected.vendor_quote_no ? <b className="rec-doc-no">{selected.vendor_quote_no}</b> : null}
+            <b className="rec-doc-no">{selected.vendor_quote_no || ""}</b>
           </span>
         )}
         <button type="button" className="btn primary sm" onClick={() => setAdding(true)}>+ Register another</button>
@@ -451,7 +458,7 @@ function EmbeddedCustomerQuote({ rfqId, onChanged }: { rfqId: number | null; onC
         ) : (
           <span className="embedded-record-current">
             <CustomerName name={selected.customer || ""} />
-            <b className="rec-doc-no">{selected.qtn_no || `Quote ${selected.id}`}</b>
+            <b className="rec-doc-no">{selected.qtn_no || ""}</b>
           </span>
         )}
         <button type="button" className="btn primary sm" onClick={() => setAdding(true)}>+ New quotation</button>

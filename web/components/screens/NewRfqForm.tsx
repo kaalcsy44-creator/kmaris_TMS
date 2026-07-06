@@ -342,7 +342,7 @@ export default function NewRfqForm({
         <div className="embedded-record-bar">
           <span className="embedded-record-current">
             <CustomerName name={customerName} />
-            {loadedRfqNo ? <b className="rec-doc-no">{loadedRfqNo}</b> : null}
+            <b className="rec-doc-no">{loadedRfqNo}</b>
           </span>
         </div>
       ) : null}
