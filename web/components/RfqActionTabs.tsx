@@ -8,6 +8,7 @@ import {
   createVendorRfq,
   assignRfqNo,
   fetchNextRfqNo,
+  fetchNextQuotationNo,
   previewVendorRfq,
   sendVendorRfq,
   vendorRfqXlsxUrl,
@@ -2739,6 +2740,9 @@ function CustomerQuoteAction({
   onCancel?: () => void;
 }) {
   const [qtnNo, setQtnNo] = useState("");
+  // Quotation No. 채번 방식: auto(자동 KMS-QUO-yymm-nnn) / manual(직접 입력).
+  const [noMode, setNoMode] = useState<"auto" | "manual">("auto");
+  const [autoNo, setAutoNo] = useState(""); // 자동채번 미리보기(다음 KMS-QUO 번호)
   const [currency, setCurrency] = useState("USD");
   const [costCurrency, setCostCurrency] = useState("USD");
   const [roundDigits, setRoundDigits] = useState<number>(DEFAULT_ROUND_DIGITS);
@@ -2761,6 +2765,11 @@ function CustomerQuoteAction({
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+
+  // 자동채번 미리보기(다음 Quotation No.) 로드.
+  useEffect(() => {
+    fetchNextQuotationNo().then((r) => setAutoNo(r.qtn_no)).catch(() => setAutoNo(""));
+  }, []);
 
   // RFQ 품목 정보로 기본 seed (cost 없음) — 공급사 견적을 불러오면 cost 가 채워진다.
   useEffect(() => {
@@ -2914,7 +2923,20 @@ function CustomerQuoteAction({
       <div className="form-grid">
         <div className="form-field">
           <label>Quotation No.</label>
-          <input value={qtnNo} onChange={(e) => setQtnNo(e.target.value)} placeholder="Blank = auto-generate" />
+          {noMode === "auto" ? (
+            <select
+              value="auto"
+              onChange={(e) => { if (e.target.value === "manual") { setNoMode("manual"); setQtnNo(""); } }}
+            >
+              <option value="auto">{autoNo ? `${autoNo} (auto)` : "Auto-generate"}</option>
+              <option value="manual">Manual entry…</option>
+            </select>
+          ) : (
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <input value={qtnNo} onChange={(e) => setQtnNo(e.target.value)} placeholder="KMS-QUO-…" autoFocus style={{ flex: 1 }} />
+              <button type="button" className="btn sm" onClick={() => { setNoMode("auto"); setQtnNo(""); }} title="Use auto number">auto</button>
+            </div>
+          )}
         </div>
         <div className="form-field">
           <label>Cost currency (vendor)</label>

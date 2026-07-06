@@ -21,6 +21,7 @@ from _core import (
     _enum_val,
     _first_rfq_iso,
     _kst_iso,
+    _next_kmaris_quotation_no,
     _pipeline_stage,
     _project_no_map,
     _quotation_total,
@@ -40,6 +41,17 @@ from _core import (
     send_email,
 )
 
+
+
+@app.get("/api/admin/quotation/next-no", dependencies=[Depends(require_token)])
+def next_quotation_no_endpoint():
+    """자동채번 미리보기 — 다음에 생성될 Quotation No.(KMS-QUO-yymm-nnn). 할당하지 않음.
+    ('/quotation/{...}' 라우트보다 먼저 등록해 경로 충돌을 피한다.)"""
+    s = get_session()
+    try:
+        return {"qtn_no": _next_kmaris_quotation_no(s)}
+    finally:
+        s.close()
 
 
 @app.get("/api/admin/quotation-overview", dependencies=[Depends(require_token)])
@@ -117,10 +129,12 @@ def create_customer_quote(rfq_id: int, body: CustomerQuoteCreate,
         if body.remarks and not terms.get("remarks"):
             terms["remarks"] = body.remarks
 
-        # 수동 입력. 비우면 번호 없이 저장(나중에 편집에서 채움).
+        # 번호: 수동 입력값이 있으면 사용(중복 검사), 비우면 자동 채번(KMS-QUO-yymm-nnn).
         qtn_no = (body.qtn_no or "").strip() or None
         if qtn_no and s.query(Quotation).filter_by(qtn_no=qtn_no).first():
             raise HTTPException(status_code=409, detail="Quotation No. already exists.")
+        if not qtn_no:
+            qtn_no = _next_kmaris_quotation_no(s)
         sent_at = (body.sent_at or "").strip()
         qtn = Quotation(
             qtn_no=qtn_no,

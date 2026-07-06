@@ -214,6 +214,11 @@ export function fetchNextRfqNo(): Promise<{ rfq_no: string }> {
   return get(`/api/admin/rfq/next-no?_=${Date.now()}`);
 }
 
+// 자동채번 미리보기 — 다음에 생성될 Quotation No.(KMS-QUO-yymm-nnn, 할당하지 않음).
+export function fetchNextQuotationNo(): Promise<{ qtn_no: string }> {
+  return get(`/api/admin/quotation/next-no?_=${Date.now()}`);
+}
+
 export function updateRfqLevel(
   rfqId: number,
   followUpLevel: string
