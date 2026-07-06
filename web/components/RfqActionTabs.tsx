@@ -262,6 +262,7 @@ function EmbeddedCustomerRfq({ rfqId, onChanged }: { rfqId: number | null; onCha
     <div className="embedded-detail">
       <NewRfqForm
         autoLoadId={rfqId}
+        embedded
         onCreated={onChanged}
         onCancel={() => undefined}
         onDeleted={onChanged}

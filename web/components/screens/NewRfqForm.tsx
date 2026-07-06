@@ -35,11 +35,15 @@ export default function NewRfqForm({
   onCancel,
   onDeleted,
   autoLoadId,
+  embedded,
 }: {
   onCreated?: (rfqNo: string) => void;
   onCancel?: () => void;
   onDeleted?: () => void;        // 삭제 후 콜백(있으면 삭제 버튼 표시)
   autoLoadId?: number | null;    // 마운트 시 해당 RFQ를 즉시 불러와 수정 모드 진입
+  // embedded: 프로젝트 워크스페이스(단계 상세) 임베드용. 카드(.panel)·900px 제한을 빼고
+  // 다른 단계(2~4) 처럼 컨테이너 폭에 꽉 차는 평면 레이아웃으로 렌더한다.
+  embedded?: boolean;
 }) {
   const [editId, setEditId] = useState<number | null>(null); // null=신규, >0=수정
   const [assigneeId, setAssigneeId] = useState<number>(0);   // 편집 대상 RFQ의 담당자(PIC)
@@ -328,7 +332,7 @@ export default function NewRfqForm({
   }
 
   return (
-    <div className="panel form-panel" onPaste={handlePaste}>
+    <div className={embedded ? undefined : "panel form-panel"} onPaste={handlePaste}>
       <fieldset className="form-fieldset" disabled={!canEditThis}>
       {/* 도구 모음 — 평소엔 접혀 있고, 버튼으로 필요한 패널만 펼친다. */}
       <div className="form-tools">
