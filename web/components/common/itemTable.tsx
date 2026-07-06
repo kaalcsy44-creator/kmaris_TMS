@@ -162,8 +162,15 @@ function handleGridKeyDown(event: KeyboardEvent<GridCell>) {
   if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
 
   const input = event.currentTarget;
-  // 여러 줄 textarea(설명 칸)에서는 위/아래로 셀 이동하지 않고 줄 이동을 그대로 둔다.
-  if (input.tagName === "TEXTAREA" && (key === "ArrowUp" || key === "ArrowDown")) return;
+  // 여러 줄 textarea: 캐럿이 첫 줄이면 ↑, 마지막 줄이면 ↓ 일 때만 위/아래 셀로 이동.
+  // (중간 줄에서는 줄 이동을 그대로 둬서 여러 줄 편집을 방해하지 않는다.)
+  if (
+    input.tagName === "TEXTAREA" &&
+    (key === "ArrowUp" || key === "ArrowDown") &&
+    !shouldMoveVertically(input, key)
+  ) {
+    return;
+  }
   if ((key === "ArrowLeft" || key === "ArrowRight") && !shouldMoveHorizontally(input, key)) {
     return;
   }
@@ -192,6 +199,17 @@ function shouldMoveHorizontally(input: GridCell, key: string): boolean {
   const end = input.selectionEnd ?? 0;
   if (start !== end) return true;
   return key === "ArrowLeft" ? start === 0 : end === input.value.length;
+}
+
+// textarea 에서 위/아래 화살표로 인접 셀(행)로 이동할지 판단.
+// 첫 줄에서 ↑, 마지막 줄에서 ↓ 이면 이동(줄바꿈 기준). 선택 영역이 있으면 편집 우선(이동 안 함).
+function shouldMoveVertically(input: GridCell, key: string): boolean {
+  const start = input.selectionStart ?? 0;
+  const end = input.selectionEnd ?? 0;
+  if (start !== end) return false;
+  const value = input.value;
+  if (key === "ArrowUp") return value.lastIndexOf("\n", start - 1) === -1;
+  return value.indexOf("\n", end) === -1;
 }
 
 function findGridInput(from: GridCell, row: number, col: number): GridCell | null {
