@@ -444,7 +444,14 @@ function EmbeddedCustomerQuote({ rfqId, onChanged }: { rfqId: number | null; onC
   return (
     <div className="embedded-record-wrap">
       <div className="embedded-record-bar">
-        <RecordPicker rows={mine} selectedId={selected.id} label={(r) => r.qtn_no || `Quote ${r.id}`} onSelect={setSelId} />
+        {mine.length > 1 ? (
+          <RecordPicker rows={mine} selectedId={selected.id} label={(r) => r.qtn_no || `Quote ${r.id}`} onSelect={setSelId} />
+        ) : (
+          <span className="embedded-record-current">
+            <span className="rec-doc-label">Quotation No.</span>
+            <b className="rec-doc-no">{selected.qtn_no || `Quote ${selected.id}`}</b>
+          </span>
+        )}
         <button type="button" className="btn primary sm" onClick={() => setAdding(true)}>+ New quotation</button>
       </div>
       <CustomerQuoteDetailModal id={selected.id} onClose={() => { load(); onChanged(); }} onChanged={() => { load(); onChanged(); }} inline />

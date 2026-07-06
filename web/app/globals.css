@@ -5208,6 +5208,18 @@ table.mini .num {
   border-radius: 999px;
   padding: 2px 9px;
 }
+/* 단건 문서(견적 등) 번호를 상단에 라벨과 함께 표시. */
+.embedded-record-current .rec-doc-label {
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.embedded-record-current .rec-doc-no {
+  font-size: 15px;
+  color: var(--blue);
+}
 /* 등록 폼 상단 바(뒤로 + 제목). */
 .embedded-add-head {
   display: flex;
