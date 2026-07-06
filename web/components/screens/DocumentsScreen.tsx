@@ -5,8 +5,11 @@ import {
   documentDownloadUrl,
   fetchDocumentDetail,
   saveCommercialInvoice,
+  deleteCommercialInvoice,
   savePackingList,
+  deletePackingList,
   saveShippingAdvice,
+  deleteShippingAdvice,
   saveTaxInvoice,
   sendShippingAdvice,
   updateDocumentMilestone,
@@ -848,6 +851,39 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
     }
   }
 
+  // 저장하지 않은 편집을 마지막 저장값으로 되돌린다.
+  function cancel() {
+    setCiNo(data.ci?.ci_no || "");
+    setDate(data.ci?.date || today());
+    setCurrency(data.ci?.currency || "USD");
+    setVatRate(data.ci?.vat_rate ?? 0);
+    setItems(normalizeItems(data.ci?.items || data.order.items));
+    setShipping({
+      port_loading: "Busan, Korea",
+      port_discharge: "",
+      carrier: "TBD",
+      bl_awb_no: "TBD",
+      etd: "",
+      eta: "",
+      shipping_marks: `K-MARIS / ${data.order.vessel || ""} / ${data.order.po_no || ""}`,
+      ...(data.ci?.shipping || {}),
+    });
+  }
+
+  async function del() {
+    if (!data.ci) return;
+    if (!confirm("Delete this Commercial Invoice? (its Packing List is also removed)")) return;
+    setBusy(true);
+    try {
+      await deleteCommercialInvoice(data.order.id);
+      onChanged();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Delete failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="doc-tab">
       <fieldset className="form-fieldset" disabled={!editable}>
@@ -875,9 +911,19 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
       </fieldset>
       <div className="form-actions">
         {editable ? (
-          <button className="btn primary" disabled={busy || data.order.id === 0} onClick={save}>
-            Save CI
-          </button>
+          <>
+            <button className="btn primary" disabled={busy || data.order.id === 0} onClick={save}>
+              Save
+            </button>
+            <button className="btn" disabled={busy} onClick={cancel}>
+              Cancel
+            </button>
+            {data.ci ? (
+              <button className="btn danger" disabled={busy} onClick={del}>
+                Delete
+              </button>
+            ) : null}
+          </>
         ) : (
           <span className="hint-inline">{editBlockReason("documents", data.order.assignee_id)}</span>
         )}
@@ -901,6 +947,26 @@ function PackingListTab({ data, onChanged }: { data: DocumentDetail; onChanged: 
     try {
       await savePackingList(data.order.id, { pl_no: plNo, date, items });
       onChanged();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function cancel() {
+    setPlNo(data.pl?.pl_no || "");
+    setDate(data.pl?.date || today());
+    setItems(normalizeItems(data.pl?.items || data.ci?.items || data.order.items, true));
+  }
+
+  async function del() {
+    if (!data.pl) return;
+    if (!confirm("Delete this Packing List?")) return;
+    setBusy(true);
+    try {
+      await deletePackingList(data.order.id);
+      onChanged();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Delete failed");
     } finally {
       setBusy(false);
     }
@@ -931,9 +997,19 @@ function PackingListTab({ data, onChanged }: { data: DocumentDetail; onChanged: 
       </fieldset>
       <div className="form-actions">
         {editable ? (
-          <button className="btn primary" disabled={busy} onClick={save}>
-            Save PL
-          </button>
+          <>
+            <button className="btn primary" disabled={busy} onClick={save}>
+              Save
+            </button>
+            <button className="btn" disabled={busy} onClick={cancel}>
+              Cancel
+            </button>
+            {data.pl ? (
+              <button className="btn danger" disabled={busy} onClick={del}>
+                Delete
+              </button>
+            ) : null}
+          </>
         ) : (
           <span className="hint-inline">{editBlockReason("documents", data.order.assignee_id)}</span>
         )}
@@ -986,6 +1062,35 @@ function ShippingAdviceTab({ data, onChanged }: { data: DocumentDetail; onChange
     }
   }
 
+  function cancel() {
+    setSaNo(data.sa?.sa_no || "");
+    setDate(data.sa?.date || today());
+    setShipping({
+      port_loading: data.ci?.shipping.port_loading || "Busan, Korea",
+      port_discharge: data.ci?.shipping.port_discharge || "",
+      carrier: data.ci?.shipping.carrier || "TBD",
+      bl_awb_no: data.ci?.shipping.bl_awb_no || "TBD",
+      etd: data.ci?.shipping.etd || "",
+      eta: data.ci?.shipping.eta || "",
+      shipping_marks: data.ci?.shipping.shipping_marks || `K-MARIS / ${data.order.vessel || ""} / ${data.order.po_no || ""}`,
+      ...(data.sa?.shipping || {}),
+    });
+  }
+
+  async function del() {
+    if (!data.sa) return;
+    if (!confirm("Delete this Shipping Advice?")) return;
+    setBusy(true);
+    try {
+      await deleteShippingAdvice(data.order.id);
+      onChanged();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Delete failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="doc-tab">
       {/* 8단계(Delivery arrangement) 마일스톤 — Customer 확인 / Vendor 서류 확인 */}
@@ -1022,8 +1127,16 @@ function ShippingAdviceTab({ data, onChanged }: { data: DocumentDetail; onChange
         {editable ? (
           <>
             <button className="btn primary" disabled={busy || data.order.id === 0} onClick={save}>
-              Save SA
+              Save
             </button>
+            <button className="btn" disabled={busy} onClick={cancel}>
+              Cancel
+            </button>
+            {data.sa ? (
+              <button className="btn danger" disabled={busy} onClick={del}>
+                Delete
+              </button>
+            ) : null}
             <DownloadButton orderId={data.order.id} kind="sa/pdf" disabled={!data.sa} label="Download SA PDF" />
             <button
               className="btn"

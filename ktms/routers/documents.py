@@ -301,6 +301,28 @@ def commercial_invoice_pdf(order_id: int):
         s.close()
 
 
+@app.delete("/api/admin/documents/{order_id}/ci",
+            dependencies=[Depends(require_token)])
+def delete_commercial_invoice(order_id: int):
+    """Commercial Invoice 삭제. 하위 Packing List 는 함께 삭제(CI 없이는 존재 불가).
+    다운스트림 세금계산서(9단계)가 있으면 막는다 — 먼저 그걸 삭제해야 한다."""
+    s = get_session()
+    try:
+        ci = _latest_ci(s, order_id)
+        if not ci:
+            raise HTTPException(status_code=404, detail="Commercial Invoice가 없습니다.")
+        if s.query(TaxInvoiceData).filter_by(ci_id=ci.id).first():
+            raise HTTPException(status_code=400,
+                detail="세금계산서가 있어 삭제할 수 없습니다. 먼저 9단계 세금계산서를 삭제하세요.")
+        for pl in s.query(PackingList).filter_by(ci_id=ci.id).all():
+            s.delete(pl)
+        s.delete(ci)
+        s.commit()
+        return {"ok": True}
+    finally:
+        s.close()
+
+
 @app.post("/api/admin/documents/{order_id}/pl",
           dependencies=[Depends(require_token)])
 def save_packing_list(order_id: int, body: PackingListSave):
@@ -353,6 +375,22 @@ def packing_list_pdf(order_id: int):
         s.close()
 
 
+@app.delete("/api/admin/documents/{order_id}/pl",
+            dependencies=[Depends(require_token)])
+def delete_packing_list(order_id: int):
+    s = get_session()
+    try:
+        ci = _latest_ci(s, order_id)
+        pl = _latest_pl(s, ci.id if ci else None)
+        if not pl:
+            raise HTTPException(status_code=404, detail="Packing List가 없습니다.")
+        s.delete(pl)
+        s.commit()
+        return {"ok": True}
+    finally:
+        s.close()
+
+
 @app.post("/api/admin/documents/{order_id}/sa",
           dependencies=[Depends(require_token)])
 def save_shipping_advice(order_id: int, body: ShippingAdviceSave):
@@ -400,6 +438,21 @@ def shipping_advice_pdf(order_id: int):
         )
         pdf = generate_pdf("shipping_advice", payload)
         return _doc_file_response(pdf, f"{sa.sa_no}_SA.pdf", "application/pdf")
+    finally:
+        s.close()
+
+
+@app.delete("/api/admin/documents/{order_id}/sa",
+            dependencies=[Depends(require_token)])
+def delete_shipping_advice(order_id: int):
+    s = get_session()
+    try:
+        sa = _latest_sa(s, order_id)
+        if not sa:
+            raise HTTPException(status_code=404, detail="Shipping Advice가 없습니다.")
+        s.delete(sa)
+        s.commit()
+        return {"ok": True}
     finally:
         s.close()
 

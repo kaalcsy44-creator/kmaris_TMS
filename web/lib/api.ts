@@ -378,6 +378,10 @@ export function saveCommercialInvoice(
   return post(`/api/admin/documents/${orderId}/ci`, body);
 }
 
+export function deleteCommercialInvoice(orderId: number): Promise<{ ok: boolean }> {
+  return del(`/api/admin/documents/${orderId}/ci`);
+}
+
 export function saveServiceStage(
   orderId: number,
   stage: number,
@@ -398,11 +402,19 @@ export function savePackingList(
   return post(`/api/admin/documents/${orderId}/pl`, body);
 }
 
+export function deletePackingList(orderId: number): Promise<{ ok: boolean }> {
+  return del(`/api/admin/documents/${orderId}/pl`);
+}
+
 export function saveShippingAdvice(
   orderId: number,
   body: { sa_no?: string; date?: string; shipping: Record<string, string> }
 ): Promise<{ ok: boolean; id: number; sa_no: string }> {
   return post(`/api/admin/documents/${orderId}/sa`, body);
+}
+
+export function deleteShippingAdvice(orderId: number): Promise<{ ok: boolean }> {
+  return del(`/api/admin/documents/${orderId}/sa`);
 }
 
 export function sendShippingAdvice(
