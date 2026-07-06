@@ -219,6 +219,11 @@ export function fetchNextQuotationNo(): Promise<{ qtn_no: string }> {
   return get(`/api/admin/quotation/next-no?_=${Date.now()}`);
 }
 
+// 자동채번 미리보기 — 다음에 생성될 K-Maris (Vendor) P/O No.(KMS-ORD-yymm-nnn, 할당하지 않음).
+export function fetchNextPoNo(): Promise<{ po_no: string }> {
+  return get(`/api/admin/vendor-po/next-no?_=${Date.now()}`);
+}
+
 export function updateRfqLevel(
   rfqId: number,
   followUpLevel: string

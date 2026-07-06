@@ -41,6 +41,7 @@ from _core import (
     _kst_iso,
     _ocr_image_media_type,
     _order_for_rfq,
+    _next_kmaris_po_no,
     _pipeline_stage,
     _project_no_for_order,
     _project_no_map,
@@ -488,6 +489,16 @@ def delete_order(order_id: int):
         s.close()
 
 
+@app.get("/api/admin/vendor-po/next-no", dependencies=[Depends(require_token)])
+def next_vendor_po_no_endpoint():
+    """자동채번 미리보기 — 다음 K-Maris (Vendor) P/O No.(KMS-ORD-yymm-nnn). 할당하지 않음."""
+    s = get_session()
+    try:
+        return {"po_no": _next_kmaris_po_no(s)}
+    finally:
+        s.close()
+
+
 @app.post("/api/admin/vendor-pos", dependencies=[Depends(require_token)])
 def create_purchase_order(body: PurchaseOrderCreate):
     """Vendor P/O 발신 탭 — 발주서 생성."""
@@ -516,10 +527,12 @@ def create_purchase_order(body: PurchaseOrderCreate):
                 "amount": it.amount if it.amount is not None else qty * unit_price,
             })
 
-        # 수동 입력. 비우면 번호 없이 저장(나중에 편집에서 채움).
+        # 번호: 수동 입력값 우선(중복 검사), 비우면 자동 채번(KMS-ORD-yymm-nnn).
         po_no = (body.po_no or "").strip() or None
         if po_no and s.query(PurchaseOrder).filter_by(po_no=po_no).first():
             raise HTTPException(status_code=400, detail=f"이미 존재하는 PO No. 입니다: {po_no}")
+        if not po_no:
+            po_no = _next_kmaris_po_no(s)
         po = PurchaseOrder(
             po_no=po_no,
             order_id=order.id,

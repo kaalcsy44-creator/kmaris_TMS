@@ -1892,6 +1892,19 @@ def _next_kmaris_quotation_no(session) -> str:
     return f"{prefix}{mx + 1:03d}"
 
 
+def _next_kmaris_po_no(session) -> str:
+    """자동 채번 K-Maris (Vendor) P/O No. — 'KMS-ORD-yymm-nnn'. 이번 달(KST) 마지막 순번 +1.
+    (벤더에 발주하는 우리 주문서라 ORD 프리픽스 사용.)"""
+    yymm = (datetime.utcnow() + timedelta(hours=9)).strftime("%y%m")
+    prefix = f"KMS-ORD-{yymm}-"
+    mx = 0
+    for (no,) in session.query(PurchaseOrder.po_no).filter(PurchaseOrder.po_no.like(prefix + "%")).all():
+        tail = str(no or "")[len(prefix):]
+        if tail.isdigit():
+            mx = max(mx, int(tail))
+    return f"{prefix}{mx + 1:03d}"
+
+
 def _assign_rfq_no(session, rfq, mode: str = "auto", manual: str = "") -> str:
     """미발급 RFQ 에 K-Maris RFQ No. 를 부여한다.
     - manual: 입력값이 있으면 그 값(중복 검사). 비우면 그대로 미발급 유지.
@@ -2115,6 +2128,7 @@ __all__ = [
     "_assign_rfq_no",
     "_next_kmaris_rfq_no",
     "_next_kmaris_quotation_no",
+    "_next_kmaris_po_no",
     "_base_meta",
     "_coerce_work_type",
     "_cur2",

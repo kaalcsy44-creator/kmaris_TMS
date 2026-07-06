@@ -17,12 +17,14 @@ import {
   updatePurchaseOrder,
   deletePurchaseOrder,
   fetchVendorQuoteOverview,
+  fetchNextPoNo,
 } from "@/lib/api";
 import { getToken, can, canEditDeal, editBlockReason } from "@/lib/auth";
 import { useCachedData, invalidateCache } from "@/lib/useCachedData";
 import FilterTable, { ColumnDef } from "@/components/common/FilterTable";
 import { identityColumns, projectNoColumn } from "@/components/common/identityColumns";
 import VendorName from "@/components/common/VendorName";
+import CustomerName from "@/components/common/CustomerName";
 import Modal from "@/components/common/Modal";
 import BaseMetaRows, { ModalTitle } from "@/components/common/BaseMeta";
 import CurrencyToggle from "@/components/common/CurrencyToggle";
@@ -392,6 +394,14 @@ function OrderDetailModal({
         <div className="state">Loading details…</div>
       ) : (
         <>
+          {inline ? (
+            <div className="embedded-record-bar">
+              <span className="embedded-record-current">
+                <CustomerName name={detail.customer || ""} />
+                <b className="rec-doc-no">{detail.customer_po_no || ""}</b>
+              </span>
+            </div>
+          ) : null}
           {!inline ? (
             <>
               <div className="form-section-title">Order info</div>
@@ -544,7 +554,7 @@ function VendorPoTab({
             {pos.length ? (
               <button type="button" className="btn" onClick={() => setAdding(false)}>← Back</button>
             ) : null}
-            <span className="form-section-title" style={{ margin: 0 }}>Issue a Vendor P/O</span>
+            <span className="form-section-title" style={{ margin: 0 }}>Basic Info</span>
           </div>
           <VendorPoCreate
             options={options}
@@ -571,7 +581,12 @@ function VendorPoTab({
                 </button>
               ))}
             </div>
-          ) : <span />}
+          ) : (
+            <span className="embedded-record-current">
+              <VendorName name={selected.vendor || ""} />
+              <b className="rec-doc-no">{selected.po_no || ""}</b>
+            </span>
+          )}
           <button type="button" className="btn primary sm" onClick={() => setAdding(true)}>+ Issue another</button>
         </div>
         <VendorPoDetailModal
@@ -1111,6 +1126,9 @@ function VendorPoCreate({
   const [orderId, setOrderId] = useState<number | "">(defaultOrder);
   const [vendorId, setVendorId] = useState<number | "">("");
   const [poNo, setPoNo] = useState("");
+  // K-Maris PO No. 채번: auto(자동 KMS-ORD-yymm-nnn) / manual(직접 입력).
+  const [noMode, setNoMode] = useState<"auto" | "manual">("auto");
+  const [autoNo, setAutoNo] = useState("");
   const [date, setDate] = useState(today);
   const [items, setItems] = useState<PoWorkItem[]>([blankItem()]);
   const [busy, setBusy] = useState(false);
@@ -1143,10 +1161,14 @@ function VendorPoCreate({
   useEffect(() => {
     if (order) {
       setItems(order.items.length ? order.items.map(normalizeItem) : [blankItem()]);
-      setPoNo(order.po_no ? `KM-${order.po_no}` : "");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderId]);
+
+  // 자동채번 미리보기(다음 K-Maris PO No.) 로드.
+  useEffect(() => {
+    fetchNextPoNo().then((r) => setAutoNo(r.po_no)).catch(() => setAutoNo(""));
+  }, []);
 
   async function submit() {
     if (orderId === "" || vendorId === "") return;
@@ -1200,11 +1222,20 @@ function VendorPoCreate({
         </div>
         <div className="form-field">
           <label>K-Maris PO No.</label>
-          <input
-            value={poNo}
-            onChange={(e) => setPoNo(e.target.value)}
-            placeholder={order?.po_no ? `KM-${order.po_no}` : "KM-…"}
-          />
+          {noMode === "auto" ? (
+            <select
+              value="auto"
+              onChange={(e) => { if (e.target.value === "manual") { setNoMode("manual"); setPoNo(""); } }}
+            >
+              <option value="auto">{autoNo ? `${autoNo} (auto)` : "Auto-generate"}</option>
+              <option value="manual">Manual entry…</option>
+            </select>
+          ) : (
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <input value={poNo} onChange={(e) => setPoNo(e.target.value)} placeholder="KMS-ORD-…" autoFocus style={{ flex: 1 }} />
+              <button type="button" className="btn sm" onClick={() => { setNoMode("auto"); setPoNo(""); }} title="Use auto number">auto</button>
+            </div>
+          )}
         </div>
         <div className="form-field">
           <label>PO date</label>
