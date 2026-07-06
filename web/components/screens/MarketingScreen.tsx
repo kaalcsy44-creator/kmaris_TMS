@@ -36,7 +36,7 @@ function toggleType(s: string, t: string): string {
   return ACTIVITY_TYPES.filter((x) => next.includes(x)).join(", ");
 }
 
-type Form = {
+export type Form = {
   customer_id: number | "";
   prospect_name: string;
   contact_person: string;
@@ -50,7 +50,7 @@ type Form = {
   owner_id: number | "";
 };
 
-const emptyForm: Form = {
+export const emptyForm: Form = {
   customer_id: "",
   prospect_name: "",
   contact_person: "",
@@ -216,7 +216,7 @@ export default function MarketingScreen() {
   );
 }
 
-function MarketingForm({
+export function MarketingForm({
   initial,
   customers,
   canEdit,

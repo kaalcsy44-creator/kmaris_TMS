@@ -7,6 +7,7 @@ import {
   fetchQuotationOverview,
   fetchPipeline,
   fetchArOverview,
+  fetchPoOverview,
   fetchMarketingOverview,
   fetchSchedule,
   fetchCustomers,
@@ -18,12 +19,13 @@ import {
   type ScheduleSave,
 } from "@/lib/api";
 import { useCachedData, invalidateCache } from "@/lib/useCachedData";
-import { can, canEditDeal } from "@/lib/auth";
+import { can, canEditDeal, getUser } from "@/lib/auth";
 import type {
-  QtnRow, PipelineRow, ArRow, MarketingRow, MarketingOverview,
+  QtnRow, PipelineRow, ArRow, PoRow, MarketingRow, MarketingOverview,
   ScheduleRow, CustomerOption, StatisticsData, StatAlertRow, CurrencyKey,
 } from "@/lib/types";
 import { PipelineModal } from "@/components/screens/ProgressScreen";
+import { MarketingForm, emptyForm as emptyMarketingForm } from "@/components/screens/MarketingScreen";
 import {
   ResponsiveContainer, LineChart, Line, BarChart, Bar,
   XAxis, YAxis, Tooltip, CartesianGrid, Legend, Cell, LabelList,
@@ -144,11 +146,17 @@ function HomeTab() {
   const { data: qtn, refresh: refreshQtn } = useCachedData("home:quotations", () => fetchQuotationOverview());
   const { data: pipeline, refresh: refreshPipeline } = useCachedData("pipeline", () => fetchPipeline());
   const { data: ar, refresh: refreshAr } = useCachedData("ar:overview", fetchArOverview);
+  // 고객 P/O 수신 현황 — 열람 권한이 있을 때만 로드(없으면 카드 미표시).
+  const canPo = can("po", "view");
+  const { data: po } = useCachedData(
+    "po:overview",
+    () => (canPo ? fetchPoOverview() : Promise.resolve(null)),
+  );
   // 프로젝트 상세 팝업(Progress 화면과 동일한 모달)용 — 편집 셀렉터에 쓰는 고객사·선박 목록.
   const { data: vessels } = useCachedData("settings:vessels", fetchSettingsVessels);
   // 마케팅 요약 — 열람 권한이 있을 때만 로드(없으면 카드 미표시).
   const canMarketing = can("marketing", "view");
-  const { data: marketing } = useCachedData(
+  const { data: marketing, refresh: refreshMarketing } = useCachedData(
     "home:marketing",
     () => (canMarketing ? fetchMarketingOverview() : Promise.resolve(null)),
   );
@@ -159,8 +167,14 @@ function HomeTab() {
   const [schedAdding, setSchedAdding] = useState(false);
   const [schedEditing, setSchedEditing] = useState<ScheduleRow | null>(null);
 
+  // 마케팅 활동 등록 모달 상태 — 카드의 + Add 버튼으로 연다.
+  const [mktAdding, setMktAdding] = useState(false);
+  const canMarketingCreate = canMarketing && can("marketing", "create");
+
   const qtnRows = useMemo(() => qtn?.rows ?? [], [qtn]);
   const arRows = useMemo(() => ar?.rows ?? [], [ar]);
+  // P/O 수신 = 주문(Order)이 생성된 건만(id>0). RFQ 단계뿐인 건은 제외.
+  const poRows = useMemo(() => (po?.rows ?? []).filter((r) => r.id > 0), [po]);
   const schedRows = useMemo(() => schedule?.rows ?? [], [schedule]);
 
   // 대시보드 목록에서 프로젝트 행 클릭 → Progress 화면과 동일한 상세 팝업을 연다.
@@ -312,6 +326,16 @@ function HomeTab() {
     { key: "pic", label: "PIC", text: (r) => r.assignee || "", filter: "facet" },
   ];
 
+  // 고객 P/O 수신 — 대시보드 카드 컬럼(수신일·PO번호·고객·선박·품목수·단계).
+  const poCols: ColumnDef<PoRow>[] = [
+    { key: "customer_po_at", label: "Received", text: (r) => (r.customer_po_at || "").slice(0, 10), filter: "date" },
+    { key: "customer_po_no", label: "PO No.", text: (r) => r.customer_po_no || "" },
+    { key: "customer", label: "Customer", text: (r) => r.customer || "", filter: "facet", render: (r) => <CustomerName name={r.customer || ""} /> },
+    { key: "vessel", label: "Vessel", text: (r) => r.vessel || "" },
+    { key: "items", label: "Items", numeric: true, text: (r) => String(r.item_count), sortValue: (r) => r.item_count },
+    { key: "status", label: "Status", text: (r) => tr(r.status), filter: "facet", render: (r) => <span className="ar-badge">{tr(r.status)}</span> },
+  ];
+
   const delayCols: ColumnDef<DelayRow>[] = [
     { key: "due", label: "Due date", text: (r) => r.due || "", filter: "date" },
     { key: "days", label: "Days late", numeric: true, text: (r) => `${r.days}d`, sortValue: (r) => r.days, render: (r) => <b className="home-late">{r.days}d</b> },
@@ -362,6 +386,28 @@ function HomeTab() {
         />
       ),
     },
+    ...(canPo
+      ? {
+          po: {
+            title: "P/O Received",
+            sub: "Customer purchase orders",
+            body: !po ? (
+              <div className="state">Loading…</div>
+            ) : (
+              <FilterTable
+                tableId="dash-po"
+                rows={poRows}
+                columns={poCols}
+                getRowKey={(r) => r.id}
+                defaultSortKey="customer_po_at"
+                defaultSortDir="desc"
+                onRowClick={(r) => openByOrderId(r.id, `/progress?order=${r.id}&stage=5`)}
+                empty="No purchase orders received yet."
+              />
+            ),
+          },
+        }
+      : {}),
     activity: {
       title: "Activity Log",
       sub: "PIC activity log",
@@ -452,6 +498,7 @@ function HomeTab() {
                 data={marketing}
                 columns={marketingCols}
                 onRowClick={(r) => router.push(`/marketing?id=${r.id}`)}
+                onAdd={canMarketingCreate ? () => setMktAdding(true) : undefined}
               />
             ),
           },
@@ -466,6 +513,14 @@ function HomeTab() {
     setSchedAdding(false);
     setSchedEditing(null);
     return refreshSchedule();
+  }
+
+  function reloadMarketing() {
+    setMktAdding(false);
+    // 마케팅 화면 목록 캐시도 무효화해 다음 방문 시 최신 활동이 보이도록.
+    invalidateCache("marketing");
+    invalidateCache("marketing-overview");
+    return refreshMarketing();
   }
 
   return (
@@ -500,6 +555,17 @@ function HomeTab() {
             customers={customers ?? []}
             canEdit={canEditDeal(schedEditing.owner_id)}
             onChanged={reloadSchedule}
+          />
+        </Modal>
+      ) : null}
+
+      {mktAdding ? (
+        <Modal title="Add marketing activity" onClose={() => setMktAdding(false)} wide>
+          <MarketingForm
+            initial={{ ...emptyMarketingForm, owner_id: getUser()?.id ?? "" }}
+            customers={customers ?? []}
+            canEdit
+            onChanged={reloadMarketing}
           />
         </Modal>
       ) : null}
@@ -659,10 +725,22 @@ function useHomeOrder(defaults: string[]) {
       saved = [];
     }
     const known = new Set(defaults);
-    const merged = [
-      ...saved.filter((id) => known.has(id)),
-      ...defaults.filter((id) => !saved.includes(id)),
-    ];
+    // 저장된 순서를 유지하되, 저장 이후 새로 추가된 카드는 끝이 아니라
+    // 기본 순서상의 자리(직전 카드 뒤)에 끼워 넣는다. 그래야 신규 카드가
+    // 의도한 위치(예: P/O Received = Quote 다음)에 나타난다.
+    const merged = saved.filter((id) => known.has(id));
+    defaults.forEach((id, idx) => {
+      if (merged.includes(id)) return;
+      let insertAt = merged.length;
+      for (let j = idx - 1; j >= 0; j--) {
+        const pos = merged.indexOf(defaults[j]);
+        if (pos !== -1) {
+          insertAt = pos + 1;
+          break;
+        }
+      }
+      merged.splice(insertAt, 0, id);
+    });
     setIds(merged);
     // defaults 는 매 렌더 새 배열이라 의존성에서 제외(키 집합은 고정).
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -704,10 +782,12 @@ function MarketingCardBody({
   data,
   columns,
   onRowClick,
+  onAdd,
 }: {
   data: MarketingOverview;
   columns: ColumnDef<MarketingRow>[];
   onRowClick: (r: MarketingRow) => void;
+  onAdd?: () => void;
 }) {
   const t = today();
   const dueFollowUps = data.follow_ups.filter((r) => r.next_action_date && r.next_action_date <= t).length;
@@ -733,6 +813,13 @@ function MarketingCardBody({
         defaultSortDir="desc"
         onRowClick={onRowClick}
         empty="No marketing activities yet."
+        actions={
+          onAdd ? (
+            <button className="btn" onClick={onAdd}>
+              + Add
+            </button>
+          ) : undefined
+        }
       />
     </>
   );
