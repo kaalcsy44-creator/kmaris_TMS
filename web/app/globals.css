@@ -3244,7 +3244,10 @@ a.btn.primary:hover {
   color: #45526a;
   white-space: nowrap;
 }
-.form-field label {
+/* 입력란 제목 — <label> 자식(div.form-field 패턴)과 <span> 제목(label.form-field 패턴)
+   양쪽에 동일한 컴팩트 라벨 스타일을 적용해 앱 전체 폼 제목을 통일한다. */
+.form-field label,
+.form-field > span {
   display: block;
   font-size: 12px;
   font-weight: 600;

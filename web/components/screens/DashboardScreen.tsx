@@ -570,7 +570,7 @@ function HomeTab() {
       ) : null}
 
       {mktAdding ? (
-        <Modal title="Add marketing activity" onClose={() => setMktAdding(false)} wide>
+        <Modal title="Add marketing activity" onClose={() => setMktAdding(false)} form>
           <MarketingForm
             initial={{ ...emptyMarketingForm, owner_id: getUser()?.id ?? "" }}
             customers={customers ?? []}

@@ -183,7 +183,7 @@ export default function MarketingScreen() {
       )}
 
       {adding ? (
-        <Modal title="Add marketing activity" onClose={close} wide>
+        <Modal title="Add marketing activity" onClose={close} form>
           <MarketingForm
             initial={{ ...emptyForm, owner_id: getUser()?.id ?? "" }}
             customers={customers ?? []}
@@ -197,7 +197,7 @@ export default function MarketingScreen() {
       ) : null}
 
       {editing ? (
-        <Modal title={`Marketing — ${editing.customer || "activity"}`} onClose={close} wide>
+        <Modal title={`Marketing — ${editing.customer || "activity"}`} onClose={close} form>
           <MarketingForm
             initial={rowToForm(editing)}
             customers={customers ?? []}
