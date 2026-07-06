@@ -2715,6 +2715,7 @@ function customerQuoteItemsFromVendorQuote(
       margin_pct: defaultMargin,
       unit_price: unit,
       amount: unit * qty,
+      lead_time: it.lead_time ?? "",
       remark: it.remark ?? "",
     };
   });
@@ -3161,6 +3162,7 @@ function CustomerQuoteItemEditor({
         margin_pct: last?.margin_pct ?? 0,
         unit_price: 0,
         amount: 0,
+        lead_time: "",
         remark: "",
       },
     ]);
@@ -3192,6 +3194,7 @@ function CustomerQuoteItemEditor({
               <th className="num">Margin %</th>
               <th className="num">Unit Price ({saleCur})</th>
               <th className="num">Amount ({saleCur})</th>
+              <th>Lead Time</th>
               <th>Remark</th>
             </tr>
           </thead>
@@ -3210,7 +3213,8 @@ function CustomerQuoteItemEditor({
                 <td><input {...gridCellProps(i, 5)} className="num" value={amountInputValue(it.margin_pct)} onChange={(e) => patch(i, "margin_pct", e.target.value)} /></td>
                 <td><input {...gridCellProps(i, 6)} className="num" value={amountInputValue(it.unit_price)} onChange={(e) => patch(i, "unit_price", e.target.value)} /></td>
                 <td><input {...gridCellProps(i, 7)} className="num" value={amountInputValue(it.amount)} onChange={(e) => patch(i, "amount", e.target.value)} /></td>
-                <td><textarea {...gridCellProps(i, 8)} className="wrapcell" rows={1} value={it.remark ?? ""} onChange={(e) => patch(i, "remark", e.target.value)} /></td>
+                <td><textarea {...gridCellProps(i, 8)} className="wrapcell" rows={1} value={it.lead_time ?? ""} onChange={(e) => patch(i, "lead_time", e.target.value)} /></td>
+                <td><textarea {...gridCellProps(i, 9)} className="wrapcell" rows={1} value={it.remark ?? ""} onChange={(e) => patch(i, "remark", e.target.value)} /></td>
               </tr>
             ))}
           </tbody>
@@ -3221,7 +3225,7 @@ function CustomerQuoteItemEditor({
                 <DualCurrencyAmount value={total} currency={currency} />
                 <span className="fx-note">{fxRateText()}</span>
               </td>
-              <td></td>
+              <td colSpan={2}></td>
             </tr>
           </tfoot>
         </table>

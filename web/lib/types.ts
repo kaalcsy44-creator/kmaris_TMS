@@ -353,6 +353,7 @@ export type CustomerQuoteItem = {
   margin_pct: number | null;
   unit_price: number | null;
   amount: number | null;
+  lead_time?: string;
   remark?: string;
 };
 
