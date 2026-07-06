@@ -383,7 +383,14 @@ function EmbeddedVendorQuote({ rfqId, onChanged }: { rfqId: number | null; onCha
   return (
     <div className="embedded-record-wrap">
       <div className="embedded-record-bar">
-        <RecordPicker rows={mine} selectedId={selected.id} label={(r) => `${r.vendor || ""} ${r.vendor_quote_no || ""}`.trim() || `Quote ${r.id}`} onSelect={setSelId} />
+        {mine.length > 1 ? (
+          <RecordPicker rows={mine} selectedId={selected.id} label={(r) => `${r.vendor || ""} ${r.vendor_quote_no || ""}`.trim() || `Quote ${r.id}`} onSelect={setSelId} />
+        ) : (
+          <span className="embedded-record-current">
+            <VendorName name={selected.vendor || ""} />
+            {selected.vendor_quote_no ? <span className="rec-quote-no">{selected.vendor_quote_no}</span> : null}
+          </span>
+        )}
         <button type="button" className="btn primary sm" onClick={() => setAdding(true)}>+ Register another</button>
       </div>
       <VendorQuoteDetailModal id={selected.id} onClose={() => { load(); onChanged(); }} onChanged={() => { load(); onChanged(); }} inline />
