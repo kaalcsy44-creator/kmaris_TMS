@@ -234,7 +234,7 @@ function RecordPicker<T extends { id: number }>({
 }: {
   rows: T[];
   selectedId: number;
-  label: (r: T) => string;
+  label: (r: T) => React.ReactNode;
   onSelect: (id: number) => void;
 }) {
   if (rows.length <= 1) return null;
@@ -330,7 +330,7 @@ function EmbeddedVendorRfq({
   return (
     <div className="embedded-record-wrap">
       <div className="embedded-record-bar">
-        <RecordPicker rows={mine} selectedId={selected.id} label={(r) => r.vendor || `RFQ ${r.id}`} onSelect={setSelId} />
+        <RecordPicker rows={mine} selectedId={selected.id} label={(r) => r.vendor ? <VendorName name={r.vendor} /> : `RFQ ${r.id}`} onSelect={setSelId} />
         <button type="button" className="btn primary sm" onClick={() => setAdding(true)}>+ Send another</button>
       </div>
       <VendorRfqDetailModal
@@ -384,7 +384,17 @@ function EmbeddedVendorQuote({ rfqId, onChanged }: { rfqId: number | null; onCha
     <div className="embedded-record-wrap">
       <div className="embedded-record-bar">
         {mine.length > 1 ? (
-          <RecordPicker rows={mine} selectedId={selected.id} label={(r) => `${r.vendor || ""} ${r.vendor_quote_no || ""}`.trim() || `Quote ${r.id}`} onSelect={setSelId} />
+          <RecordPicker
+            rows={mine}
+            selectedId={selected.id}
+            label={(r) => (
+              <span className="rec-tab-label">
+                {r.vendor ? <VendorName name={r.vendor} /> : `Quote ${r.id}`}
+                {r.vendor_quote_no ? <span className="rec-quote-no">{r.vendor_quote_no}</span> : null}
+              </span>
+            )}
+            onSelect={setSelId}
+          />
         ) : (
           <span className="embedded-record-current">
             <VendorName name={selected.vendor || ""} />

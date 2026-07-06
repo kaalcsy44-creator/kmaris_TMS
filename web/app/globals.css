@@ -5168,6 +5168,17 @@ table.mini .num {
   background: #eff6ff;
   color: var(--ink);
 }
+/* 탭 안에 로고 + 이름(+견적번호) 정렬 */
+.embedded-record-picker button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.rec-tab-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
 /* 레코드 선택기 + "새로 등록" 버튼을 한 줄로. */
 .embedded-record-bar {
   display: flex;
