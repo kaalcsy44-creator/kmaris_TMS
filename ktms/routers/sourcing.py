@@ -22,8 +22,13 @@ from _core import (
     VendorRfqSendRequest,
     VendorRfqUpdate,
     VendorRfqXlsxRequest,
+    VendorRfqEmailPreviewReq,
+    VendorRfqEmailSendReq,
     Vessel,
     _assign_rfq_no,
+    build_po_payload,
+    generate_pdf,
+    send_email,
     _base_meta,
     _date_iso,
     _enum_val,
@@ -244,6 +249,114 @@ def vendor_rfq_xlsx_post(rfq_id: int, vendor_id: int, body: VendorRfqXlsxRequest
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
+    finally:
+        s.close()
+
+
+# ── Vendor RFQ 1건(단일 벤더) 문서 생성 + 이메일 발송 — 상세편집 DocSendPanel용 ──
+def _vrfq_ctx(s, vrfq_id: int):
+    """VendorRFQ 1건의 rfq/vendor/customer/vessel/rfq_no/items 를 한 번에 로드."""
+    vr = s.query(VendorRFQ).filter_by(id=vrfq_id).first()
+    if not vr:
+        raise HTTPException(status_code=404, detail="Vendor RFQ를 찾을 수 없습니다.")
+    rfq = s.query(RFQ).filter_by(id=vr.rfq_id).first()
+    vendor = s.query(Vendor).filter_by(id=vr.vendor_id).first()
+    cust = s.query(Customer).filter_by(id=rfq.customer_id).first() if rfq else None
+    vessel = s.query(Vessel).filter_by(id=rfq.vessel_id).first() if rfq and rfq.vessel_id else None
+    rfq_no = _rfq_no_disp(rfq.rfq_no) if rfq else "RFQ"
+    items = vr.items or (rfq.items if rfq else []) or []
+    safe = "".join(c for c in (vendor.name if vendor else "vendor") if c.isalnum() or c in "._- ")[:40]
+    return vr, rfq, vendor, cust, vessel, rfq_no, items, safe
+
+
+@app.get("/api/admin/vendor-rfq/{vrfq_id}/pdf", dependencies=[Depends(require_token)])
+def vendor_rfq_pdf(vrfq_id: int):
+    s = get_session()
+    try:
+        vr, rfq, vendor, cust, vessel, rfq_no, items, safe = _vrfq_ctx(s, vrfq_id)
+        payload = build_po_payload(
+            po_no=rfq_no, date=vr.sent_date or date.today().isoformat(),
+            vendor=vendor, vessel=vessel, items=items,
+        )
+        pdf = generate_pdf("vendor_rfq", payload)
+        return Response(
+            content=pdf, media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{rfq_no}_RFQ_{safe}.pdf"'},
+        )
+    finally:
+        s.close()
+
+
+@app.get("/api/admin/vendor-rfq/{vrfq_id}/xlsx", dependencies=[Depends(require_token)])
+def vendor_rfq_xlsx_single(vrfq_id: int):
+    s = get_session()
+    try:
+        vr, rfq, vendor, cust, vessel, rfq_no, items, safe = _vrfq_ctx(s, vrfq_id)
+        xlsx = make_vendor_rfq_quote_xlsx(
+            rfq_no=rfq_no, vessel_name=vessel.name if vessel else "—",
+            customer_name=cust.name if cust else "—",
+            enquiry_date=vr.sent_date or date.today().isoformat(),
+            vendor_name=vendor.name if vendor else "—", items=items,
+        )
+        return Response(
+            content=xlsx,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f'attachment; filename="{rfq_no}_VendorQuoteSheet_{safe}.xlsx"'},
+        )
+    finally:
+        s.close()
+
+
+@app.post("/api/admin/vendor-rfq/{vrfq_id}/email-preview", dependencies=[Depends(require_token)])
+def vendor_rfq_email_preview(vrfq_id: int, body: VendorRfqEmailPreviewReq):
+    s = get_session()
+    try:
+        vr, rfq, vendor, cust, vessel, rfq_no, items, safe = _vrfq_ctx(s, vrfq_id)
+        lang = "ko" if body.lang == "ko" else "en"
+        subject = (
+            f"[K-MARIS] 견적 요청 — {rfq_no} / {vessel.name if vessel else rfq_no}"
+            if lang == "ko"
+            else f"[K-MARIS] Inquiry — {rfq_no} / {vessel.name if vessel else rfq_no}"
+        )
+        return {
+            "to": vr.sent_to_email or (vendor.email if vendor else "") or "",
+            "subject": subject,
+            "body": _vendor_rfq_email_body(rfq, cust, vessel, vendor, "", lang, vr.items or None),
+            "smtp_configured": bool(os.getenv("SMTP_USER") and os.getenv("SMTP_PASSWORD")),
+        }
+    finally:
+        s.close()
+
+
+@app.post("/api/admin/vendor-rfq/{vrfq_id}/send", dependencies=[Depends(require_token)])
+def vendor_rfq_email_send(vrfq_id: int, body: VendorRfqEmailSendReq):
+    s = get_session()
+    try:
+        vr, rfq, vendor, cust, vessel, rfq_no, items, safe = _vrfq_ctx(s, vrfq_id)
+        if not body.to.strip():
+            raise HTTPException(status_code=400, detail="수신자 이메일을 입력하세요.")
+        if body.format == "pdf":
+            payload = build_po_payload(
+                po_no=rfq_no, date=vr.sent_date or date.today().isoformat(),
+                vendor=vendor, vessel=vessel, items=items,
+            )
+            attach = (f"{rfq_no}_RFQ_{safe}.pdf", generate_pdf("vendor_rfq", payload))
+        else:
+            xlsx = make_vendor_rfq_quote_xlsx(
+                rfq_no=rfq_no, vessel_name=vessel.name if vessel else "—",
+                customer_name=cust.name if cust else "—",
+                enquiry_date=vr.sent_date or date.today().isoformat(),
+                vendor_name=vendor.name if vendor else "—", items=items,
+            )
+            attach = (f"{rfq_no}_VendorQuoteSheet_{safe}.xlsx", xlsx)
+        sent = send_email(to=body.to.strip(), subject=body.subject, body=body.body, attachments=[attach])
+        if not sent:
+            raise HTTPException(status_code=400, detail="이메일 발송 실패 — SMTP 설정 또는 서버 상태를 확인하세요.")
+        vr.sent_to_email = body.to.strip()
+        vr.sent_date = date.today().isoformat()
+        vr.status = "이메일 발송완료"
+        s.commit()
+        return {"ok": True, "sent_date": vr.sent_date}
     finally:
         s.close()
 

@@ -12,6 +12,10 @@ import {
   previewVendorRfq,
   sendVendorRfq,
   vendorRfqXlsxUrl,
+  vendorRfqPdfUrl,
+  vendorRfqSheetXlsxUrl,
+  previewVendorRfqEmail,
+  sendVendorRfqEmail,
   createVendorQuote,
   parseVendorQuoteFile,
   createCustomerQuote,
@@ -965,17 +969,18 @@ function VendorRfqDetailModal({
           </div>
           {err ? <span className="action-err">{err}</span> : null}
 
-          {/* Vendor 견적요청서(Excel) 생성. 이메일 자동발송은 후속 단계에서 추가. */}
-          {d.rfq_id ? (
-            <DocSendPanel
-              title="Vendor RFQ Sheet"
-              formats={["xlsx"]}
-              downloadUrl={() => vendorRfqXlsxUrl(d.rfq_id as number, d.vendor_id)}
-              downloadName={() => `${d.kmaris_rfq_no || "VendorRFQ"}_${d.vendor || "vendor"}.xlsx`}
-              disabled={!canEditThis}
-              disabledReason={!canEditThis ? editBlockReason("rfq", d?.assignee_id) : undefined}
-            />
-          ) : null}
+          {/* Vendor 견적요청서(Excel/PDF) 생성 + 벤더 이메일 발송(선택 포맷 첨부). */}
+          <DocSendPanel
+            title="Vendor RFQ · Email to Vendor"
+            formats={["xlsx", "pdf"]}
+            downloadUrl={(f) => (f === "pdf" ? vendorRfqPdfUrl(d.id) : vendorRfqSheetXlsxUrl(d.id))}
+            downloadName={(f) => `${d.kmaris_rfq_no || "VendorRFQ"}_${d.vendor || "vendor"}.${f}`}
+            onPreview={(lang) => previewVendorRfqEmail(d.id, lang)}
+            onSend={({ to, subject, body, format }) => sendVendorRfqEmail(d.id, to, subject, body, format)}
+            disabled={!canEditThis}
+            disabledReason={!canEditThis ? editBlockReason("rfq", d?.assignee_id) : "Generated from the last saved version — save your edits first."}
+            onSent={onChanged}
+          />
         </>
       )}
     </Modal>

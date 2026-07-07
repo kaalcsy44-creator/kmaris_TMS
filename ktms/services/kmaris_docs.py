@@ -64,6 +64,7 @@ DARK_GRAY = colors.HexColor("#3A3F44")
 
 DOC_TITLES = {
     "quotation": "QUOTATION",
+    "vendor_rfq": "REQUEST FOR QUOTATION",
     "purchase_order": "PURCHASE ORDER",
     "proforma_invoice": "PROFORMA INVOICE",
     "commercial_invoice": "COMMERCIAL INVOICE",
@@ -257,7 +258,12 @@ def _info_tables(data: Dict[str, Any], doc_type: str):
     shipping = data.get("shipping", {})
 
     is_po = doc_type == "purchase_order"
-    party_label = "Supplier / Seller" if is_po else "Customer / Buyer"
+    is_rfq = doc_type == "vendor_rfq"
+    party_label = (
+        "To (Vendor / Supplier)" if is_rfq
+        else "Supplier / Seller" if is_po
+        else "Customer / Buyer"
+    )
     left_rows = [
         [_p(f"<b>{party_label}</b>", s["base"]), _p(customer.get("name", ""), s["base"])],
         [_p("Address", s["base"]), _p(customer.get("address", ""), s["base"])],
@@ -334,6 +340,27 @@ def _items_table(data: Dict[str, Any], doc_type: str):
                     _p(item.get("net_weight", ""), s["tiny"]),
                     _p(item.get("gross_weight", ""), s["tiny"]),
                     _p(item.get("dimension", ""), s["tiny"]),
+                    _p(item.get("remark", ""), s["tiny"]),
+                ]
+            )
+    elif doc_type == "vendor_rfq":
+        # 견적요청서 — 단가/납기/원산지는 공급사가 채우도록 빈칸으로 둔다.
+        headers = ["No.", "Part No.", "Description", "Maker", "Qty", "Unit",
+                   "Unit Price\n(to quote)", "Lead Time", "Country\nof Origin", "Remark"]
+        widths = [10, 30, 64, 32, 15, 16, 26, 24, 28, 43]
+        rows = [[_p(h, s["tiny"]) for h in headers]]
+        for item in items:
+            rows.append(
+                [
+                    _p(item["item_no"], s["tiny"]),
+                    _p(item["part_no"], s["tiny"]),
+                    _p(item["description"], s["tiny"]),
+                    _p(item["maker"], s["tiny"]),
+                    _p(str(item["qty"]), s["tiny"]),
+                    _p(item["unit"], s["tiny"]),
+                    _p("", s["tiny"]),  # Unit Price — 공급사 입력
+                    _p("", s["tiny"]),  # Lead Time — 공급사 입력
+                    _p("", s["tiny"]),  # Origin — 공급사 입력
                     _p(item.get("remark", ""), s["tiny"]),
                 ]
             )
@@ -437,6 +464,14 @@ def _terms_block(data: Dict[str, Any], doc_type: str):
                     ["SWIFT", company.get("swift", "")],
                 ]
             )
+    if doc_type == "vendor_rfq":
+        rows.extend(
+            [
+                ["Requested Incoterms", terms.get("incoterms", "") or "CNF Busan port"],
+                ["Instructions", "Please provide Unit Price, Lead Time and Country of Origin, then return this sheet to sales@k-maris.com."],
+                ["Remarks", terms.get("remarks", "")],
+            ]
+        )
     if doc_type in {"packing_list", "shipping_advice"}:
         rows.extend(
             [
@@ -507,7 +542,7 @@ def make_pdf(doc_type: str, data: Dict[str, Any], company: Optional[Dict[str, An
     story.append(_info_tables(payload, doc_type))
     story.append(Spacer(1, 5 * mm))
     story.append(_items_table(payload, doc_type))
-    if doc_type not in {"packing_list", "shipping_advice"}:
+    if doc_type not in {"packing_list", "shipping_advice", "vendor_rfq"}:
         story.append(Spacer(1, 4 * mm))
         story.append(_totals_table(payload))
     story.append(Spacer(1, 5 * mm))

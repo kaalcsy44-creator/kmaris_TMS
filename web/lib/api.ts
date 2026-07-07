@@ -845,6 +845,29 @@ export function vendorRfqXlsxUrl(rfqId: number, vendorId: number): string {
   return `${API_BASE}/api/admin/rfq/${rfqId}/vendor-rfq-xlsx/${vendorId}`;
 }
 
+// 단일 Vendor RFQ(레코드 id 기준) — 상세편집 DocSendPanel용 문서·이메일
+export function vendorRfqPdfUrl(vrfqId: number): string {
+  return `${API_BASE}/api/admin/vendor-rfq/${vrfqId}/pdf`;
+}
+export function vendorRfqSheetXlsxUrl(vrfqId: number): string {
+  return `${API_BASE}/api/admin/vendor-rfq/${vrfqId}/xlsx`;
+}
+export function previewVendorRfqEmail(
+  vrfqId: number,
+  lang: "en" | "ko"
+): Promise<{ to: string; subject: string; body: string; smtp_configured: boolean }> {
+  return post(`/api/admin/vendor-rfq/${vrfqId}/email-preview`, { lang });
+}
+export function sendVendorRfqEmail(
+  vrfqId: number,
+  to: string,
+  subject: string,
+  body: string,
+  format: "xlsx" | "pdf" = "xlsx"
+): Promise<{ ok: boolean; sent_date: string }> {
+  return post(`/api/admin/vendor-rfq/${vrfqId}/send`, { to, subject, body, format });
+}
+
 export function createVendorQuote(
   rfqId: number,
   vendorRfqId: number,

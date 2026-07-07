@@ -1852,6 +1852,19 @@ class VendorRfqUpdate(BaseModel):
     items: list[dict] | None = None
 
 
+class VendorRfqEmailPreviewReq(BaseModel):
+    lang: str = "en"
+
+
+class VendorRfqEmailSendReq(BaseModel):
+    to: str
+    subject: str
+    body: str
+    format: str = "xlsx"   # 첨부 포맷: xlsx | pdf
+    lang: str = "en"
+    note: str = ""
+
+
 class VendorQuoteCreate(BaseModel):
     vendor_rfq_id: int
     vendor_quote_no: str
@@ -2150,6 +2163,8 @@ __all__ = [
     "VendorRfqPreviewRequest",
     "VendorRfqSendRequest",
     "VendorRfqUpdate",
+    "VendorRfqEmailPreviewReq",
+    "VendorRfqEmailSendReq",
     "VendorRfqXlsxRequest",
     "Vessel",
     "VesselCreate",
