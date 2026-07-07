@@ -117,18 +117,25 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
                 vquote_no = str(_vq_no) + (f"  (외 {len(vqs) - 1}건)" if len(vqs) > 1 else "")
                 vquote_at = _kst(vq0.created_at)
                 _cur = getattr(vq0, "currency", None) or "USD"
-                vendor_amount = _dual_money(_items_cost_total(vq0.items), _cur)
+                _vendor_total = _items_cost_total(vq0.items)
+                vendor_amount = _dual_money(_vendor_total, _cur)
+                vendor_usd = (_vendor_total / USD_KRW_RATE) if _cur.upper() == "KRW" else _vendor_total
             else:
                 vquote_no, vquote_at, vendor_amount = "", "", ""
+                vendor_usd = None
 
             # 4) Customer Quot. 발신
             qtn = (s.query(Quotation).filter_by(rfq_id=r.id)
                    .order_by(Quotation.id.desc()).first())
             if qtn:
                 cquote_no, cquote_at = qtn.qtn_no, _kst(qtn.created_at)
-                customer_amount = _dual_money(_total_amount(qtn.items or []), qtn.currency)
+                _customer_total = _total_amount(qtn.items or [])
+                _c_cur = (qtn.currency or "USD").upper()
+                customer_amount = _dual_money(_customer_total, qtn.currency)
+                customer_usd = (_customer_total / USD_KRW_RATE) if _c_cur == "KRW" else _customer_total
             else:
                 cquote_no, cquote_at, customer_amount = "", "", ""
+                customer_usd = None
 
             # 5) Customer P/O 수신 · 6) Vendor P/O 발신
             o = _order_for_rfq(s, r.id)
@@ -167,6 +174,21 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
             else:
                 order_amount = ""
 
+            # 마진 = 수주(고객 견적) − 발주(벤더 견적). 통화가 섞일 수 있어 USD 로 환산해
+            # 계산한 뒤 이중통화 문자열로 표기한다. 둘 중 하나라도 없으면 마진은 빈 값.
+            if customer_usd is not None and vendor_usd is not None:
+                _margin_usd = customer_usd - vendor_usd
+                margin_amount = _dual_money(_margin_usd, "USD")
+                margin_pct = round(_margin_usd / customer_usd * 100, 1) if customer_usd else None
+            else:
+                margin_amount, margin_pct = "", None
+
+            # 품목 요약 — 카드/사이드바에 "(첫 품목) 외 N unit" 형태로 표기하기 위한 첫 품목명.
+            _row_items = (o.items if o else None) or r.items or []
+            item_count = len(_row_items)
+            _it0 = _row_items[0] if _row_items else {}
+            first_item = (_it0.get("description") or _it0.get("part_no") or "").strip()
+
             # 단계 일시·노트 + 다음 액션(P3). stage_auto 는 한 번만 계산해 재사용.
             _sd = getattr(r, "stage_dates", None) or {}
             _auto = _stage_auto_times(s, r, o)
@@ -197,7 +219,8 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
                 # 담당자(PIC) = created_by 직원. 직접 지정 가능(설정 시 created_by 갱신).
                 "assignee": user_names.get(getattr(r, "created_by", None), "") or "",
                 "assignee_id": getattr(r, "created_by", None) or 0,
-                "item_count": len((o.items if o else None) or r.items or []),
+                "item_count": item_count,
+                "first_item": first_item,
                 "crfq_at": _fmt_received(getattr(r, "received_at", None) or "") or _kst(r.created_at),
                 # 1~4 RFQ 체인
                 "vrfq_vendors": vrfq_vendors,
@@ -208,6 +231,9 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
                 "cquote_no": cquote_no,
                 "cquote_at": cquote_at,
                 "customer_amount": customer_amount,
+                # 마진(수주−발주) — 이중통화 문자열 + 마진율(%). 한쪽이라도 없으면 빈 값/None.
+                "margin_amount": margin_amount,
+                "margin_pct": margin_pct,
                 # 딜 총액(고객 P/O 여러 건 합산) — PO 이후 단계 카드 금액에 사용.
                 "order_amount": order_amount,
                 # 5~6 PO 체인

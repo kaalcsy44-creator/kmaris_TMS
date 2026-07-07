@@ -4894,6 +4894,30 @@ table.mini .num {
 .pl-next-banner.lv-urgent .pl-next-label { color: #b42318; }
 .pl-next-text { font-size: 13px; font-weight: 700; color: var(--ink); }
 
+/* 좌측 사이드바 하단의 단계별 활동 로그(+ Activity log) */
+.intl-activity {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.intl-activity-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .6px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.intl-activity-stage {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ink);
+}
+
 /* ── Progress 모달: Stages / Timeline 토글 + 여정 타임라인 ─────────────────── */
 .pl-detail-toggle {
   display: inline-flex;

@@ -700,6 +700,7 @@ export type PipelineRow = {
   assignee: string; // 담당자(PIC) = created_by username
   assignee_id: number; // 담당자(PIC) = created_by user id (0 = 미지정)
   item_count: number;
+  first_item: string; // 첫 품목명(사이드바 "(첫 품목) 외 N unit" 표기용)
   crfq_at: string;
   vrfq_vendors: string;
   vrfq_at: string;
@@ -709,6 +710,8 @@ export type PipelineRow = {
   cquote_no: string;
   cquote_at: string;
   customer_amount: string;
+  margin_amount: string;      // 마진(수주−발주) 이중통화 문자열. 없으면 ""
+  margin_pct: number | null;  // 마진율(%). 계산 불가 시 null
   order_amount: string;
   customer_po_no: string;
   customer_po_at: string;

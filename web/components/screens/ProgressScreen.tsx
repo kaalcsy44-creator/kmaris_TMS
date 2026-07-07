@@ -36,13 +36,29 @@ const INFO_FIELDS: { key: string; label: string; render: (r: PipelineRow) => Rea
   { key: "vendor", label: "Vendor", render: (r) => r.vendor || "—" },
   { key: "project_title", label: "Project title", render: (r) => r.project_title || "—" },
   { key: "customer_po_no", label: "Customer P/O No.", render: (r) => r.customer_po_no || "—" },
-  { key: "items", label: "Items", render: (r) => r.item_count },
+  {
+    key: "items",
+    label: "Items",
+    render: (r) =>
+      r.item_count ? (r.first_item ? `${r.first_item} 외 ${r.item_count} unit` : r.item_count) : "—",
+  },
+  { key: "sales_amount", label: "Sales (quote)", render: (r) => r.customer_amount || "—" },
+  { key: "purchase_amount", label: "Purchase (quote)", render: (r) => r.vendor_amount || "—" },
+  {
+    key: "margin",
+    label: "Margin",
+    render: (r) =>
+      r.margin_amount
+        ? `${r.margin_amount}${r.margin_pct != null ? ` (${r.margin_pct}%)` : ""}`
+        : "—",
+  },
   { key: "pic", label: "PIC", render: (r) => r.assignee || "—" },
   { key: "customer_rfq_no", label: "Customer RFQ No.", render: (r) => r.customer_rfq_no || "—" },
   { key: "kmaris_rfq_no", label: "K-Maris RFQ No.", render: (r) => r.kmaris_rfq_no || "—" },
 ];
 const DEFAULT_INFO_FIELDS = [
   "customer", "trade_type", "vessel", "vendor", "project_title", "customer_po_no", "items",
+  "sales_amount", "purchase_amount", "margin",
 ];
 
 // 고객확인용 7단계(RFQ 3 + Order 4) — 내부확인용과 동일한 표를 쓰되 단계만 7개.
@@ -265,6 +281,7 @@ function blankPipelineRow(): PipelineRow {
     assignee: "",
     assignee_id: 0,
     item_count: 0,
+    first_item: "",
     crfq_at: "",
     vrfq_vendors: "",
     vrfq_at: "",
@@ -274,6 +291,8 @@ function blankPipelineRow(): PipelineRow {
     cquote_no: "",
     cquote_at: "",
     customer_amount: "",
+    margin_amount: "",
+    margin_pct: null,
     order_amount: "",
     customer_po_no: "",
     customer_po_at: "",
@@ -1107,7 +1126,15 @@ export function PipelineModal({
     if (typeof window === "undefined") return DEFAULT_INFO_FIELDS;
     try {
       const arr = JSON.parse(window.localStorage.getItem("ktms:proj-info-fields") || "null");
-      return Array.isArray(arr) && arr.length ? arr : DEFAULT_INFO_FIELDS;
+      if (!Array.isArray(arr) || !arr.length) return DEFAULT_INFO_FIELDS;
+      // 신규 도입 필드는 저장된 목록에 없으므로, 기존 사용자에게도 1회만 덧붙인다.
+      // (이후 사용자가 지우면 그 의사를 존중 — 마커로 재추가를 막는다.)
+      if (window.localStorage.getItem("ktms:proj-info-fields-mig1") !== "1") {
+        window.localStorage.setItem("ktms:proj-info-fields-mig1", "1");
+        const add = ["sales_amount", "purchase_amount", "margin"].filter((k) => !arr.includes(k));
+        return add.length ? [...arr, ...add] : arr;
+      }
+      return arr;
     } catch {
       return DEFAULT_INFO_FIELDS;
     }
@@ -1360,6 +1387,23 @@ export function PipelineModal({
             <div className={`pl-next-banner lv-${r.next_level || "normal"}`}>
               <span className="pl-next-label">Next action</span>
               <span className="pl-next-text">{r.next_action}</span>
+            </div>
+          ) : null}
+
+          {!isNewProject ? (
+            <div className="intl-activity">
+              <div className="intl-activity-head">
+                Activity log
+                <span className="intl-activity-stage">
+                  {selectedStage}. {rSteps[selectedStage - 1] ?? ""}
+                </span>
+              </div>
+              <StageNotes
+                rfqId={r.rfq_id}
+                stage={selectedStage}
+                notes={r.stage_notes?.[String(selectedStage)] ?? []}
+                onChanged={onChanged}
+              />
             </div>
           ) : null}
               </aside>
