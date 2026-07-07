@@ -800,13 +800,8 @@ function VendorPoDetailModal({
       .then((data) => {
         setD(data);
         setVendorId(data.vendor_id || "");
-        // 5단계 PO No. → "KM-" 형태로 자동 제안. 이미 KM-로 저장돼 있으면 그대로 유지.
-        const kmFromStage5 = data.customer_po_no ? `KM-${data.customer_po_no}` : "";
-        setPoNo(
-          data.po_no && data.po_no.startsWith("KM-")
-            ? data.po_no
-            : kmFromStage5 || data.po_no || ""
-        );
+        // 이미 채번되어 저장된 K-Maris PO No.(KMS-ORD-…)를 그대로 보여준다.
+        setPoNo(data.po_no || "");
         setSentDate(data.sent_date || "");
         setStatus(data.status || "");
         setItems(data.items.length ? data.items.map(normalizeItem) : [blankItem()]);
@@ -904,7 +899,7 @@ function VendorPoDetailModal({
               <input
                 value={poNo}
                 onChange={(e) => setPoNo(e.target.value)}
-                placeholder={d.customer_po_no ? `KM-${d.customer_po_no}` : "KM-…"}
+                placeholder="KMS-ORD-…"
               />
             </div>
             <div className="form-field">
