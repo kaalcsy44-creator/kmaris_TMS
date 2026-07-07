@@ -274,6 +274,8 @@ def po_work_options():
             stage = _pipeline_stage(s, rfq.id) if rfq else 5
             orders.append({
                 "id": o.id,
+                # 프로젝트 워크스페이스에서 이 오더가 어느 RFQ(프로젝트)에 속하는지 식별용.
+                "rfq_id": rfq.id if rfq else 0,
                 "customer_id": o.customer_id,
                 "customer": cust_names.get(o.customer_id, "—"),
                 "vessel_id": o.vessel_id,

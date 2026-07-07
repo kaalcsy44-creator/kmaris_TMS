@@ -146,20 +146,66 @@ function CustomerPoTab({
     setDetailId(deepOrderId);
   }, [deepOrderId]);
 
-  // 프로젝트 워크스페이스: 오더가 있으면 편집, 없으면 이 자리에서 바로 등록(주문 생성).
+  // 프로젝트 워크스페이스: 이 프로젝트(RFQ)의 고객 P/O(오더)들. 여러 건이면 선택기 +
+  // '+ Add another P/O'. 없거나 신규 추가면 등록 폼(현재 프로젝트로 자동 연결).
   if (embedded) {
-    return deepOrderId && deepOrderId > 0 ? (
-      <OrderDetailModal
-        orderId={deepOrderId}
-        options={options}
-        onClose={onChanged}
-        onChanged={onChanged}
-        inline
-      />
-    ) : (
-      <div className="embedded-detail">
-        <div className="form-section-title" style={{ marginTop: 0 }}>Basic Info</div>
-        <CustomerPoNewForm options={options} projectRfqId={deepRfqId ?? null} onChanged={onChanged} />
+    const projectOrders =
+      deepRfqId != null
+        ? options.orders.filter((o) => o.rfq_id === deepRfqId)
+        : deepOrderId
+        ? options.orders.filter((o) => o.id === deepOrderId)
+        : [];
+
+    if (projectOrders.length === 0 || adding) {
+      return (
+        <div className="embedded-detail">
+          <div className="embedded-add-head">
+            {projectOrders.length ? (
+              <button type="button" className="btn" onClick={() => setAdding(false)}>← Back</button>
+            ) : null}
+            <span className="form-section-title" style={{ margin: 0 }}>Basic Info</span>
+          </div>
+          <CustomerPoNewForm
+            options={options}
+            projectRfqId={deepRfqId ?? null}
+            onChanged={() => { setAdding(false); onChanged(); }}
+          />
+        </div>
+      );
+    }
+
+    const selected = projectOrders.find((o) => o.id === detailId) ?? projectOrders[0];
+    return (
+      <div className="embedded-po-list">
+        <div className="embedded-record-bar">
+          {projectOrders.length > 1 ? (
+            <div className="embedded-record-picker" role="tablist" aria-label="Customer POs">
+              {projectOrders.map((o) => (
+                <button
+                  key={o.id}
+                  type="button"
+                  className={o.id === selected.id ? "on" : ""}
+                  onClick={() => setDetailId(o.id)}
+                >
+                  {o.po_no || o.vessel || `PO ${o.id}`}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <span className="embedded-record-current">
+              <CustomerName name={selected.customer || ""} />
+              <b className="rec-doc-no">{selected.po_no || ""}</b>
+            </span>
+          )}
+          <button type="button" className="btn primary sm" onClick={() => setAdding(true)}>+ Add another P/O</button>
+        </div>
+        <OrderDetailModal
+          orderId={selected.id}
+          options={options}
+          onClose={onChanged}
+          onChanged={onChanged}
+          inline
+        />
       </div>
     );
   }

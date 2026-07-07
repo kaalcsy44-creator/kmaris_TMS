@@ -268,6 +268,7 @@ export type PoWorkOptions = {
   }[];
   orders: {
     id: number;
+    rfq_id: number;
     customer_id: number;
     customer: string;
     vessel_id: number | null;
