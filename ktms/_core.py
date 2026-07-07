@@ -733,11 +733,15 @@ def _deal_progress(s, rfq, order) -> tuple[int, dict[str, str]]:
 
 
 def _pipeline_stage(s, rfq_id: int) -> int:
-    """RFQ 1건의 내부 진행 단계(1~11). `_deal_progress` 위임(단일 소스)."""
+    """RFQ 1건의 내부 진행 단계(1~11). `_deal_progress` 위임(단일 소스).
+    고객 P/O(오더)가 여러 건이면 '가장 앞선(최고 단계)' 오더 기준으로 표시한다."""
     rfq = s.query(RFQ).filter_by(id=rfq_id).first()
     if rfq is None:
         return 1
-    return _deal_progress(s, rfq, _order_for_rfq(s, rfq_id))[0]
+    orders = _orders_for_rfq(s, rfq_id)
+    if not orders:
+        return _deal_progress(s, rfq, None)[0]
+    return max(_deal_progress(s, rfq, o)[0] for o in orders)
 
 
 def _kst_iso(dt) -> str:
@@ -1119,7 +1123,7 @@ def _month_key(v: str | None) -> str:
 
 
 def _order_for_rfq(s, rfq_id: int):
-    """RFQ에 연결된 Order — 직접 연결 우선, 없으면 Quotation 경유."""
+    """RFQ에 연결된 대표 Order(단건) — 직접 연결 우선, 없으면 Quotation 경유(최신)."""
     order = (s.query(Order).filter(Order.rfq_id == rfq_id)
              .order_by(Order.created_at.desc()).first())
     if not order:
@@ -1127,6 +1131,23 @@ def _order_for_rfq(s, rfq_id: int):
                  .filter(Quotation.rfq_id == rfq_id)
                  .order_by(Order.created_at.desc()).first())
     return order
+
+
+def _orders_for_rfq(s, rfq_id: int) -> list:
+    """RFQ에 연결된 모든 Order — 직접 연결 + Quotation 경유(중복 제거, 생성순).
+    한 프로젝트가 여러 고객 P/O(오더)로 분기하는 경우(선박별 등)를 지원한다."""
+    orders = list(
+        s.query(Order).filter(Order.rfq_id == rfq_id)
+        .order_by(Order.created_at.asc()).all()
+    )
+    seen = {o.id for o in orders}
+    for o in (s.query(Order).join(Quotation, Order.quotation_id == Quotation.id)
+              .filter(Quotation.rfq_id == rfq_id)
+              .order_by(Order.created_at.asc()).all()):
+        if o.id not in seen:
+            orders.append(o)
+            seen.add(o.id)
+    return orders
 
 
 def _rfq_for_order(s, order: Order):

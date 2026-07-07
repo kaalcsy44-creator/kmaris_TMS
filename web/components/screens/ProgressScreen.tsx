@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   fetchPipeline,
@@ -1534,36 +1534,86 @@ function WorkspacePanel({
   row: PipelineRow;
   onChanged: () => void | Promise<unknown>;
 }) {
+  // 이 프로젝트(RFQ)의 고객 P/O(오더)들 — 6~11단계는 어느 P/O 기준으로 진행할지 선택.
+  const { data: poOptions } = useCachedData("po:work-options", fetchPoWorkOptions);
+  const projectOrders = useMemo(
+    () => (poOptions?.orders ?? []).filter((o) => o.rfq_id === row.rfq_id),
+    [poOptions, row.rfq_id]
+  );
+  const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
+  // 기본 선택: 대표 오더(row.order_id) 우선, 없으면 첫 오더. 선택 유효성 유지.
+  useEffect(() => {
+    setSelectedOrderId((cur) => {
+      if (cur != null && projectOrders.some((o) => o.id === cur)) return cur;
+      if (row.order_id > 0 && projectOrders.some((o) => o.id === row.order_id)) return row.order_id;
+      return projectOrders[0]?.id ?? (row.order_id > 0 ? row.order_id : null);
+    });
+  }, [projectOrders, row.order_id]);
+
+  const effectiveOrderId = selectedOrderId ?? (row.order_id > 0 ? row.order_id : 0);
+
+  // 6단계 이상 + 고객 P/O가 2건 이상일 때만 상단 P/O 선택기 노출.
+  // (5단계는 CustomerPoTab 자체에 P/O 선택기가 있어 중복 표시하지 않는다.)
+  const picker =
+    stage >= 6 && projectOrders.length > 1 ? (
+      <div className="embedded-record-bar wp-po-picker">
+        <span className="wp-po-picker-label">P/O</span>
+        <div className="embedded-record-picker" role="tablist" aria-label="Customer POs">
+          {projectOrders.map((o) => (
+            <button
+              key={o.id}
+              type="button"
+              className={o.id === effectiveOrderId ? "on" : ""}
+              onClick={() => setSelectedOrderId(o.id)}
+            >
+              {o.po_no || o.vessel || `PO ${o.id}`}
+            </button>
+          ))}
+        </div>
+      </div>
+    ) : null;
+
   if (area === "rfq") {
     return <ProjectRfqWorkspace row={row} stage={stage} onChanged={onChanged} />;
   }
   if (area === "po") {
-    return <ProjectPoWorkspace row={row} stage={stage} onChanged={onChanged} />;
+    return (
+      <>
+        {picker}
+        <ProjectPoWorkspace row={row} stage={stage} orderId={effectiveOrderId} onChanged={onChanged} />
+      </>
+    );
   }
   if (area === "documents") {
-    return row.order_id > 0 ? (
-      <div className="project-work-panel embedded-workspace">
-        <Suspense fallback={<div className="state">Loading details…</div>}>
-          <DocumentsOverview
-            initialOrderId={row.order_id}
-            initialStage={Math.min(Math.max(stage, 7), 9)}
-            initialView={row.work_type === "서비스" ? "service" : "parts"}
-          />
-        </Suspense>
-      </div>
+    return effectiveOrderId > 0 ? (
+      <>
+        {picker}
+        <div className="project-work-panel embedded-workspace">
+          <Suspense fallback={<div className="state">Loading details…</div>}>
+            <DocumentsOverview
+              initialOrderId={effectiveOrderId}
+              initialStage={Math.min(Math.max(stage, 7), 9)}
+              initialView={row.work_type === "서비스" ? "service" : "parts"}
+            />
+          </Suspense>
+        </div>
+      </>
     ) : (
       <MissingOrderPanel />
     );
   }
-  return row.order_id > 0 ? (
-    <div className="project-work-panel embedded-workspace stage-fill">
-      <Suspense fallback={<div className="state">Loading details…</div>}>
-        <ArOverview
-          initialOrderId={row.order_id}
-          initialStage={stage >= 11 ? 11 : 10}
-        />
-      </Suspense>
-    </div>
+  return effectiveOrderId > 0 ? (
+    <>
+      {picker}
+      <div className="project-work-panel embedded-workspace stage-fill">
+        <Suspense fallback={<div className="state">Loading details…</div>}>
+          <ArOverview
+            initialOrderId={effectiveOrderId}
+            initialStage={stage >= 11 ? 11 : 10}
+          />
+        </Suspense>
+      </div>
+    </>
   ) : (
     <MissingOrderPanel />
   );
@@ -1604,10 +1654,13 @@ function ProjectRfqWorkspace({
 function ProjectPoWorkspace({
   row,
   stage,
+  orderId,
   onChanged,
 }: {
   row: PipelineRow;
   stage: number;
+  // 상위(WorkspacePanel)에서 선택된 고객 P/O(오더). 6단계 Vendor P/O가 이 오더 기준으로 발행된다.
+  orderId: number;
   onChanged: () => void | Promise<unknown>;
 }) {
   const { data: options, refresh } = useCachedData("po:work-options", fetchPoWorkOptions);
@@ -1622,7 +1675,7 @@ function ProjectPoWorkspace({
     <div className="project-work-panel embedded-workspace">
       <PoActionTabs
         options={options}
-        deepOrderId={row.order_id > 0 ? row.order_id : null}
+        deepOrderId={orderId > 0 ? orderId : null}
         deepRfqId={row.rfq_id}
         initialTab={stage >= 6 ? "vendor" : "customer"}
         onChanged={load}

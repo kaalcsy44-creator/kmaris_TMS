@@ -5245,6 +5245,21 @@ table.mini .num {
 .embedded-record-bar .embedded-record-picker {
   margin-bottom: 0;
 }
+/* 워크스페이스 6~11단계 상단 고객 P/O 선택기 — 어느 P/O 기준으로 진행할지. */
+.wp-po-picker {
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 8px 10px;
+  background: #f7fafd;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.wp-po-picker-label {
+  font-size: 11px;
+  font-weight: 800;
+  color: #64748b;
+  letter-spacing: 0.3px;
+}
 /* 레코드가 1건일 때(선택 탭 없음) 상단에 표시하는 통일 헤드라인:
    [로고] 회사이름(작게) + 등록번호(RFQ·견적, 크게 강조). 모든 단계 동일 포맷. */
 .embedded-record-current {
