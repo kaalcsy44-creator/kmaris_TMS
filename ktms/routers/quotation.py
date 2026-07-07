@@ -192,6 +192,8 @@ def customer_quotation_detail(qtn_id: int):
             "date": qtn.date or "",
             "terms": qtn.terms or {},
             "items": qtn.items or [],
+            # 고객 정보에 등록된 기본 결제조건(상세 편집 시 payment_terms 기본값용)
+            "default_payment_terms": (getattr(cust, "payment_terms", None) or "") if cust else "",
         }
     finally:
         s.close()

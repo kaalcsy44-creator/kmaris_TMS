@@ -52,6 +52,7 @@ import Modal from "@/components/common/Modal";
 import { invalidateCustomerLogos } from "@/lib/customerLogos";
 import { invalidateVendorLogos } from "@/lib/vendorLogos";
 import { fileToLogoDataUrl, imageFromClipboard } from "@/lib/imagePaste";
+import { PAYMENT_TERMS_PRESETS } from "@/lib/terms";
 
 type Tab =
   | "company" | "users" | "permissions"
@@ -735,7 +736,7 @@ function CustomersTab() {
   return (
     <MasterSection<SettingsCustomer>
       title="Customer Management"
-      empty={{ id: 0, name: "", contact: "", contact_phone: "", email: "", country: "", address: "", tax_id: "", logo: "" }}
+      empty={{ id: 0, name: "", contact: "", contact_phone: "", email: "", country: "", address: "", tax_id: "", payment_terms: "", logo: "" }}
       load={fetchSettingsCustomers}
       create={createSettingsCustomer}
       update={updateSettingsCustomer}
@@ -763,14 +764,47 @@ function CustomersTab() {
       ]}
       required="name"
       extraForm={(form, setForm) => (
-        <LogoPasteField
-          value={form.logo}
-          onChange={(logo) => setForm({ ...form, logo })}
-        />
+        <>
+          <PaymentTermsField
+            value={form.payment_terms}
+            onChange={(payment_terms) => setForm({ ...form, payment_terms })}
+          />
+          <LogoPasteField
+            value={form.logo}
+            onChange={(logo) => setForm({ ...form, logo })}
+          />
+        </>
       )}
       allowCopy
       copyHint="To register another contact for the same customer, change only the contact/email and save."
     />
+  );
+}
+
+// 기본 결제조건 콤보박스 — 추천 목록에서 선택하거나 직접 입력. 여기 등록한 값이
+// 3·4단계 견적 상세편집의 Payment Terms 기본값으로 불려온다.
+function PaymentTermsField({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className="form-field">
+      <label>Payment Terms</label>
+      <input
+        list="settings-payment-terms"
+        value={value ?? ""}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="Select or type…"
+      />
+      <datalist id="settings-payment-terms">
+        {PAYMENT_TERMS_PRESETS.map((p) => (
+          <option key={p} value={p} />
+        ))}
+      </datalist>
+    </div>
   );
 }
 
@@ -841,7 +875,7 @@ function VendorsTab() {
   return (
     <MasterSection<SettingsVendor>
       title="Vendor Management"
-      empty={{ id: 0, name: "", contact: "", contact_phone: "", email: "", specialization: "", country: "", address: "", logo: "" }}
+      empty={{ id: 0, name: "", contact: "", contact_phone: "", email: "", specialization: "", country: "", address: "", payment_terms: "", logo: "" }}
       load={fetchSettingsVendors}
       create={createSettingsVendor}
       update={updateSettingsVendor}
@@ -870,10 +904,16 @@ function VendorsTab() {
       ]}
       required="name"
       extraForm={(form, setForm) => (
-        <LogoPasteField
-          value={form.logo}
-          onChange={(logo) => setForm({ ...form, logo })}
-        />
+        <>
+          <PaymentTermsField
+            value={form.payment_terms}
+            onChange={(payment_terms) => setForm({ ...form, payment_terms })}
+          />
+          <LogoPasteField
+            value={form.logo}
+            onChange={(logo) => setForm({ ...form, logo })}
+          />
+        </>
       )}
       allowCopy
       copyHint="To register another contact for the same vendor, change only the contact/email and save."

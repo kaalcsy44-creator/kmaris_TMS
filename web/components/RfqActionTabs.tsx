@@ -33,6 +33,7 @@ import {
 } from "@/lib/api";
 import { getToken, can, canEditDeal, editBlockReason } from "@/lib/auth";
 import { tr } from "@/lib/labels";
+import { PAYMENT_TERMS_PRESETS } from "@/lib/terms";
 import type {
   VendorOption,
   RfqRow,
@@ -1243,7 +1244,8 @@ function VendorQuoteDetailModal({
         setCurrency(data.currency || "USD");
         setNotes(data.notes || "");
         setItems((data.items || []).map(normalizeVendorQuoteItem));
-        setTerms(data.terms || {});
+        // Payment Terms 미입력이면 벤더 정보에 등록된 기본 결제조건으로 채운다(수정 가능).
+        setTerms(seedPaymentTerms(data.terms, data.default_payment_terms));
         setParseMsg(null);
       })
       .catch((e) => setErr(e instanceof Error ? e.message : "Error"));
@@ -1605,7 +1607,8 @@ function CustomerQuoteDetailModal({
         setSentAt(toLocalDt(data.sent_at || data.sent_date));
         setValidUntil(data.valid_until || "");
         setStatus(data.status || "");
-        setTerms(data.terms || {});
+        // Payment Terms 미입력이면 고객 정보에 등록된 기본 결제조건으로 채운다(수정 가능).
+        setTerms(seedPaymentTerms(data.terms, data.default_payment_terms));
         setItems(data.items || []);
         setMsg(null);
         if (data.rfq_id) {
@@ -2742,11 +2745,22 @@ function customerQuoteItemsFromVendorQuote(
 const TERM_PRESETS = {
   incoterms: ["FCA Busan, Korea", "FOB Busan, Korea", "CIF (named port of destination)", "CFR (named port of destination)", "DAP (named destination)", "EXW Busan"],
   shipment_method: ["Air courier / Sea freight", "By Air (Courier)", "By Sea (FCL)", "By Sea (LCL)"],
-  payment_terms: ["100% T/T in advance", "T/T 30 days after delivery", "T/T 50% in advance, 50% before shipment", "L/C at sight"],
+  payment_terms: PAYMENT_TERMS_PRESETS,
   packing: ["Standard export packing", "Seaworthy export packing", "Wooden case packing"],
   delivery_place: ["Busan, Republic of Korea", "Incheon, Republic of Korea"],
   warranty: ["Manufacturer's standard warranty", "12 months from delivery", "6 months from delivery", "No warranty"],
 } as const;
+
+// 저장된 거래조건에 Payment Terms 가 비어 있으면 고객/공급사 정보의 기본 결제조건으로
+// 채운다. 이미 값이 있으면 그대로 둔다(사용자가 지정한 값 우선).
+function seedPaymentTerms(
+  terms: QuotationTerms | null | undefined,
+  fallback: string | null | undefined
+): QuotationTerms {
+  const t = terms || {};
+  if (t.payment_terms && t.payment_terms.trim()) return t;
+  return { ...t, payment_terms: fallback || "" };
+}
 
 function CustomerQuoteAction({
   rfqId,

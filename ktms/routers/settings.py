@@ -71,6 +71,7 @@ def settings_customers():
                  "contact_phone": getattr(c, "contact_phone", None) or "",
                  "email": c.email or "", "country": c.country or "",
                  "address": c.address or "", "tax_id": c.tax_id or "",
+                 "payment_terms": getattr(c, "payment_terms", None) or "",
                  "logo": getattr(c, "logo", None) or ""}
                 for c in s.query(Customer).order_by(Customer.name).all()]
     finally:
@@ -87,6 +88,7 @@ def create_customer(body: CustomerCreate):
                      contact_phone=body.contact_phone or "",
                      email=body.email or "", country=body.country or "",
                      address=body.address or "", tax_id=body.tax_id or "",
+                     payment_terms=body.payment_terms or "",
                      logo=body.logo or "")
         s.add(c)
         s.commit()
@@ -109,6 +111,7 @@ def update_customer(row_id: int, body: CustomerCreate):
         c.country = body.country or ""
         c.address = body.address or ""
         c.tax_id = body.tax_id or ""
+        c.payment_terms = body.payment_terms or ""
         if body.logo is not None:
             c.logo = body.logo
         s.commit()
@@ -139,6 +142,7 @@ def settings_vendors():
                  "contact_phone": getattr(v, "contact_phone", None) or "",
                  "email": v.email or "", "specialization": v.specialization or "",
                  "country": v.country or "", "address": v.address or "",
+                 "payment_terms": getattr(v, "payment_terms", None) or "",
                  "logo": getattr(v, "logo", None) or ""}
                 for v in s.query(Vendor).order_by(Vendor.name).all()]
     finally:
@@ -155,6 +159,7 @@ def create_vendor(body: VendorCreate):
                    contact_phone=body.contact_phone or "",
                    email=body.email or "", specialization=body.specialization or "",
                    country=body.country or "", address=body.address or "",
+                   payment_terms=body.payment_terms or "",
                    logo=body.logo or "")
         s.add(v)
         s.commit()
@@ -177,6 +182,7 @@ def update_vendor(row_id: int, body: VendorCreate):
         v.specialization = body.specialization or ""
         v.country = body.country or ""
         v.address = body.address or ""
+        v.payment_terms = body.payment_terms or ""
         if body.logo is not None:
             v.logo = body.logo
         s.commit()

@@ -101,6 +101,7 @@ class Customer(Base):
     email      = Column(String(200))
     tax_id     = Column(String(100))
     country    = Column(String(100))
+    payment_terms = Column(String(200))  # 기본 결제조건(견적 작성 시 기본값으로 사용)
     logo       = Column(Text)          # 회사 로고 이미지(data URL, 캡쳐 붙여넣기)
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -115,6 +116,7 @@ class Vendor(Base):
     email          = Column(String(200))
     country        = Column(String(100))
     specialization = Column(String(200))
+    payment_terms  = Column(String(200))  # 기본 결제조건(견적 작성 시 기본값으로 사용)
     logo           = Column(Text)          # 회사 로고 이미지(data URL, 캡쳐 붙여넣기)
     created_at     = Column(DateTime, default=datetime.utcnow)
 

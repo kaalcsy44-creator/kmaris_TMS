@@ -43,6 +43,7 @@ export type SettingsCustomer = {
   country: string;
   address: string;
   tax_id: string;
+  payment_terms: string;
   logo: string;
 };
 export type SettingsVendor = {
@@ -54,6 +55,7 @@ export type SettingsVendor = {
   specialization: string;
   country: string;
   address: string;
+  payment_terms: string;
   logo: string;
 };
 export type SettingsVessel = {
@@ -835,6 +837,7 @@ export type VendorQuoteDetail = {
   currency: string;
   items: VendorQuoteItem[];
   terms: QuotationTerms;
+  default_payment_terms?: string; // 벤더 정보에 등록된 기본 결제조건
 };
 
 export type CustomerQuotationDetail = {
@@ -862,6 +865,7 @@ export type CustomerQuotationDetail = {
   date: string;
   terms: QuotationTerms;
   items: CustomerQuoteItem[];
+  default_payment_terms?: string; // 고객 정보에 등록된 기본 결제조건
 };
 
 export type PurchaseOrderDetail = {

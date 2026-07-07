@@ -596,6 +596,8 @@ def vendor_quote_detail(vq_id: int):
             "currency": getattr(q, "currency", None) or "USD",
             "items": q.items or [],
             "terms": getattr(q, "terms", None) or {},
+            # 벤더 정보에 등록된 기본 결제조건(상세 편집 시 payment_terms 기본값용)
+            "default_payment_terms": (getattr(vendor, "payment_terms", None) or "") if vendor else "",
         }
     finally:
         s.close()

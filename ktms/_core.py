@@ -1703,6 +1703,7 @@ class CustomerCreate(BaseModel):
     country: str | None = ""
     address: str | None = ""
     tax_id: str | None = ""
+    payment_terms: str | None = ""   # 기본 결제조건
     logo: str | None = ""    # 회사 로고 data URL(붙여넣기). None=변경 안 함(수정 시)
 
 
@@ -1714,6 +1715,7 @@ class VendorCreate(BaseModel):
     specialization: str | None = ""
     country: str | None = ""
     address: str | None = ""
+    payment_terms: str | None = ""   # 기본 결제조건
     logo: str | None = ""    # 회사 로고 data URL(붙여넣기). None=변경 안 함(수정 시)
 
 

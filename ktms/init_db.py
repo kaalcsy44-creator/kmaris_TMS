@@ -43,10 +43,12 @@ _MIGRATIONS = {
     },
     "customers": {
         "contact_phone": "VARCHAR(50)",
+        "payment_terms": "VARCHAR(200)",
         "logo": "TEXT",
     },
     "vendors": {
         "contact_phone": "VARCHAR(50)",
+        "payment_terms": "VARCHAR(200)",
         "logo": "TEXT",
     },
     "vessels": {

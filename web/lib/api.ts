@@ -580,6 +580,7 @@ export function createSettingsCustomer(body: {
   country?: string;
   address?: string;
   tax_id?: string;
+  payment_terms?: string;
   logo?: string;
 }): Promise<{ ok: boolean; id: number }> {
   return post("/api/admin/settings/customers", body);
@@ -601,6 +602,7 @@ export function createSettingsVendor(body: {
   specialization?: string;
   country?: string;
   address?: string;
+  payment_terms?: string;
   logo?: string;
 }): Promise<{ ok: boolean; id: number }> {
   return post("/api/admin/settings/vendors", body);
