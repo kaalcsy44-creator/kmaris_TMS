@@ -984,6 +984,14 @@ function BoardCard({
   const isService = (r.work_type || "부품공급") === "서비스";
   const total = steps.length;
   const filled = Math.max(0, Math.min(stage, total));
+  // 진행바는 현재 단계가 속한 중분류(컬럼) 범위만 표시 — 컬럼별 세부 진행을 인지.
+  // 예: Quote 컬럼(3·4단계)=바 2개, Documents(7·8·9)=바 3개. 라벨(x/11)은 절대값 유지.
+  const grouped = steps.length === 11;
+  const phase = grouped ? phaseIndexOfStage(stage) : -1;
+  const phaseStart =
+    phase >= 0 ? STAGE_PHASES.slice(0, phase).reduce((s, x) => s + x.count, 0) : 0;
+  const barTotal = phase >= 0 ? STAGE_PHASES[phase].count : total;
+  const barFilled = phase >= 0 ? Math.max(0, Math.min(stage - phaseStart, barTotal)) : filled;
   // PO 이후 단계는 고객 P/O(오더) 합산액(order_amount)을 우선 표시. 견적 단계는 견적액.
   const amount = r.order_amount || r.customer_amount || r.vendor_amount || "";
   const age = daysSince(r.first_rfq_at);
@@ -1005,8 +1013,8 @@ function BoardCard({
       ) : null}
       {r.vessel ? <div className="pl-card-sub" title={r.vessel}>{r.vessel}</div> : null}
       <div className="pl-card-bar" title={`${filled}/${total} ${steps[filled - 1] ?? ""}`}>
-        {Array.from({ length: total }).map((_, i) => (
-          <span key={i} className={`seg${i < filled ? " on" : ""}`} />
+        {Array.from({ length: barTotal }).map((_, i) => (
+          <span key={i} className={`seg${i < barFilled ? " on" : ""}`} />
         ))}
       </div>
       <div className="pl-card-stage">
