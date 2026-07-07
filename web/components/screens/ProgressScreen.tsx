@@ -1329,8 +1329,8 @@ export function PipelineModal({
               ref={layoutRef}
               style={{
                 gridTemplateColumns: infoCollapsed
-                  ? "0 18px minmax(0, 1fr)"
-                  : `${infoWidth}px 8px minmax(0, 1fr)`,
+                  ? "0 26px minmax(0, 1fr)"
+                  : `${infoWidth}px 14px minmax(0, 1fr)`,
               }}
             >
               <aside className="project-info-pane" hidden={infoCollapsed}>
