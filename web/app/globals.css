@@ -4776,9 +4776,18 @@ table.mini .num {
   color: var(--navy);
   min-width: 0;
 }
-.stage-pane-title > span:last-child {
+/* 제목 본문(2번째 span) — 넘치면 말줄임. 회색 자격 문구는 뒤에 별도. */
+.stage-pane-title > span:nth-child(2) {
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* 상세 헤더 전용 자격 문구(from Customer 등) — 회색·일반 굵기. */
+.stage-pane-qual {
+  flex: 0 0 auto;
+  color: #94a3b8;
+  font-weight: 400;
+  font-size: 13px;
   white-space: nowrap;
 }
 .stage-pane-no {

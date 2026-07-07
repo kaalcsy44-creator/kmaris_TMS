@@ -93,8 +93,8 @@ export function PoActionTabs({
     if (initialTab === "vendor" || initialTab === "customer") setTab(initialTab);
   }, [initialTab]);
   const tabs = [
-    { key: "customer", label: "5. Customer P/O Received" },
-    { key: "vendor", label: "6. Vendor P/O Sent" },
+    { key: "customer", label: "5. P/O Received" },
+    { key: "vendor", label: "6. P/O Sent" },
   ];
 
   return (
@@ -882,9 +882,8 @@ function CustomerPoNewForm({
   onChanged: () => void;
 }) {
   const today = new Date().toISOString().slice(0, 10);
-  const [customerId, setCustomerId] = useState<number | "">(
-    options.customers[0]?.id ?? ""
-  );
+  // 기본값은 미선택("") — 사용자가 명시적으로 고객사를 고르도록 한다.
+  const [customerId, setCustomerId] = useState<number | "">("");
   const [vesselId, setVesselId] = useState<number | "">("");
   const [rfqId, setRfqId] = useState<number | "">("");
   const [poNo, setPoNo] = useState("");
@@ -1028,6 +1027,7 @@ function CustomerPoNewForm({
               setVesselId("");
             }}
           >
+            <option value="">— Select customer —</option>
             {options.customers.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
@@ -1193,7 +1193,7 @@ function VendorPoCreate({
   }
 
   if (options.orders.length === 0) {
-    return <div className="empty">No orders registered. Register an order in the Customer P/O Received tab first.</div>;
+    return <div className="empty">No orders registered. Register an order in the P/O Received tab first.</div>;
   }
 
   return (

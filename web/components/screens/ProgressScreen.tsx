@@ -280,6 +280,17 @@ function joinDot(...parts: (string | undefined)[]): string {
   return parts.filter((p) => p && p.trim()).join(" · ");
 }
 
+// 상세편집 단계 제목의 보조 설명(괄호) — 발신/수신 주체를 회색으로 덧붙인다.
+// 단계 제목 본문(steps[])은 짧게 유지하고, 이 자격 문구는 상세 헤더에서만 표기.
+const STAGE_TITLE_QUALIFIER: Record<number, string> = {
+  1: "from Customer",
+  2: "to Vendor",
+  3: "from Vendor",
+  4: "to Customer",
+  5: "from Customer",
+  6: "to Vendor",
+};
+
 /** 완료한 단계 라벨: "N. 라벨" (stage가 0이면 "미시작"). */
 function doneStageLabel(stage: number, steps: string[]): string {
   if (stage <= 0) return "Not started";
@@ -1458,6 +1469,9 @@ export function PipelineModal({
               <h3 className="stage-pane-title">
                 <span className="stage-pane-no">{selectedStage}</span>
                 <span>{rSteps[selectedStage - 1] ?? ""}</span>
+                {STAGE_TITLE_QUALIFIER[selectedStage] ? (
+                  <span className="stage-pane-qual">({STAGE_TITLE_QUALIFIER[selectedStage]})</span>
+                ) : null}
               </h3>
               {!isNewProject ? (
                 <div className="stage-pane-nav">

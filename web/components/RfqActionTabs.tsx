@@ -93,10 +93,10 @@ function toLocalDt(v?: string): string {
 
 // 원본 rfq_quotation.py 하단의 작업 segmented control(4탭)을 복원.
 const TABS = [
-  { key: "new", label: "1. Customer RFQ Received" },
-  { key: "vrfq", label: "2. Vendor RFQ Sent" },
-  { key: "vquote", label: "3. Vendor Quote Received" },
-  { key: "cquote", label: "4. Customer Quote Sent" },
+  { key: "new", label: "1. RFQ Received" },
+  { key: "vrfq", label: "2. RFQ Sent" },
+  { key: "vquote", label: "3. Quote Received" },
+  { key: "cquote", label: "4. Quote Sent" },
 ];
 
 function money(n: number) {

@@ -146,12 +146,12 @@ JWT_ALGO = "HS256"
 TOKEN_TTL_HOURS = 12
 
 INTERNAL_STEPS = [
-    "Customer RFQ Received",      # 1
-    "Vendor RFQ Sent",            # 2
-    "Vendor Quote Received",      # 3
-    "Customer Quote Sent",        # 4
-    "Customer P/O Received",      # 5
-    "Vendor P/O Sent",            # 6
+    "RFQ Received",               # 1  (from Customer)
+    "RFQ Sent",                   # 2  (to Vendor)
+    "Quote Received",             # 3  (from Vendor)
+    "Quote Sent",                 # 4  (to Customer)
+    "P/O Received",               # 5  (from Customer)
+    "P/O Sent",                   # 6  (to Vendor)
     "Delivery Readiness",         # 7  (구 'Delivery Arrangement'(구 8)를 흡수)
     "Delivery Complete · POD",    # 8  (구 9)
     "Tax Invoice · Billing",      # 9  (구 10)
