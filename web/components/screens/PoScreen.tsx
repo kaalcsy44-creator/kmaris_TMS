@@ -16,7 +16,6 @@ import {
   fetchVendorPoDetail,
   updatePurchaseOrder,
   deletePurchaseOrder,
-  fetchVendorQuoteOverview,
   fetchNextPoNo,
 } from "@/lib/api";
 import { getToken, can, canEditDeal, editBlockReason } from "@/lib/auth";
@@ -44,7 +43,6 @@ import type {
   PoWorkOptions,
   VendorPoPreview,
   PurchaseOrderDetail,
-  VendorQuoteOverviewRow,
 } from "@/lib/types";
 
 type OrderOpt = PoWorkOptions["orders"][number];
@@ -439,6 +437,9 @@ function OrderDetailModal({
   const canEditThis = can("po", "edit") && canEditDeal(detail?.assignee_id);
   const canDeleteThis = can("po", "delete") && canEditDeal(detail?.assignee_id);
 
+  // 선택 고객사에 속한 선박만 노출(고객 미선택이면 전체).
+  const vessels = options.vessels.filter((v) => customerId === "" || v.customer_id === customerId);
+
   return (
     <Modal title={<ModalTitle label="Edit order" projectNo={order?.project_no} />} onClose={onClose} wide inline={inline}>
       {!detail ? (
@@ -498,6 +499,21 @@ function OrderDetailModal({
 
           <div className="form-grid">
             <div className="form-field">
+              <label>Customer</label>
+              <select
+                value={customerId}
+                onChange={(e) => {
+                  setCustomerId(e.target.value ? Number(e.target.value) : "");
+                  setVesselId("");
+                }}
+              >
+                <option value="">— Select customer —</option>
+                {options.customers.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="form-field">
               <label>Customer PO No.</label>
               <input value={poNo} onChange={(e) => setPoNo(e.target.value)} />
             </div>
@@ -506,8 +522,27 @@ function OrderDetailModal({
               <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
             </div>
             <div className="form-field">
+              <label>Trade type</label>
+              <select value={tradeType} onChange={(e) => setTradeType(e.target.value)}>
+                <option value="수출">{tr("수출")}</option>
+                <option value="내수">{tr("내수")}</option>
+              </select>
+            </div>
+            <div className="form-field">
               <label>Currency</label>
               <CurrencyToggle value={currency} onChange={setCurrency} />
+            </div>
+            <div className="form-field">
+              <label>Vessel</label>
+              <select
+                value={vesselId}
+                onChange={(e) => setVesselId(e.target.value ? Number(e.target.value) : "")}
+              >
+                <option value="">— None —</option>
+                {vessels.map((v) => (
+                  <option key={v.id} value={v.id}>{v.name}</option>
+                ))}
+              </select>
             </div>
             <div className="form-field">
               <label>Promised delivery</label>
@@ -750,29 +785,12 @@ function VendorPoDetailModal({
   const [items, setItems] = useState<PoWorkItem[]>([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  // 이 프로젝트에 견적을 준 벤더(이름) — Vendor 드롭다운을 이들로 좁힌다.
-  const [quotedVendors, setQuotedVendors] = useState<Set<string>>(new Set());
   // 편집 권한 = 역할 권한(po.edit) × 담당(PIC) 소유권. 없으면 읽기전용.
   const canEditThis = can("po", "edit") && canEditDeal(d?.assignee_id);
   const canDeleteThis = can("po", "delete") && canEditDeal(d?.assignee_id);
 
-  // 프로젝트별 벤더 견적을 불러와 견적 제출 벤더 목록을 만든다(드롭다운 스코프용).
-  useEffect(() => {
-    if (!d?.project_no) return;
-    let alive = true;
-    fetchVendorQuoteOverview()
-      .then((r) => {
-        if (!alive) return;
-        setQuotedVendors(new Set(r.rows.filter((x) => x.project_no === d.project_no).map((x) => x.vendor)));
-      })
-      .catch(() => { if (alive) setQuotedVendors(new Set()); });
-    return () => { alive = false; };
-  }, [d?.project_no]);
-
-  // 드롭다운 후보: 견적 준 벤더 + 현재 선택 벤더(숨겨지지 않게). 견적 정보가 없으면 전체.
-  const vendorChoices = options.vendors.filter(
-    (v) => quotedVendors.size === 0 || quotedVendors.has(v.name) || v.id === vendorId
-  );
+  // Vendor 드롭다운은 모든 벤더를 노출(견적 제출 벤더로 제한하지 않음).
+  const vendorChoices = options.vendors;
 
   useEffect(() => {
     fetchVendorPoDetail(id)
@@ -1198,7 +1216,6 @@ function CustomerPoNewForm({
 
 function VendorPoCreate({
   options,
-  selectedOrderId,
   onChanged,
 }: {
   options: PoWorkOptions;
@@ -1206,8 +1223,8 @@ function VendorPoCreate({
   onChanged: () => void;
 }) {
   const today = new Date().toISOString().slice(0, 10);
-  const defaultOrder = selectedOrderId ?? options.orders[0]?.id ?? "";
-  const [orderId, setOrderId] = useState<number | "">(defaultOrder);
+  // 기본값은 미선택("") — 여러 P/O 중 대상을 사용자가 명시적으로 고르도록 한다.
+  const [orderId, setOrderId] = useState<number | "">("");
   const [vendorId, setVendorId] = useState<number | "">("");
   const [poNo, setPoNo] = useState("");
   // K-Maris PO No. 채번: auto(자동 KMS-ORD-yymm-nnn) / manual(직접 입력).
@@ -1218,29 +1235,10 @@ function VendorPoCreate({
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  // 프로젝트별 벤더 견적 — 선택한 order의 프로젝트에 견적을 준 벤더로 목록을 좁힌다.
-  const [vendorQuotes, setVendorQuotes] = useState<VendorQuoteOverviewRow[]>([]);
-
-  useEffect(() => {
-    if (selectedOrderId) setOrderId(selectedOrderId);
-  }, [selectedOrderId]);
-
-  useEffect(() => {
-    let alive = true;
-    fetchVendorQuoteOverview()
-      .then((r) => { if (alive) setVendorQuotes(r.rows); })
-      .catch(() => undefined);
-    return () => { alive = false; };
-  }, []);
 
   const order = options.orders.find((o) => o.id === orderId);
-  // 견적 준 벤더(이름) + 현재 선택. 견적 정보 없으면 전체.
-  const quotedVendors = new Set(
-    order ? vendorQuotes.filter((x) => x.project_no === order.project_no).map((x) => x.vendor) : []
-  );
-  const vendorChoices = options.vendors.filter(
-    (v) => quotedVendors.size === 0 || quotedVendors.has(v.name) || v.id === vendorId
-  );
+  // Vendor 드롭다운은 모든 벤더를 노출(견적 제출 벤더로 제한하지 않음).
+  const vendorChoices = options.vendors;
 
   useEffect(() => {
     if (order) {
@@ -1285,10 +1283,11 @@ function VendorPoCreate({
       <div className="form-grid">
         <div className="form-field">
           <label>Select target order</label>
-          <select value={orderId} onChange={(e) => setOrderId(Number(e.target.value))}>
+          <select value={orderId} onChange={(e) => setOrderId(e.target.value ? Number(e.target.value) : "")}>
+            <option value="">— Select target order —</option>
             {options.orders.map((o) => (
               <option key={o.id} value={o.id}>
-                {o.project_no} · {o.customer} · {tr(o.status)}
+                {o.project_no} · {o.customer} · {o.po_no || "—"} · {tr(o.status)}
               </option>
             ))}
           </select>
