@@ -1623,6 +1623,7 @@ function ProjectPoWorkspace({
       <PoActionTabs
         options={options}
         deepOrderId={row.order_id > 0 ? row.order_id : null}
+        deepRfqId={row.rfq_id}
         initialTab={stage >= 6 ? "vendor" : "customer"}
         onChanged={load}
         embedded

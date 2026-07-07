@@ -1359,26 +1359,8 @@ function VendorQuoteDetailModal({
           ) : null}
 
           <fieldset className="form-fieldset" disabled={!canEditThis}>
-          <div className="form-section-title">Vendor quote info</div>
-          <div className="form-grid">
-            <div className="form-field">
-              <label>Vendor quote no.</label>
-              <input value={no} onChange={(e) => setNo(e.target.value)} />
-            </div>
-            <div className="form-field">
-              <label>Quote received at</label>
-              <input type="datetime-local" value={receivedAt} onChange={(e) => setReceivedAt(e.target.value)} />
-            </div>
-            <div className="form-field">
-              <label>Currency</label>
-              <CurrencyToggle value={currency} onChange={setCurrency} />
-            </div>
-            <div className="form-field">
-              <label>Notes</label>
-              <input value={notes} onChange={(e) => setNotes(e.target.value)} />
-            </div>
-          </div>
-
+          <div className="form-section-title">Basic Info</div>
+          {/* Auto-fill 은 1단계 폼과 동일하게 제목 바로 아래(입력칸 위)에 배치. */}
           <div className="form-tools">
             <button
               type="button"
@@ -1406,6 +1388,24 @@ function VendorQuoteDetailModal({
               )}
             </div>
           ) : null}
+          <div className="form-grid">
+            <div className="form-field">
+              <label>Vendor quote no.</label>
+              <input value={no} onChange={(e) => setNo(e.target.value)} />
+            </div>
+            <div className="form-field">
+              <label>Quote received at</label>
+              <input type="datetime-local" value={receivedAt} onChange={(e) => setReceivedAt(e.target.value)} />
+            </div>
+            <div className="form-field">
+              <label>Currency</label>
+              <CurrencyToggle value={currency} onChange={setCurrency} />
+            </div>
+            <div className="form-field">
+              <label>Notes</label>
+              <input value={notes} onChange={(e) => setNotes(e.target.value)} />
+            </div>
+          </div>
           <VendorQuoteItemEditor
             items={items}
             onChange={setItems}
@@ -1693,7 +1693,7 @@ function CustomerQuoteDetailModal({
           ) : null}
 
           <fieldset className="form-fieldset" disabled={!canEditThis}>
-          <div className="form-section-title">Quotation info</div>
+          <div className="form-section-title">Basic Info</div>
           <div className="form-grid">
             <div className="form-field">
               <label>Select Vendor quote</label>
@@ -2442,6 +2442,35 @@ function VendorQuoteAction({
         <span className="hint-inline">Select a project with a sent Vendor RFQ to enable saving.</span>
       ) : null}
       <>
+          <div className="form-section-title">Basic Info</div>
+          {/* Auto-fill 은 1단계 폼과 동일하게 제목 바로 아래(입력칸 위)에 배치. */}
+          <div className="form-tools">
+            <button
+              type="button"
+              className={`tool-btn${showOcr ? " on" : ""}`}
+              onClick={() => setShowOcr((v) => !v)}
+            >
+              📄 Auto-fill
+            </button>
+          </div>
+          {showOcr ? (
+            <div className="ocr-bar">
+              <span className="ocr-bar-label">📄 Vendor quote auto-fill (PDF·Excel·image)</span>
+              <input
+                type="file"
+                accept=".pdf,.xlsx,.xls,.png,.jpg,.jpeg,.webp,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,image/*"
+                disabled={busy || vrfqId === ""}
+                onChange={(e) => parseFile(e.target.files?.[0] ?? null)}
+              />
+              {busy ? (
+                <span className="hint-inline">Analyzing…</span>
+              ) : parseMsg ? (
+                <span className="action-ok">{parseMsg}</span>
+              ) : (
+                <span className="hint-inline">Select a Vendor RFQ, then upload a file or paste with Ctrl+V → auto-fill</span>
+              )}
+            </div>
+          ) : null}
           <div className="form-grid">
             <div className="form-field">
               <label>Select Vendor RFQ</label>
@@ -2476,34 +2505,6 @@ function VendorQuoteAction({
               <CurrencyToggle value={currency} onChange={setCurrency} />
             </div>
           </div>
-
-          <div className="form-tools">
-            <button
-              type="button"
-              className={`tool-btn${showOcr ? " on" : ""}`}
-              onClick={() => setShowOcr((v) => !v)}
-            >
-              📄 Auto-fill
-            </button>
-          </div>
-          {showOcr ? (
-            <div className="ocr-bar">
-              <span className="ocr-bar-label">📄 Vendor quote auto-fill (PDF·Excel·image)</span>
-              <input
-                type="file"
-                accept=".pdf,.xlsx,.xls,.png,.jpg,.jpeg,.webp,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,image/*"
-                disabled={busy || vrfqId === ""}
-                onChange={(e) => parseFile(e.target.files?.[0] ?? null)}
-              />
-              {busy ? (
-                <span className="hint-inline">Analyzing…</span>
-              ) : parseMsg ? (
-                <span className="action-ok">{parseMsg}</span>
-              ) : (
-                <span className="hint-inline">Select a Vendor RFQ, then upload a file or paste with Ctrl+V → auto-fill</span>
-              )}
-            </div>
-          ) : null}
 
           <VendorQuoteItemEditor
             items={items}

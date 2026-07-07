@@ -76,12 +76,15 @@ export default function PoScreen() {
 export function PoActionTabs({
   options,
   deepOrderId,
+  deepRfqId,
   initialTab,
   onChanged,
   embedded,
 }: {
   options: PoWorkOptions;
   deepOrderId: number | null;
+  // 프로젝트 워크스페이스에서 이 프로젝트(RFQ)로 신규 오더를 자동 연결하기 위한 rfq_id.
+  deepRfqId?: number | null;
   initialTab?: string | null;
   onChanged: () => void;
   // embedded: 프로젝트 워크스페이스 내부. 내부 탭바·전역 목록·생성 없이 이 프로젝트의
@@ -114,7 +117,7 @@ export function PoActionTabs({
       )}
 
       {tab === "customer" ? (
-        <CustomerPoTab options={options} deepOrderId={deepOrderId} onChanged={onChanged} embedded={embedded} />
+        <CustomerPoTab options={options} deepOrderId={deepOrderId} deepRfqId={deepRfqId} onChanged={onChanged} embedded={embedded} />
       ) : (
         <VendorPoTab options={options} deepOrderId={deepOrderId} onChanged={onChanged} embedded={embedded} />
       )}
@@ -126,11 +129,13 @@ export function PoActionTabs({
 function CustomerPoTab({
   options,
   deepOrderId,
+  deepRfqId,
   onChanged,
   embedded,
 }: {
   options: PoWorkOptions;
   deepOrderId: number | null;
+  deepRfqId?: number | null;
   onChanged: () => void;
   embedded?: boolean;
 }) {
@@ -153,8 +158,8 @@ function CustomerPoTab({
       />
     ) : (
       <div className="embedded-detail">
-        <div className="form-section-title" style={{ marginTop: 0 }}>Register Customer P/O (create order)</div>
-        <CustomerPoNewForm options={options} onChanged={onChanged} />
+        <div className="form-section-title" style={{ marginTop: 0 }}>Basic Info</div>
+        <CustomerPoNewForm options={options} projectRfqId={deepRfqId ?? null} onChanged={onChanged} />
       </div>
     );
   }
@@ -877,15 +882,19 @@ function VendorPoDetailModal({
 function CustomerPoNewForm({
   options,
   onChanged,
+  projectRfqId,
 }: {
   options: PoWorkOptions;
   onChanged: () => void;
+  // 프로젝트 워크스페이스(임베드)에서 주어지면 이 RFQ로 자동 연결하고 Link RFQ 셀렉터는 숨긴다.
+  projectRfqId?: number | null;
 }) {
   const today = new Date().toISOString().slice(0, 10);
   // 기본값은 미선택("") — 사용자가 명시적으로 고객사를 고르도록 한다.
   const [customerId, setCustomerId] = useState<number | "">("");
   const [vesselId, setVesselId] = useState<number | "">("");
-  const [rfqId, setRfqId] = useState<number | "">("");
+  // 임베드 모드면 현재 프로젝트 RFQ로 고정, 아니면 사용자가 Link RFQ에서 선택.
+  const [rfqId, setRfqId] = useState<number | "">(projectRfqId ?? "");
   const [poNo, setPoNo] = useState("");
   const [date, setDate] = useState(today);
   const [currency, setCurrency] = useState("USD");
@@ -984,6 +993,22 @@ function CustomerPoNewForm({
     }
   }
 
+  // 이 프로젝트(임베드) 또는 선택한 Link RFQ의 고객 견적 — 품목·통화를 그대로 불러온다.
+  const linkedRfqId = projectRfqId ?? (rfqId === "" ? null : rfqId);
+  const linkedQuote =
+    linkedRfqId != null ? options.quotations.find((q) => q.rfq_id === linkedRfqId) : undefined;
+
+  function loadCustomerQuote() {
+    if (!linkedQuote) {
+      setErr("Linked customer quotation not found for this project.");
+      return;
+    }
+    setCurrency(linkedQuote.currency || currency);
+    setItems(linkedQuote.items.length ? linkedQuote.items.map(normalizeItem) : [blankItem()]);
+    setOcrMsg(`Loaded ${linkedQuote.items.length} item(s) from quotation ${linkedQuote.qtn_no}.`);
+    setErr(null);
+  }
+
   return (
     <>
       <div className="form-tools">
@@ -992,7 +1017,7 @@ function CustomerPoNewForm({
           className={`tool-btn${showOcr ? " on" : ""}`}
           onClick={() => setShowOcr((v) => !v)}
         >
-          📄 Auto-fill from PDF
+          📄 Auto-fill
         </button>
       </div>
 
@@ -1078,19 +1103,38 @@ function CustomerPoNewForm({
         </div>
       </div>
 
-      <div className="form-field" style={{ marginTop: 14 }}>
-        <label>Link RFQ</label>
-        <select value={rfqId} onChange={(e) => setRfqId(e.target.value ? Number(e.target.value) : "")}>
-          <option value="">— None —</option>
-          {options.rfqs.map((r) => (
-            <option key={r.id} value={r.id}>
-              {r.rfq_no} · {r.customer} · {r.vessel || "—"} · {tr(r.status)}
-            </option>
-          ))}
-        </select>
-      </div>
+      {/* 임베드(프로젝트 워크스페이스)에선 이 프로젝트로 자동 연결되므로 Link RFQ 셀렉터 불필요. */}
+      {projectRfqId == null ? (
+        <div className="form-field" style={{ marginTop: 14 }}>
+          <label>Link RFQ</label>
+          <select value={rfqId} onChange={(e) => setRfqId(e.target.value ? Number(e.target.value) : "")}>
+            <option value="">— None —</option>
+            {options.rfqs.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.rfq_no} · {r.customer} · {r.vessel || "—"} · {tr(r.status)}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : null}
 
-      <ItemEditor items={items} onChange={setItems} currency={currency} />
+      <ItemEditor
+        items={items}
+        onChange={setItems}
+        currency={currency}
+        headerActions={
+          linkedRfqId != null ? (
+            <button
+              className="btn sm"
+              onClick={loadCustomerQuote}
+              disabled={busy || !linkedQuote}
+              title={linkedQuote ? "Load items and amounts from this project's customer quotation" : "No customer quotation for this project"}
+            >
+              Load customer quote
+            </button>
+          ) : null
+        }
+      />
 
       <div className="form-actions">
         <StageTotal
