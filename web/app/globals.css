@@ -3502,6 +3502,19 @@ table.mini tfoot .total-value {
   flex: 0 0 auto;
 }
 
+/* "Load vendor quote" — 여러 공급사 견적 중 선택기 + 버튼 묶음 */
+.load-vq-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.load-vq-control .load-vq-select {
+  max-width: 260px;
+  height: 28px;
+  padding: 2px 8px;
+  font-size: 12px;
+}
+
 /* ── 품목 편집 표 — 목록만 세로 스크롤(헤더·합계 고정) ─────────────────────
    폼 전체가 아니라 품목 표 안에서만 스크롤되게 한다. 어떤 mini 표에도 안전. */
 .table-wrap.item-scroll {

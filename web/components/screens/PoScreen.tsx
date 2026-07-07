@@ -17,6 +17,7 @@ import {
   updatePurchaseOrder,
   deletePurchaseOrder,
   fetchNextPoNo,
+  fetchRfqVendorQuotes,
 } from "@/lib/api";
 import { getToken, can, canEditDeal, editBlockReason } from "@/lib/auth";
 import { useCachedData, invalidateCache } from "@/lib/useCachedData";
@@ -43,6 +44,7 @@ import type {
   PoWorkOptions,
   VendorPoPreview,
   PurchaseOrderDetail,
+  VendorQuoteForImport,
 } from "@/lib/types";
 
 type OrderOpt = PoWorkOptions["orders"][number];
@@ -783,6 +785,7 @@ function VendorPoDetailModal({
   const [sentDate, setSentDate] = useState("");
   const [status, setStatus] = useState("");
   const [items, setItems] = useState<PoWorkItem[]>([]);
+  const [vendorQuotes, setVendorQuotes] = useState<VendorQuoteForImport[]>([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   // 편집 권한 = 역할 권한(po.edit) × 담당(PIC) 소유권. 없으면 읽기전용.
@@ -807,9 +810,27 @@ function VendorPoDetailModal({
         setSentDate(data.sent_date || "");
         setStatus(data.status || "");
         setItems(data.items.length ? data.items.map(normalizeItem) : [blankItem()]);
+        // 이 발주서가 속한 오더의 프로젝트(RFQ)에서 수신한 공급사 견적들.
+        const ord = options.orders.find((o) => o.id === data.order_id);
+        if (ord) {
+          fetchRfqVendorQuotes(ord.rfq_id)
+            .then((r) => setVendorQuotes(r.vendor_quotes))
+            .catch(() => setVendorQuotes([]));
+        } else {
+          setVendorQuotes([]);
+        }
       })
       .catch((e) => setErr(e instanceof Error ? e.message : "Error"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  // 선택한 공급사 견적의 품목·단가를 발주서 품목으로 불러온다.
+  function loadVendorQuote(vq: VendorQuoteForImport) {
+    setItems(poItemsFromVendorQuote(vq));
+    const v = options.vendors.find((x) => x.name === vq.vendor);
+    if (v) setVendorId(v.id);
+    setErr(null);
+  }
 
   async function save() {
     setBusy(true);
@@ -907,9 +928,16 @@ function VendorPoDetailModal({
             currency={d.currency || "USD"}
             headerActions={
               canEditThis ? (
-                <button className="btn sm" onClick={loadOrderItems} disabled={busy} title="Reload items from the linked Customer P/O">
-                  Load customer P/O
-                </button>
+                <>
+                  <LoadVendorQuoteControl
+                    vendorQuotes={vendorQuotes}
+                    onLoad={loadVendorQuote}
+                    disabled={busy}
+                  />
+                  <button className="btn sm" onClick={loadOrderItems} disabled={busy} title="Reload items from the linked Customer P/O">
+                    Load customer P/O
+                  </button>
+                </>
               ) : null
             }
           />
@@ -1232,6 +1260,7 @@ function VendorPoCreate({
   const [autoNo, setAutoNo] = useState("");
   const [date, setDate] = useState(today);
   const [items, setItems] = useState<PoWorkItem[]>([blankItem()]);
+  const [vendorQuotes, setVendorQuotes] = useState<VendorQuoteForImport[]>([]);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -1246,6 +1275,27 @@ function VendorPoCreate({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderId]);
+
+  // 선택 오더의 프로젝트(RFQ)에서 3단계에 수신한 공급사 견적들 — "Load vendor quote"용.
+  useEffect(() => {
+    if (!order) {
+      setVendorQuotes([]);
+      return;
+    }
+    fetchRfqVendorQuotes(order.rfq_id)
+      .then((r) => setVendorQuotes(r.vendor_quotes))
+      .catch(() => setVendorQuotes([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderId]);
+
+  // 선택한 공급사 견적의 품목·단가를 발주서 품목으로 불러오고, 수신 벤더도 맞춘다.
+  function loadVendorQuote(vq: VendorQuoteForImport) {
+    setItems(poItemsFromVendorQuote(vq));
+    const v = options.vendors.find((x) => x.name === vq.vendor);
+    if (v) setVendorId(v.id);
+    setErr(null);
+    setMsg(`Loaded ${vq.items.length} item(s) from vendor quote ${vq.vendor_quote_no} (${vq.vendor}).`);
+  }
 
   // 자동채번 미리보기(다음 K-Maris PO No.) 로드.
   useEffect(() => {
@@ -1332,7 +1382,20 @@ function VendorPoCreate({
         </div>
       ) : null}
 
-      <ItemEditor items={items} onChange={setItems} currency={order?.currency || "USD"} />
+      <ItemEditor
+        items={items}
+        onChange={setItems}
+        currency={order?.currency || "USD"}
+        headerActions={
+          order ? (
+            <LoadVendorQuoteControl
+              vendorQuotes={vendorQuotes}
+              onLoad={loadVendorQuote}
+              disabled={busy}
+            />
+          ) : null
+        }
+      />
 
       <div className="form-actions">
         <StageTotal
@@ -1690,6 +1753,80 @@ function ItemEditor({
         </table>
       </div>
     </div>
+  );
+}
+
+// 3단계에서 수신한 공급사 견적 → 발주서 품목으로 변환.
+// 공급사 견적의 cost_price 가 발주서의 unit price(= 우리가 벤더에 지불하는 단가)가 된다.
+function poItemsFromVendorQuote(vq: VendorQuoteForImport): PoWorkItem[] {
+  if (!vq.items.length) return [blankItem()];
+  return vq.items.map((it) => {
+    const qty = Number(it.qty ?? 1) || 1;
+    const cost = it.cost_price == null ? 0 : Number(it.cost_price);
+    return {
+      part_no: it.part_no ?? "",
+      description: it.description ?? "",
+      maker: it.maker ?? it.manufacturer ?? "",
+      qty,
+      unit: it.unit ?? "PCS",
+      unit_price: cost,
+      amount: qty * cost,
+      remark: it.remark ?? "",
+    };
+  });
+}
+
+// "Load vendor quote" — 품목표 헤더의 "+ Add" 옆 보조 액션.
+// 이 프로젝트에서 수신한 공급사 견적이 여러 건이면 선택기를, 한 건이면 버튼만 노출한다.
+function LoadVendorQuoteControl({
+  vendorQuotes,
+  onLoad,
+  disabled,
+}: {
+  vendorQuotes: VendorQuoteForImport[];
+  onLoad: (vq: VendorQuoteForImport) => void;
+  disabled?: boolean;
+}) {
+  const [vqId, setVqId] = useState<number | "">(
+    vendorQuotes.length === 1 ? vendorQuotes[0].id : ""
+  );
+  // 견적 목록이 바뀌면(오더 변경 등) 선택 초기화. 한 건이면 자동 선택.
+  useEffect(() => {
+    setVqId(vendorQuotes.length === 1 ? vendorQuotes[0].id : "");
+  }, [vendorQuotes]);
+
+  if (vendorQuotes.length === 0) return null;
+
+  return (
+    <span className="load-vq-control">
+      {vendorQuotes.length > 1 ? (
+        <select
+          className="load-vq-select"
+          value={vqId}
+          onChange={(e) => setVqId(e.target.value ? Number(e.target.value) : "")}
+          title="Choose which received vendor quote to load"
+        >
+          <option value="">— Select vendor quote —</option>
+          {vendorQuotes.map((v) => (
+            <option key={v.id} value={v.id}>
+              {v.received_date || "—"} · {v.vendor} · {v.vendor_quote_no}
+            </option>
+          ))}
+        </select>
+      ) : null}
+      <button
+        type="button"
+        className="btn sm"
+        disabled={disabled || vqId === ""}
+        title="Load items and unit prices from the vendor quote received at stage 3"
+        onClick={() => {
+          const vq = vendorQuotes.find((v) => v.id === vqId);
+          if (vq) onLoad(vq);
+        }}
+      >
+        Load vendor quote
+      </button>
+    </span>
   );
 }
 
