@@ -1254,6 +1254,7 @@ class OrderCreate(BaseModel):
     trade_type: str = "수출"
     promised_delivery: str | None = None
     items: list[PoWorkItem] = []
+    terms: dict | None = None
 
 
 class OrderUpdate(BaseModel):
@@ -1265,6 +1266,7 @@ class OrderUpdate(BaseModel):
     trade_type: str | None = None
     promised_delivery: str | None = None
     items: list[PoWorkItem] | None = None
+    terms: dict | None = None
 
 
 class PurchaseOrderCreate(BaseModel):
@@ -1273,6 +1275,7 @@ class PurchaseOrderCreate(BaseModel):
     po_no: str | None = None
     date: str | None = None
     items: list[PoWorkItem] = []
+    terms: dict | None = None
 
 
 class PurchaseOrderUpdate(BaseModel):
@@ -1282,6 +1285,7 @@ class PurchaseOrderUpdate(BaseModel):
     sent_date: str | None = None
     status: str | None = None
     items: list[PoWorkItem] | None = None
+    terms: dict | None = None
 
 
 class VendorPoPreview(BaseModel):

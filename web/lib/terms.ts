@@ -19,3 +19,20 @@ export const PAYMENT_TERMS_PRESETS: readonly string[] = [
   "D/P at sight",
   "D/A 30 days",
 ];
+
+// 견적서/오더/발주서 Terms & Conditions 편집기 프리셋(콤보박스, 자유입력 가능).
+export const TERM_PRESETS = {
+  // Incoterms 는 규칙만 — 지역/항구는 Place 필드에서 지정. 약어 풀이를 괄호에 표기.
+  incoterms: [
+    "EXW (Ex Works)",
+    "FCA (Free Carrier)",
+    "FOB (Free On Board)",
+    "CFR (Cost and Freight)",
+    "CIF (Cost, Insurance and Freight)",
+    "DAP (Delivered at Place)",
+  ],
+  payment_terms: PAYMENT_TERMS_PRESETS,
+  packing: ["Standard export packing", "Seaworthy export packing", "Wooden case packing"],
+  delivery_place: ["Busan, Republic of Korea", "Incheon, Republic of Korea", "named port of destination"],
+  warranty: ["Manufacturer's standard warranty", "12 months from delivery", "6 months from delivery", "No warranty"],
+} as const;

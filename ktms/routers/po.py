@@ -195,6 +195,7 @@ def order_detail(order_id: int):
             "tracking_token": o.tracking_token or "",
             "steps": steps,
             "items": [_item_view(it) for it in (o.items or [])],
+            "terms": getattr(o, "terms", None) or {},
             "vendor_pos": vendor_po_view,
             "documents": {
                 "ci_no": ci.ci_no if ci else "",
@@ -408,6 +409,7 @@ def create_order(body: OrderCreate):
             promised_delivery=body.promised_delivery or None,
             status=OrderStatus.RECEIVED,
             items=items,
+            terms=body.terms or {},
         )
         s.add(order)
         if qtn:
@@ -458,6 +460,8 @@ def update_order(order_id: int, body: OrderUpdate):
                     "remark": (it.remark or "").strip(),
                 })
             order.items = items
+        if body.terms is not None:
+            order.terms = body.terms or {}
         s.commit()
         return {"ok": True, "id": order.id, "project_no": _project_no_for_order(s, order)}
     finally:
@@ -542,6 +546,7 @@ def create_purchase_order(body: PurchaseOrderCreate):
             vendor_id=vendor.id,
             date=body.date or date.today().isoformat(),
             items=items,
+            terms=body.terms or {},
             status="발주완료",
         )
         s.add(po)
@@ -580,6 +585,7 @@ def vendor_po_detail(po_id: int):
             "sent": po.status == "이메일 발송완료",
             "currency": (qtn.currency if qtn else "USD") or "USD",
             "items": [_item_view(it) for it in (po.items or [])],
+            "terms": getattr(po, "terms", None) or {},
         }
     finally:
         s.close()
@@ -626,6 +632,8 @@ def update_purchase_order(po_id: int, body: PurchaseOrderUpdate):
                     "remark": (it.remark or "").strip(),
                 })
             po.items = items
+        if body.terms is not None:
+            po.terms = body.terms or {}
         s.commit()
         return {"ok": True, "id": po.id, "po_no": po.po_no}
     finally:

@@ -28,6 +28,7 @@ import CustomerName from "@/components/common/CustomerName";
 import Modal from "@/components/common/Modal";
 import BaseMetaRows, { ModalTitle } from "@/components/common/BaseMeta";
 import CurrencyToggle from "@/components/common/CurrencyToggle";
+import TermsEditor from "@/components/common/TermsEditor";
 import {
   amountInputValue,
   DualCurrencyAmount,
@@ -45,6 +46,7 @@ import type {
   VendorPoPreview,
   PurchaseOrderDetail,
   VendorQuoteForImport,
+  QuotationTerms,
 } from "@/lib/types";
 
 type OrderOpt = PoWorkOptions["orders"][number];
@@ -304,6 +306,7 @@ function OrderDetailModal({
   const [tradeType, setTradeType] = useState("수출");
   const [promised, setPromised] = useState("");
   const [items, setItems] = useState<PoWorkItem[]>([]);
+  const [terms, setTerms] = useState<QuotationTerms>({});
   const [ocrBusy, setOcrBusy] = useState(false);
   const [ocrMsg, setOcrMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -325,6 +328,7 @@ function OrderDetailModal({
         setCurrency(d.currency || "USD");
         setPromised(d.promised_delivery || "");
         setItems(d.items.length ? d.items.map(normalizeItem) : [blankItem()]);
+        setTerms(d.terms || {});
         setOcrMsg(null);
       })
       .catch((e) => setErr(e instanceof Error ? e.message : "Load failed"));
@@ -411,6 +415,7 @@ function OrderDetailModal({
         trade_type: tradeType,
         promised_delivery: promised || null,
         items: cleanItems(items),
+        terms,
       });
       onChanged();
       onClose();
@@ -568,6 +573,7 @@ function OrderDetailModal({
               ) : null
             }
           />
+          <TermsEditor terms={terms} onChange={setTerms} />
           </fieldset>
           <div className="form-actions">
             <StageTotal
@@ -785,6 +791,7 @@ function VendorPoDetailModal({
   const [sentDate, setSentDate] = useState("");
   const [status, setStatus] = useState("");
   const [items, setItems] = useState<PoWorkItem[]>([]);
+  const [terms, setTerms] = useState<QuotationTerms>({});
   const [vendorQuotes, setVendorQuotes] = useState<VendorQuoteForImport[]>([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -805,6 +812,7 @@ function VendorPoDetailModal({
         setSentDate(data.sent_date || "");
         setStatus(data.status || "");
         setItems(data.items.length ? data.items.map(normalizeItem) : [blankItem()]);
+        setTerms(data.terms || {});
         // 이 발주서가 속한 오더의 프로젝트(RFQ)에서 수신한 공급사 견적들.
         const ord = options.orders.find((o) => o.id === data.order_id);
         if (ord) {
@@ -837,6 +845,7 @@ function VendorPoDetailModal({
         sent_date: sentDate,
         status,
         items: cleanItems(items),
+        terms,
       });
       onChanged();
       onClose();
@@ -921,6 +930,7 @@ function VendorPoDetailModal({
               ) : null
             }
           />
+          <TermsEditor terms={terms} onChange={setTerms} />
           </fieldset>
           <div className="form-actions">
             <StageTotal
@@ -967,6 +977,7 @@ function CustomerPoNewForm({
   const [tradeType, setTradeType] = useState("수출");
   const [promised, setPromised] = useState("");
   const [items, setItems] = useState<PoWorkItem[]>([blankItem()]);
+  const [terms, setTerms] = useState<QuotationTerms>({});
   const [busy, setBusy] = useState(false);
   const [ocrBusy, setOcrBusy] = useState(false);
   const [showOcr, setShowOcr] = useState(false);
@@ -1046,11 +1057,13 @@ function CustomerPoNewForm({
         trade_type: tradeType,
         promised_delivery: promised || null,
         items: cleanItems(items),
+        terms,
       });
       setMsg(`Order created: ${r.project_no}`);
       setPoNo("");
       setPromised("");
       setItems([blankItem()]);
+      setTerms({});
       onChanged();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Order creation failed");
@@ -1202,6 +1215,8 @@ function CustomerPoNewForm({
         }
       />
 
+      <TermsEditor terms={terms} onChange={setTerms} />
+
       <div className="form-actions">
         <StageTotal
           label="Total"
@@ -1244,6 +1259,7 @@ function VendorPoCreate({
   const [autoNo, setAutoNo] = useState("");
   const [date, setDate] = useState(today);
   const [items, setItems] = useState<PoWorkItem[]>([blankItem()]);
+  const [terms, setTerms] = useState<QuotationTerms>({});
   const [vendorQuotes, setVendorQuotes] = useState<VendorQuoteForImport[]>([]);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -1303,6 +1319,7 @@ function VendorPoCreate({
         po_no: poNo.trim() || undefined,
         date,
         items: cleanItems(items),
+        terms,
       });
       setMsg(`PO created: ${r.po_no}`);
       onChanged();
@@ -1402,6 +1419,8 @@ function VendorPoCreate({
           ) : null
         }
       />
+
+      <TermsEditor terms={terms} onChange={setTerms} />
 
       <div className="form-actions">
         <StageTotal

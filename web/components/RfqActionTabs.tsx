@@ -33,7 +33,6 @@ import {
 } from "@/lib/api";
 import { getToken, can, canEditDeal, editBlockReason } from "@/lib/auth";
 import { tr } from "@/lib/labels";
-import { PAYMENT_TERMS_PRESETS } from "@/lib/terms";
 import type {
   VendorOption,
   RfqRow,
@@ -61,7 +60,7 @@ import { imageFromClipboard } from "@/lib/imagePaste";
 import Modal from "./common/Modal";
 import BaseMetaRows, { ModalTitle } from "./common/BaseMeta";
 import CurrencyToggle from "./common/CurrencyToggle";
-import ComboBox from "./common/ComboBox";
+import TermsEditor from "./common/TermsEditor";
 import {
   amountInputValue,
   convertCurrency,
@@ -1419,7 +1418,7 @@ function VendorQuoteDetailModal({
               </button>
             }
           />
-          <QuotationTermsEditor terms={terms} onChange={setTerms} />
+          <TermsEditor terms={terms} onChange={setTerms} />
           </fieldset>
           <div className="form-actions">
             <StageTotal
@@ -1797,7 +1796,7 @@ function CustomerQuoteDetailModal({
             onDiscountChange={setDiscountPct}
             currency={currency}
           />
-          <QuotationTermsEditor terms={terms} onChange={setTerms} />
+          <TermsEditor terms={terms} onChange={setTerms} />
           </fieldset>
           <div className="form-actions">
             <StageTotal label="Final" value={finalTotal} currency={currency} />
@@ -2527,7 +2526,7 @@ function VendorQuoteAction({
             }
           />
 
-          <QuotationTermsEditor terms={terms} onChange={setTerms} />
+          <TermsEditor terms={terms} onChange={setTerms} />
 
           <div className="form-field" style={{ marginTop: 12 }}>
             <label>Notes</label>
@@ -2741,23 +2740,6 @@ function customerQuoteItemsFromVendorQuote(
     };
   });
 }
-
-// Streamlit 4_Quotation.py 의 거래 조건 프리셋 — datalist 로 드롭다운 + 자유 입력 모두 지원.
-const TERM_PRESETS = {
-  // Incoterms 는 규칙만 — 지역/항구는 Place 필드에서 지정. 약어 풀이를 괄호에 표기.
-  incoterms: [
-    "EXW (Ex Works)",
-    "FCA (Free Carrier)",
-    "FOB (Free On Board)",
-    "CFR (Cost and Freight)",
-    "CIF (Cost, Insurance and Freight)",
-    "DAP (Delivered at Place)",
-  ],
-  payment_terms: PAYMENT_TERMS_PRESETS,
-  packing: ["Standard export packing", "Seaworthy export packing", "Wooden case packing"],
-  delivery_place: ["Busan, Republic of Korea", "Incheon, Republic of Korea", "named port of destination"],
-  warranty: ["Manufacturer's standard warranty", "12 months from delivery", "6 months from delivery", "No warranty"],
-} as const;
 
 // 저장된 거래조건에 Payment Terms 가 비어 있으면 고객/공급사 정보의 기본 결제조건으로
 // 채운다. 이미 값이 있으면 그대로 둔다(사용자가 지정한 값 우선).
@@ -3029,7 +3011,7 @@ function CustomerQuoteAction({
         currency={currency}
       />
 
-      <QuotationTermsEditor terms={terms} onChange={setTerms} />
+      <TermsEditor terms={terms} onChange={setTerms} />
 
       <div className="form-actions">
         <StageTotal label="Final" value={finalTotal} currency={currency} />
@@ -3092,57 +3074,6 @@ function CustomerQuoteAction({
       ) : null}
       {msg ? <span className="action-ok">{msg}</span> : null}
       {err ? <span className="action-err">{err}</span> : null}
-    </div>
-  );
-}
-
-function QuotationTermsEditor({
-  terms,
-  onChange,
-}: {
-  terms: QuotationTerms;
-  onChange: (terms: QuotationTerms) => void;
-}) {
-  function field(key: keyof QuotationTerms, label: string) {
-    const presets = (TERM_PRESETS as Record<string, readonly string[]>)[key];
-    return (
-      <div className="form-field">
-        <label>{label}</label>
-        {presets ? (
-          <ComboBox
-            value={terms[key] ?? ""}
-            onChange={(v) => onChange({ ...terms, [key]: v })}
-            options={presets}
-          />
-        ) : (
-          <input
-            value={terms[key] ?? ""}
-            onChange={(e) => onChange({ ...terms, [key]: e.target.value })}
-          />
-        )}
-      </div>
-    );
-  }
-
-  return (
-    <div style={{ marginTop: 12 }}>
-      <div className="sub-h">Terms</div>
-      <div className="form-grid">
-        {field("incoterms", "Incoterms *")}
-        {field("delivery_place", "Place *")}
-        {field("payment_terms", "Payment Terms *")}
-        {field("packing", "Packing (optional)")}
-        {field("warranty", "Warranty *")}
-      </div>
-      <div className="form-field" style={{ marginTop: 8 }}>
-        <label>Remarks</label>
-        <textarea
-          rows={3}
-          style={{ minHeight: 72 }}
-          value={terms.remarks ?? ""}
-          onChange={(e) => onChange({ ...terms, remarks: e.target.value })}
-        />
-      </div>
     </div>
   );
 }

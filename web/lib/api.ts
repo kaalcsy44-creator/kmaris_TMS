@@ -302,6 +302,7 @@ export function createOrder(body: {
   trade_type?: string;
   promised_delivery?: string | null;
   items: PoWorkItem[];
+  terms?: QuotationTerms;
 }): Promise<{ ok: boolean; id: number; project_no: string }> {
   return post("/api/admin/orders", body);
 }
@@ -312,6 +313,7 @@ export function createPurchaseOrder(body: {
   po_no?: string;
   date?: string;
   items: PoWorkItem[];
+  terms?: QuotationTerms;
 }): Promise<{ ok: boolean; id: number; po_no: string }> {
   return post("/api/admin/vendor-pos", body);
 }
@@ -1018,6 +1020,7 @@ export function updateOrder(
     trade_type?: string;
     promised_delivery?: string | null;
     items?: PoWorkItem[];
+    terms?: QuotationTerms;
   }
 ): Promise<{ ok: boolean; id: number; project_no: string }> {
   return put(`/api/admin/orders/${id}`, body);
@@ -1040,6 +1043,7 @@ export function updatePurchaseOrder(
     sent_date?: string;
     status?: string;
     items?: PoWorkItem[];
+    terms?: QuotationTerms;
   }
 ): Promise<{ ok: boolean; id: number; po_no: string }> {
   return put(`/api/admin/vendor-pos/${id}`, body);

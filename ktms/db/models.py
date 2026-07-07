@@ -272,6 +272,7 @@ class Order(Base):
     consignee_confirmed_date = Column(String(10))  # 8) Delivery arrangement - Customer 확인 (수동)
     vendor_docs_sent_date    = Column(String(10))  # 8) Delivery arrangement - Vendor 서류 확인 (수동)
     items          = Column(JSON, default=list)
+    terms          = Column(JSON, default=dict)   # 거래조건(Incoterms·Place·결제·포장·보증 등)
     tracking_token = Column(String(64), unique=True, default=lambda: secrets.token_urlsafe(32))
     created_at     = Column(DateTime, default=datetime.utcnow)
 
@@ -296,6 +297,7 @@ class PurchaseOrder(Base):
     vendor_id  = Column(Integer, ForeignKey("vendors.id"))
     date       = Column(String(10))
     items      = Column(JSON, default=list)
+    terms      = Column(JSON, default=dict)   # 거래조건(Incoterms·Place·결제·포장·보증 등)
     status     = Column(String(40), default="발주완료")
     sent_date  = Column(String(10))
     sent_to_email = Column(String(200))

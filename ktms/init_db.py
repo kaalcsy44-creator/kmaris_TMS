@@ -73,6 +73,7 @@ _MIGRATIONS = {
         # DEFAULT 없이 추가 → 기존 오더는 NULL 로 남아 연결 견적 통화를 그대로 상속(회귀 방지).
         # 신규 오더는 create_order 에서 통화를 명시 저장한다.
         "currency":          "VARCHAR(10)",
+        "terms":             "JSON",
     },
     "vendor_rfqs": {
         "sent_to_email": "VARCHAR(200)",
@@ -80,6 +81,7 @@ _MIGRATIONS = {
     },
     "purchase_orders": {
         "sent_to_email": "VARCHAR(200)",
+        "terms": "JSON",
     },
     "marketing_activities": {
         "contact_person": "VARCHAR(100)",

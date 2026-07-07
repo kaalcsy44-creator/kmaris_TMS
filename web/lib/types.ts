@@ -168,6 +168,7 @@ export type PoDetail = {
   tracking_token: string;
   steps: RfqStep[];
   items: RfqItem[];
+  terms?: QuotationTerms;
   vendor_pos: {
     id: number;
     po_no: string;
@@ -890,6 +891,7 @@ export type PurchaseOrderDetail = {
   sent: boolean;
   currency: string;
   items: PoWorkItem[];
+  terms?: QuotationTerms;
 };
 
 // ── 마케팅 활동(잠정 고객사) ──────────────────────────────────────────────────
