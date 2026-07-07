@@ -473,13 +473,17 @@ def dashboard():
         won_quotes = [q for q in quotes if q.status == QuotationStatus.WON]
         hit_rate = (len(won_quotes) / len(sent_quotes) * 100) if sent_quotes else 0.0
 
+        # 매출(판매가)은 앱 전역과 동일하게 amount 기반(_quotation_total, 할인 반영)으로,
+        # 원가는 cost_price 합(_items_cost_total)으로 잡는다. 예전엔 매출을 unit_price 로
+        # 계산했으나 견적 품목은 판매가를 amount 에 저장해 매출이 과소 집계 → 마진이
+        # 비정상적으로 음수(-800%대)로 나오던 버그를 수정. 견적 통화가 섞일 수 있어 각
+        # 견적을 USD 로 환산한 뒤 합산해 단일 마진율을 낸다.
         margin_basis = won_quotes or sent_quotes
         _rev = _cost = 0.0
         for q in margin_basis:
-            for it in (q.items or []):
-                qty = float(it.get("qty", 1) or 1)
-                _rev += float(it.get("unit_price", 0) or 0) * qty
-                _cost += float(it.get("cost_price", 0) or 0) * qty
+            fx = (1.0 / USD_KRW_RATE) if _cur2(q.currency) == "KRW" else 1.0
+            _rev += _quotation_total(q.items or [], getattr(q, "discount_pct", 0) or 0) * fx
+            _cost += _items_cost_total(q.items or []) * fx
         gross_margin_pct = ((_rev - _cost) / _rev * 100) if _rev else 0.0
 
         negotiating_value_usd = 0.0
