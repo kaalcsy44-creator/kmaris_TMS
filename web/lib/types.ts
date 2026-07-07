@@ -155,6 +155,7 @@ export type PoDetail = {
   customer: string;
   customer_contact: string;
   customer_email: string;
+  vessel_id: number;
   vessel: string;
   work_type: string;
   trade_type: string;

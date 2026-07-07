@@ -146,10 +146,10 @@ def order_detail(order_id: int):
 
         cust = s.query(Customer).filter_by(id=o.customer_id).first()
         rfq = _rfq_for_order(s, o)
-        # 오더에 선박이 지정 안 됐으면 프로젝트(RFQ)의 선박을 사용해 표시한다.
-        _vid = o.vessel_id or (rfq.vessel_id if rfq else None)
-        vessel = s.query(Vessel).filter_by(id=_vid).first() if _vid else None
         qtn = s.query(Quotation).filter_by(id=o.quotation_id).first() if o.quotation_id else None
+        # 오더에 선박이 없으면 프로젝트(RFQ)·견적의 선박을 순서대로 사용해 표시한다.
+        _vid = o.vessel_id or (rfq.vessel_id if rfq else None) or (qtn.vessel_id if qtn else None)
+        vessel = s.query(Vessel).filter_by(id=_vid).first() if _vid else None
         stage = _pipeline_stage(s, rfq.id) if rfq else 5
 
         steps = [{
@@ -195,6 +195,7 @@ def order_detail(order_id: int):
             "customer": cust.name if cust else "—",
             "customer_contact": (cust.contact if cust else "") or "",
             "customer_email": (cust.email if cust else "") or "",
+            "vessel_id": _vid or 0,
             "vessel": vessel.name if vessel else "",
             "work_type": _enum_val(rfq.work_type) if (rfq and rfq.work_type) else "부품공급",
             "trade_type": o.trade_type or "수출",
@@ -286,7 +287,7 @@ def po_work_options():
             rfq = _rfq_for_order(s, o)
             qtn = s.query(Quotation).filter_by(id=o.quotation_id).first() if o.quotation_id else None
             stage = _pipeline_stage(s, rfq.id) if rfq else 5
-            _ovid = o.vessel_id or (rfq.vessel_id if rfq else None)  # 오더 미지정 시 RFQ 선박
+            _ovid = o.vessel_id or (rfq.vessel_id if rfq else None) or (qtn.vessel_id if qtn else None)  # 오더 미지정 시 RFQ·견적 선박
             orders.append({
                 "id": o.id,
                 # 프로젝트 워크스페이스에서 이 오더가 어느 RFQ(프로젝트)에 속하는지 식별용.

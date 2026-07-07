@@ -321,7 +321,10 @@ function OrderDetailModal({
     fetchPoDetail(orderId)
       .then((d) => {
         const cust = options.customers.find((c) => c.name === d.customer);
-        const ves = options.vessels.find((v) => v.name === d.vessel);
+        // 선박은 id 우선 매칭(이름 정확일치는 취약). id 없으면 이름으로 폴백.
+        const ves =
+          (d.vessel_id ? options.vessels.find((v) => v.id === d.vessel_id) : undefined) ??
+          options.vessels.find((v) => v.name === d.vessel);
         setDetail(d);
         setCustomerId(cust?.id ?? "");
         setVesselId(ves?.id ?? "");
@@ -448,7 +451,11 @@ function OrderDetailModal({
   const canDeleteThis = can("po", "delete") && canEditDeal(detail?.assignee_id);
 
   // 선택 고객사에 속한 선박만 노출(고객 미선택이면 전체).
-  const vessels = options.vessels.filter((v) => customerId === "" || v.customer_id === customerId);
+  // 고객사 기준으로 거르되, 현재 선택된 선박은 (다른 고객사 소속이어도) 항상 포함해
+  // 드롭다운에서 선택값이 사라져 비어 보이지 않도록 한다.
+  const vessels = options.vessels.filter(
+    (v) => customerId === "" || v.customer_id === customerId || v.id === vesselId
+  );
 
   return (
     <Modal title={<ModalTitle label="Edit order" projectNo={order?.project_no} />} onClose={onClose} wide inline={inline}>
