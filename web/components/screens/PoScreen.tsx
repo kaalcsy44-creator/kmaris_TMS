@@ -445,14 +445,8 @@ function OrderDetailModal({
         <div className="state">Loading details…</div>
       ) : (
         <>
-          {inline ? (
-            <div className="embedded-record-bar">
-              <span className="embedded-record-current">
-                <CustomerName name={detail.customer || ""} />
-                <b className="rec-doc-no">{detail.customer_po_no || ""}</b>
-              </span>
-            </div>
-          ) : null}
+          {/* 인라인(임베드) 상세는 상위 CustomerPoTab이 레코드 바(선택기·+ Add)를
+              그리므로 여기서는 중복 표시하지 않는다. */}
           {!inline ? (
             <>
               <div className="form-section-title">Order info</div>
