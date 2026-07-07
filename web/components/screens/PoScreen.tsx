@@ -866,16 +866,6 @@ function VendorPoDetailModal({
     }
   }
 
-  function loadOrderItems() {
-    if (!d) return;
-    const order = options.orders.find((o) => o.id === d.order_id);
-    if (!order) {
-      setErr("Linked order items are not available.");
-      return;
-    }
-    setItems(order.items.length ? order.items.map(normalizeItem) : [blankItem()]);
-  }
-
   return (
     <Modal title={d ? <ModalTitle label={`Edit purchase order — ${d.po_no}`} projectNo={d.project_no} /> : "PO details"} onClose={onClose} wide inline={inline}>
       {!d ? (
@@ -928,16 +918,11 @@ function VendorPoDetailModal({
             currency={d.currency || "USD"}
             headerActions={
               canEditThis ? (
-                <>
-                  <LoadVendorQuoteControl
-                    vendorQuotes={vendorQuotes}
-                    onLoad={loadVendorQuote}
-                    disabled={busy}
-                  />
-                  <button className="btn sm" onClick={loadOrderItems} disabled={busy} title="Reload items from the linked Customer P/O">
-                    Load customer P/O
-                  </button>
-                </>
+                <LoadVendorQuoteControl
+                  vendorQuotes={vendorQuotes}
+                  onLoad={loadVendorQuote}
+                  disabled={busy}
+                />
               ) : null
             }
           />
