@@ -3261,7 +3261,10 @@ a.btn.primary:hover {
   border: 1px solid #d7e2ee;
   border-radius: 8px;
   padding: 0 10px;
-  font-size: 13px;
+  font-size: 12px;
+  /* 날짜(input[type=date] 등) 입력란이 브라우저 기본 글씨체가 아니라
+     다른 입력란과 동일한 앱 글씨체를 쓰도록 강제한다. */
+  font-family: inherit;
   background: #fff;
 }
 /* 체크박스는 입력칸 스타일(100% 너비/높이)에서 제외 */
@@ -3286,7 +3289,8 @@ a.btn.primary:hover {
   border: 1px solid #d7e2ee;
   border-radius: 8px;
   padding: 10px 12px;
-  font-size: 13px;
+  font-size: 12px;
+  font-family: inherit;
   line-height: 1.45;
   background: #fff;
   color: var(--ink);
@@ -3321,7 +3325,8 @@ table.mini.wide input {
   border: 1px solid #d7e2ee;
   border-radius: 6px;
   padding: 0 8px;
-  font-size: 13px;
+  font-size: 12px;
+  font-family: inherit;
 }
 table.mini.wide input.num {
   text-align: right;
@@ -3361,7 +3366,7 @@ table.mini textarea.wrapcell {
   border: 1px solid #d7e2ee;
   border-radius: 6px;
   padding: 5px 8px;
-  font-size: 13px;
+  font-size: 12px;
   font-family: inherit;
   line-height: 1.35;
   white-space: pre-wrap;
