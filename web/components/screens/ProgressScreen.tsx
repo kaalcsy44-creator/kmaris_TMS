@@ -1099,6 +1099,41 @@ export function PipelineModal({
   const [selectedStage, setSelectedStage] = useState<StageTabKey>(
     Math.min(Math.max(initialStage || r.stage || 1, 1), 11)
   );
+  // 좌측 기본정보 패널: 구분선 드래그로 폭 조절 + 토글 버튼으로 숨김. localStorage 로 유지.
+  const layoutRef = useRef<HTMLDivElement>(null);
+  const [infoWidth, setInfoWidth] = useState<number>(() => {
+    if (typeof window === "undefined") return 300;
+    const v = Number(window.localStorage.getItem("ktms:proj-info-w"));
+    return v >= 200 && v <= 620 ? v : 300;
+  });
+  const [infoCollapsed, setInfoCollapsed] = useState<boolean>(
+    () => typeof window !== "undefined" && window.localStorage.getItem("ktms:proj-info-collapsed") === "1"
+  );
+  useEffect(() => {
+    if (typeof window !== "undefined") window.localStorage.setItem("ktms:proj-info-w", String(infoWidth));
+  }, [infoWidth]);
+  useEffect(() => {
+    if (typeof window !== "undefined")
+      window.localStorage.setItem("ktms:proj-info-collapsed", infoCollapsed ? "1" : "0");
+  }, [infoCollapsed]);
+
+  function startInfoDrag(e: React.MouseEvent) {
+    if (infoCollapsed) return;
+    e.preventDefault();
+    document.body.style.userSelect = "none";
+    const onMove = (ev: MouseEvent) => {
+      const rect = layoutRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      setInfoWidth(Math.max(200, Math.min(620, ev.clientX - rect.left)));
+    };
+    const onUp = () => {
+      document.body.style.userSelect = "";
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }
   // 편집 필드(편집 진입 시 r 값으로 seed)
   const [fWorkType, setFWorkType] = useState(r.work_type || "부품공급");
   const [fCustomerId, setFCustomerId] = useState<number | "">(r.customer_id || "");
@@ -1289,8 +1324,16 @@ export function PipelineModal({
 
         <div className="pl-modal-body">
           <div className="intl-detail">
-            <div className="project-workspace-layout">
-              <aside className="project-info-pane">
+            <div
+              className={`project-workspace-layout${infoCollapsed ? " info-collapsed" : ""}`}
+              ref={layoutRef}
+              style={{
+                gridTemplateColumns: infoCollapsed
+                  ? "0 18px minmax(0, 1fr)"
+                  : `${infoWidth}px 8px minmax(0, 1fr)`,
+              }}
+            >
+              <aside className="project-info-pane" hidden={infoCollapsed}>
             {isNewProject ? (
             <div className="intl-new-hint">
               <p>Fill in the basic info on the right and click <b>Create RFQ</b>.</p>
@@ -1461,6 +1504,26 @@ export function PipelineModal({
           </div>
           ) : null}
               </aside>
+
+              {/* 드래그로 좌우 폭 조절 + 토글 버튼으로 좌측 패널 숨김/표시. */}
+              <div
+                className="ws-divider"
+                onMouseDown={startInfoDrag}
+                role="separator"
+                aria-orientation="vertical"
+                title={infoCollapsed ? undefined : "Drag to resize"}
+              >
+                <button
+                  type="button"
+                  className="ws-divider-toggle"
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={() => setInfoCollapsed((v) => !v)}
+                  title={infoCollapsed ? "Show project info" : "Hide project info"}
+                  aria-label={infoCollapsed ? "Show project info" : "Hide project info"}
+                >
+                  {infoCollapsed ? "›" : "‹"}
+                </button>
+              </div>
 
               <section className="project-stage-pane">
             {/* 단계 상세 공통 헤더 — 모든 단계에서 동일한 위치·서체의 제목(좌) +
