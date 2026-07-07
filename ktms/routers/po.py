@@ -41,6 +41,7 @@ from _core import (
     _kst_iso,
     _ocr_image_media_type,
     _order_for_rfq,
+    _orders_for_rfq,
     _next_kmaris_po_no,
     _pipeline_stage,
     _project_no_for_order,
@@ -79,46 +80,55 @@ def po_overview():
 
         rows = []
         for r in s.query(RFQ).order_by(RFQ.id.desc()).all():
-            o = _order_for_rfq(s, r.id)
-            vpos = (s.query(PurchaseOrder).filter_by(order_id=o.id)
-                    .order_by(PurchaseOrder.id.desc()).all()) if o else []
-            if vpos:
-                vp0 = vpos[0]
-                vendor_po_no = (vp0.po_no or "—") + (
-                    f"  (외 {len(vpos) - 1}건)" if len(vpos) > 1 else "")
-                vendor_nm = vendor_names.get(vp0.vendor_id, "—")
-                vendor_email = vp0.sent_to_email or "—"
-                # Vendor P/O 발신 일시 (시·분) — created_at 기준, 앱 전반 규칙과 동일
-                vendor_po_at = _kst(vp0.created_at)
-            else:
-                vendor_po_no = vendor_nm = vendor_email = vendor_po_at = ""
+            # 한 프로젝트에 고객 P/O(오더)가 여러 건이면 PO No.별로 각각 한 행씩 올린다.
+            orders = _orders_for_rfq(s, r.id)
 
-            # Vendor RFQ 발신 일시 (시·분) — Vendor RFQ를 보낸 거래에서만
+            # RFQ 레벨 공통값(모든 오더가 공유).
             vrfqs = (s.query(VendorRFQ).filter_by(rfq_id=r.id)
                      .order_by(VendorRFQ.id.desc()).all())
             vrfq_at = _fmt_received(_vrfq_sent_iso(vrfqs[0])) if vrfqs else ""
-
             stage = _pipeline_stage(s, r.id)
-            rows.append({
-                "id": o.id if o else 0,
-                "customer_rfq_no": r.customer_rfq_no or "",
-                "crfq_at": _kst(r.created_at),
-                "kmaris_rfq_no": _rfq_no_disp(r.rfq_no),
-                "vrfq_at": vrfq_at,
-                "customer": cust_names.get(r.customer_id, "—"),
-                "project_title": getattr(r, "project_title", None) or "",
-                "vessel": vessel_names.get(r.vessel_id, "") if r.vessel_id else "",
-                "customer_po_no": (o.po_no if o else "") or "",
-                # 고객 P/O 수신 일시 (시·분) — 시스템 수신(created_at) 기준
-                "customer_po_at": _kst(o.created_at) if o else "",
-                "item_count": len((o.items if o else None) or r.items or []),
-                "vendor_po_no": vendor_po_no,
-                "vendor_po_at": vendor_po_at,
-                "vendor": vendor_nm,
-                "vendor_email": vendor_email,
-                "stage": stage,
-                "status": _status_label(stage, r.work_type),
-            })
+
+            def _row(o):
+                # 오더별 Vendor P/O(발주서).
+                vpos = (s.query(PurchaseOrder).filter_by(order_id=o.id)
+                        .order_by(PurchaseOrder.id.desc()).all()) if o else []
+                if vpos:
+                    vp0 = vpos[0]
+                    vendor_po_no = (vp0.po_no or "—") + (
+                        f"  (외 {len(vpos) - 1}건)" if len(vpos) > 1 else "")
+                    vendor_nm = vendor_names.get(vp0.vendor_id, "—")
+                    vendor_email = vp0.sent_to_email or "—"
+                    vendor_po_at = _kst(vp0.created_at)
+                else:
+                    vendor_po_no = vendor_nm = vendor_email = vendor_po_at = ""
+                return {
+                    "id": o.id if o else 0,
+                    "customer_rfq_no": r.customer_rfq_no or "",
+                    "crfq_at": _kst(r.created_at),
+                    "kmaris_rfq_no": _rfq_no_disp(r.rfq_no),
+                    "vrfq_at": vrfq_at,
+                    "customer": cust_names.get(r.customer_id, "—"),
+                    "project_title": getattr(r, "project_title", None) or "",
+                    "vessel": vessel_names.get(r.vessel_id, "") if r.vessel_id else "",
+                    "customer_po_no": (o.po_no if o else "") or "",
+                    # 고객 P/O 수신 일시 (시·분) — 시스템 수신(created_at) 기준
+                    "customer_po_at": _kst(o.created_at) if o else "",
+                    "item_count": len((o.items if o else None) or r.items or []),
+                    "vendor_po_no": vendor_po_no,
+                    "vendor_po_at": vendor_po_at,
+                    "vendor": vendor_nm,
+                    "vendor_email": vendor_email,
+                    "stage": stage,
+                    "status": _status_label(stage, r.work_type),
+                }
+
+            if orders:
+                for o in orders:
+                    rows.append(_row(o))
+            else:
+                # 아직 오더가 없는 RFQ는 id=0 행(대시보드 P/O Received 목록에선 제외됨).
+                rows.append(_row(None))
         return {"rows": rows}
     finally:
         s.close()
