@@ -1244,6 +1244,7 @@ function CustomerPoNewForm({
 
 function VendorPoCreate({
   options,
+  selectedOrderId,
   onChanged,
 }: {
   options: PoWorkOptions;
@@ -1251,8 +1252,11 @@ function VendorPoCreate({
   onChanged: () => void;
 }) {
   const today = new Date().toISOString().slice(0, 10);
-  // 기본값은 미선택("") — 여러 P/O 중 대상을 사용자가 명시적으로 고르도록 한다.
-  const [orderId, setOrderId] = useState<number | "">("");
+  // 대상 오더가 상위(상단 P/O 선택기)에서 정해지면(embedded) 그 값으로 고정하고
+  // 자체 선택기는 숨긴다. 전역 "Create PO" 모달에서는 selectedOrderId 가 없으므로
+  // 사용자가 직접 고르도록 드롭다운을 노출한다.
+  const fixedOrder = selectedOrderId != null;
+  const [orderId, setOrderId] = useState<number | "">(selectedOrderId ?? "");
   const [vendorId, setVendorId] = useState<number | "">("");
   const [poNo, setPoNo] = useState("");
   // K-Maris PO No. 채번: auto(자동 KMS-ORD-yymm-nnn) / manual(직접 입력).
@@ -1268,6 +1272,11 @@ function VendorPoCreate({
   const order = options.orders.find((o) => o.id === orderId);
   // Vendor 드롭다운은 모든 벤더를 노출(견적 제출 벤더로 제한하지 않음).
   const vendorChoices = options.vendors;
+
+  // 상단 P/O 선택기에서 대상 오더가 바뀌면 폼도 그 오더로 맞춘다.
+  useEffect(() => {
+    if (selectedOrderId != null) setOrderId(selectedOrderId);
+  }, [selectedOrderId]);
 
   useEffect(() => {
     if (order) {
@@ -1331,17 +1340,32 @@ function VendorPoCreate({
   return (
     <>
       <div className="form-grid">
-        <div className="form-field">
-          <label>Select target order</label>
-          <select value={orderId} onChange={(e) => setOrderId(e.target.value ? Number(e.target.value) : "")}>
-            <option value="">— Select target order —</option>
-            {options.orders.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.project_no} · {o.customer} · {o.po_no || "—"} · {tr(o.status)}
-              </option>
-            ))}
-          </select>
-        </div>
+        {fixedOrder ? (
+          <>
+            {/* 대상 오더는 상단 P/O 선택기가 정한다. 여기서는 선박·프로젝트명을
+                해당 고객 P/O에서 자동으로 불러와 읽기전용으로 보여준다. */}
+            <div className="form-field">
+              <label>Vessel</label>
+              <input value={order?.vessel || "—"} readOnly />
+            </div>
+            <div className="form-field">
+              <label>Project name</label>
+              <input value={order?.project_title || order?.project_no || "—"} readOnly />
+            </div>
+          </>
+        ) : (
+          <div className="form-field">
+            <label>Select target order</label>
+            <select value={orderId} onChange={(e) => setOrderId(e.target.value ? Number(e.target.value) : "")}>
+              <option value="">— Select target order —</option>
+              {options.orders.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.project_no} · {o.customer} · {o.po_no || "—"} · {tr(o.status)}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         <div className="form-field">
           <label>Select vendor</label>
           <select value={vendorId} onChange={(e) => setVendorId(e.target.value ? Number(e.target.value) : "")}>
@@ -1378,7 +1402,9 @@ function VendorPoCreate({
 
       {order ? (
         <div className="action-ctx">
-          Target order: <b>{order.project_no || "—"}</b> · PO No. {order.po_no || "—"} · {order.customer} · {order.vessel || "—"} · {order.items.length} item(s)
+          {fixedOrder
+            ? <>Customer P/O <b>{order.po_no || "—"}</b> · {order.customer} · {order.items.length} item(s)</>
+            : <>Target order: <b>{order.project_no || "—"}</b> · PO No. {order.po_no || "—"} · {order.customer} · {order.vessel || "—"} · {order.items.length} item(s)</>}
         </div>
       ) : null}
 
