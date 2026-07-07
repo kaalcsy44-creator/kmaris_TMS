@@ -423,7 +423,6 @@ def _terms_block(data: Dict[str, Any], doc_type: str):
             [
                 ["Payment Terms", terms.get("payment_terms", "")],
                 ["Delivery Place", terms.get("delivery_place", "")],
-                ["Shipment Method", terms.get("shipment_method", "")],
                 ["Packing", terms.get("packing", "")],
                 ["Warranty", terms.get("warranty", "")],
                 ["Remarks", terms.get("remarks", "")],

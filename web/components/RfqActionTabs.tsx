@@ -2744,11 +2744,11 @@ function customerQuoteItemsFromVendorQuote(
 
 // Streamlit 4_Quotation.py 의 거래 조건 프리셋 — datalist 로 드롭다운 + 자유 입력 모두 지원.
 const TERM_PRESETS = {
-  incoterms: ["FCA Busan, Korea", "FOB Busan, Korea", "CIF (named port of destination)", "CFR (named port of destination)", "DAP (named destination)", "EXW Busan"],
-  shipment_method: ["Air courier / Sea freight", "By Air (Courier)", "By Sea (FCL)", "By Sea (LCL)"],
+  // Incoterms 는 규칙(코드)만 — 지역/항구는 Place 필드에서 지정.
+  incoterms: ["FCA", "FOB", "CIF", "CFR", "DAP", "EXW"],
   payment_terms: PAYMENT_TERMS_PRESETS,
   packing: ["Standard export packing", "Seaworthy export packing", "Wooden case packing"],
-  delivery_place: ["Busan, Republic of Korea", "Incheon, Republic of Korea"],
+  delivery_place: ["Busan, Republic of Korea", "Incheon, Republic of Korea", "named port of destination"],
   warranty: ["Manufacturer's standard warranty", "12 months from delivery", "6 months from delivery", "No warranty"],
 } as const;
 
@@ -3121,12 +3121,11 @@ function QuotationTermsEditor({
     <div style={{ marginTop: 12 }}>
       <div className="sub-h">Terms</div>
       <div className="form-grid">
-        {field("incoterms", "Incoterms")}
-        {field("shipment_method", "Shipment Method")}
-        {field("payment_terms", "Payment Terms")}
-        {field("packing", "Packing")}
-        {field("delivery_place", "Delivery Place")}
-        {field("warranty", "Warranty")}
+        {field("incoterms", "Incoterms *")}
+        {field("delivery_place", "Place *")}
+        {field("payment_terms", "Payment Terms *")}
+        {field("packing", "Packing (optional)")}
+        {field("warranty", "Warranty *")}
       </div>
       <div className="form-field" style={{ marginTop: 8 }}>
         <label>Remarks</label>
