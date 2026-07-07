@@ -477,7 +477,7 @@ function PipelineTable({
     setDeepStage(openStage && openStage > 0 ? openStage : null);
   }, [openRfqId, openOrderId, openStage, rows]);
   // 목록 표시 방식: 표(table) / 칸반 보드(board). 같은 데이터·같은 상세 모달 재사용.
-  const [view, setView] = useState<"table" | "board">("table");
+  const [view, setView] = useState<"table" | "board">("board");
   // 기본 정렬: 관리번호(Project No.) 내림차순 — 최근 프로젝트가 맨 위.
   const [sortKey, setSortKey] = useState<ColKey | null>("received_at");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
