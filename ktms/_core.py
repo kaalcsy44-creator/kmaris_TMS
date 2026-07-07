@@ -50,6 +50,7 @@ from services.pdf_parser import (
     parse_vendor_quote_pdf_document,
 )
 from services.vendor_xlsx import make_vendor_rfq_quote_xlsx
+from services.doc_xlsx import make_document_xlsx
 from services.quote_response_parser import parse_vendor_quote_bytes, excel_to_text
 from db.models import (
     RFQ, Customer, Vessel, Vendor, User, UserRole, RolePermission, ItemMaster, ItemCategory, DocSequence,
@@ -1297,6 +1298,7 @@ class VendorPoSend(BaseModel):
     to: str
     subject: str
     body: str
+    format: str = "pdf"   # 첨부 포맷: pdf | xlsx
 
 
 class ARPayment(BaseModel):
@@ -2061,6 +2063,7 @@ class QuotationSendReq(BaseModel):
     subject: str
     body: str
     doc_type: str = "quotation"
+    format: str = "pdf"   # 첨부 포맷: pdf | xlsx
 
 
 # Public surface consumed by routers/*.py (split from this file).
@@ -2224,6 +2227,7 @@ __all__ = [
     "get_session",
     "io",
     "make_vendor_rfq_quote_xlsx",
+    "make_document_xlsx",
     "order_tracking_step",
     "os",
     "parse_order_fields",

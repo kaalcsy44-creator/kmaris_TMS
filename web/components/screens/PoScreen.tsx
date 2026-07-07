@@ -11,6 +11,7 @@ import {
   parseOrderPdf,
   sendVendorPo,
   vendorPoPdfUrl,
+  vendorPoXlsxUrl,
   updateOrder,
   deleteOrder,
   fetchVendorPoDetail,
@@ -951,14 +952,14 @@ function VendorPoDetailModal({
             {err ? <span className="action-err">{err}</span> : null}
           </div>
 
-          {/* 발주서 파일 생성 + 벤더 이메일 발송(생성 PDF 첨부). 저장본 기준으로 생성된다. */}
+          {/* 발주서 파일 생성(PDF/Excel) + 벤더 이메일 발송(선택 포맷 첨부). 저장본 기준. */}
           <DocSendPanel
             title="Purchase Order · Email to Vendor"
-            formats={["pdf"]}
-            downloadUrl={() => vendorPoPdfUrl(id)}
-            downloadName={() => `${d.po_no || "PurchaseOrder"}.pdf`}
+            formats={["pdf", "xlsx"]}
+            downloadUrl={(f) => (f === "xlsx" ? vendorPoXlsxUrl(id) : vendorPoPdfUrl(id))}
+            downloadName={(f) => `${d.po_no || "PurchaseOrder"}.${f}`}
             onPreview={(lang, note) => previewVendorPo(id, lang, note)}
-            onSend={({ to, subject, body }) => sendVendorPo(id, to, subject, body)}
+            onSend={({ to, subject, body, format }) => sendVendorPo(id, to, subject, body, format)}
             showNote
             disabled={!canEditThis}
             disabledReason={!canEditThis ? editBlockReason("po", d?.assignee_id) : "Generated from the last saved version — save your edits first."}

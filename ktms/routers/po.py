@@ -54,6 +54,7 @@ from _core import (
     _vrfq_sent_iso,
     app,
     build_po_payload,
+    make_document_xlsx,
     date,
     datetime,
     extract_text_from_pdf,
@@ -720,6 +721,35 @@ def vendor_po_pdf(po_id: int):
         s.close()
 
 
+@app.get("/api/admin/vendor-pos/{po_id}/xlsx", dependencies=[Depends(require_token)])
+def vendor_po_xlsx(po_id: int):
+    s = get_session()
+    try:
+        po = s.query(PurchaseOrder).filter_by(id=po_id).first()
+        if not po:
+            raise HTTPException(status_code=404, detail="발주서를 찾을 수 없습니다.")
+        vendor = s.query(Vendor).filter_by(id=po.vendor_id).first()
+        order = s.query(Order).filter_by(id=po.order_id).first()
+        vessel = s.query(Vessel).filter_by(id=order.vessel_id).first() if order and order.vessel_id else None
+        payload = build_po_payload(
+            po_no=po.po_no,
+            date=po.date or date.today().isoformat(),
+            vendor=vendor,
+            vessel=vessel,
+            items=po.items or [],
+        )
+        # 발주서에 저장된 거래조건을 payload 에 얹어 Excel Terms 에 반영.
+        payload["terms"] = getattr(po, "terms", None) or {}
+        xlsx = make_document_xlsx("purchase_order", payload)
+        return Response(
+            content=xlsx,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f'attachment; filename="{po.po_no}_PurchaseOrder.xlsx"'},
+        )
+    finally:
+        s.close()
+
+
 @app.post("/api/admin/vendor-pos/{po_id}/send", dependencies=[Depends(require_token)])
 def vendor_po_send(po_id: int, body: VendorPoSend):
     s = get_session()
@@ -739,12 +769,16 @@ def vendor_po_send(po_id: int, body: VendorPoSend):
             vessel=vessel,
             items=po.items or [],
         )
-        pdf = generate_po_pdf(payload)
+        if body.format == "xlsx":
+            payload["terms"] = getattr(po, "terms", None) or {}
+            attach = (f"{po.po_no}_PurchaseOrder.xlsx", make_document_xlsx("purchase_order", payload))
+        else:
+            attach = (f"{po.po_no}_PurchaseOrder.pdf", generate_po_pdf(payload))
         sent = send_email(
             to=body.to.strip(),
             subject=body.subject,
             body=body.body,
-            attachments=[(f"{po.po_no}_PurchaseOrder.pdf", pdf)],
+            attachments=[attach],
         )
         if not sent:
             raise HTTPException(status_code=400, detail="이메일 발송 실패 — SMTP 설정 또는 서버 상태를 확인하세요.")

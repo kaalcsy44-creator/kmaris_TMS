@@ -29,6 +29,7 @@ from _core import (
     _status_label,
     app,
     build_payload,
+    make_document_xlsx,
     date,
     datetime,
     generate_pdf,
@@ -293,6 +294,37 @@ def quotation_pdf(qtn_id: int, doc_type: str = "quotation"):
         s.close()
 
 
+@app.get("/api/admin/quotations/{qtn_id}/xlsx", dependencies=[Depends(require_token)])
+def quotation_xlsx(qtn_id: int, doc_type: str = "quotation"):
+    s = get_session()
+    try:
+        qtn = s.query(Quotation).filter_by(id=qtn_id).first()
+        if not qtn:
+            raise HTTPException(status_code=404, detail="견적서를 찾을 수 없습니다.")
+        cust = s.query(Customer).filter_by(id=qtn.customer_id).first()
+        vessel = s.query(Vessel).filter_by(id=qtn.vessel_id).first() if qtn.vessel_id else None
+        payload = build_payload(
+            doc_no=qtn.qtn_no,
+            date=qtn.date or date.today().isoformat(),
+            customer=cust,
+            vessel=vessel,
+            items=qtn.items or [],
+            terms=qtn.terms or {},
+            currency=qtn.currency or "USD",
+            vat_rate=qtn.vat_rate or 0.0,
+            valid_until=qtn.valid_until or "",
+            discount_pct=getattr(qtn, "discount_pct", 0) or 0.0,
+        )
+        xlsx = make_document_xlsx(doc_type, payload)
+        return Response(
+            content=xlsx,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f'attachment; filename="{qtn.qtn_no}.xlsx"'},
+        )
+    finally:
+        s.close()
+
+
 @app.post("/api/admin/quotations/{qtn_id}/email-preview", dependencies=[Depends(require_token)])
 def quotation_email_preview(qtn_id: int, body: QuotationEmailPreviewReq):
     s = get_session()
@@ -335,12 +367,15 @@ def quotation_send(qtn_id: int, body: QuotationSendReq):
             valid_until=qtn.valid_until or "",
             discount_pct=getattr(qtn, "discount_pct", 0) or 0.0,
         )
-        pdf = generate_pdf(body.doc_type, payload)
+        if body.format == "xlsx":
+            attach = (f"{qtn.qtn_no}.xlsx", make_document_xlsx(body.doc_type, payload))
+        else:
+            attach = (f"{qtn.qtn_no}.pdf", generate_pdf(body.doc_type, payload))
         sent = send_email(
             to=body.to.strip(),
             subject=body.subject,
             body=body.body,
-            attachments=[(f"{qtn.qtn_no}.pdf", pdf)],
+            attachments=[attach],
         )
         if not sent:
             raise HTTPException(status_code=400, detail="이메일 발송 실패 — SMTP 설정 또는 서버 상태를 확인하세요.")

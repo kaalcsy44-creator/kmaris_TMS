@@ -330,13 +330,18 @@ export function sendVendorPo(
   poId: number,
   to: string,
   subject: string,
-  body: string
+  body: string,
+  format: "pdf" | "xlsx" = "pdf"
 ): Promise<{ ok: boolean; sent_date: string }> {
-  return post(`/api/admin/vendor-pos/${poId}/send`, { to, subject, body });
+  return post(`/api/admin/vendor-pos/${poId}/send`, { to, subject, body, format });
 }
 
 export function vendorPoPdfUrl(poId: number): string {
   return `${API_BASE}/api/admin/vendor-pos/${poId}/pdf`;
+}
+
+export function vendorPoXlsxUrl(poId: number): string {
+  return `${API_BASE}/api/admin/vendor-pos/${poId}/xlsx`;
 }
 
 export function fetchQuotationOverview(customerId?: number): Promise<{ rows: QtnRow[] }> {
@@ -908,6 +913,10 @@ export function quotationPdfUrl(qtnId: number, docType = "quotation"): string {
   return `${API_BASE}/api/admin/quotations/${qtnId}/pdf?doc_type=${encodeURIComponent(docType)}`;
 }
 
+export function quotationXlsxUrl(qtnId: number, docType = "quotation"): string {
+  return `${API_BASE}/api/admin/quotations/${qtnId}/xlsx?doc_type=${encodeURIComponent(docType)}`;
+}
+
 export function previewQuotationEmail(
   qtnId: number,
   lang: "en" | "ko"
@@ -920,13 +929,15 @@ export function sendQuotationEmail(
   to: string,
   subject: string,
   body: string,
-  docType = "quotation"
+  docType = "quotation",
+  format: "pdf" | "xlsx" = "pdf"
 ): Promise<{ ok: boolean; sent_date: string }> {
   return post(`/api/admin/quotations/${qtnId}/send`, {
     to,
     subject,
     body,
     doc_type: docType,
+    format,
   });
 }
 

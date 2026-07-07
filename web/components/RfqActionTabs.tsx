@@ -16,6 +16,7 @@ import {
   parseVendorQuoteFile,
   createCustomerQuote,
   quotationPdfUrl,
+  quotationXlsxUrl,
   previewQuotationEmail,
   sendQuotationEmail,
   fetchVrfqOverview,
@@ -1827,14 +1828,14 @@ function CustomerQuoteDetailModal({
           {msg ? <span className="action-ok">{msg}</span> : null}
           {err ? <span className="action-err">{err}</span> : null}
 
-          {/* 견적서 파일 생성 + 고객 이메일 발송(생성 PDF 첨부). 저장본 기준으로 생성. */}
+          {/* 견적서 파일 생성(PDF/Excel) + 고객 이메일 발송(선택 포맷 첨부). 저장본 기준. */}
           <DocSendPanel
             title="Quotation · Email to Customer"
-            formats={["pdf"]}
-            downloadUrl={() => quotationPdfUrl(id, "quotation")}
-            downloadName={() => `${d.qtn_no || "Quotation"}.pdf`}
+            formats={["pdf", "xlsx"]}
+            downloadUrl={(f) => (f === "xlsx" ? quotationXlsxUrl(id, "quotation") : quotationPdfUrl(id, "quotation"))}
+            downloadName={(f) => `${d.qtn_no || "Quotation"}.${f}`}
             onPreview={(lang) => previewQuotationEmail(id, lang)}
-            onSend={({ to, subject, body }) => sendQuotationEmail(id, to, subject, body, "quotation")}
+            onSend={({ to, subject, body, format }) => sendQuotationEmail(id, to, subject, body, "quotation", format)}
             disabled={!canEditThis}
             disabledReason={!canEditThis ? editBlockReason("rfq", d?.assignee_id) : "Generated from the last saved version — save your edits first."}
             onSent={onChanged}
