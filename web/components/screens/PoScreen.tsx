@@ -792,6 +792,7 @@ function VendorPoDetailModal({
   const [tab, setTab] = useState<DetailTab>("edit");
   const [vendorId, setVendorId] = useState<number | "">("");
   const [poNo, setPoNo] = useState("");
+  const [poDate, setPoDate] = useState("");
   const [sentDate, setSentDate] = useState("");
   const [status, setStatus] = useState("");
   const [items, setItems] = useState<PoWorkItem[]>([]);
@@ -813,6 +814,7 @@ function VendorPoDetailModal({
         setVendorId(data.vendor_id || "");
         // 이미 채번되어 저장된 K-Maris PO No.(KMS-ORD-…)를 그대로 보여준다.
         setPoNo(data.po_no || "");
+        setPoDate(data.date || "");
         setSentDate(data.sent_date || "");
         setStatus(data.status || "");
         setItems(data.items.length ? data.items.map(normalizeItem) : [blankItem()]);
@@ -846,6 +848,7 @@ function VendorPoDetailModal({
       await updatePurchaseOrder(id, {
         vendor_id: vendorId === "" ? undefined : vendorId,
         po_no: poNo.trim() || undefined,
+        date: poDate,
         sent_date: sentDate,
         status,
         items: cleanItems(items),
@@ -917,6 +920,10 @@ function VendorPoDetailModal({
                 onChange={(e) => setPoNo(e.target.value)}
                 placeholder="KMS-ORD-…"
               />
+            </div>
+            <div className="form-field">
+              <label>PO date</label>
+              <input type="date" value={poDate} onChange={(e) => setPoDate(e.target.value)} />
             </div>
             <div className="form-field">
               <label>Sent date</label>
@@ -1011,6 +1018,17 @@ function CustomerPoNewForm({
   const vessels = options.vessels.filter(
     (v) => customerId === "" || v.customer_id === customerId
   );
+
+  // 프로젝트(임베드) 등록 시 해당 RFQ의 고객·선박을 기본값으로 채운다 → 오더에 선박이
+  // 비지 않도록. 사용자가 이미 값을 바꿨으면 덮어쓰지 않는다.
+  useEffect(() => {
+    if (projectRfqId == null) return;
+    const rfq = options.rfqs.find((r) => r.id === projectRfqId);
+    if (!rfq) return;
+    setCustomerId((prev) => (prev === "" ? rfq.customer_id ?? "" : prev));
+    setVesselId((prev) => (prev === "" && rfq.vessel_id ? rfq.vessel_id : prev));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectRfqId, options.rfqs]);
 
   function matchByName<T extends { name: string }>(
     hint: string | null | undefined,

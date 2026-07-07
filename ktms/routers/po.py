@@ -145,8 +145,10 @@ def order_detail(order_id: int):
             raise HTTPException(status_code=404, detail="Order not found")
 
         cust = s.query(Customer).filter_by(id=o.customer_id).first()
-        vessel = s.query(Vessel).filter_by(id=o.vessel_id).first() if o.vessel_id else None
         rfq = _rfq_for_order(s, o)
+        # 오더에 선박이 지정 안 됐으면 프로젝트(RFQ)의 선박을 사용해 표시한다.
+        _vid = o.vessel_id or (rfq.vessel_id if rfq else None)
+        vessel = s.query(Vessel).filter_by(id=_vid).first() if _vid else None
         qtn = s.query(Quotation).filter_by(id=o.quotation_id).first() if o.quotation_id else None
         stage = _pipeline_stage(s, rfq.id) if rfq else 5
 
@@ -284,14 +286,15 @@ def po_work_options():
             rfq = _rfq_for_order(s, o)
             qtn = s.query(Quotation).filter_by(id=o.quotation_id).first() if o.quotation_id else None
             stage = _pipeline_stage(s, rfq.id) if rfq else 5
+            _ovid = o.vessel_id or (rfq.vessel_id if rfq else None)  # 오더 미지정 시 RFQ 선박
             orders.append({
                 "id": o.id,
                 # 프로젝트 워크스페이스에서 이 오더가 어느 RFQ(프로젝트)에 속하는지 식별용.
                 "rfq_id": rfq.id if rfq else 0,
                 "customer_id": o.customer_id,
                 "customer": cust_names.get(o.customer_id, "—"),
-                "vessel_id": o.vessel_id,
-                "vessel": vessel_names.get(o.vessel_id, "") if o.vessel_id else "",
+                "vessel_id": _ovid or 0,
+                "vessel": vessel_names.get(_ovid, "") if _ovid else "",
                 "po_no": o.po_no or "",
                 "date": o.date or "",
                 "trade_type": o.trade_type or "수출",
@@ -327,14 +330,15 @@ def po_work_options():
                 "status": po.status or "",
                 "sent": po.status == "이메일 발송완료",
                 "items": [_item_view(it) for it in (po.items or [])],
-                "currency": (qtn.currency if qtn else "USD") or "USD",
+                # 발주서 통화 = 오더 통화 우선(견적 통화·USD 순 폴백). 오더가 KRW면 발주서도 KRW.
+                "currency": (o.currency if o else None) or (qtn.currency if qtn else None) or "USD",
                 # 공통 식별 컬럼
                 "customer": cust_names.get(o.customer_id, "—") if o else "—",
                 "project_title": (getattr(rfq, "project_title", None) or "") if rfq else "",
                 "contact_person": (getattr(rfq, "contact_person", None) or "") if rfq else "",
                 "assignee": (user_names.get(rfq.created_by, "") or "") if rfq else "",
                 "assignee_id": (rfq.created_by or 0) if rfq else 0,
-                "vessel": (vessel_names.get(o.vessel_id, "") if o and o.vessel_id else ""),
+                "vessel": (vessel_names.get(o.vessel_id or (rfq.vessel_id if rfq else None), "") if o else ""),
                 "trade_type": (o.trade_type or "수출") if o else "수출",
                 "work_type": (_enum_val(rfq.work_type) if rfq and rfq.work_type else "부품공급"),
                 "first_rfq_at": _first_rfq_iso(rfq),
@@ -391,6 +395,9 @@ def create_order(body: OrderCreate):
             raise HTTPException(status_code=400, detail="Customer를 선택하세요.")
         qtn = s.query(Quotation).filter_by(id=body.quotation_id).first() if body.quotation_id else None
         rfq_id = body.rfq_id or (qtn.rfq_id if qtn else None)
+        rfq_obj = s.query(RFQ).filter_by(id=rfq_id).first() if rfq_id else None
+        # 선박 미지정 시 프로젝트(RFQ)·견적의 선박을 승계 → 상세에서 선박이 비지 않도록.
+        vessel_id = body.vessel_id or (rfq_obj.vessel_id if rfq_obj else None) or (qtn.vessel_id if qtn else None)
         items = []
         for it in body.items:
             if not (it.part_no or it.description):
@@ -412,7 +419,7 @@ def create_order(body: OrderCreate):
             quotation_id=qtn.id if qtn else None,
             rfq_id=rfq_id,
             customer_id=cust.id,
-            vessel_id=body.vessel_id,
+            vessel_id=vessel_id,
             po_no=(body.po_no or "").strip(),
             date=body.date or date.today().isoformat(),
             currency=(body.currency or (qtn.currency if qtn else None) or "USD"),
@@ -594,7 +601,8 @@ def vendor_po_detail(po_id: int):
             "sent_date": po.sent_date or "",
             "status": po.status or "",
             "sent": po.status == "이메일 발송완료",
-            "currency": (qtn.currency if qtn else "USD") or "USD",
+            # 발주서 통화 = 오더 통화 우선(견적 통화·USD 순 폴백). 오더가 KRW면 발주서도 KRW로 표시.
+            "currency": (order.currency if order else None) or (qtn.currency if qtn else None) or "USD",
             "items": [_item_view(it) for it in (po.items or [])],
             "terms": getattr(po, "terms", None) or {},
         }
