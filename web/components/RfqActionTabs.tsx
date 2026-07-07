@@ -2744,8 +2744,15 @@ function customerQuoteItemsFromVendorQuote(
 
 // Streamlit 4_Quotation.py 의 거래 조건 프리셋 — datalist 로 드롭다운 + 자유 입력 모두 지원.
 const TERM_PRESETS = {
-  // Incoterms 는 규칙(코드)만 — 지역/항구는 Place 필드에서 지정.
-  incoterms: ["FCA", "FOB", "CIF", "CFR", "DAP", "EXW"],
+  // Incoterms 는 규칙만 — 지역/항구는 Place 필드에서 지정. 약어 풀이를 괄호에 표기.
+  incoterms: [
+    "EXW (Ex Works)",
+    "FCA (Free Carrier)",
+    "FOB (Free On Board)",
+    "CFR (Cost and Freight)",
+    "CIF (Cost, Insurance and Freight)",
+    "DAP (Delivered at Place)",
+  ],
   payment_terms: PAYMENT_TERMS_PRESETS,
   packing: ["Standard export packing", "Seaworthy export packing", "Wooden case packing"],
   delivery_place: ["Busan, Republic of Korea", "Incheon, Republic of Korea", "named port of destination"],

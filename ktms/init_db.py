@@ -12,7 +12,7 @@ import bcrypt
 from sqlalchemy import text, inspect
 from db.engine import Base, get_engine, get_session
 from db.models import (
-    User, UserRole, DocSequence, Customer, Vendor, RFQ, Quotation, Order, ItemCategory,
+    User, UserRole, DocSequence, Customer, Vendor, RFQ, Quotation, VendorQuote, Order, ItemCategory,
 )
 
 
@@ -494,6 +494,61 @@ def migrate_remove_stage_8():
     print(f"[OK] remove_stage_8 migration applied: {n_rfq} RFQs, {n_ord} orders renumbered.")
 
 
+_INCOTERM_LABELS = {
+    "EXW": "EXW (Ex Works)",
+    "FCA": "FCA (Free Carrier)",
+    "FOB": "FOB (Free On Board)",
+    "CFR": "CFR (Cost and Freight)",
+    "CIF": "CIF (Cost, Insurance and Freight)",
+    "DAP": "DAP (Delivered at Place)",
+}
+
+
+def _normalize_incoterm(val):
+    """'EXW Busan' 처럼 코드로 시작하는 값을 지역/약어 없는 표준 라벨로 정규화.
+    코드로 시작하지 않거나 이미 표준 라벨이면 None(변경 없음)."""
+    if not isinstance(val, str):
+        return None
+    v = val.strip()
+    if not v:
+        return None
+    up = v.upper()
+    for code, label in _INCOTERM_LABELS.items():
+        if up == code or up.startswith(code + " ") or up.startswith(code + "("):
+            return label if label != v else None
+    return None
+
+
+def migrate_normalize_incoterms():
+    """1회성: 저장된 견적 terms.incoterms 를 지역 없는 표준 라벨로 정규화.
+    예) 'EXW Busan' → 'EXW (Ex Works)'. applied_migrations 가드로 재실행 안전."""
+    eng = get_engine()
+    with eng.begin() as conn:
+        conn.execute(text(
+            "CREATE TABLE IF NOT EXISTS applied_migrations (name VARCHAR(100) PRIMARY KEY)"))
+        if conn.execute(text(
+                "SELECT 1 FROM applied_migrations WHERE name='normalize_incoterms'")).first():
+            return  # 이미 적용됨
+    s = get_session()
+    n = 0
+    try:
+        for model in (Quotation, VendorQuote):
+            for row in s.query(model).all():
+                terms = getattr(row, "terms", None)
+                if not isinstance(terms, dict):
+                    continue
+                new_ic = _normalize_incoterm(terms.get("incoterms"))
+                if new_ic:
+                    row.terms = {**terms, "incoterms": new_ic}  # 재할당해야 JSON 변경 감지
+                    n += 1
+        s.commit()
+    finally:
+        s.close()
+    with eng.begin() as conn:
+        conn.execute(text("INSERT INTO applied_migrations (name) VALUES ('normalize_incoterms')"))
+    print(f"[OK] normalize_incoterms applied: {n} quote(s) updated.")
+
+
 if __name__ == "__main__":
     print("Initializing KTMS database...")
     create_tables()
@@ -508,4 +563,5 @@ if __name__ == "__main__":
     seed_item_categories()
     migrate_translate_categories()
     migrate_widen_activity_type()
+    migrate_normalize_incoterms()
     print("Done.")
