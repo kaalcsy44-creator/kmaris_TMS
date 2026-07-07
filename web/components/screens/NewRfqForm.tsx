@@ -348,7 +348,10 @@ export default function NewRfqForm({
         </div>
       ) : null}
       <fieldset className="form-fieldset" disabled={!canEditThis}>
-      {/* 도구 모음 — 평소엔 접혀 있고, 버튼으로 필요한 패널만 펼친다. */}
+      <div className="sub-h" style={{ marginTop: 0, marginBottom: 8 }}>
+        Basic info
+      </div>
+      {/* 도구 모음 — Basic info 바로 아래에 배치. 평소엔 접혀 있고, 버튼으로 필요한 패널만 펼친다. */}
       <div className="form-tools">
         <button
           type="button"
@@ -424,9 +427,6 @@ export default function NewRfqForm({
         </div>
       ) : null}
 
-      <div className="sub-h" style={{ marginTop: 16 }}>
-        Basic info
-      </div>
       <div className="form-grid">
         <Field label="RFQ received at">
           <input
