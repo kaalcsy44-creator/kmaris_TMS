@@ -61,6 +61,7 @@ import Modal from "./common/Modal";
 import BaseMetaRows, { ModalTitle } from "./common/BaseMeta";
 import CurrencyToggle from "./common/CurrencyToggle";
 import TermsEditor from "./common/TermsEditor";
+import DocSendPanel from "./common/DocSendPanel";
 import {
   amountInputValue,
   convertCurrency,
@@ -962,6 +963,18 @@ function VendorRfqDetailModal({
             ) : null}
           </div>
           {err ? <span className="action-err">{err}</span> : null}
+
+          {/* Vendor 견적요청서(Excel) 생성. 이메일 자동발송은 후속 단계에서 추가. */}
+          {d.rfq_id ? (
+            <DocSendPanel
+              title="Vendor RFQ Sheet"
+              formats={["xlsx"]}
+              downloadUrl={() => vendorRfqXlsxUrl(d.rfq_id as number, d.vendor_id)}
+              downloadName={() => `${d.kmaris_rfq_no || "VendorRFQ"}_${d.vendor || "vendor"}.xlsx`}
+              disabled={!canEditThis}
+              disabledReason={!canEditThis ? editBlockReason("rfq", d?.assignee_id) : undefined}
+            />
+          ) : null}
         </>
       )}
     </Modal>
@@ -1813,6 +1826,19 @@ function CustomerQuoteDetailModal({
           </div>
           {msg ? <span className="action-ok">{msg}</span> : null}
           {err ? <span className="action-err">{err}</span> : null}
+
+          {/* 견적서 파일 생성 + 고객 이메일 발송(생성 PDF 첨부). 저장본 기준으로 생성. */}
+          <DocSendPanel
+            title="Quotation · Email to Customer"
+            formats={["pdf"]}
+            downloadUrl={() => quotationPdfUrl(id, "quotation")}
+            downloadName={() => `${d.qtn_no || "Quotation"}.pdf`}
+            onPreview={(lang) => previewQuotationEmail(id, lang)}
+            onSend={({ to, subject, body }) => sendQuotationEmail(id, to, subject, body, "quotation")}
+            disabled={!canEditThis}
+            disabledReason={!canEditThis ? editBlockReason("rfq", d?.assignee_id) : "Generated from the last saved version — save your edits first."}
+            onSent={onChanged}
+          />
         </>
       )}
     </Modal>

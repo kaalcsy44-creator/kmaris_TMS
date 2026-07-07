@@ -3611,6 +3611,38 @@ table.mini tfoot .total-value {
   flex: 0 0 auto;
 }
 
+/* 문서 생성 + 이메일 발송 공통 패널(2·4·6단계 상세) */
+.doc-send-panel {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.doc-send-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.doc-send-spacer {
+  flex: 1 1 auto;
+}
+.doc-send-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #55627a;
+}
+.doc-send-inline select {
+  height: 28px;
+  border: 1px solid #d7e2ee;
+  border-radius: 6px;
+  padding: 0 6px;
+  font-size: 12px;
+  font-family: inherit;
+  background: #fff;
+}
+
 /* "Load vendor quote" — 여러 공급사 견적 중 선택기 + 버튼 묶음 */
 .load-vq-control {
   display: inline-flex;
