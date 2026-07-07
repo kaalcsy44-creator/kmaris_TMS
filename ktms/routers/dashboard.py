@@ -18,6 +18,7 @@ from _core import (
     RFQ,
     RFQStatus,
     RFQ_STEPS,
+    USD_KRW_RATE,
     User,
     Vendor,
     VendorQuote,
@@ -34,6 +35,7 @@ from _core import (
     _kst,
     _month_key,
     _order_for_rfq,
+    _orders_for_rfq,
     _pipeline_stage,
     _project_no_map,
     _quotation_total,
@@ -147,6 +149,24 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
             else:
                 vendor_po_no = vendor_po_vendor = vendor_po_email = vendor_po_at = ""
 
+            # 카드 금액(딜 총액): 한 프로젝트에 고객 P/O(오더)가 여러 건이면 모두 합산한다.
+            # 통화가 섞이면 USD 로 환산해 합산 후, 대표(첫) 오더 통화로 표기.
+            orders_all = _orders_for_rfq(s, r.id)
+            if orders_all:
+                disp_cur = (getattr(orders_all[0], "currency", None) or "USD").upper()
+                total_usd = 0.0
+                for oo in orders_all:
+                    t = _total_amount(oo.items or [])
+                    oc = (getattr(oo, "currency", None) or "USD").upper()
+                    total_usd += (t / USD_KRW_RATE) if oc == "KRW" else t
+                order_amount = (
+                    _dual_money(total_usd * USD_KRW_RATE, "KRW")
+                    if disp_cur == "KRW"
+                    else _dual_money(total_usd, "USD")
+                )
+            else:
+                order_amount = ""
+
             # 단계 일시·노트 + 다음 액션(P3). stage_auto 는 한 번만 계산해 재사용.
             _sd = getattr(r, "stage_dates", None) or {}
             _auto = _stage_auto_times(s, r, o)
@@ -188,6 +208,8 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
                 "cquote_no": cquote_no,
                 "cquote_at": cquote_at,
                 "customer_amount": customer_amount,
+                # 딜 총액(고객 P/O 여러 건 합산) — PO 이후 단계 카드 금액에 사용.
+                "order_amount": order_amount,
                 # 5~6 PO 체인
                 "customer_po_no": (o.po_no if o else "") or "",
                 "customer_po_at": _kst(o.created_at) if o else "",

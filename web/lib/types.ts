@@ -709,6 +709,7 @@ export type PipelineRow = {
   cquote_no: string;
   cquote_at: string;
   customer_amount: string;
+  order_amount: string;
   customer_po_no: string;
   customer_po_at: string;
   vendor_po_no: string;

@@ -261,6 +261,7 @@ function blankPipelineRow(): PipelineRow {
     cquote_no: "",
     cquote_at: "",
     customer_amount: "",
+    order_amount: "",
     customer_po_no: "",
     customer_po_at: "",
     vendor_po_no: "",
@@ -970,7 +971,8 @@ function BoardCard({
   const isService = (r.work_type || "부품공급") === "서비스";
   const total = steps.length;
   const filled = Math.max(0, Math.min(stage, total));
-  const amount = r.customer_amount || r.vendor_amount || "";
+  // PO 이후 단계는 고객 P/O(오더) 합산액(order_amount)을 우선 표시. 견적 단계는 견적액.
+  const amount = r.order_amount || r.customer_amount || r.vendor_amount || "";
   const age = daysSince(r.first_rfq_at);
   return (
     <button
