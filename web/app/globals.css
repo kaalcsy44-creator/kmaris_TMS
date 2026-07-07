@@ -3518,6 +3518,34 @@ table.mini tfoot .total-value {
   bottom: 0;
   z-index: 3;
 }
+/* 품목표 좌측 고정열 — 가로 스크롤 시 삭제(×) 열과 No.(seq) 열을 왼쪽에 고정. */
+.table-wrap table.mini.wide.lead-tools th.row-tools,
+.table-wrap table.mini.wide.lead-tools td.row-tools {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: #fff;
+}
+.table-wrap table.mini.wide.lead-tools th.seq,
+.table-wrap table.mini.wide.lead-tools td.seq {
+  position: sticky;
+  left: 44px; /* row-tools 열 폭(44px)만큼 우측으로 */
+  z-index: 2;
+  background: #fff;
+  /* 고정 영역과 스크롤 영역의 경계선(오른쪽 그림자). */
+  box-shadow: 2px 0 4px -2px rgba(11, 29, 58, 0.18);
+}
+/* 헤더는 top(3)·left 동시 고정 코너 — 더 높은 z-index + 헤더 배경. */
+.table-wrap table.mini.wide.lead-tools thead th.row-tools,
+.table-wrap table.mini.wide.lead-tools thead th.seq {
+  z-index: 4;
+  background: #f7fafd;
+}
+/* 5행마다 들어가는 그룹 구분행은 배경이 다르므로 고정열 배경도 맞춘다. */
+.table-wrap table.mini.wide.lead-tools tbody tr.item-group-break td.row-tools,
+.table-wrap table.mini.wide.lead-tools tbody tr.item-group-break td.seq {
+  background: #f8fbff;
+}
 /* 맨 좌측 행 도구(삭제) 열 — 좁은 고정 폭, 가운데 정렬. */
 table.mini.wide th.row-tools,
 table.mini.wide td.row-tools {
