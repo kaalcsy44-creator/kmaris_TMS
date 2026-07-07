@@ -830,7 +830,10 @@ function LogoPasteField({
   }
 
   return (
-    <label className="form-field logo-field">
+    // 바깥을 <label> 로 두면 로고 박스·캡션 등 아무 데나 클릭해도 파일창이 열린다.
+    // <div> 로 바꿔, 파일창은 "파일 선택" 버튼(파일 input)에서만 열리게 한다.
+    // 로고 박스 클릭은 붙여넣기(Ctrl+V)를 위한 포커스 용도로만 동작.
+    <div className="form-field logo-field">
       <span>Company logo</span>
       <div
         className="logo-drop"
@@ -863,7 +866,7 @@ function LogoPasteField({
         {busy ? <span className="hint-inline">Processing…</span> : null}
         {err ? <span className="action-err">{err}</span> : null}
       </div>
-    </label>
+    </div>
   );
 }
 
