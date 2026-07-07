@@ -3477,6 +3477,10 @@ table.mini tfoot .total-value {
   color: var(--navy);
   font-variant-numeric: tabular-nums;
 }
+/* Subtotal · Discount amount · Final total 값 — 기본(16px)에서 1px 줄임. */
+.static-value {
+  font-size: 15px;
+}
 .dual-amount {
   display: flex;
   flex-direction: column;
