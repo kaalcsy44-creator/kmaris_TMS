@@ -1917,6 +1917,44 @@ table.pipeline thead th.pl-th.dragging {
 .pl-cols-menu-item input:disabled {
   cursor: not-allowed;
 }
+/* 좌측 프로젝트 정보 패널 — 표시 항목 선택 헤더(제목 + ⚙ 메뉴). */
+.intl-meta-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.intl-meta-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #8595a8;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+.intl-fields-menu-wrap {
+  position: relative;
+}
+.intl-fields-btn {
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 6px;
+  width: 28px;
+  height: 24px;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  color: #55627a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.intl-fields-btn:hover {
+  border-color: var(--blue);
+  color: var(--blue);
+}
+.intl-fields-menu {
+  width: 200px;
+}
 .pl-th-btn {
   display: flex;
   align-items: center;

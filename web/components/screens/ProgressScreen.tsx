@@ -1,16 +1,14 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   fetchPipeline,
   fetchRfqOverview,
   fetchPoWorkOptions,
-  deleteRfq,
-  updateRfq,
   fetchCustomers,
   fetchSettingsVessels,
-  fetchAssignableUsers,
   addRfqStageNote,
   updateRfqStageNote,
   deleteRfqStageNote,
@@ -28,9 +26,24 @@ import { PoActionTabs } from "@/components/screens/PoScreen";
 import { DocumentsOverview } from "@/components/screens/DocumentsScreen";
 import { ArOverview } from "@/components/screens/ArScreen";
 import { tr } from "@/lib/labels";
-import { getUser, can, isOwnScoped, canEditDeal } from "@/lib/auth";
+import { getUser, can, isOwnScoped } from "@/lib/auth";
 
-const WORK_TYPES = ["부품공급", "서비스"];
+// 좌측 프로젝트 정보 패널에 표시 가능한 항목(사용자가 표시 여부 선택). render 는 표시값.
+const INFO_FIELDS: { key: string; label: string; render: (r: PipelineRow) => ReactNode }[] = [
+  { key: "customer", label: "Customer", render: (r) => (r.customer ? <CustomerName name={r.customer} /> : "—") },
+  { key: "trade_type", label: "Trade type", render: (r) => tr(r.trade_type || "수출") },
+  { key: "vessel", label: "Vessel", render: (r) => r.vessel || "—" },
+  { key: "vendor", label: "Vendor", render: (r) => r.vendor || "—" },
+  { key: "project_title", label: "Project title", render: (r) => r.project_title || "—" },
+  { key: "customer_po_no", label: "Customer P/O No.", render: (r) => r.customer_po_no || "—" },
+  { key: "items", label: "Items", render: (r) => r.item_count },
+  { key: "pic", label: "PIC", render: (r) => r.assignee || "—" },
+  { key: "customer_rfq_no", label: "Customer RFQ No.", render: (r) => r.customer_rfq_no || "—" },
+  { key: "kmaris_rfq_no", label: "K-Maris RFQ No.", render: (r) => r.kmaris_rfq_no || "—" },
+];
+const DEFAULT_INFO_FIELDS = [
+  "customer", "trade_type", "vessel", "vendor", "project_title", "customer_po_no", "items",
+];
 
 // 고객확인용 7단계(RFQ 3 + Order 4) — 내부확인용과 동일한 표를 쓰되 단계만 7개.
 const CUSTOMER_STEPS = [
@@ -1089,14 +1102,33 @@ export function PipelineModal({
 }) {
   const isNewProject = !!isNew;
   const backdropMouseDown = useRef(false);
-  // 담당(PIC) 소유권: 비관리자는 본인이 담당인 딜만 편집/삭제. 남의 건은 조회만.
-  const ownsDeal = canEditDeal(r.assignee_id);
-  const canEdit = can("rfq", "edit") && ownsDeal;
-  const canDelete = can("rfq", "delete") && ownsDeal;
-  const { data: users } = useCachedData("assignable-users", fetchAssignableUsers);
-  const [deleting, setDeleting] = useState(false);
-  const [editing, setEditing] = useState(false);
-  const [saving, setSaving] = useState(false);
+  // 좌측 정보 패널에 표시할 항목 선택(체크박스 메뉴). localStorage 로 유지.
+  const [infoFields, setInfoFields] = useState<string[]>(() => {
+    if (typeof window === "undefined") return DEFAULT_INFO_FIELDS;
+    try {
+      const arr = JSON.parse(window.localStorage.getItem("ktms:proj-info-fields") || "null");
+      return Array.isArray(arr) && arr.length ? arr : DEFAULT_INFO_FIELDS;
+    } catch {
+      return DEFAULT_INFO_FIELDS;
+    }
+  });
+  const [fieldsMenuOpen, setFieldsMenuOpen] = useState(false);
+  const fieldsMenuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (typeof window !== "undefined")
+      window.localStorage.setItem("ktms:proj-info-fields", JSON.stringify(infoFields));
+  }, [infoFields]);
+  useEffect(() => {
+    function onDoc(e: MouseEvent) {
+      if (fieldsMenuRef.current && !fieldsMenuRef.current.contains(e.target as Node))
+        setFieldsMenuOpen(false);
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, []);
+  function toggleInfoField(key: string) {
+    setInfoFields((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
+  }
   // 단계 상세 표시: 단계별 그룹(stages, 편집 가능) / 시간순 여정(timeline, 읽기전용)
   const [selectedStage, setSelectedStage] = useState<StageTabKey>(
     Math.min(Math.max(initialStage || r.stage || 1, 1), 11)
@@ -1136,71 +1168,9 @@ export function PipelineModal({
     document.addEventListener("mousemove", onMove);
     document.addEventListener("mouseup", onUp);
   }
-  // 편집 필드(편집 진입 시 r 값으로 seed)
-  const [fWorkType, setFWorkType] = useState(r.work_type || "부품공급");
-  const [fCustomerId, setFCustomerId] = useState<number | "">(r.customer_id || "");
-  const [fVesselId, setFVesselId] = useState<number | "">(r.vessel_id || "");
-  const [fCustRfqNo, setFCustRfqNo] = useState(r.customer_rfq_no || "");
-  const [fProjectTitle, setFProjectTitle] = useState(r.project_title || "");
-  const [fReceivedAt, setFReceivedAt] = useState(r.received_at || "");
-  const [fAssigneeId, setFAssigneeId] = useState<number | "">(r.assignee_id || "");
-  const rSteps = resolveSteps(steps, fWorkType);
-
-  function startEdit() {
-    // 현재 저장값으로 seed 후 편집 모드 진입(목록은 상위에서 미리 로드됨)
-    setFWorkType(r.work_type || "부품공급");
-    setFCustomerId(r.customer_id || "");
-    setFVesselId(r.vessel_id || "");
-    setFCustRfqNo(r.customer_rfq_no || "");
-    setFProjectTitle(r.project_title || "");
-    setFReceivedAt(r.received_at || "");
-    setFAssigneeId(r.assignee_id || "");
-    setEditing(true);
-  }
-
-  async function handleSave() {
-    setSaving(true);
-    try {
-      await updateRfq(r.rfq_id, {
-        customer_id: fCustomerId === "" ? undefined : fCustomerId,
-        vessel_id: fVesselId === "" ? 0 : fVesselId, // 0 = 선박 미지정 해제
-        customer_rfq_no: fCustRfqNo,
-        project_title: fProjectTitle,
-        work_type: fWorkType,
-        received_at: fReceivedAt || undefined,
-        assignee_id: fAssigneeId === "" ? 0 : fAssigneeId, // 0 = 담당자 미지정
-      });
-      // 목록 새로고침이 끝난 뒤에 편집 모드를 닫는다. 그래야 보기 모드로 돌아갈 때
-      // 이미 갱신된 값(예: PIC)이 반영되어, "한 번에 안 바뀐다"는 착시가 없어진다.
-      await onChanged();
-      setEditing(false);
-    } catch (e) {
-      window.alert(e instanceof Error ? e.message : "Update failed");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  // 선택한 고객 소유 선박만(소유 정보 없는 선박은 항상 노출)
-  const vesselOptions = vessels.filter(
-    (v) => fCustomerId === "" || !v.customer_id || v.customer_id === fCustomerId
-  );
-
-  async function handleDelete() {
-    const ok = window.confirm(
-      `Delete deal ${r.kmaris_rfq_no}?\nLinked Vendor RFQs/quotes will also be deleted.\n(Deals already advanced to a customer quote/order cannot be deleted.)`
-    );
-    if (!ok) return;
-    setDeleting(true);
-    try {
-      await deleteRfq(r.rfq_id);
-      onChanged();
-    } catch (e) {
-      window.alert(e instanceof Error ? e.message : "Delete failed");
-    } finally {
-      setDeleting(false);
-    }
-  }
+  // 프로젝트 정보 편집·삭제는 우측 1단계(RFQ Received) 패널에서 처리한다.
+  // 좌측 패널은 읽기전용 요약(+ 표시 항목 선택)만 담당한다.
+  const rSteps = resolveSteps(steps, r.work_type || "부품공급");
 
   /** 단계의 표시 일시(읽기 전용): 수동 저장값 우선, 없으면 자동 동기화값, 둘 다 없으면 빈칸. */
   function effective(stage: number): string {
@@ -1341,131 +1311,49 @@ export function PipelineModal({
               <p>Fill in the basic info on the right and click <b>Create RFQ</b>.</p>
               <p className="muted">Once created, this project appears on the board with its stages.</p>
             </div>
-          ) : editing ? (
-            <div className="intl-edit">
-              <div className="form-field">
-                <label>Work type</label>
-                <div className="seg-tabs">
-                  {WORK_TYPES.map((t) => (
-                    <button
-                      key={t}
-                      type="button"
-                      className={fWorkType === t ? "on" : ""}
-                      onClick={() => setFWorkType(t)}
-                    >
-                      {tr(t)}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="form-grid">
-                <div className="form-field">
-                  <label>Customer</label>
-                  <select
-                    value={fCustomerId}
-                    onChange={(e) => {
-                      setFCustomerId(e.target.value === "" ? "" : Number(e.target.value));
-                      setFVesselId("");
-                    }}
-                  >
-                    <option value="">Select…</option>
-                    {customers.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="form-field">
-                  <label>Vessel</label>
-                  <select
-                    value={fVesselId}
-                    onChange={(e) =>
-                      setFVesselId(e.target.value === "" ? "" : Number(e.target.value))
-                    }
-                  >
-                    <option value="">— No vessel —</option>
-                    {vesselOptions.map((v) => (
-                      <option key={v.id} value={v.id}>
-                        {v.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="form-field">
-                  <label>Customer RFQ No.</label>
-                  <input
-                    value={fCustRfqNo}
-                    onChange={(e) => setFCustRfqNo(e.target.value)}
-                    placeholder="Customer's reference no. (optional)"
-                  />
-                </div>
-                <div className="form-field">
-                  <label>Project title</label>
-                  <input
-                    value={fProjectTitle}
-                    onChange={(e) => setFProjectTitle(e.target.value)}
-                    placeholder="Internal reference title (optional)"
-                  />
-                </div>
-                <div className="form-field">
-                  <label>RFQ received at</label>
-                  <input
-                    type="datetime-local"
-                    value={fReceivedAt}
-                    onChange={(e) => setFReceivedAt(e.target.value)}
-                  />
-                </div>
-                <div className="form-field">
-                  <label>PIC</label>
-                  <select
-                    value={fAssigneeId}
-                    onChange={(e) =>
-                      setFAssigneeId(e.target.value === "" ? "" : Number(e.target.value))
-                    }
-                  >
-                    <option value="">— Unassigned —</option>
-                    {(users ?? []).map((u) => (
-                      <option key={u.id} value={u.id}>
-                        {u.username}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            </div>
           ) : (
-            <dl className="intl-meta">
-              <div>
-                <dt>Customer</dt>
-                <dd>{r.customer ? <CustomerName name={r.customer} /> : "—"}</dd>
+            <>
+              {/* 표시 항목 선택 메뉴(⚙). 편집·삭제는 우측 1단계 패널에서 처리. */}
+              <div className="intl-meta-head">
+                <span className="intl-meta-title">Project info</span>
+                <div className="intl-fields-menu-wrap" ref={fieldsMenuRef}>
+                  <button
+                    type="button"
+                    className="intl-fields-btn"
+                    onClick={() => setFieldsMenuOpen((v) => !v)}
+                    title="Choose fields to show"
+                    aria-label="Choose fields to show"
+                  >
+                    ⚙
+                  </button>
+                  {fieldsMenuOpen ? (
+                    <div className="pl-cols-menu intl-fields-menu">
+                      <div className="pl-cols-menu-head">Show fields</div>
+                      <div className="pl-cols-menu-list">
+                        {INFO_FIELDS.map((f) => (
+                          <label key={f.key} className="pl-cols-menu-item">
+                            <input
+                              type="checkbox"
+                              checked={infoFields.includes(f.key)}
+                              onChange={() => toggleInfoField(f.key)}
+                            />
+                            {f.label}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
               </div>
-              <div>
-                <dt>Trade type</dt>
-                <dd>{tr(r.trade_type || "수출")}</dd>
-              </div>
-              <div>
-                <dt>Vessel</dt>
-                <dd>{r.vessel || "—"}</dd>
-              </div>
-              <div>
-                <dt>Vendor</dt>
-                <dd>{r.vendor || "—"}</dd>
-              </div>
-              <div>
-                <dt>Project title</dt>
-                <dd>{r.project_title || "—"}</dd>
-              </div>
-              <div>
-                <dt>Customer P/O No.</dt>
-                <dd>{r.customer_po_no || "—"}</dd>
-              </div>
-              <div>
-                <dt>Items</dt>
-                <dd>{r.item_count}</dd>
-              </div>
-              {/* PIC 는 상단 헤더(pl-pic-chip)에 이미 표시되므로 좌측 패널에선 생략. */}
-            </dl>
+              <dl className="intl-meta">
+                {INFO_FIELDS.filter((f) => infoFields.includes(f.key)).map((f) => (
+                  <div key={f.key}>
+                    <dt>{f.label}</dt>
+                    <dd>{f.render(r)}</dd>
+                  </div>
+                ))}
+              </dl>
+            </>
           )}
 
           {!isNewProject && r.next_action ? (
@@ -1473,37 +1361,6 @@ export function PipelineModal({
               <span className="pl-next-label">Next action</span>
               <span className="pl-next-text">{r.next_action}</span>
             </div>
-          ) : null}
-
-          {/* 딜(프로젝트) 수준 액션 — 좌측 기본정보와 함께. 단계 레코드 편집(우측)과
-              분리되어 하단 버튼 중복을 없앤다. 신규 등록 모드에서는 감춘다. */}
-          {!isNewProject ? (
-          <div className="pl-deal-actions">
-            {!ownsDeal && can("rfq", "edit") ? (
-              <span className="hint-inline" title={r.assignee ? `PIC: ${r.assignee}` : undefined}>
-                View only — assigned to {r.assignee || "another PIC"}
-              </span>
-            ) : null}
-            {canEdit && editing ? (
-              <>
-                <button className="btn primary" onClick={handleSave} disabled={saving}>
-                  {saving ? "Saving…" : "Save"}
-                </button>
-                <button className="btn" onClick={() => setEditing(false)} disabled={saving}>
-                  Cancel
-                </button>
-              </>
-            ) : canEdit ? (
-              <button className="btn" onClick={startEdit}>
-                ✎ Edit project info
-              </button>
-            ) : null}
-            {canDelete ? (
-              <button className="btn danger" onClick={handleDelete} disabled={deleting || editing}>
-                {deleting ? "Deleting…" : "Delete project"}
-              </button>
-            ) : null}
-          </div>
           ) : null}
               </aside>
 
