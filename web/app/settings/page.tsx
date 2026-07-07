@@ -53,6 +53,7 @@ import { invalidateCustomerLogos } from "@/lib/customerLogos";
 import { invalidateVendorLogos } from "@/lib/vendorLogos";
 import { fileToLogoDataUrl, imageFromClipboard } from "@/lib/imagePaste";
 import { PAYMENT_TERMS_PRESETS } from "@/lib/terms";
+import ComboBox from "@/components/common/ComboBox";
 
 type Tab =
   | "company" | "users" | "permissions"
@@ -793,17 +794,12 @@ function PaymentTermsField({
   return (
     <div className="form-field">
       <label>Payment Terms</label>
-      <input
-        list="settings-payment-terms"
+      <ComboBox
         value={value ?? ""}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={onChange}
+        options={PAYMENT_TERMS_PRESETS}
         placeholder="Select or type…"
       />
-      <datalist id="settings-payment-terms">
-        {PAYMENT_TERMS_PRESETS.map((p) => (
-          <option key={p} value={p} />
-        ))}
-      </datalist>
     </div>
   );
 }

@@ -61,6 +61,7 @@ import { imageFromClipboard } from "@/lib/imagePaste";
 import Modal from "./common/Modal";
 import BaseMetaRows, { ModalTitle } from "./common/BaseMeta";
 import CurrencyToggle from "./common/CurrencyToggle";
+import ComboBox from "./common/ComboBox";
 import {
   amountInputValue,
   convertCurrency,
@@ -3097,22 +3098,21 @@ function QuotationTermsEditor({
 }) {
   function field(key: keyof QuotationTerms, label: string) {
     const presets = (TERM_PRESETS as Record<string, readonly string[]>)[key];
-    const listId = `qtn-term-${key}`;
     return (
       <div className="form-field">
         <label>{label}</label>
-        <input
-          list={presets ? listId : undefined}
-          value={terms[key] ?? ""}
-          onChange={(e) => onChange({ ...terms, [key]: e.target.value })}
-        />
         {presets ? (
-          <datalist id={listId}>
-            {presets.map((p) => (
-              <option key={p} value={p} />
-            ))}
-          </datalist>
-        ) : null}
+          <ComboBox
+            value={terms[key] ?? ""}
+            onChange={(v) => onChange({ ...terms, [key]: v })}
+            options={presets}
+          />
+        ) : (
+          <input
+            value={terms[key] ?? ""}
+            onChange={(e) => onChange({ ...terms, [key]: e.target.value })}
+          />
+        )}
       </div>
     );
   }
