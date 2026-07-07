@@ -4824,6 +4824,18 @@ table.mini .num {
   min-height: 0;
   width: 100%;
 }
+/* 각 패널을 고정 컬럼에 배치 — 좌측 패널을 display:none(hidden) 으로 숨겨도
+   구분선·상세 패널이 원래 컬럼(2·3)에 그대로 남도록 한다. (auto-flow 시 우측이
+   빈 1fr 컬럼으로 밀려 사라지는 문제 방지) */
+.project-info-pane {
+  grid-column: 1;
+}
+.ws-divider {
+  grid-column: 2;
+}
+.project-stage-pane {
+  grid-column: 3;
+}
 /* 좌우 폭 조절 구분선(드래그) + 좌측 패널 숨김/표시 토글 버튼. */
 .ws-divider {
   position: relative;
@@ -5458,6 +5470,11 @@ table.mini .num {
   /* 좁은 화면에선 세로로 쌓고, 드래그/숨김(인라인 스타일)은 무시한다. */
   .project-workspace-layout {
     grid-template-columns: 1fr !important;
+  }
+  .project-info-pane,
+  .ws-divider,
+  .project-stage-pane {
+    grid-column: auto !important;
   }
   .project-info-pane {
     position: static;
