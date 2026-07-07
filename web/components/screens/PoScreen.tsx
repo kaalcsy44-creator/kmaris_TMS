@@ -31,6 +31,7 @@ import BaseMetaRows, { ModalTitle } from "@/components/common/BaseMeta";
 import CurrencyToggle from "@/components/common/CurrencyToggle";
 import TermsEditor from "@/components/common/TermsEditor";
 import DocSendPanel from "@/components/common/DocSendPanel";
+import DetailTabBar, { DetailTab } from "@/components/common/DetailTabBar";
 import {
   amountInputValue,
   DualCurrencyAmount,
@@ -788,6 +789,7 @@ function VendorPoDetailModal({
   inline?: boolean;
 }) {
   const [d, setD] = useState<PurchaseOrderDetail | null>(null);
+  const [tab, setTab] = useState<DetailTab>("edit");
   const [vendorId, setVendorId] = useState<number | "">("");
   const [poNo, setPoNo] = useState("");
   const [sentDate, setSentDate] = useState("");
@@ -878,6 +880,9 @@ function VendorPoDetailModal({
         <div className="state">Loading details…</div>
       ) : (
         <>
+          <DetailTabBar tab={tab} onTab={setTab} />
+          {tab === "edit" ? (
+          <>
           {!inline ? (
             <>
               <div className="form-section-title">Purchase order info</div>
@@ -951,8 +956,9 @@ function VendorPoDetailModal({
             ) : null}
             {err ? <span className="action-err">{err}</span> : null}
           </div>
-
-          {/* 발주서 파일 생성(PDF/Excel) + 벤더 이메일 발송(선택 포맷 첨부). 저장본 기준. */}
+          </>
+          ) : (
+          /* 발주서 파일 생성(PDF/Excel) + 벤더 이메일 발송(선택 포맷 첨부). 저장본 기준. */
           <DocSendPanel
             title="Purchase Order · Email to Vendor"
             formats={["pdf", "xlsx"]}
@@ -965,6 +971,7 @@ function VendorPoDetailModal({
             disabledReason={!canEditThis ? editBlockReason("po", d?.assignee_id) : "Generated from the last saved version — save your edits first."}
             onSent={onChanged}
           />
+          )}
         </>
       )}
     </Modal>

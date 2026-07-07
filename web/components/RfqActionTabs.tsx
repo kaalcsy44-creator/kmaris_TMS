@@ -67,6 +67,7 @@ import BaseMetaRows, { ModalTitle } from "./common/BaseMeta";
 import CurrencyToggle from "./common/CurrencyToggle";
 import TermsEditor from "./common/TermsEditor";
 import DocSendPanel from "./common/DocSendPanel";
+import DetailTabBar, { DetailTab } from "./common/DetailTabBar";
 import {
   amountInputValue,
   convertCurrency,
@@ -744,6 +745,7 @@ function VendorRfqDetailModal({
   inline?: boolean;
 }) {
   const [d, setD] = useState<VendorRfqDetail | null>(null);
+  const [tab, setTab] = useState<DetailTab>("edit");
   // 프로젝트 모달 내 임베드(inline)에서는 읽기전용 개요를 건너뛰고 바로 편집 화면으로.
   const [editing, setEditing] = useState(!!autoEdit || !!inline);
   // 편집 권한 = 역할 권한(rfq.edit) × 담당(PIC) 소유권. 없으면 읽기전용(뷰어) 모드.
@@ -851,6 +853,9 @@ function VendorRfqDetailModal({
         <div className="state">Loading details…</div>
       ) : (
         <>
+          <DetailTabBar tab={tab} onTab={setTab} />
+          {tab === "edit" ? (
+          <>
           {showEdit ? (
             <>
               {!inline ? (
@@ -968,8 +973,9 @@ function VendorRfqDetailModal({
             ) : null}
           </div>
           {err ? <span className="action-err">{err}</span> : null}
-
-          {/* Vendor 견적요청서(Excel/PDF) 생성 + 벤더 이메일 발송(선택 포맷 첨부). */}
+          </>
+          ) : (
+          /* Vendor 견적요청서(Excel/PDF) 생성 + 벤더 이메일 발송(선택 포맷 첨부). */
           <DocSendPanel
             title="Vendor RFQ · Email to Vendor"
             formats={["xlsx", "pdf"]}
@@ -981,6 +987,7 @@ function VendorRfqDetailModal({
             disabledReason={!canEditThis ? editBlockReason("rfq", d?.assignee_id) : "Generated from the last saved version — save your edits first."}
             onSent={onChanged}
           />
+          )}
         </>
       )}
     </Modal>
@@ -1592,6 +1599,7 @@ function CustomerQuoteDetailModal({
   inline?: boolean;
 }) {
   const [d, setD] = useState<CustomerQuotationDetail | null>(null);
+  const [tab, setTab] = useState<DetailTab>("edit");
   const [qtnNo, setQtnNo] = useState("");
   const [currency, setCurrency] = useState("USD");
   const [costCurrency, setCostCurrency] = useState("USD");
@@ -1703,6 +1711,9 @@ function CustomerQuoteDetailModal({
         <div className="state">Loading details…</div>
       ) : (
         <>
+          <DetailTabBar tab={tab} onTab={setTab} />
+          {tab === "edit" ? (
+          <>
           {!inline ? (
             <>
               <div className="form-section-title">Project info</div>
@@ -1832,8 +1843,9 @@ function CustomerQuoteDetailModal({
           </div>
           {msg ? <span className="action-ok">{msg}</span> : null}
           {err ? <span className="action-err">{err}</span> : null}
-
-          {/* 견적서 파일 생성(PDF/Excel) + 고객 이메일 발송(선택 포맷 첨부). 저장본 기준. */}
+          </>
+          ) : (
+          /* 견적서 파일 생성(PDF/Excel) + 고객 이메일 발송(선택 포맷 첨부). 저장본 기준. */
           <DocSendPanel
             title="Quotation · Email to Customer"
             formats={["pdf", "xlsx"]}
@@ -1845,6 +1857,7 @@ function CustomerQuoteDetailModal({
             disabledReason={!canEditThis ? editBlockReason("rfq", d?.assignee_id) : "Generated from the last saved version — save your edits first."}
             onSent={onChanged}
           />
+          )}
         </>
       )}
     </Modal>
