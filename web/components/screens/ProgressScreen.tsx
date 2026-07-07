@@ -1890,27 +1890,29 @@ function StageNotes({
           />
         ) : (
           <div className="pl-note" key={i}>
-            <span className="pl-note-at">{fmtStageDate(n.datetime || n.at)}</span>
-            {n.party ? <span className="pl-note-tag party">{n.party}</span> : null}
-            {n.channel ? <span className="pl-note-tag channel">{n.channel}</span> : null}
-            <span className="pl-note-text">{n.text}</span>
-            {writable ? (
-              <>
-                <button
-                  className="pl-note-edit"
-                  title="Edit"
-                  onClick={() => {
-                    setAdding(false);
-                    setEditIndex(i);
-                  }}
-                >
-                  ✎
-                </button>
-                <button className="pl-note-del" title="Delete" onClick={() => remove(i)}>
-                  ×
-                </button>
-              </>
-            ) : null}
+            <div className="pl-note-meta">
+              <span className="pl-note-at">{fmtStageDate(n.datetime || n.at)}</span>
+              {n.party ? <span className="pl-note-tag party">{n.party}</span> : null}
+              {n.channel ? <span className="pl-note-tag channel">{n.channel}</span> : null}
+              {writable ? (
+                <span className="pl-note-actions">
+                  <button
+                    className="pl-note-edit"
+                    title="Edit"
+                    onClick={() => {
+                      setAdding(false);
+                      setEditIndex(i);
+                    }}
+                  >
+                    ✎
+                  </button>
+                  <button className="pl-note-del" title="Delete" onClick={() => remove(i)}>
+                    ×
+                  </button>
+                </span>
+              ) : null}
+            </div>
+            <div className="pl-note-text">{n.text}</div>
           </div>
         )
       )}
