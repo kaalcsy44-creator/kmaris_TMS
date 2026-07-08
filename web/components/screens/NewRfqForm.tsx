@@ -203,7 +203,8 @@ export default function NewRfqForm({
       for (const file of files) {
         const r = await parseRfqPdf(file);
         ok++;
-        if (!headerFilled && !firstHint) firstHint = r.customer_hint ?? "";
+        // 힌트 문구는 고객을 아직 수동 선택하지 않았을 때만(수동 입력 유지 시 혼란 방지).
+        if (!headerFilled && !firstHint && customerId === "") firstHint = r.customer_hint ?? "";
         // 헤더 정보(고객/선박/번호/담당자)는 첫 유효 추출 1회만 반영.
         if (!headerFilled) {
           const cust = matchName(r.customer_hint, customers);
