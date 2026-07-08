@@ -448,6 +448,7 @@ export type VrfqRow = {
   id: number;
   rfq_id: number | null;
   customer_rfq_no: string;
+  kmaris_rfq_no: string;   // 이 Vendor RFQ 고유의 K-Maris RFQ No.
   vendor: string;
   vendor_email: string;
   sent_date: string;

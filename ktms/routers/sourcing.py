@@ -88,6 +88,8 @@ def vrfq_overview():
                 "rfq_id": vr.rfq_id,
                 # 고객 RFQ No.는 1단계의 고객 참조번호(없으면 "—"). K-Maris RFQ No.가 아님.
                 "customer_rfq_no": (rfq.customer_rfq_no or "—") if rfq else "—",
+                # 이 Vendor RFQ 고유의 K-Maris RFQ No.(구 레코드는 프로젝트 번호로 폴백).
+                "kmaris_rfq_no": _rfq_no_disp(vr.kmaris_rfq_no or (rfq.rfq_no if rfq else "")),
                 "vendor": vendor_names.get(vr.vendor_id, "—"),
                 "vendor_email": vr.sent_to_email or vendor_emails.get(vr.vendor_id, "") or "",
                 "sent_date": vr.sent_date or "",

@@ -347,7 +347,8 @@ function EmbeddedVendorRfq({
           ) : (
             <span className="embedded-record-current"><VendorName name={selected.vendor || ""} /></span>
           )}
-          <b className="rec-doc-no">{project?.vrfq_kmaris_no || ""}</b>
+          {/* 배지는 선택된 Vendor RFQ 고유 번호(001·002…). 프로젝트 공통 번호가 아님. */}
+          <b className="rec-doc-no">{selected.kmaris_rfq_no || project?.vrfq_kmaris_no || ""}</b>
         </div>
         <button type="button" className="btn primary sm" onClick={() => setAdding(true)}>+ Send another</button>
       </div>
