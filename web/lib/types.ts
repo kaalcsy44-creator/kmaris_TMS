@@ -787,6 +787,7 @@ export type RfqDetail = {
   id: number;
   rfq_no: string;
   assignee_id: number; // 담당자(PIC) = RFQ.created_by (0 = 미지정)
+  assignee?: string;   // 담당자(PIC) username(비활성/삭제 시 빈값)
   customer_rfq_no: string;
   project_no: string;
   first_rfq_at: string;

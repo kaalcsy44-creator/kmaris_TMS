@@ -175,6 +175,7 @@ def rfq_detail(rfq_id: int):
 
         cust = s.query(Customer).filter_by(id=r.customer_id).first()
         vessel = s.query(Vessel).filter_by(id=r.vessel_id).first() if r.vessel_id else None
+        pic = s.query(User).filter_by(id=r.created_by).first() if r.created_by else None
         stage = _pipeline_stage(s, r.id)
 
         vrfqs = (s.query(VendorRFQ).filter_by(rfq_id=r.id)
@@ -217,6 +218,7 @@ def rfq_detail(rfq_id: int):
             "id": r.id,
             "rfq_no": _rfq_no_disp(r.rfq_no),
             "assignee_id": r.created_by or 0,   # 담당자(PIC)
+            "assignee": pic.username if pic else "",   # 담당자(PIC) username(비활성/삭제 시 빈값)
             "customer_rfq_no": r.customer_rfq_no or "",
             "contact_person": getattr(r, "contact_person", None) or "",
             "customer": cust.name if cust else "—",

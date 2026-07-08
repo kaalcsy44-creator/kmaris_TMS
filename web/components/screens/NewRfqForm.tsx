@@ -12,6 +12,7 @@ import {
   parseRfqPdf,
   createSettingsCustomer,
   createSettingsVessel,
+  fetchAssignableUsers,
 } from "@/lib/api";
 import type { CustomerOption, SettingsVessel, RfqSourceFile } from "@/lib/types";
 import { can, canEditDeal, editBlockReason } from "@/lib/auth";
@@ -86,6 +87,8 @@ export default function NewRfqForm({
   const [editId, setEditId] = useState<number | null>(null); // null=신규, >0=수정
   const [loadedRfqNo, setLoadedRfqNo] = useState("");        // 로드된 K-Maris RFQ No.(상단 헤드라인용)
   const [assigneeId, setAssigneeId] = useState<number>(0);   // 편집 대상 RFQ의 담당자(PIC)
+  const [assigneeName, setAssigneeName] = useState("");      // 현재 담당자 이름(목록에 없을 때 fallback 라벨)
+  const [users, setUsers] = useState<{ id: number; username: string }[]>([]); // PIC 재지정 후보
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
   const [vessels, setVessels] = useState<SettingsVessel[]>([]);
   const [customerId, setCustomerId] = useState<number | "">("");
@@ -140,6 +143,9 @@ export default function NewRfqForm({
   useEffect(() => {
     reloadCustomers();
     reloadVessels();
+    fetchAssignableUsers()
+      .then(setUsers)
+      .catch(() => setUsers([]));
   }, []);
 
   // 상세 모달 진입 시: 지정된 RFQ를 즉시 불러와 수정 모드로 전환.
@@ -314,6 +320,7 @@ export default function NewRfqForm({
   function resetForm() {
     setEditId(null);
     setAssigneeId(0);
+    setAssigneeName("");
     setCustomerId("");
     setVesselId("");
     setCustRfqNo("");
@@ -340,6 +347,7 @@ export default function NewRfqForm({
       // 미발급 RFQ 는 상세 API 가 "-" 로 내려준다 → 배지는 빈칸으로(번호는 2단계 발송 시 부여).
       setLoadedRfqNo(d.rfq_no && d.rfq_no !== "-" ? d.rfq_no : "");
       setAssigneeId(d.assignee_id ?? 0);
+      setAssigneeName(d.assignee || "");
       setCustomerId(d.customer_id || "");
       setVesselId(d.vessel_id || "");
       setCustRfqNo(d.customer_rfq_no || "");
@@ -400,6 +408,7 @@ export default function NewRfqForm({
           work_type: workType,
           request_channel: requestChannel,
           notes,
+          assignee_id: assigneeId,   // 담당자(PIC) 재지정. 0 → 미지정 해제
           items: cleanItems,
           source_files: ocrFiles,
         });
@@ -643,6 +652,27 @@ export default function NewRfqForm({
             ))}
           </select>
         </Field>
+        {editId != null ? (
+          <Field label="PIC (담당자)">
+            <select
+              value={assigneeId}
+              onChange={(e) => setAssigneeId(Number(e.target.value))}
+            >
+              <option value={0}>Unassigned</option>
+              {users.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.username}
+                </option>
+              ))}
+              {/* 현재 담당자가 비활성/삭제되어 목록에 없으면 그대로 유지되도록 fallback 옵션 표시 */}
+              {assigneeId > 0 && !users.some((u) => u.id === assigneeId) ? (
+                <option value={assigneeId}>
+                  {assigneeName || `User #${assigneeId}`} (inactive)
+                </option>
+              ) : null}
+            </select>
+          </Field>
+        ) : null}
       </div>
 
       <div className="items-head" style={{ marginTop: 18 }}>
