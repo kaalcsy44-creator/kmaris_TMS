@@ -517,16 +517,18 @@ def dashboard():
         hit_rate = (len(won_quotes) / len(sent_quotes) * 100) if sent_quotes else 0.0
 
         # 매출(판매가)은 앱 전역과 동일하게 amount 기반(_quotation_total, 할인 반영)으로,
-        # 원가는 cost_price 합(_items_cost_total)으로 잡는다. 예전엔 매출을 unit_price 로
-        # 계산했으나 견적 품목은 판매가를 amount 에 저장해 매출이 과소 집계 → 마진이
-        # 비정상적으로 음수(-800%대)로 나오던 버그를 수정. 견적 통화가 섞일 수 있어 각
-        # 견적을 USD 로 환산한 뒤 합산해 단일 마진율을 낸다.
+        # 원가는 cost_price 합(_items_cost_total)으로 잡는다. 견적은 판매 통화(currency)와
+        # 원가 통화(cost_currency)가 서로 다를 수 있으므로(예: KRW로 팔고 원가는 USD),
+        # 매출은 판매 통화, 원가는 원가 통화 기준으로 각각 USD 환산한 뒤 합산해야 한다.
+        # (이전엔 원가에도 판매 통화 환율을 적용해 마진이 -800%/-8만% 로 튀던 버그를 수정.)
+        def _to_usd(amount: float, cur: str) -> float:
+            return (amount / USD_KRW_RATE) if _cur2(cur) == "KRW" else amount
+
         margin_basis = won_quotes or sent_quotes
         _rev = _cost = 0.0
         for q in margin_basis:
-            fx = (1.0 / USD_KRW_RATE) if _cur2(q.currency) == "KRW" else 1.0
-            _rev += _quotation_total(q.items or [], getattr(q, "discount_pct", 0) or 0) * fx
-            _cost += _items_cost_total(q.items or []) * fx
+            _rev += _to_usd(_quotation_total(q.items or [], getattr(q, "discount_pct", 0) or 0), q.currency)
+            _cost += _to_usd(_items_cost_total(q.items or []), getattr(q, "cost_currency", None) or q.currency)
         gross_margin_pct = ((_rev - _cost) / _rev * 100) if _rev else 0.0
 
         negotiating_value_usd = 0.0
