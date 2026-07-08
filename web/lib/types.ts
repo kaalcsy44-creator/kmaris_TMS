@@ -762,6 +762,14 @@ export type RfqStep = {
   state: "done" | "current" | "todo";
 };
 
+// Auto-fill 로 업로드·추출한 소스 파일 메타(RFQ에 영구 보관).
+export type RfqSourceFile = {
+  name: string;
+  media_type?: string;
+  item_count: number;
+  at?: string;
+};
+
 export type RfqDetail = {
   id: number;
   rfq_no: string;
@@ -787,6 +795,7 @@ export type RfqDetail = {
   status: string;
   steps: RfqStep[];
   items: RfqItem[];
+  source_files: RfqSourceFile[];
   vendor_rfqs: { id: number; vendor: string; at: string }[];
   vendor_quotes: { vendor_quote_no: string; amount: string; at: string }[];
   quotation: { qtn_no: string; amount: string; status: string; at: string } | null;

@@ -1974,6 +1974,14 @@ class RfqItemIn(BaseModel):
     remark: str | None = ""
 
 
+class RfqSourceFileIn(BaseModel):
+    """Auto-fill 로 업로드·추출한 소스 파일 메타(파일명·아이템수·시각)."""
+    name: str = ""
+    media_type: str | None = ""
+    item_count: int = 0
+    at: str | None = ""
+
+
 class RfqCreate(BaseModel):
     customer_id: int
     vessel_id: int | None = None
@@ -1986,6 +1994,7 @@ class RfqCreate(BaseModel):
     request_channel: str | None = ""   # 고객 요청 수단: Email/Phone/SMS/WhatsApp/WeChat 등
     notes: str | None = ""             # 내부 메모(자유 서술)
     items: list[RfqItemIn] = []
+    source_files: list[RfqSourceFileIn] = []   # Auto-fill 소스 파일 메타(영구 보관)
 
 
 class RfqAssignNo(BaseModel):
@@ -2007,6 +2016,7 @@ class RfqUpdate(BaseModel):
     received_at: str | None = None      # "YYYY-MM-DDTHH:MM"
     assignee_id: int | None = None      # 담당자(PIC) = created_by. 0 → 미지정 해제
     items: list[RfqItemIn] | None = None  # 보내면 품목 전체 교체
+    source_files: list[RfqSourceFileIn] | None = None  # 보내면 소스 파일 메타 전체 교체
 
 
 class RfqLevelUpdate(BaseModel):

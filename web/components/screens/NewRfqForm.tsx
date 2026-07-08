@@ -13,7 +13,7 @@ import {
   createSettingsCustomer,
   createSettingsVessel,
 } from "@/lib/api";
-import type { CustomerOption, SettingsVessel } from "@/lib/types";
+import type { CustomerOption, SettingsVessel, RfqSourceFile } from "@/lib/types";
 import { can, canEditDeal, editBlockReason } from "@/lib/auth";
 import CustomerName from "@/components/common/CustomerName";
 
@@ -71,6 +71,8 @@ export default function NewRfqForm({
   // OCR 이 인식했지만 DB 에 없는 Customer/선박 — 빠른 등록 폼의 기본값/자동 열기에 사용
   const [custHint, setCustHint] = useState("");
   const [vesselHint, setVesselHint] = useState("");
+  // Auto-fill 로 업로드·추출한 소스 파일 메타(RFQ 저장 시 함께 보관 → 재접속해도 유지).
+  const [ocrFiles, setOcrFiles] = useState<RfqSourceFile[]>([]);
 
   function reloadCustomers(): Promise<CustomerOption[]> {
     return fetchCustomers()
@@ -197,12 +199,20 @@ export default function NewRfqForm({
     setOcrMsg(null);
     try {
       const collected: ItemRow[] = [];
+      const newFiles: RfqSourceFile[] = [];
       let firstHint = "";
       let ok = 0;
       let headerFilled = false;
       for (const file of files) {
         const r = await parseRfqPdf(file);
         ok++;
+        // 업로드한 소스 파일 메타 기록(파일명·타입·추출 아이템수).
+        newFiles.push({
+          name: file.name || "(unnamed)",
+          media_type: file.type || "",
+          item_count: r.items?.length ?? 0,
+          at: nowLocal(),
+        });
         // 힌트 문구는 고객을 아직 수동 선택하지 않았을 때만(수동 입력 유지 시 혼란 방지).
         if (!headerFilled && !firstHint && customerId === "") firstHint = r.customer_hint ?? "";
         // 헤더 정보(고객/선박/번호/담당자)는 첫 유효 추출 1회만 반영.
@@ -245,6 +255,8 @@ export default function NewRfqForm({
           return [...kept, ...collected];
         });
       }
+      // 소스 파일 목록에 누적(중복 파일명은 그대로 추가 — 사용자가 개별 삭제 가능).
+      if (newFiles.length) setOcrFiles((prev) => [...prev, ...newFiles]);
       setOcrMsg(
         `Extracted: +${collected.length} item(s)${
           files.length > 1 ? ` from ${ok} files` : ""
@@ -270,6 +282,7 @@ export default function NewRfqForm({
     setNotes("");
     setReceivedAt(nowLocal());
     setItems([{ part_no: "", description: "", qty: "1", remark: "" }]);
+    setOcrFiles([]);
     setErr(null);
     setMsg(null);
   }
@@ -304,6 +317,8 @@ export default function NewRfqForm({
             }))
           : [{ part_no: "", description: "", qty: "1", remark: "" }]
       );
+      // 이전에 Auto-fill 로 저장해둔 소스 파일 목록 복원.
+      setOcrFiles(Array.isArray(d.source_files) ? d.source_files : []);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Failed to load RFQ");
     } finally {
@@ -340,6 +355,7 @@ export default function NewRfqForm({
           request_channel: requestChannel,
           notes,
           items: cleanItems,
+          source_files: ocrFiles,
         });
         setMsg("Updated");
         onCreated?.(""); // 목록·상위 새로고침
@@ -355,6 +371,7 @@ export default function NewRfqForm({
           request_channel: requestChannel,
           notes,
           items: cleanItems,
+          source_files: ocrFiles,
         });
         setMsg(`Created — ${r.rfq_no}`);
         resetForm();
@@ -432,6 +449,39 @@ export default function NewRfqForm({
               Upload PDF/image files (multiple OK) or paste a screenshot with Ctrl+V → items accumulate
             </span>
           )}
+        </div>
+      ) : null}
+
+      {ocrFiles.length > 0 ? (
+        <div className="ocr-files">
+          <div className="ocr-files-head">
+            📎 Auto-fill source files ({ocrFiles.length})
+          </div>
+          <ul className="ocr-files-list">
+            {ocrFiles.map((f, i) => (
+              <li key={`${f.name}-${i}`} className="ocr-file">
+                <span className="ocr-file-icon">
+                  {(f.media_type || "").startsWith("image/") ? "🖼️" : "📄"}
+                </span>
+                <span className="ocr-file-name" title={f.name}>{f.name}</span>
+                <span className="ocr-file-meta">
+                  {f.item_count} item{f.item_count === 1 ? "" : "s"}
+                  {f.at ? ` · ${f.at.slice(0, 10)}` : ""}
+                </span>
+                {canEditThis ? (
+                  <button
+                    type="button"
+                    className="ocr-file-del"
+                    title="Remove from list"
+                    aria-label={`Remove ${f.name}`}
+                    onClick={() => setOcrFiles((prev) => prev.filter((_, idx) => idx !== i))}
+                  >
+                    ✕
+                  </button>
+                ) : null}
+              </li>
+            ))}
+          </ul>
         </div>
       ) : null}
 

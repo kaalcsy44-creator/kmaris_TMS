@@ -149,6 +149,7 @@ export function createRfq(body: {
   request_channel?: string;
   notes?: string;
   items: { part_no: string; description: string; qty: number; remark?: string }[];
+  source_files?: { name: string; media_type?: string; item_count: number; at?: string }[];
 }): Promise<{ ok: boolean; id: number; rfq_no: string }> {
   return post("/api/admin/rfq", body);
 }
@@ -168,6 +169,7 @@ export function updateRfq(
     received_at?: string;
     assignee_id?: number;
     items?: { part_no: string; description: string; qty: number; remark?: string }[];
+    source_files?: { name: string; media_type?: string; item_count: number; at?: string }[];
   }
 ): Promise<{ ok: boolean; id: number }> {
   return patch(`/api/admin/rfq/${rfqId}`, body);

@@ -238,6 +238,7 @@ def rfq_detail(rfq_id: int):
             "status": _status_label(stage, r.work_type),
             "steps": steps,
             "items": [_item_view(it) for it in (r.items or [])],
+            "source_files": getattr(r, "source_files", None) or [],
             "vendor_rfqs": vrfq_view,
             "vendor_quotes": vquote_view,
             "quotation": qtn_view,
@@ -272,6 +273,22 @@ def ocr_rfq_pdf(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail=f"OCR 추출 실패: {exc}") from exc
 
 
+def _clean_source_files(src) -> list[dict]:
+    """Auto-fill 소스 파일 메타를 정규화(파일명 없는 항목 제외, 시각 기본값 채움)."""
+    out = []
+    for f in (src or []):
+        name = (getattr(f, "name", "") or "").strip()
+        if not name:
+            continue
+        out.append({
+            "name": name,
+            "media_type": (getattr(f, "media_type", "") or "").strip(),
+            "item_count": int(getattr(f, "item_count", 0) or 0),
+            "at": (getattr(f, "at", "") or "").strip() or _kst_iso(datetime.utcnow()),
+        })
+    return out
+
+
 @app.post("/api/admin/rfq", dependencies=[Depends(require_token)])
 def create_rfq(body: RfqCreate, user: dict = Depends(get_current_user)):
     """Customer RFQ 신규 등록. 케이마리스 RFQ No.는 기본적으로 미발급(임시) 상태로
@@ -287,6 +304,7 @@ def create_rfq(body: RfqCreate, user: dict = Depends(get_current_user)):
             "qty": it.qty or 1,
             "remark": (it.remark or "").strip(),
         } for it in body.items if (it.part_no or it.description)]
+        src_files = _clean_source_files(body.source_files)
 
         try:
             work_type = WorkType(body.work_type) if body.work_type else WorkType.PARTS
@@ -316,6 +334,7 @@ def create_rfq(body: RfqCreate, user: dict = Depends(get_current_user)):
             received_at=received_at,
             status=RFQStatus.RECEIVED,
             items=items,
+            source_files=src_files,
             created_by=(user.get("id") or None),   # 담당자 = 등록한 내부 직원
         )
         s.add(rfq)
@@ -405,6 +424,9 @@ def update_rfq(rfq_id: int, body: RfqUpdate):
                 "qty": it.qty or 1,
                 "remark": (it.remark or "").strip(),
             } for it in body.items if (it.part_no or it.description)]
+        if body.source_files is not None:
+            # 프론트가 현재 전체 목록을 보내므로 통째로 교체.
+            rfq.source_files = _clean_source_files(body.source_files)
 
         s.commit()
         return {"ok": True, "id": rfq.id}

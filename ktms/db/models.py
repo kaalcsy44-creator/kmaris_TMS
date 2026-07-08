@@ -197,6 +197,8 @@ class RFQ(Base):
     stage_dates      = Column(JSON, default=dict)
     # 단계별 코멘트/활동이력. {"1": [{"text": "...", "at": "YYYY-MM-DDTHH:MM"}], ...} (KST).
     stage_notes      = Column(JSON, default=dict)
+    # Auto-fill 소스 파일 메타(영구 보관). [{"name","media_type","item_count","at"}]
+    source_files     = Column(JSON, default=list)
     tracking_token   = Column(String(64), unique=True, default=lambda: secrets.token_urlsafe(32))
     created_by       = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at       = Column(DateTime, default=datetime.utcnow)
