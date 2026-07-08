@@ -1109,14 +1109,16 @@ function BoardCard({
   if (compact) {
     return (
       <div {...cardProps}>
-        <div className="pl-card-crow">
+        <div className="pl-card-nrow">
           <span className="pl-card-no">{r.project_no || "—"}</span>
+          {chevron}
+        </div>
+        <div className="pl-card-crow">
           {logo ? <img className="cust-logo" src={logo} alt="" /> : null}
           <span className="pl-card-proj-c" title={`${compactLabel}${r.customer ? ` · ${r.customer}` : ""}`}>
             {compactLabel}
           </span>
           {age != null ? <span className="pl-card-age" title="Days since first RFQ">{age}d</span> : null}
-          {chevron}
         </div>
         <div className="pl-card-bar" title={barTitle}>
           {Array.from({ length: total }).map((_, i) => (

@@ -4799,10 +4799,20 @@ table.mini .num {
 .pl-card.compact {
   padding: 6px 8px;
 }
+/* 간략 카드 1행: 프로젝트 번호 단독(+ 접기 화살표) */
+.pl-card-nrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+  margin-bottom: 2px;
+}
+/* 간략 카드 2행: 고객 로고 · 프로젝트명 · 경과일 */
 .pl-card-crow {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
   min-width: 0;
 }
 .pl-card.compact .pl-card-no { flex: none; font-size: 9px; }
