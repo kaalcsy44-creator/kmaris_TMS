@@ -2232,13 +2232,6 @@ function VendorRfqAction({
             onChange={(e) => setSentAt(e.target.value)}
           />
         </div>
-        <div className="form-field">
-          <label>Email language</label>
-          <select value={lang} onChange={(e) => setLang(e.target.value as "en" | "ko")}>
-            <option value="en">English</option>
-            <option value="ko">Korean</option>
-          </select>
-        </div>
       </div>
       {rfqId ? (
         <>
@@ -2318,7 +2311,16 @@ function VendorRfqAction({
       <>
       <div className="po-work-note">
         <b>Generate &amp; send the email yourself</b>
-        <span>Pick a Vendor in the Detail tab, generate the draft, copy subject/body, attach the Excel form, send it, then Mark as sent. The system does not send mail.</span>
+        <span>Pick a Vendor in the Detail tab, choose the language, generate the draft, copy subject/body, attach the Excel form, send it, then Mark as sent. The system does not send mail.</span>
+      </div>
+      <div className="form-grid">
+        <div className="form-field">
+          <label>Email language</label>
+          <select value={lang} onChange={(e) => setLang(e.target.value as "en" | "ko")}>
+            <option value="en">English</option>
+            <option value="ko">Korean</option>
+          </select>
+        </div>
       </div>
       <div className="form-actions">
         <button className="btn primary" onClick={makePreview} disabled={busy || vendorId === ""}>
