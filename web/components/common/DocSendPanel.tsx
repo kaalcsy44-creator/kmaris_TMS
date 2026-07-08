@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getToken } from "@/lib/auth";
 
 // 문서 생성(다운로드) + 이메일 미리보기 + 발송(생성파일 첨부) 공통 패널.
@@ -10,6 +10,7 @@ export type DocFormat = "pdf" | "xlsx";
 
 export interface DocPreview {
   to: string;
+  from?: string;     // 서버가 제안하는 기본 발신자(From)
   subject: string;
   body: string;
   smtp_configured: boolean;
@@ -35,6 +36,8 @@ export default function DocSendPanel({
   onPreview?: (lang: "en" | "ko", note: string) => Promise<DocPreview>;
   onSend?: (p: {
     to: string;
+    from: string;
+    cc: string;
     subject: string;
     body: string;
     format: DocFormat;
@@ -50,13 +53,16 @@ export default function DocSendPanel({
   const [lang, setLang] = useState<"en" | "ko">("en");
   const [note, setNote] = useState("");
   const [format, setFormat] = useState<DocFormat>(formats[0] ?? "pdf");
-  const [preview, setPreview] = useState<DocPreview | null>(null);
   const [to, setTo] = useState("");
+  const [from, setFrom] = useState("");
+  const [cc, setCc] = useState("");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
+  const [smtpConfigured, setSmtpConfigured] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const autoRan = useRef(false);
 
   async function download(fmt: DocFormat) {
     setErr(null);
@@ -77,6 +83,8 @@ export default function DocSendPanel({
     }
   }
 
+  // 미리보기(초안 생성) — to/from/subject/body 를 서버 기본값으로 채운다.
+  // 미리보기 전에도 필드가 기본값으로 보이도록 마운트 시 1회 자동 실행(아래 useEffect).
   async function makePreview() {
     if (!onPreview) return;
     setBusy(true);
@@ -84,10 +92,11 @@ export default function DocSendPanel({
     setErr(null);
     try {
       const p = await onPreview(lang, note);
-      setPreview(p);
       setTo(p.to);
+      setFrom(p.from ?? "");
       setSubject(p.subject);
       setBody(p.body);
+      setSmtpConfigured(p.smtp_configured);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Preview generation failed");
     } finally {
@@ -95,15 +104,23 @@ export default function DocSendPanel({
     }
   }
 
+  // 이메일 탭 진입 시 서버 기본값으로 필드를 자동 채운다(1회).
+  useEffect(() => {
+    if (emailEnabled && !disabled && !autoRan.current) {
+      autoRan.current = true;
+      makePreview();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [emailEnabled, disabled]);
+
   async function send() {
     if (!onSend) return;
     setBusy(true);
     setMsg(null);
     setErr(null);
     try {
-      const r = await onSend({ to, subject, body, format, lang, note });
+      const r = await onSend({ to, from, cc, subject, body, format, lang, note });
       setMsg(`Email sent${r.sent_date ? `: ${r.sent_date}` : ""}`);
-      setPreview(null);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Email sending failed");
       setBusy(false);
@@ -166,31 +183,34 @@ export default function DocSendPanel({
 
       {!emailEnabled ? (
         err ? <div className="action-err" style={{ marginTop: 8 }}>{err}</div> : null
-      ) : !preview ? (
-        <div className="form-actions" style={{ marginTop: 8 }}>
-          <button className="btn" onClick={makePreview} disabled={disabled || busy}>
-            {busy ? "Preparing…" : "✉ Preview email"}
-          </button>
-          {msg ? <span className="action-ok">{msg}</span> : null}
-          {err ? <span className="action-err">{err}</span> : null}
-        </div>
       ) : (
         <>
           <div className="form-grid" style={{ marginTop: 8 }}>
             <div className="form-field">
+              <label>From (sender)</label>
+              <input value={from} onChange={(e) => setFrom(e.target.value)} placeholder="sales@k-maris.com" />
+            </div>
+            <div className="form-field">
               <label>Recipient email</label>
               <input value={to} onChange={(e) => setTo(e.target.value)} />
+            </div>
+            <div className="form-field">
+              <label>CC</label>
+              <input value={cc} onChange={(e) => setCc(e.target.value)} placeholder="comma-separated (optional)" />
             </div>
             <div className="form-field">
               <label>Subject</label>
               <input value={subject} onChange={(e) => setSubject(e.target.value)} />
             </div>
           </div>
-          <div className="form-field">
+          <div className="hint-inline" style={{ marginTop: 2 }}>
+            From only changes the sender if it is a verified send-as alias on the SMTP account; otherwise the provider keeps the configured sender.
+          </div>
+          <div className="form-field" style={{ marginTop: 8 }}>
             <label>Body</label>
             <textarea className="po-textarea" value={body} onChange={(e) => setBody(e.target.value)} />
           </div>
-          {!preview.smtp_configured ? (
+          {!smtpConfigured ? (
             <div className="action-err">
               SMTP not configured — set SMTP_USER / SMTP_PASSWORD to enable sending.
             </div>
@@ -199,13 +219,19 @@ export default function DocSendPanel({
             <button
               className="btn primary"
               onClick={send}
-              disabled={busy || !to || !preview.smtp_configured}
+              disabled={disabled || busy || !to || !smtpConfigured}
             >
               {busy ? "Sending…" : `Send (attach ${format.toUpperCase()})`}
             </button>
-            <button className="btn" onClick={() => setPreview(null)} disabled={busy}>
-              Cancel
+            <button
+              className="btn"
+              onClick={makePreview}
+              disabled={disabled || busy}
+              title="Regenerate the draft from the template (overwrites your edits)"
+            >
+              {busy ? "…" : "↻ Regenerate draft"}
             </button>
+            <span className="hint-inline">Regenerate overwrites your edits.</span>
             {msg ? <span className="action-ok">{msg}</span> : null}
             {err ? <span className="action-err">{err}</span> : null}
           </div>

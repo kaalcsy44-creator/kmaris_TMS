@@ -40,6 +40,7 @@ from _core import (
     quotation_email_subject,
     require_token,
     send_email,
+    default_from,
 )
 
 
@@ -336,6 +337,7 @@ def quotation_email_preview(qtn_id: int, body: QuotationEmailPreviewReq):
         lang = "kr" if body.lang in ("ko", "kr") else "en"
         return {
             "to": (cust.email if cust else "") or "",
+            "from": default_from(),
             "subject": quotation_email_subject(qtn.qtn_no, lang),
             "body": quotation_email_body(cust.name if cust else "Customer", qtn.qtn_no, "", lang),
             "smtp_configured": bool(os.getenv("SMTP_USER") and os.getenv("SMTP_PASSWORD")),
@@ -376,6 +378,8 @@ def quotation_send(qtn_id: int, body: QuotationSendReq):
             subject=body.subject,
             body=body.body,
             attachments=[attach],
+            cc=body.cc.strip(),
+            from_addr=body.from_email.strip(),
         )
         if not sent:
             raise HTTPException(status_code=400, detail="이메일 발송 실패 — SMTP 설정 또는 서버 상태를 확인하세요.")

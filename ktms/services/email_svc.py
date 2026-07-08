@@ -1,5 +1,6 @@
 """Simple SMTP email sender with PDF attachment support."""
 from __future__ import annotations
+import json
 import os
 import smtplib
 from email.mime.application import MIMEApplication
@@ -18,24 +19,46 @@ def _cfg():
     }
 
 
+def default_from() -> str:
+    """UI 의 From 기본값으로 노출할 발신 주소(SMTP_FROM)."""
+    return _cfg()["from"]
+
+
+def email_signature(default: str = "") -> str:
+    """Settings 에 등록된 공용 이메일 서명(config/company.json 의 email_signature).
+    비어 있으면 default(각 이메일의 기존 기본 서명)를 반환한다.
+    _core 와 순환 참조를 피하려 여기서 JSON 을 직접 읽는다."""
+    path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "config", "company.json")
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            sig = (json.load(fh).get("email_signature") or "").strip()
+        return sig if sig else default
+    except (OSError, ValueError):
+        return default
+
+
 def send_email(
     to: str,
     subject: str,
     body: str,
     attachments: Optional[List[Tuple[str, bytes]]] = None,
     cc: str = "",
+    from_addr: str = "",
 ) -> bool:
     """
     Send an email via SMTP.
     attachments: list of (filename, bytes) tuples.
+    from_addr: 발신자 override(빈값이면 SMTP_FROM). 실제 반영 여부는 SMTP 계정의
+    'send-as alias' 등록에 따름(미등록 시 provider 가 인증 계정으로 재작성할 수 있음).
     Returns True on success, False on failure.
     """
     cfg = _cfg()
     if not cfg["user"] or not cfg["password"]:
         return False
 
+    sender = (from_addr or "").strip() or cfg["from"]
     msg = MIMEMultipart()
-    msg["From"] = cfg["from"]
+    msg["From"] = sender
     msg["To"] = to
     msg["Subject"] = subject
     if cc:
@@ -54,7 +77,7 @@ def send_email(
             server.starttls()
             server.login(cfg["user"], cfg["password"])
             recipients = [to] + ([cc] if cc else [])
-            server.sendmail(cfg["from"], recipients, msg.as_bytes())
+            server.sendmail(sender, recipients, msg.as_bytes())
         return True
     except Exception:
         return False
@@ -79,13 +102,12 @@ def quotation_email_body(customer_name: str, doc_no: str, tracking_url: str = ""
 아래 링크를 통해 진행 상황을 확인하실 수 있습니다:
 {tracking_url}
 """
-        body += """
-감사합니다.
-
-케이마리스 에너지 앤 솔루션 주식회사
-sales@k-maris.com | www.k-maris.com
-Engineering Reliability. Supplying Performance.
-"""
+        body += "\n" + email_signature(default=(
+            "감사합니다.\n\n"
+            "케이마리스 에너지 앤 솔루션 주식회사\n"
+            "sales@k-maris.com | www.k-maris.com\n"
+            "Engineering Reliability. Supplying Performance."
+        )) + "\n"
         return body
 
     body = f"""Dear {customer_name},
@@ -99,12 +121,12 @@ Should you have any questions or require further clarification, please do not he
 You can track the status of your inquiry at any time:
 {tracking_url}
 """
-    body += """
-Best regards,
-K-MARIS Energy & Solutions Co., Ltd.
-sales@k-maris.com | www.k-maris.com
-Engineering Reliability. Supplying Performance.
-"""
+    body += "\n" + email_signature(default=(
+        "Best regards,\n"
+        "K-MARIS Energy & Solutions Co., Ltd.\n"
+        "sales@k-maris.com | www.k-maris.com\n"
+        "Engineering Reliability. Supplying Performance."
+    )) + "\n"
     return body
 
 
@@ -118,9 +140,9 @@ Please find attached our Shipping Advice {doc_no} along with the Commercial Invo
 Track your shipment in real time:
 {tracking_url}
 """
-    body += """
-Best regards,
-K-MARIS Energy & Solutions Co., Ltd.
-sales@k-maris.com | www.k-maris.com
-"""
+    body += "\n" + email_signature(default=(
+        "Best regards,\n"
+        "K-MARIS Energy & Solutions Co., Ltd.\n"
+        "sales@k-maris.com | www.k-maris.com"
+    )) + "\n"
     return body

@@ -65,6 +65,7 @@ from _core import (
     parse_order_image,
     require_token,
     send_email,
+    default_from,
     steps_for,
 )
 
@@ -707,6 +708,7 @@ def vendor_po_preview(po_id: int, body: VendorPoPreview):
         )
         return {
             "to": (vendor.email if vendor else "") or "",
+            "from": default_from(),
             "subject": subject,
             "body": _vendor_po_email_body(po, vendor, order, vessel, body.notes, lang, _project_no_for_order(s, order)),
             "pdf_filename": f"{po.po_no}_PurchaseOrder.pdf",
@@ -801,6 +803,8 @@ def vendor_po_send(po_id: int, body: VendorPoSend):
             subject=body.subject,
             body=body.body,
             attachments=[attach],
+            cc=body.cc.strip(),
+            from_addr=body.from_email.strip(),
         )
         if not sent:
             raise HTTPException(status_code=400, detail="이메일 발송 실패 — SMTP 설정 또는 서버 상태를 확인하세요.")

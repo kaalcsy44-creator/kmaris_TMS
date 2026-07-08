@@ -979,7 +979,7 @@ function VendorPoDetailModal({
             downloadUrl={(f) => (f === "xlsx" ? vendorPoXlsxUrl(id) : vendorPoPdfUrl(id))}
             downloadName={(f) => `${d.po_no || "PurchaseOrder"}.${f}`}
             onPreview={(lang, note) => previewVendorPo(id, lang, note)}
-            onSend={({ to, subject, body, format }) => sendVendorPo(id, to, subject, body, format)}
+            onSend={({ to, subject, body, format, cc, from }) => sendVendorPo(id, to, subject, body, format, cc, from)}
             showNote
             disabled={!canEditThis}
             disabledReason={!canEditThis ? editBlockReason("po", d?.assignee_id) : "Generated from the last saved version — save your edits first."}

@@ -117,6 +117,7 @@ export type CompanyProfile = {
   bank_holder: string;
   swift: string;
   tagline: string;
+  email_signature: string;   // 이메일 본문 하단 공용 서명(비우면 기본 서명)
 };
 
 export type VendorOption = { id: number; name: string; email: string; logo?: string };
@@ -325,6 +326,7 @@ export type PoWorkOptions = {
 
 export type VendorPoPreview = {
   to: string;
+  from?: string;
   subject: string;
   body: string;
   pdf_filename: string;

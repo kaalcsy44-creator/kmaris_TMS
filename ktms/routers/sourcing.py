@@ -32,6 +32,7 @@ from _core import (
     build_po_payload,
     generate_pdf,
     send_email,
+    default_from,
     _base_meta,
     _date_iso,
     _enum_val,
@@ -331,6 +332,7 @@ def vendor_rfq_email_preview(vrfq_id: int, body: VendorRfqEmailPreviewReq):
         )
         return {
             "to": vr.sent_to_email or (vendor.email if vendor else "") or "",
+            "from": default_from(),
             "subject": subject,
             "body": _vendor_rfq_email_body(rfq, cust, vessel, vendor, "", lang, vr.items or None),
             "smtp_configured": bool(os.getenv("SMTP_USER") and os.getenv("SMTP_PASSWORD")),
@@ -360,7 +362,8 @@ def vendor_rfq_email_send(vrfq_id: int, body: VendorRfqEmailSendReq):
                 vendor_name=vendor.name if vendor else "—", items=items,
             )
             attach = (f"{rfq_no}_VendorQuoteSheet_{safe}.xlsx", xlsx)
-        sent = send_email(to=body.to.strip(), subject=body.subject, body=body.body, attachments=[attach])
+        sent = send_email(to=body.to.strip(), subject=body.subject, body=body.body,
+                          attachments=[attach], cc=body.cc.strip(), from_addr=body.from_email.strip())
         if not sent:
             raise HTTPException(status_code=400, detail="이메일 발송 실패 — SMTP 설정 또는 서버 상태를 확인하세요.")
         vr.sent_to_email = body.to.strip()

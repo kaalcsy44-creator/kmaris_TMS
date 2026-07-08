@@ -334,9 +334,11 @@ export function sendVendorPo(
   to: string,
   subject: string,
   body: string,
-  format: "pdf" | "xlsx" = "pdf"
+  format: "pdf" | "xlsx" = "pdf",
+  cc = "",
+  from = ""
 ): Promise<{ ok: boolean; sent_date: string }> {
-  return post(`/api/admin/vendor-pos/${poId}/send`, { to, subject, body, format });
+  return post(`/api/admin/vendor-pos/${poId}/send`, { to, subject, body, format, cc, from_email: from });
 }
 
 export function vendorPoPdfUrl(poId: number): string {
@@ -858,7 +860,7 @@ export function vendorRfqSheetXlsxUrl(vrfqId: number): string {
 export function previewVendorRfqEmail(
   vrfqId: number,
   lang: "en" | "ko"
-): Promise<{ to: string; subject: string; body: string; smtp_configured: boolean }> {
+): Promise<{ to: string; from: string; subject: string; body: string; smtp_configured: boolean }> {
   return post(`/api/admin/vendor-rfq/${vrfqId}/email-preview`, { lang });
 }
 export function sendVendorRfqEmail(
@@ -866,9 +868,11 @@ export function sendVendorRfqEmail(
   to: string,
   subject: string,
   body: string,
-  format: "xlsx" | "pdf" = "xlsx"
+  format: "xlsx" | "pdf" = "xlsx",
+  cc = "",
+  from = ""
 ): Promise<{ ok: boolean; sent_date: string }> {
-  return post(`/api/admin/vendor-rfq/${vrfqId}/send`, { to, subject, body, format });
+  return post(`/api/admin/vendor-rfq/${vrfqId}/send`, { to, subject, body, format, cc, from_email: from });
 }
 
 export function createVendorQuote(
@@ -946,7 +950,7 @@ export function quotationXlsxUrl(qtnId: number, docType = "quotation"): string {
 export function previewQuotationEmail(
   qtnId: number,
   lang: "en" | "ko"
-): Promise<{ to: string; subject: string; body: string; smtp_configured: boolean }> {
+): Promise<{ to: string; from: string; subject: string; body: string; smtp_configured: boolean }> {
   return post(`/api/admin/quotations/${qtnId}/email-preview`, { lang });
 }
 
@@ -956,7 +960,9 @@ export function sendQuotationEmail(
   subject: string,
   body: string,
   docType = "quotation",
-  format: "pdf" | "xlsx" = "pdf"
+  format: "pdf" | "xlsx" = "pdf",
+  cc = "",
+  from = ""
 ): Promise<{ ok: boolean; sent_date: string }> {
   return post(`/api/admin/quotations/${qtnId}/send`, {
     to,
@@ -964,6 +970,8 @@ export function sendQuotationEmail(
     body,
     doc_type: docType,
     format,
+    cc,
+    from_email: from,
   });
 }
 

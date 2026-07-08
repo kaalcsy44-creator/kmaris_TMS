@@ -983,7 +983,7 @@ function VendorRfqDetailModal({
             downloadUrl={(f) => (f === "pdf" ? vendorRfqPdfUrl(d.id) : vendorRfqSheetXlsxUrl(d.id))}
             downloadName={(f) => `${d.kmaris_rfq_no || "VendorRFQ"}_${d.vendor || "vendor"}.${f}`}
             onPreview={(lang) => previewVendorRfqEmail(d.id, lang)}
-            onSend={({ to, subject, body, format }) => sendVendorRfqEmail(d.id, to, subject, body, format)}
+            onSend={({ to, subject, body, format, cc, from }) => sendVendorRfqEmail(d.id, to, subject, body, format, cc, from)}
             disabled={!canEditThis}
             disabledReason={!canEditThis ? editBlockReason("rfq", d?.assignee_id) : "Generated from the last saved version — save your edits first."}
             onSent={onChanged}
@@ -1857,7 +1857,7 @@ function CustomerQuoteDetailModal({
             downloadUrl={(f) => (f === "xlsx" ? quotationXlsxUrl(id, "quotation") : quotationPdfUrl(id, "quotation"))}
             downloadName={(f) => `${d.qtn_no || "Quotation"}.${f}`}
             onPreview={(lang) => previewQuotationEmail(id, lang)}
-            onSend={({ to, subject, body, format }) => sendQuotationEmail(id, to, subject, body, "quotation", format)}
+            onSend={({ to, subject, body, format, cc, from }) => sendQuotationEmail(id, to, subject, body, "quotation", format, cc, from)}
             disabled={!canEditThis}
             disabledReason={!canEditThis ? editBlockReason("rfq", d?.assignee_id) : "Generated from the last saved version — save your edits first."}
             onSent={onChanged}

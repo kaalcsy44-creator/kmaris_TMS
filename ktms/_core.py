@@ -37,7 +37,7 @@ from services.tracking_status import (
 )
 from services.email_svc import (
     quotation_email_body, quotation_email_subject, send_email,
-    shipping_advice_email_body,
+    shipping_advice_email_body, email_signature, default_from,
 )
 from services.pdf_svc import (
     build_payload, build_po_payload, generate_pdf, generate_po_pdf,
@@ -966,13 +966,13 @@ def _vendor_po_email_body(po, vendor, order, vessel, notes: str, lang: str, proj
 """
         if notes:
             body += f"추가 사항:\n{notes}\n\n"
-        body += """영업일 기준 3일 이내 수령 확인 및 회신 부탁드립니다.
-
-감사합니다.
-K-MARIS Energy & Solutions Co., Ltd.
-Email: sales@k-maris.com  |  www.k-maris.com
-Engineering Reliability. Supplying Performance.
-"""
+        body += "영업일 기준 3일 이내 수령 확인 및 회신 부탁드립니다.\n\n"
+        body += email_signature(default=(
+            "감사합니다.\n"
+            "K-MARIS Energy & Solutions Co., Ltd.\n"
+            "Email: sales@k-maris.com  |  www.k-maris.com\n"
+            "Engineering Reliability. Supplying Performance."
+        )) + "\n"
         return body
 
     body = f"""Dear {vendor_name},
@@ -996,13 +996,13 @@ Please confirm the following upon receipt:
 """
     if notes:
         body += f"Additional Notes:\n{notes}\n\n"
-    body += """Kindly acknowledge receipt and confirm within 3 business days.
-
-Best regards,
-K-MARIS Energy & Solutions Co., Ltd.
-Email: sales@k-maris.com  |  www.k-maris.com
-Engineering Reliability. Supplying Performance.
-"""
+    body += "Kindly acknowledge receipt and confirm within 3 business days.\n\n"
+    body += email_signature(default=(
+        "Best regards,\n"
+        "K-MARIS Energy & Solutions Co., Ltd.\n"
+        "Email: sales@k-maris.com  |  www.k-maris.com\n"
+        "Engineering Reliability. Supplying Performance."
+    )) + "\n"
     return body
 
 
@@ -1069,13 +1069,13 @@ RFQ 번호 : {_no}
 """
         if notes:
             body += f"추가 사항:\n{notes}\n\n"
-        body += """영업일 기준 5일 이내 회신 부탁드립니다.
-
-감사합니다.
-K-MARIS Energy & Solutions Co., Ltd.
-Email: sales@k-maris.com  |  www.k-maris.com
-Engineering Reliability. Supplying Performance.
-"""
+        body += "영업일 기준 5일 이내 회신 부탁드립니다.\n\n"
+        body += email_signature(default=(
+            "감사합니다.\n"
+            "K-MARIS Energy & Solutions Co., Ltd.\n"
+            "Email: sales@k-maris.com  |  www.k-maris.com\n"
+            "Engineering Reliability. Supplying Performance."
+        )) + "\n"
         return body
 
     item_lines = "\n".join(
@@ -1107,13 +1107,13 @@ Please quote for each item:
 """
     if notes:
         body += f"Additional Notes:\n{notes}\n\n"
-    body += """Kindly reply within 5 business days.
-
-Best regards,
-K-MARIS Energy & Solutions Co., Ltd.
-Email: sales@k-maris.com  |  www.k-maris.com
-Engineering Reliability. Supplying Performance.
-"""
+    body += "Kindly reply within 5 business days.\n\n"
+    body += email_signature(default=(
+        "Best regards,\n"
+        "K-MARIS Energy & Solutions Co., Ltd.\n"
+        "Email: sales@k-maris.com  |  www.k-maris.com\n"
+        "Engineering Reliability. Supplying Performance."
+    )) + "\n"
     return body
 
 
@@ -1308,6 +1308,8 @@ class VendorPoSend(BaseModel):
     subject: str
     body: str
     format: str = "pdf"   # 첨부 포맷: pdf | xlsx
+    cc: str = ""            # 참조(CC) 수신자(쉼표 구분)
+    from_email: str = ""    # 발신자 override(빈값이면 SMTP_FROM)
 
 
 class ARPayment(BaseModel):
@@ -1786,6 +1788,7 @@ class CompanyProfile(BaseModel):
     bank_holder: str | None = ""
     swift: str | None = ""
     tagline: str | None = ""
+    email_signature: str | None = ""   # 이메일 본문 하단 공용 서명(비우면 기본 서명)
 
 
 _COMPANY_CONFIG = ROOT / "config" / "company.json"
@@ -1872,6 +1875,8 @@ class VendorRfqEmailSendReq(BaseModel):
     format: str = "xlsx"   # 첨부 포맷: xlsx | pdf
     lang: str = "en"
     note: str = ""
+    cc: str = ""            # 참조(CC) 수신자(쉼표 구분)
+    from_email: str = ""    # 발신자 override(빈값이면 SMTP_FROM)
 
 
 class VendorQuoteCreate(BaseModel):
@@ -2123,6 +2128,8 @@ class QuotationSendReq(BaseModel):
     body: str
     doc_type: str = "quotation"
     format: str = "pdf"   # 첨부 포맷: pdf | xlsx
+    cc: str = ""            # 참조(CC) 수신자(쉼표 구분)
+    from_email: str = ""    # 발신자 override(빈값이면 SMTP_FROM)
 
 
 # Public surface consumed by routers/*.py (split from this file).
@@ -2304,6 +2311,7 @@ __all__ = [
     "require_token",
     "rfq_tracking_step",
     "send_email",
+    "default_from",
     "shipping_advice_email_body",
     "steps_for",
     "text",
