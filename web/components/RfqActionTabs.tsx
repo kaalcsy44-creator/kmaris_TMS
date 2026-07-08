@@ -1991,6 +1991,8 @@ function VendorRfqAction({
   kmarisNo: string;
   onDone: () => void;
 }) {
+  // 편집 뷰와 동일한 Detail/Email 탭 구조.
+  const [tab, setTab] = useState<DetailTab>("edit");
   // 편집 뷰와 동일하게 Vendor 는 1개씩 선택(여러 곳은 발신 후 "+ Send another" 로 반복).
   const [vendorId, setVendorId] = useState<number | "">("");
   const [to, setTo] = useState("");   // Recipient email(벤더 선택 시 자동 채움, 편집 가능)
@@ -2178,6 +2180,9 @@ function VendorRfqAction({
 
   return (
     <>
+      <DetailTabBar tab={tab} onTab={setTab} />
+      {tab === "edit" ? (
+      <>
       <div className="form-section-title">This vendor send info</div>
 
       <div className="form-grid">
@@ -2286,28 +2291,33 @@ function VendorRfqAction({
         />
       </div>
 
-      {/* 3개 버튼 동시 표시: RFQ 생성(선택) · 이메일 생성(선택) · 발신 완료(필수) */}
+      {/* Create RFQ(선택) · 발신 완료(필수). 이메일 초안은 Email 탭에서 생성. */}
       <div className="form-actions">
         <button className="btn" onClick={generateRfqNo} disabled={busy || !unassigned}>
           Create RFQ
-        </button>
-        <button className="btn" onClick={makePreview} disabled={busy || vendorId === ""}>
-          Generate email
         </button>
         <button className="btn primary" onClick={sendAll} disabled={busy || vendorId === ""}>
           Mark as sent
         </button>
         <span className="hint-inline">
-          Create RFQ and Generate email are optional; Mark as sent is required.
+          Create RFQ is optional; Mark as sent is required. Draft the email in the Email tab.
         </span>
+      </div>
+      </>
+      ) : (
+      <>
+      <div className="po-work-note">
+        <b>Generate &amp; send the email yourself</b>
+        <span>Pick a Vendor in the Detail tab, generate the draft, copy subject/body, attach the Excel form, send it, then Mark as sent. The system does not send mail.</span>
+      </div>
+      <div className="form-actions">
+        <button className="btn primary" onClick={makePreview} disabled={busy || vendorId === ""}>
+          Generate email
+        </button>
       </div>
 
       {previews.length > 0 ? (
         <div style={{ marginTop: 14 }}>
-          <div className="po-work-note">
-            <b>Send email yourself</b>
-            <span>Copy the draft (subject/body), attach the Excel form, send it yourself, then click "Sent" to record it. The system does not send mail.</span>
-          </div>
           {previews.map((p, i) => (
             <div key={p.vendor_id} className="panel" style={{ boxShadow: "none" }}>
               <div className="sub-h">{p.vendor_name}</div>
@@ -2340,7 +2350,11 @@ function VendorRfqAction({
             </button>
           </div>
         </div>
-      ) : null}
+      ) : (
+        <span className="hint-inline">No draft yet — click Generate email.</span>
+      )}
+      </>
+      )}
       {msg ? <span className="action-ok">{msg}</span> : null}
       {err ? <span className="action-err">{err}</span> : null}
     </>
@@ -2824,6 +2838,8 @@ function CustomerQuoteAction({
   const [qtn, setQtn] = useState<{ id: number; qtn_no: string } | null>(null);
   const [email, setEmail] = useState<{ to: string; subject: string; body: string; smtp_configured: boolean } | null>(null);
   const [to, setTo] = useState("");
+  // 편집 뷰와 동일한 Detail/Email 탭 구조.
+  const [tab, setTab] = useState<DetailTab>("edit");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
@@ -2946,6 +2962,9 @@ function CustomerQuoteAction({
 
   return (
     <div>
+      <DetailTabBar tab={tab} onTab={setTab} />
+      {tab === "edit" ? (
+      <>
       <div className="form-section-title">Basic Info</div>
       <div className="form-grid">
         <div className="form-field">
@@ -3073,7 +3092,12 @@ function CustomerQuoteAction({
           <button className="btn" onClick={onCancel} disabled={busy}>Cancel</button>
         ) : null}
       </div>
-
+      </>
+      ) : (
+      <>
+      {!qtn ? (
+        <span className="hint-inline">Save the quotation in the Detail tab first, then generate the PDF/email here.</span>
+      ) : null}
       {qtn ? (
         <div className="panel" style={{ boxShadow: "none" }}>
           <div className="sub-h">Send — {qtn.qtn_no}</div>
@@ -3115,6 +3139,8 @@ function CustomerQuoteAction({
           </button>
         </div>
       ) : null}
+      </>
+      )}
       {msg ? <span className="action-ok">{msg}</span> : null}
       {err ? <span className="action-err">{err}</span> : null}
     </div>

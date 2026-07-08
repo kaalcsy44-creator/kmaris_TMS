@@ -1313,6 +1313,8 @@ function VendorPoCreate({
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  // 편집 뷰(VendorPoDetailModal)와 동일한 Detail/Email 탭 구조.
+  const [tab, setTab] = useState<DetailTab>("edit");
 
   const order = options.orders.find((o) => o.id === orderId);
   // Vendor 드롭다운은 모든 벤더를 노출(견적 제출 벤더로 제한하지 않음).
@@ -1388,6 +1390,13 @@ function VendorPoCreate({
 
   return (
     <>
+      <DetailTabBar tab={tab} onTab={setTab} />
+      {tab === "email" ? (
+        <span className="hint-inline">
+          Create the P/O in the Detail tab first — the vendor email is generated from the saved P/O.
+        </span>
+      ) : (
+      <>
       <div className="form-grid">
         {fixedOrder ? (
           <>
@@ -1496,6 +1505,8 @@ function VendorPoCreate({
       </div>
 
       <IssuedPoTable purchaseOrders={options.purchase_orders.filter((p) => p.order_id === orderId)} />
+      </>
+      )}
     </>
   );
 }
