@@ -82,6 +82,8 @@ _MIGRATIONS = {
     "purchase_orders": {
         "sent_to_email": "VARCHAR(200)",
         "terms": "JSON",
+        # DEFAULT 없이 추가 → 기존 발주서는 NULL 로 남아 오더/견적 통화를 상속(회귀 방지).
+        "currency": "VARCHAR(10)",
     },
     "marketing_activities": {
         "contact_person": "VARCHAR(100)",

@@ -296,6 +296,7 @@ class PurchaseOrder(Base):
     order_id   = Column(Integer, ForeignKey("orders.id"))
     vendor_id  = Column(Integer, ForeignKey("vendors.id"))
     date       = Column(String(10))
+    currency   = Column(String(10))  # 발주 통화(USD/KRW). 미지정 시 오더/견적 통화 상속
     items      = Column(JSON, default=list)
     terms      = Column(JSON, default=dict)   # 거래조건(Incoterms·Place·결제·포장·보증 등)
     status     = Column(String(40), default="발주완료")

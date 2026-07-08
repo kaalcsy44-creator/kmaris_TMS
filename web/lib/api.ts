@@ -312,6 +312,7 @@ export function createPurchaseOrder(body: {
   vendor_id: number;
   po_no?: string;
   date?: string;
+  currency?: string;
   items: PoWorkItem[];
   terms?: QuotationTerms;
 }): Promise<{ ok: boolean; id: number; po_no: string }> {
@@ -1075,6 +1076,7 @@ export function updatePurchaseOrder(
     po_no?: string;
     date?: string;
     sent_date?: string;
+    currency?: string;
     status?: string;
     items?: PoWorkItem[];
     terms?: QuotationTerms;

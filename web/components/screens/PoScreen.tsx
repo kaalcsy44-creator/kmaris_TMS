@@ -800,7 +800,7 @@ function VendorPoDetailModal({
   const [vendorId, setVendorId] = useState<number | "">("");
   const [poNo, setPoNo] = useState("");
   const [poDate, setPoDate] = useState("");
-  const [sentDate, setSentDate] = useState("");
+  const [currency, setCurrency] = useState("USD");
   const [status, setStatus] = useState("");
   const [items, setItems] = useState<PoWorkItem[]>([]);
   const [terms, setTerms] = useState<QuotationTerms>({});
@@ -822,7 +822,7 @@ function VendorPoDetailModal({
         // 이미 채번되어 저장된 K-Maris PO No.(KMS-ORD-…)를 그대로 보여준다.
         setPoNo(data.po_no || "");
         setPoDate(data.date || "");
-        setSentDate(data.sent_date || "");
+        setCurrency(data.currency || "USD");
         setStatus(data.status || "");
         setItems(data.items.length ? data.items.map(normalizeItem) : [blankItem()]);
         setTerms(data.terms || {});
@@ -856,7 +856,7 @@ function VendorPoDetailModal({
         vendor_id: vendorId === "" ? undefined : vendorId,
         po_no: poNo.trim() || undefined,
         date: poDate,
-        sent_date: sentDate,
+        currency,
         status,
         items: cleanItems(items),
         terms,
@@ -902,7 +902,7 @@ function VendorPoDetailModal({
                 <div><dt>K-Maris PO No.</dt><dd>{d.po_no || "—"}</dd></div>
                 <div><dt>Vendor</dt><dd>{d.vendor}</dd></div>
                 <div><dt>Recipient email</dt><dd>{d.vendor_email || "—"}</dd></div>
-                <div><dt>Sent date</dt><dd>{d.sent_date || "—"}</dd></div>
+                <div><dt>PO date</dt><dd>{d.date || "—"}</dd></div>
                 <div><dt>Status</dt><dd>{tr(d.status)}</dd></div>
                 <div><dt>Items</dt><dd>{d.items.length}</dd></div>
               </dl>
@@ -933,14 +933,14 @@ function VendorPoDetailModal({
               <input type="date" value={poDate} onChange={(e) => setPoDate(e.target.value)} />
             </div>
             <div className="form-field">
-              <label>Sent date</label>
-              <input type="date" value={sentDate} onChange={(e) => setSentDate(e.target.value)} />
+              <label>Currency</label>
+              <CurrencyToggle value={currency} onChange={setCurrency} />
             </div>
           </div>
           <ItemEditor
             items={items}
             onChange={setItems}
-            currency={d.currency || "USD"}
+            currency={currency}
             headerActions={
               canEditThis ? (
                 <LoadVendorQuoteControl
@@ -957,7 +957,7 @@ function VendorPoDetailModal({
             <StageTotal
               label="Total"
               value={items.reduce((s, it) => s + Number(it.amount || 0), 0)}
-              currency={d.currency || "USD"}
+              currency={currency}
             />
             {!canEditThis ? (
               <span className="hint-inline">{editBlockReason("po", d?.assignee_id)}</span>
@@ -1306,6 +1306,7 @@ function VendorPoCreate({
   const [noMode, setNoMode] = useState<"auto" | "manual">("auto");
   const [autoNo, setAutoNo] = useState("");
   const [date, setDate] = useState(today);
+  const [currency, setCurrency] = useState("USD");
   const [items, setItems] = useState<PoWorkItem[]>([blankItem()]);
   const [terms, setTerms] = useState<QuotationTerms>({});
   const [vendorQuotes, setVendorQuotes] = useState<VendorQuoteForImport[]>([]);
@@ -1325,6 +1326,8 @@ function VendorPoCreate({
   useEffect(() => {
     if (order) {
       setItems(order.items.length ? order.items.map(normalizeItem) : [blankItem()]);
+      // 발주 통화 기본값은 오더 통화(KRW 오더면 KRW). 사용자가 토글로 바꿀 수 있다.
+      setCurrency(order.currency || "USD");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderId]);
@@ -1366,6 +1369,7 @@ function VendorPoCreate({
         vendor_id: vendorId,
         po_no: poNo.trim() || undefined,
         date,
+        currency,
         items: cleanItems(items),
         terms,
       });
@@ -1443,6 +1447,10 @@ function VendorPoCreate({
           <label>PO date</label>
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
         </div>
+        <div className="form-field">
+          <label>Currency</label>
+          <CurrencyToggle value={currency} onChange={setCurrency} />
+        </div>
       </div>
 
       {order ? (
@@ -1456,7 +1464,7 @@ function VendorPoCreate({
       <ItemEditor
         items={items}
         onChange={setItems}
-        currency={order?.currency || "USD"}
+        currency={currency}
         headerActions={
           order ? (
             <LoadVendorQuoteControl
@@ -1474,7 +1482,7 @@ function VendorPoCreate({
         <StageTotal
           label="Total"
           value={items.reduce((s, it) => s + Number(it.amount || 0), 0)}
-          currency={order?.currency || "USD"}
+          currency={currency}
         />
         <button
           className="btn primary"

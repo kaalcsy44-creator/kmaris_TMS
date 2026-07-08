@@ -331,8 +331,8 @@ def po_work_options():
                 "status": po.status or "",
                 "sent": po.status == "이메일 발송완료",
                 "items": [_item_view(it) for it in (po.items or [])],
-                # 발주서 통화 = 오더 통화 우선(견적 통화·USD 순 폴백). 오더가 KRW면 발주서도 KRW.
-                "currency": (o.currency if o else None) or (qtn.currency if qtn else None) or "USD",
+                # 발주서 통화 = 저장된 발주 통화 우선. 없으면 오더·견적·USD 순 상속.
+                "currency": po.currency or (o.currency if o else None) or (qtn.currency if qtn else None) or "USD",
                 # 공통 식별 컬럼
                 "customer": cust_names.get(o.customer_id, "—") if o else "—",
                 "project_title": (getattr(rfq, "project_title", None) or "") if rfq else "",
@@ -559,11 +559,14 @@ def create_purchase_order(body: PurchaseOrderCreate):
             raise HTTPException(status_code=400, detail=f"이미 존재하는 PO No. 입니다: {po_no}")
         if not po_no:
             po_no = _next_kmaris_po_no(s)
+        # 발주 통화: 명시값 우선, 없으면 오더 통화 상속(오더가 KRW면 발주서도 KRW).
+        _po_cur = (body.currency or "").strip() or (order.currency or None)
         po = PurchaseOrder(
             po_no=po_no,
             order_id=order.id,
             vendor_id=vendor.id,
             date=body.date or date.today().isoformat(),
+            currency=_po_cur,
             items=items,
             terms=body.terms or {},
             status="발주완료",
@@ -602,8 +605,8 @@ def vendor_po_detail(po_id: int):
             "sent_date": po.sent_date or "",
             "status": po.status or "",
             "sent": po.status == "이메일 발송완료",
-            # 발주서 통화 = 오더 통화 우선(견적 통화·USD 순 폴백). 오더가 KRW면 발주서도 KRW로 표시.
-            "currency": (order.currency if order else None) or (qtn.currency if qtn else None) or "USD",
+            # 발주서 통화 = 저장된 발주 통화 우선. 없으면(기존 발주서) 오더·견적·USD 순 상속.
+            "currency": po.currency or (order.currency if order else None) or (qtn.currency if qtn else None) or "USD",
             "items": [_item_view(it) for it in (po.items or [])],
             "terms": getattr(po, "terms", None) or {},
         }
@@ -629,6 +632,8 @@ def update_purchase_order(po_id: int, body: PurchaseOrderUpdate):
                 po.po_no = new_no
         if body.date is not None:
             po.date = body.date or po.date
+        if body.currency is not None:
+            po.currency = body.currency.strip() or None
         if body.sent_date is not None:
             # 메일 발송 없이도 수동으로 발송일 입력 가능 (빈 값이면 해제)
             po.sent_date = body.sent_date.strip() or None

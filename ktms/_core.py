@@ -1275,6 +1275,7 @@ class PurchaseOrderCreate(BaseModel):
     vendor_id: int
     po_no: str | None = None
     date: str | None = None
+    currency: str | None = None
     items: list[PoWorkItem] = []
     terms: dict | None = None
 
@@ -1284,6 +1285,7 @@ class PurchaseOrderUpdate(BaseModel):
     po_no: str | None = None
     date: str | None = None
     sent_date: str | None = None
+    currency: str | None = None
     status: str | None = None
     items: list[PoWorkItem] | None = None
     terms: dict | None = None
