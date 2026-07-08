@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   fetchPipeline,
@@ -523,6 +523,14 @@ function PipelineTable({
   }, [openRfqId, openOrderId, openStage, rows]);
   // 목록 표시 방식: 표(table) / 칸반 보드(board). 같은 데이터·같은 상세 모달 재사용.
   const [view, setView] = useState<"table" | "board">("board");
+  // 보드 카드 밀도: 상세(false) / 간략(true). 간략이면 모든 카드를 한 줄 요약으로 접어 전체를 한눈에.
+  const [boardCompact, setBoardCompact] = useState<boolean>(
+    () => typeof window !== "undefined" && window.localStorage.getItem("ktms:board-compact") === "1"
+  );
+  useEffect(() => {
+    if (typeof window !== "undefined")
+      window.localStorage.setItem("ktms:board-compact", boardCompact ? "1" : "0");
+  }, [boardCompact]);
   // 기본 정렬: 관리번호(Project No.) 내림차순 — 최근 프로젝트가 맨 위.
   const [sortKey, setSortKey] = useState<ColKey | null>("received_at");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -794,6 +802,28 @@ function PipelineTable({
           {displayRows.length} / {rows.length}
         </span>
         {view === "table" ? <ColumnsButton cols={PIPELINE_COLUMNS} layout={layout} /> : null}
+        {view === "board" ? (
+          <span className="pl-view-toggle" role="group" aria-label="카드 밀도">
+            <button
+              type="button"
+              className={!boardCompact ? "on" : ""}
+              aria-pressed={!boardCompact}
+              onClick={() => setBoardCompact(false)}
+              title="카드를 상세하게 표시"
+            >
+              ▤ 상세
+            </button>
+            <button
+              type="button"
+              className={boardCompact ? "on" : ""}
+              aria-pressed={boardCompact}
+              onClick={() => setBoardCompact(true)}
+              title="모든 카드를 한 줄 요약으로 접어 전체를 한눈에"
+            >
+              ▬ 간략
+            </button>
+          </span>
+        ) : null}
         <span className="pl-view-toggle" role="tablist" aria-label="View mode">
           <button
             type="button"
@@ -821,6 +851,7 @@ function PipelineTable({
           stageOf={stageOf}
           selectedId={selectedId}
           onSelect={openRow}
+          compact={boardCompact}
         />
       ) : (
       <div className="pl-table-wrap">
@@ -944,13 +975,29 @@ function PipelineBoard({
   stageOf,
   selectedId,
   onSelect,
+  compact,
 }: {
   rows: PipelineRow[];
   steps: string[];
   stageOf: (r: PipelineRow) => number;
   selectedId: number | null;
   onSelect: (id: number) => void;
+  compact: boolean;
 }) {
+  // 카드별 접힘 예외: 글로벌 밀도와 반대로 뒤집힌 카드 id 집합.
+  // 글로벌 토글이 바뀌면 예외를 초기화해 전체가 새 기본값을 따르게 함.
+  const [flipped, setFlipped] = useState<Set<number>>(() => new Set());
+  useEffect(() => {
+    setFlipped(new Set());
+  }, [compact]);
+  const toggleCard = useCallback((id: number) => {
+    setFlipped((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
   const grouped = steps.length === 11;
   const cols = grouped
     ? STAGE_PHASES.map((p, pi) => ({
@@ -986,7 +1033,9 @@ function PipelineBoard({
                     steps={steps}
                     stage={stageOf(r)}
                     sel={selectedId === r.rfq_id}
+                    compact={compact !== flipped.has(r.rfq_id)}
                     onClick={() => onSelect(r.rfq_id)}
+                    onToggle={() => toggleCard(r.rfq_id)}
                   />
                 ))
               )}
@@ -998,19 +1047,24 @@ function PipelineBoard({
   );
 }
 
-/** 보드 1장 = 거래 1건. 관리번호·고객·선박·진행바·PIC·경과일·금액. */
+/** 보드 1장 = 거래 1건. 관리번호·고객·선박·진행바·PIC·경과일·금액.
+ *  compact=true 면 관리번호·고객·진행바만 남긴 한 줄 요약으로 접힘. */
 function BoardCard({
   r,
   steps,
   stage,
   sel,
+  compact,
   onClick,
+  onToggle,
 }: {
   r: PipelineRow;
   steps: string[];
   stage: number;
   sel: boolean;
+  compact: boolean;
   onClick: () => void;
+  onToggle: () => void;
 }) {
   const isService = (r.work_type || "부품공급") === "서비스";
   const total = steps.length;
@@ -1018,15 +1072,62 @@ function BoardCard({
   // PO 이후 단계는 고객 P/O(오더) 합산액(order_amount)을 우선 표시. 견적 단계는 견적액.
   const amount = r.order_amount || r.customer_amount || r.vendor_amount || "";
   const age = daysSince(r.first_rfq_at);
-  return (
+  const barTitle = `${filled}/${total} ${steps[filled - 1] ?? ""}`;
+  // 접힘/펼침 화살표(카드 클릭=상세 팝업과 분리하려고 별도 버튼 + stopPropagation).
+  const chevron = (
     <button
       type="button"
-      className={`pl-card${sel ? " sel" : ""}${isService ? " service" : ""}`}
-      onClick={onClick}
+      className="pl-card-toggle"
+      aria-label={compact ? "카드 펼치기" : "카드 접기"}
+      aria-expanded={!compact}
+      title={compact ? "펼치기" : "접기"}
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggle();
+      }}
     >
+      {compact ? "▸" : "▾"}
+    </button>
+  );
+  const cardProps = {
+    role: "button" as const,
+    tabIndex: 0,
+    className: `pl-card${compact ? " compact" : ""}${sel ? " sel" : ""}${isService ? " service" : ""}`,
+    onClick,
+    onKeyDown: (e: ReactKeyboardEvent) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        onClick();
+      }
+    },
+  };
+
+  if (compact) {
+    return (
+      <div {...cardProps}>
+        <div className="pl-card-crow">
+          <span className="pl-card-no">{r.project_no || "—"}</span>
+          <span className="pl-card-cust" title={r.customer || ""}>
+            {r.customer ? <CustomerName name={r.customer} /> : "—"}
+          </span>
+          {age != null ? <span className="pl-card-age" title="Days since first RFQ">{age}d</span> : null}
+          {chevron}
+        </div>
+        <div className="pl-card-bar" title={barTitle}>
+          {Array.from({ length: total }).map((_, i) => (
+            <span key={i} className={`seg${i < filled ? " on" : ""}`} />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div {...cardProps}>
       <div className="pl-card-top">
         <span className="pl-card-no">{r.project_no || "—"}</span>
         <WorkTypeBadge type={r.work_type} />
+        {chevron}
       </div>
       <div className="pl-card-cust" title={r.customer || ""}>
         {r.customer ? <CustomerName name={r.customer} /> : "—"}
@@ -1039,7 +1140,7 @@ function BoardCard({
         const vs = (r.vessels || r.vessel).split("\n").filter(Boolean).join(" · ");
         return vs ? <div className="pl-card-sub" title={vs}>{vs}</div> : null;
       })()}
-      <div className="pl-card-bar" title={`${filled}/${total} ${steps[filled - 1] ?? ""}`}>
+      <div className="pl-card-bar" title={barTitle}>
         {Array.from({ length: total }).map((_, i) => (
           <span key={i} className={`seg${i < filled ? " on" : ""}`} />
         ))}
@@ -1057,7 +1158,7 @@ function BoardCard({
           {r.next_action}
         </div>
       ) : null}
-    </button>
+    </div>
   );
 }
 

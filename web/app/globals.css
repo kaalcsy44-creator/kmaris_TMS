@@ -4776,6 +4776,45 @@ table.mini .num {
   gap: 6px;
   margin-bottom: 4px;
 }
+/* 카드 접기/펼치기 화살표 — 카드 클릭(상세 팝업)과 분리된 별도 버튼 */
+.pl-card-toggle {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+}
+.pl-card-toggle:hover { background: var(--head-bg); color: var(--blue); }
+
+/* ── 간략(접힌) 카드: 관리번호·고객·진행바만 한 줄 요약 ─────────────────── */
+.pl-card.compact {
+  padding: 6px 8px;
+}
+.pl-card-crow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+.pl-card.compact .pl-card-no { flex: none; }
+.pl-card.compact .pl-card-cust {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pl-card.compact .pl-card-bar { margin: 5px 0 0; }
 .pl-card-no {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 11px;
