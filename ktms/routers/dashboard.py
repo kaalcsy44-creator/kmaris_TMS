@@ -174,14 +174,52 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
             else:
                 order_amount = ""
 
-            # 마진 = 수주(고객 견적) − 발주(벤더 견적). 통화가 섞일 수 있어 USD 로 환산해
-            # 계산한 뒤 이중통화 문자열로 표기한다. 둘 중 하나라도 없으면 마진은 빈 값.
-            if customer_usd is not None and vendor_usd is not None:
-                _margin_usd = customer_usd - vendor_usd
-                margin_amount = _dual_money(_margin_usd, "USD")
-                margin_pct = round(_margin_usd / customer_usd * 100, 1) if customer_usd else None
+            # ── 프로젝트 정보(사이드바) 집계 ─────────────────────────────────────
+            # 한 프로젝트에 고객 P/O(오더)가 여러 건이면 선박·고객 PO No.는 목록으로,
+            # 매출(수주)·매입(발주)·마진은 전체 오더를 합산해 표기한다. 통화가 섞이면
+            # USD 로 환산해 합산한 뒤 대표(첫 오더) 통화로 표기.
+            _vessels: list[str] = []
+            _po_nos: list[str] = []
+            _sales_usd = 0.0
+            _purchase_usd = 0.0
+            _has_po = False
+            for oo in orders_all:
+                _ovid = oo.vessel_id or r.vessel_id
+                _vn = vessel_names.get(_ovid, "") if _ovid else ""
+                if _vn and _vn not in _vessels:
+                    _vessels.append(_vn)
+                if oo.po_no and oo.po_no not in _po_nos:
+                    _po_nos.append(oo.po_no)
+                _oc = (getattr(oo, "currency", None) or "USD").upper()
+                _st = _total_amount(oo.items or [])
+                _sales_usd += (_st / USD_KRW_RATE) if _oc == "KRW" else _st
+                for _vp in s.query(PurchaseOrder).filter_by(order_id=oo.id).all():
+                    _has_po = True
+                    _pt = _total_amount(_vp.items or []) or _items_cost_total(_vp.items or [])
+                    _pc = (getattr(_vp, "currency", None) or _oc or "USD").upper()
+                    _purchase_usd += (_pt / USD_KRW_RATE) if _pc == "KRW" else _pt
+
+            _disp = (getattr(orders_all[0], "currency", None) or "USD").upper() if orders_all \
+                else ((qtn.currency or "USD").upper() if qtn else "USD")
+
+            def _money_disp(usd: float) -> str:
+                return _dual_money(usd * USD_KRW_RATE, "KRW") if _disp == "KRW" else _dual_money(usd, "USD")
+
+            # 매출: 오더 있으면 오더 합산, 없으면 고객 견적. 매입: 발주서 있으면 합산, 없으면 벤더 견적.
+            sales_total = _money_disp(_sales_usd) if orders_all else customer_amount
+            purchase_total = _money_disp(_purchase_usd) if _has_po else vendor_amount
+
+            _s_usd = _sales_usd if orders_all else (customer_usd or 0.0)
+            _p_usd = _purchase_usd if _has_po else (vendor_usd or 0.0)
+            if (orders_all or customer_usd is not None) and (_has_po or vendor_usd is not None):
+                _margin_usd = _s_usd - _p_usd
+                margin_amount = _money_disp(_margin_usd)
+                margin_pct = round(_margin_usd / _s_usd * 100, 1) if _s_usd else None
             else:
                 margin_amount, margin_pct = "", None
+
+            vessels_disp = "\n".join(_vessels)
+            customer_po_nos_disp = "\n".join(_po_nos)
 
             # 품목 요약 — 카드/사이드바에 "(첫 품목) 외 N unit" 형태로 표기하기 위한 첫 품목명.
             _row_items = (o.items if o else None) or r.items or []
@@ -231,9 +269,14 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
                 "cquote_no": cquote_no,
                 "cquote_at": cquote_at,
                 "customer_amount": customer_amount,
-                # 마진(수주−발주) — 이중통화 문자열 + 마진율(%). 한쪽이라도 없으면 빈 값/None.
+                # 프로젝트 정보(사이드바) 집계 — 오더 여러 건이면 합산/목록.
+                "sales_total": sales_total,       # 수주 합산(오더 없으면 견적)
+                "purchase_total": purchase_total, # 발주 합산(발주 없으면 벤더 견적)
+                # 마진(수주−발주 합산) — 이중통화 문자열 + 마진율(%). 한쪽이라도 없으면 빈 값/None.
                 "margin_amount": margin_amount,
                 "margin_pct": margin_pct,
+                "vessels": vessels_disp,               # 오더별 선박 목록(줄바꿈)
+                "customer_po_nos": customer_po_nos_disp, # 고객 P/O No. 목록(줄바꿈)
                 # 딜 총액(고객 P/O 여러 건 합산) — PO 이후 단계 카드 금액에 사용.
                 "order_amount": order_amount,
                 # 5~6 PO 체인

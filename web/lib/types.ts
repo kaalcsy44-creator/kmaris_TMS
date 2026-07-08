@@ -711,8 +711,12 @@ export type PipelineRow = {
   cquote_no: string;
   cquote_at: string;
   customer_amount: string;
-  margin_amount: string;      // 마진(수주−발주) 이중통화 문자열. 없으면 ""
+  sales_total: string;        // 프로젝트 수주 합산(오더 여러 건). 없으면 견적금액
+  purchase_total: string;     // 프로젝트 발주 합산. 없으면 벤더 견적금액
+  margin_amount: string;      // 마진(수주−발주 합산) 이중통화 문자열. 없으면 ""
   margin_pct: number | null;  // 마진율(%). 계산 불가 시 null
+  vessels: string;            // 오더별 선박 목록(줄바꿈). 단일이면 1개
+  customer_po_nos: string;    // 고객 P/O No. 목록(줄바꿈)
   order_amount: string;
   customer_po_no: string;
   customer_po_at: string;
