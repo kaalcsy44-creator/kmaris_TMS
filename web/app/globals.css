@@ -4168,6 +4168,14 @@ table.mini.resizable-cols th.col-resizable {
 table.mini.resizable-cols td {
   overflow: hidden;
 }
+/* 컬럼을 좁히면 입력박스도 함께 줄며 내용이 자동 줄바꿈되도록 min-width 해제. */
+table.mini.resizable-cols textarea.desc,
+table.mini.resizable-cols textarea.wrapcell,
+table.mini.resizable-cols input {
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
 table.mini tr.sel td {
   background: #eef5ff;
   color: var(--navy);
