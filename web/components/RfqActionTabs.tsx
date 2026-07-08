@@ -2550,6 +2550,10 @@ function VendorQuoteAction({
               <label>Currency</label>
               <CurrencyToggle value={currency} onChange={setCurrency} />
             </div>
+            <div className="form-field">
+              <label>Notes</label>
+              <input value={notes} onChange={(e) => setNotes(e.target.value)} />
+            </div>
           </div>
 
           <VendorQuoteItemEditor
@@ -2564,17 +2568,12 @@ function VendorQuoteAction({
                 disabled={busy || vrfqId === ""}
                 title={vrfqId === "" ? "Select a Vendor RFQ first" : "Load items from the selected Vendor RFQ"}
               >
-                Load Vendor RFQ
+                Load Vendor RFQ items
               </button>
             }
           />
 
           <TermsEditor terms={terms} onChange={setTerms} />
-
-          <div className="form-field" style={{ marginTop: 12 }}>
-            <label>Notes</label>
-            <input value={notes} onChange={(e) => setNotes(e.target.value)} />
-          </div>
 
           <div className="form-actions">
             <StageTotal
@@ -2947,6 +2946,7 @@ function CustomerQuoteAction({
 
   return (
     <div>
+      <div className="form-section-title">Basic Info</div>
       <div className="form-grid">
         <div className="form-field">
           <label>Select Vendor quote</label>

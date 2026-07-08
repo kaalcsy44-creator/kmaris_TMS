@@ -1416,9 +1416,9 @@ function VendorPoCreate({
           </div>
         )}
         <div className="form-field">
-          <label>Select vendor</label>
+          <label>Vendor</label>
           <select value={vendorId} onChange={(e) => setVendorId(e.target.value ? Number(e.target.value) : "")}>
-            <option value="">— None —</option>
+            <option value="">Select…</option>
             {vendorChoices.map((v) => (
               <option key={v.id} value={v.id}>
                 {v.name}
