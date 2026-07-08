@@ -4157,6 +4157,17 @@ table.mini th {
   font-weight: 700;
   background: #f7fafd;
 }
+/* 편집형 품목 표 — 헤더 경계 드래그로 컬럼 폭 조절(colgroup 폭을 고정 레이아웃으로 적용). */
+table.mini.resizable-cols {
+  table-layout: fixed;
+}
+table.mini.resizable-cols th.col-resizable {
+  position: relative;
+}
+/* 리사이즈 대상 셀은 폭을 넘는 내용이 잘리도록(textarea 는 100% 폭). */
+table.mini.resizable-cols td {
+  overflow: hidden;
+}
 table.mini tr.sel td {
   background: #eef5ff;
   color: var(--navy);

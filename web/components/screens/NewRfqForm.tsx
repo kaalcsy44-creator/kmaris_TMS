@@ -16,6 +16,26 @@ import {
 import type { CustomerOption, SettingsVessel, RfqSourceFile } from "@/lib/types";
 import { can, canEditDeal, editBlockReason } from "@/lib/auth";
 import CustomerName from "@/components/common/CustomerName";
+import { useColumnLayout } from "@/components/common/useColumnLayout";
+import { ColumnResizer } from "@/components/common/tableLayout";
+
+// 품목 표에서 폭 조절 가능한 컬럼(관리번호·순번·삭제 열 제외)과 기본폭(px).
+const RFQ_ITEM_COLS = [
+  { key: "part_no", label: "Part No." },
+  { key: "description", label: "Description" },
+  { key: "type", label: "Type" },
+  { key: "serial_no", label: "Serial No." },
+  { key: "qty", label: "Qty" },
+  { key: "remark", label: "Remark" },
+];
+const RFQ_ITEM_DEFAULT_W: Record<string, number> = {
+  part_no: 160,
+  description: 280,
+  type: 96,
+  serial_no: 130,
+  qty: 84,
+  remark: 160,
+};
 
 type ItemRow = {
   part_no: string;
@@ -90,6 +110,9 @@ export default function NewRfqForm({
   const [vesselHint, setVesselHint] = useState("");
   // Auto-fill 로 업로드·추출한 소스 파일 메타(RFQ 저장 시 함께 보관 → 재접속해도 유지).
   const [ocrFiles, setOcrFiles] = useState<RfqSourceFile[]>([]);
+  // 품목 표 컬럼 폭(헤더 경계 드래그로 조절, localStorage 유지).
+  const itemCols = useColumnLayout("rfq-item-cols", RFQ_ITEM_COLS);
+  const itemColW = (k: string) => itemCols.widths[k] ?? RFQ_ITEM_DEFAULT_W[k];
 
   function reloadCustomers(): Promise<CustomerOption[]> {
     return fetchCustomers()
@@ -627,27 +650,24 @@ export default function NewRfqForm({
         <button type="button" className="btn sm items-head-add" onClick={addItem}>+ Add</button>
       </div>
       <div className="table-wrap item-scroll">
-      <table className="mini items-edit">
+      <table className="mini items-edit resizable-cols">
         <colgroup>
           <col style={{ width: 44 }} />
           <col style={{ width: 44 }} />
-          <col style={{ width: 160 }} />
-          <col />
-          <col style={{ width: 96 }} />
-          <col style={{ width: 130 }} />
-          <col style={{ width: 84 }} />
-          <col style={{ width: 160 }} />
+          {RFQ_ITEM_COLS.map((c) => (
+            <col key={c.key} style={{ width: itemColW(c.key) }} />
+          ))}
         </colgroup>
         <thead>
           <tr>
             <th className="row-tools"></th>
             <th className="seq">#</th>
-            <th>Part No.</th>
-            <th>Description</th>
-            <th>Type</th>
-            <th>Serial No.</th>
-            <th className="num">Qty</th>
-            <th>Remark</th>
+            {RFQ_ITEM_COLS.map((c) => (
+              <th key={c.key} className={`col-resizable${c.key === "qty" ? " num" : ""}`}>
+                {c.label}
+                <ColumnResizer onResize={(px) => itemCols.setWidth(c.key, px)} />
+              </th>
+            ))}
           </tr>
         </thead>
         <tbody>
