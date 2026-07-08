@@ -186,37 +186,68 @@ export default function NewRfqForm({
     }
   }
 
-  async function uploadOcr(file: File | null) {
-    if (!file) return;
+  // 복수 파일을 순차 분석해 아이템을 누적. 고객/선박/번호/담당자 등 헤더 정보는
+  // 아직 비어 있을 때만 첫 파일의 추출값으로 채워, 뒤 파일이 덮어쓰지 않게 한다.
+  async function uploadOcr(input: File | FileList | null) {
+    if (!input) return;
+    const files = input instanceof File ? [input] : Array.from(input);
+    if (files.length === 0) return;
     setOcrBusy(true);
     setErr(null);
     setOcrMsg(null);
     try {
-      const r = await parseRfqPdf(file);
-      const cust = matchName(r.customer_hint, customers);
-      const vessel = matchName(r.vessel_name, vessels);
-      setCustHint(cust ? "" : r.customer_hint ?? "");
-      setVesselHint(vessel ? "" : r.vessel_name ?? "");
-      if (cust) setCustomerId(cust.id);
-      if (vessel) setVesselId(vessel.id);
-      if (r.customer_rfq_no) setCustRfqNo(r.customer_rfq_no);
-      // 담당자: OCR 추출값 우선, 없으면 매칭된 Customer의 담당자
-      if (r.contact_person) setContactPerson(r.contact_person);
-      else if (cust?.contact) setContactPerson(cust.contact);
-      if (r.items?.length) {
-        setItems(
-          r.items.map((it) => ({
-            part_no: it.part_no ?? "",
-            description: it.description ?? "",
-            qty: String(it.qty ?? 1),
-            remark: it.remark ?? "",
-          }))
-        );
+      const collected: ItemRow[] = [];
+      let firstHint = "";
+      let ok = 0;
+      let headerFilled = false;
+      for (const file of files) {
+        const r = await parseRfqPdf(file);
+        ok++;
+        if (!headerFilled && !firstHint) firstHint = r.customer_hint ?? "";
+        // 헤더 정보(고객/선박/번호/담당자)는 첫 유효 추출 1회만 반영.
+        if (!headerFilled) {
+          const cust = matchName(r.customer_hint, customers);
+          const vessel = matchName(r.vessel_name, vessels);
+          if (customerId === "") {
+            setCustHint(cust ? "" : r.customer_hint ?? "");
+            if (cust) setCustomerId(cust.id);
+          }
+          if (vesselId === "") {
+            setVesselHint(vessel ? "" : r.vessel_name ?? "");
+            if (vessel) setVesselId(vessel.id);
+          }
+          if (r.customer_rfq_no) setCustRfqNo((v) => v || r.customer_rfq_no!);
+          // 담당자: OCR 추출값 우선, 없으면 매칭된 Customer의 담당자
+          if (r.contact_person) setContactPerson((v) => v || r.contact_person!);
+          else if (cust?.contact) setContactPerson((v) => v || cust.contact!);
+          if (r.customer_hint || r.vessel_name || r.items?.length) headerFilled = true;
+        }
+        if (r.items?.length) {
+          for (const it of r.items) {
+            collected.push({
+              part_no: it.part_no ?? "",
+              description: it.description ?? "",
+              qty: String(it.qty ?? 1),
+              remark: it.remark ?? "",
+            });
+          }
+        }
+      }
+      // 기존 아이템(빈 placeholder 행 제외)에 이번 추출분을 누적.
+      const keptCount = items.filter(
+        (it) => it.part_no.trim() || it.description.trim()
+      ).length;
+      const totalAfter = keptCount + collected.length;
+      if (collected.length) {
+        setItems((prev) => {
+          const kept = prev.filter((it) => it.part_no.trim() || it.description.trim());
+          return [...kept, ...collected];
+        });
       }
       setOcrMsg(
-        `Extracted: ${r.items?.length ?? 0} item(s)${
-          r.customer_hint ? ` · Customer hint ${r.customer_hint}` : ""
-        }`
+        `Extracted: +${collected.length} item(s)${
+          files.length > 1 ? ` from ${ok} files` : ""
+        } · ${totalAfter} total${firstHint ? ` · Customer hint ${firstHint}` : ""}`
       );
     } catch (e) {
       setErr(e instanceof Error ? e.message : "OCR extraction failed");
@@ -381,8 +412,14 @@ export default function NewRfqForm({
           <span className="ocr-bar-label">📄 RFQ auto-fill (PDF·image)</span>
           <input
             type="file"
+            multiple
             accept="application/pdf,image/png,image/jpeg,image/webp"
-            onChange={(e) => uploadOcr(e.target.files?.[0] ?? null)}
+            onChange={(e) => {
+              const fl = e.target.files;
+              uploadOcr(fl);
+              // 같은 파일을 다시 선택해도 onChange 가 발생하도록 값 초기화(누적 업로드).
+              e.target.value = "";
+            }}
             disabled={ocrBusy}
           />
           {ocrBusy ? (
@@ -390,7 +427,9 @@ export default function NewRfqForm({
           ) : ocrMsg ? (
             <span className="action-ok">{ocrMsg}</span>
           ) : (
-            <span className="hint-inline">Upload a PDF/image or paste a screenshot with Ctrl+V → auto-fill</span>
+            <span className="hint-inline">
+              Upload PDF/image files (multiple OK) or paste a screenshot with Ctrl+V → items accumulate
+            </span>
           )}
         </div>
       ) : null}
