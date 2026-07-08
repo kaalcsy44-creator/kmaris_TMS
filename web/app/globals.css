@@ -4973,7 +4973,15 @@ table.mini .num {
   gap: 6px;
   margin-top: 6px;
 }
+/* foot 좌측 그룹: vendor 모노그램 + PIC(공간 부족 시 PIC 가 말줄임). */
+.pl-card-foot-l {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
 .pl-card-pic {
+  min-width: 0;
   font-size: 11px;
   font-weight: 700;
   color: var(--ink);
@@ -4982,6 +4990,38 @@ table.mini .num {
   text-overflow: ellipsis;
 }
 .pl-card-pic.none { color: var(--muted); font-weight: 500; }
+/* 간략 카드: 진행바 아래 vendor 모노그램 전용 행(연결 vendor 있을 때만). */
+.pl-card-vrow {
+  display: flex;
+  align-items: center;
+  margin-top: 4px;
+}
+/* 연결 vendor 를 색상 이니셜 배지로 표시(로고 대신, 이름은 툴팁). */
+.vendor-mono-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex: none;
+}
+.vendor-mono {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  line-height: 1;
+  color: #fff;
+  flex: none;
+}
+.vendor-mono.more {
+  background: var(--head-bg);
+  color: var(--muted);
+  font-size: 9px;
+}
 .pl-card-age {
   flex: none;
   font-size: 10px;

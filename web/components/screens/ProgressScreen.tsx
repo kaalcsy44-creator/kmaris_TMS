@@ -21,6 +21,7 @@ import WorkTypeBadge from "@/components/WorkTypeBadge";
 import CustomerName from "@/components/common/CustomerName";
 import { useCustomerLogo } from "@/lib/customerLogos";
 import VendorName from "@/components/common/VendorName";
+import VendorMonograms from "@/components/common/VendorMonograms";
 import RfqActionTabs from "@/components/RfqActionTabs";
 import NewRfqForm from "@/components/screens/NewRfqForm";
 import { PoActionTabs } from "@/components/screens/PoScreen";
@@ -1125,6 +1126,11 @@ function BoardCard({
             <span key={i} className={`seg${i < filled ? " on" : ""}`} />
           ))}
         </div>
+        {vendorOf(r) ? (
+          <div className="pl-card-vrow">
+            <VendorMonograms value={vendorOf(r)} />
+          </div>
+        ) : null}
       </div>
     );
   }
@@ -1156,7 +1162,10 @@ function BoardCard({
         {filled}/{total} · {steps[filled - 1] ?? ""}
       </div>
       <div className="pl-card-foot">
-        <span className={`pl-card-pic${r.assignee ? "" : " none"}`}>{r.assignee || "—"}</span>
+        <div className="pl-card-foot-l">
+          <VendorMonograms value={vendorOf(r)} />
+          <span className={`pl-card-pic${r.assignee ? "" : " none"}`}>{r.assignee || "—"}</span>
+        </div>
         {age != null ? <span className="pl-card-age" title="Days since first RFQ">{age}d</span> : null}
       </div>
       {amount ? <div className="pl-card-amt" title={amount}>{amount}</div> : null}
