@@ -1991,7 +1991,9 @@ function VendorRfqAction({
   kmarisNo: string;
   onDone: () => void;
 }) {
-  const [vendorIds, setVendorIds] = useState<number[]>([]);
+  // 편집 뷰와 동일하게 Vendor 는 1개씩 선택(여러 곳은 발신 후 "+ Send another" 로 반복).
+  const [vendorId, setVendorId] = useState<number | "">("");
+  const [to, setTo] = useState("");   // Recipient email(벤더 선택 시 자동 채움, 편집 가능)
   const [lang, setLang] = useState<"en" | "ko">("en");
   const [notes, setNotes] = useState("");
   const [previews, setPreviews] = useState<VendorRfqPreview[]>([]);
@@ -2071,10 +2073,11 @@ function VendorRfqAction({
     setRfqItems((prev) => prev.filter((_, idx) => idx !== i));
   }
 
-  function toggleVendor(id: number) {
-    setVendorIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-    );
+  // 벤더 선택 → 저장된 벤더 이메일을 Recipient email 로 자동 채움(편집 뷰와 동일 동작).
+  function selectVendor(id: number | "") {
+    setVendorId(id);
+    const v = id === "" ? undefined : vendors.find((x) => x.id === id);
+    setTo(v?.email || "");
   }
 
   // RFQ 생성 — 케이마리스 RFQ No. 단독 발번(자동생성 / 직접 입력)
@@ -2101,12 +2104,12 @@ function VendorRfqAction({
   }
 
   async function makePreview() {
-    if (vendorIds.length === 0) return;
+    if (vendorId === "") return;
     setBusy(true);
     setMsg(null);
     setErr(null);
     try {
-      const r = await previewVendorRfq(rfqId, vendorIds, lang, notes, rfqNoArg, effectiveItems);
+      const r = await previewVendorRfq(rfqId, [vendorId], lang, notes, rfqNoArg, effectiveItems);
       setPreviews(r.previews);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Preview generation failed");
@@ -2146,7 +2149,7 @@ function VendorRfqAction({
 
   // 발신 완료 — 선택한 Vendor의 RFQ 발신을 기록(이메일 생성 여부와 무관). 초안이 있으면 그 내용을 함께 보낸다.
   async function sendAll() {
-    if (vendorIds.length === 0) {
+    if (vendorId === "") {
       setErr("Select a vendor.");
       return;
     }
@@ -2154,19 +2157,17 @@ function VendorRfqAction({
     setMsg(null);
     setErr(null);
     try {
-      const items = vendorIds.map((vid) => {
-        const p = previews.find((x) => x.vendor_id === vid);
-        return {
-          vendor_id: vid,
-          to: p?.to ?? "",
-          subject: p?.subject ?? "",
-          body: p?.body ?? "",
-        };
-      });
+      const p = previews.find((x) => x.vendor_id === vendorId);
+      const items = [{
+        vendor_id: vendorId,
+        to: p?.to ?? to ?? "",
+        subject: p?.subject ?? "",
+        body: p?.body ?? "",
+      }];
       const r = await sendVendorRfq(rfqId, items, rfqNoArg, sentAt || undefined, effectiveItems);
       setMsg(`K-Maris RFQ No. ${r.rfq_no || "-"} · sent (${r.saved} Vendor RFQ recorded)`);
       setPreviews([]);
-      setVendorIds([]);
+      selectVendor("");
       onDone();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Send failed");
@@ -2177,58 +2178,55 @@ function VendorRfqAction({
 
   return (
     <>
-      <div className="sub-h">Create & Send Vendor RFQ</div>
+      <div className="form-section-title">This vendor send info</div>
 
-      <div className="form-field">
-        <label>K-Maris RFQ No.</label>
-        {unassigned ? (
-          noMode === "auto" ? (
-            <select value="auto" onChange={(e) => { if (e.target.value === "manual") setNoMode("manual"); }} style={{ maxWidth: 320 }}>
+      <div className="form-grid">
+        <div className="form-field">
+          <label>Vendor</label>
+          <select
+            value={vendorId}
+            onChange={(e) => selectVendor(e.target.value === "" ? "" : Number(e.target.value))}
+          >
+            <option value="">Select…</option>
+            {vendors.map((v) => (
+              <option key={v.id} value={v.id}>{v.name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="form-field">
+          <label>K-Maris RFQ No.</label>
+          {!unassigned ? (
+            <input value={kmarisNo} disabled />
+          ) : noMode === "auto" ? (
+            <select value="auto" onChange={(e) => { if (e.target.value === "manual") setNoMode("manual"); }}>
               <option value="auto">{autoNo ? `${autoNo} (auto)` : "Auto-generate"}</option>
               <option value="manual">Manual entry…</option>
             </select>
           ) : (
-            <div style={{ display: "flex", gap: 6, alignItems: "center", maxWidth: 320 }}>
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
               <input value={manualNo} onChange={(e) => setManualNo(e.target.value)} placeholder="KMS-RFQ-…" autoFocus style={{ flex: 1 }} />
               <button type="button" className="btn sm" onClick={() => setNoMode("auto")} title="Use auto number">auto</button>
             </div>
-          )
-        ) : (
-          <div className="action-ctx" style={{ margin: 0 }}>
-            Issued: <b>{kmarisNo}</b>
-          </div>
-        )}
-      </div>
-      <div className="form-field">
-        <label>Select vendor</label>
-        <div className="vendor-checks">
-          {vendors.map((v) => (
-            <label key={v.id} className="check-inline">
-              <input
-                type="checkbox"
-                checked={vendorIds.includes(v.id)}
-                onChange={() => toggleVendor(v.id)}
-              />
-              {v.name}
-            </label>
-          ))}
+          )}
         </div>
-      </div>
-      <div className="form-grid">
+        <div className="form-field">
+          <label>Recipient email</label>
+          <input value={to} onChange={(e) => setTo(e.target.value)} />
+        </div>
+        <div className="form-field">
+          <label>Sent at</label>
+          <input
+            type="datetime-local"
+            value={sentAt}
+            onChange={(e) => setSentAt(e.target.value)}
+          />
+        </div>
         <div className="form-field">
           <label>Email language</label>
           <select value={lang} onChange={(e) => setLang(e.target.value as "en" | "ko")}>
             <option value="en">English</option>
             <option value="ko">Korean</option>
           </select>
-        </div>
-        <div className="form-field">
-          <label>Sent at (mark as sent)</label>
-          <input
-            type="datetime-local"
-            value={sentAt}
-            onChange={(e) => setSentAt(e.target.value)}
-          />
         </div>
       </div>
       {rfqId ? (
@@ -2293,10 +2291,10 @@ function VendorRfqAction({
         <button className="btn" onClick={generateRfqNo} disabled={busy || !unassigned}>
           Create RFQ
         </button>
-        <button className="btn" onClick={makePreview} disabled={busy || vendorIds.length === 0}>
+        <button className="btn" onClick={makePreview} disabled={busy || vendorId === ""}>
           Generate email
         </button>
-        <button className="btn primary" onClick={sendAll} disabled={busy || vendorIds.length === 0}>
+        <button className="btn primary" onClick={sendAll} disabled={busy || vendorId === ""}>
           Mark as sent
         </button>
         <span className="hint-inline">
