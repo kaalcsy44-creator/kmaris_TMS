@@ -4815,7 +4815,7 @@ table.mini .num {
   gap: 6px;
   min-width: 0;
 }
-.pl-card.compact .pl-card-no { flex: none; font-size: 9px; }
+.pl-card.compact .pl-card-no { flex: none; font-size: 9px; font-weight: 500; }
 .pl-card-crow .cust-logo { flex: none; }
 /* 간략 카드 주 라벨: 프로젝트명(고객 로고 옆) */
 .pl-card-proj-c {
