@@ -126,6 +126,7 @@ def parse_rfq_fields(text: str, customer_names: list[str] | None = None) -> dict
 
     prompt = f"""Extract RFQ information from the document text below.
 Output ONLY a single-line compact JSON object (no newlines, no markdown).{customer_hint_line}
+{_STRICT_EXTRACTION}
 
 JSON schema (all strings must be on one line, no embedded newlines):
 {{
@@ -174,6 +175,18 @@ _ORDER_SCHEMA = """{
 }"""
 
 
+# 문서에 실제로 적힌 값만 뽑도록 강제(IMO/선체번호/외부지식 기반 추측 금지).
+_STRICT_EXTRACTION = (
+    "STRICT RULES: Extract ONLY values that appear verbatim in the document. "
+    "If a field is not explicitly written in the text, output null (empty string for "
+    "item text fields). Do NOT guess or infer customer_hint or vessel_name from IMO "
+    "numbers, hull numbers, engine numbers, part numbers, or any outside/world knowledge. "
+    "The known-customers list is ONLY to normalize the spelling of a customer name that "
+    "actually appears in the document — never pick one from it when no customer/manager "
+    "name is present in the text."
+)
+
+
 def _customer_hint_line(customer_names: list[str] | None) -> str:
     if customer_names:
         return f"\nKnown customers (for matching): {', '.join(customer_names[:30])}"
@@ -203,6 +216,7 @@ def parse_rfq_image(image_bytes: bytes, media_type: str, customer_names: list[st
     """RFQ 이미지(스크린샷/사진)에서 필드를 추출."""
     prompt = f"""Extract RFQ information from the attached image (a screenshot or photo of an RFQ document).
 Output ONLY a single-line compact JSON object (no newlines, no markdown).{_customer_hint_line(customer_names)}
+{_STRICT_EXTRACTION}
 
 JSON schema (all strings on one line, no embedded newlines):
 {_RFQ_SCHEMA}"""
@@ -213,6 +227,7 @@ def parse_order_image(image_bytes: bytes, media_type: str, customer_names: list[
     """고객 P/O 이미지에서 필드를 추출."""
     prompt = f"""Extract Purchase Order (customer order) information from the attached image (a screenshot or photo).
 Output ONLY a single-line compact JSON object (no newlines, no markdown).{_customer_hint_line(customer_names)}
+{_STRICT_EXTRACTION}
 
 JSON schema (all strings on one line; dates as YYYY-MM-DD or null):
 {_ORDER_SCHEMA}"""
@@ -308,6 +323,7 @@ def parse_order_fields(text: str, customer_names: list[str] | None = None) -> di
 
     prompt = f"""Extract Purchase Order (customer order) information from the document text below.
 Output ONLY a single-line compact JSON object (no newlines, no markdown).{customer_hint_line}
+{_STRICT_EXTRACTION}
 
 JSON schema (all strings on one line, no embedded newlines; dates as YYYY-MM-DD or null):
 {{
