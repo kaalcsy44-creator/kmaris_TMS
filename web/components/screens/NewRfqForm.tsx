@@ -719,11 +719,12 @@ export default function NewRfqForm({
       </table>
       </div>
 
-      <div className="form-field" style={{ marginTop: 18, maxWidth: "33%", minWidth: 240 }}>
+      <div className="form-field" style={{ marginTop: 18 }}>
         <label>Notes</label>
         <textarea
           className="wrapcell"
           rows={3}
+          style={{ minHeight: 120 }}
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           placeholder="Internal memo (optional)"
