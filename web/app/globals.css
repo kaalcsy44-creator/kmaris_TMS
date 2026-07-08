@@ -4806,10 +4806,14 @@ table.mini .num {
   min-width: 0;
 }
 .pl-card.compact .pl-card-no { flex: none; }
-.pl-card.compact .pl-card-cust {
+.pl-card-crow .cust-logo { flex: none; }
+/* 간략 카드 주 라벨: 프로젝트명(고객 로고 옆) */
+.pl-card-proj-c {
   flex: 1;
   min-width: 0;
   font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

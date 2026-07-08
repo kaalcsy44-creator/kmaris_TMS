@@ -19,6 +19,7 @@ import { ColumnResizer, ColumnsButton, dragHandleProps } from "@/components/comm
 import type { PipelineRow, CustomerOption, SettingsVessel, StageNote } from "@/lib/types";
 import WorkTypeBadge from "@/components/WorkTypeBadge";
 import CustomerName from "@/components/common/CustomerName";
+import { useCustomerLogo } from "@/lib/customerLogos";
 import VendorName from "@/components/common/VendorName";
 import RfqActionTabs from "@/components/RfqActionTabs";
 import NewRfqForm from "@/components/screens/NewRfqForm";
@@ -811,7 +812,7 @@ function PipelineTable({
               onClick={() => setBoardCompact(false)}
               title="카드를 상세하게 표시"
             >
-              ▤ 상세
+              ▤ Detailed
             </button>
             <button
               type="button"
@@ -820,7 +821,7 @@ function PipelineTable({
               onClick={() => setBoardCompact(true)}
               title="모든 카드를 한 줄 요약으로 접어 전체를 한눈에"
             >
-              ▬ 간략
+              ▬ Compact
             </button>
           </span>
         ) : null}
@@ -1073,6 +1074,9 @@ function BoardCard({
   const amount = r.order_amount || r.customer_amount || r.vendor_amount || "";
   const age = daysSince(r.first_rfq_at);
   const barTitle = `${filled}/${total} ${steps[filled - 1] ?? ""}`;
+  // 간략 카드: 고객 로고 + 프로젝트명(없으면 고객명)으로 인지성 확보.
+  const logo = useCustomerLogo()(r.customer || "");
+  const compactLabel = r.project_title || r.customer || "—";
   // 접힘/펼침 화살표(카드 클릭=상세 팝업과 분리하려고 별도 버튼 + stopPropagation).
   const chevron = (
     <button
@@ -1107,8 +1111,9 @@ function BoardCard({
       <div {...cardProps}>
         <div className="pl-card-crow">
           <span className="pl-card-no">{r.project_no || "—"}</span>
-          <span className="pl-card-cust" title={r.customer || ""}>
-            {r.customer ? <CustomerName name={r.customer} /> : "—"}
+          {logo ? <img className="cust-logo" src={logo} alt="" /> : null}
+          <span className="pl-card-proj-c" title={`${compactLabel}${r.customer ? ` · ${r.customer}` : ""}`}>
+            {compactLabel}
           </span>
           {age != null ? <span className="pl-card-age" title="Days since first RFQ">{age}d</span> : null}
           {chevron}
