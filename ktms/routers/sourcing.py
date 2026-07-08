@@ -26,6 +26,9 @@ from _core import (
     VendorRfqEmailSendReq,
     Vessel,
     _assign_rfq_no,
+    _assign_vrfq_no,
+    _next_kmaris_rfq_no,
+    _rfq_unassigned,
     build_po_payload,
     generate_pdf,
     send_email,
@@ -153,9 +156,15 @@ def vendor_rfq_preview(rfq_id: int, body: VendorRfqPreviewRequest):
         rfq = s.query(RFQ).filter_by(id=rfq_id).first()
         if not rfq:
             raise HTTPException(status_code=404, detail="RFQ를 찾을 수 없습니다.")
-        # Vendor RFQ 발신 단계 진입 시 케이마리스 RFQ No. 부여(미발급이면).
-        _assign_rfq_no(s, rfq, body.rfq_no_mode, body.rfq_no)
-        s.commit()
+        # 미리보기는 DB를 변경하지 않는다. 이번 발송에 부여될 vendor 번호를 계산해 표시만 한다.
+        existing = s.query(VendorRFQ).filter_by(rfq_id=rfq.id).count()
+        manual_no = (body.rfq_no or "").strip()
+        if body.rfq_no_mode == "manual" and manual_no:
+            disp_no = manual_no
+        elif existing == 0 and not _rfq_unassigned(rfq.rfq_no):
+            disp_no = rfq.rfq_no
+        else:
+            disp_no = _next_kmaris_rfq_no(s)
         cust = s.query(Customer).filter_by(id=rfq.customer_id).first()
         vessel = s.query(Vessel).filter_by(id=rfq.vessel_id).first() if rfq.vessel_id else None
         lang = "ko" if body.lang == "ko" else "en"
@@ -171,12 +180,12 @@ def vendor_rfq_preview(rfq_id: int, body: VendorRfqPreviewRequest):
                 "vendor_name": vendor.name,
                 "to": vendor.email or "",
                 "subject": (
-                    f"[K-MARIS] 견적 요청 — {rfq.rfq_no} / {vessel.name if vessel else rfq.rfq_no}"
+                    f"[K-MARIS] 견적 요청 — {disp_no} / {vessel.name if vessel else disp_no}"
                     if lang == "ko"
-                    else f"[K-MARIS] Inquiry — {rfq.rfq_no} / {vessel.name if vessel else rfq.rfq_no}"
+                    else f"[K-MARIS] Inquiry — {disp_no} / {vessel.name if vessel else disp_no}"
                 ),
-                "body": _vendor_rfq_email_body(rfq, cust, vessel, vendor, body.notes, lang, items),
-                "xlsx_filename": f"{rfq.rfq_no}_VendorQuoteSheet_{safe_vname}.xlsx",
+                "body": _vendor_rfq_email_body(rfq, cust, vessel, vendor, body.notes, lang, items, rfq_no=disp_no),
+                "xlsx_filename": f"{disp_no}_VendorQuoteSheet_{safe_vname}.xlsx",
             })
         return {
             "previews": previews,
@@ -372,21 +381,33 @@ def vendor_rfq_send(rfq_id: int, body: VendorRfqSendRequest):
         rfq = s.query(RFQ).filter_by(id=rfq_id).first()
         if not rfq:
             raise HTTPException(status_code=404, detail="RFQ를 찾을 수 없습니다.")
-        # 케이마리스 RFQ No. 부여(미발급이면)
-        _assign_rfq_no(s, rfq, body.rfq_no_mode, body.rfq_no)
         sent_at = (body.sent_at or "").strip() or _kst_iso(datetime.utcnow())
         # 발신 화면에서 선택·편집한 품목이 오면 그것을, 없으면 RFQ 원본을 저장.
         sent_items = (_sanitize_vendor_rfq_items(body.rfq_items)
                       if body.rfq_items is not None else (rfq.items or []))
         saved = 0
         result_rows = []
+        last_no = ""
+        # 이 프로젝트에 이미 저장된 Vendor RFQ 수(첫 vendor 판정용).
+        existing_count = s.query(VendorRFQ).filter_by(rfq_id=rfq.id).count()
+        manual_no = (body.rfq_no or "").strip()
         for item in body.items:
             vendor = s.query(Vendor).filter_by(id=item.vendor_id).first()
             if not vendor:
                 continue
+            # Vendor RFQ별 고유 K-Maris RFQ No.(같은 프로젝트라도 vendor마다 다음 번호).
+            if body.rfq_no_mode == "manual" and manual_no:
+                vno = _assign_vrfq_no(s, "manual", manual_no)
+                manual_no = ""   # 수동 번호는 첫 vendor에만 적용, 이후는 자동
+            elif existing_count == 0 and not _rfq_unassigned(rfq.rfq_no):
+                # 'Create RFQ'로 미리 발번한 프로젝트 번호를 첫 vendor에 그대로 사용.
+                vno = rfq.rfq_no
+            else:
+                vno = _assign_vrfq_no(s, "auto", "")
             vrfq = VendorRFQ(
                 rfq_id=rfq.id,
                 vendor_id=vendor.id,
+                kmaris_rfq_no=vno,
                 sent_date=sent_at[:10],
                 sent_at=sent_at,
                 sent_to_email=item.to or "",
@@ -395,8 +416,13 @@ def vendor_rfq_send(rfq_id: int, body: VendorRfqSendRequest):
             )
             s.add(vrfq)
             s.flush()
+            # 프로젝트 RFQ가 미발급이면 첫 vendor 번호로 채워 단계 판정·배지 연속성 유지.
+            if _rfq_unassigned(rfq.rfq_no):
+                rfq.rfq_no = vno
+            existing_count += 1
             saved += 1
-            result_rows.append({"vendor": vendor.name})
+            last_no = vno
+            result_rows.append({"vendor": vendor.name, "kmaris_rfq_no": vno})
 
         rfq.status = RFQStatus.SOURCING
         s.commit()
@@ -404,7 +430,7 @@ def vendor_rfq_send(rfq_id: int, body: VendorRfqSendRequest):
             "ok": True,
             "saved": saved,
             "rows": result_rows,
-            "rfq_no": _rfq_no_disp(rfq.rfq_no),
+            "rfq_no": last_no or _rfq_no_disp(rfq.rfq_no),
         }
     finally:
         s.close()
@@ -485,7 +511,8 @@ def vendor_rfq_detail(vrfq_id: int):
             "rfq_id": vr.rfq_id,
             "assignee_id": (rfq.created_by or 0) if rfq else 0,
             "customer_rfq_no": rfq.customer_rfq_no if rfq else "",
-            "kmaris_rfq_no": _rfq_no_disp(rfq.rfq_no) if rfq else "",
+            # Vendor RFQ 자신의 번호 우선(구 레코드는 프로젝트 RFQ 번호로 폴백).
+            "kmaris_rfq_no": _rfq_no_disp(vr.kmaris_rfq_no or (rfq.rfq_no if rfq else "")),
             "project_no": _project_no_map(s).get(rfq.id, "") if rfq else "",
             "first_rfq_at": _first_rfq_iso(rfq) if rfq else "",
             "customer": customer.name if customer else "",

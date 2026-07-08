@@ -2005,18 +2005,17 @@ function VendorRfqAction({
   const [previews, setPreviews] = useState<VendorRfqPreview[]>([]);
   // 선택한 프로젝트(Customer RFQ)의 품목 — 벤더에게 보낼 품목을 편집한다(행 삭제로 제외).
   const [rfqItems, setRfqItems] = useState<RfqItem[]>([]);
-  // 케이마리스 RFQ No.는 이 단계(Vendor RFQ 발신)에서 부여된다.
+  // K-Maris RFQ No.는 Vendor RFQ 발신 시 vendor마다 개별로 부여된다(001·002…).
+  // 같은 프로젝트라도 "Send another" 시 다음 번호가 나오므로 항상 자동/수동 토글을 노출한다.
+  // (unassigned = 프로젝트에 아직 번호가 없음 → 'Create RFQ' 선발번 버튼 노출 판단용.)
   const unassigned = !kmarisNo || kmarisNo === "Not issued" || kmarisNo === "-";
   const [noMode, setNoMode] = useState<"auto" | "manual">("auto");
   const [manualNo, setManualNo] = useState("");
   const [autoNo, setAutoNo] = useState(""); // 자동채번 미리보기(다음 KMS-RFQ 번호)
-  // manual 은 빈값이어도 명시적으로 manual 로 보내 백엔드 기본값(auto)으로 새지 않게 한다
-  // (manual+빈값 = 아직 미지정 유지, auto = 자동채번).
-  const rfqNoArg = unassigned
-    ? noMode === "manual"
+  const rfqNoArg =
+    noMode === "manual"
       ? { mode: "manual" as const, value: manualNo.trim() }
-      : { mode: "auto" as const, value: "" }
-    : undefined;
+      : { mode: "auto" as const, value: "" };
   const [sentAt, setSentAt] = useState(nowLocalDt());
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -2035,13 +2034,12 @@ function VendorRfqAction({
     return () => { alive = false; };
   }, [rfqId]);
 
-  // 미지정이면 다음 자동채번 번호를 미리 불러와 토글에서 보여준다.
+  // 다음 자동채번 번호(vendor별 고유)를 미리 불러와 토글에서 보여준다.
   useEffect(() => {
-    if (!unassigned) return;
     let alive = true;
     fetchNextRfqNo().then((r) => { if (alive) setAutoNo(r.rfq_no); }).catch(() => undefined);
     return () => { alive = false; };
-  }, [unassigned]);
+  }, [rfqId]);
 
   // "Load customer RFQ" — Customer RFQ 품목으로 다시 채운다(편집·삭제 후 원복용).
   function loadCustomerRfqItems() {
@@ -2206,9 +2204,7 @@ function VendorRfqAction({
         </div>
         <div className="form-field">
           <label>K-Maris RFQ No.</label>
-          {!unassigned ? (
-            <input value={kmarisNo} disabled />
-          ) : noMode === "auto" ? (
+          {noMode === "auto" ? (
             <select value="auto" onChange={(e) => { if (e.target.value === "manual") setNoMode("manual"); }}>
               <option value="auto">{autoNo ? `${autoNo} (auto)` : "Auto-generate"}</option>
               <option value="manual">Manual entry…</option>

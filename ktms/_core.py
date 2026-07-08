@@ -1029,11 +1029,13 @@ def _sanitize_vendor_rfq_items(raw) -> list[dict]:
 
 
 def _vendor_rfq_email_body(rfq, cust, vessel, vendor, notes: str, lang: str,
-                           items=None) -> str:
+                           items=None, rfq_no: str | None = None) -> str:
     # items 를 명시적으로 주면(발신 화면에서 선택·편집한 품목) 그것을 쓰고,
     # 없으면 RFQ 원본 품목을 사용한다.
     items = rfq.items if items is None else items
     items = items or []
+    # 표시할 RFQ 번호(vendor별 번호를 넘기면 그것을, 없으면 프로젝트 RFQ 번호).
+    _no = rfq_no or rfq.rfq_no
     if lang == "ko":
         item_lines = "\n".join(
             f"  {i+1:>2}. Part No.: {str(item.get('part_no','—')):<20s}"
@@ -1049,7 +1051,7 @@ def _vendor_rfq_email_body(rfq, cust, vessel, vendor, notes: str, lang: str,
 
 아래 선박용 부품에 대한 견적을 요청드립니다.
 
-RFQ 번호 : {rfq.rfq_no}
+RFQ 번호 : {_no}
 선박명    : {vessel.name if vessel else '—'}
 발주처    : {cust.name if cust else '—'}
 문의일    : {rfq.date or date.today().isoformat()}
@@ -1087,7 +1089,7 @@ Engineering Reliability. Supplying Performance.
 
 We would like to request your best quotation for the following marine spare parts.
 
-RFQ Reference : {rfq.rfq_no}
+RFQ Reference : {_no}
 Vessel        : {vessel.name if vessel else '—'}
 End Customer  : {cust.name if cust else '—'}
 Enquiry Date  : {rfq.date or date.today().isoformat()}
@@ -1919,15 +1921,40 @@ def _new_tmp_rfq_no(session) -> str:
 
 
 def _next_kmaris_rfq_no(session) -> str:
-    """자동 채번 K-Maris RFQ No. — 'KMS-RFQ-yymm-nnn'. 이번 달(KST) 마지막 순번 +1."""
+    """자동 채번 K-Maris RFQ No. — 'KMS-RFQ-yymm-nnn'. 이번 달(KST) 마지막 순번 +1.
+    RFQ.rfq_no 와 VendorRFQ.kmaris_rfq_no(벤더별 고유 번호) 양쪽을 모두 세어 충돌을 막는다."""
     yymm = (datetime.utcnow() + timedelta(hours=9)).strftime("%y%m")
     prefix = f"KMS-RFQ-{yymm}-"
     mx = 0
-    for (no,) in session.query(RFQ.rfq_no).filter(RFQ.rfq_no.like(prefix + "%")).all():
+    rows = list(session.query(RFQ.rfq_no).filter(RFQ.rfq_no.like(prefix + "%")).all())
+    rows += list(session.query(VendorRFQ.kmaris_rfq_no)
+                 .filter(VendorRFQ.kmaris_rfq_no.like(prefix + "%")).all())
+    for (no,) in rows:
         tail = str(no or "")[len(prefix):]
         if tail.isdigit():
             mx = max(mx, int(tail))
     return f"{prefix}{mx + 1:03d}"
+
+
+def _kmaris_rfq_no_taken(session, no: str) -> bool:
+    """RFQ.rfq_no 또는 VendorRFQ.kmaris_rfq_no 로 이미 사용 중인 번호인지."""
+    if session.query(RFQ).filter_by(rfq_no=no).first():
+        return True
+    if session.query(VendorRFQ).filter_by(kmaris_rfq_no=no).first():
+        return True
+    return False
+
+
+def _assign_vrfq_no(session, mode: str = "auto", manual: str = "") -> str:
+    """Vendor RFQ 1건에 부여할 K-Maris RFQ No. 를 계산한다(레코드에 직접 저장은 호출측에서).
+    - manual: 입력값이 있으면 그 값(중복 검사). 비우면 자동 채번으로 폴백.
+    - auto: 다음 순번 자동 생성."""
+    manual = (manual or "").strip()
+    if mode == "manual" and manual:
+        if _kmaris_rfq_no_taken(session, manual):
+            raise HTTPException(status_code=400, detail=f"이미 존재하는 RFQ No.입니다: {manual}")
+        return manual
+    return _next_kmaris_rfq_no(session)
 
 
 def _next_kmaris_quotation_no(session) -> str:

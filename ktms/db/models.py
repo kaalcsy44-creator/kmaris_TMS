@@ -209,6 +209,8 @@ class VendorRFQ(Base):
     id             = Column(Integer, primary_key=True)
     rfq_id         = Column(Integer, ForeignKey("rfqs.id"))
     vendor_id      = Column(Integer, ForeignKey("vendors.id"))
+    # Vendor RFQ별 고유 K-Maris RFQ No.(KMS-RFQ-yymm-nnn). 같은 프로젝트라도 vendor마다 다른 번호.
+    kmaris_rfq_no  = Column(String(40))
     sent_date      = Column(String(10))
     sent_at        = Column(String(16))   # 발신 일시 "YYYY-MM-DDTHH:MM" (KST)
     sent_to_email  = Column(String(200))
