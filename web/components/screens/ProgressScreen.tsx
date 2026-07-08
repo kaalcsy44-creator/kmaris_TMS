@@ -1034,7 +1034,11 @@ function BoardCard({
       {r.project_title ? (
         <div className="pl-card-proj" title={r.project_title}>{r.project_title}</div>
       ) : null}
-      {r.vessel ? <div className="pl-card-sub" title={r.vessel}>{r.vessel}</div> : null}
+      {(() => {
+        // 오더 여러 건이면 선박을 모두 " · "로 이어 한 줄에 표기.
+        const vs = (r.vessels || r.vessel).split("\n").filter(Boolean).join(" · ");
+        return vs ? <div className="pl-card-sub" title={vs}>{vs}</div> : null;
+      })()}
       <div className="pl-card-bar" title={`${filled}/${total} ${steps[filled - 1] ?? ""}`}>
         {Array.from({ length: total }).map((_, i) => (
           <span key={i} className={`seg${i < filled ? " on" : ""}`} />
