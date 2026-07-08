@@ -136,7 +136,7 @@ JSON schema (all strings must be on one line, no embedded newlines):
   "customer_hint": string|null,
   "notes": string|null,
   "items": [
-    {{"part_no":string,"description":string,"maker":string,"qty":number,"unit":string,"lead_time_req":string,"remark":string}}
+    {{"part_no":string,"description":string,"type":string,"serial_no":string,"maker":string,"qty":number,"unit":string,"lead_time_req":string,"remark":string}}
   ]
 }}
 
@@ -159,7 +159,7 @@ _RFQ_SCHEMA = """{
   "contact_person": string|null,
   "notes": string|null,
   "items": [
-    {"part_no":string,"description":string,"maker":string,"qty":number,"unit":string,"lead_time_req":string,"remark":string}
+    {"part_no":string,"description":string,"type":string,"serial_no":string,"maker":string,"qty":number,"unit":string,"lead_time_req":string,"remark":string}
   ]
 }"""
 

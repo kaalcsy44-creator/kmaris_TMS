@@ -301,6 +301,8 @@ def create_rfq(body: RfqCreate, user: dict = Depends(get_current_user)):
         items = [{
             "part_no": (it.part_no or "").strip(),
             "description": (it.description or "").strip(),
+            "type": (it.type or "").strip(),
+            "serial_no": (it.serial_no or "").strip(),
             "qty": it.qty or 1,
             "remark": (it.remark or "").strip(),
         } for it in body.items if (it.part_no or it.description)]
@@ -421,6 +423,8 @@ def update_rfq(rfq_id: int, body: RfqUpdate):
             rfq.items = [{
                 "part_no": (it.part_no or "").strip(),
                 "description": (it.description or "").strip(),
+                "type": (it.type or "").strip(),
+                "serial_no": (it.serial_no or "").strip(),
                 "qty": it.qty or 1,
                 "remark": (it.remark or "").strip(),
             } for it in body.items if (it.part_no or it.description)]

@@ -17,7 +17,24 @@ import type { CustomerOption, SettingsVessel, RfqSourceFile } from "@/lib/types"
 import { can, canEditDeal, editBlockReason } from "@/lib/auth";
 import CustomerName from "@/components/common/CustomerName";
 
-type ItemRow = { part_no: string; description: string; qty: string; remark: string };
+type ItemRow = {
+  part_no: string;
+  description: string;
+  type: string;
+  serial_no: string;
+  qty: string;
+  remark: string;
+};
+
+// 빈 품목 행 1개(초기값·+Add·reset 공용).
+const EMPTY_ITEM: ItemRow = {
+  part_no: "",
+  description: "",
+  type: "",
+  serial_no: "",
+  qty: "1",
+  remark: "",
+};
 
 // 고객이 RFQ를 보내온 수단(요청 수단). 자유 텍스트 컬럼이라 프리셋 외 값도 저장 가능.
 const REQUEST_CHANNELS = ["Email", "Phone", "SMS", "WhatsApp", "WeChat", "Other"];
@@ -61,7 +78,7 @@ export default function NewRfqForm({
   const [notes, setNotes] = useState("");
   const [receivedAt, setReceivedAt] = useState(nowLocal());
   const [items, setItems] = useState<ItemRow[]>([
-    { part_no: "", description: "", qty: "1", remark: "" },
+    { ...EMPTY_ITEM },
   ]);
   const [busy, setBusy] = useState(false);
   const [ocrBusy, setOcrBusy] = useState(false);
@@ -148,7 +165,7 @@ export default function NewRfqForm({
     );
   }
   function addItem() {
-    setItems((prev) => [...prev, { part_no: "", description: "", qty: "1", remark: "" }]);
+    setItems((prev) => [...prev, { ...EMPTY_ITEM }]);
   }
   function removeItem(i: number) {
     setItems((prev) => prev.filter((_, idx) => idx !== i));
@@ -238,6 +255,8 @@ export default function NewRfqForm({
             collected.push({
               part_no: it.part_no ?? "",
               description: it.description ?? "",
+              type: it.type ?? "",
+              serial_no: it.serial_no ?? "",
               qty: String(it.qty ?? 1),
               remark: it.remark ?? "",
             });
@@ -281,7 +300,7 @@ export default function NewRfqForm({
     setRequestChannel("");
     setNotes("");
     setReceivedAt(nowLocal());
-    setItems([{ part_no: "", description: "", qty: "1", remark: "" }]);
+    setItems([{ ...EMPTY_ITEM }]);
     setOcrFiles([]);
     setErr(null);
     setMsg(null);
@@ -312,10 +331,12 @@ export default function NewRfqForm({
           ? d.items.map((it) => ({
               part_no: it.part_no || "",
               description: it.description || "",
+              type: it.type ?? "",
+              serial_no: it.serial_no ?? "",
               qty: String(it.qty ?? 1),
               remark: it.remark ?? "",
             }))
-          : [{ part_no: "", description: "", qty: "1", remark: "" }]
+          : [{ ...EMPTY_ITEM }]
       );
       // 이전에 Auto-fill 로 저장해둔 소스 파일 목록 복원.
       setOcrFiles(Array.isArray(d.source_files) ? d.source_files : []);
@@ -339,6 +360,8 @@ export default function NewRfqForm({
       .map((it) => ({
         part_no: it.part_no,
         description: it.description,
+        type: it.type,
+        serial_no: it.serial_no,
         qty: Number(it.qty) || 1,
         remark: it.remark,
       }));
@@ -610,6 +633,8 @@ export default function NewRfqForm({
           <col style={{ width: 44 }} />
           <col style={{ width: 160 }} />
           <col />
+          <col style={{ width: 96 }} />
+          <col style={{ width: 130 }} />
           <col style={{ width: 84 }} />
           <col style={{ width: 160 }} />
         </colgroup>
@@ -619,6 +644,8 @@ export default function NewRfqForm({
             <th className="seq">#</th>
             <th>Part No.</th>
             <th>Description</th>
+            <th>Type</th>
+            <th>Serial No.</th>
             <th className="num">Qty</th>
             <th>Remark</th>
           </tr>
@@ -652,6 +679,22 @@ export default function NewRfqForm({
                   rows={1}
                   value={it.description}
                   onChange={(e) => setItem(i, "description", e.target.value)}
+                />
+              </td>
+              <td>
+                <textarea
+                  className="wrapcell"
+                  rows={1}
+                  value={it.type}
+                  onChange={(e) => setItem(i, "type", e.target.value)}
+                />
+              </td>
+              <td>
+                <textarea
+                  className="wrapcell"
+                  rows={1}
+                  value={it.serial_no}
+                  onChange={(e) => setItem(i, "serial_no", e.target.value)}
                 />
               </td>
               <td>

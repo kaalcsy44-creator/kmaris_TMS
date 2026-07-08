@@ -916,10 +916,13 @@ def _item_view(it: dict) -> dict:
     return {
         "part_no": it.get("part_no") or "",
         "description": it.get("description") or "",
+        "type": it.get("type") or "",
+        "serial_no": it.get("serial_no") or "",
         "qty": qty,
         "unit": it.get("unit") or "",
         "unit_price": unit,
         "amount": amount,
+        "remark": it.get("remark") or "",
     }
 
 
@@ -1970,6 +1973,8 @@ def _assign_rfq_no(session, rfq, mode: str = "auto", manual: str = "") -> str:
 class RfqItemIn(BaseModel):
     part_no: str = ""
     description: str = ""
+    type: str | None = ""        # 엔진/부품 타입(예: H35DF)
+    serial_no: str | None = ""   # 시리얼 번호
     qty: float = 1
     remark: str | None = ""
 

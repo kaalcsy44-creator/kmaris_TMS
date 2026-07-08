@@ -148,7 +148,7 @@ export function createRfq(body: {
   work_type?: string;
   request_channel?: string;
   notes?: string;
-  items: { part_no: string; description: string; qty: number; remark?: string }[];
+  items: { part_no: string; description: string; type?: string; serial_no?: string; qty: number; remark?: string }[];
   source_files?: { name: string; media_type?: string; item_count: number; at?: string }[];
 }): Promise<{ ok: boolean; id: number; rfq_no: string }> {
   return post("/api/admin/rfq", body);
@@ -168,7 +168,7 @@ export function updateRfq(
     notes?: string;
     received_at?: string;
     assignee_id?: number;
-    items?: { part_no: string; description: string; qty: number; remark?: string }[];
+    items?: { part_no: string; description: string; type?: string; serial_no?: string; qty: number; remark?: string }[];
     source_files?: { name: string; media_type?: string; item_count: number; at?: string }[];
   }
 ): Promise<{ ok: boolean; id: number }> {

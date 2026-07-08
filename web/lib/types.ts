@@ -217,6 +217,8 @@ export type RfqOcrResult = {
   items?: {
     part_no?: string;
     description?: string;
+    type?: string;
+    serial_no?: string;
     maker?: string;
     qty?: number;
     unit?: string;
@@ -749,6 +751,8 @@ export type PipelineData = {
 export type RfqItem = {
   part_no: string;
   description: string;
+  type?: string;
+  serial_no?: string;
   qty: number;
   unit: string;
   unit_price: number | null;
