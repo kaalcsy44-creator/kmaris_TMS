@@ -199,6 +199,8 @@ export type PoDetail = {
 export type PoWorkItem = {
   part_no: string;
   description: string;
+  type?: string;
+  serial_no?: string;
   maker?: string;
   qty: number;
   unit: string;
@@ -342,6 +344,8 @@ export type VendorQuoteItem = {
   item_no?: number | string;
   part_no: string;
   description: string;
+  type?: string;
+  serial_no?: string;
   maker?: string;
   manufacturer?: string;
   origin?: string;
@@ -355,6 +359,8 @@ export type VendorQuoteItem = {
 export type CustomerQuoteItem = {
   part_no: string;
   description: string;
+  type?: string;
+  serial_no?: string;
   qty: number;
   unit: string;
   cost_price: number | null;

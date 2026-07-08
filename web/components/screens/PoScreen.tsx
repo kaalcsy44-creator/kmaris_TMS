@@ -1769,6 +1769,8 @@ function ItemEditor({
               <th className="seq">No.</th>
               <th>Part No.</th>
               <th>Description</th>
+              <th>Type</th>
+              <th>Serial No.</th>
               <th>Maker</th>
               <th className="num">Qty</th>
               <th>Unit</th>
@@ -1797,22 +1799,28 @@ function ItemEditor({
                   <textarea {...gridCellProps(i, 1)} className="desc" rows={1} value={it.description} onChange={(e) => patch(i, "description", e.target.value)} />
                 </td>
                 <td>
-                  <textarea {...gridCellProps(i, 2)} className="wrapcell" rows={1} value={it.maker ?? ""} onChange={(e) => patch(i, "maker", e.target.value)} />
+                  <textarea {...gridCellProps(i, 2)} className="wrapcell" rows={1} value={it.type ?? ""} onChange={(e) => patch(i, "type", e.target.value)} />
+                </td>
+                <td>
+                  <textarea {...gridCellProps(i, 3)} className="wrapcell" rows={1} value={it.serial_no ?? ""} onChange={(e) => patch(i, "serial_no", e.target.value)} />
+                </td>
+                <td>
+                  <textarea {...gridCellProps(i, 4)} className="wrapcell" rows={1} value={it.maker ?? ""} onChange={(e) => patch(i, "maker", e.target.value)} />
                 </td>
                 <td>
                   <input
-                    {...gridCellProps(i, 3)}
+                    {...gridCellProps(i, 5)}
                     className="num"
                     value={amountInputValue(it.qty)}
                     onChange={(e) => patch(i, "qty", e.target.value)}
                   />
                 </td>
                 <td>
-                  <input {...gridCellProps(i, 4)} value={it.unit} onChange={(e) => patch(i, "unit", e.target.value)} />
+                  <input {...gridCellProps(i, 6)} value={it.unit} onChange={(e) => patch(i, "unit", e.target.value)} />
                 </td>
                 <td>
                   <input
-                    {...gridCellProps(i, 5)}
+                    {...gridCellProps(i, 7)}
                     className="num"
                     value={amountInputValue(it.unit_price)}
                     onChange={(e) => patch(i, "unit_price", e.target.value)}
@@ -1820,21 +1828,21 @@ function ItemEditor({
                 </td>
                 <td>
                   <input
-                    {...gridCellProps(i, 6)}
+                    {...gridCellProps(i, 8)}
                     className="num"
                     value={amountInputValue(it.amount)}
                     onChange={(e) => patch(i, "amount", e.target.value)}
                   />
                 </td>
                 <td>
-                  <textarea {...gridCellProps(i, 7)} className="wrapcell" rows={1} value={it.remark ?? ""} onChange={(e) => patch(i, "remark", e.target.value)} />
+                  <textarea {...gridCellProps(i, 9)} className="wrapcell" rows={1} value={it.remark ?? ""} onChange={(e) => patch(i, "remark", e.target.value)} />
                 </td>
               </tr>
             ))}
           </tbody>
           <tfoot>
             <tr>
-              <td colSpan={8} className="total-label">Total</td>
+              <td colSpan={10} className="total-label">Total</td>
               <td className="num total-value">
                 <DualCurrencyAmount value={total} currency={currency} />
                 <span className="fx-note">{fxRateText()}</span>
@@ -1858,6 +1866,8 @@ function poItemsFromVendorQuote(vq: VendorQuoteForImport): PoWorkItem[] {
     return {
       part_no: it.part_no ?? "",
       description: it.description ?? "",
+      type: it.type ?? "",
+      serial_no: it.serial_no ?? "",
       maker: it.maker ?? it.manufacturer ?? "",
       qty,
       unit: it.unit ?? "PCS",

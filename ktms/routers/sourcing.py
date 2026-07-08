@@ -428,6 +428,8 @@ def create_vendor_rfq(rfq_id: int, body: VendorRfqCreate):
         req_items = [{
             "part_no": it.get("part_no", ""),
             "description": it.get("description", ""),
+            "type": it.get("type", ""),
+            "serial_no": it.get("serial_no", ""),
             "qty": it.get("qty", 1),
         } for it in (rfq.items or [])]
 
@@ -531,6 +533,8 @@ def update_vendor_rfq(vrfq_id: int, body: VendorRfqUpdate):
             vr.items = [{
                 "part_no": (it.get("part_no") or "").strip(),
                 "description": (it.get("description") or "").strip(),
+                "type": (it.get("type") or "").strip(),
+                "serial_no": (it.get("serial_no") or "").strip(),
                 "qty": it.get("qty", 1) or 1,
                 "unit": (it.get("unit") or "").strip(),
                 "remark": (it.get("remark") or "").strip(),

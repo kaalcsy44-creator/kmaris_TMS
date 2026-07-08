@@ -408,6 +408,8 @@ def create_order(body: OrderCreate):
             items.append({
                 "part_no": it.part_no.strip(),
                 "description": it.description.strip(),
+                "type": (it.type or "").strip(),
+                "serial_no": (it.serial_no or "").strip(),
                 "maker": it.maker.strip(),
                 "qty": qty,
                 "unit": it.unit or "PCS",
@@ -471,6 +473,8 @@ def update_order(order_id: int, body: OrderUpdate):
                 items.append({
                     "part_no": it.part_no.strip(),
                     "description": it.description.strip(),
+                    "type": (it.type or "").strip(),
+                    "serial_no": (it.serial_no or "").strip(),
                     "maker": it.maker.strip(),
                     "qty": qty,
                     "unit": it.unit or "PCS",
@@ -546,6 +550,8 @@ def create_purchase_order(body: PurchaseOrderCreate):
             items.append({
                 "part_no": it.part_no.strip(),
                 "description": it.description.strip(),
+                "type": (it.type or "").strip(),
+                "serial_no": (it.serial_no or "").strip(),
                 "maker": it.maker.strip(),
                 "qty": qty,
                 "unit": it.unit or "PCS",
@@ -649,6 +655,8 @@ def update_purchase_order(po_id: int, body: PurchaseOrderUpdate):
                 items.append({
                     "part_no": it.part_no.strip(),
                     "description": it.description.strip(),
+                    "type": (it.type or "").strip(),
+                    "serial_no": (it.serial_no or "").strip(),
                     "maker": it.maker.strip(),
                     "qty": qty,
                     "unit": it.unit or "PCS",

@@ -1239,6 +1239,8 @@ def _ocr_image_media_type(file: UploadFile) -> str | None:
 class PoWorkItem(BaseModel):
     part_no: str = ""
     description: str = ""
+    type: str | None = ""        # 엔진/부품 타입(예: H35DF)
+    serial_no: str | None = ""   # 시리얼 번호
     maker: str = ""
     qty: float = 1
     unit: str = "PCS"
