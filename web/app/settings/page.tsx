@@ -1621,12 +1621,14 @@ function EmailTemplatesTab() {
   const [cols, setCols] = useState<string[]>([]);
   const [customized, setCustomized] = useState(false);
   const [preview, setPreview] = useState<{ subject: string; body: string } | null>(null);
+  const [previewing, setPreviewing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
   const subjectRef = useRef<HTMLInputElement>(null);
   const lastFocus = useRef<"subject" | "body">("body");
+  const previewSeq = useRef(0);
 
   function load() {
     fetchEmailTemplates("vendor_rfq")
@@ -1652,10 +1654,33 @@ function EmailTemplatesTab() {
       setCols(data.default_item_cols);
       setCustomized(false);
     }
-    setPreview(null);
     setMsg(null);
     setErr(null);
   }, [data, scope, lang]);
+
+  // 실시간 미리보기: 제목·본문·컬럼·언어가 바뀌면 디바운스 후 서버 렌더를 갱신한다.
+  // (서버가 샘플 데이터로 토큰/{{item_list}}를 치환하므로 클라이언트 렌더와 항상 일치)
+  useEffect(() => {
+    if (!data) return;
+    const seq = ++previewSeq.current;
+    setPreviewing(true);
+    const t = setTimeout(async () => {
+      try {
+        const p = await previewEmailTemplate({
+          lang,
+          subject_tpl: subject,
+          body_tpl: body,
+          options: { item_cols: cols },
+        });
+        if (seq === previewSeq.current) setPreview(p);
+      } catch {
+        /* 편집 중 일시적 실패는 조용히 무시 — 다음 입력에서 재시도된다. */
+      } finally {
+        if (seq === previewSeq.current) setPreviewing(false);
+      }
+    }, 350);
+    return () => clearTimeout(t);
+  }, [data, lang, subject, body, cols]);
 
   function insertToken(tok: string) {
     const ins = `{{${tok}}}`;
@@ -1681,19 +1706,6 @@ function EmailTemplatesTab() {
     });
   }
 
-  async function doPreview() {
-    setBusy(true);
-    setErr(null);
-    try {
-      setPreview(
-        await previewEmailTemplate({ lang, subject_tpl: subject, body_tpl: body, options: { item_cols: cols } })
-      );
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "Preview failed");
-    } finally {
-      setBusy(false);
-    }
-  }
   async function doSave() {
     setBusy(true);
     setErr(null);
@@ -1770,46 +1782,64 @@ function EmailTemplatesTab() {
         ))}
       </div>
 
-      <div className="form-field" style={{ marginTop: 10 }}>
-        <label>Subject</label>
-        <input
-          ref={subjectRef}
-          value={subject}
-          onFocus={() => (lastFocus.current = "subject")}
-          onChange={(e) => setSubject(e.target.value)}
-        />
-      </div>
-      <div className="form-field" style={{ marginTop: 8 }}>
-        <label>Body</label>
-        <textarea
-          ref={bodyRef}
-          className="po-textarea"
-          style={{ minHeight: 320, fontFamily: "ui-monospace, monospace" }}
-          value={body}
-          onFocus={() => (lastFocus.current = "body")}
-          onChange={(e) => setBody(e.target.value)}
-        />
-      </div>
+      <div className="email-tpl-split">
+        <div className="email-tpl-editor">
+          <div className="form-field" style={{ marginTop: 10 }}>
+            <label>Subject</label>
+            <input
+              ref={subjectRef}
+              value={subject}
+              onFocus={() => (lastFocus.current = "subject")}
+              onChange={(e) => setSubject(e.target.value)}
+            />
+          </div>
+          <div className="form-field" style={{ marginTop: 8 }}>
+            <label>Body</label>
+            <textarea
+              ref={bodyRef}
+              className="po-textarea"
+              style={{ minHeight: 320, fontFamily: "ui-monospace, monospace" }}
+              value={body}
+              onFocus={() => (lastFocus.current = "body")}
+              onChange={(e) => setBody(e.target.value)}
+            />
+          </div>
 
-      <div className="form-field" style={{ marginTop: 8 }}>
-        <label>{"ITEM LIST columns  ({{item_list}})"}</label>
-        <div className="email-tpl-cols">
-          {data.item_cols.map((c) => (
-            <label key={c.key} className="email-tpl-col">
-              <input
-                type="checkbox"
-                checked={cols.includes(c.key)}
-                onChange={() => toggleCol(c.key)}
-              />
-              {lang === "ko" ? c.label_ko : c.label_en}
-              <span className="muted"> ({c.key})</span>
-            </label>
-          ))}
+          <div className="form-field" style={{ marginTop: 8 }}>
+            <label>{"ITEM LIST columns  ({{item_list}})"}</label>
+            <div className="email-tpl-cols">
+              {data.item_cols.map((c) => (
+                <label key={c.key} className="email-tpl-col">
+                  <input
+                    type="checkbox"
+                    checked={cols.includes(c.key)}
+                    onChange={() => toggleCol(c.key)}
+                  />
+                  {lang === "ko" ? c.label_ko : c.label_en}
+                  <span className="muted"> ({c.key})</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="email-tpl-preview">
+          <div className="sub-h">
+            Preview (sample data)
+            {previewing ? <span className="email-tpl-preview-live"> · updating…</span> : null}
+          </div>
+          {preview ? (
+            <>
+              <div className="email-tpl-preview-subj"><b>Subject:</b> {preview.subject}</div>
+              <pre className="email-tpl-preview-body">{preview.body}</pre>
+            </>
+          ) : (
+            <div className="muted">Rendering…</div>
+          )}
         </div>
       </div>
 
       <div className="form-actions">
-        <button className="btn" onClick={doPreview} disabled={busy}>Preview</button>
         <button className="btn primary" onClick={doSave} disabled={busy}>
           {busy ? "Working…" : "Save"}
         </button>
@@ -1817,14 +1847,6 @@ function EmailTemplatesTab() {
         {msg ? <span className="action-ok">{msg}</span> : null}
         {err ? <span className="action-err">{err}</span> : null}
       </div>
-
-      {preview ? (
-        <div className="email-tpl-preview">
-          <div className="sub-h">Preview (sample data)</div>
-          <div className="email-tpl-preview-subj"><b>Subject:</b> {preview.subject}</div>
-          <pre className="email-tpl-preview-body">{preview.body}</pre>
-        </div>
-      ) : null}
     </div>
   );
 }

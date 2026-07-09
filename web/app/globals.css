@@ -6240,12 +6240,33 @@ table.mini .num {
   cursor: pointer;
 }
 
+/* 편집기(좌) + 실시간 미리보기(우) 2단 배치. 좁은 화면에선 세로로 쌓임. */
+.email-tpl-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+.email-tpl-editor { min-width: 0; }
 .email-tpl-preview {
   margin-top: 14px;
   border: 1px solid var(--line);
   border-radius: 10px;
   padding: 12px 14px;
   background: var(--page-bg);
+}
+/* 2단 안의 미리보기는 상단 여백 제거 + 편집 중 화면에 붙어 따라오도록 sticky. */
+.email-tpl-split .email-tpl-preview {
+  margin-top: 0;
+  position: sticky;
+  top: 12px;
+  max-height: calc(100vh - 130px);
+  overflow: auto;
+}
+.email-tpl-preview-live { font-weight: 400; color: var(--muted); font-size: 12px; }
+@media (max-width: 980px) {
+  .email-tpl-split { grid-template-columns: 1fr; }
+  .email-tpl-split .email-tpl-preview { position: static; max-height: none; }
 }
 .email-tpl-preview-subj { font-size: 13px; margin: 6px 0 8px; }
 .email-tpl-preview-body {
