@@ -34,12 +34,17 @@ import DocSendPanel from "@/components/common/DocSendPanel";
 import DetailTabBar, { DetailTab } from "@/components/common/DetailTabBar";
 import {
   amountInputValue,
+  DeleteSelectedButton,
+  deleteSelectedRows,
   DualCurrencyAmount,
   fxRateText,
   gridCellProps,
+  ItemSelectCell,
+  ItemSelectHeaderCell,
   itemRowClass,
   parseAmountInput,
   StageTotal,
+  useRowSelection,
 } from "@/components/common/itemTable";
 import { tr } from "@/lib/labels";
 import type {
@@ -1802,6 +1807,7 @@ function ItemEditor({
     );
   }
   const total = items.reduce((sum, it) => sum + Number(it.amount || 0), 0);
+  const sel = useRowSelection();
 
   return (
     <div style={{ marginTop: 16 }}>
@@ -1809,6 +1815,7 @@ function ItemEditor({
         <div className="sub-h">Item list</div>
         <div className="items-head-actions">
           {headerActions}
+          <DeleteSelectedButton sel={sel} onDelete={() => deleteSelectedRows(items, sel, onChange)} />
           <button className="btn sm items-head-add" onClick={() => onChange([...items, blankItem()])}>+ Add</button>
         </div>
       </div>
@@ -1816,7 +1823,7 @@ function ItemEditor({
         <table className="mini wide lead-tools">
           <thead>
             <tr>
-              <th className="row-tools"></th>
+              <ItemSelectHeaderCell count={items.length} sel={sel} />
               <th className="seq">No.</th>
               <th>Part No.</th>
               <th>Description</th>
@@ -1833,15 +1840,7 @@ function ItemEditor({
           <tbody>
             {items.map((it, i) => (
               <tr key={i} className={itemRowClass(i)}>
-                <td className="row-tools">
-                  <button
-                    className="row-del"
-                    onClick={() => onChange(items.filter((_, idx) => idx !== i))}
-                    disabled={items.length === 1}
-                  >
-                    ×
-                  </button>
-                </td>
+                <ItemSelectCell index={i} sel={sel} />
                 <td className="seq">{i + 1}</td>
                 <td>
                   <textarea {...gridCellProps(i, 0)} className="wrapcell" rows={1} value={it.part_no} onChange={(e) => patch(i, "part_no", e.target.value)} />

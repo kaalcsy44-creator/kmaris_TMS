@@ -19,6 +19,12 @@ import { can, canEditDeal, editBlockReason } from "@/lib/auth";
 import CustomerName from "@/components/common/CustomerName";
 import { useColumnLayout } from "@/components/common/useColumnLayout";
 import { ColumnResizer } from "@/components/common/tableLayout";
+import {
+  DeleteSelectedButton,
+  ItemSelectCell,
+  ItemSelectHeaderCell,
+  useRowSelection,
+} from "@/components/common/itemTable";
 
 // 품목 표에서 폭 조절 가능한 컬럼(관리번호·순번·삭제 열 제외)과 기본폭(px).
 const RFQ_ITEM_COLS = [
@@ -196,8 +202,11 @@ export default function NewRfqForm({
   function addItem() {
     setItems((prev) => [...prev, { ...EMPTY_ITEM }]);
   }
-  function removeItem(i: number) {
-    setItems((prev) => prev.filter((_, idx) => idx !== i));
+  const itemSel = useRowSelection();
+  function deleteSelectedItems() {
+    if (itemSel.count === 0) return;
+    setItems((prev) => prev.filter((_, idx) => !itemSel.selected.has(idx)));
+    itemSel.clear();
   }
 
   function matchName<T extends { name: string }>(hint: string | null | undefined, rows: T[]) {
@@ -677,7 +686,10 @@ export default function NewRfqForm({
 
       <div className="items-head" style={{ marginTop: 18 }}>
         <div className="sub-h">Item list</div>
-        <button type="button" className="btn sm items-head-add" onClick={addItem}>+ Add</button>
+        <div className="items-head-actions">
+          <DeleteSelectedButton sel={itemSel} onDelete={deleteSelectedItems} />
+          <button type="button" className="btn sm items-head-add" onClick={addItem}>+ Add</button>
+        </div>
       </div>
       <div className="table-wrap item-scroll">
       <table className="mini items-edit resizable-cols">
@@ -690,7 +702,7 @@ export default function NewRfqForm({
         </colgroup>
         <thead>
           <tr>
-            <th className="row-tools"></th>
+            <ItemSelectHeaderCell count={items.length} sel={itemSel} />
             <th className="seq">#</th>
             {RFQ_ITEM_COLS.map((c) => (
               <th key={c.key} className={`col-resizable${c.key === "qty" ? " num" : ""}`}>
@@ -703,17 +715,7 @@ export default function NewRfqForm({
         <tbody>
           {items.map((it, i) => (
             <tr key={i}>
-              <td className="row-tools">
-                <button
-                  type="button"
-                  className="row-del"
-                  onClick={() => removeItem(i)}
-                  disabled={items.length === 1}
-                  title="Delete"
-                >
-                  ✕
-                </button>
-              </td>
+              <ItemSelectCell index={i} sel={itemSel} />
               <td className="seq">{i + 1}</td>
               <td>
                 <textarea

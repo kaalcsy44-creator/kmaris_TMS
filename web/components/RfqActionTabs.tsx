@@ -71,14 +71,19 @@ import DetailTabBar, { DetailTab } from "./common/DetailTabBar";
 import {
   amountInputValue,
   convertCurrency,
+  DeleteSelectedButton,
+  deleteSelectedRows,
   DualCurrencyAmount,
   dualCurrencyText,
   fxRateText,
   gridCellProps,
+  ItemSelectCell,
+  ItemSelectHeaderCell,
   itemRowClass,
   parseAmountInput,
   roundUp,
   StageTotal,
+  useRowSelection,
 } from "./common/itemTable";
 
 /** 현재 시각 "YYYY-MM-DDTHH:MM" (datetime-local 기본값). */
@@ -1061,6 +1066,7 @@ function VendorRfqItemEditor({
       { part_no: "", description: "", qty: 1, unit: last?.unit || "PCS", unit_price: null, amount: null, remark: "" },
     ]);
   }
+  const sel = useRowSelection();
 
   return (
     <>
@@ -1068,6 +1074,7 @@ function VendorRfqItemEditor({
         <div className="form-section-title">Item list</div>
         <div className="items-head-actions">
           {headerActions}
+          <DeleteSelectedButton sel={sel} onDelete={() => deleteSelectedRows(items, sel, onChange)} />
           <button className="btn sm items-head-add" onClick={add}>+ Add</button>
         </div>
       </div>
@@ -1075,7 +1082,7 @@ function VendorRfqItemEditor({
         <table className="mini wide lead-tools">
           <thead>
             <tr>
-              <th className="row-tools"></th>
+              <ItemSelectHeaderCell count={items.length} sel={sel} />
               <th className="seq">No.</th>
               <th>Part No.</th>
               <th>Description</th>
@@ -1094,9 +1101,7 @@ function VendorRfqItemEditor({
             ) : (
               items.map((it, i) => (
                 <tr key={i} className={itemRowClass(i)}>
-                  <td className="row-tools">
-                    <button className="row-del" onClick={() => onChange(items.filter((_, idx) => idx !== i))}>×</button>
-                  </td>
+                  <ItemSelectCell index={i} sel={sel} />
                   <td className="seq">{i + 1}</td>
                   <td><textarea {...gridCellProps(i, 0)} className="wrapcell" rows={1} value={it.part_no || ""} onChange={(e) => patch(i, "part_no", e.target.value)} /></td>
                   <td><textarea {...gridCellProps(i, 1)} className="desc" rows={1} value={it.description || ""} onChange={(e) => patch(i, "description", e.target.value)} /></td>
@@ -2089,8 +2094,11 @@ function VendorRfqAction({
       { part_no: "", description: "", qty: 1, unit: "", unit_price: null, amount: null, remark: "" },
     ]);
   }
-  function removeItem(i: number) {
-    setRfqItems((prev) => prev.filter((_, idx) => idx !== i));
+  const itemSel = useRowSelection();
+  function deleteSelectedItems() {
+    if (itemSel.count === 0) return;
+    setRfqItems((prev) => prev.filter((_, idx) => !itemSel.selected.has(idx)));
+    itemSel.clear();
   }
 
   // 벤더 선택 → 저장된 벤더 이메일을 Recipient email 로 자동 채움(편집 뷰와 동일 동작).
@@ -2249,6 +2257,7 @@ function VendorRfqAction({
             <div className="form-section-title">Item list</div>
             <div className="items-head-actions">
               <button className="btn sm" onClick={loadCustomerRfqItems}>Load customer RFQ</button>
+              <DeleteSelectedButton sel={itemSel} onDelete={deleteSelectedItems} />
               <button className="btn sm items-head-add" onClick={addItem}>+ Add</button>
             </div>
           </div>
@@ -2256,7 +2265,7 @@ function VendorRfqAction({
             <table className="mini wide lead-tools">
               <thead>
                 <tr>
-                  <th className="row-tools"></th>
+                  <ItemSelectHeaderCell count={rfqItems.length} sel={itemSel} />
                   <th className="seq">No.</th>
                   <th>Part No.</th>
                   <th>Description</th>
@@ -2275,9 +2284,7 @@ function VendorRfqAction({
                 ) : (
                   rfqItems.map((it, i) => (
                     <tr key={i} className={itemRowClass(i)}>
-                      <td className="row-tools">
-                        <button className="row-del" title="Remove row" onClick={() => removeItem(i)}>×</button>
-                      </td>
+                      <ItemSelectCell index={i} sel={itemSel} />
                       <td className="seq">{i + 1}</td>
                       <td><textarea {...gridCellProps(i, 0)} className="wrapcell" rows={1} value={it.part_no || ""} onChange={(e) => patchItem(i, "part_no", e.target.value)} /></td>
                       <td><textarea {...gridCellProps(i, 1)} className="desc" rows={1} value={it.description || ""} onChange={(e) => patchItem(i, "description", e.target.value)} /></td>
@@ -2689,6 +2696,7 @@ function VendorQuoteItemEditor({
     (sum, it) => sum + Number(it.cost_price || 0) * Number(it.qty || 1),
     0
   );
+  const sel = useRowSelection();
 
   return (
     <div style={{ marginTop: 12 }}>
@@ -2696,6 +2704,7 @@ function VendorQuoteItemEditor({
         <div className="sub-h">Item list</div>
         <div className="items-head-actions">
           {headerActions}
+          <DeleteSelectedButton sel={sel} onDelete={() => deleteSelectedRows(items, sel, onChange)} />
           <button className="btn sm items-head-add" onClick={add}>+ Add</button>
         </div>
       </div>
@@ -2703,7 +2712,7 @@ function VendorQuoteItemEditor({
         <table className="mini wide lead-tools">
           <thead>
             <tr>
-              <th className="row-tools"></th>
+              <ItemSelectHeaderCell count={items.length} sel={sel} />
               <th className="seq">No.</th>
               <th>Part No.</th>
               <th>Description</th>
@@ -2722,9 +2731,7 @@ function VendorQuoteItemEditor({
           <tbody>
             {items.map((it, i) => (
               <tr key={i} className={itemRowClass(i)}>
-                <td className="row-tools">
-                  <button className="row-del" disabled={items.length === 1} onClick={() => onChange(items.filter((_, idx) => idx !== i))}>×</button>
-                </td>
+                <ItemSelectCell index={i} sel={sel} />
                 <td className="seq">{i + 1}</td>
                 <td><textarea {...gridCellProps(i, 0)} className="wrapcell" rows={1} value={it.part_no} onChange={(e) => patch(i, "part_no", e.target.value)} /></td>
                 <td><textarea {...gridCellProps(i, 1)} className="desc" rows={1} value={it.description} onChange={(e) => patch(i, "description", e.target.value)} /></td>
@@ -3260,6 +3267,7 @@ function CustomerQuoteItemEditor({
   const costCur = (costCurrency || "USD").toUpperCase();
   const saleCur = (currency || "USD").toUpperCase();
   const total = items.reduce((sum, it) => sum + Number(it.amount || 0), 0);
+  const sel = useRowSelection();
 
   return (
     <div style={{ marginTop: 12 }}>
@@ -3267,6 +3275,7 @@ function CustomerQuoteItemEditor({
         <div className="sub-h">Item list</div>
         <div className="items-head-actions">
           {headerActions}
+          <DeleteSelectedButton sel={sel} onDelete={() => deleteSelectedRows(items, sel, onChange)} />
           <button className="btn sm items-head-add" onClick={add}>+ Add</button>
         </div>
       </div>
@@ -3274,7 +3283,7 @@ function CustomerQuoteItemEditor({
         <table className="mini wide lead-tools">
           <thead>
             <tr>
-              <th className="row-tools"></th>
+              <ItemSelectHeaderCell count={items.length} sel={sel} />
               <th className="seq">No.</th>
               <th>Part No.</th>
               <th>Description</th>
@@ -3293,9 +3302,7 @@ function CustomerQuoteItemEditor({
           <tbody>
             {items.map((it, i) => (
               <tr key={i} className={itemRowClass(i)}>
-                <td className="row-tools">
-                  <button className="row-del" disabled={items.length === 1} onClick={() => onChange(items.filter((_, idx) => idx !== i))}>×</button>
-                </td>
+                <ItemSelectCell index={i} sel={sel} />
                 <td className="seq">{i + 1}</td>
                 <td><textarea {...gridCellProps(i, 0)} className="wrapcell" rows={1} value={it.part_no} onChange={(e) => patch(i, "part_no", e.target.value)} /></td>
                 <td><textarea {...gridCellProps(i, 1)} className="desc" rows={1} value={it.description} onChange={(e) => patch(i, "description", e.target.value)} /></td>

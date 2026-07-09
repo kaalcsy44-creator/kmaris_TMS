@@ -30,12 +30,17 @@ import ProjectNo from "@/components/common/ProjectNo";
 import CurrencyToggle from "@/components/common/CurrencyToggle";
 import {
   amountInputValue,
+  DeleteSelectedButton,
+  deleteSelectedRows,
   DualCurrencyAmount,
   dualCurrencyText,
   fxRateText,
   gridCellProps,
+  ItemSelectCell,
+  ItemSelectHeaderCell,
   itemRowClass,
   parseAmountInput,
+  useRowSelection,
 } from "@/components/common/itemTable";
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -1300,12 +1305,14 @@ function ItemEditor({
     setItems(next);
   }
   const total = items.reduce((sum, item) => sum + num(item.amount), 0);
+  const sel = useRowSelection();
 
   return (
     <div className="table-wrap">
-      <table className="mini wide">
+      <table className="mini wide lead-tools">
         <thead>
           <tr>
+            <ItemSelectHeaderCell count={items.length} sel={sel} />
             <th className="seq">No.</th>
             <th>Part No.</th>
             <th>Description</th>
@@ -1327,12 +1334,12 @@ function ItemEditor({
               </>
             )}
             <th>Remark</th>
-            <th></th>
           </tr>
         </thead>
         <tbody>
           {items.map((item, i) => (
             <tr key={i} className={itemRowClass(i)}>
+              <ItemSelectCell index={i} sel={sel} />
               <td className="seq">{i + 1}</td>
               <td><textarea {...gridCellProps(i, 0)} className="wrapcell" rows={1} value={item.part_no || ""} onChange={(e) => patch(i, "part_no", e.target.value)} /></td>
               <td><textarea {...gridCellProps(i, 1)} className="desc" rows={1} value={item.description || ""} onChange={(e) => patch(i, "description", e.target.value)} /></td>
@@ -1354,28 +1361,28 @@ function ItemEditor({
                 </>
               )}
               <td><textarea {...gridCellProps(i, packing ? 9 : 8)} className="wrapcell" rows={1} value={item.remark || ""} onChange={(e) => patch(i, "remark", e.target.value)} /></td>
-              <td>
-                <button className="row-del" onClick={() => setItems(items.filter((_, idx) => idx !== i))}>×</button>
-              </td>
             </tr>
           ))}
         </tbody>
         {!packing ? (
           <tfoot>
             <tr>
-              <td colSpan={7} className="total-label">Total</td>
+              <td colSpan={8} className="total-label">Total</td>
               <td className="num total-value">
                 <DualCurrencyAmount value={total} currency={currency} />
                 <span className="fx-note">{fxRateText()}</span>
               </td>
-              <td colSpan={3}></td>
+              <td colSpan={2}></td>
             </tr>
           </tfoot>
         ) : null}
       </table>
-      <button className="btn" style={{ marginTop: 10 }} onClick={() => setItems([...items, blankItem(packing)])}>
-        Add row
-      </button>
+      <div className="items-head-actions" style={{ marginTop: 10 }}>
+        <DeleteSelectedButton sel={sel} onDelete={() => deleteSelectedRows(items, sel, setItems)} />
+        <button className="btn" onClick={() => setItems([...items, blankItem(packing)])}>
+          Add row
+        </button>
+      </div>
     </div>
   );
 }

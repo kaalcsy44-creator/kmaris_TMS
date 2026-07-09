@@ -1,6 +1,119 @@
+"use client";
+
 import type { KeyboardEvent } from "react";
+import { useCallback, useState } from "react";
 
 export const USD_KRW_RATE = 1543.41;
+
+// ── 품목표 다중 선택(체크박스) ─────────────────────────────────────────────
+// 각 편집기에서 행을 체크박스로 선택 → 헤더 "Delete" 로 일괄 삭제한다.
+// 선택은 행 인덱스 기준이므로 삭제·정렬 등 행 구성이 바뀌면 clear() 로 초기화한다.
+export type RowSelection = {
+  selected: Set<number>;
+  isSelected: (i: number) => boolean;
+  toggle: (i: number) => void;
+  setAll: (count: number, on: boolean) => void;
+  clear: () => void;
+  count: number;
+};
+
+export function useRowSelection(): RowSelection {
+  const [selected, setSelected] = useState<Set<number>>(() => new Set());
+  const toggle = useCallback((i: number) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i);
+      else next.add(i);
+      return next;
+    });
+  }, []);
+  const setAll = useCallback((count: number, on: boolean) => {
+    setSelected(on ? new Set(Array.from({ length: count }, (_, i) => i)) : new Set());
+  }, []);
+  const clear = useCallback(() => setSelected(new Set()), []);
+  return {
+    selected,
+    isSelected: (i: number) => selected.has(i),
+    toggle,
+    setAll,
+    clear,
+    count: selected.size,
+  };
+}
+
+// 선택된 행을 제거하고 선택 상태를 초기화. onChange 로 남은 행을 전달한다.
+// 빈 결과를 허용하려면 allowEmpty=true (마지막 1행까지 삭제 가능).
+export function deleteSelectedRows<T>(
+  items: T[],
+  sel: RowSelection,
+  onChange: (next: T[]) => void
+) {
+  if (sel.count === 0) return;
+  onChange(items.filter((_, idx) => !sel.selected.has(idx)));
+  sel.clear();
+}
+
+// 품목표 헤더 좌측(row-tools) 열의 전체 선택 체크박스.
+export function ItemSelectHeaderCell({
+  count,
+  sel,
+}: {
+  count: number;
+  sel: RowSelection;
+}) {
+  const all = count > 0 && sel.count === count;
+  const some = sel.count > 0 && !all;
+  return (
+    <th className="row-tools">
+      <input
+        type="checkbox"
+        className="row-check"
+        aria-label="Select all rows"
+        checked={all}
+        disabled={count === 0}
+        ref={(el) => {
+          if (el) el.indeterminate = some;
+        }}
+        onChange={(e) => sel.setAll(count, e.target.checked)}
+      />
+    </th>
+  );
+}
+
+// 품목표 각 행 좌측(row-tools) 열의 선택 체크박스.
+export function ItemSelectCell({ index, sel }: { index: number; sel: RowSelection }) {
+  return (
+    <td className="row-tools">
+      <input
+        type="checkbox"
+        className="row-check"
+        aria-label={`Select row ${index + 1}`}
+        checked={sel.isSelected(index)}
+        onChange={() => sel.toggle(index)}
+      />
+    </td>
+  );
+}
+
+// 품목표 헤더의 "+ Add" 옆 일괄 삭제 버튼. 선택된 행이 없으면 비활성.
+export function DeleteSelectedButton({
+  sel,
+  onDelete,
+}: {
+  sel: RowSelection;
+  onDelete: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="btn sm danger items-head-del"
+      disabled={sel.count === 0}
+      onClick={onDelete}
+    >
+      Delete{sel.count > 0 ? ` (${sel.count})` : ""}
+    </button>
+  );
+}
 
 export function parseAmountInput(value: string): number | null {
   const normalized = value.replace(/,/g, "").trim();
