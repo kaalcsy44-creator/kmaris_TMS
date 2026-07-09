@@ -2,6 +2,7 @@
 from __future__ import annotations
 import json
 import os
+import re
 import smtplib
 from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
@@ -57,12 +58,20 @@ def send_email(
         return False
 
     sender = (from_addr or "").strip() or cfg["from"]
+    # To·Cc 는 쉼표(또는 세미콜론)로 여러 주소를 받을 수 있다. 헤더엔 쉼표 결합
+    # 문자열을 쓰되, SMTP 봉투(envelope) 수신자는 반드시 개별 주소 리스트로 넘겨야 한다.
+    def _addrs(s: str) -> List[str]:
+        return [a.strip() for a in re.split(r"[,;]", s or "") if a.strip()]
+
+    to_list = _addrs(to)
+    cc_list = _addrs(cc)
+
     msg = MIMEMultipart()
     msg["From"] = sender
-    msg["To"] = to
+    msg["To"] = ", ".join(to_list)
     msg["Subject"] = subject
-    if cc:
-        msg["Cc"] = cc
+    if cc_list:
+        msg["Cc"] = ", ".join(cc_list)
 
     msg.attach(MIMEText(body, "plain", "utf-8"))
 
@@ -76,7 +85,7 @@ def send_email(
             server.ehlo()
             server.starttls()
             server.login(cfg["user"], cfg["password"])
-            recipients = [to] + ([cc] if cc else [])
+            recipients = to_list + cc_list
             server.sendmail(sender, recipients, msg.as_bytes())
         return True
     except Exception:

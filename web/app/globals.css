@@ -6408,6 +6408,50 @@ table.mini .num {
 }
 .linklike:hover { color: #00468c; }
 
+/* CC 복수 입력 — 주소를 칩으로 쌓고, 마지막에 입력칸이 이어짐 */
+.cc-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  min-height: 38px;
+  padding: 5px 8px;
+  border: 1px solid var(--input-border, #c7d0de);
+  border-radius: 8px;
+  background: #fff;
+  cursor: text;
+}
+.cc-chips:focus-within { border-color: var(--blue, #0055a8); }
+.cc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px 2px 9px;
+  font-size: 12.5px;
+  color: #1d4ed8;
+  background: #e4edfb;
+  border-radius: 999px;
+}
+.cc-chip-x {
+  border: none;
+  background: none;
+  color: #1d4ed8;
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  padding: 0 2px;
+}
+.cc-chip-x:hover { color: #c04040; }
+.cc-chip-input {
+  flex: 1;
+  min-width: 120px;
+  border: none !important;
+  outline: none;
+  padding: 2px 0 !important;
+  font: inherit;
+  background: transparent;
+}
+
 /* ── 프로젝트 관리번호 표기: 번호(진하고 크게, 컨테이너 색 상속=잘 보임) +
    날짜((yymmdd) 비볼드·1px 작게·회색 유지). 고유 클래스로 기존 .proj-no(회색)와 분리. */
 .pjno { white-space: nowrap; }

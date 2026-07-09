@@ -57,7 +57,7 @@ export default function Modal({
     >
       <div
         className={`pl-modal${form ? " pl-modal--form" : ""}`}
-        style={wide && !form ? { maxWidth: 1120 } : undefined}
+        style={wide ? { maxWidth: 1120 } : undefined}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"

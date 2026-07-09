@@ -23,7 +23,7 @@ function fmtSize(n: number): string {
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
-// 홍보/회사소개 이메일 작성·발송 모달. 좌: 수신정보 / 우: 메일 내용·서명·첨부.
+// Promotional / company-intro email composer. Left: recipient info. Right: content.
 export default function ComposeEmailModal({
   customers,
   onClose,
@@ -33,7 +33,7 @@ export default function ComposeEmailModal({
   onClose: () => void;
   onSent: () => void;
 }) {
-  // 이메일 자동 채움용 상세 고객사(email 포함) — CustomerOption 엔 email 이 없어 별도 로드.
+  // CustomerOption has no email, so load full customers for contact/email auto-fill.
   const { data: fullCustomers } = useCachedData("settings:customers-full", fetchSettingsCustomers);
   const { data: assetData, refresh: refreshAssets } = useCachedData(
     "marketing-assets",
@@ -45,7 +45,8 @@ export default function ComposeEmailModal({
   const [prospectName, setProspectName] = useState("");
   const [contact, setContact] = useState("");
   const [email, setEmail] = useState("");
-  const [cc, setCc] = useState("");
+  const [ccList, setCcList] = useState<string[]>([]);
+  const [ccInput, setCcInput] = useState("");
 
   const [kind, setKind] = useState<TplKind>("intro");
   const [lang, setLang] = useState<Lang>("en");
@@ -72,8 +73,8 @@ export default function ComposeEmailModal({
   const selectedName =
     customerId === "" ? prospectName : custById.get(customerId)?.name ?? "";
 
-  // 템플릿 기본값 로드 — 템플릿 종류·언어·수신 담당자/고객사명이 바뀌면 다시 채운다.
-  // 사용자가 이미 손댄 값은 덮지 않도록, 직전 템플릿 값과 같을 때만 교체한다.
+  // Load template defaults — refetched when template kind / language / recipient changes.
+  // Only replace fields the user hasn't edited (still equal to the last template value).
   const lastTpl = useRef<{ subject: string; body: string; signature: string } | null>(null);
   useEffect(() => {
     let cancelled = false;
@@ -106,6 +107,27 @@ export default function ComposeEmailModal({
     }
   }
 
+  // ── CC: multiple addresses as chips ──────────────────────────────
+  function commitCc(raw: string) {
+    // allow pasting several at once (comma / semicolon / whitespace separated)
+    const parts = raw.split(/[,;\s]+/).map((x) => x.trim()).filter(Boolean);
+    if (!parts.length) return;
+    setCcList((cur) => {
+      const next = [...cur];
+      for (const p of parts) if (!next.includes(p)) next.push(p);
+      return next;
+    });
+    setCcInput("");
+  }
+  function onCcKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter" || e.key === "," || e.key === ";") {
+      e.preventDefault();
+      commitCc(ccInput);
+    } else if (e.key === "Backspace" && !ccInput && ccList.length) {
+      setCcList((cur) => cur.slice(0, -1));
+    }
+  }
+
   function toggleAsset(id: number) {
     setAssetIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
   }
@@ -117,7 +139,7 @@ export default function ComposeEmailModal({
   }
 
   function clearDraft() {
-    if (!confirm("작성 중인 내용을 모두 지울까요?")) return;
+    if (!confirm("Clear all content?")) return;
     setSubject("");
     setBody("");
     setAssetIds([]);
@@ -128,9 +150,10 @@ export default function ComposeEmailModal({
 
   async function send() {
     if (!email.trim()) {
-      setErr("수신자 이메일을 입력하세요.");
+      setErr("Enter a recipient email.");
       return;
     }
+    const cc = [...ccList, ...(ccInput.trim() ? [ccInput.trim()] : [])].join(", ");
     setBusy(true);
     setErr("");
     try {
@@ -150,80 +173,100 @@ export default function ComposeEmailModal({
       });
       onSent();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "발송에 실패했습니다.");
+      setErr(e instanceof Error ? e.message : "Failed to send.");
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <Modal title="홍보 이메일 작성" onClose={onClose} wide>
+    <Modal title="Compose Email" onClose={onClose} form wide>
       {!smtpConfigured ? (
         <div className="state error" style={{ marginBottom: 12 }}>
-          SMTP가 설정되지 않아 실제 발송이 되지 않습니다. 서버 환경변수(SMTP_USER/SMTP_PASSWORD)를 확인하세요.
+          SMTP is not configured, so emails will not actually be sent. Check the server
+          environment variables (SMTP_USER / SMTP_PASSWORD).
         </div>
       ) : null}
 
       <div className="compose-split">
-        {/* ── 좌: 수신 정보 ───────────────────────────── */}
+        {/* ── Left: recipient info ───────────────────────────── */}
         <div className="compose-col">
-          <div className="compose-section-title">수신 정보</div>
+          <div className="compose-section-title">Recipient</div>
           <div className="project-select">
-            <label>고객사 (등록)</label>
+            <label>Customer (registered)</label>
             <CustomerSelect
               value={customerId}
               options={customers}
               onChange={pickCustomer}
-              emptyLabel="— 미등록 잠정사 —"
+              emptyLabel="— Prospect (not registered) —"
             />
           </div>
           {customerId === "" ? (
             <label className="form-field">
-              <span>잠정사 이름</span>
+              <span>Prospect name</span>
               <input value={prospectName} onChange={(e) => setProspectName(e.target.value)} />
             </label>
           ) : null}
           <label className="form-field">
-            <span>담당자</span>
+            <span>Contact</span>
             <input value={contact} onChange={(e) => setContact(e.target.value)} />
           </label>
           <label className="form-field">
-            <span>이메일 *</span>
+            <span>Email *</span>
             <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
           </label>
           <label className="form-field">
-            <span>참조 (CC)</span>
-            <input
-              type="email"
-              value={cc}
-              onChange={(e) => setCc(e.target.value)}
-              placeholder="쉼표로 구분"
-            />
-          </label>
-          <label className="form-field">
-            <span>발신 (From)</span>
+            <span>From</span>
             <input value={from} onChange={(e) => setFrom(e.target.value)} />
           </label>
+          <div className="form-field">
+            <span>CC (multiple)</span>
+            <div className="cc-chips" onClick={() => document.getElementById("cc-input")?.focus()}>
+              {ccList.map((addr) => (
+                <span key={addr} className="cc-chip">
+                  {addr}
+                  <button
+                    type="button"
+                    className="cc-chip-x"
+                    onClick={() => setCcList((cur) => cur.filter((x) => x !== addr))}
+                    aria-label={`Remove ${addr}`}
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+              <input
+                id="cc-input"
+                className="cc-chip-input"
+                type="email"
+                value={ccInput}
+                placeholder={ccList.length ? "" : "Add address, Enter"}
+                onChange={(e) => setCcInput(e.target.value)}
+                onKeyDown={onCcKeyDown}
+                onBlur={() => commitCc(ccInput)}
+              />
+            </div>
+          </div>
         </div>
 
-        {/* ── 우: 메일 내용 ───────────────────────────── */}
+        {/* ── Right: message ───────────────────────────── */}
         <div className="compose-col">
           <div className="compose-section-title">
-            메일 내용
+            Message
             <span className="compose-tpl">
               <button
                 type="button"
                 className={`chip-btn${kind === "intro" ? " on" : ""}`}
                 onClick={() => setKind("intro")}
               >
-                회사소개
+                Company Intro
               </button>
               <button
                 type="button"
                 className={`chip-btn${kind === "brochure" ? " on" : ""}`}
                 onClick={() => setKind("brochure")}
               >
-                브로슈어
+                Brochure
               </button>
               <span className="compose-tpl-sep" />
               <button
@@ -244,24 +287,24 @@ export default function ComposeEmailModal({
           </div>
 
           <label className="form-field">
-            <span>제목</span>
+            <span>Subject</span>
             <input value={subject} onChange={(e) => setSubject(e.target.value)} />
           </label>
           <label className="form-field">
-            <span>본문</span>
+            <span>Body</span>
             <textarea rows={9} value={body} onChange={(e) => setBody(e.target.value)} />
           </label>
 
           <label className="form-field">
             <span className="compose-sig-head">
-              서명
+              Signature
               <label className="compose-sig-toggle">
                 <input
                   type="checkbox"
                   checked={includeSignature}
                   onChange={(e) => setIncludeSignature(e.target.checked)}
                 />
-                메일에 포함
+                Include in email
               </label>
             </span>
             <textarea
@@ -273,7 +316,7 @@ export default function ComposeEmailModal({
           </label>
 
           <div className="form-field">
-            <span>첨부 파일</span>
+            <span>Attachments</span>
             {assets.length ? (
               <div className="compose-assets">
                 {assets.map((a: MarketingAsset) => (
@@ -290,12 +333,12 @@ export default function ComposeEmailModal({
               </div>
             ) : (
               <div className="hint-inline">
-                등록된 자료가 없습니다. 설정에서 회사소개서·브로슈어를 등록하거나 아래에서 파일을 첨부하세요.
+                No saved files. Register brochures in Settings, or attach a file below.
               </div>
             )}
             <div className="compose-upload">
               <button type="button" className="btn ghost" onClick={() => fileRef.current?.click()}>
-                + 파일 첨부
+                + Attach file
               </button>
               <input
                 ref={fileRef}
@@ -308,7 +351,7 @@ export default function ComposeEmailModal({
                 type="button"
                 className="btn ghost"
                 onClick={() => refreshAssets()}
-                title="라이브러리 새로고침"
+                title="Refresh library"
               >
                 ↻
               </button>
@@ -335,13 +378,13 @@ export default function ComposeEmailModal({
 
       <div className="form-actions">
         <button className="btn primary" disabled={busy || !email.trim()} onClick={send}>
-          {busy ? "발송 중…" : "보내기"}
+          {busy ? "Sending…" : "Send"}
         </button>
         <button className="btn" disabled={busy} onClick={onClose}>
-          취소
+          Cancel
         </button>
-        <button className="btn danger" disabled={busy} onClick={clearDraft} style={{ marginLeft: "auto" }}>
-          삭제
+        <button className="btn danger" disabled={busy} onClick={clearDraft}>
+          Clear
         </button>
         {err ? <span className="action-err">{err}</span> : null}
       </div>
