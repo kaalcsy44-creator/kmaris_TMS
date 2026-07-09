@@ -1037,7 +1037,8 @@ export function createVendorQuote(
   receivedAt?: string,
   notes?: string,
   terms?: QuotationTerms,
-  sourceFiles?: RfqSourceFile[]
+  sourceFiles?: RfqSourceFile[],
+  fxRate?: number | null
 ): Promise<{ ok: boolean; vendor_quote_no: string }> {
   return post(`/api/admin/rfq/${rfqId}/vendor-quote`, {
     vendor_rfq_id: vendorRfqId,
@@ -1049,6 +1050,7 @@ export function createVendorQuote(
     notes,
     terms,
     source_files: sourceFiles,
+    fx_rate: fxRate,
   });
 }
 
@@ -1056,6 +1058,15 @@ export function parseVendorQuoteFile(file: File): Promise<{ items: Partial<Vendo
   const fd = new FormData();
   fd.append("file", file);
   return postForm<{ items: Partial<VendorQuoteItem>[] }>("/api/admin/vendor-quote-parse", fd);
+}
+
+// 해당일의 매매기준율(수출입은행) 조회. source: "exim"(고시값) | "fixed"(폴백 고정환율).
+export function fetchFxRate(
+  date: string,
+  cur = "USD"
+): Promise<{ rate: number; date_used: string; cur: string; source: "exim" | "fixed" }> {
+  const q = new URLSearchParams({ date: (date || "").slice(0, 10), cur }).toString();
+  return get(`/api/admin/fx-rate?${q}`);
 }
 
 export function fetchRfqVendorQuotes(
@@ -1076,7 +1087,8 @@ export function createCustomerQuote(
   sentAt?: string,
   costCurrency?: string,
   roundDigits?: number,
-  discountPct?: number
+  discountPct?: number,
+  fxRate?: number | null
 ): Promise<{ ok: boolean; id: number; qtn_no: string }> {
   return post(`/api/admin/rfq/${rfqId}/customer-quote`, {
     qtn_no: qtnNo,
@@ -1084,6 +1096,7 @@ export function createCustomerQuote(
     cost_currency: costCurrency,
     round_digits: roundDigits,
     discount_pct: discountPct,
+    fx_rate: fxRate,
     amount,
     items,
     sent_at: sentAt,
@@ -1167,6 +1180,7 @@ export function updateVendorQuote(
     notes?: string;
     items?: VendorQuoteItem[];
     terms?: QuotationTerms;
+    fx_rate?: number | null;
     source_files?: RfqSourceFile[];
   }
 ): Promise<{ ok: boolean; vendor_quote_no: string; currency?: string }> {
@@ -1193,6 +1207,7 @@ export function updateCustomerQuotation(
     cost_currency?: string;
     round_digits?: number;
     discount_pct?: number;
+    fx_rate?: number | null;
     items?: CustomerQuoteItem[];
     sent_at?: string;
     valid_until?: string;

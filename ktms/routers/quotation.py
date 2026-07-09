@@ -41,7 +41,23 @@ from _core import (
     require_token,
     send_email,
     default_from,
+    USD_KRW_RATE,
 )
+from services.fx import get_deal_base_rate
+
+
+@app.get("/api/admin/fx-rate", dependencies=[Depends(require_token)])
+def fx_rate(date: str = "", cur: str = "USD"):
+    """해당일의 매매기준율(수출입은행) 조회. cur↔KRW 환율(1 cur = ? KRW).
+
+    조회 실패(주말·공휴일·인증키 미설정 등)면 고정환율로 폴백하고 source=fixed 로 알린다.
+    프런트 '매매기준율' 토글에서 사용한다."""
+    rate, used = get_deal_base_rate(date, cur)
+    if rate is not None:
+        return {"rate": round(rate, 4), "date_used": used, "cur": (cur or "USD").upper(),
+                "source": "exim"}
+    return {"rate": USD_KRW_RATE, "date_used": "", "cur": (cur or "USD").upper(),
+            "source": "fixed"}
 
 
 
@@ -147,6 +163,7 @@ def create_customer_quote(rfq_id: int, body: CustomerQuoteCreate,
             cost_currency=(body.cost_currency or None),
             round_digits=body.round_digits,
             discount_pct=(body.discount_pct or 0.0),
+            fx_rate=body.fx_rate,
             status=QuotationStatus.SENT,
             valid_until=body.valid_until,
             items=items,
@@ -185,6 +202,7 @@ def customer_quotation_detail(qtn_id: int):
             "cost_currency": getattr(qtn, "cost_currency", None) or "",
             "round_digits": getattr(qtn, "round_digits", None),
             "discount_pct": getattr(qtn, "discount_pct", 0) or 0,
+            "fx_rate": getattr(qtn, "fx_rate", None),
             "amount": round(_quotation_total(qtn.items or [], getattr(qtn, "discount_pct", 0) or 0), 2),
             "valid_until": qtn.valid_until or "",
             "status": _enum_val(qtn.status),
@@ -228,6 +246,8 @@ def update_customer_quotation(qtn_id: int, body: CustomerQuoteUpdate):
             qtn.round_digits = body.round_digits
         if body.discount_pct is not None:
             qtn.discount_pct = body.discount_pct
+        if body.fx_rate is not None:
+            qtn.fx_rate = body.fx_rate
         if body.valid_until is not None:
             qtn.valid_until = body.valid_until or None
         if body.terms is not None:

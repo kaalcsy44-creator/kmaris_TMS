@@ -86,8 +86,10 @@ import {
   parseAmountInput,
   roundUp,
   StageTotal,
+  USD_KRW_RATE,
   useRowSelection,
 } from "./common/itemTable";
+import FxRateControl, { FxMode } from "./common/FxRateControl";
 
 /** 현재 시각 "YYYY-MM-DDTHH:MM" (datetime-local 기본값). */
 function nowLocalDt(): string {
@@ -1266,6 +1268,8 @@ function VendorQuoteDetailModal({
   const [notes, setNotes] = useState("");
   const [items, setItems] = useState<VendorQuoteItem[]>([]);
   const [terms, setTerms] = useState<QuotationTerms>(withDefaultTerms());
+  const [fxRate, setFxRate] = useState<number | null>(null);
+  const [fxMode, setFxMode] = useState<FxMode>("auto");
   const [ocrFiles, setOcrFiles] = useState<RfqSourceFile[]>([]); // Auto-fill 소스 파일 목록(영구 보관)
   const [parseMsg, setParseMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -1284,6 +1288,8 @@ function VendorQuoteDetailModal({
         setCurrency(data.currency || "USD");
         setNotes(data.notes || "");
         setItems((data.items || []).map(normalizeVendorQuoteItem));
+        setFxRate(typeof data.fx_rate === "number" ? data.fx_rate : null);
+        setFxMode(typeof data.fx_rate === "number" ? "manual" : "auto");
         setOcrFiles(Array.isArray(data.source_files) ? data.source_files : []);
         // Payment Terms 미입력이면 벤더 정보에 등록된 기본 결제조건으로 채운다(수정 가능).
         setTerms(withDefaultTerms(seedPaymentTerms(data.terms, data.default_payment_terms)));
@@ -1377,6 +1383,7 @@ function VendorQuoteDetailModal({
         notes,
         items: cleanVendorQuoteItems(items),
         terms,
+        fx_rate: fxRate,
         source_files: ocrFiles,
       });
       onChanged();
@@ -1470,6 +1477,13 @@ function VendorQuoteDetailModal({
               <label>Currency</label>
               <CurrencyToggle value={currency} onChange={setCurrency} />
             </div>
+            <FxRateControl
+              rate={fxRate}
+              onRate={setFxRate}
+              mode={fxMode}
+              onMode={setFxMode}
+              date={receivedAt}
+            />
             <div className="form-field">
               <label>Notes</label>
               <input value={notes} onChange={(e) => setNotes(e.target.value)} />
@@ -1479,6 +1493,7 @@ function VendorQuoteDetailModal({
             items={items}
             onChange={setItems}
             currency={currency}
+            rate={fxRate ?? USD_KRW_RATE}
             headerActions={
               <button className="btn sm" onClick={loadVendorRfqItems} disabled={busy}>
                 Load Vendor RFQ items
@@ -1646,6 +1661,8 @@ function CustomerQuoteDetailModal({
   const [costCurrency, setCostCurrency] = useState("USD");
   const [roundDigits, setRoundDigits] = useState<number>(DEFAULT_ROUND_DIGITS);
   const [discountPct, setDiscountPct] = useState<number>(0);
+  const [fxRate, setFxRate] = useState<number | null>(null);
+  const [fxMode, setFxMode] = useState<FxMode>("auto");
   const [sentAt, setSentAt] = useState("");
   const [validUntil, setValidUntil] = useState("");
   const [status, setStatus] = useState("");
@@ -1654,6 +1671,7 @@ function CustomerQuoteDetailModal({
   const [vendorQuotes, setVendorQuotes] = useState<VendorQuoteForImport[]>([]);
   const [importVqId, setImportVqId] = useState<number | "">("");
   const [defaultMargin, setDefaultMargin] = useState(20);
+  const effRate = fxRate ?? USD_KRW_RATE;
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -1672,6 +1690,8 @@ function CustomerQuoteDetailModal({
           typeof data.round_digits === "number" ? data.round_digits : DEFAULT_ROUND_DIGITS
         );
         setDiscountPct(Number(data.discount_pct || 0));
+        setFxRate(typeof data.fx_rate === "number" ? data.fx_rate : null);
+        setFxMode(typeof data.fx_rate === "number" ? "manual" : "auto");
         setSentAt(toLocalDt(data.sent_at || data.sent_date));
         setValidUntil(data.valid_until || "");
         setStatus(data.status || "");
@@ -1703,6 +1723,7 @@ function CustomerQuoteDetailModal({
         cost_currency: costCurrency,
         round_digits: roundDigits,
         discount_pct: discountPct,
+        fx_rate: fxRate,
         sent_at: sentAt,
         valid_until: validUntil,
         status,
@@ -1738,7 +1759,7 @@ function CustomerQuoteDetailModal({
     if (!vq) return;
     // 원가 통화 = 공급사 견적 통화. 판매 통화(currency)는 사용자가 정한 값을 유지하고
     // 단가는 판매 통화로 환산해 계산한다.
-    setItems(customerQuoteItemsFromVendorQuote(vq, defaultMargin, currency, roundDigits));
+    setItems(customerQuoteItemsFromVendorQuote(vq, defaultMargin, currency, roundDigits, effRate));
     if (vq.currency) setCostCurrency(vq.currency);
     setTerms((prev) => mergeTermsFromVendorQuote(prev, vq.terms));
     setMsg(`Loaded ${vq.items.length} item(s) from quote ${vq.vendor_quote_no} (${vq.vendor}).`);
@@ -1815,21 +1836,28 @@ function CustomerQuoteDetailModal({
               <label>Cost currency (vendor)</label>
               <CurrencyToggle
                 value={costCurrency}
-                onChange={(c) => { setCostCurrency(c); setItems((prev) => recomputeCustomerQuoteItems(prev, c, currency, roundDigits)); }}
+                onChange={(c) => { setCostCurrency(c); setItems((prev) => recomputeCustomerQuoteItems(prev, c, currency, roundDigits, effRate)); }}
               />
             </div>
             <div className="form-field">
               <label>Sale currency (unit price)</label>
               <CurrencyToggle
                 value={currency}
-                onChange={(c) => { setCurrency(c); setItems((prev) => recomputeCustomerQuoteItems(prev, costCurrency, c, roundDigits)); }}
+                onChange={(c) => { setCurrency(c); setItems((prev) => recomputeCustomerQuoteItems(prev, costCurrency, c, roundDigits, effRate)); }}
               />
             </div>
+            <FxRateControl
+              rate={fxRate}
+              onRate={(v) => { setFxRate(v); setItems((prev) => recomputeCustomerQuoteItems(prev, costCurrency, currency, roundDigits, v ?? USD_KRW_RATE)); }}
+              mode={fxMode}
+              onMode={setFxMode}
+              date={sentAt}
+            />
             <div className="form-field">
               <label>Round unit price up to</label>
               <RoundUnitSelect
                 value={roundDigits}
-                onChange={(d) => { setRoundDigits(d); setItems((prev) => recomputeCustomerQuoteItems(prev, costCurrency, currency, d)); }}
+                onChange={(d) => { setRoundDigits(d); setItems((prev) => recomputeCustomerQuoteItems(prev, costCurrency, currency, d, effRate)); }}
               />
             </div>
             <div className="form-field">
@@ -1855,6 +1883,7 @@ function CustomerQuoteDetailModal({
             currency={currency}
             costCurrency={costCurrency}
             roundDigits={roundDigits}
+            rate={effRate}
             headerActions={
               <button className="btn sm" onClick={importFromVendorQuote} disabled={importVqId === ""}>
                 Load Vendor quote
@@ -1866,11 +1895,12 @@ function CustomerQuoteDetailModal({
             discountPct={discountPct}
             onDiscountChange={setDiscountPct}
             currency={currency}
+            rate={effRate}
           />
           <TermsEditor terms={terms} onChange={setTerms} />
           </fieldset>
           <div className="form-actions">
-            <StageTotal label="Final" value={finalTotal} currency={currency} />
+            <StageTotal label="Final" value={finalTotal} currency={currency} rate={effRate} />
             {!canEditThis ? (
               <span className="hint-inline" style={{ marginRight: "auto" }}>{editBlockReason("rfq", d?.assignee_id)}</span>
             ) : null}
@@ -2424,6 +2454,8 @@ function VendorQuoteAction({
   const [notes, setNotes] = useState("");
   const [items, setItems] = useState<VendorQuoteItem[]>([]);
   const [terms, setTerms] = useState<QuotationTerms>(withDefaultTerms());
+  const [fxRate, setFxRate] = useState<number | null>(null);
+  const [fxMode, setFxMode] = useState<FxMode>("auto");
   const [ocrFiles, setOcrFiles] = useState<RfqSourceFile[]>([]); // Auto-fill 소스 파일 목록(영구 보관)
   const [parseMsg, setParseMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -2546,7 +2578,8 @@ function VendorQuoteAction({
         receivedAt,
         notes,
         terms,
-        ocrFiles
+        ocrFiles,
+        fxRate
       );
       setMsg(`Registered — ${r.vendor_quote_no}`);
       setNo("");
@@ -2555,6 +2588,8 @@ function VendorQuoteAction({
       setItems([]);
       setTerms(withDefaultTerms());
       setOcrFiles([]);
+      setFxRate(null);
+      setFxMode("auto");
       setVrfqId("");
       setReceivedAt(nowLocalDt());
       onDone();
@@ -2641,6 +2676,13 @@ function VendorQuoteAction({
               <label>Currency</label>
               <CurrencyToggle value={currency} onChange={setCurrency} />
             </div>
+            <FxRateControl
+              rate={fxRate}
+              onRate={setFxRate}
+              mode={fxMode}
+              onMode={setFxMode}
+              date={receivedAt}
+            />
             <div className="form-field">
               <label>Notes</label>
               <input value={notes} onChange={(e) => setNotes(e.target.value)} />
@@ -2651,6 +2693,7 @@ function VendorQuoteAction({
             items={items}
             onChange={setItems}
             currency={currency}
+            rate={fxRate ?? USD_KRW_RATE}
             headerActions={
               <button
                 type="button"
@@ -2691,11 +2734,13 @@ function VendorQuoteItemEditor({
   items,
   onChange,
   currency = "USD",
+  rate = USD_KRW_RATE,
   headerActions,
 }: {
   items: VendorQuoteItem[];
   onChange: (items: VendorQuoteItem[]) => void;
   currency?: string;
+  rate?: number;
   // 품목표 헤더의 "+ Add" 옆 보조 액션(예: "Load Vendor RFQ items").
   headerActions?: React.ReactNode;
 }) {
@@ -2787,8 +2832,8 @@ function VendorQuoteItemEditor({
             <tr>
               <td colSpan={11} className="total-label">Total</td>
               <td className="num total-value">
-                <DualCurrencyAmount value={total} currency={currency} />
-                <span className="fx-note">{fxRateText()}</span>
+                <DualCurrencyAmount value={total} currency={currency} rate={rate} />
+                <span className="fx-note">{fxRateText(rate)}</span>
               </td>
               <td colSpan={2}></td>
             </tr>
@@ -2868,12 +2913,13 @@ function customerQuoteItemsFromVendorQuote(
   vq: VendorQuoteForImport,
   defaultMargin: number,
   saleCurrency = "USD",
-  roundDigits: number = DEFAULT_ROUND_DIGITS
+  roundDigits: number = DEFAULT_ROUND_DIGITS,
+  rate: number = USD_KRW_RATE
 ): CustomerQuoteItem[] {
   // 원가는 공급사 견적 통화(vq.currency), 단가는 판매 통화 기준으로 환산해 계산.
   return vq.items.map((it) => {
     const cost = Number(it.cost_price ?? 0);
-    const unit = calcUnitPrice(cost, defaultMargin, vq.currency, saleCurrency, roundDigits);
+    const unit = calcUnitPrice(cost, defaultMargin, vq.currency, saleCurrency, roundDigits, rate);
     const qty = Number(it.qty || 1);
     return {
       part_no: it.part_no || "",
@@ -2920,10 +2966,13 @@ function CustomerQuoteAction({
   const [costCurrency, setCostCurrency] = useState("USD");
   const [roundDigits, setRoundDigits] = useState<number>(DEFAULT_ROUND_DIGITS);
   const [discountPct, setDiscountPct] = useState<number>(0);
+  const [fxRate, setFxRate] = useState<number | null>(null);
+  const [fxMode, setFxMode] = useState<FxMode>("auto");
   const [sentAt, setSentAt] = useState(nowLocalDt());
   const [items, setItems] = useState<CustomerQuoteItem[]>([]);
   const [validUntil, setValidUntil] = useState("");
   const [defaultMargin, setDefaultMargin] = useState(20);
+  const effRate = fxRate ?? USD_KRW_RATE;
   const [terms, setTerms] = useState<QuotationTerms>(
     withDefaultTerms({ remarks: "Bank charges outside Korea shall be borne by Buyer." })
   );
@@ -2980,7 +3029,7 @@ function CustomerQuoteAction({
     const vq = vendorQuotes.find((v) => v.id === importVqId);
     if (!vq) return;
     // 원가 통화 = 공급사 견적 통화. 판매 통화(currency)는 사용자 선택값을 유지.
-    setItems(customerQuoteItemsFromVendorQuote(vq, defaultMargin, currency, roundDigits));
+    setItems(customerQuoteItemsFromVendorQuote(vq, defaultMargin, currency, roundDigits, effRate));
     if (vq.currency) setCostCurrency(vq.currency);
     setTerms((prev) => mergeTermsFromVendorQuote(prev, vq.terms));
     setMsg(`Loaded ${vq.items.length} item(s) from quote ${vq.vendor_quote_no} (${vq.vendor}).`);
@@ -2994,7 +3043,7 @@ function CustomerQuoteAction({
     setMsg(null);
     setErr(null);
     try {
-      const r = await createCustomerQuote(rfqId, currency, finalTotal, items, validUntil, undefined, terms, qtnNo, sentAt, costCurrency, roundDigits, discountPct);
+      const r = await createCustomerQuote(rfqId, currency, finalTotal, items, validUntil, undefined, terms, qtnNo, sentAt, costCurrency, roundDigits, discountPct, fxRate);
       setQtn({ id: r.id, qtn_no: r.qtn_no });
       setMsg(`Sent — ${r.qtn_no}`);
       onDone();
@@ -3121,21 +3170,28 @@ function CustomerQuoteAction({
           <label>Cost currency (vendor)</label>
           <CurrencyToggle
             value={costCurrency}
-            onChange={(c) => { setCostCurrency(c); setItems((prev) => recomputeCustomerQuoteItems(prev, c, currency, roundDigits)); }}
+            onChange={(c) => { setCostCurrency(c); setItems((prev) => recomputeCustomerQuoteItems(prev, c, currency, roundDigits, effRate)); }}
           />
         </div>
         <div className="form-field">
           <label>Sale currency (unit price)</label>
           <CurrencyToggle
             value={currency}
-            onChange={(c) => { setCurrency(c); setItems((prev) => recomputeCustomerQuoteItems(prev, costCurrency, c, roundDigits)); }}
+            onChange={(c) => { setCurrency(c); setItems((prev) => recomputeCustomerQuoteItems(prev, costCurrency, c, roundDigits, effRate)); }}
           />
         </div>
+        <FxRateControl
+          rate={fxRate}
+          onRate={(v) => { setFxRate(v); setItems((prev) => recomputeCustomerQuoteItems(prev, costCurrency, currency, roundDigits, v ?? USD_KRW_RATE)); }}
+          mode={fxMode}
+          onMode={setFxMode}
+          date={sentAt}
+        />
         <div className="form-field">
           <label>Round unit price up to</label>
           <RoundUnitSelect
             value={roundDigits}
-            onChange={(d) => { setRoundDigits(d); setItems((prev) => recomputeCustomerQuoteItems(prev, costCurrency, currency, d)); }}
+            onChange={(d) => { setRoundDigits(d); setItems((prev) => recomputeCustomerQuoteItems(prev, costCurrency, currency, d, effRate)); }}
           />
         </div>
         <div className="form-field">
@@ -3154,6 +3210,7 @@ function CustomerQuoteAction({
         currency={currency}
         costCurrency={costCurrency}
         roundDigits={roundDigits}
+        rate={effRate}
         headerActions={
           <button className="btn sm" onClick={importFromVendorQuote} disabled={importVqId === ""}>
             Load Vendor quote
@@ -3166,12 +3223,13 @@ function CustomerQuoteAction({
         discountPct={discountPct}
         onDiscountChange={setDiscountPct}
         currency={currency}
+        rate={effRate}
       />
 
       <TermsEditor terms={terms} onChange={setTerms} />
 
       <div className="form-actions">
-        <StageTotal label="Final" value={finalTotal} currency={currency} />
+        <StageTotal label="Final" value={finalTotal} currency={currency} rate={effRate} />
         <button
           className="btn danger"
           disabled
@@ -3248,6 +3306,7 @@ function CustomerQuoteItemEditor({
   currency = "USD",
   costCurrency = "USD",
   roundDigits = DEFAULT_ROUND_DIGITS,
+  rate = USD_KRW_RATE,
   headerActions,
 }: {
   items: CustomerQuoteItem[];
@@ -3255,6 +3314,7 @@ function CustomerQuoteItemEditor({
   currency?: string;
   costCurrency?: string;
   roundDigits?: number;
+  rate?: number;
   // 품목표 헤더의 "+ Add" 옆 보조 액션(예: "Load Vendor quote").
   headerActions?: React.ReactNode;
 }) {
@@ -3269,7 +3329,7 @@ function CustomerQuoteItemEditor({
           (next[key] as string) = value;
         }
         if (key === "cost_price" || key === "margin_pct" || key === "qty") {
-          const unit = calcUnitPrice(Number(next.cost_price || 0), Number(next.margin_pct || 0), costCurrency, currency, roundDigits);
+          const unit = calcUnitPrice(Number(next.cost_price || 0), Number(next.margin_pct || 0), costCurrency, currency, roundDigits, rate);
           next.unit_price = unit;
           next.amount = unit * Number(next.qty || 1);
         }
@@ -3362,13 +3422,13 @@ function CustomerQuoteItemEditor({
             <tr>
               <td colSpan={9} className="total-label">Total</td>
               <td className="num total-value">
-                <DualCurrencyAmount value={purchaseTotal} currency={costCurrency} />
+                <DualCurrencyAmount value={purchaseTotal} currency={costCurrency} rate={rate} />
                 <span className="fx-note">Purchase</span>
               </td>
               <td colSpan={2}></td>
               <td className="num total-value">
-                <DualCurrencyAmount value={total} currency={currency} />
-                <span className="fx-note">Sales · {fxRateText()}</span>
+                <DualCurrencyAmount value={total} currency={currency} rate={rate} />
+                <span className="fx-note">Sales · {fxRateText(rate)}</span>
               </td>
               <td colSpan={2}></td>
             </tr>
@@ -3385,11 +3445,13 @@ function DiscountSummary({
   discountPct,
   onDiscountChange,
   currency = "USD",
+  rate = USD_KRW_RATE,
 }: {
   subtotal: number;
   discountPct: number;
   onDiscountChange: (v: number) => void;
   currency?: string;
+  rate?: number;
 }) {
   const discountAmt = subtotal * (Number(discountPct || 0) / 100);
   const finalTotal = subtotal - discountAmt;
@@ -3397,7 +3459,7 @@ function DiscountSummary({
     <div className="form-grid" style={{ marginTop: 12 }}>
       <div className="form-field">
         <label>Subtotal</label>
-        <div className="static-value"><DualCurrencyAmount value={subtotal} currency={currency} /></div>
+        <div className="static-value"><DualCurrencyAmount value={subtotal} currency={currency} rate={rate} /></div>
       </div>
       <div className="form-field">
         <label>Discount (%)</label>
@@ -3410,11 +3472,11 @@ function DiscountSummary({
       </div>
       <div className="form-field">
         <label>Discount amount</label>
-        <div className="static-value">- {dualCurrencyText(discountAmt, currency)}</div>
+        <div className="static-value">- {dualCurrencyText(discountAmt, currency, rate)}</div>
       </div>
       <div className="form-field">
         <label>Final total</label>
-        <div className="static-value"><b><DualCurrencyAmount value={finalTotal} currency={currency} /></b></div>
+        <div className="static-value"><b><DualCurrencyAmount value={finalTotal} currency={currency} rate={rate} /></b></div>
       </div>
     </div>
   );
@@ -3430,9 +3492,10 @@ function calcUnitPrice(
   marginPct: number,
   costCur?: string,
   saleCur?: string,
-  roundDigits: number = DEFAULT_ROUND_DIGITS
+  roundDigits: number = DEFAULT_ROUND_DIGITS,
+  rate: number = USD_KRW_RATE
 ) {
-  const converted = convertCurrency(cost, costCur, saleCur);
+  const converted = convertCurrency(cost, costCur, saleCur, rate);
   const denom = 1 - Number(marginPct || 0) / 100;
   const priced = denom > 0 ? converted / denom : converted;
   return roundUp(priced, roundDigits);
@@ -3463,10 +3526,11 @@ function applyMarginToAll(
   marginPct: number,
   costCur: string,
   saleCur: string,
-  roundDigits: number
+  roundDigits: number,
+  rate: number = USD_KRW_RATE
 ): CustomerQuoteItem[] {
   return items.map((it) => {
-    const unit = calcUnitPrice(Number(it.cost_price || 0), marginPct, costCur, saleCur, roundDigits);
+    const unit = calcUnitPrice(Number(it.cost_price || 0), marginPct, costCur, saleCur, roundDigits, rate);
     return { ...it, margin_pct: marginPct, unit_price: unit, amount: unit * Number(it.qty || 1) };
   });
 }
@@ -3476,10 +3540,11 @@ function recomputeCustomerQuoteItems(
   items: CustomerQuoteItem[],
   costCur: string,
   saleCur: string,
-  roundDigits: number = DEFAULT_ROUND_DIGITS
+  roundDigits: number = DEFAULT_ROUND_DIGITS,
+  rate: number = USD_KRW_RATE
 ): CustomerQuoteItem[] {
   return items.map((it) => {
-    const unit = calcUnitPrice(Number(it.cost_price || 0), Number(it.margin_pct || 0), costCur, saleCur, roundDigits);
+    const unit = calcUnitPrice(Number(it.cost_price || 0), Number(it.margin_pct || 0), costCur, saleCur, roundDigits, rate);
     return { ...it, unit_price: unit, amount: unit * Number(it.qty || 1) };
   });
 }

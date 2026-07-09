@@ -3773,6 +3773,53 @@ table.mini input[type="checkbox"].row-check:indeterminate::after {
   border-top: 0;
 }
 
+/* 통화 옆 환율 컨트롤(매매기준율/직접입력) — 견적 편집기 Basic Info. */
+.fx-control {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+}
+.fx-toggle {
+  display: inline-flex;
+  flex: 0 0 auto;
+  border: 1px solid #d7e2ee;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.fx-toggle button {
+  border: 0;
+  background: #fff;
+  color: #55627a;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 0 8px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.fx-toggle button + button {
+  border-left: 1px solid #d7e2ee;
+}
+.fx-toggle button.on {
+  background: var(--blue, #0055a8);
+  color: #fff;
+}
+.fx-rate-input {
+  flex: 1 1 auto;
+  min-width: 90px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.fx-rate-input[readonly] {
+  background: #f4f7fb;
+  color: #2b3a4d;
+}
+.fx-note-inline {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  color: #7c8aa0;
+}
+
 /* 문서 생성 + 이메일 발송 공통 패널(2·4·6단계 상세) */
 .doc-send-panel {
   margin-top: 16px;

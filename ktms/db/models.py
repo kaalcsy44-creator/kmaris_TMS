@@ -246,6 +246,7 @@ class VendorQuote(Base):
     received_date   = Column(String(10))
     received_at     = Column(String(16))    # 견적 수신 일시 "YYYY-MM-DDTHH:MM"
     currency      = Column(String(10), default="USD")  # 견적 통화(USD/KRW)
+    fx_rate       = Column(Float)                       # 적용 환율(1 USD = ? KRW). 매매기준율/직접입력
     items         = Column(JSON, default=list)
     terms         = Column(JSON, default=dict)  # 거래조건(Incoterms·납기·공급형태 등)
     notes         = Column(Text)
@@ -267,6 +268,7 @@ class Quotation(Base):
     cost_currency   = Column(String(10))                   # 원가(공급사 제시가) 통화
     round_digits    = Column(Integer)                      # 단가 올림 자릿수(ROUNDUP num_digits)
     discount_pct    = Column(Float, default=0.0)            # 총액 할인율(%) — 최종금액 산출용
+    fx_rate         = Column(Float)                         # 적용 환율(1 USD = ? KRW). 매매기준율/직접입력
     vat_rate        = Column(Float, default=0.0)
     items           = Column(JSON, default=list)
     terms           = Column(JSON, default=dict)

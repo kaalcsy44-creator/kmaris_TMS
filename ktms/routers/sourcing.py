@@ -676,6 +676,7 @@ def create_vendor_quote(rfq_id: int, body: VendorQuoteCreate):
             items=items,
             terms=body.terms or {},
             notes=body.notes or "",
+            fx_rate=body.fx_rate,
             source_files=clean_source_files(body.source_files),
         )
         s.add(vq)
@@ -744,6 +745,7 @@ def vendor_quote_detail(vq_id: int):
             "received_at": q.received_at or "",
             "notes": q.notes or "",
             "currency": getattr(q, "currency", None) or "USD",
+            "fx_rate": getattr(q, "fx_rate", None),
             "items": q.items or [],
             "terms": getattr(q, "terms", None) or {},
             "source_files": getattr(q, "source_files", None) or [],
@@ -783,6 +785,8 @@ def update_vendor_quote(vq_id: int, body: VendorQuoteUpdate):
             q.items = body.items
         if body.terms is not None:
             q.terms = body.terms
+        if body.fx_rate is not None:
+            q.fx_rate = body.fx_rate
         if body.source_files is not None:
             q.source_files = clean_source_files(body.source_files)
         s.commit()

@@ -41,6 +41,7 @@ _MIGRATIONS = {
         "cost_currency": "VARCHAR(10)",
         "round_digits": "INTEGER",
         "discount_pct": "FLOAT",
+        "fx_rate": "FLOAT",
     },
     "customers": {
         "contact_phone": "VARCHAR(50)",
@@ -62,6 +63,7 @@ _MIGRATIONS = {
         "currency": "VARCHAR(10) DEFAULT 'USD'",
         "terms": "JSON",
         "source_files": "JSON",
+        "fx_rate": "FLOAT",
     },
     "orders": {
         "promised_delivery": "VARCHAR(10)",

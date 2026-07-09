@@ -2004,6 +2004,7 @@ class VendorQuoteCreate(BaseModel):
     notes: str = ""
     items: list[dict] | None = None
     terms: dict | None = None
+    fx_rate: float | None = None       # 적용 환율(1 USD = ? KRW). 매매기준율/직접입력
     source_files: list[dict] = []      # Auto-fill 소스 파일 메타(영구 보관)
 
 
@@ -2015,6 +2016,7 @@ class VendorQuoteUpdate(BaseModel):
     notes: str | None = None
     items: list[dict] | None = None
     terms: dict | None = None
+    fx_rate: float | None = None
     source_files: list[dict] | None = None  # 보내면 소스 파일 메타 전체 교체
 
 
@@ -2265,6 +2267,7 @@ class CustomerQuoteCreate(BaseModel):
     cost_currency: str | None = None
     round_digits: int | None = None
     discount_pct: float | None = None
+    fx_rate: float | None = None       # 적용 환율(1 USD = ? KRW). 매매기준율/직접입력
     amount: float | None = None
     items: list[dict] | None = None
     sent_at: str | None = None
@@ -2279,6 +2282,7 @@ class CustomerQuoteUpdate(BaseModel):
     cost_currency: str | None = None
     round_digits: int | None = None
     discount_pct: float | None = None
+    fx_rate: float | None = None
     items: list[dict] | None = None
     sent_at: str | None = None
     valid_until: str | None = None

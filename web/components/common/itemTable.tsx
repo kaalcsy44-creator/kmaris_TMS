@@ -143,13 +143,15 @@ export function roundUp(value: number, digits = 0): number {
 export function convertCurrency(
   amount: number,
   from: string | undefined,
-  to: string | undefined
+  to: string | undefined,
+  rate: number = USD_KRW_RATE
 ): number {
   const f = (from || "USD").toUpperCase();
   const t = (to || "USD").toUpperCase();
+  const r = rate && Number.isFinite(rate) && rate > 0 ? rate : USD_KRW_RATE;
   if (!Number.isFinite(amount) || f === t) return amount;
-  if (f === "KRW" && t === "USD") return amount / USD_KRW_RATE;
-  if (f === "USD" && t === "KRW") return amount * USD_KRW_RATE;
+  if (f === "KRW" && t === "USD") return amount / r;
+  if (f === "USD" && t === "KRW") return amount * r;
   return amount;
 }
 
@@ -159,8 +161,9 @@ export function moneyText(value: number | string | null | undefined): string {
   return Math.round(parsed).toLocaleString();
 }
 
-export function fxRateText(): string {
-  return `FX 1 USD = KRW ${USD_KRW_RATE.toLocaleString(undefined, {
+export function fxRateText(rate: number = USD_KRW_RATE): string {
+  const r = rate && Number.isFinite(rate) && rate > 0 ? rate : USD_KRW_RATE;
+  return `FX 1 USD = KRW ${r.toLocaleString(undefined, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
@@ -168,16 +171,18 @@ export function fxRateText(): string {
 
 export function dualCurrencyText(
   value: number | string | null | undefined,
-  currency = "USD"
+  currency = "USD",
+  rate: number = USD_KRW_RATE
 ): string {
   const amount = toNumber(value);
   const cur = (currency || "USD").toUpperCase();
+  const r = rate && Number.isFinite(rate) && rate > 0 ? rate : USD_KRW_RATE;
   if (!Number.isFinite(amount)) return `${cur} 0 KRW 0`;
   if (cur === "KRW") {
-    return `KRW ${Math.round(amount).toLocaleString()} USD ${moneyText(amount / USD_KRW_RATE)}`;
+    return `KRW ${Math.round(amount).toLocaleString()} USD ${moneyText(amount / r)}`;
   }
   if (cur === "USD") {
-    return `USD ${moneyText(amount)} KRW ${Math.round(amount * USD_KRW_RATE).toLocaleString()}`;
+    return `USD ${moneyText(amount)} KRW ${Math.round(amount * r).toLocaleString()}`;
   }
   return `${cur} ${moneyText(amount)}`;
 }
@@ -188,21 +193,24 @@ export function StageTotal({
   value,
   currency = "USD",
   label = "Total",
+  rate = USD_KRW_RATE,
 }: {
   value: number | string | null | undefined;
   currency?: string;
   label?: string;
+  rate?: number;
 }) {
   const amount = toNumber(value);
   const cur = (currency || "USD").toUpperCase();
+  const r = rate && Number.isFinite(rate) && rate > 0 ? rate : USD_KRW_RATE;
   let primary: string;
   let secondary = "";
   if (cur === "KRW") {
     primary = `KRW ${Math.round(amount).toLocaleString()}`;
-    secondary = `USD ${moneyText(amount / USD_KRW_RATE)}`;
+    secondary = `USD ${moneyText(amount / r)}`;
   } else if (cur === "USD") {
     primary = `USD ${moneyText(amount)}`;
-    secondary = `KRW ${Math.round(amount * USD_KRW_RATE).toLocaleString()}`;
+    secondary = `KRW ${Math.round(amount * r).toLocaleString()}`;
   } else {
     primary = `${cur} ${moneyText(amount)}`;
   }
@@ -212,7 +220,7 @@ export function StageTotal({
       <b className="stage-total-main">{primary}</b>
       <span className="stage-total-sub">
         {secondary ? `${secondary} · ` : ""}
-        {fxRateText()}
+        {fxRateText(r)}
       </span>
     </span>
   );
@@ -221,17 +229,20 @@ export function StageTotal({
 export function DualCurrencyAmount({
   value,
   currency = "USD",
+  rate = USD_KRW_RATE,
 }: {
   value: number | string | null | undefined;
   currency?: string;
+  rate?: number;
 }) {
   const amount = toNumber(value);
   const cur = (currency || "USD").toUpperCase();
+  const r = rate && Number.isFinite(rate) && rate > 0 ? rate : USD_KRW_RATE;
   if (cur === "KRW") {
     return (
       <span className="dual-amount">
         <span className="dual-line primary">KRW {Math.round(amount).toLocaleString()}</span>
-        <span className="dual-line converted">USD {moneyText(amount / USD_KRW_RATE)}</span>
+        <span className="dual-line converted">USD {moneyText(amount / r)}</span>
       </span>
     );
   }
@@ -239,7 +250,7 @@ export function DualCurrencyAmount({
     return (
       <span className="dual-amount">
         <span className="dual-line primary">USD {moneyText(amount)}</span>
-        <span className="dual-line converted">KRW {Math.round(amount * USD_KRW_RATE).toLocaleString()}</span>
+        <span className="dual-line converted">KRW {Math.round(amount * r).toLocaleString()}</span>
       </span>
     );
   }

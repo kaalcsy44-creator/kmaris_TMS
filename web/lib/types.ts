@@ -872,6 +872,7 @@ export type VendorQuoteDetail = {
   received_at: string;
   notes: string;
   currency: string;
+  fx_rate?: number | null; // 적용 환율(1 USD = ? KRW). 매매기준율/직접입력
   items: VendorQuoteItem[];
   terms: QuotationTerms;
   source_files: RfqSourceFile[]; // Auto-fill 소스 파일 메타(영구 보관)
@@ -894,6 +895,7 @@ export type CustomerQuotationDetail = {
   cost_currency?: string;
   round_digits?: number;
   discount_pct?: number;
+  fx_rate?: number | null; // 적용 환율(1 USD = ? KRW). 매매기준율/직접입력
   amount: number;
   valid_until: string;
   sent_at: string;
