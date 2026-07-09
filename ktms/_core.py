@@ -770,21 +770,25 @@ def _first_rfq_iso(rfq) -> str:
 
 
 def _project_no_map(s) -> dict[int, str]:
-    """프로젝트(=RFQ)별 내부 관리번호 {rfq_id: 'yymmdd-nn'}.
-    최초 RFQ 수신 일시 기준으로, 같은 날짜 안에서 수신 순서대로 01,02,… 부여한다.
-    (수신 일시 동률은 RFQ id 순. 저장값이 아니라 매 조회 시 결정적으로 산출.)
-    같은 세션 안에서는 한 번만 계산하고 캐시한다(요청마다 세션은 새로 생성)."""
+    """프로젝트(=RFQ)별 내부 관리번호 {rfq_id: 'P-001(yymmdd)'}.
+    최초 RFQ 수신 순서대로 업무 타입별 전역 일련번호를 부여한다.
+      · Parts(부품공급) → P-001(yymmdd), P-002(yymmdd), …
+      · Service(서비스) → S-001(yymmdd), S-002(yymmdd), …
+    (yymmdd = 해당 RFQ 수신일. 수신 일시 동률은 RFQ id 순. 저장값이 아니라 매 조회 시
+    결정적으로 산출한다.) 같은 세션 안에서는 한 번만 계산하고 캐시한다."""
     cached = getattr(s, "_proj_no_cache", None)
     if cached is not None:
         return cached
-    triples = [(_first_rfq_iso(r), r.id) for r in s.query(RFQ).all()]
-    triples.sort(key=lambda t: (t[0] or "9999-99-99T99:99", t[1]))
-    counters: dict[str, int] = {}
+    rows = [(_first_rfq_iso(r), r.id,
+             "S" if _enum_val(r.work_type) == WorkType.SERVICE.value else "P")
+            for r in s.query(RFQ).all()]
+    rows.sort(key=lambda t: (t[0] or "9999-99-99T99:99", t[1]))
+    counters: dict[str, int] = {"P": 0, "S": 0}
     out: dict[int, str] = {}
-    for iso, rid in triples:
+    for iso, rid, prefix in rows:
+        counters[prefix] += 1
         yymmdd = (iso[2:4] + iso[5:7] + iso[8:10]) if len(iso) >= 10 else "000000"
-        counters[yymmdd] = counters.get(yymmdd, 0) + 1
-        out[rid] = f"{yymmdd}-{counters[yymmdd]:02d}"
+        out[rid] = f"{prefix}-{counters[prefix]:03d}({yymmdd})"
     try:
         s._proj_no_cache = out
     except Exception:
