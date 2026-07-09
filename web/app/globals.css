@@ -2884,9 +2884,11 @@ table.mini.items-edit td:last-child {
 /* 맨 좌측 행 삭제열 — items-edit 변형도 통일 포맷(가운데 정렬). */
 table.mini.items-edit th.row-tools,
 table.mini.items-edit td.row-tools {
+  width: 32px;
+  min-width: 32px;
   text-align: center;
-  padding-left: 6px;
-  padding-right: 6px;
+  padding-left: 4px;
+  padding-right: 4px;
 }
 
 /* ── Dashboard ─────────────────────────────────────────────────────── */
@@ -3664,13 +3666,52 @@ table.mini tfoot .total-value {
   opacity: 0.4;
   cursor: not-allowed;
 }
-/* 품목표 행 선택 체크박스(row-tools 열 · 헤더 전체선택). */
-.row-check {
-  width: 16px;
-  height: 16px;
+/* 품목표 행 선택 체크박스(row-tools 열 · 헤더 전체선택).
+   커스텀(appearance:none) 체크박스 — 표 input 100% 폭 규칙과 충돌하지 않고,
+   sticky 고정열 안에서 네이티브 체크박스가 스크롤 시 사라지는 크로미움 리페인트
+   버그도 피한다. 강한 선택자로 table.mini(.wide/.items-edit) input 규칙을 이긴다. */
+table.mini input[type="checkbox"].row-check,
+.items-head input[type="checkbox"].row-check {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: none;
+  display: inline-block;
+  vertical-align: middle;
+  position: relative;
+  width: 15px;
+  min-width: 15px;
+  height: 15px;
   margin: 0;
+  padding: 0;
+  border: 1.5px solid #b8c6d8;
+  border-radius: 4px;
+  background: #fff;
   cursor: pointer;
-  accent-color: var(--blue, #0055a8);
+}
+table.mini input[type="checkbox"].row-check:checked,
+table.mini input[type="checkbox"].row-check:indeterminate {
+  background: var(--blue, #0055a8);
+  border-color: var(--blue, #0055a8);
+}
+table.mini input[type="checkbox"].row-check:checked::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 4px;
+  height: 8px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+table.mini input[type="checkbox"].row-check:indeterminate::after {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 6px;
+  width: 9px;
+  height: 2px;
+  background: #fff;
 }
 /* 품목 표 헤더 — 제목(좌) + Add 버튼(우상단). */
 .items-head {
@@ -3799,7 +3840,7 @@ table.mini tfoot .total-value {
 .table-wrap table.mini.wide.lead-tools th.seq,
 .table-wrap table.mini.wide.lead-tools td.seq {
   position: sticky;
-  left: 44px; /* row-tools 열 폭(44px)만큼 우측으로 */
+  left: 32px; /* row-tools 열 폭(32px)만큼 우측으로 */
   z-index: 2;
   background: #fff;
   /* 고정 영역과 스크롤 영역의 경계선(오른쪽 그림자). */
@@ -3816,14 +3857,14 @@ table.mini tfoot .total-value {
 .table-wrap table.mini.wide.lead-tools tbody tr.item-group-break td.seq {
   background: #f8fbff;
 }
-/* 맨 좌측 행 도구(삭제) 열 — 좁은 고정 폭, 가운데 정렬. */
+/* 맨 좌측 행 선택(체크박스) 열 — 좁은 고정 폭, 가운데 정렬. */
 table.mini.wide th.row-tools,
 table.mini.wide td.row-tools {
-  width: 44px;
-  min-width: 44px;
+  width: 32px;
+  min-width: 32px;
   text-align: center;
-  padding-left: 6px;
-  padding-right: 6px;
+  padding-left: 4px;
+  padding-right: 4px;
 }
 /* 좌측 삭제열(lead-tools)이 있는 표: 열이 한 칸씩 밀리므로 위치 기반 폭 규칙을 보정.
    구조 = 1:삭제 · 2:No. · 3:Part · 4:Description · 5~:그 외. (num 열은 별도 규칙 유지) */

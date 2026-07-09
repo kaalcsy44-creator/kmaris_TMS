@@ -694,7 +694,7 @@ export default function NewRfqForm({
       <div className="table-wrap item-scroll">
       <table className="mini items-edit resizable-cols">
         <colgroup>
-          <col style={{ width: 44 }} />
+          <col style={{ width: 32 }} />
           <col style={{ width: 44 }} />
           {RFQ_ITEM_COLS.map((c) => (
             <col key={c.key} style={{ width: itemColW(c.key) }} />
