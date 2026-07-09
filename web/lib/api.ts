@@ -667,6 +667,51 @@ export function deleteSettingsItem(id: number): Promise<{ ok: boolean }> {
   return del(`/api/admin/settings/items/${id}`);
 }
 
+// ── 이메일 템플릿(담당자별 초안) ──────────────────────────────────────────────
+export type EmailTplRow = {
+  subject_tpl: string;
+  body_tpl: string;
+  options: { item_cols?: string[] };
+} | null;
+export type EmailTemplatesData = {
+  doc_type: string;
+  is_admin: boolean;
+  tokens: string[];
+  item_cols: { key: string; label_en: string; label_ko: string }[];
+  default_item_cols: string[];
+  defaults: Record<"en" | "ko", { subject_tpl: string; body_tpl: string }>;
+  user: Record<"en" | "ko", EmailTplRow>;
+  company: Record<"en" | "ko", EmailTplRow>;
+};
+export function fetchEmailTemplates(docType = "vendor_rfq"): Promise<EmailTemplatesData> {
+  return get<EmailTemplatesData>(`/api/admin/settings/email-templates?doc_type=${docType}`);
+}
+export function saveEmailTemplate(body: {
+  scope: "user" | "company";
+  doc_type: string;
+  lang: "en" | "ko";
+  subject_tpl: string;
+  body_tpl: string;
+  options: { item_cols: string[] };
+}): Promise<{ ok: boolean; scope: string; lang: string }> {
+  return put("/api/admin/settings/email-templates", body);
+}
+export function deleteEmailTemplate(
+  scope: "user" | "company",
+  docType: string,
+  lang: "en" | "ko"
+): Promise<{ ok: boolean }> {
+  return del(`/api/admin/settings/email-templates?scope=${scope}&doc_type=${docType}&lang=${lang}`);
+}
+export function previewEmailTemplate(body: {
+  lang: "en" | "ko";
+  subject_tpl: string;
+  body_tpl: string;
+  options: { item_cols: string[] };
+}): Promise<{ subject: string; body: string }> {
+  return post("/api/admin/settings/email-templates/preview", body);
+}
+
 // ── 품목 분류 트리(대>중>소) ──────────────────────────────────────────────────
 export function fetchItemCategories(): Promise<ItemCategory[]> {
   return get<ItemCategory[]>("/api/admin/settings/item-categories");

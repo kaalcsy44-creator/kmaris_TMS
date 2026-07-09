@@ -6,6 +6,9 @@ from _core import (
     Customer,
     CustomerCreate,
     Depends,
+    EmailTemplate,
+    EmailTemplateSave,
+    EmailTemplatePreviewReq,
     HTTPException,
     ItemCategory,
     ItemCategorySave,
@@ -37,6 +40,12 @@ from _core import (
     get_current_user,
     get_session,
     require_token,
+    VENDOR_RFQ_ITEM_COLS,
+    VENDOR_RFQ_TOKENS,
+    DEFAULT_VENDOR_RFQ_ITEM_COLS,
+    vendor_rfq_default_subject_tpl,
+    vendor_rfq_default_body_tpl,
+    preview_vendor_rfq_template,
 )
 
 
@@ -520,6 +529,97 @@ def assignable_users():
                 .order_by(User.username).all()]
     finally:
         s.close()
+
+
+# ── 이메일 템플릿(담당자별 초안) ────────────────────────────────────────────
+def _email_tpl_row(s, user_id, doc_type: str, lang: str):
+    t = (s.query(EmailTemplate)
+         .filter_by(user_id=user_id, doc_type=doc_type, lang=lang).first())
+    if not t:
+        return None
+    return {"subject_tpl": t.subject_tpl or "", "body_tpl": t.body_tpl or "",
+            "options": t.options or {}}
+
+
+@app.get("/api/admin/settings/email-templates", dependencies=[Depends(require_token)])
+def get_email_templates(doc_type: str = "vendor_rfq",
+                        user: dict = Depends(get_current_user)):
+    """현재 사용자 개인 템플릿 + 회사 기본값 + 코드 내장 기본값/토큰·컬럼 카탈로그."""
+    s = get_session()
+    try:
+        uid = user.get("id")
+        langs = ("en", "ko")
+        return {
+            "doc_type": doc_type,
+            "is_admin": user.get("role") == "admin",
+            "tokens": VENDOR_RFQ_TOKENS,
+            "item_cols": [{"key": k, "label_en": v[0], "label_ko": v[1]}
+                          for k, v in VENDOR_RFQ_ITEM_COLS.items()],
+            "default_item_cols": DEFAULT_VENDOR_RFQ_ITEM_COLS,
+            "defaults": {lang: {"subject_tpl": vendor_rfq_default_subject_tpl(lang),
+                                "body_tpl": vendor_rfq_default_body_tpl(lang)}
+                         for lang in langs},
+            "user": {lang: _email_tpl_row(s, uid, doc_type, lang) for lang in langs},
+            "company": {lang: _email_tpl_row(s, None, doc_type, lang) for lang in langs},
+        }
+    finally:
+        s.close()
+
+
+@app.put("/api/admin/settings/email-templates", dependencies=[Depends(require_token)])
+def save_email_template(body: EmailTemplateSave, user: dict = Depends(get_current_user)):
+    """개인/회사 이메일 템플릿 upsert. 회사(company) 편집은 admin 만."""
+    scope = "company" if body.scope == "company" else "user"
+    if scope == "company" and user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="회사 기본 템플릿은 admin만 편집할 수 있습니다.")
+    lang = "ko" if body.lang == "ko" else "en"
+    user_id = None if scope == "company" else user.get("id")
+    cols = [c for c in ((body.options or {}).get("item_cols") or []) if c in VENDOR_RFQ_ITEM_COLS]
+    opts = {"item_cols": cols or DEFAULT_VENDOR_RFQ_ITEM_COLS}
+    s = get_session()
+    try:
+        t = (s.query(EmailTemplate)
+             .filter_by(user_id=user_id, doc_type=body.doc_type, lang=lang).first())
+        if not t:
+            t = EmailTemplate(user_id=user_id, doc_type=body.doc_type, lang=lang)
+            s.add(t)
+        t.subject_tpl = body.subject_tpl or ""
+        t.body_tpl = body.body_tpl or ""
+        t.options = opts
+        t.updated_at = datetime.utcnow()
+        s.commit()
+        return {"ok": True, "scope": scope, "lang": lang}
+    finally:
+        s.close()
+
+
+@app.delete("/api/admin/settings/email-templates", dependencies=[Depends(require_token)])
+def delete_email_template(scope: str = "user", doc_type: str = "vendor_rfq",
+                          lang: str = "en", user: dict = Depends(get_current_user)):
+    """템플릿 삭제(= 상위 기본값으로 초기화). 회사(company)는 admin 만."""
+    scope = "company" if scope == "company" else "user"
+    if scope == "company" and user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="회사 기본 템플릿은 admin만 편집할 수 있습니다.")
+    lang = "ko" if lang == "ko" else "en"
+    user_id = None if scope == "company" else user.get("id")
+    s = get_session()
+    try:
+        t = (s.query(EmailTemplate)
+             .filter_by(user_id=user_id, doc_type=doc_type, lang=lang).first())
+        if t:
+            s.delete(t)
+            s.commit()
+        return {"ok": True}
+    finally:
+        s.close()
+
+
+@app.post("/api/admin/settings/email-templates/preview", dependencies=[Depends(require_token)])
+def preview_email_template(body: EmailTemplatePreviewReq):
+    """미저장 템플릿을 샘플 데이터로 렌더 — 편집 중 실시간 미리보기용."""
+    subject, mail_body = preview_vendor_rfq_template(
+        body.subject_tpl, body.body_tpl, body.options, body.lang)
+    return {"subject": subject, "body": mail_body}
 
 
 @app.get("/api/admin/settings/users", dependencies=[Depends(require_token)])

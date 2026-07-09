@@ -54,6 +54,7 @@ from services.doc_xlsx import make_document_xlsx
 from services.quote_response_parser import parse_vendor_quote_bytes, excel_to_text
 from db.models import (
     RFQ, Customer, Vessel, Vendor, User, UserRole, RolePermission, ItemMaster, ItemCategory, DocSequence,
+    EmailTemplate,
     VendorRFQ, VendorQuote, Quotation, QuotationStatus, FollowUpLevel,
     Order, PurchaseOrder, ShippingAdvice, CommercialInvoice,
     PackingList, TaxInvoiceData, ARRecord, DeliveryProof,
@@ -1028,93 +1029,196 @@ def _sanitize_vendor_rfq_items(raw) -> list[dict]:
     return out
 
 
-def _vendor_rfq_email_body(rfq, cust, vessel, vendor, notes: str, lang: str,
-                           items=None, rfq_no: str | None = None) -> str:
-    # items 를 명시적으로 주면(발신 화면에서 선택·편집한 품목) 그것을 쓰고,
-    # 없으면 RFQ 원본 품목을 사용한다.
-    items = rfq.items if items is None else items
-    items = items or []
-    # 표시할 RFQ 번호(vendor별 번호를 넘기면 그것을, 없으면 프로젝트 RFQ 번호).
-    _no = rfq_no or rfq.rfq_no
+# ── 이메일 템플릿 엔진(담당자별 초안) ─────────────────────────────────────────
+# 발송 화면 초안(제목·본문)을 토큰 치환으로 생성한다. 해석 순서는
+# 개인(user_id) → 회사 기본(user_id=NULL) → 아래 코드 내장 기본값.
+
+# ITEM LIST 에서 선택 가능한 컬럼과 (EN, KO) 라벨. 순서는 사용자 설정을 따른다.
+VENDOR_RFQ_ITEM_COLS: dict[str, tuple[str, str]] = {
+    "part_no":     ("Part No.", "Part No."),
+    "description": ("Desc",     "품명"),
+    "qty":         ("Qty",      "수량"),
+    "unit":        ("Unit",     "단위"),
+    "maker":       ("Maker",    "Maker"),
+    "serial_no":   ("Serial",   "Serial"),
+    "remark":      ("Remark",   "비고"),
+}
+# 한 줄에 붙는 짧은 컬럼(그 외 description·remark 는 아래 줄에 별도 표기).
+_ITEM_INLINE_COLS = ("part_no", "qty", "unit", "maker", "serial_no")
+DEFAULT_VENDOR_RFQ_ITEM_COLS = ["part_no", "qty", "maker", "description"]
+
+# 본문에서 쓸 수 있는 토큰(설정 UI 팔레트/검증용).
+VENDOR_RFQ_TOKENS = [
+    "vendor_name", "rfq_no", "vessel", "customer",
+    "enquiry_date", "item_list", "notes", "signature",
+]
+
+
+def _item_field(item: dict, col: str) -> str:
+    v = item.get(col, "")
+    s = "" if v is None else str(v)
+    return s if s.strip() else "—"
+
+
+def _render_item_list(items, cols, lang: str) -> str:
+    """선택된 컬럼(cols, 순서 포함)으로 ITEM LIST 블록을 렌더한다."""
+    li = 1 if lang == "ko" else 0
+    cols = [c for c in (cols or DEFAULT_VENDOR_RFQ_ITEM_COLS) if c in VENDOR_RFQ_ITEM_COLS]
+    if not cols:
+        cols = DEFAULT_VENDOR_RFQ_ITEM_COLS
+    inline = [c for c in cols if c in _ITEM_INLINE_COLS]
+    block = [c for c in cols if c not in _ITEM_INLINE_COLS]
+    lines: list[str] = []
+    for i, item in enumerate(items or [], 1):
+        head = "   ".join(f"{VENDOR_RFQ_ITEM_COLS[c][li]}: {_item_field(item, c)}" for c in inline)
+        lines.append(f"  {i:>2}. {head}".rstrip())
+        for c in block:
+            lines.append(f"       {VENDOR_RFQ_ITEM_COLS[c][li]}: {_item_field(item, c)}")
+    return "\n".join(lines)
+
+
+def _default_signature(lang: str) -> str:
     if lang == "ko":
-        item_lines = "\n".join(
-            f"  {i+1:>2}. Part No.: {str(item.get('part_no','—')):<20s}"
-            f"  수량: {item.get('qty','—')} {item.get('unit',''):<5s}"
-            f"  Maker: {item.get('maker','—')}\n"
-            f"       품명: {item.get('description','—')}"
-            for i, item in enumerate(items)
-        )
-        body = f"""{vendor.name if vendor else 'Vendor'} 귀중
-
-안녕하세요,
-항상 협조해 주셔서 감사드립니다.
-
-아래 선박용 부품에 대한 견적을 요청드립니다.
-
-RFQ 번호 : {_no}
-선박명    : {vessel.name if vessel else '—'}
-발주처    : {cust.name if cust else '—'}
-문의일    : {rfq.date or date.today().isoformat()}
-
-──────────────────────── 품목 리스트 ────────────────────────
-{item_lines}
-──────────────────────────────────────────────────────────────
-
-각 품목에 대해 아래 사항을 포함하여 견적을 회신해 주시기 바랍니다:
-  • 단가 (USD, CNF 부산항 기준)
-  • 납기
-  • 원산지 / 제조사
-  • 기술적 비고 또는 대체품 (해당 시)
-
-"""
-        if notes:
-            body += f"추가 사항:\n{notes}\n\n"
-        body += "영업일 기준 5일 이내 회신 부탁드립니다.\n\n"
-        body += email_signature(default=(
+        return (
             "감사합니다.\n"
             "K-MARIS Energy & Solutions Co., Ltd.\n"
             "Email: sales@k-maris.com  |  www.k-maris.com\n"
             "Engineering Reliability. Supplying Performance."
-        )) + "\n"
-        return body
-
-    item_lines = "\n".join(
-        f"  {i+1:>2}. Part No.: {str(item.get('part_no','—')):<20s}"
-        f"  Qty: {item.get('qty','—')} {item.get('unit',''):<5s}"
-        f"  Maker: {item.get('maker','—')}\n"
-        f"       Desc: {item.get('description','—')}"
-        for i, item in enumerate(items)
-    )
-    body = f"""Dear {vendor.name if vendor else 'Vendor'},
-
-We would like to request your best quotation for the following marine spare parts.
-
-RFQ Reference : {_no}
-Vessel        : {vessel.name if vessel else '—'}
-End Customer  : {cust.name if cust else '—'}
-Enquiry Date  : {rfq.date or date.today().isoformat()}
-
-──────────────────────── ITEM LIST ────────────────────────
-{item_lines}
-────────────────────────────────────────────────────────────
-
-Please quote for each item:
-  • Unit price (USD, CNF Busan port)
-  • Lead time
-  • Country of origin / Manufacturer
-  • Technical remarks or alternatives (if any)
-
-"""
-    if notes:
-        body += f"Additional Notes:\n{notes}\n\n"
-    body += "Kindly reply within 5 business days.\n\n"
-    body += email_signature(default=(
+        )
+    return (
         "Best regards,\n"
         "K-MARIS Energy & Solutions Co., Ltd.\n"
         "Email: sales@k-maris.com  |  www.k-maris.com\n"
         "Engineering Reliability. Supplying Performance."
-    )) + "\n"
-    return body
+    )
+
+
+def vendor_rfq_default_subject_tpl(lang: str) -> str:
+    return ("[K-MARIS] 견적 요청 — {{rfq_no}} / {{vessel}}" if lang == "ko"
+            else "[K-MARIS] Inquiry — {{rfq_no}} / {{vessel}}")
+
+
+def vendor_rfq_default_body_tpl(lang: str) -> str:
+    if lang == "ko":
+        return (
+            "{{vendor_name}} 귀중\n\n"
+            "안녕하세요,\n"
+            "항상 협조해 주셔서 감사드립니다.\n\n"
+            "아래 선박용 부품에 대한 견적을 요청드립니다.\n\n"
+            "RFQ 번호 : {{rfq_no}}\n"
+            "선박명    : {{vessel}}\n"
+            "발주처    : {{customer}}\n"
+            "문의일    : {{enquiry_date}}\n\n"
+            "──────────────────────── 품목 리스트 ────────────────────────\n"
+            "{{item_list}}\n"
+            "──────────────────────────────────────────────────────────────\n\n"
+            "각 품목에 대해 아래 사항을 포함하여 견적을 회신해 주시기 바랍니다:\n"
+            "  • 단가 (USD, CNF 부산항 기준)\n"
+            "  • 납기\n"
+            "  • 원산지 / 제조사\n"
+            "  • 기술적 비고 또는 대체품 (해당 시)\n\n"
+            "{{notes}}영업일 기준 5일 이내 회신 부탁드립니다.\n\n"
+            "{{signature}}\n"
+        )
+    return (
+        "Dear {{vendor_name}},\n\n"
+        "We would like to request your best quotation for the following marine spare parts.\n\n"
+        "RFQ Reference : {{rfq_no}}\n"
+        "Vessel        : {{vessel}}\n"
+        "End Customer  : {{customer}}\n"
+        "Enquiry Date  : {{enquiry_date}}\n\n"
+        "──────────────────────── ITEM LIST ────────────────────────\n"
+        "{{item_list}}\n"
+        "────────────────────────────────────────────────────────────\n\n"
+        "Please quote for each item:\n"
+        "  • Unit price (USD, CNF Busan port)\n"
+        "  • Lead time\n"
+        "  • Country of origin / Manufacturer\n"
+        "  • Technical remarks or alternatives (if any)\n\n"
+        "{{notes}}Kindly reply within 5 business days.\n\n"
+        "{{signature}}\n"
+    )
+
+
+def _vendor_rfq_token_ctx(rfq, cust, vessel, vendor, notes, lang, items, rfq_no, item_cols) -> dict:
+    items = (rfq.items if items is None else items) or []
+    notes = (notes or "").strip()
+    if notes:
+        notes_block = (f"추가 사항:\n{notes}\n\n" if lang == "ko" else f"Additional Notes:\n{notes}\n\n")
+    else:
+        notes_block = ""
+    return {
+        "vendor_name": (vendor.name if vendor else "Vendor"),
+        "rfq_no": rfq_no or rfq.rfq_no or "—",
+        "vessel": (vessel.name if vessel else "—"),
+        "customer": (cust.name if cust else "—"),
+        "enquiry_date": (rfq.date or date.today().isoformat()),
+        "item_list": _render_item_list(items, item_cols, lang),
+        "notes": notes_block,
+        "signature": email_signature(default=_default_signature(lang)),
+    }
+
+
+def _render_tokens(tpl: str, ctx: dict) -> str:
+    """{{key}} 토큰을 안전하게 치환(str.replace). 미정의 토큰은 원문 그대로 둔다."""
+    out = tpl or ""
+    for k, v in ctx.items():
+        out = out.replace("{{" + k + "}}", str(v))
+    return out
+
+
+def _resolve_email_template(s, user_id, doc_type: str, lang: str):
+    """개인(user_id) → 회사 기본(NULL) 순으로 EmailTemplate 조회. 없으면 None."""
+    for uid in (([user_id] if user_id else []) + [None]):
+        t = (s.query(EmailTemplate)
+             .filter_by(user_id=uid, doc_type=doc_type, lang=lang).first())
+        if t:
+            return t
+    return None
+
+
+def build_vendor_rfq_email(s, user_id, rfq, cust, vessel, vendor, notes, lang,
+                           items=None, rfq_no: str | None = None) -> tuple[str, str]:
+    """(subject, body) 초안 생성 — 담당자 템플릿 우선, 없으면 회사/내장 기본."""
+    lang = "ko" if lang == "ko" else "en"
+    tpl = _resolve_email_template(s, user_id, "vendor_rfq", lang)
+    subject_tpl = (tpl.subject_tpl if (tpl and tpl.subject_tpl) else vendor_rfq_default_subject_tpl(lang))
+    body_tpl = (tpl.body_tpl if (tpl and tpl.body_tpl) else vendor_rfq_default_body_tpl(lang))
+    item_cols = ((tpl.options or {}).get("item_cols") if tpl else None) or DEFAULT_VENDOR_RFQ_ITEM_COLS
+    ctx = _vendor_rfq_token_ctx(rfq, cust, vessel, vendor, notes, lang, items, rfq_no, item_cols)
+    return _render_tokens(subject_tpl, ctx), _render_tokens(body_tpl, ctx)
+
+
+def _vendor_rfq_email_body(rfq, cust, vessel, vendor, notes: str, lang: str,
+                           items=None, rfq_no: str | None = None) -> str:
+    """하위호환 래퍼 — 사용자 템플릿 없이 내장 기본 템플릿으로 본문만 생성."""
+    lang = "ko" if lang == "ko" else "en"
+    ctx = _vendor_rfq_token_ctx(rfq, cust, vessel, vendor, notes, lang, items, rfq_no,
+                                DEFAULT_VENDOR_RFQ_ITEM_COLS)
+    return _render_tokens(vendor_rfq_default_body_tpl(lang), ctx)
+
+
+def preview_vendor_rfq_template(subject_tpl: str, body_tpl: str,
+                                options: dict | None, lang: str) -> tuple[str, str]:
+    """설정 화면 미리보기 — (미저장) 템플릿을 샘플 데이터로 렌더한다."""
+    from types import SimpleNamespace
+    lang = "ko" if lang == "ko" else "en"
+    rfq = SimpleNamespace(rfq_no="KMS-RFQ-SAMPLE", date=date.today().isoformat(), items=[
+        {"part_no": "L53000-211", "description": "Accumulator", "qty": 2,
+         "unit": "pcs", "maker": "Parker", "serial_no": "SN-2207", "remark": "urgent"},
+        {"part_no": "AB-77-9", "description": "Cylinder head gasket", "qty": 10,
+         "unit": "ea", "maker": "MAN", "serial_no": "", "remark": ""},
+    ])
+    cust = SimpleNamespace(name="SENDA group")
+    vessel = SimpleNamespace(name="MV SAMPLE")
+    vendor = SimpleNamespace(name="Global Marine Service")
+    cols = (options or {}).get("item_cols") or DEFAULT_VENDOR_RFQ_ITEM_COLS
+    sample_notes = ("재고 여부 회신 부탁드립니다." if lang == "ko"
+                    else "Please advise stock availability.")
+    ctx = _vendor_rfq_token_ctx(rfq, cust, vessel, vendor, sample_notes, lang, None, None, cols)
+    st = subject_tpl or vendor_rfq_default_subject_tpl(lang)
+    bt = body_tpl or vendor_rfq_default_body_tpl(lang)
+    return _render_tokens(st, ctx), _render_tokens(bt, ctx)
 
 
 def _cur2(c: str | None) -> str:
@@ -2068,6 +2172,24 @@ class RfqCancelUpdate(BaseModel):
     cancelled: bool
 
 
+class EmailTemplateSave(BaseModel):
+    """이메일 템플릿 저장(upsert). scope=user(개인) | company(회사 기본, admin)."""
+    scope: str = "user"
+    doc_type: str = "vendor_rfq"
+    lang: str = "en"
+    subject_tpl: str = ""
+    body_tpl: str = ""
+    options: dict | None = None   # {"item_cols": [...]}
+
+
+class EmailTemplatePreviewReq(BaseModel):
+    """미저장 템플릿을 샘플 데이터로 렌더해 미리보기."""
+    lang: str = "en"
+    subject_tpl: str = ""
+    body_tpl: str = ""
+    options: dict | None = None
+
+
 class StageDateUpdate(BaseModel):
     stage: int                 # 1~11
     value: str | None = None   # "YYYY-MM-DDTHH:MM" (KST) 또는 빈값/None → 해제
@@ -2283,6 +2405,16 @@ __all__ = [
     "_tracking_url",
     "_vendor_po_email_body",
     "_vendor_rfq_email_body",
+    "EmailTemplate",
+    "EmailTemplateSave",
+    "EmailTemplatePreviewReq",
+    "build_vendor_rfq_email",
+    "preview_vendor_rfq_template",
+    "vendor_rfq_default_subject_tpl",
+    "vendor_rfq_default_body_tpl",
+    "VENDOR_RFQ_ITEM_COLS",
+    "VENDOR_RFQ_TOKENS",
+    "DEFAULT_VENDOR_RFQ_ITEM_COLS",
     "_vessel_for_order",
     "_vrfq_sent_iso",
     "_write_company_profile",

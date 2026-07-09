@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
   createSettingsCustomer,
@@ -33,8 +33,12 @@ import {
   createItemCategory,
   updateItemCategory,
   deleteItemCategory,
+  fetchEmailTemplates,
+  saveEmailTemplate,
+  deleteEmailTemplate,
+  previewEmailTemplate,
 } from "@/lib/api";
-import type { PermissionsConfig, RolePermRow } from "@/lib/api";
+import type { PermissionsConfig, RolePermRow, EmailTemplatesData } from "@/lib/api";
 import type { PermGrid } from "@/lib/auth";
 import type {
   CompanyProfile,
@@ -57,7 +61,7 @@ import ComboBox from "@/components/common/ComboBox";
 
 type Tab =
   | "company" | "users" | "permissions"
-  | "customers" | "vendors" | "vessels" | "items" | "categories" | "account";
+  | "customers" | "vendors" | "vessels" | "items" | "categories" | "email" | "account";
 
 const emptyCompany: CompanyProfile = {
   company_name_en: "",
@@ -117,6 +121,7 @@ function Settings() {
         { key: "vessels", label: "Vessels" },
         { key: "items", label: "Item Master" },
         { key: "categories", label: "Item Category" },
+        { key: "email", label: "Email Templates" },
       ]
     : [
         { key: "customers", label: "Customer" },
@@ -124,6 +129,7 @@ function Settings() {
         { key: "vessels", label: "Vessels" },
         { key: "items", label: "Item Master" },
         { key: "categories", label: "Item Category" },
+        { key: "email", label: "Email Templates" },
         { key: "account", label: "My Account" },
       ];
 
@@ -148,6 +154,7 @@ function Settings() {
       {tab === "vessels" && <VesselsTab />}
       {tab === "items" && <ItemsTab />}
       {tab === "categories" && <CategoriesTab />}
+      {tab === "email" && <EmailTemplatesTab />}
       {tab === "account" && (
         <div className="panel">
           <MyPasswordChange />
@@ -1602,4 +1609,222 @@ function TextField({
 function stripId<T extends { id: number }>(row: T): Omit<T, "id"> {
   const { id: _id, ...rest } = row;
   return rest;
+}
+
+// ── 이메일 템플릿 편집 탭 (담당자별 초안) ──────────────────────────────────────
+function EmailTemplatesTab() {
+  const [data, setData] = useState<EmailTemplatesData | null>(null);
+  const [scope, setScope] = useState<"user" | "company">("user");
+  const [lang, setLang] = useState<"en" | "ko">("en");
+  const [subject, setSubject] = useState("");
+  const [body, setBody] = useState("");
+  const [cols, setCols] = useState<string[]>([]);
+  const [customized, setCustomized] = useState(false);
+  const [preview, setPreview] = useState<{ subject: string; body: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const subjectRef = useRef<HTMLInputElement>(null);
+  const lastFocus = useRef<"subject" | "body">("body");
+
+  function load() {
+    fetchEmailTemplates("vendor_rfq")
+      .then(setData)
+      .catch((e) => setErr(e instanceof Error ? e.message : "Load failed"));
+  }
+  useEffect(() => {
+    load();
+  }, []);
+
+  // scope/lang/data 변화 시 해당 템플릿(없으면 기본값)을 폼에 채운다.
+  useEffect(() => {
+    if (!data) return;
+    const src = scope === "company" ? data.company[lang] : data.user[lang];
+    if (src) {
+      setSubject(src.subject_tpl);
+      setBody(src.body_tpl);
+      setCols(src.options?.item_cols?.length ? src.options.item_cols : data.default_item_cols);
+      setCustomized(true);
+    } else {
+      setSubject(data.defaults[lang].subject_tpl);
+      setBody(data.defaults[lang].body_tpl);
+      setCols(data.default_item_cols);
+      setCustomized(false);
+    }
+    setPreview(null);
+    setMsg(null);
+    setErr(null);
+  }, [data, scope, lang]);
+
+  function insertToken(tok: string) {
+    const ins = `{{${tok}}}`;
+    if (lastFocus.current === "subject" && subjectRef.current) {
+      const el = subjectRef.current;
+      const a = el.selectionStart ?? subject.length;
+      const b = el.selectionEnd ?? subject.length;
+      setSubject(subject.slice(0, a) + ins + subject.slice(b));
+    } else {
+      const el = bodyRef.current;
+      const a = el?.selectionStart ?? body.length;
+      const b = el?.selectionEnd ?? body.length;
+      setBody(body.slice(0, a) + ins + body.slice(b));
+    }
+  }
+
+  function toggleCol(key: string) {
+    if (!data) return;
+    const order = data.item_cols.map((c) => c.key);
+    setCols((prev) => {
+      const next = prev.includes(key) ? prev.filter((c) => c !== key) : [...prev, key];
+      return order.filter((k) => next.includes(k)); // 카탈로그 순서 유지
+    });
+  }
+
+  async function doPreview() {
+    setBusy(true);
+    setErr(null);
+    try {
+      setPreview(
+        await previewEmailTemplate({ lang, subject_tpl: subject, body_tpl: body, options: { item_cols: cols } })
+      );
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Preview failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function doSave() {
+    setBusy(true);
+    setErr(null);
+    setMsg(null);
+    try {
+      await saveEmailTemplate({
+        scope,
+        doc_type: "vendor_rfq",
+        lang,
+        subject_tpl: subject,
+        body_tpl: body,
+        options: { item_cols: cols },
+      });
+      setMsg(scope === "company" ? "Saved company default" : "Saved your template");
+      load();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function doReset() {
+    if (!window.confirm("Reset to default? Your saved template for this language will be removed."))
+      return;
+    setBusy(true);
+    setErr(null);
+    setMsg(null);
+    try {
+      await deleteEmailTemplate(scope, "vendor_rfq", lang);
+      setMsg("Reset to default");
+      load();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Reset failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!data) return <div className="panel">Loading…</div>;
+
+  return (
+    <div className="panel email-tpl">
+      <div className="hint-inline" style={{ marginBottom: 10 }}>
+        Vendor RFQ 발송 초안(제목·본문)의 기본값을 담당자별로 설정합니다. 발송 화면에서는 언제든 다시 편집할 수 있습니다.
+        토큰(<code>{"{{rfq_no}}"}</code> 등)은 발송 시 실제 값으로 치환됩니다.
+      </div>
+
+      <div className="email-tpl-toolbar">
+        {data.is_admin ? (
+          <span className="seg-toggle" role="group" aria-label="Scope">
+            <button className={scope === "user" ? "on" : ""} onClick={() => setScope("user")}>
+              My template
+            </button>
+            <button className={scope === "company" ? "on" : ""} onClick={() => setScope("company")}>
+              Company default
+            </button>
+          </span>
+        ) : null}
+        <span className="seg-toggle" role="group" aria-label="Language">
+          <button className={lang === "en" ? "on" : ""} onClick={() => setLang("en")}>EN</button>
+          <button className={lang === "ko" ? "on" : ""} onClick={() => setLang("ko")}>KO</button>
+        </span>
+        <span className={`email-tpl-badge ${customized ? "custom" : "default"}`}>
+          {customized ? "Customized" : "Using default"}
+        </span>
+      </div>
+
+      <div className="email-tpl-tokens">
+        <span className="email-tpl-tokens-label">Insert token:</span>
+        {data.tokens.map((t) => (
+          <button key={t} type="button" className="btn xs" onClick={() => insertToken(t)}>
+            {`{{${t}}}`}
+          </button>
+        ))}
+      </div>
+
+      <div className="form-field" style={{ marginTop: 10 }}>
+        <label>Subject</label>
+        <input
+          ref={subjectRef}
+          value={subject}
+          onFocus={() => (lastFocus.current = "subject")}
+          onChange={(e) => setSubject(e.target.value)}
+        />
+      </div>
+      <div className="form-field" style={{ marginTop: 8 }}>
+        <label>Body</label>
+        <textarea
+          ref={bodyRef}
+          className="po-textarea"
+          style={{ minHeight: 320, fontFamily: "ui-monospace, monospace" }}
+          value={body}
+          onFocus={() => (lastFocus.current = "body")}
+          onChange={(e) => setBody(e.target.value)}
+        />
+      </div>
+
+      <div className="form-field" style={{ marginTop: 8 }}>
+        <label>{"ITEM LIST columns  ({{item_list}})"}</label>
+        <div className="email-tpl-cols">
+          {data.item_cols.map((c) => (
+            <label key={c.key} className="email-tpl-col">
+              <input
+                type="checkbox"
+                checked={cols.includes(c.key)}
+                onChange={() => toggleCol(c.key)}
+              />
+              {lang === "ko" ? c.label_ko : c.label_en}
+              <span className="muted"> ({c.key})</span>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <div className="form-actions">
+        <button className="btn" onClick={doPreview} disabled={busy}>Preview</button>
+        <button className="btn primary" onClick={doSave} disabled={busy}>
+          {busy ? "Working…" : "Save"}
+        </button>
+        <button className="btn" onClick={doReset} disabled={busy || !customized}>Reset to default</button>
+        {msg ? <span className="action-ok">{msg}</span> : null}
+        {err ? <span className="action-err">{err}</span> : null}
+      </div>
+
+      {preview ? (
+        <div className="email-tpl-preview">
+          <div className="sub-h">Preview (sample data)</div>
+          <div className="email-tpl-preview-subj"><b>Subject:</b> {preview.subject}</div>
+          <pre className="email-tpl-preview-body">{preview.body}</pre>
+        </div>
+      ) : null}
+    </div>
+  );
 }

@@ -46,6 +46,8 @@ from _core import (
     _sanitize_vendor_rfq_items,
     _status_label,
     _vendor_rfq_email_body,
+    build_vendor_rfq_email,
+    get_current_user,
     app,
     date,
     datetime,
@@ -153,7 +155,8 @@ def vendor_quote_overview():
 
 @app.post("/api/admin/rfq/{rfq_id}/vendor-rfq-preview",
           dependencies=[Depends(require_token)])
-def vendor_rfq_preview(rfq_id: int, body: VendorRfqPreviewRequest):
+def vendor_rfq_preview(rfq_id: int, body: VendorRfqPreviewRequest,
+                       user: dict = Depends(get_current_user)):
     s = get_session()
     try:
         rfq = s.query(RFQ).filter_by(id=rfq_id).first()
@@ -178,16 +181,14 @@ def vendor_rfq_preview(rfq_id: int, body: VendorRfqPreviewRequest):
             if not vendor:
                 continue
             safe_vname = "".join(c for c in vendor.name if c.isalnum() or c in "._- ")[:40]
+            subj, bod = build_vendor_rfq_email(
+                s, user.get("id"), rfq, cust, vessel, vendor, body.notes, lang, items, rfq_no=disp_no)
             previews.append({
                 "vendor_id": vendor.id,
                 "vendor_name": vendor.name,
                 "to": vendor.email or "",
-                "subject": (
-                    f"[K-MARIS] 견적 요청 — {disp_no} / {vessel.name if vessel else disp_no}"
-                    if lang == "ko"
-                    else f"[K-MARIS] Inquiry — {disp_no} / {vessel.name if vessel else disp_no}"
-                ),
-                "body": _vendor_rfq_email_body(rfq, cust, vessel, vendor, body.notes, lang, items, rfq_no=disp_no),
+                "subject": subj,
+                "body": bod,
                 "xlsx_filename": f"{disp_no}_VendorQuoteSheet_{safe_vname}.xlsx",
             })
         return {
@@ -320,21 +321,19 @@ def vendor_rfq_xlsx_single(vrfq_id: int):
 
 
 @app.post("/api/admin/vendor-rfq/{vrfq_id}/email-preview", dependencies=[Depends(require_token)])
-def vendor_rfq_email_preview(vrfq_id: int, body: VendorRfqEmailPreviewReq):
+def vendor_rfq_email_preview(vrfq_id: int, body: VendorRfqEmailPreviewReq,
+                             user: dict = Depends(get_current_user)):
     s = get_session()
     try:
         vr, rfq, vendor, cust, vessel, rfq_no, items, safe = _vrfq_ctx(s, vrfq_id)
         lang = "ko" if body.lang == "ko" else "en"
-        subject = (
-            f"[K-MARIS] 견적 요청 — {rfq_no} / {vessel.name if vessel else rfq_no}"
-            if lang == "ko"
-            else f"[K-MARIS] Inquiry — {rfq_no} / {vessel.name if vessel else rfq_no}"
-        )
+        subject, mail_body = build_vendor_rfq_email(
+            s, user.get("id"), rfq, cust, vessel, vendor, "", lang, vr.items or None, rfq_no=rfq_no)
         return {
             "to": vr.sent_to_email or (vendor.email if vendor else "") or "",
             "from": default_from(),
             "subject": subject,
-            "body": _vendor_rfq_email_body(rfq, cust, vessel, vendor, "", lang, vr.items or None),
+            "body": mail_body,
             "smtp_configured": bool(os.getenv("SMTP_USER") and os.getenv("SMTP_PASSWORD")),
         }
     finally:

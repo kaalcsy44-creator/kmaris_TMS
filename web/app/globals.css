@@ -6160,3 +6160,89 @@ table.mini .num {
     opacity: 1;
   }
 }
+
+/* ── Settings: 이메일 템플릿 편집 ─────────────────────────────────────────── */
+.seg-toggle {
+  display: inline-flex;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.seg-toggle button {
+  border: 0;
+  background: #fff;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 5px 12px;
+  cursor: pointer;
+  line-height: 1;
+}
+.seg-toggle button + button { border-left: 1px solid var(--line); }
+.seg-toggle button.on { background: var(--navy); color: #fff; }
+
+.email-tpl-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.email-tpl-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+.email-tpl-badge.custom { background: #e9f2fb; color: var(--blue); }
+.email-tpl-badge.default { background: var(--head-bg); color: var(--muted); }
+
+.email-tpl-tokens {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 8px 10px;
+  background: var(--head-bg);
+  border-radius: 8px;
+}
+.email-tpl-tokens-label { font-size: 12px; font-weight: 700; color: var(--muted); }
+.btn.xs {
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.email-tpl-cols {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  padding: 8px 2px;
+}
+.email-tpl-col {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.email-tpl-preview {
+  margin-top: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: var(--page-bg);
+}
+.email-tpl-preview-subj { font-size: 13px; margin: 6px 0 8px; }
+.email-tpl-preview-body {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px;
+  line-height: 1.5;
+  margin: 0;
+  color: var(--ink);
+  overflow-x: auto;
+}

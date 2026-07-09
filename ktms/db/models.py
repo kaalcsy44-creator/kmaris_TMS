@@ -173,6 +173,25 @@ class DocSequence(Base):
     last_seq = Column(Integer, default=0)
 
 
+class EmailTemplate(Base):
+    """담당자별(또는 회사 공용) 이메일 초안 템플릿.
+
+    발송 화면의 초안(제목·본문)을 생성할 때 사용한다. 토큰({{rfq_no}} 등) 치환
+    방식이며, options 로 ITEM LIST 컬럼 구성을 담는다.
+    해석 순서: 개인(user_id=uid) → 회사 기본(user_id=NULL) → 코드 내장 기본값.
+    (user_id, doc_type, lang) 조합은 upsert 로직에서 유일하게 유지한다.
+    """
+    __tablename__ = "email_templates"
+    id          = Column(Integer, primary_key=True)
+    user_id     = Column(Integer, ForeignKey("users.id"), nullable=True)  # NULL=회사 공용 기본
+    doc_type    = Column(String(40), default="vendor_rfq")   # MVP: vendor_rfq
+    lang        = Column(String(8), default="en")            # en | ko
+    subject_tpl = Column(Text)
+    body_tpl    = Column(Text)
+    options     = Column(JSON, default=dict)   # {"item_cols": ["part_no","qty","maker","description"]}
+    updated_at  = Column(DateTime, default=datetime.utcnow)
+
+
 # ── Trade flow tables ─────────────────────────────────────────────────────────
 
 class RFQ(Base):
