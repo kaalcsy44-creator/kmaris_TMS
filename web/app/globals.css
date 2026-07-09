@@ -4936,12 +4936,13 @@ table.mini .num {
 }
 .pl-board-col.done {
   border-top-color: var(--ink);
+  background: #fff;
 }
 .pl-board-col.done .pl-board-title { color: var(--ink); }
 .pl-board-col.done .pl-board-count { background: var(--ink); }
 .pl-board-col.cancelled {
   border-top-color: #9aa3af;
-  background: var(--head-bg);
+  background: #fff;
 }
 .pl-board-col.cancelled .pl-board-title { color: #6b7280; }
 .pl-board-col.cancelled .pl-board-count { background: #9aa3af; }
@@ -6643,8 +6644,9 @@ table.mini .num {
   flex-direction: column;
   overflow: hidden;
 }
-.board-prev-col.done { border-top-color: var(--ink); }
-.board-prev-col.cancelled { border-top-color: #9aa3af; background: var(--head-bg); }
+/* 종결 컬럼(Done·Closed)은 본 진행 프로세스와 구분되게 배경 음영을 빼고 흰 바탕으로. */
+.board-prev-col.done { border-top-color: var(--ink); background: #fff; }
+.board-prev-col.cancelled { border-top-color: #9aa3af; background: #fff; }
 .board-prev-colhead {
   display: flex;
   align-items: center;
