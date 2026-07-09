@@ -527,6 +527,8 @@ function PipelineTable({
   }, [openRfqId, openOrderId, openStage, rows]);
   // 목록 표시 방식: 표(table) / 칸반 보드(board). 같은 데이터·같은 상세 모달 재사용.
   const [view, setView] = useState<"table" | "board">("board");
+  // 현황판 전체 미리보기(A4 가로 이미지) 팝업 열림 여부.
+  const [previewOpen, setPreviewOpen] = useState(false);
   // 보드 카드 밀도: 상세(false) / 간략(true). 간략이면 모든 카드를 한 줄 요약으로 접어 전체를 한눈에.
   const [boardCompact, setBoardCompact] = useState<boolean>(
     () => typeof window !== "undefined" && window.localStorage.getItem("ktms:board-compact") === "1"
@@ -828,6 +830,16 @@ function PipelineTable({
             </button>
           </span>
         ) : null}
+        {view === "board" ? (
+          <button
+            type="button"
+            className="btn sm pl-preview-btn"
+            onClick={() => setPreviewOpen(true)}
+            title="현황판 전체를 A4 가로 1장으로 미리보기 · 이미지 저장"
+          >
+            🖼 Preview
+          </button>
+        ) : null}
         <span className="pl-view-toggle" role="tablist" aria-label="View mode">
           <button
             type="button"
@@ -957,6 +969,15 @@ function PipelineTable({
           }}
         />
       ) : null}
+
+      {previewOpen ? (
+        <BoardPreviewModal
+          rows={displayRows}
+          steps={steps}
+          stageOf={stageOf}
+          onClose={() => setPreviewOpen(false)}
+        />
+      ) : null}
     </>
   );
 }
@@ -966,6 +987,25 @@ function daysSince(iso: string): number | null {
   const t = Date.parse((iso || "").slice(0, 10));
   if (Number.isNaN(t)) return null;
   return Math.max(0, Math.floor((Date.now() - t) / 86_400_000));
+}
+
+type BoardCol = {
+  label: string;
+  variant?: "done" | "cancelled";
+  match: (r: PipelineRow) => boolean;
+};
+
+/** 내부 11단계 보드의 컬럼 정의(Closed·RFQ·Quote·PO·Documents·AR·Done). 보드/미리보기 공용. */
+function groupedBoardColumns(stageOf: (r: PipelineRow) => number): BoardCol[] {
+  return [
+    { label: "Closed", variant: "cancelled", match: (r) => !!r.cancelled },
+    { label: "RFQ", match: (r) => !r.cancelled && stageOf(r) <= 2 },
+    { label: "Quote", match: (r) => !r.cancelled && stageOf(r) >= 3 && stageOf(r) <= 4 },
+    { label: "PO", match: (r) => !r.cancelled && stageOf(r) >= 5 && stageOf(r) <= 6 },
+    { label: "Documents", match: (r) => !r.cancelled && stageOf(r) >= 7 && stageOf(r) <= 9 },
+    { label: "AR", match: (r) => !r.cancelled && stageOf(r) === 10 },
+    { label: "Done ✓", variant: "done", match: (r) => !r.cancelled && stageOf(r) >= 11 },
+  ];
 }
 
 /**
@@ -1005,20 +1045,8 @@ function PipelineBoard({
   const grouped = steps.length === 11;
   // 종결(취소/실주) 딜은 진행 컬럼에서 빼고 별도 Closed 존(RFQ 좌측 맨 앞)으로 모은다.
   // 완료(11단계 Payment Completed)는 AR 을 떠나 Done 컬럼으로 종결 처리한다.
-  const cols: {
-    label: string;
-    variant?: "done" | "cancelled";
-    match: (r: PipelineRow) => boolean;
-  }[] = grouped
-    ? [
-        { label: "Closed", variant: "cancelled", match: (r) => !!r.cancelled },
-        { label: "RFQ", match: (r) => !r.cancelled && stageOf(r) <= 2 },
-        { label: "Quote", match: (r) => !r.cancelled && stageOf(r) >= 3 && stageOf(r) <= 4 },
-        { label: "PO", match: (r) => !r.cancelled && stageOf(r) >= 5 && stageOf(r) <= 6 },
-        { label: "Documents", match: (r) => !r.cancelled && stageOf(r) >= 7 && stageOf(r) <= 9 },
-        { label: "AR", match: (r) => !r.cancelled && stageOf(r) === 10 },
-        { label: "Done ✓", variant: "done", match: (r) => !r.cancelled && stageOf(r) >= 11 },
-      ]
+  const cols: BoardCol[] = grouped
+    ? groupedBoardColumns(stageOf)
     : steps.map((label, i) => ({
         label: `${i + 1}. ${label}`,
         match: (r: PipelineRow) => !r.cancelled && stageOf(r) === i + 1,
@@ -1061,6 +1089,135 @@ function PipelineBoard({
           </section>
         );
       })}
+    </div>
+  );
+}
+
+/** 현황판 전체를 A4 가로 1장으로 미리보기 + PNG 내려받기.
+ *  클릭한 시점의 필터/정렬 결과(displayRows)를 그대로 담아 한눈에 보여준다. */
+function BoardPreviewModal({
+  rows,
+  steps,
+  stageOf,
+  onClose,
+}: {
+  rows: PipelineRow[];
+  steps: string[];
+  stageOf: (r: PipelineRow) => number;
+  onClose: () => void;
+}) {
+  const A4_W = 1400;
+  const A4_H = 990; // 1400/990 ≈ 1.414 (A4 가로 비율)
+  const frameRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(0.5);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    function fit() {
+      const s = Math.min(1, (window.innerWidth - 64) / A4_W, (window.innerHeight - 150) / A4_H);
+      setScale(s > 0.15 ? s : 0.4);
+    }
+    fit();
+    window.addEventListener("resize", fit);
+    return () => window.removeEventListener("resize", fit);
+  }, []);
+  // 종결(Closed) 존은 해당 딜이 있을 때만 표시(보드와 동일 규칙).
+  const cols = groupedBoardColumns(stageOf).filter(
+    (c) => c.variant !== "cancelled" || rows.some((r) => c.match(r))
+  );
+  const today = new Date().toISOString().slice(0, 10);
+
+  async function download() {
+    if (!frameRef.current) return;
+    setBusy(true);
+    try {
+      const { toPng } = await import("html-to-image");
+      const url = await toPng(frameRef.current, {
+        width: A4_W,
+        height: A4_H,
+        pixelRatio: 2,
+        backgroundColor: "#ffffff",
+        cacheBust: true,
+      });
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `KMARIS-progress-${today}.png`;
+      a.click();
+    } catch {
+      /* 캡처 실패 시 조용히 무시 */
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div
+      className="pl-modal-backdrop"
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      role="presentation"
+    >
+      <div className="board-prev" onMouseDown={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+        <div className="board-prev-bar">
+          <b>Board overview · A4 landscape</b>
+          <span className="board-prev-actions">
+            <button className="btn primary" onClick={download} disabled={busy}>
+              {busy ? "Rendering…" : "⬇ Download PNG"}
+            </button>
+            <button className="btn" onClick={onClose}>Close</button>
+          </span>
+        </div>
+        <div className="board-prev-vp" style={{ width: A4_W * scale, height: A4_H * scale }}>
+          <div className="board-prev-scale" style={{ transform: `scale(${scale})` }}>
+            <div ref={frameRef} className="board-prev-a4" style={{ width: A4_W, height: A4_H }}>
+              <div className="board-prev-pghead">
+                <span className="board-prev-brand">K-MARIS · Progress (Internal)</span>
+                <span className="board-prev-meta">{today} · {rows.length} deals</span>
+              </div>
+              <div className="board-prev-cols">
+                {cols.map((col, ci) => {
+                  const cards = rows.filter((r) => col.match(r));
+                  return (
+                    <div key={ci} className={`board-prev-col${col.variant ? ` ${col.variant}` : ""}`}>
+                      <div className="board-prev-colhead">
+                        <span>{col.label}</span>
+                        <span className="board-prev-cnt">{cards.length}</span>
+                      </div>
+                      <div className="board-prev-list">
+                        {cards.length === 0 ? (
+                          <div className="board-prev-empty">—</div>
+                        ) : (
+                          cards.map((r) => {
+                            const total = steps.length;
+                            const filled = Math.max(0, Math.min(stageOf(r), total));
+                            const amount = r.order_amount || r.customer_amount || r.vendor_amount || "";
+                            return (
+                              <div key={r.rfq_id} className="board-prev-card">
+                                <div className="board-prev-cardno"><ProjectNo value={r.project_no} /></div>
+                                <div className="board-prev-cust">{r.customer || "—"}</div>
+                                {r.project_title ? (
+                                  <div className="board-prev-title2">{r.project_title}</div>
+                                ) : null}
+                                <div className="board-prev-cardbar">
+                                  {Array.from({ length: total }).map((_, i) => (
+                                    <span key={i} className={`seg${i < filled ? " on" : ""}`} />
+                                  ))}
+                                </div>
+                                <div className="board-prev-foot">
+                                  <span>{r.assignee || "—"}</span>
+                                  {amount ? <span className="board-prev-amt">{amount}</span> : null}
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

@@ -4759,8 +4759,8 @@ table.mini .num {
   padding: 4px 2px 12px;
 }
 .pl-board-col {
-  flex: 1 1 0;
-  min-width: 210px;
+  flex: 1 1 330px;
+  min-width: 330px;
   background: var(--page-bg);
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -4830,8 +4830,8 @@ table.mini .num {
 /* 종결 컬럼(Done/Cancelled)은 카드 수가 적어 폭을 좁게 고정하고 색으로 구분한다. */
 .pl-board-col.done,
 .pl-board-col.cancelled {
-  flex: 0 1 190px;
-  min-width: 168px;
+  flex: 0 1 228px;
+  min-width: 200px;
 }
 .pl-board-col.done {
   border-top-color: var(--ink);
@@ -6257,3 +6257,113 @@ table.mini .num {
   margin-left: 1px;
   color: #8a96a8;
 }
+
+/* ── 현황판 A4 가로 미리보기 팝업 ─────────────────────────────────────────── */
+.pl-preview-btn { font-size: 12px; }
+.board-prev {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(11, 29, 58, 0.35);
+  display: flex;
+  flex-direction: column;
+  max-width: calc(100vw - 40px);
+  max-height: calc(100vh - 96px);
+  overflow: hidden;
+}
+.board-prev-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  flex: none;
+}
+.board-prev-actions { display: inline-flex; gap: 8px; }
+.board-prev-vp {
+  overflow: hidden;
+  background: #eef1f5;
+}
+.board-prev-scale { transform-origin: top left; }
+/* 캡처 대상 = A4 가로 1장(1400×990). 시각적으로는 부모(scale)로 축소된다. */
+.board-prev-a4 {
+  box-sizing: border-box;
+  background: #fff;
+  padding: 22px 24px;
+  display: flex;
+  flex-direction: column;
+  font-family: -apple-system, "Segoe UI", Roboto, "Malgun Gothic", sans-serif;
+}
+.board-prev-pghead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  border-bottom: 2px solid var(--navy);
+  padding-bottom: 8px;
+  margin-bottom: 12px;
+  flex: none;
+}
+.board-prev-brand { font-size: 20px; font-weight: 800; color: var(--navy); }
+.board-prev-meta { font-size: 13px; color: var(--muted); font-weight: 600; }
+.board-prev-cols { display: flex; gap: 10px; flex: 1; min-height: 0; align-items: stretch; }
+.board-prev-col {
+  flex: 1 1 0;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--blue);
+  border-radius: 8px;
+  background: var(--page-bg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.board-prev-col.done { border-top-color: var(--ink); }
+.board-prev-col.cancelled { border-top-color: #9aa3af; background: var(--head-bg); }
+.board-prev-colhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--blue);
+  border-bottom: 1px solid var(--line);
+  flex: none;
+}
+.board-prev-col.done .board-prev-colhead { color: var(--ink); }
+.board-prev-col.cancelled .board-prev-colhead { color: #6b7280; }
+.board-prev-cnt {
+  font-size: 11px;
+  color: #fff;
+  background: var(--blue);
+  border-radius: 999px;
+  padding: 0 6px;
+  min-width: 18px;
+  text-align: center;
+}
+.board-prev-col.done .board-prev-cnt { background: var(--ink); }
+.board-prev-col.cancelled .board-prev-cnt { background: #9aa3af; }
+.board-prev-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px;
+  overflow: hidden;
+}
+.board-prev-empty { color: var(--muted); font-size: 12px; text-align: center; padding: 8px 0; }
+.board-prev-card {
+  background: #fff;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  padding: 6px 8px;
+}
+.board-prev-cardno { font-size: 11px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--blue); margin-bottom: 2px; }
+.board-prev-cust { font-size: 12px; font-weight: 700; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.board-prev-title2 { font-size: 11px; color: var(--blue); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+.board-prev-cardbar { display: flex; gap: 2px; margin: 5px 0 4px; }
+.board-prev-cardbar .seg { flex: 1; height: 3px; border-radius: 2px; background: var(--line-strong); }
+.board-prev-cardbar .seg.on { background: var(--blue); }
+.board-prev-col.done .board-prev-cardbar .seg.on { background: var(--ink); }
+.board-prev-foot { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 10.5px; }
+.board-prev-foot > span:first-child { font-weight: 700; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.board-prev-amt { flex: none; color: var(--muted); font-weight: 600; }
