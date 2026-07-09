@@ -2757,30 +2757,14 @@ function VendorQuoteItemEditor({
   );
 }
 
-// 복수 파일 자동입력용 — 같은 part_no 는 기존 행에 값 병합(가격 등 채움), 없는 part_no 는
-// 새 행으로 누적한다. 파일을 여러 개 올려도 아이템이 사라지지 않고 쌓인다.
+// 복수 파일 자동입력용 — 병합 없이 파싱된 항목을 무조건 새 행으로 누적한다.
+// 기존 행은 그대로 두되, 빈 placeholder 행만 정리한 뒤 뒤에 이어 붙인다.
 function accumulateVendorItems(
   base: VendorQuoteItem[],
   parsed: Partial<VendorQuoteItem>[]
 ): VendorQuoteItem[] {
-  if (!base.length) return parsed.map(normalizeVendorQuoteItem);
-  const idxByPart = new Map<string, number>();
-  base.forEach((r, i) => {
-    const k = r.part_no.trim();
-    if (k) idxByPart.set(k, i);
-  });
-  const result = base.slice();
-  const appended: VendorQuoteItem[] = [];
-  for (const p of parsed) {
-    const key = String(p.part_no ?? "").trim();
-    const idx = key ? idxByPart.get(key) : undefined;
-    if (idx !== undefined) {
-      result[idx] = normalizeVendorQuoteItem({ ...result[idx], ...p, maker: p.maker ?? p.manufacturer ?? result[idx].maker });
-    } else {
-      appended.push(normalizeVendorQuoteItem(p));
-    }
-  }
-  return [...result, ...appended];
+  const kept = base.filter((it) => it.part_no.trim() || it.description.trim());
+  return [...kept, ...parsed.map(normalizeVendorQuoteItem)];
 }
 
 function mergeParsedItems(
