@@ -130,6 +130,70 @@ You can track the status of your inquiry at any time:
     return body
 
 
+def intro_email_subject(kind: str = "intro", lang: str = "en") -> str:
+    """홍보/회사소개 메일 기본 제목. kind: intro(회사소개) | brochure(제품 브로슈어 안내)."""
+    if lang in ("ko", "kr"):
+        return "케이마리스 회사소개" if kind == "brochure" else "케이마리스 회사소개 및 협력 제안"
+    if kind == "brochure":
+        return "K-MARIS — Product Brochure"
+    return "Introducing K-MARIS Energy & Solutions"
+
+
+def intro_signature(lang: str = "en") -> str:
+    """홍보 메일 기본 서명 — Settings 공용 서명 우선, 없으면 언어별 기본값."""
+    if lang in ("ko", "kr"):
+        return email_signature(default=(
+            "감사합니다.\n\n"
+            "케이마리스 에너지 앤 솔루션 주식회사\n"
+            "sales@k-maris.com | www.k-maris.com\n"
+            "Engineering Reliability. Supplying Performance."
+        ))
+    return email_signature(default=(
+        "Best regards,\n"
+        "K-MARIS Energy & Solutions Co., Ltd.\n"
+        "sales@k-maris.com | www.k-maris.com\n"
+        "Engineering Reliability. Supplying Performance."
+    ))
+
+
+def intro_email_body(contact_person: str = "", customer_name: str = "",
+                     kind: str = "intro", lang: str = "en") -> str:
+    """홍보/회사소개 메일 기본 본문(서명 제외 — 서명은 별도 필드로 관리).
+    담당자·고객사명이 있으면 인사말에 반영, 없으면 일반 인사말로 대체한다."""
+    greet_name = (contact_person or "").strip() or ((customer_name or "").strip())
+    if lang in ("ko", "kr"):
+        hello = f"{greet_name} 담당자님께," if greet_name else "안녕하십니까,"
+        if kind == "brochure":
+            intro = (
+                "요청하신 제품 브로슈어를 첨부해 드립니다.\n\n"
+                "선박용 부품 공급 및 정비 서비스 관련하여 견적이나 협의가 필요하시면 "
+                "언제든지 편하게 회신 주시기 바랍니다."
+            )
+        else:
+            intro = (
+                "케이마리스 에너지 앤 솔루션을 소개드리고자 연락드립니다. 당사는 선박용 부품 공급과 "
+                "정비 서비스를 전문으로 하는 회사입니다.\n\n"
+                "회사소개 자료를 첨부해 드리오니 검토 부탁드리며, 협력 기회가 있으면 언제든지 회신 주시기 바랍니다."
+            )
+        return f"{hello}\n\n{intro}\n"
+
+    hello = f"Dear {greet_name}," if greet_name else "Dear Sir/Madam,"
+    if kind == "brochure":
+        intro = (
+            "Please find attached our product brochure as requested.\n\n"
+            "Should you require a quotation or wish to discuss your marine parts and "
+            "service needs, please do not hesitate to reply to this email."
+        )
+    else:
+        intro = (
+            "We would like to introduce K-MARIS Energy & Solutions, a specialist supplier of "
+            "marine parts and repair services.\n\n"
+            "Our company profile is attached for your review. We would welcome the opportunity "
+            "to support your operations — please feel free to reply at any time."
+        )
+    return f"{hello}\n\n{intro}\n"
+
+
 def shipping_advice_email_body(customer_name: str, doc_no: str, tracking_url: str = "") -> str:
     body = f"""Dear {customer_name},
 

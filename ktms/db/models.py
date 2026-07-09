@@ -423,3 +423,18 @@ class ScheduleEvent(Base):
     customer_id = Column(Integer, ForeignKey("customers.id"), nullable=True)  # 관련 고객사(선택)
     owner_id    = Column(Integer, ForeignKey("users.id"), nullable=True)      # 담당자(PIC)
     created_at  = Column(DateTime, default=datetime.utcnow)
+
+
+class MarketingAsset(Base):
+    """홍보 이메일 첨부용 자료 라이브러리(회사소개서·브로슈어 등). DB BLOB 저장
+    (Render 파일시스템 휘발 회피 — DeliveryProof 와 동일 방식). 홍보 메일 작성 시
+    라이브러리에서 골라 첨부하거나, 작성 화면에서 즉석 업로드도 병행 지원한다."""
+    __tablename__ = "marketing_assets"
+    id          = Column(Integer, primary_key=True)
+    label       = Column(String(200))   # 표시 이름(예: "회사소개서 2026", "Pump Brochure")
+    filename    = Column(String(255))    # 원본 파일명(첨부 시 사용)
+    mime        = Column(String(120))
+    size        = Column(Integer)        # 바이트 크기(목록 표시용)
+    data        = Column(LargeBinary)
+    owner_id    = Column(Integer, ForeignKey("users.id"), nullable=True)  # 업로더
+    created_at  = Column(DateTime, default=datetime.utcnow)

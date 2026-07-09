@@ -546,6 +546,102 @@ export function deleteMarketing(id: number): Promise<{ ok: boolean }> {
   return del(`/api/admin/marketing/${id}`);
 }
 
+// ── 홍보 이메일(회사소개·브로슈어) 발송 + 첨부 자료 라이브러리 ────────────────────
+export type MarketingAsset = {
+  id: number;
+  label: string;
+  filename: string;
+  mime: string;
+  size: number;
+  created_at: string;
+};
+
+export function fetchMarketingAssets(): Promise<{ rows: MarketingAsset[] }> {
+  return get<{ rows: MarketingAsset[] }>("/api/admin/marketing-assets");
+}
+
+export function uploadMarketingAsset(
+  file: File,
+  label = ""
+): Promise<{ ok: boolean; id: number }> {
+  const fd = new FormData();
+  fd.append("file", file);
+  fd.append("label", label);
+  return postForm("/api/admin/marketing-assets", fd);
+}
+
+export function deleteMarketingAsset(id: number): Promise<{ ok: boolean; deleted: number }> {
+  return del(`/api/admin/marketing-assets/${id}`);
+}
+
+export function marketingAssetDownloadUrl(id: number): string {
+  return `${API_BASE}/api/admin/marketing-assets/${id}/file`;
+}
+
+// 첨부 자료 다운로드 — 인증 헤더가 필요하므로 fetch→blob 방식으로 내려받는다.
+export async function downloadMarketingAsset(id: number, filename: string): Promise<void> {
+  const res = await fetch(marketingAssetDownloadUrl(id), { headers: authHeaders() });
+  if (!res.ok) throw new Error(`다운로드 실패 (${res.status})`);
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename || "asset";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+export function marketingComposeDefaults(opts: {
+  kind?: "intro" | "brochure";
+  lang?: "en" | "ko";
+  contact?: string;
+  customer?: string;
+}): Promise<{
+  from: string;
+  subject: string;
+  body: string;
+  signature: string;
+  smtp_configured: boolean;
+}> {
+  const p = new URLSearchParams({
+    kind: opts.kind ?? "intro",
+    lang: opts.lang ?? "en",
+    contact: opts.contact ?? "",
+    customer: opts.customer ?? "",
+  });
+  return get(`/api/admin/marketing/compose-defaults?${p.toString()}`);
+}
+
+export function sendMarketingEmail(input: {
+  to: string;
+  subject: string;
+  body: string;
+  signature?: string;
+  includeSignature?: boolean;
+  cc?: string;
+  from?: string;
+  customerId?: number | null;
+  prospectName?: string;
+  contactPerson?: string;
+  assetIds?: number[];
+  files?: File[];
+}): Promise<{ ok: boolean; id: number; sent_date: string }> {
+  const fd = new FormData();
+  fd.append("to", input.to);
+  fd.append("subject", input.subject ?? "");
+  fd.append("body", input.body ?? "");
+  fd.append("signature", input.signature ?? "");
+  fd.append("include_signature", String(input.includeSignature ?? true));
+  fd.append("cc", input.cc ?? "");
+  fd.append("from_email", input.from ?? "");
+  fd.append("customer_id", input.customerId ? String(input.customerId) : "");
+  fd.append("prospect_name", input.prospectName ?? "");
+  fd.append("contact_person", input.contactPerson ?? "");
+  fd.append("asset_ids", (input.assetIds ?? []).join(","));
+  for (const f of input.files ?? []) fd.append("files", f);
+  return postForm("/api/admin/marketing/send", fd);
+}
+
 // ── 일정(Schedule) ────────────────────────────────────────────────────────────
 export type ScheduleSave = {
   date?: string;

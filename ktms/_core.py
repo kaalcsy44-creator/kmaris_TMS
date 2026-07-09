@@ -25,7 +25,8 @@ if str(ROOT) not in sys.path:
 
 import bcrypt
 import jwt
-from fastapi import Depends, FastAPI, File, Header, HTTPException, Request, Response, UploadFile
+from typing import List, Optional
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -38,6 +39,7 @@ from services.tracking_status import (
 from services.email_svc import (
     quotation_email_body, quotation_email_subject, send_email,
     shipping_advice_email_body, email_signature, default_from,
+    intro_email_subject, intro_email_body, intro_signature,
 )
 from services.pdf_svc import (
     build_payload, build_po_payload, generate_pdf, generate_po_pdf,
@@ -59,6 +61,7 @@ from db.models import (
     Order, PurchaseOrder, ShippingAdvice, CommercialInvoice,
     PackingList, TaxInvoiceData, ARRecord, DeliveryProof,
     RFQStatus, OrderStatus, ARStatus, WorkType, MarketingActivity, ScheduleEvent,
+    MarketingAsset,
 )
 
 # ── App / CORS ────────────────────────────────────────────────────────────────
@@ -2291,6 +2294,12 @@ __all__ = [
     "LoginRequest",
     "MarketingActivity",
     "MarketingActivityCreate",
+    "MarketingAsset",
+    "intro_email_subject",
+    "intro_email_body",
+    "intro_signature",
+    "Form",
+    "List",
     "ORDER_STEPS",
     "Order",
     "OrderCreate",

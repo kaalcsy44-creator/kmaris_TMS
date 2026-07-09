@@ -18,6 +18,7 @@ import FilterTable, { ColumnDef } from "@/components/common/FilterTable";
 import CustomerName from "@/components/common/CustomerName";
 import CustomerSelect from "@/components/common/CustomerSelect";
 import Modal from "@/components/common/Modal";
+import ComposeEmailModal from "@/components/screens/ComposeEmailModal";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -105,6 +106,7 @@ export default function MarketingScreen() {
   const { data: customers } = useCachedData("settings:customers", fetchCustomers);
   const [editing, setEditing] = useState<MarketingRow | null>(null);
   const [adding, setAdding] = useState(false);
+  const [composing, setComposing] = useState(false);
 
   const rows = useMemo(() => data?.rows ?? [], [data]);
 
@@ -211,6 +213,30 @@ export default function MarketingScreen() {
             }}
           />
         </Modal>
+      ) : null}
+
+      {/* 우하단 FAB — 홍보/회사소개 이메일 작성·발송 */}
+      {can("marketing", "create") ? (
+        <button
+          type="button"
+          className="compose-fab"
+          title="홍보 이메일 보내기"
+          onClick={() => setComposing(true)}
+        >
+          <span className="compose-fab-plus">＋</span>
+          <span className="compose-fab-label">이메일</span>
+        </button>
+      ) : null}
+
+      {composing ? (
+        <ComposeEmailModal
+          customers={customers ?? []}
+          onClose={() => setComposing(false)}
+          onSent={() => {
+            setComposing(false);
+            reload();
+          }}
+        />
       ) : null}
     </div>
   );

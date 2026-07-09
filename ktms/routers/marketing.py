@@ -4,21 +4,34 @@ from __future__ import annotations
 from _core import (
     Customer,
     Depends,
+    File,
+    Form,
     HTTPException,
+    List,
     MarketingActivity,
     MarketingActivityCreate,
+    MarketingAsset,
+    Response,
     ScheduleEvent,
     ScheduleEventCreate,
+    UploadFile,
     User,
+    _kst_iso,
     _marketing_row,
     _marketing_scoped,
     _schedule_guard,
     _schedule_row,
     app,
     datetime,
+    default_from,
     get_current_user,
     get_session,
+    intro_email_body,
+    intro_email_subject,
+    intro_signature,
+    os,
     require_token,
+    send_email,
     timedelta,
 )
 
@@ -145,6 +158,174 @@ def marketing_overview(user: dict = Depends(get_current_user)):
                 "by_type": by_type,
             },
         }
+    finally:
+        s.close()
+
+
+# ── 홍보 이메일 첨부 자료 라이브러리(회사소개서·브로슈어) ─────────────────────────
+@app.get("/api/admin/marketing-assets", dependencies=[Depends(require_token)])
+def marketing_assets_list():
+    """첨부 자료 목록(바이너리 제외). 홍보 메일 작성 시 라이브러리에서 선택."""
+    s = get_session()
+    try:
+        rows = s.query(MarketingAsset).order_by(MarketingAsset.id.desc()).all()
+        return {"rows": [
+            {
+                "id": a.id,
+                "label": a.label or a.filename or "",
+                "filename": a.filename or "",
+                "mime": a.mime or "",
+                "size": a.size or 0,
+                "created_at": _kst_iso(a.created_at),
+            }
+            for a in rows
+        ]}
+    finally:
+        s.close()
+
+
+@app.post("/api/admin/marketing-assets", dependencies=[Depends(require_token)])
+def marketing_asset_upload(
+    file: UploadFile = File(...),
+    label: str = Form(""),
+    user: dict = Depends(get_current_user),
+):
+    """첨부 자료 업로드 — DB BLOB 저장(Render 파일시스템 휘발 회피)."""
+    s = get_session()
+    try:
+        file.file.seek(0)
+        data = file.file.read()
+        if not data:
+            raise HTTPException(status_code=400, detail="빈 파일입니다.")
+        asset = MarketingAsset(
+            label=(label or "").strip() or (file.filename or "자료"),
+            filename=file.filename or "asset",
+            mime=file.content_type or "application/octet-stream",
+            size=len(data),
+            data=data,
+            owner_id=user.get("id") or None,
+        )
+        s.add(asset)
+        s.commit()
+        return {"ok": True, "id": asset.id}
+    finally:
+        s.close()
+
+
+@app.get("/api/admin/marketing-assets/{asset_id}/file", dependencies=[Depends(require_token)])
+def marketing_asset_download(asset_id: int):
+    s = get_session()
+    try:
+        a = s.query(MarketingAsset).filter_by(id=asset_id).first()
+        if not a or not a.data:
+            raise HTTPException(status_code=404, detail="자료를 찾을 수 없습니다.")
+        return Response(
+            content=a.data,
+            media_type=a.mime or "application/octet-stream",
+            headers={"Content-Disposition": f'attachment; filename="{a.filename or "asset"}"'},
+        )
+    finally:
+        s.close()
+
+
+@app.delete("/api/admin/marketing-assets/{asset_id}", dependencies=[Depends(require_token)])
+def marketing_asset_delete(asset_id: int):
+    s = get_session()
+    try:
+        n = s.query(MarketingAsset).filter_by(id=asset_id).delete()
+        s.commit()
+        return {"ok": True, "deleted": n}
+    finally:
+        s.close()
+
+
+# ── 홍보 이메일 작성 기본값 + 발송 ────────────────────────────────────────────────
+@app.get("/api/admin/marketing/compose-defaults", dependencies=[Depends(require_token)])
+def marketing_compose_defaults(
+    kind: str = "intro", lang: str = "en", contact: str = "", customer: str = "",
+):
+    """작성 화면 기본값 — 템플릿 제목·본문·서명·발신주소·SMTP 설정 여부."""
+    lang_n = "kr" if lang in ("ko", "kr") else "en"
+    return {
+        "from": default_from(),
+        "subject": intro_email_subject(kind, lang_n),
+        "body": intro_email_body(contact, customer, kind, lang_n),
+        "signature": intro_signature(lang_n),
+        "smtp_configured": bool(os.getenv("SMTP_USER") and os.getenv("SMTP_PASSWORD")),
+    }
+
+
+@app.post("/api/admin/marketing/send", dependencies=[Depends(require_token)])
+def marketing_email_send(
+    to: str = Form(...),
+    subject: str = Form(""),
+    body: str = Form(""),
+    signature: str = Form(""),
+    include_signature: bool = Form(True),
+    cc: str = Form(""),
+    from_email: str = Form(""),
+    customer_id: str = Form(""),
+    prospect_name: str = Form(""),
+    contact_person: str = Form(""),
+    asset_ids: str = Form(""),      # 라이브러리 첨부 id들(쉼표 구분)
+    files: List[UploadFile] = File(default=[]),   # 즉석 업로드 첨부
+    user: dict = Depends(get_current_user),
+):
+    """홍보 이메일 발송 — 라이브러리 자료 + 즉석 업로드 첨부. 발송 성공 시
+    MarketingActivity 로그를 자동 생성해 활동 목록에 남긴다."""
+    to = (to or "").strip()
+    if not to:
+        raise HTTPException(status_code=400, detail="수신자 이메일을 입력하세요.")
+
+    s = get_session()
+    try:
+        # 최종 본문 = 본문 + (서명 포함 시 서명)
+        final_body = body or ""
+        if include_signature and (signature or "").strip():
+            final_body = f"{final_body.rstrip()}\n\n{signature.strip()}\n"
+
+        # 첨부 조립: 라이브러리 자료 → 즉석 업로드 순
+        attachments: list[tuple[str, bytes]] = []
+        wanted_ids = [int(x) for x in (asset_ids or "").split(",") if x.strip().isdigit()]
+        if wanted_ids:
+            for a in s.query(MarketingAsset).filter(MarketingAsset.id.in_(wanted_ids)).all():
+                if a.data:
+                    attachments.append((a.filename or f"asset-{a.id}", a.data))
+        for f in files or []:
+            f.file.seek(0)
+            data = f.file.read()
+            if data:
+                attachments.append((f.filename or "attachment", data))
+
+        sent = send_email(
+            to=to,
+            subject=subject or "",
+            body=final_body,
+            attachments=attachments,
+            cc=(cc or "").strip(),
+            from_addr=(from_email or "").strip(),
+        )
+        if not sent:
+            raise HTTPException(status_code=400, detail="이메일 발송 실패 — SMTP 설정 또는 서버 상태를 확인하세요.")
+
+        # 발송 성공 → 마케팅 활동 로그 자동 생성(표에 즉시 반영)
+        cid = int(customer_id) if (customer_id or "").strip().isdigit() else None
+        today = (datetime.utcnow() + timedelta(hours=9)).strftime("%Y-%m-%d")
+        activity = MarketingActivity(
+            customer_id=cid,
+            prospect_name=(prospect_name or "").strip(),
+            contact_person=(contact_person or "").strip(),
+            recipient_email=to,
+            activity_date=today,
+            channel="Email",
+            activity_type="Intro email",
+            subject=subject or "",
+            notes="홍보 이메일 발송" + (f" (첨부 {len(attachments)}건)" if attachments else ""),
+            owner_id=user.get("id") or None,
+        )
+        s.add(activity)
+        s.commit()
+        return {"ok": True, "id": activity.id, "sent_date": today}
     finally:
         s.close()
 

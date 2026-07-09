@@ -37,7 +37,12 @@ import {
   saveEmailTemplate,
   deleteEmailTemplate,
   previewEmailTemplate,
+  fetchMarketingAssets,
+  uploadMarketingAsset,
+  deleteMarketingAsset,
+  downloadMarketingAsset,
 } from "@/lib/api";
+import type { MarketingAsset } from "@/lib/api";
 import type { PermissionsConfig, RolePermRow, EmailTemplatesData } from "@/lib/api";
 import type { PermGrid } from "@/lib/auth";
 import type {
@@ -61,7 +66,7 @@ import ComboBox from "@/components/common/ComboBox";
 
 type Tab =
   | "company" | "users" | "permissions"
-  | "customers" | "vendors" | "vessels" | "items" | "categories" | "email" | "account";
+  | "customers" | "vendors" | "vessels" | "items" | "categories" | "email" | "brochures" | "account";
 
 const emptyCompany: CompanyProfile = {
   company_name_en: "",
@@ -122,6 +127,7 @@ function Settings() {
         { key: "items", label: "Item Master" },
         { key: "categories", label: "Item Category" },
         { key: "email", label: "Email Templates" },
+        { key: "brochures", label: "Brochures" },
       ]
     : [
         { key: "customers", label: "Customer" },
@@ -130,6 +136,7 @@ function Settings() {
         { key: "items", label: "Item Master" },
         { key: "categories", label: "Item Category" },
         { key: "email", label: "Email Templates" },
+        { key: "brochures", label: "Brochures" },
         { key: "account", label: "My Account" },
       ];
 
@@ -155,6 +162,7 @@ function Settings() {
       {tab === "items" && <ItemsTab />}
       {tab === "categories" && <CategoriesTab />}
       {tab === "email" && <EmailTemplatesTab />}
+      {tab === "brochures" && <BrochuresTab />}
       {tab === "account" && (
         <div className="panel">
           <MyPasswordChange />
@@ -1847,6 +1855,162 @@ function EmailTemplatesTab() {
         {msg ? <span className="action-ok">{msg}</span> : null}
         {err ? <span className="action-err">{err}</span> : null}
       </div>
+    </div>
+  );
+}
+
+// 홍보 이메일 첨부용 자료 라이브러리(회사소개서·브로슈어). 여기 등록한 파일을
+// Marketing 화면의 이메일 작성 모달에서 골라 첨부한다.
+function fmtBytes(n: number): string {
+  if (!n) return "—";
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function BrochuresTab() {
+  const [rows, setRows] = useState<MarketingAsset[]>([]);
+  const [label, setLabel] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [loading, setLoading] = useState(true);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  async function load() {
+    setLoading(true);
+    try {
+      const d = await fetchMarketingAssets();
+      setRows(d.rows);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "목록을 불러오지 못했습니다.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  async function onUpload(list: FileList | null) {
+    if (!list || !list.length) return;
+    setBusy(true);
+    setErr("");
+    try {
+      // 여러 파일 선택 시 각각 업로드. label 은 단일 파일일 때만 적용.
+      const files = Array.from(list);
+      for (const f of files) {
+        await uploadMarketingAsset(f, files.length === 1 ? label.trim() : "");
+      }
+      setLabel("");
+      if (fileRef.current) fileRef.current.value = "";
+      await load();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "업로드에 실패했습니다.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(a: MarketingAsset) {
+    if (!confirm(`"${a.label}" 자료를 삭제할까요?`)) return;
+    setBusy(true);
+    setErr("");
+    try {
+      await deleteMarketingAsset(a.id);
+      await load();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "삭제에 실패했습니다.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="panel">
+      <h3 className="form-title">Brochures &amp; company profile</h3>
+      <p className="hint-inline" style={{ display: "block", marginBottom: 12 }}>
+        홍보 이메일 작성 시 첨부할 회사소개서·브로슈어를 등록해 두세요. Marketing 화면의 이메일 작성창에서 골라 첨부할 수 있습니다.
+      </p>
+
+      <div className="form-grid" style={{ alignItems: "end", marginBottom: 14 }}>
+        <label className="form-field">
+          <span>표시 이름 (선택)</span>
+          <input
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            placeholder="예: 회사소개서 2026"
+          />
+        </label>
+        <div className="form-field">
+          <span>&nbsp;</span>
+          <div>
+            <button
+              type="button"
+              className="btn primary"
+              disabled={busy}
+              onClick={() => fileRef.current?.click()}
+            >
+              {busy ? "업로드 중…" : "+ 파일 업로드"}
+            </button>
+            <input
+              ref={fileRef}
+              type="file"
+              multiple
+              hidden
+              onChange={(e) => onUpload(e.target.files)}
+            />
+          </div>
+        </div>
+      </div>
+
+      {err ? <div className="action-err" style={{ marginBottom: 10 }}>{err}</div> : null}
+
+      {loading ? (
+        <div className="muted">Loading…</div>
+      ) : rows.length === 0 ? (
+        <div className="muted">등록된 자료가 없습니다.</div>
+      ) : (
+        <table className="mini">
+          <thead>
+            <tr>
+              <th>이름</th>
+              <th>파일명</th>
+              <th>크기</th>
+              <th>등록일</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((a) => (
+              <tr key={a.id}>
+                <td>{a.label}</td>
+                <td>
+                  <button
+                    type="button"
+                    className="linklike"
+                    onClick={() => downloadMarketingAsset(a.id, a.filename).catch(() => setErr("다운로드에 실패했습니다."))}
+                  >
+                    {a.filename}
+                  </button>
+                </td>
+                <td>{fmtBytes(a.size)}</td>
+                <td>{(a.created_at || "").replace("T", " ")}</td>
+                <td>
+                  <button
+                    type="button"
+                    className="btn danger sm"
+                    disabled={busy}
+                    onClick={() => remove(a)}
+                  >
+                    삭제
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }
