@@ -1320,8 +1320,11 @@ function BoardCard({
       {cancelled ? <span className="pl-card-ribbon">CLOSED</span> : null}
       <div className="pl-card-top">
         <span className="pl-card-no"><ProjectNo value={r.project_no} /></span>
-        <WorkTypeBadge type={r.work_type} />
-        {chevron}
+        <span className="pl-card-top-r">
+          <span className={`pl-card-pic${r.assignee ? "" : " none"}`}>{r.assignee || "—"}</span>
+          <WorkTypeBadge type={r.work_type} />
+          {chevron}
+        </span>
       </div>
       {r.project_title ? (
         <div className="pl-card-proj" title={r.project_title}>{r.project_title}</div>
@@ -1345,13 +1348,8 @@ function BoardCard({
         <span className="pl-card-stage">
           {filled}/{total} · {steps[filled - 1] ?? ""}
         </span>
+        <VendorMonograms value={vendorOf(r)} />
         {age != null ? <span className="pl-card-age" title="Days since first RFQ">{age}d</span> : null}
-      </div>
-      <div className="pl-card-foot">
-        <div className="pl-card-foot-l">
-          <VendorMonograms value={vendorOf(r)} />
-          <span className={`pl-card-pic${r.assignee ? "" : " none"}`}>{r.assignee || "—"}</span>
-        </div>
       </div>
       {amount ? <div className="pl-card-amt" title={amount}>{amount}</div> : null}
       {r.next_action ? (

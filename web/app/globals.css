@@ -4916,6 +4916,13 @@ table.mini .num {
   gap: 6px;
   margin-bottom: 3px;
 }
+/* 1행 우측 그룹: 담당자 + 작업유형 배지 + 접기 화살표 */
+.pl-card-top-r {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
 /* 카드 접기/펼치기 화살표 — 카드 클릭(상세 팝업)과 분리된 별도 버튼 */
 .pl-card-toggle {
   flex: none;
@@ -4969,8 +4976,8 @@ table.mini .num {
   text-overflow: ellipsis;
 }
 .pl-card.compact .pl-card-bar { margin: 5px 0 0; }
+/* 프로젝트 번호 — 프로젝트명과 동일한 글씨체(sans). 크기만 약간 작게. */
 .pl-card-no {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;
   font-weight: 700;
   color: var(--blue);
@@ -5042,20 +5049,7 @@ table.mini .num {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.pl-card-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  margin-top: 5px;
-}
-/* foot 좌측 그룹: vendor 모노그램 + PIC(공간 부족 시 PIC 가 말줄임). */
-.pl-card-foot-l {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
+/* 담당자(PIC) — 1행 우측 그룹에 배치(작업배지·화살표와 함께). */
 .pl-card-pic {
   min-width: 0;
   font-size: 11px;
@@ -5065,6 +5059,7 @@ table.mini .num {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.pl-card-top-r .pl-card-pic { flex: 0 1 auto; max-width: 96px; }
 .pl-card-pic.none { color: var(--muted); font-weight: 500; }
 /* 간략 카드: 진행바 아래 vendor 모노그램 전용 행(연결 vendor 있을 때만). */
 .pl-card-vrow {
