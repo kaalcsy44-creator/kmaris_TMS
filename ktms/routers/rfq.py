@@ -129,11 +129,24 @@ def rfq_overview(customer_id: int | None = None, work_type: str | None = None,
             else:
                 vq_main, vq_at, vendor_amount = "", "", ""
 
-            qtn = (s.query(Quotation).filter_by(rfq_id=r.id)
-                   .order_by(Quotation.id.desc()).first())
-            if qtn:
-                qtn_main, qtn_at = qtn.qtn_no, _kst(qtn.created_at)
-                customer_amount = _dual_money(_total_amount(qtn.items or []), qtn.currency)
+            qtns = (s.query(Quotation).filter_by(rfq_id=r.id)
+                    .order_by(Quotation.id.desc()).all())
+            if qtns:
+                qtn0 = qtns[0]
+                qtn_main, qtn_at = qtn0.qtn_no, _kst(qtn0.created_at)
+                # 매출(견적) 금액은 발행한 모든 고객 견적 합산(각기 다른 품목 담당).
+                # 통화 혼재 시 USD 환산 합산 후 대표(최신) 견적 통화로 표기.
+                _c_disp = (qtn0.currency or "USD").upper()
+                _cust_usd_sum = 0.0
+                for _q in qtns:
+                    _qc = (getattr(_q, "currency", None) or "USD").upper()
+                    _qt = _total_amount(_q.items or [])
+                    _cust_usd_sum += (_qt / USD_KRW_RATE) if _qc == "KRW" else _qt
+                customer_amount = (
+                    _dual_money(_cust_usd_sum * USD_KRW_RATE, "KRW")
+                    if _c_disp == "KRW"
+                    else _dual_money(_cust_usd_sum, "USD")
+                )
             else:
                 qtn_main, qtn_at, customer_amount = "", "", ""
 
