@@ -477,6 +477,13 @@ function vendorOf(r: PipelineRow): string {
   return r.vendor || r.vrfq_vendors || "";
 }
 
+// 보드 카드 벤더 배지: P/O 발주 벤더가 정해지기 전에는 RFQ 발송 벤더 + 견적 수신여부를
+// 넘겨 미제출 벤더를 고스트로 표시한다. P/O 이후엔(문자열) 그대로 정상 표시.
+function vendorStatusesFor(r: PipelineRow): { name: string; quoted: boolean }[] | undefined {
+  if (r.vendor) return undefined; // 발주 벤더 확정 → 문자열 fallback(모두 정상)
+  return r.rfq_vendors && r.rfq_vendors.length ? r.rfq_vendors : undefined;
+}
+
 /** 한 행에서 컬럼별 텍스트 값(검색·문자열 정렬용). */
 function cellText(r: PipelineRow, key: ColKey, steps: string[]): string {
   switch (key) {
@@ -1342,7 +1349,7 @@ function BoardCard({
         </div>
         {vendorOf(r) ? (
           <div className="pl-card-vrow">
-            <VendorMonograms value={vendorOf(r)} />
+            <VendorMonograms value={vendorOf(r)} statuses={vendorStatusesFor(r)} />
           </div>
         ) : null}
       </div>
@@ -1383,7 +1390,7 @@ function BoardCard({
           {steps[filled - 1] ?? ""}
           {stageDate ? <span className="pl-card-stage-date"> ({stageDate})</span> : null}
         </span>
-        <VendorMonograms value={vendorOf(r)} />
+        <VendorMonograms value={vendorOf(r)} statuses={vendorStatusesFor(r)} />
         {age != null ? <span className="pl-card-age" title="Days since first RFQ">{age}d</span> : null}
       </div>
       {amount ? <div className="pl-card-amt" title={amount}>{amount}</div> : null}

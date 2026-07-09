@@ -38,32 +38,45 @@ function hueFor(name: string): number {
 
 export default function VendorMonograms({
   value,
+  statuses,
   className,
 }: {
-  value: string;
+  value?: string;
+  // 견적 수신여부까지 주면(Quote 단계): 제출 벤더=진한 배지, 미제출=흐린 고스트 배지.
+  statuses?: { name: string; quoted: boolean }[];
   className?: string;
 }) {
-  const names = splitVendors(value || "");
-  if (names.length === 0) return null;
-  const shown = names.slice(0, MAX);
-  const extra = names.length - shown.length;
+  // statuses 가 있으면 제출(quoted) 벤더를 앞으로 정렬해 우선 노출한다.
+  const entries: { name: string; quoted: boolean }[] =
+    statuses && statuses.length
+      ? [...statuses].sort((a, b) => Number(b.quoted) - Number(a.quoted))
+      : splitVendors(value || "").map((n) => ({ name: n, quoted: true }));
+  if (entries.length === 0) return null;
+  const shown = entries.slice(0, MAX);
+  const extra = entries.length - shown.length;
+  const label = entries
+    .map((e) => (e.quoted ? e.name : `${e.name} (견적 미수신)`))
+    .join(", ");
   return (
     <span
       className={`vendor-mono-wrap${className ? ` ${className}` : ""}`}
-      title={`Vendor: ${names.join(", ")}`}
+      title={`Vendor: ${label}`}
     >
-      {shown.map((n, i) => (
+      {shown.map((e, i) => (
         <span
           key={i}
-          className="vendor-mono"
-          style={{ backgroundColor: `hsl(${hueFor(n)} 48% 40%)` }}
-          title={n}
+          className={`vendor-mono${e.quoted ? "" : " ghost"}`}
+          style={e.quoted ? { backgroundColor: `hsl(${hueFor(e.name)} 48% 40%)` } : undefined}
+          title={e.quoted ? e.name : `${e.name} — RFQ 발송·견적 미수신`}
         >
-          {initials(n)}
+          {initials(e.name)}
         </span>
       ))}
       {extra > 0 ? (
-        <span className="vendor-mono more" title={names.slice(MAX).join(", ")}>
+        <span
+          className="vendor-mono more"
+          title={entries.slice(MAX).map((e) => (e.quoted ? e.name : `${e.name} (견적 미수신)`)).join(", ")}
+        >
           +{extra}
         </span>
       ) : null}
