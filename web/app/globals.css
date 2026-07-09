@@ -4955,7 +4955,7 @@ table.mini .num {
   gap: 6px;
   min-width: 0;
 }
-.pl-card.compact .pl-card-no { flex: none; font-size: 9px; font-weight: 500; }
+.pl-card.compact .pl-card-no { flex: none; font-size: 10px; font-weight: 500; }
 .pl-card-crow .cust-logo { flex: none; }
 /* 간략 카드 주 라벨: 프로젝트명(고객 로고 옆) */
 .pl-card-proj-c {
@@ -4971,7 +4971,7 @@ table.mini .num {
 .pl-card.compact .pl-card-bar { margin: 5px 0 0; }
 .pl-card-no {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--blue);
 }
@@ -6245,4 +6245,13 @@ table.mini .num {
   margin: 0;
   color: var(--ink);
   overflow-x: auto;
+}
+
+/* ── 프로젝트 관리번호 표기: 번호(진하고 크게) + 날짜((yymmdd) 비볼드·1px 작게) ── */
+.proj-no { white-space: nowrap; }
+.proj-no-main { font-weight: 800; }
+.proj-no-date {
+  font-weight: 400;
+  font-size: calc(1em - 1px);
+  margin-left: 1px;
 }

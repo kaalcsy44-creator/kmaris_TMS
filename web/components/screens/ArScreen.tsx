@@ -17,6 +17,7 @@ import type { ArRow, DocumentDetail, PoWorkOptions } from "@/lib/types";
 import { tr } from "@/lib/labels";
 import Modal from "@/components/common/Modal";
 import { ModalTitle } from "@/components/common/BaseMeta";
+import ProjectNo from "@/components/common/ProjectNo";
 import CurrencyToggle from "@/components/common/CurrencyToggle";
 import { dualCurrencyText } from "@/components/common/itemTable";
 
@@ -136,7 +137,7 @@ function OrderInfoBlock({
   if (!d) return null;
   return (
     <dl className="intl-meta" style={{ margin: "0 0 14px" }}>
-      <div><dt>Project No.</dt><dd><b>{d.order.project_no || "—"}</b></dd></div>
+      <div><dt>Project No.</dt><dd><b><ProjectNo value={d.order.project_no} /></b></dd></div>
       <div><dt>First RFQ at</dt><dd>{(d.order.first_rfq_at || "").replace("T", " ") || "—"}</dd></div>
       <div><dt>Type</dt><dd>{tr(d.order.work_type) || "—"}</dd></div>
       <div><dt>Trade type</dt><dd>{tr(d.order.trade_type) || "—"}</dd></div>

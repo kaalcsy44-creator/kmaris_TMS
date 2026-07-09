@@ -1,8 +1,9 @@
 import { tr } from "@/lib/labels";
+import ProjectNo from "./ProjectNo";
 
 /** 모달 제목 옆에 붙는 Project No. 칩. 단계별 팝업 제목 공통 표기. */
 export function ProjectChip({ no }: { no?: string }) {
-  return <span className="modal-proj-chip">Project No. {no || "—"}</span>;
+  return <span className="modal-proj-chip">Project No. <ProjectNo value={no} /></span>;
 }
 
 /** 단계 팝업 제목 = 단계명 + Project No. 칩. */
@@ -44,7 +45,7 @@ export default function BaseMetaRows({ info }: { info: BaseMetaInfo }) {
     <>
       <div>
         <dt>Project No.</dt>
-        <dd>{info.project_no || "—"}</dd>
+        <dd><ProjectNo value={info.project_no} /></dd>
       </div>
       <div>
         <dt>First RFQ at</dt>

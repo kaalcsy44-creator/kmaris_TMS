@@ -26,6 +26,7 @@ import { useCachedData, invalidateCache } from "@/lib/useCachedData";
 import { tr } from "@/lib/labels";
 import Modal from "@/components/common/Modal";
 import { ModalTitle } from "@/components/common/BaseMeta";
+import ProjectNo from "@/components/common/ProjectNo";
 import CurrencyToggle from "@/components/common/CurrencyToggle";
 import {
   amountInputValue,
@@ -1463,7 +1464,7 @@ function DocOrderInfo({ order }: { order: DocumentDetail["order"] }) {
   if (!order.id) return null;
   return (
     <dl className="intl-meta" style={{ margin: "0 0 14px" }}>
-      <div><dt>Project No.</dt><dd><b>{order.project_no || "—"}</b></dd></div>
+      <div><dt>Project No.</dt><dd><b><ProjectNo value={order.project_no} /></b></dd></div>
       <div><dt>First RFQ at</dt><dd>{(order.first_rfq_at || "").replace("T", " ") || "—"}</dd></div>
       <div><dt>Type</dt><dd>{tr(order.work_type) || "—"}</dd></div>
       <div><dt>Trade type</dt><dd>{tr(order.trade_type) || "—"}</dd></div>

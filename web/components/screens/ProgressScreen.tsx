@@ -23,6 +23,7 @@ import CustomerName from "@/components/common/CustomerName";
 import { useCustomerLogo } from "@/lib/customerLogos";
 import VendorName from "@/components/common/VendorName";
 import VendorMonograms from "@/components/common/VendorMonograms";
+import ProjectNo from "@/components/common/ProjectNo";
 import RfqActionTabs from "@/components/RfqActionTabs";
 import NewRfqForm from "@/components/screens/NewRfqForm";
 import { PoActionTabs } from "@/components/screens/PoScreen";
@@ -1130,7 +1131,7 @@ function BoardCard({
       <div {...cardProps}>
         {cancelled ? <span className="pl-card-ribbon">CLOSED</span> : null}
         <div className="pl-card-nrow">
-          <span className="pl-card-no">{r.project_no || "—"}</span>
+          <span className="pl-card-no"><ProjectNo value={r.project_no} /></span>
           {chevron}
         </div>
         <div className="pl-card-crow">
@@ -1158,7 +1159,7 @@ function BoardCard({
     <div {...cardProps}>
       {cancelled ? <span className="pl-card-ribbon">CLOSED</span> : null}
       <div className="pl-card-top">
-        <span className="pl-card-no">{r.project_no || "—"}</span>
+        <span className="pl-card-no"><ProjectNo value={r.project_no} /></span>
         <WorkTypeBadge type={r.work_type} />
         {chevron}
       </div>
@@ -1215,7 +1216,7 @@ function PipelineCell({
       return (
         <td className="nowrap">
           <div className="proj-cell">
-            <div className="pn">{r.project_no || <span className="muted">—</span>}</div>
+            <div className="pn"><ProjectNo value={r.project_no} /></div>
             {r.received_at ? <div className="pn-at">{fmtStageDate(r.received_at)}</div> : null}
           </div>
         </td>
@@ -1439,7 +1440,7 @@ export function PipelineModal({
           ) : (
             <span className="intl-title">
               <span className="pl-recv-label">Project No.</span>
-              <b>{r.project_no || "—"}</b>
+              <b><ProjectNo value={r.project_no} /></b>
               <WorkTypeBadge type={r.work_type} />
               {r.project_title ? <span className="pl-proj-name">{r.project_title}</span> : null}
               {r.received_at ? <span className="pl-recv-at">First RFQ {fmtStageDate(r.received_at)}</span> : null}

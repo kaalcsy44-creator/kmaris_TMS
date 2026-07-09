@@ -6,6 +6,7 @@ import { ColumnDef } from "./FilterTable";
 import { tr } from "@/lib/labels";
 import WorkTypeBadge from "@/components/WorkTypeBadge";
 import CustomerName from "./CustomerName";
+import ProjectNo from "./ProjectNo";
 
 /** "YYYY-MM-DDTHH:MM" → "yy-mm-dd HH:MM". 시각 없으면 날짜만. 빈값이면 "". */
 export function fmtRfqDateTime(iso: string): string {
@@ -28,7 +29,7 @@ export function projectNoColumn<T>(a: {
     text: (r) => a.projectNo(r) || "",
     render: (r) => (
       <div className="proj-cell">
-        <div className="pn">{a.projectNo(r) || <span className="muted">—</span>}</div>
+        <div className="pn"><ProjectNo value={a.projectNo(r)} /></div>
         {a.firstRfqAt(r) ? <div className="pn-at">{fmtRfqDateTime(a.firstRfqAt(r))}</div> : null}
       </div>
     ),
