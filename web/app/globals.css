@@ -6247,11 +6247,13 @@ table.mini .num {
   overflow-x: auto;
 }
 
-/* ── 프로젝트 관리번호 표기: 번호(진하고 크게) + 날짜((yymmdd) 비볼드·1px 작게) ── */
-.proj-no { white-space: nowrap; }
-.proj-no-main { font-weight: 800; }
-.proj-no-date {
+/* ── 프로젝트 관리번호 표기: 번호(진하고 크게, 컨테이너 색 상속=잘 보임) +
+   날짜((yymmdd) 비볼드·1px 작게·회색 유지). 고유 클래스로 기존 .proj-no(회색)와 분리. */
+.pjno { white-space: nowrap; }
+.pjno-main { font-weight: 800; }
+.pjno-date {
   font-weight: 400;
   font-size: calc(1em - 1px);
   margin-left: 1px;
+  color: #8a96a8;
 }
