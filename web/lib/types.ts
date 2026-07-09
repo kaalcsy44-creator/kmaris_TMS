@@ -736,6 +736,8 @@ export type PipelineRow = {
   vendor_po_at: string;
   vendor: string;
   vendor_email: string;
+  // RFQ 발송 벤더 + 견적 수신여부. 미수신 벤더는 프로젝트 정보 Vendor 필드에서 취소선 표시.
+  rfq_vendors?: { name: string; quoted: boolean }[];
   stage: number;
   status: string;
   cancelled?: boolean;            // 종결(취소/실주) — 보드 Cancelled 존 분류

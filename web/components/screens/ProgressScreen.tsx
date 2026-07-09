@@ -41,11 +41,25 @@ function multiText(s: string): ReactNode {
   return parts.map((p, i) => <div key={i}>{p}</div>);
 }
 
+// Vendor 필드: RFQ를 보낸 모든 벤더를 나열하되, 견적을 받지 못한 벤더는 취소선으로
+// 표시한다. RFQ 발송 전이면 발주(P/O) 벤더 또는 —.
+function vendorList(r: PipelineRow): ReactNode {
+  const list = r.rfq_vendors;
+  if (list && list.length) {
+    return list.map((v, i) => (
+      <div key={i} className={v.quoted ? undefined : "vendor-noquote"}>
+        {v.name}
+      </div>
+    ));
+  }
+  return r.vendor ? multiText(r.vendor) : "—";
+}
+
 const INFO_FIELDS: { key: string; label: string; render: (r: PipelineRow) => ReactNode }[] = [
   { key: "customer", label: "Customer", render: (r) => (r.customer ? <CustomerName name={r.customer} /> : "—") },
   { key: "trade_type", label: "Trade type", render: (r) => tr(r.trade_type || "수출") },
   { key: "vessel", label: "Vessel", render: (r) => multiText(r.vessels || r.vessel) },
-  { key: "vendor", label: "Vendor", render: (r) => r.vendor || "—" },
+  { key: "vendor", label: "Vendor", render: (r) => vendorList(r) },
   { key: "project_title", label: "Project title", render: (r) => r.project_title || "—" },
   { key: "customer_po_no", label: "Customer P/O No.", render: (r) => multiText(r.customer_po_nos || r.customer_po_no) },
   {

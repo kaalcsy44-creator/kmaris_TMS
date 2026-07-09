@@ -135,6 +135,22 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
                 vquote_no, vquote_at, vendor_amount = "", "", ""
                 vendor_usd = None
 
+            # RFQ 보낸 벤더별 견적 수신 여부 — 프로젝트 정보 Vendor 필드에서 발송 벤더를
+            # 모두 노출하되, 견적 미수신 벤더는 프런트에서 취소선으로 표시한다.
+            _quoted_vrfq_ids = {vq.vendor_rfq_id for vq in vqs}
+            rfq_vendors_status: list[dict] = []
+            _seen_v: dict[str, dict] = {}
+            for x in vrfqs:
+                nm = vendor_names.get(x.vendor_id, "—")
+                q = x.id in _quoted_vrfq_ids
+                if nm in _seen_v:
+                    if q:
+                        _seen_v[nm]["quoted"] = True
+                else:
+                    e = {"name": nm, "quoted": q}
+                    _seen_v[nm] = e
+                    rfq_vendors_status.append(e)
+
             # 4) Customer Quot. 발신
             qtn = (s.query(Quotation).filter_by(rfq_id=r.id)
                    .order_by(Quotation.id.desc()).first())
@@ -296,6 +312,8 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
                 "vendor_po_no": vendor_po_no,
                 "vendor_po_at": vendor_po_at,
                 "vendor": vendor_po_vendor,
+                # RFQ 발송 벤더 + 견적 수신여부(미수신은 프런트에서 취소선). 프로젝트 정보용.
+                "rfq_vendors": rfq_vendors_status,
                 "vendor_email": vendor_po_email,
                 # 상태 · 단계 일시
                 "stage": stage,
