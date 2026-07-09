@@ -16,6 +16,7 @@ from _core import (
     RfqAssignNo,
     RfqCreate,
     RfqLevelUpdate,
+    RfqCancelUpdate,
     RfqUpdate,
     StageDateUpdate,
     StageNoteAdd,
@@ -455,6 +456,23 @@ def update_rfq_level(rfq_id: int, body: RfqLevelUpdate):
             raise HTTPException(status_code=400, detail="잘못된 Level 값입니다.")
         s.commit()
         return {"ok": True, "follow_up_level": _enum_val(rfq.follow_up_level)}
+    finally:
+        s.close()
+
+
+@app.put("/api/admin/rfq/{rfq_id}/cancel", dependencies=[Depends(require_token)])
+def update_rfq_cancel(rfq_id: int, body: RfqCancelUpdate):
+    """딜을 종결(취소/실주)로 표시하거나 재활성화한다.
+    종결 → status=LOST (보드에서 Cancelled 존으로 분류), 재활성 → status=RECEIVED.
+    진행 단계(stage)는 레코드 기반 자동 산출이라 건드리지 않는다."""
+    s = get_session()
+    try:
+        rfq = s.query(RFQ).filter_by(id=rfq_id).first()
+        if not rfq:
+            raise HTTPException(status_code=404, detail="RFQ를 찾을 수 없습니다.")
+        rfq.status = RFQStatus.LOST if body.cancelled else RFQStatus.RECEIVED
+        s.commit()
+        return {"ok": True, "cancelled": body.cancelled}
     finally:
         s.close()
 

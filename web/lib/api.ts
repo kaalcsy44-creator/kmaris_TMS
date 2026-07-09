@@ -233,6 +233,14 @@ export function updateRfqLevel(
   return put(`/api/admin/rfq/${rfqId}/level`, { follow_up_level: followUpLevel });
 }
 
+// 딜 종결(취소/실주) 토글. cancelled=true → 종결, false → 재활성.
+export function setRfqCancelled(
+  rfqId: number,
+  cancelled: boolean
+): Promise<{ ok: boolean; cancelled: boolean }> {
+  return put(`/api/admin/rfq/${rfqId}/cancel`, { cancelled });
+}
+
 export function updateRfqStageDate(
   rfqId: number,
   stage: number,

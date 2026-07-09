@@ -12,6 +12,7 @@ import {
   addRfqStageNote,
   updateRfqStageNote,
   deleteRfqStageNote,
+  setRfqCancelled,
 } from "@/lib/api";
 import { useCachedData, invalidateCache } from "@/lib/useCachedData";
 import { useColumnLayout } from "@/components/common/useColumnLayout";
@@ -1001,24 +1002,38 @@ function PipelineBoard({
     });
   }, []);
   const grouped = steps.length === 11;
-  const cols = grouped
-    ? STAGE_PHASES.map((p, pi) => ({
-        label: p.label,
-        accent: pi,
-        match: (st: number) => phaseIndexOfStage(st) === pi,
-      }))
+  // 종결(취소/실주) 딜은 진행 컬럼에서 빼고 별도 Cancelled 존으로 모은다.
+  // 완료(11단계 Payment Completed)는 AR 을 떠나 Done 컬럼으로 종결 처리한다.
+  const cols: {
+    label: string;
+    variant?: "done" | "cancelled";
+    match: (r: PipelineRow) => boolean;
+  }[] = grouped
+    ? [
+        { label: "RFQ", match: (r) => !r.cancelled && stageOf(r) <= 2 },
+        { label: "Quote", match: (r) => !r.cancelled && stageOf(r) >= 3 && stageOf(r) <= 4 },
+        { label: "PO", match: (r) => !r.cancelled && stageOf(r) >= 5 && stageOf(r) <= 6 },
+        { label: "Documents", match: (r) => !r.cancelled && stageOf(r) >= 7 && stageOf(r) <= 9 },
+        { label: "AR", match: (r) => !r.cancelled && stageOf(r) === 10 },
+        { label: "Done ✓", variant: "done", match: (r) => !r.cancelled && stageOf(r) >= 11 },
+        { label: "Cancelled", variant: "cancelled", match: (r) => !!r.cancelled },
+      ]
     : steps.map((label, i) => ({
         label: `${i + 1}. ${label}`,
-        accent: i % 4,
-        match: (st: number) => st === i + 1,
+        match: (r: PipelineRow) => !r.cancelled && stageOf(r) === i + 1,
       }));
 
   return (
     <div className="pl-board">
       {cols.map((col, ci) => {
-        const cards = rows.filter((r) => col.match(stageOf(r)));
+        const cards = rows.filter((r) => col.match(r));
+        // Cancelled 존은 종결 딜이 하나도 없으면 아예 표시하지 않는다(평소 보드는 깔끔하게).
+        if (col.variant === "cancelled" && cards.length === 0) return null;
         return (
-          <section key={ci} className="pl-board-col" data-accent={col.accent}>
+          <section
+            key={ci}
+            className={`pl-board-col${col.variant ? ` ${col.variant}` : ""}`}
+          >
             <header className="pl-board-head">
               {/* 단계 작업은 카드 클릭 → 프로젝트 팝업에서 처리(별도 작업 페이지 없음). */}
               <span className="pl-board-title" title={col.label}>{col.label}</span>
@@ -1075,6 +1090,9 @@ function BoardCard({
   const amount = r.order_amount || r.customer_amount || r.vendor_amount || "";
   const age = daysSince(r.first_rfq_at);
   const barTitle = `${filled}/${total} ${steps[filled - 1] ?? ""}`;
+  // 종결 상태: 취소(회색+리본) / 완료(11단계 Payment Completed → 초록 체크).
+  const cancelled = !!r.cancelled;
+  const done = !cancelled && filled >= total;
   // 간략 카드: 고객 로고 + 프로젝트명(없으면 고객명)으로 인지성 확보.
   const logo = useCustomerLogo()(r.customer || "");
   const compactLabel = r.project_title || r.customer || "—";
@@ -1097,7 +1115,7 @@ function BoardCard({
   const cardProps = {
     role: "button" as const,
     tabIndex: 0,
-    className: `pl-card${compact ? " compact" : ""}${sel ? " sel" : ""}${isService ? " service" : ""}`,
+    className: `pl-card${compact ? " compact" : ""}${sel ? " sel" : ""}${isService ? " service" : ""}${cancelled ? " cancelled" : ""}${done ? " done" : ""}`,
     onClick,
     onKeyDown: (e: ReactKeyboardEvent) => {
       if (e.key === "Enter" || e.key === " ") {
@@ -1110,6 +1128,7 @@ function BoardCard({
   if (compact) {
     return (
       <div {...cardProps}>
+        {cancelled ? <span className="pl-card-ribbon">CANCELLED</span> : null}
         <div className="pl-card-nrow">
           <span className="pl-card-no">{r.project_no || "—"}</span>
           {chevron}
@@ -1137,6 +1156,7 @@ function BoardCard({
 
   return (
     <div {...cardProps}>
+      {cancelled ? <span className="pl-card-ribbon">CANCELLED</span> : null}
       <div className="pl-card-top">
         <span className="pl-card-no">{r.project_no || "—"}</span>
         <WorkTypeBadge type={r.work_type} />
@@ -1254,6 +1274,26 @@ export function PipelineModal({
 }) {
   const isNewProject = !!isNew;
   const backdropMouseDown = useRef(false);
+  // 딜 종결(취소/실주) 토글 — 종결 시 보드 Cancelled 존으로, 재활성 시 진행 컬럼으로 복귀.
+  const [cancelBusy, setCancelBusy] = useState(false);
+  async function toggleCancelled() {
+    if (isNewProject || cancelBusy) return;
+    const next = !r.cancelled;
+    if (
+      next &&
+      !window.confirm(
+        "Mark this project as cancelled/closed?\nIt will move to the Cancelled zone on the board (you can reactivate it later)."
+      )
+    )
+      return;
+    setCancelBusy(true);
+    try {
+      await setRfqCancelled(r.rfq_id, next);
+      await onChanged();
+    } finally {
+      setCancelBusy(false);
+    }
+  }
   // 좌측 정보 패널에 표시할 항목 선택(체크박스 메뉴). localStorage 로 유지.
   const [infoFields, setInfoFields] = useState<string[]>(() => {
     if (typeof window === "undefined") return DEFAULT_INFO_FIELDS;
@@ -1410,6 +1450,17 @@ export function PipelineModal({
               <span className="pl-pic-label">PIC</span>
               {r.assignee || "—"}
             </span>
+            {!isNewProject ? (
+              <button
+                type="button"
+                className={`pl-modal-cancel${r.cancelled ? " reactivate" : ""}`}
+                onClick={toggleCancelled}
+                disabled={cancelBusy}
+                title={r.cancelled ? "Reactivate this project" : "Mark as cancelled / closed"}
+              >
+                {cancelBusy ? "…" : r.cancelled ? "↺ Reactivate" : "⊘ Cancel deal"}
+              </button>
+            ) : null}
             <button
               type="button"
               className="pl-modal-close"

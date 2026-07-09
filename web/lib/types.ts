@@ -737,6 +737,7 @@ export type PipelineRow = {
   vendor_email: string;
   stage: number;
   status: string;
+  cancelled?: boolean;            // 종결(취소/실주) — 보드 Cancelled 존 분류
   stage_dates: Record<string, string>;
   stage_auto: Record<string, string>;
   stage_notes: Record<string, StageNote[]>;

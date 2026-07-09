@@ -289,6 +289,8 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
                 # 상태 · 단계 일시
                 "stage": stage,
                 "status": _status_label(stage, r.work_type),
+                # 종결(취소/실주) 여부 — 보드에서 진행 컬럼 대신 Cancelled 존으로 분류한다.
+                "cancelled": _lost,
                 "stage_dates": _sd,
                 "stage_auto": _auto,
                 "stage_notes": _sn,

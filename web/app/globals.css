@@ -4827,6 +4827,65 @@ table.mini .num {
   text-align: center;
   padding: 14px 0;
 }
+/* 종결 컬럼(Done/Cancelled)은 카드 수가 적어 폭을 좁게 고정하고 색으로 구분한다. */
+.pl-board-col.done,
+.pl-board-col.cancelled {
+  flex: 0 1 190px;
+  min-width: 168px;
+}
+.pl-board-col.done {
+  border-top-color: #11824a;
+}
+.pl-board-col.done .pl-board-title { color: #11824a; }
+.pl-board-col.done .pl-board-count { background: #11824a; }
+.pl-board-col.cancelled {
+  border-top-color: #9aa3af;
+  background: var(--head-bg);
+}
+.pl-board-col.cancelled .pl-board-title { color: #6b7280; }
+.pl-board-col.cancelled .pl-board-count { background: #9aa3af; }
+/* 종결 상태 리본 — 카드 최상단 작은 칩(취소=회색). 흐름 배치라 겹침 없음. */
+.pl-card-ribbon {
+  display: inline-block;
+  align-self: flex-start;
+  font-size: 8.5px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  color: #fff;
+  background: #9aa3af;
+  padding: 1px 6px;
+  border-radius: 4px;
+  margin-bottom: 5px;
+}
+/* 취소 카드: 채도 낮추고 제목/고객명에 취소선. */
+.pl-card.cancelled { opacity: 0.7; }
+.pl-card.cancelled .pl-card-cust,
+.pl-card.cancelled .pl-card-proj,
+.pl-card.cancelled .pl-card-proj-c {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+/* 완료 카드: 왼쪽에 초록 강조선으로 종결(성사) 표시. */
+.pl-card.done { border-left: 3px solid #11824a; }
+/* 모달 헤더 '취소/재활성' 버튼. */
+.pl-modal-cancel {
+  flex: none;
+  font-size: 11px;
+  font-weight: 700;
+  color: #b23b3b;
+  background: transparent;
+  border: 1px solid #e3b7b7;
+  border-radius: 7px;
+  padding: 3px 9px;
+  cursor: pointer;
+}
+.pl-modal-cancel:hover:not(:disabled) { background: #fbeaea; }
+.pl-modal-cancel:disabled { opacity: 0.5; cursor: default; }
+.pl-modal-cancel.reactivate {
+  color: #11824a;
+  border-color: #b7dcc6;
+}
+.pl-modal-cancel.reactivate:hover:not(:disabled) { background: #e9f5ee; }
 .pl-card {
   display: block;
   width: 100%;

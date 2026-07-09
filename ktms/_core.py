@@ -2062,6 +2062,12 @@ class RfqLevelUpdate(BaseModel):
     follow_up_level: str
 
 
+class RfqCancelUpdate(BaseModel):
+    """딜 종결(취소/실주) 토글. True=종결(status→LOST), False=재활성(status→RECEIVED).
+    단계(stage)는 레코드 기반으로 자동 산출되므로 여기서는 status 만 바꾼다."""
+    cancelled: bool
+
+
 class StageDateUpdate(BaseModel):
     stage: int                 # 1~11
     value: str | None = None   # "YYYY-MM-DDTHH:MM" (KST) 또는 빈값/None → 해제
