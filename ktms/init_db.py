@@ -61,6 +61,7 @@ _MIGRATIONS = {
         "received_at": "VARCHAR(16)",
         "currency": "VARCHAR(10) DEFAULT 'USD'",
         "terms": "JSON",
+        "source_files": "JSON",
     },
     "orders": {
         "promised_delivery": "VARCHAR(10)",
@@ -75,6 +76,7 @@ _MIGRATIONS = {
         # 신규 오더는 create_order 에서 통화를 명시 저장한다.
         "currency":          "VARCHAR(10)",
         "terms":             "JSON",
+        "source_files":      "JSON",
     },
     "vendor_rfqs": {
         "sent_to_email": "VARCHAR(200)",
@@ -86,6 +88,7 @@ _MIGRATIONS = {
         "terms": "JSON",
         # DEFAULT 없이 추가 → 기존 발주서는 NULL 로 남아 오더/견적 통화를 상속(회귀 방지).
         "currency": "VARCHAR(10)",
+        "source_files": "JSON",
     },
     "marketing_activities": {
         "contact_person": "VARCHAR(100)",

@@ -54,6 +54,7 @@ import type {
   VendorQuoteDetail,
   CustomerQuotationDetail,
   RfqItem,
+  RfqSourceFile,
 } from "@/lib/types";
 import NewRfqForm from "./screens/NewRfqForm";
 import WorkTypeBadge from "./WorkTypeBadge";
@@ -68,6 +69,7 @@ import CurrencyToggle from "./common/CurrencyToggle";
 import TermsEditor from "./common/TermsEditor";
 import DocSendPanel from "./common/DocSendPanel";
 import DetailTabBar, { DetailTab } from "./common/DetailTabBar";
+import SourceFilesList from "./common/SourceFilesList";
 import {
   amountInputValue,
   convertCurrency,
@@ -1263,6 +1265,7 @@ function VendorQuoteDetailModal({
   const [notes, setNotes] = useState("");
   const [items, setItems] = useState<VendorQuoteItem[]>([]);
   const [terms, setTerms] = useState<QuotationTerms>({});
+  const [ocrFiles, setOcrFiles] = useState<RfqSourceFile[]>([]); // Auto-fill 소스 파일 목록(영구 보관)
   const [parseMsg, setParseMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -1280,6 +1283,7 @@ function VendorQuoteDetailModal({
         setCurrency(data.currency || "USD");
         setNotes(data.notes || "");
         setItems((data.items || []).map(normalizeVendorQuoteItem));
+        setOcrFiles(Array.isArray(data.source_files) ? data.source_files : []);
         // Payment Terms 미입력이면 벤더 정보에 등록된 기본 결제조건으로 채운다(수정 가능).
         setTerms(seedPaymentTerms(data.terms, data.default_payment_terms));
         setParseMsg(null);
@@ -1298,13 +1302,21 @@ function VendorQuoteDetailModal({
     try {
       let added = 0;
       let ok = 0;
+      const newFiles: RfqSourceFile[] = [];
       for (const file of files) {
         const r = await parseVendorQuoteFile(file);
         const parsed = r.items || [];
         added += parsed.length;
         ok++;
+        newFiles.push({
+          name: file.name || "(unnamed)",
+          media_type: file.type || "",
+          item_count: parsed.length,
+          at: nowLocalDt(),
+        });
         setItems((prev) => accumulateVendorItems(prev, parsed));
       }
+      setOcrFiles((prev) => [...prev, ...newFiles]);
       setParseMsg(
         added
           ? `Auto-filled ${added} item(s)${files.length > 1 ? ` from ${ok} files` : ""} — review and edit`
@@ -1364,6 +1376,7 @@ function VendorQuoteDetailModal({
         notes,
         items: cleanVendorQuoteItems(items),
         terms,
+        source_files: ocrFiles,
       });
       onChanged();
       onClose();
@@ -1439,6 +1452,10 @@ function VendorQuoteDetailModal({
               )}
             </div>
           ) : null}
+          <SourceFilesList
+            files={ocrFiles}
+            onRemove={canEditThis ? (i) => setOcrFiles((prev) => prev.filter((_, idx) => idx !== i)) : undefined}
+          />
           <div className="form-grid">
             <div className="form-field">
               <label>Vendor quote no.</label>
@@ -2406,6 +2423,7 @@ function VendorQuoteAction({
   const [notes, setNotes] = useState("");
   const [items, setItems] = useState<VendorQuoteItem[]>([]);
   const [terms, setTerms] = useState<QuotationTerms>({});
+  const [ocrFiles, setOcrFiles] = useState<RfqSourceFile[]>([]); // Auto-fill 소스 파일 목록(영구 보관)
   const [parseMsg, setParseMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -2415,9 +2433,11 @@ function VendorQuoteAction({
   useEffect(() => {
     if (vrfqId === "") {
       setItems([]);
+      setOcrFiles([]);
       return;
     }
     setItems([]);
+    setOcrFiles([]);
     setParseMsg(null);
   }, [vrfqId]);
 
@@ -2432,13 +2452,21 @@ function VendorQuoteAction({
     try {
       let added = 0;
       let ok = 0;
+      const newFiles: RfqSourceFile[] = [];
       for (const file of files) {
         const r = await parseVendorQuoteFile(file);
         const parsed = r.items || [];
         added += parsed.length;
         ok++;
+        newFiles.push({
+          name: file.name || "(unnamed)",
+          media_type: file.type || "",
+          item_count: parsed.length,
+          at: nowLocalDt(),
+        });
         setItems((prev) => accumulateVendorItems(prev, parsed));
       }
+      setOcrFiles((prev) => [...prev, ...newFiles]);
       setParseMsg(
         added
           ? `Auto-filled ${added} item(s)${files.length > 1 ? ` from ${ok} files` : ""} — review and edit`
@@ -2516,7 +2544,8 @@ function VendorQuoteAction({
         clean,
         receivedAt,
         notes,
-        terms
+        terms,
+        ocrFiles
       );
       setMsg(`Registered — ${r.vendor_quote_no}`);
       setNo("");
@@ -2524,6 +2553,7 @@ function VendorQuoteAction({
       setNotes("");
       setItems([]);
       setTerms({});
+      setOcrFiles([]);
       setVrfqId("");
       setReceivedAt(nowLocalDt());
       onDone();
@@ -2573,6 +2603,10 @@ function VendorQuoteAction({
               )}
             </div>
           ) : null}
+          <SourceFilesList
+            files={ocrFiles}
+            onRemove={(i) => setOcrFiles((prev) => prev.filter((_, idx) => idx !== i))}
+          />
           <div className="form-grid">
             <div className="form-field">
               <label>Select Vendor RFQ</label>

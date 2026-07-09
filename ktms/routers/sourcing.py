@@ -30,6 +30,7 @@ from _core import (
     _next_kmaris_rfq_no,
     _rfq_unassigned,
     build_po_payload,
+    clean_source_files,
     generate_pdf,
     send_email,
     default_from,
@@ -675,6 +676,7 @@ def create_vendor_quote(rfq_id: int, body: VendorQuoteCreate):
             items=items,
             terms=body.terms or {},
             notes=body.notes or "",
+            source_files=clean_source_files(body.source_files),
         )
         s.add(vq)
         vrfq.status = "견적 수신완료"
@@ -744,6 +746,7 @@ def vendor_quote_detail(vq_id: int):
             "currency": getattr(q, "currency", None) or "USD",
             "items": q.items or [],
             "terms": getattr(q, "terms", None) or {},
+            "source_files": getattr(q, "source_files", None) or [],
             # 벤더 정보에 등록된 기본 결제조건(상세 편집 시 payment_terms 기본값용)
             "default_payment_terms": (getattr(vendor, "payment_terms", None) or "") if vendor else "",
         }
@@ -780,6 +783,8 @@ def update_vendor_quote(vq_id: int, body: VendorQuoteUpdate):
             q.items = body.items
         if body.terms is not None:
             q.terms = body.terms
+        if body.source_files is not None:
+            q.source_files = clean_source_files(body.source_files)
         s.commit()
         saved_currency = (
             s.execute(text("SELECT currency FROM vendor_quotes WHERE id = :id"), {"id": vq_id}).scalar()

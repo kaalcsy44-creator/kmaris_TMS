@@ -1374,6 +1374,7 @@ class OrderCreate(BaseModel):
     promised_delivery: str | None = None
     items: list[PoWorkItem] = []
     terms: dict | None = None
+    source_files: list[dict] = []      # Auto-fill 소스 파일 메타(영구 보관)
 
 
 class OrderUpdate(BaseModel):
@@ -1386,6 +1387,7 @@ class OrderUpdate(BaseModel):
     promised_delivery: str | None = None
     items: list[PoWorkItem] | None = None
     terms: dict | None = None
+    source_files: list[dict] | None = None  # 보내면 소스 파일 메타 전체 교체
 
 
 class PurchaseOrderCreate(BaseModel):
@@ -1396,6 +1398,7 @@ class PurchaseOrderCreate(BaseModel):
     currency: str | None = None
     items: list[PoWorkItem] = []
     terms: dict | None = None
+    source_files: list[dict] = []      # Auto-fill 소스 파일 메타(영구 보관)
 
 
 class PurchaseOrderUpdate(BaseModel):
@@ -1407,6 +1410,7 @@ class PurchaseOrderUpdate(BaseModel):
     status: str | None = None
     items: list[PoWorkItem] | None = None
     terms: dict | None = None
+    source_files: list[dict] | None = None  # 보내면 소스 파일 메타 전체 교체
 
 
 class VendorPoPreview(BaseModel):
@@ -2000,6 +2004,7 @@ class VendorQuoteCreate(BaseModel):
     notes: str = ""
     items: list[dict] | None = None
     terms: dict | None = None
+    source_files: list[dict] = []      # Auto-fill 소스 파일 메타(영구 보관)
 
 
 class VendorQuoteUpdate(BaseModel):
@@ -2010,6 +2015,7 @@ class VendorQuoteUpdate(BaseModel):
     notes: str | None = None
     items: list[dict] | None = None
     terms: dict | None = None
+    source_files: list[dict] | None = None  # 보내면 소스 파일 메타 전체 교체
 
 
 
@@ -2130,6 +2136,33 @@ class RfqSourceFileIn(BaseModel):
     media_type: str | None = ""
     item_count: int = 0
     at: str | None = ""
+
+
+def clean_source_files(src) -> list[dict]:
+    """Auto-fill 소스 파일 메타 정규화(dict/Pydantic 객체 모두 허용).
+    파일명 없는 항목은 제외하고, 시각이 비면 현재(KST)로 채운다.
+    RFQ(1단계)·Vendor Quote(3단계)·P/O(5단계) 공용."""
+    out: list[dict] = []
+    for f in (src or []):
+        if isinstance(f, dict):
+            name = (f.get("name") or "").strip()
+            media = (f.get("media_type") or "").strip()
+            cnt = f.get("item_count", 0)
+            at = (f.get("at") or "").strip()
+        else:
+            name = (getattr(f, "name", "") or "").strip()
+            media = (getattr(f, "media_type", "") or "").strip()
+            cnt = getattr(f, "item_count", 0)
+            at = (getattr(f, "at", "") or "").strip()
+        if not name:
+            continue
+        out.append({
+            "name": name,
+            "media_type": media,
+            "item_count": int(cnt or 0),
+            "at": at or _kst_iso(datetime.utcnow()),
+        })
+    return out
 
 
 class RfqCreate(BaseModel):

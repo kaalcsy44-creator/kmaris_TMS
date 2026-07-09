@@ -54,6 +54,7 @@ from _core import (
     _vrfq_sent_iso,
     app,
     build_po_payload,
+    clean_source_files,
     make_document_xlsx,
     date,
     datetime,
@@ -211,6 +212,7 @@ def order_detail(order_id: int):
             "steps": steps,
             "items": [_item_view(it) for it in (o.items or [])],
             "terms": getattr(o, "terms", None) or {},
+            "source_files": getattr(o, "source_files", None) or [],
             "vendor_pos": vendor_po_view,
             "documents": {
                 "ci_no": ci.ci_no if ci else "",
@@ -432,6 +434,7 @@ def create_order(body: OrderCreate):
             status=OrderStatus.RECEIVED,
             items=items,
             terms=body.terms or {},
+            source_files=clean_source_files(body.source_files),
         )
         s.add(order)
         if qtn:
@@ -486,6 +489,8 @@ def update_order(order_id: int, body: OrderUpdate):
             order.items = items
         if body.terms is not None:
             order.terms = body.terms or {}
+        if body.source_files is not None:
+            order.source_files = clean_source_files(body.source_files)
         s.commit()
         return {"ok": True, "id": order.id, "project_no": _project_no_for_order(s, order)}
     finally:
@@ -577,6 +582,7 @@ def create_purchase_order(body: PurchaseOrderCreate):
             items=items,
             terms=body.terms or {},
             status="발주완료",
+            source_files=clean_source_files(body.source_files),
         )
         s.add(po)
         order.status = OrderStatus.PO_SENT
@@ -616,6 +622,7 @@ def vendor_po_detail(po_id: int):
             "currency": po.currency or (order.currency if order else None) or (qtn.currency if qtn else None) or "USD",
             "items": [_item_view(it) for it in (po.items or [])],
             "terms": getattr(po, "terms", None) or {},
+            "source_files": getattr(po, "source_files", None) or [],
         }
     finally:
         s.close()
@@ -668,6 +675,8 @@ def update_purchase_order(po_id: int, body: PurchaseOrderUpdate):
             po.items = items
         if body.terms is not None:
             po.terms = body.terms or {}
+        if body.source_files is not None:
+            po.source_files = clean_source_files(body.source_files)
         s.commit()
         return {"ok": True, "id": po.id, "po_no": po.po_no}
     finally:

@@ -55,10 +55,19 @@ import type {
   PurchaseOrderDetail,
   VendorQuoteForImport,
   QuotationTerms,
+  RfqSourceFile,
 } from "@/lib/types";
+import SourceFilesList from "@/components/common/SourceFilesList";
 
 type OrderOpt = PoWorkOptions["orders"][number];
 type PoOpt = PoWorkOptions["purchase_orders"][number];
+
+// Auto-fill 소스 파일 메타 시각용 로컬 "YYYY-MM-DDTHH:MM".
+function nowLocalMeta(): string {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
 
 export default function PoScreen() {
   const params = useSearchParams();
@@ -315,6 +324,7 @@ function OrderDetailModal({
   const [promised, setPromised] = useState("");
   const [items, setItems] = useState<PoWorkItem[]>([]);
   const [terms, setTerms] = useState<QuotationTerms>({});
+  const [ocrFiles, setOcrFiles] = useState<RfqSourceFile[]>([]); // Auto-fill 소스 파일 목록(영구 보관)
   const [ocrBusy, setOcrBusy] = useState(false);
   const [ocrMsg, setOcrMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -340,6 +350,7 @@ function OrderDetailModal({
         setPromised(d.promised_delivery || "");
         setItems(d.items.length ? d.items.map(normalizeItem) : [blankItem()]);
         setTerms(d.terms || {});
+        setOcrFiles(Array.isArray(d.source_files) ? d.source_files : []);
         setOcrMsg(null);
       })
       .catch((e) => setErr(e instanceof Error ? e.message : "Load failed"));
@@ -387,12 +398,19 @@ function OrderDetailModal({
     setOcrMsg(null);
     try {
       const collected: PoWorkItem[] = [];
+      const newFiles: RfqSourceFile[] = [];
       let ok = 0;
       let headerFilled = false;
       let hint = "";
       for (const file of files) {
         const r = await parseOrderPdf(file);
         ok++;
+        newFiles.push({
+          name: file.name || "(unnamed)",
+          media_type: file.type || "",
+          item_count: r.items?.length ?? 0,
+          at: nowLocalMeta(),
+        });
         if (!headerFilled) {
           const cust = matchByName(r.customer_hint, options.customers);
           if (cust) setCustomerId(cust.id);
@@ -418,6 +436,7 @@ function OrderDetailModal({
           );
         }
       }
+      setOcrFiles((prev) => [...prev, ...newFiles]);
       if (collected.length) {
         setItems((prev) => {
           const kept = prev.filter((it) => it.part_no.trim() || it.description.trim());
@@ -450,6 +469,7 @@ function OrderDetailModal({
         promised_delivery: promised || null,
         items: cleanItems(items),
         terms,
+        source_files: ocrFiles,
       });
       onChanged();
       onClose();
@@ -545,6 +565,10 @@ function OrderDetailModal({
               )}
             </div>
           ) : null}
+          <SourceFilesList
+            files={ocrFiles}
+            onRemove={canEditThis ? (i) => setOcrFiles((prev) => prev.filter((_, idx) => idx !== i)) : undefined}
+          />
 
           <div className="form-grid">
             <div className="form-field">
@@ -1047,6 +1071,7 @@ function CustomerPoNewForm({
   const [promised, setPromised] = useState("");
   const [items, setItems] = useState<PoWorkItem[]>([blankItem()]);
   const [terms, setTerms] = useState<QuotationTerms>({});
+  const [ocrFiles, setOcrFiles] = useState<RfqSourceFile[]>([]); // Auto-fill 소스 파일 목록(영구 보관)
   const [busy, setBusy] = useState(false);
   const [ocrBusy, setOcrBusy] = useState(false);
   const [showOcr, setShowOcr] = useState(false);
@@ -1091,12 +1116,19 @@ function CustomerPoNewForm({
     setOcrMsg(null);
     try {
       const collected: PoWorkItem[] = [];
+      const newFiles: RfqSourceFile[] = [];
       let ok = 0;
       let headerFilled = false;
       let hint = "";
       for (const file of files) {
         const r = await parseOrderPdf(file);
         ok++;
+        newFiles.push({
+          name: file.name || "(unnamed)",
+          media_type: file.type || "",
+          item_count: r.items?.length ?? 0,
+          at: nowLocalMeta(),
+        });
         if (!headerFilled) {
           const cust = matchByName(r.customer_hint, options.customers);
           if (cust) setCustomerId(cust.id);
@@ -1122,6 +1154,7 @@ function CustomerPoNewForm({
           );
         }
       }
+      setOcrFiles((prev) => [...prev, ...newFiles]);
       if (collected.length) {
         setItems((prev) => {
           const kept = prev.filter((it) => it.part_no.trim() || it.description.trim());
@@ -1158,12 +1191,14 @@ function CustomerPoNewForm({
         promised_delivery: promised || null,
         items: cleanItems(items),
         terms,
+        source_files: ocrFiles,
       });
       setMsg(`Order created: ${r.project_no}`);
       setPoNo("");
       setPromised("");
       setItems([blankItem()]);
       setTerms({});
+      setOcrFiles([]);
       onChanged();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Order creation failed");
@@ -1224,6 +1259,10 @@ function CustomerPoNewForm({
           )}
         </div>
       ) : null}
+      <SourceFilesList
+        files={ocrFiles}
+        onRemove={(i) => setOcrFiles((prev) => prev.filter((_, idx) => idx !== i))}
+      />
 
       <div className="form-grid">
         <div className="form-field">

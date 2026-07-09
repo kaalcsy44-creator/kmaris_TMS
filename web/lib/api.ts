@@ -12,6 +12,7 @@ import type {
   PoWorkItem,
   PoWorkOptions,
   RfqOcrResult,
+  RfqSourceFile,
   OrderOcrResult,
   VendorPoPreview,
   VendorRfqPreview,
@@ -313,6 +314,7 @@ export function createOrder(body: {
   promised_delivery?: string | null;
   items: PoWorkItem[];
   terms?: QuotationTerms;
+  source_files?: RfqSourceFile[];
 }): Promise<{ ok: boolean; id: number; project_no: string }> {
   return post("/api/admin/orders", body);
 }
@@ -325,6 +327,7 @@ export function createPurchaseOrder(body: {
   currency?: string;
   items: PoWorkItem[];
   terms?: QuotationTerms;
+  source_files?: RfqSourceFile[];
 }): Promise<{ ok: boolean; id: number; po_no: string }> {
   return post("/api/admin/vendor-pos", body);
 }
@@ -1033,7 +1036,8 @@ export function createVendorQuote(
   items?: VendorQuoteItem[],
   receivedAt?: string,
   notes?: string,
-  terms?: QuotationTerms
+  terms?: QuotationTerms,
+  sourceFiles?: RfqSourceFile[]
 ): Promise<{ ok: boolean; vendor_quote_no: string }> {
   return post(`/api/admin/rfq/${rfqId}/vendor-quote`, {
     vendor_rfq_id: vendorRfqId,
@@ -1044,6 +1048,7 @@ export function createVendorQuote(
     received_at: receivedAt,
     notes,
     terms,
+    source_files: sourceFiles,
   });
 }
 
@@ -1162,6 +1167,7 @@ export function updateVendorQuote(
     notes?: string;
     items?: VendorQuoteItem[];
     terms?: QuotationTerms;
+    source_files?: RfqSourceFile[];
   }
 ): Promise<{ ok: boolean; vendor_quote_no: string; currency?: string }> {
   return put(`/api/admin/vendor-quote/${id}`, body);
@@ -1215,6 +1221,7 @@ export function updateOrder(
     promised_delivery?: string | null;
     items?: PoWorkItem[];
     terms?: QuotationTerms;
+    source_files?: RfqSourceFile[];
   }
 ): Promise<{ ok: boolean; id: number; project_no: string }> {
   return put(`/api/admin/orders/${id}`, body);
@@ -1239,6 +1246,7 @@ export function updatePurchaseOrder(
     status?: string;
     items?: PoWorkItem[];
     terms?: QuotationTerms;
+    source_files?: RfqSourceFile[];
   }
 ): Promise<{ ok: boolean; id: number; po_no: string }> {
   return put(`/api/admin/vendor-pos/${id}`, body);

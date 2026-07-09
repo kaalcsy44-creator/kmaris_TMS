@@ -171,6 +171,7 @@ export type PoDetail = {
   steps: RfqStep[];
   items: RfqItem[];
   terms?: QuotationTerms;
+  source_files: RfqSourceFile[]; // Auto-fill 소스 파일 메타(영구 보관)
   vendor_pos: {
     id: number;
     po_no: string;
@@ -871,6 +872,7 @@ export type VendorQuoteDetail = {
   currency: string;
   items: VendorQuoteItem[];
   terms: QuotationTerms;
+  source_files: RfqSourceFile[]; // Auto-fill 소스 파일 메타(영구 보관)
   default_payment_terms?: string; // 벤더 정보에 등록된 기본 결제조건
 };
 
@@ -925,6 +927,7 @@ export type PurchaseOrderDetail = {
   currency: string;
   items: PoWorkItem[];
   terms?: QuotationTerms;
+  source_files: RfqSourceFile[]; // Auto-fill 소스 파일 메타(영구 보관)
 };
 
 // ── 마케팅 활동(잠정 고객사) ──────────────────────────────────────────────────

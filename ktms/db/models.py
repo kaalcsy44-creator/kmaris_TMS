@@ -249,6 +249,8 @@ class VendorQuote(Base):
     items         = Column(JSON, default=list)
     terms         = Column(JSON, default=dict)  # 거래조건(Incoterms·납기·공급형태 등)
     notes         = Column(Text)
+    # Auto-fill 소스 파일 메타(영구 보관). [{"name","media_type","item_count","at"}]
+    source_files  = Column(JSON, default=list)
     created_at    = Column(DateTime, default=datetime.utcnow)
 
 
@@ -296,6 +298,8 @@ class Order(Base):
     vendor_docs_sent_date    = Column(String(10))  # 8) Delivery arrangement - Vendor 서류 확인 (수동)
     items          = Column(JSON, default=list)
     terms          = Column(JSON, default=dict)   # 거래조건(Incoterms·Place·결제·포장·보증 등)
+    # Auto-fill 소스 파일 메타(영구 보관). [{"name","media_type","item_count","at"}]
+    source_files   = Column(JSON, default=list)
     tracking_token = Column(String(64), unique=True, default=lambda: secrets.token_urlsafe(32))
     created_at     = Column(DateTime, default=datetime.utcnow)
 
@@ -325,6 +329,8 @@ class PurchaseOrder(Base):
     status     = Column(String(40), default="발주완료")
     sent_date  = Column(String(10))
     sent_to_email = Column(String(200))
+    # Auto-fill 소스 파일 메타(영구 보관). [{"name","media_type","item_count","at"}]
+    source_files = Column(JSON, default=list)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
