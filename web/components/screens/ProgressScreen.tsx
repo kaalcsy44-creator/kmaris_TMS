@@ -1113,8 +1113,9 @@ function BoardPreviewModal({
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     function fit() {
-      const s = Math.min(1, (window.innerWidth - 64) / A4_W, (window.innerHeight - 150) / A4_H);
-      setScale(s > 0.15 ? s : 0.4);
+      // 가로 폭 기준으로 최대한 넓게(최대 1.4배까지 확대). 높이가 넘치면 팝업 안에서 세로 스크롤.
+      const s = Math.min(1.4, (window.innerWidth - 40) / A4_W);
+      setScale(s > 0.2 ? s : 0.4);
     }
     fit();
     window.addEventListener("resize", fit);
@@ -1151,7 +1152,7 @@ function BoardPreviewModal({
 
   return (
     <div
-      className="pl-modal-backdrop"
+      className="pl-modal-backdrop board-prev-backdrop"
       onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
       role="presentation"
     >
@@ -1165,9 +1166,10 @@ function BoardPreviewModal({
             <button className="btn" onClick={onClose}>Close</button>
           </span>
         </div>
-        <div className="board-prev-vp" style={{ width: A4_W * scale, height: A4_H * scale }}>
-          <div className="board-prev-scale" style={{ transform: `scale(${scale})` }}>
-            <div ref={frameRef} className="board-prev-a4" style={{ width: A4_W, height: A4_H }}>
+        <div className="board-prev-scroll">
+          <div className="board-prev-vp" style={{ width: A4_W * scale, height: A4_H * scale }}>
+            <div className="board-prev-scale" style={{ transform: `scale(${scale})` }}>
+              <div ref={frameRef} className="board-prev-a4" style={{ width: A4_W, height: A4_H }}>
               <div className="board-prev-pghead">
                 <span className="board-prev-brand">K-MARIS · Progress (Internal)</span>
                 <span className="board-prev-meta">{today} · {rows.length} deals</span>
@@ -1219,6 +1221,7 @@ function BoardPreviewModal({
         </div>
       </div>
     </div>
+  </div>
   );
 }
 

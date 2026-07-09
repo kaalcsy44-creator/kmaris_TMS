@@ -6260,14 +6260,19 @@ table.mini .num {
 
 /* ── 현황판 A4 가로 미리보기 팝업 ─────────────────────────────────────────── */
 .pl-preview-btn { font-size: 12px; }
+/* 미리보기 팝업은 가로를 최대한 넓게 쓰도록 백드롭 여백을 최소화하고 중앙 정렬. */
+.board-prev-backdrop {
+  padding: 16px;
+  align-items: center;
+}
 .board-prev {
   background: #fff;
   border-radius: 12px;
   box-shadow: 0 12px 40px rgba(11, 29, 58, 0.35);
   display: flex;
   flex-direction: column;
-  max-width: calc(100vw - 40px);
-  max-height: calc(100vh - 96px);
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 32px);
   overflow: hidden;
 }
 .board-prev-bar {
@@ -6280,9 +6285,18 @@ table.mini .num {
   flex: none;
 }
 .board-prev-actions { display: inline-flex; gap: 8px; }
-.board-prev-vp {
-  overflow: hidden;
+/* 가로는 폭에 맞춰 꽉 채우고, A4가 세로로 넘치면 이 영역에서 스크롤한다. */
+.board-prev-scroll {
+  flex: 1 1 auto;
+  overflow: auto;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
   background: #eef1f5;
+}
+.board-prev-vp {
+  flex: none;
+  overflow: hidden;
 }
 .board-prev-scale { transform-origin: top left; }
 /* 캡처 대상 = A4 가로 1장(1400×990). 시각적으로는 부모(scale)로 축소된다. */
