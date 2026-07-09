@@ -371,23 +371,36 @@ function OrderDetailModal({
     });
   }
 
-  async function uploadOrderFile(file: File | null) {
-    if (!file) return;
+  // 복수 파일 지원 — 여러 개를 순차 분석해 아이템을 누적하고, 헤더 정보(고객·선박·
+  // PO번호·일자·납기)는 첫 유효 추출 1회만 반영해 뒤 파일이 덮어쓰지 않게 한다.
+  async function uploadOrderFile(input: File | FileList | null) {
+    if (!input) return;
+    const files = input instanceof File ? [input] : Array.from(input);
+    if (!files.length) return;
     setOcrBusy(true);
     setErr(null);
     setOcrMsg(null);
     try {
-      const r = await parseOrderPdf(file);
-      const cust = matchByName(r.customer_hint, options.customers);
-      if (cust) setCustomerId(cust.id);
-      const vessel = matchByName(r.vessel_name, options.vessels);
-      if (vessel) setVesselId(vessel.id);
-      if (r.po_no) setPoNo(r.po_no);
-      if (r.order_date) setDate(r.order_date);
-      if (r.promised_delivery) setPromised(r.promised_delivery);
-      if (r.items?.length) {
-        setItems(
-          r.items.map((it) =>
+      const collected: PoWorkItem[] = [];
+      let ok = 0;
+      let headerFilled = false;
+      let hint = "";
+      for (const file of files) {
+        const r = await parseOrderPdf(file);
+        ok++;
+        if (!headerFilled) {
+          const cust = matchByName(r.customer_hint, options.customers);
+          if (cust) setCustomerId(cust.id);
+          const vessel = matchByName(r.vessel_name, options.vessels);
+          if (vessel) setVesselId(vessel.id);
+          if (r.po_no) setPoNo(r.po_no);
+          if (r.order_date) setDate(r.order_date);
+          if (r.promised_delivery) setPromised(r.promised_delivery);
+          if (r.customer_hint) hint = r.customer_hint;
+          if (r.customer_hint || r.vessel_name || r.po_no || r.items?.length) headerFilled = true;
+        }
+        for (const it of r.items ?? []) {
+          collected.push(
             normalizeItem({
               part_no: it.part_no ?? "",
               description: it.description ?? "",
@@ -397,10 +410,20 @@ function OrderDetailModal({
               unit_price: it.unit_price ?? 0,
               amount: (it.qty ?? 1) * (it.unit_price ?? 0),
             })
-          )
-        );
+          );
+        }
       }
-      setOcrMsg(`Extracted ${r.items?.length ?? 0} item(s) from file.`);
+      if (collected.length) {
+        setItems((prev) => {
+          const kept = prev.filter((it) => it.part_no.trim() || it.description.trim());
+          return [...kept, ...collected];
+        });
+      }
+      setOcrMsg(
+        `Extracted: +${collected.length} item(s)${files.length > 1 ? ` from ${ok} files` : ""}${
+          hint ? ` · Customer hint ${hint}` : ""
+        }`
+      );
     } catch (e) {
       setErr(e instanceof Error ? e.message : "File parsing failed");
     } finally {
@@ -500,8 +523,12 @@ function OrderDetailModal({
               <span className="ocr-bar-label">📄 Customer P/O auto-fill</span>
               <input
                 type="file"
+                multiple
                 accept=".pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/*"
-                onChange={(e) => uploadOrderFile(e.target.files?.[0] ?? null)}
+                onChange={(e) => {
+                  uploadOrderFile(e.target.files);
+                  e.target.value = "";
+                }}
                 disabled={ocrBusy || busy}
               />
               {ocrBusy ? (
@@ -509,7 +536,7 @@ function OrderDetailModal({
               ) : ocrMsg ? (
                 <span className="action-ok">{ocrMsg}</span>
               ) : (
-                <span className="hint-inline">Upload a customer P/O PDF/image → auto-fill</span>
+                <span className="hint-inline">Upload customer P/O files (multiple OK) → items accumulate</span>
               )}
             </div>
           ) : null}
@@ -1049,36 +1076,56 @@ function CustomerPoNewForm({
     });
   }
 
-  async function uploadOrderPdf(file: File | null) {
-    if (!file) return;
+  // 복수 파일 지원 — 여러 개를 순차 분석해 아이템을 누적하고, 헤더 정보는 첫 유효 추출 1회만 반영.
+  async function uploadOrderPdf(input: File | FileList | null) {
+    if (!input) return;
+    const files = input instanceof File ? [input] : Array.from(input);
+    if (!files.length) return;
     setOcrBusy(true);
     setErr(null);
     setOcrMsg(null);
     try {
-      const r = await parseOrderPdf(file);
-      const cust = matchByName(r.customer_hint, options.customers);
-      if (cust) setCustomerId(cust.id);
-      const vessel = matchByName(r.vessel_name, options.vessels);
-      if (vessel) setVesselId(vessel.id);
-      if (r.po_no) setPoNo(r.po_no);
-      if (r.order_date) setDate(r.order_date);
-      if (r.promised_delivery) setPromised(r.promised_delivery);
-      if (r.items?.length) {
-        setItems(
-          r.items.map((it) => ({
-            part_no: it.part_no ?? "",
-            description: it.description ?? "",
-            maker: it.maker ?? "",
-            qty: it.qty ?? 1,
-            unit: it.unit ?? "PCS",
-            unit_price: it.unit_price ?? 0,
-            amount: (it.qty ?? 1) * (it.unit_price ?? 0),
-          }))
-        );
+      const collected: PoWorkItem[] = [];
+      let ok = 0;
+      let headerFilled = false;
+      let hint = "";
+      for (const file of files) {
+        const r = await parseOrderPdf(file);
+        ok++;
+        if (!headerFilled) {
+          const cust = matchByName(r.customer_hint, options.customers);
+          if (cust) setCustomerId(cust.id);
+          const vessel = matchByName(r.vessel_name, options.vessels);
+          if (vessel) setVesselId(vessel.id);
+          if (r.po_no) setPoNo(r.po_no);
+          if (r.order_date) setDate(r.order_date);
+          if (r.promised_delivery) setPromised(r.promised_delivery);
+          if (r.customer_hint) hint = r.customer_hint;
+          if (r.customer_hint || r.vessel_name || r.po_no || r.items?.length) headerFilled = true;
+        }
+        for (const it of r.items ?? []) {
+          collected.push(
+            normalizeItem({
+              part_no: it.part_no ?? "",
+              description: it.description ?? "",
+              maker: it.maker ?? "",
+              qty: it.qty ?? 1,
+              unit: it.unit ?? "PCS",
+              unit_price: it.unit_price ?? 0,
+              amount: (it.qty ?? 1) * (it.unit_price ?? 0),
+            })
+          );
+        }
+      }
+      if (collected.length) {
+        setItems((prev) => {
+          const kept = prev.filter((it) => it.part_no.trim() || it.description.trim());
+          return [...kept, ...collected];
+        });
       }
       setOcrMsg(
-        `Extracted: ${r.items?.length ?? 0} item(s)${
-          r.customer_hint ? ` · Customer hint ${r.customer_hint}` : ""
+        `Extracted: +${collected.length} item(s)${files.length > 1 ? ` from ${ok} files` : ""}${
+          hint ? ` · Customer hint ${hint}` : ""
         }`
       );
     } catch (e) {
@@ -1153,8 +1200,12 @@ function CustomerPoNewForm({
           <span className="ocr-bar-label">📄 Auto-fill from order PDF</span>
           <input
             type="file"
+            multiple
             accept="application/pdf"
-            onChange={(e) => uploadOrderPdf(e.target.files?.[0] ?? null)}
+            onChange={(e) => {
+              uploadOrderPdf(e.target.files);
+              e.target.value = "";
+            }}
             disabled={ocrBusy}
           />
           {ocrBusy ? (
@@ -1163,7 +1214,7 @@ function CustomerPoNewForm({
             <span className="action-ok">{ocrMsg}</span>
           ) : (
             <span className="hint-inline">
-              Upload a customer P/O PDF → auto-extract customer, PO no., vessel, delivery, items
+              Upload customer P/O PDFs (multiple OK) → auto-extract customer, PO no., vessel, delivery; items accumulate
             </span>
           )}
         </div>

@@ -1282,18 +1282,27 @@ function VendorQuoteDetailModal({
       .catch((e) => setErr(e instanceof Error ? e.message : "Error"));
   }, [id]);
 
-  async function parseFile(file: File | null) {
-    if (!file) return;
+  // 복수 파일 지원 — 여러 개를 순차 분석해 아이템을 누적한다(같은 part_no 는 병합).
+  async function parseFile(input: File | FileList | null) {
+    if (!input) return;
+    const files = input instanceof File ? [input] : Array.from(input);
+    if (!files.length) return;
     setBusy(true);
     setErr(null);
     setParseMsg(null);
     try {
-      const r = await parseVendorQuoteFile(file);
-      const parsed = r.items || [];
-      setItems((prev) => mergeParsedItems(prev.length ? prev : [], parsed));
+      let added = 0;
+      let ok = 0;
+      for (const file of files) {
+        const r = await parseVendorQuoteFile(file);
+        const parsed = r.items || [];
+        added += parsed.length;
+        ok++;
+        setItems((prev) => accumulateVendorItems(prev, parsed));
+      }
       setParseMsg(
-        parsed.length
-          ? `Auto-filled ${parsed.length} item(s) — review and edit`
+        added
+          ? `Auto-filled ${added} item(s)${files.length > 1 ? ` from ${ok} files` : ""} — review and edit`
           : "Could not extract items. Enter manually or try another file."
       );
     } catch (e) {
@@ -1408,16 +1417,20 @@ function VendorQuoteDetailModal({
               <span className="ocr-bar-label">📄 Vendor quote auto-fill (PDF·Excel·image)</span>
               <input
                 type="file"
+                multiple
                 accept=".pdf,.xlsx,.xls,.png,.jpg,.jpeg,.webp,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,image/*"
                 disabled={busy}
-                onChange={(e) => parseFile(e.target.files?.[0] ?? null)}
+                onChange={(e) => {
+                  parseFile(e.target.files);
+                  e.target.value = "";
+                }}
               />
               {busy ? (
                 <span className="hint-inline">Analyzing…</span>
               ) : parseMsg ? (
                 <span className="action-ok">{parseMsg}</span>
               ) : (
-                <span className="hint-inline">Upload a file or paste a screenshot with Ctrl+V → auto-fill</span>
+                <span className="hint-inline">Upload files (multiple OK) or paste a screenshot with Ctrl+V → items accumulate</span>
               )}
             </div>
           ) : null}
@@ -2401,18 +2414,27 @@ function VendorQuoteAction({
     setParseMsg(null);
   }, [vrfqId]);
 
-  async function parseFile(file: File | null) {
-    if (!file) return;
+  // 복수 파일 지원 — 여러 개를 순차 분석해 아이템을 누적한다(같은 part_no 는 병합).
+  async function parseFile(input: File | FileList | null) {
+    if (!input) return;
+    const files = input instanceof File ? [input] : Array.from(input);
+    if (!files.length) return;
     setBusy(true);
     setErr(null);
     setParseMsg(null);
     try {
-      const r = await parseVendorQuoteFile(file);
-      const parsed = r.items || [];
-      setItems((prev) => mergeParsedItems(prev.length ? prev : [], parsed));
+      let added = 0;
+      let ok = 0;
+      for (const file of files) {
+        const r = await parseVendorQuoteFile(file);
+        const parsed = r.items || [];
+        added += parsed.length;
+        ok++;
+        setItems((prev) => accumulateVendorItems(prev, parsed));
+      }
       setParseMsg(
-        parsed.length
-          ? `Auto-filled ${parsed.length} item(s) — review and edit`
+        added
+          ? `Auto-filled ${added} item(s)${files.length > 1 ? ` from ${ok} files` : ""} — review and edit`
           : "Could not extract items. Enter manually or try another file."
       );
     } catch (e) {
@@ -2527,16 +2549,20 @@ function VendorQuoteAction({
               <span className="ocr-bar-label">📄 Vendor quote auto-fill (PDF·Excel·image)</span>
               <input
                 type="file"
+                multiple
                 accept=".pdf,.xlsx,.xls,.png,.jpg,.jpeg,.webp,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,image/*"
                 disabled={busy || vrfqId === ""}
-                onChange={(e) => parseFile(e.target.files?.[0] ?? null)}
+                onChange={(e) => {
+                  parseFile(e.target.files);
+                  e.target.value = "";
+                }}
               />
               {busy ? (
                 <span className="hint-inline">Analyzing…</span>
               ) : parseMsg ? (
                 <span className="action-ok">{parseMsg}</span>
               ) : (
-                <span className="hint-inline">Select a Vendor RFQ, then upload a file or paste with Ctrl+V → auto-fill</span>
+                <span className="hint-inline">Select a Vendor RFQ, then upload files (multiple OK) or paste with Ctrl+V → items accumulate</span>
               )}
             </div>
           ) : null}
@@ -2729,6 +2755,32 @@ function VendorQuoteItemEditor({
       </div>
     </div>
   );
+}
+
+// 복수 파일 자동입력용 — 같은 part_no 는 기존 행에 값 병합(가격 등 채움), 없는 part_no 는
+// 새 행으로 누적한다. 파일을 여러 개 올려도 아이템이 사라지지 않고 쌓인다.
+function accumulateVendorItems(
+  base: VendorQuoteItem[],
+  parsed: Partial<VendorQuoteItem>[]
+): VendorQuoteItem[] {
+  if (!base.length) return parsed.map(normalizeVendorQuoteItem);
+  const idxByPart = new Map<string, number>();
+  base.forEach((r, i) => {
+    const k = r.part_no.trim();
+    if (k) idxByPart.set(k, i);
+  });
+  const result = base.slice();
+  const appended: VendorQuoteItem[] = [];
+  for (const p of parsed) {
+    const key = String(p.part_no ?? "").trim();
+    const idx = key ? idxByPart.get(key) : undefined;
+    if (idx !== undefined) {
+      result[idx] = normalizeVendorQuoteItem({ ...result[idx], ...p, maker: p.maker ?? p.manufacturer ?? result[idx].maker });
+    } else {
+      appended.push(normalizeVendorQuoteItem(p));
+    }
+  }
+  return [...result, ...appended];
 }
 
 function mergeParsedItems(
