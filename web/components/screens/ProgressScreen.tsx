@@ -1197,22 +1197,27 @@ function BoardPreviewModal({
                             const total = steps.length;
                             const filled = Math.max(0, Math.min(stageOf(r), total));
                             const amount = r.order_amount || r.customer_amount || r.vendor_amount || "";
+                            const isService = (r.work_type || "부품공급") === "서비스";
                             return (
-                              <div key={r.rfq_id} className="board-prev-card">
-                                <div className="board-prev-cardno"><ProjectNo value={r.project_no} /></div>
-                                <div className="board-prev-cust">{r.customer || "—"}</div>
+                              <div key={r.rfq_id} className={`board-prev-card${isService ? " service" : ""}`}>
+                                <div className="board-prev-top">
+                                  <span className="board-prev-cardno"><ProjectNo value={r.project_no} /></span>
+                                  <span className="board-prev-pic">{r.assignee || "—"}</span>
+                                </div>
                                 {r.project_title ? (
                                   <div className="board-prev-title2">{r.project_title}</div>
                                 ) : null}
+                                <div className="board-prev-cust">{r.customer || "—"}</div>
                                 <div className="board-prev-cardbar">
                                   {Array.from({ length: total }).map((_, i) => (
                                     <span key={i} className={`seg${i < filled ? " on" : ""}`} />
                                   ))}
                                 </div>
-                                <div className="board-prev-foot">
-                                  <span>{r.assignee || "—"}</span>
-                                  {amount ? <span className="board-prev-amt">{amount}</span> : null}
-                                </div>
+                                {amount ? (
+                                  <div className="board-prev-foot">
+                                    <span className="board-prev-amt">{amount}</span>
+                                  </div>
+                                ) : null}
                               </div>
                             );
                           })
