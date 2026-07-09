@@ -134,6 +134,12 @@ function fmtStageDate(iso: string): string {
   return `${y.slice(2)}-${mo}-${d} ${h}:${mi}`;
 }
 
+/** ISO('YYYY-MM-DD…') → 관리번호와 같은 6자리 yymmdd(예: "260703"). 없으면 빈칸. */
+function fmtYYMMDD(iso: string): string {
+  const m = (iso || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? m[1].slice(2) + m[2] + m[3] : "";
+}
+
 type Tab = "customer" | "internal";
 type WorkspaceArea = "rfq" | "po" | "documents" | "ar";
 type StageTabKey = number;
@@ -1251,6 +1257,9 @@ function BoardCard({
   const amount = r.order_amount || r.customer_amount || r.vendor_amount || "";
   const age = daysSince(r.first_rfq_at);
   const barTitle = `${filled}/${total} ${steps[filled - 1] ?? ""}`;
+  // 현재(최종 진행) 단계의 날짜: 수동 저장값 우선, 없으면 자동 동기화값. yymmdd로 표기.
+  // 조회는 내부 단계번호(r.stage) 기준 — Customer 탭에서 filled가 재매핑돼도 정확.
+  const stageDate = fmtYYMMDD(r.stage_dates?.[String(r.stage)] ?? r.stage_auto?.[String(r.stage)] ?? "");
   // 종결 상태: 취소(회색+리본) / 완료(11단계 Payment Completed → 초록 체크).
   const cancelled = !!r.cancelled;
   const done = !cancelled && filled >= total;
@@ -1346,7 +1355,8 @@ function BoardCard({
       </div>
       <div className="pl-card-stageline">
         <span className="pl-card-stage">
-          {filled}/{total} · {steps[filled - 1] ?? ""}
+          {steps[filled - 1] ?? ""}
+          {stageDate ? <span className="pl-card-stage-date"> ({stageDate})</span> : null}
         </span>
         <VendorMonograms value={vendorOf(r)} />
         {age != null ? <span className="pl-card-age" title="Days since first RFQ">{age}d</span> : null}

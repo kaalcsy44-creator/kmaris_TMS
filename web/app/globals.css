@@ -5049,6 +5049,8 @@ table.mini .num {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* 최종 진행 단계 날짜(yymmdd) — 번호 날짜와 같은 톤(비볼드·연한 회색). */
+.pl-card-stage-date { font-weight: 400; color: #8a96a8; }
 /* 담당자(PIC) — 1행 우측 그룹에 배치(작업배지·화살표와 함께). */
 .pl-card-pic {
   min-width: 0;
