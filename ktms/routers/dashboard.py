@@ -116,10 +116,21 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
                 _vq_no = getattr(vq0, "vendor_quote_no", None) or "—"
                 vquote_no = str(_vq_no) + (f"  (외 {len(vqs) - 1}건)" if len(vqs) > 1 else "")
                 vquote_at = _kst(vq0.created_at)
-                _cur = getattr(vq0, "currency", None) or "USD"
-                _vendor_total = _items_cost_total(vq0.items)
-                vendor_amount = _dual_money(_vendor_total, _cur)
-                vendor_usd = (_vendor_total / USD_KRW_RATE) if _cur.upper() == "KRW" else _vendor_total
+                # 매입(견적) 금액은 수신한 모든 벤더 견적을 합산한다(견적이 여러 건이면
+                # 각 견적이 서로 다른 품목을 담당 → 전체 매입원가). 통화가 섞이면 USD로
+                # 환산해 합산하고, 대표(최신) 견적 통화로 표기.
+                _disp_vcur = (getattr(vq0, "currency", None) or "USD").upper()
+                _vendor_usd_sum = 0.0
+                for _vq in vqs:
+                    _vc = (getattr(_vq, "currency", None) or "USD").upper()
+                    _vt = _items_cost_total(_vq.items)
+                    _vendor_usd_sum += (_vt / USD_KRW_RATE) if _vc == "KRW" else _vt
+                vendor_usd = _vendor_usd_sum
+                vendor_amount = (
+                    _dual_money(_vendor_usd_sum * USD_KRW_RATE, "KRW")
+                    if _disp_vcur == "KRW"
+                    else _dual_money(_vendor_usd_sum, "USD")
+                )
             else:
                 vquote_no, vquote_at, vendor_amount = "", "", ""
                 vendor_usd = None

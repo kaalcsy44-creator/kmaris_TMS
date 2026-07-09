@@ -29,6 +29,7 @@ from _core import (
     VendorRFQ,
     Vessel,
     WorkType,
+    USD_KRW_RATE,
     _apply_owner_filter,
     _assign_rfq_no,
     _next_kmaris_rfq_no,
@@ -112,8 +113,19 @@ def rfq_overview(customer_id: int | None = None, work_type: str | None = None,
                 _vq_no = getattr(vq0, "vendor_quote_no", None) or "—"
                 vq_main = str(_vq_no) + (f"  (외 {len(vqs) - 1}건)" if len(vqs) > 1 else "")
                 vq_at = _kst(vq0.created_at)
-                _cur = getattr(vq0, "currency", None) or "USD"
-                vendor_amount = _dual_money(_items_cost_total(vq0.items), _cur)
+                # 매입(견적) 금액은 수신한 모든 벤더 견적을 합산(견적이 여러 건이면 각기 다른
+                # 품목 담당 → 전체 매입원가). 통화 혼재 시 USD 환산 합산 후 대표 통화로 표기.
+                _disp_vcur = (getattr(vq0, "currency", None) or "USD").upper()
+                _vendor_usd_sum = 0.0
+                for _vq in vqs:
+                    _vc = (getattr(_vq, "currency", None) or "USD").upper()
+                    _vt = _items_cost_total(_vq.items)
+                    _vendor_usd_sum += (_vt / USD_KRW_RATE) if _vc == "KRW" else _vt
+                vendor_amount = (
+                    _dual_money(_vendor_usd_sum * USD_KRW_RATE, "KRW")
+                    if _disp_vcur == "KRW"
+                    else _dual_money(_vendor_usd_sum, "USD")
+                )
             else:
                 vq_main, vq_at, vendor_amount = "", "", ""
 
