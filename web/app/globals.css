@@ -6387,11 +6387,11 @@ table.mini .num {
 .board-prev-top { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 2px; }
 /* 번호 — 프로젝트명과 동일한 글씨체(sans) */
 .board-prev-cardno { font-size: 11px; font-weight: 700; color: var(--blue); }
-.board-prev-pic { flex: none; max-width: 90px; font-size: 10.5px; font-weight: 700; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.board-prev-pic { flex: none; max-width: 90px; font-size: 9.5px; font-weight: 500; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* 프로젝트명 — 히어로(가장 강조) */
-.board-prev-title2 { font-size: 12px; font-weight: 700; color: var(--blue); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+.board-prev-title2 { font-size: 11px; font-weight: 700; color: var(--blue); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
 /* 고객명 — 보조(비볼드·작게) */
-.board-prev-cust { font-size: 11px; font-weight: 500; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+.board-prev-cust { font-size: 10px; font-weight: 500; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
 .board-prev-cardbar { display: flex; gap: 2px; margin: 5px 0 4px; }
 .board-prev-cardbar .seg { flex: 1; height: 3px; border-radius: 2px; background: var(--line-strong); }
 .board-prev-cardbar .seg.on { background: var(--blue); }
@@ -6400,4 +6400,8 @@ table.mini .num {
 .board-prev-card.service { border-left: 3px solid #11824a; padding-left: 6px; }
 .board-prev-card.service .board-prev-cardbar .seg.on { background: #11824a; }
 .board-prev-foot { display: flex; align-items: center; justify-content: flex-end; gap: 6px; font-size: 10.5px; margin-top: 2px; }
-.board-prev-amt { flex: none; color: var(--muted); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.board-prev-amt { flex: none; color: var(--muted); font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Closed(종결) 카드: 번호·프로젝트명·담당자를 회색으로 톤다운. */
+.board-prev-col.cancelled .board-prev-cardno,
+.board-prev-col.cancelled .board-prev-title2,
+.board-prev-col.cancelled .board-prev-pic { color: #9aa3af; }

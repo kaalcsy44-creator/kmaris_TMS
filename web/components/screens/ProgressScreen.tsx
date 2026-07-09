@@ -140,6 +140,12 @@ function fmtYYMMDD(iso: string): string {
   return m ? m[1].slice(2) + m[2] + m[3] : "";
 }
 
+/** 복수 통화 금액에서 주요(첫) 통화만: "KRW 6,614,200 USD 4,285" → "KRW 6,614,200". */
+function primaryAmount(s: string): string {
+  const m = (s || "").match(/[A-Z]{3}\s*[\d,.]+/);
+  return m ? m[0].replace(/\s+/, " ") : s || "";
+}
+
 type Tab = "customer" | "internal";
 type WorkspaceArea = "rfq" | "po" | "documents" | "ar";
 type StageTabKey = number;
@@ -1215,7 +1221,7 @@ function BoardPreviewModal({
                                 </div>
                                 {amount ? (
                                   <div className="board-prev-foot">
-                                    <span className="board-prev-amt">{amount}</span>
+                                    <span className="board-prev-amt" title={amount}>{primaryAmount(amount)}</span>
                                   </div>
                                 ) : null}
                               </div>
