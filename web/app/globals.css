@@ -4859,7 +4859,7 @@ table.mini .num {
 }
 /* 취소 카드: 채도 낮추고 제목/고객명에 취소선. */
 .pl-card.cancelled { opacity: 0.7; }
-.pl-card.cancelled .pl-card-cust,
+.pl-card.cancelled .pl-card-meta,
 .pl-card.cancelled .pl-card-proj,
 .pl-card.cancelled .pl-card-proj-c {
   text-decoration: line-through;
@@ -4893,7 +4893,7 @@ table.mini .num {
   background: #fff;
   border: 1px solid var(--line-strong);
   border-radius: 10px;
-  padding: 9px 10px;
+  padding: 8px 10px;
   cursor: pointer;
   box-shadow: 0 1px 2px rgba(11, 29, 58, 0.04);
   transition: box-shadow 0.12s, border-color 0.12s, transform 0.06s;
@@ -4914,7 +4914,7 @@ table.mini .num {
   align-items: center;
   justify-content: space-between;
   gap: 6px;
-  margin-bottom: 4px;
+  margin-bottom: 3px;
 }
 /* 카드 접기/펼치기 화살표 — 카드 클릭(상세 팝업)과 분리된 별도 버튼 */
 .pl-card-toggle {
@@ -4975,34 +4975,41 @@ table.mini .num {
   font-weight: 700;
   color: var(--blue);
 }
-.pl-card-cust {
-  display: flex;
-  align-items: center;
-  min-width: 0;
+/* 프로젝트명(건별 식별) — 번호 바로 아래, 카드의 히어로(가장 강조). */
+.pl-card-proj {
   font-size: 13px;
   font-weight: 700;
-  color: var(--ink);
-}
-.pl-card-cust .cust-name {
-  min-width: 0;
-}
-/* 프로젝트명(건별 식별) — 고객명 아래, 선박 위 */
-.pl-card-proj {
-  font-size: 11.5px;
-  font-weight: 600;
+  line-height: 1.25;
   color: var(--blue);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  margin-top: 1px;
+  margin-top: 2px;
 }
-.pl-card-sub {
-  font-size: 11.5px;
+/* 보조 메타: 고객명 + 선박을 한 줄로(둘 다 2차 정보, 비볼드·작게). */
+.pl-card-meta {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 500;
   color: var(--muted);
   white-space: nowrap;
   overflow: hidden;
+}
+.pl-card-meta .cust-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  gap: 5px;
+  color: var(--ink);
+}
+.pl-card-meta .cust-logo { width: 16px; height: 16px; }
+.pl-card-meta-vessel {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
   text-overflow: ellipsis;
-  margin-bottom: 2px;
 }
 .pl-card-bar {
   display: flex;
@@ -5017,7 +5024,17 @@ table.mini .num {
 }
 .pl-card-bar .seg.on { background: var(--blue); }
 .pl-card.service .pl-card-bar .seg.on { background: #11824a; }
+/* 단계 텍스트(좌) + 경과일 배지(우)를 한 줄에 — 오른쪽 여백 활용. */
+.pl-card-stageline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-top: 3px;
+}
 .pl-card-stage {
+  flex: 1;
+  min-width: 0;
   font-size: 10.5px;
   font-weight: 600;
   color: var(--muted);
@@ -5030,7 +5047,7 @@ table.mini .num {
   align-items: center;
   justify-content: space-between;
   gap: 6px;
-  margin-top: 6px;
+  margin-top: 5px;
 }
 /* foot 좌측 그룹: vendor 모노그램 + PIC(공간 부족 시 PIC 가 말줄임). */
 .pl-card-foot-l {
@@ -5091,9 +5108,7 @@ table.mini .num {
   padding: 1px 5px;
 }
 .pl-card-amt {
-  margin-top: 5px;
-  padding-top: 5px;
-  border-top: 1px dashed var(--line);
+  margin-top: 4px;
   font-size: 10.5px;
   color: var(--muted);
   white-space: nowrap;

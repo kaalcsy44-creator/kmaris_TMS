@@ -1323,31 +1323,35 @@ function BoardCard({
         <WorkTypeBadge type={r.work_type} />
         {chevron}
       </div>
-      <div className="pl-card-cust" title={r.customer || ""}>
-        {r.customer ? <CustomerName name={r.customer} /> : "—"}
-      </div>
       {r.project_title ? (
         <div className="pl-card-proj" title={r.project_title}>{r.project_title}</div>
       ) : null}
       {(() => {
-        // 오더 여러 건이면 선박을 모두 " · "로 이어 한 줄에 표기.
+        // 고객명 + 선박(오더 여럿이면 " · "로 이어)을 한 줄의 보조 메타로 병합.
         const vs = (r.vessels || r.vessel).split("\n").filter(Boolean).join(" · ");
-        return vs ? <div className="pl-card-sub" title={vs}>{vs}</div> : null;
+        return (
+          <div className="pl-card-meta" title={`${r.customer || "—"}${vs ? ` · ${vs}` : ""}`}>
+            {r.customer ? <CustomerName name={r.customer} /> : <span className="muted">—</span>}
+            {vs ? <span className="pl-card-meta-vessel"> · {vs}</span> : null}
+          </div>
+        );
       })()}
       <div className="pl-card-bar" title={barTitle}>
         {Array.from({ length: total }).map((_, i) => (
           <span key={i} className={`seg${i < filled ? " on" : ""}`} />
         ))}
       </div>
-      <div className="pl-card-stage">
-        {filled}/{total} · {steps[filled - 1] ?? ""}
+      <div className="pl-card-stageline">
+        <span className="pl-card-stage">
+          {filled}/{total} · {steps[filled - 1] ?? ""}
+        </span>
+        {age != null ? <span className="pl-card-age" title="Days since first RFQ">{age}d</span> : null}
       </div>
       <div className="pl-card-foot">
         <div className="pl-card-foot-l">
           <VendorMonograms value={vendorOf(r)} />
           <span className={`pl-card-pic${r.assignee ? "" : " none"}`}>{r.assignee || "—"}</span>
         </div>
-        {age != null ? <span className="pl-card-age" title="Days since first RFQ">{age}d</span> : null}
       </div>
       {amount ? <div className="pl-card-amt" title={amount}>{amount}</div> : null}
       {r.next_action ? (
