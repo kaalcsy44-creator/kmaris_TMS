@@ -4834,10 +4834,10 @@ table.mini .num {
   min-width: 168px;
 }
 .pl-board-col.done {
-  border-top-color: #11824a;
+  border-top-color: var(--ink);
 }
-.pl-board-col.done .pl-board-title { color: #11824a; }
-.pl-board-col.done .pl-board-count { background: #11824a; }
+.pl-board-col.done .pl-board-title { color: var(--ink); }
+.pl-board-col.done .pl-board-count { background: var(--ink); }
 .pl-board-col.cancelled {
   border-top-color: #9aa3af;
   background: var(--head-bg);
@@ -4865,8 +4865,8 @@ table.mini .num {
   text-decoration: line-through;
   color: var(--muted);
 }
-/* 완료 카드: 왼쪽에 초록 강조선으로 종결(성사) 표시. */
-.pl-card.done { border-left: 3px solid #11824a; }
+/* 완료 카드: 왼쪽에 블랙 강조선으로 종결(성사) 표시. */
+.pl-card.done { border-left: 3px solid var(--ink); }
 /* 모달 헤더 '취소/재활성' 버튼. */
 .pl-modal-cancel {
   flex: none;

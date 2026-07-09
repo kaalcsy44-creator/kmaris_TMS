@@ -1002,7 +1002,7 @@ function PipelineBoard({
     });
   }, []);
   const grouped = steps.length === 11;
-  // 종결(취소/실주) 딜은 진행 컬럼에서 빼고 별도 Cancelled 존으로 모은다.
+  // 종결(취소/실주) 딜은 진행 컬럼에서 빼고 별도 Closed 존(RFQ 좌측 맨 앞)으로 모은다.
   // 완료(11단계 Payment Completed)는 AR 을 떠나 Done 컬럼으로 종결 처리한다.
   const cols: {
     label: string;
@@ -1010,13 +1010,13 @@ function PipelineBoard({
     match: (r: PipelineRow) => boolean;
   }[] = grouped
     ? [
+        { label: "Closed", variant: "cancelled", match: (r) => !!r.cancelled },
         { label: "RFQ", match: (r) => !r.cancelled && stageOf(r) <= 2 },
         { label: "Quote", match: (r) => !r.cancelled && stageOf(r) >= 3 && stageOf(r) <= 4 },
         { label: "PO", match: (r) => !r.cancelled && stageOf(r) >= 5 && stageOf(r) <= 6 },
         { label: "Documents", match: (r) => !r.cancelled && stageOf(r) >= 7 && stageOf(r) <= 9 },
         { label: "AR", match: (r) => !r.cancelled && stageOf(r) === 10 },
         { label: "Done ✓", variant: "done", match: (r) => !r.cancelled && stageOf(r) >= 11 },
-        { label: "Cancelled", variant: "cancelled", match: (r) => !!r.cancelled },
       ]
     : steps.map((label, i) => ({
         label: `${i + 1}. ${label}`,
@@ -1128,7 +1128,7 @@ function BoardCard({
   if (compact) {
     return (
       <div {...cardProps}>
-        {cancelled ? <span className="pl-card-ribbon">CANCELLED</span> : null}
+        {cancelled ? <span className="pl-card-ribbon">CLOSED</span> : null}
         <div className="pl-card-nrow">
           <span className="pl-card-no">{r.project_no || "—"}</span>
           {chevron}
@@ -1156,7 +1156,7 @@ function BoardCard({
 
   return (
     <div {...cardProps}>
-      {cancelled ? <span className="pl-card-ribbon">CANCELLED</span> : null}
+      {cancelled ? <span className="pl-card-ribbon">CLOSED</span> : null}
       <div className="pl-card-top">
         <span className="pl-card-no">{r.project_no || "—"}</span>
         <WorkTypeBadge type={r.work_type} />
@@ -1282,7 +1282,7 @@ export function PipelineModal({
     if (
       next &&
       !window.confirm(
-        "Mark this project as cancelled/closed?\nIt will move to the Cancelled zone on the board (you can reactivate it later)."
+        "Mark this project as closed?\nIt will move to the Closed zone on the board (you can reactivate it later)."
       )
     )
       return;
@@ -1456,9 +1456,9 @@ export function PipelineModal({
                 className={`pl-modal-cancel${r.cancelled ? " reactivate" : ""}`}
                 onClick={toggleCancelled}
                 disabled={cancelBusy}
-                title={r.cancelled ? "Reactivate this project" : "Mark as cancelled / closed"}
+                title={r.cancelled ? "Reactivate this project" : "Mark this deal as closed"}
               >
-                {cancelBusy ? "…" : r.cancelled ? "↺ Reactivate" : "⊘ Cancel deal"}
+                {cancelBusy ? "…" : r.cancelled ? "↺ Reactivate" : "⊘ Close deal"}
               </button>
             ) : null}
             <button
