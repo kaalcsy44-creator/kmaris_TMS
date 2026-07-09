@@ -172,6 +172,17 @@ export default function DocSendPanel({
             </select>
           </label>
         ) : null}
+        {emailEnabled ? (
+          <button
+            type="button"
+            className="btn sm"
+            onClick={makePreview}
+            disabled={disabled || busy}
+            title="Regenerate the draft from the template (overwrites your edits)"
+          >
+            {busy ? "…" : "↻ Regenerate draft"}
+          </button>
+        ) : null}
       </div>
 
       {showNote && emailEnabled ? (
@@ -223,15 +234,6 @@ export default function DocSendPanel({
             >
               {busy ? "Sending…" : `Send (attach ${format.toUpperCase()})`}
             </button>
-            <button
-              className="btn"
-              onClick={makePreview}
-              disabled={disabled || busy}
-              title="Regenerate the draft from the template (overwrites your edits)"
-            >
-              {busy ? "…" : "↻ Regenerate draft"}
-            </button>
-            <span className="hint-inline">Regenerate overwrites your edits.</span>
             {msg ? <span className="action-ok">{msg}</span> : null}
             {err ? <span className="action-err">{err}</span> : null}
           </div>
