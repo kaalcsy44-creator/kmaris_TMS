@@ -653,7 +653,7 @@ export default function NewRfqForm({
           </select>
         </Field>
         {editId != null ? (
-          <Field label="PIC (담당자)">
+          <Field label="PIC (Person In Charge)">
             <select
               value={assigneeId}
               onChange={(e) => setAssigneeId(Number(e.target.value))}
