@@ -3301,6 +3301,8 @@ function CustomerQuoteItemEditor({
   }
   const costCur = (costCurrency || "USD").toUpperCase();
   const saleCur = (currency || "USD").toUpperCase();
+  // 매입 합계(원가×수량, 원가 통화) · 매출 합계(판매 Amount, 판매 통화)를 각각 표기.
+  const purchaseTotal = items.reduce((sum, it) => sum + Number(it.cost_price || 0) * Number(it.qty || 1), 0);
   const total = items.reduce((sum, it) => sum + Number(it.amount || 0), 0);
   const sel = useRowSelection();
 
@@ -3327,6 +3329,7 @@ function CustomerQuoteItemEditor({
               <th className="num">Qty</th>
               <th>Unit</th>
               <th className="num">Cost ({costCur})</th>
+              <th className="num">Cost Amount ({costCur})</th>
               <th className="num">Margin %</th>
               <th className="num">Unit Price ({saleCur})</th>
               <th className="num">Amount ({saleCur})</th>
@@ -3346,6 +3349,7 @@ function CustomerQuoteItemEditor({
                 <td><input {...gridCellProps(i, 4)} className="num" value={amountInputValue(it.qty)} onChange={(e) => patch(i, "qty", e.target.value)} /></td>
                 <td><input {...gridCellProps(i, 5)} value={it.unit} onChange={(e) => patch(i, "unit", e.target.value)} /></td>
                 <td><input {...gridCellProps(i, 6)} className="num" value={amountInputValue(it.cost_price)} onChange={(e) => patch(i, "cost_price", e.target.value)} /></td>
+                <td className="num">{amountInputValue(Number(it.cost_price || 0) * Number(it.qty || 1))}</td>
                 <td><input {...gridCellProps(i, 7)} className="num" value={amountInputValue(it.margin_pct)} onChange={(e) => patch(i, "margin_pct", e.target.value)} /></td>
                 <td><input {...gridCellProps(i, 8)} className="num" value={amountInputValue(it.unit_price)} onChange={(e) => patch(i, "unit_price", e.target.value)} /></td>
                 <td><input {...gridCellProps(i, 9)} className="num" value={amountInputValue(it.amount)} onChange={(e) => patch(i, "amount", e.target.value)} /></td>
@@ -3356,10 +3360,15 @@ function CustomerQuoteItemEditor({
           </tbody>
           <tfoot>
             <tr>
-              <td colSpan={11} className="total-label">Total</td>
+              <td colSpan={9} className="total-label">Total</td>
+              <td className="num total-value">
+                <DualCurrencyAmount value={purchaseTotal} currency={costCurrency} />
+                <span className="fx-note">Purchase</span>
+              </td>
+              <td colSpan={2}></td>
               <td className="num total-value">
                 <DualCurrencyAmount value={total} currency={currency} />
-                <span className="fx-note">{fxRateText()}</span>
+                <span className="fx-note">Sales · {fxRateText()}</span>
               </td>
               <td colSpan={2}></td>
             </tr>
