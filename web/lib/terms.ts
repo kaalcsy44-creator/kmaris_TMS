@@ -20,6 +20,27 @@ export const PAYMENT_TERMS_PRESETS: readonly string[] = [
   "D/A 30 days",
 ];
 
+import type { QuotationTerms } from "./types";
+
+// Terms & Conditions 기본값 — 신규 견적/오더/발주서 작성 시 미리 채워지는 값.
+// (Packing·Remarks 는 비워 둔다.) 콤보박스라 사용자가 자유롭게 바꿀 수 있다.
+export const DEFAULT_TERMS: QuotationTerms = {
+  incoterms: "EXW (Ex Works)",
+  delivery_place: "Busan, Republic of Korea",
+  payment_terms: "T/T 30 days after delivery",
+  warranty: "6 months from delivery",
+};
+
+// 저장된 terms 에 기본값을 채워 반환한다. 이미 값이 있는 필드는 그대로 두고,
+// 비어 있는(미입력) 필드만 DEFAULT_TERMS 로 보완한다. t 를 안 주면 순수 기본값.
+export function withDefaultTerms(t?: QuotationTerms | null): QuotationTerms {
+  const out: QuotationTerms = { ...DEFAULT_TERMS, ...(t || {}) };
+  (Object.keys(DEFAULT_TERMS) as (keyof QuotationTerms)[]).forEach((k) => {
+    if (!out[k] || String(out[k]).trim() === "") out[k] = DEFAULT_TERMS[k];
+  });
+  return out;
+}
+
 // 견적서/오더/발주서 Terms & Conditions 편집기 프리셋(콤보박스, 자유입력 가능).
 export const TERM_PRESETS = {
   // Incoterms 는 규칙만 — 지역/항구는 Place 필드에서 지정. 약어 풀이를 괄호에 표기.

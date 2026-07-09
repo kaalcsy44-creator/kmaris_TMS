@@ -58,6 +58,7 @@ import type {
   RfqSourceFile,
 } from "@/lib/types";
 import SourceFilesList from "@/components/common/SourceFilesList";
+import { withDefaultTerms } from "@/lib/terms";
 
 type OrderOpt = PoWorkOptions["orders"][number];
 type PoOpt = PoWorkOptions["purchase_orders"][number];
@@ -323,7 +324,7 @@ function OrderDetailModal({
   const [tradeType, setTradeType] = useState("수출");
   const [promised, setPromised] = useState("");
   const [items, setItems] = useState<PoWorkItem[]>([]);
-  const [terms, setTerms] = useState<QuotationTerms>({});
+  const [terms, setTerms] = useState<QuotationTerms>(withDefaultTerms());
   const [ocrFiles, setOcrFiles] = useState<RfqSourceFile[]>([]); // Auto-fill 소스 파일 목록(영구 보관)
   const [ocrBusy, setOcrBusy] = useState(false);
   const [ocrMsg, setOcrMsg] = useState<string | null>(null);
@@ -349,7 +350,7 @@ function OrderDetailModal({
         setCurrency(d.currency || "USD");
         setPromised(d.promised_delivery || "");
         setItems(d.items.length ? d.items.map(normalizeItem) : [blankItem()]);
-        setTerms(d.terms || {});
+        setTerms(withDefaultTerms(d.terms));
         setOcrFiles(Array.isArray(d.source_files) ? d.source_files : []);
         setOcrMsg(null);
       })
@@ -859,7 +860,7 @@ function VendorPoDetailModal({
   const [currency, setCurrency] = useState("USD");
   const [status, setStatus] = useState("");
   const [items, setItems] = useState<PoWorkItem[]>([]);
-  const [terms, setTerms] = useState<QuotationTerms>({});
+  const [terms, setTerms] = useState<QuotationTerms>(withDefaultTerms());
   const [vendorQuotes, setVendorQuotes] = useState<VendorQuoteForImport[]>([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -881,7 +882,7 @@ function VendorPoDetailModal({
         setCurrency(data.currency || "USD");
         setStatus(data.status || "");
         setItems(data.items.length ? data.items.map(normalizeItem) : [blankItem()]);
-        setTerms(data.terms || {});
+        setTerms(withDefaultTerms(data.terms));
         // 이 발주서가 속한 오더의 프로젝트(RFQ)에서 수신한 공급사 견적들.
         const ord = options.orders.find((o) => o.id === data.order_id);
         if (ord) {
@@ -1070,7 +1071,7 @@ function CustomerPoNewForm({
   const [tradeType, setTradeType] = useState("수출");
   const [promised, setPromised] = useState("");
   const [items, setItems] = useState<PoWorkItem[]>([blankItem()]);
-  const [terms, setTerms] = useState<QuotationTerms>({});
+  const [terms, setTerms] = useState<QuotationTerms>(withDefaultTerms());
   const [ocrFiles, setOcrFiles] = useState<RfqSourceFile[]>([]); // Auto-fill 소스 파일 목록(영구 보관)
   const [busy, setBusy] = useState(false);
   const [ocrBusy, setOcrBusy] = useState(false);
@@ -1197,7 +1198,7 @@ function CustomerPoNewForm({
       setPoNo("");
       setPromised("");
       setItems([blankItem()]);
-      setTerms({});
+      setTerms(withDefaultTerms());
       setOcrFiles([]);
       onChanged();
     } catch (e) {
@@ -1403,7 +1404,7 @@ function VendorPoCreate({
   const [date, setDate] = useState(today);
   const [currency, setCurrency] = useState("USD");
   const [items, setItems] = useState<PoWorkItem[]>([blankItem()]);
-  const [terms, setTerms] = useState<QuotationTerms>({});
+  const [terms, setTerms] = useState<QuotationTerms>(withDefaultTerms());
   const [vendorQuotes, setVendorQuotes] = useState<VendorQuoteForImport[]>([]);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);

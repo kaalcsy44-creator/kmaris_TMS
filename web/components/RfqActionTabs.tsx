@@ -70,6 +70,7 @@ import TermsEditor from "./common/TermsEditor";
 import DocSendPanel from "./common/DocSendPanel";
 import DetailTabBar, { DetailTab } from "./common/DetailTabBar";
 import SourceFilesList from "./common/SourceFilesList";
+import { withDefaultTerms } from "@/lib/terms";
 import {
   amountInputValue,
   convertCurrency,
@@ -1264,7 +1265,7 @@ function VendorQuoteDetailModal({
   const [currency, setCurrency] = useState("USD");
   const [notes, setNotes] = useState("");
   const [items, setItems] = useState<VendorQuoteItem[]>([]);
-  const [terms, setTerms] = useState<QuotationTerms>({});
+  const [terms, setTerms] = useState<QuotationTerms>(withDefaultTerms());
   const [ocrFiles, setOcrFiles] = useState<RfqSourceFile[]>([]); // Auto-fill 소스 파일 목록(영구 보관)
   const [parseMsg, setParseMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -1285,7 +1286,7 @@ function VendorQuoteDetailModal({
         setItems((data.items || []).map(normalizeVendorQuoteItem));
         setOcrFiles(Array.isArray(data.source_files) ? data.source_files : []);
         // Payment Terms 미입력이면 벤더 정보에 등록된 기본 결제조건으로 채운다(수정 가능).
-        setTerms(seedPaymentTerms(data.terms, data.default_payment_terms));
+        setTerms(withDefaultTerms(seedPaymentTerms(data.terms, data.default_payment_terms)));
         setParseMsg(null);
       })
       .catch((e) => setErr(e instanceof Error ? e.message : "Error"));
@@ -1648,7 +1649,7 @@ function CustomerQuoteDetailModal({
   const [sentAt, setSentAt] = useState("");
   const [validUntil, setValidUntil] = useState("");
   const [status, setStatus] = useState("");
-  const [terms, setTerms] = useState<QuotationTerms>({});
+  const [terms, setTerms] = useState<QuotationTerms>(withDefaultTerms());
   const [items, setItems] = useState<CustomerQuoteItem[]>([]);
   const [vendorQuotes, setVendorQuotes] = useState<VendorQuoteForImport[]>([]);
   const [importVqId, setImportVqId] = useState<number | "">("");
@@ -1675,7 +1676,7 @@ function CustomerQuoteDetailModal({
         setValidUntil(data.valid_until || "");
         setStatus(data.status || "");
         // Payment Terms 미입력이면 고객 정보에 등록된 기본 결제조건으로 채운다(수정 가능).
-        setTerms(seedPaymentTerms(data.terms, data.default_payment_terms));
+        setTerms(withDefaultTerms(seedPaymentTerms(data.terms, data.default_payment_terms)));
         setItems(data.items || []);
         setMsg(null);
         if (data.rfq_id) {
@@ -2422,7 +2423,7 @@ function VendorQuoteAction({
   const [currency, setCurrency] = useState("USD");
   const [notes, setNotes] = useState("");
   const [items, setItems] = useState<VendorQuoteItem[]>([]);
-  const [terms, setTerms] = useState<QuotationTerms>({});
+  const [terms, setTerms] = useState<QuotationTerms>(withDefaultTerms());
   const [ocrFiles, setOcrFiles] = useState<RfqSourceFile[]>([]); // Auto-fill 소스 파일 목록(영구 보관)
   const [parseMsg, setParseMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -2552,7 +2553,7 @@ function VendorQuoteAction({
       setCurrency("USD");
       setNotes("");
       setItems([]);
-      setTerms({});
+      setTerms(withDefaultTerms());
       setOcrFiles([]);
       setVrfqId("");
       setReceivedAt(nowLocalDt());
@@ -2923,9 +2924,9 @@ function CustomerQuoteAction({
   const [items, setItems] = useState<CustomerQuoteItem[]>([]);
   const [validUntil, setValidUntil] = useState("");
   const [defaultMargin, setDefaultMargin] = useState(20);
-  const [terms, setTerms] = useState<QuotationTerms>({
-    remarks: "Bank charges outside Korea shall be borne by Buyer.",
-  });
+  const [terms, setTerms] = useState<QuotationTerms>(
+    withDefaultTerms({ remarks: "Bank charges outside Korea shall be borne by Buyer." })
+  );
   const [vendorQuotes, setVendorQuotes] = useState<VendorQuoteForImport[]>([]);
   const [importVqId, setImportVqId] = useState<number | "">("");
   const [docType, setDocType] = useState<"quotation" | "proforma_invoice">("quotation");
