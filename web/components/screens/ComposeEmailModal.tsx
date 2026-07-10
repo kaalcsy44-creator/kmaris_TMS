@@ -5,6 +5,8 @@ import {
   fetchSettingsCustomers,
   fetchMarketingAssets,
   marketingComposeDefaults,
+  saveMarketingTemplate,
+  resetMarketingTemplate,
   sendMarketingEmail,
   type MarketingAsset,
 } from "@/lib/api";
@@ -56,6 +58,9 @@ export default function ComposeEmailModal({
   const [signature, setSignature] = useState("");
   const [includeSignature, setIncludeSignature] = useState(true);
   const [smtpConfigured, setSmtpConfigured] = useState(true);
+  // 현재 종류·언어에 사용자가 저장한 템플릿이 있는지 + 저장/초기화 안내 문구.
+  const [savedTpl, setSavedTpl] = useState(false);
+  const [tplMsg, setTplMsg] = useState("");
 
   const [assetIds, setAssetIds] = useState<number[]>([]);
   const [files, setFiles] = useState<File[]>([]);
@@ -78,11 +83,13 @@ export default function ComposeEmailModal({
   const lastTpl = useRef<{ subject: string; body: string; signature: string } | null>(null);
   useEffect(() => {
     let cancelled = false;
+    setTplMsg("");
     marketingComposeDefaults({ kind, lang, contact, customer: selectedName })
       .then((d) => {
         if (cancelled) return;
         setFrom((prev) => prev || d.from);
         setSmtpConfigured(d.smtp_configured);
+        setSavedTpl(d.saved);
         setSubject((prev) => (!prev || prev === lastTpl.current?.subject ? d.subject : prev));
         setBody((prev) => (!prev || prev === lastTpl.current?.body ? d.body : prev));
         setSignature((prev) => (!prev || prev === lastTpl.current?.signature ? d.signature : prev));
@@ -94,6 +101,44 @@ export default function ComposeEmailModal({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kind, lang, contact, selectedName]);
+
+  // 현재 편집한 제목·본문을 이 종류·언어의 사용자 템플릿으로 저장 → 다음 작성 시 기본값.
+  async function saveTpl() {
+    setBusy(true);
+    setErr("");
+    setTplMsg("");
+    try {
+      await saveMarketingTemplate({ kind, lang, subject, body });
+      lastTpl.current = { subject, body, signature };
+      setSavedTpl(true);
+      setTplMsg("Saved as default.");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Failed to save template.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // 저장한 템플릿 삭제 후 내장 기본값을 다시 불러온다.
+  async function resetTpl() {
+    if (!confirm("Reset this email to the built-in default?")) return;
+    setBusy(true);
+    setErr("");
+    setTplMsg("");
+    try {
+      await resetMarketingTemplate(kind, lang);
+      const d = await marketingComposeDefaults({ kind, lang, contact, customer: selectedName });
+      setSubject(d.subject);
+      setBody(d.body);
+      lastTpl.current = { subject: d.subject, body: d.body, signature };
+      setSavedTpl(false);
+      setTplMsg("Reset to default.");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Failed to reset template.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   function pickCustomer(id: number | "") {
     setCustomerId(id);
@@ -283,16 +328,51 @@ export default function ComposeEmailModal({
               >
                 KR
               </button>
+              <span className="compose-tpl-sep" />
+              <button
+                type="button"
+                className="chip-btn"
+                disabled={busy}
+                onClick={saveTpl}
+                title="Save this subject & body as the default for this type + language"
+              >
+                💾 Save
+              </button>
+              {savedTpl ? (
+                <button
+                  type="button"
+                  className="chip-btn"
+                  disabled={busy}
+                  onClick={resetTpl}
+                  title="Reset to the built-in default"
+                >
+                  ↺ Reset
+                </button>
+              ) : null}
+              {tplMsg ? <span className="compose-tpl-msg">{tplMsg}</span> : null}
             </span>
           </div>
 
           <label className="form-field">
             <span>Subject</span>
-            <input value={subject} onChange={(e) => setSubject(e.target.value)} />
+            <input
+              value={subject}
+              onChange={(e) => {
+                setSubject(e.target.value);
+                if (tplMsg) setTplMsg("");
+              }}
+            />
           </label>
           <label className="form-field">
             <span>Body</span>
-            <textarea rows={9} value={body} onChange={(e) => setBody(e.target.value)} />
+            <textarea
+              rows={9}
+              value={body}
+              onChange={(e) => {
+                setBody(e.target.value);
+                if (tplMsg) setTplMsg("");
+              }}
+            />
           </label>
 
           <label className="form-field">

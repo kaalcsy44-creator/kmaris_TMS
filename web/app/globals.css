@@ -6656,8 +6656,9 @@ table.mini .num {
   padding-bottom: 6px;
   border-bottom: 1px solid var(--line, #e3e9f2);
 }
-.compose-tpl { display: inline-flex; align-items: center; gap: 4px; }
+.compose-tpl { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
 .compose-tpl-sep { width: 1px; height: 16px; background: var(--line, #d7e2ee); margin: 0 3px; }
+.compose-tpl-msg { font-size: 11.5px; font-weight: 600; color: #16a05a; white-space: nowrap; }
 .chip-btn {
   padding: 3px 10px;
   font-size: 12px;

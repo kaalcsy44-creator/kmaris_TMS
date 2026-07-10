@@ -4,6 +4,7 @@ from __future__ import annotations
 from _core import (
     Customer,
     Depends,
+    EmailTemplate,
     File,
     Form,
     HTTPException,
@@ -19,6 +20,7 @@ from _core import (
     _kst_iso,
     _marketing_row,
     _marketing_scoped,
+    _resolve_email_template,
     _schedule_guard,
     _schedule_row,
     app,
@@ -259,19 +261,81 @@ def marketing_asset_delete(asset_id: int):
 
 
 # ── 홍보 이메일 작성 기본값 + 발송 ────────────────────────────────────────────────
+def _marketing_doc_type(kind: str) -> str:
+    return f"marketing_{kind if kind in ('intro', 'brochure') else 'intro'}"
+
+
 @app.get("/api/admin/marketing/compose-defaults", dependencies=[Depends(require_token)])
 def marketing_compose_defaults(
     kind: str = "intro", lang: str = "en", contact: str = "", customer: str = "",
+    user: dict = Depends(get_current_user),
 ):
-    """작성 화면 기본값 — 템플릿 제목·본문·서명·발신주소·SMTP 설정 여부."""
+    """작성 화면 기본값 — 저장된 사용자/회사 템플릿이 있으면 그 제목·본문을 우선 사용하고,
+    없으면 코드 내장 기본값(수신자 인사말 반영)으로 생성한다."""
     lang_n = "kr" if lang in ("ko", "kr") else "en"
+    lang_db = "ko" if lang_n == "kr" else "en"
+    s = get_session()
+    try:
+        tpl = _resolve_email_template(s, user.get("id"), _marketing_doc_type(kind), lang_db)
+        saved_subject = tpl.subject_tpl if (tpl and tpl.subject_tpl) else ""
+        saved_body = tpl.body_tpl if (tpl and tpl.body_tpl) else ""
+    finally:
+        s.close()
     return {
         "from": default_from(),
-        "subject": intro_email_subject(kind, lang_n),
-        "body": intro_email_body(contact, customer, kind, lang_n),
+        "subject": saved_subject or intro_email_subject(kind, lang_n),
+        "body": saved_body or intro_email_body(contact, customer, kind, lang_n),
         "signature": intro_signature(lang_n),
+        # 저장된 사용자 템플릿이 있으면 True — 프론트에서 'Reset to default' 노출용.
+        "saved": bool(tpl and tpl.user_id and (tpl.subject_tpl or tpl.body_tpl)),
         "smtp_configured": bool(os.getenv("SMTP_USER") and os.getenv("SMTP_PASSWORD")),
     }
+
+
+@app.put("/api/admin/marketing/compose-template", dependencies=[Depends(require_token)])
+def save_marketing_template(
+    kind: str = Body("intro", embed=True),
+    lang: str = Body("en", embed=True),
+    subject: str = Body("", embed=True),
+    body: str = Body("", embed=True),
+    user: dict = Depends(get_current_user),
+):
+    """홍보 메일 제목·본문을 사용자 템플릿으로 저장(종류 intro/brochure × 언어 en/ko)."""
+    lang_db = "ko" if lang in ("ko", "kr") else "en"
+    doc_type = _marketing_doc_type(kind)
+    uid = user.get("id")
+    s = get_session()
+    try:
+        t = (s.query(EmailTemplate)
+             .filter_by(user_id=uid, doc_type=doc_type, lang=lang_db).first())
+        if not t:
+            t = EmailTemplate(user_id=uid, doc_type=doc_type, lang=lang_db)
+            s.add(t)
+        t.subject_tpl = subject or ""
+        t.body_tpl = body or ""
+        t.updated_at = datetime.utcnow()
+        s.commit()
+        return {"ok": True, "kind": kind, "lang": lang_db}
+    finally:
+        s.close()
+
+
+@app.delete("/api/admin/marketing/compose-template", dependencies=[Depends(require_token)])
+def reset_marketing_template(
+    kind: str = "intro", lang: str = "en", user: dict = Depends(get_current_user),
+):
+    """저장한 홍보 메일 템플릿 삭제 → 코드 내장 기본값으로 복귀."""
+    lang_db = "ko" if lang in ("ko", "kr") else "en"
+    s = get_session()
+    try:
+        t = (s.query(EmailTemplate)
+             .filter_by(user_id=user.get("id"), doc_type=_marketing_doc_type(kind), lang=lang_db).first())
+        if t:
+            s.delete(t)
+            s.commit()
+        return {"ok": True}
+    finally:
+        s.close()
 
 
 @app.post("/api/admin/marketing/send", dependencies=[Depends(require_token)])

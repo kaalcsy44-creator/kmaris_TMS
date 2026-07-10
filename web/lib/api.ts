@@ -619,6 +619,7 @@ export function marketingComposeDefaults(opts: {
   subject: string;
   body: string;
   signature: string;
+  saved: boolean;
   smtp_configured: boolean;
 }> {
   const p = new URLSearchParams({
@@ -628,6 +629,21 @@ export function marketingComposeDefaults(opts: {
     customer: opts.customer ?? "",
   });
   return get(`/api/admin/marketing/compose-defaults?${p.toString()}`);
+}
+
+// 홍보 메일 제목·본문을 사용자 템플릿으로 저장(종류 × 언어별). 다음 작성 시 기본값으로 로드.
+export function saveMarketingTemplate(input: {
+  kind: "intro" | "brochure";
+  lang: "en" | "ko";
+  subject: string;
+  body: string;
+}): Promise<{ ok: boolean }> {
+  return put("/api/admin/marketing/compose-template", input);
+}
+
+// 저장한 홍보 메일 템플릿 삭제 → 내장 기본값으로 복귀.
+export function resetMarketingTemplate(kind: "intro" | "brochure", lang: "en" | "ko"): Promise<{ ok: boolean }> {
+  return del(`/api/admin/marketing/compose-template?kind=${kind}&lang=${lang}`);
 }
 
 export function sendMarketingEmail(input: {
