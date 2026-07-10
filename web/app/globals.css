@@ -4957,8 +4957,9 @@ table.mini .num {
   padding: 4px 2px 12px;
 }
 .pl-board-col {
-  flex: 1 1 330px;
-  min-width: 330px;
+  /* RFQ~AR 5개 컬럼이 100% 화면에서 한눈에 들어오도록 폭 축소. */
+  flex: 1 1 258px;
+  min-width: 258px;
   background: var(--page-bg);
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -5198,7 +5199,7 @@ table.mini .num {
   align-items: center;
   min-width: 0;
   margin-top: 2px;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
   color: var(--muted);
   white-space: nowrap;
