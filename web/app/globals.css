@@ -2500,7 +2500,7 @@ table.pipeline tbody tr.service .pl-stage-done {
 }
 .pl-modal {
   width: 100%;
-  max-width: 1320px;
+  max-width: 1600px;
   background: #fff;
   border-radius: 12px;
   border-top: 4px solid var(--blue);
