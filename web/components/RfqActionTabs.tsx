@@ -1769,8 +1769,6 @@ function CustomerQuoteDetailModal({
     setMsg(`Loaded ${vq.items.length} item(s) from quote ${vq.vendor_quote_no} (${vq.vendor}).`);
   }
 
-  const STATUSES = ["초안", "발송완료", "협상중", "수주확정", "실주", "만료"];
-
   return (
     <Modal title={d ? <ModalTitle label={`Quotation — ${d.qtn_no}`} projectNo={d.project_no} /> : "Quotation details"} onClose={onClose} wide inline={inline}>
       {!d ? (
@@ -1793,6 +1791,7 @@ function CustomerQuoteDetailModal({
 
           <fieldset className="form-fieldset" disabled={!canEditThis}>
           <div className="form-section-title">Basic Info</div>
+          {/* 1~2행: 문서 식별·일자 항목 */}
           <div className="form-grid">
             <div className="form-field">
               <label>Select Vendor quote</label>
@@ -1812,6 +1811,22 @@ function CustomerQuoteDetailModal({
               </select>
             </div>
             <div className="form-field">
+              <label>Quotation No.</label>
+              <input value={qtnNo} onChange={(e) => setQtnNo(e.target.value)} placeholder="KMS-QUO-2606-001" />
+            </div>
+            <div className="form-field">
+              <label>Sent at</label>
+              <input type="datetime-local" value={sentAt} onChange={(e) => setSentAt(e.target.value)} />
+            </div>
+            <div className="form-field">
+              <label>Valid until</label>
+              <input type="date" value={validUntil} onChange={(e) => setValidUntil(e.target.value)} />
+            </div>
+          </div>
+
+          {/* 3행: 마진·통화·환율·반올림 설정 */}
+          <div className="form-grid">
+            <div className="form-field">
               <label>Default margin (%)</label>
               <input
                 className="num"
@@ -1828,13 +1843,6 @@ function CustomerQuoteDetailModal({
               >
                 Apply margin to all
               </button>
-            </div>
-          </div>
-
-          <div className="form-grid">
-            <div className="form-field">
-              <label>Quotation No.</label>
-              <input value={qtnNo} onChange={(e) => setQtnNo(e.target.value)} placeholder="KMS-QUO-2606-001" />
             </div>
             <div className="form-field">
               <label>Cost currency (vendor)</label>
@@ -1863,22 +1871,6 @@ function CustomerQuoteDetailModal({
                 value={roundDigits}
                 onChange={(d) => { setRoundDigits(d); setItems((prev) => recomputeCustomerQuoteItems(prev, costCurrency, currency, d, effRate)); }}
               />
-            </div>
-            <div className="form-field">
-              <label>Sent at</label>
-              <input type="datetime-local" value={sentAt} onChange={(e) => setSentAt(e.target.value)} />
-            </div>
-            <div className="form-field">
-              <label>Valid until</label>
-              <input type="date" value={validUntil} onChange={(e) => setValidUntil(e.target.value)} />
-            </div>
-            <div className="form-field">
-              <label>Status</label>
-              <select value={status} onChange={(e) => setStatus(e.target.value)}>
-                {STATUSES.map((s) => (
-                  <option key={s} value={s}>{tr(s)}</option>
-                ))}
-              </select>
             </div>
           </div>
           <CustomerQuoteItemEditor
@@ -3114,6 +3106,7 @@ function CustomerQuoteAction({
       {tab === "edit" ? (
       <>
       <div className="form-section-title">Basic Info</div>
+      {/* 1~2행: 문서 식별·일자 항목 */}
       <div className="form-grid">
         <div className="form-field">
           <label>Select Vendor quote</label>
@@ -3133,6 +3126,35 @@ function CustomerQuoteAction({
           </select>
         </div>
         <div className="form-field">
+          <label>Quotation No.</label>
+          {noMode === "auto" ? (
+            <select
+              value="auto"
+              onChange={(e) => { if (e.target.value === "manual") { setNoMode("manual"); setQtnNo(""); } }}
+            >
+              <option value="auto">{autoNo ? `${autoNo} (auto)` : "Auto-generate"}</option>
+              <option value="manual">Manual entry…</option>
+            </select>
+          ) : (
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <input value={qtnNo} onChange={(e) => setQtnNo(e.target.value)} placeholder="KMS-QUO-…" autoFocus style={{ flex: 1 }} />
+              <button type="button" className="btn sm" onClick={() => { setNoMode("auto"); setQtnNo(""); }} title="Use auto number">auto</button>
+            </div>
+          )}
+        </div>
+        <div className="form-field">
+          <label>Sent at</label>
+          <input type="datetime-local" value={sentAt} onChange={(e) => setSentAt(e.target.value)} />
+        </div>
+        <div className="form-field">
+          <label>Valid until</label>
+          <input type="date" value={validUntil} onChange={(e) => setValidUntil(e.target.value)} />
+        </div>
+      </div>
+
+      {/* 3행: 마진·통화·환율·반올림 설정 */}
+      <div className="form-grid">
+        <div className="form-field">
           <label>Default margin (%)</label>
           <input
             className="num"
@@ -3149,26 +3171,6 @@ function CustomerQuoteAction({
           >
             Apply
           </button>
-        </div>
-      </div>
-
-      <div className="form-grid">
-        <div className="form-field">
-          <label>Quotation No.</label>
-          {noMode === "auto" ? (
-            <select
-              value="auto"
-              onChange={(e) => { if (e.target.value === "manual") { setNoMode("manual"); setQtnNo(""); } }}
-            >
-              <option value="auto">{autoNo ? `${autoNo} (auto)` : "Auto-generate"}</option>
-              <option value="manual">Manual entry…</option>
-            </select>
-          ) : (
-            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-              <input value={qtnNo} onChange={(e) => setQtnNo(e.target.value)} placeholder="KMS-QUO-…" autoFocus style={{ flex: 1 }} />
-              <button type="button" className="btn sm" onClick={() => { setNoMode("auto"); setQtnNo(""); }} title="Use auto number">auto</button>
-            </div>
-          )}
         </div>
         <div className="form-field">
           <label>Cost currency (vendor)</label>
@@ -3197,14 +3199,6 @@ function CustomerQuoteAction({
             value={roundDigits}
             onChange={(d) => { setRoundDigits(d); setItems((prev) => recomputeCustomerQuoteItems(prev, costCurrency, currency, d, effRate)); }}
           />
-        </div>
-        <div className="form-field">
-          <label>Sent at</label>
-          <input type="datetime-local" value={sentAt} onChange={(e) => setSentAt(e.target.value)} />
-        </div>
-        <div className="form-field">
-          <label>Valid until</label>
-          <input type="date" value={validUntil} onChange={(e) => setValidUntil(e.target.value)} />
         </div>
       </div>
 
