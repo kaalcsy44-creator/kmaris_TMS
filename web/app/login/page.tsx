@@ -28,7 +28,10 @@ export default function LoginPage() {
   return (
     <div className="login-wrap">
       <form className="login-box" onSubmit={submit}>
-        <div className="login-brand">K-Maris Trade Management System</div>
+        <div className="login-brand">
+          <img className="login-logo" src="/brand/ktms-logo.png" alt="KTMS" />
+          <div className="login-brand-name">K-Maris Trade Management System</div>
+        </div>
         <label>Username</label>
         <input
           value={username}

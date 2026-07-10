@@ -31,11 +31,11 @@ export default function TopNav({ active }: { active: string }) {
     <header className={`topnav${open ? " open" : ""}`}>
       <div className="topnav-inner">
         <Link href="/" className="topnav-brand" onClick={() => setOpen(false)}>
-          <span className="mark">TMS</span>
-          <span className="name">
-            K-MARIS
-            <small>Trade Management</small>
-          </span>
+          <img
+            className="topnav-logo"
+            src="/brand/ktms-logo.png"
+            alt="KTMS"
+          />
         </Link>
 
         <button
