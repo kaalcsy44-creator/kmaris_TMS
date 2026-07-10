@@ -2841,6 +2841,31 @@ table.mini.wide td:last-child {
   width: 44px;
 }
 
+/* ── 품목표 컬럼 커스터마이즈(폭 조절 핸들 + 헤더 숨김 버튼) ─────────────── */
+table.mini.wide th.ig-th,
+table.mini.items-edit th.ig-th {
+  position: relative;
+}
+.ig-th .ig-hide {
+  margin-left: 5px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 10px;
+  line-height: 1;
+  padding: 0 2px;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.ig-th:hover .ig-hide {
+  opacity: 0.5;
+}
+.ig-th .ig-hide:hover {
+  opacity: 1;
+  color: #b91c1c;
+}
+
 /* ── RFQ 품목 편집 표(팝업 내) — 컨테이너 폭에 맞춰 넘치지 않게. ──────── */
 table.mini.items-edit {
   width: 100%;
@@ -5154,6 +5179,11 @@ table.mini .num {
 }
 .pl-card-bar .seg.on { background: var(--blue); }
 .pl-card.service .pl-card-bar .seg.on { background: #11824a; }
+/* Service 업무타입 카드: 프로젝트 번호·프로젝트명도 초록 계열로(진행바·배지와 통일).
+   단, 취소 카드는 회색+취소선 유지(:not(.cancelled)). */
+.pl-card.service:not(.cancelled) .pl-card-no,
+.pl-card.service:not(.cancelled) .pl-card-proj,
+.pl-card.service:not(.cancelled) .pl-card-proj-c { color: #11824a; }
 /* 단계 텍스트(좌) + 경과일 배지(우)를 한 줄에 — 오른쪽 여백 활용. */
 .pl-card-stageline {
   display: flex;

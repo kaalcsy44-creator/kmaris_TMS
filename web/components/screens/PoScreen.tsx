@@ -47,6 +47,7 @@ import {
   StageTotal,
   useRowSelection,
 } from "@/components/common/itemTable";
+import { useItemGrid, ItemTh, ItemGridStyle, ItemColsButton, type ItemCol } from "@/components/common/itemGrid";
 import { tr } from "@/lib/labels";
 import type {
   PoDetail as PoDetailT,
@@ -1858,6 +1859,21 @@ function ItemEditor({
   }
   const total = items.reduce((sum, it) => sum + Number(it.amount || 0), 0);
   const sel = useRowSelection();
+  const cols: ItemCol[] = [
+    { key: "__sel", fixed: true },
+    { key: "__seq", fixed: true, className: "seq" },
+    { key: "part_no", label: "Part No." },
+    { key: "description", label: "Description" },
+    { key: "type", label: "Type" },
+    { key: "serial_no", label: "Serial No." },
+    { key: "maker", label: "Maker" },
+    { key: "qty", label: "Qty", className: "num" },
+    { key: "unit", label: "Unit" },
+    { key: "unit_price", label: "Unit price", className: "num" },
+    { key: "amount", label: "Amount", className: "num" },
+    { key: "remark", label: "Remark" },
+  ];
+  const grid = useItemGrid("po-items", cols);
 
   return (
     <div style={{ marginTop: 16 }}>
@@ -1865,26 +1881,28 @@ function ItemEditor({
         <div className="sub-h">Item list</div>
         <div className="items-head-actions">
           {headerActions}
+          <ItemColsButton grid={grid} />
           <DeleteSelectedButton sel={sel} onDelete={() => deleteSelectedRows(items, sel, onChange)} />
           <button className="btn sm items-head-add" onClick={() => onChange([...items, blankItem()])}>+ Add</button>
         </div>
       </div>
       <div className="table-wrap item-scroll">
-        <table className="mini wide lead-tools">
+        <ItemGridStyle grid={grid} />
+        <table className={`mini wide lead-tools ${grid.tableClass}`}>
           <thead>
             <tr>
               <ItemSelectHeaderCell count={items.length} sel={sel} />
               <th className="seq">No.</th>
-              <th>Part No.</th>
-              <th>Description</th>
-              <th>Type</th>
-              <th>Serial No.</th>
-              <th>Maker</th>
-              <th className="num">Qty</th>
-              <th>Unit</th>
-              <th className="num">Unit price</th>
-              <th className="num">Amount</th>
-              <th>Remark</th>
+              <ItemTh grid={grid} k="part_no">Part No.</ItemTh>
+              <ItemTh grid={grid} k="description">Description</ItemTh>
+              <ItemTh grid={grid} k="type">Type</ItemTh>
+              <ItemTh grid={grid} k="serial_no">Serial No.</ItemTh>
+              <ItemTh grid={grid} k="maker">Maker</ItemTh>
+              <ItemTh grid={grid} k="qty" className="num">Qty</ItemTh>
+              <ItemTh grid={grid} k="unit">Unit</ItemTh>
+              <ItemTh grid={grid} k="unit_price" className="num">Unit price</ItemTh>
+              <ItemTh grid={grid} k="amount" className="num">Amount</ItemTh>
+              <ItemTh grid={grid} k="remark">Remark</ItemTh>
             </tr>
           </thead>
           <tbody>
@@ -1940,14 +1958,24 @@ function ItemEditor({
               </tr>
             ))}
           </tbody>
+          {/* 합계행 — 컬럼당 1셀(숨김/폭 조절 정렬 유지). Total=Unit price(10열), 값=Amount(11열). */}
           <tfoot>
             <tr>
-              <td colSpan={10} className="total-label">Total</td>
-              <td className="num total-value">
+              <td></td>{/* 1 sel */}
+              <td></td>{/* 2 No. */}
+              <td></td>{/* 3 part_no */}
+              <td></td>{/* 4 description */}
+              <td></td>{/* 5 type */}
+              <td></td>{/* 6 serial_no */}
+              <td></td>{/* 7 maker */}
+              <td></td>{/* 8 qty */}
+              <td></td>{/* 9 unit */}
+              <td className="total-label">Total</td>{/* 10 unit_price */}
+              <td className="num total-value">{/* 11 amount */}
                 <DualCurrencyAmount value={total} currency={currency} />
                 <span className="fx-note">{fxRateText()}</span>
               </td>
-              <td></td>
+              <td></td>{/* 12 remark */}
             </tr>
           </tfoot>
         </table>

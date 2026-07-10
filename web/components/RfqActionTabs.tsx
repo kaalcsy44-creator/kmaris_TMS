@@ -91,6 +91,7 @@ import {
   useRowSelection,
 } from "./common/itemTable";
 import FxRateControl, { FxMode } from "./common/FxRateControl";
+import { useItemGrid, ItemTh, ItemGridStyle, ItemColsButton, type ItemCol } from "./common/itemGrid";
 
 /** 현재 시각 "YYYY-MM-DDTHH:MM" (datetime-local 기본값). */
 function nowLocalDt(): string {
@@ -1076,6 +1077,18 @@ function VendorRfqItemEditor({
     ]);
   }
   const sel = useRowSelection();
+  const cols: ItemCol[] = [
+    { key: "__sel", fixed: true },
+    { key: "__seq", fixed: true, className: "seq" },
+    { key: "part_no", label: "Part No." },
+    { key: "description", label: "Description" },
+    { key: "type", label: "Type" },
+    { key: "serial_no", label: "Serial No." },
+    { key: "qty", label: "Qty" },
+    { key: "unit", label: "Unit" },
+    { key: "remark", label: "Remark" },
+  ];
+  const grid = useItemGrid("vrfq-items", cols);
 
   return (
     <>
@@ -1083,23 +1096,25 @@ function VendorRfqItemEditor({
         <div className="form-section-title">Item list</div>
         <div className="items-head-actions">
           {headerActions}
+          <ItemColsButton grid={grid} />
           <DeleteSelectedButton sel={sel} onDelete={() => deleteSelectedRows(items, sel, onChange)} />
           <button className="btn sm items-head-add" onClick={add}>+ Add</button>
         </div>
       </div>
       <div className="table-wrap compact item-scroll">
-        <table className="mini wide lead-tools">
+        <ItemGridStyle grid={grid} />
+        <table className={`mini wide lead-tools ${grid.tableClass}`}>
           <thead>
             <tr>
               <ItemSelectHeaderCell count={items.length} sel={sel} />
               <th className="seq">No.</th>
-              <th>Part No.</th>
-              <th>Description</th>
-              <th>Type</th>
-              <th>Serial No.</th>
-              <th>Qty</th>
-              <th>Unit</th>
-              <th>Remark</th>
+              <ItemTh grid={grid} k="part_no">Part No.</ItemTh>
+              <ItemTh grid={grid} k="description">Description</ItemTh>
+              <ItemTh grid={grid} k="type">Type</ItemTh>
+              <ItemTh grid={grid} k="serial_no">Serial No.</ItemTh>
+              <ItemTh grid={grid} k="qty">Qty</ItemTh>
+              <ItemTh grid={grid} k="unit">Unit</ItemTh>
+              <ItemTh grid={grid} k="remark">Remark</ItemTh>
             </tr>
           </thead>
           <tbody>
@@ -2140,6 +2155,18 @@ function VendorRfqAction({
     ]);
   }
   const itemSel = useRowSelection();
+  const itemGridCols: ItemCol[] = [
+    { key: "__sel", fixed: true },
+    { key: "__seq", fixed: true, className: "seq" },
+    { key: "part_no", label: "Part No." },
+    { key: "description", label: "Description" },
+    { key: "type", label: "Type" },
+    { key: "serial_no", label: "Serial No." },
+    { key: "qty", label: "Qty" },
+    { key: "unit", label: "Unit" },
+    { key: "remark", label: "Remark" },
+  ];
+  const grid = useItemGrid("vrfq-items", itemGridCols);
   function deleteSelectedItems() {
     if (itemSel.count === 0) return;
     setRfqItems((prev) => prev.filter((_, idx) => !itemSel.selected.has(idx)));
@@ -2302,23 +2329,25 @@ function VendorRfqAction({
             <div className="form-section-title">Item list</div>
             <div className="items-head-actions">
               <button className="btn sm" onClick={loadCustomerRfqItems}>Load customer RFQ</button>
+              <ItemColsButton grid={grid} />
               <DeleteSelectedButton sel={itemSel} onDelete={deleteSelectedItems} />
               <button className="btn sm items-head-add" onClick={addItem}>+ Add</button>
             </div>
           </div>
           <div className="table-wrap compact item-scroll">
-            <table className="mini wide lead-tools">
+            <ItemGridStyle grid={grid} />
+            <table className={`mini wide lead-tools ${grid.tableClass}`}>
               <thead>
                 <tr>
                   <ItemSelectHeaderCell count={rfqItems.length} sel={itemSel} />
                   <th className="seq">No.</th>
-                  <th>Part No.</th>
-                  <th>Description</th>
-                  <th>Type</th>
-                  <th>Serial No.</th>
-                  <th>Qty</th>
-                  <th>Unit</th>
-                  <th>Remark</th>
+                  <ItemTh grid={grid} k="part_no">Part No.</ItemTh>
+                  <ItemTh grid={grid} k="description">Description</ItemTh>
+                  <ItemTh grid={grid} k="type">Type</ItemTh>
+                  <ItemTh grid={grid} k="serial_no">Serial No.</ItemTh>
+                  <ItemTh grid={grid} k="qty">Qty</ItemTh>
+                  <ItemTh grid={grid} k="unit">Unit</ItemTh>
+                  <ItemTh grid={grid} k="remark">Remark</ItemTh>
                 </tr>
               </thead>
               <tbody>
@@ -2774,6 +2803,23 @@ function VendorQuoteItemEditor({
     0
   );
   const sel = useRowSelection();
+  const cols: ItemCol[] = [
+    { key: "__sel", fixed: true },
+    { key: "__seq", fixed: true, className: "seq" },
+    { key: "part_no", label: "Part No." },
+    { key: "description", label: "Description" },
+    { key: "type", label: "Type" },
+    { key: "serial_no", label: "Serial No." },
+    { key: "maker", label: "Maker" },
+    { key: "origin", label: "Origin" },
+    { key: "qty", label: "Qty", className: "num" },
+    { key: "unit", label: "Unit" },
+    { key: "unit_price", label: "Unit Price", className: "num" },
+    { key: "amount", label: "Amount", className: "num" },
+    { key: "lead_time", label: "Lead Time" },
+    { key: "remark", label: "Remark" },
+  ];
+  const grid = useItemGrid("vquote-items", cols);
 
   return (
     <div style={{ marginTop: 12 }}>
@@ -2781,28 +2827,30 @@ function VendorQuoteItemEditor({
         <div className="sub-h">Item list</div>
         <div className="items-head-actions">
           {headerActions}
+          <ItemColsButton grid={grid} />
           <DeleteSelectedButton sel={sel} onDelete={() => deleteSelectedRows(items, sel, onChange)} />
           <button className="btn sm items-head-add" onClick={add}>+ Add</button>
         </div>
       </div>
       <div className="table-wrap item-scroll">
-        <table className="mini wide lead-tools">
+        <ItemGridStyle grid={grid} />
+        <table className={`mini wide lead-tools ${grid.tableClass}`}>
           <thead>
             <tr>
               <ItemSelectHeaderCell count={items.length} sel={sel} />
               <th className="seq">No.</th>
-              <th>Part No.</th>
-              <th>Description</th>
-              <th>Type</th>
-              <th>Serial No.</th>
-              <th>Maker</th>
-              <th>Origin</th>
-              <th className="num">Qty</th>
-              <th>Unit</th>
-              <th className="num">Unit Price</th>
-              <th className="num">Amount</th>
-              <th>Lead Time</th>
-              <th>Remark</th>
+              <ItemTh grid={grid} k="part_no">Part No.</ItemTh>
+              <ItemTh grid={grid} k="description">Description</ItemTh>
+              <ItemTh grid={grid} k="type">Type</ItemTh>
+              <ItemTh grid={grid} k="serial_no">Serial No.</ItemTh>
+              <ItemTh grid={grid} k="maker">Maker</ItemTh>
+              <ItemTh grid={grid} k="origin">Origin</ItemTh>
+              <ItemTh grid={grid} k="qty" className="num">Qty</ItemTh>
+              <ItemTh grid={grid} k="unit">Unit</ItemTh>
+              <ItemTh grid={grid} k="unit_price" className="num">Unit Price</ItemTh>
+              <ItemTh grid={grid} k="amount" className="num">Amount</ItemTh>
+              <ItemTh grid={grid} k="lead_time">Lead Time</ItemTh>
+              <ItemTh grid={grid} k="remark">Remark</ItemTh>
             </tr>
           </thead>
           <tbody>
@@ -2825,14 +2873,26 @@ function VendorQuoteItemEditor({
               </tr>
             ))}
           </tbody>
+          {/* 합계행 — 컬럼당 1셀(숨김/폭 조절 정렬 유지). Total=Unit Price(11열), 값=Amount(12열). */}
           <tfoot>
             <tr>
-              <td colSpan={11} className="total-label">Total</td>
-              <td className="num total-value">
+              <td></td>{/* 1 sel */}
+              <td></td>{/* 2 No. */}
+              <td></td>{/* 3 part_no */}
+              <td></td>{/* 4 description */}
+              <td></td>{/* 5 type */}
+              <td></td>{/* 6 serial_no */}
+              <td></td>{/* 7 maker */}
+              <td></td>{/* 8 origin */}
+              <td></td>{/* 9 qty */}
+              <td></td>{/* 10 unit */}
+              <td className="total-label">Total</td>{/* 11 unit_price */}
+              <td className="num total-value">{/* 12 amount */}
                 <DualCurrencyAmount value={total} currency={currency} rate={rate} />
                 <span className="fx-note">{fxRateText(rate)}</span>
               </td>
-              <td colSpan={2}></td>
+              <td></td>{/* 13 lead_time */}
+              <td></td>{/* 14 remark */}
             </tr>
           </tfoot>
         </table>
@@ -3365,6 +3425,24 @@ function CustomerQuoteItemEditor({
   const purchaseTotal = items.reduce((sum, it) => sum + Number(it.cost_price || 0) * Number(it.qty || 1), 0);
   const total = items.reduce((sum, it) => sum + Number(it.amount || 0), 0);
   const sel = useRowSelection();
+  const cols: ItemCol[] = [
+    { key: "__sel", fixed: true },
+    { key: "__seq", fixed: true, className: "seq" },
+    { key: "part_no", label: "Part No." },
+    { key: "description", label: "Description" },
+    { key: "type", label: "Type" },
+    { key: "serial_no", label: "Serial No." },
+    { key: "qty", label: "Qty", className: "num" },
+    { key: "unit", label: "Unit" },
+    { key: "cost", label: `Cost (${costCur})`, className: "num" },
+    { key: "cost_amount", label: `Cost Amount (${costCur})`, className: "num" },
+    { key: "margin", label: "Margin %", className: "num" },
+    { key: "unit_price", label: `Unit Price (${saleCur})`, className: "num" },
+    { key: "amount", label: `Amount (${saleCur})`, className: "num" },
+    { key: "lead_time", label: "Lead Time" },
+    { key: "remark", label: "Remark" },
+  ];
+  const grid = useItemGrid("cquote-items", cols);
 
   return (
     <div style={{ marginTop: 12 }}>
@@ -3372,29 +3450,31 @@ function CustomerQuoteItemEditor({
         <div className="sub-h">Item list</div>
         <div className="items-head-actions">
           {headerActions}
+          <ItemColsButton grid={grid} />
           <DeleteSelectedButton sel={sel} onDelete={() => deleteSelectedRows(items, sel, onChange)} />
           <button className="btn sm items-head-add" onClick={add}>+ Add</button>
         </div>
       </div>
       <div className="table-wrap item-scroll">
-        <table className="mini wide lead-tools">
+        <ItemGridStyle grid={grid} />
+        <table className={`mini wide lead-tools ${grid.tableClass}`}>
           <thead>
             <tr>
               <ItemSelectHeaderCell count={items.length} sel={sel} />
               <th className="seq">No.</th>
-              <th>Part No.</th>
-              <th>Description</th>
-              <th>Type</th>
-              <th>Serial No.</th>
-              <th className="num">Qty</th>
-              <th>Unit</th>
-              <th className="num">Cost ({costCur})</th>
-              <th className="num">Cost Amount ({costCur})</th>
-              <th className="num">Margin %</th>
-              <th className="num">Unit Price ({saleCur})</th>
-              <th className="num">Amount ({saleCur})</th>
-              <th>Lead Time</th>
-              <th>Remark</th>
+              <ItemTh grid={grid} k="part_no">Part No.</ItemTh>
+              <ItemTh grid={grid} k="description">Description</ItemTh>
+              <ItemTh grid={grid} k="type">Type</ItemTh>
+              <ItemTh grid={grid} k="serial_no">Serial No.</ItemTh>
+              <ItemTh grid={grid} k="qty" className="num">Qty</ItemTh>
+              <ItemTh grid={grid} k="unit">Unit</ItemTh>
+              <ItemTh grid={grid} k="cost" className="num">Cost ({costCur})</ItemTh>
+              <ItemTh grid={grid} k="cost_amount" className="num">Cost Amount ({costCur})</ItemTh>
+              <ItemTh grid={grid} k="margin" className="num">Margin %</ItemTh>
+              <ItemTh grid={grid} k="unit_price" className="num">Unit Price ({saleCur})</ItemTh>
+              <ItemTh grid={grid} k="amount" className="num">Amount ({saleCur})</ItemTh>
+              <ItemTh grid={grid} k="lead_time">Lead Time</ItemTh>
+              <ItemTh grid={grid} k="remark">Remark</ItemTh>
             </tr>
           </thead>
           <tbody>
@@ -3418,19 +3498,31 @@ function CustomerQuoteItemEditor({
               </tr>
             ))}
           </tbody>
+          {/* 합계행 — 컬럼 숨김/폭 조절 시 정렬이 유지되도록 컬럼당 1셀로 구성.
+              Total=Cost(9열), Purchase=Cost Amount(10열), Sales=Amount(13열). */}
           <tfoot>
             <tr>
-              <td colSpan={9} className="total-label">Total</td>
-              <td className="num total-value">
+              <td></td>{/* 1 sel */}
+              <td></td>{/* 2 No. */}
+              <td></td>{/* 3 part_no */}
+              <td></td>{/* 4 description */}
+              <td></td>{/* 5 type */}
+              <td></td>{/* 6 serial_no */}
+              <td></td>{/* 7 qty */}
+              <td></td>{/* 8 unit */}
+              <td className="total-label">Total</td>{/* 9 cost */}
+              <td className="num total-value">{/* 10 cost_amount */}
                 <DualCurrencyAmount value={purchaseTotal} currency={costCurrency} rate={rate} />
                 <span className="fx-note">Purchase</span>
               </td>
-              <td colSpan={2}></td>
-              <td className="num total-value">
+              <td></td>{/* 11 margin */}
+              <td></td>{/* 12 unit_price */}
+              <td className="num total-value">{/* 13 amount */}
                 <DualCurrencyAmount value={total} currency={currency} rate={rate} />
                 <span className="fx-note">Sales · {fxRateText(rate)}</span>
               </td>
-              <td colSpan={2}></td>
+              <td></td>{/* 14 lead_time */}
+              <td></td>{/* 15 remark */}
             </tr>
           </tfoot>
         </table>

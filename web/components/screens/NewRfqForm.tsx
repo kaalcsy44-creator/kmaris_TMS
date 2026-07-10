@@ -18,7 +18,7 @@ import type { CustomerOption, SettingsVessel, RfqSourceFile } from "@/lib/types"
 import { can, canEditDeal, editBlockReason } from "@/lib/auth";
 import CustomerName from "@/components/common/CustomerName";
 import { useColumnLayout } from "@/components/common/useColumnLayout";
-import { ColumnResizer } from "@/components/common/tableLayout";
+import { ColumnResizer, ColumnsButton } from "@/components/common/tableLayout";
 import {
   DeleteSelectedButton,
   ItemSelectCell,
@@ -26,14 +26,15 @@ import {
   useRowSelection,
 } from "@/components/common/itemTable";
 
-// 품목 표에서 폭 조절 가능한 컬럼(관리번호·순번·삭제 열 제외)과 기본폭(px).
-const RFQ_ITEM_COLS = [
-  { key: "part_no", label: "Part No." },
-  { key: "description", label: "Description" },
-  { key: "type", label: "Type" },
-  { key: "serial_no", label: "Serial No." },
-  { key: "qty", label: "Qty" },
-  { key: "remark", label: "Remark" },
+// 품목 표에서 폭 조절·숨김 가능한 컬럼(관리번호·순번 열 제외)과 셀 렌더 메타.
+type RfqItemColKey = "part_no" | "description" | "type" | "serial_no" | "qty" | "remark";
+const RFQ_ITEM_COLS: { key: RfqItemColKey; label: string; cellClass: string; num?: boolean }[] = [
+  { key: "part_no", label: "Part No.", cellClass: "wrapcell" },
+  { key: "description", label: "Description", cellClass: "desc" },
+  { key: "type", label: "Type", cellClass: "wrapcell" },
+  { key: "serial_no", label: "Serial No.", cellClass: "wrapcell" },
+  { key: "qty", label: "Qty", cellClass: "num", num: true },
+  { key: "remark", label: "Remark", cellClass: "wrapcell" },
 ];
 const RFQ_ITEM_DEFAULT_W: Record<string, number> = {
   part_no: 160,
@@ -122,6 +123,7 @@ export default function NewRfqForm({
   // 품목 표 컬럼 폭(헤더 경계 드래그로 조절, localStorage 유지).
   const itemCols = useColumnLayout("rfq-item-cols", RFQ_ITEM_COLS);
   const itemColW = (k: string) => itemCols.widths[k] ?? RFQ_ITEM_DEFAULT_W[k];
+  const visibleItemCols = RFQ_ITEM_COLS.filter((c) => !itemCols.hidden.has(c.key));
 
   function reloadCustomers(): Promise<CustomerOption[]> {
     return fetchCustomers()
@@ -687,6 +689,7 @@ export default function NewRfqForm({
       <div className="items-head" style={{ marginTop: 18 }}>
         <div className="sub-h">Item list</div>
         <div className="items-head-actions">
+          <ColumnsButton cols={RFQ_ITEM_COLS} layout={itemCols} />
           <DeleteSelectedButton sel={itemSel} onDelete={deleteSelectedItems} />
           <button type="button" className="btn sm items-head-add" onClick={addItem}>+ Add</button>
         </div>
@@ -696,7 +699,7 @@ export default function NewRfqForm({
         <colgroup>
           <col style={{ width: 32 }} />
           <col style={{ width: 44 }} />
-          {RFQ_ITEM_COLS.map((c) => (
+          {visibleItemCols.map((c) => (
             <col key={c.key} style={{ width: itemColW(c.key) }} />
           ))}
         </colgroup>
@@ -704,12 +707,18 @@ export default function NewRfqForm({
           <tr>
             <ItemSelectHeaderCell count={items.length} sel={itemSel} />
             <th className="seq">#</th>
-            {RFQ_ITEM_COLS.map((c) => (
-              <th key={c.key} className={`col-resizable${c.key === "qty" ? " num" : ""}`}>
-                {c.label}
-                <ColumnResizer onResize={(px) => itemCols.setWidth(c.key, px)} />
-              </th>
-            ))}
+            {visibleItemCols.map((c) => {
+              const lastShown = itemCols.visibleKeys.length <= 1;
+              return (
+                <th key={c.key} className={`col-resizable ig-th${c.num ? " num" : ""}`}>
+                  <span className="ig-th-label">{c.label}</span>
+                  {!lastShown ? (
+                    <button type="button" className="ig-hide" title="Hide column" onClick={() => itemCols.toggleHidden(c.key)}>✕</button>
+                  ) : null}
+                  <ColumnResizer onResize={(px) => itemCols.setWidth(c.key, px)} />
+                </th>
+              );
+            })}
           </tr>
         </thead>
         <tbody>
@@ -717,54 +726,25 @@ export default function NewRfqForm({
             <tr key={i}>
               <ItemSelectCell index={i} sel={itemSel} />
               <td className="seq">{i + 1}</td>
-              <td>
-                <textarea
-                  className="wrapcell"
-                  rows={1}
-                  value={it.part_no}
-                  onChange={(e) => setItem(i, "part_no", e.target.value)}
-                />
-              </td>
-              <td>
-                <textarea
-                  className="desc"
-                  rows={1}
-                  value={it.description}
-                  onChange={(e) => setItem(i, "description", e.target.value)}
-                />
-              </td>
-              <td>
-                <textarea
-                  className="wrapcell"
-                  rows={1}
-                  value={it.type}
-                  onChange={(e) => setItem(i, "type", e.target.value)}
-                />
-              </td>
-              <td>
-                <textarea
-                  className="wrapcell"
-                  rows={1}
-                  value={it.serial_no}
-                  onChange={(e) => setItem(i, "serial_no", e.target.value)}
-                />
-              </td>
-              <td>
-                <input
-                  className="num"
-                  value={it.qty}
-                  onChange={(e) => setItem(i, "qty", e.target.value)}
-                  inputMode="decimal"
-                />
-              </td>
-              <td>
-                <textarea
-                  className="wrapcell"
-                  rows={1}
-                  value={it.remark}
-                  onChange={(e) => setItem(i, "remark", e.target.value)}
-                />
-              </td>
+              {visibleItemCols.map((c) => (
+                <td key={c.key}>
+                  {c.num ? (
+                    <input
+                      className={c.cellClass}
+                      value={it[c.key]}
+                      onChange={(e) => setItem(i, c.key, e.target.value)}
+                      inputMode="decimal"
+                    />
+                  ) : (
+                    <textarea
+                      className={c.cellClass}
+                      rows={1}
+                      value={it[c.key]}
+                      onChange={(e) => setItem(i, c.key, e.target.value)}
+                    />
+                  )}
+                </td>
+              ))}
             </tr>
           ))}
         </tbody>
