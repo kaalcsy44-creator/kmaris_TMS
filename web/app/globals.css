@@ -5883,6 +5883,13 @@ table.mini .num {
 .pl-modal.service .project-stage-tabs button.on .st-label {
   color: var(--navy);
 }
+/* 완료+현재/선택 단계(초록 버튼): 위 navy 규칙이 done 의 흰 글자를 덮어써 초록 위
+   남색으로 묻힌다. 다른 완료 단계·Parts 와 동일하게 흰색 라벨로 되돌린다.
+   (아직 완료 안 된 미래 단계를 미리보기(on)로 열 때는 흰 버튼이라 navy 유지.) */
+.pl-modal.service .project-stage-tabs button.done.current .st-label,
+.pl-modal.service .project-stage-tabs button.done.on .st-label {
+  color: #fff;
+}
 .pl-modal.service .stage-pane-no {
   background: #16a05a;
 }
