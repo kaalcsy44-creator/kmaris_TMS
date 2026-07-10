@@ -34,6 +34,7 @@ from _core import (
     send_email,
     timedelta,
 )
+from fastapi import Body
 
 
 
@@ -208,6 +209,24 @@ def marketing_asset_upload(
         s.add(asset)
         s.commit()
         return {"ok": True, "id": asset.id}
+    finally:
+        s.close()
+
+
+@app.patch("/api/admin/marketing-assets/{asset_id}", dependencies=[Depends(require_token)])
+def marketing_asset_rename(asset_id: int, label: str = Body(..., embed=True)):
+    """첨부 자료 표시 이름(label) 변경. 파일 자체(filename/데이터)는 그대로."""
+    name = (label or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="이름을 입력하세요.")
+    s = get_session()
+    try:
+        a = s.query(MarketingAsset).filter_by(id=asset_id).first()
+        if not a:
+            raise HTTPException(status_code=404, detail="자료를 찾을 수 없습니다.")
+        a.label = name
+        s.commit()
+        return {"ok": True, "id": a.id, "label": a.label}
     finally:
         s.close()
 

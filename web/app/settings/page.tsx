@@ -42,6 +42,7 @@ import {
   deleteMarketingAsset,
   downloadMarketingAsset,
   fetchMarketingAssetObjectUrl,
+  renameMarketingAsset,
 } from "@/lib/api";
 import type { MarketingAsset } from "@/lib/api";
 import type { PermissionsConfig, RolePermRow, EmailTemplatesData } from "@/lib/api";
@@ -1879,6 +1880,9 @@ function BrochuresTab() {
   // 미리보기: 인증 헤더로 받은 blob 의 object URL 을 모달에 표시. 닫을 때 revoke.
   const [preview, setPreview] = useState<{ asset: MarketingAsset; url: string } | null>(null);
   const [previewBusy, setPreviewBusy] = useState(false);
+  // 표시 이름 인라인 편집(파일명이 아니라 라벨만 변경).
+  const [editId, setEditId] = useState<number | null>(null);
+  const [editVal, setEditVal] = useState("");
 
   async function load() {
     setLoading(true);
@@ -1961,6 +1965,33 @@ function BrochuresTab() {
     }
   }
 
+  function startRename(a: MarketingAsset) {
+    setEditId(a.id);
+    setEditVal(a.label);
+  }
+  function cancelRename() {
+    setEditId(null);
+    setEditVal("");
+  }
+  async function saveRename(a: MarketingAsset) {
+    const name = editVal.trim();
+    if (!name || name === a.label) {
+      cancelRename();
+      return;
+    }
+    setBusy(true);
+    setErr("");
+    try {
+      await renameMarketingAsset(a.id, name);
+      cancelRename();
+      await load();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "이름 변경에 실패했습니다.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="panel">
       <h3 className="form-title">Brochures &amp; company profile</h3>
@@ -2019,7 +2050,22 @@ function BrochuresTab() {
           <tbody>
             {rows.map((a) => (
               <tr key={a.id}>
-                <td>{a.label}</td>
+                <td>
+                  {editId === a.id ? (
+                    <input
+                      value={editVal}
+                      autoFocus
+                      style={{ width: "100%", maxWidth: 320 }}
+                      onChange={(e) => setEditVal(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") saveRename(a);
+                        else if (e.key === "Escape") cancelRename();
+                      }}
+                    />
+                  ) : (
+                    a.label
+                  )}
+                </td>
                 <td>
                   <button
                     type="button"
@@ -2034,29 +2080,45 @@ function BrochuresTab() {
                 <td>{(a.created_at || "").replace("T", " ")}</td>
                 <td>
                   <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
-                    <button
-                      type="button"
-                      className="btn sm"
-                      disabled={previewBusy}
-                      onClick={() => openPreview(a)}
-                    >
-                      미리보기
-                    </button>
-                    <button
-                      type="button"
-                      className="btn sm"
-                      onClick={() => downloadMarketingAsset(a.id, a.filename).catch(() => setErr("다운로드에 실패했습니다."))}
-                    >
-                      다운로드
-                    </button>
-                    <button
-                      type="button"
-                      className="btn danger sm"
-                      disabled={busy}
-                      onClick={() => remove(a)}
-                    >
-                      삭제
-                    </button>
+                    {editId === a.id ? (
+                      <>
+                        <button type="button" className="btn primary sm" disabled={busy} onClick={() => saveRename(a)}>
+                          저장
+                        </button>
+                        <button type="button" className="btn sm" disabled={busy} onClick={cancelRename}>
+                          취소
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button type="button" className="btn sm" disabled={busy} onClick={() => startRename(a)}>
+                          이름변경
+                        </button>
+                        <button
+                          type="button"
+                          className="btn sm"
+                          disabled={previewBusy}
+                          onClick={() => openPreview(a)}
+                        >
+                          미리보기
+                        </button>
+                        <button
+                          type="button"
+                          className="btn sm"
+                          onClick={() => downloadMarketingAsset(a.id, a.filename).catch(() => setErr("다운로드에 실패했습니다."))}
+                        >
+                          다운로드
+                        </button>
+                        <button
+                          type="button"
+                          className="btn danger sm"
+                          disabled={busy}
+                          onClick={() => remove(a)}
+                        >
+                          삭제
+                        </button>
+                      </>
+                    )}
                   </div>
                 </td>
               </tr>

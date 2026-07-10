@@ -577,6 +577,11 @@ export function deleteMarketingAsset(id: number): Promise<{ ok: boolean; deleted
   return del(`/api/admin/marketing-assets/${id}`);
 }
 
+// 첨부 자료 표시 이름(label) 변경 — 파일 자체는 그대로 두고 목록 표시명만 수정.
+export function renameMarketingAsset(id: number, label: string): Promise<{ ok: boolean; id: number; label: string }> {
+  return patch(`/api/admin/marketing-assets/${id}`, { label });
+}
+
 export function marketingAssetDownloadUrl(id: number): string {
   return `${API_BASE}/api/admin/marketing-assets/${id}/file`;
 }
