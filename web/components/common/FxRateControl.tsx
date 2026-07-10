@@ -39,9 +39,9 @@ export default function FxRateControl({
     fetchFxRate(d, cur)
       .then((r) => {
         onRate(r.rate);
-        setNote(r.source === "exim" ? `매매기준율 ${r.date_used}` : "고시 없음 · 고정환율");
+        setNote(r.source === "exim" ? `Market rate ${r.date_used}` : "No published rate · fixed");
       })
-      .catch(() => setNote("조회 실패 · 고정환율"))
+      .catch(() => setNote("Lookup failed · fixed"))
       .finally(() => setLoading(false));
     // onRate 는 의존성에서 제외(부모 리렌더로 인한 재조회 방지). date/cur/mode 변경 시에만 조회.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -57,14 +57,14 @@ export default function FxRateControl({
             className={mode === "auto" ? "on" : ""}
             onClick={() => onMode("auto")}
           >
-            매매기준율
+            Market rate
           </button>
           <button
             type="button"
             className={mode === "manual" ? "on" : ""}
             onClick={() => { onMode("manual"); lastFetch.current = ""; }}
           >
-            직접입력
+            Manual
           </button>
         </div>
         <input
@@ -79,7 +79,7 @@ export default function FxRateControl({
         />
       </div>
       {mode === "auto" ? (
-        <span className="fx-note-inline">{loading ? "조회중…" : note}</span>
+        <span className="fx-note-inline">{loading ? "Loading…" : note}</span>
       ) : null}
     </div>
   );
