@@ -5733,6 +5733,8 @@ table.mini .num {
 .pl-modal.service .project-stage-tabs button.current .st-no,
 .pl-modal.service .project-stage-tabs button.on .st-no {
   background: #16a05a;
+  /* 현재=완료 단계(1단계 등)에서 done 규칙의 초록 글씨를 덮어써 초록 배경 위 흰 숫자로. */
+  color: #fff;
 }
 .pl-modal.service .project-stage-tabs button.current {
   border-color: #16a05a;
