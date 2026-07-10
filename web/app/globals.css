@@ -3224,10 +3224,16 @@ a.btn.primary:hover {
 .quote-meta-grid {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
-/* 가격설정 — Item list 단가 계산에 직결. 3열 고정으로 6개 컨트롤이 2행에 꽉 차게. */
+/* 가격설정 — Item list 단가 계산에 직결. 6개 컨트롤을 한 줄로(FX 넓게, Apply는 내용폭). */
 .quote-price-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: 1fr 1fr 1.4fr 1fr 0.8fr auto;
   align-items: end;
+}
+/* 폭이 좁아지면(정보 패널 펼침 등) 한 줄이 좁아지므로 3열로 접는다. */
+@media (max-width: 1200px) {
+  .quote-price-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 /* RFQ 신규/수정 모드 바 */
 .rfq-mode-bar {
