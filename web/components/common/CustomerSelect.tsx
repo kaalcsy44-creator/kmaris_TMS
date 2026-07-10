@@ -57,9 +57,12 @@ export default function CustomerSelect({
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") setOpen(false);
     }
-    // 스크롤/리사이즈 시 메뉴가 떨어져 보이지 않도록 닫는다(재계산 대신 단순 닫기).
-    function onShift() {
-      setOpen(false);
+    // 스크롤/리사이즈 시 메뉴를 앵커(버튼)에 맞춰 재배치해 따라오게 한다(닫지 않음).
+    // 단, 메뉴 내부 목록(overflow 스크롤) 스크롤은 무시 — 그때 재배치할 필요가 없고,
+    // capture 단계라 내부 스크롤도 여기로 잡혀 예전엔 메뉴가 닫히던 버그의 원인이었다.
+    function onShift(e: Event) {
+      if (menuRef.current && e.target instanceof Node && menuRef.current.contains(e.target)) return;
+      reposition();
     }
     document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onKey);
