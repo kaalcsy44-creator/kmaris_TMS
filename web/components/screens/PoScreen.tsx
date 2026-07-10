@@ -577,56 +577,63 @@ function OrderDetailModal({
             onRemove={canEditThis ? (i) => setOcrFiles((prev) => prev.filter((_, idx) => idx !== i)) : undefined}
           />
 
-          <div className="form-grid">
-            <div className="form-field">
-              <label>Customer</label>
-              <select
-                value={customerId}
-                onChange={(e) => {
-                  setCustomerId(e.target.value ? Number(e.target.value) : "");
-                  setVesselId("");
-                }}
-              >
-                <option value="">— Select customer —</option>
-                {options.customers.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
+          {/* Received 단계 Basic Info — 좌: 고객·선박 / 우: 주문 정보. */}
+          <div className="basic-2col">
+            <div className="basic-col">
+              <div className="basic-col-title">Customer &amp; vessel</div>
+              <div className="form-field">
+                <label>Customer</label>
+                <select
+                  value={customerId}
+                  onChange={(e) => {
+                    setCustomerId(e.target.value ? Number(e.target.value) : "");
+                    setVesselId("");
+                  }}
+                >
+                  <option value="">— Select customer —</option>
+                  {options.customers.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-field">
+                <label>Vessel</label>
+                <select
+                  value={vesselId}
+                  onChange={(e) => setVesselId(e.target.value ? Number(e.target.value) : "")}
+                >
+                  <option value="">— None —</option>
+                  {vessels.map((v) => (
+                    <option key={v.id} value={v.id}>{v.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-field">
+                <label>Trade type</label>
+                <select value={tradeType} onChange={(e) => setTradeType(e.target.value)}>
+                  <option value="수출">{tr("수출")}</option>
+                  <option value="내수">{tr("내수")}</option>
+                </select>
+              </div>
             </div>
-            <div className="form-field">
-              <label>Customer PO No.</label>
-              <input value={poNo} onChange={(e) => setPoNo(e.target.value)} />
-            </div>
-            <div className="form-field">
-              <label>Order date</label>
-              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-            </div>
-            <div className="form-field">
-              <label>Trade type</label>
-              <select value={tradeType} onChange={(e) => setTradeType(e.target.value)}>
-                <option value="수출">{tr("수출")}</option>
-                <option value="내수">{tr("내수")}</option>
-              </select>
-            </div>
-            <div className="form-field">
-              <label>Currency</label>
-              <CurrencyToggle value={currency} onChange={setCurrency} />
-            </div>
-            <div className="form-field">
-              <label>Vessel</label>
-              <select
-                value={vesselId}
-                onChange={(e) => setVesselId(e.target.value ? Number(e.target.value) : "")}
-              >
-                <option value="">— None —</option>
-                {vessels.map((v) => (
-                  <option key={v.id} value={v.id}>{v.name}</option>
-                ))}
-              </select>
-            </div>
-            <div className="form-field">
-              <label>Promised delivery</label>
-              <input type="date" value={promised} onChange={(e) => setPromised(e.target.value)} />
+            <div className="basic-col">
+              <div className="basic-col-title">Order details</div>
+              <div className="form-field">
+                <label>Customer PO No.</label>
+                <input value={poNo} onChange={(e) => setPoNo(e.target.value)} />
+              </div>
+              <div className="form-field">
+                <label>Order date</label>
+                <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+              </div>
+              <div className="form-field">
+                <label>Currency</label>
+                <CurrencyToggle value={currency} onChange={setCurrency} />
+              </div>
+              <div className="form-field">
+                <label>Promised delivery</label>
+                <input type="date" value={promised} onChange={(e) => setPromised(e.target.value)} />
+              </div>
             </div>
           </div>
           <ItemEditor
@@ -1276,64 +1283,71 @@ function CustomerPoNewForm({
         onRemove={(i) => setOcrFiles((prev) => prev.filter((_, idx) => idx !== i))}
       />
 
-      <div className="form-grid">
-        <div className="form-field">
-          <label>Customer *</label>
-          <select
-            value={customerId}
-            onChange={(e) => {
-              setCustomerId(e.target.value ? Number(e.target.value) : "");
-              setVesselId("");
-            }}
-          >
-            <option value="">— Select customer —</option>
-            {options.customers.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+      {/* Received 단계 Basic Info — 좌: 고객·선박 / 우: 주문 정보. */}
+      <div className="basic-2col">
+        <div className="basic-col">
+          <div className="basic-col-title">Customer &amp; vessel</div>
+          <div className="form-field">
+            <label>Customer *</label>
+            <select
+              value={customerId}
+              onChange={(e) => {
+                setCustomerId(e.target.value ? Number(e.target.value) : "");
+                setVesselId("");
+              }}
+            >
+              <option value="">— Select customer —</option>
+              {options.customers.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="form-field">
+            <label>Vessel</label>
+            <select
+              value={vesselId}
+              onChange={(e) => setVesselId(e.target.value ? Number(e.target.value) : "")}
+            >
+              <option value="">— None —</option>
+              {vessels.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="form-field">
+            <label>Trade type *</label>
+            <select value={tradeType} onChange={(e) => setTradeType(e.target.value)}>
+              <option value="수출">{tr("수출")}</option>
+              <option value="내수">{tr("내수")}</option>
+            </select>
+          </div>
         </div>
-        <div className="form-field">
-          <label>Order date</label>
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-        </div>
-        <div className="form-field">
-          <label>Trade type *</label>
-          <select value={tradeType} onChange={(e) => setTradeType(e.target.value)}>
-            <option value="수출">{tr("수출")}</option>
-            <option value="내수">{tr("내수")}</option>
-          </select>
-        </div>
-        <div className="form-field">
-          <label>Currency</label>
-          <CurrencyToggle value={currency} onChange={setCurrency} />
-        </div>
-        <div className="form-field">
-          <label>Customer PO No.</label>
-          <input value={poNo} onChange={(e) => setPoNo(e.target.value)} />
-        </div>
-        <div className="form-field">
-          <label>Vessel</label>
-          <select
-            value={vesselId}
-            onChange={(e) => setVesselId(e.target.value ? Number(e.target.value) : "")}
-          >
-            <option value="">— None —</option>
-            {vessels.map((v) => (
-              <option key={v.id} value={v.id}>
-                {v.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="form-field">
-          <label>Promised delivery</label>
-          <input
-            type="date"
-            value={promised}
-            onChange={(e) => setPromised(e.target.value)}
-          />
+        <div className="basic-col">
+          <div className="basic-col-title">Order details</div>
+          <div className="form-field">
+            <label>Customer PO No.</label>
+            <input value={poNo} onChange={(e) => setPoNo(e.target.value)} />
+          </div>
+          <div className="form-field">
+            <label>Order date</label>
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          </div>
+          <div className="form-field">
+            <label>Currency</label>
+            <CurrencyToggle value={currency} onChange={setCurrency} />
+          </div>
+          <div className="form-field">
+            <label>Promised delivery</label>
+            <input
+              type="date"
+              value={promised}
+              onChange={(e) => setPromised(e.target.value)}
+            />
+          </div>
         </div>
       </div>
 

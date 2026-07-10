@@ -3260,6 +3260,32 @@ a.btn.primary:hover {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
+/* Received 단계(1·3·5) Basic Info — 성격별 좌우 2그룹. 각 그룹은 세로 1열 스택.
+   넓은 모달에서 필드가 과하게 늘어지지 않도록 전체 폭을 제한한다. */
+.basic-2col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 34px;
+  align-items: start;
+  max-width: 1120px;
+}
+.basic-col {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.basic-col-title {
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+@media (max-width: 860px) {
+  .basic-2col {
+    grid-template-columns: 1fr;
+  }
+}
 /* RFQ 신규/수정 모드 바 */
 .rfq-mode-bar {
   display: flex;

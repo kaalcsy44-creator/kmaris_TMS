@@ -1483,29 +1483,36 @@ function VendorQuoteDetailModal({
             files={ocrFiles}
             onRemove={canEditThis ? (i) => setOcrFiles((prev) => prev.filter((_, idx) => idx !== i)) : undefined}
           />
-          <div className="form-grid">
-            <div className="form-field">
-              <label>Vendor quote no.</label>
-              <input value={no} onChange={(e) => setNo(e.target.value)} />
+          {/* Received 단계 Basic Info — 좌: 견적·통화 / 우: 수신 정보. */}
+          <div className="basic-2col">
+            <div className="basic-col">
+              <div className="basic-col-title">Quote details</div>
+              <div className="form-field">
+                <label>Vendor quote no.</label>
+                <input value={no} onChange={(e) => setNo(e.target.value)} />
+              </div>
+              <div className="form-field">
+                <label>Currency</label>
+                <CurrencyToggle value={currency} onChange={setCurrency} />
+              </div>
+              <FxRateControl
+                rate={fxRate}
+                onRate={setFxRate}
+                mode={fxMode}
+                onMode={setFxMode}
+                date={receivedAt}
+              />
             </div>
-            <div className="form-field">
-              <label>Quote received at</label>
-              <input type="datetime-local" value={receivedAt} onChange={(e) => setReceivedAt(e.target.value)} />
-            </div>
-            <div className="form-field">
-              <label>Currency</label>
-              <CurrencyToggle value={currency} onChange={setCurrency} />
-            </div>
-            <FxRateControl
-              rate={fxRate}
-              onRate={setFxRate}
-              mode={fxMode}
-              onMode={setFxMode}
-              date={receivedAt}
-            />
-            <div className="form-field">
-              <label>Notes</label>
-              <input value={notes} onChange={(e) => setNotes(e.target.value)} />
+            <div className="basic-col">
+              <div className="basic-col-title">Receipt</div>
+              <div className="form-field">
+                <label>Quote received at</label>
+                <input type="datetime-local" value={receivedAt} onChange={(e) => setReceivedAt(e.target.value)} />
+              </div>
+              <div className="form-field">
+                <label>Notes</label>
+                <input value={notes} onChange={(e) => setNotes(e.target.value)} />
+              </div>
             </div>
           </div>
           <VendorQuoteItemEditor
@@ -2669,49 +2676,56 @@ function VendorQuoteAction({
             files={ocrFiles}
             onRemove={(i) => setOcrFiles((prev) => prev.filter((_, idx) => idx !== i))}
           />
-          <div className="form-grid">
-            <div className="form-field">
-              <label>Select Vendor RFQ</label>
-              <select
-                value={vrfqId}
-                onChange={(e) =>
-                  setVrfqId(e.target.value === "" ? "" : Number(e.target.value))
-                }
-              >
-                <option value="">Select Vendor RFQ…</option>
-                {vendorRfqs.map((v) => (
-                  <option key={v.id} value={v.id}>
-                    {v.vendor}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="form-field">
-              <label>Vendor quote no.</label>
-              <input value={no} onChange={(e) => setNo(e.target.value)} />
-            </div>
-            <div className="form-field">
-              <label>Quote received at</label>
-              <input
-                type="datetime-local"
-                value={receivedAt}
-                onChange={(e) => setReceivedAt(e.target.value)}
+          {/* Received 단계 Basic Info — 좌: 견적출처·통화 / 우: 수신 정보. */}
+          <div className="basic-2col">
+            <div className="basic-col">
+              <div className="basic-col-title">Quote source</div>
+              <div className="form-field">
+                <label>Select Vendor RFQ</label>
+                <select
+                  value={vrfqId}
+                  onChange={(e) =>
+                    setVrfqId(e.target.value === "" ? "" : Number(e.target.value))
+                  }
+                >
+                  <option value="">Select Vendor RFQ…</option>
+                  {vendorRfqs.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.vendor}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-field">
+                <label>Vendor quote no.</label>
+                <input value={no} onChange={(e) => setNo(e.target.value)} />
+              </div>
+              <div className="form-field">
+                <label>Currency</label>
+                <CurrencyToggle value={currency} onChange={setCurrency} />
+              </div>
+              <FxRateControl
+                rate={fxRate}
+                onRate={setFxRate}
+                mode={fxMode}
+                onMode={setFxMode}
+                date={receivedAt}
               />
             </div>
-            <div className="form-field">
-              <label>Currency</label>
-              <CurrencyToggle value={currency} onChange={setCurrency} />
-            </div>
-            <FxRateControl
-              rate={fxRate}
-              onRate={setFxRate}
-              mode={fxMode}
-              onMode={setFxMode}
-              date={receivedAt}
-            />
-            <div className="form-field">
-              <label>Notes</label>
-              <input value={notes} onChange={(e) => setNotes(e.target.value)} />
+            <div className="basic-col">
+              <div className="basic-col-title">Receipt</div>
+              <div className="form-field">
+                <label>Quote received at</label>
+                <input
+                  type="datetime-local"
+                  value={receivedAt}
+                  onChange={(e) => setReceivedAt(e.target.value)}
+                />
+              </div>
+              <div className="form-field">
+                <label>Notes</label>
+                <input value={notes} onChange={(e) => setNotes(e.target.value)} />
+              </div>
             </div>
           </div>
 

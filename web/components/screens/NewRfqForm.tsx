@@ -583,107 +583,114 @@ export default function NewRfqForm({
         </div>
       ) : null}
 
-      <div className="form-grid">
-        <Field label="RFQ received at">
-          <input
-            type="datetime-local"
-            value={receivedAt}
-            onChange={(e) => setReceivedAt(e.target.value)}
-          />
-        </Field>
-        <Field label="Work type">
-          <select value={workType} onChange={(e) => setWorkType(e.target.value)}>
-            <option value="부품공급">{tr("부품공급")}</option>
-            <option value="서비스">{tr("서비스")}</option>
-          </select>
-        </Field>
-        <Field label="Customer *">
-          <select
-            value={customerId}
-            onChange={(e) => {
-              const id = e.target.value === "" ? "" : Number(e.target.value);
-              setCustomerId(id);
-              // 선택한 Customer의 담당자를 함께 채운다(있으면).
-              const c = id === "" ? undefined : customers.find((x) => x.id === id);
-              if (c?.contact) setContactPerson(c.contact);
-            }}
-          >
-            <option value="">Select…</option>
-            {customers.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-                {c.contact ? ` — ${c.contact}` : ""}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Customer contact">
-          <input
-            value={contactPerson}
-            onChange={(e) => setContactPerson(e.target.value)}
-            placeholder="Contact name/title (optional)"
-          />
-        </Field>
-        <Field label="Vessel">
-          <select
-            value={vesselId}
-            onChange={(e) =>
-              setVesselId(e.target.value === "" ? "" : Number(e.target.value))
-            }
-          >
-            <option value="">Select…</option>
-            {vessels.map((v) => (
-              <option key={v.id} value={v.id}>
-                {v.name}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Customer RFQ No.">
-          <input
-            value={custRfqNo}
-            onChange={(e) => setCustRfqNo(e.target.value)}
-            placeholder="Customer reference no. (optional)"
-          />
-        </Field>
-        <Field label="Project title">
-          <input
-            value={projectTitle}
-            onChange={(e) => setProjectTitle(e.target.value)}
-            placeholder="Internal reference title (optional)"
-          />
-        </Field>
-        <Field label="Request method">
-          <select value={requestChannel} onChange={(e) => setRequestChannel(e.target.value)}>
-            <option value="">Select…</option>
-            {REQUEST_CHANNELS.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-        </Field>
-        {editId != null ? (
-          <Field label="PIC (Person In Charge)">
+      {/* Received 단계 Basic Info — 좌: 고객·선박 / 우: 수신·처리 정보. */}
+      <div className="basic-2col">
+        <div className="basic-col">
+          <div className="basic-col-title">Customer &amp; vessel</div>
+          <Field label="Customer *">
             <select
-              value={assigneeId}
-              onChange={(e) => setAssigneeId(Number(e.target.value))}
+              value={customerId}
+              onChange={(e) => {
+                const id = e.target.value === "" ? "" : Number(e.target.value);
+                setCustomerId(id);
+                // 선택한 Customer의 담당자를 함께 채운다(있으면).
+                const c = id === "" ? undefined : customers.find((x) => x.id === id);
+                if (c?.contact) setContactPerson(c.contact);
+              }}
             >
-              <option value={0}>Unassigned</option>
-              {users.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.username}
+              <option value="">Select…</option>
+              {customers.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                  {c.contact ? ` — ${c.contact}` : ""}
                 </option>
               ))}
-              {/* 현재 담당자가 비활성/삭제되어 목록에 없으면 그대로 유지되도록 fallback 옵션 표시 */}
-              {assigneeId > 0 && !users.some((u) => u.id === assigneeId) ? (
-                <option value={assigneeId}>
-                  {assigneeName || `User #${assigneeId}`} (inactive)
-                </option>
-              ) : null}
             </select>
           </Field>
-        ) : null}
+          <Field label="Customer contact">
+            <input
+              value={contactPerson}
+              onChange={(e) => setContactPerson(e.target.value)}
+              placeholder="Contact name/title (optional)"
+            />
+          </Field>
+          <Field label="Vessel">
+            <select
+              value={vesselId}
+              onChange={(e) =>
+                setVesselId(e.target.value === "" ? "" : Number(e.target.value))
+              }
+            >
+              <option value="">Select…</option>
+              {vessels.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Customer RFQ No.">
+            <input
+              value={custRfqNo}
+              onChange={(e) => setCustRfqNo(e.target.value)}
+              placeholder="Customer reference no. (optional)"
+            />
+          </Field>
+        </div>
+        <div className="basic-col">
+          <div className="basic-col-title">Receipt details</div>
+          <Field label="RFQ received at">
+            <input
+              type="datetime-local"
+              value={receivedAt}
+              onChange={(e) => setReceivedAt(e.target.value)}
+            />
+          </Field>
+          <Field label="Work type">
+            <select value={workType} onChange={(e) => setWorkType(e.target.value)}>
+              <option value="부품공급">{tr("부품공급")}</option>
+              <option value="서비스">{tr("서비스")}</option>
+            </select>
+          </Field>
+          <Field label="Request method">
+            <select value={requestChannel} onChange={(e) => setRequestChannel(e.target.value)}>
+              <option value="">Select…</option>
+              {REQUEST_CHANNELS.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Project title">
+            <input
+              value={projectTitle}
+              onChange={(e) => setProjectTitle(e.target.value)}
+              placeholder="Internal reference title (optional)"
+            />
+          </Field>
+          {editId != null ? (
+            <Field label="PIC (Person In Charge)">
+              <select
+                value={assigneeId}
+                onChange={(e) => setAssigneeId(Number(e.target.value))}
+              >
+                <option value={0}>Unassigned</option>
+                {users.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.username}
+                  </option>
+                ))}
+                {/* 현재 담당자가 비활성/삭제되어 목록에 없으면 그대로 유지되도록 fallback 옵션 표시 */}
+                {assigneeId > 0 && !users.some((u) => u.id === assigneeId) ? (
+                  <option value={assigneeId}>
+                    {assigneeName || `User #${assigneeId}`} (inactive)
+                  </option>
+                ) : null}
+              </select>
+            </Field>
+          ) : null}
+        </div>
       </div>
 
       <div className="items-head" style={{ marginTop: 18 }}>
