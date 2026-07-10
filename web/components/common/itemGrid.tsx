@@ -88,13 +88,20 @@ export function ItemGridStyle({ grid }: { grid: ItemGridApi }) {
     const rules: string[] = [];
     for (const c of cols) {
       const i = colIndex[c.key];
-      const sel = `.${tableClass} thead th:nth-child(${i}),.${tableClass} tbody td:nth-child(${i}),.${tableClass} tfoot td:nth-child(${i})`;
+      // thead 는 그룹 헤더행(.ig-group)을 제외하고 컬럼 헤더행에만 적용(colspan 그룹셀 오정렬 방지).
+      const sel = `.${tableClass} thead th:not(.ig-group):nth-child(${i}),.${tableClass} tbody td:nth-child(${i}),.${tableClass} tfoot td:nth-child(${i})`;
       if (!c.fixed && layout.hidden.has(c.key)) {
         rules.push(`${sel}{display:none!important}`);
         continue;
       }
       const w = layout.widths[c.key];
-      if (w) rules.push(`${sel}{width:${w}px!important;min-width:${w}px!important;max-width:${w}px!important}`);
+      if (w) {
+        rules.push(`${sel}{width:${w}px!important;min-width:${w}px!important;max-width:${w}px!important}`);
+        // 컬럼 폭을 사용자가 지정하면 안의 입력 박스도 함께 줄도록 기본 min-width 해제.
+        rules.push(
+          `.${tableClass} tbody td:nth-child(${i}) input,.${tableClass} tbody td:nth-child(${i}) textarea{min-width:0!important}`
+        );
+      }
     }
     return rules.join("\n");
   }, [cols, colIndex, layout.hidden, layout.widths, tableClass]);

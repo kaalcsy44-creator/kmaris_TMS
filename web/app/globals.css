@@ -2866,6 +2866,30 @@ table.mini.items-edit th.ig-th {
   color: #b91c1c;
 }
 
+/* 상위 그룹 헤더행 — Purchase(Cost·Cost Amount)·Sales(Unit Price·Amount) 묶음 라벨.
+   라벨 없는 구간은 투명 스페이서. colspan 셀은 ig-group 으로 폭/숨김 규칙에서 제외됨. */
+table.mini.wide thead tr.ig-group-row th {
+  padding: 3px 8px;
+  text-align: center;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  background: transparent;
+  border-bottom: 0;
+}
+table.mini.wide thead tr.ig-group-row th.grp-purchase {
+  color: #64748b;
+  background: #f1f5f9;
+  border-bottom: 2px solid #cbd5e1;
+}
+table.mini.wide thead tr.ig-group-row th.grp-sales {
+  color: var(--blue);
+  background: #eef3fc;
+  border-bottom: 2px solid var(--blue);
+}
+
 /* ── RFQ 품목 편집 표(팝업 내) — 컨테이너 폭에 맞춰 넘치지 않게. ──────── */
 table.mini.items-edit {
   width: 100%;
@@ -3694,6 +3718,15 @@ table.mini tfoot .total-label {
 table.mini tfoot .total-value {
   color: var(--navy);
   font-variant-numeric: tabular-nums;
+}
+/* 합계행 총액 — 항목 숫자열(.num, 우측정렬)과 통일되게 오른쪽으로 붙인다. */
+table.mini tfoot .total-value .dual-amount {
+  align-items: flex-end;
+  text-align: right;
+}
+table.mini tfoot .total-value .dual-line,
+table.mini tfoot .total-value .fx-note {
+  text-align: right;
 }
 /* Subtotal · Discount amount · Final total 값 — 기본(16px)에서 1px 줄임. */
 .static-value {

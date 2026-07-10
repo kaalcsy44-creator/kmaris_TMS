@@ -3459,6 +3459,21 @@ function CustomerQuoteItemEditor({
   ];
   const grid = useItemGrid("cquote-items", cols);
 
+  // 상위 그룹 헤더 — 표시 중인 컬럼을 코드 순서로 훑어 Purchase(Cost·Cost Amount)·
+  // Sales(Unit Price·Amount) 구간을 colspan 으로 묶는다(숨김 반영해 항상 정렬 유지).
+  const groupOfCol = (key: string): string =>
+    key === "cost" || key === "cost_amount" ? "Purchase"
+      : key === "unit_price" || key === "amount" ? "Sales"
+        : "";
+  const groupSegments: { label: string; span: number }[] = [];
+  for (const c of grid.cols) {
+    if (!c.fixed && grid.layout.hidden.has(c.key)) continue;
+    const label = groupOfCol(c.key);
+    const last = groupSegments[groupSegments.length - 1];
+    if (last && last.label === label) last.span += 1;
+    else groupSegments.push({ label, span: 1 });
+  }
+
   return (
     <div style={{ marginTop: 12 }}>
       <div className="items-head">
@@ -3474,6 +3489,17 @@ function CustomerQuoteItemEditor({
         <ItemGridStyle grid={grid} />
         <table className={`mini wide lead-tools ${grid.tableClass}`}>
           <thead>
+            <tr className="ig-group-row">
+              {groupSegments.map((s, gi) => (
+                <th
+                  key={gi}
+                  className={`ig-group${s.label ? ` grp-${s.label.toLowerCase()}` : ""}`}
+                  colSpan={s.span}
+                >
+                  {s.label}
+                </th>
+              ))}
+            </tr>
             <tr>
               <ItemSelectHeaderCell count={items.length} sel={sel} />
               <th className="seq">No.</th>
@@ -3507,9 +3533,9 @@ function CustomerQuoteItemEditor({
                 <td className="num">{amountInputValue(Number(it.cost_price || 0) * Number(it.qty || 1))}</td>
                 <td><input {...gridCellProps(i, 7)} className="num" value={amountInputValue(it.margin_pct)} onChange={(e) => patch(i, "margin_pct", e.target.value)} /></td>
                 <td><input {...gridCellProps(i, 8)} className="num" value={amountInputValue(it.unit_price)} onChange={(e) => patch(i, "unit_price", e.target.value)} /></td>
-                <td><input {...gridCellProps(i, 9)} className="num" value={amountInputValue(it.amount)} onChange={(e) => patch(i, "amount", e.target.value)} /></td>
-                <td><textarea {...gridCellProps(i, 10)} className="wrapcell" rows={1} value={it.lead_time ?? ""} onChange={(e) => patch(i, "lead_time", e.target.value)} /></td>
-                <td><textarea {...gridCellProps(i, 11)} className="wrapcell" rows={1} value={it.remark ?? ""} onChange={(e) => patch(i, "remark", e.target.value)} /></td>
+                <td className="num">{amountInputValue(it.amount)}</td>
+                <td><textarea {...gridCellProps(i, 9)} className="wrapcell" rows={1} value={it.lead_time ?? ""} onChange={(e) => patch(i, "lead_time", e.target.value)} /></td>
+                <td><textarea {...gridCellProps(i, 10)} className="wrapcell" rows={1} value={it.remark ?? ""} onChange={(e) => patch(i, "remark", e.target.value)} /></td>
               </tr>
             ))}
           </tbody>
@@ -3528,7 +3554,7 @@ function CustomerQuoteItemEditor({
               <td className="total-label">Total</td>{/* 9 cost */}
               <td className="num total-value">{/* 10 cost_amount */}
                 <DualCurrencyAmount value={purchaseTotal} currency={costCurrency} rate={rate} />
-                <span className="fx-note">Purchase</span>
+                <span className="fx-note">Purchase · {fxRateText(rate)}</span>
               </td>
               <td></td>{/* 11 margin */}
               <td></td>{/* 12 unit_price */}
