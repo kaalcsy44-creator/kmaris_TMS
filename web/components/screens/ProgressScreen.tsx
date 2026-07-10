@@ -13,6 +13,8 @@ import {
   updateRfqStageNote,
   deleteRfqStageNote,
   setRfqCancelled,
+  updateRfq,
+  fetchAssignableUsers,
 } from "@/lib/api";
 import { useCachedData, invalidateCache } from "@/lib/useCachedData";
 import { sortByDocNo } from "@/lib/sort";
@@ -31,7 +33,7 @@ import { PoActionTabs } from "@/components/screens/PoScreen";
 import { DocumentsOverview } from "@/components/screens/DocumentsScreen";
 import { ArOverview } from "@/components/screens/ArScreen";
 import { tr } from "@/lib/labels";
-import { getUser, can, isOwnScoped } from "@/lib/auth";
+import { getUser, can, isOwnScoped, isAdmin } from "@/lib/auth";
 
 // 좌측 프로젝트 정보 패널에 표시 가능한 항목(사용자가 표시 여부 선택). render 는 표시값.
 // 줄바꿈으로 구분된 여러 값(선박·고객 PO 목록)을 여러 줄로 렌더. 1개면 그대로, 없으면 —.
@@ -1500,6 +1502,28 @@ export function PipelineModal({
       setCancelBusy(false);
     }
   }
+  // 담당자(PIC) 재지정 — 우측 상단 PIC 칩에서 어느 단계에서도 변경(admin 전용).
+  const canEditPic = !isNewProject && isAdmin();
+  const [picUsers, setPicUsers] = useState<{ id: number; username: string }[]>([]);
+  const [picBusy, setPicBusy] = useState(false);
+  useEffect(() => {
+    if (!canEditPic) return;
+    let alive = true;
+    fetchAssignableUsers()
+      .then((u) => { if (alive) setPicUsers(u); })
+      .catch(() => { if (alive) setPicUsers([]); });
+    return () => { alive = false; };
+  }, [canEditPic]);
+  async function reassignPic(id: number) {
+    if (picBusy || id === (r.assignee_id || 0)) return;
+    setPicBusy(true);
+    try {
+      await updateRfq(r.rfq_id, { assignee_id: id });
+      await onChanged();
+    } finally {
+      setPicBusy(false);
+    }
+  }
   // 좌측 정보 패널에 표시할 항목 선택(체크박스 메뉴). localStorage 로 유지.
   const [infoFields, setInfoFields] = useState<string[]>(() => {
     if (typeof window === "undefined") return DEFAULT_INFO_FIELDS;
@@ -1652,9 +1676,28 @@ export function PipelineModal({
             </span>
           )}
           <span className="pl-head-right">
-            <span className="pl-pic-chip">
+            <span className={`pl-pic-chip${canEditPic ? " editable" : ""}`}>
               <span className="pl-pic-label">PIC</span>
-              {r.assignee || "—"}
+              {canEditPic ? (
+                <select
+                  className="pl-pic-select"
+                  value={r.assignee_id || 0}
+                  disabled={picBusy}
+                  onChange={(e) => reassignPic(Number(e.target.value))}
+                  title="Reassign PIC (admin only)"
+                >
+                  <option value={0}>Unassigned</option>
+                  {picUsers.map((u) => (
+                    <option key={u.id} value={u.id}>{u.username}</option>
+                  ))}
+                  {/* 현재 담당자가 후보 목록에 없으면(비활성 등) 유지되도록 fallback 옵션 */}
+                  {r.assignee_id && !picUsers.some((u) => u.id === r.assignee_id) ? (
+                    <option value={r.assignee_id}>{r.assignee || `User #${r.assignee_id}`}</option>
+                  ) : null}
+                </select>
+              ) : (
+                r.assignee || "—"
+              )}
             </span>
             {!isNewProject ? (
               <button

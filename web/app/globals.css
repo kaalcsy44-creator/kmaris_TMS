@@ -5945,6 +5945,29 @@ table.mini .num {
   color: var(--muted);
   letter-spacing: 0.04em;
 }
+/* admin 이 담당자(PIC)를 바꿀 수 있는 편집형 칩 — 칩 안에 인라인 셀렉트를 얹는다. */
+.pl-pic-chip.editable {
+  padding-right: 6px;
+}
+.pl-pic-select {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  padding: 1px 4px;
+  cursor: pointer;
+  max-width: 160px;
+}
+.pl-pic-select:hover:not(:disabled) {
+  border-color: var(--blue);
+}
+.pl-pic-select:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
 /* 딜(프로젝트) 액션 — 좌측 정보 패널 하단. 단계 편집(우측)과 분리. */
 .pl-deal-actions {
   display: flex;
