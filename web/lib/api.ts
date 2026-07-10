@@ -581,6 +581,16 @@ export function marketingAssetDownloadUrl(id: number): string {
   return `${API_BASE}/api/admin/marketing-assets/${id}/file`;
 }
 
+// 첨부 자료 미리보기용 — 인증 헤더로 blob 을 받아 object URL 을 만든다.
+// blob 의 MIME 은 응답 Content-Type(예: application/pdf) 이므로 iframe/img 로 인라인 표시 가능.
+// (다운로드 강제하는 Content-Disposition 헤더는 blob URL 에는 영향 없음.) 호출측이 revoke.
+export async function fetchMarketingAssetObjectUrl(id: number): Promise<string> {
+  const res = await fetch(marketingAssetDownloadUrl(id), { headers: authHeaders() });
+  if (!res.ok) throw new Error(`미리보기 실패 (${res.status})`);
+  const blob = await res.blob();
+  return URL.createObjectURL(blob);
+}
+
 // 첨부 자료 다운로드 — 인증 헤더가 필요하므로 fetch→blob 방식으로 내려받는다.
 export async function downloadMarketingAsset(id: number, filename: string): Promise<void> {
   const res = await fetch(marketingAssetDownloadUrl(id), { headers: authHeaders() });

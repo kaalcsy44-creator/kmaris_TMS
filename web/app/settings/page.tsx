@@ -41,6 +41,7 @@ import {
   uploadMarketingAsset,
   deleteMarketingAsset,
   downloadMarketingAsset,
+  fetchMarketingAssetObjectUrl,
 } from "@/lib/api";
 import type { MarketingAsset } from "@/lib/api";
 import type { PermissionsConfig, RolePermRow, EmailTemplatesData } from "@/lib/api";
@@ -1875,6 +1876,9 @@ function BrochuresTab() {
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(true);
   const fileRef = useRef<HTMLInputElement>(null);
+  // 미리보기: 인증 헤더로 받은 blob 의 object URL 을 모달에 표시. 닫을 때 revoke.
+  const [preview, setPreview] = useState<{ asset: MarketingAsset; url: string } | null>(null);
+  const [previewBusy, setPreviewBusy] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -1891,6 +1895,37 @@ function BrochuresTab() {
   useEffect(() => {
     load();
   }, []);
+
+  // 열려 있던 미리보기 URL 은 컴포넌트가 사라질 때 정리한다.
+  useEffect(() => () => {
+    setPreview((p) => {
+      if (p) URL.revokeObjectURL(p.url);
+      return null;
+    });
+  }, []);
+
+  async function openPreview(a: MarketingAsset) {
+    setErr("");
+    setPreviewBusy(true);
+    try {
+      const url = await fetchMarketingAssetObjectUrl(a.id);
+      setPreview((prev) => {
+        if (prev) URL.revokeObjectURL(prev.url);
+        return { asset: a, url };
+      });
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "미리보기에 실패했습니다.");
+    } finally {
+      setPreviewBusy(false);
+    }
+  }
+
+  function closePreview() {
+    setPreview((p) => {
+      if (p) URL.revokeObjectURL(p.url);
+      return null;
+    });
+  }
 
   async function onUpload(list: FileList | null) {
     if (!list || !list.length) return;
@@ -1989,7 +2024,8 @@ function BrochuresTab() {
                   <button
                     type="button"
                     className="linklike"
-                    onClick={() => downloadMarketingAsset(a.id, a.filename).catch(() => setErr("다운로드에 실패했습니다."))}
+                    title="미리보기"
+                    onClick={() => openPreview(a)}
                   >
                     {a.filename}
                   </button>
@@ -1997,20 +2033,74 @@ function BrochuresTab() {
                 <td>{fmtBytes(a.size)}</td>
                 <td>{(a.created_at || "").replace("T", " ")}</td>
                 <td>
-                  <button
-                    type="button"
-                    className="btn danger sm"
-                    disabled={busy}
-                    onClick={() => remove(a)}
-                  >
-                    삭제
-                  </button>
+                  <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                    <button
+                      type="button"
+                      className="btn sm"
+                      disabled={previewBusy}
+                      onClick={() => openPreview(a)}
+                    >
+                      미리보기
+                    </button>
+                    <button
+                      type="button"
+                      className="btn sm"
+                      onClick={() => downloadMarketingAsset(a.id, a.filename).catch(() => setErr("다운로드에 실패했습니다."))}
+                    >
+                      다운로드
+                    </button>
+                    <button
+                      type="button"
+                      className="btn danger sm"
+                      disabled={busy}
+                      onClick={() => remove(a)}
+                    >
+                      삭제
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       )}
+
+      {preview ? (
+        <Modal title={`미리보기 — ${preview.asset.label || preview.asset.filename}`} onClose={closePreview} wide>
+          <div style={{ width: "100%" }}>
+            {preview.asset.mime.startsWith("image/") ? (
+              <img
+                src={preview.url}
+                alt={preview.asset.filename}
+                style={{ maxWidth: "100%", maxHeight: "calc(100vh - 200px)", display: "block", margin: "0 auto" }}
+              />
+            ) : preview.asset.mime.startsWith("application/pdf") ? (
+              <iframe
+                src={preview.url}
+                title={preview.asset.filename}
+                style={{ width: "100%", height: "calc(100vh - 200px)", minHeight: 400, border: "1px solid var(--line)", borderRadius: 6 }}
+              />
+            ) : (
+              <div className="muted" style={{ padding: 16 }}>
+                이 형식({preview.asset.mime || "unknown"})은 브라우저 미리보기를 지원하지 않습니다. 다운로드해서 확인하세요.
+                <div style={{ marginTop: 10 }}>
+                  <button
+                    type="button"
+                    className="btn primary"
+                    onClick={() =>
+                      downloadMarketingAsset(preview.asset.id, preview.asset.filename).catch(() =>
+                        setErr("다운로드에 실패했습니다.")
+                      )
+                    }
+                  >
+                    다운로드
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </Modal>
+      ) : null}
     </div>
   );
 }
