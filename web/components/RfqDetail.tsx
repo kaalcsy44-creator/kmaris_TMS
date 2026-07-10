@@ -188,8 +188,8 @@ export default function RfqDetail({
                       <th>Part No.</th>
                       <th>Description</th>
                       <th className="num">Qty</th>
-                      <th className="num">Unit price</th>
-                      <th className="num">Amount</th>
+                      <th className="num">Unit price (USD)</th>
+                      <th className="num">Amount (USD)</th>
                     </tr>
                   </thead>
                   <tbody>

@@ -1880,6 +1880,7 @@ function ItemEditor({
   }
   const total = items.reduce((sum, it) => sum + Number(it.amount || 0), 0);
   const sel = useRowSelection();
+  const cur = (currency || "USD").toUpperCase();
   const cols: ItemCol[] = [
     { key: "__sel", fixed: true },
     { key: "__seq", fixed: true, className: "seq" },
@@ -1890,8 +1891,8 @@ function ItemEditor({
     { key: "maker", label: "Maker" },
     { key: "qty", label: "Qty", className: "num" },
     { key: "unit", label: "Unit" },
-    { key: "unit_price", label: "Unit price", className: "num" },
-    { key: "amount", label: "Amount", className: "num" },
+    { key: "unit_price", label: `Unit price (${cur})`, className: "num" },
+    { key: "amount", label: `Amount (${cur})`, className: "num" },
     { key: "remark", label: "Remark" },
   ];
   const grid = useItemGrid("po-items", cols);
@@ -1921,8 +1922,8 @@ function ItemEditor({
               <ItemTh grid={grid} k="maker">Maker</ItemTh>
               <ItemTh grid={grid} k="qty" className="num">Qty</ItemTh>
               <ItemTh grid={grid} k="unit">Unit</ItemTh>
-              <ItemTh grid={grid} k="unit_price" className="num">Unit price</ItemTh>
-              <ItemTh grid={grid} k="amount" className="num">Amount</ItemTh>
+              <ItemTh grid={grid} k="unit_price" className="num">Unit price ({cur})</ItemTh>
+              <ItemTh grid={grid} k="amount" className="num">Amount ({cur})</ItemTh>
               <ItemTh grid={grid} k="remark">Remark</ItemTh>
             </tr>
           </thead>

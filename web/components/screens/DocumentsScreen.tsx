@@ -1306,6 +1306,7 @@ function ItemEditor({
   }
   const total = items.reduce((sum, item) => sum + num(item.amount), 0);
   const sel = useRowSelection();
+  const cur = (currency || "USD").toUpperCase();
 
   return (
     <div className="table-wrap">
@@ -1328,8 +1329,8 @@ function ItemEditor({
               </>
             ) : (
               <>
-                <th className="num">Unit Price</th>
-                <th className="num">Amount</th>
+                <th className="num">Unit Price ({cur})</th>
+                <th className="num">Amount ({cur})</th>
                 <th>HS Code</th>
               </>
             )}

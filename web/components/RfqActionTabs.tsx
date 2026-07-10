@@ -2818,6 +2818,7 @@ function VendorQuoteItemEditor({
     0
   );
   const sel = useRowSelection();
+  const cur = (currency || "USD").toUpperCase();
   const cols: ItemCol[] = [
     { key: "__sel", fixed: true },
     { key: "__seq", fixed: true, className: "seq" },
@@ -2829,8 +2830,8 @@ function VendorQuoteItemEditor({
     { key: "origin", label: "Origin" },
     { key: "qty", label: "Qty", className: "num" },
     { key: "unit", label: "Unit" },
-    { key: "unit_price", label: "Unit Price", className: "num" },
-    { key: "amount", label: "Amount", className: "num" },
+    { key: "unit_price", label: `Unit Price (${cur})`, className: "num" },
+    { key: "amount", label: `Amount (${cur})`, className: "num" },
     { key: "lead_time", label: "Lead Time" },
     { key: "remark", label: "Remark" },
   ];
@@ -2862,8 +2863,8 @@ function VendorQuoteItemEditor({
               <ItemTh grid={grid} k="origin">Origin</ItemTh>
               <ItemTh grid={grid} k="qty" className="num">Qty</ItemTh>
               <ItemTh grid={grid} k="unit">Unit</ItemTh>
-              <ItemTh grid={grid} k="unit_price" className="num">Unit Price</ItemTh>
-              <ItemTh grid={grid} k="amount" className="num">Amount</ItemTh>
+              <ItemTh grid={grid} k="unit_price" className="num">Unit Price ({cur})</ItemTh>
+              <ItemTh grid={grid} k="amount" className="num">Amount ({cur})</ItemTh>
               <ItemTh grid={grid} k="lead_time">Lead Time</ItemTh>
               <ItemTh grid={grid} k="remark">Remark</ItemTh>
             </tr>
