@@ -71,6 +71,7 @@ import DocSendPanel from "./common/DocSendPanel";
 import DetailTabBar, { DetailTab } from "./common/DetailTabBar";
 import SourceFilesList from "./common/SourceFilesList";
 import { withDefaultTerms } from "@/lib/terms";
+import { sortByDocNo } from "@/lib/sort";
 import {
   amountInputValue,
   convertCurrency,
@@ -327,7 +328,8 @@ function EmbeddedVendorRfq({
       .finally(() => setLoaded(true));
   }, []);
   useEffect(() => { load(); }, [load]);
-  const mine = rows.filter((r) => r.rfq_id === rfqId);
+  // 복수 Vendor RFQ는 K-Maris RFQ 번호 오름차순(숫자 빠른 순)으로 좌→우 배치.
+  const mine = sortByDocNo(rows.filter((r) => r.rfq_id === rfqId), (r) => r.kmaris_rfq_no, (r) => r.id);
   if (!loaded) return <div className="state">Loading details…</div>;
 
   if (adding || mine.length === 0) {
@@ -391,7 +393,8 @@ function EmbeddedVendorQuote({ rfqId, onChanged }: { rfqId: number | null; onCha
     if (!rfqId) return;
     fetchRfqDetail(rfqId).then((d) => setVendorRfqs(d.vendor_rfqs)).catch(() => setVendorRfqs([]));
   }, [rfqId]);
-  const mine = rows.filter((r) => r.rfq_id === rfqId);
+  // 복수 Vendor Quote는 벤더 견적번호 오름차순(숫자 빠른 순)으로 좌→우 배치.
+  const mine = sortByDocNo(rows.filter((r) => r.rfq_id === rfqId), (r) => r.vendor_quote_no, (r) => r.id);
   if (!loaded) return <div className="state">Loading details…</div>;
 
   if (adding || mine.length === 0) {
@@ -452,7 +455,8 @@ function EmbeddedCustomerQuote({ rfqId, onChanged }: { rfqId: number | null; onC
       .finally(() => setLoaded(true));
   }, []);
   useEffect(() => { load(); }, [load]);
-  const mine = rows.filter((r) => r.rfq_id === rfqId);
+  // 복수 견적서는 견적번호 오름차순(숫자 빠른 순)으로 좌→우 배치.
+  const mine = sortByDocNo(rows.filter((r) => r.rfq_id === rfqId), (r) => r.qtn_no, (r) => r.id);
   if (!loaded) return <div className="state">Loading details…</div>;
 
   if (adding || mine.length === 0) {

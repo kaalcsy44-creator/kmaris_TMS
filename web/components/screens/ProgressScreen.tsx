@@ -15,6 +15,7 @@ import {
   setRfqCancelled,
 } from "@/lib/api";
 import { useCachedData, invalidateCache } from "@/lib/useCachedData";
+import { sortByDocNo } from "@/lib/sort";
 import { useColumnLayout } from "@/components/common/useColumnLayout";
 import { ColumnResizer, ColumnsButton, dragHandleProps } from "@/components/common/tableLayout";
 import type { PipelineRow, CustomerOption, SettingsVessel, StageNote } from "@/lib/types";
@@ -1891,8 +1892,9 @@ function WorkspacePanel({
 }) {
   // 이 프로젝트(RFQ)의 고객 P/O(오더)들 — 6~11단계는 어느 P/O 기준으로 진행할지 선택.
   const { data: poOptions } = useCachedData("po:work-options", fetchPoWorkOptions);
+  // 복수 P/O는 K-Maris PO 번호 오름차순(숫자 빠른 순)으로 좌→우 배치.
   const projectOrders = useMemo(
-    () => (poOptions?.orders ?? []).filter((o) => o.rfq_id === row.rfq_id),
+    () => sortByDocNo((poOptions?.orders ?? []).filter((o) => o.rfq_id === row.rfq_id), (o) => o.po_no, (o) => o.id),
     [poOptions, row.rfq_id]
   );
   const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);

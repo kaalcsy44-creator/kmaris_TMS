@@ -32,6 +32,7 @@ import CurrencyToggle from "@/components/common/CurrencyToggle";
 import TermsEditor from "@/components/common/TermsEditor";
 import DocSendPanel from "@/components/common/DocSendPanel";
 import DetailTabBar, { DetailTab } from "@/components/common/DetailTabBar";
+import { sortByDocNo } from "@/lib/sort";
 import {
   amountInputValue,
   DeleteSelectedButton,
@@ -169,12 +170,16 @@ function CustomerPoTab({
   // 프로젝트 워크스페이스: 이 프로젝트(RFQ)의 고객 P/O(오더)들. 여러 건이면 선택기 +
   // '+ Add another P/O'. 없거나 신규 추가면 등록 폼(현재 프로젝트로 자동 연결).
   if (embedded) {
-    const projectOrders =
+    // 복수 P/O는 K-Maris PO 번호 오름차순(숫자 빠른 순)으로 좌→우 배치.
+    const projectOrders = sortByDocNo(
       deepRfqId != null
         ? options.orders.filter((o) => o.rfq_id === deepRfqId)
         : deepOrderId
         ? options.orders.filter((o) => o.id === deepOrderId)
-        : [];
+        : [],
+      (o) => o.po_no,
+      (o) => o.id
+    );
 
     if (projectOrders.length === 0 || adding) {
       return (
@@ -701,7 +706,12 @@ function VendorPoTab({
         </div>
       );
     }
-    const pos = options.purchase_orders.filter((p) => p.order_id === deepOrderId);
+    // 복수 Vendor PO는 K-Maris PO 번호 오름차순(숫자 빠른 순)으로 좌→우 배치.
+    const pos = sortByDocNo(
+      options.purchase_orders.filter((p) => p.order_id === deepOrderId),
+      (p) => p.po_no,
+      (p) => p.id
+    );
     if (pos.length === 0 || adding) {
       return (
         <div className="embedded-detail">
