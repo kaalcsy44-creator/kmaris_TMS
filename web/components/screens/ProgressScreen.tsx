@@ -1598,6 +1598,74 @@ export function PipelineModal({
     document.addEventListener("mousemove", onMove);
     document.addEventListener("mouseup", onUp);
   }
+
+  // 모달 크기 조절: 테두리/모서리를 잡고 드래그(8방향). 크기는 localStorage 로 기억하고
+  // 열 때마다 그 크기로 화면 중앙에 배치한다. 미조절 상태(null)면 CSS 기본(중앙 정렬).
+  const modalRef = useRef<HTMLDivElement>(null);
+  const [modalBox, setModalBox] = useState<{ left: number; top: number; w: number; h: number } | null>(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      const s = JSON.parse(window.localStorage.getItem("ktms:proj-modal-size") || "null");
+      if (s && s.w && s.h) {
+        const w = Math.min(s.w, window.innerWidth - 24);
+        const h = Math.min(s.h, window.innerHeight - 24);
+        return { w, h, left: Math.max(12, (window.innerWidth - w) / 2), top: Math.max(12, (window.innerHeight - h) / 2) };
+      }
+    } catch {
+      /* ignore malformed */
+    }
+    return null;
+  });
+  useEffect(() => {
+    if (modalBox && typeof window !== "undefined")
+      window.localStorage.setItem(
+        "ktms:proj-modal-size",
+        JSON.stringify({ w: Math.round(modalBox.w), h: Math.round(modalBox.h) })
+      );
+  }, [modalBox?.w, modalBox?.h]);
+
+  function startResize(dir: string, e: React.PointerEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    const el = modalRef.current;
+    if (!el) return;
+    const r0 = el.getBoundingClientRect();
+    const start = { x: e.clientX, y: e.clientY, left: r0.left, top: r0.top, w: r0.width, h: r0.height };
+    const MINW = 560;
+    const MINH = 360;
+    const maxW = window.innerWidth - 16;
+    const maxH = window.innerHeight - 16;
+    const cursor = getComputedStyle(e.currentTarget as Element).cursor;
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = cursor;
+    const onMove = (ev: PointerEvent) => {
+      const dx = ev.clientX - start.x;
+      const dy = ev.clientY - start.y;
+      let { left, top, w, h } = start;
+      if (dir.includes("e")) w = start.w + dx;
+      if (dir.includes("s")) h = start.h + dy;
+      if (dir.includes("w")) { w = start.w - dx; left = start.left + dx; }
+      if (dir.includes("n")) { h = start.h - dy; top = start.top + dy; }
+      if (w < MINW) { if (dir.includes("w")) left = start.left + (start.w - MINW); w = MINW; }
+      if (h < MINH) { if (dir.includes("n")) top = start.top + (start.h - MINH); h = MINH; }
+      w = Math.min(w, maxW);
+      h = Math.min(h, maxH);
+      // 최소 120px 는 화면 안에 남겨 완전히 사라지지 않게 한다.
+      left = Math.min(Math.max(left, 120 - w), window.innerWidth - 120);
+      top = Math.min(Math.max(top, 8), window.innerHeight - 60);
+      setModalBox({ left, top, w, h });
+    };
+    const onUp = () => {
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+    };
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp);
+  }
+  const RESIZE_DIRS = ["n", "s", "e", "w", "ne", "nw", "se", "sw"] as const;
+
   // 프로젝트 정보 편집·삭제는 우측 1단계(RFQ Received) 패널에서 처리한다.
   // 좌측 패널은 읽기전용 요약(+ 표시 항목 선택)만 담당한다.
   const rSteps = resolveSteps(steps, r.work_type || "부품공급");
@@ -1655,11 +1723,34 @@ export function PipelineModal({
       role="presentation"
     >
       <div
-        className={`pl-modal${isService ? " service" : ""}`}
+        ref={modalRef}
+        className={`pl-modal pl-modal--resizable${isService ? " service" : ""}`}
+        style={
+          modalBox
+            ? {
+                position: "fixed",
+                left: modalBox.left,
+                top: modalBox.top,
+                width: modalBox.w,
+                height: modalBox.h,
+                maxWidth: "none",
+                maxHeight: "none",
+                margin: 0,
+              }
+            : undefined
+        }
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
       >
+        {RESIZE_DIRS.map((d) => (
+          <span
+            key={d}
+            className={`pl-resize-h ${d}`}
+            onPointerDown={(e) => startResize(d, e)}
+            aria-hidden
+          />
+        ))}
         <div className="pl-modal-head">
           {isNewProject ? (
             <span className="intl-title">

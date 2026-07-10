@@ -2496,6 +2496,36 @@ table.pipeline tbody tr.service .pl-stage-done {
   flex-direction: column;
   max-height: calc(100vh - 96px);
 }
+/* 크기 조절 가능한 모달(WorkspacePanel) — 테두리/모서리에 드래그 핸들을 얹는다.
+   position:relative 로 핸들의 기준을 만든다(조절을 시작하면 인라인 position:fixed 로 고정). */
+.pl-modal--resizable {
+  position: relative;
+}
+.pl-resize-h {
+  position: absolute;
+  z-index: 30;
+  touch-action: none;
+}
+.pl-resize-h.n { top: -3px; left: 12px; right: 12px; height: 7px; cursor: ns-resize; }
+.pl-resize-h.s { bottom: -3px; left: 12px; right: 12px; height: 7px; cursor: ns-resize; }
+.pl-resize-h.e { right: -3px; top: 12px; bottom: 12px; width: 7px; cursor: ew-resize; }
+.pl-resize-h.w { left: -3px; top: 12px; bottom: 12px; width: 7px; cursor: ew-resize; }
+.pl-resize-h.ne { top: -4px; right: -4px; width: 16px; height: 16px; cursor: nesw-resize; z-index: 31; }
+.pl-resize-h.nw { top: -4px; left: -4px; width: 16px; height: 16px; cursor: nwse-resize; z-index: 31; }
+.pl-resize-h.se { bottom: -4px; right: -4px; width: 16px; height: 16px; cursor: nwse-resize; z-index: 31; }
+.pl-resize-h.sw { bottom: -4px; left: -4px; width: 16px; height: 16px; cursor: nesw-resize; z-index: 31; }
+/* 우하단 모서리에 옅은 그립 표시(리사이즈 가능함을 알림). */
+.pl-resize-h.se::after {
+  content: "";
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid rgba(120, 140, 170, 0.65);
+  border-bottom: 2px solid rgba(120, 140, 170, 0.65);
+  border-bottom-right-radius: 3px;
+}
 /* 본문은 스크롤하지 않는다 — 좌측바/우측 상세부분이 각각 독립 스크롤한다. */
 .pl-modal-body {
   flex: 1 1 auto;
