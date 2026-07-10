@@ -2866,6 +2866,15 @@ table.mini.items-edit th.ig-th {
   color: #b91c1c;
 }
 
+/* 컬럼 헤더 경계선 — 폭을 줄일 때 컬럼 구분(드래그 위치)이 잘 보이도록 표시. */
+table.mini.wide thead th.seq,
+table.mini.wide thead th.ig-th {
+  border-right: 1px solid var(--line);
+}
+table.mini.wide thead th.ig-th:last-child {
+  border-right: 0;
+}
+
 /* 상위 그룹 헤더행 — Purchase(Cost·Cost Amount)·Sales(Unit Price·Amount) 묶음 라벨.
    라벨 없는 구간은 투명 스페이서. colspan 셀은 ig-group 으로 폭/숨김 규칙에서 제외됨. */
 table.mini.wide thead tr.ig-group-row th {
