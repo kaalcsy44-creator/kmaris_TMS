@@ -1806,7 +1806,7 @@ function EmailTemplatesTab() {
             <textarea
               ref={bodyRef}
               className="po-textarea"
-              style={{ minHeight: 320, fontFamily: "ui-monospace, monospace" }}
+              style={{ minHeight: 320, fontFamily: "var(--mono)", fontSize: 13, lineHeight: 1.55 }}
               value={body}
               onFocus={() => (lastFocus.current = "body")}
               onChange={(e) => setBody(e.target.value)}

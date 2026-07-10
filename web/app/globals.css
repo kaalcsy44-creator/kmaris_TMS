@@ -10,6 +10,10 @@
   --hover: #eaf3ff;
   --sel: #dcebff;
   --page-bg: #f4f7fb;
+  /* 고정폭(모노스페이스) 스택 — 콜론 정렬·구분선에 고정폭이 필요한 곳(이메일 템플릿 등)용.
+     Windows 기본 Consolas / 최신 Cascadia 를 앞세워 Courier New 폴백(가독성 낮음)을 피한다. */
+  --mono: "Cascadia Code", "Cascadia Mono", Consolas, "SF Mono", SFMono-Regular,
+    Menlo, "Roboto Mono", "DejaVu Sans Mono", ui-monospace, monospace;
 }
 
 * {
@@ -6552,7 +6556,7 @@ table.mini .num {
   font-size: 11px;
   padding: 2px 7px;
   border-radius: 6px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--mono);
 }
 
 .email-tpl-cols {
@@ -6601,9 +6605,9 @@ table.mini .num {
 .email-tpl-preview-body {
   white-space: pre-wrap;
   word-break: break-word;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 12.5px;
-  line-height: 1.5;
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.55;
   margin: 0;
   color: var(--ink);
   overflow-x: auto;
