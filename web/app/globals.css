@@ -117,16 +117,14 @@ body {
   align-items: center;
   text-decoration: none;
   flex-shrink: 0;
-  height: 42px;
-  padding: 5px 10px;
-  border-radius: 8px;
-  background: #fff;
+  height: 44px;
 }
 .topnav-logo {
   display: block;
-  width: 112px;
-  height: 32px;
+  width: 119px;
+  height: 34px;
   object-fit: contain;
+  filter: brightness(0) invert(1);
 }
 .topnav-menu {
   display: flex;
@@ -4713,7 +4711,7 @@ table.mini .num {
     margin-right: auto;
   }
   .topnav-logo {
-    width: 96px;
+    width: 102px;
   }
   .topnav-menu {
     display: none;
