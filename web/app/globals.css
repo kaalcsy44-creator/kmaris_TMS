@@ -2894,15 +2894,17 @@ table.mini.wide thead tr.ig-group-row th {
   background: #eef2f7;
   border-bottom: 1px solid var(--line);
 }
+/* Purchase(매입) — 차분한 뉴트럴 앰버로 배경화. Sales 를 부각하기 위해 상대적으로 톤 다운. */
 table.mini.wide thead tr.ig-group-row th.grp-purchase {
-  color: #b45309;
-  background: #fbf1e4;
-  border-bottom: 2px solid #e2a760;
+  color: #9c7a4d;
+  background: #f3ecdf;
+  border-bottom: 2px solid #dcc6a1;
 }
+/* Sales(매출) — 채도 높은 블루로 강조(더 진한 배경 + 굵은 하단 보더). */
 table.mini.wide thead tr.ig-group-row th.grp-sales {
-  color: #1d4ed8;
-  background: #e8f0fc;
-  border-bottom: 2px solid #6d9bef;
+  color: #1a49c0;
+  background: #d3e2fb;
+  border-bottom: 3px solid #2f6fed;
 }
 /* Purchase(Cost 9·Cost Amount 10)·Sales(Unit Price 12·Amount 13) 블럭화 —
    그룹 라벨 톤을 컬럼 헤더와 합계행까지 이어 하나의 색 블록으로 보이게(본문 행은 흰색 유지).
@@ -2911,13 +2913,13 @@ table.mini.wide thead tr.ig-group-row th.grp-sales {
 .ig-cquote-items thead tr:not(.ig-group-row) th:nth-child(10),
 .ig-cquote-items tfoot td:nth-child(9),
 .ig-cquote-items tfoot td:nth-child(10) {
-  background: #fbf4e8;
+  background: #f8f2e6;
 }
 .ig-cquote-items thead tr:not(.ig-group-row) th:nth-child(12),
 .ig-cquote-items thead tr:not(.ig-group-row) th:nth-child(13),
 .ig-cquote-items tfoot td:nth-child(12),
 .ig-cquote-items tfoot td:nth-child(13) {
-  background: #eaf1fc;
+  background: #e2ecfb;
 }
 
 /* ── RFQ 품목 편집 표(팝업 내) — 컨테이너 폭에 맞춰 넘치지 않게. ──────── */
