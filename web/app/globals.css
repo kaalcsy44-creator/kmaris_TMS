@@ -2876,27 +2876,30 @@ table.mini.wide thead th.ig-th:last-child {
 }
 
 /* 상위 그룹 헤더행 — Purchase(Cost·Cost Amount)·Sales(Unit Price·Amount) 묶음 라벨.
-   라벨 없는 구간은 투명 스페이서. colspan 셀은 ig-group 으로 폭/숨김 규칙에서 제외됨. */
+   라벨 없는 구간은 헤더 톤의 밴드로 이어 하나의 띠처럼 보이게. colspan 셀은
+   ig-group 으로 폭/숨김 규칙에서 제외됨. 높이는 sticky 2행 고정 오프셋(24px)과 일치. */
 table.mini.wide thead tr.ig-group-row th {
-  padding: 3px 8px;
+  height: 24px;
+  padding: 0 10px;
   text-align: center;
-  font-size: 10.5px;
+  font-size: 10px;
   font-weight: 800;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   white-space: nowrap;
-  background: transparent;
-  border-bottom: 0;
+  color: transparent;
+  background: #eef2f7;
+  border-bottom: 1px solid var(--line);
 }
 table.mini.wide thead tr.ig-group-row th.grp-purchase {
-  color: #64748b;
-  background: #f1f5f9;
-  border-bottom: 2px solid #cbd5e1;
+  color: #b45309;
+  background: #fbf1e4;
+  border-bottom: 2px solid #e2a760;
 }
 table.mini.wide thead tr.ig-group-row th.grp-sales {
-  color: var(--blue);
-  background: #eef3fc;
-  border-bottom: 2px solid var(--blue);
+  color: #1d4ed8;
+  background: #e8f0fc;
+  border-bottom: 2px solid #6d9bef;
 }
 
 /* ── RFQ 품목 편집 표(팝업 내) — 컨테이너 폭에 맞춰 넘치지 않게. ──────── */
@@ -4014,6 +4017,15 @@ table.mini input[type="checkbox"].row-check:indeterminate::after {
   position: sticky;
   top: 0;
   z-index: 3;
+}
+/* 그룹 헤더가 있는 표는 2행(그룹+컬럼 헤더) 모두 세로 고정.
+   그룹행은 top:0, 컬럼 헤더행은 그룹행 높이(24px)만큼 내려 붙인다. */
+.table-wrap.item-scroll table.mini thead tr.ig-group-row th {
+  top: 0;
+  z-index: 4;
+}
+.table-wrap.item-scroll table.mini thead tr.ig-group-row + tr th {
+  top: 24px;
 }
 .table-wrap.item-scroll table.mini tfoot td {
   position: sticky;
