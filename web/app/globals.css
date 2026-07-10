@@ -2809,7 +2809,10 @@ table.mini.wide td {
   vertical-align: middle;
 }
 table.mini.wide {
-  min-width: 1180px;
+  /* 고정 하한(1180px) 제거 — 컬럼을 줄이면 표 전체도 화면 폭 아래로 좁아질 수 있게.
+     기본 표시는 각 컬럼 min-width 합으로 자연히 넓게 유지되고, 사용자가 폭을 줄이면
+     그만큼 표가 좁아져 가로 스크롤이 사라진다. */
+  min-width: 0;
   table-layout: auto;
 }
 table.mini.wide th,
@@ -2900,6 +2903,21 @@ table.mini.wide thead tr.ig-group-row th.grp-sales {
   color: #1d4ed8;
   background: #e8f0fc;
   border-bottom: 2px solid #6d9bef;
+}
+/* Purchase(Cost 9·Cost Amount 10)·Sales(Unit Price 12·Amount 13) 블럭화 —
+   그룹 라벨 톤을 컬럼 헤더와 합계행까지 이어 하나의 색 블록으로 보이게(본문 행은 흰색 유지).
+   이 표(ig-cquote-items)에만 적용해 다른 편집표에는 영향 없음. 물리 컬럼 위치 고정(재정렬 없음). */
+.ig-cquote-items thead tr:not(.ig-group-row) th:nth-child(9),
+.ig-cquote-items thead tr:not(.ig-group-row) th:nth-child(10),
+.ig-cquote-items tfoot td:nth-child(9),
+.ig-cquote-items tfoot td:nth-child(10) {
+  background: #fbf4e8;
+}
+.ig-cquote-items thead tr:not(.ig-group-row) th:nth-child(12),
+.ig-cquote-items thead tr:not(.ig-group-row) th:nth-child(13),
+.ig-cquote-items tfoot td:nth-child(12),
+.ig-cquote-items tfoot td:nth-child(13) {
+  background: #eaf1fc;
 }
 
 /* ── RFQ 품목 편집 표(팝업 내) — 컨테이너 폭에 맞춰 넘치지 않게. ──────── */
