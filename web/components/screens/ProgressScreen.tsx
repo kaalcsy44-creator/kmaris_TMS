@@ -1855,6 +1855,7 @@ export function PipelineModal({
             {isNewProject ? (
               <div className="project-work-panel embedded-workspace embedded-detail">
                 <NewRfqForm
+                  embedded
                   onCreated={() => {
                     onChanged();
                     onClose();
