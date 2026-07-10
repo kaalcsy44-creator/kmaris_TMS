@@ -3271,29 +3271,36 @@ a.btn.primary:hover {
   order: 1; /* 소스상 도구가 먼저 와도 필드를 좌측에 둔다. */
   flex: 1 1 0;
   min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px 20px;
+  align-content: start;
 }
 .received-tools {
   order: 2;
-  flex: 1 1 0;
+  flex: 0 0 clamp(280px, 30%, 380px);
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
+/* 그룹 래퍼는 박스를 없애(display:contents) 개별 필드가 3열 그리드에 직접 배치되게 한다. */
 .basic-col {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
+  display: contents;
 }
 .basic-col-title {
+  grid-column: 1 / -1; /* 그룹 제목은 한 행 전체를 차지하는 구분선. */
+  margin-top: 4px;
   font-size: 11.5px;
   font-weight: 800;
   letter-spacing: 0.02em;
   text-transform: uppercase;
   color: var(--muted);
+}
+@media (max-width: 1280px) {
+  .received-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 @media (max-width: 980px) {
   .received-split {
