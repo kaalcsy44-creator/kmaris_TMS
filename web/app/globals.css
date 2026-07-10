@@ -5709,7 +5709,8 @@ table.mini .num {
   display: flex;
   gap: 6px;
   overflow-x: auto;
-  padding: 4px 0 10px;
+  /* 선택 탭의 위로-띄움 + 후광 링 + 드롭 그림자가 잘리지 않도록 상/하/좌우 여백 확보. */
+  padding: 9px 3px 18px;
   margin: 6px 0 0;
   border-bottom: 1px solid var(--line);
   flex: 0 0 auto;
@@ -5718,7 +5719,7 @@ table.mini .num {
   display: flex;
   gap: 6px;
   overflow-x: auto;
-  padding-bottom: 8px;
+  padding: 9px 3px 18px;
   margin-bottom: 12px;
 }
 /* 단계 카드 — 11개가 팝업 폭에 균등하게 모두 보이도록 flex 로 나눠 채운다. */
@@ -5799,9 +5800,9 @@ table.mini .num {
 .project-stage-tabs button.on {
   border-color: var(--blue);
   box-shadow: 0 0 0 3px rgba(0, 85, 168, 0.35), 0 6px 16px rgba(11, 29, 58, 0.2);
-  transform: translateY(-2px);
+  transform: translateY(-4px) scale(1.02);
   position: relative;
-  z-index: 1;
+  z-index: 2;
 }
 .project-stage-tabs button.on:not(.done) {
   background: #eef4fc;
@@ -5843,10 +5844,11 @@ table.mini .num {
 .project-stage-tabs button.current {
   border-color: var(--blue);
 }
-/* 보고 있는 단계(on): 파란 아웃라인으로 선택을 뚜렷하게(음영과 무관하게 우선). */
+/* 보고 있는 단계(on): 완료 단계들이 모두 같은 색(파랑/초록)이라 링만으로는 잘 구분되지
+   않으므로, 흰 간격 링(후광)으로 형제와 분리한 뒤 테마색 외곽 링 + 드롭 그림자로 띄운다. */
 .project-stage-tabs button.on {
   border-color: var(--blue);
-  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.35);
+  box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--blue), 0 9px 20px rgba(11, 29, 58, 0.3);
 }
 /* ── Service 프로젝트: 편집 모달 내부도 녹색(#16a05a) 톤으로 통일 ──────────────
    완료 단계탭 음영, 현재/선택 강조, 스테이지 번호, 이전/다음·주요 액션 버튼. */
@@ -5877,7 +5879,7 @@ table.mini .num {
 }
 .pl-modal.service .project-stage-tabs button.on {
   border-color: #16a05a;
-  box-shadow: 0 0 0 2px rgba(22, 160, 90, 0.35);
+  box-shadow: 0 0 0 2px #fff, 0 0 0 4px #16a05a, 0 9px 20px rgba(11, 29, 58, 0.3);
 }
 .pl-modal.service .project-stage-tabs button.current .st-label,
 .pl-modal.service .project-stage-tabs button.on .st-label {
