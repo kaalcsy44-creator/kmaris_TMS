@@ -3209,10 +3209,25 @@ a.btn.primary:hover {
   font-weight: 800;
   color: var(--navy);
 }
+/* 섹션 제목 옆 보조 설명 — 예: "Pricing — applied to item unit prices" */
+.section-hint {
+  font-weight: 500;
+  font-size: 12px;
+  color: var(--muted);
+}
 .form-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 14px;
+}
+/* 견적 편집기 — 문서정보 4필드를 한 줄로 고정(3+1 로 깨져 생기던 끝칸 공백 방지). */
+.quote-meta-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+/* 가격설정 — Item list 단가 계산에 직결. 3열 고정으로 6개 컨트롤이 2행에 꽉 차게. */
+.quote-price-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: end;
 }
 /* RFQ 신규/수정 모드 바 */
 .rfq-mode-bar {

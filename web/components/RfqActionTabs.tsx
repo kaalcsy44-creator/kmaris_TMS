@@ -1790,9 +1790,9 @@ function CustomerQuoteDetailModal({
           ) : null}
 
           <fieldset className="form-fieldset" disabled={!canEditThis}>
+          {/* 문서 정보 — 견적 식별·일자. 4필드 한 줄. */}
           <div className="form-section-title">Basic Info</div>
-          {/* 1~2행: 문서 식별·일자 항목 */}
-          <div className="form-grid">
+          <div className="form-grid quote-meta-grid">
             <div className="form-field">
               <label>Select Vendor quote</label>
               <select
@@ -1824,26 +1824,9 @@ function CustomerQuoteDetailModal({
             </div>
           </div>
 
-          {/* 3행: 마진·통화·환율·반올림 설정 */}
-          <div className="form-grid">
-            <div className="form-field">
-              <label>Default margin (%)</label>
-              <input
-                className="num"
-                type="number"
-                value={defaultMargin}
-                onChange={(e) => setDefaultMargin(Number(e.target.value))}
-              />
-            </div>
-            <div className="form-field" style={{ alignSelf: "end" }}>
-              <button
-                className="btn"
-                onClick={() => setItems((prev) => applyMarginToAll(prev, defaultMargin, costCurrency, currency, roundDigits))}
-                disabled={items.length === 0}
-              >
-                Apply margin to all
-              </button>
-            </div>
+          {/* 가격 설정 — 아래 Item list 단가 계산에 직접 반영. */}
+          <div className="form-section-title">Pricing <span className="section-hint">— applied to item unit prices</span></div>
+          <div className="form-grid quote-price-grid">
             <div className="form-field">
               <label>Cost currency (vendor)</label>
               <CurrencyToggle
@@ -1871,6 +1854,24 @@ function CustomerQuoteDetailModal({
                 value={roundDigits}
                 onChange={(d) => { setRoundDigits(d); setItems((prev) => recomputeCustomerQuoteItems(prev, costCurrency, currency, d, effRate)); }}
               />
+            </div>
+            <div className="form-field">
+              <label>Default margin (%)</label>
+              <input
+                className="num"
+                type="number"
+                value={defaultMargin}
+                onChange={(e) => setDefaultMargin(Number(e.target.value))}
+              />
+            </div>
+            <div className="form-field" style={{ alignSelf: "end" }}>
+              <button
+                className="btn"
+                onClick={() => setItems((prev) => applyMarginToAll(prev, defaultMargin, costCurrency, currency, roundDigits))}
+                disabled={items.length === 0}
+              >
+                Apply margin to all
+              </button>
             </div>
           </div>
           <CustomerQuoteItemEditor
@@ -3105,9 +3106,9 @@ function CustomerQuoteAction({
       <DetailTabBar tab={tab} onTab={setTab} />
       {tab === "edit" ? (
       <>
+      {/* 문서 정보 — 견적 식별·일자. 4필드 한 줄. */}
       <div className="form-section-title">Basic Info</div>
-      {/* 1~2행: 문서 식별·일자 항목 */}
-      <div className="form-grid">
+      <div className="form-grid quote-meta-grid">
         <div className="form-field">
           <label>Select Vendor quote</label>
           <select
@@ -3152,26 +3153,9 @@ function CustomerQuoteAction({
         </div>
       </div>
 
-      {/* 3행: 마진·통화·환율·반올림 설정 */}
-      <div className="form-grid">
-        <div className="form-field">
-          <label>Default margin (%)</label>
-          <input
-            className="num"
-            type="number"
-            value={defaultMargin}
-            onChange={(e) => setDefaultMargin(Number(e.target.value))}
-          />
-        </div>
-        <div className="form-field" style={{ alignSelf: "end" }}>
-          <button
-            className="btn"
-            onClick={() => setItems((prev) => applyMarginToAll(prev, defaultMargin, costCurrency, currency, roundDigits))}
-            disabled={items.length === 0}
-          >
-            Apply
-          </button>
-        </div>
+      {/* 가격 설정 — 아래 Item list 단가 계산에 직접 반영. */}
+      <div className="form-section-title">Pricing <span className="section-hint">— applied to item unit prices</span></div>
+      <div className="form-grid quote-price-grid">
         <div className="form-field">
           <label>Cost currency (vendor)</label>
           <CurrencyToggle
@@ -3199,6 +3183,24 @@ function CustomerQuoteAction({
             value={roundDigits}
             onChange={(d) => { setRoundDigits(d); setItems((prev) => recomputeCustomerQuoteItems(prev, costCurrency, currency, d, effRate)); }}
           />
+        </div>
+        <div className="form-field">
+          <label>Default margin (%)</label>
+          <input
+            className="num"
+            type="number"
+            value={defaultMargin}
+            onChange={(e) => setDefaultMargin(Number(e.target.value))}
+          />
+        </div>
+        <div className="form-field" style={{ alignSelf: "end" }}>
+          <button
+            className="btn"
+            onClick={() => setItems((prev) => applyMarginToAll(prev, defaultMargin, costCurrency, currency, roundDigits))}
+            disabled={items.length === 0}
+          >
+            Apply
+          </button>
         </div>
       </div>
 
