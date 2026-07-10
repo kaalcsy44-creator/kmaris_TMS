@@ -1488,35 +1488,25 @@ function VendorQuoteDetailModal({
           </aside>
           {/* 좌측: 입력 필드(세로 1열, 성격별 그룹 스택). */}
           <div className="received-fields">
-            <div className="basic-col">
-              <div className="basic-col-title">Quote details</div>
-              <div className="form-field">
-                <label>Vendor quote no.</label>
-                <input value={no} onChange={(e) => setNo(e.target.value)} />
-              </div>
-              <div className="form-field">
-                <label>Currency</label>
-                <CurrencyToggle value={currency} onChange={setCurrency} />
-              </div>
-              <FxRateControl
-                rate={fxRate}
-                onRate={setFxRate}
-                mode={fxMode}
-                onMode={setFxMode}
-                date={receivedAt}
-              />
+            <div className="form-field">
+              <label>Vendor quote no.</label>
+              <input value={no} onChange={(e) => setNo(e.target.value)} />
             </div>
-            <div className="basic-col">
-              <div className="basic-col-title">Receipt</div>
-              <div className="form-field">
-                <label>Quote received at</label>
-                <input type="datetime-local" value={receivedAt} onChange={(e) => setReceivedAt(e.target.value)} />
-              </div>
-              <div className="form-field">
-                <label>Notes</label>
-                <input value={notes} onChange={(e) => setNotes(e.target.value)} />
-              </div>
+            <div className="form-field">
+              <label>Quote received at</label>
+              <input type="datetime-local" value={receivedAt} onChange={(e) => setReceivedAt(e.target.value)} />
             </div>
+            <div className="form-field">
+              <label>Currency</label>
+              <CurrencyToggle value={currency} onChange={setCurrency} />
+            </div>
+            <FxRateControl
+              rate={fxRate}
+              onRate={setFxRate}
+              mode={fxMode}
+              onMode={setFxMode}
+              date={receivedAt}
+            />
           </div>
           </div>
           <VendorQuoteItemEditor
@@ -1531,6 +1521,10 @@ function VendorQuoteDetailModal({
             }
           />
           <TermsEditor terms={terms} onChange={setTerms} />
+          <div className="form-field" style={{ marginTop: 8 }}>
+            <label>Notes</label>
+            <textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
+          </div>
           </fieldset>
           <div className="form-actions">
             <StageTotal
@@ -2689,55 +2683,45 @@ function VendorQuoteAction({
           </aside>
           {/* 좌측: 입력 필드(세로 1열, 성격별 그룹 스택). */}
           <div className="received-fields">
-            <div className="basic-col">
-              <div className="basic-col-title">Quote source</div>
-              <div className="form-field">
-                <label>Select Vendor RFQ</label>
-                <select
-                  value={vrfqId}
-                  onChange={(e) =>
-                    setVrfqId(e.target.value === "" ? "" : Number(e.target.value))
-                  }
-                >
-                  <option value="">Select Vendor RFQ…</option>
-                  {vendorRfqs.map((v) => (
-                    <option key={v.id} value={v.id}>
-                      {v.vendor}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="form-field">
-                <label>Vendor quote no.</label>
-                <input value={no} onChange={(e) => setNo(e.target.value)} />
-              </div>
-              <div className="form-field">
-                <label>Currency</label>
-                <CurrencyToggle value={currency} onChange={setCurrency} />
-              </div>
-              <FxRateControl
-                rate={fxRate}
-                onRate={setFxRate}
-                mode={fxMode}
-                onMode={setFxMode}
-                date={receivedAt}
+            <div className="form-field">
+              <label>Select Vendor RFQ</label>
+              <select
+                value={vrfqId}
+                onChange={(e) =>
+                  setVrfqId(e.target.value === "" ? "" : Number(e.target.value))
+                }
+              >
+                <option value="">Select Vendor RFQ…</option>
+                {vendorRfqs.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.vendor}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="form-field">
+              <label>Vendor quote no.</label>
+              <input value={no} onChange={(e) => setNo(e.target.value)} />
+            </div>
+            <div className="form-field">
+              <label>Quote received at</label>
+              <input
+                type="datetime-local"
+                value={receivedAt}
+                onChange={(e) => setReceivedAt(e.target.value)}
               />
             </div>
-            <div className="basic-col">
-              <div className="basic-col-title">Receipt</div>
-              <div className="form-field">
-                <label>Quote received at</label>
-                <input
-                  type="datetime-local"
-                  value={receivedAt}
-                  onChange={(e) => setReceivedAt(e.target.value)}
-                />
-              </div>
-              <div className="form-field">
-                <label>Notes</label>
-                <input value={notes} onChange={(e) => setNotes(e.target.value)} />
-              </div>
+            <div className="form-field">
+              <label>Currency</label>
+              <CurrencyToggle value={currency} onChange={setCurrency} />
             </div>
+            <FxRateControl
+              rate={fxRate}
+              onRate={setFxRate}
+              mode={fxMode}
+              onMode={setFxMode}
+              date={receivedAt}
+            />
           </div>
           </div>
 
@@ -2760,6 +2744,11 @@ function VendorQuoteAction({
           />
 
           <TermsEditor terms={terms} onChange={setTerms} />
+
+          <div className="form-field" style={{ marginTop: 8 }}>
+            <label>Notes</label>
+            <textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
+          </div>
 
           <div className="form-actions">
             <StageTotal
