@@ -220,11 +220,11 @@ export default function MarketingScreen() {
         <button
           type="button"
           className="compose-fab"
-          title="홍보 이메일 보내기"
+          title="Compose promotional email"
           onClick={() => setComposing(true)}
         >
           <span className="compose-fab-plus">＋</span>
-          <span className="compose-fab-label">이메일</span>
+          <span className="compose-fab-label">Email</span>
         </button>
       ) : null}
 
@@ -268,7 +268,7 @@ export function MarketingForm({
 
   async function save() {
     if (!valid) {
-      setErr("대상 고객사를 선택하거나 잠정사 이름을 입력하세요.");
+      setErr("Select a target customer or enter a prospect name.");
       return;
     }
     setBusy(true);
