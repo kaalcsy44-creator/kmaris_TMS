@@ -2132,10 +2132,14 @@ function VendorRfqAction({
   }, [rfqId]);
 
   // "Load customer RFQ" — Customer RFQ 품목으로 다시 채운다(편집·삭제 후 원복용).
+  // 고객 RFQ에 노트가 있으면 "Note to vendor" 초안으로도 함께 불러온다(빈 노트로 덮어쓰진 않음).
   function loadCustomerRfqItems() {
     if (!rfqId) return;
     fetchRfqDetail(rfqId)
-      .then((d) => setRfqItems(d.items || []))
+      .then((d) => {
+        setRfqItems(d.items || []);
+        if (d.notes) setNotes(d.notes);
+      })
       .catch(() => undefined);
   }
 
