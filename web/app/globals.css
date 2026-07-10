@@ -121,8 +121,8 @@ body {
 }
 .topnav-logo {
   display: block;
-  width: 119px;
-  height: 34px;
+  width: 133px;
+  height: 38px;
   object-fit: contain;
   filter: brightness(0) invert(1);
 }
