@@ -5224,7 +5224,8 @@ table.mini .num {
   min-width: 0;
   font-size: 10px;
   font-weight: 600;
-  color: var(--ink);
+  /* 부품공급(기본) 프로젝트명은 블루 계열로 통일(서비스=초록, 취소=회색은 각각 override). */
+  color: var(--blue);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
