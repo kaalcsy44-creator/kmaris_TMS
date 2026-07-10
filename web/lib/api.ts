@@ -63,10 +63,33 @@ async function handle<T>(res: Response, path: string): Promise<T> {
     throw new Error("인증이 필요합니다.");
   }
   if (!res.ok) {
-    const e = (await res.json().catch(() => ({}))) as { detail?: string };
-    throw new Error(e.detail ?? `API ${res.status} ${res.statusText} — ${path}`);
+    const e = (await res.json().catch(() => ({}))) as { detail?: unknown };
+    throw new Error(errorDetailToString(e?.detail) || `API ${res.status} ${res.statusText} — ${path}`);
   }
   return res.json() as Promise<T>;
+}
+
+// FastAPI 오류 detail 을 사람이 읽을 문자열로. 문자열이면 그대로, 검증오류(배열)면 msg 결합,
+// 객체면 JSON 으로. (예전엔 배열/객체를 new Error 에 그대로 넘겨 "[object Object]" 로 표시됐다.)
+function errorDetailToString(detail: unknown): string {
+  if (!detail) return "";
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    return detail
+      .map((d) => (d && typeof d === "object" && "msg" in d ? String((d as { msg: unknown }).msg) : JSON.stringify(d)))
+      .filter(Boolean)
+      .join("; ");
+  }
+  if (typeof detail === "object") {
+    const d = detail as { msg?: unknown; detail?: unknown };
+    if (typeof d.msg === "string") return d.msg;
+    try {
+      return JSON.stringify(detail);
+    } catch {
+      return "";
+    }
+  }
+  return String(detail);
 }
 
 async function get<T>(path: string): Promise<T> {

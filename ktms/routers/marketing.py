@@ -81,7 +81,7 @@ def create_marketing(body: MarketingActivityCreate, user: dict = Depends(get_cur
         s.close()
 
 
-@app.put("/api/admin/marketing/{row_id}", dependencies=[Depends(require_token)])
+@app.put("/api/admin/marketing/{row_id:int}", dependencies=[Depends(require_token)])
 def update_marketing(row_id: int, body: MarketingActivityCreate):
     if not (body.customer_id or (body.prospect_name or "").strip()):
         raise HTTPException(status_code=400, detail="대상 고객사(선택) 또는 잠정사 이름을 입력하세요.")
@@ -107,7 +107,7 @@ def update_marketing(row_id: int, body: MarketingActivityCreate):
         s.close()
 
 
-@app.delete("/api/admin/marketing/{row_id}", dependencies=[Depends(require_token)])
+@app.delete("/api/admin/marketing/{row_id:int}", dependencies=[Depends(require_token)])
 def delete_marketing(row_id: int):
     s = get_session()
     try:
