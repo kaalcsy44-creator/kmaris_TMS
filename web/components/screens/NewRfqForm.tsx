@@ -466,7 +466,10 @@ export default function NewRfqForm({
       <div className="sub-h" style={{ marginTop: 0, marginBottom: 8 }}>
         Basic info
       </div>
-      {/* 도구 모음 — Basic info 바로 아래에 배치. 평소엔 접혀 있고, 버튼으로 필요한 패널만 펼친다. */}
+      {/* 좌: 입력 필드 / 우: Auto-fill 도구·소스파일. 소스상 도구가 먼저 와도 CSS order 로 우측 배치. */}
+      <div className="received-split">
+      <aside className="received-tools">
+      {/* 도구 모음 — Auto-fill · 빠른등록. 평소엔 접혀 있고, 버튼으로 필요한 패널만 펼친다. */}
       <div className="form-tools">
         <button
           type="button"
@@ -583,8 +586,9 @@ export default function NewRfqForm({
         </div>
       ) : null}
 
-      {/* Received 단계 Basic Info — 좌: 고객·선박 / 우: 수신·처리 정보. */}
-      <div className="basic-2col">
+      </aside>
+      {/* 좌측: 입력 필드(세로 1열, 성격별 그룹 스택). */}
+      <div className="received-fields">
         <div className="basic-col">
           <div className="basic-col-title">Customer &amp; vessel</div>
           <Field label="Customer *">
@@ -691,6 +695,7 @@ export default function NewRfqForm({
             </Field>
           ) : null}
         </div>
+      </div>
       </div>
 
       <div className="items-head" style={{ marginTop: 18 }}>

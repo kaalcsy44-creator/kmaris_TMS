@@ -1447,7 +1447,9 @@ function VendorQuoteDetailModal({
 
           <fieldset className="form-fieldset" disabled={!canEditThis}>
           <div className="form-section-title">Basic Info</div>
-          {/* Auto-fill 은 1단계 폼과 동일하게 제목 바로 아래(입력칸 위)에 배치. */}
+          {/* 좌: 입력 필드 / 우: Auto-fill 도구·소스파일(CSS order 로 우측 배치). */}
+          <div className="received-split">
+          <aside className="received-tools">
           <div className="form-tools">
             <button
               type="button"
@@ -1483,8 +1485,9 @@ function VendorQuoteDetailModal({
             files={ocrFiles}
             onRemove={canEditThis ? (i) => setOcrFiles((prev) => prev.filter((_, idx) => idx !== i)) : undefined}
           />
-          {/* Received 단계 Basic Info — 좌: 견적·통화 / 우: 수신 정보. */}
-          <div className="basic-2col">
+          </aside>
+          {/* 좌측: 입력 필드(세로 1열, 성격별 그룹 스택). */}
+          <div className="received-fields">
             <div className="basic-col">
               <div className="basic-col-title">Quote details</div>
               <div className="form-field">
@@ -1514,6 +1517,7 @@ function VendorQuoteDetailModal({
                 <input value={notes} onChange={(e) => setNotes(e.target.value)} />
               </div>
             </div>
+          </div>
           </div>
           <VendorQuoteItemEditor
             items={items}
@@ -2640,7 +2644,9 @@ function VendorQuoteAction({
       ) : null}
       <>
           <div className="form-section-title">Basic Info</div>
-          {/* Auto-fill 은 1단계 폼과 동일하게 제목 바로 아래(입력칸 위)에 배치. */}
+          {/* 좌: 입력 필드 / 우: Auto-fill 도구·소스파일(CSS order 로 우측 배치). */}
+          <div className="received-split">
+          <aside className="received-tools">
           <div className="form-tools">
             <button
               type="button"
@@ -2676,8 +2682,9 @@ function VendorQuoteAction({
             files={ocrFiles}
             onRemove={(i) => setOcrFiles((prev) => prev.filter((_, idx) => idx !== i))}
           />
-          {/* Received 단계 Basic Info — 좌: 견적출처·통화 / 우: 수신 정보. */}
-          <div className="basic-2col">
+          </aside>
+          {/* 좌측: 입력 필드(세로 1열, 성격별 그룹 스택). */}
+          <div className="received-fields">
             <div className="basic-col">
               <div className="basic-col-title">Quote source</div>
               <div className="form-field">
@@ -2727,6 +2734,7 @@ function VendorQuoteAction({
                 <input value={notes} onChange={(e) => setNotes(e.target.value)} />
               </div>
             </div>
+          </div>
           </div>
 
           <VendorQuoteItemEditor

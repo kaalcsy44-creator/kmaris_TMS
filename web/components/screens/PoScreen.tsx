@@ -541,6 +541,9 @@ function OrderDetailModal({
           ) : null}
 
           <fieldset className="form-fieldset" disabled={!canEditThis}>
+          {/* 좌: 입력 필드 / 우: Auto-fill 도구·소스파일(CSS order 로 우측 배치). */}
+          <div className="received-split">
+          <aside className="received-tools">
           <div className="form-tools">
             <button
               type="button"
@@ -576,9 +579,9 @@ function OrderDetailModal({
             files={ocrFiles}
             onRemove={canEditThis ? (i) => setOcrFiles((prev) => prev.filter((_, idx) => idx !== i)) : undefined}
           />
-
-          {/* Received 단계 Basic Info — 좌: 고객·선박 / 우: 주문 정보. */}
-          <div className="basic-2col">
+          </aside>
+          {/* 좌측: 입력 필드(세로 1열, 성격별 그룹 스택). */}
+          <div className="received-fields">
             <div className="basic-col">
               <div className="basic-col-title">Customer &amp; vessel</div>
               <div className="form-field">
@@ -635,6 +638,7 @@ function OrderDetailModal({
                 <input type="date" value={promised} onChange={(e) => setPromised(e.target.value)} />
               </div>
             </div>
+          </div>
           </div>
           <ItemEditor
             items={items}
@@ -1244,6 +1248,9 @@ function CustomerPoNewForm({
 
   return (
     <>
+      {/* 좌: 입력 필드 / 우: Auto-fill 도구·소스파일(CSS order 로 우측 배치). */}
+      <div className="received-split">
+      <aside className="received-tools">
       <div className="form-tools">
         <button
           type="button"
@@ -1282,9 +1289,9 @@ function CustomerPoNewForm({
         files={ocrFiles}
         onRemove={(i) => setOcrFiles((prev) => prev.filter((_, idx) => idx !== i))}
       />
-
-      {/* Received 단계 Basic Info — 좌: 고객·선박 / 우: 주문 정보. */}
-      <div className="basic-2col">
+      </aside>
+      {/* 좌측: 입력 필드(세로 1열, 성격별 그룹 스택). */}
+      <div className="received-fields">
         <div className="basic-col">
           <div className="basic-col-title">Customer &amp; vessel</div>
           <div className="form-field">
@@ -1349,22 +1356,22 @@ function CustomerPoNewForm({
             />
           </div>
         </div>
+        {/* 임베드(프로젝트 워크스페이스)에선 이 프로젝트로 자동 연결되므로 Link RFQ 셀렉터 불필요. */}
+        {projectRfqId == null ? (
+          <div className="form-field">
+            <label>Link RFQ</label>
+            <select value={rfqId} onChange={(e) => setRfqId(e.target.value ? Number(e.target.value) : "")}>
+              <option value="">— None —</option>
+              {options.rfqs.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.rfq_no} · {r.customer} · {r.vessel || "—"} · {tr(r.status)}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : null}
       </div>
-
-      {/* 임베드(프로젝트 워크스페이스)에선 이 프로젝트로 자동 연결되므로 Link RFQ 셀렉터 불필요. */}
-      {projectRfqId == null ? (
-        <div className="form-field" style={{ marginTop: 14 }}>
-          <label>Link RFQ</label>
-          <select value={rfqId} onChange={(e) => setRfqId(e.target.value ? Number(e.target.value) : "")}>
-            <option value="">— None —</option>
-            {options.rfqs.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.rfq_no} · {r.customer} · {r.vessel || "—"} · {tr(r.status)}
-              </option>
-            ))}
-          </select>
-        </div>
-      ) : null}
+      </div>
 
       <ItemEditor
         items={items}
