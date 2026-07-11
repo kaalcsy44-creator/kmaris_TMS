@@ -117,14 +117,14 @@ body {
   align-items: center;
   text-decoration: none;
   flex-shrink: 0;
-  height: 44px;
+  height: 46px;
 }
 .topnav-logo {
   display: block;
-  width: 133px;
-  height: 38px;
+  width: 147px;
+  height: 42px;
   object-fit: contain;
-  filter: brightness(0) invert(1);
+  filter: brightness(2.2) saturate(0.85);
 }
 .topnav-menu {
   display: flex;
