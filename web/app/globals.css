@@ -1599,6 +1599,54 @@ table.perm-matrix td.perm-mod {
   background: #e6e9ef;
   color: #4a5568;
 }
+.pl-note-tag.dir.in {
+  background: #dcfce7;
+  color: #15803d;
+}
+.pl-note-tag.dir.out {
+  background: #fef3c7;
+  color: #b45309;
+}
+/* 수신(In)/발신(Out) 토글 — 세그먼트 컨트롤 */
+.pl-dir-toggle {
+  display: inline-flex;
+  border: 1px solid #c7d0de;
+  border-radius: 5px;
+  overflow: hidden;
+}
+.pl-dir-btn {
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border: 0;
+  background: #fff;
+  color: #64748b;
+  cursor: pointer;
+  line-height: 1.2;
+}
+.pl-dir-btn + .pl-dir-btn {
+  border-left: 1px solid #c7d0de;
+}
+.pl-dir-btn:hover {
+  background: #f1f5f9;
+}
+.pl-dir-btn.on.in {
+  background: #16a34a;
+  color: #fff;
+}
+.pl-dir-btn.on.out {
+  background: #d97706;
+  color: #fff;
+}
+.pl-tl-dir {
+  font-weight: 700;
+}
+.pl-tl-dir.in {
+  color: #15803d;
+}
+.pl-tl-dir.out {
+  color: #b45309;
+}
 .pl-note-form {
   display: flex;
   flex-direction: column;

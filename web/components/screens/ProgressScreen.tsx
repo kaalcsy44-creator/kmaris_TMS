@@ -2208,12 +2208,13 @@ function NoteForm({
 }: {
   initial: StageNote | null;
   submitLabel: string;
-  onSubmit: (p: { text: string; datetime: string; party: string; channel: string }) => Promise<void>;
+  onSubmit: (p: { text: string; datetime: string; party: string; channel: string; direction: string }) => Promise<void>;
   onCancel: () => void;
 }) {
   const [dt, setDt] = useState(initial?.datetime || initial?.at || nowLocalInput());
   const [party, setParty] = useState(initial?.party || "Customer");
   const [channel, setChannel] = useState(initial?.channel || "Email");
+  const [direction, setDirection] = useState<"in" | "out" | "">(initial?.direction || "");
   const [text, setText] = useState(initial?.text || "");
   const [busy, setBusy] = useState(false);
 
@@ -2222,7 +2223,7 @@ function NoteForm({
     if (!t) return;
     setBusy(true);
     try {
-      await onSubmit({ text: t, datetime: dt, party, channel });
+      await onSubmit({ text: t, datetime: dt, party, channel, direction });
     } finally {
       setBusy(false);
     }
@@ -2251,6 +2252,25 @@ function NoteForm({
             </option>
           ))}
         </select>
+        {/* 수신(In)/발신(Out) 토글 — 같은 버튼 다시 누르면 해제(해당없음). */}
+        <div className="pl-dir-toggle" role="group" aria-label="Direction">
+          <button
+            type="button"
+            className={`pl-dir-btn${direction === "in" ? " on in" : ""}`}
+            onClick={() => setDirection((d) => (d === "in" ? "" : "in"))}
+            title="Received (수신)"
+          >
+            ↓ In
+          </button>
+          <button
+            type="button"
+            className={`pl-dir-btn${direction === "out" ? " on out" : ""}`}
+            onClick={() => setDirection((d) => (d === "out" ? "" : "out"))}
+            title="Sent (발신)"
+          >
+            ↑ Out
+          </button>
+        </div>
       </div>
       <div className="pl-note-add">
         <input
@@ -2341,6 +2361,11 @@ function DealTimeline({
                 </div>
               ) : (
                 <div className="pl-tl-text">
+                  {e.note?.direction === "in" ? (
+                    <span className="pl-tl-dir in" title="Received (수신)">↓ </span>
+                  ) : e.note?.direction === "out" ? (
+                    <span className="pl-tl-dir out" title="Sent (발신)">↑ </span>
+                  ) : null}
                   {e.note?.party || e.note?.channel ? (
                     <span className="pl-tl-meta">{joinDot(e.note?.party, e.note?.channel)} </span>
                   ) : null}
@@ -2370,7 +2395,7 @@ function StageNotes({
   const [adding, setAdding] = useState(false);
   const [editIndex, setEditIndex] = useState<number | null>(null);
 
-  async function submitAdd(p: { text: string; datetime: string; party: string; channel: string }) {
+  async function submitAdd(p: { text: string; datetime: string; party: string; channel: string; direction: string }) {
     try {
       await addRfqStageNote(rfqId, stage, p);
       setAdding(false);
@@ -2382,7 +2407,7 @@ function StageNotes({
 
   async function submitEdit(
     index: number,
-    p: { text: string; datetime: string; party: string; channel: string }
+    p: { text: string; datetime: string; party: string; channel: string; direction: string }
   ) {
     try {
       await updateRfqStageNote(rfqId, stage, index, p);
@@ -2420,6 +2445,11 @@ function StageNotes({
               <span className="pl-note-at">{fmtStageDate(n.datetime || n.at)}</span>
               {n.party ? <span className="pl-note-tag party">{n.party}</span> : null}
               {n.channel ? <span className="pl-note-tag channel">{n.channel}</span> : null}
+              {n.direction === "in" ? (
+                <span className="pl-note-tag dir in" title="Received (수신)">↓ In</span>
+              ) : n.direction === "out" ? (
+                <span className="pl-note-tag dir out" title="Sent (발신)">↑ Out</span>
+              ) : null}
               {writable ? (
                 <span className="pl-note-actions">
                   <button
