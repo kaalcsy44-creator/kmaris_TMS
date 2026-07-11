@@ -6,7 +6,14 @@ import type { ColumnLayout, LayoutCol } from "./useColumnLayout";
 // useColumnLayout 과 함께 쓰는 공용 UI: 폭 조절 핸들 · 헤더 드래그 재정렬 · 컬럼 표시/숨김 메뉴.
 
 /** 헤더 우측 끝의 폭 조절 핸들. 부모 th 의 현재 폭을 기준으로 드래그한다. */
-export function ColumnResizer({ onResize }: { onResize: (px: number) => void }) {
+export function ColumnResizer({
+  onResize,
+  onResizeEnd,
+}: {
+  onResize: (px: number) => void;
+  /** 드래그 종료 시 1회 호출(예: localStorage 저장). */
+  onResizeEnd?: () => void;
+}) {
   function onPointerDown(e: React.PointerEvent<HTMLSpanElement>) {
     e.preventDefault();
     e.stopPropagation();
@@ -14,10 +21,24 @@ export function ColumnResizer({ onResize }: { onResize: (px: number) => void }) 
     if (!th) return;
     const startX = e.clientX;
     const startW = th.offsetWidth;
+    // pointermove 는 초당 수십~수백 번 발생하므로 rAF 로 프레임당 1회만 반영해 리렌더 폭주를 막는다.
+    let raf = 0;
+    let pendingW = startW;
+    function flush() {
+      raf = 0;
+      onResize(pendingW);
+    }
     function move(ev: PointerEvent) {
-      onResize(startW + (ev.clientX - startX));
+      pendingW = startW + (ev.clientX - startX);
+      if (!raf) raf = requestAnimationFrame(flush);
     }
     function up() {
+      if (raf) {
+        cancelAnimationFrame(raf);
+        raf = 0;
+      }
+      onResize(pendingW); // 마지막 위치 확정 반영
+      onResizeEnd?.(); // 저장은 여기서 한 번만
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
       document.body.classList.remove("col-resizing");

@@ -947,7 +947,7 @@ function PipelineTable({
                         {sorted ? (sortDir === "asc" ? "▲" : "▼") : "▾"}
                       </span>
                     </button>
-                    <ColumnResizer onResize={(px) => layout.setWidth(c.key, px)} />
+                    <ColumnResizer onResize={(px) => layout.setWidth(c.key, px)} onResizeEnd={layout.commitWidths} />
                   </th>
                 );
               })}

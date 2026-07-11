@@ -76,7 +76,7 @@ export function ItemTh({
           ✕
         </button>
       ) : null}
-      <ColumnResizer onResize={(px) => layout.setWidth(k, px)} />
+      <ColumnResizer onResize={(px) => layout.setWidth(k, px)} onResizeEnd={layout.commitWidths} />
     </th>
   );
 }

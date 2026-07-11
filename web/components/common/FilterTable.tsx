@@ -328,7 +328,7 @@ export default function FilterTable<T>({
                       <span className="pl-th-caret">{sorted ? (sortDir === "asc" ? "▲" : "▼") : "▾"}</span>
                     </button>
                     {customize ? (
-                      <ColumnResizer onResize={(px) => layout.setWidth(c.key, px)} />
+                      <ColumnResizer onResize={(px) => layout.setWidth(c.key, px)} onResizeEnd={layout.commitWidths} />
                     ) : null}
                   </th>
                 );

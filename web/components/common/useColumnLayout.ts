@@ -16,7 +16,10 @@ export type ColumnLayout = {
   /** key → 폭(px). 미설정이면 undefined(=CSS 기본폭). */
   widths: Record<string, number>;
   hidden: Set<string>;
+  /** 드래그 중 실시간 폭 반영(상태만 갱신, localStorage 저장 안 함). */
   setWidth: (key: string, px: number) => void;
+  /** 드래그 종료 시 현재 폭을 localStorage 에 한 번만 저장. */
+  commitWidths: () => void;
   /** order 상의 위치를 from → to 로 이동(숨김 포함 전체 기준). */
   moveKey: (fromKey: string, toKey: string) => void;
   toggleHidden: (key: string) => void;
@@ -112,17 +115,19 @@ export function useColumnLayout(tableId: string, cols: LayoutCol[]): ColumnLayou
     [tableId]
   );
 
-  const setWidth = useCallback(
-    (key: string, px: number) => {
-      const w = Math.max(MIN_W, Math.min(MAX_W, Math.round(px)));
-      setWidths((prev) => {
-        const next = { ...prev, [key]: w };
-        persist({ widths: next });
-        return next;
-      });
-    },
-    [persist]
-  );
+  const setWidth = useCallback((key: string, px: number) => {
+    const w = Math.max(MIN_W, Math.min(MAX_W, Math.round(px)));
+    // 드래그 중엔 상태만 갱신(리렌더는 rAF 로 스로틀됨). localStorage 저장은 commitWidths 에서.
+    setWidths((prev) => (prev[key] === w ? prev : { ...prev, [key]: w }));
+  }, []);
+
+  const commitWidths = useCallback(() => {
+    // 현재 폭을 저장만 하고 상태는 그대로(같은 참조 반환 → 리렌더 없음).
+    setWidths((prev) => {
+      persist({ widths: prev });
+      return prev;
+    });
+  }, [persist]);
 
   const moveKey = useCallback(
     (fromKey: string, toKey: string) => {
@@ -179,6 +184,7 @@ export function useColumnLayout(tableId: string, cols: LayoutCol[]): ColumnLayou
     widths,
     hidden,
     setWidth,
+    commitWidths,
     moveKey,
     toggleHidden,
     reset,
