@@ -124,7 +124,7 @@ body {
   width: 147px;
   height: 42px;
   object-fit: contain;
-  filter: brightness(2.2) saturate(0.85);
+  filter: invert(1) hue-rotate(180deg) brightness(1.08) saturate(1.15);
 }
 .topnav-menu {
   display: flex;
