@@ -35,8 +35,9 @@ type Stored = {
 };
 
 const KEY_PREFIX = "ktms.tableLayout.";
-const MIN_W = 60;
-const MAX_W = 900;
+/** 컬럼 폭 한계(px). 드래그 미리보기(ColumnResizer)와 저장(setWidth)이 동일 값을 써야 스냅이 없다. */
+export const COL_MIN_W = 60;
+export const COL_MAX_W = 900;
 
 function load(tableId: string): Stored {
   if (typeof window === "undefined") return {};
@@ -116,7 +117,7 @@ export function useColumnLayout(tableId: string, cols: LayoutCol[]): ColumnLayou
   );
 
   const setWidth = useCallback((key: string, px: number) => {
-    const w = Math.max(MIN_W, Math.min(MAX_W, Math.round(px)));
+    const w = Math.max(COL_MIN_W, Math.min(COL_MAX_W, Math.round(px)));
     // 드래그 중엔 상태만 갱신(리렌더는 rAF 로 스로틀됨). localStorage 저장은 commitWidths 에서.
     setWidths((prev) => (prev[key] === w ? prev : { ...prev, [key]: w }));
   }, []);

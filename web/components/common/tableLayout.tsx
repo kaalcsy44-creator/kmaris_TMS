@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { ColumnLayout, LayoutCol } from "./useColumnLayout";
+import { COL_MIN_W, COL_MAX_W, type ColumnLayout, type LayoutCol } from "./useColumnLayout";
 
 // useColumnLayout 과 함께 쓰는 공용 UI: 폭 조절 핸들 · 헤더 드래그 재정렬 · 컬럼 표시/숨김 메뉴.
 
@@ -19,14 +19,47 @@ export function ColumnResizer({
     e.stopPropagation();
     const th = (e.currentTarget.closest("th") ?? e.currentTarget.parentElement) as HTMLElement | null;
     if (!th) return;
+    const table = th.closest("table") as HTMLTableElement | null;
     const startX = e.clientX;
     const startW = th.offsetWidth;
-    // pointermove 는 초당 수십~수백 번 발생하므로 rAF 로 프레임당 1회만 반영해 리렌더 폭주를 막는다.
+    // 0-based 물리 컬럼 위치(th 가 아닌 경우 대비 -1 가드).
+    const colIndex = (th as HTMLTableCellElement).cellIndex ?? -1;
+    const n = colIndex + 1; // nth-child(1-based)
+
+    // 드래그 중엔 React 상태를 건드리지 않고, 주입한 <style> 로만 폭을 미리보기한다.
+    // → 프레임마다 React 리렌더가 없어 부드럽고, 백그라운드 새로고침으로 표가 리렌더돼도
+    //   미리보기가 되돌아가지 않는다(React 가 소유한 노드를 건드리지 않으므로).
+    // 한 규칙으로 두 종류의 표를 모두 커버:
+    //  · <colgroup><col> 표(FilterTable·PipelineTable) → col:nth-child 로 컬럼 폭 지정
+    //  · nth-child <style> 표(itemGrid)               → th/td:nth-child 로 셀 폭 지정
+    let liveStyle: HTMLStyleElement | null = null;
+    if (table && colIndex >= 0) {
+      table.setAttribute("data-col-resizing", "");
+      liveStyle = document.createElement("style");
+      document.head.appendChild(liveStyle);
+    }
+
+    const clamp = (w: number) => Math.max(COL_MIN_W, Math.min(COL_MAX_W, Math.round(w)));
+    function preview(w: number) {
+      if (!liveStyle) return;
+      const wpx = `${w}px`;
+      liveStyle.textContent =
+        `table[data-col-resizing]>colgroup>col:nth-child(${n})` +
+        `{width:${wpx}!important;min-width:${wpx}!important}` +
+        `table[data-col-resizing] thead th:not(.ig-group):nth-child(${n}),` +
+        `table[data-col-resizing] tbody td:nth-child(${n}),` +
+        `table[data-col-resizing] tfoot td:nth-child(${n})` +
+        `{width:${wpx}!important;min-width:${wpx}!important;max-width:${wpx}!important}` +
+        `table[data-col-resizing] tbody td:nth-child(${n}) input,` +
+        `table[data-col-resizing] tbody td:nth-child(${n}) textarea{min-width:0!important}`;
+    }
+
+    // pointermove 는 초당 수십~수백 번 발생하므로 rAF 로 프레임당 1회만 DOM 을 갱신한다.
     let raf = 0;
     let pendingW = startW;
     function flush() {
       raf = 0;
-      onResize(pendingW);
+      preview(clamp(pendingW));
     }
     function move(ev: PointerEvent) {
       pendingW = startW + (ev.clientX - startX);
@@ -37,8 +70,14 @@ export function ColumnResizer({
         cancelAnimationFrame(raf);
         raf = 0;
       }
-      onResize(pendingW); // 마지막 위치 확정 반영
-      onResizeEnd?.(); // 저장은 여기서 한 번만
+      const finalW = clamp(pendingW);
+      onResize(finalW); // React 상태에 한 번만 커밋(정식 폭 규칙 반영)
+      onResizeEnd?.(); // localStorage 저장도 여기서 한 번만
+      // 정식 규칙이 그려진 다음 프레임에 미리보기 <style> 제거 — 같은 값이라 깜빡임 없음.
+      requestAnimationFrame(() => {
+        if (liveStyle) liveStyle.remove();
+        if (table) table.removeAttribute("data-col-resizing");
+      });
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
       document.body.classList.remove("col-resizing");
