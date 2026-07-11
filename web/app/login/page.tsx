@@ -50,7 +50,6 @@ export default function LoginPage() {
         <button className="login-btn" type="submit" disabled={busy}>
           {busy ? "Signing in…" : "Sign in"}
         </button>
-        <div className="login-hint">First login: admin / admin1234</div>
       </form>
     </div>
   );

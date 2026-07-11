@@ -3381,6 +3381,11 @@ a.btn.primary:hover {
 .quote-meta-grid {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
+/* 문서(7·9단계) 편집 폼 — 문서정보/선적정보 입력란을 4열 균일폭으로 정렬
+   (auto-fit 로 칸폭이 들쭉날쭉하거나 우측이 잘리던 문제 해결). */
+.doc-form-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
 /* 가격설정 — Item list 단가 계산에 직결. 6개 컨트롤을 한 줄로(FX 넓게, Apply는 내용폭). */
 .quote-price-grid {
   grid-template-columns: 1fr 1fr 1.4fr 1fr 0.8fr auto;

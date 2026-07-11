@@ -42,6 +42,13 @@ import {
   parseAmountInput,
   useRowSelection,
 } from "@/components/common/itemTable";
+import {
+  useItemGrid,
+  ItemTh,
+  ItemGridStyle,
+  ItemColsButton,
+  type ItemCol,
+} from "@/components/common/itemGrid";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -529,16 +536,18 @@ function ServiceBillingForm({ data, onChanged, onClose }: { data: DocumentDetail
         </label>
         <Field label="VAT Rate" value={String(vatRate)} onChange={setVatRate} type="number" />
       </div>
-      <div className="po-work-note">
-        <b>Load from previous step</b>
-        <span>Reload item and amount data from the linked order.</span>
-      </div>
-      <div className="form-actions" style={{ marginTop: 0 }}>
-        <button className="btn" disabled={busy} onClick={() => setItems(normalizeItems(data.order.items))}>
-          Load order items
-        </button>
-      </div>
-      <ItemEditor items={items} setItems={setItems} packing={false} currency={currency} />
+      <ItemEditor
+        items={items}
+        setItems={setItems}
+        packing={false}
+        currency={currency}
+        tableId="svc-billing-items"
+        headerActions={
+          <button className="btn sm" disabled={busy} onClick={() => setItems(normalizeItems(data.order.items))}>
+            Load order items
+          </button>
+        }
+      />
       <div className="sub-h" style={{ marginTop: 14 }}>Additional cost</div>
       <div className="form-grid">
         <Field label="Labor cost" value={String(labor)} onChange={setLabor} type="number" />
@@ -893,7 +902,7 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
   return (
     <div className="doc-tab">
       <fieldset className="form-fieldset" disabled={!editable}>
-      <div className="form-grid">
+      <div className="form-grid doc-form-grid">
         <Field label="CI No." value={ciNo} onChange={setCiNo} />
         <Field label="CI Date" value={date} onChange={setDate} type="date" />
         <label className="form-field">
@@ -903,16 +912,18 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
         <Field label="VAT Rate" value={String(vatRate)} onChange={(v) => setVatRate(num(v))} type="number" />
       </div>
       <ShippingFields shipping={shipping} setShipping={setShipping} />
-      <div className="po-work-note">
-        <b>Load from previous step</b>
-        <span>Reload item and amount data from the linked order.</span>
-      </div>
-      <div className="form-actions" style={{ marginTop: 0 }}>
-        <button className="btn" disabled={busy} onClick={() => setItems(normalizeItems(data.order.items))}>
-          Load order items
-        </button>
-      </div>
-      <ItemEditor items={items} setItems={setItems} packing={false} currency={currency} />
+      <ItemEditor
+        items={items}
+        setItems={setItems}
+        packing={false}
+        currency={currency}
+        tableId="ci-items"
+        headerActions={
+          <button className="btn sm" disabled={busy} onClick={() => setItems(normalizeItems(data.order.items))}>
+            Load order items
+          </button>
+        }
+      />
       <MissingWarning missing={data.ci?.missing || []} />
       </fieldset>
       <div className="form-actions">
@@ -989,16 +1000,17 @@ function PackingListTab({ data, onChanged }: { data: DocumentDetail; onChanged: 
         <Field label="PL No." value={plNo} onChange={setPlNo} />
         <Field label="PL Date" value={date} onChange={setDate} type="date" />
       </div>
-      <div className="po-work-note">
-        <b>Load from previous step</b>
-        <span>Reload packing items from the Commercial Invoice.</span>
-      </div>
-      <div className="form-actions" style={{ marginTop: 0 }}>
-        <button className="btn" disabled={busy} onClick={() => setItems(normalizeItems(data.ci?.items || data.order.items, true))}>
-          Load CI items
-        </button>
-      </div>
-      <ItemEditor items={items} setItems={setItems} packing />
+      <ItemEditor
+        items={items}
+        setItems={setItems}
+        packing
+        tableId="pl-items"
+        headerActions={
+          <button className="btn sm" disabled={busy} onClick={() => setItems(normalizeItems(data.ci?.items || data.order.items, true))}>
+            Load CI items
+          </button>
+        }
+      />
       <MissingWarning missing={data.pl?.missing || []} />
       </fieldset>
       <div className="form-actions">
@@ -1202,23 +1214,25 @@ function TaxInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChanged: (
   return (
     <div className="doc-tab">
       <fieldset className="form-fieldset" disabled={!editable}>
-      <div className="form-grid">
+      <div className="form-grid doc-form-grid">
         <Field label="Tax No." value={taxNo} onChange={setTaxNo} />
         <Field label="Issue Date" value={date} onChange={setDate} type="date" />
         <Field label="Supply Type" value={supplyType} onChange={setSupplyType} />
         <Field label="Buyer Business No." value={buyerNo} onChange={setBuyerNo} />
         <Field label="VAT Rate" value={String(vatRate)} onChange={(v) => setVatRate(num(v))} type="number" />
       </div>
-      <div className="po-work-note">
-        <b>Load from previous step</b>
-        <span>Reload item and amount data from the Commercial Invoice.</span>
-      </div>
-      <div className="form-actions" style={{ marginTop: 0 }}>
-        <button className="btn" disabled={busy} onClick={() => setItems(normalizeItems(data.ci?.items || data.order.items))}>
-          Load CI items
-        </button>
-      </div>
-      <ItemEditor items={items} setItems={setItems} packing={false} currency={currency} />
+      <ItemEditor
+        items={items}
+        setItems={setItems}
+        packing={false}
+        currency={currency}
+        tableId="tax-items"
+        headerActions={
+          <button className="btn sm" disabled={busy} onClick={() => setItems(normalizeItems(data.ci?.items || data.order.items))}>
+            Load CI items
+          </button>
+        }
+      />
       </fieldset>
       <div className="form-actions">
         {editable ? (
@@ -1252,7 +1266,7 @@ function ShippingFields({
     ["shipping_marks", "Shipping Marks"],
   ];
   return (
-    <div className="form-grid">
+    <div className="form-grid doc-form-grid">
       {fields.map(([key, label]) => (
         <Field
           key={key}
@@ -1289,11 +1303,16 @@ function ItemEditor({
   setItems,
   packing,
   currency = "USD",
+  tableId,
+  headerActions,
 }: {
   items: DocumentWorkItem[];
   setItems: (items: DocumentWorkItem[]) => void;
   packing: boolean;
   currency?: string;
+  tableId: string;
+  // 품목표 헤더의 "+ Add" 옆에 넣을 보조 액션(예: "Load order items").
+  headerActions?: React.ReactNode;
 }) {
   function patch(i: number, key: keyof DocumentWorkItem, value: string) {
     const next = [...items];
@@ -1307,82 +1326,120 @@ function ItemEditor({
   const total = items.reduce((sum, item) => sum + num(item.amount), 0);
   const sel = useRowSelection();
   const cur = (currency || "USD").toUpperCase();
+  const cols: ItemCol[] = [
+    { key: "__sel", fixed: true },
+    { key: "__seq", fixed: true, className: "seq" },
+    { key: "part_no", label: "Part No." },
+    { key: "description", label: "Description" },
+    { key: "maker", label: "Maker" },
+    { key: "qty", label: "Qty", className: "num" },
+    { key: "unit", label: "Unit" },
+    ...(packing
+      ? [
+          { key: "package", label: "Package" },
+          { key: "net_weight", label: "N.W." },
+          { key: "gross_weight", label: "G.W." },
+          { key: "dimension", label: "Dimension" },
+        ]
+      : [
+          { key: "unit_price", label: `Unit Price (${cur})`, className: "num" },
+          { key: "amount", label: `Amount (${cur})`, className: "num" },
+          { key: "hs_code", label: "HS Code" },
+        ]),
+    { key: "remark", label: "Remark" },
+  ];
+  const grid = useItemGrid(tableId, cols);
 
   return (
-    <div className="table-wrap">
-      <table className="mini wide lead-tools">
-        <thead>
-          <tr>
-            <ItemSelectHeaderCell count={items.length} sel={sel} />
-            <th className="seq">No.</th>
-            <th>Part No.</th>
-            <th>Description</th>
-            <th>Maker</th>
-            <th className="num">Qty</th>
-            <th>Unit</th>
-            {packing ? (
-              <>
-                <th>Package</th>
-                <th>N.W.</th>
-                <th>G.W.</th>
-                <th>Dimension</th>
-              </>
-            ) : (
-              <>
-                <th className="num">Unit Price ({cur})</th>
-                <th className="num">Amount ({cur})</th>
-                <th>HS Code</th>
-              </>
-            )}
-            <th>Remark</th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((item, i) => (
-            <tr key={i} className={itemRowClass(i)}>
-              <ItemSelectCell index={i} sel={sel} />
-              <td className="seq">{i + 1}</td>
-              <td><textarea {...gridCellProps(i, 0)} className="wrapcell" rows={1} value={item.part_no || ""} onChange={(e) => patch(i, "part_no", e.target.value)} /></td>
-              <td><textarea {...gridCellProps(i, 1)} className="desc" rows={1} value={item.description || ""} onChange={(e) => patch(i, "description", e.target.value)} /></td>
-              <td><textarea {...gridCellProps(i, 2)} className="wrapcell" rows={1} value={item.maker || ""} onChange={(e) => patch(i, "maker", e.target.value)} /></td>
-              <td><input {...gridCellProps(i, 3)} className="num" value={amountInputValue(item.qty)} onChange={(e) => patch(i, "qty", e.target.value)} /></td>
-              <td><input {...gridCellProps(i, 4)} value={item.unit || "PCS"} onChange={(e) => patch(i, "unit", e.target.value)} /></td>
+    <div style={{ marginTop: 16 }}>
+      <div className="items-head">
+        <div className="sub-h">Item list</div>
+        <div className="items-head-actions">
+          {headerActions}
+          <ItemColsButton grid={grid} />
+          <DeleteSelectedButton sel={sel} onDelete={() => deleteSelectedRows(items, sel, setItems)} />
+          <button className="btn sm items-head-add" onClick={() => setItems([...items, blankItem(packing)])}>+ Add</button>
+        </div>
+      </div>
+      <div className="table-wrap item-scroll">
+        <ItemGridStyle grid={grid} />
+        <table className={`mini wide lead-tools ${grid.tableClass}`}>
+          <thead>
+            <tr>
+              <ItemSelectHeaderCell count={items.length} sel={sel} />
+              <th className="seq">No.</th>
+              <ItemTh grid={grid} k="part_no">Part No.</ItemTh>
+              <ItemTh grid={grid} k="description">Description</ItemTh>
+              <ItemTh grid={grid} k="maker">Maker</ItemTh>
+              <ItemTh grid={grid} k="qty" className="num">Qty</ItemTh>
+              <ItemTh grid={grid} k="unit">Unit</ItemTh>
               {packing ? (
                 <>
-                  <td><input {...gridCellProps(i, 5)} value={item.package || ""} onChange={(e) => patch(i, "package", e.target.value)} /></td>
-                  <td><input {...gridCellProps(i, 6)} value={String(item.net_weight || "")} onChange={(e) => patch(i, "net_weight", e.target.value)} /></td>
-                  <td><input {...gridCellProps(i, 7)} value={String(item.gross_weight || "")} onChange={(e) => patch(i, "gross_weight", e.target.value)} /></td>
-                  <td><input {...gridCellProps(i, 8)} value={item.dimension || ""} onChange={(e) => patch(i, "dimension", e.target.value)} /></td>
+                  <ItemTh grid={grid} k="package">Package</ItemTh>
+                  <ItemTh grid={grid} k="net_weight">N.W.</ItemTh>
+                  <ItemTh grid={grid} k="gross_weight">G.W.</ItemTh>
+                  <ItemTh grid={grid} k="dimension">Dimension</ItemTh>
                 </>
               ) : (
                 <>
-                  <td><input {...gridCellProps(i, 5)} className="num" value={amountInputValue(item.unit_price)} onChange={(e) => patch(i, "unit_price", e.target.value)} /></td>
-                  <td><input {...gridCellProps(i, 6)} className="num" value={amountInputValue(item.amount)} onChange={(e) => patch(i, "amount", e.target.value)} /></td>
-                  <td><input {...gridCellProps(i, 7)} value={item.hs_code || ""} onChange={(e) => patch(i, "hs_code", e.target.value)} /></td>
+                  <ItemTh grid={grid} k="unit_price" className="num">Unit Price ({cur})</ItemTh>
+                  <ItemTh grid={grid} k="amount" className="num">Amount ({cur})</ItemTh>
+                  <ItemTh grid={grid} k="hs_code">HS Code</ItemTh>
                 </>
               )}
-              <td><textarea {...gridCellProps(i, packing ? 9 : 8)} className="wrapcell" rows={1} value={item.remark || ""} onChange={(e) => patch(i, "remark", e.target.value)} /></td>
+              <ItemTh grid={grid} k="remark">Remark</ItemTh>
             </tr>
-          ))}
-        </tbody>
-        {!packing ? (
-          <tfoot>
-            <tr>
-              <td colSpan={8} className="total-label">Total</td>
-              <td className="num total-value">
-                <DualCurrencyAmount value={total} currency={currency} />
-                <span className="fx-note">{fxRateText()}</span>
-              </td>
-              <td colSpan={2}></td>
-            </tr>
-          </tfoot>
-        ) : null}
-      </table>
-      <div className="items-head-actions" style={{ marginTop: 10 }}>
-        <DeleteSelectedButton sel={sel} onDelete={() => deleteSelectedRows(items, sel, setItems)} />
-        <button className="btn" onClick={() => setItems([...items, blankItem(packing)])}>
-          Add row
-        </button>
+          </thead>
+          <tbody>
+            {items.map((item, i) => (
+              <tr key={i} className={itemRowClass(i)}>
+                <ItemSelectCell index={i} sel={sel} />
+                <td className="seq">{i + 1}</td>
+                <td><textarea {...gridCellProps(i, 0)} className="wrapcell" rows={1} value={item.part_no || ""} onChange={(e) => patch(i, "part_no", e.target.value)} /></td>
+                <td><textarea {...gridCellProps(i, 1)} className="desc" rows={1} value={item.description || ""} onChange={(e) => patch(i, "description", e.target.value)} /></td>
+                <td><textarea {...gridCellProps(i, 2)} className="wrapcell" rows={1} value={item.maker || ""} onChange={(e) => patch(i, "maker", e.target.value)} /></td>
+                <td><input {...gridCellProps(i, 3)} className="num" value={amountInputValue(item.qty)} onChange={(e) => patch(i, "qty", e.target.value)} /></td>
+                <td><input {...gridCellProps(i, 4)} value={item.unit || "PCS"} onChange={(e) => patch(i, "unit", e.target.value)} /></td>
+                {packing ? (
+                  <>
+                    <td><input {...gridCellProps(i, 5)} value={item.package || ""} onChange={(e) => patch(i, "package", e.target.value)} /></td>
+                    <td><input {...gridCellProps(i, 6)} value={String(item.net_weight || "")} onChange={(e) => patch(i, "net_weight", e.target.value)} /></td>
+                    <td><input {...gridCellProps(i, 7)} value={String(item.gross_weight || "")} onChange={(e) => patch(i, "gross_weight", e.target.value)} /></td>
+                    <td><input {...gridCellProps(i, 8)} value={item.dimension || ""} onChange={(e) => patch(i, "dimension", e.target.value)} /></td>
+                  </>
+                ) : (
+                  <>
+                    <td><input {...gridCellProps(i, 5)} className="num" value={amountInputValue(item.unit_price)} onChange={(e) => patch(i, "unit_price", e.target.value)} /></td>
+                    <td><input {...gridCellProps(i, 6)} className="num" value={amountInputValue(item.amount)} onChange={(e) => patch(i, "amount", e.target.value)} /></td>
+                    <td><input {...gridCellProps(i, 7)} value={item.hs_code || ""} onChange={(e) => patch(i, "hs_code", e.target.value)} /></td>
+                  </>
+                )}
+                <td><textarea {...gridCellProps(i, packing ? 9 : 8)} className="wrapcell" rows={1} value={item.remark || ""} onChange={(e) => patch(i, "remark", e.target.value)} /></td>
+              </tr>
+            ))}
+          </tbody>
+          {/* 합계행 — 컬럼당 1셀(숨김/폭 조절 정렬 유지). Total=Unit price(8열), 값=Amount(9열). */}
+          {!packing ? (
+            <tfoot>
+              <tr>
+                <td></td>{/* 1 sel */}
+                <td></td>{/* 2 No. */}
+                <td></td>{/* 3 part_no */}
+                <td></td>{/* 4 description */}
+                <td></td>{/* 5 maker */}
+                <td></td>{/* 6 qty */}
+                <td></td>{/* 7 unit */}
+                <td className="total-label">Total</td>{/* 8 unit_price */}
+                <td className="num total-value">{/* 9 amount */}
+                  <DualCurrencyAmount value={total} currency={currency} />
+                  <span className="fx-note">{fxRateText()}</span>
+                </td>
+                <td></td>{/* 10 hs_code */}
+                <td></td>{/* 11 remark */}
+              </tr>
+            </tfoot>
+          ) : null}
+        </table>
       </div>
     </div>
   );
