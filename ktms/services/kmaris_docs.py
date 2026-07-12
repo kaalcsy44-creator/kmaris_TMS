@@ -172,6 +172,16 @@ def _styles() -> Dict[str, ParagraphStyle]:
         "base": base,
         "small": ParagraphStyle("KMSmall", parent=base, fontSize=7.3, leading=9.0),
         "tiny": ParagraphStyle("KMTiny", parent=base, fontSize=6.6, leading=8.2),
+        # 품목 표 헤더 — NAVY 배경 위 글자. tiny(검정)를 쓰면 검정 on 남색으로 안 보이므로
+        # 반드시 흰색 볼드 스타일을 별도로 둔다.
+        "th": ParagraphStyle(
+            "KMTh",
+            parent=base,
+            fontName=DEFAULT_BOLD_FONT,
+            fontSize=6.6,
+            leading=8.2,
+            textColor=colors.white,
+        ),
         "title": ParagraphStyle(
             "KMTitle",
             parent=base,
@@ -327,7 +337,7 @@ def _items_table(data: Dict[str, Any], doc_type: str):
     if doc_type == "packing_list":
         headers = ["No.", "Part No.", "Description", "Qty", "Unit", "Package", "N.W.", "G.W.", "Dimension", "Remark"]
         widths = [10, 30, 65, 15, 16, 28, 20, 20, 34, 32]
-        rows = [[_p(h, s["tiny"]) for h in headers]]
+        rows = [[_p(h, s["th"]) for h in headers]]
         for item in items:
             rows.append(
                 [
@@ -348,7 +358,7 @@ def _items_table(data: Dict[str, Any], doc_type: str):
         headers = ["No.", "Part No.", "Description", "Maker", "Qty", "Unit",
                    "Unit Price\n(to quote)", "Lead Time", "Country\nof Origin", "Remark"]
         widths = [10, 30, 64, 32, 15, 16, 26, 24, 28, 43]
-        rows = [[_p(h, s["tiny"]) for h in headers]]
+        rows = [[_p(h, s["th"]) for h in headers]]
         for item in items:
             rows.append(
                 [
@@ -367,7 +377,7 @@ def _items_table(data: Dict[str, Any], doc_type: str):
     else:
         headers = ["No.", "Part No.", "Description", "Maker", "Origin", "Qty", "Unit", "Unit Price", "Amount", "Lead Time / Remark"]
         widths = [10, 30, 58, 35, 24, 15, 16, 25, 28, 47]
-        rows = [[_p(h, s["tiny"]) for h in headers]]
+        rows = [[_p(h, s["th"]) for h in headers]]
         for item in items:
             lead_remark = f"{item.get('lead_time', '')}\n{item.get('remark', '')}".strip()
             rows.append(

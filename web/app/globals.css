@@ -3541,6 +3541,12 @@ a.btn.primary:hover {
   flex-direction: column;
   width: min(920px, 96vw);
   height: min(90vh, 1200px);
+  /* 우하단 코너를 드래그해 좌우·상하 크기 조정(overflow:hidden 이라야 resize 동작). */
+  resize: both;
+  min-width: 360px;
+  min-height: 280px;
+  max-width: 98vw;
+  max-height: 96vh;
   background: #fff;
   border-radius: 12px;
   overflow: hidden;
