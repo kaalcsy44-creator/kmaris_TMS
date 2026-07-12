@@ -660,7 +660,10 @@ def _make_commercial_invoice_pdf(data: Dict[str, Any], company: Dict[str, Any]) 
     story.append(title)
     banner_text = "   |   ".join(x for x in [company.get("company_name_en", "K-MARIS Energy & Solutions Co., Ltd."),
                                                company.get("sales_email", ""), company.get("website", "")] if x)
-    banner = Table([[p(banner_text, "section")]], colWidths=[page_width], rowHeights=[6 * mm])
+    banner_style = ParagraphStyle("KMCIBanner", parent=s["section"], fontName=DEFAULT_FONT,
+                                  fontSize=8.2, leading=10, alignment=TA_CENTER,
+                                  textColor=colors.white)
+    banner = Table([[Paragraph(banner_text, banner_style)]], colWidths=[page_width], rowHeights=[6 * mm])
     banner.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), BLUE), ("TEXTCOLOR", (0, 0), (-1, -1), colors.white),
                                 ("ALIGN", (0, 0), (-1, -1), "CENTER"), ("VALIGN", (0, 0), (-1, -1), "MIDDLE")]))
     story += [banner, Spacer(1, 3 * mm)]
