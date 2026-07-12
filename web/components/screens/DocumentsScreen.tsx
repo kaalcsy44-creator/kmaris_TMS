@@ -988,13 +988,30 @@ function PackingListTab({ data, onChanged }: { data: DocumentDetail; onChanged: 
   const [packingInfo, setPackingInfo] = useState(data.pl?.packing_info || "");
   const seed = data.pl?.items || data.ci?.items || data.order.items;
   const [items, setItems] = useState<DocumentWorkItem[]>(normalizeItems(seed, true));
+  // 선적정보·Shipping Marks — CI 값을 기본 상속하고, PL 이 저장한 값이 있으면 그것을 우선.
+  // 사용자가 수정한 항목만 PL 로 저장되며 나머지는 CI 를 따라간다.
+  function initialShipping(): Record<string, string> {
+    return {
+      port_loading: "Busan, Korea",
+      port_discharge: "",
+      carrier: "TBD",
+      bl_awb_no: "TBD",
+      etd: "",
+      eta: "",
+      ...defaultMarkFields(data.order),
+      ...(data.ci?.shipping || {}), // CI 상속
+      ...(data.pl?.shipping || {}), // PL 자체 저장값 우선
+    };
+  }
+  const [shipping, setShipping] = useState<Record<string, string>>(initialShipping);
   const [busy, setBusy] = useState(false);
   const editable = canEditDoc(data);
 
   async function save() {
     setBusy(true);
     try {
-      await savePackingList(data.order.id, { pl_no: plNo, date, items, packing_info: packingInfo });
+      const outShipping = { ...shipping, shipping_marks: composeShippingMarks(shipping) };
+      await savePackingList(data.order.id, { pl_no: plNo, date, items, packing_info: packingInfo, shipping: outShipping });
       onChanged();
     } finally {
       setBusy(false);
@@ -1006,6 +1023,7 @@ function PackingListTab({ data, onChanged }: { data: DocumentDetail; onChanged: 
     setDate(data.pl?.date || today());
     setPackingInfo(data.pl?.packing_info || "");
     setItems(normalizeItems(data.pl?.items || data.ci?.items || data.order.items, true));
+    setShipping(initialShipping());
   }
 
   async function del() {
@@ -1029,9 +1047,21 @@ function PackingListTab({ data, onChanged }: { data: DocumentDetail; onChanged: 
   return (
     <div className="doc-tab">
       <fieldset className="form-fieldset" disabled={!editable}>
-      <div className="form-grid form-grid--thirds">
+      <div className="doc-cols">
+      <div className="doc-col">
+      <div className="sub-h">Basic info</div>
+      {/* 좌열: 문서정보(PL No./Date) + 선적정보(CI 상속·수정가능). */}
+      <div className="form-grid doc-form-grid">
         <Field label="PL No." value={plNo} onChange={setPlNo} />
         <Field label="PL Date" value={date} onChange={setDate} type="date" />
+        <ShippingFields shipping={shipping} setShipping={setShipping} />
+      </div>
+      <p className="hint-inline" style={{ marginTop: 6 }}>
+        선적정보·Shipping Marks 는 Commercial Invoice 값을 상속합니다. 여기서 수정하면 이 Packing List 에만 반영됩니다.
+      </p>
+      </div>
+      {/* Shipping Marks — CI 상속, PL 에서 개별 수정 가능. */}
+      <ShippingMarksSection shipping={shipping} setShipping={setShipping} />
       </div>
       <ItemEditor
         items={items}

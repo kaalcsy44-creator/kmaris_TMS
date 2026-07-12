@@ -103,6 +103,8 @@ _MIGRATIONS = {
     "packing_lists": {
         # Packing List 자유 메모(예: "Cartons in 5 pallets"). DEFAULT 없이 추가.
         "packing_info": "VARCHAR",
+        # 선적정보·Shipping Marks 오버라이드(비우면 CI 상속).
+        "shipping": "JSON",
     },
 }
 

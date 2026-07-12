@@ -450,7 +450,13 @@ export function deleteServiceStage(orderId: number, stage: number): Promise<{ ok
 
 export function savePackingList(
   orderId: number,
-  body: { pl_no?: string; date?: string; items: DocumentWorkItem[]; packing_info?: string }
+  body: {
+    pl_no?: string;
+    date?: string;
+    items: DocumentWorkItem[];
+    packing_info?: string;
+    shipping?: Record<string, string>;
+  }
 ): Promise<{ ok: boolean; id: number; pl_no: string }> {
   return post(`/api/admin/documents/${orderId}/pl`, body);
 }

@@ -1664,6 +1664,7 @@ def _document_detail_payload(session, order: Order) -> dict:
             "date": pl.date or "",
             "items": pl.items or [],
             "packing_info": pl.packing_info or "",
+            "shipping": pl.shipping or {},
             "missing": _missing_items(order.items or [], pl.items or []),
         },
         "sa": None if not sa else {
@@ -1703,6 +1704,7 @@ class PackingListSave(BaseModel):
     date: str | None = None
     items: list[dict] = []
     packing_info: str | None = None
+    shipping: dict | None = None
 
 
 class ShippingAdviceSave(BaseModel):

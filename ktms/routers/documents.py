@@ -384,6 +384,8 @@ def save_packing_list(order_id: int, body: PackingListSave):
         pl.items = body.items or []
         if body.packing_info is not None:
             pl.packing_info = body.packing_info
+        if body.shipping is not None:
+            pl.shipping = body.shipping
         s.commit()
         return {"ok": True, "id": pl.id, "pl_no": pl.pl_no}
     finally:
@@ -430,14 +432,16 @@ def packing_list_xlsx(order_id: int):
 
 
 def _packing_list_payload(s, order, ci, pl) -> dict:
-    """PL PDF/Excel 공통 payload — 선적정보는 CI 에서 상속하고 CI 번호·포장 메모를 얹는다."""
+    """PL PDF/Excel 공통 payload — 선적정보·Shipping Marks 는 CI 값을 기본으로 상속하되
+    PL 이 자체 저장한 값(pl.shipping)이 있으면 그 항목만 덮어쓴다(오버라이드)."""
+    merged_shipping = {**(ci.shipping or {}), **(pl.shipping or {})}
     payload = build_payload(
         doc_no=pl.pl_no, date=pl.date,
         customer=_customer_for_order(s, order),
         vessel=_vessel_for_order(s, order),
         items=pl.items or [], terms={},
         currency=ci.currency or "USD",
-        shipping=ci.shipping or {}, po_no=order.po_no or "",
+        shipping=merged_shipping, po_no=order.po_no or "",
         export_ref=_project_no_for_order(s, order),
     )
     payload["shipping"]["ci_no"] = ci.ci_no or ""

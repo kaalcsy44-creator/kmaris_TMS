@@ -357,6 +357,8 @@ class PackingList(Base):
     ci_id      = Column(Integer, ForeignKey("commercial_invoices.id"))
     date       = Column(String(10))
     items      = Column(JSON, default=list)
+    # 선적정보·Shipping Marks — 비우면 CI 값 상속, 입력하면 PL 값이 우선(_packing_list_payload).
+    shipping   = Column(JSON, default=dict)
     packing_info = Column(String)   # 자유 메모(예: "Cartons in 5 pallets")
     created_at = Column(DateTime, default=datetime.utcnow)
 

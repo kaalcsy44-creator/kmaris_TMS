@@ -564,6 +564,7 @@ export type DocumentDetail = {
     date: string;
     items: DocumentWorkItem[];
     packing_info?: string;
+    shipping?: Record<string, string>;
     missing: { part_no: string; description: string; order_qty: number; doc_qty: number }[];
   };
   sa: null | {
