@@ -3492,14 +3492,36 @@ a.btn.primary:hover {
     gap: 8px;
   }
 }
-/* 문서 미리보기 버튼 — 하단 고정바 좌측 끝(삭제 유무와 무관). */
-.pl-modal-body .form-actions .doc-preview-btn {
-  order: -2;
-  margin-right: auto;
+/* 문서 하단 고정바 — 좌(Preview·Download) / 중앙(금액) / 우(Cancel·Save) 3구역.
+   base 의 justify-content:flex-end(flex) 대신 3열 그리드로 배치한다. */
+.pl-modal-body .form-actions.doc-actions {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 10px 16px;
 }
-/* 미리보기가 있으면 삭제 버튼의 좌측 밀기(auto)를 해제해 이중 여백을 막는다. */
-.pl-modal-body .form-actions:has(.doc-preview-btn) .btn.danger {
-  margin-right: 0;
+.doc-actions-left {
+  justify-self: start;
+}
+.doc-actions-center {
+  justify-self: center;
+  text-align: center;
+}
+.doc-actions-right {
+  justify-self: end;
+}
+.doc-actions-left,
+.doc-actions-right {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+/* 그룹 안에서는 상속된 order/auto-margin(우측정렬 규약)을 무력화하고 DOM 순서를 따른다. */
+.doc-actions .btn {
+  order: 0 !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
 }
 /* 문서 미리보기 모달 — 생성된 PDF 를 iframe 으로 인라인 표시. */
 .doc-preview-backdrop {

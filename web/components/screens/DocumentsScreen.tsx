@@ -942,27 +942,33 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
       />
       <MissingWarning missing={data.ci?.missing || []} />
       </fieldset>
-      <div className="form-actions">
-        <DocPreviewButton orderId={data.order.id} kind="ci/pdf" filename="Commercial Invoice.pdf" disabled={!data.ci} />
-        {editable ? (
-          <>
-            <button className="btn primary" disabled={busy || data.order.id === 0} onClick={save}>
-              Save
-            </button>
-            <button className="btn" disabled={busy} onClick={cancel}>
-              Cancel
-            </button>
-            {data.ci ? (
-              <button className="btn danger" disabled={busy} onClick={del}>
-                Delete
+      <div className="form-actions doc-actions">
+        <div className="doc-actions-left">
+          <DocPreviewButton orderId={data.order.id} kind="ci/pdf" filename="Commercial Invoice.pdf" disabled={!data.ci} />
+          <DownloadButton orderId={data.order.id} kind="ci/pdf" disabled={!data.ci} label="Download" />
+        </div>
+        <div className="doc-actions-center">
+          <span className="hint-inline">Total {dualCurrencyText(total, currency)} · {fxRateText()}</span>
+        </div>
+        <div className="doc-actions-right">
+          {editable ? (
+            <>
+              {data.ci ? (
+                <button className="btn danger" disabled={busy} onClick={del}>
+                  Delete
+                </button>
+              ) : null}
+              <button className="btn" disabled={busy} onClick={cancel}>
+                Cancel
               </button>
-            ) : null}
-          </>
-        ) : (
-          <span className="hint-inline">{editBlockReason("documents", data.order.assignee_id)}</span>
-        )}
-        <DownloadButton orderId={data.order.id} kind="ci/pdf" disabled={!data.ci} label="Download CI PDF" />
-        <span className="hint-inline">Total {dualCurrencyText(total, currency)} · {fxRateText()}</span>
+              <button className="btn primary" disabled={busy || data.order.id === 0} onClick={save}>
+                Save
+              </button>
+            </>
+          ) : (
+            <span className="hint-inline">{editBlockReason("documents", data.order.assignee_id)}</span>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -1030,26 +1036,31 @@ function PackingListTab({ data, onChanged }: { data: DocumentDetail; onChanged: 
       />
       <MissingWarning missing={data.pl?.missing || []} />
       </fieldset>
-      <div className="form-actions">
-        <DocPreviewButton orderId={data.order.id} kind="pl/pdf" filename="Packing List.pdf" disabled={!data.pl} />
-        {editable ? (
-          <>
-            <button className="btn primary" disabled={busy} onClick={save}>
-              Save
-            </button>
-            <button className="btn" disabled={busy} onClick={cancel}>
-              Cancel
-            </button>
-            {data.pl ? (
-              <button className="btn danger" disabled={busy} onClick={del}>
-                Delete
+      <div className="form-actions doc-actions">
+        <div className="doc-actions-left">
+          <DocPreviewButton orderId={data.order.id} kind="pl/pdf" filename="Packing List.pdf" disabled={!data.pl} />
+          <DownloadButton orderId={data.order.id} kind="pl/pdf" disabled={!data.pl} label="Download" />
+        </div>
+        <div className="doc-actions-center" />
+        <div className="doc-actions-right">
+          {editable ? (
+            <>
+              {data.pl ? (
+                <button className="btn danger" disabled={busy} onClick={del}>
+                  Delete
+                </button>
+              ) : null}
+              <button className="btn" disabled={busy} onClick={cancel}>
+                Cancel
               </button>
-            ) : null}
-          </>
-        ) : (
-          <span className="hint-inline">{editBlockReason("documents", data.order.assignee_id)}</span>
-        )}
-        <DownloadButton orderId={data.order.id} kind="pl/pdf" disabled={!data.pl} label="Download PL PDF" />
+              <button className="btn primary" disabled={busy} onClick={save}>
+                Save
+              </button>
+            </>
+          ) : (
+            <span className="hint-inline">{editBlockReason("documents", data.order.assignee_id)}</span>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -1168,39 +1179,42 @@ function ShippingAdviceTab({ data, onChanged }: { data: DocumentDetail; onChange
         </label>
       ) : null}
       </fieldset>
-      <div className="form-actions">
-        <DocPreviewButton orderId={data.order.id} kind="sa/pdf" filename="Shipping Advice.pdf" disabled={!data.sa} />
-        {editable ? (
-          <>
-            <button className="btn primary" disabled={busy || data.order.id === 0} onClick={save}>
-              Save
-            </button>
-            <button className="btn" disabled={busy} onClick={cancel}>
-              Cancel
-            </button>
-            {data.sa ? (
-              <button className="btn danger" disabled={busy} onClick={del}>
-                Delete
+      <div className="form-actions doc-actions">
+        <div className="doc-actions-left">
+          <DocPreviewButton orderId={data.order.id} kind="sa/pdf" filename="Shipping Advice.pdf" disabled={!data.sa} />
+          <DownloadButton orderId={data.order.id} kind="sa/pdf" disabled={!data.sa} label="Download" />
+        </div>
+        <div className="doc-actions-center">
+          <span className="hint-inline">
+            SMTP {data.smtp_configured ? "configured" : "not configured"} {data.sa?.sent_date ? `· sent ${data.sa.sent_date}` : ""}
+          </span>
+        </div>
+        <div className="doc-actions-right">
+          {editable ? (
+            <>
+              {data.sa ? (
+                <button className="btn danger" disabled={busy} onClick={del}>
+                  Delete
+                </button>
+              ) : null}
+              <button
+                className="btn"
+                disabled={busy || !data.sa || !to.trim() || (ciMissing.length > 0 && !ackMissing)}
+                onClick={send}
+              >
+                Send SA email
               </button>
-            ) : null}
-            <DownloadButton orderId={data.order.id} kind="sa/pdf" disabled={!data.sa} label="Download SA PDF" />
-            <button
-              className="btn"
-              disabled={busy || !data.sa || !to.trim() || (ciMissing.length > 0 && !ackMissing)}
-              onClick={send}
-            >
-              Send SA email
-            </button>
-          </>
-        ) : (
-          <>
+              <button className="btn" disabled={busy} onClick={cancel}>
+                Cancel
+              </button>
+              <button className="btn primary" disabled={busy || data.order.id === 0} onClick={save}>
+                Save
+              </button>
+            </>
+          ) : (
             <span className="hint-inline">{editBlockReason("documents", data.order.assignee_id)}</span>
-            <DownloadButton orderId={data.order.id} kind="sa/pdf" disabled={!data.sa} label="Download SA PDF" />
-          </>
-        )}
-        <span className="hint-inline">
-          SMTP {data.smtp_configured ? "configured" : "not configured"} {data.sa?.sent_date ? `· sent ${data.sa.sent_date}` : ""}
-        </span>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -1729,7 +1743,7 @@ function DocPreviewButton({
   return (
     <>
       <button className="btn doc-preview-btn" disabled={disabled || busy} onClick={open}>
-        {busy ? "여는 중…" : "미리보기"}
+        {busy ? "Opening…" : "Preview"}
       </button>
       {url ? (
         <div className="doc-preview-backdrop" onClick={close}>
@@ -1737,11 +1751,11 @@ function DocPreviewButton({
             <div className="doc-preview-head">
               <span className="doc-preview-title">{filename}</span>
               <div className="doc-preview-acts">
-                <button className="btn sm doc-preview-save" onClick={savePdf}>PDF 저장</button>
-                <button className="btn sm" onClick={close}>닫기</button>
+                <button className="btn sm doc-preview-save" onClick={savePdf}>Download</button>
+                <button className="btn sm" onClick={close}>Close</button>
               </div>
             </div>
-            <iframe className="doc-preview-frame" src={url} title="미리보기" />
+            <iframe className="doc-preview-frame" src={url} title="Preview" />
           </div>
         </div>
       ) : null}
