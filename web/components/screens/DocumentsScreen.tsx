@@ -1762,6 +1762,27 @@ function DocPreviewButton({
     a.click();
   }
 
+  async function saveExcel() {
+    if (kind !== "ci/pdf") return;
+    try {
+      const res = await fetch(documentDownloadUrl(orderId, "ci/xlsx"), {
+        headers: getToken() ? { Authorization: `Bearer ${getToken()}` } : {},
+      });
+      if (!res.ok) throw new Error("Excel download failed");
+      const blob = await res.blob();
+      const disposition = res.headers.get("content-disposition") || "";
+      const match = disposition.match(/filename="([^"]+)"/);
+      const excelUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = excelUrl;
+      a.download = match?.[1] || "Commercial Invoice.xlsx";
+      a.click();
+      URL.revokeObjectURL(excelUrl);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Excel download failed");
+    }
+  }
+
   return (
     <>
       <button className="btn doc-preview-btn" disabled={disabled || busy} onClick={open}>
@@ -1780,7 +1801,8 @@ function DocPreviewButton({
                 <div className="doc-preview-head">
                   <span className="doc-preview-title">{filename}</span>
                   <div className="doc-preview-acts">
-                    <button className="btn sm doc-preview-save" onClick={savePdf}>Download</button>
+                    <button className="btn sm doc-preview-save" onClick={savePdf}>PDF Download</button>
+                    {kind === "ci/pdf" ? <button className="btn sm" onClick={saveExcel}>Excel Download</button> : null}
                     <button className="btn sm" onClick={close}>Close</button>
                   </div>
                 </div>
