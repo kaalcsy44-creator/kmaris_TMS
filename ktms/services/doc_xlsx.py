@@ -16,14 +16,16 @@ from openpyxl.utils import get_column_letter
 from services.kmaris_docs import normalize_items, calc_totals, _num, DOC_TITLES
 
 _CONFIG_DIR = Path(__file__).resolve().parent.parent / "config"
+_REPO_DIR = Path(__file__).resolve().parents[2]
 
 
 def _find_asset(*names: str) -> Optional[str]:
     """config/ 에서 자산 이미지(로고·서명·직인)를 찾는다. 없으면 None(선택 자산)."""
-    for n in names:
-        p = _CONFIG_DIR / n
-        if p.exists():
-            return str(p)
+    for root in (_REPO_DIR, _CONFIG_DIR):
+        for n in names:
+            p = root / n
+            if p.exists():
+                return str(p)
     return None
 
 
@@ -82,13 +84,13 @@ def make_commercial_invoice_xlsx(
     lightblue = PatternFill("solid", fgColor="EAF3FF")
     alt = PatternFill("solid", fgColor="FAFBFC")
 
-    white_lg = Font(color="FFFFFF", bold=True, size=16)
-    white_sm = Font(color="FFFFFF", size=9)
-    white_sec = Font(color="FFFFFF", bold=True, size=10)
-    white_hdr = Font(color="FFFFFF", bold=True, size=9)
-    bold = Font(bold=True)
-    boldsm = Font(bold=True, size=9)
-    normal = Font(size=9)
+    white_lg = Font(name="Noto Sans KR", color="0B1D3A", bold=True, size=19)
+    white_sm = Font(name="Noto Sans KR", color="FFFFFF", size=9)
+    white_sec = Font(name="Noto Sans KR", color="FFFFFF", bold=True, size=10)
+    white_hdr = Font(name="Noto Sans KR", color="FFFFFF", bold=True, size=9)
+    bold = Font(name="Noto Sans KR", bold=True)
+    boldsm = Font(name="Noto Sans KR", bold=True, size=9)
+    normal = Font(name="Noto Sans KR", size=9)
 
     thin = Side(style="thin", color="C8D2E0")
     bdr = Border(top=thin, bottom=thin, left=thin, right=thin)
@@ -154,14 +156,12 @@ def make_commercial_invoice_xlsx(
 
     r = 1
     # ── 회사 로고(선택: config/logo.png) — 맨 상단 좌측에 얹는다 ─────────────
-    logo = _find_asset("logo.png", "logo.jpg", "logo.jpeg")
+    logo = _find_asset("logo_K-maris.png", "logo.png", "logo.jpg", "logo.jpeg")
     if logo:
-        ws.row_dimensions[r].height = 52
-        add_image(logo, f"A{r}", 160, 46)
-        r += 1
+        add_image(logo, f"A{r}", 105, 35)
     # ── 타이틀 + 회사 배너 ────────────────────────────────────────────────
-    merge(r, 1, r, NCOL); put(r, 1, "COMMERCIAL INVOICE", fill=navy, font=white_lg, align=center)
-    bd(r, 1, r, NCOL, navy); ws.row_dimensions[r].height = 30; r += 1
+    merge(r, 1, r, NCOL); put(r, 1, "COMMERCIAL INVOICE", font=white_lg, align=center)
+    bd(r, 1, r, NCOL); ws.row_dimensions[r].height = 42; r += 1
     banner = "   |   ".join(x for x in [
         company.get("company_name_en", "K-MARIS Energy & Solutions Co., Ltd."),
         company.get("sales_email", ""), company.get("website", ""),
@@ -187,8 +187,8 @@ def make_commercial_invoice_xlsx(
     ]
     for i in range(4):
         merge(r, 1, r, 4); put(r, 1, exporter[i], font=normal, align=left); bd(r, 1, r, 4)
-        put(r, 5, inv_info[i][0], fill=gray, font=boldsm, align=left)
-        merge(r, 6, r, 8); put(r, 6, inv_info[i][1], font=normal, align=left); bd(r, 5, r, 8)
+        merge(r, 5, r, 6); put(r, 5, inv_info[i][0], fill=gray, font=boldsm, align=left)
+        merge(r, 7, r, 8); put(r, 7, inv_info[i][1], font=normal, align=left); bd(r, 5, r, 8)
         r += 1
 
     # ── Consignee / Ship-to ──────────────────────────────────────────────
@@ -207,8 +207,8 @@ def make_commercial_invoice_xlsx(
     ]
     for i in range(3):
         merge(r, 1, r, 4); put(r, 1, buyer[i], font=normal, align=left); bd(r, 1, r, 4)
-        put(r, 5, ship_to[i][0], fill=gray, font=boldsm, align=left)
-        merge(r, 6, r, 8); put(r, 6, ship_to[i][1], font=normal, align=left); bd(r, 5, r, 8)
+        merge(r, 5, r, 6); put(r, 5, ship_to[i][0], fill=gray, font=boldsm, align=left)
+        merge(r, 7, r, 8); put(r, 7, ship_to[i][1], font=normal, align=left); bd(r, 5, r, 8)
         r += 1
 
     # ── Shipping information ─────────────────────────────────────────────
@@ -232,9 +232,16 @@ def make_commercial_invoice_xlsx(
     bd(r, 1, r, NCOL, section); r += 1
     # sm_* 로 항상 재구성(무게 N.W./G.W. · 치수 DIM. 포함). 없으면 저장된 문자열로 폴백.
     marks = _compose_marks(shipping) or (shipping.get("shipping_marks") or "").strip()
+    mark_lines = marks.splitlines()
+    split_at = (len(mark_lines) + 1) // 2
     marks_h = max(4, len(marks.splitlines()))  # 줄 수만큼 블록 높이 확보
-    merge(r, 1, r + marks_h - 1, NCOL); put(r, 1, marks, font=normal, align=left_top)
-    bd(r, 1, r + marks_h - 1, NCOL)
+    marks_h = 5
+    merge(r, 1, r + marks_h - 1, 4)
+    put(r, 1, "\n".join(mark_lines[:split_at]), font=normal, align=left_top)
+    merge(r, 5, r + marks_h - 1, 8)
+    put(r, 5, "\n".join(mark_lines[split_at:]), font=normal, align=left_top)
+    bd(r, 1, r + marks_h - 1, 4)
+    bd(r, 5, r + marks_h - 1, 8)
     r += marks_h
 
     # ── 품목 표 ───────────────────────────────────────────────────────────
@@ -267,13 +274,12 @@ def make_commercial_invoice_xlsx(
     # ── 합계(수식) — Freight/Packing/Insurance 는 사용자가 채우면 TOTAL 자동합산 ──
     def total_line(label, value, is_total=False):
         nonlocal r
-        merge(r, 5, r, 7)
-        lc = put(r, 5, label, fill=(lightblue if is_total else gray),
+        lc = put(r, 7, label, fill=(lightblue if is_total else gray),
                  font=(bold if is_total else boldsm), align=right)
         vc = put(r, 8, value, align=right, fmt=num_fmt)
         if is_total:
             vc.fill = lightblue; vc.font = bold
-        bd(r, 5, r, 8)
+        bd(r, 7, r, 8)
         ref = f"H{r}"
         r += 1
         return ref
@@ -306,12 +312,25 @@ def make_commercial_invoice_xlsx(
     put(sig_row, 5, f"{company.get('company_name_en', '')}\n(Company Stamp)", font=boldsm, align=left_top)
     bd(sig_row, 5, sig_row + 2, 8)
     # 서명·직인 이미지(선택: config/signature.png, config/stamp.png) — 라벨 아래에 얹는다.
-    sign = _find_asset("signature.png", "signature.jpg", "sign.png")
-    stamp = _find_asset("stamp.png", "stamp.jpg", "seal.png")
+    sign = _find_asset("Authorized signature_Sungyeon Cho.jpg", "signature.png", "signature.jpg", "sign.png")
+    stamp = _find_asset("Company stamp_K-Maris Energy & Solutions.jpg", "stamp.png", "stamp.jpg", "seal.png")
     if sign:
         add_image(sign, f"B{sig_row + 1}", 130, 44)
     if stamp:
         add_image(stamp, f"F{sig_row + 1}", 78, 78)
+
+    final_row = sig_row + 2
+    ws.page_setup.paperSize = ws.PAPERSIZE_A4
+    ws.page_setup.orientation = ws.ORIENTATION_PORTRAIT
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 1
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+    ws.print_area = f"A1:H{final_row}"
+    ws.sheet_view.zoomScale = 75
+    ws.page_margins.left = 0.25
+    ws.page_margins.right = 0.25
+    ws.page_margins.top = 0.3
+    ws.page_margins.bottom = 0.3
 
     out = io.BytesIO()
     wb.save(out)
