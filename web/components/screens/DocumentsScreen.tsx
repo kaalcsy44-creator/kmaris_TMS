@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import {
   documentDownloadUrl,
   fetchDocumentDetail,
@@ -909,6 +909,7 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
     <div className="doc-tab">
       <fieldset className="form-fieldset" disabled={!editable}>
       <div className="sub-h">Basic info</div>
+      {/* 4열 × 3행 균일폭: 문서정보(4) · 선적정보(7) · HS Code(1) = 12필드. */}
       <div className="form-grid doc-form-grid">
         <Field label="CI No." value={ciNo} onChange={setCiNo} />
         <Field label="CI Date" value={date} onChange={setDate} type="date" />
@@ -916,10 +917,10 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
           <span>Currency</span>
           <CurrencyToggle value={currency} onChange={setCurrency} />
         </label>
-        <Field label="VAT Rate" value={String(vatRate)} onChange={(v) => setVatRate(num(v))} type="number" />
+        <VatRateSelect value={String(vatRate)} onChange={(v) => setVatRate(num(v))} />
+        <ShippingFields shipping={shipping} setShipping={setShipping} />
         <Field label="HS Code" value={shipping.hs_code || ""} onChange={(v) => setShipping({ ...shipping, hs_code: v })} />
       </div>
-      <ShippingFields shipping={shipping} setShipping={setShipping} />
       <ItemEditor
         items={items}
         setItems={setItems}
@@ -1122,11 +1123,11 @@ function ShippingAdviceTab({ data, onChanged }: { data: DocumentDetail; onChange
       {/* 8단계(Delivery arrangement) 마일스톤 — Customer 확인 / Vendor 서류 확인 */}
       <OrderMilestones data={data} onChanged={onChanged} />
       <fieldset className="form-fieldset" disabled={!editable}>
-      <div className="form-grid">
+      <div className="form-grid doc-form-grid">
         <Field label="SA No." value={saNo} onChange={setSaNo} />
         <Field label="SA Date" value={date} onChange={setDate} type="date" />
+        <ShippingFields shipping={shipping} setShipping={setShipping} />
       </div>
-      <ShippingFields shipping={shipping} setShipping={setShipping} />
       {data.ci ? (
         <MissingWarning missing={ciMissing} />
       ) : (
@@ -1227,7 +1228,7 @@ function TaxInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChanged: (
         <Field label="Issue Date" value={date} onChange={setDate} type="date" />
         <Field label="Supply Type" value={supplyType} onChange={setSupplyType} />
         <Field label="Buyer Business No." value={buyerNo} onChange={setBuyerNo} />
-        <Field label="VAT Rate" value={String(vatRate)} onChange={(v) => setVatRate(num(v))} type="number" />
+        <VatRateSelect value={String(vatRate)} onChange={(v) => setVatRate(num(v))} />
       </div>
       <ItemEditor
         items={items}
@@ -1257,6 +1258,8 @@ function TaxInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChanged: (
   );
 }
 
+// 선적정보 입력 필드들 — 래핑 그리드 없이 Field 조각만 반환해 상위 폼 그리드에
+// 함께 배치(문서정보와 같은 4열 트랙에 정렬)한다.
 function ShippingFields({
   shipping,
   setShipping,
@@ -1264,26 +1267,17 @@ function ShippingFields({
   shipping: Record<string, string>;
   setShipping: (v: Record<string, string>) => void;
 }) {
-  const fields = [
-    ["port_loading", "Port of Loading"],
-    ["port_discharge", "Port of Discharge"],
-    ["carrier", "Carrier"],
-    ["bl_awb_no", "B/L or AWB No."],
-    ["etd", "ETD"],
-    ["eta", "ETA"],
-    ["shipping_marks", "Shipping Marks"],
-  ];
+  const set = (key: string) => (v: string) => setShipping({ ...shipping, [key]: v });
   return (
-    <div className="form-grid doc-form-grid">
-      {fields.map(([key, label]) => (
-        <Field
-          key={key}
-          label={label}
-          value={shipping[key] || ""}
-          onChange={(v) => setShipping({ ...shipping, [key]: v })}
-        />
-      ))}
-    </div>
+    <>
+      <ComboField label="Port of Loading" value={shipping.port_loading || ""} onChange={set("port_loading")} options={PORT_OPTIONS} />
+      <ComboField label="Port of Discharge" value={shipping.port_discharge || ""} onChange={set("port_discharge")} options={PORT_OPTIONS} />
+      <ComboField label="Carrier" value={shipping.carrier || ""} onChange={set("carrier")} options={CARRIER_OPTIONS} />
+      <Field label="B/L or AWB No." value={shipping.bl_awb_no || ""} onChange={set("bl_awb_no")} />
+      <Field label="ETD" value={shipping.etd || ""} onChange={set("etd")} type="date" />
+      <Field label="ETA" value={shipping.eta || ""} onChange={set("eta")} type="date" />
+      <Field label="Shipping Marks" value={shipping.shipping_marks || ""} onChange={set("shipping_marks")} />
+    </>
   );
 }
 
@@ -1302,6 +1296,61 @@ function Field({
     <label className="form-field">
       <span>{label}</span>
       <input type={type} value={value} onChange={(e) => onChange(e.target.value)} />
+    </label>
+  );
+}
+
+// 자주 쓰는 값 제안 목록(datalist) — 목록 선택도, 직접 입력도 모두 가능한 콤보박스.
+const PORT_OPTIONS = [
+  "Busan, Korea", "Incheon, Korea", "Gwangyang, Korea", "Ulsan, Korea", "Pyeongtaek, Korea",
+  "Shanghai, China", "Ningbo, China", "Qingdao, China", "Hong Kong",
+  "Singapore", "Port Klang, Malaysia", "Tokyo, Japan", "Kobe, Japan",
+  "Rotterdam, Netherlands", "Hamburg, Germany", "Antwerp, Belgium",
+  "Los Angeles, USA", "Long Beach, USA", "Jebel Ali, UAE",
+];
+const CARRIER_OPTIONS = [
+  "TBD", "Maersk", "MSC", "CMA CGM", "HMM", "ONE", "Hapag-Lloyd", "Evergreen", "COSCO", "Yang Ming",
+  "Korean Air Cargo", "Asiana Cargo", "DHL", "FedEx", "UPS",
+];
+const UNIT_OPTIONS = ["PCS", "SET", "EA", "UNIT", "KG", "M", "M2", "M3", "L", "ROLL", "BOX", "PAIR", "LOT"];
+
+// 콤보박스 입력(목록 제안 + 자유 입력). Field 와 동일한 form-field 레이아웃.
+function ComboField({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: string[];
+}) {
+  const listId = useId();
+  return (
+    <label className="form-field">
+      <span>{label}</span>
+      <input list={listId} value={value} onChange={(e) => onChange(e.target.value)} />
+      <datalist id={listId}>
+        {options.map((o) => (
+          <option key={o} value={o} />
+        ))}
+      </datalist>
+    </label>
+  );
+}
+
+// VAT 세율 선택(0% 영세율 / 10% 표준). 기존 값이 목록에 없으면 그 값도 노출.
+function VatRateSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const known = ["0", "10"];
+  return (
+    <label className="form-field">
+      <span>VAT Rate</span>
+      <select value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value="0">0%</option>
+        <option value="10">10%</option>
+        {known.includes(value) ? null : <option value={value}>{value}%</option>}
+      </select>
     </label>
   );
 }
@@ -1334,6 +1383,7 @@ function ItemEditor({
   const total = items.reduce((sum, item) => sum + num(item.amount), 0);
   const sel = useRowSelection();
   const cur = (currency || "USD").toUpperCase();
+  const unitListId = useId();
   const cols: ItemCol[] = [
     { key: "__sel", fixed: true },
     { key: "__seq", fixed: true, className: "seq" },
@@ -1368,6 +1418,11 @@ function ItemEditor({
           <button className="btn sm items-head-add" onClick={() => setItems([...items, blankItem(packing)])}>+ Add</button>
         </div>
       </div>
+      <datalist id={unitListId}>
+        {UNIT_OPTIONS.map((o) => (
+          <option key={o} value={o} />
+        ))}
+      </datalist>
       <div className="table-wrap item-scroll">
         <ItemGridStyle grid={grid} />
         <table className={`mini wide lead-tools ${grid.tableClass}`}>
@@ -1405,7 +1460,7 @@ function ItemEditor({
                 <td><textarea {...gridCellProps(i, 1)} className="desc" rows={1} value={item.description || ""} onChange={(e) => patch(i, "description", e.target.value)} /></td>
                 <td><textarea {...gridCellProps(i, 2)} className="wrapcell" rows={1} value={item.maker || ""} onChange={(e) => patch(i, "maker", e.target.value)} /></td>
                 <td><input {...gridCellProps(i, 3)} className="num" value={amountInputValue(item.qty)} onChange={(e) => patch(i, "qty", e.target.value)} /></td>
-                <td><input {...gridCellProps(i, 4)} value={item.unit || "PCS"} onChange={(e) => patch(i, "unit", e.target.value)} /></td>
+                <td><input {...gridCellProps(i, 4)} list={unitListId} value={item.unit || "PCS"} onChange={(e) => patch(i, "unit", e.target.value)} /></td>
                 {packing ? (
                   <>
                     <td><input {...gridCellProps(i, 5)} value={item.package || ""} onChange={(e) => patch(i, "package", e.target.value)} /></td>

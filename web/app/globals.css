@@ -3381,10 +3381,17 @@ a.btn.primary:hover {
 .quote-meta-grid {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
-/* 문서(7·9단계) 편집 폼 — 문서정보/선적정보 입력란을 균일폭으로 정렬.
-   auto-fit + minmax 로 폭에 맞춰 자동 줄바꿈해 가로 스크롤 없이 모두 보이게 한다. */
+/* 문서(7·9단계) 편집 폼 — 문서정보/선적정보 입력란을 4열 균일폭 그리드로 정렬.
+   minmax(0,1fr) 4열은 컨테이너 폭에 맞춰 줄어들어 화면 밖으로 넘치지 않는다
+   (한 행 4개, CI No. 와 동일 폭). */
 .doc-form-grid {
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+/* 모바일/좁은 폭에서는 2열로 접어 잘림 방지. */
+@media (max-width: 720px) {
+  .doc-form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 /* 가격설정 — Item list 단가 계산에 직결. 6개 컨트롤을 한 줄로(FX 넓게, Apply는 내용폭). */
 .quote-price-grid {
