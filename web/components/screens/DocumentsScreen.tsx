@@ -52,6 +52,19 @@ import {
 
 const today = () => new Date().toISOString().slice(0, 10);
 
+// 표준 선적 마크(Shipping Marks) 기본 생성. 수출 화물의 통상 표기:
+//   수하인(고객) / 선박 / P/O 참조 / 케이스번호(C/NO. 1-UP) / 원산지.
+// 백엔드는 이 문자열을 그대로 CI·SA PDF 에 출력하므로 여기서 관례에 맞게 만든다.
+function defaultShippingMarks(order: { customer?: string; vessel?: string; po_no?: string }): string {
+  const lines: string[] = [];
+  if (order.customer) lines.push(order.customer.toUpperCase());
+  if (order.vessel) lines.push(`M/V ${order.vessel.toUpperCase()}`);
+  if (order.po_no) lines.push(`P/O NO.: ${order.po_no}`);
+  lines.push("C/NO. 1-UP");
+  lines.push("MADE IN KOREA");
+  return lines.join("\n");
+}
+
 // 문서 편집 권한 = 역할 권한(documents.edit) × 담당(PIC) 소유권. 없으면 읽기전용.
 function canEditDoc(data: DocumentDetail | null | undefined): boolean {
   return can("documents", "edit") && canEditDeal(data?.order.assignee_id);
@@ -851,7 +864,7 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
     bl_awb_no: "TBD",
     etd: "",
     eta: "",
-    shipping_marks: `K-MARIS / ${data.order.vessel || ""} / ${data.order.po_no || ""}`,
+    shipping_marks: defaultShippingMarks(data.order),
     hs_code: firstHs,
     ...(data.ci?.shipping || {}),
   });
@@ -885,7 +898,7 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
       bl_awb_no: "TBD",
       etd: "",
       eta: "",
-      shipping_marks: `K-MARIS / ${data.order.vessel || ""} / ${data.order.po_no || ""}`,
+      shipping_marks: defaultShippingMarks(data.order),
       hs_code: firstHs,
       ...(data.ci?.shipping || {}),
     });
@@ -919,8 +932,9 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
         </label>
         <VatRateSelect value={String(vatRate)} onChange={(v) => setVatRate(num(v))} />
         <ShippingFields shipping={shipping} setShipping={setShipping} />
-        <Field label="HS Code" value={shipping.hs_code || ""} onChange={(v) => setShipping({ ...shipping, hs_code: v })} />
+        <Field label="HS Code (optional)" value={shipping.hs_code || ""} onChange={(v) => setShipping({ ...shipping, hs_code: v })} />
       </div>
+      <ShippingMarksField value={shipping.shipping_marks || ""} onChange={(v) => setShipping({ ...shipping, shipping_marks: v })} />
       <ItemEditor
         items={items}
         setItems={setItems}
@@ -1056,7 +1070,7 @@ function ShippingAdviceTab({ data, onChanged }: { data: DocumentDetail; onChange
     bl_awb_no: data.ci?.shipping.bl_awb_no || "TBD",
     etd: data.ci?.shipping.etd || "",
     eta: data.ci?.shipping.eta || "",
-    shipping_marks: data.ci?.shipping.shipping_marks || `K-MARIS / ${data.order.vessel || ""} / ${data.order.po_no || ""}`,
+    shipping_marks: data.ci?.shipping.shipping_marks || defaultShippingMarks(data.order),
     ...(data.sa?.shipping || {}),
   });
   const [to, setTo] = useState(data.order.customer_email || "");
@@ -1099,7 +1113,7 @@ function ShippingAdviceTab({ data, onChanged }: { data: DocumentDetail; onChange
       bl_awb_no: data.ci?.shipping.bl_awb_no || "TBD",
       etd: data.ci?.shipping.etd || "",
       eta: data.ci?.shipping.eta || "",
-      shipping_marks: data.ci?.shipping.shipping_marks || `K-MARIS / ${data.order.vessel || ""} / ${data.order.po_no || ""}`,
+      shipping_marks: data.ci?.shipping.shipping_marks || defaultShippingMarks(data.order),
       ...(data.sa?.shipping || {}),
     });
   }
@@ -1128,6 +1142,7 @@ function ShippingAdviceTab({ data, onChanged }: { data: DocumentDetail; onChange
         <Field label="SA Date" value={date} onChange={setDate} type="date" />
         <ShippingFields shipping={shipping} setShipping={setShipping} />
       </div>
+      <ShippingMarksField value={shipping.shipping_marks || ""} onChange={(v) => setShipping({ ...shipping, shipping_marks: v })} />
       {data.ci ? (
         <MissingWarning missing={ciMissing} />
       ) : (
@@ -1276,8 +1291,23 @@ function ShippingFields({
       <Field label="B/L or AWB No." value={shipping.bl_awb_no || ""} onChange={set("bl_awb_no")} />
       <Field label="ETD" value={shipping.etd || ""} onChange={set("etd")} type="date" />
       <Field label="ETA" value={shipping.eta || ""} onChange={set("eta")} type="date" />
-      <Field label="Shipping Marks" value={shipping.shipping_marks || ""} onChange={set("shipping_marks")} />
     </>
+  );
+}
+
+// 선적 마크 — 여러 줄 블록(수하인/선박/PO/케이스번호/원산지)이므로 폭 전체를 쓰는 textarea.
+function ShippingMarksField({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <label className="form-field" style={{ maxWidth: "66.6667%" }}>
+      <span>Shipping Marks</span>
+      <textarea className="po-textarea small" value={value} onChange={(e) => onChange(e.target.value)} />
+    </label>
   );
 }
 

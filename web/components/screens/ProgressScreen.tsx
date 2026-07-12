@@ -1573,6 +1573,10 @@ export function PipelineModal({
   const [infoCollapsed, setInfoCollapsed] = useState<boolean>(
     () => typeof window !== "undefined" && window.localStorage.getItem("ktms:proj-info-collapsed") === "1"
   );
+  // 상단 단계 스트립: 토글로 납작한(번호+작은 제목) 바로 접기. localStorage 로 유지.
+  const [stagesCollapsed, setStagesCollapsed] = useState<boolean>(
+    () => typeof window !== "undefined" && window.localStorage.getItem("ktms:proj-stages-collapsed") === "1"
+  );
   useEffect(() => {
     if (typeof window !== "undefined") window.localStorage.setItem("ktms:proj-info-w", String(infoWidth));
   }, [infoWidth]);
@@ -1580,6 +1584,10 @@ export function PipelineModal({
     if (typeof window !== "undefined")
       window.localStorage.setItem("ktms:proj-info-collapsed", infoCollapsed ? "1" : "0");
   }, [infoCollapsed]);
+  useEffect(() => {
+    if (typeof window !== "undefined")
+      window.localStorage.setItem("ktms:proj-stages-collapsed", stagesCollapsed ? "1" : "0");
+  }, [stagesCollapsed]);
 
   function startInfoDrag(e: React.MouseEvent) {
     if (infoCollapsed) return;
@@ -1813,8 +1821,10 @@ export function PipelineModal({
         </div>
 
         {/* 단계 스트립 — 진행상태(완료 음영/현재)와 탐색(선택)을 통합하고, 각 단계의
-            주요 결과물(번호·Vendor·금액 등)과 완료 일시를 카드에 함께 노출한다. */}
-        <div className="project-stage-tabs" role="tablist" aria-label="Project stages">
+            주요 결과물(번호·Vendor·금액 등)과 완료 일시를 카드에 함께 노출한다.
+            우측 토글로 납작한(번호+작은 제목) 바로 접어 세로 공간을 아낀다. */}
+        <div className={`project-stage-tabs-row${stagesCollapsed ? " collapsed" : ""}`}>
+          <div className="project-stage-tabs" role="tablist" aria-label="Project stages">
           {chain.map((c) => {
             const no = c.no;
             const cls = [
@@ -1843,6 +1853,17 @@ export function PipelineModal({
               </button>
             );
           })}
+          </div>
+          <button
+            type="button"
+            className="stage-tabs-toggle"
+            onClick={() => setStagesCollapsed((v) => !v)}
+            title={stagesCollapsed ? "Expand stage details" : "Collapse stages"}
+            aria-label={stagesCollapsed ? "Expand stage details" : "Collapse stages"}
+            aria-pressed={stagesCollapsed}
+          >
+            {stagesCollapsed ? "▾" : "▴"}
+          </button>
         </div>
 
         <div className="pl-modal-body">
