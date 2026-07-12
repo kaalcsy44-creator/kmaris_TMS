@@ -552,6 +552,7 @@ export type DocumentDetail = {
     vat_rate: number;
     items: DocumentWorkItem[];
     shipping: Record<string, string>;
+    terms?: Record<string, string>;
     missing: { part_no: string; description: string; order_qty: number; doc_qty: number }[];
   };
   pl: null | {

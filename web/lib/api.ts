@@ -425,6 +425,7 @@ export function saveCommercialInvoice(
     vat_rate: number;
     items: DocumentWorkItem[];
     shipping: Record<string, string>;
+    terms?: Record<string, string>;
   }
 ): Promise<{ ok: boolean; id: number; ci_no: string }> {
   return post(`/api/admin/documents/${orderId}/ci`, body);

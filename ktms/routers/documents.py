@@ -16,6 +16,7 @@ from _core import (
     PackingList,
     PackingListSave,
     PurchaseOrder,
+    Quotation,
     Response,
     ServiceStageSave,
     ShippingAdvice,
@@ -272,6 +273,7 @@ def save_commercial_invoice(order_id: int, body: CommercialInvoiceSave):
         ci.vat_rate = body.vat_rate or 0.0
         ci.items = body.items or []
         ci.shipping = body.shipping or {}
+        ci.terms = body.terms or {}
         s.commit()
         return {"ok": True, "id": ci.id, "ci_no": ci.ci_no}
     finally:
@@ -321,6 +323,10 @@ def commercial_invoice_xlsx(order_id: int):
             shipping=ci.shipping or {}, po_no=order.po_no or "",
             export_ref=_project_no_for_order(s, order),
         )
+        # Quotation Ref. — 오더에 연결된 고객 견적번호(있으면).
+        if order.quotation_id:
+            q = s.query(Quotation).filter_by(id=order.quotation_id).first()
+            payload["quotation_ref"] = (q.qtn_no or "") if q else ""
         xlsx = generate_ci_xlsx(payload)
         return _doc_file_response(
             xlsx,

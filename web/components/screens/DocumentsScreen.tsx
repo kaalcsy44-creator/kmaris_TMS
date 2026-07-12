@@ -857,6 +857,8 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
     ...defaultMarkFields(data.order),
     ...(data.ci?.shipping || {}),
   });
+  // Incoterms · Payment Terms — CI/PDF/Excel 의 Shipping Information 에 출력.
+  const [terms, setTerms] = useState<Record<string, string>>(data.ci?.terms || {});
   const [busy, setBusy] = useState(false);
   const total = useMemo(() => items.reduce((sum, i) => sum + num(i.amount), 0), [items]);
   const editable = canEditDoc(data);
@@ -868,7 +870,7 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
       const outItems = items.map((it) => ({ ...it, hs_code: shipping.hs_code || it.hs_code || "" }));
       // 구조화 Shipping Marks → PDF 출력용 문자열로 합성해 함께 저장.
       const outShipping = { ...shipping, shipping_marks: composeShippingMarks(shipping) };
-      await saveCommercialInvoice(data.order.id, { ci_no: ciNo, date, currency, vat_rate: vatRate, items: outItems, shipping: outShipping });
+      await saveCommercialInvoice(data.order.id, { ci_no: ciNo, date, currency, vat_rate: vatRate, items: outItems, shipping: outShipping, terms });
       onChanged();
     } finally {
       setBusy(false);
@@ -893,6 +895,7 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
       ...defaultMarkFields(data.order),
       ...(data.ci?.shipping || {}),
     });
+    setTerms(data.ci?.terms || {});
   }
 
   async function del() {
@@ -925,6 +928,8 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
         </label>
         <VatRateSelect value={String(vatRate)} onChange={(v) => setVatRate(num(v))} />
         <ShippingFields shipping={shipping} setShipping={setShipping} />
+        <ComboField label="Incoterms" value={terms.incoterms || ""} onChange={(v) => setTerms({ ...terms, incoterms: v })} options={INCOTERMS_OPTIONS} />
+        <ComboField label="Payment Terms" value={terms.payment_terms || ""} onChange={(v) => setTerms({ ...terms, payment_terms: v })} options={PAYMENT_OPTIONS} />
         <Field label="HS Code (optional)" value={shipping.hs_code || ""} onChange={(v) => setShipping({ ...shipping, hs_code: v })} />
       </div>
       </div>
@@ -1409,6 +1414,13 @@ const CARRIER_OPTIONS = [
   "Korean Air Cargo", "Asiana Cargo", "DHL", "FedEx", "UPS",
 ];
 const UNIT_OPTIONS = ["PCS", "SET", "EA", "UNIT", "KG", "M", "M2", "M3", "L", "ROLL", "BOX", "PAIR", "LOT"];
+const INCOTERMS_OPTIONS = [
+  "EXW (Ex Works)", "FCA (Free Carrier)", "FOB (Free On Board)",
+  "CFR (Cost and Freight)", "CIF (Cost, Insurance and Freight)", "DAP (Delivered at Place)",
+];
+const PAYMENT_OPTIONS = [
+  "T/T in advance", "T/T 30 days", "T/T 60 days", "L/C at sight", "Net 30", "Net 60", "COD",
+];
 
 // ── Shipping Marks 섹션 선택지 ─────────────────────────────────────────────
 const SM_TYPE_OPTIONS = ["SHIP'S SPARES IN TRANSIT", "SHIP'S STORES", "COMMERCIAL CARGO"];

@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import io
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 from openpyxl import Workbook
@@ -13,6 +14,44 @@ from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
 
 from services.kmaris_docs import normalize_items, calc_totals, _num, DOC_TITLES
+
+_CONFIG_DIR = Path(__file__).resolve().parent.parent / "config"
+
+
+def _find_asset(*names: str) -> Optional[str]:
+    """config/ 에서 자산 이미지(로고·서명·직인)를 찾는다. 없으면 None(선택 자산)."""
+    for n in names:
+        p = _CONFIG_DIR / n
+        if p.exists():
+            return str(p)
+    return None
+
+
+def _compose_marks(sh: Dict[str, Any]) -> str:
+    """구조화 Shipping Marks(sm_*)를 여러 줄 문자열로 합성 — 프론트 composeShippingMarks 와
+    동일 규약(무게·치수 포함). 저장된 shipping_marks 문자열이 없거나 비어도 항상 재구성한다."""
+    lines = []
+    def push(v):
+        if v and str(v).strip():
+            lines.append(str(v).strip())
+    push(sh.get("sm_type"))
+    if sh.get("sm_consignee"): push(f"C/O {sh['sm_consignee']}")
+    if sh.get("sm_vessel"): push(f"M/V {str(sh['sm_vessel']).upper()}")
+    if sh.get("sm_po_no"): push(f"P.O. NO.: {sh['sm_po_no']}")
+    if sh.get("sm_ref_no"): push(f"REF. NO.: {sh['sm_ref_no']}")
+    push(sh.get("sm_desc"))
+    if sh.get("sm_case_no"): push(f"CASE NO.: {sh['sm_case_no']}")
+    if sh.get("sm_total_cases"): push(f"TOTAL: {sh['sm_total_cases']} CASE(S)")
+    if sh.get("sm_net_weight"): push(f"N.W.: {sh['sm_net_weight']} KG")
+    if sh.get("sm_gross_weight"): push(f"G.W.: {sh['sm_gross_weight']} KG")
+    dim = [sh.get("sm_dim_l"), sh.get("sm_dim_w"), sh.get("sm_dim_h")]
+    if any(d and str(d).strip() for d in dim):
+        push("DIM.: " + " × ".join((str(d).strip() if d and str(d).strip() else "-") for d in dim) + " MM")
+    if sh.get("sm_port_delivery"): push(f"PORT OF DELIVERY: {sh['sm_port_delivery']}")
+    if sh.get("sm_final_dest"): push(f"FINAL DESTINATION: {sh['sm_final_dest']}")
+    push(sh.get("sm_origin"))
+    push(sh.get("sm_handling"))
+    return "\n".join(lines)
 
 
 def make_commercial_invoice_xlsx(
@@ -104,7 +143,22 @@ def make_commercial_invoice_xlsx(
             r += 1
         return r
 
+    def add_image(path, anchor, w, h):
+        try:
+            from openpyxl.drawing.image import Image as XLImage
+            img = XLImage(path); img.width = w; img.height = h
+            ws.add_image(img, anchor)
+            return True
+        except Exception:
+            return False
+
     r = 1
+    # ── 회사 로고(선택: config/logo.png) — 맨 상단 좌측에 얹는다 ─────────────
+    logo = _find_asset("logo.png", "logo.jpg", "logo.jpeg")
+    if logo:
+        ws.row_dimensions[r].height = 52
+        add_image(logo, f"A{r}", 160, 46)
+        r += 1
     # ── 타이틀 + 회사 배너 ────────────────────────────────────────────────
     merge(r, 1, r, NCOL); put(r, 1, "COMMERCIAL INVOICE", fill=navy, font=white_lg, align=center)
     bd(r, 1, r, NCOL, navy); ws.row_dimensions[r].height = 30; r += 1
@@ -121,7 +175,7 @@ def make_commercial_invoice_xlsx(
     bd(r, 1, r, 4, section); bd(r, 5, r, 8, section); r += 1
     exporter = [
         company.get("company_name_en", ""),
-        company.get("address", ""),
+        company.get("address_en") or company.get("address", ""),
         f"Tel: {company.get('phone', '')}    Email: {company.get('sales_email', '')}",
         f"Business Reg. No.: {company.get('business_no', '')}",
     ]
@@ -129,7 +183,7 @@ def make_commercial_invoice_xlsx(
         ("Invoice No.", data.get("doc_no", "")),
         ("Invoice Date", data.get("date", "")),
         ("P.O. No.", shipping.get("po_no", "")),
-        ("Export Ref.", shipping.get("export_ref", "")),
+        ("Quotation Ref.", data.get("quotation_ref") or shipping.get("export_ref", "")),
     ]
     for i in range(4):
         merge(r, 1, r, 4); put(r, 1, exporter[i], font=normal, align=left); bd(r, 1, r, 4)
@@ -176,20 +230,12 @@ def make_commercial_invoice_xlsx(
     # ── Shipping marks ───────────────────────────────────────────────────
     merge(r, 1, r, NCOL); put(r, 1, "SHIPPING MARKS", fill=section, font=white_sec, align=left)
     bd(r, 1, r, NCOL, section); r += 1
-    marks = (shipping.get("shipping_marks") or "").strip()
-    if not marks:
-        parts = []
-        if shipping.get("sm_type"):
-            parts.append(shipping["sm_type"])
-        if shipping.get("sm_vessel"):
-            parts.append(f"FOR M/V {str(shipping['sm_vessel']).upper()}")
-        if shipping.get("sm_consignee"):
-            parts.append(f"C/O {shipping['sm_consignee']}")
-        if shipping.get("sm_case_no"):
-            parts.append(f"CASE NO. {shipping['sm_case_no']}")
-        marks = "\n".join(parts)
-    merge(r, 1, r + 3, NCOL); put(r, 1, marks, font=normal, align=left_top); bd(r, 1, r + 3, NCOL)
-    r += 4
+    # sm_* 로 항상 재구성(무게 N.W./G.W. · 치수 DIM. 포함). 없으면 저장된 문자열로 폴백.
+    marks = _compose_marks(shipping) or (shipping.get("shipping_marks") or "").strip()
+    marks_h = max(4, len(marks.splitlines()))  # 줄 수만큼 블록 높이 확보
+    merge(r, 1, r + marks_h - 1, NCOL); put(r, 1, marks, font=normal, align=left_top)
+    bd(r, 1, r + marks_h - 1, NCOL)
+    r += marks_h
 
     # ── 품목 표 ───────────────────────────────────────────────────────────
     hrow = r
@@ -251,10 +297,21 @@ def make_commercial_invoice_xlsx(
     merge(r, 1, r, NCOL)
     put(r, 1, "We hereby certify that this Commercial Invoice is true and correct.",
         font=normal, align=left); bd(r, 1, r, NCOL); r += 2
-    merge(r, 1, r + 2, 4); put(r, 1, "Authorized Signature", font=boldsm, align=left_top); bd(r, 1, r + 2, 4)
-    merge(r, 5, r + 2, 8)
-    put(r, 5, f"{company.get('company_name_en', '')}\n(Company Stamp)", font=boldsm, align=left_top)
-    bd(r, 5, r + 2, 8)
+    sig_row = r
+    for rr in range(sig_row, sig_row + 3):
+        ws.row_dimensions[rr].height = 28
+    merge(sig_row, 1, sig_row + 2, 4)
+    put(sig_row, 1, "Authorized Signature", font=boldsm, align=left_top); bd(sig_row, 1, sig_row + 2, 4)
+    merge(sig_row, 5, sig_row + 2, 8)
+    put(sig_row, 5, f"{company.get('company_name_en', '')}\n(Company Stamp)", font=boldsm, align=left_top)
+    bd(sig_row, 5, sig_row + 2, 8)
+    # 서명·직인 이미지(선택: config/signature.png, config/stamp.png) — 라벨 아래에 얹는다.
+    sign = _find_asset("signature.png", "signature.jpg", "sign.png")
+    stamp = _find_asset("stamp.png", "stamp.jpg", "seal.png")
+    if sign:
+        add_image(sign, f"B{sig_row + 1}", 130, 44)
+    if stamp:
+        add_image(stamp, f"F{sig_row + 1}", 78, 78)
 
     out = io.BytesIO()
     wb.save(out)

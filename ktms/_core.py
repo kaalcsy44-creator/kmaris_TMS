@@ -1655,6 +1655,7 @@ def _document_detail_payload(session, order: Order) -> dict:
             "vat_rate": ci.vat_rate or 0.0,
             "items": ci.items or [],
             "shipping": ci.shipping or {},
+            "terms": ci.terms or {},
             "missing": _missing_items(order.items or [], ci.items or []),
         },
         "pl": None if not pl else {
@@ -1693,6 +1694,7 @@ class CommercialInvoiceSave(BaseModel):
     vat_rate: float = 0.0
     items: list[dict] = []
     shipping: dict = {}
+    terms: dict = {}
 
 
 class PackingListSave(BaseModel):
