@@ -579,11 +579,172 @@ def _footer(canvas, doc):
     canvas.restoreState()
 
 
+def _make_commercial_invoice_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> bytes:
+    """Commercial Invoice PDF whose visual structure mirrors the dedicated XLSX."""
+    s = _styles()
+    customer = data.get("customer", {}) or {}
+    vessel = data.get("vessel", {}) or {}
+    terms = data.get("terms", {}) or {}
+    shipping = data.get("shipping", {}) or {}
+    items = normalize_items(data.get("items", []))
+    currency = (data.get("currency") or "USD").upper()
+    totals = calc_totals(items, _num(data.get("vat_rate", 0)))
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), leftMargin=10 * mm,
+                            rightMargin=10 * mm, topMargin=8 * mm, bottomMargin=14 * mm,
+                            title="COMMERCIAL INVOICE")
+
+    def p(value, style="small"):
+        text = str(value or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        return Paragraph(text.replace("\n", "<br/>"), s[style])
+
+    def section(title):
+        t = Table([[p(title, "section")]], colWidths=[277 * mm])
+        t.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#1F3B66")),
+                               ("TEXTCOLOR", (0, 0), (-1, -1), colors.white),
+                               ("FONTNAME", (0, 0), (-1, -1), DEFAULT_BOLD_FONT),
+                               ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                               ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]))
+        return t
+
+    def grid(rows, widths, label_cols=()):
+        t = Table(rows, colWidths=[w * mm for w in widths])
+        cmds = [("GRID", (0, 0), (-1, -1), .35, MID_GRAY), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]
+        for col in label_cols:
+            cmds += [("BACKGROUND", (col, 0), (col, -1), LIGHT_GRAY),
+                     ("FONTNAME", (col, 0), (col, -1), DEFAULT_BOLD_FONT)]
+        t.setStyle(TableStyle(cmds))
+        return t
+
+    story = []
+    title = Table([[p("COMMERCIAL INVOICE", "section")]], colWidths=[277 * mm], rowHeights=[13 * mm])
+    title.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), NAVY), ("TEXTCOLOR", (0, 0), (-1, -1), colors.white),
+                               ("ALIGN", (0, 0), (-1, -1), "CENTER"), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                               ("FONTNAME", (0, 0), (-1, -1), DEFAULT_BOLD_FONT),
+                               ("FONTSIZE", (0, 0), (-1, -1), 17)]))
+    story.append(title)
+    banner_text = "   |   ".join(x for x in [company.get("company_name_en", "K-MARIS Energy & Solutions Co., Ltd."),
+                                               company.get("sales_email", ""), company.get("website", "")] if x)
+    banner = Table([[p(banner_text, "section")]], colWidths=[277 * mm], rowHeights=[7 * mm])
+    banner.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), BLUE), ("TEXTCOLOR", (0, 0), (-1, -1), colors.white),
+                                ("ALIGN", (0, 0), (-1, -1), "CENTER"), ("VALIGN", (0, 0), (-1, -1), "MIDDLE")]))
+    story += [banner, Spacer(1, 5 * mm)]
+
+    exporter = [company.get("company_name_en", ""), company.get("address_en") or company.get("address", ""),
+                f"Tel: {company.get('phone', '')}    Email: {company.get('sales_email', '')}",
+                f"Business Reg. No.: {company.get('business_no', '')}"]
+    invoice = [("Invoice No.", data.get("doc_no", "")), ("Invoice Date", data.get("date", "")),
+               ("P.O. No.", shipping.get("po_no", "")),
+               ("Quotation Ref.", data.get("quotation_ref") or shipping.get("export_ref", ""))]
+    rows = [[p("EXPORTER / SELLER", "section"), "", p("INVOICE INFORMATION", "section"), ""]]
+    rows += [[p(exporter[i]), "", p(invoice[i][0]), p(invoice[i][1])] for i in range(4)]
+    info = Table(rows, colWidths=[36 * mm, 102.5 * mm, 32 * mm, 106.5 * mm])
+    info.setStyle(TableStyle([("SPAN", (0, 0), (1, 0)), ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1F3B66")),
+                              ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                              ("FONTNAME", (0, 0), (-1, 0), DEFAULT_BOLD_FONT),
+                              ("SPAN", (0, 1), (1, 1)), ("SPAN", (0, 2), (1, 2)), ("SPAN", (0, 3), (1, 3)), ("SPAN", (0, 4), (1, 4)),
+                              ("BACKGROUND", (2, 1), (2, -1), LIGHT_GRAY), ("FONTNAME", (2, 1), (2, -1), DEFAULT_BOLD_FONT),
+                              ("GRID", (0, 0), (-1, -1), .35, MID_GRAY), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                              ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                              ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]))
+    story.append(info)
+
+    buyer = [customer.get("name", ""), customer.get("address", ""),
+             f"Contact: {customer.get('contact', '')}    {customer.get('email', '')}"]
+    ship = [("Ship Agent", shipping.get("sm_consignee", "")),
+            ("Vessel / IMO", " / ".join(x for x in [shipping.get("sm_vessel") or vessel.get("name", ""), vessel.get("imo", "")] if x)),
+            ("B/L or AWB No.", shipping.get("bl_awb_no", ""))]
+    rows = [[p("CONSIGNEE / BUYER", "section"), "", p("SHIP TO / C/O", "section"), ""]]
+    rows += [[p(buyer[i]), "", p(ship[i][0]), p(ship[i][1])] for i in range(3)]
+    consignee = Table(rows, colWidths=[36 * mm, 102.5 * mm, 32 * mm, 106.5 * mm])
+    consignee.setStyle(TableStyle([("SPAN", (0, 0), (1, 0)), ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1F3B66")),
+                                   ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                                   ("FONTNAME", (0, 0), (-1, 0), DEFAULT_BOLD_FONT),
+                                   ("SPAN", (0, 1), (1, 1)), ("SPAN", (0, 2), (1, 2)), ("SPAN", (0, 3), (1, 3)),
+                                   ("BACKGROUND", (2, 1), (2, -1), LIGHT_GRAY), ("FONTNAME", (2, 1), (2, -1), DEFAULT_BOLD_FONT),
+                                   ("GRID", (0, 0), (-1, -1), .35, MID_GRAY), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                                   ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                                   ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]))
+    story += [consignee, section("SHIPPING INFORMATION")]
+    shipping_rows = [[p(a), p(b), p(c), p(d)] for a, b, c, d in [
+        ("Vessel", shipping.get("sm_vessel") or vessel.get("name", ""), "Carrier", shipping.get("carrier", "")),
+        ("Port of Loading", shipping.get("port_loading", ""), "Port of Discharge", shipping.get("port_discharge", "")),
+        ("Incoterms", terms.get("incoterms", ""), "Payment Terms", terms.get("payment_terms", "")),
+        ("ETD", shipping.get("etd", ""), "ETA", shipping.get("eta", "")),
+        ("Currency", currency, "Country of Origin", shipping.get("sm_origin", ""))]]
+    story += [grid(shipping_rows, [36, 102.5, 52, 86.5], (0, 2)), section("SHIPPING MARKS")]
+
+    marks = (shipping.get("shipping_marks") or "").strip()
+    if not marks:
+        parts = [shipping.get("sm_type"), f"C/O {shipping.get('sm_consignee')}" if shipping.get("sm_consignee") else "",
+                 f"M/V {str(shipping.get('sm_vessel')).upper()}" if shipping.get("sm_vessel") else "",
+                 f"P.O. NO.: {shipping.get('sm_po_no')}" if shipping.get("sm_po_no") else "",
+                 f"REF. NO.: {shipping.get('sm_ref_no')}" if shipping.get("sm_ref_no") else "", shipping.get("sm_desc"),
+                 f"CASE NO.: {shipping.get('sm_case_no')}" if shipping.get("sm_case_no") else "",
+                 f"TOTAL: {shipping.get('sm_total_cases')} CASE(S)" if shipping.get("sm_total_cases") else "",
+                 f"N.W.: {shipping.get('sm_net_weight')} KG" if shipping.get("sm_net_weight") else "",
+                 f"G.W.: {shipping.get('sm_gross_weight')} KG" if shipping.get("sm_gross_weight") else ""]
+        dims = [shipping.get("sm_dim_l"), shipping.get("sm_dim_w"), shipping.get("sm_dim_h")]
+        if any(dims): parts.append("DIM.: " + " x ".join(str(x or "-") for x in dims) + " MM")
+        parts += [f"PORT OF DELIVERY: {shipping.get('sm_port_delivery')}" if shipping.get("sm_port_delivery") else "",
+                  f"FINAL DESTINATION: {shipping.get('sm_final_dest')}" if shipping.get("sm_final_dest") else "",
+                  shipping.get("sm_origin"), shipping.get("sm_handling")]
+        marks = "\n".join(str(x) for x in parts if x)
+    marks_table = Table([[p(marks)]], colWidths=[277 * mm])
+    marks_table.setStyle(TableStyle([("BOX", (0, 0), (-1, -1), .35, MID_GRAY), ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                                     ("LEFTPADDING", (0, 0), (-1, -1), 4), ("TOPPADDING", (0, 0), (-1, -1), 4),
+                                     ("BOTTOMPADDING", (0, 0), (-1, -1), 4)]))
+    story.append(marks_table)
+
+    headers = ["No.", "Description", "Part No.", "HS Code", "Qty", "Unit Price", f"Amount ({currency})"]
+    item_rows = [[p(h, "th") for h in headers]]
+    for it in items:
+        item_rows.append([p(it["item_no"], "tiny"), p(it["description"], "tiny"), p(it["part_no"], "tiny"),
+                          p(it.get("hs_code") or shipping.get("hs_code", ""), "tiny"), p(f"{it['qty']:g}", "tiny"),
+                          p(f"{it['unit_price']:,.2f}", "tiny"), p(f"{it['amount']:,.2f}", "tiny")])
+    item_table = Table(item_rows, colWidths=[w * mm for w in [12, 83, 42, 30, 18, 42, 50]], repeatRows=1)
+    cmds = [("BACKGROUND", (0, 0), (-1, 0), NAVY), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("GRID", (0, 0), (-1, -1), .35, MID_GRAY), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("ALIGN", (4, 1), (-1, -1), "RIGHT"), ("LEFTPADDING", (0, 0), (-1, -1), 3),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 3), ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]
+    for i in range(2, len(item_rows), 2): cmds.append(("BACKGROUND", (0, i), (-1, i), colors.HexColor("#FAFBFC")))
+    item_table.setStyle(TableStyle(cmds)); story.append(item_table)
+
+    total_rows = [[p(label), p(f"{value:,.2f}")] for label, value in [
+        ("Subtotal", totals["subtotal"]), ("Freight", 0), ("Packing", 0), ("Insurance", 0),
+        ("VAT", totals["vat"]), ("TOTAL INVOICE VALUE", totals["total"])]]
+    total_table = Table([["", Table(total_rows, colWidths=[52 * mm, 42 * mm])]], colWidths=[183 * mm, 94 * mm])
+    total_table._cellvalues[0][1].setStyle(TableStyle([("GRID", (0, 0), (-1, -1), .35, MID_GRAY),
+        ("BACKGROUND", (0, 0), (0, -1), LIGHT_GRAY), ("BACKGROUND", (0, -1), (-1, -1), LIGHT_BLUE),
+        ("ALIGN", (1, 0), (1, -1), "RIGHT"), ("FONTNAME", (0, -1), (-1, -1), DEFAULT_BOLD_FONT),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4)]))
+    story += [total_table, Spacer(1, 3 * mm), section("PACKING & DECLARATION")]
+    packing = [[p(a), p(b), p(c), p(d)] for a, b, c, d in [
+        ("Total Packages", shipping.get("sm_total_cases", ""), "Net Weight (kg)", shipping.get("sm_net_weight", "")),
+        ("Gross Weight (kg)", shipping.get("sm_gross_weight", ""), "Country of Origin", shipping.get("sm_origin", ""))]]
+    story += [grid(packing, [36, 102.5, 52, 86.5], (0, 2)), grid([[p("We hereby certify that this Commercial Invoice is true and correct.")]], [277])]
+    sign = Table([[p("Authorized Signature", "base"),
+                   p(f"{company.get('company_name_en', '')}\n(Company Stamp)", "base")]],
+                 colWidths=[138.5 * mm, 138.5 * mm], rowHeights=[18 * mm])
+    sign.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), .35, MID_GRAY),
+                              ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                              ("FONTNAME", (0, 0), (-1, -1), DEFAULT_BOLD_FONT),
+                              ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                              ("TOPPADDING", (0, 0), (-1, -1), 4)]))
+    story.append(sign)
+    doc.build(story, onFirstPage=_footer, onLaterPages=_footer)
+    return buffer.getvalue()
+
+
 def make_pdf(doc_type: str, data: Dict[str, Any], company: Optional[Dict[str, Any]] = None, logo_path: Optional[str] = None) -> bytes:
     if doc_type not in DOC_TITLES:
         raise ValueError(f"Unsupported document type: {doc_type}")
     payload = dict(data)
     payload["company"] = company or data.get("company", {})
+    if doc_type == "commercial_invoice":
+        return _make_commercial_invoice_pdf(payload, payload["company"])
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
         buffer,
