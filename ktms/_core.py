@@ -43,7 +43,7 @@ from services.email_svc import (
 )
 from services.pdf_svc import (
     build_payload, build_po_payload, generate_pdf, generate_po_pdf,
-    generate_tax_xlsx, generate_ci_xlsx,
+    generate_tax_xlsx, generate_ci_xlsx, generate_pl_xlsx,
 )
 from services.pdf_parser import (
     extract_text_from_pdf, parse_order_fields, parse_rfq_fields,
@@ -1663,6 +1663,7 @@ def _document_detail_payload(session, order: Order) -> dict:
             "pl_no": pl.pl_no or "",
             "date": pl.date or "",
             "items": pl.items or [],
+            "packing_info": pl.packing_info or "",
             "missing": _missing_items(order.items or [], pl.items or []),
         },
         "sa": None if not sa else {
@@ -1701,6 +1702,7 @@ class PackingListSave(BaseModel):
     pl_no: str | None = None
     date: str | None = None
     items: list[dict] = []
+    packing_info: str | None = None
 
 
 class ShippingAdviceSave(BaseModel):
@@ -2484,6 +2486,7 @@ __all__ = [
     "generate_po_pdf",
     "generate_tax_xlsx",
     "generate_ci_xlsx",
+    "generate_pl_xlsx",
     "get_current_user",
     "get_session",
     "io",

@@ -52,6 +52,7 @@ from _core import (
     generate_pdf,
     generate_tax_xlsx,
     generate_ci_xlsx,
+    generate_pl_xlsx,
     get_session,
     require_token,
     send_email,
@@ -381,6 +382,8 @@ def save_packing_list(order_id: int, body: PackingListSave):
             pl.pl_no = _manual_doc_no(s, PackingList, "pl_no", body.pl_no, pl.id)
         pl.date = body.date or pl.date or date.today().isoformat()
         pl.items = body.items or []
+        if body.packing_info is not None:
+            pl.packing_info = body.packing_info
         s.commit()
         return {"ok": True, "id": pl.id, "pl_no": pl.pl_no}
     finally:
@@ -397,19 +400,49 @@ def packing_list_pdf(order_id: int):
         pl = _latest_pl(s, ci.id if ci else None)
         if not order or not ci or not pl:
             raise HTTPException(status_code=404, detail="Packing List瑜?李얠쓣 ???놁뒿?덈떎.")
-        payload = build_payload(
-            doc_no=pl.pl_no, date=pl.date,
-            customer=_customer_for_order(s, order),
-            vessel=_vessel_for_order(s, order),
-            items=pl.items or [], terms={},
-            currency=ci.currency or "USD",
-            shipping=ci.shipping or {}, po_no=order.po_no or "",
-            export_ref=_project_no_for_order(s, order),
-        )
+        payload = _packing_list_payload(s, order, ci, pl)
         pdf = generate_pdf("packing_list", payload)
         return _doc_file_response(pdf, f"{pl.pl_no}_PL.pdf", "application/pdf")
     finally:
         s.close()
+
+
+@app.get("/api/admin/documents/{order_id}/pl/xlsx",
+         dependencies=[Depends(require_token)])
+def packing_list_xlsx(order_id: int):
+    """Packing List 전용 Excel — PL 탭 입력을 지정 양식으로 렌더링."""
+    s = get_session()
+    try:
+        order = s.query(Order).filter_by(id=order_id).first()
+        ci = _latest_ci(s, order_id) if order else None
+        pl = _latest_pl(s, ci.id if ci else None)
+        if not order or not ci or not pl:
+            raise HTTPException(status_code=404, detail="Packing List가 없습니다.")
+        payload = _packing_list_payload(s, order, ci, pl)
+        xlsx = generate_pl_xlsx(payload)
+        return _doc_file_response(
+            xlsx,
+            f"{pl.pl_no}_PackingList.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+    finally:
+        s.close()
+
+
+def _packing_list_payload(s, order, ci, pl) -> dict:
+    """PL PDF/Excel 공통 payload — 선적정보는 CI 에서 상속하고 CI 번호·포장 메모를 얹는다."""
+    payload = build_payload(
+        doc_no=pl.pl_no, date=pl.date,
+        customer=_customer_for_order(s, order),
+        vessel=_vessel_for_order(s, order),
+        items=pl.items or [], terms={},
+        currency=ci.currency or "USD",
+        shipping=ci.shipping or {}, po_no=order.po_no or "",
+        export_ref=_project_no_for_order(s, order),
+    )
+    payload["shipping"]["ci_no"] = ci.ci_no or ""
+    payload["packing_info"] = pl.packing_info or ""
+    return payload
 
 
 @app.delete("/api/admin/documents/{order_id}/pl",

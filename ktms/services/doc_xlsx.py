@@ -350,6 +350,294 @@ def make_commercial_invoice_xlsx(
     return out.getvalue()
 
 
+def _pkg_text_xlsx(it: Dict[str, Any]) -> str:
+    """'No. & Kind of Packages' 셀 — 수량+종류 결합, 없으면 레거시 package."""
+    q = str(it.get("pkg_qty") or "").strip()
+    k = str(it.get("pkg_kind") or "").strip()
+    combined = f"{q} {k}".strip()
+    return combined or str(it.get("package") or "").strip()
+
+
+def make_packing_list_xlsx(
+    data: Dict[str, Any], company: Optional[Dict[str, Any]] = None
+) -> bytes:
+    """Packing List 전용 Excel — Commercial Invoice 와 같은 섹션 구조. 가격 열은 없고
+    포장(No.&Kind of Packages)·중량(N.W./G.W.)·용적(Measurement) 열과 합계행을 갖는다."""
+    company = company or {}
+    customer = data.get("customer", {}) or {}
+    vessel = data.get("vessel", {}) or {}
+    shipping = data.get("shipping", {}) or {}
+    items = normalize_items(data.get("items", []))
+    num_fmt = "#,##0.###"
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Packing List"
+    ws.sheet_view.showGridLines = False
+
+    navy = PatternFill("solid", fgColor="0B1D3A")
+    blue = PatternFill("solid", fgColor="0055A8")
+    section = PatternFill("solid", fgColor="1F3B66")
+    gray = PatternFill("solid", fgColor="F4F6F8")
+    lightblue = PatternFill("solid", fgColor="EAF3FF")
+    alt = PatternFill("solid", fgColor="FAFBFC")
+
+    white_lg = Font(name="Noto Sans KR", color="0B1D3A", bold=True, size=19)
+    white_sm = Font(name="Noto Sans KR", color="FFFFFF", size=9)
+    white_sec = Font(name="Noto Sans KR", color="FFFFFF", bold=True, size=10)
+    white_hdr = Font(name="Noto Sans KR", color="FFFFFF", bold=True, size=9)
+    bold = Font(name="Noto Sans KR", bold=True)
+    boldsm = Font(name="Noto Sans KR", bold=True, size=9)
+    normal = Font(name="Noto Sans KR", size=9)
+
+    thin = Side(style="thin", color="C8D2E0")
+    bdr = Border(top=thin, bottom=thin, left=thin, right=thin)
+    center = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    left = Alignment(horizontal="left", vertical="center", wrap_text=True)
+    right = Alignment(horizontal="right", vertical="center")
+    left_top = Alignment(horizontal="left", vertical="top", wrap_text=True)
+
+    NCOL = 9
+    widths = [6, 20, 14, 7, 8, 13, 11, 11, 12]
+    for i, w in enumerate(widths, start=1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+
+    def merge(r1, c1, r2, c2):
+        ws.merge_cells(start_row=r1, start_column=c1, end_row=r2, end_column=c2)
+
+    def bd(r1, c1, r2, c2, fill=None):
+        for rr in range(r1, r2 + 1):
+            for cc in range(c1, c2 + 1):
+                ws.cell(rr, cc).border = bdr
+                if fill:
+                    ws.cell(rr, cc).fill = fill
+
+    def put(r, c, v="", *, fill=None, font=None, align=None, fmt=None):
+        x = ws.cell(r, c, v)
+        if fill:
+            x.fill = fill
+        if font:
+            x.font = font
+        if align:
+            x.alignment = align
+        if fmt:
+            x.number_format = fmt
+        return x
+
+    def add_image(path, anchor, w, h):
+        try:
+            from openpyxl.drawing.image import Image as XLImage
+            img = XLImage(path); img.width = w; img.height = h
+            ws.add_image(img, anchor)
+            return True
+        except Exception:
+            return False
+
+    def pairs_block(rows, start_row):
+        """label:value 쌍을 한 행에 2쌍씩(좌: 1-5, 우: 6-9) 배치."""
+        r = start_row
+        for i in range(0, len(rows), 2):
+            chunk = rows[i:i + 2]
+            k, v = chunk[0]
+            merge(r, 1, r, 2); put(r, 1, k, fill=gray, font=boldsm, align=left)
+            merge(r, 3, r, 5); put(r, 3, v, font=normal, align=left)
+            bd(r, 1, r, 5)
+            if len(chunk) > 1:
+                k2, v2 = chunk[1]
+                merge(r, 6, r, 7); put(r, 6, k2, fill=gray, font=boldsm, align=left)
+                merge(r, 8, r, 9); put(r, 8, v2, font=normal, align=left)
+            else:
+                merge(r, 6, r, 9)
+            bd(r, 6, r, 9)
+            r += 1
+        return r
+
+    r = 1
+    logo = _find_asset("logo_K-maris.png", "logo.png", "logo.jpg", "logo.jpeg")
+    if logo:
+        add_image(logo, f"A{r}", 105, 35)
+    merge(r, 1, r, NCOL); put(r, 1, "PACKING LIST", font=white_lg, align=center)
+    bd(r, 1, r, NCOL); ws.row_dimensions[r].height = 53.6; r += 1
+    banner = "   |   ".join(x for x in [
+        company.get("company_name_en", "K-MARIS Energy & Solutions Co., Ltd."),
+        company.get("sales_email", ""), company.get("website", ""),
+    ] if x)
+    merge(r, 1, r, NCOL); put(r, 1, banner, fill=blue, font=white_sm, align=center)
+    bd(r, 1, r, NCOL, blue); ws.row_dimensions[r].height = 16; r += 2
+
+    # ── Exporter / Packing list information ──────────────────────────────
+    merge(r, 1, r, 5); put(r, 1, "EXPORTER / SELLER", fill=section, font=white_sec, align=left)
+    merge(r, 6, r, 9); put(r, 6, "PACKING LIST INFORMATION", fill=section, font=white_sec, align=left)
+    bd(r, 1, r, 5, section); bd(r, 6, r, 9, section); r += 1
+    address = company.get("address_en") or company.get("address", "")
+    address_top, address_bottom = address, ""
+    if " Seoul" in address:
+        address_top, address_bottom = address.split(" Seoul", 1)
+        address_bottom = "Seoul" + address_bottom
+    exporter = [
+        company.get("company_name_en", ""),
+        address_top,
+        address_bottom,
+        f"Tel: {company.get('phone', '')}    Email: {company.get('sales_email', '')}",
+        f"Business Reg. No.: {company.get('business_no', '')}",
+    ]
+    pl_info = [
+        ("P/L No.", data.get("doc_no", "")),
+        ("P/L Date", data.get("date", "")),
+        ("Invoice No.", shipping.get("ci_no", "")),
+        ("P.O. No.", shipping.get("po_no", "")),
+        ("", ""),
+    ]
+    for i in range(5):
+        merge(r, 1, r, 5); put(r, 1, exporter[i], font=normal, align=left); bd(r, 1, r, 5)
+        merge(r, 6, r, 7); put(r, 6, pl_info[i][0], fill=gray, font=boldsm, align=left)
+        merge(r, 8, r, 9); put(r, 8, pl_info[i][1], font=normal, align=left); bd(r, 6, r, 9)
+        if i == 3:
+            ws.row_dimensions[r].height = 17.6
+        r += 1
+
+    # ── Consignee / Ship-to ──────────────────────────────────────────────
+    merge(r, 1, r, 5); put(r, 1, "CONSIGNEE / BUYER", fill=section, font=white_sec, align=left)
+    merge(r, 6, r, 9); put(r, 6, "SHIP TO / C/O", fill=section, font=white_sec, align=left)
+    bd(r, 1, r, 5, section); bd(r, 6, r, 9, section); r += 1
+    buyer = [
+        customer.get("name", ""),
+        customer.get("address", ""),
+        f"Contact: {customer.get('contact', '')}    {customer.get('email', '')}",
+    ]
+    ship_to = [
+        ("Ship Agent", shipping.get("sm_consignee", "")),
+        ("Vessel / IMO", " / ".join(x for x in [shipping.get("sm_vessel", "") or vessel.get("name", ""), vessel.get("imo", "")] if x)),
+        ("B/L or AWB No.", shipping.get("bl_awb_no", "")),
+    ]
+    for i in range(3):
+        merge(r, 1, r, 5); put(r, 1, buyer[i], font=normal, align=left); bd(r, 1, r, 5)
+        merge(r, 6, r, 7); put(r, 6, ship_to[i][0], fill=gray, font=boldsm, align=left)
+        merge(r, 8, r, 9); put(r, 8, ship_to[i][1], font=normal, align=left); bd(r, 6, r, 9)
+        r += 1
+
+    # ── Shipping information ─────────────────────────────────────────────
+    merge(r, 1, r, NCOL); put(r, 1, "SHIPPING INFORMATION", fill=section, font=white_sec, align=left)
+    bd(r, 1, r, NCOL, section); r += 1
+    r = pairs_block([
+        ("Vessel", shipping.get("sm_vessel", "") or vessel.get("name", "")),
+        ("Carrier", shipping.get("carrier", "")),
+        ("Port of Loading", shipping.get("port_loading", "")),
+        ("Port of Discharge", shipping.get("port_discharge", "")),
+        ("ETD", shipping.get("etd", "")),
+        ("ETA", shipping.get("eta", "")),
+        ("Country of Origin", shipping.get("sm_origin", "")),
+        ("Final Destination", shipping.get("sm_final_dest", "")),
+    ], r)
+
+    # ── Shipping marks ───────────────────────────────────────────────────
+    merge(r, 1, r, NCOL); put(r, 1, "SHIPPING MARKS", fill=section, font=white_sec, align=left)
+    bd(r, 1, r, NCOL, section); r += 1
+    marks = _compose_marks(shipping) or (shipping.get("shipping_marks") or "").strip()
+    mark_lines = marks.splitlines()
+    split_at = (len(mark_lines) + 1) // 2
+    marks_h = 5
+    merge(r, 1, r + marks_h - 1, 5)
+    put(r, 1, "\n".join(mark_lines[:split_at]), font=normal, align=left_top)
+    merge(r, 6, r + marks_h - 1, 9)
+    put(r, 6, "\n".join(mark_lines[split_at:]), font=normal, align=left_top)
+    bd(r, 1, r + marks_h - 1, 5)
+    bd(r, 6, r + marks_h - 1, 9)
+    r += marks_h
+
+    # ── 품목 표(가격 없음) ─────────────────────────────────────────────────
+    hrow = r
+    heads = ["No.", "Description", "Part No.", "Q'ty", "Unit", "No. & Kind of Packages",
+             "N.W. (kg)", "G.W. (kg)", "Meas. (m³)"]
+    for c, h in enumerate(heads, start=1):
+        put(hrow, c, h, fill=navy, font=white_hdr, align=center)
+    bd(hrow, 1, hrow, NCOL, navy); ws.row_dimensions[hrow].height = 26
+    r = hrow + 1
+    first_data = r
+
+    def _numval(v):
+        try:
+            f = float(v)
+            return f if f else ""
+        except (TypeError, ValueError):
+            return str(v).strip() if v not in (None, "") else ""
+
+    for i, it in enumerate(items):
+        put(r, 1, it["item_no"], align=center)
+        put(r, 2, it["description"], align=left)
+        put(r, 3, it["part_no"], align=left)
+        put(r, 4, _num(it["qty"]), align=center)
+        put(r, 5, it["unit"], align=center)
+        put(r, 6, _pkg_text_xlsx(it), align=left)
+        put(r, 7, _numval(it.get("net_weight")), align=right, fmt=num_fmt)
+        put(r, 8, _numval(it.get("gross_weight")), align=right, fmt=num_fmt)
+        put(r, 9, _numval(it.get("measurement")), align=right, fmt=num_fmt)
+        if i % 2 == 1:
+            for cc in range(1, NCOL + 1):
+                ws.cell(r, cc).fill = alt
+        bd(r, 1, r, NCOL); ws.row_dimensions[r].height = 18
+        r += 1
+    last_data = r - 1 if items else first_data
+
+    # ── 합계행 — 포장 수량/중량/용적 자동합산(수식) ──────────────────────
+    tot_pkgs = sum(_num(it.get("pkg_qty")) for it in items)
+    merge(r, 1, r, 5); put(r, 1, "TOTAL", fill=lightblue, font=bold, align=right)
+    put(r, 6, (tot_pkgs or ""), fill=lightblue, font=bold, align=right)
+    for c in (7, 8, 9):
+        col = get_column_letter(c)
+        formula = f"=SUM({col}{first_data}:{col}{last_data})" if items else 0
+        put(r, c, formula, fill=lightblue, font=bold, align=right, fmt=num_fmt)
+    bd(r, 1, r, NCOL); ws.row_dimensions[r].height = 18
+    r += 2
+
+    # ── Packing Information(자유 메모) ────────────────────────────────────
+    packing_info = (data.get("packing_info") or "").strip()
+    if packing_info:
+        merge(r, 1, r, NCOL); put(r, 1, "PACKING INFORMATION", fill=section, font=white_sec, align=left)
+        bd(r, 1, r, NCOL, section); r += 1
+        merge(r, 1, r + 1, NCOL); put(r, 1, packing_info, font=normal, align=left_top)
+        bd(r, 1, r + 1, NCOL); r += 2
+
+    merge(r, 1, r, NCOL)
+    put(r, 1, "We hereby certify that this Packing List is true and correct.",
+        font=normal, align=left); bd(r, 1, r, NCOL); r += 2
+
+    # ── 서명 / 직인 ───────────────────────────────────────────────────────
+    sig_row = r
+    ws.row_dimensions[sig_row].height = 28
+    ws.row_dimensions[sig_row + 1].height = 20.15
+    ws.row_dimensions[sig_row + 2].height = 21
+    merge(sig_row, 1, sig_row + 2, 5)
+    put(sig_row, 1, "Authorized Signature", font=boldsm, align=left_top); bd(sig_row, 1, sig_row + 2, 5)
+    merge(sig_row, 6, sig_row + 2, 9)
+    put(sig_row, 6, f"{company.get('company_name_en', '')}\n(Company Stamp)", font=boldsm, align=left_top)
+    bd(sig_row, 6, sig_row + 2, 9)
+    sign = _find_asset("Authorized signature_Sungyeon Cho.jpg", "signature.png", "signature.jpg", "sign.png")
+    stamp = _find_asset("Company stamp_K-Maris Energy & Solutions.jpg", "stamp.png", "stamp.jpg", "seal.png")
+    if sign:
+        add_image(sign, f"B{sig_row + 1}", 130, 44)
+    if stamp:
+        add_image(stamp, f"G{sig_row + 1}", 78, 78)
+
+    final_row = sig_row + 2
+    ws.page_setup.paperSize = ws.PAPERSIZE_A4
+    ws.page_setup.orientation = ws.ORIENTATION_PORTRAIT
+    ws.page_setup.scale = 90
+    ws.page_setup.fitToWidth = None
+    ws.page_setup.fitToHeight = None
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+    ws.print_area = f"A1:I{final_row}"
+    ws.sheet_view.zoomScale = 75
+    ws.page_margins.left = 0.25
+    ws.page_margins.right = 0.25
+    ws.page_margins.top = 0.3
+    ws.page_margins.bottom = 0.3
+
+    out = io.BytesIO()
+    wb.save(out)
+    return out.getvalue()
+
+
 def make_document_xlsx(
     doc_type: str, data: Dict[str, Any], company: Optional[Dict[str, Any]] = None
 ) -> bytes:

@@ -512,8 +512,11 @@ export type DocumentWorkItem = {
   hs_code?: string;
   remark?: string;
   package?: string;
+  pkg_qty?: string | number;
+  pkg_kind?: string;
   net_weight?: string | number;
   gross_weight?: string | number;
+  measurement?: string | number;
   dimension?: string;
 };
 
@@ -560,6 +563,7 @@ export type DocumentDetail = {
     pl_no: string;
     date: string;
     items: DocumentWorkItem[];
+    packing_info?: string;
     missing: { part_no: string; description: string; order_qty: number; doc_qty: number }[];
   };
   sa: null | {

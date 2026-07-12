@@ -135,6 +135,9 @@ def normalize_items(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 "gross_weight": raw.get("gross_weight", ""),
                 "net_weight": raw.get("net_weight", ""),
                 "package": raw.get("package", ""),
+                "pkg_qty": raw.get("pkg_qty", ""),
+                "pkg_kind": raw.get("pkg_kind", ""),
+                "measurement": raw.get("measurement", ""),
                 "dimension": raw.get("dimension", ""),
                 "hs_code": raw.get("hs_code", ""),
             }
@@ -827,6 +830,245 @@ def _make_commercial_invoice_pdf(data: Dict[str, Any], company: Dict[str, Any]) 
     return buffer.getvalue()
 
 
+def _pkg_text(it: Dict[str, Any]) -> str:
+    """'No. & Kind of Packages' 셀 — 수량+종류 결합, 없으면 레거시 package 문자열."""
+    q = str(it.get("pkg_qty") or "").strip()
+    k = str(it.get("pkg_kind") or "").strip()
+    combined = f"{q} {k}".strip()
+    return combined or str(it.get("package") or "").strip()
+
+
+def _make_packing_list_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> bytes:
+    """Packing List PDF — Commercial Invoice 와 동일한 섹션 구조. 가격 열은 없고
+    포장(No.&Kind of Packages)·중량(N.W./G.W.)·용적(Measurement) 열과 합계행을 갖는다."""
+    s = _styles()
+    customer = data.get("customer", {}) or {}
+    vessel = data.get("vessel", {}) or {}
+    shipping = data.get("shipping", {}) or {}
+    items = normalize_items(data.get("items", []))
+    currency = (data.get("currency") or "USD").upper()
+    buffer = io.BytesIO()
+    page_width = 190 * mm
+    doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=10 * mm,
+                            rightMargin=10 * mm, topMargin=7 * mm, bottomMargin=12 * mm,
+                            title="PACKING LIST")
+
+    # 상단 정보 블록은 CI 와 같은 8-단위 격자(4분할)를 그대로 쓴다.
+    excel_units = [6, 14.5, 16, 13.5, 12, 8, 14, 18.28515625]
+    col_widths = [page_width * unit / sum(excel_units) for unit in excel_units]
+    half_widths = [sum(col_widths[:4]), sum(col_widths[4:])]
+
+    asset_roots = [Path(__file__).resolve().parents[2], Path(__file__).resolve().parent.parent / "config"]
+
+    def asset(*names):
+        for root in asset_roots:
+            for name in names:
+                candidate = root / name
+                if candidate.exists():
+                    return candidate
+        return None
+
+    def image(path, max_width, max_height):
+        if not path:
+            return ""
+        from PIL import Image as PILImage
+        with PILImage.open(path) as source:
+            width, height = source.size
+        scale = min(max_width / width, max_height / height)
+        return Image(str(path), width=width * scale, height=height * scale)
+
+    def p(value, style="small"):
+        text = str(value or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        return Paragraph(text.replace("\n", "<br/>"), s[style])
+
+    def section(title):
+        t = Table([[p(title, "section")]], colWidths=[page_width])
+        t.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#1F3B66")),
+                               ("TEXTCOLOR", (0, 0), (-1, -1), colors.white),
+                               ("FONTNAME", (0, 0), (-1, -1), DEFAULT_BOLD_FONT),
+                               ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                               ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]))
+        return t
+
+    story = []
+    title_style = ParagraphStyle("KMPLTitle", parent=s["section"], fontName=DEFAULT_BOLD_FONT,
+                                 fontSize=19, leading=22, alignment=TA_CENTER, textColor=NAVY)
+    logo = image(asset("logo_K-maris.png", "logo.png", "logo.jpg"), 32 * mm, 11 * mm)
+    title = Table([[logo, Paragraph("PACKING LIST", title_style), ""]],
+                  colWidths=[38 * mm, 114 * mm, 38 * mm], rowHeights=[16 * mm])
+    title.setStyle(TableStyle([("TEXTCOLOR", (0, 0), (-1, -1), NAVY),
+                               ("ALIGN", (0, 0), (-1, -1), "CENTER"), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                               ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                               ("FONTNAME", (0, 0), (-1, -1), DEFAULT_BOLD_FONT),
+                               ("FONTSIZE", (0, 0), (-1, -1), 17)]))
+    story.append(title)
+    banner_text = "   |   ".join(x for x in [company.get("company_name_en", "K-MARIS Energy & Solutions Co., Ltd."),
+                                               company.get("sales_email", ""), company.get("website", "")] if x)
+    banner_style = ParagraphStyle("KMPLBanner", parent=s["section"], fontName=DEFAULT_FONT,
+                                  fontSize=8.2, leading=10, alignment=TA_CENTER,
+                                  textColor=colors.white)
+    banner = Table([[Paragraph(banner_text, banner_style)]], colWidths=[page_width], rowHeights=[6 * mm])
+    banner.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), BLUE), ("TEXTCOLOR", (0, 0), (-1, -1), colors.white),
+                                ("ALIGN", (0, 0), (-1, -1), "CENTER"), ("VALIGN", (0, 0), (-1, -1), "MIDDLE")]))
+    story += [banner, Spacer(1, 3 * mm)]
+
+    address = company.get("address_en") or company.get("address", "")
+    address_top, address_bottom = address, ""
+    if " Seoul" in address:
+        address_top, address_bottom = address.split(" Seoul", 1)
+        address_bottom = "Seoul" + address_bottom
+    exporter = [company.get("company_name_en", ""), address_top, address_bottom,
+                f"Tel: {company.get('phone', '')}    Email: {company.get('sales_email', '')}",
+                f"Business Reg. No.: {company.get('business_no', '')}"]
+    invoice = [("P/L No.", data.get("doc_no", "")), ("P/L Date", data.get("date", "")),
+               ("Invoice No.", shipping.get("ci_no", "")),
+               ("P.O. No.", shipping.get("po_no", "")), ("", "")]
+    rows = [[p("EXPORTER / SELLER", "section"), "", p("PACKING LIST INFORMATION", "section"), ""]]
+    rows += [[p(exporter[i]), "", p(invoice[i][0]), p(invoice[i][1])] for i in range(5)]
+    info = Table(rows, colWidths=[col_widths[0] + col_widths[1], col_widths[2] + col_widths[3],
+                                 col_widths[4] + col_widths[5], col_widths[6] + col_widths[7]])
+    info.setStyle(TableStyle([("SPAN", (0, 0), (1, 0)), ("SPAN", (2, 0), (3, 0)),
+                              ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1F3B66")),
+                              ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                              ("FONTNAME", (0, 0), (-1, 0), DEFAULT_BOLD_FONT),
+                              ("SPAN", (0, 1), (1, 1)), ("SPAN", (0, 2), (1, 2)), ("SPAN", (0, 3), (1, 3)),
+                              ("SPAN", (0, 4), (1, 4)), ("SPAN", (0, 5), (1, 5)),
+                              ("BACKGROUND", (2, 1), (2, -1), LIGHT_GRAY), ("FONTNAME", (2, 1), (2, -1), DEFAULT_BOLD_FONT),
+                              ("GRID", (0, 0), (-1, -1), .35, MID_GRAY), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                              ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                              ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]))
+    story.append(info)
+
+    buyer = [customer.get("name", ""), customer.get("address", ""),
+             f"Contact: {customer.get('contact', '')}    {customer.get('email', '')}"]
+    ship = [("Ship Agent", shipping.get("sm_consignee", "")),
+            ("Vessel / IMO", " / ".join(x for x in [shipping.get("sm_vessel") or vessel.get("name", ""), vessel.get("imo", "")] if x)),
+            ("B/L or AWB No.", shipping.get("bl_awb_no", ""))]
+    rows = [[p("CONSIGNEE / BUYER", "section"), "", p("SHIP TO / C/O", "section"), ""]]
+    rows += [[p(buyer[i]), "", p(ship[i][0]), p(ship[i][1])] for i in range(3)]
+    consignee = Table(rows, colWidths=[col_widths[0] + col_widths[1], col_widths[2] + col_widths[3],
+                                      col_widths[4] + col_widths[5], col_widths[6] + col_widths[7]])
+    consignee.setStyle(TableStyle([("SPAN", (0, 0), (1, 0)), ("SPAN", (2, 0), (3, 0)),
+                                   ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1F3B66")),
+                                   ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                                   ("FONTNAME", (0, 0), (-1, 0), DEFAULT_BOLD_FONT),
+                                   ("SPAN", (0, 1), (1, 1)), ("SPAN", (0, 2), (1, 2)), ("SPAN", (0, 3), (1, 3)),
+                                   ("BACKGROUND", (2, 1), (2, -1), LIGHT_GRAY), ("FONTNAME", (2, 1), (2, -1), DEFAULT_BOLD_FONT),
+                                   ("GRID", (0, 0), (-1, -1), .35, MID_GRAY), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                                   ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                                   ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]))
+    story += [consignee, section("SHIPPING INFORMATION")]
+    shipping_rows = [[p(a), p(b), p(c), p(d)] for a, b, c, d in [
+        ("Vessel", shipping.get("sm_vessel") or vessel.get("name", ""), "Carrier", shipping.get("carrier", "")),
+        ("Port of Loading", shipping.get("port_loading", ""), "Port of Discharge", shipping.get("port_discharge", "")),
+        ("ETD", shipping.get("etd", ""), "ETA", shipping.get("eta", "")),
+        ("Country of Origin", shipping.get("sm_origin", ""), "Final Destination", shipping.get("sm_final_dest", ""))]]
+    shipping_table = Table(shipping_rows, colWidths=[col_widths[0] + col_widths[1], col_widths[2] + col_widths[3],
+                                                     col_widths[4] + col_widths[5], col_widths[6] + col_widths[7]])
+    shipping_table.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), .35, MID_GRAY),
+        ("BACKGROUND", (0, 0), (0, -1), LIGHT_GRAY), ("BACKGROUND", (2, 0), (2, -1), LIGHT_GRAY),
+        ("FONTNAME", (0, 0), (0, -1), DEFAULT_BOLD_FONT), ("FONTNAME", (2, 0), (2, -1), DEFAULT_BOLD_FONT),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LEFTPADDING", (0, 0), (-1, -1), 4),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 4), ("TOPPADDING", (0, 0), (-1, -1), 3),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]))
+    story += [shipping_table, section("SHIPPING MARKS")]
+
+    marks = (shipping.get("shipping_marks") or "").strip()
+    mark_lines = marks.splitlines()
+    split_at = (len(mark_lines) + 1) // 2
+    marks_table = Table([[p("\n".join(mark_lines[:split_at])), p("\n".join(mark_lines[split_at:]))]],
+                        colWidths=half_widths)
+    marks_table.setStyle(TableStyle([("BOX", (0, 0), (-1, -1), .35, MID_GRAY), ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                                     ("LINEBEFORE", (1, 0), (1, -1), .35, MID_GRAY),
+                                     ("LEFTPADDING", (0, 0), (-1, -1), 4), ("TOPPADDING", (0, 0), (-1, -1), 4),
+                                     ("BOTTOMPADDING", (0, 0), (-1, -1), 4)]))
+    story.append(marks_table)
+
+    # ── 품목 표(가격 없음) ─────────────────────────────────────────────────
+    # 9열: No · Description · Part No · Qty · Unit · No.&Kind of Pkgs · N.W.(kg) · G.W.(kg) · Meas.(m³)
+    pl_units = [5, 22, 14, 7, 8, 15, 11, 11, 11]
+    pl_w = [page_width * u / sum(pl_units) for u in pl_units]
+    headers = ["No.", "Description", "Part No.", "Q'ty", "Unit", "No. & Kind\nof Packages",
+               "N.W. (kg)", "G.W. (kg)", "Meas. (m³)"]
+    item_rows = [[p(h, "th") for h in headers]]
+
+    def _numtxt(v):
+        return str(v).strip() if v not in (None, "", 0, 0.0) else ""
+
+    for it in items:
+        item_rows.append([p(it["item_no"], "tiny"), p(it["description"], "tiny"), p(it["part_no"], "tiny"),
+                          p(f"{it['qty']:g}", "tiny"), p(it["unit"], "tiny"), p(_pkg_text(it), "tiny"),
+                          p(_numtxt(it.get("net_weight")), "tiny"), p(_numtxt(it.get("gross_weight")), "tiny"),
+                          p(_numtxt(it.get("measurement")), "tiny")])
+    # 합계행 — 포장 수량/중량/용적 자동합산.
+    tot_pkgs = sum(_num(it.get("pkg_qty")) for it in items)
+    tot_nw = sum(_num(it.get("net_weight")) for it in items)
+    tot_gw = sum(_num(it.get("gross_weight")) for it in items)
+    tot_meas = sum(_num(it.get("measurement")) for it in items)
+
+    def _tot(v):
+        return f"{v:g}" if v else ""
+    item_rows.append([p("", "th"), p("TOTAL", "th"), p("", "th"), p("", "th"), p("", "th"),
+                      p(_tot(tot_pkgs), "th"), p(_tot(tot_nw), "th"), p(_tot(tot_gw), "th"), p(_tot(tot_meas), "th")])
+    item_table = Table(item_rows, colWidths=pl_w, repeatRows=1)
+    last = len(item_rows) - 1
+    cmds = [("BACKGROUND", (0, 0), (-1, 0), NAVY), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("GRID", (0, 0), (-1, -1), .35, MID_GRAY), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("ALIGN", (3, 1), (4, -1), "CENTER"), ("ALIGN", (6, 1), (-1, -1), "RIGHT"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 3), ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+            ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+            # 합계행 강조.
+            ("BACKGROUND", (0, last), (-1, last), LIGHT_BLUE),
+            ("TEXTCOLOR", (0, last), (-1, last), colors.black),
+            ("FONTNAME", (0, last), (-1, last), DEFAULT_BOLD_FONT),
+            ("SPAN", (1, last), (4, last))]
+    for i in range(2, len(item_rows) - 1, 2):
+        cmds.append(("BACKGROUND", (0, i), (-1, i), colors.HexColor("#FAFBFC")))
+    item_table.setStyle(TableStyle(cmds))
+    story.append(item_table)
+
+    # ── Packing Information(자유 메모) + 선언 ─────────────────────────────
+    packing_info = (data.get("packing_info") or "").strip()
+    if packing_info:
+        story += [Spacer(1, 2 * mm), section("PACKING INFORMATION")]
+        note = Table([[p(packing_info)]], colWidths=[page_width])
+        note.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), .35, MID_GRAY),
+                                  ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                                  ("LEFTPADDING", (0, 0), (-1, -1), 4), ("TOPPADDING", (0, 0), (-1, -1), 4),
+                                  ("BOTTOMPADDING", (0, 0), (-1, -1), 4)]))
+        story.append(note)
+    story.append(Spacer(1, 2 * mm))
+    declaration = Table([[p("We hereby certify that this Packing List is true and correct.")]],
+                        colWidths=[page_width])
+    declaration.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), .35, MID_GRAY),
+                                      ("LEFTPADDING", (0, 0), (-1, -1), 4)]))
+    story.append(declaration)
+
+    signature_image = image(asset("Authorized signature_Sungyeon Cho.jpg", "signature.png", "signature.jpg"), 35 * mm, 11 * mm)
+    stamp_image = image(asset("Company stamp_K-Maris Energy & Solutions.jpg", "stamp.png", "stamp.jpg"), 14 * mm, 14 * mm)
+    left_sign = Table([[p("Authorized Signature", "base"), signature_image]], colWidths=[32 * mm, half_widths[0] - 32 * mm])
+    right_sign = Table([[p(f"{company.get('company_name_en', '')}\n(Company Stamp)", "base"), stamp_image]],
+                       colWidths=[half_widths[1] - 25 * mm, 25 * mm])
+    inner_sign_style = TableStyle([
+        ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+        ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+    ])
+    left_sign.setStyle(inner_sign_style)
+    right_sign.setStyle(inner_sign_style)
+    sign = Table([[left_sign, right_sign]], colWidths=half_widths, rowHeights=[15 * mm])
+    sign.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), .35, MID_GRAY),
+                              ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                              ("FONTNAME", (0, 0), (-1, -1), DEFAULT_BOLD_FONT),
+                              ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                              ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                              ("TOPPADDING", (0, 0), (-1, -1), 0),
+                              ("BOTTOMPADDING", (0, 0), (-1, -1), 0)]))
+    story += [Spacer(1, 2 * mm), sign]
+    doc.build(story, onFirstPage=_footer, onLaterPages=_footer)
+    return buffer.getvalue()
+
+
 def make_pdf(doc_type: str, data: Dict[str, Any], company: Optional[Dict[str, Any]] = None, logo_path: Optional[str] = None) -> bytes:
     if doc_type not in DOC_TITLES:
         raise ValueError(f"Unsupported document type: {doc_type}")
@@ -834,6 +1076,8 @@ def make_pdf(doc_type: str, data: Dict[str, Any], company: Optional[Dict[str, An
     payload["company"] = company or data.get("company", {})
     if doc_type == "commercial_invoice":
         return _make_commercial_invoice_pdf(payload, payload["company"])
+    if doc_type == "packing_list":
+        return _make_packing_list_pdf(payload, payload["company"])
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
         buffer,

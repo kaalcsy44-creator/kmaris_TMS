@@ -450,7 +450,7 @@ export function deleteServiceStage(orderId: number, stage: number): Promise<{ ok
 
 export function savePackingList(
   orderId: number,
-  body: { pl_no?: string; date?: string; items: DocumentWorkItem[] }
+  body: { pl_no?: string; date?: string; items: DocumentWorkItem[]; packing_info?: string }
 ): Promise<{ ok: boolean; id: number; pl_no: string }> {
   return post(`/api/admin/documents/${orderId}/pl`, body);
 }
@@ -495,7 +495,7 @@ export function saveTaxInvoice(
 
 export function documentDownloadUrl(
   orderId: number,
-  kind: "ci/pdf" | "ci/xlsx" | "pl/pdf" | "sa/pdf" | "tax/xlsx"
+  kind: "ci/pdf" | "ci/xlsx" | "pl/pdf" | "pl/xlsx" | "sa/pdf" | "tax/xlsx"
 ): string {
   return `${API_BASE}/api/admin/documents/${orderId}/${kind}`;
 }

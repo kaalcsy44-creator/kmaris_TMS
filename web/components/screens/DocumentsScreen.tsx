@@ -985,6 +985,7 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
 function PackingListTab({ data, onChanged }: { data: DocumentDetail; onChanged: () => void }) {
   const [plNo, setPlNo] = useState(data.pl?.pl_no || "");
   const [date, setDate] = useState(data.pl?.date || today());
+  const [packingInfo, setPackingInfo] = useState(data.pl?.packing_info || "");
   const seed = data.pl?.items || data.ci?.items || data.order.items;
   const [items, setItems] = useState<DocumentWorkItem[]>(normalizeItems(seed, true));
   const [busy, setBusy] = useState(false);
@@ -993,7 +994,7 @@ function PackingListTab({ data, onChanged }: { data: DocumentDetail; onChanged: 
   async function save() {
     setBusy(true);
     try {
-      await savePackingList(data.order.id, { pl_no: plNo, date, items });
+      await savePackingList(data.order.id, { pl_no: plNo, date, items, packing_info: packingInfo });
       onChanged();
     } finally {
       setBusy(false);
@@ -1003,6 +1004,7 @@ function PackingListTab({ data, onChanged }: { data: DocumentDetail; onChanged: 
   function cancel() {
     setPlNo(data.pl?.pl_no || "");
     setDate(data.pl?.date || today());
+    setPackingInfo(data.pl?.packing_info || "");
     setItems(normalizeItems(data.pl?.items || data.ci?.items || data.order.items, true));
   }
 
@@ -1027,7 +1029,7 @@ function PackingListTab({ data, onChanged }: { data: DocumentDetail; onChanged: 
   return (
     <div className="doc-tab">
       <fieldset className="form-fieldset" disabled={!editable}>
-      <div className="form-grid">
+      <div className="form-grid form-grid--thirds">
         <Field label="PL No." value={plNo} onChange={setPlNo} />
         <Field label="PL Date" value={date} onChange={setDate} type="date" />
       </div>
@@ -1042,12 +1044,23 @@ function PackingListTab({ data, onChanged }: { data: DocumentDetail; onChanged: 
           </button>
         }
       />
+      <label className="form-field" style={{ marginTop: 16 }}>
+        <span>Packing Information</span>
+        <textarea
+          className="wrapcell"
+          rows={2}
+          value={packingInfo}
+          placeholder="예: Cartons in 5 pallets"
+          onChange={(e) => setPackingInfo(e.target.value)}
+        />
+      </label>
       <MissingWarning missing={data.pl?.missing || []} />
       </fieldset>
       <div className="form-actions doc-actions">
         <div className="doc-actions-left">
           <DocPreviewButton orderId={data.order.id} kind="pl/pdf" filename="Packing List.pdf" disabled={!data.pl} />
-          <DownloadButton orderId={data.order.id} kind="pl/pdf" disabled={!data.pl} label="Download" />
+          <DownloadButton orderId={data.order.id} kind="pl/pdf" disabled={!data.pl} label="PDF" />
+          <DownloadButton orderId={data.order.id} kind="pl/xlsx" disabled={!data.pl} label="Excel" />
         </div>
         <div className="doc-actions-center" />
         <div className="doc-actions-right">
@@ -1545,6 +1558,12 @@ function ItemEditor({
     setItems(next);
   }
   const total = items.reduce((sum, item) => sum + num(item.amount), 0);
+  // Packing List 합계 — 포장수량·중량·용적 자동합산(빈 값은 0으로 무시).
+  const pkgTotal = items.reduce((s, it) => s + num(it.pkg_qty), 0);
+  const nwTotal = items.reduce((s, it) => s + num(it.net_weight), 0);
+  const gwTotal = items.reduce((s, it) => s + num(it.gross_weight), 0);
+  const measTotal = items.reduce((s, it) => s + num(it.measurement), 0);
+  const fmtNum = (n: number) => (n ? n.toLocaleString(undefined, { maximumFractionDigits: 3 }) : "");
   const sel = useRowSelection();
   const cur = (currency || "USD").toUpperCase();
   const unitListId = useId();
@@ -1558,9 +1577,11 @@ function ItemEditor({
     { key: "unit", label: "Unit" },
     ...(packing
       ? [
-          { key: "package", label: "Package" },
+          { key: "pkg_qty", label: "Pkgs", className: "num" },
+          { key: "pkg_kind", label: "Kind" },
           { key: "net_weight", label: "N.W." },
           { key: "gross_weight", label: "G.W." },
+          { key: "measurement", label: "Meas. (m³)", className: "num" },
           { key: "dimension", label: "Dimension" },
         ]
       : [
@@ -1601,9 +1622,11 @@ function ItemEditor({
               <ItemTh grid={grid} k="unit">Unit</ItemTh>
               {packing ? (
                 <>
-                  <ItemTh grid={grid} k="package">Package</ItemTh>
+                  <ItemTh grid={grid} k="pkg_qty" className="num">Pkgs</ItemTh>
+                  <ItemTh grid={grid} k="pkg_kind">Kind</ItemTh>
                   <ItemTh grid={grid} k="net_weight">N.W.</ItemTh>
                   <ItemTh grid={grid} k="gross_weight">G.W.</ItemTh>
+                  <ItemTh grid={grid} k="measurement" className="num">Meas. (m³)</ItemTh>
                   <ItemTh grid={grid} k="dimension">Dimension</ItemTh>
                 </>
               ) : (
@@ -1627,10 +1650,12 @@ function ItemEditor({
                 <td><input {...gridCellProps(i, 4)} list={unitListId} value={item.unit || "PCS"} onChange={(e) => patch(i, "unit", e.target.value)} /></td>
                 {packing ? (
                   <>
-                    <td><input {...gridCellProps(i, 5)} value={item.package || ""} onChange={(e) => patch(i, "package", e.target.value)} /></td>
-                    <td><input {...gridCellProps(i, 6)} value={String(item.net_weight || "")} onChange={(e) => patch(i, "net_weight", e.target.value)} /></td>
-                    <td><input {...gridCellProps(i, 7)} value={String(item.gross_weight || "")} onChange={(e) => patch(i, "gross_weight", e.target.value)} /></td>
-                    <td><input {...gridCellProps(i, 8)} value={item.dimension || ""} onChange={(e) => patch(i, "dimension", e.target.value)} /></td>
+                    <td><input {...gridCellProps(i, 5)} className="num" value={String(item.pkg_qty ?? "")} onChange={(e) => patch(i, "pkg_qty", e.target.value)} /></td>
+                    <td><input {...gridCellProps(i, 6)} value={item.pkg_kind || ""} onChange={(e) => patch(i, "pkg_kind", e.target.value)} /></td>
+                    <td><input {...gridCellProps(i, 7)} value={String(item.net_weight || "")} onChange={(e) => patch(i, "net_weight", e.target.value)} /></td>
+                    <td><input {...gridCellProps(i, 8)} value={String(item.gross_weight || "")} onChange={(e) => patch(i, "gross_weight", e.target.value)} /></td>
+                    <td><input {...gridCellProps(i, 9)} className="num" value={String(item.measurement ?? "")} onChange={(e) => patch(i, "measurement", e.target.value)} /></td>
+                    <td><input {...gridCellProps(i, 10)} value={item.dimension || ""} onChange={(e) => patch(i, "dimension", e.target.value)} /></td>
                   </>
                 ) : (
                   <>
@@ -1638,7 +1663,7 @@ function ItemEditor({
                     <td><input {...gridCellProps(i, 6)} className="num" value={amountInputValue(item.amount)} onChange={(e) => patch(i, "amount", e.target.value)} /></td>
                   </>
                 )}
-                <td><textarea {...gridCellProps(i, packing ? 9 : 7)} className="wrapcell" rows={1} value={item.remark || ""} onChange={(e) => patch(i, "remark", e.target.value)} /></td>
+                <td><textarea {...gridCellProps(i, packing ? 11 : 7)} className="wrapcell" rows={1} value={item.remark || ""} onChange={(e) => patch(i, "remark", e.target.value)} /></td>
               </tr>
             ))}
           </tbody>
@@ -1661,7 +1686,27 @@ function ItemEditor({
                 <td></td>{/* 10 remark */}
               </tr>
             </tfoot>
-          ) : null}
+          ) : (
+            /* Packing 합계행 — 포장수량·N.W.·G.W.·Measurement 자동합산. 컬럼당 1셀. */
+            <tfoot>
+              <tr>
+                <td></td>{/* 1 sel */}
+                <td></td>{/* 2 No. */}
+                <td></td>{/* 3 part_no */}
+                <td></td>{/* 4 description */}
+                <td></td>{/* 5 maker */}
+                <td></td>{/* 6 qty */}
+                <td className="total-label">Total</td>{/* 7 unit */}
+                <td className="num total-value">{fmtNum(pkgTotal)}</td>{/* 8 pkg_qty */}
+                <td></td>{/* 9 pkg_kind */}
+                <td className="num total-value">{fmtNum(nwTotal)}</td>{/* 10 net_weight */}
+                <td className="num total-value">{fmtNum(gwTotal)}</td>{/* 11 gross_weight */}
+                <td className="num total-value">{fmtNum(measTotal)}</td>{/* 12 measurement */}
+                <td></td>{/* 13 dimension */}
+                <td></td>{/* 14 remark */}
+              </tr>
+            </tfoot>
+          )}
         </table>
       </div>
     </div>
@@ -1689,7 +1734,7 @@ function DownloadButton({
   disabled,
 }: {
   orderId: number;
-  kind: "ci/pdf" | "ci/xlsx" | "pl/pdf" | "sa/pdf" | "tax/xlsx";
+  kind: "ci/pdf" | "ci/xlsx" | "pl/pdf" | "pl/xlsx" | "sa/pdf" | "tax/xlsx";
   label: string;
   disabled: boolean;
 }) {
@@ -1830,8 +1875,11 @@ function normalizeItems(items: DocumentWorkItem[], packing = false): DocumentWor
     hs_code: item.hs_code || "",
     remark: item.remark || "",
     package: item.package || "",
+    pkg_qty: item.pkg_qty ?? "",
+    pkg_kind: item.pkg_kind || "",
     net_weight: item.net_weight || "",
     gross_weight: item.gross_weight || "",
+    measurement: item.measurement ?? "",
     dimension: item.dimension || "",
   }));
 }

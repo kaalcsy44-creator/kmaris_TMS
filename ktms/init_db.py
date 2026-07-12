@@ -100,6 +100,10 @@ _MIGRATIONS = {
         # 품목 분류 연결(대>중>소 트리의 가장 깊은 노드 id). FK 는 신규 DB 모델에서만 강제.
         "category_id": "INTEGER",
     },
+    "packing_lists": {
+        # Packing List 자유 메모(예: "Cartons in 5 pallets"). DEFAULT 없이 추가.
+        "packing_info": "VARCHAR",
+    },
 }
 
 

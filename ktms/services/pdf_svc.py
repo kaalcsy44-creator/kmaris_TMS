@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from services.kmaris_docs import make_pdf, make_tax_invoice_xlsx  # type: ignore
-from services.doc_xlsx import make_commercial_invoice_xlsx  # type: ignore
+from services.doc_xlsx import make_commercial_invoice_xlsx, make_packing_list_xlsx  # type: ignore
 
 _config_path = Path(__file__).resolve().parent.parent / "config" / "company.json"
 
@@ -128,3 +128,9 @@ def generate_ci_xlsx(payload: Dict[str, Any]) -> bytes:
     """Commercial Invoice 전용 Excel(회사 정보 로딩 포함)."""
     company = _load_company()
     return make_commercial_invoice_xlsx(payload, company)
+
+
+def generate_pl_xlsx(payload: Dict[str, Any]) -> bytes:
+    """Packing List 전용 Excel(회사 정보 로딩 포함)."""
+    company = _load_company()
+    return make_packing_list_xlsx(payload, company)
