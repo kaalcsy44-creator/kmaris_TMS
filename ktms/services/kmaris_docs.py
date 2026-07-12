@@ -576,7 +576,7 @@ def _footer(canvas, doc):
     canvas.line(12 * mm, 11 * mm, 285 * mm, 11 * mm)
     canvas.setFont(DEFAULT_FONT, 7)
     canvas.setFillColor(DARK_GRAY)
-    canvas.drawString(12 * mm, 7 * mm, "K-MARIS Energy & Solutions Co., Ltd. | This document is system-generated.")
+    canvas.drawString(12 * mm, 7 * mm, "K-MARIS Energy & Solutions Co., Ltd.")
     canvas.drawRightString(285 * mm, 7 * mm, f"Page {doc.page}")
     canvas.restoreState()
 
@@ -775,6 +775,11 @@ def _make_commercial_invoice_pdf(data: Dict[str, Any], company: Dict[str, Any]) 
         ("BACKGROUND", (0, 0), (0, -1), LIGHT_GRAY), ("BACKGROUND", (0, -1), (-1, -1), LIGHT_BLUE),
         ("ALIGN", (1, 0), (1, -1), "RIGHT"), ("FONTNAME", (0, -1), (-1, -1), DEFAULT_BOLD_FONT),
         ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4)]))
+    total_table.setStyle(TableStyle([
+        ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+        ("TOPPADDING", (0, 0), (-1, -1), 0), ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+    ]))
     story += [total_table, Spacer(1, 2 * mm), section("PACKING & DECLARATION")]
     packing = [[p(a), p(b), p(c), p(d)] for a, b, c, d in [
         ("Total Packages", shipping.get("sm_total_cases", ""), "Net Weight (kg)", shipping.get("sm_net_weight", "")),
@@ -797,12 +802,21 @@ def _make_commercial_invoice_pdf(data: Dict[str, Any], company: Dict[str, Any]) 
     left_sign = Table([[p("Authorized Signature", "base"), signature_image]], colWidths=[32 * mm, half_widths[0] - 32 * mm])
     right_sign = Table([[p(f"{company.get('company_name_en', '')}\n(Company Stamp)", "base"), stamp_image]],
                        colWidths=[half_widths[1] - 25 * mm, 25 * mm])
+    inner_sign_style = TableStyle([
+        ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+        ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+    ])
+    left_sign.setStyle(inner_sign_style)
+    right_sign.setStyle(inner_sign_style)
     sign = Table([[left_sign, right_sign]], colWidths=half_widths, rowHeights=[15 * mm])
     sign.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), .35, MID_GRAY),
                               ("VALIGN", (0, 0), (-1, -1), "TOP"),
                               ("FONTNAME", (0, 0), (-1, -1), DEFAULT_BOLD_FONT),
-                              ("LEFTPADDING", (0, 0), (-1, -1), 4),
-                              ("TOPPADDING", (0, 0), (-1, -1), 4)]))
+                              ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                              ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                              ("TOPPADDING", (0, 0), (-1, -1), 0),
+                              ("BOTTOMPADDING", (0, 0), (-1, -1), 0)]))
     story.append(sign)
     doc.build(story, onFirstPage=_footer, onLaterPages=_footer)
     return buffer.getvalue()
