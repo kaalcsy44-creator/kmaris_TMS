@@ -947,7 +947,8 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
       <div className="form-actions doc-actions">
         <div className="doc-actions-left">
           <DocPreviewButton orderId={data.order.id} kind="ci/pdf" filename="Commercial Invoice.pdf" disabled={!data.ci} />
-          <DownloadButton orderId={data.order.id} kind="ci/pdf" disabled={!data.ci} label="Download" />
+          <DownloadButton orderId={data.order.id} kind="ci/pdf" disabled={!data.ci} label="PDF" />
+          <DownloadButton orderId={data.order.id} kind="ci/xlsx" disabled={!data.ci} label="Excel" />
         </div>
         <div className="doc-actions-center">
           <span className="hint-inline">Total {dualCurrencyText(total, currency)} · {fxRateText()}</span>
@@ -1670,7 +1671,7 @@ function DownloadButton({
   disabled,
 }: {
   orderId: number;
-  kind: "ci/pdf" | "pl/pdf" | "sa/pdf" | "tax/xlsx";
+  kind: "ci/pdf" | "ci/xlsx" | "pl/pdf" | "sa/pdf" | "tax/xlsx";
   label: string;
   disabled: boolean;
 }) {

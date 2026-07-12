@@ -43,7 +43,7 @@ from services.email_svc import (
 )
 from services.pdf_svc import (
     build_payload, build_po_payload, generate_pdf, generate_po_pdf,
-    generate_tax_xlsx,
+    generate_tax_xlsx, generate_ci_xlsx,
 )
 from services.pdf_parser import (
     extract_text_from_pdf, parse_order_fields, parse_rfq_fields,
@@ -2481,6 +2481,7 @@ __all__ = [
     "generate_pdf",
     "generate_po_pdf",
     "generate_tax_xlsx",
+    "generate_ci_xlsx",
     "get_current_user",
     "get_session",
     "io",

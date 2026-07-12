@@ -15,6 +15,252 @@ from openpyxl.utils import get_column_letter
 from services.kmaris_docs import normalize_items, calc_totals, _num, DOC_TITLES
 
 
+def make_commercial_invoice_xlsx(
+    data: Dict[str, Any], company: Optional[Dict[str, Any]] = None
+) -> bytes:
+    """Commercial Invoice 전용 Excel — 편집 페이지(CI 탭)의 모든 입력을 그대로 반영한다.
+    레이아웃: 타이틀 → Exporter/Invoice info → Consignee/Ship-to → Shipping info →
+    Shipping marks → 품목표(금액=수식) → 합계(Freight/Packing/Insurance 편집가능) → 포장/선언/서명.
+    """
+    company = company or {}
+    currency = (data.get("currency") or "USD").upper()
+    customer = data.get("customer", {}) or {}
+    vessel = data.get("vessel", {}) or {}
+    terms = data.get("terms", {}) or {}
+    shipping = data.get("shipping", {}) or {}
+    items = normalize_items(data.get("items", []))
+    num_fmt = "#,##0.00" if currency == "USD" else "#,##0"
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Commercial Invoice"
+    ws.sheet_view.showGridLines = False
+
+    navy = PatternFill("solid", fgColor="0B1D3A")
+    blue = PatternFill("solid", fgColor="0055A8")
+    section = PatternFill("solid", fgColor="1F3B66")
+    gray = PatternFill("solid", fgColor="F4F6F8")
+    lightblue = PatternFill("solid", fgColor="EAF3FF")
+    alt = PatternFill("solid", fgColor="FAFBFC")
+
+    white_lg = Font(color="FFFFFF", bold=True, size=16)
+    white_sm = Font(color="FFFFFF", size=9)
+    white_sec = Font(color="FFFFFF", bold=True, size=10)
+    white_hdr = Font(color="FFFFFF", bold=True, size=9)
+    bold = Font(bold=True)
+    boldsm = Font(bold=True, size=9)
+    normal = Font(size=9)
+
+    thin = Side(style="thin", color="C8D2E0")
+    bdr = Border(top=thin, bottom=thin, left=thin, right=thin)
+    center = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    left = Alignment(horizontal="left", vertical="center", wrap_text=True)
+    right = Alignment(horizontal="right", vertical="center")
+    left_top = Alignment(horizontal="left", vertical="top", wrap_text=True)
+
+    NCOL = 8
+    widths = [6, 20, 16, 14, 12, 8, 14, 16]
+    for i, w in enumerate(widths, start=1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+
+    def merge(r1, c1, r2, c2):
+        ws.merge_cells(start_row=r1, start_column=c1, end_row=r2, end_column=c2)
+
+    def bd(r1, c1, r2, c2, fill=None):
+        for rr in range(r1, r2 + 1):
+            for cc in range(c1, c2 + 1):
+                ws.cell(rr, cc).border = bdr
+                if fill:
+                    ws.cell(rr, cc).fill = fill
+
+    def put(r, c, v="", *, fill=None, font=None, align=None, fmt=None):
+        x = ws.cell(r, c, v)
+        if fill:
+            x.fill = fill
+        if font:
+            x.font = font
+        if align:
+            x.alignment = align
+        if fmt:
+            x.number_format = fmt
+        return x
+
+    def pairs_block(rows, start_row):
+        """label:value 쌍 리스트를 한 행에 2쌍씩(좌: 1-4, 우: 5-8) 배치."""
+        r = start_row
+        for i in range(0, len(rows), 2):
+            chunk = rows[i:i + 2]
+            k, v = chunk[0]
+            merge(r, 1, r, 2); put(r, 1, k, fill=gray, font=boldsm, align=left)
+            merge(r, 3, r, 4); put(r, 3, v, font=normal, align=left)
+            bd(r, 1, r, 4)
+            if len(chunk) > 1:
+                k2, v2 = chunk[1]
+                merge(r, 5, r, 6); put(r, 5, k2, fill=gray, font=boldsm, align=left)
+                merge(r, 7, r, 8); put(r, 7, v2, font=normal, align=left)
+            else:
+                merge(r, 5, r, 8)
+            bd(r, 5, r, 8)
+            r += 1
+        return r
+
+    r = 1
+    # ── 타이틀 + 회사 배너 ────────────────────────────────────────────────
+    merge(r, 1, r, NCOL); put(r, 1, "COMMERCIAL INVOICE", fill=navy, font=white_lg, align=center)
+    bd(r, 1, r, NCOL, navy); ws.row_dimensions[r].height = 30; r += 1
+    banner = "   |   ".join(x for x in [
+        company.get("company_name_en", "K-MARIS Energy & Solutions Co., Ltd."),
+        company.get("sales_email", ""), company.get("website", ""),
+    ] if x)
+    merge(r, 1, r, NCOL); put(r, 1, banner, fill=blue, font=white_sm, align=center)
+    bd(r, 1, r, NCOL, blue); ws.row_dimensions[r].height = 16; r += 2
+
+    # ── Exporter / Invoice information ───────────────────────────────────
+    merge(r, 1, r, 4); put(r, 1, "EXPORTER / SELLER", fill=section, font=white_sec, align=left)
+    merge(r, 5, r, 8); put(r, 5, "INVOICE INFORMATION", fill=section, font=white_sec, align=left)
+    bd(r, 1, r, 4, section); bd(r, 5, r, 8, section); r += 1
+    exporter = [
+        company.get("company_name_en", ""),
+        company.get("address", ""),
+        f"Tel: {company.get('phone', '')}    Email: {company.get('sales_email', '')}",
+        f"Business Reg. No.: {company.get('business_no', '')}",
+    ]
+    inv_info = [
+        ("Invoice No.", data.get("doc_no", "")),
+        ("Invoice Date", data.get("date", "")),
+        ("P.O. No.", shipping.get("po_no", "")),
+        ("Export Ref.", shipping.get("export_ref", "")),
+    ]
+    for i in range(4):
+        merge(r, 1, r, 4); put(r, 1, exporter[i], font=normal, align=left); bd(r, 1, r, 4)
+        put(r, 5, inv_info[i][0], fill=gray, font=boldsm, align=left)
+        merge(r, 6, r, 8); put(r, 6, inv_info[i][1], font=normal, align=left); bd(r, 5, r, 8)
+        r += 1
+
+    # ── Consignee / Ship-to ──────────────────────────────────────────────
+    merge(r, 1, r, 4); put(r, 1, "CONSIGNEE / BUYER", fill=section, font=white_sec, align=left)
+    merge(r, 5, r, 8); put(r, 5, "SHIP TO / C/O", fill=section, font=white_sec, align=left)
+    bd(r, 1, r, 4, section); bd(r, 5, r, 8, section); r += 1
+    buyer = [
+        customer.get("name", ""),
+        customer.get("address", ""),
+        f"Contact: {customer.get('contact', '')}    {customer.get('email', '')}",
+    ]
+    ship_to = [
+        ("Ship Agent", shipping.get("sm_consignee", "")),
+        ("Vessel / IMO", " / ".join(x for x in [shipping.get("sm_vessel", "") or vessel.get("name", ""), vessel.get("imo", "")] if x)),
+        ("B/L or AWB No.", shipping.get("bl_awb_no", "")),
+    ]
+    for i in range(3):
+        merge(r, 1, r, 4); put(r, 1, buyer[i], font=normal, align=left); bd(r, 1, r, 4)
+        put(r, 5, ship_to[i][0], fill=gray, font=boldsm, align=left)
+        merge(r, 6, r, 8); put(r, 6, ship_to[i][1], font=normal, align=left); bd(r, 5, r, 8)
+        r += 1
+
+    # ── Shipping information ─────────────────────────────────────────────
+    merge(r, 1, r, NCOL); put(r, 1, "SHIPPING INFORMATION", fill=section, font=white_sec, align=left)
+    bd(r, 1, r, NCOL, section); r += 1
+    r = pairs_block([
+        ("Vessel", shipping.get("sm_vessel", "") or vessel.get("name", "")),
+        ("Carrier", shipping.get("carrier", "")),
+        ("Port of Loading", shipping.get("port_loading", "")),
+        ("Port of Discharge", shipping.get("port_discharge", "")),
+        ("Incoterms", terms.get("incoterms", "")),
+        ("Payment Terms", terms.get("payment_terms", "")),
+        ("ETD", shipping.get("etd", "")),
+        ("ETA", shipping.get("eta", "")),
+        ("Currency", currency),
+        ("Country of Origin", shipping.get("sm_origin", "")),
+    ], r)
+
+    # ── Shipping marks ───────────────────────────────────────────────────
+    merge(r, 1, r, NCOL); put(r, 1, "SHIPPING MARKS", fill=section, font=white_sec, align=left)
+    bd(r, 1, r, NCOL, section); r += 1
+    marks = (shipping.get("shipping_marks") or "").strip()
+    if not marks:
+        parts = []
+        if shipping.get("sm_type"):
+            parts.append(shipping["sm_type"])
+        if shipping.get("sm_vessel"):
+            parts.append(f"FOR M/V {str(shipping['sm_vessel']).upper()}")
+        if shipping.get("sm_consignee"):
+            parts.append(f"C/O {shipping['sm_consignee']}")
+        if shipping.get("sm_case_no"):
+            parts.append(f"CASE NO. {shipping['sm_case_no']}")
+        marks = "\n".join(parts)
+    merge(r, 1, r + 3, NCOL); put(r, 1, marks, font=normal, align=left_top); bd(r, 1, r + 3, NCOL)
+    r += 4
+
+    # ── 품목 표 ───────────────────────────────────────────────────────────
+    hrow = r
+    put(hrow, 1, "No.", fill=navy, font=white_hdr, align=center)
+    merge(hrow, 2, hrow, 3); put(hrow, 2, "Description", fill=navy, font=white_hdr, align=center)
+    put(hrow, 4, "Part No.", fill=navy, font=white_hdr, align=center)
+    put(hrow, 5, "HS Code", fill=navy, font=white_hdr, align=center)
+    put(hrow, 6, "Qty", fill=navy, font=white_hdr, align=center)
+    put(hrow, 7, "Unit Price", fill=navy, font=white_hdr, align=center)
+    put(hrow, 8, f"Amount ({currency})", fill=navy, font=white_hdr, align=center)
+    bd(hrow, 1, hrow, NCOL, navy); ws.row_dimensions[hrow].height = 24
+    r = hrow + 1
+    first_data = r
+    for i, it in enumerate(items):
+        put(r, 1, it["item_no"], align=center)
+        merge(r, 2, r, 3); put(r, 2, it["description"], align=left)
+        put(r, 4, it["part_no"], align=left)
+        put(r, 5, it.get("hs_code", "") or shipping.get("hs_code", ""), align=center)
+        put(r, 6, _num(it["qty"]), align=center)
+        put(r, 7, _num(it["unit_price"]), align=right, fmt=num_fmt)
+        put(r, 8, f"=F{r}*G{r}", align=right, fmt=num_fmt)  # 금액 = 수량 × 단가(수식)
+        if i % 2 == 1:
+            for cc in range(1, NCOL + 1):
+                ws.cell(r, cc).fill = alt
+        bd(r, 1, r, NCOL); ws.row_dimensions[r].height = 18
+        r += 1
+    last_data = r - 1 if items else first_data
+
+    # ── 합계(수식) — Freight/Packing/Insurance 는 사용자가 채우면 TOTAL 자동합산 ──
+    def total_line(label, value, is_total=False):
+        nonlocal r
+        merge(r, 5, r, 7)
+        lc = put(r, 5, label, fill=(lightblue if is_total else gray),
+                 font=(bold if is_total else boldsm), align=right)
+        vc = put(r, 8, value, align=right, fmt=num_fmt)
+        if is_total:
+            vc.fill = lightblue; vc.font = bold
+        bd(r, 5, r, 8)
+        ref = f"H{r}"
+        r += 1
+        return ref
+    sref = total_line("Subtotal", f"=SUM(H{first_data}:H{last_data})" if items else 0)
+    fref = total_line("Freight", 0)
+    pref = total_line("Packing", 0)
+    iref = total_line("Insurance", 0)
+    vref = total_line("VAT", f"={sref}*{_num(data.get('vat_rate', 0))}")
+    total_line("TOTAL INVOICE VALUE", f"={sref}+{fref}+{pref}+{iref}+{vref}", is_total=True)
+
+    # ── 포장 정보 / 선언 / 서명 ───────────────────────────────────────────
+    r += 1
+    merge(r, 1, r, NCOL); put(r, 1, "PACKING & DECLARATION", fill=section, font=white_sec, align=left)
+    bd(r, 1, r, NCOL, section); r += 1
+    r = pairs_block([
+        ("Total Packages", shipping.get("sm_total_cases", "")),
+        ("Net Weight (kg)", shipping.get("sm_net_weight", "")),
+        ("Gross Weight (kg)", shipping.get("sm_gross_weight", "")),
+        ("Country of Origin", shipping.get("sm_origin", "")),
+    ], r)
+    merge(r, 1, r, NCOL)
+    put(r, 1, "We hereby certify that this Commercial Invoice is true and correct.",
+        font=normal, align=left); bd(r, 1, r, NCOL); r += 2
+    merge(r, 1, r + 2, 4); put(r, 1, "Authorized Signature", font=boldsm, align=left_top); bd(r, 1, r + 2, 4)
+    merge(r, 5, r + 2, 8)
+    put(r, 5, f"{company.get('company_name_en', '')}\n(Company Stamp)", font=boldsm, align=left_top)
+    bd(r, 5, r + 2, 8)
+
+    out = io.BytesIO()
+    wb.save(out)
+    return out.getvalue()
+
+
 def make_document_xlsx(
     doc_type: str, data: Dict[str, Any], company: Optional[Dict[str, Any]] = None
 ) -> bytes:

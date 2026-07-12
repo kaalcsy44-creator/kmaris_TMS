@@ -50,6 +50,7 @@ from _core import (
     datetime,
     generate_pdf,
     generate_tax_xlsx,
+    generate_ci_xlsx,
     get_session,
     require_token,
     send_email,
@@ -297,6 +298,35 @@ def commercial_invoice_pdf(order_id: int):
         )
         pdf = generate_pdf("commercial_invoice", payload)
         return _doc_file_response(pdf, f"{ci.ci_no}_CI.pdf", "application/pdf")
+    finally:
+        s.close()
+
+
+@app.get("/api/admin/documents/{order_id}/ci/xlsx",
+         dependencies=[Depends(require_token)])
+def commercial_invoice_xlsx(order_id: int):
+    """Commercial Invoice 전용 Excel — CI 탭 입력을 지정 양식으로 렌더링."""
+    s = get_session()
+    try:
+        order = s.query(Order).filter_by(id=order_id).first()
+        ci = _latest_ci(s, order_id) if order else None
+        if not order or not ci:
+            raise HTTPException(status_code=404, detail="Commercial Invoice가 없습니다.")
+        payload = build_payload(
+            doc_no=ci.ci_no, date=ci.date,
+            customer=_customer_for_order(s, order),
+            vessel=_vessel_for_order(s, order),
+            items=ci.items or [], terms=ci.terms or {},
+            currency=ci.currency or "USD", vat_rate=ci.vat_rate or 0.0,
+            shipping=ci.shipping or {}, po_no=order.po_no or "",
+            export_ref=_project_no_for_order(s, order),
+        )
+        xlsx = generate_ci_xlsx(payload)
+        return _doc_file_response(
+            xlsx,
+            f"{ci.ci_no}_CommercialInvoice.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
     finally:
         s.close()
 

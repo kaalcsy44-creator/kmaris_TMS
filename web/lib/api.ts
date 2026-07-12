@@ -494,7 +494,7 @@ export function saveTaxInvoice(
 
 export function documentDownloadUrl(
   orderId: number,
-  kind: "ci/pdf" | "pl/pdf" | "sa/pdf" | "tax/xlsx"
+  kind: "ci/pdf" | "ci/xlsx" | "pl/pdf" | "sa/pdf" | "tax/xlsx"
 ): string {
   return `${API_BASE}/api/admin/documents/${orderId}/${kind}`;
 }
