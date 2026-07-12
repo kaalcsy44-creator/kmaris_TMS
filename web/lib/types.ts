@@ -523,6 +523,7 @@ export type DocumentDetail = {
     rfq_id: number;
     assignee_id: number; // 담당자(PIC) = RFQ.created_by (0 = 미지정)
     po_no: string;
+    kms_order_no: string; // K-Maris (Vendor) P/O No.(KMS-ORD-…) — Shipping Marks Reference No. 자동입력
     date: string;
     status: string;
     customer: string;

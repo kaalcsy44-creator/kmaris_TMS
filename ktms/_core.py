@@ -1599,11 +1599,10 @@ def _document_detail_payload(session, order: Order) -> dict:
     rfq = _rfq_for_order(session, order)
     sd = (getattr(rfq, "stage_dates", None) or {}) if rfq else {}
     # 발주된 Vendor(들) — 이 오더의 PurchaseOrder vendor_id → Vendor.name (중복 제거)
-    vendor_ids = [
-        po.vendor_id
-        for po in session.query(PurchaseOrder).filter_by(order_id=order.id).all()
-        if po.vendor_id
-    ]
+    pos = session.query(PurchaseOrder).filter_by(order_id=order.id).all()
+    vendor_ids = [po.vendor_id for po in pos if po.vendor_id]
+    # K-Maris (Vendor) P/O No.(KMS-ORD-yymm-nnn) — Shipping Marks Reference No. 자동입력용.
+    kms_order_no = next((po.po_no for po in pos if po.po_no), "")
     vendor_names: list[str] = []
     if vendor_ids:
         name_by_id = {
@@ -1622,6 +1621,7 @@ def _document_detail_payload(session, order: Order) -> dict:
             "rfq_id": rfq.id if rfq else 0,
             "assignee_id": (rfq.created_by or 0) if rfq else 0,
             "po_no": order.po_no or "",
+            "kms_order_no": kms_order_no,
             "date": order.date or "",
             "status": _enum_val(order.status),
             "customer": cust.name if cust else "",

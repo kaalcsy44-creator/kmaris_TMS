@@ -3381,21 +3381,39 @@ a.btn.primary:hover {
 .quote-meta-grid {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
-/* Shipping Marks 섹션 — Dimension(3입력)은 2칸, Handling(체크박스)은 한 줄 전체. */
-.sm-dim {
-  grid-column: span 2;
+/* Shipping Marks 섹션 — 무게·치수(좁은 입력 5개)와 Handling(체크박스)은 한 줄 전체. */
+.sm-metrics {
+  grid-column: 1 / -1;
 }
-.sm-dim-row {
+.sm-metrics-row {
   display: flex;
-  align-items: center;
-  gap: 6px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 10px;
 }
-.sm-dim-row input {
-  width: 100%;
+.sm-metric {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sm-metric > em {
+  font-style: normal;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.sm-metrics-row .sm-metric input {
+  width: 96px;
   min-width: 0;
 }
-.sm-dim-row em {
-  flex: 0 0 auto;
+.sm-metrics-sep {
+  align-self: stretch;
+  width: 1px;
+  margin: 0 4px;
+  background: var(--line);
+}
+.sm-times {
+  align-self: center;
   color: var(--muted);
   font-style: normal;
 }

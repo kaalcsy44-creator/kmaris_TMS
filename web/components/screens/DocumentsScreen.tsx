@@ -1313,20 +1313,22 @@ function ShippingMarksSection({
         <Field label="P.O. No." value={shipping.sm_po_no ?? ""} onChange={set("sm_po_no")} />
         <Field label="Reference No." value={shipping.sm_ref_no ?? ""} onChange={set("sm_ref_no")} />
         <Field label="Description of Goods" value={shipping.sm_desc ?? ""} onChange={set("sm_desc")} />
-        <Field label="Case No." value={shipping.sm_case_no ?? ""} onChange={set("sm_case_no")} />
+        <ComboField label="Case No." value={shipping.sm_case_no ?? ""} onChange={set("sm_case_no")} options={CASE_NO_OPTIONS} />
         <Field label="Total Number of Cases" value={shipping.sm_total_cases ?? ""} onChange={set("sm_total_cases")} type="number" />
-        <Field label="Net Weight (kg)" value={shipping.sm_net_weight ?? ""} onChange={set("sm_net_weight")} type="number" />
-        <Field label="Gross Weight (kg)" value={shipping.sm_gross_weight ?? ""} onChange={set("sm_gross_weight")} type="number" />
-        <label className="form-field sm-dim">
-          <span>Dimension (mm)</span>
-          <span className="sm-dim-row">
-            <input type="number" placeholder="Length" value={shipping.sm_dim_l ?? ""} onChange={(e) => set("sm_dim_l")(e.target.value)} />
-            <em>×</em>
-            <input type="number" placeholder="Width" value={shipping.sm_dim_w ?? ""} onChange={(e) => set("sm_dim_w")(e.target.value)} />
-            <em>×</em>
-            <input type="number" placeholder="Height" value={shipping.sm_dim_h ?? ""} onChange={(e) => set("sm_dim_h")(e.target.value)} />
-          </span>
-        </label>
+        {/* 무게·치수는 넓은 폭이 필요 없어 한 행에 좁은 입력란으로 모아 배치. */}
+        <div className="form-field sm-metrics">
+          <span>Weight (kg) &amp; Dimension (mm)</span>
+          <div className="sm-metrics-row">
+            <span className="sm-metric"><em>N.W.</em><input type="number" value={shipping.sm_net_weight ?? ""} onChange={(e) => set("sm_net_weight")(e.target.value)} /></span>
+            <span className="sm-metric"><em>G.W.</em><input type="number" value={shipping.sm_gross_weight ?? ""} onChange={(e) => set("sm_gross_weight")(e.target.value)} /></span>
+            <span className="sm-metrics-sep" />
+            <span className="sm-metric"><em>L</em><input type="number" value={shipping.sm_dim_l ?? ""} onChange={(e) => set("sm_dim_l")(e.target.value)} /></span>
+            <em className="sm-times">×</em>
+            <span className="sm-metric"><em>W</em><input type="number" value={shipping.sm_dim_w ?? ""} onChange={(e) => set("sm_dim_w")(e.target.value)} /></span>
+            <em className="sm-times">×</em>
+            <span className="sm-metric"><em>H</em><input type="number" value={shipping.sm_dim_h ?? ""} onChange={(e) => set("sm_dim_h")(e.target.value)} /></span>
+          </div>
+        </div>
         <ComboField label="Port of Delivery" value={shipping.sm_port_delivery ?? ""} onChange={set("sm_port_delivery")} options={PORT_DELIVERY_OPTIONS} />
         <ComboField label="Final Destination" value={shipping.sm_final_dest ?? ""} onChange={set("sm_final_dest")} options={FINAL_DEST_OPTIONS} />
         <ComboField label="Country of Origin" value={shipping.sm_origin ?? ""} onChange={set("sm_origin")} options={ORIGIN_OPTIONS} />
@@ -1387,17 +1389,20 @@ const FINAL_DEST_OPTIONS = [
   "Kaohsiung, Taiwan", "Rotterdam, Netherlands", "Hamburg, Germany", "Los Angeles, USA", "Jebel Ali, UAE",
 ];
 const ORIGIN_OPTIONS = ["Made in Korea", "Made in China", "Made in Japan", "Made in Germany", "Made in USA"];
+const CASE_NO_OPTIONS = ["1-UP", "1 OF 1", "1-2", "1-3", "1-5", "1-10"];
 const HANDLING_OPTIONS = ["THIS SIDE UP", "KEEP DRY", "FRAGILE", "HANDLE WITH CARE", "DO NOT STACK", "USE NO HOOKS", "KEEP AWAY FROM HEAT"];
 
 // Shipping Marks 구조화 필드 기본값(오더 정보로 프리필). 저장값이 있으면 덮어쓴다.
-function defaultMarkFields(order: { vessel?: string; po_no?: string; customer?: string }): Record<string, string> {
+function defaultMarkFields(order: { vessel?: string; po_no?: string; customer?: string; kms_order_no?: string }): Record<string, string> {
   return {
     sm_type: "SHIP'S SPARES IN TRANSIT",
     sm_vessel: order.vessel || "",
     sm_consignee: order.customer || "",
     sm_po_no: order.po_no || "",
-    sm_ref_no: "KMS-ORD-yymm-nnn",
+    // Reference No. = 해당 오더의 KMS-ORD 번호(발주서 P/O No.). 없으면 템플릿 안내값.
+    sm_ref_no: order.kms_order_no || "KMS-ORD-yymm-nnn",
     sm_desc: "MARINE SPARE PARTS",
+    sm_case_no: "1-UP",
     sm_port_delivery: "Busan, Korea",
     sm_origin: "Made in Korea",
   };
@@ -1719,7 +1724,7 @@ function DocOrderInfo({ order }: { order: DocumentDetail["order"] }) {
 function emptyDocDetail(): DocumentDetail {
   return {
     order: {
-      id: 0, rfq_id: 0, assignee_id: 0, po_no: "", date: "", status: "",
+      id: 0, rfq_id: 0, assignee_id: 0, po_no: "", kms_order_no: "", date: "", status: "",
       customer: "", customer_email: "", customer_tax_id: "", vessel: "",
       project_title: "", project_no: "", first_rfq_at: "", work_type: "", vendor: "", trade_type: "", service_info: {},
       tracking_token: "", consignee_confirmed_date: "", vendor_docs_sent_date: "",
