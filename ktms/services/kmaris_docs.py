@@ -596,6 +596,31 @@ def _make_commercial_invoice_pdf(data: Dict[str, Any], company: Dict[str, Any]) 
                             rightMargin=10 * mm, topMargin=8 * mm, bottomMargin=14 * mm,
                             title="COMMERCIAL INVOICE")
 
+    # Keep every block on the same vertical grid. These are the PDF equivalents
+    # of the eight Excel columns (6, 20, 16, 14, 12, 8, 14, 16).
+    excel_units = [6, 20, 16, 14, 12, 8, 14, 16]
+    col_widths = [277 * mm * unit / sum(excel_units) for unit in excel_units]
+    half_widths = [sum(col_widths[:4]), sum(col_widths[4:])]
+
+    asset_roots = [Path(__file__).resolve().parents[2], Path(__file__).resolve().parent.parent / "config"]
+
+    def asset(*names):
+        for root in asset_roots:
+            for name in names:
+                candidate = root / name
+                if candidate.exists():
+                    return candidate
+        return None
+
+    def image(path, max_width, max_height):
+        if not path:
+            return ""
+        from PIL import Image as PILImage
+        with PILImage.open(path) as source:
+            width, height = source.size
+        scale = min(max_width / width, max_height / height)
+        return Image(str(path), width=width * scale, height=height * scale)
+
     def p(value, style="small"):
         text = str(value or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
         return Paragraph(text.replace("\n", "<br/>"), s[style])
@@ -621,9 +646,14 @@ def _make_commercial_invoice_pdf(data: Dict[str, Any], company: Dict[str, Any]) 
         return t
 
     story = []
-    title = Table([[p("COMMERCIAL INVOICE", "section")]], colWidths=[277 * mm], rowHeights=[13 * mm])
+    title_style = ParagraphStyle("KMCITitle", parent=s["section"], fontName=DEFAULT_BOLD_FONT,
+                                 fontSize=19, leading=22, alignment=TA_CENTER)
+    logo = image(asset("logo_K-maris.png", "logo.png", "logo.jpg"), 42 * mm, 12 * mm)
+    title = Table([[logo, Paragraph("COMMERCIAL INVOICE", title_style), ""]],
+                  colWidths=[50 * mm, 177 * mm, 50 * mm], rowHeights=[16 * mm])
     title.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), NAVY), ("TEXTCOLOR", (0, 0), (-1, -1), colors.white),
                                ("ALIGN", (0, 0), (-1, -1), "CENTER"), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                               ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
                                ("FONTNAME", (0, 0), (-1, -1), DEFAULT_BOLD_FONT),
                                ("FONTSIZE", (0, 0), (-1, -1), 17)]))
     story.append(title)
@@ -642,7 +672,8 @@ def _make_commercial_invoice_pdf(data: Dict[str, Any], company: Dict[str, Any]) 
                ("Quotation Ref.", data.get("quotation_ref") or shipping.get("export_ref", ""))]
     rows = [[p("EXPORTER / SELLER", "section"), "", p("INVOICE INFORMATION", "section"), ""]]
     rows += [[p(exporter[i]), "", p(invoice[i][0]), p(invoice[i][1])] for i in range(4)]
-    info = Table(rows, colWidths=[36 * mm, 102.5 * mm, 32 * mm, 106.5 * mm])
+    info = Table(rows, colWidths=[col_widths[0] + col_widths[1], col_widths[2] + col_widths[3],
+                                 col_widths[4] + col_widths[5], col_widths[6] + col_widths[7]])
     info.setStyle(TableStyle([("SPAN", (0, 0), (1, 0)), ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1F3B66")),
                               ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
                               ("FONTNAME", (0, 0), (-1, 0), DEFAULT_BOLD_FONT),
@@ -660,7 +691,8 @@ def _make_commercial_invoice_pdf(data: Dict[str, Any], company: Dict[str, Any]) 
             ("B/L or AWB No.", shipping.get("bl_awb_no", ""))]
     rows = [[p("CONSIGNEE / BUYER", "section"), "", p("SHIP TO / C/O", "section"), ""]]
     rows += [[p(buyer[i]), "", p(ship[i][0]), p(ship[i][1])] for i in range(3)]
-    consignee = Table(rows, colWidths=[36 * mm, 102.5 * mm, 32 * mm, 106.5 * mm])
+    consignee = Table(rows, colWidths=[col_widths[0] + col_widths[1], col_widths[2] + col_widths[3],
+                                      col_widths[4] + col_widths[5], col_widths[6] + col_widths[7]])
     consignee.setStyle(TableStyle([("SPAN", (0, 0), (1, 0)), ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1F3B66")),
                                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
                                    ("FONTNAME", (0, 0), (-1, 0), DEFAULT_BOLD_FONT),
@@ -676,7 +708,15 @@ def _make_commercial_invoice_pdf(data: Dict[str, Any], company: Dict[str, Any]) 
         ("Incoterms", terms.get("incoterms", ""), "Payment Terms", terms.get("payment_terms", "")),
         ("ETD", shipping.get("etd", ""), "ETA", shipping.get("eta", "")),
         ("Currency", currency, "Country of Origin", shipping.get("sm_origin", ""))]]
-    story += [grid(shipping_rows, [36, 102.5, 52, 86.5], (0, 2)), section("SHIPPING MARKS")]
+    shipping_table = Table(shipping_rows, colWidths=[col_widths[0] + col_widths[1], col_widths[2] + col_widths[3],
+                                                     col_widths[4] + col_widths[5], col_widths[6] + col_widths[7]])
+    shipping_table.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), .35, MID_GRAY),
+        ("BACKGROUND", (0, 0), (0, -1), LIGHT_GRAY), ("BACKGROUND", (2, 0), (2, -1), LIGHT_GRAY),
+        ("FONTNAME", (0, 0), (0, -1), DEFAULT_BOLD_FONT), ("FONTNAME", (2, 0), (2, -1), DEFAULT_BOLD_FONT),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LEFTPADDING", (0, 0), (-1, -1), 4),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 4), ("TOPPADDING", (0, 0), (-1, -1), 3),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]))
+    story += [shipping_table, section("SHIPPING MARKS")]
 
     marks = (shipping.get("shipping_marks") or "").strip()
     if not marks:
@@ -706,7 +746,8 @@ def _make_commercial_invoice_pdf(data: Dict[str, Any], company: Dict[str, Any]) 
         item_rows.append([p(it["item_no"], "tiny"), p(it["description"], "tiny"), p(it["part_no"], "tiny"),
                           p(it.get("hs_code") or shipping.get("hs_code", ""), "tiny"), p(f"{it['qty']:g}", "tiny"),
                           p(f"{it['unit_price']:,.2f}", "tiny"), p(f"{it['amount']:,.2f}", "tiny")])
-    item_table = Table(item_rows, colWidths=[w * mm for w in [12, 83, 42, 30, 18, 42, 50]], repeatRows=1)
+    item_table = Table(item_rows, colWidths=[col_widths[0], col_widths[1] + col_widths[2], col_widths[3],
+                                             col_widths[4], col_widths[5], col_widths[6], col_widths[7]], repeatRows=1)
     cmds = [("BACKGROUND", (0, 0), (-1, 0), NAVY), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
             ("GRID", (0, 0), (-1, -1), .35, MID_GRAY), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
             ("ALIGN", (4, 1), (-1, -1), "RIGHT"), ("LEFTPADDING", (0, 0), (-1, -1), 3),
@@ -717,8 +758,9 @@ def _make_commercial_invoice_pdf(data: Dict[str, Any], company: Dict[str, Any]) 
     total_rows = [[p(label), p(f"{value:,.2f}")] for label, value in [
         ("Subtotal", totals["subtotal"]), ("Freight", 0), ("Packing", 0), ("Insurance", 0),
         ("VAT", totals["vat"]), ("TOTAL INVOICE VALUE", totals["total"])]]
-    total_table = Table([["", Table(total_rows, colWidths=[52 * mm, 42 * mm])]], colWidths=[183 * mm, 94 * mm])
-    total_table._cellvalues[0][1].setStyle(TableStyle([("GRID", (0, 0), (-1, -1), .35, MID_GRAY),
+    total_inner = Table(total_rows, colWidths=[col_widths[4] + col_widths[5] + col_widths[6], col_widths[7]])
+    total_table = Table([["", total_inner]], colWidths=[sum(col_widths[:4]), sum(col_widths[4:])])
+    total_inner.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), .35, MID_GRAY),
         ("BACKGROUND", (0, 0), (0, -1), LIGHT_GRAY), ("BACKGROUND", (0, -1), (-1, -1), LIGHT_BLUE),
         ("ALIGN", (1, 0), (1, -1), "RIGHT"), ("FONTNAME", (0, -1), (-1, -1), DEFAULT_BOLD_FONT),
         ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4)]))
@@ -726,10 +768,25 @@ def _make_commercial_invoice_pdf(data: Dict[str, Any], company: Dict[str, Any]) 
     packing = [[p(a), p(b), p(c), p(d)] for a, b, c, d in [
         ("Total Packages", shipping.get("sm_total_cases", ""), "Net Weight (kg)", shipping.get("sm_net_weight", "")),
         ("Gross Weight (kg)", shipping.get("sm_gross_weight", ""), "Country of Origin", shipping.get("sm_origin", ""))]]
-    story += [grid(packing, [36, 102.5, 52, 86.5], (0, 2)), grid([[p("We hereby certify that this Commercial Invoice is true and correct.")]], [277])]
-    sign = Table([[p("Authorized Signature", "base"),
-                   p(f"{company.get('company_name_en', '')}\n(Company Stamp)", "base")]],
-                 colWidths=[138.5 * mm, 138.5 * mm], rowHeights=[18 * mm])
+    packing_table = Table(packing, colWidths=[col_widths[0] + col_widths[1], col_widths[2] + col_widths[3],
+                                              col_widths[4] + col_widths[5], col_widths[6] + col_widths[7]])
+    packing_table.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), .35, MID_GRAY),
+        ("BACKGROUND", (0, 0), (0, -1), LIGHT_GRAY), ("BACKGROUND", (2, 0), (2, -1), LIGHT_GRAY),
+        ("FONTNAME", (0, 0), (0, -1), DEFAULT_BOLD_FONT), ("FONTNAME", (2, 0), (2, -1), DEFAULT_BOLD_FONT),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LEFTPADDING", (0, 0), (-1, -1), 4),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 4), ("TOPPADDING", (0, 0), (-1, -1), 3),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]))
+    declaration = Table([[p("We hereby certify that this Commercial Invoice is true and correct.")]],
+                        colWidths=[sum(col_widths)])
+    declaration.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), .35, MID_GRAY),
+                                      ("LEFTPADDING", (0, 0), (-1, -1), 4)]))
+    story += [packing_table, declaration]
+    signature_image = image(asset("Authorized signature_Sungyeon Cho.jpg", "signature.png", "signature.jpg"), 45 * mm, 15 * mm)
+    stamp_image = image(asset("Company stamp_K-Maris Energy & Solutions.jpg", "stamp.png", "stamp.jpg"), 18 * mm, 18 * mm)
+    left_sign = Table([[p("Authorized Signature", "base"), signature_image]], colWidths=[42 * mm, half_widths[0] - 42 * mm])
+    right_sign = Table([[p(f"{company.get('company_name_en', '')}\n(Company Stamp)", "base"), stamp_image]],
+                       colWidths=[half_widths[1] - 25 * mm, 25 * mm])
+    sign = Table([[left_sign, right_sign]], colWidths=half_widths, rowHeights=[20 * mm])
     sign.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), .35, MID_GRAY),
                               ("VALIGN", (0, 0), (-1, -1), "TOP"),
                               ("FONTNAME", (0, 0), (-1, -1), DEFAULT_BOLD_FONT),
