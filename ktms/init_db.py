@@ -124,11 +124,14 @@ def migrate_columns():
     # SQLAlchemy Enum 은 멤버 '이름'(PARTS/SERVICE)을 저장하므로 값(한글)이 아닌 이름으로 채운다.
     if insp.has_table("rfqs"):
         with engine.begin() as conn:
+            # work_type 은 신규 DB에서 네이티브 PG enum(worktype)이라 빈문자·한글값을
+            # enum 리터럴로 직접 비교하면 InvalidTextRepresentation 으로 죽는다.
+            # ::text 캐스팅으로 varchar(구 DB)·enum(신 DB) 스키마 양쪽에서 안전하게 비교.
             conn.execute(text(
                 "UPDATE rfqs SET work_type='PARTS' "
-                "WHERE work_type IS NULL OR work_type='' OR work_type='부품공급'"
+                "WHERE work_type IS NULL OR work_type::text='' OR work_type::text='부품공급'"
             ))
-            conn.execute(text("UPDATE rfqs SET work_type='SERVICE' WHERE work_type='서비스'"))
+            conn.execute(text("UPDATE rfqs SET work_type='SERVICE' WHERE work_type::text='서비스'"))
 
 
 def migrate_relax_not_null():
