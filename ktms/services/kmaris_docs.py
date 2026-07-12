@@ -517,6 +517,56 @@ def _terms_block(data: Dict[str, Any], doc_type: str):
     return table
 
 
+def _commercial_shipping_block(data: Dict[str, Any]):
+    """Render the CI footer in the same section order and field grouping as the XLSX."""
+    s = _styles()
+    shipping = data.get("shipping", {})
+    terms = data.get("terms", {})
+
+    dim = " x ".join(str(shipping.get(k, "") or "-") for k in ("sm_dim_l", "sm_dim_w", "sm_dim_h"))
+    marks = (shipping.get("shipping_marks") or "").strip()
+    if not marks:
+        mark_lines = []
+        for value in (
+            shipping.get("sm_type"),
+            f"C/O {shipping.get('sm_consignee')}" if shipping.get("sm_consignee") else "",
+            f"M/V {shipping.get('sm_vessel')}" if shipping.get("sm_vessel") else "",
+            f"P.O. NO.: {shipping.get('sm_po_no')}" if shipping.get("sm_po_no") else "",
+            f"REF. NO.: {shipping.get('sm_ref_no')}" if shipping.get("sm_ref_no") else "",
+            shipping.get("sm_desc"),
+            f"CASE NO.: {shipping.get('sm_case_no')}" if shipping.get("sm_case_no") else "",
+        ):
+            if value:
+                mark_lines.append(str(value))
+        marks = "\n".join(mark_lines)
+
+    rows = [
+        [_p("<b>SHIPPING INFORMATION</b>", s["section"]), "", _p("<b>SHIPPING INFORMATION</b>", s["section"]), ""],
+        [_p("Vessel", s["small"]), _p(shipping.get("sm_vessel", ""), s["small"]), _p("Carrier", s["small"]), _p(shipping.get("carrier", ""), s["small"])],
+        [_p("Port of Loading", s["small"]), _p(shipping.get("port_loading", ""), s["small"]), _p("Port of Discharge", s["small"]), _p(shipping.get("port_discharge", ""), s["small"])],
+        [_p("B/L or AWB No.", s["small"]), _p(shipping.get("bl_awb_no", ""), s["small"]), _p("ETD / ETA", s["small"]), _p(f"{shipping.get('etd', '')} / {shipping.get('eta', '')}", s["small"])],
+        [_p("Incoterms", s["small"]), _p(terms.get("incoterms", ""), s["small"]), _p("Payment Terms", s["small"]), _p(terms.get("payment_terms", ""), s["small"])],
+        [_p("<b>SHIPPING MARKS</b>", s["section"]), "", "", ""],
+        [_p(marks, s["small"]), "", "", ""],
+        [_p("<b>PACKING &amp; DECLARATION</b>", s["section"]), "", "", ""],
+        [_p("Total Packages", s["small"]), _p(shipping.get("sm_total_cases", ""), s["small"]), _p("N.W. / G.W. (kg)", s["small"]), _p(f"{shipping.get('sm_net_weight', '')} / {shipping.get('sm_gross_weight', '')}", s["small"])],
+        [_p("Dimension (mm)", s["small"]), _p(dim if dim != "- x - x -" else "", s["small"]), _p("Country of Origin", s["small"]), _p(shipping.get("sm_origin", ""), s["small"])],
+    ]
+    table = Table(rows, colWidths=[38 * mm, 97 * mm, 38 * mm, 97 * mm])
+    table.setStyle(TableStyle([
+        ("SPAN", (0, 0), (1, 0)), ("SPAN", (2, 0), (3, 0)),
+        ("SPAN", (0, 5), (3, 5)), ("SPAN", (0, 6), (3, 6)), ("SPAN", (0, 7), (3, 7)),
+        ("BACKGROUND", (0, 0), (-1, 0), BLUE), ("BACKGROUND", (0, 5), (-1, 5), BLUE),
+        ("BACKGROUND", (0, 7), (-1, 7), BLUE),
+        ("BACKGROUND", (0, 1), (0, 4), LIGHT_GRAY), ("BACKGROUND", (2, 1), (2, 4), LIGHT_GRAY),
+        ("BACKGROUND", (0, 8), (0, 9), LIGHT_GRAY), ("BACKGROUND", (2, 8), (2, 9), LIGHT_GRAY),
+        ("GRID", (0, 0), (-1, -1), 0.35, MID_GRAY), ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+        ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+    ]))
+    return table
+
+
 def _footer(canvas, doc):
     canvas.saveState()
     canvas.setStrokeColor(MID_GRAY)
@@ -556,7 +606,7 @@ def make_pdf(doc_type: str, data: Dict[str, Any], company: Optional[Dict[str, An
         story.append(Spacer(1, 4 * mm))
         story.append(_totals_table(payload))
     story.append(Spacer(1, 5 * mm))
-    story.append(_terms_block(payload, doc_type))
+    story.append(_commercial_shipping_block(payload) if doc_type == "commercial_invoice" else _terms_block(payload, doc_type))
     story.append(Spacer(1, 2 * mm))
     sign = Table(
         [[

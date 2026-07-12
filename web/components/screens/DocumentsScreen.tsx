@@ -1314,7 +1314,7 @@ function ShippingFields({
       <ComboField label="Port of Loading" value={shipping.port_loading || ""} onChange={set("port_loading")} options={PORT_OPTIONS} />
       <ComboField label="Port of Discharge" value={shipping.port_discharge || ""} onChange={set("port_discharge")} options={PORT_OPTIONS} />
       <ComboField label="Carrier" value={shipping.carrier || ""} onChange={set("carrier")} options={CARRIER_OPTIONS} />
-      <Field label="B/L or AWB No." value={shipping.bl_awb_no || ""} onChange={set("bl_awb_no")} />
+      <ComboField label="B/L or AWB No." value={shipping.bl_awb_no || ""} onChange={set("bl_awb_no")} options={BL_AWB_OPTIONS} />
       <Field label="ETD" value={shipping.etd || ""} onChange={set("etd")} type="date" />
       <Field label="ETA" value={shipping.eta || ""} onChange={set("eta")} type="date" />
     </>
@@ -1411,7 +1411,13 @@ const PORT_OPTIONS = [
 ];
 const CARRIER_OPTIONS = [
   "TBD", "Maersk", "MSC", "CMA CGM", "HMM", "ONE", "Hapag-Lloyd", "Evergreen", "COSCO", "Yang Ming",
-  "Korean Air Cargo", "Asiana Cargo", "DHL", "FedEx", "UPS",
+  "ZIM", "PIL", "Wan Hai", "SITC", "KMTC", "Sinokor", "Heung-A Line", "Pan Ocean",
+  "Korean Air Cargo", "Asiana Cargo", "Emirates SkyCargo", "Qatar Airways Cargo", "Lufthansa Cargo",
+  "Singapore Airlines Cargo", "Cathay Cargo", "DHL", "FedEx", "UPS", "SF Express",
+];
+const BL_AWB_OPTIONS = [
+  "TBD", "To be advised", "Not issued yet", "Original B/L", "Surrendered B/L", "Sea Waybill",
+  "House B/L", "Master B/L", "House AWB", "Master AWB", "Express Release", "N/A",
 ];
 const UNIT_OPTIONS = ["PCS", "SET", "EA", "UNIT", "KG", "M", "M2", "M3", "L", "ROLL", "BOX", "PAIR", "LOT"];
 const INCOTERMS_OPTIONS = [
