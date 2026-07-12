@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   documentDownloadUrl,
   fetchDocumentDetail,
@@ -1745,20 +1746,23 @@ function DocPreviewButton({
       <button className="btn doc-preview-btn" disabled={disabled || busy} onClick={open}>
         {busy ? "Opening…" : "Preview"}
       </button>
-      {url ? (
-        <div className="doc-preview-backdrop" onClick={close}>
-          <div className="doc-preview-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="doc-preview-head">
-              <span className="doc-preview-title">{filename}</span>
-              <div className="doc-preview-acts">
-                <button className="btn sm doc-preview-save" onClick={savePdf}>Download</button>
-                <button className="btn sm" onClick={close}>Close</button>
+      {url && typeof document !== "undefined"
+        ? createPortal(
+            <div className="doc-preview-backdrop" onClick={close}>
+              <div className="doc-preview-modal" onClick={(e) => e.stopPropagation()}>
+                <div className="doc-preview-head">
+                  <span className="doc-preview-title">{filename}</span>
+                  <div className="doc-preview-acts">
+                    <button className="btn sm doc-preview-save" onClick={savePdf}>Download</button>
+                    <button className="btn sm" onClick={close}>Close</button>
+                  </div>
+                </div>
+                <iframe className="doc-preview-frame" src={url} title="Preview" />
               </div>
-            </div>
-            <iframe className="doc-preview-frame" src={url} title="Preview" />
-          </div>
-        </div>
-      ) : null}
+            </div>,
+            document.body,
+          )
+        : null}
     </>
   );
 }

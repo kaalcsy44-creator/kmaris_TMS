@@ -3527,7 +3527,9 @@ a.btn.primary:hover {
 .doc-preview-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 60;
+  /* 스테이지 팝업(.pl-modal-backdrop, z-index:100) 위로 띄운다. 모달은 document.body
+     로 portal 되어 form-actions 의 sticky stacking context 밖에서 최상단에 그려진다. */
+  z-index: 1000;
   display: flex;
   align-items: center;
   justify-content: center;
