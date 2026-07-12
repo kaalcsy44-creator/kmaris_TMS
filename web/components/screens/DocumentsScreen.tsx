@@ -943,6 +943,7 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
       <MissingWarning missing={data.ci?.missing || []} />
       </fieldset>
       <div className="form-actions">
+        <DocPreviewButton orderId={data.order.id} kind="ci/pdf" filename="Commercial Invoice.pdf" disabled={!data.ci} />
         {editable ? (
           <>
             <button className="btn primary" disabled={busy || data.order.id === 0} onClick={save}>
@@ -1030,6 +1031,7 @@ function PackingListTab({ data, onChanged }: { data: DocumentDetail; onChanged: 
       <MissingWarning missing={data.pl?.missing || []} />
       </fieldset>
       <div className="form-actions">
+        <DocPreviewButton orderId={data.order.id} kind="pl/pdf" filename="Packing List.pdf" disabled={!data.pl} />
         {editable ? (
           <>
             <button className="btn primary" disabled={busy} onClick={save}>
@@ -1167,6 +1169,7 @@ function ShippingAdviceTab({ data, onChanged }: { data: DocumentDetail; onChange
       ) : null}
       </fieldset>
       <div className="form-actions">
+        <DocPreviewButton orderId={data.order.id} kind="sa/pdf" filename="Shipping Advice.pdf" disabled={!data.sa} />
         {editable ? (
           <>
             <button className="btn primary" disabled={busy || data.order.id === 0} onClick={save}>
@@ -1676,6 +1679,73 @@ function DownloadButton({
     <button className="btn" disabled={disabled} onClick={download}>
       {label}
     </button>
+  );
+}
+
+// 문서 미리보기 — 다운로드와 동일한 PDF 를 받아 모달 iframe 으로 인라인 표시한다.
+// PDF 는 저장된 문서 기준으로 생성되므로 저장 전에는 비활성(Download 와 동일 규약).
+function DocPreviewButton({
+  orderId,
+  kind,
+  filename,
+  disabled,
+}: {
+  orderId: number;
+  kind: "ci/pdf" | "pl/pdf" | "sa/pdf";
+  filename: string;
+  disabled: boolean;
+}) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function open() {
+    setBusy(true);
+    try {
+      const res = await fetch(documentDownloadUrl(orderId, kind), {
+        headers: getToken() ? { Authorization: `Bearer ${getToken()}` } : {},
+      });
+      if (!res.ok) throw new Error("preview failed");
+      setUrl(URL.createObjectURL(await res.blob()));
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "미리보기를 열 수 없습니다.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function close() {
+    if (url) URL.revokeObjectURL(url);
+    setUrl(null);
+  }
+
+  function savePdf() {
+    if (!url) return;
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+  }
+
+  return (
+    <>
+      <button className="btn doc-preview-btn" disabled={disabled || busy} onClick={open}>
+        {busy ? "여는 중…" : "미리보기"}
+      </button>
+      {url ? (
+        <div className="doc-preview-backdrop" onClick={close}>
+          <div className="doc-preview-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="doc-preview-head">
+              <span className="doc-preview-title">{filename}</span>
+              <div className="doc-preview-acts">
+                <button className="btn sm doc-preview-save" onClick={savePdf}>PDF 저장</button>
+                <button className="btn sm" onClick={close}>닫기</button>
+              </div>
+            </div>
+            <iframe className="doc-preview-frame" src={url} title="미리보기" />
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 }
 

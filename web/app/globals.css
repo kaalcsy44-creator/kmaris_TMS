@@ -3492,6 +3492,69 @@ a.btn.primary:hover {
     gap: 8px;
   }
 }
+/* 문서 미리보기 버튼 — 하단 고정바 좌측 끝(삭제 유무와 무관). */
+.pl-modal-body .form-actions .doc-preview-btn {
+  order: -2;
+  margin-right: auto;
+}
+/* 미리보기가 있으면 삭제 버튼의 좌측 밀기(auto)를 해제해 이중 여백을 막는다. */
+.pl-modal-body .form-actions:has(.doc-preview-btn) .btn.danger {
+  margin-right: 0;
+}
+/* 문서 미리보기 모달 — 생성된 PDF 를 iframe 으로 인라인 표시. */
+.doc-preview-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(11, 29, 58, 0.5);
+}
+.doc-preview-modal {
+  display: flex;
+  flex-direction: column;
+  width: min(920px, 96vw);
+  height: min(90vh, 1200px);
+  background: #fff;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(11, 29, 58, 0.35);
+}
+.doc-preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.doc-preview-title {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.doc-preview-acts {
+  display: flex;
+  flex-shrink: 0;
+  gap: 8px;
+}
+.doc-preview-save {
+  background: var(--blue);
+  border-color: var(--blue);
+  color: #fff;
+}
+.doc-preview-frame {
+  flex: 1 1 auto;
+  width: 100%;
+  border: 0;
+  background: #525659;
+}
 /* 가격설정 — Item list 단가 계산에 직결. 6개 컨트롤을 한 줄로(FX 넓게, Apply는 내용폭). */
 .quote-price-grid {
   grid-template-columns: 1fr 1fr 1.4fr 1fr 0.8fr auto;
