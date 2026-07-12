@@ -24,3 +24,4 @@ pillow>=10.0.0
 # reportlab for Quotation/CI/PL/SA/Vendor-PO PDF generation. Required at import
 # time, so the API will not start without it.
 reportlab>=4.0.0
+fonttools>=4.53.0

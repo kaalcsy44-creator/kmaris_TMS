@@ -29,7 +29,9 @@ from reportlab.platypus import (
 )
 
 def _register_default_font() -> tuple[str, str]:
+    bundled_fonts = Path(__file__).resolve().parent.parent / "config" / "fonts"
     candidates = [
+        (str(bundled_fonts / "NotoSansKR-Regular.ttf"), str(bundled_fonts / "NotoSansKR-Bold.ttf")),
         ("/usr/share/fonts/truetype/nanum/NanumBarunGothic.ttf", "/usr/share/fonts/truetype/nanum/NanumBarunGothicBold.ttf"),
         ("/usr/share/fonts/truetype/nanum/NanumGothic.ttf", "/usr/share/fonts/truetype/nanum/NanumGothicBold.ttf"),
         ("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc"),
