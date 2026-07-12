@@ -910,8 +910,10 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
   return (
     <div className="doc-tab">
       <fieldset className="form-fieldset" disabled={!editable}>
+      <div className="doc-cols">
+      <div className="doc-col">
       <div className="sub-h">Basic info</div>
-      {/* 4열 × 3행 균일폭: 문서정보(4) · 선적정보(7) · HS Code(1) = 12필드. */}
+      {/* 좌열: 문서정보(4)·선적정보(7)·HS Code(1) = 12필드, 절반폭 2열 배치. */}
       <div className="form-grid doc-form-grid">
         <Field label="CI No." value={ciNo} onChange={setCiNo} />
         <Field label="CI Date" value={date} onChange={setDate} type="date" />
@@ -923,7 +925,9 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
         <ShippingFields shipping={shipping} setShipping={setShipping} />
         <Field label="HS Code (optional)" value={shipping.hs_code || ""} onChange={(v) => setShipping({ ...shipping, hs_code: v })} />
       </div>
+      </div>
       <ShippingMarksSection shipping={shipping} setShipping={setShipping} />
+      </div>
       <ItemEditor
         items={items}
         setItems={setItems}
@@ -1129,12 +1133,17 @@ function ShippingAdviceTab({ data, onChanged }: { data: DocumentDetail; onChange
       {/* 8단계(Delivery arrangement) 마일스톤 — Customer 확인 / Vendor 서류 확인 */}
       <OrderMilestones data={data} onChanged={onChanged} />
       <fieldset className="form-fieldset" disabled={!editable}>
+      <div className="doc-cols">
+      <div className="doc-col">
+      <div className="sub-h">Basic info</div>
       <div className="form-grid doc-form-grid">
         <Field label="SA No." value={saNo} onChange={setSaNo} />
         <Field label="SA Date" value={date} onChange={setDate} type="date" />
         <ShippingFields shipping={shipping} setShipping={setShipping} />
       </div>
+      </div>
       <ShippingMarksSection shipping={shipping} setShipping={setShipping} />
+      </div>
       {data.ci ? (
         <MissingWarning missing={ciMissing} />
       ) : (

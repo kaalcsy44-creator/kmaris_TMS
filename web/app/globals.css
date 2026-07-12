@@ -3458,6 +3458,26 @@ a.btn.primary:hover {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+/* 문서 폼 좌우 2단: 좌=Basic info, 우=Shipping Marks 로 넓은 스테이지 창의
+   우측 여백을 활용한다(세로 스크롤 절감). */
+.doc-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  align-items: start;
+}
+/* 2단 안에서는 각 섹션 그리드를 절반폭 2열로(2/3 폭 제한 해제). */
+.doc-cols .doc-form-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  max-width: 100%;
+}
+/* 좁은 창(정보 패널 펼침 등)에서는 좌우 2단을 위아래로 접는다. */
+@media (max-width: 1100px) {
+  .doc-cols {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+}
 /* 가격설정 — Item list 단가 계산에 직결. 6개 컨트롤을 한 줄로(FX 넓게, Apply는 내용폭). */
 .quote-price-grid {
   grid-template-columns: 1fr 1fr 1.4fr 1fr 0.8fr auto;
