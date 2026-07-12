@@ -599,7 +599,7 @@ def _make_commercial_invoice_pdf(data: Dict[str, Any], company: Dict[str, Any]) 
 
     # Keep every block on the same vertical grid. These are the PDF equivalents
     # of the eight Excel columns (6, 20, 16, 14, 12, 8, 14, 16).
-    excel_units = [6, 20, 16, 14, 12, 8, 14, 16]
+    excel_units = [6, 14.5, 16, 13.5, 12, 8, 14, 18.28515625]
     col_widths = [page_width * unit / sum(excel_units) for unit in excel_units]
     half_widths = [sum(col_widths[:4]), sum(col_widths[4:])]
 
@@ -665,20 +665,26 @@ def _make_commercial_invoice_pdf(data: Dict[str, Any], company: Dict[str, Any]) 
                                 ("ALIGN", (0, 0), (-1, -1), "CENTER"), ("VALIGN", (0, 0), (-1, -1), "MIDDLE")]))
     story += [banner, Spacer(1, 3 * mm)]
 
-    exporter = [company.get("company_name_en", ""), company.get("address_en") or company.get("address", ""),
+    address = company.get("address_en") or company.get("address", "")
+    address_top, address_bottom = address, ""
+    if " Seoul" in address:
+        address_top, address_bottom = address.split(" Seoul", 1)
+        address_bottom = "Seoul" + address_bottom
+    exporter = [company.get("company_name_en", ""), address_top, address_bottom,
                 f"Tel: {company.get('phone', '')}    Email: {company.get('sales_email', '')}",
                 f"Business Reg. No.: {company.get('business_no', '')}"]
     invoice = [("Invoice No.", data.get("doc_no", "")), ("Invoice Date", data.get("date", "")),
                ("P.O. No.", shipping.get("po_no", "")),
-               ("Quotation Ref.", data.get("quotation_ref") or shipping.get("export_ref", ""))]
+               ("Quotation Ref.", data.get("quotation_ref") or shipping.get("export_ref", "")), ("", "")]
     rows = [[p("EXPORTER / SELLER", "section"), "", p("INVOICE INFORMATION", "section"), ""]]
-    rows += [[p(exporter[i]), "", p(invoice[i][0]), p(invoice[i][1])] for i in range(4)]
+    rows += [[p(exporter[i]), "", p(invoice[i][0]), p(invoice[i][1])] for i in range(5)]
     info = Table(rows, colWidths=[col_widths[0] + col_widths[1], col_widths[2] + col_widths[3],
                                  col_widths[4] + col_widths[5], col_widths[6] + col_widths[7]])
     info.setStyle(TableStyle([("SPAN", (0, 0), (1, 0)), ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1F3B66")),
                               ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
                               ("FONTNAME", (0, 0), (-1, 0), DEFAULT_BOLD_FONT),
-                              ("SPAN", (0, 1), (1, 1)), ("SPAN", (0, 2), (1, 2)), ("SPAN", (0, 3), (1, 3)), ("SPAN", (0, 4), (1, 4)),
+                              ("SPAN", (0, 1), (1, 1)), ("SPAN", (0, 2), (1, 2)), ("SPAN", (0, 3), (1, 3)),
+                              ("SPAN", (0, 4), (1, 4)), ("SPAN", (0, 5), (1, 5)),
                               ("BACKGROUND", (2, 1), (2, -1), LIGHT_GRAY), ("FONTNAME", (2, 1), (2, -1), DEFAULT_BOLD_FONT),
                               ("GRID", (0, 0), (-1, -1), .35, MID_GRAY), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
                               ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
@@ -763,8 +769,8 @@ def _make_commercial_invoice_pdf(data: Dict[str, Any], company: Dict[str, Any]) 
     total_rows = [[p(label), p(f"{value:,.2f}")] for label, value in [
         ("Subtotal", totals["subtotal"]), ("Freight", 0), ("Packing", 0), ("Insurance", 0),
         ("VAT", totals["vat"]), ("TOTAL INVOICE VALUE", totals["total"])]]
-    total_inner = Table(total_rows, colWidths=[col_widths[6], col_widths[7]])
-    total_table = Table([["", total_inner]], colWidths=[sum(col_widths[:6]), col_widths[6] + col_widths[7]])
+    total_inner = Table(total_rows, colWidths=[col_widths[5] + col_widths[6], col_widths[7]])
+    total_table = Table([["", total_inner]], colWidths=[sum(col_widths[:5]), col_widths[5] + col_widths[6] + col_widths[7]])
     total_inner.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), .35, MID_GRAY),
         ("BACKGROUND", (0, 0), (0, -1), LIGHT_GRAY), ("BACKGROUND", (0, -1), (-1, -1), LIGHT_BLUE),
         ("ALIGN", (1, 0), (1, -1), "RIGHT"), ("FONTNAME", (0, -1), (-1, -1), DEFAULT_BOLD_FONT),

@@ -100,7 +100,7 @@ def make_commercial_invoice_xlsx(
     left_top = Alignment(horizontal="left", vertical="top", wrap_text=True)
 
     NCOL = 8
-    widths = [6, 20, 16, 14, 12, 8, 14, 16]
+    widths = [6, 14.5, 16, 13.5, 12, 8, 14, 18.28515625]
     for i, w in enumerate(widths, start=1):
         ws.column_dimensions[get_column_letter(i)].width = w
 
@@ -161,7 +161,7 @@ def make_commercial_invoice_xlsx(
         add_image(logo, f"A{r}", 105, 35)
     # ── 타이틀 + 회사 배너 ────────────────────────────────────────────────
     merge(r, 1, r, NCOL); put(r, 1, "COMMERCIAL INVOICE", font=white_lg, align=center)
-    bd(r, 1, r, NCOL); ws.row_dimensions[r].height = 42; r += 1
+    bd(r, 1, r, NCOL); ws.row_dimensions[r].height = 53.6; r += 1
     banner = "   |   ".join(x for x in [
         company.get("company_name_en", "K-MARIS Energy & Solutions Co., Ltd."),
         company.get("sales_email", ""), company.get("website", ""),
@@ -173,9 +173,15 @@ def make_commercial_invoice_xlsx(
     merge(r, 1, r, 4); put(r, 1, "EXPORTER / SELLER", fill=section, font=white_sec, align=left)
     merge(r, 5, r, 8); put(r, 5, "INVOICE INFORMATION", fill=section, font=white_sec, align=left)
     bd(r, 1, r, 4, section); bd(r, 5, r, 8, section); r += 1
+    address = company.get("address_en") or company.get("address", "")
+    address_top, address_bottom = address, ""
+    if " Seoul" in address:
+        address_top, address_bottom = address.split(" Seoul", 1)
+        address_bottom = "Seoul" + address_bottom
     exporter = [
         company.get("company_name_en", ""),
-        company.get("address_en") or company.get("address", ""),
+        address_top,
+        address_bottom,
         f"Tel: {company.get('phone', '')}    Email: {company.get('sales_email', '')}",
         f"Business Reg. No.: {company.get('business_no', '')}",
     ]
@@ -184,11 +190,14 @@ def make_commercial_invoice_xlsx(
         ("Invoice Date", data.get("date", "")),
         ("P.O. No.", shipping.get("po_no", "")),
         ("Quotation Ref.", data.get("quotation_ref") or shipping.get("export_ref", "")),
+        ("", ""),
     ]
-    for i in range(4):
+    for i in range(5):
         merge(r, 1, r, 4); put(r, 1, exporter[i], font=normal, align=left); bd(r, 1, r, 4)
         merge(r, 5, r, 6); put(r, 5, inv_info[i][0], fill=gray, font=boldsm, align=left)
         merge(r, 7, r, 8); put(r, 7, inv_info[i][1], font=normal, align=left); bd(r, 5, r, 8)
+        if i == 3:
+            ws.row_dimensions[r].height = 17.6
         r += 1
 
     # ── Consignee / Ship-to ──────────────────────────────────────────────
@@ -274,12 +283,14 @@ def make_commercial_invoice_xlsx(
     # ── 합계(수식) — Freight/Packing/Insurance 는 사용자가 채우면 TOTAL 자동합산 ──
     def total_line(label, value, is_total=False):
         nonlocal r
-        lc = put(r, 7, label, fill=(lightblue if is_total else gray),
+        merge(r, 6, r, 7)
+        lc = put(r, 6, label, fill=(lightblue if is_total else gray),
                  font=(bold if is_total else boldsm), align=right)
         vc = put(r, 8, value, align=right, fmt=num_fmt)
         if is_total:
             vc.fill = lightblue; vc.font = bold
-        bd(r, 7, r, 8)
+            ws.row_dimensions[r].height = 18
+        bd(r, 6, r, 8)
         ref = f"H{r}"
         r += 1
         return ref
@@ -304,8 +315,9 @@ def make_commercial_invoice_xlsx(
     put(r, 1, "We hereby certify that this Commercial Invoice is true and correct.",
         font=normal, align=left); bd(r, 1, r, NCOL); r += 2
     sig_row = r
-    for rr in range(sig_row, sig_row + 3):
-        ws.row_dimensions[rr].height = 28
+    ws.row_dimensions[sig_row].height = 28
+    ws.row_dimensions[sig_row + 1].height = 20.15
+    ws.row_dimensions[sig_row + 2].height = 21
     merge(sig_row, 1, sig_row + 2, 4)
     put(sig_row, 1, "Authorized Signature", font=boldsm, align=left_top); bd(sig_row, 1, sig_row + 2, 4)
     merge(sig_row, 5, sig_row + 2, 8)
@@ -322,8 +334,9 @@ def make_commercial_invoice_xlsx(
     final_row = sig_row + 2
     ws.page_setup.paperSize = ws.PAPERSIZE_A4
     ws.page_setup.orientation = ws.ORIENTATION_PORTRAIT
-    ws.page_setup.fitToWidth = 1
-    ws.page_setup.fitToHeight = 1
+    ws.page_setup.scale = 90
+    ws.page_setup.fitToWidth = None
+    ws.page_setup.fitToHeight = None
     ws.sheet_properties.pageSetUpPr.fitToPage = True
     ws.print_area = f"A1:H{final_row}"
     ws.sheet_view.zoomScale = 75
