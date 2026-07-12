@@ -3381,6 +3381,47 @@ a.btn.primary:hover {
 .quote-meta-grid {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
+/* Shipping Marks 섹션 — Dimension(3입력)은 2칸, Handling(체크박스)은 한 줄 전체. */
+.sm-dim {
+  grid-column: span 2;
+}
+.sm-dim-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sm-dim-row input {
+  width: 100%;
+  min-width: 0;
+}
+.sm-dim-row em {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-style: normal;
+}
+.sm-handling {
+  grid-column: 1 / -1;
+}
+.sm-handling-opts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin-top: 2px;
+}
+.sm-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #45526a;
+  cursor: pointer;
+}
+.sm-check input {
+  width: auto;
+  height: auto;
+  margin: 0;
+}
 /* 문서(7·9단계) 편집 폼 — 문서정보/선적정보 입력란을 4열 균일폭 그리드로 정렬.
    넓은 스테이지 창에서 입력 세트가 오른쪽으로 넘쳐 잘리지 않도록 폭을 2/3 로 제한
    (한 행 4개, CI No. 와 동일 폭). */

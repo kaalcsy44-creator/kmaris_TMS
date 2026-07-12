@@ -52,19 +52,6 @@ import {
 
 const today = () => new Date().toISOString().slice(0, 10);
 
-// 표준 선적 마크(Shipping Marks) 기본 생성. 수출 화물의 통상 표기:
-//   수하인(고객) / 선박 / P/O 참조 / 케이스번호(C/NO. 1-UP) / 원산지.
-// 백엔드는 이 문자열을 그대로 CI·SA PDF 에 출력하므로 여기서 관례에 맞게 만든다.
-function defaultShippingMarks(order: { customer?: string; vessel?: string; po_no?: string }): string {
-  const lines: string[] = [];
-  if (order.customer) lines.push(order.customer.toUpperCase());
-  if (order.vessel) lines.push(`M/V ${order.vessel.toUpperCase()}`);
-  if (order.po_no) lines.push(`P/O NO.: ${order.po_no}`);
-  lines.push("C/NO. 1-UP");
-  lines.push("MADE IN KOREA");
-  return lines.join("\n");
-}
-
 // 문서 편집 권한 = 역할 권한(documents.edit) × 담당(PIC) 소유권. 없으면 읽기전용.
 function canEditDoc(data: DocumentDetail | null | undefined): boolean {
   return can("documents", "edit") && canEditDeal(data?.order.assignee_id);
@@ -864,8 +851,8 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
     bl_awb_no: "TBD",
     etd: "",
     eta: "",
-    shipping_marks: defaultShippingMarks(data.order),
     hs_code: firstHs,
+    ...defaultMarkFields(data.order),
     ...(data.ci?.shipping || {}),
   });
   const [busy, setBusy] = useState(false);
@@ -877,7 +864,9 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
     try {
       // 단일 HS Code 를 모든 품목에 반영해 PDF(품목별 HS 열)와 일관되게 유지.
       const outItems = items.map((it) => ({ ...it, hs_code: shipping.hs_code || it.hs_code || "" }));
-      await saveCommercialInvoice(data.order.id, { ci_no: ciNo, date, currency, vat_rate: vatRate, items: outItems, shipping });
+      // 구조화 Shipping Marks → PDF 출력용 문자열로 합성해 함께 저장.
+      const outShipping = { ...shipping, shipping_marks: composeShippingMarks(shipping) };
+      await saveCommercialInvoice(data.order.id, { ci_no: ciNo, date, currency, vat_rate: vatRate, items: outItems, shipping: outShipping });
       onChanged();
     } finally {
       setBusy(false);
@@ -898,8 +887,8 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
       bl_awb_no: "TBD",
       etd: "",
       eta: "",
-      shipping_marks: defaultShippingMarks(data.order),
       hs_code: firstHs,
+      ...defaultMarkFields(data.order),
       ...(data.ci?.shipping || {}),
     });
   }
@@ -934,7 +923,7 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
         <ShippingFields shipping={shipping} setShipping={setShipping} />
         <Field label="HS Code (optional)" value={shipping.hs_code || ""} onChange={(v) => setShipping({ ...shipping, hs_code: v })} />
       </div>
-      <ShippingMarksField value={shipping.shipping_marks || ""} onChange={(v) => setShipping({ ...shipping, shipping_marks: v })} />
+      <ShippingMarksSection shipping={shipping} setShipping={setShipping} />
       <ItemEditor
         items={items}
         setItems={setItems}
@@ -1064,14 +1053,15 @@ function ShippingAdviceTab({ data, onChanged }: { data: DocumentDetail; onChange
   const [saNo, setSaNo] = useState(data.sa?.sa_no || "");
   const [date, setDate] = useState(data.sa?.date || today());
   const [shipping, setShipping] = useState<Record<string, string>>({
-    port_loading: data.ci?.shipping.port_loading || "Busan, Korea",
-    port_discharge: data.ci?.shipping.port_discharge || "",
-    carrier: data.ci?.shipping.carrier || "TBD",
-    bl_awb_no: data.ci?.shipping.bl_awb_no || "TBD",
-    etd: data.ci?.shipping.etd || "",
-    eta: data.ci?.shipping.eta || "",
-    shipping_marks: data.ci?.shipping.shipping_marks || defaultShippingMarks(data.order),
-    ...(data.sa?.shipping || {}),
+    port_loading: "Busan, Korea",
+    port_discharge: "",
+    carrier: "TBD",
+    bl_awb_no: "TBD",
+    etd: "",
+    eta: "",
+    ...defaultMarkFields(data.order),
+    ...(data.ci?.shipping || {}), // CI 의 선적정보·Shipping Marks(sm_*) 상속
+    ...(data.sa?.shipping || {}), // SA 자체 저장값 우선
   });
   const [to, setTo] = useState(data.order.customer_email || "");
   const [subject, setSubject] = useState(data.sa?.sa_no ? `[K-MARIS] Shipping Advice ${data.sa.sa_no}` : "");
@@ -1086,7 +1076,8 @@ function ShippingAdviceTab({ data, onChanged }: { data: DocumentDetail; onChange
   async function save() {
     setBusy(true);
     try {
-      await saveShippingAdvice(data.order.id, { sa_no: saNo, date, shipping });
+      const outShipping = { ...shipping, shipping_marks: composeShippingMarks(shipping) };
+      await saveShippingAdvice(data.order.id, { sa_no: saNo, date, shipping: outShipping });
       onChanged();
     } finally {
       setBusy(false);
@@ -1107,13 +1098,14 @@ function ShippingAdviceTab({ data, onChanged }: { data: DocumentDetail; onChange
     setSaNo(data.sa?.sa_no || "");
     setDate(data.sa?.date || today());
     setShipping({
-      port_loading: data.ci?.shipping.port_loading || "Busan, Korea",
-      port_discharge: data.ci?.shipping.port_discharge || "",
-      carrier: data.ci?.shipping.carrier || "TBD",
-      bl_awb_no: data.ci?.shipping.bl_awb_no || "TBD",
-      etd: data.ci?.shipping.etd || "",
-      eta: data.ci?.shipping.eta || "",
-      shipping_marks: data.ci?.shipping.shipping_marks || defaultShippingMarks(data.order),
+      port_loading: "Busan, Korea",
+      port_discharge: "",
+      carrier: "TBD",
+      bl_awb_no: "TBD",
+      etd: "",
+      eta: "",
+      ...defaultMarkFields(data.order),
+      ...(data.ci?.shipping || {}),
       ...(data.sa?.shipping || {}),
     });
   }
@@ -1142,7 +1134,7 @@ function ShippingAdviceTab({ data, onChanged }: { data: DocumentDetail; onChange
         <Field label="SA Date" value={date} onChange={setDate} type="date" />
         <ShippingFields shipping={shipping} setShipping={setShipping} />
       </div>
-      <ShippingMarksField value={shipping.shipping_marks || ""} onChange={(v) => setShipping({ ...shipping, shipping_marks: v })} />
+      <ShippingMarksSection shipping={shipping} setShipping={setShipping} />
       {data.ci ? (
         <MissingWarning missing={ciMissing} />
       ) : (
@@ -1295,19 +1287,62 @@ function ShippingFields({
   );
 }
 
-// 선적 마크 — 여러 줄 블록(수하인/선박/PO/케이스번호/원산지)이므로 폭 전체를 쓰는 textarea.
-function ShippingMarksField({
-  value,
-  onChange,
+// 선적 마크(Shipping Marks) — 구조화 입력 섹션(Item list 와 동일 위계의 제목).
+// 각 항목은 shipping.sm_* 키에 저장하고, 저장 시 composeShippingMarks 로 여러 줄
+// 문자열(shipping.shipping_marks)을 만들어 PDF 에 출력한다.
+function ShippingMarksSection({
+  shipping,
+  setShipping,
 }: {
-  value: string;
-  onChange: (v: string) => void;
+  shipping: Record<string, string>;
+  setShipping: (v: Record<string, string>) => void;
 }) {
+  const set = (key: string) => (v: string) => setShipping({ ...shipping, [key]: v });
+  const handling = (shipping.sm_handling || "").split(",").map((s) => s.trim()).filter(Boolean);
+  const toggleHandling = (opt: string) => {
+    const next = handling.includes(opt) ? handling.filter((h) => h !== opt) : [...handling, opt];
+    setShipping({ ...shipping, sm_handling: next.join(", ") });
+  };
   return (
-    <label className="form-field" style={{ maxWidth: "66.6667%" }}>
-      <span>Shipping Marks</span>
-      <textarea className="po-textarea small" value={value} onChange={(e) => onChange(e.target.value)} />
-    </label>
+    <div className="sm-section">
+      <div className="sub-h">Shipping Marks</div>
+      <div className="form-grid doc-form-grid">
+        <ComboField label="Shipping mark type" value={shipping.sm_type ?? ""} onChange={set("sm_type")} options={SM_TYPE_OPTIONS} />
+        <Field label="Vessel Name" value={shipping.sm_vessel ?? ""} onChange={set("sm_vessel")} />
+        <Field label="C/O Company / Ship Agent" value={shipping.sm_consignee ?? ""} onChange={set("sm_consignee")} />
+        <Field label="P.O. No." value={shipping.sm_po_no ?? ""} onChange={set("sm_po_no")} />
+        <Field label="Reference No." value={shipping.sm_ref_no ?? ""} onChange={set("sm_ref_no")} />
+        <Field label="Description of Goods" value={shipping.sm_desc ?? ""} onChange={set("sm_desc")} />
+        <Field label="Case No." value={shipping.sm_case_no ?? ""} onChange={set("sm_case_no")} />
+        <Field label="Total Number of Cases" value={shipping.sm_total_cases ?? ""} onChange={set("sm_total_cases")} type="number" />
+        <Field label="Net Weight (kg)" value={shipping.sm_net_weight ?? ""} onChange={set("sm_net_weight")} type="number" />
+        <Field label="Gross Weight (kg)" value={shipping.sm_gross_weight ?? ""} onChange={set("sm_gross_weight")} type="number" />
+        <label className="form-field sm-dim">
+          <span>Dimension (mm)</span>
+          <span className="sm-dim-row">
+            <input type="number" placeholder="Length" value={shipping.sm_dim_l ?? ""} onChange={(e) => set("sm_dim_l")(e.target.value)} />
+            <em>×</em>
+            <input type="number" placeholder="Width" value={shipping.sm_dim_w ?? ""} onChange={(e) => set("sm_dim_w")(e.target.value)} />
+            <em>×</em>
+            <input type="number" placeholder="Height" value={shipping.sm_dim_h ?? ""} onChange={(e) => set("sm_dim_h")(e.target.value)} />
+          </span>
+        </label>
+        <ComboField label="Port of Delivery" value={shipping.sm_port_delivery ?? ""} onChange={set("sm_port_delivery")} options={PORT_DELIVERY_OPTIONS} />
+        <ComboField label="Final Destination" value={shipping.sm_final_dest ?? ""} onChange={set("sm_final_dest")} options={FINAL_DEST_OPTIONS} />
+        <ComboField label="Country of Origin" value={shipping.sm_origin ?? ""} onChange={set("sm_origin")} options={ORIGIN_OPTIONS} />
+        <div className="form-field sm-handling">
+          <span>Handling Instructions</span>
+          <div className="sm-handling-opts">
+            {HANDLING_OPTIONS.map((opt) => (
+              <label key={opt} className="sm-check">
+                <input type="checkbox" checked={handling.includes(opt)} onChange={() => toggleHandling(opt)} />
+                <span>{opt}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1343,6 +1378,53 @@ const CARRIER_OPTIONS = [
   "Korean Air Cargo", "Asiana Cargo", "DHL", "FedEx", "UPS",
 ];
 const UNIT_OPTIONS = ["PCS", "SET", "EA", "UNIT", "KG", "M", "M2", "M3", "L", "ROLL", "BOX", "PAIR", "LOT"];
+
+// ── Shipping Marks 섹션 선택지 ─────────────────────────────────────────────
+const SM_TYPE_OPTIONS = ["SHIP'S SPARES IN TRANSIT", "SHIP'S STORES", "COMMERCIAL CARGO"];
+const PORT_DELIVERY_OPTIONS = ["Busan, Korea", "Incheon, Korea", "Gwangyang, Korea", "Ulsan, Korea", "Pyeongtaek, Korea"];
+const FINAL_DEST_OPTIONS = [
+  "Hong Kong", "Singapore", "Shanghai, China", "Ningbo, China", "Tokyo, Japan",
+  "Kaohsiung, Taiwan", "Rotterdam, Netherlands", "Hamburg, Germany", "Los Angeles, USA", "Jebel Ali, UAE",
+];
+const ORIGIN_OPTIONS = ["Made in Korea", "Made in China", "Made in Japan", "Made in Germany", "Made in USA"];
+const HANDLING_OPTIONS = ["THIS SIDE UP", "KEEP DRY", "FRAGILE", "HANDLE WITH CARE", "DO NOT STACK", "USE NO HOOKS", "KEEP AWAY FROM HEAT"];
+
+// Shipping Marks 구조화 필드 기본값(오더 정보로 프리필). 저장값이 있으면 덮어쓴다.
+function defaultMarkFields(order: { vessel?: string; po_no?: string; customer?: string }): Record<string, string> {
+  return {
+    sm_type: "SHIP'S SPARES IN TRANSIT",
+    sm_vessel: order.vessel || "",
+    sm_consignee: order.customer || "",
+    sm_po_no: order.po_no || "",
+    sm_ref_no: "KMS-ORD-yymm-nnn",
+    sm_desc: "MARINE SPARE PARTS",
+    sm_port_delivery: "Busan, Korea",
+    sm_origin: "Made in Korea",
+  };
+}
+
+// 구조화 Shipping Marks 필드 → PDF 출력용 여러 줄 마크 문자열(비어있는 항목은 생략).
+function composeShippingMarks(s: Record<string, string>): string {
+  const lines: string[] = [];
+  const push = (v?: string) => { if (v && v.trim()) lines.push(v.trim()); };
+  push(s.sm_type);
+  if (s.sm_consignee) push(`C/O ${s.sm_consignee}`);
+  if (s.sm_vessel) push(`M/V ${s.sm_vessel.toUpperCase()}`);
+  if (s.sm_po_no) push(`P.O. NO.: ${s.sm_po_no}`);
+  if (s.sm_ref_no) push(`REF. NO.: ${s.sm_ref_no}`);
+  push(s.sm_desc);
+  if (s.sm_case_no) push(`CASE NO.: ${s.sm_case_no}`);
+  if (s.sm_total_cases) push(`TOTAL: ${s.sm_total_cases} CASE(S)`);
+  if (s.sm_net_weight) push(`N.W.: ${s.sm_net_weight} KG`);
+  if (s.sm_gross_weight) push(`G.W.: ${s.sm_gross_weight} KG`);
+  const dim = [s.sm_dim_l, s.sm_dim_w, s.sm_dim_h];
+  if (dim.some((v) => v && v.trim())) push(`DIM.: ${dim.map((v) => (v && v.trim()) || "-").join(" × ")} MM`);
+  if (s.sm_port_delivery) push(`PORT OF DELIVERY: ${s.sm_port_delivery}`);
+  if (s.sm_final_dest) push(`FINAL DESTINATION: ${s.sm_final_dest}`);
+  push(s.sm_origin);
+  push(s.sm_handling);
+  return lines.join("\n");
+}
 
 // 콤보박스 입력(목록 제안 + 자유 입력). Field 와 동일한 form-field 레이아웃.
 function ComboField({
