@@ -3832,6 +3832,23 @@ a.btn.primary:hover {
   font-family: inherit;
   background: #fff;
 }
+/* ── 읽기전용 확정 필드(Packing List) ────────────────────────────────
+   입력란 대신 값만 표시. 회색 배경으로 '수정 불가(CI 상속)' 를 시각적으로 구분. */
+.form-field--ro .ro-value {
+  width: 100%;
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  border: 1px dashed #d7e2ee;
+  border-radius: 8px;
+  padding: 0 10px;
+  font-size: 12px;
+  color: #6b7688;
+  background: #f4f6f8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 /* ── 콤보박스(선택 + 자유입력) ─────────────────────────────────────────
    토글을 누르면 항상 전체 목록을 보여준다(datalist의 필터 한계 보완). */
 .combobox {

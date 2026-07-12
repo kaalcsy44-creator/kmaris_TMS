@@ -951,9 +951,7 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
       </fieldset>
       <div className="form-actions doc-actions">
         <div className="doc-actions-left">
-          <DocPreviewButton orderId={data.order.id} kind="ci/pdf" filename="Commercial Invoice.pdf" disabled={!data.ci} />
-          <DownloadButton orderId={data.order.id} kind="ci/pdf" disabled={!data.ci} label="PDF" />
-          <DownloadButton orderId={data.order.id} kind="ci/xlsx" disabled={!data.ci} label="Excel" />
+          <DocPreviewButton orderId={data.order.id} kind="ci/pdf" filename="Commercial Invoice.pdf" disabled={!data.ci} xlsxKind="ci/xlsx" />
         </div>
         <div className="doc-actions-center">
           <span className="hint-inline">Total {dualCurrencyText(total, currency)} · {fxRateText()}</span>
@@ -981,6 +979,20 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
     </div>
   );
 }
+
+// Packing List 선적정보/Marks 필드 정책 —
+//  · READONLY: CI 와 동일한 확정 정보. 입력란 없이 값만 표시하고 저장하지 않아 항상 CI 를 따라간다.
+//  · EDITABLE(운송 + 포장 실측): CI 값을 불러와 두되 PL 에서 수정 가능. 이 키들만 pl.shipping 에 저장.
+const PL_READONLY_KEYS = new Set([
+  "port_loading", "port_discharge",
+  "sm_type", "sm_vessel", "sm_consignee", "sm_po_no", "sm_ref_no", "sm_desc",
+  "sm_port_delivery", "sm_final_dest", "sm_origin",
+]);
+const PL_EDITABLE_KEYS = [
+  "carrier", "bl_awb_no", "etd", "eta",
+  "sm_case_no", "sm_total_cases", "sm_net_weight", "sm_gross_weight",
+  "sm_dim_l", "sm_dim_w", "sm_dim_h", "sm_handling",
+];
 
 function PackingListTab({ data, onChanged }: { data: DocumentDetail; onChanged: () => void }) {
   const [plNo, setPlNo] = useState(data.pl?.pl_no || "");
@@ -1010,7 +1022,12 @@ function PackingListTab({ data, onChanged }: { data: DocumentDetail; onChanged: 
   async function save() {
     setBusy(true);
     try {
-      const outShipping = { ...shipping, shipping_marks: composeShippingMarks(shipping) };
+      // 수정 가능한 키만 PL 에 저장 → 확정 정보는 저장하지 않아 항상 CI 를 상속(라이브).
+      // Shipping Marks 문자열은 백엔드가 병합된 sm_* 로 재구성하므로 여기서 저장하지 않는다.
+      const outShipping: Record<string, string> = {};
+      for (const k of PL_EDITABLE_KEYS) {
+        if (shipping[k] !== undefined && shipping[k] !== "") outShipping[k] = shipping[k];
+      }
       await savePackingList(data.order.id, { pl_no: plNo, date, items, packing_info: packingInfo, shipping: outShipping });
       onChanged();
     } finally {
@@ -1054,14 +1071,14 @@ function PackingListTab({ data, onChanged }: { data: DocumentDetail; onChanged: 
       <div className="form-grid doc-form-grid">
         <Field label="PL No." value={plNo} onChange={setPlNo} />
         <Field label="PL Date" value={date} onChange={setDate} type="date" />
-        <ShippingFields shipping={shipping} setShipping={setShipping} />
+        <ShippingFields shipping={shipping} setShipping={setShipping} readonlyKeys={PL_READONLY_KEYS} />
       </div>
       <p className="hint-inline" style={{ marginTop: 6 }}>
-        선적정보·Shipping Marks 는 Commercial Invoice 값을 상속합니다. 여기서 수정하면 이 Packing List 에만 반영됩니다.
+        회색 항목은 Commercial Invoice 값을 그대로 표시합니다(수정 불가). 운송·포장 정보만 이 Packing List 에서 수정·저장됩니다.
       </p>
       </div>
-      {/* Shipping Marks — CI 상속, PL 에서 개별 수정 가능. */}
-      <ShippingMarksSection shipping={shipping} setShipping={setShipping} />
+      {/* Shipping Marks — 확정 정보는 CI 표시, 운송·포장 실측만 편집. */}
+      <ShippingMarksSection shipping={shipping} setShipping={setShipping} readonlyKeys={PL_READONLY_KEYS} />
       </div>
       <ItemEditor
         items={items}
@@ -1088,9 +1105,7 @@ function PackingListTab({ data, onChanged }: { data: DocumentDetail; onChanged: 
       </fieldset>
       <div className="form-actions doc-actions">
         <div className="doc-actions-left">
-          <DocPreviewButton orderId={data.order.id} kind="pl/pdf" filename="Packing List.pdf" disabled={!data.pl} />
-          <DownloadButton orderId={data.order.id} kind="pl/pdf" disabled={!data.pl} label="PDF" />
-          <DownloadButton orderId={data.order.id} kind="pl/xlsx" disabled={!data.pl} label="Excel" />
+          <DocPreviewButton orderId={data.order.id} kind="pl/pdf" filename="Packing List.pdf" disabled={!data.pl} xlsxKind="pl/xlsx" />
         </div>
         <div className="doc-actions-center" />
         <div className="doc-actions-right">
@@ -1347,19 +1362,35 @@ function TaxInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChanged: (
 function ShippingFields({
   shipping,
   setShipping,
+  readonlyKeys,
 }: {
   shipping: Record<string, string>;
   setShipping: (v: Record<string, string>) => void;
+  // 이 키들은 입력란 대신 읽기전용 텍스트로 표시(Packing List 의 확정 정보). 없으면 전부 편집 가능.
+  readonlyKeys?: Set<string>;
 }) {
   const set = (key: string) => (v: string) => setShipping({ ...shipping, [key]: v });
+  const ro = (key: string) => readonlyKeys?.has(key);
   return (
     <>
-      <ComboField label="Port of Loading" value={shipping.port_loading || ""} onChange={set("port_loading")} options={PORT_OPTIONS} />
-      <ComboField label="Port of Discharge" value={shipping.port_discharge || ""} onChange={set("port_discharge")} options={PORT_OPTIONS} />
-      <ComboField label="Carrier" value={shipping.carrier || ""} onChange={set("carrier")} options={CARRIER_OPTIONS} />
-      <ComboField label="B/L or AWB No." value={shipping.bl_awb_no || ""} onChange={set("bl_awb_no")} options={BL_AWB_OPTIONS} />
-      <Field label="ETD" value={shipping.etd || ""} onChange={set("etd")} type="date" />
-      <Field label="ETA" value={shipping.eta || ""} onChange={set("eta")} type="date" />
+      {ro("port_loading")
+        ? <ReadonlyField label="Port of Loading" value={shipping.port_loading || ""} />
+        : <ComboField label="Port of Loading" value={shipping.port_loading || ""} onChange={set("port_loading")} options={PORT_OPTIONS} />}
+      {ro("port_discharge")
+        ? <ReadonlyField label="Port of Discharge" value={shipping.port_discharge || ""} />
+        : <ComboField label="Port of Discharge" value={shipping.port_discharge || ""} onChange={set("port_discharge")} options={PORT_OPTIONS} />}
+      {ro("carrier")
+        ? <ReadonlyField label="Carrier" value={shipping.carrier || ""} />
+        : <ComboField label="Carrier" value={shipping.carrier || ""} onChange={set("carrier")} options={CARRIER_OPTIONS} />}
+      {ro("bl_awb_no")
+        ? <ReadonlyField label="B/L or AWB No." value={shipping.bl_awb_no || ""} />
+        : <ComboField label="B/L or AWB No." value={shipping.bl_awb_no || ""} onChange={set("bl_awb_no")} options={BL_AWB_OPTIONS} />}
+      {ro("etd")
+        ? <ReadonlyField label="ETD" value={shipping.etd || ""} />
+        : <Field label="ETD" value={shipping.etd || ""} onChange={set("etd")} type="date" />}
+      {ro("eta")
+        ? <ReadonlyField label="ETA" value={shipping.eta || ""} />
+        : <Field label="ETA" value={shipping.eta || ""} onChange={set("eta")} type="date" />}
     </>
   );
 }
@@ -1370,11 +1401,15 @@ function ShippingFields({
 function ShippingMarksSection({
   shipping,
   setShipping,
+  readonlyKeys,
 }: {
   shipping: Record<string, string>;
   setShipping: (v: Record<string, string>) => void;
+  // 이 키들은 입력란 대신 읽기전용 텍스트로 표시(Packing List 의 확정 정보). 없으면 전부 편집 가능.
+  readonlyKeys?: Set<string>;
 }) {
   const set = (key: string) => (v: string) => setShipping({ ...shipping, [key]: v });
+  const ro = (key: string) => readonlyKeys?.has(key);
   const handling = (shipping.sm_handling || "").split(",").map((s) => s.trim()).filter(Boolean);
   const toggleHandling = (opt: string) => {
     const next = handling.includes(opt) ? handling.filter((h) => h !== opt) : [...handling, opt];
@@ -1384,12 +1419,24 @@ function ShippingMarksSection({
     <div className="sm-section">
       <div className="sub-h">Shipping Marks</div>
       <div className="form-grid doc-form-grid">
-        <ComboField label="Shipping mark type" value={shipping.sm_type ?? ""} onChange={set("sm_type")} options={SM_TYPE_OPTIONS} />
-        <Field label="Vessel Name" value={shipping.sm_vessel ?? ""} onChange={set("sm_vessel")} />
-        <Field label="C/O Company / Ship Agent" value={shipping.sm_consignee ?? ""} onChange={set("sm_consignee")} />
-        <Field label="P.O. No." value={shipping.sm_po_no ?? ""} onChange={set("sm_po_no")} />
-        <Field label="Reference No." value={shipping.sm_ref_no ?? ""} onChange={set("sm_ref_no")} />
-        <Field label="Description of Goods" value={shipping.sm_desc ?? ""} onChange={set("sm_desc")} />
+        {ro("sm_type")
+          ? <ReadonlyField label="Shipping mark type" value={shipping.sm_type ?? ""} />
+          : <ComboField label="Shipping mark type" value={shipping.sm_type ?? ""} onChange={set("sm_type")} options={SM_TYPE_OPTIONS} />}
+        {ro("sm_vessel")
+          ? <ReadonlyField label="Vessel Name" value={shipping.sm_vessel ?? ""} />
+          : <Field label="Vessel Name" value={shipping.sm_vessel ?? ""} onChange={set("sm_vessel")} />}
+        {ro("sm_consignee")
+          ? <ReadonlyField label="C/O Company / Ship Agent" value={shipping.sm_consignee ?? ""} />
+          : <Field label="C/O Company / Ship Agent" value={shipping.sm_consignee ?? ""} onChange={set("sm_consignee")} />}
+        {ro("sm_po_no")
+          ? <ReadonlyField label="P.O. No." value={shipping.sm_po_no ?? ""} />
+          : <Field label="P.O. No." value={shipping.sm_po_no ?? ""} onChange={set("sm_po_no")} />}
+        {ro("sm_ref_no")
+          ? <ReadonlyField label="Reference No." value={shipping.sm_ref_no ?? ""} />
+          : <Field label="Reference No." value={shipping.sm_ref_no ?? ""} onChange={set("sm_ref_no")} />}
+        {ro("sm_desc")
+          ? <ReadonlyField label="Description of Goods" value={shipping.sm_desc ?? ""} />
+          : <Field label="Description of Goods" value={shipping.sm_desc ?? ""} onChange={set("sm_desc")} />}
         <ComboField label="Case No." value={shipping.sm_case_no ?? ""} onChange={set("sm_case_no")} options={CASE_NO_OPTIONS} />
         <Field label="Total Number of Cases" value={shipping.sm_total_cases ?? ""} onChange={set("sm_total_cases")} type="number" />
         {/* 무게·치수는 넓은 폭이 필요 없어 한 행에 좁은 입력란으로 모아 배치. */}
@@ -1406,9 +1453,15 @@ function ShippingMarksSection({
             <span className="sm-metric"><em>H</em><input type="number" value={shipping.sm_dim_h ?? ""} onChange={(e) => set("sm_dim_h")(e.target.value)} /></span>
           </div>
         </div>
-        <ComboField label="Port of Delivery" value={shipping.sm_port_delivery ?? ""} onChange={set("sm_port_delivery")} options={PORT_DELIVERY_OPTIONS} />
-        <ComboField label="Final Destination" value={shipping.sm_final_dest ?? ""} onChange={set("sm_final_dest")} options={FINAL_DEST_OPTIONS} />
-        <ComboField label="Country of Origin" value={shipping.sm_origin ?? ""} onChange={set("sm_origin")} options={ORIGIN_OPTIONS} />
+        {ro("sm_port_delivery")
+          ? <ReadonlyField label="Port of Delivery" value={shipping.sm_port_delivery ?? ""} />
+          : <ComboField label="Port of Delivery" value={shipping.sm_port_delivery ?? ""} onChange={set("sm_port_delivery")} options={PORT_DELIVERY_OPTIONS} />}
+        {ro("sm_final_dest")
+          ? <ReadonlyField label="Final Destination" value={shipping.sm_final_dest ?? ""} />
+          : <ComboField label="Final Destination" value={shipping.sm_final_dest ?? ""} onChange={set("sm_final_dest")} options={FINAL_DEST_OPTIONS} />}
+        {ro("sm_origin")
+          ? <ReadonlyField label="Country of Origin" value={shipping.sm_origin ?? ""} />
+          : <ComboField label="Country of Origin" value={shipping.sm_origin ?? ""} onChange={set("sm_origin")} options={ORIGIN_OPTIONS} />}
         <div className="form-field sm-handling">
           <span>Handling Instructions</span>
           <div className="sm-handling-opts">
@@ -1441,6 +1494,17 @@ function Field({
       <span>{label}</span>
       <input type={type} value={value} onChange={(e) => onChange(e.target.value)} />
     </label>
+  );
+}
+
+// 확정 정보(CI 상속·수정 불가)를 입력란 대신 읽기전용 텍스트로 표시. Packing List 에서
+// "값은 CI 를 따라가되 여기서는 못 고침" 을 나타낸다.
+function ReadonlyField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="form-field form-field--ro">
+      <span>{label}</span>
+      <div className="ro-value" title={value}>{value || "—"}</div>
+    </div>
   );
 }
 
@@ -1799,11 +1863,14 @@ function DocPreviewButton({
   kind,
   filename,
   disabled,
+  xlsxKind,
 }: {
   orderId: number;
   kind: "ci/pdf" | "pl/pdf" | "sa/pdf";
   filename: string;
   disabled: boolean;
+  // 지정 시 미리보기 우측상단에 Excel 다운로드 버튼을 노출한다(CI/PL 만 xlsx 지원).
+  xlsxKind?: "ci/xlsx" | "pl/xlsx";
 }) {
   const [url, setUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -1838,9 +1905,9 @@ function DocPreviewButton({
   }
 
   async function saveExcel() {
-    if (kind !== "ci/pdf") return;
+    if (!xlsxKind) return;
     try {
-      const res = await fetch(documentDownloadUrl(orderId, "ci/xlsx"), {
+      const res = await fetch(documentDownloadUrl(orderId, xlsxKind), {
         headers: getToken() ? { Authorization: `Bearer ${getToken()}` } : {},
       });
       if (!res.ok) throw new Error("Excel download failed");
@@ -1850,7 +1917,7 @@ function DocPreviewButton({
       const excelUrl = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = excelUrl;
-      a.download = match?.[1] || "Commercial Invoice.xlsx";
+      a.download = match?.[1] || filename.replace(/\.pdf$/i, ".xlsx");
       a.click();
       URL.revokeObjectURL(excelUrl);
     } catch (e) {
@@ -1876,8 +1943,8 @@ function DocPreviewButton({
                 <div className="doc-preview-head">
                   <span className="doc-preview-title">{filename}</span>
                   <div className="doc-preview-acts">
+                    {xlsxKind ? <button className="btn sm" onClick={saveExcel}>Excel Download</button> : null}
                     <button className="btn sm doc-preview-save" onClick={savePdf}>PDF Download</button>
-                    {kind === "ci/pdf" ? <button className="btn sm" onClick={saveExcel}>Excel Download</button> : null}
                     <button className="btn sm" onClick={close}>Close</button>
                   </div>
                 </div>

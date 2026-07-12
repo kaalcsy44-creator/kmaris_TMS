@@ -830,6 +830,36 @@ def _make_commercial_invoice_pdf(data: Dict[str, Any], company: Dict[str, Any]) 
     return buffer.getvalue()
 
 
+def compose_shipping_marks(sh: Dict[str, Any]) -> str:
+    """구조화 Shipping Marks(sm_*)를 여러 줄 문자열로 재구성 — 프론트 composeShippingMarks·
+    doc_xlsx._compose_marks 와 동일 규약. PL 은 CI 상속값+PL 수정값이 병합된 sh 를 받아
+    저장된 shipping_marks 문자열 대신 항상 최신 sm_* 로 재구성한다."""
+    lines: List[str] = []
+
+    def push(v):
+        if v and str(v).strip():
+            lines.append(str(v).strip())
+
+    push(sh.get("sm_type"))
+    if sh.get("sm_consignee"): push(f"C/O {sh['sm_consignee']}")
+    if sh.get("sm_vessel"): push(f"M/V {str(sh['sm_vessel']).upper()}")
+    if sh.get("sm_po_no"): push(f"P.O. NO.: {sh['sm_po_no']}")
+    if sh.get("sm_ref_no"): push(f"REF. NO.: {sh['sm_ref_no']}")
+    push(sh.get("sm_desc"))
+    if sh.get("sm_case_no"): push(f"CASE NO.: {sh['sm_case_no']}")
+    if sh.get("sm_total_cases"): push(f"TOTAL: {sh['sm_total_cases']} CASE(S)")
+    if sh.get("sm_net_weight"): push(f"N.W.: {sh['sm_net_weight']} KG")
+    if sh.get("sm_gross_weight"): push(f"G.W.: {sh['sm_gross_weight']} KG")
+    dim = [sh.get("sm_dim_l"), sh.get("sm_dim_w"), sh.get("sm_dim_h")]
+    if any(d and str(d).strip() for d in dim):
+        push("DIM.: " + " × ".join((str(d).strip() if d and str(d).strip() else "-") for d in dim) + " MM")
+    if sh.get("sm_port_delivery"): push(f"PORT OF DELIVERY: {sh['sm_port_delivery']}")
+    if sh.get("sm_final_dest"): push(f"FINAL DESTINATION: {sh['sm_final_dest']}")
+    push(sh.get("sm_origin"))
+    push(sh.get("sm_handling"))
+    return "\n".join(lines)
+
+
 def _pkg_text(it: Dict[str, Any]) -> str:
     """'No. & Kind of Packages' 셀 — 수량+종류 결합, 없으면 레거시 package 문자열."""
     q = str(it.get("pkg_qty") or "").strip()
@@ -973,7 +1003,8 @@ def _make_packing_list_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> byt
         ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]))
     story += [shipping_table, section("SHIPPING MARKS")]
 
-    marks = (shipping.get("shipping_marks") or "").strip()
+    # 병합된 sm_*(CI 상속 + PL 수정) 로 항상 재구성. 없으면 저장된 문자열로 폴백.
+    marks = compose_shipping_marks(shipping) or (shipping.get("shipping_marks") or "").strip()
     mark_lines = marks.splitlines()
     split_at = (len(mark_lines) + 1) // 2
     marks_table = Table([[p("\n".join(mark_lines[:split_at])), p("\n".join(mark_lines[split_at:]))]],
