@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { useResizable } from "@/lib/useResizable";
 
 // 공용 모달 — Progress 상세 모달과 동일한 pl-modal* 스타일을 재사용한다.
 // 신규 등록 폼·상세(보기/수정) 양쪽에서 사용. 배경 클릭/ESC 로 닫힌다.
@@ -23,6 +24,7 @@ export default function Modal({
   children: React.ReactNode;
 }) {
   const backdropMouseDown = useRef(false);
+  const resize = useResizable();
 
   useEffect(() => {
     if (inline) return; // 임베드 모드에선 ESC 닫기 비활성(닫을 오버레이가 없음)
@@ -56,12 +58,14 @@ export default function Modal({
       role="presentation"
     >
       <div
-        className={`pl-modal${form ? " pl-modal--form" : ""}`}
-        style={wide ? { maxWidth: 1120 } : undefined}
+        ref={resize.ref}
+        className={`pl-modal pl-modal--resizable${form ? " pl-modal--form" : ""}`}
+        style={{ ...(wide ? { maxWidth: 1120 } : {}), ...resize.style }}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
       >
+        {resize.handles}
         <div className="pl-modal-head">
           <span className="intl-title">
             <b>{title}</b>

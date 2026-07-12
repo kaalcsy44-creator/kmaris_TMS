@@ -21,6 +21,7 @@ import {
   deleteServiceStage,
 } from "@/lib/api";
 import { getToken, can, canEditDeal, editBlockReason } from "@/lib/auth";
+import { useResizable } from "@/lib/useResizable";
 import type { DocRow, DocumentDetail, DocumentWorkItem } from "@/lib/types";
 import { fetchDocumentsOverview } from "@/lib/api";
 import { useCachedData, invalidateCache } from "@/lib/useCachedData";
@@ -1712,6 +1713,7 @@ function DocPreviewButton({
 }) {
   const [url, setUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const resize = useResizable({ storageKey: "ktms:doc-preview-size", minW: 360, minH: 280 });
 
   async function open() {
     setBusy(true);
@@ -1749,7 +1751,13 @@ function DocPreviewButton({
       {url && typeof document !== "undefined"
         ? createPortal(
             <div className="doc-preview-backdrop" onClick={close}>
-              <div className="doc-preview-modal" onClick={(e) => e.stopPropagation()}>
+              <div
+                ref={resize.ref}
+                className="doc-preview-modal pl-modal--resizable"
+                style={resize.style}
+                onClick={(e) => e.stopPropagation()}
+              >
+                {resize.handles}
                 <div className="doc-preview-head">
                   <span className="doc-preview-title">{filename}</span>
                   <div className="doc-preview-acts">
