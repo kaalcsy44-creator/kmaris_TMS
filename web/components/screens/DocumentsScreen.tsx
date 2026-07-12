@@ -842,6 +842,8 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
   const [currency, setCurrency] = useState(data.ci?.currency || "USD");
   const [vatRate, setVatRate] = useState(data.ci?.vat_rate ?? 0);
   const [items, setItems] = useState<DocumentWorkItem[]>(normalizeItems(data.ci?.items || data.order.items));
+  // HS Code 는 문서 단위 단일 값(선적 단위) — shipping.hs_code 에 저장하고 저장 시 전 품목에 반영.
+  const firstHs = (data.ci?.items || data.order.items || []).find((i) => i.hs_code)?.hs_code || "";
   const [shipping, setShipping] = useState<Record<string, string>>({
     port_loading: "Busan, Korea",
     port_discharge: "",
@@ -850,6 +852,7 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
     etd: "",
     eta: "",
     shipping_marks: `K-MARIS / ${data.order.vessel || ""} / ${data.order.po_no || ""}`,
+    hs_code: firstHs,
     ...(data.ci?.shipping || {}),
   });
   const [busy, setBusy] = useState(false);
@@ -859,7 +862,9 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
   async function save() {
     setBusy(true);
     try {
-      await saveCommercialInvoice(data.order.id, { ci_no: ciNo, date, currency, vat_rate: vatRate, items, shipping });
+      // 단일 HS Code 를 모든 품목에 반영해 PDF(품목별 HS 열)와 일관되게 유지.
+      const outItems = items.map((it) => ({ ...it, hs_code: shipping.hs_code || it.hs_code || "" }));
+      await saveCommercialInvoice(data.order.id, { ci_no: ciNo, date, currency, vat_rate: vatRate, items: outItems, shipping });
       onChanged();
     } finally {
       setBusy(false);
@@ -881,6 +886,7 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
       etd: "",
       eta: "",
       shipping_marks: `K-MARIS / ${data.order.vessel || ""} / ${data.order.po_no || ""}`,
+      hs_code: firstHs,
       ...(data.ci?.shipping || {}),
     });
   }
@@ -902,6 +908,7 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
   return (
     <div className="doc-tab">
       <fieldset className="form-fieldset" disabled={!editable}>
+      <div className="sub-h">Basic info</div>
       <div className="form-grid doc-form-grid">
         <Field label="CI No." value={ciNo} onChange={setCiNo} />
         <Field label="CI Date" value={date} onChange={setDate} type="date" />
@@ -910,6 +917,7 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
           <CurrencyToggle value={currency} onChange={setCurrency} />
         </label>
         <Field label="VAT Rate" value={String(vatRate)} onChange={(v) => setVatRate(num(v))} type="number" />
+        <Field label="HS Code" value={shipping.hs_code || ""} onChange={(v) => setShipping({ ...shipping, hs_code: v })} />
       </div>
       <ShippingFields shipping={shipping} setShipping={setShipping} />
       <ItemEditor
@@ -1344,7 +1352,6 @@ function ItemEditor({
       : [
           { key: "unit_price", label: `Unit Price (${cur})`, className: "num" },
           { key: "amount", label: `Amount (${cur})`, className: "num" },
-          { key: "hs_code", label: "HS Code" },
         ]),
     { key: "remark", label: "Remark" },
   ];
@@ -1384,7 +1391,6 @@ function ItemEditor({
                 <>
                   <ItemTh grid={grid} k="unit_price" className="num">Unit Price ({cur})</ItemTh>
                   <ItemTh grid={grid} k="amount" className="num">Amount ({cur})</ItemTh>
-                  <ItemTh grid={grid} k="hs_code">HS Code</ItemTh>
                 </>
               )}
               <ItemTh grid={grid} k="remark">Remark</ItemTh>
@@ -1411,10 +1417,9 @@ function ItemEditor({
                   <>
                     <td><input {...gridCellProps(i, 5)} className="num" value={amountInputValue(item.unit_price)} onChange={(e) => patch(i, "unit_price", e.target.value)} /></td>
                     <td><input {...gridCellProps(i, 6)} className="num" value={amountInputValue(item.amount)} onChange={(e) => patch(i, "amount", e.target.value)} /></td>
-                    <td><input {...gridCellProps(i, 7)} value={item.hs_code || ""} onChange={(e) => patch(i, "hs_code", e.target.value)} /></td>
                   </>
                 )}
-                <td><textarea {...gridCellProps(i, packing ? 9 : 8)} className="wrapcell" rows={1} value={item.remark || ""} onChange={(e) => patch(i, "remark", e.target.value)} /></td>
+                <td><textarea {...gridCellProps(i, packing ? 9 : 7)} className="wrapcell" rows={1} value={item.remark || ""} onChange={(e) => patch(i, "remark", e.target.value)} /></td>
               </tr>
             ))}
           </tbody>
@@ -1434,8 +1439,7 @@ function ItemEditor({
                   <DualCurrencyAmount value={total} currency={currency} />
                   <span className="fx-note">{fxRateText()}</span>
                 </td>
-                <td></td>{/* 10 hs_code */}
-                <td></td>{/* 11 remark */}
+                <td></td>{/* 10 remark */}
               </tr>
             </tfoot>
           ) : null}
