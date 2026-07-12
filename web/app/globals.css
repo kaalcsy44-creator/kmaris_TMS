@@ -3475,6 +3475,7 @@ a.btn.primary:hover {
 }
 /* form-field 는 기본 min-width:auto 라 그리드 셀이 입력란 콘텐츠폭 밑으로 안 줄어든다.
    0 으로 풀어 Basic info·Shipping Marks 입력란이 열 폭에 맞춰 함께 좁아지게 한다. */
+.doc-cols > *,
 .doc-cols .form-field {
   min-width: 0;
 }
@@ -4798,7 +4799,17 @@ table.mini .num {
 }
 .doc-tab {
   display: grid;
+  /* 단일 컬럼을 minmax(0,1fr)로 고정 — 없으면 암시적 auto 컬럼이 콘텐츠(넓은 item
+     테이블 등) 최대폭에 맞춰 pane 밖으로 커져 우측(Save·+Add·Shipping Marks)이
+     잘렸다. 0 하한으로 자식이 pane 폭에 맞춰 줄고, 넓은 표는 .table-wrap 이
+     자체 가로 스크롤한다. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 14px;
+}
+/* 그리드 자식은 기본 min-width:auto 라 콘텐츠 최소폭 밑으로 안 줄어든다.
+   fieldset·form-actions 를 0 으로 풀어 pane 폭에 맞춰 축소되게 한다. */
+.doc-tab > * {
+  min-width: 0;
 }
 .milestone-row {
   display: flex;
