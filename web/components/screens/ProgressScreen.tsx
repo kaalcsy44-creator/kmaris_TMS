@@ -1613,6 +1613,20 @@ export function PipelineModal({
   // 모바일 전용: 프로젝트 정보/단계 상세를 동시에 띄우면 좁아, 탭으로 하나씩 전환.
   // (데스크톱은 좌우 2단으로 함께 보이므로 이 값은 CSS 상 무시된다.)
   const [mobilePane, setMobilePane] = useState<"info" | "stage">("stage");
+  // 상단 단계 스트립 — 모바일에선 가로 스크롤. 선택 단계를 화면 중앙으로 자동 스크롤한다.
+  const stageStripRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const strip = stageStripRef.current;
+    if (!strip) return;
+    const btn = strip.querySelector<HTMLElement>(`[data-stage="${selectedStage}"]`);
+    // 실제로 넘칠 때(모바일 가로 스크롤)만 중앙 정렬 이동 — 데스크톱은 no-op.
+    if (btn && strip.scrollWidth > strip.clientWidth + 4) {
+      const sr = strip.getBoundingClientRect();
+      const br = btn.getBoundingClientRect();
+      const target = strip.scrollLeft + (br.left - sr.left) - (strip.clientWidth - br.width) / 2;
+      strip.scrollTo({ left: Math.max(0, target), behavior: "smooth" });
+    }
+  }, [selectedStage]);
   // 좌측 기본정보 패널: 구분선 드래그로 폭 조절 + 토글 버튼으로 숨김. localStorage 로 유지.
   const layoutRef = useRef<HTMLDivElement>(null);
   const [infoWidth, setInfoWidth] = useState<number>(() => {
@@ -1944,7 +1958,7 @@ export function PipelineModal({
             주요 결과물(번호·Vendor·금액 등)과 완료 일시를 카드에 함께 노출한다.
             우측 토글로 납작한(번호+작은 제목) 바로 접어 세로 공간을 아낀다. */}
         <div className={`project-stage-tabs-row${stagesCollapsed ? " collapsed" : ""}`}>
-          <div className="project-stage-tabs" role="tablist" aria-label="Project stages">
+          <div className="project-stage-tabs" role="tablist" aria-label="Project stages" ref={stageStripRef}>
           {chain.map((c) => {
             const no = c.no;
             const cls = [
@@ -1959,6 +1973,7 @@ export function PipelineModal({
               <button
                 key={no}
                 type="button"
+                data-stage={no}
                 className={cls}
                 aria-pressed={selectedStage === no}
                 onClick={() => setSelectedStage(no)}

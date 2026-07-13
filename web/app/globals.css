@@ -6919,6 +6919,33 @@ table.mini .num {
     padding-left: 0;
     padding-right: 0;
   }
+  /* 상단 단계 스트립 — 좁은 화면에선 균등분할(숫자만) 대신 '번호+제목(2줄)'이 온전히
+     보이는 폭으로 넓히고 가로 스크롤. 현재 단계는 JS 로 화면 중앙에 자동 스크롤된다.
+     (접힌 collapsed 모드는 기존 납작 표시 유지 → :not(.collapsed) 로 한정) */
+  .project-stage-tabs-row:not(.collapsed) .project-stage-tabs button {
+    flex: 0 0 auto;
+    width: 80px;
+    min-height: 0;
+    scroll-snap-align: start;
+  }
+  .project-stage-tabs-row:not(.collapsed) .project-stage-tabs {
+    scroll-snap-type: x proximity;
+  }
+  /* 번호를 제목 위에 쌓아, 제목이 버튼 폭 전체를 쓰도록(좁은 폭에서 가독성↑). */
+  .project-stage-tabs-row:not(.collapsed) .project-stage-tabs .st-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
+  }
+  /* 값·완료일시는 숨겨 카드 높이를 낮게 유지(제목 가독성 우선). 상세는 아래 패널에 있음. */
+  .project-stage-tabs-row:not(.collapsed) .project-stage-tabs .st-val,
+  .project-stage-tabs-row:not(.collapsed) .project-stage-tabs .st-at {
+    display: none;
+  }
+  /* 제목 3줄까지 허용해 'Quote Received' 같은 라벨이 잘리지 않게. */
+  .project-stage-tabs-row:not(.collapsed) .project-stage-tabs .st-label {
+    -webkit-line-clamp: 3;
+  }
 }
 .project-work-head {
   display: flex;
