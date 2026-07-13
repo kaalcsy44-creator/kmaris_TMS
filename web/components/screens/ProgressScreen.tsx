@@ -1457,6 +1457,31 @@ function PipelineCell({
   }
 }
 
+// 모달 크기 상태 — 사용자가 드래그로 지정한 '선호 크기'(원본)를 저장하고, 표시할 땐
+// 현재 뷰포트에 맞춰 클램프+가운데 정렬한다. 모바일에서 열려 축소된 값을 그대로 저장하지
+// 않으므로, 모바일↔PC 를 오가도 팝업이 좁게 굳지 않는다.
+const MODAL_SIZE_KEY = "ktms:proj-modal-size";
+function readModalPref(): { w: number; h: number } | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const s = JSON.parse(window.localStorage.getItem(MODAL_SIZE_KEY) || "null");
+    const w = Number(s?.w), h = Number(s?.h);
+    // 리사이즈 최소값(560×360) 미만은 옛 버그로 모바일에서 축소·저장된 손상값 → 폐기하고
+    // 기본(중앙·큰) 레이아웃으로 복귀시킨다.
+    if (w >= 560 && h >= 360) return { w, h };
+    if (s) window.localStorage.removeItem(MODAL_SIZE_KEY);
+  } catch {
+    /* ignore malformed */
+  }
+  return null;
+}
+function computeModalBox(pref: { w: number; h: number } | null) {
+  if (!pref || typeof window === "undefined") return null;
+  const w = Math.min(pref.w, window.innerWidth - 24);
+  const h = Math.min(pref.h, window.innerHeight - 24);
+  return { w, h, left: Math.max(12, (window.innerWidth - w) / 2), top: Math.max(12, (window.innerHeight - h) / 2) };
+}
+
 /** 통합 파이프라인 상세 모달 — 테이블 행 클릭 시 전 구간 문서 체인을 팝업으로 보여준다.
  *  헤더: RFQ No. · 업무 타입 · 고객사 · 선박 · 프로젝트 제목 + 닫기
  *  본문: 핵심 메타 + 6구간 문서 체인 + 12단계 완료 일시 + RFQ/P·O 작업 바로가기 */
@@ -1635,27 +1660,20 @@ export function PipelineModal({
   // 모달 크기 조절: 테두리/모서리를 잡고 드래그(8방향). 크기는 localStorage 로 기억하고
   // 열 때마다 그 크기로 화면 중앙에 배치한다. 미조절 상태(null)면 CSS 기본(중앙 정렬).
   const modalRef = useRef<HTMLDivElement>(null);
-  const [modalBox, setModalBox] = useState<{ left: number; top: number; w: number; h: number } | null>(() => {
-    if (typeof window === "undefined") return null;
-    try {
-      const s = JSON.parse(window.localStorage.getItem("ktms:proj-modal-size") || "null");
-      if (s && s.w && s.h) {
-        const w = Math.min(s.w, window.innerWidth - 24);
-        const h = Math.min(s.h, window.innerHeight - 24);
-        return { w, h, left: Math.max(12, (window.innerWidth - w) / 2), top: Math.max(12, (window.innerHeight - h) / 2) };
-      }
-    } catch {
-      /* ignore malformed */
-    }
-    return null;
-  });
+  // 사용자가 드래그로 확정한 '선호 크기'(원본) — 저장/복원의 기준. 표시 박스는 여기서 파생.
+  const prefSizeRef = useRef<{ w: number; h: number } | null>(readModalPref());
+  const [modalBox, setModalBox] = useState<{ left: number; top: number; w: number; h: number } | null>(
+    () => computeModalBox(prefSizeRef.current)
+  );
+  // 뷰포트 크기 변경(모바일↔PC 전환, 브라우저 리사이즈) 시 선호 크기에서 다시 계산해
+  // 항상 화면에 맞게 클램프+중앙 정렬한다. (축소된 값을 저장하지 않으므로 원래 크기로 복귀)
   useEffect(() => {
-    if (modalBox && typeof window !== "undefined")
-      window.localStorage.setItem(
-        "ktms:proj-modal-size",
-        JSON.stringify({ w: Math.round(modalBox.w), h: Math.round(modalBox.h) })
-      );
-  }, [modalBox?.w, modalBox?.h]);
+    function onResize() {
+      setModalBox(computeModalBox(prefSizeRef.current));
+    }
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   function startResize(dir: string, e: React.PointerEvent) {
     e.preventDefault();
@@ -1671,6 +1689,7 @@ export function PipelineModal({
     const cursor = getComputedStyle(e.currentTarget as Element).cursor;
     document.body.style.userSelect = "none";
     document.body.style.cursor = cursor;
+    let lastSize = { w: start.w, h: start.h };
     const onMove = (ev: PointerEvent) => {
       const dx = ev.clientX - start.x;
       const dy = ev.clientY - start.y;
@@ -1686,6 +1705,7 @@ export function PipelineModal({
       // 최소 120px 는 화면 안에 남겨 완전히 사라지지 않게 한다.
       left = Math.min(Math.max(left, 120 - w), window.innerWidth - 120);
       top = Math.min(Math.max(top, 8), window.innerHeight - 60);
+      lastSize = { w, h };
       setModalBox({ left, top, w, h });
     };
     const onUp = () => {
@@ -1693,6 +1713,13 @@ export function PipelineModal({
       document.body.style.cursor = "";
       document.removeEventListener("pointermove", onMove);
       document.removeEventListener("pointerup", onUp);
+      // 드래그로 확정된 '실제' 크기만 선호 크기로 저장(뷰포트에 맞춰 축소된 값은 저장하지 않음).
+      prefSizeRef.current = { w: Math.round(lastSize.w), h: Math.round(lastSize.h) };
+      try {
+        window.localStorage.setItem(MODAL_SIZE_KEY, JSON.stringify(prefSizeRef.current));
+      } catch {
+        /* ignore quota/serialization errors */
+      }
     };
     document.addEventListener("pointermove", onMove);
     document.addEventListener("pointerup", onUp);
