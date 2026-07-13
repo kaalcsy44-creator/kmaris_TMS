@@ -893,6 +893,8 @@ function StatisticsTab() {
   const { data, error } = useCachedData("dashboard", fetchDashboard);
   const { data: stat } = useCachedData("statistics", () => fetchStatistics(12));
   const [cur, setCur] = useState<CurrencyKey>("USD");
+  // 금액 KPI 월 이동 — null 이면 최신(이번 달). 절대 인덱스로 저장하고 로드 후 clamp.
+  const [monthIdx, setMonthIdx] = useState<number | null>(null);
 
   if (error && !data) {
     return <div className="state error">API error: {error.message}</div>;
@@ -902,7 +904,16 @@ function StatisticsTab() {
   }
 
   const { ops, perf } = data;
-  const k = stat.kpi[cur];
+  // 선택 월 인덱스(기본 최신월) — 금액 KPI 3종은 월별 시계열에서 직접 뽑는다.
+  const lastIdx = stat.months.length - 1;
+  const idx = monthIdx == null ? lastIdx : Math.min(Math.max(monthIdx, 0), lastIdx);
+  const selMonth = stat.months[idx];
+  const isCurMonth = idx === lastIdx;
+  const mVal = (metric: "revenue" | "quote" | "order", i: number) =>
+    stat.series[metric][cur][i] ?? 0;
+  const mRevenue = mVal("revenue", idx), mRevenuePrev = idx > 0 ? mVal("revenue", idx - 1) : 0;
+  const mOrder = mVal("order", idx), mOrderPrev = idx > 0 ? mVal("order", idx - 1) : 0;
+  const mQuote = mVal("quote", idx), mQuotePrev = idx > 0 ? mVal("quote", idx - 1) : 0;
 
   // 차트 데이터 변환 ---------------------------------------------------------
   const monthLabel = (m: string) => m.slice(2); // "2026-07" → "26-07"
@@ -939,18 +950,39 @@ function StatisticsTab() {
         </div>
       </div>
 
-      {/* ① 금액 KPI 스트립 ------------------------------------------------- */}
-      <SubHead title="This Month" sub={`${stat.months[stat.months.length - 1]} · ${cur}`} />
-      <div className="kpi-row">
-        <Kpi label="Revenue" value={fmtMoney(cur, k.revenue)} sub="Tax-invoiced"
-          chipNode={<DeltaChip cur={k.revenue} prev={k.revenue_prev} />} />
-        <Kpi label="Orders Won" value={fmtMoney(cur, k.order)} sub="Order value" accent="#2e8b57"
-          chipNode={<DeltaChip cur={k.order} prev={k.order_prev} />} />
-        <Kpi label="Quoted" value={fmtMoney(cur, k.quote)} sub="Quote value" accent="#e8830c"
-          chipNode={<DeltaChip cur={k.quote} prev={k.quote_prev} />} />
-        <Kpi label="Hit Rate" value={`${perf.hit_rate}%`} sub="PO conversion" accent="#8e44ad" />
+      {/* ① 금액 KPI 스트립 — 월 앞뒤 이동으로 과거 실적 확인(월별 시계열 기반) ---- */}
+      <div className="dash-subhead stat-monthhead">
+        <span className="t">Monthly</span>
+        <span className="stat-monthnav">
+          <button
+            type="button" className="stat-mnav-btn"
+            onClick={() => setMonthIdx(idx - 1)} disabled={idx <= 0}
+            aria-label="Previous month" title="Previous month"
+          >‹</button>
+          <span className="stat-mnav-label">
+            {selMonth}{isCurMonth ? " · This month" : ""}
+          </span>
+          <button
+            type="button" className="stat-mnav-btn"
+            onClick={() => setMonthIdx(idx + 1)} disabled={idx >= lastIdx}
+            aria-label="Next month" title="Next month"
+          >›</button>
+        </span>
+        <span className="s">{cur}</span>
       </div>
       <div className="kpi-row">
+        <Kpi label="Revenue" value={fmtMoney(cur, mRevenue)} sub="Tax-invoiced"
+          chipNode={<DeltaChip cur={mRevenue} prev={mRevenuePrev} />} />
+        <Kpi label="Orders Won" value={fmtMoney(cur, mOrder)} sub="Order value" accent="#2e8b57"
+          chipNode={<DeltaChip cur={mOrder} prev={mOrderPrev} />} />
+        <Kpi label="Quoted" value={fmtMoney(cur, mQuote)} sub="Quote value" accent="#e8830c"
+          chipNode={<DeltaChip cur={mQuote} prev={mQuotePrev} />} />
+      </div>
+
+      {/* ② 운영 스냅샷 — 현재 상태(월 이동과 무관한 실시간 지표) ---------------- */}
+      <SubHead title="Operations" sub="Current status" />
+      <div className="kpi-row">
+        <Kpi label="Hit Rate" value={`${perf.hit_rate}%`} sub="PO conversion" accent="#8e44ad" />
         <Kpi label="Gross Margin" value={`${perf.gross_margin_pct}%`} sub="Gross margin %" accent="#1a7a4a" />
         <Kpi label="AR Outstanding" value={`USD ${num(Math.round(data.kpi.ar_outstanding_usd))}`} sub="Outstanding (USD)"
           accent={ops.overdue ? "#dc3545" : "#0055a8"}

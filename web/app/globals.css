@@ -1793,7 +1793,9 @@ table.perm-matrix td.perm-mod {
 .pl-toolbar {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
+  row-gap: 8px;
   margin: 18px 0 10px;
 }
 .pl-filter-reset {
@@ -3075,6 +3077,48 @@ table.mini.items-edit td.row-tools {
 .stat-cur-toggle button.on {
   background: #0055a8;
   color: #fff;
+}
+/* Monthly KPI 월 이동 네비게이터 — PC/모바일 공용. */
+.stat-monthhead {
+  align-items: center;
+  flex-wrap: wrap;
+  row-gap: 6px;
+}
+.stat-monthnav {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.stat-mnav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid #d5deea;
+  border-radius: 7px;
+  background: #fff;
+  color: #45526a;
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+}
+.stat-mnav-btn:hover:not(:disabled) {
+  background: #eef4fb;
+  border-color: #0055a8;
+  color: #0055a8;
+}
+.stat-mnav-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.stat-mnav-label {
+  min-width: 116px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--navy);
+  font-variant-numeric: tabular-nums;
 }
 .stat-charts {
   display: grid;
@@ -5439,6 +5483,43 @@ table.mini .num {
 }
 .pl-board-col.cancelled .pl-board-title { color: #6b7280; }
 .pl-board-col.cancelled .pl-board-count { background: #9aa3af; }
+
+/* ── Progress: 모바일 반응형 ─────────────────────────────────────────────── */
+@media (max-width: 720px) {
+  /* 상단 컨트롤바: 줄바꿈 + 여백/글자 축소로 잘림 방지. 카운트는 첫 줄 우측 고정. */
+  .pl-toolbar {
+    gap: 8px;
+    row-gap: 8px;
+  }
+  .pl-search-count { margin-left: auto; }
+  .pl-mine-toggle,
+  .pl-scope-badge,
+  .pl-filter-reset,
+  .pl-preview-btn {
+    height: 30px;
+    font-size: 11.5px;
+    padding: 0 10px;
+  }
+  .pl-view-toggle button { padding: 6px 10px; }
+}
+@media (max-width: 640px) {
+  /* 칸반: 한 컬럼씩 스와이프(스냅)해 좁은 화면에서도 카드가 넉넉히 보이게. */
+  .pl-board {
+    gap: 10px;
+    padding-bottom: 10px;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+  }
+  .pl-board-col,
+  .pl-board-col.done,
+  .pl-board-col.cancelled {
+    flex: 0 0 84vw;
+    min-width: 84vw;
+    max-width: 84vw;
+    max-height: 68vh;
+    scroll-snap-align: start;
+  }
+}
 /* 종결 상태 리본 — 카드 최상단 작은 칩(취소=회색). 흐름 배치라 겹침 없음. */
 .pl-card-ribbon {
   display: inline-block;
