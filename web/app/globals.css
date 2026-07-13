@@ -6757,6 +6757,68 @@ table.mini .num {
     display: none;
   }
 }
+/* ── Progress 단계 편집 팝업: 폰 최적화 ─────────────────────────────────────
+   좁은 화면에서 낭비되는 좌우 여백을 줄여 콘텐츠 폭을 확보하고, 헤더 컨트롤·
+   문서 하위탭을 손가락 조작이 쉬운 형태로 재배치한다. 드래그(리사이즈)는 터치
+   에서 방해만 되므로 끄고, 이전에 저장된 드래그 크기(인라인 style)도 무시한다. */
+@media (max-width: 640px) {
+  .pl-modal-backdrop {
+    padding: 10px 8px;
+  }
+  .pl-modal {
+    padding: 12px 12px 0;
+    border-radius: 10px;
+  }
+  /* 데스크톱에서 드래그로 저장된 고정 크기(인라인 style)를 폰에서는 무력화 —
+     항상 화면 폭에 맞춘 세로 스택으로 되돌린다. */
+  .pl-modal.pl-modal--resizable {
+    position: static !important;
+    left: auto !important;
+    top: auto !important;
+    width: 100% !important;
+    height: auto !important;
+    max-width: none !important;
+    max-height: calc(100vh - 20px) !important;
+    margin: 0 !important;
+  }
+  .pl-resize-h {
+    display: none;
+  }
+  /* 헤더: 제목은 한 줄 전체, PIC·Close deal·닫기는 아래 줄 우측으로 정렬. */
+  .pl-modal-head {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+  .pl-modal-head .intl-title {
+    flex: 1 1 100%;
+  }
+  .pl-head-right {
+    flex: 1 1 100%;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+  /* 문서 하위탭(Commercial Invoice / Packing List / Shipping Advice) — 전체 폭
+     균등 분할로 터치 타깃 확대. */
+  .seg-tabs {
+    display: flex;
+    width: 100%;
+  }
+  .seg-tabs button {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 8px 6px;
+    font-size: 12px;
+  }
+  /* 스티키 푸터의 full-bleed 음수마진은 데스크톱 22px 패딩 기준이라, 축소된 폰
+     패딩에서 그대로 두면 가로로 삐져나온다 → bleed 를 끄고 콘텐츠 폭에 맞춘다. */
+  .pl-modal-body .form-actions,
+  .pl-modal-body .pl-actions {
+    margin-left: 0;
+    margin-right: 0;
+    padding-left: 0;
+    padding-right: 0;
+  }
+}
 .project-work-head {
   display: flex;
   align-items: center;
