@@ -1531,6 +1531,7 @@ function VendorQuoteDetailModal({
               label="Total"
               value={items.reduce((s, it) => s + Number(it.cost_price || 0) * Number(it.qty || 1), 0)}
               currency={currency}
+              rate={fxRate ?? USD_KRW_RATE}
             />
             {!canEditThis ? (
               <span className="hint-inline" style={{ marginRight: "auto" }}>{editBlockReason("rfq", d?.assignee_id)}</span>
@@ -2755,6 +2756,7 @@ function VendorQuoteAction({
               label="Total"
               value={items.reduce((s, it) => s + Number(it.cost_price || 0) * Number(it.qty || 1), 0)}
               currency={currency}
+              rate={fxRate ?? USD_KRW_RATE}
             />
             <button
               className="btn primary"
