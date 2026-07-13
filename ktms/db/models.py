@@ -207,6 +207,10 @@ class RFQ(Base):
     date             = Column(String(10))   # YYYY-MM-DD (수신일)
     received_at      = Column(String(16))   # RFQ 수신 일시 "YYYY-MM-DDTHH:MM" (KST)
     status           = Column(SAEnum(RFQStatus), default=RFQStatus.RECEIVED)
+    # 딜 종결(취소/실주) 사유. 종결 시 저장, 재활성 시 비운다.
+    #   code: schedule(일정 지연/취소) | slow_response(대응 지연) | no_quote(견적 불가) | other(기타)
+    close_reason      = Column(String(40))   # 사유 코드
+    close_reason_note = Column(Text)          # 기타 사유 직접 입력(선택)
     follow_up_level  = Column(SAEnum(FollowUpLevel), default=FollowUpLevel.B)
     request_channel  = Column(String(40))   # 고객 요청 수단: Email/Phone/SMS/WhatsApp/WeChat 등
     items            = Column(JSON, default=list)

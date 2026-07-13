@@ -15,6 +15,8 @@ import {
   setRfqCancelled,
   updateRfq,
   fetchAssignableUsers,
+  CLOSE_REASONS,
+  closeReasonLabel,
 } from "@/lib/api";
 import { useCachedData, invalidateCache } from "@/lib/useCachedData";
 import { sortByDocNo } from "@/lib/sort";
@@ -1484,19 +1486,39 @@ export function PipelineModal({
   const backdropMouseDown = useRef(false);
   // 딜 종결(취소/실주) 토글 — 종결 시 보드 Cancelled 존으로, 재활성 시 진행 컬럼으로 복귀.
   const [cancelBusy, setCancelBusy] = useState(false);
+  // 종결 시 사유 선택 모달 상태. 재활성은 사유가 필요 없으므로 바로 처리한다.
+  const [reasonOpen, setReasonOpen] = useState(false);
+  const [reasonCode, setReasonCode] = useState<string>("");
+  const [reasonNote, setReasonNote] = useState("");
   async function toggleCancelled() {
     if (isNewProject || cancelBusy) return;
-    const next = !r.cancelled;
-    if (
-      next &&
-      !window.confirm(
-        "Mark this project as closed?\nIt will move to the Closed zone on the board (you can reactivate it later)."
-      )
-    )
+    if (!r.cancelled) {
+      // 종결 → 사유 선택 모달을 연다(직접 확정은 confirmClose 에서).
+      setReasonCode("");
+      setReasonNote("");
+      setReasonOpen(true);
       return;
+    }
+    // 재활성 → 진행 컬럼으로 복귀(사유는 백엔드에서 비운다).
     setCancelBusy(true);
     try {
-      await setRfqCancelled(r.rfq_id, next);
+      await setRfqCancelled(r.rfq_id, false);
+      await onChanged();
+    } finally {
+      setCancelBusy(false);
+    }
+  }
+  async function confirmClose() {
+    if (cancelBusy || !reasonCode) return;
+    setCancelBusy(true);
+    try {
+      await setRfqCancelled(
+        r.rfq_id,
+        true,
+        reasonCode,
+        reasonCode === "other" ? reasonNote : undefined
+      );
+      setReasonOpen(false);
       await onChanged();
     } finally {
       setCancelBusy(false);
@@ -1798,6 +1820,21 @@ export function PipelineModal({
                 r.assignee || "—"
               )}
             </span>
+            {!isNewProject && r.cancelled && r.close_reason ? (
+              <span
+                className="pl-close-reason"
+                title={
+                  r.close_reason === "other" && r.close_reason_note
+                    ? r.close_reason_note
+                    : closeReasonLabel(r.close_reason)
+                }
+              >
+                ⊘{" "}
+                {r.close_reason === "other" && r.close_reason_note
+                  ? r.close_reason_note
+                  : closeReasonLabel(r.close_reason)}
+              </span>
+            ) : null}
             {!isNewProject ? (
               <button
                 type="button"
@@ -1819,6 +1856,59 @@ export function PipelineModal({
             </button>
           </span>
         </div>
+
+        {/* Close deal 사유 선택 — 종결 확정 전 사유를 고른다(기타는 직접 입력). */}
+        {reasonOpen ? (
+          <div
+            className="close-reason-backdrop"
+            onMouseDown={(e) => { if (e.target === e.currentTarget && !cancelBusy) setReasonOpen(false); }}
+            role="presentation"
+          >
+            <div className="close-reason-modal" role="dialog" aria-modal="true" aria-label="Close deal reason">
+              <div className="close-reason-title">Close this deal</div>
+              <div className="close-reason-sub">
+                Select a reason. It will move to the Closed zone on the board — you can reactivate it anytime.
+              </div>
+              <div className="close-reason-list">
+                {CLOSE_REASONS.map((opt) => (
+                  <label key={opt.code} className={`close-reason-opt${reasonCode === opt.code ? " sel" : ""}`}>
+                    <input
+                      type="radio"
+                      name="close-reason"
+                      value={opt.code}
+                      checked={reasonCode === opt.code}
+                      onChange={() => setReasonCode(opt.code)}
+                    />
+                    <span>{opt.label}</span>
+                  </label>
+                ))}
+              </div>
+              {reasonCode === "other" ? (
+                <textarea
+                  className="close-reason-note"
+                  placeholder="Enter the reason"
+                  value={reasonNote}
+                  onChange={(e) => setReasonNote(e.target.value)}
+                  rows={3}
+                  autoFocus
+                />
+              ) : null}
+              <div className="close-reason-actions">
+                <button type="button" className="btn" onClick={() => setReasonOpen(false)} disabled={cancelBusy}>
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn primary"
+                  onClick={confirmClose}
+                  disabled={cancelBusy || !reasonCode || (reasonCode === "other" && !reasonNote.trim())}
+                >
+                  {cancelBusy ? "Closing…" : "Close deal"}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         {/* 단계 스트립 — 진행상태(완료 음영/현재)와 탐색(선택)을 통합하고, 각 단계의
             주요 결과물(번호·Vendor·금액 등)과 완료 일시를 카드에 함께 노출한다.

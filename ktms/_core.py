@@ -2216,8 +2216,12 @@ class RfqLevelUpdate(BaseModel):
 
 class RfqCancelUpdate(BaseModel):
     """딜 종결(취소/실주) 토글. True=종결(status→LOST), False=재활성(status→RECEIVED).
-    단계(stage)는 레코드 기반으로 자동 산출되므로 여기서는 status 만 바꾼다."""
+    단계(stage)는 레코드 기반으로 자동 산출되므로 여기서는 status 만 바꾼다.
+    종결 시 사유(reason 코드 + 기타 직접입력 note)를 함께 저장한다."""
     cancelled: bool
+    # schedule(일정 지연/취소) | slow_response(대응 지연) | no_quote(견적 불가) | other(기타)
+    reason: Optional[str] = None
+    reason_note: Optional[str] = None
 
 
 class EmailTemplateSave(BaseModel):

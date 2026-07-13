@@ -333,6 +333,9 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
                 "status": _status_label(stage, r.work_type),
                 # 종결(취소/실주) 여부 — 보드에서 진행 컬럼 대신 Cancelled 존으로 분류한다.
                 "cancelled": _lost,
+                # 종결 사유(코드 + 기타 직접입력). 종결건에서만 채워진다.
+                "close_reason": getattr(r, "close_reason", None) or "",
+                "close_reason_note": getattr(r, "close_reason_note", None) or "",
                 "stage_dates": _sd,
                 "stage_auto": _auto,
                 "stage_notes": _sn,

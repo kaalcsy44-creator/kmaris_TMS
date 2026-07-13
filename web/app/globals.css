@@ -5478,6 +5478,86 @@ table.mini .num {
   border-color: #b7dcc6;
 }
 .pl-modal-cancel.reactivate:hover:not(:disabled) { background: #e9f5ee; }
+/* 종결 사유 배지 — Reactivate 버튼 옆에 저장된 사유를 요약 표시. */
+.pl-close-reason {
+  flex: none;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 600;
+  color: #b23b3b;
+  background: #fbeaea;
+  border: 1px solid #e3b7b7;
+  border-radius: 7px;
+  padding: 3px 9px;
+}
+/* Close deal 사유 선택 모달 — 프로젝트 모달(z-index 100) 위로 띄운다. */
+.close-reason-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(11, 29, 58, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.close-reason-modal {
+  width: min(440px, 96vw);
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(11, 29, 58, 0.28);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.close-reason-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--navy);
+}
+.close-reason-sub {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.close-reason-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.close-reason-opt {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 11px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  font-size: 13px;
+  color: #2b3a4d;
+  cursor: pointer;
+}
+.close-reason-opt:hover { border-color: var(--blue); background: #f6f9ff; }
+.close-reason-opt.sel { border-color: var(--blue); background: var(--sel); font-weight: 600; }
+.close-reason-opt input { accent-color: var(--blue); }
+.close-reason-note {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 13px;
+}
+.close-reason-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
 .pl-card {
   display: block;
   width: 100%;

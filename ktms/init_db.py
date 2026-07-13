@@ -34,6 +34,8 @@ _MIGRATIONS = {
         "contact_person": "VARCHAR(100)",
         "request_channel": "VARCHAR(40)",
         "created_by": "INTEGER",
+        "close_reason": "VARCHAR(40)",
+        "close_reason_note": "TEXT",
     },
     "quotations": {
         "created_by": "INTEGER",

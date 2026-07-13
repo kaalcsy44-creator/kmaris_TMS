@@ -258,11 +258,30 @@ export function updateRfqLevel(
 }
 
 // 딜 종결(취소/실주) 토글. cancelled=true → 종결, false → 재활성.
+// 종결 시 사유(reason 코드 + 기타 직접입력 note)를 함께 보낸다.
 export function setRfqCancelled(
   rfqId: number,
-  cancelled: boolean
-): Promise<{ ok: boolean; cancelled: boolean }> {
-  return put(`/api/admin/rfq/${rfqId}/cancel`, { cancelled });
+  cancelled: boolean,
+  reason?: string,
+  reasonNote?: string
+): Promise<{ ok: boolean; cancelled: boolean; close_reason?: string; close_reason_note?: string }> {
+  return put(`/api/admin/rfq/${rfqId}/cancel`, {
+    cancelled,
+    reason: reason ?? null,
+    reason_note: reasonNote ?? null,
+  });
+}
+
+// 딜 종결 사유 코드 → 라벨. Close deal 사유 선택/표시 공용.
+export const CLOSE_REASONS: { code: string; label: string }[] = [
+  { code: "schedule", label: "Schedule delayed or cancelled" },
+  { code: "slow_response", label: "Slower response than competitors" },
+  { code: "no_quote", label: "Unable to quote" },
+  { code: "other", label: "Other (specify)" },
+];
+export function closeReasonLabel(code?: string | null): string {
+  if (!code) return "";
+  return CLOSE_REASONS.find((r) => r.code === code)?.label || code;
 }
 
 export function updateRfqStageDate(

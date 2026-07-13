@@ -748,6 +748,8 @@ export type PipelineRow = {
   stage: number;
   status: string;
   cancelled?: boolean;            // 종결(취소/실주) — 보드 Cancelled 존 분류
+  close_reason?: string;          // 종결 사유 코드(schedule/slow_response/no_quote/other)
+  close_reason_note?: string;     // 기타 사유 직접 입력
   stage_dates: Record<string, string>;
   stage_auto: Record<string, string>;
   stage_notes: Record<string, StageNote[]>;

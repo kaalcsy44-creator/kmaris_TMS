@@ -496,8 +496,18 @@ def update_rfq_cancel(rfq_id: int, body: RfqCancelUpdate):
         if not rfq:
             raise HTTPException(status_code=404, detail="RFQ를 찾을 수 없습니다.")
         rfq.status = RFQStatus.LOST if body.cancelled else RFQStatus.RECEIVED
+        if body.cancelled:
+            # 종결 사유 기록. reason 코드 + 기타 직접입력(note)은 other 일 때만 의미.
+            rfq.close_reason = (body.reason or "").strip() or None
+            rfq.close_reason_note = (body.reason_note or "").strip() or None
+        else:
+            # 재활성 시 사유를 비운다.
+            rfq.close_reason = None
+            rfq.close_reason_note = None
         s.commit()
-        return {"ok": True, "cancelled": body.cancelled}
+        return {"ok": True, "cancelled": body.cancelled,
+                "close_reason": rfq.close_reason,
+                "close_reason_note": rfq.close_reason_note}
     finally:
         s.close()
 
