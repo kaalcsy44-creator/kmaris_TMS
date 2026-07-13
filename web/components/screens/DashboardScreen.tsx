@@ -880,6 +880,15 @@ function DeltaChip({ cur, prev }: { cur: number; prev: number }) {
 const CHART_COLORS = ["#0055a8", "#2e8b57", "#e8830c", "#8e44ad", "#16a085",
   "#c0392b", "#2980b9", "#d35400", "#27ae60", "#7f8c8d"];
 
+// 프로젝트 단계별 색상 — hue=단계, 채도(진/연)=매출/매입.
+const STAGE_KEYS = ["Quoted", "PO", "Invoiced"] as const;
+type StageKey = (typeof STAGE_KEYS)[number];
+const STAGE_COLORS: Record<StageKey, { sales: string; purchase: string }> = {
+  Quoted:   { sales: "#e8830c", purchase: "#f6c489" },  // 주황
+  PO:       { sales: "#0055a8", purchase: "#9cc0e6" },  // 파랑
+  Invoiced: { sales: "#1a7a4a", purchase: "#96caae" },  // 초록
+};
+
 // 파이프라인 4개 중분류(phase) 순서형 파랑 램프(light→dark) — dataviz 검증 통과.
 // 단계는 순서형이므로 임의 카테고리색이 아니라 단일 색조 심도로 진행감을 준다.
 const PHASE_RAMP = ["#86b6ef", "#5598e7", "#2a78d6", "#1c5cab", "#0d366b"];
@@ -897,6 +906,8 @@ function StatisticsTab() {
   const [cur, setCur] = useState<CurrencyKey>("USD");
   // 금액 KPI 월 이동 — null 이면 최신(이번 달). 절대 인덱스로 저장하고 로드 후 clamp.
   const [monthIdx, setMonthIdx] = useState<number | null>(null);
+  // 프로젝트 Sales/Purchase 차트 단계 필터.
+  const [marginStage, setMarginStage] = useState<"All" | StageKey>("All");
   // 관리자 전용 금액 KPI 감사 패널(행 단위 내역). 필요할 때만 온디맨드 로드.
   const [audit, setAudit] = useState<StatDebugData | null>(null);
   const [auditOpen, setAuditOpen] = useState(false);
@@ -974,6 +985,9 @@ function StatisticsTab() {
     sales: Math.round(toCur(p.sales_usd)),
     purchase: Math.round(toCur(p.purchase_usd)),
   }));
+  const marginFiltered = marginStage === "All" ? marginData : marginData.filter((p) => p.stage === marginStage);
+  const stageColor = (stg: string, kind: "sales" | "purchase") =>
+    (STAGE_COLORS[stg as StageKey] ?? STAGE_COLORS.PO)[kind];
   const funnelData = [
     { stage: "RFQ", count: stat.funnel.rfq, rate: 100, label: "" },
     { stage: "Quote", count: stat.funnel.quote, rate: stat.funnel.quote_rate, label: "Quote / RFQ" },
@@ -1201,21 +1215,40 @@ function StatisticsTab() {
           </ResponsiveContainer>
         </div>
 
-        {/* 프로젝트별 Sales/Purchase — 세로 그룹 막대. 견적·PO·Invoiced 단계 모두 포함. */}
+        {/* 프로젝트별 Sales/Purchase — 세로 그룹 막대. hue=단계, 채도=매출/매입. */}
         <div className="stat-chart stat-chart--wide">
-          <SubHead title="Project Sales vs Purchase" sub={`프로젝트별 매출·매입 (${cur}) · 견적/PO/Invoiced · 호버 상세`} />
-          {marginData.length === 0 ? (
-            <div className="state">견적 이상 단계의 프로젝트가 아직 없습니다.</div>
+          <SubHead title="Project Sales vs Purchase" sub={`프로젝트별 매출·매입 (${cur}) · 호버 상세`} />
+          <div className="stat-margin-controls">
+            <div className="stat-cur-toggle sm">
+              {(["All", ...STAGE_KEYS] as const).map((sname) => (
+                <button key={sname} className={marginStage === sname ? "on" : ""} onClick={() => setMarginStage(sname)}>
+                  {sname === "All" ? "All" : sname}
+                  {sname !== "All" ? ` (${marginData.filter((p) => p.stage === sname).length})` : ` (${marginData.length})`}
+                </button>
+              ))}
+            </div>
+            <div className="stat-margin-legend">
+              {STAGE_KEYS.map((sname) => (
+                <span key={sname} className="lg"><i style={{ background: STAGE_COLORS[sname].sales }} />{sname}</span>
+              ))}
+              <span className="muted">· 진한색 = Sales, 연한색 = Purchase</span>
+            </div>
+          </div>
+          {marginFiltered.length === 0 ? (
+            <div className="state">해당 단계의 프로젝트가 없습니다.</div>
           ) : (
             <ResponsiveContainer width="100%" height={320}>
-              <BarChart data={marginData} margin={{ top: 8, right: 16, bottom: 48, left: 8 }} barGap={2}>
+              <BarChart data={marginFiltered} margin={{ top: 8, right: 16, bottom: 48, left: 8 }} barGap={2}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#eef1f5" />
                 <XAxis dataKey="name" tick={{ fontSize: 10 }} interval={0} angle={-30} textAnchor="end" height={60} />
                 <YAxis tickFormatter={compact} tick={{ fontSize: 11 }} width={48} />
                 <Tooltip content={<MarginTip />} cursor={{ fill: "rgba(0,85,168,0.05)" }} />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Bar dataKey="sales" fill="#0055a8" name="Sales" radius={[3, 3, 0, 0]} />
-                <Bar dataKey="purchase" fill="#e8830c" name="Purchase" radius={[3, 3, 0, 0]} />
+                <Bar dataKey="sales" name="Sales" radius={[3, 3, 0, 0]}>
+                  {marginFiltered.map((p, i) => <Cell key={i} fill={stageColor(p.stage, "sales")} />)}
+                </Bar>
+                <Bar dataKey="purchase" name="Purchase" radius={[3, 3, 0, 0]}>
+                  {marginFiltered.map((p, i) => <Cell key={i} fill={stageColor(p.stage, "purchase")} />)}
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           )}
