@@ -523,12 +523,13 @@ def dashboard():
             if q.created_at and q.created_at.year == now.year
             and q.created_at.month == now.month
         )
-        ar_outstanding = sum(
-            (a.invoice_amount or 0) - (a.paid_amount or 0)
-            for a in ars
-            if a.status in {ARStatus.OUTSTANDING, ARStatus.PARTIAL, ARStatus.OVERDUE}
-            and (a.currency or "USD") == "USD"
-        )
+        # 미수금 — 통화별(USD/KRW)로 분리 집계해 대시보드 통화 토글을 따르게 한다.
+        # (예전엔 USD AR 만 합산 + 라벨도 USD 고정이라 KRW 토글에서도 'USD 0' 으로 보였다.)
+        ar_out = {"USD": 0.0, "KRW": 0.0}
+        for a in ars:
+            if a.status in {ARStatus.OUTSTANDING, ARStatus.PARTIAL, ARStatus.OVERDUE}:
+                ar_out[_cur2(a.currency)] += (a.invoice_amount or 0) - (a.paid_amount or 0)
+        ar_outstanding = ar_out["USD"]   # 하위호환(ar_outstanding_usd)
 
         urgent = [q for q in quotes
                   if q.status == QuotationStatus.SENT
@@ -648,6 +649,7 @@ def dashboard():
                 "active_orders": active_orders,
                 "monthly_quotes": monthly_quotes,
                 "ar_outstanding_usd": round(ar_outstanding, 2),
+                "ar_outstanding": {"USD": round(ar_out["USD"], 2), "KRW": round(ar_out["KRW"], 2)},
             },
             "ops": {
                 "urgent": len(urgent),

@@ -637,6 +637,7 @@ export type DashboardData = {
     active_orders: number;
     monthly_quotes: number;
     ar_outstanding_usd: number;
+    ar_outstanding?: Record<CurrencyKey, number>;   // 통화별 미수금(대시보드 토글용)
   };
   ops: {
     urgent: number;

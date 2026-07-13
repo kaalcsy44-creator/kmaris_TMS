@@ -1009,7 +1009,9 @@ function StatisticsTab() {
       <div className="kpi-row">
         <Kpi label="Hit Rate" value={`${perf.hit_rate}%`} sub="PO conversion" accent="#8e44ad" />
         <Kpi label="Gross Margin" value={`${perf.gross_margin_pct}%`} sub="Gross margin %" accent="#1a7a4a" />
-        <Kpi label="AR Outstanding" value={`USD ${num(Math.round(data.kpi.ar_outstanding_usd))}`} sub="Outstanding (USD)"
+        <Kpi label="AR Outstanding"
+          value={`${cur} ${num(Math.round(data.kpi.ar_outstanding?.[cur] ?? (cur === "USD" ? data.kpi.ar_outstanding_usd : 0)))}`}
+          sub={`Outstanding (${cur})`}
           accent={ops.overdue ? "#dc3545" : "#0055a8"}
           chip={{ text: `Overdue ${ops.overdue}`, tone: ops.overdue ? "red" : "gray" }} />
         <Kpi label="Delivery Delays" value={stat.delivery_delays} sub="Past promised date"
