@@ -1025,11 +1025,11 @@ function StatisticsTab() {
       </div>
     );
   }
-  // X축 라벨: 프로젝트 번호 + 프로젝트명(2줄, -30° 회전) --------------------
+  // X축 라벨: 프로젝트 번호 + 프로젝트명(없으면 고객명, 2줄·-30° 회전) --------
   function MarginTick({ x, y, payload }: { x?: number; y?: number; payload?: { value: string; index: number } }) {
     const p = marginFiltered[payload?.index ?? -1];
-    const title = (p?.project_title || "").trim();
-    const short = title.length > 16 ? `${title.slice(0, 15)}…` : title;
+    const name = (p?.project_title || p?.customer || "").trim();
+    const short = name.length > 16 ? `${name.slice(0, 15)}…` : name;
     return (
       <g transform={`translate(${x},${y})`}>
         <text x={0} y={0} dy={4} textAnchor="end" transform="rotate(-30)" fontSize={10} fill="#374151">
@@ -1039,14 +1039,18 @@ function StatisticsTab() {
       </g>
     );
   }
-  // 각 프로젝트 상단 마진율 라벨(매출 막대 기준으로 중앙 정렬) --------------
-  function MarginPctLabel(props: { x?: number; y?: number; width?: number; index?: number }) {
+  // 각 프로젝트 상단 마진율 라벨 — Sales·Purchase 두 막대 쌍의 중앙, 더 높은 막대 위 -
+  function MarginPctLabel(props: { x?: number; y?: number; width?: number; height?: number; index?: number }) {
     const p = marginFiltered[props.index ?? -1];
     if (!p) return null;
+    const x = props.x ?? 0, y = props.y ?? 0, w = props.width ?? 0, h = props.height ?? 0;
+    const bottom = y + h;                                  // 값 0 지점(막대 밑)
+    const ppv = p.sales > 0 ? h / p.sales : 0;             // 픽셀/금액 환산
+    const purchaseTop = ppv ? bottom - p.purchase * ppv : y;
+    const top = Math.min(y, purchaseTop);                  // 더 높은(=위) 막대의 상단
     const color = p.margin_pct < 0 ? "#dc2626" : "#059669";
     return (
-      <text x={(props.x ?? 0) + (props.width ?? 0) / 2} y={(props.y ?? 0) - 16}
-        textAnchor="middle" fontSize={10} fontWeight={700} fill={color}>
+      <text x={x + w} y={top - 12} textAnchor="middle" fontSize={10} fontWeight={700} fill={color}>
         {p.margin_pct}%
       </text>
     );
@@ -1264,25 +1268,28 @@ function StatisticsTab() {
           {marginFiltered.length === 0 ? (
             <div className="state">해당 단계의 프로젝트가 없습니다.</div>
           ) : (
-            <ResponsiveContainer width="100%" height={340}>
-              <BarChart data={marginFiltered} margin={{ top: 28, right: 16, bottom: 64, left: 8 }} barGap={2}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#eef1f5" />
-                <XAxis dataKey="name" interval={0} height={78} tick={<MarginTick />} />
-                <YAxis tickFormatter={compact} tick={{ fontSize: 11 }} width={48} />
-                <Tooltip content={<MarginTip />} cursor={{ fill: "rgba(0,85,168,0.05)" }} />
-                <Bar dataKey="sales" name="Sales" radius={[3, 3, 0, 0]} maxBarSize={16}>
-                  {marginFiltered.map((p, i) => <Cell key={i} fill={stageColor(p.stage, "sales")} />)}
-                  <LabelList dataKey="sales" position="top" formatter={(v) => compact(Number(v) || 0)}
-                    style={{ fontSize: 9, fill: "#374151" }} />
-                  <LabelList dataKey="margin_pct" content={<MarginPctLabel />} />
-                </Bar>
-                <Bar dataKey="purchase" name="Purchase" radius={[3, 3, 0, 0]} maxBarSize={16}>
-                  {marginFiltered.map((p, i) => <Cell key={i} fill={stageColor(p.stage, "purchase")} />)}
-                  <LabelList dataKey="purchase" position="top" formatter={(v) => compact(Number(v) || 0)}
-                    style={{ fontSize: 9, fill: "#9ca3af" }} />
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+            <div style={{ width: `${Math.min(100, Math.max(30, marginFiltered.length * 5))}%` }}>
+              <ResponsiveContainer width="100%" height={340}>
+                <BarChart data={marginFiltered} margin={{ top: 28, right: 16, bottom: 64, left: 8 }}
+                  barGap={0} barCategoryGap="45%">
+                  <CartesianGrid strokeDasharray="3 3" stroke="#eef1f5" />
+                  <XAxis dataKey="name" interval={0} height={78} tick={<MarginTick />} />
+                  <YAxis tickFormatter={compact} tick={{ fontSize: 11 }} width={48} />
+                  <Tooltip content={<MarginTip />} cursor={{ fill: "rgba(0,85,168,0.05)" }} />
+                  <Bar dataKey="sales" name="Sales" radius={[3, 3, 0, 0]} barSize={16}>
+                    {marginFiltered.map((p, i) => <Cell key={i} fill={stageColor(p.stage, "sales")} />)}
+                    <LabelList dataKey="sales" position="top" formatter={(v) => compact(Number(v) || 0)}
+                      style={{ fontSize: 9, fill: "#374151" }} />
+                    <LabelList dataKey="margin_pct" content={<MarginPctLabel />} />
+                  </Bar>
+                  <Bar dataKey="purchase" name="Purchase" radius={[3, 3, 0, 0]} barSize={16}>
+                    {marginFiltered.map((p, i) => <Cell key={i} fill={stageColor(p.stage, "purchase")} />)}
+                    <LabelList dataKey="purchase" position="top" formatter={(v) => compact(Number(v) || 0)}
+                      style={{ fontSize: 9, fill: "#9ca3af" }} />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           )}
         </div>
 
