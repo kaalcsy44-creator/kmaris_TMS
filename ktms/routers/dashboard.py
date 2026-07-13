@@ -980,6 +980,7 @@ def statistics(months: int = 12):
             margin_usd = sales_usd - purchase_usd
             project_margin.append({
                 "project_no": proj_no_map.get(r.id, "") or _rfq_no_disp(r.rfq_no),
+                "project_title": getattr(r, "project_title", None) or "",
                 "customer": cust_names.get(r.customer_id, "—"),
                 "stage": stage,
                 "sales_usd": round(sales_usd, 2),

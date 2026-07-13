@@ -1018,10 +1018,37 @@ function StatisticsTab() {
     return (
       <div className="stat-tip">
         <div className="stat-tip-h">{p.project_no} · {p.customer} <span className={`stat-tip-badge stage-${p.stage.toLowerCase()}`}>{p.stage}</span></div>
+        {p.project_title ? <div className="stat-tip-row muted">{p.project_title}</div> : null}
         <div className="stat-tip-row">Sales: {marginDisp(p.sales_usd)}</div>
         <div className="stat-tip-row">Purchase: {marginDisp(p.purchase_usd)}</div>
         <div className="stat-tip-row"><b>Margin: {marginDisp(p.margin_usd)} ({p.margin_pct}%)</b></div>
       </div>
+    );
+  }
+  // X축 라벨: 프로젝트 번호 + 프로젝트명(2줄, -30° 회전) --------------------
+  function MarginTick({ x, y, payload }: { x?: number; y?: number; payload?: { value: string; index: number } }) {
+    const p = marginFiltered[payload?.index ?? -1];
+    const title = (p?.project_title || "").trim();
+    const short = title.length > 16 ? `${title.slice(0, 15)}…` : title;
+    return (
+      <g transform={`translate(${x},${y})`}>
+        <text x={0} y={0} dy={4} textAnchor="end" transform="rotate(-30)" fontSize={10} fill="#374151">
+          <tspan x={0}>{payload?.value}</tspan>
+          {short ? <tspan x={0} dy={12} fill="#8a94a6" fontSize={9}>{short}</tspan> : null}
+        </text>
+      </g>
+    );
+  }
+  // 각 프로젝트 상단 마진율 라벨(매출 막대 기준으로 중앙 정렬) --------------
+  function MarginPctLabel(props: { x?: number; y?: number; width?: number; index?: number }) {
+    const p = marginFiltered[props.index ?? -1];
+    if (!p) return null;
+    const color = p.margin_pct < 0 ? "#dc2626" : "#059669";
+    return (
+      <text x={(props.x ?? 0) + (props.width ?? 0) / 2} y={(props.y ?? 0) - 16}
+        textAnchor="middle" fontSize={10} fontWeight={700} fill={color}>
+        {p.margin_pct}%
+      </text>
     );
   }
   function FunnelTip({ active, payload }: { active?: boolean; payload?: { payload: typeof funnelData[number] }[] }) {
@@ -1237,17 +1264,22 @@ function StatisticsTab() {
           {marginFiltered.length === 0 ? (
             <div className="state">해당 단계의 프로젝트가 없습니다.</div>
           ) : (
-            <ResponsiveContainer width="100%" height={320}>
-              <BarChart data={marginFiltered} margin={{ top: 8, right: 16, bottom: 48, left: 8 }} barGap={2}>
+            <ResponsiveContainer width="100%" height={340}>
+              <BarChart data={marginFiltered} margin={{ top: 28, right: 16, bottom: 64, left: 8 }} barGap={2}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#eef1f5" />
-                <XAxis dataKey="name" tick={{ fontSize: 10 }} interval={0} angle={-30} textAnchor="end" height={60} />
+                <XAxis dataKey="name" interval={0} height={78} tick={<MarginTick />} />
                 <YAxis tickFormatter={compact} tick={{ fontSize: 11 }} width={48} />
                 <Tooltip content={<MarginTip />} cursor={{ fill: "rgba(0,85,168,0.05)" }} />
-                <Bar dataKey="sales" name="Sales" radius={[3, 3, 0, 0]}>
+                <Bar dataKey="sales" name="Sales" radius={[3, 3, 0, 0]} maxBarSize={16}>
                   {marginFiltered.map((p, i) => <Cell key={i} fill={stageColor(p.stage, "sales")} />)}
+                  <LabelList dataKey="sales" position="top" formatter={(v) => compact(Number(v) || 0)}
+                    style={{ fontSize: 9, fill: "#374151" }} />
+                  <LabelList dataKey="margin_pct" content={<MarginPctLabel />} />
                 </Bar>
-                <Bar dataKey="purchase" name="Purchase" radius={[3, 3, 0, 0]}>
+                <Bar dataKey="purchase" name="Purchase" radius={[3, 3, 0, 0]} maxBarSize={16}>
                   {marginFiltered.map((p, i) => <Cell key={i} fill={stageColor(p.stage, "purchase")} />)}
+                  <LabelList dataKey="purchase" position="top" formatter={(v) => compact(Number(v) || 0)}
+                    style={{ fontSize: 9, fill: "#9ca3af" }} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>

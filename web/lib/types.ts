@@ -1022,7 +1022,7 @@ export type StatFunnel = {
   quote_rate: number; order_rate: number; revenue_rate: number;
 };
 export type StatProjectMargin = {
-  project_no: string; customer: string; stage: string;   // Quoted | PO | Invoiced
+  project_no: string; project_title: string; customer: string; stage: string;   // Quoted | PO | Invoiced
   sales_usd: number; purchase_usd: number; margin_usd: number; margin_pct: number;
 };
 export type StatisticsData = {
