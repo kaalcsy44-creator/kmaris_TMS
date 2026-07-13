@@ -1585,6 +1585,9 @@ export function PipelineModal({
   const [selectedStage, setSelectedStage] = useState<StageTabKey>(
     Math.min(Math.max(initialStage || r.stage || 1, 1), 11)
   );
+  // 모바일 전용: 프로젝트 정보/단계 상세를 동시에 띄우면 좁아, 탭으로 하나씩 전환.
+  // (데스크톱은 좌우 2단으로 함께 보이므로 이 값은 CSS 상 무시된다.)
+  const [mobilePane, setMobilePane] = useState<"info" | "stage">("stage");
   // 좌측 기본정보 패널: 구분선 드래그로 폭 조절 + 토글 버튼으로 숨김. localStorage 로 유지.
   const layoutRef = useRef<HTMLDivElement>(null);
   const [infoWidth, setInfoWidth] = useState<number>(() => {
@@ -1958,8 +1961,29 @@ export function PipelineModal({
 
         <div className="pl-modal-body">
           <div className="intl-detail">
+            {/* 모바일 전환 탭 — 좁은 화면에서만 노출(데스크톱은 CSS 로 숨김). */}
+            <div className="pl-pane-tabs" role="tablist" aria-label="Panel">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={mobilePane === "info"}
+                className={mobilePane === "info" ? "on" : ""}
+                onClick={() => setMobilePane("info")}
+              >
+                Project info
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={mobilePane === "stage"}
+                className={mobilePane === "stage" ? "on" : ""}
+                onClick={() => setMobilePane("stage")}
+              >
+                {selectedStage}. {rSteps[selectedStage - 1] ?? "Detail"}
+              </button>
+            </div>
             <div
-              className={`project-workspace-layout${infoCollapsed ? " info-collapsed" : ""}`}
+              className={`project-workspace-layout mobile-pane-${mobilePane}${infoCollapsed ? " info-collapsed" : ""}`}
               ref={layoutRef}
               style={{
                 gridTemplateColumns: infoCollapsed
