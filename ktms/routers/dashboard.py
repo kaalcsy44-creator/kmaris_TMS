@@ -759,7 +759,9 @@ def statistics(months: int = 12):
                 cur = _cur2(qtn.currency)
                 amt = _quotation_total(qtn.items or [], getattr(qtn, "discount_pct", 0) or 0)
             else:
-                cur = "USD"
+                # 견적 미연결 오더는 오더 자체 통화로 집계한다. (예전엔 무조건 USD 로 넣어
+                # order.currency='KRW' 인 오더의 KRW 금액이 USD 버킷을 오염시켰다.)
+                cur = _cur2(getattr(o, "currency", None) or "USD")
                 amt = _total_amount(o.items or [])
             order_series[cur][mo] += amt
 
@@ -923,9 +925,9 @@ def statistics_debug(month: str | None = None):
                 amt = _quotation_total(qtn.items or [], getattr(qtn, "discount_pct", 0) or 0)
                 src = f"quotation #{qtn.id} · currency={qtn.currency!r}"
             else:
-                bucket = "USD"
+                bucket = _cur2(getattr(o, "currency", None) or "USD")
                 amt = _total_amount(o.items or [])
-                src = f"NO quotation → forced USD · order.currency={getattr(o, 'currency', None)!r}"
+                src = f"no quotation → order.currency={getattr(o, 'currency', None)!r}"
             won[bucket] += amt
             won_rows.append({
                 "ref": o.po_no or f"order#{o.id}",

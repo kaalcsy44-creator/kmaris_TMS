@@ -77,9 +77,9 @@ def main() -> None:
                 amt = _quotation_total(qtn.items or [], getattr(qtn, "discount_pct", 0) or 0)
                 src = f"qtn#{qtn.id} currency={qtn.currency!r}"
             else:
-                bucket = "USD"
+                bucket = _cur2(getattr(o, "currency", None) or "USD")
                 amt = _total_amount(o.items or [])
-                src = "NO-QUOTATION → 강제 USD, order.items amount 합"
+                src = f"no quotation → order.currency={getattr(o, 'currency', None)!r}"
             won[bucket] += amt
             rfq = _rfq_for_order(s, o)
             rows.append((o.po_no or f"order#{o.id}", cust.get(o.customer_id, "—"),
