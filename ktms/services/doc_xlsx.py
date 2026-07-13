@@ -212,7 +212,7 @@ def make_commercial_invoice_xlsx(
     ship_to = [
         ("Ship Agent", shipping.get("sm_consignee", "")),
         ("Vessel / IMO", " / ".join(x for x in [shipping.get("sm_vessel", "") or vessel.get("name", ""), vessel.get("imo", "")] if x)),
-        ("B/L or AWB No.", shipping.get("bl_awb_no", "")),
+        ("", ""),
     ]
     for i in range(3):
         merge(r, 1, r, 4); put(r, 1, buyer[i], font=normal, align=left); bd(r, 1, r, 4)

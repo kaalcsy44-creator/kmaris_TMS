@@ -702,7 +702,7 @@ def _make_commercial_invoice_pdf(data: Dict[str, Any], company: Dict[str, Any]) 
              f"Contact: {customer.get('contact', '')}    {customer.get('email', '')}"]
     ship = [("Ship Agent", shipping.get("sm_consignee", "")),
             ("Vessel / IMO", " / ".join(x for x in [shipping.get("sm_vessel") or vessel.get("name", ""), vessel.get("imo", "")] if x)),
-            ("B/L or AWB No.", shipping.get("bl_awb_no", ""))]
+            ("", "")]
     rows = [[p("CONSIGNEE / BUYER", "section"), "", p("SHIP TO / C/O", "section"), ""]]
     rows += [[p(buyer[i]), "", p(ship[i][0]), p(ship[i][1])] for i in range(3)]
     consignee = Table(rows, colWidths=[col_widths[0] + col_widths[1], col_widths[2] + col_widths[3],
