@@ -13,16 +13,18 @@ import {
   fetchCustomers,
   fetchSettingsVessels,
   fetchStatistics,
+  fetchStatisticsDebug,
   createSchedule,
   updateSchedule,
   deleteSchedule,
   type ScheduleSave,
 } from "@/lib/api";
 import { useCachedData, invalidateCache } from "@/lib/useCachedData";
-import { can, canEditDeal, getUser } from "@/lib/auth";
+import { can, canEditDeal, getUser, isAdmin } from "@/lib/auth";
 import type {
   QtnRow, PipelineRow, ArRow, PoRow, MarketingRow, MarketingOverview,
   ScheduleRow, CustomerOption, StatisticsData, StatAlertRow, CurrencyKey,
+  StatDebugData,
 } from "@/lib/types";
 import { PipelineModal } from "@/components/screens/ProgressScreen";
 import { MarketingForm, emptyForm as emptyMarketingForm } from "@/components/screens/MarketingScreen";
@@ -895,6 +897,11 @@ function StatisticsTab() {
   const [cur, setCur] = useState<CurrencyKey>("USD");
   // 금액 KPI 월 이동 — null 이면 최신(이번 달). 절대 인덱스로 저장하고 로드 후 clamp.
   const [monthIdx, setMonthIdx] = useState<number | null>(null);
+  // 관리자 전용 금액 KPI 감사 패널(행 단위 내역). 필요할 때만 온디맨드 로드.
+  const [audit, setAudit] = useState<StatDebugData | null>(null);
+  const [auditOpen, setAuditOpen] = useState(false);
+  const [auditBusy, setAuditBusy] = useState(false);
+  const [auditErr, setAuditErr] = useState<string | null>(null);
 
   if (error && !data) {
     return <div className="state error">API error: {error.message}</div>;
@@ -937,6 +944,24 @@ function StatisticsTab() {
     if (Math.abs(n) >= 1_000) return `${Math.round(n / 1_000)}K`;
     return String(Math.round(n));
   };
+
+  const showAudit = isAdmin();
+  async function loadAudit() {
+    const nextOpen = !auditOpen;
+    setAuditOpen(nextOpen);
+    if (nextOpen && !audit) {
+      setAuditBusy(true);
+      setAuditErr(null);
+      try {
+        setAudit(await fetchStatisticsDebug(selMonth));
+      } catch (e) {
+        setAuditErr(e instanceof Error ? e.message : "Failed to load");
+      } finally {
+        setAuditBusy(false);
+      }
+    }
+  }
+  const money = (n: number) => Math.round(n).toLocaleString();
 
   return (
     <>
@@ -993,6 +1018,93 @@ function StatisticsTab() {
           accent={ops.urgent ? "#e8830c" : "#0055a8"}
           chip={{ text: `Expiring ${ops.expiring}`, tone: ops.expiring ? "amber" : "gray" }} />
       </div>
+
+      {/* 관리자 전용 감사 — 금액 KPI 가 어떤 오더·견적·AR 에서 왔는지 행 단위로 확인.
+          통화 오염(예: KRW 금액이 USD 로 계상) 원인을 화면에서 바로 특정한다. */}
+      {showAudit ? (
+        <div className="stat-audit">
+          <button type="button" className="stat-audit-toggle" onClick={loadAudit}>
+            {auditOpen ? "▾" : "▸"} 🔍 Audit money KPIs — trace Orders Won / Quoted / Revenue rows
+          </button>
+          {auditOpen ? (
+            auditBusy ? (
+              <div className="state">Loading breakdown…</div>
+            ) : auditErr ? (
+              <div className="state error">{auditErr}</div>
+            ) : audit ? (
+              <div className="stat-audit-body">
+                <p className="stat-audit-note">
+                  Month <b>{audit.month}</b>. Amounts are shown in the currency bucket each row lands in.
+                  Rows marked <span className="stat-audit-flag">⚠ suspect</span> are large amounts counted as USD —
+                  the likely cross-currency contamination.
+                </p>
+
+                <div className="stat-audit-tbl">
+                  <div className="stat-audit-h">
+                    Orders Won → USD {money(audit.orders_won.total.USD)} · KRW {money(audit.orders_won.total.KRW)}
+                  </div>
+                  <table className="mini wide">
+                    <thead><tr><th>Ref</th><th>Customer</th><th>Date</th><th>Bucket</th><th style={{ textAlign: "right" }}>Amount</th><th>Source</th></tr></thead>
+                    <tbody>
+                      {audit.orders_won.rows.length === 0 ? (
+                        <tr><td colSpan={6} className="muted">No orders this month.</td></tr>
+                      ) : audit.orders_won.rows.map((r, i) => (
+                        <tr key={i} className={r.suspect ? "stat-audit-suspect" : ""}>
+                          <td>{r.ref}</td><td>{r.customer}</td><td>{r.date || "—"}</td>
+                          <td>{r.bucket}{r.suspect ? " ⚠" : ""}</td>
+                          <td style={{ textAlign: "right" }}>{money(r.amount)}</td>
+                          <td className="muted">{r.source}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="stat-audit-tbl">
+                  <div className="stat-audit-h">
+                    Quoted → USD {money(audit.quoted.total.USD)} · KRW {money(audit.quoted.total.KRW)}
+                  </div>
+                  <table className="mini wide">
+                    <thead><tr><th>Ref</th><th>Bucket</th><th>Raw currency</th><th style={{ textAlign: "right" }}>Amount</th></tr></thead>
+                    <tbody>
+                      {audit.quoted.rows.length === 0 ? (
+                        <tr><td colSpan={4} className="muted">No quotes this month.</td></tr>
+                      ) : audit.quoted.rows.map((r, i) => (
+                        <tr key={i}>
+                          <td>{r.ref}</td><td>{r.bucket}</td>
+                          <td className="muted">{r.raw_currency ?? "(null)"}</td>
+                          <td style={{ textAlign: "right" }}>{money(r.amount)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="stat-audit-tbl">
+                  <div className="stat-audit-h">
+                    Revenue → USD {money(audit.revenue.total.USD)} · KRW {money(audit.revenue.total.KRW)}
+                    <span className="muted"> (only rows with a tax-invoice month = {audit.month} are counted)</span>
+                  </div>
+                  <table className="mini wide">
+                    <thead><tr><th>Ref</th><th>Tax-invoice month</th><th>Bucket</th><th style={{ textAlign: "right" }}>Amount</th><th>Counted</th></tr></thead>
+                    <tbody>
+                      {audit.revenue.rows.length === 0 ? (
+                        <tr><td colSpan={5} className="muted">No AR records.</td></tr>
+                      ) : audit.revenue.rows.map((r, i) => (
+                        <tr key={i} className={r.counted ? "" : "muted"}>
+                          <td>{r.ref}</td><td>{r.issue_month}</td><td>{r.bucket}</td>
+                          <td style={{ textAlign: "right" }}>{money(r.amount)}</td>
+                          <td>{r.counted ? "✓" : "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : null
+          ) : null}
+        </div>
+      ) : null}
 
       {/* ② 추이·구성 차트 (2×2) ------------------------------------------- */}
       <div className="stat-charts">

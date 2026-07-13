@@ -45,6 +45,7 @@ import type {
   MarketingOverview,
   ScheduleRow,
   StatisticsData,
+  StatDebugData,
   SearchData,
 } from "./types";
 
@@ -326,6 +327,12 @@ export function fetchDashboard(): Promise<DashboardData> {
 
 export function fetchStatistics(months = 12): Promise<StatisticsData> {
   return get<StatisticsData>(`/api/admin/statistics?months=${months}`);
+}
+
+// 금액 KPI 감사 — Orders Won/Quoted/Revenue 가 어떤 오더·견적·AR 에서 왔는지 행 단위.
+export function fetchStatisticsDebug(month?: string): Promise<StatDebugData> {
+  const q = month ? `?month=${encodeURIComponent(month)}` : "";
+  return get<StatDebugData>(`/api/admin/statistics-debug${q}`);
 }
 
 export function fetchVendors(): Promise<VendorOption[]> {

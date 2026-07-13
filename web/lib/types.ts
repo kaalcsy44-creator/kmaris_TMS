@@ -1033,6 +1033,25 @@ export type StatisticsData = {
   };
 };
 
+// 금액 KPI 감사(statistics-debug) — Orders Won/Quoted/Revenue 행 단위 내역.
+export type StatDebugSection<Row> = { rows: Row[]; total: Record<CurrencyKey, number> };
+export type StatDebugWonRow = {
+  ref: string; customer: string; date: string;
+  bucket: CurrencyKey; amount: number; source: string; suspect: boolean;
+};
+export type StatDebugQuoteRow = {
+  ref: string; bucket: CurrencyKey; raw_currency: string | null; amount: number;
+};
+export type StatDebugRevRow = {
+  ref: string; issue_month: string; bucket: CurrencyKey; amount: number; counted: boolean;
+};
+export type StatDebugData = {
+  month: string;
+  orders_won: StatDebugSection<StatDebugWonRow>;
+  quoted: StatDebugSection<StatDebugQuoteRow>;
+  revenue: StatDebugSection<StatDebugRevRow>;
+};
+
 export type MarketingOverview = {
   recent: MarketingRow[];
   follow_ups: MarketingRow[];

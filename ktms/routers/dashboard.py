@@ -884,3 +884,104 @@ def statistics(months: int = 12):
         }
     finally:
         s.close()
+
+
+@app.get("/api/admin/statistics-debug", dependencies=[Depends(require_token)])
+def statistics_debug(month: str | None = None):
+    """Statistics 금액 KPI(Orders Won / Quoted / Revenue) 감사 — 각 오더·견적·AR 이
+    어떤 통화 버킷에 얼마로 들어갔는지 '행 단위'로 반환한다. 값은 statistics() 와
+    동일 로직으로 산출하며 SELECT 만 하는 읽기 전용이다.
+    'Orders Won 4,394,340 USD 가 맞는가?' 를 화면에서 바로 검증하기 위한 용도."""
+    s = get_session()
+    try:
+        now_kst = datetime.now(timezone.utc) + timedelta(hours=9)
+        y, m, months = now_kst.year, now_kst.month, []
+        for _ in range(12):
+            months.append(f"{y:04d}-{m:02d}")
+            m -= 1
+            if m == 0:
+                m, y = 12, y - 1
+        months.reverse()
+        cur_month = month or months[-1]
+        cust = {c.id: c.name for c in s.query(Customer).all()}
+        order_map = {o.id: o for o in s.query(Order).all()}
+
+        def _issue_month(rfq):
+            sd = (getattr(rfq, "stage_dates", None) or {}) if rfq else {}
+            return _month_key(sd.get("11") or "")
+
+        # ── Orders Won — statistics() order_series 와 동일 로직 ──
+        won = {"USD": 0.0, "KRW": 0.0}
+        won_rows = []
+        for o in order_map.values():
+            mo = _month_key(o.date or (o.created_at.isoformat() if o.created_at else ""))
+            if mo != cur_month:
+                continue
+            qtn = s.query(Quotation).filter_by(id=o.quotation_id).first() if o.quotation_id else None
+            if qtn:
+                bucket = _cur2(qtn.currency)
+                amt = _quotation_total(qtn.items or [], getattr(qtn, "discount_pct", 0) or 0)
+                src = f"quotation #{qtn.id} · currency={qtn.currency!r}"
+            else:
+                bucket = "USD"
+                amt = _total_amount(o.items or [])
+                src = f"NO quotation → forced USD · order.currency={getattr(o, 'currency', None)!r}"
+            won[bucket] += amt
+            won_rows.append({
+                "ref": o.po_no or f"order#{o.id}",
+                "customer": cust.get(o.customer_id, "—"),
+                "date": o.date or "",
+                "bucket": bucket,
+                "amount": round(amt, 2),
+                "source": src,
+                # USD 버킷에 10만 넘게 들어간 행 = 통화 오염 유력 용의자
+                "suspect": bool(bucket == "USD" and amt > 100000),
+            })
+        won_rows.sort(key=lambda x: -x["amount"])
+
+        # ── Quoted — quote_series 와 동일 로직 ──
+        quoted = {"USD": 0.0, "KRW": 0.0}
+        q_rows = []
+        for q in s.query(Quotation).all():
+            mo = _month_key(getattr(q, "sent_at", None) or q.sent_date or q.date or "")
+            if mo != cur_month:
+                continue
+            bucket = _cur2(q.currency)
+            amt = _quotation_total(q.items or [], getattr(q, "discount_pct", 0) or 0)
+            quoted[bucket] += amt
+            q_rows.append({
+                "ref": q.qtn_no or f"qtn#{q.id}",
+                "bucket": bucket,
+                "raw_currency": q.currency,
+                "amount": round(amt, 2),
+            })
+        q_rows.sort(key=lambda x: -x["amount"])
+
+        # ── Revenue — rev_series(세금계산서 11단계 발행월) 와 동일 로직 ──
+        rev = {"USD": 0.0, "KRW": 0.0}
+        r_rows = []
+        for a in s.query(ARRecord).all():
+            o = order_map.get(a.order_id)
+            rfq = _rfq_for_order(s, o) if o else None
+            mo = _issue_month(rfq)
+            bucket = _cur2(a.currency)
+            in_month = (mo == cur_month)
+            if in_month:
+                rev[bucket] += float(a.invoice_amount or 0)
+            r_rows.append({
+                "ref": a.ci_no or f"ar#{a.id}",
+                "issue_month": mo or "(11단계 미입력)",
+                "bucket": bucket,
+                "amount": round(float(a.invoice_amount or 0), 2),
+                "counted": in_month,
+            })
+        r_rows.sort(key=lambda x: -x["amount"])
+
+        return {
+            "month": cur_month,
+            "orders_won": {"rows": won_rows, "total": {k: round(v, 2) for k, v in won.items()}},
+            "quoted": {"rows": q_rows, "total": {k: round(v, 2) for k, v in quoted.items()}},
+            "revenue": {"rows": r_rows, "total": {k: round(v, 2) for k, v in rev.items()}},
+        }
+    finally:
+        s.close()
