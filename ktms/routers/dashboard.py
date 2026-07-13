@@ -5,6 +5,7 @@ from _core import (
     ARRecord,
     ARStatus,
     CommercialInvoice,
+    TaxInvoiceData,
     Customer,
     Depends,
     FollowUpLevel,
@@ -723,16 +724,35 @@ def statistics(months: int = 12):
         cust_rev: dict[str, dict[str, float]] = {c: {} for c in CURS}
         item_rev: dict[str, dict[str, dict]] = {c: {} for c in CURS}
 
-        # RFQ.id → 세금계산서 발행월(stage_dates["11"]) 매핑
-        def _issue_month(rfq) -> str:
+        # ── 세금계산서 발행월 매핑 ───────────────────────────────────────────────
+        # 매출 인식 시점 = 세금계산서(TaxInvoiceData) 실제 발행일. AR 은 CI 를 거쳐
+        # 세금계산서로 연결된다. (예전엔 stage_dates["11"](=결제완료, 게다가 수동)을
+        # 읽어 세금계산서를 발행해도 매출이 0으로 잡히던 버그. 11단계 재편성으로
+        # 'Tax Invoice Issued' 는 10번이 됐고, 실제 발행일은 문서(date)에 있다.)
+        _all_ci = s.query(CommercialInvoice).all()
+        _ci_by_no = {c.ci_no: c for c in _all_ci if c.ci_no}
+        _ci_by_order: dict = {}
+        for c in _all_ci:
+            _ci_by_order.setdefault(c.order_id, c)   # 오더당 가장 이른 CI
+        _tax_date_by_ci: dict = {}
+        for t in s.query(TaxInvoiceData).all():
+            if t.date and t.ci_id not in _tax_date_by_ci:
+                _tax_date_by_ci[t.ci_id] = t.date
+
+        def _issue_month(a) -> str:
+            ci = _ci_by_no.get(a.ci_no) or _ci_by_order.get(a.order_id)
+            if ci and _tax_date_by_ci.get(ci.id):
+                return _month_key(_tax_date_by_ci[ci.id])
+            # 폴백: 수동 '세금계산서 발행'(stage 10) 완료일
+            o = order_map.get(a.order_id)
+            rfq = _rfq_for_order(s, o) if o else None
             sd = (getattr(rfq, "stage_dates", None) or {}) if rfq else {}
-            return _month_key(sd.get("11") or "")
+            return _month_key(sd.get("10") or "")
 
         # ── 매출(세금계산서 발행 기준) + 고객사 랭킹 ─────────────────────────────
         for a in s.query(ARRecord).all():
             o = order_map.get(a.order_id)
-            rfq = _rfq_for_order(s, o) if o else None
-            mo = _issue_month(rfq)
+            mo = _issue_month(a)
             if not mo or mo not in month_set:
                 continue
             cur = _cur2(a.currency)
@@ -908,9 +928,25 @@ def statistics_debug(month: str | None = None):
         cust = {c.id: c.name for c in s.query(Customer).all()}
         order_map = {o.id: o for o in s.query(Order).all()}
 
-        def _issue_month(rfq):
+        # 세금계산서 발행월 — statistics() 와 동일하게 TaxInvoiceData.date 기준(폴백 stage 10).
+        _all_ci = s.query(CommercialInvoice).all()
+        _ci_by_no = {c.ci_no: c for c in _all_ci if c.ci_no}
+        _ci_by_order: dict = {}
+        for c in _all_ci:
+            _ci_by_order.setdefault(c.order_id, c)
+        _tax_date_by_ci: dict = {}
+        for t in s.query(TaxInvoiceData).all():
+            if t.date and t.ci_id not in _tax_date_by_ci:
+                _tax_date_by_ci[t.ci_id] = t.date
+
+        def _issue_month(a):
+            ci = _ci_by_no.get(a.ci_no) or _ci_by_order.get(a.order_id)
+            if ci and _tax_date_by_ci.get(ci.id):
+                return _month_key(_tax_date_by_ci[ci.id])
+            o = order_map.get(a.order_id)
+            rfq = _rfq_for_order(s, o) if o else None
             sd = (getattr(rfq, "stage_dates", None) or {}) if rfq else {}
-            return _month_key(sd.get("11") or "")
+            return _month_key(sd.get("10") or "")
 
         # ── Orders Won — statistics() order_series 와 동일 로직 ──
         won = {"USD": 0.0, "KRW": 0.0}
@@ -959,20 +995,18 @@ def statistics_debug(month: str | None = None):
             })
         q_rows.sort(key=lambda x: -x["amount"])
 
-        # ── Revenue — rev_series(세금계산서 11단계 발행월) 와 동일 로직 ──
+        # ── Revenue — rev_series(세금계산서 발행월) 와 동일 로직 ──
         rev = {"USD": 0.0, "KRW": 0.0}
         r_rows = []
         for a in s.query(ARRecord).all():
-            o = order_map.get(a.order_id)
-            rfq = _rfq_for_order(s, o) if o else None
-            mo = _issue_month(rfq)
+            mo = _issue_month(a)
             bucket = _cur2(a.currency)
             in_month = (mo == cur_month)
             if in_month:
                 rev[bucket] += float(a.invoice_amount or 0)
             r_rows.append({
                 "ref": a.ci_no or f"ar#{a.id}",
-                "issue_month": mo or "(11단계 미입력)",
+                "issue_month": mo or "(발행일 없음)",
                 "bucket": bucket,
                 "amount": round(float(a.invoice_amount or 0), 2),
                 "counted": in_month,

@@ -31,7 +31,7 @@ from _core import (  # noqa: E402
     _rfq_for_order,
 )
 from db.models import (  # noqa: E402
-    Order, Quotation, ARRecord, RFQ, Customer,
+    Order, Quotation, ARRecord, RFQ, Customer, CommercialInvoice, TaxInvoiceData,
 )
 
 
@@ -47,9 +47,6 @@ def month_buckets(n: int = 12) -> list[str]:
     return out
 
 
-def _issue_month(rfq) -> str:
-    sd = (getattr(rfq, "stage_dates", None) or {}) if rfq else {}
-    return _month_key(sd.get("11") or "")
 
 
 def main() -> None:
@@ -105,25 +102,42 @@ def main() -> None:
             print(f"  {qn:<24} {bucket} (raw={rawcur!r}) {amt:>14,.0f}")
         print(f"  → 합계  USD {quoted['USD']:,.0f} · KRW {quoted['KRW']:,.0f}\n")
 
-        # ── Revenue (매출) — 세금계산서 발행(11단계)월 기준 ──────────────────
-        print("── Revenue (rev_series) — 세금계산서(11단계 stage_dates['11'])월 기준 ──")
+        # ── Revenue (매출) — 세금계산서(TaxInvoiceData) 발행일 기준 ──────────────
+        print("── Revenue (rev_series) — 세금계산서 발행일(TaxInvoiceData.date, 폴백 stage10)월 기준 ──")
+        all_ci = s.query(CommercialInvoice).all()
+        ci_by_no = {c.ci_no: c for c in all_ci if c.ci_no}
+        ci_by_order: dict = {}
+        for c in all_ci:
+            ci_by_order.setdefault(c.order_id, c)
+        tax_date_by_ci: dict = {}
+        for t in s.query(TaxInvoiceData).all():
+            if t.date and t.ci_id not in tax_date_by_ci:
+                tax_date_by_ci[t.ci_id] = t.date
+
+        def _issue_month(a) -> str:
+            ci = ci_by_no.get(a.ci_no) or ci_by_order.get(a.order_id)
+            if ci and tax_date_by_ci.get(ci.id):
+                return _month_key(tax_date_by_ci[ci.id])
+            o = order_map.get(a.order_id)
+            rfq = _rfq_for_order(s, o) if o else None
+            sd = (getattr(rfq, "stage_dates", None) or {}) if rfq else {}
+            return _month_key(sd.get("10") or "")
+
         rev = {"USD": 0.0, "KRW": 0.0}
         rrows = []
         for a in s.query(ARRecord).all():
-            o = order_map.get(a.order_id)
-            rfq = _rfq_for_order(s, o) if o else None
-            mo = _issue_month(rfq)
+            mo = _issue_month(a)
             bucket = _cur2(a.currency)
             in_month = (mo == cur_month)
             if in_month:
                 rev[bucket] += float(a.invoice_amount or 0)
-            rrows.append((a.ci_no or f"ar#{a.id}", mo or "(11단계 미입력)",
+            rrows.append((a.ci_no or f"ar#{a.id}", mo or "(발행일 없음)",
                           bucket, float(a.invoice_amount or 0), in_month))
         for ci, mo, bucket, amt, inm in sorted(rrows, key=lambda x: -x[3]):
             mark = "✓" if inm else " "
             print(f"  {mark} {ci:<20} 발행월={mo:<18} {bucket} {amt:>14,.0f}")
         print(f"  → 합계  USD {rev['USD']:,.0f} · KRW {rev['KRW']:,.0f}")
-        print("    (11단계 미입력 AR 은 Revenue 에서 제외됨 — Sales 위젯과 불일치의 원인)\n")
+        print("    (세금계산서 발행일이 없는 AR 은 Revenue 에서 제외됨)\n")
     finally:
         s.close()
 
