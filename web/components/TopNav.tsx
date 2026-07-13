@@ -109,8 +109,18 @@ export default function TopNav({ active }: { active: string }) {
             <span className="avatar">{initial}</span>
             <span className="uname">{user?.username ?? ""}</span>
           </span>
-          <button className="topnav-logout" onClick={logout}>
-            Logout
+          <button
+            className="topnav-logout"
+            onClick={logout}
+            title="Logout"
+            aria-label="Logout"
+          >
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+              <path
+                fill="currentColor"
+                d="M16 13v-2H7V8l-5 4 5 4v-3h9Zm3-10H11a2 2 0 0 0-2 2v3h2V5h8v14h-8v-3H9v3a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2Z"
+              />
+            </svg>
           </button>
         </div>
       </div>

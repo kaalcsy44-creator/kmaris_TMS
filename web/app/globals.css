@@ -238,12 +238,15 @@ body {
   white-space: nowrap;
 }
 .topnav-logout {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex: none;
   background: transparent;
   border: 1px solid rgba(255, 255, 255, 0.18);
   color: #c4cfde;
-  font-size: 11.5px;
-  font-weight: 600;
-  padding: 6px 11px;
   border-radius: 7px;
   cursor: pointer;
 }
