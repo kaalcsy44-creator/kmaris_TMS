@@ -963,6 +963,58 @@ function StatisticsTab() {
   }
   const money = (n: number) => Math.round(n).toLocaleString();
 
+  // 신규 차트 데이터 -------------------------------------------------------
+  const rfqData = stat.months.map((m, i) => ({
+    month: monthLabel(m), count: stat.rfq_count[i] || 0, detail: stat.rfq_detail[i] || [],
+  }));
+  const marginData = stat.project_margin.map((p) => ({ ...p, name: p.project_no }));
+  const funnelData = [
+    { stage: "RFQ", count: stat.funnel.rfq, rate: 100, label: "" },
+    { stage: "Quote", count: stat.funnel.quote, rate: stat.funnel.quote_rate, label: "Quote / RFQ" },
+    { stage: "Order (PO)", count: stat.funnel.order, rate: stat.funnel.order_rate, label: "PO / Quote" },
+    { stage: "Revenue", count: stat.funnel.revenue, rate: stat.funnel.revenue_rate, label: "Revenue / PO" },
+  ];
+  const marginDisp = (usd: number) =>
+    cur === "KRW" ? `KRW ${money(usd * stat.usd_krw_rate)}` : `USD ${money(usd)}`;
+
+  // 커스텀 호버 툴팁(상세내역) --------------------------------------------
+  function RfqTip({ active, payload }: { active?: boolean; payload?: { payload: typeof rfqData[number] }[] }) {
+    if (!active || !payload?.length) return null;
+    const p = payload[0].payload;
+    return (
+      <div className="stat-tip">
+        <div className="stat-tip-h">{p.month} · RFQ {p.count}건</div>
+        {p.detail.slice(0, 12).map((d, i) => (
+          <div key={i} className="stat-tip-row"><b>{d.rfq_no}</b> {d.customer}{d.work_type ? ` · ${d.work_type}` : ""}</div>
+        ))}
+        {p.detail.length > 12 ? <div className="stat-tip-more">+{p.detail.length - 12} more…</div> : null}
+        {p.count === 0 ? <div className="stat-tip-row muted">수신 없음</div> : null}
+      </div>
+    );
+  }
+  function MarginTip({ active, payload }: { active?: boolean; payload?: { payload: typeof marginData[number] }[] }) {
+    if (!active || !payload?.length) return null;
+    const p = payload[0].payload;
+    return (
+      <div className="stat-tip">
+        <div className="stat-tip-h">{p.project_no} · {p.customer}</div>
+        <div className="stat-tip-row">Sales: {marginDisp(p.sales_usd)}</div>
+        <div className="stat-tip-row">Purchase: {marginDisp(p.purchase_usd)}</div>
+        <div className="stat-tip-row"><b>Margin: {marginDisp(p.margin_usd)} ({p.margin_pct}%)</b></div>
+      </div>
+    );
+  }
+  function FunnelTip({ active, payload }: { active?: boolean; payload?: { payload: typeof funnelData[number] }[] }) {
+    if (!active || !payload?.length) return null;
+    const p = payload[0].payload;
+    return (
+      <div className="stat-tip">
+        <div className="stat-tip-h">{p.stage}: {p.count}건</div>
+        {p.label ? <div className="stat-tip-row">{p.label} = <b>{p.rate}%</b></div> : <div className="stat-tip-row muted">기준(전체)</div>}
+      </div>
+    );
+  }
+
   return (
     <>
       <div className="stat-toolbar">
@@ -1108,8 +1160,62 @@ function StatisticsTab() {
         </div>
       ) : null}
 
-      {/* ② 추이·구성 차트 (2×2) ------------------------------------------- */}
+      {/* ② 추이·구성 차트 (2열) ------------------------------------------- */}
       <div className="stat-charts">
+        {/* 월간 RFQ 수신 건수 — 호버 시 해당 월 RFQ 목록 표시 */}
+        <div className="stat-chart">
+          <SubHead title="Monthly RFQ Received" sub="RFQ 수신 건수 · 호버 상세" />
+          <ResponsiveContainer width="100%" height={240}>
+            <BarChart data={rfqData} margin={{ top: 8, right: 16, bottom: 0, left: 8 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#eef1f5" />
+              <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+              <YAxis allowDecimals={false} tick={{ fontSize: 11 }} width={32} />
+              <Tooltip content={<RfqTip />} />
+              <Bar dataKey="count" fill="#0055a8" name="RFQ" radius={[3, 3, 0, 0]}>
+                <LabelList dataKey="count" position="top" style={{ fontSize: 11, fill: "#45526a" }} />
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Hit-rate 퍼널 — RFQ→Quote→PO→Revenue 전환. 호버 시 전환율 */}
+        <div className="stat-chart">
+          <SubHead title="Conversion Funnel" sub="RFQ → Quote → PO → Revenue" />
+          <ResponsiveContainer width="100%" height={240}>
+            <BarChart data={funnelData} layout="vertical" margin={{ top: 4, right: 40, bottom: 0, left: 8 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#eef1f5" />
+              <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} />
+              <YAxis type="category" dataKey="stage" width={92} tick={{ fontSize: 11 }} />
+              <Tooltip content={<FunnelTip />} />
+              <Bar dataKey="count" name="Count" radius={[0, 3, 3, 0]}>
+                {funnelData.map((_, i) => <Cell key={i} fill={PHASE_RAMP[i % PHASE_RAMP.length]} />)}
+                <LabelList dataKey="count" position="right" style={{ fontSize: 11, fill: "#45526a" }} />
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* 프로젝트별 마진율 — bar=마진%, 호버 시 매출/매입/마진 상세 */}
+        <div className="stat-chart stat-chart--wide">
+          <SubHead title="Project Margin %" sub="프로젝트별 (매출 − 매입) · 호버 상세" />
+          {marginData.length === 0 ? (
+            <div className="state">발주(매입)까지 있는 프로젝트가 아직 없습니다.</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={Math.max(200, marginData.length * 30 + 40)}>
+              <BarChart data={marginData} layout="vertical" margin={{ top: 4, right: 40, bottom: 0, left: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#eef1f5" />
+                <XAxis type="number" tickFormatter={(v) => `${v}%`} tick={{ fontSize: 11 }} />
+                <YAxis type="category" dataKey="name" width={140} tick={{ fontSize: 11 }} />
+                <Tooltip content={<MarginTip />} />
+                <Bar dataKey="margin_pct" name="Margin %" radius={[0, 3, 3, 0]}>
+                  {marginData.map((p, i) => <Cell key={i} fill={p.margin_pct < 0 ? "#c0392b" : "#1a7a4a"} />)}
+                  <LabelList dataKey="margin_pct" position="right" formatter={(v) => `${v}%`} style={{ fontSize: 11, fill: "#45526a" }} />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
         <div className="stat-chart">
           <SubHead title="Monthly Revenue" sub="Tax-invoiced trend" />
           <ResponsiveContainer width="100%" height={240}>

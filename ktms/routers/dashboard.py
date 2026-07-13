@@ -63,6 +63,9 @@ from _core import (
     timezone,
 )
 
+# 통계 그래프의 고정 시작 월(년, 월). 이 달부터 이번 달까지 누적 표시한다.
+STATS_START_YM = (2026, 5)
+
 
 
 @app.get("/api/admin/pipeline", dependencies=[Depends(require_token)])
@@ -701,17 +704,17 @@ def statistics(months: int = 12):
         order_map = {o.id: o for o in orders_all}
         rfq_map = {r.id: r for r in s.query(RFQ).all()}
 
-        # ── 월 버킷(최근 N개월, KST) ───────────────────────────────────────────
+        # ── 월 버킷(고정 시작월 STATS_START_YM ~ 이번 달, KST) ────────────────────
+        # 통계 그래프는 2026-05 부터 누적해서 보여준다(요청). 최대 36개월로 안전 제한.
         now_kst = datetime.now(timezone.utc) + timedelta(hours=9)
         month_labels: list[str] = []
-        y, m = now_kst.year, now_kst.month
-        for _ in range(months):
+        y, m = STATS_START_YM
+        while (y, m) <= (now_kst.year, now_kst.month):
             month_labels.append(f"{y:04d}-{m:02d}")
-            m -= 1
-            if m == 0:
-                m = 12
-                y -= 1
-        month_labels.reverse()
+            m += 1
+            if m == 13:
+                m, y = 1, y + 1
+        month_labels = month_labels[-36:] or [f"{now_kst.year:04d}-{now_kst.month:02d}"]
         month_set = set(month_labels)
         cur_month = month_labels[-1]
         prev_month = month_labels[-2] if len(month_labels) >= 2 else ""
@@ -885,6 +888,82 @@ def statistics(months: int = 12):
             if o.promised_delivery and not o.delivered_date and o.promised_delivery[:10] < today_iso
         )
 
+        # ── 월간 RFQ 수신 건수(+ 호버 상세) — 수신월(received_at/date/created_at) 기준 ──
+        def _rfq_recv_month(r) -> str:
+            recv = (getattr(r, "received_at", None) or r.date
+                    or (r.created_at.isoformat() if r.created_at else ""))
+            return _month_key(recv)
+        rfq_count = {mo: 0 for mo in month_labels}
+        rfq_detail: dict[str, list] = {mo: [] for mo in month_labels}
+        period_rfqs = []
+        for r in rfq_map.values():
+            mo = _rfq_recv_month(r)
+            if mo in month_set:
+                period_rfqs.append(r)
+                rfq_count[mo] += 1
+                rfq_detail[mo].append({
+                    "rfq_no": _rfq_no_disp(r.rfq_no),
+                    "customer": cust_names.get(r.customer_id, "—"),
+                    "work_type": _enum_val(getattr(r, "work_type", None)) if getattr(r, "work_type", None) else "",
+                })
+
+        # ── Hit-rate 퍼널 — 기간 내 RFQ 기준으로 견적→수주→매출 전환율 ──
+        rfq_ids_period = {r.id for r in period_rfqs}
+        quoted_ids = {q.rfq_id for q in s.query(Quotation).all()
+                      if q.rfq_id in rfq_ids_period and q.status != QuotationStatus.DRAFT}
+        ordered_ids = set()
+        for o in orders_all:
+            rr = _rfq_for_order(s, o)
+            if rr and rr.id in rfq_ids_period:
+                ordered_ids.add(rr.id)
+        invoiced_ids = set()
+        for a in s.query(ARRecord).all():
+            if _issue_month(a):   # 세금계산서 발행일이 있는(=매출 인식) AR
+                o = order_map.get(a.order_id)
+                rr = _rfq_for_order(s, o) if o else None
+                if rr and rr.id in rfq_ids_period:
+                    invoiced_ids.add(rr.id)
+        n_rfq, n_quote = len(rfq_ids_period), len(quoted_ids)
+        n_order, n_rev = len(ordered_ids), len(invoiced_ids)
+        funnel = {
+            "rfq": n_rfq, "quote": n_quote, "order": n_order, "revenue": n_rev,
+            "quote_rate": round(n_quote / n_rfq * 100, 1) if n_rfq else 0.0,       # Quote/RFQ
+            "order_rate": round(n_order / n_quote * 100, 1) if n_quote else 0.0,   # PO/Quote
+            "revenue_rate": round(n_rev / n_order * 100, 1) if n_order else 0.0,   # Revenue/PO
+        }
+
+        # ── 프로젝트별 마진(매출-매입, USD 환산) — 오더+발주가 있는 프로젝트만 ──
+        proj_no_map = _project_no_map(s)
+        project_margin = []
+        for r in period_rfqs:
+            prj_orders = _orders_for_rfq(s, r.id)
+            if not prj_orders:
+                continue
+            sales_usd = purchase_usd = 0.0
+            has_po = False
+            for oo in prj_orders:
+                oc = (getattr(oo, "currency", None) or "USD").upper()
+                st = _total_amount(oo.items or [])
+                sales_usd += (st / USD_KRW_RATE) if oc == "KRW" else st
+                for vp in s.query(PurchaseOrder).filter_by(order_id=oo.id).all():
+                    has_po = True
+                    pt = _total_amount(vp.items or []) or _items_cost_total(vp.items or [])
+                    pc = (getattr(vp, "currency", None) or oc or "USD").upper()
+                    purchase_usd += (pt / USD_KRW_RATE) if pc == "KRW" else pt
+            if not has_po:
+                continue   # 매입(발주) 근거 없으면 마진 산출 불가 → 제외
+            margin_usd = sales_usd - purchase_usd
+            project_margin.append({
+                "project_no": proj_no_map.get(r.id, "") or _rfq_no_disp(r.rfq_no),
+                "customer": cust_names.get(r.customer_id, "—"),
+                "sales_usd": round(sales_usd, 2),
+                "purchase_usd": round(purchase_usd, 2),
+                "margin_usd": round(margin_usd, 2),
+                "margin_pct": round(margin_usd / sales_usd * 100, 1) if sales_usd else 0.0,
+            })
+        project_margin.sort(key=lambda x: -x["margin_usd"])
+        project_margin = project_margin[:20]
+
         return {
             "months": month_labels,
             "currencies": list(CURS),
@@ -893,6 +972,11 @@ def statistics(months: int = 12):
                 "quote": _series_list(quote_series),
                 "order": _series_list(order_series),
             },
+            "rfq_count": [rfq_count[mo] for mo in month_labels],
+            "rfq_detail": [rfq_detail[mo] for mo in month_labels],
+            "funnel": funnel,
+            "project_margin": project_margin,
+            "usd_krw_rate": USD_KRW_RATE,
             "customer_top": _top(cust_rev, "customer"),
             "item_top": _top(item_rev, "item"),
             "kpi": _kpi(),

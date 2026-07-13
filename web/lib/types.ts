@@ -1016,10 +1016,24 @@ export type StatAlertRow = {
   currency?: CurrencyKey;
   outstanding?: number;
 };
+export type StatRfqDetailRow = { rfq_no: string; customer: string; work_type: string };
+export type StatFunnel = {
+  rfq: number; quote: number; order: number; revenue: number;
+  quote_rate: number; order_rate: number; revenue_rate: number;
+};
+export type StatProjectMargin = {
+  project_no: string; customer: string;
+  sales_usd: number; purchase_usd: number; margin_usd: number; margin_pct: number;
+};
 export type StatisticsData = {
   months: string[];
   currencies: CurrencyKey[];
   series: { revenue: StatSeries; quote: StatSeries; order: StatSeries };
+  rfq_count: number[];                 // 월간 RFQ 수신 건수(months 순서)
+  rfq_detail: StatRfqDetailRow[][];    // 월별 RFQ 상세(호버용, months 순서)
+  funnel: StatFunnel;                  // RFQ→Quote→PO→Revenue 전환
+  project_margin: StatProjectMargin[]; // 프로젝트별 마진(USD 환산)
+  usd_krw_rate: number;                // 마진 KRW 환산용 고정환율
   customer_top: StatCustomerTop;
   item_top: StatItemTop;
   kpi: Record<CurrencyKey, StatKpiCur>;
