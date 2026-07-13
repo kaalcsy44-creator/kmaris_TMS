@@ -274,7 +274,7 @@ export function setRfqCancelled(
 
 // 딜 종결 사유 코드 → 라벨. Close deal 사유 선택/표시 공용.
 export const CLOSE_REASONS: { code: string; label: string }[] = [
-  { code: "schedule", label: "Schedule delayed or cancelled" },
+  { code: "schedule", label: "Project delayed or cancelled" },
   { code: "slow_response", label: "Slower response than competitors" },
   { code: "no_quote", label: "Unable to quote" },
   { code: "other", label: "Other (specify)" },
