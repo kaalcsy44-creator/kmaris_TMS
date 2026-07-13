@@ -967,7 +967,13 @@ function StatisticsTab() {
   const rfqData = stat.months.map((m, i) => ({
     month: monthLabel(m), count: stat.rfq_count[i] || 0, detail: stat.rfq_detail[i] || [],
   }));
-  const marginData = stat.project_margin.map((p) => ({ ...p, name: p.project_no }));
+  const toCur = (usd: number) => (cur === "KRW" ? usd * stat.usd_krw_rate : usd);
+  const marginData = stat.project_margin.map((p) => ({
+    ...p,
+    name: p.project_no,
+    sales: Math.round(toCur(p.sales_usd)),
+    purchase: Math.round(toCur(p.purchase_usd)),
+  }));
   const funnelData = [
     { stage: "RFQ", count: stat.funnel.rfq, rate: 100, label: "" },
     { stage: "Quote", count: stat.funnel.quote, rate: stat.funnel.quote_rate, label: "Quote / RFQ" },
@@ -997,7 +1003,7 @@ function StatisticsTab() {
     const p = payload[0].payload;
     return (
       <div className="stat-tip">
-        <div className="stat-tip-h">{p.project_no} · {p.customer}</div>
+        <div className="stat-tip-h">{p.project_no} · {p.customer} <span className={`stat-tip-badge stage-${p.stage.toLowerCase()}`}>{p.stage}</span></div>
         <div className="stat-tip-row">Sales: {marginDisp(p.sales_usd)}</div>
         <div className="stat-tip-row">Purchase: {marginDisp(p.purchase_usd)}</div>
         <div className="stat-tip-row"><b>Margin: {marginDisp(p.margin_usd)} ({p.margin_pct}%)</b></div>
@@ -1195,22 +1201,21 @@ function StatisticsTab() {
           </ResponsiveContainer>
         </div>
 
-        {/* 프로젝트별 마진율 — bar=마진%, 호버 시 매출/매입/마진 상세 */}
+        {/* 프로젝트별 Sales/Purchase — 세로 그룹 막대. 견적·PO·Invoiced 단계 모두 포함. */}
         <div className="stat-chart stat-chart--wide">
-          <SubHead title="Project Margin %" sub="프로젝트별 (매출 − 매입) · 호버 상세" />
+          <SubHead title="Project Sales vs Purchase" sub={`프로젝트별 매출·매입 (${cur}) · 견적/PO/Invoiced · 호버 상세`} />
           {marginData.length === 0 ? (
-            <div className="state">발주(매입)까지 있는 프로젝트가 아직 없습니다.</div>
+            <div className="state">견적 이상 단계의 프로젝트가 아직 없습니다.</div>
           ) : (
-            <ResponsiveContainer width="100%" height={Math.max(200, marginData.length * 30 + 40)}>
-              <BarChart data={marginData} layout="vertical" margin={{ top: 4, right: 40, bottom: 0, left: 8 }}>
+            <ResponsiveContainer width="100%" height={320}>
+              <BarChart data={marginData} margin={{ top: 8, right: 16, bottom: 48, left: 8 }} barGap={2}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#eef1f5" />
-                <XAxis type="number" tickFormatter={(v) => `${v}%`} tick={{ fontSize: 11 }} />
-                <YAxis type="category" dataKey="name" width={140} tick={{ fontSize: 11 }} />
-                <Tooltip content={<MarginTip />} />
-                <Bar dataKey="margin_pct" name="Margin %" radius={[0, 3, 3, 0]}>
-                  {marginData.map((p, i) => <Cell key={i} fill={p.margin_pct < 0 ? "#c0392b" : "#1a7a4a"} />)}
-                  <LabelList dataKey="margin_pct" position="right" formatter={(v) => `${v}%`} style={{ fontSize: 11, fill: "#45526a" }} />
-                </Bar>
+                <XAxis dataKey="name" tick={{ fontSize: 10 }} interval={0} angle={-30} textAnchor="end" height={60} />
+                <YAxis tickFormatter={compact} tick={{ fontSize: 11 }} width={48} />
+                <Tooltip content={<MarginTip />} cursor={{ fill: "rgba(0,85,168,0.05)" }} />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Bar dataKey="sales" fill="#0055a8" name="Sales" radius={[3, 3, 0, 0]} />
+                <Bar dataKey="purchase" fill="#e8830c" name="Purchase" radius={[3, 3, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           )}

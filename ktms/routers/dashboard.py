@@ -933,35 +933,61 @@ def statistics(months: int = 12):
         }
 
         # ── 프로젝트별 마진(매출-매입, USD 환산) — 오더+발주가 있는 프로젝트만 ──
+        # 매출(sales) = 오더 있으면 오더 합, 없으면 고객 견적 합.
+        # 매입(purchase) = 발주(PO) 있으면 발주 합, 없으면 벤더 견적 합.
+        # → 견적만 낸 건·PO 받은 건·Invoiced 건을 모두 포함(단계 라벨 stage 로 구분).
         proj_no_map = _project_no_map(s)
         project_margin = []
         for r in period_rfqs:
+            # 고객 견적 합(USD)
+            cust_usd = 0.0
+            for q in s.query(Quotation).filter_by(rfq_id=r.id).all():
+                qc = (getattr(q, "currency", None) or "USD").upper()
+                qt = _total_amount(q.items or [])
+                cust_usd += (qt / USD_KRW_RATE) if qc == "KRW" else qt
+            # 벤더 견적 합(USD)
+            vend_usd = 0.0
+            _vrfq_ids = [x.id for x in s.query(VendorRFQ).filter_by(rfq_id=r.id).all()]
+            _vqs = (s.query(VendorQuote).filter(VendorQuote.vendor_rfq_id.in_(_vrfq_ids)).all()
+                    if _vrfq_ids else [])
+            for vq in _vqs:
+                vc = (getattr(vq, "currency", None) or "USD").upper()
+                vend_usd += (_items_cost_total(vq.items or []) / USD_KRW_RATE) if vc == "KRW" \
+                    else _items_cost_total(vq.items or [])
+            # 오더/발주(있으면 견적 대신 확정치 사용)
             prj_orders = _orders_for_rfq(s, r.id)
-            if not prj_orders:
-                continue
-            sales_usd = purchase_usd = 0.0
+            order_sales_usd = 0.0
+            po_purchase_usd = 0.0
             has_po = False
             for oo in prj_orders:
                 oc = (getattr(oo, "currency", None) or "USD").upper()
                 st = _total_amount(oo.items or [])
-                sales_usd += (st / USD_KRW_RATE) if oc == "KRW" else st
+                order_sales_usd += (st / USD_KRW_RATE) if oc == "KRW" else st
                 for vp in s.query(PurchaseOrder).filter_by(order_id=oo.id).all():
                     has_po = True
                     pt = _total_amount(vp.items or []) or _items_cost_total(vp.items or [])
                     pc = (getattr(vp, "currency", None) or oc or "USD").upper()
-                    purchase_usd += (pt / USD_KRW_RATE) if pc == "KRW" else pt
-            if not has_po:
-                continue   # 매입(발주) 근거 없으면 마진 산출 불가 → 제외
+                    po_purchase_usd += (pt / USD_KRW_RATE) if pc == "KRW" else pt
+
+            sales_usd = order_sales_usd if prj_orders else cust_usd
+            purchase_usd = po_purchase_usd if has_po else vend_usd
+            if sales_usd <= 0 and purchase_usd <= 0:
+                continue   # 매출·매입 근거가 전혀 없으면(견적 전) 제외
+
+            stage = ("Invoiced" if r.id in invoiced_ids
+                     else "PO" if r.id in ordered_ids
+                     else "Quoted")
             margin_usd = sales_usd - purchase_usd
             project_margin.append({
                 "project_no": proj_no_map.get(r.id, "") or _rfq_no_disp(r.rfq_no),
                 "customer": cust_names.get(r.customer_id, "—"),
+                "stage": stage,
                 "sales_usd": round(sales_usd, 2),
                 "purchase_usd": round(purchase_usd, 2),
                 "margin_usd": round(margin_usd, 2),
                 "margin_pct": round(margin_usd / sales_usd * 100, 1) if sales_usd else 0.0,
             })
-        project_margin.sort(key=lambda x: -x["margin_usd"])
+        project_margin.sort(key=lambda x: -x["sales_usd"])
         project_margin = project_margin[:20]
 
         return {

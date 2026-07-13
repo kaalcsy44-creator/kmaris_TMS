@@ -3215,6 +3215,18 @@ table.mini.items-edit td.row-tools {
   color: var(--muted);
   font-style: italic;
 }
+.stat-tip-badge {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  vertical-align: middle;
+}
+.stat-tip-badge.stage-quoted { background: #fff2e0; color: #b5670a; }
+.stat-tip-badge.stage-po { background: #e7f0fb; color: #0055a8; }
+.stat-tip-badge.stage-invoiced { background: #e7f5ec; color: #1a7a4a; }
 .stat-alerts {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
