@@ -7789,12 +7789,22 @@ table.mini .num {
 @media (max-width: 680px) { .act-cards { grid-template-columns: 1fr; } }
 
 .act-card { border: 1px solid var(--border, #e5e7eb); border-radius: 8px; padding: 12px 14px; background: #fff; overflow: hidden; }
-/* 카드 상단 헤더(1~3행) — 음영으로 카드 경계를 분명히. 이 영역이 드래그 핸들. */
-.act-card-head { margin: -12px -14px 8px; padding: 10px 14px 8px;
-  background: #f4f7fb; border-bottom: 1px solid #e6edf5; }
+/* 카드 상단 헤더(1~3행) — 프로젝트 번호 색(브랜드 블루)으로 채워 카드 경계를 분명히.
+   이 영역이 드래그 핸들. 내부 글씨는 대비되도록 흰색/하늘색 계열로 재지정. */
+.act-card-head { margin: -12px -14px 8px; padding: 10px 14px 9px;
+  background: #0055a8; border-bottom: 1px solid #003f7d; }
 .act-card-head.draggable { cursor: grab; }
 .act-card-head.draggable:active { cursor: grabbing; }
 .act-card-head .act-sub { margin-bottom: 0; }
+/* 헤더 안 글씨색 — 파란 배경 대비. */
+.act-card-head .act-pno { color: #fff; }
+.act-card-head .act-pno-date { color: #bcd6f0; }
+.act-card-head .act-title2 { color: #fff; }
+.act-card-head .act-tvessel { color: #cfe0f5; }
+.act-card-head .act-sub { color: #cfe0f5; }
+.act-card-head .act-sub-contact { color: #eaf3fc; }
+.act-card-head .act-open { color: #fff; }
+.act-card-head .act-pic { background: rgba(255, 255, 255, 0.18); color: #fff; }
 /* 드래그 상태 표시. */
 .act-card.drag-over { outline: 2px dashed #0055a8; outline-offset: -2px; }
 .act-card.dragging { opacity: 0.5; }
