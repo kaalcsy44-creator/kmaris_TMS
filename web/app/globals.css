@@ -7856,32 +7856,43 @@ table.mini .num {
   padding: 1px 6px; border-radius: 6px; background: var(--head-bg); color: var(--muted); }
 .act-age.lv-warn { background: #fff3e0; color: #9a5b00; }
 .act-age.lv-urgent { background: #fdeaea; color: #b42318; }
-/* 카드 상단 헤더(1~3행) — 프로젝트 번호 색과 페이지 배경의 중간 채도(옅은 톤)로 채워
-   카드 경계를 분명히. 이 영역이 드래그 핸들. 옅은 배경에 맞춰 글씨는 어둡게 재지정. */
+/* 카드 상단 헤더(1~3행) — 이 영역이 드래그 핸들.
+   음영은 "진한 배경 + 흰 글씨" 원칙. 구 #8fb4d9 같은 중간 톤은 흰 카드와 페이지 배경 사이에
+   끼어 탁해 보이고, 어떤 글씨색을 얹어도 대비가 안 벌어져 서브라인이 4.25:1(AA 미달)이었다.
+   아래 글씨색은 모두 이 배경 위 대비 5:1 이상으로 맞춘 값 — 배경을 바꾸면 함께 재계산할 것.
+   parts=블루 / service=녹색. */
 .act-card-head { margin: -12px -14px 8px; padding: 10px 14px 9px;
-  background: #8fb4d9; border-bottom: 1px solid #6f9bc9; }
+  background: #0b4a86; border-bottom: 1px solid #083a6a; }
 .act-card-head.draggable { cursor: grab; }
 .act-card-head.draggable:active { cursor: grabbing; }
 .act-card-head .act-sub { margin-bottom: 0; }
-/* 헤더 안 글씨색 — 옅은 블루 배경에서 또렷하게(진한 네이비). PIC 배지는 예외(아래 유지). */
-.act-card-head .act-pno { color: #052548; }
-.act-card-head .act-pno-date { color: #234a70; }
-.act-card-head .act-title2 { color: #081b32; }
-.act-card-head .act-tvessel { color: #234669; }
-.act-card-head .act-sub { color: #21425f; }
-.act-card-head .act-sub-contact { color: #122e4a; }
-.act-card-head .act-open { color: #052548; }
-.act-card-head .act-pic { background: rgba(255, 255, 255, 0.6); color: #0d3b6b; }
-/* 서비스 딜 — 헤더를 서비스 녹색과 배경의 중간 채도로. 글씨는 녹색 진한 톤. */
-.act-card.service .act-card-head { background: #97c6b2; border-bottom-color: #74b096; }
+/* #0b4a86 위 대비: pno·title 9.0:1 / sub 6.4:1 / date 5.1:1 */
+.act-card-head .act-pno { color: #ffffff; }
+.act-card-head .act-pno-date { color: #a8c6e4; }
+.act-card-head .act-title2 { color: #ffffff; }
+.act-card-head .act-tvessel { color: #c5dcf2; }
+.act-card-head .act-sub { color: #c5dcf2; }
+.act-card-head .act-sub-contact { color: #eaf3fb; }
+.act-card-head .act-open { color: #ffffff; }
+.act-card-head .act-pic { background: rgba(255, 255, 255, 0.92); color: #0b3d6e; }
+/* 벤더 모노그램 — 배지 색(hsl 48% 40%)은 벤더 식별자라 유지하되, 진한 헤더에 묻히지 않게
+   흰 링을 둘러 분리한다. 고스트(견적 미수신)·+N 배지는 밝은 톤으로 재지정. */
+.act-card-head .vendor-mono { box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.85); }
+.act-card-head .vendor-mono.ghost { color: #cfe0f2; border-color: rgba(255, 255, 255, 0.55);
+  box-shadow: none; }
+.act-card-head .vendor-mono.more { background: rgba(255, 255, 255, 0.9); color: #0b3d6e; }
+/* 서비스 딜 — 같은 원칙의 녹색. #0c5b3a 위 대비: pno·title 8.2:1 / sub 6.7:1 / date 5.5:1 */
+.act-card.service .act-card-head { background: #0c5b3a; border-bottom-color: #094a2f; }
 .act-card.service .act-card-head .act-pno,
-.act-card.service .act-card-head .act-open { color: #063d22; }
-.act-card.service .act-card-head .act-pno-date { color: #235539; }
-.act-card.service .act-card-head .act-title2 { color: #072015; }
+.act-card.service .act-card-head .act-open,
+.act-card.service .act-card-head .act-title2 { color: #ffffff; }
+.act-card.service .act-card-head .act-pno-date { color: #b6ddc9; }
 .act-card.service .act-card-head .act-tvessel,
-.act-card.service .act-card-head .act-sub { color: #1f4a33; }
-.act-card.service .act-card-head .act-sub-contact { color: #123422; }
+.act-card.service .act-card-head .act-sub { color: #d3efe0; }
+.act-card.service .act-card-head .act-sub-contact { color: #e8f7ef; }
 .act-card.service .act-card-head .act-pic { color: #0b5c34; }
+.act-card.service .act-card-head .vendor-mono.ghost { color: #cfeadc; }
+.act-card.service .act-card-head .vendor-mono.more { color: #0b5c34; }
 .act-card.service.drag-over { outline-color: #11824a; }
 /* 드래그 상태 표시. */
 .act-card.drag-over { outline: 2px dashed #0055a8; outline-offset: -2px; }
