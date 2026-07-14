@@ -963,9 +963,9 @@ def make_quotation_costing_xlsx(
         last_row = r
 
     ws.freeze_panes = f"A{HROW + 1}"
-    # A4 가로 1페이지 폭에 맞춰 인쇄(항목표가 여러 페이지로 잘리지 않게).
+    # A4 세로 1페이지 폭에 맞춰 인쇄(PDF 미리보기와 동일한 세로 규격).
     ws.print_area = f"A1:{get_column_letter(NCOL)}{last_row}"
-    ws.page_setup.orientation = ws.ORIENTATION_LANDSCAPE
+    ws.page_setup.orientation = ws.ORIENTATION_PORTRAIT
     ws.page_setup.paperSize = ws.PAPERSIZE_A4
     ws.page_setup.fitToWidth = 1
     ws.page_setup.fitToHeight = 0
