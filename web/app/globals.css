@@ -7783,7 +7783,7 @@ table.mini .num {
 .act-title2 { font-size: 14.5px; font-weight: 600; color: #1f2937; margin-bottom: 1px; }
 .act-tvessel { font-size: 14.5px; font-weight: 600; color: #1f2937; }  /* 선박명 — 프로젝트명과 동일 */
 .act-sub { font-size: 12px; font-weight: 400; color: #6b7280; margin-bottom: 8px; }
-.act-sub-pic { color: #0055a8; }
+.act-sub-contact { color: #334155; }  /* 고객사 담당자 */
 .act-open { font-size: 15px; font-weight: 700; }  /* 화살표만 크게 */
 
 .act-list { list-style: none; margin: 0 0 8px; padding: 0; }
@@ -7818,8 +7818,8 @@ table.mini .num {
   border-radius: 6px; font-size: 13px; }
 /* From/To 세그먼트(작게). */
 .act-seg.sm button { padding: 3px 9px; font-size: 11.5px; }
-/* Add/Cancel 버튼 높이 축소(약 2/3). */
-.act-add .act-add-go { padding: 2px 12px; font-size: 12px; line-height: 1.35; min-height: 0; }
+/* Add/Cancel 버튼 높이 축소(약 2/3 = 24px). .btn 의 height:36px 를 덮는다. */
+.act-add .act-add-go { height: 24px; padding: 0 14px; font-size: 12px; line-height: 1; }
 
 /* 회의 모드 — 입력 UI 숨기고 크게. */
 .act-screen.meeting .act-cards { grid-template-columns: 1fr; }

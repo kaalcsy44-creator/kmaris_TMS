@@ -716,6 +716,7 @@ export type PipelineRow = {
   trade_type: string;
   customer: string;
   customer_id: number;
+  contact_person?: string; // 고객사 담당자(연락 담당)
   vessel: string;
   vessel_id: number;
   project_title: string;

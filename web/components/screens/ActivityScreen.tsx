@@ -277,11 +277,11 @@ function ActivityCard({
         {row.project_title || "(untitled)"}
         {row.vessel ? <span className="act-tvessel"> · {row.vessel}</span> : null}
       </div>
-      {/* 고객사 · 담당자 / 벤더. */}
+      {/* 고객사 · 고객사 담당자 / 벤더. (우측 상단 배지 = 내부 PIC) */}
       {(row.customer || vend) ? (
         <div className="act-sub">
           {row.customer}
-          {row.assignee ? <span className="act-sub-pic"> · {row.assignee}</span> : null}
+          {row.contact_person ? <span className="act-sub-contact"> · {row.contact_person}</span> : null}
           {vend ? ` / ${vend}` : ""}
         </div>
       ) : null}
@@ -357,19 +357,9 @@ function AddActivity({ rfqId, stage, onAdded }: { rfqId: number; stage: number; 
   }
   return (
     <div className="act-add">
+      {/* 1행: 날짜 · From/To · Party · ★ */}
       <div className="act-add-row">
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-        <input
-          className="act-add-text"
-          placeholder="Activity note (e.g. Waiting for PO / requested update)"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
-          autoFocus
-        />
-      </div>
-      <div className="act-add-row">
-        {/* From/To 방향(수신/발신). 활성 항목 재클릭 시 해제. */}
         <div className="act-seg sm">
           {(["in", "out"] as const).map((d) => (
             <button key={d} className={dir === d ? "on" : ""} onClick={() => setDir((v) => (v === d ? "" : d))}>
@@ -384,7 +374,20 @@ function AddActivity({ rfqId, stage, onAdded }: { rfqId: number; stage: number; 
           <option value="Internal">Internal</option>
         </select>
         <label className="act-check"><input type="checkbox" checked={star} onChange={(e) => setStar(e.target.checked)} /> ★</label>
-        <span className="act-spacer" />
+      </div>
+      {/* 2행: 내용 입력 */}
+      <div className="act-add-row">
+        <input
+          className="act-add-text"
+          placeholder="Activity note (e.g. Waiting for PO / requested update)"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
+          autoFocus
+        />
+      </div>
+      {/* 3행: Add · Cancel */}
+      <div className="act-add-row">
         <button className="btn sm primary act-add-go" disabled={busy || !text.trim()} onClick={submit}>{busy ? "…" : "Add"}</button>
         <button className="btn sm act-add-go" onClick={() => setOpen(false)}>Cancel</button>
       </div>

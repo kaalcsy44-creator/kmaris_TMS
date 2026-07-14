@@ -292,6 +292,7 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
                 "trade_type": (o.trade_type if o else "수출") or "수출",
                 "customer": cust_names.get(r.customer_id, "—"),
                 "customer_id": r.customer_id or 0,
+                "contact_person": getattr(r, "contact_person", None) or "",  # 고객사 담당자(연락 담당)
                 "vessel": (vessel_names.get(r.vessel_id) if r.vessel_id else "") or "",
                 "vessel_id": r.vessel_id or 0,
                 "project_title": getattr(r, "project_title", None) or "",
