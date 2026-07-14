@@ -16,7 +16,7 @@ import {
   setRfqCancelled,
   updateRfq,
   fetchAssignableUsers,
-  resetDeliveryReadiness,
+  resetStage,
   CLOSE_REASONS,
   closeReasonLabel,
 } from "@/lib/api";
@@ -2262,56 +2262,71 @@ function WorkspacePanel({
     );
   }
   if (area === "documents") {
+    const docStage = Math.min(Math.max(stage, 7), 9);
     return effectiveOrderId > 0 ? (
       <>
         {picker}
-        {stage === 7 && row.work_type !== "서비스" ? (
-          <ResetReadinessBar
-            orderId={effectiveOrderId}
-            onChanged={async () => { setDocReloadKey((k) => k + 1); await onChanged(); }}
-          />
-        ) : null}
         <div className="project-work-panel embedded-workspace">
           <Suspense fallback={<div className="state">Loading details…</div>}>
             <DocumentsOverview
               key={docReloadKey}
               initialOrderId={effectiveOrderId}
-              initialStage={Math.min(Math.max(stage, 7), 9)}
+              initialStage={docStage}
               initialView={row.work_type === "서비스" ? "service" : "parts"}
             />
           </Suspense>
         </div>
+        <ResetStageBar
+          orderId={effectiveOrderId}
+          stage={docStage}
+          onChanged={async () => { setDocReloadKey((k) => k + 1); await onChanged(); }}
+        />
       </>
     ) : (
       <MissingOrderPanel />
     );
   }
+  // AR 영역 단계 = 실제 파이프라인 단계(서비스/내수 9단계 청구도 여기로 옴). 9~11로 한정.
+  const arStage = Math.max(9, Math.min(stage, 11));
   return effectiveOrderId > 0 ? (
     <>
       {picker}
       <div className="project-work-panel embedded-workspace stage-fill">
         <Suspense fallback={<div className="state">Loading details…</div>}>
           <ArOverview
+            key={docReloadKey}
             initialOrderId={effectiveOrderId}
             initialStage={stage >= 11 ? 11 : 10}
           />
         </Suspense>
       </div>
+      <ResetStageBar
+        orderId={effectiveOrderId}
+        stage={arStage}
+        onChanged={async () => { setDocReloadKey((k) => k + 1); await onChanged(); }}
+      />
     </>
   ) : (
     <MissingOrderPanel />
   );
 }
 
-// 7단계(Delivery Readiness) 초기화 바 — 이 P/O의 CI(+PL)·SA·마일스톤을 한 번에 지워 6단계로 되돌린다.
-// (7단계 완료는 저장 플래그가 아니라 증거 레코드 존재로 계산되므로, 필드를 비우는 것만으로는 내려가지 않는다.)
-function ResetReadinessBar({ orderId, onChanged }: { orderId: number; onChanged: () => void | Promise<unknown> }) {
+// 단계(7~11) 초기화 바(하단 고정) — 이 P/O에서 해당 단계의 완료 근거를 한 번에 지워 앞 단계로 되돌린다.
+// (단계 완료는 저장 플래그가 아니라 근거 레코드 존재로 계산되므로, 필드를 비우는 것만으로는 내려가지 않는다.)
+const RESET_STAGE_EVIDENCE: Record<number, string> = {
+  7: "Commercial Invoice (+Packing List), Shipping Advice, and confirmation milestones",
+  8: "the Proof of Delivery (POD) and delivery date",
+  9: "the Tax Invoice and its A/R record",
+  10: "the manual completion of this stage",
+  11: "the manual completion of this stage",
+};
+function ResetStageBar({ orderId, stage, onChanged }: { orderId: number; stage: number; onChanged: () => void | Promise<unknown> }) {
   const [busy, setBusy] = useState(false);
   async function reset() {
-    if (!confirm("Reset this stage for the selected P/O?\nDeletes its Commercial Invoice (and Packing List), Shipping Advice, and clears the confirmation milestones. The deal returns to stage 6.")) return;
+    if (!confirm(`Reset stage ${stage} for the selected P/O?\nRemoves ${RESET_STAGE_EVIDENCE[stage] || "this stage's records"}. The deal returns to the previous stage.`)) return;
     setBusy(true);
     try {
-      await resetDeliveryReadiness(orderId);
+      await resetStage(orderId, stage);
       invalidateCache("dashboard");
       invalidateCache("pipeline");
       invalidateCache("po:work-options");
@@ -2323,8 +2338,8 @@ function ResetReadinessBar({ orderId, onChanged }: { orderId: number; onChanged:
     }
   }
   return (
-    <div className="embedded-record-bar wp-reset-bar">
-      <span className="wp-reset-hint">Stage 7 is auto-derived from CI / Shipping Advice / milestones on this P/O.</span>
+    <div className="wp-reset-foot">
+      <span className="wp-reset-hint">Stage {stage} is auto-derived from records on this P/O.</span>
       <button type="button" className="btn sm danger" disabled={busy} onClick={reset}>
         {busy ? "…" : "Reset this stage"}
       </button>

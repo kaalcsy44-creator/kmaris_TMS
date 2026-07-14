@@ -461,9 +461,9 @@ export function deleteCommercialInvoice(orderId: number): Promise<{ ok: boolean 
   return del(`/api/admin/documents/${orderId}/ci`);
 }
 
-// 7단계(Delivery Readiness) 초기화 — 이 오더의 CI(+PL)·SA·마일스톤을 한 번에 제거해 6단계로 되돌린다.
-export function resetDeliveryReadiness(orderId: number): Promise<{ ok: boolean }> {
-  return post(`/api/admin/documents/${orderId}/reset-readiness`, {});
+// 단계(7~11) 초기화 — 이 오더에서 해당 단계의 완료 근거를 한 번에 제거해 앞 단계로 되돌린다.
+export function resetStage(orderId: number, stage: number): Promise<{ ok: boolean }> {
+  return post(`/api/admin/documents/${orderId}/reset-stage/${stage}`, {});
 }
 
 export function saveServiceStage(

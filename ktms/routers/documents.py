@@ -29,6 +29,7 @@ from _core import (
     Vendor,
     Vessel,
     _customer_for_order,
+    _deal_progress,
     _doc_file_response,
     _document_detail_payload,
     _enum_val,
@@ -361,35 +362,69 @@ def delete_commercial_invoice(order_id: int):
         s.close()
 
 
-@app.post("/api/admin/documents/{order_id}/reset-readiness",
+@app.post("/api/admin/documents/{order_id}/reset-stage/{stage}",
           dependencies=[Depends(require_token)])
-def reset_delivery_readiness(order_id: int):
-    """7단계(Delivery Readiness) 증거를 이 오더(고객 P/O)에서 한 번에 제거한다.
-    CI(+하위 PL)·SA·수하인/벤더서류 마일스톤을 모두 지워 딜을 6단계로 되돌린다.
-    (7단계 완료는 저장 플래그가 아니라 이 증거들의 존재로 계산되므로 — _deal_progress 참조.)
-    하류 문서(POD 8단계·세금계산서 9단계)가 있으면 막는다 — 먼저 그걸 삭제해야 한다."""
+def reset_stage(order_id: int, stage: int):
+    """7~11단계 중 한 단계의 '완료 근거'를 이 오더(고객 P/O)에서 한 번에 제거해 그 앞 단계로 되돌린다.
+
+    각 단계 근거(= 그 단계를 완료로 계산하게 만드는 것):
+      · 7 Delivery Readiness : CI(+하위 PL)·SA·수하인/벤더서류 마일스톤
+      · 8 Delivery Complete  : POD(인도증빙)·인도일
+      · 9 Tax Invoice·Billing: 세금계산서·AR 레코드
+      · 10 Tax Invoice Issued: 수동 완료 플래그(stage_dates)
+      · 11 Payment Completed : 수동 완료 플래그(AR 완납이면 AR 화면에서 먼저 해제)
+    공통으로 해당 단계의 수동 완료 플래그(stage_dates)·서비스 입력(service_info)도 제거한다.
+
+    상위(더 진행된) 단계 근거가 남아 있으면 막는다 — 반드시 위 단계부터 순서대로 초기화해야 한다."""
+    if stage not in (7, 8, 9, 10, 11):
+        raise HTTPException(status_code=400, detail="7~11단계만 초기화할 수 있습니다.")
     s = get_session()
     try:
         order = s.query(Order).filter_by(id=order_id).first()
         if not order:
             raise HTTPException(status_code=404, detail="Order를 찾을 수 없습니다.")
-        ci = _latest_ci(s, order_id)
-        if ci and s.query(TaxInvoiceData).filter_by(ci_id=ci.id).first():
+        rfq = _rfq_for_order(s, order)
+        # 이 P/O 기준 현재 단계 — 상위 단계 근거가 남아 있으면(cur>stage) 먼저 그걸 초기화해야 한다.
+        cur = _deal_progress(s, rfq, order)[0] if rfq else 0
+        if cur > stage:
             raise HTTPException(status_code=400,
-                detail="세금계산서(9단계)가 있어 초기화할 수 없습니다. 먼저 9단계 세금계산서를 삭제하세요.")
-        if s.query(DeliveryProof).filter_by(order_id=order_id).first():
-            raise HTTPException(status_code=400,
-                detail="운송완료(POD, 8단계)가 있어 초기화할 수 없습니다. 먼저 8단계 POD를 삭제하세요.")
-        # 하위 PL → CI → SA 순으로 삭제(FK 제약 회피). 마일스톤은 해제.
-        if ci:
-            s.query(PackingList).filter_by(ci_id=ci.id).delete(synchronize_session=False)
-            s.flush()
-            s.delete(ci)
-        sa = _latest_sa(s, order_id)
-        if sa:
-            s.delete(sa)
-        order.consignee_confirmed_date = None
-        order.vendor_docs_sent_date = None
+                detail=f"이 P/O는 현재 {cur}단계입니다. {stage}단계보다 위 단계부터 순서대로 초기화하세요.")
+
+        if stage == 7:
+            ci = _latest_ci(s, order_id)
+            if ci:  # 하위 PL → CI → SA 순(FK 제약 회피)
+                s.query(PackingList).filter_by(ci_id=ci.id).delete(synchronize_session=False)
+                s.flush()
+                s.delete(ci)
+            sa = _latest_sa(s, order_id)
+            if sa:
+                s.delete(sa)
+            order.consignee_confirmed_date = None
+            order.vendor_docs_sent_date = None
+        elif stage == 8:
+            s.query(DeliveryProof).filter_by(order_id=order_id).delete(synchronize_session=False)
+            if hasattr(order, "delivered_date"):
+                order.delivered_date = None
+        elif stage == 9:
+            ci = _latest_ci(s, order_id)
+            if ci:
+                tax = _latest_tax(s, ci.id)
+                if tax:
+                    s.delete(tax)
+            s.query(ARRecord).filter_by(order_id=order_id).delete(synchronize_session=False)
+        elif stage == 11:
+            ars = s.query(ARRecord).filter_by(order_id=order_id).all()
+            if any(_enum_val(a.status) == "완납" for a in ars):
+                raise HTTPException(status_code=400,
+                    detail="AR이 '완납'으로 표시돼 있습니다. AR 화면에서 결제를 먼저 해제하세요.")
+        # 공통: 해당 단계의 수동 완료 플래그·서비스 입력 제거.
+        if rfq:
+            dates = dict(getattr(rfq, "stage_dates", None) or {})
+            dates.pop(str(stage), None)
+            rfq.stage_dates = dates
+        info = dict(getattr(order, "service_info", None) or {})
+        info.pop(str(stage), None)
+        order.service_info = info
         s.commit()
         return {"ok": True}
     finally:

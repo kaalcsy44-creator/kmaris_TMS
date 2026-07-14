@@ -6806,11 +6806,17 @@ table.mini .num {
   color: #64748b;
   letter-spacing: 0.3px;
 }
-/* 7단계 초기화 바 — 안내문(좌) + Reset 버튼(우). */
-.wp-reset-bar {
+/* 단계 초기화 바 — 스테이지 패널 하단 고정(안내문 좌 + Reset 버튼 우). */
+.wp-reset-foot {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 6px 10px;
+  margin-top: 8px;
+  padding: 8px 12px;
   background: #fff7f7;
   border: 1px solid #f3d6d6;
   border-radius: 10px;
@@ -7802,24 +7808,24 @@ table.mini .num {
 .act-card-head.draggable { cursor: grab; }
 .act-card-head.draggable:active { cursor: grabbing; }
 .act-card-head .act-sub { margin-bottom: 0; }
-/* 헤더 안 글씨색 — 옅은 블루 배경 대비(진한 톤). */
-.act-card-head .act-pno { color: #08386c; }
-.act-card-head .act-pno-date { color: #3d5f82; }
-.act-card-head .act-title2 { color: #16243c; }
-.act-card-head .act-tvessel { color: #37547a; }
-.act-card-head .act-sub { color: #3a577a; }
-.act-card-head .act-sub-contact { color: #213f60; }
-.act-card-head .act-open { color: #08386c; }
+/* 헤더 안 글씨색 — 옅은 블루 배경에서 또렷하게(진한 네이비). PIC 배지는 예외(아래 유지). */
+.act-card-head .act-pno { color: #052548; }
+.act-card-head .act-pno-date { color: #234a70; }
+.act-card-head .act-title2 { color: #081b32; }
+.act-card-head .act-tvessel { color: #234669; }
+.act-card-head .act-sub { color: #21425f; }
+.act-card-head .act-sub-contact { color: #122e4a; }
+.act-card-head .act-open { color: #052548; }
 .act-card-head .act-pic { background: rgba(255, 255, 255, 0.6); color: #0d3b6b; }
 /* 서비스 딜 — 헤더를 서비스 녹색과 배경의 중간 채도로. 글씨는 녹색 진한 톤. */
 .act-card.service .act-card-head { background: #97c6b2; border-bottom-color: #74b096; }
 .act-card.service .act-card-head .act-pno,
-.act-card.service .act-card-head .act-open { color: #0a5c34; }
-.act-card.service .act-card-head .act-pno-date { color: #3a6b52; }
-.act-card.service .act-card-head .act-title2 { color: #143024; }
+.act-card.service .act-card-head .act-open { color: #063d22; }
+.act-card.service .act-card-head .act-pno-date { color: #235539; }
+.act-card.service .act-card-head .act-title2 { color: #072015; }
 .act-card.service .act-card-head .act-tvessel,
-.act-card.service .act-card-head .act-sub { color: #33604a; }
-.act-card.service .act-card-head .act-sub-contact { color: #1e4635; }
+.act-card.service .act-card-head .act-sub { color: #1f4a33; }
+.act-card.service .act-card-head .act-sub-contact { color: #123422; }
 .act-card.service .act-card-head .act-pic { color: #0b5c34; }
 .act-card.service.drag-over { outline-color: #11824a; }
 /* 드래그 상태 표시. */
