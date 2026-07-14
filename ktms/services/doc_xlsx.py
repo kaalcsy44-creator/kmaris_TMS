@@ -641,6 +641,8 @@ def make_packing_list_xlsx(
 def make_document_xlsx(
     doc_type: str, data: Dict[str, Any], company: Optional[Dict[str, Any]] = None
 ) -> bytes:
+    if doc_type == "quotation":
+        return make_quotation_costing_xlsx(data, company)
     title = DOC_TITLES.get(doc_type, "DOCUMENT")
     is_po = doc_type == "purchase_order"
     currency = (data.get("currency") or "USD").upper()
@@ -775,6 +777,170 @@ def make_document_xlsx(
             ws.cell(r, col).border = bdr
 
     ws.freeze_panes = f"A{HROW + 1}"
+
+    out = io.BytesIO()
+    wb.save(out)
+    return out.getvalue()
+
+
+def make_quotation_costing_xlsx(
+    data: Dict[str, Any], company: Optional[Dict[str, Any]] = None
+) -> bytes:
+    """고객 견적서(COSTING SHEET) Excel — sales + PURCHASE(원가) + MARGIN 포함(내부용)."""
+    from services.kmaris_docs import quotation_standard_terms
+
+    company = company or {}
+    customer = data.get("customer", {}) or {}
+    vessel = data.get("vessel", {}) or {}
+    terms = data.get("terms", {}) or {}
+    currency = (data.get("currency") or "USD").upper()
+    raw_items = data.get("items", []) or []
+    num_fmt = "#,##0.00" if currency == "USD" else "#,##0"
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Quotation"
+    ws.sheet_view.showGridLines = False
+
+    navy = PatternFill("solid", fgColor="0B1D3A")
+    blue = PatternFill("solid", fgColor="0055A8")
+    gray = PatternFill("solid", fgColor="F4F6F8")
+    lightblue = PatternFill("solid", fgColor="EAF3FF")
+    cost_fill = PatternFill("solid", fgColor="FDF3E7")   # PURCHASE 열 톤
+    alt = PatternFill("solid", fgColor="FAFBFC")
+
+    white_lg = Font(name="Calibri", color="FFFFFF", bold=True, size=15)
+    white_sm = Font(name="Calibri", color="FFFFFF", size=9)
+    white_hdr = Font(name="Calibri", color="FFFFFF", bold=True, size=9)
+    bold = Font(name="Calibri", bold=True)
+    boldsm = Font(name="Calibri", bold=True, size=9)
+
+    thin = Side(style="thin", color="D8DEE6")
+    bdr = Border(top=thin, bottom=thin, left=thin, right=thin)
+    center = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    left = Alignment(horizontal="left", vertical="center", wrap_text=True)
+    right = Alignment(horizontal="right", vertical="center")
+
+    # No | Part No | Description | Qty | Unit | Cost U/P | Cost Amount | Margin% | U/Price | Amount | Lead Time | Remark
+    HEADERS = ["No.", "Part No.", "Description", "Qty", "Unit",
+               "Cost U/P", "Cost Amount", "Margin %", "U/Price", "Amount", "Lead Time", "Remark"]
+    WIDTHS = [5, 18, 34, 7, 7, 13, 14, 9, 13, 15, 14, 20]
+    NCOL = len(HEADERS)
+
+    def merge(r1, c1, r2, c2):
+        ws.merge_cells(start_row=r1, start_column=c1, end_row=r2, end_column=c2)
+
+    # ── Title / banner ─────────────────────────────────────────────────
+    merge(1, 1, 1, NCOL)
+    c = ws.cell(1, 1, "QUOTATION / COSTING SHEET"); c.fill = navy; c.font = white_lg; c.alignment = center
+    ws.row_dimensions[1].height = 26
+    merge(2, 1, 2, NCOL)
+    c = ws.cell(2, 1, "K-MARIS Energy & Solutions Co., Ltd.  |  sales@k-maris.com  |  www.k-maris.com")
+    c.fill = blue; c.font = white_sm; c.alignment = center
+    ws.row_dimensions[2].height = 15
+
+    # ── Meta (rows 4-8) ────────────────────────────────────────────────
+    vat_label = "VAT excluded" if _num(data.get("vat_rate", 0)) == 0 else f"VAT {int(_num(data.get('vat_rate', 0)) * 100)}%"
+    meta = [
+        ("User", customer.get("name", ""), "Quotation No.", data.get("doc_no", "")),
+        ("Attn.", customer.get("contact", ""), "Ref. No.", data.get("ref_no", "")),
+        ("Ship Name", vessel.get("name", ""), "Date", data.get("date", "")),
+        ("Project", data.get("project_title", ""), "Currency", currency),
+        ("", "", "VAT", vat_label),
+    ]
+    mid = NCOL // 2
+    for off, (k1, v1, k2, v2) in enumerate(meta, start=4):
+        for col, val, is_label in [(1, k1, True), (2, v1, False), (mid + 1, k2, True), (mid + 2, v2, False)]:
+            cell = ws.cell(off, col, val); cell.border = bdr; cell.alignment = left
+            if is_label:
+                cell.fill = gray; cell.font = boldsm
+        merge(off, 2, off, mid); merge(off, mid + 2, off, NCOL)
+        for col in range(2, mid + 1):
+            ws.cell(off, col).border = bdr
+        for col in range(mid + 2, NCOL + 1):
+            ws.cell(off, col).border = bdr
+        ws.row_dimensions[off].height = 15
+
+    # ── PURCHASE 그룹 라벨(원가 열 위) ─────────────────────────────────
+    GROUP_ROW = 9
+    merge(GROUP_ROW, 6, GROUP_ROW, 8)
+    gc = ws.cell(GROUP_ROW, 6, "PURCHASE (internal)"); gc.fill = cost_fill; gc.font = boldsm; gc.alignment = center
+    for col in range(1, NCOL + 1):
+        ws.cell(GROUP_ROW, col).border = bdr
+        if col < 6 or col > 8:
+            ws.cell(GROUP_ROW, col).fill = gray
+    ws.row_dimensions[GROUP_ROW].height = 14
+
+    # ── Item header (row 10) ───────────────────────────────────────────
+    HROW = 10
+    for ci, (h, w) in enumerate(zip(HEADERS, WIDTHS), start=1):
+        cell = ws.cell(HROW, ci, h); cell.fill = navy; cell.font = white_hdr
+        cell.alignment = center; cell.border = bdr
+        ws.column_dimensions[get_column_letter(ci)].width = w
+    ws.row_dimensions[HROW].height = 24
+
+    sales_total = 0.0
+    cost_total = 0.0
+    for ri, it in enumerate(raw_items, start=1):
+        r = HROW + ri
+        qty = _num(it.get("qty", 0))
+        unit_price = _num(it.get("unit_price", 0))
+        amount = _num(it.get("amount", 0)) or qty * unit_price
+        cost = _num(it.get("cost_price", 0))
+        cost_amt = cost * qty
+        mg = it.get("margin_pct")
+        margin = _num(mg) if mg not in (None, "") else (
+            (unit_price - cost) / unit_price * 100 if unit_price else 0.0
+        )
+        sales_total += amount
+        cost_total += cost_amt
+        lead_remark = str(it.get("lead_time", "") or "")
+        vals = [ri, it.get("part_no", ""), it.get("description", ""), qty, it.get("unit", ""),
+                cost, cost_amt, round(margin, 1), unit_price, amount, lead_remark, it.get("remark", "")]
+        for ci, val in enumerate(vals, start=1):
+            cell = ws.cell(r, ci, val); cell.border = bdr
+            if ri % 2 == 0 and ci not in (6, 7, 8):
+                cell.fill = alt
+            if ci in (6, 7, 8):
+                cell.fill = cost_fill
+            if ci in (4, 6, 7, 9, 10):
+                cell.alignment = right
+                if ci in (6, 7, 9, 10):
+                    cell.number_format = num_fmt
+            elif ci == 8:
+                cell.alignment = right; cell.number_format = '0.0"%"'
+            elif ci in (1, 5):
+                cell.alignment = center
+            else:
+                cell.alignment = left
+        ws.row_dimensions[r].height = 18
+
+    # ── Totals ─────────────────────────────────────────────────────────
+    trow = HROW + len(raw_items) + 1
+    margin_total = (sales_total - cost_total) / sales_total * 100 if sales_total else 0.0
+    tc = ws.cell(trow, 3, "Total"); tc.font = bold; tc.alignment = right; tc.border = bdr
+    for col in (1, 2, 4, 5, 11, 12):
+        ws.cell(trow, col).border = bdr
+    for col, val, fill in [(6, "", cost_fill), (7, cost_total, cost_fill), (8, round(margin_total, 1), cost_fill),
+                           (9, "", lightblue), (10, sales_total, lightblue)]:
+        cell = ws.cell(trow, col, val); cell.border = bdr; cell.fill = fill; cell.font = bold; cell.alignment = right
+        if col in (7, 10):
+            cell.number_format = num_fmt
+        if col == 8:
+            cell.number_format = '0.0"%"'
+
+    # ── Terms & Conditions ─────────────────────────────────────────────
+    tstart = trow + 2
+    ws.cell(tstart, 1, "Terms & Conditions").font = bold
+    for i, line in enumerate(quotation_standard_terms(terms), start=1):
+        r = tstart + i
+        merge(r, 1, r, NCOL)
+        cell = ws.cell(r, 1, f"• {line}"); cell.alignment = left
+        ws.row_dimensions[r].height = 14
+
+    ws.freeze_panes = f"A{HROW + 1}"
+    ws.page_setup.orientation = ws.ORIENTATION_LANDSCAPE
+    ws.page_setup.paperSize = ws.PAPERSIZE_A4
 
     out = io.BytesIO()
     wb.save(out)

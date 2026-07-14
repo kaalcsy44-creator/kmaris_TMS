@@ -92,6 +92,7 @@ import {
 } from "./common/itemTable";
 import FxRateControl, { FxMode } from "./common/FxRateControl";
 import { useItemGrid, ItemTh, ItemGridStyle, ItemColsButton, type ItemCol } from "./common/itemGrid";
+import QuotationPreview, { type QuotationPreviewData } from "./QuotationPreview";
 
 /** 현재 시각 "YYYY-MM-DDTHH:MM" (datetime-local 기본값). */
 function nowLocalDt(): string {
@@ -975,17 +976,19 @@ function VendorRfqDetailModal({
 
           <div className="form-actions">
             {!canEditThis ? (
-              <span className="hint-inline" style={{ marginLeft: "auto" }}>{editBlockReason("rfq", d?.assignee_id)}</span>
-            ) : showEdit ? (
-              <>
-                <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
-                <button className="btn" onClick={() => setEditing(false)} disabled={busy}>Cancel</button>
-              </>
-            ) : (
-              <button className="btn" onClick={() => setEditing(true)} style={{ marginLeft: "auto" }}>✎ Edit</button>
-            )}
+              <span className="hint-inline">{editBlockReason("rfq", d?.assignee_id)}</span>
+            ) : null}
+            <span style={{ marginLeft: "auto" }} />
             {canDeleteThis ? (
               <button className="btn danger" onClick={remove} disabled={busy || showEdit}>Delete</button>
+            ) : null}
+            {canEditThis && showEdit ? (
+              <>
+                <button className="btn" onClick={() => setEditing(false)} disabled={busy}>Cancel</button>
+                <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
+              </>
+            ) : canEditThis ? (
+              <button className="btn" onClick={() => setEditing(true)}>✎ Edit</button>
             ) : null}
           </div>
           {err ? <span className="action-err">{err}</span> : null}
@@ -1534,15 +1537,16 @@ function VendorQuoteDetailModal({
               rate={fxRate ?? USD_KRW_RATE}
             />
             {!canEditThis ? (
-              <span className="hint-inline" style={{ marginRight: "auto" }}>{editBlockReason("rfq", d?.assignee_id)}</span>
+              <span className="hint-inline">{editBlockReason("rfq", d?.assignee_id)}</span>
             ) : null}
+            <span style={{ marginLeft: "auto" }} />
             {canDeleteThis ? (
-              <button className="btn danger" onClick={remove} disabled={busy} style={{ marginRight: "auto" }}>Delete</button>
+              <button className="btn danger" onClick={remove} disabled={busy}>Delete</button>
             ) : null}
+            <button className="btn" onClick={onClose} disabled={busy}>Cancel</button>
             {canEditThis ? (
               <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
             ) : null}
-            <button className="btn" onClick={onClose} disabled={busy}>Cancel</button>
           </div>
           {err ? <span className="action-err">{err}</span> : null}
         </div>
@@ -1700,6 +1704,9 @@ function CustomerQuoteDetailModal({
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
+  const [dlBusy, setDlBusy] = useState(false);
+  const [dlErr, setDlErr] = useState<string | null>(null);
   // 편집 권한 = 역할 권한(rfq.edit) × 담당(PIC) 소유권. 없으면 읽기전용.
   const canEditThis = can("rfq", "edit") && canEditDeal(d?.assignee_id);
   const canDeleteThis = can("rfq", "delete") && canEditDeal(d?.assignee_id);
@@ -1738,24 +1745,29 @@ function CustomerQuoteDetailModal({
   const total = items.reduce((sum, it) => sum + Number(it.amount || 0), 0);
   const finalTotal = total * (1 - Number(discountPct || 0) / 100);
 
+  // 현재 편집값을 서버에 저장(모달은 닫지 않음). save()·미리보기 다운로드가 공유.
+  async function persist() {
+    await updateCustomerQuotation(id, {
+      qtn_no: qtnNo,
+      currency,
+      cost_currency: costCurrency,
+      round_digits: roundDigits,
+      discount_pct: discountPct,
+      fx_rate: fxRate,
+      sent_at: sentAt,
+      valid_until: validUntil,
+      status,
+      terms,
+      items,
+    });
+    onChanged();
+  }
+
   async function save() {
     setBusy(true);
     setErr(null);
     try {
-      await updateCustomerQuotation(id, {
-        qtn_no: qtnNo,
-        currency,
-        cost_currency: costCurrency,
-        round_digits: roundDigits,
-        discount_pct: discountPct,
-        fx_rate: fxRate,
-        sent_at: sentAt,
-        valid_until: validUntil,
-        status,
-        terms,
-        items,
-      });
-      onChanged();
+      await persist();
       onClose();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Update failed");
@@ -1763,6 +1775,49 @@ function CustomerQuoteDetailModal({
       setBusy(false);
     }
   }
+
+  // 미리보기 → 다운로드: 현재 편집값을 먼저 저장한 뒤 서버 생성 문서를 내려받는다.
+  // 다운로드 엔드포인트는 Bearer 토큰이 필요하므로 fetch → blob 방식으로 저장한다.
+  async function downloadDoc(format: "pdf" | "xlsx") {
+    setDlBusy(true);
+    setDlErr(null);
+    try {
+      if (canEditThis) await persist();
+      const url = format === "xlsx"
+        ? quotationXlsxUrl(id, "quotation")
+        : quotationPdfUrl(id, "quotation");
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${getToken()}` } });
+      if (!res.ok) throw new Error("File download failed");
+      const blob = await res.blob();
+      const objUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objUrl;
+      a.download = `${qtnNo || d?.qtn_no || "Quotation"}.${format}`;
+      a.click();
+      URL.revokeObjectURL(objUrl);
+    } catch (e) {
+      setDlErr(e instanceof Error ? e.message : "Download failed");
+    } finally {
+      setDlBusy(false);
+    }
+  }
+
+  // 편집기 현재 상태 → 견적서 미리보기 데이터.
+  const previewData: QuotationPreviewData = {
+    qtnNo,
+    refNo: d?.rfq_no || "",
+    date: (sentAt || d?.date || "").slice(0, 10),
+    currency,
+    vatLabel: "VAT excluded",
+    validUntil,
+    validityDays: 30,
+    customerName: d?.customer || "",
+    attn: "",
+    shipName: d?.vessel || "",
+    project: d?.project_title || "",
+    items,
+    terms,
+  };
 
   async function remove() {
     if (!window.confirm("Delete this quotation?")) return;
@@ -1920,18 +1975,30 @@ function CustomerQuoteDetailModal({
           <div className="form-actions">
             <StageTotal label="Final" value={finalTotal} currency={currency} rate={effRate} />
             {!canEditThis ? (
-              <span className="hint-inline" style={{ marginRight: "auto" }}>{editBlockReason("rfq", d?.assignee_id)}</span>
+              <span className="hint-inline">{editBlockReason("rfq", d?.assignee_id)}</span>
             ) : null}
+            <button className="btn" onClick={() => setShowPreview(true)} disabled={busy} style={{ marginRight: "auto" }}>
+              Preview
+            </button>
             {canDeleteThis ? (
-              <button className="btn danger" onClick={remove} disabled={busy} style={{ marginRight: "auto" }}>Delete</button>
+              <button className="btn danger" onClick={remove} disabled={busy}>Delete</button>
             ) : null}
+            <button className="btn" onClick={onClose} disabled={busy}>Cancel</button>
             {canEditThis ? (
               <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
             ) : null}
-            <button className="btn" onClick={onClose} disabled={busy}>Cancel</button>
           </div>
           {msg ? <span className="action-ok">{msg}</span> : null}
           {err ? <span className="action-err">{err}</span> : null}
+          {showPreview ? (
+            <QuotationPreview
+              data={previewData}
+              onClose={() => setShowPreview(false)}
+              onDownload={downloadDoc}
+              busy={dlBusy}
+              err={dlErr}
+            />
+          ) : null}
           </>
           ) : (
           /* 견적서 파일 생성(PDF/Excel) + 고객 이메일 발송(선택 포맷 첨부). 저장본 기준. */

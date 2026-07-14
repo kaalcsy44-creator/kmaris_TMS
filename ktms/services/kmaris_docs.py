@@ -1100,11 +1100,210 @@ def _make_packing_list_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> byt
     return buffer.getvalue()
 
 
+def _qnum(value: Any) -> str:
+    """견적서 금액 표기 — 천단위 구분, 정수면 소수 생략(첨부 양식과 동일)."""
+    try:
+        q = Decimal(str(value or 0))
+    except Exception:
+        return "0"
+    if q == q.to_integral_value():
+        return f"{int(q):,}"
+    return f"{q:,.2f}"
+
+
+def quotation_standard_terms(terms: Dict[str, Any], validity_days: int = 30) -> List[str]:
+    """QUOTATION / COSTING SHEET 하단 표준 Terms & Conditions. 편집된 terms 값을 끼워 넣어 동기화."""
+    incoterms = terms.get("incoterms") or "EXW"
+    place = terms.get("delivery_place") or "Busan"
+    payment = terms.get("payment_terms") or "T/T in advance"
+    warranty = terms.get("warranty") or "supplier's/manufacturer's standard warranty terms"
+    lines = [
+        f"Quotation validity: {validity_days} days from quotation date.",
+        "Price, availability, and delivery time are subject to final confirmation upon order placement.",
+        f"Delivery term: {incoterms} {place}, Incoterms 2020.",
+        "Freight, customs duty, local tax, and other logistics charges are excluded unless otherwise stated.",
+        f"Payment term: {payment}",
+        "Buyer to confirm part number, description, quantity, engine type, and technical suitability before order.",
+        "Certificates are excluded unless specifically stated.",
+        "Cancellation or return may not be accepted after order confirmation, especially for specially ordered or non-stock items.",
+        f"Warranty follows {warranty}.",
+        "The unit price suggested is based on the complete order with complete quantities. In case of reduction for qty, "
+        "it may constitute a variation to the contract, subject to mutual agreement.",
+    ]
+    if terms.get("remarks") and str(terms["remarks"]).strip():
+        lines.append(str(terms["remarks"]).strip())
+    return lines
+
+
+def _make_quotation_costing_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> bytes:
+    """고객 견적서(QUOTATION / COSTING SHEET) — sales only. 첨부 양식을 따른다."""
+    s = _styles()
+    customer = data.get("customer", {}) or {}
+    vessel = data.get("vessel", {}) or {}
+    terms = data.get("terms", {}) or {}
+    items = normalize_items(data.get("items", []))
+    currency = (data.get("currency") or "USD").upper()
+    total = sum(_num(it.get("amount", 0)) for it in items)
+
+    page_width = 190 * mm
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer, pagesize=A4, leftMargin=10 * mm, rightMargin=10 * mm,
+        topMargin=8 * mm, bottomMargin=14 * mm, title="QUOTATION / COSTING SHEET",
+        author="K-MARIS Energy & Solutions Co., Ltd.",
+    )
+    asset_roots = [Path(__file__).resolve().parents[2], Path(__file__).resolve().parent.parent / "config"]
+
+    def asset(*names):
+        for root in asset_roots:
+            for name in names:
+                cand = root / name
+                if cand.exists():
+                    return cand
+        return None
+
+    def image(path, max_w, max_h):
+        if not path:
+            return ""
+        try:
+            from PIL import Image as PILImage
+            with PILImage.open(path) as src:
+                w, h = src.size
+            scale = min(max_w / w, max_h / h)
+            return Image(str(path), width=w * scale, height=h * scale)
+        except Exception:
+            return ""
+
+    def section(title):
+        t = Table([[_p(f"<b>{title}</b>", s["th"])]], colWidths=[page_width])
+        t.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), NAVY), ("TEXTCOLOR", (0, 0), (-1, -1), colors.white),
+            ("LEFTPADDING", (0, 0), (-1, -1), 6),
+            ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ]))
+        return t
+
+    story: List[Any] = []
+
+    # ── 헤더: 로고 + 타이틀 ──────────────────────────────────────────────
+    title_style = ParagraphStyle("KMQTitle", parent=s["section"], fontName=DEFAULT_BOLD_FONT,
+                                 fontSize=17, leading=20, alignment=TA_CENTER, textColor=NAVY)
+    logo = image(asset("logo_K-maris.png", "logo.png", "logo.jpg"), 34 * mm, 12 * mm)
+    org_style = ParagraphStyle("KMQOrg", parent=s["base"], fontName=DEFAULT_BOLD_FONT,
+                               fontSize=11, alignment=TA_RIGHT, textColor=BLUE)
+    head = Table([[logo, Paragraph("K-MARIS ENERGY &amp; SOLUTIONS", org_style)]],
+                 colWidths=[100 * mm, 90 * mm], rowHeights=[14 * mm])
+    head.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LINEBELOW", (0, 0), (-1, -1), 1.2, BLUE)]))
+    story += [head, Spacer(1, 4 * mm), Paragraph("QUOTATION / COSTING SHEET", title_style), Spacer(1, 4 * mm)]
+
+    # ── 정보 박스(2단) ─────────────────────────────────────────────────
+    left_rows = [
+        ("User", customer.get("name", "")),
+        ("Messrs", ""),
+        ("Attn.", customer.get("contact", "")),
+        ("Ship Name", vessel.get("name", "")),
+        ("Project", data.get("project_title", "")),
+    ]
+    vat_label = "VAT excluded" if _num(data.get("vat_rate", 0)) == 0 else f"VAT {int(_num(data.get('vat_rate', 0)) * 100)}%"
+    right_rows = [
+        ("Quotation No.", data.get("doc_no", "")),
+        ("Ref. No.", data.get("ref_no", "")),
+        ("Date", data.get("date", "")),
+        ("Currency", currency),
+        ("VAT", vat_label),
+    ]
+
+    def meta_box(rows):
+        body = [[_p(f"<b>{k}</b>", s["small"]), _p(v, s["small"])] for k, v in rows]
+        t = Table(body, colWidths=[28 * mm, 65 * mm])
+        t.setStyle(TableStyle([
+            ("GRID", (0, 0), (-1, -1), 0.35, MID_GRAY),
+            ("BACKGROUND", (0, 0), (0, -1), LIGHT_GRAY),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+            ("TOPPADDING", (0, 0), (-1, -1), 2.5), ("BOTTOMPADDING", (0, 0), (-1, -1), 2.5),
+        ]))
+        return t
+
+    info = Table([[meta_box(left_rows), meta_box(right_rows)]], colWidths=[95 * mm, 95 * mm])
+    info.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
+    story += [info, Spacer(1, 4 * mm)]
+
+    # ── 품목표 (sales only) ────────────────────────────────────────────
+    headers = ["No.", "Part No.", "Description", "Qty", "U/Price", "Amount", "Lead Time", "Remark"]
+    widths = [10, 28, 56, 14, 22, 24, 18, 18]
+    rows = [[_p(h, s["th"]) for h in headers]]
+    for it in items:
+        rows.append([
+            _p(it["item_no"], s["tiny"]),
+            _p(it["part_no"], s["tiny"]),
+            _p(it["description"], s["tiny"]),
+            _p(_qnum(it["qty"]), s["tiny"]),
+            _p(_qnum(it["unit_price"]), s["tiny"]),
+            _p(_qnum(it["amount"]), s["tiny"]),
+            _p(it.get("lead_time", ""), s["tiny"]),
+            _p(it.get("remark", ""), s["tiny"]),
+        ])
+    rows.append([
+        _p("", s["tiny"]), _p("", s["tiny"]),
+        _p("<b>Total</b>", s["tiny"]), _p("", s["tiny"]), _p("", s["tiny"]),
+        _p(f"<b>{_qnum(total)}</b>", s["tiny"]), _p("", s["tiny"]), _p("", s["tiny"]),
+    ])
+    items_table = Table(rows, colWidths=[w * mm for w in widths], repeatRows=1)
+    tcmds = [
+        ("BACKGROUND", (0, 0), (-1, 0), NAVY), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("GRID", (0, 0), (-1, -1), 0.35, MID_GRAY), ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("ALIGN", (3, 1), (5, -1), "RIGHT"), ("ALIGN", (0, 1), (0, -1), "CENTER"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 3), ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+        ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ("BACKGROUND", (0, len(rows) - 1), (-1, len(rows) - 1), LIGHT_BLUE),
+    ]
+    for r in range(1, len(rows) - 1):
+        if r % 2 == 0:
+            tcmds.append(("BACKGROUND", (0, r), (-1, r), colors.HexColor("#FAFBFC")))
+    items_table.setStyle(TableStyle(tcmds))
+    story += [items_table, Spacer(1, 5 * mm)]
+
+    # ── Terms & Conditions ────────────────────────────────────────────
+    story.append(section("Terms & Conditions"))
+    story.append(Spacer(1, 2 * mm))
+    for line in quotation_standard_terms(terms):
+        story.append(_p(f"• {line}", s["small"]))
+        story.append(Spacer(1, 1 * mm))
+    story.append(Spacer(1, 3 * mm))
+
+    # ── Payment ───────────────────────────────────────────────────────
+    story.append(section("Payment"))
+    story.append(Spacer(1, 2 * mm))
+    story.append(_p(f"• {terms.get('payment_terms') or 'T/T in advance'}", s["small"]))
+    story.append(Spacer(1, 1 * mm))
+    story.append(_p("• Once order is confirmed by the supplier, the order is unable to be cancelled without "
+                    "cancellation charge of 100% of the ordered amount.", s["small"]))
+    story.append(Spacer(1, 3 * mm))
+    story.append(_p("We hope this quotation meets your requirement and to receive your order confirmation "
+                    "at your earliest convenience.", s["base"]))
+    story.append(Spacer(1, 6 * mm))
+
+    # ── 서명 ──────────────────────────────────────────────────────────
+    sign_img = image(asset("Authorized signature_Sungyeon Cho.jpg", "signature.png", "signature.jpg"), 40 * mm, 16 * mm)
+    story.append(_p("Your sincerely", s["base"]))
+    if sign_img:
+        story.append(sign_img)
+    story.append(_p("________________________", s["base"]))
+    story.append(_p("<b>Sam Cho, Managing Director</b>", s["base"]))
+    story.append(_p("K-MARIS Energy & Solutions | Seoul, Korea | www.k-maris.com", s["small"]))
+
+    doc.build(story, onFirstPage=_footer, onLaterPages=_footer)
+    return buffer.getvalue()
+
+
 def make_pdf(doc_type: str, data: Dict[str, Any], company: Optional[Dict[str, Any]] = None, logo_path: Optional[str] = None) -> bytes:
     if doc_type not in DOC_TITLES:
         raise ValueError(f"Unsupported document type: {doc_type}")
     payload = dict(data)
     payload["company"] = company or data.get("company", {})
+    if doc_type == "quotation":
+        return _make_quotation_costing_pdf(payload, payload["company"])
     if doc_type == "commercial_invoice":
         return _make_commercial_invoice_pdf(payload, payload["company"])
     if doc_type == "packing_list":

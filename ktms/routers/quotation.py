@@ -284,6 +284,29 @@ def delete_customer_quotation(qtn_id: int):
         s.close()
 
 
+def _quotation_payload(s, qtn):
+    """견적서 문서(PDF/Excel) payload — 고객·선박·품목·약관 + 프로젝트명·Ref No.(고객 RFQ No.)."""
+    cust = s.query(Customer).filter_by(id=qtn.customer_id).first()
+    vessel = s.query(Vessel).filter_by(id=qtn.vessel_id).first() if qtn.vessel_id else None
+    rfq = s.query(RFQ).filter_by(id=qtn.rfq_id).first() if getattr(qtn, "rfq_id", None) else None
+    project_title = (getattr(rfq, "project_title", None) or "") if rfq else ""
+    ref_no = (getattr(rfq, "customer_rfq_no", None) or "") if rfq else ""
+    return build_payload(
+        doc_no=qtn.qtn_no,
+        date=qtn.date or date.today().isoformat(),
+        customer=cust,
+        vessel=vessel,
+        items=qtn.items or [],
+        terms=qtn.terms or {},
+        currency=qtn.currency or "USD",
+        vat_rate=qtn.vat_rate or 0.0,
+        valid_until=qtn.valid_until or "",
+        discount_pct=getattr(qtn, "discount_pct", 0) or 0.0,
+        project_title=project_title,
+        ref_no=ref_no,
+    )
+
+
 @app.get("/api/admin/quotations/{qtn_id}/pdf", dependencies=[Depends(require_token)])
 def quotation_pdf(qtn_id: int, doc_type: str = "quotation"):
     s = get_session()
@@ -291,20 +314,7 @@ def quotation_pdf(qtn_id: int, doc_type: str = "quotation"):
         qtn = s.query(Quotation).filter_by(id=qtn_id).first()
         if not qtn:
             raise HTTPException(status_code=404, detail="견적서를 찾을 수 없습니다.")
-        cust = s.query(Customer).filter_by(id=qtn.customer_id).first()
-        vessel = s.query(Vessel).filter_by(id=qtn.vessel_id).first() if qtn.vessel_id else None
-        payload = build_payload(
-            doc_no=qtn.qtn_no,
-            date=qtn.date or date.today().isoformat(),
-            customer=cust,
-            vessel=vessel,
-            items=qtn.items or [],
-            terms=qtn.terms or {},
-            currency=qtn.currency or "USD",
-            vat_rate=qtn.vat_rate or 0.0,
-            valid_until=qtn.valid_until or "",
-            discount_pct=getattr(qtn, "discount_pct", 0) or 0.0,
-        )
+        payload = _quotation_payload(s, qtn)
         pdf = generate_pdf(doc_type, payload)
         return Response(
             content=pdf,
@@ -322,20 +332,7 @@ def quotation_xlsx(qtn_id: int, doc_type: str = "quotation"):
         qtn = s.query(Quotation).filter_by(id=qtn_id).first()
         if not qtn:
             raise HTTPException(status_code=404, detail="견적서를 찾을 수 없습니다.")
-        cust = s.query(Customer).filter_by(id=qtn.customer_id).first()
-        vessel = s.query(Vessel).filter_by(id=qtn.vessel_id).first() if qtn.vessel_id else None
-        payload = build_payload(
-            doc_no=qtn.qtn_no,
-            date=qtn.date or date.today().isoformat(),
-            customer=cust,
-            vessel=vessel,
-            items=qtn.items or [],
-            terms=qtn.terms or {},
-            currency=qtn.currency or "USD",
-            vat_rate=qtn.vat_rate or 0.0,
-            valid_until=qtn.valid_until or "",
-            discount_pct=getattr(qtn, "discount_pct", 0) or 0.0,
-        )
+        payload = _quotation_payload(s, qtn)
         xlsx = make_document_xlsx(doc_type, payload)
         return Response(
             content=xlsx,
@@ -376,19 +373,7 @@ def quotation_send(qtn_id: int, body: QuotationSendReq):
         if not body.to.strip():
             raise HTTPException(status_code=400, detail="수신자 이메일을 입력하세요.")
         cust = s.query(Customer).filter_by(id=qtn.customer_id).first()
-        vessel = s.query(Vessel).filter_by(id=qtn.vessel_id).first() if qtn.vessel_id else None
-        payload = build_payload(
-            doc_no=qtn.qtn_no,
-            date=qtn.date or date.today().isoformat(),
-            customer=cust,
-            vessel=vessel,
-            items=qtn.items or [],
-            terms=qtn.terms or {},
-            currency=qtn.currency or "USD",
-            vat_rate=qtn.vat_rate or 0.0,
-            valid_until=qtn.valid_until or "",
-            discount_pct=getattr(qtn, "discount_pct", 0) or 0.0,
-        )
+        payload = _quotation_payload(s, qtn)
         if body.format == "xlsx":
             attach = (f"{qtn.qtn_no}.xlsx", make_document_xlsx(body.doc_type, payload))
         else:
