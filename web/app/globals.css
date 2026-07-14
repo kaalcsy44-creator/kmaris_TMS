@@ -7789,28 +7789,39 @@ table.mini .num {
   color: #556075; border-radius: 6px; cursor: pointer; }
 .act-tabs button.on { background: #0055a8; color: #fff; }
 
-/* ── 일자별 피드 ─────────────────────────────────────────────────────── */
-.act-date-group { margin-bottom: 18px; }
-.act-date-h { font-size: 14px; font-weight: 800; color: #0b1d3a; margin: 6px 0 8px;
-  padding-bottom: 5px; border-bottom: 2px solid #0055a8; }
-.act-date-h .cnt { color: #0055a8; font-size: 12px; margin-left: 4px; }
-.act-dlist { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border, #e5e7eb);
-  border-radius: 8px; background: #fff; overflow: hidden; }
-.act-drow { display: grid; grid-template-columns: 62px minmax(160px, 280px) 1fr; align-items: start;
-  gap: 12px; padding: 7px 12px; font-size: 13px; border-bottom: 1px solid #f0f2f5; }
-.act-drow:last-child { border-bottom: 0; }
-.act-drow.star { background: #fff8e6; }
-.act-drow-pno { font-weight: 700; color: #0055a8; text-decoration: none; font-variant-numeric: tabular-nums; }
-.act-drow-pno:hover { text-decoration: underline; }
-.act-drow-deal { color: #1f2937; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.act-drow-cust { color: #6b7280; }
-.act-drow-desc { color: #334155; min-width: 0; }
-.act-drow.closed .act-drow-desc { color: #b91c1c; }
+/* ── 일자별 · 주간 캘린더(7열) ─────────────────────────────────────────
+   주(월요일 시작)가 한 행, 위=이전 주·아래=다음 주. 좁은 화면은 가로 스크롤. */
+.act-cal { overflow-x: auto; padding-bottom: 4px; }
+.act-cal-weekdays,
+.act-cal-week { display: grid; grid-template-columns: repeat(7, minmax(150px, 1fr)); }
+.act-cal-weekdays { position: sticky; top: 0; z-index: 2; background: #eef2f7;
+  border: 1px solid var(--border, #d8dee6); border-radius: 8px 8px 0 0; }
+.act-cal-wd { padding: 6px 10px; font-size: 12px; font-weight: 700; color: #0b1d3a;
+  border-right: 1px solid #dbe2ea; }
+.act-cal-wd:last-child { border-right: 0; }
+.act-cal-wd:nth-child(6), .act-cal-wd:nth-child(7) { color: #9aa4b2; }  /* 주말 톤다운 */
+.act-cal-week { border: 1px solid var(--border, #d8dee6); border-top: 0; }
+.act-cal-day { border-right: 1px solid #eef1f5; padding: 6px 8px 9px; min-height: 56px;
+  background: #fff; min-width: 0; }
+.act-cal-day:last-child { border-right: 0; }
+.act-cal-day.empty { background: #fafbfc; }
+.act-cal-day.today { background: #f2f8ff; box-shadow: inset 0 0 0 2px #b7d4f2; }
+.act-cal-date { font-size: 11.5px; font-weight: 700; color: #64748b; margin-bottom: 6px;
+  font-variant-numeric: tabular-nums; }
+.act-cal-day.today .act-cal-date { color: #0055a8; }
+.act-cal-proj { margin-bottom: 8px; }
+.act-cal-proj:last-child { margin-bottom: 0; }
+.act-cal-phead { display: flex; align-items: baseline; gap: 4px; margin-bottom: 1px; }
+.act-cal-pno { flex: none; font-weight: 700; color: #0055a8; text-decoration: none; font-size: 12px;
+  font-variant-numeric: tabular-nums; }
+.act-cal-pno:hover { text-decoration: underline; }
+.act-cal-ptitle { font-size: 11px; color: #6b7280; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.act-cal-acts { list-style: none; margin: 0; padding: 0; }
+.act-cal-act { font-size: 11.5px; line-height: 1.4; color: #334155; padding: 1px 0;
+  overflow-wrap: break-word; }
+.act-cal-act.closed { color: #b91c1c; }
+.act-cal-act.star { background: #fff8e6; border-radius: 3px; padding: 1px 4px; }
 .act-drow-star { color: #f59e0b; margin-right: 3px; }
-@media (max-width: 720px) {
-  .act-drow { grid-template-columns: 54px 1fr; }
-  .act-drow-desc { grid-column: 1 / -1; }
-}
 .act-filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .act-search { min-width: 200px; padding: 5px 9px; border: 1px solid var(--border, #d8dee6);
   border-radius: 6px; font-size: 13px; }

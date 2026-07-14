@@ -204,7 +204,8 @@ export default function ActivityScreen() {
   useEffect(load, []);
 
   const steps = data?.steps ?? [];
-  const targetDate = dateFilter === "today" ? todayISO() : dateFilter === "date" ? pickDate : "";
+  const today = todayISO();
+  const targetDate = dateFilter === "today" ? today : dateFilter === "date" ? pickDate : "";
 
   const buckets = useMemo(() => {
     const groups: { phase: number; rows: { row: PipelineRow; acts: Activity[] }[] }[] =
@@ -231,9 +232,11 @@ export default function ActivityScreen() {
 
   const totalDeals = buckets.reduce((s, g) => s + g.rows.length, 0);
 
-  // ── 일자별 탭 — 모든 딜의 활동을 평탄화해 날짜별로 묶는다(최신 날짜 먼저). 필터는 딜별 탭과 공유. ──
-  const dateView = useMemo(() => {
-    const map = new Map<string, { row: PipelineRow; act: Activity }[]>();
+  // ── 일자별 탭 — 주간 캘린더(7열). 주(월요일 시작)가 한 행, 위=이전 주·아래=다음 주.
+  //    각 날짜 셀에 프로젝트별로 활동을 묶어 나열한다. 필터는 딜별 탭과 공유. ──
+  const weekView = useMemo(() => {
+    // 필터를 통과한 활동을 평탄화(날짜 없는 건은 캘린더에서 제외).
+    const flat: { row: PipelineRow; act: Activity }[] = [];
     for (const row of data?.rows ?? []) {
       if (row.cancelled && !showClosed) continue;
       if (mine && row.assignee_id !== uid) continue;
@@ -241,31 +244,42 @@ export default function ActivityScreen() {
       if (q.trim() && !text.includes(q.trim().toLowerCase())) continue;
       let acts = buildActivities(row, steps);
       if (targetDate) acts = acts.filter((a) => a.date === targetDate);
-      for (const act of acts) {
-        const key = act.date || "";
-        if (!map.has(key)) map.set(key, []);
-        (map.get(key) as { row: PipelineRow; act: Activity }[]).push({ row, act });
-      }
+      for (const act of acts) if (act.date) flat.push({ row, act });
     }
-    const stageSort = (a: Activity) => (a.kind === "close" ? 99 : a.stage);
-    const groups = Array.from(map.entries()).map(([date, items]) => {
-      items.sort((x, y) => {
-        const px = x.row.project_no || "", py = y.row.project_no || "";
-        if (px !== py) return px < py ? -1 : 1;
-        return stageSort(x.act) - stageSort(y.act);
-      });
-      return { date, items };
+    // 주(월요일 ISO) → 날짜 → 프로젝트(rfq_id) 로 3단계 그룹화.
+    const weeks = new Map<string, Map<string, Map<number, { row: PipelineRow; acts: Activity[] }>>>();
+    for (const { row, act } of flat) {
+      const ws = weekStart(act.date);
+      if (!weeks.has(ws)) weeks.set(ws, new Map());
+      const days = weeks.get(ws) as Map<string, Map<number, { row: PipelineRow; acts: Activity[] }>>;
+      if (!days.has(act.date)) days.set(act.date, new Map());
+      const projs = days.get(act.date) as Map<number, { row: PipelineRow; acts: Activity[] }>;
+      if (!projs.has(row.rfq_id)) projs.set(row.rfq_id, { row, acts: [] });
+      (projs.get(row.rfq_id) as { row: PipelineRow; acts: Activity[] }).acts.push(act);
+    }
+    // 주 오름차순(위=이전) → 각 주를 월~일 7칸으로 채운다.
+    return Array.from(weeks.keys()).sort().map((ws) => {
+      const days: DayCell[] = [];
+      for (let i = 0; i < 7; i++) {
+        const date = addDays(ws, i);
+        const projMap = weeks.get(ws)?.get(date);
+        const projects = projMap
+          ? Array.from(projMap.values()).sort((a, b) => {
+              const pa = a.row.project_no || "", pb = b.row.project_no || "";
+              return pa < pb ? -1 : pa > pb ? 1 : 0;
+            })
+          : [];
+        for (const p of projects) p.acts.sort((x, y) => actStageSort(x) - actStageSort(y));
+        days.push({ date, projects });
+      }
+      return { start: ws, days };
     });
-    // 날짜 내림차순. 날짜 없는(미확정 종결) 그룹은 맨 뒤.
-    groups.sort((a, b) => {
-      if (!a.date) return 1;
-      if (!b.date) return -1;
-      return a.date < b.date ? 1 : a.date > b.date ? -1 : 0;
-    });
-    return groups;
   }, [data, steps, q, mine, uid, showClosed, targetDate]);
 
-  const totalActs = dateView.reduce((s, g) => s + g.items.length, 0);
+  const totalActs = weekView.reduce(
+    (s, w) => s + w.days.reduce((ds, d) => ds + d.projects.reduce((ps, p) => ps + p.acts.length, 0), 0),
+    0
+  );
 
   // ── 카드 순서(드래그앤드롭) ─────────────────────────────────────────────
   // SSR 하이드레이션 불일치를 피하려고 초기값은 빈 객체, 마운트 후 localStorage 로드.
@@ -431,31 +445,78 @@ export default function ActivityScreen() {
       ) : (
         <>
           {totalActs === 0 ? <div className="state">No activity to show.</div> : null}
-          {dateView.map((g) => (
-            <section key={g.date || "nodate"} className="act-date-group">
-              <h3 className="act-date-h">
-                {dateHeader(g.date)} <span className="cnt">{g.items.length}</span>
-              </h3>
-              <ul className="act-dlist">
-                {g.items.map(({ row, act }, i) => (
-                  <DateActRow key={`${row.rfq_id}-${i}`} row={row} act={act} />
+          {totalActs > 0 ? (
+            <div className="act-cal">
+              <div className="act-cal-weekdays">
+                {WEEKDAYS.map((w) => (
+                  <div key={w} className="act-cal-wd">{w}</div>
                 ))}
-              </ul>
-            </section>
-          ))}
+              </div>
+              {weekView.map((week) => (
+                <div key={week.start} className="act-cal-week">
+                  {week.days.map((day) => (
+                    <div
+                      key={day.date}
+                      className={`act-cal-day${day.date === today ? " today" : ""}${day.projects.length === 0 ? " empty" : ""}`}
+                    >
+                      <div className="act-cal-date">{md(day.date)}</div>
+                      {day.projects.map((p) => (
+                        <div key={p.row.rfq_id} className="act-cal-proj">
+                          <div className="act-cal-phead">
+                            <Link
+                              className="act-cal-pno"
+                              href={`/progress?rfq=${p.row.rfq_id}&stage=${p.row.stage}`}
+                              title="Open deal"
+                            >
+                              {splitProjectNo(p.row.project_no || p.row.kmaris_rfq_no || "—").code}
+                            </Link>
+                            <span className="act-cal-ptitle">{p.row.project_title || "(untitled)"}</span>
+                          </div>
+                          <ul className="act-cal-acts">
+                            {p.acts.map((a, i) => (
+                              <li
+                                key={i}
+                                className={`act-cal-act${a.kind === "close" ? " closed" : ""}${a.kind === "note" && a.note.star ? " star" : ""}`}
+                              >
+                                {actDesc(a)}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          ) : null}
         </>
       )}
     </div>
   );
 }
 
-// yyyy-mm-dd → "Jul 14, 2026 · Mon". 파싱 불가/빈 값이면 'No date'.
-function dateHeader(iso: string): string {
+// 주간 캘린더용 타입/헬퍼.
+type DayCell = { date: string; projects: { row: PipelineRow; acts: Activity[] }[] };
+const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+function actStageSort(a: Activity): number {
+  return a.kind === "close" ? 99 : a.stage;
+}
+function toISODate(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+// 해당 날짜가 속한 주의 월요일(ISO).
+function weekStart(iso: string): string {
   const d = new Date(`${iso}T00:00`);
-  if (!iso || Number.isNaN(d.getTime())) return "No date";
-  const wd = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.getDay()];
-  const mo = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][d.getMonth()];
-  return `${mo} ${d.getDate()}, ${d.getFullYear()} · ${wd}`;
+  const day = d.getDay(); // 0=일 … 6=토
+  d.setDate(d.getDate() + (day === 0 ? -6 : 1 - day));
+  return toISODate(d);
+}
+function addDays(iso: string, n: number): string {
+  const d = new Date(`${iso}T00:00`);
+  d.setDate(d.getDate() + n);
+  return toISODate(d);
 }
 
 // 활동 1건의 설명 — 딜별 카드와 동일한 표기(auto 라벨·party / 노트 텍스트·메타·PIC / 종결 사유).
@@ -486,24 +547,6 @@ function actDesc(act: Activity) {
       {parts.length ? <span className="act-meta"> · {parts.join(" · ")}</span> : null}
       {n.pic ? <span className="act-note-pic">{n.pic}</span> : null}
     </>
-  );
-}
-
-// 일자별 피드의 한 줄 — [딜코드] [프로젝트명·고객] [활동 설명].
-function DateActRow({ row, act }: { row: PipelineRow; act: Activity }) {
-  const { code } = splitProjectNo(row.project_no || row.kmaris_rfq_no || "—");
-  const star = act.kind === "note" && !!act.note.star;
-  return (
-    <li className={`act-drow${act.kind === "close" ? " closed" : ""}${star ? " star" : ""}`}>
-      <Link className="act-drow-pno" href={`/progress?rfq=${row.rfq_id}&stage=${row.stage}`} title="Open deal">
-        {code}
-      </Link>
-      <span className="act-drow-deal">
-        {row.project_title || "(untitled)"}
-        {row.customer ? <span className="act-drow-cust"> · {row.customer}</span> : null}
-      </span>
-      <span className="act-drow-desc">{actDesc(act)}</span>
-    </li>
   );
 }
 
