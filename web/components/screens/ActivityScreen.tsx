@@ -7,7 +7,9 @@ import {
   addRfqStageNote,
   updateRfqStageNote,
   deleteRfqStageNote,
+  fetchAssignableUsers,
 } from "@/lib/api";
+import { useCachedData } from "@/lib/useCachedData";
 import type { PipelineData, PipelineRow, StageNote } from "@/lib/types";
 import { getUserId, getUser } from "@/lib/auth";
 
@@ -334,6 +336,15 @@ function AddActivity({ rfqId, stage, onAdded }: { rfqId: number; stage: number; 
   const [busy, setBusy] = useState(false);
   const me = getUser();
   const [pic, setPic] = useState(me?.username ?? ""); // 담당자(작성자) — 기본값=로그인 사용자, 편집 가능
+  // 담당자 드롭다운 후보 — 배정 가능 사용자 목록(+ 로그인 사용자, + 현재 선택값).
+  const { data: users } = useCachedData("assignable-users", fetchAssignableUsers);
+  const picOptions = useMemo(() => {
+    const set = new Set<string>();
+    if (me?.username) set.add(me.username);
+    (users ?? []).forEach((u) => set.add(u.username));
+    if (pic) set.add(pic);
+    return Array.from(set);
+  }, [users, me?.username, pic]);
 
   async function submit() {
     if (!text.trim()) return;
@@ -361,17 +372,12 @@ function AddActivity({ rfqId, stage, onAdded }: { rfqId: number; stage: number; 
   }
   return (
     <div className="act-add">
-      {/* 1행: 날짜 · 담당자(PIC) · From/To · Party · ★ */}
+      {/* 1행: 날짜 */}
       <div className="act-add-row">
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-        <input
-          className="act-add-pic"
-          type="text"
-          value={pic}
-          placeholder="PIC"
-          title="담당자(작성자)"
-          onChange={(e) => setPic(e.target.value)}
-        />
+      </div>
+      {/* 2행: From/To · Party · 담당자(PIC) · ★ */}
+      <div className="act-add-row">
         <div className="act-seg sm">
           {(["in", "out"] as const).map((d) => (
             <button key={d} className={dir === d ? "on" : ""} onClick={() => setDir((v) => (v === d ? "" : d))}>
@@ -385,9 +391,15 @@ function AddActivity({ rfqId, stage, onAdded }: { rfqId: number; stage: number; 
           <option value="Vendor">Vendor</option>
           <option value="Internal">Internal</option>
         </select>
+        <select className="act-add-pic" value={pic} title="담당자(작성자)" onChange={(e) => setPic(e.target.value)}>
+          {pic ? null : <option value="">PIC —</option>}
+          {picOptions.map((u) => (
+            <option key={u} value={u}>{u}</option>
+          ))}
+        </select>
         <label className="act-check"><input type="checkbox" checked={star} onChange={(e) => setStar(e.target.checked)} /> ★</label>
       </div>
-      {/* 2행: 내용 입력 — 길어지면 자동 줄바꿈(Enter=저장, Shift+Enter=줄바꿈). */}
+      {/* 3행: 내용 입력 — 길어지면 자동 줄바꿈(Enter=저장, Shift+Enter=줄바꿈). */}
       <div className="act-add-row">
         <textarea
           className="act-add-text"
@@ -399,7 +411,7 @@ function AddActivity({ rfqId, stage, onAdded }: { rfqId: number; stage: number; 
           autoFocus
         />
       </div>
-      {/* 3행: Add · Cancel */}
+      {/* 4행: Add · Cancel */}
       <div className="act-add-row">
         <button className="btn sm primary act-add-go" disabled={busy || !text.trim()} onClick={submit}>{busy ? "…" : "Add"}</button>
         <button className="btn sm act-add-go" onClick={() => setOpen(false)}>Cancel</button>

@@ -7834,9 +7834,8 @@ table.mini .num {
 .act-add-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .act-add input[type="date"], .act-add select { padding: 4px 6px; border: 1px solid var(--border, #d8dee6);
   border-radius: 6px; font-size: 12px; }
-/* 담당자(PIC) 입력 — 좁게. */
-.act-add-pic { width: 90px; padding: 4px 6px; border: 1px solid var(--border, #d8dee6);
-  border-radius: 6px; font-size: 12px; }
+/* 담당자(PIC) 드롭다운 — 사용자명이 들어갈 만큼만. */
+.act-add-pic { min-width: 96px; }
 /* 내용 입력란 — 한 줄 전체를 넓게. 길어지면 자동 줄바꿈되는 textarea. */
 .act-add-text { flex: 1; width: 100%; min-width: 240px; padding: 6px 10px;
   border: 1px solid var(--border, #d8dee6); border-radius: 6px; font-size: 13px;
