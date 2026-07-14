@@ -7818,9 +7818,10 @@ table.mini .num {
 .act-add-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .act-add input[type="date"], .act-add select { padding: 4px 6px; border: 1px solid var(--border, #d8dee6);
   border-radius: 6px; font-size: 12px; }
-/* 내용 입력란 — 한 줄 전체를 넓게 차지. */
-.act-add-text { flex: 1; min-width: 240px; padding: 6px 10px; border: 1px solid var(--border, #d8dee6);
-  border-radius: 6px; font-size: 13px; }
+/* 내용 입력란 — 한 줄 전체를 넓게. 길어지면 자동 줄바꿈되는 textarea. */
+.act-add-text { flex: 1; width: 100%; min-width: 240px; padding: 6px 10px;
+  border: 1px solid var(--border, #d8dee6); border-radius: 6px; font-size: 13px;
+  font-family: inherit; line-height: 1.4; resize: vertical; }
 /* From/To 세그먼트(작게). */
 .act-seg.sm button { padding: 3px 9px; font-size: 11.5px; }
 /* Add/Cancel 버튼 높이 축소(약 2/3 = 24px). .btn 의 height:36px 를 덮는다. */

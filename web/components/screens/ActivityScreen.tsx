@@ -375,14 +375,15 @@ function AddActivity({ rfqId, stage, onAdded }: { rfqId: number; stage: number; 
         </select>
         <label className="act-check"><input type="checkbox" checked={star} onChange={(e) => setStar(e.target.checked)} /> ★</label>
       </div>
-      {/* 2행: 내용 입력 */}
+      {/* 2행: 내용 입력 — 길어지면 자동 줄바꿈(Enter=저장, Shift+Enter=줄바꿈). */}
       <div className="act-add-row">
-        <input
+        <textarea
           className="act-add-text"
           placeholder="Activity note (e.g. Waiting for PO / requested update)"
           value={text}
+          rows={2}
           onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
+          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); } }}
           autoFocus
         />
       </div>
