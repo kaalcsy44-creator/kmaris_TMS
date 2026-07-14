@@ -211,6 +211,7 @@ class RFQ(Base):
     #   code: schedule(일정 지연/취소) | slow_response(대응 지연) | no_quote(견적 불가) | other(기타)
     close_reason      = Column(String(40))   # 사유 코드
     close_reason_note = Column(Text)          # 기타 사유 직접 입력(선택)
+    closed_at         = Column(String(16))    # 종결 일시 "YYYY-MM-DDTHH:MM" (KST). 재활성 시 비운다.
     follow_up_level  = Column(SAEnum(FollowUpLevel), default=FollowUpLevel.B)
     request_channel  = Column(String(40))   # 고객 요청 수단: Email/Phone/SMS/WhatsApp/WeChat 등
     items            = Column(JSON, default=list)

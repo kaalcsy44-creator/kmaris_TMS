@@ -340,6 +340,7 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
                 # 종결 사유(코드 + 기타 직접입력). 종결건에서만 채워진다.
                 "close_reason": getattr(r, "close_reason", None) or "",
                 "close_reason_note": getattr(r, "close_reason_note", None) or "",
+                "closed_at": getattr(r, "closed_at", None) or "",
                 "stage_dates": _sd,
                 "stage_auto": _auto,
                 "stage_notes": _sn,

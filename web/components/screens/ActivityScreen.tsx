@@ -24,6 +24,13 @@ function phaseOf(stage: number): number {
   return stage <= 1 ? 0 : PHASES.length - 1;
 }
 
+const CLOSE_REASONS: Record<string, string> = {
+  schedule: "Schedule delay / cancelled",
+  slow_response: "Slow response",
+  no_quote: "No quote available",
+  other: "Other",
+};
+
 function todayISO(): string {
   const d = new Date();
   const p = (n: number) => String(n).padStart(2, "0");
@@ -36,21 +43,46 @@ function md(iso: string): string {
   if (!m) return s;
   return `${Number(m[1])}/${Number(m[2])}`;
 }
+// 프로젝트 번호 "P-010(260713)" → { code: "P-010", date: "(260713)" }
+function splitProjectNo(pno: string): { code: string; date: string } {
+  const m = (pno || "").match(/^(.*?)\s*(\(.*\))\s*$/);
+  return m ? { code: m[1], date: m[2] } : { code: pno || "—", date: "" };
+}
+function vendorOf(row: PipelineRow): string {
+  return (row.vendor || "").trim() || (row.vrfq_vendors || "").trim();
+}
+// 자동 단계 이벤트의 From/To 상대 — 단계별로 고객/벤더를 붙인다.
+function autoParty(stage: number, row: PipelineRow): string {
+  const cust = row.customer || "";
+  const vend = vendorOf(row);
+  switch (stage) {
+    case 1: return cust ? `from ${cust}` : "";   // RFQ Received
+    case 2: return vend ? `to ${vend}` : "";     // RFQ Sent
+    case 3: return vend ? `from ${vend}` : "";   // Quote Received
+    case 4: return cust ? `to ${cust}` : "";     // Quote Sent
+    case 5: return cust ? `from ${cust}` : "";   // P/O Received
+    case 6: return vend ? `to ${vend}` : "";     // P/O Sent
+    case 8: return cust ? `to ${cust}` : "";     // Delivery Complete
+    case 9: return cust ? `to ${cust}` : "";     // Tax Invoice · Billing
+    case 10: return cust ? `to ${cust}` : "";    // Tax Invoice Issued
+    case 11: return cust ? `from ${cust}` : "";  // Payment
+    default: return "";
+  }
+}
 
-// 한 딜의 활동 = 자동 단계 이벤트(stage_dates/auto) + 수동 stage_notes 병합.
+// 한 딜의 활동 = 자동 단계 이벤트 + 수동 stage_notes + 종결 이벤트.
 type Activity =
-  | { kind: "auto"; date: string; stage: number; label: string }
-  | { kind: "note"; date: string; stage: number; index: number; note: StageNote };
+  | { kind: "auto"; date: string; stage: number; label: string; party: string }
+  | { kind: "note"; date: string; stage: number; index: number; note: StageNote }
+  | { kind: "close"; date: string; reason: string };
 
 function buildActivities(row: PipelineRow, steps: string[]): Activity[] {
   const out: Activity[] = [];
-  // 자동 단계 이벤트 — 각 단계에서 실제일자(stage_dates) 우선, 없으면 자동시각(stage_auto).
   for (let n = 1; n <= steps.length; n++) {
     const key = String(n);
     const date = (row.stage_dates?.[key] || row.stage_auto?.[key] || "").slice(0, 10);
-    if (date) out.push({ kind: "auto", date, stage: n, label: steps[n - 1] || `Stage ${n}` });
+    if (date) out.push({ kind: "auto", date, stage: n, label: steps[n - 1] || `Stage ${n}`, party: autoParty(n, row) });
   }
-  // 수동 활동 기록.
   for (const [stage, list] of Object.entries(row.stage_notes ?? {})) {
     (list ?? []).forEach((note, index) => {
       const date = (note.datetime || note.at || "").slice(0, 10);
@@ -62,6 +94,16 @@ function buildActivities(row: PipelineRow, steps: string[]): Activity[] {
     const db = b.kind === "note" ? (b.note.datetime || b.note.at || b.date) : b.date;
     return da < db ? -1 : da > db ? 1 : 0;
   });
+  // 종결 이벤트 — 항상 맨 아래에 붙인다(날짜 없으면 날짜칸 비움).
+  if (row.cancelled) {
+    const reason = CLOSE_REASONS[row.close_reason || ""] || row.close_reason || "";
+    const note = (row.close_reason_note || "").trim();
+    out.push({
+      kind: "close",
+      date: (row.closed_at || "").slice(0, 10),
+      reason: [reason, note].filter(Boolean).join(" — "),
+    });
+  }
   return out;
 }
 
@@ -87,22 +129,19 @@ export default function ActivityScreen() {
   const steps = data?.steps ?? [];
   const targetDate = dateFilter === "today" ? todayISO() : dateFilter === "date" ? pickDate : "";
 
-  // 딜별로 활동을 만들고, 필터(담당/검색/종결/날짜)를 적용한 뒤 버킷별로 묶는다.
   const buckets = useMemo(() => {
     const groups: { phase: number; rows: { row: PipelineRow; acts: Activity[] }[] }[] =
       PHASES.map((_, i) => ({ phase: i, rows: [] }));
     for (const row of data?.rows ?? []) {
       if (row.cancelled && !showClosed) continue;
       if (mine && row.assignee_id !== uid) continue;
-      const text = `${row.project_no} ${row.project_title} ${row.customer} ${row.vendor} ${row.vrfq_vendors}`.toLowerCase();
+      const text = `${row.project_no} ${row.project_title} ${row.customer} ${row.vendor} ${row.vrfq_vendors} ${row.vessel}`.toLowerCase();
       if (q.trim() && !text.includes(q.trim().toLowerCase())) continue;
       let acts = buildActivities(row, steps);
       if (targetDate) acts = acts.filter((a) => a.date === targetDate);
-      // 날짜 필터가 걸린 경우, 해당일 활동이 없는 딜은 숨긴다.
       if (targetDate && acts.length === 0) continue;
       groups[phaseOf(row.stage)].rows.push({ row, acts });
     }
-    // 각 버킷 내 정렬 — 최근 활동(마지막 활동일) 내림차순.
     for (const g of groups) {
       g.rows.sort((a, b) => {
         const la = a.acts.length ? a.acts[a.acts.length - 1].date : "";
@@ -134,7 +173,7 @@ export default function ActivityScreen() {
 
   async function removeNote(rfqId: number, a: Activity) {
     if (a.kind !== "note") return;
-    if (!window.confirm("이 활동 기록을 삭제할까요?")) return;
+    if (!window.confirm("Delete this activity?")) return;
     try {
       await deleteRfqStageNote(rfqId, a.stage, a.index);
       load();
@@ -151,41 +190,41 @@ export default function ActivityScreen() {
       <div className="act-toolbar">
         <div className="act-title">
           <b>Activity Log</b>
-          <span className="muted">프로젝트별 · 단계별 활동 일지 · {totalDeals}건</span>
+          <span className="muted">Project · stage activity by deal · {totalDeals}</span>
         </div>
         <div className="act-filters">
           <input
             className="act-search"
-            placeholder="프로젝트 / 고객 / 벤더 검색"
+            placeholder="Search project / customer / vendor"
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
           <div className="act-seg">
             {(["all", "today", "date"] as const).map((k) => (
               <button key={k} className={dateFilter === k ? "on" : ""} onClick={() => setDateFilter(k)}>
-                {k === "all" ? "전체" : k === "today" ? "오늘" : "날짜"}
+                {k === "all" ? "All" : k === "today" ? "Today" : "Date"}
               </button>
             ))}
             {dateFilter === "date" ? (
               <input type="date" value={pickDate} onChange={(e) => setPickDate(e.target.value)} />
             ) : null}
           </div>
-          <label className="act-check"><input type="checkbox" checked={mine} onChange={(e) => setMine(e.target.checked)} /> 내 담당</label>
-          <label className="act-check"><input type="checkbox" checked={showClosed} onChange={(e) => setShowClosed(e.target.checked)} /> 종결 포함</label>
+          <label className="act-check"><input type="checkbox" checked={mine} onChange={(e) => setMine(e.target.checked)} /> Mine</label>
+          <label className="act-check"><input type="checkbox" checked={showClosed} onChange={(e) => setShowClosed(e.target.checked)} /> Include closed</label>
           <button className={`btn sm${meeting ? " primary" : ""}`} onClick={() => setMeeting((v) => !v)}>
-            {meeting ? "회의모드 ON" : "회의모드"}
+            {meeting ? "Meeting ON" : "Meeting mode"}
           </button>
-          <button className="btn sm" onClick={() => window.print()}>인쇄</button>
+          <button className="btn sm" onClick={() => window.print()}>Print</button>
         </div>
       </div>
 
-      {totalDeals === 0 ? <div className="state">표시할 활동이 없습니다.</div> : null}
+      {totalDeals === 0 ? <div className="state">No activity to show.</div> : null}
 
       {buckets.map((g) =>
         g.rows.length === 0 ? null : (
           <section key={g.phase} className="act-bucket">
             <h3 className="act-bucket-h">
-              {PHASES[g.phase].label} 중 <span className="cnt">{g.rows.length}</span>
+              {PHASES[g.phase].label} <span className="cnt">{g.rows.length}</span>
             </h3>
             <div className="act-cards">
               {g.rows.map(({ row, acts }) => (
@@ -222,24 +261,31 @@ function ActivityCard({
   onDelete: (a: Activity) => void;
   onAdded: () => void;
 }) {
-  const vendor = (row.vendor || "").trim() || (row.vrfq_vendors || "").trim();
-  const head = [row.project_title || "(제목 없음)", row.customer, vendor].filter(Boolean).join(" / ");
+  const { code, date } = splitProjectNo(row.project_no || row.kmaris_rfq_no || "—");
+  const sub = [row.customer, vendorOf(row), row.vessel].filter(Boolean).join(" / ");
   return (
     <div className="act-card">
       <div className="act-card-h">
-        <span className="act-pno">{row.project_no || row.kmaris_rfq_no || "—"})</span>
-        <span className="act-head">{head}</span>
+        <span className="act-pno">{code}</span>
+        {date ? <span className="act-pno-date">{date}</span> : null}
         <span className="act-spacer" />
         {row.assignee ? <span className="act-pic">{row.assignee}</span> : null}
-        <Link className="act-open" href={`/progress?rfq=${row.rfq_id}&stage=${row.stage}`}>열기 →</Link>
+        <Link className="act-open" href={`/progress?rfq=${row.rfq_id}&stage=${row.stage}`}>Open →</Link>
       </div>
+      <div className="act-title2">{row.project_title || "(untitled)"}</div>
+      {sub ? <div className="act-sub">{sub}</div> : null}
       <ul className="act-list">
-        {acts.length === 0 ? <li className="act-empty muted">활동 기록 없음</li> : null}
+        {acts.length === 0 ? <li className="act-empty muted">No activity yet</li> : null}
         {acts.map((a, i) => (
-          <li key={i} className={`act-item${a.kind === "note" && a.note.star ? " star" : ""}`}>
+          <li key={i} className={`act-item${a.kind === "note" && a.note.star ? " star" : ""}${a.kind === "close" ? " closed" : ""}`}>
             <span className="act-date">{md(a.date)}</span>
             {a.kind === "auto" ? (
-              <span className="act-auto"><span className="act-tag">자동</span> {a.label}</span>
+              <span className="act-auto">
+                <span className="act-tag">auto</span> {a.label}
+                {a.party ? <span className="act-meta"> · {a.party}</span> : null}
+              </span>
+            ) : a.kind === "close" ? (
+              <span className="act-text"><span className="act-tag close">closed</span> {a.reason || "Closed"}</span>
             ) : (
               <span className="act-text">
                 {a.note.text}
@@ -250,8 +296,8 @@ function ActivityCard({
             )}
             {a.kind === "note" ? (
               <span className="act-actions">
-                <button className={`act-starbtn${a.note.star ? " on" : ""}`} title="우선 표시" onClick={() => onStar(a)}>★</button>
-                {!meeting ? <button className="act-del" title="삭제" onClick={() => onDelete(a)}>×</button> : null}
+                <button className={`act-starbtn${a.note.star ? " on" : ""}`} title="Mark priority" onClick={() => onStar(a)}>★</button>
+                {!meeting ? <button className="act-del" title="Delete" onClick={() => onDelete(a)}>×</button> : null}
               </span>
             ) : null}
           </li>
@@ -290,7 +336,7 @@ function AddActivity({ rfqId, stage, onAdded }: { rfqId: number; stage: number; 
 
   if (!open) {
     return (
-      <button className="act-add-btn" onClick={() => setOpen(true)}>+ 활동 추가{me ? ` (${me.username})` : ""}</button>
+      <button className="act-add-btn" onClick={() => setOpen(true)}>+ Add activity{me ? ` (${me.username})` : ""}</button>
     );
   }
   return (
@@ -298,21 +344,21 @@ function AddActivity({ rfqId, stage, onAdded }: { rfqId: number; stage: number; 
       <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
       <input
         className="act-add-text"
-        placeholder="활동 내용 (예: PO 기다리는 중 / 업데이트 요청)"
+        placeholder="Activity note (e.g. Waiting for PO / requested update)"
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
         autoFocus
       />
       <select value={party} onChange={(e) => setParty(e.target.value)}>
-        <option value="">상대 —</option>
+        <option value="">Party —</option>
         <option value="Customer">Customer</option>
         <option value="Vendor">Vendor</option>
         <option value="Internal">Internal</option>
       </select>
       <label className="act-check"><input type="checkbox" checked={star} onChange={(e) => setStar(e.target.checked)} /> ★</label>
-      <button className="btn sm primary" disabled={busy || !text.trim()} onClick={submit}>{busy ? "…" : "추가"}</button>
-      <button className="btn sm" onClick={() => setOpen(false)}>취소</button>
+      <button className="btn sm primary" disabled={busy || !text.trim()} onClick={submit}>{busy ? "…" : "Add"}</button>
+      <button className="btn sm" onClick={() => setOpen(false)}>Cancel</button>
     </div>
   );
 }

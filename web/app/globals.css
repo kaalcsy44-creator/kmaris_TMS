@@ -7772,13 +7772,16 @@ table.mini .num {
 .act-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 12px; }
 
 .act-card { border: 1px solid var(--border, #e5e7eb); border-radius: 8px; padding: 12px 14px; background: #fff; }
-.act-card-h { display: flex; align-items: baseline; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
-.act-pno { font-weight: 800; color: #0055a8; }
-.act-head { font-weight: 600; font-size: 13.5px; }
+.act-card-h { display: flex; align-items: baseline; gap: 5px; margin-bottom: 3px; flex-wrap: wrap; }
+.act-pno { font-weight: 800; color: #0055a8; font-size: 14.5px; }
+.act-pno-date { font-weight: 400; color: #94a3b8; font-size: 12.5px; }
 .act-spacer { flex: 1; }
 .act-pic { font-size: 11px; background: #eef3f9; color: #334155; padding: 1px 7px; border-radius: 10px; }
 .act-open { font-size: 11.5px; color: #0055a8; text-decoration: none; white-space: nowrap; }
 .act-open:hover { text-decoration: underline; }
+/* 프로젝트명(1pt 크게, 준볼드) + 고객/벤더/선박(1pt 작게, 비볼드 muted). */
+.act-title2 { font-size: 14.5px; font-weight: 600; color: #1f2937; margin-bottom: 1px; }
+.act-sub { font-size: 12px; font-weight: 400; color: #6b7280; margin-bottom: 8px; }
 
 .act-list { list-style: none; margin: 0 0 8px; padding: 0; }
 .act-item { display: flex; align-items: flex-start; gap: 8px; padding: 3px 0; font-size: 13px;
@@ -7788,6 +7791,8 @@ table.mini .num {
 .act-date { flex: none; width: 42px; color: #64748b; font-variant-numeric: tabular-nums; font-weight: 600; }
 .act-auto { color: #64748b; }
 .act-tag { font-size: 10px; background: #eef3f9; color: #64748b; padding: 0 5px; border-radius: 8px; margin-right: 2px; }
+.act-tag.close { background: #fde8e8; color: #b91c1c; }
+.act-item.closed .act-text { color: #b91c1c; }
 .act-text { flex: 1; }
 .act-meta { color: #94a3b8; font-size: 11.5px; }
 .act-actions { flex: none; display: flex; gap: 4px; opacity: 0; transition: opacity .12s; }

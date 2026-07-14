@@ -500,10 +500,13 @@ def update_rfq_cancel(rfq_id: int, body: RfqCancelUpdate):
             # 종결 사유 기록. reason 코드 + 기타 직접입력(note)은 other 일 때만 의미.
             rfq.close_reason = (body.reason or "").strip() or None
             rfq.close_reason_note = (body.reason_note or "").strip() or None
+            # 최초 종결 일시 보존(이미 있으면 유지).
+            rfq.closed_at = getattr(rfq, "closed_at", None) or _kst_iso(datetime.utcnow())
         else:
-            # 재활성 시 사유를 비운다.
+            # 재활성 시 사유·종결일시를 비운다.
             rfq.close_reason = None
             rfq.close_reason_note = None
+            rfq.closed_at = None
         s.commit()
         return {"ok": True, "cancelled": body.cancelled,
                 "close_reason": rfq.close_reason,

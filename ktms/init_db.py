@@ -36,6 +36,7 @@ _MIGRATIONS = {
         "created_by": "INTEGER",
         "close_reason": "VARCHAR(40)",
         "close_reason_note": "TEXT",
+        "closed_at": "VARCHAR(16)",
     },
     "quotations": {
         "created_by": "INTEGER",
