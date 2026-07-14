@@ -310,6 +310,8 @@ def _quotation_payload(s, qtn):
         ref_no=ref_no,
         attn=attn,
         messrs=messrs,
+        cost_currency=(qtn.cost_currency or qtn.currency or "USD"),
+        fx_rate=(getattr(qtn, "fx_rate", None) or USD_KRW_RATE),
     )
 
 

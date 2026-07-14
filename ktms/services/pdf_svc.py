@@ -57,12 +57,16 @@ def build_payload(
     ref_no: str = "",
     attn: str = "",
     messrs: str = "",
+    cost_currency: str = "",
+    fx_rate: float = 0.0,
 ) -> Dict[str, Any]:
     return {
         "doc_no": doc_no,
         "date": date,
         "valid_until": valid_until,
         "currency": currency,
+        "cost_currency": cost_currency or currency,
+        "fx_rate": fx_rate,
         "vat_rate": vat_rate,
         "discount_pct": discount_pct,
         "project_title": project_title,

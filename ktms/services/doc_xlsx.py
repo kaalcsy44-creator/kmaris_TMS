@@ -839,32 +839,45 @@ def make_quotation_costing_xlsx(
     c.fill = blue; c.font = white_sm; c.alignment = center
     ws.row_dimensions[2].height = 15
 
-    # ── Meta (rows 4-8) ────────────────────────────────────────────────
+    # 원가(cost) 통화 → 판매 통화 환산계수. Margin 수식에서 통화가 섞일 때 사용.
+    cost_cur = (data.get("cost_currency") or currency).upper()
+    fx = _num(data.get("fx_rate")) or 0.0
+    if cost_cur == currency or fx <= 0:
+        factor = 1.0
+    elif cost_cur == "KRW" and currency == "USD":
+        factor = 1.0 / fx
+    elif cost_cur == "USD" and currency == "KRW":
+        factor = fx
+    else:
+        factor = 1.0
+    fx_str = f"{factor:.10g}"
+    cost_fmt = "#,##0.00" if cost_cur == "USD" else "#,##0"
+
+    # ── Meta (rows 4-8) — 미리보기(PDF) 와 동일한 순서·구성 ────────────
     vat_label = "VAT excluded" if _num(data.get("vat_rate", 0)) == 0 else f"VAT {int(_num(data.get('vat_rate', 0)) * 100)}%"
     meta = [
         ("User", customer.get("name", ""), "Quotation No.", data.get("doc_no", "")),
-        ("Attn.", data.get("attn", "") or customer.get("contact", ""), "Ref. No.", data.get("ref_no", "")),
-        ("Ship Name", vessel.get("name", ""), "Date", data.get("date", "")),
-        ("Project", data.get("project_title", ""), "Currency", currency),
-        ("Messrs", data.get("messrs", ""), "VAT", vat_label),
+        ("Messrs", data.get("messrs", ""), "Ref. No.", data.get("ref_no", "")),
+        ("Attn.", data.get("attn", "") or customer.get("contact", ""), "Date", data.get("date", "")),
+        ("Ship Name", vessel.get("name", ""), "Currency", currency),
+        ("Project", data.get("project_title", ""), "VAT", vat_label),
     ]
-    mid = NCOL // 2
     for off, (k1, v1, k2, v2) in enumerate(meta, start=4):
-        for col, val, is_label in [(1, k1, True), (2, v1, False), (mid + 1, k2, True), (mid + 2, v2, False)]:
-            cell = ws.cell(off, col, val); cell.border = bdr; cell.alignment = left
+        # 라벨은 A:B 로 병합해 잘리지 않게 한다(항목표 No. 열은 좁게 유지).
+        merge(off, 1, off, 2); merge(off, 3, off, 6)
+        merge(off, 7, off, 8); merge(off, 9, off, NCOL)
+        for col, val, is_label in [(1, k1, True), (3, v1, False), (7, k2, True), (9, v2, False)]:
+            cell = ws.cell(off, col, val); cell.alignment = left
             if is_label:
                 cell.fill = gray; cell.font = boldsm
-        merge(off, 2, off, mid); merge(off, mid + 2, off, NCOL)
-        for col in range(2, mid + 1):
-            ws.cell(off, col).border = bdr
-        for col in range(mid + 2, NCOL + 1):
+        for col in range(1, NCOL + 1):
             ws.cell(off, col).border = bdr
         ws.row_dimensions[off].height = 15
 
     # ── PURCHASE 그룹 라벨(원가 열 위) ─────────────────────────────────
     GROUP_ROW = 9
     merge(GROUP_ROW, 6, GROUP_ROW, 8)
-    gc = ws.cell(GROUP_ROW, 6, "PURCHASE (internal)"); gc.fill = cost_fill; gc.font = boldsm; gc.alignment = center
+    gc = ws.cell(GROUP_ROW, 6, f"PURCHASE (internal, {cost_cur})"); gc.fill = cost_fill; gc.font = boldsm; gc.alignment = center
     for col in range(1, NCOL + 1):
         ws.cell(GROUP_ROW, col).border = bdr
         if col < 6 or col > 8:
@@ -879,34 +892,37 @@ def make_quotation_costing_xlsx(
         ws.column_dimensions[get_column_letter(ci)].width = w
     ws.row_dimensions[HROW].height = 24
 
-    sales_total = 0.0
-    cost_total = 0.0
+    # 컬럼: A No · B Part · C Desc · D Qty · E Unit · F Cost U/P · G Cost Amount
+    #       · H Margin% · I U/Price · J Amount · K Lead · L Remark
+    first = HROW + 1
     for ri, it in enumerate(raw_items, start=1):
         r = HROW + ri
         qty = _num(it.get("qty", 0))
         unit_price = _num(it.get("unit_price", 0))
-        amount = _num(it.get("amount", 0)) or qty * unit_price
         cost = _num(it.get("cost_price", 0))
-        cost_amt = cost * qty
-        mg = it.get("margin_pct")
-        margin = _num(mg) if mg not in (None, "") else (
-            (unit_price - cost) / unit_price * 100 if unit_price else 0.0
-        )
-        sales_total += amount
-        cost_total += cost_amt
-        lead_remark = str(it.get("lead_time", "") or "")
-        vals = [ri, it.get("part_no", ""), it.get("description", ""), qty, it.get("unit", ""),
-                cost, cost_amt, round(margin, 1), unit_price, amount, lead_remark, it.get("remark", "")]
-        for ci, val in enumerate(vals, start=1):
+        # 값(입력)과 수식(계산)을 섞어 배치 — Commercial Invoice 와 동일한 방식.
+        cells = {
+            1: ri, 2: it.get("part_no", ""), 3: it.get("description", ""),
+            4: qty, 5: it.get("unit", ""),
+            6: cost,                                   # Cost U/P (입력)
+            7: f"=D{r}*F{r}",                          # Cost Amount = Qty × Cost
+            8: f"=IF(I{r}=0,0,(I{r}-F{r}*{fx_str})/I{r}*100)",  # Margin% (통화환산 반영)
+            9: unit_price,                             # U/Price (입력)
+            10: f"=D{r}*I{r}",                         # Amount = Qty × U/Price
+            11: str(it.get("lead_time", "") or ""), 12: it.get("remark", ""),
+        }
+        for ci, val in cells.items():
             cell = ws.cell(r, ci, val); cell.border = bdr
             if ri % 2 == 0 and ci not in (6, 7, 8):
                 cell.fill = alt
             if ci in (6, 7, 8):
                 cell.fill = cost_fill
-            if ci in (4, 6, 7, 9, 10):
+            if ci in (4, 9, 10):
                 cell.alignment = right
-                if ci in (6, 7, 9, 10):
+                if ci in (9, 10):
                     cell.number_format = num_fmt
+            elif ci in (6, 7):
+                cell.alignment = right; cell.number_format = cost_fmt
             elif ci == 8:
                 cell.alignment = right; cell.number_format = '0.0"%"'
             elif ci in (1, 5):
@@ -914,17 +930,23 @@ def make_quotation_costing_xlsx(
             else:
                 cell.alignment = left
         ws.row_dimensions[r].height = 18
+    last = HROW + len(raw_items)
 
-    # ── Totals ─────────────────────────────────────────────────────────
-    trow = HROW + len(raw_items) + 1
-    margin_total = (sales_total - cost_total) / sales_total * 100 if sales_total else 0.0
+    # ── Totals (수식) ──────────────────────────────────────────────────
+    trow = last + 1
+    has_rows = len(raw_items) > 0
     tc = ws.cell(trow, 3, "Total"); tc.font = bold; tc.alignment = right; tc.border = bdr
     for col in (1, 2, 4, 5, 11, 12):
         ws.cell(trow, col).border = bdr
-    for col, val, fill in [(6, "", cost_fill), (7, cost_total, cost_fill), (8, round(margin_total, 1), cost_fill),
-                           (9, "", lightblue), (10, sales_total, lightblue)]:
+    cost_sum = f"=SUM(G{first}:G{last})" if has_rows else 0
+    amt_sum = f"=SUM(J{first}:J{last})" if has_rows else 0
+    margin_tot = f"=IF(J{trow}=0,0,(J{trow}-G{trow}*{fx_str})/J{trow}*100)" if has_rows else 0
+    for col, val, fill in [(6, "", cost_fill), (7, cost_sum, cost_fill), (8, margin_tot, cost_fill),
+                           (9, "", lightblue), (10, amt_sum, lightblue)]:
         cell = ws.cell(trow, col, val); cell.border = bdr; cell.fill = fill; cell.font = bold; cell.alignment = right
-        if col in (7, 10):
+        if col == 7:
+            cell.number_format = cost_fmt
+        if col == 10:
             cell.number_format = num_fmt
         if col == 8:
             cell.number_format = '0.0"%"'
@@ -932,15 +954,26 @@ def make_quotation_costing_xlsx(
     # ── Terms & Conditions ─────────────────────────────────────────────
     tstart = trow + 2
     ws.cell(tstart, 1, "Terms & Conditions").font = bold
+    last_row = tstart
     for i, line in enumerate(quotation_standard_terms(terms), start=1):
         r = tstart + i
         merge(r, 1, r, NCOL)
         cell = ws.cell(r, 1, f"• {line}"); cell.alignment = left
         ws.row_dimensions[r].height = 14
+        last_row = r
 
     ws.freeze_panes = f"A{HROW + 1}"
+    # A4 가로 1페이지 폭에 맞춰 인쇄(항목표가 여러 페이지로 잘리지 않게).
+    ws.print_area = f"A1:{get_column_letter(NCOL)}{last_row}"
     ws.page_setup.orientation = ws.ORIENTATION_LANDSCAPE
     ws.page_setup.paperSize = ws.PAPERSIZE_A4
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 0
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+    ws.page_margins.left = 0.3
+    ws.page_margins.right = 0.3
+    ws.page_margins.top = 0.4
+    ws.page_margins.bottom = 0.4
 
     out = io.BytesIO()
     wb.save(out)
