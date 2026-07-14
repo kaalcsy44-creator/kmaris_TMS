@@ -6806,6 +6806,19 @@ table.mini .num {
   color: #64748b;
   letter-spacing: 0.3px;
 }
+/* 7단계 초기화 바 — 안내문(좌) + Reset 버튼(우). */
+.wp-reset-bar {
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 10px;
+  background: #fff7f7;
+  border: 1px solid #f3d6d6;
+  border-radius: 10px;
+}
+.wp-reset-hint {
+  font-size: 11.5px;
+  color: #64748b;
+}
 /* 레코드가 1건일 때(선택 탭 없음) 상단에 표시하는 통일 헤드라인:
    [로고] 회사이름(작게) + 등록번호(RFQ·견적, 크게 강조). 모든 단계 동일 포맷. */
 .embedded-record-current {
@@ -7803,6 +7816,9 @@ table.mini .num {
 .act-item.closed .act-text { color: #b91c1c; }
 .act-text { flex: 1; }
 .act-meta { color: #94a3b8; font-size: 11.5px; }
+/* 담당자(작성자) 배지 — 노트 끝에 작게. */
+.act-note-pic { margin-left: 6px; font-size: 10.5px; background: #eef3f9; color: #64748b;
+  padding: 0 6px; border-radius: 8px; vertical-align: 1px; }
 .act-actions { flex: none; display: flex; gap: 4px; opacity: 0; transition: opacity .12s; }
 .act-item:hover .act-actions, .act-item.star .act-actions { opacity: 1; }
 .act-starbtn { border: 0; background: none; color: #cbd5e1; cursor: pointer; font-size: 13px; padding: 0 2px; }
@@ -7817,6 +7833,9 @@ table.mini .num {
 .act-add { display: flex; flex-direction: column; gap: 6px; }
 .act-add-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .act-add input[type="date"], .act-add select { padding: 4px 6px; border: 1px solid var(--border, #d8dee6);
+  border-radius: 6px; font-size: 12px; }
+/* 담당자(PIC) 입력 — 좁게. */
+.act-add-pic { width: 90px; padding: 4px 6px; border: 1px solid var(--border, #d8dee6);
   border-radius: 6px; font-size: 12px; }
 /* 내용 입력란 — 한 줄 전체를 넓게. 길어지면 자동 줄바꿈되는 textarea. */
 .act-add-text { flex: 1; width: 100%; min-width: 240px; padding: 6px 10px;

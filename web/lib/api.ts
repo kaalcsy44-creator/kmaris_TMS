@@ -207,7 +207,7 @@ export function fetchAssignableUsers(): Promise<{ id: number; username: string }
 export function addRfqStageNote(
   rfqId: number,
   stage: number,
-  payload: { text: string; datetime?: string; party?: string; channel?: string; direction?: string; star?: boolean }
+  payload: { text: string; datetime?: string; party?: string; channel?: string; direction?: string; star?: boolean; pic?: string }
 ): Promise<{ ok: boolean; stage: number; notes: StageNote[] }> {
   return post(`/api/admin/rfq/${rfqId}/stage-note`, { stage, ...payload });
 }
@@ -216,7 +216,7 @@ export function updateRfqStageNote(
   rfqId: number,
   stage: number,
   index: number,
-  payload: { text: string; datetime?: string; party?: string; channel?: string; direction?: string; star?: boolean }
+  payload: { text: string; datetime?: string; party?: string; channel?: string; direction?: string; star?: boolean; pic?: string }
 ): Promise<{ ok: boolean; stage: number; notes: StageNote[] }> {
   return post(`/api/admin/rfq/${rfqId}/stage-note-update`, { stage, index, ...payload });
 }
@@ -459,6 +459,11 @@ export function saveCommercialInvoice(
 
 export function deleteCommercialInvoice(orderId: number): Promise<{ ok: boolean }> {
   return del(`/api/admin/documents/${orderId}/ci`);
+}
+
+// 7단계(Delivery Readiness) 초기화 — 이 오더의 CI(+PL)·SA·마일스톤을 한 번에 제거해 6단계로 되돌린다.
+export function resetDeliveryReadiness(orderId: number): Promise<{ ok: boolean }> {
+  return post(`/api/admin/documents/${orderId}/reset-readiness`, {});
 }
 
 export function saveServiceStage(

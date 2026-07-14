@@ -164,6 +164,7 @@ export default function ActivityScreen() {
         channel: a.note.channel,
         direction: a.note.direction,
         star: !a.note.star,
+        pic: a.note.pic,
       });
       load();
     } catch (e) {
@@ -306,6 +307,7 @@ function ActivityCard({
                   const parts = [who, a.note.channel].filter(Boolean);
                   return parts.length ? <span className="act-meta"> · {parts.join(" · ")}</span> : null;
                 })()}
+                {a.note.pic ? <span className="act-note-pic">{a.note.pic}</span> : null}
               </span>
             )}
             {a.kind === "note" ? (
@@ -331,6 +333,7 @@ function AddActivity({ rfqId, stage, onAdded }: { rfqId: number; stage: number; 
   const [star, setStar] = useState(false);
   const [busy, setBusy] = useState(false);
   const me = getUser();
+  const [pic, setPic] = useState(me?.username ?? ""); // 담당자(작성자) — 기본값=로그인 사용자, 편집 가능
 
   async function submit() {
     if (!text.trim()) return;
@@ -342,8 +345,9 @@ function AddActivity({ rfqId, stage, onAdded }: { rfqId: number; stage: number; 
         direction: dir || undefined,
         party: party || undefined,
         star,
+        pic: pic.trim() || undefined,
       });
-      setText(""); setDir(""); setParty(""); setStar(false); setOpen(false);
+      setText(""); setDir(""); setParty(""); setStar(false); setPic(me?.username ?? ""); setOpen(false);
       onAdded();
     } finally {
       setBusy(false);
@@ -352,14 +356,22 @@ function AddActivity({ rfqId, stage, onAdded }: { rfqId: number; stage: number; 
 
   if (!open) {
     return (
-      <button className="act-add-btn" onClick={() => setOpen(true)}>+ Add activity{me ? ` (${me.username})` : ""}</button>
+      <button className="act-add-btn" onClick={() => setOpen(true)}>+ Add activity</button>
     );
   }
   return (
     <div className="act-add">
-      {/* 1행: 날짜 · From/To · Party · ★ */}
+      {/* 1행: 날짜 · 담당자(PIC) · From/To · Party · ★ */}
       <div className="act-add-row">
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        <input
+          className="act-add-pic"
+          type="text"
+          value={pic}
+          placeholder="PIC"
+          title="담당자(작성자)"
+          onChange={(e) => setPic(e.target.value)}
+        />
         <div className="act-seg sm">
           {(["in", "out"] as const).map((d) => (
             <button key={d} className={dir === d ? "on" : ""} onClick={() => setDir((v) => (v === d ? "" : d))}>

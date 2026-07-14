@@ -2255,6 +2255,7 @@ class StageNoteAdd(BaseModel):
     channel: str | None = None       # 소통 수단: 이메일 / 통화 / 문자 / 방문 / 기타
     direction: str | None = None     # 방향: in(수신) / out(발신) / 빈값(해당없음)
     star: bool = False               # ★ 우선(회의/후속 표시)
+    pic: str | None = None           # 담당자(작성자) username
 
 
 class StageNoteUpdate(BaseModel):
@@ -2266,6 +2267,7 @@ class StageNoteUpdate(BaseModel):
     channel: str | None = None
     direction: str | None = None
     star: bool = False
+    pic: str | None = None           # 담당자(작성자) username
 
 
 class StageNoteDelete(BaseModel):

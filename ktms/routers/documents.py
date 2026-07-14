@@ -361,6 +361,41 @@ def delete_commercial_invoice(order_id: int):
         s.close()
 
 
+@app.post("/api/admin/documents/{order_id}/reset-readiness",
+          dependencies=[Depends(require_token)])
+def reset_delivery_readiness(order_id: int):
+    """7단계(Delivery Readiness) 증거를 이 오더(고객 P/O)에서 한 번에 제거한다.
+    CI(+하위 PL)·SA·수하인/벤더서류 마일스톤을 모두 지워 딜을 6단계로 되돌린다.
+    (7단계 완료는 저장 플래그가 아니라 이 증거들의 존재로 계산되므로 — _deal_progress 참조.)
+    하류 문서(POD 8단계·세금계산서 9단계)가 있으면 막는다 — 먼저 그걸 삭제해야 한다."""
+    s = get_session()
+    try:
+        order = s.query(Order).filter_by(id=order_id).first()
+        if not order:
+            raise HTTPException(status_code=404, detail="Order를 찾을 수 없습니다.")
+        ci = _latest_ci(s, order_id)
+        if ci and s.query(TaxInvoiceData).filter_by(ci_id=ci.id).first():
+            raise HTTPException(status_code=400,
+                detail="세금계산서(9단계)가 있어 초기화할 수 없습니다. 먼저 9단계 세금계산서를 삭제하세요.")
+        if s.query(DeliveryProof).filter_by(order_id=order_id).first():
+            raise HTTPException(status_code=400,
+                detail="운송완료(POD, 8단계)가 있어 초기화할 수 없습니다. 먼저 8단계 POD를 삭제하세요.")
+        # 하위 PL → CI → SA 순으로 삭제(FK 제약 회피). 마일스톤은 해제.
+        if ci:
+            s.query(PackingList).filter_by(ci_id=ci.id).delete(synchronize_session=False)
+            s.flush()
+            s.delete(ci)
+        sa = _latest_sa(s, order_id)
+        if sa:
+            s.delete(sa)
+        order.consignee_confirmed_date = None
+        order.vendor_docs_sent_date = None
+        s.commit()
+        return {"ok": True}
+    finally:
+        s.close()
+
+
 @app.post("/api/admin/documents/{order_id}/pl",
           dependencies=[Depends(require_token)])
 def save_packing_list(order_id: int, body: PackingListSave):

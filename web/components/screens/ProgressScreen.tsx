@@ -16,6 +16,7 @@ import {
   setRfqCancelled,
   updateRfq,
   fetchAssignableUsers,
+  resetDeliveryReadiness,
   CLOSE_REASONS,
   closeReasonLabel,
 } from "@/lib/api";
@@ -2214,6 +2215,9 @@ function WorkspacePanel({
     [poOptions, row.rfq_id]
   );
   const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
+  // 임베드된 문서 뷰(DocumentsOverview)는 orderId 변화로만 재조회하므로, 7단계 초기화 후
+  // 강제 리마운트해 지워진 CI/SA 를 즉시 반영한다.
+  const [docReloadKey, setDocReloadKey] = useState(0);
   // 기본 선택: 대표 오더(row.order_id) 우선, 없으면 첫 오더. 선택 유효성 유지.
   useEffect(() => {
     setSelectedOrderId((cur) => {
@@ -2261,9 +2265,16 @@ function WorkspacePanel({
     return effectiveOrderId > 0 ? (
       <>
         {picker}
+        {stage === 7 && row.work_type !== "서비스" ? (
+          <ResetReadinessBar
+            orderId={effectiveOrderId}
+            onChanged={async () => { setDocReloadKey((k) => k + 1); await onChanged(); }}
+          />
+        ) : null}
         <div className="project-work-panel embedded-workspace">
           <Suspense fallback={<div className="state">Loading details…</div>}>
             <DocumentsOverview
+              key={docReloadKey}
               initialOrderId={effectiveOrderId}
               initialStage={Math.min(Math.max(stage, 7), 9)}
               initialView={row.work_type === "서비스" ? "service" : "parts"}
@@ -2289,6 +2300,35 @@ function WorkspacePanel({
     </>
   ) : (
     <MissingOrderPanel />
+  );
+}
+
+// 7단계(Delivery Readiness) 초기화 바 — 이 P/O의 CI(+PL)·SA·마일스톤을 한 번에 지워 6단계로 되돌린다.
+// (7단계 완료는 저장 플래그가 아니라 증거 레코드 존재로 계산되므로, 필드를 비우는 것만으로는 내려가지 않는다.)
+function ResetReadinessBar({ orderId, onChanged }: { orderId: number; onChanged: () => void | Promise<unknown> }) {
+  const [busy, setBusy] = useState(false);
+  async function reset() {
+    if (!confirm("Reset this stage for the selected P/O?\nDeletes its Commercial Invoice (and Packing List), Shipping Advice, and clears the confirmation milestones. The deal returns to stage 6.")) return;
+    setBusy(true);
+    try {
+      await resetDeliveryReadiness(orderId);
+      invalidateCache("dashboard");
+      invalidateCache("pipeline");
+      invalidateCache("po:work-options");
+      await onChanged();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Reset failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="embedded-record-bar wp-reset-bar">
+      <span className="wp-reset-hint">Stage 7 is auto-derived from CI / Shipping Advice / milestones on this P/O.</span>
+      <button type="button" className="btn sm danger" disabled={busy} onClick={reset}>
+        {busy ? "…" : "Reset this stage"}
+      </button>
+    </div>
   );
 }
 
