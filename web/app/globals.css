@@ -7961,6 +7961,7 @@ table.mini .num {
 .act-screen.meeting .act-head { font-size: 15px; }
 @media print {
   .act-toolbar, .act-add, .act-add-btn, .act-actions, .act-open, .topnav { display: none !important; }
-  .act-cards { grid-template-columns: 1fr; }
+  .act-screen .act-cards,
+  .act-screen.meeting .act-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .act-card { break-inside: avoid; }
 }
