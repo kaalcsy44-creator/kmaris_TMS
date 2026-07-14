@@ -862,15 +862,15 @@ def make_quotation_costing_xlsx(
         ("Ship Name", vessel.get("name", ""), "Currency", currency),
         ("Project", data.get("project_title", ""), "VAT", vat_label),
     ]
+    # 원가열(F·G·H)은 기본 숨김이므로 메타는 그 열을 피해 좌(1-5)·우(9-12)에 배치.
     for off, (k1, v1, k2, v2) in enumerate(meta, start=4):
-        # 라벨은 A:B 로 병합해 잘리지 않게 한다(항목표 No. 열은 좁게 유지).
-        merge(off, 1, off, 2); merge(off, 3, off, 6)
-        merge(off, 7, off, 8); merge(off, 9, off, NCOL)
-        for col, val, is_label in [(1, k1, True), (3, v1, False), (7, k2, True), (9, v2, False)]:
+        merge(off, 1, off, 2); merge(off, 3, off, 5)
+        merge(off, 9, off, 10); merge(off, 11, off, NCOL)
+        for col, val, is_label in [(1, k1, True), (3, v1, False), (9, k2, True), (11, v2, False)]:
             cell = ws.cell(off, col, val); cell.alignment = left
             if is_label:
                 cell.fill = gray; cell.font = boldsm
-        for col in range(1, NCOL + 1):
+        for col in (1, 2, 3, 4, 5, 9, 10, 11, 12):
             ws.cell(off, col).border = bdr
         ws.row_dimensions[off].height = 15
 
@@ -951,19 +951,62 @@ def make_quotation_costing_xlsx(
         if col == 8:
             cell.number_format = '0.0"%"'
 
-    # ── Terms & Conditions ─────────────────────────────────────────────
-    tstart = trow + 2
-    ws.cell(tstart, 1, "Terms & Conditions").font = bold
-    last_row = tstart
-    for i, line in enumerate(quotation_standard_terms(terms), start=1):
-        r = tstart + i
+    # 섹션 헤더(네이비 바) 헬퍼.
+    def section_bar(r, title):
         merge(r, 1, r, NCOL)
-        cell = ws.cell(r, 1, f"• {line}"); cell.alignment = left
-        ws.row_dimensions[r].height = 14
-        last_row = r
+        c = ws.cell(r, 1, title); c.fill = navy; c.font = white_hdr; c.alignment = left
+        for col in range(1, NCOL + 1):
+            ws.cell(r, col).fill = navy
+        ws.row_dimensions[r].height = 16
+
+    # ── Terms & Conditions ─────────────────────────────────────────────
+    r = trow + 2
+    section_bar(r, "Terms & Conditions"); r += 1
+    for line in quotation_standard_terms(terms):
+        merge(r, 1, r, NCOL)
+        ws.cell(r, 1, f"• {line}").alignment = left
+        ws.row_dimensions[r].height = 13
+        r += 1
+
+    # ── Payment ────────────────────────────────────────────────────────
+    r += 1
+    section_bar(r, "Payment"); r += 1
+    for line in (terms.get("payment_terms") or "T/T in advance",
+                 "Once order is confirmed by the supplier, the order is unable to be cancelled without "
+                 "cancellation charge of 100% of the ordered amount."):
+        merge(r, 1, r, NCOL)
+        ws.cell(r, 1, f"• {line}").alignment = left
+        ws.row_dimensions[r].height = 13
+        r += 1
+    r += 1
+    merge(r, 1, r, NCOL)
+    ws.cell(r, 1, "We hope this quotation meets your requirement and to receive your order "
+            "confirmation at your earliest convenience.").alignment = left
+    r += 2
+
+    # ── 서명 ───────────────────────────────────────────────────────────
+    merge(r, 1, r, NCOL); ws.cell(r, 1, "Your sincerely").alignment = left
+    sig = _find_asset("Authorized signature_Sungyeon Cho.jpg", "signature.png", "signature.jpg")
+    if sig:
+        try:
+            from openpyxl.drawing.image import Image as XLImage
+            img = XLImage(sig); img.width = 150; img.height = 52
+            ws.add_image(img, f"A{r + 1}")
+        except Exception:
+            pass
+    r += 4
+    ws.cell(r, 1, "________________________").alignment = left; r += 1
+    ws.cell(r, 1, "Sam Cho, Managing Director").font = bold; r += 1
+    ws.cell(r, 1, "K-MARIS Energy & Solutions | Seoul, Korea | www.k-maris.com").font = Font(name="Calibri", size=9)
+    last_row = r
+
+    # ── 원가/마진 열(F·G·H)은 기본 숨김(내부 코스팅용) — 필요시 사용자가 펼침 ──
+    for col in ("F", "G", "H"):
+        ws.column_dimensions[col].hidden = True
 
     ws.freeze_panes = f"A{HROW + 1}"
     # A4 세로 1페이지 폭에 맞춰 인쇄(PDF 미리보기와 동일한 세로 규격).
+    # 숨긴 원가열은 인쇄 폭 계산에서 제외되어 판매 열만 세로로 깔끔히 맞는다.
     ws.print_area = f"A1:{get_column_letter(NCOL)}{last_row}"
     ws.page_setup.orientation = ws.ORIENTATION_PORTRAIT
     ws.page_setup.paperSize = ws.PAPERSIZE_A4
