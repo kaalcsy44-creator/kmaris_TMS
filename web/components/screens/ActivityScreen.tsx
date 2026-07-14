@@ -476,7 +476,7 @@ export default function ActivityScreen() {
                             {p.acts.map((a, i) => (
                               <li
                                 key={i}
-                                className={`act-cal-act${a.kind === "close" ? " closed" : ""}${a.kind === "note" && a.note.star ? " star" : ""}`}
+                                className={`act-cal-act ${a.kind === "note" ? "note" : a.kind === "close" ? "closed" : "auto"}${a.kind === "note" && a.note.star ? " star" : ""}`}
                               >
                                 {actDesc(a)}
                               </li>
@@ -519,12 +519,14 @@ function addDays(iso: string, n: number): string {
   return toISODate(d);
 }
 
-// 활동 1건의 설명 — 딜별 카드와 동일한 표기(auto 라벨·party / 노트 텍스트·메타·PIC / 종결 사유).
+// 활동 1건의 설명 — 딜별 카드와 동일한 표기(단계 라벨·party / 노트 텍스트·메타·PIC / 종결 사유).
+// auto 배지는 거의 모든 행에 붙어 변별력이 없어 제거했다. 자동 기록 여부는 앞의 점 색과
+// 라벨 톤(회색 고정 라벨 vs 진한 자유 텍스트+PIC 배지)으로 구분된다. closed 는 드물어 유지.
 function actDesc(act: Activity) {
   if (act.kind === "auto") {
     return (
       <>
-        <span className="act-tag">auto</span> {act.label}
+        {act.label}
         {act.party ? <span className="act-meta"> · {act.party}</span> : null}
       </>
     );
@@ -633,7 +635,7 @@ function ActivityCard({
               <span className="act-date">{md(a.date)}</span>
               {a.kind === "auto" ? (
                 <span className="act-auto">
-                  <span className="act-tag">auto</span> {a.label}
+                  {a.label}
                   {a.party ? <span className="act-meta"> · {a.party}</span> : null}
                 </span>
               ) : (

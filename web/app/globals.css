@@ -7798,8 +7798,14 @@ table.mini .num {
 .act-tabs button.on { background: #0055a8; color: #fff; }
 
 /* ── 일자별 · 주간 캘린더(7열) ─────────────────────────────────────────
-   주(월요일 시작)가 한 행, 위=이전 주·아래=다음 주. 좁은 화면은 가로 스크롤. */
-.act-cal { overflow-x: auto; padding-bottom: 4px; }
+   주(월요일 시작)가 한 행, 위=이전 주·아래=다음 주. 좁은 화면은 가로 스크롤.
+   요일 헤더 고정을 위해 .act-cal 이 직접 세로 스크롤 컨테이너가 되어야 한다.
+   (overflow-x:auto 만 있으면 세로축도 auto 로 계산돼 스크롤포트는 .act-cal 이 되는데,
+   높이 제한이 없어 세로로 스크롤될 일이 없고 실제 스크롤은 조상 .shell-main 에서 일어난다
+   → 아래 sticky 요일 헤더가 발동하지 못한다. 높이를 묶어 여기서 스크롤되게 한다.)
+   차감값 140px = topnav 58 + .page 상단 패딩 16 + .act-toolbar 약 30 + 그 margin 14 + 하단 여백. */
+.act-cal { overflow: auto; max-height: calc(100vh - 140px); min-height: 320px;
+  padding-bottom: 4px; overscroll-behavior: contain; }
 .act-cal-weekdays,
 .act-cal-week { display: grid; grid-template-columns: repeat(7, minmax(150px, 1fr)); }
 .act-cal-weekdays { position: sticky; top: 0; z-index: 2; background: #eef2f7;
@@ -7825,10 +7831,16 @@ table.mini .num {
 .act-cal-pno:hover { text-decoration: underline; }
 .act-cal-ptitle { font-size: 11px; color: #6b7280; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .act-cal-acts { list-style: none; margin: 0; padding: 0; }
-.act-cal-act { font-size: 11.5px; line-height: 1.4; color: #334155; padding: 1px 0;
-  overflow-wrap: break-word; }
+/* 활동 1건 = 점 1개. 여러 줄로 접히는 활동이 이어 붙어 보이지 않게 앞에 점을 찍어 끊는다.
+   점 색이 auto 배지를 대신해 종류를 표시: 회색=자동 기록 / 파랑=수기 노트 / 빨강=종결. */
+.act-cal-act { position: relative; font-size: 11.5px; line-height: 1.4; color: #334155;
+  padding: 1px 0 1px 11px; overflow-wrap: break-word; }
+.act-cal-act::before { content: ""; position: absolute; left: 2px; top: 7px;
+  width: 4px; height: 4px; border-radius: 50%; background: #b6c2d1; }
+.act-cal-act.note::before { background: #0055a8; }
 .act-cal-act.closed { color: #b91c1c; }
-.act-cal-act.star { background: #fff8e6; border-radius: 3px; padding: 1px 4px; }
+.act-cal-act.closed::before { background: #b91c1c; }
+.act-cal-act.star { background: #fff8e6; border-radius: 3px; padding-right: 4px; }
 .act-drow-star { color: #f59e0b; margin-right: 3px; }
 .act-filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .act-search { min-width: 200px; padding: 5px 9px; border: 1px solid var(--border, #d8dee6);
@@ -7975,4 +7987,7 @@ table.mini .num {
   .act-screen .act-cards,
   .act-screen.meeting .act-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .act-card { break-inside: avoid; }
+  /* 화면용 스크롤 높이 제한을 풀지 않으면 첫 화면 분량만 인쇄되고 나머지가 잘린다. */
+  .act-cal { max-height: none; min-height: 0; overflow: visible; }
+  .act-cal-week { break-inside: avoid; }
 }
