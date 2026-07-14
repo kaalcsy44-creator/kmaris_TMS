@@ -346,9 +346,10 @@ function ActivityCard({
 }) {
   const { code, date } = splitProjectNo(row.project_no || row.kmaris_rfq_no || "—");
   const vend = vendorOf(row);
+  const isService = row.work_type === "서비스";
   return (
     <div
-      className={`act-card${drag?.over ? " drag-over" : ""}${drag?.dragging ? " dragging" : ""}`}
+      className={`act-card${isService ? " service" : ""}${drag?.over ? " drag-over" : ""}${drag?.dragging ? " dragging" : ""}`}
       onDragOver={drag?.onOver}
       onDrop={drag?.onDrop}
     >

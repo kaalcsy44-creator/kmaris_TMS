@@ -7805,6 +7805,13 @@ table.mini .num {
 .act-card-head .act-sub-contact { color: #eaf3fc; }
 .act-card-head .act-open { color: #fff; }
 .act-card-head .act-pic { background: rgba(255, 255, 255, 0.18); color: #fff; }
+/* 서비스 딜 — 헤더를 서비스 녹색(#11824a)으로. 파란 톤 글씨는 녹색 톤으로 재지정. */
+.act-card.service .act-card-head { background: #11824a; border-bottom-color: #0c6338; }
+.act-card.service .act-card-head .act-pno-date { color: #bfe3cd; }
+.act-card.service .act-card-head .act-tvessel,
+.act-card.service .act-card-head .act-sub { color: #cdebd9; }
+.act-card.service .act-card-head .act-sub-contact { color: #e8f6ee; }
+.act-card.service.drag-over { outline-color: #11824a; }
 /* 드래그 상태 표시. */
 .act-card.drag-over { outline: 2px dashed #0055a8; outline-offset: -2px; }
 .act-card.dragging { opacity: 0.5; }
