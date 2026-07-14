@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { DragEvent as ReactDragEvent } from "react";
 import Link from "next/link";
 import {
   fetchPipeline,
@@ -69,6 +70,34 @@ function autoParty(stage: number, row: PipelineRow): string {
     case 10: return cust ? `to ${cust}` : "";    // Tax Invoice Issued
     case 11: return cust ? `from ${cust}` : "";  // Payment
     default: return "";
+  }
+}
+
+// 카드 드래그앤드롭(동일 단계 그룹 내 순서 변경) 배선.
+type CardDrag = {
+  enabled: boolean;   // meeting 모드 등에서 비활성
+  over: boolean;      // 드롭 대상 하이라이트
+  dragging: boolean;  // 드래그 중인 카드(반투명)
+  onStart: (e: ReactDragEvent) => void;
+  onEnd: (e: ReactDragEvent) => void;
+  onOver: (e: ReactDragEvent) => void;
+  onDrop: (e: ReactDragEvent) => void;
+};
+
+// 사용자별 카드 순서 저장(브라우저 localStorage). phase → rfq_id 배열.
+const ORDER_KEY = "act-card-order";
+function loadCardOrder(): Record<number, number[]> {
+  try {
+    return JSON.parse(localStorage.getItem(ORDER_KEY) || "{}") as Record<number, number[]>;
+  } catch {
+    return {};
+  }
+}
+function saveCardOrder(o: Record<number, number[]>): void {
+  try {
+    localStorage.setItem(ORDER_KEY, JSON.stringify(o));
+  } catch {
+    /* 저장 실패는 무시(시크릿 모드 등). */
   }
 }
 
@@ -156,6 +185,51 @@ export default function ActivityScreen() {
 
   const totalDeals = buckets.reduce((s, g) => s + g.rows.length, 0);
 
+  // ── 카드 순서(드래그앤드롭) ─────────────────────────────────────────────
+  // SSR 하이드레이션 불일치를 피하려고 초기값은 빈 객체, 마운트 후 localStorage 로드.
+  const [cardOrder, setCardOrder] = useState<Record<number, number[]>>({});
+  useEffect(() => setCardOrder(loadCardOrder()), []);
+  const dragId = useRef<number | null>(null);
+  const [draggingId, setDraggingId] = useState<number | null>(null); // 시각 피드백용(리렌더 보장)
+  const [overId, setOverId] = useState<number | null>(null);
+
+  // 저장된 순서를 적용해 그룹 행을 정렬. 저장에 없는(신규) 딜은 기본 정렬 순서로 뒤에 둔다.
+  function orderedRows(phase: number, rows: { row: PipelineRow; acts: Activity[] }[]) {
+    const saved = cardOrder[phase];
+    if (!saved || saved.length === 0) return rows;
+    const pos = new Map(saved.map((id, i) => [id, i]));
+    return [...rows].sort((a, b) => {
+      const pa = pos.has(a.row.rfq_id) ? (pos.get(a.row.rfq_id) as number) : Infinity;
+      const pb = pos.has(b.row.rfq_id) ? (pos.get(b.row.rfq_id) as number) : Infinity;
+      return pa - pb;
+    });
+  }
+
+  // 드래그한 카드를 대상 카드 '앞'에 삽입하고 그 phase 의 전체 순서를 저장.
+  function reorderCards(phase: number, from: number | null, to: number, current: { row: PipelineRow }[]) {
+    if (from == null || from === to) return;
+    const ids = current.map((r) => r.row.rfq_id);
+    const fromIdx = ids.indexOf(from);
+    if (fromIdx < 0 || ids.indexOf(to) < 0) return;
+    ids.splice(fromIdx, 1);
+    ids.splice(ids.indexOf(to), 0, from);
+    const next = { ...cardOrder, [phase]: ids };
+    setCardOrder(next);
+    saveCardOrder(next);
+  }
+
+  function makeDrag(phase: number, id: number, current: { row: PipelineRow }[]): CardDrag {
+    return {
+      enabled: !meeting,
+      over: overId === id && draggingId !== null && draggingId !== id,
+      dragging: draggingId === id,
+      onStart: (e) => { dragId.current = id; setDraggingId(id); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(id)); },
+      onEnd: () => { dragId.current = null; setDraggingId(null); setOverId(null); },
+      onOver: (e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; if (overId !== id) setOverId(id); },
+      onDrop: (e) => { e.preventDefault(); reorderCards(phase, dragId.current, id, current); dragId.current = null; setDraggingId(null); setOverId(null); },
+    };
+  }
+
   async function toggleStar(rfqId: number, a: Activity) {
     if (a.kind !== "note") return;
     try {
@@ -230,17 +304,21 @@ export default function ActivityScreen() {
               {PHASES[g.phase].label} <span className="cnt">{g.rows.length}</span>
             </h3>
             <div className="act-cards">
-              {g.rows.map(({ row, acts }) => (
-                <ActivityCard
-                  key={row.rfq_id}
-                  row={row}
-                  acts={acts}
-                  meeting={meeting}
-                  onStar={(a) => toggleStar(row.rfq_id, a)}
-                  onDelete={(a) => removeNote(row.rfq_id, a)}
-                  onAdded={load}
-                />
-              ))}
+              {(() => {
+                const ordered = orderedRows(g.phase, g.rows);
+                return ordered.map(({ row, acts }) => (
+                  <ActivityCard
+                    key={row.rfq_id}
+                    row={row}
+                    acts={acts}
+                    meeting={meeting}
+                    onStar={(a) => toggleStar(row.rfq_id, a)}
+                    onDelete={(a) => removeNote(row.rfq_id, a)}
+                    onAdded={load}
+                    drag={makeDrag(g.phase, row.rfq_id, ordered)}
+                  />
+                ));
+              })()}
             </div>
           </section>
         )
@@ -256,6 +334,7 @@ function ActivityCard({
   onStar,
   onDelete,
   onAdded,
+  drag,
 }: {
   row: PipelineRow;
   acts: Activity[];
@@ -263,31 +342,45 @@ function ActivityCard({
   onStar: (a: Activity) => void;
   onDelete: (a: Activity) => void;
   onAdded: () => void;
+  drag?: CardDrag;
 }) {
   const { code, date } = splitProjectNo(row.project_no || row.kmaris_rfq_no || "—");
   const vend = vendorOf(row);
   return (
-    <div className="act-card">
-      <div className="act-card-h">
-        <span className="act-pno">{code}</span>
-        {date ? <span className="act-pno-date">{date}</span> : null}
-        <span className="act-spacer" />
-        {row.assignee ? <span className="act-pic">{row.assignee}</span> : null}
-        <Link className="act-open" href={`/progress?rfq=${row.rfq_id}&stage=${row.stage}`} title="Open deal">→</Link>
-      </div>
-      {/* 프로젝트명 + 선박명(우측, 동일 크기·색상). */}
-      <div className="act-title2">
-        {row.project_title || "(untitled)"}
-        {row.vessel ? <span className="act-tvessel"> · {row.vessel}</span> : null}
-      </div>
-      {/* 고객사 · 고객사 담당자 / 벤더. (우측 상단 배지 = 내부 PIC) */}
-      {(row.customer || vend) ? (
-        <div className="act-sub">
-          {row.customer}
-          {row.contact_person ? <span className="act-sub-contact"> · {row.contact_person}</span> : null}
-          {vend ? ` / ${vend}` : ""}
+    <div
+      className={`act-card${drag?.over ? " drag-over" : ""}${drag?.dragging ? " dragging" : ""}`}
+      onDragOver={drag?.onOver}
+      onDrop={drag?.onDrop}
+    >
+      {/* 상단 헤더(1~3행) — 음영으로 카드 식별. 이 영역을 잡고 드래그해 순서 변경. */}
+      <div
+        className={`act-card-head${drag?.enabled ? " draggable" : ""}`}
+        draggable={drag?.enabled ?? false}
+        onDragStart={drag?.onStart}
+        onDragEnd={drag?.onEnd}
+        title={drag?.enabled ? "Drag to reorder" : undefined}
+      >
+        <div className="act-card-h">
+          <span className="act-pno">{code}</span>
+          {date ? <span className="act-pno-date">{date}</span> : null}
+          <span className="act-spacer" />
+          {row.assignee ? <span className="act-pic">{row.assignee}</span> : null}
+          <Link className="act-open" href={`/progress?rfq=${row.rfq_id}&stage=${row.stage}`} title="Open deal">→</Link>
         </div>
-      ) : null}
+        {/* 프로젝트명 + 선박명(우측, 동일 크기·색상). */}
+        <div className="act-title2">
+          {row.project_title || "(untitled)"}
+          {row.vessel ? <span className="act-tvessel"> · {row.vessel}</span> : null}
+        </div>
+        {/* 고객사 · 고객사 담당자 / 벤더. (우측 상단 배지 = 내부 PIC) */}
+        {(row.customer || vend) ? (
+          <div className="act-sub">
+            {row.customer}
+            {row.contact_person ? <span className="act-sub-contact"> · {row.contact_person}</span> : null}
+            {vend ? ` / ${vend}` : ""}
+          </div>
+        ) : null}
+      </div>
       <ul className="act-list">
         {acts.length === 0 ? <li className="act-empty muted">No activity yet</li> : null}
         {acts.map((a, i) => (
