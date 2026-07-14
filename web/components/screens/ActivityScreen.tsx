@@ -262,7 +262,7 @@ function ActivityCard({
   onAdded: () => void;
 }) {
   const { code, date } = splitProjectNo(row.project_no || row.kmaris_rfq_no || "—");
-  const sub = [row.customer, vendorOf(row), row.vessel].filter(Boolean).join(" / ");
+  const vend = vendorOf(row);
   return (
     <div className="act-card">
       <div className="act-card-h">
@@ -270,10 +270,21 @@ function ActivityCard({
         {date ? <span className="act-pno-date">{date}</span> : null}
         <span className="act-spacer" />
         {row.assignee ? <span className="act-pic">{row.assignee}</span> : null}
-        <Link className="act-open" href={`/progress?rfq=${row.rfq_id}&stage=${row.stage}`}>Open →</Link>
+        <Link className="act-open" href={`/progress?rfq=${row.rfq_id}&stage=${row.stage}`} title="Open deal">→</Link>
       </div>
-      <div className="act-title2">{row.project_title || "(untitled)"}</div>
-      {sub ? <div className="act-sub">{sub}</div> : null}
+      {/* 프로젝트명 + 선박명(우측, 동일 크기·색상). */}
+      <div className="act-title2">
+        {row.project_title || "(untitled)"}
+        {row.vessel ? <span className="act-tvessel"> · {row.vessel}</span> : null}
+      </div>
+      {/* 고객사 · 담당자 / 벤더. */}
+      {(row.customer || vend) ? (
+        <div className="act-sub">
+          {row.customer}
+          {row.assignee ? <span className="act-sub-pic"> · {row.assignee}</span> : null}
+          {vend ? ` / ${vend}` : ""}
+        </div>
+      ) : null}
       <ul className="act-list">
         {acts.length === 0 ? <li className="act-empty muted">No activity yet</li> : null}
         {acts.map((a, i) => (
@@ -289,9 +300,12 @@ function ActivityCard({
             ) : (
               <span className="act-text">
                 {a.note.text}
-                {a.note.party || a.note.channel ? (
-                  <span className="act-meta"> · {[a.note.party, a.note.channel].filter(Boolean).join(" · ")}</span>
-                ) : null}
+                {(() => {
+                  const dl = a.note.direction === "in" ? "from" : a.note.direction === "out" ? "to" : "";
+                  const who = [dl, a.note.party].filter(Boolean).join(" ");
+                  const parts = [who, a.note.channel].filter(Boolean);
+                  return parts.length ? <span className="act-meta"> · {parts.join(" · ")}</span> : null;
+                })()}
               </span>
             )}
             {a.kind === "note" ? (
@@ -312,6 +326,7 @@ function AddActivity({ rfqId, stage, onAdded }: { rfqId: number; stage: number; 
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const [date, setDate] = useState(todayISO());
+  const [dir, setDir] = useState<"" | "in" | "out">(""); // in=from(수신) / out=to(발신)
   const [party, setParty] = useState("");
   const [star, setStar] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -324,10 +339,11 @@ function AddActivity({ rfqId, stage, onAdded }: { rfqId: number; stage: number; 
       await addRfqStageNote(rfqId, stage, {
         text: text.trim(),
         datetime: `${date}T09:00`,
+        direction: dir || undefined,
         party: party || undefined,
         star,
       });
-      setText(""); setParty(""); setStar(false); setOpen(false);
+      setText(""); setDir(""); setParty(""); setStar(false); setOpen(false);
       onAdded();
     } finally {
       setBusy(false);
@@ -341,24 +357,37 @@ function AddActivity({ rfqId, stage, onAdded }: { rfqId: number; stage: number; 
   }
   return (
     <div className="act-add">
-      <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-      <input
-        className="act-add-text"
-        placeholder="Activity note (e.g. Waiting for PO / requested update)"
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
-        autoFocus
-      />
-      <select value={party} onChange={(e) => setParty(e.target.value)}>
-        <option value="">Party —</option>
-        <option value="Customer">Customer</option>
-        <option value="Vendor">Vendor</option>
-        <option value="Internal">Internal</option>
-      </select>
-      <label className="act-check"><input type="checkbox" checked={star} onChange={(e) => setStar(e.target.checked)} /> ★</label>
-      <button className="btn sm primary" disabled={busy || !text.trim()} onClick={submit}>{busy ? "…" : "Add"}</button>
-      <button className="btn sm" onClick={() => setOpen(false)}>Cancel</button>
+      <div className="act-add-row">
+        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        <input
+          className="act-add-text"
+          placeholder="Activity note (e.g. Waiting for PO / requested update)"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
+          autoFocus
+        />
+      </div>
+      <div className="act-add-row">
+        {/* From/To 방향(수신/발신). 활성 항목 재클릭 시 해제. */}
+        <div className="act-seg sm">
+          {(["in", "out"] as const).map((d) => (
+            <button key={d} className={dir === d ? "on" : ""} onClick={() => setDir((v) => (v === d ? "" : d))}>
+              {d === "in" ? "From" : "To"}
+            </button>
+          ))}
+        </div>
+        <select value={party} onChange={(e) => setParty(e.target.value)}>
+          <option value="">Party —</option>
+          <option value="Customer">Customer</option>
+          <option value="Vendor">Vendor</option>
+          <option value="Internal">Internal</option>
+        </select>
+        <label className="act-check"><input type="checkbox" checked={star} onChange={(e) => setStar(e.target.checked)} /> ★</label>
+        <span className="act-spacer" />
+        <button className="btn sm primary act-add-go" disabled={busy || !text.trim()} onClick={submit}>{busy ? "…" : "Add"}</button>
+        <button className="btn sm act-add-go" onClick={() => setOpen(false)}>Cancel</button>
+      </div>
     </div>
   );
 }

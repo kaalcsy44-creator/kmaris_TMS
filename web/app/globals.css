@@ -7781,7 +7781,10 @@ table.mini .num {
 .act-open:hover { text-decoration: underline; }
 /* 프로젝트명(1pt 크게, 준볼드) + 고객/벤더/선박(1pt 작게, 비볼드 muted). */
 .act-title2 { font-size: 14.5px; font-weight: 600; color: #1f2937; margin-bottom: 1px; }
+.act-tvessel { font-size: 14.5px; font-weight: 600; color: #1f2937; }  /* 선박명 — 프로젝트명과 동일 */
 .act-sub { font-size: 12px; font-weight: 400; color: #6b7280; margin-bottom: 8px; }
+.act-sub-pic { color: #0055a8; }
+.act-open { font-size: 15px; font-weight: 700; }  /* 화살표만 크게 */
 
 .act-list { list-style: none; margin: 0 0 8px; padding: 0; }
 .act-item { display: flex; align-items: flex-start; gap: 8px; padding: 3px 0; font-size: 13px;
@@ -7806,11 +7809,17 @@ table.mini .num {
 .act-add-btn { border: 1px dashed #cbd5e1; background: none; color: #64748b; font-size: 12px;
   border-radius: 6px; padding: 4px 10px; cursor: pointer; }
 .act-add-btn:hover { border-color: #0055a8; color: #0055a8; }
-.act-add { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.act-add { display: flex; flex-direction: column; gap: 6px; }
+.act-add-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .act-add input[type="date"], .act-add select { padding: 4px 6px; border: 1px solid var(--border, #d8dee6);
   border-radius: 6px; font-size: 12px; }
-.act-add-text { flex: 1; min-width: 180px; padding: 5px 9px; border: 1px solid var(--border, #d8dee6);
+/* 내용 입력란 — 한 줄 전체를 넓게 차지. */
+.act-add-text { flex: 1; min-width: 240px; padding: 6px 10px; border: 1px solid var(--border, #d8dee6);
   border-radius: 6px; font-size: 13px; }
+/* From/To 세그먼트(작게). */
+.act-seg.sm button { padding: 3px 9px; font-size: 11.5px; }
+/* Add/Cancel 버튼 높이 축소(약 2/3). */
+.act-add .act-add-go { padding: 2px 12px; font-size: 12px; line-height: 1.35; min-height: 0; }
 
 /* 회의 모드 — 입력 UI 숨기고 크게. */
 .act-screen.meeting .act-cards { grid-template-columns: 1fr; }
