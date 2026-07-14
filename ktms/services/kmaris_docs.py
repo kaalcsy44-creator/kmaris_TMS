@@ -1199,8 +1199,8 @@ def _make_quotation_costing_pdf(data: Dict[str, Any], company: Dict[str, Any]) -
     # ── 정보 박스(2단) ─────────────────────────────────────────────────
     left_rows = [
         ("User", customer.get("name", "")),
-        ("Messrs", ""),
-        ("Attn.", customer.get("contact", "")),
+        ("Messrs", data.get("messrs", "")),
+        ("Attn.", data.get("attn", "") or customer.get("contact", "")),
         ("Ship Name", vessel.get("name", "")),
         ("Project", data.get("project_title", "")),
     ]

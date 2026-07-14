@@ -843,10 +843,10 @@ def make_quotation_costing_xlsx(
     vat_label = "VAT excluded" if _num(data.get("vat_rate", 0)) == 0 else f"VAT {int(_num(data.get('vat_rate', 0)) * 100)}%"
     meta = [
         ("User", customer.get("name", ""), "Quotation No.", data.get("doc_no", "")),
-        ("Attn.", customer.get("contact", ""), "Ref. No.", data.get("ref_no", "")),
+        ("Attn.", data.get("attn", "") or customer.get("contact", ""), "Ref. No.", data.get("ref_no", "")),
         ("Ship Name", vessel.get("name", ""), "Date", data.get("date", "")),
         ("Project", data.get("project_title", ""), "Currency", currency),
-        ("", "", "VAT", vat_label),
+        ("Messrs", data.get("messrs", ""), "VAT", vat_label),
     ]
     mid = NCOL // 2
     for off, (k1, v1, k2, v2) in enumerate(meta, start=4):

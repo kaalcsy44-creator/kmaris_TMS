@@ -92,7 +92,7 @@ import {
 } from "./common/itemTable";
 import FxRateControl, { FxMode } from "./common/FxRateControl";
 import { useItemGrid, ItemTh, ItemGridStyle, ItemColsButton, type ItemCol } from "./common/itemGrid";
-import QuotationPreview, { type QuotationPreviewData } from "./QuotationPreview";
+import QuotationPreview from "./QuotationPreview";
 
 /** 현재 시각 "YYYY-MM-DDTHH:MM" (datetime-local 기본값). */
 function nowLocalDt(): string {
@@ -1696,6 +1696,10 @@ function CustomerQuoteDetailModal({
   const [validUntil, setValidUntil] = useState("");
   const [status, setStatus] = useState("");
   const [terms, setTerms] = useState<QuotationTerms>(withDefaultTerms());
+  // 견적서 헤더 문서 필드(첨부 양식) — terms JSON 안에 저장(마이그레이션 불필요).
+  const [messrs, setMessrs] = useState("");
+  const [attn, setAttn] = useState("");
+  const [refNo, setRefNo] = useState("");
   const [items, setItems] = useState<CustomerQuoteItem[]>([]);
   const [vendorQuotes, setVendorQuotes] = useState<VendorQuoteForImport[]>([]);
   const [importVqId, setImportVqId] = useState<number | "">("");
@@ -1704,7 +1708,7 @@ function CustomerQuoteDetailModal({
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [showPreview, setShowPreview] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [dlBusy, setDlBusy] = useState(false);
   const [dlErr, setDlErr] = useState<string | null>(null);
   // 편집 권한 = 역할 권한(rfq.edit) × 담당(PIC) 소유권. 없으면 읽기전용.
@@ -1729,6 +1733,10 @@ function CustomerQuoteDetailModal({
         setStatus(data.status || "");
         // Payment Terms 미입력이면 고객 정보에 등록된 기본 결제조건으로 채운다(수정 가능).
         setTerms(withDefaultTerms(seedPaymentTerms(data.terms, data.default_payment_terms)));
+        // 헤더 문서 필드 — terms JSON 에 저장한 값(Attn 은 미입력 시 담당자 이름 시드).
+        setMessrs((data.terms as { messrs?: string })?.messrs || "");
+        setAttn((data.terms as { attn?: string })?.attn || "");
+        setRefNo((data.terms as { ref_no?: string })?.ref_no || "");
         setItems(data.items || []);
         setMsg(null);
         if (data.rfq_id) {
@@ -1745,7 +1753,10 @@ function CustomerQuoteDetailModal({
   const total = items.reduce((sum, it) => sum + Number(it.amount || 0), 0);
   const finalTotal = total * (1 - Number(discountPct || 0) / 100);
 
-  // 현재 편집값을 서버에 저장(모달은 닫지 않음). save()·미리보기 다운로드가 공유.
+  // 헤더 문서 필드(Attn/Messrs/Ref No.)는 terms JSON 에 함께 저장한다.
+  const termsForSave = (): QuotationTerms => ({ ...terms, messrs, attn, ref_no: refNo });
+
+  // 현재 편집값을 서버에 저장(모달은 닫지 않음). save()·미리보기가 공유.
   async function persist() {
     await updateCustomerQuotation(id, {
       qtn_no: qtnNo,
@@ -1757,7 +1768,7 @@ function CustomerQuoteDetailModal({
       sent_at: sentAt,
       valid_until: validUntil,
       status,
-      terms,
+      terms: termsForSave(),
       items,
     });
     onChanged();
@@ -1776,48 +1787,56 @@ function CustomerQuoteDetailModal({
     }
   }
 
-  // 미리보기 → 다운로드: 현재 편집값을 먼저 저장한 뒤 서버 생성 문서를 내려받는다.
-  // 다운로드 엔드포인트는 Bearer 토큰이 필요하므로 fetch → blob 방식으로 저장한다.
-  async function downloadDoc(format: "pdf" | "xlsx") {
+  // 인증 GET 으로 문서 blob 을 받아온다(다운로드 엔드포인트는 Bearer 토큰 필요).
+  async function fetchDocBlob(format: "pdf" | "xlsx"): Promise<Blob> {
+    const url = format === "xlsx" ? quotationXlsxUrl(id, "quotation") : quotationPdfUrl(id, "quotation");
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${getToken()}` } });
+    if (!res.ok) throw new Error("문서를 생성할 수 없습니다.");
+    return res.blob();
+  }
+
+  function saveBlob(blob: Blob, format: "pdf" | "xlsx") {
+    const objUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = objUrl;
+    a.download = `${qtnNo || d?.qtn_no || "Quotation"}.${format}`;
+    a.click();
+    URL.revokeObjectURL(objUrl);
+  }
+
+  // Preview: 현재 편집값을 먼저 저장한 뒤 A4 PDF 를 받아 iframe 모달로 표시한다.
+  async function openPreview() {
     setDlBusy(true);
     setDlErr(null);
     try {
       if (canEditThis) await persist();
-      const url = format === "xlsx"
-        ? quotationXlsxUrl(id, "quotation")
-        : quotationPdfUrl(id, "quotation");
-      const res = await fetch(url, { headers: { Authorization: `Bearer ${getToken()}` } });
-      if (!res.ok) throw new Error("File download failed");
-      const blob = await res.blob();
-      const objUrl = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = objUrl;
-      a.download = `${qtnNo || d?.qtn_no || "Quotation"}.${format}`;
-      a.click();
-      URL.revokeObjectURL(objUrl);
+      const blob = await fetchDocBlob("pdf");
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(URL.createObjectURL(blob));
+    } catch (e) {
+      setDlErr(e instanceof Error ? e.message : "Preview failed");
+    } finally {
+      setDlBusy(false);
+    }
+  }
+
+  function closePreview() {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(null);
+  }
+
+  // 미리보기 모달의 다운로드 — 이미 저장된 상태이므로 blob 만 받아 저장한다.
+  async function downloadDoc(format: "pdf" | "xlsx") {
+    setDlBusy(true);
+    setDlErr(null);
+    try {
+      saveBlob(await fetchDocBlob(format), format);
     } catch (e) {
       setDlErr(e instanceof Error ? e.message : "Download failed");
     } finally {
       setDlBusy(false);
     }
   }
-
-  // 편집기 현재 상태 → 견적서 미리보기 데이터.
-  const previewData: QuotationPreviewData = {
-    qtnNo,
-    refNo: d?.rfq_no || "",
-    date: (sentAt || d?.date || "").slice(0, 10),
-    currency,
-    vatLabel: "VAT excluded",
-    validUntil,
-    validityDays: 30,
-    customerName: d?.customer || "",
-    attn: "",
-    shipName: d?.vessel || "",
-    project: d?.project_title || "",
-    items,
-    terms,
-  };
 
   async function remove() {
     if (!window.confirm("Delete this quotation?")) return;
@@ -1900,6 +1919,27 @@ function CustomerQuoteDetailModal({
             </div>
           </div>
 
+          {/* 견적서 헤더 문서 필드(첨부 양식) — Messrs·Attn.·Ref No.
+              User(고객)·Ship Name(선박)·Project(프로젝트명)은 딜 정보에서 자동. */}
+          <div className="form-grid quote-meta-grid">
+            <div className="form-field">
+              <label>Messrs</label>
+              <input value={messrs} onChange={(e) => setMessrs(e.target.value)} placeholder="Ms. / Mr." />
+            </div>
+            <div className="form-field">
+              <label>Attn.</label>
+              <input value={attn} onChange={(e) => setAttn(e.target.value)} placeholder="Contact person" />
+            </div>
+            <div className="form-field">
+              <label>Ref. No.</label>
+              <input value={refNo} onChange={(e) => setRefNo(e.target.value)} placeholder="Customer ref." />
+            </div>
+            <div className="form-field">
+              <label>Ship Name</label>
+              <input value={d.vessel || ""} readOnly disabled />
+            </div>
+          </div>
+
           {/* 가격 설정 — 아래 Item list 단가 계산에 직접 반영. */}
           <div className="form-section-title">Pricing <span className="section-hint">— applied to item unit prices</span></div>
           <div className="form-grid quote-price-grid">
@@ -1973,13 +2013,15 @@ function CustomerQuoteDetailModal({
           <TermsEditor terms={terms} onChange={setTerms} />
           </fieldset>
           <div className="form-actions">
-            <StageTotal label="Final" value={finalTotal} currency={currency} rate={effRate} />
+            <button className="btn" onClick={openPreview} disabled={busy || dlBusy}>
+              {dlBusy && !previewUrl ? "Opening…" : "Preview"}
+            </button>
+            <span style={{ margin: "0 auto" }}>
+              <StageTotal label="Final" value={finalTotal} currency={currency} rate={effRate} />
+            </span>
             {!canEditThis ? (
               <span className="hint-inline">{editBlockReason("rfq", d?.assignee_id)}</span>
             ) : null}
-            <button className="btn" onClick={() => setShowPreview(true)} disabled={busy} style={{ marginRight: "auto" }}>
-              Preview
-            </button>
             {canDeleteThis ? (
               <button className="btn danger" onClick={remove} disabled={busy}>Delete</button>
             ) : null}
@@ -1990,11 +2032,14 @@ function CustomerQuoteDetailModal({
           </div>
           {msg ? <span className="action-ok">{msg}</span> : null}
           {err ? <span className="action-err">{err}</span> : null}
-          {showPreview ? (
+          {dlErr && !previewUrl ? <span className="action-err">{dlErr}</span> : null}
+          {previewUrl ? (
             <QuotationPreview
-              data={previewData}
-              onClose={() => setShowPreview(false)}
-              onDownload={downloadDoc}
+              filename={`${qtnNo || d?.qtn_no || "Quotation"}.pdf`}
+              pdfUrl={previewUrl}
+              onClose={closePreview}
+              onDownloadPdf={() => downloadDoc("pdf")}
+              onDownloadXlsx={() => downloadDoc("xlsx")}
               busy={dlBusy}
               err={dlErr}
             />

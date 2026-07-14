@@ -382,6 +382,10 @@ export type QuotationTerms = {
   packing?: string;
   warranty?: string;
   remarks?: string;
+  // 견적서 헤더 문서 필드(첨부 양식) — terms JSON 에 함께 보관.
+  messrs?: string;
+  attn?: string;
+  ref_no?: string;
 };
 
 // Customer Quotation 작성 시 공급사 견적에서 cost 불러오기용
