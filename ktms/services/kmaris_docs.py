@@ -70,6 +70,7 @@ DOC_TITLES = {
     "purchase_order": "PURCHASE ORDER",
     "proforma_invoice": "PROFORMA INVOICE",
     "commercial_invoice": "COMMERCIAL INVOICE",
+    "shipping_mark": "SHIPPING MARK",
     "packing_list": "PACKING LIST",
     "shipping_advice": "SHIPPING ADVICE",
 }
@@ -79,6 +80,7 @@ DOC_PREFIX = {
     "purchase_order": "PO",
     "proforma_invoice": "PI",
     "commercial_invoice": "CI",
+    "shipping_mark": "SM",
     "packing_list": "PL",
     "shipping_advice": "SA",
     "tax_invoice_data": "TAX",
@@ -731,33 +733,8 @@ def _make_commercial_invoice_pdf(data: Dict[str, Any], company: Dict[str, Any]) 
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LEFTPADDING", (0, 0), (-1, -1), 4),
         ("RIGHTPADDING", (0, 0), (-1, -1), 4), ("TOPPADDING", (0, 0), (-1, -1), 3),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]))
-    story += [shipping_table, section("SHIPPING MARKS")]
-
-    marks = (shipping.get("shipping_marks") or "").strip()
-    if not marks:
-        parts = [shipping.get("sm_type"), f"C/O {shipping.get('sm_consignee')}" if shipping.get("sm_consignee") else "",
-                 f"M/V {str(shipping.get('sm_vessel')).upper()}" if shipping.get("sm_vessel") else "",
-                 f"P.O. NO.: {shipping.get('sm_po_no')}" if shipping.get("sm_po_no") else "",
-                 f"REF. NO.: {shipping.get('sm_ref_no')}" if shipping.get("sm_ref_no") else "", shipping.get("sm_desc"),
-                 f"CASE NO.: {shipping.get('sm_case_no')}" if shipping.get("sm_case_no") else "",
-                 f"TOTAL: {shipping.get('sm_total_cases')} CASE(S)" if shipping.get("sm_total_cases") else "",
-                 f"N.W.: {shipping.get('sm_net_weight')} KG" if shipping.get("sm_net_weight") else "",
-                 f"G.W.: {shipping.get('sm_gross_weight')} KG" if shipping.get("sm_gross_weight") else ""]
-        dims = [shipping.get("sm_dim_l"), shipping.get("sm_dim_w"), shipping.get("sm_dim_h")]
-        if any(dims): parts.append("DIM.: " + " x ".join(str(x or "-") for x in dims) + " MM")
-        parts += [f"PORT OF DELIVERY: {shipping.get('sm_port_delivery')}" if shipping.get("sm_port_delivery") else "",
-                  f"FINAL DESTINATION: {shipping.get('sm_final_dest')}" if shipping.get("sm_final_dest") else "",
-                  shipping.get("sm_origin"), shipping.get("sm_handling")]
-        marks = "\n".join(str(x) for x in parts if x)
-    mark_lines = marks.splitlines()
-    split_at = (len(mark_lines) + 1) // 2
-    marks_table = Table([[p("\n".join(mark_lines[:split_at])), p("\n".join(mark_lines[split_at:]))]],
-                        colWidths=half_widths)
-    marks_table.setStyle(TableStyle([("BOX", (0, 0), (-1, -1), .35, MID_GRAY), ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                                     ("LINEBEFORE", (1, 0), (1, -1), .35, MID_GRAY),
-                                     ("LEFTPADDING", (0, 0), (-1, -1), 4), ("TOPPADDING", (0, 0), (-1, -1), 4),
-                                     ("BOTTOMPADDING", (0, 0), (-1, -1), 4)]))
-    story.append(marks_table)
+    # Shipping Marks(케이스 마킹)는 별도 문서(Shipping Mark PDF)로 분리 — CI 에는 출력하지 않는다.
+    story += [shipping_table]
 
     headers = ["No.", "Description", "Part No.", "HS Code", "Qty", "Unit Price", f"Amount ({currency})"]
     item_rows = [[p(h, "th") for h in headers]]
@@ -858,6 +835,148 @@ def compose_shipping_marks(sh: Dict[str, Any]) -> str:
     push(sh.get("sm_origin"))
     push(sh.get("sm_handling"))
     return "\n".join(lines)
+
+
+def _make_shipping_mark_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> bytes:
+    """Shipping Mark(케이스 마킹) PDF — 수출 화물에 스텐실로 찍는 통상적인 마킹 라벨 양식.
+    가운데 큰 마크 박스(주 마크) + 하단 실측(중량·치수·케이스) + 취급주의 라인."""
+    s = _styles()
+    vessel = data.get("vessel", {}) or {}
+    shipping = data.get("shipping", {}) or {}
+    buffer = io.BytesIO()
+    page_width = 190 * mm
+    doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=10 * mm,
+                            rightMargin=10 * mm, topMargin=7 * mm, bottomMargin=12 * mm,
+                            title="SHIPPING MARK")
+
+    asset_roots = [Path(__file__).resolve().parents[2], Path(__file__).resolve().parent.parent / "config"]
+
+    def asset(*names):
+        for root in asset_roots:
+            for name in names:
+                candidate = root / name
+                if candidate.exists():
+                    return candidate
+        return None
+
+    def image(path, max_width, max_height):
+        if not path:
+            return ""
+        from PIL import Image as PILImage
+        with PILImage.open(path) as source:
+            width, height = source.size
+        scale = min(max_width / width, max_height / height)
+        return Image(str(path), width=width * scale, height=height * scale)
+
+    def p(value, style="small"):
+        text = str(value or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        return Paragraph(text.replace("\n", "<br/>"), s[style])
+
+    story = []
+    # ── 제목 + 회사 배너 (CI 와 동일 톤) ──────────────────────────────────
+    title_style = ParagraphStyle("KMSMTitle", parent=s["section"], fontName=DEFAULT_BOLD_FONT,
+                                 fontSize=17, leading=20, alignment=TA_CENTER, textColor=NAVY)
+    logo = image(asset("logo_K-maris.png", "logo.png", "logo.jpg"), 32 * mm, 11 * mm)
+    title = Table([[logo, Paragraph("SHIPPING MARK", title_style), ""]],
+                  colWidths=[38 * mm, 114 * mm, 38 * mm], rowHeights=[16 * mm])
+    title.setStyle(TableStyle([("ALIGN", (0, 0), (-1, -1), "CENTER"), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                               ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4)]))
+    story.append(title)
+    banner_text = "   |   ".join(x for x in [company.get("company_name_en", "K-MARIS Energy & Solutions Co., Ltd."),
+                                             company.get("sales_email", ""), company.get("website", "")] if x)
+    banner_style = ParagraphStyle("KMSMBanner", parent=s["section"], fontName=DEFAULT_FONT,
+                                  fontSize=8.2, leading=10, alignment=TA_CENTER, textColor=colors.white)
+    banner = Table([[Paragraph(banner_text, banner_style)]], colWidths=[page_width], rowHeights=[6 * mm])
+    banner.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), BLUE), ("VALIGN", (0, 0), (-1, -1), "MIDDLE")]))
+    story += [banner, Spacer(1, 3 * mm)]
+
+    # ── 참조 정보 스트립 ─────────────────────────────────────────────────
+    ref_rows = [[p("REF. NO.", "section"), p(shipping.get("sm_ref_no", "")),
+                 p("P.O. NO.", "section"), p(shipping.get("sm_po_no", "")),
+                 p("DATE", "section"), p(data.get("date", ""))]]
+    ref = Table(ref_rows, colWidths=[page_width * w for w in (.13, .27, .12, .22, .10, .16)])
+    ref.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), .35, MID_GRAY), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                             ("BACKGROUND", (0, 0), (0, -1), NAVY), ("BACKGROUND", (2, 0), (2, -1), NAVY),
+                             ("BACKGROUND", (4, 0), (4, -1), NAVY),
+                             ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                             ("TOPPADDING", (0, 0), (-1, -1), 4), ("BOTTOMPADDING", (0, 0), (-1, -1), 4)]))
+    story += [ref, Spacer(1, 5 * mm)]
+
+    # ── 주 마크 박스 — 스텐실 스타일(가운데 정렬, 볼드) ────────────────────
+    mark_style = ParagraphStyle("KMMark", parent=s["base"], fontName=DEFAULT_BOLD_FONT,
+                                fontSize=13, leading=20, alignment=TA_CENTER, textColor=colors.black)
+    head_style = ParagraphStyle("KMMarkHead", parent=mark_style, fontSize=15, leading=22)
+    desc_style = ParagraphStyle("KMMarkDesc", parent=mark_style, fontSize=13, leading=20)
+
+    def mline(text, style=mark_style):
+        safe = str(text or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        return Paragraph(safe, style)
+
+    flow = []
+    if shipping.get("sm_type"):
+        flow += [mline(str(shipping["sm_type"]).upper(), head_style), Spacer(1, 3 * mm)]
+    if shipping.get("sm_consignee"):
+        flow.append(mline(f"C/O {shipping['sm_consignee']}"))
+    if shipping.get("sm_vessel"):
+        flow.append(mline(f"M/V {str(shipping['sm_vessel']).upper()}"))
+    elif vessel.get("name"):
+        flow.append(mline(f"M/V {str(vessel['name']).upper()}"))
+    flow.append(Spacer(1, 2 * mm))
+    if shipping.get("sm_po_no"):
+        flow.append(mline(f"P.O. NO. : {shipping['sm_po_no']}"))
+    if shipping.get("sm_ref_no"):
+        flow.append(mline(f"REF. NO. : {shipping['sm_ref_no']}"))
+    if shipping.get("sm_desc"):
+        flow += [Spacer(1, 2 * mm), mline(str(shipping["sm_desc"]).upper(), desc_style)]
+    if shipping.get("sm_port_delivery") or shipping.get("sm_final_dest"):
+        flow.append(Spacer(1, 2 * mm))
+    if shipping.get("sm_port_delivery"):
+        flow.append(mline(f"PORT OF DELIVERY : {str(shipping['sm_port_delivery']).upper()}"))
+    if shipping.get("sm_final_dest"):
+        flow.append(mline(f"FINAL DESTINATION : {str(shipping['sm_final_dest']).upper()}"))
+    flow.append(Spacer(1, 2 * mm))
+    if shipping.get("sm_case_no"):
+        flow.append(mline(f"CASE NO. : {shipping['sm_case_no']}"))
+    if shipping.get("sm_origin"):
+        flow.append(mline(str(shipping["sm_origin"]).upper()))
+    if not flow:
+        flow.append(mline("(NO SHIPPING MARK DATA)"))
+
+    mark_box = Table([[flow]], colWidths=[page_width], rowHeights=[92 * mm])
+    mark_box.setStyle(TableStyle([("BOX", (0, 0), (-1, -1), 1.4, colors.black),
+                                  ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                                  ("LEFTPADDING", (0, 0), (-1, -1), 10), ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+                                  ("TOPPADDING", (0, 0), (-1, -1), 8), ("BOTTOMPADDING", (0, 0), (-1, -1), 8)]))
+    story += [mark_box, Spacer(1, 5 * mm)]
+
+    # ── 실측(중량·치수·케이스) 표 ────────────────────────────────────────
+    dim = [shipping.get("sm_dim_l"), shipping.get("sm_dim_w"), shipping.get("sm_dim_h")]
+    dim_txt = " × ".join((str(d).strip() if d and str(d).strip() else "-") for d in dim) + " MM" if any(d and str(d).strip() for d in dim) else ""
+    m_rows = [[p("N.W.", "section"), p(f"{shipping.get('sm_net_weight', '')} KG" if shipping.get("sm_net_weight") else ""),
+               p("G.W.", "section"), p(f"{shipping.get('sm_gross_weight', '')} KG" if shipping.get("sm_gross_weight") else "")],
+              [p("DIMENSION", "section"), p(dim_txt),
+               p("TOTAL CASES", "section"), p(f"{shipping.get('sm_total_cases', '')} CASE(S)" if shipping.get("sm_total_cases") else "")]]
+    metrics = Table(m_rows, colWidths=[page_width * w for w in (.16, .34, .16, .34)])
+    metrics.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), .35, MID_GRAY), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                                 ("BACKGROUND", (0, 0), (0, -1), NAVY), ("BACKGROUND", (2, 0), (2, -1), NAVY),
+                                 ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                                 ("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, 0), (-1, -1), 5)]))
+    story.append(metrics)
+
+    # ── 취급 주의 라인 ───────────────────────────────────────────────────
+    handling = str(shipping.get("sm_handling") or "").strip()
+    if handling:
+        parts = " · ".join(h.strip() for h in handling.split(",") if h.strip())
+        h_rows = [[p("HANDLING", "section"), p(parts)]]
+        h_tbl = Table(h_rows, colWidths=[page_width * .16, page_width * .84])
+        h_tbl.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), .35, MID_GRAY), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                                   ("BACKGROUND", (0, 0), (0, -1), NAVY),
+                                   ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                                   ("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, 0), (-1, -1), 5)]))
+        story += [Spacer(1, 2 * mm), h_tbl]
+
+    doc.build(story, onFirstPage=_footer, onLaterPages=_footer)
+    return buffer.getvalue()
 
 
 def _pkg_text(it: Dict[str, Any]) -> str:
@@ -1306,6 +1425,8 @@ def make_pdf(doc_type: str, data: Dict[str, Any], company: Optional[Dict[str, An
         return _make_quotation_costing_pdf(payload, payload["company"])
     if doc_type == "commercial_invoice":
         return _make_commercial_invoice_pdf(payload, payload["company"])
+    if doc_type == "shipping_mark":
+        return _make_shipping_mark_pdf(payload, payload["company"])
     if doc_type == "packing_list":
         return _make_packing_list_pdf(payload, payload["company"])
     buffer = io.BytesIO()

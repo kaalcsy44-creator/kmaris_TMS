@@ -63,9 +63,10 @@ type StageTab = "s7" | "s8" | "s9";
 type WorkView = "parts" | "service";
 
 // 문서 종류 → 표시 라벨(작업 모달 제목 등).
-type DocKind = "ci" | "pl" | "sa" | "pod" | "tax";
+type DocKind = "ci" | "sm" | "pl" | "sa" | "pod" | "tax";
 const KIND_CFG: Record<DocKind, { label: string }> = {
   ci: { label: "Commercial Invoice" },
+  sm: { label: "Shipping Marks" },
   pl: { label: "Packing List" },
   sa: { label: "Shipping Advice" },
   pod: { label: "POD" },
@@ -89,7 +90,7 @@ export function DocumentsOverview({
     s === 8 ? "s8" : s === 9 ? "s9" : "s7";
   const [workView, setWorkView] = useState<WorkView>(initialView === "service" ? "service" : "parts");
   const [stage, setStage] = useState<StageTab>(stageFromProp(initialStage));
-  const [readyDoc, setReadyDoc] = useState<"ci" | "pl" | "sa">("ci"); // 7단계 하위(CI/PL/SA)
+  const [readyDoc, setReadyDoc] = useState<"ci" | "sm" | "pl" | "sa">("ci"); // 7단계 하위(CI/Shipping Marks/PL/SA)
 
   const { data: overview, refresh } = useCachedData(
     "documents:overview",
@@ -143,6 +144,9 @@ export function DocumentsOverview({
         <div className="seg-tabs" style={{ marginBottom: 12 }}>
           <button className={readyDoc === "ci" ? "on" : ""} onClick={() => setReadyDoc("ci")}>
             Commercial Invoice
+          </button>
+          <button className={readyDoc === "sm" ? "on" : ""} onClick={() => setReadyDoc("sm")}>
+            Shipping Marks
           </button>
           <button className={readyDoc === "pl" ? "on" : ""} onClick={() => setReadyDoc("pl")}>
             Packing List
@@ -661,6 +665,8 @@ function DocEditorContent({
           {hideInfo ? null : <DocOrderInfo order={data.order} />}
           {kind === "ci" ? (
             <CommercialInvoiceTab key={`ci-${data.order.id}-${data.ci?.id ?? 0}`} data={data} onChanged={afterChange} />
+          ) : kind === "sm" ? (
+            <ShippingMarksTab key={`sm-${data.order.id}-${data.ci?.id ?? 0}`} data={data} onChanged={afterChange} />
           ) : kind === "pl" ? (
             <PackingListTab key={`pl-${data.order.id}-${data.pl?.id ?? 0}`} data={data} onChanged={afterChange} />
           ) : kind === "sa" ? (
@@ -933,7 +939,6 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
         <Field label="HS Code (optional)" value={shipping.hs_code || ""} onChange={(v) => setShipping({ ...shipping, hs_code: v })} />
       </div>
       </div>
-      <ShippingMarksSection shipping={shipping} setShipping={setShipping} />
       </div>
       <ItemEditor
         items={items}
@@ -980,6 +985,74 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
   );
 }
 
+// Shipping Marks 전용 탭 — 케이스 마킹(sm_*) 입력. 값은 CI 레코드의 shipping 에 저장되며
+// 저장은 기존 CI 엔드포인트를 재사용(다른 CI 필드는 그대로 보존하고 sm_* 만 갱신).
+function ShippingMarksTab({ data, onChanged }: { data: DocumentDetail; onChanged: () => void }) {
+  const [shipping, setShipping] = useState<Record<string, string>>({
+    ...defaultMarkFields(data.order),
+    ...(data.ci?.shipping || {}),
+  });
+  const [busy, setBusy] = useState(false);
+  const editable = canEditDoc(data);
+
+  async function save() {
+    if (!data.ci) return;
+    setBusy(true);
+    try {
+      // CI 의 다른 필드(문서번호·품목·조건 등)는 그대로 보존하고 shipping 의 sm_* 만 갱신.
+      const outShipping = { ...(data.ci.shipping || {}), ...shipping, shipping_marks: composeShippingMarks(shipping) };
+      await saveCommercialInvoice(data.order.id, {
+        ci_no: data.ci.ci_no,
+        date: data.ci.date,
+        currency: data.ci.currency,
+        vat_rate: data.ci.vat_rate,
+        items: data.ci.items || [],
+        shipping: outShipping,
+        terms: data.ci.terms || {},
+      });
+      onChanged();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function cancel() {
+    setShipping({ ...defaultMarkFields(data.order), ...(data.ci?.shipping || {}) });
+  }
+
+  if (!data.ci) {
+    return <div className="state">Create a Commercial Invoice first.</div>;
+  }
+
+  return (
+    <div className="doc-tab">
+      <fieldset className="form-fieldset" disabled={!editable}>
+        <ShippingMarksSection shipping={shipping} setShipping={setShipping} />
+      </fieldset>
+      <div className="form-actions doc-actions">
+        <div className="doc-actions-left">
+          <DocPreviewButton orderId={data.order.id} kind="sm/pdf" filename="Shipping Marks.pdf" disabled={!data.ci} />
+        </div>
+        <div className="doc-actions-center" />
+        <div className="doc-actions-right">
+          {editable ? (
+            <>
+              <button className="btn" disabled={busy} onClick={cancel}>
+                Cancel
+              </button>
+              <button className="btn primary" disabled={busy || data.order.id === 0} onClick={save}>
+                Save
+              </button>
+            </>
+          ) : (
+            <span className="hint-inline">{editBlockReason("documents", data.order.assignee_id)}</span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Packing List 선적정보/Marks 필드 정책 —
 //  · READONLY: CI 와 동일한 확정 정보. 입력란 없이 값만 표시하고 저장하지 않아 항상 CI 를 따라간다.
 //  · EDITABLE(운송 + 포장 실측): CI 값을 불러와 두되 PL 에서 수정 가능. 이 키들만 pl.shipping 에 저장.
@@ -988,11 +1061,8 @@ const PL_READONLY_KEYS = new Set([
   "sm_type", "sm_vessel", "sm_consignee", "sm_po_no", "sm_ref_no", "sm_desc",
   "sm_port_delivery", "sm_final_dest", "sm_origin",
 ]);
-const PL_EDITABLE_KEYS = [
-  "carrier", "bl_awb_no", "etd", "eta",
-  "sm_case_no", "sm_total_cases", "sm_net_weight", "sm_gross_weight",
-  "sm_dim_l", "sm_dim_w", "sm_dim_h", "sm_handling",
-];
+// 케이스 마킹(sm_*)은 Shipping Marks 탭에서 CI 에 저장하므로 PL 은 운송 정보만 자체 저장한다.
+const PL_EDITABLE_KEYS = ["carrier", "bl_awb_no", "etd", "eta"];
 
 function PackingListTab({ data, onChanged }: { data: DocumentDetail; onChanged: () => void }) {
   const [plNo, setPlNo] = useState(data.pl?.pl_no || "");
@@ -1074,11 +1144,9 @@ function PackingListTab({ data, onChanged }: { data: DocumentDetail; onChanged: 
         <ShippingFields shipping={shipping} setShipping={setShipping} readonlyKeys={PL_READONLY_KEYS} />
       </div>
       <p className="hint-inline" style={{ marginTop: 6 }}>
-        회색 항목은 Commercial Invoice 값을 그대로 표시합니다(수정 불가). 운송·포장 정보만 이 Packing List 에서 수정·저장됩니다.
+        회색 항목은 Commercial Invoice 값을 그대로 표시합니다(수정 불가). 운송 정보만 이 Packing List 에서 수정·저장됩니다. 케이스 마킹은 Shipping Marks 탭에서 관리합니다.
       </p>
       </div>
-      {/* Shipping Marks — 확정 정보는 CI 표시, 운송·포장 실측만 편집. */}
-      <ShippingMarksSection shipping={shipping} setShipping={setShipping} readonlyKeys={PL_READONLY_KEYS} />
       </div>
       <ItemEditor
         items={items}
@@ -1221,7 +1289,6 @@ function ShippingAdviceTab({ data, onChanged }: { data: DocumentDetail; onChange
         <ShippingFields shipping={shipping} setShipping={setShipping} />
       </div>
       </div>
-      <ShippingMarksSection shipping={shipping} setShipping={setShipping} />
       </div>
       {data.ci ? (
         <MissingWarning missing={ciMissing} />
@@ -1866,7 +1933,7 @@ function DocPreviewButton({
   xlsxKind,
 }: {
   orderId: number;
-  kind: "ci/pdf" | "pl/pdf" | "sa/pdf";
+  kind: "ci/pdf" | "sm/pdf" | "pl/pdf" | "sa/pdf";
   filename: string;
   disabled: boolean;
   // 지정 시 미리보기 우측상단에 Excel 다운로드 버튼을 노출한다(CI/PL 만 xlsx 지원).

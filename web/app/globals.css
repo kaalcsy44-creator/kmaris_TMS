@@ -3674,6 +3674,14 @@ a.btn.primary:hover {
 .doc-cols .sm-section .doc-form-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
+/* Shipping Marks 를 별도 탭으로 분리한 뒤 — Basic info 만 남은 문서 탭(CI·PL·SA)은
+   단을 나누지 않고 전체 폭을 쓰고, 입력란은 폭에 맞춰 여러 열로 자동 배치한다. */
+.doc-cols:has(> .doc-col:only-child) {
+  grid-template-columns: 1fr;
+}
+.doc-cols > .doc-col:only-child .doc-form-grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
 /* 좁은 창(정보 패널 펼침 등)에서는 좌우 2단을 위아래로 접는다. */
 @media (max-width: 1100px) {
   .doc-cols {

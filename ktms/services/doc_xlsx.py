@@ -236,22 +236,7 @@ def make_commercial_invoice_xlsx(
         ("Country of Origin", shipping.get("sm_origin", "")),
     ], r)
 
-    # ── Shipping marks ───────────────────────────────────────────────────
-    merge(r, 1, r, NCOL); put(r, 1, "SHIPPING MARKS", fill=section, font=white_sec, align=left)
-    bd(r, 1, r, NCOL, section); r += 1
-    # sm_* 로 항상 재구성(무게 N.W./G.W. · 치수 DIM. 포함). 없으면 저장된 문자열로 폴백.
-    marks = _compose_marks(shipping) or (shipping.get("shipping_marks") or "").strip()
-    mark_lines = marks.splitlines()
-    split_at = (len(mark_lines) + 1) // 2
-    marks_h = max(4, len(marks.splitlines()))  # 줄 수만큼 블록 높이 확보
-    marks_h = 5
-    merge(r, 1, r + marks_h - 1, 4)
-    put(r, 1, "\n".join(mark_lines[:split_at]), font=normal, align=left_top)
-    merge(r, 5, r + marks_h - 1, 8)
-    put(r, 5, "\n".join(mark_lines[split_at:]), font=normal, align=left_top)
-    bd(r, 1, r + marks_h - 1, 4)
-    bd(r, 5, r + marks_h - 1, 8)
-    r += marks_h
+    # Shipping Marks(케이스 마킹)는 별도 문서로 분리 — CI Excel 에는 출력하지 않는다.
 
     # ── 품목 표 ───────────────────────────────────────────────────────────
     hrow = r
