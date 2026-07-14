@@ -2,6 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   fetchPipeline,
@@ -227,6 +228,9 @@ export default function ProgressScreen() {
         >
           Progress (Customer)
         </button>
+        <Link href="/activity" className="btn sm" style={{ marginLeft: "auto" }}>
+          🗒 Activity Log
+        </Link>
       </div>
 
       {tab === "customer" && (

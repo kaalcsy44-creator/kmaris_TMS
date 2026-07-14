@@ -7749,3 +7749,70 @@ table.mini .num {
 .board-prev-col.cancelled .board-prev-cardno,
 .board-prev-col.cancelled .board-prev-title2,
 .board-prev-col.cancelled .board-prev-pic { color: #9aa3af; }
+
+/* ── Activity Log (업무일지) ───────────────────────────────────────────── */
+.act-toolbar { display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.act-title { display: flex; align-items: baseline; gap: 10px; }
+.act-title b { font-size: 18px; }
+.act-title .muted { color: var(--muted); font-size: 12px; }
+.act-filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.act-search { min-width: 200px; padding: 5px 9px; border: 1px solid var(--border, #d8dee6);
+  border-radius: 6px; font-size: 13px; }
+.act-seg { display: inline-flex; border: 1px solid var(--border, #d8dee6); border-radius: 6px; overflow: hidden; }
+.act-seg button { border: 0; background: #fff; padding: 5px 10px; font-size: 12px; cursor: pointer; }
+.act-seg button.on { background: #0055a8; color: #fff; }
+.act-seg input[type="date"] { border: 0; border-left: 1px solid var(--border, #d8dee6); padding: 4px 6px; font-size: 12px; }
+.act-check { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); }
+
+.act-bucket { margin-bottom: 20px; }
+.act-bucket-h { font-size: 14px; font-weight: 800; color: #0b1d3a; margin: 6px 0 10px;
+  padding-bottom: 5px; border-bottom: 2px solid #0055a8; }
+.act-bucket-h .cnt { color: #0055a8; font-size: 12px; }
+.act-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 12px; }
+
+.act-card { border: 1px solid var(--border, #e5e7eb); border-radius: 8px; padding: 12px 14px; background: #fff; }
+.act-card-h { display: flex; align-items: baseline; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
+.act-pno { font-weight: 800; color: #0055a8; }
+.act-head { font-weight: 600; font-size: 13.5px; }
+.act-spacer { flex: 1; }
+.act-pic { font-size: 11px; background: #eef3f9; color: #334155; padding: 1px 7px; border-radius: 10px; }
+.act-open { font-size: 11.5px; color: #0055a8; text-decoration: none; white-space: nowrap; }
+.act-open:hover { text-decoration: underline; }
+
+.act-list { list-style: none; margin: 0 0 8px; padding: 0; }
+.act-item { display: flex; align-items: flex-start; gap: 8px; padding: 3px 0; font-size: 13px;
+  border-bottom: 1px dashed #f0f2f5; }
+.act-item:last-child { border-bottom: 0; }
+.act-item.star { background: #fff8e6; border-radius: 4px; padding-left: 6px; }
+.act-date { flex: none; width: 42px; color: #64748b; font-variant-numeric: tabular-nums; font-weight: 600; }
+.act-auto { color: #64748b; }
+.act-tag { font-size: 10px; background: #eef3f9; color: #64748b; padding: 0 5px; border-radius: 8px; margin-right: 2px; }
+.act-text { flex: 1; }
+.act-meta { color: #94a3b8; font-size: 11.5px; }
+.act-actions { flex: none; display: flex; gap: 4px; opacity: 0; transition: opacity .12s; }
+.act-item:hover .act-actions, .act-item.star .act-actions { opacity: 1; }
+.act-starbtn { border: 0; background: none; color: #cbd5e1; cursor: pointer; font-size: 13px; padding: 0 2px; }
+.act-starbtn.on { color: #f59e0b; }
+.act-del { border: 0; background: none; color: #cbd5e1; cursor: pointer; font-size: 15px; line-height: 1; padding: 0 2px; }
+.act-del:hover { color: #dc2626; }
+.act-empty { padding: 4px 0; }
+
+.act-add-btn { border: 1px dashed #cbd5e1; background: none; color: #64748b; font-size: 12px;
+  border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+.act-add-btn:hover { border-color: #0055a8; color: #0055a8; }
+.act-add { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.act-add input[type="date"], .act-add select { padding: 4px 6px; border: 1px solid var(--border, #d8dee6);
+  border-radius: 6px; font-size: 12px; }
+.act-add-text { flex: 1; min-width: 180px; padding: 5px 9px; border: 1px solid var(--border, #d8dee6);
+  border-radius: 6px; font-size: 13px; }
+
+/* 회의 모드 — 입력 UI 숨기고 크게. */
+.act-screen.meeting .act-cards { grid-template-columns: 1fr; }
+.act-screen.meeting .act-item { font-size: 15px; padding: 5px 0; }
+.act-screen.meeting .act-head { font-size: 15px; }
+@media print {
+  .act-toolbar, .act-add, .act-add-btn, .act-actions, .act-open, .topnav { display: none !important; }
+  .act-cards { grid-template-columns: 1fr; }
+  .act-card { break-inside: avoid; }
+}

@@ -769,6 +769,7 @@ export type StageNote = {
   party?: string; // Customer / Vendor / 기타
   channel?: string; // 이메일 / 통화 / 문자 / 방문 / 기타
   direction?: "in" | "out" | ""; // in=수신(Received) / out=발신(Sent) / 빈값=해당없음
+  star?: boolean; // ★ 우선(회의/후속 표시)
 };
 
 export type PipelineData = {

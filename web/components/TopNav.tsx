@@ -7,7 +7,8 @@ import type { PermModule } from "@/lib/auth";
 import GlobalSearch from "./GlobalSearch";
 
 type SubItem = { href: string; label: string };
-type Item = { href: string; label: string; key: string; sub?: SubItem[] };
+// perm: 열람 권한 확인에 쓸 모듈(생략 시 key 를 모듈로 사용).
+type Item = { href: string; label: string; key: string; perm?: PermModule; sub?: SubItem[] };
 
 // 평면 상단 메뉴 — 페이지 자체가 주요 메뉴. 설정은 우측 톱니 아이콘으로 분리.
 // RFQ·견적 / P/O / Documents / AR 은 진행현황(Progress) 프로젝트 팝업의 단계별 작업으로
@@ -15,6 +16,8 @@ type Item = { href: string; label: string; key: string; sub?: SubItem[] };
 const ITEMS: Item[] = [
   { href: "/", label: "Dashboard", key: "dashboard" },
   { href: "/progress", label: "Progress", key: "progress" },
+  // 업무일지 — 파이프라인(progress) 열람 권한 사용자면 접근 가능.
+  { href: "/activity", label: "Activity", key: "activity", perm: "progress" },
   { href: "/marketing", label: "Marketing", key: "marketing" },
 ];
 
@@ -24,7 +27,7 @@ export default function TopNav({ active }: { active: string }) {
   const admin = isAdmin();
   const initial = (user?.username ?? "?").charAt(0).toUpperCase();
   // 열람(view) 권한이 있는 메뉴만 노출. (item.key 가 권한 모듈명과 동일)
-  const items = ITEMS.filter((it) => can(it.key as PermModule, "view"));
+  const items = ITEMS.filter((it) => can((it.perm ?? it.key) as PermModule, "view"));
   const showSettings = admin || can("settings", "view");
 
   return (

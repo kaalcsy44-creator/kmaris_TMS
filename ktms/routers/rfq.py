@@ -560,6 +560,7 @@ def add_rfq_stage_note(rfq_id: int, body: StageNoteAdd):
             "party": (body.party or "").strip(),
             "channel": (body.channel or "").strip(),
             "direction": (body.direction or "").strip(),  # in(수신)/out(발신)
+            "star": bool(getattr(body, "star", False)),   # ★ 우선
             "at": _kst_iso(datetime.utcnow()),   # 기록 생성 시각(감사용)
         })
         notes[key] = log
@@ -593,6 +594,7 @@ def update_rfq_stage_note(rfq_id: int, body: StageNoteUpdate):
             "party": (body.party or "").strip(),
             "channel": (body.channel or "").strip(),
             "direction": (body.direction or "").strip(),  # in(수신)/out(발신)
+            "star": bool(getattr(body, "star", False)),   # ★ 우선
             "at": old.get("at") or _kst_iso(datetime.utcnow()),  # 생성 시각 유지
         }
         notes[key] = log
