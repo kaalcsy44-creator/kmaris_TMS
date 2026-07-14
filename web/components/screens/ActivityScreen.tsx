@@ -13,6 +13,28 @@ import {
 import { useCachedData } from "@/lib/useCachedData";
 import type { PipelineData, PipelineRow, StageNote } from "@/lib/types";
 import { getUserId, getUser } from "@/lib/auth";
+import CustomerName from "@/components/common/CustomerName";
+import VendorMonograms from "@/components/common/VendorMonograms";
+
+// 벤더 모노그램 상태 — 발주 벤더 확정 시 문자열 fallback, 아니면 RFQ 발송 벤더의 견적 수신여부.
+// (ProgressScreen 과 동일 규칙.)
+function vendorStatusesFor(r: PipelineRow): { name: string; quoted: boolean }[] | undefined {
+  if (r.vendor) return undefined;
+  return r.rfq_vendors && r.rfq_vendors.length ? r.rfq_vendors : undefined;
+}
+
+// 담당자(PIC) 드롭다운 후보 — 배정 가능 사용자(+ 로그인 사용자, + 현재 선택값). 공유 캐시.
+function usePicOptions(current: string): string[] {
+  const me = getUser();
+  const { data: users } = useCachedData("assignable-users", fetchAssignableUsers);
+  return useMemo(() => {
+    const set = new Set<string>();
+    if (me?.username) set.add(me.username);
+    (users ?? []).forEach((u) => set.add(u.username));
+    if (current) set.add(current);
+    return Array.from(set);
+  }, [users, me?.username, current]);
+}
 
 // 내부 11단계 → 5개 버킷(RFQ 1–2 / Quote 3–4 / PO 5–6 / Documents 7–9 / AR 10–11).
 const PHASES: { label: string; from: number; to: number }[] = [
@@ -54,6 +76,26 @@ function splitProjectNo(pno: string): { code: string; date: string } {
 function vendorOf(row: PipelineRow): string {
   return (row.vendor || "").trim() || (row.vrfq_vendors || "").trim();
 }
+// 최신 활동 일시(iso) — 단계 완료(수동/자동)·단계 노트 중 최신. 백엔드 _last_activity_iso 와 동일 규칙.
+function lastActivityISO(row: PipelineRow): string {
+  const times: string[] = [];
+  for (const m of [row.stage_dates, row.stage_auto]) {
+    for (const v of Object.values(m ?? {})) if (v) times.push(v);
+  }
+  for (const notes of Object.values(row.stage_notes ?? {})) {
+    for (const n of notes ?? []) {
+      const v = n.datetime || n.at || "";
+      if (v) times.push(v);
+    }
+  }
+  return times.length ? times.reduce((a, b) => (a > b ? a : b)) : "";
+}
+// iso 로부터 오늘까지 경과 일수(≥0). 파싱 불가면 null. progress 페이지 daysSince 와 동일.
+function daysSinceISO(iso: string): number | null {
+  const t = Date.parse((iso || "").slice(0, 10));
+  if (Number.isNaN(t)) return null;
+  return Math.max(0, Math.floor((Date.now() - t) / 86_400_000));
+}
 // 자동 단계 이벤트의 From/To 상대 — 단계별로 고객/벤더를 붙인다.
 function autoParty(stage: number, row: PipelineRow): string {
   const cust = row.customer || "";
@@ -72,6 +114,9 @@ function autoParty(stage: number, row: PipelineRow): string {
     default: return "";
   }
 }
+
+// 기존 활동 노트 수정 시 전달하는 값.
+type NotePatch = { text: string; datetime?: string; direction?: string; party?: string; star?: boolean; pic?: string };
 
 // 카드 드래그앤드롭(동일 단계 그룹 내 순서 변경) 배선.
 type CardDrag = {
@@ -248,6 +293,20 @@ export default function ActivityScreen() {
     }
   }
 
+  async function saveNote(rfqId: number, a: Activity, patch: NotePatch) {
+    if (a.kind !== "note") return;
+    await updateRfqStageNote(rfqId, a.stage, a.index, {
+      text: patch.text,
+      datetime: patch.datetime,
+      direction: patch.direction,
+      party: patch.party,
+      channel: a.note.channel, // 편집 폼에 없는 필드 — 기존값 보존
+      star: patch.star ?? a.note.star,
+      pic: patch.pic,
+    });
+    load();
+  }
+
   async function removeNote(rfqId: number, a: Activity) {
     if (a.kind !== "note") return;
     if (!window.confirm("Delete this activity?")) return;
@@ -314,6 +373,7 @@ export default function ActivityScreen() {
                     meeting={meeting}
                     onStar={(a) => toggleStar(row.rfq_id, a)}
                     onDelete={(a) => removeNote(row.rfq_id, a)}
+                    onSave={(a, patch) => saveNote(row.rfq_id, a, patch)}
                     onAdded={load}
                     drag={makeDrag(g.phase, row.rfq_id, ordered)}
                   />
@@ -333,6 +393,7 @@ function ActivityCard({
   meeting,
   onStar,
   onDelete,
+  onSave,
   onAdded,
   drag,
 }: {
@@ -341,12 +402,21 @@ function ActivityCard({
   meeting: boolean;
   onStar: (a: Activity) => void;
   onDelete: (a: Activity) => void;
+  onSave: (a: Activity, patch: NotePatch) => Promise<void>;
   onAdded: () => void;
   drag?: CardDrag;
 }) {
   const { code, date } = splitProjectNo(row.project_no || row.kmaris_rfq_no || "—");
   const vend = vendorOf(row);
   const isService = row.work_type === "서비스";
+  // 경과일(최신 활동 이후) + 색상 등급 — progress next-action 규칙 동기화.
+  // 백엔드 next_level 이 있으면 그대로(완료/실주=normal 포함), 없으면 임계값(7/14일)으로.
+  const ageDays = daysSinceISO(lastActivityISO(row));
+  const ageLevel: "normal" | "warn" | "urgent" = row.next_level
+    ? row.next_level
+    : !row.cancelled && ageDays != null
+      ? ageDays >= 14 ? "urgent" : ageDays >= 7 ? "warn" : "normal"
+      : "normal";
   return (
     <div
       className={`act-card${isService ? " service" : ""}${drag?.over ? " drag-over" : ""}${drag?.dragging ? " dragging" : ""}`}
@@ -373,50 +443,203 @@ function ActivityCard({
           {row.project_title || "(untitled)"}
           {row.vessel ? <span className="act-tvessel"> · {row.vessel}</span> : null}
         </div>
-        {/* 고객사 · 고객사 담당자 / 벤더. (우측 상단 배지 = 내부 PIC) */}
+        {/* 고객사(로고+이름) · 담당자 / 벤더(이니셜 원형 배지). (우측 상단 배지 = 내부 PIC) */}
         {(row.customer || vend) ? (
           <div className="act-sub">
-            {row.customer}
-            {row.contact_person ? <span className="act-sub-contact"> · {row.contact_person}</span> : null}
-            {vend ? ` / ${vend}` : ""}
+            {row.customer ? <CustomerName name={row.customer} /> : null}
+            {row.contact_person ? <span className="act-sub-contact">· {row.contact_person}</span> : null}
+            {vend ? <span className="act-sub-sep">/</span> : null}
+            {vend ? <VendorMonograms value={vendorOf(row)} statuses={vendorStatusesFor(row)} /> : null}
           </div>
         ) : null}
       </div>
       <ul className="act-list">
         {acts.length === 0 ? <li className="act-empty muted">No activity yet</li> : null}
-        {acts.map((a, i) => (
-          <li key={i} className={`act-item${a.kind === "note" && a.note.star ? " star" : ""}${a.kind === "close" ? " closed" : ""}`}>
-            <span className="act-date">{md(a.date)}</span>
-            {a.kind === "auto" ? (
-              <span className="act-auto">
-                <span className="act-tag">auto</span> {a.label}
-                {a.party ? <span className="act-meta"> · {a.party}</span> : null}
-              </span>
-            ) : a.kind === "close" ? (
-              <span className="act-text"><span className="act-tag close">closed</span> {a.reason || "Closed"}</span>
-            ) : (
-              <span className="act-text">
-                {a.note.text}
-                {(() => {
-                  const dl = a.note.direction === "in" ? "from" : a.note.direction === "out" ? "to" : "";
-                  const who = [dl, a.note.party].filter(Boolean).join(" ");
-                  const parts = [who, a.note.channel].filter(Boolean);
-                  return parts.length ? <span className="act-meta"> · {parts.join(" · ")}</span> : null;
-                })()}
-                {a.note.pic ? <span className="act-note-pic">{a.note.pic}</span> : null}
-              </span>
-            )}
-            {a.kind === "note" ? (
-              <span className="act-actions">
-                <button className={`act-starbtn${a.note.star ? " on" : ""}`} title="Mark priority" onClick={() => onStar(a)}>★</button>
-                {!meeting ? <button className="act-del" title="Delete" onClick={() => onDelete(a)}>×</button> : null}
-              </span>
-            ) : null}
-          </li>
-        ))}
+        {acts.map((a, i) =>
+          a.kind === "note" ? (
+            <NoteRow
+              key={i}
+              a={a}
+              meeting={meeting}
+              onStar={() => onStar(a)}
+              onDelete={() => onDelete(a)}
+              onSave={(patch) => onSave(a, patch)}
+            />
+          ) : (
+            <li key={i} className={`act-item${a.kind === "close" ? " closed" : ""}`}>
+              <span className="act-date">{md(a.date)}</span>
+              {a.kind === "auto" ? (
+                <span className="act-auto">
+                  <span className="act-tag">auto</span> {a.label}
+                  {a.party ? <span className="act-meta"> · {a.party}</span> : null}
+                </span>
+              ) : (
+                <span className="act-text"><span className="act-tag close">closed</span> {a.reason || "Closed"}</span>
+              )}
+            </li>
+          )
+        )}
       </ul>
       {!meeting ? <AddActivity rfqId={row.rfq_id} stage={row.stage} onAdded={onAdded} /> : null}
+      {ageDays != null ? (
+        <span className={`act-age lv-${ageLevel}`} title="Days since last activity">{ageDays}d</span>
+      ) : null}
     </div>
+  );
+}
+
+// Party 선택 — 프리셋(Customer/Vendor/Internal) + '직접입력'(자유 텍스트).
+const PARTY_PRESETS = ["Customer", "Vendor", "Internal"];
+function PartySelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  // 값이 있고 프리셋이 아니면 직접입력 모드로 시작.
+  const [custom, setCustom] = useState(() => !!value && !PARTY_PRESETS.includes(value));
+  return (
+    <>
+      <select
+        value={custom ? "__custom__" : value}
+        onChange={(e) => {
+          const v = e.target.value;
+          if (v === "__custom__") { setCustom(true); onChange(""); }
+          else { setCustom(false); onChange(v); }
+        }}
+      >
+        <option value="">Party —</option>
+        {PARTY_PRESETS.map((p) => (
+          <option key={p} value={p}>{p}</option>
+        ))}
+        <option value="__custom__">직접입력</option>
+      </select>
+      {custom ? (
+        <input
+          className="act-party-custom"
+          type="text"
+          value={value}
+          placeholder="Party"
+          autoFocus
+          onChange={(e) => onChange(e.target.value)}
+        />
+      ) : null}
+    </>
+  );
+}
+
+// 기존 활동 노트 1건 — 표시/인라인 수정 토글.
+function NoteRow({
+  a,
+  meeting,
+  onStar,
+  onDelete,
+  onSave,
+}: {
+  a: Extract<Activity, { kind: "note" }>;
+  meeting: boolean;
+  onStar: () => void;
+  onDelete: () => void;
+  onSave: (patch: NotePatch) => Promise<void>;
+}) {
+  const n = a.note;
+  const [editing, setEditing] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [text, setText] = useState(n.text);
+  const [date, setDate] = useState((n.datetime || n.at || "").slice(0, 10) || todayISO());
+  const [dir, setDir] = useState<"" | "in" | "out">((n.direction as "" | "in" | "out") || "");
+  const [party, setParty] = useState(n.party || "");
+  const [star, setStar] = useState(!!n.star);
+  const [pic, setPic] = useState(n.pic || "");
+  const picOptions = usePicOptions(pic);
+
+  function begin() {
+    // 최신 저장값으로 초기화 후 편집 시작.
+    setText(n.text);
+    setDate((n.datetime || n.at || "").slice(0, 10) || todayISO());
+    setDir((n.direction as "" | "in" | "out") || "");
+    setParty(n.party || "");
+    setStar(!!n.star);
+    setPic(n.pic || "");
+    setEditing(true);
+  }
+
+  async function save() {
+    if (!text.trim()) return;
+    setBusy(true);
+    try {
+      await onSave({
+        text: text.trim(),
+        datetime: `${date}T09:00`,
+        direction: dir || undefined,
+        party: party || undefined,
+        star,
+        pic: pic.trim() || undefined,
+      });
+      setEditing(false);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (editing) {
+    return (
+      <li className="act-item editing">
+        <div className="act-add act-edit">
+          {/* 1행: 날짜 · From/To · Party · 담당자 · ★ */}
+          <div className="act-add-row">
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            <div className="act-seg sm">
+              {(["in", "out"] as const).map((d) => (
+                <button key={d} className={dir === d ? "on" : ""} onClick={() => setDir((v) => (v === d ? "" : d))}>
+                  {d === "in" ? "From" : "To"}
+                </button>
+              ))}
+            </div>
+            <PartySelect value={party} onChange={setParty} />
+            <select className="act-add-pic" value={pic} title="담당자(작성자)" onChange={(e) => setPic(e.target.value)}>
+              {pic ? null : <option value="">PIC —</option>}
+              {picOptions.map((u) => (
+                <option key={u} value={u}>{u}</option>
+              ))}
+            </select>
+            <label className="act-check"><input type="checkbox" checked={star} onChange={(e) => setStar(e.target.checked)} /> ★</label>
+          </div>
+          {/* 2행: 내용 */}
+          <div className="act-add-row">
+            <textarea
+              className="act-add-text"
+              value={text}
+              rows={2}
+              onChange={(e) => setText(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); save(); } }}
+              autoFocus
+            />
+          </div>
+          {/* 3행: Save · Cancel */}
+          <div className="act-add-row">
+            <button className="btn sm primary act-add-go" disabled={busy || !text.trim()} onClick={save}>{busy ? "…" : "Save"}</button>
+            <button className="btn sm act-add-go" onClick={() => setEditing(false)}>Cancel</button>
+          </div>
+        </div>
+      </li>
+    );
+  }
+
+  return (
+    <li className={`act-item${n.star ? " star" : ""}`}>
+      <span className="act-date">{md(a.date)}</span>
+      <span className="act-text">
+        {n.text}
+        {(() => {
+          const dl = n.direction === "in" ? "from" : n.direction === "out" ? "to" : "";
+          const who = [dl, n.party].filter(Boolean).join(" ");
+          const parts = [who, n.channel].filter(Boolean);
+          return parts.length ? <span className="act-meta"> · {parts.join(" · ")}</span> : null;
+        })()}
+        {n.pic ? <span className="act-note-pic">{n.pic}</span> : null}
+      </span>
+      <span className="act-actions">
+        <button className={`act-starbtn${n.star ? " on" : ""}`} title="Mark priority" onClick={onStar}>★</button>
+        {!meeting ? <button className="act-edit-btn" title="Edit" onClick={begin}>✎</button> : null}
+        {!meeting ? <button className="act-del" title="Delete" onClick={onDelete}>×</button> : null}
+      </span>
+    </li>
   );
 }
 
@@ -430,15 +653,7 @@ function AddActivity({ rfqId, stage, onAdded }: { rfqId: number; stage: number; 
   const [busy, setBusy] = useState(false);
   const me = getUser();
   const [pic, setPic] = useState(me?.username ?? ""); // 담당자(작성자) — 기본값=로그인 사용자, 편집 가능
-  // 담당자 드롭다운 후보 — 배정 가능 사용자 목록(+ 로그인 사용자, + 현재 선택값).
-  const { data: users } = useCachedData("assignable-users", fetchAssignableUsers);
-  const picOptions = useMemo(() => {
-    const set = new Set<string>();
-    if (me?.username) set.add(me.username);
-    (users ?? []).forEach((u) => set.add(u.username));
-    if (pic) set.add(pic);
-    return Array.from(set);
-  }, [users, me?.username, pic]);
+  const picOptions = usePicOptions(pic);
 
   async function submit() {
     if (!text.trim()) return;
@@ -479,12 +694,7 @@ function AddActivity({ rfqId, stage, onAdded }: { rfqId: number; stage: number; 
             </button>
           ))}
         </div>
-        <select value={party} onChange={(e) => setParty(e.target.value)}>
-          <option value="">Party —</option>
-          <option value="Customer">Customer</option>
-          <option value="Vendor">Vendor</option>
-          <option value="Internal">Internal</option>
-        </select>
+        <PartySelect value={party} onChange={setParty} />
         <select className="act-add-pic" value={pic} title="담당자(작성자)" onChange={(e) => setPic(e.target.value)}>
           {pic ? null : <option value="">PIC —</option>}
           {picOptions.map((u) => (

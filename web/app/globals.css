@@ -7788,29 +7788,39 @@ table.mini .num {
 @media (max-width: 1050px) { .act-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 680px) { .act-cards { grid-template-columns: 1fr; } }
 
-.act-card { border: 1px solid var(--border, #e5e7eb); border-radius: 8px; padding: 12px 14px; background: #fff; overflow: hidden; }
-/* 카드 상단 헤더(1~3행) — 프로젝트 번호 색(브랜드 블루)으로 채워 카드 경계를 분명히.
-   이 영역이 드래그 핸들. 내부 글씨는 대비되도록 흰색/하늘색 계열로 재지정. */
+.act-card { position: relative; border: 1px solid var(--border, #e5e7eb); border-radius: 8px; padding: 12px 14px; background: #fff; overflow: hidden; }
+/* 경과일 배지(우측 하단) — 최신 활동 이후 경과일. 색상은 progress next-action 규칙과 동기화
+   (warn ≥7d 노랑 / urgent ≥14d 빨강). */
+.act-age { position: absolute; right: 10px; bottom: 9px; font-size: 10px; font-weight: 700;
+  padding: 1px 6px; border-radius: 6px; background: var(--head-bg); color: var(--muted); }
+.act-age.lv-warn { background: #fff3e0; color: #9a5b00; }
+.act-age.lv-urgent { background: #fdeaea; color: #b42318; }
+/* 카드 상단 헤더(1~3행) — 프로젝트 번호 색과 페이지 배경의 중간 채도(옅은 톤)로 채워
+   카드 경계를 분명히. 이 영역이 드래그 핸들. 옅은 배경에 맞춰 글씨는 어둡게 재지정. */
 .act-card-head { margin: -12px -14px 8px; padding: 10px 14px 9px;
-  background: #0055a8; border-bottom: 1px solid #003f7d; }
+  background: #8fb4d9; border-bottom: 1px solid #6f9bc9; }
 .act-card-head.draggable { cursor: grab; }
 .act-card-head.draggable:active { cursor: grabbing; }
 .act-card-head .act-sub { margin-bottom: 0; }
-/* 헤더 안 글씨색 — 파란 배경 대비. */
-.act-card-head .act-pno { color: #fff; }
-.act-card-head .act-pno-date { color: #bcd6f0; }
-.act-card-head .act-title2 { color: #fff; }
-.act-card-head .act-tvessel { color: #cfe0f5; }
-.act-card-head .act-sub { color: #cfe0f5; }
-.act-card-head .act-sub-contact { color: #eaf3fc; }
-.act-card-head .act-open { color: #fff; }
-.act-card-head .act-pic { background: rgba(255, 255, 255, 0.18); color: #fff; }
-/* 서비스 딜 — 헤더를 서비스 녹색(#11824a)으로. 파란 톤 글씨는 녹색 톤으로 재지정. */
-.act-card.service .act-card-head { background: #11824a; border-bottom-color: #0c6338; }
-.act-card.service .act-card-head .act-pno-date { color: #bfe3cd; }
+/* 헤더 안 글씨색 — 옅은 블루 배경 대비(진한 톤). */
+.act-card-head .act-pno { color: #08386c; }
+.act-card-head .act-pno-date { color: #3d5f82; }
+.act-card-head .act-title2 { color: #16243c; }
+.act-card-head .act-tvessel { color: #37547a; }
+.act-card-head .act-sub { color: #3a577a; }
+.act-card-head .act-sub-contact { color: #213f60; }
+.act-card-head .act-open { color: #08386c; }
+.act-card-head .act-pic { background: rgba(255, 255, 255, 0.6); color: #0d3b6b; }
+/* 서비스 딜 — 헤더를 서비스 녹색과 배경의 중간 채도로. 글씨는 녹색 진한 톤. */
+.act-card.service .act-card-head { background: #97c6b2; border-bottom-color: #74b096; }
+.act-card.service .act-card-head .act-pno,
+.act-card.service .act-card-head .act-open { color: #0a5c34; }
+.act-card.service .act-card-head .act-pno-date { color: #3a6b52; }
+.act-card.service .act-card-head .act-title2 { color: #143024; }
 .act-card.service .act-card-head .act-tvessel,
-.act-card.service .act-card-head .act-sub { color: #cdebd9; }
-.act-card.service .act-card-head .act-sub-contact { color: #e8f6ee; }
+.act-card.service .act-card-head .act-sub { color: #33604a; }
+.act-card.service .act-card-head .act-sub-contact { color: #1e4635; }
+.act-card.service .act-card-head .act-pic { color: #0b5c34; }
 .act-card.service.drag-over { outline-color: #11824a; }
 /* 드래그 상태 표시. */
 .act-card.drag-over { outline: 2px dashed #0055a8; outline-offset: -2px; }
@@ -7826,8 +7836,13 @@ table.mini .num {
 .act-title2 { font-size: 14.5px; font-weight: 600; color: #1f2937; margin-bottom: 1px; }
 /* 선박명 — 회색·비볼드·프로젝트명보다 1pt 작게(고객/벤더 서브라인과 동일 톤). */
 .act-tvessel { font-size: 13.5px; font-weight: 400; color: #6b7280; }
-.act-sub { font-size: 12px; font-weight: 400; color: #6b7280; margin-bottom: 8px; }
+/* 고객사(로고+이름) · 담당자 / 벤더 모노그램을 한 줄에 정렬. */
+.act-sub { display: flex; align-items: center; flex-wrap: wrap; gap: 5px;
+  font-size: 12px; font-weight: 400; color: #6b7280; margin-bottom: 8px; }
+.act-sub .cust-logo { width: 16px; height: 16px; }
+.act-sub .cust-name-text { color: inherit; }
 .act-sub-contact { color: #334155; }  /* 고객사 담당자 */
+.act-sub-sep { color: inherit; opacity: 0.55; }
 .act-open { font-size: 15px; font-weight: 700; }  /* 화살표만 크게 */
 
 .act-list { list-style: none; margin: 0 0 8px; padding: 0; }
@@ -7851,6 +7866,11 @@ table.mini .num {
 .act-starbtn.on { color: #f59e0b; }
 .act-del { border: 0; background: none; color: #cbd5e1; cursor: pointer; font-size: 15px; line-height: 1; padding: 0 2px; }
 .act-del:hover { color: #dc2626; }
+.act-edit-btn { border: 0; background: none; color: #cbd5e1; cursor: pointer; font-size: 12px; line-height: 1; padding: 0 2px; }
+.act-edit-btn:hover { color: #0055a8; }
+/* 인라인 수정 중인 노트 — 한 줄 flex 대신 편집 폼 전체 폭. */
+.act-item.editing { display: block; background: #f7fafe; border-radius: 6px; padding: 6px; }
+.act-item.editing .act-add { gap: 6px; }
 .act-empty { padding: 4px 0; }
 
 .act-add-btn { border: 1px dashed #cbd5e1; background: none; color: #64748b; font-size: 12px;
@@ -7862,6 +7882,9 @@ table.mini .num {
   border-radius: 6px; font-size: 12px; }
 /* 담당자(PIC) 드롭다운 — 사용자명이 들어갈 만큼만. */
 .act-add-pic { min-width: 96px; }
+/* Party 직접입력 텍스트 필드. */
+.act-party-custom { width: 110px; padding: 4px 6px; border: 1px solid var(--border, #d8dee6);
+  border-radius: 6px; font-size: 12px; }
 /* 내용 입력란 — 한 줄 전체를 넓게. 길어지면 자동 줄바꿈되는 textarea. */
 .act-add-text { flex: 1; width: 100%; min-width: 240px; padding: 6px 10px;
   border: 1px solid var(--border, #d8dee6); border-radius: 6px; font-size: 13px;
