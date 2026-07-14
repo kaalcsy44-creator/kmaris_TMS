@@ -7769,7 +7769,11 @@ table.mini .num {
 .act-bucket-h { font-size: 14px; font-weight: 800; color: #0b1d3a; margin: 6px 0 10px;
   padding-bottom: 5px; border-bottom: 2px solid #0055a8; }
 .act-bucket-h .cnt { color: #0055a8; font-size: 12px; }
-.act-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 12px; }
+/* 4열 배열(넓은 화면). 좁아지면 2열 → 1열로 축소. */
+.act-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 1400px) { .act-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 1050px) { .act-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 680px) { .act-cards { grid-template-columns: 1fr; } }
 
 .act-card { border: 1px solid var(--border, #e5e7eb); border-radius: 8px; padding: 12px 14px; background: #fff; }
 .act-card-h { display: flex; align-items: baseline; gap: 5px; margin-bottom: 3px; flex-wrap: wrap; }
@@ -7781,7 +7785,8 @@ table.mini .num {
 .act-open:hover { text-decoration: underline; }
 /* 프로젝트명(1pt 크게, 준볼드) + 고객/벤더/선박(1pt 작게, 비볼드 muted). */
 .act-title2 { font-size: 14.5px; font-weight: 600; color: #1f2937; margin-bottom: 1px; }
-.act-tvessel { font-size: 14.5px; font-weight: 600; color: #1f2937; }  /* 선박명 — 프로젝트명과 동일 */
+/* 선박명 — 회색·비볼드·프로젝트명보다 1pt 작게(고객/벤더 서브라인과 동일 톤). */
+.act-tvessel { font-size: 13.5px; font-weight: 400; color: #6b7280; }
 .act-sub { font-size: 12px; font-weight: 400; color: #6b7280; margin-bottom: 8px; }
 .act-sub-contact { color: #334155; }  /* 고객사 담당자 */
 .act-open { font-size: 15px; font-weight: 700; }  /* 화살표만 크게 */
