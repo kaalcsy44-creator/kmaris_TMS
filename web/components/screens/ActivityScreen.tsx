@@ -116,7 +116,7 @@ function autoParty(stage: number, row: PipelineRow): string {
 }
 
 // 기존 활동 노트 수정 시 전달하는 값.
-type NotePatch = { text: string; datetime?: string; direction?: string; party?: string; star?: boolean; pic?: string };
+type NotePatch = { text: string; datetime?: string; direction?: string; party?: string; channel?: string; star?: boolean; pic?: string };
 
 // 카드 드래그앤드롭(동일 단계 그룹 내 순서 변경) 배선.
 type CardDrag = {
@@ -300,7 +300,7 @@ export default function ActivityScreen() {
       datetime: patch.datetime,
       direction: patch.direction,
       party: patch.party,
-      channel: a.note.channel, // 편집 폼에 없는 필드 — 기존값 보존
+      channel: patch.channel,
       star: patch.star ?? a.note.star,
       pic: patch.pic,
     });
@@ -488,11 +488,22 @@ function ActivityCard({
   );
 }
 
-// Party 선택 — 프리셋(Customer/Vendor/Internal) + '직접입력'(자유 텍스트).
+// Party / Channel 선택 — 프리셋 + '직접입력'(자유 텍스트, 영문). 두 필드가 동일 구조라 공용.
 const PARTY_PRESETS = ["Customer", "Vendor", "Internal"];
-function PartySelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+const CHANNEL_PRESETS = ["Email", "Message", "Call"];
+function PresetSelect({
+  value,
+  onChange,
+  placeholder,
+  presets,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string; // 예: "Party —" / "Channel —"
+  presets: string[];
+}) {
   // 값이 있고 프리셋이 아니면 직접입력 모드로 시작.
-  const [custom, setCustom] = useState(() => !!value && !PARTY_PRESETS.includes(value));
+  const [custom, setCustom] = useState(() => !!value && !presets.includes(value));
   return (
     <>
       <select
@@ -503,8 +514,8 @@ function PartySelect({ value, onChange }: { value: string; onChange: (v: string)
           else { setCustom(false); onChange(v); }
         }}
       >
-        <option value="">Party —</option>
-        {PARTY_PRESETS.map((p) => (
+        <option value="">{placeholder}</option>
+        {presets.map((p) => (
           <option key={p} value={p}>{p}</option>
         ))}
         <option value="__custom__">직접입력</option>
@@ -514,7 +525,7 @@ function PartySelect({ value, onChange }: { value: string; onChange: (v: string)
           className="act-party-custom"
           type="text"
           value={value}
-          placeholder="Party"
+          placeholder={placeholder.replace(/\s*—\s*$/, "")}
           autoFocus
           onChange={(e) => onChange(e.target.value)}
         />
@@ -544,6 +555,7 @@ function NoteRow({
   const [date, setDate] = useState((n.datetime || n.at || "").slice(0, 10) || todayISO());
   const [dir, setDir] = useState<"" | "in" | "out">((n.direction as "" | "in" | "out") || "");
   const [party, setParty] = useState(n.party || "");
+  const [channel, setChannel] = useState(n.channel || "");
   const [star, setStar] = useState(!!n.star);
   const [pic, setPic] = useState(n.pic || "");
   const picOptions = usePicOptions(pic);
@@ -554,6 +566,7 @@ function NoteRow({
     setDate((n.datetime || n.at || "").slice(0, 10) || todayISO());
     setDir((n.direction as "" | "in" | "out") || "");
     setParty(n.party || "");
+    setChannel(n.channel || "");
     setStar(!!n.star);
     setPic(n.pic || "");
     setEditing(true);
@@ -568,6 +581,7 @@ function NoteRow({
         datetime: `${date}T09:00`,
         direction: dir || undefined,
         party: party || undefined,
+        channel: channel || undefined,
         star,
         pic: pic.trim() || undefined,
       });
@@ -591,7 +605,8 @@ function NoteRow({
                 </button>
               ))}
             </div>
-            <PartySelect value={party} onChange={setParty} />
+            <PresetSelect value={party} onChange={setParty} placeholder="Party —" presets={PARTY_PRESETS} />
+            <PresetSelect value={channel} onChange={setChannel} placeholder="Channel —" presets={CHANNEL_PRESETS} />
             <select className="act-add-pic" value={pic} title="담당자(작성자)" onChange={(e) => setPic(e.target.value)}>
               {pic ? null : <option value="">PIC —</option>}
               {picOptions.map((u) => (
@@ -649,6 +664,7 @@ function AddActivity({ rfqId, stage, onAdded }: { rfqId: number; stage: number; 
   const [date, setDate] = useState(todayISO());
   const [dir, setDir] = useState<"" | "in" | "out">(""); // in=from(수신) / out=to(발신)
   const [party, setParty] = useState("");
+  const [channel, setChannel] = useState("");
   const [star, setStar] = useState(false);
   const [busy, setBusy] = useState(false);
   const me = getUser();
@@ -664,10 +680,11 @@ function AddActivity({ rfqId, stage, onAdded }: { rfqId: number; stage: number; 
         datetime: `${date}T09:00`,
         direction: dir || undefined,
         party: party || undefined,
+        channel: channel || undefined,
         star,
         pic: pic.trim() || undefined,
       });
-      setText(""); setDir(""); setParty(""); setStar(false); setPic(me?.username ?? ""); setOpen(false);
+      setText(""); setDir(""); setParty(""); setChannel(""); setStar(false); setPic(me?.username ?? ""); setOpen(false);
       onAdded();
     } finally {
       setBusy(false);
@@ -694,7 +711,8 @@ function AddActivity({ rfqId, stage, onAdded }: { rfqId: number; stage: number; 
             </button>
           ))}
         </div>
-        <PartySelect value={party} onChange={setParty} />
+        <PresetSelect value={party} onChange={setParty} placeholder="Party —" presets={PARTY_PRESETS} />
+        <PresetSelect value={channel} onChange={setChannel} placeholder="Channel —" presets={CHANNEL_PRESETS} />
         <select className="act-add-pic" value={pic} title="담당자(작성자)" onChange={(e) => setPic(e.target.value)}>
           {pic ? null : <option value="">PIC —</option>}
           {picOptions.map((u) => (
