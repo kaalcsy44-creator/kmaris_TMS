@@ -2638,6 +2638,11 @@ table.pipeline tbody tr.service .pl-stage-done {
 .pl-modal-body .form-actions .btn.primary {
   order: 1;
 }
+/* 견적 편집기 푸터는 표준 규약을 따르지 않는다: Preview=좌측끝, Delete=Cancel 왼쪽(우측 그룹). */
+.pl-modal-body .form-actions.quote-editor-actions .btn.danger {
+  order: 0;
+  margin-right: 0 !important;
+}
 /* 팝업 안의 품목 표는 1180px 강제폭 대신 컨테이너 폭에 맞춘다(넓은 내용일 때만 가로 스크롤). */
 .pl-modal table.mini.wide,
 .pl-modal table.rfq {

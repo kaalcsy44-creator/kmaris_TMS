@@ -2012,7 +2012,7 @@ function CustomerQuoteDetailModal({
           />
           <TermsEditor terms={terms} onChange={setTerms} />
           </fieldset>
-          <div className="form-actions">
+          <div className="form-actions quote-editor-actions">
             <button className="btn" onClick={openPreview} disabled={busy || dlBusy}>
               {dlBusy && !previewUrl ? "Opening…" : "Preview"}
             </button>
