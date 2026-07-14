@@ -192,6 +192,7 @@ export default function ActivityScreen() {
   const [pickDate, setPickDate] = useState(todayISO());
   const [showClosed, setShowClosed] = useState(false);
   const [meeting, setMeeting] = useState(false);
+  const [view, setView] = useState<"deal" | "date">("deal"); // 탭: 딜별(카드) / 일자별(피드)
 
   const uid = getUserId();
 
@@ -229,6 +230,42 @@ export default function ActivityScreen() {
   }, [data, steps, q, mine, uid, showClosed, targetDate]);
 
   const totalDeals = buckets.reduce((s, g) => s + g.rows.length, 0);
+
+  // ── 일자별 탭 — 모든 딜의 활동을 평탄화해 날짜별로 묶는다(최신 날짜 먼저). 필터는 딜별 탭과 공유. ──
+  const dateView = useMemo(() => {
+    const map = new Map<string, { row: PipelineRow; act: Activity }[]>();
+    for (const row of data?.rows ?? []) {
+      if (row.cancelled && !showClosed) continue;
+      if (mine && row.assignee_id !== uid) continue;
+      const text = `${row.project_no} ${row.project_title} ${row.customer} ${row.vendor} ${row.vrfq_vendors} ${row.vessel}`.toLowerCase();
+      if (q.trim() && !text.includes(q.trim().toLowerCase())) continue;
+      let acts = buildActivities(row, steps);
+      if (targetDate) acts = acts.filter((a) => a.date === targetDate);
+      for (const act of acts) {
+        const key = act.date || "";
+        if (!map.has(key)) map.set(key, []);
+        (map.get(key) as { row: PipelineRow; act: Activity }[]).push({ row, act });
+      }
+    }
+    const stageSort = (a: Activity) => (a.kind === "close" ? 99 : a.stage);
+    const groups = Array.from(map.entries()).map(([date, items]) => {
+      items.sort((x, y) => {
+        const px = x.row.project_no || "", py = y.row.project_no || "";
+        if (px !== py) return px < py ? -1 : 1;
+        return stageSort(x.act) - stageSort(y.act);
+      });
+      return { date, items };
+    });
+    // 날짜 내림차순. 날짜 없는(미확정 종결) 그룹은 맨 뒤.
+    groups.sort((a, b) => {
+      if (!a.date) return 1;
+      if (!b.date) return -1;
+      return a.date < b.date ? 1 : a.date > b.date ? -1 : 0;
+    });
+    return groups;
+  }, [data, steps, q, mine, uid, showClosed, targetDate]);
+
+  const totalActs = dateView.reduce((s, g) => s + g.items.length, 0);
 
   // ── 카드 순서(드래그앤드롭) ─────────────────────────────────────────────
   // SSR 하이드레이션 불일치를 피하려고 초기값은 빈 객체, 마운트 후 localStorage 로드.
@@ -326,7 +363,13 @@ export default function ActivityScreen() {
       <div className="act-toolbar">
         <div className="act-title">
           <b>Activity Log</b>
-          <span className="muted">Project · stage activity by deal · {totalDeals}</span>
+          <div className="act-tabs">
+            <button className={view === "deal" ? "on" : ""} onClick={() => setView("deal")}>By deal</button>
+            <button className={view === "date" ? "on" : ""} onClick={() => setView("date")}>By date</button>
+          </div>
+          <span className="muted">
+            {view === "deal" ? `stage activity by deal · ${totalDeals}` : `stage activity by date · ${totalActs}`}
+          </span>
         </div>
         <div className="act-filters">
           <input
@@ -354,36 +397,113 @@ export default function ActivityScreen() {
         </div>
       </div>
 
-      {totalDeals === 0 ? <div className="state">No activity to show.</div> : null}
-
-      {buckets.map((g) =>
-        g.rows.length === 0 ? null : (
-          <section key={g.phase} className="act-bucket">
-            <h3 className="act-bucket-h">
-              {PHASES[g.phase].label} <span className="cnt">{g.rows.length}</span>
-            </h3>
-            <div className="act-cards">
-              {(() => {
-                const ordered = orderedRows(g.phase, g.rows);
-                return ordered.map(({ row, acts }) => (
-                  <ActivityCard
-                    key={row.rfq_id}
-                    row={row}
-                    acts={acts}
-                    meeting={meeting}
-                    onStar={(a) => toggleStar(row.rfq_id, a)}
-                    onDelete={(a) => removeNote(row.rfq_id, a)}
-                    onSave={(a, patch) => saveNote(row.rfq_id, a, patch)}
-                    onAdded={load}
-                    drag={makeDrag(g.phase, row.rfq_id, ordered)}
-                  />
-                ));
-              })()}
-            </div>
-          </section>
-        )
+      {view === "deal" ? (
+        <>
+          {totalDeals === 0 ? <div className="state">No activity to show.</div> : null}
+          {buckets.map((g) =>
+            g.rows.length === 0 ? null : (
+              <section key={g.phase} className="act-bucket">
+                <h3 className="act-bucket-h">
+                  {PHASES[g.phase].label} <span className="cnt">{g.rows.length}</span>
+                </h3>
+                <div className="act-cards">
+                  {(() => {
+                    const ordered = orderedRows(g.phase, g.rows);
+                    return ordered.map(({ row, acts }) => (
+                      <ActivityCard
+                        key={row.rfq_id}
+                        row={row}
+                        acts={acts}
+                        meeting={meeting}
+                        onStar={(a) => toggleStar(row.rfq_id, a)}
+                        onDelete={(a) => removeNote(row.rfq_id, a)}
+                        onSave={(a, patch) => saveNote(row.rfq_id, a, patch)}
+                        onAdded={load}
+                        drag={makeDrag(g.phase, row.rfq_id, ordered)}
+                      />
+                    ));
+                  })()}
+                </div>
+              </section>
+            )
+          )}
+        </>
+      ) : (
+        <>
+          {totalActs === 0 ? <div className="state">No activity to show.</div> : null}
+          {dateView.map((g) => (
+            <section key={g.date || "nodate"} className="act-date-group">
+              <h3 className="act-date-h">
+                {dateHeader(g.date)} <span className="cnt">{g.items.length}</span>
+              </h3>
+              <ul className="act-dlist">
+                {g.items.map(({ row, act }, i) => (
+                  <DateActRow key={`${row.rfq_id}-${i}`} row={row} act={act} />
+                ))}
+              </ul>
+            </section>
+          ))}
+        </>
       )}
     </div>
+  );
+}
+
+// yyyy-mm-dd → "Jul 14, 2026 · Mon". 파싱 불가/빈 값이면 'No date'.
+function dateHeader(iso: string): string {
+  const d = new Date(`${iso}T00:00`);
+  if (!iso || Number.isNaN(d.getTime())) return "No date";
+  const wd = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.getDay()];
+  const mo = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][d.getMonth()];
+  return `${mo} ${d.getDate()}, ${d.getFullYear()} · ${wd}`;
+}
+
+// 활동 1건의 설명 — 딜별 카드와 동일한 표기(auto 라벨·party / 노트 텍스트·메타·PIC / 종결 사유).
+function actDesc(act: Activity) {
+  if (act.kind === "auto") {
+    return (
+      <>
+        <span className="act-tag">auto</span> {act.label}
+        {act.party ? <span className="act-meta"> · {act.party}</span> : null}
+      </>
+    );
+  }
+  if (act.kind === "close") {
+    return (
+      <>
+        <span className="act-tag close">closed</span> {act.reason || "Closed"}
+      </>
+    );
+  }
+  const n = act.note;
+  const dl = n.direction === "in" ? "from" : n.direction === "out" ? "to" : "";
+  const who = [dl, n.party].filter(Boolean).join(" ");
+  const parts = [who, n.channel].filter(Boolean);
+  return (
+    <>
+      {n.star ? <span className="act-drow-star">★</span> : null}
+      {n.text}
+      {parts.length ? <span className="act-meta"> · {parts.join(" · ")}</span> : null}
+      {n.pic ? <span className="act-note-pic">{n.pic}</span> : null}
+    </>
+  );
+}
+
+// 일자별 피드의 한 줄 — [딜코드] [프로젝트명·고객] [활동 설명].
+function DateActRow({ row, act }: { row: PipelineRow; act: Activity }) {
+  const { code } = splitProjectNo(row.project_no || row.kmaris_rfq_no || "—");
+  const star = act.kind === "note" && !!act.note.star;
+  return (
+    <li className={`act-drow${act.kind === "close" ? " closed" : ""}${star ? " star" : ""}`}>
+      <Link className="act-drow-pno" href={`/progress?rfq=${row.rfq_id}&stage=${row.stage}`} title="Open deal">
+        {code}
+      </Link>
+      <span className="act-drow-deal">
+        {row.project_title || "(untitled)"}
+        {row.customer ? <span className="act-drow-cust"> · {row.customer}</span> : null}
+      </span>
+      <span className="act-drow-desc">{actDesc(act)}</span>
+    </li>
   );
 }
 
