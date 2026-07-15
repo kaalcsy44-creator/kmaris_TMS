@@ -8156,33 +8156,55 @@ table.mini .num {
 .proj-ov-src { font-size: 11px; font-weight: 500; color: var(--muted); }
 .proj-ov-empty { font-size: 12.5px; color: var(--muted); padding: 10px 2px; }
 
-/* 단계 11칸 — 한 줄에 모두. 좁아지면 줄바꿈되며 최소폭을 지킨다. */
-.proj-ov-stages { display: grid; grid-template-columns: repeat(11, minmax(0, 1fr));
-  gap: 4px; list-style: none; margin: 0; padding: 0; }
-@media (max-width: 1280px) { .proj-ov-stages { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
-@media (max-width: 760px) { .proj-ov-stages { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-.proj-ov-stages li { min-width: 0; }
-.proj-ov-stages a { display: flex; flex-direction: column; gap: 3px; height: 100%;
-  border: 1px solid var(--line); border-top: 3px solid var(--line-strong); border-radius: 6px;
-  background: #fff; padding: 7px 8px; text-decoration: none; color: inherit; }
-.proj-ov-stages a:hover { background: var(--hover); }
-.ov-st-head { display: flex; align-items: center; gap: 5px; min-width: 0; }
-.ov-st-no { flex: none; width: 16px; height: 16px; border-radius: 50%; background: var(--line);
-  color: #5a6b85; font-size: 10px; font-weight: 800; display: inline-flex;
-  align-items: center; justify-content: center; }
-.ov-st-label { font-size: 11px; font-weight: 700; color: var(--navy); line-height: 1.25;
-  overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-.ov-st-val { font-size: 10.5px; font-style: normal; color: var(--muted); min-height: 13px;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ov-st-at { font-size: 10px; color: var(--muted); margin-top: auto; }
-/* 완료 단계는 파란 상단선 + 옅은 파란 배경, 현재 단계는 진하게 강조. */
-.proj-ov-stages .done a { border-top-color: var(--blue); background: #f2f8ff; }
-.proj-ov-stages .done .ov-st-no { background: var(--blue); color: #fff; }
-.proj-ov-stages .current a { border-color: var(--blue); box-shadow: 0 0 0 2px rgba(0, 85, 168, 0.15); }
-.proj-ov-stages .skip a { opacity: 0.45; }
+/* ── 단계 + 활동 통합 타임라인 ──────────────────────────────────────────
+   단계가 뼈대(왼쪽 세로선 + 점), 사람이 쓴 노트가 그 단계 아래 들여쓰기로 붙는다.
+   자동 단계 이벤트와 활동 로그가 같은 사건을 두 번 보여주던 중복을 없앤 구조. */
+.proj-ov-tl { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line);
+  border-radius: 8px; background: #fff; overflow: hidden; }
+.proj-ov-tl > li { position: relative; padding: 0 10px 0 0; }
+/* 단계를 잇는 세로선 — 점(dot) 중앙(좌측 22px)을 지난다. 마지막 항목은 아래로 끊는다. */
+.proj-ov-tl > li::before { content: ""; position: absolute; left: 22px; top: 0; bottom: 0;
+  width: 2px; background: var(--line); }
+.proj-ov-tl > li:first-child::before { top: 14px; }
+.proj-ov-tl > li:last-child::before { bottom: calc(100% - 14px); }
+.ov-tl-stage { display: flex; align-items: center; gap: 8px; padding: 5px 0 5px 12px;
+  text-decoration: none; color: inherit; min-width: 0; }
+a.ov-tl-stage:hover { background: var(--hover); }
+.ov-tl-dot { position: relative; z-index: 1; flex: none; width: 18px; height: 18px;
+  border-radius: 50%; background: var(--line); color: #5a6b85; font-size: 9px; font-weight: 800;
+  display: inline-flex; align-items: center; justify-content: center; }
+.ov-tl-no { flex: none; width: 14px; font-size: 10px; font-weight: 800; color: var(--muted);
+  text-align: right; }
+.ov-tl-label { flex: none; font-size: 12.5px; font-weight: 700; color: var(--navy); }
+.ov-tl-party { font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; }
+/* 문서번호·금액 — 우측 날짜 앞에 붙여 오른쪽 정렬시킨다. */
+.ov-tl-val { margin-left: auto; flex: none; max-width: 45%; font-size: 11px; color: #47536b;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ov-tl-at { flex: none; font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+/* 완료 = 파란 점 + 선, 현재 = 굵게 강조, 미완료 = 흐리게. */
+.proj-ov-tl > li.done .ov-tl-dot,
+.proj-ov-tl > li.current .ov-tl-dot { background: var(--blue); color: #fff; }
+.proj-ov-tl > li.done::before, .proj-ov-tl > li.current::before { background: #b9d3ee; }
+.proj-ov-tl > li.current { background: #f2f8ff; }
+.proj-ov-tl > li.current .ov-tl-label { color: var(--blue); }
+.proj-ov-tl > li.current .ov-tl-dot { box-shadow: 0 0 0 3px rgba(0, 85, 168, 0.18); }
+.proj-ov-tl > li.todo .ov-tl-label { color: #8792a5; font-weight: 600; }
+.proj-ov-tl > li.skip { opacity: 0.45; }
+.proj-ov-tl > li.closed .ov-tl-dot { background: #fdeaea; color: #b42318; }
+.proj-ov-tl > li.closed .ov-tl-label { color: #b42318; font-weight: 600; }
 
-/* 정보 + 활동 2단. 좁으면 1단으로. */
-.proj-ov-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 20px; }
+/* 단계에 달린 사람이 쓴 노트 — 점 선 오른쪽으로 들여써 단계에 속함을 보인다. */
+.ov-tl-notes { list-style: none; margin: 0; padding: 0 0 4px 44px; }
+.ov-tl-notes li { display: flex; gap: 8px; padding: 3px 0; font-size: 12px; color: #47536b; }
+.ov-tl-notes li.star { background: #fffbe9; border-radius: 4px; }
+.ov-tl-ndate { flex: none; width: 32px; color: var(--muted); font-size: 10.5px;
+  font-variant-numeric: tabular-nums; padding-top: 1px; }
+.ov-tl-ntext { min-width: 0; word-break: break-word; }
+
+/* 정보 + 타임라인 2단. 좁으면 1단으로. */
+.proj-ov-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 20px;
+  align-items: start; }
 @media (max-width: 1000px) { .proj-ov-cols { grid-template-columns: 1fr; } }
 
 .proj-ov-info { margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -8193,18 +8215,6 @@ table.mini .num {
 .proj-ov-info dt { font-size: 10px; font-weight: 700; color: var(--muted);
   text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 2px; }
 .proj-ov-info dd { margin: 0; font-size: 12.5px; color: var(--ink); word-break: break-word; }
-
-.proj-ov-acts { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line);
-  border-radius: 8px; background: #fff; max-height: 420px; overflow: auto; }
-.proj-ov-acts li { display: flex; gap: 8px; padding: 5px 10px; font-size: 12.5px;
-  border-bottom: 1px solid var(--line); }
-.proj-ov-acts li:last-child { border-bottom: 0; }
-.proj-ov-acts li.auto { color: #47536b; }
-.proj-ov-acts li.star { background: #fffbe9; }
-.proj-ov-acts li.closed { color: #b42318; }
-.ov-act-date { flex: none; width: 38px; color: var(--muted); font-size: 11px;
-  font-variant-numeric: tabular-nums; padding-top: 1px; }
-.ov-act-text { min-width: 0; word-break: break-word; }
 
 /* 품목 — 내부 공유용이라 단가·금액 포함. 좁은 화면에선 표만 가로 스크롤. */
 .proj-ov-items-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px;
@@ -8242,11 +8252,8 @@ table.mini .num {
   .act-cal { max-height: none; min-height: 0; overflow: visible; }
   .act-cal-week { break-inside: avoid; }
 
-  /* 프로젝트 개요 — 버튼류를 빼고, 스크롤 영역을 풀어 전체가 나오게 한다. */
+  /* 프로젝트 개요 — 버튼류를 빼고 한 단으로 펼쳐 인쇄한다. */
   .proj-ov-actions, .proj-ov-back { display: none !important; }
-  .proj-ov-acts { max-height: none; overflow: visible; }
-  .proj-ov-sec, .proj-ov-stages li, .proj-ov-items tr { break-inside: avoid; }
-  /* A4 세로 기준 11칸은 너무 좁다 → 인쇄에선 4칸씩 접어 라벨이 읽히게 한다. */
-  .proj-ov-stages { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .proj-ov-sec, .proj-ov-tl > li, .proj-ov-items tr { break-inside: avoid; }
   .proj-ov-cols { grid-template-columns: 1fr; }
 }

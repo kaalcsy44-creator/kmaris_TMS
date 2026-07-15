@@ -9,8 +9,8 @@ import {
   closeReasonLabel,
 } from "@/lib/api";
 import { useCachedData } from "@/lib/useCachedData";
-import { resolveSteps, fmtStageDate, buildStageChain } from "@/lib/deal";
-import { buildActivities, md, splitProjectNo } from "@/lib/activity";
+import { resolveSteps, fmtStageDate, buildStageChain, type StageChainItem } from "@/lib/deal";
+import { buildActivities, md, splitProjectNo, type Activity } from "@/lib/activity";
 import type { PipelineRow } from "@/lib/types";
 import { INFO_FIELDS } from "@/components/common/dealFields";
 import { DualCurrencyAmount } from "@/components/common/itemTable";
@@ -181,35 +181,6 @@ function Overview({
         </div>
       </div>
 
-      {/* 단계 — 11개를 한 줄에 모두 펼쳐 현재 위치와 각 단계 결과물을 한눈에.
-          카드를 누르면 진행현황 팝업의 해당 단계로 이동한다(편집 진입점). */}
-      <section className="proj-ov-sec">
-        <h2 className="proj-ov-h">Stages</h2>
-        <ol className="proj-ov-stages">
-          {chain.map((c) => {
-            const cls = [
-              c.no <= row.stage ? "done" : "",
-              c.no === row.stage ? "current" : "",
-              c.skip ? "skip" : "",
-            ]
-              .filter(Boolean)
-              .join(" ");
-            return (
-              <li key={c.no} className={cls}>
-                <Link href={`/progress?rfq=${row.rfq_id}&stage=${c.no}`} title={`Open stage ${c.no}`}>
-                  <span className="ov-st-head">
-                    <span className="ov-st-no">{c.no}</span>
-                    <b className="ov-st-label">{c.label}</b>
-                  </span>
-                  <em className="ov-st-val">{c.skip ? "N/A" : c.value || ""}</em>
-                  <time className="ov-st-at">{c.at ? fmtStageDate(c.at) : ""}</time>
-                </Link>
-              </li>
-            );
-          })}
-        </ol>
-      </section>
-
       <div className="proj-ov-cols">
         <section className="proj-ov-sec">
           <h2 className="proj-ov-h">Project info</h2>
@@ -223,31 +194,7 @@ function Overview({
           </dl>
         </section>
 
-        {/* 활동 로그 — Activity Log 화면과 같은 규칙(buildActivities)으로 만든 전체 이력. */}
-        <section className="proj-ov-sec">
-          <h2 className="proj-ov-h">
-            Activity log <span className="proj-ov-cnt">{acts.length}</span>
-          </h2>
-          {acts.length === 0 ? (
-            <div className="proj-ov-empty">No activity yet.</div>
-          ) : (
-            <ul className="proj-ov-acts">
-              {acts.map((a, i) => (
-                <li
-                  key={i}
-                  className={`${a.kind === "note" ? "note" : a.kind === "close" ? "closed" : "auto"}${
-                    a.kind === "note" && a.note.star ? " star" : ""
-                  }`}
-                >
-                  <span className="ov-act-date">{md(a.date)}</span>
-                  <span className="ov-act-text">
-                    <ActivityDesc act={a} />
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+        <StageTimeline row={row} chain={chain} acts={acts} />
       </div>
 
       {/* 품목 — 내부 공유용이므로 매입(원가)·매출·마진을 모두 노출한다. */}
@@ -267,6 +214,100 @@ function Overview({
         <ItemsTable source={source} />
       </section>
     </div>
+  );
+}
+
+/**
+ * 단계 + 활동 통합 타임라인 — 단계가 뼈대, 사람이 쓴 노트가 그 아래 붙는다.
+ *
+ * 예전엔 가로 단계 스트립과 활동 로그를 따로 뒀는데, 활동 로그의 자동 행들이
+ * 결국 단계 완료 이벤트라서 같은 사건이 한 화면에 두 번 나왔다. 여기서 하나로 합쳐
+ * 중복을 없애고 프로세스 순서대로 읽히게 한다.
+ *
+ * 자동 이벤트(단계 완료)는 buildActivities 가 만든 것을 그대로 쓴다 — 상대(from/to)
+ * 표기 규칙이 업무일지 화면과 갈라지지 않게 하기 위해서다.
+ */
+function StageTimeline({
+  row,
+  chain,
+  acts,
+}: {
+  row: PipelineRow;
+  chain: StageChainItem[];
+  acts: Activity[];
+}) {
+  // 단계별로 활동을 나눠 담는다. 자동 이벤트는 단계당 최대 1건(완료), 노트는 여러 건.
+  const autoOf = new Map<number, Extract<Activity, { kind: "auto" }>>();
+  const notesOf = new Map<number, Extract<Activity, { kind: "note" }>[]>();
+  let closeAct: Extract<Activity, { kind: "close" }> | null = null;
+  for (const a of acts) {
+    if (a.kind === "auto") autoOf.set(a.stage, a);
+    else if (a.kind === "note") notesOf.set(a.stage, [...(notesOf.get(a.stage) ?? []), a]);
+    else closeAct = a;
+  }
+  const done = Math.max(0, Math.min(row.stage, chain.length));
+
+  return (
+    <section className="proj-ov-sec">
+      <h2 className="proj-ov-h">
+        Stages &amp; activity
+        <span className="proj-ov-cnt">
+          {done}/{chain.length}
+        </span>
+      </h2>
+      <ol className="proj-ov-tl">
+        {chain.map((c) => {
+          const state = c.no < row.stage ? "done" : c.no === row.stage ? "current" : "todo";
+          const auto = autoOf.get(c.no);
+          const notes = notesOf.get(c.no) ?? [];
+          return (
+            <li key={c.no} className={`${state}${c.skip ? " skip" : ""}`}>
+              {/* 단계 줄 클릭 → 진행현황 팝업의 그 단계(편집 진입점). */}
+              <Link
+                className="ov-tl-stage"
+                href={`/progress?rfq=${row.rfq_id}&stage=${c.no}`}
+                title={`Open stage ${c.no} in Progress`}
+              >
+                <span className="ov-tl-dot" aria-hidden>
+                  {state === "done" ? "✓" : state === "current" ? "●" : "○"}
+                </span>
+                <span className="ov-tl-no">{c.no}</span>
+                <b className="ov-tl-label">{c.label}</b>
+                {auto?.party ? <span className="ov-tl-party">{auto.party}</span> : null}
+                <span className="ov-tl-val">{c.skip ? "N/A" : c.value || ""}</span>
+                <time className="ov-tl-at">{c.at ? fmtStageDate(c.at) : ""}</time>
+              </Link>
+              {notes.length ? (
+                <ul className="ov-tl-notes">
+                  {notes.map((n, i) => (
+                    <li key={i} className={n.note.star ? "star" : undefined}>
+                      <span className="ov-tl-ndate">{md(n.date)}</span>
+                      <span className="ov-tl-ntext">
+                        <ActivityDesc act={n} />
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </li>
+          );
+        })}
+        {closeAct ? (
+          <li className="closed">
+            <span className="ov-tl-stage">
+              <span className="ov-tl-dot" aria-hidden>
+                ⊘
+              </span>
+              <span className="ov-tl-no" />
+              <b className="ov-tl-label">
+                <ActivityDesc act={closeAct} />
+              </b>
+              <time className="ov-tl-at">{closeAct.date ? md(closeAct.date) : ""}</time>
+            </span>
+          </li>
+        ) : null}
+      </ol>
+    </section>
   );
 }
 
