@@ -34,9 +34,11 @@ export default function TopNav({ active }: { active: string }) {
     <header className={`topnav${open ? " open" : ""}`}>
       <div className="topnav-inner">
         <Link href="/" className="topnav-brand" onClick={() => setOpen(false)}>
+          {/* 네비바(네이비 배경) 전용 반전본 — 흰 글자 + 메뉴 활성색과 같은 파랑.
+              밝은 배경(로그인)에는 원본 ktms-logo.png 를 쓴다. */}
           <img
             className="topnav-logo"
-            src="/brand/ktms-logo.png"
+            src="/brand/ktms-logo-nav.png"
             alt="KTMS"
           />
         </Link>

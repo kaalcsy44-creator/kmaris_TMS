@@ -119,12 +119,14 @@ body {
   flex-shrink: 0;
   height: 46px;
 }
+/* 로고는 네비바 전용 반전본(ktms-logo-nav.png)을 쓴다 — 흰 글자 + 메뉴 활성색과 같은
+   파랑(--blue #0055a8). 예전엔 원본에 invert+hue-rotate 필터를 씌웠는데, 그러면 파랑이
+   #55c7ff(하늘색)로 튀어 메뉴 파랑과 따로 놀았다. 색은 에셋에 구워 필터를 쓰지 않는다. */
 .topnav-logo {
   display: block;
   width: 147px;
   height: 42px;
   object-fit: contain;
-  filter: invert(1) hue-rotate(180deg) brightness(1.08) saturate(1.15);
 }
 .topnav-menu {
   display: flex;
