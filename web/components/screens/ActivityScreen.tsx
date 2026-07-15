@@ -366,17 +366,29 @@ export default function ActivityScreen() {
 
   return (
     <div className={`act-screen${meeting ? " meeting" : ""}`}>
+      {/* 페이지 탭 — Progress 페이지와 동일한 폼(상단 고정 밑줄 탭 + 우측 교차 링크). */}
+      <div className="page-tabs">
+        <button
+          className={view === "deal" ? "on" : ""}
+          onClick={() => setView("deal")}
+        >
+          Activity (By deal)
+        </button>
+        <button
+          className={view === "date" ? "on" : ""}
+          onClick={() => setView("date")}
+        >
+          Activity (By date)
+        </button>
+        <Link href="/progress" className="btn sm" style={{ marginLeft: "auto" }}>
+          📋 Progress
+        </Link>
+      </div>
+
       <div className="act-toolbar">
-        <div className="act-title">
-          <b>Activity Log</b>
-          <div className="act-tabs">
-            <button className={view === "deal" ? "on" : ""} onClick={() => setView("deal")}>By deal</button>
-            <button className={view === "date" ? "on" : ""} onClick={() => setView("date")}>By date</button>
-          </div>
-          <span className="muted">
-            {view === "deal" ? `stage activity by deal · ${totalDeals}` : `stage activity by date · ${totalActs}`}
-          </span>
-        </div>
+        <span className="act-count">
+          {view === "deal" ? `stage activity by deal · ${totalDeals}` : `stage activity by date · ${totalActs}`}
+        </span>
         <div className="act-filters">
           <input
             className="act-search"

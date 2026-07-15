@@ -7906,15 +7906,8 @@ table.mini .num {
 /* ── Activity Log (업무일지) ───────────────────────────────────────────── */
 .act-toolbar { display: flex; align-items: center; justify-content: space-between;
   gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
-.act-title { display: flex; align-items: baseline; gap: 10px; }
-.act-title b { font-size: 18px; }
-.act-title .muted { color: var(--muted); font-size: 12px; }
-/* 페이지 내 탭 — By deal(카드) / By date(일자별 피드). */
-.act-tabs { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--border, #d8dee6);
-  border-radius: 8px; background: #f2f5f9; align-self: center; }
-.act-tabs button { border: 0; background: none; padding: 4px 14px; font-size: 12.5px; font-weight: 600;
-  color: #556075; border-radius: 6px; cursor: pointer; }
-.act-tabs button.on { background: #0055a8; color: #fff; }
+/* 탭(By deal / By date)은 Progress 와 공용인 .page-tabs 사용. 여기선 건수 라벨만. */
+.act-count { color: var(--muted); font-size: 12px; }
 
 /* ── 일자별 · 주간 캘린더(7열) ─────────────────────────────────────────
    주(월요일 시작)가 한 행, 위=이전 주·아래=다음 주. 좁은 화면은 가로 스크롤.
@@ -7922,8 +7915,9 @@ table.mini .num {
    (overflow-x:auto 만 있으면 세로축도 auto 로 계산돼 스크롤포트는 .act-cal 이 되는데,
    높이 제한이 없어 세로로 스크롤될 일이 없고 실제 스크롤은 조상 .shell-main 에서 일어난다
    → 아래 sticky 요일 헤더가 발동하지 못한다. 높이를 묶어 여기서 스크롤되게 한다.)
-   차감값 140px = topnav 58 + .page 상단 패딩 16 + .act-toolbar 약 30 + 그 margin 14 + 하단 여백. */
-.act-cal { overflow: auto; max-height: calc(100vh - 140px); min-height: 320px;
+   차감값 200px = topnav 58 + .page 상단 패딩 16 + .page-tabs 약 43 + 그 margin 18
+   + .act-toolbar 약 30 + 그 margin 14 + 하단 여백. */
+.act-cal { overflow: auto; max-height: calc(100vh - 200px); min-height: 320px;
   padding-bottom: 4px; overscroll-behavior: contain; }
 .act-cal-weekdays,
 .act-cal-week { display: grid; grid-template-columns: repeat(7, minmax(150px, 1fr)); }
