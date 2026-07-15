@@ -8243,38 +8243,33 @@ a.ov-tl-stage:hover { background: var(--hover); }
 .proj-ov-grid { font-size: 11.5px; }
 .proj-ov-grid th, .proj-ov-grid td { padding: 4px 7px; }
 /* 3단계 묶음 헤더 — Quote/P/O/C/I 를 색으로 구분해 좌→우 흐름이 보이게 한다. */
-.proj-ov-grid .ov-gh { text-align: center; font-size: 10.5px; letter-spacing: 0.04em;
-  border-left: 2px solid var(--line-strong); }
+.proj-ov-grid .ov-gh { text-align: center; font-size: 10.5px; letter-spacing: 0.04em; }
 .proj-ov-grid .ov-gh.q { color: var(--blue); }
 .proj-ov-grid .ov-gh.p { color: #7c3aed; }
 .proj-ov-grid .ov-gh.c { color: #11824a; }
 .proj-ov-grid .ov-sub { font-size: 9.5px; font-weight: 600; color: var(--muted);
   text-transform: none; letter-spacing: 0; white-space: nowrap; }
-.proj-ov-grid .ov-sub.q:first-of-type { border-left: 2px solid var(--line-strong); }
-/* 각 단계 묶음의 시작 열에 세로 구분선 — 4·7·10번째 열(Purchase). */
-.proj-ov-grid tbody td:nth-child(4),
-.proj-ov-grid tbody td:nth-child(7),
-.proj-ov-grid tbody td:nth-child(10),
-.proj-ov-grid thead tr:nth-child(2) th:nth-child(1),
-.proj-ov-grid thead tr:nth-child(2) th:nth-child(4),
-.proj-ov-grid thead tr:nth-child(2) th:nth-child(7) { border-left: 2px solid var(--line-strong); }
+/* 단계 묶음이 시작되는 칸에만 세로 구분선. 열 번호(nth-child)로 그리면 colspan 쓰는
+   합계·묶음머리 행에서 칸이 밀려 엉뚱한 자리에 선이 생긴다 → 칸에 직접 표시한다. */
+.proj-ov-grid .gs { border-left: 2px solid var(--line-strong); }
 /* 금액 — 통화기호는 작고 흐리게, 숫자에 시선이 가도록. */
 .ov-m { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .ov-m em { font-style: normal; font-size: 9px; color: var(--muted); margin-right: 2px; }
 .ov-pct { font-weight: 700; color: #11824a; font-variant-numeric: tabular-nums; }
 
-/* 선박 묶음 머리 — 이 묶음이 어느 선박·어느 문서 체인인지. */
+/* 선박 묶음 머리 — 선박명 + 각 단계 문서번호를 그 단계 열 위에 정렬해 둔다. */
 .ov-grp-head td { background: var(--head-bg) !important; border-top: 2px solid var(--line-strong);
   padding: 5px 8px !important; }
-.ov-grp-vessel { font-size: 12px; font-weight: 800; color: var(--navy); margin-right: 10px; }
-.ov-grp-docs { font-size: 10.5px; color: #47536b; }
-.ov-grp-docs b { font-size: 9.5px; letter-spacing: 0.04em; margin-right: 3px; }
-.ov-grp-docs b.q { color: var(--blue); }
-.ov-grp-docs b.p { color: #7c3aed; }
-.ov-grp-docs b.c { color: #11824a; }
-.ov-grp-docs .sep { margin: 0 7px; color: var(--muted); }
-.ov-grp-docs i { font-style: normal; }
-.ov-grp-vpo { margin-left: 5px; color: var(--muted); }
+.ov-grp-vessel { font-size: 12px; font-weight: 800; color: var(--navy); }
+.ov-grp-doc { font-size: 10.5px; font-weight: 700; text-align: right; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; }
+.ov-grp-doc.q { color: var(--blue); }
+.ov-grp-doc.p { color: #7c3aed; }
+.ov-grp-doc.c { color: #11824a; }
+/* 매입측 문서(벤더 견적·벤더 P/O)는 보조 정보 → 흐리게, 매출 문서를 앞세운다. */
+.ov-grp-doc .ov-doc-pur { font-weight: 500; color: var(--muted); }
+.ov-grp-doc .sep { margin: 0 5px; color: var(--muted); }
+.ov-grp-doc i { font-style: normal; font-weight: 500; }
 .ov-grp-total td { background: #f7fafd !important; border-top: 1px solid var(--line-strong); }
 .proj-ov-grid tbody tr:nth-child(even) td { background: transparent; }
 .proj-ov-grid tbody tr:hover td { background: var(--hover); }

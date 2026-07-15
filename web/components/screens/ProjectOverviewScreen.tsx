@@ -13,7 +13,13 @@ import {
 } from "@/lib/api";
 import { useCachedData } from "@/lib/useCachedData";
 import { sortByDocNo } from "@/lib/sort";
-import { resolveSteps, fmtStageDate, buildStageChain, type StageChainItem } from "@/lib/deal";
+import {
+  resolveSteps,
+  fmtStageDate,
+  buildStageChain,
+  makeItemMatcher,
+  type StageChainItem,
+} from "@/lib/deal";
 import { buildActivities, md, splitProjectNo, type Activity } from "@/lib/activity";
 import type { PipelineRow, PoWorkOptions, RfqItem } from "@/lib/types";
 import { INFO_FIELDS } from "@/components/common/dealFields";
@@ -74,14 +80,33 @@ export default function ProjectOverviewScreen({ rfqId }: { rfqId: number }) {
       steps={pipeline.steps}
       orders={orders}
       purchaseOrders={purchaseOrders}
+      quotations={(poOpts?.quotations ?? []).filter((q) => q.rfq_id === rfqId)}
       quoteOnlyId={quoteOnlyId}
       rfqItems={detail?.items ?? null}
+      // 매입측 견적 = 벤더 견적번호(프로젝트 단위). Quote 묶음 머리에 매출 견적과 나란히 둔다.
+      vendorQuoteNo={row.vquote_no || ""}
     />
   );
 }
 
 type ProjectOrder = PoWorkOptions["orders"][number];
 type VendorPo = PoWorkOptions["purchase_orders"][number];
+type ProjectQuote = PoWorkOptions["quotations"][number];
+
+
+/**
+ * 이 오더에 해당하는 견적 — 링크(quotation_id) 우선, 없으면 같은 선박의 견적.
+ * 견적 없이 등록된 오더가 있어 링크가 늘 채워져 있지는 않다. 선박도 못 맞추면 null
+ * (= 그 선박은 견적 없이 발주된 것).
+ */
+function quoteForOrder(order: ProjectOrder, quotes: ProjectQuote[]): ProjectQuote | null {
+  if (order.quotation_id) {
+    const linked = quotes.find((q) => q.id === order.quotation_id);
+    if (linked) return linked;
+  }
+  const vid = order.vessel_id || 0;
+  return (vid && quotes.find((q) => (q.vessel_id || 0) === vid)) || null;
+}
 type StageItem = { qty?: number; unit_price?: number | null; amount?: number | null };
 
 /** 품목 1줄의 금액 — amount 가 있으면 그대로, 없으면 단가×수량으로 보정. */
@@ -118,16 +143,20 @@ function Overview({
   steps,
   orders,
   purchaseOrders,
+  quotations,
   quoteOnlyId,
   rfqItems,
+  vendorQuoteNo,
 }: {
   row: PipelineRow;
   steps: string[];
   orders: ProjectOrder[];
   purchaseOrders: VendorPo[];
+  quotations: ProjectQuote[];
   /** P/O 가 아직 없을 때 보여줄 견적 id. 0 이면 없음. */
   quoteOnlyId: number;
   rfqItems: RfqItem[] | null;
+  vendorQuoteNo: string;
 }) {
   const rSteps = resolveSteps(steps, row.work_type);
   const chain = buildStageChain(row, rSteps);
@@ -199,8 +228,10 @@ function Overview({
       <ItemsSection
         orders={orders}
         purchaseOrders={purchaseOrders}
+        quotations={quotations}
         quoteOnlyId={quoteOnlyId}
         rfqItems={rfqItems}
+        vendorQuoteNo={vendorQuoteNo}
       />
     </div>
   );
@@ -311,13 +342,17 @@ function StageTimeline({
 function ItemsSection({
   orders,
   purchaseOrders,
+  quotations,
   quoteOnlyId,
   rfqItems,
+  vendorQuoteNo,
 }: {
   orders: ProjectOrder[];
   purchaseOrders: VendorPo[];
+  quotations: ProjectQuote[];
   quoteOnlyId: number;
   rfqItems: RfqItem[] | null;
+  vendorQuoteNo: string;
 }) {
   const hasGroups = orders.length > 0 || quoteOnlyId > 0;
   return (
@@ -340,24 +375,25 @@ function ItemsSection({
                 <th className="ov-it-n" rowSpan={2}>
                   #
                 </th>
+                <th rowSpan={2}>Part No.</th>
                 <th rowSpan={2}>Description</th>
                 <th className="ov-it-qty" rowSpan={2}>
                   Qty
                 </th>
-                <th className="num ov-gh q" colSpan={3}>
+                <th className="num ov-gh q gs" colSpan={3}>
                   Quote
                 </th>
-                <th className="num ov-gh p" colSpan={3}>
+                <th className="num ov-gh p gs" colSpan={3}>
                   P/O
                 </th>
-                <th className="num ov-gh c" colSpan={3}>
+                <th className="num ov-gh c gs" colSpan={3}>
                   C/I
                 </th>
               </tr>
               <tr>
                 {["q", "p", "c"].map((g) => (
                   <Fragment key={g}>
-                    <th className={`num ov-sub ${g}`}>Purchase</th>
+                    <th className={`num ov-sub ${g} gs`}>Purchase</th>
                     <th className={`num ov-sub ${g}`}>Margin</th>
                     <th className={`num ov-sub ${g}`}>Sales</th>
                   </Fragment>
@@ -370,10 +406,12 @@ function ItemsSection({
                   key={o.id}
                   order={o}
                   vendorPos={purchaseOrders.filter((p) => p.order_id === o.id)}
+                  quote={quoteForOrder(o, quotations)}
+                  vendorQuoteNo={vendorQuoteNo}
                 />
               ))
             ) : (
-              <QuoteOnlyGroup quoteId={quoteOnlyId} />
+              <QuoteOnlyGroup quoteId={quoteOnlyId} vendorQuoteNo={vendorQuoteNo} />
             )}
           </table>
         </div>
@@ -398,10 +436,22 @@ function Pct({ value }: { value: number | null }) {
 }
 
 /** 한 선박(=고객 P/O) 묶음 — 그 P/O 의 품목을 기준 행으로 삼고 견적·C/I 를 순서로 맞춘다. */
-function OrderItemGroup({ order, vendorPos }: { order: ProjectOrder; vendorPos: VendorPo[] }) {
-  // 이 오더가 나온 견적(없으면 quotation_id = 0 → Quote 열 전체가 —).
-  const { data: quote } = useCachedData(`quotation:${order.quotation_id}`, () =>
-    order.quotation_id ? fetchCustomerQuotationDetail(order.quotation_id) : Promise.resolve(null)
+function OrderItemGroup({
+  order,
+  vendorPos,
+  quote: quoteRow,
+  vendorQuoteNo,
+}: {
+  order: ProjectOrder;
+  vendorPos: VendorPo[];
+  /** 이 선박의 견적(목록 행). 없으면 견적 없이 발주된 선박. */
+  quote: ProjectQuote | null;
+  vendorQuoteNo: string;
+}) {
+  // 원가·마진은 견적 목록에 없고 상세에만 있어 따로 받는다(_item_view 가 원가를 지움).
+  const qid = quoteRow?.id ?? 0;
+  const { data: quote } = useCachedData(`quotation:${qid}`, () =>
+    qid ? fetchCustomerQuotationDetail(qid) : Promise.resolve(null)
   );
   const { data: doc } = useCachedData(`documents:${order.id}`, () => fetchDocumentDetail(order.id));
   const ci = doc?.ci ?? null;
@@ -420,39 +470,39 @@ function OrderItemGroup({ order, vendorPos }: { order: ProjectOrder; vendorPos: 
   const rate = quote?.fx_rate && quote.fx_rate > 0 ? quote.fx_rate : USD_KRW_RATE;
 
   const rows = order.items.length ? order.items : (quote?.items ?? []);
+  // 품번으로 각 문서의 같은 품목을 찾는다. 아래 rows.map 이 순서대로 돌면서 소비한다.
+  const matchQuote = makeItemMatcher(quote?.items ?? []);
+  const matchVpo = makeItemMatcher(vpoItems);
+  const matchCi = makeItemMatcher(ci?.items ?? []);
 
   return (
     <tbody className="ov-grp">
-      <tr className="ov-grp-head">
-        <td colSpan={12}>
-          <span className="ov-grp-vessel">{order.vessel || "— no vessel —"}</span>
-          <span className="ov-grp-docs">
-            <b className="q">Quote</b> {quote?.qtn_no || <i className="muted">none</i>}
-            <span className="sep">→</span>
-            <b className="p">P/O</b> {order.po_no || "—"}
-            {vpoNos ? <span className="ov-grp-vpo">(vendor {vpoNos})</span> : null}
-            <span className="sep">→</span>
-            <b className="c">C/I</b> {ci?.ci_no ? ci.ci_no : <i className="muted">not issued</i>}
-          </span>
-        </td>
-      </tr>
+      <GroupHead
+        vessel={order.vessel}
+        quoteDocs={quote ? { pur: vendorQuoteNo, sales: quote.qtn_no || "—" } : null}
+        poDocs={{ pur: vpoNos, sales: order.po_no || "—" }}
+        ciNo={ci?.ci_no || ""}
+      />
       {rows.map((it, i) => {
-        const qIt = quote?.items[i];
+        const qIt = matchQuote(it, i);
+        const vIt = matchVpo(it, i);
+        const cIt = matchCi(it, i);
         const qty = Number(it.qty || 1);
         const qPur = qIt?.cost_price == null ? null : Number(qIt.cost_price) * Number(qIt.qty || 1);
         const qSales = lineAmount(qIt);
-        const pPur = lineAmount(vpoItems[i]);
+        const pPur = lineAmount(vIt);
         const pSales = lineAmount(it);
-        const cSales = lineAmount(ci?.items[i]);
+        const cSales = lineAmount(cIt);
         return (
           <tr key={i}>
             <td className="ov-it-n">{i + 1}</td>
+            <td className="ov-it-part">{it.part_no || <span className="muted">—</span>}</td>
             <td>{it.description || qIt?.description || "—"}</td>
             <td className="ov-it-qty">
               {qty}
               {it.unit ? ` ${it.unit}` : ""}
             </td>
-            <td className="num">
+            <td className="num gs">
               <Money value={qPur} currency={qCostCur} />
             </td>
             <td className="num">
@@ -461,7 +511,7 @@ function OrderItemGroup({ order, vendorPos }: { order: ProjectOrder; vendorPos: 
             <td className="num">
               <Money value={qSales} currency={qCur} />
             </td>
-            <td className="num">
+            <td className="num gs">
               <Money value={pPur} currency={vpoCur} />
             </td>
             <td className="num">
@@ -470,7 +520,7 @@ function OrderItemGroup({ order, vendorPos }: { order: ProjectOrder; vendorPos: 
             <td className="num">
               <Money value={pSales} currency={oCur} />
             </td>
-            <td className="num">
+            <td className="num gs">
               {/* C/I 단계 매입은 별도 문서가 없어 실제 발주(Vendor P/O)를 그대로 잇는다. */}
               <Money value={cSales == null ? null : pPur} currency={vpoCur} />
             </td>
@@ -498,6 +548,59 @@ function OrderItemGroup({ order, vendorPos }: { order: ProjectOrder; vendorPos: 
   );
 }
 
+/**
+ * 선박 묶음 머리 — 문서번호를 각 단계 열 위에 정렬해 둔다.
+ * 한 줄에 몰아 쓰면 어느 번호가 어느 단계인지 눈으로 짚어야 해서, 열에 맞춰 나눈다.
+ * 각 단계는 "매입문서 → 매출문서" 순(예: 벤더견적 → 고객견적, 벤더P/O → 고객P/O).
+ */
+function GroupHead({
+  vessel,
+  quoteDocs,
+  poDocs,
+  ciNo,
+}: {
+  vessel: string;
+  quoteDocs: { pur: string; sales: string } | null;
+  poDocs: { pur: string; sales: string };
+  ciNo: string;
+}) {
+  return (
+    <tr className="ov-grp-head">
+      <td colSpan={4}>
+        <span className="ov-grp-vessel">{vessel || "— no vessel —"}</span>
+      </td>
+      <td colSpan={3} className="ov-grp-doc q gs">
+        {quoteDocs ? <DocPair pur={quoteDocs.pur} sales={quoteDocs.sales} /> : <i className="muted">not quoted</i>}
+      </td>
+      <td colSpan={3} className="ov-grp-doc p gs">
+        {poDocs.sales ? (
+          <DocPair pur={poDocs.pur} sales={poDocs.sales} />
+        ) : (
+          <i className="muted">no P/O yet</i>
+        )}
+      </td>
+      <td colSpan={3} className="ov-grp-doc c gs">
+        {ciNo || <i className="muted">not issued</i>}
+      </td>
+    </tr>
+  );
+}
+
+/** "매입문서 → 매출문서". 매입문서가 없으면 매출문서만. */
+function DocPair({ pur, sales }: { pur: string; sales: string }) {
+  return (
+    <>
+      {pur ? (
+        <>
+          <span className="ov-doc-pur">{pur}</span>
+          <span className="sep">→</span>
+        </>
+      ) : null}
+      {sales}
+    </>
+  );
+}
+
 /** 묶음 합계 행 — 각 단계의 매입·마진·매출 총계. 마진은 총계끼리 다시 계산한다. */
 function GroupTotal({
   quotePur,
@@ -518,10 +621,10 @@ function GroupTotal({
 }) {
   return (
     <tr className="ov-grp-total">
-      <td colSpan={3} className="ov-it-totlabel">
+      <td colSpan={4} className="ov-it-totlabel">
         Total
       </td>
-      <td className="num">
+      <td className="num gs">
         <Money value={quotePur} currency={cur.qCostCur} />
       </td>
       <td className="num">
@@ -530,7 +633,7 @@ function GroupTotal({
       <td className="num ov-it-total">
         <Money value={quoteSales} currency={cur.qCur} />
       </td>
-      <td className="num">
+      <td className="num gs">
         <Money value={poPur} currency={cur.vpoCur} />
       </td>
       <td className="num">
@@ -539,7 +642,7 @@ function GroupTotal({
       <td className="num ov-it-total">
         <Money value={poSales} currency={cur.oCur} />
       </td>
-      <td className="num">
+      <td className="num gs">
         <Money value={ciSales == null ? null : poPur} currency={cur.vpoCur} />
       </td>
       <td className="num">
@@ -553,7 +656,7 @@ function GroupTotal({
 }
 
 /** P/O 전(4단계 이하) — 견적만 있는 프로젝트. Quote 열만 채우고 P/O·C/I 는 비운다. */
-function QuoteOnlyGroup({ quoteId }: { quoteId: number }) {
+function QuoteOnlyGroup({ quoteId, vendorQuoteNo }: { quoteId: number; vendorQuoteNo: string }) {
   const { data: quote } = useCachedData(`quotation:${quoteId}`, () =>
     fetchCustomerQuotationDetail(quoteId)
   );
@@ -561,7 +664,7 @@ function QuoteOnlyGroup({ quoteId }: { quoteId: number }) {
     return (
       <tbody>
         <tr>
-          <td colSpan={12} className="proj-ov-empty">
+          <td colSpan={13} className="proj-ov-empty">
             Loading items…
           </td>
         </tr>
@@ -573,25 +676,22 @@ function QuoteOnlyGroup({ quoteId }: { quoteId: number }) {
   const rate = quote.fx_rate && quote.fx_rate > 0 ? quote.fx_rate : USD_KRW_RATE;
   return (
     <tbody className="ov-grp">
-      <tr className="ov-grp-head">
-        <td colSpan={12}>
-          <span className="ov-grp-vessel">{quote.vessel || "— no vessel —"}</span>
-          <span className="ov-grp-docs">
-            <b className="q">Quote</b> {quote.qtn_no || "—"}
-            <span className="sep">→</span>
-            <i className="muted">no P/O yet</i>
-          </span>
-        </td>
-      </tr>
+      <GroupHead
+        vessel={quote.vessel}
+        quoteDocs={{ pur: vendorQuoteNo, sales: quote.qtn_no || "—" }}
+        poDocs={{ pur: "", sales: "" }}
+        ciNo=""
+      />
       {quote.items.map((it, i) => (
         <tr key={i}>
           <td className="ov-it-n">{i + 1}</td>
+          <td className="ov-it-part">{it.part_no || <span className="muted">—</span>}</td>
           <td>{it.description || "—"}</td>
           <td className="ov-it-qty">
             {it.qty}
             {it.unit ? ` ${it.unit}` : ""}
           </td>
-          <td className="num">
+          <td className="num gs">
             <Money
               value={it.cost_price == null ? null : Number(it.cost_price) * Number(it.qty || 1)}
               currency={qCostCur}
@@ -603,7 +703,7 @@ function QuoteOnlyGroup({ quoteId }: { quoteId: number }) {
           <td className="num">
             <Money value={lineAmount(it)} currency={qCur} />
           </td>
-          <td className="num" colSpan={6}>
+          <td className="num gs" colSpan={6}>
             <span className="muted">—</span>
           </td>
         </tr>

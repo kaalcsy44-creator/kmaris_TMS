@@ -39,6 +39,47 @@ export function joinDot(...parts: (string | undefined)[]): string {
   return parts.filter((p) => p && p.trim()).join(" · ");
 }
 
+function partKey(v: string | undefined): string {
+  return (v || "").trim().toUpperCase();
+}
+
+/**
+ * 단계 간 품목 연결자 — 기준 행(고객 P/O 품목)에 대응하는 다른 문서(견적·벤더P/O·C/I)의
+ * 품목을 찾는다. 프로젝트 개요의 Quote→P/O→C/I 가로 배치가 이걸로 줄을 맞춘다.
+ *
+ * 품번(Part No.)이 있으면 그것으로 잇는다. 그래야 문서마다 품목 수가 달라도 제자리를
+ * 찾는다 — 예: C/I 가 6개 중 5·6항만 실었으면 그 두 줄에만 붙고 나머지는 빈칸으로 남는다.
+ * 같은 품번이 여러 줄이면 나온 순서대로 하나씩 소비한다.
+ *
+ * 품번이 하나도 없는 문서(옛 데이터)는 배열 순서로 맞춘다 — 이때는 문서별 품목 수·순서가
+ * 같아야만 맞으므로, 품번을 넣어 두는 편이 정확하다.
+ *
+ * 반환된 함수는 소비 상태를 들고 있으므로 기준 행을 처음부터 순서대로 훑어야 한다.
+ */
+export function makeItemMatcher<T extends { part_no?: string }>(items: T[]) {
+  const keyed = items.some((it) => partKey(it.part_no));
+  const buckets = new Map<string, T[]>();
+  if (keyed) {
+    for (const it of items) {
+      const k = partKey(it.part_no);
+      if (!k) continue;
+      buckets.set(k, [...(buckets.get(k) ?? []), it]);
+    }
+  }
+  const used = new Map<string, number>();
+  return (base: { part_no?: string }, index: number): T | undefined => {
+    if (!keyed) return items[index];
+    const k = partKey(base.part_no);
+    if (!k) return undefined;
+    const list = buckets.get(k);
+    if (!list) return undefined; // 이 문서에는 없는 품목(예: C/I 에 안 실린 항)
+    const n = used.get(k) ?? 0;
+    if (n >= list.length) return undefined;
+    used.set(k, n + 1);
+    return list[n];
+  };
+}
+
 export type StageChainItem = {
   no: number;
   label: string;
