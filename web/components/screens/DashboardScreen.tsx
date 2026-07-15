@@ -147,7 +147,8 @@ type DelayRow = {
 
 function HomeTab() {
   const router = useRouter();
-  const { data: qtn, refresh: refreshQtn } = useCachedData("home:quotations", () => fetchQuotationOverview());
+  // 프로젝트 개요 페이지도 같은 목록으로 견적 id 를 찾으므로 캐시 키를 공유한다.
+  const { data: qtn, refresh: refreshQtn } = useCachedData("quotations:overview", () => fetchQuotationOverview());
   const { data: pipeline, refresh: refreshPipeline } = useCachedData("pipeline", () => fetchPipeline());
   const { data: ar, refresh: refreshAr } = useCachedData("ar:overview", fetchArOverview);
   // 고객 P/O 수신 현황 — 열람 권한이 있을 때만 로드(없으면 카드 미표시).

@@ -8159,6 +8159,8 @@ table.mini .num {
   font-size: 13px; font-weight: 800; color: var(--navy); padding-bottom: 5px;
   border-bottom: 2px solid var(--blue); }
 .proj-ov-cnt { font-size: 11.5px; font-weight: 700; color: var(--blue); }
+/* 품목 표 출처 — 견적(값 있음) / RFQ 요청(값 없음) 중 무엇을 보고 있는지 밝힌다. */
+.proj-ov-src { font-size: 11px; font-weight: 500; color: var(--muted); }
 .proj-ov-empty { font-size: 12.5px; color: var(--muted); padding: 10px 2px; }
 
 /* 단계 11칸 — 한 줄에 모두. 좁아지면 줄바꿈되며 최소폭을 지킨다. */
@@ -8222,6 +8224,11 @@ table.mini .num {
 .proj-ov-items tbody tr:last-child td { border-bottom: 0; }
 .proj-ov-items tbody tr:nth-child(even) td { background: var(--zebra); }
 .proj-ov-items .num { text-align: right; white-space: nowrap; }
+.proj-ov-items tfoot td { background: var(--head-bg); border-top: 2px solid var(--line-strong);
+  padding: 7px 10px; }
+.ov-it-totlabel { text-align: right; font-size: 11px; font-weight: 700; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.03em; }
+.ov-it-total { font-weight: 800; color: var(--navy); }
 .proj-ov-items .ov-it-n { width: 34px; color: var(--muted); text-align: right; }
 .proj-ov-items .ov-it-qty { white-space: nowrap; }
 .ov-it-part { font-weight: 600; color: var(--navy); }

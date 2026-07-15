@@ -1,9 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { fetchPipeline, fetchRfqDetail } from "@/lib/api";
+import {
+  fetchPipeline,
+  fetchRfqDetail,
+  fetchQuotationOverview,
+  fetchCustomerQuotationDetail,
+  closeReasonLabel,
+} from "@/lib/api";
 import { useCachedData } from "@/lib/useCachedData";
-import { closeReasonLabel } from "@/lib/api";
 import {
   resolveSteps,
   fmtStageDate,
@@ -17,7 +22,7 @@ import {
   md,
   splitProjectNo,
 } from "@/lib/activity";
-import type { PipelineRow, RfqItem } from "@/lib/types";
+import type { PipelineRow } from "@/lib/types";
 import { INFO_FIELDS } from "@/components/common/dealFields";
 import { DualCurrencyAmount } from "@/components/common/itemTable";
 import ActivityDesc from "@/components/common/ActivityDesc";
@@ -35,7 +40,15 @@ export default function ProjectOverviewScreen({ rfqId }: { rfqId: number }) {
   // 목록에서 넘어오면 이미 캐시에 있어 즉시 그려진다(같은 "pipeline" 키를 공유).
   const { data: pipeline, error: pipeErr } = useCachedData("pipeline", () => fetchPipeline());
   // 품목은 파이프라인 행에 없어(개수만) RFQ 상세를 따로 받는다.
+  // 단, RFQ 품목은 "고객이 요청한 줄"이라 단가가 없다(전부 null). 값이 매겨진 품목은
+  // 견적(Quotation)에 있으므로, 견적이 있으면 그쪽을 우선 쓴다. ↓ quoted
   const { data: detail } = useCachedData(`rfq:${rfqId}`, () => fetchRfqDetail(rfqId));
+  // 견적 목록에서 이 프로젝트의 견적을 찾는다(백엔드가 id 내림차순 → 첫 건이 최신).
+  const { data: qtnList } = useCachedData("quotations:overview", () => fetchQuotationOverview());
+  const qtnId = qtnList?.rows.find((q) => q.rfq_id === rfqId)?.id ?? 0;
+  const { data: quote } = useCachedData(`quotation:${qtnId}`, () =>
+    qtnId ? fetchCustomerQuotationDetail(qtnId) : Promise.resolve(null)
+  );
 
   if (pipeErr && !pipeline) return <div className="state error">API error: {pipeErr.message}</div>;
   if (!pipeline) return <div className="state">Loading…</div>;
@@ -57,18 +70,68 @@ export default function ProjectOverviewScreen({ rfqId }: { rfqId: number }) {
     );
   }
 
-  return <Overview row={row} steps={pipeline.steps} items={detail?.items ?? null} />;
+  // 견적이 있으면 값이 매겨진 견적 품목을, 아직 없으면 RFQ 요청 품목(단가 없음)을 보여준다.
+  const source: ItemSource | null = quote
+    ? {
+        kind: "quote",
+        label: quote.qtn_no || "Quotation",
+        items: quote.items,
+        currency: quote.currency || "USD",
+        fxRate: quote.fx_rate ?? null,
+        discountPct: quote.discount_pct || 0,
+        total: quote.amount ?? null,
+      }
+    : qtnId
+      ? null // 견적이 있는데 아직 로딩 중 → 표만 늦게 채운다
+      : detail
+        ? {
+            kind: "rfq",
+            label: "RFQ request",
+            items: detail.items,
+            currency: "USD",
+            fxRate: null,
+            discountPct: 0,
+            total: null,
+          }
+        : null;
+
+  return <Overview row={row} steps={pipeline.steps} source={source} />;
 }
+
+/** 품목 표의 출처 — 견적(값 있음) 또는 RFQ 요청(값 없음). 화면에 어느 쪽인지 밝힌다. */
+type ItemSource = {
+  kind: "quote" | "rfq";
+  label: string;
+  items: OverviewItem[];
+  currency: string;
+  /** 견적에 저장된 적용 환율(1 통화 = ? KRW). 없으면 기본 환율로 환산. */
+  fxRate: number | null;
+  discountPct: number;
+  /** 견적 총액(할인 반영). 품목 합계와 다를 수 있어 서버 값을 그대로 쓴다. */
+  total: number | null;
+};
+
+// RfqItem 과 CustomerQuoteItem 이 공통으로 갖는 표시용 필드.
+type OverviewItem = {
+  part_no: string;
+  description: string;
+  serial_no?: string;
+  qty: number;
+  unit: string;
+  unit_price: number | null;
+  amount: number | null;
+  remark?: string;
+};
 
 function Overview({
   row,
   steps,
-  items,
+  source,
 }: {
   row: PipelineRow;
   steps: string[];
   // null = 아직 로딩 중(품목 표만 늦게 채워진다). 나머지 화면은 먼저 보여준다.
-  items: RfqItem[] | null;
+  source: ItemSource | null;
 }) {
   const rSteps = resolveSteps(steps, row.work_type);
   const chain = buildStageChain(row, rSteps);
@@ -220,17 +283,32 @@ function Overview({
       {/* 품목 — 내부 공유용이므로 단가·금액까지 노출한다. */}
       <section className="proj-ov-sec">
         <h2 className="proj-ov-h">
-          Items{items ? <span className="proj-ov-cnt">{items.length}</span> : null}
+          Items{source ? <span className="proj-ov-cnt">{source.items.length}</span> : null}
+          {source ? (
+            <span className="proj-ov-src">
+              {source.kind === "quote"
+                ? `from ${source.label} · ${source.currency}`
+                : "from RFQ request — not priced until a quotation is created"}
+            </span>
+          ) : null}
         </h2>
-        <ItemsTable items={items} />
+        <ItemsTable source={source} />
       </section>
     </div>
   );
 }
 
-function ItemsTable({ items }: { items: RfqItem[] | null }) {
-  if (items === null) return <div className="proj-ov-empty">Loading items…</div>;
-  if (items.length === 0) return <div className="proj-ov-empty">No items registered.</div>;
+function ItemsTable({ source }: { source: ItemSource | null }) {
+  if (source === null) return <div className="proj-ov-empty">Loading items…</div>;
+  if (source.items.length === 0) return <div className="proj-ov-empty">No items registered.</div>;
+  const { currency, fxRate } = source;
+  // 견적에 저장된 환율이 있으면 그 환율로 환산해 견적서와 숫자가 어긋나지 않게 한다.
+  const rate = fxRate && fxRate > 0 ? fxRate : undefined;
+  // 값이 없는(RFQ 요청) 품목은 0 으로 보이면 "무료"로 오해되므로 — 로 비운다.
+  const money = (v: number | null | undefined) =>
+    v == null ? <span className="muted">—</span> : (
+      <DualCurrencyAmount value={v} currency={currency} rate={rate} />
+    );
   return (
     <div className="proj-ov-items-wrap">
       <table className="proj-ov-items">
@@ -246,7 +324,7 @@ function ItemsTable({ items }: { items: RfqItem[] | null }) {
           </tr>
         </thead>
         <tbody>
-          {items.map((it, i) => (
+          {source.items.map((it, i) => (
             <tr key={i}>
               <td className="ov-it-n">{i + 1}</td>
               <td className="ov-it-part">{it.part_no || "—"}</td>
@@ -258,16 +336,26 @@ function ItemsTable({ items }: { items: RfqItem[] | null }) {
                 {it.qty}
                 {it.unit ? ` ${it.unit}` : ""}
               </td>
-              <td className="num">
-                <DualCurrencyAmount value={it.unit_price} currency="USD" />
-              </td>
-              <td className="num">
-                <DualCurrencyAmount value={it.amount} currency="USD" />
-              </td>
+              <td className="num">{money(it.unit_price)}</td>
+              <td className="num">{money(it.amount)}</td>
               <td className="ov-it-remark">{it.remark || ""}</td>
             </tr>
           ))}
         </tbody>
+        {source.total != null ? (
+          <tfoot>
+            <tr>
+              <td colSpan={5} className="ov-it-totlabel">
+                Quotation total
+                {source.discountPct ? ` (after ${source.discountPct}% discount)` : ""}
+              </td>
+              <td className="num ov-it-total">
+                <DualCurrencyAmount value={source.total} currency={currency} rate={rate} />
+              </td>
+              <td />
+            </tr>
+          </tfoot>
+        ) : null}
       </table>
     </div>
   );
