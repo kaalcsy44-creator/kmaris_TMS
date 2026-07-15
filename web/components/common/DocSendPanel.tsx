@@ -2,10 +2,18 @@
 
 import { useEffect, useRef, useState } from "react";
 import { getToken } from "@/lib/auth";
+import { saveEmailSignature } from "@/lib/api";
 
-// 문서 생성(다운로드) + 이메일 미리보기 + 발송(생성파일 첨부) 공통 패널.
+// 문서 생성(다운로드) + 이메일 미리보기 + 발송(첨부) 공통 패널.
 // 2·4·6단계 상세편집 페이지에서 공유한다. 단계별 API 차이는 콜백(onPreview/onSend/
 // downloadUrl)으로 주입해 흡수한다.
+//
+// 메일 본문은 세 조각으로 나눠 다룬다 — 서버가 발송 시 이 순서로 합친다:
+//     body(템플릿 초안) → notes(이번 건에만 덧붙일 문단) → signature(포함 여부 토글)
+// 서버 미리보기는 서명을 뺀 body 와 signature 를 따로 내려준다(합치면 기존 메일과 동일).
+//
+// 첨부는 생성 문서(Attach 포맷으로 고른 PDF/XLSX — 서버가 붙인다) + 여기서 올린 파일.
+// 올린 파일은 보관하지 않고 발송 시에만 붙는다.
 export type DocFormat = "pdf" | "xlsx";
 
 export interface DocPreview {
@@ -13,7 +21,16 @@ export interface DocPreview {
   from?: string;     // 서버가 제안하는 기본 발신자(From)
   subject: string;
   body: string;
+  signature?: string;
   smtp_configured: boolean;
+}
+
+const MAX_ATTACH_TOTAL = 18 * 1024 * 1024;  // 서버(mail_compose.MAX_ATTACH_TOTAL)와 같은 값
+
+function fmtSize(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
 export default function DocSendPanel({
@@ -23,7 +40,6 @@ export default function DocSendPanel({
   downloadName,
   onPreview,
   onSend,
-  showNote = false,
   disabled = false,
   disabledReason,
   onSent,
@@ -33,36 +49,60 @@ export default function DocSendPanel({
   downloadUrl: (fmt: DocFormat) => string; // 인증 GET URL
   downloadName: (fmt: DocFormat) => string;
   // onPreview/onSend 를 주지 않으면 이메일 섹션은 감추고 파일 다운로드만 노출한다.
-  onPreview?: (lang: "en" | "ko", note: string) => Promise<DocPreview>;
+  onPreview?: (lang: "en" | "ko") => Promise<DocPreview>;
   onSend?: (p: {
     to: string;
     from: string;
     cc: string;
     subject: string;
     body: string;
+    notes: string;
+    signature: string;
+    includeSignature: boolean;
     format: DocFormat;
     lang: "en" | "ko";
-    note: string;
+    files: File[];
   }) => Promise<{ sent_date?: string }>;
-  showNote?: boolean; // 벤더/고객 메모 입력칸 노출(미리보기에 반영)
   disabled?: boolean;
   disabledReason?: string;
   onSent?: () => void;
 }) {
   const emailEnabled = !!onPreview && !!onSend;
   const [lang, setLang] = useState<"en" | "ko">("en");
-  const [note, setNote] = useState("");
   const [format, setFormat] = useState<DocFormat>(formats[0] ?? "pdf");
   const [to, setTo] = useState("");
   const [from, setFrom] = useState("");
   const [cc, setCc] = useState("");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
+  const [notes, setNotes] = useState("");
+  const [signature, setSignature] = useState("");
+  const [includeSignature, setIncludeSignature] = useState(true);
+  const [sigMsg, setSigMsg] = useState("");
+  const [files, setFiles] = useState<File[]>([]);
   const [smtpConfigured, setSmtpConfigured] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const autoRan = useRef(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const attachTotal = files.reduce((n, f) => n + f.size, 0);
+  const overSize = attachTotal > MAX_ATTACH_TOTAL;
+
+  function addFiles(picked: FileList | null) {
+    if (!picked?.length) return;
+    // 같은 파일을 두 번 고르면 한 번만 남긴다(이름+크기 기준).
+    setFiles((prev) => {
+      const seen = new Set(prev.map((f) => `${f.name}:${f.size}`));
+      const next = [...prev];
+      for (const f of Array.from(picked)) {
+        if (!seen.has(`${f.name}:${f.size}`)) next.push(f);
+      }
+      return next;
+    });
+    setErr(null);
+  }
 
   async function download(fmt: DocFormat) {
     setErr(null);
@@ -83,24 +123,38 @@ export default function DocSendPanel({
     }
   }
 
-  // 미리보기(초안 생성) — to/from/subject/body 를 서버 기본값으로 채운다.
+  // 미리보기(초안 생성) — to/from/subject/body/signature 를 서버 기본값으로 채운다.
   // 미리보기 전에도 필드가 기본값으로 보이도록 마운트 시 1회 자동 실행(아래 useEffect).
+  // Notes·첨부는 사용자가 넣은 것이므로 초안을 다시 만들어도 건드리지 않는다.
   async function makePreview() {
     if (!onPreview) return;
     setBusy(true);
     setMsg(null);
     setErr(null);
     try {
-      const p = await onPreview(lang, note);
+      const p = await onPreview(lang);
       setTo(p.to);
       setFrom(p.from ?? "");
       setSubject(p.subject);
       setBody(p.body);
+      setSignature(p.signature ?? "");
       setSmtpConfigured(p.smtp_configured);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Preview generation failed");
     } finally {
       setBusy(false);
+    }
+  }
+
+  /** 지금 서명을 내 기본 서명으로 저장 — 이후 모든 단계 발송 화면에 채워진다. */
+  async function saveSignatureAsDefault() {
+    setSigMsg("");
+    try {
+      await saveEmailSignature(lang, signature);
+      setSigMsg("Saved as your default.");
+      setTimeout(() => setSigMsg(""), 2000);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Signature save failed");
     }
   }
 
@@ -119,7 +173,9 @@ export default function DocSendPanel({
     setMsg(null);
     setErr(null);
     try {
-      const r = await onSend({ to, from, cc, subject, body, format, lang, note });
+      const r = await onSend({
+        to, from, cc, subject, body, notes, signature, includeSignature, format, lang, files,
+      });
       setMsg(`Email sent${r.sent_date ? `: ${r.sent_date}` : ""}`);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Email sending failed");
@@ -185,18 +241,12 @@ export default function DocSendPanel({
         ) : null}
       </div>
 
-      {showNote && emailEnabled ? (
-        <div className="form-field" style={{ marginTop: 8 }}>
-          <label>Note (optional)</label>
-          <input value={note} onChange={(e) => setNote(e.target.value)} disabled={disabled} />
-        </div>
-      ) : null}
-
       {!emailEnabled ? (
         err ? <div className="action-err" style={{ marginTop: 8 }}>{err}</div> : null
       ) : (
         <>
-          <div className="form-grid" style={{ marginTop: 8 }}>
+          {/* 주소 3열 → Subject 는 아래 전폭 단독 행(제목이 길어 잘리던 문제). */}
+          <div className="mail-addr-grid">
             <div className="form-field">
               <label>From (sender)</label>
               <input value={from} onChange={(e) => setFrom(e.target.value)} placeholder="sales@k-maris.com" />
@@ -209,18 +259,117 @@ export default function DocSendPanel({
               <label>CC</label>
               <input value={cc} onChange={(e) => setCc(e.target.value)} placeholder="comma-separated (optional)" />
             </div>
-            <div className="form-field">
-              <label>Subject</label>
-              <input value={subject} onChange={(e) => setSubject(e.target.value)} />
-            </div>
           </div>
           <div className="hint-inline" style={{ marginTop: 2 }}>
             From only changes the sender if it is a verified send-as alias on the SMTP account; otherwise the provider keeps the configured sender.
           </div>
           <div className="form-field" style={{ marginTop: 8 }}>
+            <label>Subject</label>
+            <input value={subject} onChange={(e) => setSubject(e.target.value)} />
+          </div>
+          <div className="form-field" style={{ marginTop: 8 }}>
             <label>Body</label>
             <textarea className="po-textarea" value={body} onChange={(e) => setBody(e.target.value)} />
           </div>
+
+          {/* 본문 뒤에 붙는 문단 — 이번 건에만 덧붙일 내용. */}
+          <div className="form-field" style={{ marginTop: 8 }}>
+            <label>Notes (optional)</label>
+            <textarea
+              className="mail-notes"
+              rows={3}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Added after the body, before the signature."
+            />
+          </div>
+
+          <div className="form-field" style={{ marginTop: 8 }}>
+            <label className="mail-sig-head">
+              Signature
+              <span className="mail-sig-tools">
+                <label className="mail-sig-toggle">
+                  <input
+                    type="checkbox"
+                    checked={includeSignature}
+                    onChange={(e) => setIncludeSignature(e.target.checked)}
+                  />
+                  Include
+                </label>
+                <button
+                  type="button"
+                  className="btn ghost xs"
+                  onClick={saveSignatureAsDefault}
+                  disabled={!includeSignature}
+                  title="이 서명을 내 기본 서명으로 저장 — 이후 모든 단계 발송 화면에 채워집니다"
+                >
+                  Save as default
+                </button>
+                {sigMsg ? <span className="action-ok">{sigMsg}</span> : null}
+              </span>
+            </label>
+            <textarea
+              className="mail-sig"
+              rows={4}
+              value={signature}
+              onChange={(e) => setSignature(e.target.value)}
+              disabled={!includeSignature}
+            />
+          </div>
+
+          {/* 첨부 — 생성 문서(Attach 선택 포맷)는 서버가 붙이므로 목록 맨 위에 고정 표시. */}
+          <div className="form-field" style={{ marginTop: 8 }}>
+            <label className="mail-attach-head">
+              Attachments
+              <span className={`mail-attach-size${overSize ? " over" : ""}`}>
+                {fmtSize(attachTotal)} / {fmtSize(MAX_ATTACH_TOTAL)}
+              </span>
+            </label>
+            <div className="mail-attach-list">
+              <span className="mail-attach generated" title="Attach 에서 고른 포맷으로 자동 첨부됩니다">
+                <span className="mail-attach-name">📄 {downloadName(format)}</span>
+                <span className="mail-attach-tag">auto</span>
+              </span>
+              {files.map((f, i) => (
+                <span key={`${f.name}:${f.size}:${i}`} className="mail-attach">
+                  <span className="mail-attach-name">📎 {f.name}</span>
+                  <span className="mail-attach-size-sm">{fmtSize(f.size)}</span>
+                  <button
+                    type="button"
+                    className="mail-attach-x"
+                    title="Remove"
+                    onClick={() => setFiles((prev) => prev.filter((_, idx) => idx !== i))}
+                  >
+                    ✕
+                  </button>
+                </span>
+              ))}
+              <button
+                type="button"
+                className="btn ghost xs"
+                onClick={() => fileRef.current?.click()}
+                disabled={disabled}
+              >
+                + Attach file
+              </button>
+              <input
+                ref={fileRef}
+                type="file"
+                multiple
+                hidden
+                onChange={(e) => {
+                  addFiles(e.target.files);
+                  e.target.value = "";  // 같은 파일을 지웠다 다시 고를 수 있게 초기화
+                }}
+              />
+            </div>
+            {overSize ? (
+              <div className="action-err" style={{ marginTop: 4 }}>
+                첨부 용량이 한도를 넘었습니다 — 파일을 줄여주세요.
+              </div>
+            ) : null}
+          </div>
+
           {!smtpConfigured ? (
             <div className="action-err">
               SMTP not configured — set SMTP_USER / SMTP_PASSWORD to enable sending.
@@ -230,9 +379,11 @@ export default function DocSendPanel({
             <button
               className="btn primary"
               onClick={send}
-              disabled={disabled || busy || !to || !smtpConfigured}
+              disabled={disabled || busy || !to || !smtpConfigured || overSize}
             >
-              {busy ? "Sending…" : `Send (attach ${format.toUpperCase()})`}
+              {busy
+                ? "Sending…"
+                : `Send (attach ${format.toUpperCase()}${files.length ? ` +${files.length}` : ""})`}
             </button>
             {msg ? <span className="action-ok">{msg}</span> : null}
             {err ? <span className="action-err">{err}</span> : null}

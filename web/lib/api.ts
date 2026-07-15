@@ -381,24 +381,71 @@ export function createPurchaseOrder(body: {
   return post("/api/admin/vendor-pos", body);
 }
 
-export function previewVendorPo(
-  poId: number,
-  lang: "en" | "ko",
-  notes: string
-): Promise<VendorPoPreview> {
-  return post(`/api/admin/vendor-pos/${poId}/preview`, { lang, notes });
+// ── 단계 이메일(2·4·6) 공통 ────────────────────────────────────────────────
+// 세 단계 모두 DocSendPanel 하나를 쓰고, 서버도 같은 폼 필드를 받는다.
+// 본문은 body/notes/signature 세 조각으로 보내고 서버가 합친다(중복 서명 방지).
+// 첨부는 multipart — 생성 문서(견적서 등)는 서버가 붙이고, files 는 사용자가 더한 것.
+export interface DocEmailPreview {
+  to: string;
+  from?: string;
+  subject: string;
+  body: string;
+  signature?: string;
+  smtp_configured: boolean;
 }
 
-export function sendVendorPo(
-  poId: number,
-  to: string,
-  subject: string,
-  body: string,
-  format: "pdf" | "xlsx" = "pdf",
-  cc = "",
-  from = ""
-): Promise<{ ok: boolean; sent_date: string }> {
-  return post(`/api/admin/vendor-pos/${poId}/send`, { to, subject, body, format, cc, from_email: from });
+export interface DocEmailSend {
+  to: string;
+  from?: string;
+  cc?: string;
+  subject: string;
+  body: string;
+  notes?: string;
+  signature?: string;
+  includeSignature?: boolean;
+  format?: "pdf" | "xlsx";
+  files?: File[];
+}
+
+function docEmailFormData(p: DocEmailSend): FormData {
+  const fd = new FormData();
+  fd.append("to", p.to);
+  fd.append("from_email", p.from ?? "");
+  fd.append("cc", p.cc ?? "");
+  fd.append("subject", p.subject);
+  fd.append("body", p.body);
+  fd.append("notes", p.notes ?? "");
+  fd.append("signature", p.signature ?? "");
+  fd.append("include_signature", String(p.includeSignature ?? true));
+  fd.append("format", p.format ?? "pdf");
+  for (const f of p.files ?? []) fd.append("files", f);
+  return fd;
+}
+
+/** 담당자 이메일 서명 — 발송 화면 기본값(개인 → 회사 → 내장 기본 순으로 해석된 값). */
+export function fetchEmailSignature(
+  lang: "en" | "ko"
+): Promise<{ lang: string; signature: string; is_personal: boolean }> {
+  return get(`/api/admin/settings/email-signature?lang=${lang}`);
+}
+
+/** 개인 서명 저장(이후 모든 단계의 기본 서명). 빈 문자열이면 해제. */
+export function saveEmailSignature(
+  lang: "en" | "ko",
+  signature: string
+): Promise<{ ok: boolean; signature: string }> {
+  return put(`/api/admin/settings/email-signature`, { lang, signature });
+}
+
+export function previewVendorPo(poId: number, lang: "en" | "ko"): Promise<VendorPoPreview> {
+  return post(`/api/admin/vendor-pos/${poId}/preview`, { lang, notes: "" });
+}
+
+export function sendVendorPo(p: DocEmailSend & { poId: number }) {
+  return postForm<{ ok: boolean; sent_date: string }>(
+    `/api/admin/vendor-pos/${p.poId}/send`,
+    docEmailFormData(p)
+  );
 }
 
 export function vendorPoPdfUrl(poId: number): string {
@@ -1104,19 +1151,14 @@ export function vendorRfqSheetXlsxUrl(vrfqId: number): string {
 export function previewVendorRfqEmail(
   vrfqId: number,
   lang: "en" | "ko"
-): Promise<{ to: string; from: string; subject: string; body: string; smtp_configured: boolean }> {
+): Promise<DocEmailPreview> {
   return post(`/api/admin/vendor-rfq/${vrfqId}/email-preview`, { lang });
 }
-export function sendVendorRfqEmail(
-  vrfqId: number,
-  to: string,
-  subject: string,
-  body: string,
-  format: "xlsx" | "pdf" = "xlsx",
-  cc = "",
-  from = ""
-): Promise<{ ok: boolean; sent_date: string }> {
-  return post(`/api/admin/vendor-rfq/${vrfqId}/send`, { to, subject, body, format, cc, from_email: from });
+export function sendVendorRfqEmail(p: DocEmailSend & { vrfqId: number }) {
+  return postForm<{ ok: boolean; sent_date: string }>(
+    `/api/admin/vendor-rfq/${p.vrfqId}/send`,
+    docEmailFormData(p)
+  );
 }
 
 export function createVendorQuote(
@@ -1209,29 +1251,14 @@ export function quotationXlsxUrl(qtnId: number, docType = "quotation"): string {
 export function previewQuotationEmail(
   qtnId: number,
   lang: "en" | "ko"
-): Promise<{ to: string; from: string; subject: string; body: string; smtp_configured: boolean }> {
+): Promise<DocEmailPreview> {
   return post(`/api/admin/quotations/${qtnId}/email-preview`, { lang });
 }
 
-export function sendQuotationEmail(
-  qtnId: number,
-  to: string,
-  subject: string,
-  body: string,
-  docType = "quotation",
-  format: "pdf" | "xlsx" = "pdf",
-  cc = "",
-  from = ""
-): Promise<{ ok: boolean; sent_date: string }> {
-  return post(`/api/admin/quotations/${qtnId}/send`, {
-    to,
-    subject,
-    body,
-    doc_type: docType,
-    format,
-    cc,
-    from_email: from,
-  });
+export function sendQuotationEmail(p: DocEmailSend & { qtnId: number; docType?: string }) {
+  const fd = docEmailFormData(p);
+  fd.append("doc_type", p.docType ?? "quotation");
+  return postForm<{ ok: boolean; sent_date: string }>(`/api/admin/quotations/${p.qtnId}/send`, fd);
 }
 
 // ── 목록 행 클릭 상세(보기·수정·삭제) ───────────────────────────────────────

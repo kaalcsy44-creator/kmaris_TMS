@@ -6,8 +6,11 @@ from _core import (
     Depends,
     _deal_identity,
     File,
+    Form,
     HTTPException,
+    List,
     RFQ,
+    resolve_signature,
     RFQStatus,
     Response,
     UploadFile,
@@ -34,6 +37,9 @@ from _core import (
     generate_pdf,
     send_email,
     default_from,
+)
+from services.mail_compose import build_attachments, compose_body
+from _core import (
     _base_meta,
     _date_iso,
     _enum_val,
@@ -328,13 +334,16 @@ def vendor_rfq_email_preview(vrfq_id: int, body: VendorRfqEmailPreviewReq,
     try:
         vr, rfq, vendor, cust, vessel, rfq_no, items, safe = _vrfq_ctx(s, vrfq_id)
         lang = "ko" if body.lang == "ko" else "en"
+        # 서명은 별도 필드로 내려보내고 본문 템플릿에서는 뺀다(발송 시 다시 합쳐진다).
         subject, mail_body = build_vendor_rfq_email(
-            s, user.get("id"), rfq, cust, vessel, vendor, "", lang, vr.items or None, rfq_no=rfq_no)
+            s, user.get("id"), rfq, cust, vessel, vendor, "", lang, vr.items or None,
+            rfq_no=rfq_no, inline_signature=False)
         return {
             "to": vr.sent_to_email or (vendor.email if vendor else "") or "",
             "from": default_from(),
             "subject": subject,
             "body": mail_body,
+            "signature": resolve_signature(s, user.get("id"), lang),
             "smtp_configured": bool(os.getenv("SMTP_USER") and os.getenv("SMTP_PASSWORD")),
         }
     finally:
@@ -342,18 +351,31 @@ def vendor_rfq_email_preview(vrfq_id: int, body: VendorRfqEmailPreviewReq,
 
 
 @app.post("/api/admin/vendor-rfq/{vrfq_id}/send", dependencies=[Depends(require_token)])
-def vendor_rfq_email_send(vrfq_id: int, body: VendorRfqEmailSendReq):
+def vendor_rfq_email_send(
+    vrfq_id: int,
+    to: str = Form(...),
+    subject: str = Form(""),
+    body: str = Form(""),
+    notes: str = Form(""),
+    signature: str = Form(""),
+    include_signature: bool = Form(True),
+    cc: str = Form(""),
+    from_email: str = Form(""),
+    format: str = Form("pdf"),
+    files: List[UploadFile] = File(default=[]),
+):
+    """Vendor RFQ 이메일 발송 — 생성 문서(PDF/XLSX) + 사용자가 추가한 첨부."""
     s = get_session()
     try:
         vr, rfq, vendor, cust, vessel, rfq_no, items, safe = _vrfq_ctx(s, vrfq_id)
-        if not body.to.strip():
+        if not to.strip():
             raise HTTPException(status_code=400, detail="수신자 이메일을 입력하세요.")
-        if body.format == "pdf":
+        if format == "pdf":
             payload = build_po_payload(
                 po_no=rfq_no, date=vr.sent_date or date.today().isoformat(),
                 vendor=vendor, vessel=vessel, items=items,
             )
-            attach = (f"{rfq_no}_RFQ_{safe}.pdf", generate_pdf("vendor_rfq", payload))
+            generated = (f"{rfq_no}_RFQ_{safe}.pdf", generate_pdf("vendor_rfq", payload))
         else:
             xlsx = make_vendor_rfq_quote_xlsx(
                 rfq_no=rfq_no, vessel_name=vessel.name if vessel else "—",
@@ -361,12 +383,19 @@ def vendor_rfq_email_send(vrfq_id: int, body: VendorRfqEmailSendReq):
                 enquiry_date=vr.sent_date or date.today().isoformat(),
                 vendor_name=vendor.name if vendor else "—", items=items,
             )
-            attach = (f"{rfq_no}_VendorQuoteSheet_{safe}.xlsx", xlsx)
-        sent = send_email(to=body.to.strip(), subject=body.subject, body=body.body,
-                          attachments=[attach], cc=body.cc.strip(), from_addr=body.from_email.strip())
+            generated = (f"{rfq_no}_VendorQuoteSheet_{safe}.xlsx", xlsx)
+        attachments = build_attachments(generated, files)
+        sent = send_email(
+            to=to.strip(),
+            subject=subject,
+            body=compose_body(body, notes, signature, include_signature),
+            attachments=attachments,
+            cc=cc.strip(),
+            from_addr=from_email.strip(),
+        )
         if not sent:
             raise HTTPException(status_code=400, detail="이메일 발송 실패 — SMTP 설정 또는 서버 상태를 확인하세요.")
-        vr.sent_to_email = body.to.strip()
+        vr.sent_to_email = to.strip()
         vr.sent_date = date.today().isoformat()
         vr.status = "이메일 발송완료"
         s.commit()

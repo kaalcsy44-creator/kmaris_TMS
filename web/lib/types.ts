@@ -330,6 +330,7 @@ export type VendorPoPreview = {
   from?: string;
   subject: string;
   body: string;
+  signature?: string;   // 본문과 분리해 내려온다 — 발송 시 본문 뒤에 다시 붙는다
   pdf_filename: string;
   smtp_configured: boolean;
 };

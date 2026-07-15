@@ -6,15 +6,19 @@ from _core import (
     CustomerQuoteCreate,
     CustomerQuoteUpdate,
     Depends,
+    File,
+    Form,
     HTTPException,
+    List,
     Order,
     Quotation,
     QuotationEmailPreviewReq,
-    QuotationSendReq,
     QuotationStatus,
     RFQ,
     Response,
+    UploadFile,
     User,
+    resolve_signature,
     Vessel,
     _apply_owner_filter,
     _base_meta,
@@ -44,6 +48,7 @@ from _core import (
     USD_KRW_RATE,
 )
 from services.fx import get_deal_base_rate
+from services.mail_compose import build_attachments, compose_body
 
 
 @app.get("/api/admin/fx-rate", dependencies=[Depends(require_token)])
@@ -352,7 +357,8 @@ def quotation_xlsx(qtn_id: int, doc_type: str = "quotation"):
 
 
 @app.post("/api/admin/quotations/{qtn_id}/email-preview", dependencies=[Depends(require_token)])
-def quotation_email_preview(qtn_id: int, body: QuotationEmailPreviewReq):
+def quotation_email_preview(qtn_id: int, body: QuotationEmailPreviewReq,
+                            user: dict = Depends(get_current_user)):
     s = get_session()
     try:
         qtn = s.query(Quotation).filter_by(id=qtn_id).first()
@@ -364,7 +370,10 @@ def quotation_email_preview(qtn_id: int, body: QuotationEmailPreviewReq):
             "to": (cust.email if cust else "") or "",
             "from": default_from(),
             "subject": quotation_email_subject(qtn.qtn_no, lang),
-            "body": quotation_email_body(cust.name if cust else "Customer", qtn.qtn_no, "", lang),
+            # 서명은 별도 필드로 내려보내고 본문에서는 뺀다(발송 시 다시 합쳐진다).
+            "body": quotation_email_body(cust.name if cust else "Customer", qtn.qtn_no, "", lang,
+                                         inline_signature=False),
+            "signature": resolve_signature(s, user.get("id"), lang),
             "smtp_configured": bool(os.getenv("SMTP_USER") and os.getenv("SMTP_PASSWORD")),
         }
     finally:
@@ -372,27 +381,40 @@ def quotation_email_preview(qtn_id: int, body: QuotationEmailPreviewReq):
 
 
 @app.post("/api/admin/quotations/{qtn_id}/send", dependencies=[Depends(require_token)])
-def quotation_send(qtn_id: int, body: QuotationSendReq):
+def quotation_send(
+    qtn_id: int,
+    to: str = Form(...),
+    subject: str = Form(""),
+    body: str = Form(""),
+    notes: str = Form(""),
+    signature: str = Form(""),
+    include_signature: bool = Form(True),
+    cc: str = Form(""),
+    from_email: str = Form(""),
+    format: str = Form("pdf"),
+    doc_type: str = Form("quotation"),
+    files: List[UploadFile] = File(default=[]),
+):
+    """견적서 이메일 발송 — 생성 문서(PDF/XLSX) + 사용자가 추가한 첨부."""
     s = get_session()
     try:
         qtn = s.query(Quotation).filter_by(id=qtn_id).first()
         if not qtn:
             raise HTTPException(status_code=404, detail="견적서를 찾을 수 없습니다.")
-        if not body.to.strip():
+        if not to.strip():
             raise HTTPException(status_code=400, detail="수신자 이메일을 입력하세요.")
-        cust = s.query(Customer).filter_by(id=qtn.customer_id).first()
         payload = _quotation_payload(s, qtn)
-        if body.format == "xlsx":
-            attach = (f"{qtn.qtn_no}.xlsx", make_document_xlsx(body.doc_type, payload))
+        if format == "xlsx":
+            generated = (f"{qtn.qtn_no}.xlsx", make_document_xlsx(doc_type, payload))
         else:
-            attach = (f"{qtn.qtn_no}.pdf", generate_pdf(body.doc_type, payload))
+            generated = (f"{qtn.qtn_no}.pdf", generate_pdf(doc_type, payload))
         sent = send_email(
-            to=body.to.strip(),
-            subject=body.subject,
-            body=body.body,
-            attachments=[attach],
-            cc=body.cc.strip(),
-            from_addr=body.from_email.strip(),
+            to=to.strip(),
+            subject=subject,
+            body=compose_body(body, notes, signature, include_signature),
+            attachments=build_attachments(generated, files),
+            cc=cc.strip(),
+            from_addr=from_email.strip(),
         )
         if not sent:
             raise HTTPException(status_code=400, detail="이메일 발송 실패 — SMTP 설정 또는 서버 상태를 확인하세요.")

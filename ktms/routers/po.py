@@ -8,8 +8,10 @@ from _core import (
     DeliveryProof,
     Depends,
     File,
+    Form,
     HTTPException,
     INTERNAL_STEPS,
+    List,
     Order,
     OrderCreate,
     OrderStatus,
@@ -29,7 +31,7 @@ from _core import (
     User,
     Vendor,
     VendorPoPreview,
-    VendorPoSend,
+    resolve_signature,
     VendorRFQ,
     Vessel,
     _base_meta,
@@ -60,6 +62,7 @@ from _core import (
     datetime,
     extract_text_from_pdf,
     generate_po_pdf,
+    get_current_user,
     get_session,
     os,
     parse_order_fields,
@@ -69,6 +72,7 @@ from _core import (
     default_from,
     steps_for,
 )
+from services.mail_compose import build_attachments, compose_body
 
 
 
@@ -700,7 +704,8 @@ def delete_purchase_order(po_id: int):
 
 
 @app.post("/api/admin/vendor-pos/{po_id}/preview", dependencies=[Depends(require_token)])
-def vendor_po_preview(po_id: int, body: VendorPoPreview):
+def vendor_po_preview(po_id: int, body: VendorPoPreview,
+                      user: dict = Depends(get_current_user)):
     s = get_session()
     try:
         po = s.query(PurchaseOrder).filter_by(id=po_id).first()
@@ -719,7 +724,10 @@ def vendor_po_preview(po_id: int, body: VendorPoPreview):
             "to": (vendor.email if vendor else "") or "",
             "from": default_from(),
             "subject": subject,
-            "body": _vendor_po_email_body(po, vendor, order, vessel, body.notes, lang, _project_no_for_order(s, order)),
+            # 서명·추가사항은 별도 필드로 다룬다(발송 시 본문 뒤에 합쳐진다).
+            "body": _vendor_po_email_body(po, vendor, order, vessel, "", lang,
+                                          _project_no_for_order(s, order), inline_signature=False),
+            "signature": resolve_signature(s, user.get("id"), lang),
             "pdf_filename": f"{po.po_no}_PurchaseOrder.pdf",
             "smtp_configured": bool(os.getenv("SMTP_USER") and os.getenv("SMTP_PASSWORD")),
         }
@@ -784,13 +792,26 @@ def vendor_po_xlsx(po_id: int):
 
 
 @app.post("/api/admin/vendor-pos/{po_id}/send", dependencies=[Depends(require_token)])
-def vendor_po_send(po_id: int, body: VendorPoSend):
+def vendor_po_send(
+    po_id: int,
+    to: str = Form(...),
+    subject: str = Form(""),
+    body: str = Form(""),
+    notes: str = Form(""),
+    signature: str = Form(""),
+    include_signature: bool = Form(True),
+    cc: str = Form(""),
+    from_email: str = Form(""),
+    format: str = Form("pdf"),
+    files: List[UploadFile] = File(default=[]),
+):
+    """발주서 이메일 발송 — 생성 문서(PDF/XLSX) + 사용자가 추가한 첨부."""
     s = get_session()
     try:
         po = s.query(PurchaseOrder).filter_by(id=po_id).first()
         if not po:
             raise HTTPException(status_code=404, detail="발주서를 찾을 수 없습니다.")
-        if not body.to.strip():
+        if not to.strip():
             raise HTTPException(status_code=400, detail="수신자 이메일을 입력하세요.")
         vendor = s.query(Vendor).filter_by(id=po.vendor_id).first()
         order = s.query(Order).filter_by(id=po.order_id).first()
@@ -802,23 +823,23 @@ def vendor_po_send(po_id: int, body: VendorPoSend):
             vessel=vessel,
             items=po.items or [],
         )
-        if body.format == "xlsx":
+        if format == "xlsx":
             payload["terms"] = getattr(po, "terms", None) or {}
-            attach = (f"{po.po_no}_PurchaseOrder.xlsx", make_document_xlsx("purchase_order", payload))
+            generated = (f"{po.po_no}_PurchaseOrder.xlsx", make_document_xlsx("purchase_order", payload))
         else:
-            attach = (f"{po.po_no}_PurchaseOrder.pdf", generate_po_pdf(payload))
+            generated = (f"{po.po_no}_PurchaseOrder.pdf", generate_po_pdf(payload))
         sent = send_email(
-            to=body.to.strip(),
-            subject=body.subject,
-            body=body.body,
-            attachments=[attach],
-            cc=body.cc.strip(),
-            from_addr=body.from_email.strip(),
+            to=to.strip(),
+            subject=subject,
+            body=compose_body(body, notes, signature, include_signature),
+            attachments=build_attachments(generated, files),
+            cc=cc.strip(),
+            from_addr=from_email.strip(),
         )
         if not sent:
             raise HTTPException(status_code=400, detail="이메일 발송 실패 — SMTP 설정 또는 서버 상태를 확인하세요.")
         po.status = "이메일 발송완료"
-        po.sent_to_email = body.to.strip()
+        po.sent_to_email = to.strip()
         po.sent_date = date.today().isoformat()
         s.commit()
         return {"ok": True, "sent_date": po.sent_date}

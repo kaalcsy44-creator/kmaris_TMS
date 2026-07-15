@@ -9,6 +9,10 @@ from _core import (
     EmailTemplate,
     EmailTemplateSave,
     EmailTemplatePreviewReq,
+    EmailSignatureSave,
+    SIGNATURE_DOC_TYPE,
+    resolve_signature,
+    save_signature,
     HTTPException,
     ItemCategory,
     ItemCategorySave,
@@ -610,6 +614,37 @@ def delete_email_template(scope: str = "user", doc_type: str = "vendor_rfq",
             s.delete(t)
             s.commit()
         return {"ok": True}
+    finally:
+        s.close()
+
+
+@app.get("/api/admin/settings/email-signature", dependencies=[Depends(require_token)])
+def get_email_signature(lang: str = "en", user: dict = Depends(get_current_user)):
+    """발송 화면에 채울 담당자 서명 — 개인 → 회사 기본 → 내장 기본 순으로 해석한 값과,
+    개인 서명을 따로 저장해 뒀는지 여부(is_personal)를 함께 준다."""
+    lang = "ko" if lang == "ko" else "en"
+    s = get_session()
+    try:
+        own = (s.query(EmailTemplate)
+               .filter_by(user_id=user.get("id"), doc_type=SIGNATURE_DOC_TYPE, lang=lang).first())
+        return {
+            "lang": lang,
+            "signature": resolve_signature(s, user.get("id"), lang),
+            "is_personal": bool(own and (own.body_tpl or "").strip()),
+        }
+    finally:
+        s.close()
+
+
+@app.put("/api/admin/settings/email-signature", dependencies=[Depends(require_token)])
+def put_email_signature(body: EmailSignatureSave, user: dict = Depends(get_current_user)):
+    """담당자 개인 서명 저장 — 이후 모든 단계 발송 화면의 기본 서명이 된다.
+    빈 문자열로 저장하면 개인 서명을 지우고 회사/내장 기본으로 되돌아간다."""
+    lang = "ko" if body.lang == "ko" else "en"
+    s = get_session()
+    try:
+        save_signature(s, user.get("id"), lang, body.signature)
+        return {"ok": True, "signature": resolve_signature(s, user.get("id"), lang)}
     finally:
         s.close()
 

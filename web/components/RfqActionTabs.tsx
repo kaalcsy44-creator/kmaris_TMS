@@ -1003,7 +1003,7 @@ function VendorRfqDetailModal({
             downloadUrl={(f) => (f === "pdf" ? vendorRfqPdfUrl(d.id) : vendorRfqSheetXlsxUrl(d.id))}
             downloadName={(f) => `${d.kmaris_rfq_no || "VendorRFQ"}_${d.vendor || "vendor"}.${f}`}
             onPreview={(lang) => previewVendorRfqEmail(d.id, lang)}
-            onSend={({ to, subject, body, format, cc, from }) => sendVendorRfqEmail(d.id, to, subject, body, format, cc, from)}
+            onSend={(p) => sendVendorRfqEmail({ ...p, vrfqId: d.id })}
             disabled={!canEditThis}
             disabledReason={!canEditThis ? editBlockReason("rfq", d?.assignee_id) : "Generated from the last saved version — save your edits first."}
             onSent={onChanged}
@@ -2073,7 +2073,7 @@ function CustomerQuoteDetailModal({
             downloadUrl={(f) => (f === "xlsx" ? quotationXlsxUrl(id, "quotation") : quotationPdfUrl(id, "quotation"))}
             downloadName={(f) => `${d.qtn_no || "Quotation"}.${f}`}
             onPreview={(lang) => previewQuotationEmail(id, lang)}
-            onSend={({ to, subject, body, format, cc, from }) => sendQuotationEmail(id, to, subject, body, "quotation", format, cc, from)}
+            onSend={(p) => sendQuotationEmail({ ...p, qtnId: id, docType: "quotation" })}
             disabled={!canEditThis}
             disabledReason={!canEditThis ? editBlockReason("rfq", d?.assignee_id) : "Generated from the last saved version — save your edits first."}
             onSent={onChanged}
@@ -3324,7 +3324,7 @@ function CustomerQuoteAction({
     setBusy(true);
     setErr(null);
     try {
-      const r = await sendQuotationEmail(qtn.id, to, subject, body, docType);
+      const r = await sendQuotationEmail({ qtnId: qtn.id, to, subject, body, docType });
       setMsg(`Email sent: ${r.sent_date}`);
       onDone();
     } catch (e) {

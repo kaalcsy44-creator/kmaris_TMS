@@ -4500,6 +4500,122 @@ table.mini input[type="checkbox"].row-check:indeterminate::after {
   padding-top: 12px;
   border-top: 1px solid var(--line);
 }
+/* ── 단계 이메일 작성(2·4·6 · DocSendPanel) ───────────────────────────────
+   주소 3열(From·To·CC) → 그 아래 Subject 는 전폭 단독 행. Subject 를 주소칸과 같은
+   grid 에 두면 제목이 칸 폭에 눌려 잘려 보인다(제목은 대개 가장 길다). */
+.mail-addr-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 8px;
+}
+@media (max-width: 760px) {
+  .mail-addr-grid { grid-template-columns: 1fr; }
+}
+/* 본문 뒤에 붙는 문단 — 본문보다 짧게. */
+.mail-notes,
+.mail-sig {
+  width: 100%;
+  border: 1px solid #d7e2ee;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 12px;
+  font-family: inherit;
+  line-height: 1.45;
+  background: #fff;
+  color: var(--ink);
+  resize: vertical;
+}
+.mail-sig:disabled {
+  background: var(--head-bg);
+  color: var(--muted);
+}
+/* 서명 라벨 줄 — 라벨 좌측, 포함 토글·기본저장 우측. */
+.mail-sig-head,
+.mail-attach-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.mail-sig-tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 400;
+}
+.mail-sig-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  color: var(--muted);
+  cursor: pointer;
+}
+/* 첨부 목록 — 생성 문서 칩 + 업로드 칩 + 추가 버튼이 한 줄에 흐른다. */
+.mail-attach-size {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.mail-attach-size.over {
+  color: #b42318;
+  font-weight: 700;
+}
+.mail-attach-list {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.mail-attach {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 3px 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 14px;
+  background: #fff;
+  font-size: 11.5px;
+}
+/* 생성 문서(견적서 등) — 사용자가 뗄 수 없는 자동 첨부라 톤을 구분한다. */
+.mail-attach.generated {
+  background: #eef4fb;
+  border-color: #b9d3ee;
+  color: #0b3d6e;
+}
+.mail-attach-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 260px;
+}
+.mail-attach-tag {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: #4a7fb5;
+}
+.mail-attach-size-sm {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.mail-attach-x {
+  border: 0;
+  background: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 0 1px;
+  font-size: 12px;
+  line-height: 1;
+}
+.mail-attach-x:hover {
+  color: #b42318;
+}
 .doc-send-row {
   display: flex;
   align-items: center;

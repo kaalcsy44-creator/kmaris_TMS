@@ -946,7 +946,11 @@ def _po_item_lines(items, korean: bool) -> str:
     )
 
 
-def _vendor_po_email_body(po, vendor, order, vessel, notes: str, lang: str, project_no: str = "") -> str:
+def _vendor_po_email_body(po, vendor, order, vessel, notes: str, lang: str, project_no: str = "",
+                          inline_signature: bool = True) -> str:
+    """발주서 메일 본문. inline_signature=False 면 서명을 붙이지 않는다 — 발송 화면이 서명을
+    별도 입력칸으로 다루고 발송 시 본문 뒤에 다시 합치기 때문(중복 방지).
+    notes 도 발송 화면에서는 빈값으로 넘어온다(본문 뒤 Notes 칸으로 일원화)."""
     vendor_name = vendor.name if vendor else "Vendor"
     vessel_str = vessel.name if vessel else "—"
     if lang == "ko":
@@ -974,8 +978,10 @@ def _vendor_po_email_body(po, vendor, order, vessel, notes: str, lang: str, proj
 """
         if notes:
             body += f"추가 사항:\n{notes}\n\n"
-        body += "영업일 기준 3일 이내 수령 확인 및 회신 부탁드립니다.\n\n"
-        body += email_signature(default=(
+        body += "영업일 기준 3일 이내 수령 확인 및 회신 부탁드립니다.\n"
+        if not inline_signature:
+            return body
+        body += "\n" + email_signature(default=(
             "감사합니다.\n"
             "K-MARIS Energy & Solutions Co., Ltd.\n"
             "Email: sales@k-maris.com  |  www.k-maris.com\n"
@@ -1004,8 +1010,10 @@ Please confirm the following upon receipt:
 """
     if notes:
         body += f"Additional Notes:\n{notes}\n\n"
-    body += "Kindly acknowledge receipt and confirm within 3 business days.\n\n"
-    body += email_signature(default=(
+    body += "Kindly acknowledge receipt and confirm within 3 business days.\n"
+    if not inline_signature:
+        return body
+    body += "\n" + email_signature(default=(
         "Best regards,\n"
         "K-MARIS Energy & Solutions Co., Ltd.\n"
         "Email: sales@k-maris.com  |  www.k-maris.com\n"
@@ -1184,16 +1192,53 @@ def _resolve_email_template(s, user_id, doc_type: str, lang: str):
     return None
 
 
+# 서명은 문서 종류와 무관하게 담당자당 하나다. 저장할 곳을 새로 만드는 대신 EmailTemplate 의
+# 해석 순서(개인 → 회사 기본 → 내장 기본)를 그대로 쓰려고 doc_type="signature" 행에 얹는다.
+# (설정 화면의 템플릿 편집기는 doc_type="vendor_rfq" 만 다루므로 이 행이 거기 섞이지 않는다.)
+SIGNATURE_DOC_TYPE = "signature"
+
+
+def resolve_signature(s, user_id, lang: str) -> str:
+    """이메일 서명 — 담당자 개인 → 회사 기본(EmailTemplate) → Settings 공용(company.json)
+    → 코드 내장 기본값 순으로 해석한다."""
+    lang = "ko" if lang == "ko" else "en"
+    tpl = _resolve_email_template(s, user_id, SIGNATURE_DOC_TYPE, lang)
+    if tpl and (tpl.body_tpl or "").strip():
+        return tpl.body_tpl.strip()
+    return email_signature(default=_default_signature(lang))
+
+
+def save_signature(s, user_id, lang: str, text: str) -> None:
+    """담당자 개인 서명 upsert. 빈 문자열로 저장하면 기본 서명으로 되돌아간다."""
+    lang = "ko" if lang == "ko" else "en"
+    t = (s.query(EmailTemplate)
+         .filter_by(user_id=user_id, doc_type=SIGNATURE_DOC_TYPE, lang=lang).first())
+    if not t:
+        t = EmailTemplate(user_id=user_id, doc_type=SIGNATURE_DOC_TYPE, lang=lang)
+        s.add(t)
+    t.body_tpl = (text or "").strip()
+    t.subject_tpl = ""
+    t.updated_at = datetime.utcnow()
+    s.commit()
+
+
 def build_vendor_rfq_email(s, user_id, rfq, cust, vessel, vendor, notes, lang,
-                           items=None, rfq_no: str | None = None) -> tuple[str, str]:
-    """(subject, body) 초안 생성 — 담당자 템플릿 우선, 없으면 회사/내장 기본."""
+                           items=None, rfq_no: str | None = None,
+                           inline_signature: bool = True) -> tuple[str, str]:
+    """(subject, body) 초안 생성 — 담당자 템플릿 우선, 없으면 회사/내장 기본.
+
+    inline_signature=False 면 {{signature}} 토큰을 빈칸으로 렌더한다. 발송 화면은 서명을
+    본문과 분리해 별도 입력칸으로 다루므로(본문 뒤에 다시 붙인다) 여기서 넣으면 두 번 들어간다.
+    기본 템플릿은 {{signature}} 가 맨 끝이라 결과 메일은 동일하다."""
     lang = "ko" if lang == "ko" else "en"
     tpl = _resolve_email_template(s, user_id, "vendor_rfq", lang)
     subject_tpl = (tpl.subject_tpl if (tpl and tpl.subject_tpl) else vendor_rfq_default_subject_tpl(lang))
     body_tpl = (tpl.body_tpl if (tpl and tpl.body_tpl) else vendor_rfq_default_body_tpl(lang))
     item_cols = ((tpl.options or {}).get("item_cols") if tpl else None) or DEFAULT_VENDOR_RFQ_ITEM_COLS
     ctx = _vendor_rfq_token_ctx(rfq, cust, vessel, vendor, notes, lang, items, rfq_no, item_cols)
-    return _render_tokens(subject_tpl, ctx), _render_tokens(body_tpl, ctx)
+    if not inline_signature:
+        ctx["signature"] = ""
+    return _render_tokens(subject_tpl, ctx), _render_tokens(body_tpl, ctx).rstrip() + "\n"
 
 
 def _vendor_rfq_email_body(rfq, cust, vessel, vendor, notes: str, lang: str,
@@ -2242,6 +2287,12 @@ class EmailTemplatePreviewReq(BaseModel):
     options: dict | None = None
 
 
+class EmailSignatureSave(BaseModel):
+    """담당자 개인 이메일 서명 저장. 빈 문자열이면 개인 서명 해제(상위 기본값 사용)."""
+    lang: str = "en"
+    signature: str = ""
+
+
 class StageDateUpdate(BaseModel):
     stage: int                 # 1~11
     value: str | None = None   # "YYYY-MM-DDTHH:MM" (KST) 또는 빈값/None → 해제
@@ -2473,6 +2524,10 @@ __all__ = [
     "_vendor_rfq_email_body",
     "EmailTemplate",
     "EmailTemplateSave",
+    "EmailSignatureSave",
+    "SIGNATURE_DOC_TYPE",
+    "resolve_signature",
+    "save_signature",
     "EmailTemplatePreviewReq",
     "build_vendor_rfq_email",
     "preview_vendor_rfq_template",

@@ -1059,9 +1059,8 @@ function VendorPoDetailModal({
             formats={["pdf", "xlsx"]}
             downloadUrl={(f) => (f === "xlsx" ? vendorPoXlsxUrl(id) : vendorPoPdfUrl(id))}
             downloadName={(f) => `${d.po_no || "PurchaseOrder"}.${f}`}
-            onPreview={(lang, note) => previewVendorPo(id, lang, note)}
-            onSend={({ to, subject, body, format, cc, from }) => sendVendorPo(id, to, subject, body, format, cc, from)}
-            showNote
+            onPreview={(lang) => previewVendorPo(id, lang)}
+            onSend={(p) => sendVendorPo({ ...p, poId: id })}
             disabled={!canEditThis}
             disabledReason={!canEditThis ? editBlockReason("po", d?.assignee_id) : "Generated from the last saved version — save your edits first."}
             onSent={onChanged}
@@ -1651,6 +1650,7 @@ function VendorPoSend({
   const [poId, setPoId] = useState<number | "">(options.purchase_orders[0]?.id ?? "");
   const [lang, setLang] = useState<"en" | "ko">("en");
   const [notes, setNotes] = useState("");
+  const [signature, setSignature] = useState("");
   const [preview, setPreview] = useState<VendorPoPreview | null>(null);
   const [to, setTo] = useState("");
   const [subject, setSubject] = useState("");
@@ -1667,11 +1667,13 @@ function VendorPoSend({
     setMsg(null);
     setErr(null);
     try {
-      const p = await previewVendorPo(poId, lang, notes);
+      // notes 는 더 이상 본문 템플릿에 짜넣지 않고 발송 시 본문 뒤에 붙는다(단계 이메일과 동일 규칙).
+      const p = await previewVendorPo(poId, lang);
       setPreview(p);
       setTo(p.to);
       setSubject(p.subject);
       setBody(p.body);
+      setSignature(p.signature ?? "");
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Preview generation failed");
     } finally {
@@ -1685,7 +1687,7 @@ function VendorPoSend({
     setMsg(null);
     setErr(null);
     try {
-      const r = await sendVendorPo(poId, to, subject, body);
+      const r = await sendVendorPo({ poId, to, subject, body, notes, signature });
       setMsg(`Email sent: ${r.sent_date}`);
       setPreview(null);
       onChanged();

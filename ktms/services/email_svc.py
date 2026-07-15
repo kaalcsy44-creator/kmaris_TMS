@@ -98,7 +98,10 @@ def quotation_email_subject(doc_no: str, lang: str = "en") -> str:
     return f"[K-MARIS] Quotation {doc_no}"
 
 
-def quotation_email_body(customer_name: str, doc_no: str, tracking_url: str = "", lang: str = "en") -> str:
+def quotation_email_body(customer_name: str, doc_no: str, tracking_url: str = "",
+                         lang: str = "en", inline_signature: bool = True) -> str:
+    """견적서 메일 본문. inline_signature=False 면 서명을 붙이지 않는다 — 발송 화면이
+    서명을 별도 입력칸으로 다루고 발송 시 본문 뒤에 다시 합치기 때문(중복 방지)."""
     if lang == "kr":
         body = f"""{customer_name} 담당자님께,
 
@@ -111,6 +114,8 @@ def quotation_email_body(customer_name: str, doc_no: str, tracking_url: str = ""
 아래 링크를 통해 진행 상황을 확인하실 수 있습니다:
 {tracking_url}
 """
+        if not inline_signature:
+            return body
         body += "\n" + email_signature(default=(
             "감사합니다.\n\n"
             "케이마리스 에너지 앤 솔루션 주식회사\n"
@@ -130,6 +135,8 @@ Should you have any questions or require further clarification, please do not he
 You can track the status of your inquiry at any time:
 {tracking_url}
 """
+    if not inline_signature:
+        return body
     body += "\n" + email_signature(default=(
         "Best regards,\n"
         "K-MARIS Energy & Solutions Co., Ltd.\n"
