@@ -405,6 +405,21 @@ function ItemsSection({
       ) : (
         <div className="proj-ov-items-wrap">
           <table className="proj-ov-items proj-ov-grid">
+            {/* 열 폭 고정 — 식별 4열이 25%, Quote·P/O·C/I 가 각 25%. 위 Stages 4칸과
+                경계를 같은 자리(25/50/75%)에 두려는 것. 둘 중 하나만 바꾸면 어긋난다. */}
+            <colgroup>
+              <col className="ovc-n" />
+              <col className="ovc-part" />
+              <col className="ovc-desc" />
+              <col className="ovc-qty" />
+              {["q", "p", "c"].map((g) => (
+                <Fragment key={g}>
+                  <col className="ovc-pur" />
+                  <col className="ovc-mg" />
+                  <col className="ovc-sales" />
+                </Fragment>
+              ))}
+            </colgroup>
             <thead>
               <tr>
                 <th className="ov-it-n" rowSpan={2}>
