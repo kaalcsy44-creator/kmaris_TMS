@@ -1,5 +1,6 @@
 "use client";
 
+import { Fragment } from "react";
 import Link from "next/link";
 import {
   fetchPipeline,
@@ -14,13 +15,9 @@ import { useCachedData } from "@/lib/useCachedData";
 import { sortByDocNo } from "@/lib/sort";
 import { resolveSteps, fmtStageDate, buildStageChain, type StageChainItem } from "@/lib/deal";
 import { buildActivities, md, splitProjectNo, type Activity } from "@/lib/activity";
-import type { PipelineRow, PoWorkOptions, CustomerQuotationDetail } from "@/lib/types";
+import type { PipelineRow, PoWorkOptions, RfqItem } from "@/lib/types";
 import { INFO_FIELDS } from "@/components/common/dealFields";
-import {
-  DualCurrencyAmount,
-  fxRateText,
-  USD_KRW_RATE,
-} from "@/components/common/itemTable";
+import { convertCurrency, USD_KRW_RATE } from "@/components/common/itemTable";
 import ActivityDesc from "@/components/common/ActivityDesc";
 import WorkTypeBadge from "@/components/WorkTypeBadge";
 
@@ -34,19 +31,12 @@ import WorkTypeBadge from "@/components/WorkTypeBadge";
 export default function ProjectOverviewScreen({ rfqId }: { rfqId: number }) {
   // 목록에서 넘어오면 이미 캐시에 있어 즉시 그려진다(같은 "pipeline" 키를 공유).
   const { data: pipeline, error: pipeErr } = useCachedData("pipeline", () => fetchPipeline());
-  // 품목은 파이프라인 행에 없어(개수만) RFQ 상세를 따로 받는다.
-  // 단, RFQ 품목은 "고객이 요청한 줄"이라 단가가 없다(전부 null). 값이 매겨진 품목은
-  // 견적(Quotation)에 있으므로, 견적이 있으면 그쪽을 우선 쓴다. ↓ quoted
+  // 견적 전(1~3단계) 프로젝트는 고객이 요청한 RFQ 품목만 있다 — 값이 매겨지기 전 목록.
   const { data: detail } = useCachedData(`rfq:${rfqId}`, () => fetchRfqDetail(rfqId));
-  // 견적 목록에서 이 프로젝트의 견적을 찾는다(백엔드가 id 내림차순 → 첫 건이 최신).
-  const { data: qtnList } = useCachedData("quotations:overview", () => fetchQuotationOverview());
-  const qtnId = qtnList?.rows.find((q) => q.rfq_id === rfqId)?.id ?? 0;
-  const { data: quote } = useCachedData(`quotation:${qtnId}`, () =>
-    qtnId ? fetchCustomerQuotationDetail(qtnId) : Promise.resolve(null)
-  );
-  // 고객 P/O — 선박이 여러 척이면 P/O 도 선박별로 나뉜다(견적 1건 → P/O N건).
-  // ProgressScreen 과 같은 캐시 키를 써서 중복 호출하지 않는다.
+  // 고객 P/O·Vendor P/O·견적을 한 번에 받는다. ProgressScreen 과 같은 캐시 키.
   const { data: poOpts } = useCachedData("po:work-options", fetchPoWorkOptions);
+  // 이 프로젝트에 견적만 있고 아직 P/O 가 없을 때 쓸 견적 id(가장 최근 것).
+  const { data: qtnList } = useCachedData("quotations:overview", () => fetchQuotationOverview());
 
   if (pipeErr && !pipeline) return <div className="state error">API error: {pipeErr.message}</div>;
   if (!pipeline) return <div className="state">Loading…</div>;
@@ -68,110 +58,76 @@ export default function ProjectOverviewScreen({ rfqId }: { rfqId: number }) {
     );
   }
 
-  // 견적이 있으면 값이 매겨진 견적 품목을, 아직 없으면 RFQ 요청 품목(단가 없음)을 보여준다.
-  const source: ItemSource | null = quote
-    ? {
-        kind: "quote",
-        label: quote.qtn_no || "Quotation",
-        items: quote.items,
-        currency: quote.currency || "USD",
-        // 원가 통화는 판매 통화와 다를 수 있다(벤더 견적 통화 그대로). 미지정이면 판매 통화.
-        costCurrency: quote.cost_currency || quote.currency || "USD",
-        fxRate: quote.fx_rate ?? null,
-        discountPct: quote.discount_pct || 0,
-        total: quote.amount ?? null,
-      }
-    : qtnId
-      ? null // 견적이 있는데 아직 로딩 중 → 표만 늦게 채운다
-      : detail
-        ? {
-            kind: "rfq",
-            label: "RFQ request",
-            items: detail.items,
-            currency: "USD",
-            costCurrency: "USD",
-            fxRate: null,
-            discountPct: 0,
-            total: null,
-          }
-        : null;
-
-  // 이 프로젝트의 고객 P/O — K-Maris P/O 번호 오름차순(ProgressScreen 과 동일 정렬).
+  // 이 프로젝트의 고객 P/O — 선박별로 나뉜다. P/O 번호 오름차순(ProgressScreen 과 동일 정렬).
   const orders = sortByDocNo(
     (poOpts?.orders ?? []).filter((o) => o.rfq_id === rfqId),
     (o) => o.po_no,
     (o) => o.id
   );
+  const purchaseOrders = poOpts?.purchase_orders ?? [];
+  // P/O 가 아직 없으면 견적(있으면)만으로 한 그룹을 만든다.
+  const quoteOnlyId = orders.length === 0 ? (qtnList?.rows.find((q) => q.rfq_id === rfqId)?.id ?? 0) : 0;
 
   return (
     <Overview
       row={row}
       steps={pipeline.steps}
-      source={source}
-      quote={quote ?? null}
       orders={orders}
+      purchaseOrders={purchaseOrders}
+      quoteOnlyId={quoteOnlyId}
+      rfqItems={detail?.items ?? null}
     />
   );
 }
 
 type ProjectOrder = PoWorkOptions["orders"][number];
+type VendorPo = PoWorkOptions["purchase_orders"][number];
+type StageItem = { qty?: number; unit_price?: number | null; amount?: number | null };
 
-/** 문서 품목 합계 — amount 가 있으면 그대로, 없으면 단가×수량으로 보정. */
-function sumItems(
-  items: { qty?: number; unit_price?: number | null; amount?: number | null }[]
-): number {
-  return items.reduce(
-    (s, it) =>
-      s +
-      (it.amount != null ? Number(it.amount) : Number(it.unit_price || 0) * Number(it.qty || 1)),
-    0
-  );
+/** 품목 1줄의 금액 — amount 가 있으면 그대로, 없으면 단가×수량으로 보정. */
+function lineAmount(it: StageItem | undefined): number | null {
+  if (!it) return null;
+  if (it.amount != null) return Number(it.amount);
+  if (it.unit_price == null) return null;
+  return Number(it.unit_price) * Number(it.qty || 1);
 }
 
-/** 품목 표의 출처 — 견적(값 있음) 또는 RFQ 요청(값 없음). 화면에 어느 쪽인지 밝힌다. */
-type ItemSource = {
-  kind: "quote" | "rfq";
-  label: string;
-  items: OverviewItem[];
-  /** 판매(견적) 통화. */
-  currency: string;
-  /** 원가 통화 — 벤더 견적 통화라 판매 통화와 다를 수 있다. */
-  costCurrency: string;
-  /** 견적에 저장된 적용 환율(1 통화 = ? KRW). 없으면 기본 환율로 환산. */
-  fxRate: number | null;
-  discountPct: number;
-  /** 견적 총액(할인 반영). 품목 합계와 다를 수 있어 서버 값을 그대로 쓴다. */
-  total: number | null;
-};
+function sumLines(items: StageItem[]): number | null {
+  const vals = items.map(lineAmount).filter((v): v is number => v != null);
+  return vals.length ? vals.reduce((a, b) => a + b, 0) : null;
+}
 
-// RfqItem 과 CustomerQuoteItem 이 공통으로 갖는 표시용 필드.
-// cost_price·margin_pct 는 견적 품목에만 있다(RFQ 요청 품목은 값이 없음).
-type OverviewItem = {
-  part_no: string;
-  description: string;
-  serial_no?: string;
-  qty: number;
-  unit: string;
-  cost_price?: number | null;
-  margin_pct?: number | null;
-  unit_price: number | null;
-  amount: number | null;
-  remark?: string;
-};
+/**
+ * 마진율(%) — (매출 − 매입) / 매출. 통화가 다르면 매입을 매출 통화로 환산해 비교한다.
+ * 매출이 0이거나 한쪽이 없으면 계산하지 않는다(0% 로 보이면 오해되므로).
+ */
+function marginPct(
+  sales: number | null,
+  purchase: number | null,
+  salesCur: string,
+  purCur: string,
+  rate: number
+): number | null {
+  if (sales == null || purchase == null || !sales) return null;
+  const p = convertCurrency(purchase, purCur, salesCur, rate);
+  return Math.round(((sales - p) / sales) * 1000) / 10;
+}
 
 function Overview({
   row,
   steps,
-  source,
-  quote,
   orders,
+  purchaseOrders,
+  quoteOnlyId,
+  rfqItems,
 }: {
   row: PipelineRow;
   steps: string[];
-  // null = 아직 로딩 중(품목 표만 늦게 채워진다). 나머지 화면은 먼저 보여준다.
-  source: ItemSource | null;
-  quote: CustomerQuotationDetail | null;
   orders: ProjectOrder[];
+  purchaseOrders: VendorPo[];
+  /** P/O 가 아직 없을 때 보여줄 견적 id. 0 이면 없음. */
+  quoteOnlyId: number;
+  rfqItems: RfqItem[] | null;
 }) {
   const rSteps = resolveSteps(steps, row.work_type);
   const chain = buildStageChain(row, rSteps);
@@ -240,24 +196,12 @@ function Overview({
         <StageTimeline row={row} chain={chain} acts={acts} />
       </div>
 
-      <AmountHistory quote={quote} orders={orders} rate={source?.fxRate ?? null} />
-
-      {/* 품목 — 내부 공유용이므로 매입(원가)·매출·마진을 모두 노출한다. */}
-      <section className="proj-ov-sec">
-        <h2 className="proj-ov-h">
-          Items{source ? <span className="proj-ov-cnt">{source.items.length}</span> : null}
-          {source ? (
-            <span className="proj-ov-src">
-              {source.kind === "quote"
-                ? `from ${source.label} · sales ${source.currency}${
-                    source.costCurrency !== source.currency ? ` · cost ${source.costCurrency}` : ""
-                  } · ${fxRateText(source.fxRate ?? undefined)}`
-                : "from RFQ request — not priced until a quotation is created"}
-            </span>
-          ) : null}
-        </h2>
-        <ItemsTable source={source} />
-      </section>
+      <ItemsSection
+        orders={orders}
+        purchaseOrders={purchaseOrders}
+        quoteOnlyId={quoteOnlyId}
+        rfqItems={rfqItems}
+      />
     </div>
   );
 }
@@ -357,127 +301,330 @@ function StageTimeline({
 }
 
 /**
- * 금액 이력 — Quote → P/O → C/I.
+ * 품목 — 선박(=고객 P/O)별로 묶고, 한 줄 안에서 Quote → P/O → C/I 를 좌→우로 잇는다.
+ * 각 단계마다 매입·마진·매출을 나란히 둬서 "견적에선 이랬는데 발주·송장에선 이렇게 됐다"를
+ * 한 줄로 읽게 한다. 세 단계 금액은 일부만 발주되거나 선적 수량이 바뀌면 서로 달라진다.
  *
- * 세 단계의 금액은 서로 다를 수 있다: 견적 뒤 일부만 발주되거나, 선박이 여러 척이면
- * 견적 1건이 선박별 P/O 여러 건으로 갈리고, 선적 시 수량이 바뀌면 C/I 가 또 달라진다.
- * 그래서 합계 하나만 보여주면 "왜 견적이랑 다르지" 가 남는다 — 단계별로 나란히 둔다.
+ * 단계 간 품목 연결은 배열 순서(index)로 맞춘다 — Part No. 가 비어 있는 건이 많아
+ * 번호로는 이을 수 없다. 따라서 각 문서의 품목 순서가 서로 같다는 전제가 깔린다.
  */
-function AmountHistory({
-  quote,
+function ItemsSection({
   orders,
-  rate,
+  purchaseOrders,
+  quoteOnlyId,
+  rfqItems,
 }: {
-  quote: CustomerQuotationDetail | null;
   orders: ProjectOrder[];
-  /** 견적에 저장된 적용 환율. 없으면 기본 환율. */
-  rate: number | null;
+  purchaseOrders: VendorPo[];
+  quoteOnlyId: number;
+  rfqItems: RfqItem[] | null;
 }) {
-  if (!quote && orders.length === 0) return null;
-  const eff = rate && rate > 0 ? rate : USD_KRW_RATE;
+  const hasGroups = orders.length > 0 || quoteOnlyId > 0;
   return (
     <section className="proj-ov-sec">
       <h2 className="proj-ov-h">
-        Amount history
+        Items
         <span className="proj-ov-src">
-          Quote → P/O → C/I · {fxRateText(eff)}
-          {rate && rate > 0 ? " (from the quotation)" : " (default rate — none saved on the quotation)"}
+          {hasGroups
+            ? "by vessel · Quote → P/O → C/I · purchase = vendor P/O"
+            : "from RFQ request — not priced until a quotation is created"}
         </span>
       </h2>
-      <div className="proj-ov-items-wrap">
-        <table className="proj-ov-items proj-ov-hist">
-          <thead>
-            <tr>
-              <th className="ov-hs-stage">Stage</th>
-              <th>Vessel</th>
-              <th>Doc No.</th>
-              <th className="ov-hs-date">Date</th>
-              <th className="num">Amount</th>
-            </tr>
-          </thead>
-          <tbody>
-            {quote ? (
-              <tr className="ov-hs-quote">
-                <td className="ov-hs-stage">Quote</td>
-                <td className="muted">— all vessels —</td>
-                <td className="ov-it-part">{quote.qtn_no || "—"}</td>
-                <td className="ov-hs-date">{quote.sent_date || quote.date || "—"}</td>
-                <td className="num">
-                  <DualCurrencyAmount
-                    value={quote.amount}
-                    currency={quote.currency || "USD"}
-                    rate={eff}
-                  />
-                </td>
+      {!hasGroups ? (
+        <RfqItemsTable items={rfqItems} />
+      ) : (
+        <div className="proj-ov-items-wrap">
+          <table className="proj-ov-items proj-ov-grid">
+            <thead>
+              <tr>
+                <th className="ov-it-n" rowSpan={2}>
+                  #
+                </th>
+                <th rowSpan={2}>Description</th>
+                <th className="ov-it-qty" rowSpan={2}>
+                  Qty
+                </th>
+                <th className="num ov-gh q" colSpan={3}>
+                  Quote
+                </th>
+                <th className="num ov-gh p" colSpan={3}>
+                  P/O
+                </th>
+                <th className="num ov-gh c" colSpan={3}>
+                  C/I
+                </th>
               </tr>
-            ) : null}
-            {orders.map((o) => (
-              <OrderAmountRows key={o.id} order={o} rate={eff} />
-            ))}
-          </tbody>
-        </table>
-      </div>
+              <tr>
+                {["q", "p", "c"].map((g) => (
+                  <Fragment key={g}>
+                    <th className={`num ov-sub ${g}`}>Purchase</th>
+                    <th className={`num ov-sub ${g}`}>Margin</th>
+                    <th className={`num ov-sub ${g}`}>Sales</th>
+                  </Fragment>
+                ))}
+              </tr>
+            </thead>
+            {orders.length > 0 ? (
+              orders.map((o) => (
+                <OrderItemGroup
+                  key={o.id}
+                  order={o}
+                  vendorPos={purchaseOrders.filter((p) => p.order_id === o.id)}
+                />
+              ))
+            ) : (
+              <QuoteOnlyGroup quoteId={quoteOnlyId} />
+            )}
+          </table>
+        </div>
+      )}
     </section>
   );
 }
 
-/** 한 고객 P/O 의 금액과, 그 P/O 로 발행된 C/I 금액. 선박별 P/O 이므로 행이 한 쌍씩 늘어난다. */
-function OrderAmountRows({ order, rate }: { order: ProjectOrder; rate: number }) {
-  const { data: doc } = useCachedData(`documents:${order.id}`, () => fetchDocumentDetail(order.id));
-  const ci = doc?.ci ?? null;
+/** 통화 + 금액 한 줄(조밀). 값이 없으면 —. 0 으로 보이면 "무료"로 오해되므로 구분한다. */
+function Money({ value, currency }: { value: number | null | undefined; currency: string }) {
+  if (value == null || !Number.isFinite(value)) return <span className="muted">—</span>;
   return (
-    <>
-      <tr className="ov-hs-po">
-        <td className="ov-hs-stage">P/O</td>
-        <td>{order.vessel || <span className="muted">—</span>}</td>
-        <td className="ov-it-part">{order.po_no || "—"}</td>
-        <td className="ov-hs-date">{order.date || "—"}</td>
-        <td className="num">
-          <DualCurrencyAmount
-            value={sumItems(order.items)}
-            currency={order.currency || "USD"}
-            rate={rate}
-          />
-        </td>
-      </tr>
-      <tr className="ov-hs-ci">
-        <td className="ov-hs-stage">C/I</td>
-        <td>{order.vessel || <span className="muted">—</span>}</td>
-        <td className="ov-it-part">{ci?.ci_no || <span className="muted">not issued</span>}</td>
-        <td className="ov-hs-date">{ci?.date || "—"}</td>
-        <td className="num">
-          {ci ? (
-            <DualCurrencyAmount
-              value={sumItems(ci.items)}
-              currency={ci.currency || order.currency || "USD"}
-              rate={rate}
-            />
-          ) : (
-            <span className="muted">—</span>
-          )}
-        </td>
-      </tr>
-    </>
+    <span className="ov-m">
+      <em>{currency}</em> {Math.round(value).toLocaleString()}
+    </span>
   );
 }
 
-function ItemsTable({ source }: { source: ItemSource | null }) {
-  if (source === null) return <div className="proj-ov-empty">Loading items…</div>;
-  if (source.items.length === 0) return <div className="proj-ov-empty">No items registered.</div>;
-  const { currency, costCurrency, fxRate } = source;
-  // 견적에 저장된 환율이 있으면 그 환율로 환산해 견적서와 숫자가 어긋나지 않게 한다.
-  const rate = fxRate && fxRate > 0 ? fxRate : undefined;
-  // 값이 없는(RFQ 요청) 품목은 0 으로 보이면 "무료"로 오해되므로 — 로 비운다.
-  const money = (v: number | null | undefined, cur: string) =>
-    v == null ? <span className="muted">—</span> : (
-      <DualCurrencyAmount value={v} currency={cur} rate={rate} />
-    );
-  // 매입 합계는 원가 통화 기준(판매 통화와 다를 수 있어 매출 총액과 직접 빼지 않는다).
-  const costTotal = source.items.reduce(
-    (s, it) => s + Number(it.cost_price || 0) * Number(it.qty || 1),
-    0
+function Pct({ value }: { value: number | null }) {
+  if (value == null) return <span className="muted">—</span>;
+  return <span className="ov-pct">{value}%</span>;
+}
+
+/** 한 선박(=고객 P/O) 묶음 — 그 P/O 의 품목을 기준 행으로 삼고 견적·C/I 를 순서로 맞춘다. */
+function OrderItemGroup({ order, vendorPos }: { order: ProjectOrder; vendorPos: VendorPo[] }) {
+  // 이 오더가 나온 견적(없으면 quotation_id = 0 → Quote 열 전체가 —).
+  const { data: quote } = useCachedData(`quotation:${order.quotation_id}`, () =>
+    order.quotation_id ? fetchCustomerQuotationDetail(order.quotation_id) : Promise.resolve(null)
   );
-  const hasCost = source.items.some((it) => it.cost_price != null);
+  const { data: doc } = useCachedData(`documents:${order.id}`, () => fetchDocumentDetail(order.id));
+  const ci = doc?.ci ?? null;
+
+  // 매입 = 실제 Vendor P/O. 한 오더에 발주서가 여러 장이면 P/O 번호 순으로 이어 붙여 순서를 맞춘다.
+  const vpos = sortByDocNo(vendorPos, (p) => p.po_no, (p) => p.id);
+  const vpoItems = vpos.flatMap((p) => p.items);
+  const vpoCur = vpos[0]?.currency || order.currency || "USD";
+  const vpoNos = vpos.map((p) => p.po_no).filter(Boolean).join(" · ");
+
+  const qCur = quote?.currency || order.currency || "USD";
+  const qCostCur = quote?.cost_currency || qCur;
+  const oCur = order.currency || "USD";
+  const ciCur = ci?.currency || oCur;
+  // 환산 기준은 견적에 저장된 환율(없으면 기본값). 통화가 다른 단계 간 마진 계산에만 쓰인다.
+  const rate = quote?.fx_rate && quote.fx_rate > 0 ? quote.fx_rate : USD_KRW_RATE;
+
+  const rows = order.items.length ? order.items : (quote?.items ?? []);
+
+  return (
+    <tbody className="ov-grp">
+      <tr className="ov-grp-head">
+        <td colSpan={12}>
+          <span className="ov-grp-vessel">{order.vessel || "— no vessel —"}</span>
+          <span className="ov-grp-docs">
+            <b className="q">Quote</b> {quote?.qtn_no || <i className="muted">none</i>}
+            <span className="sep">→</span>
+            <b className="p">P/O</b> {order.po_no || "—"}
+            {vpoNos ? <span className="ov-grp-vpo">(vendor {vpoNos})</span> : null}
+            <span className="sep">→</span>
+            <b className="c">C/I</b> {ci?.ci_no ? ci.ci_no : <i className="muted">not issued</i>}
+          </span>
+        </td>
+      </tr>
+      {rows.map((it, i) => {
+        const qIt = quote?.items[i];
+        const qty = Number(it.qty || 1);
+        const qPur = qIt?.cost_price == null ? null : Number(qIt.cost_price) * Number(qIt.qty || 1);
+        const qSales = lineAmount(qIt);
+        const pPur = lineAmount(vpoItems[i]);
+        const pSales = lineAmount(it);
+        const cSales = lineAmount(ci?.items[i]);
+        return (
+          <tr key={i}>
+            <td className="ov-it-n">{i + 1}</td>
+            <td>{it.description || qIt?.description || "—"}</td>
+            <td className="ov-it-qty">
+              {qty}
+              {it.unit ? ` ${it.unit}` : ""}
+            </td>
+            <td className="num">
+              <Money value={qPur} currency={qCostCur} />
+            </td>
+            <td className="num">
+              <Pct value={qIt?.margin_pct ?? null} />
+            </td>
+            <td className="num">
+              <Money value={qSales} currency={qCur} />
+            </td>
+            <td className="num">
+              <Money value={pPur} currency={vpoCur} />
+            </td>
+            <td className="num">
+              <Pct value={marginPct(pSales, pPur, oCur, vpoCur, rate)} />
+            </td>
+            <td className="num">
+              <Money value={pSales} currency={oCur} />
+            </td>
+            <td className="num">
+              {/* C/I 단계 매입은 별도 문서가 없어 실제 발주(Vendor P/O)를 그대로 잇는다. */}
+              <Money value={cSales == null ? null : pPur} currency={vpoCur} />
+            </td>
+            <td className="num">
+              <Pct value={cSales == null ? null : marginPct(cSales, pPur, ciCur, vpoCur, rate)} />
+            </td>
+            <td className="num">
+              <Money value={cSales} currency={ciCur} />
+            </td>
+          </tr>
+        );
+      })}
+      <GroupTotal
+        quotePur={
+          quote ? sumLines(quote.items.map((x) => ({ amount: (x.cost_price ?? 0) * (x.qty || 1) }))) : null
+        }
+        quoteSales={quote ? (quote.amount ?? sumLines(quote.items)) : null}
+        poPur={sumLines(vpoItems)}
+        poSales={sumLines(order.items)}
+        ciSales={ci ? sumLines(ci.items) : null}
+        cur={{ qCostCur, qCur, vpoCur, oCur, ciCur }}
+        rate={rate}
+      />
+    </tbody>
+  );
+}
+
+/** 묶음 합계 행 — 각 단계의 매입·마진·매출 총계. 마진은 총계끼리 다시 계산한다. */
+function GroupTotal({
+  quotePur,
+  quoteSales,
+  poPur,
+  poSales,
+  ciSales,
+  cur,
+  rate,
+}: {
+  quotePur: number | null;
+  quoteSales: number | null;
+  poPur: number | null;
+  poSales: number | null;
+  ciSales: number | null;
+  cur: { qCostCur: string; qCur: string; vpoCur: string; oCur: string; ciCur: string };
+  rate: number;
+}) {
+  return (
+    <tr className="ov-grp-total">
+      <td colSpan={3} className="ov-it-totlabel">
+        Total
+      </td>
+      <td className="num">
+        <Money value={quotePur} currency={cur.qCostCur} />
+      </td>
+      <td className="num">
+        <Pct value={marginPct(quoteSales, quotePur, cur.qCur, cur.qCostCur, rate)} />
+      </td>
+      <td className="num ov-it-total">
+        <Money value={quoteSales} currency={cur.qCur} />
+      </td>
+      <td className="num">
+        <Money value={poPur} currency={cur.vpoCur} />
+      </td>
+      <td className="num">
+        <Pct value={marginPct(poSales, poPur, cur.oCur, cur.vpoCur, rate)} />
+      </td>
+      <td className="num ov-it-total">
+        <Money value={poSales} currency={cur.oCur} />
+      </td>
+      <td className="num">
+        <Money value={ciSales == null ? null : poPur} currency={cur.vpoCur} />
+      </td>
+      <td className="num">
+        <Pct value={ciSales == null ? null : marginPct(ciSales, poPur, cur.ciCur, cur.vpoCur, rate)} />
+      </td>
+      <td className="num ov-it-total">
+        <Money value={ciSales} currency={cur.ciCur} />
+      </td>
+    </tr>
+  );
+}
+
+/** P/O 전(4단계 이하) — 견적만 있는 프로젝트. Quote 열만 채우고 P/O·C/I 는 비운다. */
+function QuoteOnlyGroup({ quoteId }: { quoteId: number }) {
+  const { data: quote } = useCachedData(`quotation:${quoteId}`, () =>
+    fetchCustomerQuotationDetail(quoteId)
+  );
+  if (!quote) {
+    return (
+      <tbody>
+        <tr>
+          <td colSpan={12} className="proj-ov-empty">
+            Loading items…
+          </td>
+        </tr>
+      </tbody>
+    );
+  }
+  const qCur = quote.currency || "USD";
+  const qCostCur = quote.cost_currency || qCur;
+  const rate = quote.fx_rate && quote.fx_rate > 0 ? quote.fx_rate : USD_KRW_RATE;
+  return (
+    <tbody className="ov-grp">
+      <tr className="ov-grp-head">
+        <td colSpan={12}>
+          <span className="ov-grp-vessel">{quote.vessel || "— no vessel —"}</span>
+          <span className="ov-grp-docs">
+            <b className="q">Quote</b> {quote.qtn_no || "—"}
+            <span className="sep">→</span>
+            <i className="muted">no P/O yet</i>
+          </span>
+        </td>
+      </tr>
+      {quote.items.map((it, i) => (
+        <tr key={i}>
+          <td className="ov-it-n">{i + 1}</td>
+          <td>{it.description || "—"}</td>
+          <td className="ov-it-qty">
+            {it.qty}
+            {it.unit ? ` ${it.unit}` : ""}
+          </td>
+          <td className="num">
+            <Money
+              value={it.cost_price == null ? null : Number(it.cost_price) * Number(it.qty || 1)}
+              currency={qCostCur}
+            />
+          </td>
+          <td className="num">
+            <Pct value={it.margin_pct ?? null} />
+          </td>
+          <td className="num">
+            <Money value={lineAmount(it)} currency={qCur} />
+          </td>
+          <td className="num" colSpan={6}>
+            <span className="muted">—</span>
+          </td>
+        </tr>
+      ))}
+      <GroupTotal
+        quotePur={sumLines(quote.items.map((x) => ({ amount: (x.cost_price ?? 0) * (x.qty || 1) })))}
+        quoteSales={quote.amount ?? sumLines(quote.items)}
+        poPur={null}
+        poSales={null}
+        ciSales={null}
+        cur={{ qCostCur, qCur, vpoCur: qCur, oCur: qCur, ciCur: qCur }}
+        rate={rate}
+      />
+    </tbody>
+  );
+}
+
+/** 견적 전 — 고객이 요청한 RFQ 품목만. 단가가 없으므로 수량까지만 보여준다. */
+function RfqItemsTable({ items }: { items: RfqItem[] | null }) {
+  if (items === null) return <div className="proj-ov-empty">Loading items…</div>;
+  if (items.length === 0) return <div className="proj-ov-empty">No items registered.</div>;
   return (
     <div className="proj-ov-items-wrap">
       <table className="proj-ov-items">
@@ -487,66 +634,23 @@ function ItemsTable({ source }: { source: ItemSource | null }) {
             <th>Part No.</th>
             <th>Description</th>
             <th className="ov-it-qty">Qty</th>
-            <th className="num">Purchase / unit</th>
-            <th className="num">Purchase</th>
-            <th className="num ov-it-mg">Margin</th>
-            <th className="num">Sales / unit</th>
-            <th className="num">Sales</th>
             <th>Remark</th>
           </tr>
         </thead>
         <tbody>
-          {source.items.map((it, i) => {
-            const qty = Number(it.qty || 1);
-            const cost = it.cost_price;
-            return (
-              <tr key={i}>
-                <td className="ov-it-n">{i + 1}</td>
-                <td className="ov-it-part">{it.part_no || "—"}</td>
-                <td>
-                  {it.description || "—"}
-                  {it.serial_no ? <span className="ov-it-serial"> · S/N {it.serial_no}</span> : null}
-                </td>
-                <td className="ov-it-qty">
-                  {it.qty}
-                  {it.unit ? ` ${it.unit}` : ""}
-                </td>
-                <td className="num">{money(cost, costCurrency)}</td>
-                <td className="num">{money(cost == null ? null : cost * qty, costCurrency)}</td>
-                <td className="num ov-it-mg">
-                  {it.margin_pct == null ? <span className="muted">—</span> : `${it.margin_pct}%`}
-                </td>
-                <td className="num">{money(it.unit_price, currency)}</td>
-                <td className="num">{money(it.amount, currency)}</td>
-                <td className="ov-it-remark">{it.remark || ""}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-        {source.total != null ? (
-          <tfoot>
-            <tr>
-              <td colSpan={4} className="ov-it-totlabel">
-                Total
-                {source.discountPct ? ` (sales after ${source.discountPct}% discount)` : ""}
+          {items.map((it, i) => (
+            <tr key={i}>
+              <td className="ov-it-n">{i + 1}</td>
+              <td className="ov-it-part">{it.part_no || "—"}</td>
+              <td>{it.description || "—"}</td>
+              <td className="ov-it-qty">
+                {it.qty}
+                {it.unit ? ` ${it.unit}` : ""}
               </td>
-              <td />
-              <td className="num ov-it-total">
-                {hasCost ? (
-                  <DualCurrencyAmount value={costTotal} currency={costCurrency} rate={rate} />
-                ) : (
-                  <span className="muted">—</span>
-                )}
-              </td>
-              <td />
-              <td />
-              <td className="num ov-it-total">
-                <DualCurrencyAmount value={source.total} currency={currency} rate={rate} />
-              </td>
-              <td />
+              <td className="ov-it-remark">{it.remark || ""}</td>
             </tr>
-          </tfoot>
-        ) : null}
+          ))}
+        </tbody>
       </table>
     </div>
   );

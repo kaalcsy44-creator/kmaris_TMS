@@ -8238,17 +8238,46 @@ a.ov-tl-stage:hover { background: var(--hover); }
 .proj-ov-items .ov-it-mg { font-weight: 700; color: #11824a; }
 .proj-ov-items .dual-line.converted { font-size: 10px; }
 
-/* 금액 이력 — Quote → P/O → C/I. 단계 배지로 세 줄을 구분하고, P/O·C/I 는 선박별로 쌍을 이룬다. */
-.proj-ov-hist .ov-hs-stage { width: 62px; }
-.proj-ov-hist .ov-hs-date { width: 96px; white-space: nowrap; color: var(--muted); }
-.proj-ov-hist tbody td.ov-hs-stage { font-size: 10.5px; font-weight: 800; letter-spacing: 0.03em; }
-.proj-ov-hist tbody tr.ov-hs-quote td.ov-hs-stage { color: var(--blue); }
-.proj-ov-hist tbody tr.ov-hs-po td.ov-hs-stage { color: #7c3aed; }
-.proj-ov-hist tbody tr.ov-hs-ci td.ov-hs-stage { color: #11824a; }
-/* 견적 행 아래로 P/O·C/I 묶음이 이어지므로, 새 P/O 가 시작되는 곳에 구분선을 준다. */
-.proj-ov-hist tbody tr.ov-hs-po td { border-top: 2px solid var(--line-strong); }
-.proj-ov-hist tbody tr:nth-child(even) td { background: transparent; }
-.proj-ov-hist tbody tr.ov-hs-ci td { background: var(--zebra); }
+/* ── 품목 그리드 — 선박(P/O)별 묶음 × Quote→P/O→C/I 3단계 ─────────────────
+   금액 열이 9개라 조밀해야 한다: 폰트를 줄이고 통화기호를 작게, 줄바꿈 없이. */
+.proj-ov-grid { font-size: 11.5px; }
+.proj-ov-grid th, .proj-ov-grid td { padding: 4px 7px; }
+/* 3단계 묶음 헤더 — Quote/P/O/C/I 를 색으로 구분해 좌→우 흐름이 보이게 한다. */
+.proj-ov-grid .ov-gh { text-align: center; font-size: 10.5px; letter-spacing: 0.04em;
+  border-left: 2px solid var(--line-strong); }
+.proj-ov-grid .ov-gh.q { color: var(--blue); }
+.proj-ov-grid .ov-gh.p { color: #7c3aed; }
+.proj-ov-grid .ov-gh.c { color: #11824a; }
+.proj-ov-grid .ov-sub { font-size: 9.5px; font-weight: 600; color: var(--muted);
+  text-transform: none; letter-spacing: 0; white-space: nowrap; }
+.proj-ov-grid .ov-sub.q:first-of-type { border-left: 2px solid var(--line-strong); }
+/* 각 단계 묶음의 시작 열에 세로 구분선 — 4·7·10번째 열(Purchase). */
+.proj-ov-grid tbody td:nth-child(4),
+.proj-ov-grid tbody td:nth-child(7),
+.proj-ov-grid tbody td:nth-child(10),
+.proj-ov-grid thead tr:nth-child(2) th:nth-child(1),
+.proj-ov-grid thead tr:nth-child(2) th:nth-child(4),
+.proj-ov-grid thead tr:nth-child(2) th:nth-child(7) { border-left: 2px solid var(--line-strong); }
+/* 금액 — 통화기호는 작고 흐리게, 숫자에 시선이 가도록. */
+.ov-m { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.ov-m em { font-style: normal; font-size: 9px; color: var(--muted); margin-right: 2px; }
+.ov-pct { font-weight: 700; color: #11824a; font-variant-numeric: tabular-nums; }
+
+/* 선박 묶음 머리 — 이 묶음이 어느 선박·어느 문서 체인인지. */
+.ov-grp-head td { background: var(--head-bg) !important; border-top: 2px solid var(--line-strong);
+  padding: 5px 8px !important; }
+.ov-grp-vessel { font-size: 12px; font-weight: 800; color: var(--navy); margin-right: 10px; }
+.ov-grp-docs { font-size: 10.5px; color: #47536b; }
+.ov-grp-docs b { font-size: 9.5px; letter-spacing: 0.04em; margin-right: 3px; }
+.ov-grp-docs b.q { color: var(--blue); }
+.ov-grp-docs b.p { color: #7c3aed; }
+.ov-grp-docs b.c { color: #11824a; }
+.ov-grp-docs .sep { margin: 0 7px; color: var(--muted); }
+.ov-grp-docs i { font-style: normal; }
+.ov-grp-vpo { margin-left: 5px; color: var(--muted); }
+.ov-grp-total td { background: #f7fafd !important; border-top: 1px solid var(--line-strong); }
+.proj-ov-grid tbody tr:nth-child(even) td { background: transparent; }
+.proj-ov-grid tbody tr:hover td { background: var(--hover); }
 .ov-it-part { font-weight: 600; color: var(--navy); }
 .ov-it-serial { color: var(--muted); }
 .ov-it-remark { color: var(--muted); }

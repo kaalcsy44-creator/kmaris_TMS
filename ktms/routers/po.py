@@ -299,6 +299,9 @@ def po_work_options():
                 "id": o.id,
                 # 프로젝트 워크스페이스에서 이 오더가 어느 RFQ(프로젝트)에 속하는지 식별용.
                 "rfq_id": rfq.id if rfq else 0,
+                # 이 오더가 어느 견적에서 나왔는지. 견적 없이 등록된 오더는 0 —
+                # 프로젝트 개요의 선박별 Quote→P/O→C/I 이력에서 "견적 없음"으로 표시된다.
+                "quotation_id": o.quotation_id or 0,
                 "customer_id": o.customer_id,
                 "customer": cust_names.get(o.customer_id, "—"),
                 "vessel_id": _ovid or 0,

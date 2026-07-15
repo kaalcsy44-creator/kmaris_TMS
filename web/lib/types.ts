@@ -279,6 +279,8 @@ export type PoWorkOptions = {
   orders: {
     id: number;
     rfq_id: number;
+    /** 이 오더가 나온 견적. 견적 없이 등록된 오더는 0(= 개요에서 "견적 없음"). */
+    quotation_id: number;
     customer_id: number;
     customer: string;
     vessel_id: number | null;
