@@ -37,7 +37,9 @@ import {
   DualCurrencyAmount,
   dualCurrencyText,
   fxRateText,
-  gridCellProps,
+  useItemGridKeys,
+  CopyRowsButton,
+  ItemGridHint,
   ItemSelectCell,
   ItemSelectHeaderCell,
   itemRowClass,
@@ -1752,6 +1754,40 @@ function ItemEditor({
     { key: "remark", label: "Remark" },
   ];
   const grid = useItemGrid(tableId, cols);
+  // fields 순서 = 아래 keys.cell(i, …) 열 번호. Packing List 와 금액 문서는 중간 컬럼 구성이
+  // 통째로 달라 열 번호도 갈린다(공통 0..4 뒤가 갈리고 Remark 는 11 또는 7).
+  const keys = useItemGridKeys<DocumentWorkItem>({
+    items,
+    onChange: setItems,
+    fields: [
+      "part_no", "description", "maker", "qty", "unit",
+      ...(packing
+        ? ["pkg_qty", "pkg_kind", "net_weight", "gross_weight", "measurement", "dimension"]
+        : ["unit_price", "amount"]),
+      "remark",
+    ],
+    numeric: ["qty", "unit_price", "amount"],
+    blank: () => blankItem(packing),
+    headers: [
+      "Part No.", "Description", "Maker", "Qty", "Unit",
+      ...(packing
+        ? ["Pkgs", "Kind", "N.W.", "G.W.", "Meas. (m³)", "Dimension"]
+        : [`Unit Price (${cur})`, `Amount (${cur})`]),
+      "Remark",
+    ],
+    sel,
+    // patch() 와 같은 규칙: 숫자 컬럼의 빈 값은 0 으로 굳히고, 금액 문서는 Amount 를 다시 계산.
+    normalizeRow: (it, changed) => {
+      const next = { ...it };
+      for (const k of ["qty", "unit_price", "amount"] as const) {
+        if (changed.includes(k) && (next[k] === null || next[k] === undefined)) next[k] = 0;
+      }
+      if (!packing && (changed.includes("qty") || changed.includes("unit_price"))) {
+        next.amount = num(next.qty) * num(next.unit_price);
+      }
+      return next;
+    },
+  });
 
   return (
     <div style={{ marginTop: 16 }}>
@@ -1760,6 +1796,8 @@ function ItemEditor({
         <div className="items-head-actions">
           {headerActions}
           <ItemColsButton grid={grid} />
+          <ItemGridHint />
+          <CopyRowsButton grid={keys} sel={sel} />
           <DeleteSelectedButton sel={sel} onDelete={() => deleteSelectedRows(items, sel, setItems)} />
           <button className="btn sm items-head-add" onClick={() => setItems([...items, blankItem(packing)])}>+ Add</button>
         </div>
@@ -1804,27 +1842,27 @@ function ItemEditor({
               <tr key={i} className={itemRowClass(i)}>
                 <ItemSelectCell index={i} sel={sel} />
                 <td className="seq">{i + 1}</td>
-                <td><textarea {...gridCellProps(i, 0)} className="wrapcell" rows={1} value={item.part_no || ""} onChange={(e) => patch(i, "part_no", e.target.value)} /></td>
-                <td><textarea {...gridCellProps(i, 1)} className="desc" rows={1} value={item.description || ""} onChange={(e) => patch(i, "description", e.target.value)} /></td>
-                <td><textarea {...gridCellProps(i, 2)} className="wrapcell" rows={1} value={item.maker || ""} onChange={(e) => patch(i, "maker", e.target.value)} /></td>
-                <td><input {...gridCellProps(i, 3)} className="num" value={amountInputValue(item.qty)} onChange={(e) => patch(i, "qty", e.target.value)} /></td>
-                <td><input {...gridCellProps(i, 4)} list={unitListId} value={item.unit || "PCS"} onChange={(e) => patch(i, "unit", e.target.value)} /></td>
+                <td><textarea {...keys.cell(i, 0)} className="wrapcell" rows={1} value={item.part_no || ""} onChange={(e) => patch(i, "part_no", e.target.value)} /></td>
+                <td><textarea {...keys.cell(i, 1)} className="desc" rows={1} value={item.description || ""} onChange={(e) => patch(i, "description", e.target.value)} /></td>
+                <td><textarea {...keys.cell(i, 2)} className="wrapcell" rows={1} value={item.maker || ""} onChange={(e) => patch(i, "maker", e.target.value)} /></td>
+                <td><input {...keys.cell(i, 3)} className="num" value={amountInputValue(item.qty)} onChange={(e) => patch(i, "qty", e.target.value)} /></td>
+                <td><input {...keys.cell(i, 4)} list={unitListId} value={item.unit || "PCS"} onChange={(e) => patch(i, "unit", e.target.value)} /></td>
                 {packing ? (
                   <>
-                    <td><input {...gridCellProps(i, 5)} className="num" value={String(item.pkg_qty ?? "")} onChange={(e) => patch(i, "pkg_qty", e.target.value)} /></td>
-                    <td><input {...gridCellProps(i, 6)} value={item.pkg_kind || ""} onChange={(e) => patch(i, "pkg_kind", e.target.value)} /></td>
-                    <td><input {...gridCellProps(i, 7)} value={String(item.net_weight || "")} onChange={(e) => patch(i, "net_weight", e.target.value)} /></td>
-                    <td><input {...gridCellProps(i, 8)} value={String(item.gross_weight || "")} onChange={(e) => patch(i, "gross_weight", e.target.value)} /></td>
-                    <td><input {...gridCellProps(i, 9)} className="num" value={String(item.measurement ?? "")} onChange={(e) => patch(i, "measurement", e.target.value)} /></td>
-                    <td><input {...gridCellProps(i, 10)} value={item.dimension || ""} onChange={(e) => patch(i, "dimension", e.target.value)} /></td>
+                    <td><input {...keys.cell(i, 5)} className="num" value={String(item.pkg_qty ?? "")} onChange={(e) => patch(i, "pkg_qty", e.target.value)} /></td>
+                    <td><input {...keys.cell(i, 6)} value={item.pkg_kind || ""} onChange={(e) => patch(i, "pkg_kind", e.target.value)} /></td>
+                    <td><input {...keys.cell(i, 7)} value={String(item.net_weight || "")} onChange={(e) => patch(i, "net_weight", e.target.value)} /></td>
+                    <td><input {...keys.cell(i, 8)} value={String(item.gross_weight || "")} onChange={(e) => patch(i, "gross_weight", e.target.value)} /></td>
+                    <td><input {...keys.cell(i, 9)} className="num" value={String(item.measurement ?? "")} onChange={(e) => patch(i, "measurement", e.target.value)} /></td>
+                    <td><input {...keys.cell(i, 10)} value={item.dimension || ""} onChange={(e) => patch(i, "dimension", e.target.value)} /></td>
                   </>
                 ) : (
                   <>
-                    <td><input {...gridCellProps(i, 5)} className="num" value={amountInputValue(item.unit_price)} onChange={(e) => patch(i, "unit_price", e.target.value)} /></td>
-                    <td><input {...gridCellProps(i, 6)} className="num" value={amountInputValue(item.amount)} onChange={(e) => patch(i, "amount", e.target.value)} /></td>
+                    <td><input {...keys.cell(i, 5)} className="num" value={amountInputValue(item.unit_price)} onChange={(e) => patch(i, "unit_price", e.target.value)} /></td>
+                    <td><input {...keys.cell(i, 6)} className="num" value={amountInputValue(item.amount)} onChange={(e) => patch(i, "amount", e.target.value)} /></td>
                   </>
                 )}
-                <td><textarea {...gridCellProps(i, packing ? 11 : 7)} className="wrapcell" rows={1} value={item.remark || ""} onChange={(e) => patch(i, "remark", e.target.value)} /></td>
+                <td><textarea {...keys.cell(i, packing ? 11 : 7)} className="wrapcell" rows={1} value={item.remark || ""} onChange={(e) => patch(i, "remark", e.target.value)} /></td>
               </tr>
             ))}
           </tbody>

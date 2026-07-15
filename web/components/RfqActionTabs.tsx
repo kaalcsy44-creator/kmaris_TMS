@@ -80,7 +80,9 @@ import {
   DualCurrencyAmount,
   dualCurrencyText,
   fxRateText,
-  gridCellProps,
+  useItemGridKeys,
+  CopyRowsButton,
+  ItemGridHint,
   ItemSelectCell,
   ItemSelectHeaderCell,
   itemRowClass,
@@ -1072,12 +1074,18 @@ function VendorRfqItemEditor({
       )
     );
   }
+  // 새 행의 Unit 은 직전 행을 따라간다(같은 단위가 이어지는 경우가 대부분).
+  const blank = (): RfqItem => ({
+    part_no: "",
+    description: "",
+    qty: 1,
+    unit: items[items.length - 1]?.unit || "PCS",
+    unit_price: null,
+    amount: null,
+    remark: "",
+  });
   function add() {
-    const last = items[items.length - 1];
-    onChange([
-      ...items,
-      { part_no: "", description: "", qty: 1, unit: last?.unit || "PCS", unit_price: null, amount: null, remark: "" },
-    ]);
+    onChange([...items, blank()]);
   }
   const sel = useRowSelection();
   const cols: ItemCol[] = [
@@ -1092,6 +1100,16 @@ function VendorRfqItemEditor({
     { key: "remark", label: "Remark" },
   ];
   const grid = useItemGrid("vrfq-items", cols);
+  // fields 순서 = 아래 keys.cell(i, 0..6) 열 번호.
+  const keys = useItemGridKeys<RfqItem>({
+    items,
+    onChange,
+    fields: ["part_no", "description", "type", "serial_no", "qty", "unit", "remark"],
+    numeric: ["qty"],
+    blank,
+    headers: ["Part No.", "Description", "Type", "Serial No.", "Qty", "Unit", "Remark"],
+    sel,
+  });
 
   return (
     <>
@@ -1100,6 +1118,8 @@ function VendorRfqItemEditor({
         <div className="items-head-actions">
           {headerActions}
           <ItemColsButton grid={grid} />
+          <ItemGridHint />
+          <CopyRowsButton grid={keys} sel={sel} />
           <DeleteSelectedButton sel={sel} onDelete={() => deleteSelectedRows(items, sel, onChange)} />
           <button className="btn sm items-head-add" onClick={add}>+ Add</button>
         </div>
@@ -1130,13 +1150,13 @@ function VendorRfqItemEditor({
                 <tr key={i} className={itemRowClass(i)}>
                   <ItemSelectCell index={i} sel={sel} />
                   <td className="seq">{i + 1}</td>
-                  <td><textarea {...gridCellProps(i, 0)} className="wrapcell" rows={1} value={it.part_no || ""} onChange={(e) => patch(i, "part_no", e.target.value)} /></td>
-                  <td><textarea {...gridCellProps(i, 1)} className="desc" rows={1} value={it.description || ""} onChange={(e) => patch(i, "description", e.target.value)} /></td>
-                  <td><textarea {...gridCellProps(i, 2)} className="wrapcell" rows={1} value={it.type ?? ""} onChange={(e) => patch(i, "type", e.target.value)} /></td>
-                  <td><textarea {...gridCellProps(i, 3)} className="wrapcell" rows={1} value={it.serial_no ?? ""} onChange={(e) => patch(i, "serial_no", e.target.value)} /></td>
-                  <td><input {...gridCellProps(i, 4)} className="num" value={amountInputValue(it.qty)} onChange={(e) => patch(i, "qty", e.target.value)} /></td>
-                  <td><input {...gridCellProps(i, 5)} value={it.unit || ""} onChange={(e) => patch(i, "unit", e.target.value)} /></td>
-                  <td><textarea {...gridCellProps(i, 6)} className="wrapcell" rows={1} value={it.remark ?? ""} onChange={(e) => patch(i, "remark", e.target.value)} /></td>
+                  <td><textarea {...keys.cell(i, 0)} className="wrapcell" rows={1} value={it.part_no || ""} onChange={(e) => patch(i, "part_no", e.target.value)} /></td>
+                  <td><textarea {...keys.cell(i, 1)} className="desc" rows={1} value={it.description || ""} onChange={(e) => patch(i, "description", e.target.value)} /></td>
+                  <td><textarea {...keys.cell(i, 2)} className="wrapcell" rows={1} value={it.type ?? ""} onChange={(e) => patch(i, "type", e.target.value)} /></td>
+                  <td><textarea {...keys.cell(i, 3)} className="wrapcell" rows={1} value={it.serial_no ?? ""} onChange={(e) => patch(i, "serial_no", e.target.value)} /></td>
+                  <td><input {...keys.cell(i, 4)} className="num" value={amountInputValue(it.qty)} onChange={(e) => patch(i, "qty", e.target.value)} /></td>
+                  <td><input {...keys.cell(i, 5)} value={it.unit || ""} onChange={(e) => patch(i, "unit", e.target.value)} /></td>
+                  <td><textarea {...keys.cell(i, 6)} className="wrapcell" rows={1} value={it.remark ?? ""} onChange={(e) => patch(i, "remark", e.target.value)} /></td>
                 </tr>
               ))
             )}
@@ -2270,11 +2290,11 @@ function VendorRfqAction({
       )
     );
   }
+  const blankItem = (): RfqItem => ({
+    part_no: "", description: "", qty: 1, unit: "", unit_price: null, amount: null, remark: "",
+  });
   function addItem() {
-    setRfqItems((prev) => [
-      ...prev,
-      { part_no: "", description: "", qty: 1, unit: "", unit_price: null, amount: null, remark: "" },
-    ]);
+    setRfqItems((prev) => [...prev, blankItem()]);
   }
   const itemSel = useRowSelection();
   const itemGridCols: ItemCol[] = [
@@ -2289,6 +2309,16 @@ function VendorRfqAction({
     { key: "remark", label: "Remark" },
   ];
   const grid = useItemGrid("vrfq-items", itemGridCols);
+  // fields 순서 = 아래 itemKeys.cell(i, 0..6) 열 번호.
+  const itemKeys = useItemGridKeys<RfqItem>({
+    items: rfqItems,
+    onChange: setRfqItems,
+    fields: ["part_no", "description", "type", "serial_no", "qty", "unit", "remark"],
+    numeric: ["qty"],
+    blank: blankItem,
+    headers: ["Part No.", "Description", "Type", "Serial No.", "Qty", "Unit", "Remark"],
+    sel: itemSel,
+  });
   function deleteSelectedItems() {
     if (itemSel.count === 0) return;
     setRfqItems((prev) => prev.filter((_, idx) => !itemSel.selected.has(idx)));
@@ -2452,6 +2482,8 @@ function VendorRfqAction({
             <div className="items-head-actions">
               <button className="btn sm" onClick={loadCustomerRfqItems}>Load customer RFQ</button>
               <ItemColsButton grid={grid} />
+              <ItemGridHint />
+          <CopyRowsButton grid={itemKeys} sel={itemSel} />
               <DeleteSelectedButton sel={itemSel} onDelete={deleteSelectedItems} />
               <button className="btn sm items-head-add" onClick={addItem}>+ Add</button>
             </div>
@@ -2482,13 +2514,13 @@ function VendorRfqAction({
                     <tr key={i} className={itemRowClass(i)}>
                       <ItemSelectCell index={i} sel={itemSel} />
                       <td className="seq">{i + 1}</td>
-                      <td><textarea {...gridCellProps(i, 0)} className="wrapcell" rows={1} value={it.part_no || ""} onChange={(e) => patchItem(i, "part_no", e.target.value)} /></td>
-                      <td><textarea {...gridCellProps(i, 1)} className="desc" rows={1} value={it.description || ""} onChange={(e) => patchItem(i, "description", e.target.value)} /></td>
-                      <td><textarea {...gridCellProps(i, 2)} className="wrapcell" rows={1} value={it.type ?? ""} onChange={(e) => patchItem(i, "type", e.target.value)} /></td>
-                      <td><textarea {...gridCellProps(i, 3)} className="wrapcell" rows={1} value={it.serial_no ?? ""} onChange={(e) => patchItem(i, "serial_no", e.target.value)} /></td>
-                      <td><input {...gridCellProps(i, 4)} className="num" value={amountInputValue(it.qty)} onChange={(e) => patchItem(i, "qty", e.target.value)} /></td>
-                      <td><input {...gridCellProps(i, 5)} value={it.unit || ""} onChange={(e) => patchItem(i, "unit", e.target.value)} /></td>
-                      <td><textarea {...gridCellProps(i, 6)} className="wrapcell" rows={1} value={it.remark ?? ""} onChange={(e) => patchItem(i, "remark", e.target.value)} /></td>
+                      <td><textarea {...itemKeys.cell(i, 0)} className="wrapcell" rows={1} value={it.part_no || ""} onChange={(e) => patchItem(i, "part_no", e.target.value)} /></td>
+                      <td><textarea {...itemKeys.cell(i, 1)} className="desc" rows={1} value={it.description || ""} onChange={(e) => patchItem(i, "description", e.target.value)} /></td>
+                      <td><textarea {...itemKeys.cell(i, 2)} className="wrapcell" rows={1} value={it.type ?? ""} onChange={(e) => patchItem(i, "type", e.target.value)} /></td>
+                      <td><textarea {...itemKeys.cell(i, 3)} className="wrapcell" rows={1} value={it.serial_no ?? ""} onChange={(e) => patchItem(i, "serial_no", e.target.value)} /></td>
+                      <td><input {...itemKeys.cell(i, 4)} className="num" value={amountInputValue(it.qty)} onChange={(e) => patchItem(i, "qty", e.target.value)} /></td>
+                      <td><input {...itemKeys.cell(i, 5)} value={it.unit || ""} onChange={(e) => patchItem(i, "unit", e.target.value)} /></td>
+                      <td><textarea {...itemKeys.cell(i, 6)} className="wrapcell" rows={1} value={it.remark ?? ""} onChange={(e) => patchItem(i, "remark", e.target.value)} /></td>
                     </tr>
                   ))
                 )}
@@ -2899,21 +2931,19 @@ function VendorQuoteItemEditor({
   // 품목표 헤더의 "+ Add" 옆 보조 액션(예: "Load Vendor RFQ items").
   headerActions?: React.ReactNode;
 }) {
+  const blank = (): VendorQuoteItem => ({
+    part_no: "",
+    description: "",
+    maker: "",
+    origin: "",
+    qty: 1,
+    unit: "PCS",
+    cost_price: 0,
+    lead_time: "",
+    remark: "",
+  });
   function add() {
-    onChange([
-      ...items,
-      {
-        part_no: "",
-        description: "",
-        maker: "",
-        origin: "",
-        qty: 1,
-        unit: "PCS",
-        cost_price: 0,
-        lead_time: "",
-        remark: "",
-      },
-    ]);
+    onChange([...items, blank()]);
   }
   function patch(i: number, key: keyof VendorQuoteItem, value: string) {
     onChange(
@@ -2950,6 +2980,17 @@ function VendorQuoteItemEditor({
     { key: "remark", label: "Remark" },
   ];
   const grid = useItemGrid("vquote-items", cols);
+  // 엑셀식 편집 — fields 는 아래 keys.cell(i, 0..10) 열 번호와 순서가 같아야 한다.
+  // Amount 는 계산 컬럼이라 입력이 없고 열 번호도 차지하지 않으므로 뺀다.
+  const keys = useItemGridKeys<VendorQuoteItem>({
+    items,
+    onChange,
+    fields: ["part_no", "description", "type", "serial_no", "maker", "origin", "qty", "unit", "cost_price", "lead_time", "remark"],
+    numeric: ["qty", "cost_price"],
+    blank,
+    headers: ["Part No.", "Description", "Type", "Serial No.", "Maker", "Origin", "Qty", "Unit", `Unit Price (${cur})`, "Lead Time", "Remark"],
+    sel,
+  });
 
   return (
     <div style={{ marginTop: 12 }}>
@@ -2958,6 +2999,8 @@ function VendorQuoteItemEditor({
         <div className="items-head-actions">
           {headerActions}
           <ItemColsButton grid={grid} />
+          <ItemGridHint />
+          <CopyRowsButton grid={keys} sel={sel} />
           <DeleteSelectedButton sel={sel} onDelete={() => deleteSelectedRows(items, sel, onChange)} />
           <button className="btn sm items-head-add" onClick={add}>+ Add</button>
         </div>
@@ -2988,18 +3031,18 @@ function VendorQuoteItemEditor({
               <tr key={i} className={itemRowClass(i)}>
                 <ItemSelectCell index={i} sel={sel} />
                 <td className="seq">{i + 1}</td>
-                <td><textarea {...gridCellProps(i, 0)} className="wrapcell" rows={1} value={it.part_no} onChange={(e) => patch(i, "part_no", e.target.value)} /></td>
-                <td><textarea {...gridCellProps(i, 1)} className="desc" rows={1} value={it.description} onChange={(e) => patch(i, "description", e.target.value)} /></td>
-                <td><textarea {...gridCellProps(i, 2)} className="wrapcell" rows={1} value={it.type ?? ""} onChange={(e) => patch(i, "type", e.target.value)} /></td>
-                <td><textarea {...gridCellProps(i, 3)} className="wrapcell" rows={1} value={it.serial_no ?? ""} onChange={(e) => patch(i, "serial_no", e.target.value)} /></td>
-                <td><textarea {...gridCellProps(i, 4)} className="wrapcell" rows={1} value={it.maker ?? ""} onChange={(e) => patch(i, "maker", e.target.value)} /></td>
-                <td><textarea {...gridCellProps(i, 5)} className="wrapcell" rows={1} value={it.origin ?? ""} onChange={(e) => patch(i, "origin", e.target.value)} /></td>
-                <td><input {...gridCellProps(i, 6)} className="num" value={amountInputValue(it.qty)} onChange={(e) => patch(i, "qty", e.target.value)} /></td>
-                <td><input {...gridCellProps(i, 7)} value={it.unit} onChange={(e) => patch(i, "unit", e.target.value)} /></td>
-                <td><input {...gridCellProps(i, 8)} className="num" value={amountInputValue(it.cost_price)} onChange={(e) => patch(i, "cost_price", e.target.value)} /></td>
+                <td><textarea {...keys.cell(i, 0)} className="wrapcell" rows={1} value={it.part_no} onChange={(e) => patch(i, "part_no", e.target.value)} /></td>
+                <td><textarea {...keys.cell(i, 1)} className="desc" rows={1} value={it.description} onChange={(e) => patch(i, "description", e.target.value)} /></td>
+                <td><textarea {...keys.cell(i, 2)} className="wrapcell" rows={1} value={it.type ?? ""} onChange={(e) => patch(i, "type", e.target.value)} /></td>
+                <td><textarea {...keys.cell(i, 3)} className="wrapcell" rows={1} value={it.serial_no ?? ""} onChange={(e) => patch(i, "serial_no", e.target.value)} /></td>
+                <td><textarea {...keys.cell(i, 4)} className="wrapcell" rows={1} value={it.maker ?? ""} onChange={(e) => patch(i, "maker", e.target.value)} /></td>
+                <td><textarea {...keys.cell(i, 5)} className="wrapcell" rows={1} value={it.origin ?? ""} onChange={(e) => patch(i, "origin", e.target.value)} /></td>
+                <td><input {...keys.cell(i, 6)} className="num" value={amountInputValue(it.qty)} onChange={(e) => patch(i, "qty", e.target.value)} /></td>
+                <td><input {...keys.cell(i, 7)} value={it.unit} onChange={(e) => patch(i, "unit", e.target.value)} /></td>
+                <td><input {...keys.cell(i, 8)} className="num" value={amountInputValue(it.cost_price)} onChange={(e) => patch(i, "cost_price", e.target.value)} /></td>
                 <td className="num">{amountInputValue(Number(it.cost_price || 0) * Number(it.qty || 1))}</td>
-                <td><textarea {...gridCellProps(i, 9)} className="wrapcell" rows={1} value={it.lead_time ?? ""} onChange={(e) => patch(i, "lead_time", e.target.value)} /></td>
-                <td><textarea {...gridCellProps(i, 10)} className="wrapcell" rows={1} value={it.remark ?? ""} onChange={(e) => patch(i, "remark", e.target.value)} /></td>
+                <td><textarea {...keys.cell(i, 9)} className="wrapcell" rows={1} value={it.lead_time ?? ""} onChange={(e) => patch(i, "lead_time", e.target.value)} /></td>
+                <td><textarea {...keys.cell(i, 10)} className="wrapcell" rows={1} value={it.remark ?? ""} onChange={(e) => patch(i, "remark", e.target.value)} /></td>
               </tr>
             ))}
           </tbody>
@@ -3531,24 +3574,37 @@ function CustomerQuoteItemEditor({
     );
   }
   // 새 품목은 마지막 행의 단위·마진을 이어받아 견적 기준과 맞춘다.
-  function add() {
+  const blank = (): CustomerQuoteItem => {
     const last = items[items.length - 1];
-    onChange([
-      ...items,
-      {
-        part_no: "",
-        description: "",
-        qty: 1,
-        unit: last?.unit || "PCS",
-        cost_price: 0,
-        margin_pct: last?.margin_pct ?? 0,
-        unit_price: 0,
-        amount: 0,
-        lead_time: "",
-        remark: "",
-      },
-    ]);
+    return {
+      part_no: "",
+      description: "",
+      qty: 1,
+      unit: last?.unit || "PCS",
+      cost_price: 0,
+      margin_pct: last?.margin_pct ?? 0,
+      unit_price: 0,
+      amount: 0,
+      lead_time: "",
+      remark: "",
+    };
+  };
+  function add() {
+    onChange([...items, blank()]);
   }
+  // 붙여넣기·Ctrl+D 도 손으로 친 것과 같은 결과가 되도록 patch() 의 재계산 분기를 그대로 옮긴 것.
+  const normalizeRow = (it: CustomerQuoteItem, changed: string[]): CustomerQuoteItem => {
+    const next: CustomerQuoteItem = { ...it };
+    if (changed.includes("cost_price") || changed.includes("margin_pct") || changed.includes("qty")) {
+      const unit = calcUnitPrice(Number(next.cost_price || 0), Number(next.margin_pct || 0), costCurrency, currency, roundDigits, rate);
+      next.unit_price = unit;
+      next.amount = unit * Number(next.qty || 1);
+    }
+    if (changed.includes("unit_price") || changed.includes("qty")) {
+      next.amount = Number(next.unit_price || 0) * Number(next.qty || 1);
+    }
+    return next;
+  };
   const costCur = (costCurrency || "USD").toUpperCase();
   const saleCur = (currency || "USD").toUpperCase();
   // 매입 합계(원가×수량, 원가 통화) · 매출 합계(판매 Amount, 판매 통화)를 각각 표기.
@@ -3573,6 +3629,17 @@ function CustomerQuoteItemEditor({
     { key: "remark", label: "Remark" },
   ];
   const grid = useItemGrid("cquote-items", cols);
+  // fields 순서 = 아래 keys.cell(i, 0..10) 열 번호. Cost Amount·Amount 는 계산 컬럼이라 뺀다.
+  const keys = useItemGridKeys<CustomerQuoteItem>({
+    items,
+    onChange,
+    fields: ["part_no", "description", "type", "serial_no", "qty", "unit", "cost_price", "margin_pct", "unit_price", "lead_time", "remark"],
+    numeric: ["qty", "cost_price", "margin_pct", "unit_price"],
+    blank,
+    headers: ["Part No.", "Description", "Type", "Serial No.", "Qty", "Unit", `Cost (${costCur})`, "Margin %", `Unit Price (${saleCur})`, "Lead Time", "Remark"],
+    sel,
+    normalizeRow,
+  });
 
   // 상위 그룹 헤더 — 표시 중인 컬럼을 코드 순서로 훑어 Purchase(Cost·Cost Amount)·
   // Sales(Unit Price·Amount) 구간을 colspan 으로 묶는다(숨김 반영해 항상 정렬 유지).
@@ -3596,6 +3663,8 @@ function CustomerQuoteItemEditor({
         <div className="items-head-actions">
           {headerActions}
           <ItemColsButton grid={grid} />
+          <ItemGridHint />
+          <CopyRowsButton grid={keys} sel={sel} />
           <DeleteSelectedButton sel={sel} onDelete={() => deleteSelectedRows(items, sel, onChange)} />
           <button className="btn sm items-head-add" onClick={add}>+ Add</button>
         </div>
@@ -3638,19 +3707,19 @@ function CustomerQuoteItemEditor({
               <tr key={i} className={itemRowClass(i)}>
                 <ItemSelectCell index={i} sel={sel} />
                 <td className="seq">{i + 1}</td>
-                <td><textarea {...gridCellProps(i, 0)} className="wrapcell" rows={1} value={it.part_no} onChange={(e) => patch(i, "part_no", e.target.value)} /></td>
-                <td><textarea {...gridCellProps(i, 1)} className="desc" rows={1} value={it.description} onChange={(e) => patch(i, "description", e.target.value)} /></td>
-                <td><textarea {...gridCellProps(i, 2)} className="wrapcell" rows={1} value={it.type ?? ""} onChange={(e) => patch(i, "type", e.target.value)} /></td>
-                <td><textarea {...gridCellProps(i, 3)} className="wrapcell" rows={1} value={it.serial_no ?? ""} onChange={(e) => patch(i, "serial_no", e.target.value)} /></td>
-                <td><input {...gridCellProps(i, 4)} className="num" value={amountInputValue(it.qty)} onChange={(e) => patch(i, "qty", e.target.value)} /></td>
-                <td><input {...gridCellProps(i, 5)} value={it.unit} onChange={(e) => patch(i, "unit", e.target.value)} /></td>
-                <td><input {...gridCellProps(i, 6)} className="num" value={amountInputValue(it.cost_price)} onChange={(e) => patch(i, "cost_price", e.target.value)} /></td>
+                <td><textarea {...keys.cell(i, 0)} className="wrapcell" rows={1} value={it.part_no} onChange={(e) => patch(i, "part_no", e.target.value)} /></td>
+                <td><textarea {...keys.cell(i, 1)} className="desc" rows={1} value={it.description} onChange={(e) => patch(i, "description", e.target.value)} /></td>
+                <td><textarea {...keys.cell(i, 2)} className="wrapcell" rows={1} value={it.type ?? ""} onChange={(e) => patch(i, "type", e.target.value)} /></td>
+                <td><textarea {...keys.cell(i, 3)} className="wrapcell" rows={1} value={it.serial_no ?? ""} onChange={(e) => patch(i, "serial_no", e.target.value)} /></td>
+                <td><input {...keys.cell(i, 4)} className="num" value={amountInputValue(it.qty)} onChange={(e) => patch(i, "qty", e.target.value)} /></td>
+                <td><input {...keys.cell(i, 5)} value={it.unit} onChange={(e) => patch(i, "unit", e.target.value)} /></td>
+                <td><input {...keys.cell(i, 6)} className="num" value={amountInputValue(it.cost_price)} onChange={(e) => patch(i, "cost_price", e.target.value)} /></td>
                 <td className="num">{amountInputValue(Number(it.cost_price || 0) * Number(it.qty || 1))}</td>
-                <td><input {...gridCellProps(i, 7)} className="num" value={amountInputValue(it.margin_pct)} onChange={(e) => patch(i, "margin_pct", e.target.value)} /></td>
-                <td><input {...gridCellProps(i, 8)} className="num" value={amountInputValue(it.unit_price)} onChange={(e) => patch(i, "unit_price", e.target.value)} /></td>
+                <td><input {...keys.cell(i, 7)} className="num" value={amountInputValue(it.margin_pct)} onChange={(e) => patch(i, "margin_pct", e.target.value)} /></td>
+                <td><input {...keys.cell(i, 8)} className="num" value={amountInputValue(it.unit_price)} onChange={(e) => patch(i, "unit_price", e.target.value)} /></td>
                 <td className="num">{amountInputValue(it.amount)}</td>
-                <td><textarea {...gridCellProps(i, 9)} className="wrapcell" rows={1} value={it.lead_time ?? ""} onChange={(e) => patch(i, "lead_time", e.target.value)} /></td>
-                <td><textarea {...gridCellProps(i, 10)} className="wrapcell" rows={1} value={it.remark ?? ""} onChange={(e) => patch(i, "remark", e.target.value)} /></td>
+                <td><textarea {...keys.cell(i, 9)} className="wrapcell" rows={1} value={it.lead_time ?? ""} onChange={(e) => patch(i, "lead_time", e.target.value)} /></td>
+                <td><textarea {...keys.cell(i, 10)} className="wrapcell" rows={1} value={it.remark ?? ""} onChange={(e) => patch(i, "remark", e.target.value)} /></td>
               </tr>
             ))}
           </tbody>

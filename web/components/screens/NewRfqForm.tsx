@@ -19,6 +19,9 @@ import CustomerName from "@/components/common/CustomerName";
 import { useColumnLayout } from "@/components/common/useColumnLayout";
 import { ColumnResizer, ColumnsButton } from "@/components/common/tableLayout";
 import {
+  CopyRowsButton,
+  ItemGridHint,
+  useItemGridKeys,
   DeleteSelectedButton,
   ItemSelectCell,
   ItemSelectHeaderCell,
@@ -204,6 +207,16 @@ export default function NewRfqForm({
     setItems((prev) => prev.filter((_, idx) => !itemSel.selected.has(idx)));
     itemSel.clear();
   }
+  // 엑셀식 편집. 이 표는 숨긴 컬럼이 렌더에서 아예 빠지므로, 열 번호 = visibleItemCols 위치이고
+  // fields 도 거기서 그대로 뽑으면 된다. 값은 전부 문자열로 담기므로 numeric 은 없다.
+  const itemKeys = useItemGridKeys<ItemRow>({
+    items,
+    onChange: setItems,
+    fields: visibleItemCols.map((c) => c.key),
+    blank: () => ({ ...EMPTY_ITEM }),
+    headers: visibleItemCols.map((c) => c.label),
+    sel: itemSel,
+  });
 
   function matchName<T extends { name: string }>(hint: string | null | undefined, rows: T[]) {
     if (!hint) return undefined;
@@ -674,6 +687,8 @@ export default function NewRfqForm({
         <div className="sub-h">Item list</div>
         <div className="items-head-actions">
           <ColumnsButton cols={RFQ_ITEM_COLS} layout={itemCols} />
+          <ItemGridHint />
+          <CopyRowsButton grid={itemKeys} sel={itemSel} />
           <DeleteSelectedButton sel={itemSel} onDelete={deleteSelectedItems} />
           <button type="button" className="btn sm items-head-add" onClick={addItem}>+ Add</button>
         </div>
@@ -710,10 +725,11 @@ export default function NewRfqForm({
             <tr key={i}>
               <ItemSelectCell index={i} sel={itemSel} />
               <td className="seq">{i + 1}</td>
-              {visibleItemCols.map((c) => (
+              {visibleItemCols.map((c, ci) => (
                 <td key={c.key}>
                   {c.num ? (
                     <input
+                      {...itemKeys.cell(i, ci)}
                       className={c.cellClass}
                       value={it[c.key]}
                       onChange={(e) => setItem(i, c.key, e.target.value)}
@@ -721,6 +737,7 @@ export default function NewRfqForm({
                     />
                   ) : (
                     <textarea
+                      {...itemKeys.cell(i, ci)}
                       className={c.cellClass}
                       rows={1}
                       value={it[c.key]}

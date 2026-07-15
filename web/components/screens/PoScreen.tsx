@@ -39,7 +39,9 @@ import {
   deleteSelectedRows,
   DualCurrencyAmount,
   fxRateText,
-  gridCellProps,
+  useItemGridKeys,
+  CopyRowsButton,
+  ItemGridHint,
   ItemSelectCell,
   ItemSelectHeaderCell,
   itemRowClass,
@@ -1896,6 +1898,17 @@ function ItemEditor({
     { key: "remark", label: "Remark" },
   ];
   const grid = useItemGrid("po-items", cols);
+  // fields 순서 = 아래 keys.cell(i, 0..9) 열 번호. 여기 Amount 는 계산 컬럼이 아니라 직접 입력이라
+  // fields 에 포함하고 재계산(normalizeRow)도 두지 않는다 — patch() 도 다시 계산하지 않는다.
+  const keys = useItemGridKeys<PoWorkItem>({
+    items,
+    onChange,
+    fields: ["part_no", "description", "type", "serial_no", "maker", "qty", "unit", "unit_price", "amount", "remark"],
+    numeric: ["qty", "unit_price", "amount"],
+    blank: blankItem,
+    headers: ["Part No.", "Description", "Type", "Serial No.", "Maker", "Qty", "Unit", `Unit price (${cur})`, `Amount (${cur})`, "Remark"],
+    sel,
+  });
 
   return (
     <div style={{ marginTop: 16 }}>
@@ -1904,6 +1917,8 @@ function ItemEditor({
         <div className="items-head-actions">
           {headerActions}
           <ItemColsButton grid={grid} />
+          <ItemGridHint />
+          <CopyRowsButton grid={keys} sel={sel} />
           <DeleteSelectedButton sel={sel} onDelete={() => deleteSelectedRows(items, sel, onChange)} />
           <button className="btn sm items-head-add" onClick={() => onChange([...items, blankItem()])}>+ Add</button>
         </div>
@@ -1933,34 +1948,34 @@ function ItemEditor({
                 <ItemSelectCell index={i} sel={sel} />
                 <td className="seq">{i + 1}</td>
                 <td>
-                  <textarea {...gridCellProps(i, 0)} className="wrapcell" rows={1} value={it.part_no} onChange={(e) => patch(i, "part_no", e.target.value)} />
+                  <textarea {...keys.cell(i, 0)} className="wrapcell" rows={1} value={it.part_no} onChange={(e) => patch(i, "part_no", e.target.value)} />
                 </td>
                 <td>
-                  <textarea {...gridCellProps(i, 1)} className="desc" rows={1} value={it.description} onChange={(e) => patch(i, "description", e.target.value)} />
+                  <textarea {...keys.cell(i, 1)} className="desc" rows={1} value={it.description} onChange={(e) => patch(i, "description", e.target.value)} />
                 </td>
                 <td>
-                  <textarea {...gridCellProps(i, 2)} className="wrapcell" rows={1} value={it.type ?? ""} onChange={(e) => patch(i, "type", e.target.value)} />
+                  <textarea {...keys.cell(i, 2)} className="wrapcell" rows={1} value={it.type ?? ""} onChange={(e) => patch(i, "type", e.target.value)} />
                 </td>
                 <td>
-                  <textarea {...gridCellProps(i, 3)} className="wrapcell" rows={1} value={it.serial_no ?? ""} onChange={(e) => patch(i, "serial_no", e.target.value)} />
+                  <textarea {...keys.cell(i, 3)} className="wrapcell" rows={1} value={it.serial_no ?? ""} onChange={(e) => patch(i, "serial_no", e.target.value)} />
                 </td>
                 <td>
-                  <textarea {...gridCellProps(i, 4)} className="wrapcell" rows={1} value={it.maker ?? ""} onChange={(e) => patch(i, "maker", e.target.value)} />
+                  <textarea {...keys.cell(i, 4)} className="wrapcell" rows={1} value={it.maker ?? ""} onChange={(e) => patch(i, "maker", e.target.value)} />
                 </td>
                 <td>
                   <input
-                    {...gridCellProps(i, 5)}
+                    {...keys.cell(i, 5)}
                     className="num"
                     value={amountInputValue(it.qty)}
                     onChange={(e) => patch(i, "qty", e.target.value)}
                   />
                 </td>
                 <td>
-                  <input {...gridCellProps(i, 6)} value={it.unit} onChange={(e) => patch(i, "unit", e.target.value)} />
+                  <input {...keys.cell(i, 6)} value={it.unit} onChange={(e) => patch(i, "unit", e.target.value)} />
                 </td>
                 <td>
                   <input
-                    {...gridCellProps(i, 7)}
+                    {...keys.cell(i, 7)}
                     className="num"
                     value={amountInputValue(it.unit_price)}
                     onChange={(e) => patch(i, "unit_price", e.target.value)}
@@ -1968,14 +1983,14 @@ function ItemEditor({
                 </td>
                 <td>
                   <input
-                    {...gridCellProps(i, 8)}
+                    {...keys.cell(i, 8)}
                     className="num"
                     value={amountInputValue(it.amount)}
                     onChange={(e) => patch(i, "amount", e.target.value)}
                   />
                 </td>
                 <td>
-                  <textarea {...gridCellProps(i, 9)} className="wrapcell" rows={1} value={it.remark ?? ""} onChange={(e) => patch(i, "remark", e.target.value)} />
+                  <textarea {...keys.cell(i, 9)} className="wrapcell" rows={1} value={it.remark ?? ""} onChange={(e) => patch(i, "remark", e.target.value)} />
                 </td>
               </tr>
             ))}

@@ -4397,6 +4397,21 @@ table.mini input[type="checkbox"].row-check:indeterminate::after {
   gap: 8px;
   flex: 0 0 auto;
 }
+/* 엑셀 단축키 안내 — 버튼이 아니라 hover 툴팁용 표식이라 눈에 띄지 않는 톤으로 둔다.
+   Enter 가 줄바꿈 → 아래 셀 이동으로 바뀌었으므로 최소한의 발견 수단은 필요하다. */
+.items-head-hint {
+  font-size: 11px;
+  color: var(--muted);
+  border: 1px dashed var(--line-strong);
+  border-radius: 6px;
+  padding: 1px 7px;
+  cursor: help;
+  white-space: nowrap;
+}
+.items-head-hint:hover {
+  color: #0055a8;
+  border-color: #9cc3e8;
+}
 
 /* 상세 모달 탭바(Detail / Email) — 2·4·6단계 */
 .detail-tabs {

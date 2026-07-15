@@ -1,7 +1,8 @@
 "use client";
 
-import type { KeyboardEvent } from "react";
-import { useCallback, useState } from "react";
+import type { ClipboardEvent, KeyboardEvent } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { cellText, parseClipboardGrid, tsvCell } from "./itemClipboard";
 
 export const USD_KRW_RATE = 1543.41;
 
@@ -270,14 +271,6 @@ export function itemRowClass(index: number): string | undefined {
   return index > 0 && index % 5 === 0 ? "item-group-break" : undefined;
 }
 
-export function gridCellProps(row: number, col: number) {
-  return {
-    "data-grid-row": row,
-    "data-grid-col": col,
-    onKeyDown: handleGridKeyDown,
-  };
-}
-
 type GridCell = HTMLInputElement | HTMLTextAreaElement;
 
 function handleGridKeyDown(event: KeyboardEvent<GridCell>) {
@@ -339,8 +332,245 @@ function shouldMoveVertically(input: GridCell, key: string): boolean {
 function findGridInput(from: GridCell, row: number, col: number): GridCell | null {
   const table = from.closest("table");
   if (!table) return null;
+  return queryGridInput(table, row, col);
+}
+
+function queryGridInput(table: Element, row: number, col: number): GridCell | null {
   return table.querySelector<GridCell>(
     `input[data-grid-row="${row}"][data-grid-col="${col}"]:not(:disabled),` +
       `textarea[data-grid-row="${row}"][data-grid-col="${col}"]:not(:disabled)`
+  );
+}
+
+function focusGridCell(from: GridCell, row: number, col: number): boolean {
+  const el = findGridInput(from, row, col);
+  if (!el) return false;
+  el.focus();
+  el.select();
+  return true;
+}
+
+// ── 엑셀식 편집(붙여넣기 · 복사 · Ctrl+D · Enter) ───────────────────────────
+// 각 셀에 data-grid-row/col 좌표를 붙이고, 그 위에 키 이동·클립보드·블록 편집을
+// 얹어 "엑셀에서 복사 → 표에 붙여넣기" 를 지원한다.
+//
+// 컬럼 매핑은 fields — 그리드 열 번호(0-based) 순서대로 나열한 필드 키 — 하나로 정한다.
+// Amount 처럼 계산 전용 컬럼은 입력이 없어 열 번호를 차지하지 않으므로 fields 에도 넣지 않는다.
+//
+// 붙여넣기는 "이 표의 컬럼 순서" 기준으로 자리를 맞춘다. 벤더 엑셀의 컬럼 순서는 대개 이 표와
+// 다르므로, 여러 컬럼을 한 번에 붙이는 것보다 컬럼 단위(엑셀에서 Description 열만 복사 →
+// 이 표 Description 첫 셀에 붙여넣기)로 옮기는 쪽이 잘 맞는다.
+
+export type ItemGridKeys = {
+  /** 셀에 뿌리는 props — 좌표 + 키/붙여넣기 처리. <input {...cell(i, 0)} /> 처럼 쓴다. */
+  cell: (row: number, col: number) => {
+    "data-grid-row": number;
+    "data-grid-col": number;
+    onKeyDown: (e: KeyboardEvent<GridCell>) => void;
+    onPaste: (e: ClipboardEvent<GridCell>) => void;
+  };
+  /** 행을 TSV 로 클립보드에 복사(엑셀에 그대로 붙는다). 선택 행이 없으면 전체 행. */
+  copyRows: () => Promise<void>;
+};
+
+export function useItemGridKeys<T extends object>({
+  items,
+  onChange,
+  fields,
+  numeric = [],
+  blank,
+  headers,
+  sel,
+  normalizeRow,
+}: {
+  items: T[];
+  onChange: (next: T[]) => void;
+  /** 그리드 열 번호 순서대로 나열한 필드 키. cell(row, col) 의 col 과 1:1 로 맞아야 한다. */
+  fields: string[];
+  /** 숫자로 저장할 필드 — 붙여넣기 시 "1,234" → 1234 로 파싱한다. */
+  numeric?: string[];
+  /** 행이 모자랄 때(붙여넣기·마지막 행 Enter) 새로 만들 빈 행. */
+  blank: () => T;
+  /** Copy 시 첫 줄에 붙일 헤더. 생략하면 값만 복사. */
+  headers?: string[];
+  /** 주면 체크된 행만 복사. */
+  sel?: RowSelection;
+  /** 파생 컬럼(Amount 등)이 있는 표에서 쓴다. 값을 쓴 뒤 그 행을 다시 계산할 기회.
+   *  changed = 이번에 값이 들어간 필드 키. 편집기의 patch() 재계산 분기와 같은 규칙을 넣어야
+   *  붙여넣기/Ctrl+D 결과가 손으로 친 것과 같아진다. */
+  normalizeRow?: (row: T, changed: string[]) => T;
+}): ItemGridKeys {
+  const finish = (row: T, changed: string[]): T => (normalizeRow ? normalizeRow(row, changed) : row);
+  // 행이 늘어난 뒤(=리렌더 후)에야 새 셀이 DOM 에 생기므로, 포커스는 여기 적어두고 다음 커밋에서 준다.
+  const pending = useRef<{ table: Element; row: number; col: number } | null>(null);
+  useEffect(() => {
+    const p = pending.current;
+    if (!p) return;
+    pending.current = null;
+    const el = queryGridInput(p.table, p.row, p.col);
+    el?.focus();
+    el?.select();
+  });
+
+  function writeField(row: number, col: number, raw: string) {
+    const f = fields[col];
+    if (!f) return;
+    onChange(
+      items.map((it, i) =>
+        i === row
+          ? finish({ ...it, [f]: numeric.includes(f) ? parseAmountInput(raw) : raw } as T, [f])
+          : it
+      )
+    );
+  }
+
+  // 클립보드 블록을 (startRow, startCol) 기준으로 찍어넣는다. 행이 모자라면 늘리고,
+  // 표 오른쪽 밖으로 넘치는 열은 버린다.
+  function applyBlock(startRow: number, startCol: number, block: string[][]) {
+    const next = items.slice();
+    while (next.length < startRow + block.length) next.push(blank());
+    block.forEach((cells, r) => {
+      const target = { ...next[startRow + r] } as Record<string, unknown>;
+      const changed: string[] = [];
+      cells.forEach((raw, c) => {
+        const f = fields[startCol + c];
+        if (!f) return;
+        target[f] = numeric.includes(f) ? parseAmountInput(raw) : raw;
+        changed.push(f);
+      });
+      next[startRow + r] = finish(target as T, changed);
+    });
+    onChange(next);
+  }
+
+  function onPaste(e: ClipboardEvent<GridCell>) {
+    const text = e.clipboardData.getData("text/plain");
+    if (!text) return;
+    const block = parseClipboardGrid(text);
+    // 한 칸짜리는 브라우저 기본 동작에 맡긴다(부분 선택 교체 등이 자연스럽게 동작).
+    if (block.length === 0 || (block.length === 1 && block[0].length === 1)) return;
+    const el = e.currentTarget;
+    const row = Number(el.dataset.gridRow);
+    const col = Number(el.dataset.gridCol);
+    if (!Number.isFinite(row) || !Number.isFinite(col)) return;
+    e.preventDefault();
+    applyBlock(row, col, block);
+  }
+
+  function onKeyDown(e: KeyboardEvent<GridCell>) {
+    const el = e.currentTarget;
+    const row = Number(el.dataset.gridRow);
+    const col = Number(el.dataset.gridCol);
+    if (!Number.isFinite(row) || !Number.isFinite(col)) return;
+
+    // Ctrl+D — 바로 위 셀 값을 내려받는다(엑셀 동일). 숫자/문자 타입을 보존하려 파싱 없이 그대로 복사.
+    if ((e.ctrlKey || e.metaKey) && (e.key === "d" || e.key === "D")) {
+      e.preventDefault();
+      const f = fields[col];
+      if (!f || row < 1) return;
+      const above = items[row - 1] as Record<string, unknown>;
+      onChange(items.map((it, i) => (i === row ? finish({ ...it, [f]: above[f] } as T, [f]) : it)));
+      return;
+    }
+
+    if (e.key === "Enter") {
+      // Alt+Enter — 셀 안 줄바꿈(엑셀 동일). 브라우저 기본값에 기대지 않고 직접 끼워넣는다.
+      if (e.altKey) {
+        if (el.tagName !== "TEXTAREA") return;
+        e.preventDefault();
+        const s = el.selectionStart ?? el.value.length;
+        const t = el.selectionEnd ?? s;
+        writeField(row, col, `${el.value.slice(0, s)}\n${el.value.slice(t)}`);
+        requestAnimationFrame(() => {
+          el.selectionStart = el.selectionEnd = s + 1;
+        });
+        return;
+      }
+      e.preventDefault();
+      if (e.shiftKey) {
+        focusGridCell(el, row - 1, col);
+        return;
+      }
+      if (focusGridCell(el, row + 1, col)) return;
+      // 마지막 행에서 Enter → 행을 하나 늘리고 같은 컬럼으로 내려간다.
+      // 갓 추가된 빈 행에서 또 누르면 계속 늘어나므로, 손대지 않은 행이면 늘리지 않는다.
+      if (isUntouchedRow(items[row], blank(), fields)) return;
+      const table = el.closest("table");
+      if (table) pending.current = { table, row: row + 1, col };
+      onChange([...items, blank()]);
+      return;
+    }
+
+    handleGridKeyDown(e);
+  }
+
+  async function copyRows() {
+    const chosen = sel && sel.count > 0 ? items.filter((_, i) => sel.selected.has(i)) : items;
+    const lines: string[] = [];
+    if (headers?.length) lines.push(headers.map(tsvCell).join("\t"));
+    for (const it of chosen) {
+      const r = it as Record<string, unknown>;
+      lines.push(fields.map((f) => tsvCell(cellText(r[f]))).join("\t"));
+    }
+    await navigator.clipboard.writeText(lines.join("\r\n"));
+  }
+
+  return {
+    cell: (row, col) => ({
+      "data-grid-row": row,
+      "data-grid-col": col,
+      onKeyDown,
+      onPaste,
+    }),
+    copyRows,
+  };
+}
+
+/** blank() 대비 아직 아무것도 입력되지 않은 행인지. 기본값(qty=1, unit=PCS 등)은 빈 것으로 본다. */
+function isUntouchedRow<T extends object>(row: T | undefined, blank: T, fields: string[]): boolean {
+  if (!row) return true;
+  const a = row as Record<string, unknown>;
+  const b = blank as Record<string, unknown>;
+  return fields.every((f) => cellText(a[f]) === cellText(b[f]));
+}
+
+
+/** 품목표 헤더의 엑셀 단축키 안내. Enter 가 줄바꿈이 아니라 아래 셀 이동으로 바뀌었으므로
+ *  (엑셀과 동일) 최소한의 발견 수단이 필요하다 — 자세한 내용은 hover 툴팁. */
+export function ItemGridHint() {
+  return (
+    <span
+      className="items-head-hint"
+      title={[
+        "엑셀에서 복사한 범위를 셀에 붙여넣기 — 행이 모자라면 자동으로 늘어납니다.",
+        "  · 컬럼 순서가 다르면 엑셀에서 컬럼 하나씩 복사해 같은 컬럼에 붙여넣으세요.",
+        "Enter — 아래 셀로 이동 / Shift+Enter — 위로",
+        "Alt+Enter — 셀 안에서 줄바꿈",
+        "Ctrl+D — 바로 위 셀의 값을 그대로 내려받기",
+        "방향키 — 셀 이동 / Tab — 다음 셀",
+        "Copy — 선택한 행(없으면 전체)을 엑셀로 붙여넣게 복사",
+      ].join("\n")}
+    >
+      Excel keys
+    </span>
+  );
+}
+
+/** 선택 행(없으면 전체)을 엑셀용 TSV 로 복사하는 헤더 버튼. */
+export function CopyRowsButton({ grid, sel }: { grid: ItemGridKeys; sel?: RowSelection }) {
+  const [done, setDone] = useState(false);
+  return (
+    <button
+      type="button"
+      className="btn sm"
+      title="선택한 행(없으면 전체)을 엑셀에 붙여넣을 수 있게 복사"
+      onClick={async () => {
+        await grid.copyRows();
+        setDone(true);
+        setTimeout(() => setDone(false), 1200);
+      }}
+    >
+      {done ? "Copied" : `Copy${sel && sel.count > 0 ? ` (${sel.count})` : ""}`}
+    </button>
   );
 }
