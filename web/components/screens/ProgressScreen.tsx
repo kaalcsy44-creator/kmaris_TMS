@@ -27,6 +27,10 @@ import { ColumnResizer, ColumnsButton, dragHandleProps } from "@/components/comm
 import type { PipelineRow, CustomerOption, SettingsVessel, StageNote } from "@/lib/types";
 import WorkTypeBadge from "@/components/WorkTypeBadge";
 import CustomerName from "@/components/common/CustomerName";
+import ActivityNoteForm, {
+  initialNoteValue,
+  type ActivityNoteValue,
+} from "@/components/common/ActivityNoteForm";
 import { useCustomerLogo } from "@/lib/customerLogos";
 import VendorName from "@/components/common/VendorName";
 import VendorMonograms from "@/components/common/VendorMonograms";
@@ -2423,113 +2427,6 @@ function MissingOrderPanel() {
   );
 }
 
-const NOTE_PARTIES = ["Customer", "Vendor", "Internal", "Other"];
-const NOTE_CHANNELS = ["Email", "Call", "SMS", "Messenger", "Visit", "Other"];
-
-/** datetime-local 기본값(현재 시각, 분 단위) "YYYY-MM-DDTHH:MM". */
-function nowLocalInput(): string {
-  const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
-    d.getHours()
-  )}:${pad(d.getMinutes())}`;
-}
-
-/** 활동 기록 구조화 입력 폼 — 신규/수정 공용. initial 이 있으면 그 값으로 채운다. */
-function NoteForm({
-  initial,
-  submitLabel,
-  onSubmit,
-  onCancel,
-}: {
-  initial: StageNote | null;
-  submitLabel: string;
-  onSubmit: (p: { text: string; datetime: string; party: string; channel: string; direction: string }) => Promise<void>;
-  onCancel: () => void;
-}) {
-  const [dt, setDt] = useState(initial?.datetime || initial?.at || nowLocalInput());
-  const [party, setParty] = useState(initial?.party || "Customer");
-  const [channel, setChannel] = useState(initial?.channel || "Email");
-  const [direction, setDirection] = useState<"in" | "out" | "">(initial?.direction || "");
-  const [text, setText] = useState(initial?.text || "");
-  const [busy, setBusy] = useState(false);
-
-  async function go() {
-    const t = text.trim();
-    if (!t) return;
-    setBusy(true);
-    try {
-      await onSubmit({ text: t, datetime: dt, party, channel, direction });
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="pl-note-form">
-      <div className="pl-note-fields">
-        <input
-          type="datetime-local"
-          value={dt}
-          onChange={(e) => setDt(e.target.value)}
-          title="Activity time"
-        />
-        <select value={party} onChange={(e) => setParty(e.target.value)} title="Party">
-          {NOTE_PARTIES.map((p) => (
-            <option key={p} value={p}>
-              {p}
-            </option>
-          ))}
-        </select>
-        <select value={channel} onChange={(e) => setChannel(e.target.value)} title="Channel">
-          {NOTE_CHANNELS.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
-        {/* 수신(In)/발신(Out) 토글 — 같은 버튼 다시 누르면 해제(해당없음). */}
-        <div className="pl-dir-toggle" role="group" aria-label="Direction">
-          <button
-            type="button"
-            className={`pl-dir-btn${direction === "in" ? " on in" : ""}`}
-            onClick={() => setDirection((d) => (d === "in" ? "" : "in"))}
-            title="Received (수신)"
-          >
-            ↓ In
-          </button>
-          <button
-            type="button"
-            className={`pl-dir-btn${direction === "out" ? " on out" : ""}`}
-            onClick={() => setDirection((d) => (d === "out" ? "" : "out"))}
-            title="Sent (발신)"
-          >
-            ↑ Out
-          </button>
-        </div>
-      </div>
-      <div className="pl-note-add">
-        <input
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") go();
-            if (e.key === "Escape") onCancel();
-          }}
-          placeholder="Type the activity and press Enter"
-          autoFocus
-        />
-        <button className="pl-note-btn primary" onClick={go} disabled={busy || !text.trim()}>
-          {submitLabel}
-        </button>
-        <button className="pl-note-btn" onClick={onCancel}>
-          Cancel
-        </button>
-      </div>
-    </div>
-  );
-}
-
 /** 단계별 코멘트/활동이력 — 일시·상대·수단·내용 구조화 입력 + 기록 표시/수정/삭제. */
 /**
  * 거래 여정 타임라인 — 단계 완료 일시 + 모든 단계 노트를 시간순으로 병합해
@@ -2630,27 +2527,66 @@ function StageNotes({
   const writable = can("rfq", "edit");
   const [adding, setAdding] = useState(false);
   const [editIndex, setEditIndex] = useState<number | null>(null);
+  // 입력 폼은 Activity 페이지와 같은 공용 컴포넌트를 쓴다(담당자·★ 포함, 일시는 분 단위).
+  const [form, setForm] = useState<ActivityNoteValue>(() => initialNoteValue());
+  const [busy, setBusy] = useState(false);
 
-  async function submitAdd(p: { text: string; datetime: string; party: string; channel: string; direction: string }) {
+  function beginAdd() {
+    setEditIndex(null);
+    setForm(initialNoteValue());
+    setAdding(true);
+  }
+  function beginEdit(i: number, n: StageNote) {
+    setAdding(false);
+    setForm(initialNoteValue({
+      text: n.text,
+      datetime: n.datetime || n.at || "",
+      direction: (n.direction as "" | "in" | "out") || "",
+      party: n.party || "",
+      channel: n.channel || "",
+      star: !!n.star,
+      pic: n.pic || "",
+    }));
+    setEditIndex(i);
+  }
+
+  function payload() {
+    return {
+      text: form.text.trim(),
+      datetime: form.datetime,
+      direction: form.direction || undefined,
+      party: form.party || undefined,
+      channel: form.channel || undefined,
+      star: form.star,
+      pic: form.pic.trim() || undefined,
+    };
+  }
+
+  async function submitAdd() {
+    if (!form.text.trim()) return;
+    setBusy(true);
     try {
-      await addRfqStageNote(rfqId, stage, p);
+      await addRfqStageNote(rfqId, stage, payload());
       setAdding(false);
       onChanged();
     } catch (e) {
       window.alert(e instanceof Error ? e.message : "Failed to add activity");
+    } finally {
+      setBusy(false);
     }
   }
 
-  async function submitEdit(
-    index: number,
-    p: { text: string; datetime: string; party: string; channel: string; direction: string }
-  ) {
+  async function submitEdit(index: number) {
+    if (!form.text.trim()) return;
+    setBusy(true);
     try {
-      await updateRfqStageNote(rfqId, stage, index, p);
+      await updateRfqStageNote(rfqId, stage, index, payload());
       setEditIndex(null);
       onChanged();
     } catch (e) {
       window.alert(e instanceof Error ? e.message : "Update failed");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -2668,16 +2604,20 @@ function StageNotes({
     <div className="pl-notes">
       {notes.map((n, i) =>
         editIndex === i ? (
-          <NoteForm
+          <ActivityNoteForm
             key={i}
-            initial={n}
-            submitLabel="Save"
-            onSubmit={(p) => submitEdit(i, p)}
+            value={form}
+            onChange={setForm}
+            onSubmit={() => submitEdit(i)}
             onCancel={() => setEditIndex(null)}
+            submitLabel="Save"
+            busy={busy}
           />
         ) : (
-          <div className="pl-note" key={i}>
+          <div className={`pl-note${n.star ? " star" : ""}`} key={i}>
             <div className="pl-note-meta">
+              {/* ★·담당자는 입력 폼(공용)이 받는 값이라 여기서도 보여준다 — 안 그러면 넣어도 사라진 것처럼 보인다. */}
+              {n.star ? <span className="pl-note-star" title="중요">★</span> : null}
               <span className="pl-note-at">{fmtStageDate(n.datetime || n.at)}</span>
               {n.party ? <span className="pl-note-tag party">{n.party}</span> : null}
               {n.channel ? <span className="pl-note-tag channel">{n.channel}</span> : null}
@@ -2686,15 +2626,13 @@ function StageNotes({
               ) : n.direction === "out" ? (
                 <span className="pl-note-tag dir out" title="Sent (발신)">↑ Out</span>
               ) : null}
+              {n.pic ? <span className="pl-note-tag pic" title="담당자(작성자)">{n.pic}</span> : null}
               {writable ? (
                 <span className="pl-note-actions">
                   <button
                     className="pl-note-edit"
                     title="Edit"
-                    onClick={() => {
-                      setAdding(false);
-                      setEditIndex(i);
-                    }}
+                    onClick={() => beginEdit(i, n)}
                   >
                     ✎
                   </button>
@@ -2709,20 +2647,16 @@ function StageNotes({
         )
       )}
       {!writable ? null : adding ? (
-        <NoteForm
-          initial={null}
-          submitLabel="Add"
+        <ActivityNoteForm
+          value={form}
+          onChange={setForm}
           onSubmit={submitAdd}
           onCancel={() => setAdding(false)}
+          submitLabel="Add"
+          busy={busy}
         />
       ) : (
-        <button
-          className="pl-note-toggle"
-          onClick={() => {
-            setEditIndex(null);
-            setAdding(true);
-          }}
-        >
+        <button className="pl-note-toggle" onClick={beginAdd}>
           + Activity log
         </button>
       )}

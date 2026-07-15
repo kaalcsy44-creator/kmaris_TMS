@@ -8,32 +8,21 @@ import {
   addRfqStageNote,
   updateRfqStageNote,
   deleteRfqStageNote,
-  fetchAssignableUsers,
 } from "@/lib/api";
-import { useCachedData } from "@/lib/useCachedData";
 import type { PipelineData, PipelineRow, StageNote } from "@/lib/types";
-import { getUserId, getUser } from "@/lib/auth";
+import { getUserId } from "@/lib/auth";
 import CustomerName from "@/components/common/CustomerName";
 import VendorMonograms from "@/components/common/VendorMonograms";
+import ActivityNoteForm, {
+  initialNoteValue,
+  type ActivityNoteValue,
+} from "@/components/common/ActivityNoteForm";
 
 // 벤더 모노그램 상태 — 발주 벤더 확정 시 문자열 fallback, 아니면 RFQ 발송 벤더의 견적 수신여부.
 // (ProgressScreen 과 동일 규칙.)
 function vendorStatusesFor(r: PipelineRow): { name: string; quoted: boolean }[] | undefined {
   if (r.vendor) return undefined;
   return r.rfq_vendors && r.rfq_vendors.length ? r.rfq_vendors : undefined;
-}
-
-// 담당자(PIC) 드롭다운 후보 — 배정 가능 사용자(+ 로그인 사용자, + 현재 선택값). 공유 캐시.
-function usePicOptions(current: string): string[] {
-  const me = getUser();
-  const { data: users } = useCachedData("assignable-users", fetchAssignableUsers);
-  return useMemo(() => {
-    const set = new Set<string>();
-    if (me?.username) set.add(me.username);
-    (users ?? []).forEach((u) => set.add(u.username));
-    if (current) set.add(current);
-    return Array.from(set);
-  }, [users, me?.username, current]);
 }
 
 // 내부 11단계 → 5개 버킷(RFQ 1–2 / Quote 3–4 / PO 5–6 / Documents 7–9 / AR 10–11).
@@ -656,50 +645,30 @@ function ActivityCard({
   );
 }
 
-// Party / Channel 선택 — 프리셋 + '직접입력'(자유 텍스트, 영문). 두 필드가 동일 구조라 공용.
-const PARTY_PRESETS = ["Customer", "Vendor", "Internal"];
-const CHANNEL_PRESETS = ["Email", "Message", "Call"];
-function PresetSelect({
-  value,
-  onChange,
-  placeholder,
-  presets,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  placeholder: string; // 예: "Party —" / "Channel —"
-  presets: string[];
-}) {
-  // 값이 있고 프리셋이 아니면 직접입력 모드로 시작.
-  const [custom, setCustom] = useState(() => !!value && !presets.includes(value));
-  return (
-    <>
-      <select
-        value={custom ? "__custom__" : value}
-        onChange={(e) => {
-          const v = e.target.value;
-          if (v === "__custom__") { setCustom(true); onChange(""); }
-          else { setCustom(false); onChange(v); }
-        }}
-      >
-        <option value="">{placeholder}</option>
-        {presets.map((p) => (
-          <option key={p} value={p}>{p}</option>
-        ))}
-        <option value="__custom__">직접입력</option>
-      </select>
-      {custom ? (
-        <input
-          className="act-party-custom"
-          type="text"
-          value={value}
-          placeholder={placeholder.replace(/\s*—\s*$/, "")}
-          autoFocus
-          onChange={(e) => onChange(e.target.value)}
-        />
-      ) : null}
-    </>
-  );
+/** 저장된 노트 → 폼 값. */
+function noteToForm(n: StageNote): ActivityNoteValue {
+  return initialNoteValue({
+    text: n.text,
+    datetime: n.datetime || n.at || "",
+    direction: (n.direction as "" | "in" | "out") || "",
+    party: n.party || "",
+    channel: n.channel || "",
+    star: !!n.star,
+    pic: n.pic || "",
+  });
+}
+
+/** 폼 값 → 저장 payload. 빈 값은 보내지 않아 서버가 '미지정'으로 남긴다. */
+function formToPatch(v: ActivityNoteValue): NotePatch {
+  return {
+    text: v.text.trim(),
+    datetime: v.datetime,
+    direction: v.direction || undefined,
+    party: v.party || undefined,
+    channel: v.channel || undefined,
+    star: v.star,
+    pic: v.pic.trim() || undefined,
+  };
 }
 
 // 기존 활동 노트 1건 — 표시/인라인 수정 토글.
@@ -719,40 +688,18 @@ function NoteRow({
   const n = a.note;
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [text, setText] = useState(n.text);
-  const [date, setDate] = useState((n.datetime || n.at || "").slice(0, 10) || todayISO());
-  const [dir, setDir] = useState<"" | "in" | "out">((n.direction as "" | "in" | "out") || "");
-  const [party, setParty] = useState(n.party || "");
-  const [channel, setChannel] = useState(n.channel || "");
-  const [star, setStar] = useState(!!n.star);
-  const [pic, setPic] = useState(n.pic || "");
-  const picOptions = usePicOptions(pic);
+  const [form, setForm] = useState<ActivityNoteValue>(() => noteToForm(n));
 
   function begin() {
-    // 최신 저장값으로 초기화 후 편집 시작.
-    setText(n.text);
-    setDate((n.datetime || n.at || "").slice(0, 10) || todayISO());
-    setDir((n.direction as "" | "in" | "out") || "");
-    setParty(n.party || "");
-    setChannel(n.channel || "");
-    setStar(!!n.star);
-    setPic(n.pic || "");
+    setForm(noteToForm(n));   // 최신 저장값으로 초기화 후 편집 시작.
     setEditing(true);
   }
 
   async function save() {
-    if (!text.trim()) return;
+    if (!form.text.trim()) return;
     setBusy(true);
     try {
-      await onSave({
-        text: text.trim(),
-        datetime: `${date}T09:00`,
-        direction: dir || undefined,
-        party: party || undefined,
-        channel: channel || undefined,
-        star,
-        pic: pic.trim() || undefined,
-      });
+      await onSave(formToPatch(form));
       setEditing(false);
     } finally {
       setBusy(false);
@@ -762,43 +709,15 @@ function NoteRow({
   if (editing) {
     return (
       <li className="act-item editing">
-        <div className="act-add act-edit">
-          {/* 1행: 날짜 · From/To · Party · 담당자 · ★ */}
-          <div className="act-add-row">
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-            <div className="act-seg sm">
-              {(["in", "out"] as const).map((d) => (
-                <button key={d} className={dir === d ? "on" : ""} onClick={() => setDir((v) => (v === d ? "" : d))}>
-                  {d === "in" ? "From" : "To"}
-                </button>
-              ))}
-            </div>
-            <PresetSelect value={party} onChange={setParty} placeholder="Party —" presets={PARTY_PRESETS} />
-            <PresetSelect value={channel} onChange={setChannel} placeholder="Channel —" presets={CHANNEL_PRESETS} />
-            <select className="act-add-pic" value={pic} title="담당자(작성자)" onChange={(e) => setPic(e.target.value)}>
-              {pic ? null : <option value="">PIC —</option>}
-              {picOptions.map((u) => (
-                <option key={u} value={u}>{u}</option>
-              ))}
-            </select>
-            <label className="act-check"><input type="checkbox" checked={star} onChange={(e) => setStar(e.target.checked)} /> ★</label>
-          </div>
-          {/* 2행: 내용 */}
-          <div className="act-add-row">
-            <textarea
-              className="act-add-text"
-              value={text}
-              rows={2}
-              onChange={(e) => setText(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); save(); } }}
-              autoFocus
-            />
-          </div>
-          {/* 3행: Save · Cancel */}
-          <div className="act-add-row">
-            <button className="btn sm primary act-add-go" disabled={busy || !text.trim()} onClick={save}>{busy ? "…" : "Save"}</button>
-            <button className="btn sm act-add-go" onClick={() => setEditing(false)}>Cancel</button>
-          </div>
+        <div className="act-edit">
+          <ActivityNoteForm
+            value={form}
+            onChange={setForm}
+            onSubmit={save}
+            onCancel={() => setEditing(false)}
+            submitLabel="Save"
+            busy={busy}
+          />
         </div>
       </li>
     );
@@ -828,31 +747,16 @@ function NoteRow({
 
 function AddActivity({ rfqId, stage, onAdded }: { rfqId: number; stage: number; onAdded: () => void }) {
   const [open, setOpen] = useState(false);
-  const [text, setText] = useState("");
-  const [date, setDate] = useState(todayISO());
-  const [dir, setDir] = useState<"" | "in" | "out">(""); // in=from(수신) / out=to(발신)
-  const [party, setParty] = useState("");
-  const [channel, setChannel] = useState("");
-  const [star, setStar] = useState(false);
   const [busy, setBusy] = useState(false);
-  const me = getUser();
-  const [pic, setPic] = useState(me?.username ?? ""); // 담당자(작성자) — 기본값=로그인 사용자, 편집 가능
-  const picOptions = usePicOptions(pic);
+  const [form, setForm] = useState<ActivityNoteValue>(() => initialNoteValue());
 
   async function submit() {
-    if (!text.trim()) return;
+    if (!form.text.trim()) return;
     setBusy(true);
     try {
-      await addRfqStageNote(rfqId, stage, {
-        text: text.trim(),
-        datetime: `${date}T09:00`,
-        direction: dir || undefined,
-        party: party || undefined,
-        channel: channel || undefined,
-        star,
-        pic: pic.trim() || undefined,
-      });
-      setText(""); setDir(""); setParty(""); setChannel(""); setStar(false); setPic(me?.username ?? ""); setOpen(false);
+      await addRfqStageNote(rfqId, stage, formToPatch(form));
+      setForm(initialNoteValue());
+      setOpen(false);
       onAdded();
     } finally {
       setBusy(false);
@@ -860,52 +764,16 @@ function AddActivity({ rfqId, stage, onAdded }: { rfqId: number; stage: number; 
   }
 
   if (!open) {
-    return (
-      <button className="act-add-btn" onClick={() => setOpen(true)}>+ Add activity</button>
-    );
+    return <button className="act-add-btn" onClick={() => setOpen(true)}>+ Add activity</button>;
   }
   return (
-    <div className="act-add">
-      {/* 1행: 날짜 */}
-      <div className="act-add-row">
-        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-      </div>
-      {/* 2행: From/To · Party · 담당자(PIC) · ★ */}
-      <div className="act-add-row">
-        <div className="act-seg sm">
-          {(["in", "out"] as const).map((d) => (
-            <button key={d} className={dir === d ? "on" : ""} onClick={() => setDir((v) => (v === d ? "" : d))}>
-              {d === "in" ? "From" : "To"}
-            </button>
-          ))}
-        </div>
-        <PresetSelect value={party} onChange={setParty} placeholder="Party —" presets={PARTY_PRESETS} />
-        <PresetSelect value={channel} onChange={setChannel} placeholder="Channel —" presets={CHANNEL_PRESETS} />
-        <select className="act-add-pic" value={pic} title="담당자(작성자)" onChange={(e) => setPic(e.target.value)}>
-          {pic ? null : <option value="">PIC —</option>}
-          {picOptions.map((u) => (
-            <option key={u} value={u}>{u}</option>
-          ))}
-        </select>
-        <label className="act-check"><input type="checkbox" checked={star} onChange={(e) => setStar(e.target.checked)} /> ★</label>
-      </div>
-      {/* 3행: 내용 입력 — 길어지면 자동 줄바꿈(Enter=저장, Shift+Enter=줄바꿈). */}
-      <div className="act-add-row">
-        <textarea
-          className="act-add-text"
-          placeholder="Activity note (e.g. Waiting for PO / requested update)"
-          value={text}
-          rows={2}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); } }}
-          autoFocus
-        />
-      </div>
-      {/* 4행: Add · Cancel */}
-      <div className="act-add-row">
-        <button className="btn sm primary act-add-go" disabled={busy || !text.trim()} onClick={submit}>{busy ? "…" : "Add"}</button>
-        <button className="btn sm act-add-go" onClick={() => setOpen(false)}>Cancel</button>
-      </div>
-    </div>
+    <ActivityNoteForm
+      value={form}
+      onChange={setForm}
+      onSubmit={submit}
+      onCancel={() => setOpen(false)}
+      submitLabel="Add"
+      busy={busy}
+    />
   );
 }

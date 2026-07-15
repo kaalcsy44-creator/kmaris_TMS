@@ -1612,36 +1612,21 @@ table.perm-matrix td.perm-mod {
   background: #fef3c7;
   color: #b45309;
 }
-/* 수신(In)/발신(Out) 토글 — 세그먼트 컨트롤 */
-.pl-dir-toggle {
-  display: inline-flex;
-  border: 1px solid #c7d0de;
-  border-radius: 5px;
-  overflow: hidden;
-}
-.pl-dir-btn {
-  font-size: 11.5px;
-  font-weight: 600;
-  padding: 4px 8px;
-  border: 0;
-  background: #fff;
+/* 담당자(작성자) — 다른 태그와 달리 분류가 아니라 사람이라 중립 톤. */
+.pl-note-tag.pic {
+  background: #eef3f9;
   color: #64748b;
-  cursor: pointer;
-  line-height: 1.2;
+  font-weight: 600;
 }
-.pl-dir-btn + .pl-dir-btn {
-  border-left: 1px solid #c7d0de;
+/* ★ 표시 — Activity 페이지의 노트 강조와 같은 규칙(노란 배경 + 별). */
+.pl-note.star {
+  background: #fff8e6;
 }
-.pl-dir-btn:hover {
-  background: #f1f5f9;
-}
-.pl-dir-btn.on.in {
-  background: #16a34a;
-  color: #fff;
-}
-.pl-dir-btn.on.out {
-  background: #d97706;
-  color: #fff;
+.pl-note-star {
+  flex-shrink: 0;
+  color: #f59e0b;
+  font-size: 11px;
+  line-height: 1;
 }
 .pl-tl-dir {
   font-weight: 700;
@@ -1651,84 +1636,6 @@ table.perm-matrix td.perm-mod {
 }
 .pl-tl-dir.out {
   color: #b45309;
-}
-.pl-note-form {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-.pl-note-fields {
-  display: flex;
-  gap: 5px;
-  flex-wrap: wrap;
-}
-.pl-note-fields input,
-.pl-note-fields select {
-  font-size: 11.5px;
-  padding: 4px 7px;
-  border: 1px solid #c7d0de;
-  border-radius: 5px;
-  background: #fff;
-}
-.pl-note-fields input[type="datetime-local"] {
-  flex: 1;
-  min-width: 150px;
-}
-.pl-note-edit,
-.pl-note-del {
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  line-height: 1;
-  padding: 0 2px;
-  flex-shrink: 0;
-}
-.pl-note-edit {
-  color: #8a97ab;
-  font-size: 11px;
-}
-.pl-note-edit:hover {
-  color: var(--navy);
-}
-.pl-note-del {
-  color: #b9a0a0;
-  font-size: 13px;
-}
-.pl-note-del:hover {
-  color: #c0392b;
-}
-.pl-note-add {
-  display: flex;
-  gap: 5px;
-  align-items: center;
-}
-.pl-note-add input {
-  flex: 1;
-  min-width: 0;
-  font-size: 11.5px;
-  padding: 4px 7px;
-  border: 1px solid #c7d0de;
-  border-radius: 5px;
-}
-.pl-note-btn {
-  border: 1px solid #c7d0de;
-  background: #fff;
-  color: #45526a;
-  font-size: 11px;
-  font-weight: 600;
-  padding: 4px 9px;
-  border-radius: 5px;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.pl-note-btn.primary {
-  background: var(--navy);
-  border-color: var(--navy);
-  color: #fff;
-}
-.pl-note-btn:disabled {
-  opacity: 0.5;
-  cursor: default;
 }
 .pl-note-toggle {
   align-self: flex-start;
@@ -8174,7 +8081,10 @@ table.mini .num {
 .act-add-btn:hover { border-color: #0055a8; color: #0055a8; }
 .act-add { display: flex; flex-direction: column; gap: 6px; }
 .act-add-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.act-add input[type="date"], .act-add select { padding: 4px 6px; border: 1px solid var(--border, #d8dee6);
+/* 일시는 분 단위(datetime-local) — Progress 목록이 시각을 표시하므로 날짜만 받으면 09:00 이 박힌다. */
+.act-add input[type="date"],
+.act-add input[type="datetime-local"],
+.act-add select { padding: 4px 6px; border: 1px solid var(--border, #d8dee6);
   border-radius: 6px; font-size: 12px; }
 /* 담당자(PIC) 드롭다운 — 사용자명이 들어갈 만큼만. */
 .act-add-pic { min-width: 96px; }
