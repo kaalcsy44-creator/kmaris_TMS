@@ -362,28 +362,32 @@ def vendor_rfq_email_send(
     cc: str = Form(""),
     from_email: str = Form(""),
     format: str = Form("pdf"),
+    include_document: bool = Form(True),
     files: List[UploadFile] = File(default=[]),
 ):
-    """Vendor RFQ 이메일 발송 — 생성 문서(PDF/XLSX) + 사용자가 추가한 첨부."""
+    """Vendor RFQ 이메일 발송 — 생성 문서(PDF/XLSX) + 사용자가 추가한 첨부.
+    include_document=False 면 문서를 만들지 않고 본문(+업로드 첨부)만 보낸다."""
     s = get_session()
     try:
         vr, rfq, vendor, cust, vessel, rfq_no, items, safe = _vrfq_ctx(s, vrfq_id)
         if not to.strip():
             raise HTTPException(status_code=400, detail="수신자 이메일을 입력하세요.")
-        if format == "pdf":
-            payload = build_po_payload(
-                po_no=rfq_no, date=vr.sent_date or date.today().isoformat(),
-                vendor=vendor, vessel=vessel, items=items,
-            )
-            generated = (f"{rfq_no}_RFQ_{safe}.pdf", generate_pdf("vendor_rfq", payload))
-        else:
-            xlsx = make_vendor_rfq_quote_xlsx(
-                rfq_no=rfq_no, vessel_name=vessel.name if vessel else "—",
-                customer_name=cust.name if cust else "—",
-                enquiry_date=vr.sent_date or date.today().isoformat(),
-                vendor_name=vendor.name if vendor else "—", items=items,
-            )
-            generated = (f"{rfq_no}_VendorQuoteSheet_{safe}.xlsx", xlsx)
+        generated = None
+        if include_document:
+            if format == "pdf":
+                payload = build_po_payload(
+                    po_no=rfq_no, date=vr.sent_date or date.today().isoformat(),
+                    vendor=vendor, vessel=vessel, items=items,
+                )
+                generated = (f"{rfq_no}_RFQ_{safe}.pdf", generate_pdf("vendor_rfq", payload))
+            else:
+                xlsx = make_vendor_rfq_quote_xlsx(
+                    rfq_no=rfq_no, vessel_name=vessel.name if vessel else "—",
+                    customer_name=cust.name if cust else "—",
+                    enquiry_date=vr.sent_date or date.today().isoformat(),
+                    vendor_name=vendor.name if vendor else "—", items=items,
+                )
+                generated = (f"{rfq_no}_VendorQuoteSheet_{safe}.xlsx", xlsx)
         attachments = build_attachments(generated, files)
         sent = send_email(
             to=to.strip(),

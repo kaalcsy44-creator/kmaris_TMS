@@ -60,6 +60,7 @@ export default function DocSendPanel({
     signature: string;
     includeSignature: boolean;
     format: DocFormat;
+    includeDocument: boolean;
     lang: "en" | "ko";
     files: File[];
   }) => Promise<{ sent_date?: string }>;
@@ -79,6 +80,8 @@ export default function DocSendPanel({
   const [signature, setSignature] = useState("");
   const [includeSignature, setIncludeSignature] = useState(true);
   const [sigMsg, setSigMsg] = useState("");
+  // 생성 문서(견적서·발주서 등) 첨부 여부. 기본은 붙임 — 이 화면의 본래 목적이 문서 발송이다.
+  const [includeDoc, setIncludeDoc] = useState(true);
   const [files, setFiles] = useState<File[]>([]);
   const [smtpConfigured, setSmtpConfigured] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -87,8 +90,10 @@ export default function DocSendPanel({
   const autoRan = useRef(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  // 표시 용량은 업로드분만 — 생성 문서는 발송 시점에 서버가 만들어 크기를 미리 알 수 없다.
   const attachTotal = files.reduce((n, f) => n + f.size, 0);
   const overSize = attachTotal > MAX_ATTACH_TOTAL;
+  const attachCount = files.length + (includeDoc ? 1 : 0);
 
   function addFiles(picked: FileList | null) {
     if (!picked?.length) return;
@@ -174,7 +179,8 @@ export default function DocSendPanel({
     setErr(null);
     try {
       const r = await onSend({
-        to, from, cc, subject, body, notes, signature, includeSignature, format, lang, files,
+        to, from, cc, subject, body, notes, signature, includeSignature,
+        format, includeDocument: includeDoc, lang, files,
       });
       setMsg(`Email sent${r.sent_date ? `: ${r.sent_date}` : ""}`);
     } catch (e) {
@@ -193,32 +199,24 @@ export default function DocSendPanel({
         <div className="hint-inline" style={{ marginBottom: 8 }}>{disabledReason}</div>
       ) : null}
 
+      {/* 이메일을 쓰지 않는 다운로드 전용 모드에서만 포맷별 내려받기 버튼을 둔다.
+          이메일 모드에서는 첨부 칩 안의 ↓ 로 같은 파일을 받을 수 있어 중복이다. */}
       <div className="doc-send-row">
-        {formats.map((f) => (
-          <button
-            key={f}
-            type="button"
-            className="btn sm"
-            disabled={disabled}
-            onClick={() => download(f)}
-            title={`Download ${f.toUpperCase()}`}
-          >
-            ↓ {f.toUpperCase()}
-          </button>
-        ))}
+        {!emailEnabled
+          ? formats.map((f) => (
+              <button
+                key={f}
+                type="button"
+                className="btn sm"
+                disabled={disabled}
+                onClick={() => download(f)}
+                title={`Download ${f.toUpperCase()}`}
+              >
+                ↓ {f.toUpperCase()}
+              </button>
+            ))
+          : null}
         <span className="doc-send-spacer" />
-        <label className="doc-send-inline">
-          Attach
-          <select
-            value={format}
-            onChange={(e) => setFormat(e.target.value as DocFormat)}
-            disabled={disabled || formats.length <= 1}
-          >
-            {formats.map((f) => (
-              <option key={f} value={f}>{f.toUpperCase()}</option>
-            ))}
-          </select>
-        </label>
         {emailEnabled ? (
           <label className="doc-send-inline">
             Lang
@@ -272,63 +270,92 @@ export default function DocSendPanel({
             <textarea className="po-textarea" value={body} onChange={(e) => setBody(e.target.value)} />
           </div>
 
-          {/* 본문 뒤에 붙는 문단 — 이번 건에만 덧붙일 내용. */}
-          <div className="form-field" style={{ marginTop: 8 }}>
-            <label>Notes (optional)</label>
-            <textarea
-              className="mail-notes"
-              rows={3}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Added after the body, before the signature."
-            />
+          {/* Notes(본문 뒤 문단) · Signature 는 본문만큼 길 일이 없어 좌우 2열 · 절반 높이. */}
+          <div className="mail-compose-2col">
+            <div className="form-field">
+              <label>Notes (optional)</label>
+              <textarea
+                className="mail-notes"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Added after the body, before the signature."
+              />
+            </div>
+
+            <div className="form-field">
+              <label className="mail-sig-head">
+                <span>Signature</span>
+                <span className="mail-sig-tools">
+                  {sigMsg ? <span className="action-ok">{sigMsg}</span> : null}
+                  <label className="mail-sig-toggle">
+                    <input
+                      type="checkbox"
+                      checked={includeSignature}
+                      onChange={(e) => setIncludeSignature(e.target.checked)}
+                    />
+                    Include
+                  </label>
+                  <button
+                    type="button"
+                    className="btn ghost xs"
+                    onClick={saveSignatureAsDefault}
+                    disabled={!includeSignature}
+                    title="이 서명을 내 기본 서명으로 저장 — 이후 모든 단계 발송 화면에 채워집니다"
+                  >
+                    Save as default
+                  </button>
+                </span>
+              </label>
+              <textarea
+                className="mail-sig"
+                value={signature}
+                onChange={(e) => setSignature(e.target.value)}
+                disabled={!includeSignature}
+              />
+            </div>
           </div>
 
-          <div className="form-field" style={{ marginTop: 8 }}>
-            <label className="mail-sig-head">
-              Signature
-              <span className="mail-sig-tools">
-                <label className="mail-sig-toggle">
-                  <input
-                    type="checkbox"
-                    checked={includeSignature}
-                    onChange={(e) => setIncludeSignature(e.target.checked)}
-                  />
-                  Include
-                </label>
-                <button
-                  type="button"
-                  className="btn ghost xs"
-                  onClick={saveSignatureAsDefault}
-                  disabled={!includeSignature}
-                  title="이 서명을 내 기본 서명으로 저장 — 이후 모든 단계 발송 화면에 채워집니다"
-                >
-                  Save as default
-                </button>
-                {sigMsg ? <span className="action-ok">{sigMsg}</span> : null}
-              </span>
-            </label>
-            <textarea
-              className="mail-sig"
-              rows={4}
-              value={signature}
-              onChange={(e) => setSignature(e.target.value)}
-              disabled={!includeSignature}
-            />
-          </div>
-
-          {/* 첨부 — 생성 문서(Attach 선택 포맷)는 서버가 붙이므로 목록 맨 위에 고정 표시. */}
+          {/* 첨부 — 이 메일에 무엇이 붙는지 한 곳에서 다 보이게 한다.
+              생성 문서도 체크를 끄면 빠진다(서버가 아예 만들지 않는다). 포맷 선택·내려받기도
+              이 칩 위에 둬서 상단에 따로 두던 Attach 드롭다운·다운로드 버튼을 없앴다. */}
           <div className="form-field" style={{ marginTop: 8 }}>
             <label className="mail-attach-head">
-              Attachments
+              <span>Attachments</span>
               <span className={`mail-attach-size${overSize ? " over" : ""}`}>
                 {fmtSize(attachTotal)} / {fmtSize(MAX_ATTACH_TOTAL)}
               </span>
             </label>
             <div className="mail-attach-list">
-              <span className="mail-attach generated" title="Attach 에서 고른 포맷으로 자동 첨부됩니다">
-                <span className="mail-attach-name">📄 {downloadName(format)}</span>
-                <span className="mail-attach-tag">auto</span>
+              <span className={`mail-attach generated${includeDoc ? "" : " off"}`}>
+                <label className="mail-attach-pick" title="이 문서를 첨부합니다(끄면 본문만 발송)">
+                  <input
+                    type="checkbox"
+                    checked={includeDoc}
+                    onChange={(e) => setIncludeDoc(e.target.checked)}
+                  />
+                  <span className="mail-attach-name">{downloadName(format)}</span>
+                </label>
+                {formats.length > 1 ? (
+                  <select
+                    className="mail-attach-fmt"
+                    value={format}
+                    onChange={(e) => setFormat(e.target.value as DocFormat)}
+                    disabled={!includeDoc}
+                    title="첨부 형식"
+                  >
+                    {formats.map((f) => (
+                      <option key={f} value={f}>{f.toUpperCase()}</option>
+                    ))}
+                  </select>
+                ) : null}
+                <button
+                  type="button"
+                  className="mail-attach-dl"
+                  title="이 문서를 내려받아 확인"
+                  onClick={() => download(format)}
+                >
+                  ↓
+                </button>
               </span>
               {files.map((f, i) => (
                 <span key={`${f.name}:${f.size}:${i}`} className="mail-attach">
@@ -381,9 +408,7 @@ export default function DocSendPanel({
               onClick={send}
               disabled={disabled || busy || !to || !smtpConfigured || overSize}
             >
-              {busy
-                ? "Sending…"
-                : `Send (attach ${format.toUpperCase()}${files.length ? ` +${files.length}` : ""})`}
+              {busy ? "Sending…" : attachCount ? `Send (${attachCount} attached)` : "Send"}
             </button>
             {msg ? <span className="action-ok">{msg}</span> : null}
             {err ? <span className="action-err">{err}</span> : null}

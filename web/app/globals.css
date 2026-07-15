@@ -4512,10 +4512,23 @@ table.mini input[type="checkbox"].row-check:indeterminate::after {
 @media (max-width: 760px) {
   .mail-addr-grid { grid-template-columns: 1fr; }
 }
-/* 본문 뒤에 붙는 문단 — 본문보다 짧게. */
-.mail-notes,
-.mail-sig {
+/* Notes·Signature — 본문(.po-textarea 240px)의 절반 높이로 좌우 2열.
+   아래 규칙들은 .doc-send-panel 로 한 단계 감싼다: .form-field textarea/label 쪽이
+   min-height:240px · display:block 을 걸고 있어 클래스 하나로는 특이도에서 진다. */
+.mail-compose-2col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 8px;
+}
+@media (max-width: 760px) {
+  .mail-compose-2col { grid-template-columns: 1fr; }
+}
+.doc-send-panel .mail-notes,
+.doc-send-panel .mail-sig {
   width: 100%;
+  min-height: 120px;
+  height: 120px;
   border: 1px solid #d7e2ee;
   border-radius: 8px;
   padding: 10px 12px;
@@ -4526,13 +4539,13 @@ table.mini input[type="checkbox"].row-check:indeterminate::after {
   color: var(--ink);
   resize: vertical;
 }
-.mail-sig:disabled {
+.doc-send-panel .mail-sig:disabled {
   background: var(--head-bg);
   color: var(--muted);
 }
-/* 서명 라벨 줄 — 라벨 좌측, 포함 토글·기본저장 우측. */
-.mail-sig-head,
-.mail-attach-head {
+/* 서명·첨부 라벨 줄 — 라벨 좌측, 도구 우측. */
+.doc-send-panel .mail-sig-head,
+.doc-send-panel .mail-attach-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -4581,24 +4594,53 @@ table.mini input[type="checkbox"].row-check:indeterminate::after {
   background: #fff;
   font-size: 11.5px;
 }
-/* 생성 문서(견적서 등) — 사용자가 뗄 수 없는 자동 첨부라 톤을 구분한다. */
+/* 생성 문서(견적서 등) — 시스템이 만드는 첨부라 톤을 구분한다. 체크를 끄면 흐려진다. */
 .mail-attach.generated {
   background: #eef4fb;
   border-color: #b9d3ee;
   color: #0b3d6e;
+  padding-left: 6px;
 }
+.mail-attach.generated.off {
+  background: var(--head-bg);
+  border-color: var(--line-strong);
+  color: var(--muted);
+}
+.mail-attach-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  cursor: pointer;
+}
+.mail-attach.generated.off .mail-attach-name {
+  text-decoration: line-through;
+}
+.mail-attach-fmt {
+  height: 20px;
+  padding: 0 2px;
+  border: 1px solid #b9d3ee;
+  border-radius: 5px;
+  background: #fff;
+  font-size: 10.5px;
+  color: inherit;
+}
+.mail-attach-dl {
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 0 1px;
+  font-size: 12px;
+  line-height: 1;
+  opacity: 0.75;
+}
+.mail-attach-dl:hover { opacity: 1; }
 .mail-attach-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 260px;
-}
-.mail-attach-tag {
-  font-size: 9.5px;
-  font-weight: 700;
-  letter-spacing: 0.4px;
-  text-transform: uppercase;
-  color: #4a7fb5;
 }
 .mail-attach-size-sm {
   color: var(--muted);

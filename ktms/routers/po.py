@@ -803,9 +803,11 @@ def vendor_po_send(
     cc: str = Form(""),
     from_email: str = Form(""),
     format: str = Form("pdf"),
+    include_document: bool = Form(True),
     files: List[UploadFile] = File(default=[]),
 ):
-    """발주서 이메일 발송 — 생성 문서(PDF/XLSX) + 사용자가 추가한 첨부."""
+    """발주서 이메일 발송 — 생성 문서(PDF/XLSX) + 사용자가 추가한 첨부.
+    include_document=False 면 문서를 만들지 않고 본문(+업로드 첨부)만 보낸다."""
     s = get_session()
     try:
         po = s.query(PurchaseOrder).filter_by(id=po_id).first()
@@ -816,18 +818,20 @@ def vendor_po_send(
         vendor = s.query(Vendor).filter_by(id=po.vendor_id).first()
         order = s.query(Order).filter_by(id=po.order_id).first()
         vessel = s.query(Vessel).filter_by(id=order.vessel_id).first() if order and order.vessel_id else None
-        payload = build_po_payload(
-            po_no=po.po_no,
-            date=po.date or date.today().isoformat(),
-            vendor=vendor,
-            vessel=vessel,
-            items=po.items or [],
-        )
-        if format == "xlsx":
-            payload["terms"] = getattr(po, "terms", None) or {}
-            generated = (f"{po.po_no}_PurchaseOrder.xlsx", make_document_xlsx("purchase_order", payload))
-        else:
-            generated = (f"{po.po_no}_PurchaseOrder.pdf", generate_po_pdf(payload))
+        generated = None
+        if include_document:
+            payload = build_po_payload(
+                po_no=po.po_no,
+                date=po.date or date.today().isoformat(),
+                vendor=vendor,
+                vessel=vessel,
+                items=po.items or [],
+            )
+            if format == "xlsx":
+                payload["terms"] = getattr(po, "terms", None) or {}
+                generated = (f"{po.po_no}_PurchaseOrder.xlsx", make_document_xlsx("purchase_order", payload))
+            else:
+                generated = (f"{po.po_no}_PurchaseOrder.pdf", generate_po_pdf(payload))
         sent = send_email(
             to=to.strip(),
             subject=subject,

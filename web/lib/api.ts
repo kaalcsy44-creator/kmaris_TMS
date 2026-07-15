@@ -404,6 +404,8 @@ export interface DocEmailSend {
   signature?: string;
   includeSignature?: boolean;
   format?: "pdf" | "xlsx";
+  /** 생성 문서(견적서 등)를 첨부할지. false 면 서버가 문서를 만들지 않는다. */
+  includeDocument?: boolean;
   files?: File[];
 }
 
@@ -418,6 +420,7 @@ function docEmailFormData(p: DocEmailSend): FormData {
   fd.append("signature", p.signature ?? "");
   fd.append("include_signature", String(p.includeSignature ?? true));
   fd.append("format", p.format ?? "pdf");
+  fd.append("include_document", String(p.includeDocument ?? true));
   for (const f of p.files ?? []) fd.append("files", f);
   return fd;
 }

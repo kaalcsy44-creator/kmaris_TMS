@@ -393,9 +393,11 @@ def quotation_send(
     from_email: str = Form(""),
     format: str = Form("pdf"),
     doc_type: str = Form("quotation"),
+    include_document: bool = Form(True),
     files: List[UploadFile] = File(default=[]),
 ):
-    """견적서 이메일 발송 — 생성 문서(PDF/XLSX) + 사용자가 추가한 첨부."""
+    """견적서 이메일 발송 — 생성 문서(PDF/XLSX) + 사용자가 추가한 첨부.
+    include_document=False 면 문서를 만들지 않고 본문(+업로드 첨부)만 보낸다."""
     s = get_session()
     try:
         qtn = s.query(Quotation).filter_by(id=qtn_id).first()
@@ -403,11 +405,13 @@ def quotation_send(
             raise HTTPException(status_code=404, detail="견적서를 찾을 수 없습니다.")
         if not to.strip():
             raise HTTPException(status_code=400, detail="수신자 이메일을 입력하세요.")
-        payload = _quotation_payload(s, qtn)
-        if format == "xlsx":
-            generated = (f"{qtn.qtn_no}.xlsx", make_document_xlsx(doc_type, payload))
-        else:
-            generated = (f"{qtn.qtn_no}.pdf", generate_pdf(doc_type, payload))
+        generated = None
+        if include_document:
+            payload = _quotation_payload(s, qtn)
+            if format == "xlsx":
+                generated = (f"{qtn.qtn_no}.xlsx", make_document_xlsx(doc_type, payload))
+            else:
+                generated = (f"{qtn.qtn_no}.pdf", generate_pdf(doc_type, payload))
         sent = send_email(
             to=to.strip(),
             subject=subject,

@@ -57,7 +57,8 @@ def check_total_size(attachments: Sequence[Attachment]) -> None:
 
 def build_attachments(generated: Optional[Attachment],
                       files: Optional[Sequence[UploadFile]]) -> List[Attachment]:
-    """생성 문서(먼저) + 업로드 파일 순으로 첨부 목록을 만들고 용량을 확인한다."""
+    """생성 문서(먼저) + 업로드 파일 순으로 첨부 목록을 만들고 용량을 확인한다.
+    generated=None 이면 문서 없이 본문만 보낸다(발송 화면에서 문서 첨부를 끈 경우)."""
     out: List[Attachment] = []
     if generated is not None:
         out.append(generated)
