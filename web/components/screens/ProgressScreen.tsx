@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -21,6 +21,15 @@ import {
   closeReasonLabel,
 } from "@/lib/api";
 import { useCachedData, invalidateCache } from "@/lib/useCachedData";
+import {
+  vendorOf,
+  resolveSteps,
+  fmtStageDate,
+  stageDateOf,
+  buildStageChain,
+  joinDot,
+} from "@/lib/deal";
+import { INFO_FIELDS, DEFAULT_INFO_FIELDS } from "@/components/common/dealFields";
 import { sortByDocNo } from "@/lib/sort";
 import { useColumnLayout } from "@/components/common/useColumnLayout";
 import { ColumnResizer, ColumnsButton, dragHandleProps } from "@/components/common/tableLayout";
@@ -43,61 +52,6 @@ import { ArOverview } from "@/components/screens/ArScreen";
 import { tr } from "@/lib/labels";
 import { getUser, can, isOwnScoped, isAdmin } from "@/lib/auth";
 
-// 좌측 프로젝트 정보 패널에 표시 가능한 항목(사용자가 표시 여부 선택). render 는 표시값.
-// 줄바꿈으로 구분된 여러 값(선박·고객 PO 목록)을 여러 줄로 렌더. 1개면 그대로, 없으면 —.
-function multiText(s: string): ReactNode {
-  const parts = (s || "").split("\n").filter(Boolean);
-  if (parts.length === 0) return "—";
-  if (parts.length === 1) return parts[0];
-  return parts.map((p, i) => <div key={i}>{p}</div>);
-}
-
-// Vendor 필드: RFQ를 보낸 모든 벤더를 나열하되, 견적을 받지 못한 벤더는 취소선으로
-// 표시한다. RFQ 발송 전이면 발주(P/O) 벤더 또는 —.
-function vendorList(r: PipelineRow): ReactNode {
-  const list = r.rfq_vendors;
-  if (list && list.length) {
-    return list.map((v, i) => (
-      <div key={i} className={v.quoted ? undefined : "vendor-noquote"}>
-        {v.name}
-      </div>
-    ));
-  }
-  return r.vendor ? multiText(r.vendor) : "—";
-}
-
-const INFO_FIELDS: { key: string; label: string; render: (r: PipelineRow) => ReactNode }[] = [
-  { key: "customer", label: "Customer", render: (r) => (r.customer ? <CustomerName name={r.customer} /> : "—") },
-  { key: "trade_type", label: "Trade type", render: (r) => tr(r.trade_type || "수출") },
-  { key: "vessel", label: "Vessel", render: (r) => multiText(r.vessels || r.vessel) },
-  { key: "vendor", label: "Vendor", render: (r) => vendorList(r) },
-  { key: "project_title", label: "Project title", render: (r) => r.project_title || "—" },
-  { key: "customer_po_no", label: "Customer P/O No.", render: (r) => multiText(r.customer_po_nos || r.customer_po_no) },
-  {
-    key: "items",
-    label: "Items",
-    render: (r) =>
-      r.item_count ? (r.first_item ? `${r.first_item} 외 ${r.item_count} unit` : r.item_count) : "—",
-  },
-  { key: "sales_amount", label: "Sales", render: (r) => r.sales_total || r.customer_amount || "—" },
-  { key: "purchase_amount", label: "Purchase", render: (r) => r.purchase_total || r.vendor_amount || "—" },
-  {
-    key: "margin",
-    label: "Margin",
-    render: (r) =>
-      r.margin_amount
-        ? `${r.margin_amount}${r.margin_pct != null ? ` (${r.margin_pct}%)` : ""}`
-        : "—",
-  },
-  { key: "pic", label: "PIC", render: (r) => r.assignee || "—" },
-  { key: "customer_rfq_no", label: "Customer RFQ No.", render: (r) => r.customer_rfq_no || "—" },
-  { key: "kmaris_rfq_no", label: "K-Maris RFQ No.", render: (r) => r.kmaris_rfq_no || "—" },
-];
-const DEFAULT_INFO_FIELDS = [
-  "customer", "trade_type", "vessel", "vendor", "project_title", "customer_po_no", "items",
-  "sales_amount", "purchase_amount", "margin",
-];
-
 // 고객확인용 7단계(RFQ 3 + Order 4) — 내부확인용과 동일한 표를 쓰되 단계만 7개.
 const CUSTOMER_STEPS = [
   "RFQ Received",
@@ -113,17 +67,6 @@ const CUSTOMER_STAGE_MAP = [1, 2, 2, 3, 4, 5, 6, 7, 7, 7, 7];
 function customerStage(internal: number): number {
   if (internal <= 0) return 0;
   return CUSTOMER_STAGE_MAP[Math.min(internal, 11) - 1] ?? 0;
-}
-
-// 업무타입 "서비스"는 내부 11단계 중 7·8단계를 서비스 명칭으로 표시한다.
-const SERVICE_STEP_OVERRIDES: Record<number, string> = {
-  7: "Service Readiness",
-  8: "Service Complete · Report",
-};
-function resolveSteps(baseSteps: string[], workType?: string | null): string[] {
-  // 내부 11단계에만 적용(고객확인용 7단계는 그대로).
-  if (baseSteps.length !== 11 || (workType || "부품공급") !== "서비스") return baseSteps;
-  return baseSteps.map((name, i) => SERVICE_STEP_OVERRIDES[i + 1] ?? name);
 }
 
 // 내부 11단계 → 5개 중분류(영역): RFQ 1–2 / Quote 3–4 / PO 5–6 / Docs 7–9 / AR 10–11.
@@ -148,15 +91,6 @@ function phaseIndexOfStage(stage: number): number {
     if (stage <= acc) return i;
   }
   return STAGE_PHASES.length - 1;
-}
-
-/** "YYYY-MM-DDTHH:MM" → "yy-mm-dd HH:MM" (표시용). 빈값이면 "". */
-function fmtStageDate(iso: string): string {
-  if (!iso) return "";
-  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
-  if (!m) return iso;
-  const [, y, mo, d, h, mi] = m;
-  return `${y.slice(2)}-${mo}-${d} ${h}:${mi}`;
 }
 
 /** ISO('YYYY-MM-DD…') → 관리번호와 같은 6자리 yymmdd(예: "260703"). 없으면 빈칸. */
@@ -364,11 +298,6 @@ function blankPipelineRow(): PipelineRow {
   };
 }
 
-/** ` · ` 로 빈값을 건너뛰며 이어붙인다. */
-function joinDot(...parts: (string | undefined)[]): string {
-  return parts.filter((p) => p && p.trim()).join(" · ");
-}
-
 // 상세편집 단계 제목의 보조 설명(괄호) — 발신/수신 주체를 회색으로 덧붙인다.
 // 단계 제목 본문(steps[])은 짧게 유지하고, 이 자격 문구는 상세 헤더에서만 표기.
 const STAGE_TITLE_QUALIFIER: Record<number, string> = {
@@ -485,11 +414,6 @@ const PLC_CLASS: Record<ColKey, string> = {
   stage: "plc-stage",
   assignee: "plc-assignee",
 };
-
-/** 거래의 벤더 표시값 — 확정 벤더(PO) 우선, 없으면 RFQ 발송 벤더 목록. */
-function vendorOf(r: PipelineRow): string {
-  return r.vendor || r.vrfq_vendors || "";
-}
 
 // 보드 카드 벤더 배지: P/O 발주 벤더가 정해지기 전에는 RFQ 발송 벤더 + 견적 수신여부를
 // 넘겨 미제출 벤더를 고스트로 표시한다. P/O 이후엔(문자열) 그대로 정상 표시.
@@ -1305,7 +1229,7 @@ function BoardCard({
   const barTitle = `${filled}/${total} ${steps[filled - 1] ?? ""}`;
   // 현재(최종 진행) 단계의 날짜: 수동 저장값 우선, 없으면 자동 동기화값. yymmdd로 표기.
   // 조회는 내부 단계번호(r.stage) 기준 — Customer 탭에서 filled가 재매핑돼도 정확.
-  const stageDate = fmtYYMMDD(r.stage_dates?.[String(r.stage)] ?? r.stage_auto?.[String(r.stage)] ?? "");
+  const stageDate = fmtYYMMDD(stageDateOf(r, r.stage));
   // 종결 상태: 취소(회색+리본) / 완료(11단계 Payment Completed → 초록 체크).
   const cancelled = !!r.cancelled;
   const done = !cancelled && filled >= total;
@@ -1753,29 +1677,8 @@ export function PipelineModal({
   // 좌측 패널은 읽기전용 요약(+ 표시 항목 선택)만 담당한다.
   const rSteps = resolveSteps(steps, r.work_type || "부품공급");
 
-  /** 단계의 표시 일시(읽기 전용): 수동 저장값 우선, 없으면 자동 동기화값, 둘 다 없으면 빈칸. */
-  function effective(stage: number): string {
-    return r.stage_dates?.[String(stage)] ?? r.stage_auto?.[String(stage)] ?? "";
-  }
-
-  // 12단계 체인: 1~6은 문서번호·금액, 7~12는 문서 없이 완료 일시만. 일시는 effective() 통일.
-  const docValue: Record<number, string> = {
-    1: r.customer_rfq_no,
-    2: r.vrfq_vendors,
-    3: joinDot(r.vquote_no, r.vendor_amount),
-    4: joinDot(r.cquote_no, r.customer_amount),
-    5: r.customer_po_no || "",
-    6: joinDot(r.vendor_po_no, r.vendor),
-  };
-  const isDomestic = (r.trade_type || "수출") === "내수";
   const isService = (r.work_type || "부품공급") === "서비스";
-  const chain = rSteps.map((label, i) => {
-    const no = i + 1;
-    // 내수 부품공급은 7·8·9단계(CI/PL/SA/POD)를 생략한다.
-    // 서비스는 7·8·9가 Service Readiness/arrangement/Complete 단계이므로 내수여도 생략하지 않는다.
-    const skip = isDomestic && !isService && (no === 7 || no === 8);
-    return { no, label, value: docValue[no] ?? "", at: effective(no), skip };
-  });
+  const chain = buildStageChain(r, rSteps);
 
   function onBackdropMouseDown(e: React.MouseEvent<HTMLDivElement>) {
     backdropMouseDown.current = e.target === e.currentTarget;
@@ -1850,6 +1753,16 @@ export function PipelineModal({
             </span>
           )}
           <span className="pl-head-right">
+            {/* 개요 — 이 프로젝트의 모든 정보를 한 페이지로(읽기 전용). 팀원 공유·인쇄용. */}
+            {!isNewProject ? (
+              <Link
+                className="pl-modal-overview"
+                href={`/project/${r.rfq_id}`}
+                title="Open the full project overview (read-only, shareable)"
+              >
+                ⤢ Overview
+              </Link>
+            ) : null}
             <span className={`pl-pic-chip${canEditPic ? " editable" : ""}`}>
               <span className="pl-pic-label">PIC</span>
               {canEditPic ? (

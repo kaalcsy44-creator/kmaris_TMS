@@ -5804,6 +5804,20 @@ table.mini .num {
 }
 /* 완료 카드: 왼쪽에 블랙 강조선으로 종결(성사) 표시. */
 .pl-card.done { border-left: 3px solid var(--ink); }
+/* 모달 헤더 '개요' 링크 — 이 프로젝트의 전체 정보를 읽기 전용 한 페이지로. */
+.pl-modal-overview {
+  flex: none;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--blue);
+  background: #fff;
+  border: 1px solid #b9d3ee;
+  border-radius: 7px;
+  padding: 3px 9px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.pl-modal-overview:hover { background: #eef6ff; }
 /* 모달 헤더 '취소/재활성' 버튼. */
 .pl-modal-cancel {
   flex: none;
@@ -8041,6 +8055,9 @@ table.mini .num {
 .act-sub-contact { color: #334155; }  /* 고객사 담당자 */
 .act-sub-sep { color: inherit; opacity: 0.55; }
 .act-open { font-size: 15px; font-weight: 700; }  /* 화살표만 크게 */
+/* 카드 헤더의 두 진입점: → 개요(읽기 전용), ✎ 진행현황 팝업(작업). */
+.act-open-edit { font-size: 12px; color: #64748b; margin-left: 5px; }
+.act-open-edit:hover { color: var(--blue); }
 
 .act-list { list-style: none; margin: 0 0 8px; padding: 0; }
 .act-item { display: flex; align-items: flex-start; gap: 8px; padding: 3px 0; font-size: 13px;
@@ -8098,12 +8115,135 @@ table.mini .num {
 .act-screen.meeting .act-cards { grid-template-columns: 1fr; }
 .act-screen.meeting .act-item { font-size: 15px; padding: 5px 0; }
 .act-screen.meeting .act-head { font-size: 15px; }
+/* ── 프로젝트 개요(읽기 전용) — /project/<rfq_id> ────────────────────────
+   팀원 공유용 한 장짜리 현황. 위에서 아래로 머리글 → 단계 → 정보/활동 → 품목
+   순의 문서형 흐름이라 화면에서 한눈에 들어오고 그대로 인쇄된다. */
+.proj-ov { display: flex; flex-direction: column; gap: 16px; }
+.proj-ov-head { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  flex-wrap: wrap; }
+.proj-ov-id { display: flex; align-items: center; gap: 8px; }
+.proj-ov-back { display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 6px; border: 1px solid var(--line-strong);
+  color: var(--navy); text-decoration: none; font-size: 14px; background: #fff; }
+.proj-ov-back:hover { background: var(--hover); }
+.proj-ov-no { font-size: 20px; color: var(--navy); letter-spacing: -0.2px; }
+.proj-ov-nodate { font-size: 13px; color: var(--muted); }
+.proj-ov-closed { font-size: 11.5px; font-weight: 700; color: #b42318; background: #fdeaea;
+  border-radius: 6px; padding: 2px 8px; }
+.proj-ov-actions { display: flex; align-items: center; gap: 8px; }
+.proj-ov-pic { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px;
+  font-weight: 700; color: var(--navy); background: var(--head-bg); border-radius: 6px;
+  padding: 3px 10px; }
+.proj-ov-pic-label { font-size: 10px; font-weight: 700; color: var(--muted); }
+
+.proj-ov-title { margin: 0; font-size: 24px; font-weight: 800; color: var(--ink);
+  line-height: 1.25; }
+.proj-ov-vessel { font-weight: 600; color: var(--muted); }
+.proj-ov-sub { display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  margin-top: -8px; font-size: 12.5px; color: var(--muted); }
+.proj-ov-stagenow { font-weight: 800; color: var(--blue); }
+.proj-ov-age, .proj-ov-recv { color: var(--muted); }
+/* 서비스 딜은 목록·보드와 같은 보라 계열 강조를 제목에 준다. */
+.proj-ov.service .proj-ov-title { color: #5b21b6; }
+.proj-ov.cancelled .proj-ov-title { color: var(--muted); text-decoration: line-through; }
+
+.proj-ov-next { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600;
+  border-radius: 8px; padding: 8px 12px; background: var(--head-bg); color: var(--navy); }
+.proj-ov-next-label { font-size: 10px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--muted); }
+.proj-ov-next.lv-warn { background: #fff3e0; color: #9a5b00; }
+.proj-ov-next.lv-urgent { background: #fdeaea; color: #b42318; }
+
+.proj-ov-sec { min-width: 0; }
+.proj-ov-h { display: flex; align-items: baseline; gap: 8px; margin: 0 0 8px;
+  font-size: 13px; font-weight: 800; color: var(--navy); padding-bottom: 5px;
+  border-bottom: 2px solid var(--blue); }
+.proj-ov-cnt { font-size: 11.5px; font-weight: 700; color: var(--blue); }
+.proj-ov-empty { font-size: 12.5px; color: var(--muted); padding: 10px 2px; }
+
+/* 단계 11칸 — 한 줄에 모두. 좁아지면 줄바꿈되며 최소폭을 지킨다. */
+.proj-ov-stages { display: grid; grid-template-columns: repeat(11, minmax(0, 1fr));
+  gap: 4px; list-style: none; margin: 0; padding: 0; }
+@media (max-width: 1280px) { .proj-ov-stages { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+@media (max-width: 760px) { .proj-ov-stages { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.proj-ov-stages li { min-width: 0; }
+.proj-ov-stages a { display: flex; flex-direction: column; gap: 3px; height: 100%;
+  border: 1px solid var(--line); border-top: 3px solid var(--line-strong); border-radius: 6px;
+  background: #fff; padding: 7px 8px; text-decoration: none; color: inherit; }
+.proj-ov-stages a:hover { background: var(--hover); }
+.ov-st-head { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.ov-st-no { flex: none; width: 16px; height: 16px; border-radius: 50%; background: var(--line);
+  color: #5a6b85; font-size: 10px; font-weight: 800; display: inline-flex;
+  align-items: center; justify-content: center; }
+.ov-st-label { font-size: 11px; font-weight: 700; color: var(--navy); line-height: 1.25;
+  overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.ov-st-val { font-size: 10.5px; font-style: normal; color: var(--muted); min-height: 13px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ov-st-at { font-size: 10px; color: var(--muted); margin-top: auto; }
+/* 완료 단계는 파란 상단선 + 옅은 파란 배경, 현재 단계는 진하게 강조. */
+.proj-ov-stages .done a { border-top-color: var(--blue); background: #f2f8ff; }
+.proj-ov-stages .done .ov-st-no { background: var(--blue); color: #fff; }
+.proj-ov-stages .current a { border-color: var(--blue); box-shadow: 0 0 0 2px rgba(0, 85, 168, 0.15); }
+.proj-ov-stages .skip a { opacity: 0.45; }
+
+/* 정보 + 활동 2단. 좁으면 1단으로. */
+.proj-ov-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 20px; }
+@media (max-width: 1000px) { .proj-ov-cols { grid-template-columns: 1fr; } }
+
+.proj-ov-info { margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 8px;
+  overflow: hidden; }
+@media (max-width: 620px) { .proj-ov-info { grid-template-columns: 1fr; } }
+.proj-ov-info > div { background: #fff; padding: 7px 10px; min-width: 0; }
+.proj-ov-info dt { font-size: 10px; font-weight: 700; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 2px; }
+.proj-ov-info dd { margin: 0; font-size: 12.5px; color: var(--ink); word-break: break-word; }
+
+.proj-ov-acts { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line);
+  border-radius: 8px; background: #fff; max-height: 420px; overflow: auto; }
+.proj-ov-acts li { display: flex; gap: 8px; padding: 5px 10px; font-size: 12.5px;
+  border-bottom: 1px solid var(--line); }
+.proj-ov-acts li:last-child { border-bottom: 0; }
+.proj-ov-acts li.auto { color: #47536b; }
+.proj-ov-acts li.star { background: #fffbe9; }
+.proj-ov-acts li.closed { color: #b42318; }
+.ov-act-date { flex: none; width: 38px; color: var(--muted); font-size: 11px;
+  font-variant-numeric: tabular-nums; padding-top: 1px; }
+.ov-act-text { min-width: 0; word-break: break-word; }
+
+/* 품목 — 내부 공유용이라 단가·금액 포함. 좁은 화면에선 표만 가로 스크롤. */
+.proj-ov-items-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px;
+  background: #fff; }
+.proj-ov-items { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.proj-ov-items th, .proj-ov-items td { padding: 6px 10px; text-align: left;
+  border-bottom: 1px solid var(--line); vertical-align: top; }
+.proj-ov-items thead th { background: var(--head-bg); color: var(--navy); font-size: 11px;
+  font-weight: 700; white-space: nowrap; }
+.proj-ov-items tbody tr:last-child td { border-bottom: 0; }
+.proj-ov-items tbody tr:nth-child(even) td { background: var(--zebra); }
+.proj-ov-items .num { text-align: right; white-space: nowrap; }
+.proj-ov-items .ov-it-n { width: 34px; color: var(--muted); text-align: right; }
+.proj-ov-items .ov-it-qty { white-space: nowrap; }
+.ov-it-part { font-weight: 600; color: var(--navy); }
+.ov-it-serial { color: var(--muted); }
+.ov-it-remark { color: var(--muted); }
+
 @media print {
   .act-toolbar, .act-add, .act-add-btn, .act-actions, .act-open, .topnav { display: none !important; }
+  /* Activity 탭 바(.page-tabs)도 인쇄물에선 불필요. */
+  .page-tabs { display: none !important; }
   .act-screen .act-cards,
   .act-screen.meeting .act-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .act-card { break-inside: avoid; }
   /* 화면용 스크롤 높이 제한을 풀지 않으면 첫 화면 분량만 인쇄되고 나머지가 잘린다. */
   .act-cal { max-height: none; min-height: 0; overflow: visible; }
   .act-cal-week { break-inside: avoid; }
+
+  /* 프로젝트 개요 — 버튼류를 빼고, 스크롤 영역을 풀어 전체가 나오게 한다. */
+  .proj-ov-actions, .proj-ov-back { display: none !important; }
+  .proj-ov-acts { max-height: none; overflow: visible; }
+  .proj-ov-sec, .proj-ov-stages li, .proj-ov-items tr { break-inside: avoid; }
+  /* A4 세로 기준 11칸은 너무 좁다 → 인쇄에선 4칸씩 접어 라벨이 읽히게 한다. */
+  .proj-ov-stages { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .proj-ov-cols { grid-template-columns: 1fr; }
 }

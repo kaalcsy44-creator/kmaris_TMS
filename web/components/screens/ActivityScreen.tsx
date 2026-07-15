@@ -11,8 +11,18 @@ import {
 } from "@/lib/api";
 import type { PipelineData, PipelineRow, StageNote } from "@/lib/types";
 import { getUserId } from "@/lib/auth";
+import { vendorOf } from "@/lib/deal";
+import {
+  buildActivities,
+  daysSinceISO,
+  lastActivityISO,
+  md,
+  splitProjectNo,
+  type Activity,
+} from "@/lib/activity";
 import CustomerName from "@/components/common/CustomerName";
 import VendorMonograms from "@/components/common/VendorMonograms";
+import ActivityDesc from "@/components/common/ActivityDesc";
 import ActivityNoteForm, {
   initialNoteValue,
   type ActivityNoteValue,
@@ -38,70 +48,10 @@ function phaseOf(stage: number): number {
   return stage <= 1 ? 0 : PHASES.length - 1;
 }
 
-const CLOSE_REASONS: Record<string, string> = {
-  schedule: "Schedule delay / cancelled",
-  slow_response: "Slow response",
-  no_quote: "No quote available",
-  other: "Other",
-};
-
 function todayISO(): string {
   const d = new Date();
   const p = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-}
-// "2026-07-14T09:30" | "2026-07-14" → "7/14"
-function md(iso: string): string {
-  const s = (iso || "").slice(0, 10);
-  const m = s.match(/^\d{4}-(\d{2})-(\d{2})/);
-  if (!m) return s;
-  return `${Number(m[1])}/${Number(m[2])}`;
-}
-// 프로젝트 번호 "P-010(260713)" → { code: "P-010", date: "(260713)" }
-function splitProjectNo(pno: string): { code: string; date: string } {
-  const m = (pno || "").match(/^(.*?)\s*(\(.*\))\s*$/);
-  return m ? { code: m[1], date: m[2] } : { code: pno || "—", date: "" };
-}
-function vendorOf(row: PipelineRow): string {
-  return (row.vendor || "").trim() || (row.vrfq_vendors || "").trim();
-}
-// 최신 활동 일시(iso) — 단계 완료(수동/자동)·단계 노트 중 최신. 백엔드 _last_activity_iso 와 동일 규칙.
-function lastActivityISO(row: PipelineRow): string {
-  const times: string[] = [];
-  for (const m of [row.stage_dates, row.stage_auto]) {
-    for (const v of Object.values(m ?? {})) if (v) times.push(v);
-  }
-  for (const notes of Object.values(row.stage_notes ?? {})) {
-    for (const n of notes ?? []) {
-      const v = n.datetime || n.at || "";
-      if (v) times.push(v);
-    }
-  }
-  return times.length ? times.reduce((a, b) => (a > b ? a : b)) : "";
-}
-// iso 로부터 오늘까지 경과 일수(≥0). 파싱 불가면 null. progress 페이지 daysSince 와 동일.
-function daysSinceISO(iso: string): number | null {
-  const t = Date.parse((iso || "").slice(0, 10));
-  if (Number.isNaN(t)) return null;
-  return Math.max(0, Math.floor((Date.now() - t) / 86_400_000));
-}
-// 자동 단계 이벤트의 From/To 상대 — 단계별로 고객/벤더를 붙인다.
-function autoParty(stage: number, row: PipelineRow): string {
-  const cust = row.customer || "";
-  const vend = vendorOf(row);
-  switch (stage) {
-    case 1: return cust ? `from ${cust}` : "";   // RFQ Received
-    case 2: return vend ? `to ${vend}` : "";     // RFQ Sent
-    case 3: return vend ? `from ${vend}` : "";   // Quote Received
-    case 4: return cust ? `to ${cust}` : "";     // Quote Sent
-    case 5: return cust ? `from ${cust}` : "";   // P/O Received
-    case 6: return vend ? `to ${vend}` : "";     // P/O Sent
-    case 8: return cust ? `to ${cust}` : "";     // Delivery Complete
-    case 9: return cust ? `to ${cust}` : "";     // Tax Invoice · Billing
-    case 10: return cust ? `to ${cust}` : "";    // Tax Invoice Issued
-    case 11: return cust ? `from ${cust}` : "";  // Payment
-    default: return "";
-  }
 }
 
 // 기존 활동 노트 수정 시 전달하는 값.
@@ -133,46 +83,6 @@ function saveCardOrder(o: Record<number, number[]>): void {
   } catch {
     /* 저장 실패는 무시(시크릿 모드 등). */
   }
-}
-
-// 한 딜의 활동 = 자동 단계 이벤트 + 수동 stage_notes + 종결 이벤트.
-// auto 이벤트는 단계 날짜에서 파생돼 "작성자"가 따로 없다. 그래서 PIC 는 딜 담당자(row.assignee)
-// 를 쓴다 — 기록자가 아니라 그 건의 책임자라는 의미. 딜이 재배정되면 과거 auto 행의 PIC 도
-// 새 담당자로 함께 바뀐다(수기 노트는 작성 시점 작성자를 그대로 보존).
-type Activity =
-  | { kind: "auto"; date: string; stage: number; label: string; party: string; pic?: string }
-  | { kind: "note"; date: string; stage: number; index: number; note: StageNote }
-  | { kind: "close"; date: string; reason: string };
-
-function buildActivities(row: PipelineRow, steps: string[]): Activity[] {
-  const out: Activity[] = [];
-  for (let n = 1; n <= steps.length; n++) {
-    const key = String(n);
-    const date = (row.stage_dates?.[key] || row.stage_auto?.[key] || "").slice(0, 10);
-    if (date) out.push({ kind: "auto", date, stage: n, label: steps[n - 1] || `Stage ${n}`, party: autoParty(n, row), pic: row.assignee });
-  }
-  for (const [stage, list] of Object.entries(row.stage_notes ?? {})) {
-    (list ?? []).forEach((note, index) => {
-      const date = (note.datetime || note.at || "").slice(0, 10);
-      out.push({ kind: "note", date, stage: Number(stage), index, note });
-    });
-  }
-  out.sort((a, b) => {
-    const da = a.kind === "note" ? (a.note.datetime || a.note.at || a.date) : a.date;
-    const db = b.kind === "note" ? (b.note.datetime || b.note.at || b.date) : b.date;
-    return da < db ? -1 : da > db ? 1 : 0;
-  });
-  // 종결 이벤트 — 항상 맨 아래에 붙인다(날짜 없으면 날짜칸 비움).
-  if (row.cancelled) {
-    const reason = CLOSE_REASONS[row.close_reason || ""] || row.close_reason || "";
-    const note = (row.close_reason_note || "").trim();
-    out.push({
-      kind: "close",
-      date: (row.closed_at || "").slice(0, 10),
-      reason: [reason, note].filter(Boolean).join(" — "),
-    });
-  }
-  return out;
 }
 
 export default function ActivityScreen() {
@@ -482,7 +392,7 @@ export default function ActivityScreen() {
                                 key={i}
                                 className={`act-cal-act ${a.kind === "note" ? "note" : a.kind === "close" ? "closed" : "auto"}${a.kind === "note" && a.note.star ? " star" : ""}`}
                               >
-                                {actDesc(a)}
+                                <ActivityDesc act={a} />
                               </li>
                             ))}
                           </ul>
@@ -521,39 +431,6 @@ function addDays(iso: string, n: number): string {
   const d = new Date(`${iso}T00:00`);
   d.setDate(d.getDate() + n);
   return toISODate(d);
-}
-
-// 활동 1건의 설명 — 자동 단계 이벤트(라벨·party·PIC) / 노트(텍스트·메타·PIC) / 종결 사유.
-// auto 배지는 거의 모든 행에 붙어 변별력이 없어 제거했다. closed 는 드물어 유지.
-function actDesc(act: Activity) {
-  if (act.kind === "auto") {
-    return (
-      <>
-        {act.label}
-        {act.party ? <span className="act-meta"> · {act.party}</span> : null}
-        {act.pic ? <span className="act-note-pic">{act.pic}</span> : null}
-      </>
-    );
-  }
-  if (act.kind === "close") {
-    return (
-      <>
-        <span className="act-tag close">closed</span> {act.reason || "Closed"}
-      </>
-    );
-  }
-  const n = act.note;
-  const dl = n.direction === "in" ? "from" : n.direction === "out" ? "to" : "";
-  const who = [dl, n.party].filter(Boolean).join(" ");
-  const parts = [who, n.channel].filter(Boolean);
-  return (
-    <>
-      {n.star ? <span className="act-drow-star">★</span> : null}
-      {n.text}
-      {parts.length ? <span className="act-meta"> · {parts.join(" · ")}</span> : null}
-      {n.pic ? <span className="act-note-pic">{n.pic}</span> : null}
-    </>
-  );
 }
 
 function ActivityCard({
@@ -605,7 +482,15 @@ function ActivityCard({
           {date ? <span className="act-pno-date">{date}</span> : null}
           <span className="act-spacer" />
           {row.assignee ? <span className="act-pic">{row.assignee}</span> : null}
-          <Link className="act-open" href={`/progress?rfq=${row.rfq_id}&stage=${row.stage}`} title="Open deal">→</Link>
+          {/* 개요(읽기 전용 한 페이지) → / 진행현황 팝업(작업) ✎ — 두 진입점을 나눠 둔다. */}
+          <Link className="act-open" href={`/project/${row.rfq_id}`} title="Project overview">→</Link>
+          <Link
+            className="act-open act-open-edit"
+            href={`/progress?rfq=${row.rfq_id}&stage=${row.stage}`}
+            title="Open deal in Progress"
+          >
+            ✎
+          </Link>
         </div>
         {/* 프로젝트명 + 선박명(우측, 동일 크기·색상). */}
         <div className="act-title2">
