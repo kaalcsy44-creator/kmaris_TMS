@@ -199,45 +199,25 @@ export default function DocSendPanel({
         <div className="hint-inline" style={{ marginBottom: 8 }}>{disabledReason}</div>
       ) : null}
 
-      {/* 이메일을 쓰지 않는 다운로드 전용 모드에서만 포맷별 내려받기 버튼을 둔다.
-          이메일 모드에서는 첨부 칩 안의 ↓ 로 같은 파일을 받을 수 있어 중복이다. */}
-      <div className="doc-send-row">
-        {!emailEnabled
-          ? formats.map((f) => (
-              <button
-                key={f}
-                type="button"
-                className="btn sm"
-                disabled={disabled}
-                onClick={() => download(f)}
-                title={`Download ${f.toUpperCase()}`}
-              >
-                ↓ {f.toUpperCase()}
-              </button>
-            ))
-          : null}
-        <span className="doc-send-spacer" />
-        {emailEnabled ? (
-          <label className="doc-send-inline">
-            Lang
-            <select value={lang} onChange={(e) => setLang(e.target.value as "en" | "ko")} disabled={disabled}>
-              <option value="en">EN</option>
-              <option value="ko">KO</option>
-            </select>
-          </label>
-        ) : null}
-        {emailEnabled ? (
-          <button
-            type="button"
-            className="btn sm"
-            onClick={makePreview}
-            disabled={disabled || busy}
-            title="Regenerate the draft from the template (overwrites your edits)"
-          >
-            {busy ? "…" : "↻ Regenerate draft"}
-          </button>
-        ) : null}
-      </div>
+      {/* 이메일을 쓰지 않는 다운로드 전용 모드에만 남는 줄(포맷별 내려받기).
+          이메일 모드에서는 첨부 칩 안의 ↓ 로 같은 파일을 받고, Lang·초안 재생성은
+          Subject 줄로 옮겨 빈 줄이 생기지 않게 했다. */}
+      {!emailEnabled ? (
+        <div className="doc-send-row">
+          {formats.map((f) => (
+            <button
+              key={f}
+              type="button"
+              className="btn sm"
+              disabled={disabled}
+              onClick={() => download(f)}
+              title={`Download ${f.toUpperCase()}`}
+            >
+              ↓ {f.toUpperCase()}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       {!emailEnabled ? (
         err ? <div className="action-err" style={{ marginTop: 8 }}>{err}</div> : null
@@ -261,9 +241,33 @@ export default function DocSendPanel({
           <div className="hint-inline" style={{ marginTop: 2 }}>
             From only changes the sender if it is a verified send-as alias on the SMTP account; otherwise the provider keeps the configured sender.
           </div>
+          {/* 제목 + 언어·초안 재생성을 한 줄에. 셋 다 "이 초안을 어떻게 만들/고칠까"에 속하고,
+              따로 두면 폭만 넓은 빈 줄이 하나 더 생긴다. */}
           <div className="form-field" style={{ marginTop: 8 }}>
             <label>Subject</label>
-            <input value={subject} onChange={(e) => setSubject(e.target.value)} />
+            <div className="mail-subject-row">
+              <input value={subject} onChange={(e) => setSubject(e.target.value)} />
+              <label className="doc-send-inline">
+                Lang
+                <select
+                  value={lang}
+                  onChange={(e) => setLang(e.target.value as "en" | "ko")}
+                  disabled={disabled}
+                >
+                  <option value="en">EN</option>
+                  <option value="ko">KO</option>
+                </select>
+              </label>
+              <button
+                type="button"
+                className="btn sm"
+                onClick={makePreview}
+                disabled={disabled || busy}
+                title="Regenerate the draft from the template (overwrites your edits)"
+              >
+                {busy ? "…" : "↻ Regenerate draft"}
+              </button>
+            </div>
           </div>
           <div className="form-field" style={{ marginTop: 8 }}>
             <label>Body</label>

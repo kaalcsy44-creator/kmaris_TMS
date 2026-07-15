@@ -4552,6 +4552,32 @@ table.mini input[type="checkbox"].row-check:indeterminate::after {
   gap: 10px;
   flex-wrap: wrap;
 }
+/* Notes·Signature 라벨 높이 맞추기 — 서명 쪽만 버튼(Save as default)을 품고 있어 줄이 높아지면
+   두 입력란의 윗선이 어긋난다. 두 라벨 줄을 같은 높이로 고정해 나란히 시작하게 한다. */
+.doc-send-panel .mail-compose-2col .form-field > label {
+  display: flex;
+  align-items: center;
+  min-height: 24px;
+  margin-bottom: 3px;
+}
+/* 제목 + 언어·초안 재생성을 한 줄에. 제목이 남는 폭을 다 쓴다. */
+.mail-subject-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.mail-subject-row input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.mail-subject-row .doc-send-inline,
+.mail-subject-row .btn {
+  flex: 0 0 auto;
+}
+@media (max-width: 760px) {
+  .mail-subject-row { flex-wrap: wrap; }
+  .mail-subject-row input { flex-basis: 100%; }
+}
 .mail-sig-tools {
   display: inline-flex;
   align-items: center;
@@ -4586,6 +4612,7 @@ table.mini input[type="checkbox"].row-check:indeterminate::after {
 .mail-attach {
   display: inline-flex;
   align-items: center;
+  flex-wrap: nowrap;   /* 칩 안에서 줄이 접히면 파일명이 아래로 밀려 셀렉트에 가린다 */
   gap: 6px;
   max-width: 100%;
   padding: 3px 8px;
@@ -4609,20 +4636,29 @@ table.mini input[type="checkbox"].row-check:indeterminate::after {
 .mail-attach-pick {
   display: inline-flex;
   align-items: center;
+  flex-wrap: nowrap;
   gap: 5px;
-  min-width: 0;
+  min-width: 0;        /* 이게 없으면 flex 아이템이 내용 폭 아래로 못 줄어 이름이 안 잘린다 */
   cursor: pointer;
+}
+.mail-attach-pick input[type="checkbox"] {
+  flex: none;
+  margin: 0;
 }
 .mail-attach.generated.off .mail-attach-name {
   text-decoration: line-through;
 }
+/* 포맷 셀렉트 — 기본 폭이 넓어 파일명을 밀어낸다. 내용에 맞춰 좁게 고정. */
 .mail-attach-fmt {
+  flex: none;
+  width: auto;
   height: 20px;
-  padding: 0 2px;
+  padding: 0 4px;
   border: 1px solid #b9d3ee;
   border-radius: 5px;
   background: #fff;
   font-size: 10.5px;
+  line-height: 1;
   color: inherit;
 }
 .mail-attach-dl {
@@ -4640,6 +4676,7 @@ table.mini input[type="checkbox"].row-check:indeterminate::after {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
   max-width: 260px;
 }
 .mail-attach-size-sm {
