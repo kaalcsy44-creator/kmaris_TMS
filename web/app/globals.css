@@ -7832,12 +7832,12 @@ table.mini .num {
 .act-cal-ptitle { font-size: 11px; color: #6b7280; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .act-cal-acts { list-style: none; margin: 0; padding: 0; }
 /* 활동 1건 = 점 1개. 여러 줄로 접히는 활동이 이어 붙어 보이지 않게 앞에 점을 찍어 끊는다.
-   점 색이 auto 배지를 대신해 종류를 표시: 회색=자동 기록 / 파랑=수기 노트 / 빨강=종결. */
+   점은 "구분자"이지 "분류표"가 아니므로 자동/수기 구분 없이 같은 진한 톤으로 통일한다
+   (연한 점은 셀 안에서 눈에 걸리지 않아 끊어주는 역할을 못 했다). 종결만 빨강. */
 .act-cal-act { position: relative; font-size: 11.5px; line-height: 1.4; color: #334155;
   padding: 1px 0 1px 11px; overflow-wrap: break-word; }
 .act-cal-act::before { content: ""; position: absolute; left: 2px; top: 7px;
-  width: 4px; height: 4px; border-radius: 50%; background: #b6c2d1; }
-.act-cal-act.note::before { background: #0055a8; }
+  width: 4px; height: 4px; border-radius: 50%; background: #0055a8; }
 .act-cal-act.closed { color: #b91c1c; }
 .act-cal-act.closed::before { background: #b91c1c; }
 .act-cal-act.star { background: #fff8e6; border-radius: 3px; padding-right: 4px; }

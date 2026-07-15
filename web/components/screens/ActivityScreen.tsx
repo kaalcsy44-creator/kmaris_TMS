@@ -147,8 +147,11 @@ function saveCardOrder(o: Record<number, number[]>): void {
 }
 
 // 한 딜의 활동 = 자동 단계 이벤트 + 수동 stage_notes + 종결 이벤트.
+// auto 이벤트는 단계 날짜에서 파생돼 "작성자"가 따로 없다. 그래서 PIC 는 딜 담당자(row.assignee)
+// 를 쓴다 — 기록자가 아니라 그 건의 책임자라는 의미. 딜이 재배정되면 과거 auto 행의 PIC 도
+// 새 담당자로 함께 바뀐다(수기 노트는 작성 시점 작성자를 그대로 보존).
 type Activity =
-  | { kind: "auto"; date: string; stage: number; label: string; party: string }
+  | { kind: "auto"; date: string; stage: number; label: string; party: string; pic?: string }
   | { kind: "note"; date: string; stage: number; index: number; note: StageNote }
   | { kind: "close"; date: string; reason: string };
 
@@ -157,7 +160,7 @@ function buildActivities(row: PipelineRow, steps: string[]): Activity[] {
   for (let n = 1; n <= steps.length; n++) {
     const key = String(n);
     const date = (row.stage_dates?.[key] || row.stage_auto?.[key] || "").slice(0, 10);
-    if (date) out.push({ kind: "auto", date, stage: n, label: steps[n - 1] || `Stage ${n}`, party: autoParty(n, row) });
+    if (date) out.push({ kind: "auto", date, stage: n, label: steps[n - 1] || `Stage ${n}`, party: autoParty(n, row), pic: row.assignee });
   }
   for (const [stage, list] of Object.entries(row.stage_notes ?? {})) {
     (list ?? []).forEach((note, index) => {
@@ -519,15 +522,15 @@ function addDays(iso: string, n: number): string {
   return toISODate(d);
 }
 
-// 활동 1건의 설명 — 딜별 카드와 동일한 표기(단계 라벨·party / 노트 텍스트·메타·PIC / 종결 사유).
-// auto 배지는 거의 모든 행에 붙어 변별력이 없어 제거했다. 자동 기록 여부는 앞의 점 색과
-// 라벨 톤(회색 고정 라벨 vs 진한 자유 텍스트+PIC 배지)으로 구분된다. closed 는 드물어 유지.
+// 활동 1건의 설명 — 자동 단계 이벤트(라벨·party·PIC) / 노트(텍스트·메타·PIC) / 종결 사유.
+// auto 배지는 거의 모든 행에 붙어 변별력이 없어 제거했다. closed 는 드물어 유지.
 function actDesc(act: Activity) {
   if (act.kind === "auto") {
     return (
       <>
         {act.label}
         {act.party ? <span className="act-meta"> · {act.party}</span> : null}
+        {act.pic ? <span className="act-note-pic">{act.pic}</span> : null}
       </>
     );
   }
