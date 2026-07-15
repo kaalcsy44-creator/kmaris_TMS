@@ -8237,6 +8237,18 @@ a.ov-tl-stage:hover { background: var(--hover); }
 /* 매입(원가) 열은 내부용 보조 정보 → 매출 열보다 톤을 낮춰 시선이 매출로 가게 한다. */
 .proj-ov-items .ov-it-mg { font-weight: 700; color: #11824a; }
 .proj-ov-items .dual-line.converted { font-size: 10px; }
+
+/* 금액 이력 — Quote → P/O → C/I. 단계 배지로 세 줄을 구분하고, P/O·C/I 는 선박별로 쌍을 이룬다. */
+.proj-ov-hist .ov-hs-stage { width: 62px; }
+.proj-ov-hist .ov-hs-date { width: 96px; white-space: nowrap; color: var(--muted); }
+.proj-ov-hist tbody td.ov-hs-stage { font-size: 10.5px; font-weight: 800; letter-spacing: 0.03em; }
+.proj-ov-hist tbody tr.ov-hs-quote td.ov-hs-stage { color: var(--blue); }
+.proj-ov-hist tbody tr.ov-hs-po td.ov-hs-stage { color: #7c3aed; }
+.proj-ov-hist tbody tr.ov-hs-ci td.ov-hs-stage { color: #11824a; }
+/* 견적 행 아래로 P/O·C/I 묶음이 이어지므로, 새 P/O 가 시작되는 곳에 구분선을 준다. */
+.proj-ov-hist tbody tr.ov-hs-po td { border-top: 2px solid var(--line-strong); }
+.proj-ov-hist tbody tr:nth-child(even) td { background: transparent; }
+.proj-ov-hist tbody tr.ov-hs-ci td { background: var(--zebra); }
 .ov-it-part { font-weight: 600; color: var(--navy); }
 .ov-it-serial { color: var(--muted); }
 .ov-it-remark { color: var(--muted); }

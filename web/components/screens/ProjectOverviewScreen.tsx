@@ -6,14 +6,21 @@ import {
   fetchRfqDetail,
   fetchQuotationOverview,
   fetchCustomerQuotationDetail,
+  fetchPoWorkOptions,
+  fetchDocumentDetail,
   closeReasonLabel,
 } from "@/lib/api";
 import { useCachedData } from "@/lib/useCachedData";
+import { sortByDocNo } from "@/lib/sort";
 import { resolveSteps, fmtStageDate, buildStageChain, type StageChainItem } from "@/lib/deal";
 import { buildActivities, md, splitProjectNo, type Activity } from "@/lib/activity";
-import type { PipelineRow } from "@/lib/types";
+import type { PipelineRow, PoWorkOptions, CustomerQuotationDetail } from "@/lib/types";
 import { INFO_FIELDS } from "@/components/common/dealFields";
-import { DualCurrencyAmount } from "@/components/common/itemTable";
+import {
+  DualCurrencyAmount,
+  fxRateText,
+  USD_KRW_RATE,
+} from "@/components/common/itemTable";
 import ActivityDesc from "@/components/common/ActivityDesc";
 import WorkTypeBadge from "@/components/WorkTypeBadge";
 
@@ -37,6 +44,9 @@ export default function ProjectOverviewScreen({ rfqId }: { rfqId: number }) {
   const { data: quote } = useCachedData(`quotation:${qtnId}`, () =>
     qtnId ? fetchCustomerQuotationDetail(qtnId) : Promise.resolve(null)
   );
+  // 고객 P/O — 선박이 여러 척이면 P/O 도 선박별로 나뉜다(견적 1건 → P/O N건).
+  // ProgressScreen 과 같은 캐시 키를 써서 중복 호출하지 않는다.
+  const { data: poOpts } = useCachedData("po:work-options", fetchPoWorkOptions);
 
   if (pipeErr && !pipeline) return <div className="state error">API error: {pipeErr.message}</div>;
   if (!pipeline) return <div className="state">Loading…</div>;
@@ -86,7 +96,36 @@ export default function ProjectOverviewScreen({ rfqId }: { rfqId: number }) {
           }
         : null;
 
-  return <Overview row={row} steps={pipeline.steps} source={source} />;
+  // 이 프로젝트의 고객 P/O — K-Maris P/O 번호 오름차순(ProgressScreen 과 동일 정렬).
+  const orders = sortByDocNo(
+    (poOpts?.orders ?? []).filter((o) => o.rfq_id === rfqId),
+    (o) => o.po_no,
+    (o) => o.id
+  );
+
+  return (
+    <Overview
+      row={row}
+      steps={pipeline.steps}
+      source={source}
+      quote={quote ?? null}
+      orders={orders}
+    />
+  );
+}
+
+type ProjectOrder = PoWorkOptions["orders"][number];
+
+/** 문서 품목 합계 — amount 가 있으면 그대로, 없으면 단가×수량으로 보정. */
+function sumItems(
+  items: { qty?: number; unit_price?: number | null; amount?: number | null }[]
+): number {
+  return items.reduce(
+    (s, it) =>
+      s +
+      (it.amount != null ? Number(it.amount) : Number(it.unit_price || 0) * Number(it.qty || 1)),
+    0
+  );
 }
 
 /** 품목 표의 출처 — 견적(값 있음) 또는 RFQ 요청(값 없음). 화면에 어느 쪽인지 밝힌다. */
@@ -124,11 +163,15 @@ function Overview({
   row,
   steps,
   source,
+  quote,
+  orders,
 }: {
   row: PipelineRow;
   steps: string[];
   // null = 아직 로딩 중(품목 표만 늦게 채워진다). 나머지 화면은 먼저 보여준다.
   source: ItemSource | null;
+  quote: CustomerQuotationDetail | null;
+  orders: ProjectOrder[];
 }) {
   const rSteps = resolveSteps(steps, row.work_type);
   const chain = buildStageChain(row, rSteps);
@@ -197,6 +240,8 @@ function Overview({
         <StageTimeline row={row} chain={chain} acts={acts} />
       </div>
 
+      <AmountHistory quote={quote} orders={orders} rate={source?.fxRate ?? null} />
+
       {/* 품목 — 내부 공유용이므로 매입(원가)·매출·마진을 모두 노출한다. */}
       <section className="proj-ov-sec">
         <h2 className="proj-ov-h">
@@ -206,7 +251,7 @@ function Overview({
               {source.kind === "quote"
                 ? `from ${source.label} · sales ${source.currency}${
                     source.costCurrency !== source.currency ? ` · cost ${source.costCurrency}` : ""
-                  }`
+                  } · ${fxRateText(source.fxRate ?? undefined)}`
                 : "from RFQ request — not priced until a quotation is created"}
             </span>
           ) : null}
@@ -308,6 +353,111 @@ function StageTimeline({
         ) : null}
       </ol>
     </section>
+  );
+}
+
+/**
+ * 금액 이력 — Quote → P/O → C/I.
+ *
+ * 세 단계의 금액은 서로 다를 수 있다: 견적 뒤 일부만 발주되거나, 선박이 여러 척이면
+ * 견적 1건이 선박별 P/O 여러 건으로 갈리고, 선적 시 수량이 바뀌면 C/I 가 또 달라진다.
+ * 그래서 합계 하나만 보여주면 "왜 견적이랑 다르지" 가 남는다 — 단계별로 나란히 둔다.
+ */
+function AmountHistory({
+  quote,
+  orders,
+  rate,
+}: {
+  quote: CustomerQuotationDetail | null;
+  orders: ProjectOrder[];
+  /** 견적에 저장된 적용 환율. 없으면 기본 환율. */
+  rate: number | null;
+}) {
+  if (!quote && orders.length === 0) return null;
+  const eff = rate && rate > 0 ? rate : USD_KRW_RATE;
+  return (
+    <section className="proj-ov-sec">
+      <h2 className="proj-ov-h">
+        Amount history
+        <span className="proj-ov-src">
+          Quote → P/O → C/I · {fxRateText(eff)}
+          {rate && rate > 0 ? " (from the quotation)" : " (default rate — none saved on the quotation)"}
+        </span>
+      </h2>
+      <div className="proj-ov-items-wrap">
+        <table className="proj-ov-items proj-ov-hist">
+          <thead>
+            <tr>
+              <th className="ov-hs-stage">Stage</th>
+              <th>Vessel</th>
+              <th>Doc No.</th>
+              <th className="ov-hs-date">Date</th>
+              <th className="num">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {quote ? (
+              <tr className="ov-hs-quote">
+                <td className="ov-hs-stage">Quote</td>
+                <td className="muted">— all vessels —</td>
+                <td className="ov-it-part">{quote.qtn_no || "—"}</td>
+                <td className="ov-hs-date">{quote.sent_date || quote.date || "—"}</td>
+                <td className="num">
+                  <DualCurrencyAmount
+                    value={quote.amount}
+                    currency={quote.currency || "USD"}
+                    rate={eff}
+                  />
+                </td>
+              </tr>
+            ) : null}
+            {orders.map((o) => (
+              <OrderAmountRows key={o.id} order={o} rate={eff} />
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+/** 한 고객 P/O 의 금액과, 그 P/O 로 발행된 C/I 금액. 선박별 P/O 이므로 행이 한 쌍씩 늘어난다. */
+function OrderAmountRows({ order, rate }: { order: ProjectOrder; rate: number }) {
+  const { data: doc } = useCachedData(`documents:${order.id}`, () => fetchDocumentDetail(order.id));
+  const ci = doc?.ci ?? null;
+  return (
+    <>
+      <tr className="ov-hs-po">
+        <td className="ov-hs-stage">P/O</td>
+        <td>{order.vessel || <span className="muted">—</span>}</td>
+        <td className="ov-it-part">{order.po_no || "—"}</td>
+        <td className="ov-hs-date">{order.date || "—"}</td>
+        <td className="num">
+          <DualCurrencyAmount
+            value={sumItems(order.items)}
+            currency={order.currency || "USD"}
+            rate={rate}
+          />
+        </td>
+      </tr>
+      <tr className="ov-hs-ci">
+        <td className="ov-hs-stage">C/I</td>
+        <td>{order.vessel || <span className="muted">—</span>}</td>
+        <td className="ov-it-part">{ci?.ci_no || <span className="muted">not issued</span>}</td>
+        <td className="ov-hs-date">{ci?.date || "—"}</td>
+        <td className="num">
+          {ci ? (
+            <DualCurrencyAmount
+              value={sumItems(ci.items)}
+              currency={ci.currency || order.currency || "USD"}
+              rate={rate}
+            />
+          ) : (
+            <span className="muted">—</span>
+          )}
+        </td>
+      </tr>
+    </>
   );
 }
 
