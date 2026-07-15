@@ -8156,32 +8156,57 @@ table.mini .num {
 .proj-ov-src { font-size: 11px; font-weight: 500; color: var(--muted); }
 .proj-ov-empty { font-size: 12.5px; color: var(--muted); padding: 10px 2px; }
 
-/* ── 단계 + 활동 통합 타임라인 ──────────────────────────────────────────
+/* 거래 상대 한 줄 — 프로젝트명 아래. 고객·벤더·거래구분만 남긴다. */
+.proj-ov-meta { display: flex; align-items: center; gap: 22px; flex-wrap: wrap;
+  margin-top: -6px; padding-bottom: 2px; font-size: 12.5px; color: var(--ink); }
+.ov-meta-f { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.ov-meta-f > b { font-size: 9.5px; font-weight: 800; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.05em; }
+/* 벤더가 여러 곳이면 vendorList 가 줄마다 div 를 내므로, flex 로 옆으로 눕힌다. */
+.ov-meta-vendors { flex-wrap: wrap; gap: 7px 12px; }
+.ov-meta-f .cust-name { gap: 5px; }
+
+/* ── 단계 + 활동 — Items 표와 같은 4칸(RFQ / Quote / P/O / C/I) ─────────
    단계가 뼈대(왼쪽 세로선 + 점), 사람이 쓴 노트가 그 단계 아래 들여쓰기로 붙는다.
    자동 단계 이벤트와 활동 로그가 같은 사건을 두 번 보여주던 중복을 없앤 구조. */
+.proj-ov-tlcols { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px;
+  align-items: start; }
+@media (max-width: 1100px) { .proj-ov-tlcols { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 620px) { .proj-ov-tlcols { grid-template-columns: 1fr; } }
+.ov-tlcol { min-width: 0; }
+/* 칸 머리 — Items 표의 묶음 헤더(Quote/P/O/C/I)와 같은 색으로 좌우를 잇는다. */
+.ov-tlcol-h { font-size: 10.5px; font-weight: 800; letter-spacing: 0.04em; text-align: center;
+  padding: 3px 0; margin-bottom: 5px; border-bottom: 2px solid currentColor; }
+.ov-tlcol.r { color: #5a6b85; }
+.ov-tlcol.q { color: var(--blue); }
+.ov-tlcol.p { color: #7c3aed; }
+.ov-tlcol.c { color: #11824a; }
 .proj-ov-tl { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line);
-  border-radius: 8px; background: #fff; overflow: hidden; }
-.proj-ov-tl > li { position: relative; padding: 0 10px 0 0; }
+  border-radius: 8px; background: #fff; overflow: hidden; color: var(--ink); }
+.proj-ov-tl > li { position: relative; padding: 0 8px 0 0; }
 /* 단계를 잇는 세로선 — 점(dot) 중앙(좌측 22px)을 지난다. 마지막 항목은 아래로 끊는다. */
 .proj-ov-tl > li::before { content: ""; position: absolute; left: 22px; top: 0; bottom: 0;
   width: 2px; background: var(--line); }
 .proj-ov-tl > li:first-child::before { top: 14px; }
 .proj-ov-tl > li:last-child::before { bottom: calc(100% - 14px); }
-.ov-tl-stage { display: flex; align-items: center; gap: 8px; padding: 5px 0 5px 12px;
+.ov-tl-stage { display: flex; align-items: center; gap: 6px; padding: 5px 0 5px 10px;
   text-decoration: none; color: inherit; min-width: 0; }
 a.ov-tl-stage:hover { background: var(--hover); }
 .ov-tl-dot { position: relative; z-index: 1; flex: none; width: 18px; height: 18px;
   border-radius: 50%; background: var(--line); color: #5a6b85; font-size: 9px; font-weight: 800;
   display: inline-flex; align-items: center; justify-content: center; }
-.ov-tl-no { flex: none; width: 14px; font-size: 10px; font-weight: 800; color: var(--muted);
+.ov-tl-no { flex: none; width: 12px; font-size: 10px; font-weight: 800; color: var(--muted);
   text-align: right; }
-.ov-tl-label { flex: none; font-size: 12.5px; font-weight: 700; color: var(--navy); }
-.ov-tl-party { font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden;
-  text-overflow: ellipsis; }
-/* 문서번호·금액 — 우측 날짜 앞에 붙여 오른쪽 정렬시킨다. */
-.ov-tl-val { margin-left: auto; flex: none; max-width: 45%; font-size: 11px; color: #47536b;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ov-tl-at { flex: none; font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.ov-tl-label { font-size: 12px; font-weight: 700; color: var(--navy); min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ov-tl-at { flex: none; margin-left: auto; font-size: 10px; color: var(--muted);
+  font-variant-numeric: tabular-nums; }
+/* 상대·문서번호 — 칸이 좁아 단계 줄 아래로 내린다(점 선 오른쪽으로 들여씀). */
+.ov-tl-sub { display: flex; gap: 6px; padding: 0 4px 4px 36px; font-size: 10.5px;
+  color: var(--muted); min-width: 0; }
+.ov-tl-party { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ov-tl-val { color: #47536b; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; }
 /* 완료 = 파란 점 + 선, 현재 = 굵게 강조, 미완료 = 흐리게. */
 .proj-ov-tl > li.done .ov-tl-dot,
 .proj-ov-tl > li.current .ov-tl-dot { background: var(--blue); color: #fff; }
@@ -8191,30 +8216,19 @@ a.ov-tl-stage:hover { background: var(--hover); }
 .proj-ov-tl > li.current .ov-tl-dot { box-shadow: 0 0 0 3px rgba(0, 85, 168, 0.18); }
 .proj-ov-tl > li.todo .ov-tl-label { color: #8792a5; font-weight: 600; }
 .proj-ov-tl > li.skip { opacity: 0.45; }
-.proj-ov-tl > li.closed .ov-tl-dot { background: #fdeaea; color: #b42318; }
-.proj-ov-tl > li.closed .ov-tl-label { color: #b42318; font-weight: 600; }
-
 /* 단계에 달린 사람이 쓴 노트 — 점 선 오른쪽으로 들여써 단계에 속함을 보인다. */
-.ov-tl-notes { list-style: none; margin: 0; padding: 0 0 4px 44px; }
-.ov-tl-notes li { display: flex; gap: 8px; padding: 3px 0; font-size: 12px; color: #47536b; }
+.ov-tl-notes { list-style: none; margin: 0; padding: 0 4px 4px 36px; }
+.ov-tl-notes li { display: flex; gap: 6px; padding: 3px 0; font-size: 11.5px; color: #47536b; }
 .ov-tl-notes li.star { background: #fffbe9; border-radius: 4px; }
-.ov-tl-ndate { flex: none; width: 32px; color: var(--muted); font-size: 10.5px;
+.ov-tl-ndate { flex: none; width: 28px; color: var(--muted); font-size: 10px;
   font-variant-numeric: tabular-nums; padding-top: 1px; }
 .ov-tl-ntext { min-width: 0; word-break: break-word; }
 
-/* 정보 + 타임라인 2단. 좁으면 1단으로. */
-.proj-ov-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 20px;
-  align-items: start; }
-@media (max-width: 1000px) { .proj-ov-cols { grid-template-columns: 1fr; } }
-
-.proj-ov-info { margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 8px;
-  overflow: hidden; }
-@media (max-width: 620px) { .proj-ov-info { grid-template-columns: 1fr; } }
-.proj-ov-info > div { background: #fff; padding: 7px 10px; min-width: 0; }
-.proj-ov-info dt { font-size: 10px; font-weight: 700; color: var(--muted);
-  text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 2px; }
-.proj-ov-info dd { margin: 0; font-size: 12.5px; color: var(--ink); word-break: break-word; }
+/* 종결 — 특정 단계에 속하지 않아 4칸 아래 전체 폭으로. */
+.ov-tl-closed { display: flex; align-items: center; gap: 8px; margin-top: 8px; padding: 6px 10px;
+  border: 1px solid #f3c7c4; border-radius: 8px; background: #fdf3f2; color: #b42318;
+  font-size: 12px; font-weight: 600; }
+.ov-tl-closed .ov-tl-dot { background: #fdeaea; color: #b42318; }
 
 /* 품목 — 내부 공유용이라 단가·금액 포함. 좁은 화면에선 표만 가로 스크롤. */
 .proj-ov-items-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px;
@@ -8288,8 +8302,9 @@ a.ov-tl-stage:hover { background: var(--hover); }
   .act-cal { max-height: none; min-height: 0; overflow: visible; }
   .act-cal-week { break-inside: avoid; }
 
-  /* 프로젝트 개요 — 버튼류를 빼고 한 단으로 펼쳐 인쇄한다. */
+  /* 프로젝트 개요 — 버튼류를 빼고 인쇄한다. 단계 4칸은 A4 가로에서도 유지되므로
+     Items 표와 열이 맞은 채로 나온다(2칸으로 접으면 그 대응이 깨진다). */
   .proj-ov-actions, .proj-ov-back { display: none !important; }
   .proj-ov-sec, .proj-ov-tl > li, .proj-ov-items tr { break-inside: avoid; }
-  .proj-ov-cols { grid-template-columns: 1fr; }
+  .proj-ov-tlcols { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
 }
