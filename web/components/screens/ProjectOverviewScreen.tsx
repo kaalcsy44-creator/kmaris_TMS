@@ -9,25 +9,13 @@ import {
   closeReasonLabel,
 } from "@/lib/api";
 import { useCachedData } from "@/lib/useCachedData";
-import {
-  resolveSteps,
-  fmtStageDate,
-  buildStageChain,
-  vendorOf,
-} from "@/lib/deal";
-import {
-  buildActivities,
-  daysSinceISO,
-  lastActivityISO,
-  md,
-  splitProjectNo,
-} from "@/lib/activity";
+import { resolveSteps, fmtStageDate, buildStageChain } from "@/lib/deal";
+import { buildActivities, md, splitProjectNo } from "@/lib/activity";
 import type { PipelineRow } from "@/lib/types";
 import { INFO_FIELDS } from "@/components/common/dealFields";
 import { DualCurrencyAmount } from "@/components/common/itemTable";
 import ActivityDesc from "@/components/common/ActivityDesc";
 import WorkTypeBadge from "@/components/WorkTypeBadge";
-import VendorMonograms from "@/components/common/VendorMonograms";
 
 /**
  * 프로젝트 개요 — 한 프로젝트의 모든 정보를 한 페이지에 읽기 전용으로 모아 보여준다.
@@ -77,6 +65,8 @@ export default function ProjectOverviewScreen({ rfqId }: { rfqId: number }) {
         label: quote.qtn_no || "Quotation",
         items: quote.items,
         currency: quote.currency || "USD",
+        // 원가 통화는 판매 통화와 다를 수 있다(벤더 견적 통화 그대로). 미지정이면 판매 통화.
+        costCurrency: quote.cost_currency || quote.currency || "USD",
         fxRate: quote.fx_rate ?? null,
         discountPct: quote.discount_pct || 0,
         total: quote.amount ?? null,
@@ -89,6 +79,7 @@ export default function ProjectOverviewScreen({ rfqId }: { rfqId: number }) {
             label: "RFQ request",
             items: detail.items,
             currency: "USD",
+            costCurrency: "USD",
             fxRate: null,
             discountPct: 0,
             total: null,
@@ -103,7 +94,10 @@ type ItemSource = {
   kind: "quote" | "rfq";
   label: string;
   items: OverviewItem[];
+  /** 판매(견적) 통화. */
   currency: string;
+  /** 원가 통화 — 벤더 견적 통화라 판매 통화와 다를 수 있다. */
+  costCurrency: string;
   /** 견적에 저장된 적용 환율(1 통화 = ? KRW). 없으면 기본 환율로 환산. */
   fxRate: number | null;
   discountPct: number;
@@ -112,12 +106,15 @@ type ItemSource = {
 };
 
 // RfqItem 과 CustomerQuoteItem 이 공통으로 갖는 표시용 필드.
+// cost_price·margin_pct 는 견적 품목에만 있다(RFQ 요청 품목은 값이 없음).
 type OverviewItem = {
   part_no: string;
   description: string;
   serial_no?: string;
   qty: number;
   unit: string;
+  cost_price?: number | null;
+  margin_pct?: number | null;
   unit_price: number | null;
   amount: number | null;
   remark?: string;
@@ -138,21 +135,25 @@ function Overview({
   const acts = buildActivities(row, rSteps);
   const { code, date } = splitProjectNo(row.project_no || row.kmaris_rfq_no || "—");
   const isService = (row.work_type || "부품공급") === "서비스";
-  const age = daysSinceISO(lastActivityISO(row));
-  const total = rSteps.length;
-  const filled = Math.max(0, Math.min(row.stage, total));
   const editHref = `/progress?rfq=${row.rfq_id}&stage=${Math.max(row.stage, 1)}`;
+  // 선박은 오더별로 여러 척일 수 있다(vessels = 줄바꿈 구분). 한 줄 머리글이므로 · 로 잇는다.
+  const vessels = (row.vessels || row.vessel).split("\n").filter(Boolean).join(" · ");
 
   return (
     <div className={`proj-ov${isService ? " service" : ""}${row.cancelled ? " cancelled" : ""}`}>
+      {/* 머리글 한 줄: 번호 · (날짜) · 타입 · 프로젝트명 · 선박 + 우측 액션.
+          현재 단계·경과일·Next action 은 아래 Stages 스트립이 같은 내용을 더 정확히
+          보여줘서 따로 두지 않는다. */}
       <div className="proj-ov-head">
-        <div className="proj-ov-id">
+        <h1 className="proj-ov-id">
           <Link className="proj-ov-back" href="/progress" title="Back to Progress">
             ←
           </Link>
           <b className="proj-ov-no">{code}</b>
           {date ? <span className="proj-ov-nodate">{date}</span> : null}
           <WorkTypeBadge type={row.work_type} />
+          <span className="proj-ov-title">{row.project_title || "(untitled project)"}</span>
+          {vessels ? <span className="proj-ov-vessel">· {vessels}</span> : null}
           {row.cancelled ? (
             <span className="proj-ov-closed">
               ⊘ Closed
@@ -165,7 +166,7 @@ function Overview({
                 : ""}
             </span>
           ) : null}
-        </div>
+        </h1>
         <div className="proj-ov-actions">
           <span className="proj-ov-pic">
             <span className="proj-ov-pic-label">PIC</span>
@@ -179,37 +180,6 @@ function Overview({
           </Link>
         </div>
       </div>
-
-      <h1 className="proj-ov-title">
-        {row.project_title || "(untitled project)"}
-        {row.vessel ? <span className="proj-ov-vessel"> · {row.vessel}</span> : null}
-      </h1>
-      <div className="proj-ov-sub">
-        <span className="proj-ov-stagenow">
-          {filled}/{total} {rSteps[filled - 1] ?? "Not started"}
-        </span>
-        {vendorOf(row) ? (
-          <VendorMonograms
-            value={vendorOf(row)}
-            statuses={row.vendor ? undefined : row.rfq_vendors}
-          />
-        ) : null}
-        {age != null ? (
-          <span className="proj-ov-age" title="Days since last activity">
-            {age}d since last activity
-          </span>
-        ) : null}
-        {row.received_at ? (
-          <span className="proj-ov-recv">First RFQ {fmtStageDate(row.received_at)}</span>
-        ) : null}
-      </div>
-
-      {row.next_action ? (
-        <div className={`proj-ov-next lv-${row.next_level || "normal"}`}>
-          <span className="proj-ov-next-label">Next action</span>
-          {row.next_action}
-        </div>
-      ) : null}
 
       {/* 단계 — 11개를 한 줄에 모두 펼쳐 현재 위치와 각 단계 결과물을 한눈에.
           카드를 누르면 진행현황 팝업의 해당 단계로 이동한다(편집 진입점). */}
@@ -280,14 +250,16 @@ function Overview({
         </section>
       </div>
 
-      {/* 품목 — 내부 공유용이므로 단가·금액까지 노출한다. */}
+      {/* 품목 — 내부 공유용이므로 매입(원가)·매출·마진을 모두 노출한다. */}
       <section className="proj-ov-sec">
         <h2 className="proj-ov-h">
           Items{source ? <span className="proj-ov-cnt">{source.items.length}</span> : null}
           {source ? (
             <span className="proj-ov-src">
               {source.kind === "quote"
-                ? `from ${source.label} · ${source.currency}`
+                ? `from ${source.label} · sales ${source.currency}${
+                    source.costCurrency !== source.currency ? ` · cost ${source.costCurrency}` : ""
+                  }`
                 : "from RFQ request — not priced until a quotation is created"}
             </span>
           ) : null}
@@ -301,14 +273,20 @@ function Overview({
 function ItemsTable({ source }: { source: ItemSource | null }) {
   if (source === null) return <div className="proj-ov-empty">Loading items…</div>;
   if (source.items.length === 0) return <div className="proj-ov-empty">No items registered.</div>;
-  const { currency, fxRate } = source;
+  const { currency, costCurrency, fxRate } = source;
   // 견적에 저장된 환율이 있으면 그 환율로 환산해 견적서와 숫자가 어긋나지 않게 한다.
   const rate = fxRate && fxRate > 0 ? fxRate : undefined;
   // 값이 없는(RFQ 요청) 품목은 0 으로 보이면 "무료"로 오해되므로 — 로 비운다.
-  const money = (v: number | null | undefined) =>
+  const money = (v: number | null | undefined, cur: string) =>
     v == null ? <span className="muted">—</span> : (
-      <DualCurrencyAmount value={v} currency={currency} rate={rate} />
+      <DualCurrencyAmount value={v} currency={cur} rate={rate} />
     );
+  // 매입 합계는 원가 통화 기준(판매 통화와 다를 수 있어 매출 총액과 직접 빼지 않는다).
+  const costTotal = source.items.reduce(
+    (s, it) => s + Number(it.cost_price || 0) * Number(it.qty || 1),
+    0
+  );
+  const hasCost = source.items.some((it) => it.cost_price != null);
   return (
     <div className="proj-ov-items-wrap">
       <table className="proj-ov-items">
@@ -318,37 +296,59 @@ function ItemsTable({ source }: { source: ItemSource | null }) {
             <th>Part No.</th>
             <th>Description</th>
             <th className="ov-it-qty">Qty</th>
-            <th className="num">Unit price</th>
-            <th className="num">Amount</th>
+            <th className="num">Purchase / unit</th>
+            <th className="num">Purchase</th>
+            <th className="num ov-it-mg">Margin</th>
+            <th className="num">Sales / unit</th>
+            <th className="num">Sales</th>
             <th>Remark</th>
           </tr>
         </thead>
         <tbody>
-          {source.items.map((it, i) => (
-            <tr key={i}>
-              <td className="ov-it-n">{i + 1}</td>
-              <td className="ov-it-part">{it.part_no || "—"}</td>
-              <td>
-                {it.description || "—"}
-                {it.serial_no ? <span className="ov-it-serial"> · S/N {it.serial_no}</span> : null}
-              </td>
-              <td className="ov-it-qty">
-                {it.qty}
-                {it.unit ? ` ${it.unit}` : ""}
-              </td>
-              <td className="num">{money(it.unit_price)}</td>
-              <td className="num">{money(it.amount)}</td>
-              <td className="ov-it-remark">{it.remark || ""}</td>
-            </tr>
-          ))}
+          {source.items.map((it, i) => {
+            const qty = Number(it.qty || 1);
+            const cost = it.cost_price;
+            return (
+              <tr key={i}>
+                <td className="ov-it-n">{i + 1}</td>
+                <td className="ov-it-part">{it.part_no || "—"}</td>
+                <td>
+                  {it.description || "—"}
+                  {it.serial_no ? <span className="ov-it-serial"> · S/N {it.serial_no}</span> : null}
+                </td>
+                <td className="ov-it-qty">
+                  {it.qty}
+                  {it.unit ? ` ${it.unit}` : ""}
+                </td>
+                <td className="num">{money(cost, costCurrency)}</td>
+                <td className="num">{money(cost == null ? null : cost * qty, costCurrency)}</td>
+                <td className="num ov-it-mg">
+                  {it.margin_pct == null ? <span className="muted">—</span> : `${it.margin_pct}%`}
+                </td>
+                <td className="num">{money(it.unit_price, currency)}</td>
+                <td className="num">{money(it.amount, currency)}</td>
+                <td className="ov-it-remark">{it.remark || ""}</td>
+              </tr>
+            );
+          })}
         </tbody>
         {source.total != null ? (
           <tfoot>
             <tr>
-              <td colSpan={5} className="ov-it-totlabel">
-                Quotation total
-                {source.discountPct ? ` (after ${source.discountPct}% discount)` : ""}
+              <td colSpan={4} className="ov-it-totlabel">
+                Total
+                {source.discountPct ? ` (sales after ${source.discountPct}% discount)` : ""}
               </td>
+              <td />
+              <td className="num ov-it-total">
+                {hasCost ? (
+                  <DualCurrencyAmount value={costTotal} currency={costCurrency} rate={rate} />
+                ) : (
+                  <span className="muted">—</span>
+                )}
+              </td>
+              <td />
+              <td />
               <td className="num ov-it-total">
                 <DualCurrencyAmount value={source.total} currency={currency} rate={rate} />
               </td>

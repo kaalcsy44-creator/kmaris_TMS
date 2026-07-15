@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import type { PipelineRow } from "@/lib/types";
 import CustomerName from "@/components/common/CustomerName";
+import VendorName from "@/components/common/VendorName";
 import { tr } from "@/lib/labels";
 
 // 프로젝트 정보 항목 정의 — 상세 모달 좌측 패널(사용자가 표시 여부 선택)과
@@ -18,16 +19,17 @@ export function multiText(s: string): ReactNode {
 
 // Vendor 필드: RFQ를 보낸 모든 벤더를 나열하되, 견적을 받지 못한 벤더는 취소선으로
 // 표시한다. RFQ 발송 전이면 발주(P/O) 벤더 또는 —.
+// 벤더명 좌측 로고는 VendorName 이 붙인다(고객사 표기와 동일한 모양).
 export function vendorList(r: PipelineRow): ReactNode {
   const list = r.rfq_vendors;
   if (list && list.length) {
     return list.map((v, i) => (
       <div key={i} className={v.quoted ? undefined : "vendor-noquote"}>
-        {v.name}
+        <VendorName name={v.name} />
       </div>
     ));
   }
-  return r.vendor ? multiText(r.vendor) : "—";
+  return r.vendor ? <VendorName name={r.vendor} /> : "—";
 }
 
 export const INFO_FIELDS: { key: string; label: string; render: (r: PipelineRow) => ReactNode }[] = [

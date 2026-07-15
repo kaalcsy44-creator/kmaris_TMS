@@ -8121,7 +8121,9 @@ table.mini .num {
 .proj-ov { display: flex; flex-direction: column; gap: 16px; }
 .proj-ov-head { display: flex; align-items: center; justify-content: space-between; gap: 12px;
   flex-wrap: wrap; }
-.proj-ov-id { display: flex; align-items: center; gap: 8px; }
+/* 머리글 한 줄: 번호 · (날짜) · 타입 · 프로젝트명 · 선박. 좁으면 제목만 줄여 한 줄 유지. */
+.proj-ov-id { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1;
+  margin: 0; font-size: inherit; font-weight: inherit; }
 .proj-ov-back { display: inline-flex; align-items: center; justify-content: center;
   width: 26px; height: 26px; border-radius: 6px; border: 1px solid var(--line-strong);
   color: var(--navy); text-decoration: none; font-size: 14px; background: #fff; }
@@ -8136,23 +8138,14 @@ table.mini .num {
   padding: 3px 10px; }
 .proj-ov-pic-label { font-size: 10px; font-weight: 700; color: var(--muted); }
 
-.proj-ov-title { margin: 0; font-size: 24px; font-weight: 800; color: var(--ink);
-  line-height: 1.25; }
-.proj-ov-vessel { font-weight: 600; color: var(--muted); }
-.proj-ov-sub { display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
-  margin-top: -8px; font-size: 12.5px; color: var(--muted); }
-.proj-ov-stagenow { font-weight: 800; color: var(--blue); }
-.proj-ov-age, .proj-ov-recv { color: var(--muted); }
+/* 프로젝트명 — 머리글에서 가장 큰 글자. 길면 말줄임(선박명은 끝까지 보이게 유지). */
+.proj-ov-title { font-size: 18px; font-weight: 800; color: var(--ink); min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.proj-ov-vessel { flex: none; font-size: 15px; font-weight: 600; color: var(--muted);
+  white-space: nowrap; }
 /* 서비스 딜은 목록·보드와 같은 보라 계열 강조를 제목에 준다. */
 .proj-ov.service .proj-ov-title { color: #5b21b6; }
 .proj-ov.cancelled .proj-ov-title { color: var(--muted); text-decoration: line-through; }
-
-.proj-ov-next { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600;
-  border-radius: 8px; padding: 8px 12px; background: var(--head-bg); color: var(--navy); }
-.proj-ov-next-label { font-size: 10px; font-weight: 800; text-transform: uppercase;
-  letter-spacing: 0.04em; color: var(--muted); }
-.proj-ov-next.lv-warn { background: #fff3e0; color: #9a5b00; }
-.proj-ov-next.lv-urgent { background: #fdeaea; color: #b42318; }
 
 .proj-ov-sec { min-width: 0; }
 .proj-ov-h { display: flex; align-items: baseline; gap: 8px; margin: 0 0 8px;
@@ -8231,6 +8224,9 @@ table.mini .num {
 .ov-it-total { font-weight: 800; color: var(--navy); }
 .proj-ov-items .ov-it-n { width: 34px; color: var(--muted); text-align: right; }
 .proj-ov-items .ov-it-qty { white-space: nowrap; }
+/* 매입(원가) 열은 내부용 보조 정보 → 매출 열보다 톤을 낮춰 시선이 매출로 가게 한다. */
+.proj-ov-items .ov-it-mg { font-weight: 700; color: #11824a; }
+.proj-ov-items .dual-line.converted { font-size: 10px; }
 .ov-it-part { font-weight: 600; color: var(--navy); }
 .ov-it-serial { color: var(--muted); }
 .ov-it-remark { color: var(--muted); }
