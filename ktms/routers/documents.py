@@ -55,6 +55,7 @@ from _core import (
     generate_ci_xlsx,
     generate_pl_xlsx,
     get_session,
+    make_document_xlsx,
     require_token,
     send_email,
     shipping_advice_email_body,
