@@ -28,6 +28,15 @@ import { convertCurrency, USD_KRW_RATE } from "@/components/common/itemTable";
 import ActivityDesc from "@/components/common/ActivityDesc";
 import WorkTypeBadge from "@/components/WorkTypeBadge";
 
+// 좌측 정보 패널에서 빼는 항목 — 이 페이지의 다른 자리에 이미 있어 두 번 읽게 만든다.
+//   items           → 아래 Items 표가 품목을 전부 보여준다
+//   pic             → 머리글 우측 PIC 칩
+//   customer_rfq_no → 1단계(RFQ Received) 타임라인의 문서번호
+//   kmaris_rfq_no   → 머리글의 프로젝트 번호(P-007)가 딜을 식별한다
+// INFO_FIELDS 자체는 두 화면이 공유하므로 건드리지 않는다 — 진행현황 팝업은 ⚙ 로 직접 고른다.
+const OVERVIEW_HIDDEN_FIELDS = new Set(["items", "pic", "customer_rfq_no", "kmaris_rfq_no"]);
+const OVERVIEW_INFO_FIELDS = INFO_FIELDS.filter((f) => !OVERVIEW_HIDDEN_FIELDS.has(f.key));
+
 /**
  * 프로젝트 개요 — 한 프로젝트의 모든 정보를 한 페이지에 읽기 전용으로 모아 보여준다.
  * 목적은 "팀원과 현재 상황 공유"라서 URL 로 바로 열리고 인쇄가 되는 게 핵심이다.
@@ -220,7 +229,7 @@ function Overview({
         <section className="proj-ov-sec">
           <h2 className="proj-ov-h">Project info</h2>
           <dl className="proj-ov-info">
-            {INFO_FIELDS.map((f) => (
+            {OVERVIEW_INFO_FIELDS.map((f) => (
               <div key={f.key}>
                 <dt>{f.label}</dt>
                 <dd>{f.render(row)}</dd>
