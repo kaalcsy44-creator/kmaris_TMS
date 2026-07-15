@@ -331,6 +331,34 @@ def shipping_mark_pdf(order_id: int):
         s.close()
 
 
+@app.get("/api/admin/documents/{order_id}/sm/xlsx",
+         dependencies=[Depends(require_token)])
+def shipping_mark_xlsx(order_id: int):
+    """Shipping Mark Excel — PDF 와 같은 데이터·구성(마킹 데이터는 CI 의 shipping 에 보관)."""
+    s = get_session()
+    try:
+        order = s.query(Order).filter_by(id=order_id).first()
+        ci = _latest_ci(s, order_id) if order else None
+        if not order or not ci:
+            raise HTTPException(status_code=404, detail="Commercial Invoice가 없습니다.")
+        payload = build_payload(
+            doc_no=ci.ci_no, date=ci.date,
+            customer=_customer_for_order(s, order),
+            vessel=_vessel_for_order(s, order),
+            items=ci.items or [], terms=ci.terms or {},
+            currency=ci.currency or "USD", vat_rate=ci.vat_rate or 0.0,
+            shipping=ci.shipping or {}, po_no=order.po_no or "",
+            export_ref=_project_no_for_order(s, order),
+        )
+        xlsx = make_document_xlsx("shipping_mark", payload)
+        return _doc_file_response(
+            xlsx, f"{ci.ci_no}_SM.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+    finally:
+        s.close()
+
+
 @app.get("/api/admin/documents/{order_id}/ci/xlsx",
          dependencies=[Depends(require_token)])
 def commercial_invoice_xlsx(order_id: int):

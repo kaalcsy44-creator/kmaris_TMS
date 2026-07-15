@@ -1033,7 +1033,7 @@ function ShippingMarksTab({ data, onChanged }: { data: DocumentDetail; onChanged
       </fieldset>
       <div className="form-actions doc-actions">
         <div className="doc-actions-left">
-          <DocPreviewButton orderId={data.order.id} kind="sm/pdf" filename="Shipping Marks.pdf" disabled={!data.ci} />
+          <DocPreviewButton orderId={data.order.id} kind="sm/pdf" filename="Shipping Marks.pdf" disabled={!data.ci} xlsxKind="sm/xlsx" />
         </div>
         <div className="doc-actions-center" />
         <div className="doc-actions-right">
@@ -1933,7 +1933,7 @@ function DownloadButton({
   disabled,
 }: {
   orderId: number;
-  kind: "ci/pdf" | "ci/xlsx" | "pl/pdf" | "pl/xlsx" | "sa/pdf" | "tax/xlsx";
+  kind: "ci/pdf" | "ci/xlsx" | "sm/pdf" | "sm/xlsx" | "pl/pdf" | "pl/xlsx" | "sa/pdf" | "tax/xlsx";
   label: string;
   disabled: boolean;
 }) {
@@ -1974,8 +1974,8 @@ function DocPreviewButton({
   kind: "ci/pdf" | "sm/pdf" | "pl/pdf" | "sa/pdf";
   filename: string;
   disabled: boolean;
-  // 지정 시 미리보기 우측상단에 Excel 다운로드 버튼을 노출한다(CI/PL 만 xlsx 지원).
-  xlsxKind?: "ci/xlsx" | "pl/xlsx";
+  // 지정 시 미리보기 우측상단에 Excel 다운로드 버튼을 노출한다.
+  xlsxKind?: "ci/xlsx" | "sm/xlsx" | "pl/xlsx";
 }) {
   const [url, setUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);

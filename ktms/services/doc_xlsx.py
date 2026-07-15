@@ -623,11 +623,172 @@ def make_packing_list_xlsx(
     return out.getvalue()
 
 
+def make_shipping_mark_xlsx(
+    data: Dict[str, Any], company: Optional[Dict[str, Any]] = None
+) -> bytes:
+    """Shipping Mark(케이스 마킹) Excel — PDF(_make_shipping_mark_pdf)와 같은 구성:
+    타이틀·배너 → 참조 스트립(REF/P.O./DATE) → 주 마크 박스 → 실측표 → 취급주의.
+
+    범용 make_document_xlsx 를 쓰지 않는 이유: 그쪽은 품목표 문서(CI/PL/PO)용이고
+    Shipping Mark 은 품목이 없는 마킹 라벨이라 형태가 전혀 다르다.
+    마크 박스는 스텐실로 옮겨 적는 원본이므로 PDF 와 같은 줄·같은 순서로 유지한다.
+    """
+    company = company or {}
+    vessel = data.get("vessel", {}) or {}
+    shipping = data.get("shipping", {}) or {}
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Shipping Mark"
+    ws.sheet_view.showGridLines = False
+
+    navy = PatternFill("solid", fgColor="0B1D3A")
+    blue = PatternFill("solid", fgColor="0055A8")
+
+    title_font = Font(name="Noto Sans KR", color="0B1D3A", bold=True, size=19)
+    white_sm = Font(name="Noto Sans KR", color="FFFFFF", size=9)
+    white_lbl = Font(name="Noto Sans KR", color="FFFFFF", bold=True, size=9)
+    normal = Font(name="Noto Sans KR", size=9)
+    mark_font = Font(name="Noto Sans KR", bold=True, size=13)
+
+    thin = Side(style="thin", color="C8D2E0")
+    bdr = Border(top=thin, bottom=thin, left=thin, right=thin)
+    thick = Side(style="medium", color="000000")
+    center = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    left = Alignment(horizontal="left", vertical="center", wrap_text=True)
+
+    NCOL = 6
+    for i, w in enumerate([13, 20, 12, 18, 10, 16], start=1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+
+    def merge(r1, c1, r2, c2):
+        ws.merge_cells(start_row=r1, start_column=c1, end_row=r2, end_column=c2)
+
+    def bd(r1, c1, r2, c2, fill=None, border=bdr):
+        for rr in range(r1, r2 + 1):
+            for cc in range(c1, c2 + 1):
+                ws.cell(rr, cc).border = border
+                if fill:
+                    ws.cell(rr, cc).fill = fill
+
+    def put(r, c, v="", *, fill=None, font=None, align=None):
+        x = ws.cell(r, c, v)
+        if fill:
+            x.fill = fill
+        if font:
+            x.font = font
+        if align:
+            x.alignment = align
+        return x
+
+    r = 1
+    logo = _find_asset("logo_K-maris.png", "logo.png", "logo.jpg", "logo.jpeg")
+    if logo:
+        try:
+            from openpyxl.drawing.image import Image as XLImage
+            img = XLImage(logo)
+            img.width, img.height = 105, 35
+            ws.add_image(img, f"A{r}")
+        except Exception:
+            pass   # 로고는 장식 — 없거나 실패해도 문서는 나와야 한다.
+    merge(r, 1, r, NCOL); put(r, 1, "SHIPPING MARK", font=title_font, align=center)
+    bd(r, 1, r, NCOL); ws.row_dimensions[r].height = 53.6; r += 1
+
+    banner = "   |   ".join(x for x in [
+        company.get("company_name_en", "K-MARIS Energy & Solutions Co., Ltd."),
+        company.get("sales_email", ""), company.get("website", ""),
+    ] if x)
+    merge(r, 1, r, NCOL); put(r, 1, banner, fill=blue, font=white_sm, align=center)
+    bd(r, 1, r, NCOL, blue); ws.row_dimensions[r].height = 16; r += 2
+
+    # ── 참조 스트립 ──────────────────────────────────────────────────────
+    for c, (label, value) in enumerate([
+        ("REF. NO.", shipping.get("sm_ref_no", "")),
+        ("P.O. NO.", shipping.get("sm_po_no", "")),
+        ("DATE", data.get("date", "")),
+    ]):
+        lc = c * 2 + 1
+        put(r, lc, label, fill=navy, font=white_lbl, align=left)
+        put(r, lc + 1, value, font=normal, align=left)
+    bd(r, 1, r, NCOL); ws.row_dimensions[r].height = 20; r += 2
+
+    # ── 주 마크 박스 — PDF 와 같은 줄 구성. 한 셀에 줄바꿈으로 넣어야 스텐실용으로
+    #    그대로 복사된다(줄마다 행을 쓰면 붙여넣을 때 셀이 쪼개진다).
+    lines = []
+    if shipping.get("sm_type"):
+        lines.append(str(shipping["sm_type"]).upper())
+    if shipping.get("sm_consignee"):
+        lines.append(f"C/O {shipping['sm_consignee']}")
+    if shipping.get("sm_vessel"):
+        lines.append(f"M/V {str(shipping['sm_vessel']).upper()}")
+    elif vessel.get("name"):
+        lines.append(f"M/V {str(vessel['name']).upper()}")
+    if shipping.get("sm_po_no"):
+        lines.append(f"P.O. NO. : {shipping['sm_po_no']}")
+    if shipping.get("sm_ref_no"):
+        lines.append(f"REF. NO. : {shipping['sm_ref_no']}")
+    if shipping.get("sm_desc"):
+        lines.append(str(shipping["sm_desc"]).upper())
+    if shipping.get("sm_port_delivery"):
+        lines.append(f"PORT OF DELIVERY : {str(shipping['sm_port_delivery']).upper()}")
+    if shipping.get("sm_final_dest"):
+        lines.append(f"FINAL DESTINATION : {str(shipping['sm_final_dest']).upper()}")
+    if shipping.get("sm_case_no"):
+        lines.append(f"CASE NO. : {shipping['sm_case_no']}")
+    if shipping.get("sm_origin"):
+        lines.append(str(shipping["sm_origin"]).upper())
+    if not lines:
+        lines.append("(NO SHIPPING MARK DATA)")
+
+    box_top = r
+    box_bottom = r + 15
+    merge(box_top, 1, box_bottom, NCOL)
+    put(box_top, 1, "\n".join(lines), font=mark_font, align=center)
+    bd(box_top, 1, box_bottom, NCOL,
+       border=Border(top=thick, bottom=thick, left=thick, right=thick))
+    for rr in range(box_top, box_bottom + 1):
+        ws.row_dimensions[rr].height = 18
+    r = box_bottom + 2
+
+    # ── 실측(중량·치수·케이스) ────────────────────────────────────────────
+    dim = [shipping.get("sm_dim_l"), shipping.get("sm_dim_w"), shipping.get("sm_dim_h")]
+    dim_txt = (" × ".join((str(d).strip() if d and str(d).strip() else "-") for d in dim) + " MM"
+               if any(d and str(d).strip() for d in dim) else "")
+    metrics = [
+        [("N.W.", f"{shipping['sm_net_weight']} KG" if shipping.get("sm_net_weight") else ""),
+         ("G.W.", f"{shipping['sm_gross_weight']} KG" if shipping.get("sm_gross_weight") else "")],
+        [("DIMENSION", dim_txt),
+         ("TOTAL CASES", f"{shipping['sm_total_cases']} CASE(S)" if shipping.get("sm_total_cases") else "")],
+    ]
+    for row in metrics:
+        (k1, v1), (k2, v2) = row
+        put(r, 1, k1, fill=navy, font=white_lbl, align=left)
+        merge(r, 2, r, 3); put(r, 2, v1, font=normal, align=left)
+        put(r, 4, k2, fill=navy, font=white_lbl, align=left)
+        merge(r, 5, r, 6); put(r, 5, v2, font=normal, align=left)
+        bd(r, 1, r, NCOL); ws.row_dimensions[r].height = 20; r += 1
+
+    # ── 취급 주의 ────────────────────────────────────────────────────────
+    handling = str(shipping.get("sm_handling") or "").strip()
+    if handling:
+        put(r, 1, "HANDLING", fill=navy, font=white_lbl, align=left)
+        merge(r, 2, r, NCOL)
+        put(r, 2, " · ".join(h.strip() for h in handling.split(",") if h.strip()),
+            font=normal, align=left)
+        bd(r, 1, r, NCOL); ws.row_dimensions[r].height = 20
+
+    out = io.BytesIO()
+    wb.save(out)
+    return out.getvalue()
+
+
 def make_document_xlsx(
     doc_type: str, data: Dict[str, Any], company: Optional[Dict[str, Any]] = None
 ) -> bytes:
     if doc_type == "quotation":
         return make_quotation_costing_xlsx(data, company)
+    if doc_type == "shipping_mark":
+        return make_shipping_mark_xlsx(data, company)
     title = DOC_TITLES.get(doc_type, "DOCUMENT")
     is_po = doc_type == "purchase_order"
     currency = (data.get("currency") or "USD").upper()
