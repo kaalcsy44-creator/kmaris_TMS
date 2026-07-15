@@ -43,6 +43,31 @@ function partKey(v: string | undefined): string {
   return (v || "").trim().toUpperCase();
 }
 
+type DocLine = { qty?: number; unit_price?: number | null; amount?: number | null };
+
+/** 품목 1줄의 단가 — unit_price 우선, 없으면 금액÷수량으로 역산. */
+export function unitPriceOf(it: DocLine | undefined): number | null {
+  if (!it) return null;
+  if (it.unit_price != null) return Number(it.unit_price);
+  const q = Number(it.qty || 0);
+  if (it.amount != null && q) return Number(it.amount) / q;
+  return null;
+}
+
+/**
+ * C/I 1줄의 매입액 — 벤더 발주 단가 × C/I 수량.
+ *
+ * C/I 는 실제로 실은 수량만 적는다(안 실린 품목은 수량 0으로 남는다). 그래서 발주 금액을
+ * 그대로 옮기면 나가지도 않은 물건의 원가가 매입으로 잡혀 마진이 음수로 무너진다.
+ * 매입은 나간 수량만큼만 잡는다.
+ */
+export function ciPurchase(vendorPoLine: DocLine | undefined, ciLine: DocLine | undefined): number | null {
+  if (!ciLine) return null;
+  const unit = unitPriceOf(vendorPoLine);
+  if (unit == null) return null;
+  return unit * Number(ciLine.qty ?? 0);
+}
+
 /**
  * 단계 간 품목 연결자 — 기준 행(고객 P/O 품목)에 대응하는 다른 문서(견적·벤더P/O·C/I)의
  * 품목을 찾는다. 프로젝트 개요의 Quote→P/O→C/I 가로 배치가 이걸로 줄을 맞춘다.

@@ -18,6 +18,7 @@ import {
   fmtStageDate,
   buildStageChain,
   makeItemMatcher,
+  ciPurchase,
   type StageChainItem,
 } from "@/lib/deal";
 import { buildActivities, md, splitProjectNo, type Activity } from "@/lib/activity";
@@ -118,9 +119,15 @@ function lineAmount(it: StageItem | undefined): number | null {
 }
 
 function sumLines(items: StageItem[]): number | null {
-  const vals = items.map(lineAmount).filter((v): v is number => v != null);
-  return vals.length ? vals.reduce((a, b) => a + b, 0) : null;
+  return total(items.map(lineAmount));
 }
+
+/** 값이 있는 것만 더한다. 하나도 없으면 null(= 0 이 아니라 "없음"). */
+function total(vals: (number | null)[]): number | null {
+  const xs = vals.filter((v): v is number => v != null);
+  return xs.length ? xs.reduce((a, b) => a + b, 0) : null;
+}
+
 
 /**
  * 마진율(%) — (매출 − 매입) / 매출. 통화가 다르면 매입을 매출 통화로 환산해 비교한다.
@@ -470,10 +477,27 @@ function OrderItemGroup({
   const rate = quote?.fx_rate && quote.fx_rate > 0 ? quote.fx_rate : USD_KRW_RATE;
 
   const rows = order.items.length ? order.items : (quote?.items ?? []);
-  // 품번으로 각 문서의 같은 품목을 찾는다. 아래 rows.map 이 순서대로 돌면서 소비한다.
+  // 품번으로 각 문서의 같은 품목을 찾는다. 아래 map 이 순서대로 돌면서 소비한다.
   const matchQuote = makeItemMatcher(quote?.items ?? []);
   const matchVpo = makeItemMatcher(vpoItems);
   const matchCi = makeItemMatcher(ci?.items ?? []);
+
+  // 줄별 금액을 한 번에 계산해 두고, 합계는 이 값들을 더한다(화면 숫자와 합계가 늘 일치).
+  const lines = rows.map((it, i) => {
+    const qIt = matchQuote(it, i);
+    const vIt = matchVpo(it, i);
+    const cIt = matchCi(it, i);
+    return {
+      it,
+      qIt,
+      qPur: qIt?.cost_price == null ? null : Number(qIt.cost_price) * Number(qIt.qty || 1),
+      qSales: lineAmount(qIt),
+      pPur: lineAmount(vIt),
+      pSales: lineAmount(it),
+      cPur: ciPurchase(vIt, cIt),
+      cSales: lineAmount(cIt),
+    };
+  });
 
   return (
     <tbody className="ov-grp">
@@ -483,64 +507,51 @@ function OrderItemGroup({
         poDocs={{ pur: vpoNos, sales: order.po_no || "—" }}
         ciNo={ci?.ci_no || ""}
       />
-      {rows.map((it, i) => {
-        const qIt = matchQuote(it, i);
-        const vIt = matchVpo(it, i);
-        const cIt = matchCi(it, i);
-        const qty = Number(it.qty || 1);
-        const qPur = qIt?.cost_price == null ? null : Number(qIt.cost_price) * Number(qIt.qty || 1);
-        const qSales = lineAmount(qIt);
-        const pPur = lineAmount(vIt);
-        const pSales = lineAmount(it);
-        const cSales = lineAmount(cIt);
-        return (
-          <tr key={i}>
-            <td className="ov-it-n">{i + 1}</td>
-            <td className="ov-it-part">{it.part_no || <span className="muted">—</span>}</td>
-            <td>{it.description || qIt?.description || "—"}</td>
-            <td className="ov-it-qty">
-              {qty}
-              {it.unit ? ` ${it.unit}` : ""}
-            </td>
-            <td className="num gs">
-              <Money value={qPur} currency={qCostCur} />
-            </td>
-            <td className="num">
-              <Pct value={qIt?.margin_pct ?? null} />
-            </td>
-            <td className="num">
-              <Money value={qSales} currency={qCur} />
-            </td>
-            <td className="num gs">
-              <Money value={pPur} currency={vpoCur} />
-            </td>
-            <td className="num">
-              <Pct value={marginPct(pSales, pPur, oCur, vpoCur, rate)} />
-            </td>
-            <td className="num">
-              <Money value={pSales} currency={oCur} />
-            </td>
-            <td className="num gs">
-              {/* C/I 단계 매입은 별도 문서가 없어 실제 발주(Vendor P/O)를 그대로 잇는다. */}
-              <Money value={cSales == null ? null : pPur} currency={vpoCur} />
-            </td>
-            <td className="num">
-              <Pct value={cSales == null ? null : marginPct(cSales, pPur, ciCur, vpoCur, rate)} />
-            </td>
-            <td className="num">
-              <Money value={cSales} currency={ciCur} />
-            </td>
-          </tr>
-        );
-      })}
+      {lines.map((ln, i) => (
+        <tr key={i}>
+          <td className="ov-it-n">{i + 1}</td>
+          <td className="ov-it-part">{ln.it.part_no || <span className="muted">—</span>}</td>
+          <td>{ln.it.description || ln.qIt?.description || "—"}</td>
+          <td className="ov-it-qty">
+            {Number(ln.it.qty || 1)}
+            {ln.it.unit ? ` ${ln.it.unit}` : ""}
+          </td>
+          <td className="num gs">
+            <Money value={ln.qPur} currency={qCostCur} />
+          </td>
+          <td className="num">
+            <Pct value={ln.qIt?.margin_pct ?? null} />
+          </td>
+          <td className="num">
+            <Money value={ln.qSales} currency={qCur} />
+          </td>
+          <td className="num gs">
+            <Money value={ln.pPur} currency={vpoCur} />
+          </td>
+          <td className="num">
+            <Pct value={marginPct(ln.pSales, ln.pPur, oCur, vpoCur, rate)} />
+          </td>
+          <td className="num">
+            <Money value={ln.pSales} currency={oCur} />
+          </td>
+          <td className="num gs">
+            <Money value={ln.cPur} currency={vpoCur} />
+          </td>
+          <td className="num">
+            <Pct value={marginPct(ln.cSales, ln.cPur, ciCur, vpoCur, rate)} />
+          </td>
+          <td className="num">
+            <Money value={ln.cSales} currency={ciCur} />
+          </td>
+        </tr>
+      ))}
       <GroupTotal
-        quotePur={
-          quote ? sumLines(quote.items.map((x) => ({ amount: (x.cost_price ?? 0) * (x.qty || 1) }))) : null
-        }
-        quoteSales={quote ? (quote.amount ?? sumLines(quote.items)) : null}
-        poPur={sumLines(vpoItems)}
-        poSales={sumLines(order.items)}
-        ciSales={ci ? sumLines(ci.items) : null}
+        quotePur={total(lines.map((l) => l.qPur))}
+        quoteSales={total(lines.map((l) => l.qSales))}
+        poPur={total(lines.map((l) => l.pPur))}
+        poSales={total(lines.map((l) => l.pSales))}
+        ciPur={total(lines.map((l) => l.cPur))}
+        ciSales={total(lines.map((l) => l.cSales))}
         cur={{ qCostCur, qCur, vpoCur, oCur, ciCur }}
         rate={rate}
       />
@@ -607,6 +618,7 @@ function GroupTotal({
   quoteSales,
   poPur,
   poSales,
+  ciPur,
   ciSales,
   cur,
   rate,
@@ -615,6 +627,7 @@ function GroupTotal({
   quoteSales: number | null;
   poPur: number | null;
   poSales: number | null;
+  ciPur: number | null;
   ciSales: number | null;
   cur: { qCostCur: string; qCur: string; vpoCur: string; oCur: string; ciCur: string };
   rate: number;
@@ -643,10 +656,10 @@ function GroupTotal({
         <Money value={poSales} currency={cur.oCur} />
       </td>
       <td className="num gs">
-        <Money value={ciSales == null ? null : poPur} currency={cur.vpoCur} />
+        <Money value={ciPur} currency={cur.vpoCur} />
       </td>
       <td className="num">
-        <Pct value={ciSales == null ? null : marginPct(ciSales, poPur, cur.ciCur, cur.vpoCur, rate)} />
+        <Pct value={marginPct(ciSales, ciPur, cur.ciCur, cur.vpoCur, rate)} />
       </td>
       <td className="num ov-it-total">
         <Money value={ciSales} currency={cur.ciCur} />
@@ -713,6 +726,7 @@ function QuoteOnlyGroup({ quoteId, vendorQuoteNo }: { quoteId: number; vendorQuo
         quoteSales={quote.amount ?? sumLines(quote.items)}
         poPur={null}
         poSales={null}
+        ciPur={null}
         ciSales={null}
         cur={{ qCostCur, qCur, vpoCur: qCur, oCur: qCur, ciCur: qCur }}
         rate={rate}

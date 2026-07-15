@@ -5,7 +5,7 @@
 // 잘못 맞으면 "5·6항 C/I 가 1·2항에 붙는" 식으로 조용히 틀린 숫자가 나오므로 고정해 둔다.
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { makeItemMatcher } from "../../lib/deal.ts";
+import { makeItemMatcher, ciPurchase, unitPriceOf } from "../../lib/deal.ts";
 
 type Item = { part_no?: string; tag: string };
 
@@ -80,4 +80,43 @@ test("기준 행에 품번이 없으면 품번 있는 문서와는 잇지 않는
   const po: Item[] = [{ tag: "po1" }];
   const ci: Item[] = [{ part_no: "A-9", tag: "ci1" }];
   assert.deepEqual(pair(po, ci), [null]);
+});
+
+// ── C/I 매입 = 벤더 단가 × 실린 수량 ─────────────────────────────────────
+
+test("C/I 수량이 0이면 매입도 0 — 안 실린 물건의 원가를 잡지 않는다", () => {
+  const vendorPo = { qty: 1, unit_price: 150000, amount: 150000 };
+  assert.equal(ciPurchase(vendorPo, { qty: 0, amount: 0 }), 0);
+});
+
+test("C/I 수량이 발주보다 적으면 실린 만큼만 매입", () => {
+  const vendorPo = { qty: 10, unit_price: 1000, amount: 10000 };
+  assert.equal(ciPurchase(vendorPo, { qty: 3, amount: 3000 }), 3000);
+});
+
+test("C/I 에 아예 없는 줄이면 매입은 null(빈칸) — 0 과 구분한다", () => {
+  const vendorPo = { qty: 1, unit_price: 150000 };
+  assert.equal(ciPurchase(vendorPo, undefined), null);
+});
+
+test("발주 단가가 없으면 금액÷수량으로 역산해 쓴다", () => {
+  assert.equal(unitPriceOf({ qty: 4, amount: 800 }), 200);
+  assert.equal(ciPurchase({ qty: 4, amount: 800 }, { qty: 2 }), 400);
+});
+
+test("P-007 ON PHOENIX — 6줄 중 5·6항만 실린 C/I 의 매입 합계", () => {
+  // 발주 6줄(각 수량 1). C/I 는 5·6항만 수량 1, 나머지는 0으로 남아 있다.
+  const vendorPo = [150000, 450000, 188000, 450000, 150000, 150000].map((p) => ({
+    qty: 1,
+    unit_price: p,
+    amount: p,
+  }));
+  const ci = [0, 0, 0, 0, 1, 1].map((q, i) => ({ qty: q, amount: q * [0, 0, 0, 0, 214290, 214290][i] }));
+  const purchases = vendorPo.map((v, i) => ciPurchase(v, ci[i]));
+  assert.deepEqual(purchases, [0, 0, 0, 0, 150000, 150000]);
+  // 매입 300,000 / 매출 428,580 → 마진 30%. 발주 전액(1,538,000)을 잡던 예전 계산은 -258.9%.
+  const purTotal = purchases.reduce((a, b) => (a ?? 0) + (b ?? 0), 0) as number;
+  const salesTotal = 214290 * 2;
+  assert.equal(purTotal, 300000);
+  assert.equal(Math.round(((salesTotal - purTotal) / salesTotal) * 1000) / 10, 30);
 });
