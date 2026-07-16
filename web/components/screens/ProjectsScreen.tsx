@@ -4,12 +4,13 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { fetchPipeline } from "@/lib/api";
 import { useCachedData } from "@/lib/useCachedData";
-import { resolveSteps } from "@/lib/deal";
+import { resolveSteps, vendorOf } from "@/lib/deal";
 import { splitProjectNo } from "@/lib/activity";
 import { tr } from "@/lib/labels";
 import type { PipelineRow } from "@/lib/types";
 import WorkTypeBadge from "@/components/WorkTypeBadge";
 import CustomerName from "@/components/common/CustomerName";
+import VendorName from "@/components/common/VendorName";
 
 /**
  * 프로젝트 색인(읽기 전용) — /project.
@@ -30,8 +31,15 @@ export default function ProjectsScreen() {
     return all.filter((r) => {
       if (!showClosed && r.cancelled) return false;
       if (!needle) return true;
-      return [r.project_no, r.project_title, r.customer, r.vessels || r.vessel, r.assignee]
-        .some((f) => (f || "").toLowerCase().includes(needle));
+      return [
+        r.project_no,
+        r.project_title,
+        r.customer,
+        r.contact_person,
+        r.vessels || r.vessel,
+        vendorOf(r),
+        r.assignee,
+      ].some((f) => (f || "").toLowerCase().includes(needle));
     });
   }, [data, q, showClosed]);
 
@@ -72,17 +80,21 @@ export default function ProjectsScreen() {
               <th className="pjx-c-no">Project No.</th>
               <th className="pjx-c-type">Type</th>
               <th className="pjx-c-cust">Customer</th>
+              <th className="pjx-c-contact">Contact</th>
               <th className="pjx-c-vessel">Vessel</th>
               <th className="pjx-c-title">Project</th>
               <th className="pjx-c-stage">Stage</th>
+              <th className="pjx-c-vendor">Vendor</th>
               <th className="pjx-c-amt num">Sales</th>
+              <th className="pjx-c-amt num">Purchase</th>
+              <th className="pjx-c-margin num">Margin</th>
               <th className="pjx-c-pic">PIC</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td className="pjx-empty" colSpan={8}>
+                <td className="pjx-empty" colSpan={12}>
                   {q.trim() ? `No projects match “${q.trim()}”.` : "No projects yet."}
                 </td>
               </tr>
@@ -96,6 +108,25 @@ export default function ProjectsScreen() {
   );
 }
 
+/**
+ * 이중통화 금액("USD 8,000 KRW 12,347,280")을 통화 단위로 끊어 각 줄에 놓는다.
+ * 좁은 열에서 그냥 wrap 시키면 "12,347,280" 같은 숫자 한가운데가 잘리는데, 통화 코드
+ * (대문자 3글자) 앞에서만 끊으면 "USD 8,000" / "KRW 12,347,280" 이 한 덩어리씩 유지된다.
+ * 단일 통화면 조각이 하나라 그대로 한 줄.
+ */
+function DualAmount({ value }: { value: string }) {
+  const parts = value.trim().split(/\s+(?=[A-Z]{3}\s)/);
+  return (
+    <span className="pjx-amt">
+      {parts.map((p, i) => (
+        <span key={i} className="pjx-amt-cur">
+          {p}
+        </span>
+      ))}
+    </span>
+  );
+}
+
 function ProjectRow({ r, steps }: { r: PipelineRow; steps: string[] }) {
   const { code, date } = splitProjectNo(r.project_no || r.kmaris_rfq_no || "—");
   const rSteps = resolveSteps(steps, r.work_type);
@@ -103,6 +134,8 @@ function ProjectRow({ r, steps }: { r: PipelineRow; steps: string[] }) {
   const label = rSteps[stage - 1] || "—";
   // 선박은 오더별로 여러 척일 수 있다(vessels = 줄바꿈 구분).
   const vessels = (r.vessels || r.vessel || "").split("\n").filter(Boolean).join(" · ");
+  // 확정 벤더(P/O) 우선, 없으면 RFQ 발송 벤더 목록 — 목록·보드와 같은 규칙(vendorOf).
+  const vendor = vendorOf(r);
 
   return (
     <tr className={r.cancelled ? "closed" : undefined}>
@@ -120,6 +153,9 @@ function ProjectRow({ r, steps }: { r: PipelineRow; steps: string[] }) {
       <td className="pjx-c-cust">
         {r.customer ? <CustomerName name={r.customer} /> : <span className="muted">—</span>}
       </td>
+      <td className="pjx-c-contact">
+        {r.contact_person || <span className="muted">—</span>}
+      </td>
       <td className="pjx-c-vessel">{vessels || <span className="muted">—</span>}</td>
       <td className="pjx-c-title">
         {r.project_title || <span className="muted">(untitled project)</span>}
@@ -130,9 +166,27 @@ function ProjectRow({ r, steps }: { r: PipelineRow; steps: string[] }) {
         </span>
         <span className="pjx-stage-label">{r.cancelled ? tr(r.status) : label}</span>
       </td>
+      <td className="pjx-c-vendor">
+        {vendor ? <VendorName name={vendor} /> : <span className="muted">—</span>}
+      </td>
       <td className="pjx-c-amt num">
-        {r.sales_total ? (
-          <span className="pjx-amt">{r.sales_total}</span>
+        {r.sales_total ? <DualAmount value={r.sales_total} /> : <span className="muted">—</span>}
+      </td>
+      <td className="pjx-c-amt num">
+        {r.purchase_total ? (
+          <DualAmount value={r.purchase_total} />
+        ) : (
+          <span className="muted">—</span>
+        )}
+      </td>
+      <td className="pjx-c-margin num">
+        {r.margin_amount ? (
+          <span className="pjx-margin-wrap">
+            <DualAmount value={r.margin_amount} />
+            {r.margin_pct != null ? (
+              <span className="pjx-margin-pct">{r.margin_pct}%</span>
+            ) : null}
+          </span>
         ) : (
           <span className="muted">—</span>
         )}
