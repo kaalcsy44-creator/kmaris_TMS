@@ -4593,8 +4593,11 @@ table.mini input[type="checkbox"].row-check:indeterminate::after {
 .mail-attach.generated.off .mail-attach-name {
   text-decoration: line-through;
 }
-/* 포맷 셀렉트 — 기본 폭이 넓어 파일명을 밀어낸다. 내용에 맞춰 좁게 고정. */
-.mail-attach-fmt {
+/* 포맷 셀렉트 — 기본 폭이 넓어 파일명을 밀어낸다. 내용에 맞춰 좁게 고정.
+   칩이 .form-field 안에 있어 전역 `.form-field select{width:100%;height:32px}`가
+   더 높은 명시도로 이겨 셀렉트를 전폭으로 부풀리고 파일명을 잘라먹었다.
+   `.mail-attach` 스코프로 명시도를 올려 폭·높이를 되돌린다. */
+.mail-attach .mail-attach-fmt {
   flex: none;
   width: auto;
   height: 20px;
