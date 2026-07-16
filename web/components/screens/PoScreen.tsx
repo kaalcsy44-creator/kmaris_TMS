@@ -926,6 +926,27 @@ function VendorPoPdfPreviewButton({
     a.click();
   }
 
+  // 발주서 Excel — 미리보기(PDF)와 같은 저장본에서 서버가 만든 xlsx 를 내려받는다.
+  async function saveExcel() {
+    try {
+      const res = await fetch(vendorPoXlsxUrl(poId), {
+        headers: getToken() ? { Authorization: `Bearer ${getToken()}` } : {},
+      });
+      if (!res.ok) throw new Error("Excel download failed");
+      const blob = await res.blob();
+      const disposition = res.headers.get("content-disposition") || "";
+      const match = disposition.match(/filename="([^"]+)"/);
+      const xlsxUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = xlsxUrl;
+      a.download = match?.[1] || filename.replace(/\.pdf$/i, ".xlsx");
+      a.click();
+      URL.revokeObjectURL(xlsxUrl);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Excel download failed");
+    }
+  }
+
   return (
     <>
       <button className="btn doc-preview-btn" disabled={disabled || busy} onClick={open}>
@@ -944,6 +965,7 @@ function VendorPoPdfPreviewButton({
                 <div className="doc-preview-head">
                   <span className="doc-preview-title">{filename}</span>
                   <div className="doc-preview-acts">
+                    <button className="btn sm" onClick={saveExcel}>Excel Download</button>
                     <button className="btn sm doc-preview-save" onClick={savePdf}>PDF Download</button>
                     <button className="btn sm" onClick={close}>Close</button>
                   </div>
