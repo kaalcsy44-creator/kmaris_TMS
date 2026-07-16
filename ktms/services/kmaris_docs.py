@@ -1416,6 +1416,185 @@ def _make_quotation_costing_pdf(data: Dict[str, Any], company: Dict[str, Any]) -
     return buffer.getvalue()
 
 
+def _make_purchase_order_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> bytes:
+    """공급사 발주서(PURCHASE ORDER) — 4단계 견적서(QUOTATION / COSTING SHEET)와 같은
+    비주얼 시스템(세로 A4·로고 헤더·중앙 타이틀·남색 섹션바·지브라 품목표·서명)을 따른다.
+    payload['customer'] 에는 build_po_payload 가 넣은 Vendor(공급사) 정보가 들어 있다."""
+    s = _styles()
+    vendor = data.get("customer", {}) or {}   # build_po_payload: Supplier/Seller = Vendor
+    vessel = data.get("vessel", {}) or {}
+    terms = data.get("terms", {}) or {}
+    items = normalize_items(data.get("items", []))
+    currency = (data.get("currency") or "USD").upper()
+    total = sum(_num(it.get("amount", 0)) for it in items)
+
+    page_width = 190 * mm
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer, pagesize=A4, leftMargin=10 * mm, rightMargin=10 * mm,
+        topMargin=8 * mm, bottomMargin=14 * mm, title="PURCHASE ORDER",
+        author="K-MARIS Energy & Solutions Co., Ltd.",
+    )
+    asset_roots = [Path(__file__).resolve().parents[2], Path(__file__).resolve().parent.parent / "config"]
+
+    def asset(*names):
+        for root in asset_roots:
+            for name in names:
+                cand = root / name
+                if cand.exists():
+                    return cand
+        return None
+
+    def image(path, max_w, max_h):
+        if not path:
+            return ""
+        try:
+            from PIL import Image as PILImage
+            with PILImage.open(path) as src:
+                w, h = src.size
+            scale = min(max_w / w, max_h / h)
+            return Image(str(path), width=w * scale, height=h * scale)
+        except Exception:
+            return ""
+
+    def section(title):
+        t = Table([[_p(f"<b>{title}</b>", s["th"])]], colWidths=[page_width])
+        t.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), NAVY), ("TEXTCOLOR", (0, 0), (-1, -1), colors.white),
+            ("LEFTPADDING", (0, 0), (-1, -1), 6),
+            ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ]))
+        return t
+
+    story: List[Any] = []
+
+    # ── 헤더: 로고 + 타이틀 ──────────────────────────────────────────────
+    title_style = ParagraphStyle("KMPOTitle", parent=s["section"], fontName=DEFAULT_BOLD_FONT,
+                                 fontSize=17, leading=20, alignment=TA_CENTER, textColor=NAVY)
+    logo = image(asset("logo_K-maris.png", "logo.png", "logo.jpg"), 34 * mm, 12 * mm)
+    org_style = ParagraphStyle("KMPOOrg", parent=s["base"], fontName=DEFAULT_BOLD_FONT,
+                               fontSize=11, alignment=TA_RIGHT, textColor=BLUE)
+    head = Table([[logo, Paragraph("K-MARIS ENERGY &amp; SOLUTIONS", org_style)]],
+                 colWidths=[100 * mm, 90 * mm], rowHeights=[14 * mm])
+    head.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LINEBELOW", (0, 0), (-1, -1), 1.2, BLUE)]))
+    story += [head, Spacer(1, 4 * mm), Paragraph("PURCHASE ORDER", title_style), Spacer(1, 4 * mm)]
+
+    # ── 정보 박스(2단) ─────────────────────────────────────────────────
+    incoterms = terms.get("incoterms", "")
+    place = terms.get("delivery_place", "")
+    incoterms_line = " · ".join([x for x in (incoterms, place) if x])
+    left_rows = [
+        ("Supplier / Seller", vendor.get("name", "")),
+        ("Address", vendor.get("address", "")),
+        ("Contact", vendor.get("contact", "")),
+        ("Email", vendor.get("email", "")),
+        ("Ship Name", vessel.get("name", "")),
+        ("Engine Type", vessel.get("engine_type", "")),
+    ]
+    right_rows = [
+        ("P/O No.", data.get("doc_no", "")),
+        ("Date", data.get("date", "")),
+        ("Currency", currency),
+        ("IMO No.", vessel.get("imo", "")),
+        ("Incoterms", incoterms_line),
+        ("Payment", terms.get("payment_terms", "")),
+    ]
+
+    def meta_box(rows):
+        body = [[_p(f"<b>{k}</b>", s["small"]), _p(v, s["small"])] for k, v in rows]
+        t = Table(body, colWidths=[28 * mm, 65 * mm])
+        t.setStyle(TableStyle([
+            ("GRID", (0, 0), (-1, -1), 0.35, MID_GRAY),
+            ("BACKGROUND", (0, 0), (0, -1), LIGHT_GRAY),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+            ("TOPPADDING", (0, 0), (-1, -1), 2.5), ("BOTTOMPADDING", (0, 0), (-1, -1), 2.5),
+        ]))
+        return t
+
+    info = Table([[meta_box(left_rows), meta_box(right_rows)]], colWidths=[95 * mm, 95 * mm])
+    info.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
+    story += [info, Spacer(1, 4 * mm)]
+
+    # ── 품목표 ─────────────────────────────────────────────────────────
+    headers = ["No.", "Part No.", "Description", "Maker", "Qty", "Unit", "Unit Price", "Amount", "Lead Time / Remark"]
+    widths = [8, 24, 44, 26, 12, 14, 22, 22, 18]
+    rows = [[_p(h, s["th"]) for h in headers]]
+    for it in items:
+        lead_remark = f"{it.get('lead_time', '')}\n{it.get('remark', '')}".strip()
+        rows.append([
+            _p(it["item_no"], s["tiny"]),
+            _p(it["part_no"], s["tiny"]),
+            _p(it["description"], s["tiny"]),
+            _p(it.get("maker", ""), s["tiny"]),
+            _p(_qnum(it["qty"]), s["tiny"]),
+            _p(it.get("unit", ""), s["tiny"]),
+            _p(_qnum(it["unit_price"]), s["tiny"]),
+            _p(_qnum(it["amount"]), s["tiny"]),
+            _p(lead_remark, s["tiny"]),
+        ])
+    rows.append([
+        _p("", s["tiny"]), _p("", s["tiny"]), _p("<b>Total</b>", s["tiny"]),
+        _p("", s["tiny"]), _p("", s["tiny"]), _p("", s["tiny"]), _p("", s["tiny"]),
+        _p(f"<b>{_qnum(total)}</b>", s["tiny"]), _p("", s["tiny"]),
+    ])
+    items_table = Table(rows, colWidths=[w * mm for w in widths], repeatRows=1)
+    tcmds = [
+        ("BACKGROUND", (0, 0), (-1, 0), NAVY), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("GRID", (0, 0), (-1, -1), 0.35, MID_GRAY), ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("ALIGN", (4, 1), (7, -1), "RIGHT"), ("ALIGN", (0, 1), (0, -1), "CENTER"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 3), ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+        ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ("BACKGROUND", (0, len(rows) - 1), (-1, len(rows) - 1), LIGHT_BLUE),
+    ]
+    for r in range(1, len(rows) - 1):
+        if r % 2 == 0:
+            tcmds.append(("BACKGROUND", (0, r), (-1, r), colors.HexColor("#FAFBFC")))
+    items_table.setStyle(TableStyle(tcmds))
+    story += [items_table, Spacer(1, 2 * mm)]
+    story.append(_p(f"<b>Total: {_money(total, currency)}</b>", s["right"]))
+    story.append(Spacer(1, 5 * mm))
+
+    # ── Terms & Conditions ────────────────────────────────────────────
+    story.append(section("Terms & Conditions"))
+    story.append(Spacer(1, 2 * mm))
+    term_lines = []
+    if incoterms_line:
+        term_lines.append(f"Incoterms: {incoterms_line}")
+    if terms.get("packing"):
+        term_lines.append(f"Packing: {terms.get('packing')}")
+    if terms.get("warranty"):
+        term_lines.append(f"Warranty: {terms.get('warranty')}")
+    if terms.get("remarks"):
+        term_lines.append(f"Remarks: {terms.get('remarks')}")
+    if not term_lines:
+        term_lines.append("As per the terms agreed between K-MARIS and the supplier.")
+    for line in term_lines:
+        story.append(_p(f"• {line}", s["small"]))
+        story.append(Spacer(1, 1 * mm))
+    story.append(Spacer(1, 3 * mm))
+
+    # ── Payment ───────────────────────────────────────────────────────
+    story.append(section("Payment"))
+    story.append(Spacer(1, 2 * mm))
+    story.append(_p(f"• {terms.get('payment_terms') or 'T/T after delivery'}", s["small"]))
+    story.append(Spacer(1, 1 * mm))
+    story.append(_p("• Please confirm this purchase order and proceed with delivery per the agreed schedule.", s["small"]))
+    story.append(Spacer(1, 6 * mm))
+
+    # ── 서명 ──────────────────────────────────────────────────────────
+    sign_img = image(asset("Authorized signature_Sungyeon Cho.jpg", "signature.png", "signature.jpg"), 40 * mm, 16 * mm)
+    story.append(_p("For and on behalf of K-MARIS Energy & Solutions Co., Ltd.", s["base"]))
+    if sign_img:
+        story.append(sign_img)
+    story.append(_p("________________________", s["base"]))
+    story.append(_p("<b>Sam Cho, Managing Director</b>", s["base"]))
+    story.append(_p("K-MARIS Energy & Solutions | Seoul, Korea | www.k-maris.com", s["small"]))
+
+    doc.build(story, onFirstPage=_footer, onLaterPages=_footer)
+    return buffer.getvalue()
+
+
 def make_pdf(doc_type: str, data: Dict[str, Any], company: Optional[Dict[str, Any]] = None, logo_path: Optional[str] = None) -> bytes:
     if doc_type not in DOC_TITLES:
         raise ValueError(f"Unsupported document type: {doc_type}")
@@ -1423,6 +1602,8 @@ def make_pdf(doc_type: str, data: Dict[str, Any], company: Optional[Dict[str, An
     payload["company"] = company or data.get("company", {})
     if doc_type == "quotation":
         return _make_quotation_costing_pdf(payload, payload["company"])
+    if doc_type == "purchase_order":
+        return _make_purchase_order_pdf(payload, payload["company"])
     if doc_type == "commercial_invoice":
         return _make_commercial_invoice_pdf(payload, payload["company"])
     if doc_type == "shipping_mark":

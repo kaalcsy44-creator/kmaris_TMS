@@ -754,6 +754,8 @@ def vendor_po_pdf(po_id: int):
             vendor=vendor,
             vessel=vessel,
             items=po.items or [],
+            currency=po.currency or (order.currency if order else None) or "USD",
+            terms=getattr(po, "terms", None) or {},
         )
         pdf = generate_po_pdf(payload)
         return Response(
@@ -781,9 +783,9 @@ def vendor_po_xlsx(po_id: int):
             vendor=vendor,
             vessel=vessel,
             items=po.items or [],
+            currency=po.currency or (order.currency if order else None) or "USD",
+            terms=getattr(po, "terms", None) or {},
         )
-        # 발주서에 저장된 거래조건을 payload 에 얹어 Excel Terms 에 반영.
-        payload["terms"] = getattr(po, "terms", None) or {}
         xlsx = make_document_xlsx("purchase_order", payload)
         return Response(
             content=xlsx,
@@ -829,9 +831,10 @@ def vendor_po_send(
                 vendor=vendor,
                 vessel=vessel,
                 items=po.items or [],
+                currency=po.currency or (order.currency if order else None) or "USD",
+                terms=getattr(po, "terms", None) or {},
             )
             if format == "xlsx":
-                payload["terms"] = getattr(po, "terms", None) or {}
                 generated = (f"{po.po_no}_PurchaseOrder.xlsx", make_document_xlsx("purchase_order", payload))
             else:
                 generated = (f"{po.po_no}_PurchaseOrder.pdf", generate_po_pdf(payload))
