@@ -508,11 +508,24 @@ function OrderDetailModal({
   const canDeleteThis = can("po", "delete") && canEditDeal(detail?.assignee_id);
 
   // 선택 고객사에 속한 선박만 노출(고객 미선택이면 전체).
-  // 고객사 기준으로 거르되, 현재 선택된 선박은 (다른 고객사 소속이어도) 항상 포함해
-  // 드롭다운에서 선택값이 사라져 비어 보이지 않도록 한다.
+  // 고객사 기준으로 거르되, (a) 현재 선택된 선박과 (b) 이 프로젝트(RFQ)의 선박은
+  // 다른 고객사 소속이거나 마스터 등록이 안 돼 있어도 항상 후보에 포함해,
+  // 프로젝트 선박이 목록에서 빠져 엉뚱한 선박만 보이는 일이 없도록 한다.
+  const projRfq = options.rfqs.find((r) => r.rfq_no === detail?.rfq_no);
+  const projVesselId = detail?.vessel_id || projRfq?.vessel_id || 0;
+  const projVesselName = (detail?.vessel || projRfq?.vessel || "").trim();
   const vessels = options.vessels.filter(
-    (v) => customerId === "" || v.customer_id === customerId || v.id === vesselId
+    (v) =>
+      customerId === "" ||
+      v.customer_id === customerId ||
+      v.id === vesselId ||
+      (projVesselId ? v.id === projVesselId : false) ||
+      (projVesselName ? v.name === projVesselName : false)
   );
+  // 프로젝트 선박 이름이 선박 마스터에 아예 없으면, 안내용(선택 불가) 옵션으로라도
+  // 노출해 "이 프로젝트 선박은 미등록"임을 알리고 설정에서 추가하도록 유도한다.
+  const projVesselUnregistered =
+    !!projVesselName && !vessels.some((v) => v.name === projVesselName);
 
   return (
     <Modal title={<ModalTitle label="Edit order" projectNo={order?.project_no} />} onClose={onClose} wide inline={inline}>
@@ -611,6 +624,11 @@ function OrderDetailModal({
                   {vessels.map((v) => (
                     <option key={v.id} value={v.id}>{v.name}</option>
                   ))}
+                  {projVesselUnregistered && (
+                    <option value="" disabled>
+                      {projVesselName} (미등록 — 설정에서 추가)
+                    </option>
+                  )}
                 </select>
               </div>
               <div className="form-field">
@@ -1103,9 +1121,23 @@ function CustomerPoNewForm({
   const [ocrMsg, setOcrMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  const vessels = options.vessels.filter(
-    (v) => customerId === "" || v.customer_id === customerId
+  // 고객사 기준으로 거르되, (a) 현재 선택된 선박과 (b) 연결된 RFQ의 선박은 다른
+  // 고객사 소속이거나 미등록이어도 항상 후보에 포함(편집 모달과 동일 규칙).
+  const projRfq = options.rfqs.find(
+    (r) => r.id === (rfqId === "" ? projectRfqId : rfqId)
   );
+  const projVesselId = projRfq?.vessel_id || 0;
+  const projVesselName = (projRfq?.vessel || "").trim();
+  const vessels = options.vessels.filter(
+    (v) =>
+      customerId === "" ||
+      v.customer_id === customerId ||
+      v.id === vesselId ||
+      (projVesselId ? v.id === projVesselId : false) ||
+      (projVesselName ? v.name === projVesselName : false)
+  );
+  const projVesselUnregistered =
+    !!projVesselName && !vessels.some((v) => v.name === projVesselName);
 
   // 프로젝트(임베드) 등록 시 해당 RFQ의 고객·선박을 기본값으로 채운다 → 오더에 선박이
   // 비지 않도록. 사용자가 이미 값을 바꿨으면 덮어쓰지 않는다.
@@ -1324,6 +1356,11 @@ function CustomerPoNewForm({
                   {v.name}
                 </option>
               ))}
+              {projVesselUnregistered && (
+                <option value="" disabled>
+                  {projVesselName} (미등록 — 설정에서 추가)
+                </option>
+              )}
             </select>
           </div>
           <div className="form-field">
