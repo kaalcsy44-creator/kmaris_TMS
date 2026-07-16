@@ -6078,11 +6078,20 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   text-overflow: ellipsis;
 }
 .pl-card.compact .pl-card-bar { margin: 5px 0 0; }
-/* 프로젝트 번호 — 프로젝트명과 동일한 글씨체(sans). 크기만 약간 작게. */
+/* 프로젝트 번호 — 프로젝트명과 동일한 글씨체(sans). 크기만 약간 작게.
+   개요로 가는 링크라 밑줄은 짚었을 때만 — 늘 그으면 보드 전체가 밑줄밭이 되고,
+   번호는 링크이기 전에 먼저 읽히는 식별자다. 색(--blue)은 이미 링크로 읽힌다. */
 .pl-card-no {
   font-size: 12px;
   font-weight: 700;
   color: var(--blue);
+  text-decoration: none;
+}
+.pl-card-no:hover { text-decoration: underline; }
+.pl-card-no:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 1px;
+  border-radius: 3px;
 }
 /* 프로젝트명(건별 식별) — 번호 바로 아래, 카드의 히어로(가장 강조). */
 .pl-card-proj {

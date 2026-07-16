@@ -1283,6 +1283,19 @@ function BoardCard({
       ⤢
     </Link>
   );
+  // 번호 자체도 개요로 가는 문. ⤢ 는 카드를 짚어야 드러나서(평소 color:transparent) 처음 보는
+  // 사람에겐 없는 것과 같다 — 번호는 늘 보이고 이미 파랗다. 카드는 role="button"인 div라
+  // 버튼 중첩이 아니고, 카드 클릭(편집 팝업)을 막으려면 여기도 stopPropagation.
+  const projectNo = (
+    <Link
+      className="pl-card-no"
+      href={`/project/${r.rfq_id}`}
+      onClick={(e) => e.stopPropagation()}
+      title={`Open ${r.project_no || "project"} overview (read-only)`}
+    >
+      <ProjectNo value={r.project_no} />
+    </Link>
+  );
   const cardProps = {
     role: "button" as const,
     tabIndex: 0,
@@ -1301,7 +1314,7 @@ function BoardCard({
       <div {...cardProps}>
         {cancelled ? <span className="pl-card-ribbon">CLOSED</span> : null}
         <div className="pl-card-nrow">
-          <span className="pl-card-no"><ProjectNo value={r.project_no} /></span>
+          {projectNo}
           {overview}
           {chevron}
         </div>
@@ -1330,7 +1343,7 @@ function BoardCard({
     <div {...cardProps}>
       {cancelled ? <span className="pl-card-ribbon">CLOSED</span> : null}
       <div className="pl-card-top">
-        <span className="pl-card-no"><ProjectNo value={r.project_no} /></span>
+        {projectNo}
         <span className="pl-card-top-r">
           <span className={`pl-card-pic${r.assignee ? "" : " none"}`}>{r.assignee || "—"}</span>
           <WorkTypeBadge type={r.work_type} />
