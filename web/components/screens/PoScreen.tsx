@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useSearchParams } from "next/navigation";
+import { useResizable } from "@/lib/useResizable";
 import {
   createOrder,
   createPurchaseOrder,
@@ -881,6 +883,81 @@ function VendorPoTab({
   );
 }
 
+// 발주서(Vendor PO) PDF 미리보기 — 저장본 기준 PDF 를 앱 내 모달(iframe)로 띄운다.
+// 7단계 문서의 DocPreviewButton 과 같은 .doc-preview-* 스타일·동작을 재사용한다.
+function VendorPoPdfPreviewButton({
+  poId,
+  filename,
+  disabled,
+}: {
+  poId: number;
+  filename: string;
+  disabled?: boolean;
+}) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const resize = useResizable({ storageKey: "ktms:doc-preview-size", minW: 360, minH: 280 });
+
+  async function open() {
+    setBusy(true);
+    try {
+      const res = await fetch(vendorPoPdfUrl(poId), {
+        headers: getToken() ? { Authorization: `Bearer ${getToken()}` } : {},
+      });
+      if (!res.ok) throw new Error("preview failed");
+      setUrl(URL.createObjectURL(await res.blob()));
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "미리보기를 열 수 없습니다.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function close() {
+    if (url) URL.revokeObjectURL(url);
+    setUrl(null);
+  }
+
+  function savePdf() {
+    if (!url) return;
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+  }
+
+  return (
+    <>
+      <button className="btn doc-preview-btn" disabled={disabled || busy} onClick={open}>
+        {busy ? "Opening…" : "Preview"}
+      </button>
+      {url && typeof document !== "undefined"
+        ? createPortal(
+            <div className="doc-preview-backdrop" onClick={close}>
+              <div
+                ref={resize.ref}
+                className="doc-preview-modal pl-modal--resizable"
+                style={resize.style}
+                onClick={(e) => e.stopPropagation()}
+              >
+                {resize.handles}
+                <div className="doc-preview-head">
+                  <span className="doc-preview-title">{filename}</span>
+                  <div className="doc-preview-acts">
+                    <button className="btn sm doc-preview-save" onClick={savePdf}>PDF Download</button>
+                    <button className="btn sm" onClick={close}>Close</button>
+                  </div>
+                </div>
+                <iframe className="doc-preview-frame" src={url} title="Preview" />
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
+    </>
+  );
+}
+
 function VendorPoDetailModal({
   id,
   options,
@@ -1052,22 +1129,34 @@ function VendorPoDetailModal({
           />
           <TermsEditor terms={terms} onChange={setTerms} />
           </fieldset>
-          <div className="form-actions">
-            <StageTotal
-              label="Total"
-              value={items.reduce((s, it) => s + Number(it.amount || 0), 0)}
-              currency={currency}
-            />
-            {!canEditThis ? (
-              <span className="hint-inline">{editBlockReason("po", d?.assignee_id)}</span>
-            ) : (
-              <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
-            )}
-            <button className="btn" onClick={onClose} disabled={busy}>Cancel</button>
-            {canDeleteThis ? (
-              <button className="btn danger" onClick={remove} disabled={busy}>Delete</button>
-            ) : null}
-            {err ? <span className="action-err">{err}</span> : null}
+          {/* 하단 고정바 — 좌(Preview) / 중앙(총액) / 우(Delete·Cancel·Save) 3구역.
+              7단계 문서 편집기(.doc-actions)와 동일한 규약. */}
+          <div className="form-actions doc-actions">
+            <div className="doc-actions-left">
+              <VendorPoPdfPreviewButton
+                poId={id}
+                filename={`${d.po_no || "PurchaseOrder"}.pdf`}
+              />
+            </div>
+            <div className="doc-actions-center">
+              <StageTotal
+                label="Total"
+                value={items.reduce((s, it) => s + Number(it.amount || 0), 0)}
+                currency={currency}
+              />
+            </div>
+            <div className="doc-actions-right">
+              {canDeleteThis ? (
+                <button className="btn danger" onClick={remove} disabled={busy}>Delete</button>
+              ) : null}
+              <button className="btn" onClick={onClose} disabled={busy}>Cancel</button>
+              {!canEditThis ? (
+                <span className="hint-inline">{editBlockReason("po", d?.assignee_id)}</span>
+              ) : (
+                <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
+              )}
+              {err ? <span className="action-err">{err}</span> : null}
+            </div>
           </div>
           </>
           ) : (

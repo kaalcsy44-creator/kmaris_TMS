@@ -3637,12 +3637,19 @@ a.btn.primary:hover {
   }
 }
 /* 문서 하단 고정바 — 좌(Preview·Download) / 중앙(금액) / 우(Cancel·Save) 3구역.
-   base 의 justify-content:flex-end(flex) 대신 3열 그리드로 배치한다. */
-.pl-modal-body .form-actions.doc-actions {
+   base 의 justify-content:flex-end(flex) 대신 3열 그리드로 배치한다.
+   모달(pl-modal-body)·임베드(embedded-detail) 양쪽에서 동일하게 3열을 유지한다. */
+.pl-modal-body .form-actions.doc-actions,
+.embedded-detail .form-actions.doc-actions {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: 10px 16px;
+}
+/* 중앙 칸에 단계 총액(StageTotal)을 둘 때, 그 기본 margin-right:auto 가 그리드 셀
+   안에서 총액을 왼쪽으로 밀지 않도록 중화한다(중앙 정렬 유지). */
+.doc-actions .stage-total {
+  margin-right: 0;
 }
 .doc-actions-left {
   justify-self: start;
@@ -4497,8 +4504,8 @@ table.mini input[type="checkbox"].row-check:indeterminate::after {
   gap: 10px;
   flex-wrap: wrap;
 }
-/* Notes·Signature 라벨 높이 맞추기 — 서명 쪽만 버튼(Save as default)을 품고 있어 줄이 높아지면
-   두 입력란의 윗선이 어긋난다. 두 라벨 줄을 같은 높이로 고정해 나란히 시작하게 한다. */
+/* Notes·Signature 라벨 높이 맞추기 — 서명 쪽은 Include 토글을 품고 있어 줄 높이가
+   달라지면 두 입력란의 윗선이 어긋난다. 두 라벨 줄을 같은 높이로 고정해 나란히 시작하게 한다. */
 .doc-send-panel .mail-compose-2col .form-field > label {
   display: flex;
   align-items: center;

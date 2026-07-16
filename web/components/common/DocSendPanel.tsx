@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import { getToken } from "@/lib/auth";
-import { saveEmailSignature } from "@/lib/api";
 
 // 문서 생성(다운로드) + 이메일 미리보기 + 발송(첨부) 공통 패널.
 // 2·4·6단계 상세편집 페이지에서 공유한다. 단계별 API 차이는 콜백(onPreview/onSend/
@@ -69,7 +68,9 @@ export default function DocSendPanel({
   onSent?: () => void;
 }) {
   const emailEnabled = !!onPreview && !!onSend;
-  const [lang, setLang] = useState<"en" | "ko">("en");
+  // 메일 언어는 EN 고정(단계별 발송 화면에서 언어 선택 UI 제거). 서버 API 는 여전히
+  // lang 을 받으므로 값만 넘긴다.
+  const [lang] = useState<"en" | "ko">("en");
   const [format, setFormat] = useState<DocFormat>(formats[0] ?? "pdf");
   const [to, setTo] = useState("");
   const [from, setFrom] = useState("");
@@ -79,7 +80,6 @@ export default function DocSendPanel({
   const [notes, setNotes] = useState("");
   const [signature, setSignature] = useState("");
   const [includeSignature, setIncludeSignature] = useState(true);
-  const [sigMsg, setSigMsg] = useState("");
   // 생성 문서(견적서·발주서 등) 첨부 여부. 기본은 붙임 — 이 화면의 본래 목적이 문서 발송이다.
   const [includeDoc, setIncludeDoc] = useState(true);
   const [files, setFiles] = useState<File[]>([]);
@@ -148,18 +148,6 @@ export default function DocSendPanel({
       setErr(e instanceof Error ? e.message : "Preview generation failed");
     } finally {
       setBusy(false);
-    }
-  }
-
-  /** 지금 서명을 내 기본 서명으로 저장 — 이후 모든 단계 발송 화면에 채워진다. */
-  async function saveSignatureAsDefault() {
-    setSigMsg("");
-    try {
-      await saveEmailSignature(lang, signature);
-      setSigMsg("Saved as your default.");
-      setTimeout(() => setSigMsg(""), 2000);
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "Signature save failed");
     }
   }
 
@@ -247,17 +235,6 @@ export default function DocSendPanel({
             <label>Subject</label>
             <div className="mail-subject-row">
               <input value={subject} onChange={(e) => setSubject(e.target.value)} />
-              <label className="doc-send-inline">
-                Lang
-                <select
-                  value={lang}
-                  onChange={(e) => setLang(e.target.value as "en" | "ko")}
-                  disabled={disabled}
-                >
-                  <option value="en">EN</option>
-                  <option value="ko">KO</option>
-                </select>
-              </label>
               <button
                 type="button"
                 className="btn sm"
@@ -290,7 +267,6 @@ export default function DocSendPanel({
               <label className="mail-sig-head">
                 <span>Signature</span>
                 <span className="mail-sig-tools">
-                  {sigMsg ? <span className="action-ok">{sigMsg}</span> : null}
                   <label className="mail-sig-toggle">
                     <input
                       type="checkbox"
@@ -299,15 +275,6 @@ export default function DocSendPanel({
                     />
                     Include
                   </label>
-                  <button
-                    type="button"
-                    className="btn ghost xs"
-                    onClick={saveSignatureAsDefault}
-                    disabled={!includeSignature}
-                    title="이 서명을 내 기본 서명으로 저장 — 이후 모든 단계 발송 화면에 채워집니다"
-                  >
-                    Save as default
-                  </button>
                 </span>
               </label>
               <textarea
