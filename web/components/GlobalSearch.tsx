@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { globalSearch } from "@/lib/api";
 import type { SearchResult } from "@/lib/types";
@@ -77,14 +78,28 @@ export default function GlobalSearch() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  /** 결과 패널을 닫고 입력을 비운다. 이동은 부르는 쪽이 한다(router.push 또는 <Link>). */
+  const dismiss = useCallback(() => {
+    setOpen(false);
+    setQ("");
+    setResults([]);
+  }, []);
+
   const go = useCallback(
     (r: SearchResult) => {
-      setOpen(false);
-      setQ("");
-      setResults([]);
+      dismiss();
       router.push(r.href);
     },
-    [router]
+    [dismiss, router]
+  );
+
+  /** 개요(읽기 전용)로. 검색 결과의 기본 이동(그 단계 편집 화면)과 짝을 이룬다. */
+  const goOverview = useCallback(
+    (r: SearchResult) => {
+      dismiss();
+      router.push(`/project/${r.rfq_id}`);
+    },
+    [dismiss, router]
   );
 
   function onKeyDown(e: React.KeyboardEvent) {
@@ -103,7 +118,10 @@ export default function GlobalSearch() {
     } else if (e.key === "Enter") {
       e.preventDefault();
       const r = results[active];
-      if (r) go(r);
+      if (!r) return;
+      // Shift+Enter → 개요. 손을 키보드에서 떼지 않고 읽기 전용 화면으로 갈 수 있게.
+      if (e.shiftKey) goOverview(r);
+      else go(r);
     }
   }
 
@@ -138,28 +156,39 @@ export default function GlobalSearch() {
             <div className="gsearch-empty">No matches for “{q.trim()}”.</div>
           ) : (
             results.map((r, i) => (
-              <button
+              /* 결과 한 줄에 문이 둘 — 본문은 그 단계 편집 화면으로(기존 동작), ⤢ 는 읽기
+                 전용 개요로. 개요 링크를 본문 버튼 안에 넣으면 버튼 중첩이라 못 넣는다. */
+              <div
                 key={`${r.rfq_id}-${i}`}
-                type="button"
                 className={`gsearch-item${i === active ? " on" : ""}`}
                 onMouseEnter={() => setActive(i)}
-                onClick={() => go(r)}
               >
-                <div className="gsearch-item-main">
-                  <span className="gsearch-proj">{r.project_no || `RFQ-${r.rfq_id}`}</span>
-                  <span className="gsearch-cust">{r.customer}</span>
-                  {r.vessel ? <span className="gsearch-vessel">· {r.vessel}</span> : null}
-                  {r.status ? <span className="gsearch-status">{tr(r.status)}</span> : null}
-                </div>
-                <div className="gsearch-item-sub">
-                  {r.project_title ? <span className="gsearch-title">{r.project_title}</span> : null}
-                  {r.matched_label ? (
-                    <span className="gsearch-match">
-                      <b>{r.matched_label}:</b> {snippet(r.matched_text)}
-                    </span>
-                  ) : null}
-                </div>
-              </button>
+                <button type="button" className="gsearch-item-go" onClick={() => go(r)}>
+                  <div className="gsearch-item-main">
+                    <span className="gsearch-proj">{r.project_no || `RFQ-${r.rfq_id}`}</span>
+                    <span className="gsearch-cust">{r.customer}</span>
+                    {r.vessel ? <span className="gsearch-vessel">· {r.vessel}</span> : null}
+                    {r.status ? <span className="gsearch-status">{tr(r.status)}</span> : null}
+                  </div>
+                  <div className="gsearch-item-sub">
+                    {r.project_title ? <span className="gsearch-title">{r.project_title}</span> : null}
+                    {r.matched_label ? (
+                      <span className="gsearch-match">
+                        <b>{r.matched_label}:</b> {snippet(r.matched_text)}
+                      </span>
+                    ) : null}
+                  </div>
+                </button>
+                <Link
+                  className="gsearch-item-ov"
+                  href={`/project/${r.rfq_id}`}
+                  onClick={dismiss}
+                  title="Open the project overview (read-only) — Shift+Enter"
+                  aria-label={`Open ${r.project_no || `RFQ-${r.rfq_id}`} overview`}
+                >
+                  ⤢
+                </Link>
+              </div>
             ))
           )}
         </div>

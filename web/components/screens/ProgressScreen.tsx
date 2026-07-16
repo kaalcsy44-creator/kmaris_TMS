@@ -854,6 +854,9 @@ function PipelineTable({
                 />
               );
             })}
+            {/* 개요 열 — 사용자가 옮기거나 숨기는 열(PIPELINE_COLUMNS) 밖에 고정으로 둔다.
+                행 어디를 눌러도 편집 팝업이 열리므로, 읽기 전용 개요로 갈 문은 따로 필요하다. */}
+            <col className="plc-ov" />
           </colgroup>
           <thead>
             <tr>
@@ -886,12 +889,14 @@ function PipelineTable({
                   </th>
                 );
               })}
+              {/* 정렬·필터·리사이즈가 없는 고정 열이라 pl-th 머리 장치를 붙이지 않는다. */}
+              <th className="pl-th-ov" scope="col" aria-label="Overview" />
             </tr>
           </thead>
           <tbody>
             {displayRows.length === 0 ? (
               <tr>
-                <td className="pl-empty" colSpan={orderedColumns.length}>
+                <td className="pl-empty" colSpan={orderedColumns.length + 1}>
                   No deals match the filters.
                 </td>
               </tr>
@@ -915,6 +920,19 @@ function PipelineTable({
                         stage={stageOf(r)}
                       />
                     ))}
+                    <td className="pl-ov-cell">
+                      {/* stopPropagation — 이 칸을 눌렀을 때 행의 편집 팝업까지 같이 열리면
+                          개요로 가려던 클릭이 팝업에 가려진다. */}
+                      <Link
+                        className="pl-ov-link"
+                        href={`/project/${r.rfq_id}`}
+                        onClick={(e) => e.stopPropagation()}
+                        title={`Open ${r.project_no || "project"} overview (read-only)`}
+                        aria-label={`Open ${r.project_no || "project"} overview`}
+                      >
+                        ⤢
+                      </Link>
+                    </td>
                   </tr>
                 );
               })
@@ -1252,6 +1270,19 @@ function BoardCard({
       {compact ? "▸" : "▾"}
     </button>
   );
+  // 개요 바로가기 — 보드가 기본 뷰라 표에만 두면 대부분의 사용자에겐 없는 것과 같다.
+  // 화살표와 같은 이유로 stopPropagation(카드 클릭은 편집 팝업).
+  const overview = (
+    <Link
+      className="pl-card-ov"
+      href={`/project/${r.rfq_id}`}
+      onClick={(e) => e.stopPropagation()}
+      title={`Open ${r.project_no || "project"} overview (read-only)`}
+      aria-label={`Open ${r.project_no || "project"} overview`}
+    >
+      ⤢
+    </Link>
+  );
   const cardProps = {
     role: "button" as const,
     tabIndex: 0,
@@ -1271,6 +1302,7 @@ function BoardCard({
         {cancelled ? <span className="pl-card-ribbon">CLOSED</span> : null}
         <div className="pl-card-nrow">
           <span className="pl-card-no"><ProjectNo value={r.project_no} /></span>
+          {overview}
           {chevron}
         </div>
         <div className="pl-card-crow">
@@ -1302,6 +1334,7 @@ function BoardCard({
         <span className="pl-card-top-r">
           <span className={`pl-card-pic${r.assignee ? "" : " none"}`}>{r.assignee || "—"}</span>
           <WorkTypeBadge type={r.work_type} />
+          {overview}
           {chevron}
         </span>
       </div>

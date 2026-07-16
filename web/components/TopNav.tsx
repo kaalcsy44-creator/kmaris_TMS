@@ -16,6 +16,9 @@ type Item = { href: string; label: string; key: string; perm?: PermModule; sub?:
 const ITEMS: Item[] = [
   { href: "/", label: "Dashboard", key: "dashboard" },
   { href: "/progress", label: "Progress", key: "progress" },
+  // 프로젝트 — 읽기 전용 색인. Progress 가 "단계를 진행시키는" 작업 화면이라면 이쪽은
+  // "무슨 프로젝트가 있고 얼마짜리인가"를 훑고 개요로 들어가는 문. 권한은 progress 와 같다.
+  { href: "/project", label: "Projects", key: "projects", perm: "progress" },
   // 업무일지 — 파이프라인(progress) 열람 권한 사용자면 접근 가능.
   { href: "/activity", label: "Activity", key: "activity", perm: "progress" },
   { href: "/marketing", label: "Marketing", key: "marketing" },

@@ -34,16 +34,21 @@ function firstAllowed(): string {
  */
 export default function AppShell({
   active,
+  perm,
   children,
   wide = false,
 }: {
   active: string;
+  /** 열람 가드에 쓸 권한 모듈. 생략하면 active 를 모듈로 본다(TopNav 의 perm 과 같은 규칙).
+   *  active 가 권한 모듈이 아닌 화면(예: projects)은 반드시 이걸 줘야 한다 — 안 주면
+   *  NAV_MODULES 에 없어서 가드가 통째로 건너뛰어진다. */
+  perm?: PermModule;
   children: React.ReactNode;
   wide?: boolean;
 }) {
   return (
     <AuthGate>
-      <ShellInner active={active} wide={wide}>
+      <ShellInner active={active} perm={perm} wide={wide}>
         {children}
       </ShellInner>
     </AuthGate>
@@ -53,15 +58,17 @@ export default function AppShell({
 /** AuthGate(권한 로드 완료) 내부에서만 마운트 → 최신 권한으로 열람 가드. */
 function ShellInner({
   active,
+  perm,
   wide,
   children,
 }: {
   active: string;
+  perm?: PermModule;
   wide: boolean;
   children: React.ReactNode;
 }) {
   const router = useRouter();
-  const mod = active as PermModule;
+  const mod = (perm ?? active) as PermModule;
   const guarded = NAV_MODULES.includes(mod);
   const settingsOk =
     mod === "settings" ? isAdmin() || can("settings", "view") : true;

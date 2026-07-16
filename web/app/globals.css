@@ -315,19 +315,53 @@ body {
   font-size: 13px;
   text-align: center;
 }
+/* 결과 한 줄 = 본문 버튼(그 단계로) + ⤢(읽기 전용 개요). 둘 다 누를 수 있어야 해서
+   줄 자체는 더 이상 버튼이 아니고, 안의 두 요소가 각자 문이다. */
 .gsearch-item {
-  display: block;
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
   width: 100%;
-  text-align: left;
-  padding: 8px 10px;
-  border: none;
-  background: transparent;
   border-radius: 7px;
-  cursor: pointer;
 }
 .gsearch-item.on,
 .gsearch-item:hover {
   background: #eff5ff;
+}
+.gsearch-item-go {
+  display: block;
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  padding: 8px 10px;
+  border: none;
+  background: transparent;
+  border-radius: 7px 0 0 7px;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+/* ⤢ — 줄에 마우스를 올리거나 키보드로 짚었을 때만 또렷해진다. 늘 진하면 결과를 읽는
+   눈이 매 줄마다 이 아이콘에 걸린다. */
+.gsearch-item-ov {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 30px;
+  border-radius: 0 7px 7px 0;
+  text-decoration: none;
+  font-size: 12px;
+  color: transparent;
+}
+.gsearch-item.on .gsearch-item-ov,
+.gsearch-item:hover .gsearch-item-ov {
+  color: var(--muted);
+}
+.gsearch-item-ov:hover,
+.gsearch-item-ov:focus-visible {
+  background: #dbe9ff;
+  color: var(--blue);
 }
 .gsearch-item-main {
   display: flex;
@@ -2150,6 +2184,10 @@ table.pipeline col.plc-project {
 }
 table.pipeline col.plc-assignee {
   width: 84px;
+}
+/* 개요 열 — 아이콘 하나만 들어가는 고정 폭. 사용자가 옮기는 열이 아니라 늘 맨 끝. */
+table.pipeline col.plc-ov {
+  width: 34px;
 }
 table.pipeline col.pl-col-project_no {
   width: 132px;
@@ -5818,6 +5856,20 @@ table.mini .num {
   white-space: nowrap;
 }
 .pl-modal-overview:hover { background: #eef6ff; }
+
+/* ── 목록 행 → 개요 바로가기 ────────────────────────────────────────────
+   행 클릭은 편집 팝업이라, 읽기 전용 개요로 가려면 여기까지 와야 했다(목록 → 팝업 →
+   Overview). 열 하나를 늘 맨 끝에 고정해 한 번에 가게 한다. */
+table.pipeline thead th.pl-th-ov { padding: 0; }
+table.pipeline td.pl-ov-cell { padding: 0; text-align: center; }
+.pl-ov-link { display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 5px; text-decoration: none;
+  font-size: 12px; color: var(--muted); }
+/* 평소엔 흐리게 — 행마다 있는 장식이라 목록을 읽는 데 끼어들면 안 된다.
+   행에 마우스를 올리면 또렷해져 "여기 문이 있다"를 그때 알린다. */
+tr:hover > td > .pl-ov-link { color: var(--blue); }
+.pl-ov-link:hover { background: var(--hover); color: var(--blue); }
+.pl-ov-link:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
 /* 모달 헤더 '취소/재활성' 버튼. */
 .pl-modal-cancel {
   flex: none;
@@ -5972,6 +6024,24 @@ table.mini .num {
   cursor: pointer;
 }
 .pl-card-toggle:hover { background: var(--head-bg); color: var(--blue); }
+
+/* 카드 → 개요 바로가기. 접기 화살표와 같은 크기·자리라 같은 규격을 쓴다.
+   카드를 짚었을 때만 또렷해진다 — 늘 진하면 보드 전체가 아이콘밭이 된다. */
+.pl-card-ov {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  color: transparent;
+  font-size: 11px;
+  line-height: 1;
+  text-decoration: none;
+}
+.pl-card:hover .pl-card-ov, .pl-card.sel .pl-card-ov { color: var(--muted); }
+.pl-card-ov:hover, .pl-card-ov:focus-visible { background: var(--head-bg); color: var(--blue); }
 
 /* ── 간략(접힌) 카드: 관리번호·고객·진행바만 한 줄 요약 ─────────────────── */
 .pl-card.compact {
@@ -8115,6 +8185,45 @@ table.mini .num {
 .act-screen.meeting .act-cards { grid-template-columns: 1fr; }
 .act-screen.meeting .act-item { font-size: 15px; padding: 5px 0; }
 .act-screen.meeting .act-head { font-size: 15px; }
+/* ── 프로젝트 색인 — /project ─────────────────────────────────────────────
+   개요로 들어가는 착지점. 훑고 고르는 화면이라 작업용 장치(필터·보드) 없이 표 하나. */
+.pjx { display: flex; flex-direction: column; gap: 10px; }
+.pjx-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.pjx-search { flex: 1; min-width: 220px; max-width: 460px; padding: 6px 10px;
+  border: 1px solid var(--line-strong); border-radius: 7px; font-size: 12.5px;
+  color: var(--ink); background: #fff; }
+.pjx-search:focus { outline: none; border-color: var(--blue); }
+.pjx-count { font-size: 11.5px; font-weight: 700; color: var(--muted); }
+.pjx-closed { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px;
+  color: var(--muted); cursor: pointer; }
+.pjx-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px;
+  background: #fff; }
+.pjx-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.pjx-table th, .pjx-table td { padding: 7px 10px; text-align: left;
+  border-bottom: 1px solid var(--line); vertical-align: middle; }
+.pjx-table thead th { background: var(--head-bg); color: var(--navy); font-size: 10px;
+  font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; }
+.pjx-table tbody tr:last-child td { border-bottom: 0; }
+.pjx-table tbody tr:hover td { background: var(--hover); }
+.pjx-table .num { text-align: right; white-space: nowrap; }
+.pjx-empty { color: var(--muted); padding: 14px 10px !important; }
+/* 종결 프로젝트 — 목록에 남기되 눈에 먼저 걸리지 않게. */
+.pjx-table tr.closed td { color: var(--muted); }
+.pjx-table tr.closed .pjx-open b { text-decoration: line-through; }
+.pjx-open { display: inline-flex; align-items: baseline; gap: 5px; text-decoration: none;
+  color: var(--blue); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pjx-open b { font-size: 13px; }
+.pjx-open:hover b { text-decoration: underline; }
+.pjx-nodate { font-size: 10.5px; color: var(--muted); }
+.pjx-c-title { color: var(--ink); font-weight: 600; }
+.pjx-c-vessel { color: #47536b; }
+.pjx-c-stage { white-space: nowrap; }
+.pjx-stage-no { font-size: 10.5px; font-weight: 800; color: var(--blue); margin-right: 6px;
+  font-variant-numeric: tabular-nums; }
+.pjx-stage-label { font-size: 11.5px; color: #47536b; }
+.pjx-amt { font-weight: 700; color: var(--navy); font-variant-numeric: tabular-nums; }
+.pjx-c-pic { font-size: 11.5px; color: #47536b; white-space: nowrap; }
+
 /* ── 프로젝트 개요(읽기 전용) — /project/<rfq_id> ────────────────────────
    팀원 공유용 한 장짜리 현황. 위에서 아래로 머리글 → 단계 → 정보/활동 → 품목
    순의 문서형 흐름이라 화면에서 한눈에 들어오고 그대로 인쇄된다. */
