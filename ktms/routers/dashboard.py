@@ -52,6 +52,7 @@ from _core import (
     _total_amount,
     _vrfq_sent_iso,
     app,
+    cached_aggregate,
     date,
     datetime,
     get_current_user,
@@ -69,6 +70,7 @@ STATS_START_YM = (2026, 5)
 
 
 @app.get("/api/admin/pipeline", dependencies=[Depends(require_token)])
+@cached_aggregate()
 def pipeline_overview(customer_id: int | None = None, work_type: str | None = None,
                       mine: int = 0, assignee: int | None = None,
                       user: dict = Depends(get_current_user)):
@@ -500,6 +502,7 @@ def global_search(q: str = "", limit: int = 40, user: dict = Depends(get_current
 
 
 @app.get("/api/admin/dashboard", dependencies=[Depends(require_token)])
+@cached_aggregate()
 def dashboard():
     """운영 현황 요약 — 핵심 KPI + 12단계 분포 + 최근 RFQ."""
     s = get_session()
@@ -692,6 +695,7 @@ def dashboard():
 
 
 @app.get("/api/admin/statistics", dependencies=[Depends(require_token)])
+@cached_aggregate()
 def statistics(months: int = 12):
     """통계 대시보드 — 월별 시계열(매출·견적·수주), 랭킹(고객·품목), KPI, 업무알림.
 

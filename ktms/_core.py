@@ -16,7 +16,10 @@ import os
 import re
 import secrets
 import sys
+import threading
+import time
 from datetime import date, datetime, timedelta, timezone
+from functools import wraps
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -102,6 +105,72 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ── 서버측 단기 캐시(무거운 집계 API의 Neon egress 절감) ─────────────────────────
+# /dashboard·/statistics·/pipeline 은 매 요청마다 여러 테이블을 통째로(품목 items JSON
+# 포함) 스캔한다. 홈 화면 1회 진입이 이런 풀스캔을 여러 번 유발하고, 잦은 새로고침·
+# 다중 사용자까지 겹치면 Neon 네트워크 전송(egress)이 폭증한다(작은 DB인데 전송량만 GB).
+# 같은 (인자, 데이터 세대) 결과를 짧게 재사용해 반복 전송을 없앤다. 쓰기 요청이 한 번
+# 이라도 성공하면 데이터 세대가 올라가 캐시가 즉시 무효화되므로 오래된 값이 남지 않는다.
+AGG_CACHE_TTL = float(os.environ.get("AGG_CACHE_TTL", "60"))  # 초. 0 이하면 캐시 비활성.
+_AGG_CACHE: dict = {}
+_AGG_CACHE_LOCK = threading.Lock()
+_DATA_GEN = 0  # 성공한 쓰기(POST/PUT/PATCH/DELETE)마다 +1 → 모든 집계 캐시 무효화.
+
+
+def bump_data_generation() -> None:
+    global _DATA_GEN
+    with _AGG_CACHE_LOCK:
+        _DATA_GEN += 1
+
+
+def cached_aggregate(ttl: float | None = None):
+    """읽기 전용 집계 엔드포인트용 서버측 TTL 캐시 데코레이터.
+
+    캐시 키 = (함수명, user 스코프(id·role), 나머지 쿼리 인자). 엔트리에 데이터 세대를
+    함께 저장해, 쓰기가 발생하면(세대 상승) 즉시 무효 처리한다. ttl 초 안의 동일 요청은
+    DB를 건드리지 않고 캐시된 결과를 돌려준다.
+    반드시 @app.get(...) '아래'(=함수에 더 가깝게)에 붙여야 FastAPI 가 원본 시그니처를
+    그대로 인식한다(functools.wraps 로 __wrapped__ 전파 → 의존성 주입·쿼리 파라미터 유지)."""
+    def deco(fn):
+        @wraps(fn)
+        def wrapper(*args, **kwargs):
+            eff_ttl = AGG_CACHE_TTL if ttl is None else ttl
+            if eff_ttl <= 0:
+                return fn(*args, **kwargs)
+            u = kwargs.get("user")
+            scope = (u.get("id"), u.get("role")) if isinstance(u, dict) else None
+            try:
+                rest = tuple(sorted((k, v) for k, v in kwargs.items() if k != "user"))
+                key = (fn.__name__, scope, rest)
+                hash(key)
+            except TypeError:
+                return fn(*args, **kwargs)  # 캐시 불가한 인자면 그냥 계산.
+            now = time.time()
+            with _AGG_CACHE_LOCK:
+                gen = _DATA_GEN
+                hit = _AGG_CACHE.get(key)
+                if hit and hit[0] > now and hit[1] == gen:
+                    return hit[2]
+            result = fn(*args, **kwargs)
+            with _AGG_CACHE_LOCK:
+                # 계산 도중 쓰기가 있었으면(_DATA_GEN 상승) 저장하되 그 세대로 태그해,
+                # 다음 조회에서 최신 세대와 불일치 → 자동 재계산되게 한다(오염 방지).
+                _AGG_CACHE[key] = (now + eff_ttl, _DATA_GEN, result)
+            return result
+        return wrapper
+    return deco
+
+
+@app.middleware("http")
+async def _bump_gen_on_write(request: Request, call_next):
+    """성공한 변경 요청(POST/PUT/PATCH/DELETE) 뒤 데이터 세대를 올려 집계 캐시를
+    무효화한다. 이로써 TTL 과 무관하게 쓰기 직후 대시보드/통계가 항상 최신을 반영한다."""
+    response = await call_next(request)
+    if request.method in ("POST", "PUT", "PATCH", "DELETE") and response.status_code < 400:
+        bump_data_generation()
+    return response
 
 
 @app.on_event("startup")
