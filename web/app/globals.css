@@ -8126,6 +8126,21 @@ table.mini .num {
   --ov-q: var(--blue); --ov-q-bg: #f3f7fd; --ov-q-hd: #e4eefb;
   --ov-p: #7c3aed; --ov-p-bg: #f8f6fe; --ov-p-hd: #efe9fe;
   --ov-c: #11824a; --ov-c-bg: #f3f9f6; --ov-c-hd: #e3f2ea;
+
+  /* 글자 크기 — 역할이 같으면 같은 급을 쓴다. 이 6단계 밖의 크기는 쓰지 않는다.
+     (정리 전엔 9~20px 사이 13가지가 섞여 있어, 같은 뜻의 글자가 자리마다 달라 보였다.)
+       title 프로젝트명·번호 │ sub 선박(부제) │ sec 섹션 제목
+       name 이름(단계·선박) │ body 본문(품목·노트)
+       meta 보조(날짜·상대·문서번호) │ cap 캡션·열 이름
+     굵기는 800(머리·캡션) / 700(이름·강조) / 600(열 이름·보조 이름) / 400(본문) 만 쓴다. */
+  --ov-t-title: 18px;
+  --ov-t-sub: 13px;
+  --ov-t-sec: 13px;
+  --ov-t-name: 12px;
+  --ov-t-body: 11.5px;
+  --ov-t-meta: 10.5px;
+  --ov-t-cap: 9.5px;
+
   display: flex; flex-direction: column; gap: 16px;
 }
 .proj-ov-head { display: flex; align-items: center; justify-content: space-between; gap: 12px;
@@ -8135,41 +8150,46 @@ table.mini .num {
   margin: 0; font-size: inherit; font-weight: inherit; }
 .proj-ov-back { display: inline-flex; align-items: center; justify-content: center;
   width: 26px; height: 26px; border-radius: 6px; border: 1px solid var(--line-strong);
-  color: var(--navy); text-decoration: none; font-size: 14px; background: #fff; }
+  color: var(--navy); text-decoration: none; font-size: var(--ov-t-sub); background: #fff; }
 .proj-ov-back:hover { background: var(--hover); }
-.proj-ov-no { font-size: 20px; color: var(--navy); letter-spacing: -0.2px; }
-.proj-ov-nodate { font-size: 13px; color: var(--muted); }
-.proj-ov-closed { font-size: 11.5px; font-weight: 700; color: #b42318; background: #fdeaea;
+/* 번호와 제목은 같은 급 — 둘 다 "이 프로젝트가 무엇인가"라서 크기를 나눌 이유가 없다. */
+.proj-ov-no { font-size: var(--ov-t-title); font-weight: 800; color: var(--navy);
+  letter-spacing: -0.2px; }
+.proj-ov-nodate { font-size: var(--ov-t-meta); color: var(--muted); }
+.proj-ov-closed { font-size: var(--ov-t-body); font-weight: 700; color: #b42318; background: #fdeaea;
   border-radius: 6px; padding: 2px 8px; }
 .proj-ov-actions { display: flex; align-items: center; gap: 8px; }
-.proj-ov-pic { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px;
+.proj-ov-pic { display: inline-flex; align-items: center; gap: 6px; font-size: var(--ov-t-name);
   font-weight: 700; color: var(--navy); background: var(--head-bg); border-radius: 6px;
   padding: 3px 10px; }
-.proj-ov-pic-label { font-size: 10px; font-weight: 700; color: var(--muted); }
+/* PIC 은 CUSTOMER/VENDOR/TRADE 와 같은 캡션 라벨 → 같은 서체로 맞춘다. */
+.proj-ov-pic-label { font-size: var(--ov-t-cap); font-weight: 800; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.05em; }
 
 /* 프로젝트명 — 머리글에서 가장 큰 글자. 길면 말줄임(선박명은 끝까지 보이게 유지). */
-.proj-ov-title { font-size: 18px; font-weight: 800; color: var(--ink); min-width: 0;
+.proj-ov-title { font-size: var(--ov-t-title); font-weight: 800; color: var(--ink); min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.proj-ov-vessel { flex: none; font-size: 15px; font-weight: 600; color: var(--muted);
+.proj-ov-vessel { flex: none; font-size: var(--ov-t-sub); font-weight: 600; color: var(--muted);
   white-space: nowrap; }
 /* 서비스 딜은 목록·보드와 같은 보라 계열 강조를 제목에 준다. */
 .proj-ov.service .proj-ov-title { color: #5b21b6; }
 .proj-ov.cancelled .proj-ov-title { color: var(--muted); text-decoration: line-through; }
 
 .proj-ov-sec { min-width: 0; }
-.proj-ov-h { display: flex; align-items: baseline; gap: 8px; margin: 0 0 8px;
-  font-size: 13px; font-weight: 800; color: var(--navy); padding-bottom: 5px;
-  border-bottom: 2px solid var(--blue); }
-.proj-ov-cnt { font-size: 11.5px; font-weight: 700; color: var(--blue); }
+/* 섹션 제목 — 밑줄을 긋지 않는다. 아래 4칸/표가 이미 테두리로 시작을 알려서,
+   줄을 더 그으면 가로선만 늘고 단계 톤(세로 줄)과 부딪힌다. */
+.proj-ov-h { display: flex; align-items: baseline; gap: 8px; margin: 0 0 6px;
+  font-size: var(--ov-t-sec); font-weight: 800; color: var(--navy); }
+.proj-ov-cnt { font-size: var(--ov-t-meta); font-weight: 800; color: var(--blue); }
 /* 품목 표 출처 — 견적(값 있음) / RFQ 요청(값 없음) 중 무엇을 보고 있는지 밝힌다. */
-.proj-ov-src { font-size: 11px; font-weight: 500; color: var(--muted); }
-.proj-ov-empty { font-size: 12.5px; color: var(--muted); padding: 10px 2px; }
+.proj-ov-src { font-size: var(--ov-t-meta); font-weight: 400; color: var(--muted); }
+.proj-ov-empty { font-size: var(--ov-t-body); color: var(--muted); padding: 10px 2px; }
 
 /* 거래 상대 한 줄 — 프로젝트명 아래. 고객·벤더·거래구분만 남긴다. */
 .proj-ov-meta { display: flex; align-items: center; gap: 22px; flex-wrap: wrap;
-  margin-top: -6px; padding-bottom: 2px; font-size: 12.5px; color: var(--ink); }
+  margin-top: -6px; padding-bottom: 2px; font-size: var(--ov-t-name); color: var(--ink); }
 .ov-meta-f { display: flex; align-items: center; gap: 7px; min-width: 0; }
-.ov-meta-f > b { font-size: 9.5px; font-weight: 800; color: var(--muted);
+.ov-meta-f > b { font-size: var(--ov-t-cap); font-weight: 800; color: var(--muted);
   text-transform: uppercase; letter-spacing: 0.05em; }
 /* 벤더가 여러 곳이면 vendorList 가 줄마다 div 를 내므로, flex 로 옆으로 눕힌다. */
 .ov-meta-vendors { flex-wrap: wrap; gap: 7px 12px; }
@@ -8194,9 +8214,10 @@ table.mini .num {
 .ov-tlcol { min-width: 0; background: var(--ov-bg); }
 /* 묶음 시작 칸의 세로선 — Items 표의 .gs 와 같은 선. */
 .ov-tlcol + .ov-tlcol { border-left: 2px solid var(--line-strong); }
-/* 칸 머리 — Items 표의 묶음 헤더(Quote/P/O/C/I)와 같은 색으로 좌우를 잇는다. */
-.ov-tlcol-h { font-size: 10.5px; font-weight: 800; letter-spacing: 0.06em; text-align: center;
-  text-transform: uppercase; padding: 5px 0; background: var(--ov-hd);
+/* 칸 머리 — Items 표의 묶음 헤더(Quote/P/O/C/I)와 같은 색으로 좌우를 잇는다.
+   서체는 .ov-gh 와 한 규칙으로 묶여 있다(아래 "칸 머리" 규칙) — 같은 뜻의 글자라
+   따로 적으면 굵기가 갈라진다. 여기엔 이 칸에만 필요한 것만 둔다. */
+.ov-tlcol-h { text-align: center; padding: 5px 0; background: var(--ov-hd);
   border-bottom: 2px solid currentColor; }
 /* --ov-tone = 이 칸의 대표색. 아래 점·연결선·현재단계 강조가 모두 이 값을 따라가서
    칸마다 색이 한 벌로 맞는다(파랑 고정이면 초록 C/I 칸 안에서 파란 점이 튄다). */
@@ -8217,14 +8238,14 @@ a.ov-tl-stage:hover { background: color-mix(in srgb, var(--ov-tone) 12%, transpa
 .ov-tl-dot { position: relative; z-index: 1; flex: none; width: 18px; height: 18px;
   border-radius: 50%; background: var(--line); color: #5a6b85; font-size: 9px; font-weight: 800;
   display: inline-flex; align-items: center; justify-content: center; }
-.ov-tl-no { flex: none; width: 12px; font-size: 10px; font-weight: 800; color: var(--muted);
-  text-align: right; }
-.ov-tl-label { font-size: 12px; font-weight: 700; color: var(--navy); min-width: 0;
+.ov-tl-no { flex: none; width: 12px; font-size: var(--ov-t-cap); font-weight: 800;
+  color: var(--muted); text-align: right; }
+.ov-tl-label { font-size: var(--ov-t-name); font-weight: 700; color: var(--navy); min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ov-tl-at { flex: none; margin-left: auto; font-size: 10px; color: var(--muted);
+.ov-tl-at { flex: none; margin-left: auto; font-size: var(--ov-t-meta); color: var(--muted);
   font-variant-numeric: tabular-nums; }
 /* 상대·문서번호 — 칸이 좁아 단계 줄 아래로 내린다(점 선 오른쪽으로 들여씀). */
-.ov-tl-sub { display: flex; gap: 6px; padding: 0 4px 4px 36px; font-size: 10.5px;
+.ov-tl-sub { display: flex; gap: 6px; padding: 0 4px 4px 36px; font-size: var(--ov-t-meta);
   color: var(--muted); min-width: 0; }
 .ov-tl-party { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ov-tl-val { color: #47536b; min-width: 0; overflow: hidden; text-overflow: ellipsis;
@@ -8244,22 +8265,26 @@ a.ov-tl-stage:hover { background: color-mix(in srgb, var(--ov-tone) 12%, transpa
 .proj-ov-tl > li.skip { opacity: 0.45; }
 /* 단계에 달린 사람이 쓴 노트 — 점 선 오른쪽으로 들여써 단계에 속함을 보인다. */
 .ov-tl-notes { list-style: none; margin: 0; padding: 0 4px 4px 36px; }
-.ov-tl-notes li { display: flex; gap: 6px; padding: 3px 0; font-size: 11.5px; color: #47536b; }
+.ov-tl-notes li { display: flex; gap: 6px; padding: 3px 0; font-size: var(--ov-t-body);
+  color: #47536b; }
+/* 담당자 칩 — 노트에 붙는 보조 표시. .act-pic 은 업무일지 화면과 공유하는 클래스라
+   이 페이지 안에서만 보조(meta) 급으로 맞춘다. */
+.proj-ov .act-pic { font-size: var(--ov-t-meta); }
 .ov-tl-notes li.star { background: #fffbe9; border-radius: 4px; }
-.ov-tl-ndate { flex: none; width: 28px; color: var(--muted); font-size: 10px;
+.ov-tl-ndate { flex: none; width: 28px; color: var(--muted); font-size: var(--ov-t-meta);
   font-variant-numeric: tabular-nums; padding-top: 1px; }
 .ov-tl-ntext { min-width: 0; word-break: break-word; }
 
 /* 종결 — 특정 단계에 속하지 않아 4칸 아래 전체 폭으로. */
 .ov-tl-closed { display: flex; align-items: center; gap: 8px; margin-top: 8px; padding: 6px 10px;
   border: 1px solid #f3c7c4; border-radius: 8px; background: #fdf3f2; color: #b42318;
-  font-size: 12px; font-weight: 600; }
+  font-size: var(--ov-t-name); font-weight: 600; }
 .ov-tl-closed .ov-tl-dot { background: #fdeaea; color: #b42318; }
 
 /* 품목 — 내부 공유용이라 단가·금액 포함. 좁은 화면에선 표만 가로 스크롤. */
 .proj-ov-items-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px;
   background: #fff; }
-.proj-ov-items { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.proj-ov-items { width: 100%; border-collapse: collapse; font-size: var(--ov-t-name); }
 /* Stages 와 열을 맞추는 폭(25%)은 넓은 화면 기준이다. 좁아지면 금액 9열이 뭉개지므로
    정렬을 포기하고 최소폭을 준다 — 이 구간에선 Stages 도 2칸으로 접혀 있다. */
 @media (max-width: 1100px) { .proj-ov-grid { min-width: 1080px; } }
@@ -8272,8 +8297,9 @@ a.ov-tl-stage:hover { background: color-mix(in srgb, var(--ov-tone) 12%, transpa
 .proj-ov-items .num { text-align: right; white-space: nowrap; }
 .proj-ov-items tfoot td { background: var(--head-bg); border-top: 2px solid var(--line-strong);
   padding: 7px 10px; }
-.ov-it-totlabel { text-align: right; font-size: 11px; font-weight: 700; color: var(--muted);
-  text-transform: uppercase; letter-spacing: 0.03em; }
+/* Total — CUSTOMER/PIC 과 같은 캡션 라벨. */
+.ov-it-totlabel { text-align: right; font-size: var(--ov-t-cap); font-weight: 800;
+  color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
 .ov-it-total { font-weight: 800; color: var(--navy); }
 .proj-ov-items .ov-it-n { width: 34px; color: var(--muted); text-align: right; }
 .proj-ov-items .ov-it-qty { white-space: nowrap; }
@@ -8288,7 +8314,7 @@ a.ov-tl-stage:hover { background: color-mix(in srgb, var(--ov-tone) 12%, transpa
 
    열 폭은 고정(table-layout: fixed) — 위 Stages 4칸과 경계를 25/50/75% 에 맞추기 위해서다.
    식별 4열 합이 25%, Quote·P/O·C/I 가 각 25%. 이 비율은 .proj-ov-tlcols 와 한 쌍이다. */
-.proj-ov-grid { font-size: 11.5px; table-layout: fixed; }
+.proj-ov-grid { font-size: var(--ov-t-body); table-layout: fixed; }
 .proj-ov-grid th, .proj-ov-grid td { padding: 4px 7px; }
 .ovc-n { width: 2.5%; }
 .ovc-part { width: 5.5%; }
@@ -8300,17 +8326,23 @@ a.ov-tl-stage:hover { background: color-mix(in srgb, var(--ov-tone) 12%, transpa
 /* 폭이 고정되면 긴 품목명이 넘치므로 줄바꿈을 허용한다(수량·금액은 그대로 한 줄). */
 .proj-ov-grid td { overflow-wrap: anywhere; }
 .proj-ov-grid .ov-it-part { overflow-wrap: anywhere; }
-/* 3단계 묶음 헤더 — Quote/P/O/C/I 를 색으로 구분해 좌→우 흐름이 보이게 한다. */
-.proj-ov-grid .ov-gh { text-align: center; font-size: 10.5px; letter-spacing: 0.06em;
+/* ── 칸 머리(RFQ/Quote/P/O/C/I) ─────────────────────────────────────────
+   Stages 4칸과 Items 묶음은 같은 것을 가리키는 같은 이름 → 한 규칙에서 서체를 준다.
+   전에는 .ov-gh 가 thead th 의 700 을 물려받아 위(800)와 굵기가 갈라져 있었다. */
+.ov-tlcol-h,
+.proj-ov-grid .ov-gh { font-size: var(--ov-t-meta); font-weight: 800; letter-spacing: 0.06em;
   text-transform: uppercase; }
+.proj-ov-grid .ov-gh { text-align: center; }
 .proj-ov-grid .ov-gh.q, .proj-ov-grid .ov-sub.q { color: var(--ov-q); background: var(--ov-q-hd); }
 .proj-ov-grid .ov-gh.p, .proj-ov-grid .ov-sub.p { color: var(--ov-p); background: var(--ov-p-hd); }
 .proj-ov-grid .ov-gh.c, .proj-ov-grid .ov-sub.c { color: var(--ov-c); background: var(--ov-c-hd); }
 /* 식별 4열(#·Part·Desc·Qty)은 위 Stages 의 RFQ 칸과 같은 자리 → 같은 톤으로 잇는다. */
 .proj-ov-grid thead th:not(.q):not(.p):not(.c) { background: var(--ov-r-hd); color: var(--ov-r); }
-/* 하위 머리(Purchase/Margin/Sales)는 묶음 이름보다 한 단 낮게 — 톤은 유지하고 흐리게. */
-.proj-ov-grid .ov-sub { font-size: 9.5px; font-weight: 600;
-  text-transform: none; letter-spacing: 0; white-space: nowrap; opacity: 0.72; }
+/* 열 이름 — #·Part No.·Description·Qty 와 Purchase·Margin·Sales 는 둘 다 "열 하나의
+   이름"이라 같은 급(cap/600). 묶음 이름(칸 머리)보다 한 단 낮다. */
+.proj-ov-items thead th:not(.ov-gh) { font-size: var(--ov-t-cap); font-weight: 600;
+  text-transform: none; letter-spacing: 0; }
+.proj-ov-grid .ov-sub { white-space: nowrap; opacity: 0.72; }
 /* 각 단계 3열에 칸 바탕을 깔아 위 Stages 4칸과 같은 세로 줄로 읽히게 한다.
    셀이 아니라 <col> 에 거는 이유: colspan 을 쓰는 묶음머리·합계 행에서도 열이 안 밀린다. */
 .proj-ov-grid col.ovt-r { background: var(--ov-r-bg); }
@@ -8322,7 +8354,10 @@ a.ov-tl-stage:hover { background: color-mix(in srgb, var(--ov-tone) 12%, transpa
 .proj-ov-grid .gs { border-left: 2px solid var(--line-strong); }
 /* 금액 — 통화기호는 작고 흐리게, 숫자에 시선이 가도록. */
 .ov-m { white-space: nowrap; font-variant-numeric: tabular-nums; }
-.ov-m em { font-style: normal; font-size: 9px; color: var(--muted); margin-right: 2px; }
+/* 통화기호 — 늘 같은 무게로 흐리게. 굵기를 물려받게 두면 합계 행에서만 굵어져
+   같은 KRW 가 자리마다 달라 보인다. */
+.ov-m em { font-style: normal; font-size: var(--ov-t-cap); font-weight: 400;
+  color: var(--muted); margin-right: 2px; }
 /* 0 원 — "아직 없다"는 뜻이라 실제 금액과 같은 무게로 읽히면 안 된다. 다만 — 와는
    구분해야 해서(0 = 무료가 아님) 지우지 않고 톤만 낮춘다. */
 .ov-m.zero, .ov-m.zero em { color: var(--muted); font-weight: 400; }
@@ -8334,18 +8369,18 @@ a.ov-tl-stage:hover { background: color-mix(in srgb, var(--ov-tone) 12%, transpa
    바탕은 반투명 — 불투명하게 깔면 아래 <col> 톤을 덮어 세로 줄이 이 행에서 끊긴다. */
 .ov-grp-head td { background: rgba(11, 29, 58, 0.06) !important;
   border-top: 2px solid var(--line-strong); padding: 5px 8px !important; }
-.ov-grp-vessel { font-size: 12px; font-weight: 800; color: var(--navy); }
+.ov-grp-vessel { font-size: var(--ov-t-name); font-weight: 800; color: var(--navy); }
 /* 문서번호 두 개("벤더견적 → 고객견적")가 25% 칸에 안 들어가면 줄을 바꾼다 — 자르면
    번호 뒷자리가 사라져 어느 문서인지 못 읽는다. */
-.ov-grp-doc { font-size: 10.5px; font-weight: 700; text-align: right;
+.ov-grp-doc { font-size: var(--ov-t-meta); font-weight: 700; text-align: right;
   overflow-wrap: anywhere; }
 .ov-grp-doc.q { color: var(--blue); }
 .ov-grp-doc.p { color: #7c3aed; }
 .ov-grp-doc.c { color: #11824a; }
 /* 매입측 문서(벤더 견적·벤더 P/O)는 보조 정보 → 흐리게, 매출 문서를 앞세운다. */
-.ov-grp-doc .ov-doc-pur { font-weight: 500; color: var(--muted); }
+.ov-grp-doc .ov-doc-pur { font-weight: 400; color: var(--muted); }
 .ov-grp-doc .sep { margin: 0 5px; color: var(--muted); }
-.ov-grp-doc i { font-style: normal; font-weight: 500; }
+.ov-grp-doc i { font-style: normal; font-weight: 400; }
 /* 합계 행 — 묶음 머리와 같은 이유로 반투명. 머리보다 옅게 깔고 윗선으로 구분한다. */
 .ov-grp-total td { background: rgba(11, 29, 58, 0.055) !important;
   border-top: 1px solid var(--line-strong); }
