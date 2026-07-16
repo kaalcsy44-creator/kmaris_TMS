@@ -407,16 +407,17 @@ function ItemsSection({
           <table className="proj-ov-items proj-ov-grid">
             {/* 열 폭 고정 — 식별 4열이 25%, Quote·P/O·C/I 가 각 25%. 위 Stages 4칸과
                 경계를 같은 자리(25/50/75%)에 두려는 것. 둘 중 하나만 바꾸면 어긋난다. */}
+            {/* 톤(ovt-*)은 각 단계 열에 옅은 바탕을 깔아 위 Stages 4칸과 세로로 잇는다. */}
             <colgroup>
-              <col className="ovc-n" />
-              <col className="ovc-part" />
-              <col className="ovc-desc" />
-              <col className="ovc-qty" />
+              <col className="ovc-n ovt-r" />
+              <col className="ovc-part ovt-r" />
+              <col className="ovc-desc ovt-r" />
+              <col className="ovc-qty ovt-r" />
               {["q", "p", "c"].map((g) => (
                 <Fragment key={g}>
-                  <col className="ovc-pur" />
-                  <col className="ovc-mg" />
-                  <col className="ovc-sales" />
+                  <col className={`ovc-pur ovt-${g}`} />
+                  <col className={`ovc-mg ovt-${g}`} />
+                  <col className={`ovc-sales ovt-${g}`} />
                 </Fragment>
               ))}
             </colgroup>
@@ -470,11 +471,12 @@ function ItemsSection({
   );
 }
 
-/** 통화 + 금액 한 줄(조밀). 값이 없으면 —. 0 으로 보이면 "무료"로 오해되므로 구분한다. */
+/** 통화 + 금액 한 줄(조밀). 값이 없으면 —. 0 으로 보이면 "무료"로 오해되므로 구분한다.
+ *  0 은 아직 값이 없다는 뜻이라 .zero 로 톤만 낮춘다(표기는 그대로 둔다). */
 function Money({ value, currency }: { value: number | null | undefined; currency: string }) {
   if (value == null || !Number.isFinite(value)) return <span className="muted">—</span>;
   return (
-    <span className="ov-m">
+    <span className={`ov-m${Math.round(value) === 0 ? " zero" : ""}`}>
       <em>{currency}</em> {Math.round(value).toLocaleString()}
     </span>
   );
@@ -565,7 +567,7 @@ function OrderItemGroup({
           <td className="num">
             <Pct value={ln.qIt?.margin_pct ?? null} />
           </td>
-          <td className="num">
+          <td className="num ov-sal">
             <Money value={ln.qSales} currency={qCur} />
           </td>
           <td className="num gs">
@@ -574,7 +576,7 @@ function OrderItemGroup({
           <td className="num">
             <Pct value={marginPct(ln.pSales, ln.pPur, oCur, vpoCur, rate)} />
           </td>
-          <td className="num">
+          <td className="num ov-sal">
             <Money value={ln.pSales} currency={oCur} />
           </td>
           <td className="num gs">
@@ -583,7 +585,7 @@ function OrderItemGroup({
           <td className="num">
             <Pct value={marginPct(ln.cSales, ln.cPur, ciCur, vpoCur, rate)} />
           </td>
-          <td className="num">
+          <td className="num ov-sal">
             <Money value={ln.cSales} currency={ciCur} />
           </td>
         </tr>
@@ -756,7 +758,7 @@ function QuoteOnlyGroup({ quoteId, vendorQuoteNo }: { quoteId: number; vendorQuo
           <td className="num">
             <Pct value={it.margin_pct ?? null} />
           </td>
-          <td className="num">
+          <td className="num ov-sal">
             <Money value={lineAmount(it)} currency={qCur} />
           </td>
           <td className="num gs" colSpan={6}>

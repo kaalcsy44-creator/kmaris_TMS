@@ -8118,7 +8118,16 @@ table.mini .num {
 /* ── 프로젝트 개요(읽기 전용) — /project/<rfq_id> ────────────────────────
    팀원 공유용 한 장짜리 현황. 위에서 아래로 머리글 → 단계 → 정보/활동 → 품목
    순의 문서형 흐름이라 화면에서 한눈에 들어오고 그대로 인쇄된다. */
-.proj-ov { display: flex; flex-direction: column; gap: 16px; }
+/* 4단계 톤(RFQ/Quote/P/O/C/I) — Stages 4칸과 Items 표 묶음이 같은 색을 써야 위아래가
+   한 세로줄로 읽힌다. 두 곳이 갈라지지 않게 여기서 한 번만 정의한다.
+   -bg = 칸 전체에 까는 옅은 바탕, -hd = 칸 머리(조금 더 진하게). */
+.proj-ov {
+  --ov-r: #48587a; --ov-r-bg: #f7f9fc; --ov-r-hd: #eaeff6;
+  --ov-q: var(--blue); --ov-q-bg: #f3f7fd; --ov-q-hd: #e4eefb;
+  --ov-p: #7c3aed; --ov-p-bg: #f8f6fe; --ov-p-hd: #efe9fe;
+  --ov-c: #11824a; --ov-c-bg: #f3f9f6; --ov-c-hd: #e3f2ea;
+  display: flex; flex-direction: column; gap: 16px;
+}
 .proj-ov-head { display: flex; align-items: center; justify-content: space-between; gap: 12px;
   flex-wrap: wrap; }
 /* 머리글 한 줄: 번호 · (날짜) · 타입 · 프로젝트명 · 선박. 좁으면 제목만 줄여 한 줄 유지. */
@@ -8180,16 +8189,21 @@ table.mini .num {
   .proj-ov-tlcols { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 620px) { .proj-ov-tlcols { grid-template-columns: 1fr; } }
-.ov-tlcol { min-width: 0; }
+/* 칸마다 옅은 바탕을 깔아 4칸이 "세로 줄"로 보이게 한다 — 아래 Items 표의 같은 톤과
+   이어져, 25/50/75% 로 맞춰 둔 정렬이 설명 없이도 눈에 보인다. */
+.ov-tlcol { min-width: 0; background: var(--ov-bg); }
 /* 묶음 시작 칸의 세로선 — Items 표의 .gs 와 같은 선. */
 .ov-tlcol + .ov-tlcol { border-left: 2px solid var(--line-strong); }
 /* 칸 머리 — Items 표의 묶음 헤더(Quote/P/O/C/I)와 같은 색으로 좌우를 잇는다. */
-.ov-tlcol-h { font-size: 10.5px; font-weight: 800; letter-spacing: 0.04em; text-align: center;
-  padding: 4px 0; border-bottom: 2px solid currentColor; }
-.ov-tlcol.r { color: #5a6b85; }
-.ov-tlcol.q { color: var(--blue); }
-.ov-tlcol.p { color: #7c3aed; }
-.ov-tlcol.c { color: #11824a; }
+.ov-tlcol-h { font-size: 10.5px; font-weight: 800; letter-spacing: 0.06em; text-align: center;
+  text-transform: uppercase; padding: 5px 0; background: var(--ov-hd);
+  border-bottom: 2px solid currentColor; }
+/* --ov-tone = 이 칸의 대표색. 아래 점·연결선·현재단계 강조가 모두 이 값을 따라가서
+   칸마다 색이 한 벌로 맞는다(파랑 고정이면 초록 C/I 칸 안에서 파란 점이 튄다). */
+.ov-tlcol.r { color: var(--ov-r); --ov-tone: var(--ov-r); --ov-bg: var(--ov-r-bg); --ov-hd: var(--ov-r-hd); }
+.ov-tlcol.q { color: var(--ov-q); --ov-tone: var(--ov-q); --ov-bg: var(--ov-q-bg); --ov-hd: var(--ov-q-hd); }
+.ov-tlcol.p { color: var(--ov-p); --ov-tone: var(--ov-p); --ov-bg: var(--ov-p-bg); --ov-hd: var(--ov-p-hd); }
+.ov-tlcol.c { color: var(--ov-c); --ov-tone: var(--ov-c); --ov-bg: var(--ov-c-bg); --ov-hd: var(--ov-c-hd); }
 .proj-ov-tl { list-style: none; margin: 0; padding: 0; color: var(--ink); }
 .proj-ov-tl > li { position: relative; padding: 0 8px 0 0; }
 /* 단계를 잇는 세로선 — 점(dot) 중앙(좌측 22px)을 지난다. 마지막 항목은 아래로 끊는다. */
@@ -8199,7 +8213,7 @@ table.mini .num {
 .proj-ov-tl > li:last-child::before { bottom: calc(100% - 14px); }
 .ov-tl-stage { display: flex; align-items: center; gap: 6px; padding: 5px 0 5px 10px;
   text-decoration: none; color: inherit; min-width: 0; }
-a.ov-tl-stage:hover { background: var(--hover); }
+a.ov-tl-stage:hover { background: color-mix(in srgb, var(--ov-tone) 12%, transparent); }
 .ov-tl-dot { position: relative; z-index: 1; flex: none; width: 18px; height: 18px;
   border-radius: 50%; background: var(--line); color: #5a6b85; font-size: 9px; font-weight: 800;
   display: inline-flex; align-items: center; justify-content: center; }
@@ -8215,13 +8229,17 @@ a.ov-tl-stage:hover { background: var(--hover); }
 .ov-tl-party { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ov-tl-val { color: #47536b; min-width: 0; overflow: hidden; text-overflow: ellipsis;
   white-space: nowrap; }
-/* 완료 = 파란 점 + 선, 현재 = 굵게 강조, 미완료 = 흐리게. */
+/* 완료 = 칸 색 점 + 선, 현재 = 흰 카드로 띄움, 미완료 = 흐리게.
+   현재 단계 바탕이 흰색인 건 칸 톤 위에서 "떠 보이게" 하려는 것 — 색을 하나 더 쓰면
+   칸 색과 부딪힌다. */
 .proj-ov-tl > li.done .ov-tl-dot,
-.proj-ov-tl > li.current .ov-tl-dot { background: var(--blue); color: #fff; }
-.proj-ov-tl > li.done::before, .proj-ov-tl > li.current::before { background: #b9d3ee; }
-.proj-ov-tl > li.current { background: #f2f8ff; }
-.proj-ov-tl > li.current .ov-tl-label { color: var(--blue); }
-.proj-ov-tl > li.current .ov-tl-dot { box-shadow: 0 0 0 3px rgba(0, 85, 168, 0.18); }
+.proj-ov-tl > li.current .ov-tl-dot { background: var(--ov-tone); color: #fff; }
+.proj-ov-tl > li.done::before, .proj-ov-tl > li.current::before {
+  background: color-mix(in srgb, var(--ov-tone) 32%, #fff); }
+.proj-ov-tl > li.current { background: #fff; box-shadow: inset 2px 0 0 var(--ov-tone); }
+.proj-ov-tl > li.current .ov-tl-label { color: var(--ov-tone); }
+.proj-ov-tl > li.current .ov-tl-dot {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ov-tone) 22%, transparent); }
 .proj-ov-tl > li.todo .ov-tl-label { color: #8792a5; font-weight: 600; }
 .proj-ov-tl > li.skip { opacity: 0.45; }
 /* 단계에 달린 사람이 쓴 노트 — 점 선 오른쪽으로 들여써 단계에 속함을 보인다. */
@@ -8283,23 +8301,39 @@ a.ov-tl-stage:hover { background: var(--hover); }
 .proj-ov-grid td { overflow-wrap: anywhere; }
 .proj-ov-grid .ov-it-part { overflow-wrap: anywhere; }
 /* 3단계 묶음 헤더 — Quote/P/O/C/I 를 색으로 구분해 좌→우 흐름이 보이게 한다. */
-.proj-ov-grid .ov-gh { text-align: center; font-size: 10.5px; letter-spacing: 0.04em; }
-.proj-ov-grid .ov-gh.q { color: var(--blue); }
-.proj-ov-grid .ov-gh.p { color: #7c3aed; }
-.proj-ov-grid .ov-gh.c { color: #11824a; }
-.proj-ov-grid .ov-sub { font-size: 9.5px; font-weight: 600; color: var(--muted);
-  text-transform: none; letter-spacing: 0; white-space: nowrap; }
+.proj-ov-grid .ov-gh { text-align: center; font-size: 10.5px; letter-spacing: 0.06em;
+  text-transform: uppercase; }
+.proj-ov-grid .ov-gh.q, .proj-ov-grid .ov-sub.q { color: var(--ov-q); background: var(--ov-q-hd); }
+.proj-ov-grid .ov-gh.p, .proj-ov-grid .ov-sub.p { color: var(--ov-p); background: var(--ov-p-hd); }
+.proj-ov-grid .ov-gh.c, .proj-ov-grid .ov-sub.c { color: var(--ov-c); background: var(--ov-c-hd); }
+/* 식별 4열(#·Part·Desc·Qty)은 위 Stages 의 RFQ 칸과 같은 자리 → 같은 톤으로 잇는다. */
+.proj-ov-grid thead th:not(.q):not(.p):not(.c) { background: var(--ov-r-hd); color: var(--ov-r); }
+/* 하위 머리(Purchase/Margin/Sales)는 묶음 이름보다 한 단 낮게 — 톤은 유지하고 흐리게. */
+.proj-ov-grid .ov-sub { font-size: 9.5px; font-weight: 600;
+  text-transform: none; letter-spacing: 0; white-space: nowrap; opacity: 0.72; }
+/* 각 단계 3열에 칸 바탕을 깔아 위 Stages 4칸과 같은 세로 줄로 읽히게 한다.
+   셀이 아니라 <col> 에 거는 이유: colspan 을 쓰는 묶음머리·합계 행에서도 열이 안 밀린다. */
+.proj-ov-grid col.ovt-r { background: var(--ov-r-bg); }
+.proj-ov-grid col.ovt-q { background: var(--ov-q-bg); }
+.proj-ov-grid col.ovt-p { background: var(--ov-p-bg); }
+.proj-ov-grid col.ovt-c { background: var(--ov-c-bg); }
 /* 단계 묶음이 시작되는 칸에만 세로 구분선. 열 번호(nth-child)로 그리면 colspan 쓰는
    합계·묶음머리 행에서 칸이 밀려 엉뚱한 자리에 선이 생긴다 → 칸에 직접 표시한다. */
 .proj-ov-grid .gs { border-left: 2px solid var(--line-strong); }
 /* 금액 — 통화기호는 작고 흐리게, 숫자에 시선이 가도록. */
 .ov-m { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .ov-m em { font-style: normal; font-size: 9px; color: var(--muted); margin-right: 2px; }
+/* 0 원 — "아직 없다"는 뜻이라 실제 금액과 같은 무게로 읽히면 안 된다. 다만 — 와는
+   구분해야 해서(0 = 무료가 아님) 지우지 않고 톤만 낮춘다. */
+.ov-m.zero, .ov-m.zero em { color: var(--muted); font-weight: 400; }
+/* 매출 = 그 단계의 결론 → 세 숫자(매입·마진·매출) 중 가장 진하게. */
+.proj-ov-grid .ov-sal .ov-m { color: var(--navy); font-weight: 600; }
 .ov-pct { font-weight: 700; color: #11824a; font-variant-numeric: tabular-nums; }
 
-/* 선박 묶음 머리 — 선박명 + 각 단계 문서번호를 그 단계 열 위에 정렬해 둔다. */
-.ov-grp-head td { background: var(--head-bg) !important; border-top: 2px solid var(--line-strong);
-  padding: 5px 8px !important; }
+/* 선박 묶음 머리 — 선박명 + 각 단계 문서번호를 그 단계 열 위에 정렬해 둔다.
+   바탕은 반투명 — 불투명하게 깔면 아래 <col> 톤을 덮어 세로 줄이 이 행에서 끊긴다. */
+.ov-grp-head td { background: rgba(11, 29, 58, 0.06) !important;
+  border-top: 2px solid var(--line-strong); padding: 5px 8px !important; }
 .ov-grp-vessel { font-size: 12px; font-weight: 800; color: var(--navy); }
 /* 문서번호 두 개("벤더견적 → 고객견적")가 25% 칸에 안 들어가면 줄을 바꾼다 — 자르면
    번호 뒷자리가 사라져 어느 문서인지 못 읽는다. */
@@ -8312,9 +8346,12 @@ a.ov-tl-stage:hover { background: var(--hover); }
 .ov-grp-doc .ov-doc-pur { font-weight: 500; color: var(--muted); }
 .ov-grp-doc .sep { margin: 0 5px; color: var(--muted); }
 .ov-grp-doc i { font-style: normal; font-weight: 500; }
-.ov-grp-total td { background: #f7fafd !important; border-top: 1px solid var(--line-strong); }
+/* 합계 행 — 묶음 머리와 같은 이유로 반투명. 머리보다 옅게 깔고 윗선으로 구분한다. */
+.ov-grp-total td { background: rgba(11, 29, 58, 0.055) !important;
+  border-top: 1px solid var(--line-strong); }
 .proj-ov-grid tbody tr:nth-child(even) td { background: transparent; }
-.proj-ov-grid tbody tr:hover td { background: var(--hover); }
+/* 행 강조도 반투명 — 덮어버리면 짚고 있는 행만 세로 줄이 사라진다. */
+.proj-ov-grid tbody tr:hover td { background: rgba(0, 85, 168, 0.09); }
 .ov-it-part { font-weight: 600; color: var(--navy); }
 .ov-it-serial { color: var(--muted); }
 .ov-it-remark { color: var(--muted); }
@@ -8335,4 +8372,7 @@ a.ov-tl-stage:hover { background: var(--hover); }
   .proj-ov-actions, .proj-ov-back { display: none !important; }
   .proj-ov-sec, .proj-ov-tl > li, .proj-ov-items tr { break-inside: avoid; }
   .proj-ov-tlcols { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
+  /* 4칸 톤은 이 화면에서 "어느 단계 열인지"를 알려주는 장치라 인쇄에서도 남긴다 —
+     브라우저는 배경색을 기본으로 빼고 인쇄해서 명시해 줘야 한다(톤이 옅어 잉크는 거의 안 쓴다). */
+  .proj-ov { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
 }
