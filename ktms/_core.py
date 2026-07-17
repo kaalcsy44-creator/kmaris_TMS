@@ -33,9 +33,19 @@ from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from sqlalchemy import text
+from sqlalchemy import event as _sa_event, text
+from sqlalchemy.orm import Session as _SASession
 
 from db.engine import get_session, get_engine
+
+
+@_sa_event.listens_for(_SASession, "after_flush")
+def _invalidate_deal_progress_cache(session, flush_context):
+    """세션에 변경이 flush 되면 스테이지 메모(_deal_progress_cache)를 폐기한다.
+    읽기 요청은 flush 가 없어 요청 내내 메모가 유지되고, 쓰기가 반영되는 즉시(=flush)
+    폐기돼 오래된 단계값이 남지 않는다. (autoflush=False 이므로 flush=커밋 시점)."""
+    if getattr(session, "_deal_progress_cache", None):
+        session._deal_progress_cache = {}
 from services.tracking_status import (
     rfq_tracking_step, order_tracking_step, RFQ_STEPS, ORDER_STEPS,
 )
@@ -673,6 +683,21 @@ def _deal_progress(s, rfq, order) -> tuple[int, dict[str, str]]:
     if rfq is None:
         return 1, {}
     rfq_id = rfq.id
+
+    # ── 세션 스코프 메모 ──────────────────────────────────────────────────────
+    # 한 요청에서 같은 (rfq, order) 조합의 단계는 여러 번 필요하다(_pipeline_stage 가
+    # dist·recent·snapshot 에서, _stage_auto_times 가 별도로 각각 _deal_progress 를 호출).
+    # 매번 자식 테이블(Vendor RFQ/Quote·Quotation·PO·SA·CI·Tax·AR·POD)을 재조회하면
+    # RFQ 1건당 수 회의 왕복이 발생한다. 결과를 세션에 캐시해 요청당 1회만 계산한다.
+    # (쓰기가 flush 되면 _invalidate_deal_progress_cache 가 폐기 → 항상 최신.)
+    order_id = order.id if order is not None else 0
+    _dp_cache = getattr(s, "_deal_progress_cache", None)
+    if _dp_cache is None:
+        _dp_cache = s._deal_progress_cache = {}
+    _dp_key = (rfq_id, order_id)
+    if _dp_key in _dp_cache:
+        return _dp_cache[_dp_key]
+
     is_service = _enum_val(rfq.work_type) == "서비스"
 
     # ── 자식 레코드 1회 조회(번호·일시 공용) ──────────────────────────────────
@@ -804,7 +829,9 @@ def _deal_progress(s, rfq, order) -> tuple[int, dict[str, str]]:
              or _kst_iso(min((a.created_at for a in ars if a.created_at), default=None)))
         # 10) 세금계산서 발행 · 11) 대금 결제 완료 — 수동 완료(stage_dates)로만 표시
 
-    return stage, auto
+    result = (stage, auto)
+    _dp_cache[_dp_key] = result
+    return result
 
 
 def _pipeline_stage(s, rfq_id: int) -> int:
