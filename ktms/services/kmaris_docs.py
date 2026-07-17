@@ -421,7 +421,7 @@ def _items_table(data: Dict[str, Any], doc_type: str):
     return table
 
 
-def _totals_table(data: Dict[str, Any]):
+def _totals_table(data: Dict[str, Any], doc_type: str | None = None):
     s = _styles()
     currency = data.get("currency", "USD")
     base = calc_totals(
@@ -429,7 +429,10 @@ def _totals_table(data: Dict[str, Any]):
     )
     subtotal = base["subtotal"]
     discount = base["discount"]
-    # Freight/Packing/Insurance — Proforma Invoice 의 부대비용(terms 에 보관). 있는 항목만 표기.
+    # Freight/Packing/Insurance — Proforma Invoice 의 부대비용(terms 에 보관).
+    # PI 는 참조 양식처럼 값이 없어도 4개 항목(Freight/Packing/Insurance/VAT)을 0으로 항상 표기,
+    # 그 외 문서는 값이 있는 항목만 표기한다.
+    force_charges = doc_type == "proforma_invoice"
     terms = data.get("terms", {}) or {}
 
     def _extra(key: str) -> float:
@@ -460,11 +463,11 @@ def _totals_table(data: Dict[str, Any]):
                 _p(f"-{_money(discount, currency)}", s["right"]),
             ]
         )
-    if freight:
+    if force_charges or freight:
         rows.append([_p("Freight", s["base"]), _p(_money(freight, currency), s["right"])])
-    if packing:
+    if force_charges or packing:
         rows.append([_p("Packing", s["base"]), _p(_money(packing, currency), s["right"])])
-    if insurance:
+    if force_charges or insurance:
         rows.append([_p("Insurance", s["base"]), _p(_money(insurance, currency), s["right"])])
     rows.append([_p("VAT", s["base"]), _p(_money(vat, currency), s["right"])])
     rows.append(
@@ -1659,7 +1662,7 @@ def make_pdf(doc_type: str, data: Dict[str, Any], company: Optional[Dict[str, An
     story.append(_items_table(payload, doc_type))
     if doc_type not in {"packing_list", "shipping_advice", "vendor_rfq"}:
         story.append(Spacer(1, 4 * mm))
-        story.append(_totals_table(payload))
+        story.append(_totals_table(payload, doc_type))
     story.append(Spacer(1, 5 * mm))
     story.append(_commercial_shipping_block(payload) if doc_type == "commercial_invoice" else _terms_block(payload, doc_type))
     story.append(Spacer(1, 2 * mm))

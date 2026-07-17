@@ -2046,20 +2046,29 @@ function ItemEditor({
             <tfoot>
               {footerRows ? (
                 // 금액 문서 확장 합계(예: Proforma Invoice) — 라벨=8열, 값=9열에 정렬.
-                footerRows.map((r, idx) => (
-                  <tr key={idx} className={r.grand ? "foot-grand" : undefined}>
-                    <td></td>{/* 1 sel */}
-                    <td></td>{/* 2 No. */}
-                    <td></td>{/* 3 part_no */}
-                    <td></td>{/* 4 description */}
-                    <td></td>{/* 5 maker */}
-                    <td></td>{/* 6 qty */}
-                    <td></td>{/* 7 unit */}
-                    <td className="total-label">{r.label}</td>{/* 8 unit_price */}
-                    <td className="num total-value">{r.value}</td>{/* 9 amount */}
-                    <td></td>{/* 10 remark */}
-                  </tr>
-                ))
+                // grand(최종 합계)행은 좌측 셀(1~8열)을 하나로 합쳐 라벨을 넓게 표기.
+                footerRows.map((r, idx) =>
+                  r.grand ? (
+                    <tr key={idx} className="foot-grand">
+                      <td className="total-label" colSpan={8}>{r.label}</td>{/* 1~8 병합 */}
+                      <td className="num total-value">{r.value}</td>{/* 9 amount */}
+                      <td></td>{/* 10 remark */}
+                    </tr>
+                  ) : (
+                    <tr key={idx}>
+                      <td></td>{/* 1 sel */}
+                      <td></td>{/* 2 No. */}
+                      <td></td>{/* 3 part_no */}
+                      <td></td>{/* 4 description */}
+                      <td></td>{/* 5 maker */}
+                      <td></td>{/* 6 qty */}
+                      <td></td>{/* 7 unit */}
+                      <td className="total-label">{r.label}</td>{/* 8 unit_price */}
+                      <td className="num total-value">{r.value}</td>{/* 9 amount */}
+                      <td></td>{/* 10 remark */}
+                    </tr>
+                  )
+                )
               ) : (
                 <tr>
                   <td></td>{/* 1 sel */}
