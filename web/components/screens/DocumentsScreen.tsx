@@ -933,7 +933,7 @@ function ProformaInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChang
       <div className="sub-h" style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
         <span>Basic info</span>
         <span className="hint-inline" style={{ fontWeight: 400 }}>
-          선적 전 발행하는 <b>선택</b> 문서 · Commercial Invoice 와 독립 저장
+          <b>Optional</b> pre-shipment document · saved independently of the Commercial Invoice
         </span>
       </div>
       <div className="form-grid doc-form-grid">
