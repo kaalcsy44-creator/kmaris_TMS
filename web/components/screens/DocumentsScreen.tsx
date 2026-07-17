@@ -973,38 +973,17 @@ function ProformaInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChang
             Load order items
           </button>
         }
+        // Freight/Packing/Insurance/VAT 를 품목표 tfoot 안에 넣는다(참조 양식).
+        // Total invoice value = 품목 소계 + Freight + Packing + Insurance + VAT.
+        footerRows={[
+          { label: "Subtotal", value: <DualCurrencyAmount value={subtotal} currency={currency} /> },
+          { label: "Freight", value: <input className="foot-charge-input" value={amountInputValue(freight)} onChange={(e) => setFreight(String(parseAmountInput(e.target.value) ?? ""))} /> },
+          { label: "Packing", value: <input className="foot-charge-input" value={amountInputValue(packing)} onChange={(e) => setPacking(String(parseAmountInput(e.target.value) ?? ""))} /> },
+          { label: "Insurance", value: <input className="foot-charge-input" value={amountInputValue(insurance)} onChange={(e) => setInsurance(String(parseAmountInput(e.target.value) ?? ""))} /> },
+          { label: `VAT (${num(vatRate)}%)`, value: <DualCurrencyAmount value={vatAmount} currency={currency} /> },
+          { label: "Total invoice value", grand: true, value: <><DualCurrencyAmount value={totalInvoiceValue} currency={currency} /><span className="fx-note">{fxRateText()}</span></> },
+        ]}
       />
-      {/* Freight/Packing/Insurance/VAT — 품목 소계에 더해 Total invoice value 를 만든다. */}
-      <div className="pi-charges">
-        <table className="pi-charges-table">
-          <tbody>
-            <tr>
-              <td className="lbl">Subtotal</td>
-              <td className="amt"><DualCurrencyAmount value={subtotal} currency={currency} /></td>
-            </tr>
-            <tr>
-              <td className="lbl">Freight</td>
-              <td className="amt"><input className="num" value={amountInputValue(freight)} onChange={(e) => setFreight(String(parseAmountInput(e.target.value) ?? ""))} /></td>
-            </tr>
-            <tr>
-              <td className="lbl">Packing</td>
-              <td className="amt"><input className="num" value={amountInputValue(packing)} onChange={(e) => setPacking(String(parseAmountInput(e.target.value) ?? ""))} /></td>
-            </tr>
-            <tr>
-              <td className="lbl">Insurance</td>
-              <td className="amt"><input className="num" value={amountInputValue(insurance)} onChange={(e) => setInsurance(String(parseAmountInput(e.target.value) ?? ""))} /></td>
-            </tr>
-            <tr>
-              <td className="lbl">VAT ({num(vatRate)}%)</td>
-              <td className="amt"><DualCurrencyAmount value={vatAmount} currency={currency} /></td>
-            </tr>
-            <tr className="grand">
-              <td className="lbl">Total invoice value</td>
-              <td className="amt"><DualCurrencyAmount value={totalInvoiceValue} currency={currency} /></td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
       </fieldset>
       <div className="form-actions doc-actions">
         <div className="doc-actions-left">
@@ -1893,6 +1872,7 @@ function ItemEditor({
   currency = "USD",
   tableId,
   headerActions,
+  footerRows,
 }: {
   items: DocumentWorkItem[];
   setItems: (items: DocumentWorkItem[]) => void;
@@ -1901,6 +1881,10 @@ function ItemEditor({
   tableId: string;
   // 품목표 헤더의 "+ Add" 옆에 넣을 보조 액션(예: "Load order items").
   headerActions?: React.ReactNode;
+  // 지정 시(금액 문서 전용) 기본 Total 합계행 대신 이 행들을 표 tfoot 에 렌더 —
+  // Proforma Invoice 의 Subtotal/Freight/Packing/Insurance/VAT/Total invoice value 처럼
+  // 품목 컬럼(Unit Price=라벨, Amount=값)에 정렬해 표 안에 넣는다.
+  footerRows?: { label: React.ReactNode; value: React.ReactNode; grand?: boolean }[];
 }) {
   function patch(i: number, key: keyof DocumentWorkItem, value: string) {
     const next = [...items];
@@ -2060,21 +2044,39 @@ function ItemEditor({
           {/* 합계행 — 컬럼당 1셀(숨김/폭 조절 정렬 유지). Total=Unit price(8열), 값=Amount(9열). */}
           {!packing ? (
             <tfoot>
-              <tr>
-                <td></td>{/* 1 sel */}
-                <td></td>{/* 2 No. */}
-                <td></td>{/* 3 part_no */}
-                <td></td>{/* 4 description */}
-                <td></td>{/* 5 maker */}
-                <td></td>{/* 6 qty */}
-                <td></td>{/* 7 unit */}
-                <td className="total-label">Total</td>{/* 8 unit_price */}
-                <td className="num total-value">{/* 9 amount */}
-                  <DualCurrencyAmount value={total} currency={currency} />
-                  <span className="fx-note">{fxRateText()}</span>
-                </td>
-                <td></td>{/* 10 remark */}
-              </tr>
+              {footerRows ? (
+                // 금액 문서 확장 합계(예: Proforma Invoice) — 라벨=8열, 값=9열에 정렬.
+                footerRows.map((r, idx) => (
+                  <tr key={idx} className={r.grand ? "foot-grand" : undefined}>
+                    <td></td>{/* 1 sel */}
+                    <td></td>{/* 2 No. */}
+                    <td></td>{/* 3 part_no */}
+                    <td></td>{/* 4 description */}
+                    <td></td>{/* 5 maker */}
+                    <td></td>{/* 6 qty */}
+                    <td></td>{/* 7 unit */}
+                    <td className="total-label">{r.label}</td>{/* 8 unit_price */}
+                    <td className="num total-value">{r.value}</td>{/* 9 amount */}
+                    <td></td>{/* 10 remark */}
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td></td>{/* 1 sel */}
+                  <td></td>{/* 2 No. */}
+                  <td></td>{/* 3 part_no */}
+                  <td></td>{/* 4 description */}
+                  <td></td>{/* 5 maker */}
+                  <td></td>{/* 6 qty */}
+                  <td></td>{/* 7 unit */}
+                  <td className="total-label">Total</td>{/* 8 unit_price */}
+                  <td className="num total-value">{/* 9 amount */}
+                    <DualCurrencyAmount value={total} currency={currency} />
+                    <span className="fx-note">{fxRateText()}</span>
+                  </td>
+                  <td></td>{/* 10 remark */}
+                </tr>
+              )}
             </tfoot>
           ) : (
             /* Packing 합계행 — 포장수량·N.W.·G.W.·Measurement 자동합산. 컬럼당 1셀. */
