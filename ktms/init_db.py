@@ -12,7 +12,8 @@ import bcrypt
 from sqlalchemy import text, inspect
 from db.engine import Base, get_engine, get_session
 from db.models import (
-    User, UserRole, DocSequence, Customer, Vendor, RFQ, Quotation, VendorQuote, Order, ItemCategory,
+    User, UserRole, DocSequence, Customer, CustomerContact, Vendor, VendorContact,
+    RFQ, Quotation, VendorQuote, Order, ItemCategory,
 )
 
 
@@ -447,6 +448,49 @@ def migrate_translate_categories():
         conn.execute(text(
             "INSERT INTO applied_migrations (name) VALUES ('translate_item_categories')"))
     print(f"[OK] translate_item_categories applied: {n} categories renamed.")
+
+
+def migrate_seed_contacts():
+    """1회성: 기존 고객사·공급사의 단일 담당자(flat contact/email/phone)를
+    담당자 자식 테이블(customer_contacts/vendor_contacts)의 대표(primary) 1건으로 이관.
+
+    담당자 행이 하나도 없고 flat 정보가 있는 회사만 시드하므로 재실행해도 안전.
+    applied_migrations 마커로 1회만 실행."""
+    eng = get_engine()
+    insp = inspect(eng)
+    if not (insp.has_table("customer_contacts") and insp.has_table("vendor_contacts")):
+        return
+    with eng.begin() as conn:
+        conn.execute(text(
+            "CREATE TABLE IF NOT EXISTS applied_migrations (name VARCHAR(100) PRIMARY KEY)"))
+        if conn.execute(text(
+                "SELECT 1 FROM applied_migrations WHERE name='seed_company_contacts'")).first():
+            return
+
+    s = get_session()
+    n = 0
+    try:
+        def seed(rows, Child, fk):
+            nonlocal n
+            for r in rows:
+                has = s.query(Child).filter(getattr(Child, fk) == r.id).first()
+                name = (r.contact or "").strip()
+                email = (r.email or "").strip()
+                phone = (getattr(r, "contact_phone", None) or "").strip()
+                if has or not (name or email or phone):
+                    continue
+                s.add(Child(**{fk: r.id}, name=name, email=email, phone=phone,
+                            position="", is_primary=True))
+                n += 1
+        seed(s.query(Customer).all(), CustomerContact, "customer_id")
+        seed(s.query(Vendor).all(), VendorContact, "vendor_id")
+        s.commit()
+    finally:
+        s.close()
+    with eng.begin() as conn:
+        conn.execute(text(
+            "INSERT INTO applied_migrations (name) VALUES ('seed_company_contacts')"))
+    print(f"[OK] seed_company_contacts applied: {n} primary contacts created.")
 
 
 def migrate_remove_stage_8():

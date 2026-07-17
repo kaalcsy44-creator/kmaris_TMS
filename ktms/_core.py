@@ -68,7 +68,7 @@ from services.vendor_xlsx import make_vendor_rfq_quote_xlsx
 from services.doc_xlsx import make_document_xlsx
 from services.quote_response_parser import parse_vendor_quote_bytes, excel_to_text
 from db.models import (
-    RFQ, Customer, Vessel, Vendor, User, UserRole, RolePermission, ItemMaster, ItemCategory, DocSequence,
+    RFQ, Customer, CustomerContact, Vessel, Vendor, VendorContact, User, UserRole, RolePermission, ItemMaster, ItemCategory, DocSequence,
     EmailTemplate,
     VendorRFQ, VendorQuote, Quotation, QuotationStatus, FollowUpLevel,
     Order, PurchaseOrder, ShippingAdvice, ProformaInvoice, CommercialInvoice,
@@ -193,11 +193,12 @@ def _sync_schema() -> None:
     추가해 스키마 드리프트를 방지한다."""
     try:
         from db.engine import Base
-        from init_db import migrate_columns, migrate_normalize_incoterms
+        from init_db import migrate_columns, migrate_normalize_incoterms, migrate_seed_contacts
 
         Base.metadata.create_all(bind=get_engine())
         migrate_columns()
         migrate_normalize_incoterms()   # 'EXW Busan' 등 기존 incoterms 값 표준 라벨로 1회 정규화
+        migrate_seed_contacts()         # 기존 단일 담당자 → 담당자 테이블 대표 1건으로 1회 이관
     except Exception as exc:  # 스키마 동기화 실패가 앱 기동을 막지 않도록 로그만 남긴다.
         print(f"[WARN] startup schema sync skipped: {exc}", file=sys.stderr)
     try:
@@ -2006,6 +2007,15 @@ def _schedule_guard(e: ScheduleEvent, user: dict) -> None:
 
 
 # ── Settings: master data (list + create) ─────────────────────────────────────
+class ContactIn(BaseModel):
+    """고객사·공급사 담당자 1명(회사 1:N). 다중 담당자 등록/수정에 사용."""
+    name: str | None = ""
+    email: str | None = ""
+    phone: str | None = ""
+    position: str | None = ""
+    is_primary: bool = False
+
+
 class CustomerCreate(BaseModel):
     name: str
     contact: str | None = ""
@@ -2016,6 +2026,7 @@ class CustomerCreate(BaseModel):
     tax_id: str | None = ""
     payment_terms: str | None = ""   # 기본 결제조건
     logo: str | None = ""    # 회사 로고 data URL(붙여넣기). None=변경 안 함(수정 시)
+    contacts: list[ContactIn] | None = None  # None=담당자 미변경(수정 시), []=전부 삭제
 
 
 class VendorCreate(BaseModel):
@@ -2028,6 +2039,39 @@ class VendorCreate(BaseModel):
     address: str | None = ""
     payment_terms: str | None = ""   # 기본 결제조건
     logo: str | None = ""    # 회사 로고 data URL(붙여넣기). None=변경 안 함(수정 시)
+    contacts: list[ContactIn] | None = None  # None=담당자 미변경(수정 시), []=전부 삭제
+
+
+def _serialize_contacts(session, ChildModel, fk_attr: str, parent_id: int) -> list[dict]:
+    """회사의 담당자 목록을 프론트 페이로드용 dict 리스트로 직렬화(대표 먼저)."""
+    rows = (session.query(ChildModel)
+            .filter(getattr(ChildModel, fk_attr) == parent_id)
+            .order_by(ChildModel.is_primary.desc(), ChildModel.id).all())
+    return [{"name": r.name or "", "email": r.email or "", "phone": r.phone or "",
+             "position": r.position or "", "is_primary": bool(r.is_primary)} for r in rows]
+
+
+def _sync_contacts(session, ChildModel, fk_attr: str, parent, contacts) -> None:
+    """회사의 담당자 집합을 교체(delete-all + re-insert)하고, 대표 담당자를 회사의
+    flat contact/email/contact_phone 로 미러링한다(기존 모든 소비처 호환).
+
+    contacts=None 이면 변경하지 않는다. 이름·이메일·전화가 모두 빈 항목은 건너뛴다.
+    대표 표시가 하나도 없으면 첫 항목을 대표로 삼는다."""
+    if contacts is None:
+        return
+    clean = [c for c in contacts if (c.name or c.email or c.phone or "").strip()]
+    session.query(ChildModel).filter(getattr(ChildModel, fk_attr) == parent.id).delete(
+        synchronize_session=False)
+    session.flush()
+    primary = next((c for c in clean if c.is_primary), clean[0] if clean else None)
+    for c in clean:
+        session.add(ChildModel(**{fk_attr: parent.id}, name=(c.name or "").strip(),
+                               email=(c.email or "").strip(), phone=(c.phone or "").strip(),
+                               position=(c.position or "").strip(), is_primary=(c is primary)))
+    # 대표 담당자를 회사 flat 필드로 미러링(대표 없으면 비운다).
+    parent.contact = (primary.name or "").strip() if primary else ""
+    parent.email = (primary.email or "").strip() if primary else ""
+    parent.contact_phone = (primary.phone or "").strip() if primary else ""
 
 
 class VesselCreate(BaseModel):
@@ -2506,6 +2550,11 @@ __all__ = [
     "ARStatus",
     "CommercialInvoice",
     "CommercialInvoiceSave",
+    "ContactIn",
+    "CustomerContact",
+    "VendorContact",
+    "_serialize_contacts",
+    "_sync_contacts",
     "ProformaInvoice",
     "ProformaInvoiceSave",
     "CompanyProfile",

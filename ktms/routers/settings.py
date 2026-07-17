@@ -4,7 +4,11 @@ from __future__ import annotations
 from _core import (
     CompanyProfile,
     Customer,
+    CustomerContact,
     CustomerCreate,
+    VendorContact,
+    _serialize_contacts,
+    _sync_contacts,
     Depends,
     EmailTemplate,
     EmailTemplateSave,
@@ -85,7 +89,8 @@ def settings_customers():
                  "email": c.email or "", "country": c.country or "",
                  "address": c.address or "", "tax_id": c.tax_id or "",
                  "payment_terms": getattr(c, "payment_terms", None) or "",
-                 "logo": getattr(c, "logo", None) or ""}
+                 "logo": getattr(c, "logo", None) or "",
+                 "contacts": _serialize_contacts(s, CustomerContact, "customer_id", c.id)}
                 for c in s.query(Customer).order_by(Customer.name).all()]
     finally:
         s.close()
@@ -104,6 +109,9 @@ def create_customer(body: CustomerCreate):
                      payment_terms=body.payment_terms or "",
                      logo=body.logo or "")
         s.add(c)
+        s.flush()  # c.id 확보 후 담당자 연결
+        # 담당자 목록이 오면 대표를 flat 필드로 미러링(위 contact/email 은 덮어써짐).
+        _sync_contacts(s, CustomerContact, "customer_id", c, body.contacts)
         s.commit()
         return {"ok": True, "id": c.id}
     finally:
@@ -127,6 +135,8 @@ def update_customer(row_id: int, body: CustomerCreate):
         c.payment_terms = body.payment_terms or ""
         if body.logo is not None:
             c.logo = body.logo
+        # 담당자 목록이 오면 교체 + 대표를 flat 필드로 미러링(위 contact/email 은 덮어써짐).
+        _sync_contacts(s, CustomerContact, "customer_id", c, body.contacts)
         s.commit()
         return {"ok": True, "id": c.id}
     finally:
@@ -140,6 +150,9 @@ def delete_customer(row_id: int):
         c = s.query(Customer).filter_by(id=row_id).first()
         if not c:
             raise HTTPException(status_code=404, detail="Customer를 찾을 수 없습니다.")
+        # 자식 담당자 먼저 삭제(FK 제약 회피).
+        s.query(CustomerContact).filter_by(customer_id=c.id).delete(synchronize_session=False)
+        s.flush()
         s.delete(c)
         s.commit()
         return {"ok": True}
@@ -156,7 +169,8 @@ def settings_vendors():
                  "email": v.email or "", "specialization": v.specialization or "",
                  "country": v.country or "", "address": v.address or "",
                  "payment_terms": getattr(v, "payment_terms", None) or "",
-                 "logo": getattr(v, "logo", None) or ""}
+                 "logo": getattr(v, "logo", None) or "",
+                 "contacts": _serialize_contacts(s, VendorContact, "vendor_id", v.id)}
                 for v in s.query(Vendor).order_by(Vendor.name).all()]
     finally:
         s.close()
@@ -175,6 +189,8 @@ def create_vendor(body: VendorCreate):
                    payment_terms=body.payment_terms or "",
                    logo=body.logo or "")
         s.add(v)
+        s.flush()  # v.id 확보 후 담당자 연결
+        _sync_contacts(s, VendorContact, "vendor_id", v, body.contacts)
         s.commit()
         return {"ok": True, "id": v.id}
     finally:
@@ -198,6 +214,7 @@ def update_vendor(row_id: int, body: VendorCreate):
         v.payment_terms = body.payment_terms or ""
         if body.logo is not None:
             v.logo = body.logo
+        _sync_contacts(s, VendorContact, "vendor_id", v, body.contacts)
         s.commit()
         return {"ok": True, "id": v.id}
     finally:
@@ -211,6 +228,8 @@ def delete_vendor(row_id: int):
         v = s.query(Vendor).filter_by(id=row_id).first()
         if not v:
             raise HTTPException(status_code=404, detail="Vendor를 찾을 수 없습니다.")
+        s.query(VendorContact).filter_by(vendor_id=v.id).delete(synchronize_session=False)
+        s.flush()
         s.delete(v)
         s.commit()
         return {"ok": True}

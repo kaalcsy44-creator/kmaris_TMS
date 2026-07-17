@@ -5660,6 +5660,68 @@ table.mini .num {
 .logo-field {
   grid-column: 1 / -1;
 }
+/* 회사 담당자(1:N) 편집기 — 폼 전체폭. 여러 담당자 행을 추가·삭제하고 대표를 지정. */
+.contacts-field {
+  grid-column: 1 / -1;
+}
+.contacts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 4px 0 6px;
+}
+.contacts-empty {
+  color: var(--muted, #7c8aa0);
+  font-size: 13px;
+  padding: 6px 2px;
+}
+.contact-row {
+  display: grid;
+  grid-template-columns: auto minmax(120px, 1.3fr) minmax(90px, 1fr) minmax(140px, 1.4fr) minmax(100px, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+  padding: 6px;
+  border: 1px solid var(--border, #d8dee6);
+  border-radius: 6px;
+  background: var(--surface, #fff);
+}
+.contact-row.is-primary {
+  border-color: var(--accent, #0055a8);
+  background: var(--accent-soft, #eaf3ff);
+}
+.contact-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted, #52627a);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.contact-in {
+  min-width: 0;
+  padding: 5px 8px;
+  border: 1px solid var(--border, #d8dee6);
+  border-radius: 5px;
+  font-size: 13px;
+}
+.contact-del {
+  padding: 2px 8px;
+}
+.contact-more {
+  color: var(--muted, #7c8aa0);
+  font-size: 12px;
+  font-weight: 600;
+}
+@media (max-width: 720px) {
+  .contact-row {
+    grid-template-columns: 1fr 1fr;
+  }
+  .contact-primary {
+    grid-column: 1 / -1;
+  }
+}
 .logo-drop {
   display: flex;
   align-items: center;

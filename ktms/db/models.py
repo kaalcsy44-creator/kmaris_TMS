@@ -121,6 +121,32 @@ class Vendor(Base):
     created_at     = Column(DateTime, default=datetime.utcnow)
 
 
+class CustomerContact(Base):
+    """고객사 담당자(회사 1 : 담당자 N). 회사의 flat contact/email/phone 은 대표(primary)를 미러링한다."""
+    __tablename__ = "customer_contacts"
+    id          = Column(Integer, primary_key=True)
+    customer_id = Column(Integer, ForeignKey("customers.id"))
+    name        = Column(String(100))
+    email       = Column(String(200))
+    phone       = Column(String(50))
+    position    = Column(String(100))   # 직책(예: Purchasing Manager)
+    is_primary  = Column(Boolean, default=False)
+    created_at  = Column(DateTime, default=datetime.utcnow)
+
+
+class VendorContact(Base):
+    """공급사 담당자(회사 1 : 담당자 N). 회사의 flat contact/email/phone 은 대표(primary)를 미러링한다."""
+    __tablename__ = "vendor_contacts"
+    id          = Column(Integer, primary_key=True)
+    vendor_id   = Column(Integer, ForeignKey("vendors.id"))
+    name        = Column(String(100))
+    email       = Column(String(200))
+    phone       = Column(String(50))
+    position    = Column(String(100))
+    is_primary  = Column(Boolean, default=False)
+    created_at  = Column(DateTime, default=datetime.utcnow)
+
+
 class Vessel(Base):
     __tablename__ = "vessels"
     id          = Column(Integer, primary_key=True)
