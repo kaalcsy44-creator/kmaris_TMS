@@ -1995,6 +1995,11 @@ export function PipelineModal({
               <b><ProjectNo value={r.project_no} /></b>
               <WorkTypeBadge type={r.work_type} />
               {r.project_title ? <span className="pl-proj-name">{r.project_title}</span> : null}
+              {r.vessels || r.vessel ? (
+                <span className="pl-proj-vessel">
+                  · {(r.vessels || r.vessel).split("\n").filter(Boolean).join(" · ")}
+                </span>
+              ) : null}
             </span>
           )}
           <span className="pl-head-right">
