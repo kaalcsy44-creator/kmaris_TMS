@@ -879,15 +879,19 @@ function ContactsEditor({
         ) : null}
         {list.map((c, i) => (
           <div key={i} className={`contact-row${c.is_primary ? " is-primary" : ""}`}>
-            <label className="contact-primary" title="Primary contact (shown on documents & emails)">
-              <input type="radio" checked={!!c.is_primary} onChange={() => setPrimary(i)} />
-              <span>Primary</span>
-            </label>
-            <input className="contact-in" placeholder="Name" value={c.name} onChange={(e) => patch(i, "name", e.target.value)} />
-            <input className="contact-in" placeholder="Position" value={c.position} onChange={(e) => patch(i, "position", e.target.value)} />
-            <input className="contact-in" placeholder="Email" value={c.email} onChange={(e) => patch(i, "email", e.target.value)} />
-            <input className="contact-in" placeholder="Phone" value={c.phone} onChange={(e) => patch(i, "phone", e.target.value)} />
-            <button type="button" className="btn sm danger contact-del" onClick={() => remove(i)} title="Remove">✕</button>
+            <div className="contact-fields">
+              <input className="contact-in" placeholder="Name" value={c.name} onChange={(e) => patch(i, "name", e.target.value)} />
+              <input className="contact-in" placeholder="Position" value={c.position} onChange={(e) => patch(i, "position", e.target.value)} />
+              <input className="contact-in" placeholder="Email" value={c.email} onChange={(e) => patch(i, "email", e.target.value)} />
+              <input className="contact-in" placeholder="Phone" value={c.phone} onChange={(e) => patch(i, "phone", e.target.value)} />
+            </div>
+            <div className="contact-side">
+              <label className="contact-primary" title="Primary contact (shown on documents & emails)">
+                <input type="radio" checked={!!c.is_primary} onChange={() => setPrimary(i)} />
+                <span>Primary</span>
+              </label>
+              <button type="button" className="btn sm danger contact-del" onClick={() => remove(i)} title="Remove">✕</button>
+            </div>
           </div>
         ))}
       </div>

@@ -5675,11 +5675,13 @@ table.mini .num {
   font-size: 13px;
   padding: 6px 2px;
 }
+/* 담당자 1행 = 필드 카드(2열, 좁으면 1열로 접힘) + 우측 대표/삭제. 폭을 강제하지 않아
+   모달을 넘치게 하지 않는다(min-width:0 로 컨테이너 폭 안에서 축소). */
 .contact-row {
-  display: grid;
-  grid-template-columns: auto minmax(120px, 1.3fr) minmax(90px, 1fr) minmax(140px, 1.4fr) minmax(100px, 1fr) auto;
-  gap: 6px;
-  align-items: center;
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+  min-width: 0;
   padding: 6px;
   border: 1px solid var(--border, #d8dee6);
   border-radius: 6px;
@@ -5688,6 +5690,21 @@ table.mini .num {
 .contact-row.is-primary {
   border-color: var(--accent, #0055a8);
   background: var(--accent-soft, #eaf3ff);
+}
+.contact-fields {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+.contact-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 6px;
+  flex: 0 0 auto;
 }
 .contact-primary {
   display: inline-flex;
@@ -5701,6 +5718,7 @@ table.mini .num {
 }
 .contact-in {
   min-width: 0;
+  width: 100%;
   padding: 5px 8px;
   border: 1px solid var(--border, #d8dee6);
   border-radius: 5px;
@@ -5714,12 +5732,9 @@ table.mini .num {
   font-size: 12px;
   font-weight: 600;
 }
-@media (max-width: 720px) {
-  .contact-row {
-    grid-template-columns: 1fr 1fr;
-  }
-  .contact-primary {
-    grid-column: 1 / -1;
+@media (max-width: 560px) {
+  .contact-fields {
+    grid-template-columns: 1fr;
   }
 }
 .logo-drop {
