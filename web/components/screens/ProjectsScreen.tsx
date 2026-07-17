@@ -538,12 +538,19 @@ function PipelineTable({
   openStage?: number | null;
 }) {
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [initialModalView, setInitialModalView] = useState<"work" | "overview">("work");
   // 딥링크로 열 때만 지정 단계로 진입. 수동 오픈 시엔 null → 해당 프로젝트의 현재 단계로.
   const [deepStage, setDeepStage] = useState<number | null>(null);
   // 딥링크 1회 소비 가드(행 로드 지연·재렌더 시 닫은 팝업이 다시 열리지 않도록).
   const deepConsumed = useRef(false);
   // 목록·상세 모달 공용 오픈 헬퍼(수동 오픈은 지정 단계 없음).
   const openRow = useCallback((id: number) => {
+    setInitialModalView("work");
+    setSelectedId(id);
+    setDeepStage(null);
+  }, []);
+  const openOverview = useCallback((id: number) => {
+    setInitialModalView("overview");
     setSelectedId(id);
     setDeepStage(null);
   }, []);
@@ -555,6 +562,7 @@ function PipelineTable({
       openRfqId ?? rows.find((r) => r.order_id === openOrderId)?.rfq_id ?? null;
     if (!id) return;
     deepConsumed.current = true;
+    setInitialModalView("work");
     setSelectedId(id);
     setDeepStage(openStage && openStage > 0 ? openStage : null);
   }, [openRfqId, openOrderId, openStage, rows]);
@@ -950,6 +958,7 @@ function PipelineTable({
           stageOf={stageOf}
           selectedId={selectedId}
           onSelect={openRow}
+          onOverview={openOverview}
           compact={boardCompact}
         />
       ) : (
@@ -968,7 +977,6 @@ function PipelineTable({
             })}
             {/* 개요 열 — 사용자가 옮기거나 숨기는 열(PIPELINE_COLUMNS) 밖에 고정으로 둔다.
                 행 어디를 눌러도 편집 팝업이 열리므로, 읽기 전용 개요로 갈 문은 따로 필요하다. */}
-            <col className="plc-ov" />
           </colgroup>
           <thead>
             <tr>
@@ -1003,13 +1011,12 @@ function PipelineTable({
                 );
               })}
               {/* 정렬·필터·리사이즈가 없는 고정 열이라 pl-th 머리 장치를 붙이지 않는다. */}
-              <th className="pl-th-ov" scope="col" aria-label="Overview" />
             </tr>
           </thead>
           <tbody>
             {tableRows.length === 0 ? (
               <tr>
-                <td className="pl-empty" colSpan={orderedColumns.length + 1}>
+                <td className="pl-empty" colSpan={orderedColumns.length}>
                   No deals match the filters.
                 </td>
               </tr>
@@ -1031,21 +1038,9 @@ function PipelineTable({
                         r={r}
                         steps={steps}
                         stage={stageOf(r)}
+                        onOverview={() => openOverview(r.rfq_id)}
                       />
                     ))}
-                    <td className="pl-ov-cell">
-                      {/* stopPropagation — 이 칸을 눌렀을 때 행의 편집 팝업까지 같이 열리면
-                          개요로 가려던 클릭이 팝업에 가려진다. */}
-                      <Link
-                        className="pl-ov-link"
-                        href={`/project/${r.rfq_id}`}
-                        onClick={(e) => e.stopPropagation()}
-                        title={`Open ${r.project_no || "project"} overview (read-only)`}
-                        aria-label={`Open ${r.project_no || "project"} overview`}
-                      >
-                        ⤢
-                      </Link>
-                    </td>
                   </tr>
                 );
               })
@@ -1065,6 +1060,7 @@ function PipelineTable({
           vessels={vessels}
           onChanged={onChanged}
           initialStage={deepStage}
+          initialView={initialModalView}
           onClose={() => {
             setSelectedId(null);
             setDeepStage(null);
@@ -1121,6 +1117,7 @@ function PipelineBoard({
   stageOf,
   selectedId,
   onSelect,
+  onOverview,
   compact,
 }: {
   rows: PipelineRow[];
@@ -1128,6 +1125,7 @@ function PipelineBoard({
   stageOf: (r: PipelineRow) => number;
   selectedId: number | null;
   onSelect: (id: number) => void;
+  onOverview: (id: number) => void;
   compact: boolean;
 }) {
   // 카드별 접힘 예외: 글로벌 밀도와 반대로 뒤집힌 카드 id 집합.
@@ -1183,6 +1181,7 @@ function PipelineBoard({
                     sel={selectedId === r.rfq_id}
                     compact={compact !== flipped.has(r.rfq_id)}
                     onClick={() => onSelect(r.rfq_id)}
+                    onOverview={() => onOverview(r.rfq_id)}
                     onToggle={() => toggleCard(r.rfq_id)}
                   />
                 ))
@@ -1341,6 +1340,7 @@ function BoardCard({
   sel,
   compact,
   onClick,
+  onOverview,
   onToggle,
 }: {
   r: PipelineRow;
@@ -1349,6 +1349,7 @@ function BoardCard({
   sel: boolean;
   compact: boolean;
   onClick: () => void;
+  onOverview: () => void;
   onToggle: () => void;
 }) {
   const isService = (r.work_type || "부품공급") === "서비스";
@@ -1400,14 +1401,14 @@ function BoardCard({
   // 사람에겐 없는 것과 같다 — 번호는 늘 보이고 이미 파랗다. 카드는 role="button"인 div라
   // 버튼 중첩이 아니고, 카드 클릭(편집 팝업)을 막으려면 여기도 stopPropagation.
   const projectNo = (
-    <Link
+    <button
+      type="button"
       className="pl-card-no"
-      href={`/project/${r.rfq_id}`}
-      onClick={(e) => e.stopPropagation()}
-      title={`Open ${r.project_no || "project"} overview (read-only)`}
+      onClick={(e) => { e.stopPropagation(); onOverview(); }}
+      title={`Open ${r.project_no || "project"} overview`}
     >
       <ProjectNo value={r.project_no} />
-    </Link>
+    </button>
   );
   const cardProps = {
     role: "button" as const,
@@ -1428,7 +1429,6 @@ function BoardCard({
         {cancelled ? <span className="pl-card-ribbon">CLOSED</span> : null}
         <div className="pl-card-nrow">
           {projectNo}
-          {overview}
           {chevron}
         </div>
         <div className="pl-card-crow">
@@ -1460,7 +1460,6 @@ function BoardCard({
         <span className="pl-card-top-r">
           <span className={`pl-card-pic${r.assignee ? "" : " none"}`}>{r.assignee || "—"}</span>
           <WorkTypeBadge type={r.work_type} />
-          {overview}
           {chevron}
         </span>
       </div>
@@ -1555,11 +1554,13 @@ function PipelineCell({
   r,
   steps,
   stage,
+  onOverview,
 }: {
   colKey: ColKey;
   r: PipelineRow;
   steps: string[];
   stage: number;
+  onOverview: () => void;
 }) {
   switch (colKey) {
     case "project": {
@@ -1568,7 +1569,14 @@ function PipelineCell({
       return (
         <td className="pl-td-project">
           <div className="pl-idline">
-            <ProjectNo value={r.project_no} />
+            <button
+              type="button"
+              className="pl-project-no-btn"
+              onClick={(e) => { e.stopPropagation(); onOverview(); }}
+              title={`Open ${r.project_no || "project"} overview`}
+            >
+              <ProjectNo value={r.project_no} />
+            </button>
             <WorkTypeBadge type={r.work_type} />
             {vessels ? <span className="pl-vessel">{vessels}</span> : null}
           </div>
@@ -1654,6 +1662,7 @@ export function PipelineModal({
   onClose,
   isNew,
   initialStage = null,
+  initialView = "work",
 }: {
   r: PipelineRow;
   steps: string[];
@@ -1666,6 +1675,7 @@ export function PipelineModal({
   isNew?: boolean;
   // 딥링크로 열 때 진입할 단계(1~11). null 이면 프로젝트의 현재 단계로 연다.
   initialStage?: number | null;
+  initialView?: "work" | "overview";
 }) {
   const isNewProject = !!isNew;
   const backdropMouseDown = useRef(false);
@@ -1774,7 +1784,7 @@ export function PipelineModal({
   // 기억하지 않고 늘 work 로 연다 — 팝업을 여는 목적은 대개 단계를 진행시키는 것이라,
   // overview 로 굳어 있으면 작업하려던 사람이 매번 한 번 더 눌러야 한다.
   // 오래 읽는 용도는 페이지(/project/<id>)가 맡는다.
-  const [modalView, setModalView] = useState<"work" | "overview">("work");
+  const [modalView, setModalView] = useState<"work" | "overview">(initialView);
   /** 개요의 단계 줄 클릭 → 그 단계의 작업 화면으로. 개요에서 짚은 곳을 바로 편집. */
   const openStageFromOverview = useCallback((no: number) => {
     setSelectedStage(Math.min(Math.max(no, 1), 11));

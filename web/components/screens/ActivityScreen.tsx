@@ -27,6 +27,7 @@ import ActivityNoteForm, {
   initialNoteValue,
   type ActivityNoteValue,
 } from "@/components/common/ActivityNoteForm";
+import ProjectOverviewScreen from "@/components/screens/ProjectOverviewScreen";
 
 // 벤더 모노그램 상태 — 발주 벤더 확정 시 문자열 fallback, 아니면 RFQ 발송 벤더의 견적 수신여부.
 // (ProjectsScreen 과 동일 규칙.)
@@ -96,6 +97,7 @@ export default function ActivityScreen() {
   const [meeting, setMeeting] = useState(false);
   const [view, setView] = useState<"deal" | "date">("deal"); // 탭: 딜별(카드) / 일자별(피드)
 
+  const [overviewId, setOverviewId] = useState<number | null>(null);
   const uid = getUserId();
 
   function load() {
@@ -347,6 +349,7 @@ export default function ActivityScreen() {
                         onDelete={(a) => removeNote(row.rfq_id, a)}
                         onSave={(a, patch) => saveNote(row.rfq_id, a, patch)}
                         onAdded={load}
+                        onOverview={() => setOverviewId(row.rfq_id)}
                         drag={makeDrag(g.phase, row.rfq_id, ordered)}
                       />
                     ));
@@ -377,13 +380,14 @@ export default function ActivityScreen() {
                       {day.projects.map((p) => (
                         <div key={p.row.rfq_id} className="act-cal-proj">
                           <div className="act-cal-phead">
-                            <Link
+                            <button
+                              type="button"
                               className="act-cal-pno"
-                              href={`/project?rfq=${p.row.rfq_id}&stage=${p.row.stage}`}
-                              title="Open deal"
+                              onClick={() => setOverviewId(p.row.rfq_id)}
+                              title="Project overview"
                             >
                               {splitProjectNo(p.row.project_no || p.row.kmaris_rfq_no || "—").code}
-                            </Link>
+                            </button>
                             <span className="act-cal-ptitle">{p.row.project_title || "(untitled)"}</span>
                           </div>
                           <ul className="act-cal-acts">
@@ -406,6 +410,29 @@ export default function ActivityScreen() {
           ) : null}
         </>
       )}
+      {overviewId != null ? (
+        <ActivityOverviewModal rfqId={overviewId} onClose={() => setOverviewId(null)} />
+      ) : null}
+    </div>
+  );
+}
+
+function ActivityOverviewModal({ rfqId, onClose }: { rfqId: number; onClose: () => void }) {
+  return (
+    <div
+      className="pl-modal-backdrop"
+      role="presentation"
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="pl-modal" role="dialog" aria-modal="true" aria-label="Project overview">
+        <div className="pl-modal-head">
+          <b>Project overview</b>
+          <button type="button" className="pl-modal-close" onClick={onClose} aria-label="Close">×</button>
+        </div>
+        <div className="pl-modal-ov">
+          <ProjectOverviewScreen rfqId={rfqId} embedded />
+        </div>
+      </div>
     </div>
   );
 }
@@ -441,6 +468,7 @@ function ActivityCard({
   onDelete,
   onSave,
   onAdded,
+  onOverview,
   drag,
 }: {
   row: PipelineRow;
@@ -450,6 +478,7 @@ function ActivityCard({
   onDelete: (a: Activity) => void;
   onSave: (a: Activity, patch: NotePatch) => Promise<void>;
   onAdded: () => void;
+  onOverview: () => void;
   drag?: CardDrag;
 }) {
   const { code, date } = splitProjectNo(row.project_no || row.kmaris_rfq_no || "—");
@@ -478,7 +507,15 @@ function ActivityCard({
         title={drag?.enabled ? "Drag to reorder" : undefined}
       >
         <div className="act-card-h">
-          <span className="act-pno">{code}</span>
+          <button
+            type="button"
+            className="act-pno"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={onOverview}
+            title="Project overview"
+          >
+            {code}
+          </button>
           {date ? <span className="act-pno-date">{date}</span> : null}
           <span className="act-spacer" />
           {row.assignee ? <span className="act-pic">{row.assignee}</span> : null}
