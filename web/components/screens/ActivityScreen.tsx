@@ -5,6 +5,8 @@ import type { DragEvent as ReactDragEvent } from "react";
 import Link from "next/link";
 import {
   fetchPipeline,
+  fetchCustomers,
+  fetchSettingsVessels,
   addRfqStageNote,
   updateRfqStageNote,
   deleteRfqStageNote,
@@ -27,7 +29,8 @@ import ActivityNoteForm, {
   initialNoteValue,
   type ActivityNoteValue,
 } from "@/components/common/ActivityNoteForm";
-import ProjectOverviewScreen from "@/components/screens/ProjectOverviewScreen";
+import { PipelineModal } from "@/components/screens/ProjectsScreen";
+import { useCachedData } from "@/lib/useCachedData";
 
 // 벤더 모노그램 상태 — 발주 벤더 확정 시 문자열 fallback, 아니면 RFQ 발송 벤더의 견적 수신여부.
 // (ProjectsScreen 과 동일 규칙.)
@@ -98,6 +101,8 @@ export default function ActivityScreen() {
   const [view, setView] = useState<"deal" | "date">("deal"); // 탭: 딜별(카드) / 일자별(피드)
 
   const [overviewId, setOverviewId] = useState<number | null>(null);
+  const { data: customers } = useCachedData("settings:customers", fetchCustomers);
+  const { data: vessels } = useCachedData("settings:vessels", fetchSettingsVessels);
   const uid = getUserId();
 
   function load() {
@@ -410,29 +415,17 @@ export default function ActivityScreen() {
           ) : null}
         </>
       )}
-      {overviewId != null ? (
-        <ActivityOverviewModal rfqId={overviewId} onClose={() => setOverviewId(null)} />
+      {overviewId != null && data?.rows.find((row) => row.rfq_id === overviewId) ? (
+        <PipelineModal
+          r={data.rows.find((row) => row.rfq_id === overviewId) as PipelineRow}
+          steps={data.steps}
+          customers={customers ?? []}
+          vessels={vessels ?? []}
+          onChanged={load}
+          onClose={() => setOverviewId(null)}
+          initialView="overview"
+        />
       ) : null}
-    </div>
-  );
-}
-
-function ActivityOverviewModal({ rfqId, onClose }: { rfqId: number; onClose: () => void }) {
-  return (
-    <div
-      className="pl-modal-backdrop"
-      role="presentation"
-      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
-    >
-      <div className="pl-modal" role="dialog" aria-modal="true" aria-label="Project overview">
-        <div className="pl-modal-head">
-          <b>Project overview</b>
-          <button type="button" className="pl-modal-close" onClick={onClose} aria-label="Close">×</button>
-        </div>
-        <div className="pl-modal-ov">
-          <ProjectOverviewScreen rfqId={rfqId} embedded />
-        </div>
-      </div>
     </div>
   );
 }
