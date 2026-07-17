@@ -193,12 +193,11 @@ def _sync_schema() -> None:
     추가해 스키마 드리프트를 방지한다."""
     try:
         from db.engine import Base
-        from init_db import migrate_columns, migrate_normalize_incoterms, migrate_seed_contacts
+        from init_db import migrate_columns, migrate_normalize_incoterms
 
         Base.metadata.create_all(bind=get_engine())
         migrate_columns()
         migrate_normalize_incoterms()   # 'EXW Busan' 등 기존 incoterms 값 표준 라벨로 1회 정규화
-        migrate_seed_contacts()         # 기존 단일 담당자 → 담당자 테이블 대표 1건으로 1회 이관
     except Exception as exc:  # 스키마 동기화 실패가 앱 기동을 막지 않도록 로그만 남긴다.
         print(f"[WARN] startup schema sync skipped: {exc}", file=sys.stderr)
     try:
@@ -2026,7 +2025,10 @@ class CustomerCreate(BaseModel):
     tax_id: str | None = ""
     payment_terms: str | None = ""   # 기본 결제조건
     logo: str | None = ""    # 회사 로고 data URL(붙여넣기). None=변경 안 함(수정 시)
-    contacts: list[ContactIn] | None = None  # None=담당자 미변경(수정 시), []=전부 삭제
+    # 담당자 1명이 여러 이메일·연락처·지역을 가질 수 있어 다중값. 첫 값=대표(문서·메일용).
+    emails: list[str] | None = None
+    phones: list[str] | None = None
+    regions: list[str] | None = None
 
 
 class VendorCreate(BaseModel):
@@ -2039,7 +2041,9 @@ class VendorCreate(BaseModel):
     address: str | None = ""
     payment_terms: str | None = ""   # 기본 결제조건
     logo: str | None = ""    # 회사 로고 data URL(붙여넣기). None=변경 안 함(수정 시)
-    contacts: list[ContactIn] | None = None  # None=담당자 미변경(수정 시), []=전부 삭제
+    emails: list[str] | None = None
+    phones: list[str] | None = None
+    regions: list[str] | None = None
 
 
 def _serialize_contacts(session, ChildModel, fk_attr: str, parent_id: int) -> list[dict]:
@@ -2072,6 +2076,33 @@ def _sync_contacts(session, ChildModel, fk_attr: str, parent, contacts) -> None:
     parent.contact = (primary.name or "").strip() if primary else ""
     parent.email = (primary.email or "").strip() if primary else ""
     parent.contact_phone = (primary.phone or "").strip() if primary else ""
+
+
+def _mv_list(raw) -> list[str]:
+    """다중값 입력(list)을 공백 제거·빈 값 제외한 문자열 리스트로 정규화."""
+    return [str(x).strip() for x in (raw or []) if str(x).strip()]
+
+
+def _apply_multi(obj, emails, phones, regions) -> None:
+    """고객/공급사에 다중 이메일·연락처·지역을 저장하고, 각 리스트의 첫 값(대표)을
+    flat 컬럼(email/contact_phone/country)에 미러링한다. 기존 소비처(PDF·메일·목록) 호환.
+
+    리스트가 None(미전송)이면 현재 flat 값을 리스트로 승격해 보존한다(빠른등록 호환)."""
+    em = _mv_list(emails) if emails is not None else _mv_list([obj.email])
+    ph = _mv_list(phones) if phones is not None else _mv_list([obj.contact_phone])
+    rg = _mv_list(regions) if regions is not None else _mv_list([obj.country])
+    obj.emails, obj.phones, obj.regions = em, ph, rg
+    obj.email = em[0] if em else ""
+    obj.contact_phone = ph[0] if ph else ""
+    obj.country = rg[0] if rg else ""
+
+
+def _multi_out(raw, flat) -> list[str]:
+    """GET 응답용 다중값 — JSON 리스트가 비었으면 flat 단일값으로 폴백(기존 레코드 표시)."""
+    lst = _mv_list(raw)
+    if not lst and (flat or "").strip():
+        lst = [flat.strip()]
+    return lst
 
 
 class VesselCreate(BaseModel):
@@ -2555,6 +2586,8 @@ __all__ = [
     "VendorContact",
     "_serialize_contacts",
     "_sync_contacts",
+    "_apply_multi",
+    "_multi_out",
     "ProformaInvoice",
     "ProformaInvoiceSave",
     "CompanyProfile",

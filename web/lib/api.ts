@@ -28,7 +28,6 @@ import type {
   DocRow,
   VendorPoRow,
   ArData,
-  ContactPerson,
   SettingsCustomer,
   SettingsVendor,
   SettingsVessel,
@@ -863,7 +862,9 @@ export function createSettingsCustomer(body: {
   tax_id?: string;
   payment_terms?: string;
   logo?: string;
-  contacts?: ContactPerson[];
+  emails?: string[];
+  phones?: string[];
+  regions?: string[];
 }): Promise<{ ok: boolean; id: number }> {
   return post("/api/admin/settings/customers", body);
 }
@@ -886,7 +887,9 @@ export function createSettingsVendor(body: {
   address?: string;
   payment_terms?: string;
   logo?: string;
-  contacts?: ContactPerson[];
+  emails?: string[];
+  phones?: string[];
+  regions?: string[];
 }): Promise<{ ok: boolean; id: number }> {
   return post("/api/admin/settings/vendors", body);
 }

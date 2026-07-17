@@ -97,10 +97,15 @@ class Customer(Base):
     name       = Column(String(200), nullable=False)
     address    = Column(String(400))
     contact    = Column(String(100))   # 담당자 이름
-    contact_phone = Column(String(50)) # 담당자 연락처
-    email      = Column(String(200))
+    contact_phone = Column(String(50)) # 대표 연락처(phones[0] 미러링)
+    email      = Column(String(200))   # 대표 이메일(emails[0] 미러링)
     tax_id     = Column(String(100))
-    country    = Column(String(100))
+    country    = Column(String(100))   # 대표 지역(regions[0] 미러링)
+    # 담당자 1명이 이메일·연락처·지역을 여러 개 가질 수 있어 다중값으로 보관. flat 컬럼은
+    # 각 리스트의 첫 값(대표)을 미러링해 기존 소비처(PDF·메일·목록)와 호환.
+    emails     = Column(JSON, default=list)
+    phones     = Column(JSON, default=list)
+    regions    = Column(JSON, default=list)
     payment_terms = Column(String(200))  # 기본 결제조건(견적 작성 시 기본값으로 사용)
     logo       = Column(Text)          # 회사 로고 이미지(data URL, 캡쳐 붙여넣기)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -112,9 +117,12 @@ class Vendor(Base):
     name           = Column(String(200), nullable=False)
     address        = Column(String(400))
     contact        = Column(String(100))   # 담당자 이름
-    contact_phone  = Column(String(50))    # 담당자 연락처
-    email          = Column(String(200))
-    country        = Column(String(100))
+    contact_phone  = Column(String(50))    # 대표 연락처(phones[0] 미러링)
+    email          = Column(String(200))   # 대표 이메일(emails[0] 미러링)
+    country        = Column(String(100))   # 대표 지역(regions[0] 미러링)
+    emails         = Column(JSON, default=list)   # 다중 이메일(첫 값=대표)
+    phones         = Column(JSON, default=list)   # 다중 연락처(첫 값=대표)
+    regions        = Column(JSON, default=list)   # 다중 지역(첫 값=대표)
     specialization = Column(String(200))
     payment_terms  = Column(String(200))  # 기본 결제조건(견적 작성 시 기본값으로 사용)
     logo           = Column(Text)          # 회사 로고 이미지(data URL, 캡쳐 붙여넣기)

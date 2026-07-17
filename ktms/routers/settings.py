@@ -14,8 +14,8 @@ from _core import (
     ScheduleEvent,
     VendorContact,
     VendorRFQ,
-    _serialize_contacts,
-    _sync_contacts,
+    _apply_multi,
+    _multi_out,
     Depends,
     EmailTemplate,
     EmailTemplateSave,
@@ -97,7 +97,9 @@ def settings_customers():
                  "address": c.address or "", "tax_id": c.tax_id or "",
                  "payment_terms": getattr(c, "payment_terms", None) or "",
                  "logo": getattr(c, "logo", None) or "",
-                 "contacts": _serialize_contacts(s, CustomerContact, "customer_id", c.id)}
+                 "emails": _multi_out(getattr(c, "emails", None), c.email),
+                 "phones": _multi_out(getattr(c, "phones", None), getattr(c, "contact_phone", None)),
+                 "regions": _multi_out(getattr(c, "regions", None), c.country)}
                 for c in s.query(Customer).order_by(Customer.name).all()]
     finally:
         s.close()
@@ -116,9 +118,8 @@ def create_customer(body: CustomerCreate):
                      payment_terms=body.payment_terms or "",
                      logo=body.logo or "")
         s.add(c)
-        s.flush()  # c.id 확보 후 담당자 연결
-        # 담당자 목록이 오면 대표를 flat 필드로 미러링(위 contact/email 은 덮어써짐).
-        _sync_contacts(s, CustomerContact, "customer_id", c, body.contacts)
+        # 다중 이메일·연락처·지역 저장 + 첫 값(대표)을 flat 컬럼에 미러링.
+        _apply_multi(c, body.emails, body.phones, body.regions)
         s.commit()
         return {"ok": True, "id": c.id}
     finally:
@@ -142,8 +143,8 @@ def update_customer(row_id: int, body: CustomerCreate):
         c.payment_terms = body.payment_terms or ""
         if body.logo is not None:
             c.logo = body.logo
-        # 담당자 목록이 오면 교체 + 대표를 flat 필드로 미러링(위 contact/email 은 덮어써짐).
-        _sync_contacts(s, CustomerContact, "customer_id", c, body.contacts)
+        # 다중 이메일·연락처·지역 갱신 + 첫 값(대표)을 flat 컬럼에 미러링.
+        _apply_multi(c, body.emails, body.phones, body.regions)
         s.commit()
         return {"ok": True, "id": c.id}
     finally:
@@ -192,7 +193,9 @@ def settings_vendors():
                  "country": v.country or "", "address": v.address or "",
                  "payment_terms": getattr(v, "payment_terms", None) or "",
                  "logo": getattr(v, "logo", None) or "",
-                 "contacts": _serialize_contacts(s, VendorContact, "vendor_id", v.id)}
+                 "emails": _multi_out(getattr(v, "emails", None), v.email),
+                 "phones": _multi_out(getattr(v, "phones", None), getattr(v, "contact_phone", None)),
+                 "regions": _multi_out(getattr(v, "regions", None), v.country)}
                 for v in s.query(Vendor).order_by(Vendor.name).all()]
     finally:
         s.close()
@@ -211,8 +214,7 @@ def create_vendor(body: VendorCreate):
                    payment_terms=body.payment_terms or "",
                    logo=body.logo or "")
         s.add(v)
-        s.flush()  # v.id 확보 후 담당자 연결
-        _sync_contacts(s, VendorContact, "vendor_id", v, body.contacts)
+        _apply_multi(v, body.emails, body.phones, body.regions)
         s.commit()
         return {"ok": True, "id": v.id}
     finally:
@@ -236,7 +238,7 @@ def update_vendor(row_id: int, body: VendorCreate):
         v.payment_terms = body.payment_terms or ""
         if body.logo is not None:
             v.logo = body.logo
-        _sync_contacts(s, VendorContact, "vendor_id", v, body.contacts)
+        _apply_multi(v, body.emails, body.phones, body.regions)
         s.commit()
         return {"ok": True, "id": v.id}
     finally:

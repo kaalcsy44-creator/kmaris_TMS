@@ -5660,82 +5660,52 @@ table.mini .num {
 .logo-field {
   grid-column: 1 / -1;
 }
-/* 회사 담당자(1:N) 편집기 — 폼 전체폭. 여러 담당자 행을 추가·삭제하고 대표를 지정. */
-.contacts-field {
+/* 다중값 필드(이메일·연락처·지역) — 폼 전체폭. 값을 여러 개 추가·삭제, 맨 위=대표. */
+.mv-field {
   grid-column: 1 / -1;
 }
-.contacts-list {
+.mv-hint {
+  font-weight: 400;
+  font-size: 11px;
+  color: var(--muted, #7c8aa0);
+}
+.mv-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
   margin: 4px 0 6px;
 }
-.contacts-empty {
-  color: var(--muted, #7c8aa0);
-  font-size: 13px;
-  padding: 6px 2px;
-}
-/* 담당자 1행 = 필드 카드(2열, 좁으면 1열로 접힘) + 우측 대표/삭제. 폭을 강제하지 않아
-   모달을 넘치게 하지 않는다(min-width:0 로 컨테이너 폭 안에서 축소). */
-.contact-row {
+.mv-row {
   display: flex;
-  gap: 8px;
-  align-items: stretch;
+  align-items: center;
+  gap: 6px;
   min-width: 0;
-  padding: 6px;
-  border: 1px solid var(--border, #d8dee6);
-  border-radius: 6px;
-  background: var(--surface, #fff);
 }
-.contact-row.is-primary {
-  border-color: var(--accent, #0055a8);
-  background: var(--accent-soft, #eaf3ff);
-}
-.contact-fields {
+.mv-in {
   flex: 1;
   min-width: 0;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
-}
-.contact-side {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 6px;
-  flex: 0 0 auto;
-}
-.contact-primary {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--muted, #52627a);
-  white-space: nowrap;
-  cursor: pointer;
-}
-.contact-in {
-  min-width: 0;
-  width: 100%;
-  padding: 5px 8px;
+  padding: 6px 8px;
   border: 1px solid var(--border, #d8dee6);
   border-radius: 5px;
   font-size: 13px;
 }
-.contact-del {
+.mv-primary {
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent, #0055a8);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+.mv-del {
+  flex: 0 0 auto;
   padding: 2px 8px;
 }
-.contact-more {
+.mv-more {
   color: var(--muted, #7c8aa0);
   font-size: 12px;
   font-weight: 600;
-}
-@media (max-width: 560px) {
-  .contact-fields {
-    grid-template-columns: 1fr;
-  }
 }
 .logo-drop {
   display: flex;

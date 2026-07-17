@@ -51,11 +51,17 @@ _MIGRATIONS = {
         "contact_phone": "VARCHAR(50)",
         "payment_terms": "VARCHAR(200)",
         "logo": "TEXT",
+        "emails": "JSON",
+        "phones": "JSON",
+        "regions": "JSON",
     },
     "vendors": {
         "contact_phone": "VARCHAR(50)",
         "payment_terms": "VARCHAR(200)",
         "logo": "TEXT",
+        "emails": "JSON",
+        "phones": "JSON",
+        "regions": "JSON",
     },
     "vessels": {
         "vessel_type": "VARCHAR(60)",

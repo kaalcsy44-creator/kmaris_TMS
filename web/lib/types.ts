@@ -34,14 +34,8 @@ export type RfqOverview = {
 
 export type CustomerOption = { id: number; name: string; contact?: string; logo?: string };
 
-// 회사(고객사·공급사) 담당자 1명. 회사 1 : 담당자 N. 대표(is_primary)가 flat 필드로 미러링된다.
-export type ContactPerson = {
-  name: string;
-  email: string;
-  phone: string;
-  position: string;
-  is_primary: boolean;
-};
+// 레코드 1건 = 담당자 1명(person-centric). 이메일·연락처·지역은 여러 개 등록 가능하며
+// 각 리스트의 첫 값(대표)이 flat contact 필드로 미러링돼 문서·메일에 쓰인다.
 export type SettingsCustomer = {
   id: number;
   name: string;
@@ -53,7 +47,9 @@ export type SettingsCustomer = {
   tax_id: string;
   payment_terms: string;
   logo: string;
-  contacts: ContactPerson[];
+  emails: string[];
+  phones: string[];
+  regions: string[];
 };
 export type SettingsVendor = {
   id: number;
@@ -66,7 +62,9 @@ export type SettingsVendor = {
   address: string;
   payment_terms: string;
   logo: string;
-  contacts: ContactPerson[];
+  emails: string[];
+  phones: string[];
+  regions: string[];
 };
 export type SettingsVessel = {
   id: number;

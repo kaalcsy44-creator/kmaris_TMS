@@ -49,7 +49,6 @@ import type { PermissionsConfig, RolePermRow, EmailTemplatesData } from "@/lib/a
 import type { PermGrid } from "@/lib/auth";
 import type {
   CompanyProfile,
-  ContactPerson,
   CustomerOption,
   SettingsCustomer,
   SettingsItem,
@@ -775,8 +774,8 @@ function CustomersTab() {
   return (
     <MasterSection<SettingsCustomer>
       title="Customer Management"
-      empty={{ id: 0, name: "", contact: "", contact_phone: "", email: "", country: "", address: "", tax_id: "", payment_terms: "", logo: "", contacts: [] }}
-      load={async () => (await fetchSettingsCustomers()).map(withSeededContacts)}
+      empty={{ id: 0, name: "", contact: "", contact_phone: "", email: "", country: "", address: "", tax_id: "", payment_terms: "", logo: "", emails: [], phones: [], regions: [] }}
+      load={fetchSettingsCustomers}
       create={createSettingsCustomer}
       update={updateSettingsCustomer}
       remove={deleteSettingsCustomer}
@@ -788,23 +787,22 @@ function CustomersTab() {
             <span className="cust-name-text">{r.name || "—"}</span>
           </span>
         )],
-        ["country", "Country"],
-        ["contact", "Contact", (r) => <ContactCell row={r} />],
-        ["email", "Email"],
+        ["country", "Region", (r) => <MultiCell values={r.regions} flat={r.country} />],
+        ["contact", "Contact"],
+        ["email", "Email", (r) => <MultiCell values={r.emails} flat={r.email} />],
       ]}
       fields={[
         ["name", "Customer *"],
-        ["country", "Country"],
+        ["contact", "Contact name"],
         ["address", "Address"],
         ["tax_id", "Tax ID / Business No."],
       ]}
       required="name"
       extraForm={(form, setForm) => (
         <>
-          <ContactsEditor
-            contacts={form.contacts}
-            onChange={(contacts) => setForm({ ...form, contacts })}
-          />
+          <MultiValueField label="Email" placeholder="name@company.com" values={form.emails} onChange={(emails) => setForm({ ...form, emails })} />
+          <MultiValueField label="Phone" placeholder="+65 1234 5678" values={form.phones} onChange={(phones) => setForm({ ...form, phones })} />
+          <MultiValueField label="Region" placeholder="Singapore" values={form.regions} onChange={(regions) => setForm({ ...form, regions })} />
           <PaymentTermsField
             value={form.payment_terms}
             onChange={(payment_terms) => setForm({ ...form, payment_terms })}
@@ -816,86 +814,62 @@ function CustomersTab() {
         </>
       )}
       allowCopy
-      copyHint="Copies the company info (incl. contacts) into a new record."
+      copyHint="Copies this info into a new record — keep the company, change the contact/email/region for a different person."
     />
   );
 }
 
-// 로드된 회사 레코드에 담당자 배열을 보장 — 담당자 행이 없고 flat 담당자 정보가 있으면
-// 그 값을 대표 1건으로 채워 편집기에서 보이게 한다(저장 시 flat 정보 유실 방지).
-function withSeededContacts<T extends { contact: string; contact_phone: string; email: string; contacts?: ContactPerson[] }>(r: T): T {
-  const list = r.contacts ?? [];
-  if (list.length === 0 && (r.contact || r.email || r.contact_phone)) {
-    return { ...r, contacts: [{ name: r.contact || "", email: r.email || "", phone: r.contact_phone || "", position: "", is_primary: true }] };
-  }
-  return { ...r, contacts: list };
-}
-
-// 목록 Contact 셀 — 대표 담당자 + 추가 인원 수(예: "Gin Zhang 외 1명").
-function ContactCell({ row }: { row: { contact: string; contacts?: ContactPerson[] } }) {
-  const list = row.contacts ?? [];
-  const primary = list.find((c) => c.is_primary) ?? list[0];
-  const name = primary?.name || row.contact || "—";
+// 목록 셀 — 대표(첫 값) + 추가 개수(예: "a@x.com +1"). 리스트가 비면 flat 값 표시.
+function MultiCell({ values, flat }: { values?: string[]; flat: string }) {
+  const list = (values ?? []).filter(Boolean);
+  const first = list[0] || flat || "—";
   const extra = list.length > 1 ? list.length - 1 : 0;
   return (
     <span>
-      {name}
-      {extra > 0 ? <span className="contact-more"> +{extra}</span> : null}
+      {first}
+      {extra > 0 ? <span className="mv-more"> +{extra}</span> : null}
     </span>
   );
 }
 
-// 회사 담당자(회사 1:N) 편집기 — 이름/직책/이메일/전화 행을 여러 개 추가·삭제하고
-// 라디오로 대표를 지정한다. 대표는 서버에서 회사 flat contact/email 로 미러링된다.
-function ContactsEditor({
-  contacts,
+// 다중값 입력(이메일·연락처·지역 등) — 값 여러 개를 추가·삭제. 맨 위 = 대표(문서·메일용).
+function MultiValueField({
+  label,
+  placeholder,
+  values,
   onChange,
 }: {
-  contacts: ContactPerson[];
-  onChange: (next: ContactPerson[]) => void;
+  label: string;
+  placeholder?: string;
+  values: string[];
+  onChange: (next: string[]) => void;
 }) {
-  const list = contacts ?? [];
-  function patch(i: number, key: keyof ContactPerson, value: string | boolean) {
-    onChange(list.map((c, idx) => (idx === i ? { ...c, [key]: value } : c)));
-  }
-  function setPrimary(i: number) {
-    onChange(list.map((c, idx) => ({ ...c, is_primary: idx === i })));
+  const list = values.length ? values : [""];
+  function set(i: number, v: string) {
+    onChange(list.map((x, idx) => (idx === i ? v : x)));
   }
   function add() {
-    onChange([...list, { name: "", email: "", phone: "", position: "", is_primary: list.length === 0 }]);
+    onChange([...list, ""]);
   }
   function remove(i: number) {
     const next = list.filter((_, idx) => idx !== i);
-    // 대표를 지웠으면 첫 항목을 대표로 승격.
-    if (next.length && !next.some((c) => c.is_primary)) next[0] = { ...next[0], is_primary: true };
-    onChange(next);
+    onChange(next.length ? next : [""]);
   }
   return (
-    <div className="form-field contacts-field">
-      <span>Contacts (multiple people supported)</span>
-      <div className="contacts-list">
-        {list.length === 0 ? (
-          <div className="contacts-empty">No contact yet. Add the people you deal with at this company.</div>
-        ) : null}
-        {list.map((c, i) => (
-          <div key={i} className={`contact-row${c.is_primary ? " is-primary" : ""}`}>
-            <div className="contact-fields">
-              <input className="contact-in" placeholder="Name" value={c.name} onChange={(e) => patch(i, "name", e.target.value)} />
-              <input className="contact-in" placeholder="Position" value={c.position} onChange={(e) => patch(i, "position", e.target.value)} />
-              <input className="contact-in" placeholder="Email" value={c.email} onChange={(e) => patch(i, "email", e.target.value)} />
-              <input className="contact-in" placeholder="Phone" value={c.phone} onChange={(e) => patch(i, "phone", e.target.value)} />
-            </div>
-            <div className="contact-side">
-              <label className="contact-primary" title="Primary contact (shown on documents & emails)">
-                <input type="radio" checked={!!c.is_primary} onChange={() => setPrimary(i)} />
-                <span>Primary</span>
-              </label>
-              <button type="button" className="btn sm danger contact-del" onClick={() => remove(i)} title="Remove">✕</button>
-            </div>
+    <div className="form-field mv-field">
+      <span>{label} <span className="mv-hint">(multiple — top one is primary)</span></span>
+      <div className="mv-list">
+        {list.map((v, i) => (
+          <div key={i} className="mv-row">
+            <input className="mv-in" placeholder={placeholder} value={v} onChange={(e) => set(i, e.target.value)} />
+            {i === 0 ? <span className="mv-primary" title="Used on documents & emails">Primary</span> : null}
+            {list.length > 1 ? (
+              <button type="button" className="btn sm danger mv-del" onClick={() => remove(i)} title="Remove">✕</button>
+            ) : null}
           </div>
         ))}
       </div>
-      <button type="button" className="btn sm contact-add" onClick={add}>+ Add contact</button>
+      <button type="button" className="btn sm mv-add" onClick={add}>+ Add {label.toLowerCase()}</button>
     </div>
   );
 }
@@ -992,8 +966,8 @@ function VendorsTab() {
   return (
     <MasterSection<SettingsVendor>
       title="Vendor Management"
-      empty={{ id: 0, name: "", contact: "", contact_phone: "", email: "", specialization: "", country: "", address: "", payment_terms: "", logo: "", contacts: [] }}
-      load={async () => (await fetchSettingsVendors()).map(withSeededContacts)}
+      empty={{ id: 0, name: "", contact: "", contact_phone: "", email: "", specialization: "", country: "", address: "", payment_terms: "", logo: "", emails: [], phones: [], regions: [] }}
+      load={fetchSettingsVendors}
       create={createSettingsVendor}
       update={updateSettingsVendor}
       remove={deleteSettingsVendor}
@@ -1005,24 +979,23 @@ function VendorsTab() {
             <span className="cust-name-text">{r.name || "—"}</span>
           </span>
         )],
-        ["country", "Country"],
-        ["contact", "Contact", (r) => <ContactCell row={r} />],
-        ["email", "Email"],
+        ["country", "Region", (r) => <MultiCell values={r.regions} flat={r.country} />],
+        ["contact", "Contact"],
+        ["email", "Email", (r) => <MultiCell values={r.emails} flat={r.email} />],
         ["specialization", "Specialization"],
       ]}
       fields={[
         ["name", "Vendor *"],
-        ["country", "Country"],
+        ["contact", "Contact name"],
         ["address", "Address"],
         ["specialization", "Specialization"],
       ]}
       required="name"
       extraForm={(form, setForm) => (
         <>
-          <ContactsEditor
-            contacts={form.contacts}
-            onChange={(contacts) => setForm({ ...form, contacts })}
-          />
+          <MultiValueField label="Email" placeholder="name@company.com" values={form.emails} onChange={(emails) => setForm({ ...form, emails })} />
+          <MultiValueField label="Phone" placeholder="+65 1234 5678" values={form.phones} onChange={(phones) => setForm({ ...form, phones })} />
+          <MultiValueField label="Region" placeholder="Singapore" values={form.regions} onChange={(regions) => setForm({ ...form, regions })} />
           <PaymentTermsField
             value={form.payment_terms}
             onChange={(payment_terms) => setForm({ ...form, payment_terms })}
@@ -1034,7 +1007,7 @@ function VendorsTab() {
         </>
       )}
       allowCopy
-      copyHint="Copies the company info (incl. contacts) into a new record."
+      copyHint="Copies this info into a new record — keep the company, change the contact/email/region for a different person."
     />
   );
 }
