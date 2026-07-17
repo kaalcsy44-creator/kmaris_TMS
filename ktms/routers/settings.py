@@ -6,7 +6,14 @@ from _core import (
     Customer,
     CustomerContact,
     CustomerCreate,
+    MarketingActivity,
+    Order,
+    PurchaseOrder,
+    Quotation,
+    RFQ,
+    ScheduleEvent,
     VendorContact,
+    VendorRFQ,
     _serialize_contacts,
     _sync_contacts,
     Depends,
@@ -150,7 +157,22 @@ def delete_customer(row_id: int):
         c = s.query(Customer).filter_by(id=row_id).first()
         if not c:
             raise HTTPException(status_code=404, detail="Customer를 찾을 수 없습니다.")
-        # 자식 담당자 먼저 삭제(FK 제약 회피).
+        # 거래 기록(RFQ·견적·오더)이 있으면 삭제 불가 — 데이터 손상 방지, 명확히 안내.
+        n_rfq = s.query(RFQ).filter_by(customer_id=c.id).count()
+        n_qtn = s.query(Quotation).filter_by(customer_id=c.id).count()
+        n_ord = s.query(Order).filter_by(customer_id=c.id).count()
+        if n_rfq or n_qtn or n_ord:
+            parts = []
+            if n_rfq: parts.append(f"RFQ {n_rfq}건")
+            if n_qtn: parts.append(f"견적 {n_qtn}건")
+            if n_ord: parts.append(f"오더 {n_ord}건")
+            raise HTTPException(status_code=400,
+                detail=f"이 고객사에 연결된 {' · '.join(parts)}이(가) 있어 삭제할 수 없습니다. 거래 기록이 있는 고객사는 삭제 대신 보관하세요.")
+        # 소프트 링크(선택 참조: 선박·마케팅·일정)는 연결만 해제하고 고객사를 삭제한다.
+        s.query(Vessel).filter_by(customer_id=c.id).update({Vessel.customer_id: None}, synchronize_session=False)
+        s.query(MarketingActivity).filter_by(customer_id=c.id).update({MarketingActivity.customer_id: None}, synchronize_session=False)
+        s.query(ScheduleEvent).filter_by(customer_id=c.id).update({ScheduleEvent.customer_id: None}, synchronize_session=False)
+        # 자식 담당자 삭제(FK 제약 회피) 후 고객사 삭제.
         s.query(CustomerContact).filter_by(customer_id=c.id).delete(synchronize_session=False)
         s.flush()
         s.delete(c)
@@ -228,6 +250,15 @@ def delete_vendor(row_id: int):
         v = s.query(Vendor).filter_by(id=row_id).first()
         if not v:
             raise HTTPException(status_code=404, detail="Vendor를 찾을 수 없습니다.")
+        # 거래 기록(발주 RFQ·발주서)이 있으면 삭제 불가.
+        n_vrfq = s.query(VendorRFQ).filter_by(vendor_id=v.id).count()
+        n_po = s.query(PurchaseOrder).filter_by(vendor_id=v.id).count()
+        if n_vrfq or n_po:
+            parts = []
+            if n_vrfq: parts.append(f"발주 RFQ {n_vrfq}건")
+            if n_po: parts.append(f"발주서 {n_po}건")
+            raise HTTPException(status_code=400,
+                detail=f"이 공급사에 연결된 {' · '.join(parts)}이(가) 있어 삭제할 수 없습니다. 거래 기록이 있는 공급사는 삭제 대신 보관하세요.")
         s.query(VendorContact).filter_by(vendor_id=v.id).delete(synchronize_session=False)
         s.flush()
         s.delete(v)
