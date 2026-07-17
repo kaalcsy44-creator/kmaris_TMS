@@ -8287,8 +8287,9 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 .pjx-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px;
   background: #fff; }
 .pjx-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
-.pjx-table th, .pjx-table td { padding: 7px 10px; text-align: left;
-  border-bottom: 1px solid var(--line); vertical-align: middle; }
+/* 한 프로젝트 = 한 행이되 셀 안이 여러 줄이라, 셀은 위로 붙여 각 줄이 나란히 읽히게. */
+.pjx-table th, .pjx-table td { padding: 9px 10px; text-align: left;
+  border-bottom: 1px solid var(--line); vertical-align: top; }
 .pjx-table thead th { background: var(--head-bg); color: var(--navy); font-size: 10px;
   font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; }
 .pjx-table tbody tr:last-child td { border-bottom: 0; }
@@ -8303,23 +8304,34 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 .pjx-open b { font-size: 13px; }
 .pjx-open:hover b { text-decoration: underline; }
 .pjx-nodate { font-size: 10.5px; color: var(--muted); }
-.pjx-c-title { color: var(--ink); font-weight: 600; }
-.pjx-c-vessel { color: #47536b; }
+/* 식별 줄 = 번호 · 타입 · 선박이 한 줄에, 제목은 그 아래 — 좁아지면 선박부터 접힌다. */
+.pjx-idline { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.pjx-vessel { font-size: 11.5px; color: #47536b; }
+.pjx-title { margin-top: 3px; color: var(--ink); font-weight: 600; line-height: 1.35; }
+.pjx-c-no { min-width: 240px; }
 .pjx-c-stage { white-space: nowrap; }
 .pjx-stage-no { font-size: 10.5px; font-weight: 800; color: var(--blue); margin-right: 6px;
   font-variant-numeric: tabular-nums; }
 .pjx-stage-label { font-size: 11.5px; color: #47536b; }
 .pjx-amt { font-weight: 700; color: var(--navy); font-variant-numeric: tabular-nums; }
-/* 이중통화 금액은 통화 단위로 한 줄씩 — 좁은 열에서도 숫자가 잘리지 않는다(DualAmount). */
-.pjx-amt-cur { display: block; white-space: nowrap; }
+/* 이중통화 금액은 통화 단위로 끊어 두되, 폭이 남으면 한 줄에 나란히(DualAmount). */
+.pjx-amt { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; gap: 2px 8px; }
+.pjx-amt-cur { white-space: nowrap; }
 .pjx-c-pic { font-size: 11.5px; color: #47536b; white-space: nowrap; }
-/* ── 추가 열: 고객사 담당자 · Vendor · Purchase · Margin ─────────────────── */
-.pjx-c-contact { font-size: 11.5px; color: #47536b; }
+/* ── 고객사 담당자 · Vendor · 금액 묶음 ──────────────────────────────────── */
+.pjx-contact { margin-top: 3px; font-size: 11.5px; color: #47536b; }
 .pjx-c-vendor { color: #47536b; }
 /* 벤더/고객명은 길면 줄바꿈 허용(열 폭이 무한정 늘지 않게). */
 .pjx-c-vendor .cust-name-text, .pjx-c-cust .cust-name-text { white-space: normal; }
-/* Margin 셀 = 금액 + 마진율(%)을 오른쪽 정렬로 위아래. */
-.pjx-margin-wrap { display: inline-flex; flex-direction: column; align-items: flex-end; gap: 1px; }
+/* 금액 셀 = 매출·매입·마진 세 줄. 이름표는 왼쪽, 숫자는 오른쪽으로 밀어 자릿수를 맞춘다. */
+.pjx-c-money { min-width: 200px; }
+.pjx-money-line { display: flex; align-items: baseline; justify-content: space-between;
+  gap: 10px; }
+.pjx-money-line + .pjx-money-line { margin-top: 3px; }
+.pjx-money-label { font-size: 10px; font-weight: 800; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.04em; }
+.pjx-money-val { display: inline-flex; align-items: baseline; flex-wrap: wrap;
+  justify-content: flex-end; gap: 2px 8px; }
 .pjx-margin-pct { font-size: 10.5px; font-weight: 700; color: var(--muted);
   font-variant-numeric: tabular-nums; }
 

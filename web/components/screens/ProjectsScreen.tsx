@@ -77,24 +77,18 @@ export default function ProjectsScreen() {
         <table className="pjx-table">
           <thead>
             <tr>
-              <th className="pjx-c-no">Project No.</th>
-              <th className="pjx-c-type">Type</th>
+              <th className="pjx-c-no">Project</th>
               <th className="pjx-c-cust">Customer</th>
-              <th className="pjx-c-contact">Contact</th>
-              <th className="pjx-c-vessel">Vessel</th>
-              <th className="pjx-c-title">Project</th>
-              <th className="pjx-c-stage">Stage</th>
               <th className="pjx-c-vendor">Vendor</th>
-              <th className="pjx-c-amt num">Sales</th>
-              <th className="pjx-c-amt num">Purchase</th>
-              <th className="pjx-c-margin num">Margin</th>
+              <th className="pjx-c-stage">Stage</th>
+              <th className="pjx-c-money num">Amounts</th>
               <th className="pjx-c-pic">PIC</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td className="pjx-empty" colSpan={12}>
+                <td className="pjx-empty" colSpan={6}>
                   {q.trim() ? `No projects match “${q.trim()}”.` : "No projects yet."}
                 </td>
               </tr>
@@ -140,25 +134,26 @@ function ProjectRow({ r, steps }: { r: PipelineRow; steps: string[] }) {
   return (
     <tr className={r.cancelled ? "closed" : undefined}>
       <td className="pjx-c-no">
-        {/* 행 전체가 아니라 번호를 링크로 — 행 전체를 <Link> 로 감싸면 표 구조가 깨지고,
-            onClick 라우팅은 새 탭(⌘·Ctrl 클릭)·링크 복사를 잃는다. */}
-        <Link className="pjx-open" href={`/project/${r.rfq_id}`} title="Open project overview">
-          <b>{code}</b>
-          {date ? <span className="pjx-nodate">{date}</span> : null}
-        </Link>
-      </td>
-      <td className="pjx-c-type">
-        <WorkTypeBadge type={r.work_type} />
+        <div className="pjx-idline">
+          {/* 행 전체가 아니라 번호를 링크로 — 행 전체를 <Link> 로 감싸면 표 구조가 깨지고,
+              onClick 라우팅은 새 탭(⌘·Ctrl 클릭)·링크 복사를 잃는다. */}
+          <Link className="pjx-open" href={`/project/${r.rfq_id}`} title="Open project overview">
+            <b>{code}</b>
+            {date ? <span className="pjx-nodate">{date}</span> : null}
+          </Link>
+          <WorkTypeBadge type={r.work_type} />
+          {vessels ? <span className="pjx-vessel">{vessels}</span> : null}
+        </div>
+        <div className="pjx-title">
+          {r.project_title || <span className="muted">(untitled project)</span>}
+        </div>
       </td>
       <td className="pjx-c-cust">
         {r.customer ? <CustomerName name={r.customer} /> : <span className="muted">—</span>}
+        <div className="pjx-contact">{r.contact_person || <span className="muted">—</span>}</div>
       </td>
-      <td className="pjx-c-contact">
-        {r.contact_person || <span className="muted">—</span>}
-      </td>
-      <td className="pjx-c-vessel">{vessels || <span className="muted">—</span>}</td>
-      <td className="pjx-c-title">
-        {r.project_title || <span className="muted">(untitled project)</span>}
+      <td className="pjx-c-vendor">
+        {vendor ? <VendorName name={vendor} /> : <span className="muted">—</span>}
       </td>
       <td className="pjx-c-stage">
         <span className="pjx-stage-no">
@@ -166,32 +161,38 @@ function ProjectRow({ r, steps }: { r: PipelineRow; steps: string[] }) {
         </span>
         <span className="pjx-stage-label">{r.cancelled ? tr(r.status) : label}</span>
       </td>
-      <td className="pjx-c-vendor">
-        {vendor ? <VendorName name={vendor} /> : <span className="muted">—</span>}
-      </td>
-      <td className="pjx-c-amt num">
-        {r.sales_total ? <DualAmount value={r.sales_total} /> : <span className="muted">—</span>}
-      </td>
-      <td className="pjx-c-amt num">
-        {r.purchase_total ? (
-          <DualAmount value={r.purchase_total} />
-        ) : (
-          <span className="muted">—</span>
-        )}
-      </td>
-      <td className="pjx-c-margin num">
-        {r.margin_amount ? (
-          <span className="pjx-margin-wrap">
-            <DualAmount value={r.margin_amount} />
-            {r.margin_pct != null ? (
-              <span className="pjx-margin-pct">{r.margin_pct}%</span>
-            ) : null}
-          </span>
-        ) : (
-          <span className="muted">—</span>
-        )}
+      <td className="pjx-c-money num">
+        <MoneyLine label="Sales" value={r.sales_total} />
+        <MoneyLine label="Purchase" value={r.purchase_total} />
+        <MoneyLine label="Margin" value={r.margin_amount} pct={r.margin_pct} />
       </td>
       <td className="pjx-c-pic">{r.assignee || <span className="muted">—</span>}</td>
     </tr>
+  );
+}
+
+/** 금액 한 줄 — 왼쪽에 항목명, 오른쪽에 금액. 세 줄이 한 셀에 쌓이므로 이름표가 있어야
+    어느 숫자가 매출·매입·마진인지 열 머리글 없이도 읽힌다. */
+function MoneyLine({
+  label,
+  value,
+  pct,
+}: {
+  label: string;
+  value?: string | null;
+  pct?: number | null;
+}) {
+  return (
+    <div className="pjx-money-line">
+      <span className="pjx-money-label">{label}</span>
+      {value ? (
+        <span className="pjx-money-val">
+          <DualAmount value={value} />
+          {pct != null ? <span className="pjx-margin-pct">{pct}%</span> : null}
+        </span>
+      ) : (
+        <span className="muted">—</span>
+      )}
+    </div>
   );
 }
