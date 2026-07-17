@@ -1,6 +1,8 @@
 """K-Maris TMS — dashboard routes (split from admin_api.py; behavior unchanged)."""
 from __future__ import annotations
 
+from sqlalchemy.orm import defer
+
 from _core import (
     ARRecord,
     ARStatus,
@@ -510,7 +512,11 @@ def dashboard():
         cust_names = {c.id: c.name for c in s.query(Customer).all()}
         vessel_names = {v.id: v.name for v in s.query(Vessel).all()}
         rfqs = s.query(RFQ).all()
-        orders = s.query(Order).all()
+        # 이 orders 리스트는 status 카운트(active/pending)에만 쓰인다. 품목(items JSON)은
+        # 여기서 접근하지 않으므로(스냅샷의 item_count 는 별도 _order_for_rfq 조회에서 옴)
+        # items 를 defer 해 Neon 전송량을 줄인다. (defer 한 컬럼을 이 인스턴스에서 실제로
+        # 읽으면 지연 로드가 발생하므로, 미사용이 확실한 쿼리에만 적용한다.)
+        orders = s.query(Order).options(defer(Order.items)).all()
         quotes = s.query(Quotation).all()
         ars = s.query(ARRecord).all()
 
@@ -708,7 +714,9 @@ def statistics(months: int = 12):
         cust_names = {c.id: c.name for c in s.query(Customer).all()}
         orders_all = s.query(Order).all()
         order_map = {o.id: o for o in orders_all}
-        rfq_map = {r.id: r for r in s.query(RFQ).all()}
+        # statistics 전체에서 RFQ.items 는 사용하지 않는다(금액은 견적·오더·발주 items 로
+        # 계산). 큰 품목 JSON 을 빼고 로드해 전송량을 줄인다.
+        rfq_map = {r.id: r for r in s.query(RFQ).options(defer(RFQ.items)).all()}
 
         # ── 월 버킷(고정 시작월 STATS_START_YM ~ 이번 달, KST) ────────────────────
         # 통계 그래프는 2026-05 부터 누적해서 보여준다(요청). 최대 36개월로 안전 제한.
@@ -740,7 +748,9 @@ def statistics(months: int = 12):
         # 세금계산서로 연결된다. (예전엔 stage_dates["11"](=결제완료, 게다가 수동)을
         # 읽어 세금계산서를 발행해도 매출이 0으로 잡히던 버그. 11단계 재편성으로
         # 'Tax Invoice Issued' 는 10번이 됐고, 실제 발행일은 문서(date)에 있다.)
-        _all_ci = s.query(CommercialInvoice).all()
+        # 이 스캔은 ci_no·order_id·id 매핑용(발행월 판정). 품목(items)은 아래 품목별
+        # 매출 집계에서 CI 를 다시 조회할 때만 필요하므로 여기선 defer 한다.
+        _all_ci = s.query(CommercialInvoice).options(defer(CommercialInvoice.items)).all()
         _ci_by_no = {c.ci_no: c for c in _all_ci if c.ci_no}
         _ci_by_order: dict = {}
         for c in _all_ci:
