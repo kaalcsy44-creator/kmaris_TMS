@@ -718,6 +718,65 @@ def statistics(months: int = 12):
         # 계산). 큰 품목 JSON 을 빼고 로드해 전송량을 줄인다.
         rfq_map = {r.id: r for r in s.query(RFQ).options(defer(RFQ.items)).all()}
 
+        # ── 벌크 로드(요청당 1회 스캔) ────────────────────────────────────────────
+        # 종전엔 같은 테이블(견적·AR·발주·CI·벤더견적)을 이 함수 안에서 여러 번 풀스캔하고
+        # 오더→RFQ, RFQ→오더/견적/발주 해석을 헬퍼(N+1)로 반복했다. 여기서 한 번만 로드해
+        # 맵으로 재사용한다(결과·동작은 종전과 동일, DB 왕복·Neon 전송만 감소).
+        all_quotations = s.query(Quotation).all()
+        qtn_by_id = {q.id: q for q in all_quotations}
+        qtns_by_rfq: dict[int, list] = {}
+        for _q in all_quotations:
+            if _q.rfq_id:
+                qtns_by_rfq.setdefault(_q.rfq_id, []).append(_q)
+
+        all_ars = s.query(ARRecord).all()
+
+        all_pos = s.query(PurchaseOrder).all()
+        pos_by_order: dict[int, list] = {}
+        for _po in all_pos:
+            if _po.order_id:
+                pos_by_order.setdefault(_po.order_id, []).append(_po)
+
+        all_ci = s.query(CommercialInvoice).all()
+
+        all_vrfqs = s.query(VendorRFQ).all()
+        _vrfq_rfq = {x.id: x.rfq_id for x in all_vrfqs}
+        all_vqs = s.query(VendorQuote).all()
+        vqs_by_rfq: dict[int, list] = {}
+        for _vq in all_vqs:
+            _rid = _vrfq_rfq.get(_vq.vendor_rfq_id)
+            if _rid:
+                vqs_by_rfq.setdefault(_rid, []).append(_vq)
+
+        def _rfq_of(o):
+            """오더→RFQ. rfq_map/qtn_by_id 로 해석하는 _rfq_for_order 의 무쿼리 버전
+            (직접연결 rfq_id 우선, 없거나 미존재면 견적 경유). 결과는 동일."""
+            if o is None:
+                return None
+            rid = getattr(o, "rfq_id", None)
+            if rid:
+                rfq = rfq_map.get(rid)
+                if rfq:
+                    return rfq
+            qid = getattr(o, "quotation_id", None)
+            if qid:
+                qtn = qtn_by_id.get(qid)
+                if qtn and qtn.rfq_id:
+                    return rfq_map.get(qtn.rfq_id)
+            return None
+
+        # RFQ → 연결 오더 목록(_orders_for_rfq 벌크판: 직접연결 + 견적경유, 중복 제거).
+        orders_by_rfq: dict[int, list] = {}
+        for _o in orders_all:
+            if getattr(_o, "rfq_id", None):
+                orders_by_rfq.setdefault(_o.rfq_id, []).append(_o)
+        for _o in orders_all:
+            _qt = qtn_by_id.get(_o.quotation_id) if getattr(_o, "quotation_id", None) else None
+            if _qt and _qt.rfq_id:
+                _lst = orders_by_rfq.setdefault(_qt.rfq_id, [])
+                if all(x.id != _o.id for x in _lst):
+                    _lst.append(_o)
+
         # ── 월 버킷(고정 시작월 STATS_START_YM ~ 이번 달, KST) ────────────────────
         # 통계 그래프는 2026-05 부터 누적해서 보여준다(요청). 최대 36개월로 안전 제한.
         now_kst = datetime.now(timezone.utc) + timedelta(hours=9)
@@ -748,12 +807,10 @@ def statistics(months: int = 12):
         # 세금계산서로 연결된다. (예전엔 stage_dates["11"](=결제완료, 게다가 수동)을
         # 읽어 세금계산서를 발행해도 매출이 0으로 잡히던 버그. 11단계 재편성으로
         # 'Tax Invoice Issued' 는 10번이 됐고, 실제 발행일은 문서(date)에 있다.)
-        # 이 스캔은 ci_no·order_id·id 매핑용(발행월 판정). 품목(items)은 아래 품목별
-        # 매출 집계에서 CI 를 다시 조회할 때만 필요하므로 여기선 defer 한다.
-        _all_ci = s.query(CommercialInvoice).options(defer(CommercialInvoice.items)).all()
-        _ci_by_no = {c.ci_no: c for c in _all_ci if c.ci_no}
+        # CI 는 위 벌크 로드(all_ci)를 재사용 — 발행월 판정 매핑 + 아래 품목별 매출 집계 공용.
+        _ci_by_no = {c.ci_no: c for c in all_ci if c.ci_no}
         _ci_by_order: dict = {}
-        for c in _all_ci:
+        for c in all_ci:
             _ci_by_order.setdefault(c.order_id, c)   # 오더당 가장 이른 CI
         _tax_date_by_ci: dict = {}
         for t in s.query(TaxInvoiceData).all():
@@ -766,12 +823,12 @@ def statistics(months: int = 12):
                 return _month_key(_tax_date_by_ci[ci.id])
             # 폴백: 수동 '세금계산서 발행'(stage 10) 완료일
             o = order_map.get(a.order_id)
-            rfq = _rfq_for_order(s, o) if o else None
+            rfq = _rfq_of(o)
             sd = (getattr(rfq, "stage_dates", None) or {}) if rfq else {}
             return _month_key(sd.get("10") or "")
 
         # ── 매출(세금계산서 발행 기준) + 고객사 랭킹 ─────────────────────────────
-        for a in s.query(ARRecord).all():
+        for a in all_ars:
             o = order_map.get(a.order_id)
             mo = _issue_month(a)
             if not mo or mo not in month_set:
@@ -783,7 +840,7 @@ def statistics(months: int = 12):
             cust_rev[cur][cname] = cust_rev[cur].get(cname, 0.0) + amt
 
         # ── 견적금액(발송월 기준) ───────────────────────────────────────────────
-        for q in s.query(Quotation).all():
+        for q in all_quotations:
             mo = _month_key(getattr(q, "sent_at", None) or q.sent_date or q.date or "")
             if not mo or mo not in month_set:
                 continue
@@ -795,7 +852,7 @@ def statistics(months: int = 12):
             mo = _month_key(o.date or (o.created_at.isoformat() if o.created_at else ""))
             if not mo or mo not in month_set:
                 continue
-            qtn = s.query(Quotation).filter_by(id=o.quotation_id).first() if o.quotation_id else None
+            qtn = qtn_by_id.get(o.quotation_id) if o.quotation_id else None
             if qtn:
                 cur = _cur2(qtn.currency)
                 amt = _quotation_total(qtn.items or [], getattr(qtn, "discount_pct", 0) or 0)
@@ -807,7 +864,7 @@ def statistics(months: int = 12):
             order_series[cur][mo] += amt
 
         # ── 품목별 매출(청구 품목=CI items 기준, 기간 내) ────────────────────────
-        for ci in s.query(CommercialInvoice).all():
+        for ci in all_ci:
             mo = _month_key(ci.date or "")
             if not mo or mo not in month_set:
                 continue
@@ -860,7 +917,7 @@ def statistics(months: int = 12):
         for o in orders_all:
             pd = o.promised_delivery or ""
             delivered = bool(o.delivered_date)
-            rfq = _rfq_for_order(s, o)
+            rfq = _rfq_of(o)
             pno = _project_no_map(s).get(rfq.id, "") if rfq else ""
             if pd and not delivered:
                 if pd[:10] == today_iso:
@@ -873,18 +930,18 @@ def statistics(months: int = 12):
                 uninvoiced.append({"order_id": o.id, "project_no": pno, "customer": _cust_of(o), "date": o.delivered_date or ""})
 
         # 미입고 발주: 발송된 Vendor P/O 인데 해당 오더가 아직 미인도
-        for po in s.query(PurchaseOrder).all():
+        for po in all_pos:
             o = order_map.get(po.order_id)
             sent = (po.status == "이메일 발송완료") or bool(po.sent_date)
             if sent and o and not o.delivered_date:
-                rfq = _rfq_for_order(s, o)
+                rfq = _rfq_of(o)
                 pno = _project_no_map(s).get(rfq.id, "") if rfq else ""
                 unreceived_po.append({"order_id": o.id, "po_no": po.po_no or "", "project_no": pno, "customer": _cust_of(o), "date": po.sent_date or ""})
 
         # 미회신 견적: 발송/협상 상태 & 발송 후 7일 경과(수주·실주 아님)
         unanswered = []
         wk_ago = (now_kst - timedelta(days=7)).strftime("%Y-%m-%d")
-        for q in s.query(Quotation).all():
+        for q in all_quotations:
             if q.status in (QuotationStatus.SENT, QuotationStatus.NEGOTIATING):
                 sd = (getattr(q, "sent_at", None) or q.sent_date or q.date or "")[:10]
                 if sd and sd <= wk_ago:
@@ -892,7 +949,7 @@ def statistics(months: int = 12):
 
         # 장기 미수금: 연체 & 만기 60일 초과
         long_overdue = []
-        for a in s.query(ARRecord).all():
+        for a in all_ars:
             outstanding = (a.invoice_amount or 0) - (a.paid_amount or 0)
             if a.status != ARStatus.PAID and a.due_date and a.due_date < cutoff60 and outstanding > 0:
                 o = order_map.get(a.order_id)
@@ -925,18 +982,18 @@ def statistics(months: int = 12):
 
         # ── Hit-rate 퍼널 — 기간 내 RFQ 기준으로 견적→수주→매출 전환율 ──
         rfq_ids_period = {r.id for r in period_rfqs}
-        quoted_ids = {q.rfq_id for q in s.query(Quotation).all()
+        quoted_ids = {q.rfq_id for q in all_quotations
                       if q.rfq_id in rfq_ids_period and q.status != QuotationStatus.DRAFT}
         ordered_ids = set()
         for o in orders_all:
-            rr = _rfq_for_order(s, o)
+            rr = _rfq_of(o)
             if rr and rr.id in rfq_ids_period:
                 ordered_ids.add(rr.id)
         invoiced_ids = set()
-        for a in s.query(ARRecord).all():
+        for a in all_ars:
             if _issue_month(a):   # 세금계산서 발행일이 있는(=매출 인식) AR
                 o = order_map.get(a.order_id)
-                rr = _rfq_for_order(s, o) if o else None
+                rr = _rfq_of(o)
                 if rr and rr.id in rfq_ids_period:
                     invoiced_ids.add(rr.id)
         n_rfq, n_quote = len(rfq_ids_period), len(quoted_ids)
@@ -957,21 +1014,19 @@ def statistics(months: int = 12):
         for r in period_rfqs:
             # 고객 견적 합(USD)
             cust_usd = 0.0
-            for q in s.query(Quotation).filter_by(rfq_id=r.id).all():
+            for q in qtns_by_rfq.get(r.id, []):
                 qc = (getattr(q, "currency", None) or "USD").upper()
                 qt = _total_amount(q.items or [])
                 cust_usd += (qt / USD_KRW_RATE) if qc == "KRW" else qt
             # 벤더 견적 합(USD)
             vend_usd = 0.0
-            _vrfq_ids = [x.id for x in s.query(VendorRFQ).filter_by(rfq_id=r.id).all()]
-            _vqs = (s.query(VendorQuote).filter(VendorQuote.vendor_rfq_id.in_(_vrfq_ids)).all()
-                    if _vrfq_ids else [])
+            _vqs = vqs_by_rfq.get(r.id, [])
             for vq in _vqs:
                 vc = (getattr(vq, "currency", None) or "USD").upper()
                 vend_usd += (_items_cost_total(vq.items or []) / USD_KRW_RATE) if vc == "KRW" \
                     else _items_cost_total(vq.items or [])
             # 오더/발주(있으면 견적 대신 확정치 사용)
-            prj_orders = _orders_for_rfq(s, r.id)
+            prj_orders = orders_by_rfq.get(r.id, [])
             order_sales_usd = 0.0
             po_purchase_usd = 0.0
             has_po = False
@@ -979,7 +1034,7 @@ def statistics(months: int = 12):
                 oc = (getattr(oo, "currency", None) or "USD").upper()
                 st = _total_amount(oo.items or [])
                 order_sales_usd += (st / USD_KRW_RATE) if oc == "KRW" else st
-                for vp in s.query(PurchaseOrder).filter_by(order_id=oo.id).all():
+                for vp in pos_by_order.get(oo.id, []):
                     has_po = True
                     pt = _total_amount(vp.items or []) or _items_cost_total(vp.items or [])
                     pc = (getattr(vp, "currency", None) or oc or "USD").upper()
