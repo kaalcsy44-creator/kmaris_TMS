@@ -927,13 +927,15 @@ function ProformaInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChang
 
   return (
     <div className="doc-tab">
-      <p className="hint-inline" style={{ display: "block", marginBottom: 10 }}>
-        Proforma Invoice 는 선적 전 발행하는 <b>선택</b> 문서입니다. Commercial Invoice 와 독립적으로 저장됩니다.
-      </p>
       <fieldset className="form-fieldset" disabled={!editable}>
       <div className="doc-cols">
       <div className="doc-col">
-      <div className="sub-h">Basic info</div>
+      <div className="sub-h" style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+        <span>Basic info</span>
+        <span className="hint-inline" style={{ fontWeight: 400 }}>
+          선적 전 발행하는 <b>선택</b> 문서 · Commercial Invoice 와 독립 저장
+        </span>
+      </div>
       <div className="form-grid doc-form-grid">
         <Field label="PI No." value={piNo} onChange={setPiNo} />
         <Field label="PI Date" value={date} onChange={setDate} type="date" />
