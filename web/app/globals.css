@@ -8313,7 +8313,7 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 .pjx-stage-no { font-size: 10.5px; font-weight: 800; color: var(--blue); margin-right: 6px;
   font-variant-numeric: tabular-nums; }
 .pjx-stage-label { font-size: 11.5px; color: #47536b; }
-.pjx-amt { font-weight: 700; color: var(--navy); font-variant-numeric: tabular-nums; }
+.pjx-amt { font-weight: 400; color: var(--navy); font-variant-numeric: tabular-nums; }
 /* 이중통화 금액은 통화 단위로 끊어 두되, 폭이 남으면 한 줄에 나란히(DualAmount). */
 .pjx-amt { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; gap: 2px 8px; }
 .pjx-amt-cur { white-space: nowrap; }
