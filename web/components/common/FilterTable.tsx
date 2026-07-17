@@ -5,7 +5,7 @@ import { useColumnLayout } from "./useColumnLayout";
 import { ColumnResizer, ColumnsButton, dragHandleProps } from "./tableLayout";
 
 // Progress(진행현황) 표의 컬럼 헤더 정렬·필터 UX를 제네릭으로 추출한 공용 테이블.
-// ProgressScreen 의 PipelineTable 과 동일한 pl-* CSS 클래스를 그대로 사용해
+// ProjectsScreen 의 PipelineTable 과 동일한 pl-* CSS 클래스를 그대로 사용해
 // 시각·동작이 일치한다. 각 목록 화면은 ColumnDef 배열만 정의하면 된다.
 // tableId 를 주면 컬럼 폭 조절·순서 변경·표시/숨김(브라우저에 저장)이 활성화된다.
 

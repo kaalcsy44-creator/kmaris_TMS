@@ -15,9 +15,9 @@ type Item = { href: string; label: string; key: string; perm?: PermModule; sub?:
 // 통합되어 상단 메뉴에서 제거했다. 라우트(/rfq·/po·/documents·/ar)는 딥링크용으로 유지된다.
 const ITEMS: Item[] = [
   { href: "/", label: "Dashboard", key: "dashboard" },
-  { href: "/progress", label: "Progress", key: "progress" },
-  // 프로젝트 — 읽기 전용 색인. Progress 가 "단계를 진행시키는" 작업 화면이라면 이쪽은
-  // "무슨 프로젝트가 있고 얼마짜리인가"를 훑고 개요로 들어가는 문. 권한은 progress 와 같다.
+  // 프로젝트 — 목록(/project)과 개요(/project/<id>)가 한 계층. 예전에는 같은 표를
+  // 진행현황(/progress)과 색인(/project)으로 나눠 뒀는데, 같은 파이프라인 데이터를
+  // 두 번 그리는 중복이라 하나로 합쳤다. 권한은 progress 모듈을 그대로 쓴다.
   { href: "/project", label: "Projects", key: "projects", perm: "progress" },
   // 업무일지 — 파이프라인(progress) 열람 권한 사용자면 접근 가능.
   { href: "/activity", label: "Activity", key: "activity", perm: "progress" },

@@ -26,7 +26,7 @@ import type {
   ScheduleRow, CustomerOption, StatisticsData, StatAlertRow, CurrencyKey,
   StatDebugData,
 } from "@/lib/types";
-import { PipelineModal } from "@/components/screens/ProgressScreen";
+import { PipelineModal } from "@/components/screens/ProjectsScreen";
 import { MarketingForm, emptyForm as emptyMarketingForm } from "@/components/screens/MarketingScreen";
 import {
   ResponsiveContainer, LineChart, Line, BarChart, Bar,
@@ -258,7 +258,7 @@ function HomeTab() {
           due: q.valid_until,
           days: daysBetween(t, q.valid_until),
           amount: dualCurrencyText(q.amount, q.currency),
-          href: q.rfq_id ? `/progress?rfq=${q.rfq_id}&stage=4` : "/progress",
+          href: q.rfq_id ? `/project?rfq=${q.rfq_id}&stage=4` : "/project",
           rfq_id: q.rfq_id || undefined,
         });
       }
@@ -275,7 +275,7 @@ function HomeTab() {
           due: a.due_date,
           days: daysBetween(t, a.due_date),
           amount: dualCurrencyText(a.outstanding, a.currency),
-          href: `/progress?order=${a.order_id}&stage=11`,
+          href: `/project?order=${a.order_id}&stage=11`,
           order_id: a.order_id || undefined,
         });
       }
@@ -394,7 +394,7 @@ function HomeTab() {
           getRowKey={(r) => r.id}
           defaultSortKey="date"
           defaultSortDir="desc"
-          onRowClick={(r) => openByRfqId(r.rfq_id, r.rfq_id ? `/progress?rfq=${r.rfq_id}&stage=4` : "/progress")}
+          onRowClick={(r) => openByRfqId(r.rfq_id, r.rfq_id ? `/project?rfq=${r.rfq_id}&stage=4` : "/project")}
           empty="No quotations submitted yet."
         />
       ),
@@ -414,7 +414,7 @@ function HomeTab() {
                 getRowKey={(r) => r.id}
                 defaultSortKey="customer_po_at"
                 defaultSortDir="desc"
-                onRowClick={(r) => openByOrderId(r.id, `/progress?order=${r.id}&stage=5`)}
+                onRowClick={(r) => openByOrderId(r.id, `/project?order=${r.id}&stage=5`)}
                 empty="No purchase orders received yet."
               />
             ),
@@ -434,7 +434,7 @@ function HomeTab() {
           getRowKey={(r) => r.id}
           defaultSortKey="datetime"
           defaultSortDir="desc"
-          onRowClick={(r) => openByRfqId(r.rfq_id, `/progress?rfq=${r.rfq_id}`)}
+          onRowClick={(r) => openByRfqId(r.rfq_id, `/project?rfq=${r.rfq_id}`)}
           empty="No activity recorded yet."
         />
       ),
@@ -452,7 +452,7 @@ function HomeTab() {
           getRowKey={(r) => r.id}
           defaultSortKey="date"
           defaultSortDir="desc"
-          onRowClick={(r) => openByOrderId(r.order_id, `/progress?order=${r.order_id}&stage=11`)}
+          onRowClick={(r) => openByOrderId(r.order_id, `/project?order=${r.order_id}&stage=11`)}
           empty="No sales records yet."
         />
       ),
@@ -1443,11 +1443,11 @@ function AlertCard({
   const router = useRouter();
   function go(r: StatAlertRow) {
     // 모든 단계 작업은 진행현황(Progress) 프로젝트 팝업으로 통합됨 → 딥링크로 해당 단계를 연다.
-    if (kind === "quote" && r.rfq_id) router.push(`/progress?rfq=${r.rfq_id}&stage=4`);
-    else if (kind === "ar" && r.order_id) router.push(`/progress?order=${r.order_id}&stage=11`);
-    else if (r.rfq_id) router.push(`/progress?rfq=${r.rfq_id}`);
-    else if (r.order_id) router.push(`/progress?order=${r.order_id}`);
-    else router.push("/progress");
+    if (kind === "quote" && r.rfq_id) router.push(`/project?rfq=${r.rfq_id}&stage=4`);
+    else if (kind === "ar" && r.order_id) router.push(`/project?order=${r.order_id}&stage=11`);
+    else if (r.rfq_id) router.push(`/project?rfq=${r.rfq_id}`);
+    else if (r.order_id) router.push(`/project?order=${r.order_id}`);
+    else router.push("/project");
   }
   return (
     <div className="stat-alert">

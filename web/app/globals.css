@@ -2163,24 +2163,19 @@ table.pipeline {
   /* 고정 레이아웃 — 컬럼 폭은 colgroup으로 제어. 폭 없는 'Stage'가 남는 폭을 모두 흡수. */
   table-layout: fixed;
 }
-/* 다른 칼럼은 compact하게, Stage(plc-stage)는 폭 미지정 → 남는 폭 전부 흡수 */
-table.pipeline col.plc-date {
-  width: 124px;
+/* 그룹 열 기본폭 — Stage(plc-stage)만 폭 미지정 → 남는 폭 전부 흡수.
+   한 칸에 여러 줄이 들어가므로 예전 단일 필드 열보다 넉넉하게 준다. */
+table.pipeline col.plc-project {
+  width: 260px;
 }
 table.pipeline col.plc-customer {
-  width: 190px;
+  width: 170px;
 }
 table.pipeline col.plc-vendor {
   width: 150px;
 }
-table.pipeline col.plc-work {
-  width: 78px;
-}
-table.pipeline col.plc-vessel {
-  width: 130px;
-}
-table.pipeline col.plc-project {
-  width: 110px;
+table.pipeline col.plc-amounts {
+  width: 210px;
 }
 table.pipeline col.plc-assignee {
   width: 84px;
@@ -2248,9 +2243,94 @@ table.pipeline th,
 table.pipeline td {
   padding: 9px 14px;
   text-align: left;
-  vertical-align: middle;
+  /* 셀 안이 여러 줄이라 위로 붙여야 각 칸의 첫 줄끼리 나란히 읽힌다. Stage 는 예외로
+     가운데 정렬(아래 pl-td-stage) — 타임라인 바 하나뿐이라 붙이면 떠 보인다. */
+  vertical-align: top;
   border-bottom: 1px solid var(--line);
   line-height: 1.35;
+}
+
+/* ── 그룹 열(다행 셀) ────────────────────────────────────────────────────
+   프로젝트 1건 = 1행이되, 묶인 필드를 셀 안에서 위아래로 쌓는다. 열을 잘게 쪼개면
+   제목·벤더명·이중통화 금액이 좁은 칸에서 단어 중간에 잘리기 때문. */
+/* 식별 줄 — 번호 · 타입 · 선박이 한 줄, 제목은 아래. 좁아지면 선박부터 접힌다. */
+table.pipeline td.pl-td-project .pl-idline {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+table.pipeline td.pl-td-project .pl-vessel {
+  color: #47536b;
+}
+table.pipeline td.pl-td-project .pl-title {
+  margin-top: 3px;
+  color: var(--ink);
+  font-weight: 600;
+}
+/* 수신일시 — 정렬 기본값이라 값은 필요하지만, 훑을 때 먼저 걸리면 안 되는 보조 정보. */
+table.pipeline td.pl-td-project .pl-received {
+  margin-top: 2px;
+  font-size: 10px;
+  color: var(--muted);
+}
+table.pipeline td.pl-td-customer .pl-contact {
+  margin-top: 3px;
+  color: #47536b;
+}
+table.pipeline td.pl-td-stage {
+  vertical-align: middle;
+}
+/* 금액 셀 = 매출·매입·마진 세 줄. 이름표는 왼쪽, 숫자는 오른쪽으로 밀어 자릿수를 맞춘다. */
+table.pipeline td.pl-td-amounts .pl-money-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+table.pipeline td.pl-td-amounts .pl-money-line + .pl-money-line {
+  margin-top: 3px;
+}
+.pl-money-label {
+  font-size: 9px;
+  font-weight: 800;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.pl-money-val {
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 2px 8px;
+}
+/* 이중통화 금액은 통화 단위로 끊되, 폭이 남으면 한 줄에 나란히(DualAmount).
+   금액은 비볼드 — 세 줄이 전부 굵으면 눈이 쉴 곳이 없다. 강조는 마진율이 가져간다. */
+.pl-amt {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 2px 8px;
+  font-weight: 400;
+  color: var(--navy);
+  font-variant-numeric: tabular-nums;
+}
+.pl-amt-cur {
+  white-space: nowrap;
+}
+.pl-margin-pct {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+/* 종결 프로젝트 — 목록에 남기되(Show closed) 눈에 먼저 걸리지 않게. */
+table.pipeline tbody tr.closed td {
+  color: var(--muted);
+}
+table.pipeline tbody tr.closed .pl-title {
+  text-decoration: line-through;
 }
 table.pipeline tbody td {
   white-space: normal;
@@ -8272,69 +8352,6 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 .act-screen.meeting .act-cards { grid-template-columns: 1fr; }
 .act-screen.meeting .act-item { font-size: 15px; padding: 5px 0; }
 .act-screen.meeting .act-head { font-size: 15px; }
-/* ── 프로젝트 색인 — /project ─────────────────────────────────────────────
-   개요로 들어가는 착지점. 훑고 고르는 화면이라 작업용 장치(필터·보드) 없이 표 하나. */
-/* 상단에 숨 쉴 공간 — 필터 바가 네비바에 바짝 붙지 않도록 페이지 기본 여백에 더 얹는다. */
-.pjx { display: flex; flex-direction: column; gap: 10px; padding-top: 14px; }
-.pjx-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.pjx-search { flex: 1; min-width: 220px; max-width: 460px; padding: 6px 10px;
-  border: 1px solid var(--line-strong); border-radius: 7px; font-size: 12.5px;
-  color: var(--ink); background: #fff; }
-.pjx-search:focus { outline: none; border-color: var(--blue); }
-.pjx-count { font-size: 11.5px; font-weight: 700; color: var(--muted); }
-.pjx-closed { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px;
-  color: var(--muted); cursor: pointer; }
-.pjx-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px;
-  background: #fff; }
-.pjx-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
-/* 한 프로젝트 = 한 행이되 셀 안이 여러 줄이라, 셀은 위로 붙여 각 줄이 나란히 읽히게. */
-.pjx-table th, .pjx-table td { padding: 9px 10px; text-align: left;
-  border-bottom: 1px solid var(--line); vertical-align: top; }
-.pjx-table thead th { background: var(--head-bg); color: var(--navy); font-size: 10px;
-  font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; }
-.pjx-table tbody tr:last-child td { border-bottom: 0; }
-.pjx-table tbody tr:hover td { background: var(--hover); }
-.pjx-table .num { text-align: right; white-space: nowrap; }
-.pjx-empty { color: var(--muted); padding: 14px 10px !important; }
-/* 종결 프로젝트 — 목록에 남기되 눈에 먼저 걸리지 않게. */
-.pjx-table tr.closed td { color: var(--muted); }
-.pjx-table tr.closed .pjx-open b { text-decoration: line-through; }
-.pjx-open { display: inline-flex; align-items: baseline; gap: 5px; text-decoration: none;
-  color: var(--blue); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.pjx-open b { font-size: 13px; }
-.pjx-open:hover b { text-decoration: underline; }
-.pjx-nodate { font-size: 10.5px; color: var(--muted); }
-/* 식별 줄 = 번호 · 타입 · 선박이 한 줄에, 제목은 그 아래 — 좁아지면 선박부터 접힌다. */
-.pjx-idline { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
-.pjx-vessel { font-size: 11.5px; color: #47536b; }
-.pjx-title { margin-top: 3px; color: var(--ink); font-weight: 600; line-height: 1.35; }
-.pjx-c-no { min-width: 240px; }
-.pjx-c-stage { white-space: nowrap; }
-.pjx-stage-no { font-size: 10.5px; font-weight: 800; color: var(--blue); margin-right: 6px;
-  font-variant-numeric: tabular-nums; }
-.pjx-stage-label { font-size: 11.5px; color: #47536b; }
-.pjx-amt { font-weight: 400; color: var(--navy); font-variant-numeric: tabular-nums; }
-/* 이중통화 금액은 통화 단위로 끊어 두되, 폭이 남으면 한 줄에 나란히(DualAmount). */
-.pjx-amt { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; gap: 2px 8px; }
-.pjx-amt-cur { white-space: nowrap; }
-.pjx-c-pic { font-size: 11.5px; color: #47536b; white-space: nowrap; }
-/* ── 고객사 담당자 · Vendor · 금액 묶음 ──────────────────────────────────── */
-.pjx-contact { margin-top: 3px; font-size: 11.5px; color: #47536b; }
-.pjx-c-vendor { color: #47536b; }
-/* 벤더/고객명은 길면 줄바꿈 허용(열 폭이 무한정 늘지 않게). */
-.pjx-c-vendor .cust-name-text, .pjx-c-cust .cust-name-text { white-space: normal; }
-/* 금액 셀 = 매출·매입·마진 세 줄. 이름표는 왼쪽, 숫자는 오른쪽으로 밀어 자릿수를 맞춘다. */
-.pjx-c-money { min-width: 200px; }
-.pjx-money-line { display: flex; align-items: baseline; justify-content: space-between;
-  gap: 10px; }
-.pjx-money-line + .pjx-money-line { margin-top: 3px; }
-.pjx-money-label { font-size: 10px; font-weight: 800; color: var(--muted);
-  text-transform: uppercase; letter-spacing: 0.04em; }
-.pjx-money-val { display: inline-flex; align-items: baseline; flex-wrap: wrap;
-  justify-content: flex-end; gap: 2px 8px; }
-.pjx-margin-pct { font-size: 10.5px; font-weight: 700; color: var(--muted);
-  font-variant-numeric: tabular-nums; }
-
 /* ── 프로젝트 개요(읽기 전용) — /project/<rfq_id> ────────────────────────
    팀원 공유용 한 장짜리 현황. 위에서 아래로 머리글 → 단계 → 정보/활동 → 품목
    순의 문서형 흐름이라 화면에서 한눈에 들어오고 그대로 인쇄된다. */

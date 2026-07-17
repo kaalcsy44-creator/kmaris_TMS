@@ -12,16 +12,16 @@ const NAV_MODULES: PermModule[] = [
   "dashboard", "progress", "rfq", "po", "documents", "ar", "marketing", "settings",
 ];
 // 열람 권한이 있는 첫 메뉴로 보낸다(차단된 페이지 접근 시). RFQ·P/O·Documents·AR 은
-// 진행현황(Progress) 팝업으로 통합되어 전용 페이지가 없으므로, 그 권한만 있는 사용자는
-// 진행현황으로 보낸다(단계 작업은 모두 Progress 에서 수행).
+// 프로젝트 팝업의 단계별 작업으로 통합되어 전용 페이지가 없으므로, 그 권한만 있는
+// 사용자는 프로젝트 목록으로 보낸다(단계 작업은 모두 거기서 수행).
 function firstAllowed(): string {
   const order: { key: PermModule; href: string }[] = [
     { key: "dashboard", href: "/" },
-    { key: "progress", href: "/progress" },
-    { key: "rfq", href: "/progress" },
-    { key: "po", href: "/progress" },
-    { key: "documents", href: "/progress" },
-    { key: "ar", href: "/progress" },
+    { key: "progress", href: "/project" },
+    { key: "rfq", href: "/project" },
+    { key: "po", href: "/project" },
+    { key: "documents", href: "/project" },
+    { key: "ar", href: "/project" },
     { key: "marketing", href: "/marketing" },
   ];
   const hit = order.find((o) => can(o.key, "view"));

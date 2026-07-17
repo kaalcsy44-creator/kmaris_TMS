@@ -46,15 +46,15 @@ const STAGE_COLUMNS: { label: string; tone: string; from: number; to: number }[]
  * 프로젝트 개요 — 한 프로젝트의 모든 정보를 한 페이지에 읽기 전용으로 모아 보여준다.
  * 목적은 "팀원과 현재 상황 공유"라서 URL 로 바로 열리고 인쇄가 되는 게 핵심이다.
  *
- * 편집은 하지 않는다. 각 단계 카드를 누르면 기존 진행현황 팝업의 그 단계로 보낸다
- * (/progress?rfq=N&stage=M) — 개요는 읽고, 작업은 팝업에서 하는 역할 분담.
+ * 편집은 하지 않는다. 각 단계 카드를 누르면 프로젝트 목록(/project) 팝업의 그 단계로
+ * 보낸다 (/project?rfq=N&stage=M) — 개요는 읽고, 작업은 팝업에서 하는 역할 분담.
  */
 export default function ProjectOverviewScreen({ rfqId }: { rfqId: number }) {
   // 목록에서 넘어오면 이미 캐시에 있어 즉시 그려진다(같은 "pipeline" 키를 공유).
   const { data: pipeline, error: pipeErr } = useCachedData("pipeline", () => fetchPipeline());
   // 견적 전(1~3단계) 프로젝트는 고객이 요청한 RFQ 품목만 있다 — 값이 매겨지기 전 목록.
   const { data: detail } = useCachedData(`rfq:${rfqId}`, () => fetchRfqDetail(rfqId));
-  // 고객 P/O·Vendor P/O·견적을 한 번에 받는다. ProgressScreen 과 같은 캐시 키.
+  // 고객 P/O·Vendor P/O·견적을 한 번에 받는다. ProjectsScreen 과 같은 캐시 키.
   const { data: poOpts } = useCachedData("po:work-options", fetchPoWorkOptions);
   // 이 프로젝트에 견적만 있고 아직 P/O 가 없을 때 쓸 견적 id(가장 최근 것).
   const { data: qtnList } = useCachedData("quotations:overview", () => fetchQuotationOverview());
@@ -71,15 +71,15 @@ export default function ProjectOverviewScreen({ rfqId }: { rfqId: number }) {
         This project is not available — it may have been deleted, or your account may not have
         access to it.
         <div style={{ marginTop: 10 }}>
-          <Link className="btn sm" href="/progress">
-            ← Back to Progress
+          <Link className="btn sm" href="/project">
+            ← Back to Projects
           </Link>
         </div>
       </div>
     );
   }
 
-  // 이 프로젝트의 고객 P/O — 선박별로 나뉜다. P/O 번호 오름차순(ProgressScreen 과 동일 정렬).
+  // 이 프로젝트의 고객 P/O — 선박별로 나뉜다. P/O 번호 오름차순(ProjectsScreen 과 동일 정렬).
   const orders = sortByDocNo(
     (poOpts?.orders ?? []).filter((o) => o.rfq_id === rfqId),
     (o) => o.po_no,
@@ -184,7 +184,7 @@ function Overview({
   const acts = buildActivities(row, rSteps);
   const { code, date } = splitProjectNo(row.project_no || row.kmaris_rfq_no || "—");
   const isService = (row.work_type || "부품공급") === "서비스";
-  const editHref = `/progress?rfq=${row.rfq_id}&stage=${Math.max(row.stage, 1)}`;
+  const editHref = `/project?rfq=${row.rfq_id}&stage=${Math.max(row.stage, 1)}`;
   // 선박은 오더별로 여러 척일 수 있다(vessels = 줄바꿈 구분). 한 줄 머리글이므로 · 로 잇는다.
   const vessels = (row.vessels || row.vessel).split("\n").filter(Boolean).join(" · ");
 
@@ -195,7 +195,7 @@ function Overview({
           보여줘서 따로 두지 않는다. */}
       <div className="proj-ov-head">
         <h1 className="proj-ov-id">
-          <Link className="proj-ov-back" href="/progress" title="Back to Progress">
+          <Link className="proj-ov-back" href="/project" title="Back to Projects">
             ←
           </Link>
           <b className="proj-ov-no">{code}</b>
@@ -316,7 +316,7 @@ function StageTimeline({
                       {/* 단계 줄 클릭 → 진행현황 팝업의 그 단계(편집 진입점). */}
                       <Link
                         className="ov-tl-stage"
-                        href={`/progress?rfq=${row.rfq_id}&stage=${c.no}`}
+                        href={`/project?rfq=${row.rfq_id}&stage=${c.no}`}
                         title={`Open stage ${c.no} in Progress`}
                       >
                         <span className="ov-tl-dot" aria-hidden>

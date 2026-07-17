@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 // 테이블 컬럼 커스터마이즈(폭 조절·순서 변경·표시/숨김)를 관리하는 공용 훅.
 // 설정은 localStorage 에 tableId 별로 저장되어 새로고침 후에도 유지된다.
-// FilterTable 과 ProgressScreen 의 PipelineTable 이 함께 사용한다.
+// FilterTable 과 ProjectsScreen 의 PipelineTable 이 함께 사용한다.
 
 export type LayoutCol = { key: string; label: string };
 

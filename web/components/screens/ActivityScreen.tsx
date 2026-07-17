@@ -29,7 +29,7 @@ import ActivityNoteForm, {
 } from "@/components/common/ActivityNoteForm";
 
 // 벤더 모노그램 상태 — 발주 벤더 확정 시 문자열 fallback, 아니면 RFQ 발송 벤더의 견적 수신여부.
-// (ProgressScreen 과 동일 규칙.)
+// (ProjectsScreen 과 동일 규칙.)
 function vendorStatusesFor(r: PipelineRow): { name: string; quoted: boolean }[] | undefined {
   if (r.vendor) return undefined;
   return r.rfq_vendors && r.rfq_vendors.length ? r.rfq_vendors : undefined;
@@ -290,8 +290,8 @@ export default function ActivityScreen() {
         >
           Activity (By date)
         </button>
-        <Link href="/progress" className="btn sm" style={{ marginLeft: "auto" }}>
-          📋 Progress
+        <Link href="/project" className="btn sm" style={{ marginLeft: "auto" }}>
+          📋 Projects
         </Link>
       </div>
 
@@ -379,7 +379,7 @@ export default function ActivityScreen() {
                           <div className="act-cal-phead">
                             <Link
                               className="act-cal-pno"
-                              href={`/progress?rfq=${p.row.rfq_id}&stage=${p.row.stage}`}
+                              href={`/project?rfq=${p.row.rfq_id}&stage=${p.row.stage}`}
                               title="Open deal"
                             >
                               {splitProjectNo(p.row.project_no || p.row.kmaris_rfq_no || "—").code}
@@ -486,7 +486,7 @@ function ActivityCard({
           <Link className="act-open" href={`/project/${row.rfq_id}`} title="Project overview">→</Link>
           <Link
             className="act-open act-open-edit"
-            href={`/progress?rfq=${row.rfq_id}&stage=${row.stage}`}
+            href={`/project?rfq=${row.rfq_id}&stage=${row.stage}`}
             title="Open deal in Progress"
           >
             ✎
