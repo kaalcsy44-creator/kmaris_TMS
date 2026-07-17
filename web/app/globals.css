@@ -8228,8 +8228,8 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   padding: 0;
   border: 0;
   background: transparent;
-  font: inherit;
-  color: inherit;
+  font-family: inherit;
+  line-height: inherit;
   cursor: pointer;
 }
 .pl-project-no-btn { color: #0055a8; font-weight: 700; }
