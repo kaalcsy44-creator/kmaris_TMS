@@ -48,8 +48,25 @@ const STAGE_COLUMNS: { label: string; tone: string; from: number; to: number }[]
  *
  * 편집은 하지 않는다. 각 단계 카드를 누르면 프로젝트 목록(/project) 팝업의 그 단계로
  * 보낸다 (/project?rfq=N&stage=M) — 개요는 읽고, 작업은 팝업에서 하는 역할 분담.
+ *
+ * 두 곳에서 쓴다:
+ *  - 페이지(/project/<id>) — 기본. URL 공유·인쇄가 되는 건 이쪽뿐이다.
+ *  - 작업 팝업 안의 Overview 뷰 — embedded. 머리글은 팝업 헤더가 이미 갖고 있어 빼고,
+ *    단계 줄은 링크가 아니라 onOpenStage 로 그 자리에서 작업 화면으로 되돌린다.
+ *    "pipeline"·"po:work-options" 는 팝업이 이미 받아 둔 캐시를 그대로 쓰고, rfq:<id> 와
+ *    quotations:overview 만 첫 전환에서 받는다(이후 캐시).
  */
-export default function ProjectOverviewScreen({ rfqId }: { rfqId: number }) {
+export default function ProjectOverviewScreen({
+  rfqId,
+  embedded = false,
+  onOpenStage,
+}: {
+  rfqId: number;
+  /** 작업 팝업 안에 끼워 넣는 모드 — 자체 머리글(신원·PIC·인쇄·뒤로)을 렌더하지 않는다. */
+  embedded?: boolean;
+  /** 단계 줄 클릭 처리. 주면 링크 대신 이 콜백을 쓴다(팝업 안에서 화면 전환). */
+  onOpenStage?: (stage: number) => void;
+}) {
   // 목록에서 넘어오면 이미 캐시에 있어 즉시 그려진다(같은 "pipeline" 키를 공유).
   const { data: pipeline, error: pipeErr } = useCachedData("pipeline", () => fetchPipeline());
   // 견적 전(1~3단계) 프로젝트는 고객이 요청한 RFQ 품목만 있다 — 값이 매겨지기 전 목록.
@@ -70,11 +87,14 @@ export default function ProjectOverviewScreen({ rfqId }: { rfqId: number }) {
       <div className="state">
         This project is not available — it may have been deleted, or your account may not have
         access to it.
-        <div style={{ marginTop: 10 }}>
-          <Link className="btn sm" href="/project">
-            ← Back to Projects
-          </Link>
-        </div>
+        {/* 팝업 안에서는 이미 그 프로젝트를 열어 둔 상태라 목록으로 보내는 링크가 무의미하다. */}
+        {embedded ? null : (
+          <div style={{ marginTop: 10 }}>
+            <Link className="btn sm" href="/project">
+              ← Back to Projects
+            </Link>
+          </div>
+        )}
       </div>
     );
   }
@@ -100,6 +120,8 @@ export default function ProjectOverviewScreen({ rfqId }: { rfqId: number }) {
       rfqItems={detail?.items ?? null}
       // 매입측 견적 = 벤더 견적번호(프로젝트 단위). Quote 묶음 머리에 매출 견적과 나란히 둔다.
       vendorQuoteNo={row.vquote_no || ""}
+      embedded={embedded}
+      onOpenStage={onOpenStage}
     />
   );
 }
@@ -168,6 +190,8 @@ function Overview({
   quoteOnlyId,
   rfqItems,
   vendorQuoteNo,
+  embedded = false,
+  onOpenStage,
 }: {
   row: PipelineRow;
   steps: string[];
@@ -178,6 +202,8 @@ function Overview({
   quoteOnlyId: number;
   rfqItems: RfqItem[] | null;
   vendorQuoteNo: string;
+  embedded?: boolean;
+  onOpenStage?: (stage: number) => void;
 }) {
   const rSteps = resolveSteps(steps, row.work_type);
   const chain = buildStageChain(row, rSteps);
@@ -189,10 +215,17 @@ function Overview({
   const vessels = (row.vessels || row.vessel).split("\n").filter(Boolean).join(" · ");
 
   return (
-    <div className={`proj-ov${isService ? " service" : ""}${row.cancelled ? " cancelled" : ""}`}>
+    <div
+      className={`proj-ov${isService ? " service" : ""}${row.cancelled ? " cancelled" : ""}${
+        embedded ? " embedded" : ""
+      }`}
+    >
       {/* 머리글 한 줄: 번호 · (날짜) · 타입 · 프로젝트명 · 선박 + 우측 액션.
           현재 단계·경과일·Next action 은 아래 Stages 스트립이 같은 내용을 더 정확히
-          보여줘서 따로 두지 않는다. */}
+          보여줘서 따로 두지 않는다.
+          팝업 안(embedded)에서는 통째로 뺀다 — 번호·타입·제목·PIC 는 팝업 헤더가 이미
+          같은 걸 보여주고, 뒤로·인쇄·"Open in Progress" 는 팝업 안에서 갈 곳이 없다. */}
+      {embedded ? null : (
       <div className="proj-ov-head">
         <h1 className="proj-ov-id">
           <Link className="proj-ov-back" href="/project" title="Back to Projects">
@@ -229,6 +262,7 @@ function Overview({
           </Link>
         </div>
       </div>
+      )}
 
       {/* 거래 상대 한 줄 — 고객·벤더·거래구분. 나머지 옛 Project info 항목은 이 페이지
           다른 곳에 이미 있다: 선박·제목은 머리글, 고객 P/O 번호는 Items 묶음 머리,
@@ -248,7 +282,7 @@ function Overview({
         </span>
       </div>
 
-      <StageTimeline row={row} chain={chain} acts={acts} />
+      <StageTimeline row={row} chain={chain} acts={acts} onOpenStage={onOpenStage} />
 
       <ItemsSection
         orders={orders}
@@ -276,10 +310,13 @@ function StageTimeline({
   row,
   chain,
   acts,
+  onOpenStage,
 }: {
   row: PipelineRow;
   chain: StageChainItem[];
   acts: Activity[];
+  /** 주면 단계 줄이 링크 대신 이 콜백을 부른다(작업 팝업 안에서 화면 전환). */
+  onOpenStage?: (stage: number) => void;
 }) {
   // 단계별로 활동을 나눠 담는다. 자동 이벤트는 단계당 최대 1건(완료), 노트는 여러 건.
   const autoOf = new Map<number, Extract<Activity, { kind: "auto" }>>();
@@ -313,19 +350,38 @@ function StageTimeline({
                   const notes = notesOf.get(c.no) ?? [];
                   return (
                     <li key={c.no} className={`${state}${c.skip ? " skip" : ""}`}>
-                      {/* 단계 줄 클릭 → 진행현황 팝업의 그 단계(편집 진입점). */}
-                      <Link
-                        className="ov-tl-stage"
-                        href={`/project?rfq=${row.rfq_id}&stage=${c.no}`}
-                        title={`Open stage ${c.no} in Progress`}
-                      >
-                        <span className="ov-tl-dot" aria-hidden>
-                          {state === "done" ? "✓" : state === "current" ? "●" : "○"}
-                        </span>
-                        <span className="ov-tl-no">{c.no}</span>
-                        <b className="ov-tl-label">{c.label}</b>
-                        <time className="ov-tl-at">{c.at ? fmtStageDate(c.at) : ""}</time>
-                      </Link>
+                      {/* 단계 줄 클릭 → 그 단계의 작업 화면(편집 진입점).
+                          팝업 안에서는 링크가 아니라 버튼이어야 한다: 이미 이 프로젝트를
+                          열어 둔 상태라 같은 URL 로 다시 라우팅해도 딥링크가 1회 소비된 뒤라
+                          아무 일도 일어나지 않는다(조용히 죽는 링크). */}
+                      {onOpenStage ? (
+                        <button
+                          type="button"
+                          className="ov-tl-stage"
+                          onClick={() => onOpenStage(c.no)}
+                          title={`Open stage ${c.no} in the work view`}
+                        >
+                          <span className="ov-tl-dot" aria-hidden>
+                            {state === "done" ? "✓" : state === "current" ? "●" : "○"}
+                          </span>
+                          <span className="ov-tl-no">{c.no}</span>
+                          <b className="ov-tl-label">{c.label}</b>
+                          <time className="ov-tl-at">{c.at ? fmtStageDate(c.at) : ""}</time>
+                        </button>
+                      ) : (
+                        <Link
+                          className="ov-tl-stage"
+                          href={`/project?rfq=${row.rfq_id}&stage=${c.no}`}
+                          title={`Open stage ${c.no} in Progress`}
+                        >
+                          <span className="ov-tl-dot" aria-hidden>
+                            {state === "done" ? "✓" : state === "current" ? "●" : "○"}
+                          </span>
+                          <span className="ov-tl-no">{c.no}</span>
+                          <b className="ov-tl-label">{c.label}</b>
+                          <time className="ov-tl-at">{c.at ? fmtStageDate(c.at) : ""}</time>
+                        </Link>
+                      )}
                       {/* 상대·문서번호는 단계 줄이 좁아 아랫줄로 내린다. */}
                       {auto?.party || c.value || c.skip ? (
                         <div className="ov-tl-sub">

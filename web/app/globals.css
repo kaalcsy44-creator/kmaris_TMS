@@ -6000,20 +6000,48 @@ table.mini .num {
 }
 /* 완료 카드: 왼쪽에 블랙 강조선으로 종결(성사) 표시. */
 .pl-card.done { border-left: 3px solid var(--ink); }
-/* 모달 헤더 '개요' 링크 — 이 프로젝트의 전체 정보를 읽기 전용 한 페이지로. */
-.pl-modal-overview {
+/* 모달 헤더 작업↔개요 전환 — 목록의 Table/Board 토글과 같은 생김새로, 같은 종류의
+   장치(같은 데이터를 다른 방식으로 본다)임을 알아보게 한다. 크기만 헤더에 맞춰 줄인다. */
+.pl-modal-viewtoggle {
   flex: none;
+  display: inline-flex;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  overflow: hidden;
+}
+.pl-modal-viewtoggle button {
+  border: 0;
+  background: #fff;
+  color: var(--muted);
   font-size: 11px;
   font-weight: 700;
-  color: var(--blue);
-  background: #fff;
-  border: 1px solid #b9d3ee;
-  border-radius: 7px;
-  padding: 3px 9px;
-  text-decoration: none;
+  padding: 4px 10px;
+  cursor: pointer;
+  line-height: 1;
   white-space: nowrap;
 }
-.pl-modal-overview:hover { background: #eef6ff; }
+.pl-modal-viewtoggle button + button { border-left: 1px solid var(--line); }
+.pl-modal-viewtoggle button.on { background: var(--navy); color: #fff; }
+
+/* 팝업 안 개요 뷰 — pl-modal-body(overflow:hidden) 를 쓰지 않고 스스로 스크롤한다.
+   개요는 세로로 긴 문서라 감싸지 않으면 첫 화면 분량만 보이고 잘린다. */
+.pl-modal-ov {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  /* 좌우 여백은 .pl-modal 이 이미 갖고 있다(padding: 18px 22px 0) — 여기서 또 주면 겹친다. */
+  padding: 0 0 12px;
+}
+/* 페이지용 개요는 화면 폭을 채우는 문서라 자체 여백을 갖는데, 팝업 안에서는
+   팝업이 이미 여백을 갖고 있어 위쪽만 덜어낸다. */
+.proj-ov.embedded { padding-top: 4px; }
+.pl-modal-ov-foot {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  margin-top: 12px;
+}
 
 /* ── 목록 행 → 개요 바로가기 ────────────────────────────────────────────
    행 클릭은 편집 팝업이라, 읽기 전용 개요로 가려면 여기까지 와야 했다(목록 → 팝업 →
@@ -8469,9 +8497,14 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   width: 2px; background: var(--line); }
 .proj-ov-tl > li:first-child::before { top: 14px; }
 .proj-ov-tl > li:last-child::before { bottom: calc(100% - 14px); }
+/* 단계 줄 — 페이지에선 <a>(URL 이동), 팝업 안에선 <button>(그 자리에서 작업 화면 전환).
+   버튼 기본 스타일(배경·테두리·폰트)을 지워 둘이 같은 줄로 보이게 한다. */
 .ov-tl-stage { display: flex; align-items: center; gap: 6px; padding: 5px 0 5px 10px;
   text-decoration: none; color: inherit; min-width: 0; }
-a.ov-tl-stage:hover { background: color-mix(in srgb, var(--ov-tone) 12%, transparent); }
+button.ov-tl-stage { width: 100%; border: 0; background: none; font: inherit;
+  text-align: left; cursor: pointer; }
+a.ov-tl-stage:hover,
+button.ov-tl-stage:hover { background: color-mix(in srgb, var(--ov-tone) 12%, transparent); }
 .ov-tl-dot { position: relative; z-index: 1; flex: none; width: 18px; height: 18px;
   border-radius: 50%; background: var(--line); color: #5a6b85; font-size: 9px; font-weight: 800;
   display: inline-flex; align-items: center; justify-content: center; }

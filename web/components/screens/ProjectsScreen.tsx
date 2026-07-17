@@ -49,6 +49,7 @@ import NewRfqForm from "@/components/screens/NewRfqForm";
 import { PoActionTabs } from "@/components/screens/PoScreen";
 import { DocumentsOverview } from "@/components/screens/DocumentsScreen";
 import { ArOverview } from "@/components/screens/ArScreen";
+import ProjectOverviewScreen from "@/components/screens/ProjectOverviewScreen";
 import { tr } from "@/lib/labels";
 import { getUser, can, isOwnScoped, isAdmin } from "@/lib/auth";
 
@@ -1769,6 +1770,16 @@ export function PipelineModal({
   const [selectedStage, setSelectedStage] = useState<StageTabKey>(
     Math.min(Math.max(initialStage || r.stage || 1, 1), 11)
   );
+  // 팝업 안 화면 전환: 단계 작업(work) ↔ 프로젝트 개요(overview).
+  // 기억하지 않고 늘 work 로 연다 — 팝업을 여는 목적은 대개 단계를 진행시키는 것이라,
+  // overview 로 굳어 있으면 작업하려던 사람이 매번 한 번 더 눌러야 한다.
+  // 오래 읽는 용도는 페이지(/project/<id>)가 맡는다.
+  const [modalView, setModalView] = useState<"work" | "overview">("work");
+  /** 개요의 단계 줄 클릭 → 그 단계의 작업 화면으로. 개요에서 짚은 곳을 바로 편집. */
+  const openStageFromOverview = useCallback((no: number) => {
+    setSelectedStage(Math.min(Math.max(no, 1), 11));
+    setModalView("work");
+  }, []);
   // 모바일 전용: 프로젝트 정보/단계 상세를 동시에 띄우면 좁아, 탭으로 하나씩 전환.
   // (데스크톱은 좌우 2단으로 함께 보이므로 이 값은 CSS 상 무시된다.)
   const [mobilePane, setMobilePane] = useState<"info" | "stage">("stage");
@@ -1979,15 +1990,32 @@ export function PipelineModal({
             </span>
           )}
           <span className="pl-head-right">
-            {/* 개요 — 이 프로젝트의 모든 정보를 한 페이지로(읽기 전용). 팀원 공유·인쇄용. */}
+            {/* 작업 ↔ 개요 전환 — 같은 프로젝트를 "이번 단계 작업"과 "상황 전체"로 오간다.
+                예전엔 여기서 /project/<id> 로 페이지를 통째로 떠났는데, 돌아오면 열어 둔
+                단계와 스크롤을 잃었다. 공유·인쇄가 필요한 사람은 개요 뷰의 ↗ 로 나간다. */}
             {!isNewProject ? (
-              <Link
-                className="pl-modal-overview"
-                href={`/project/${r.rfq_id}`}
-                title="Open the full project overview (read-only, shareable)"
-              >
-                ⤢ Overview
-              </Link>
+              <span className="pl-modal-viewtoggle" role="tablist" aria-label="Modal view">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={modalView === "work"}
+                  className={modalView === "work" ? "on" : ""}
+                  onClick={() => setModalView("work")}
+                  title="Work the stages of this project"
+                >
+                  ✎ Work
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={modalView === "overview"}
+                  className={modalView === "overview" ? "on" : ""}
+                  onClick={() => setModalView("overview")}
+                  title="Read the whole project at a glance"
+                >
+                  ▤ Overview
+                </button>
+              </span>
             ) : null}
             <span className={`pl-pic-chip${canEditPic ? " editable" : ""}`}>
               <span className="pl-pic-label">PIC</span>
@@ -2102,9 +2130,30 @@ export function PipelineModal({
           </div>
         ) : null}
 
+        {/* 개요 뷰 — 팝업 안에서 프로젝트 전체를 읽는다. 단계 스트립과 좌우 2단 작업
+            패널을 대신한다(개요가 같은 단계 타임라인을 더 자세히 갖고 있어 스트립이
+            겹친다). pl-modal-body 는 overflow:hidden 이라 스크롤 컨테이너를 따로 둔다. */}
+        {modalView === "overview" && !isNewProject ? (
+          <div className="pl-modal-ov">
+            <ProjectOverviewScreen
+              rfqId={r.rfq_id}
+              embedded
+              onOpenStage={openStageFromOverview}
+            />
+            {/* 인쇄·공유는 URL 이 필요한 일이라 페이지 개요로 보낸다. 팝업 안에서
+                window.print() 를 부르면 백드롭과 뒤 화면까지 같이 인쇄된다. */}
+            <div className="pl-modal-ov-foot">
+              <Link className="btn sm" href={`/project/${r.rfq_id}`} target="_blank">
+                ↗ Open as page (print · share)
+              </Link>
+            </div>
+          </div>
+        ) : null}
+
         {/* 단계 스트립 — 진행상태(완료 음영/현재)와 탐색(선택)을 통합하고, 각 단계의
             주요 결과물(번호·Vendor·금액 등)과 완료 일시를 카드에 함께 노출한다.
             우측 토글로 납작한(번호+작은 제목) 바로 접어 세로 공간을 아낀다. */}
+        {modalView === "work" ? (
         <div className={`project-stage-tabs-row${stagesCollapsed ? " collapsed" : ""}`}>
           <div className="project-stage-tabs" role="tablist" aria-label="Project stages" ref={stageStripRef}>
           {chain.map((c) => {
@@ -2148,7 +2197,9 @@ export function PipelineModal({
             {stagesCollapsed ? "▾" : "▴"}
           </button>
         </div>
+        ) : null}
 
+        {modalView === "work" ? (
         <div className="pl-modal-body">
           <div className="intl-detail">
             {/* 모바일 전환 탭 — 좁은 화면에서만 노출(데스크톱은 CSS 로 숨김). */}
@@ -2334,6 +2385,7 @@ export function PipelineModal({
             </div>
           </div>
         </div>
+        ) : null}
       </div>
     </div>
   );
