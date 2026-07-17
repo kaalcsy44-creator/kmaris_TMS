@@ -2745,8 +2745,12 @@ table.mini td.mini-empty {
   font-variant-numeric: tabular-nums;
 }
 .pl-modal-head .intl-title b {
-  font-size: 14px;
+  font-size: 16px;
   color: var(--navy);
+}
+.pl-modal-head .pl-proj-name {
+  font-size: 15px;
+  font-weight: 700;
 }
 /* 현재 단계 — 단계 바 바로 아래(해당 단계) */
 .pl-curstage {

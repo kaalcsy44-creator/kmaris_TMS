@@ -1992,11 +1992,9 @@ export function PipelineModal({
             </span>
           ) : (
             <span className="intl-title">
-              <span className="pl-recv-label">Project No.</span>
               <b><ProjectNo value={r.project_no} /></b>
               <WorkTypeBadge type={r.work_type} />
               {r.project_title ? <span className="pl-proj-name">{r.project_title}</span> : null}
-              {r.received_at ? <span className="pl-recv-at">First RFQ {fmtStageDate(r.received_at)}</span> : null}
             </span>
           )}
           <span className="pl-head-right">
