@@ -5,6 +5,8 @@ import { createPortal } from "react-dom";
 import {
   documentDownloadUrl,
   fetchDocumentDetail,
+  saveProformaInvoice,
+  deleteProformaInvoice,
   saveCommercialInvoice,
   deleteCommercialInvoice,
   savePackingList,
@@ -65,8 +67,9 @@ type StageTab = "s7" | "s8" | "s9";
 type WorkView = "parts" | "service";
 
 // 문서 종류 → 표시 라벨(작업 모달 제목 등).
-type DocKind = "ci" | "sm" | "pl" | "sa" | "pod" | "tax";
+type DocKind = "pi" | "ci" | "sm" | "pl" | "sa" | "pod" | "tax";
 const KIND_CFG: Record<DocKind, { label: string }> = {
+  pi: { label: "Proforma Invoice" },
   ci: { label: "Commercial Invoice" },
   sm: { label: "Shipping Marks" },
   pl: { label: "Packing List" },
@@ -92,7 +95,7 @@ export function DocumentsOverview({
     s === 8 ? "s8" : s === 9 ? "s9" : "s7";
   const [workView, setWorkView] = useState<WorkView>(initialView === "service" ? "service" : "parts");
   const [stage, setStage] = useState<StageTab>(stageFromProp(initialStage));
-  const [readyDoc, setReadyDoc] = useState<"ci" | "sm" | "pl" | "sa">("ci"); // 7단계 하위(CI/Shipping Marks/PL/SA)
+  const [readyDoc, setReadyDoc] = useState<"pi" | "ci" | "sm" | "pl" | "sa">("ci"); // 7단계 하위(Proforma(선택)/CI/Shipping Marks/PL/SA)
 
   const { data: overview, refresh } = useCachedData(
     "documents:overview",
@@ -144,6 +147,9 @@ export function DocumentsOverview({
     <div className="action-tabs embedded">
       {stage === "s7" ? (
         <div className="seg-tabs" style={{ marginBottom: 12 }}>
+          <button className={readyDoc === "pi" ? "on" : ""} onClick={() => setReadyDoc("pi")}>
+            Proforma Invoice
+          </button>
           <button className={readyDoc === "ci" ? "on" : ""} onClick={() => setReadyDoc("ci")}>
             Commercial Invoice
           </button>
@@ -665,7 +671,9 @@ function DocEditorContent({
       {data ? (
         <>
           {hideInfo ? null : <DocOrderInfo order={data.order} />}
-          {kind === "ci" ? (
+          {kind === "pi" ? (
+            <ProformaInvoiceTab key={`pi-${data.order.id}-${data.pi?.id ?? 0}`} data={data} onChanged={afterChange} />
+          ) : kind === "ci" ? (
             <CommercialInvoiceTab key={`ci-${data.order.id}-${data.ci?.id ?? 0}`} data={data} onChanged={afterChange} />
           ) : kind === "sm" ? (
             <ShippingMarksTab key={`sm-${data.order.id}-${data.ci?.id ?? 0}`} data={data} onChanged={afterChange} />
@@ -842,6 +850,145 @@ function OrderMilestones({ data, onChanged }: { data: DocumentDetail; onChanged:
       >
         Vendor docs confirmed {data.order.vendor_docs_sent_date || "pending"}
       </button>
+    </div>
+  );
+}
+
+// Proforma Invoice(선택) — 선적 전 발행하는 견적성 송장. Commercial Invoice 와 동일한
+// Basic info + Item list 구성이나 별도 레코드(pi)에 저장되며 하위 문서를 만들지 않는다.
+function ProformaInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChanged: () => void }) {
+  const [piNo, setPiNo] = useState(data.pi?.pi_no || "");
+  const [date, setDate] = useState(data.pi?.date || today());
+  const [currency, setCurrency] = useState(data.pi?.currency || "USD");
+  const [vatRate, setVatRate] = useState(data.pi?.vat_rate ?? 0);
+  const [items, setItems] = useState<DocumentWorkItem[]>(normalizeItems(data.pi?.items || data.order.items));
+  const firstHs = (data.pi?.items || data.order.items || []).find((i) => i.hs_code)?.hs_code || "";
+  const [shipping, setShipping] = useState<Record<string, string>>({
+    port_loading: "Busan, Korea",
+    port_discharge: "",
+    carrier: "TBD",
+    bl_awb_no: "TBD",
+    etd: "",
+    eta: "",
+    hs_code: firstHs,
+    ...defaultMarkFields(data.order),
+    ...(data.pi?.shipping || {}),
+  });
+  const [terms, setTerms] = useState<Record<string, string>>(data.pi?.terms || {});
+  const [busy, setBusy] = useState(false);
+  const total = useMemo(() => items.reduce((sum, i) => sum + num(i.amount), 0), [items]);
+  const editable = canEditDoc(data);
+
+  async function save() {
+    setBusy(true);
+    try {
+      const outItems = items.map((it) => ({ ...it, hs_code: shipping.hs_code || it.hs_code || "" }));
+      const outShipping = { ...shipping, shipping_marks: composeShippingMarks(shipping) };
+      await saveProformaInvoice(data.order.id, { pi_no: piNo, date, currency, vat_rate: vatRate, items: outItems, shipping: outShipping, terms });
+      onChanged();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function cancel() {
+    setPiNo(data.pi?.pi_no || "");
+    setDate(data.pi?.date || today());
+    setCurrency(data.pi?.currency || "USD");
+    setVatRate(data.pi?.vat_rate ?? 0);
+    setItems(normalizeItems(data.pi?.items || data.order.items));
+    setShipping({
+      port_loading: "Busan, Korea",
+      port_discharge: "",
+      carrier: "TBD",
+      bl_awb_no: "TBD",
+      etd: "",
+      eta: "",
+      hs_code: firstHs,
+      ...defaultMarkFields(data.order),
+      ...(data.pi?.shipping || {}),
+    });
+    setTerms(data.pi?.terms || {});
+  }
+
+  async function del() {
+    if (!data.pi) return;
+    if (!confirm("Delete this Proforma Invoice?")) return;
+    setBusy(true);
+    try {
+      await deleteProformaInvoice(data.order.id);
+      onChanged();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Delete failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="doc-tab">
+      <p className="hint-inline" style={{ display: "block", marginBottom: 10 }}>
+        Proforma Invoice 는 선적 전 발행하는 <b>선택</b> 문서입니다. Commercial Invoice 와 독립적으로 저장됩니다.
+      </p>
+      <fieldset className="form-fieldset" disabled={!editable}>
+      <div className="doc-cols">
+      <div className="doc-col">
+      <div className="sub-h">Basic info</div>
+      <div className="form-grid doc-form-grid">
+        <Field label="PI No." value={piNo} onChange={setPiNo} />
+        <Field label="PI Date" value={date} onChange={setDate} type="date" />
+        <label className="form-field">
+          <span>Currency</span>
+          <CurrencyToggle value={currency} onChange={setCurrency} />
+        </label>
+        <VatRateSelect value={String(vatRate)} onChange={(v) => setVatRate(num(v))} />
+        <ShippingFields shipping={shipping} setShipping={setShipping} />
+        <ComboField label="Incoterms" value={terms.incoterms || ""} onChange={(v) => setTerms({ ...terms, incoterms: v })} options={INCOTERMS_OPTIONS} />
+        <ComboField label="Payment Terms" value={terms.payment_terms || ""} onChange={(v) => setTerms({ ...terms, payment_terms: v })} options={PAYMENT_OPTIONS} />
+        <Field label="HS Code (optional)" value={shipping.hs_code || ""} onChange={(v) => setShipping({ ...shipping, hs_code: v })} />
+      </div>
+      </div>
+      </div>
+      <ItemEditor
+        items={items}
+        setItems={setItems}
+        packing={false}
+        currency={currency}
+        tableId="pi-items"
+        headerActions={
+          <button className="btn sm" disabled={busy} onClick={() => setItems(normalizeItems(data.order.items))}>
+            Load order items
+          </button>
+        }
+      />
+      </fieldset>
+      <div className="form-actions doc-actions">
+        <div className="doc-actions-left">
+          <DocPreviewButton orderId={data.order.id} kind="pi/pdf" filename="Proforma Invoice.pdf" disabled={!data.pi} />
+        </div>
+        <div className="doc-actions-center">
+          <span className="hint-inline">Total {dualCurrencyText(total, currency)} · {fxRateText()}</span>
+        </div>
+        <div className="doc-actions-right">
+          {editable ? (
+            <>
+              {data.pi ? (
+                <button className="btn danger" disabled={busy} onClick={del}>
+                  Delete
+                </button>
+              ) : null}
+              <button className="btn" disabled={busy} onClick={cancel}>
+                Cancel
+              </button>
+              <button className="btn primary" disabled={busy || data.order.id === 0} onClick={save}>
+                Save
+              </button>
+            </>
+          ) : (
+            <span className="hint-inline">{editBlockReason("documents", data.order.assignee_id)}</span>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -1971,7 +2118,7 @@ function DocPreviewButton({
   xlsxKind,
 }: {
   orderId: number;
-  kind: "ci/pdf" | "sm/pdf" | "pl/pdf" | "sa/pdf";
+  kind: "pi/pdf" | "ci/pdf" | "sm/pdf" | "pl/pdf" | "sa/pdf";
   filename: string;
   disabled: boolean;
   // 지정 시 미리보기 우측상단에 Excel 다운로드 버튼을 노출한다.
@@ -2128,7 +2275,7 @@ function emptyDocDetail(): DocumentDetail {
     },
     pod: null,
     stage_done: { "7": false, "8": false, "10": false, "11": false },
-    ci: null, pl: null, sa: null, tax: null,
+    pi: null, ci: null, pl: null, sa: null, tax: null,
     smtp_configured: false,
   };
 }

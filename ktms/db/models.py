@@ -341,6 +341,21 @@ class PurchaseOrder(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class ProformaInvoice(Base):
+    """선적 전 발행하는 견적성 송장(선택). CI 와 독립적으로 오더당 최신 1건을 편집한다."""
+    __tablename__ = "proforma_invoices"
+    id         = Column(Integer, primary_key=True)
+    pi_no      = Column(String(40), unique=True)
+    order_id   = Column(Integer, ForeignKey("orders.id"))
+    date       = Column(String(10))
+    currency   = Column(String(10), default="USD")
+    vat_rate   = Column(Float, default=0.0)
+    items      = Column(JSON, default=list)
+    shipping   = Column(JSON, default=dict)   # 선적정보(port/carrier/etd/eta 등)
+    terms      = Column(JSON, default=dict)   # Incoterms·Payment Terms·Freight/Packing/Insurance 등
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 class CommercialInvoice(Base):
     __tablename__ = "commercial_invoices"
     id         = Column(Integer, primary_key=True)

@@ -71,7 +71,7 @@ from db.models import (
     RFQ, Customer, Vessel, Vendor, User, UserRole, RolePermission, ItemMaster, ItemCategory, DocSequence,
     EmailTemplate,
     VendorRFQ, VendorQuote, Quotation, QuotationStatus, FollowUpLevel,
-    Order, PurchaseOrder, ShippingAdvice, CommercialInvoice,
+    Order, PurchaseOrder, ShippingAdvice, ProformaInvoice, CommercialInvoice,
     PackingList, TaxInvoiceData, ARRecord, DeliveryProof,
     RFQStatus, OrderStatus, ARStatus, WorkType, MarketingActivity, ScheduleEvent,
     MarketingAsset,
@@ -1624,6 +1624,15 @@ def _vessel_for_order(session, order: Order):
     return session.query(Vessel).filter_by(id=order.vessel_id).first()
 
 
+def _latest_pi(session, order_id: int):
+    return (
+        session.query(ProformaInvoice)
+        .filter_by(order_id=order_id)
+        .order_by(ProformaInvoice.id.desc())
+        .first()
+    )
+
+
 def _latest_ci(session, order_id: int):
     return (
         session.query(CommercialInvoice)
@@ -1731,6 +1740,7 @@ def _rfq_for_order(session, order: Order):
 def _document_detail_payload(session, order: Order) -> dict:
     cust = _customer_for_order(session, order)
     vessel = _vessel_for_order(session, order)
+    pi = _latest_pi(session, order.id)
     ci = _latest_ci(session, order.id)
     pl = _latest_pl(session, ci.id if ci else None)
     sa = _latest_sa(session, order.id)
@@ -1788,6 +1798,17 @@ def _document_detail_payload(session, order: Order) -> dict:
         },
         # 수동 완료(완료 버튼) 단계 상태 — 7·8(서비스) · 10 · 11
         "stage_done": {k: bool(sd.get(k)) for k in ("7", "8", "10", "11")},
+        "pi": None if not pi else {
+            "id": pi.id,
+            "pi_no": pi.pi_no or "",
+            "date": pi.date or "",
+            "currency": pi.currency or "USD",
+            "vat_rate": pi.vat_rate or 0.0,
+            "items": pi.items or [],
+            "shipping": pi.shipping or {},
+            "terms": pi.terms or {},
+            "missing": _missing_items(order.items or [], pi.items or []),
+        },
         "ci": None if not ci else {
             "id": ci.id,
             "ci_no": ci.ci_no or "",
@@ -1828,6 +1849,16 @@ def _document_detail_payload(session, order: Order) -> dict:
 class DocumentMilestoneUpdate(BaseModel):
     field: str
     value: bool
+
+
+class ProformaInvoiceSave(BaseModel):
+    pi_no: str | None = None
+    date: str | None = None
+    currency: str = "USD"
+    vat_rate: float = 0.0
+    items: list[dict] = []
+    shipping: dict = {}
+    terms: dict = {}
 
 
 class CommercialInvoiceSave(BaseModel):
@@ -2475,6 +2506,8 @@ __all__ = [
     "ARStatus",
     "CommercialInvoice",
     "CommercialInvoiceSave",
+    "ProformaInvoice",
+    "ProformaInvoiceSave",
     "CompanyProfile",
     "Customer",
     "CustomerCreate",
@@ -2586,6 +2619,7 @@ __all__ = [
     "_kst",
     "_kst_iso",
     "_latest_ci",
+    "_latest_pi",
     "_latest_pl",
     "_latest_sa",
     "_latest_tax",

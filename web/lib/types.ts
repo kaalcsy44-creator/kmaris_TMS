@@ -554,6 +554,17 @@ export type DocumentDetail = {
   };
   pod: null | { id: number; filename: string; uploaded_at: string };
   stage_done: { "7": boolean; "8": boolean; "10": boolean; "11": boolean };
+  pi: null | {
+    id: number;
+    pi_no: string;
+    date: string;
+    currency: string;
+    vat_rate: number;
+    items: DocumentWorkItem[];
+    shipping: Record<string, string>;
+    terms?: Record<string, string>;
+    missing: { part_no: string; description: string; order_qty: number; doc_qty: number }[];
+  };
   ci: null | {
     id: number;
     ci_no: string;

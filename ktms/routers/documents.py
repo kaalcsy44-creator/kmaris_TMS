@@ -15,6 +15,8 @@ from _core import (
     Order,
     PackingList,
     PackingListSave,
+    ProformaInvoice,
+    ProformaInvoiceSave,
     PurchaseOrder,
     Quotation,
     Response,
@@ -36,6 +38,7 @@ from _core import (
     _first_rfq_iso,
     _kst_iso,
     _latest_ci,
+    _latest_pi,
     _latest_pl,
     _latest_sa,
     _latest_tax,
@@ -249,6 +252,76 @@ def document_milestone(order_id: int, body: DocumentMilestoneUpdate):
         setattr(order, body.field, date.today().isoformat() if body.value else None)
         s.commit()
         return {"ok": True, "value": getattr(order, body.field) or ""}
+    finally:
+        s.close()
+
+
+# ── Proforma Invoice (선택) — 선적 전 견적성 송장. CI 와 독립적으로 오더당 최신 1건. ──
+@app.post("/api/admin/documents/{order_id}/pi",
+          dependencies=[Depends(require_token)])
+def save_proforma_invoice(order_id: int, body: ProformaInvoiceSave):
+    s = get_session()
+    try:
+        order = s.query(Order).filter_by(id=order_id).first()
+        if not order:
+            raise HTTPException(status_code=404, detail="Order를 찾을 수 없습니다.")
+        pi = _latest_pi(s, order_id)
+        if not pi:
+            pi = ProformaInvoice(
+                pi_no=_manual_doc_no(s, ProformaInvoice, "pi_no", body.pi_no, None),
+                order_id=order.id,
+                date=body.date or date.today().isoformat(),
+            )
+            s.add(pi)
+        elif body.pi_no is not None:
+            pi.pi_no = _manual_doc_no(s, ProformaInvoice, "pi_no", body.pi_no, pi.id)
+        pi.date = body.date or pi.date or date.today().isoformat()
+        pi.currency = body.currency or "USD"
+        pi.vat_rate = body.vat_rate or 0.0
+        pi.items = body.items or []
+        pi.shipping = body.shipping or {}
+        pi.terms = body.terms or {}
+        s.commit()
+        return {"ok": True, "id": pi.id, "pi_no": pi.pi_no}
+    finally:
+        s.close()
+
+
+@app.get("/api/admin/documents/{order_id}/pi/pdf",
+         dependencies=[Depends(require_token)])
+def proforma_invoice_pdf(order_id: int):
+    s = get_session()
+    try:
+        order = s.query(Order).filter_by(id=order_id).first()
+        pi = _latest_pi(s, order_id) if order else None
+        if not order or not pi:
+            raise HTTPException(status_code=404, detail="Proforma Invoice가 없습니다.")
+        payload = build_payload(
+            doc_no=pi.pi_no, date=pi.date,
+            customer=_customer_for_order(s, order),
+            vessel=_vessel_for_order(s, order),
+            items=pi.items or [], terms=pi.terms or {},
+            currency=pi.currency or "USD", vat_rate=pi.vat_rate or 0.0,
+            shipping=pi.shipping or {}, po_no=order.po_no or "",
+            export_ref=_project_no_for_order(s, order),
+        )
+        pdf = generate_pdf("proforma_invoice", payload)
+        return _doc_file_response(pdf, f"{pi.pi_no}_PI.pdf", "application/pdf")
+    finally:
+        s.close()
+
+
+@app.delete("/api/admin/documents/{order_id}/pi",
+            dependencies=[Depends(require_token)])
+def delete_proforma_invoice(order_id: int):
+    s = get_session()
+    try:
+        pi = _latest_pi(s, order_id)
+        if not pi:
+            raise HTTPException(status_code=404, detail="Proforma Invoice가 없습니다.")
+        s.delete(pi)
+        s.commit()
+        return {"ok": True}
     finally:
         s.close()
 

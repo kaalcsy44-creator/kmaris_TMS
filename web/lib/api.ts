@@ -492,6 +492,25 @@ export function updateDocumentMilestone(
   return post(`/api/admin/documents/${orderId}/milestone`, { field, value });
 }
 
+export function saveProformaInvoice(
+  orderId: number,
+  body: {
+    pi_no?: string;
+    date?: string;
+    currency: string;
+    vat_rate: number;
+    items: DocumentWorkItem[];
+    shipping: Record<string, string>;
+    terms?: Record<string, string>;
+  }
+): Promise<{ ok: boolean; id: number; pi_no: string }> {
+  return post(`/api/admin/documents/${orderId}/pi`, body);
+}
+
+export function deleteProformaInvoice(orderId: number): Promise<{ ok: boolean }> {
+  return del(`/api/admin/documents/${orderId}/pi`);
+}
+
 export function saveCommercialInvoice(
   orderId: number,
   body: {
@@ -582,7 +601,7 @@ export function saveTaxInvoice(
 
 export function documentDownloadUrl(
   orderId: number,
-  kind: "ci/pdf" | "ci/xlsx" | "sm/pdf" | "sm/xlsx" | "pl/pdf" | "pl/xlsx" | "sa/pdf" | "tax/xlsx"
+  kind: "pi/pdf" | "ci/pdf" | "ci/xlsx" | "sm/pdf" | "sm/xlsx" | "pl/pdf" | "pl/xlsx" | "sa/pdf" | "tax/xlsx"
 ): string {
   return `${API_BASE}/api/admin/documents/${orderId}/${kind}`;
 }
