@@ -424,22 +424,51 @@ def _items_table(data: Dict[str, Any], doc_type: str):
 def _totals_table(data: Dict[str, Any]):
     s = _styles()
     currency = data.get("currency", "USD")
-    totals = calc_totals(
-        data.get("items", []), _num(data.get("vat_rate", 0)), _num(data.get("discount_pct", 0))
+    base = calc_totals(
+        data.get("items", []), 0.0, _num(data.get("discount_pct", 0))
     )
+    subtotal = base["subtotal"]
+    discount = base["discount"]
+    # Freight/Packing/Insurance — Proforma Invoice 의 부대비용(terms 에 보관). 있는 항목만 표기.
+    terms = data.get("terms", {}) or {}
+
+    def _extra(key: str) -> float:
+        try:
+            return float(terms.get(key) or 0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    freight = _extra("freight")
+    packing = _extra("packing")
+    insurance = _extra("insurance")
+    extras = freight + packing + insurance
+    # VAT 율 정규화 — 프론트는 퍼센트(10), 이 모듈은 분수(0.1) 규약. >1 이면 퍼센트로 간주.
+    rate = _num(data.get("vat_rate", 0))
+    if rate > 1:
+        rate /= 100.0
+    taxable = subtotal - discount + extras
+    vat = taxable * rate
+    total = taxable + vat
+
     rows = [
-        [_p("Subtotal", s["base"]), _p(_money(totals["subtotal"], currency), s["right"])],
+        [_p("Subtotal", s["base"]), _p(_money(subtotal, currency), s["right"])],
     ]
-    if totals.get("discount_pct"):
+    if base.get("discount_pct"):
         rows.append(
             [
-                _p(f"Discount ({_num(totals['discount_pct']):g}%)", s["base"]),
-                _p(f"-{_money(totals['discount'], currency)}", s["right"]),
+                _p(f"Discount ({_num(base['discount_pct']):g}%)", s["base"]),
+                _p(f"-{_money(discount, currency)}", s["right"]),
             ]
         )
-    rows.append([_p("VAT", s["base"]), _p(_money(totals["vat"], currency), s["right"])])
+    if freight:
+        rows.append([_p("Freight", s["base"]), _p(_money(freight, currency), s["right"])])
+    if packing:
+        rows.append([_p("Packing", s["base"]), _p(_money(packing, currency), s["right"])])
+    if insurance:
+        rows.append([_p("Insurance", s["base"]), _p(_money(insurance, currency), s["right"])])
+    rows.append([_p("VAT", s["base"]), _p(_money(vat, currency), s["right"])])
     rows.append(
-        [_p("Total", s["base"]), _p(f"<b>{_money(totals['total'], currency)}</b>", s["right"])]
+        [_p("Total", s["base"]), _p(f"<b>{_money(total, currency)}</b>", s["right"])]
     )
     table = Table(rows, colWidths=[35 * mm, 45 * mm])
     table.setStyle(

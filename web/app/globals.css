@@ -3629,6 +3629,46 @@ a.btn.primary:hover {
 .doc-cols > .doc-col:only-child .doc-form-grid {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
+/* Proforma Invoice — Freight/Packing/Insurance/VAT 합산 패널(품목표 우측 아래, 참조 양식). */
+.pi-charges {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+.pi-charges-table {
+  border-collapse: collapse;
+  min-width: 300px;
+}
+.pi-charges-table td {
+  border: 1px solid var(--border, #d8dee6);
+  padding: 4px 10px;
+  font-size: 13px;
+}
+.pi-charges-table td.lbl {
+  background: var(--surface-2, #f4f6f8);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.pi-charges-table td.amt {
+  text-align: right;
+  min-width: 150px;
+}
+.pi-charges-table td.amt input {
+  width: 100%;
+  text-align: right;
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  padding: 0;
+}
+.pi-charges-table td.amt input:focus {
+  outline: 1px solid var(--accent, #0055a8);
+  border-radius: 3px;
+}
+.pi-charges-table tr.grand td {
+  background: var(--accent-soft, #eaf3ff);
+  font-weight: 700;
+}
 /* 좁은 창(정보 패널 펼침 등)에서는 좌우 2단을 위아래로 접는다. */
 @media (max-width: 1100px) {
   .doc-cols {

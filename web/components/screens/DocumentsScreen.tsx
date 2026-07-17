@@ -875,8 +875,15 @@ function ProformaInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChang
     ...(data.pi?.shipping || {}),
   });
   const [terms, setTerms] = useState<Record<string, string>>(data.pi?.terms || {});
+  const [freight, setFreight] = useState(data.pi?.terms?.freight || "");
+  const [packing, setPacking] = useState(data.pi?.terms?.packing || "");
+  const [insurance, setInsurance] = useState(data.pi?.terms?.insurance || "");
   const [busy, setBusy] = useState(false);
-  const total = useMemo(() => items.reduce((sum, i) => sum + num(i.amount), 0), [items]);
+  // Total invoice value = 품목 소계 + Freight + Packing + Insurance + VAT (선적 전 견적성 송장).
+  const subtotal = useMemo(() => items.reduce((sum, i) => sum + num(i.amount), 0), [items]);
+  const extras = num(freight) + num(packing) + num(insurance);
+  const vatAmount = (subtotal + extras) * (num(vatRate) / 100);
+  const totalInvoiceValue = subtotal + extras + vatAmount;
   const editable = canEditDoc(data);
 
   async function save() {
@@ -884,7 +891,8 @@ function ProformaInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChang
     try {
       const outItems = items.map((it) => ({ ...it, hs_code: shipping.hs_code || it.hs_code || "" }));
       const outShipping = { ...shipping, shipping_marks: composeShippingMarks(shipping) };
-      await saveProformaInvoice(data.order.id, { pi_no: piNo, date, currency, vat_rate: vatRate, items: outItems, shipping: outShipping, terms });
+      const outTerms = { ...terms, freight, packing, insurance };
+      await saveProformaInvoice(data.order.id, { pi_no: piNo, date, currency, vat_rate: vatRate, items: outItems, shipping: outShipping, terms: outTerms });
       onChanged();
     } finally {
       setBusy(false);
@@ -909,6 +917,9 @@ function ProformaInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChang
       ...(data.pi?.shipping || {}),
     });
     setTerms(data.pi?.terms || {});
+    setFreight(data.pi?.terms?.freight || "");
+    setPacking(data.pi?.terms?.packing || "");
+    setInsurance(data.pi?.terms?.insurance || "");
   }
 
   async function del() {
@@ -963,13 +974,44 @@ function ProformaInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChang
           </button>
         }
       />
+      {/* Freight/Packing/Insurance/VAT — 품목 소계에 더해 Total invoice value 를 만든다. */}
+      <div className="pi-charges">
+        <table className="pi-charges-table">
+          <tbody>
+            <tr>
+              <td className="lbl">Subtotal</td>
+              <td className="amt"><DualCurrencyAmount value={subtotal} currency={currency} /></td>
+            </tr>
+            <tr>
+              <td className="lbl">Freight</td>
+              <td className="amt"><input className="num" value={amountInputValue(freight)} onChange={(e) => setFreight(String(parseAmountInput(e.target.value) ?? ""))} /></td>
+            </tr>
+            <tr>
+              <td className="lbl">Packing</td>
+              <td className="amt"><input className="num" value={amountInputValue(packing)} onChange={(e) => setPacking(String(parseAmountInput(e.target.value) ?? ""))} /></td>
+            </tr>
+            <tr>
+              <td className="lbl">Insurance</td>
+              <td className="amt"><input className="num" value={amountInputValue(insurance)} onChange={(e) => setInsurance(String(parseAmountInput(e.target.value) ?? ""))} /></td>
+            </tr>
+            <tr>
+              <td className="lbl">VAT ({num(vatRate)}%)</td>
+              <td className="amt"><DualCurrencyAmount value={vatAmount} currency={currency} /></td>
+            </tr>
+            <tr className="grand">
+              <td className="lbl">Total invoice value</td>
+              <td className="amt"><DualCurrencyAmount value={totalInvoiceValue} currency={currency} /></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
       </fieldset>
       <div className="form-actions doc-actions">
         <div className="doc-actions-left">
           <DocPreviewButton orderId={data.order.id} kind="pi/pdf" filename="Proforma Invoice.pdf" disabled={!data.pi} />
         </div>
         <div className="doc-actions-center">
-          <span className="hint-inline">Total {dualCurrencyText(total, currency)} · {fxRateText()}</span>
+          <span className="hint-inline">Total invoice value {dualCurrencyText(totalInvoiceValue, currency)} · {fxRateText()}</span>
         </div>
         <div className="doc-actions-right">
           {editable ? (
