@@ -121,10 +121,12 @@ export default function ProjectsScreen() {
   const deepRfq = params.get("rfq");
   const deepOrder = params.get("order");
   const deepStage = params.get("stage");
+  const deepView = params.get("view");
   const [deepLink, setDeepLink] = useState<{
     rfqId: number | null;
     orderId: number | null;
     stage: number | null;
+    view: "work" | "overview";
   } | null>(null);
   useEffect(() => {
     if (!deepRfq && !deepOrder) return;
@@ -133,10 +135,11 @@ export default function ProjectsScreen() {
       rfqId: deepRfq ? Number(deepRfq) : null,
       orderId: deepOrder ? Number(deepOrder) : null,
       stage: deepStage ? Number(deepStage) : null,
+      view: deepView === "overview" ? "overview" : "work",
     });
     // URL 정리 — 새로고침마다 같은 팝업이 다시 열리지 않도록 파라미터를 제거한다.
     router.replace("/project", { scroll: false });
-  }, [deepRfq, deepOrder, deepStage, router]);
+  }, [deepRfq, deepOrder, deepStage, deepView, router]);
   // 내부확인용·고객확인용 모두 통합 파이프라인(rows) 사용. 단계 체계만 12 vs 7로 다름.
   const {
     data: pipeline,
@@ -219,6 +222,7 @@ export default function ProjectsScreen() {
               openRfqId={deepLink?.rfqId ?? null}
               openOrderId={deepLink?.orderId ?? null}
               openStage={deepLink?.stage ?? null}
+              openView={deepLink?.view ?? "work"}
             />
           )}
         </>
@@ -516,6 +520,7 @@ function PipelineTable({
   openRfqId = null,
   openOrderId = null,
   openStage = null,
+  openView = "work",
 }: {
   rows: PipelineRow[];
   steps: string[];
@@ -536,6 +541,7 @@ function PipelineTable({
   openRfqId?: number | null;
   openOrderId?: number | null;
   openStage?: number | null;
+  openView?: "work" | "overview";
 }) {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [initialModalView, setInitialModalView] = useState<"work" | "overview">("work");
@@ -562,10 +568,10 @@ function PipelineTable({
       openRfqId ?? rows.find((r) => r.order_id === openOrderId)?.rfq_id ?? null;
     if (!id) return;
     deepConsumed.current = true;
-    setInitialModalView("work");
+    setInitialModalView(openView);
     setSelectedId(id);
     setDeepStage(openStage && openStage > 0 ? openStage : null);
-  }, [openRfqId, openOrderId, openStage, rows]);
+  }, [openRfqId, openOrderId, openStage, openView, rows]);
   // 목록 표시 방식: 표(table) / 칸반 보드(board). 같은 데이터·같은 상세 모달 재사용.
   const [view, setView] = useState<"table" | "board">("board");
   // 현황판 전체 미리보기(A4 가로 이미지) 팝업 열림 여부.
@@ -2155,11 +2161,6 @@ export function PipelineModal({
             />
             {/* 인쇄·공유는 URL 이 필요한 일이라 페이지 개요로 보낸다. 팝업 안에서
                 window.print() 를 부르면 백드롭과 뒤 화면까지 같이 인쇄된다. */}
-            <div className="pl-modal-ov-foot">
-              <Link className="btn sm" href={`/project/${r.rfq_id}`} target="_blank">
-                ↗ Open as page (print · share)
-              </Link>
-            </div>
           </div>
         ) : null}
 

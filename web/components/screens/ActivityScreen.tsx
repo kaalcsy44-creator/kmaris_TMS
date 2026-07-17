@@ -513,7 +513,7 @@ function ActivityCard({
           <span className="act-spacer" />
           {row.assignee ? <span className="act-pic">{row.assignee}</span> : null}
           {/* 개요(읽기 전용 한 페이지) → / 진행현황 팝업(작업) ✎ — 두 진입점을 나눠 둔다. */}
-          <Link className="act-open" href={`/project/${row.rfq_id}`} title="Project overview">→</Link>
+          <Link className="act-open" href={`/project?rfq=${row.rfq_id}&view=overview`} title="Project overview">→</Link>
           <Link
             className="act-open act-open-edit"
             href={`/project?rfq=${row.rfq_id}&stage=${row.stage}`}

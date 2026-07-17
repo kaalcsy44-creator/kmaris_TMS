@@ -97,7 +97,7 @@ export default function GlobalSearch() {
   const goOverview = useCallback(
     (r: SearchResult) => {
       dismiss();
-      router.push(`/project/${r.rfq_id}`);
+      router.push(`/project?rfq=${r.rfq_id}&view=overview`);
     },
     [dismiss, router]
   );
@@ -181,7 +181,7 @@ export default function GlobalSearch() {
                 </button>
                 <Link
                   className="gsearch-item-ov"
-                  href={`/project/${r.rfq_id}`}
+                  href={`/project?rfq=${r.rfq_id}&view=overview`}
                   onClick={dismiss}
                   title="Open the project overview (read-only) — Shift+Enter"
                   aria-label={`Open ${r.project_no || `RFQ-${r.rfq_id}`} overview`}
