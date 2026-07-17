@@ -875,8 +875,10 @@ function VendorRfqDetailModal({
           <DetailTabBar tab={tab} onTab={setTab} />
           {tab === "edit" ? (
           <>
-          {showEdit ? (
-            <>
+          {/* inline(프로젝트 팝업)에서는 다른 단계처럼 읽기전용 개요 없이 편집 화면을 기본으로.
+              편집 권한이 없으면 fieldset 을 비활성화해 뷰어 모드로 보여준다. */}
+          {(showEdit || inline) ? (
+            <fieldset className="form-fieldset" disabled={!canEditThis}>
               {!inline ? (
                 <>
                   <div className="form-section-title">Project info</div>
@@ -946,7 +948,7 @@ function VendorRfqDetailModal({
                   ) : null
                 }
               />
-            </>
+            </fieldset>
           ) : (
             <>
               {!inline ? (
@@ -982,9 +984,12 @@ function VendorRfqDetailModal({
             ) : null}
             <span style={{ marginLeft: "auto" }} />
             {canDeleteThis ? (
-              <button className="btn danger" onClick={remove} disabled={busy || showEdit}>Delete</button>
+              <button className="btn danger" onClick={remove} disabled={busy || (showEdit && !inline)}>Delete</button>
             ) : null}
-            {canEditThis && showEdit ? (
+            {/* inline 은 편집 화면이 기본 → Save 만 노출(읽기전용 ↔ 편집 토글 없음). */}
+            {canEditThis && inline ? (
+              <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
+            ) : canEditThis && showEdit ? (
               <>
                 <button className="btn" onClick={() => setEditing(false)} disabled={busy}>Cancel</button>
                 <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
