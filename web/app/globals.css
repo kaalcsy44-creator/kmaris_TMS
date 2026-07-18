@@ -8695,20 +8695,20 @@ button.ov-tl-stage:hover { background: color-mix(in srgb, var(--ov-tone) 12%, tr
    Keep the existing header / four-stage / items geometry, but make content—not
    the grid chrome—the strongest visual signal. */
 .proj-ov {
-  /* Parts uses one blue family. Stages are separated by lightness/saturation,
-     so they read as one workflow rather than four unrelated modules. */
-  --ov-r: #587596;
+  /* Mirror Project Work: one status color per work type. */
+  --ov-work: var(--blue);
+  --ov-r: var(--ov-work);
   --ov-r-bg: #fbfdff;
-  --ov-r-hd: #eff4f9;
-  --ov-q: #326fa8;
-  --ov-q-bg: #fafdff;
-  --ov-q-hd: #e8f1f9;
-  --ov-p: #125e9d;
-  --ov-p-bg: #f9fcff;
-  --ov-p-hd: #e0edf8;
-  --ov-c: #004f8f;
-  --ov-c-bg: #f8fbfe;
-  --ov-c-hd: #d8e9f6;
+  --ov-r-hd: #edf4fb;
+  --ov-q: var(--ov-work);
+  --ov-q-bg: #fbfdff;
+  --ov-q-hd: #edf4fb;
+  --ov-p: var(--ov-work);
+  --ov-p-bg: #fbfdff;
+  --ov-p-hd: #edf4fb;
+  --ov-c: var(--ov-work);
+  --ov-c-bg: #fbfdff;
+  --ov-c-hd: #edf4fb;
 
   --ov-t-title: 19px;
   --ov-t-sub: 13px;
@@ -8722,20 +8722,21 @@ button.ov-tl-stage:hover { background: color-mix(in srgb, var(--ov-tone) 12%, tr
   color: #26354b;
 }
 
-/* Service follows the same visual grammar in a green family. */
+/* Service uses the exact green status color from Project Work. */
 .proj-ov.service {
-  --ov-r: #66887a;
+  --ov-work: #16a05a;
+  --ov-r: var(--ov-work);
   --ov-r-bg: #fbfefc;
-  --ov-r-hd: #eff6f2;
-  --ov-q: #438467;
-  --ov-q-bg: #fafffc;
-  --ov-q-hd: #e7f4ec;
-  --ov-p: #1f7755;
-  --ov-p-bg: #f9fefb;
-  --ov-p-hd: #dff0e7;
-  --ov-c: #086943;
-  --ov-c-bg: #f8fdfa;
-  --ov-c-hd: #d5ebdf;
+  --ov-r-hd: #eaf7f0;
+  --ov-q: var(--ov-work);
+  --ov-q-bg: #fbfefc;
+  --ov-q-hd: #eaf7f0;
+  --ov-p: var(--ov-work);
+  --ov-p-bg: #fbfefc;
+  --ov-p-hd: #eaf7f0;
+  --ov-c: var(--ov-work);
+  --ov-c-bg: #fbfefc;
+  --ov-c-hd: #eaf7f0;
 }
 .proj-ov.service .proj-ov-title,
 .proj-ov.service .proj-ov-cnt,
@@ -8809,23 +8810,38 @@ button.ov-tl-stage:hover { background: color-mix(in srgb, var(--ov-tone) 12%, tr
 .ov-tlcol:has(.current) {
   position: relative;
   z-index: 1;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ov-tone) 18%, transparent),
-    0 2px 9px rgba(24, 53, 83, 0.08);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ov-work) 24%, transparent),
+    0 3px 10px rgba(24, 53, 83, 0.11);
 }
 .ov-tlcol:not(:has(.done, .current)) {
   background: #fbfcfd;
-}
-.ov-tlcol:not(:has(.done, .current)) .ov-tlcol-h {
-  color: #8491a2;
-  background: linear-gradient(180deg, #fcfdfe 0%, #f1f4f7 100%);
-  filter: saturate(0.25);
 }
 .ov-tlcol-h {
   padding: 7px 0 6px;
   border-bottom-width: 1px;
   letter-spacing: 0.075em;
-  background: linear-gradient(180deg, #fff 0%, var(--ov-hd) 100%);
+  color: #8491a2;
+  background: linear-gradient(180deg, #fcfdfe 0%, #f1f4f7 100%);
   box-shadow: inset 0 1px 0 #fff, 0 1px 2px rgba(24, 53, 83, 0.05);
+}
+.ov-tlcol:has(.done) .ov-tlcol-h,
+.ov-tlcol:has(.current) .ov-tlcol-h {
+  color: #fff;
+  border-bottom-color: color-mix(in srgb, var(--ov-work) 72%, #0b1d3a);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--ov-work) 82%, #fff) 0%,
+    var(--ov-work) 100%
+  );
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    0 2px 4px color-mix(in srgb, var(--ov-work) 22%, transparent);
+}
+.ov-tlcol:has(.current) .ov-tlcol-h {
+  position: relative;
+  z-index: 2;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.38),
+    inset 0 -2px 0 rgba(4, 22, 42, 0.16),
+    0 3px 7px color-mix(in srgb, var(--ov-work) 28%, transparent);
 }
 .proj-ov-tl > li {
   margin: 2px 6px;
@@ -8872,8 +8888,9 @@ button.ov-tl-stage:hover {
 .ov-tl-val { color: #4f5f75; }
 .proj-ov-tl > li.done .ov-tl-dot,
 .proj-ov-tl > li.current .ov-tl-dot {
-  border-color: var(--ov-tone);
-  background: var(--ov-tone);
+  border-color: var(--ov-work);
+  background: var(--ov-work);
+  color: #fff;
 }
 .proj-ov-tl > li.done::before,
 .proj-ov-tl > li.current::before {
@@ -8885,7 +8902,8 @@ button.ov-tl-stage:hover {
   box-shadow: inset 3px 0 0 var(--ov-tone), 0 2px 7px rgba(24, 53, 83, 0.12);
 }
 .proj-ov-tl > li.current .ov-tl-dot {
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ov-tone) 14%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ov-work) 18%, transparent),
+    0 2px 4px color-mix(in srgb, var(--ov-work) 24%, transparent);
 }
 .proj-ov-tl > li.todo .ov-tl-label { color: #8995a6; }
 .proj-ov-tl > li.todo {
