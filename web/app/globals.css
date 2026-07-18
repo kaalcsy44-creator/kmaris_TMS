@@ -8318,11 +8318,13 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 .act-age.lv-warn { background: #fff3e0; color: #9a5b00; }
 .act-age.lv-urgent { background: #fdeaea; color: #b42318; }
 /* 카드 상단 헤더(1~3행) — 이 영역이 드래그 핸들.
-   음영(진한 배경)은 없앤다: 카드 바탕 그대로 두고 아래 활동 목록과는 얇은 선으로만 구분한다.
+   기본정보(헤더)와 활동 로그를 나누려고 아주 연한 배경 띠를 깐다(구 진한 음영과 다름 — 흐리고
+   부드럽다). 업무타입으로 살짝 색을 나눠 부품=연블루 / 서비스=연그린. 아래 로그 영역은 흰색.
    글자색은 라이트 배경용 기본값을 쓰되, 프로젝트 번호와 프로젝트명만 업무타입 색으로 맞춘다
    — 부품공급=블루 / 서비스=그린. 나머지(고객·벤더·담당자·날짜·선박)는 기본색 유지. */
 .act-card-head { margin: -12px -14px 8px; padding: 10px 14px 9px;
-  background: transparent; border-bottom: 1px solid var(--line); }
+  background: #f3f7fc; border-bottom: 1px solid #e3ebf5; }
+.act-card.service .act-card-head { background: #f1f8f4; border-bottom-color: #dcece2; }
 .act-card-head.draggable { cursor: grab; }
 .act-card-head.draggable:active { cursor: grabbing; }
 .act-card-head .act-sub { margin-bottom: 0; }
