@@ -8695,18 +8695,20 @@ button.ov-tl-stage:hover { background: color-mix(in srgb, var(--ov-tone) 12%, tr
    Keep the existing header / four-stage / items geometry, but make content—not
    the grid chrome—the strongest visual signal. */
 .proj-ov {
-  --ov-r: #50627d;
-  --ov-r-bg: #fbfcfe;
-  --ov-r-hd: #f2f5f9;
-  --ov-q: #075faa;
-  --ov-q-bg: #fbfdff;
-  --ov-q-hd: #edf5fc;
-  --ov-p: #6d4ac7;
-  --ov-p-bg: #fdfcff;
-  --ov-p-hd: #f3effc;
-  --ov-c: #087a46;
-  --ov-c-bg: #fbfefc;
-  --ov-c-hd: #edf8f2;
+  /* Parts uses one blue family. Stages are separated by lightness/saturation,
+     so they read as one workflow rather than four unrelated modules. */
+  --ov-r: #587596;
+  --ov-r-bg: #fbfdff;
+  --ov-r-hd: #eff4f9;
+  --ov-q: #326fa8;
+  --ov-q-bg: #fafdff;
+  --ov-q-hd: #e8f1f9;
+  --ov-p: #125e9d;
+  --ov-p-bg: #f9fcff;
+  --ov-p-hd: #e0edf8;
+  --ov-c: #004f8f;
+  --ov-c-bg: #f8fbfe;
+  --ov-c-hd: #d8e9f6;
 
   --ov-t-title: 19px;
   --ov-t-sub: 13px;
@@ -8719,6 +8721,26 @@ button.ov-tl-stage:hover { background: color-mix(in srgb, var(--ov-tone) 12%, tr
   gap: 18px;
   color: #26354b;
 }
+
+/* Service follows the same visual grammar in a green family. */
+.proj-ov.service {
+  --ov-r: #66887a;
+  --ov-r-bg: #fbfefc;
+  --ov-r-hd: #eff6f2;
+  --ov-q: #438467;
+  --ov-q-bg: #fafffc;
+  --ov-q-hd: #e7f4ec;
+  --ov-p: #1f7755;
+  --ov-p-bg: #f9fefb;
+  --ov-p-hd: #dff0e7;
+  --ov-c: #086943;
+  --ov-c-bg: #f8fdfa;
+  --ov-c-hd: #d5ebdf;
+}
+.proj-ov.service .proj-ov-title,
+.proj-ov.service .proj-ov-cnt,
+.proj-ov.service .proj-ov-actlink { color: #086943; }
+.proj-ov.service .proj-ov-cnt { background: #e7f4ec; }
 
 .proj-ov-head {
   gap: 16px;
@@ -8776,17 +8798,34 @@ button.ov-tl-stage:hover { background: color-mix(in srgb, var(--ov-tone) 12%, tr
 .proj-ov-items-wrap {
   border-color: #dfe5ed;
   border-radius: 10px;
-  box-shadow: 0 1px 2px rgba(15, 35, 62, 0.025);
+  box-shadow: 0 2px 5px rgba(15, 35, 62, 0.055),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 .ov-tlcol + .ov-tlcol,
 .proj-ov-grid .gs {
   border-left-width: 1px;
   border-left-color: #dce3ec;
 }
+.ov-tlcol:has(.current) {
+  position: relative;
+  z-index: 1;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ov-tone) 18%, transparent),
+    0 2px 9px rgba(24, 53, 83, 0.08);
+}
+.ov-tlcol:not(:has(.done, .current)) {
+  background: #fbfcfd;
+}
+.ov-tlcol:not(:has(.done, .current)) .ov-tlcol-h {
+  color: #8491a2;
+  background: linear-gradient(180deg, #fcfdfe 0%, #f1f4f7 100%);
+  filter: saturate(0.25);
+}
 .ov-tlcol-h {
   padding: 7px 0 6px;
   border-bottom-width: 1px;
   letter-spacing: 0.075em;
+  background: linear-gradient(180deg, #fff 0%, var(--ov-hd) 100%);
+  box-shadow: inset 0 1px 0 #fff, 0 1px 2px rgba(24, 53, 83, 0.05);
 }
 .proj-ov-tl > li {
   margin: 2px 6px;
@@ -8841,13 +8880,22 @@ button.ov-tl-stage:hover {
   background: color-mix(in srgb, var(--ov-tone) 28%, #fff);
 }
 .proj-ov-tl > li.current {
-  background: color-mix(in srgb, var(--ov-tone) 5%, #fff);
-  box-shadow: inset 2px 0 0 var(--ov-tone);
+  z-index: 2;
+  background: linear-gradient(180deg, #fff 0%, color-mix(in srgb, var(--ov-tone) 7%, #fff) 100%);
+  box-shadow: inset 3px 0 0 var(--ov-tone), 0 2px 7px rgba(24, 53, 83, 0.12);
 }
 .proj-ov-tl > li.current .ov-tl-dot {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--ov-tone) 14%, transparent);
 }
 .proj-ov-tl > li.todo .ov-tl-label { color: #8995a6; }
+.proj-ov-tl > li.todo {
+  opacity: 0.58;
+  filter: saturate(0.35);
+}
+.proj-ov-tl > li.todo .ov-tl-dot {
+  background: #f8fafc;
+  border-color: #dce3eb;
+}
 .ov-tl-notes { padding: 1px 5px 7px 40px; }
 .ov-tl-notes li {
   gap: 8px;
@@ -8869,24 +8917,36 @@ button.ov-tl-stage:hover {
   padding-top: 7px;
   padding-bottom: 6px;
   letter-spacing: 0.075em;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -1px 0 color-mix(in srgb, currentColor 14%, transparent);
 }
 .proj-ov-items thead th:not(.ov-gh) {
   font-weight: 650;
   color: #647288;
 }
 .proj-ov-grid .ov-sub { opacity: 0.86; }
+.proj-ov-grid .ov-gh.q,
+.proj-ov-grid .ov-sub.q,
+.proj-ov-grid .ov-gh.p,
+.proj-ov-grid .ov-sub.p,
+.proj-ov-grid .ov-gh.c,
+.proj-ov-grid .ov-sub.c,
+.proj-ov-grid thead th:not(.q):not(.p):not(.c) {
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.74), transparent);
+}
 .proj-ov-grid col.ovt-r,
 .proj-ov-grid col.ovt-q,
 .proj-ov-grid col.ovt-p,
 .proj-ov-grid col.ovt-c { background: #fff; }
 .ov-grp-head td {
   padding: 7px 9px !important;
-  background: #f6f8fb !important;
+  background: linear-gradient(180deg, #fafbfd 0%, #f2f5f8 100%) !important;
   border-top: 1px solid #d9e1ea;
+  box-shadow: inset 0 1px 0 #fff;
 }
 .ov-grp-vessel { letter-spacing: -0.05px; }
 .ov-grp-total td {
-  background: #f8fafc !important;
+  background: linear-gradient(180deg, #f9fbfc 0%, #f3f6f9 100%) !important;
   border-top-color: #dfe5ed;
 }
 .proj-ov-grid tbody tr:hover td { background: #f3f7fb; }
@@ -8895,6 +8955,7 @@ button.ov-tl-stage:hover {
 .ov-pct { font-variant-numeric: tabular-nums; }
 .proj-ov-grid .ov-sal .ov-m { color: #142945; font-weight: 750; }
 .ov-pct { color: #087a46; font-weight: 750; }
+.proj-ov.service .ov-pct { color: #086943; }
 .ov-m em { color: #8793a4; }
 
 @media print {
