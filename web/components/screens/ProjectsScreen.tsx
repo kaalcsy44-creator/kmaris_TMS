@@ -599,8 +599,9 @@ function PipelineTable({
   const me = getUser();
   const salesScoped = isOwnScoped();
   const [mineOnly, setMineOnly] = useState(false);
-  // 종결(취소·실주) 프로젝트는 기본으로 접는다 — 표는 "지금 뭘 해야 하나"를 보는 곳이라
-  // 끝난 건이 섞이면 훑는 데 방해가 된다. 보드는 Closed 칸으로 따로 모으므로 표에만 적용.
+  // 종결(취소·실주) + 완료(Done) 프로젝트는 기본으로 접는다 — 현황판은 "지금 뭘 해야 하나"를
+  // 보는 곳이라 끝난 건이 섞이면 훑는 데 방해가 된다. 표는 해당 행을, 보드는 Closed·Done
+  // 칸(과 그 카드)을 통째로 숨긴다. 체크박스로 다시 펼칠 수 있다.
   const [showClosed, setShowClosed] = useState(false);
   // 패싯 필터: 각 값 "전체"는 미적용. 빈 문자열("")은 "미지정" 값 자체를 의미.
   const [fWorkType, setFWorkType] = useState("전체");
@@ -765,11 +766,14 @@ function PipelineTable({
     });
   }
 
-  // 3) 표에서만 종결 프로젝트를 접는다. 보드는 Closed 칸에 따로 모으는 구조라 여기서
-  //    걸러내면 그 칸이 늘 비어 버린다.
-  const closedCount = displayRows.filter((r) => r.cancelled).length;
-  const tableRows = showClosed ? displayRows : displayRows.filter((r) => !r.cancelled);
-  const shownRows = view === "table" ? tableRows : displayRows;
+  // 3) 종결(취소·실주) + 완료(Done) 프로젝트 접기 — 표·보드 공통.
+  //    Done 은 내부 11단계 뷰에서만 존재(마지막 단계 도달). 고객 7단계 뷰는 취소만 대상.
+  const isDone = (r: PipelineRow) => steps.length === 11 && stageOf(r) >= 11;
+  const isFinished = (r: PipelineRow) => !!r.cancelled || isDone(r);
+  const closedCount = displayRows.filter(isFinished).length;
+  const visibleRows = showClosed ? displayRows : displayRows.filter((r) => !isFinished(r));
+  const tableRows = visibleRows;
+  const shownRows = visibleRows;
 
   // 새로고침 후에도 rfq_id로 다시 찾으므로 모달이 최신 값으로 유지된다(삭제되면 null → 자동 닫힘).
   const selected = rows.find((r) => r.rfq_id === selectedId) ?? null;
@@ -905,15 +909,15 @@ function PipelineTable({
             My deals only
           </label>
         )}
-        {/* 종결 프로젝트 토글 — 표에서만 의미가 있다(보드는 Closed 칸으로 분리). */}
-        {view === "table" && closedCount > 0 ? (
+        {/* 종결(Closed)·완료(Done) 프로젝트 토글 — 표는 해당 행을, 보드는 Closed·Done 칸을 숨긴다. */}
+        {closedCount > 0 ? (
           <label className="pl-mine-toggle">
             <input
               type="checkbox"
               checked={showClosed}
               onChange={(e) => setShowClosed(e.target.checked)}
             />
-            Show closed ({closedCount})
+            Show closed/done ({closedCount})
           </label>
         ) : null}
         {filtersActive ? (
@@ -986,6 +990,7 @@ function PipelineTable({
           onSelect={openRow}
           onOverview={openOverview}
           compact={boardCompact}
+          showClosed={showClosed}
         />
       ) : (
       <div className="pl-table-wrap">
@@ -1157,6 +1162,7 @@ function PipelineBoard({
   onSelect,
   onOverview,
   compact,
+  showClosed,
 }: {
   rows: PipelineRow[];
   steps: string[];
@@ -1165,6 +1171,8 @@ function PipelineBoard({
   onSelect: (id: number) => void;
   onOverview: (id: number) => void;
   compact: boolean;
+  // 종결(Closed)·완료(Done) 칸 표시 여부. false면 두 칸을 통째로 숨긴다(기본값).
+  showClosed: boolean;
 }) {
   // 카드별 접힘 예외: 글로벌 밀도와 반대로 뒤집힌 카드 id 집합.
   // 글로벌 토글이 바뀌면 예외를 초기화해 전체가 새 기본값을 따르게 함.
@@ -1183,12 +1191,16 @@ function PipelineBoard({
   const grouped = steps.length === 11;
   // 종결(취소/실주) 딜은 진행 컬럼에서 빼고 별도 Closed 존(RFQ 좌측 맨 앞)으로 모은다.
   // 완료(11단계 Payment Completed)는 AR 을 떠나 Done 컬럼으로 종결 처리한다.
-  const cols: BoardCol[] = grouped
+  const allCols: BoardCol[] = grouped
     ? groupedBoardColumns(stageOf)
     : steps.map((label, i) => ({
         label: `${i + 1}. ${label}`,
         match: (r: PipelineRow) => !r.cancelled && stageOf(r) === i + 1,
       }));
+  // 종결·완료 칸은 토글이 켜졌을 때만 노출한다(기본은 진행 중 칸만 깔끔하게).
+  const cols = showClosed
+    ? allCols
+    : allCols.filter((c) => c.variant !== "cancelled" && c.variant !== "done");
 
   return (
     <div className="pl-board">
