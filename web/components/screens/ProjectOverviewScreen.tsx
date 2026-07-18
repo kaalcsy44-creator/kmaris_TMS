@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment } from "react";
+import { Fragment, useState } from "react";
 import Link from "next/link";
 import {
   fetchPipeline,
@@ -9,6 +9,7 @@ import {
   fetchCustomerQuotationDetail,
   fetchPoWorkOptions,
   fetchDocumentDetail,
+  addRfqStageNote,
   closeReasonLabel,
 } from "@/lib/api";
 import { useCachedData } from "@/lib/useCachedData";
@@ -28,6 +29,10 @@ import { convertCurrency, USD_KRW_RATE } from "@/components/common/itemTable";
 import { tr } from "@/lib/labels";
 import CustomerName from "@/components/common/CustomerName";
 import ActivityDesc from "@/components/common/ActivityDesc";
+import ActivityNoteForm, {
+  initialNoteValue,
+  type ActivityNoteValue,
+} from "@/components/common/ActivityNoteForm";
 import WorkTypeBadge from "@/components/WorkTypeBadge";
 
 /**
@@ -60,15 +65,18 @@ export default function ProjectOverviewScreen({
   rfqId,
   embedded = false,
   onOpenStage,
+  onActivityChanged,
 }: {
   rfqId: number;
   /** 작업 팝업 안에 끼워 넣는 모드 — 자체 머리글(신원·PIC·인쇄·뒤로)을 렌더하지 않는다. */
   embedded?: boolean;
   /** 단계 줄 클릭 처리. 주면 링크 대신 이 콜백을 쓴다(팝업 안에서 화면 전환). */
   onOpenStage?: (stage: number) => void;
+  /** 활동기록을 이 화면에서 추가한 뒤 부모에게 알린다(팝업/목록 갱신). */
+  onActivityChanged?: () => void | Promise<unknown>;
 }) {
   // 목록에서 넘어오면 이미 캐시에 있어 즉시 그려진다(같은 "pipeline" 키를 공유).
-  const { data: pipeline, error: pipeErr } = useCachedData("pipeline", () => fetchPipeline());
+  const { data: pipeline, error: pipeErr, refresh: refreshPipeline } = useCachedData("pipeline", () => fetchPipeline());
   // 견적 전(1~3단계) 프로젝트는 고객이 요청한 RFQ 품목만 있다 — 값이 매겨지기 전 목록.
   const { data: detail } = useCachedData(`rfq:${rfqId}`, () => fetchRfqDetail(rfqId));
   // 고객 P/O·Vendor P/O·견적을 한 번에 받는다. ProjectsScreen 과 같은 캐시 키.
@@ -109,6 +117,12 @@ export default function ProjectOverviewScreen({
   // P/O 가 아직 없으면 견적(있으면)만으로 한 그룹을 만든다.
   const quoteOnlyId = orders.length === 0 ? (qtnList?.rows.find((q) => q.rfq_id === rfqId)?.id ?? 0) : 0;
 
+  // 활동기록 추가 후: 이 화면 데이터를 새로 받고(같은 "pipeline" 캐시) 부모에게도 알린다.
+  const onActivityAdded = async () => {
+    await refreshPipeline();
+    await onActivityChanged?.();
+  };
+
   return (
     <Overview
       row={row}
@@ -122,6 +136,7 @@ export default function ProjectOverviewScreen({
       vendorQuoteNo={row.vquote_no || ""}
       embedded={embedded}
       onOpenStage={onOpenStage}
+      onActivityAdded={onActivityAdded}
     />
   );
 }
@@ -192,6 +207,7 @@ function Overview({
   vendorQuoteNo,
   embedded = false,
   onOpenStage,
+  onActivityAdded,
 }: {
   row: PipelineRow;
   steps: string[];
@@ -204,6 +220,8 @@ function Overview({
   vendorQuoteNo: string;
   embedded?: boolean;
   onOpenStage?: (stage: number) => void;
+  /** 활동기록 추가 후 데이터 갱신 콜백. */
+  onActivityAdded?: () => void | Promise<unknown>;
 }) {
   const rSteps = resolveSteps(steps, row.work_type);
   const chain = buildStageChain(row, rSteps);
@@ -284,7 +302,13 @@ function Overview({
         </span>
       </div>
 
-      <StageTimeline row={row} chain={chain} acts={acts} onOpenStage={onOpenStage} />
+      <StageTimeline
+        row={row}
+        chain={chain}
+        acts={acts}
+        onOpenStage={onOpenStage}
+        onActivityAdded={onActivityAdded}
+      />
 
       <ItemsSection
         stage={row.stage}
@@ -314,13 +338,19 @@ function StageTimeline({
   chain,
   acts,
   onOpenStage,
+  onActivityAdded,
 }: {
   row: PipelineRow;
   chain: StageChainItem[];
   acts: Activity[];
   /** 주면 단계 줄이 링크 대신 이 콜백을 부른다(작업 팝업 안에서 화면 전환). */
   onOpenStage?: (stage: number) => void;
+  /** 활동기록 추가 후 데이터 갱신 콜백. 주면 각 단계에 "+ note" 입력이 열린다. */
+  onActivityAdded?: () => void | Promise<unknown>;
 }) {
+  // 어느 단계에 활동기록 입력창을 열어 뒀는지(한 번에 하나). null 이면 모두 닫힘.
+  const [addStage, setAddStage] = useState<number | null>(null);
+
   // 단계별로 활동을 나눠 담는다. 자동 이벤트는 단계당 최대 1건(완료), 노트는 여러 건.
   const autoOf = new Map<number, Extract<Activity, { kind: "auto" }>>();
   const notesOf = new Map<number, Extract<Activity, { kind: "note" }>[]>();
@@ -413,6 +443,32 @@ function StageTimeline({
                           ))}
                         </ul>
                       ) : null}
+                      {/* 이 단계에 활동기록 추가 — 개요에서 바로 작성. onActivityAdded 가
+                          있을 때만(작업 팝업/페이지에서 로그인 상태) 노출한다. */}
+                      {onActivityAdded ? (
+                        addStage === c.no ? (
+                          <div className="ov-tl-addform">
+                            <StageAddNote
+                              rfqId={row.rfq_id}
+                              stage={c.no}
+                              onDone={async () => {
+                                setAddStage(null);
+                                await onActivityAdded();
+                              }}
+                              onCancel={() => setAddStage(null)}
+                            />
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            className="ov-tl-add"
+                            onClick={() => setAddStage(c.no)}
+                            title={`Add activity to ${c.label}`}
+                          >
+                            + note
+                          </button>
+                        )
+                      ) : null}
                     </li>
                   );
                 })}
@@ -431,6 +487,58 @@ function StageTimeline({
         </div>
       ) : null}
     </section>
+  );
+}
+
+/** 활동기록(stage note) → 저장 payload. 빈 값은 보내지 않아 서버가 '미지정'으로 남긴다.
+ *  (ActivityScreen 의 formToPatch 와 같은 규칙 — 두 화면이 같은 stage_notes 에 쓴다.) */
+function noteFormToPatch(v: ActivityNoteValue) {
+  return {
+    text: v.text.trim(),
+    datetime: v.datetime,
+    direction: v.direction || undefined,
+    party: v.party || undefined,
+    channel: v.channel || undefined,
+    star: v.star,
+    pic: v.pic.trim() || undefined,
+  };
+}
+
+/** 개요의 한 단계에 활동기록 1건 추가 — 공용 ActivityNoteForm 을 그대로 쓴다. */
+function StageAddNote({
+  rfqId,
+  stage,
+  onDone,
+  onCancel,
+}: {
+  rfqId: number;
+  stage: number;
+  onDone: () => void | Promise<unknown>;
+  onCancel: () => void;
+}) {
+  const [form, setForm] = useState<ActivityNoteValue>(() => initialNoteValue());
+  const [busy, setBusy] = useState(false);
+
+  async function submit() {
+    if (!form.text.trim()) return;
+    setBusy(true);
+    try {
+      await addRfqStageNote(rfqId, stage, noteFormToPatch(form));
+      await onDone();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <ActivityNoteForm
+      value={form}
+      onChange={setForm}
+      onSubmit={submit}
+      onCancel={onCancel}
+      submitLabel="Add"
+      busy={busy}
+    />
   );
 }
 

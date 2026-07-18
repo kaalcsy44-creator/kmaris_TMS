@@ -2276,6 +2276,7 @@ export function PipelineModal({
               rfqId={r.rfq_id}
               embedded
               onOpenStage={openStageFromOverview}
+              onActivityChanged={onChanged}
             />
             {/* 인쇄·공유는 URL 이 필요한 일이라 페이지 개요로 보낸다. 팝업 안에서
                 window.print() 를 부르면 백드롭과 뒤 화면까지 같이 인쇄된다. */}
