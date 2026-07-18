@@ -774,6 +774,22 @@ function PipelineTable({
   // 새로고침 후에도 rfq_id로 다시 찾으므로 모달이 최신 값으로 유지된다(삭제되면 null → 자동 닫힘).
   const selected = rows.find((r) => r.rfq_id === selectedId) ?? null;
 
+  // 인접 프로젝트 전환 — "현재 보이는 목록 순서"(shownRows: 표=tableRows, 보드=displayRows)에서
+  // 위/아래 이웃으로. 양 끝에선 제자리(넘어갈 곳 없음). 방향 전환 시 딥링크 단계는 비운다.
+  const navigateSelected = useCallback(
+    (dir: -1 | 1) => {
+      setSelectedId((cur) => {
+        if (cur == null) return cur;
+        const idx = shownRows.findIndex((r) => r.rfq_id === cur);
+        if (idx < 0) return cur;
+        const next = shownRows[idx + dir];
+        return next ? next.rfq_id : cur;
+      });
+      setDeepStage(null);
+    },
+    [shownRows]
+  );
+
   /**
    * 헤더 클릭 시 뜨는 컬럼 메뉴: 정렬 + 필터.
    * 그룹 열이라 한 메뉴가 여러 필드를 담는다 — 정렬 기준이 둘 이상이면 기준별로 ▲▼ 를
@@ -1067,6 +1083,7 @@ function PipelineTable({
           onChanged={onChanged}
           initialStage={deepStage}
           initialView={initialModalView}
+          onNavigate={navigateSelected}
           onClose={() => {
             setSelectedId(null);
             setDeepStage(null);
@@ -1666,6 +1683,7 @@ export function PipelineModal({
   vessels,
   onChanged,
   onClose,
+  onNavigate,
   isNew,
   initialStage = null,
   initialView = "work",
@@ -1676,6 +1694,9 @@ export function PipelineModal({
   vessels: SettingsVessel[];
   onChanged: () => void | Promise<unknown>;
   onClose: () => void;
+  // 인접 프로젝트로 전환(-1=이전, +1=다음). 부모가 "현재 보이는 목록 순서"로 이웃을 계산해
+  // selectedId 를 바꾼다. 주면 ←/→ 방향키와 헤더의 ‹ › 버튼이 활성화된다. 신규 등록 모드엔 없다.
+  onNavigate?: (dir: -1 | 1) => void;
   // isNew: 신규 RFQ 등록 모드 — 저장된 프로젝트가 없으므로 좌측/딜 액션은 안내로 대체하고
   // 우측 상세 자리에 신규 RFQ 기본정보 입력 폼(NewRfqForm)을 넣는다.
   isNew?: boolean;
@@ -1796,6 +1817,40 @@ export function PipelineModal({
     setSelectedStage(Math.min(Math.max(no, 1), 11));
     setModalView("work");
   }, []);
+
+  // 인접 프로젝트 전환 — 부모가 같은 모달을 다른 r 로 다시 그린다(리마운트 안 함).
+  // 프로젝트가 바뀌면 그 프로젝트의 현재 단계로 맞춘다. 보던 뷰(작업/개요)는 그대로 둬서
+  // 개요를 훑던 사람은 계속 개요로, 작업하던 사람은 계속 작업으로 이웃을 넘긴다.
+  const prevRfqId = useRef(r.rfq_id);
+  useEffect(() => {
+    if (prevRfqId.current === r.rfq_id) return;
+    prevRfqId.current = r.rfq_id;
+    setSelectedStage(Math.min(Math.max(r.stage || 1, 1), 11));
+  }, [r.rfq_id, r.stage]);
+
+  // ←/→ 방향키로 이웃 프로젝트 전환. 입력 중(텍스트칸·선택·메모)엔 커서 이동이 우선이라
+  // 가로채지 않는다. Close deal 사유 모달이 열려 있을 때도 비활성(그 안에서 조작 중).
+  useEffect(() => {
+    if (!onNavigate || isNewProject) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+      if (reasonOpen) return;
+      const t = e.target as HTMLElement | null;
+      if (
+        t &&
+        (t.tagName === "INPUT" ||
+          t.tagName === "TEXTAREA" ||
+          t.tagName === "SELECT" ||
+          t.isContentEditable)
+      )
+        return;
+      e.preventDefault();
+      onNavigate?.(e.key === "ArrowLeft" ? -1 : 1);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onNavigate, isNewProject, reasonOpen]);
   // 모바일 전용: 프로젝트 정보/단계 상세를 동시에 띄우면 좁아, 탭으로 하나씩 전환.
   // (데스크톱은 좌우 2단으로 함께 보이므로 이 값은 CSS 상 무시된다.)
   const [mobilePane, setMobilePane] = useState<"info" | "stage">("stage");
@@ -1991,6 +2046,29 @@ export function PipelineModal({
           />
         ))}
         <div className="pl-modal-head">
+          {/* 인접 프로젝트 전환 — 헤더 맨 앞의 ‹ › (방향키와 같은 동작). 목록 순서대로 앞뒤 딜. */}
+          {!isNewProject && onNavigate ? (
+            <span className="pl-modal-nav" role="group" aria-label="Adjacent projects">
+              <button
+                type="button"
+                className="pl-nav-btn"
+                onClick={() => onNavigate(-1)}
+                title="Previous project (←)"
+                aria-label="Previous project"
+              >
+                ‹
+              </button>
+              <button
+                type="button"
+                className="pl-nav-btn"
+                onClick={() => onNavigate(1)}
+                title="Next project (→)"
+                aria-label="Next project"
+              >
+                ›
+              </button>
+            </span>
+          ) : null}
           {isNewProject ? (
             <span className="intl-title">
               <b>New Customer RFQ</b>

@@ -2802,6 +2802,28 @@ table.mini td.mini-empty {
   background: #e0e7f1;
   color: var(--navy);
 }
+/* 인접 프로젝트 전환 ‹ › — 헤더 맨 앞. 방향키(←/→)와 같은 동작. */
+.pl-modal-nav {
+  flex: none;
+  display: inline-flex;
+  gap: 2px;
+}
+.pl-nav-btn {
+  width: 24px;
+  height: 26px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--muted);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+}
+.pl-nav-btn:hover {
+  background: var(--navy);
+  border-color: var(--navy);
+  color: #fff;
+}
 .pl-modal .intl-detail {
   margin-top: 0;
   border-top: 0;

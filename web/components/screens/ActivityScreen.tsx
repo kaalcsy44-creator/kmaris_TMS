@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent as ReactDragEvent } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -282,6 +282,40 @@ export default function ActivityScreen() {
     }
   }
 
+  // 개요 모달의 인접 프로젝트 전환 — "현재 보이는 순서"대로 이웃 rfq_id 목록을 만든다.
+  // 딜 탭: 버킷 순서 × 각 버킷의 (사용자) 카드 순서. 일자 탭: 주→일→프로젝트 순, 첫 등장만.
+  const navIds = useMemo(() => {
+    const ids: number[] = [];
+    if (view === "deal") {
+      for (const g of buckets) for (const { row } of orderedRows(g.phase, g.rows)) ids.push(row.rfq_id);
+    } else {
+      const seen = new Set<number>();
+      for (const w of weekView)
+        for (const d of w.days)
+          for (const p of d.projects)
+            if (!seen.has(p.row.rfq_id)) {
+              seen.add(p.row.rfq_id);
+              ids.push(p.row.rfq_id);
+            }
+    }
+    return ids;
+    // orderedRows 는 cardOrder 만 참조하므로 위 deps 로 충분(함수 자체는 제외).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, buckets, weekView, cardOrder]);
+
+  const navigateOverview = useCallback(
+    (dir: -1 | 1) => {
+      setOverviewId((cur) => {
+        if (cur == null) return cur;
+        const idx = navIds.indexOf(cur);
+        if (idx < 0) return cur;
+        const next = navIds[idx + dir];
+        return next != null ? next : cur;
+      });
+    },
+    [navIds]
+  );
+
   if (err) return <div className="state error">{err}</div>;
   if (!data) return <div className="state">Loading…</div>;
 
@@ -427,6 +461,7 @@ export default function ActivityScreen() {
           vessels={vessels ?? []}
           onChanged={load}
           onClose={() => setOverviewId(null)}
+          onNavigate={navigateOverview}
           initialView="overview"
         />
       ) : null}
