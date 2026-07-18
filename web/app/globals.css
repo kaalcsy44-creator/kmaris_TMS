@@ -2265,8 +2265,16 @@ table.pipeline td.pl-td-project .pl-vessel {
 }
 table.pipeline td.pl-td-project .pl-title {
   margin-top: 3px;
-  color: var(--ink);
+  /* 프로젝트명은 훑는 기준선이라 한 단계(1px) 키워 번호줄과 위계를 준다. */
+  font-size: 12px;
+  /* 번호와 함께 업무타입 색으로 맞춘다 — 부품공급=블루(기본), 서비스는 아래에서 그린으로. */
+  color: #0055a8;
   font-weight: 600;
+}
+/* 서비스 프로젝트 — 번호·이름을 그린 계열로(부품공급 블루와 구분). 배지/단계바와 같은 톤. */
+table.pipeline tbody tr.service td.pl-td-project .pl-title,
+table.pipeline tbody tr.service td.pl-td-project .pl-project-no-btn {
+  color: #11824a;
 }
 /* 수신일시 — 정렬 기본값이라 값은 필요하지만, 훑을 때 먼저 걸리면 안 되는 보조 정보. */
 table.pipeline td.pl-td-project .pl-received {
