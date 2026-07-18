@@ -460,12 +460,11 @@ function ItemsSection({
   vendorQuoteNo: string;
 }) {
   const hasGroups = orders.length > 0 || quoteOnlyId > 0;
-  const phaseClass = (from: number, to: number) =>
-    stage < from ? "ov-phase-todo" : stage > to ? "ov-phase-done" : "ov-phase-current";
-  const rfqPhase = phaseClass(1, 2);
-  const quotePhase = phaseClass(3, 4);
-  const poPhase = phaseClass(5, 6);
-  const ciPhase = phaseClass(7, 11);
+  const phaseClass = (from: number) => (stage >= from ? "ov-phase-on" : "ov-phase-todo");
+  const rfqPhase = phaseClass(1);
+  const quotePhase = phaseClass(3);
+  const poPhase = phaseClass(5);
+  const ciPhase = phaseClass(7);
   return (
     <section className="proj-ov-sec">
       <h2 className="proj-ov-h">
