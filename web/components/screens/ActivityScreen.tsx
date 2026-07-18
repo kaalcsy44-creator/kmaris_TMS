@@ -420,7 +420,10 @@ export default function ActivityScreen() {
                     >
                       <div className="act-cal-date">{md(day.date)}</div>
                       {day.projects.map((p) => (
-                        <div key={p.row.rfq_id} className="act-cal-proj">
+                        <div
+                          key={p.row.rfq_id}
+                          className={`act-cal-proj${p.row.work_type === "서비스" ? " service" : ""}`}
+                        >
                           <div className="act-cal-phead">
                             <button
                               type="button"
