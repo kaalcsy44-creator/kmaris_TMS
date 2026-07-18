@@ -287,6 +287,7 @@ function Overview({
       <StageTimeline row={row} chain={chain} acts={acts} onOpenStage={onOpenStage} />
 
       <ItemsSection
+        stage={row.stage}
         orders={orders}
         purchaseOrders={purchaseOrders}
         quotations={quotations}
@@ -442,6 +443,7 @@ function StageTimeline({
  * 번호로는 이을 수 없다. 따라서 각 문서의 품목 순서가 서로 같다는 전제가 깔린다.
  */
 function ItemsSection({
+  stage,
   orders,
   purchaseOrders,
   quotations,
@@ -449,6 +451,7 @@ function ItemsSection({
   rfqItems,
   vendorQuoteNo,
 }: {
+  stage: number;
   orders: ProjectOrder[];
   purchaseOrders: VendorPo[];
   quotations: ProjectQuote[];
@@ -457,6 +460,11 @@ function ItemsSection({
   vendorQuoteNo: string;
 }) {
   const hasGroups = orders.length > 0 || quoteOnlyId > 0;
+  const phaseClass = (from: number) => (stage >= from ? "ov-phase-on" : "ov-phase-todo");
+  const rfqPhase = phaseClass(1);
+  const quotePhase = phaseClass(3);
+  const poPhase = phaseClass(5);
+  const ciPhase = phaseClass(7);
   return (
     <section className="proj-ov-sec">
       <h2 className="proj-ov-h">
@@ -490,30 +498,30 @@ function ItemsSection({
             </colgroup>
             <thead>
               <tr>
-                <th className="ov-it-n" rowSpan={2}>
+                <th className={`ov-it-n ${rfqPhase}`} rowSpan={2}>
                   #
                 </th>
-                <th rowSpan={2}>Part No.</th>
-                <th rowSpan={2}>Description</th>
-                <th className="ov-it-qty" rowSpan={2}>
+                <th className={rfqPhase} rowSpan={2}>Part No.</th>
+                <th className={rfqPhase} rowSpan={2}>Description</th>
+                <th className={`ov-it-qty ${rfqPhase}`} rowSpan={2}>
                   Qty
                 </th>
-                <th className="num ov-gh q gs" colSpan={3}>
+                <th className={`num ov-gh q gs ${quotePhase}`} colSpan={3}>
                   Quote
                 </th>
-                <th className="num ov-gh p gs" colSpan={3}>
+                <th className={`num ov-gh p gs ${poPhase}`} colSpan={3}>
                   P/O
                 </th>
-                <th className="num ov-gh c gs" colSpan={3}>
+                <th className={`num ov-gh c gs ${ciPhase}`} colSpan={3}>
                   C/I
                 </th>
               </tr>
               <tr>
-                {["q", "p", "c"].map((g) => (
+                {[["q", quotePhase], ["p", poPhase], ["c", ciPhase]].map(([g, phase]) => (
                   <Fragment key={g}>
-                    <th className={`num ov-sub ${g} gs`}>Purchase</th>
-                    <th className={`num ov-sub ${g}`}>Margin</th>
-                    <th className={`num ov-sub ${g}`}>Sales</th>
+                    <th className={`num ov-sub ${g} gs ${phase}`}>Purchase</th>
+                    <th className={`num ov-sub ${g} ${phase}`}>Margin</th>
+                    <th className={`num ov-sub ${g} ${phase}`}>Sales</th>
                   </Fragment>
                 ))}
               </tr>
