@@ -3046,18 +3046,28 @@ table.mini.wide thead tr.ig-group-row th.grp-sales {
   border-bottom: 3px solid #2f6fed;
 }
 /* Purchase(Cost 9·Cost Amount 10)·Sales(Unit Price 12·Amount 13) 블럭화 —
-   그룹 라벨 톤을 컬럼 헤더와 합계행까지 이어 하나의 색 블록으로 보이게(본문 행은 흰색 유지).
-   이 표(ig-cquote-items)에만 적용해 다른 편집표에는 영향 없음. 물리 컬럼 위치 고정(재정렬 없음). */
+   그룹 라벨 톤을 컬럼 헤더에 이어 하나의 색 블록으로 보이게(본문 행은 흰색 유지).
+   이 표(ig-cquote-items)에만 적용해 다른 편집표에는 영향 없음. 물리 컬럼 위치 고정(재정렬 없음).
+   합계행(tfoot)은 colspan 세그먼트라 nth-child 대신 .foot-purchase/.foot-sales 클래스로 색을 준다. */
 .ig-cquote-items thead tr:not(.ig-group-row) th:nth-child(9),
-.ig-cquote-items thead tr:not(.ig-group-row) th:nth-child(10),
-.ig-cquote-items tfoot td:nth-child(9),
-.ig-cquote-items tfoot td:nth-child(10) {
+.ig-cquote-items thead tr:not(.ig-group-row) th:nth-child(10) {
   background: #f8f2e6;
 }
 .ig-cquote-items thead tr:not(.ig-group-row) th:nth-child(12),
-.ig-cquote-items thead tr:not(.ig-group-row) th:nth-child(13),
-.ig-cquote-items tfoot td:nth-child(12),
-.ig-cquote-items tfoot td:nth-child(13) {
+.ig-cquote-items thead tr:not(.ig-group-row) th:nth-child(13) {
+  background: #e2ecfb;
+}
+/* 합계행 셀: "Total" 은 통합셀 가운데, 매입/매출 합계는 그룹색 배경. */
+table.mini.wide tfoot td.foot-total-label {
+  text-align: center;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: var(--navy);
+}
+.ig-cquote-items tfoot td.foot-purchase {
+  background: #f8f2e6;
+}
+.ig-cquote-items tfoot td.foot-sales {
   background: #e2ecfb;
 }
 

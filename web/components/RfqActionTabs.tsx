@@ -3665,6 +3665,25 @@ function CustomerQuoteItemEditor({
     }
   }
 
+  // 합계행(tfoot)도 colspan 으로 구성한다 — "Total" 라벨을 No.~Unit 구간을 통합한 셀 가운데에
+  // 두고, 매입 합계는 Cost Amount 칸, 매출 합계는 Amount 칸에 둔다. 그룹행과 같은 방식으로
+  // 숨김 컬럼을 건너뛰어 항상 정렬을 맞춘다(.ig-foot → ItemGridStyle nth-child 규칙에서 제외).
+  const footRole = (key: string): "label" | "purchase" | "sales" | "empty" =>
+    key === "cost_amount" ? "purchase"
+      : key === "amount" ? "sales"
+        : key === "__seq" || key === "part_no" || key === "description" || key === "type" ||
+            key === "serial_no" || key === "qty" || key === "unit" ? "label"
+          : "empty";
+  const footSegments: { role: "label" | "purchase" | "sales" | "empty"; span: number }[] = [];
+  for (const c of grid.cols) {
+    if (!c.fixed && grid.layout.hidden.has(c.key)) continue;
+    const role = footRole(c.key);
+    const last = footSegments[footSegments.length - 1];
+    // label·empty 는 연속 구간을 합치고, 값(purchase·sales)은 단일 칸으로 둔다.
+    if (last && last.role === role && role !== "purchase" && role !== "sales") last.span += 1;
+    else footSegments.push({ role, span: 1 });
+  }
+
   return (
     <div style={{ marginTop: 12 }}>
       <div className="items-head">
@@ -3743,31 +3762,33 @@ function CustomerQuoteItemEditor({
               </tr>
             ))}
           </tbody>
-          {/* 합계행 — 컬럼 숨김/폭 조절 시 정렬이 유지되도록 컬럼당 1셀로 구성.
-              Total=Cost(9열), Purchase=Cost Amount(10열), Sales=Amount(13열). */}
+          {/* 합계행 — colspan 세그먼트(.ig-foot)로 구성. "Total" 은 No.~Unit 통합셀 가운데,
+              매입 합계는 Cost Amount 칸, 매출 합계는 Amount 칸. 숨김 컬럼은 건너뛰어 정렬 유지. */}
           <tfoot>
             <tr>
-              <td></td>{/* 1 sel */}
-              <td></td>{/* 2 No. */}
-              <td></td>{/* 3 part_no */}
-              <td></td>{/* 4 description */}
-              <td></td>{/* 5 type */}
-              <td></td>{/* 6 serial_no */}
-              <td></td>{/* 7 qty */}
-              <td></td>{/* 8 unit */}
-              <td className="total-label">Total</td>{/* 9 cost */}
-              <td className="num total-value">{/* 10 cost_amount */}
-                <DualCurrencyAmount value={purchaseTotal} currency={costCurrency} rate={rate} />
-                <span className="fx-note">Purchase · {fxRateText(rate)}</span>
-              </td>
-              <td></td>{/* 11 margin */}
-              <td></td>{/* 12 unit_price */}
-              <td className="num total-value">{/* 13 amount */}
-                <DualCurrencyAmount value={total} currency={currency} rate={rate} />
-                <span className="fx-note">Sales · {fxRateText(rate)}</span>
-              </td>
-              <td></td>{/* 14 lead_time */}
-              <td></td>{/* 15 remark */}
+              {footSegments.map((s, fi) => {
+                if (s.role === "label")
+                  return (
+                    <td key={fi} className="ig-foot foot-total-label" colSpan={s.span}>
+                      Total
+                    </td>
+                  );
+                if (s.role === "purchase")
+                  return (
+                    <td key={fi} className="ig-foot num total-value foot-purchase" colSpan={s.span}>
+                      <DualCurrencyAmount value={purchaseTotal} currency={costCurrency} rate={rate} />
+                      <span className="fx-note">Purchase · {fxRateText(rate)}</span>
+                    </td>
+                  );
+                if (s.role === "sales")
+                  return (
+                    <td key={fi} className="ig-foot num total-value foot-sales" colSpan={s.span}>
+                      <DualCurrencyAmount value={total} currency={currency} rate={rate} />
+                      <span className="fx-note">Sales · {fxRateText(rate)}</span>
+                    </td>
+                  );
+                return <td key={fi} className="ig-foot" colSpan={s.span} />;
+              })}
             </tr>
           </tfoot>
         </table>
