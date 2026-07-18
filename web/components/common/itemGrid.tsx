@@ -19,18 +19,7 @@ export type ItemCol = {
   className?: string;
   /** 선택 체크박스·No. 처럼 숨기거나 폭 조절하지 않는 구조 컬럼. */
   fixed?: boolean;
-  /** 기본 컬럼 폭(px). 미지정 시 className 으로 추정. 사용자가 조절하면 그 값이 우선. */
-  width?: number;
 };
-
-/** 사용자 지정 폭이 없을 때 쓰는 기본 폭(px). 품목표는 table-layout:fixed 라 이 값이 실제 컬럼폭. */
-export function defaultColWidth(c: ItemCol): number {
-  if (c.width != null) return c.width;
-  if (c.key === "__sel") return 34;
-  if ((c.className ?? "").includes("seq")) return 44;
-  if ((c.className ?? "").includes("num")) return 96;
-  return 130;
-}
 
 export type ItemGridApi = {
   layout: ColumnLayout;
@@ -92,49 +81,28 @@ export function ItemTh({
   );
 }
 
-/** 품목표 앞에 놓는 <colgroup> — table-layout:fixed 에서 각 컬럼 폭의 기준.
- *  폭 값 자체는 ItemGridStyle 의 col:nth-child 규칙이 준다(여기선 빈 <col> 만 배치). */
-export function ItemColGroup({ grid }: { grid: ItemGridApi }) {
-  return (
-    <colgroup>
-      {grid.cols.map((c) => (
-        <col key={c.key} />
-      ))}
-    </colgroup>
-  );
-}
-
-/**
- * 현재 폭/숨김 상태를 물리 컬럼 위치 기준 CSS 로 방출(스코프 클래스로 이 표에만 적용).
- * 품목표는 table-layout:fixed 라, 컬럼 폭은 <colgroup><col> 의 width 로만 정확히 먹는다
- * (auto 레이아웃에선 셀의 width/max-width 가 무시돼 아무리 줄여도 안 줄어든다 — 실측 확인).
- * fixed 표는 전체 폭이 명시돼야 col 폭이 그대로 반영되므로, 보이는 컬럼 폭의 합을 표 width 로 준다.
- */
+/** 현재 폭/숨김 상태를 물리 컬럼 위치 기준 CSS 로 방출(스코프 클래스로 이 표에만 적용). */
 export function ItemGridStyle({ grid }: { grid: ItemGridApi }) {
   const { cols, colIndex, layout, tableClass } = grid;
   const css = useMemo(() => {
     const rules: string[] = [];
-    let total = 0;
     for (const c of cols) {
       const i = colIndex[c.key];
+      // thead 는 그룹 헤더행(.ig-group)을 제외하고 컬럼 헤더행에만 적용(colspan 그룹셀 오정렬 방지).
+      const sel = `.${tableClass} thead th:not(.ig-group):nth-child(${i}),.${tableClass} tbody td:nth-child(${i}),.${tableClass} tfoot td:nth-child(${i})`;
       if (!c.fixed && layout.hidden.has(c.key)) {
-        // 숨김: col 폭 0 + 해당 물리열의 헤더/본문/합계 셀 감춤(그룹헤더 colspan 셀은 제외).
-        rules.push(`.${tableClass} colgroup col:nth-child(${i}){width:0}`);
-        rules.push(
-          `.${tableClass} thead th:not(.ig-group):nth-child(${i}),.${tableClass} tbody td:nth-child(${i}),.${tableClass} tfoot td:nth-child(${i}){display:none!important}`
-        );
+        rules.push(`${sel}{display:none!important}`);
         continue;
       }
-      const w = layout.widths[c.key] ?? defaultColWidth(c);
-      total += w;
-      rules.push(`.${tableClass} colgroup col:nth-child(${i}){width:${w}px}`);
-      // fixed 표에선 셀 내용이 컬럼폭을 넘겨도 넘치지 않게 클립/줄바꿈. 입력칸은 셀에 맞춰 채운다.
-      rules.push(
-        `.${tableClass} tbody td:nth-child(${i}) input:not([type=checkbox]),.${tableClass} tbody td:nth-child(${i}) textarea{min-width:0!important;width:100%!important;box-sizing:border-box}`
-      );
+      const w = layout.widths[c.key];
+      if (w) {
+        rules.push(`${sel}{width:${w}px!important;min-width:${w}px!important;max-width:${w}px!important}`);
+        // 컬럼 폭을 사용자가 지정하면 안의 입력 박스도 함께 줄도록 기본 min-width 해제.
+        rules.push(
+          `.${tableClass} tbody td:nth-child(${i}) input,.${tableClass} tbody td:nth-child(${i}) textarea{min-width:0!important}`
+        );
+      }
     }
-    // 표 전체 폭 = 보이는 컬럼 폭의 합. 이게 있어야 fixed 레이아웃이 col 폭을 그대로 반영한다.
-    rules.push(`.${tableClass}{width:${total}px;min-width:0}`);
     return rules.join("\n");
   }, [cols, colIndex, layout.hidden, layout.widths, tableClass]);
   if (!css) return null;

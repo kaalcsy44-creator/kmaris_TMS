@@ -35,9 +35,8 @@ type Stored = {
 };
 
 const KEY_PREFIX = "ktms.tableLayout.";
-/** 컬럼 폭 한계(px). 드래그 미리보기(ColumnResizer)와 저장(setWidth)이 동일 값을 써야 스냅이 없다.
- *  하한 32px — 어떤 컬럼이든 실질 최소 폭까지 좁힐 수 있게(헤더 라벨은 글자 단위로 접힘). */
-export const COL_MIN_W = 32;
+/** 컬럼 폭 한계(px). 드래그 미리보기(ColumnResizer)와 저장(setWidth)이 동일 값을 써야 스냅이 없다. */
+export const COL_MIN_W = 60;
 export const COL_MAX_W = 900;
 
 function load(tableId: string): Stored {

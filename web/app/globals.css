@@ -2678,15 +2678,10 @@ table.pipeline tbody tr.service .pl-stage-done {
   order: 0;
   margin-right: 0 !important;
 }
-/* 팝업 안의 RFQ 표는 컨테이너 폭에 맞춘다(넓은 내용일 때만 가로 스크롤). */
+/* 팝업 안의 품목 표는 1180px 강제폭 대신 컨테이너 폭에 맞춘다(넓은 내용일 때만 가로 스크롤). */
+.pl-modal table.mini.wide,
 .pl-modal table.rfq {
   min-width: 100%;
-}
-/* 견적 품목표는 내용 폭(content-sized)으로 둔다 — min-width:100% 로 모달을 강제로 채우면
-   table-layout:auto 에서 남는 폭이 특정 컬럼(Margin 등)으로 재분배돼, 컬럼을 줄여도
-   그 열이 도로 넓어진다. 강제폭을 없애야 지정 폭만큼 실제로 좁아진다. */
-.pl-modal table.mini.wide {
-  min-width: 0;
 }
 /* 서비스 단계 '완료로 표시' 체크박스 — 푸터 바로 위 */
 .stage-complete-check {
@@ -2959,13 +2954,6 @@ table.mini.wide {
   min-width: 0;
   table-layout: auto;
 }
-/* 편집형 품목표(lead-tools)는 반드시 table-layout:fixed 여야 컬럼 폭 조절이 먹는다.
-   auto 레이아웃에선 셀의 width/max-width 가 무시돼 아무리 줄여도 안 줄어든다(실측 확인).
-   폭은 <colgroup><col> + ItemGridStyle 의 col:nth-child 규칙이 정하고, 표 전체 폭도
-   ItemGridStyle 이 컬럼 합으로 명시한다. 대시보드 등 lead-tools 없는 .mini.wide 표는 auto 유지. */
-table.mini.wide.lead-tools {
-  table-layout: fixed;
-}
 table.mini.wide th,
 table.mini.wide td {
   white-space: normal;
@@ -2999,13 +2987,6 @@ table.mini.wide td:last-child {
 table.mini.wide th.ig-th,
 table.mini.items-edit th.ig-th {
   position: relative;
-}
-/* 헤더 라벨은 좁게 줄일 때 글자 단위로 접히게 한다 — 컬럼이 헤더 단어 폭(예: "Margin")
-   아래로 못 줄어드는 하한을 없애, 사용자가 지정한 폭(최소 COL_MIN_W)까지 좁아지도록.
-   (표를 min-width:0 로 두어 폭 재분배가 없으므로, 접힘은 사용자가 줄인 컬럼에만 생긴다.) */
-.ig-th .ig-th-label {
-  overflow-wrap: anywhere;
-  word-break: break-word;
 }
 .ig-th .ig-hide {
   margin-left: 5px;

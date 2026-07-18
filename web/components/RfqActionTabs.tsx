@@ -93,7 +93,7 @@ import {
   useRowSelection,
 } from "./common/itemTable";
 import FxRateControl, { FxMode } from "./common/FxRateControl";
-import { useItemGrid, ItemTh, ItemGridStyle, ItemColGroup, ItemColsButton, type ItemCol } from "./common/itemGrid";
+import { useItemGrid, ItemTh, ItemGridStyle, ItemColsButton, type ItemCol } from "./common/itemGrid";
 import QuotationPreview from "./QuotationPreview";
 
 /** 현재 시각 "YYYY-MM-DDTHH:MM" (datetime-local 기본값). */
@@ -1096,13 +1096,13 @@ function VendorRfqItemEditor({
   const cols: ItemCol[] = [
     { key: "__sel", fixed: true },
     { key: "__seq", fixed: true, className: "seq" },
-    { key: "part_no", label: "Part No.", width: 110 },
-    { key: "description", label: "Description", width: 200 },
+    { key: "part_no", label: "Part No." },
+    { key: "description", label: "Description" },
     { key: "type", label: "Type" },
     { key: "serial_no", label: "Serial No." },
     { key: "qty", label: "Qty" },
     { key: "unit", label: "Unit" },
-    { key: "remark", label: "Remark", width: 150 },
+    { key: "remark", label: "Remark" },
   ];
   const grid = useItemGrid("vrfq-items", cols);
   // fields 순서 = 아래 keys.cell(i, 0..6) 열 번호.
@@ -1132,7 +1132,6 @@ function VendorRfqItemEditor({
       <div className="table-wrap compact item-scroll">
         <ItemGridStyle grid={grid} />
         <table className={`mini wide lead-tools ${grid.tableClass}`}>
-          <ItemColGroup grid={grid} />
           <thead>
             <tr>
               <ItemSelectHeaderCell count={items.length} sel={sel} />
@@ -2306,13 +2305,13 @@ function VendorRfqAction({
   const itemGridCols: ItemCol[] = [
     { key: "__sel", fixed: true },
     { key: "__seq", fixed: true, className: "seq" },
-    { key: "part_no", label: "Part No.", width: 110 },
-    { key: "description", label: "Description", width: 200 },
+    { key: "part_no", label: "Part No." },
+    { key: "description", label: "Description" },
     { key: "type", label: "Type" },
     { key: "serial_no", label: "Serial No." },
     { key: "qty", label: "Qty" },
     { key: "unit", label: "Unit" },
-    { key: "remark", label: "Remark", width: 150 },
+    { key: "remark", label: "Remark" },
   ];
   const grid = useItemGrid("vrfq-items", itemGridCols);
   // fields 순서 = 아래 itemKeys.cell(i, 0..6) 열 번호.
@@ -2497,7 +2496,6 @@ function VendorRfqAction({
           <div className="table-wrap compact item-scroll">
             <ItemGridStyle grid={grid} />
             <table className={`mini wide lead-tools ${grid.tableClass}`}>
-              <ItemColGroup grid={grid} />
               <thead>
                 <tr>
                   <ItemSelectHeaderCell count={rfqItems.length} sel={itemSel} />
@@ -2973,8 +2971,8 @@ function VendorQuoteItemEditor({
   const cols: ItemCol[] = [
     { key: "__sel", fixed: true },
     { key: "__seq", fixed: true, className: "seq" },
-    { key: "part_no", label: "Part No.", width: 110 },
-    { key: "description", label: "Description", width: 200 },
+    { key: "part_no", label: "Part No." },
+    { key: "description", label: "Description" },
     { key: "type", label: "Type" },
     { key: "serial_no", label: "Serial No." },
     { key: "maker", label: "Maker" },
@@ -2984,7 +2982,7 @@ function VendorQuoteItemEditor({
     { key: "unit_price", label: `Unit Price (${cur})`, className: "num" },
     { key: "amount", label: `Amount (${cur})`, className: "num" },
     { key: "lead_time", label: "Lead Time" },
-    { key: "remark", label: "Remark", width: 150 },
+    { key: "remark", label: "Remark" },
   ];
   const grid = useItemGrid("vquote-items", cols);
   // 엑셀식 편집 — fields 는 아래 keys.cell(i, 0..10) 열 번호와 순서가 같아야 한다.
@@ -3015,7 +3013,6 @@ function VendorQuoteItemEditor({
       <div className="table-wrap item-scroll">
         <ItemGridStyle grid={grid} />
         <table className={`mini wide lead-tools ${grid.tableClass}`}>
-          <ItemColGroup grid={grid} />
           <thead>
             <tr>
               <ItemSelectHeaderCell count={items.length} sel={sel} />
@@ -3622,8 +3619,8 @@ function CustomerQuoteItemEditor({
   const cols: ItemCol[] = [
     { key: "__sel", fixed: true },
     { key: "__seq", fixed: true, className: "seq" },
-    { key: "part_no", label: "Part No.", width: 110 },
-    { key: "description", label: "Description", width: 200 },
+    { key: "part_no", label: "Part No." },
+    { key: "description", label: "Description" },
     { key: "type", label: "Type" },
     { key: "serial_no", label: "Serial No." },
     { key: "qty", label: "Qty", className: "num" },
@@ -3634,7 +3631,7 @@ function CustomerQuoteItemEditor({
     { key: "unit_price", label: `Unit Price (${saleCur})`, className: "num" },
     { key: "amount", label: `Amount (${saleCur})`, className: "num" },
     { key: "lead_time", label: "Lead Time" },
-    { key: "remark", label: "Remark", width: 150 },
+    { key: "remark", label: "Remark" },
   ];
   const grid = useItemGrid("cquote-items", cols);
   // fields 순서 = 아래 keys.cell(i, 0..10) 열 번호. Cost Amount·Amount 는 계산 컬럼이라 뺀다.
@@ -3680,7 +3677,6 @@ function CustomerQuoteItemEditor({
       <div className="table-wrap item-scroll">
         <ItemGridStyle grid={grid} />
         <table className={`mini wide lead-tools ${grid.tableClass}`}>
-          <ItemColGroup grid={grid} />
           <thead>
             <tr className="ig-group-row">
               {groupSegments.map((s, gi) => (

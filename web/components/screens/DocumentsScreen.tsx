@@ -52,7 +52,6 @@ import {
   useItemGrid,
   ItemTh,
   ItemGridStyle,
-  ItemColGroup,
   ItemColsButton,
   type ItemCol,
 } from "@/components/common/itemGrid";
@@ -1986,7 +1985,6 @@ function ItemEditor({
       <div className="table-wrap item-scroll">
         <ItemGridStyle grid={grid} />
         <table className={`mini wide lead-tools ${grid.tableClass}`}>
-          <ItemColGroup grid={grid} />
           <thead>
             <tr>
               <ItemSelectHeaderCell count={items.length} sel={sel} />
