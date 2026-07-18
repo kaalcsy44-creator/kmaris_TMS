@@ -6451,6 +6451,10 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   border-radius: 6px;
   padding: 1px 5px;
 }
+/* 대응 경과일별 음영 — 오래 방치될수록 진해진다(연노랑→앰버→레드). */
+.pl-card-age.lv-notice { background: #fff8e1; color: #8a6d00; }
+.pl-card-age.lv-warn { background: #fff3e0; color: #9a5b00; }
+.pl-card-age.lv-urgent { background: #fdeaea; color: #b42318; }
 .pl-card-amt {
   margin-top: 4px;
   font-size: 10.5px;

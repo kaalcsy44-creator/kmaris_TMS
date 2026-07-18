@@ -1130,6 +1130,16 @@ function daysSince(iso: string): number | null {
   return Math.max(0, Math.floor((Date.now() - t) / 86_400_000));
 }
 
+/** 대응 경과일 → 긴급도 레벨(배지 글자·음영색). 오래 방치될수록 진해진다.
+ *  ~6일 기본(중립) · 7~13일 notice(연노랑) · 14~29일 warn(앰버) · 30일+ urgent(레드). */
+function ageLevel(days: number | null): "" | "notice" | "warn" | "urgent" {
+  if (days == null) return "";
+  if (days >= 30) return "urgent";
+  if (days >= 14) return "warn";
+  if (days >= 7) return "notice";
+  return "";
+}
+
 type BoardCol = {
   label: string;
   variant?: "done" | "cancelled";
@@ -1415,6 +1425,9 @@ function BoardCard({
   // 종결 상태: 취소(회색+리본) / 완료(11단계 Payment Completed → 초록 체크).
   const cancelled = !!r.cancelled;
   const done = !cancelled && filled >= total;
+  // 대응 경과일에 따른 배지 색상 레벨(오래될수록 앰버→레드). 종결·완료 카드는 중립 유지.
+  const ageLv = cancelled || done ? "" : ageLevel(age);
+  const ageTitle = age != null ? `${age} days since first RFQ` : undefined;
   // 간략 카드: 고객 로고 + 프로젝트명(없으면 고객명)으로 인지성 확보.
   const logo = useCustomerLogo()(r.customer || "");
   const compactLabel = r.project_title || r.customer || "—";
@@ -1486,7 +1499,7 @@ function BoardCard({
           <span className="pl-card-proj-c" title={`${compactLabel}${r.customer ? ` · ${r.customer}` : ""}`}>
             {compactLabel}
           </span>
-          {age != null ? <span className="pl-card-age" title="Days since first RFQ">{age}d</span> : null}
+          {age != null ? <span className={`pl-card-age${ageLv ? ` lv-${ageLv}` : ""}`} title={ageTitle}>{age}d</span> : null}
         </div>
         <div className="pl-card-bar" title={barTitle}>
           {Array.from({ length: total }).map((_, i) => (
@@ -1537,7 +1550,7 @@ function BoardCard({
           {stageDate ? <span className="pl-card-stage-date"> ({stageDate})</span> : null}
         </span>
         <VendorMonograms value={vendorOf(r)} statuses={vendorStatusesFor(r)} />
-        {age != null ? <span className="pl-card-age" title="Days since first RFQ">{age}d</span> : null}
+        {age != null ? <span className={`pl-card-age${ageLv ? ` lv-${ageLv}` : ""}`} title={ageTitle}>{age}d</span> : null}
       </div>
       {amount ? <div className="pl-card-amt" title={amount}>{amount}</div> : null}
       {r.next_action ? (
