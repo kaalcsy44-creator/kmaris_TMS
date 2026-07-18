@@ -373,34 +373,32 @@ export default function ActivityScreen() {
       {view === "deal" ? (
         <>
           {totalDeals === 0 ? <div className="state">No activity to show.</div> : null}
-          {buckets.map((g) =>
-            g.rows.length === 0 ? null : (
-              <section key={g.phase} className="act-bucket">
-                <h3 className="act-bucket-h">
-                  {PHASES[g.phase].label} <span className="cnt">{g.rows.length}</span>
-                </h3>
-                <div className="act-cards">
-                  {(() => {
-                    const ordered = orderedRows(g.phase, g.rows);
-                    return ordered.map(({ row, acts }) => (
-                      <ActivityCard
-                        key={row.rfq_id}
-                        row={row}
-                        acts={acts}
-                        meeting={meeting}
-                        onStar={(a) => toggleStar(row.rfq_id, a)}
-                        onDelete={(a) => removeNote(row.rfq_id, a)}
-                        onSave={(a, patch) => saveNote(row.rfq_id, a, patch)}
-                        onAdded={load}
-                        onOverview={() => setOverviewId(row.rfq_id)}
-                        drag={makeDrag(g.phase, row.rfq_id, ordered)}
-                      />
-                    ));
-                  })()}
-                </div>
-              </section>
-            )
-          )}
+          {totalDeals > 0 ? (
+            // 모든 단계(RFQ→AR)를 하나의 연속 그리드에 담아 빈칸 없이 채운다.
+            // 단계 구분은 각 단계의 '첫 카드'에만 붙는 단계 칩으로만 표시한다.
+            <div className="act-cards">
+              {buckets.flatMap((g) => {
+                if (g.rows.length === 0) return [];
+                const ordered = orderedRows(g.phase, g.rows);
+                return ordered.map(({ row, acts }, i) => (
+                  <ActivityCard
+                    key={row.rfq_id}
+                    row={row}
+                    acts={acts}
+                    phaseLabel={i === 0 ? PHASES[g.phase].label : undefined}
+                    phaseCount={i === 0 ? g.rows.length : undefined}
+                    meeting={meeting}
+                    onStar={(a) => toggleStar(row.rfq_id, a)}
+                    onDelete={(a) => removeNote(row.rfq_id, a)}
+                    onSave={(a, patch) => saveNote(row.rfq_id, a, patch)}
+                    onAdded={load}
+                    onOverview={() => setOverviewId(row.rfq_id)}
+                    drag={makeDrag(g.phase, row.rfq_id, ordered)}
+                  />
+                ));
+              })}
+            </div>
+          ) : null}
         </>
       ) : (
         <>
@@ -498,6 +496,8 @@ function addDays(iso: string, n: number): string {
 function ActivityCard({
   row,
   acts,
+  phaseLabel,
+  phaseCount,
   meeting,
   onStar,
   onDelete,
@@ -508,6 +508,8 @@ function ActivityCard({
 }: {
   row: PipelineRow;
   acts: Activity[];
+  phaseLabel?: string;   // 단계 그룹의 첫 카드에만 전달 → 단계 칩 표시.
+  phaseCount?: number;   // 그 단계의 카드 수.
   meeting: boolean;
   onStar: (a: Activity) => void;
   onDelete: (a: Activity) => void;
@@ -542,6 +544,12 @@ function ActivityCard({
         title={drag?.enabled ? "Drag to reorder" : undefined}
       >
         <div className="act-card-h">
+          {phaseLabel ? (
+            <span className="act-phase-chip" title={`${phaseLabel} stage`}>
+              {phaseLabel}
+              {phaseCount != null ? <b>{phaseCount}</b> : null}
+            </span>
+          ) : null}
           <button
             type="button"
             className="act-pno"

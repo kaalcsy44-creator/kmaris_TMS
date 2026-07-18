@@ -8314,11 +8314,9 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 .act-seg input[type="date"] { border: 0; border-left: 1px solid var(--border, #d8dee6); padding: 4px 6px; font-size: 12px; }
 .act-check { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); }
 
-.act-bucket { margin-bottom: 20px; }
-.act-bucket-h { font-size: 14px; font-weight: 800; color: #0b1d3a; margin: 6px 0 10px;
-  padding-bottom: 5px; border-bottom: 2px solid #0055a8; }
-.act-bucket-h .cnt { color: #0055a8; font-size: 12px; }
-/* 4열 배열(넓은 화면). 좁아지면 2열 → 1열로 축소. */
+/* 4열 배열(넓은 화면). 좁아지면 2열 → 1열로 축소.
+   모든 단계(RFQ→AR) 카드를 하나의 연속 그리드에 담아 빈칸 없이 채운다 —
+   단계 구분은 각 단계 첫 카드의 .act-phase-chip 만으로 한다. */
 .act-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
 @media (max-width: 1400px) { .act-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 1050px) { .act-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
@@ -8352,6 +8350,14 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 .act-card.drag-over { outline: 2px dashed #0055a8; outline-offset: -2px; }
 .act-card.dragging { opacity: 0.5; }
 .act-card-h { display: flex; align-items: baseline; gap: 5px; margin-bottom: 3px; flex-wrap: wrap; }
+/* 단계 그룹의 첫 카드에만 붙는 단계 칩(RFQ/Quote/PO/Documents/AR) — 연속 그리드에서
+   단계 경계를 알려주는 유일한 표식. */
+.act-phase-chip { align-self: center; display: inline-flex; align-items: center; gap: 4px;
+  font-size: 10px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase;
+  color: #fff; background: #0055a8; padding: 2px 7px; border-radius: 10px; white-space: nowrap; }
+.act-phase-chip b { font-weight: 800; color: #cfe2f6; }
+.act-card.service .act-phase-chip { background: #11824a; }
+.act-card.service .act-phase-chip b { color: #cdebd9; }
 .act-pno { font-weight: 800; color: #0055a8; font-size: 14.5px; }
 .act-pno-date { font-weight: 400; color: #94a3b8; font-size: 12.5px; }
 .act-spacer { flex: 1; }
