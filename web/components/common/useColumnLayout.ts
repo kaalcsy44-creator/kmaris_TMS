@@ -35,8 +35,9 @@ type Stored = {
 };
 
 const KEY_PREFIX = "ktms.tableLayout.";
-/** 컬럼 폭 한계(px). 드래그 미리보기(ColumnResizer)와 저장(setWidth)이 동일 값을 써야 스냅이 없다. */
-export const COL_MIN_W = 60;
+/** 컬럼 폭 한계(px). 드래그 미리보기(ColumnResizer)와 저장(setWidth)이 동일 값을 써야 스냅이 없다.
+ *  하한 44px — 짧은 숫자 컬럼(Margin %·Qty 등)을 값 폭에 가깝게 좁힐 수 있게. */
+export const COL_MIN_W = 44;
 export const COL_MAX_W = 900;
 
 function load(tableId: string): Stored {

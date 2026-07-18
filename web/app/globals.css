@@ -2988,6 +2988,12 @@ table.mini.wide th.ig-th,
 table.mini.items-edit th.ig-th {
   position: relative;
 }
+/* 헤더 라벨은 좁게 줄일 때 문자 단위로 접히게 한다 — auto 레이아웃 표에서 컬럼이
+   헤더 단어(예: "Margin") 폭 아래로 못 줄어드는 하한을 없애, 지정 폭까지 좁아지도록. */
+.ig-th .ig-th-label {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
 .ig-th .ig-hide {
   margin-left: 5px;
   border: 0;
