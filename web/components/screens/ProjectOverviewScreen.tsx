@@ -863,14 +863,38 @@ function RfqItemsTable({ items }: { items: RfqItem[] | null }) {
   if (items.length === 0) return <div className="proj-ov-empty">No items registered.</div>;
   return (
     <div className="proj-ov-items-wrap">
-      <table className="proj-ov-items">
+      <table className="proj-ov-items proj-ov-grid">
+        <colgroup>
+          <col className="ovc-n ovt-r" />
+          <col className="ovc-part ovt-r" />
+          <col className="ovc-desc ovt-r" />
+          <col className="ovc-qty ovt-r" />
+          {["q", "p", "c"].map((g) => (
+            <Fragment key={g}>
+              <col className={`ovc-pur ovt-${g}`} />
+              <col className={`ovc-mg ovt-${g}`} />
+              <col className={`ovc-sales ovt-${g}`} />
+            </Fragment>
+          ))}
+        </colgroup>
         <thead>
           <tr>
-            <th className="ov-it-n">#</th>
-            <th>Part No.</th>
-            <th>Description</th>
-            <th className="ov-it-qty">Qty</th>
-            <th>Remark</th>
+            <th className="ov-it-n ov-phase-on" rowSpan={2}>#</th>
+            <th className="ov-phase-on" rowSpan={2}>Part No.</th>
+            <th className="ov-phase-on" rowSpan={2}>Description</th>
+            <th className="ov-it-qty ov-phase-on" rowSpan={2}>Qty</th>
+            <th className="num ov-gh q gs ov-phase-todo" colSpan={3}>Quote</th>
+            <th className="num ov-gh p gs ov-phase-todo" colSpan={3}>P/O</th>
+            <th className="num ov-gh c gs ov-phase-todo" colSpan={3}>C/I</th>
+          </tr>
+          <tr>
+            {["q", "p", "c"].map((g) => (
+              <Fragment key={g}>
+                <th className={`num ov-sub ${g} gs ov-phase-todo`}>Purchase</th>
+                <th className={`num ov-sub ${g} ov-phase-todo`}>Margin</th>
+                <th className={`num ov-sub ${g} ov-phase-todo`}>Sales</th>
+              </Fragment>
+            ))}
           </tr>
         </thead>
         <tbody>
@@ -878,12 +902,17 @@ function RfqItemsTable({ items }: { items: RfqItem[] | null }) {
             <tr key={i}>
               <td className="ov-it-n">{i + 1}</td>
               <td className="ov-it-part">{it.part_no || "—"}</td>
-              <td>{it.description || "—"}</td>
+              <td>
+                {it.description || "—"}
+                {it.remark ? <span className="ov-rfq-remark">{it.remark}</span> : null}
+              </td>
               <td className="ov-it-qty">
                 {it.qty}
                 {it.unit ? ` ${it.unit}` : ""}
               </td>
-              <td className="ov-it-remark">{it.remark || ""}</td>
+              {["q", "p", "c"].map((g) => (
+                <td key={g} className="num gs" colSpan={3} aria-label={`${g} not available`} />
+              ))}
             </tr>
           ))}
         </tbody>

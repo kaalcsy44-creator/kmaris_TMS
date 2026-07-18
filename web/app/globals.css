@@ -8690,6 +8690,8 @@ button.ov-tl-stage:hover { background: color-mix(in srgb, var(--ov-tone) 12%, tr
 .ov-it-part { font-weight: 600; color: var(--navy); }
 .ov-it-serial { color: var(--muted); }
 .ov-it-remark { color: var(--muted); }
+.ov-rfq-remark { display: block; margin-top: 3px; color: var(--muted);
+  font-size: var(--ov-t-meta); line-height: 1.35; }
 
 /* Project overview visual refresh.
    Keep the existing header / four-stage / items geometry, but make content—not
