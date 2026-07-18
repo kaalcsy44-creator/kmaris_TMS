@@ -3652,13 +3652,17 @@ function CustomerQuoteItemEditor({
     key === "cost" || key === "cost_amount" ? "Purchase"
       : key === "unit_price" || key === "amount" ? "Sales"
         : "";
-  const groupSegments: { label: string; span: number }[] = [];
+  const groupSegments: { label: string; span: number; keys: string[] }[] = [];
   for (const c of grid.cols) {
     if (!c.fixed && grid.layout.hidden.has(c.key)) continue;
     const label = groupOfCol(c.key);
     const last = groupSegments[groupSegments.length - 1];
-    if (last && last.label === label) last.span += 1;
-    else groupSegments.push({ label, span: 1 });
+    if (last && last.label === label) {
+      last.span += 1;
+      last.keys.push(c.key);
+    } else {
+      groupSegments.push({ label, span: 1, keys: [c.key] });
+    }
   }
 
   return (
@@ -3679,15 +3683,26 @@ function CustomerQuoteItemEditor({
         <table className={`mini wide lead-tools ${grid.tableClass}`}>
           <thead>
             <tr className="ig-group-row">
-              {groupSegments.map((s, gi) => (
-                <th
-                  key={gi}
-                  className={`ig-group${s.label ? ` grp-${s.label.toLowerCase()}` : ""}`}
-                  colSpan={s.span}
-                >
-                  {s.label}
-                </th>
-              ))}
+              {groupSegments.map((s, gi) => {
+                // 한 컬럼만 덮는 그룹셀(예: Purchase·Sales 사이에 홀로 있는 Margin %)은
+                // auto 레이아웃에서 남는 폭을 그 셀이 홀로 흡수해, 사용자가 아무리 컬럼을
+                // 줄여도 그 컬럼이 안 좁아진다. 사용자가 폭을 지정한 컬럼이면 그룹셀도 같은
+                // 폭으로 고정해 컬럼과 함께 좁아지게 한다(그 외에는 기존대로 auto).
+                const soloW = s.span === 1 ? grid.layout.widths[s.keys[0]] : undefined;
+                const style = soloW
+                  ? { width: soloW, minWidth: soloW, maxWidth: soloW }
+                  : undefined;
+                return (
+                  <th
+                    key={gi}
+                    className={`ig-group${s.label ? ` grp-${s.label.toLowerCase()}` : ""}`}
+                    colSpan={s.span}
+                    style={style}
+                  >
+                    {s.label}
+                  </th>
+                );
+              })}
             </tr>
             <tr>
               <ItemSelectHeaderCell count={items.length} sel={sel} />
