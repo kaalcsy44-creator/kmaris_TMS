@@ -8944,12 +8944,14 @@ button.ov-tl-stage:hover {
 }
 .proj-ov-grid .ov-sub { opacity: 0.86; }
 .proj-ov-grid thead th.ov-gh.ov-phase-todo,
-.proj-ov-grid thead th.ov-phase-todo:not(.ov-sub) {
+.proj-ov-grid thead th.ov-phase-todo:not(.ov-sub),
+.proj-ov-grid thead th.ov-phase-todo:not(.q):not(.p):not(.c):not(.ov-sub) {
   color: #8793a4;
   background: linear-gradient(180deg, #fafbfd 0%, #f0f3f7 100%);
 }
 .proj-ov-grid thead th.ov-gh.ov-phase-on,
-.proj-ov-grid thead th.ov-phase-on:not(.ov-sub) {
+.proj-ov-grid thead th.ov-phase-on:not(.ov-sub),
+.proj-ov-grid thead th.ov-phase-on:not(.q):not(.p):not(.c):not(.ov-sub) {
   color: #fff;
   background: linear-gradient(
     180deg,
