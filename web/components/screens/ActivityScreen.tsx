@@ -302,14 +302,15 @@ export default function ActivityScreen() {
     return [...rows].sort(byProjectNo).map((r) => r.rfq_id);
   }, [view, buckets, weekView]);
 
+  // 마지막에서 다음은 처음, 처음에서 이전은 마지막으로 순환(ProjectsScreen 과 동일).
   const navigateOverview = useCallback(
     (dir: -1 | 1) => {
       setOverviewId((cur) => {
         if (cur == null) return cur;
         const idx = navIds.indexOf(cur);
         if (idx < 0) return cur;
-        const next = navIds[idx + dir];
-        return next != null ? next : cur;
+        const n = navIds.length;
+        return navIds[(((idx + dir) % n) + n) % n];
       });
     },
     [navIds]

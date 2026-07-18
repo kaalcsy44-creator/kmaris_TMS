@@ -8277,7 +8277,8 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 .act-open:not(.act-open-edit) { display: none; }
 /* 프로젝트명은 업무타입 색(부품공급=블루 / 서비스=그린)으로 볼드 처리 — 표 뷰와 같은 규칙. */
 .act-cal-ptitle { font-size: 11px; font-weight: 700; color: #0055a8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.act-cal-proj.service .act-cal-ptitle { color: #11824a; }
+.act-cal-proj.service .act-cal-ptitle,
+.act-cal-proj.service .act-cal-pno { color: #11824a; }
 .act-cal-acts { list-style: none; margin: 0; padding: 0; }
 /* 활동 1건 = 점 1개. 여러 줄로 접히는 활동이 이어 붙어 보이지 않게 앞에 점을 찍어 끊는다.
    점은 "구분자"이지 "분류표"가 아니므로 자동/수기 구분 없이 같은 진한 톤으로 통일한다

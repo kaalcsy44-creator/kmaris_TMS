@@ -777,7 +777,8 @@ function PipelineTable({
   // 인접 프로젝트 전환 — 이웃 집합은 "현재 보이는 행"(shownRows: 표=tableRows, 보드=displayRows)
   // 이되, 순서는 표 정렬과 무관하게 프로젝트 번호 오름차순으로 고정한다. 그래야 ←=이전(작은
   // 번호), →=다음(큰 번호)이 표를 어떻게 정렬해도 늘 같은 방향으로 읽힌다(001 ← 002 → 003).
-  // dir: -1=이전(작은 번호), +1=다음(큰 번호). 양 끝에선 제자리. 전환 시 딥링크 단계는 비운다.
+  // dir: -1=이전(작은 번호), +1=다음(큰 번호). 양 끝에선 순환한다 — 마지막에서 다음은 처음,
+  // 처음에서 이전은 마지막(끝없이 훑을 수 있게). 전환 시 딥링크 단계는 비운다.
   const navigateSelected = useCallback(
     (dir: -1 | 1) => {
       setSelectedId((cur) => {
@@ -785,8 +786,8 @@ function PipelineTable({
         const ordered = [...shownRows].sort(byProjectNo);
         const idx = ordered.findIndex((r) => r.rfq_id === cur);
         if (idx < 0) return cur;
-        const next = ordered[idx + dir];
-        return next ? next.rfq_id : cur;
+        const n = ordered.length;
+        return ordered[(((idx + dir) % n) + n) % n].rfq_id;
       });
       setDeepStage(null);
     },
