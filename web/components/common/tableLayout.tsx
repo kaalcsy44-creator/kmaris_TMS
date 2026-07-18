@@ -50,8 +50,8 @@ export function ColumnResizer({
         `table[data-col-resizing] tbody td:nth-child(${n}),` +
         `table[data-col-resizing] tfoot td:nth-child(${n})` +
         `{width:${wpx}!important;min-width:${wpx}!important;max-width:${wpx}!important}` +
-        `table[data-col-resizing] tbody td:nth-child(${n}) input,` +
-        `table[data-col-resizing] tbody td:nth-child(${n}) textarea{min-width:0!important}`;
+        `table[data-col-resizing] tbody td:nth-child(${n}) input:not([type=checkbox]),` +
+        `table[data-col-resizing] tbody td:nth-child(${n}) textarea{min-width:0!important;width:100%!important;box-sizing:border-box}`;
     }
 
     // pointermove 는 초당 수십~수백 번 발생하므로 rAF 로 프레임당 1회만 DOM 을 갱신한다.

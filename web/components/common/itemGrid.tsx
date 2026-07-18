@@ -97,9 +97,11 @@ export function ItemGridStyle({ grid }: { grid: ItemGridApi }) {
       const w = layout.widths[c.key];
       if (w) {
         rules.push(`${sel}{width:${w}px!important;min-width:${w}px!important;max-width:${w}px!important}`);
-        // 컬럼 폭을 사용자가 지정하면 안의 입력 박스도 함께 줄도록 기본 min-width 해제.
+        // 컬럼 폭을 사용자가 지정하면 안의 입력 박스도 함께 줄도록 min-width 를 풀고 폭을 셀에 묶는다.
+        // (auto 레이아웃 표에서 input 은 min-width:0 만으로는 고유 폭이 남아 컬럼이 그 아래로 안 줄어든다.
+        //  width:100% 로 셀에 맞춰야 min-content 가 사라져 지정 폭까지 좁아진다.)
         rules.push(
-          `.${tableClass} tbody td:nth-child(${i}) input,.${tableClass} tbody td:nth-child(${i}) textarea{min-width:0!important}`
+          `.${tableClass} tbody td:nth-child(${i}) input:not([type=checkbox]),.${tableClass} tbody td:nth-child(${i}) textarea{min-width:0!important;width:100%!important;box-sizing:border-box}`
         );
       }
     }
