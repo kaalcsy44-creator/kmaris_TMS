@@ -51,7 +51,7 @@ import {
   StageTotal,
   useRowSelection,
 } from "@/components/common/itemTable";
-import { useItemGrid, ItemTh, ItemGridStyle, ItemColsButton, type ItemCol } from "@/components/common/itemGrid";
+import { useItemGrid, ItemTh, ItemGridStyle, ItemColGroup, ItemColsButton, type ItemCol } from "@/components/common/itemGrid";
 import { tr } from "@/lib/labels";
 import type {
   PoDetail as PoDetailT,
@@ -2076,6 +2076,7 @@ function ItemEditor({
       <div className="table-wrap item-scroll">
         <ItemGridStyle grid={grid} />
         <table className={`mini wide lead-tools ${grid.tableClass}`}>
+          <ItemColGroup grid={grid} />
           <thead>
             <tr>
               <ItemSelectHeaderCell count={items.length} sel={sel} />

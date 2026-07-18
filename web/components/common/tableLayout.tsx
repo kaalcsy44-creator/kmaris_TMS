@@ -22,6 +22,10 @@ export function ColumnResizer({
     const table = th.closest("table") as HTMLTableElement | null;
     const startX = e.clientX;
     const startW = th.offsetWidth;
+    // 편집형 품목표(table-layout:fixed + 명시적 전체폭)는 컬럼을 줄이면 표 전체폭도 그만큼
+    // 줄어야 한다. 미리보기에서도 전체폭을 함께 갱신(파이프라인 표는 컨테이너 채움이라 제외).
+    const sizedTable = !!table && table.classList.contains("lead-tools");
+    const startTableW = table ? table.offsetWidth : 0;
     // 0-based 물리 컬럼 위치(th 가 아닌 경우 대비 -1 가드).
     const colIndex = (th as HTMLTableCellElement).cellIndex ?? -1;
     const n = colIndex + 1; // nth-child(1-based)
@@ -43,7 +47,12 @@ export function ColumnResizer({
     function preview(w: number) {
       if (!liveStyle) return;
       const wpx = `${w}px`;
+      // 품목표는 표 전체폭도 (시작폭 − 시작컬럼폭 + 새컬럼폭)으로 맞춰, 줄인 만큼 표가 좁아지게.
+      const tableRule = sizedTable
+        ? `table[data-col-resizing]{width:${Math.max(0, startTableW - startW + w)}px!important}`
+        : "";
       liveStyle.textContent =
+        tableRule +
         `table[data-col-resizing]>colgroup>col:nth-child(${n})` +
         `{width:${wpx}!important;min-width:${wpx}!important}` +
         `table[data-col-resizing] thead th:not(.ig-group):nth-child(${n}),` +

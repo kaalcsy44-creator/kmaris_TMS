@@ -2959,6 +2959,13 @@ table.mini.wide {
   min-width: 0;
   table-layout: auto;
 }
+/* 편집형 품목표(lead-tools)는 반드시 table-layout:fixed 여야 컬럼 폭 조절이 먹는다.
+   auto 레이아웃에선 셀의 width/max-width 가 무시돼 아무리 줄여도 안 줄어든다(실측 확인).
+   폭은 <colgroup><col> + ItemGridStyle 의 col:nth-child 규칙이 정하고, 표 전체 폭도
+   ItemGridStyle 이 컬럼 합으로 명시한다. 대시보드 등 lead-tools 없는 .mini.wide 표는 auto 유지. */
+table.mini.wide.lead-tools {
+  table-layout: fixed;
+}
 table.mini.wide th,
 table.mini.wide td {
   white-space: normal;

@@ -1,0 +1,91 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><style>
+:root{--muted:#607089;--line:#e3eaf3;--blue:#2f6fed;--navy:#0b1d3a;--head-bg:#eef2f7;}
+body{font-family:sans-serif;margin:0;padding:10px;}
+.modal{width:1000px;margin-bottom:30px;border:2px solid #ccc;}
+.table-wrap{overflow-x:auto;border:1px solid var(--line);background:#fff;}
+.table-wrap.item-scroll{max-height:340px;overflow-y:auto;}
+
+table.mini.wide{min-width:0;table-layout:auto;border-collapse:collapse;}
+table.mini.wide th,table.mini.wide td{font-size:12px;padding:4px 7px;vertical-align:middle;white-space:normal;overflow-wrap:break-word;}
+table.mini.wide th:nth-child(2),table.mini.wide td:nth-child(2){min-width:140px;}
+table.mini.wide th:nth-child(3),table.mini.wide td:nth-child(3){min-width:180px;}
+table.mini.wide th:nth-child(4),table.mini.wide td:nth-child(4),table.mini.wide th:nth-child(5),table.mini.wide td:nth-child(5){min-width:110px;}
+table.mini.wide th.num,table.mini.wide td:has(input.num){min-width:104px;}
+table.mini.wide th:last-child,table.mini.wide td:last-child{min-width:44px;width:44px;}
+.ig-th{position:relative;}
+.ig-th .ig-th-label{overflow-wrap:anywhere;word-break:break-word;}
+th.num{text-align:right;}
+table.mini.wide thead tr.ig-group-row th{height:24px;padding:0 10px;text-align:center;font-size:10px;font-weight:800;white-space:nowrap;background:#eef2f7;}
+
+table.mini.wide input{width:100%;min-width:0;height:26px;border:1px solid #d7e2ee;border-radius:6px;padding:0 7px;font-size:12px;box-sizing:border-box;}
+table.mini.wide input.num{text-align:right;}
+table.mini.wide td:nth-child(2) input{min-width:118px;}
+table.mini.wide td:nth-child(3) input{min-width:158px;}
+table.mini.wide td:has(input.num) input{min-width:88px;}
+table.mini.wide input:not(.num){min-width:96px;}
+table.mini textarea.desc,table.mini textarea.wrapcell{width:100%;min-height:26px;border:1px solid #d7e2ee;border-radius:6px;padding:3px 7px;box-sizing:border-box;font-size:12px;resize:none;}
+
+/* ItemGridStyle output: margin (nth-child 11) forced to width 40 */
+.ig-cquote-items thead th:not(.ig-group):nth-child(11),.ig-cquote-items tbody td:nth-child(11),.ig-cquote-items tfoot td:nth-child(11){width:40px!important;min-width:40px!important;max-width:40px!important;}
+.ig-cquote-items tbody td:nth-child(11) input:not([type=checkbox]),.ig-cquote-items tbody td:nth-child(11) textarea{min-width:0!important;width:100%!important;box-sizing:border-box;}
+
+/* OLD scenario override */
+.old .pl-modal table.mini.wide, .old.pl-modal table.mini.wide{min-width:100%;}
+</style></head><body>
+
+<h3>OLD (min-width:100% forced)</h3>
+<div class="old pl-modal modal">
+  <div class="table-wrap item-scroll" id="wrapOld">
+    <table class="mini wide ig-cquote-items" id="tblOld"></table>
+  </div>
+</div>
+
+<h3>NEW (min-width:0 content-sized)</h3>
+<div class="pl-modal modal">
+  <div class="table-wrap item-scroll" id="wrapNew">
+    <table class="mini wide ig-cquote-items" id="tblNew"></table>
+  </div>
+</div>
+
+<script>
+function buildTable(tbl){
+  const groups=[['',8],['PURCHASE',2],['',1],['SALES',2],['',2]];
+  const heads=['','No.','Part No.','Description','Type','Serial No.','Qty','Unit','Cost (KRW)','Cost Amount (KRW)','Margin %','Unit Price (KRW)','Amount (KRW)','Lead Time','Remark'];
+  const numCols=new Set([6,8,9,10,11,12]); // 0-based physical: qty,cost,cost_amount,margin,unit_price,amount
+  let html='<thead><tr class="ig-group-row">';
+  groups.forEach(g=>{html+=`<th class="ig-group" colspan="${g[1]}">${g[0]}</th>`;});
+  html+='</tr><tr>';
+  heads.forEach((h,i)=>{
+    if(i===0){html+='<th><input type="checkbox"></th>';return;}
+    if(i===1){html+='<th class="seq">No.</th>';return;}
+    const numc=numCols.has(i)?' num':'';
+    html+=`<th class="ig-th${numc}"><span class="ig-th-label">${h}</span></th>`;
+  });
+  html+='</tr></thead><tbody>';
+  for(let r=0;r<2;r++){
+    html+='<tr>';
+    html+='<td><input type="checkbox"></td>';
+    html+='<td class="seq">'+(r+1)+'</td>';
+    html+='<td><textarea class="wrapcell" rows="1">HGD-062-26</textarea></td>';
+    html+='<td><textarea class="desc" rows="1">EXTERNAL LIGHT (NO.8 ON REPORT)</textarea></td>';
+    html+='<td><textarea class="wrapcell" rows="1"></textarea></td>';
+    html+='<td><textarea class="wrapcell" rows="1"></textarea></td>';
+    html+='<td><input class="num" value="5"></td>';
+    html+='<td><input value="PC"></td>';
+    html+='<td><input class="num" value="0"></td>';
+    html+='<td class="num">0</td>';
+    html+='<td><input class="num" value="35"></td>';
+    html+='<td><input class="num" value="0"></td>';
+    html+='<td class="num">0</td>';
+    html+='<td><textarea class="wrapcell" rows="1"></textarea></td>';
+    html+='<td><textarea class="wrapcell" rows="1"></textarea></td>';
+    html+='</tr>';
+  }
+  html+='</tbody>';
+  tbl.innerHTML=html;
+}
+buildTable(document.getElementById('tblOld'));
+buildTable(document.getElementById('tblNew'));
+</script>
+</body></html>
