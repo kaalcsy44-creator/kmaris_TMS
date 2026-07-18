@@ -8947,22 +8947,42 @@ button.ov-tl-stage:hover {
   color: #8793a4;
   background: linear-gradient(180deg, #fafbfd 0%, #f0f3f7 100%);
 }
-.proj-ov-grid thead th.ov-phase-on {
-  color: var(--ov-work);
+.proj-ov-grid thead th.ov-phase-done,
+.proj-ov-grid thead th.ov-phase-current {
+  color: #fff;
   background: linear-gradient(
     180deg,
-    color-mix(in srgb, var(--ov-work) 5%, #fff) 0%,
-    color-mix(in srgb, var(--ov-work) 16%, #fff) 100%
+    color-mix(in srgb, var(--ov-work) 82%, #fff) 0%,
+    var(--ov-work) 100%
   );
-  box-shadow: inset 0 1px 0 #fff,
-    inset 0 -1px 0 color-mix(in srgb, var(--ov-work) 25%, transparent);
+  border-bottom-color: color-mix(in srgb, var(--ov-work) 72%, #0b1d3a);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    0 2px 4px color-mix(in srgb, var(--ov-work) 20%, transparent);
+}
+.proj-ov-grid thead th.ov-phase-current {
+  position: relative;
+  z-index: 1;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.38),
+    inset 0 -2px 0 rgba(4, 22, 42, 0.16),
+    0 3px 7px color-mix(in srgb, var(--ov-work) 28%, transparent);
 }
 /* Purchase / Margin / Sales are supporting labels, regardless of phase. */
 .proj-ov-grid thead th.ov-sub,
-.proj-ov-grid thead th.ov-sub.ov-phase-on,
+.proj-ov-grid thead th.ov-sub.ov-phase-done,
+.proj-ov-grid thead th.ov-sub.ov-phase-current,
 .proj-ov-grid thead th.ov-sub.ov-phase-todo {
   color: #68768a;
   font-weight: 650;
+}
+.proj-ov-grid thead th.ov-sub.ov-phase-done,
+.proj-ov-grid thead th.ov-sub.ov-phase-current {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--ov-work) 4%, #fff) 0%,
+    color-mix(in srgb, var(--ov-work) 13%, #fff) 100%
+  );
+  border-bottom-color: color-mix(in srgb, var(--ov-work) 22%, #dfe5ed);
+  box-shadow: none;
 }
 .proj-ov-grid col.ovt-r,
 .proj-ov-grid col.ovt-q,
