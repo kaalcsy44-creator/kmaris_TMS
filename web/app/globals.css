@@ -8470,6 +8470,10 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 .proj-ov-h { display: flex; align-items: baseline; gap: 8px; margin: 0 0 6px;
   font-size: var(--ov-t-sec); font-weight: 800; color: var(--navy); }
 .proj-ov-cnt { font-size: var(--ov-t-meta); font-weight: 800; color: var(--blue); }
+/* 이 프로젝트만 걸러 보는 업무일지 바로가기 — 제목 우측 끝에 붙인다. */
+.proj-ov-actlink { margin-left: auto; font-size: var(--ov-t-meta); font-weight: 700;
+  color: var(--blue); white-space: nowrap; }
+.proj-ov-actlink:hover { text-decoration: underline; }
 /* 품목 표 출처 — 견적(값 있음) / RFQ 요청(값 없음) 중 무엇을 보고 있는지 밝힌다. */
 .proj-ov-src { font-size: var(--ov-t-meta); font-weight: 400; color: var(--muted); }
 .proj-ov-empty { font-size: var(--ov-t-body); color: var(--muted); padding: 10px 2px; }
@@ -8483,6 +8487,8 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 /* 벤더가 여러 곳이면 vendorList 가 줄마다 div 를 내므로, flex 로 옆으로 눕힌다. */
 .ov-meta-vendors { flex-wrap: wrap; gap: 7px 12px; }
 .ov-meta-f .cust-name { gap: 5px; }
+/* 고객사 담당자 — 회사명 우측에 한 톤 낮춰 붙인다. */
+.ov-meta-contact { font-size: var(--ov-t-meta); color: var(--muted); }
 
 /* ── 단계 + 활동 — Items 표와 같은 4칸(RFQ / Quote / P/O / C/I) ─────────
    단계가 뼈대(왼쪽 세로선 + 점), 사람이 쓴 노트가 그 단계 아래 들여쓰기로 붙는다.

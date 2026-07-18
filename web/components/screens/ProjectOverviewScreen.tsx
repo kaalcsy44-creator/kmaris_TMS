@@ -271,6 +271,8 @@ function Overview({
         <span className="ov-meta-f">
           <b>Customer</b>
           {row.customer ? <CustomerName name={row.customer} /> : <span className="muted">—</span>}
+          {/* 고객사 담당자(연락 담당) — 회사명 우측에 한 톤 낮춰 붙인다. */}
+          {row.contact_person ? <span className="ov-meta-contact">{row.contact_person}</span> : null}
         </span>
         <span className="ov-meta-f ov-meta-vendors">
           <b>Vendor</b>
@@ -336,6 +338,15 @@ function StageTimeline({
         <span className="proj-ov-cnt">
           {done}/{chain.length}
         </span>
+        {/* 업무일지(Activity Log)에서 이 프로젝트만 걸러 보는 바로가기. 검색어에 프로젝트
+            번호를 실어 By-deal 카드가 이 딜만 남게 한다. 입력·수정은 그 화면에서 한다. */}
+        <Link
+          className="proj-ov-actlink"
+          href={`/activity?q=${encodeURIComponent(row.project_no || row.kmaris_rfq_no || "")}`}
+          title="Open this project in the Activity Log"
+        >
+          Activity Log →
+        </Link>
       </h2>
       <div className="proj-ov-tlcols">
         {STAGE_COLUMNS.map((col) => (
@@ -608,6 +619,17 @@ function OrderItemGroup({
         poDocs={{ pur: vpoNos, sales: order.po_no || "—" }}
         ciNo={ci?.ci_no || ""}
       />
+      {/* 합계를 품목 1번행 바로 위에 둔다 — 표를 끝까지 훑지 않고도 단계별 총액을 먼저 본다. */}
+      <GroupTotal
+        quotePur={total(lines.map((l) => l.qPur))}
+        quoteSales={total(lines.map((l) => l.qSales))}
+        poPur={total(lines.map((l) => l.pPur))}
+        poSales={total(lines.map((l) => l.pSales))}
+        ciPur={total(lines.map((l) => l.cPur))}
+        ciSales={total(lines.map((l) => l.cSales))}
+        cur={{ qCostCur, qCur, vpoCur, oCur, ciCur }}
+        rate={rate}
+      />
       {lines.map((ln, i) => (
         <tr key={i}>
           <td className="ov-it-n">{i + 1}</td>
@@ -646,16 +668,6 @@ function OrderItemGroup({
           </td>
         </tr>
       ))}
-      <GroupTotal
-        quotePur={total(lines.map((l) => l.qPur))}
-        quoteSales={total(lines.map((l) => l.qSales))}
-        poPur={total(lines.map((l) => l.pPur))}
-        poSales={total(lines.map((l) => l.pSales))}
-        ciPur={total(lines.map((l) => l.cPur))}
-        ciSales={total(lines.map((l) => l.cSales))}
-        cur={{ qCostCur, qCur, vpoCur, oCur, ciCur }}
-        rate={rate}
-      />
     </tbody>
   );
 }
@@ -796,6 +808,17 @@ function QuoteOnlyGroup({ quoteId, vendorQuoteNo }: { quoteId: number; vendorQuo
         poDocs={{ pur: "", sales: "" }}
         ciNo=""
       />
+      {/* 합계를 품목 1번행 바로 위에 둔다(OrderItemGroup 과 동일 배치). */}
+      <GroupTotal
+        quotePur={sumLines(quote.items.map((x) => ({ amount: (x.cost_price ?? 0) * (x.qty || 1) })))}
+        quoteSales={quote.amount ?? sumLines(quote.items)}
+        poPur={null}
+        poSales={null}
+        ciPur={null}
+        ciSales={null}
+        cur={{ qCostCur, qCur, vpoCur: qCur, oCur: qCur, ciCur: qCur }}
+        rate={rate}
+      />
       {quote.items.map((it, i) => (
         <tr key={i}>
           <td className="ov-it-n">{i + 1}</td>
@@ -822,16 +845,6 @@ function QuoteOnlyGroup({ quoteId, vendorQuoteNo }: { quoteId: number; vendorQuo
           </td>
         </tr>
       ))}
-      <GroupTotal
-        quotePur={sumLines(quote.items.map((x) => ({ amount: (x.cost_price ?? 0) * (x.qty || 1) })))}
-        quoteSales={quote.amount ?? sumLines(quote.items)}
-        poPur={null}
-        poSales={null}
-        ciPur={null}
-        ciSales={null}
-        cur={{ qCostCur, qCur, vpoCur: qCur, oCur: qCur, ciCur: qCur }}
-        rate={rate}
-      />
     </tbody>
   );
 }

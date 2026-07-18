@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent as ReactDragEvent } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   fetchPipeline,
   fetchCustomers,
@@ -90,9 +91,12 @@ function saveCardOrder(o: Record<number, number[]>): void {
 }
 
 export default function ActivityScreen() {
+  // 프로젝트 개요의 "Activity Log →" 바로가기가 ?q=<프로젝트번호> 로 넘어온다 —
+  // 그 딜만 걸러 보이게 검색어 초기값으로 쓴다(이후엔 사용자가 자유롭게 바꾼다).
+  const params = useSearchParams();
   const [data, setData] = useState<PipelineData | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(() => params.get("q") ?? "");
   const [mine, setMine] = useState(false);
   const [dateFilter, setDateFilter] = useState<"all" | "today" | "date">("all");
   const [pickDate, setPickDate] = useState(todayISO());
