@@ -30,7 +30,7 @@ import ActivityNoteForm, {
   initialNoteValue,
   type ActivityNoteValue,
 } from "@/components/common/ActivityNoteForm";
-import { PipelineModal } from "@/components/screens/ProjectsScreen";
+import { PipelineModal, byProjectNo } from "@/components/screens/ProjectsScreen";
 import { useCachedData } from "@/lib/useCachedData";
 
 // 벤더 모노그램 상태 — 발주 벤더 확정 시 문자열 fallback, 아니면 RFQ 발송 벤더의 견적 수신여부.
@@ -282,26 +282,25 @@ export default function ActivityScreen() {
     }
   }
 
-  // 개요 모달의 인접 프로젝트 전환 — "현재 보이는 순서"대로 이웃 rfq_id 목록을 만든다.
-  // 딜 탭: 버킷 순서 × 각 버킷의 (사용자) 카드 순서. 일자 탭: 주→일→프로젝트 순, 첫 등장만.
+  // 개요 모달의 인접 프로젝트 전환 — 이웃 집합은 현재 뷰에 보이는 프로젝트(필터 적용)이되,
+  // 순서는 프로젝트 번호 오름차순으로 고정한다(ProjectsScreen 과 동일 기준). ←=이전(작은 번호),
+  // →=다음(큰 번호). 딜/일자 탭 모두 같은 방향으로 읽히게 하려는 것.
   const navIds = useMemo(() => {
-    const ids: number[] = [];
+    const rows: PipelineRow[] = [];
+    const seen = new Set<number>();
+    const collect = (row: PipelineRow) => {
+      if (!seen.has(row.rfq_id)) {
+        seen.add(row.rfq_id);
+        rows.push(row);
+      }
+    };
     if (view === "deal") {
-      for (const g of buckets) for (const { row } of orderedRows(g.phase, g.rows)) ids.push(row.rfq_id);
+      for (const g of buckets) for (const { row } of g.rows) collect(row);
     } else {
-      const seen = new Set<number>();
-      for (const w of weekView)
-        for (const d of w.days)
-          for (const p of d.projects)
-            if (!seen.has(p.row.rfq_id)) {
-              seen.add(p.row.rfq_id);
-              ids.push(p.row.rfq_id);
-            }
+      for (const w of weekView) for (const d of w.days) for (const p of d.projects) collect(p.row);
     }
-    return ids;
-    // orderedRows 는 cardOrder 만 참조하므로 위 deps 로 충분(함수 자체는 제외).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, buckets, weekView, cardOrder]);
+    return [...rows].sort(byProjectNo).map((r) => r.rfq_id);
+  }, [view, buckets, weekView]);
 
   const navigateOverview = useCallback(
     (dir: -1 | 1) => {

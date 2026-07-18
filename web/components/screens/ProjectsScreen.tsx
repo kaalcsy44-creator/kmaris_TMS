@@ -774,15 +774,18 @@ function PipelineTable({
   // 새로고침 후에도 rfq_id로 다시 찾으므로 모달이 최신 값으로 유지된다(삭제되면 null → 자동 닫힘).
   const selected = rows.find((r) => r.rfq_id === selectedId) ?? null;
 
-  // 인접 프로젝트 전환 — "현재 보이는 목록 순서"(shownRows: 표=tableRows, 보드=displayRows)에서
-  // 위/아래 이웃으로. 양 끝에선 제자리(넘어갈 곳 없음). 방향 전환 시 딥링크 단계는 비운다.
+  // 인접 프로젝트 전환 — 이웃 집합은 "현재 보이는 행"(shownRows: 표=tableRows, 보드=displayRows)
+  // 이되, 순서는 표 정렬과 무관하게 프로젝트 번호 오름차순으로 고정한다. 그래야 ←=이전(작은
+  // 번호), →=다음(큰 번호)이 표를 어떻게 정렬해도 늘 같은 방향으로 읽힌다(001 ← 002 → 003).
+  // dir: -1=이전(작은 번호), +1=다음(큰 번호). 양 끝에선 제자리. 전환 시 딥링크 단계는 비운다.
   const navigateSelected = useCallback(
     (dir: -1 | 1) => {
       setSelectedId((cur) => {
         if (cur == null) return cur;
-        const idx = shownRows.findIndex((r) => r.rfq_id === cur);
+        const ordered = [...shownRows].sort(byProjectNo);
+        const idx = ordered.findIndex((r) => r.rfq_id === cur);
         if (idx < 0) return cur;
-        const next = shownRows[idx + dir];
+        const next = ordered[idx + dir];
         return next ? next.rfq_id : cur;
       });
       setDeepStage(null);
@@ -1101,6 +1104,17 @@ function PipelineTable({
       ) : null}
     </>
   );
+}
+
+/** 프로젝트 번호 오름차순 비교(P-011 < P-012 < P-100). 번호가 없으면(신규 등) kmaris_rfq_no
+ *  로 대체하고, 그것도 없으면 뒤로 보낸다. numeric 옵션으로 "011" vs "012" 를 수로 비교한다. */
+export function byProjectNo(a: PipelineRow, b: PipelineRow): number {
+  const an = a.project_no || a.kmaris_rfq_no || "";
+  const bn = b.project_no || b.kmaris_rfq_no || "";
+  if (!an && !bn) return 0;
+  if (!an) return 1;
+  if (!bn) return -1;
+  return an.localeCompare(bn, undefined, { numeric: true });
 }
 
 /** first_rfq_at('YYYY-MM-DD…') 로부터 경과 일수. 파싱 불가면 null. */
