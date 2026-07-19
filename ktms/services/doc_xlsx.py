@@ -22,9 +22,10 @@ _REPO_DIR = Path(__file__).resolve().parents[2]
 
 def _find_asset(*names: str) -> Optional[str]:
     """자산 이미지(로고·서명·직인)를 config/ · templates/ · 저장소 루트에서 찾는다.
-    templates/ 는 git 에 커밋되므로 커밋된 아이콘 로고(logo_icon.png 등)를 여기 두면 배포에 반영된다."""
-    for root in (_CONFIG_DIR, _TEMPLATES_DIR, _REPO_DIR):
-        for n in names:
+    templates/ 는 git 에 커밋되므로 커밋된 아이콘 로고(logo_icon.jpg 등)를 여기 두면 배포에 반영된다.
+    이름 우선순위가 폴더보다 우선 — 앞선 이름(아이콘)이 있으면 배포본 텍스트 로고보다 먼저 선택된다."""
+    for n in names:
+        for root in (_TEMPLATES_DIR, _CONFIG_DIR, _REPO_DIR):
             p = root / n
             if p.exists():
                 return str(p)
@@ -996,10 +997,10 @@ def make_quotation_costing_xlsx(
     # ── 레터헤드: 아이콘 로고(좌, 텍스트 없는 심볼 우선) + 회사정보(중) + 태그라인(우) ──
     # 텍스트가 빠진 아이콘 로고를 쓰려면 config/ 또는 저장소 루트에 logo_icon.png(또는
     # logo_mark/logo_symbol) 파일을 두면 그것을 우선 사용한다. 없으면 기존 로고로 대체.
-    logo = _find_asset("logo_icon.png", "logo_mark.png", "logo_symbol.png",
+    logo = _find_asset("logo_icon.jpg", "logo_icon.png", "logo_mark.png", "logo_symbol.png",
                        "logo_K-maris.png", "logo.png", "logo.jpg")
     if logo:
-        add_image(logo, "A1", 92, 92)
+        add_image(logo, "A1", 96, 85)
     hd_name = Font(name="Calibri", bold=True, size=14, color="0B1D3A")
     hd_addr = Font(name="Calibri", size=8, color="555555")
     hd_tag = Font(name="Calibri", italic=True, size=10, color="0055A8")

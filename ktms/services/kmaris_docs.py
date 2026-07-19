@@ -686,7 +686,7 @@ def _make_commercial_invoice_pdf(data: Dict[str, Any], company: Dict[str, Any]) 
     story = []
     title_style = ParagraphStyle("KMCITitle", parent=s["section"], fontName=DEFAULT_BOLD_FONT,
                                  fontSize=19, leading=22, alignment=TA_CENTER, textColor=NAVY)
-    logo = image(asset("logo_K-maris.png", "logo.png", "logo.jpg"), 32 * mm, 11 * mm)
+    logo = image(asset("logo_icon.jpg", "logo_icon.png", "logo_K-maris.png", "logo.png", "logo.jpg"), 32 * mm, 11 * mm)
     title = Table([[logo, Paragraph("COMMERCIAL INVOICE", title_style), ""]],
                   colWidths=[38 * mm, 114 * mm, 38 * mm], rowHeights=[16 * mm])
     title.setStyle(TableStyle([("TEXTCOLOR", (0, 0), (-1, -1), NAVY),
@@ -908,7 +908,7 @@ def _make_shipping_mark_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> by
     # ── 제목 + 회사 배너 (CI 와 동일 톤) ──────────────────────────────────
     title_style = ParagraphStyle("KMSMTitle", parent=s["section"], fontName=DEFAULT_BOLD_FONT,
                                  fontSize=17, leading=20, alignment=TA_CENTER, textColor=NAVY)
-    logo = image(asset("logo_K-maris.png", "logo.png", "logo.jpg"), 32 * mm, 11 * mm)
+    logo = image(asset("logo_icon.jpg", "logo_icon.png", "logo_K-maris.png", "logo.png", "logo.jpg"), 32 * mm, 11 * mm)
     title = Table([[logo, Paragraph("SHIPPING MARK", title_style), ""]],
                   colWidths=[38 * mm, 114 * mm, 38 * mm], rowHeights=[16 * mm])
     title.setStyle(TableStyle([("ALIGN", (0, 0), (-1, -1), "CENTER"), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
@@ -1074,7 +1074,7 @@ def _make_packing_list_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> byt
     story = []
     title_style = ParagraphStyle("KMPLTitle", parent=s["section"], fontName=DEFAULT_BOLD_FONT,
                                  fontSize=19, leading=22, alignment=TA_CENTER, textColor=NAVY)
-    logo = image(asset("logo_K-maris.png", "logo.png", "logo.jpg"), 32 * mm, 11 * mm)
+    logo = image(asset("logo_icon.jpg", "logo_icon.png", "logo_K-maris.png", "logo.png", "logo.jpg"), 32 * mm, 11 * mm)
     title = Table([[logo, Paragraph("PACKING LIST", title_style), ""]],
                   colWidths=[38 * mm, 114 * mm, 38 * mm], rowHeights=[16 * mm])
     title.setStyle(TableStyle([("TEXTCOLOR", (0, 0), (-1, -1), NAVY),
@@ -1303,11 +1303,14 @@ def _make_quotation_costing_pdf(data: Dict[str, Any], company: Dict[str, Any]) -
         topMargin=8 * mm, bottomMargin=14 * mm, title="QUOTATION / COSTING SHEET",
         author="K-MARIS Energy & Solutions Co., Ltd.",
     )
-    asset_roots = [Path(__file__).resolve().parents[2], Path(__file__).resolve().parent.parent / "config"]
+    asset_roots = [Path(__file__).resolve().parent.parent / "templates",
+                   Path(__file__).resolve().parent.parent / "config",
+                   Path(__file__).resolve().parents[2]]
 
     def asset(*names):
-        for root in asset_roots:
-            for name in names:
+        # 이름 우선순위가 폴더보다 우선 — 앞선 이름(아이콘)이 있으면 텍스트 로고보다 먼저 선택.
+        for name in names:
+            for root in asset_roots:
                 cand = root / name
                 if cand.exists():
                     return cand
@@ -1341,7 +1344,7 @@ def _make_quotation_costing_pdf(data: Dict[str, Any], company: Dict[str, Any]) -
         return (t or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     title_style = ParagraphStyle("KMQTitle", parent=s["section"], fontName=DEFAULT_BOLD_FONT,
                                  fontSize=17, leading=20, alignment=TA_CENTER, textColor=NAVY)
-    logo = image(asset("logo_K-maris.png", "logo.png", "logo.jpg"), 24 * mm, 15 * mm)
+    logo = image(asset("logo_icon.jpg", "logo_icon.png", "logo_K-maris.png", "logo.png", "logo.jpg"), 24 * mm, 15 * mm)
     name_style = ParagraphStyle("KMQName", parent=s["base"], fontName=DEFAULT_BOLD_FONT,
                                 fontSize=13, leading=15, textColor=NAVY)
     addr_style = ParagraphStyle("KMQAddr", parent=s["base"], fontSize=7, leading=9,
@@ -1495,11 +1498,14 @@ def _make_vendor_rfq_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> bytes
         topMargin=8 * mm, bottomMargin=14 * mm, title="REQUEST FOR QUOTATION",
         author="K-MARIS Energy & Solutions Co., Ltd.",
     )
-    asset_roots = [Path(__file__).resolve().parents[2], Path(__file__).resolve().parent.parent / "config"]
+    asset_roots = [Path(__file__).resolve().parent.parent / "templates",
+                   Path(__file__).resolve().parent.parent / "config",
+                   Path(__file__).resolve().parents[2]]
 
     def asset(*names):
-        for root in asset_roots:
-            for name in names:
+        # 이름 우선순위가 폴더보다 우선 — 앞선 이름(아이콘)이 있으면 텍스트 로고보다 먼저 선택.
+        for name in names:
+            for root in asset_roots:
                 cand = root / name
                 if cand.exists():
                     return cand
@@ -1531,7 +1537,7 @@ def _make_vendor_rfq_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> bytes
     # ── 헤더: 로고 + 타이틀 ──────────────────────────────────────────────
     title_style = ParagraphStyle("KMRFQTitle", parent=s["section"], fontName=DEFAULT_BOLD_FONT,
                                  fontSize=17, leading=20, alignment=TA_CENTER, textColor=NAVY)
-    logo = image(asset("logo_K-maris.png", "logo.png", "logo.jpg"), 34 * mm, 12 * mm)
+    logo = image(asset("logo_icon.jpg", "logo_icon.png", "logo_K-maris.png", "logo.png", "logo.jpg"), 34 * mm, 12 * mm)
     org_style = ParagraphStyle("KMRFQOrg", parent=s["base"], fontName=DEFAULT_BOLD_FONT,
                                fontSize=11, alignment=TA_RIGHT, textColor=BLUE)
     head = Table([[logo, Paragraph("K-MARIS ENERGY &amp; SOLUTIONS", org_style)]],
@@ -1658,11 +1664,14 @@ def _make_purchase_order_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> b
         topMargin=8 * mm, bottomMargin=14 * mm, title="PURCHASE ORDER",
         author="K-MARIS Energy & Solutions Co., Ltd.",
     )
-    asset_roots = [Path(__file__).resolve().parents[2], Path(__file__).resolve().parent.parent / "config"]
+    asset_roots = [Path(__file__).resolve().parent.parent / "templates",
+                   Path(__file__).resolve().parent.parent / "config",
+                   Path(__file__).resolve().parents[2]]
 
     def asset(*names):
-        for root in asset_roots:
-            for name in names:
+        # 이름 우선순위가 폴더보다 우선 — 앞선 이름(아이콘)이 있으면 텍스트 로고보다 먼저 선택.
+        for name in names:
+            for root in asset_roots:
                 cand = root / name
                 if cand.exists():
                     return cand
@@ -1694,7 +1703,7 @@ def _make_purchase_order_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> b
     # ── 헤더: 로고 + 타이틀 ──────────────────────────────────────────────
     title_style = ParagraphStyle("KMPOTitle", parent=s["section"], fontName=DEFAULT_BOLD_FONT,
                                  fontSize=17, leading=20, alignment=TA_CENTER, textColor=NAVY)
-    logo = image(asset("logo_K-maris.png", "logo.png", "logo.jpg"), 34 * mm, 12 * mm)
+    logo = image(asset("logo_icon.jpg", "logo_icon.png", "logo_K-maris.png", "logo.png", "logo.jpg"), 34 * mm, 12 * mm)
     org_style = ParagraphStyle("KMPOOrg", parent=s["base"], fontName=DEFAULT_BOLD_FONT,
                                fontSize=11, alignment=TA_RIGHT, textColor=BLUE)
     head = Table([[logo, Paragraph("K-MARIS ENERGY &amp; SOLUTIONS", org_style)]],
