@@ -976,14 +976,35 @@ def make_quotation_costing_xlsx(
     def merge(r1, c1, r2, c2):
         ws.merge_cells(start_row=r1, start_column=c1, end_row=r2, end_column=c2)
 
-    # ── Title / banner ─────────────────────────────────────────────────
-    merge(1, 1, 1, NCOL)
-    c = ws.cell(1, 1, "QUOTATION / COSTING SHEET"); c.fill = navy; c.font = white_lg; c.alignment = center
-    ws.row_dimensions[1].height = 26
-    merge(2, 1, 2, NCOL)
-    c = ws.cell(2, 1, "K-MARIS Energy & Solutions Co., Ltd.  |  sales@k-maris.com  |  www.k-maris.com")
-    c.fill = blue; c.font = white_sm; c.alignment = center
-    ws.row_dimensions[2].height = 15
+    def add_image(path, anchor, w, h):
+        try:
+            from openpyxl.drawing.image import Image as XLImage
+            img = XLImage(path); img.width = w; img.height = h
+            ws.add_image(img, anchor)
+        except Exception:
+            pass
+
+    # ── 레터헤드: 로고(좌) + 회사정보(중) + 태그라인(우), 아래 파란 구분선 ─────
+    logo = _find_asset("logo_K-maris.png", "logo.png", "logo.jpg")
+    if logo:
+        add_image(logo, "A1", 150, 58)
+    hd_name = Font(name="Calibri", bold=True, size=14, color="0B1D3A")
+    hd_addr = Font(name="Calibri", size=8, color="555555")
+    hd_tag = Font(name="Calibri", italic=True, size=10, color="0055A8")
+    merge(1, 3, 1, 9); cc = ws.cell(1, 3, company.get("company_name_en", "K-MARIS Energy & Solutions Co., Ltd.")); cc.font = hd_name; cc.alignment = left
+    merge(2, 3, 2, 9); cc = ws.cell(2, 3, company.get("address_en", "")); cc.font = hd_addr; cc.alignment = left
+    merge(3, 3, 3, 9); cc = ws.cell(3, 3, f"Tel: {company.get('phone', '')}  |  {company.get('sales_email', '')}  |  {company.get('website', '')}"); cc.font = hd_addr; cc.alignment = left
+    merge(1, 10, 3, NCOL); cc = ws.cell(1, 10, company.get("tagline", "")); cc.font = hd_tag; cc.alignment = Alignment(horizontal="right", vertical="center", wrap_text=True)
+    for rr in (1, 2, 3):
+        ws.row_dimensions[rr].height = 17
+    for col in range(1, NCOL + 1):
+        ws.cell(3, col).border = Border(bottom=Side(style="medium", color="0055A8"))
+    ws.row_dimensions[4].height = 6
+    # ── 타이틀 ─────────────────────────────────────────────────────────────
+    merge(5, 1, 5, NCOL)
+    c = ws.cell(5, 1, "QUOTATION / COSTING SHEET"); c.font = Font(name="Calibri", bold=True, size=16, color="0B1D3A"); c.alignment = center
+    ws.row_dimensions[5].height = 26
+    ws.row_dimensions[6].height = 4
 
     # 원가(cost) 통화 → 판매 통화 환산계수. Margin 수식에서 통화가 섞일 때 사용.
     cost_cur = (data.get("cost_currency") or currency).upper()
@@ -1009,7 +1030,7 @@ def make_quotation_costing_xlsx(
         ("Project", data.get("project_title", ""), "VAT", vat_label),
     ]
     # 원가열(F·G·H)은 기본 숨김이므로 메타는 그 열을 피해 좌(1-5)·우(9-12)에 배치.
-    for off, (k1, v1, k2, v2) in enumerate(meta, start=4):
+    for off, (k1, v1, k2, v2) in enumerate(meta, start=7):
         merge(off, 1, off, 2); merge(off, 3, off, 5)
         merge(off, 9, off, 10); merge(off, 11, off, NCOL)
         for col, val, is_label in [(1, k1, True), (3, v1, False), (9, k2, True), (11, v2, False)]:
@@ -1021,7 +1042,7 @@ def make_quotation_costing_xlsx(
         ws.row_dimensions[off].height = 15
 
     # ── PURCHASE 그룹 라벨(원가 열 위) ─────────────────────────────────
-    GROUP_ROW = 9
+    GROUP_ROW = 12
     merge(GROUP_ROW, 6, GROUP_ROW, 8)
     gc = ws.cell(GROUP_ROW, 6, f"PURCHASE (internal, {cost_cur})"); gc.fill = cost_fill; gc.font = boldsm; gc.alignment = center
     for col in range(1, NCOL + 1):
@@ -1030,8 +1051,8 @@ def make_quotation_costing_xlsx(
             ws.cell(GROUP_ROW, col).fill = gray
     ws.row_dimensions[GROUP_ROW].height = 14
 
-    # ── Item header (row 10) ───────────────────────────────────────────
-    HROW = 10
+    # ── Item header (row 13) ───────────────────────────────────────────
+    HROW = 13
     for ci, (h, w) in enumerate(zip(HEADERS, WIDTHS), start=1):
         cell = ws.cell(HROW, ci, h); cell.fill = navy; cell.font = white_hdr
         cell.alignment = center; cell.border = bdr
@@ -1076,7 +1097,16 @@ def make_quotation_costing_xlsx(
             else:
                 cell.alignment = left
         ws.row_dimensions[r].height = 18
-    last = HROW + len(raw_items)
+    # 샘플처럼 최소 5줄의 폼 형태 — 품목이 적어도 빈 줄로 표 높이를 유지(Total 위치 고정).
+    MIN_ITEM_ROWS = 5
+    for ri in range(len(raw_items) + 1, MIN_ITEM_ROWS + 1):
+        r = HROW + ri
+        for ci in range(1, NCOL + 1):
+            cell = ws.cell(r, ci); cell.border = bdr
+            if ci in (6, 7, 8):
+                cell.fill = cost_fill
+        ws.row_dimensions[r].height = 18
+    last = HROW + max(len(raw_items), MIN_ITEM_ROWS)
 
     # ── Totals (수식) ──────────────────────────────────────────────────
     trow = last + 1
