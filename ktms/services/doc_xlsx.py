@@ -1086,14 +1086,22 @@ def make_quotation_costing_xlsx(
         qty = _num(it.get("qty", 0))
         unit_price = _num(it.get("unit_price", 0))
         cost = _num(it.get("cost_price", 0))
-        # 값(입력)과 수식(계산)을 섞어 배치 — Commercial Invoice 와 동일한 방식.
+        # 마진(H)은 입력값(분수), U/Price(I)는 원가·마진으로 계산하는 수식 — 샘플과 동일.
+        # margin_pct(예: 35 또는 0.35)를 분수로 정규화. 없으면 원가·판매가에서 유도.
+        mp = _num(it.get("margin_pct", 0))
+        if mp:
+            margin_frac = mp / 100.0 if mp > 1 else mp
+        else:
+            csell = cost * factor
+            margin_frac = (1 - csell / unit_price) if unit_price else 0.0
         cells = {
             1: ri, 2: it.get("part_no", ""), 3: it.get("description", ""),
             4: qty, 5: it.get("unit", ""),
-            6: cost,                                   # Cost U/P (입력)
+            6: cost,                                   # Cost U/P (입력, 원가통화)
             7: f"=D{r}*F{r}",                          # Cost Amount = Qty × Cost
-            8: f"=IF(I{r}=0,0,(I{r}-F{r}*{fx_str})/I{r}*100)",  # Margin% (통화환산 반영)
-            9: unit_price,                             # U/Price (입력)
+            8: margin_frac,                            # Margin % (입력, 분수)
+            # U/Price = 원가(판매통화 환산) ÷ (1−마진), 100단위 올림 — 샘플 수식.
+            9: f"=IF(OR(F{r}=0,H{r}>=1),0,ROUNDUP(F{r}*{fx_str}/(1-H{r}),-2))",
             10: f"=D{r}*I{r}",                         # Amount = Qty × U/Price
             11: str(it.get("lead_time", "") or ""), 12: it.get("remark", ""),
         }
@@ -1108,7 +1116,7 @@ def make_quotation_costing_xlsx(
             elif ci in (6, 7):
                 cell.alignment = right; cell.number_format = cost_fmt
             elif ci == 8:
-                cell.alignment = right; cell.number_format = '0.0"%"'
+                cell.alignment = right; cell.number_format = '0.0%'
             elif ci in (1, 5):
                 cell.alignment = center
             else:
@@ -1138,7 +1146,7 @@ def make_quotation_costing_xlsx(
         ws.cell(trow, col).border = bdr
     cost_sum = f"=SUM(G{first}:G{last})" if has_rows else 0
     amt_sum = f"=SUM(J{first}:J{last})" if has_rows else 0
-    margin_tot = f"=IF(J{trow}=0,0,(J{trow}-G{trow}*{fx_str})/J{trow}*100)" if has_rows else 0
+    margin_tot = f"=IF(J{trow}=0,0,(J{trow}-G{trow}*{fx_str})/J{trow})" if has_rows else 0
     for col, val, fill in [(6, "", cost_fill), (7, cost_sum, cost_fill), (8, margin_tot, cost_fill),
                            (9, "", lightblue), (10, amt_sum, lightblue)]:
         cell = ws.cell(trow, col, val); cell.border = bdr; cell.fill = fill; cell.font = bold; cell.alignment = right
@@ -1147,7 +1155,7 @@ def make_quotation_costing_xlsx(
         if col == 10:
             cell.number_format = num_fmt
         if col == 8:
-            cell.number_format = '0.0"%"'
+            cell.number_format = '0.0%'
 
     # 섹션 헤더(네이비 바) 헬퍼.
     def section_bar(r, title):
