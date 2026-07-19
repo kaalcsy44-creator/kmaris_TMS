@@ -6347,7 +6347,7 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   min-width: 0;
   margin-top: 2px;
   font-size: 11px;
-  font-weight: 500;
+  font-weight: 400;
   color: var(--muted);
   white-space: nowrap;
   overflow: hidden;
@@ -6365,6 +6365,18 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* 고객사 담당자 — 고객사명 줄 아래, 회색으로 낮춰 붙인다. */
+.pl-card-contact {
+  min-width: 0;
+  margin-top: 1px;
+  font-size: 10.5px;
+  font-weight: 400;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pl-card.cancelled .pl-card-contact { text-decoration: line-through; }
 .pl-card-bar {
   display: flex;
   gap: 2px;
@@ -6407,14 +6419,14 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 .pl-card-pic {
   min-width: 0;
   font-size: 10px;
-  font-weight: 500;
+  font-weight: 400;
   color: var(--ink);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .pl-card-top-r .pl-card-pic { flex: 0 1 auto; max-width: 96px; }
-.pl-card-pic.none { color: var(--muted); font-weight: 500; }
+.pl-card-pic.none { color: var(--muted); font-weight: 400; }
 /* 간략 카드: 진행바 아래 vendor 모노그램 전용 행(연결 vendor 있을 때만). */
 .pl-card-vrow {
   display: flex;
