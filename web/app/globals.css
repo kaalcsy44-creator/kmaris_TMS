@@ -8621,10 +8621,6 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 /* Add/Cancel 버튼 높이 축소(약 2/3 = 24px). .btn 의 height:36px 를 덮는다. */
 .act-add .act-add-go { height: 24px; padding: 0 14px; font-size: 12px; line-height: 1; }
 
-/* 회의 모드 — 입력 UI 숨기고 크게. */
-.act-screen.meeting .act-cards { column-count: 1; }
-.act-screen.meeting .act-item { font-size: 15px; padding: 5px 0; }
-.act-screen.meeting .act-head { font-size: 15px; }
 /* ── 프로젝트 개요(읽기 전용) — /project/<rfq_id> ────────────────────────
    팀원 공유용 한 장짜리 현황. 위에서 아래로 머리글 → 단계 → 정보/활동 → 품목
    순의 문서형 흐름이라 화면에서 한눈에 들어오고 그대로 인쇄된다. */
@@ -9252,9 +9248,10 @@ button.ov-tl-stage:hover {
   .act-toolbar, .act-add, .act-add-btn, .act-actions, .act-open, .topnav { display: none !important; }
   /* Activity 탭 바(.page-tabs)도 인쇄물에선 불필요. */
   .page-tabs { display: none !important; }
-  .act-screen .act-cards,
-  .act-screen.meeting .act-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .act-screen .act-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .act-card { break-inside: avoid; }
+  /* 매트릭스는 화면용 스크롤 높이 제한을 풀어야 전체 행이 인쇄된다. */
+  .act-matrix { max-height: none; overflow: visible; }
   /* 화면용 스크롤 높이 제한을 풀지 않으면 첫 화면 분량만 인쇄되고 나머지가 잘린다. */
   .act-cal { max-height: none; min-height: 0; overflow: visible; }
   .act-cal-week { break-inside: avoid; }

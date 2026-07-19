@@ -94,7 +94,6 @@ export default function ActivityScreen() {
   const [ageFilter, setAgeFilter] = useState<"all" | "7" | "14" | "30">("all"); // 최신활동 경과일(이상)
   const [customerFilter, setCustomerFilter] = useState("");
   const [vendorFilter, setVendorFilter] = useState("");
-  const [meeting, setMeeting] = useState(false);
   const [view, setView] = useState<"deal" | "date">("deal"); // 탭: 딜별(카드) / 일자별(피드)
 
   const [overviewId, setOverviewId] = useState<number | null>(null);
@@ -299,7 +298,7 @@ export default function ActivityScreen() {
   if (!data) return <div className="state">Loading…</div>;
 
   return (
-    <div className={`act-screen${meeting ? " meeting" : ""}`}>
+    <div className="act-screen">
       {/* 페이지 탭 — Progress 페이지와 동일한 폼(상단 고정 밑줄 탭 + 우측 교차 링크). */}
       <div className="page-tabs">
         <button
@@ -368,9 +367,6 @@ export default function ActivityScreen() {
               Reset
             </button>
           ) : null}
-          <button className={`btn sm${meeting ? " primary" : ""}`} onClick={() => setMeeting((v) => !v)}>
-            {meeting ? "Meeting ON" : "Meeting mode"}
-          </button>
           <button className="btn sm" onClick={() => window.print()}>Print</button>
         </div>
       </div>
@@ -391,7 +387,6 @@ export default function ActivityScreen() {
                   key={row.rfq_id}
                   row={row}
                   acts={acts}
-                  meeting={meeting}
                   onStar={(a) => toggleStar(row.rfq_id, a)}
                   onDelete={(a) => removeNote(row.rfq_id, a)}
                   onSave={(a, patch) => saveNote(row.rfq_id, a, patch)}
@@ -500,7 +495,6 @@ function addDays(iso: string, n: number): string {
 function DealStageRow({
   row,
   acts,
-  meeting,
   onStar,
   onDelete,
   onSave,
@@ -509,7 +503,6 @@ function DealStageRow({
 }: {
   row: PipelineRow;
   acts: Activity[];
-  meeting: boolean;
   onStar: (a: Activity) => void;
   onDelete: (a: Activity) => void;
   onSave: (a: Activity, patch: NotePatch) => Promise<void>;
@@ -580,7 +573,6 @@ function DealStageRow({
                   <NoteRow
                     key={i}
                     a={a}
-                    meeting={meeting}
                     onStar={() => onStar(a)}
                     onDelete={() => onDelete(a)}
                     onSave={(patch) => onSave(a, patch)}
@@ -599,7 +591,7 @@ function DealStageRow({
           ) : ci !== addCol ? (
             <span className="act-mx-empty">·</span>
           ) : null}
-          {ci === addCol && !meeting ? (
+          {ci === addCol ? (
             <AddActivity rfqId={row.rfq_id} stage={row.stage} onAdded={onAdded} />
           ) : null}
         </div>
@@ -638,13 +630,11 @@ function formToPatch(v: ActivityNoteValue): NotePatch {
 // 기존 활동 노트 1건 — 표시/인라인 수정 토글.
 function NoteRow({
   a,
-  meeting,
   onStar,
   onDelete,
   onSave,
 }: {
   a: Extract<Activity, { kind: "note" }>;
-  meeting: boolean;
   onStar: () => void;
   onDelete: () => void;
   onSave: (patch: NotePatch) => Promise<void>;
@@ -702,8 +692,8 @@ function NoteRow({
       </span>
       <span className="act-actions">
         <button className={`act-starbtn${n.star ? " on" : ""}`} title="Mark priority" onClick={onStar}>★</button>
-        {!meeting ? <button className="act-edit-btn" title="Edit" onClick={begin}>✎</button> : null}
-        {!meeting ? <button className="act-del" title="Delete" onClick={onDelete}>×</button> : null}
+        <button className="act-edit-btn" title="Edit" onClick={begin}>✎</button>
+        <button className="act-del" title="Delete" onClick={onDelete}>×</button>
       </span>
     </li>
   );
