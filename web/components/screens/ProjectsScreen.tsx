@@ -101,12 +101,6 @@ function fmtYYMMDD(iso: string): string {
   return m ? m[1].slice(2) + m[2] + m[3] : "";
 }
 
-/** 복수 통화 금액에서 주요(첫) 통화만: "KRW 6,614,200 USD 4,285" → "KRW 6,614,200". */
-function primaryAmount(s: string): string {
-  const m = (s || "").match(/[A-Z]{3}\s*[\d,.]+/);
-  return m ? m[0].replace(/\s+/, " ") : s || "";
-}
-
 type Tab = "customer" | "internal";
 type WorkspaceArea = "rfq" | "po" | "documents" | "ar";
 type StageTabKey = number;
@@ -1106,6 +1100,8 @@ function PipelineTable({
           rows={displayRows}
           steps={steps}
           stageOf={stageOf}
+          showClosed={showClosed}
+          compact={boardCompact}
           onClose={() => setPreviewOpen(false)}
         />
       ) : null}
@@ -1254,11 +1250,15 @@ function BoardPreviewModal({
   rows,
   steps,
   stageOf,
+  showClosed,
+  compact,
   onClose,
 }: {
   rows: PipelineRow[];
   steps: string[];
   stageOf: (r: PipelineRow) => number;
+  showClosed: boolean;
+  compact: boolean;
   onClose: () => void;
 }) {
   const A4_W = 1400;
@@ -1276,10 +1276,14 @@ function BoardPreviewModal({
     window.addEventListener("resize", fit);
     return () => window.removeEventListener("resize", fit);
   }, []);
-  // 종결(Closed) 존은 해당 딜이 있을 때만 표시(보드와 동일 규칙).
-  const cols = groupedBoardColumns(stageOf).filter(
-    (c) => c.variant !== "cancelled" || rows.some((r) => c.match(r))
-  );
+  // 실제 보드와 동일한 컬럼 규칙: showClosed 가 꺼지면 Closed/Done 컬럼 자체를 뺀다.
+  // 켜졌더라도 Closed 존은 해당 딜이 있을 때만 노출.
+  const allCols = groupedBoardColumns(stageOf);
+  const cols = (showClosed
+    ? allCols
+    : allCols.filter((c) => c.variant !== "cancelled" && c.variant !== "done")
+  ).filter((c) => c.variant !== "cancelled" || rows.some((r) => c.match(r)));
+  const shownCount = rows.filter((r) => cols.some((c) => c.match(r))).length;
   const today = new Date().toISOString().slice(0, 10);
 
   async function download() {
@@ -1327,52 +1331,39 @@ function BoardPreviewModal({
               <div ref={frameRef} className="board-prev-a4" style={{ width: A4_W, height: A4_H }}>
               <div className="board-prev-pghead">
                 <span className="board-prev-brand">K-MARIS · Progress (Internal)</span>
-                <span className="board-prev-meta">{today} · {rows.length} deals</span>
+                <span className="board-prev-meta">{today} · {shownCount} deals</span>
               </div>
-              <div className="board-prev-cols">
+              {/* 실제 Progress 보드와 동일한 컬럼·카드 마크업(BoardCard)을 그대로 재사용해
+                  A4 프레임에 맞춘다(스크롤/상호작용은 board-prev-live 오버라이드로 정적화). */}
+              <div className="pl-board board-prev-live">
                 {cols.map((col, ci) => {
                   const cards = rows.filter((r) => col.match(r));
                   return (
-                    <div key={ci} className={`board-prev-col${col.variant ? ` ${col.variant}` : ""}`}>
-                      <div className="board-prev-colhead">
-                        <span>{col.label}</span>
-                        <span className="board-prev-cnt">{cards.length}</span>
-                      </div>
-                      <div className="board-prev-list">
+                    <section key={ci} className={`pl-board-col${col.variant ? ` ${col.variant}` : ""}`}>
+                      <header className="pl-board-head">
+                        <span className="pl-board-title" title={col.label}>{col.label}</span>
+                        <span className="pl-board-count">{cards.length}</span>
+                      </header>
+                      <div className="pl-board-list">
                         {cards.length === 0 ? (
-                          <div className="board-prev-empty">—</div>
+                          <div className="pl-board-empty">—</div>
                         ) : (
-                          cards.map((r) => {
-                            const total = steps.length;
-                            const filled = Math.max(0, Math.min(stageOf(r), total));
-                            const amount = r.order_amount || r.customer_amount || r.vendor_amount || "";
-                            const isService = (r.work_type || "부품공급") === "서비스";
-                            return (
-                              <div key={r.rfq_id} className={`board-prev-card${isService ? " service" : ""}`}>
-                                <div className="board-prev-top">
-                                  <span className="board-prev-cardno"><ProjectNo value={r.project_no} /></span>
-                                  <span className="board-prev-pic">{r.assignee || "—"}</span>
-                                </div>
-                                {r.project_title ? (
-                                  <div className="board-prev-title2">{r.project_title}</div>
-                                ) : null}
-                                <div className="board-prev-cust">{r.customer || "—"}</div>
-                                <div className="board-prev-cardbar">
-                                  {Array.from({ length: total }).map((_, i) => (
-                                    <span key={i} className={`seg${i < filled ? " on" : ""}`} />
-                                  ))}
-                                </div>
-                                {amount ? (
-                                  <div className="board-prev-foot">
-                                    <span className="board-prev-amt" title={amount}>{primaryAmount(amount)}</span>
-                                  </div>
-                                ) : null}
-                              </div>
-                            );
-                          })
+                          cards.map((r) => (
+                            <BoardCard
+                              key={`prev-${r.rfq_id}`}
+                              r={r}
+                              steps={steps}
+                              stage={stageOf(r)}
+                              sel={false}
+                              compact={compact}
+                              onClick={() => {}}
+                              onOverview={() => {}}
+                              onToggle={() => {}}
+                            />
+                          ))
                         )}
                       </div>
-                    </div>
+                    </section>
                   );
                 })}
               </div>

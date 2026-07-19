@@ -8181,6 +8181,28 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 .board-prev-brand { font-size: 20px; font-weight: 800; color: var(--navy); }
 .board-prev-meta { font-size: 13px; color: var(--muted); font-weight: 600; }
 .board-prev-cols { display: flex; gap: 10px; flex: 1; min-height: 0; align-items: stretch; }
+/* A4 미리보기가 실제 Progress 보드 마크업(.pl-board/.pl-board-col/BoardCard)을 그대로
+   재사용한다. 스크롤·최대높이를 없애고 컬럼을 프레임 폭에 균등 분배해 정적 캡처에 맞춘다. */
+.board-prev-live {
+  flex: 1 1 auto;
+  min-height: 0;
+  gap: 10px;
+  padding: 0;
+  overflow: visible;
+  align-items: stretch;
+}
+.board-prev-live .pl-board-col,
+.board-prev-live .pl-board-col.done,
+.board-prev-live .pl-board-col.cancelled {
+  flex: 1 1 0;
+  min-width: 0;
+  max-height: none;
+}
+.board-prev-live .pl-board-list {
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+.board-prev-live .pl-card { cursor: default; }
 .board-prev-col {
   flex: 1 1 0;
   min-width: 0;
