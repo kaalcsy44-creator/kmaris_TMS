@@ -37,6 +37,7 @@ import { ColumnResizer, ColumnsButton, dragHandleProps } from "@/components/comm
 import type { PipelineRow, CustomerOption, SettingsVessel, StageNote } from "@/lib/types";
 import WorkTypeBadge from "@/components/WorkTypeBadge";
 import CustomerName from "@/components/common/CustomerName";
+import FilterSelect from "@/components/common/FilterSelect";
 import ActivityNoteForm, {
   initialNoteValue,
   type ActivityNoteValue,
@@ -593,11 +594,12 @@ function PipelineTable({
   // admin/viewer 는 "내 담당만" 토글로 본인(username) 건만 클라이언트 필터.
   const me = getUser();
   const salesScoped = isOwnScoped();
-  const [mineOnly, setMineOnly] = useState(false);
-  // 종결(취소·실주) + 완료(Done) 프로젝트는 기본으로 접는다 — 현황판은 "지금 뭘 해야 하나"를
-  // 보는 곳이라 끝난 건이 섞이면 훑는 데 방해가 된다. 표는 해당 행을, 보드는 Closed·Done
-  // 칸(과 그 카드)을 통째로 숨긴다. 체크박스로 다시 펼칠 수 있다.
-  const [showClosed, setShowClosed] = useState(false);
+  // 툴바 멀티 선택 필터(Activity 화면과 동일한 FilterSelect 폼). 빈 배열=전체.
+  // Status 기본은 Active — 종결(취소·실주)/완료(Done)는 기본으로 접는다("Closed / Done" 선택 시 표시).
+  const [tbAssignee, setTbAssignee] = useState<string[]>([]);
+  const [tbStatus, setTbStatus] = useState<string[]>(["active"]);
+  const [tbCustomer, setTbCustomer] = useState<string[]>([]);
+  const [tbVendor, setTbVendor] = useState<string[]>([]);
   // 패싯 필터: 각 값 "전체"는 미적용. 빈 문자열("")은 "미지정" 값 자체를 의미.
   const [fWorkType, setFWorkType] = useState("전체");
   const [fCustomer, setFCustomer] = useState("전체");
@@ -725,8 +727,9 @@ function PipelineTable({
     return true;
   }
 
-  // 1) 필터: 선택한 조건들의 교집합(AND)
+  // 1) 필터: 선택한 조건들의 교집합(AND). 툴바 멀티 선택(tb*)은 배열 안 값 중 하나라도 일치(OR).
   const myName = me?.username || "";
+  const rowVendors = (r: PipelineRow) => vendorOf(r).split(/[\n,]/).map((s) => s.trim()).filter(Boolean);
   let displayRows = rows.filter(
     (r) =>
       (fWorkType === "전체" || (r.work_type || "부품공급") === fWorkType) &&
@@ -735,7 +738,12 @@ function PipelineTable({
       (fVessel === "전체" || (r.vessel || "") === fVessel) &&
       (fAssignee === "전체" || (r.assignee || "") === fAssignee) &&
       (fStage === "전체" || stageOf(r) === Number(fStage)) &&
-      (!mineOnly || (r.assignee || "") === myName) &&
+      // 영업 계정은 항상 자기 딜만. 그 외엔 Assignee 멀티 필터(빈 배열=전체).
+      (salesScoped
+        ? (r.assignee || "") === myName
+        : tbAssignee.length === 0 || tbAssignee.includes(r.assignee || "")) &&
+      (tbCustomer.length === 0 || tbCustomer.includes(r.customer || "")) &&
+      (tbVendor.length === 0 || rowVendors(r).some((v) => tbVendor.includes(v))) &&
       inDateRange(r.received_at)
   );
   // 2) 정렬: 단계·마진율은 숫자, 그 외는 표시 문자열(한글 로케일)
@@ -766,6 +774,8 @@ function PipelineTable({
   const isDone = (r: PipelineRow) => steps.length === 11 && stageOf(r) >= 11;
   const isFinished = (r: PipelineRow) => !!r.cancelled || isDone(r);
   const closedCount = displayRows.filter(isFinished).length;
+  // Status 필터의 "closed" 선택 = 종결·완료 포함(기존 showClosed 와 동일 역할). 보드/미리보기에 그대로 전달.
+  const showClosed = tbStatus.includes("closed");
   const visibleRows = showClosed ? displayRows : displayRows.filter((r) => !isFinished(r));
   const tableRows = visibleRows;
   const shownRows = visibleRows;
@@ -890,31 +900,29 @@ function PipelineTable({
   return (
     <>
       <div className="pl-toolbar">
+        {/* 필터 — Activity 화면과 동일한 멀티 선택 드롭다운 폼(FilterSelect). */}
         {salesScoped ? (
           <span className="pl-scope-badge" title="Sales accounts see only their own deals">
             🔒 My deals only
           </span>
         ) : (
-          <label className="pl-mine-toggle">
-            <input
-              type="checkbox"
-              checked={mineOnly}
-              onChange={(e) => setMineOnly(e.target.checked)}
-            />
-            My deals only
-          </label>
+          <FilterSelect label="Assignee" allLabel="All PICs"
+            options={assigneeOpts.map((a) => ({ value: a, label: a || "Unspecified" }))}
+            selected={tbAssignee} onChange={setTbAssignee} />
         )}
-        {/* 종결(Closed)·완료(Done) 프로젝트 토글 — 표는 해당 행을, 보드는 Closed·Done 칸을 숨긴다. */}
-        {closedCount > 0 ? (
-          <label className="pl-mine-toggle">
-            <input
-              type="checkbox"
-              checked={showClosed}
-              onChange={(e) => setShowClosed(e.target.checked)}
-            />
-            Show closed/done ({closedCount})
-          </label>
-        ) : null}
+        {/* Status: 기본 Active(종결·완료 접힘). "Closed / Done" 선택 시 표·보드에 표시. */}
+        <FilterSelect label="Status" allLabel="Any status"
+          options={[
+            { value: "active", label: "Active" },
+            { value: "closed", label: `Closed / Done${closedCount ? ` (${closedCount})` : ""}` },
+          ]}
+          selected={tbStatus} onChange={setTbStatus} />
+        <FilterSelect label="Customer" allLabel="All customers"
+          options={customerOpts.map((c) => ({ value: c, label: c || "Unspecified" }))}
+          selected={tbCustomer} onChange={setTbCustomer} />
+        <FilterSelect label="Vendor" allLabel="All vendors"
+          options={vendorOpts.map((v) => ({ value: v, label: v || "Unspecified" }))}
+          selected={tbVendor} onChange={setTbVendor} />
         {filtersActive ? (
           <button type="button" className="pl-filter-reset" onClick={resetFilters}>
             Reset filters
