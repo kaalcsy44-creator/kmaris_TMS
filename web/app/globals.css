@@ -6459,8 +6459,8 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   font-weight: 700;
   /* 경과일이 짧은(임계 미만) 카드는 파란기 없는 중립 회색으로 — 파란색은 업무
      타입 배지 전용. 오래 방치되면 아래 lv-* 가 앰버→레드로 덮어쓴다. */
-  color: #6b7280;
-  background: #f1f3f5;
+  color: #5b626c;
+  background: #e5e7ea;
   border-radius: 6px;
   padding: 1px 5px;
 }
