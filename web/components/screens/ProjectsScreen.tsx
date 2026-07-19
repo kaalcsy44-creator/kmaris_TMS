@@ -30,6 +30,7 @@ import {
   joinDot,
 } from "@/lib/deal";
 import { INFO_FIELDS, DEFAULT_INFO_FIELDS } from "@/components/common/dealFields";
+import { lastActivityISO, daysSinceISO } from "@/lib/activity";
 import { sortByDocNo } from "@/lib/sort";
 import { useColumnLayout } from "@/components/common/useColumnLayout";
 import { ColumnResizer, ColumnsButton, dragHandleProps } from "@/components/common/tableLayout";
@@ -1123,13 +1124,6 @@ export function byProjectNo(a: PipelineRow, b: PipelineRow): number {
   return an.localeCompare(bn, undefined, { numeric: true });
 }
 
-/** first_rfq_at('YYYY-MM-DD…') 로부터 경과 일수. 파싱 불가면 null. */
-function daysSince(iso: string): number | null {
-  const t = Date.parse((iso || "").slice(0, 10));
-  if (Number.isNaN(t)) return null;
-  return Math.max(0, Math.floor((Date.now() - t) / 86_400_000));
-}
-
 /** 대응 경과일 → 긴급도 레벨(배지 글자·음영색). 오래 방치될수록 진해진다.
  *  ~6일 기본(중립) · 7~13일 notice(연노랑) · 14~29일 warn(앰버) · 30일+ urgent(레드). */
 function ageLevel(days: number | null): "" | "notice" | "warn" | "urgent" {
@@ -1417,7 +1411,8 @@ function BoardCard({
   const filled = Math.max(0, Math.min(stage, total));
   // PO 이후 단계는 고객 P/O(오더) 합산액(order_amount)을 우선 표시. 견적 단계는 견적액.
   const amount = r.order_amount || r.customer_amount || r.vendor_amount || "";
-  const age = daysSince(r.first_rfq_at);
+  // 경과일 = 최근 활동(단계 완료/노트) 이후 며칠. 방치 감지에 first_rfq_at 보다 정확.
+  const age = daysSinceISO(lastActivityISO(r));
   const barTitle = `${filled}/${total} ${steps[filled - 1] ?? ""}`;
   // 현재(최종 진행) 단계의 날짜: 수동 저장값 우선, 없으면 자동 동기화값. yymmdd로 표기.
   // 조회는 내부 단계번호(r.stage) 기준 — Customer 탭에서 filled가 재매핑돼도 정확.
@@ -1427,7 +1422,7 @@ function BoardCard({
   const done = !cancelled && filled >= total;
   // 대응 경과일에 따른 배지 색상 레벨(오래될수록 앰버→레드). 종결·완료 카드는 중립 유지.
   const ageLv = cancelled || done ? "" : ageLevel(age);
-  const ageTitle = age != null ? `${age} days since first RFQ` : undefined;
+  const ageTitle = age != null ? `${age} days since last activity` : undefined;
   // 간략 카드: 고객 로고 + 프로젝트명(없으면 고객명)으로 인지성 확보.
   const logo = useCustomerLogo()(r.customer || "");
   const compactLabel = r.project_title || r.customer || "—";
@@ -1553,11 +1548,6 @@ function BoardCard({
         {age != null ? <span className={`pl-card-age${ageLv ? ` lv-${ageLv}` : ""}`} title={ageTitle}>{age}d</span> : null}
       </div>
       {amount ? <div className="pl-card-amt" title={amount}>{amount}</div> : null}
-      {r.next_action ? (
-        <div className={`pl-card-next lv-${r.next_level || "normal"}`} title="Recommended next action">
-          {r.next_action}
-        </div>
-      ) : null}
     </div>
   );
 }
