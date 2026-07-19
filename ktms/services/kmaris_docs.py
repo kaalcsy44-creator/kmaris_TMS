@@ -1345,10 +1345,11 @@ def _make_quotation_costing_pdf(data: Dict[str, Any], company: Dict[str, Any]) -
     title_style = ParagraphStyle("KMQTitle", parent=s["section"], fontName=DEFAULT_BOLD_FONT,
                                  fontSize=17, leading=20, alignment=TA_CENTER, textColor=NAVY)
     logo = image(asset("logo_icon.jpg", "logo_icon.png", "logo_K-maris.png", "logo.png", "logo.jpg"), 24 * mm, 15 * mm)
-    name_style = ParagraphStyle("KMQName", parent=s["base"], fontName=DEFAULT_BOLD_FONT,
-                                fontSize=13, leading=15, textColor=NAVY)
-    addr_style = ParagraphStyle("KMQAddr", parent=s["base"], fontSize=7, leading=9,
-                                textColor=colors.HexColor("#555555"))
+    # 엑셀과 동일: 회사명 가운데·진한 회색·비볼드, 주소/연락처 가운데·진한 회색.
+    name_style = ParagraphStyle("KMQName", parent=s["base"], fontSize=16, leading=19,
+                                alignment=TA_CENTER, textColor=colors.HexColor("#404040"))
+    addr_style = ParagraphStyle("KMQAddr", parent=s["base"], fontSize=9, leading=11,
+                                alignment=TA_CENTER, textColor=colors.HexColor("#404040"))
     tag_style = ParagraphStyle("KMQTag", parent=s["base"], fontSize=8.5, leading=11,
                                alignment=TA_RIGHT, textColor=BLUE)
     _addr = company.get("address_en") or company.get("address") or ""
@@ -1458,9 +1459,6 @@ def _make_quotation_costing_pdf(data: Dict[str, Any], company: Dict[str, Any]) -
     story.append(section("Payment"))
     story.append(Spacer(1, 2 * mm))
     story.append(_p(f"• {terms.get('payment_terms') or 'T/T in advance'}", s["small"]))
-    story.append(Spacer(1, 1 * mm))
-    story.append(_p("• Once order is confirmed by the supplier, the order is unable to be cancelled without "
-                    "cancellation charge of 100% of the ordered amount.", s["small"]))
     story.append(Spacer(1, 3 * mm))
     story.append(_p("We hope this quotation meets your requirement and to receive your order confirmation "
                     "at your earliest convenience.", s["base"]))
