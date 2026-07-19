@@ -8379,6 +8379,34 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 /* 4열 배열(넓은 화면). 좁아지면 2열 → 1열로 축소.
    모든 단계(RFQ→AR) 카드를 하나의 연속 그리드에 담아 빈칸 없이 채운다 —
    단계 구분은 각 단계 첫 카드의 .act-phase-chip 만으로 한다. */
+/* 단계(RFQ→AR)별 섹션 — 전체폭 구분 헤더 + 그 단계 카드 그리드. */
+.act-phase-section { margin-bottom: 20px; }
+.act-phase-section:last-child { margin-bottom: 0; }
+.act-phase-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  padding-bottom: 6px;
+  border-bottom: 2px solid var(--line);
+}
+.act-phase-header-label {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--navy);
+}
+.act-phase-header-count {
+  font-size: 11px;
+  font-weight: 800;
+  color: #fff;
+  background: #475569;
+  border-radius: 999px;
+  min-width: 20px;
+  text-align: center;
+  padding: 1px 8px;
+}
 .act-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
 @media (max-width: 1400px) { .act-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 1050px) { .act-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
