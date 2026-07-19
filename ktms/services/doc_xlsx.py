@@ -1004,7 +1004,7 @@ def make_quotation_costing_xlsx(
         add_image(logo, "B1", 112, 99)
     GRAYTX = "404040"   # 진한 회색(회사명·주소·연락처)
     center_wrap = Alignment(horizontal="center", vertical="center", wrap_text=True)
-    hd_name = Font(name="Calibri", bold=True, size=22, color=GRAYTX)
+    hd_name = Font(name="Calibri", bold=False, size=22, color=GRAYTX)
     hd_addr = Font(name="Calibri", size=11, color=GRAYTX)
     hd_tag = Font(name="Calibri", italic=True, size=10.5, color="0055A8")
     addr = company.get("address_en") or company.get("address") or ""
@@ -1151,9 +1151,12 @@ def make_quotation_costing_xlsx(
     # ── Totals (수식) ──────────────────────────────────────────────────
     trow = last + 1
     has_rows = len(raw_items) > 0
-    tc = ws.cell(trow, 3, "Total"); tc.font = bold; tc.alignment = right; tc.border = bdr
-    for col in (1, 2, 4, 5, 11, 12):
+    # "Total" 라벨 — A~E 병합, 가운데. 행 높이 16px.
+    merge(trow, 1, trow, 5)
+    tc = ws.cell(trow, 1, "Total"); tc.font = bold; tc.alignment = center
+    for col in (1, 2, 3, 4, 5, 11, 12):
         ws.cell(trow, col).border = bdr
+    ws.row_dimensions[trow].height = 16
     cost_sum = f"=SUM(G{first}:G{last})" if has_rows else 0
     amt_sum = f"=SUM(J{first}:J{last})" if has_rows else 0
     margin_tot = f"=IF(J{trow}=0,0,(J{trow}-G{trow}*{fx_str})/J{trow})" if has_rows else 0
@@ -1212,15 +1215,12 @@ def make_quotation_costing_xlsx(
             pass
     r += 4
     ws.cell(r, 1, "________________________").alignment = left; r += 1
-    ws.cell(r, 1, "Sam Cho, Managing Director").font = bold; r += 1
-    ws.cell(r, 1, "K-MARIS Energy & Solutions | Seoul, Korea | www.k-maris.com").font = Font(name="Calibri", size=9)
+    ws.cell(r, 1, "Sam Cho, Managing Director").font = bold
     last_row = r
 
     # ── 원가/마진 열(F·G·H)은 기본 숨김(내부 코스팅용) — 필요시 사용자가 펼침 ──
     for col in ("F", "G", "H"):
         ws.column_dimensions[col].hidden = True
-
-    ws.freeze_panes = f"A{HROW + 1}"
     # A4 세로 1페이지 폭에 맞춰 인쇄(PDF 미리보기와 동일한 세로 규격).
     # 숨긴 원가열은 인쇄 폭 계산에서 제외되어 판매 열만 세로로 깔끔히 맞는다.
     ws.print_area = f"A1:{get_column_letter(NCOL)}{last_row}"
