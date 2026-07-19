@@ -785,6 +785,13 @@ def make_shipping_mark_xlsx(
 def make_document_xlsx(
     doc_type: str, data: Dict[str, Any], company: Optional[Dict[str, Any]] = None
 ) -> bytes:
+    # 라우트가 company 를 안 넘기면(대부분) 설정(company.json)에서 로드 — PDF 경로와 동일.
+    if company is None:
+        try:
+            from services.pdf_svc import _load_company
+            company = _load_company()
+        except Exception:
+            company = {}
     if doc_type == "quotation":
         return make_quotation_costing_xlsx(data, company)
     if doc_type == "shipping_mark":
