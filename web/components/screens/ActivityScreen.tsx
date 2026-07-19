@@ -1,7 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { DragEvent as ReactDragEvent } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
@@ -53,6 +52,14 @@ function phaseOf(stage: number): number {
   return stage <= 1 ? 0 : PHASES.length - 1;
 }
 
+// By-deal 매트릭스의 단계 열 — Project Overview 의 Stages&activity 4칸과 동일한 구획.
+const STAGE_COLUMNS: { label: string; tone: string; from: number; to: number }[] = [
+  { label: "RFQ", tone: "r", from: 1, to: 2 },
+  { label: "Quote", tone: "q", from: 3, to: 4 },
+  { label: "P/O", tone: "p", from: 5, to: 6 },
+  { label: "C/I & after", tone: "c", from: 7, to: 11 },
+];
+
 function todayISO(): string {
   const d = new Date();
   const p = (n: number) => String(n).padStart(2, "0");
@@ -62,33 +69,6 @@ function todayISO(): string {
 // 기존 활동 노트 수정 시 전달하는 값.
 type NotePatch = { text: string; datetime?: string; direction?: string; party?: string; channel?: string; star?: boolean; pic?: string };
 
-// 카드 드래그앤드롭(동일 단계 그룹 내 순서 변경) 배선.
-type CardDrag = {
-  enabled: boolean;   // meeting 모드 등에서 비활성
-  over: boolean;      // 드롭 대상 하이라이트
-  dragging: boolean;  // 드래그 중인 카드(반투명)
-  onStart: (e: ReactDragEvent) => void;
-  onEnd: (e: ReactDragEvent) => void;
-  onOver: (e: ReactDragEvent) => void;
-  onDrop: (e: ReactDragEvent) => void;
-};
-
-// 사용자별 카드 순서 저장(브라우저 localStorage). phase → rfq_id 배열.
-const ORDER_KEY = "act-card-order";
-function loadCardOrder(): Record<number, number[]> {
-  try {
-    return JSON.parse(localStorage.getItem(ORDER_KEY) || "{}") as Record<number, number[]>;
-  } catch {
-    return {};
-  }
-}
-function saveCardOrder(o: Record<number, number[]>): void {
-  try {
-    localStorage.setItem(ORDER_KEY, JSON.stringify(o));
-  } catch {
-    /* 저장 실패는 무시(시크릿 모드 등). */
-  }
-}
 
 export default function ActivityScreen() {
   // 프로젝트 개요의 "Activity Log →" 바로가기가 ?q=<프로젝트번호> 로 넘어온다 —
@@ -194,50 +174,15 @@ export default function ActivityScreen() {
     0
   );
 
-  // ── 카드 순서(드래그앤드롭) ─────────────────────────────────────────────
-  // SSR 하이드레이션 불일치를 피하려고 초기값은 빈 객체, 마운트 후 localStorage 로드.
-  const [cardOrder, setCardOrder] = useState<Record<number, number[]>>({});
-  useEffect(() => setCardOrder(loadCardOrder()), []);
-  const dragId = useRef<number | null>(null);
-  const [draggingId, setDraggingId] = useState<number | null>(null); // 시각 피드백용(리렌더 보장)
-  const [overId, setOverId] = useState<number | null>(null);
-
-  // 저장된 순서를 적용해 그룹 행을 정렬. 저장에 없는(신규) 딜은 기본 정렬 순서로 뒤에 둔다.
-  function orderedRows(phase: number, rows: { row: PipelineRow; acts: Activity[] }[]) {
-    const saved = cardOrder[phase];
-    if (!saved || saved.length === 0) return rows;
-    const pos = new Map(saved.map((id, i) => [id, i]));
-    return [...rows].sort((a, b) => {
-      const pa = pos.has(a.row.rfq_id) ? (pos.get(a.row.rfq_id) as number) : Infinity;
-      const pb = pos.has(b.row.rfq_id) ? (pos.get(b.row.rfq_id) as number) : Infinity;
-      return pa - pb;
+  // 매트릭스 행 = 프로젝트. 단계 버킷을 평탄화해 최근 활동순으로 정렬한다.
+  const dealRows = useMemo(() => {
+    const all = buckets.flatMap((g) => g.rows);
+    return all.sort((a, b) => {
+      const la = a.acts.length ? a.acts[a.acts.length - 1].date : "";
+      const lb = b.acts.length ? b.acts[b.acts.length - 1].date : "";
+      return la < lb ? 1 : la > lb ? -1 : 0;
     });
-  }
-
-  // 드래그한 카드를 대상 카드 '앞'에 삽입하고 그 phase 의 전체 순서를 저장.
-  function reorderCards(phase: number, from: number | null, to: number, current: { row: PipelineRow }[]) {
-    if (from == null || from === to) return;
-    const ids = current.map((r) => r.row.rfq_id);
-    const fromIdx = ids.indexOf(from);
-    if (fromIdx < 0 || ids.indexOf(to) < 0) return;
-    ids.splice(fromIdx, 1);
-    ids.splice(ids.indexOf(to), 0, from);
-    const next = { ...cardOrder, [phase]: ids };
-    setCardOrder(next);
-    saveCardOrder(next);
-  }
-
-  function makeDrag(phase: number, id: number, current: { row: PipelineRow }[]): CardDrag {
-    return {
-      enabled: !meeting,
-      over: overId === id && draggingId !== null && draggingId !== id,
-      dragging: draggingId === id,
-      onStart: (e) => { dragId.current = id; setDraggingId(id); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(id)); },
-      onEnd: () => { dragId.current = null; setDraggingId(null); setOverId(null); },
-      onOver: (e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; if (overId !== id) setOverId(id); },
-      onDrop: (e) => { e.preventDefault(); reorderCards(phase, dragId.current, id, current); dragId.current = null; setDraggingId(null); setOverId(null); },
-    };
-  }
+  }, [buckets]);
 
   async function toggleStar(rfqId: number, a: Activity) {
     if (a.kind !== "note") return;
@@ -374,37 +319,26 @@ export default function ActivityScreen() {
         <>
           {totalDeals === 0 ? <div className="state">No activity to show.</div> : null}
           {totalDeals > 0 ? (
-            // 단계(RFQ→AR)를 좌→우 세로 밴드로 나열 — 밴드마다 헤더 + 카드 2열 masonry.
-            // 전 단계를 한눈에 비교하며 좌우 스크롤로 이동한다(Progress 보드와 같은 순서).
-            <div className="act-deal-board">
-              {buckets.map((g) => {
-                if (g.rows.length === 0) return null;
-                const ordered = orderedRows(g.phase, g.rows);
-                return (
-                  <section key={g.phase} className="act-phase-col">
-                    <div className="act-phase-header">
-                      <span className="act-phase-header-label">{PHASES[g.phase].label}</span>
-                      <span className="act-phase-header-count">{g.rows.length}</span>
-                    </div>
-                    <div className="act-cards">
-                      {ordered.map(({ row, acts }) => (
-                        <ActivityCard
-                          key={row.rfq_id}
-                          row={row}
-                          acts={acts}
-                          meeting={meeting}
-                          onStar={(a) => toggleStar(row.rfq_id, a)}
-                          onDelete={(a) => removeNote(row.rfq_id, a)}
-                          onSave={(a, patch) => saveNote(row.rfq_id, a, patch)}
-                          onAdded={load}
-                          onOverview={() => setOverviewId(row.rfq_id)}
-                          drag={makeDrag(g.phase, row.rfq_id, ordered)}
-                        />
-                      ))}
-                    </div>
-                  </section>
-                );
-              })}
+            // 프로젝트=행, 단계(RFQ/Quote/P·O/C·I)=열 매트릭스. 활동이 세로로 길어져도
+            // 단계 열로 분산돼 행 높이가 완만히 늘고, 상단 단계 헤더는 스크롤에 고정된다.
+            <div className="act-matrix">
+              <div className="act-mx-hcell act-mx-proj-h">Project</div>
+              {STAGE_COLUMNS.map((c) => (
+                <div key={c.label} className={`act-mx-hcell tone-${c.tone}`}>{c.label}</div>
+              ))}
+              {dealRows.map(({ row, acts }) => (
+                <DealStageRow
+                  key={row.rfq_id}
+                  row={row}
+                  acts={acts}
+                  meeting={meeting}
+                  onStar={(a) => toggleStar(row.rfq_id, a)}
+                  onDelete={(a) => removeNote(row.rfq_id, a)}
+                  onSave={(a, patch) => saveNote(row.rfq_id, a, patch)}
+                  onAdded={load}
+                  onOverview={() => setOverviewId(row.rfq_id)}
+                />
+              ))}
             </div>
           ) : null}
         </>
@@ -501,7 +435,9 @@ function addDays(iso: string, n: number): string {
   return toISODate(d);
 }
 
-function ActivityCard({
+// 매트릭스 한 행 = 한 프로젝트. 좌측 정보 셀 + 단계 4열 셀(그 단계의 활동)을 그리드에
+// 직접 흘려보낸다(부모 .act-matrix 가 5열 그리드). 활동 노트는 편집 가능한 NoteRow 재사용.
+function DealStageRow({
   row,
   acts,
   meeting,
@@ -510,7 +446,6 @@ function ActivityCard({
   onSave,
   onAdded,
   onOverview,
-  drag,
 }: {
   row: PipelineRow;
   acts: Activity[];
@@ -520,67 +455,39 @@ function ActivityCard({
   onSave: (a: Activity, patch: NotePatch) => Promise<void>;
   onAdded: () => void;
   onOverview: () => void;
-  drag?: CardDrag;
 }) {
   const { code, date } = splitProjectNo(row.project_no || row.kmaris_rfq_no || "—");
   const vend = vendorOf(row);
   const isService = row.work_type === "서비스";
-  // 경과일(최신 활동 이후) + 색상 등급 — progress next-action 규칙 동기화.
-  // 백엔드 next_level 이 있으면 그대로(완료/실주=normal 포함), 없으면 임계값(7/14일)으로.
   const ageDays = daysSinceISO(lastActivityISO(row));
   const ageLevel: "normal" | "warn" | "urgent" = row.next_level
     ? row.next_level
     : !row.cancelled && ageDays != null
       ? ageDays >= 14 ? "urgent" : ageDays >= 7 ? "warn" : "normal"
       : "normal";
+  const vs = (row.vessels || row.vessel || "").split("\n").filter(Boolean).join(" · ");
+  // 활동(자동 이벤트·노트)을 단계 열로 분배. 종결(close)은 단계가 없어 정보 셀에서 처리.
+  const closeAct = acts.find((a) => a.kind === "close");
+  const byCol = STAGE_COLUMNS.map((c) =>
+    acts.filter((a) => (a.kind === "note" || a.kind === "auto") && a.stage >= c.from && a.stage <= c.to),
+  );
+  const infoCls = `act-mx-info${isService ? " service" : ""}${row.cancelled ? " cancelled" : ""}`;
+
   return (
-    <div
-      className={`act-card${isService ? " service" : ""}${drag?.over ? " drag-over" : ""}${drag?.dragging ? " dragging" : ""}`}
-      onDragOver={drag?.onOver}
-      onDrop={drag?.onDrop}
-    >
-      {/* 상단 헤더(1~3행) — 음영으로 카드 식별. 이 영역을 잡고 드래그해 순서 변경. */}
-      <div
-        className={`act-card-head${drag?.enabled ? " draggable" : ""}`}
-        draggable={drag?.enabled ?? false}
-        onDragStart={drag?.onStart}
-        onDragEnd={drag?.onEnd}
-        title={drag?.enabled ? "Drag to reorder" : undefined}
-      >
+    <>
+      <div className={infoCls}>
         <div className="act-card-h">
-          <button
-            type="button"
-            className="act-pno"
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={onOverview}
-            title="Project overview"
-          >
-            {code}
-          </button>
+          <button type="button" className="act-pno" onClick={onOverview} title="Project overview">{code}</button>
           {date ? <span className="act-pno-date">{date}</span> : null}
           <span className="act-spacer" />
           {row.assignee ? <span className="act-pic">{row.assignee}</span> : null}
-          {/* 개요(읽기 전용 한 페이지) → / 진행현황 팝업(작업) ✎ — 두 진입점을 나눠 둔다. */}
           <Link className="act-open" href={`/project?rfq=${row.rfq_id}&view=overview`} title="Project overview">→</Link>
-          <Link
-            className="act-open act-open-edit"
-            href={`/project?rfq=${row.rfq_id}&stage=${row.stage}`}
-            title="Open deal in Progress"
-          >
-            ✎
-          </Link>
+          <Link className="act-open act-open-edit" href={`/project?rfq=${row.rfq_id}&stage=${row.stage}`} title="Open deal in Progress">✎</Link>
         </div>
-        {/* 프로젝트명 + 선박명(우측). 오더가 여럿이면 선박도 " · "로 이어 붙인다. */}
-        {(() => {
-          const vs = (row.vessels || row.vessel || "").split("\n").filter(Boolean).join(" · ");
-          return (
-            <div className="act-title2">
-              {row.project_title || "(untitled)"}
-              {vs ? <span className="act-tvessel"> · {vs}</span> : null}
-            </div>
-          );
-        })()}
-        {/* 고객사(로고+이름) · 담당자 / 벤더(이니셜 원형 배지). (우측 상단 배지 = 내부 PIC) */}
+        <div className="act-title2">
+          {row.project_title || "(untitled)"}
+          {vs ? <span className="act-tvessel"> · {vs}</span> : null}
+        </div>
         {(row.customer || vend) ? (
           <div className="act-sub">
             {row.customer ? <CustomerName name={row.customer} /> : null}
@@ -589,39 +496,45 @@ function ActivityCard({
             {vend ? <VendorMonograms value={vendorOf(row)} statuses={vendorStatusesFor(row)} /> : null}
           </div>
         ) : null}
+        {closeAct ? (
+          <div className="act-mx-closed"><span className="act-tag close">closed</span> {closeAct.kind === "close" ? closeAct.reason || "Closed" : ""}</div>
+        ) : null}
+        <div className="act-mx-info-foot">
+          {ageDays != null ? <span className={`act-age-inline lv-${ageLevel}`} title="Days since last activity">{ageDays}d</span> : null}
+          {!meeting ? <AddActivity rfqId={row.rfq_id} stage={row.stage} onAdded={onAdded} /> : null}
+        </div>
       </div>
-      <ul className="act-list">
-        {acts.length === 0 ? <li className="act-empty muted">No activity yet</li> : null}
-        {acts.map((a, i) =>
-          a.kind === "note" ? (
-            <NoteRow
-              key={i}
-              a={a}
-              meeting={meeting}
-              onStar={() => onStar(a)}
-              onDelete={() => onDelete(a)}
-              onSave={(patch) => onSave(a, patch)}
-            />
+      {byCol.map((cacts, ci) => (
+        <div key={ci} className={`act-mx-cell tone-${STAGE_COLUMNS[ci].tone}`}>
+          {cacts.length === 0 ? (
+            <span className="act-mx-empty">·</span>
           ) : (
-            <li key={i} className={`act-item${a.kind === "close" ? " closed" : ""}`}>
-              <span className="act-date">{md(a.date)}</span>
-              {a.kind === "auto" ? (
-                <span className="act-auto">
-                  {a.label}
-                  {a.party ? <span className="act-meta"> · {a.party}</span> : null}
-                </span>
-              ) : (
-                <span className="act-text"><span className="act-tag close">closed</span> {a.reason || "Closed"}</span>
+            <ul className="act-list">
+              {cacts.map((a, i) =>
+                a.kind === "note" ? (
+                  <NoteRow
+                    key={i}
+                    a={a}
+                    meeting={meeting}
+                    onStar={() => onStar(a)}
+                    onDelete={() => onDelete(a)}
+                    onSave={(patch) => onSave(a, patch)}
+                  />
+                ) : (
+                  <li key={i} className="act-item">
+                    <span className="act-date">{md(a.date)}</span>
+                    <span className="act-auto">
+                      {a.kind === "auto" ? a.label : ""}
+                      {a.kind === "auto" && a.party ? <span className="act-meta"> · {a.party}</span> : null}
+                    </span>
+                  </li>
+                ),
               )}
-            </li>
-          )
-        )}
-      </ul>
-      {!meeting ? <AddActivity rfqId={row.rfq_id} stage={row.stage} onAdded={onAdded} /> : null}
-      {ageDays != null ? (
-        <span className={`act-age lv-${ageLevel}`} title="Days since last activity">{ageDays}d</span>
-      ) : null}
-    </div>
+            </ul>
+          )}
+        </div>
+      ))}
+    </>
   );
 }
 

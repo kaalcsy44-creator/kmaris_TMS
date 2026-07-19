@@ -8429,6 +8429,59 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 
 .act-card { position: relative; border: 1px solid var(--border, #e5e7eb); border-radius: 8px; padding: 12px 14px; background: #fff; overflow: hidden;
   break-inside: avoid; -webkit-column-break-inside: avoid; margin-bottom: 12px; }
+
+/* ── By-deal 매트릭스: 프로젝트=행 / 단계(RFQ·Quote·P·O·C·I)=열 ─────────────────
+   활동이 세로로 길어져도 단계 열로 분산돼 행 높이가 완만히 늘어난다. Project Overview
+   의 Stages&activity 4칸과 같은 구획. Fragment 로 셀을 그리드에 직접 흘려보낸다. */
+.act-matrix {
+  display: grid;
+  grid-template-columns: 210px repeat(4, minmax(0, 1fr));
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  overflow: hidden;
+}
+.act-mx-hcell {
+  background: #eef2f8;
+  color: var(--navy);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  padding: 8px 10px;
+  border-bottom: 2px solid var(--line);
+}
+.act-mx-proj-h { border-right: 2px solid var(--line); }
+.act-mx-hcell.tone-r { background: #eaf1fb; }
+.act-mx-hcell.tone-q { background: #e9f6ee; }
+.act-mx-hcell.tone-p { background: #fdf1e6; }
+.act-mx-hcell.tone-c { background: #efedfb; }
+.act-mx-info,
+.act-mx-cell { padding: 8px 9px; border-bottom: 1px solid var(--line); min-width: 0; }
+.act-mx-info {
+  border-right: 2px solid var(--line);
+  background: #fafcff;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.act-mx-info.service { background: #f6fbf8; }
+.act-mx-info.cancelled .act-pno,
+.act-mx-info.cancelled .act-title2 { text-decoration: line-through; color: var(--muted); }
+.act-mx-cell { border-right: 1px solid #eef1f5; }
+.act-mx-cell:last-child { border-right: 0; }
+.act-mx-cell.tone-r { background: #f7faff; }
+.act-mx-cell.tone-q { background: #f6fbf8; }
+.act-mx-cell.tone-p { background: #fffbf5; }
+.act-mx-cell.tone-c { background: #f9f8fd; }
+.act-mx-cell .act-list { margin: 0; }
+.act-mx-empty { color: #cbd5e1; font-size: 12px; }
+.act-mx-info-foot { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.act-age-inline { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 6px;
+  background: var(--head-bg); color: var(--muted); }
+.act-age-inline.lv-warn { background: #fff3e0; color: #9a5b00; }
+.act-age-inline.lv-urgent { background: #fdeaea; color: #b42318; }
+.act-mx-closed { font-size: 10.5px; color: #b91c1c; margin-top: 2px; }
 /* 경과일 배지(우측 하단) — 최신 활동 이후 경과일. 색상은 progress next-action 규칙과 동기화
    (warn ≥7d 노랑 / urgent ≥14d 빨강). */
 .act-age { position: absolute; right: 10px; bottom: 9px; font-size: 10px; font-weight: 700;
