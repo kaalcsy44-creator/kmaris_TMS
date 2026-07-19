@@ -324,7 +324,7 @@ export default function ActivityScreen() {
             <div className="act-matrix">
               <div className="act-mx-hcell act-mx-proj-h">Project</div>
               {STAGE_COLUMNS.map((c) => (
-                <div key={c.label} className={`act-mx-hcell tone-${c.tone}`}>{c.label}</div>
+                <div key={c.label} className="act-mx-hcell">{c.label}</div>
               ))}
               {dealRows.map(({ row, acts }) => (
                 <DealStageRow
@@ -508,8 +508,11 @@ function DealStageRow({
           </div>
         ) : null}
       </div>
-      {byCol.map((cacts, ci) => (
-        <div key={ci} className={`act-mx-cell tone-${STAGE_COLUMNS[ci].tone}`}>
+      {byCol.map((cacts, ci) => {
+        // 이 딜이 현재 진행 중인 단계의 열이면 상단에 업무타입 색 bar(진행 표시).
+        const cur = ci === addCol && !row.cancelled;
+        return (
+        <div key={ci} className={`act-mx-cell${cur ? (isService ? " cur-service" : " cur-parts") : ""}`}>
           {cacts.length > 0 ? (
             <ul className="act-list">
               {cacts.map((a, i) =>
@@ -540,7 +543,8 @@ function DealStageRow({
             <AddActivity rfqId={row.rfq_id} stage={row.stage} onAdded={onAdded} />
           ) : null}
         </div>
-      ))}
+        );
+      })}
     </>
   );
 }
