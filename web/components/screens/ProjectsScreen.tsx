@@ -2683,7 +2683,7 @@ function ProjectRfqWorkspace({
   }, [onChanged, refresh]);
   const initialTab = stage <= 1 ? "new" : stage === 2 ? "vrfq" : stage === 3 ? "vquote" : "cquote";
   return (
-    <div className="project-work-panel embedded-workspace">
+    <div className="project-work-panel embedded-workspace stage-fill">
       <RfqActionTabs
         rfqId={row.rfq_id}
         rows={rows}

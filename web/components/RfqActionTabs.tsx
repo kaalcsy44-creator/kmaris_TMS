@@ -782,6 +782,10 @@ function VendorRfqDetailModal({
   const [autoNo, setAutoNo] = useState(""); // 자동채번 미리보기(다음 KMS-RFQ 번호)
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // 문서 미리보기(Vendor RFQ PDF) — 견적 편집기와 동일한 iframe 모달 사용.
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [dlBusy, setDlBusy] = useState(false);
+  const [dlErr, setDlErr] = useState<string | null>(null);
 
   // 미지정이면 다음 자동채번 번호를 미리 불러와 토글에서 보여준다.
   useEffect(() => {
@@ -821,27 +825,32 @@ function VendorRfqDetailModal({
     }
   }
 
+  // 편집값 저장(모달을 닫지 않음) — save()와 Preview(openPreview) 양쪽에서 재사용.
+  async function persist() {
+    await updateVendorRfq(id, {
+      vendor_id: vendorId === "" ? undefined : vendorId,
+      sent_to_email: email,
+      status,
+      sent_at: sentAt,
+      items,
+    });
+    // K-Maris RFQ No. 배정: manual 은 값이 바뀐 경우만, auto 는 미지정일 때만(오배정 방지).
+    if (d?.rfq_id) {
+      const cur = (d.kmaris_rfq_no || "").trim();
+      const unassigned = !cur || cur === "-";
+      if (noMode === "manual" && manualNo.trim() && manualNo.trim() !== cur) {
+        await assignRfqNo(d.rfq_id, { mode: "manual", rfq_no: manualNo.trim() });
+      } else if (noMode === "auto" && unassigned) {
+        await assignRfqNo(d.rfq_id, { mode: "auto" });
+      }
+    }
+  }
+
   async function save() {
     setBusy(true);
     setErr(null);
     try {
-      await updateVendorRfq(id, {
-        vendor_id: vendorId === "" ? undefined : vendorId,
-        sent_to_email: email,
-        status,
-        sent_at: sentAt,
-        items,
-      });
-      // K-Maris RFQ No. 배정: manual 은 값이 바뀐 경우만, auto 는 미지정일 때만(오배정 방지).
-      if (d?.rfq_id) {
-        const cur = (d.kmaris_rfq_no || "").trim();
-        const unassigned = !cur || cur === "-";
-        if (noMode === "manual" && manualNo.trim() && manualNo.trim() !== cur) {
-          await assignRfqNo(d.rfq_id, { mode: "manual", rfq_no: manualNo.trim() });
-        } else if (noMode === "auto" && unassigned) {
-          await assignRfqNo(d.rfq_id, { mode: "auto" });
-        }
-      }
+      await persist();
       setEditing(false);
       onChanged();
       onClose();
@@ -849,6 +858,53 @@ function VendorRfqDetailModal({
       setErr(e instanceof Error ? e.message : "Update failed");
     } finally {
       setBusy(false);
+    }
+  }
+
+  // Preview: (편집 권한 있으면) 현재 값을 먼저 저장한 뒤 Vendor RFQ 문서(A4 PDF)를
+  // 견적서와 동일한 문서 엔진으로 받아 iframe 모달로 표시한다. 저장본 기준.
+  async function fetchDocBlob(format: "pdf" | "xlsx"): Promise<Blob> {
+    const url = format === "xlsx" ? vendorRfqSheetXlsxUrl(id) : vendorRfqPdfUrl(id);
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${getToken()}` } });
+    if (!res.ok) throw new Error("문서를 생성할 수 없습니다.");
+    return res.blob();
+  }
+
+  async function openPreview() {
+    setDlBusy(true);
+    setDlErr(null);
+    try {
+      if (canEditThis) await persist();
+      const blob = await fetchDocBlob("pdf");
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(URL.createObjectURL(blob));
+    } catch (e) {
+      setDlErr(e instanceof Error ? e.message : "Preview failed");
+    } finally {
+      setDlBusy(false);
+    }
+  }
+
+  function closePreview() {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(null);
+  }
+
+  async function downloadDoc(format: "pdf" | "xlsx") {
+    setDlBusy(true);
+    setDlErr(null);
+    try {
+      const blob = await fetchDocBlob(format);
+      const objUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objUrl;
+      a.download = `${d?.kmaris_rfq_no || "VendorRFQ"}_${d?.vendor || "vendor"}.${format}`;
+      a.click();
+      URL.revokeObjectURL(objUrl);
+    } catch (e) {
+      setDlErr(e instanceof Error ? e.message : "Download failed");
+    } finally {
+      setDlBusy(false);
     }
   }
 
@@ -979,6 +1035,9 @@ function VendorRfqDetailModal({
           )}
 
           <div className="form-actions">
+            <button className="btn" onClick={openPreview} disabled={busy || dlBusy}>
+              {dlBusy && !previewUrl ? "Opening…" : "Preview"}
+            </button>
             {!canEditThis ? (
               <span className="hint-inline">{editBlockReason("rfq", d?.assignee_id)}</span>
             ) : null}
@@ -999,6 +1058,20 @@ function VendorRfqDetailModal({
             ) : null}
           </div>
           {err ? <span className="action-err">{err}</span> : null}
+          {dlErr && !previewUrl ? <span className="action-err">{dlErr}</span> : null}
+          {previewUrl ? (
+            <QuotationPreview
+              filename={`${d?.kmaris_rfq_no || "VendorRFQ"}_${d?.vendor || "vendor"}.pdf`}
+              pdfUrl={previewUrl}
+              onClose={closePreview}
+              onDownloadPdf={() => downloadDoc("pdf")}
+              onDownloadXlsx={() => downloadDoc("xlsx")}
+              xlsxLabel="Excel Download (RFQ form)"
+              pdfLabel="PDF Download"
+              busy={dlBusy}
+              err={dlErr}
+            />
+          ) : null}
           </>
           ) : (
           /* Vendor 견적요청서(Excel/PDF) 생성 + 벤더 이메일 발송(선택 포맷 첨부). */

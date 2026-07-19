@@ -11,6 +11,8 @@ export default function QuotationPreview({
   onClose,
   onDownloadPdf,
   onDownloadXlsx,
+  xlsxLabel = "Excel Download (purchase·margin)",
+  pdfLabel = "PDF Download (sales)",
   busy,
   err,
 }: {
@@ -19,6 +21,9 @@ export default function QuotationPreview({
   onClose: () => void;
   onDownloadPdf: () => void;
   onDownloadXlsx: () => void;
+  // 문서 종류별 다운로드 버튼 라벨(기본=견적서). Vendor RFQ 등 다른 문서에서 재사용.
+  xlsxLabel?: string;
+  pdfLabel?: string;
   busy?: boolean;
   err?: string | null;
 }) {
@@ -38,10 +43,10 @@ export default function QuotationPreview({
           <span className="doc-preview-title">{filename}</span>
           <div className="doc-preview-acts">
             <button className="btn sm" onClick={onDownloadXlsx} disabled={busy}>
-              {busy ? "…" : "Excel Download (purchase·margin)"}
+              {busy ? "…" : xlsxLabel}
             </button>
             <button className="btn sm doc-preview-save" onClick={onDownloadPdf} disabled={busy}>
-              PDF Download (sales)
+              {pdfLabel}
             </button>
             <button className="btn sm" onClick={onClose}>Close</button>
           </div>

@@ -7232,6 +7232,21 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 .stage-fill .embedded-detail > .form-actions:has(.btn.primary) {
   margin-top: auto;
 }
+/* 멀티레코드 단계(2단계 RFQ Sent 등)는 .action-tabs.embedded 아래에 .embedded-record-wrap
+   한 겹이 더 있어 위 flex 체인이 끊긴다. wrap 과 그 안의 .embedded-detail 까지 flex 열로
+   이어 액션바(Save 포함)를 스테이지 창 바닥에 붙인다(다른 단계와 동일). */
+.stage-fill .action-tabs.embedded > .embedded-record-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.stage-fill .embedded-record-wrap > .embedded-detail {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
 .embedded-record-wrap,
 .embedded-po-list {
   min-width: 0;
