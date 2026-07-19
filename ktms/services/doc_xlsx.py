@@ -1038,6 +1038,9 @@ def make_quotation_costing_xlsx(
         factor = 1.0
     fx_str = f"{factor:.10g}"
     cost_fmt = "#,##0.00" if cost_cur == "USD" else "#,##0"
+    # 판매가 올림 자릿수 — 편집창 "Round unit price up to"(1000→-3, 100→-2 …). None 이면 -2.
+    _rd = data.get("round_digits")
+    rd = -2 if _rd is None else int(_rd)
 
     # ── Meta (rows 4-8) — 미리보기(PDF) 와 동일한 순서·구성 ────────────
     vat_label = "VAT excluded" if _num(data.get("vat_rate", 0)) == 0 else f"VAT {int(_num(data.get('vat_rate', 0)) * 100)}%"
@@ -1101,7 +1104,7 @@ def make_quotation_costing_xlsx(
             7: f"=D{r}*F{r}",                          # Cost Amount = Qty × Cost
             8: margin_frac,                            # Margin % (입력, 분수)
             # U/Price = 원가(판매통화 환산) ÷ (1−마진), 100단위 올림 — 샘플 수식.
-            9: f"=IF(OR(F{r}=0,H{r}>=1),0,ROUNDUP(F{r}*{fx_str}/(1-H{r}),-2))",
+            9: f"=IF(OR(F{r}=0,H{r}>=1),0,ROUNDUP(F{r}*{fx_str}/(1-H{r}),{rd}))",
             10: f"=D{r}*I{r}",                         # Amount = Qty × U/Price
             11: str(it.get("lead_time", "") or ""), 12: it.get("remark", ""),
         }

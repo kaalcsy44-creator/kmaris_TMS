@@ -59,6 +59,7 @@ def build_payload(
     messrs: str = "",
     cost_currency: str = "",
     fx_rate: float = 0.0,
+    round_digits: Optional[int] = None,
 ) -> Dict[str, Any]:
     return {
         "doc_no": doc_no,
@@ -67,6 +68,7 @@ def build_payload(
         "currency": currency,
         "cost_currency": cost_currency or currency,
         "fx_rate": fx_rate,
+        "round_digits": round_digits,
         "vat_rate": vat_rate,
         "discount_pct": discount_pct,
         "project_title": project_title,
