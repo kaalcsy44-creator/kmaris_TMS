@@ -1534,9 +1534,14 @@ function BoardCard({
           </div>
         );
       })()}
-      {/* 고객사 담당자(연락 담당) — 고객사명 아래 한 톤 낮춰 회색으로. */}
-      {r.contact_person ? (
-        <div className="pl-card-contact" title={r.contact_person}>{r.contact_person}</div>
+      {/* 고객사 담당자(좌, 회색) + 연결 vendor 배지(우 끝단). 둘 중 하나라도 있으면 표시. */}
+      {r.contact_person || vendorOf(r) ? (
+        <div className="pl-card-contact-row">
+          <span className="pl-card-contact" title={r.contact_person || undefined}>
+            {r.contact_person || ""}
+          </span>
+          <VendorMonograms value={vendorOf(r)} statuses={vendorStatusesFor(r)} />
+        </div>
       ) : null}
       <div className="pl-card-bar" title={barTitle}>
         {Array.from({ length: total }).map((_, i) => (
@@ -1548,7 +1553,6 @@ function BoardCard({
           {steps[filled - 1] ?? ""}
           {stageDate ? <span className="pl-card-stage-date"> ({stageDate})</span> : null}
         </span>
-        <VendorMonograms value={vendorOf(r)} statuses={vendorStatusesFor(r)} />
         {age != null ? <span className={`pl-card-age${ageLv ? ` lv-${ageLv}` : ""}`} title={ageTitle}>{age}d</span> : null}
       </div>
       {amount ? <div className="pl-card-amt" title={amount}>{amount}</div> : null}

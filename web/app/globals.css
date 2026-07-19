@@ -6365,10 +6365,20 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* 고객사 담당자 — 고객사명 줄 아래, 회색으로 낮춰 붙인다. */
-.pl-card-contact {
+/* 고객사 담당자(좌) + vendor 배지(우) — 고객사명 줄 아래 한 줄. */
+.pl-card-contact-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
   min-width: 0;
   margin-top: 1px;
+}
+.pl-card-contact-row .vendor-mono-wrap { flex: none; }
+/* 고객사 담당자 — 회색으로 낮춰, 좁으면 줄임표. vendor 배지는 우측 끝단 고정. */
+.pl-card-contact {
+  flex: 0 1 auto;
+  min-width: 0;
   font-size: 10.5px;
   font-weight: 400;
   color: var(--muted);
