@@ -1000,13 +1000,25 @@ def make_quotation_costing_xlsx(
     logo = _find_asset("logo_icon.jpg", "logo_icon.png", "logo_mark.png", "logo_symbol.png",
                        "logo_K-maris.png", "logo.png", "logo.jpg")
     if logo:
-        # 좌측(B~C) 아이콘 로고 — 행 1-3 에 세로로 걸치도록 크게.
-        add_image(logo, "B1", 112, 99)
+        # 아이콘 로고 — B~C 열 사이에 걸치도록(colOff) 배치, 행 1-3 세로 걸침.
+        try:
+            from openpyxl.drawing.image import Image as XLImage
+            from openpyxl.drawing.spreadsheet_drawing import OneCellAnchor, AnchorMarker
+            from openpyxl.drawing.xdr import XDRPositiveSize2D
+            from openpyxl.utils.units import pixels_to_EMU
+            im = XLImage(logo)
+            im.anchor = OneCellAnchor(
+                _from=AnchorMarker(col=1, colOff=pixels_to_EMU(60), row=0, rowOff=pixels_to_EMU(4)),
+                ext=XDRPositiveSize2D(pixels_to_EMU(112), pixels_to_EMU(99)),
+            )
+            ws.add_image(im)
+        except Exception:
+            add_image(logo, "B1", 112, 99)
     GRAYTX = "404040"   # 진한 회색(회사명·주소·연락처)
     center_wrap = Alignment(horizontal="center", vertical="center", wrap_text=True)
-    hd_name = Font(name="Calibri", bold=False, size=22, color=GRAYTX)
-    hd_addr = Font(name="Calibri", size=11, color=GRAYTX)
-    hd_tag = Font(name="Calibri", italic=True, size=10.5, color="0055A8")
+    hd_name = Font(name="Calibri", bold=False, size=18, color=GRAYTX)
+    hd_addr = Font(name="Calibri", size=10, color=GRAYTX)
+    hd_tag = Font(name="Calibri", italic=True, size=10, color="0055A8")
     addr = company.get("address_en") or company.get("address") or ""
     bits = []
     if company.get("phone"): bits.append(f"Tel: {company['phone']}")
@@ -1028,7 +1040,7 @@ def make_quotation_costing_xlsx(
     ws.row_dimensions[4].height = 6
     # ── 타이틀 (샘플처럼 크게) ─────────────────────────────────────────────
     merge(5, 1, 5, NCOL)
-    c = ws.cell(5, 1, "QUOTATION / COSTING SHEET"); c.font = Font(name="Calibri", bold=True, size=24, color="0B1D3A"); c.alignment = center
+    c = ws.cell(5, 1, "QUOTATION / COSTING SHEET"); c.font = Font(name="Calibri", bold=True, size=22, color="0B1D3A"); c.alignment = center
     ws.row_dimensions[5].height = 34
     ws.row_dimensions[6].height = 4
 
@@ -1151,13 +1163,13 @@ def make_quotation_costing_xlsx(
     # ── Totals (수식) ──────────────────────────────────────────────────
     trow = last + 1
     has_rows = len(raw_items) > 0
-    # "Total" 라벨 — A~E 병합, 가운데. 행 전체 글자 크기 16.
-    bold16 = Font(name="맑은 고딕", bold=True, size=16)
+    # "Total" 라벨 — A~E 병합, 가운데. 행 전체 글자 크기 12.
+    bold16 = Font(name="맑은 고딕", bold=True, size=12)
     merge(trow, 1, trow, 5)
     tc = ws.cell(trow, 1, "Total"); tc.font = bold16; tc.alignment = center
     for col in (1, 2, 3, 4, 5, 11, 12):
         ws.cell(trow, col).border = bdr
-    ws.row_dimensions[trow].height = 22
+    ws.row_dimensions[trow].height = 16
     cost_sum = f"=SUM(G{first}:G{last})" if has_rows else 0
     amt_sum = f"=SUM(J{first}:J{last})" if has_rows else 0
     margin_tot = f"=IF(J{trow}=0,0,(J{trow}-G{trow}*{fx_str})/J{trow})" if has_rows else 0
@@ -1213,9 +1225,11 @@ def make_quotation_costing_xlsx(
         except Exception:
             pass
     r += 4
-    ws.cell(r, 1, "________________________").alignment = left; r += 1
+    merge(r, 1, r, 2); ws.cell(r, 1, "________________________").alignment = left; r += 1
     ws.cell(r, 1, "Sam Cho, Managing Director").font = bold; r += 1
-    ws.cell(r, 1, "K-MARIS Energy & Solutions | Seoul, Korea | www.k-maris.com").font = Font(name="맑은 고딕", size=9)
+    merge(r, 1, r, NCOL)
+    fc = ws.cell(r, 1, "K-MARIS Energy & Solutions | Seoul, Korea | www.k-maris.com")
+    fc.font = Font(name="맑은 고딕", size=9); fc.alignment = center
     last_row = r
 
     # ── 원가/마진 열(F·G·H)은 기본 숨김(내부 코스팅용) — 필요시 사용자가 펼침 ──
