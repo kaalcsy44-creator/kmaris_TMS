@@ -1264,10 +1264,10 @@ def _qnum(value: Any) -> str:
 
 def quotation_standard_terms(terms: Dict[str, Any], validity_days: int = 30) -> List[str]:
     """QUOTATION / COSTING SHEET 하단 표준 Terms & Conditions. 편집된 terms 값을 끼워 넣어 동기화."""
-    incoterms = terms.get("incoterms") or "EXW"
-    place = terms.get("delivery_place") or "Busan"
+    incoterms = terms.get("incoterms") or "EXW (Ex Works)"
+    place = terms.get("delivery_place") or "Busan, Republic of Korea"
     payment = terms.get("payment_terms") or "T/T in advance"
-    warranty = terms.get("warranty") or "supplier's/manufacturer's standard warranty terms"
+    warranty = terms.get("warranty") or "6 months from delivery"
     lines = [
         f"Quotation validity: {validity_days} days from quotation date.",
         "Price, availability, and delivery time are subject to final confirmation upon order placement.",
@@ -1336,15 +1336,31 @@ def _make_quotation_costing_pdf(data: Dict[str, Any], company: Dict[str, Any]) -
 
     story: List[Any] = []
 
-    # ── 헤더: 로고 + 타이틀 ──────────────────────────────────────────────
+    # ── 헤더: 로고 + 회사정보(이름·주소·연락처) + 태그라인 ─────────────────
+    def _esc(t: str) -> str:
+        return (t or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     title_style = ParagraphStyle("KMQTitle", parent=s["section"], fontName=DEFAULT_BOLD_FONT,
                                  fontSize=17, leading=20, alignment=TA_CENTER, textColor=NAVY)
-    logo = image(asset("logo_K-maris.png", "logo.png", "logo.jpg"), 34 * mm, 12 * mm)
-    org_style = ParagraphStyle("KMQOrg", parent=s["base"], fontName=DEFAULT_BOLD_FONT,
-                               fontSize=11, alignment=TA_RIGHT, textColor=BLUE)
-    head = Table([[logo, Paragraph("K-MARIS ENERGY &amp; SOLUTIONS", org_style)]],
-                 colWidths=[100 * mm, 90 * mm], rowHeights=[14 * mm])
-    head.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LINEBELOW", (0, 0), (-1, -1), 1.2, BLUE)]))
+    logo = image(asset("logo_K-maris.png", "logo.png", "logo.jpg"), 24 * mm, 15 * mm)
+    name_style = ParagraphStyle("KMQName", parent=s["base"], fontName=DEFAULT_BOLD_FONT,
+                                fontSize=13, leading=15, textColor=NAVY)
+    addr_style = ParagraphStyle("KMQAddr", parent=s["base"], fontSize=7, leading=9,
+                                textColor=colors.HexColor("#555555"))
+    tag_style = ParagraphStyle("KMQTag", parent=s["base"], fontSize=8.5, leading=11,
+                               alignment=TA_RIGHT, textColor=BLUE)
+    org_block = [
+        Paragraph(_esc(company.get("company_name_en", "K-MARIS Energy & Solutions Co., Ltd.")), name_style),
+        Paragraph(_esc(company.get("address_en", "")), addr_style),
+        Paragraph(_esc(f"Tel: {company.get('phone', '')}  |  {company.get('sales_email', '')}  |  {company.get('website', '')}"), addr_style),
+    ]
+    tagline = _esc(company.get("tagline", "")).replace(". ", ".<br/>")
+    head = Table([[logo, org_block, Paragraph(tagline, tag_style)]],
+                 colWidths=[26 * mm, 120 * mm, 44 * mm], rowHeights=[16 * mm])
+    head.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LINEBELOW", (0, 0), (-1, -1), 1.2, BLUE),
+        ("LEFTPADDING", (0, 0), (0, 0), 0),
+    ]))
     story += [head, Spacer(1, 4 * mm), Paragraph("QUOTATION / COSTING SHEET", title_style), Spacer(1, 4 * mm)]
 
     # ── 정보 박스(2단) ─────────────────────────────────────────────────
@@ -1380,9 +1396,9 @@ def _make_quotation_costing_pdf(data: Dict[str, Any], company: Dict[str, Any]) -
     info.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
     story += [info, Spacer(1, 4 * mm)]
 
-    # ── 품목표 (sales only) ────────────────────────────────────────────
-    headers = ["No.", "Part No.", "Description", "Qty", "U/Price", "Amount", "Lead Time", "Remark"]
-    widths = [10, 28, 56, 14, 22, 24, 18, 18]
+    # ── 품목표 (sales only) — Unit 열 포함, 샘플처럼 최소 6줄의 폼 형태 ──────
+    headers = ["No.", "Part No.", "Description", "Qty", "Unit", "U/Price", "Amount", "Lead Time", "Remark"]
+    widths = [8, 24, 50, 11, 12, 22, 22, 18, 23]
     rows = [[_p(h, s["th"]) for h in headers]]
     for it in items:
         rows.append([
@@ -1390,26 +1406,33 @@ def _make_quotation_costing_pdf(data: Dict[str, Any], company: Dict[str, Any]) -
             _p(it["part_no"], s["tiny"]),
             _p(it["description"], s["tiny"]),
             _p(_qnum(it["qty"]), s["tiny"]),
+            _p(it.get("unit", ""), s["tiny"]),
             _p(_qnum(it["unit_price"]), s["tiny"]),
             _p(_qnum(it["amount"]), s["tiny"]),
             _p(it.get("lead_time", ""), s["tiny"]),
             _p(it.get("remark", ""), s["tiny"]),
         ])
+    for _pad in range(max(0, 6 - len(items))):
+        rows.append([_p("", s["tiny"]) for _ in range(9)])
+    total_row = len(rows)
     rows.append([
-        _p("", s["tiny"]), _p("", s["tiny"]),
         _p("<b>Total</b>", s["tiny"]), _p("", s["tiny"]), _p("", s["tiny"]),
+        _p("", s["tiny"]), _p("", s["tiny"]), _p("", s["tiny"]),
         _p(f"<b>{_qnum(total)}</b>", s["tiny"]), _p("", s["tiny"]), _p("", s["tiny"]),
     ])
     items_table = Table(rows, colWidths=[w * mm for w in widths], repeatRows=1)
     tcmds = [
         ("BACKGROUND", (0, 0), (-1, 0), NAVY), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
         ("GRID", (0, 0), (-1, -1), 0.35, MID_GRAY), ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("ALIGN", (3, 1), (5, -1), "RIGHT"), ("ALIGN", (0, 1), (0, -1), "CENTER"),
+        ("ALIGN", (0, 1), (0, -1), "CENTER"), ("ALIGN", (3, 1), (3, -1), "RIGHT"),
+        ("ALIGN", (4, 1), (4, -1), "CENTER"), ("ALIGN", (5, 1), (6, -1), "RIGHT"),
         ("LEFTPADDING", (0, 0), (-1, -1), 3), ("RIGHTPADDING", (0, 0), (-1, -1), 3),
         ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
-        ("BACKGROUND", (0, len(rows) - 1), (-1, len(rows) - 1), LIGHT_BLUE),
+        ("BACKGROUND", (0, total_row), (-1, total_row), LIGHT_BLUE),
+        ("SPAN", (0, total_row), (5, total_row)),
+        ("ALIGN", (0, total_row), (0, total_row), "CENTER"),
     ]
-    for r in range(1, len(rows) - 1):
+    for r in range(1, total_row):
         if r % 2 == 0:
             tcmds.append(("BACKGROUND", (0, r), (-1, r), colors.HexColor("#FAFBFC")))
     items_table.setStyle(TableStyle(tcmds))
