@@ -570,11 +570,16 @@ function ActivityCard({
             ✎
           </Link>
         </div>
-        {/* 프로젝트명 + 선박명(우측, 동일 크기·색상). */}
-        <div className="act-title2">
-          {row.project_title || "(untitled)"}
-          {row.vessel ? <span className="act-tvessel"> · {row.vessel}</span> : null}
-        </div>
+        {/* 프로젝트명 + 선박명(우측). 오더가 여럿이면 선박도 " · "로 이어 붙인다. */}
+        {(() => {
+          const vs = (row.vessels || row.vessel || "").split("\n").filter(Boolean).join(" · ");
+          return (
+            <div className="act-title2">
+              {row.project_title || "(untitled)"}
+              {vs ? <span className="act-tvessel"> · {vs}</span> : null}
+            </div>
+          );
+        })()}
         {/* 고객사(로고+이름) · 담당자 / 벤더(이니셜 원형 배지). (우측 상단 배지 = 내부 PIC) */}
         {(row.customer || vend) ? (
           <div className="act-sub">
