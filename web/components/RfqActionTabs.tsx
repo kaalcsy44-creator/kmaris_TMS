@@ -1034,7 +1034,9 @@ function VendorRfqDetailModal({
             </>
           )}
 
-          <div className="form-actions">
+          {/* stage 4·6 견적 편집기와 동일한 푸터 규약: Preview=좌측끝, Delete/Cancel/Save=우측 그룹.
+              quote-editor-actions 로 표준 danger-좌측 규약을 무효화한다. */}
+          <div className="form-actions quote-editor-actions">
             <button className="btn" onClick={openPreview} disabled={busy || dlBusy}>
               {dlBusy && !previewUrl ? "Opening…" : "Preview"}
             </button>
