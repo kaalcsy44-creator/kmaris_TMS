@@ -16,12 +16,14 @@ from openpyxl.utils import get_column_letter
 from services.kmaris_docs import normalize_items, calc_totals, _num, DOC_TITLES
 
 _CONFIG_DIR = Path(__file__).resolve().parent.parent / "config"
+_TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
 _REPO_DIR = Path(__file__).resolve().parents[2]
 
 
 def _find_asset(*names: str) -> Optional[str]:
-    """config/ 에서 자산 이미지(로고·서명·직인)를 찾는다. 없으면 None(선택 자산)."""
-    for root in (_REPO_DIR, _CONFIG_DIR):
+    """자산 이미지(로고·서명·직인)를 config/ · templates/ · 저장소 루트에서 찾는다.
+    templates/ 는 git 에 커밋되므로 커밋된 아이콘 로고(logo_icon.png 등)를 여기 두면 배포에 반영된다."""
+    for root in (_CONFIG_DIR, _TEMPLATES_DIR, _REPO_DIR):
         for n in names:
             p = root / n
             if p.exists():
@@ -959,12 +961,12 @@ def make_quotation_costing_xlsx(
     blue = PatternFill("solid", fgColor="0055A8")
     gray = PatternFill("solid", fgColor="F4F6F8")
     lightblue = PatternFill("solid", fgColor="EAF3FF")
-    cost_fill = PatternFill("solid", fgColor="FDF3E7")   # PURCHASE 열 톤
+    cost_fill = PatternFill("solid", fgColor="FFFFCC")   # PURCHASE 열 톤(샘플: 연노랑)
     alt = PatternFill("solid", fgColor="FAFBFC")
 
     white_lg = Font(name="Calibri", color="FFFFFF", bold=True, size=15)
     white_sm = Font(name="Calibri", color="FFFFFF", size=9)
-    white_hdr = Font(name="Calibri", color="FFFFFF", bold=True, size=9)
+    white_hdr = Font(name="Calibri", color="FFFFFF", bold=True, size=11)
     bold = Font(name="Calibri", bold=True)
     boldsm = Font(name="Calibri", bold=True, size=9)
 
@@ -991,10 +993,13 @@ def make_quotation_costing_xlsx(
         except Exception:
             pass
 
-    # ── 레터헤드: 로고(좌) + 회사정보(중) + 태그라인(우), 아래 파란 구분선 ─────
-    logo = _find_asset("logo_K-maris.png", "logo.png", "logo.jpg")
+    # ── 레터헤드: 아이콘 로고(좌, 텍스트 없는 심볼 우선) + 회사정보(중) + 태그라인(우) ──
+    # 텍스트가 빠진 아이콘 로고를 쓰려면 config/ 또는 저장소 루트에 logo_icon.png(또는
+    # logo_mark/logo_symbol) 파일을 두면 그것을 우선 사용한다. 없으면 기존 로고로 대체.
+    logo = _find_asset("logo_icon.png", "logo_mark.png", "logo_symbol.png",
+                       "logo_K-maris.png", "logo.png", "logo.jpg")
     if logo:
-        add_image(logo, "A1", 150, 58)
+        add_image(logo, "A1", 92, 92)
     hd_name = Font(name="Calibri", bold=True, size=14, color="0B1D3A")
     hd_addr = Font(name="Calibri", size=8, color="555555")
     hd_tag = Font(name="Calibri", italic=True, size=10, color="0055A8")
@@ -1009,14 +1014,14 @@ def make_quotation_costing_xlsx(
     merge(3, 3, 3, 9); cc = ws.cell(3, 3, contact); cc.font = hd_addr; cc.alignment = left
     merge(1, 10, 3, NCOL); cc = ws.cell(1, 10, company.get("tagline", "")); cc.font = hd_tag; cc.alignment = Alignment(horizontal="right", vertical="center", wrap_text=True)
     for rr in (1, 2, 3):
-        ws.row_dimensions[rr].height = 17
+        ws.row_dimensions[rr].height = 23
     for col in range(1, NCOL + 1):
         ws.cell(3, col).border = Border(bottom=Side(style="medium", color="0055A8"))
     ws.row_dimensions[4].height = 6
-    # ── 타이틀 ─────────────────────────────────────────────────────────────
+    # ── 타이틀 (샘플처럼 크게) ─────────────────────────────────────────────
     merge(5, 1, 5, NCOL)
-    c = ws.cell(5, 1, "QUOTATION / COSTING SHEET"); c.font = Font(name="Calibri", bold=True, size=16, color="0B1D3A"); c.alignment = center
-    ws.row_dimensions[5].height = 26
+    c = ws.cell(5, 1, "QUOTATION / COSTING SHEET"); c.font = Font(name="Calibri", bold=True, size=24, color="0B1D3A"); c.alignment = center
+    ws.row_dimensions[5].height = 34
     ws.row_dimensions[6].height = 4
 
     # 원가(cost) 통화 → 판매 통화 환산계수. Margin 수식에서 통화가 섞일 때 사용.
@@ -1093,9 +1098,7 @@ def make_quotation_costing_xlsx(
         }
         for ci, val in cells.items():
             cell = ws.cell(r, ci, val); cell.border = bdr
-            if ri % 2 == 0 and ci not in (6, 7, 8):
-                cell.fill = alt
-            if ci in (6, 7, 8):
+            if ci in (6, 7, 8):   # 원가열만 연노랑 음영(샘플엔 판매열 zebra 없음)
                 cell.fill = cost_fill
             if ci in (4, 9, 10):
                 cell.alignment = right
