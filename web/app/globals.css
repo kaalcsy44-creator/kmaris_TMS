@@ -5912,8 +5912,9 @@ table.mini .num {
   display: flex;
   flex-direction: column;
   max-height: 72vh;
-  /* RFQ~AR 5개 중분류 — 색을 구분하지 않고 단일 파란색으로 통일. */
-  --accent: var(--blue);
+  /* RFQ~AR 5개 중분류 — 색 구분 없이 단일 진한 회색으로 통일. 파란색은 parts 등
+     업무 타입 배지 전용으로 남겨 보드 전반의 파란색 과다를 덜어낸다. */
+  --accent: #475569;
 }
 .pl-board-head {
   display: flex;
@@ -6456,8 +6457,10 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   flex: none;
   font-size: 10px;
   font-weight: 700;
-  color: var(--muted);
-  background: var(--head-bg);
+  /* 경과일이 짧은(임계 미만) 카드는 파란기 없는 중립 회색으로 — 파란색은 업무
+     타입 배지 전용. 오래 방치되면 아래 lv-* 가 앰버→레드로 덮어쓴다. */
+  color: #6b7280;
+  background: #f1f3f5;
   border-radius: 6px;
   padding: 1px 5px;
 }
