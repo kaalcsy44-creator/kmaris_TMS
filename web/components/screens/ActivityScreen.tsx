@@ -509,8 +509,8 @@ function DealStageRow({
         ) : null}
       </div>
       {byCol.map((cacts, ci) => {
-        // 이 딜이 현재 진행 중인 단계의 열이면 상단에 업무타입 색 bar(진행 표시).
-        const cur = ci === addCol && !row.cancelled;
+        // 지나왔거나 진행 중인 단계 열(ci ≤ 현재 단계 열)에 상단 업무타입 색 bar.
+        const cur = ci <= addCol && !row.cancelled;
         return (
         <div key={ci} className={`act-mx-cell${cur ? (isService ? " cur-service" : " cur-parts") : ""}`}>
           {cacts.length > 0 ? (
