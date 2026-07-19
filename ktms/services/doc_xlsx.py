@@ -991,9 +991,15 @@ def make_quotation_costing_xlsx(
     hd_name = Font(name="Calibri", bold=True, size=14, color="0B1D3A")
     hd_addr = Font(name="Calibri", size=8, color="555555")
     hd_tag = Font(name="Calibri", italic=True, size=10, color="0055A8")
+    addr = company.get("address_en") or company.get("address") or ""
+    bits = []
+    if company.get("phone"): bits.append(f"Tel: {company['phone']}")
+    if company.get("sales_email"): bits.append(company["sales_email"])
+    if company.get("website"): bits.append(company["website"])
+    contact = "   |   ".join(bits)
     merge(1, 3, 1, 9); cc = ws.cell(1, 3, company.get("company_name_en", "K-MARIS Energy & Solutions Co., Ltd.")); cc.font = hd_name; cc.alignment = left
-    merge(2, 3, 2, 9); cc = ws.cell(2, 3, company.get("address_en", "")); cc.font = hd_addr; cc.alignment = left
-    merge(3, 3, 3, 9); cc = ws.cell(3, 3, f"Tel: {company.get('phone', '')}  |  {company.get('sales_email', '')}  |  {company.get('website', '')}"); cc.font = hd_addr; cc.alignment = left
+    merge(2, 3, 2, 9); cc = ws.cell(2, 3, addr); cc.font = hd_addr; cc.alignment = left
+    merge(3, 3, 3, 9); cc = ws.cell(3, 3, contact); cc.font = hd_addr; cc.alignment = left
     merge(1, 10, 3, NCOL); cc = ws.cell(1, 10, company.get("tagline", "")); cc.font = hd_tag; cc.alignment = Alignment(horizontal="right", vertical="center", wrap_text=True)
     for rr in (1, 2, 3):
         ws.row_dimensions[rr].height = 17
@@ -1096,7 +1102,12 @@ def make_quotation_costing_xlsx(
                 cell.alignment = center
             else:
                 cell.alignment = left
-        ws.row_dimensions[r].height = 18
+        # 줄바꿈 텍스트가 잘리지 않도록 Description(C, ~40자/줄)·Remark(L, ~26자/줄)
+        # 내용에 맞춰 행 높이를 늘린다(고정 18은 2줄 이상에서 겹침).
+        _desc = str(it.get("description", "") or ""); _rmk = str(it.get("remark", "") or "")
+        _dl = sum(max(1, (len(x) + 39) // 40) for x in _desc.split("\n")) if _desc else 1
+        _rl = sum(max(1, (len(x) + 25) // 26) for x in _rmk.split("\n")) if _rmk else 1
+        ws.row_dimensions[r].height = 14 * max(_dl, _rl, 1) + 5
     # 샘플처럼 최소 5줄의 폼 형태 — 품목이 적어도 빈 줄로 표 높이를 유지(Total 위치 고정).
     MIN_ITEM_ROWS = 5
     for ri in range(len(raw_items) + 1, MIN_ITEM_ROWS + 1):

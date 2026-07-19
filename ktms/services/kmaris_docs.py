@@ -1348,10 +1348,15 @@ def _make_quotation_costing_pdf(data: Dict[str, Any], company: Dict[str, Any]) -
                                 textColor=colors.HexColor("#555555"))
     tag_style = ParagraphStyle("KMQTag", parent=s["base"], fontSize=8.5, leading=11,
                                alignment=TA_RIGHT, textColor=BLUE)
+    _addr = company.get("address_en") or company.get("address") or ""
+    _bits = []
+    if company.get("phone"): _bits.append(f"Tel: {company['phone']}")
+    if company.get("sales_email"): _bits.append(company["sales_email"])
+    if company.get("website"): _bits.append(company["website"])
     org_block = [
         Paragraph(_esc(company.get("company_name_en", "K-MARIS Energy & Solutions Co., Ltd.")), name_style),
-        Paragraph(_esc(company.get("address_en", "")), addr_style),
-        Paragraph(_esc(f"Tel: {company.get('phone', '')}  |  {company.get('sales_email', '')}  |  {company.get('website', '')}"), addr_style),
+        Paragraph(_esc(_addr), addr_style),
+        Paragraph(_esc("   |   ".join(_bits)), addr_style),
     ]
     tagline = _esc(company.get("tagline", "")).replace(". ", ".<br/>")
     head = Table([[logo, org_block, Paragraph(tagline, tag_style)]],
