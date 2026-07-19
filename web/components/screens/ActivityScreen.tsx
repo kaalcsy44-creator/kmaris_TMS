@@ -59,6 +59,15 @@ const STAGE_COLUMNS: { label: string; tone: string; from: number; to: number }[]
   { label: "P/O", tone: "p", from: 5, to: 6 },
   { label: "C/I & after", tone: "c", from: 7, to: 11 },
 ];
+// 딜의 현재 단계가 속한 열 인덱스(단계 필터·진행 bar 공용).
+function stageColOf(stage: number): number {
+  const i = STAGE_COLUMNS.findIndex((c) => stage >= c.from && stage <= c.to);
+  return i < 0 ? 0 : i;
+}
+// 딜에 연결된 vendor 이름 목록(","·줄바꿈 분리). vendor 필터·옵션 공용.
+function vendorNames(row: PipelineRow): string[] {
+  return (vendorOf(row) || "").split(/[\n,]/).map((s) => s.trim()).filter(Boolean);
+}
 
 function todayISO(): string {
   const d = new Date();
@@ -81,6 +90,10 @@ export default function ActivityScreen() {
   const [dateFilter, setDateFilter] = useState<"all" | "today" | "date">("all");
   const [pickDate, setPickDate] = useState(todayISO());
   const [showClosed, setShowClosed] = useState(false);
+  const [stageFilter, setStageFilter] = useState<"all" | number>("all");   // 현재 진행 단계 열
+  const [ageFilter, setAgeFilter] = useState<"all" | "7" | "14" | "30">("all"); // 최신활동 경과일(이상)
+  const [customerFilter, setCustomerFilter] = useState("");
+  const [vendorFilter, setVendorFilter] = useState("");
   const [meeting, setMeeting] = useState(false);
   const [view, setView] = useState<"deal" | "date">("deal"); // 탭: 딜별(카드) / 일자별(피드)
 
@@ -100,14 +113,38 @@ export default function ActivityScreen() {
   const today = todayISO();
   const targetDate = dateFilter === "today" ? today : dateFilter === "date" ? pickDate : "";
 
+  // 필터 드롭다운 옵션 — 현재 데이터의 고객사/vendor 유니크 목록.
+  const custOptions = useMemo(
+    () => Array.from(new Set((data?.rows ?? []).map((r) => r.customer).filter(Boolean))).sort(),
+    [data],
+  );
+  const vendOptions = useMemo(() => {
+    const s = new Set<string>();
+    for (const r of data?.rows ?? []) for (const v of vendorNames(r)) s.add(v);
+    return Array.from(s).sort();
+  }, [data]);
+
+  // 행(딜) 단위 필터 — 딜별/일자별 탭 공용. 활동 날짜 필터는 각 useMemo 에서 별도 처리.
+  const rowPasses = useCallback((row: PipelineRow): boolean => {
+    if (row.cancelled && !showClosed) return false;
+    if (mine && row.assignee_id !== uid) return false;
+    if (customerFilter && row.customer !== customerFilter) return false;
+    if (vendorFilter && !vendorNames(row).includes(vendorFilter)) return false;
+    if (stageFilter !== "all" && stageColOf(row.stage) !== stageFilter) return false;
+    if (ageFilter !== "all") {
+      const d = daysSinceISO(lastActivityISO(row));
+      if (d == null || d < Number(ageFilter)) return false;
+    }
+    const text = `${row.project_no} ${row.project_title} ${row.customer} ${row.vendor} ${row.vrfq_vendors} ${row.vessel}`.toLowerCase();
+    if (q.trim() && !text.includes(q.trim().toLowerCase())) return false;
+    return true;
+  }, [showClosed, mine, uid, customerFilter, vendorFilter, stageFilter, ageFilter, q]);
+
   const buckets = useMemo(() => {
     const groups: { phase: number; rows: { row: PipelineRow; acts: Activity[] }[] }[] =
       PHASES.map((_, i) => ({ phase: i, rows: [] }));
     for (const row of data?.rows ?? []) {
-      if (row.cancelled && !showClosed) continue;
-      if (mine && row.assignee_id !== uid) continue;
-      const text = `${row.project_no} ${row.project_title} ${row.customer} ${row.vendor} ${row.vrfq_vendors} ${row.vessel}`.toLowerCase();
-      if (q.trim() && !text.includes(q.trim().toLowerCase())) continue;
+      if (!rowPasses(row)) continue;
       let acts = buildActivities(row, steps);
       if (targetDate) acts = acts.filter((a) => a.date === targetDate);
       if (targetDate && acts.length === 0) continue;
@@ -121,7 +158,7 @@ export default function ActivityScreen() {
       });
     }
     return groups;
-  }, [data, steps, q, mine, uid, showClosed, targetDate]);
+  }, [data, steps, rowPasses, targetDate]);
 
   const totalDeals = buckets.reduce((s, g) => s + g.rows.length, 0);
 
@@ -131,10 +168,7 @@ export default function ActivityScreen() {
     // 필터를 통과한 활동을 평탄화(날짜 없는 건은 캘린더에서 제외).
     const flat: { row: PipelineRow; act: Activity }[] = [];
     for (const row of data?.rows ?? []) {
-      if (row.cancelled && !showClosed) continue;
-      if (mine && row.assignee_id !== uid) continue;
-      const text = `${row.project_no} ${row.project_title} ${row.customer} ${row.vendor} ${row.vrfq_vendors} ${row.vessel}`.toLowerCase();
-      if (q.trim() && !text.includes(q.trim().toLowerCase())) continue;
+      if (!rowPasses(row)) continue;
       let acts = buildActivities(row, steps);
       if (targetDate) acts = acts.filter((a) => a.date === targetDate);
       for (const act of acts) if (act.date) flat.push({ row, act });
@@ -167,7 +201,7 @@ export default function ActivityScreen() {
       }
       return { start: ws, days };
     });
-  }, [data, steps, q, mine, uid, showClosed, targetDate]);
+  }, [data, steps, rowPasses, targetDate]);
 
   const totalActs = weekView.reduce(
     (s, w) => s + w.days.reduce((ds, d) => ds + d.projects.reduce((ps, p) => ps + p.acts.length, 0), 0),
@@ -308,6 +342,32 @@ export default function ActivityScreen() {
           </div>
           <label className="act-check"><input type="checkbox" checked={mine} onChange={(e) => setMine(e.target.checked)} /> Mine</label>
           <label className="act-check"><input type="checkbox" checked={showClosed} onChange={(e) => setShowClosed(e.target.checked)} /> Include closed</label>
+          <select className="act-fsel" value={stageFilter === "all" ? "all" : String(stageFilter)}
+            onChange={(e) => setStageFilter(e.target.value === "all" ? "all" : Number(e.target.value))} title="Current stage">
+            <option value="all">All stages</option>
+            {STAGE_COLUMNS.map((c, i) => <option key={i} value={i}>{c.label}</option>)}
+          </select>
+          <select className="act-fsel" value={ageFilter}
+            onChange={(e) => setAgeFilter(e.target.value as "all" | "7" | "14" | "30")} title="Days since last activity">
+            <option value="all">Any age</option>
+            <option value="7">Stale ≥ 7d</option>
+            <option value="14">Stale ≥ 14d</option>
+            <option value="30">Stale ≥ 30d</option>
+          </select>
+          <select className="act-fsel" value={customerFilter} onChange={(e) => setCustomerFilter(e.target.value)} title="Customer">
+            <option value="">All customers</option>
+            {custOptions.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <select className="act-fsel" value={vendorFilter} onChange={(e) => setVendorFilter(e.target.value)} title="Vendor">
+            <option value="">All vendors</option>
+            {vendOptions.map((v) => <option key={v} value={v}>{v}</option>)}
+          </select>
+          {stageFilter !== "all" || ageFilter !== "all" || customerFilter || vendorFilter || q || mine || showClosed ? (
+            <button className="btn sm" title="Clear all filters"
+              onClick={() => { setStageFilter("all"); setAgeFilter("all"); setCustomerFilter(""); setVendorFilter(""); setQ(""); setMine(false); setShowClosed(false); }}>
+              Reset
+            </button>
+          ) : null}
           <button className={`btn sm${meeting ? " primary" : ""}`} onClick={() => setMeeting((v) => !v)}>
             {meeting ? "Meeting ON" : "Meeting mode"}
           </button>
