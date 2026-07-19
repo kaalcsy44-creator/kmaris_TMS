@@ -1000,11 +1000,12 @@ def make_quotation_costing_xlsx(
     logo = _find_asset("logo_icon.jpg", "logo_icon.png", "logo_mark.png", "logo_symbol.png",
                        "logo_K-maris.png", "logo.png", "logo.jpg")
     if logo:
-        # 좌측(A~B) 아이콘 로고 — 행 1-3 에 세로로 걸치도록 크게, 약간 내려 세로 중앙.
-        add_image(logo, "A1", 104, 92)
+        # 좌측(B~C) 아이콘 로고 — 행 1-3 에 세로로 걸치도록 크게.
+        add_image(logo, "B1", 112, 99)
+    GRAYTX = "404040"   # 진한 회색(회사명·주소·연락처)
     center_wrap = Alignment(horizontal="center", vertical="center", wrap_text=True)
-    hd_name = Font(name="Calibri", bold=True, size=24, color="0B1D3A")
-    hd_addr = Font(name="Calibri", size=11, color="333333")
+    hd_name = Font(name="Calibri", bold=True, size=22, color=GRAYTX)
+    hd_addr = Font(name="Calibri", size=11, color=GRAYTX)
     hd_tag = Font(name="Calibri", italic=True, size=10.5, color="0055A8")
     addr = company.get("address_en") or company.get("address") or ""
     bits = []
@@ -1012,15 +1013,16 @@ def make_quotation_costing_xlsx(
     if company.get("sales_email"): bits.append(company["sales_email"])
     if company.get("website"): bits.append(company["website"])
     contact = "   |   ".join(bits)
-    # 회사명/주소/연락처 — 가운데 정렬(좌 로고·우 슬로건 사이 중앙 영역 C~J). 음영 없음.
-    merge(1, 3, 1, 10); cc = ws.cell(1, 3, company.get("company_name_en", "K-MARIS Energy & Solutions Co., Ltd.")); cc.font = hd_name; cc.alignment = center_wrap
-    merge(2, 3, 2, 10); cc = ws.cell(2, 3, addr); cc.font = hd_addr; cc.alignment = center_wrap
-    merge(3, 3, 3, 10); cc = ws.cell(3, 3, contact); cc.font = hd_addr; cc.alignment = center_wrap
-    # 슬로건 — 우측(K~L), 2줄, 이탤릭 블루.
-    merge(1, 11, 3, NCOL); cc = ws.cell(1, 11, company.get("tagline", "")); cc.font = hd_tag; cc.alignment = Alignment(horizontal="right", vertical="center", wrap_text=True)
-    ws.row_dimensions[1].height = 38
-    ws.row_dimensions[2].height = 15
-    ws.row_dimensions[3].height = 15
+    # 회사명/주소/연락처 — C~K 가운데 정렬, 진한 회색, 음영 없음.
+    merge(1, 3, 1, 11); cc = ws.cell(1, 3, company.get("company_name_en", "K-MARIS Energy & Solutions Co., Ltd.")); cc.font = hd_name; cc.alignment = center_wrap
+    merge(2, 3, 2, 11); cc = ws.cell(2, 3, addr); cc.font = hd_addr; cc.alignment = center_wrap
+    merge(3, 3, 3, 11); cc = ws.cell(3, 3, contact); cc.font = hd_addr; cc.alignment = center_wrap
+    # 슬로건 — 우측 열 L1:L3, 좌측 정렬, 2줄(줄바꿈), 이탤릭 블루.
+    tagline = (company.get("tagline", "") or "").replace(". ", ".\n", 1)
+    merge(1, 12, 3, NCOL); cc = ws.cell(1, 12, tagline); cc.font = hd_tag; cc.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+    ws.row_dimensions[1].height = 34
+    ws.row_dimensions[2].height = 17
+    ws.row_dimensions[3].height = 17
     for col in range(1, NCOL + 1):
         ws.cell(3, col).border = Border(bottom=Side(style="medium", color="0055A8"))
     ws.row_dimensions[4].height = 6
