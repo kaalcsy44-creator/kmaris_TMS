@@ -8410,10 +8410,10 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 /* 카드 높이가 제각각이라 그리드는 빈칸이 커진다 → CSS 멀티컬럼(masonry)으로 세로로
    빈틈 없이 채운다. 열 흐름은 컬럼 우선(위→아래)이며, 단계 섹션 헤더는 그대로 유지. */
 .act-cards { column-count: 5; column-gap: 12px; }
-@media (max-width: 1500px) { .act-cards { column-count: 4; } }
-@media (max-width: 1200px) { .act-cards { column-count: 3; } }
-@media (max-width: 820px) { .act-cards { column-count: 2; } }
-@media (max-width: 560px) { .act-cards { column-count: 1; } }
+@media (max-width: 1280px) { .act-cards { column-count: 4; } }
+@media (max-width: 1000px) { .act-cards { column-count: 3; } }
+@media (max-width: 760px) { .act-cards { column-count: 2; } }
+@media (max-width: 520px) { .act-cards { column-count: 1; } }
 
 .act-card { position: relative; border: 1px solid var(--border, #e5e7eb); border-radius: 8px; padding: 12px 14px; background: #fff; overflow: hidden;
   break-inside: avoid; -webkit-column-break-inside: avoid; margin-bottom: 12px; }
