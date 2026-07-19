@@ -69,10 +69,10 @@ function vendorNames(row: PipelineRow): string[] {
 }
 // 경과일(최신 활동 이후) 구간 — 멀티 선택 필터용.
 const AGE_BUCKETS: { value: string; label: string; min: number; max: number }[] = [
-  { value: "0", label: "≤ 6d (fresh)", min: 0, max: 6 },
+  { value: "0", label: "≤ 6d", min: 0, max: 6 },
   { value: "7", label: "7–13d", min: 7, max: 13 },
   { value: "14", label: "14–29d", min: 14, max: 29 },
-  { value: "30", label: "≥ 30d (stale)", min: 30, max: Infinity },
+  { value: "30", label: "≥ 30d", min: 30, max: Infinity },
 ];
 const STATUS_OPTIONS = [
   { value: "active", label: "Active" },
@@ -129,6 +129,49 @@ function FilterSelect({
           ))}
           {selected.length ? (
             <button type="button" className="filt-clear" onClick={() => onChange([])}>Clear</button>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// 날짜 필터 — 다른 필터와 동일한 버튼/드롭다운 폼(단, 단일 선택). "Pick date" 시 날짜 입력.
+function DateFilter({
+  value,
+  pickDate,
+  onValue,
+  onPick,
+}: {
+  value: "all" | "today" | "date";
+  pickDate: string;
+  onValue: (v: "all" | "today" | "date") => void;
+  onPick: (d: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    function onDoc(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+  const label = value === "all" ? "All dates" : value === "today" ? "Today" : pickDate || "Pick date";
+  return (
+    <div className="filt" ref={ref}>
+      <button type="button" className={`filt-btn${value !== "all" ? " on" : ""}`} onClick={() => setOpen((o) => !o)} title="Date">
+        <span className="filt-lbl">{label}</span>
+        <span className="filt-caret" aria-hidden>▾</span>
+      </button>
+      {open ? (
+        <div className="filt-menu">
+          <label className="filt-opt"><input type="radio" name="act-date" checked={value === "all"} onChange={() => { onValue("all"); setOpen(false); }} /><span>All dates</span></label>
+          <label className="filt-opt"><input type="radio" name="act-date" checked={value === "today"} onChange={() => { onValue("today"); setOpen(false); }} /><span>Today</span></label>
+          <label className="filt-opt"><input type="radio" name="act-date" checked={value === "date"} onChange={() => onValue("date")} /><span>Pick date</span></label>
+          {value === "date" ? (
+            <input type="date" className="filt-date" value={pickDate} onChange={(e) => onPick(e.target.value)} />
           ) : null}
         </div>
       ) : null}
@@ -401,16 +444,7 @@ export default function ActivityScreen() {
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
-          <div className="act-seg">
-            {(["all", "today", "date"] as const).map((k) => (
-              <button key={k} className={dateFilter === k ? "on" : ""} onClick={() => setDateFilter(k)}>
-                {k === "all" ? "All" : k === "today" ? "Today" : "Date"}
-              </button>
-            ))}
-            {dateFilter === "date" ? (
-              <input type="date" value={pickDate} onChange={(e) => setPickDate(e.target.value)} />
-            ) : null}
-          </div>
+          <DateFilter value={dateFilter} pickDate={pickDate} onValue={setDateFilter} onPick={setPickDate} />
           <FilterSelect label="Assignee" allLabel="All PICs"
             options={assigneeOptions.map((a) => ({ value: a, label: a }))} selected={assigneeF} onChange={setAssigneeF} />
           <FilterSelect label="Status" allLabel="Any status"
@@ -423,13 +457,14 @@ export default function ActivityScreen() {
             options={custOptions.map((c) => ({ value: c, label: c }))} selected={custF} onChange={setCustF} />
           <FilterSelect label="Vendor" allLabel="All vendors"
             options={vendOptions.map((v) => ({ value: v, label: v }))} selected={vendF} onChange={setVendF} />
-          {assigneeF.length || stageF.length || ageF.length || custF.length || vendF.length || q ||
-            dateFilter !== "all" || statusF.length !== 1 || statusF[0] !== "active" ? (
-            <button className="btn sm" title="Clear all filters"
-              onClick={() => { setAssigneeF([]); setStatusF(["active"]); setStageF([]); setAgeF([]); setCustF([]); setVendF([]); setQ(""); setDateFilter("all"); }}>
-              Reset
-            </button>
-          ) : null}
+          {/* Reset 는 항상 자리를 차지(visibility 토글)해 필터 버튼 위치가 흔들리지 않게 한다. */}
+          <button className="btn sm act-reset"
+            style={{ visibility: (assigneeF.length || stageF.length || ageF.length || custF.length || vendF.length || q ||
+              dateFilter !== "all" || statusF.length !== 1 || statusF[0] !== "active") ? "visible" : "hidden" }}
+            title="Clear all filters"
+            onClick={() => { setAssigneeF([]); setStatusF(["active"]); setStageF([]); setAgeF([]); setCustF([]); setVendF([]); setQ(""); setDateFilter("all"); }}>
+            Reset
+          </button>
           <button className="btn sm" onClick={() => window.print()}>Print</button>
         </div>
       </div>
