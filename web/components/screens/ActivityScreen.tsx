@@ -374,14 +374,14 @@ export default function ActivityScreen() {
         <>
           {totalDeals === 0 ? <div className="state">No activity to show.</div> : null}
           {totalDeals > 0 ? (
-            // 단계(RFQ→AR)별 섹션 — 각 단계 위에 전체폭 구분 헤더를 두고, 그 아래에
-            // 해당 단계 카드만 그리드로 채운다(단계 경계가 명확해진다).
-            <div className="act-deal-sections">
+            // 단계(RFQ→AR)를 좌→우 세로 밴드로 나열 — 밴드마다 헤더 + 카드 2열 masonry.
+            // 전 단계를 한눈에 비교하며 좌우 스크롤로 이동한다(Progress 보드와 같은 순서).
+            <div className="act-deal-board">
               {buckets.map((g) => {
                 if (g.rows.length === 0) return null;
                 const ordered = orderedRows(g.phase, g.rows);
                 return (
-                  <section key={g.phase} className="act-phase-section">
+                  <section key={g.phase} className="act-phase-col">
                     <div className="act-phase-header">
                       <span className="act-phase-header-label">{PHASES[g.phase].label}</span>
                       <span className="act-phase-header-count">{g.rows.length}</span>
