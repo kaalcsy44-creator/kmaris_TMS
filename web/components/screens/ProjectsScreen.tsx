@@ -772,11 +772,15 @@ function PipelineTable({
   // 3) 종결(취소·실주) + 완료(Done) 프로젝트 접기 — 표·보드 공통.
   //    Done 은 내부 11단계 뷰에서만 존재(마지막 단계 도달). 고객 7단계 뷰는 취소만 대상.
   const isDone = (r: PipelineRow) => steps.length === 11 && stageOf(r) >= 11;
-  const isFinished = (r: PipelineRow) => !!r.cancelled || isDone(r);
-  const closedCount = displayRows.filter(isFinished).length;
-  // Status 필터의 "closed" 선택 = 종결·완료 포함(기존 showClosed 와 동일 역할). 보드/미리보기에 그대로 전달.
-  const showClosed = tbStatus.includes("closed");
-  const visibleRows = showClosed ? displayRows : displayRows.filter((r) => !isFinished(r));
+  // Status = active(진행) / done(완료) / closed(취소·실주). 별개 항목으로 선택.
+  const statusOf = (r: PipelineRow): string => (r.cancelled ? "closed" : isDone(r) ? "done" : "active");
+  const cancelledCount = displayRows.filter((r) => r.cancelled).length;
+  const doneCount = displayRows.filter((r) => !r.cancelled && isDone(r)).length;
+  const showCancelled = tbStatus.includes("closed"); // 보드 Closed 칸
+  const showDone = tbStatus.includes("done");         // 보드 Done 칸
+  // 표(table): 선택한 상태만 남긴다(빈 배열=전체).
+  const visibleRows =
+    tbStatus.length === 0 ? displayRows : displayRows.filter((r) => tbStatus.includes(statusOf(r)));
   const tableRows = visibleRows;
   const shownRows = visibleRows;
 
@@ -910,11 +914,12 @@ function PipelineTable({
             options={assigneeOpts.map((a) => ({ value: a, label: a || "Unspecified" }))}
             selected={tbAssignee} onChange={setTbAssignee} />
         )}
-        {/* Status: 기본 Active(종결·완료 접힘). "Closed / Done" 선택 시 표·보드에 표시. */}
+        {/* Status: 기본 Active. Done(완료)·Closed(취소·실주)를 별개 항목으로 선택. */}
         <FilterSelect label="Status" allLabel="Any status"
           options={[
             { value: "active", label: "Active" },
-            { value: "closed", label: `Closed / Done${closedCount ? ` (${closedCount})` : ""}` },
+            { value: "done", label: `Done${doneCount ? ` (${doneCount})` : ""}` },
+            { value: "closed", label: `Closed${cancelledCount ? ` (${cancelledCount})` : ""}` },
           ]}
           selected={tbStatus} onChange={setTbStatus} />
         <FilterSelect label="Customer" allLabel="All customers"
@@ -993,7 +998,8 @@ function PipelineTable({
           onSelect={openRow}
           onOverview={openOverview}
           compact={boardCompact}
-          showClosed={showClosed}
+          showCancelled={showCancelled}
+          showDone={showDone}
         />
       ) : (
       <div className="pl-table-wrap">
@@ -1108,7 +1114,8 @@ function PipelineTable({
           rows={displayRows}
           steps={steps}
           stageOf={stageOf}
-          showClosed={showClosed}
+          showCancelled={showCancelled}
+          showDone={showDone}
           compact={boardCompact}
           onClose={() => setPreviewOpen(false)}
         />
@@ -1170,7 +1177,8 @@ function PipelineBoard({
   onSelect,
   onOverview,
   compact,
-  showClosed,
+  showCancelled,
+  showDone,
 }: {
   rows: PipelineRow[];
   steps: string[];
@@ -1179,8 +1187,9 @@ function PipelineBoard({
   onSelect: (id: number) => void;
   onOverview: (id: number) => void;
   compact: boolean;
-  // 종결(Closed)·완료(Done) 칸 표시 여부. false면 두 칸을 통째로 숨긴다(기본값).
-  showClosed: boolean;
+  // 종결(Closed)·완료(Done) 칸을 각각 표시할지. 둘 다 false면 진행 중 칸만(기본값).
+  showCancelled: boolean;
+  showDone: boolean;
 }) {
   // 카드별 접힘 예외: 글로벌 밀도와 반대로 뒤집힌 카드 id 집합.
   // 글로벌 토글이 바뀌면 예외를 초기화해 전체가 새 기본값을 따르게 함.
@@ -1205,10 +1214,10 @@ function PipelineBoard({
         label: `${i + 1}. ${label}`,
         match: (r: PipelineRow) => !r.cancelled && stageOf(r) === i + 1,
       }));
-  // 종결·완료 칸은 토글이 켜졌을 때만 노출한다(기본은 진행 중 칸만 깔끔하게).
-  const cols = showClosed
-    ? allCols
-    : allCols.filter((c) => c.variant !== "cancelled" && c.variant !== "done");
+  // 종결(cancelled)·완료(done) 칸은 각 Status 선택 시에만 노출한다.
+  const cols = allCols.filter((c) =>
+    c.variant === "cancelled" ? showCancelled : c.variant === "done" ? showDone : true,
+  );
 
   return (
     <div className="pl-board">
@@ -1258,14 +1267,16 @@ function BoardPreviewModal({
   rows,
   steps,
   stageOf,
-  showClosed,
+  showCancelled,
+  showDone,
   compact,
   onClose,
 }: {
   rows: PipelineRow[];
   steps: string[];
   stageOf: (r: PipelineRow) => number;
-  showClosed: boolean;
+  showCancelled: boolean;
+  showDone: boolean;
   compact: boolean;
   onClose: () => void;
 }) {
@@ -1284,13 +1295,11 @@ function BoardPreviewModal({
     window.addEventListener("resize", fit);
     return () => window.removeEventListener("resize", fit);
   }, []);
-  // 실제 보드와 동일한 컬럼 규칙: showClosed 가 꺼지면 Closed/Done 컬럼 자체를 뺀다.
-  // 켜졌더라도 Closed 존은 해당 딜이 있을 때만 노출.
+  // 실제 보드와 동일한 컬럼 규칙: Closed/Done 은 각 Status 선택 시에만, Closed 는 딜 있을 때만.
   const allCols = groupedBoardColumns(stageOf);
-  const cols = (showClosed
-    ? allCols
-    : allCols.filter((c) => c.variant !== "cancelled" && c.variant !== "done")
-  ).filter((c) => c.variant !== "cancelled" || rows.some((r) => c.match(r)));
+  const cols = allCols
+    .filter((c) => (c.variant === "cancelled" ? showCancelled : c.variant === "done" ? showDone : true))
+    .filter((c) => c.variant !== "cancelled" || rows.some((r) => c.match(r)));
   const shownCount = rows.filter((r) => cols.some((c) => c.match(r))).length;
   const today = new Date().toISOString().slice(0, 10);
 
