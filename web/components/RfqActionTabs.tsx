@@ -794,7 +794,8 @@ function VendorRfqDetailModal({
     fetchNextRfqNo().then((r) => setAutoNo(r.rfq_no)).catch(() => setAutoNo(""));
   }, [d?.kmaris_rfq_no, d]);
 
-  useEffect(() => {
+  // 저장본 상세를 불러와 편집 상태를 채운다. 최초 진입 + Cancel(편집 되돌리기)에서 재사용.
+  const loadDetail = useCallback(() => {
     fetchVendorRfqDetail(id)
       .then((data) => {
         setD(data);
@@ -810,6 +811,8 @@ function VendorRfqDetailModal({
       })
       .catch((e) => setErr(e instanceof Error ? e.message : "Error"));
   }, [id]);
+
+  useEffect(() => { loadDetail(); }, [loadDetail]);
 
   async function loadCustomerRfqItems() {
     if (!d?.rfq_id) return;
@@ -1047,9 +1050,12 @@ function VendorRfqDetailModal({
             {canDeleteThis ? (
               <button className="btn danger" onClick={remove} disabled={busy || (showEdit && !inline)}>Delete</button>
             ) : null}
-            {/* inline 은 편집 화면이 기본 → Save 만 노출(읽기전용 ↔ 편집 토글 없음). */}
+            {/* inline 은 편집 화면이 기본(읽기전용 토글 없음) → Cancel=편집값 되돌리기(저장본 재로드). */}
             {canEditThis && inline ? (
-              <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
+              <>
+                <button className="btn" onClick={() => { setErr(null); loadDetail(); }} disabled={busy}>Cancel</button>
+                <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
+              </>
             ) : canEditThis && showEdit ? (
               <>
                 <button className="btn" onClick={() => setEditing(false)} disabled={busy}>Cancel</button>
