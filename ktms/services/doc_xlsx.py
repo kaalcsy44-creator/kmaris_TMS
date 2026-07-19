@@ -1151,18 +1151,19 @@ def make_quotation_costing_xlsx(
     # ── Totals (수식) ──────────────────────────────────────────────────
     trow = last + 1
     has_rows = len(raw_items) > 0
-    # "Total" 라벨 — A~E 병합, 가운데. 행 높이 16px.
+    # "Total" 라벨 — A~E 병합, 가운데. 행 전체 글자 크기 16.
+    bold16 = Font(name="맑은 고딕", bold=True, size=16)
     merge(trow, 1, trow, 5)
-    tc = ws.cell(trow, 1, "Total"); tc.font = bold; tc.alignment = center
+    tc = ws.cell(trow, 1, "Total"); tc.font = bold16; tc.alignment = center
     for col in (1, 2, 3, 4, 5, 11, 12):
         ws.cell(trow, col).border = bdr
-    ws.row_dimensions[trow].height = 16
+    ws.row_dimensions[trow].height = 22
     cost_sum = f"=SUM(G{first}:G{last})" if has_rows else 0
     amt_sum = f"=SUM(J{first}:J{last})" if has_rows else 0
     margin_tot = f"=IF(J{trow}=0,0,(J{trow}-G{trow}*{fx_str})/J{trow})" if has_rows else 0
     for col, val, fill in [(6, "", cost_fill), (7, cost_sum, cost_fill), (8, margin_tot, cost_fill),
                            (9, "", lightblue), (10, amt_sum, lightblue)]:
-        cell = ws.cell(trow, col, val); cell.border = bdr; cell.fill = fill; cell.font = bold; cell.alignment = right
+        cell = ws.cell(trow, col, val); cell.border = bdr; cell.fill = fill; cell.font = bold16; cell.alignment = right
         if col == 7:
             cell.number_format = cost_fmt
         if col == 10:
@@ -1190,9 +1191,7 @@ def make_quotation_costing_xlsx(
     # ── Payment ────────────────────────────────────────────────────────
     r += 1
     section_bar(r, "Payment"); r += 1
-    for line in (terms.get("payment_terms") or "T/T in advance",
-                 "Once order is confirmed by the supplier, the order is unable to be cancelled without "
-                 "cancellation charge of 100% of the ordered amount."):
+    for line in (terms.get("payment_terms") or "T/T in advance",):
         merge(r, 1, r, NCOL)
         ws.cell(r, 1, f"• {line}").alignment = left
         ws.row_dimensions[r].height = 13
@@ -1215,7 +1214,8 @@ def make_quotation_costing_xlsx(
             pass
     r += 4
     ws.cell(r, 1, "________________________").alignment = left; r += 1
-    ws.cell(r, 1, "Sam Cho, Managing Director").font = bold
+    ws.cell(r, 1, "Sam Cho, Managing Director").font = bold; r += 1
+    ws.cell(r, 1, "K-MARIS Energy & Solutions | Seoul, Korea | www.k-maris.com").font = Font(name="맑은 고딕", size=9)
     last_row = r
 
     # ── 원가/마진 열(F·G·H)은 기본 숨김(내부 코스팅용) — 필요시 사용자가 펼침 ──
@@ -1233,6 +1233,15 @@ def make_quotation_costing_xlsx(
     ws.page_margins.right = 0.3
     ws.page_margins.top = 0.4
     ws.page_margins.bottom = 0.4
+
+    # ── 전체 폰트 맑은 고딕으로 통일(각 셀의 크기·굵기·색·이탤릭은 유지) ─────
+    from copy import copy
+    for row in ws.iter_rows():
+        for cell in row:
+            if cell.font is not None and cell.font.name != "맑은 고딕":
+                f = copy(cell.font)
+                f.name = "맑은 고딕"
+                cell.font = f
 
     out = io.BytesIO()
     wb.save(out)
