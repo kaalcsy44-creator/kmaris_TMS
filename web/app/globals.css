@@ -8482,6 +8482,21 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 .act-age-inline.lv-warn { background: #fff3e0; color: #9a5b00; }
 .act-age-inline.lv-urgent { background: #fdeaea; color: #b42318; }
 .act-mx-closed { font-size: 10.5px; color: #b91c1c; margin-top: 2px; }
+/* 매트릭스 셀 안의 +Add 편집 폼 — 좁은 단계 열에 맞춰 글씨 2pt 축소(활동 로그 크기에
+   맞춤) + 폭 제한(열 밖으로 넘치지 않게). 다른 화면의 ActivityNoteForm 엔 영향 없음. */
+.act-mx-cell .act-add { gap: 4px; margin-top: 6px; }
+.act-mx-cell .act-add-row { gap: 4px; }
+.act-mx-cell .act-add input,
+.act-mx-cell .act-add select,
+.act-mx-cell .act-add-text,
+.act-mx-cell .act-party-custom { font-size: 10px; padding: 3px 5px; max-width: 100%; }
+.act-mx-cell .act-add-text { min-width: 0; }
+.act-mx-cell .act-party-custom { width: 88px; }
+.act-mx-cell .act-add-pic { min-width: 70px; }
+.act-mx-cell .act-seg.sm button { font-size: 9.5px; padding: 2px 6px; }
+.act-mx-cell .act-add-go { font-size: 10px; }
+.act-mx-cell .act-add-btn { font-size: 10px; padding: 3px 8px; }
+.act-mx-cell .act-check { font-size: 10px; }
 /* 경과일 배지(우측 하단) — 최신 활동 이후 경과일. 색상은 progress next-action 규칙과 동기화
    (warn ≥7d 노랑 / urgent ≥14d 빨강). */
 .act-age { position: absolute; right: 10px; bottom: 9px; font-size: 10px; font-weight: 700;

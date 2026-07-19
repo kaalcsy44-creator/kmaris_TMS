@@ -471,6 +471,9 @@ function DealStageRow({
   const byCol = STAGE_COLUMNS.map((c) =>
     acts.filter((a) => (a.kind === "note" || a.kind === "auto") && a.stage >= c.from && a.stage <= c.to),
   );
+  // "+ Add activity"는 현재 단계 열(보통 최신 활동이 있는 열)의 맨 아래에 둔다.
+  const addColRaw = STAGE_COLUMNS.findIndex((c) => row.stage >= c.from && row.stage <= c.to);
+  const addCol = addColRaw < 0 ? 0 : addColRaw;
   const infoCls = `act-mx-info${isService ? " service" : ""}${row.cancelled ? " cancelled" : ""}`;
 
   return (
@@ -499,16 +502,15 @@ function DealStageRow({
         {closeAct ? (
           <div className="act-mx-closed"><span className="act-tag close">closed</span> {closeAct.kind === "close" ? closeAct.reason || "Closed" : ""}</div>
         ) : null}
-        <div className="act-mx-info-foot">
-          {ageDays != null ? <span className={`act-age-inline lv-${ageLevel}`} title="Days since last activity">{ageDays}d</span> : null}
-          {!meeting ? <AddActivity rfqId={row.rfq_id} stage={row.stage} onAdded={onAdded} /> : null}
-        </div>
+        {ageDays != null ? (
+          <div className="act-mx-info-foot">
+            <span className={`act-age-inline lv-${ageLevel}`} title="Days since last activity">{ageDays}d</span>
+          </div>
+        ) : null}
       </div>
       {byCol.map((cacts, ci) => (
         <div key={ci} className={`act-mx-cell tone-${STAGE_COLUMNS[ci].tone}`}>
-          {cacts.length === 0 ? (
-            <span className="act-mx-empty">·</span>
-          ) : (
+          {cacts.length > 0 ? (
             <ul className="act-list">
               {cacts.map((a, i) =>
                 a.kind === "note" ? (
@@ -531,7 +533,12 @@ function DealStageRow({
                 ),
               )}
             </ul>
-          )}
+          ) : ci !== addCol ? (
+            <span className="act-mx-empty">·</span>
+          ) : null}
+          {ci === addCol && !meeting ? (
+            <AddActivity rfqId={row.rfq_id} stage={row.stage} onAdded={onAdded} />
+          ) : null}
         </div>
       ))}
     </>
