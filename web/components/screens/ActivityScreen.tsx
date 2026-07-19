@@ -167,9 +167,10 @@ function DateFilter({
       </button>
       {open ? (
         <div className="filt-menu">
-          <label className="filt-opt"><input type="radio" name="act-date" checked={value === "all"} onChange={() => { onValue("all"); setOpen(false); }} /><span>All dates</span></label>
-          <label className="filt-opt"><input type="radio" name="act-date" checked={value === "today"} onChange={() => { onValue("today"); setOpen(false); }} /><span>Today</span></label>
-          <label className="filt-opt"><input type="radio" name="act-date" checked={value === "date"} onChange={() => onValue("date")} /><span>Pick date</span></label>
+          {/* 시각은 다른 필터와 동일한 체크박스, 동작은 단일 선택(하나만 checked). */}
+          <label className="filt-opt"><input type="checkbox" checked={value === "all"} onChange={() => { onValue("all"); setOpen(false); }} /><span>All dates</span></label>
+          <label className="filt-opt"><input type="checkbox" checked={value === "today"} onChange={() => { onValue("today"); setOpen(false); }} /><span>Today</span></label>
+          <label className="filt-opt"><input type="checkbox" checked={value === "date"} onChange={() => onValue("date")} /><span>Pick date</span></label>
           {value === "date" ? (
             <input type="date" className="filt-date" value={pickDate} onChange={(e) => onPick(e.target.value)} />
           ) : null}
