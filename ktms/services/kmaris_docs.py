@@ -1348,7 +1348,8 @@ def _make_quotation_costing_pdf(data: Dict[str, Any], company: Dict[str, Any]) -
     # 엑셀과 동일: 회사명 가운데·진한 회색·비볼드, 주소/연락처 가운데·진한 회색.
     name_style = ParagraphStyle("KMQName", parent=s["base"], fontSize=16, leading=19,
                                 alignment=TA_CENTER, textColor=colors.HexColor("#404040"))
-    addr_style = ParagraphStyle("KMQAddr", parent=s["base"], fontSize=9, leading=11,
+    # 주소/연락처는 길어서 좁은 헤더 폭에 맞춰 작게(안 그러면 줄바꿈되어 파란 구분선과 겹침).
+    addr_style = ParagraphStyle("KMQAddr", parent=s["base"], fontSize=7.5, leading=10,
                                 alignment=TA_CENTER, textColor=colors.HexColor("#404040"))
     tag_style = ParagraphStyle("KMQTag", parent=s["base"], fontSize=8.5, leading=11,
                                alignment=TA_RIGHT, textColor=BLUE)
@@ -1364,7 +1365,7 @@ def _make_quotation_costing_pdf(data: Dict[str, Any], company: Dict[str, Any]) -
     ]
     tagline = _esc(company.get("tagline", "")).replace(". ", ".<br/>")
     head = Table([[logo, org_block, Paragraph(tagline, tag_style)]],
-                 colWidths=[26 * mm, 120 * mm, 44 * mm], rowHeights=[16 * mm])
+                 colWidths=[24 * mm, 128 * mm, 38 * mm], rowHeights=[17 * mm])
     head.setStyle(TableStyle([
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("LINEBELOW", (0, 0), (-1, -1), 1.2, BLUE),
