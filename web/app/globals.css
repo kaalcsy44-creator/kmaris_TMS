@@ -8628,6 +8628,9 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   border-radius: 6px; font-size: 12px; }
 /* 담당자(PIC) 드롭다운 — 사용자명이 들어갈 만큼만. */
 .act-add-pic { min-width: 96px; }
+/* 시각(시·분) 드롭다운 — 오름차순(위→아래 증가). 시/분 각각 좁게, 콜론으로 구분. */
+.act-time { min-width: 52px; text-align: center; }
+.act-time-colon { color: var(--muted); font-weight: 700; margin: 0 -2px; }
 /* Party 직접입력 텍스트 필드. */
 .act-party-custom { width: 110px; padding: 4px 6px; border: 1px solid var(--border, #d8dee6);
   border-radius: 6px; font-size: 12px; }

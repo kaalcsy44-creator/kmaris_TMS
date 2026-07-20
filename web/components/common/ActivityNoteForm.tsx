@@ -130,16 +130,49 @@ export default function ActivityNoteForm({
   const set = <K extends keyof ActivityNoteValue>(k: K, v: ActivityNoteValue[K]) =>
     onChange({ ...value, [k]: v });
 
+  // 일시 — 네이티브 datetime-local 의 시간 피커는 순서를 앱에서 제어할 수 없다(브라우저 담당).
+  // "아래로 갈수록 숫자가 커지게" 하려고 시·분을 직접 select 로 빼서 오름차순(00→23, 00→59)
+  // 으로 나열한다. 값은 그대로 "YYYY-MM-DDTHH:MM" 로 합쳐 저장한다.
+  const dt = value.datetime || "";
+  const dtDate = dt.slice(0, 10) || nowLocalInput().slice(0, 10);
+  const dtHour = dt.slice(11, 13) || "09";
+  const dtMin = dt.slice(14, 16) || "00";
+  const setDT = (date: string, hh: string, mm: string) => set("datetime", `${date}T${hh}:${mm}`);
+  const HOURS = Array.from({ length: 24 }, (_, h) => String(h).padStart(2, "0"));
+  const MINUTES = Array.from({ length: 60 }, (_, m) => String(m).padStart(2, "0"));
+
   return (
     <div className="act-add">
       {/* 1행: 일시 · From/To · Party · Channel · 담당자 · ★ */}
       <div className="act-add-row">
         <input
-          type="datetime-local"
-          value={value.datetime}
-          title="Activity time"
-          onChange={(e) => set("datetime", e.target.value)}
+          type="date"
+          className="act-date"
+          value={dtDate}
+          title="Activity date"
+          onChange={(e) => setDT(e.target.value || dtDate, dtHour, dtMin)}
         />
+        <select
+          className="act-time"
+          value={dtHour}
+          title="Hour (00–23)"
+          onChange={(e) => setDT(dtDate, e.target.value, dtMin)}
+        >
+          {HOURS.map((h) => (
+            <option key={h} value={h}>{h}</option>
+          ))}
+        </select>
+        <span className="act-time-colon">:</span>
+        <select
+          className="act-time"
+          value={dtMin}
+          title="Minute (00–59)"
+          onChange={(e) => setDT(dtDate, dtHour, e.target.value)}
+        >
+          {MINUTES.map((m) => (
+            <option key={m} value={m}>{m}</option>
+          ))}
+        </select>
         <div className="act-seg sm">
           {(["in", "out"] as const).map((d) => (
             <button
