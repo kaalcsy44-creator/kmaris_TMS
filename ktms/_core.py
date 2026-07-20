@@ -83,7 +83,7 @@ app = FastAPI(title="KTMS Admin API", docs_url=None, redoc_url=None)
 _ALLOWED_ORIGINS = {"http://localhost:3000", "http://127.0.0.1:3000"}
 _ALLOWED_ORIGIN_RE = re.compile(r"https://.*\.vercel\.app$")
 USD_KRW_RATE = 1543.41
-API_BUILD = "doc-nocache"
+API_BUILD = "xlsx-font-scheme-fix"
 
 
 def _allow_origin(origin: str | None) -> str | None:
