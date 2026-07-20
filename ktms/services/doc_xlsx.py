@@ -32,6 +32,49 @@ def _find_asset(*names: str) -> Optional[str]:
     return None
 
 
+def _apply_noto_font(wb: "Workbook") -> None:
+    """워크북 전체 글꼴을 Noto Sans KR 로 통일한다(모든 문서 Excel 공통).
+
+    핵심 주의점(견적 Excel 에서 크게 데인 부분):
+    1) 이름만 바꾸면 안 된다 — scheme("minor"/"major")·family 도 지워야 한다.
+       scheme 이 남으면 Excel 은 글꼴 이름을 무시하고 '테마 글꼴'을 쓰는데,
+       한글판 Excel 테마 기본 글꼴이 맑은 고딕이라 화면에 계속 맑은고딕으로 뜬다.
+    2) 병합 셀 비앵커 칸/빈 칸은 저장 시 개별 글꼴이 버려지고 기본 글꼴(fontId 0)
+       로 되돌아간다 → 기본 글꼴 레코드 자체를 Noto 로 교체.
+    3) 테마 major/minor 글꼴도 Noto 로 교체(혹시 남은 scheme 참조의 폴백까지 차단).
+    """
+    from copy import copy
+    for ws in wb.worksheets:
+        for row in ws.iter_rows():
+            for cell in row:
+                f0 = cell.font
+                if f0 is not None and (f0.name != "Noto Sans KR" or f0.scheme is not None):
+                    f = copy(f0)
+                    f.name = "Noto Sans KR"
+                    f.scheme = None
+                    f.family = None
+                    cell.font = f
+    try:
+        wb._fonts[0] = Font(name="Noto Sans KR", size=11, scheme=None, family=None)
+    except Exception:
+        pass
+    try:
+        th = wb.loaded_theme
+        if th:
+            th = th.decode("utf-8") if isinstance(th, bytes) else th
+            import re as _re
+            def _fix(block):
+                block = _re.sub(r'<a:latin typeface="[^"]*"', '<a:latin typeface="Noto Sans KR"', block)
+                block = _re.sub(r'<a:ea typeface="[^"]*"', '<a:ea typeface="Noto Sans KR"', block)
+                return block
+            for tag in ("majorFont", "minorFont"):
+                th = _re.sub(r'(<a:%s>)(.*?)(</a:%s>)' % (tag, tag),
+                             lambda m: m.group(1) + _fix(m.group(2)) + m.group(3), th, flags=_re.S)
+            wb.loaded_theme = th.encode("utf-8")
+    except Exception:
+        pass
+
+
 def _compose_marks(sh: Dict[str, Any]) -> str:
     """구조화 Shipping Marks(sm_*)를 여러 줄 문자열로 합성 — 프론트 composeShippingMarks 와
     동일 규약(무게·치수 포함). 저장된 shipping_marks 문자열이 없거나 비어도 항상 재구성한다."""
@@ -333,6 +376,7 @@ def make_commercial_invoice_xlsx(
     ws.page_margins.top = 0.3
     ws.page_margins.bottom = 0.3
 
+    _apply_noto_font(wb)   # 전체 글꼴 Noto Sans KR 통일(모든 문서 Excel 공통)
     out = io.BytesIO()
     wb.save(out)
     return out.getvalue()
@@ -621,6 +665,7 @@ def make_packing_list_xlsx(
     ws.page_margins.top = 0.3
     ws.page_margins.bottom = 0.3
 
+    _apply_noto_font(wb)   # 전체 글꼴 Noto Sans KR 통일(모든 문서 Excel 공통)
     out = io.BytesIO()
     wb.save(out)
     return out.getvalue()
@@ -780,6 +825,7 @@ def make_shipping_mark_xlsx(
             font=normal, align=left)
         bd(r, 1, r, NCOL); ws.row_dimensions[r].height = 20
 
+    _apply_noto_font(wb)   # 전체 글꼴 Noto Sans KR 통일(모든 문서 Excel 공통)
     out = io.BytesIO()
     wb.save(out)
     return out.getvalue()
@@ -934,6 +980,7 @@ def make_document_xlsx(
 
     ws.freeze_panes = f"A{HROW + 1}"
 
+    _apply_noto_font(wb)   # 전체 글꼴 Noto Sans KR 통일(모든 문서 Excel 공통)
     out = io.BytesIO()
     wb.save(out)
     return out.getvalue()
@@ -1249,46 +1296,7 @@ def make_quotation_costing_xlsx(
     ws.page_margins.top = 0.4
     ws.page_margins.bottom = 0.4
 
-    # ── 전체 폰트 Noto Sans KR으로 통일(각 셀의 크기·굵기·색·이탤릭은 유지) ─────
-    # ⚠ scheme("minor"/"major")를 반드시 지운다. scheme 이 남아 있으면 Excel 은
-    #   글꼴 이름(Noto Sans KR)을 무시하고 '테마 글꼴'을 쓰는데, 한글판 Excel 의
-    #   테마 기본 글꼴이 맑은 고딕이라 이름만 바꾸면 화면엔 계속 맑은 고딕으로 뜬다.
-    from copy import copy
-    for row in ws.iter_rows():
-        for cell in row:
-            f0 = cell.font
-            if f0 is not None and (f0.name != "Noto Sans KR" or f0.scheme is not None):
-                f = copy(f0)
-                f.name = "Noto Sans KR"
-                f.scheme = None
-                f.family = None
-                cell.font = f
-    # openpyxl은 병합 셀의 비앵커 칸(과 손대지 않은 빈 칸)의 개별 글꼴을 저장 시
-    # 버리고 기본 글꼴(fontId 0)로 되돌린다. 그래서 위 루프만으로는 병합 칸이
-    # 남는다. 기본 글꼴 레코드 자체를 Noto Sans KR(scheme 없음)로 교체해 병합·빈
-    # 칸까지 완전히 통일한다.
-    try:
-        wb._fonts[0] = Font(name="Noto Sans KR", size=11, scheme=None, family=None)
-    except Exception:
-        pass
-    # 테마 자체의 소수(minor)/대(major) 글꼴도 Noto 로 바꿔, 혹시 scheme 글꼴을
-    # 참조하는 잔여 요소가 있어도 맑은 고딕으로 폴백하지 않게 한다.
-    try:
-        th = wb.loaded_theme
-        if th:
-            th = th.decode("utf-8") if isinstance(th, bytes) else th
-            import re as _re
-            def _fix(block):
-                block = _re.sub(r'<a:latin typeface="[^"]*"', '<a:latin typeface="Noto Sans KR"', block)
-                block = _re.sub(r'<a:ea typeface="[^"]*"', '<a:ea typeface="Noto Sans KR"', block)
-                return block
-            for tag in ("majorFont", "minorFont"):
-                th = _re.sub(r'(<a:%s>)(.*?)(</a:%s>)' % (tag, tag),
-                             lambda m: m.group(1) + _fix(m.group(2)) + m.group(3), th, flags=_re.S)
-            wb.loaded_theme = th.encode("utf-8")
-    except Exception:
-        pass
-
+    _apply_noto_font(wb)   # 전체 글꼴 Noto Sans KR 통일(모든 문서 Excel 공통)
     out = io.BytesIO()
     wb.save(out)
     return out.getvalue()
