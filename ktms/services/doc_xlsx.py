@@ -1164,7 +1164,7 @@ def make_quotation_costing_xlsx(
     trow = last + 1
     has_rows = len(raw_items) > 0
     # "Total" 라벨 — A~E 병합, 가운데. 행 전체 글자 크기 12.
-    bold16 = Font(name="맑은 고딕", bold=True, size=12)
+    bold16 = Font(name="Noto Sans KR", bold=True, size=12)
     merge(trow, 1, trow, 5)
     tc = ws.cell(trow, 1, "Total"); tc.font = bold16; tc.alignment = center
     for col in (1, 2, 3, 4, 5, 11, 12):
@@ -1229,7 +1229,7 @@ def make_quotation_costing_xlsx(
     ws.cell(r, 1, "Sam Cho, Managing Director").font = bold; r += 1
     merge(r, 1, r, NCOL)
     fc = ws.cell(r, 1, "K-MARIS Energy & Solutions | Seoul, Korea | www.k-maris.com")
-    fc.font = Font(name="맑은 고딕", size=9); fc.alignment = center
+    fc.font = Font(name="Noto Sans KR", size=9); fc.alignment = center
     last_row = r
 
     # ── 원가/마진 열(F·G·H)은 기본 숨김(내부 코스팅용) — 필요시 사용자가 펼침 ──
@@ -1248,13 +1248,13 @@ def make_quotation_costing_xlsx(
     ws.page_margins.top = 0.4
     ws.page_margins.bottom = 0.4
 
-    # ── 전체 폰트 맑은 고딕으로 통일(각 셀의 크기·굵기·색·이탤릭은 유지) ─────
+    # ── 전체 폰트 Noto Sans KR으로 통일(각 셀의 크기·굵기·색·이탤릭은 유지) ─────
     from copy import copy
     for row in ws.iter_rows():
         for cell in row:
-            if cell.font is not None and cell.font.name != "맑은 고딕":
+            if cell.font is not None and cell.font.name != "Noto Sans KR":
                 f = copy(cell.font)
-                f.name = "맑은 고딕"
+                f.name = "Noto Sans KR"
                 cell.font = f
 
     out = io.BytesIO()
