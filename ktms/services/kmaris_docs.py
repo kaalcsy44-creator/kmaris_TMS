@@ -57,6 +57,21 @@ def _register_default_font() -> tuple[str, str]:
 
 DEFAULT_FONT, DEFAULT_BOLD_FONT = _register_default_font()
 
+# ReportLab의 인라인 <b> 마크업은 폰트 "패밀리"에 bold 매핑이 등록돼 있어야만
+# 실제 굵게 렌더된다. KMBaseFont/KMBoldFont는 개별 폰트로만 등록돼 있어서 매핑이
+# 없으면 <b>가 무시된다(정보 박스 라벨 등이 안 굵어짐). 여기서 패밀리를 묶는다.
+try:
+    from reportlab.pdfbase.pdfmetrics import registerFontFamily
+    registerFontFamily(
+        DEFAULT_FONT,
+        normal=DEFAULT_FONT,
+        bold=DEFAULT_BOLD_FONT,
+        italic=DEFAULT_FONT,
+        boldItalic=DEFAULT_BOLD_FONT,
+    )
+except Exception:
+    pass
+
 NAVY = colors.HexColor("#0B1D3A")
 BLUE = colors.HexColor("#0055A8")
 LIGHT_BLUE = colors.HexColor("#EAF3FF")
