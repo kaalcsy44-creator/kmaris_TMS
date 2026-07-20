@@ -1221,7 +1221,8 @@ def make_quotation_costing_xlsx(
         try:
             from openpyxl.drawing.image import Image as XLImage
             img = XLImage(sig); img.width = 150; img.height = 52
-            ws.add_image(img, f"A{r + 1}")
+            # 서명이 아래 서명란(밑줄) 바로 위에 앉도록 한 행 내려서 배치.
+            ws.add_image(img, f"A{r + 2}")
         except Exception:
             pass
     r += 4

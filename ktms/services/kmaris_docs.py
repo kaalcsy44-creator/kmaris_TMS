@@ -1499,7 +1499,10 @@ def _make_quotation_costing_pdf(data: Dict[str, Any], company: Dict[str, Any]) -
     sig_line.hAlign = "LEFT"
     story.append(sig_line)
     story.append(_p("<b>Sam Cho, Managing Director</b>", s["base"]))
-    story.append(_p("K-MARIS Energy & Solutions | Seoul, Korea | www.k-maris.com", s["small"]))
+    # 하단 회사 푸터 — 엑셀 푸터처럼 가운데 정렬.
+    foot_center = ParagraphStyle("KMQFoot", parent=s["small"], alignment=TA_CENTER)
+    story.append(Spacer(1, 2 * mm))
+    story.append(_p("K-MARIS Energy & Solutions | Seoul, Korea | www.k-maris.com", foot_center))
 
     doc.build(story, onFirstPage=_footer, onLaterPages=_footer)
     return buffer.getvalue()
