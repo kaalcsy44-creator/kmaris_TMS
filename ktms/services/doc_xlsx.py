@@ -1256,6 +1256,14 @@ def make_quotation_costing_xlsx(
                 f = copy(cell.font)
                 f.name = "Noto Sans KR"
                 cell.font = f
+    # openpyxl은 병합 셀의 비앵커 칸(과 손대지 않은 빈 칸)의 개별 글꼴을 저장 시
+    # 버리고 기본 글꼴(fontId 0 = Calibri)로 되돌린다. 그래서 위 루프만으로는
+    # 병합 칸이 Calibri로 남는다. 기본 글꼴 레코드 자체를 Noto Sans KR로 교체해
+    # 병합·빈 칸까지 완전히 통일한다.
+    try:
+        wb._fonts[0] = Font(name="Noto Sans KR", size=11)
+    except Exception:
+        pass
 
     out = io.BytesIO()
     wb.save(out)
