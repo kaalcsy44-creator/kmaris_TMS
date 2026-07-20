@@ -247,6 +247,82 @@ def _p(text: Any, style: ParagraphStyle) -> Paragraph:
     return Paragraph(safe, style)
 
 
+_ASSET_ROOTS = [Path(__file__).resolve().parent.parent / "templates",
+                Path(__file__).resolve().parent.parent / "config",
+                Path(__file__).resolve().parents[2]]
+
+
+def _pdf_asset(*names: str):
+    """문서 자산(로고·서명)을 templates/·config/·저장소 루트에서 찾는다.
+    이름 우선순위가 폴더보다 우선(앞선 아이콘 이름이 있으면 먼저 선택)."""
+    for name in names:
+        for root in _ASSET_ROOTS:
+            cand = root / name
+            if cand.exists():
+                return cand
+    return None
+
+
+def _pdf_image(path, max_w, max_h):
+    if not path:
+        return ""
+    try:
+        from PIL import Image as PILImage
+        with PILImage.open(path) as src:
+            w, h = src.size
+        scale = min(max_w / w, max_h / h)
+        return Image(str(path), width=w * scale, height=h * scale)
+    except Exception:
+        return ""
+
+
+def _letterhead(company: Dict[str, Any], doc_title: str, s: Dict[str, ParagraphStyle],
+                width: float = 190 * mm) -> List[Any]:
+    """모든 문서 PDF 공통 레터헤드 + 중앙 타이틀(견적서와 동일한 비주얼).
+
+    좌: 아이콘 로고 / 중: 회사명(가운데·진회색)·주소·연락처 / 우: 슬로건(블루·우측),
+    그 아래 파란 구분선. 이어서 중앙 정렬 문서 타이틀.
+    width 는 본문 폭(세로 A4=190mm, 가로 A4≈273mm) — 로고·슬로건 폭은 고정하고
+    가운데(회사정보) 칸만 늘려 어떤 방향에서도 꽉 차게 한다.
+    """
+    def _esc(t: str) -> str:
+        return (t or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    title_style = ParagraphStyle("KMHTitle", parent=s["section"], fontName=DEFAULT_BOLD_FONT,
+                                 fontSize=17, leading=20, alignment=TA_CENTER, textColor=NAVY)
+    logo = _pdf_image(_pdf_asset("logo_icon.jpg", "logo_icon.png", "logo_K-maris.png", "logo.png", "logo.jpg"), 24 * mm, 15 * mm)
+    name_style = ParagraphStyle("KMHName", parent=s["base"], fontSize=16, leading=19,
+                                alignment=TA_CENTER, textColor=colors.HexColor("#404040"))
+    addr_style = ParagraphStyle("KMHAddr", parent=s["base"], fontSize=7.5, leading=10,
+                                alignment=TA_CENTER, textColor=colors.HexColor("#404040"))
+    tag_style = ParagraphStyle("KMHTag", parent=s["base"], fontSize=8.5, leading=11,
+                               alignment=TA_RIGHT, textColor=BLUE)
+    _addr = company.get("address_en") or company.get("address") or ""
+    _bits = []
+    if company.get("phone"): _bits.append(f"Tel: {company['phone']}")
+    if company.get("sales_email"): _bits.append(company["sales_email"])
+    if company.get("website"): _bits.append(company["website"])
+    org_block = [
+        Paragraph(_esc(company.get("company_name_en", "K-MARIS Energy & Solutions Co., Ltd.")), name_style),
+        Paragraph(_esc(_addr), addr_style),
+        Paragraph(_esc("   |   ".join(_bits)), addr_style),
+    ]
+    tagline = _esc(company.get("tagline", "")).replace(". ", ".<br/>")
+    head = Table([[logo, org_block, Paragraph(tagline, tag_style)]],
+                 colWidths=[24 * mm, width - 62 * mm, 38 * mm], rowHeights=[17 * mm])
+    head.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LINEBELOW", (0, 0), (-1, -1), 1.2, BLUE),
+        ("LEFTPADDING", (0, 0), (0, 0), 0),
+    ]))
+    return [head, Spacer(1, 4 * mm), Paragraph(doc_title, title_style), Spacer(1, 4 * mm)]
+
+
+def _footer_center(s: Dict[str, ParagraphStyle]) -> Paragraph:
+    """모든 문서 PDF 공통 하단 회사 푸터 — 가운데 정렬(엑셀 푸터와 동일)."""
+    fc = ParagraphStyle("KMHFoot", parent=s["small"], alignment=TA_CENTER)
+    return _p("K-MARIS Energy & Solutions | Seoul, Korea | www.k-maris.com", fc)
+
+
 def _header(company: Dict[str, Any], doc_title: str, logo_path: Optional[str] = None):
     s = _styles()
     left_lines = [
@@ -699,26 +775,7 @@ def _make_commercial_invoice_pdf(data: Dict[str, Any], company: Dict[str, Any]) 
         return t
 
     story = []
-    title_style = ParagraphStyle("KMCITitle", parent=s["section"], fontName=DEFAULT_BOLD_FONT,
-                                 fontSize=19, leading=22, alignment=TA_CENTER, textColor=NAVY)
-    logo = image(asset("logo_icon.jpg", "logo_icon.png", "logo_K-maris.png", "logo.png", "logo.jpg"), 32 * mm, 11 * mm)
-    title = Table([[logo, Paragraph("COMMERCIAL INVOICE", title_style), ""]],
-                  colWidths=[38 * mm, 114 * mm, 38 * mm], rowHeights=[16 * mm])
-    title.setStyle(TableStyle([("TEXTCOLOR", (0, 0), (-1, -1), NAVY),
-                               ("ALIGN", (0, 0), (-1, -1), "CENTER"), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                               ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
-                               ("FONTNAME", (0, 0), (-1, -1), DEFAULT_BOLD_FONT),
-                               ("FONTSIZE", (0, 0), (-1, -1), 17)]))
-    story.append(title)
-    banner_text = "   |   ".join(x for x in [company.get("company_name_en", "K-MARIS Energy & Solutions Co., Ltd."),
-                                               company.get("sales_email", ""), company.get("website", "")] if x)
-    banner_style = ParagraphStyle("KMCIBanner", parent=s["section"], fontName=DEFAULT_FONT,
-                                  fontSize=8.2, leading=10, alignment=TA_CENTER,
-                                  textColor=colors.white)
-    banner = Table([[Paragraph(banner_text, banner_style)]], colWidths=[page_width], rowHeights=[6 * mm])
-    banner.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), BLUE), ("TEXTCOLOR", (0, 0), (-1, -1), colors.white),
-                                ("ALIGN", (0, 0), (-1, -1), "CENTER"), ("VALIGN", (0, 0), (-1, -1), "MIDDLE")]))
-    story += [banner, Spacer(1, 3 * mm)]
+    story += _letterhead(company, "COMMERCIAL INVOICE", s)
 
     address = company.get("address_en") or company.get("address", "")
     address_top, address_bottom = address, ""
@@ -850,6 +907,8 @@ def _make_commercial_invoice_pdf(data: Dict[str, Any], company: Dict[str, Any]) 
                               ("TOPPADDING", (0, 0), (-1, -1), 0),
                               ("BOTTOMPADDING", (0, 0), (-1, -1), 0)]))
     story.append(sign)
+    story.append(Spacer(1, 2 * mm))
+    story.append(_footer_center(s))
     doc.build(story, onFirstPage=_footer, onLaterPages=_footer)
     return buffer.getvalue()
 
@@ -920,22 +979,8 @@ def _make_shipping_mark_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> by
         return Paragraph(text.replace("\n", "<br/>"), s[style])
 
     story = []
-    # ── 제목 + 회사 배너 (CI 와 동일 톤) ──────────────────────────────────
-    title_style = ParagraphStyle("KMSMTitle", parent=s["section"], fontName=DEFAULT_BOLD_FONT,
-                                 fontSize=17, leading=20, alignment=TA_CENTER, textColor=NAVY)
-    logo = image(asset("logo_icon.jpg", "logo_icon.png", "logo_K-maris.png", "logo.png", "logo.jpg"), 32 * mm, 11 * mm)
-    title = Table([[logo, Paragraph("SHIPPING MARK", title_style), ""]],
-                  colWidths=[38 * mm, 114 * mm, 38 * mm], rowHeights=[16 * mm])
-    title.setStyle(TableStyle([("ALIGN", (0, 0), (-1, -1), "CENTER"), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                               ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4)]))
-    story.append(title)
-    banner_text = "   |   ".join(x for x in [company.get("company_name_en", "K-MARIS Energy & Solutions Co., Ltd."),
-                                             company.get("sales_email", ""), company.get("website", "")] if x)
-    banner_style = ParagraphStyle("KMSMBanner", parent=s["section"], fontName=DEFAULT_FONT,
-                                  fontSize=8.2, leading=10, alignment=TA_CENTER, textColor=colors.white)
-    banner = Table([[Paragraph(banner_text, banner_style)]], colWidths=[page_width], rowHeights=[6 * mm])
-    banner.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), BLUE), ("VALIGN", (0, 0), (-1, -1), "MIDDLE")]))
-    story += [banner, Spacer(1, 3 * mm)]
+    # ── 헤더: 공통 레터헤드 + 중앙 타이틀 ────────────────────────────────
+    story += _letterhead(company, "SHIPPING MARK", s)
 
     # ── 참조 정보 스트립 ─────────────────────────────────────────────────
     ref_rows = [[p("REF. NO.", "section"), p(shipping.get("sm_ref_no", "")),
@@ -1022,6 +1067,8 @@ def _make_shipping_mark_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> by
                                    ("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, 0), (-1, -1), 5)]))
         story += [Spacer(1, 2 * mm), h_tbl]
 
+    story.append(Spacer(1, 2 * mm))
+    story.append(_footer_center(s))
     doc.build(story, onFirstPage=_footer, onLaterPages=_footer)
     return buffer.getvalue()
 
@@ -1087,26 +1134,7 @@ def _make_packing_list_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> byt
         return t
 
     story = []
-    title_style = ParagraphStyle("KMPLTitle", parent=s["section"], fontName=DEFAULT_BOLD_FONT,
-                                 fontSize=19, leading=22, alignment=TA_CENTER, textColor=NAVY)
-    logo = image(asset("logo_icon.jpg", "logo_icon.png", "logo_K-maris.png", "logo.png", "logo.jpg"), 32 * mm, 11 * mm)
-    title = Table([[logo, Paragraph("PACKING LIST", title_style), ""]],
-                  colWidths=[38 * mm, 114 * mm, 38 * mm], rowHeights=[16 * mm])
-    title.setStyle(TableStyle([("TEXTCOLOR", (0, 0), (-1, -1), NAVY),
-                               ("ALIGN", (0, 0), (-1, -1), "CENTER"), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                               ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
-                               ("FONTNAME", (0, 0), (-1, -1), DEFAULT_BOLD_FONT),
-                               ("FONTSIZE", (0, 0), (-1, -1), 17)]))
-    story.append(title)
-    banner_text = "   |   ".join(x for x in [company.get("company_name_en", "K-MARIS Energy & Solutions Co., Ltd."),
-                                               company.get("sales_email", ""), company.get("website", "")] if x)
-    banner_style = ParagraphStyle("KMPLBanner", parent=s["section"], fontName=DEFAULT_FONT,
-                                  fontSize=8.2, leading=10, alignment=TA_CENTER,
-                                  textColor=colors.white)
-    banner = Table([[Paragraph(banner_text, banner_style)]], colWidths=[page_width], rowHeights=[6 * mm])
-    banner.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), BLUE), ("TEXTCOLOR", (0, 0), (-1, -1), colors.white),
-                                ("ALIGN", (0, 0), (-1, -1), "CENTER"), ("VALIGN", (0, 0), (-1, -1), "MIDDLE")]))
-    story += [banner, Spacer(1, 3 * mm)]
+    story += _letterhead(company, "PACKING LIST", s)
 
     address = company.get("address_en") or company.get("address", "")
     address_top, address_bottom = address, ""
@@ -1262,6 +1290,8 @@ def _make_packing_list_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> byt
                               ("TOPPADDING", (0, 0), (-1, -1), 0),
                               ("BOTTOMPADDING", (0, 0), (-1, -1), 0)]))
     story += [Spacer(1, 2 * mm), sign]
+    story.append(Spacer(1, 2 * mm))
+    story.append(_footer_center(s))
     doc.build(story, onFirstPage=_footer, onLaterPages=_footer)
     return buffer.getvalue()
 
@@ -1354,39 +1384,8 @@ def _make_quotation_costing_pdf(data: Dict[str, Any], company: Dict[str, Any]) -
 
     story: List[Any] = []
 
-    # ── 헤더: 로고 + 회사정보(이름·주소·연락처) + 태그라인 ─────────────────
-    def _esc(t: str) -> str:
-        return (t or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-    title_style = ParagraphStyle("KMQTitle", parent=s["section"], fontName=DEFAULT_BOLD_FONT,
-                                 fontSize=17, leading=20, alignment=TA_CENTER, textColor=NAVY)
-    logo = image(asset("logo_icon.jpg", "logo_icon.png", "logo_K-maris.png", "logo.png", "logo.jpg"), 24 * mm, 15 * mm)
-    # 엑셀과 동일: 회사명 가운데·진한 회색·비볼드, 주소/연락처 가운데·진한 회색.
-    name_style = ParagraphStyle("KMQName", parent=s["base"], fontSize=16, leading=19,
-                                alignment=TA_CENTER, textColor=colors.HexColor("#404040"))
-    # 주소/연락처는 길어서 좁은 헤더 폭에 맞춰 작게(안 그러면 줄바꿈되어 파란 구분선과 겹침).
-    addr_style = ParagraphStyle("KMQAddr", parent=s["base"], fontSize=7.5, leading=10,
-                                alignment=TA_CENTER, textColor=colors.HexColor("#404040"))
-    tag_style = ParagraphStyle("KMQTag", parent=s["base"], fontSize=8.5, leading=11,
-                               alignment=TA_RIGHT, textColor=BLUE)
-    _addr = company.get("address_en") or company.get("address") or ""
-    _bits = []
-    if company.get("phone"): _bits.append(f"Tel: {company['phone']}")
-    if company.get("sales_email"): _bits.append(company["sales_email"])
-    if company.get("website"): _bits.append(company["website"])
-    org_block = [
-        Paragraph(_esc(company.get("company_name_en", "K-MARIS Energy & Solutions Co., Ltd.")), name_style),
-        Paragraph(_esc(_addr), addr_style),
-        Paragraph(_esc("   |   ".join(_bits)), addr_style),
-    ]
-    tagline = _esc(company.get("tagline", "")).replace(". ", ".<br/>")
-    head = Table([[logo, org_block, Paragraph(tagline, tag_style)]],
-                 colWidths=[24 * mm, 128 * mm, 38 * mm], rowHeights=[17 * mm])
-    head.setStyle(TableStyle([
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("LINEBELOW", (0, 0), (-1, -1), 1.2, BLUE),
-        ("LEFTPADDING", (0, 0), (0, 0), 0),
-    ]))
-    story += [head, Spacer(1, 4 * mm), Paragraph("QUOTATION / COSTING SHEET", title_style), Spacer(1, 4 * mm)]
+    # ── 헤더: 공통 레터헤드(로고 + 회사정보 + 슬로건) + 중앙 타이틀 ──────────
+    story += _letterhead(company, "QUOTATION / COSTING SHEET", s)
 
     # ── 정보 박스(2단) ─────────────────────────────────────────────────
     left_rows = [
@@ -1499,10 +1498,9 @@ def _make_quotation_costing_pdf(data: Dict[str, Any], company: Dict[str, Any]) -
     sig_line.hAlign = "LEFT"
     story.append(sig_line)
     story.append(_p("<b>Sam Cho, Managing Director</b>", s["base"]))
-    # 하단 회사 푸터 — 엑셀 푸터처럼 가운데 정렬.
-    foot_center = ParagraphStyle("KMQFoot", parent=s["small"], alignment=TA_CENTER)
+    # 하단 회사 푸터 — 공통(엑셀 푸터처럼 가운데 정렬).
     story.append(Spacer(1, 2 * mm))
-    story.append(_p("K-MARIS Energy & Solutions | Seoul, Korea | www.k-maris.com", foot_center))
+    story.append(_footer_center(s))
 
     doc.build(story, onFirstPage=_footer, onLaterPages=_footer)
     return buffer.getvalue()
@@ -1563,16 +1561,8 @@ def _make_vendor_rfq_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> bytes
 
     story: List[Any] = []
 
-    # ── 헤더: 로고 + 타이틀 ──────────────────────────────────────────────
-    title_style = ParagraphStyle("KMRFQTitle", parent=s["section"], fontName=DEFAULT_BOLD_FONT,
-                                 fontSize=17, leading=20, alignment=TA_CENTER, textColor=NAVY)
-    logo = image(asset("logo_icon.jpg", "logo_icon.png", "logo_K-maris.png", "logo.png", "logo.jpg"), 34 * mm, 12 * mm)
-    org_style = ParagraphStyle("KMRFQOrg", parent=s["base"], fontName=DEFAULT_BOLD_FONT,
-                               fontSize=11, alignment=TA_RIGHT, textColor=BLUE)
-    head = Table([[logo, Paragraph("K-MARIS ENERGY &amp; SOLUTIONS", org_style)]],
-                 colWidths=[100 * mm, 90 * mm], rowHeights=[14 * mm])
-    head.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LINEBELOW", (0, 0), (-1, -1), 1.2, BLUE)]))
-    story += [head, Spacer(1, 4 * mm), Paragraph("REQUEST FOR QUOTATION", title_style), Spacer(1, 4 * mm)]
+    # ── 헤더: 공통 레터헤드 + 중앙 타이틀 ────────────────────────────────
+    story += _letterhead(company, "REQUEST FOR QUOTATION", s)
 
     # ── 정보 박스(2단) — 발주서와 동일 스타일 ─────────────────────────────
     incoterms = terms.get("incoterms", "") or "CNF Busan port"
@@ -1668,7 +1658,8 @@ def _make_vendor_rfq_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> bytes
         story.append(sign_img)
     story.append(_p("________________________", s["base"]))
     story.append(_p("<b>Sam Cho, Managing Director</b>", s["base"]))
-    story.append(_p("K-MARIS Energy & Solutions | Seoul, Korea | www.k-maris.com", s["small"]))
+    story.append(Spacer(1, 2 * mm))
+    story.append(_footer_center(s))
 
     doc.build(story, onFirstPage=_footer, onLaterPages=_footer)
     return buffer.getvalue()
@@ -1729,16 +1720,8 @@ def _make_purchase_order_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> b
 
     story: List[Any] = []
 
-    # ── 헤더: 로고 + 타이틀 ──────────────────────────────────────────────
-    title_style = ParagraphStyle("KMPOTitle", parent=s["section"], fontName=DEFAULT_BOLD_FONT,
-                                 fontSize=17, leading=20, alignment=TA_CENTER, textColor=NAVY)
-    logo = image(asset("logo_icon.jpg", "logo_icon.png", "logo_K-maris.png", "logo.png", "logo.jpg"), 34 * mm, 12 * mm)
-    org_style = ParagraphStyle("KMPOOrg", parent=s["base"], fontName=DEFAULT_BOLD_FONT,
-                               fontSize=11, alignment=TA_RIGHT, textColor=BLUE)
-    head = Table([[logo, Paragraph("K-MARIS ENERGY &amp; SOLUTIONS", org_style)]],
-                 colWidths=[100 * mm, 90 * mm], rowHeights=[14 * mm])
-    head.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LINEBELOW", (0, 0), (-1, -1), 1.2, BLUE)]))
-    story += [head, Spacer(1, 4 * mm), Paragraph("PURCHASE ORDER", title_style), Spacer(1, 4 * mm)]
+    # ── 헤더: 공통 레터헤드 + 중앙 타이틀 ────────────────────────────────
+    story += _letterhead(company, "PURCHASE ORDER", s)
 
     # ── 정보 박스(2단) ─────────────────────────────────────────────────
     incoterms = terms.get("incoterms", "")
@@ -1850,7 +1833,8 @@ def _make_purchase_order_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> b
         story.append(sign_img)
     story.append(_p("________________________", s["base"]))
     story.append(_p("<b>Sam Cho, Managing Director</b>", s["base"]))
-    story.append(_p("K-MARIS Energy & Solutions | Seoul, Korea | www.k-maris.com", s["small"]))
+    story.append(Spacer(1, 2 * mm))
+    story.append(_footer_center(s))
 
     doc.build(story, onFirstPage=_footer, onLaterPages=_footer)
     return buffer.getvalue()
@@ -1886,8 +1870,7 @@ def make_pdf(doc_type: str, data: Dict[str, Any], company: Optional[Dict[str, An
     )
     s = _styles()
     story = []
-    story.append(_header(payload["company"], DOC_TITLES[doc_type], logo_path))
-    story.append(Spacer(1, 5 * mm))
+    story += _letterhead(payload["company"], DOC_TITLES[doc_type], s, width=273 * mm)
     story.append(_info_tables(payload, doc_type))
     story.append(Spacer(1, 5 * mm))
     story.append(_items_table(payload, doc_type))
@@ -1916,6 +1899,8 @@ def make_pdf(doc_type: str, data: Dict[str, Any], company: Optional[Dict[str, An
         )
     )
     story.append(sign)
+    story.append(Spacer(1, 2 * mm))
+    story.append(_footer_center(s))
     doc.build(story, onFirstPage=_footer, onLaterPages=_footer)
     return buffer.getvalue()
 
