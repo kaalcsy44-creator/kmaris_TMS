@@ -333,7 +333,11 @@ def quotation_pdf(qtn_id: int, doc_type: str = "quotation"):
         return Response(
             content=pdf,
             media_type="application/pdf",
-            headers={"Content-Disposition": f'attachment; filename="{qtn.qtn_no}.pdf"'},
+            headers={
+                "Content-Disposition": f'attachment; filename="{qtn.qtn_no}.pdf"',
+                "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+                "Pragma": "no-cache",
+            },
         )
     finally:
         s.close()
@@ -351,7 +355,13 @@ def quotation_xlsx(qtn_id: int, doc_type: str = "quotation"):
         return Response(
             content=xlsx,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            headers={"Content-Disposition": f'attachment; filename="{qtn.qtn_no}.xlsx"'},
+            headers={
+                "Content-Disposition": f'attachment; filename="{qtn.qtn_no}.xlsx"',
+                # 문서는 편집 때마다 새로 생성되므로 브라우저가 옛 파일을 캐시해
+                # 다시 내려주지 않도록 캐시를 완전히 끈다.
+                "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+                "Pragma": "no-cache",
+            },
         )
     finally:
         s.close()
