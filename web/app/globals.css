@@ -8838,7 +8838,9 @@ button.ov-tl-stage:hover { background: color-mix(in srgb, var(--ov-tone) 12%, tr
   display: flex; align-items: flex-start; gap: 8px; width: 100%;
   padding: 3px 4px 3px 8px; font-size: var(--ov-t-body); color: #405168; line-height: 1.45;
 }
-.ov-tl-rowlink { border: 0; background: none; font: inherit; color: #405168;
+/* font: inherit 는 버튼의 font-size 까지 상위(큰 기본값)로 되돌려 라벨이 커졌다.
+   family 만 상속하고 크기는 위 규칙의 body 급을 그대로 쓴다(로그 내용과 동일 크기). */
+.ov-tl-rowlink { border: 0; background: none; font-family: inherit; font-weight: inherit; color: #405168;
   text-align: left; cursor: pointer; text-decoration: none; border-radius: 6px; }
 .ov-tl-rowlink:hover { background: color-mix(in srgb, var(--ov-tone) 8%, #fff); }
 .ov-tl-acts li.star .ov-tl-row { background: #fff9e8; border-radius: 4px; }
