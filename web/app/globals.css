@@ -8817,11 +8817,11 @@ button.ov-tl-stage:hover { background: color-mix(in srgb, var(--ov-tone) 12%, tr
 .ov-tl-party { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ov-tl-val { color: #47536b; min-width: 0; overflow: hidden; text-overflow: ellipsis;
   white-space: nowrap; }
-/* 2단계(RFQ Sent) 다중 발송 — 벤더별로 상대·발신일을 한 줄씩. */
-.ov-tl-sends { list-style: none; margin: 0; padding: 0 4px 4px 36px; font-size: var(--ov-t-meta);
+/* 2단계(RFQ Sent) 다중 발송 — 벤더별로 상대·발신일을 한 줄씩.
+   들여쓰기·날짜폭·간격을 노트 줄(.ov-tl-notes)과 똑같이 맞춰 날짜·내용 열이 정렬되게 한다. */
+.ov-tl-sends { list-style: none; margin: 0; padding: 1px 5px 4px 40px; font-size: var(--ov-t-meta);
   color: var(--muted); }
-.ov-tl-sends li { display: flex; gap: 6px; padding: 1px 0; min-width: 0; }
-.ov-tl-sends .ov-tl-ndate { width: auto; }
+.ov-tl-sends li { display: flex; gap: 8px; padding: 1px 0; min-width: 0; }
 /* 완료 = 칸 색 점 + 선, 현재 = 흰 카드로 띄움, 미완료 = 흐리게.
    현재 단계 바탕이 흰색인 건 칸 톤 위에서 "떠 보이게" 하려는 것 — 색을 하나 더 쓰면
    칸 색과 부딪힌다. */
