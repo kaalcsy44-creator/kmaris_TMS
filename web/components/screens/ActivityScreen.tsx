@@ -736,9 +736,15 @@ function NoteRow({
           const dl = n.direction === "in" ? "from" : n.direction === "out" ? "to" : "";
           const who = [dl, n.party].filter(Boolean).join(" ");
           const parts = [who, n.channel].filter(Boolean);
-          return parts.length ? <span className="act-meta"> · {parts.join(" · ")}</span> : null;
+          // 상대·채널·담당자는 내용 아래 줄로 내린다.
+          if (!parts.length && !n.pic) return null;
+          return (
+            <span className="act-metaline">
+              {parts.length ? <span className="act-meta">{parts.join(" · ")}</span> : null}
+              {n.pic ? <span className="act-note-pic">{n.pic}</span> : null}
+            </span>
+          );
         })()}
-        {n.pic ? <span className="act-note-pic">{n.pic}</span> : null}
       </span>
       <span className="act-actions">
         <button className={`act-starbtn${n.star ? " on" : ""}`} title="Mark priority" onClick={onStar}>★</button>

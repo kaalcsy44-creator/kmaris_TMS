@@ -8618,11 +8618,13 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 .act-tag { font-size: 10px; background: #eef3f9; color: #64748b; padding: 0 5px; border-radius: 8px; margin-right: 2px; }
 .act-tag.close { background: #fde8e8; color: #b91c1c; }
 .act-item.closed .act-text { color: #b91c1c; }
-.act-text { flex: 1; }
+.act-text { flex: 1; min-width: 0; }
+/* 상대·채널·담당자는 내용 아래 줄로 — 내용이 행 전체 폭을 쓰게 한다. */
+.act-metaline { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 1px; }
 .act-meta { color: #94a3b8; font-size: 9.5px; }
-/* 담당자(작성자) 배지 — 노트 끝에 작게. */
-.act-note-pic { margin-left: 6px; font-size: 10.5px; background: #eef3f9; color: #64748b;
-  padding: 0 6px; border-radius: 8px; vertical-align: 1px; }
+/* 담당자(작성자) 배지 — 메타 줄 끝에 작게. */
+.act-note-pic { font-size: 10.5px; background: #eef3f9; color: #64748b;
+  padding: 0 6px; border-radius: 8px; }
 /* 액션(★✎×)은 flow에서 빼내 hover 시 우측에 떠오르는 오버레이로 — 평소엔 공간을
    차지하지 않아 act-text가 행 전체 폭을 쓴다. 뒤에 페이드 배경을 깔아 글자와 안 겹친다. */
 .act-actions { position: absolute; top: 2px; right: 0; display: flex; gap: 4px;
