@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { Fragment, useState, type ReactNode } from "react";
 import Link from "next/link";
 import {
   fetchPipeline,
@@ -420,57 +420,74 @@ function StageTimeline({
                   rows.sort((x, y) => actAt(x).localeCompare(actAt(y)));
                   return (
                     <li key={c.no} className={`${state}${c.skip ? " skip" : ""}`}>
-                      {/* 단계 줄 클릭 → 그 단계의 작업 화면(편집 진입점).
-                          팝업 안에서는 링크가 아니라 버튼이어야 한다: 이미 이 프로젝트를
-                          열어 둔 상태라 같은 URL 로 다시 라우팅해도 딥링크가 1회 소비된 뒤라
-                          아무 일도 일어나지 않는다(조용히 죽는 링크). */}
-                      {onOpenStage ? (
-                        <button
-                          type="button"
-                          className="ov-tl-stage"
-                          onClick={() => onOpenStage(c.no)}
-                          title={`Open stage ${c.no} in the work view`}
-                        >
-                          <span className="ov-tl-dot">{c.no}</span>
-                          <b className="ov-tl-label">{c.label}</b>
-                        </button>
-                      ) : (
-                        <Link
-                          className="ov-tl-stage"
-                          href={`/project?rfq=${row.rfq_id}&stage=${c.no}`}
-                          title={`Open stage ${c.no} in Progress`}
-                        >
-                          <span className="ov-tl-dot">{c.no}</span>
-                          <b className="ov-tl-label">{c.label}</b>
-                        </Link>
-                      )}
-                      {/* 이 단계의 활동 — 날짜·시각을 앞 열에 두고 그 뒤에 내용을 정렬한다.
-                          자동이벤트(수·발신)는 상대만(라벨은 헤더 제목), 노트는 내용 + 메타.
-                          해당 없는 단계(내수 CI/PL 등)는 N/A 만 표시. */}
-                      {c.skip ? (
-                        <div className="ov-tl-sub">
-                          <span className="ov-tl-ndate" />
-                          <span className="ov-tl-val">N/A</span>
-                        </div>
-                      ) : rows.length ? (
-                        <ul className="ov-tl-notes">
-                          {rows.map((a, i) => (
-                            <li key={i} className={a.kind === "note" && a.note.star ? "star" : undefined}>
-                              <span className="ov-tl-ndate">{md(a.date)}{hm(actAt(a)) ? ` ${hm(actAt(a))}` : ""}</span>
-                              <span className="ov-tl-ntext">
-                                {a.kind === "auto" ? (
-                                  <>
-                                    <b className="ov-tl-actlabel">{a.label}</b>
-                                    {a.party ? <span className="ov-tl-actmeta">{a.party}</span> : null}
-                                  </>
-                                ) : (
-                                  <ActivityDesc act={a} metaBlock />
-                                )}
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : null}
+                      {/* 헤더(번호+제목)를 따로 두지 않는다. 단계 번호 원형은 그 단계의
+                          메인 활동(자동이벤트) 행에 얹고, 그 행이 작업화면 진입 링크가 된다.
+                          클릭은 팝업 안에선 버튼(onOpenStage), 페이지에선 Link 로 그 단계를 연다.
+                          활동이 아직 없는 미래 단계·N/A 는 번호+제목 한 줄(로드맵 자리)로만 남긴다. */}
+                      {(() => {
+                        const openTitle = onOpenStage
+                          ? `Open stage ${c.no} in the work view`
+                          : `Open stage ${c.no} in Progress`;
+                        const rowLink = (children: ReactNode) =>
+                          onOpenStage ? (
+                            <button type="button" className="ov-tl-rowlink" onClick={() => onOpenStage(c.no)} title={openTitle}>
+                              {children}
+                            </button>
+                          ) : (
+                            <Link className="ov-tl-rowlink" href={`/project?rfq=${row.rfq_id}&stage=${c.no}`} title={openTitle}>
+                              {children}
+                            </Link>
+                          );
+                        if (!rows.length) {
+                          return rowLink(
+                            <>
+                              <span className="ov-tl-dot">{c.no}</span>
+                              <b className="ov-tl-label">{c.label}</b>
+                              {c.skip ? <span className="ov-tl-val">N/A</span> : null}
+                            </>,
+                          );
+                        }
+                        const mainIdx = rows.findIndex((r) => r.kind === "auto");
+                        const mainRow = mainIdx < 0 ? 0 : mainIdx;
+                        return (
+                          <ul className="ov-tl-acts">
+                            {rows.map((a, i) => {
+                              const dateEl = (
+                                <span className="ov-tl-ndate">{md(a.date)}{hm(actAt(a)) ? ` ${hm(actAt(a))}` : ""}</span>
+                              );
+                              const contentEl = (
+                                <span className="ov-tl-ntext">
+                                  {a.kind === "auto" ? (
+                                    <>
+                                      <b className="ov-tl-actlabel">{a.label}</b>
+                                      {a.party ? <span className="ov-tl-actmeta">{a.party}</span> : null}
+                                    </>
+                                  ) : (
+                                    <ActivityDesc act={a} metaBlock />
+                                  )}
+                                </span>
+                              );
+                              // 메인 활동 행 = 단계 번호 원형 + 작업화면 링크.
+                              if (i === mainRow) {
+                                return (
+                                  <li key={i} className="ov-tl-main">
+                                    {rowLink(<><span className="ov-tl-dot">{c.no}</span>{dateEl}{contentEl}</>)}
+                                  </li>
+                                );
+                              }
+                              return (
+                                <li key={i} className={a.kind === "note" && a.note.star ? "star" : undefined}>
+                                  <div className="ov-tl-row">
+                                    <span className="ov-tl-gutter" />
+                                    {dateEl}
+                                    {contentEl}
+                                  </div>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        );
+                      })()}
                       {/* 활동기록 추가 — 마지막 활동 바로 아래, 즉 현재 단계 로그 맨 밑에 한 곳만.
                           입력한 일시로 알맞은 단계에 자동 배치된다. 현재 단계는 흐림이 없어
                           단계 li 안에 둬도 눌리지 않는다. onActivityAdded 있을 때만(로그인) 노출. */}

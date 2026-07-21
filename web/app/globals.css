@@ -8830,6 +8830,19 @@ button.ov-tl-stage:hover { background: color-mix(in srgb, var(--ov-tone) 12%, tr
 /* 상대(from/to …)는 라벨 아래 줄로 내리고(노트 메타와 같은 꼴), 글자 크기도 meta 급으로 통일. */
 .ov-tl-actmeta { display: block; margin-top: 1px; color: var(--muted); font-size: var(--ov-t-meta); }
 .proj-ov .act-meta { font-size: var(--ov-t-meta); }
+/* 헤더 없는 단계 활동 목록 — 각 행이 [번호 원형/빈 거터][날짜][내용]. 메인 활동 행은
+   번호 원형을 얹고 통째로 작업화면 링크(.ov-tl-rowlink)가 된다. 날짜 열은 두 행종류에서
+   같은 x 에서 시작하도록 원형과 빈 거터 폭(19px)을 맞춘다. */
+.ov-tl-acts { list-style: none; margin: 0; padding: 0 0 4px; }
+.ov-tl-row, .ov-tl-rowlink {
+  display: flex; align-items: flex-start; gap: 8px; width: 100%;
+  padding: 3px 4px 3px 8px; font-size: var(--ov-t-body); color: #405168; line-height: 1.45;
+}
+.ov-tl-rowlink { border: 0; background: none; font: inherit; color: #405168;
+  text-align: left; cursor: pointer; text-decoration: none; border-radius: 6px; }
+.ov-tl-rowlink:hover { background: color-mix(in srgb, var(--ov-tone) 8%, #fff); }
+.ov-tl-acts li.star .ov-tl-row { background: #fff9e8; border-radius: 4px; }
+.ov-tl-gutter { flex: none; width: 19px; }
 /* 완료 = 칸 색 점 + 선, 현재 = 흰 카드로 띄움, 미완료 = 흐리게.
    현재 단계 바탕이 흰색인 건 칸 톤 위에서 "떠 보이게" 하려는 것 — 색을 하나 더 쓰면
    칸 색과 부딪힌다. */
