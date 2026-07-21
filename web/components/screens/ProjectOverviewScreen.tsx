@@ -322,6 +322,20 @@ function Overview({
   );
 }
 
+/** 노트를 입력한 일시가 속한 단계로 자동 배치한다 — 그 시점에 "진행 중"이던 단계
+ *  (= 완료 일시가 그 일시 이후인 가장 이른 단계). 모든 완료 단계보다 늦으면 현재 단계.
+ *  일시를 못 읽으면 현재 단계. chain 은 no 오름차순, at 도 대체로 그에 따라 증가한다. */
+function stageForNote(chain: StageChainItem[], iso: string, current: number): number {
+  const t = Date.parse((iso || "").slice(0, 16));
+  if (Number.isNaN(t)) return current;
+  for (const c of chain) {
+    if (c.skip || !c.at) continue;
+    const ct = Date.parse(c.at);
+    if (!Number.isNaN(ct) && ct >= t) return c.no;
+  }
+  return current;
+}
+
 /**
  * 단계 + 활동 — 단계가 뼈대, 사람이 쓴 노트가 그 단계 아래 붙는다.
  *
@@ -351,16 +365,21 @@ function StageTimeline({
   const [addStage, setAddStage] = useState<number | null>(null);
 
   // 단계별로 활동을 나눠 담는다. 자동 이벤트는 대개 단계당 1건이나, 2단계(RFQ Sent)는
-  // 벤더별 발송이 여러 건일 수 있어 리스트로 담는다. 노트는 여러 건.
+  // 벤더별 발송이 여러 건일 수 있어 리스트로 담는다. 노트는 저장된 단계가 아니라 입력
+  // 일시가 속한 단계로 자동 배치한다(stageForNote) — 어느 단계에 넣을지 고를 필요가 없다.
   const autoOf = new Map<number, Extract<Activity, { kind: "auto" }>[]>();
   const notesOf = new Map<number, Extract<Activity, { kind: "note" }>[]>();
   let closeAct: Extract<Activity, { kind: "close" }> | null = null;
   for (const a of acts) {
     if (a.kind === "auto") autoOf.set(a.stage, [...(autoOf.get(a.stage) ?? []), a]);
-    else if (a.kind === "note") notesOf.set(a.stage, [...(notesOf.get(a.stage) ?? []), a]);
-    else closeAct = a;
+    else if (a.kind === "note") {
+      const s = stageForNote(chain, a.note.datetime || a.note.at || a.date, row.stage);
+      notesOf.set(s, [...(notesOf.get(s) ?? []), a]);
+    } else closeAct = a;
   }
   const done = Math.max(0, Math.min(row.stage, chain.length));
+  // "+ note" 는 맨 마지막(가장 높은, 생략 안 된) 단계 한 곳에만 — 입력하면 날짜로 자동 배치된다.
+  const lastStageNo = [...chain].reverse().find((c) => !c.skip)?.no ?? chain[chain.length - 1]?.no ?? 0;
 
   return (
     <section className="proj-ov-sec">
@@ -437,10 +456,11 @@ function StageTimeline({
                             </li>
                           ))}
                         </ul>
-                      ) : party || c.value || c.skip ? (
+                      ) : party || c.skip ? (
+                        // 문서번호·금액(c.value)은 아래 Items 표에 나오므로 여기선 상대만 남긴다.
                         <div className="ov-tl-sub">
                           {party ? <span className="ov-tl-party">{party}</span> : null}
-                          <span className="ov-tl-val">{c.skip ? "N/A" : c.value || ""}</span>
+                          {c.skip ? <span className="ov-tl-val">N/A</span> : null}
                         </div>
                       ) : null}
                       {notes.length ? (
@@ -456,36 +476,38 @@ function StageTimeline({
                           ))}
                         </ul>
                       ) : null}
-                      {/* 이 단계에 활동기록 추가 — 개요에서 바로 작성. onActivityAdded 가
-                          있을 때만(작업 팝업/페이지에서 로그인 상태) 노출한다. */}
-                      {onActivityAdded ? (
-                        addStage === c.no ? (
-                          <div className="ov-tl-addform">
-                            <StageAddNote
-                              rfqId={row.rfq_id}
-                              stage={c.no}
-                              onDone={async () => {
-                                setAddStage(null);
-                                await onActivityAdded();
-                              }}
-                              onCancel={() => setAddStage(null)}
-                            />
-                          </div>
-                        ) : (
-                          <button
-                            type="button"
-                            className="ov-tl-add"
-                            onClick={() => setAddStage(c.no)}
-                            title={`Add activity to ${c.label}`}
-                          >
-                            + note
-                          </button>
-                        )
-                      ) : null}
                     </li>
                   );
                 })}
             </ol>
+            {/* 활동기록 추가 — 단계마다 두지 않고 마지막 단계가 든 열(맨 오른쪽) 밑에 한 곳만.
+                입력한 일시로 알맞은 단계에 자동 배치된다. 단계 li 밖에 둬서 미완료 단계의
+                흐림(opacity)에 눌리지 않게 한다. onActivityAdded 있을 때만(로그인) 노출. */}
+            {onActivityAdded && lastStageNo >= col.from && lastStageNo <= col.to ? (
+              addStage === lastStageNo ? (
+                <div className="ov-tl-addform">
+                  <StageAddNote
+                    rfqId={row.rfq_id}
+                    chain={chain}
+                    currentStage={row.stage}
+                    onDone={async () => {
+                      setAddStage(null);
+                      await onActivityAdded();
+                    }}
+                    onCancel={() => setAddStage(null)}
+                  />
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className="ov-tl-add ov-tl-addfoot"
+                  onClick={() => setAddStage(lastStageNo)}
+                  title="Add activity — placed by the date you enter"
+                >
+                  + note
+                </button>
+              )
+            ) : null}
           </div>
         ))}
       </div>
@@ -517,15 +539,18 @@ function noteFormToPatch(v: ActivityNoteValue) {
   };
 }
 
-/** 개요의 한 단계에 활동기록 1건 추가 — 공용 ActivityNoteForm 을 그대로 쓴다. */
+/** 개요에 활동기록 1건 추가 — 공용 ActivityNoteForm 을 그대로 쓴다. 저장 단계는 고르지
+ *  않고 입력한 일시(stageForNote)로 자동 결정한다 — 화면 표시와 같은 규칙이라 어긋나지 않는다. */
 function StageAddNote({
   rfqId,
-  stage,
+  chain,
+  currentStage,
   onDone,
   onCancel,
 }: {
   rfqId: number;
-  stage: number;
+  chain: StageChainItem[];
+  currentStage: number;
   onDone: () => void | Promise<unknown>;
   onCancel: () => void;
 }) {
@@ -536,7 +561,9 @@ function StageAddNote({
     if (!form.text.trim()) return;
     setBusy(true);
     try {
-      await addRfqStageNote(rfqId, stage, noteFormToPatch(form));
+      const patch = noteFormToPatch(form);
+      const stage = stageForNote(chain, patch.datetime, currentStage);
+      await addRfqStageNote(rfqId, stage, patch);
       await onDone();
     } finally {
       setBusy(false);

@@ -8854,6 +8854,11 @@ button.ov-tl-stage:hover { background: color-mix(in srgb, var(--ov-tone) 12%, tr
 .proj-ov-tl > li:hover .ov-tl-add,
 .proj-ov-tl > li:focus-within .ov-tl-add { opacity: 1; color: var(--ov-tone); border-color: color-mix(in srgb, var(--ov-tone) 40%, transparent); }
 .ov-tl-add:hover { color: var(--ov-tone); border-color: var(--ov-tone); background: color-mix(in srgb, var(--ov-tone) 8%, transparent); }
+/* 열 밑 단독 진입점 — 단계별 hover 노출이 없으므로 늘 또렷하게, 위에 옅은 구분선. */
+.ov-tl-addfoot { display: block; width: calc(100% - 20px); margin: 6px 10px 8px; padding: 4px 6px;
+  border: 1px dashed color-mix(in srgb, var(--ov-tone) 35%, #cfd8e4); color: var(--ov-tone);
+  opacity: 0.9; text-align: center; }
+.ov-tl-addfoot:hover { opacity: 1; }
 .ov-tl-addform { margin: 2px 4px 8px 40px; }
 /* 폼은 조밀한 개요 안에 들어가므로 공용 폼을 한 톤 작게 눌러 준다. */
 .ov-tl-addform .act-add { font-size: var(--ov-t-body); }
