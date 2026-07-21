@@ -8835,8 +8835,8 @@ button.ov-tl-stage:hover { background: color-mix(in srgb, var(--ov-tone) 12%, tr
    이 페이지 안에서만 보조(meta) 급으로 맞춘다. */
 .proj-ov .act-pic { font-size: var(--ov-t-meta); }
 .ov-tl-notes li.star { background: #fffbe9; border-radius: 4px; }
-.ov-tl-ndate { flex: none; width: 28px; color: var(--muted); font-size: var(--ov-t-meta);
-  font-variant-numeric: tabular-nums; padding-top: 1px; }
+.ov-tl-ndate { flex: none; width: 58px; color: var(--muted); font-size: var(--ov-t-meta);
+  font-variant-numeric: tabular-nums; padding-top: 1px; white-space: nowrap; }
 .ov-tl-ntext { min-width: 0; word-break: break-word; }
 /* 단계별 활동기록 추가 — 개요에서 바로 작성하는 진입점. 평소엔 옅게, hover/focus 시 진해진다.
    인쇄·공유용 화면이라 기본은 눈에 띄지 않게 두고 필요할 때만 드러낸다. */
@@ -9200,7 +9200,7 @@ button.ov-tl-stage:hover {
   line-height: 1.45;
 }
 .ov-tl-notes li.star { padding: 4px 6px; background: #fff9e8; }
-.ov-tl-ndate { width: 31px; color: #8995a6; }
+.ov-tl-ndate { width: 58px; color: #8995a6; }
 
 .proj-ov-items th,
 .proj-ov-items td {

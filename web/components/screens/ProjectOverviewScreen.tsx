@@ -22,7 +22,7 @@ import {
   ciPurchase,
   type StageChainItem,
 } from "@/lib/deal";
-import { buildActivities, md, splitProjectNo, type Activity } from "@/lib/activity";
+import { buildActivities, hm, md, splitProjectNo, type Activity } from "@/lib/activity";
 import type { PipelineRow, PoWorkOptions, RfqItem } from "@/lib/types";
 import { vendorList } from "@/components/common/dealFields";
 import { convertCurrency, USD_KRW_RATE } from "@/components/common/itemTable";
@@ -434,8 +434,9 @@ function StageTimeline({
                         <ul className="ov-tl-sends">
                           {autos.map((a, i) => (
                             <li key={i}>
+                              {/* 날짜·시각을 앞에, 상대(to 벤더)를 뒤에. */}
+                              <span className="ov-tl-ndate">{md(a.date)}{hm(a.at || "") ? ` ${hm(a.at || "")}` : ""}</span>
                               <span className="ov-tl-party">{a.party}</span>
-                              <span className="ov-tl-ndate">{md(a.date)}</span>
                             </li>
                           ))}
                         </ul>
@@ -449,7 +450,8 @@ function StageTimeline({
                         <ul className="ov-tl-notes">
                           {notes.map((n, i) => (
                             <li key={i} className={n.note.star ? "star" : undefined}>
-                              <span className="ov-tl-ndate">{md(n.date)}</span>
+                              {/* 날짜·시각을 앞에, 내용을 뒤에. */}
+                              <span className="ov-tl-ndate">{md(n.date)}{hm(n.note.datetime || n.note.at || "") ? ` ${hm(n.note.datetime || n.note.at || "")}` : ""}</span>
                               <span className="ov-tl-ntext">
                                 <ActivityDesc act={n} />
                               </span>
