@@ -5954,6 +5954,16 @@ table.mini .num {
   font-weight: 700;
   color: var(--muted);
 }
+/* 진행 금액 합계 — 제목과 카운트 사이, 카운트 배지 좌측에 붙는다. */
+.pl-board-sum {
+  flex: none;
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  white-space: nowrap;
+}
 .pl-board-count {
   flex: none;
   font-size: 11px;

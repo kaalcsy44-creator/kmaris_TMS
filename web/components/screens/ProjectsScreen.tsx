@@ -1145,6 +1145,47 @@ function ageLevel(days: number | null): "" | "notice" | "warn" | "urgent" {
   return "";
 }
 
+/** 카드에 표시되는 대표 금액(order→customer→vendor 순). 헤더 합계도 이 값을 합산해
+ *  "헤더 합 = 보이는 카드 합"이 되도록 카드와 동일 규칙을 쓴다. */
+function cardAmount(r: PipelineRow): string {
+  return r.order_amount || r.customer_amount || r.vendor_amount || "";
+}
+
+/** 이중통화 문자열("KRW 24,776,000 USD 16,053")을 통화별 숫자로 파싱해 acc에 누적.
+ *  각 통화는 같은 금액의 다른 표기이므로 통화별로 따로 합산하면 환율 혼용 없이 일관된다. */
+function accAmount(acc: Record<string, number>, value: string): void {
+  const re = /([A-Z]{3})\s*([\d,]+(?:\.\d+)?)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(value))) {
+    const n = Number(m[2].replace(/,/g, ""));
+    if (Number.isFinite(n)) acc[m[1]] = (acc[m[1]] ?? 0) + n;
+  }
+}
+
+/** 큰 금액을 헤더에 들어가도록 압축 표기($134K, ₩207M). */
+function compactMoney(cur: string, n: number): string {
+  const sym = cur === "USD" ? "$" : cur === "KRW" ? "₩" : `${cur} `;
+  const abs = Math.abs(n);
+  let v: string;
+  if (abs >= 1e9) v = `${(n / 1e9).toFixed(1).replace(/\.0$/, "")}B`;
+  else if (abs >= 1e6) v = `${(n / 1e6).toFixed(1).replace(/\.0$/, "")}M`;
+  else if (abs >= 1e3) v = `${Math.round(n / 1e3)}K`;
+  else v = String(Math.round(n));
+  return `${sym}${v}`;
+}
+
+/** 컬럼 카드들의 대표 금액을 통화별로 합산해 "$210K · ₩325M" 압축 문자열로. 없으면 "". */
+function columnSum(cards: PipelineRow[]): string {
+  const acc: Record<string, number> = {};
+  for (const r of cards) accAmount(acc, cardAmount(r));
+  // USD·KRW 우선 노출(무역/원화 순), 그 외 통화가 있으면 뒤에 이어붙인다.
+  const order = ["USD", "KRW", ...Object.keys(acc).filter((c) => c !== "USD" && c !== "KRW")];
+  return order
+    .filter((c) => acc[c])
+    .map((c) => compactMoney(c, acc[c]))
+    .join(" · ");
+}
+
 type BoardCol = {
   label: string;
   variant?: "done" | "cancelled";
@@ -1233,6 +1274,12 @@ function PipelineBoard({
             <header className="pl-board-head">
               {/* 단계 작업은 카드 클릭 → 프로젝트 팝업에서 처리(별도 작업 페이지 없음). */}
               <span className="pl-board-title" title={col.label}>{col.label}</span>
+              {/* 진행 금액 합계 — 견적 이후 단계만(RFQ는 금액 미확정, 종결/완료 존은 제외). */}
+              {!col.variant && col.label !== "RFQ" && columnSum(cards) ? (
+                <span className="pl-board-sum" title="Total amount in this stage">
+                  {columnSum(cards)}
+                </span>
+              ) : null}
               <span className="pl-board-count">{cards.length}</span>
             </header>
             <div className="pl-board-list">
@@ -1359,6 +1406,9 @@ function BoardPreviewModal({
                     <section key={ci} className={`pl-board-col${col.variant ? ` ${col.variant}` : ""}`}>
                       <header className="pl-board-head">
                         <span className="pl-board-title" title={col.label}>{col.label}</span>
+                        {!col.variant && col.label !== "RFQ" && columnSum(cards) ? (
+                          <span className="pl-board-sum">{columnSum(cards)}</span>
+                        ) : null}
                         <span className="pl-board-count">{cards.length}</span>
                       </header>
                       <div className="pl-board-list">
