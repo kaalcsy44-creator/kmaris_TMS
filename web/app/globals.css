@@ -8474,7 +8474,7 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
    의 Stages&activity 4칸과 같은 구획. Fragment 로 셀을 그리드에 직접 흘려보낸다. */
 .act-matrix {
   display: grid;
-  grid-template-columns: 210px repeat(4, minmax(0, 1fr));
+  grid-template-columns: 184px repeat(4, minmax(0, 1fr));
   border: 1px solid var(--line);
   border-radius: 10px;
   background: #fff;
@@ -8606,14 +8606,15 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 .act-open-edit:hover { color: var(--blue); }
 
 .act-list { list-style: none; margin: 0 0 8px; padding: 0; }
-.act-item { display: flex; align-items: flex-start; gap: 8px; padding: 3px 0; font-size: 11px;
+.act-item { display: flex; align-items: flex-start; gap: 6px; padding: 3px 0; font-size: 11px;
   border-bottom: 1px dashed #f0f2f5; }
 .act-item:last-child { border-bottom: 0; }
 .act-item.star { background: #fff8e6; border-radius: 4px; padding-left: 6px; }
-.act-date { flex: none; width: 44px; color: #64748b; font-variant-numeric: tabular-nums; font-weight: 600; }
-/* 시각(hh:mm) — 날짜 아래 한 톤 낮춰 표시. 날짜만 아는 항목은 hm()이 ""를 줘 렌더되지 않는다. */
-.act-time { display: block; color: #94a3b8; font-weight: 400; font-size: 9.5px; }
-.act-auto { color: #64748b; }
+.act-date { flex: none; width: 64px; color: #64748b; font-variant-numeric: tabular-nums;
+  font-weight: 600; white-space: nowrap; }
+/* 시각(hh:mm) — 날짜와 같은 줄 우측에 한 톤 낮춰 표시. 날짜만 아는 항목은 hm()이 ""를 줘 안 나온다. */
+.act-time { color: #94a3b8; font-weight: 400; font-size: 9.5px; margin-left: 4px; }
+.act-auto { color: #64748b; flex: 1; min-width: 0; }
 .act-tag { font-size: 10px; background: #eef3f9; color: #64748b; padding: 0 5px; border-radius: 8px; margin-right: 2px; }
 .act-tag.close { background: #fde8e8; color: #b91c1c; }
 .act-item.closed .act-text { color: #b91c1c; }
