@@ -8843,7 +8843,8 @@ button.ov-tl-stage:hover { background: color-mix(in srgb, var(--ov-tone) 12%, tr
 .ov-tl-acts { list-style: none; margin: 0; padding: 0 0 4px; }
 .ov-tl-row, .ov-tl-rowlink {
   display: flex; align-items: flex-start; gap: 8px; width: 100%;
-  padding: 3px 4px 3px 8px; font-size: var(--ov-t-body); color: #405168; line-height: 1.45;
+  /* log 내용은 본문(body)보다 1px 작게(요청). */
+  padding: 3px 4px 3px 8px; font-size: calc(var(--ov-t-body) - 1px); color: #405168; line-height: 1.45;
 }
 /* font: inherit 는 버튼의 font-size 까지 상위(큰 기본값)로 되돌려 라벨이 커졌다.
    family 만 상속하고 크기는 위 규칙의 body 급을 그대로 쓴다(로그 내용과 동일 크기). */
