@@ -8823,14 +8823,10 @@ button.ov-tl-stage:hover { background: color-mix(in srgb, var(--ov-tone) 12%, tr
 .ov-tl-party { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ov-tl-val { color: #47536b; min-width: 0; overflow: hidden; text-overflow: ellipsis;
   white-space: nowrap; }
-/* 2단계(RFQ Sent) 다중 발송 — 벤더별로 상대·발신일을 한 줄씩.
-   들여쓰기·날짜폭·간격을 노트 줄(.ov-tl-notes)과 똑같이 맞춰 날짜·내용 열이 정렬되게 한다. */
-.ov-tl-sends { list-style: none; margin: 0; padding: 1px 5px 4px 40px; font-size: var(--ov-t-meta);
-  color: var(--muted); }
-.ov-tl-sends li { display: flex; gap: 8px; padding: 1px 0; min-width: 0; }
-/* 발송 한 줄: [날짜] [주요 활동 라벨(볼드·매칭색)] [상대] — 라벨 뒤에 상대를 이어 붙인다. */
-.ov-tl-actline { flex: 1; min-width: 0; display: flex; gap: 6px; align-items: baseline; }
-.ov-tl-actlabel { flex: none; font-weight: 700; color: var(--ov-tone); white-space: nowrap; }
+/* 단계 활동 목록(.ov-tl-notes)에 섞이는 자동이벤트 줄 — 주요 활동 라벨(RFQ Sent 등)은
+   볼드 + 단계 매칭색, 뒤따르는 상대(· to/from …)는 옅게. 업무일지 나열과 같은 꼴. */
+.ov-tl-actlabel { font-weight: 700; color: var(--ov-tone); }
+.ov-tl-actmeta { color: var(--muted); }
 /* 완료 = 칸 색 점 + 선, 현재 = 흰 카드로 띄움, 미완료 = 흐리게.
    현재 단계 바탕이 흰색인 건 칸 톤 위에서 "떠 보이게" 하려는 것 — 색을 하나 더 쓰면
    칸 색과 부딪힌다. */
