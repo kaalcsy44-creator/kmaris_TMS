@@ -8887,6 +8887,15 @@ button.ov-tl-stage:hover { background: color-mix(in srgb, var(--ov-tone) 12%, tr
 /* 폼은 조밀한 개요 안에 들어가므로 공용 폼을 한 톤 작게 눌러 준다. */
 .ov-tl-addform .act-add { font-size: var(--ov-t-body); }
 .ov-tl-addform .act-add-text { min-height: 44px; }
+/* 각 입력란 글자 크기를 기본(공용 폼)보다 2px 씩 줄인다(요청). */
+.ov-tl-addform .act-add input[type="date"],
+.ov-tl-addform .act-add input[type="datetime-local"],
+.ov-tl-addform .act-add select { font-size: 10px; }
+.ov-tl-addform .act-add-text { font-size: 11px; }
+.ov-tl-addform .act-add .act-seg.sm button { font-size: 9.5px; }
+.ov-tl-addform .act-add .act-add-go { font-size: 10px; }
+.ov-tl-addform .act-add .act-check,
+.ov-tl-addform .act-add .act-party-custom { font-size: 10px; }
 
 /* 종결 — 특정 단계에 속하지 않아 4칸 아래 전체 폭으로. */
 .ov-tl-closed { display: flex; align-items: center; gap: 8px; margin-top: 8px; padding: 6px 10px;
