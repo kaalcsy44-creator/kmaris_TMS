@@ -4123,6 +4123,12 @@ table.mini tfoot tr.foot-grand .total-value {
   font-family: inherit;
   background: #fff;
 }
+/* 앱 전역: 날짜·시간 입력란(input[type=date/datetime-local/time/month])은 브라우저
+   기본 시스템 글씨체가 아니라 주변 입력란과 같은 앱 글씨체를 쓰도록 통일한다. */
+input[type="date"],
+input[type="datetime-local"],
+input[type="time"],
+input[type="month"] { font-family: inherit; }
 /* ── 읽기전용 확정 필드(Packing List) ────────────────────────────────
    입력란 대신 값만 표시. 회색 배경으로 '수정 불가(CI 상속)' 를 시각적으로 구분. */
 .form-field--ro .ro-value {
@@ -8658,7 +8664,7 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 .act-add input[type="date"],
 .act-add input[type="datetime-local"],
 .act-add select { padding: 4px 6px; border: 1px solid var(--border, #d8dee6);
-  border-radius: 6px; font-size: 12px; }
+  border-radius: 6px; font-size: 12px; font-family: inherit; }
 /* 담당자(PIC) 드롭다운 — 사용자명이 들어갈 만큼만. */
 .act-add-pic { min-width: 96px; }
 /* 시각(시·분) 드롭다운 — 오름차순(위→아래 증가). 시/분 각각 좁게, 콜론으로 구분. */
