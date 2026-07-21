@@ -474,6 +474,28 @@ def vendor_rfq_send(rfq_id: int, body: VendorRfqSendRequest):
         s.close()
 
 
+# Vendor RFQ '견적 불가' 상태 문자열. 프로젝트 정보 Vendor 필드에서 취소선(제외) 판정에 쓴다.
+_VRFQ_DECLINED = "견적 불가"
+
+
+@app.post("/api/admin/vendor-rfq/{vrfq_id}/toggle-decline",
+          dependencies=[Depends(require_token)])
+def vendor_rfq_toggle_decline(vrfq_id: int):
+    """이 Vendor RFQ 의 '견적 불가' 표시를 토글한다. 견적이 이미 수신된 벤더는 표시에서
+    quoted 가 우선하므로 영향이 없다. 해제 시 '발신완료' 로 되돌린다."""
+    s = get_session()
+    try:
+        vr = s.query(VendorRFQ).filter_by(id=vrfq_id).first()
+        if not vr:
+            raise HTTPException(status_code=404, detail="Vendor RFQ를 찾을 수 없습니다.")
+        declined = (vr.status or "") != _VRFQ_DECLINED
+        vr.status = _VRFQ_DECLINED if declined else "발신완료"
+        s.commit()
+        return {"ok": True, "declined": declined, "status": vr.status}
+    finally:
+        s.close()
+
+
 @app.post("/api/admin/rfq/{rfq_id}/vendor-rfq",
           dependencies=[Depends(require_token)])
 def create_vendor_rfq(rfq_id: int, body: VendorRfqCreate):

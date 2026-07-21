@@ -151,11 +151,14 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
             for x in vrfqs:
                 nm = vendor_names.get(x.vendor_id, "—")
                 q = x.id in _quoted_vrfq_ids
+                dec = (x.status or "") == "견적 불가"   # 수동 '견적 불가' 표시(취소선)
                 if nm in _seen_v:
                     if q:
                         _seen_v[nm]["quoted"] = True
+                    if dec:
+                        _seen_v[nm]["declined"] = True
                 else:
-                    e = {"name": nm, "quoted": q}
+                    e = {"name": nm, "quoted": q, "declined": dec}
                     _seen_v[nm] = e
                     rfq_vendors_status.append(e)
 

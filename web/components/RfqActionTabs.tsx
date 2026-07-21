@@ -29,6 +29,7 @@ import {
   fetchVendorRfqDetail,
   updateVendorRfq,
   deleteVendorRfq,
+  toggleVendorRfqDecline,
   fetchVendorQuoteDetail,
   updateVendorQuote,
   deleteVendorQuote,
@@ -366,7 +367,25 @@ function EmbeddedVendorRfq({
           {/* 배지는 선택된 Vendor RFQ 고유 번호(001·002…). 프로젝트 공통 번호가 아님. */}
           <b className="rec-doc-no">{selected.kmaris_rfq_no || project?.vrfq_kmaris_no || ""}</b>
         </div>
-        <button type="button" className="btn primary sm" onClick={() => setAdding(true)}>+ Send another</button>
+        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          {/* 견적 불가 통보 표시 — 프로젝트 Vendor 필드에서 이 벤더를 취소선(제외) 처리한다.
+              견적이 이미 수신된(quote_count>0) 벤더는 표시가 무의미하므로 숨긴다. */}
+          {selected.quote_count === 0 ? (
+            <button
+              type="button"
+              className={`btn sm${selected.status === "견적 불가" ? " primary" : ""}`}
+              title="이 벤더가 견적 불가를 통보한 경우 표시 (프로젝트 Vendor 필드에 취소선)"
+              onClick={async () => {
+                await toggleVendorRfqDecline(selected.id);
+                load();
+                onChanged();
+              }}
+            >
+              {selected.status === "견적 불가" ? "견적 불가 ✓" : "견적 불가"}
+            </button>
+          ) : null}
+          <button type="button" className="btn primary sm" onClick={() => setAdding(true)}>+ Send another</button>
+        </div>
       </div>
       <VendorRfqDetailModal
         id={selected.id}
