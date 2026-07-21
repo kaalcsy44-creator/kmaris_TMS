@@ -459,7 +459,10 @@ function StageTimeline({
                               <span className="ov-tl-ndate">{md(a.date)}{hm(actAt(a)) ? ` ${hm(actAt(a))}` : ""}</span>
                               <span className="ov-tl-ntext">
                                 {a.kind === "auto" ? (
-                                  a.party ? <span className="ov-tl-actmeta">{a.party}</span> : null
+                                  <>
+                                    <b className="ov-tl-actlabel">{a.label}</b>
+                                    {a.party ? <>{" "}<span className="ov-tl-actmeta">{a.party}</span></> : null}
+                                  </>
                                 ) : (
                                   <ActivityDesc act={a} metaBlock />
                                 )}

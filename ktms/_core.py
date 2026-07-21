@@ -805,9 +805,11 @@ def _deal_progress(s, rfq, order) -> tuple[int, dict[str, str]]:
                         or _date_iso(q.received_date)
                         or _kst_iso(q.created_at))
             _set(3, min((r for r in (_vq_recv(q) for q in vquotes) if r), default=""))
-    # 4) Customer Quot. 발신
+    # 4) Customer Quot. 발신 — 발신 일시(sent_at, 시각 포함) 우선. 없으면 발신일(날짜만),
+    #    그래도 없으면 레코드 생성시각. (sent_date 는 sent_at 의 날짜부 미러라 시각이 없다.)
     if quo:
-        _set(4, _date_iso(quo.sent_date) or _kst_iso(quo.created_at))
+        _set(4, (getattr(quo, "sent_at", None) or "").strip()
+             or _date_iso(quo.sent_date) or _kst_iso(quo.created_at))
     if order:
         # 5) Customer P/O 수신
         _set(5, _kst_iso(order.created_at))
