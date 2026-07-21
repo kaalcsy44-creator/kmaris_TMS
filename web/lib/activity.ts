@@ -23,6 +23,13 @@ export function md(iso: string): string {
   return `${Number(m[1])}/${Number(m[2])}`;
 }
 
+/** "2026-07-14T09:30" → "09:30". 시각이 없거나 자정(00:00, 날짜만 아는 항목)이면 "". */
+export function hm(iso: string): string {
+  const m = (iso || "").match(/T(\d{2}):(\d{2})/);
+  if (!m || (m[1] === "00" && m[2] === "00")) return "";
+  return `${m[1]}:${m[2]}`;
+}
+
 /** 프로젝트 번호 "P-010(260713)" → { code: "P-010", date: "(260713)" } */
 export function splitProjectNo(pno: string): { code: string; date: string } {
   const m = (pno || "").match(/^(.*?)\s*(\(.*\))\s*$/);
@@ -94,7 +101,8 @@ export function buildActivities(row: PipelineRow, steps: string[]): Activity[] {
       }
       continue;
     }
-    const date = (row.stage_dates?.[key] || row.stage_auto?.[key] || "").slice(0, 10);
+    const full = row.stage_dates?.[key] || row.stage_auto?.[key] || "";
+    const date = full.slice(0, 10);
     if (date)
       out.push({
         kind: "auto",
@@ -103,6 +111,7 @@ export function buildActivities(row: PipelineRow, steps: string[]): Activity[] {
         label: steps[n - 1] || `Stage ${n}`,
         party: autoParty(n, row),
         pic: row.assignee,
+        at: full,
       });
   }
   for (const [stage, list] of Object.entries(row.stage_notes ?? {})) {

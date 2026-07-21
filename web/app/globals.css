@@ -8610,7 +8610,9 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   border-bottom: 1px dashed #f0f2f5; }
 .act-item:last-child { border-bottom: 0; }
 .act-item.star { background: #fff8e6; border-radius: 4px; padding-left: 6px; }
-.act-date { flex: none; width: 42px; color: #64748b; font-variant-numeric: tabular-nums; font-weight: 600; }
+.act-date { flex: none; width: 44px; color: #64748b; font-variant-numeric: tabular-nums; font-weight: 600; }
+/* 시각(hh:mm) — 날짜 아래 한 톤 낮춰 표시. 날짜만 아는 항목은 hm()이 ""를 줘 렌더되지 않는다. */
+.act-time { display: block; color: #94a3b8; font-weight: 400; font-size: 9.5px; }
 .act-auto { color: #64748b; }
 .act-tag { font-size: 10px; background: #eef3f9; color: #64748b; padding: 0 5px; border-radius: 8px; margin-right: 2px; }
 .act-tag.close { background: #fde8e8; color: #b91c1c; }

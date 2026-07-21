@@ -16,6 +16,7 @@ import { vendorOf } from "@/lib/deal";
 import {
   buildActivities,
   daysSinceISO,
+  hm,
   lastActivityISO,
   md,
   splitProjectNo,
@@ -622,7 +623,10 @@ function DealStageRow({
                   />
                 ) : (
                   <li key={i} className="act-item">
-                    <span className="act-date">{md(a.date)}</span>
+                    <span className="act-date">
+                      {md(a.date)}
+                      {a.kind === "auto" && hm(a.at || "") ? <span className="act-time">{hm(a.at || "")}</span> : null}
+                    </span>
                     <span className="act-auto">
                       {a.kind === "auto" ? a.label : ""}
                       {a.kind === "auto" && a.party ? <span className="act-meta"> · {a.party}</span> : null}
@@ -722,7 +726,10 @@ function NoteRow({
 
   return (
     <li className={`act-item${n.star ? " star" : ""}`}>
-      <span className="act-date">{md(a.date)}</span>
+      <span className="act-date">
+        {md(a.date)}
+        {hm(n.datetime || n.at || "") ? <span className="act-time">{hm(n.datetime || n.at || "")}</span> : null}
+      </span>
       <span className="act-text">
         {n.text}
         {(() => {
