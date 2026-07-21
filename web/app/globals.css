@@ -1421,11 +1421,12 @@ table.perm-matrix td.perm-mod {
   color: #2b3a4d;
   word-break: break-word;
 }
-/* 프로젝트 정보 Vendor — 견적 미수신(RFQ만 발송) 벤더는 취소선 + 흐린 색. */
-.vendor-noquote {
-  text-decoration: line-through;
-  color: #9aa7b8;
-}
+/* 프로젝트 정보 Vendor — 3단계 표시.
+   quoted=견적 수신(선명, 기본색) / waiting=견적 대기(회색) / out=견적불가·제외(취소선+회색). */
+.vendor-waiting { color: #9aa7b8; }
+.vendor-out { text-decoration: line-through; color: #9aa7b8; }
+/* .vendor-noquote: 옛 클래스(하위호환) — out 과 동일. */
+.vendor-noquote { text-decoration: line-through; color: #9aa7b8; }
 .intl-steplist {
   list-style: none;
   margin: 0 0 12px;
