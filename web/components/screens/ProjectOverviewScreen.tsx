@@ -414,9 +414,10 @@ function StageTimeline({
                   const state = c.no < row.stage ? "done" : c.no === row.stage ? "current" : "todo";
                   const autos = autoOf.get(c.no) ?? [];
                   const notes = notesOf.get(c.no) ?? [];
-                  // 2단계는 발송마다 상대(to 벤더)가 다르므로 리스트로 보여준다. 다른 단계는 1건.
-                  const multiSend = c.no === 2 && autos.length > 1;
-                  const party = autos[0]?.party ?? "";
+                  // 이 단계의 활동(자동이벤트 + 노트)을 시간순 한 목록으로. 날짜는 헤더가 아니라
+                  // 각 행에 두고(열 정렬), 헤더에는 번호·제목만 남긴다.
+                  const rows: Activity[] = [...autos, ...notes];
+                  rows.sort((x, y) => actAt(x).localeCompare(actAt(y)));
                   return (
                     <li key={c.no} className={`${state}${c.skip ? " skip" : ""}`}>
                       {/* 단계 줄 클릭 → 그 단계의 작업 화면(편집 진입점).
@@ -431,9 +432,6 @@ function StageTimeline({
                           title={`Open stage ${c.no} in the work view`}
                         >
                           <span className="ov-tl-dot">{c.no}</span>
-                          {c.at ? (
-                            <time className="ov-tl-at">{md(c.at)}{hm(c.at) ? ` ${hm(c.at)}` : ""}</time>
-                          ) : null}
                           <b className="ov-tl-label">{c.label}</b>
                         </button>
                       ) : (
@@ -443,46 +441,33 @@ function StageTimeline({
                           title={`Open stage ${c.no} in Progress`}
                         >
                           <span className="ov-tl-dot">{c.no}</span>
-                          {c.at ? (
-                            <time className="ov-tl-at">{md(c.at)}{hm(c.at) ? ` ${hm(c.at)}` : ""}</time>
-                          ) : null}
                           <b className="ov-tl-label">{c.label}</b>
                         </Link>
                       )}
-                      {/* 단일 자동이벤트 단계는 상대만 아랫줄로. 다중 발송은 아래 활동 목록에 섞인다.
-                          문서번호·금액(c.value)은 아래 Items 표에 나오므로 여기선 상대만 남긴다. */}
-                      {!multiSend && (party || c.skip) ? (
+                      {/* 이 단계의 활동 — 날짜·시각을 앞 열에 두고 그 뒤에 내용을 정렬한다.
+                          자동이벤트(수·발신)는 상대만(라벨은 헤더 제목), 노트는 내용 + 메타.
+                          해당 없는 단계(내수 CI/PL 등)는 N/A 만 표시. */}
+                      {c.skip ? (
                         <div className="ov-tl-sub">
-                          {party ? <span className="ov-tl-party">{party}</span> : null}
-                          {c.skip ? <span className="ov-tl-val">N/A</span> : null}
+                          <span className="ov-tl-ndate" />
+                          <span className="ov-tl-val">N/A</span>
                         </div>
+                      ) : rows.length ? (
+                        <ul className="ov-tl-notes">
+                          {rows.map((a, i) => (
+                            <li key={i} className={a.kind === "note" && a.note.star ? "star" : undefined}>
+                              <span className="ov-tl-ndate">{md(a.date)}{hm(actAt(a)) ? ` ${hm(actAt(a))}` : ""}</span>
+                              <span className="ov-tl-ntext">
+                                {a.kind === "auto" ? (
+                                  a.party ? <span className="ov-tl-actmeta">{a.party}</span> : null
+                                ) : (
+                                  <ActivityDesc act={a} metaBlock />
+                                )}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
                       ) : null}
-                      {/* 이 단계의 활동 — 다중 발송(autos)과 노트를 시간순 한 목록으로(업무일지와 같은 나열).
-                          자동이벤트는 라벨(볼드·매칭색) · 상대, 노트는 내용 + 메타. */}
-                      {(() => {
-                        const rows: Activity[] = [...(multiSend ? autos : []), ...notes];
-                        if (!rows.length) return null;
-                        rows.sort((x, y) => actAt(x).localeCompare(actAt(y)));
-                        return (
-                          <ul className="ov-tl-notes">
-                            {rows.map((a, i) => (
-                              <li key={i} className={a.kind === "note" && a.note.star ? "star" : undefined}>
-                                <span className="ov-tl-ndate">{md(a.date)}{hm(actAt(a)) ? ` ${hm(actAt(a))}` : ""}</span>
-                                <span className="ov-tl-ntext">
-                                  {a.kind === "auto" ? (
-                                    <>
-                                      <b className="ov-tl-actlabel">{a.label}</b>
-                                      {a.party ? <span className="ov-tl-actmeta"> · {a.party}</span> : null}
-                                    </>
-                                  ) : (
-                                    <ActivityDesc act={a} metaBlock />
-                                  )}
-                                </span>
-                              </li>
-                            ))}
-                          </ul>
-                        );
-                      })()}
                       {/* 활동기록 추가 — 마지막 활동 바로 아래, 즉 현재 단계 로그 맨 밑에 한 곳만.
                           입력한 일시로 알맞은 단계에 자동 배치된다. 현재 단계는 흐림이 없어
                           단계 li 안에 둬도 눌리지 않는다. onActivityAdded 있을 때만(로그인) 노출. */}

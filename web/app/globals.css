@@ -8823,9 +8823,8 @@ button.ov-tl-stage:hover { background: color-mix(in srgb, var(--ov-tone) 12%, tr
 .ov-tl-party { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ov-tl-val { color: #47536b; min-width: 0; overflow: hidden; text-overflow: ellipsis;
   white-space: nowrap; }
-/* 단계 활동 목록(.ov-tl-notes)에 섞이는 자동이벤트 줄 — 주요 활동 라벨(RFQ Sent 등)은
-   볼드 + 단계 매칭색, 뒤따르는 상대(· to/from …)는 옅게. 업무일지 나열과 같은 꼴. */
-.ov-tl-actlabel { font-weight: 700; color: var(--ov-tone); }
+/* 단계 활동 목록(.ov-tl-notes)에 섞이는 자동이벤트(수·발신)의 상대 — 라벨은 헤더 제목이
+   대신하므로 여기선 상대(to/from …)만 옅게 둔다. 날짜는 앞 열(.ov-tl-ndate)에 정렬된다. */
 .ov-tl-actmeta { color: var(--muted); }
 /* 완료 = 칸 색 점 + 선, 현재 = 흰 카드로 띄움, 미완료 = 흐리게.
    현재 단계 바탕이 흰색인 건 칸 톤 위에서 "떠 보이게" 하려는 것 — 색을 하나 더 쓰면
