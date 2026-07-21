@@ -8812,7 +8812,8 @@ button.ov-tl-stage:hover { background: color-mix(in srgb, var(--ov-tone) 12%, tr
   display: inline-flex; align-items: center; justify-content: center; }
 .ov-tl-no { flex: none; width: 12px; font-size: var(--ov-t-cap); font-weight: 800;
   color: var(--muted); text-align: right; }
-.ov-tl-label { font-size: var(--ov-t-name); font-weight: 700; color: var(--navy); min-width: 0;
+/* 단계 제목 — 행의 메인 활동 라벨(볼드·매칭색)이 강조를 맡으므로 헤더 제목은 회색으로 둔다. */
+.ov-tl-label { font-size: var(--ov-t-name); font-weight: 700; color: #64748b; min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* 단계 날짜·시각 — 노트 줄과 같이 내용(라벨) 앞에 둔다. */
 .ov-tl-at { flex: none; font-size: var(--ov-t-meta); color: var(--muted);
@@ -8826,8 +8827,8 @@ button.ov-tl-stage:hover { background: color-mix(in srgb, var(--ov-tone) 12%, tr
 /* 단계 활동 목록(.ov-tl-notes)에 섞이는 메인 활동(수·발신) 줄 — 라벨(RFQ Sent 등)은
    볼드 + 단계 매칭색, 뒤따르는 상대(to/from …)는 옅게. 날짜는 앞 열(.ov-tl-ndate)에 정렬. */
 .ov-tl-actlabel { font-weight: 700; color: var(--ov-tone); }
-/* 상대(from/to …) 글자 크기는 노트 메타와 같은 meta 급으로 통일한다. */
-.ov-tl-actmeta { color: var(--muted); font-size: var(--ov-t-meta); }
+/* 상대(from/to …)는 라벨 아래 줄로 내리고(노트 메타와 같은 꼴), 글자 크기도 meta 급으로 통일. */
+.ov-tl-actmeta { display: block; margin-top: 1px; color: var(--muted); font-size: var(--ov-t-meta); }
 .proj-ov .act-meta { font-size: var(--ov-t-meta); }
 /* 완료 = 칸 색 점 + 선, 현재 = 흰 카드로 띄움, 미완료 = 흐리게.
    현재 단계 바탕이 흰색인 건 칸 톤 위에서 "떠 보이게" 하려는 것 — 색을 하나 더 쓰면
@@ -8837,7 +8838,8 @@ button.ov-tl-stage:hover { background: color-mix(in srgb, var(--ov-tone) 12%, tr
 .proj-ov-tl > li.done::before, .proj-ov-tl > li.current::before {
   background: color-mix(in srgb, var(--ov-tone) 32%, #fff); }
 .proj-ov-tl > li.current { background: #fff; box-shadow: inset 2px 0 0 var(--ov-tone); }
-.proj-ov-tl > li.current .ov-tl-label { color: var(--ov-tone); }
+/* 현재 단계 제목도 회색 통일(강조는 원형 색·행 라벨이 맡는다). */
+.proj-ov-tl > li.current .ov-tl-label { color: #64748b; }
 .proj-ov-tl > li.current .ov-tl-dot {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--ov-tone) 22%, transparent); }
 .proj-ov-tl > li.todo .ov-tl-label { color: #8792a5; font-weight: 600; }

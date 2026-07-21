@@ -461,7 +461,7 @@ function StageTimeline({
                                 {a.kind === "auto" ? (
                                   <>
                                     <b className="ov-tl-actlabel">{a.label}</b>
-                                    {a.party ? <>{" "}<span className="ov-tl-actmeta">{a.party}</span></> : null}
+                                    {a.party ? <span className="ov-tl-actmeta">{a.party}</span> : null}
                                   </>
                                 ) : (
                                   <ActivityDesc act={a} metaBlock />
