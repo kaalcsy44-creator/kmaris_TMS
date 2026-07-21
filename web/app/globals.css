@@ -8622,12 +8622,10 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 /* 시각(hh:mm) — 날짜와 같은 줄 우측에 한 톤 낮춰 표시. 날짜만 아는 항목은 hm()이 ""를 줘 안 나온다. */
 .act-time { color: #94a3b8; font-weight: 400; font-size: 9.5px; margin-left: 4px; }
 .act-auto { color: #64748b; flex: 1; min-width: 0; }
-/* 주요 활동 라벨(RFQ Sent 등) — 볼드 + 단계 열(RFQ/Quote/P/O/C·I) 매칭색. */
+/* 주요 활동 라벨(RFQ Sent 등) — 볼드 + 업무타입(Parts/Service) 매칭색으로 통일. */
 .act-auto-label { font-weight: 700; }
-.act-mx-cell.r .act-auto-label { color: #48587a; }
-.act-mx-cell.q .act-auto-label { color: var(--blue); }
-.act-mx-cell.p .act-auto-label { color: #7c3aed; }
-.act-mx-cell.c .act-auto-label { color: #11824a; }
+.act-mx-cell.wt-parts .act-auto-label { color: #1d4ed8; }
+.act-mx-cell.wt-service .act-auto-label { color: #137a44; }
 .act-tag { font-size: 10px; background: #eef3f9; color: #64748b; padding: 0 5px; border-radius: 8px; margin-right: 2px; }
 .act-tag.close { background: #fde8e8; color: #b91c1c; }
 .act-item.closed .act-text { color: #b91c1c; }

@@ -609,7 +609,7 @@ function DealStageRow({
         // 지나왔거나 진행 중인 단계 열(ci ≤ 현재 단계 열)에 상단 업무타입 색 bar.
         const cur = ci <= addCol && !row.cancelled;
         return (
-        <div key={ci} className={`act-mx-cell ${STAGE_COLUMNS[ci].tone}${cur ? (isService ? " cur-service" : " cur-parts") : ""}`}>
+        <div key={ci} className={`act-mx-cell ${STAGE_COLUMNS[ci].tone} ${isService ? "wt-service" : "wt-parts"}${cur ? (isService ? " cur-service" : " cur-parts") : ""}`}>
           {cacts.length > 0 ? (
             <ul className="act-list">
               {cacts.map((a, i) =>
