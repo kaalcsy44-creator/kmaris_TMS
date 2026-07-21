@@ -378,8 +378,6 @@ function StageTimeline({
     } else closeAct = a;
   }
   const done = Math.max(0, Math.min(row.stage, chain.length));
-  // "+ note" 는 맨 마지막(가장 높은, 생략 안 된) 단계 한 곳에만 — 입력하면 날짜로 자동 배치된다.
-  const lastStageNo = [...chain].reverse().find((c) => !c.skip)?.no ?? chain[chain.length - 1]?.no ?? 0;
 
   return (
     <section className="proj-ov-sec">
@@ -450,9 +448,12 @@ function StageTimeline({
                         <ul className="ov-tl-sends">
                           {autos.map((a, i) => (
                             <li key={i}>
-                              {/* 날짜·시각을 앞에, 상대(to 벤더)를 뒤에. */}
+                              {/* 날짜·시각 → 주요 활동 라벨(볼드·매칭색) → 상대(to 벤더). 업무일지 나열과 같은 꼴. */}
                               <span className="ov-tl-ndate">{md(a.date)}{hm(a.at || "") ? ` ${hm(a.at || "")}` : ""}</span>
-                              <span className="ov-tl-party">{a.party}</span>
+                              <span className="ov-tl-actline">
+                                <b className="ov-tl-actlabel">{a.label}</b>
+                                {a.party ? <span className="ov-tl-party">{a.party}</span> : null}
+                              </span>
                             </li>
                           ))}
                         </ul>
@@ -476,38 +477,38 @@ function StageTimeline({
                           ))}
                         </ul>
                       ) : null}
+                      {/* 활동기록 추가 — 마지막 활동 바로 아래, 즉 현재 단계 로그 맨 밑에 한 곳만.
+                          입력한 일시로 알맞은 단계에 자동 배치된다. 현재 단계는 흐림이 없어
+                          단계 li 안에 둬도 눌리지 않는다. onActivityAdded 있을 때만(로그인) 노출. */}
+                      {onActivityAdded && c.no === row.stage ? (
+                        addStage === c.no ? (
+                          <div className="ov-tl-addform">
+                            <StageAddNote
+                              rfqId={row.rfq_id}
+                              chain={chain}
+                              currentStage={row.stage}
+                              onDone={async () => {
+                                setAddStage(null);
+                                await onActivityAdded();
+                              }}
+                              onCancel={() => setAddStage(null)}
+                            />
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            className="ov-tl-add ov-tl-addfoot"
+                            onClick={() => setAddStage(c.no)}
+                            title="Add activity — placed by the date you enter"
+                          >
+                            + note
+                          </button>
+                        )
+                      ) : null}
                     </li>
                   );
                 })}
             </ol>
-            {/* 활동기록 추가 — 단계마다 두지 않고 마지막 단계가 든 열(맨 오른쪽) 밑에 한 곳만.
-                입력한 일시로 알맞은 단계에 자동 배치된다. 단계 li 밖에 둬서 미완료 단계의
-                흐림(opacity)에 눌리지 않게 한다. onActivityAdded 있을 때만(로그인) 노출. */}
-            {onActivityAdded && lastStageNo >= col.from && lastStageNo <= col.to ? (
-              addStage === lastStageNo ? (
-                <div className="ov-tl-addform">
-                  <StageAddNote
-                    rfqId={row.rfq_id}
-                    chain={chain}
-                    currentStage={row.stage}
-                    onDone={async () => {
-                      setAddStage(null);
-                      await onActivityAdded();
-                    }}
-                    onCancel={() => setAddStage(null)}
-                  />
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  className="ov-tl-add ov-tl-addfoot"
-                  onClick={() => setAddStage(lastStageNo)}
-                  title="Add activity — placed by the date you enter"
-                >
-                  + note
-                </button>
-              )
-            ) : null}
           </div>
         ))}
       </div>
