@@ -9163,13 +9163,8 @@ button.ov-tl-stage:hover { background: color-mix(in srgb, var(--ov-tone) 12%, tr
   padding-right: 4px;
   border-radius: 7px;
 }
-.proj-ov-tl > li::before {
-  left: 18px;
-  width: 1px;
-  background: #dbe2eb;
-}
-.proj-ov-tl > li:first-child::before { top: 16px; }
-.proj-ov-tl > li:last-child::before { bottom: calc(100% - 16px); }
+/* 단계 번호 사이 연결선은 표시하지 않는다(요청). */
+.proj-ov-tl > li::before { display: none; }
 .ov-tl-stage {
   gap: 7px;
   min-height: 34px;
@@ -9213,10 +9208,11 @@ button.ov-tl-stage:hover {
 .proj-ov-tl > li.current::before {
   background: color-mix(in srgb, var(--ov-tone) 28%, #fff);
 }
+/* 현재 단계를 감싸는 카드(배경·좌측 바·그림자) 효과는 표시하지 않는다(요청).
+   현재 단계 식별은 채워진 원형 + 원형 링(아래)만으로 충분하다. */
 .proj-ov-tl > li.current {
-  z-index: 2;
-  background: linear-gradient(180deg, #fff 0%, color-mix(in srgb, var(--ov-tone) 7%, #fff) 100%);
-  box-shadow: inset 3px 0 0 var(--ov-tone), 0 2px 7px rgba(24, 53, 83, 0.12);
+  background: none;
+  box-shadow: none;
 }
 .proj-ov-tl > li.current .ov-tl-dot {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--ov-work) 18%, transparent),
