@@ -8606,7 +8606,7 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 .act-open-edit:hover { color: var(--blue); }
 
 .act-list { list-style: none; margin: 0 0 8px; padding: 0; }
-.act-item { display: flex; align-items: flex-start; gap: 6px; padding: 3px 0; font-size: 11px;
+.act-item { position: relative; display: flex; align-items: flex-start; gap: 6px; padding: 3px 0; font-size: 11px;
   border-bottom: 1px dashed #f0f2f5; }
 .act-item:last-child { border-bottom: 0; }
 .act-item.star { background: #fff8e6; border-radius: 4px; padding-left: 6px; }
@@ -8623,8 +8623,13 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 /* 담당자(작성자) 배지 — 노트 끝에 작게. */
 .act-note-pic { margin-left: 6px; font-size: 10.5px; background: #eef3f9; color: #64748b;
   padding: 0 6px; border-radius: 8px; vertical-align: 1px; }
-.act-actions { flex: none; display: flex; gap: 4px; opacity: 0; transition: opacity .12s; }
-.act-item:hover .act-actions, .act-item.star .act-actions { opacity: 1; }
+/* 액션(★✎×)은 flow에서 빼내 hover 시 우측에 떠오르는 오버레이로 — 평소엔 공간을
+   차지하지 않아 act-text가 행 전체 폭을 쓴다. 뒤에 페이드 배경을 깔아 글자와 안 겹친다. */
+.act-actions { position: absolute; top: 2px; right: 0; display: flex; gap: 4px;
+  padding-left: 18px; opacity: 0; pointer-events: none; transition: opacity .12s;
+  background: linear-gradient(to right, transparent, #fff 14px); }
+.act-item.star .act-actions { background: linear-gradient(to right, transparent, #fff8e6 14px); }
+.act-item:hover .act-actions { opacity: 1; pointer-events: auto; }
 .act-starbtn { border: 0; background: none; color: #cbd5e1; cursor: pointer; font-size: 13px; padding: 0 2px; }
 .act-starbtn.on { color: #f59e0b; }
 .act-del { border: 0; background: none; color: #cbd5e1; cursor: pointer; font-size: 15px; line-height: 1; padding: 0 2px; }
