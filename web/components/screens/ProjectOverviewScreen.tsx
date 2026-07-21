@@ -16,7 +16,6 @@ import { useCachedData } from "@/lib/useCachedData";
 import { sortByDocNo } from "@/lib/sort";
 import {
   resolveSteps,
-  fmtStageDate,
   buildStageChain,
   makeItemMatcher,
   ciPurchase,
@@ -407,12 +406,11 @@ function StageTimeline({
                           onClick={() => onOpenStage(c.no)}
                           title={`Open stage ${c.no} in the work view`}
                         >
-                          <span className="ov-tl-dot" aria-hidden>
-                            {state === "done" ? "✓" : state === "current" ? "●" : "○"}
-                          </span>
-                          <span className="ov-tl-no">{c.no}</span>
+                          <span className="ov-tl-dot">{c.no}</span>
+                          {c.at ? (
+                            <time className="ov-tl-at">{md(c.at)}{hm(c.at) ? ` ${hm(c.at)}` : ""}</time>
+                          ) : null}
                           <b className="ov-tl-label">{c.label}</b>
-                          <time className="ov-tl-at">{c.at ? fmtStageDate(c.at) : ""}</time>
                         </button>
                       ) : (
                         <Link
@@ -420,12 +418,11 @@ function StageTimeline({
                           href={`/project?rfq=${row.rfq_id}&stage=${c.no}`}
                           title={`Open stage ${c.no} in Progress`}
                         >
-                          <span className="ov-tl-dot" aria-hidden>
-                            {state === "done" ? "✓" : state === "current" ? "●" : "○"}
-                          </span>
-                          <span className="ov-tl-no">{c.no}</span>
+                          <span className="ov-tl-dot">{c.no}</span>
+                          {c.at ? (
+                            <time className="ov-tl-at">{md(c.at)}{hm(c.at) ? ` ${hm(c.at)}` : ""}</time>
+                          ) : null}
                           <b className="ov-tl-label">{c.label}</b>
-                          <time className="ov-tl-at">{c.at ? fmtStageDate(c.at) : ""}</time>
                         </Link>
                       )}
                       {/* 상대·문서번호는 단계 줄이 좁아 아랫줄로 내린다. 2단계는 발송별로
@@ -453,7 +450,7 @@ function StageTimeline({
                               {/* 날짜·시각을 앞에, 내용을 뒤에. */}
                               <span className="ov-tl-ndate">{md(n.date)}{hm(n.note.datetime || n.note.at || "") ? ` ${hm(n.note.datetime || n.note.at || "")}` : ""}</span>
                               <span className="ov-tl-ntext">
-                                <ActivityDesc act={n} />
+                                <ActivityDesc act={n} metaBlock />
                               </span>
                             </li>
                           ))}

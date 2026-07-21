@@ -8808,8 +8808,9 @@ button.ov-tl-stage:hover { background: color-mix(in srgb, var(--ov-tone) 12%, tr
   color: var(--muted); text-align: right; }
 .ov-tl-label { font-size: var(--ov-t-name); font-weight: 700; color: var(--navy); min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ov-tl-at { flex: none; margin-left: auto; font-size: var(--ov-t-meta); color: var(--muted);
-  font-variant-numeric: tabular-nums; }
+/* 단계 날짜·시각 — 노트 줄과 같이 내용(라벨) 앞에 둔다. */
+.ov-tl-at { flex: none; font-size: var(--ov-t-meta); color: var(--muted);
+  font-variant-numeric: tabular-nums; white-space: nowrap; }
 /* 상대·문서번호 — 칸이 좁아 단계 줄 아래로 내린다(점 선 오른쪽으로 들여씀). */
 .ov-tl-sub { display: flex; gap: 6px; padding: 0 4px 4px 36px; font-size: var(--ov-t-meta);
   color: var(--muted); min-width: 0; }
@@ -9156,7 +9157,9 @@ button.ov-tl-stage:hover {
   background: #fff;
   border: 1px solid #cfd8e4;
   color: #8290a4;
-  font-size: 9px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: -0.4px;
 }
 .ov-tl-no {
   width: 13px;
