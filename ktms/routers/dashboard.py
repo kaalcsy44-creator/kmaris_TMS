@@ -159,6 +159,15 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
                     _seen_v[nm] = e
                     rfq_vendors_status.append(e)
 
+            # RFQ 발송 이력 — 벤더 RFQ 1건 = 발송 1건(중복제거 없음). 같은 벤더에 여러 번
+            # 보냈거나 여러 벤더에 보냈어도 각각 별도 이벤트로 남겨 업무일지에서 한 행씩 표시한다.
+            # 발신 일시 오름차순(먼저 보낸 것부터).
+            rfq_sends = sorted(
+                ({"vendor": vendor_names.get(x.vendor_id, "—"), "sent_at": _vrfq_sent_iso(x)}
+                 for x in vrfqs),
+                key=lambda e: e["sent_at"] or "",
+            )
+
             # 4) Customer Quot. 발신
             qtns = (s.query(Quotation).filter_by(rfq_id=r.id)
                     .order_by(Quotation.id.desc()).all())
@@ -336,6 +345,8 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
                 "vendor": vendor_po_vendor,
                 # RFQ 발송 벤더 + 견적 수신여부(미수신은 프런트에서 취소선). 프로젝트 정보용.
                 "rfq_vendors": rfq_vendors_status,
+                # RFQ 발송 이력(벤더별·발송별) — 업무일지에서 발송 1건씩 별도 행으로 표시.
+                "rfq_sends": rfq_sends,
                 "vendor_email": vendor_po_email,
                 # 상태 · 단계 일시
                 "stage": stage,

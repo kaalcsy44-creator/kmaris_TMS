@@ -351,12 +351,13 @@ function StageTimeline({
   // 어느 단계에 활동기록 입력창을 열어 뒀는지(한 번에 하나). null 이면 모두 닫힘.
   const [addStage, setAddStage] = useState<number | null>(null);
 
-  // 단계별로 활동을 나눠 담는다. 자동 이벤트는 단계당 최대 1건(완료), 노트는 여러 건.
-  const autoOf = new Map<number, Extract<Activity, { kind: "auto" }>>();
+  // 단계별로 활동을 나눠 담는다. 자동 이벤트는 대개 단계당 1건이나, 2단계(RFQ Sent)는
+  // 벤더별 발송이 여러 건일 수 있어 리스트로 담는다. 노트는 여러 건.
+  const autoOf = new Map<number, Extract<Activity, { kind: "auto" }>[]>();
   const notesOf = new Map<number, Extract<Activity, { kind: "note" }>[]>();
   let closeAct: Extract<Activity, { kind: "close" }> | null = null;
   for (const a of acts) {
-    if (a.kind === "auto") autoOf.set(a.stage, a);
+    if (a.kind === "auto") autoOf.set(a.stage, [...(autoOf.get(a.stage) ?? []), a]);
     else if (a.kind === "note") notesOf.set(a.stage, [...(notesOf.get(a.stage) ?? []), a]);
     else closeAct = a;
   }
@@ -388,8 +389,11 @@ function StageTimeline({
                 .filter((c) => c.no >= col.from && c.no <= col.to)
                 .map((c) => {
                   const state = c.no < row.stage ? "done" : c.no === row.stage ? "current" : "todo";
-                  const auto = autoOf.get(c.no);
+                  const autos = autoOf.get(c.no) ?? [];
                   const notes = notesOf.get(c.no) ?? [];
+                  // 2단계는 발송마다 상대(to 벤더)가 다르므로 리스트로 보여준다. 다른 단계는 1건.
+                  const multiSend = c.no === 2 && autos.length > 1;
+                  const party = autos[0]?.party ?? "";
                   return (
                     <li key={c.no} className={`${state}${c.skip ? " skip" : ""}`}>
                       {/* 단계 줄 클릭 → 그 단계의 작업 화면(편집 진입점).
@@ -424,10 +428,20 @@ function StageTimeline({
                           <time className="ov-tl-at">{c.at ? fmtStageDate(c.at) : ""}</time>
                         </Link>
                       )}
-                      {/* 상대·문서번호는 단계 줄이 좁아 아랫줄로 내린다. */}
-                      {auto?.party || c.value || c.skip ? (
+                      {/* 상대·문서번호는 단계 줄이 좁아 아랫줄로 내린다. 2단계는 발송별로
+                          벤더·발신일을 한 줄씩(여러 벤더에 보낸 경우). */}
+                      {multiSend ? (
+                        <ul className="ov-tl-sends">
+                          {autos.map((a, i) => (
+                            <li key={i}>
+                              <span className="ov-tl-party">{a.party}</span>
+                              <span className="ov-tl-ndate">{md(a.date)}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : party || c.value || c.skip ? (
                         <div className="ov-tl-sub">
-                          {auto?.party ? <span className="ov-tl-party">{auto.party}</span> : null}
+                          {party ? <span className="ov-tl-party">{party}</span> : null}
                           <span className="ov-tl-val">{c.skip ? "N/A" : c.value || ""}</span>
                         </div>
                       ) : null}

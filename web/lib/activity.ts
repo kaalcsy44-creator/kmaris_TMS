@@ -10,7 +10,8 @@ import { closeReasonLabel } from "@/lib/api";
 import { vendorOf } from "@/lib/deal";
 
 export type Activity =
-  | { kind: "auto"; date: string; stage: number; label: string; party: string; pic?: string }
+  // at: 정렬용 전체 일시(iso). 같은 날 여러 발송을 시각순으로 잇는다. 없으면 date(YYYY-MM-DD)로 정렬.
+  | { kind: "auto"; date: string; stage: number; label: string; party: string; pic?: string; at?: string }
   | { kind: "note"; date: string; stage: number; index: number; note: StageNote }
   | { kind: "close"; date: string; reason: string };
 
@@ -74,6 +75,25 @@ export function buildActivities(row: PipelineRow, steps: string[]): Activity[] {
   const out: Activity[] = [];
   for (let n = 1; n <= steps.length; n++) {
     const key = String(n);
+    // 2단계(RFQ Sent): 벤더 RFQ 발송 1건 = 활동 1건. 여러 벤더/여러 번 보냈으면(같은
+    // 시각이어도) 각각 별도 행으로 남긴다. rfq_sends 가 없는 옛 데이터는 아래 단일 처리로 폴백.
+    if (n === 2 && row.rfq_sends?.length) {
+      for (const send of row.rfq_sends) {
+        const at = send.sent_at || "";
+        const date = at.slice(0, 10);
+        if (!date) continue;
+        out.push({
+          kind: "auto",
+          date,
+          stage: 2,
+          label: steps[1] || "Stage 2",
+          party: send.vendor ? `to ${send.vendor}` : "",
+          pic: row.assignee,
+          at,
+        });
+      }
+      continue;
+    }
     const date = (row.stage_dates?.[key] || row.stage_auto?.[key] || "").slice(0, 10);
     if (date)
       out.push({
@@ -91,9 +111,11 @@ export function buildActivities(row: PipelineRow, steps: string[]): Activity[] {
       out.push({ kind: "note", date, stage: Number(stage), index, note });
     });
   }
+  const sortKey = (x: Activity): string =>
+    x.kind === "note" ? (x.note.datetime || x.note.at || x.date) : x.kind === "auto" ? (x.at || x.date) : x.date;
   out.sort((a, b) => {
-    const da = a.kind === "note" ? (a.note.datetime || a.note.at || a.date) : a.date;
-    const db = b.kind === "note" ? (b.note.datetime || b.note.at || b.date) : b.date;
+    const da = sortKey(a);
+    const db = sortKey(b);
     return da < db ? -1 : da > db ? 1 : 0;
   });
   // 종결 이벤트 — 항상 맨 아래에 붙인다(날짜 없으면 날짜칸 비움).
