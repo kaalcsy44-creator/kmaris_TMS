@@ -8361,6 +8361,8 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 .act-digest-row.cancelled { opacity: .6; }
 .act-digest-head { display: flex; align-items: baseline; gap: 6px; }
 .act-digest-code { flex: none; font-weight: 800; font-size: 14px; color: var(--blue); }
+/* 서비스 업무타입 카드의 프로젝트 번호는 녹색계열(좌측 라인과 동일 톤). */
+.act-digest-row.service .act-digest-code { color: #2f7d53; }
 .act-digest-date { flex: none; font-size: 10px; color: var(--muted); }
 .act-digest-title { flex: 0 1 auto; min-width: 0; font-size: 14.5px; font-weight: 600; color: var(--ink);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
