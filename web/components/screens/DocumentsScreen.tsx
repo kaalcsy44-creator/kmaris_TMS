@@ -2089,10 +2089,14 @@ function ItemEditor({
                 // grand(최종 합계)행은 좌측 셀(1~8열)을 하나로 합쳐 라벨을 넓게 표기.
                 footerRows.map((r, idx) =>
                   r.grand ? (
+                    // 최종 합계행 — 라벨은 No.~Unit(2~7열) 병합·중앙, 값은 Amount(9열)로 위 값들과
+                    // 같은 열에 맞춘다. colspan 이라 nth-child 폭 규칙과 어긋나므로 .ig-foot 로 제외.
                     <tr key={idx} className="foot-grand">
-                      <td className="total-label" colSpan={8}>{r.label}</td>{/* 1~8 병합 */}
-                      <td className="num total-value">{r.value}</td>{/* 9 amount */}
-                      <td></td>{/* 10 remark */}
+                      <td className="ig-foot" />{/* 1 sel */}
+                      <td className="ig-foot total-label" colSpan={6} style={{ textAlign: "center" }}>{r.label}</td>{/* 2~7 No.~Unit */}
+                      <td className="ig-foot" />{/* 8 unit_price */}
+                      <td className="ig-foot num total-value">{r.value}</td>{/* 9 amount */}
+                      <td className="ig-foot" />{/* 10 remark */}
                     </tr>
                   ) : (
                     <tr key={idx}>
