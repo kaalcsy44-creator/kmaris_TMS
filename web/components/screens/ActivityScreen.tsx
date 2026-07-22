@@ -556,8 +556,9 @@ export default function ActivityScreen() {
                     ? ageDays >= 14 ? "urgent" : ageDays >= 7 ? "warn" : "normal"
                     : "normal");
                 const vend = vendorOf(row);
-                // 최신 완료 단계 라벨(현재 stage) — 카드 우측 상단, 경과일 좌측에 표시.
+                // 최신 완료 단계 라벨(현재 stage) — 카드 우측 상단.
                 const stageLabel = row.stage > 0 ? (steps[row.stage - 1] || "") : "";
+                const vessel = (row.vessels || row.vessel || "").split("\n").filter(Boolean).join(" · ");
                 return (
                   <li
                     key={row.rfq_id}
@@ -569,11 +570,9 @@ export default function ActivityScreen() {
                       <span className="act-digest-code">{code}</span>
                       {date ? <span className="act-digest-date">{date}</span> : null}
                       <span className="act-digest-title">{row.project_title || "(untitled)"}</span>
+                      {vessel ? <span className="act-digest-vessel" title={vessel}>· {vessel}</span> : null}
                       {stageLabel ? (
                         <span className="act-digest-stage" title="Latest completed stage">{stageLabel}</span>
-                      ) : null}
-                      {ageDays != null ? (
-                        <span className={`act-digest-age lv-${lv}`} title="Days since last activity">{ageDays}d</span>
                       ) : null}
                     </div>
                     {(row.customer || vend) ? (
@@ -596,6 +595,10 @@ export default function ActivityScreen() {
                             {hm(actTimeIso(act)) ? <span className="act-time"> {hm(actTimeIso(act))}</span> : null}
                           </span>
                           <span className="act-digest-desc"><ActivityDesc act={act} /></span>
+                          {/* 경과일 — 최신 log(맨 아래 행) 우측 끝에 배치. */}
+                          {i === acts.length - 1 && ageDays != null ? (
+                            <span className={`act-digest-age lv-${lv}`} title="Days since last activity">{ageDays}d</span>
+                          ) : null}
                         </li>
                       ))}
                     </ul>
