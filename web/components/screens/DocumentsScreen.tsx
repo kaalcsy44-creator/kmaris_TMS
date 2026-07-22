@@ -1017,7 +1017,12 @@ function ProformaInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChang
 }
 
 function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChanged: () => void }) {
-  const [ciNo, setCiNo] = useState(data.ci?.ci_no || "");
+  // CI 번호 자동생성 규칙 = P/O 번호 + "-CI". 값이 없거나 규칙과 같으면 자동, 아니면 직접입력.
+  const autoCiNo = data.order.po_no ? `${data.order.po_no}-CI` : "";
+  const [ciNo, setCiNo] = useState(data.ci?.ci_no || autoCiNo);
+  const [ciMode, setCiMode] = useState<"auto" | "manual">(
+    data.ci?.ci_no && data.ci.ci_no !== autoCiNo ? "manual" : "auto",
+  );
   const [date, setDate] = useState(data.ci?.date || today());
   const [currency, setCurrency] = useState(data.ci?.currency || "USD");
   const [vatRate, setVatRate] = useState(data.ci?.vat_rate ?? 0);
@@ -1057,7 +1062,8 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
 
   // 저장하지 않은 편집을 마지막 저장값으로 되돌린다.
   function cancel() {
-    setCiNo(data.ci?.ci_no || "");
+    setCiNo(data.ci?.ci_no || autoCiNo);
+    setCiMode(data.ci?.ci_no && data.ci.ci_no !== autoCiNo ? "manual" : "auto");
     setDate(data.ci?.date || today());
     setCurrency(data.ci?.currency || "USD");
     setVatRate(data.ci?.vat_rate ?? 0);
@@ -1098,7 +1104,34 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
       <div className="sub-h">Basic info</div>
       {/* 좌열: 문서정보(4)·선적정보(7)·HS Code(1) = 12필드, 절반폭 2열 배치. */}
       <div className="form-grid doc-form-grid">
-        <Field label="CI No." value={ciNo} onChange={setCiNo} />
+        <label className="form-field">
+          <span className="field-label-row">
+            CI No.
+            <span className="seg-toggle">
+              <button
+                type="button"
+                className={ciMode === "auto" ? "on" : ""}
+                onClick={() => { setCiMode("auto"); setCiNo(autoCiNo); }}
+              >
+                자동생성
+              </button>
+              <button
+                type="button"
+                className={ciMode === "manual" ? "on" : ""}
+                onClick={() => setCiMode("manual")}
+              >
+                직접 입력
+              </button>
+            </span>
+          </span>
+          <input
+            type="text"
+            value={ciNo}
+            onChange={(e) => setCiNo(e.target.value)}
+            readOnly={ciMode === "auto"}
+            title={ciMode === "auto" ? "P/O 번호 기반 자동생성" : undefined}
+          />
+        </label>
         <Field label="CI Date" value={date} onChange={setDate} type="date" />
         <label className="form-field">
           <span>Currency</span>
