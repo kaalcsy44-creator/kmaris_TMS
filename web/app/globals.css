@@ -7415,15 +7415,13 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   letter-spacing: 0.3px;
 }
 /* 단계 초기화 바 — 스테이지 패널 하단 고정(안내문 좌 + Reset 버튼 우). */
+/* 하단 자연 흐름(정적)에 둔다 — sticky 로 띄우면 길어진 편집창(품목 리스트) 위로 겹친다. */
 .wp-reset-foot {
-  position: sticky;
-  bottom: 0;
-  z-index: 2;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  margin-top: 8px;
+  margin-top: 12px;
   padding: 8px 12px;
   background: #fff7f7;
   border: 1px solid #f3d6d6;
