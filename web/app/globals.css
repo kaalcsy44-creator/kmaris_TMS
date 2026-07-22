@@ -8350,15 +8350,16 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 /* 2열 그리드 — 좁은 화면(좁은 모달)에서는 1열로 접힌다. */
 .act-digest { list-style: none; margin: 0; padding: 0;
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+/* 모든 카드에 좌측 라인 — 업무타입 색으로 구분(Parts=파랑 / 서비스=초록). */
 .act-digest-row { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px;
-  cursor: pointer; border-left: 3px solid transparent; background: #fff; }
+  cursor: pointer; border-left: 3px solid var(--blue); background: #fff; }
 .act-digest-row:hover { background: var(--head-bg); border-color: var(--blue); }
 .act-digest-row.service { border-left-color: #7c9; }
 .act-digest-row.cancelled { opacity: .6; }
 .act-digest-head { display: flex; align-items: baseline; gap: 6px; }
-.act-digest-code { flex: none; font-weight: 800; font-size: 12px; color: var(--blue); }
+.act-digest-code { flex: none; font-weight: 800; font-size: 14px; color: var(--blue); }
 .act-digest-date { flex: none; font-size: 10px; color: var(--muted); }
-.act-digest-title { flex: 1 1 auto; min-width: 0; font-size: 12.5px; font-weight: 600; color: var(--ink);
+.act-digest-title { flex: 1 1 auto; min-width: 0; font-size: 14.5px; font-weight: 600; color: var(--ink);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .act-digest-age { flex: none; font-size: 10px; font-weight: 700;
   padding: 1px 6px; border-radius: 6px; background: var(--head-bg); color: var(--muted); }
@@ -8366,7 +8367,9 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 .act-digest-age.lv-urgent { background: #fdeaea; color: #b42318; }
 .act-digest-parties { display: flex; align-items: center; flex-wrap: wrap; gap: 4px;
   margin-top: 3px; font-size: 11px; color: var(--muted); }
-.act-digest-contact { color: var(--muted); }
+/* 고객명(로고+텍스트)과 담당자를 같은 flex 축에서 수직 중앙 정렬 → 담당자 처짐 방지. */
+.act-digest-cust { display: inline-flex; align-items: center; min-width: 0; }
+.act-digest-contact { color: var(--muted); white-space: nowrap; }
 .act-digest-sep { color: var(--line); }
 .act-digest-acts { list-style: none; margin: 5px 0 0; padding: 5px 0 0;
   border-top: 1px dashed var(--line); display: flex; flex-direction: column; gap: 3px; }
