@@ -374,14 +374,14 @@ function EmbeddedVendorRfq({
             <button
               type="button"
               className={`btn sm${selected.status === "견적 불가" ? " primary" : ""}`}
-              title="이 벤더가 견적 불가를 통보한 경우 표시 (프로젝트 Vendor 필드에 취소선)"
+              title="Mark this vendor as declined to quote (struck through in the project Vendor field)"
               onClick={async () => {
                 await toggleVendorRfqDecline(selected.id);
                 load();
                 onChanged();
               }}
             >
-              {selected.status === "견적 불가" ? "견적 불가 ✓" : "견적 불가"}
+              {selected.status === "견적 불가" ? "No quote ✓" : "No quote"}
             </button>
           ) : null}
           <button type="button" className="btn primary sm" onClick={() => setAdding(true)}>+ Send another</button>
