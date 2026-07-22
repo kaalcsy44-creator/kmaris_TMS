@@ -1105,32 +1105,18 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
       {/* 좌열: 문서정보(4)·선적정보(7)·HS Code(1) = 12필드, 절반폭 2열 배치. */}
       <div className="form-grid doc-form-grid">
         <label className="form-field">
-          <span className="field-label-row">
-            CI No.
-            <span className="seg-toggle">
-              <button
-                type="button"
-                className={ciMode === "auto" ? "on" : ""}
-                onClick={() => { setCiMode("auto"); setCiNo(autoCiNo); }}
-              >
-                자동생성
-              </button>
-              <button
-                type="button"
-                className={ciMode === "manual" ? "on" : ""}
-                onClick={() => setCiMode("manual")}
-              >
-                직접 입력
-              </button>
-            </span>
-          </span>
-          <input
-            type="text"
-            value={ciNo}
-            onChange={(e) => setCiNo(e.target.value)}
-            readOnly={ciMode === "auto"}
-            title={ciMode === "auto" ? "P/O 번호 기반 자동생성" : undefined}
-          />
+          <span>CI No.</span>
+          {ciMode === "auto" ? (
+            <select value="auto" onChange={(e) => { if (e.target.value === "manual") setCiMode("manual"); }}>
+              <option value="auto">{autoCiNo ? `${autoCiNo} (auto)` : "Auto-generate"}</option>
+              <option value="manual">Manual entry…</option>
+            </select>
+          ) : (
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <input value={ciNo} onChange={(e) => setCiNo(e.target.value)} placeholder="CI No.…" autoFocus style={{ flex: 1 }} />
+              <button type="button" className="btn sm" onClick={() => { setCiMode("auto"); setCiNo(autoCiNo); }} title="Use auto number">auto</button>
+            </div>
+          )}
         </label>
         <Field label="CI Date" value={date} onChange={setDate} type="date" />
         <label className="form-field">

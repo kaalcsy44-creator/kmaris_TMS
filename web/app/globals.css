@@ -7948,14 +7948,6 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 }
 
 /* ── Settings: 이메일 템플릿 편집 ─────────────────────────────────────────── */
-/* 라벨 옆에 세그먼트 토글을 오른쪽 정렬로 배치(예: CI No. 자동/직접). */
-.field-label-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
 .seg-toggle {
   display: inline-flex;
   border: 1px solid var(--line-strong);
