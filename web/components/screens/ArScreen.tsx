@@ -8,12 +8,14 @@ import {
   fetchArOverview,
   fetchDocumentDetail,
   fetchPoWorkOptions,
+  previewTaxInvoicePdf,
   recordArPayment,
   updateArRecord,
 } from "@/lib/api";
 import { can, canEditDeal, editBlockReason } from "@/lib/auth";
 import { useCachedData, invalidateCache } from "@/lib/useCachedData";
-import type { ArRow, DocumentDetail, PoWorkOptions } from "@/lib/types";
+import type { ArRow, DocumentDetail, PoWorkOptions, TaxInvoiceItem } from "@/lib/types";
+import { createPortal } from "react-dom";
 import { tr } from "@/lib/labels";
 import Modal from "@/components/common/Modal";
 import { ModalTitle } from "@/components/common/BaseMeta";
@@ -39,7 +41,16 @@ type ArForm = {
   due_date: string;
   status: string;
   notes: string;
+  // 세금계산서(대금청구서) 문서 필드
+  invoice_no: string;
+  invoice_date: string;
+  vat_rate: number;
+  items: TaxInvoiceItem[];
+  remarks: string;
 };
+
+const DEFAULT_REMARKS =
+  "입금 후 입금증을 담당자에게 송부 부탁드립니다. 전자세금계산서 발행을 위해 사업자등록증 사본을 함께 전달 부탁드립니다.";
 
 const emptyForm: ArForm = {
   id: 0,
@@ -51,7 +62,14 @@ const emptyForm: ArForm = {
   due_date: today(),
   status: "미수",
   notes: "",
+  invoice_no: "",
+  invoice_date: today(),
+  vat_rate: 0.1,
+  items: [],
+  remarks: DEFAULT_REMARKS,
 };
+
+const emptyTaxItem: TaxInvoiceItem = { description: "", part_no: "", qty: 1, unit_price: 0, amount: 0 };
 
 type StageTab = 10 | 11;
 
@@ -156,6 +174,23 @@ function ciTotal(d: DocumentDetail | null): number {
   if (!d?.ci?.items) return 0;
   return d.ci.items.reduce((s, it) => s + num(it.amount), 0);
 }
+
+/** CI 품목 → 세금계산서 청구 품목(설명·Part No.·수량·단가·금액). */
+function ciItemsToTax(d: DocumentDetail | null): TaxInvoiceItem[] {
+  return (d?.ci?.items ?? []).map((it) => {
+    const qty = num(it.qty);
+    const unit_price = num(it.unit_price);
+    return {
+      description: it.description || "",
+      part_no: it.part_no || "",
+      qty,
+      unit_price,
+      amount: num(it.amount) || qty * unit_price,
+    };
+  });
+}
+
+const taxSubtotal = (items: TaxInvoiceItem[]) => items.reduce((s, it) => s + num(it.amount), 0);
 
 /** 10) Issue Tax Invoice — save billing details, then complete stage 10. */
 function TaxIssueModal({
@@ -397,6 +432,9 @@ function ArAddForm({
           ci_no: f.ci_no || d.ci?.ci_no || "",
           currency: d.ci?.currency || f.currency,
           invoice_amount: f.invoice_amount || ciTotal(d),
+          // 송장번호 = P/O번호+"-INV"(비어있을 때만). 항목은 CI 품목을 기본값으로 불러온다.
+          invoice_no: f.invoice_no || (d.order.po_no ? `${d.order.po_no}-INV` : ""),
+          items: f.items.length ? f.items : ciItemsToTax(d),
         }));
       })
       .catch(() => {});
@@ -419,6 +457,11 @@ function ArAddForm({
         due_date: form.due_date,
         status: form.status,
         notes: form.notes,
+        invoice_no: form.invoice_no,
+        invoice_date: form.invoice_date,
+        vat_rate: form.vat_rate,
+        items: form.items,
+        remarks: form.remarks,
       });
       onChanged();
     } catch (e) {
@@ -427,6 +470,24 @@ function ArAddForm({
       setBusy(false);
     }
   }
+
+  // 청구 품목 편집 — 수량·단가 변경 시 금액(=수량×단가) 자동 계산.
+  function setItem(i: number, key: keyof TaxInvoiceItem, value: string) {
+    setForm((f) => {
+      const items = f.items.map((it, idx) => {
+        if (idx !== i) return it;
+        const next = { ...it, [key]: key === "qty" || key === "unit_price" ? num(value) : value };
+        if (key === "qty" || key === "unit_price") next.amount = num(next.qty) * num(next.unit_price);
+        return next;
+      });
+      return { ...f, items };
+    });
+  }
+  const addItem = () => setForm((f) => ({ ...f, items: [...f.items, { ...emptyTaxItem }] }));
+  const removeItem = (i: number) => setForm((f) => ({ ...f, items: f.items.filter((_, idx) => idx !== i) }));
+
+  const subtotal = taxSubtotal(form.items);
+  const vat = subtotal * num(form.vat_rate);
 
   return (
     <div>
@@ -446,6 +507,8 @@ function ArAddForm({
       </div>
       {form.order_id !== "" ? <OrderInfoBlock orderId={form.order_id} detail={detail} /> : null}
       <div className="form-grid">
+        <Field label="Invoice No." value={form.invoice_no} onChange={(v) => setForm({ ...form, invoice_no: v })} />
+        <Field label="Invoice date" value={form.invoice_date} onChange={(v) => setForm({ ...form, invoice_date: v })} type="date" />
         <Field label="CI No." value={form.ci_no} onChange={(v) => setForm({ ...form, ci_no: v })} />
         <Field label="Invoice amount" value={String(form.invoice_amount)} onChange={(v) => setForm({ ...form, invoice_amount: num(v) })} type="number" />
         <Field label="Paid amount" value={String(form.paid_amount)} onChange={(v) => setForm({ ...form, paid_amount: num(v) })} type="number" />
@@ -453,6 +516,7 @@ function ArAddForm({
           <span>Currency</span>
           <CurrencyToggle value={form.currency} onChange={(v) => setForm({ ...form, currency: v })} />
         </label>
+        <Field label="VAT %" value={String(Math.round(form.vat_rate * 100))} onChange={(v) => setForm({ ...form, vat_rate: num(v) / 100 })} type="number" />
         <Field label="Due date" value={form.due_date} onChange={(v) => setForm({ ...form, due_date: v })} type="date" />
         <label className="form-field">
           <span>Status</span>
@@ -465,13 +529,123 @@ function ArAddForm({
         </label>
         <Field label="Notes" value={form.notes} onChange={(v) => setForm({ ...form, notes: v })} />
       </div>
+
+      {/* 청구 품목(Item list) — TAX INVOICE 문서에 그대로 출력된다. CI 품목이 기본값. */}
+      <div className="tax-items">
+        <div className="tax-items-head">
+          <span className="form-section-title" style={{ margin: 0 }}>Item list</span>
+          <button type="button" className="btn sm" onClick={addItem}>+ Add item</button>
+        </div>
+        <table className="tax-items-table">
+          <thead>
+            <tr>
+              <th style={{ width: 34 }}>No.</th>
+              <th>Description</th>
+              <th style={{ width: 120 }}>Part No.</th>
+              <th style={{ width: 70 }}>Qty</th>
+              <th style={{ width: 110 }}>Unit Price</th>
+              <th style={{ width: 120 }}>Amount</th>
+              <th style={{ width: 30 }} />
+            </tr>
+          </thead>
+          <tbody>
+            {form.items.length === 0 ? (
+              <tr><td colSpan={7} className="tax-items-empty">No items — “+ Add item” or select an order to load CI items.</td></tr>
+            ) : form.items.map((it, i) => (
+              <tr key={i}>
+                <td className="num">{i + 1}</td>
+                <td><input value={it.description} onChange={(e) => setItem(i, "description", e.target.value)} /></td>
+                <td><input value={it.part_no} onChange={(e) => setItem(i, "part_no", e.target.value)} /></td>
+                <td><input className="num" type="number" value={it.qty} onChange={(e) => setItem(i, "qty", e.target.value)} /></td>
+                <td><input className="num" type="number" value={it.unit_price} onChange={(e) => setItem(i, "unit_price", e.target.value)} /></td>
+                <td className="num">{it.amount.toLocaleString()}</td>
+                <td><button type="button" className="tax-items-del" title="Remove" onClick={() => removeItem(i)}>×</button></td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr><td colSpan={5} className="num">Subtotal</td><td className="num">{subtotal.toLocaleString()}</td><td /></tr>
+            <tr><td colSpan={5} className="num">VAT ({Math.round(form.vat_rate * 100)}%)</td><td className="num">{Math.round(vat).toLocaleString()}</td><td /></tr>
+            <tr className="tax-items-total"><td colSpan={5} className="num">Total</td><td className="num">{Math.round(subtotal + vat).toLocaleString()}</td><td /></tr>
+          </tfoot>
+        </table>
+        <label className="form-field" style={{ marginTop: 8 }}>
+          <span>Remarks (청구서 비고)</span>
+          <textarea rows={2} value={form.remarks} onChange={(e) => setForm({ ...form, remarks: e.target.value })} />
+        </label>
+      </div>
+
       <div className="form-actions">
         <button className="btn primary" disabled={form.order_id === "" || busy} onClick={save}>
           {busy ? "Working…" : "Add AR"}
         </button>
+        <TaxPreviewButton orderId={form.order_id === "" ? null : form.order_id} form={form} />
         {err ? <span className="action-err">{err}</span> : null}
       </div>
     </div>
+  );
+}
+
+/** TAX INVOICE(대금청구서) 미리보기 버튼 — 현재 편집값으로 PDF 렌더 후 iframe 모달 표시. */
+function TaxPreviewButton({ orderId, form }: { orderId: number | null; form: ArForm }) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function open() {
+    if (orderId == null) return;
+    setBusy(true);
+    try {
+      const blob = await previewTaxInvoicePdf(orderId, {
+        invoice_no: form.invoice_no,
+        invoice_date: form.invoice_date,
+        due_date: form.due_date,
+        currency: form.currency,
+        vat_rate: form.vat_rate,
+        items: form.items,
+        remarks: form.remarks,
+      });
+      setUrl(URL.createObjectURL(blob));
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "미리보기를 열 수 없습니다.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  function close() {
+    if (url) URL.revokeObjectURL(url);
+    setUrl(null);
+  }
+  function savePdf() {
+    if (!url) return;
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${form.invoice_no || "TAX_INVOICE"}.pdf`;
+    a.click();
+  }
+
+  return (
+    <>
+      <button type="button" className="btn doc-preview-btn" disabled={orderId == null || busy} onClick={open}>
+        {busy ? "Opening…" : "Preview Tax Invoice"}
+      </button>
+      {url && typeof document !== "undefined"
+        ? createPortal(
+            <div className="doc-preview-backdrop" onClick={close}>
+              <div className="doc-preview-modal" onClick={(e) => e.stopPropagation()}>
+                <div className="doc-preview-head">
+                  <span className="doc-preview-title">{form.invoice_no || "TAX INVOICE"}</span>
+                  <div className="doc-preview-acts">
+                    <button className="btn sm doc-preview-save" onClick={savePdf}>PDF Download</button>
+                    <button className="btn sm" onClick={close}>Close</button>
+                  </div>
+                </div>
+                <iframe className="doc-preview-frame" src={url} title="Tax Invoice Preview" />
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
+    </>
   );
 }
 

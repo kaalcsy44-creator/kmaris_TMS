@@ -22,6 +22,7 @@ def _customer_dict(customer) -> Dict[str, Any]:
         "name": customer.name,
         "address": customer.address or "",
         "contact": customer.contact or "",
+        "phone": getattr(customer, "contact_phone", "") or "",
         "email": customer.email or "",
         "tax_id": customer.tax_id or "",
     }

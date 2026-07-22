@@ -3893,6 +3893,73 @@ table.mini tfoot tr.foot-grand .total-value {
   border-bottom-left-radius: 12px;
   border-bottom-right-radius: 12px;
 }
+
+/* 세금계산서(대금청구서) 청구 품목 편집 표 — 9단계 Add AR record 편집창. */
+.tax-items {
+  margin-top: 12px;
+}
+.tax-items-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.tax-items-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.tax-items-table th,
+.tax-items-table td {
+  border: 1px solid var(--border, #d7dbe0);
+  padding: 3px 6px;
+  text-align: left;
+}
+.tax-items-table thead th {
+  background: #eef2f8;
+  font-weight: 700;
+  color: #33415c;
+}
+.tax-items-table td.num,
+.tax-items-table th.num,
+.tax-items-table tfoot td {
+  text-align: right;
+}
+.tax-items-table input {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  font-size: 12px;
+  padding: 1px 2px;
+}
+.tax-items-table input.num {
+  text-align: right;
+}
+.tax-items-table input:focus {
+  outline: 1px solid #7aa2e3;
+  background: #fff;
+}
+.tax-items-empty {
+  color: #8a93a2;
+  text-align: center !important;
+  padding: 10px !important;
+}
+.tax-items-table tfoot td {
+  background: #f6f8fb;
+  font-weight: 600;
+}
+.tax-items-table tfoot tr.tax-items-total td {
+  background: #eaf1fd;
+  font-weight: 700;
+}
+.tax-items-del {
+  border: 0;
+  background: transparent;
+  color: #c0392b;
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+}
 /* 가격설정 — Item list 단가 계산에 직결. 6개 컨트롤을 한 줄로(FX 넓게, Apply는 내용폭). */
 .quote-price-grid {
   grid-template-columns: 1fr 1fr 1.4fr 1fr 0.8fr auto;

@@ -449,6 +449,12 @@ class ARRecord(Base):
     due_date       = Column(String(10))
     status         = Column(SAEnum(ARStatus), default=ARStatus.OUTSTANDING)
     notes          = Column(Text)
+    # 세금계산서(대금청구서) 문서 필드 — 9단계 편집창에서 입력, TAX INVOICE PDF 생성에 사용.
+    invoice_no     = Column(String(60))    # 송장번호(기본 P/O번호+'-INV')
+    invoice_date   = Column(String(10))    # 송장 발행일 YYYY-MM-DD
+    vat_rate       = Column(Float, default=0.1)   # 부가세율(내수 기본 10%)
+    items          = Column(JSON, default=list)   # 청구 품목(설명·Part No.·수량·단가·금액)
+    remarks        = Column(Text)          # 청구서 비고(입금 안내 등)
     created_at     = Column(DateTime, default=datetime.utcnow)
 
 

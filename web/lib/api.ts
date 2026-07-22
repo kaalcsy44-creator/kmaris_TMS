@@ -23,6 +23,7 @@ import type {
   VendorQuoteOverviewRow,
   DocumentDetail,
   DocumentWorkItem,
+  TaxInvoiceItem,
   QtnRow,
   VrfqRow,
   DocRow,
@@ -108,6 +109,24 @@ async function post<T>(path: string, body: unknown): Promise<T> {
     body: JSON.stringify(body),
   });
   return handle<T>(res, path);
+}
+
+async function postBlob(path: string, body: unknown): Promise<Blob> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    headers: authHeaders(true),
+    body: JSON.stringify(body),
+  });
+  if (res.status === 401) {
+    clearAuth();
+    if (typeof window !== "undefined") window.location.href = "/login";
+    throw new Error("인증이 필요합니다.");
+  }
+  if (!res.ok) {
+    const e = (await res.json().catch(() => ({}))) as { detail?: unknown };
+    throw new Error(errorDetailToString(e?.detail) || `API ${res.status} ${res.statusText} — ${path}`);
+  }
+  return res.blob();
 }
 
 async function put<T>(path: string, body: unknown): Promise<T> {
@@ -1078,6 +1097,15 @@ export function recordArPayment(
   });
 }
 
+// 세금계산서(대금청구서) 문서 필드 — 선택적으로 함께 저장된다.
+type ArDocFields = {
+  invoice_no?: string;
+  invoice_date?: string;
+  vat_rate?: number;
+  items?: TaxInvoiceItem[];
+  remarks?: string;
+};
+
 export function createArRecord(body: {
   order_id: number;
   ci_no?: string;
@@ -1087,7 +1115,7 @@ export function createArRecord(body: {
   due_date?: string;
   status?: string;
   notes?: string;
-}): Promise<{ ok: boolean; id: number }> {
+} & ArDocFields): Promise<{ ok: boolean; id: number }> {
   return post("/api/admin/ar", body);
 }
 
@@ -1102,9 +1130,25 @@ export function updateArRecord(
     due_date?: string;
     status?: string;
     notes?: string;
-  }
+  } & ArDocFields
 ): Promise<{ ok: boolean; id: number; status: string }> {
   return put(`/api/admin/ar/${arId}`, body);
+}
+
+/** TAX INVOICE(대금청구서) PDF 미리보기 — 현재 편집값으로 렌더(미저장). Blob 반환. */
+export function previewTaxInvoicePdf(
+  orderId: number,
+  body: {
+    invoice_no?: string;
+    invoice_date?: string;
+    due_date?: string;
+    currency?: string;
+    vat_rate?: number;
+    items?: TaxInvoiceItem[];
+    remarks?: string;
+  }
+): Promise<Blob> {
+  return postBlob(`/api/admin/documents/${orderId}/tax/pdf`, body);
 }
 
 export function deleteArRecord(arId: number): Promise<{ ok: boolean }> {

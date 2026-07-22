@@ -85,6 +85,7 @@ DOC_TITLES = {
     "purchase_order": "PURCHASE ORDER",
     "proforma_invoice": "PROFORMA INVOICE",
     "commercial_invoice": "COMMERCIAL INVOICE",
+    "tax_invoice": "TAX INVOICE",
     "shipping_mark": "SHIPPING MARK",
     "packing_list": "PACKING LIST",
     "shipping_advice": "SHIPPING ADVICE",
@@ -909,6 +910,185 @@ def _make_commercial_invoice_pdf(data: Dict[str, Any], company: Dict[str, Any]) 
     story.append(sign)
     story.append(Spacer(1, 2 * mm))
     story.append(_footer_center(s))
+    doc.build(story, onFirstPage=_footer, onLaterPages=_footer)
+    return buffer.getvalue()
+
+
+def _kor_won_amount(value: Any) -> str:
+    """숫자 금액 → 한글 정식 표기 '일금...원정' (예: 471438 → 일금사십칠만일천사백삼십팔원정)."""
+    n = int(round(_num(value)))
+    if n == 0:
+        return "일금영원정"
+    neg = n < 0
+    n = abs(n)
+    digits = "영일이삼사오육칠팔구"
+    small_units = ["", "십", "백", "천"]
+    big_units = ["", "만", "억", "조", "경"]
+    groups: List[int] = []
+    while n > 0:
+        groups.append(n % 10000)
+        n //= 10000
+    parts: List[str] = []
+    for gi in range(len(groups) - 1, -1, -1):
+        g = groups[gi]
+        if g == 0:
+            continue
+        gstr = ""
+        for pos in range(3, -1, -1):
+            d = (g // (10 ** pos)) % 10
+            if d:
+                gstr += digits[d] + small_units[pos]
+        parts.append(gstr + big_units[gi])
+    body = "".join(parts)
+    return f"일금{'마이너스' if neg else ''}{body}원정"
+
+
+def _make_tax_invoice_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> bytes:
+    """세금계산서(대금청구서) 성격의 TAX INVOICE PDF — 국내(KRW) 청구서 양식.
+    상단 정보 · BILL TO/SUPPLIER · 한글 총액 · 품목표 · 소계/VAT/합계 · 은행정보 구성."""
+    s = _styles()
+    customer = data.get("customer", {}) or {}
+    vessel = data.get("vessel", {}) or {}
+    shipping = data.get("shipping", {}) or {}
+    tax = data.get("tax_invoice", {}) or {}
+    items = normalize_items(data.get("items", []))
+    currency = (data.get("currency") or "KRW").upper()
+    totals = calc_totals(items, _num(data.get("vat_rate", 0)))
+
+    buffer = io.BytesIO()
+    page_width = 190 * mm
+    doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=10 * mm,
+                            rightMargin=10 * mm, topMargin=7 * mm, bottomMargin=12 * mm,
+                            title="TAX INVOICE", author="K-MARIS Energy & Solutions Co., Ltd.")
+
+    def p(value, style="small"):
+        return _p(value, s[style])
+
+    def section(title, width=page_width):
+        t = Table([[p(title, "section")]], colWidths=[width])
+        t.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#1F3B66")),
+                               ("TEXTCOLOR", (0, 0), (-1, -1), colors.white),
+                               ("FONTNAME", (0, 0), (-1, -1), DEFAULT_BOLD_FONT),
+                               ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                               ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]))
+        return t
+
+    story = []
+    story += _letterhead(company, "TAX INVOICE", s)
+
+    # ── 상단 정보(송장번호·일자·통화·PO) ──
+    half = page_width / 2
+    lab = page_width * 0.16
+    val = half - lab
+    info_rows = [
+        [p("Invoice No.", "small"), p(data.get("doc_no", ""), "small"),
+         p("PO / Ref. No.", "small"), p(shipping.get("po_no", ""), "small")],
+        [p("Invoice Date", "small"), p(data.get("date", ""), "small"),
+         p("Currency", "small"), p(currency, "small")],
+        [p("Due Date", "small"), p(tax.get("due_date", ""), "small"), p("", "small"), p("", "small")],
+    ]
+    info = Table(info_rows, colWidths=[lab, val, lab, val])
+    info.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), .35, MID_GRAY), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                              ("BACKGROUND", (0, 0), (0, -1), LIGHT_GRAY), ("BACKGROUND", (2, 0), (2, -1), LIGHT_GRAY),
+                              ("FONTNAME", (0, 0), (0, -1), DEFAULT_BOLD_FONT), ("FONTNAME", (2, 0), (2, -1), DEFAULT_BOLD_FONT),
+                              ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                              ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]))
+    story += [info, Spacer(1, 3 * mm)]
+
+    # ── BILL TO / CUSTOMER + SUPPLIER ──
+    address = company.get("address_en") or company.get("address", "")
+    biz = "Trading / Marine Spare Parts, Equipment & Services"
+    rep = company.get("representative", "") or "Sungyeon Cho"
+    l = [("Company Name", customer.get("name", "")), ("Contact", customer.get("contact", "")),
+         ("Email", customer.get("email", "")), ("Tel", customer.get("phone", "") or customer.get("tel", "")),
+         ("Vessel", vessel.get("name", "")), ("Project", data.get("project_title", ""))]
+    r = [("Company Name", company.get("company_name_en", "")), ("Address", address),
+         ("Business Reg. No.", company.get("business_no", "")), ("Business", biz),
+         ("Representative", rep), ("Tel", company.get("phone", ""))]
+    party_rows = [[p("BILL TO / CUSTOMER", "section"), "", p("SUPPLIER", "section"), ""]]
+    for i in range(len(l)):
+        party_rows.append([p(l[i][0], "small"), p(l[i][1], "small"), p(r[i][0], "small"), p(r[i][1], "small")])
+    party = Table(party_rows, colWidths=[lab, val, lab, val])
+    party.setStyle(TableStyle([("SPAN", (0, 0), (1, 0)), ("SPAN", (2, 0), (3, 0)),
+                               ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1F3B66")),
+                               ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                               ("FONTNAME", (0, 0), (-1, 0), DEFAULT_BOLD_FONT),
+                               ("BACKGROUND", (0, 1), (0, -1), LIGHT_GRAY), ("BACKGROUND", (2, 1), (2, -1), LIGHT_GRAY),
+                               ("FONTNAME", (0, 1), (0, -1), DEFAULT_BOLD_FONT), ("FONTNAME", (2, 1), (2, -1), DEFAULT_BOLD_FONT),
+                               ("GRID", (0, 0), (-1, -1), .35, MID_GRAY), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                               ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                               ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]))
+    story += [party, Spacer(1, 3 * mm)]
+
+    # ── 총액(VAT 포함) 한글 표기 배너 ──
+    total_style = ParagraphStyle("KMTaxTotal", parent=s["base"], fontName=DEFAULT_BOLD_FONT, fontSize=11, leading=14)
+    banner = Table([[p("TOTAL VALUE (VAT included)", "section"),
+                     _p(_kor_won_amount(totals["total"]), total_style),
+                     _p(f"₩{totals['total']:,.0f}", total_style)]],
+                   colWidths=[page_width * 0.30, page_width * 0.45, page_width * 0.25])
+    banner.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), .35, MID_GRAY), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                                ("BACKGROUND", (0, 0), (0, 0), colors.HexColor("#1F3B66")),
+                                ("TEXTCOLOR", (0, 0), (0, 0), colors.white),
+                                ("BACKGROUND", (1, 0), (-1, 0), LIGHT_BLUE),
+                                ("ALIGN", (2, 0), (2, 0), "RIGHT"),
+                                ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                                ("TOPPADDING", (0, 0), (-1, -1), 4), ("BOTTOMPADDING", (0, 0), (-1, -1), 4)]))
+    story += [banner]
+
+    # ── 품목표 ──
+    headers = ["No.", "Description", "Part No.", "Qty", "Unit Price", f"Amount ({currency})"]
+    col_w = [page_width * w for w in (0.06, 0.44, 0.14, 0.08, 0.14, 0.14)]
+    item_rows = [[p(h, "th") for h in headers]]
+    for it in items:
+        item_rows.append([p(it["item_no"], "tiny"), p(it["description"], "tiny"), p(it["part_no"], "tiny"),
+                          p(f"{it['qty']:g}", "tiny"), p(f"{it['unit_price']:,.0f}", "tiny"),
+                          p(f"{it['amount']:,.0f}", "tiny")])
+    item_table = Table(item_rows, colWidths=col_w, repeatRows=1)
+    cmds = [("BACKGROUND", (0, 0), (-1, 0), NAVY), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("GRID", (0, 0), (-1, -1), .35, MID_GRAY), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("ALIGN", (3, 1), (-1, -1), "RIGHT"), ("LEFTPADDING", (0, 0), (-1, -1), 3),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 3), ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]
+    for i in range(2, len(item_rows), 2):
+        cmds.append(("BACKGROUND", (0, i), (-1, i), colors.HexColor("#FAFBFC")))
+    item_table.setStyle(TableStyle(cmds))
+    story += [item_table]
+
+    # ── 소계 / VAT / 합계 (우측 정렬) ──
+    tot_rows = [[p(lab_, "small"), _p(f"{v:,.0f}", ParagraphStyle('r', parent=s['small'], alignment=TA_RIGHT))]
+                for lab_, v in [("Subtotal", totals["subtotal"]), ("VAT", totals["vat"]),
+                                ("TOTAL INVOICE VALUE", totals["total"])]]
+    tot_inner = Table(tot_rows, colWidths=[col_w[3] + col_w[4], col_w[5]])
+    tot_inner.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), .35, MID_GRAY),
+                                   ("BACKGROUND", (0, 0), (0, -1), LIGHT_GRAY),
+                                   ("BACKGROUND", (0, -1), (-1, -1), LIGHT_BLUE),
+                                   ("FONTNAME", (0, -1), (-1, -1), DEFAULT_BOLD_FONT),
+                                   ("ALIGN", (1, 0), (1, -1), "RIGHT"),
+                                   ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                                   ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]))
+    tot_wrap = Table([["", tot_inner]], colWidths=[sum(col_w[:3]), col_w[3] + col_w[4] + col_w[5]])
+    tot_wrap.setStyle(TableStyle([("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                                  ("TOPPADDING", (0, 0), (-1, -1), 0), ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+                                  ("VALIGN", (0, 0), (-1, -1), "TOP")]))
+    story += [tot_wrap, Spacer(1, 4 * mm)]
+
+    # ── 은행 정보 ──
+    story += [section("BANK INFORMATION")]
+    bank_rows = [
+        [p("Remittee's name", "small"), p(company.get("company_name_kr", ""), "small"),
+         p("Bank Name & Address", "small"), p(company.get("bank_name", ""), "small")],
+        [p("Currency", "small"), p(currency, "small"),
+         p("Remittee's Account No.", "small"), p(company.get("bank_account", ""), "small")],
+        [p("Remarks", "small"), p(data.get("remarks", "") or tax.get("remarks", ""), "small"), "", ""],
+    ]
+    bank = Table(bank_rows, colWidths=[lab, val, lab, val])
+    bank.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), .35, MID_GRAY), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                              ("SPAN", (1, 2), (3, 2)),
+                              ("BACKGROUND", (0, 0), (0, -1), LIGHT_GRAY), ("BACKGROUND", (2, 0), (2, 1), LIGHT_GRAY),
+                              ("FONTNAME", (0, 0), (0, -1), DEFAULT_BOLD_FONT), ("FONTNAME", (2, 0), (2, 1), DEFAULT_BOLD_FONT),
+                              ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                              ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]))
+    story += [bank, Spacer(1, 3 * mm), _footer_center(s)]
+
     doc.build(story, onFirstPage=_footer, onLaterPages=_footer)
     return buffer.getvalue()
 
@@ -1851,6 +2031,8 @@ def make_pdf(doc_type: str, data: Dict[str, Any], company: Optional[Dict[str, An
         return _make_purchase_order_pdf(payload, payload["company"])
     if doc_type == "commercial_invoice":
         return _make_commercial_invoice_pdf(payload, payload["company"])
+    if doc_type == "tax_invoice":
+        return _make_tax_invoice_pdf(payload, payload["company"])
     if doc_type == "shipping_mark":
         return _make_shipping_mark_pdf(payload, payload["company"])
     if doc_type == "packing_list":

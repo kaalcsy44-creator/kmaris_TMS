@@ -1584,6 +1584,23 @@ class ARSave(BaseModel):
     due_date: str | None = None
     status: str = ""
     notes: str | None = ""
+    # 세금계산서(대금청구서) 문서 필드 — 선택. 미전달 시 서버가 기존값을 유지한다.
+    invoice_no: str | None = None
+    invoice_date: str | None = None
+    vat_rate: float | None = None
+    items: list[dict] | None = None
+    remarks: str | None = None
+
+
+class TaxInvoicePdfReq(BaseModel):
+    # TAX INVOICE 미리보기 — 저장 없이 현재 편집값으로 PDF 렌더.
+    invoice_no: str | None = ""
+    invoice_date: str | None = ""
+    due_date: str | None = ""
+    currency: str = "KRW"
+    vat_rate: float = 0.1
+    items: list[dict] = []
+    remarks: str | None = ""
 
 
 def _ar_status_from_text(value: str | None, paid: float, invoice: float) -> ARStatus:

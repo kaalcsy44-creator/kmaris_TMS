@@ -116,6 +116,14 @@ _MIGRATIONS = {
         # 선적정보·Shipping Marks 오버라이드(비우면 CI 상속).
         "shipping": "JSON",
     },
+    "ar_records": {
+        # 세금계산서(대금청구서) 문서 필드 — 9단계 편집창에서 입력, TAX INVOICE PDF 생성용.
+        "invoice_no":   "VARCHAR(60)",
+        "invoice_date": "VARCHAR(10)",
+        "vat_rate":     "FLOAT DEFAULT 0.1",
+        "items":        "JSON",
+        "remarks":      "TEXT",
+    },
 }
 
 

@@ -649,6 +649,21 @@ export type ArRow = {
   vendor: string;
   first_rfq_at: string;
   project_no: string;
+  // 세금계산서(대금청구서) 문서 필드
+  invoice_no: string;
+  invoice_date: string;
+  vat_rate: number;
+  items: TaxInvoiceItem[];
+  remarks: string;
+};
+
+/** 세금계산서(대금청구서) 청구 품목 1줄. */
+export type TaxInvoiceItem = {
+  description: string;
+  part_no: string;
+  qty: number;
+  unit_price: number;
+  amount: number;
 };
 
 export type ArData = {

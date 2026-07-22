@@ -26,6 +26,7 @@ from _core import (
     ShippingAdviceSend,
     TaxInvoiceData,
     TaxInvoiceSave,
+    TaxInvoicePdfReq,
     UploadFile,
     User,
     Vendor,
@@ -834,6 +835,37 @@ def tax_invoice_xlsx(order_id: int):
             f"{tax.tax_no}_tax_invoice.xlsx",
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
+    finally:
+        s.close()
+
+
+@app.post("/api/admin/documents/{order_id}/tax/pdf",
+          dependencies=[Depends(require_token)])
+def tax_invoice_pdf(order_id: int, body: TaxInvoicePdfReq):
+    """세금계산서(대금청구서) TAX INVOICE PDF — 9단계 편집창의 현재 입력값으로 렌더(미저장 미리보기).
+    송장번호 미지정 시 'P/O번호-INV' 로 자동 채운다."""
+    s = get_session()
+    try:
+        order = s.query(Order).filter_by(id=order_id).first()
+        if not order:
+            raise HTTPException(status_code=404, detail="Order를 찾을 수 없습니다.")
+        rfq = _rfq_for_order(s, order)
+        doc_no = (body.invoice_no or "").strip() or (f"{order.po_no}-INV" if order.po_no else "")
+        payload = build_payload(
+            doc_no=doc_no,
+            date=body.invoice_date or date.today().isoformat(),
+            customer=_customer_for_order(s, order),
+            vessel=_vessel_for_order(s, order),
+            items=body.items or [], terms={},
+            currency=(body.currency or "KRW").upper(),
+            vat_rate=body.vat_rate if body.vat_rate is not None else 0.1,
+            po_no=order.po_no or "",
+            project_title=(getattr(rfq, "project_title", None) or "") if rfq else "",
+            tax_invoice={"due_date": body.due_date or "", "remarks": body.remarks or ""},
+        )
+        payload["remarks"] = body.remarks or ""
+        pdf = generate_pdf("tax_invoice", payload)
+        return _doc_file_response(pdf, f"{doc_no or 'TAX'}_TAX_INVOICE.pdf", "application/pdf")
     finally:
         s.close()
 

@@ -85,6 +85,12 @@ def ar_overview():
                 "status": status,
                 "overdue": bool(overdue),
                 "notes": r.notes or "",
+                # 세금계산서(대금청구서) 문서 필드
+                "invoice_no": r.invoice_no or "",
+                "invoice_date": r.invoice_date or "",
+                "vat_rate": r.vat_rate if r.vat_rate is not None else 0.1,
+                "items": r.items or [],
+                "remarks": r.remarks or "",
                 "tax_issued": bool(sd.get("11")),
                 "tax_issued_date": sd.get("11", "") or "",
                 "paid_done": bool(sd.get("12")),
@@ -204,6 +210,11 @@ def create_ar(body: ARSave):
             due_date=body.due_date,
             status=_ar_status_from_text(body.status, body.paid_amount or 0.0, body.invoice_amount or 0.0),
             notes=body.notes or "",
+            invoice_no=body.invoice_no or "",
+            invoice_date=body.invoice_date or "",
+            vat_rate=body.vat_rate if body.vat_rate is not None else 0.1,
+            items=body.items or [],
+            remarks=body.remarks or "",
         )
         s.add(ar)
         s.commit()
@@ -229,6 +240,17 @@ def update_ar(ar_id: int, body: ARSave):
         ar.due_date = body.due_date
         ar.status = _ar_status_from_text(body.status, ar.paid_amount or 0.0, ar.invoice_amount or 0.0)
         ar.notes = body.notes or ""
+        # 문서 필드는 전달된 값만 갱신(미전달=기존 유지) — 수금 등록 등 부분 저장과 충돌 방지.
+        if body.invoice_no is not None:
+            ar.invoice_no = body.invoice_no
+        if body.invoice_date is not None:
+            ar.invoice_date = body.invoice_date
+        if body.vat_rate is not None:
+            ar.vat_rate = body.vat_rate
+        if body.items is not None:
+            ar.items = body.items
+        if body.remarks is not None:
+            ar.remarks = body.remarks
         s.commit()
         return {"ok": True, "id": ar.id, "status": _enum_val(ar.status)}
     finally:
