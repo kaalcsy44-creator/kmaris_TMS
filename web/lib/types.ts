@@ -773,7 +773,7 @@ export type PipelineRow = {
   vendor_email: string;
   // RFQ 발송 벤더 + 상태. quoted=견적 수신, declined=견적 불가 통보(수동 표시).
   // 표시 규칙: 견적 수신=선명, 대기=회색, (견적불가 통보 || 견적단계 넘긴 미수신)=취소선.
-  rfq_vendors?: { name: string; quoted: boolean; declined?: boolean }[];
+  rfq_vendors?: { name: string; quoted: boolean; declined?: boolean; contact?: string }[];
   // RFQ 발송 이력 — 벤더 RFQ 1건 = 발송 1건(중복제거 없음). 업무일지에서 발송별 별도 행 표시.
   rfq_sends?: { vendor: string; sent_at: string }[];
   stage: number;
@@ -793,7 +793,8 @@ export type StageNote = {
   text: string;
   at: string;
   datetime?: string; // 활동 일시 "YYYY-MM-DDTHH:MM"
-  party?: string; // Customer / Vendor / 기타
+  party?: string; // 소통 상대(회사): 고객사명 / 벤더사명 / 기타
+  person?: string; // 소통 상대 담당자: 고객사 담당자 / 벤더사 담당자 / 기타
   channel?: string; // 이메일 / 통화 / 문자 / 방문 / 기타
   direction?: "in" | "out" | ""; // in=수신(Received) / out=발신(Sent) / 빈값=해당없음
   star?: boolean; // ★ 우선(회의/후속 표시)

@@ -12,7 +12,7 @@ import {
   deleteRfqStageNote,
 } from "@/lib/api";
 import type { PipelineData, PipelineRow, StageNote } from "@/lib/types";
-import { vendorOf } from "@/lib/deal";
+import { vendorOf, activityParties, activityPersons } from "@/lib/deal";
 import {
   buildActivities,
   daysSinceISO,
@@ -140,7 +140,7 @@ function todayISO(): string {
 }
 
 // 기존 활동 노트 수정 시 전달하는 값.
-type NotePatch = { text: string; datetime?: string; direction?: string; party?: string; channel?: string; star?: boolean; pic?: string };
+type NotePatch = { text: string; datetime?: string; direction?: string; party?: string; person?: string; channel?: string; star?: boolean; pic?: string };
 
 
 export default function ActivityScreen() {
@@ -305,6 +305,7 @@ export default function ActivityScreen() {
         text: a.note.text,
         datetime: a.note.datetime,
         party: a.note.party,
+        person: a.note.person,
         channel: a.note.channel,
         direction: a.note.direction,
         star: !a.note.star,
@@ -323,6 +324,7 @@ export default function ActivityScreen() {
       datetime: patch.datetime,
       direction: patch.direction,
       party: patch.party,
+      person: patch.person,
       channel: patch.channel,
       star: patch.star ?? a.note.star,
       pic: patch.pic,
@@ -669,6 +671,9 @@ function DealStageRow({
 }) {
   const { code, date } = splitProjectNo(row.project_no || row.kmaris_rfq_no || "—");
   const vend = vendorOf(row);
+  // 활동로그 Party·Person 드롭다운 후보 — 이 딜의 고객사·벤더사(명)와 각 담당자.
+  const parties = activityParties(row);
+  const persons = activityPersons(row);
   const isService = row.work_type === "서비스";
   const ageDays = daysSinceISO(lastActivityISO(row));
   const ageLevel: "normal" | "warn" | "urgent" = row.next_level
@@ -734,6 +739,8 @@ function DealStageRow({
                     onStar={() => onStar(a)}
                     onDelete={() => onDelete(a)}
                     onSave={(patch) => onSave(a, patch)}
+                    parties={parties}
+                    persons={persons}
                   />
                 ) : (
                   <li key={i} className="act-item">
@@ -753,7 +760,7 @@ function DealStageRow({
             <span className="act-mx-empty">·</span>
           ) : null}
           {ci === addCol ? (
-            <AddActivity rfqId={row.rfq_id} stage={row.stage} onAdded={onAdded} />
+            <AddActivity rfqId={row.rfq_id} stage={row.stage} onAdded={onAdded} parties={parties} persons={persons} />
           ) : null}
         </div>
         );
@@ -769,6 +776,7 @@ function noteToForm(n: StageNote): ActivityNoteValue {
     datetime: n.datetime || n.at || "",
     direction: (n.direction as "" | "in" | "out") || "",
     party: n.party || "",
+    person: n.person || "",
     channel: n.channel || "",
     star: !!n.star,
     pic: n.pic || "",
@@ -782,6 +790,7 @@ function formToPatch(v: ActivityNoteValue): NotePatch {
     datetime: v.datetime,
     direction: v.direction || undefined,
     party: v.party || undefined,
+    person: v.person || undefined,
     channel: v.channel || undefined,
     star: v.star,
     pic: v.pic.trim() || undefined,
@@ -794,11 +803,15 @@ function NoteRow({
   onStar,
   onDelete,
   onSave,
+  parties,
+  persons,
 }: {
   a: Extract<Activity, { kind: "note" }>;
   onStar: () => void;
   onDelete: () => void;
   onSave: (patch: NotePatch) => Promise<void>;
+  parties: string[];
+  persons: string[];
 }) {
   const n = a.note;
   const [editing, setEditing] = useState(false);
@@ -832,6 +845,8 @@ function NoteRow({
             onCancel={() => setEditing(false)}
             submitLabel="Save"
             busy={busy}
+            partyPresets={parties}
+            personPresets={persons}
           />
         </div>
       </li>
@@ -849,7 +864,7 @@ function NoteRow({
         {(() => {
           const dl = n.direction === "in" ? "from" : n.direction === "out" ? "to" : "";
           const who = [dl, n.party].filter(Boolean).join(" ");
-          const parts = [who, n.channel].filter(Boolean);
+          const parts = [who, n.person, n.channel].filter(Boolean);
           // 상대·채널·담당자는 내용 아래 줄로 내린다.
           if (!parts.length && !n.pic) return null;
           return (
@@ -869,7 +884,7 @@ function NoteRow({
   );
 }
 
-function AddActivity({ rfqId, stage, onAdded }: { rfqId: number; stage: number; onAdded: () => void }) {
+function AddActivity({ rfqId, stage, onAdded, parties, persons }: { rfqId: number; stage: number; onAdded: () => void; parties: string[]; persons: string[] }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState<ActivityNoteValue>(() => initialNoteValue());
@@ -898,6 +913,8 @@ function AddActivity({ rfqId, stage, onAdded }: { rfqId: number; stage: number; 
       onCancel={() => setOpen(false)}
       submitLabel="Add"
       busy={busy}
+      partyPresets={parties}
+      personPresets={persons}
     />
   );
 }

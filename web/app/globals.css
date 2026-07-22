@@ -1635,6 +1635,11 @@ table.perm-matrix td.perm-mod {
   background: #dfe9fb;
   color: #1d4ed8;
 }
+/* 소통 상대 담당자 — party(회사)와 한 쌍이라 같은 파랑 계열의 옅은 톤. */
+.pl-note-tag.person {
+  background: #eaf1fd;
+  color: #3b62c4;
+}
 .pl-note-tag.channel {
   background: #e6e9ef;
   color: #4a5568;

@@ -8,6 +8,30 @@ export function vendorOf(r: PipelineRow): string {
   return (r.vendor || "").trim() || (r.vrfq_vendors || "").trim();
 }
 
+// 빈값·중복·자리표시("—")를 걸러 순서대로 담는다(활동로그 드롭다운 후보 조립용).
+function pushUnique(out: string[], v: string | undefined) {
+  const t = (v || "").trim();
+  if (t && t !== "—" && !out.includes(t)) out.push(t);
+}
+
+/** 활동로그 Party(소통 상대 회사) 드롭다운 후보 — 이 딜의 고객사 + 연결된 벤더사(들). */
+export function activityParties(r: PipelineRow): string[] {
+  const out: string[] = [];
+  pushUnique(out, r.customer);
+  (r.rfq_vendors ?? []).forEach((v) => pushUnique(out, v.name));
+  pushUnique(out, r.vendor);                                   // 확정 P/O 벤더
+  (r.vrfq_vendors || "").split(/[\n,]/).forEach((v) => pushUnique(out, v)); // 옛 데이터 폴백
+  return out;
+}
+
+/** 활동로그 Person(소통 상대 담당자) 드롭다운 후보 — 고객사 담당자 + 벤더사 담당자(들). */
+export function activityPersons(r: PipelineRow): string[] {
+  const out: string[] = [];
+  pushUnique(out, r.contact_person);                          // 고객사 담당자
+  (r.rfq_vendors ?? []).forEach((v) => pushUnique(out, v.contact)); // 벤더사 담당자(들)
+  return out;
+}
+
 // 업무타입 "서비스"는 내부 11단계 중 7·8단계를 서비스 명칭으로 표시한다.
 const SERVICE_STEP_OVERRIDES: Record<number, string> = {
   7: "Service Readiness",

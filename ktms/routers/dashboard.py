@@ -82,7 +82,9 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
     try:
         cust_names = {c.id: c.name for c in s.query(Customer).all()}
         vessel_names = {v.id: v.name for v in s.query(Vessel).all()}
-        vendor_names = {v.id: v.name for v in s.query(Vendor).all()}
+        _vendors = s.query(Vendor).all()
+        vendor_names = {v.id: v.name for v in _vendors}
+        vendor_contacts = {v.id: (v.contact or "") for v in _vendors}  # 벤더 담당자(활동로그 Person 후보)
         user_names = {u.id: u.username for u in s.query(User).all()}
 
         q = s.query(RFQ).order_by(RFQ.id.desc())
@@ -158,7 +160,8 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
                     if dec:
                         _seen_v[nm]["declined"] = True
                 else:
-                    e = {"name": nm, "quoted": q, "declined": dec}
+                    e = {"name": nm, "quoted": q, "declined": dec,
+                         "contact": vendor_contacts.get(x.vendor_id, "")}
                     _seen_v[nm] = e
                     rfq_vendors_status.append(e)
 

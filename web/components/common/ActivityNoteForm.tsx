@@ -17,12 +17,12 @@ export type ActivityNoteValue = {
   datetime: string;   // "YYYY-MM-DDTHH:MM"
   direction: "" | "in" | "out";
   party: string;
+  person: string;     // 소통 상대 담당자(고객/벤더 담당자명 또는 직접입력)
   channel: string;
   star: boolean;
   pic: string;
 };
 
-const PARTY_PRESETS = ["Customer", "Vendor", "Internal"];
 const CHANNEL_PRESETS = ["Email", "Message", "Call"];
 
 /** datetime-local 기본값(현재 시각, 분 단위) "YYYY-MM-DDTHH:MM". */
@@ -105,6 +105,7 @@ export function initialNoteValue(initial?: Partial<ActivityNoteValue> | null): A
     datetime: toLocalInput(initial?.datetime),
     direction: (initial?.direction as "" | "in" | "out") ?? "",
     party: initial?.party ?? "",
+    person: initial?.person ?? "",
     channel: initial?.channel ?? "",
     star: !!initial?.star,
     pic: initial?.pic ?? (getUser()?.username ?? ""),
@@ -118,6 +119,8 @@ export default function ActivityNoteForm({
   onCancel,
   submitLabel = "Add",
   busy = false,
+  partyPresets = [],
+  personPresets = [],
 }: {
   value: ActivityNoteValue;
   onChange: (v: ActivityNoteValue) => void;
@@ -125,6 +128,8 @@ export default function ActivityNoteForm({
   onCancel: () => void;
   submitLabel?: string;
   busy?: boolean;
+  partyPresets?: string[]; // Party 후보 — 이 딜의 고객사·벤더사명(deal.activityParties)
+  personPresets?: string[]; // Person 후보 — 이 딜의 고객/벤더 담당자(deal.activityPersons)
 }) {
   const picOptions = usePicOptions(value.pic);
   const set = <K extends keyof ActivityNoteValue>(k: K, v: ActivityNoteValue[K]) =>
@@ -158,7 +163,13 @@ export default function ActivityNoteForm({
           value={value.party}
           onChange={(v) => set("party", v)}
           placeholder="Party —"
-          presets={PARTY_PRESETS}
+          presets={partyPresets}
+        />
+        <PresetSelect
+          value={value.person}
+          onChange={(v) => set("person", v)}
+          placeholder="Person —"
+          presets={personPresets}
         />
         <PresetSelect
           value={value.channel}

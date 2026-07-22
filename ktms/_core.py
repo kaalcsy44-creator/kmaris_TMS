@@ -2506,7 +2506,8 @@ class StageNoteAdd(BaseModel):
     stage: int                       # 1~11
     text: str
     datetime: str | None = None      # 활동 일시 "YYYY-MM-DDTHH:MM" (KST). 비우면 현재시각
-    party: str | None = None         # 소통 상대: Customer / Vendor / 기타
+    party: str | None = None         # 소통 상대(회사): 고객사명 / 벤더사명 / 기타
+    person: str | None = None        # 소통 상대 담당자: 고객사 담당자 / 벤더사 담당자 / 기타
     channel: str | None = None       # 소통 수단: 이메일 / 통화 / 문자 / 방문 / 기타
     direction: str | None = None     # 방향: in(수신) / out(발신) / 빈값(해당없음)
     star: bool = False               # ★ 우선(회의/후속 표시)
@@ -2519,6 +2520,7 @@ class StageNoteUpdate(BaseModel):
     text: str
     datetime: str | None = None
     party: str | None = None
+    person: str | None = None        # 소통 상대 담당자
     channel: str | None = None
     direction: str | None = None
     star: bool = False

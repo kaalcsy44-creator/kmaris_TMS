@@ -28,6 +28,8 @@ import {
   stageDateOf,
   buildStageChain,
   joinDot,
+  activityParties,
+  activityPersons,
 } from "@/lib/deal";
 import { INFO_FIELDS, DEFAULT_INFO_FIELDS } from "@/components/common/dealFields";
 import { lastActivityISO, daysSinceISO } from "@/lib/activity";
@@ -2491,6 +2493,8 @@ export function PipelineModal({
                 stage={selectedStage}
                 notes={r.stage_notes?.[String(selectedStage)] ?? []}
                 onChanged={onChanged}
+                parties={activityParties(r)}
+                persons={activityPersons(r)}
               />
             </div>
           ) : null}
@@ -2878,8 +2882,8 @@ function DealTimeline({
                   ) : e.note?.direction === "out" ? (
                     <span className="pl-tl-dir out" title="Sent (발신)">↑ </span>
                   ) : null}
-                  {e.note?.party || e.note?.channel ? (
-                    <span className="pl-tl-meta">{joinDot(e.note?.party, e.note?.channel)} </span>
+                  {e.note?.party || e.note?.person || e.note?.channel ? (
+                    <span className="pl-tl-meta">{joinDot(e.note?.party, e.note?.person, e.note?.channel)} </span>
                   ) : null}
                   {e.note?.text || ""}
                 </div>
@@ -2897,11 +2901,15 @@ function StageNotes({
   stage,
   notes,
   onChanged,
+  parties,
+  persons,
 }: {
   rfqId: number;
   stage: number;
   notes: StageNote[];
   onChanged: () => void;
+  parties: string[];
+  persons: string[];
 }) {
   const writable = can("rfq", "edit");
   const [adding, setAdding] = useState(false);
@@ -2922,6 +2930,7 @@ function StageNotes({
       datetime: n.datetime || n.at || "",
       direction: (n.direction as "" | "in" | "out") || "",
       party: n.party || "",
+      person: n.person || "",
       channel: n.channel || "",
       star: !!n.star,
       pic: n.pic || "",
@@ -2935,6 +2944,7 @@ function StageNotes({
       datetime: form.datetime,
       direction: form.direction || undefined,
       party: form.party || undefined,
+      person: form.person || undefined,
       channel: form.channel || undefined,
       star: form.star,
       pic: form.pic.trim() || undefined,
@@ -2991,6 +3001,8 @@ function StageNotes({
             onCancel={() => setEditIndex(null)}
             submitLabel="Save"
             busy={busy}
+            partyPresets={parties}
+            personPresets={persons}
           />
         ) : (
           <div className={`pl-note${n.star ? " star" : ""}`} key={i}>
@@ -2999,6 +3011,7 @@ function StageNotes({
               {n.star ? <span className="pl-note-star" title="중요">★</span> : null}
               <span className="pl-note-at">{fmtStageDate(n.datetime || n.at)}</span>
               {n.party ? <span className="pl-note-tag party">{n.party}</span> : null}
+              {n.person ? <span className="pl-note-tag person">{n.person}</span> : null}
               {n.channel ? <span className="pl-note-tag channel">{n.channel}</span> : null}
               {n.direction === "in" ? (
                 <span className="pl-note-tag dir in" title="Received (수신)">↓ In</span>
@@ -3033,6 +3046,8 @@ function StageNotes({
           onCancel={() => setAdding(false)}
           submitLabel="Add"
           busy={busy}
+          partyPresets={parties}
+          personPresets={persons}
         />
       ) : (
         <button className="pl-note-toggle" onClick={beginAdd}>

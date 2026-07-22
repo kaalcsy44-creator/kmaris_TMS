@@ -561,6 +561,7 @@ def add_rfq_stage_note(rfq_id: int, body: StageNoteAdd):
             "text": text,
             "datetime": (body.datetime or "").strip() or _kst_iso(datetime.utcnow()),
             "party": (body.party or "").strip(),
+            "person": (body.person or "").strip(),   # 소통 상대 담당자
             "channel": (body.channel or "").strip(),
             "direction": (body.direction or "").strip(),  # in(수신)/out(발신)
             "star": bool(getattr(body, "star", False)),   # ★ 우선
@@ -596,6 +597,7 @@ def update_rfq_stage_note(rfq_id: int, body: StageNoteUpdate):
             "text": text,
             "datetime": (body.datetime or "").strip() or old.get("datetime") or _kst_iso(datetime.utcnow()),
             "party": (body.party or "").strip(),
+            "person": (body.person or "").strip(),   # 소통 상대 담당자
             "channel": (body.channel or "").strip(),
             "direction": (body.direction or "").strip(),  # in(수신)/out(발신)
             "star": bool(getattr(body, "star", False)),   # ★ 우선

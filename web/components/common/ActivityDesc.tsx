@@ -26,7 +26,7 @@ export default function ActivityDesc({ act, metaBlock }: { act: Activity; metaBl
   const n = act.note;
   const dl = n.direction === "in" ? "from" : n.direction === "out" ? "to" : "";
   const who = [dl, n.party].filter(Boolean).join(" ");
-  const parts = [who, n.channel].filter(Boolean);
+  const parts = [who, n.person, n.channel].filter(Boolean);
   if (metaBlock) {
     // 내용 뒤에 줄바꿔서 상대·채널·담당자를 배치한다(선행 불릿 없이).
     return (

@@ -19,6 +19,8 @@ import {
   buildStageChain,
   makeItemMatcher,
   ciPurchase,
+  activityParties,
+  activityPersons,
   type StageChainItem,
 } from "@/lib/deal";
 import { buildActivities, hm, md, splitProjectNo, type Activity } from "@/lib/activity";
@@ -500,6 +502,8 @@ function StageTimeline({
                               rfqId={row.rfq_id}
                               chain={chain}
                               currentStage={row.stage}
+                              parties={activityParties(row)}
+                              persons={activityPersons(row)}
                               onDone={async () => {
                                 setAddStage(null);
                                 await onActivityAdded();
@@ -547,6 +551,7 @@ function noteFormToPatch(v: ActivityNoteValue) {
     datetime: v.datetime,
     direction: v.direction || undefined,
     party: v.party || undefined,
+    person: v.person || undefined,
     channel: v.channel || undefined,
     star: v.star,
     pic: v.pic.trim() || undefined,
@@ -561,12 +566,16 @@ function StageAddNote({
   currentStage,
   onDone,
   onCancel,
+  parties,
+  persons,
 }: {
   rfqId: number;
   chain: StageChainItem[];
   currentStage: number;
   onDone: () => void | Promise<unknown>;
   onCancel: () => void;
+  parties: string[];
+  persons: string[];
 }) {
   const [form, setForm] = useState<ActivityNoteValue>(() => initialNoteValue());
   const [busy, setBusy] = useState(false);
@@ -592,6 +601,8 @@ function StageAddNote({
       onCancel={onCancel}
       submitLabel="Add"
       busy={busy}
+      partyPresets={parties}
+      personPresets={persons}
     />
   );
 }

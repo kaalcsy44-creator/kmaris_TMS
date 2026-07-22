@@ -207,7 +207,7 @@ export function fetchAssignableUsers(): Promise<{ id: number; username: string }
 export function addRfqStageNote(
   rfqId: number,
   stage: number,
-  payload: { text: string; datetime?: string; party?: string; channel?: string; direction?: string; star?: boolean; pic?: string }
+  payload: { text: string; datetime?: string; party?: string; person?: string; channel?: string; direction?: string; star?: boolean; pic?: string }
 ): Promise<{ ok: boolean; stage: number; notes: StageNote[] }> {
   return post(`/api/admin/rfq/${rfqId}/stage-note`, { stage, ...payload });
 }
@@ -216,7 +216,7 @@ export function updateRfqStageNote(
   rfqId: number,
   stage: number,
   index: number,
-  payload: { text: string; datetime?: string; party?: string; channel?: string; direction?: string; star?: boolean; pic?: string }
+  payload: { text: string; datetime?: string; party?: string; person?: string; channel?: string; direction?: string; star?: boolean; pic?: string }
 ): Promise<{ ok: boolean; stage: number; notes: StageNote[] }> {
   return post(`/api/admin/rfq/${rfqId}/stage-note-update`, { stage, index, ...payload });
 }
