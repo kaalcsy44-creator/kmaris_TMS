@@ -8337,26 +8337,45 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 /* 탭(By deal / By date)은 Progress 와 공용인 .page-tabs 사용. 여기선 건수 라벨만. */
 .act-count { color: var(--muted); font-size: 12px; }
 
-/* ── 다이제스트 팝업 — 프로젝트별 '가장 최근 활동 1건'만 취합한 목록 ───────────── */
-.act-digest { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
-.act-digest-row { padding: 8px 6px; border-bottom: 1px solid var(--line);
-  cursor: pointer; border-left: 3px solid transparent; }
-.act-digest-row:hover { background: var(--head-bg); }
+/* ── 다이제스트 팝업 — 프로젝트별 '가장 최근 활동 N건'을 2열 카드로 취합 ─────────── */
+.act-digest-titlebar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.act-digest-count { display: inline-flex; align-items: center; gap: 3px; }
+.act-digest-count-lbl { font-size: 11px; font-weight: 600; color: var(--muted); margin-right: 2px; }
+.act-digest-count-btn { min-width: 22px; padding: 2px 6px; font-size: 11px; font-weight: 700;
+  border: 1px solid var(--line); background: #fff; color: var(--muted);
+  border-radius: 6px; cursor: pointer; }
+.act-digest-count-btn:hover { border-color: var(--blue); color: var(--blue); }
+.act-digest-count-btn.on { background: var(--blue); border-color: var(--blue); color: #fff; }
+
+/* 2열 그리드 — 좁은 화면(좁은 모달)에서는 1열로 접힌다. */
+.act-digest { list-style: none; margin: 0; padding: 0;
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.act-digest-row { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px;
+  cursor: pointer; border-left: 3px solid transparent; background: #fff; }
+.act-digest-row:hover { background: var(--head-bg); border-color: var(--blue); }
 .act-digest-row.service { border-left-color: #7c9; }
 .act-digest-row.cancelled { opacity: .6; }
-.act-digest-head { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
-.act-digest-code { font-weight: 800; font-size: 12px; color: var(--blue); }
-.act-digest-date { font-size: 10px; color: var(--muted); }
-.act-digest-title { font-size: 12.5px; font-weight: 600; color: var(--ink);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 46%; }
-.act-digest-cust { font-size: 11px; color: var(--muted); }
-.act-digest-age { margin-left: auto; font-size: 10px; font-weight: 700;
+.act-digest-head { display: flex; align-items: baseline; gap: 6px; }
+.act-digest-code { flex: none; font-weight: 800; font-size: 12px; color: var(--blue); }
+.act-digest-date { flex: none; font-size: 10px; color: var(--muted); }
+.act-digest-title { flex: 1 1 auto; min-width: 0; font-size: 12.5px; font-weight: 600; color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.act-digest-age { flex: none; font-size: 10px; font-weight: 700;
   padding: 1px 6px; border-radius: 6px; background: var(--head-bg); color: var(--muted); }
 .act-digest-age.lv-warn { background: #fff3e0; color: #9a5b00; }
 .act-digest-age.lv-urgent { background: #fdeaea; color: #b42318; }
-.act-digest-act { display: flex; gap: 8px; margin-top: 2px; font-size: 12px; }
+.act-digest-parties { display: flex; align-items: center; flex-wrap: wrap; gap: 4px;
+  margin-top: 3px; font-size: 11px; color: var(--muted); }
+.act-digest-contact { color: var(--muted); }
+.act-digest-sep { color: var(--line); }
+.act-digest-acts { list-style: none; margin: 5px 0 0; padding: 5px 0 0;
+  border-top: 1px dashed var(--line); display: flex; flex-direction: column; gap: 3px; }
+.act-digest-act { display: flex; gap: 8px; font-size: 12px; }
 .act-digest-when { flex: none; font-weight: 700; color: var(--muted); min-width: 52px; }
-.act-digest-desc { color: var(--ink); }
+.act-digest-desc { min-width: 0; color: var(--ink); }
+@media (max-width: 780px) {
+  .act-digest { grid-template-columns: 1fr; }
+}
 
 /* ── 일자별 · 주간 캘린더(7열) ─────────────────────────────────────────
    주(월요일 시작)가 한 행, 위=이전 주·아래=다음 주. 좁은 화면은 가로 스크롤.

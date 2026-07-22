@@ -163,6 +163,7 @@ export default function ActivityScreen() {
 
   const [overviewId, setOverviewId] = useState<number | null>(null);
   const [digestOpen, setDigestOpen] = useState(false); // 프로젝트별 최근 활동 요약 팝업
+  const [digestCount, setDigestCount] = useState(1); // 프로젝트별로 보여줄 최근 활동 개수
   const { data: customers } = useCachedData("settings:customers", fetchCustomers);
   const { data: vessels } = useCachedData("settings:vessels", fetchSettingsVessels);
 
@@ -287,14 +288,14 @@ export default function ActivityScreen() {
     });
   }, [buckets]);
 
-  // 다이제스트 — 프로젝트별 '가장 최근 활동 1건'만. dealRows 는 이미 최신활동 내림차순 정렬이라
-  // 각 딜의 마지막(=최신) 활동을 뽑고, 활동이 아직 없는 딜은 제외한다.
+  // 다이제스트 — 프로젝트별 '가장 최근 활동 N건'. dealRows 는 이미 최신활동 내림차순 정렬이라
+  // 각 딜의 마지막(=최신) 활동부터 N개를 뽑고, 활동이 아직 없는 딜은 제외한다.
   const digestRows = useMemo(
     () =>
       dealRows
         .filter(({ acts }) => acts.length > 0)
-        .map(({ row, acts }) => ({ row, act: acts[acts.length - 1] })),
-    [dealRows],
+        .map(({ row, acts }) => ({ row, acts: acts.slice(-digestCount).reverse() })),
+    [dealRows, digestCount],
   );
 
   async function toggleStar(rfqId: number, a: Activity) {
@@ -519,12 +520,34 @@ export default function ActivityScreen() {
         </>
       )}
       {digestOpen ? (
-        <Modal title={`Latest activity · ${digestRows.length} projects`} onClose={() => setDigestOpen(false)} wide>
+        <Modal
+          title={
+            <span className="act-digest-titlebar">
+              <span>Latest activity · {digestRows.length} projects</span>
+              {/* 프로젝트별로 보여줄 최근 활동 개수 — 기본 1건. */}
+              <span className="act-digest-count" role="group" aria-label="Activities per project">
+                <span className="act-digest-count-lbl">Show</span>
+                {[1, 2, 3, 5].map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    className={`act-digest-count-btn${digestCount === n ? " on" : ""}`}
+                    onClick={() => setDigestCount(n)}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </span>
+            </span>
+          }
+          onClose={() => setDigestOpen(false)}
+          wide
+        >
           {digestRows.length === 0 ? (
             <div className="state">No activity to show.</div>
           ) : (
             <ul className="act-digest">
-              {digestRows.map(({ row, act }) => {
+              {digestRows.map(({ row, acts }) => {
                 const { code, date } = splitProjectNo(row.project_no || row.kmaris_rfq_no || "—");
                 const ageDays = daysSinceISO(lastActivityISO(row));
                 const lv: "normal" | "warn" | "urgent" =
@@ -532,6 +555,7 @@ export default function ActivityScreen() {
                   (!row.cancelled && ageDays != null
                     ? ageDays >= 14 ? "urgent" : ageDays >= 7 ? "warn" : "normal"
                     : "normal");
+                const vend = vendorOf(row);
                 return (
                   <li
                     key={row.rfq_id}
@@ -543,18 +567,33 @@ export default function ActivityScreen() {
                       <span className="act-digest-code">{code}</span>
                       {date ? <span className="act-digest-date">{date}</span> : null}
                       <span className="act-digest-title">{row.project_title || "(untitled)"}</span>
-                      {row.customer ? <span className="act-digest-cust"><CustomerName name={row.customer} /></span> : null}
                       {ageDays != null ? (
                         <span className={`act-digest-age lv-${lv}`} title="Days since last activity">{ageDays}d</span>
                       ) : null}
                     </div>
-                    <div className="act-digest-act">
-                      <span className="act-digest-when">
-                        {md(act.date)}
-                        {hm(actTimeIso(act)) ? <span className="act-time"> {hm(actTimeIso(act))}</span> : null}
-                      </span>
-                      <span className="act-digest-desc"><ActivityDesc act={act} /></span>
-                    </div>
+                    {(row.customer || vend) ? (
+                      <div className="act-digest-parties">
+                        {row.customer ? (
+                          <span className="act-digest-cust">
+                            <CustomerName name={row.customer} />
+                            {row.contact_person ? <span className="act-digest-contact"> · {row.contact_person}</span> : null}
+                          </span>
+                        ) : null}
+                        {vend ? <span className="act-digest-sep">/</span> : null}
+                        {vend ? <VendorMonograms value={vend} statuses={vendorStatusesFor(row)} /> : null}
+                      </div>
+                    ) : null}
+                    <ul className="act-digest-acts">
+                      {acts.map((act, i) => (
+                        <li key={i} className="act-digest-act">
+                          <span className="act-digest-when">
+                            {md(act.date)}
+                            {hm(actTimeIso(act)) ? <span className="act-time"> {hm(actTimeIso(act))}</span> : null}
+                          </span>
+                          <span className="act-digest-desc"><ActivityDesc act={act} /></span>
+                        </li>
+                      ))}
+                    </ul>
                   </li>
                 );
               })}
