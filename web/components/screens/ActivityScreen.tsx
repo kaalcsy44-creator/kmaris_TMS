@@ -289,12 +289,12 @@ export default function ActivityScreen() {
   }, [buckets]);
 
   // 다이제스트 — 프로젝트별 '가장 최근 활동 N건'. dealRows 는 이미 최신활동 내림차순 정렬이라
-  // 각 딜의 마지막(=최신) 활동부터 N개를 뽑고, 활동이 아직 없는 딜은 제외한다.
+  // 각 딜의 최근 N개 활동을 시간 오름차순(최신이 아래)으로 담고, 활동 없는 딜은 제외한다.
   const digestRows = useMemo(
     () =>
       dealRows
         .filter(({ acts }) => acts.length > 0)
-        .map(({ row, acts }) => ({ row, acts: acts.slice(-digestCount).reverse() })),
+        .map(({ row, acts }) => ({ row, acts: acts.slice(-digestCount) })),
     [dealRows, digestCount],
   );
 
