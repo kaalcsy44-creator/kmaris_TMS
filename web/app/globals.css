@@ -7318,6 +7318,10 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   min-height: 0;
   display: flex;
   flex-direction: column;
+  /* 길어진 편집창(품목 리스트)은 이 안에서 스크롤 — 안 그러면 내용이 박스 밖으로 흘러
+     아래 Reset 바 위로 겹친다. 스크롤을 여기로 가두면 Reset 바는 항상 그 아래에 놓인다. */
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 .stage-fill > .action-tabs.embedded {
   flex: 1 1 auto;
