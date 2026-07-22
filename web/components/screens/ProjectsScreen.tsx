@@ -1834,7 +1834,7 @@ export function PipelineModal({
         r.rfq_id,
         true,
         reasonCode,
-        reasonCode === "other" ? reasonNote : undefined
+        reasonNote.trim() || undefined
       );
       setReasonOpen(false);
       await onChanged();
@@ -2233,21 +2233,19 @@ export function PipelineModal({
                 r.assignee || "—"
               )}
             </span>
-            {!isNewProject && r.cancelled && r.close_reason ? (
-              <span
-                className="pl-close-reason"
-                title={
-                  r.close_reason === "other" && r.close_reason_note
-                    ? r.close_reason_note
-                    : closeReasonLabel(r.close_reason)
-                }
-              >
-                ⊘{" "}
-                {r.close_reason === "other" && r.close_reason_note
-                  ? r.close_reason_note
-                  : closeReasonLabel(r.close_reason)}
-              </span>
-            ) : null}
+            {!isNewProject && r.cancelled && r.close_reason ? (() => {
+              // 'Other' 는 노트가 사유 자체. 그 외 사유는 라벨 뒤에 노트(있으면)를 붙인다.
+              const label = closeReasonLabel(r.close_reason);
+              const note = (r.close_reason_note || "").trim();
+              const text = r.close_reason === "other"
+                ? (note || label)
+                : (note ? `${label} — ${note}` : label);
+              return (
+                <span className="pl-close-reason" title={text}>
+                  ⊘ {text}
+                </span>
+              );
+            })() : null}
             {!isNewProject ? (
               <button
                 type="button"
@@ -2296,10 +2294,11 @@ export function PipelineModal({
                   </label>
                 ))}
               </div>
-              {reasonCode === "other" ? (
+              {/* 사유 선택 후 부가 설명(선택). 'Other' 는 필수, 그 외에는 선택 입력. */}
+              {reasonCode ? (
                 <textarea
                   className="close-reason-note"
-                  placeholder="Enter the reason"
+                  placeholder={reasonCode === "other" ? "Enter the reason" : "Add a note (optional)"}
                   value={reasonNote}
                   onChange={(e) => setReasonNote(e.target.value)}
                   rows={3}

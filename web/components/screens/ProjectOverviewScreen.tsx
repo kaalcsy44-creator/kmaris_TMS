@@ -257,11 +257,13 @@ function Overview({
             <span className="proj-ov-closed">
               ⊘ Closed
               {row.close_reason
-                ? ` · ${
-                    row.close_reason === "other" && row.close_reason_note
-                      ? row.close_reason_note
-                      : closeReasonLabel(row.close_reason)
-                  }`
+                ? ` · ${(() => {
+                    const label = closeReasonLabel(row.close_reason);
+                    const note = (row.close_reason_note || "").trim();
+                    return row.close_reason === "other"
+                      ? (note || label)
+                      : (note ? `${label} — ${note}` : label);
+                  })()}`
                 : ""}
             </span>
           ) : null}
