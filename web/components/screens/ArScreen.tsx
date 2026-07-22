@@ -21,7 +21,18 @@ import Modal from "@/components/common/Modal";
 import { ModalTitle } from "@/components/common/BaseMeta";
 import ProjectNo from "@/components/common/ProjectNo";
 import CurrencyToggle from "@/components/common/CurrencyToggle";
-import { dualCurrencyText } from "@/components/common/itemTable";
+import {
+  dualCurrencyText,
+  useRowSelection,
+  deleteSelectedRows,
+  ItemSelectHeaderCell,
+  ItemSelectCell,
+  DeleteSelectedButton,
+  amountInputValue,
+  parseAmountInput,
+  itemRowClass,
+} from "@/components/common/itemTable";
+import { useItemGrid, ItemGridStyle, ItemTh, ItemColsButton, type ItemCol } from "@/components/common/itemGrid";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -426,6 +437,9 @@ function ArAddForm({
   // 송장번호 자동생성 규칙 = P/O번호 + "-INV". auto 모드면 이 값을 그대로 사용.
   const [autoInvoiceNo, setAutoInvoiceNo] = useState("");
   const [invMode, setInvMode] = useState<"auto" | "manual">("auto");
+  // "Load CI" 버튼용 — 선택 오더의 CI 품목을 보관했다가 필요 시 표에 다시 채운다.
+  const [ciItems, setCiItems] = useState<TaxInvoiceItem[]>([]);
+  const sel = useRowSelection();
 
   // 오더 선택 시 해당 프로젝트/CI 정보를 불러와 빈 항목 자동 입력.
   useEffect(() => {
@@ -436,6 +450,7 @@ function ArAddForm({
         if (!alive) return;
         const autoInv = d.order.po_no ? `${d.order.po_no}-INV` : "";
         setAutoInvoiceNo(autoInv);
+        setCiItems(ciItemsToTax(d));
         setForm((f) => ({
           ...f,
           ci_no: f.ci_no || d.ci?.ci_no || "",
@@ -490,18 +505,35 @@ function ArAddForm({
     setForm((f) => {
       const items = f.items.map((it, idx) => {
         if (idx !== i) return it;
-        const next = { ...it, [key]: key === "qty" || key === "unit_price" ? num(value) : value };
-        if (key === "qty" || key === "unit_price") next.amount = num(next.qty) * num(next.unit_price);
+        const numeric = key === "qty" || key === "unit_price";
+        const next = { ...it, [key]: numeric ? parseAmountInput(value) ?? 0 : value };
+        if (numeric) next.amount = num(next.qty) * num(next.unit_price);
         return next;
       });
       return { ...f, items };
     });
   }
   const addItem = () => setForm((f) => ({ ...f, items: [...f.items, { ...emptyTaxItem }] }));
-  const removeItem = (i: number) => setForm((f) => ({ ...f, items: f.items.filter((_, idx) => idx !== i) }));
+  const setItems = (items: TaxInvoiceItem[]) => setForm((f) => ({ ...f, items }));
+  // Load CI — 선택 오더의 CI 품목을 표에 다시 채운다(현재 편집 내용 대체).
+  const loadCi = () => { setItems(ciItems.map((it) => ({ ...it }))); sel.clear(); };
+  // Cancel — 폼을 초기 상태로 되돌린다(오더 선택은 유지).
+  const cancel = () => { setForm({ ...emptyForm, order_id: form.order_id }); setInvMode("auto"); sel.clear(); };
 
   const subtotal = taxSubtotal(form.items);
   const vat = subtotal * num(form.vat_rate);
+
+  // 청구 품목표 — 폭조절·컬럼숨김 가능한 공용 그리드. 좌측 체크박스로 선택→선택삭제.
+  const itemCols: ItemCol[] = [
+    { key: "__sel", fixed: true },
+    { key: "__seq", fixed: true, className: "seq" },
+    { key: "description", label: "Description" },
+    { key: "part_no", label: "Part No." },
+    { key: "qty", label: "Qty", className: "num" },
+    { key: "unit_price", label: "Unit Price", className: "num" },
+    { key: "amount", label: "Amount", className: "num" },
+  ];
+  const grid = useItemGrid("ar-tax-items", itemCols);
 
   return (
     <div>
@@ -556,55 +588,84 @@ function ArAddForm({
 
       {/* 청구 품목(Item list) — TAX INVOICE 문서에 그대로 출력된다. CI 품목이 기본값. */}
       <div className="tax-items">
-        <div className="tax-items-head">
-          <span className="form-section-title" style={{ margin: 0 }}>Item list</span>
-          <button type="button" className="btn sm" onClick={addItem}>+ Add item</button>
+        <div className="items-head">
+          <div className="form-section-title" style={{ margin: 0 }}>Item list</div>
+          <div className="items-head-actions">
+            <button type="button" className="btn sm" onClick={loadCi} disabled={ciItems.length === 0}>Load CI</button>
+            <ItemColsButton grid={grid} />
+            <DeleteSelectedButton sel={sel} onDelete={() => deleteSelectedRows(form.items, sel, setItems)} />
+            <button type="button" className="btn sm items-head-add" onClick={addItem}>+ Add</button>
+          </div>
         </div>
-        <table className="tax-items-table">
-          <thead>
-            <tr>
-              <th style={{ width: 34 }}>No.</th>
-              <th>Description</th>
-              <th style={{ width: 120 }}>Part No.</th>
-              <th style={{ width: 70 }}>Qty</th>
-              <th style={{ width: 110 }}>Unit Price</th>
-              <th style={{ width: 120 }}>Amount</th>
-              <th style={{ width: 30 }} />
-            </tr>
-          </thead>
-          <tbody>
-            {form.items.length === 0 ? (
-              <tr><td colSpan={7} className="tax-items-empty">No items — “+ Add item” or select an order to load CI items.</td></tr>
-            ) : form.items.map((it, i) => (
-              <tr key={i}>
-                <td className="num">{i + 1}</td>
-                <td><input value={it.description} onChange={(e) => setItem(i, "description", e.target.value)} /></td>
-                <td><input value={it.part_no} onChange={(e) => setItem(i, "part_no", e.target.value)} /></td>
-                <td><input className="num" type="number" value={it.qty} onChange={(e) => setItem(i, "qty", e.target.value)} /></td>
-                <td><input className="num" type="number" value={it.unit_price} onChange={(e) => setItem(i, "unit_price", e.target.value)} /></td>
-                <td className="num">{it.amount.toLocaleString()}</td>
-                <td><button type="button" className="tax-items-del" title="Remove" onClick={() => removeItem(i)}>×</button></td>
+        <div className="table-wrap item-scroll">
+          <ItemGridStyle grid={grid} />
+          <table className={`mini wide lead-tools ${grid.tableClass}`}>
+            <thead>
+              <tr>
+                <ItemSelectHeaderCell count={form.items.length} sel={sel} />
+                <th className="seq">No.</th>
+                <ItemTh grid={grid} k="description">Description</ItemTh>
+                <ItemTh grid={grid} k="part_no">Part No.</ItemTh>
+                <ItemTh grid={grid} k="qty" className="num">Qty</ItemTh>
+                <ItemTh grid={grid} k="unit_price" className="num">Unit Price</ItemTh>
+                <ItemTh grid={grid} k="amount" className="num">Amount</ItemTh>
               </tr>
-            ))}
-          </tbody>
-          <tfoot>
-            <tr><td colSpan={5} className="num">Subtotal</td><td className="num">{subtotal.toLocaleString()}</td><td /></tr>
-            <tr><td colSpan={5} className="num">VAT ({Math.round(form.vat_rate * 100)}%)</td><td className="num">{Math.round(vat).toLocaleString()}</td><td /></tr>
-            <tr className="tax-items-total"><td colSpan={5} className="num">Total</td><td className="num">{Math.round(subtotal + vat).toLocaleString()}</td><td /></tr>
-          </tfoot>
-        </table>
-        <label className="form-field" style={{ marginTop: 8 }}>
-          <span>Remarks (청구서 비고)</span>
-          <textarea rows={2} value={form.remarks} onChange={(e) => setForm({ ...form, remarks: e.target.value })} />
-        </label>
+            </thead>
+            <tbody>
+              {form.items.length === 0 ? (
+                <tr><td colSpan={7} className="tax-items-empty">No items — “+ Add” or “Load CI”.</td></tr>
+              ) : form.items.map((it, i) => (
+                <tr key={i} className={itemRowClass(i)}>
+                  <ItemSelectCell index={i} sel={sel} />
+                  <td className="seq">{i + 1}</td>
+                  <td><textarea className="desc" rows={1} value={it.description} onChange={(e) => setItem(i, "description", e.target.value)} /></td>
+                  <td><textarea className="wrapcell" rows={1} value={it.part_no} onChange={(e) => setItem(i, "part_no", e.target.value)} /></td>
+                  <td><input className="num" value={amountInputValue(it.qty)} onChange={(e) => setItem(i, "qty", e.target.value)} /></td>
+                  <td><input className="num" value={amountInputValue(it.unit_price)} onChange={(e) => setItem(i, "unit_price", e.target.value)} /></td>
+                  <td className="num">{it.amount.toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+            {/* 합계행 — 컬럼당 1셀(폭조절/숨김 정렬 유지). 라벨=Unit Price열, 값=Amount열. */}
+            <tfoot>
+              <tr>
+                <td /><td /><td /><td /><td />
+                <td className="total-label">Subtotal</td>
+                <td className="num total-value">{subtotal.toLocaleString()}</td>
+              </tr>
+              <tr>
+                <td /><td /><td /><td /><td />
+                <td className="total-label">VAT ({Math.round(form.vat_rate * 100)}%)</td>
+                <td className="num total-value">{Math.round(vat).toLocaleString()}</td>
+              </tr>
+              <tr className="foot-grand">
+                <td /><td /><td /><td /><td />
+                <td className="total-label">Total</td>
+                <td className="num total-value">{Math.round(subtotal + vat).toLocaleString()}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
       </div>
 
-      <div className="form-actions">
-        <button className="btn primary" disabled={form.order_id === "" || busy} onClick={save}>
-          {busy ? "Working…" : "Add AR"}
-        </button>
-        <TaxPreviewButton orderId={form.order_id === "" ? null : form.order_id} form={form} />
-        {err ? <span className="action-err">{err}</span> : null}
+      <label className="form-field ar-remarks">
+        <span>Remarks (청구서 비고)</span>
+        <textarea rows={2} value={form.remarks} onChange={(e) => setForm({ ...form, remarks: e.target.value })} />
+      </label>
+
+      <div className="form-actions doc-actions">
+        <div className="doc-actions-left">
+          <TaxPreviewButton orderId={form.order_id === "" ? null : form.order_id} form={form} />
+        </div>
+        <div className="doc-actions-center">
+          {err ? <span className="action-err">{err}</span> : null}
+        </div>
+        <div className="doc-actions-right">
+          <button className="btn" disabled={busy} onClick={cancel}>Cancel</button>
+          <button className="btn primary" disabled={form.order_id === "" || busy} onClick={save}>
+            {busy ? "Working…" : "Save"}
+          </button>
+        </div>
       </div>
     </div>
   );
