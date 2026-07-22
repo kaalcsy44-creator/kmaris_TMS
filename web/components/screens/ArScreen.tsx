@@ -412,21 +412,16 @@ function ArAddForm({
   onChanged: () => void;
 }) {
   const [form, setForm] = useState<ArForm>({ ...emptyForm, order_id: fallbackOrderId ?? "" });
-  const [detail, setDetail] = useState<DocumentDetail | null>(null);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
 
-  // 오더 선택 시 해당 프로젝트/CI 정보를 불러와 기본정보 표시 + 빈 항목 자동 입력.
+  // 오더 선택 시 해당 프로젝트/CI 정보를 불러와 빈 항목 자동 입력.
   useEffect(() => {
-    if (form.order_id === "") {
-      setDetail(null);
-      return;
-    }
+    if (form.order_id === "") return;
     let alive = true;
     fetchDocumentDetail(form.order_id)
       .then((d) => {
         if (!alive) return;
-        setDetail(d);
         setForm((f) => ({
           ...f,
           ci_no: f.ci_no || d.ci?.ci_no || "",
@@ -505,7 +500,6 @@ function ArAddForm({
           ))}
         </select>
       </div>
-      {form.order_id !== "" ? <OrderInfoBlock orderId={form.order_id} detail={detail} /> : null}
       <div className="form-grid">
         <Field label="Invoice No." value={form.invoice_no} onChange={(v) => setForm({ ...form, invoice_no: v })} />
         <Field label="Invoice date" value={form.invoice_date} onChange={(v) => setForm({ ...form, invoice_date: v })} type="date" />
