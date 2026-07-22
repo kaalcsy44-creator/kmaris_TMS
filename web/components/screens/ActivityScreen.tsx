@@ -556,6 +556,8 @@ export default function ActivityScreen() {
                     ? ageDays >= 14 ? "urgent" : ageDays >= 7 ? "warn" : "normal"
                     : "normal");
                 const vend = vendorOf(row);
+                // 최신 완료 단계 라벨(현재 stage) — 카드 우측 상단, 경과일 좌측에 표시.
+                const stageLabel = row.stage > 0 ? (steps[row.stage - 1] || "") : "";
                 return (
                   <li
                     key={row.rfq_id}
@@ -567,6 +569,9 @@ export default function ActivityScreen() {
                       <span className="act-digest-code">{code}</span>
                       {date ? <span className="act-digest-date">{date}</span> : null}
                       <span className="act-digest-title">{row.project_title || "(untitled)"}</span>
+                      {stageLabel ? (
+                        <span className="act-digest-stage" title="Latest completed stage">{stageLabel}</span>
+                      ) : null}
                       {ageDays != null ? (
                         <span className={`act-digest-age lv-${lv}`} title="Days since last activity">{ageDays}d</span>
                       ) : null}

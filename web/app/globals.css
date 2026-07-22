@@ -8364,6 +8364,10 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 .act-digest-date { flex: none; font-size: 10px; color: var(--muted); }
 .act-digest-title { flex: 1 1 auto; min-width: 0; font-size: 14.5px; font-weight: 600; color: var(--ink);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 최신 완료 단계 배지 — 경과일 좌측. 현재 어느 단계까지 왔는지 한눈에. */
+.act-digest-stage { flex: none; font-size: 10px; font-weight: 700; white-space: nowrap;
+  padding: 1px 7px; border-radius: 6px; background: #eaf1fb; color: #2c5aa0; }
+.act-digest-row.service .act-digest-stage { background: #e7f5ee; color: #2f7d53; }
 .act-digest-age { flex: none; font-size: 10px; font-weight: 700;
   padding: 1px 6px; border-radius: 6px; background: var(--head-bg); color: var(--muted); }
 .act-digest-age.lv-warn { background: #fff3e0; color: #9a5b00; }
