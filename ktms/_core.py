@@ -2532,6 +2532,12 @@ class StageNoteDelete(BaseModel):
     index: int                 # 해당 단계 로그 내 인덱스
 
 
+class VendorRfqDeclineBody(BaseModel):
+    # '견적 불가(No quote)' 통보 표시 시 함께 받는 일시·사유. 활동로그에 자동 기록된다.
+    datetime: str | None = None   # 통보 일시 "YYYY-MM-DDTHH:MM" (KST). 비우면 현재시각
+    reason: str | None = None     # 사유(자유 입력)
+
+
 
 
 class CustomerQuoteCreate(BaseModel):

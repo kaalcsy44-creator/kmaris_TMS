@@ -1315,9 +1315,10 @@ export function deleteVendorRfq(id: number): Promise<{ ok: boolean; id: number }
 
 // 이 Vendor RFQ 의 '견적 불가' 표시를 토글한다(프로젝트 Vendor 필드 취소선 처리용).
 export function toggleVendorRfqDecline(
-  vrfqId: number
+  vrfqId: number,
+  body?: { datetime?: string; reason?: string }
 ): Promise<{ ok: boolean; declined: boolean; status: string }> {
-  return post(`/api/admin/vendor-rfq/${vrfqId}/toggle-decline`, {});
+  return post(`/api/admin/vendor-rfq/${vrfqId}/toggle-decline`, body ?? {});
 }
 
 export function fetchVendorQuoteDetail(id: number): Promise<VendorQuoteDetail> {

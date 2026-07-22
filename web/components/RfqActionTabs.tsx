@@ -65,6 +65,7 @@ import VendorName from "./common/VendorName";
 import CustomerName from "./common/CustomerName";
 import { imageFromClipboard } from "@/lib/imagePaste";
 import Modal from "./common/Modal";
+import { nowLocalInput } from "./common/ActivityNoteForm";
 import BaseMetaRows, { ModalTitle } from "./common/BaseMeta";
 import CurrencyToggle from "./common/CurrencyToggle";
 import TermsEditor from "./common/TermsEditor";
@@ -326,6 +327,7 @@ function EmbeddedVendorRfq({
   const [loaded, setLoaded] = useState(false);
   const [selId, setSelId] = useState<number | null>(null);
   const [adding, setAdding] = useState(false);
+  const [declining, setDeclining] = useState(false);   // '견적 불가' 통보 일시·사유 입력창
   const load = useCallback(() => {
     fetchVrfqOverview()
       .then((d) => setRows(d.rows))
@@ -376,9 +378,14 @@ function EmbeddedVendorRfq({
               className={`btn sm${selected.status === "견적 불가" ? " primary" : ""}`}
               title="Mark this vendor as declined to quote (struck through in the project Vendor field)"
               onClick={async () => {
-                await toggleVendorRfqDecline(selected.id);
-                load();
-                onChanged();
+                // 표시 → 해제는 바로 토글. 신규 표시는 일시·사유를 받아 로그에 남긴다.
+                if (selected.status === "견적 불가") {
+                  await toggleVendorRfqDecline(selected.id);
+                  load();
+                  onChanged();
+                } else {
+                  setDeclining(true);
+                }
               }}
             >
               {selected.status === "견적 불가" ? "No quote ✓" : "No quote"}
@@ -394,7 +401,67 @@ function EmbeddedVendorRfq({
         onChanged={() => { load(); onChanged(); }}
         inline
       />
+      {declining ? (
+        <NoQuoteDialog
+          vendor={selected.vendor || ""}
+          onCancel={() => setDeclining(false)}
+          onConfirm={async (datetime, reason) => {
+            await toggleVendorRfqDecline(selected.id, { datetime, reason });
+            setDeclining(false);
+            load();
+            onChanged();
+          }}
+        />
+      ) : null}
     </div>
+  );
+}
+
+// '견적 불가(No quote)' 통보 — 일시·사유를 받아 활동로그(3단계)에 자동 기록한다.
+function NoQuoteDialog({
+  vendor,
+  onConfirm,
+  onCancel,
+}: {
+  vendor: string;
+  onConfirm: (datetime: string, reason: string) => void | Promise<void>;
+  onCancel: () => void;
+}) {
+  const [datetime, setDatetime] = useState(() => nowLocalInput());
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  async function confirm() {
+    setBusy(true);
+    try { await onConfirm(datetime, reason.trim()); }
+    finally { setBusy(false); }
+  }
+  return (
+    <Modal title={`No quote — ${vendor || "Vendor"}`} onClose={onCancel} form>
+      <div className="form-field">
+        <label>통보 일시 (Notified at)</label>
+        <input
+          type="datetime-local"
+          value={datetime}
+          onChange={(e) => setDatetime(e.target.value)}
+        />
+      </div>
+      <div className="form-field">
+        <label>사유 (Reason)</label>
+        <textarea
+          rows={3}
+          value={reason}
+          placeholder="예: 재고 없음 / 단종 / 취급 품목 아님"
+          onChange={(e) => setReason(e.target.value)}
+          autoFocus
+        />
+      </div>
+      <div className="form-actions">
+        <button type="button" className="btn primary" disabled={busy} onClick={confirm}>
+          {busy ? "…" : "Mark no quote"}
+        </button>
+        <button type="button" className="btn" onClick={onCancel}>Cancel</button>
+      </div>
+    </Modal>
   );
 }
 

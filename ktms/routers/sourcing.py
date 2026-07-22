@@ -23,6 +23,7 @@ from _core import (
     VendorRfqCreate,
     VendorRfqPreviewRequest,
     VendorRfqSendRequest,
+    VendorRfqDeclineBody,
     VendorRfqUpdate,
     VendorRfqXlsxRequest,
     VendorRfqEmailPreviewReq,
@@ -480,9 +481,14 @@ _VRFQ_DECLINED = "견적 불가"
 
 @app.post("/api/admin/vendor-rfq/{vrfq_id}/toggle-decline",
           dependencies=[Depends(require_token)])
-def vendor_rfq_toggle_decline(vrfq_id: int):
+def vendor_rfq_toggle_decline(
+    vrfq_id: int,
+    body: VendorRfqDeclineBody | None = None,
+    user: dict = Depends(get_current_user),
+):
     """이 Vendor RFQ 의 '견적 불가' 표시를 토글한다. 견적이 이미 수신된 벤더는 표시에서
-    quoted 가 우선하므로 영향이 없다. 해제 시 '발신완료' 로 되돌린다."""
+    quoted 가 우선하므로 영향이 없다. 해제 시 '발신완료' 로 되돌린다.
+    '견적 불가'로 표시할 때는 통보 일시·사유를 받아 활동로그(3단계 Quote Received)에 자동 기록한다."""
     s = get_session()
     try:
         vr = s.query(VendorRFQ).filter_by(id=vrfq_id).first()
@@ -490,6 +496,29 @@ def vendor_rfq_toggle_decline(vrfq_id: int):
             raise HTTPException(status_code=404, detail="Vendor RFQ를 찾을 수 없습니다.")
         declined = (vr.status or "") != _VRFQ_DECLINED
         vr.status = _VRFQ_DECLINED if declined else "발신완료"
+        # 표시(declined=True)로 전환할 때만 활동로그에 한 줄 남긴다. 해제는 조용히 토글.
+        if declined:
+            rfq = s.query(RFQ).filter_by(id=vr.rfq_id).first() if vr.rfq_id else None
+            vendor = s.query(Vendor).filter_by(id=vr.vendor_id).first() if vr.vendor_id else None
+            if rfq is not None:
+                reason = ((body.reason if body else None) or "").strip()
+                when = ((body.datetime if body else None) or "").strip() or _kst_iso(datetime.utcnow())
+                notes = dict(getattr(rfq, "stage_notes", None) or {})
+                key = "3"   # Quote Received — 벤더가 견적 불가를 통보한 시점
+                log = list(notes.get(key, []))
+                log.append({
+                    "text": "견적 불가 통보" + (f" — {reason}" if reason else ""),
+                    "datetime": when,
+                    "party": (vendor.name if vendor else "") or "",   # 통보한 벤더
+                    "person": (vendor.contact if vendor else "") or "",  # 벤더 담당자
+                    "channel": "",
+                    "direction": "in",   # 벤더로부터 수신
+                    "star": False,
+                    "pic": (user.get("username") if user else "") or "",
+                    "at": _kst_iso(datetime.utcnow()),
+                })
+                notes[key] = log
+                rfq.stage_notes = notes
         s.commit()
         return {"ok": True, "declined": declined, "status": vr.status}
     finally:
