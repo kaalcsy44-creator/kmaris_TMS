@@ -1042,8 +1042,15 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
   });
   // Incoterms · Payment Terms — CI/PDF/Excel 의 Shipping Information 에 출력.
   const [terms, setTerms] = useState<Record<string, string>>(data.ci?.terms || {});
+  const [freight, setFreight] = useState(data.ci?.terms?.freight || "");
+  const [packing, setPacking] = useState(data.ci?.terms?.packing || "");
+  const [insurance, setInsurance] = useState(data.ci?.terms?.insurance || "");
   const [busy, setBusy] = useState(false);
-  const total = useMemo(() => items.reduce((sum, i) => sum + num(i.amount), 0), [items]);
+  // Total invoice value = 품목 소계 + Freight + Packing + Insurance + VAT.
+  const subtotal = useMemo(() => items.reduce((sum, i) => sum + num(i.amount), 0), [items]);
+  const extras = num(freight) + num(packing) + num(insurance);
+  const vatAmount = (subtotal + extras) * (num(vatRate) / 100);
+  const totalInvoiceValue = subtotal + extras + vatAmount;
   const editable = canEditDoc(data);
 
   async function save() {
@@ -1053,7 +1060,8 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
       const outItems = items.map((it) => ({ ...it, hs_code: shipping.hs_code || it.hs_code || "" }));
       // 구조화 Shipping Marks → PDF 출력용 문자열로 합성해 함께 저장.
       const outShipping = { ...shipping, shipping_marks: composeShippingMarks(shipping) };
-      await saveCommercialInvoice(data.order.id, { ci_no: ciNo, date, currency, vat_rate: vatRate, items: outItems, shipping: outShipping, terms });
+      const outTerms = { ...terms, freight, packing, insurance };
+      await saveCommercialInvoice(data.order.id, { ci_no: ciNo, date, currency, vat_rate: vatRate, items: outItems, shipping: outShipping, terms: outTerms });
       onChanged();
     } finally {
       setBusy(false);
@@ -1080,6 +1088,9 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
       ...(data.ci?.shipping || {}),
     });
     setTerms(data.ci?.terms || {});
+    setFreight(data.ci?.terms?.freight || "");
+    setPacking(data.ci?.terms?.packing || "");
+    setInsurance(data.ci?.terms?.insurance || "");
   }
 
   async function del() {
@@ -1142,6 +1153,16 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
             Load order items
           </button>
         }
+        // Freight/Packing/Insurance/VAT 를 품목표 tfoot 안(리스트 하단·Total 위)에 넣는다.
+        // Total invoice value = 품목 소계 + Freight + Packing + Insurance + VAT.
+        footerRows={[
+          { label: "Subtotal", value: <DualCurrencyAmount value={subtotal} currency={currency} /> },
+          { label: "Freight", value: <input className="foot-charge-input" value={amountInputValue(freight)} onChange={(e) => setFreight(String(parseAmountInput(e.target.value) ?? ""))} /> },
+          { label: "Packing", value: <input className="foot-charge-input" value={amountInputValue(packing)} onChange={(e) => setPacking(String(parseAmountInput(e.target.value) ?? ""))} /> },
+          { label: "Insurance", value: <input className="foot-charge-input" value={amountInputValue(insurance)} onChange={(e) => setInsurance(String(parseAmountInput(e.target.value) ?? ""))} /> },
+          { label: `VAT (${num(vatRate)}%)`, value: <DualCurrencyAmount value={vatAmount} currency={currency} /> },
+          { label: "Total invoice value", grand: true, value: <><DualCurrencyAmount value={totalInvoiceValue} currency={currency} /><span className="fx-note">{fxRateText()}</span></> },
+        ]}
       />
       <MissingWarning missing={data.ci?.missing || []} />
       </fieldset>
@@ -1150,7 +1171,7 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
           <DocPreviewButton orderId={data.order.id} kind="ci/pdf" filename="Commercial Invoice.pdf" disabled={!data.ci} xlsxKind="ci/xlsx" />
         </div>
         <div className="doc-actions-center">
-          <span className="hint-inline">Total {dualCurrencyText(total, currency)} · {fxRateText()}</span>
+          <span className="hint-inline">Total invoice value {dualCurrencyText(totalInvoiceValue, currency)} · {fxRateText()}</span>
         </div>
         <div className="doc-actions-right">
           {editable ? (
