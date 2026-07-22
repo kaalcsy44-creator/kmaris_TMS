@@ -455,6 +455,11 @@ class ARRecord(Base):
     vat_rate       = Column(Float, default=0.1)   # 부가세율(내수 기본 10%)
     items          = Column(JSON, default=list)   # 청구 품목(설명·Part No.·수량·단가·금액)
     remarks        = Column(Text)          # 청구서 비고(입금 안내 등)
+    # 청구처(BILL TO) 오버라이드 — 비우면 고객 마스터값을 사용. 세금계산서 PDF 에 인쇄.
+    bill_to_tax_id  = Column(String(60))   # 고객 사업자등록번호
+    bill_to_contact = Column(String(100))  # 청구 담당자
+    bill_to_email   = Column(String(200))  # 청구 이메일
+    bill_to_phone   = Column(String(60))   # 청구 연락처
     created_at     = Column(DateTime, default=datetime.utcnow)
 
 

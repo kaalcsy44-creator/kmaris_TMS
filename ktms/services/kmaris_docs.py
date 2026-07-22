@@ -999,12 +999,14 @@ def _make_tax_invoice_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> byte
     address = company.get("address_en") or company.get("address", "")
     biz = "Trading / Marine Spare Parts, Equipment & Services"
     rep = company.get("representative", "") or "Sungyeon Cho"
-    l = [("Company Name", customer.get("name", "")), ("Contact", customer.get("contact", "")),
+    l = [("Company Name", customer.get("name", "")),
+         ("Business Reg. No.", customer.get("tax_id", "")),
+         ("Contact", customer.get("contact", "")),
          ("Email", customer.get("email", "")), ("Tel", customer.get("phone", "") or customer.get("tel", "")),
          ("Vessel", vessel.get("name", "")), ("Project", data.get("project_title", ""))]
     r = [("Company Name", company.get("company_name_en", "")), ("Address", address),
          ("Business Reg. No.", company.get("business_no", "")), ("Business", biz),
-         ("Representative", rep), ("Tel", company.get("phone", ""))]
+         ("Representative", rep), ("Tel", company.get("phone", "")), ("", "")]
     party_rows = [[p("BILL TO / CUSTOMER", "section"), "", p("SUPPLIER", "section"), ""]]
     for i in range(len(l)):
         party_rows.append([p(l[i][0], "small"), p(l[i][1], "small"), p(r[i][0], "small"), p(r[i][1], "small")])

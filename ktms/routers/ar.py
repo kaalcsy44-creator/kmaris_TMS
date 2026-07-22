@@ -215,6 +215,10 @@ def create_ar(body: ARSave):
             vat_rate=body.vat_rate if body.vat_rate is not None else 0.1,
             items=body.items or [],
             remarks=body.remarks or "",
+            bill_to_tax_id=body.bill_to_tax_id or "",
+            bill_to_contact=body.bill_to_contact or "",
+            bill_to_email=body.bill_to_email or "",
+            bill_to_phone=body.bill_to_phone or "",
         )
         s.add(ar)
         s.commit()
@@ -251,6 +255,14 @@ def update_ar(ar_id: int, body: ARSave):
             ar.items = body.items
         if body.remarks is not None:
             ar.remarks = body.remarks
+        if body.bill_to_tax_id is not None:
+            ar.bill_to_tax_id = body.bill_to_tax_id
+        if body.bill_to_contact is not None:
+            ar.bill_to_contact = body.bill_to_contact
+        if body.bill_to_email is not None:
+            ar.bill_to_email = body.bill_to_email
+        if body.bill_to_phone is not None:
+            ar.bill_to_phone = body.bill_to_phone
         s.commit()
         return {"ok": True, "id": ar.id, "status": _enum_val(ar.status)}
     finally:

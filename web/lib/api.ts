@@ -1104,6 +1104,11 @@ type ArDocFields = {
   vat_rate?: number;
   items?: TaxInvoiceItem[];
   remarks?: string;
+  // 청구처(BILL TO) 오버라이드 — 비우면 고객 마스터값을 사용.
+  bill_to_tax_id?: string;
+  bill_to_contact?: string;
+  bill_to_email?: string;
+  bill_to_phone?: string;
 };
 
 export function createArRecord(body: {
@@ -1146,6 +1151,10 @@ export function previewTaxInvoicePdf(
     vat_rate?: number;
     items?: TaxInvoiceItem[];
     remarks?: string;
+    bill_to_tax_id?: string;
+    bill_to_contact?: string;
+    bill_to_email?: string;
+    bill_to_phone?: string;
   }
 ): Promise<Blob> {
   return postBlob(`/api/admin/documents/${orderId}/tax/pdf`, body);

@@ -864,6 +864,16 @@ def tax_invoice_pdf(order_id: int, body: TaxInvoicePdfReq):
             tax_invoice={"due_date": body.due_date or "", "remarks": body.remarks or ""},
         )
         payload["remarks"] = body.remarks or ""
+        # 청구처(BILL TO) 오버라이드 — 값이 있으면 고객 마스터값 대신 사용.
+        cust = payload["customer"]
+        if body.bill_to_tax_id:
+            cust["tax_id"] = body.bill_to_tax_id
+        if body.bill_to_contact:
+            cust["contact"] = body.bill_to_contact
+        if body.bill_to_email:
+            cust["email"] = body.bill_to_email
+        if body.bill_to_phone:
+            cust["phone"] = body.bill_to_phone
         pdf = generate_pdf("tax_invoice", payload)
         return _doc_file_response(pdf, f"{doc_no or 'TAX'}_TAX_INVOICE.pdf", "application/pdf")
     finally:

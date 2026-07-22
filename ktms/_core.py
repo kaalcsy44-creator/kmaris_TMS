@@ -1590,6 +1590,11 @@ class ARSave(BaseModel):
     vat_rate: float | None = None
     items: list[dict] | None = None
     remarks: str | None = None
+    # 청구처(BILL TO) 오버라이드 — 미전달 시 기존값 유지.
+    bill_to_tax_id: str | None = None
+    bill_to_contact: str | None = None
+    bill_to_email: str | None = None
+    bill_to_phone: str | None = None
 
 
 class TaxInvoicePdfReq(BaseModel):
@@ -1601,6 +1606,11 @@ class TaxInvoicePdfReq(BaseModel):
     vat_rate: float = 0.1
     items: list[dict] = []
     remarks: str | None = ""
+    # 청구처(BILL TO) 오버라이드 — 비우면 고객 마스터값 사용.
+    bill_to_tax_id: str | None = ""
+    bill_to_contact: str | None = ""
+    bill_to_email: str | None = ""
+    bill_to_phone: str | None = ""
 
 
 def _ar_status_from_text(value: str | None, paid: float, invoice: float) -> ARStatus:

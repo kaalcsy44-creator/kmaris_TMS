@@ -47,6 +47,11 @@ type ArForm = {
   vat_rate: number;
   items: TaxInvoiceItem[];
   remarks: string;
+  // 청구처(BILL TO) 오버라이드 — 비우면 고객 마스터값을 사용.
+  bill_to_tax_id: string;
+  bill_to_contact: string;
+  bill_to_email: string;
+  bill_to_phone: string;
 };
 
 const DEFAULT_REMARKS =
@@ -67,6 +72,10 @@ const emptyForm: ArForm = {
   vat_rate: 0.1,
   items: [],
   remarks: DEFAULT_REMARKS,
+  bill_to_tax_id: "",
+  bill_to_contact: "",
+  bill_to_email: "",
+  bill_to_phone: "",
 };
 
 const emptyTaxItem: TaxInvoiceItem = { description: "", part_no: "", qty: 1, unit_price: 0, amount: 0 };
@@ -414,6 +423,9 @@ function ArAddForm({
   const [form, setForm] = useState<ArForm>({ ...emptyForm, order_id: fallbackOrderId ?? "" });
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+  // 송장번호 자동생성 규칙 = P/O번호 + "-INV". auto 모드면 이 값을 그대로 사용.
+  const [autoInvoiceNo, setAutoInvoiceNo] = useState("");
+  const [invMode, setInvMode] = useState<"auto" | "manual">("auto");
 
   // 오더 선택 시 해당 프로젝트/CI 정보를 불러와 빈 항목 자동 입력.
   useEffect(() => {
@@ -422,14 +434,19 @@ function ArAddForm({
     fetchDocumentDetail(form.order_id)
       .then((d) => {
         if (!alive) return;
+        const autoInv = d.order.po_no ? `${d.order.po_no}-INV` : "";
+        setAutoInvoiceNo(autoInv);
         setForm((f) => ({
           ...f,
           ci_no: f.ci_no || d.ci?.ci_no || "",
           currency: d.ci?.currency || f.currency,
           invoice_amount: f.invoice_amount || ciTotal(d),
           // 송장번호 = P/O번호+"-INV"(비어있을 때만). 항목은 CI 품목을 기본값으로 불러온다.
-          invoice_no: f.invoice_no || (d.order.po_no ? `${d.order.po_no}-INV` : ""),
+          invoice_no: f.invoice_no || autoInv,
           items: f.items.length ? f.items : ciItemsToTax(d),
+          // 청구처는 고객 마스터값을 기본으로 채운다(사용자가 덮어쓰면 유지).
+          bill_to_tax_id: f.bill_to_tax_id || d.order.customer_tax_id || "",
+          bill_to_email: f.bill_to_email || d.order.customer_email || "",
         }));
       })
       .catch(() => {});
@@ -446,17 +463,19 @@ function ArAddForm({
       await createArRecord({
         order_id: form.order_id,
         ci_no: form.ci_no,
-        invoice_amount: form.invoice_amount,
-        paid_amount: form.paid_amount,
+        // 청구 금액 = 품목 합계(소계+VAT). 별도 입력란 없이 항상 품목표에서 계산.
+        invoice_amount: Math.round(subtotal + vat),
         currency: form.currency,
         due_date: form.due_date,
-        status: form.status,
-        notes: form.notes,
         invoice_no: form.invoice_no,
         invoice_date: form.invoice_date,
         vat_rate: form.vat_rate,
         items: form.items,
         remarks: form.remarks,
+        bill_to_tax_id: form.bill_to_tax_id,
+        bill_to_contact: form.bill_to_contact,
+        bill_to_email: form.bill_to_email,
+        bill_to_phone: form.bill_to_phone,
       });
       onChanged();
     } catch (e) {
@@ -501,27 +520,38 @@ function ArAddForm({
         </select>
       </div>
       <div className="form-grid">
-        <Field label="Invoice No." value={form.invoice_no} onChange={(v) => setForm({ ...form, invoice_no: v })} />
+        <label className="form-field">
+          <span>Invoice No.</span>
+          {invMode === "auto" ? (
+            <select value="auto" onChange={(e) => { if (e.target.value === "manual") setInvMode("manual"); }}>
+              <option value="auto">{autoInvoiceNo ? `${autoInvoiceNo} (auto)` : "Auto-generate"}</option>
+              <option value="manual">Manual entry…</option>
+            </select>
+          ) : (
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <input value={form.invoice_no} onChange={(e) => setForm({ ...form, invoice_no: e.target.value })} placeholder="Invoice No.…" autoFocus style={{ flex: 1 }} />
+              <button type="button" className="btn sm" onClick={() => { setInvMode("auto"); setForm((f) => ({ ...f, invoice_no: autoInvoiceNo })); }} title="Use auto number">auto</button>
+            </div>
+          )}
+        </label>
         <Field label="Invoice date" value={form.invoice_date} onChange={(v) => setForm({ ...form, invoice_date: v })} type="date" />
         <Field label="CI No." value={form.ci_no} onChange={(v) => setForm({ ...form, ci_no: v })} />
-        <Field label="Invoice amount" value={String(form.invoice_amount)} onChange={(v) => setForm({ ...form, invoice_amount: num(v) })} type="number" />
-        <Field label="Paid amount" value={String(form.paid_amount)} onChange={(v) => setForm({ ...form, paid_amount: num(v) })} type="number" />
         <label className="form-field">
           <span>Currency</span>
           <CurrencyToggle value={form.currency} onChange={(v) => setForm({ ...form, currency: v })} />
         </label>
         <Field label="VAT %" value={String(Math.round(form.vat_rate * 100))} onChange={(v) => setForm({ ...form, vat_rate: num(v) / 100 })} type="number" />
         <Field label="Due date" value={form.due_date} onChange={(v) => setForm({ ...form, due_date: v })} type="date" />
-        <label className="form-field">
-          <span>Status</span>
-          <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
-            <option value="미수">{tr("미수")}</option>
-            <option value="일부수금">{tr("일부수금")}</option>
-            <option value="완납">{tr("완납")}</option>
-            <option value="연체">{tr("연체")}</option>
-          </select>
-        </label>
         <Field label="Notes" value={form.notes} onChange={(v) => setForm({ ...form, notes: v })} />
+      </div>
+
+      {/* 청구처(BILL TO) — 세금계산서에 인쇄. 비우면 고객 마스터값을 사용. */}
+      <div className="form-section-title">Bill to (청구처)</div>
+      <div className="form-grid">
+        <Field label="Customer Tax ID (사업자등록번호)" value={form.bill_to_tax_id} onChange={(v) => setForm({ ...form, bill_to_tax_id: v })} />
+        <Field label="Contact (담당자)" value={form.bill_to_contact} onChange={(v) => setForm({ ...form, bill_to_contact: v })} />
+        <Field label="Email" value={form.bill_to_email} onChange={(v) => setForm({ ...form, bill_to_email: v })} />
+        <Field label="Phone (연락처)" value={form.bill_to_phone} onChange={(v) => setForm({ ...form, bill_to_phone: v })} />
       </div>
 
       {/* 청구 품목(Item list) — TAX INVOICE 문서에 그대로 출력된다. CI 품목이 기본값. */}
@@ -597,6 +627,10 @@ function TaxPreviewButton({ orderId, form }: { orderId: number | null; form: ArF
         vat_rate: form.vat_rate,
         items: form.items,
         remarks: form.remarks,
+        bill_to_tax_id: form.bill_to_tax_id,
+        bill_to_contact: form.bill_to_contact,
+        bill_to_email: form.bill_to_email,
+        bill_to_phone: form.bill_to_phone,
       });
       setUrl(URL.createObjectURL(blob));
     } catch (e) {

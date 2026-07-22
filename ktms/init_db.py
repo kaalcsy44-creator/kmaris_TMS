@@ -123,6 +123,11 @@ _MIGRATIONS = {
         "vat_rate":     "FLOAT DEFAULT 0.1",
         "items":        "JSON",
         "remarks":      "TEXT",
+        # 청구처(BILL TO) 오버라이드 — 비우면 고객 마스터값 사용.
+        "bill_to_tax_id":  "VARCHAR(60)",
+        "bill_to_contact": "VARCHAR(100)",
+        "bill_to_email":   "VARCHAR(200)",
+        "bill_to_phone":   "VARCHAR(60)",
     },
 }
 
