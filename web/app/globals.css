@@ -8337,6 +8337,27 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 /* 탭(By deal / By date)은 Progress 와 공용인 .page-tabs 사용. 여기선 건수 라벨만. */
 .act-count { color: var(--muted); font-size: 12px; }
 
+/* ── 다이제스트 팝업 — 프로젝트별 '가장 최근 활동 1건'만 취합한 목록 ───────────── */
+.act-digest { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.act-digest-row { padding: 8px 6px; border-bottom: 1px solid var(--line);
+  cursor: pointer; border-left: 3px solid transparent; }
+.act-digest-row:hover { background: var(--head-bg); }
+.act-digest-row.service { border-left-color: #7c9; }
+.act-digest-row.cancelled { opacity: .6; }
+.act-digest-head { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.act-digest-code { font-weight: 800; font-size: 12px; color: var(--blue); }
+.act-digest-date { font-size: 10px; color: var(--muted); }
+.act-digest-title { font-size: 12.5px; font-weight: 600; color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 46%; }
+.act-digest-cust { font-size: 11px; color: var(--muted); }
+.act-digest-age { margin-left: auto; font-size: 10px; font-weight: 700;
+  padding: 1px 6px; border-radius: 6px; background: var(--head-bg); color: var(--muted); }
+.act-digest-age.lv-warn { background: #fff3e0; color: #9a5b00; }
+.act-digest-age.lv-urgent { background: #fdeaea; color: #b42318; }
+.act-digest-act { display: flex; gap: 8px; margin-top: 2px; font-size: 12px; }
+.act-digest-when { flex: none; font-weight: 700; color: var(--muted); min-width: 52px; }
+.act-digest-desc { color: var(--ink); }
+
 /* ── 일자별 · 주간 캘린더(7열) ─────────────────────────────────────────
    주(월요일 시작)가 한 행, 위=이전 주·아래=다음 주. 좁은 화면은 가로 스크롤.
    요일 헤더 고정을 위해 .act-cal 이 직접 세로 스크롤 컨테이너가 되어야 한다.

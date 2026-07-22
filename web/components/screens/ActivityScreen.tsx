@@ -31,6 +31,7 @@ import ActivityNoteForm, {
   type ActivityNoteValue,
 } from "@/components/common/ActivityNoteForm";
 import { PipelineModal, byProjectNo } from "@/components/screens/ProjectsScreen";
+import Modal from "@/components/common/Modal";
 import { useCachedData } from "@/lib/useCachedData";
 
 // 벤더 모노그램 상태 — 발주 벤더 확정 시 문자열 fallback, 아니면 RFQ 발송 벤더의 견적 수신여부.
@@ -125,6 +126,13 @@ function DateFilter({
   );
 }
 
+// 활동 1건의 정렬/표시용 전체 일시(iso) — 노트는 datetime→at, 자동은 at, 종결은 날짜만.
+function actTimeIso(act: Activity): string {
+  if (act.kind === "note") return act.note.datetime || act.note.at || act.date;
+  if (act.kind === "auto") return act.at || act.date;
+  return act.date;
+}
+
 function todayISO(): string {
   const d = new Date();
   const p = (n: number) => String(n).padStart(2, "0");
@@ -154,6 +162,7 @@ export default function ActivityScreen() {
   const [view, setView] = useState<"deal" | "date">("deal"); // 탭: 딜별(카드) / 일자별(피드)
 
   const [overviewId, setOverviewId] = useState<number | null>(null);
+  const [digestOpen, setDigestOpen] = useState(false); // 프로젝트별 최근 활동 요약 팝업
   const { data: customers } = useCachedData("settings:customers", fetchCustomers);
   const { data: vessels } = useCachedData("settings:vessels", fetchSettingsVessels);
 
@@ -277,6 +286,16 @@ export default function ActivityScreen() {
       return la < lb ? 1 : la > lb ? -1 : 0;
     });
   }, [buckets]);
+
+  // 다이제스트 — 프로젝트별 '가장 최근 활동 1건'만. dealRows 는 이미 최신활동 내림차순 정렬이라
+  // 각 딜의 마지막(=최신) 활동을 뽑고, 활동이 아직 없는 딜은 제외한다.
+  const digestRows = useMemo(
+    () =>
+      dealRows
+        .filter(({ acts }) => acts.length > 0)
+        .map(({ row, acts }) => ({ row, act: acts[acts.length - 1] })),
+    [dealRows],
+  );
 
   async function toggleStar(rfqId: number, a: Activity) {
     if (a.kind !== "note") return;
@@ -411,6 +430,10 @@ export default function ActivityScreen() {
             onClick={() => { setAssigneeF([]); setStatusF(["active"]); setStageF([]); setAgeF([]); setCustF([]); setVendF([]); setQ(""); setDateFilter("all"); }}>
             Reset
           </button>
+          {/* 프로젝트별 '가장 최근 활동 1건'만 취합한 요약 팝업 — 현재 필터를 그대로 반영. */}
+          <button className="btn sm" onClick={() => setDigestOpen(true)} title="Latest activity per project">
+            🗒 Digest
+          </button>
           <button className="btn sm" onClick={() => window.print()}>Print</button>
         </div>
       </div>
@@ -495,6 +518,50 @@ export default function ActivityScreen() {
           ) : null}
         </>
       )}
+      {digestOpen ? (
+        <Modal title={`Latest activity · ${digestRows.length} projects`} onClose={() => setDigestOpen(false)} wide>
+          {digestRows.length === 0 ? (
+            <div className="state">No activity to show.</div>
+          ) : (
+            <ul className="act-digest">
+              {digestRows.map(({ row, act }) => {
+                const { code, date } = splitProjectNo(row.project_no || row.kmaris_rfq_no || "—");
+                const ageDays = daysSinceISO(lastActivityISO(row));
+                const lv: "normal" | "warn" | "urgent" =
+                  row.next_level ??
+                  (!row.cancelled && ageDays != null
+                    ? ageDays >= 14 ? "urgent" : ageDays >= 7 ? "warn" : "normal"
+                    : "normal");
+                return (
+                  <li
+                    key={row.rfq_id}
+                    className={`act-digest-row${row.work_type === "서비스" ? " service" : ""}${row.cancelled ? " cancelled" : ""}`}
+                    onClick={() => { setOverviewId(row.rfq_id); setDigestOpen(false); }}
+                    title="Project overview"
+                  >
+                    <div className="act-digest-head">
+                      <span className="act-digest-code">{code}</span>
+                      {date ? <span className="act-digest-date">{date}</span> : null}
+                      <span className="act-digest-title">{row.project_title || "(untitled)"}</span>
+                      {row.customer ? <span className="act-digest-cust"><CustomerName name={row.customer} /></span> : null}
+                      {ageDays != null ? (
+                        <span className={`act-digest-age lv-${lv}`} title="Days since last activity">{ageDays}d</span>
+                      ) : null}
+                    </div>
+                    <div className="act-digest-act">
+                      <span className="act-digest-when">
+                        {md(act.date)}
+                        {hm(actTimeIso(act)) ? <span className="act-time"> {hm(actTimeIso(act))}</span> : null}
+                      </span>
+                      <span className="act-digest-desc"><ActivityDesc act={act} /></span>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </Modal>
+      ) : null}
       {overviewId != null && data?.rows.find((row) => row.rfq_id === overviewId) ? (
         <PipelineModal
           r={data.rows.find((row) => row.rfq_id === overviewId) as PipelineRow}
