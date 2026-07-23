@@ -5,7 +5,6 @@ import Link from "next/link";
 import {
   fetchPipeline,
   fetchRfqDetail,
-  fetchQuotationOverview,
   fetchCustomerQuotationDetail,
   fetchPoWorkOptions,
   fetchDocumentDetail,
@@ -84,8 +83,6 @@ export default function ProjectOverviewScreen({
   const { data: detail } = useCachedData(`rfq:${rfqId}`, () => fetchRfqDetail(rfqId));
   // 고객 P/O·Vendor P/O·견적을 한 번에 받는다. ProjectsScreen 과 같은 캐시 키.
   const { data: poOpts } = useCachedData("po:work-options", fetchPoWorkOptions);
-  // 이 프로젝트에 견적만 있고 아직 P/O 가 없을 때 쓸 견적 id(가장 최근 것).
-  const { data: qtnList } = useCachedData("quotations:overview", () => fetchQuotationOverview());
 
   if (pipeErr && !pipeline) return <div className="state error">API error: {pipeErr.message}</div>;
   if (!pipeline) return <div className="state">Loading…</div>;
@@ -117,8 +114,13 @@ export default function ProjectOverviewScreen({
     (o) => o.id
   );
   const purchaseOrders = poOpts?.purchase_orders ?? [];
-  // P/O 가 아직 없으면 견적(있으면)만으로 한 그룹을 만든다.
-  const quoteOnlyId = orders.length === 0 ? (qtnList?.rows.find((q) => q.rfq_id === rfqId)?.id ?? 0) : 0;
+  // 이 프로젝트의 견적 전부(견적번호 오름차순). P/O 가 아직 없으면 이 견적들이 각각 한 묶음이 된다
+  // — 한 프로젝트에 견적이 여러 건일 수 있는데(예: 002~005) 예전엔 한 건만 그렸다.
+  const quotations = sortByDocNo(
+    (poOpts?.quotations ?? []).filter((q) => q.rfq_id === rfqId),
+    (q) => q.qtn_no,
+    (q) => q.id
+  );
 
   // 활동기록 추가 후: 이 화면 데이터를 새로 받고(같은 "pipeline" 캐시) 부모에게도 알린다.
   const onActivityAdded = async () => {
@@ -132,8 +134,7 @@ export default function ProjectOverviewScreen({
       steps={pipeline.steps}
       orders={orders}
       purchaseOrders={purchaseOrders}
-      quotations={(poOpts?.quotations ?? []).filter((q) => q.rfq_id === rfqId)}
-      quoteOnlyId={quoteOnlyId}
+      quotations={quotations}
       rfqItems={detail?.items ?? null}
       // 매입측 견적 = 벤더 견적번호(프로젝트 단위). Quote 묶음 머리에 매출 견적과 나란히 둔다.
       vendorQuoteNo={row.vquote_no || ""}
@@ -205,7 +206,6 @@ function Overview({
   orders,
   purchaseOrders,
   quotations,
-  quoteOnlyId,
   rfqItems,
   vendorQuoteNo,
   embedded = false,
@@ -217,8 +217,6 @@ function Overview({
   orders: ProjectOrder[];
   purchaseOrders: VendorPo[];
   quotations: ProjectQuote[];
-  /** P/O 가 아직 없을 때 보여줄 견적 id. 0 이면 없음. */
-  quoteOnlyId: number;
   rfqItems: RfqItem[] | null;
   vendorQuoteNo: string;
   embedded?: boolean;
@@ -320,7 +318,6 @@ function Overview({
         orders={orders}
         purchaseOrders={purchaseOrders}
         quotations={quotations}
-        quoteOnlyId={quoteOnlyId}
         rfqItems={rfqItems}
         vendorQuoteNo={vendorQuoteNo}
       />
@@ -807,7 +804,6 @@ function ItemsSection({
   orders,
   purchaseOrders,
   quotations,
-  quoteOnlyId,
   rfqItems,
   vendorQuoteNo,
 }: {
@@ -815,11 +811,10 @@ function ItemsSection({
   orders: ProjectOrder[];
   purchaseOrders: VendorPo[];
   quotations: ProjectQuote[];
-  quoteOnlyId: number;
   rfqItems: RfqItem[] | null;
   vendorQuoteNo: string;
 }) {
-  const hasGroups = orders.length > 0 || quoteOnlyId > 0;
+  const hasGroups = orders.length > 0 || quotations.length > 0;
   const phaseClass = (from: number) => (stage >= from ? "ov-phase-on" : "ov-phase-todo");
   const rfqPhase = phaseClass(1);
   const quotePhase = phaseClass(3);
@@ -897,7 +892,10 @@ function ItemsSection({
                 />
               ))
             ) : (
-              <QuoteOnlyGroup quoteId={quoteOnlyId} vendorQuoteNo={vendorQuoteNo} />
+              // P/O 전 — 이 프로젝트의 견적을 건별로 한 묶음씩(견적번호 오름차순).
+              quotations.map((q) => (
+                <QuoteOnlyGroup key={q.id} quoteId={q.id} vendorQuoteNo={vendorQuoteNo} />
+              ))
             )}
           </table>
         </div>
