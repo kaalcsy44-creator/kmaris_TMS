@@ -7948,6 +7948,7 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   gap: 10px;
   padding: 5px 8px;
   border-radius: 7px;
+  position: relative;   /* 액션 버튼 오버레이(absolute) 기준 */
 }
 .cat-node-row:hover {
   background: #f4f7fc;
@@ -7958,6 +7959,10 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;                 /* flex 자식 축소 허용 */
+  white-space: nowrap;          /* '2 stroke' 등 이름 줄바꿈 방지 */
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .cat-l1 > .cat-node-row .cat-node-name {
   font-weight: 700;
@@ -7979,15 +7984,35 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   padding: 1px 6px;
   text-decoration: none;
 }
+/* 액션 버튼(▲▼·수정·삭제)은 행 위에 오버레이 — 레이아웃 폭을 차지하지 않아
+   좁은 트리에서도 이름이 밀리지 않는다. hover 시에만 우측에 겹쳐 표시. */
 .cat-node-actions {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
   display: flex;
-  gap: 6px;
-  margin-left: auto;
+  gap: 3px;
+  padding: 2px 4px;
+  border-radius: 8px;
+  background: rgba(244, 247, 252, 0.94);
+  box-shadow: 0 1px 4px rgba(20, 40, 80, 0.16), 0 0 0 1px rgba(20, 40, 80, 0.06);
   opacity: 0;
+  pointer-events: none;         /* 숨김 상태에선 클릭 안 되게 */
   transition: opacity 0.12s;
 }
 .cat-node-row:hover .cat-node-actions {
   opacity: 1;
+  pointer-events: auto;
+}
+/* 오버레이 안의 버튼은 더 작게(아이콘 위주). */
+.cat-node-actions .btn.tiny {
+  height: 22px;
+  min-width: 22px;
+  padding: 0 5px;
+  font-size: 11px;
+  line-height: 20px;
+  white-space: nowrap;          /* '+ Detail' 등 라벨 줄바꿈 방지 */
 }
 /* 상위 분류 경로(모달 내 표시) */
 .cat-parent-path {
@@ -8005,6 +8030,7 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   /* 터치 환경에선 액션 버튼 항상 노출 */
   .cat-node-actions {
     opacity: 1;
+    pointer-events: auto;
   }
 }
 
