@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
   createSettingsCustomer,
@@ -74,6 +74,7 @@ const emptyCompany: CompanyProfile = {
   company_name_en: "",
   company_name_kr: "",
   address: "",
+  address_en: "",
   business_no: "",
   phone: "",
   general_email: "",
@@ -83,6 +84,9 @@ const emptyCompany: CompanyProfile = {
   bank_name: "",
   bank_account: "",
   bank_holder: "",
+  fx_bank_name: "",
+  fx_bank_account: "",
+  fx_bank_holder: "",
   swift: "",
   tagline: "",
   email_signature: "",
@@ -174,21 +178,41 @@ function Settings() {
   );
 }
 
-const COMPANY_FIELDS: { key: keyof CompanyProfile; label: string }[] = [
-  { key: "company_name_en", label: "Company Name (EN)" },
+type CompanyField = { key: keyof CompanyProfile; label: string; groupBefore?: string };
+
+// 국문(좌) — 한글 회사명·주소 + 국내계좌
+const KR_FIELDS: CompanyField[] = [
   { key: "company_name_kr", label: "Company Name (KR)" },
-  { key: "address", label: "Address" },
+  { key: "address", label: "Address (KR)" },
+  { key: "bank_name", label: "Bank", groupBefore: "국내계좌 · Domestic Account" },
+  { key: "bank_account", label: "Account No." },
+  { key: "bank_holder", label: "Holder" },
+];
+
+// 영문(우) — 영문 회사명·주소 + 외화계좌
+const EN_FIELDS: CompanyField[] = [
+  { key: "company_name_en", label: "Company Name (EN)" },
+  { key: "address_en", label: "Address (EN)" },
+  { key: "fx_bank_name", label: "Bank", groupBefore: "외화계좌 · FX Account" },
+  { key: "fx_bank_account", label: "Account No." },
+  { key: "fx_bank_holder", label: "Holder" },
+  { key: "swift", label: "SWIFT" },
+];
+
+// 공통 — 한·영 공용(사업자번호·전화·이메일·웹사이트·태그라인)
+const COMMON_FIELDS: CompanyField[] = [
   { key: "business_no", label: "Business No." },
   { key: "phone", label: "Phone" },
   { key: "general_email", label: "General Email" },
   { key: "sales_email", label: "Sales Email" },
   { key: "tax_email", label: "Tax Email" },
   { key: "website", label: "Website" },
-  { key: "bank_name", label: "Bank Name" },
-  { key: "bank_account", label: "Bank Account" },
-  { key: "bank_holder", label: "Bank Holder" },
-  { key: "swift", label: "SWIFT" },
   { key: "tagline", label: "Tagline" },
+];
+
+const BILINGUAL_COLS: { title: string; fields: CompanyField[] }[] = [
+  { title: "국문 · Korean", fields: KR_FIELDS },
+  { title: "영문 · English", fields: EN_FIELDS },
 ];
 
 function CompanyTab() {
@@ -242,8 +266,27 @@ function CompanyTab() {
   if (!editing) {
     return (
       <div className="panel">
+        <div className="bilingual-cols">
+          {BILINGUAL_COLS.map((col) => (
+            <section className="bl-col" key={col.title}>
+              <h4 className="bl-col-title">{col.title}</h4>
+              <dl className="company-view bl-view">
+                {col.fields.map((f) => (
+                  <Fragment key={f.key}>
+                    {f.groupBefore ? <div className="bl-group-label">{f.groupBefore}</div> : null}
+                    <div>
+                      <dt>{f.label}</dt>
+                      <dd>{saved[f.key] ? saved[f.key] : <span className="dash">—</span>}</dd>
+                    </div>
+                  </Fragment>
+                ))}
+              </dl>
+            </section>
+          ))}
+        </div>
+        <h4 className="bl-col-title bl-common-title">공통 · Common</h4>
         <dl className="company-view">
-          {COMPANY_FIELDS.map((f) => (
+          {COMMON_FIELDS.map((f) => (
             <div key={f.key}>
               <dt>{f.label}</dt>
               <dd>{saved[f.key] ? saved[f.key] : <span className="dash">—</span>}</dd>
@@ -273,8 +316,26 @@ function CompanyTab() {
   // 수정: 입력 폼
   return (
     <div className="panel">
+      <div className="bilingual-cols">
+        {BILINGUAL_COLS.map((col) => (
+          <section className="bl-col" key={col.title}>
+            <h4 className="bl-col-title">{col.title}</h4>
+            {col.fields.map((f) => (
+              <Fragment key={f.key}>
+                {f.groupBefore ? <div className="bl-group-label">{f.groupBefore}</div> : null}
+                <TextField
+                  label={f.label}
+                  value={form[f.key] || ""}
+                  onChange={(v) => setForm({ ...form, [f.key]: v })}
+                />
+              </Fragment>
+            ))}
+          </section>
+        ))}
+      </div>
+      <h4 className="bl-col-title bl-common-title">공통 · Common</h4>
       <div className="form-grid">
-        {COMPANY_FIELDS.map((f) => (
+        {COMMON_FIELDS.map((f) => (
           <TextField
             key={f.key}
             label={f.label}

@@ -1392,6 +1392,52 @@ table.perm-matrix td.perm-mod {
   color: #1f2b3d;
   word-break: break-word;
 }
+
+/* ── Company profile: 국문(좌)·영문(우) 이중언어 레이아웃 ─────────────────── */
+.bilingual-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 28px;
+  margin: 4px 0 18px;
+}
+.bl-col {
+  min-width: 0;
+}
+.bl-col-title {
+  margin: 0 0 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #e6eaf0;
+  font-size: 12px;
+  font-weight: 700;
+  color: #45526a;
+}
+.bl-common-title {
+  margin-top: 6px;
+}
+/* 이중언어 컬럼 안에서는 필드를 1열로 세로 정렬(company-view 3열을 덮어씀) */
+.bl-view {
+  grid-template-columns: 1fr;
+  gap: 12px 0;
+  margin: 0;
+}
+.bl-group-label {
+  margin-top: 8px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #8a95a5;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+/* 편집 폼에서 이중언어 컬럼의 입력란 간 간격 */
+.bl-col .form-field {
+  margin-bottom: 10px;
+}
+@media (max-width: 720px) {
+  .bilingual-cols {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
 .intl-edit {
   margin: 0 0 14px;
   padding: 12px 14px;

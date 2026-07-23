@@ -113,17 +113,21 @@ export type SettingsUser = {
 export type CompanyProfile = {
   company_name_en: string;
   company_name_kr: string;
-  address: string;
+  address: string;            // 국문 주소
+  address_en: string;         // 영문 주소
   business_no: string;
   phone: string;
   general_email: string;
   sales_email: string;
   tax_email: string;
   website: string;
-  bank_name: string;
-  bank_account: string;
-  bank_holder: string;
-  swift: string;
+  bank_name: string;          // 국내계좌 은행명
+  bank_account: string;       // 국내계좌 번호
+  bank_holder: string;        // 국내계좌 예금주
+  fx_bank_name: string;       // 외화계좌 은행명
+  fx_bank_account: string;    // 외화계좌 번호
+  fx_bank_holder: string;     // 외화계좌 예금주
+  swift: string;              // 외화계좌 SWIFT
   tagline: string;
   email_signature: string;   // 이메일 본문 하단 공용 서명(비우면 기본 서명)
 };

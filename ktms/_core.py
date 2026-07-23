@@ -2173,17 +2173,21 @@ class UserSave(BaseModel):
 class CompanyProfile(BaseModel):
     company_name_en: str | None = ""
     company_name_kr: str | None = ""
-    address: str | None = ""
+    address: str | None = ""            # 국문 주소
+    address_en: str | None = ""         # 영문 주소
     business_no: str | None = ""
     phone: str | None = ""
     general_email: str | None = ""
     sales_email: str | None = ""
     tax_email: str | None = ""
     website: str | None = ""
-    bank_name: str | None = ""
-    bank_account: str | None = ""
-    bank_holder: str | None = ""
-    swift: str | None = ""
+    bank_name: str | None = ""          # 국내계좌 은행명
+    bank_account: str | None = ""       # 국내계좌 번호
+    bank_holder: str | None = ""        # 국내계좌 예금주
+    fx_bank_name: str | None = ""       # 외화계좌 은행명
+    fx_bank_account: str | None = ""    # 외화계좌 번호
+    fx_bank_holder: str | None = ""     # 외화계좌 예금주
+    swift: str | None = ""              # 외화계좌 SWIFT
     tagline: str | None = ""
     email_signature: str | None = ""   # 이메일 본문 하단 공용 서명(비우면 기본 서명)
 
