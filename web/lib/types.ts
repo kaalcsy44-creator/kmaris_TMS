@@ -102,6 +102,45 @@ export type ItemCategory = {
   path: string;       // "대 > 중 > 소"
 };
 
+// 품목별 구매가·판매가 이력(item_price_history) 롤업
+export type ItemLedgerPrice = { unit_price: number; currency: string; date: string | null };
+export type ItemLedgerRow = {
+  item_id?: number;              // 마스터 연결 시. unmatched 행은 없음
+  part_no: string;
+  description: string;
+  maker?: string;
+  category_id?: number | null;
+  category_path?: string;        // "대 > 중 > 소"
+  buy: ItemLedgerPrice | null;   // 최근 구매가
+  sell: ItemLedgerPrice | null;  // 최근 판매가
+  buy_count: number;
+  sell_count: number;
+  last_date: string | null;
+};
+export type ItemLedger = {
+  items: ItemLedgerRow[];        // 마스터 연결 품목
+  unmatched: ItemLedgerRow[];    // part_no 미연결(마스터 없음)
+  built_at: string | null;       // 마지막 재구축 일시(ISO)
+};
+export type ItemPriceRow = {
+  id: number;
+  price_type: "buy" | "sell";
+  source_type: string;           // vendor_quote|po|quotation|order|ci|ar
+  source_id: number;
+  rfq_id: number | null;
+  customer: string;
+  vendor: string;
+  vessel: string;
+  part_no: string;
+  description: string;
+  currency: string;
+  fx_rate: number | null;
+  unit_price: number;
+  qty: number;
+  amount: number;
+  doc_date: string | null;
+};
+
 export type SettingsUser = {
   id: number;
   username: string;

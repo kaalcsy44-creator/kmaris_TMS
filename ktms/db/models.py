@@ -199,6 +199,38 @@ class ItemMaster(Base):
     created_at  = Column(DateTime, default=datetime.utcnow)
 
 
+class ItemPriceHistory(Base):
+    """품목별 구매가(buy)·판매가(sell) 이력. 각 딜 문서의 JSON 라인아이템을
+    part_no 로 item_master 에 매칭해 정규화한 파생 테이블(materialized).
+
+    소스 문서를 수정/삭제하면 이 테이블은 즉시 갱신되지 않으므로,
+    rebuild_price_history() 로 전체 재구축한다(관리자 Rebuild 버튼/배포 시 백필).
+    price_type: 'buy'=공급사 매입(구매가), 'sell'=고객 판매(판매가).
+    unit_price·currency 는 소스 통화 그대로 저장하고, 표시 시 환산한다."""
+    __tablename__ = "item_price_history"
+    id           = Column(Integer, primary_key=True)
+    item_id      = Column(Integer, ForeignKey("item_master.id"), index=True, nullable=True)  # NULL=미매칭
+    price_type   = Column(String(4), nullable=False)   # 'buy' | 'sell'
+    # 소스 문서 식별 (재구축 시 멱등 upsert 키). source_line_idx=문서 내 라인 순번.
+    source_type  = Column(String(20), nullable=False)  # vendor_quote|po|quotation|order|ci|ar
+    source_id    = Column(Integer, nullable=False)
+    source_line_idx = Column(Integer, default=0)
+    # 매칭·표시 보조값 (item_id 가 NULL 이어도 목록에 원문을 보여주기 위해 보관)
+    part_no      = Column(String(200))
+    description  = Column(String(400))
+    rfq_id       = Column(Integer, index=True)         # 딜 추적(있으면)
+    customer_id  = Column(Integer)
+    vendor_id    = Column(Integer)
+    vessel_id    = Column(Integer)
+    currency     = Column(String(10), default="USD")
+    fx_rate      = Column(Float)                        # 소스 문서 환율(1 USD=? KRW), 있으면
+    unit_price   = Column(Float, default=0.0)
+    qty          = Column(Float, default=0.0)
+    amount       = Column(Float, default=0.0)
+    doc_date     = Column(String(10))                  # YYYY-MM-DD (거래 기준일)
+    created_at   = Column(DateTime, default=datetime.utcnow)
+
+
 class DocSequence(Base):
     """Monotonically increasing sequence counter per doc_type per year."""
     __tablename__ = "doc_sequences"

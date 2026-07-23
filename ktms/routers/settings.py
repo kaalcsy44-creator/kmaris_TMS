@@ -62,6 +62,9 @@ from _core import (
     vendor_rfq_default_body_tpl,
     preview_vendor_rfq_template,
 )
+from sqlalchemy import func
+from db.models import ItemPriceHistory
+from services.item_ledger import ledger_rows, item_history, rebuild_price_history
 
 
 
@@ -509,6 +512,53 @@ def delete_item(row_id: int):
         s.delete(item)
         s.commit()
         return {"ok": True}
+    finally:
+        s.close()
+
+
+@app.get("/api/admin/settings/item-ledger", dependencies=[Depends(require_token)])
+def settings_item_ledger():
+    """분류별 품목 구매가·판매가 롤업. matched(마스터 연결)+unmatched(미연결) 반환.
+
+    프론트에서 분류 트리 선택으로 필터링하도록 category_id/category_path 를 함께 준다."""
+    s = get_session()
+    try:
+        cat_by_id = _category_maps(s)
+        data = ledger_rows(s)
+        for it in data["items"]:
+            it["category_path"] = _category_path(cat_by_id, it.get("category_id"))
+        built = s.query(func.max(ItemPriceHistory.created_at)).scalar()
+        data["built_at"] = built.isoformat() if built else None
+        return data
+    finally:
+        s.close()
+
+
+@app.get("/api/admin/settings/item-ledger/history", dependencies=[Depends(require_token)])
+def settings_item_ledger_history(item_id: int | None = None, part_no: str | None = None):
+    """한 품목의 buy/sell 이력(최신순). 고객·공급사·선박 이름을 해석해 붙인다."""
+    s = get_session()
+    try:
+        rows = item_history(s, item_id=item_id, part_no=part_no)
+        cust = {c.id: c.name for c in s.query(Customer).all()}
+        vend = {v.id: v.name for v in s.query(Vendor).all()}
+        vess = {v.id: v.name for v in s.query(Vessel).all()}
+        for r in rows:
+            r["customer"] = cust.get(r.get("customer_id")) or ""
+            r["vendor"] = vend.get(r.get("vendor_id")) or ""
+            r["vessel"] = vess.get(r.get("vessel_id")) or ""
+        return rows
+    finally:
+        s.close()
+
+
+@app.post("/api/admin/settings/item-ledger/rebuild", dependencies=[Depends(require_token)])
+def rebuild_item_ledger():
+    """품목 구매/판매가 이력을 소스 문서에서 전체 재구축(관리자). 반환=생성 행수."""
+    s = get_session()
+    try:
+        n = rebuild_price_history(s)
+        return {"ok": True, "rows": n}
     finally:
         s.close()
 

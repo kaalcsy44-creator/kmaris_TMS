@@ -8008,6 +8008,111 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   }
 }
 
+/* ── Settings: Item Category 가격 이력(ledger) 2단 레이아웃 ────────────────── */
+.cat-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 340px) 1fr;
+  gap: 20px;
+  align-items: start;
+}
+.cat-tree-pane {
+  min-width: 0;
+}
+.cat-quickfilter {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+/* 분류명을 클릭해 우측 목록을 필터 — 클릭 가능 표시 + 선택 하이라이트 */
+.cat-node-pick {
+  cursor: pointer;
+  border-radius: 5px;
+  padding: 1px 5px;
+  margin: -1px -5px;
+}
+.cat-node-pick:hover {
+  background: #e8eefb;
+}
+.cat-node-pick.sel {
+  background: var(--blue);
+  color: #fff;
+}
+.cat-node-pick.sel .cat-inactive {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.25);
+}
+.cat-ledger-pane {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fbfcfe;
+  padding: 12px 14px;
+}
+.ledger-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.ledger-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #223;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ledger-count {
+  font-size: 11px;
+  font-weight: 700;
+  color: #5a6b86;
+  background: #eef1f6;
+  border-radius: 10px;
+  padding: 1px 8px;
+}
+.ledger-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.ledger-table {
+  width: 100%;
+}
+.ledger-row {
+  cursor: pointer;
+}
+.ledger-row:hover {
+  background: #eef3fb;
+}
+.ledger-desc {
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Buy/Sell 구분 pill (이력 모달) */
+.ledger-pill {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 4px;
+  padding: 1px 7px;
+}
+.ledger-pill.buy {
+  color: #8a4b00;
+  background: #fdecd7;
+}
+.ledger-pill.sell {
+  color: #0a5c2b;
+  background: #d7f0df;
+}
+@media (max-width: 900px) {
+  .cat-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ── Settings: 이메일 템플릿 편집 ─────────────────────────────────────────── */
 .seg-toggle {
   display: inline-flex;

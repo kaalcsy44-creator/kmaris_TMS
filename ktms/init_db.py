@@ -13,7 +13,7 @@ from sqlalchemy import text, inspect
 from db.engine import Base, get_engine, get_session
 from db.models import (
     User, UserRole, DocSequence, Customer, CustomerContact, Vendor, VendorContact,
-    RFQ, Quotation, VendorQuote, Order, ItemCategory,
+    RFQ, Quotation, VendorQuote, Order, ItemCategory, ItemPriceHistory,
 )
 
 
@@ -636,6 +636,33 @@ def migrate_normalize_incoterms():
     print(f"[OK] normalize_incoterms applied: {n} quote(s) updated.")
 
 
+def migrate_backfill_price_history():
+    """1회성: 기존 딜 문서에서 품목별 구매가·판매가 이력(item_price_history) 초기 구축.
+
+    applied_migrations 마커로 1회만 실행(재실행 안전). 이후 갱신은 관리자 Rebuild 로.
+    파생 테이블이라 재구축은 delete+insert 이므로 언제든 다시 돌려도 안전하다."""
+    eng = get_engine()
+    insp = inspect(eng)
+    if not insp.has_table("item_price_history"):
+        return
+    with eng.begin() as conn:
+        conn.execute(text(
+            "CREATE TABLE IF NOT EXISTS applied_migrations (name VARCHAR(100) PRIMARY KEY)"))
+        if conn.execute(text(
+                "SELECT 1 FROM applied_migrations WHERE name='backfill_price_history'")).first():
+            return  # 이미 적용됨
+    from services.item_ledger import rebuild_price_history
+    s = get_session()
+    try:
+        n = rebuild_price_history(s)
+    finally:
+        s.close()
+    with eng.begin() as conn:
+        conn.execute(text(
+            "INSERT INTO applied_migrations (name) VALUES ('backfill_price_history')"))
+    print(f"[OK] backfill_price_history applied: {n} price rows built.")
+
+
 if __name__ == "__main__":
     print("Initializing KTMS database...")
     create_tables()
@@ -651,4 +678,5 @@ if __name__ == "__main__":
     migrate_translate_categories()
     migrate_widen_activity_type()
     migrate_normalize_incoterms()
+    migrate_backfill_price_history()
     print("Done.")

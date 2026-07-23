@@ -34,6 +34,8 @@ import type {
   SettingsVessel,
   SettingsItem,
   ItemCategory,
+  ItemLedger,
+  ItemPriceRow,
   SettingsUser,
   CompanyProfile,
   PipelineData,
@@ -1017,6 +1019,23 @@ export function updateItemCategory(
 }
 export function deleteItemCategory(id: number): Promise<{ ok: boolean }> {
   return del(`/api/admin/settings/item-categories/${id}`);
+}
+
+// ── Item price ledger (품목별 구매가·판매가 이력) ─────────────────────────────
+export function fetchItemLedger(): Promise<ItemLedger> {
+  return get<ItemLedger>("/api/admin/settings/item-ledger");
+}
+export function fetchItemPriceHistory(params: {
+  item_id?: number;
+  part_no?: string;
+}): Promise<ItemPriceRow[]> {
+  const qs = new URLSearchParams();
+  if (params.item_id != null) qs.set("item_id", String(params.item_id));
+  if (params.part_no != null) qs.set("part_no", params.part_no);
+  return get<ItemPriceRow[]>(`/api/admin/settings/item-ledger/history?${qs.toString()}`);
+}
+export function rebuildItemLedger(): Promise<{ ok: boolean; rows: number }> {
+  return post("/api/admin/settings/item-ledger/rebuild", {});
 }
 
 export function createSettingsUser(body: {

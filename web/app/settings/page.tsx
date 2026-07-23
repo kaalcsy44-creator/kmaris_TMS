@@ -33,6 +33,9 @@ import {
   createItemCategory,
   updateItemCategory,
   deleteItemCategory,
+  fetchItemLedger,
+  fetchItemPriceHistory,
+  rebuildItemLedger,
   fetchEmailTemplates,
   saveEmailTemplate,
   deleteEmailTemplate,
@@ -53,6 +56,9 @@ import type {
   SettingsCustomer,
   SettingsItem,
   ItemCategory,
+  ItemLedger,
+  ItemLedgerRow,
+  ItemPriceRow,
   SettingsUser,
   SettingsVendor,
   SettingsVessel,
@@ -1279,6 +1285,35 @@ type CatEditor = {
 };
 
 // Item category tree (Main > Sub > Detail) management tab. Edited with "settings" master-data permission.
+// 선택된 분류 필터 — 전체 / 특정 분류(하위 포함) / 미연결(마스터 없음)
+type LedgerFilter = { kind: "all" } | { kind: "cat"; id: number } | { kind: "unmatched" };
+
+const SOURCE_LABEL: Record<string, string> = {
+  vendor_quote: "Vendor Quote",
+  po: "Purchase Order",
+  quotation: "Quotation",
+  order: "Order",
+  ci: "Commercial Invoice",
+  ar: "Tax Invoice",
+};
+
+function fmtAmt(n: number): string {
+  return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function fmtPrice(p: { unit_price: number; currency: string } | null): string {
+  return p ? `${p.currency} ${fmtAmt(p.unit_price)}` : "—";
+}
+// 최근 구매가 대비 판매가 마진%. 통화가 다르면 환산 없이 계산 불가로 표시.
+function marginPct(row: ItemLedgerRow): string {
+  const b = row.buy, s = row.sell;
+  if (!b || !s || !s.unit_price) return "—";
+  if (b.currency !== s.currency) return "≠ cur";
+  return `${(((s.unit_price - b.unit_price) / s.unit_price) * 100).toFixed(1)}%`;
+}
+function fmtBuiltAt(iso: string | null): string {
+  return iso ? iso.replace("T", " ").slice(0, 16) : "";
+}
+
 function CategoriesTab() {
   const [rows, setRows] = useState<ItemCategory[]>([]);
   const [editor, setEditor] = useState<CatEditor | null>(null);
@@ -1287,16 +1322,74 @@ function CategoriesTab() {
   const canEdit = can("settings", "edit");
   const canDelete = can("settings", "delete");
 
+  // ── 품목 가격 이력(ledger) ────────────────────────────────────────────────
+  const [ledger, setLedger] = useState<ItemLedger | null>(null);
+  const [filter, setFilter] = useState<LedgerFilter>({ kind: "all" });
+  const [rebuilding, setRebuilding] = useState(false);
+  const [histRow, setHistRow] = useState<ItemLedgerRow | null>(null);
+  const [hist, setHist] = useState<ItemPriceRow[] | null>(null);
+
   function refresh() {
     fetchItemCategories().then(setRows).catch((e) => setErr(e instanceof Error ? e.message : "Load failed"));
   }
+  function loadLedger() {
+    fetchItemLedger().then(setLedger).catch(() => setLedger(null));
+  }
   useEffect(refresh, []);
+  useEffect(loadLedger, []);
 
   const byId = new Map(rows.map((c) => [c.id, c]));
   const childrenOf = (pid: number | null) =>
     rows
       .filter((c) => (c.parent_id ?? null) === pid)
       .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name));
+
+  // 한 분류 노드의 자기 자신 + 모든 하위 분류 id 집합(필터링용).
+  function descendantIds(id: number): Set<number> {
+    const out = new Set<number>([id]);
+    const walk = (pid: number) => {
+      for (const c of rows.filter((r) => r.parent_id === pid)) {
+        out.add(c.id);
+        walk(c.id);
+      }
+    };
+    walk(id);
+    return out;
+  }
+
+  const filtered: ItemLedgerRow[] = (() => {
+    if (!ledger) return [];
+    if (filter.kind === "unmatched") return ledger.unmatched;
+    if (filter.kind === "all") return ledger.items;
+    const ids = descendantIds(filter.id);
+    return ledger.items.filter((it) => it.category_id != null && ids.has(it.category_id));
+  })();
+
+  async function rebuild() {
+    setRebuilding(true);
+    setErr("");
+    try {
+      await rebuildItemLedger();
+      loadLedger();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Rebuild failed");
+    } finally {
+      setRebuilding(false);
+    }
+  }
+
+  async function openHistory(row: ItemLedgerRow) {
+    setHistRow(row);
+    setHist(null);
+    try {
+      const data = await fetchItemPriceHistory(
+        row.item_id != null ? { item_id: row.item_id } : { part_no: row.part_no }
+      );
+      setHist(data);
+    } catch {
+      setHist([]);
+    }
+  }
 
   function openNew(parent: ItemCategory | null) {
     setErr("");
@@ -1395,7 +1488,13 @@ function CategoriesTab() {
     return (
       <li className={`cat-node cat-l${node.level}${node.active ? "" : " off"}`}>
         <div className="cat-node-row">
-          <span className="cat-node-name">
+          <span
+            className={`cat-node-name cat-node-pick${
+              filter.kind === "cat" && filter.id === node.id ? " sel" : ""
+            }`}
+            onClick={() => setFilter({ kind: "cat", id: node.id })}
+            title="Show this category's item prices"
+          >
             {node.name}
             {!node.active ? <span className="cat-inactive">Inactive</span> : null}
           </span>
@@ -1433,27 +1532,166 @@ function CategoriesTab() {
       : `✎ Edit ${LEVEL_LABEL[editor.level] ?? "category"} — ${editor.name || ""}`
     : "";
 
+  const filterTitle =
+    filter.kind === "all"
+      ? "All items"
+      : filter.kind === "unmatched"
+        ? "Unmatched items (no master link)"
+        : byId.get(filter.id)?.path || byId.get(filter.id)?.name || "Category";
+
   return (
     <div className="panel">
       <div className="ms-toolbar">
-        <h3 className="form-title">Item Categories (Main · Sub · Detail)</h3>
+        <h3 className="form-title">Item Categories · Prices</h3>
         {canCreate ? (
           <button className="btn primary" onClick={() => openNew(null)}>+ Main</button>
         ) : null}
       </div>
       <p className="hint-inline" style={{ display: "block", marginBottom: 12 }}>
-        Manage the item classification. Main &gt; Sub &gt; Detail (up to 3 levels). Use ▲ ▼ to reorder. A category that has child categories or items in use cannot be deleted.
+        Left: manage the classification (Main &gt; Sub &gt; Detail, ▲▼ to reorder). Click a category to list its
+        items with the latest purchase (buy) and sales (sell) prices on the right; click a row for the full history.
       </p>
 
       {err ? <div className="action-err" style={{ marginBottom: 10 }}>{err}</div> : null}
 
-      {roots.length === 0 ? (
-        <div className="state">No categories yet. Start with &quot;+ Main&quot;.</div>
-      ) : (
-        <ul className="cat-tree">
-          {roots.map((r) => <NodeRow key={r.id} node={r} />)}
-        </ul>
-      )}
+      <div className="cat-layout">
+        <div className="cat-tree-pane">
+          <div className="cat-quickfilter">
+            <button
+              className={`btn tiny${filter.kind === "all" ? " primary" : ""}`}
+              onClick={() => setFilter({ kind: "all" })}
+            >
+              All items{ledger ? ` (${ledger.items.length})` : ""}
+            </button>
+            <button
+              className={`btn tiny${filter.kind === "unmatched" ? " primary" : ""}`}
+              onClick={() => setFilter({ kind: "unmatched" })}
+            >
+              Unmatched{ledger ? ` (${ledger.unmatched.length})` : ""}
+            </button>
+          </div>
+          {roots.length === 0 ? (
+            <div className="state">No categories yet. Start with &quot;+ Main&quot;.</div>
+          ) : (
+            <ul className="cat-tree">
+              {roots.map((r) => <NodeRow key={r.id} node={r} />)}
+            </ul>
+          )}
+        </div>
+
+        <div className="cat-ledger-pane">
+          <div className="ledger-head">
+            <div className="ledger-title">
+              {filterTitle}
+              <span className="ledger-count">{filtered.length}</span>
+            </div>
+            <div className="ledger-actions">
+              {ledger?.built_at ? (
+                <span className="hint-inline">Built {fmtBuiltAt(ledger.built_at)}</span>
+              ) : null}
+              {canEdit ? (
+                <button className="btn tiny" disabled={rebuilding} onClick={rebuild}>
+                  {rebuilding ? "Rebuilding…" : "↻ Rebuild"}
+                </button>
+              ) : null}
+            </div>
+          </div>
+
+          {!ledger ? (
+            <div className="state">Loading prices…</div>
+          ) : filtered.length === 0 ? (
+            <div className="state">
+              No item prices in this view.
+              {filter.kind === "cat" ? " Assign items to this category in Item Master, or try Rebuild." : " Try Rebuild."}
+            </div>
+          ) : (
+            <div className="table-wrap">
+              <table className="mini wide ledger-table">
+                <thead>
+                  <tr>
+                    <th>Part No.</th>
+                    <th>Description</th>
+                    <th>Maker</th>
+                    <th className="num">Buy (latest)</th>
+                    <th className="num">Sell (latest)</th>
+                    <th className="num">Margin</th>
+                    <th className="num">Deals</th>
+                    <th>Last</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((it, i) => (
+                    <tr
+                      key={it.item_id ?? `u${i}`}
+                      className="ledger-row"
+                      onClick={() => openHistory(it)}
+                      title="Show full price history"
+                    >
+                      <td>{it.part_no || <span className="dash">—</span>}</td>
+                      <td className="ledger-desc">{it.description}</td>
+                      <td>{it.maker || ""}</td>
+                      <td className="num">{fmtPrice(it.buy)}</td>
+                      <td className="num">{fmtPrice(it.sell)}</td>
+                      <td className="num">{marginPct(it)}</td>
+                      <td className="num">{it.buy_count}/{it.sell_count}</td>
+                      <td>{it.last_date || ""}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {histRow ? (
+        <Modal
+          title={`Price history — ${histRow.part_no || histRow.description || "item"}`}
+          onClose={() => { setHistRow(null); setHist(null); }}
+          wide
+        >
+          {hist === null ? (
+            <div className="state">Loading…</div>
+          ) : hist.length === 0 ? (
+            <div className="state">No price rows.</div>
+          ) : (
+            <div className="table-wrap">
+              <table className="mini wide">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Type</th>
+                    <th>Source</th>
+                    <th>Customer / Vendor</th>
+                    <th>Vessel</th>
+                    <th className="num">Unit</th>
+                    <th className="num">Qty</th>
+                    <th className="num">Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {hist.map((r) => (
+                    <tr key={r.id}>
+                      <td>{r.doc_date || "—"}</td>
+                      <td>
+                        <span className={`ledger-pill ${r.price_type}`}>
+                          {r.price_type === "buy" ? "Buy" : "Sell"}
+                        </span>
+                      </td>
+                      <td>{SOURCE_LABEL[r.source_type] || r.source_type}</td>
+                      <td>{r.price_type === "buy" ? (r.vendor || "—") : (r.customer || "—")}</td>
+                      <td>{r.vessel || ""}</td>
+                      <td className="num">{r.currency} {fmtAmt(r.unit_price)}</td>
+                      <td className="num">{r.qty}</td>
+                      <td className="num">{r.currency} {fmtAmt(r.amount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Modal>
+      ) : null}
 
       {editor ? (
         <Modal title={editorTitle} onClose={cancel} form>

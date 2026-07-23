@@ -193,11 +193,14 @@ def _sync_schema() -> None:
     추가해 스키마 드리프트를 방지한다."""
     try:
         from db.engine import Base
-        from init_db import migrate_columns, migrate_normalize_incoterms
+        from init_db import (
+            migrate_columns, migrate_normalize_incoterms, migrate_backfill_price_history,
+        )
 
         Base.metadata.create_all(bind=get_engine())
         migrate_columns()
         migrate_normalize_incoterms()   # 'EXW Busan' 등 기존 incoterms 값 표준 라벨로 1회 정규화
+        migrate_backfill_price_history()  # 품목 구매/판매가 이력 초기 백필(마커 가드 1회)
     except Exception as exc:  # 스키마 동기화 실패가 앱 기동을 막지 않도록 로그만 남긴다.
         print(f"[WARN] startup schema sync skipped: {exc}", file=sys.stderr)
     try:
