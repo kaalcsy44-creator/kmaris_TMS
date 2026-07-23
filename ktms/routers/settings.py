@@ -62,9 +62,12 @@ from _core import (
     vendor_rfq_default_body_tpl,
     preview_vendor_rfq_template,
 )
+from pydantic import BaseModel
 from sqlalchemy import func
 from db.models import ItemPriceHistory
-from services.item_ledger import ledger_rows, item_history, rebuild_price_history
+from services.item_ledger import (
+    ledger_rows, item_history, rebuild_price_history, stamp_history_item, part_key,
+)
 
 
 
@@ -559,6 +562,50 @@ def rebuild_item_ledger():
     try:
         n = rebuild_price_history(s)
         return {"ok": True, "rows": n}
+    finally:
+        s.close()
+
+
+class ItemLedgerAssign(BaseModel):
+    category_id: int | None = None   # 배정할 분류(가장 깊은 노드). None=미분류로도 가능
+    item_id: int | None = None       # 이미 마스터 연결된 품목 재분류 시
+    part_no: str | None = None       # 미연결 품목 배정 시(마스터 신규 생성/연결 키)
+    description: str | None = ""
+    maker: str | None = ""
+
+
+@app.post("/api/admin/settings/item-ledger/assign", dependencies=[Depends(require_token)])
+def assign_item_ledger_category(body: ItemLedgerAssign):
+    """가격 이력 화면에서 품목에 분류를 배정한다.
+
+    - item_id 있으면: 해당 마스터의 category_id 갱신(재분류).
+    - 없으면 part_no 로: 정규화 일치하는 기존 마스터가 있으면 연결·분류, 없으면 신규 생성.
+    이후 같은 part_no 의 미연결 이력 행을 이 마스터로 즉시 스탬프(전체 rebuild 불필요)."""
+    s = get_session()
+    try:
+        if body.item_id:
+            master = s.query(ItemMaster).filter_by(id=body.item_id).first()
+            if not master:
+                raise HTTPException(status_code=404, detail="Item을 찾을 수 없습니다.")
+            master.category_id = body.category_id
+        else:
+            pn = (body.part_no or "").strip()
+            if not pn:
+                raise HTTPException(status_code=400, detail="Part No.가 없는 품목은 분류할 수 없습니다.")
+            pk = part_key(pn)
+            master = next((m for m in s.query(ItemMaster).all() if part_key(m.part_no) == pk), None)
+            if master:
+                master.category_id = body.category_id
+            else:
+                master = ItemMaster(
+                    part_no=pn, description=(body.description or ""), maker=(body.maker or ""),
+                    unit="PCS", category_id=body.category_id,
+                )
+                s.add(master)
+        s.flush()
+        stamped = stamp_history_item(s, master.id)
+        s.commit()
+        return {"ok": True, "item_id": master.id, "stamped": stamped}
     finally:
         s.close()
 

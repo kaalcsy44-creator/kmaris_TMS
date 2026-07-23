@@ -36,6 +36,7 @@ import {
   fetchItemLedger,
   fetchItemPriceHistory,
   rebuildItemLedger,
+  assignItemLedgerCategory,
   fetchEmailTemplates,
   saveEmailTemplate,
   deleteEmailTemplate,
@@ -1328,6 +1329,9 @@ function CategoriesTab() {
   const [rebuilding, setRebuilding] = useState(false);
   const [histRow, setHistRow] = useState<ItemLedgerRow | null>(null);
   const [hist, setHist] = useState<ItemPriceRow[] | null>(null);
+  const [assignRow, setAssignRow] = useState<ItemLedgerRow | null>(null);
+  const [assignCat, setAssignCat] = useState<number | null>(null);
+  const [assignBusy, setAssignBusy] = useState(false);
 
   function refresh() {
     fetchItemCategories().then(setRows).catch((e) => setErr(e instanceof Error ? e.message : "Load failed"));
@@ -1388,6 +1392,38 @@ function CategoriesTab() {
       setHist(data);
     } catch {
       setHist([]);
+    }
+  }
+
+  function openAssign(row: ItemLedgerRow) {
+    setAssignRow(row);
+    setAssignCat(row.category_id ?? null);
+    setErr("");
+  }
+  function closeAssign() {
+    setAssignRow(null);
+    setAssignBusy(false);
+  }
+  async function saveAssign() {
+    if (!assignRow) return;
+    setAssignBusy(true);
+    setErr("");
+    try {
+      await assignItemLedgerCategory(
+        assignRow.item_id != null
+          ? { item_id: assignRow.item_id, category_id: assignCat }
+          : {
+              part_no: assignRow.part_no,
+              description: assignRow.description,
+              maker: assignRow.maker,
+              category_id: assignCat,
+            }
+      );
+      closeAssign();
+      loadLedger();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Assign failed");
+      setAssignBusy(false);
     }
   }
 
@@ -1617,6 +1653,7 @@ function CategoriesTab() {
                     <th className="num">Margin</th>
                     <th className="num">Deals</th>
                     <th>Last</th>
+                    <th>Category</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1635,6 +1672,20 @@ function CategoriesTab() {
                       <td className="num">{marginPct(it)}</td>
                       <td className="num">{it.buy_count}/{it.sell_count}</td>
                       <td>{it.last_date || ""}</td>
+                      <td className="ledger-cat" onClick={(e) => e.stopPropagation()}>
+                        {canEdit ? (
+                          <button
+                            className="btn tiny"
+                            disabled={!it.part_no}
+                            title={it.part_no ? "Assign / change category" : "No Part No. — cannot classify"}
+                            onClick={() => openAssign(it)}
+                          >
+                            {it.category_path ? `✎ ${it.category_path}` : "＋ Assign"}
+                          </button>
+                        ) : (
+                          it.category_path || <span className="dash">—</span>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -1690,6 +1741,28 @@ function CategoriesTab() {
               </table>
             </div>
           )}
+        </Modal>
+      ) : null}
+
+      {assignRow ? (
+        <Modal
+          title={`Assign category — ${assignRow.part_no || assignRow.description || "item"}`}
+          onClose={closeAssign}
+          form
+        >
+          <p className="hint-inline" style={{ display: "block", marginBottom: 10 }}>
+            {assignRow.item_id != null
+              ? "Change this item's classification."
+              : "This item is not yet in Item Master. Assigning a category registers it and links its price history."}
+          </p>
+          <CategoryPicker value={assignCat} onChange={setAssignCat} />
+          <div className="form-actions">
+            <button className="btn primary" disabled={assignBusy} onClick={saveAssign}>
+              {assignBusy ? "Saving…" : "Save"}
+            </button>
+            <button className="btn" disabled={assignBusy} onClick={closeAssign}>Cancel</button>
+            {err ? <span className="action-err">{err}</span> : null}
+          </div>
         </Modal>
       ) : null}
 

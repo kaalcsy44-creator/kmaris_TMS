@@ -1037,6 +1037,15 @@ export function fetchItemPriceHistory(params: {
 export function rebuildItemLedger(): Promise<{ ok: boolean; rows: number }> {
   return post("/api/admin/settings/item-ledger/rebuild", {});
 }
+export function assignItemLedgerCategory(body: {
+  category_id: number | null;
+  item_id?: number;      // 기존 마스터 재분류
+  part_no?: string;      // 미연결 품목 배정(신규 생성/연결)
+  description?: string;
+  maker?: string;
+}): Promise<{ ok: boolean; item_id: number; stamped: number }> {
+  return post("/api/admin/settings/item-ledger/assign", body);
+}
 
 export function createSettingsUser(body: {
   username: string;

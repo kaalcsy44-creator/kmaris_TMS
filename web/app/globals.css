@@ -8091,6 +8091,14 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.ledger-cat {
+  white-space: nowrap;
+}
+.ledger-cat button {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 /* Buy/Sell 구분 pill (이력 모달) */
 .ledger-pill {
   display: inline-block;

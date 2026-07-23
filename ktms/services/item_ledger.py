@@ -166,6 +166,25 @@ def rebuild_price_history(session) -> int:
     return len(rows)
 
 
+def stamp_history_item(session, item_id: int) -> int:
+    """해당 item_master 의 part_no 와 정규화 일치하는 '미연결' 이력 행을 item_id 로 연결.
+
+    분류 화면에서 미연결 품목에 분류를 배정할 때 호출 — 전체 rebuild 없이 즉시 매칭.
+    반환=갱신 행수. commit 은 호출자 책임."""
+    m = session.query(ItemMaster).filter_by(id=item_id).first()
+    if not m:
+        return 0
+    pk = part_key(m.part_no)
+    if not pk:
+        return 0
+    n = 0
+    for h in session.query(ItemPriceHistory).filter(ItemPriceHistory.item_id.is_(None)).all():
+        if part_key(h.part_no) == pk:
+            h.item_id = item_id
+            n += 1
+    return n
+
+
 def _sort_key(h):
     """최신순 정렬 키 — 거래일(없으면 빈문자=가장 과거) 그다음 id."""
     return (h.doc_date or "", h.id)
