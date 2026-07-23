@@ -93,6 +93,16 @@ export default function TopNav({ active }: { active: string }) {
               </Link>
             )
           )}
+          {/* Item — 품목 마스터·분류/가격 관리(설정에서 분리). 접근 권한은 settings 와 동일. */}
+          {showSettings ? (
+            <Link
+              href="/item"
+              className={`topnav-link${active === "item" ? " on" : ""}`}
+              onClick={() => setOpen(false)}
+            >
+              Item
+            </Link>
+          ) : null}
           {/* 설정 — Marketing 우측 메뉴 항목으로 합류(구 우측 톱니 아이콘 대체). */}
           {showSettings ? (
             <Link

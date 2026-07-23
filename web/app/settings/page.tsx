@@ -75,7 +75,7 @@ import ComboBox from "@/components/common/ComboBox";
 
 type Tab =
   | "company" | "users" | "permissions"
-  | "customers" | "vendors" | "vessels" | "items" | "categories" | "email" | "brochures" | "account";
+  | "customers" | "vendors" | "vessels" | "email" | "brochures" | "account";
 
 const emptyCompany: CompanyProfile = {
   company_name_en: "",
@@ -138,8 +138,6 @@ function Settings() {
         { key: "customers", label: "Customer" },
         { key: "vendors", label: "Vendor" },
         { key: "vessels", label: "Vessels" },
-        { key: "items", label: "Item Master" },
-        { key: "categories", label: "Item Category" },
         { key: "email", label: "Email Templates" },
         { key: "brochures", label: "Brochures" },
       ]
@@ -147,8 +145,6 @@ function Settings() {
         { key: "customers", label: "Customer" },
         { key: "vendors", label: "Vendor" },
         { key: "vessels", label: "Vessels" },
-        { key: "items", label: "Item Master" },
-        { key: "categories", label: "Item Category" },
         { key: "email", label: "Email Templates" },
         { key: "brochures", label: "Brochures" },
         { key: "account", label: "My Account" },
@@ -173,8 +169,6 @@ function Settings() {
       {tab === "customers" && <CustomersTab />}
       {tab === "vendors" && <VendorsTab />}
       {tab === "vessels" && <VesselsTab />}
-      {tab === "items" && <ItemsTab />}
-      {tab === "categories" && <CategoriesTab />}
       {tab === "email" && <EmailTemplatesTab />}
       {tab === "brochures" && <BrochuresTab />}
       {tab === "account" && (
@@ -1166,7 +1160,7 @@ const VESSEL_TYPES = [
   "Tug / Offshore",
 ];
 
-function ItemsTab() {
+export function ItemsTab() {
   return (
     <MasterSection<SettingsItem>
       title="Item Master"
@@ -1314,7 +1308,7 @@ function fmtBuiltAt(iso: string | null): string {
   return iso ? iso.replace("T", " ").slice(0, 16) : "";
 }
 
-function CategoriesTab() {
+export function CategoriesTab() {
   const [rows, setRows] = useState<ItemCategory[]>([]);
   const [editor, setEditor] = useState<CatEditor | null>(null);
   const [err, setErr] = useState("");
@@ -1556,11 +1550,13 @@ function CategoriesTab() {
     const isLast = pos >= sibs.length - 1;
     return (
       <li className={`cat-node cat-l${node.level}${node.active ? "" : " off"}`}>
-        <div className="cat-node-row">
+        <div
+          className={`cat-node-row${
+            filter.kind === "cat" && filter.id === node.id ? " sel" : ""
+          }`}
+        >
           <span
-            className={`cat-node-name cat-node-pick${
-              filter.kind === "cat" && filter.id === node.id ? " sel" : ""
-            }`}
+            className="cat-node-name cat-node-pick"
             onClick={() => setFilter({ kind: "cat", id: node.id })}
             title="Show this category's item prices"
           >

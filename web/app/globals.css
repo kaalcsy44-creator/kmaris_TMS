@@ -8118,20 +8118,13 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 /* 분류명을 클릭해 우측 목록을 필터 — 클릭 가능 표시 + 선택 하이라이트 */
 .cat-node-pick {
   cursor: pointer;
-  border-radius: 5px;
-  padding: 1px 5px;
-  margin: -1px -5px;
 }
-.cat-node-pick:hover {
-  background: #e8eefb;
+/* 선택 시 행 전체를 옅게 음영 처리(글자색은 그대로 유지 → Main 파란 글자도 안 숨음). */
+.cat-node-row.sel {
+  background: #d8e6fb;
 }
-.cat-node-pick.sel {
-  background: var(--blue);
-  color: #fff;
-}
-.cat-node-pick.sel .cat-inactive {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.25);
+.cat-node-row.sel:hover {
+  background: #cddffa;
 }
 .cat-ledger-pane {
   min-width: 0;
