@@ -9029,6 +9029,27 @@ button.ov-tl-stage:hover { background: color-mix(in srgb, var(--ov-tone) 12%, tr
 .ov-tl-ndate { flex: none; width: 58px; color: var(--muted); font-size: var(--ov-t-meta);
   font-variant-numeric: tabular-nums; padding-top: 1px; white-space: nowrap; }
 .ov-tl-ntext { min-width: 0; word-break: break-word; }
+/* 노트 행의 ★·수정·삭제 — 항상 보이게 두되(사용자가 바로 누를 수 있어야 한다) 옅은 톤으로
+   두고 hover 시 진해진다. 인쇄물에서는 통째로 숨긴다(아래 print 규칙). */
+.ov-tl-nactions {
+  flex: none; margin-left: auto; display: inline-flex; align-items: center; gap: 2px;
+}
+.ov-tl-nactions button {
+  border: 0; background: none; cursor: pointer; color: #94a3b8; line-height: 1;
+  padding: 0 3px; border-radius: 4px; opacity: 0.65; transition: opacity .12s, color .12s;
+}
+.ov-tl-acts li:hover .ov-tl-nactions button,
+.ov-tl-acts li:focus-within .ov-tl-nactions button { opacity: 1; }
+.ov-tl-nactions button:disabled { cursor: default; opacity: 0.4; }
+.ov-tl-star { font-size: 13px; }
+.ov-tl-star.on { color: #f59e0b; opacity: 1; }  /* 우선순위 표시 — 늘 또렷하게. */
+.ov-tl-star:hover:not(:disabled) { color: #f59e0b; }
+.ov-tl-nedit { font-size: 12px; }
+.ov-tl-nedit:hover:not(:disabled) { color: #0055a8; }
+.ov-tl-ndel { font-size: 15px; }
+.ov-tl-ndel:hover:not(:disabled) { color: #dc2626; }
+/* 인라인 수정 폼 — 추가 폼(.ov-tl-addform)과 같은 조밀함. 거터 오른쪽으로 흘려보낸다. */
+.ov-tl-editform { flex: 1 1 auto; min-width: 0; }
 /* 단계별 활동기록 추가 — 개요에서 바로 작성하는 진입점. 평소엔 옅게, hover/focus 시 진해진다.
    인쇄·공유용 화면이라 기본은 눈에 띄지 않게 두고 필요할 때만 드러낸다. */
 .ov-tl-add { margin: 1px 0 4px 40px; padding: 1px 6px; border: 1px dashed transparent;
@@ -9043,18 +9064,29 @@ button.ov-tl-stage:hover { background: color-mix(in srgb, var(--ov-tone) 12%, tr
   opacity: 0.9; text-align: center; }
 .ov-tl-addfoot:hover { opacity: 1; }
 .ov-tl-addform { margin: 2px 4px 8px 40px; }
-/* 폼은 조밀한 개요 안에 들어가므로 공용 폼을 한 톤 작게 눌러 준다. */
-.ov-tl-addform .act-add { font-size: var(--ov-t-body); }
-.ov-tl-addform .act-add-text { min-height: 44px; }
+/* 폼은 조밀한 개요 안에 들어가므로 공용 폼을 한 톤 작게 눌러 준다.
+   인라인 수정 폼(.ov-tl-editform)도 같은 조밀함을 공유한다. */
+.ov-tl-addform .act-add,
+.ov-tl-editform .act-add { font-size: var(--ov-t-body); }
+.ov-tl-addform .act-add-text,
+.ov-tl-editform .act-add-text { min-height: 44px; }
 /* 각 입력란 글자 크기를 기본(공용 폼)보다 2px 씩 줄인다(요청). */
 .ov-tl-addform .act-add input[type="date"],
 .ov-tl-addform .act-add input[type="datetime-local"],
-.ov-tl-addform .act-add select { font-size: 10px; }
-.ov-tl-addform .act-add-text { font-size: 11px; }
-.ov-tl-addform .act-add .act-seg.sm button { font-size: 9.5px; }
-.ov-tl-addform .act-add .act-add-go { font-size: 10px; }
+.ov-tl-addform .act-add select,
+.ov-tl-editform .act-add input[type="date"],
+.ov-tl-editform .act-add input[type="datetime-local"],
+.ov-tl-editform .act-add select { font-size: 10px; }
+.ov-tl-addform .act-add-text,
+.ov-tl-editform .act-add-text { font-size: 11px; }
+.ov-tl-addform .act-add .act-seg.sm button,
+.ov-tl-editform .act-add .act-seg.sm button { font-size: 9.5px; }
+.ov-tl-addform .act-add .act-add-go,
+.ov-tl-editform .act-add .act-add-go { font-size: 10px; }
 .ov-tl-addform .act-add .act-check,
-.ov-tl-addform .act-add .act-party-custom { font-size: 10px; }
+.ov-tl-addform .act-add .act-party-custom,
+.ov-tl-editform .act-add .act-check,
+.ov-tl-editform .act-add .act-party-custom { font-size: 10px; }
 
 /* 종결 — 특정 단계에 속하지 않아 4칸 아래 전체 폭으로. */
 .ov-tl-closed { display: flex; align-items: center; gap: 8px; margin-top: 8px; padding: 6px 10px;
@@ -9509,8 +9541,8 @@ button.ov-tl-stage:hover {
   /* 프로젝트 개요 — 버튼류를 빼고 인쇄한다. 단계 4칸은 A4 가로에서도 유지되므로
      Items 표와 열이 맞은 채로 나온다(2칸으로 접으면 그 대응이 깨진다). */
   .proj-ov-actions, .proj-ov-back { display: none !important; }
-  /* 활동기록 추가 UI(입력 진입점·폼)는 인쇄물에 남길 게 아니다. */
-  .ov-tl-add, .ov-tl-addform { display: none !important; }
+  /* 활동기록 추가·수정 UI(입력 진입점·폼·노트 편집 버튼)는 인쇄물에 남길 게 아니다. */
+  .ov-tl-add, .ov-tl-addform, .ov-tl-nactions { display: none !important; }
   .proj-ov-sec, .proj-ov-tl > li, .proj-ov-items tr { break-inside: avoid; }
   .proj-ov-tlcols { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
   /* 4칸 톤은 이 화면에서 "어느 단계 열인지"를 알려주는 장치라 인쇄에서도 남긴다 —

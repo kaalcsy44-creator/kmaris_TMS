@@ -10,6 +10,8 @@ import {
   fetchPoWorkOptions,
   fetchDocumentDetail,
   addRfqStageNote,
+  updateRfqStageNote,
+  deleteRfqStageNote,
   closeReasonLabel,
 } from "@/lib/api";
 import { useCachedData } from "@/lib/useCachedData";
@@ -24,7 +26,7 @@ import {
   type StageChainItem,
 } from "@/lib/deal";
 import { buildActivities, hm, md, splitProjectNo, type Activity } from "@/lib/activity";
-import type { PipelineRow, PoWorkOptions, RfqItem } from "@/lib/types";
+import type { PipelineRow, PoWorkOptions, RfqItem, StageNote } from "@/lib/types";
 import { vendorList } from "@/components/common/dealFields";
 import { convertCurrency, USD_KRW_RATE } from "@/components/common/itemTable";
 import { tr } from "@/lib/labels";
@@ -374,6 +376,9 @@ function StageTimeline({
 }) {
   // 어느 단계에 활동기록 입력창을 열어 뒀는지(한 번에 하나). null 이면 모두 닫힘.
   const [addStage, setAddStage] = useState<number | null>(null);
+  // 노트 편집(★·수정·삭제)에 필요한 Party/Person 후보 — 이 딜의 고객사·벤더사와 담당자.
+  const parties = activityParties(row);
+  const persons = activityPersons(row);
 
   // 단계별로 활동을 나눠 담는다. 자동 이벤트는 대개 단계당 1건이나, 2단계(RFQ Sent)는
   // 벤더별 발송이 여러 건일 수 있어 리스트로 담는다. 노트는 저장된 단계가 아니라 입력
@@ -451,28 +456,50 @@ function StageTimeline({
                             </>,
                           );
                         }
+                        // 메인 활동 = 그 단계의 자동 이벤트(단계 완료). 없으면(노트만 있는
+                        // 단계) 번호+제목만의 헤더 줄을 따로 얹어 모든 노트를 편집 가능한
+                        // 행으로 남긴다 — 노트가 메인 자리로 올라가면 링크에 감싸여 편집할 수 없다.
                         const mainIdx = rows.findIndex((r) => r.kind === "auto");
-                        const mainRow = mainIdx < 0 ? 0 : mainIdx;
                         return (
                           <ul className="ov-tl-acts">
+                            {mainIdx < 0 ? (
+                              <li className="ov-tl-main">
+                                {rowLink(
+                                  <>
+                                    <span className="ov-tl-dot">{c.no}</span>
+                                    <b className="ov-tl-label">{c.label}</b>
+                                  </>,
+                                )}
+                              </li>
+                            ) : null}
                             {rows.map((a, i) => {
                               const dateEl = (
                                 <span className="ov-tl-ndate">{md(a.date)}{hm(actAt(a)) ? ` ${hm(actAt(a))}` : ""}</span>
                               );
+                              // 사람이 쓴 노트 — ★·수정·삭제가 가능한 편집 행으로 렌더한다.
+                              if (a.kind === "note") {
+                                return (
+                                  <OvNoteRow
+                                    key={i}
+                                    a={a}
+                                    dateEl={dateEl}
+                                    rfqId={row.rfq_id}
+                                    parties={parties}
+                                    persons={persons}
+                                    onChanged={onActivityAdded}
+                                  />
+                                );
+                              }
+                              // rows 에는 close 가 섞이지 않지만(별도 처리), 타입 좁히기용 가드.
+                              if (a.kind !== "auto") return null;
                               const contentEl = (
                                 <span className="ov-tl-ntext">
-                                  {a.kind === "auto" ? (
-                                    <>
-                                      <b className="ov-tl-actlabel">{a.label}</b>
-                                      {a.party ? <span className="ov-tl-actmeta">{a.party}</span> : null}
-                                    </>
-                                  ) : (
-                                    <ActivityDesc act={a} metaBlock />
-                                  )}
+                                  <b className="ov-tl-actlabel">{a.label}</b>
+                                  {a.party ? <span className="ov-tl-actmeta">{a.party}</span> : null}
                                 </span>
                               );
-                              // 메인 활동 행 = 단계 번호 원형 + 작업화면 링크.
-                              if (i === mainRow) {
+                              // 메인 활동 행(자동 이벤트) = 단계 번호 원형 + 작업화면 링크.
+                              if (i === mainIdx) {
                                 return (
                                   <li key={i} className="ov-tl-main">
                                     {rowLink(<><span className="ov-tl-dot">{c.no}</span>{dateEl}{contentEl}</>)}
@@ -480,7 +507,7 @@ function StageTimeline({
                                 );
                               }
                               return (
-                                <li key={i} className={a.kind === "note" && a.note.star ? "star" : undefined}>
+                                <li key={i}>
                                   <div className="ov-tl-row">
                                     <span className="ov-tl-gutter" />
                                     {dateEl}
@@ -556,6 +583,166 @@ function noteFormToPatch(v: ActivityNoteValue) {
     star: v.star,
     pic: v.pic.trim() || undefined,
   };
+}
+
+/** 저장된 노트 → 폼 값(ActivityScreen 의 noteToForm 과 같은 규칙). */
+function noteToForm(n: StageNote): ActivityNoteValue {
+  return initialNoteValue({
+    text: n.text,
+    datetime: n.datetime || n.at || "",
+    direction: (n.direction as "" | "in" | "out") || "",
+    party: n.party || "",
+    person: n.person || "",
+    channel: n.channel || "",
+    star: !!n.star,
+    pic: n.pic || "",
+  });
+}
+
+/**
+ * 개요 타임라인의 노트 1건 — 표시 / 인라인 수정 토글 + ★·삭제.
+ * 노트는 화면상 입력 일시로 배치되지만(stageForNote), 수정·삭제는 저장된 단계·인덱스
+ * (a.stage·a.index)로 해야 서버의 그 노트를 정확히 가리킨다. onChanged 가 없으면(=편집
+ * 불가 맥락) 읽기 전용으로 그린다. Activity Log 화면의 NoteRow 와 같은 동작을 개요 폼에 맞춘 것.
+ */
+function OvNoteRow({
+  a,
+  dateEl,
+  rfqId,
+  parties,
+  persons,
+  onChanged,
+}: {
+  a: Extract<Activity, { kind: "note" }>;
+  dateEl: ReactNode;
+  rfqId: number;
+  parties: string[];
+  persons: string[];
+  onChanged?: () => void | Promise<unknown>;
+}) {
+  const n = a.note;
+  const [editing, setEditing] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [form, setForm] = useState<ActivityNoteValue>(() => noteToForm(n));
+
+  // 편집 불가 맥락 — 예전처럼 읽기 전용 한 줄(★ 접두 표시 유지).
+  if (!onChanged) {
+    return (
+      <li className={n.star ? "star" : undefined}>
+        <div className="ov-tl-row">
+          <span className="ov-tl-gutter" />
+          {dateEl}
+          <span className="ov-tl-ntext"><ActivityDesc act={a} metaBlock /></span>
+        </div>
+      </li>
+    );
+  }
+
+  async function toggleStar() {
+    setBusy(true);
+    try {
+      // 저장된 값 그대로 두고 star 만 뒤집는다(ActivityScreen.toggleStar 와 동일).
+      await updateRfqStageNote(rfqId, a.stage, a.index, {
+        text: n.text,
+        datetime: n.datetime,
+        direction: n.direction,
+        party: n.party,
+        person: n.person,
+        channel: n.channel,
+        star: !n.star,
+        pic: n.pic,
+      });
+      await onChanged!();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function save() {
+    if (!form.text.trim()) return;
+    setBusy(true);
+    try {
+      await updateRfqStageNote(rfqId, a.stage, a.index, noteFormToPatch(form));
+      setEditing(false);
+      await onChanged!();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove() {
+    if (!window.confirm("Delete this activity?")) return;
+    setBusy(true);
+    try {
+      await deleteRfqStageNote(rfqId, a.stage, a.index);
+      await onChanged!();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (editing) {
+    return (
+      <li className="ov-tl-noteedit">
+        <div className="ov-tl-row">
+          <span className="ov-tl-gutter" />
+          <div className="ov-tl-editform">
+            <ActivityNoteForm
+              value={form}
+              onChange={setForm}
+              onSubmit={save}
+              onCancel={() => setEditing(false)}
+              submitLabel="Save"
+              busy={busy}
+              partyPresets={parties}
+              personPresets={persons}
+            />
+          </div>
+        </div>
+      </li>
+    );
+  }
+
+  return (
+    <li className={n.star ? "star" : undefined}>
+      <div className="ov-tl-row ov-tl-noterow">
+        <span className="ov-tl-gutter" />
+        {dateEl}
+        <span className="ov-tl-ntext">
+          <ActivityDesc act={a} metaBlock hideStar />
+        </span>
+        <span className="ov-tl-nactions">
+          <button
+            type="button"
+            className={`ov-tl-star${n.star ? " on" : ""}`}
+            title="Mark priority"
+            onClick={toggleStar}
+            disabled={busy}
+          >
+            ★
+          </button>
+          <button
+            type="button"
+            className="ov-tl-nedit"
+            title="Edit"
+            onClick={() => { setForm(noteToForm(n)); setEditing(true); }}
+            disabled={busy}
+          >
+            ✎
+          </button>
+          <button
+            type="button"
+            className="ov-tl-ndel"
+            title="Delete"
+            onClick={remove}
+            disabled={busy}
+          >
+            ×
+          </button>
+        </span>
+      </div>
+    </li>
+  );
 }
 
 /** 개요에 활동기록 1건 추가 — 공용 ActivityNoteForm 을 그대로 쓴다. 저장 단계는 고르지
