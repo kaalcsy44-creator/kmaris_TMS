@@ -1582,7 +1582,7 @@ function CategoriesTab() {
               <button className="btn tiny" onClick={() => openEdit(node)} title="Edit">✎</button>
             ) : null}
             {canDelete ? (
-              <button className="btn tiny danger" onClick={() => del(node)} title="Delete">🗑</button>
+              <button className="btn tiny danger" onClick={() => del(node)} title="Delete">×</button>
             ) : null}
           </span>
         </div>
