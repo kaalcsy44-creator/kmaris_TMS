@@ -1567,19 +1567,6 @@ function CategoriesTab() {
             {node.name}
             {!node.active ? <span className="cat-inactive">Inactive</span> : null}
           </span>
-          {canCreate ? (
-            <button
-              className="cat-add"
-              title={`Add ${LEVEL_LABEL[Math.min(node.level + 1, 3)]}`}
-              onClick={() =>
-                node.level < 3
-                  ? openNew(node) // 하위 레벨(자식) 추가
-                  : openNew(node.parent_id != null ? byId.get(node.parent_id) ?? null : null) // Detail: 형제 추가
-              }
-            >
-              +
-            </button>
-          ) : null}
           <span className="cat-node-actions">
             {canEdit ? (
               <>
@@ -1595,9 +1582,17 @@ function CategoriesTab() {
             ) : null}
           </span>
         </div>
-        {kids.length ? (
+        {node.level < 3 ? (
+          // 하위 그룹(세로선). 자식들 + 맨 끝에 '+ 하위레벨 추가' 버튼 1개.
           <ul className="cat-children">
             {kids.map((k) => <NodeRow key={k.id} node={k} />)}
+            {canCreate ? (
+              <li className="cat-addrow">
+                <button className="cat-add" onClick={() => openNew(node)}>
+                  + {LEVEL_LABEL[node.level + 1]}
+                </button>
+              </li>
+            ) : null}
           </ul>
         ) : null}
       </li>
@@ -1622,9 +1617,6 @@ function CategoriesTab() {
     <div className="panel">
       <div className="ms-toolbar">
         <h3 className="form-title">Item Categories · Prices</h3>
-        {canCreate ? (
-          <button className="btn primary" onClick={() => openNew(null)}>+ Main</button>
-        ) : null}
       </div>
       <p className="hint-inline" style={{ display: "block", marginBottom: 12 }}>
         Left: manage the classification (Main &gt; Sub &gt; Detail, ▲▼ to reorder). Click a category to list its
@@ -1649,11 +1641,16 @@ function CategoriesTab() {
               Unmatched{ledger ? ` (${ledger.unmatched.length})` : ""}
             </button>
           </div>
-          {roots.length === 0 ? (
-            <div className="state">No categories yet. Start with &quot;+ Main&quot;.</div>
+          {roots.length === 0 && !canCreate ? (
+            <div className="state">No categories yet.</div>
           ) : (
             <ul className="cat-tree">
               {roots.map((r) => <NodeRow key={r.id} node={r} />)}
+              {canCreate ? (
+                <li className="cat-addrow cat-addrow-root">
+                  <button className="cat-add" onClick={() => openNew(null)}>+ Main</button>
+                </li>
+              ) : null}
             </ul>
           )}
         </div>
