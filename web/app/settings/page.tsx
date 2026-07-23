@@ -101,7 +101,8 @@ const emptyCompany: CompanyProfile = {
 
 export default function SettingsPage() {
   return (
-    <AppShell active="settings">
+    // Projects 페이지와 동일하게 전체 폭 사용(wide) — 목록/가격표가 넓게 보이도록.
+    <AppShell active="settings" wide>
       <Settings />
     </AppShell>
   );
