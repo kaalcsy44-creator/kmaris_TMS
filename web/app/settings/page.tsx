@@ -184,7 +184,7 @@ type CompanyField = { key: keyof CompanyProfile; label: string; groupBefore?: st
 const KR_FIELDS: CompanyField[] = [
   { key: "company_name_kr", label: "Company Name (KR)" },
   { key: "address", label: "Address (KR)" },
-  { key: "bank_name", label: "Bank", groupBefore: "국내계좌 · Domestic Account" },
+  { key: "bank_name", label: "Bank", groupBefore: "Domestic Account" },
   { key: "bank_account", label: "Account No." },
   { key: "bank_holder", label: "Holder" },
 ];
@@ -193,7 +193,7 @@ const KR_FIELDS: CompanyField[] = [
 const EN_FIELDS: CompanyField[] = [
   { key: "company_name_en", label: "Company Name (EN)" },
   { key: "address_en", label: "Address (EN)" },
-  { key: "fx_bank_name", label: "Bank", groupBefore: "외화계좌 · FX Account" },
+  { key: "fx_bank_name", label: "Bank", groupBefore: "FX Account" },
   { key: "fx_bank_account", label: "Account No." },
   { key: "fx_bank_holder", label: "Holder" },
   { key: "swift", label: "SWIFT" },
@@ -211,8 +211,8 @@ const COMMON_FIELDS: CompanyField[] = [
 ];
 
 const BILINGUAL_COLS: { title: string; fields: CompanyField[] }[] = [
-  { title: "국문 · Korean", fields: KR_FIELDS },
-  { title: "영문 · English", fields: EN_FIELDS },
+  { title: "Korean", fields: KR_FIELDS },
+  { title: "English", fields: EN_FIELDS },
 ];
 
 function CompanyTab() {
@@ -284,7 +284,7 @@ function CompanyTab() {
             </section>
           ))}
         </div>
-        <h4 className="bl-col-title bl-common-title">공통 · Common</h4>
+        <h4 className="bl-col-title bl-common-title">Common</h4>
         <dl className="company-view">
           {COMMON_FIELDS.map((f) => (
             <div key={f.key}>
@@ -333,7 +333,7 @@ function CompanyTab() {
           </section>
         ))}
       </div>
-      <h4 className="bl-col-title bl-common-title">공통 · Common</h4>
+      <h4 className="bl-col-title bl-common-title">Common</h4>
       <div className="form-grid">
         {COMMON_FIELDS.map((f) => (
           <TextField
