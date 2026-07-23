@@ -8011,12 +8011,28 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 /* ── Settings: Item Category 가격 이력(ledger) 2단 레이아웃 ────────────────── */
 .cat-layout {
   display: grid;
-  grid-template-columns: minmax(260px, 340px) 1fr;
-  gap: 20px;
+  /* 트리 폭은 CSS 변수(구분선 드래그로 조절), 가운데 구분선, 나머지는 목록이 모두 차지 */
+  grid-template-columns: var(--tree-w, 300px) 10px minmax(0, 1fr);
+  gap: 0;
   align-items: start;
 }
 .cat-tree-pane {
   min-width: 0;
+  padding-right: 6px;
+}
+/* 트리↔목록 폭 조절 구분선(드래그) */
+.cat-splitter {
+  align-self: stretch;
+  min-height: 220px;
+  margin: 0 4px;
+  cursor: col-resize;
+  border-radius: 5px;
+  background: #e6eaf0;
+  transition: background 0.12s;
+}
+.cat-splitter:hover,
+.cat-splitter:active {
+  background: var(--blue);
 }
 .cat-quickfilter {
   display: flex;
@@ -8080,7 +8096,7 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
    않게 한다. 패널이 좁으면 min-width 로 가로 스크롤(찌그러짐 방지). */
 .ledger-table {
   width: 100%;
-  min-width: 960px;
+  min-width: 900px;   /* Description(가변 열)이 남는 폭을 흡수해 패널 전체를 채움 */
   table-layout: fixed;
 }
 .ledger-row {
@@ -8136,6 +8152,9 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 @media (max-width: 900px) {
   .cat-layout {
     grid-template-columns: 1fr;
+  }
+  .cat-splitter {
+    display: none;
   }
 }
 

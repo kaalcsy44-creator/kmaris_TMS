@@ -1331,6 +1331,38 @@ function CategoriesTab() {
   const [assignRow, setAssignRow] = useState<ItemLedgerRow | null>(null);
   const [assignCat, setAssignCat] = useState<number | null>(null);
   const [assignBusy, setAssignBusy] = useState(false);
+  // 트리↔목록 좌우 분할 폭(px). 구분선을 드래그해 조절. localStorage 로 유지.
+  const [treeW, setTreeW] = useState<number>(() => {
+    if (typeof window === "undefined") return 300;
+    const v = Number(window.localStorage.getItem("ktms.catTreeW"));
+    return v >= 180 && v <= 620 ? v : 300;
+  });
+
+  function startSplitDrag(e: React.MouseEvent) {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = treeW;
+    const onMove = (ev: MouseEvent) => {
+      const w = Math.max(180, Math.min(620, startW + (ev.clientX - startX)));
+      setTreeW(w);
+    };
+    const onUp = () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      document.body.style.userSelect = "";
+      try {
+        window.localStorage.setItem("ktms.catTreeW", String(treeWRef.current));
+      } catch {
+        /* ignore */
+      }
+    };
+    document.body.style.userSelect = "none";
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }
+  // onUp(비동기 클로저)에서 최신 폭을 저장하기 위한 ref 미러.
+  const treeWRef = useRef(treeW);
+  treeWRef.current = treeW;
 
   function refresh() {
     fetchItemCategories().then(setRows).catch((e) => setErr(e instanceof Error ? e.message : "Load failed"));
@@ -1591,7 +1623,7 @@ function CategoriesTab() {
 
       {err ? <div className="action-err" style={{ marginBottom: 10 }}>{err}</div> : null}
 
-      <div className="cat-layout">
+      <div className="cat-layout" style={{ "--tree-w": `${treeW}px` } as React.CSSProperties}>
         <div className="cat-tree-pane">
           <div className="cat-quickfilter">
             <button
@@ -1615,6 +1647,14 @@ function CategoriesTab() {
             </ul>
           )}
         </div>
+
+        <div
+          className="cat-splitter"
+          onMouseDown={startSplitDrag}
+          role="separator"
+          aria-orientation="vertical"
+          title="Drag to resize"
+        />
 
         <div className="cat-ledger-pane">
           <div className="ledger-head">
@@ -1645,15 +1685,15 @@ function CategoriesTab() {
             <div className="table-wrap">
               <table className="mini wide ledger-table">
                 <colgroup>
-                  <col style={{ width: 96 }} />
-                  <col style={{ width: 250 }} />
-                  <col style={{ width: 90 }} />
-                  <col style={{ width: 112 }} />
-                  <col style={{ width: 112 }} />
-                  <col style={{ width: 64 }} />
-                  <col style={{ width: 52 }} />
-                  <col style={{ width: 78 }} />
-                  <col style={{ width: 118 }} />
+                  <col style={{ width: 100 }} />
+                  <col />{/* Description — 남는 폭을 흡수해 표가 패널 전체를 채움 */}
+                  <col style={{ width: 110 }} />
+                  <col style={{ width: 128 }} />
+                  <col style={{ width: 128 }} />
+                  <col style={{ width: 72 }} />
+                  <col style={{ width: 56 }} />
+                  <col style={{ width: 84 }} />
+                  <col style={{ width: 120 }} />
                 </colgroup>
                 <thead>
                   <tr>
