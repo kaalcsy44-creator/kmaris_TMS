@@ -1304,12 +1304,11 @@ function fmtAmt(n: number): string {
 function fmtPrice(p: { unit_price: number; currency: string } | null): string {
   return p ? `${p.currency} ${fmtAmt(p.unit_price)}` : "—";
 }
-// 최근 구매가 대비 판매가 마진%. 통화가 다르면 환산 없이 계산 불가로 표시.
+// 마진% — 백엔드가 USD 환산으로 계산해 준 margin_pct 사용. 통화가 달라 환산된
+// 값이면 '~'를 붙여 근사치임을 표시(환율 가정으로 산출).
 function marginPct(row: ItemLedgerRow): string {
-  const b = row.buy, s = row.sell;
-  if (!b || !s || !s.unit_price) return "—";
-  if (b.currency !== s.currency) return "≠ cur";
-  return `${(((s.unit_price - b.unit_price) / s.unit_price) * 100).toFixed(1)}%`;
+  if (row.margin_pct == null) return "—";
+  return `${row.margin_cross ? "~" : ""}${row.margin_pct.toFixed(1)}%`;
 }
 function fmtBuiltAt(iso: string | null): string {
   return iso ? iso.replace("T", " ").slice(0, 16) : "";
@@ -1671,7 +1670,12 @@ function CategoriesTab() {
                       <td>{it.maker || ""}</td>
                       <td className="num">{fmtPrice(it.buy)}</td>
                       <td className="num">{fmtPrice(it.sell)}</td>
-                      <td className="num">{marginPct(it)}</td>
+                      <td
+                        className="num"
+                        title={it.margin_cross ? "Approx. — buy/sell in different currencies, converted to USD" : undefined}
+                      >
+                        {marginPct(it)}
+                      </td>
                       <td className="num">{it.buy_count}/{it.sell_count}</td>
                       <td>{it.last_date || ""}</td>
                       <td className="ledger-cat" onClick={(e) => e.stopPropagation()}>

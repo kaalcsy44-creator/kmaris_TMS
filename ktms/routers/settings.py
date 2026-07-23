@@ -37,6 +37,7 @@ from _core import (
     User,
     UserRole,
     UserSave,
+    USD_KRW_RATE,
     Vendor,
     VendorCreate,
     Vessel,
@@ -530,11 +531,32 @@ def settings_item_ledger():
         data = ledger_rows(s)
         for it in data["items"]:
             it["category_path"] = _category_path(cat_by_id, it.get("category_id"))
+        # 매입(buy)·매출(sell) 통화가 달라도 마진을 보이도록 USD 로 환산해 margin_pct 산출
+        # (국내매입 KRW·수출 USD 케이스가 흔함). 환율은 앱 공통 상수(대시보드와 동일).
+        for it in data["items"] + data["unmatched"]:
+            _annotate_margin(it)
         built = s.query(func.max(ItemPriceHistory.created_at)).scalar()
         data["built_at"] = built.isoformat() if built else None
         return data
     finally:
         s.close()
+
+
+def _to_usd(price: float, cur: str | None) -> float:
+    return price / USD_KRW_RATE if (cur or "USD") == "KRW" else price
+
+
+def _annotate_margin(it: dict) -> None:
+    """ledger 행에 margin_pct(USD 환산 %)와 margin_cross(통화 상이 여부) 부착."""
+    b, sell = it.get("buy"), it.get("sell")
+    it["margin_pct"] = None
+    it["margin_cross"] = False
+    if b and sell and sell.get("unit_price"):
+        su = _to_usd(sell["unit_price"], sell.get("currency"))
+        if su:
+            bu = _to_usd(b["unit_price"], b.get("currency"))
+            it["margin_pct"] = round((su - bu) / su * 100, 1)
+            it["margin_cross"] = (b.get("currency") or "USD") != (sell.get("currency") or "USD")
 
 
 @app.get("/api/admin/settings/item-ledger/history", dependencies=[Depends(require_token)])

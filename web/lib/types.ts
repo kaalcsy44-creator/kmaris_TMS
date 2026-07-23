@@ -113,6 +113,8 @@ export type ItemLedgerRow = {
   category_path?: string;        // "대 > 중 > 소"
   buy: ItemLedgerPrice | null;   // 최근 구매가
   sell: ItemLedgerPrice | null;  // 최근 판매가
+  margin_pct?: number | null;    // 최근 구매가 대비 판매가 마진%(USD 환산, 백엔드 계산)
+  margin_cross?: boolean;        // 매입·매출 통화가 달라 환산으로 계산된 값인지
   buy_count: number;
   sell_count: number;
   last_date: string | null;

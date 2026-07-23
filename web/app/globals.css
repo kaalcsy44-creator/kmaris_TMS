@@ -8091,8 +8091,22 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Category(Assign) 열은 표가 가로로 넘쳐도 항상 보이도록 우측 고정(sticky). */
 .ledger-cat {
   white-space: nowrap;
+  position: sticky;
+  right: 0;
+  background: #fbfcfe;
+  box-shadow: -7px 0 7px -6px rgba(20, 40, 80, 0.16);
+}
+.ledger-row:hover .ledger-cat {
+  background: #eef3fb;
+}
+.ledger-table thead th:last-child {
+  position: sticky;
+  right: 0;
+  background: #f4f7fb;
+  box-shadow: -7px 0 7px -6px rgba(20, 40, 80, 0.16);
 }
 .ledger-cat button {
   max-width: 220px;
