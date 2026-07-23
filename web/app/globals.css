@@ -7967,6 +7967,24 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 .cat-node-name .cat-inactive {
   margin-left: 6px;
 }
+/* 각 라인 끝 '+' 추가 버튼 — 항상 표시(옅은 회색), hover 시 파랑.
+   Main→Sub, Sub→Detail 자식 추가, Detail→형제 Detail 추가. */
+.cat-add {
+  flex: 0 0 auto;
+  margin-left: auto;   /* 라인 오른쪽 끝으로 밀기 */
+  border: 0;
+  background: none;
+  color: #b6c0cf;
+  font-size: 17px;
+  line-height: 1;
+  padding: 0 5px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.cat-add:hover {
+  color: var(--blue);
+  background: #eaf1fb;
+}
 .cat-l1 > .cat-node-row .cat-node-name {
   font-weight: 700;
   color: var(--blue);
@@ -7992,7 +8010,7 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
    Activity Log 의 star/edit/delete 스타일 참조(옅은 아이콘 + 그라데이션 페이드). */
 .cat-node-actions {
   position: absolute;
-  right: 2px;
+  right: 30px;   /* 항상 보이는 '+' 버튼(맨 오른쪽) 왼쪽에 겹쳐 뜨도록 */
   top: 50%;
   transform: translateY(-50%);
   display: inline-flex;

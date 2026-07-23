@@ -1275,7 +1275,6 @@ function CategoryPicker({
 }
 
 const LEVEL_LABEL: Record<number, string> = { 1: "Main", 2: "Sub", 3: "Detail" };
-const CHILD_LABEL: Record<number, string> = { 1: "+ Sub", 2: "+ Detail" };
 
 type CatEditor = {
   id: number | null;        // null = new
@@ -1568,15 +1567,25 @@ function CategoriesTab() {
             {node.name}
             {!node.active ? <span className="cat-inactive">Inactive</span> : null}
           </span>
+          {canCreate ? (
+            <button
+              className="cat-add"
+              title={`Add ${LEVEL_LABEL[Math.min(node.level + 1, 3)]}`}
+              onClick={() =>
+                node.level < 3
+                  ? openNew(node) // 하위 레벨(자식) 추가
+                  : openNew(node.parent_id != null ? byId.get(node.parent_id) ?? null : null) // Detail: 형제 추가
+              }
+            >
+              +
+            </button>
+          ) : null}
           <span className="cat-node-actions">
             {canEdit ? (
               <>
                 <button className="btn tiny" disabled={isFirst} onClick={() => move(node, -1)} title="Move up">▲</button>
                 <button className="btn tiny" disabled={isLast} onClick={() => move(node, 1)} title="Move down">▼</button>
               </>
-            ) : null}
-            {node.level < 3 && canCreate ? (
-              <button className="btn tiny" onClick={() => openNew(node)}>{CHILD_LABEL[node.level]}</button>
             ) : null}
             {canEdit ? (
               <button className="btn tiny" onClick={() => openEdit(node)} title="Edit">✎</button>
