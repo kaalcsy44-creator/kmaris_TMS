@@ -542,19 +542,26 @@ def settings_item_ledger():
         s.close()
 
 
-def _to_usd(price: float, cur: str | None) -> float:
-    return price / USD_KRW_RATE if (cur or "USD") == "KRW" else price
+def _to_usd(price: float, cur: str | None, fx_rate: float | None) -> float:
+    """KRW→USD 는 그 딜에 저장된 fx_rate(1 USD=? KRW) 우선, 없으면 앱 공통 환율."""
+    if (cur or "USD") != "KRW":
+        return price
+    rate = fx_rate if (fx_rate and fx_rate > 0) else USD_KRW_RATE
+    return price / rate
 
 
 def _annotate_margin(it: dict) -> None:
-    """ledger 행에 margin_pct(USD 환산 %)와 margin_cross(통화 상이 여부) 부착."""
+    """ledger 행에 margin_pct(USD 환산 %)와 margin_cross(통화 상이 여부) 부착.
+
+    통화가 다르면 각 가격의 저장 fx_rate 로 USD 환산 후 마진 계산(딜 실제 환율 반영).
+    fx_rate 가 없는 소스(PO/오더 등)만 공통 환율로 대체."""
     b, sell = it.get("buy"), it.get("sell")
     it["margin_pct"] = None
     it["margin_cross"] = False
     if b and sell and sell.get("unit_price"):
-        su = _to_usd(sell["unit_price"], sell.get("currency"))
+        su = _to_usd(sell["unit_price"], sell.get("currency"), sell.get("fx_rate"))
         if su:
-            bu = _to_usd(b["unit_price"], b.get("currency"))
+            bu = _to_usd(b["unit_price"], b.get("currency"), b.get("fx_rate"))
             it["margin_pct"] = round((su - bu) / su * 100, 1)
             it["margin_cross"] = (b.get("currency") or "USD") != (sell.get("currency") or "USD")
 

@@ -216,7 +216,10 @@ def _summarize(hs: list) -> dict:
     def one(x):
         if not x:
             return None
-        return {"unit_price": x.unit_price, "currency": x.currency, "date": x.doc_date}
+        return {
+            "unit_price": x.unit_price, "currency": x.currency,
+            "date": x.doc_date, "fx_rate": x.fx_rate,  # 딜 저장 환율(있으면 마진 환산에 우선 사용)
+        }
 
     dates = [h.doc_date for h in hs if h.doc_date]
     return {

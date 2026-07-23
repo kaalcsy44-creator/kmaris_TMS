@@ -1683,7 +1683,7 @@ function CategoriesTab() {
                       <td className="num">{fmtPrice(it.sell)}</td>
                       <td
                         className="num"
-                        title={it.margin_cross ? "Approx. — buy/sell in different currencies, converted to USD" : undefined}
+                        title={it.margin_cross ? "Converted to USD using each deal's stored FX rate (app rate if none)" : undefined}
                       >
                         {marginPct(it)}
                       </td>
@@ -1739,6 +1739,7 @@ function CategoriesTab() {
                     <th className="num">Unit</th>
                     <th className="num">Qty</th>
                     <th className="num">Amount</th>
+                    <th className="num">FX (1 USD)</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1756,6 +1757,7 @@ function CategoriesTab() {
                       <td className="num">{r.currency} {fmtAmt(r.unit_price)}</td>
                       <td className="num">{r.qty}</td>
                       <td className="num">{r.currency} {fmtAmt(r.amount)}</td>
+                      <td className="num">{r.fx_rate ? `₩${fmtAmt(r.fx_rate)}` : "—"}</td>
                     </tr>
                   ))}
                 </tbody>

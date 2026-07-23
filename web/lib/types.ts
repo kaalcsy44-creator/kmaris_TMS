@@ -103,7 +103,12 @@ export type ItemCategory = {
 };
 
 // 품목별 구매가·판매가 이력(item_price_history) 롤업
-export type ItemLedgerPrice = { unit_price: number; currency: string; date: string | null };
+export type ItemLedgerPrice = {
+  unit_price: number;
+  currency: string;
+  date: string | null;
+  fx_rate?: number | null;   // 딜 저장 환율(1 USD=? KRW) — 마진 환산에 사용
+};
 export type ItemLedgerRow = {
   item_id?: number;              // 마스터 연결 시. unmatched 행은 없음
   part_no: string;
