@@ -8076,8 +8076,12 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   align-items: center;
   gap: 10px;
 }
+/* 고정 폭 레이아웃 — colgroup 폭대로 렌더해 표가 패널에 딱 맞고 sticky 열이 겹치지
+   않게 한다. 패널이 좁으면 min-width 로 가로 스크롤(찌그러짐 방지). */
 .ledger-table {
   width: 100%;
+  min-width: 960px;
+  table-layout: fixed;
 }
 .ledger-row {
   cursor: pointer;
@@ -8085,11 +8089,10 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 .ledger-row:hover {
   background: #eef3fb;
 }
+/* 설명은 열 폭 안에서 줄바꿈(분류 시 전체 텍스트를 봐야 하므로 자르지 않음). */
 .ledger-desc {
-  max-width: 280px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  word-break: break-word;
 }
 /* Category(Assign) 열은 표가 가로로 넘쳐도 항상 보이도록 우측 고정(sticky). */
 .ledger-cat {
@@ -8109,9 +8112,10 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   box-shadow: -7px 0 7px -6px rgba(20, 40, 80, 0.16);
 }
 .ledger-cat button {
-  max-width: 220px;
+  max-width: 106px;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 /* Buy/Sell 구분 pill (이력 모달) */
 .ledger-pill {

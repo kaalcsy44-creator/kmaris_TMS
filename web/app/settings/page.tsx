@@ -1644,13 +1644,24 @@ function CategoriesTab() {
           ) : (
             <div className="table-wrap">
               <table className="mini wide ledger-table">
+                <colgroup>
+                  <col style={{ width: 96 }} />
+                  <col style={{ width: 250 }} />
+                  <col style={{ width: 90 }} />
+                  <col style={{ width: 112 }} />
+                  <col style={{ width: 112 }} />
+                  <col style={{ width: 64 }} />
+                  <col style={{ width: 52 }} />
+                  <col style={{ width: 78 }} />
+                  <col style={{ width: 118 }} />
+                </colgroup>
                 <thead>
                   <tr>
                     <th>Part No.</th>
                     <th>Description</th>
                     <th>Maker</th>
-                    <th className="num">Buy (latest)</th>
-                    <th className="num">Sell (latest)</th>
+                    <th className="num">Buy</th>
+                    <th className="num">Sell</th>
                     <th className="num">Margin</th>
                     <th className="num">Deals</th>
                     <th>Last</th>
