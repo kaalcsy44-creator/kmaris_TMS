@@ -1387,7 +1387,9 @@ function CategoriesTab() {
     setHist(null);
     try {
       const data = await fetchItemPriceHistory(
-        row.item_id != null ? { item_id: row.item_id } : { part_no: row.part_no }
+        row.item_id != null
+          ? { item_id: row.item_id }
+          : { part_no: row.part_no, description: row.description }
       );
       setHist(data);
     } catch {
@@ -1676,8 +1678,12 @@ function CategoriesTab() {
                         {canEdit ? (
                           <button
                             className="btn tiny"
-                            disabled={!it.part_no}
-                            title={it.part_no ? "Assign / change category" : "No Part No. — cannot classify"}
+                            disabled={!it.part_no && !it.description}
+                            title={
+                              it.part_no || it.description
+                                ? "Assign / change category"
+                                : "No Part No. or description — cannot classify"
+                            }
                             onClick={() => openAssign(it)}
                           >
                             {it.category_path ? `✎ ${it.category_path}` : "＋ Assign"}

@@ -1028,10 +1028,12 @@ export function fetchItemLedger(): Promise<ItemLedger> {
 export function fetchItemPriceHistory(params: {
   item_id?: number;
   part_no?: string;
+  description?: string;
 }): Promise<ItemPriceRow[]> {
   const qs = new URLSearchParams();
   if (params.item_id != null) qs.set("item_id", String(params.item_id));
   if (params.part_no != null) qs.set("part_no", params.part_no);
+  if (params.description != null) qs.set("description", params.description);
   return get<ItemPriceRow[]>(`/api/admin/settings/item-ledger/history?${qs.toString()}`);
 }
 export function rebuildItemLedger(): Promise<{ ok: boolean; rows: number }> {

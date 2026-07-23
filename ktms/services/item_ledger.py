@@ -18,9 +18,26 @@ from db.models import (
 )
 
 
-def part_key(v) -> str:
-    """part_no 정규화 키 — 내부 공백 정리 + 대문자. item_master 매칭·집계용."""
+def _norm(v) -> str:
+    """내부 공백 정리 + 대문자. 정규화 키 공용."""
     return re.sub(r"\s+", " ", str(v or "").strip().upper())
+
+
+def part_key(v) -> str:
+    """part_no 정규화 키."""
+    return _norm(v)
+
+
+def match_key(part_no, description) -> str:
+    """품목 식별 키 — part_no 있으면 'P:'+part_no, 없으면 'D:'+description.
+
+    서비스 항목(Service Charge·Travelling Charge 등)은 part_no 가 없고 description 으로
+    식별되므로 description 을 대체 키로 쓴다. 둘 다 비면 '' (식별 불가)."""
+    pk = _norm(part_no)
+    if pk:
+        return "P:" + pk
+    dk = _norm(description)
+    return ("D:" + dk) if dk else ""
 
 
 def _num(v, default: float = 0.0) -> float:
@@ -31,10 +48,10 @@ def _num(v, default: float = 0.0) -> float:
 
 
 def build_master_index(session) -> dict[str, int]:
-    """정규화 part_no → item_master.id. 같은 키가 여럿이면 가장 낮은 id(안정적)."""
+    """식별키(part_no 또는 description) → item_master.id. 중복 시 가장 낮은 id."""
     idx: dict[str, int] = {}
     for m in session.query(ItemMaster).order_by(ItemMaster.id).all():
-        k = part_key(m.part_no)
+        k = match_key(m.part_no, m.description)
         if k and k not in idx:
             idx[k] = m.id
     return idx
@@ -72,8 +89,9 @@ def rebuild_price_history(session) -> int:
         qty = _num(line.get("qty"), 1.0)
         amt = line.get("amount")
         amount = _num(amt) if amt not in (None, "") else unit * qty
+        desc = (line.get("description") or "")
         rows.append({
-            "item_id": master.get(part_key(pn)),
+            "item_id": master.get(match_key(pn, desc)),
             "price_type": price_type,
             "source_type": source_type,
             "source_id": source_id,
@@ -174,12 +192,12 @@ def stamp_history_item(session, item_id: int) -> int:
     m = session.query(ItemMaster).filter_by(id=item_id).first()
     if not m:
         return 0
-    pk = part_key(m.part_no)
-    if not pk:
+    key = match_key(m.part_no, m.description)
+    if not key:
         return 0
     n = 0
     for h in session.query(ItemPriceHistory).filter(ItemPriceHistory.item_id.is_(None)).all():
-        if part_key(h.part_no) == pk:
+        if match_key(h.part_no, h.description) == key:
             h.item_id = item_id
             n += 1
     return n
@@ -219,7 +237,8 @@ def ledger_rows(session) -> dict:
         if h.item_id:
             matched.setdefault(h.item_id, []).append(h)
         else:
-            unmatched.setdefault(part_key(h.part_no) or f"#{h.id}", []).append(h)
+            # part_no 없으면 description 으로 묶는다(서비스 항목). 둘 다 없으면 행 단위.
+            unmatched.setdefault(match_key(h.part_no, h.description) or f"#{h.id}", []).append(h)
 
     items = []
     for item_id, hs in matched.items():
@@ -241,23 +260,28 @@ def ledger_rows(session) -> dict:
             "description": hs[0].description or "",
             **_summarize(hs),
         })
-    un.sort(key=lambda r: r["part_no"])
+    un.sort(key=lambda r: (r["part_no"], r["description"]))
     return {"items": items, "unmatched": un}
 
 
-def item_history(session, *, item_id: int | None = None, part_no: str | None = None) -> list[dict]:
-    """한 품목의 buy/sell 이력 행 전체(최신순). item_id 우선, 없으면 part_no 로 조회."""
-    q = session.query(ItemPriceHistory)
+def item_history(
+    session, *, item_id: int | None = None,
+    part_no: str | None = None, description: str | None = None,
+) -> list[dict]:
+    """한 품목의 buy/sell 이력 행 전체(최신순).
+
+    item_id 있으면 그 마스터 이력. 없으면 (part_no, description) 식별키로 미연결 이력 조회."""
     if item_id:
-        q = q.filter(ItemPriceHistory.item_id == item_id)
-    elif part_no is not None:
-        pk = part_key(part_no)
-        q = q.filter(ItemPriceHistory.item_id.is_(None))
-        rows = [h for h in q.all() if part_key(h.part_no) == pk]
+        rows = session.query(ItemPriceHistory).filter(ItemPriceHistory.item_id == item_id).all()
         return _history_out(sorted(rows, key=_sort_key, reverse=True))
-    else:
+    key = match_key(part_no, description)
+    if not key:
         return []
-    return _history_out(sorted(q.all(), key=_sort_key, reverse=True))
+    rows = [
+        h for h in session.query(ItemPriceHistory).filter(ItemPriceHistory.item_id.is_(None)).all()
+        if match_key(h.part_no, h.description) == key
+    ]
+    return _history_out(sorted(rows, key=_sort_key, reverse=True))
 
 
 def _history_out(rows: list) -> list[dict]:

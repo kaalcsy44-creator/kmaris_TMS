@@ -66,7 +66,7 @@ from pydantic import BaseModel
 from sqlalchemy import func
 from db.models import ItemPriceHistory
 from services.item_ledger import (
-    ledger_rows, item_history, rebuild_price_history, stamp_history_item, part_key,
+    ledger_rows, item_history, rebuild_price_history, stamp_history_item, match_key,
 )
 
 
@@ -538,11 +538,13 @@ def settings_item_ledger():
 
 
 @app.get("/api/admin/settings/item-ledger/history", dependencies=[Depends(require_token)])
-def settings_item_ledger_history(item_id: int | None = None, part_no: str | None = None):
+def settings_item_ledger_history(
+    item_id: int | None = None, part_no: str | None = None, description: str | None = None,
+):
     """한 품목의 buy/sell 이력(최신순). 고객·공급사·선박 이름을 해석해 붙인다."""
     s = get_session()
     try:
-        rows = item_history(s, item_id=item_id, part_no=part_no)
+        rows = item_history(s, item_id=item_id, part_no=part_no, description=description)
         cust = {c.id: c.name for c in s.query(Customer).all()}
         vend = {v.id: v.name for v in s.query(Vendor).all()}
         vess = {v.id: v.name for v in s.query(Vessel).all()}
@@ -590,15 +592,17 @@ def assign_item_ledger_category(body: ItemLedgerAssign):
             master.category_id = body.category_id
         else:
             pn = (body.part_no or "").strip()
-            if not pn:
-                raise HTTPException(status_code=400, detail="Part No.가 없는 품목은 분류할 수 없습니다.")
-            pk = part_key(pn)
-            master = next((m for m in s.query(ItemMaster).all() if part_key(m.part_no) == pk), None)
+            desc = (body.description or "").strip()
+            key = match_key(pn, desc)   # part_no 없으면 description 으로 식별(서비스 항목)
+            if not key:
+                raise HTTPException(status_code=400, detail="Part No.·설명이 모두 없는 품목은 분류할 수 없습니다.")
+            master = next((m for m in s.query(ItemMaster).all()
+                           if match_key(m.part_no, m.description) == key), None)
             if master:
                 master.category_id = body.category_id
             else:
                 master = ItemMaster(
-                    part_no=pn, description=(body.description or ""), maker=(body.maker or ""),
+                    part_no=pn, description=desc, maker=(body.maker or ""),
                     unit="PCS", category_id=body.category_id,
                 )
                 s.add(master)
