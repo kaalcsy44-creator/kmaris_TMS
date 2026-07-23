@@ -18,6 +18,7 @@ from _core import (
     Response,
     UploadFile,
     User,
+    VendorQuote,
     resolve_signature,
     Vessel,
     _apply_owner_filter,
@@ -169,6 +170,7 @@ def create_customer_quote(rfq_id: int, body: CustomerQuoteCreate,
             round_digits=body.round_digits,
             discount_pct=(body.discount_pct or 0.0),
             fx_rate=body.fx_rate,
+            vendor_quote_id=(body.vendor_quote_id or None),  # 원가 출처로 고른 벤더 견적
             status=QuotationStatus.SENT,
             valid_until=body.valid_until,
             items=items,
@@ -196,10 +198,15 @@ def customer_quotation_detail(qtn_id: int):
         cust = s.query(Customer).filter_by(id=qtn.customer_id).first()
         vessel = s.query(Vessel).filter_by(id=qtn.vessel_id).first() if qtn.vessel_id else None
         rfq = s.query(RFQ).filter_by(id=qtn.rfq_id).first() if qtn.rfq_id else None
+        # 원가 출처로 선택해 둔 벤더 견적(있으면) — 편집기 드롭다운 시드·문서 표기용.
+        vq_id = getattr(qtn, "vendor_quote_id", None)
+        vq = s.query(VendorQuote).filter_by(id=vq_id).first() if vq_id else None
         return {
             "id": qtn.id,
             "qtn_no": qtn.qtn_no,
             "rfq_id": qtn.rfq_id,
+            "vendor_quote_id": vq_id or None,
+            "vendor_quote_no": (vq.vendor_quote_no if vq else "") or "",
             "assignee_id": (rfq.created_by or 0) if rfq else 0,
             "rfq_no": _rfq_no_disp(rfq.rfq_no) if rfq else "",
             **_base_meta(s, rfq),   # 공통 기본정보(고객·선박·업무·Project No.·최초 RFQ)
@@ -253,6 +260,10 @@ def update_customer_quotation(qtn_id: int, body: CustomerQuoteUpdate):
             qtn.discount_pct = body.discount_pct
         if body.fx_rate is not None:
             qtn.fx_rate = body.fx_rate
+        # 벤더 견적 링크 — 명시적으로 전송된 경우에만 갱신(null 이면 링크 해제). 다른 필드처럼
+        # "값이 없으면 건너뛰기"로 하면 수동입력(=해제) 저장이 반영되지 않으므로 field-set 로 판별.
+        if "vendor_quote_id" in body.model_fields_set:
+            qtn.vendor_quote_id = body.vendor_quote_id or None
         if body.valid_until is not None:
             qtn.valid_until = body.valid_until or None
         if body.terms is not None:

@@ -282,6 +282,7 @@ export type PoWorkOptions = {
     status: string;
     currency: string;
     amount: number;
+    vendor_quote_no: string; // 이 견적이 링크한 벤더 견적번호(미링크면 "")
     items: PoWorkItem[];
   }[];
   orders: {
@@ -943,6 +944,9 @@ export type CustomerQuotationDetail = {
   id: number;
   qtn_no: string;
   rfq_id: number | null;
+  // 원가 출처로 선택한 벤더 견적. 편집기 "Select Vendor quote" 드롭다운 시드용.
+  vendor_quote_id?: number | null;
+  vendor_quote_no?: string; // 위 링크가 가리키는 벤더 견적번호(미링크면 "")
   assignee_id: number; // 담당자(PIC) = RFQ.created_by (0 = 미지정)
   rfq_no: string;
   project_no: string;

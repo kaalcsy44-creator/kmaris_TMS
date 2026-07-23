@@ -1303,7 +1303,8 @@ export function createCustomerQuote(
   costCurrency?: string,
   roundDigits?: number,
   discountPct?: number,
-  fxRate?: number | null
+  fxRate?: number | null,
+  vendorQuoteId?: number | null
 ): Promise<{ ok: boolean; id: number; qtn_no: string }> {
   return post(`/api/admin/rfq/${rfqId}/customer-quote`, {
     qtn_no: qtnNo,
@@ -1318,6 +1319,7 @@ export function createCustomerQuote(
     valid_until: validUntil,
     remarks,
     terms,
+    vendor_quote_id: vendorQuoteId ?? null,
   });
 }
 
@@ -1421,6 +1423,7 @@ export function updateCustomerQuotation(
     valid_until?: string;
     status?: string;
     terms?: QuotationTerms;
+    vendor_quote_id?: number | null; // 원가 출처 벤더 견적. null 이면 링크 해제.
   }
 ): Promise<{ ok: boolean; qtn_no: string }> {
   return put(`/api/admin/quotation/${id}`, body);

@@ -31,6 +31,7 @@ from _core import (
     User,
     Vendor,
     VendorPoPreview,
+    VendorQuote,
     resolve_signature,
     VendorRFQ,
     Vessel,
@@ -273,8 +274,14 @@ def po_work_options():
                 "items": [_item_view(it) for it in (r.items or [])],
             })
 
+        # 견적이 원가 출처로 링크한 벤더 견적번호 — id→번호 맵으로 한 번에 조회(N+1 방지).
+        vq_no_by_id = {
+            vq.id: (vq.vendor_quote_no or "")
+            for vq in s.query(VendorQuote.id, VendorQuote.vendor_quote_no).all()
+        }
         quotations = []
         for q in s.query(Quotation).order_by(Quotation.id.desc()).all():
+            _vq_id = getattr(q, "vendor_quote_id", None)
             quotations.append({
                 "id": q.id,
                 "qtn_no": q.qtn_no,
@@ -286,6 +293,8 @@ def po_work_options():
                 "status": _enum_val(q.status),
                 "currency": q.currency or "USD",
                 "amount": round(_total_amount(q.items or []), 2),
+                # 이 견적이 링크한 벤더 견적번호(미링크면 ""). 개요에서 매입측 표기에 쓴다.
+                "vendor_quote_no": vq_no_by_id.get(_vq_id, "") if _vq_id else "",
                 "items": [_item_view(it) for it in (q.items or [])],
             })
 

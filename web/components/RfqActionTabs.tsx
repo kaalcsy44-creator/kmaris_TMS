@@ -1930,6 +1930,8 @@ function CustomerQuoteDetailModal({
         setAttn((data.terms as { attn?: string })?.attn || "");
         setRefNo((data.terms as { ref_no?: string })?.ref_no || "");
         setItems(data.items || []);
+        // 원가 출처로 저장해 둔 벤더 견적을 드롭다운에 시드 — 어떤 벤더 견적과 이어졌는지 보인다.
+        setImportVqId(typeof data.vendor_quote_id === "number" ? data.vendor_quote_id : "");
         setMsg(null);
         if (data.rfq_id) {
           fetchRfqVendorQuotes(data.rfq_id)
@@ -1962,6 +1964,8 @@ function CustomerQuoteDetailModal({
       status,
       terms: termsForSave(),
       items,
+      // "Select Vendor quote"에서 고른 원가 출처. 수동입력(빈 값)이면 null 로 링크 해제.
+      vendor_quote_id: importVqId === "" ? null : importVqId,
     });
     onChanged();
   }
@@ -3445,7 +3449,7 @@ function CustomerQuoteAction({
     setMsg(null);
     setErr(null);
     try {
-      const r = await createCustomerQuote(rfqId, currency, finalTotal, items, validUntil, undefined, terms, qtnNo, sentAt, costCurrency, roundDigits, discountPct, fxRate);
+      const r = await createCustomerQuote(rfqId, currency, finalTotal, items, validUntil, undefined, terms, qtnNo, sentAt, costCurrency, roundDigits, discountPct, fxRate, importVqId === "" ? null : importVqId);
       setQtn({ id: r.id, qtn_no: r.qtn_no });
       setMsg(`Sent — ${r.qtn_no}`);
       onDone();

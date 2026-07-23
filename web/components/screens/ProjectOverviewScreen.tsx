@@ -981,7 +981,8 @@ function OrderItemGroup({
     <tbody className="ov-grp">
       <GroupHead
         vessel={order.vessel}
-        quoteDocs={quote ? { pur: vendorQuoteNo, sales: quote.qtn_no || "—" } : null}
+        // 매입측 = 이 견적이 링크한 벤더 견적번호. 미링크(구 데이터)면 프로젝트 집계값으로 폴백.
+        quoteDocs={quote ? { pur: quote.vendor_quote_no || vendorQuoteNo, sales: quote.qtn_no || "—" } : null}
         poDocs={{ pur: vpoNos, sales: order.po_no || "—" }}
         ciNo={ci?.ci_no || ""}
       />
@@ -1170,7 +1171,8 @@ function QuoteOnlyGroup({ quoteId, vendorQuoteNo }: { quoteId: number; vendorQuo
     <tbody className="ov-grp">
       <GroupHead
         vessel={quote.vessel}
-        quoteDocs={{ pur: vendorQuoteNo, sales: quote.qtn_no || "—" }}
+        // 매입측 = 이 견적이 링크한 벤더 견적번호. 미링크(구 데이터)면 프로젝트 집계값으로 폴백.
+        quoteDocs={{ pur: quote.vendor_quote_no || vendorQuoteNo, sales: quote.qtn_no || "—" }}
         poDocs={{ pur: "", sales: "" }}
         ciNo=""
       />

@@ -46,6 +46,7 @@ _MIGRATIONS = {
         "round_digits": "INTEGER",
         "discount_pct": "FLOAT",
         "fx_rate": "FLOAT",
+        "vendor_quote_id": "INTEGER",
     },
     "customers": {
         "contact_phone": "VARCHAR(50)",

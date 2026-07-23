@@ -2580,6 +2580,7 @@ class CustomerQuoteCreate(BaseModel):
     valid_until: str | None = None
     remarks: str = ""
     terms: dict | None = None
+    vendor_quote_id: int | None = None  # 원가 출처로 선택한 벤더 견적(선택)
 
 
 class CustomerQuoteUpdate(BaseModel):
@@ -2594,6 +2595,9 @@ class CustomerQuoteUpdate(BaseModel):
     valid_until: str | None = None
     status: str | None = None
     terms: dict | None = None
+    # 원가 출처로 선택한 벤더 견적 id. 명시적으로 보내면(null 포함) 그 값으로 갱신 —
+    # 수동입력 전환 시 null 로 링크 해제까지 되게, 갱신은 model_fields_set 로 판별한다.
+    vendor_quote_id: int | None = None
 
 
 class QuotationEmailPreviewReq(BaseModel):

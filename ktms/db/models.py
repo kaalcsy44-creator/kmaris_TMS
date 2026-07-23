@@ -299,6 +299,9 @@ class Quotation(Base):
     id              = Column(Integer, primary_key=True)
     qtn_no          = Column(String(40), unique=True, nullable=True)   # 수동·선택 입력
     rfq_id          = Column(Integer, ForeignKey("rfqs.id"), nullable=True)
+    # 이 견적의 원가(매입) 출처로 선택한 벤더 견적. "Select Vendor quote"에서 고른 값을 저장 —
+    # 개요/문서에서 이 견적이 어느 벤더 견적번호에서 나왔는지 잇기 위함. 미선택(수동입력)이면 null.
+    vendor_quote_id = Column(Integer, ForeignKey("vendor_quotes.id"), nullable=True)
     customer_id     = Column(Integer, ForeignKey("customers.id"))
     vessel_id       = Column(Integer, ForeignKey("vessels.id"), nullable=True)
     date            = Column(String(10))
