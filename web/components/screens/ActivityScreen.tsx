@@ -573,9 +573,6 @@ export default function ActivityScreen() {
                       {date ? <span className="act-digest-date">{date}</span> : null}
                       <span className="act-digest-title">{row.project_title || "(untitled)"}</span>
                       {vessel ? <span className="act-digest-vessel" title={vessel}>· {vessel}</span> : null}
-                      {stageLabel ? (
-                        <span className="act-digest-stage" title="Latest completed stage">{stageLabel}</span>
-                      ) : null}
                     </div>
                     {(row.customer || vend) ? (
                       <div className="act-digest-parties">
@@ -587,6 +584,21 @@ export default function ActivityScreen() {
                         ) : null}
                         {vend ? <span className="act-digest-sep">/</span> : null}
                         {vend ? <VendorMonograms value={vend} statuses={vendorStatusesFor(row)} /> : null}
+                      </div>
+                    ) : null}
+                    {/* 단계바 — 기본정보와 활동로그 사이. 얇은 세그먼트로 현 진행단계를 표시하고,
+                        완료(현 단계)명은 바 끝에. 색상은 업무타입(Parts=파랑/서비스=초록)에 맞춘다. */}
+                    {steps.length > 0 ? (
+                      <div
+                        className="act-digest-stagebar"
+                        title={stageLabel ? `Current stage: ${stageLabel}` : undefined}
+                      >
+                        <div className="act-digest-steps">
+                          {steps.map((_, i) => (
+                            <span key={i} className={`act-digest-step${i < row.stage ? " on" : ""}`} />
+                          ))}
+                        </div>
+                        {stageLabel ? <span className="act-digest-stagelbl">{stageLabel}</span> : null}
                       </div>
                     ) : null}
                     <ul className="act-digest-acts">
