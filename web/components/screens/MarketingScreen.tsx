@@ -19,6 +19,7 @@ import CustomerName from "@/components/common/CustomerName";
 import CustomerSelect from "@/components/common/CustomerSelect";
 import Modal from "@/components/common/Modal";
 import ComposeEmailModal from "@/components/screens/ComposeEmailModal";
+import BrochuresPanel from "@/components/screens/BrochuresPanel";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -107,6 +108,8 @@ export default function MarketingScreen() {
   const [editing, setEditing] = useState<MarketingRow | null>(null);
   const [adding, setAdding] = useState(false);
   const [composing, setComposing] = useState(false);
+  // 화면 탭: 활동 목록(List) / 브로슈어·회사소개서 라이브러리(Brochures).
+  const [view, setView] = useState<"list" | "brochures">("list");
 
   const rows = useMemo(() => data?.rows ?? [], [data]);
 
@@ -114,7 +117,10 @@ export default function MarketingScreen() {
   useEffect(() => {
     if (!idParam) return;
     const match = rows.find((r) => r.id === Number(idParam));
-    if (match) setEditing(match);
+    if (match) {
+      setView("list");
+      setEditing(match);
+    }
   }, [idParam, rows]);
 
   function reload() {
@@ -158,6 +164,19 @@ export default function MarketingScreen() {
 
   return (
     <div className="action-tabs">
+      <div className="page-tabs">
+        <button className={view === "list" ? "on" : ""} onClick={() => setView("list")}>
+          List
+        </button>
+        <button className={view === "brochures" ? "on" : ""} onClick={() => setView("brochures")}>
+          Brochures
+        </button>
+      </div>
+
+      {view === "brochures" ? (
+        <BrochuresPanel />
+      ) : (
+        <>
       {error && !data ? (
         <div className="state error">API error: {error.message}</div>
       ) : null}
@@ -238,6 +257,8 @@ export default function MarketingScreen() {
           }}
         />
       ) : null}
+        </>
+      )}
     </div>
   );
 }
