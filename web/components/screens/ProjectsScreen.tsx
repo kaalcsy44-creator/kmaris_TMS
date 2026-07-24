@@ -2098,6 +2098,32 @@ export function PipelineModal({
     document.addEventListener("pointermove", onMove);
     document.addEventListener("pointerup", onUp);
   }
+  // 헤더를 잡고 드래그해 팝업 위치를 옮긴다(크기 유지). 버튼·선택 등 조작 요소 위에선 시작 안 함.
+  function startDrag(e: React.PointerEvent) {
+    if ((e.target as HTMLElement).closest("button, a, input, select, textarea")) return;
+    e.preventDefault();
+    const el = modalRef.current;
+    if (!el) return;
+    const r0 = el.getBoundingClientRect();
+    const start = { x: e.clientX, y: e.clientY, left: r0.left, top: r0.top, w: r0.width, h: r0.height };
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "grabbing";
+    const onMove = (ev: PointerEvent) => {
+      const dx = ev.clientX - start.x;
+      const dy = ev.clientY - start.y;
+      const left = Math.min(Math.max(start.left + dx, 120 - start.w), window.innerWidth - 120);
+      const top = Math.min(Math.max(start.top + dy, 8), window.innerHeight - 60);
+      setModalBox({ left, top, w: start.w, h: start.h });
+    };
+    const onUp = () => {
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+    };
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp);
+  }
   const RESIZE_DIRS = ["n", "s", "e", "w", "ne", "nw", "se", "sw"] as const;
 
   // 프로젝트 정보 편집·삭제는 우측 1단계(RFQ Received) 패널에서 처리한다.
@@ -2164,7 +2190,7 @@ export function PipelineModal({
             aria-hidden
           />
         ))}
-        <div className="pl-modal-head">
+        <div className="pl-modal-head pl-modal-head--drag" onPointerDown={startDrag}>
           {/* 인접 프로젝트 전환 — 헤더 맨 앞의 ‹ › (방향키와 같은 동작). 목록 순서대로 앞뒤 딜. */}
           {!isNewProject && onNavigate ? (
             <span className="pl-modal-nav" role="group" aria-label="Adjacent projects">

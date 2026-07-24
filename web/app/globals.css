@@ -2772,6 +2772,21 @@ table.mini td.mini-empty {
 .pl-modal-head .intl-title {
   flex: 1;
 }
+/* 헤더를 잡고 드래그해 팝업 이동 — 빈 영역·제목은 이동 커서, 버튼·입력은 각자 커서 유지. */
+.pl-modal-head--drag {
+  cursor: move;
+  touch-action: none;
+}
+.pl-modal-head--drag .intl-title,
+.pl-modal-head--drag .pl-proj-name {
+  cursor: move;
+}
+.pl-modal-head--drag button,
+.pl-modal-head--drag select,
+.pl-modal-head--drag input,
+.pl-modal-head--drag a {
+  cursor: pointer;
+}
 .modal-title-row {
   display: inline-flex;
   align-items: center;

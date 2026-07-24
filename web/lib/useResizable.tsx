@@ -75,6 +75,34 @@ export function useResizable(opts?: { minW?: number; minH?: number; storageKey?:
     document.addEventListener("pointerup", onUp);
   }
 
+  // 헤더를 잡고 드래그해 위치를 옮긴다(크기는 유지). 버튼 등 조작 요소 위에선 시작 안 함.
+  function startDrag(e: React.PointerEvent) {
+    if ((e.target as HTMLElement).closest("button, a, input, select, textarea, [role='group']")) return;
+    e.preventDefault();
+    const el = ref.current;
+    if (!el) return;
+    const r0 = el.getBoundingClientRect();
+    const start = { x: e.clientX, y: e.clientY, left: r0.left, top: r0.top, w: r0.width, h: r0.height };
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "grabbing";
+    const onMove = (ev: PointerEvent) => {
+      const dx = ev.clientX - start.x;
+      const dy = ev.clientY - start.y;
+      // 완전히 화면 밖으로 나가지 않게 최소 120px 는 남긴다.
+      const left = Math.min(Math.max(start.left + dx, 120 - start.w), window.innerWidth - 120);
+      const top = Math.min(Math.max(start.top + dy, 8), window.innerHeight - 60);
+      setBox({ left, top, w: start.w, h: start.h });
+    };
+    const onUp = () => {
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+    };
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp);
+  }
+
   const style: CSSProperties | undefined = box
     ? {
         position: "fixed",
@@ -92,5 +120,8 @@ export function useResizable(opts?: { minW?: number; minH?: number; storageKey?:
     <span key={d} className={`pl-resize-h ${d}`} onPointerDown={(e) => startResize(d, e)} aria-hidden />
   ));
 
-  return { ref, style, handles };
+  // 드래그 핸들(모달 헤더)에 스프레드해 붙인다.
+  const dragHandleProps = { onPointerDown: startDrag };
+
+  return { ref, style, handles, dragHandleProps };
 }

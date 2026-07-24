@@ -2296,7 +2296,7 @@ function DocPreviewButton({
                 onClick={(e) => e.stopPropagation()}
               >
                 {resize.handles}
-                <div className="doc-preview-head">
+                <div className="doc-preview-head pl-modal-head--drag" {...resize.dragHandleProps}>
                   <span className="doc-preview-title">{filename}</span>
                   <div className="doc-preview-acts">
                     {xlsxKind ? <button className="btn sm" onClick={saveExcel}>Excel Download</button> : null}

@@ -69,7 +69,7 @@ export default function Modal({
         aria-modal="true"
       >
         {resize.handles}
-        <div className="pl-modal-head">
+        <div className="pl-modal-head pl-modal-head--drag" {...resize.dragHandleProps}>
           <span className="intl-title">
             <b>{title}</b>
           </span>
