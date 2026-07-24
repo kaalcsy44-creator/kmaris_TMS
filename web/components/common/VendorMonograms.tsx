@@ -5,7 +5,7 @@
 // 전체 이름은 hover 툴팁으로 제공한다. 여러 vendor(vrfq_vendors는 "\n", PO vendor는
 // "," 로 연결)를 분리해 최대 MAX개만 배지로 보여주고 나머지는 +N 으로 접는다.
 
-const MAX = 3;
+const MAX = 4;
 
 /** "\n" 또는 "," 로 이어진 vendor 문자열을 개별 이름으로 분리(중복 제거). */
 function splitVendors(value: string): string[] {
