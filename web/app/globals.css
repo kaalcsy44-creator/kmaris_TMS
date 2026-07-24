@@ -3622,7 +3622,7 @@ table.mini.items-edit td.row-tools {
   color: var(--ink);
 }
 .btn {
-  height: 36px;
+  height: 32px;
   border: 1px solid #d7e2ee;
   background: #fff;
   border-radius: 8px;
@@ -7586,7 +7586,8 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   margin-bottom: 10px;
 }
 .btn.sm {
-  padding: 4px 12px;
+  height: 28px;
+  padding: 0 12px;
   font-size: 12px;
   flex: 0 0 auto;
 }
