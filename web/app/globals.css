@@ -8463,6 +8463,29 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 }
 .linklike:hover { color: #00468c; }
 
+/* Icon-only action button (rename pencil, delete x, inline save/cancel) */
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted, #6b7684);
+  cursor: pointer;
+  line-height: 0;
+}
+.icon-btn:hover {
+  background: var(--hover, #eef2f7);
+  color: var(--ink, #1f2937);
+}
+.icon-btn:disabled { opacity: 0.45; cursor: default; }
+.icon-btn.danger:hover { color: #c0392b; }
+.icon-btn svg { width: 16px; height: 16px; display: block; }
+
 /* CC 복수 입력 — 주소를 칩으로 쌓고, 마지막에 입력칸이 이어짐 */
 .cc-chips {
   display: flex;

@@ -2356,6 +2356,32 @@ function EmailTemplatesTab() {
 
 // 홍보 이메일 첨부용 자료 라이브러리(회사소개서·브로슈어). 여기 등록한 파일을
 // Marketing 화면의 이메일 작성 모달에서 골라 첨부한다.
+
+// Inline action icons (16px, stroke = currentColor so .icon-btn controls color).
+function PencilIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+    </svg>
+  );
+}
+function XIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M18 6 6 18" />
+      <path d="m6 6 12 12" />
+    </svg>
+  );
+}
+function CheckIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M20 6 9 17l-5-5" />
+    </svg>
+  );
+}
+
 function fmtBytes(n: number): string {
   if (!n) return "—";
   if (n < 1024) return `${n} B`;
@@ -2545,18 +2571,49 @@ function BrochuresTab() {
               <tr key={a.id}>
                 <td>
                   {editId === a.id ? (
-                    <input
-                      value={editVal}
-                      autoFocus
-                      style={{ width: "100%", maxWidth: 320 }}
-                      onChange={(e) => setEditVal(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") saveRename(a);
-                        else if (e.key === "Escape") cancelRename();
-                      }}
-                    />
+                    <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                      <input
+                        value={editVal}
+                        autoFocus
+                        style={{ width: "100%", maxWidth: 260 }}
+                        onChange={(e) => setEditVal(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") saveRename(a);
+                          else if (e.key === "Escape") cancelRename();
+                        }}
+                      />
+                      <button
+                        type="button"
+                        className="icon-btn"
+                        title="Save"
+                        disabled={busy}
+                        onClick={() => saveRename(a)}
+                      >
+                        <CheckIcon />
+                      </button>
+                      <button
+                        type="button"
+                        className="icon-btn"
+                        title="Cancel"
+                        disabled={busy}
+                        onClick={cancelRename}
+                      >
+                        <XIcon />
+                      </button>
+                    </div>
                   ) : (
-                    a.label
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span>{a.label}</span>
+                      <button
+                        type="button"
+                        className="icon-btn"
+                        title="Rename"
+                        disabled={busy}
+                        onClick={() => startRename(a)}
+                      >
+                        <PencilIcon />
+                      </button>
+                    </div>
                   )}
                 </td>
                 <td>
@@ -2564,6 +2621,7 @@ function BrochuresTab() {
                     type="button"
                     className="linklike"
                     title="Preview"
+                    disabled={previewBusy}
                     onClick={() => openPreview(a)}
                   >
                     {a.filename}
@@ -2573,45 +2631,15 @@ function BrochuresTab() {
                 <td>{(a.created_at || "").replace("T", " ")}</td>
                 <td>
                   <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
-                    {editId === a.id ? (
-                      <>
-                        <button type="button" className="btn primary sm" disabled={busy} onClick={() => saveRename(a)}>
-                          Save
-                        </button>
-                        <button type="button" className="btn sm" disabled={busy} onClick={cancelRename}>
-                          Cancel
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <button type="button" className="btn sm" disabled={busy} onClick={() => startRename(a)}>
-                          Rename
-                        </button>
-                        <button
-                          type="button"
-                          className="btn sm"
-                          disabled={previewBusy}
-                          onClick={() => openPreview(a)}
-                        >
-                          Preview
-                        </button>
-                        <button
-                          type="button"
-                          className="btn sm"
-                          onClick={() => downloadMarketingAsset(a.id, a.filename).catch(() => setErr("Download failed."))}
-                        >
-                          Download
-                        </button>
-                        <button
-                          type="button"
-                          className="btn danger sm"
-                          disabled={busy}
-                          onClick={() => remove(a)}
-                        >
-                          Delete
-                        </button>
-                      </>
-                    )}
+                    <button
+                      type="button"
+                      className="icon-btn danger"
+                      title="Delete"
+                      disabled={busy}
+                      onClick={() => remove(a)}
+                    >
+                      <XIcon />
+                    </button>
                   </div>
                 </td>
               </tr>
