@@ -73,7 +73,7 @@ export default function ProjectOverviewScreen({
   /** 작업 팝업 안에 끼워 넣는 모드 — 자체 머리글(신원·PIC·인쇄·뒤로)을 렌더하지 않는다. */
   embedded?: boolean;
   /** 단계 줄 클릭 처리. 주면 링크 대신 이 콜백을 쓴다(팝업 안에서 화면 전환). */
-  onOpenStage?: (stage: number) => void;
+  onOpenStage?: (stage: number, vrfqId?: number) => void;
   /** 활동기록을 이 화면에서 추가한 뒤 부모에게 알린다(팝업/목록 갱신). */
   onActivityChanged?: () => void | Promise<unknown>;
 }) {
@@ -220,7 +220,7 @@ function Overview({
   rfqItems: RfqItem[] | null;
   vendorQuoteNo: string;
   embedded?: boolean;
-  onOpenStage?: (stage: number) => void;
+  onOpenStage?: (stage: number, vrfqId?: number) => void;
   /** 활동기록 추가 후 데이터 갱신 콜백. */
   onActivityAdded?: () => void | Promise<unknown>;
 }) {
@@ -367,7 +367,7 @@ function StageTimeline({
   chain: StageChainItem[];
   acts: Activity[];
   /** 주면 단계 줄이 링크 대신 이 콜백을 부른다(작업 팝업 안에서 화면 전환). */
-  onOpenStage?: (stage: number) => void;
+  onOpenStage?: (stage: number, vrfqId?: number) => void;
   /** 활동기록 추가 후 데이터 갱신 콜백. 주면 각 단계에 "+ note" 입력이 열린다. */
   onActivityAdded?: () => void | Promise<unknown>;
 }) {
@@ -434,13 +434,18 @@ function StageTimeline({
                         const openTitle = onOpenStage
                           ? `Open stage ${c.no} in the work view`
                           : `Open stage ${c.no} in Progress`;
-                        const rowLink = (children: ReactNode) =>
+                        // vrfqId: 2단계 RFQ Sent 로그를 클릭하면 그 벤더 RFQ 상세로 바로 이동.
+                        const rowLink = (children: ReactNode, vrfqId?: number) =>
                           onOpenStage ? (
-                            <button type="button" className="ov-tl-rowlink" onClick={() => onOpenStage(c.no)} title={openTitle}>
+                            <button type="button" className="ov-tl-rowlink" onClick={() => onOpenStage(c.no, vrfqId)} title={openTitle}>
                               {children}
                             </button>
                           ) : (
-                            <Link className="ov-tl-rowlink" href={`/project?rfq=${row.rfq_id}&stage=${c.no}`} title={openTitle}>
+                            <Link
+                              className="ov-tl-rowlink"
+                              href={`/project?rfq=${row.rfq_id}&stage=${c.no}${vrfqId ? `&vrfq=${vrfqId}` : ""}`}
+                              title={openTitle}
+                            >
                               {children}
                             </Link>
                           );
@@ -499,7 +504,15 @@ function StageTimeline({
                               if (i === mainIdx) {
                                 return (
                                   <li key={i} className="ov-tl-main">
-                                    {rowLink(<><span className="ov-tl-dot">{c.no}</span>{dateEl}{contentEl}</>)}
+                                    {rowLink(<><span className="ov-tl-dot">{c.no}</span>{dateEl}{contentEl}</>, a.vrfqId)}
+                                  </li>
+                                );
+                              }
+                              // 2단계 RFQ Sent 처럼 벤더 RFQ id 가 있는 보조 행은 그 벤더 상세로 가는 링크.
+                              if (a.vrfqId) {
+                                return (
+                                  <li key={i}>
+                                    {rowLink(<><span className="ov-tl-gutter" />{dateEl}{contentEl}</>, a.vrfqId)}
                                   </li>
                                 );
                               }

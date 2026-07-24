@@ -841,7 +841,7 @@ export type PipelineRow = {
   // 표시 규칙: 견적 수신=선명, 대기=회색, (견적불가 통보 || 견적단계 넘긴 미수신)=취소선.
   rfq_vendors?: { name: string; quoted: boolean; declined?: boolean; contact?: string }[];
   // RFQ 발송 이력 — 벤더 RFQ 1건 = 발송 1건(중복제거 없음). 업무일지에서 발송별 별도 행 표시.
-  rfq_sends?: { vendor: string; sent_at: string }[];
+  rfq_sends?: { id: number; vendor: string; sent_at: string }[];
   stage: number;
   status: string;
   cancelled?: boolean;            // 종결(취소/실주) — 보드 Cancelled 존 분류

@@ -119,11 +119,13 @@ export default function ProjectsScreen() {
   const deepRfq = params.get("rfq");
   const deepOrder = params.get("order");
   const deepStage = params.get("stage");
+  const deepVrfq = params.get("vrfq");
   const deepView = params.get("view");
   const [deepLink, setDeepLink] = useState<{
     rfqId: number | null;
     orderId: number | null;
     stage: number | null;
+    vrfqId: number | null;
     view: "work" | "overview";
   } | null>(null);
   useEffect(() => {
@@ -133,11 +135,12 @@ export default function ProjectsScreen() {
       rfqId: deepRfq ? Number(deepRfq) : null,
       orderId: deepOrder ? Number(deepOrder) : null,
       stage: deepStage ? Number(deepStage) : null,
+      vrfqId: deepVrfq ? Number(deepVrfq) : null,
       view: deepView === "overview" ? "overview" : "work",
     });
     // URL 정리 — 새로고침마다 같은 팝업이 다시 열리지 않도록 파라미터를 제거한다.
     router.replace("/project", { scroll: false });
-  }, [deepRfq, deepOrder, deepStage, deepView, router]);
+  }, [deepRfq, deepOrder, deepStage, deepVrfq, deepView, router]);
   // 내부확인용·고객확인용 모두 통합 파이프라인(rows) 사용. 단계 체계만 12 vs 7로 다름.
   const {
     data: pipeline,
@@ -220,6 +223,7 @@ export default function ProjectsScreen() {
               openRfqId={deepLink?.rfqId ?? null}
               openOrderId={deepLink?.orderId ?? null}
               openStage={deepLink?.stage ?? null}
+              openVrfqId={deepLink?.vrfqId ?? null}
               openView={deepLink?.view ?? "work"}
             />
           )}
@@ -518,6 +522,7 @@ function PipelineTable({
   openRfqId = null,
   openOrderId = null,
   openStage = null,
+  openVrfqId = null,
   openView = "work",
 }: {
   rows: PipelineRow[];
@@ -539,12 +544,15 @@ function PipelineTable({
   openRfqId?: number | null;
   openOrderId?: number | null;
   openStage?: number | null;
+  openVrfqId?: number | null;
   openView?: "work" | "overview";
 }) {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [initialModalView, setInitialModalView] = useState<"work" | "overview">("work");
   // 딥링크로 열 때만 지정 단계로 진입. 수동 오픈 시엔 null → 해당 프로젝트의 현재 단계로.
   const [deepStage, setDeepStage] = useState<number | null>(null);
+  // 딥링크로 2단계 진입 시 초점 벤더 RFQ id(그 벤더 상세를 바로 선택).
+  const [deepVrfqId, setDeepVrfqId] = useState<number | null>(null);
   // 딥링크 1회 소비 가드(행 로드 지연·재렌더 시 닫은 팝업이 다시 열리지 않도록).
   const deepConsumed = useRef(false);
   // 목록·상세 모달 공용 오픈 헬퍼(수동 오픈은 지정 단계 없음).
@@ -552,11 +560,13 @@ function PipelineTable({
     setInitialModalView("work");
     setSelectedId(id);
     setDeepStage(null);
+    setDeepVrfqId(null);
   }, []);
   const openOverview = useCallback((id: number) => {
     setInitialModalView("overview");
     setSelectedId(id);
     setDeepStage(null);
+    setDeepVrfqId(null);
   }, []);
   useEffect(() => {
     if (deepConsumed.current) return;
@@ -569,7 +579,8 @@ function PipelineTable({
     setInitialModalView(openView);
     setSelectedId(id);
     setDeepStage(openStage && openStage > 0 ? openStage : null);
-  }, [openRfqId, openOrderId, openStage, openView, rows]);
+    setDeepVrfqId(openVrfqId && openVrfqId > 0 ? openVrfqId : null);
+  }, [openRfqId, openOrderId, openStage, openVrfqId, openView, rows]);
   // 목록 표시 방식: 표(table) / 칸반 보드(board). 같은 데이터·같은 상세 모달 재사용.
   const [view, setView] = useState<"table" | "board">("board");
   // 현황판 전체 미리보기(A4 가로 이미지) 팝업 열림 여부.
@@ -1102,11 +1113,13 @@ function PipelineTable({
           vessels={vessels}
           onChanged={onChanged}
           initialStage={deepStage}
+          initialVrfqId={deepVrfqId}
           initialView={initialModalView}
           onNavigate={navigateSelected}
           onClose={() => {
             setSelectedId(null);
             setDeepStage(null);
+            setDeepVrfqId(null);
           }}
         />
       ) : null}
@@ -1784,6 +1797,7 @@ export function PipelineModal({
   onNavigate,
   isNew,
   initialStage = null,
+  initialVrfqId = null,
   initialView = "work",
 }: {
   r: PipelineRow;
@@ -1800,6 +1814,8 @@ export function PipelineModal({
   isNew?: boolean;
   // 딥링크로 열 때 진입할 단계(1~11). null 이면 프로젝트의 현재 단계로 연다.
   initialStage?: number | null;
+  // 딥링크로 2단계 진입 시 초점 벤더 RFQ id(그 벤더 상세를 바로 선택).
+  initialVrfqId?: number | null;
   initialView?: "work" | "overview";
 }) {
   const isNewProject = !!isNew;
@@ -1905,14 +1921,18 @@ export function PipelineModal({
   const [selectedStage, setSelectedStage] = useState<StageTabKey>(
     Math.min(Math.max(initialStage || r.stage || 1, 1), 11)
   );
+  // 2단계 진입 시 선택할 벤더 RFQ id — 개요의 특정 "RFQ Sent" 로그(또는 딥링크)에서 지정.
+  const [focusVrfqId, setFocusVrfqId] = useState<number | null>(initialVrfqId ?? null);
   // 팝업 안 화면 전환: 단계 작업(work) ↔ 프로젝트 개요(overview).
   // 기억하지 않고 늘 work 로 연다 — 팝업을 여는 목적은 대개 단계를 진행시키는 것이라,
   // overview 로 굳어 있으면 작업하려던 사람이 매번 한 번 더 눌러야 한다.
   // 오래 읽는 용도는 페이지(/project/<id>)가 맡는다.
   const [modalView, setModalView] = useState<"work" | "overview">(initialView);
-  /** 개요의 단계 줄 클릭 → 그 단계의 작업 화면으로. 개요에서 짚은 곳을 바로 편집. */
-  const openStageFromOverview = useCallback((no: number) => {
+  /** 개요의 단계 줄 클릭 → 그 단계의 작업 화면으로. 개요에서 짚은 곳을 바로 편집.
+   *  vrfqId 를 주면(2단계 RFQ Sent 로그) 그 벤더 RFQ 를 바로 선택해 연다. */
+  const openStageFromOverview = useCallback((no: number, vrfqId?: number) => {
     setSelectedStage(Math.min(Math.max(no, 1), 11));
+    setFocusVrfqId(vrfqId ?? null);
     setModalView("work");
   }, []);
 
@@ -1924,6 +1944,7 @@ export function PipelineModal({
     if (prevRfqId.current === r.rfq_id) return;
     prevRfqId.current = r.rfq_id;
     setSelectedStage(Math.min(Math.max(r.stage || 1, 1), 11));
+    setFocusVrfqId(null);
   }, [r.rfq_id, r.stage]);
 
   // ←/→ 방향키로 이웃 프로젝트 전환. 입력 중(텍스트칸·선택·메모)엔 커서 이동이 우선이라
@@ -2570,6 +2591,7 @@ export function PipelineModal({
                 stage={selectedStage}
                 area={areaForStage(selectedStage)}
                 row={r}
+                focusVrfqId={focusVrfqId}
                 onChanged={onChanged}
               />
             )}
@@ -2587,11 +2609,13 @@ function WorkspacePanel({
   stage,
   area,
   row,
+  focusVrfqId,
   onChanged,
 }: {
   stage: number;
   area: WorkspaceArea;
   row: PipelineRow;
+  focusVrfqId?: number | null;
   onChanged: () => void | Promise<unknown>;
 }) {
   // 이 프로젝트(RFQ)의 고객 P/O(오더)들 — 6~11단계는 어느 P/O 기준으로 진행할지 선택.
@@ -2638,7 +2662,7 @@ function WorkspacePanel({
     ) : null;
 
   if (area === "rfq") {
-    return <ProjectRfqWorkspace row={row} stage={stage} onChanged={onChanged} />;
+    return <ProjectRfqWorkspace row={row} stage={stage} focusVrfqId={focusVrfqId} onChanged={onChanged} />;
   }
   if (area === "po") {
     return (
@@ -2737,10 +2761,12 @@ function ResetStageBar({ orderId, stage, onChanged }: { orderId: number; stage: 
 function ProjectRfqWorkspace({
   row,
   stage,
+  focusVrfqId,
   onChanged,
 }: {
   row: PipelineRow;
   stage: number;
+  focusVrfqId?: number | null;
   onChanged: () => void | Promise<unknown>;
 }) {
   const { data: overview, refresh } = useCachedData("rfq:overview:", () => fetchRfqOverview());
@@ -2760,6 +2786,7 @@ function ProjectRfqWorkspace({
         onSelect={() => undefined}
         onChanged={load}
         initialTab={initialTab}
+        focusVrfqId={focusVrfqId}
         embedded
       />
     </div>

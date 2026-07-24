@@ -11,7 +11,8 @@ import { vendorOf } from "@/lib/deal";
 
 export type Activity =
   // at: 정렬용 전체 일시(iso). 같은 날 여러 발송을 시각순으로 잇는다. 없으면 date(YYYY-MM-DD)로 정렬.
-  | { kind: "auto"; date: string; stage: number; label: string; party: string; pic?: string; at?: string }
+  // vrfqId: 2단계(RFQ Sent) 활동에만 있음 — 그 벤더 RFQ 레코드 id(로그 클릭 시 그 벤더 상세로 이동).
+  | { kind: "auto"; date: string; stage: number; label: string; party: string; pic?: string; at?: string; vrfqId?: number }
   | { kind: "note"; date: string; stage: number; index: number; note: StageNote }
   | { kind: "close"; date: string; reason: string };
 
@@ -97,6 +98,7 @@ export function buildActivities(row: PipelineRow, steps: string[]): Activity[] {
           party: send.vendor ? `to ${send.vendor}` : "",
           pic: row.assignee,
           at,
+          vrfqId: send.id,
         });
       }
       continue;

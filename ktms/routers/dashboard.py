@@ -169,7 +169,7 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
             # 보냈거나 여러 벤더에 보냈어도 각각 별도 이벤트로 남겨 업무일지에서 한 행씩 표시한다.
             # 발신 일시 오름차순(먼저 보낸 것부터).
             rfq_sends = sorted(
-                ({"vendor": vendor_names.get(x.vendor_id, "—"), "sent_at": _vrfq_sent_iso(x)}
+                ({"id": x.id, "vendor": vendor_names.get(x.vendor_id, "—"), "sent_at": _vrfq_sent_iso(x)}
                  for x in vrfqs),
                 key=lambda e: e["sent_at"] or "",
             )

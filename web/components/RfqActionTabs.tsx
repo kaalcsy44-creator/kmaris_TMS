@@ -134,6 +134,7 @@ export default function RfqActionTabs({
   onSelect,
   onChanged,
   initialTab,
+  focusVrfqId,
   embedded,
 }: {
   rfqId: number | null;
@@ -141,6 +142,8 @@ export default function RfqActionTabs({
   onSelect: (id: number | null) => void;
   onChanged: () => void;
   initialTab?: string | null;
+  // focusVrfqId: 2단계(vrfq) 진입 시 바로 선택할 벤더 RFQ id — 개요의 "RFQ Sent" 로그에서 지정.
+  focusVrfqId?: number | null;
   // embedded: 프로젝트 워크스페이스 내부. 내부 탭바·전역 목록·생성 없이 이 프로젝트(rfqId)의
   // 단건 상세를 인라인으로 표시. 단계(new/vrfq/vquote/cquote)는 initialTab이 결정.
   embedded?: boolean;
@@ -177,7 +180,7 @@ export default function RfqActionTabs({
           <EmbeddedCustomerRfq rfqId={rfqId} onChanged={onChanged} />
         )}
         {tab === "vrfq" && (
-          <EmbeddedVendorRfq rfqId={rfqId} project={project} vendors={vendors} onChanged={onChanged} />
+          <EmbeddedVendorRfq rfqId={rfqId} project={project} vendors={vendors} focusId={focusVrfqId} onChanged={onChanged} />
         )}
         {tab === "vquote" && (
           <EmbeddedVendorQuote rfqId={rfqId} onChanged={onChanged} />
@@ -316,11 +319,14 @@ function EmbeddedVendorRfq({
   rfqId,
   project,
   vendors,
+  focusId,
   onChanged,
 }: {
   rfqId: number | null;
   project?: RfqRow;
   vendors: VendorOption[];
+  // 개요의 특정 "RFQ Sent" 로그(또는 딥링크)에서 지정한 벤더 RFQ id — 로드되면 그 레코드를 선택.
+  focusId?: number | null;
   onChanged: () => void;
 }) {
   const [rows, setRows] = useState<VrfqRow[]>([]);
@@ -335,6 +341,10 @@ function EmbeddedVendorRfq({
       .finally(() => setLoaded(true));
   }, []);
   useEffect(() => { load(); }, [load]);
+  // focusId 가 이 프로젝트의 벤더 RFQ 중 하나면 그 레코드를 선택한다(개요 로그 클릭 진입).
+  useEffect(() => {
+    if (focusId && rows.some((r) => r.id === focusId && r.rfq_id === rfqId)) setSelId(focusId);
+  }, [focusId, rows, rfqId]);
   // 복수 Vendor RFQ는 K-Maris RFQ 번호 오름차순(숫자 빠른 순)으로 좌→우 배치.
   const mine = sortByDocNo(rows.filter((r) => r.rfq_id === rfqId), (r) => r.kmaris_rfq_no, (r) => r.id);
   if (!loaded) return <div className="state">Loading details…</div>;
