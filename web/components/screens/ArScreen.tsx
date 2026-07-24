@@ -91,7 +91,7 @@ const emptyForm: ArForm = {
 
 const emptyTaxItem: TaxInvoiceItem = { description: "", part_no: "", qty: 1, unit_price: 0, amount: 0 };
 
-type StageTab = 10 | 11;
+type StageTab = 9 | 10 | 11;
 
 // 프로젝트 팝업(진행현황) 내 AR 작업 — 이 오더의 세금계산서 발행(10)·수금 완료(11)를
 // 인라인으로 편집한다. 전역 목록·SOA 내보내기는 진행현황 통합 목록으로 이전됨.
@@ -104,14 +104,17 @@ export function ArOverview({
 } = {}) {
   const { data, refresh } = useCachedData("ar:overview", fetchArOverview);
   const { data: options } = useCachedData("ar:workoptions", fetchPoWorkOptions);
-  const [stageTab, setStageTab] = useState<StageTab>(initialStage === 11 ? 11 : 10);
+  const [stageTab, setStageTab] = useState<StageTab>(
+    initialStage === 11 ? 11 : initialStage === 9 ? 9 : 10
+  );
   const rows = useMemo(() => data?.rows ?? [], [data]);
   const orderId = initialOrderId ?? null;
 
-  // 딥링크 단계(?stage=10|11) 변화 시 탭 동기화.
+  // 딥링크 단계(?stage=9|10|11) 변화 시 탭 동기화.
   useEffect(() => {
     if (initialStage === 11) setStageTab(11);
     else if (initialStage === 10) setStageTab(10);
+    else if (initialStage === 9) setStageTab(9);
   }, [initialStage]);
 
   function load() {
@@ -122,7 +125,9 @@ export function ArOverview({
 
   if (!data) return <div className="state">Loading details…</div>;
   const match = orderId ? rows.find((r) => r.order_id === orderId) : undefined;
-  if (!match) {
+  // 9단계(Tax Invoice · Billing) = 대금청구서 편집. 레코드가 없으면 생성, 있으면 그 레코드를
+  // 같은 ArAddForm 으로 편집한다(P/O 간 화면 일관성). 10·11단계만 발행/수금 화면으로 분기.
+  if (stageTab === 9 || !match) {
     if (!orderId) {
       return (
         <div className="project-work-panel">
@@ -134,8 +139,10 @@ export function ArOverview({
     }
     return (
       <div className="embedded-detail">
-        <div className="form-section-title" style={{ marginTop: 0 }}>Add AR record</div>
-        <ArAddForm options={options ?? null} fallbackOrderId={orderId} onChanged={load} />
+        <div className="form-section-title" style={{ marginTop: 0 }}>
+          {match ? "AR record (edit)" : "Add AR record"}
+        </div>
+        <ArAddForm key={match?.id ?? `new-${orderId}`} options={options ?? null} fallbackOrderId={orderId} existing={match} onChanged={load} />
       </div>
     );
   }
@@ -421,22 +428,53 @@ function PaymentModal({
   );
 }
 
-/** Direct AR record creation form (inside modal). */
+/** 기존 AR 레코드 → 편집 폼 초기값. */
+function arRowToForm(r: ArRow): ArForm {
+  return {
+    id: r.id,
+    order_id: r.order_id,
+    ci_no: r.ci_no || "",
+    invoice_amount: r.invoice_amount || 0,
+    paid_amount: r.paid_amount || 0,
+    currency: r.currency || "USD",
+    due_date: r.due_date || today(),
+    status: r.status || "미수",
+    notes: r.notes || "",
+    invoice_no: r.invoice_no || "",
+    invoice_date: r.invoice_date || today(),
+    vat_rate: r.vat_rate ?? 0.1,
+    items: (r.items || []).map((it) => ({ ...it })),
+    remarks: r.remarks || DEFAULT_REMARKS,
+    bill_to_tax_id: r.bill_to_tax_id || "",
+    bill_to_contact: r.bill_to_contact || "",
+    bill_to_email: r.bill_to_email || "",
+    bill_to_phone: r.bill_to_phone || "",
+  };
+}
+
+/** AR(대금청구서) 레코드 편집기 — 없으면 생성, 있으면(existing) 그 레코드를 수정한다. */
 function ArAddForm({
   options,
   fallbackOrderId,
+  existing,
   onChanged,
 }: {
   options: PoWorkOptions | null;
   fallbackOrderId: number | null;
+  // 주면 그 AR 레코드를 편집(수정). 없으면 신규 생성.
+  existing?: ArRow;
   onChanged: () => void;
 }) {
-  const [form, setForm] = useState<ArForm>({ ...emptyForm, order_id: fallbackOrderId ?? "" });
+  const editing = !!existing;
+  const [form, setForm] = useState<ArForm>(
+    existing ? arRowToForm(existing) : { ...emptyForm, order_id: fallbackOrderId ?? "" }
+  );
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   // 송장번호 자동생성 규칙 = P/O번호 + "-INV". auto 모드면 이 값을 그대로 사용.
   const [autoInvoiceNo, setAutoInvoiceNo] = useState("");
-  const [invMode, setInvMode] = useState<"auto" | "manual">("auto");
+  // 편집 모드는 저장된 송장번호를 그대로 보여준다(수동). 신규는 자동 생성이 기본.
+  const [invMode, setInvMode] = useState<"auto" | "manual">(editing ? "manual" : "auto");
   // "Load CI" 버튼용 — 선택 오더의 CI 품목을 보관했다가 필요 시 표에 다시 채운다.
   const [ciItems, setCiItems] = useState<TaxInvoiceItem[]>([]);
   const sel = useRowSelection();
@@ -475,7 +513,7 @@ function ArAddForm({
     setErr("");
     setBusy(true);
     try {
-      await createArRecord({
+      const body = {
         order_id: form.order_id,
         ci_no: form.ci_no,
         // 청구 금액 = 품목 합계(소계+VAT). 별도 입력란 없이 항상 품목표에서 계산.
@@ -491,7 +529,9 @@ function ArAddForm({
         bill_to_contact: form.bill_to_contact,
         bill_to_email: form.bill_to_email,
         bill_to_phone: form.bill_to_phone,
-      });
+      };
+      if (editing) await updateArRecord(form.id, { ...body, paid_amount: form.paid_amount, status: form.status, notes: form.notes });
+      else await createArRecord(body);
       onChanged();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Save failed");
@@ -517,8 +557,28 @@ function ArAddForm({
   const setItems = (items: TaxInvoiceItem[]) => setForm((f) => ({ ...f, items }));
   // Load CI — 선택 오더의 CI 품목을 표에 다시 채운다(현재 편집 내용 대체).
   const loadCi = () => { setItems(ciItems.map((it) => ({ ...it }))); sel.clear(); };
-  // Cancel — 폼을 초기 상태로 되돌린다(오더 선택은 유지).
-  const cancel = () => { setForm({ ...emptyForm, order_id: form.order_id }); setInvMode("auto"); sel.clear(); };
+  // Cancel — 편집 중이면 저장된 값으로, 신규면 빈 폼으로 되돌린다(오더 선택은 유지).
+  const cancel = () => {
+    if (existing) { setForm(arRowToForm(existing)); setInvMode("manual"); }
+    else { setForm({ ...emptyForm, order_id: form.order_id }); setInvMode("auto"); }
+    sel.clear();
+  };
+  // 편집 레코드 삭제(구 발행 화면의 Delete 기능 대체).
+  const [delBusy, setDelBusy] = useState(false);
+  async function removeRecord() {
+    if (!existing) return;
+    if (!confirm("Delete this AR record?")) return;
+    setDelBusy(true);
+    setErr("");
+    try {
+      await deleteArRecord(existing.id);
+      onChanged();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Delete failed");
+    } finally {
+      setDelBusy(false);
+    }
+  }
 
   const subtotal = taxSubtotal(form.items);
   const vat = subtotal * num(form.vat_rate);
@@ -541,6 +601,7 @@ function ArAddForm({
         <label>Order *</label>
         <select
           value={form.order_id}
+          disabled={editing}
           onChange={(e) => setForm({ ...form, order_id: e.target.value ? Number(e.target.value) : "" })}
         >
           <option value="">Select…</option>
@@ -661,7 +722,12 @@ function ArAddForm({
           {err ? <span className="action-err">{err}</span> : null}
         </div>
         <div className="doc-actions-right">
-          <button className="btn" disabled={busy} onClick={cancel}>Cancel</button>
+          {editing ? (
+            <button className="btn danger" disabled={busy || delBusy} onClick={removeRecord}>
+              {delBusy ? "Deleting…" : "Delete"}
+            </button>
+          ) : null}
+          <button className="btn" disabled={busy} onClick={cancel}>{editing ? "Reset" : "Cancel"}</button>
           <button className="btn primary" disabled={form.order_id === "" || busy} onClick={save}>
             {busy ? "Working…" : "Save"}
           </button>

@@ -706,6 +706,11 @@ export type ArRow = {
   vat_rate: number;
   items: TaxInvoiceItem[];
   remarks: string;
+  // 청구처(BILL TO) 오버라이드 — 비우면 고객 마스터값 사용.
+  bill_to_tax_id: string;
+  bill_to_contact: string;
+  bill_to_email: string;
+  bill_to_phone: string;
 };
 
 /** 세금계산서(대금청구서) 청구 품목 1줄. */

@@ -91,6 +91,11 @@ def ar_overview():
                 "vat_rate": r.vat_rate if r.vat_rate is not None else 0.1,
                 "items": r.items or [],
                 "remarks": r.remarks or "",
+                # 청구처(BILL TO) 오버라이드 — 9단계 편집 폼에서 그대로 다시 편집하려면 필요.
+                "bill_to_tax_id": r.bill_to_tax_id or "",
+                "bill_to_contact": r.bill_to_contact or "",
+                "bill_to_email": r.bill_to_email or "",
+                "bill_to_phone": r.bill_to_phone or "",
                 "tax_issued": bool(sd.get("11")),
                 "tax_issued_date": sd.get("11", "") or "",
                 "paid_done": bool(sd.get("12")),

@@ -2707,7 +2707,7 @@ function WorkspacePanel({
           <ArOverview
             key={docReloadKey}
             initialOrderId={effectiveOrderId}
-            initialStage={stage >= 11 ? 11 : 10}
+            initialStage={arStage as 9 | 10 | 11}
           />
         </Suspense>
       </div>
