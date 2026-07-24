@@ -3944,6 +3944,16 @@ table.mini tfoot tr.foot-grand .total-value {
 .tax-items {
   margin-top: 12px;
 }
+/* AR(대금청구서) 합계행: Subtotal·VAT 는 일반 굵기, Total 만 볼드 + 2px 크게. */
+.tax-items table.mini tfoot .total-label,
+.tax-items table.mini tfoot .total-value {
+  font-weight: 400;
+}
+.tax-items table.mini tfoot tr.foot-grand .total-label,
+.tax-items table.mini tfoot tr.foot-grand .total-value {
+  font-weight: 700;
+  font-size: calc(1em + 2px);
+}
 /* Remarks — Item list 아래에 약간 띄우고, 높이는 낮게(기존 240px 의 약 1/3).
    .form-field textarea{min-height:240px} 를 이기려면 클래스 2개로 명시도를 높여야 한다. */
 .ar-remarks {
@@ -5967,9 +5977,16 @@ table.mini .num {
   letter-spacing: 0.03em;
   white-space: nowrap;
 }
-.mv-del {
+.btn.sm.mv-del {
   flex: 0 0 auto;
-  padding: 2px 8px;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  line-height: 1;
 }
 .mv-more {
   color: var(--muted, #7c8aa0);
