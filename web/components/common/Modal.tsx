@@ -9,6 +9,7 @@ export default function Modal({
   title,
   onClose,
   wide,
+  maxWidth,
   form,
   inline,
   children,
@@ -16,6 +17,8 @@ export default function Modal({
   title: React.ReactNode;
   onClose: () => void;
   wide?: boolean;
+  // maxWidth: wide 기본폭(1120)을 넘겨 더 넓게 열고 싶을 때. wide 없이도 폭 지정 가능.
+  maxWidth?: number;
   // form: 입력 폼 전용 레이아웃 — 좁은 폭 + 본문을 세로 블록으로 스택(마스터 등록/수정 팝업용).
   // 기본 모달 본문은 Progress 상세용 좌우 2단 flex 라서, 폼에는 이 변형을 쓴다.
   form?: boolean;
@@ -60,7 +63,7 @@ export default function Modal({
       <div
         ref={resize.ref}
         className={`pl-modal pl-modal--resizable${form ? " pl-modal--form" : ""}`}
-        style={{ ...(wide ? { maxWidth: 1120 } : {}), ...resize.style }}
+        style={{ ...(maxWidth ? { maxWidth } : wide ? { maxWidth: 1120 } : {}), ...resize.style }}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"

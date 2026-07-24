@@ -543,7 +543,7 @@ export default function ActivityScreen() {
             </span>
           }
           onClose={() => setDigestOpen(false)}
-          wide
+          maxWidth={1600}
         >
           {digestRows.length === 0 ? (
             <div className="state">No activity to show.</div>

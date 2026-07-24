@@ -8706,7 +8706,7 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
    세로 스크롤 컨테이너가 되어 내용이 길어도 잘리지 않게 한다. */
 .act-digest { list-style: none; margin: 0; padding: 8px;
   flex: 1 1 auto; min-width: 0; min-height: 0; overflow-y: auto; align-content: start;
-  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px;
   /* 카드 사이 여백에 옅은 음영 → 흰 카드가 떠 보여 카드별 구분이 뚜렷해진다. */
   background: #f2f5fa; border-radius: 8px; }
 /* 모든 카드에 좌측 라인 — 업무타입 색으로 구분(Parts=파랑 / 서비스=초록). */
@@ -8743,6 +8743,9 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 .act-digest-act { display: flex; gap: 8px; font-size: 12px; }
 .act-digest-when { flex: none; font-weight: 700; color: var(--muted); min-width: 52px; }
 .act-digest-desc { min-width: 0; color: var(--ink); }
+@media (max-width: 1100px) {
+  .act-digest { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 @media (max-width: 780px) {
   .act-digest { grid-template-columns: 1fr; }
 }
