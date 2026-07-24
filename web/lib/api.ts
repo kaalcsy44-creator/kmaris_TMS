@@ -29,6 +29,12 @@ import type {
   DocRow,
   VendorPoRow,
   ArData,
+  FinancePayable,
+  FinancePayableSave,
+  FinanceReceivable,
+  FinanceSummary,
+  FinanceClosing,
+  FinanceCalendarEvent,
   SettingsCustomer,
   SettingsVendor,
   SettingsVessel,
@@ -664,6 +670,39 @@ export function fetchVendorPoOverview(): Promise<{ rows: VendorPoRow[] }> {
 
 export function fetchArOverview(): Promise<ArData> {
   return get<ArData>("/api/admin/ar-overview");
+}
+
+// ── Finance(재무) — 수금/미수·지급대장·캘린더 ─────────────────────────────────
+export function fetchFinanceSummary(): Promise<FinanceSummary> {
+  return get<FinanceSummary>("/api/admin/finance/summary");
+}
+export function fetchFinanceReceivables(): Promise<{ rows: FinanceReceivable[] }> {
+  return get<{ rows: FinanceReceivable[] }>("/api/admin/finance/receivables");
+}
+export function fetchFinancePayables(): Promise<{ rows: FinancePayable[] }> {
+  return get<{ rows: FinancePayable[] }>("/api/admin/finance/payables");
+}
+export function createFinancePayable(body: FinancePayableSave): Promise<{ ok: boolean; id: number }> {
+  return post("/api/admin/finance/payables", body);
+}
+export function updateFinancePayable(id: number, body: FinancePayableSave): Promise<{ ok: boolean; id: number }> {
+  return put(`/api/admin/finance/payables/${id}`, body);
+}
+export function deleteFinancePayable(id: number): Promise<{ ok: boolean }> {
+  return del(`/api/admin/finance/payables/${id}`);
+}
+export function payFinancePayable(id: number, paid: boolean, occurrence?: string): Promise<{ ok: boolean }> {
+  return post(`/api/admin/finance/payables/${id}/pay`, { paid, occurrence: occurrence ?? null });
+}
+export function fetchFinanceCalendar(start: string, end: string): Promise<{ rows: FinanceCalendarEvent[]; start: string; end: string }> {
+  return get<{ rows: FinanceCalendarEvent[]; start: string; end: string }>(
+    `/api/admin/finance/calendar?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`
+  );
+}
+export function fetchFinanceClosing(start: string, end: string, year: number): Promise<FinanceClosing> {
+  return get<FinanceClosing>(
+    `/api/admin/finance/closing?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}&year=${year}`
+  );
 }
 
 // ── 마케팅 활동(잠정 고객사) ──────────────────────────────────────────────────

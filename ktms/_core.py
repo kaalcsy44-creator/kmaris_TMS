@@ -74,7 +74,7 @@ from db.models import (
     Order, PurchaseOrder, ShippingAdvice, ProformaInvoice, CommercialInvoice,
     PackingList, TaxInvoiceData, ARRecord, DeliveryProof,
     RFQStatus, OrderStatus, ARStatus, WorkType, MarketingActivity, ScheduleEvent,
-    MarketingAsset,
+    MarketingAsset, FinancePayable,
 )
 
 # ── App / CORS ────────────────────────────────────────────────────────────────
@@ -339,7 +339,7 @@ def _authz_error(request: Request, status: int, detail: str) -> JSONResponse:
 
 # ── 권한 매트릭스 (역할 × 페이지 × 동작) ───────────────────────────────────────
 # 페이지(모듈)와 동작의 정본. 프런트 매트릭스 UI와 동일한 순서.
-PERM_MODULES = ["dashboard", "progress", "rfq", "po", "documents", "ar", "marketing", "settings"]
+PERM_MODULES = ["dashboard", "progress", "rfq", "po", "documents", "ar", "finance", "marketing", "settings"]
 PERM_ACTIONS = ["view", "create", "edit", "delete"]
 # dashboard 는 열람만 의미가 있다(입력/수정/삭제 없음) — UI에서 view만 노출.
 PERM_VIEW_ONLY = {"dashboard"}
@@ -456,7 +456,7 @@ _ADMIN_ONLY_PREFIXES = ("/api/admin/settings/users", "/api/admin/settings/permis
 # 신규 레코드 생성(POST) — 그 외 POST 는 edit 으로 본다.
 _CREATE_POST_EXACT = {
     "/api/admin/rfq", "/api/admin/orders", "/api/admin/vendor-pos", "/api/admin/ar",
-    "/api/admin/marketing",
+    "/api/admin/marketing", "/api/admin/finance/payables",
 }
 _CREATE_POST_SUFFIX = ("/vendor-rfq", "/customer-quote", "/vendor-quote",
                        "/ci", "/pl", "/sa", "/tax")
@@ -477,6 +477,8 @@ def _route_module(path: str) -> str | None:
         return "documents"
     if path.startswith("/api/admin/ar"):
         return "ar"
+    if path.startswith("/api/admin/finance"):
+        return "finance"
     if path.startswith("/api/admin/marketing"):
         return "marketing"
     if path.startswith("/api/admin/settings"):
@@ -2037,6 +2039,132 @@ def _schedule_guard(e: ScheduleEvent, user: dict) -> None:
         raise HTTPException(status_code=403, detail="작성자(PIC)만 이 일정을 수정·삭제할 수 있습니다.")
 
 
+# ── Finance: 지급대장(payables) + 재무 집계 ────────────────────────────────────
+FINANCE_CATEGORIES = ["거래선지급", "임차료", "급여", "공과금", "세금", "기타"]
+FINANCE_RECURRENCES = {"none", "monthly", "quarterly", "yearly"}
+
+
+class FinancePayableIn(BaseModel):
+    category: str | None = "기타"
+    counterparty: str | None = ""
+    vendor_id: int | None = None
+    description: str | None = ""
+    amount: float | None = 0.0
+    currency: str | None = "KRW"
+    due_date: str | None = ""
+    recurrence: str | None = "none"
+    recur_until: str | None = ""
+    notes: str | None = ""
+
+
+class FinancePayablePayIn(BaseModel):
+    """납부 표시 토글. occurrence 를 주면(반복 항목의 특정 회차일) 그 회차만 토글."""
+    paid: bool = True
+    occurrence: str | None = None
+
+
+def _finance_payable_paid_on(p: FinancePayable, iso: str) -> bool:
+    """해당 회차일(iso)이 납부 완료인지. 반복은 paid_dates, 일회성은 paid 플래그."""
+    if (p.recurrence or "none") == "none":
+        return bool(p.paid)
+    return iso in (p.paid_dates or [])
+
+
+def _finance_payable_row(p: FinancePayable, vendor_names: dict, user_names: dict) -> dict:
+    return {
+        "id": p.id,
+        "category": p.category or "기타",
+        "counterparty": p.counterparty or (vendor_names.get(p.vendor_id, "") if p.vendor_id else ""),
+        "vendor_id": p.vendor_id,
+        "description": p.description or "",
+        "amount": round(p.amount or 0, 2),
+        "currency": p.currency or "KRW",
+        "due_date": p.due_date or "",
+        "recurrence": p.recurrence or "none",
+        "recur_until": p.recur_until or "",
+        "paid": bool(p.paid),
+        "paid_date": p.paid_date or "",
+        "paid_dates": list(p.paid_dates or []),
+        "notes": p.notes or "",
+        "owner_id": p.owner_id or 0,
+        "owner": user_names.get(p.owner_id, "") if p.owner_id else "",
+    }
+
+
+def _add_months(d: date, months: int) -> date:
+    """월 단위 가산(월말 보정: 없는 날짜는 그 달 마지막 날로)."""
+    m = d.month - 1 + months
+    y = d.year + m // 12
+    m = m % 12 + 1
+    import calendar as _cal
+    day = min(d.day, _cal.monthrange(y, m)[1])
+    return date(y, m, day)
+
+
+def _finance_occurrences(p: FinancePayable, start: date, end: date) -> list[str]:
+    """반복 규칙을 [start, end] 구간에서 회차일(ISO) 목록으로 펼친다. 일회성이면 due_date 1건."""
+    base_s = (p.due_date or "").strip()
+    if not base_s:
+        return []
+    try:
+        base = date.fromisoformat(base_s[:10])
+    except ValueError:
+        return []
+    rec = p.recurrence or "none"
+    if rec == "none":
+        return [base.isoformat()] if start <= base <= end else []
+    step = {"monthly": 1, "quarterly": 3, "yearly": 12}.get(rec)
+    if not step:
+        return [base.isoformat()] if start <= base <= end else []
+    until = end
+    if (p.recur_until or "").strip():
+        try:
+            until = min(end, date.fromisoformat(p.recur_until[:10]))
+        except ValueError:
+            pass
+    out: list[str] = []
+    cur = base
+    # 최초 회차가 구간 뒤라도, base 부터 step 씩 전진하며 구간에 드는 회차만 수집(안전 상한).
+    guard = 0
+    while cur <= until and guard < 600:
+        if cur >= start:
+            out.append(cur.isoformat())
+        cur = _add_months(cur, step)
+        guard += 1
+    return out
+
+
+def _finance_receivable_rows(s) -> list[dict]:
+    """미수(수금) 집계 — ARRecord 기준. 미수금·연체·거래선(고객)별 표시에 사용."""
+    today_str = date.today().isoformat()
+    ord_map = {o.id: o for o in s.query(Order).all()}
+    cust_names = {c.id: c.name for c in s.query(Customer).all()}
+    rows: list[dict] = []
+    for r in s.query(ARRecord).all():
+        o = ord_map.get(r.order_id)
+        cust = cust_names.get(o.customer_id, "—") if o else "—"
+        invoice = round(r.invoice_amount or 0, 2)
+        paid = round(r.paid_amount or 0, 2)
+        outstanding = round(invoice - paid, 2)
+        status = _enum_val(r.status)
+        overdue = status != ARStatus.PAID and bool(r.due_date) and r.due_date < today_str and outstanding > 0
+        rows.append({
+            "id": r.id,
+            "order_id": r.order_id,
+            "customer": cust,
+            "ci_no": r.ci_no or "",
+            "invoice_no": r.invoice_no or "",
+            "currency": r.currency or "USD",
+            "invoice_amount": invoice,
+            "paid_amount": paid,
+            "outstanding": outstanding,
+            "due_date": r.due_date or "",
+            "status": "연체" if overdue else status,
+            "overdue": bool(overdue),
+        })
+    return rows
+
+
 # ── Settings: master data (list + create) ─────────────────────────────────────
 class ContactIn(BaseModel):
     """고객사·공급사 담당자 1명(회사 1:N). 다중 담당자 등록/수정에 사용."""
@@ -2693,6 +2821,15 @@ __all__ = [
     "RolePermission",
     "ScheduleEvent",
     "ScheduleEventCreate",
+    "FinancePayable",
+    "FinancePayableIn",
+    "FinancePayablePayIn",
+    "FINANCE_CATEGORIES",
+    "FINANCE_RECURRENCES",
+    "_finance_payable_row",
+    "_finance_payable_paid_on",
+    "_finance_occurrences",
+    "_finance_receivable_rows",
     "ServiceStageSave",
     "ShippingAdvice",
     "ShippingAdviceSave",

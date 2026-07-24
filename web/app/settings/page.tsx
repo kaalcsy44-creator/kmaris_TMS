@@ -584,6 +584,7 @@ const MODULE_LABEL: Record<string, string> = {
   po: "P/O",
   documents: "Documents",
   ar: "AR",
+  finance: "Finance",
   marketing: "Marketing",
   settings: "Settings · master data",
 };

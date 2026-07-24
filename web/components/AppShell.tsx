@@ -9,7 +9,7 @@ import type { PermModule } from "@/lib/auth";
 
 // active 키 → 권한 모듈(동일). 가드 대상 메뉴 목록.
 const NAV_MODULES: PermModule[] = [
-  "dashboard", "progress", "rfq", "po", "documents", "ar", "marketing", "settings",
+  "dashboard", "progress", "rfq", "po", "documents", "ar", "finance", "marketing", "settings",
 ];
 // 열람 권한이 있는 첫 메뉴로 보낸다(차단된 페이지 접근 시). RFQ·P/O·Documents·AR 은
 // 프로젝트 팝업의 단계별 작업으로 통합되어 전용 페이지가 없으므로, 그 권한만 있는
@@ -22,6 +22,7 @@ function firstAllowed(): string {
     { key: "po", href: "/project" },
     { key: "documents", href: "/project" },
     { key: "ar", href: "/project" },
+    { key: "finance", href: "/finance" },
     { key: "marketing", href: "/marketing" },
   ];
   const hit = order.find((o) => can(o.key, "view"));

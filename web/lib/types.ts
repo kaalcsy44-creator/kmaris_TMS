@@ -727,6 +727,99 @@ export type ArData = {
   rows: ArRow[];
 };
 
+// ── Finance(재무) ──────────────────────────────────────────────────────────────
+export type FinancePayable = {
+  id: number;
+  category: string;
+  counterparty: string;
+  vendor_id: number | null;
+  description: string;
+  amount: number;
+  currency: string;
+  due_date: string;
+  recurrence: "none" | "monthly" | "quarterly" | "yearly";
+  recur_until: string;
+  paid: boolean;
+  paid_date: string;
+  paid_dates: string[];
+  notes: string;
+  owner_id: number;
+  owner: string;
+};
+
+export type FinancePayableSave = {
+  category?: string;
+  counterparty?: string;
+  vendor_id?: number | null;
+  description?: string;
+  amount?: number;
+  currency?: string;
+  due_date?: string;
+  recurrence?: string;
+  recur_until?: string;
+  notes?: string;
+};
+
+export type FinanceReceivable = {
+  id: number;
+  order_id: number;
+  customer: string;
+  ci_no: string;
+  invoice_no: string;
+  currency: string;
+  invoice_amount: number;
+  paid_amount: number;
+  outstanding: number;
+  due_date: string;
+  status: string;
+  overdue: boolean;
+};
+
+// 통화별 합계 맵(예: { KRW: 1000000, USD: 500 }).
+export type MoneyByCurrency = Record<string, number>;
+
+export type FinanceSummary = {
+  receivable: {
+    outstanding: MoneyByCurrency;
+    overdue: MoneyByCurrency;
+    outstanding_krw: number;
+    count: number;
+  };
+  payable: {
+    upcoming_30d: MoneyByCurrency;
+    overdue: MoneyByCurrency;
+    total_krw: number;
+  };
+  by_customer: { name: string; outstanding_krw: number }[];
+  by_category: { name: string; amount_krw: number }[];
+  usd_krw: number;
+};
+
+export type FinanceClosing = {
+  period: { start: string; end: string; year: number };
+  sales: { supply_krw: number; vat_krw: number; total_krw: number; count: number };
+  purchase: { cost_krw: number; vat_krw: number; count: number };
+  margin_krw: number;
+  margin_pct: number;
+  vat: { output_krw: number; input_krw: number; payable_krw: number };
+  by_customer: { name: string; sales_krw: number }[];
+  monthly: { labels: string[]; sales: number[]; purchase: number[] };
+  usd_krw: number;
+};
+
+export type FinanceCalendarEvent = {
+  kind: "receivable" | "payable";
+  date: string;
+  title: string;
+  amount: number;
+  currency: string;
+  category?: string;
+  overdue?: boolean;
+  paid?: boolean;
+  ref_id: number;
+  occurrence?: string;
+};
+
 export type DashboardData = {
   kpi: {
     open_rfq: number;

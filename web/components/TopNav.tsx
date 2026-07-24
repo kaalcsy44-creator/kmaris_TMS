@@ -21,6 +21,7 @@ const ITEMS: Item[] = [
   { href: "/project", label: "Projects", key: "projects", perm: "progress" },
   // 업무일지 — 파이프라인(progress) 열람 권한 사용자면 접근 가능.
   { href: "/activity", label: "Activity", key: "activity", perm: "progress" },
+  { href: "/finance", label: "Finance", key: "finance" },
   { href: "/marketing", label: "Marketing", key: "marketing" },
 ];
 

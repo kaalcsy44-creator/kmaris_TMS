@@ -536,6 +536,32 @@ class ScheduleEvent(Base):
     created_at  = Column(DateTime, default=datetime.utcnow)
 
 
+class FinancePayable(Base):
+    """지급대장(회사 지급 예정·이력) — 거래선 지급뿐 아니라 임차료·급여 등 운영비 포함.
+
+    한 행 = 하나의 지급 의무. 반복(recurrence)이 있으면 캘린더·목록에서 기간 내 발생분을
+    가상으로 펼쳐 보여주고, 반복 항목의 개별 회차 납부 여부는 paid_dates(JSON 날짜 목록)로
+    관리한다. 일회성(recurrence='none') 항목은 paid/paid_date 로 관리한다.
+    프로젝트(RFQ) 파이프라인과 무관하게 독립 관리한다(임차료·급여·세금 등)."""
+    __tablename__ = "finance_payables"
+    id           = Column(Integer, primary_key=True)
+    category     = Column(String(40))    # 분류: 거래선지급/임차료/급여/공과금/세금/기타
+    counterparty = Column(String(200))   # 거래선·수취인(자유 입력)
+    vendor_id    = Column(Integer, ForeignKey("vendors.id"), nullable=True)  # 등록 거래선 연결(선택)
+    description  = Column(String(200))   # 내역
+    amount       = Column(Float, default=0.0)
+    currency     = Column(String(10), default="KRW")
+    due_date     = Column(String(10))    # 지급 예정일 YYYY-MM-DD (반복이면 최초 회차일)
+    recurrence   = Column(String(10), default="none")  # none/monthly/quarterly/yearly
+    recur_until  = Column(String(10))    # 반복 종료일(비우면 무기한) YYYY-MM-DD
+    paid         = Column(Boolean, default=False)  # 일회성 항목 납부 완료
+    paid_date    = Column(String(10))    # 일회성 항목 납부일 YYYY-MM-DD
+    paid_dates   = Column(JSON, default=list)  # 반복 항목의 납부 완료 회차일 목록
+    notes        = Column(Text)
+    owner_id     = Column(Integer, ForeignKey("users.id"), nullable=True)  # 등록자
+    created_at   = Column(DateTime, default=datetime.utcnow)
+
+
 class MarketingAsset(Base):
     """홍보 이메일 첨부용 자료 라이브러리(회사소개서·브로슈어 등). DB BLOB 저장
     (Render 파일시스템 휘발 회피 — DeliveryProof 와 동일 방식). 홍보 메일 작성 시
