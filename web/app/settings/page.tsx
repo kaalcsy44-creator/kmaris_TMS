@@ -2383,7 +2383,7 @@ function BrochuresTab() {
       const d = await fetchMarketingAssets();
       setRows(d.rows);
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "목록을 불러오지 못했습니다.");
+      setErr(e instanceof Error ? e.message : "Failed to load the list.");
     } finally {
       setLoading(false);
     }
@@ -2411,7 +2411,7 @@ function BrochuresTab() {
         return { asset: a, url };
       });
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "미리보기에 실패했습니다.");
+      setErr(e instanceof Error ? e.message : "Preview failed.");
     } finally {
       setPreviewBusy(false);
     }
@@ -2438,21 +2438,21 @@ function BrochuresTab() {
       if (fileRef.current) fileRef.current.value = "";
       await load();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "업로드에 실패했습니다.");
+      setErr(e instanceof Error ? e.message : "Upload failed.");
     } finally {
       setBusy(false);
     }
   }
 
   async function remove(a: MarketingAsset) {
-    if (!confirm(`"${a.label}" 자료를 삭제할까요?`)) return;
+    if (!confirm(`Delete "${a.label}"?`)) return;
     setBusy(true);
     setErr("");
     try {
       await deleteMarketingAsset(a.id);
       await load();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "삭제에 실패했습니다.");
+      setErr(e instanceof Error ? e.message : "Delete failed.");
     } finally {
       setBusy(false);
     }
@@ -2479,7 +2479,7 @@ function BrochuresTab() {
       cancelRename();
       await load();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "이름 변경에 실패했습니다.");
+      setErr(e instanceof Error ? e.message : "Rename failed.");
     } finally {
       setBusy(false);
     }
@@ -2489,16 +2489,16 @@ function BrochuresTab() {
     <div className="panel">
       <h3 className="form-title">Brochures &amp; company profile</h3>
       <p className="hint-inline" style={{ display: "block", marginBottom: 12 }}>
-        홍보 이메일 작성 시 첨부할 회사소개서·브로슈어를 등록해 두세요. Marketing 화면의 이메일 작성창에서 골라 첨부할 수 있습니다.
+        Register the company profiles and brochures you want to attach to marketing emails. You can pick and attach them from the email composer on the Marketing page.
       </p>
 
       <div className="form-grid" style={{ alignItems: "end", marginBottom: 14 }}>
         <label className="form-field">
-          <span>표시 이름 (선택)</span>
+          <span>Display name (optional)</span>
           <input
             value={label}
             onChange={(e) => setLabel(e.target.value)}
-            placeholder="예: 회사소개서 2026"
+            placeholder="e.g. Corporate Profile 2026"
           />
         </label>
         <div className="form-field">
@@ -2510,7 +2510,7 @@ function BrochuresTab() {
               disabled={busy}
               onClick={() => fileRef.current?.click()}
             >
-              {busy ? "업로드 중…" : "+ 파일 업로드"}
+              {busy ? "Uploading…" : "+ Upload file"}
             </button>
             <input
               ref={fileRef}
@@ -2528,15 +2528,15 @@ function BrochuresTab() {
       {loading ? (
         <div className="muted">Loading…</div>
       ) : rows.length === 0 ? (
-        <div className="muted">등록된 자료가 없습니다.</div>
+        <div className="muted">No items registered.</div>
       ) : (
         <table className="mini">
           <thead>
             <tr>
-              <th>이름</th>
-              <th>파일명</th>
-              <th>크기</th>
-              <th>등록일</th>
+              <th>Name</th>
+              <th>File name</th>
+              <th>Size</th>
+              <th>Registered</th>
               <th />
             </tr>
           </thead>
@@ -2563,7 +2563,7 @@ function BrochuresTab() {
                   <button
                     type="button"
                     className="linklike"
-                    title="미리보기"
+                    title="Preview"
                     onClick={() => openPreview(a)}
                   >
                     {a.filename}
@@ -2576,16 +2576,16 @@ function BrochuresTab() {
                     {editId === a.id ? (
                       <>
                         <button type="button" className="btn primary sm" disabled={busy} onClick={() => saveRename(a)}>
-                          저장
+                          Save
                         </button>
                         <button type="button" className="btn sm" disabled={busy} onClick={cancelRename}>
-                          취소
+                          Cancel
                         </button>
                       </>
                     ) : (
                       <>
                         <button type="button" className="btn sm" disabled={busy} onClick={() => startRename(a)}>
-                          이름변경
+                          Rename
                         </button>
                         <button
                           type="button"
@@ -2593,14 +2593,14 @@ function BrochuresTab() {
                           disabled={previewBusy}
                           onClick={() => openPreview(a)}
                         >
-                          미리보기
+                          Preview
                         </button>
                         <button
                           type="button"
                           className="btn sm"
-                          onClick={() => downloadMarketingAsset(a.id, a.filename).catch(() => setErr("다운로드에 실패했습니다."))}
+                          onClick={() => downloadMarketingAsset(a.id, a.filename).catch(() => setErr("Download failed."))}
                         >
-                          다운로드
+                          Download
                         </button>
                         <button
                           type="button"
@@ -2608,7 +2608,7 @@ function BrochuresTab() {
                           disabled={busy}
                           onClick={() => remove(a)}
                         >
-                          삭제
+                          Delete
                         </button>
                       </>
                     )}
@@ -2621,7 +2621,7 @@ function BrochuresTab() {
       )}
 
       {preview ? (
-        <Modal title={`미리보기 — ${preview.asset.label || preview.asset.filename}`} onClose={closePreview} wide>
+        <Modal title={`Preview — ${preview.asset.label || preview.asset.filename}`} onClose={closePreview} wide>
           <div style={{ width: "100%" }}>
             {preview.asset.mime.startsWith("image/") ? (
               <img
@@ -2637,18 +2637,18 @@ function BrochuresTab() {
               />
             ) : (
               <div className="muted" style={{ padding: 16 }}>
-                이 형식({preview.asset.mime || "unknown"})은 브라우저 미리보기를 지원하지 않습니다. 다운로드해서 확인하세요.
+                This format ({preview.asset.mime || "unknown"}) can't be previewed in the browser. Download it to view.
                 <div style={{ marginTop: 10 }}>
                   <button
                     type="button"
                     className="btn primary"
                     onClick={() =>
                       downloadMarketingAsset(preview.asset.id, preview.asset.filename).catch(() =>
-                        setErr("다운로드에 실패했습니다.")
+                        setErr("Download failed.")
                       )
                     }
                   >
-                    다운로드
+                    Download
                   </button>
                 </div>
               </div>
