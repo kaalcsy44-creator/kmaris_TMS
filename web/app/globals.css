@@ -9965,3 +9965,10 @@ button.ov-tl-stage:hover {
 .fin-net-bar { position: absolute; left: 25%; width: 50%; border-radius: 3px; }
 .fin-net-bar.pos { background: #1e7a46; }
 .fin-net-bar.neg { background: #c0392b; }
+
+/* AR 9~11단계: 대금청구서 편집(ArAddForm) 아래 발행/수금 완료 바 */
+.ar-milestone {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 2px solid var(--line-strong);
+}
