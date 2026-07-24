@@ -8704,13 +8704,15 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 /* 2열 그리드 — 좁은 화면(좁은 모달)에서는 1열로 접힌다.
    기본 .pl-modal-body 는 overflow:hidden(좌우 2단 전용)이라, 목록 자체가
    세로 스크롤 컨테이너가 되어 내용이 길어도 잘리지 않게 한다. */
-.act-digest { list-style: none; margin: 0; padding: 0 2px 6px;
+.act-digest { list-style: none; margin: 0; padding: 8px;
   flex: 1 1 auto; min-width: 0; min-height: 0; overflow-y: auto; align-content: start;
-  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;
+  /* 카드 사이 여백에 옅은 음영 → 흰 카드가 떠 보여 카드별 구분이 뚜렷해진다. */
+  background: #f2f5fa; border-radius: 8px; }
 /* 모든 카드에 좌측 라인 — 업무타입 색으로 구분(Parts=파랑 / 서비스=초록). */
 .act-digest-row { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px;
   cursor: pointer; border-left: 3px solid var(--blue); background: #fff; }
-.act-digest-row:hover { background: var(--head-bg); border-color: var(--blue); }
+.act-digest-row:hover { background: #e4ecf9; border-color: var(--blue); }
 .act-digest-row.service { border-left-color: #7c9; }
 .act-digest-row.cancelled { opacity: .6; }
 .act-digest-head { display: flex; align-items: baseline; gap: 6px; }
