@@ -7,6 +7,7 @@ import {
   fetchFinancePayables,
   fetchFinanceCalendar,
   fetchFinanceClosing,
+  fetchFinanceCashflow,
   createFinancePayable,
   updateFinancePayable,
   deleteFinancePayable,
@@ -20,6 +21,7 @@ import type {
   FinanceReceivable,
   FinanceSummary,
   FinanceClosing,
+  FinanceCashflow,
   FinanceCalendarEvent,
   MoneyByCurrency,
 } from "@/lib/types";
@@ -61,7 +63,7 @@ function byCurrency(m: MoneyByCurrency): string {
 const todayStr = () => new Date().toISOString().slice(0, 10);
 
 // ── 화면 ───────────────────────────────────────────────────────────────────────
-type Tab = "overview" | "receivables" | "payables" | "closing" | "calendar";
+type Tab = "overview" | "receivables" | "payables" | "closing" | "cashflow" | "calendar";
 
 export default function FinanceScreen() {
   const [tab, setTab] = useState<Tab>("overview");
@@ -72,6 +74,7 @@ export default function FinanceScreen() {
         <button className={tab === "receivables" ? "on" : ""} onClick={() => setTab("receivables")}>Receivables (수금)</button>
         <button className={tab === "payables" ? "on" : ""} onClick={() => setTab("payables")}>Payables (지급)</button>
         <button className={tab === "closing" ? "on" : ""} onClick={() => setTab("closing")}>Closing · VAT (결산·부가세)</button>
+        <button className={tab === "cashflow" ? "on" : ""} onClick={() => setTab("cashflow")}>Cash Flow (현금흐름)</button>
         <button className={tab === "calendar" ? "on" : ""} onClick={() => setTab("calendar")}>Calendar</button>
       </div>
 
@@ -79,6 +82,7 @@ export default function FinanceScreen() {
       {tab === "receivables" && <ReceivablesTab />}
       {tab === "payables" && <PayablesTab />}
       {tab === "closing" && <ClosingTab />}
+      {tab === "cashflow" && <CashFlowTab />}
       {tab === "calendar" && <CalendarTab />}
     </div>
   );
@@ -568,6 +572,99 @@ function MonthlyBars({ labels, sales, purchase }: { labels: string[]; sales: num
           <div className="fin-bar-label">{lab}</div>
         </div>
       ))}
+    </div>
+  );
+}
+
+// ── Cash Flow (현금흐름 예측) ───────────────────────────────────────────────────
+function CashFlowTab() {
+  const [unit, setUnit] = useState<"month" | "week">("month");
+  const [count, setCount] = useState(6);
+  const [openingInput, setOpeningInput] = useState("0");
+  const [includePo, setIncludePo] = useState(false);
+  const opening = Number(openingInput) || 0;
+
+  const key = `finance:cashflow:${unit}:${count}:${opening}:${includePo}`;
+  const { data, error } = useCachedData<FinanceCashflow>(key, () => fetchFinanceCashflow(unit, count, opening, includePo));
+
+  const maxNet = useMemo(() => {
+    if (!data) return 1;
+    return Math.max(1, ...data.rows.map((r) => Math.abs(r.net)));
+  }, [data]);
+
+  return (
+    <div className="fin-overview">
+      <div className="fin-period-bar">
+        <div className="seg-toggle" role="group" aria-label="Unit">
+          <button className={unit === "month" ? "on" : ""} onClick={() => { setUnit("month"); setCount(6); }}>월별</button>
+          <button className={unit === "week" ? "on" : ""} onClick={() => { setUnit("week"); setCount(12); }}>주별</button>
+        </div>
+        <label className="fin-inline-field">
+          구간 수
+          <select value={count} onChange={(e) => setCount(Number(e.target.value))}>
+            {(unit === "month" ? [3, 6, 12] : [8, 12, 16]).map((n) => <option key={n} value={n}>{n}</option>)}
+          </select>
+        </label>
+        <label className="fin-inline-field">
+          기초잔고 (₩)
+          <input type="number" value={openingInput} onChange={(e) => setOpeningInput(e.target.value)} style={{ width: 140 }} />
+        </label>
+        <label className="check-chip" style={{ cursor: "pointer" }}>
+          <input type="checkbox" checked={includePo} onChange={(e) => setIncludePo(e.target.checked)} /> 벤더 PO 유출 반영(추정)
+        </label>
+      </div>
+
+      {error && !data ? <div className="state error">API error: {error.message}</div> : null}
+      {!data ? <div className="state">Loading…</div> : (
+        <>
+          <div className="fin-kpis">
+            <KpiTile label="예상 유입 (Inflow)" main={won(data.total_inflow)} tone="blue" />
+            <KpiTile label="예상 유출 (Outflow)" main={won(data.total_outflow)} tone="amber" />
+            <KpiTile label="기말 잔고 (Ending)" main={won(data.ending)} sub={`기초 ${won(data.opening)}`} tone={data.ending >= 0 ? "blue" : "red"} />
+          </div>
+
+          <div className="panel">
+            <h3 className="form-title">순증감 추이 (Net cash flow, ₩)</h3>
+            <div className="fin-net-chart">
+              {data.rows.map((r) => (
+                <div key={r.label} className="fin-net-col" title={`${r.label} · 유입 ${won(r.inflow)} · 유출 ${won(r.outflow)} · 순 ${won(r.net)}`}>
+                  <div className="fin-net-track">
+                    <div className="fin-net-mid" />
+                    <div
+                      className={`fin-net-bar ${r.net >= 0 ? "pos" : "neg"}`}
+                      style={{ height: `${(Math.abs(r.net) / maxNet) * 48}%`, [r.net >= 0 ? "bottom" : "top"]: "50%" } as React.CSSProperties}
+                    />
+                  </div>
+                  <div className="fin-bar-label">{r.label}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="panel">
+            <h3 className="form-title">현금흐름 예측표</h3>
+            <table className="mini">
+              <thead>
+                <tr><th>기간</th><th className="num">유입</th><th className="num">유출</th><th className="num">순증감</th><th className="num">누적잔고</th></tr>
+              </thead>
+              <tbody>
+                {data.rows.map((r) => (
+                  <tr key={r.label} className={r.cumulative < 0 ? "fin-overdue" : ""}>
+                    <td>{r.label}</td>
+                    <td className="num">{won(r.inflow)}</td>
+                    <td className="num">{won(r.outflow)}</td>
+                    <td className="num" style={{ color: r.net >= 0 ? "#1e7a46" : "#c0392b" }}>{r.net >= 0 ? "+" : "−"}{won(Math.abs(r.net))}</td>
+                    <td className="num"><b>{won(r.cumulative)}</b></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="hint-inline" style={{ display: "block", marginTop: 8 }}>
+              유입=미수 수금 예정(AR due), 유출=지급대장 미납 회차{includePo ? " + 벤더 PO(발주일 추정)" : ""}. 연체·기지난 예정은 첫 구간에 반영됩니다. 누적잔고가 음수(빨강)면 현금 부족 구간입니다.
+            </p>
+          </div>
+        </>
+      )}
     </div>
   );
 }

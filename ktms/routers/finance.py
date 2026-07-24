@@ -388,6 +388,111 @@ def finance_closing(start: str = "", end: str = "", year: int = 0):
         s.close()
 
 
+def _cashflow_buckets(unit: str, count: int) -> list[dict]:
+    """오늘부터 count개 구간(월/주)의 [start, end, label]. 첫 구간은 과거(연체)를 흡수한다."""
+    today = date.today()
+    out: list[dict] = []
+    if unit == "week":
+        for i in range(count):
+            start = date.fromordinal(today.toordinal() + i * 7)
+            end = date.fromordinal(start.toordinal() + 6)
+            out.append({"start": start, "end": end,
+                        "label": f"{start.month}/{start.day}~{end.month}/{end.day}"})
+    else:  # month
+        for i in range(count):
+            mm = today.month - 1 + i
+            y = today.year + mm // 12
+            m = mm % 12 + 1
+            start = date(y, m, 1)
+            nm, ny = (1, y + 1) if m == 12 else (m + 1, y)
+            end = date.fromordinal(date(ny, nm, 1).toordinal() - 1)
+            out.append({"start": start, "end": end, "label": f"{y}-{m:02d}"})
+    return out
+
+
+@app.get("/api/admin/finance/cashflow", dependencies=[Depends(require_token)])
+def finance_cashflow(unit: str = "month", count: int = 6, opening: float = 0.0, include_po: int = 0):
+    """현금흐름 예측 — 유입(미수 수금 예정)·유출(지급 예정 + 선택적 벤더 PO)·순증감·누적잔고.
+
+    구간(월/주)별로 예상 유입/유출을 집계하고 opening(기초잔고)부터 누적잔고를 굴린다.
+    과거(연체)로 이미 지난 예정은 첫 구간에 흡수한다. 전부 KRW 환산.
+    include_po=1 이면 벤더 발주(PurchaseOrder) 원가를 발주일 기준 유출로 추정 반영한다.
+    """
+    unit = "week" if unit == "week" else "month"
+    count = max(1, min(count, 24))
+    buckets = _cashflow_buckets(unit, count)
+    ends = [b["end"].isoformat() for b in buckets]
+
+    def bucket_index(iso: str) -> int:
+        """날짜가 속한 구간 index — 마지막 구간보다 뒤면 -1, 첫 구간보다 앞(연체)이면 0."""
+        for i, e in enumerate(ends):
+            if iso <= e:
+                return i
+        return -1
+
+    s = get_session()
+    try:
+        inflow = [0.0] * count
+        outflow = [0.0] * count
+        # 유입 — 미수 잔액이 있는 AR 의 due_date.
+        for r in _finance_receivable_rows(s):
+            if r["outstanding"] <= 0 or not r["due_date"]:
+                continue
+            idx = bucket_index(r["due_date"])
+            if idx >= 0:
+                inflow[idx] += _to_krw(r["outstanding"], r["currency"])
+        # 유출 — 지급대장 미납 회차.
+        win_start = buckets[0]["start"]
+        win_end = buckets[-1]["end"]
+        # 첫 구간이 연체를 흡수하도록 과거 1년까지 회차를 펼쳐 담는다.
+        scan_start = date.fromordinal(win_start.toordinal() - 400)
+        for p in s.query(FinancePayable).all():
+            for occ in _finance_occurrences(p, scan_start, win_end):
+                if _finance_payable_paid_on(p, occ):
+                    continue
+                idx = bucket_index(occ)
+                if idx >= 0:
+                    outflow[idx] += _to_krw(p.amount or 0, p.currency or "KRW")
+        # 선택: 벤더 발주 원가를 발주일 기준 유출로 추정.
+        if include_po:
+            ord_map = {o.id: o for o in s.query(Order).all()}
+            for po in s.query(PurchaseOrder).all():
+                pd = _po_period_date(po)
+                if not pd:
+                    continue
+                idx = bucket_index(pd)
+                if idx >= 0:
+                    o = ord_map.get(po.order_id)
+                    cur = po.currency or (o.currency if o else "USD") or "USD"
+                    outflow[idx] += _to_krw(_po_cost(po), cur)
+
+        rows = []
+        cumulative = opening
+        for i, b in enumerate(buckets):
+            net = inflow[i] - outflow[i]
+            cumulative += net
+            rows.append({
+                "label": b["label"],
+                "start": b["start"].isoformat(),
+                "end": b["end"].isoformat(),
+                "inflow": round(inflow[i]),
+                "outflow": round(outflow[i]),
+                "net": round(net),
+                "cumulative": round(cumulative),
+            })
+        return {
+            "unit": unit,
+            "opening": round(opening),
+            "rows": rows,
+            "total_inflow": round(sum(inflow)),
+            "total_outflow": round(sum(outflow)),
+            "ending": round(cumulative),
+            "usd_krw": USD_KRW_RATE,
+        }
+    finally:
+        s.close()
+
+
 @app.get("/api/admin/finance/calendar", dependencies=[Depends(require_token)])
 def finance_calendar(start: str = "", end: str = ""):
     """캘린더용 이벤트 — 구간 [start, end] 의 수금 예정(미수 due)·지급 예정(회차) 목록."""

@@ -34,6 +34,7 @@ import type {
   FinanceReceivable,
   FinanceSummary,
   FinanceClosing,
+  FinanceCashflow,
   FinanceCalendarEvent,
   SettingsCustomer,
   SettingsVendor,
@@ -702,6 +703,11 @@ export function fetchFinanceCalendar(start: string, end: string): Promise<{ rows
 export function fetchFinanceClosing(start: string, end: string, year: number): Promise<FinanceClosing> {
   return get<FinanceClosing>(
     `/api/admin/finance/closing?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}&year=${year}`
+  );
+}
+export function fetchFinanceCashflow(unit: "month" | "week", count: number, opening: number, includePo: boolean): Promise<FinanceCashflow> {
+  return get<FinanceCashflow>(
+    `/api/admin/finance/cashflow?unit=${unit}&count=${count}&opening=${opening}&include_po=${includePo ? 1 : 0}`
   );
 }
 

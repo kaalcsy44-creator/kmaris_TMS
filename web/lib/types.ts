@@ -807,6 +807,26 @@ export type FinanceClosing = {
   usd_krw: number;
 };
 
+export type FinanceCashflowRow = {
+  label: string;
+  start: string;
+  end: string;
+  inflow: number;
+  outflow: number;
+  net: number;
+  cumulative: number;
+};
+
+export type FinanceCashflow = {
+  unit: "month" | "week";
+  opening: number;
+  rows: FinanceCashflowRow[];
+  total_inflow: number;
+  total_outflow: number;
+  ending: number;
+  usd_krw: number;
+};
+
 export type FinanceCalendarEvent = {
   kind: "receivable" | "payable";
   date: string;
