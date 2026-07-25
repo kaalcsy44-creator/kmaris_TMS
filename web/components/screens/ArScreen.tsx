@@ -61,7 +61,7 @@ type ArForm = {
 };
 
 const DEFAULT_REMARKS =
-  "입금 후 입금증을 담당자에게 송부 부탁드립니다. 전자세금계산서 발행을 위해 사업자등록증 사본을 함께 전달 부탁드립니다.";
+  "After payment, please send the deposit receipt to the person in charge. To issue the electronic tax invoice, please also provide a copy of your business registration certificate.";
 
 const emptyForm: ArForm = {
   id: 0,
@@ -174,7 +174,7 @@ function MilestoneBar({ row, stage, onChanged }: { row: ArRow; stage: 10 | 11; o
   return (
     <div className="ar-milestone">
       <div className="form-section-title">
-        {stage === 10 ? "세금계산서 발행 (Tax invoice issuance)" : "수금 완료 (Payment)"}
+        {stage === 10 ? "Tax invoice issuance" : "Payment"}
       </div>
       <div className="milestone-row" style={{ marginBottom: 10 }}>
         <span className={`ar-badge${done ? "" : " overdue"}`}>
@@ -202,7 +202,7 @@ function MilestoneBar({ row, stage, onChanged }: { row: ArRow; stage: 10 | 11; o
         </div>
         {stage === 11 ? (
           <p className="hint-inline" style={{ display: "block", margin: "6px 0 0" }}>
-            금액을 비우면 완료 표시만, 입력하면 수금 기록 후 완료합니다.
+            Leave the amount empty to just mark it complete; enter an amount to record the payment and complete.
           </p>
         ) : null}
       </fieldset>
@@ -462,12 +462,12 @@ function ArAddForm({
       </div>
 
       {/* 청구처(BILL TO) — 세금계산서에 인쇄. 비우면 고객 마스터값을 사용. */}
-      <div className="form-section-title">Bill to (청구처)</div>
+      <div className="form-section-title">Bill to</div>
       <div className="form-grid">
-        <Field label="Customer Tax ID (사업자등록번호)" value={form.bill_to_tax_id} onChange={(v) => setForm({ ...form, bill_to_tax_id: v })} />
-        <Field label="Contact (담당자)" value={form.bill_to_contact} onChange={(v) => setForm({ ...form, bill_to_contact: v })} />
+        <Field label="Customer Tax ID" value={form.bill_to_tax_id} onChange={(v) => setForm({ ...form, bill_to_tax_id: v })} />
+        <Field label="Contact" value={form.bill_to_contact} onChange={(v) => setForm({ ...form, bill_to_contact: v })} />
         <Field label="Email" value={form.bill_to_email} onChange={(v) => setForm({ ...form, bill_to_email: v })} />
-        <Field label="Phone (연락처)" value={form.bill_to_phone} onChange={(v) => setForm({ ...form, bill_to_phone: v })} />
+        <Field label="Phone" value={form.bill_to_phone} onChange={(v) => setForm({ ...form, bill_to_phone: v })} />
       </div>
 
       {/* 청구 품목(Item list) — TAX INVOICE 문서에 그대로 출력된다. CI 품목이 기본값. */}
@@ -533,7 +533,7 @@ function ArAddForm({
       </div>
 
       <label className="form-field ar-remarks">
-        <span>Remarks (청구서 비고)</span>
+        <span>Remarks</span>
         <textarea rows={2} value={form.remarks} onChange={(e) => setForm({ ...form, remarks: e.target.value })} />
       </label>
 
@@ -584,7 +584,7 @@ function TaxPreviewButton({ orderId, form }: { orderId: number | null; form: ArF
       });
       setUrl(URL.createObjectURL(blob));
     } catch (e) {
-      alert(e instanceof Error ? e.message : "미리보기를 열 수 없습니다.");
+      alert(e instanceof Error ? e.message : "Failed to open the preview.");
     } finally {
       setBusy(false);
     }
