@@ -298,11 +298,20 @@ const emptyPayable: FinancePayableSave = {
 };
 
 function PayablesTab() {
-  const { data, error, refresh } = useCachedData<{ rows: FinancePayable[] }>("finance:payables", fetchFinancePayables);
+  const { data, error, refresh } = useCachedData<{ rows: FinancePayable[]; fx: FxQuote }>("finance:payables", fetchFinancePayables);
   const [editing, setEditing] = useState<FinancePayable | null>(null);
   const [adding, setAdding] = useState(false);
-  const rows = data?.rows ?? [];
+  const rows = useMemo(() => data?.rows ?? [], [data]);
   const canEdit = can("finance", "create") || can("finance", "edit");
+  // 합계는 통화별 분리(미수 목록과 같은 규칙). 반복 항목은 1회차 금액 기준.
+  const totals = useMemo(() => {
+    const t = { all: {} as MoneyByCurrency, unpaid: {} as MoneyByCurrency };
+    for (const p of rows) {
+      t.all[p.currency] = (t.all[p.currency] || 0) + p.amount;
+      if (!p.paid) t.unpaid[p.currency] = (t.unpaid[p.currency] || 0) + p.amount;
+    }
+    return t;
+  }, [rows]);
 
   function reload() {
     invalidateCache("finance:summary");
@@ -325,6 +334,7 @@ function PayablesTab() {
 
   if (error && !data) return <div className="state error">API error: {error.message}</div>;
   if (!data) return <div className="state">Loading…</div>;
+  const fx: FxQuote = data.fx ?? { rate: 0, date: "", source: "fixed" };
 
   return (
     <div className="panel">
@@ -335,7 +345,7 @@ function PayablesTab() {
         ) : null}
       </div>
       <p className="hint-inline" style={{ display: "block", margin: "4px 0 10px" }}>
-        Register company payables — vendor payments as well as rent, payroll, utilities and taxes. Monthly/quarterly/yearly recurring items appear as occurrences on the calendar.
+        Vendor bills arrive here automatically from the project&apos;s billing stages and are read-only. Use <b>+ Add payable</b> for the company&apos;s own costs — rent, payroll, utilities, taxes. Monthly/quarterly/yearly recurring items appear as occurrences on the calendar.
       </p>
       {rows.length === 0 ? (
         <div className="muted">No payables registered.</div>
@@ -391,6 +401,28 @@ function PayablesTab() {
               );
             })}
           </tbody>
+          {/* 합계 — 통화별 분리, 그 아래 참고용 KRW 환산(미수 목록과 같은 규칙). */}
+          <tfoot>
+            <tr className="foot-grand fin-foot-total">
+              <td />
+              <td className="total-label fin-foot-name" colSpan={2}>Total</td>
+              <td className="num total-value">{byCurrencyLines(totals.all)}</td>
+              <td /><td />
+              <td className="total-value">Unpaid {byCurrency(totals.unpaid)}</td>
+              <td />
+            </tr>
+            <tr className="fin-foot-ref">
+              <td />
+              <td className="fin-foot-name" colSpan={2}>
+                Total (In KRW · 1 USD = {fx.rate.toLocaleString()}
+                {fx.source === "exim" ? ` · 매매기준율 ${fx.date}` : " · fixed rate"})
+              </td>
+              <td className="num">{won(toKrw(totals.all, fx.rate))}</td>
+              <td /><td />
+              <td>Unpaid {won(toKrw(totals.unpaid, fx.rate))}</td>
+              <td />
+            </tr>
+          </tfoot>
         </table>
       )}
 

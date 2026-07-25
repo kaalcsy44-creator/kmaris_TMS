@@ -692,8 +692,8 @@ export function fetchFinanceSummary(): Promise<FinanceSummary> {
 export function fetchFinanceReceivables(): Promise<{ rows: FinanceReceivable[]; fx: FxQuote }> {
   return get<{ rows: FinanceReceivable[]; fx: FxQuote }>("/api/admin/finance/receivables");
 }
-export function fetchFinancePayables(): Promise<{ rows: FinancePayable[] }> {
-  return get<{ rows: FinancePayable[] }>("/api/admin/finance/payables");
+export function fetchFinancePayables(): Promise<{ rows: FinancePayable[]; fx: FxQuote }> {
+  return get<{ rows: FinancePayable[]; fx: FxQuote }>("/api/admin/finance/payables");
 }
 export function createFinancePayable(body: FinancePayableSave): Promise<{ ok: boolean; id: number }> {
   return post("/api/admin/finance/payables", body);

@@ -223,7 +223,7 @@ def finance_payables():
                 "owner": "",
             })
         out.sort(key=lambda r: (r["due_date"] or "9999", r["source"] != "manual"))
-        return {"rows": out}
+        return {"rows": out, "fx": _today_usd_krw()}
     finally:
         s.close()
 
