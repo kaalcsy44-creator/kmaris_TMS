@@ -1062,11 +1062,9 @@ function ComboField({
   type?: string;
 }) {
   const [manual, setManual] = useState(false);
-  // 저장된 옵션에 없는 값(직접 입력된 값)이 들어오면 자동으로 직접입력 모드로.
-  useEffect(() => {
-    if (!manual && value && !options.includes(value)) setManual(true);
-  }, [value, options, manual]);
   const useManual = manual || options.length === 0;
+  // 현재 값(직접 입력·미리채운 값 포함)을 옵션에 넣어 항상 드롭다운에 그대로 보이게 한다.
+  const allOptions = dedup([value, ...options]);
 
   return (
     <label className="form-field">
@@ -1080,14 +1078,14 @@ function ComboField({
         </div>
       ) : (
         <select
-          value={options.includes(value) ? value : ""}
+          value={value}
           onChange={(e) => {
             if (e.target.value === "__manual__") { setManual(true); return; }
             onChange(e.target.value);
           }}
         >
           <option value="">— Select —</option>
-          {options.map((o) => <option key={o} value={o}>{o}</option>)}
+          {allOptions.map((o) => <option key={o} value={o}>{o}</option>)}
           <option value="__manual__">✎ Enter manually…</option>
         </select>
       )}
