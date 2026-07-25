@@ -87,10 +87,13 @@ export function DocumentsOverview({
   initialOrderId = null,
   initialStage = null,
   initialView = null,
+  onChanged,
 }: {
   initialOrderId?: number | null;
   initialStage?: number | null;
   initialView?: WorkView | null;
+  /** 상위(프로젝트 팝업)의 파이프라인 새로고침 — 단계 완료가 즉시 단계 칩에 반영되게 한다. */
+  onChanged?: () => void;
 } = {}) {
   const stageFromProp = (s: number | null): StageTab =>
     s === 8 ? "s8" : s === 9 ? "s9" : "s7";
@@ -116,6 +119,9 @@ export function DocumentsOverview({
   function load() {
     invalidateCache("dashboard");
     invalidateCache("pipeline");
+    // 캐시 무효화만으로는 이미 떠 있는 상위 화면이 다시 부르지 않는다(POD 업로드 등으로
+    // 단계가 올라가도 단계 칩이 그대로였던 원인).
+    onChanged?.();
     return refresh();
   }
 

@@ -120,9 +120,12 @@ type StageTab = 9 | 10 | 11;
 export function ArOverview({
   initialOrderId = null,
   initialStage = null,
+  onChanged,
 }: {
   initialOrderId?: number | null;
   initialStage?: StageTab | null;
+  /** 상위(프로젝트 팝업)의 파이프라인 새로고침 — 단계 완료가 즉시 단계 칩에 반영되게 한다. */
+  onChanged?: () => void;
 } = {}) {
   const { data, refresh } = useCachedData("ar:overview", fetchArOverview);
   const { data: options } = useCachedData("ar:workoptions", fetchPoWorkOptions);
@@ -144,6 +147,9 @@ export function ArOverview({
   function load() {
     invalidateCache("dashboard");
     invalidateCache("pipeline");
+    // 캐시 무효화만으로는 이미 떠 있는 상위 화면이 다시 부르지 않는다 — 단계 칩이
+    // 예전 단계에 머무르지 않도록 파이프라인 재조회를 직접 요청한다.
+    onChanged?.();
     return refresh();
   }
 

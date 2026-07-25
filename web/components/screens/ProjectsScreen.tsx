@@ -2707,6 +2707,7 @@ function WorkspacePanel({
               initialOrderId={effectiveOrderId}
               initialStage={docStage}
               initialView={row.work_type === "서비스" ? "service" : "parts"}
+              onChanged={onChanged}
             />
           </Suspense>
         </div>
@@ -2726,6 +2727,7 @@ function WorkspacePanel({
             key={docReloadKey}
             initialOrderId={effectiveOrderId}
             initialStage={arStage as 9 | 10 | 11}
+            onChanged={onChanged}
           />
         </Suspense>
       </div>
