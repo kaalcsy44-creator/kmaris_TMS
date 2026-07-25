@@ -3628,6 +3628,15 @@ table.mini.items-edit td.row-tools {
   background: #fff;
   color: var(--ink);
 }
+/* 버튼 모양 클래스는 <button> 외에 <label>(파일 선택 트리거)·<a>·<span> 에도 붙는다.
+   <button> 은 글자를 알아서 세로 중앙에 놓지만 그 외 요소는 height 만으로는 글자가
+   위로 붙으므로(행 높이 기준 배치) 공통으로 flex 중앙 정렬한다. */
+.btn,
+.tool-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
 .btn {
   height: 32px;
   border: 1px solid #d7e2ee;
