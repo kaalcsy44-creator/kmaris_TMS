@@ -96,10 +96,11 @@ def ar_overview():
                 "bill_to_contact": r.bill_to_contact or "",
                 "bill_to_email": r.bill_to_email or "",
                 "bill_to_phone": r.bill_to_phone or "",
-                "tax_issued": bool(sd.get("11")),
-                "tax_issued_date": sd.get("11", "") or "",
-                "paid_done": bool(sd.get("12")),
-                "paid_date": sd.get("12", "") or "",
+                # 단계 재번호(구 8 제거) 후: 세금계산서 발행=10, 수금 완료=11.
+                "tax_issued": bool(sd.get("10")),
+                "tax_issued_date": sd.get("10", "") or "",
+                "paid_done": bool(sd.get("11")),
+                "paid_date": sd.get("11", "") or "",
                 # 공통 식별 컬럼
                 "vessel": (vessel_names.get(o.vessel_id, "") if o and o.vessel_id else ""),
                 "trade_type": (o.trade_type or "수출") if o else "수출",
