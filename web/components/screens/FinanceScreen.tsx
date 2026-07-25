@@ -238,17 +238,17 @@ function ReceivablesTab() {
                 <td>{r.invoice_no || r.ci_no || "—"}</td>
                 <td>{r.due_date || "—"}</td>
                 <td className="num">{money(r.invoice_amount, r.currency)}</td>
-                <td className="num">
-                  {money(r.paid_amount, r.currency)}
-                  {/* 완납 건은 수금일을 금액 옆에 함께 보여준다. */}
-                  {r.paid_date ? <span className="fin-paid-on">{r.paid_date}</span> : null}
-                </td>
+                <td className="num">{money(r.paid_amount, r.currency)}</td>
                 <td className="num"><b>{money(r.outstanding, r.currency)}</b></td>
                 <td>
                   {r.overdue ? (
                     <span className="wt-badge" style={{ background: "#fde2e1", color: "#c0392b" }}>Overdue</span>
                   ) : (
-                    AR_STATUS_LABEL[r.status] || r.status
+                    <>
+                      {AR_STATUS_LABEL[r.status] || r.status}
+                      {/* 완납 건은 수금일을 상태 옆에 함께 보여준다. */}
+                      {r.paid_date ? <span className="fin-paid-on">{r.paid_date}</span> : null}
+                    </>
                   )}
                 </td>
               </tr>

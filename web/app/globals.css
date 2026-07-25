@@ -9927,8 +9927,15 @@ button.ov-tl-stage:hover {
 /* 미수 목록 합계행 — 라벨·금액을 본문보다 1pt 키운다. */
 .fin-foot-total .total-label,
 .fin-foot-total .total-value { font-size: calc(1em + 1pt); }
-/* 참고용 KRW 환산행 — 집계가 아니므로 회색 작은 글씨로 낮춰 표기. */
-.fin-foot-ref td { color: var(--muted); font-size: 11px; background: #f8fafc; }
+/* 참고용 KRW 환산행 — 집계가 아니므로 회색 작은 글씨·일반 굵기로 낮춰 표기
+   (table.mini tfoot td 의 font-weight:800 을 클래스 특이도로 되돌린다). */
+.fin-foot-ref td {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 400;
+  background: #f8fafc;
+  border-top: 1px solid var(--line);
+}
 /* 완납 건의 수금일 — 금액 옆 회색 작은 글씨. */
 .fin-paid-on { color: var(--muted); font-size: 11px; margin-left: 6px; }
 .fin-kpi-sub { font-size: 12px; color: #6b7684; margin-top: 3px; }
