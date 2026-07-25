@@ -14,7 +14,7 @@ import {
 } from "@/lib/api";
 import { can, canEditDeal, editBlockReason } from "@/lib/auth";
 import { useCachedData, invalidateCache } from "@/lib/useCachedData";
-import type { ArRow, DocumentDetail, PoWorkOptions, TaxInvoiceItem } from "@/lib/types";
+import type { ArRow, DocumentDetail, DocumentWorkItem, PoWorkOptions, TaxInvoiceItem } from "@/lib/types";
 import { createPortal } from "react-dom";
 import CurrencyToggle from "@/components/common/CurrencyToggle";
 import {
@@ -229,14 +229,9 @@ function MilestoneBar({ row, stage, onChanged }: { row: ArRow; stage: 10 | 11; o
   );
 }
 
-function ciTotal(d: DocumentDetail | null): number {
-  if (!d?.ci?.items) return 0;
-  return d.ci.items.reduce((s, it) => s + num(it.amount), 0);
-}
-
-/** CI 품목 → 세금계산서 청구 품목(설명·Part No.·수량·단가·금액). */
-function ciItemsToTax(d: DocumentDetail | null): TaxInvoiceItem[] {
-  return (d?.ci?.items ?? []).map((it) => {
+/** 작업 품목(CI·P/O 공용) → 세금계산서 청구 품목(설명·Part No.·수량·단가·금액). */
+function workItemsToTax(items: DocumentWorkItem[] | undefined | null): TaxInvoiceItem[] {
+  return (items ?? []).map((it) => {
     const qty = num(it.qty);
     const unit_price = num(it.unit_price);
     return {
@@ -247,6 +242,16 @@ function ciItemsToTax(d: DocumentDetail | null): TaxInvoiceItem[] {
       amount: num(it.amount) || qty * unit_price,
     };
   });
+}
+
+/** CI 품목 → 세금계산서 청구 품목. CI가 없으면 빈 배열. */
+function ciItemsToTax(d: DocumentDetail | null): TaxInvoiceItem[] {
+  return workItemsToTax(d?.ci?.items);
+}
+
+/** P/O(오더) 품목 → 세금계산서 청구 품목. CI가 없을 때의 대체 소스. */
+function poItemsToTax(d: DocumentDetail | null): TaxInvoiceItem[] {
+  return workItemsToTax(d?.order?.items);
 }
 
 const taxSubtotal = (items: TaxInvoiceItem[]) => items.reduce((s, it) => s + num(it.amount), 0);
@@ -300,6 +305,8 @@ function ArAddForm({
   const [invMode, setInvMode] = useState<"auto" | "manual">(editing ? "manual" : "auto");
   // "Load CI" 버튼용 — 선택 오더의 CI 품목을 보관했다가 필요 시 표에 다시 채운다.
   const [ciItems, setCiItems] = useState<TaxInvoiceItem[]>([]);
+  // CI가 없을 때의 대체 소스 — 오더(P/O) 품목. "Load P/O" 로 표에 채운다.
+  const [poItems, setPoItems] = useState<TaxInvoiceItem[]>([]);
   const sel = useRowSelection();
 
   // 오더 선택 시 해당 프로젝트/CI 정보를 불러와 빈 항목 자동 입력.
@@ -310,16 +317,21 @@ function ArAddForm({
       .then((d) => {
         if (!alive) return;
         const autoInv = d.order.po_no ? `${d.order.po_no}-INV` : "";
+        const ci = ciItemsToTax(d);
+        const po = poItemsToTax(d);
+        // CI가 있으면 CI 품목이 기본값, 없으면 P/O 품목으로 대체.
+        const auto = ci.length ? ci : po;
         setAutoInvoiceNo(autoInv);
-        setCiItems(ciItemsToTax(d));
+        setCiItems(ci);
+        setPoItems(po);
         setForm((f) => ({
           ...f,
           ci_no: f.ci_no || d.ci?.ci_no || "",
           currency: d.ci?.currency || f.currency,
-          invoice_amount: f.invoice_amount || ciTotal(d),
-          // 송장번호 = P/O번호+"-INV"(비어있을 때만). 항목은 CI 품목을 기본값으로 불러온다.
+          invoice_amount: f.invoice_amount || taxSubtotal(auto),
+          // 송장번호 = P/O번호+"-INV"(비어있을 때만). 항목은 CI(없으면 P/O) 품목을 기본값으로 불러온다.
           invoice_no: f.invoice_no || autoInv,
-          items: f.items.length ? f.items : ciItemsToTax(d),
+          items: f.items.length ? f.items : auto,
           // 청구처는 고객 마스터값을 기본으로 채운다(사용자가 덮어쓰면 유지).
           bill_to_tax_id: f.bill_to_tax_id || d.order.customer_tax_id || "",
           bill_to_email: f.bill_to_email || d.order.customer_email || "",
@@ -378,8 +390,14 @@ function ArAddForm({
   }
   const addItem = () => setForm((f) => ({ ...f, items: [...f.items, { ...emptyTaxItem }] }));
   const setItems = (items: TaxInvoiceItem[]) => setForm((f) => ({ ...f, items }));
-  // Load CI — 선택 오더의 CI 품목을 표에 다시 채운다(현재 편집 내용 대체).
+  // Load CI / Load P/O — 선택 오더의 품목을 표에 다시 채운다(현재 편집 내용 대체).
   const loadCi = () => { setItems(ciItems.map((it) => ({ ...it }))); sel.clear(); };
+  const loadPo = () => { setItems(poItems.map((it) => ({ ...it }))); sel.clear(); };
+  // CI가 있으면 CI를, 없으면 P/O를 불러오는 버튼으로 노출한다.
+  const hasCi = ciItems.length > 0;
+  const loadLabel = hasCi ? "Load CI" : "Load P/O";
+  const loadSource = hasCi ? loadCi : loadPo;
+  const loadDisabled = (hasCi ? ciItems : poItems).length === 0;
   // Cancel — 편집 중이면 저장된 값으로, 신규면 빈 폼으로 되돌린다(오더 선택은 유지).
   const cancel = () => {
     if (existing) { setForm(arRowToForm(existing)); setInvMode("manual"); }
@@ -475,7 +493,7 @@ function ArAddForm({
         <div className="items-head">
           <div className="form-section-title" style={{ margin: 0 }}>Item list</div>
           <div className="items-head-actions">
-            <button type="button" className="btn sm" onClick={loadCi} disabled={ciItems.length === 0}>Load CI</button>
+            <button type="button" className="btn sm" onClick={loadSource} disabled={loadDisabled}>{loadLabel}</button>
             <ItemColsButton grid={grid} />
             <DeleteSelectedButton sel={sel} onDelete={() => deleteSelectedRows(form.items, sel, setItems)} />
             <button type="button" className="btn sm items-head-add" onClick={addItem}>+ Add</button>
@@ -497,7 +515,7 @@ function ArAddForm({
             </thead>
             <tbody>
               {form.items.length === 0 ? (
-                <tr><td colSpan={7} className="tax-items-empty">No items — “+ Add” or “Load CI”.</td></tr>
+                <tr><td colSpan={7} className="tax-items-empty">No items — “+ Add” or “{loadLabel}”.</td></tr>
               ) : form.items.map((it, i) => (
                 <tr key={i} className={itemRowClass(i)}>
                   <ItemSelectCell index={i} sel={sel} />
