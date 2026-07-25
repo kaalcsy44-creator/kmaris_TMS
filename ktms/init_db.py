@@ -132,6 +132,11 @@ _MIGRATIONS = {
         "bill_to_contact": "VARCHAR(100)",
         "bill_to_email":   "VARCHAR(200)",
         "bill_to_phone":   "VARCHAR(60)",
+        # 부대비용 {"freight","packing","insurance"} — 품목 소계에 더해 청구 총액 계산.
+        "charges":         "JSON",
+    },
+    "ap_records": {
+        "charges":         "JSON",
     },
 }
 

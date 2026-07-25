@@ -19,7 +19,7 @@ import {
 import { DocumentsOverview } from "@/components/screens/DocumentsScreen";
 import { can, canEditDeal, editBlockReason } from "@/lib/auth";
 import { useCachedData, invalidateCache } from "@/lib/useCachedData";
-import type { ApByOrderRow, ArRow, DocumentDetail, DocumentWorkItem, PoWorkOptions, TaxInvoiceItem } from "@/lib/types";
+import type { ApByOrderRow, ArRow, DocCharges, DocumentDetail, DocumentWorkItem, PoWorkOptions, TaxInvoiceItem } from "@/lib/types";
 import { createPortal } from "react-dom";
 import CurrencyToggle from "@/components/common/CurrencyToggle";
 import {
@@ -42,6 +42,27 @@ const nowLocal = () => {
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 };
 
+/** 부대비용 입력값(문자열로 들고 있다가 저장 시 숫자로 변환) — PI/CI 품목표와 같은 방식. */
+type ChargeForm = { freight: string; packing: string; insurance: string };
+const emptyCharges: ChargeForm = { freight: "", packing: "", insurance: "" };
+const CHARGE_KEYS: { key: keyof ChargeForm; label: string }[] = [
+  { key: "freight", label: "Freight" },
+  { key: "packing", label: "Packing" },
+  { key: "insurance", label: "Insurance" },
+];
+/** 저장된 charges(JSON) → 입력 폼 값. 0/빈값은 빈 칸으로 둔다. */
+function chargesToForm(c: DocCharges | null | undefined): ChargeForm {
+  const one = (v: number | string | undefined) => (v === undefined || v === null || num(v) === 0 ? "" : String(v));
+  return { freight: one(c?.freight), packing: one(c?.packing), insurance: one(c?.insurance) };
+}
+/** 입력 폼 값 → 저장용 숫자 JSON. */
+const chargesToSave = (c: ChargeForm): DocCharges => ({
+  freight: num(c.freight),
+  packing: num(c.packing),
+  insurance: num(c.insurance),
+});
+const chargesTotal = (c: ChargeForm) => num(c.freight) + num(c.packing) + num(c.insurance);
+
 type ArForm = {
   id: number;
   order_id: number | "";
@@ -57,6 +78,7 @@ type ArForm = {
   invoice_date: string;
   vat_rate: number;
   items: TaxInvoiceItem[];
+  charges: ChargeForm;
   remarks: string;
   // 청구처(BILL TO) 오버라이드 — 비우면 고객 마스터값을 사용.
   bill_to_tax_id: string;
@@ -82,6 +104,7 @@ const emptyForm: ArForm = {
   invoice_date: today(),
   vat_rate: 0.1,
   items: [],
+  charges: { ...emptyCharges },
   remarks: DEFAULT_REMARKS,
   bill_to_tax_id: "",
   bill_to_contact: "",
@@ -232,6 +255,7 @@ type ApForm = {
   due_date: string;
   paid_amount: number;
   items: TaxInvoiceItem[];
+  charges: ChargeForm;
   notes: string;
   tax_received: boolean;
   tax_received_date: string;
@@ -265,6 +289,7 @@ function ApAddForm({
           due_date: ap.due_date || today(),
           paid_amount: ap.paid_amount,
           items: (ap.items || []).map((it) => ({ ...it })),
+          charges: chargesToForm(ap.charges),
           notes: ap.notes,
           tax_received: ap.tax_received,
           tax_received_date: ap.tax_received_date || today(),
@@ -278,6 +303,7 @@ function ApAddForm({
           due_date: today(),
           paid_amount: 0,
           items: poItems.map((it) => ({ ...it })),
+          charges: { ...emptyCharges },
           notes: "",
           tax_received: false,
           tax_received_date: today(),
@@ -289,9 +315,13 @@ function ApAddForm({
   const [err, setErr] = useState("");
   const sel = useRowSelection();
 
+  // 합계 = 품목 소계 + 부대비용(Freight/Packing/Insurance) + VAT.
   const subtotal = taxSubtotal(form.items);
-  const vat = subtotal * num(form.vat_rate);
-  const total = Math.round(subtotal + vat);
+  const extras = chargesTotal(form.charges);
+  const vat = (subtotal + extras) * num(form.vat_rate);
+  const total = Math.round(subtotal + extras + vat);
+  const setCharge = (key: keyof ChargeForm, v: string) =>
+    setForm((f) => ({ ...f, charges: { ...f.charges, [key]: v } }));
 
   function setItem(i: number, key: keyof TaxInvoiceItem, value: string) {
     setForm((f) => {
@@ -325,6 +355,7 @@ function ApAddForm({
         vat_rate: form.vat_rate,
         due_date: form.due_date,
         items: form.items,
+        charges: chargesToSave(form.charges),
         notes: form.notes,
         tax_received: form.tax_received,
         tax_received_date: form.tax_received ? form.tax_received_date : "",
@@ -418,12 +449,26 @@ function ApAddForm({
                 </tr>
               ))}
             </tbody>
+            {/* Freight/Packing/Insurance 는 입력칸(부대비용) — 소계에 더해 VAT 를 매긴다. */}
             <tfoot>
               <tr>
                 <td /><td /><td /><td /><td />
                 <td className="total-label">Subtotal</td>
                 <td className="num total-value">{subtotal.toLocaleString()}</td>
               </tr>
+              {CHARGE_KEYS.map(({ key, label }) => (
+                <tr key={key}>
+                  <td /><td /><td /><td /><td />
+                  <td className="total-label">{label}</td>
+                  <td className="num total-value">
+                    <input
+                      className="foot-charge-input"
+                      value={amountInputValue(form.charges[key])}
+                      onChange={(e) => setCharge(key, String(parseAmountInput(e.target.value) ?? ""))}
+                    />
+                  </td>
+                </tr>
+              ))}
               <tr>
                 <td /><td /><td /><td /><td />
                 <td className="total-label">VAT ({Math.round(form.vat_rate * 100)}%)</td>
@@ -615,6 +660,7 @@ function arRowToForm(r: ArRow): ArForm {
     invoice_date: r.invoice_date || today(),
     vat_rate: r.vat_rate ?? 0.1,
     items: (r.items || []).map((it) => ({ ...it })),
+    charges: chargesToForm(r.charges),
     remarks: r.remarks || DEFAULT_REMARKS,
     bill_to_tax_id: r.bill_to_tax_id || "",
     bill_to_contact: r.bill_to_contact || "",
@@ -716,14 +762,15 @@ function ArAddForm({
       const body = {
         order_id: form.order_id,
         ci_no: form.ci_no,
-        // 청구 금액 = 품목 합계(소계+VAT). 별도 입력란 없이 항상 품목표에서 계산.
-        invoice_amount: Math.round(subtotal + vat),
+        // 청구 금액 = 품목 소계 + 부대비용 + VAT. 별도 입력란 없이 항상 품목표에서 계산.
+        invoice_amount: total,
         currency: form.currency,
         due_date: form.due_date,
         invoice_no: form.invoice_no,
         invoice_date: form.invoice_date,
         vat_rate: form.vat_rate,
         items: form.items,
+        charges: chargesToSave(form.charges),
         remarks: form.remarks,
         bill_to_tax_id: form.bill_to_tax_id,
         bill_to_contact: form.bill_to_contact,
@@ -786,8 +833,13 @@ function ArAddForm({
     }
   }
 
+  // 합계 = 품목 소계 + 부대비용(Freight/Packing/Insurance), 여기에 VAT 를 매긴다.
   const subtotal = taxSubtotal(form.items);
-  const vat = subtotal * num(form.vat_rate);
+  const extras = chargesTotal(form.charges);
+  const vat = (subtotal + extras) * num(form.vat_rate);
+  const total = Math.round(subtotal + extras + vat);
+  const setCharge = (key: keyof ChargeForm, v: string) =>
+    setForm((f) => ({ ...f, charges: { ...f.charges, [key]: v } }));
 
   // 청구 품목표 — 폭조절·컬럼숨김 가능한 공용 그리드. 좌측 체크박스로 선택→선택삭제.
   const itemCols: ItemCol[] = [
@@ -917,13 +969,27 @@ function ArAddForm({
                 </tr>
               ))}
             </tbody>
-            {/* 합계행 — 컬럼당 1셀(폭조절/숨김 정렬 유지). 라벨=Unit Price열, 값=Amount열. */}
+            {/* 합계행 — 컬럼당 1셀(폭조절/숨김 정렬 유지). 라벨=Unit Price열, 값=Amount열.
+                Freight/Packing/Insurance 는 입력칸(부대비용) — 소계에 더해 VAT 를 매긴다. */}
             <tfoot>
               <tr>
                 <td /><td /><td /><td /><td />
                 <td className="total-label">Subtotal</td>
                 <td className="num total-value">{subtotal.toLocaleString()}</td>
               </tr>
+              {CHARGE_KEYS.map(({ key, label }) => (
+                <tr key={key}>
+                  <td /><td /><td /><td /><td />
+                  <td className="total-label">{label}</td>
+                  <td className="num total-value">
+                    <input
+                      className="foot-charge-input"
+                      value={amountInputValue(form.charges[key])}
+                      onChange={(e) => setCharge(key, String(parseAmountInput(e.target.value) ?? ""))}
+                    />
+                  </td>
+                </tr>
+              ))}
               <tr>
                 <td /><td /><td /><td /><td />
                 <td className="total-label">VAT ({Math.round(form.vat_rate * 100)}%)</td>
@@ -932,7 +998,7 @@ function ArAddForm({
               <tr className="foot-grand">
                 <td /><td /><td /><td /><td />
                 <td className="total-label">Total</td>
-                <td className="num total-value">{Math.round(subtotal + vat).toLocaleString()}</td>
+                <td className="num total-value">{total.toLocaleString()}</td>
               </tr>
             </tfoot>
           </table>
@@ -983,6 +1049,7 @@ function TaxPreviewButton({ orderId, form }: { orderId: number | null; form: ArF
         currency: form.currency,
         vat_rate: form.vat_rate,
         items: form.items,
+        charges: chargesToSave(form.charges),
         remarks: form.remarks,
         bill_to_tax_id: form.bill_to_tax_id,
         bill_to_contact: form.bill_to_contact,

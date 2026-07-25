@@ -857,7 +857,8 @@ def tax_invoice_pdf(order_id: int, body: TaxInvoicePdfReq):
             date=body.invoice_date or date.today().isoformat(),
             customer=_customer_for_order(s, order),
             vessel=_vessel_for_order(s, order),
-            items=body.items or [], terms={},
+            # 부대비용(Freight/Packing/Insurance)은 PI/CI 와 같은 자리(terms)로 넘긴다.
+            items=body.items or [], terms=body.charges or {},
             currency=(body.currency or "KRW").upper(),
             vat_rate=body.vat_rate if body.vat_rate is not None else 0.1,
             po_no=order.po_no or "",

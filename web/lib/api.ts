@@ -24,6 +24,7 @@ import type {
   DocumentDetail,
   DocumentWorkItem,
   TaxInvoiceItem,
+  DocCharges,
   QtnRow,
   VrfqRow,
   DocRow,
@@ -1189,6 +1190,7 @@ type ArDocFields = {
   invoice_date?: string;
   vat_rate?: number;
   items?: TaxInvoiceItem[];
+  charges?: DocCharges;
   remarks?: string;
   // 청구처(BILL TO) 오버라이드 — 비우면 고객 마스터값을 사용.
   bill_to_tax_id?: string;
@@ -1236,6 +1238,7 @@ export function previewTaxInvoicePdf(
     currency?: string;
     vat_rate?: number;
     items?: TaxInvoiceItem[];
+    charges?: DocCharges;
     remarks?: string;
     bill_to_tax_id?: string;
     bill_to_contact?: string;

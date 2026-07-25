@@ -90,6 +90,7 @@ def ar_overview():
                 "invoice_date": r.invoice_date or "",
                 "vat_rate": r.vat_rate if r.vat_rate is not None else 0.1,
                 "items": r.items or [],
+                "charges": r.charges or {},
                 "remarks": r.remarks or "",
                 # 청구처(BILL TO) 오버라이드 — 9단계 편집 폼에서 그대로 다시 편집하려면 필요.
                 "bill_to_tax_id": r.bill_to_tax_id or "",
@@ -220,6 +221,7 @@ def create_ar(body: ARSave):
             invoice_date=body.invoice_date or "",
             vat_rate=body.vat_rate if body.vat_rate is not None else 0.1,
             items=body.items or [],
+            charges=body.charges or {},
             remarks=body.remarks or "",
             bill_to_tax_id=body.bill_to_tax_id or "",
             bill_to_contact=body.bill_to_contact or "",
@@ -259,6 +261,8 @@ def update_ar(ar_id: int, body: ARSave):
             ar.vat_rate = body.vat_rate
         if body.items is not None:
             ar.items = body.items
+        if body.charges is not None:
+            ar.charges = body.charges
         if body.remarks is not None:
             ar.remarks = body.remarks
         if body.bill_to_tax_id is not None:

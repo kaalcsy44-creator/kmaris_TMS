@@ -954,6 +954,24 @@ def _make_tax_invoice_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> byte
     items = normalize_items(data.get("items", []))
     currency = (data.get("currency") or "KRW").upper()
     totals = calc_totals(items, _num(data.get("vat_rate", 0)))
+    # 부대비용(Freight/Packing/Insurance) — PI/CI 와 같이 terms 에 담겨 온다.
+    # 소계에 더한 뒤 VAT 를 매기고, 값이 있는 항목만 합계표에 표기한다.
+    charge_terms = data.get("terms", {}) or {}
+
+    def _charge(key: str) -> float:
+        try:
+            return float(charge_terms.get(key) or 0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    freight, packing, insurance = _charge("freight"), _charge("packing"), _charge("insurance")
+    extras = freight + packing + insurance
+    if extras:
+        rate = _num(data.get("vat_rate", 0))
+        if rate > 1:
+            rate /= 100.0
+        taxable = totals["subtotal"] + extras
+        totals = {**totals, "vat": taxable * rate, "total": taxable * (1 + rate)}
 
     buffer = io.BytesIO()
     page_width = 190 * mm
@@ -1056,9 +1074,13 @@ def _make_tax_invoice_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> byte
     story += [item_table]
 
     # ── 소계 / VAT / 합계 (우측 정렬) ──
+    tot_lines = [("Subtotal", totals["subtotal"])]
+    for lab_, v in (("Freight", freight), ("Packing", packing), ("Insurance", insurance)):
+        if v:
+            tot_lines.append((lab_, v))
+    tot_lines += [("VAT", totals["vat"]), ("TOTAL INVOICE VALUE", totals["total"])]
     tot_rows = [[p(lab_, "small"), _p(f"{v:,.0f}", ParagraphStyle('r', parent=s['small'], alignment=TA_RIGHT))]
-                for lab_, v in [("Subtotal", totals["subtotal"]), ("VAT", totals["vat"]),
-                                ("TOTAL INVOICE VALUE", totals["total"])]]
+                for lab_, v in tot_lines]
     tot_inner = Table(tot_rows, colWidths=[col_w[3] + col_w[4], col_w[5]])
     tot_inner.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), .35, MID_GRAY),
                                    ("BACKGROUND", (0, 0), (0, -1), LIGHT_GRAY),

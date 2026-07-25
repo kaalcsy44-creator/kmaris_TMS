@@ -1594,6 +1594,8 @@ class ARSave(BaseModel):
     invoice_date: str | None = None
     vat_rate: float | None = None
     items: list[dict] | None = None
+    # 부대비용 {"freight","packing","insurance"} — 미전달 시 기존값 유지.
+    charges: dict | None = None
     remarks: str | None = None
     # 청구처(BILL TO) 오버라이드 — 미전달 시 기존값 유지.
     bill_to_tax_id: str | None = None
@@ -1616,6 +1618,7 @@ class APSave(BaseModel):
     due_date: str | None = None
     status: str = ""
     items: list[dict] | None = None
+    charges: dict | None = None      # 부대비용 {"freight","packing","insurance"}
     notes: str | None = None
     # 전자세금계산서 수취(10단계) — 미전달 시 기존값 유지.
     tax_received: bool | None = None
@@ -1636,6 +1639,7 @@ class TaxInvoicePdfReq(BaseModel):
     currency: str = "KRW"
     vat_rate: float = 0.1
     items: list[dict] = []
+    charges: dict = {}               # 부대비용 {"freight","packing","insurance"}
     remarks: str | None = ""
     # 청구처(BILL TO) 오버라이드 — 비우면 고객 마스터값 사용.
     bill_to_tax_id: str | None = ""

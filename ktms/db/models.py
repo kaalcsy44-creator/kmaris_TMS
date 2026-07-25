@@ -491,6 +491,9 @@ class ARRecord(Base):
     invoice_date   = Column(String(10))    # 송장 발행일 YYYY-MM-DD
     vat_rate       = Column(Float, default=0.1)   # 부가세율(내수 기본 10%)
     items          = Column(JSON, default=list)   # 청구 품목(설명·Part No.·수량·단가·금액)
+    # 부대비용 {"freight":0,"packing":0,"insurance":0} — 품목 소계에 더해 VAT·합계 계산.
+    # (PI/CI 가 terms JSON 에 같은 3개 값을 담는 것과 같은 개념)
+    charges        = Column(JSON, default=dict)
     remarks        = Column(Text)          # 청구서 비고(입금 안내 등)
     # 청구처(BILL TO) 오버라이드 — 비우면 고객 마스터값을 사용. 세금계산서 PDF 에 인쇄.
     bill_to_tax_id  = Column(String(60))   # 고객 사업자등록번호
@@ -520,6 +523,7 @@ class APRecord(Base):
     due_date       = Column(String(10))    # 지급 예정일 YYYY-MM-DD
     status         = Column(SAEnum(ARStatus), default=ARStatus.OUTSTANDING)
     items          = Column(JSON, default=list)   # 청구 품목(설명·Part No.·수량·단가·금액)
+    charges        = Column(JSON, default=dict)   # 부대비용 {"freight","packing","insurance"}
     # 전자세금계산서 수취(10단계) — vendor P/O 단위라 레코드에 직접 보관.
     tax_received      = Column(Boolean, default=False)  # 전자세금계산서 수취 완료
     tax_received_date = Column(String(10))              # 수취일 YYYY-MM-DD

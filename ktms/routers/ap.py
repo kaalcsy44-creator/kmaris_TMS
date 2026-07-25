@@ -47,6 +47,7 @@ def _ap_out(r: APRecord, po_no: str = "", vendor: str = "") -> dict:
         "due_date": r.due_date or "",
         "status": _enum_val(r.status),
         "items": r.items or [],
+        "charges": r.charges or {},
         "notes": r.notes or "",
         "tax_received": bool(r.tax_received),
         "tax_received_date": r.tax_received_date or "",
@@ -114,6 +115,7 @@ def create_ap(body: APSave):
             due_date=body.due_date,
             status=_ar_status_from_text(body.status, body.paid_amount or 0.0, body.invoice_amount or 0.0),
             items=body.items or [],
+            charges=body.charges or {},
             notes=body.notes or "",
             tax_received=bool(body.tax_received),
             tax_received_date=body.tax_received_date or "",
@@ -151,6 +153,8 @@ def update_ap(ap_id: int, body: APSave):
             ap.vat_rate = body.vat_rate
         if body.items is not None:
             ap.items = body.items
+        if body.charges is not None:
+            ap.charges = body.charges
         if body.notes is not None:
             ap.notes = body.notes
         if body.tax_received is not None:

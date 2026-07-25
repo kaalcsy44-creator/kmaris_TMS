@@ -713,12 +713,20 @@ export type ArRow = {
   invoice_date: string;
   vat_rate: number;
   items: TaxInvoiceItem[];
+  charges?: DocCharges;
   remarks: string;
   // 청구처(BILL TO) 오버라이드 — 비우면 고객 마스터값 사용.
   bill_to_tax_id: string;
   bill_to_contact: string;
   bill_to_email: string;
   bill_to_phone: string;
+};
+
+/** 부대비용 — 품목 소계에 더해 VAT·합계를 계산한다(PI/CI 의 terms 와 같은 3개 값). */
+export type DocCharges = {
+  freight?: number | string;
+  packing?: number | string;
+  insurance?: number | string;
 };
 
 /** 세금계산서(대금청구서) 청구 품목 1줄. */
@@ -753,6 +761,7 @@ export type ApRow = {
   due_date: string;
   status: string;
   items: TaxInvoiceItem[];
+  charges?: DocCharges;
   notes: string;
   tax_received: boolean;
   tax_received_date: string;
@@ -785,6 +794,7 @@ export type ApSave = {
   due_date?: string;
   status?: string;
   items?: TaxInvoiceItem[];
+  charges?: DocCharges;
   notes?: string;
   tax_received?: boolean;
   tax_received_date?: string;
