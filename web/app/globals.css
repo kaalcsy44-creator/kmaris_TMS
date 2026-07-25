@@ -3969,7 +3969,7 @@ table.mini tfoot tr.foot-grand .total-value {
 /* AR(대금청구서) 합계행: Subtotal·VAT 는 일반 굵기, Total 만 볼드 + 2px 크게. */
 .tax-items table.mini tfoot .total-label,
 .tax-items table.mini tfoot .total-value {
-  font-weight: 400;
+  font-weight: 700;
 }
 .tax-items table.mini tfoot tr.foot-grand .total-label,
 .tax-items table.mini tfoot tr.foot-grand .total-value {
