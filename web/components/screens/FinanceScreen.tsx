@@ -24,6 +24,7 @@ import type {
   FinanceCashflow,
   FinanceCalendarEvent,
   MoneyByCurrency,
+  FxQuote,
 } from "@/lib/types";
 import { can } from "@/lib/auth";
 import Modal from "@/components/common/Modal";
@@ -75,6 +76,14 @@ function byCurrencyLines(m: MoneyByCurrency): React.ReactNode {
   return keys.map((c) => (
     <div key={c} className="cur-line">{money(m[c], c)}</div>
   ));
+}
+
+/** 통화별 합계를 참고용 KRW 한 값으로 — 표시 전용(집계·저장에는 쓰지 않는다). */
+function toKrw(m: MoneyByCurrency, usdKrw: number): number {
+  return Object.entries(m || {}).reduce(
+    (sum, [cur, amt]) => sum + (cur === "USD" ? amt * usdKrw : amt),
+    0
+  );
 }
 
 /** AR 상태(DB는 한글 enum) → 화면 표기. */
@@ -180,7 +189,7 @@ function KpiTile({ label, main, sub, tone }: { label: string; main: React.ReactN
 
 // ── Receivables (read-only; editing lives in project stages 9–11) ──────────────
 function ReceivablesTab() {
-  const { data, error } = useCachedData<{ rows: FinanceReceivable[] }>("finance:receivables", fetchFinanceReceivables);
+  const { data, error } = useCachedData<{ rows: FinanceReceivable[]; fx: FxQuote }>("finance:receivables", fetchFinanceReceivables);
   const [openOnly, setOpenOnly] = useState(true);
   const rows = useMemo(() => {
     const all = data?.rows ?? [];
@@ -199,6 +208,7 @@ function ReceivablesTab() {
 
   if (error && !data) return <div className="state error">API error: {error.message}</div>;
   if (!data) return <div className="state">Loading…</div>;
+  const fx: FxQuote = data.fx ?? { rate: 0, date: "", source: "fixed" };
 
   return (
     <div className="panel">
@@ -228,17 +238,17 @@ function ReceivablesTab() {
                 <td>{r.invoice_no || r.ci_no || "—"}</td>
                 <td>{r.due_date || "—"}</td>
                 <td className="num">{money(r.invoice_amount, r.currency)}</td>
-                <td className="num">{money(r.paid_amount, r.currency)}</td>
+                <td className="num">
+                  {money(r.paid_amount, r.currency)}
+                  {/* 완납 건은 수금일을 금액 옆에 함께 보여준다. */}
+                  {r.paid_date ? <span className="fin-paid-on">{r.paid_date}</span> : null}
+                </td>
                 <td className="num"><b>{money(r.outstanding, r.currency)}</b></td>
                 <td>
                   {r.overdue ? (
                     <span className="wt-badge" style={{ background: "#fde2e1", color: "#c0392b" }}>Overdue</span>
                   ) : (
-                    <>
-                      {AR_STATUS_LABEL[r.status] || r.status}
-                      {/* 완납 건은 수금일을 상태 옆에 함께 보여준다. */}
-                      {r.paid_date ? <span className="fin-paid-on"> {r.paid_date.slice(0, 10)}</span> : null}
-                    </>
+                    AR_STATUS_LABEL[r.status] || r.status
                   )}
                 </td>
               </tr>
@@ -250,6 +260,17 @@ function ReceivablesTab() {
               <td className="num total-value">{byCurrencyLines(totals.invoice)}</td>
               <td className="num total-value">{byCurrencyLines(totals.paid)}</td>
               <td className="num total-value">{byCurrencyLines(totals.outstanding)}</td>
+              <td />
+            </tr>
+            {/* 참고용 KRW 환산 — 오늘자 매매기준율(조회 실패 시 고정환율). 집계에는 쓰지 않는다. */}
+            <tr className="fin-foot-ref">
+              <td colSpan={3}>
+                In KRW (ref.) · 1 USD = {fx.rate.toLocaleString()}
+                {fx.source === "exim" ? ` · 매매기준율 ${fx.date}` : " · fixed rate"}
+              </td>
+              <td className="num">{won(toKrw(totals.invoice, fx.rate))}</td>
+              <td className="num">{won(toKrw(totals.paid, fx.rate))}</td>
+              <td className="num">{won(toKrw(totals.outstanding, fx.rate))}</td>
               <td />
             </tr>
           </tfoot>

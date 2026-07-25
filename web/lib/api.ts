@@ -35,6 +35,7 @@ import type {
   FinancePayable,
   FinancePayableSave,
   FinanceReceivable,
+  FxQuote,
   FinanceSummary,
   FinanceClosing,
   FinanceCashflow,
@@ -688,8 +689,8 @@ export function fetchArOverview(): Promise<ArData> {
 export function fetchFinanceSummary(): Promise<FinanceSummary> {
   return get<FinanceSummary>("/api/admin/finance/summary");
 }
-export function fetchFinanceReceivables(): Promise<{ rows: FinanceReceivable[] }> {
-  return get<{ rows: FinanceReceivable[] }>("/api/admin/finance/receivables");
+export function fetchFinanceReceivables(): Promise<{ rows: FinanceReceivable[]; fx: FxQuote }> {
+  return get<{ rows: FinanceReceivable[]; fx: FxQuote }>("/api/admin/finance/receivables");
 }
 export function fetchFinancePayables(): Promise<{ rows: FinancePayable[] }> {
   return get<{ rows: FinancePayable[] }>("/api/admin/finance/payables");

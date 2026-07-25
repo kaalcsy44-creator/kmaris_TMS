@@ -484,6 +484,7 @@ class ARRecord(Base):
     paid_amount    = Column(Float, default=0.0)
     currency       = Column(String(10), default="USD")
     due_date       = Column(String(10))
+    paid_date      = Column(String(10))   # 완납일 — 수금 등록으로 잔액이 0이 된 날
     status         = Column(SAEnum(ARStatus), default=ARStatus.OUTSTANDING)
     notes          = Column(Text)
     # 세금계산서(대금청구서) 문서 필드 — 9단계 편집창에서 입력, TAX INVOICE PDF 생성에 사용.

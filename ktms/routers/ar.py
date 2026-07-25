@@ -308,10 +308,14 @@ def ar_payment(ar_id: int, body: ARPayment):
             ar.due_date = body.due_date
         if ar.paid_amount >= (ar.invoice_amount or 0):
             ar.status = ARStatus.PAID
+            # 완납일은 최초로 잔액이 0이 된 날. 이미 있으면 유지(재수정 시 날짜 밀림 방지).
+            ar.paid_date = ar.paid_date or date.today().isoformat()
         elif ar.paid_amount > 0:
             ar.status = ARStatus.PARTIAL
+            ar.paid_date = None
         else:
             ar.status = ARStatus.OUTSTANDING
+            ar.paid_date = None
         s.commit()
         return {"ok": True, "paid_amount": ar.paid_amount, "status": _enum_val(ar.status)}
     finally:

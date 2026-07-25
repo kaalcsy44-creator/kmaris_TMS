@@ -2197,12 +2197,12 @@ def _finance_receivable_rows(s) -> list[dict]:
     rfq_by_id = {q.id: q for q in s.query(RFQ).all()}
     qtn_rfq = {q.id: q.rfq_id for q in s.query(Quotation).all()}
 
-    def _paid_date(order) -> str:
+    def _stage11_date(order) -> str:
         if not order:
             return ""
         rid = getattr(order, "rfq_id", None) or qtn_rfq.get(getattr(order, "quotation_id", None) or 0)
         rfq = rfq_by_id.get(rid) if rid else None
-        return ((getattr(rfq, "stage_dates", None) or {}).get("11") or "") if rfq else ""
+        return ((getattr(rfq, "stage_dates", None) or {}).get("11") or "")[:10] if rfq else ""
 
     rows: list[dict] = []
     for r in s.query(ARRecord).all():
@@ -2211,8 +2211,18 @@ def _finance_receivable_rows(s) -> list[dict]:
         invoice = round(r.invoice_amount or 0, 2)
         paid = round(r.paid_amount or 0, 2)
         outstanding = round(invoice - paid, 2)
-        status = _enum_val(r.status)
-        overdue = status != ARStatus.PAID and bool(r.due_date) and r.due_date < today_str and outstanding > 0
+        # 상태는 저장된 enum 대신 금액·기일에서 매번 계산한다. 한 번 '연체'로 저장된 뒤
+        # 기일을 미루면 옛 상태가 그대로 남는 문제가 있었다(표시가 실제와 어긋남).
+        settled = invoice > 0 and outstanding <= 0
+        overdue = not settled and bool(r.due_date) and r.due_date < today_str and outstanding > 0
+        if settled:
+            status = "완납"
+        elif overdue:
+            status = "연체"
+        elif paid > 0:
+            status = "일부수금"
+        else:
+            status = "미수"
         rows.append({
             "id": r.id,
             "order_id": r.order_id,
@@ -2224,9 +2234,9 @@ def _finance_receivable_rows(s) -> list[dict]:
             "paid_amount": paid,
             "outstanding": outstanding,
             "due_date": r.due_date or "",
-            # 완납 건에 표시할 수금일(11단계 완료일). 미완납이면 빈 값.
-            "paid_date": _paid_date(o) if outstanding <= 0 and invoice > 0 else "",
-            "status": "연체" if overdue else status,
+            # 완납일 — 레코드에 기록된 날짜 우선, 없으면 11단계(수금 완료) 일시로 폴백.
+            "paid_date": ((r.paid_date or "")[:10] or _stage11_date(o)) if settled else "",
+            "status": status,
             "overdue": bool(overdue),
         })
     return rows

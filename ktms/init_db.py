@@ -134,6 +134,8 @@ _MIGRATIONS = {
         "bill_to_phone":   "VARCHAR(60)",
         # 부대비용 {"freight","packing","insurance"} — 품목 소계에 더해 청구 총액 계산.
         "charges":         "JSON",
+        # 완납일 — 수금 등록으로 잔액이 0이 된 날(미기록 건은 11단계 완료일로 폴백).
+        "paid_date":       "VARCHAR(10)",
     },
     "ap_records": {
         "charges":         "JSON",

@@ -36,6 +36,7 @@ from _core import (
     require_token,
     timedelta,
 )
+from services.fx import get_deal_base_rate
 
 
 def _to_krw(amount: float, currency: str) -> float:
@@ -57,6 +58,14 @@ def _add_by_currency(bucket: dict, key: str, amount: float, currency: str) -> No
     cur = (currency or "KRW").upper()
     per = bucket.setdefault(key, {})
     per[cur] = round(per.get(cur, 0.0) + (amount or 0.0), 2)
+
+
+def _today_usd_krw() -> dict:
+    """오늘자 USD 매매기준율(수출입은행). 실패하면 고정환율로 폴백한다."""
+    rate, used = get_deal_base_rate(date.today().isoformat(), "USD")
+    if rate is not None:
+        return {"rate": round(rate, 4), "date": used, "source": "exim"}
+    return {"rate": USD_KRW_RATE, "date": "", "source": "fixed"}
 
 
 def _by_currency_sort_key(per: dict) -> tuple:
@@ -161,12 +170,16 @@ def finance_summary():
 
 @app.get("/api/admin/finance/receivables", dependencies=[Depends(require_token)])
 def finance_receivables():
-    """미수(수금) 목록 — ARRecord 기준. 미수금·연체·거래선별 확인."""
+    """미수(수금) 목록 — ARRecord 기준. 미수금·연체·거래선별 확인.
+
+    합계는 통화별로 내되, 참고용 KRW 환산에 쓰라고 오늘자 매매기준율을 함께 준다
+    (조회 실패 시 고정환율 폴백 — source 로 구분).
+    """
     s = get_session()
     try:
         rows = _finance_receivable_rows(s)
         rows.sort(key=lambda r: (r["due_date"] or "9999", -r["outstanding"]))
-        return {"rows": rows}
+        return {"rows": rows, "fx": _today_usd_krw()}
     finally:
         s.close()
 

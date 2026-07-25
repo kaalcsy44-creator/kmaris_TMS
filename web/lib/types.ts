@@ -855,6 +855,9 @@ export type FinanceReceivable = {
 // 통화별 합계 맵(예: { KRW: 1000000, USD: 500 }).
 export type MoneyByCurrency = Record<string, number>;
 
+/** 참고용 환산에 쓰는 환율 — source="exim" 이면 그날 매매기준율, "fixed" 면 고정환율 폴백. */
+export type FxQuote = { rate: number; date: string; source: "exim" | "fixed" };
+
 /** 재무 요약 — 금액은 모두 통화별 분리(환산 없음). */
 export type FinanceSummary = {
   receivable: {
