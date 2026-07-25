@@ -9939,6 +9939,10 @@ table.mini tfoot .fin-foot-name { text-align: left; }
   background: #f8fafc;
   border-top: 1px solid var(--line);
 }
+/* 납부 기록 팝업 — 날짜 한두 칸만 받는 좁은 폼(세로 스택, 여백 최소). */
+.fin-pay-form { display: flex; flex-direction: column; gap: 10px; }
+.fin-pay-form .form-field { margin: 0; }
+.fin-pay-target { font-size: 13px; font-weight: 600; color: var(--navy); }
 /* 완납 건의 수금일 — 금액 옆 회색 작은 글씨. */
 .fin-paid-on { color: var(--muted); font-size: 11px; margin-left: 6px; }
 .fin-kpi-sub { font-size: 12px; color: #6b7684; margin-top: 3px; }

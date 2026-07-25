@@ -517,22 +517,18 @@ function PaymentDateModal({
   }
 
   return (
-    <Modal title="Record payment" onClose={onClose}>
-      <div className="form-grid">
-        <label className="form-field form-field--ro">
-          <span>Payable</span>
-          <div className="ro-value">{row.description || row.counterparty || "—"} · {money(row.amount, row.currency)}</div>
-        </label>
+    <Modal title="Record payment" onClose={onClose} form maxWidth={340}>
+      <div className="fin-pay-form">
+        <div className="fin-pay-target">
+          {row.description || row.counterparty || "—"} · {money(row.amount, row.currency)}
+        </div>
         {recurring ? (
           <label className="form-field">
             <span>Scheduled occurrence</span>
             <input type="date" value={occ} onChange={(e) => setOcc(e.target.value)} />
           </label>
         ) : (
-          <label className="form-field form-field--ro">
-            <span>Scheduled date</span>
-            <div className="ro-value">{row.due_date || "—"}</div>
-          </label>
+          <div className="hint-inline">Scheduled {row.due_date || "—"}</div>
         )}
         <label className="form-field">
           <span>Payment date</span>
@@ -997,16 +993,12 @@ function CalendarTab() {
         Click a payable to record its payment — you enter the date it was actually paid, which may differ from the scheduled date (recurring items settle one occurrence at a time). Click a paid one to undo. Receivables (AR) are managed from the project stages.
       </p>
       {payingEvent ? (
-        <Modal title="Record payment" onClose={() => setPayingEvent(null)}>
-          <div className="form-grid">
-            <label className="form-field form-field--ro">
-              <span>Payable</span>
-              <div className="ro-value">{payingEvent.title} · {money(payingEvent.amount, payingEvent.currency)}</div>
-            </label>
-            <label className="form-field form-field--ro">
-              <span>Scheduled date</span>
-              <div className="ro-value">{payingEvent.occurrence || payingEvent.date}</div>
-            </label>
+        <Modal title="Record payment" onClose={() => setPayingEvent(null)} form maxWidth={340}>
+          <div className="fin-pay-form">
+            <div className="fin-pay-target">
+              {payingEvent.title} · {money(payingEvent.amount, payingEvent.currency)}
+            </div>
+            <div className="hint-inline">Scheduled {payingEvent.occurrence || payingEvent.date}</div>
             <label className="form-field">
               <span>Payment date</span>
               <input type="date" value={paidOn} onChange={(ev) => setPaidOn(ev.target.value)} />
