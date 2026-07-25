@@ -364,7 +364,7 @@ function ApAddForm({
         </label>
         <Field label="VAT %" value={String(Math.round(form.vat_rate * 100))} onChange={(v) => setForm({ ...form, vat_rate: (Number(v) || 0) / 100 })} type="number" />
         <Field label="Due date" value={form.due_date} onChange={(v) => setForm({ ...form, due_date: v })} type="date" />
-        <Field label="Paid amount" value={String(form.paid_amount)} onChange={(v) => setForm({ ...form, paid_amount: Number(v) || 0 })} type="number" />
+        <MoneyField label="Paid amount" value={form.paid_amount} onChange={(v) => setForm({ ...form, paid_amount: parseAmountInput(v) ?? 0 })} />
       </div>
 
       <div className="tax-items">
@@ -525,7 +525,7 @@ function MilestoneBar({ row, stage, onChanged }: { row: ArRow; stage: 10 | 11; o
             <Field label="Issued at" value={issuedAt} onChange={setIssuedAt} type="datetime-local" />
           ) : (
             <>
-              <Field label="Payment amount" value={amount} onChange={setAmount} type="number" />
+              <MoneyField label="Payment amount" value={amount} onChange={setAmount} />
               <Field label="Payment date / due" value={payDue} onChange={setPayDue} type="date" />
               <Field label="Paid at" value={paidAt} onChange={setPaidAt} type="datetime-local" />
             </>
@@ -1037,6 +1037,29 @@ function Field({
     <label className="form-field">
       <span>{label}</span>
       <input type={type} value={value} onChange={(e) => onChange(e.target.value)} />
+    </label>
+  );
+}
+
+/** 금액 입력 필드 — 천단위 콤마(회계 표기)로 표시하고, 저장값은 콤마 없는 원시 문자열. */
+function MoneyField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string | number;
+  onChange: (raw: string) => void;
+}) {
+  return (
+    <label className="form-field">
+      <span>{label}</span>
+      <input
+        className="num"
+        inputMode="decimal"
+        value={amountInputValue(value)}
+        onChange={(e) => onChange(e.target.value.replace(/,/g, ""))}
+      />
     </label>
   );
 }

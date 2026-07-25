@@ -28,6 +28,7 @@ import type {
 import { can } from "@/lib/auth";
 import Modal from "@/components/common/Modal";
 import CurrencyToggle from "@/components/common/CurrencyToggle";
+import { amountInputValue, parseAmountInput } from "@/components/common/itemTable";
 
 // ── Display helpers ────────────────────────────────────────────────────────────
 // Category codes are stored values (do not translate); labels below are display-only.
@@ -417,7 +418,7 @@ function PayableForm({
         </label>
         <label className="form-field">
           <span>Amount</span>
-          <input type="number" value={form.amount} onChange={(e) => set("amount", Number(e.target.value))} />
+          <input className="num" inputMode="decimal" value={amountInputValue(form.amount)} onChange={(e) => set("amount", parseAmountInput(e.target.value) ?? 0)} />
         </label>
         <label className="form-field">
           <span>Currency</span>
@@ -621,7 +622,7 @@ function CashFlowTab() {
         </label>
         <label className="fin-inline-field">
           Opening balance (₩)
-          <input type="number" value={openingInput} onChange={(e) => setOpeningInput(e.target.value)} style={{ width: 140 }} />
+          <input inputMode="decimal" value={amountInputValue(openingInput)} onChange={(e) => setOpeningInput(e.target.value.replace(/,/g, ""))} style={{ width: 140 }} />
         </label>
         <label className="check-chip" style={{ cursor: "pointer" }}>
           <input type="checkbox" checked={includePo} onChange={(e) => setIncludePo(e.target.checked)} /> Include vendor PO outflow (est.)
