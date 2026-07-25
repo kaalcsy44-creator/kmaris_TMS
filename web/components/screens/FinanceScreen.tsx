@@ -12,12 +12,17 @@ import {
   updateFinancePayable,
   deleteFinancePayable,
   payFinancePayable,
+  createFinanceIncome,
+  updateFinanceIncome,
+  deleteFinanceIncome,
+  receiveFinanceIncome,
   fetchVendors,
 } from "@/lib/api";
 import { useCachedData, invalidateCache } from "@/lib/useCachedData";
 import type {
   FinancePayable,
   FinancePayableSave,
+  FinanceIncomeSave,
   FinanceReceivable,
   FinanceSummary,
   FinanceClosing,
@@ -39,6 +44,14 @@ const RECURRENCE_LABEL: Record<string, string> = {
   monthly: "Monthly",
   quarterly: "Quarterly",
   yearly: "Yearly",
+};
+// 기타 수입 분류(저장값은 한글 코드, 표시만 영문).
+const INCOME_CATEGORIES = ["이자수입", "환급", "잡수입", "기타"];
+const INCOME_CATEGORY_LABEL: Record<string, string> = {
+  이자수입: "Interest",
+  환급: "Refund",
+  잡수입: "Misc income",
+  기타: "Other",
 };
 const CATEGORY_LABEL: Record<string, string> = {
   거래선지급: "Vendor payment",
@@ -187,39 +200,73 @@ function KpiTile({ label, main, sub, tone }: { label: string; main: React.ReactN
   );
 }
 
-// ── Receivables (read-only; editing lives in project stages 9–11) ──────────────
+/** 수입 목록 합계 — 청구·수금·미수 3열을 통화별로 모은다. */
+function receivableTotals(rows: FinanceReceivable[]) {
+  const t = { invoice: {} as MoneyByCurrency, paid: {} as MoneyByCurrency, outstanding: {} as MoneyByCurrency };
+  for (const r of rows) {
+    t.invoice[r.currency] = (t.invoice[r.currency] || 0) + r.invoice_amount;
+    t.paid[r.currency] = (t.paid[r.currency] || 0) + r.paid_amount;
+    t.outstanding[r.currency] = (t.outstanding[r.currency] || 0) + r.outstanding;
+  }
+  return t;
+}
+
+// ── Receivables — 프로젝트 매출(AR, 읽기전용) + 기타 수입(수동 등록) ────────────
 function ReceivablesTab() {
-  const { data, error } = useCachedData<{ rows: FinanceReceivable[]; fx: FxQuote }>("finance:receivables", fetchFinanceReceivables);
+  const { data, error, refresh } = useCachedData<{ rows: FinanceReceivable[]; fx: FxQuote }>("finance:receivables", fetchFinanceReceivables);
   const [openOnly, setOpenOnly] = useState(true);
+  const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState<FinanceReceivable | null>(null);
+  const [receiving, setReceiving] = useState<{ row: FinanceReceivable; occurrence: string } | null>(null);
   const rows = useMemo(() => {
     const all = data?.rows ?? [];
     return openOnly ? all.filter((r) => r.outstanding > 0) : all;
   }, [data, openOnly]);
+  // 섹션 = 프로젝트 매출(AR) / 기타 수입. 성격이 달라 소계도 따로 낸다.
+  const groups = useMemo(() => [
+    { key: "ar", label: "Sales · customer invoices (AR)", rows: rows.filter((r) => r.source !== "income") },
+    { key: "income", label: "Other income · interest, refunds, misc", rows: rows.filter((r) => r.source === "income") },
+  ], [rows]);
   // 합계 3열(청구·수금·미수) — 통화별로 분리 집계.
-  const totals = useMemo(() => {
-    const t = { invoice: {} as MoneyByCurrency, paid: {} as MoneyByCurrency, outstanding: {} as MoneyByCurrency };
-    for (const r of rows) {
-      t.invoice[r.currency] = (t.invoice[r.currency] || 0) + r.invoice_amount;
-      t.paid[r.currency] = (t.paid[r.currency] || 0) + r.paid_amount;
-      t.outstanding[r.currency] = (t.outstanding[r.currency] || 0) + r.outstanding;
-    }
-    return t;
-  }, [rows]);
+  const totals = useMemo(() => receivableTotals(rows), [rows]);
+
+  function reload() {
+    invalidateCache("finance:summary");
+    invalidateCache("finance:calendar");
+    return refresh();
+  }
+
+  async function undoReceived(r: FinanceReceivable, occurrence?: string) {
+    await receiveFinanceIncome(r.id, false, occurrence);
+    reload();
+  }
+
+  async function removeIncome(r: FinanceReceivable) {
+    if (!confirm(`Delete income "${r.description || r.counterparty}"?`)) return;
+    await deleteFinanceIncome(r.id);
+    reload();
+  }
 
   if (error && !data) return <div className="state error">API error: {error.message}</div>;
   if (!data) return <div className="state">Loading…</div>;
   const fx: FxQuote = data.fx ?? { rate: 0, date: "", source: "fixed" };
+  const canEdit = can("finance", "create") || can("finance", "edit");
 
   return (
     <div className="panel">
       <div className="items-head">
         <h3 className="form-title" style={{ margin: 0 }}>Receivables</h3>
-        <label className="check-chip" style={{ cursor: "pointer" }}>
-          <input type="checkbox" checked={openOnly} onChange={(e) => setOpenOnly(e.target.checked)} /> Outstanding only
-        </label>
+        <div className="items-head-actions">
+          <label className="check-chip" style={{ cursor: "pointer" }}>
+            <input type="checkbox" checked={openOnly} onChange={(e) => setOpenOnly(e.target.checked)} /> Outstanding only
+          </label>
+          {can("finance", "create") ? (
+            <button className="btn primary sm" onClick={() => setAdding(true)}>+ Add income</button>
+          ) : null}
+        </div>
       </div>
       <p className="hint-inline" style={{ display: "block", margin: "4px 0 10px" }}>
-        Receivables are populated automatically from the project&apos;s tax-invoice and collection stages. This view is read-only.
+        Customer invoices arrive here automatically from the project&apos;s tax-invoice and collection stages and are read-only. Use <b>+ Add income</b> for money that is not project sales — interest, refunds, misc.
       </p>
       {rows.length === 0 ? (
         <div className="muted">No receivables to show.</div>
@@ -228,12 +275,16 @@ function ReceivablesTab() {
           <thead>
             <tr>
               <th>Customer</th><th>Invoice No.</th><th>Due</th>
-              <th className="num">Invoice</th><th className="num">Paid</th><th className="num">Outstanding</th><th>Status</th>
+              <th className="num">Invoice</th><th className="num">Paid</th><th className="num">Outstanding</th><th>Status</th><th />
             </tr>
           </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.id} className={r.overdue ? "fin-overdue" : ""}>
+          {groups.map((g) => g.rows.length === 0 ? null : (
+          <tbody key={g.key}>
+            <tr className="fin-group-head"><td colSpan={8}>{g.label}</td></tr>
+            {g.rows.map((r) => {
+              const isIncome = r.source === "income";
+              return (
+              <tr key={`${r.source || "ar"}-${r.id}`} className={r.overdue ? "fin-overdue" : ""}>
                 <td>{r.customer}</td>
                 <td>{r.invoice_no || r.ci_no || "—"}</td>
                 <td>{r.due_date || "—"}</td>
@@ -243,17 +294,58 @@ function ReceivablesTab() {
                 <td>
                   {r.overdue ? (
                     <span className="wt-badge" style={{ background: "#fde2e1", color: "#c0392b" }}>Overdue</span>
+                  ) : isIncome ? (
+                    // 기타 수입은 이 화면에서 바로 입금 처리(실제 입금일 입력).
+                    <button
+                      type="button"
+                      className={`wt-badge fin-paid-toggle${r.paid ? " on" : ""}`}
+                      title={canEdit ? (r.paid ? "Undo receipt" : "Record receipt") : ""}
+                      disabled={!canEdit}
+                      onClick={() =>
+                        r.recurrence !== "none"
+                          ? setReceiving({ row: r, occurrence: nextUnpaidOccurrence(asPayableLike(r)) })
+                          : r.paid
+                            ? undoReceived(r)
+                            : setReceiving({ row: r, occurrence: r.due_date })
+                      }
+                    >
+                      {r.recurrence !== "none" ? `${(r.paid_dates || []).length} received` : r.paid ? "Received" : "Expected"}
+                    </button>
                   ) : (
-                    <>
-                      {AR_STATUS_LABEL[r.status] || r.status}
-                      {/* 완납 건은 수금일을 상태 옆에 함께 보여준다. */}
-                      {r.paid_date ? <span className="fin-paid-on">{r.paid_date}</span> : null}
-                    </>
+                    AR_STATUS_LABEL[r.status] || r.status
                   )}
+                  {r.paid_date ? <span className="fin-paid-on">{r.paid_date}</span> : null}
+                </td>
+                <td>
+                  <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                    {isIncome ? (
+                      <>
+                        {can("finance", "edit") ? <button className="btn sm" onClick={() => setEditing(r)}>Edit</button> : null}
+                        {can("finance", "delete") ? <button className="btn danger sm" onClick={() => removeIncome(r)}>Delete</button> : null}
+                      </>
+                    ) : (
+                      <span className="hint-inline">Project stage 9–11</span>
+                    )}
+                  </div>
                 </td>
               </tr>
-            ))}
+              );
+            })}
+            {(() => {
+              const st = receivableTotals(g.rows);
+              return (
+                <tr className="fin-group-sub">
+                  <td />
+                  <td className="fin-foot-name" colSpan={2}>Subtotal</td>
+                  <td className="num">{byCurrency(st.invoice)}</td>
+                  <td className="num">{byCurrency(st.paid)}</td>
+                  <td className="num">{byCurrency(st.outstanding)}</td>
+                  <td /><td />
+                </tr>
+              );
+            })()}
           </tbody>
+          ))}
           <tfoot>
             {/* 합계 라벨은 Invoice No. 열에서 시작하도록 첫 칸(Customer)을 비운다. */}
             <tr className="foot-grand fin-foot-total">
@@ -279,7 +371,220 @@ function ReceivablesTab() {
           </tfoot>
         </table>
       )}
+
+      {receiving ? (
+        <ReceiptDateModal
+          row={receiving.row}
+          occurrence={receiving.occurrence}
+          onClose={() => setReceiving(null)}
+          onSaved={() => { setReceiving(null); reload(); }}
+        />
+      ) : null}
+      {adding ? (
+        <IncomeForm initial={emptyIncome} onClose={() => setAdding(false)} onSaved={() => { setAdding(false); reload(); }} />
+      ) : null}
+      {editing ? (
+        <IncomeForm
+          initial={{
+            category: editing.category,
+            counterparty: editing.counterparty,
+            customer_id: editing.customer_id ?? null,
+            description: editing.description,
+            amount: editing.amount,
+            currency: editing.currency,
+            due_date: editing.due_date,
+            recurrence: editing.recurrence,
+            recur_until: editing.recur_until,
+            notes: editing.notes,
+          }}
+          rowId={editing.id}
+          onClose={() => setEditing(null)}
+          onSaved={() => { setEditing(null); reload(); }}
+        />
+      ) : null}
     </div>
+  );
+}
+
+// 기타 수입 등록 기본값 — 지급대장(emptyPayable)의 수입측 대응.
+const emptyIncome: FinanceIncomeSave = {
+  category: "잡수입",
+  counterparty: "",
+  customer_id: null,
+  description: "",
+  amount: 0,
+  currency: "KRW",
+  due_date: todayStr(),
+  recurrence: "none",
+  recur_until: "",
+  notes: "",
+};
+
+/** FinanceReceivable(기타 수입 행) → 반복 회차 계산용 최소 형태. */
+function asPayableLike(r: FinanceReceivable): FinancePayable {
+  return {
+    ...(r as unknown as FinancePayable),
+    due_date: r.due_date,
+    recurrence: r.recurrence ?? "none",
+    recur_until: r.recur_until ?? "",
+    paid_dates: r.paid_dates ?? [],
+  };
+}
+
+/** 입금 기록 — 예정일과 실제 입금일이 다를 수 있어 둘 다 받는다(납부 팝업과 동일). */
+function ReceiptDateModal({
+  row,
+  occurrence,
+  onClose,
+  onSaved,
+}: {
+  row: FinanceReceivable;
+  occurrence: string;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const recurring = (row.recurrence ?? "none") !== "none";
+  const [occ, setOcc] = useState(occurrence || row.due_date || todayStr());
+  const [paidOn, setPaidOn] = useState(todayStr());
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  async function save() {
+    setBusy(true);
+    setErr("");
+    try {
+      await receiveFinanceIncome(row.id, true, recurring ? occ : undefined, paidOn);
+      onSaved();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Save failed");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal title="Record receipt" onClose={onClose} form maxWidth={340}>
+      <div className="fin-pay-form">
+        <div className="fin-pay-target">
+          {row.description || row.counterparty || row.customer} · {money(row.invoice_amount, row.currency)}
+        </div>
+        {recurring ? (
+          <label className="form-field">
+            <span>Scheduled occurrence</span>
+            <input type="date" value={occ} onChange={(e) => setOcc(e.target.value)} />
+          </label>
+        ) : (
+          <div className="hint-inline">Expected {row.due_date || "—"}</div>
+        )}
+        <label className="form-field">
+          <span>Receipt date</span>
+          <input type="date" value={paidOn} onChange={(e) => setPaidOn(e.target.value)} />
+        </label>
+      </div>
+      <div className="form-actions">
+        {err ? <span className="action-err">{err}</span> : null}
+        <button className="btn" onClick={onClose} disabled={busy}>Cancel</button>
+        <button className="btn primary" onClick={save} disabled={busy || !paidOn}>
+          {busy ? "Saving…" : "Mark received"}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+/** 기타 수입 등록/수정 폼 — 지급대장 PayableForm 의 수입측 대응. */
+function IncomeForm({
+  initial,
+  rowId,
+  onClose,
+  onSaved,
+}: {
+  initial: FinanceIncomeSave;
+  rowId?: number;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [form, setForm] = useState<FinanceIncomeSave>({ ...initial });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const set = <K extends keyof FinanceIncomeSave>(k: K, v: FinanceIncomeSave[K]) =>
+    setForm((f) => ({ ...f, [k]: v }));
+
+  async function save() {
+    setBusy(true);
+    setErr("");
+    try {
+      if (rowId) await updateFinanceIncome(rowId, form);
+      else await createFinanceIncome(form);
+      onSaved();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Save failed");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal title={rowId ? "Edit income" : "Add income"} onClose={onClose} form>
+      <div className="form-grid">
+        <label className="form-field">
+          <span>Category</span>
+          <select value={form.category} onChange={(e) => set("category", e.target.value)}>
+            {INCOME_CATEGORIES.map((c) => (
+              <option key={c} value={c}>{INCOME_CATEGORY_LABEL[c] || c}</option>
+            ))}
+          </select>
+        </label>
+        <label className="form-field">
+          <span>Payer</span>
+          <input value={form.counterparty || ""} onChange={(e) => set("counterparty", e.target.value)} />
+        </label>
+        <label className="form-field">
+          <span>Description</span>
+          <input value={form.description || ""} onChange={(e) => set("description", e.target.value)} />
+        </label>
+        <label className="form-field">
+          <span>Amount</span>
+          <input
+            inputMode="decimal"
+            value={amountInputValue(form.amount ?? 0)}
+            onChange={(e) => set("amount", parseAmountInput(e.target.value) ?? 0)}
+          />
+        </label>
+        <label className="form-field">
+          <span>Currency</span>
+          <CurrencyToggle value={form.currency || "KRW"} onChange={(v) => set("currency", v)} />
+        </label>
+        <label className="form-field">
+          <span>Expected date</span>
+          <input type="date" value={form.due_date || ""} onChange={(e) => set("due_date", e.target.value)} />
+        </label>
+        <label className="form-field">
+          <span>Recurrence</span>
+          <select
+            value={form.recurrence}
+            onChange={(e) => set("recurrence", e.target.value as FinanceIncomeSave["recurrence"])}
+          >
+            {(["none", "monthly", "quarterly", "yearly"] as const).map((r) => (
+              <option key={r} value={r}>{RECURRENCE_LABEL[r]}</option>
+            ))}
+          </select>
+        </label>
+        {form.recurrence !== "none" ? (
+          <label className="form-field">
+            <span>Repeat until (optional)</span>
+            <input type="date" value={form.recur_until || ""} onChange={(e) => set("recur_until", e.target.value)} />
+          </label>
+        ) : null}
+        <label className="form-field" style={{ gridColumn: "1 / -1" }}>
+          <span>Notes</span>
+          <textarea className="po-textarea small" value={form.notes || ""} onChange={(e) => set("notes", e.target.value)} />
+        </label>
+      </div>
+      <div className="form-actions">
+        {err ? <span className="action-err">{err}</span> : null}
+        <button className="btn" onClick={onClose} disabled={busy}>Cancel</button>
+        <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
+      </div>
+    </Modal>
   );
 }
 

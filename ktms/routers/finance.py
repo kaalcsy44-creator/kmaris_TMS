@@ -12,7 +12,10 @@ from _core import (
     Customer,
     Depends,
     FINANCE_CATEGORIES,
+    FINANCE_INCOME_CATEGORIES,
     FINANCE_RECURRENCES,
+    FinanceIncome,
+    FinanceIncomeIn,
     FinancePayable,
     FinancePayableIn,
     FinancePayablePayIn,
@@ -23,6 +26,7 @@ from _core import (
     User,
     Vendor,
     _ap_record_rows,
+    _finance_income_row,
     _finance_occurrences,
     _finance_payable_paid_on,
     _finance_payable_row,
@@ -79,6 +83,7 @@ def finance_meta():
     """지급 분류·반복 옵션 등 폼 구성용 메타."""
     return {
         "categories": FINANCE_CATEGORIES,
+        "income_categories": FINANCE_INCOME_CATEGORIES,
         "recurrences": sorted(FINANCE_RECURRENCES),
     }
 
@@ -96,8 +101,8 @@ def finance_summary():
         today_str = today.isoformat()
         horizon = (date.fromordinal(today.toordinal() + 30)).isoformat()
 
-        # ── 수금(미수) — ARRecord 기준 ──
-        rec = _finance_receivable_rows(s)
+        # ── 수금(미수) — ARRecord + 기타 수입(수동 등록) ──
+        rec = _finance_receivable_rows(s) + _finance_income_rows(s)
         rec_open = [r for r in rec if r["outstanding"] > 0]
         receivable_outstanding = _sum_by_currency((r["outstanding"], r["currency"]) for r in rec_open)
         receivable_overdue = _sum_by_currency(
@@ -170,16 +175,137 @@ def finance_summary():
 
 @app.get("/api/admin/finance/receivables", dependencies=[Depends(require_token)])
 def finance_receivables():
-    """미수(수금) 목록 — ARRecord 기준. 미수금·연체·거래선별 확인.
+    """수입 목록 — 프로젝트 매출(ARRecord) + 기타 수입(FinanceIncome, 수동 등록).
 
-    합계는 통화별로 내되, 참고용 KRW 환산에 쓰라고 오늘자 매매기준율을 함께 준다
-    (조회 실패 시 고정환율 폴백 — source 로 구분).
+    지급 목록이 AP+수동을 함께 보여주는 것과 대칭. 합계는 통화별로 내되, 참고용 KRW
+    환산에 쓰라고 오늘자 매매기준율을 함께 준다(조회 실패 시 고정환율 폴백).
     """
     s = get_session()
     try:
-        rows = _finance_receivable_rows(s)
+        rows = [{**r, "source": "ar"} for r in _finance_receivable_rows(s)]
+        rows += _finance_income_rows(s)
         rows.sort(key=lambda r: (r["due_date"] or "9999", -r["outstanding"]))
         return {"rows": rows, "fx": _today_usd_krw()}
+    finally:
+        s.close()
+
+
+def _finance_income_rows(s) -> list[dict]:
+    """기타 수입(수동 등록) 행 — 목록·집계 공용."""
+    customer_names = {c.id: c.name for c in s.query(Customer).all()}
+    user_names = {u.id: u.username for u in s.query(User).all()}
+    return [
+        _finance_income_row(r, customer_names, user_names)
+        for r in s.query(FinanceIncome).order_by(FinanceIncome.due_date, FinanceIncome.id).all()
+    ]
+
+
+# ── 기타 수입(수동 등록) CRUD — 지급대장(payables)과 같은 규약 ──────────────────
+@app.get("/api/admin/finance/incomes", dependencies=[Depends(require_token)])
+def finance_incomes():
+    s = get_session()
+    try:
+        return {"rows": _finance_income_rows(s), "fx": _today_usd_krw()}
+    finally:
+        s.close()
+
+
+@app.post("/api/admin/finance/incomes", dependencies=[Depends(require_token)])
+def create_finance_income(body: FinanceIncomeIn, user: dict = Depends(get_current_user)):
+    if not (body.description or "").strip() and not (body.counterparty or "").strip():
+        raise HTTPException(status_code=400, detail="Enter a description or counterparty.")
+    if not (body.due_date or "").strip():
+        raise HTTPException(status_code=400, detail="Enter an expected date.")
+    rec = body.recurrence if (body.recurrence or "none") in FINANCE_RECURRENCES else "none"
+    s = get_session()
+    try:
+        row = FinanceIncome(
+            category=body.category or "기타",
+            counterparty=(body.counterparty or "").strip(),
+            customer_id=body.customer_id,
+            description=(body.description or "").strip(),
+            amount=body.amount or 0.0,
+            currency=body.currency or "KRW",
+            due_date=(body.due_date or "").strip()[:10],
+            recurrence=rec,
+            recur_until=(body.recur_until or "").strip()[:10],
+            notes=(body.notes or "").strip(),
+            owner_id=(user or {}).get("id"),
+        )
+        s.add(row)
+        s.commit()
+        return {"ok": True, "id": row.id}
+    finally:
+        s.close()
+
+
+@app.put("/api/admin/finance/incomes/{row_id}", dependencies=[Depends(require_token)])
+def update_finance_income(row_id: int, body: FinanceIncomeIn):
+    s = get_session()
+    try:
+        row = s.query(FinanceIncome).filter_by(id=row_id).first()
+        if not row:
+            raise HTTPException(status_code=404, detail="Income not found.")
+        row.category = body.category or "기타"
+        row.counterparty = (body.counterparty or "").strip()
+        row.customer_id = body.customer_id
+        row.description = (body.description or "").strip()
+        row.amount = body.amount or 0.0
+        row.currency = body.currency or "KRW"
+        row.due_date = (body.due_date or "").strip()[:10]
+        row.recurrence = body.recurrence if (body.recurrence or "none") in FINANCE_RECURRENCES else "none"
+        row.recur_until = (body.recur_until or "").strip()[:10]
+        row.notes = (body.notes or "").strip()
+        s.commit()
+        return {"ok": True, "id": row.id}
+    finally:
+        s.close()
+
+
+@app.delete("/api/admin/finance/incomes/{row_id}", dependencies=[Depends(require_token)])
+def delete_finance_income(row_id: int):
+    s = get_session()
+    try:
+        row = s.query(FinanceIncome).filter_by(id=row_id).first()
+        if not row:
+            raise HTTPException(status_code=404, detail="Income not found.")
+        s.delete(row)
+        s.commit()
+        return {"ok": True}
+    finally:
+        s.close()
+
+
+@app.post("/api/admin/finance/incomes/{row_id}/receive", dependencies=[Depends(require_token)])
+def receive_finance_income(row_id: int, body: FinancePayablePayIn):
+    """입금 표시 토글 — 지급대장의 납부 처리와 같은 규약(실제 입금일을 받는다)."""
+    s = get_session()
+    try:
+        row = s.query(FinanceIncome).filter_by(id=row_id).first()
+        if not row:
+            raise HTTPException(status_code=404, detail="Income not found.")
+        paid_on = (body.paid_on or "").strip()[:10] or date.today().isoformat()
+        if (row.recurrence or "none") == "none":
+            row.paid = bool(body.paid)
+            row.paid_date = paid_on if body.paid else ""
+        else:
+            occ = (body.occurrence or "").strip()
+            if not occ:
+                raise HTTPException(status_code=400, detail="반복 항목은 회차일(occurrence)이 필요합니다.")
+            dates = list(row.paid_dates or [])
+            pays = dict(getattr(row, "payments", None) or {})
+            if body.paid and occ not in dates:
+                dates.append(occ)
+            elif not body.paid and occ in dates:
+                dates.remove(occ)
+            if body.paid:
+                pays[occ] = paid_on
+            else:
+                pays.pop(occ, None)
+            row.paid_dates = sorted(dates)
+            row.payments = pays
+        s.commit()
+        return {"ok": True}
     finally:
         s.close()
 
@@ -527,8 +653,8 @@ def finance_cashflow(unit: str = "month", count: int = 6, opening: float = 0.0,
     try:
         inflow = [0.0] * count
         outflow = [0.0] * count
-        # 유입 — 미수 잔액이 있는 AR 의 due_date.
-        for r in _finance_receivable_rows(s):
+        # 유입 — 미수 잔액이 있는 AR + 미수령 기타 수입의 due_date.
+        for r in _finance_receivable_rows(s) + _finance_income_rows(s):
             if r["outstanding"] <= 0 or not r["due_date"]:
                 continue
             if (r["currency"] or "KRW").upper() != cur_sel:
@@ -627,6 +753,47 @@ def finance_calendar(start: str = "", end: str = ""):
                     "currency": r["currency"],
                     "overdue": r["overdue"],
                     "ref_id": r["id"],
+                })
+        # 수입 예정 — 기타 수입(수동 등록). 반복 회차 포함, 실제 입금일에도 표시.
+        customer_names = {c.id: c.name for c in s.query(Customer).all()}
+        for r in s.query(FinanceIncome).all():
+            who = r.counterparty or customer_names.get(r.customer_id, "") or r.description or "Income"
+            for occ in _finance_occurrences(r, d0, d1):
+                events.append({
+                    "kind": "receivable",
+                    "date": occ,
+                    "title": who,
+                    "category": r.category or "기타",
+                    "amount": round(r.amount or 0, 2),
+                    "currency": r.currency or "KRW",
+                    "paid": _finance_payable_paid_on(r, occ),
+                    "paid_on": ((r.paid_date or "") if (r.recurrence or "none") == "none"
+                                else (getattr(r, "payments", None) or {}).get(occ, "")),
+                    "ref_id": r.id,
+                    "occurrence": occ,
+                    "source": "income",
+                })
+            if (r.recurrence or "none") == "none":
+                pay_map = {(r.due_date or ""): (r.paid_date or "")} if r.paid else {}
+            else:
+                pay_map = dict(getattr(r, "payments", None) or {})
+            for sched, paid_on in pay_map.items():
+                if not paid_on or paid_on == sched or not (d0.isoformat() <= paid_on <= d1.isoformat()):
+                    continue
+                events.append({
+                    "kind": "receivable",
+                    "date": paid_on,
+                    "title": who,
+                    "category": r.category or "기타",
+                    "amount": round(r.amount or 0, 2),
+                    "currency": r.currency or "KRW",
+                    "paid": True,
+                    "paid_on": paid_on,
+                    "scheduled": sched,
+                    "actual": True,
+                    "ref_id": r.id,
+                    "occurrence": sched,
+                    "source": "income",
                 })
         # 지급 예정 — 반복 회차 포함.
         vendor_names = {v.id: v.name for v in s.query(Vendor).all()}

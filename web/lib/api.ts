@@ -34,6 +34,7 @@ import type {
   ApSave,
   FinancePayable,
   FinancePayableSave,
+  FinanceIncomeSave,
   FinanceReceivable,
   FxQuote,
   FinanceSummary,
@@ -703,6 +704,29 @@ export function updateFinancePayable(id: number, body: FinancePayableSave): Prom
 }
 export function deleteFinancePayable(id: number): Promise<{ ok: boolean }> {
   return del(`/api/admin/finance/payables/${id}`);
+}
+// ── 기타 수입(수동 등록) — 지급대장과 같은 규약 ─────────────────────────────────
+export function createFinanceIncome(body: FinanceIncomeSave): Promise<{ ok: boolean; id: number }> {
+  return post("/api/admin/finance/incomes", body);
+}
+export function updateFinanceIncome(id: number, body: FinanceIncomeSave): Promise<{ ok: boolean; id: number }> {
+  return put(`/api/admin/finance/incomes/${id}`, body);
+}
+export function deleteFinanceIncome(id: number): Promise<{ ok: boolean }> {
+  return del(`/api/admin/finance/incomes/${id}`);
+}
+/** 입금 표시 토글. paidOn = 실제 입금일(예정일과 달라도 됨). */
+export function receiveFinanceIncome(
+  id: number,
+  paid: boolean,
+  occurrence?: string,
+  paidOn?: string
+): Promise<{ ok: boolean }> {
+  return post(`/api/admin/finance/incomes/${id}/receive`, {
+    paid,
+    occurrence: occurrence ?? null,
+    paid_on: paidOn ?? null,
+  });
 }
 /** 납부 표시 토글. paidOn = 실제 납부일(예정일과 달라도 됨, 미지정 시 서버가 오늘로). */
 export function payFinancePayable(

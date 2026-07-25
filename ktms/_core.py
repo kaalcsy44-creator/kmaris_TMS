@@ -74,7 +74,7 @@ from db.models import (
     Order, PurchaseOrder, ShippingAdvice, ProformaInvoice, CommercialInvoice,
     PackingList, TaxInvoiceData, ARRecord, APRecord, DeliveryProof,
     RFQStatus, OrderStatus, ARStatus, WorkType, MarketingActivity, ScheduleEvent,
-    MarketingAsset, FinancePayable,
+    MarketingAsset, FinancePayable, FinanceIncome,
 )
 
 # ── App / CORS ────────────────────────────────────────────────────────────────
@@ -2092,8 +2092,10 @@ def _schedule_guard(e: ScheduleEvent, user: dict) -> None:
         raise HTTPException(status_code=403, detail="작성자(PIC)만 이 일정을 수정·삭제할 수 있습니다.")
 
 
-# ── Finance: 지급대장(payables) + 재무 집계 ────────────────────────────────────
+# ── Finance: 지급대장(payables) + 수입대장(incomes) + 재무 집계 ────────────────
 FINANCE_CATEGORIES = ["거래선지급", "임차료", "급여", "공과금", "세금", "기타"]
+# 기타 수입 분류 — 프로젝트 매출(AR)이 아닌 입금.
+FINANCE_INCOME_CATEGORIES = ["이자수입", "환급", "잡수입", "기타"]
 FINANCE_RECURRENCES = {"none", "monthly", "quarterly", "yearly"}
 
 
@@ -2116,6 +2118,20 @@ class FinancePayablePayIn(BaseModel):
     occurrence: str | None = None
     # 실제 납부일(YYYY-MM-DD). 예정일과 다를 수 있어 별도로 받는다. 미지정 시 오늘.
     paid_on: str | None = None
+
+
+class FinanceIncomeIn(BaseModel):
+    """기타 수입 등록/수정 — FinancePayableIn 의 수입측 대응."""
+    category: str | None = "기타"
+    counterparty: str | None = ""
+    customer_id: int | None = None
+    description: str | None = ""
+    amount: float | None = 0.0
+    currency: str | None = "KRW"
+    due_date: str | None = ""
+    recurrence: str | None = "none"
+    recur_until: str | None = ""
+    notes: str | None = ""
 
 
 def _finance_payable_paid_on(p: FinancePayable, iso: str) -> bool:
@@ -2147,6 +2163,46 @@ def _finance_payable_row(p: FinancePayable, vendor_names: dict, user_names: dict
         "notes": p.notes or "",
         "owner_id": p.owner_id or 0,
         "owner": user_names.get(p.owner_id, "") if p.owner_id else "",
+    }
+
+
+def _finance_income_row(r, customer_names: dict, user_names: dict) -> dict:
+    """FinanceIncome → 목록 행. 지급대장 행과 같은 키 구성(화면·집계 공용)."""
+    amount = round(r.amount or 0, 2)
+    settled = bool(r.paid) if (r.recurrence or "none") == "none" else (r.due_date in (r.paid_dates or []))
+    who = r.counterparty or (customer_names.get(r.customer_id, "") if r.customer_id else "")
+    today_str = date.today().isoformat()
+    overdue = (not settled) and bool(r.due_date) and r.due_date < today_str
+    return {
+        "id": r.id,
+        "source": "income",
+        "category": r.category or "기타",
+        "counterparty": who,
+        # 미수 목록(ARRecord 행)과 같은 키도 함께 채운다 — 집계·표가 두 소스를 공용한다.
+        "customer": who or "—",
+        "ci_no": "",
+        "invoice_no": r.description or "",
+        "status": "완납" if settled else ("연체" if overdue else "미수"),
+        "overdue": overdue,
+        "customer_id": r.customer_id,
+        "description": r.description or "",
+        "amount": amount,
+        # 미수 목록과 같은 3열 — 수령 완료면 전액 입금으로 본다.
+        "invoice_amount": amount,
+        "paid_amount": amount if settled else 0.0,
+        "outstanding": 0.0 if settled else amount,
+        "currency": r.currency or "KRW",
+        "due_date": r.due_date or "",
+        "recurrence": r.recurrence or "none",
+        "recur_until": r.recur_until or "",
+        "paid": bool(r.paid),
+        "paid_date": (r.paid_date or "") if (r.recurrence or "none") == "none"
+                     else max((getattr(r, "payments", None) or {}).values(), default=""),
+        "paid_dates": list(r.paid_dates or []),
+        "payments": dict(getattr(r, "payments", None) or {}),
+        "notes": r.notes or "",
+        "owner_id": r.owner_id or 0,
+        "owner": user_names.get(r.owner_id, "") if r.owner_id else "",
     }
 
 
@@ -2955,8 +3011,12 @@ __all__ = [
     "FinancePayable",
     "FinancePayableIn",
     "FinancePayablePayIn",
+    "FinanceIncome",
+    "FinanceIncomeIn",
     "FINANCE_CATEGORIES",
+    "FINANCE_INCOME_CATEGORIES",
     "FINANCE_RECURRENCES",
+    "_finance_income_row",
     "_finance_payable_row",
     "_finance_payable_paid_on",
     "_finance_occurrences",

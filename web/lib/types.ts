@@ -852,9 +852,36 @@ export type FinanceReceivable = {
   paid_amount: number;
   outstanding: number;
   due_date: string;
-  paid_date?: string;    // 완납 건의 수금 완료일(11단계 완료일)
+  paid_date?: string;    // 완납 건의 수금 완료일(11단계 완료일 / 기타 수입은 실제 입금일)
   status: string;
   overdue: boolean;
+  // "ar" = 프로젝트 매출(ARRecord), "income" = 수동 등록한 기타 수입.
+  source?: "ar" | "income";
+  category?: string;
+  counterparty?: string;
+  customer_id?: number | null;
+  description?: string;
+  amount?: number;
+  recurrence?: "none" | "monthly" | "quarterly" | "yearly";
+  recur_until?: string;
+  paid?: boolean;
+  paid_dates?: string[];
+  payments?: Record<string, string>;
+  notes?: string;
+};
+
+/** 기타 수입 등록/수정 바디 — 지급대장(FinancePayableSave)의 수입측 대응. */
+export type FinanceIncomeSave = {
+  category?: string;
+  counterparty?: string;
+  customer_id?: number | null;
+  description?: string;
+  amount?: number;
+  currency?: string;
+  due_date?: string;
+  recurrence?: "none" | "monthly" | "quarterly" | "yearly";
+  recur_until?: string;
+  notes?: string;
 };
 
 // 통화별 합계 맵(예: { KRW: 1000000, USD: 500 }).

@@ -600,6 +600,32 @@ class FinancePayable(Base):
     created_at   = Column(DateTime, default=datetime.utcnow)
 
 
+class FinanceIncome(Base):
+    """수입대장(프로젝트 매출 외 기타 수입) — FinancePayable 의 수입측 대응.
+
+    이자·환급·잡수입처럼 고객 청구(ARRecord)와 무관한 입금을 관리한다. 컬럼 구성과
+    반복(recurrence)·회차 처리 규칙은 FinancePayable 과 동일해 같은 헬퍼를 함께 쓴다
+    (paid=수령 완료, paid_date/payments=실제 입금일)."""
+    __tablename__ = "finance_incomes"
+    id           = Column(Integer, primary_key=True)
+    category     = Column(String(40))    # 분류: 이자수입/환급/잡수입/기타
+    counterparty = Column(String(200))   # 지급처(자유 입력)
+    customer_id  = Column(Integer, ForeignKey("customers.id"), nullable=True)  # 등록 고객 연결(선택)
+    description  = Column(String(200))
+    amount       = Column(Float, default=0.0)
+    currency     = Column(String(10), default="KRW")
+    due_date     = Column(String(10))    # 입금 예정일(반복이면 최초 회차일)
+    recurrence   = Column(String(10), default="none")
+    recur_until  = Column(String(10))
+    paid         = Column(Boolean, default=False)  # 일회성 수령 완료
+    paid_date    = Column(String(10))    # 실제 입금일
+    paid_dates   = Column(JSON, default=list)  # 반복 항목의 수령 완료 회차일
+    payments     = Column(JSON, default=dict)  # {회차일: 실제 입금일}
+    notes        = Column(Text)
+    owner_id     = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at   = Column(DateTime, default=datetime.utcnow)
+
+
 class MarketingAsset(Base):
     """홍보 이메일 첨부용 자료 라이브러리(회사소개서·브로슈어 등). DB BLOB 저장
     (Render 파일시스템 휘발 회피 — DeliveryProof 와 동일 방식). 홍보 메일 작성 시
