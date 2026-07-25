@@ -2146,10 +2146,9 @@ export function PipelineModal({
   function areaForStage(no: number): WorkspaceArea {
     if (no <= 4) return "rfq";
     if (no <= 6) return "po";
-    if (no <= 9) {
-      if (no === 9 && (isService || r.trade_type === "내수")) return "ar";
-      return "documents";
-    }
+    if (no <= 8) return "documents";
+    // 9~11단계는 업무유형·거래유형과 무관하게 AR/AP 화면으로 통일한다.
+    // (수출·부품 딜의 홈택스 xlsx 편집기는 9단계 AR/AP 옆 Tax Invoice Data 탭으로 이동)
     return "ar";
   }
 
@@ -2697,7 +2696,7 @@ function WorkspacePanel({
     );
   }
   if (area === "documents") {
-    const docStage = Math.min(Math.max(stage, 7), 9);
+    const docStage = Math.min(Math.max(stage, 7), 8);
     return effectiveOrderId > 0 ? (
       <>
         {picker}
@@ -2727,6 +2726,9 @@ function WorkspacePanel({
             key={docReloadKey}
             initialOrderId={effectiveOrderId}
             initialStage={arStage as 9 | 10 | 11}
+            // 홈택스 세금계산서 데이터(xlsx)는 수출·부품 딜에서만 쓰던 화면 — 9단계를 AR/AP 로
+            // 통일하면서 갈 곳이 없어지므로 같은 탭 줄에 세 번째 탭으로 붙인다.
+            taxDataTab={row.work_type !== "서비스" && row.trade_type === "수출"}
           />
         </Suspense>
       </div>
