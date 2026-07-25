@@ -616,6 +616,7 @@ export type DocumentDetail = {
     tracking_token: string;
     consignee_confirmed_date: string;
     vendor_docs_sent_date: string;
+    pod_notes?: string;          // 8) Delivery Complete · POD 메모
     items: DocumentWorkItem[];
   };
   pod: null | { id: number; filename: string; uploaded_at: string };

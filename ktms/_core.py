@@ -1866,6 +1866,7 @@ def _document_detail_payload(session, order: Order) -> dict:
             "tracking_token": order.tracking_token or "",
             "consignee_confirmed_date": order.consignee_confirmed_date or "",
             "vendor_docs_sent_date": order.vendor_docs_sent_date or "",
+            "pod_notes": getattr(order, "pod_notes", None) or "",
             "items": order.items or [],
         },
         "pod": None if not pod else {
@@ -1926,6 +1927,11 @@ def _document_detail_payload(session, order: Order) -> dict:
 class DocumentMilestoneUpdate(BaseModel):
     field: str
     value: bool
+
+
+class PodNotesSave(BaseModel):
+    """8) Delivery Complete · POD 화면 메모 저장(파일 유무와 무관)."""
+    notes: str = ""
 
 
 class ProformaInvoiceSave(BaseModel):

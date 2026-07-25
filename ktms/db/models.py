@@ -373,6 +373,7 @@ class Order(Base):
     delivered_date    = Column(String(10))   # 실제 목적지 인도일 (OTD 측정 기준)
     consignee_confirmed_date = Column(String(10))  # 8) Delivery arrangement - Customer 확인 (수동)
     vendor_docs_sent_date    = Column(String(10))  # 8) Delivery arrangement - Vendor 서류 확인 (수동)
+    pod_notes                = Column(Text)        # 8) Delivery Complete · POD 자유 메모
     items          = Column(JSON, default=list)
     terms          = Column(JSON, default=dict)   # 거래조건(Incoterms·Place·결제·포장·보증 등)
     # Auto-fill 소스 파일 메타(영구 보관). [{"name","media_type","item_count","at"}]

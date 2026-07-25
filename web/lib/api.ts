@@ -654,6 +654,14 @@ export function deletePod(orderId: number): Promise<{ ok: boolean; deleted: numb
   return del(`/api/admin/documents/${orderId}/pod`);
 }
 
+/** POD 화면 메모 저장 — 파일과 독립(파일을 지워도 메모는 남는다). */
+export function savePodNotes(
+  orderId: number,
+  notes: string
+): Promise<{ ok: boolean; notes: string }> {
+  return post(`/api/admin/documents/${orderId}/pod/notes`, { notes });
+}
+
 /** 11·12 등 수동 완료 단계 토글 — 완료 시 현황판 단계가 해당 단계로 진행. */
 export function completeOrderStage(
   orderId: number,

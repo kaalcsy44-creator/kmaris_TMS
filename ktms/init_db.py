@@ -84,6 +84,8 @@ _MIGRATIONS = {
         "rfq_id":            "INTEGER",
         "consignee_confirmed_date": "VARCHAR(10)",
         "vendor_docs_sent_date":    "VARCHAR(10)",
+        # 8) Delivery Complete · POD 화면의 자유 메모(파일과 독립 보관).
+        "pod_notes":         "TEXT",
         "trade_type":        "VARCHAR(10) DEFAULT '수출'",
         "service_info":      "JSON",
         # DEFAULT 없이 추가 → 기존 오더는 NULL 로 남아 연결 견적 통화를 그대로 상속(회귀 방지).

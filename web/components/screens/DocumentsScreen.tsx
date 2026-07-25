@@ -19,6 +19,7 @@ import {
   uploadPod,
   podDownloadUrl,
   deletePod,
+  savePodNotes,
   saveServiceStage,
   deleteServiceStage,
 } from "@/lib/api";
@@ -349,11 +350,15 @@ function ServiceReportUpload({ data, onChanged }: { data: DocumentDetail; onChan
   return (
     <div className="form-tools" style={{ marginBottom: 14 }}>
       <label className={`tool-btn${pod ? " on" : ""}`} style={{ cursor: busy ? "default" : "pointer" }}>
-        📄 {busy ? "Uploading…" : pod ? "Replace Service Report file" : "Upload Service Report file"}
+        📄 {busy ? "Uploading…" : pod ? "Replace" : "Upload"}
         <input type="file" hidden accept=".pdf,image/*" onChange={onPick} disabled={busy} />
       </label>
+      {/* 버튼 이름은 짧게, 설명은 버튼 옆 회색 작은 글씨로. */}
+      <span className="hint-inline" style={{ alignSelf: "center" }}>
+        Service report file — PDF · image. Uploading completes stage 8.
+      </span>
       {pod ? (
-        <span className="hint-inline">
+        <span className="hint-inline" style={{ alignSelf: "center" }}>
           📎 {pod.filename}
           <button type="button" className="btn" onClick={download} disabled={busy} style={{ marginLeft: 8 }}>
             Download
@@ -362,9 +367,7 @@ function ServiceReportUpload({ data, onChanged }: { data: DocumentDetail; onChan
             Delete
           </button>
         </span>
-      ) : (
-        <span className="hint-inline">PDF · image. Uploading completes stage 8.</span>
-      )}
+      ) : null}
       {err ? <span className="action-err">{err}</span> : null}
     </div>
   );
@@ -730,6 +733,11 @@ function PodTab({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const editable = canEditDoc(data);
+  // 메모 — 파일과 독립 저장. 서버 값이 바뀌면(저장·재조회) 입력값을 맞춘다.
+  const savedNotes = data.order.pod_notes || "";
+  const [notes, setNotes] = useState(savedNotes);
+  const [notesBusy, setNotesBusy] = useState(false);
+  useEffect(() => setNotes(savedNotes), [savedNotes]);
 
   async function onPick(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -744,6 +752,20 @@ function PodTab({
       setErr(x instanceof Error ? x.message : "Upload failed");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function saveNotes() {
+    if (!data.order.id) return;
+    setNotesBusy(true);
+    setErr(null);
+    try {
+      await savePodNotes(data.order.id, notes);
+      onChanged();
+    } catch (x) {
+      setErr(x instanceof Error ? x.message : "Save failed");
+    } finally {
+      setNotesBusy(false);
     }
   }
 
@@ -795,16 +817,38 @@ function PodTab({
           ) : null}
         </div>
       ) : (
-        <div className="state">
-          No {docLabel} file yet. Uploading a file (PDF · image) will <b>complete stage 8</b>.
-        </div>
+        <div className="state">No {docLabel} file yet.</div>
       )}
+      <label className="form-field" style={{ display: "block", marginTop: 14 }}>
+        <span>Notes</span>
+        <textarea
+          className="po-textarea small"
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          disabled={!editable || notesBusy}
+          placeholder="Delivery remarks (carrier, consignee contact, damage, etc.)"
+        />
+      </label>
       <div className="form-actions">
         {editable ? (
-          <label className="btn primary" style={{ cursor: busy ? "default" : "pointer" }}>
-            {busy ? "Working…" : pod ? `Replace ${docLabel} file` : `Upload ${docLabel} file`}
-            <input type="file" hidden accept=".pdf,image/*" onChange={onPick} disabled={busy} />
-          </label>
+          <>
+            {/* 버튼 이름은 짧게, 설명은 버튼 옆 회색 작은 글씨로. */}
+            <span className="hint-inline" style={{ marginRight: "auto" }}>
+              {docLabel} file — PDF · image. Uploading completes stage 8.
+            </span>
+            <button
+              type="button"
+              className="btn"
+              onClick={saveNotes}
+              disabled={notesBusy || notes === savedNotes}
+            >
+              {notesBusy ? "Saving…" : notes === savedNotes ? "Saved" : "Save notes"}
+            </button>
+            <label className="btn primary" style={{ cursor: busy ? "default" : "pointer" }}>
+              {busy ? "Working…" : pod ? "Replace" : "Upload"}
+              <input type="file" hidden accept=".pdf,image/*" onChange={onPick} disabled={busy} />
+            </label>
+          </>
         ) : (
           <span className="hint-inline">{editBlockReason("documents", data.order.assignee_id)}</span>
         )}

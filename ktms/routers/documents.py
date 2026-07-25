@@ -15,6 +15,7 @@ from _core import (
     Order,
     PackingList,
     PackingListSave,
+    PodNotesSave,
     ProformaInvoice,
     ProformaInvoiceSave,
     PurchaseOrder,
@@ -921,6 +922,21 @@ def download_pod(order_id: int):
             media_type=proof.mime or "application/octet-stream",
             headers={"Content-Disposition": f'attachment; filename="{proof.filename or "POD"}"'},
         )
+    finally:
+        s.close()
+
+
+@app.post("/api/admin/documents/{order_id}/pod/notes", dependencies=[Depends(require_token)])
+def save_pod_notes(order_id: int, body: PodNotesSave):
+    """POD 화면 메모 저장 — 파일과 독립(파일 삭제해도 메모는 남는다)."""
+    s = get_session()
+    try:
+        order = s.query(Order).filter_by(id=order_id).first()
+        if not order:
+            raise HTTPException(status_code=404, detail="Order를 찾을 수 없습니다.")
+        order.pod_notes = (body.notes or "").strip() or None
+        s.commit()
+        return {"ok": True, "notes": order.pod_notes or ""}
     finally:
         s.close()
 
