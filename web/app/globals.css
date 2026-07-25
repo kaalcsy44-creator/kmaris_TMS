@@ -9924,9 +9924,10 @@ button.ov-tl-stage:hover {
 /* 통화별로 나눠 적는 금액(환산 없이 ₩·$ 각 줄). KPI 는 두 번째 줄부터 조금 작게. */
 .cur-line { line-height: 1.25; }
 .fin-kpi-main .cur-line + .cur-line { font-size: 18px; color: #33415c; }
-/* 미수 목록 합계행 — 라벨·금액을 본문보다 1pt 키운다. */
+/* 미수 목록 합계행 — 본문 셀(table.mini td = 12px)보다 딱 2pt 크게.
+   em 은 부모(표) 글꼴을 기준으로 잡혀 실제보다 훨씬 커지므로 px 기준으로 명시한다. */
 .fin-foot-total .total-label,
-.fin-foot-total .total-value { font-size: calc(1em + 1pt); }
+.fin-foot-total .total-value { font-size: calc(12px + 2pt); }
 /* 합계행 라벨 — Invoice No. 열 왼쪽에 맞춰 시작한다(.total-label 의 우측정렬 무시). */
 table.mini tfoot .fin-foot-name { text-align: left; }
 /* 참고용 KRW 환산행 — 집계가 아니므로 회색 작은 글씨·일반 굵기로 낮춰 표기
