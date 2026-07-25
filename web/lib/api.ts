@@ -928,6 +928,7 @@ export function createSettingsCustomer(body: {
   country?: string;
   address?: string;
   tax_id?: string;
+  tax_invoice_email?: string;
   payment_terms?: string;
   logo?: string;
   emails?: string[];

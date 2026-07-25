@@ -102,6 +102,7 @@ def settings_customers():
                  "contact_phone": getattr(c, "contact_phone", None) or "",
                  "email": c.email or "", "country": c.country or "",
                  "address": c.address or "", "tax_id": c.tax_id or "",
+                 "tax_invoice_email": getattr(c, "tax_invoice_email", None) or "",
                  "payment_terms": getattr(c, "payment_terms", None) or "",
                  "logo": getattr(c, "logo", None) or "",
                  "emails": _multi_out(getattr(c, "emails", None), c.email),
@@ -122,6 +123,7 @@ def create_customer(body: CustomerCreate):
                      contact_phone=body.contact_phone or "",
                      email=body.email or "", country=body.country or "",
                      address=body.address or "", tax_id=body.tax_id or "",
+                     tax_invoice_email=body.tax_invoice_email or "",
                      payment_terms=body.payment_terms or "",
                      logo=body.logo or "")
         s.add(c)
@@ -147,6 +149,7 @@ def update_customer(row_id: int, body: CustomerCreate):
         c.country = body.country or ""
         c.address = body.address or ""
         c.tax_id = body.tax_id or ""
+        c.tax_invoice_email = body.tax_invoice_email or ""
         c.payment_terms = body.payment_terms or ""
         if body.logo is not None:
             c.logo = body.logo

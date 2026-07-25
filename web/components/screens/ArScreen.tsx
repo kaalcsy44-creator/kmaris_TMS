@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import {
   createArRecord,
   completeOrderStage,
@@ -638,6 +638,13 @@ function ArAddForm({
   const [ciItems, setCiItems] = useState<TaxInvoiceItem[]>([]);
   // CI가 없을 때의 대체 소스 — 오더(P/O) 품목. "Load P/O" 로 표에 채운다.
   const [poItems, setPoItems] = useState<TaxInvoiceItem[]>([]);
+  // 청구처(Bill to) 선택지 — 저장된 고객 정보(담당자·이메일·연락처·세금계산서 수신메일).
+  const [billOpts, setBillOpts] = useState<{
+    taxInvoiceEmail: string;
+    emails: string[];
+    phones: string[];
+    contacts: { name: string; email: string; phone: string; position: string }[];
+  }>({ taxInvoiceEmail: "", emails: [], phones: [], contacts: [] });
   const sel = useRowSelection();
 
   // 오더 선택 시 해당 프로젝트/CI 정보를 불러와 빈 항목 자동 입력.
@@ -652,9 +659,18 @@ function ArAddForm({
         const po = poItemsToTax(d);
         // CI가 있으면 CI 품목이 기본값, 없으면 P/O 품목으로 대체.
         const auto = ci.length ? ci : po;
+        const contacts = d.order.customer_contacts ?? [];
+        const primary = contacts[0];
+        const taxInvoiceEmail = d.order.customer_tax_invoice_email || "";
         setAutoInvoiceNo(autoInv);
         setCiItems(ci);
         setPoItems(po);
+        setBillOpts({
+          taxInvoiceEmail,
+          emails: d.order.customer_emails ?? [],
+          phones: d.order.customer_phones ?? [],
+          contacts,
+        });
         setForm((f) => ({
           ...f,
           ci_no: f.ci_no || d.ci?.ci_no || "",
@@ -664,8 +680,11 @@ function ArAddForm({
           invoice_no: f.invoice_no || autoInv,
           items: f.items.length ? f.items : auto,
           // 청구처는 고객 마스터값을 기본으로 채운다(사용자가 덮어쓰면 유지).
+          // 세금계산서 수신메일을 최우선, 없으면 대표 이메일. 담당자/연락처는 대표(primary) 기준.
           bill_to_tax_id: f.bill_to_tax_id || d.order.customer_tax_id || "",
-          bill_to_email: f.bill_to_email || d.order.customer_email || "",
+          bill_to_email: f.bill_to_email || taxInvoiceEmail || d.order.customer_email || "",
+          bill_to_contact: f.bill_to_contact || (primary?.name ?? ""),
+          bill_to_phone: f.bill_to_phone || (primary?.phone ?? (d.order.customer_phones ?? [])[0] ?? ""),
         }));
       })
       .catch(() => {});
@@ -810,13 +829,37 @@ function ArAddForm({
         <Field label="Notes" value={form.notes} onChange={(v) => setForm({ ...form, notes: v })} />
       </div>
 
-      {/* 청구처(BILL TO) — 세금계산서에 인쇄. 비우면 고객 마스터값을 사용. */}
+      {/* 청구처(BILL TO) — 세금계산서에 인쇄. 저장된 고객 정보에서 고르거나 직접 입력. */}
       <div className="form-section-title">Bill to</div>
       <div className="form-grid">
         <Field label="Customer Tax ID" value={form.bill_to_tax_id} onChange={(v) => setForm({ ...form, bill_to_tax_id: v })} />
-        <Field label="Contact" value={form.bill_to_contact} onChange={(v) => setForm({ ...form, bill_to_contact: v })} />
-        <Field label="Email" value={form.bill_to_email} onChange={(v) => setForm({ ...form, bill_to_email: v })} />
-        <Field label="Phone" value={form.bill_to_phone} onChange={(v) => setForm({ ...form, bill_to_phone: v })} />
+        <ComboField
+          label="Contact"
+          value={form.bill_to_contact}
+          options={dedup(billOpts.contacts.map((c) => c.name))}
+          onChange={(v) => {
+            const c = billOpts.contacts.find((x) => x.name === v);
+            setForm((f) => ({
+              ...f,
+              bill_to_contact: v,
+              // 저장된 담당자를 고르면 이메일·연락처도 함께 채운다(직접 입력 시엔 그대로).
+              ...(c ? { bill_to_email: c.email || f.bill_to_email, bill_to_phone: c.phone || f.bill_to_phone } : {}),
+            }));
+          }}
+        />
+        <ComboField
+          label="Email"
+          type="email"
+          value={form.bill_to_email}
+          options={dedup([billOpts.taxInvoiceEmail, ...billOpts.emails, ...billOpts.contacts.map((c) => c.email)])}
+          onChange={(v) => setForm({ ...form, bill_to_email: v })}
+        />
+        <ComboField
+          label="Phone"
+          value={form.bill_to_phone}
+          options={dedup([...billOpts.phones, ...billOpts.contacts.map((c) => c.phone)])}
+          onChange={(v) => setForm({ ...form, bill_to_phone: v })}
+        />
       </div>
 
       {/* 청구 품목(Item list) — TAX INVOICE 문서에 그대로 출력된다. CI 품목이 기본값. */}
@@ -991,6 +1034,44 @@ function Field({
     <label className="form-field">
       <span>{label}</span>
       <input type={type} value={value} onChange={(e) => onChange(e.target.value)} />
+    </label>
+  );
+}
+
+/** 중복·빈 값 제거(입력 순서 유지). */
+function dedup(values: string[]): string[] {
+  return Array.from(new Set(values.filter((v) => (v || "").trim() !== "")));
+}
+
+/** 선택 겸 직접 입력 필드 — 저장된 옵션을 datalist 로 제안하되 자유 입력도 허용. */
+function ComboField({
+  label,
+  value,
+  onChange,
+  options,
+  type = "text",
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: string[];
+  type?: string;
+}) {
+  const listId = useId();
+  return (
+    <label className="form-field">
+      <span>{label}</span>
+      <input
+        type={type}
+        value={value}
+        list={options.length ? listId : undefined}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      {options.length ? (
+        <datalist id={listId}>
+          {options.map((o) => <option key={o} value={o} />)}
+        </datalist>
+      ) : null}
     </label>
   );
 }

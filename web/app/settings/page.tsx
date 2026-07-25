@@ -828,7 +828,7 @@ function CustomersTab() {
   return (
     <MasterSection<SettingsCustomer>
       title="Customer Management"
-      empty={{ id: 0, name: "", contact: "", contact_phone: "", email: "", country: "", address: "", tax_id: "", payment_terms: "", logo: "", emails: [], phones: [], regions: [] }}
+      empty={{ id: 0, name: "", contact: "", contact_phone: "", email: "", country: "", address: "", tax_id: "", tax_invoice_email: "", payment_terms: "", logo: "", emails: [], phones: [], regions: [] }}
       load={fetchSettingsCustomers}
       create={createSettingsCustomer}
       update={updateSettingsCustomer}
@@ -850,6 +850,7 @@ function CustomersTab() {
         ["contact", "Contact name"],
         ["address", "Address"],
         ["tax_id", "Tax ID / Business No."],
+        ["tax_invoice_email", "Tax invoice email"],
       ]}
       required="name"
       extraForm={(form, setForm) => (

@@ -55,6 +55,7 @@ _MIGRATIONS = {
         "emails": "JSON",
         "phones": "JSON",
         "regions": "JSON",
+        "tax_invoice_email": "VARCHAR(200)",
     },
     "vendors": {
         "contact_phone": "VARCHAR(50)",

@@ -1678,6 +1678,15 @@ def _customer_for_order(session, order: Order):
     return session.query(Customer).filter_by(id=order.customer_id).first()
 
 
+def _customer_contacts_brief(session, customer_id: int) -> list[dict]:
+    """고객사 담당자 요약 — 청구서 Bill to 선택용(대표 우선 정렬)."""
+    rows = (session.query(CustomerContact)
+            .filter_by(customer_id=customer_id)
+            .order_by(CustomerContact.is_primary.desc(), CustomerContact.id).all())
+    return [{"name": c.name or "", "email": c.email or "",
+             "phone": c.phone or "", "position": c.position or ""} for c in rows]
+
+
 def _vessel_for_order(session, order: Order):
     if not order.vessel_id:
         return None
@@ -1838,6 +1847,11 @@ def _document_detail_payload(session, order: Order) -> dict:
             "customer": cust.name if cust else "",
             "customer_email": cust.email if cust else "",
             "customer_tax_id": cust.tax_id if cust else "",
+            # 청구서(Bill to) 선택지 — 저장된 고객 정보에서 고르거나 직접 입력.
+            "customer_tax_invoice_email": (getattr(cust, "tax_invoice_email", None) or "") if cust else "",
+            "customer_emails": (cust.emails or []) if cust else [],
+            "customer_phones": (cust.phones or []) if cust else [],
+            "customer_contacts": _customer_contacts_brief(session, cust.id) if cust else [],
             "vessel": vessel.name if vessel else "",
             "project_title": (rfq.project_title or "") if rfq else "",
             "project_no": _project_no_map(session).get(rfq.id, "") if rfq else "",
@@ -2252,6 +2266,7 @@ class CustomerCreate(BaseModel):
     country: str | None = ""
     address: str | None = ""
     tax_id: str | None = ""
+    tax_invoice_email: str | None = ""   # 세금계산서 수신 전용 메일
     payment_terms: str | None = ""   # 기본 결제조건
     logo: str | None = ""    # 회사 로고 data URL(붙여넣기). None=변경 안 함(수정 시)
     # 담당자 1명이 여러 이메일·연락처·지역을 가질 수 있어 다중값. 첫 값=대표(문서·메일용).

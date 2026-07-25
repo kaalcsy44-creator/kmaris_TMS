@@ -100,6 +100,7 @@ class Customer(Base):
     contact_phone = Column(String(50)) # 대표 연락처(phones[0] 미러링)
     email      = Column(String(200))   # 대표 이메일(emails[0] 미러링)
     tax_id     = Column(String(100))
+    tax_invoice_email = Column(String(200))  # 세금계산서 수신 전용 메일(청구서 Bill to 기본값)
     country    = Column(String(100))   # 대표 지역(regions[0] 미러링)
     # 담당자 1명이 이메일·연락처·지역을 여러 개 가질 수 있어 다중값으로 보관. flat 컬럼은
     # 각 리스트의 첫 값(대표)을 미러링해 기존 소비처(PDF·메일·목록)와 호환.

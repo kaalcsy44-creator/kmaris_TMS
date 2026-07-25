@@ -45,6 +45,7 @@ export type SettingsCustomer = {
   country: string;
   address: string;
   tax_id: string;
+  tax_invoice_email: string;
   payment_terms: string;
   logo: string;
   emails: string[];
@@ -598,6 +599,11 @@ export type DocumentDetail = {
     customer: string;
     customer_email: string;
     customer_tax_id: string;
+    // 청구서(Bill to) 선택지 — 저장된 고객 정보에서 고르거나 직접 입력.
+    customer_tax_invoice_email?: string;
+    customer_emails?: string[];
+    customer_phones?: string[];
+    customer_contacts?: { name: string; email: string; phone: string; position: string }[];
     vessel: string;
     project_title: string;
     project_no: string;
