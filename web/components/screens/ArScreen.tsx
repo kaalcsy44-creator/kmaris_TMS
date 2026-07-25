@@ -16,7 +16,6 @@ import {
   updateApRecord,
   deleteApRecord,
 } from "@/lib/api";
-import { DocumentsOverview } from "@/components/screens/DocumentsScreen";
 import { can, canEditDeal, editBlockReason } from "@/lib/auth";
 import { useCachedData, invalidateCache } from "@/lib/useCachedData";
 import type { ApByOrderRow, ArRow, DocCharges, DocumentDetail, DocumentWorkItem, PoWorkOptions, TaxInvoiceItem } from "@/lib/types";
@@ -121,20 +120,17 @@ type StageTab = 9 | 10 | 11;
 export function ArOverview({
   initialOrderId = null,
   initialStage = null,
-  taxDataTab = false,
 }: {
   initialOrderId?: number | null;
   initialStage?: StageTab | null;
-  /** 홈택스 세금계산서 데이터(xlsx) 탭 노출 — 수출·부품 딜에서만 쓰는 화면. */
-  taxDataTab?: boolean;
 } = {}) {
   const { data, refresh } = useCachedData("ar:overview", fetchArOverview);
   const { data: options } = useCachedData("ar:workoptions", fetchPoWorkOptions);
   const [stageTab, setStageTab] = useState<StageTab>(
     initialStage === 11 ? 11 : initialStage === 9 ? 9 : 10
   );
-  // 수취(AR, 고객 청구) / 지급(AP, 벤더 매입) / 세금계산서 데이터(수출·부품) 문서 탭.
-  const [docTab, setDocTab] = useState<"ar" | "ap" | "tax">("ar");
+  // 수취(AR, 고객 청구) / 지급(AP, 벤더 매입) 문서 탭.
+  const [docTab, setDocTab] = useState<"ar" | "ap">("ar");
   const rows = useMemo(() => data?.rows ?? [], [data]);
   const orderId = initialOrderId ?? null;
 
@@ -174,11 +170,6 @@ export function ArOverview({
         <button className={docTab === "ap" ? "on" : ""} onClick={() => setDocTab("ap")}>
           Payable · Vendor (AP)
         </button>
-        {taxDataTab ? (
-          <button className={docTab === "tax" ? "on" : ""} onClick={() => setDocTab("tax")}>
-            Tax Invoice Data
-          </button>
-        ) : null}
       </div>
 
       {docTab === "ar" ? (
@@ -186,11 +177,8 @@ export function ArOverview({
           <ArAddForm key={match?.id ?? `new-${orderId}`} options={options ?? null} fallbackOrderId={orderId} existing={match} onChanged={load} />
           {match && stageTab !== 9 ? <MilestoneBar row={match} stage={stageTab} onChanged={load} /> : null}
         </>
-      ) : docTab === "ap" ? (
-        <ApSection orderId={orderId} stage={stageTab} onChanged={load} />
       ) : (
-        // 홈택스 업로드용 세금계산서 데이터 편집기(구 9단계 문서 화면) — 파트 뷰로 고정해 Tax 탭을 연다.
-        <DocumentsOverview initialOrderId={orderId} initialStage={9} initialView="parts" />
+        <ApSection orderId={orderId} stage={stageTab} onChanged={load} />
       )}
     </div>
   );

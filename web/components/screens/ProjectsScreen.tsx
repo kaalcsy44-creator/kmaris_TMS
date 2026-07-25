@@ -2726,9 +2726,6 @@ function WorkspacePanel({
             key={docReloadKey}
             initialOrderId={effectiveOrderId}
             initialStage={arStage as 9 | 10 | 11}
-            // 홈택스 세금계산서 데이터(xlsx)는 수출·부품 딜에서만 쓰던 화면 — 9단계를 AR/AP 로
-            // 통일하면서 갈 곳이 없어지므로 같은 탭 줄에 세 번째 탭으로 붙인다.
-            taxDataTab={row.work_type !== "서비스" && row.trade_type === "수출"}
           />
         </Suspense>
       </div>
