@@ -641,10 +641,11 @@ function ArAddForm({
   // 청구처(Bill to) 선택지 — 저장된 고객 정보(담당자·이메일·연락처·세금계산서 수신메일).
   const [billOpts, setBillOpts] = useState<{
     taxInvoiceEmail: string;
+    contactName: string;
     emails: string[];
     phones: string[];
     contacts: { name: string; email: string; phone: string; position: string }[];
-  }>({ taxInvoiceEmail: "", emails: [], phones: [], contacts: [] });
+  }>({ taxInvoiceEmail: "", contactName: "", emails: [], phones: [], contacts: [] });
   const sel = useRowSelection();
 
   // 오더 선택 시 해당 프로젝트/CI 정보를 불러와 빈 항목 자동 입력.
@@ -661,12 +662,14 @@ function ArAddForm({
         const auto = ci.length ? ci : po;
         const contacts = d.order.customer_contacts ?? [];
         const primary = contacts[0];
+        const flatContact = d.order.customer_contact || "";
         const taxInvoiceEmail = d.order.customer_tax_invoice_email || "";
         setAutoInvoiceNo(autoInv);
         setCiItems(ci);
         setPoItems(po);
         setBillOpts({
           taxInvoiceEmail,
+          contactName: flatContact,
           emails: d.order.customer_emails ?? [],
           phones: d.order.customer_phones ?? [],
           contacts,
@@ -683,7 +686,7 @@ function ArAddForm({
           // 세금계산서 수신메일을 최우선, 없으면 대표 이메일. 담당자/연락처는 대표(primary) 기준.
           bill_to_tax_id: f.bill_to_tax_id || d.order.customer_tax_id || "",
           bill_to_email: f.bill_to_email || taxInvoiceEmail || d.order.customer_email || "",
-          bill_to_contact: f.bill_to_contact || (primary?.name ?? ""),
+          bill_to_contact: f.bill_to_contact || (primary?.name ?? flatContact),
           bill_to_phone: f.bill_to_phone || (primary?.phone ?? (d.order.customer_phones ?? [])[0] ?? ""),
         }));
       })
@@ -836,7 +839,7 @@ function ArAddForm({
         <ComboField
           label="Contact"
           value={form.bill_to_contact}
-          options={dedup(billOpts.contacts.map((c) => c.name))}
+          options={dedup([billOpts.contactName, ...billOpts.contacts.map((c) => c.name)])}
           onChange={(v) => {
             const c = billOpts.contacts.find((x) => x.name === v);
             setForm((f) => ({

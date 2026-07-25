@@ -1848,6 +1848,9 @@ def _document_detail_payload(session, order: Order) -> dict:
             "customer_email": cust.email if cust else "",
             "customer_tax_id": cust.tax_id if cust else "",
             # 청구서(Bill to) 선택지 — 저장된 고객 정보에서 고르거나 직접 입력.
+            # 담당자는 person-centric 모델이라 Customer.contact(대표 담당자명)를 기본으로 쓴다.
+            # (구 customer_contacts 자식테이블은 폐기·미사용이지만, 데이터가 있으면 함께 제안.)
+            "customer_contact": (cust.contact or "") if cust else "",
             "customer_tax_invoice_email": (getattr(cust, "tax_invoice_email", None) or "") if cust else "",
             "customer_emails": (cust.emails or []) if cust else [],
             "customer_phones": (cust.phones or []) if cust else [],
