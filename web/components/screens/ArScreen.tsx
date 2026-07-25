@@ -151,9 +151,6 @@ export function ArOverview({
 
       {docTab === "ar" ? (
         <>
-          <div className="form-section-title" style={{ marginTop: 0 }}>
-            {match ? "AR record (edit)" : "Add AR record"}
-          </div>
           <ArAddForm key={match?.id ?? `new-${orderId}`} options={options ?? null} fallbackOrderId={orderId} existing={match} onChanged={load} />
           {match && stageTab !== 9 ? <MilestoneBar row={match} stage={stageTab} onChanged={load} /> : null}
         </>
@@ -358,9 +355,6 @@ function ApAddForm({
 
   return (
     <fieldset className="form-fieldset" disabled={!canEdit} style={{ border: 0, padding: 0, margin: 0 }}>
-      <div className="form-section-title" style={{ marginTop: 0 }}>
-        {editing ? "Vendor bill (edit)" : "Vendor bill (new)"} — {row.vendor}
-      </div>
       <div className="form-grid">
         <Field label="Bill No. (vendor)" value={form.bill_no} onChange={(v) => setForm({ ...form, bill_no: v })} />
         <Field label="Bill date" value={form.bill_date} onChange={(v) => setForm({ ...form, bill_date: v })} type="date" />
