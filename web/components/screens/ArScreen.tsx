@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   createArRecord,
   completeOrderStage,
@@ -1046,7 +1046,8 @@ function dedup(values: string[]): string[] {
   return Array.from(new Set(values.filter((v) => (v || "").trim() !== "")));
 }
 
-/** 선택 겸 직접 입력 필드 — 저장된 옵션을 datalist 로 제안하되 자유 입력도 허용. */
+/** 선택 겸 직접 입력 필드 — 저장된 옵션을 드롭다운으로 고르거나 "직접 입력"으로 자유 입력.
+ *  (네이티브 datalist 는 팝업 글꼴을 CSS 로 못 바꿔, select + manual 토글로 구현) */
 function ComboField({
   label,
   value,
@@ -1060,21 +1061,36 @@ function ComboField({
   options: string[];
   type?: string;
 }) {
-  const listId = useId();
+  const [manual, setManual] = useState(false);
+  // 저장된 옵션에 없는 값(직접 입력된 값)이 들어오면 자동으로 직접입력 모드로.
+  useEffect(() => {
+    if (!manual && value && !options.includes(value)) setManual(true);
+  }, [value, options, manual]);
+  const useManual = manual || options.length === 0;
+
   return (
     <label className="form-field">
       <span>{label}</span>
-      <input
-        type={type}
-        value={value}
-        list={options.length ? listId : undefined}
-        onChange={(e) => onChange(e.target.value)}
-      />
-      {options.length ? (
-        <datalist id={listId}>
-          {options.map((o) => <option key={o} value={o} />)}
-        </datalist>
-      ) : null}
+      {useManual ? (
+        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          <input type={type} value={value} onChange={(e) => onChange(e.target.value)} style={{ flex: 1 }} autoFocus={manual} />
+          {options.length ? (
+            <button type="button" className="btn sm" title="Choose from saved" onClick={() => setManual(false)}>list</button>
+          ) : null}
+        </div>
+      ) : (
+        <select
+          value={options.includes(value) ? value : ""}
+          onChange={(e) => {
+            if (e.target.value === "__manual__") { setManual(true); return; }
+            onChange(e.target.value);
+          }}
+        >
+          <option value="">— Select —</option>
+          {options.map((o) => <option key={o} value={o}>{o}</option>)}
+          <option value="__manual__">✎ Enter manually…</option>
+        </select>
+      )}
     </label>
   );
 }
