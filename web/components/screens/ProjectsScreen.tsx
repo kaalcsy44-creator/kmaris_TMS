@@ -16,7 +16,6 @@ import {
   setRfqCancelled,
   updateRfq,
   fetchAssignableUsers,
-  resetStage,
   CLOSE_REASONS,
   closeReasonLabel,
 } from "@/lib/api";
@@ -2652,9 +2651,8 @@ function WorkspacePanel({
     [poOptions, row.rfq_id]
   );
   const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
-  // 임베드된 문서 뷰(DocumentsOverview)는 orderId 변화로만 재조회하므로, 7단계 초기화 후
-  // 강제 리마운트해 지워진 CI/SA 를 즉시 반영한다.
-  const [docReloadKey, setDocReloadKey] = useState(0);
+  // 임베드된 문서/AR 뷰의 리마운트 키(orderId 별로 고정). 단계 초기화 바 제거 후 setter 는 불필요.
+  const [docReloadKey] = useState(0);
   // 기본 선택: 대표 오더(row.order_id) 우선, 없으면 첫 오더. 선택 유효성 유지.
   useEffect(() => {
     setSelectedOrderId((cur) => {
@@ -2713,11 +2711,6 @@ function WorkspacePanel({
             />
           </Suspense>
         </div>
-        <ResetStageBar
-          orderId={effectiveOrderId}
-          stage={docStage}
-          onChanged={async () => { setDocReloadKey((k) => k + 1); await onChanged(); }}
-        />
       </>
     ) : (
       <MissingOrderPanel />
@@ -2737,50 +2730,9 @@ function WorkspacePanel({
           />
         </Suspense>
       </div>
-      <ResetStageBar
-        orderId={effectiveOrderId}
-        stage={arStage}
-        onChanged={async () => { setDocReloadKey((k) => k + 1); await onChanged(); }}
-      />
     </>
   ) : (
     <MissingOrderPanel />
-  );
-}
-
-// 단계(7~11) 초기화 바(하단 고정) — 이 P/O에서 해당 단계의 완료 근거를 한 번에 지워 앞 단계로 되돌린다.
-// (단계 완료는 저장 플래그가 아니라 근거 레코드 존재로 계산되므로, 필드를 비우는 것만으로는 내려가지 않는다.)
-const RESET_STAGE_EVIDENCE: Record<number, string> = {
-  7: "Commercial Invoice (+Packing List), Shipping Advice, and confirmation milestones",
-  8: "the Proof of Delivery (POD) and delivery date",
-  9: "the billing statement and its A/R (and A/P) records",
-  10: "the manual completion of this stage",
-  11: "the manual completion of this stage",
-};
-function ResetStageBar({ orderId, stage, onChanged }: { orderId: number; stage: number; onChanged: () => void | Promise<unknown> }) {
-  const [busy, setBusy] = useState(false);
-  async function reset() {
-    if (!confirm(`Reset stage ${stage} for the selected P/O?\nRemoves ${RESET_STAGE_EVIDENCE[stage] || "this stage's records"}. The deal returns to the previous stage.`)) return;
-    setBusy(true);
-    try {
-      await resetStage(orderId, stage);
-      invalidateCache("dashboard");
-      invalidateCache("pipeline");
-      invalidateCache("po:work-options");
-      await onChanged();
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "Reset failed");
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <div className="wp-reset-foot">
-      <span className="wp-reset-hint">Stage {stage} is auto-derived from records on this P/O.</span>
-      <button type="button" className="btn sm danger" disabled={busy} onClick={reset}>
-        {busy ? "…" : "Reset this stage"}
-      </button>
-    </div>
   );
 }
 
