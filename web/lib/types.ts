@@ -854,21 +854,20 @@ export type FinanceReceivable = {
 // 통화별 합계 맵(예: { KRW: 1000000, USD: 500 }).
 export type MoneyByCurrency = Record<string, number>;
 
+/** 재무 요약 — 금액은 모두 통화별 분리(환산 없음). */
 export type FinanceSummary = {
   receivable: {
     outstanding: MoneyByCurrency;
     overdue: MoneyByCurrency;
-    outstanding_krw: number;
     count: number;
   };
   payable: {
     upcoming_30d: MoneyByCurrency;
     overdue: MoneyByCurrency;
-    total_krw: number;
+    total: MoneyByCurrency;
   };
-  by_customer: { name: string; outstanding_krw: number }[];
-  by_category: { name: string; amount_krw: number }[];
-  usd_krw: number;
+  by_customer: { name: string; outstanding: MoneyByCurrency }[];
+  by_category: { name: string; amount: MoneyByCurrency }[];
 };
 
 export type FinanceClosing = {
@@ -893,14 +892,15 @@ export type FinanceCashflowRow = {
   cumulative: number;
 };
 
+/** 현금흐름 예측 — 잔고는 한 통화 안에서만 의미가 있어 통화 1개 기준으로만 낸다. */
 export type FinanceCashflow = {
   unit: "month" | "week";
+  currency: string;
   opening: number;
   rows: FinanceCashflowRow[];
   total_inflow: number;
   total_outflow: number;
   ending: number;
-  usd_krw: number;
 };
 
 export type FinanceCalendarEvent = {

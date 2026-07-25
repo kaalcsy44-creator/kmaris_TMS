@@ -57,10 +57,24 @@ function money(amount: number, currency: string): string {
 function won(n: number): string {
   return `₩${Math.round(n).toLocaleString()}`;
 }
-function byCurrency(m: MoneyByCurrency): string {
+/** 표시할 통화 목록 — KRW·USD 를 앞에 두고 나머지는 알파벳 순. */
+function currencyKeys(m: MoneyByCurrency): string[] {
   const keys = Object.keys(m || {}).filter((k) => Math.abs(m[k]) > 0.5);
+  const rank = (c: string) => (c === "KRW" ? 0 : c === "USD" ? 1 : 2);
+  return keys.sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
+}
+function byCurrency(m: MoneyByCurrency): string {
+  const keys = currencyKeys(m);
   if (!keys.length) return "—";
   return keys.map((c) => money(m[c], c)).join(" · ");
+}
+/** 통화별 금액을 한 줄씩 — 환산 없이 ₩·$ 를 나란히 보여줄 때 쓴다. */
+function byCurrencyLines(m: MoneyByCurrency): React.ReactNode {
+  const keys = currencyKeys(m);
+  if (!keys.length) return "—";
+  return keys.map((c) => (
+    <div key={c} className="fin-kpi-line">{money(m[c], c)}</div>
+  ));
 }
 const todayStr = () => new Date().toISOString().slice(0, 10);
 
@@ -98,11 +112,12 @@ function OverviewTab() {
 
   return (
     <div className="fin-overview">
+      {/* 금액은 환산하지 않고 통화별로 그대로 보여준다(₩·$ 각 줄). */}
       <div className="fin-kpis">
-        <KpiTile label="Outstanding" main={won(data.receivable.outstanding_krw)} sub={`${data.receivable.count} invoices · ${byCurrency(data.receivable.outstanding)}`} tone="blue" />
-        <KpiTile label="Overdue AR" main={byCurrency(data.receivable.overdue)} tone="red" />
-        <KpiTile label="Payable (30d + overdue)" main={won(data.payable.total_krw)} sub={byCurrency(data.payable.upcoming_30d)} tone="amber" />
-        <KpiTile label="Overdue payable" main={byCurrency(data.payable.overdue)} tone="red" />
+        <KpiTile label="Outstanding" main={byCurrencyLines(data.receivable.outstanding)} sub={`${data.receivable.count} invoices`} tone="blue" />
+        <KpiTile label="Overdue AR" main={byCurrencyLines(data.receivable.overdue)} tone="red" />
+        <KpiTile label="Payable (30d + overdue)" main={byCurrencyLines(data.payable.total)} sub={`Due in 30d ${byCurrency(data.payable.upcoming_30d)}`} tone="amber" />
+        <KpiTile label="Overdue payable" main={byCurrencyLines(data.payable.overdue)} tone="red" />
       </div>
 
       <div className="fin-overview-cols">
@@ -112,10 +127,10 @@ function OverviewTab() {
             <div className="muted">No outstanding balance.</div>
           ) : (
             <table className="mini">
-              <thead><tr><th>Customer</th><th className="num">Outstanding (₩)</th></tr></thead>
+              <thead><tr><th>Customer</th><th className="num">Outstanding</th></tr></thead>
               <tbody>
                 {data.by_customer.map((r) => (
-                  <tr key={r.name}><td>{r.name}</td><td className="num">{won(r.outstanding_krw)}</td></tr>
+                  <tr key={r.name}><td>{r.name}</td><td className="num">{byCurrency(r.outstanding)}</td></tr>
                 ))}
               </tbody>
             </table>
@@ -128,10 +143,10 @@ function OverviewTab() {
             <div className="muted">No scheduled payables.</div>
           ) : (
             <table className="mini">
-              <thead><tr><th>Category</th><th className="num">Amount (₩)</th></tr></thead>
+              <thead><tr><th>Category</th><th className="num">Amount</th></tr></thead>
               <tbody>
                 {data.by_category.map((r) => (
-                  <tr key={r.name}><td>{CATEGORY_LABEL[r.name] || r.name}</td><td className="num">{won(r.amount_krw)}</td></tr>
+                  <tr key={r.name}><td>{CATEGORY_LABEL[r.name] || r.name}</td><td className="num">{byCurrency(r.amount)}</td></tr>
                 ))}
               </tbody>
             </table>
@@ -139,13 +154,13 @@ function OverviewTab() {
         </div>
       </div>
       <p className="hint-inline" style={{ display: "block", marginTop: 10 }}>
-        ₩ figures are reference totals converted at USD {data.usd_krw.toLocaleString()}. See each item for actual amounts by currency.
+        Amounts are shown in their original currency — no FX conversion, so totals are never mixed across currencies.
       </p>
     </div>
   );
 }
 
-function KpiTile({ label, main, sub, tone }: { label: string; main: string; sub?: string; tone: "blue" | "red" | "amber" }) {
+function KpiTile({ label, main, sub, tone }: { label: string; main: React.ReactNode; sub?: string; tone: "blue" | "red" | "amber" }) {
   return (
     <div className={`fin-kpi fin-kpi--${tone}`}>
       <div className="fin-kpi-label">{label}</div>
@@ -597,10 +612,13 @@ function CashFlowTab() {
   const [count, setCount] = useState(6);
   const [openingInput, setOpeningInput] = useState("0");
   const [includePo, setIncludePo] = useState(false);
+  // 잔고 곡선은 한 통화 안에서만 의미가 있으므로 환산 대신 통화를 골라 본다.
+  const [currency, setCurrency] = useState("KRW");
   const opening = Number(openingInput) || 0;
+  const cash = (n: number) => money(n, currency);
 
-  const key = `finance:cashflow:${unit}:${count}:${opening}:${includePo}`;
-  const { data, error } = useCachedData<FinanceCashflow>(key, () => fetchFinanceCashflow(unit, count, opening, includePo));
+  const key = `finance:cashflow:${unit}:${count}:${opening}:${includePo}:${currency}`;
+  const { data, error } = useCachedData<FinanceCashflow>(key, () => fetchFinanceCashflow(unit, count, opening, includePo, currency));
 
   const maxNet = useMemo(() => {
     if (!data) return 1;
@@ -620,8 +638,12 @@ function CashFlowTab() {
             {(unit === "month" ? [3, 6, 12] : [8, 12, 16]).map((n) => <option key={n} value={n}>{n}</option>)}
           </select>
         </label>
+        <div className="seg-toggle" role="group" aria-label="Currency">
+          <button className={currency === "KRW" ? "on" : ""} onClick={() => setCurrency("KRW")}>₩ KRW</button>
+          <button className={currency === "USD" ? "on" : ""} onClick={() => setCurrency("USD")}>$ USD</button>
+        </div>
         <label className="fin-inline-field">
-          Opening balance (₩)
+          Opening balance ({sym(currency).trim()})
           <input inputMode="decimal" value={amountInputValue(openingInput)} onChange={(e) => setOpeningInput(e.target.value.replace(/,/g, ""))} style={{ width: 140 }} />
         </label>
         <label className="check-chip" style={{ cursor: "pointer" }}>
@@ -633,16 +655,16 @@ function CashFlowTab() {
       {!data ? <div className="state">Loading…</div> : (
         <>
           <div className="fin-kpis">
-            <KpiTile label="Projected inflow" main={won(data.total_inflow)} tone="blue" />
-            <KpiTile label="Projected outflow" main={won(data.total_outflow)} tone="amber" />
-            <KpiTile label="Ending balance" main={won(data.ending)} sub={`Opening ${won(data.opening)}`} tone={data.ending >= 0 ? "blue" : "red"} />
+            <KpiTile label="Projected inflow" main={cash(data.total_inflow)} tone="blue" />
+            <KpiTile label="Projected outflow" main={cash(data.total_outflow)} tone="amber" />
+            <KpiTile label="Ending balance" main={cash(data.ending)} sub={`Opening ${cash(data.opening)}`} tone={data.ending >= 0 ? "blue" : "red"} />
           </div>
 
           <div className="panel">
-            <h3 className="form-title">Net cash flow (₩)</h3>
+            <h3 className="form-title">Net cash flow ({sym(currency).trim()})</h3>
             <div className="fin-net-chart">
               {data.rows.map((r) => (
-                <div key={r.label} className="fin-net-col" title={`${r.label} · Inflow ${won(r.inflow)} · Outflow ${won(r.outflow)} · Net ${won(r.net)}`}>
+                <div key={r.label} className="fin-net-col" title={`${r.label} · Inflow ${cash(r.inflow)} · Outflow ${cash(r.outflow)} · Net ${cash(r.net)}`}>
                   <div className="fin-net-track">
                     <div className="fin-net-mid" />
                     <div
@@ -666,16 +688,16 @@ function CashFlowTab() {
                 {data.rows.map((r) => (
                   <tr key={r.label} className={r.cumulative < 0 ? "fin-overdue" : ""}>
                     <td>{r.label}</td>
-                    <td className="num">{won(r.inflow)}</td>
-                    <td className="num">{won(r.outflow)}</td>
-                    <td className="num" style={{ color: r.net >= 0 ? "#1e7a46" : "#c0392b" }}>{r.net >= 0 ? "+" : "−"}{won(Math.abs(r.net))}</td>
-                    <td className="num"><b>{won(r.cumulative)}</b></td>
+                    <td className="num">{cash(r.inflow)}</td>
+                    <td className="num">{cash(r.outflow)}</td>
+                    <td className="num" style={{ color: r.net >= 0 ? "#1e7a46" : "#c0392b" }}>{r.net >= 0 ? "+" : "−"}{cash(Math.abs(r.net))}</td>
+                    <td className="num"><b>{cash(r.cumulative)}</b></td>
                   </tr>
                 ))}
               </tbody>
             </table>
             <p className="hint-inline" style={{ display: "block", marginTop: 8 }}>
-              Inflow = receivables due (AR due), outflow = unpaid payable occurrences{includePo ? " + vendor POs (estimated from order date)" : ""}. Overdue / past-due items fall into the first period. A negative cumulative balance (red) marks a cash shortfall.
+              Inflow = receivables due (AR due), outflow = unpaid payable occurrences{includePo ? " + vendor POs (estimated from order date)" : ""}. Only {currency} items are counted — switch the currency toggle for the other book; nothing is converted. Overdue / past-due items fall into the first period. A negative cumulative balance (red) marks a cash shortfall.
             </p>
           </div>
         </>

@@ -52,6 +52,19 @@ def _sum_by_currency(pairs) -> dict:
     return out
 
 
+def _add_by_currency(bucket: dict, key: str, amount: float, currency: str) -> None:
+    """bucket[key][통화] 에 금액을 누적한다(환산 없이 통화별로 분리 보관)."""
+    cur = (currency or "KRW").upper()
+    per = bucket.setdefault(key, {})
+    per[cur] = round(per.get(cur, 0.0) + (amount or 0.0), 2)
+
+
+def _by_currency_sort_key(per: dict) -> tuple:
+    """통화별 합계 정렬 기준 — 환산 없이 KRW, USD, 그 외 최대값 순으로 비교."""
+    rest = max([v for c, v in per.items() if c not in ("KRW", "USD")] or [0.0])
+    return (per.get("KRW", 0.0), per.get("USD", 0.0), rest)
+
+
 @app.get("/api/admin/finance/meta", dependencies=[Depends(require_token)])
 def finance_meta():
     """지급 분류·반복 옵션 등 폼 구성용 메타."""
@@ -65,7 +78,8 @@ def finance_meta():
 def finance_summary():
     """재무 현황 요약 — 미수(수금)·지급 KPI + 거래선(고객)별 미수 통계.
 
-    통화가 섞이므로 통화별 합계와 KRW 환산 헤드라인을 함께 준다.
+    통화는 환산하지 않고 통화별로 분리해 합계를 낸다(임의 환율로 뭉치면 실제 잔액과
+    어긋나기 때문). 정렬만 KRW→USD→기타 순으로 비교한다.
     """
     s = get_session()
     try:
@@ -80,21 +94,20 @@ def finance_summary():
         receivable_overdue = _sum_by_currency(
             (r["outstanding"], r["currency"]) for r in rec_open if r["overdue"]
         )
-        receivable_krw = round(sum(_to_krw(r["outstanding"], r["currency"]) for r in rec_open), 0)
-        # 거래선(고객)별 미수 합계 — KRW 환산 내림차순.
-        by_cust: dict[str, float] = {}
+        # 거래선(고객)별 미수 합계 — 통화별 분리.
+        by_cust: dict[str, dict] = {}
         for r in rec_open:
-            by_cust[r["customer"]] = by_cust.get(r["customer"], 0.0) + _to_krw(r["outstanding"], r["currency"])
+            _add_by_currency(by_cust, r["customer"], r["outstanding"], r["currency"])
         by_customer = [
-            {"name": k, "outstanding_krw": round(v, 0)}
-            for k, v in sorted(by_cust.items(), key=lambda kv: kv[1], reverse=True)
+            {"name": k, "outstanding": v}
+            for k, v in sorted(by_cust.items(), key=lambda kv: _by_currency_sort_key(kv[1]), reverse=True)
         ]
 
         # ── 지급 — FinancePayable 기준(향후 30일 예정 + 연체 미납) ──
         payables = s.query(FinancePayable).all()
         upcoming: list[tuple[float, str]] = []
         overdue_pay: list[tuple[float, str]] = []
-        by_cat: dict[str, float] = {}
+        by_cat: dict[str, dict] = {}
         # 지난 1년~향후 1년 구간에서 회차를 펼쳐 예정/연체를 계산.
         win_start = (date.fromordinal(today.toordinal() - 365)).isoformat()
         win_end = (date.fromordinal(today.toordinal() + 365)).isoformat()
@@ -105,10 +118,10 @@ def finance_summary():
                 amt, cur = (p.amount or 0.0), (p.currency or "KRW")
                 if occ < today_str:
                     overdue_pay.append((amt, cur))
-                    by_cat[p.category or "기타"] = by_cat.get(p.category or "기타", 0.0) + _to_krw(amt, cur)
+                    _add_by_currency(by_cat, p.category or "기타", amt, cur)
                 elif occ <= horizon:
                     upcoming.append((amt, cur))
-                    by_cat[p.category or "기타"] = by_cat.get(p.category or "기타", 0.0) + _to_krw(amt, cur)
+                    _add_by_currency(by_cat, p.category or "기타", amt, cur)
         # ── 지급 — 매입 청구(APRecord) 미지급분(벤더 P/O별) 추가 반영 ──
         for ap in _ap_record_rows(s):
             if ap["outstanding"] <= 0:
@@ -116,33 +129,31 @@ def finance_summary():
             amt, cur, due = ap["outstanding"], ap["currency"], ap["due_date"]
             if due and due < today_str:
                 overdue_pay.append((amt, cur))
-                by_cat["거래선지급"] = by_cat.get("거래선지급", 0.0) + _to_krw(amt, cur)
+                _add_by_currency(by_cat, "거래선지급", amt, cur)
             elif not due or due <= horizon:
                 upcoming.append((amt, cur))
-                by_cat["거래선지급"] = by_cat.get("거래선지급", 0.0) + _to_krw(amt, cur)
+                _add_by_currency(by_cat, "거래선지급", amt, cur)
         payable_upcoming = _sum_by_currency(upcoming)
         payable_overdue = _sum_by_currency(overdue_pay)
-        payable_krw = round(sum(_to_krw(a, c) for a, c in (upcoming + overdue_pay)), 0)
+        payable_total = _sum_by_currency(upcoming + overdue_pay)
         by_category = [
-            {"name": k, "amount_krw": round(v, 0)}
-            for k, v in sorted(by_cat.items(), key=lambda kv: kv[1], reverse=True)
+            {"name": k, "amount": v}
+            for k, v in sorted(by_cat.items(), key=lambda kv: _by_currency_sort_key(kv[1]), reverse=True)
         ]
 
         return {
             "receivable": {
                 "outstanding": receivable_outstanding,
                 "overdue": receivable_overdue,
-                "outstanding_krw": receivable_krw,
                 "count": len(rec_open),
             },
             "payable": {
                 "upcoming_30d": payable_upcoming,
                 "overdue": payable_overdue,
-                "total_krw": payable_krw,
+                "total": payable_total,
             },
             "by_customer": by_customer[:12],
             "by_category": by_category,
-            "usd_krw": USD_KRW_RATE,
         }
     finally:
         s.close()
@@ -456,14 +467,17 @@ def _cashflow_buckets(unit: str, count: int) -> list[dict]:
 
 
 @app.get("/api/admin/finance/cashflow", dependencies=[Depends(require_token)])
-def finance_cashflow(unit: str = "month", count: int = 6, opening: float = 0.0, include_po: int = 0):
+def finance_cashflow(unit: str = "month", count: int = 6, opening: float = 0.0,
+                     include_po: int = 0, currency: str = "KRW"):
     """현금흐름 예측 — 유입(미수 수금 예정)·유출(지급 예정 + 선택적 벤더 PO)·순증감·누적잔고.
 
     구간(월/주)별로 예상 유입/유출을 집계하고 opening(기초잔고)부터 누적잔고를 굴린다.
-    과거(연체)로 이미 지난 예정은 첫 구간에 흡수한다. 전부 KRW 환산.
+    과거(연체)로 이미 지난 예정은 첫 구간에 흡수한다.
+    잔고는 한 통화 안에서만 의미가 있으므로 환산하지 않고 `currency` 통화 건만 집계한다.
     include_po=1 이면 벤더 발주(PurchaseOrder) 원가를 발주일 기준 유출로 추정 반영한다.
     """
     unit = "week" if unit == "week" else "month"
+    cur_sel = (currency or "KRW").upper()
     count = max(1, min(count, 24))
     buckets = _cashflow_buckets(unit, count)
     ends = [b["end"].isoformat() for b in buckets]
@@ -483,30 +497,36 @@ def finance_cashflow(unit: str = "month", count: int = 6, opening: float = 0.0, 
         for r in _finance_receivable_rows(s):
             if r["outstanding"] <= 0 or not r["due_date"]:
                 continue
+            if (r["currency"] or "KRW").upper() != cur_sel:
+                continue
             idx = bucket_index(r["due_date"])
             if idx >= 0:
-                inflow[idx] += _to_krw(r["outstanding"], r["currency"])
+                inflow[idx] += r["outstanding"]
         # 유출 — 지급대장 미납 회차.
         win_start = buckets[0]["start"]
         win_end = buckets[-1]["end"]
         # 첫 구간이 연체를 흡수하도록 과거 1년까지 회차를 펼쳐 담는다.
         scan_start = date.fromordinal(win_start.toordinal() - 400)
         for p in s.query(FinancePayable).all():
+            if (p.currency or "KRW").upper() != cur_sel:
+                continue
             for occ in _finance_occurrences(p, scan_start, win_end):
                 if _finance_payable_paid_on(p, occ):
                     continue
                 idx = bucket_index(occ)
                 if idx >= 0:
-                    outflow[idx] += _to_krw(p.amount or 0, p.currency or "KRW")
+                    outflow[idx] += p.amount or 0
         # 유출 — 매입 청구(AP) 미지급분을 지급 예정일 기준으로 반영.
         ap_po_ids: set[int] = set()
         for ap in _ap_record_rows(s):
             ap_po_ids.add(ap["po_id"])
             if ap["outstanding"] <= 0 or not ap["due_date"]:
                 continue
+            if (ap["currency"] or "KRW").upper() != cur_sel:
+                continue
             idx = bucket_index(ap["due_date"])
             if idx >= 0:
-                outflow[idx] += _to_krw(ap["outstanding"], ap["currency"])
+                outflow[idx] += ap["outstanding"]
         # 선택: 벤더 발주 원가를 발주일 기준 유출로 추정(AP 청구가 있는 P/O는 중복 방지 위해 제외).
         if include_po:
             ord_map = {o.id: o for o in s.query(Order).all()}
@@ -520,7 +540,8 @@ def finance_cashflow(unit: str = "month", count: int = 6, opening: float = 0.0, 
                 if idx >= 0:
                     o = ord_map.get(po.order_id)
                     cur = po.currency or (o.currency if o else "USD") or "USD"
-                    outflow[idx] += _to_krw(_po_cost(po), cur)
+                    if cur.upper() == cur_sel:
+                        outflow[idx] += _po_cost(po)
 
         rows = []
         cumulative = opening
@@ -538,12 +559,12 @@ def finance_cashflow(unit: str = "month", count: int = 6, opening: float = 0.0, 
             })
         return {
             "unit": unit,
+            "currency": cur_sel,
             "opening": round(opening),
             "rows": rows,
             "total_inflow": round(sum(inflow)),
             "total_outflow": round(sum(outflow)),
             "ending": round(cumulative),
-            "usd_krw": USD_KRW_RATE,
         }
     finally:
         s.close()

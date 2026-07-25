@@ -716,9 +716,16 @@ export function fetchFinanceClosing(start: string, end: string, year: number): P
     `/api/admin/finance/closing?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}&year=${year}`
   );
 }
-export function fetchFinanceCashflow(unit: "month" | "week", count: number, opening: number, includePo: boolean): Promise<FinanceCashflow> {
+export function fetchFinanceCashflow(
+  unit: "month" | "week",
+  count: number,
+  opening: number,
+  includePo: boolean,
+  currency = "KRW"
+): Promise<FinanceCashflow> {
   return get<FinanceCashflow>(
-    `/api/admin/finance/cashflow?unit=${unit}&count=${count}&opening=${opening}&include_po=${includePo ? 1 : 0}`
+    `/api/admin/finance/cashflow?unit=${unit}&count=${count}&opening=${opening}` +
+      `&include_po=${includePo ? 1 : 0}&currency=${encodeURIComponent(currency)}`
   );
 }
 
