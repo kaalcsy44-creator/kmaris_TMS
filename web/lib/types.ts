@@ -922,6 +922,8 @@ export type FinanceCalendarEvent = {
   overdue?: boolean;
   paid?: boolean;
   paid_on?: string;           // 실제 납부일(예정일과 다를 수 있음)
+  scheduled?: string;         // actual=true 인 이벤트의 원래 예정일
+  actual?: boolean;           // true = 예정일이 아니라 '실제 납부일' 자리에 찍힌 이벤트
   ref_id: number;
   occurrence?: string | null;
   source?: "manual" | "ap";   // "ap" = 매입 청구(읽기전용, 프로젝트 단계에서 관리)

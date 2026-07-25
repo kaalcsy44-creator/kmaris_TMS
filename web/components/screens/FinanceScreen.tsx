@@ -974,13 +974,18 @@ function CalendarTab() {
                   <button
                     key={i}
                     type="button"
-                    className={`fin-ev fin-ev--${e.kind}${e.overdue ? " overdue" : ""}${e.paid ? " paid" : ""}`}
-                    title={`${e.kind === "receivable" ? "Receivable" : "Payable"} · ${e.title} · ${money(e.amount, e.currency)}${
-                      e.paid ? ` (paid${e.paid_on ? ` ${e.paid_on}` : ""})` : ""
-                    }`}
+                    className={`fin-ev fin-ev--${e.kind}${e.overdue ? " overdue" : ""}${e.paid ? " paid" : ""}${e.actual ? " actual" : ""}`}
+                    title={
+                      e.actual
+                        ? `Paid ${e.paid_on} · ${e.title} · ${money(e.amount, e.currency)} (scheduled ${e.scheduled})`
+                        : `${e.kind === "receivable" ? "Receivable" : "Payable"} · ${e.title} · ${money(e.amount, e.currency)}${
+                            e.paid ? ` (paid${e.paid_on ? ` ${e.paid_on}` : ""})` : ""
+                          }`
+                    }
                     onClick={() => togglePayable(e)}
                   >
-                    <span className="fin-ev-title">{e.title}</span>
+                    {/* 실제 납부일 자리에 찍힌 이벤트는 체크로 구분(예정일 이벤트는 취소선). */}
+                    <span className="fin-ev-title">{e.actual ? `✓ ${e.title}` : e.title}</span>
                     <span className="fin-ev-amt">{money(e.amount, e.currency)}</span>
                   </button>
                 ))}

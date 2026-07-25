@@ -646,6 +646,31 @@ def finance_calendar(start: str = "", end: str = ""):
                     "ref_id": p.id,
                     "occurrence": occ,
                 })
+            # 실제 납부일이 예정일과 다르면 그 날짜에도 한 번 더 표시한다(actual=True).
+            # 예정 회차가 이 달 밖이어도 납부가 이 달이면 보이도록 payments 를 직접 훑는다.
+            if (p.recurrence or "none") == "none":
+                pay_map = {(p.due_date or ""): (p.paid_date or "")} if p.paid else {}
+            else:
+                pay_map = dict(getattr(p, "payments", None) or {})
+            for sched, paid_on in pay_map.items():
+                if not paid_on or paid_on == sched:
+                    continue
+                if not (d0.isoformat() <= paid_on <= d1.isoformat()):
+                    continue
+                events.append({
+                    "kind": "payable",
+                    "date": paid_on,
+                    "title": (p.counterparty or vendor_names.get(p.vendor_id, "") or p.description or "Payable"),
+                    "category": p.category or "기타",
+                    "amount": round(p.amount or 0, 2),
+                    "currency": p.currency or "KRW",
+                    "paid": True,
+                    "paid_on": paid_on,
+                    "scheduled": sched,
+                    "actual": True,
+                    "ref_id": p.id,
+                    "occurrence": sched,
+                })
         # 지급 예정 — 매입 청구(AP) 미지급분(읽기전용, 프로젝트 단계에서 관리).
         for ap in _ap_record_rows(s):
             due = ap["due_date"]

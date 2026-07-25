@@ -9980,6 +9980,8 @@ table.mini tfoot .fin-foot-name { text-align: left; }
 .fin-ev--payable { background: #fdf1dd; color: #8a5a00; }
 .fin-ev.overdue { background: #fde2e1; color: #b0281c; }
 .fin-ev.paid { background: #e8f6ee; color: #1e7a46; text-decoration: line-through; }
+/* 실제 납부일 자리에 찍힌 이벤트 — 예정일(취소선)과 달리 실제 지출이므로 취소선 없이 강조. */
+.fin-ev.paid.actual { text-decoration: none; font-weight: 600; border: 1px solid #9fd4b6; }
 .fin-ev-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fin-ev-amt { flex: none; font-variant-numeric: tabular-nums; font-weight: 700; }
 
