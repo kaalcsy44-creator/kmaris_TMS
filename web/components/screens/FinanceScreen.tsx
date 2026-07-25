@@ -305,16 +305,17 @@ function PayablesTab() {
   const [paying, setPaying] = useState<{ row: FinancePayable; occurrence: string } | null>(null);
   const rows = useMemo(() => data?.rows ?? [], [data]);
   const canEdit = can("finance", "create") || can("finance", "edit");
-  // 합계 3열(청구·지급·미지급) — 통화별 분리(미수 목록과 같은 규칙).
-  const totals = useMemo(() => {
-    const t = { invoice: {} as MoneyByCurrency, paid: {} as MoneyByCurrency, outstanding: {} as MoneyByCurrency };
-    for (const p of rows) {
-      t.invoice[p.currency] = (t.invoice[p.currency] || 0) + p.invoice_amount;
-      t.paid[p.currency] = (t.paid[p.currency] || 0) + p.paid_amount;
-      t.outstanding[p.currency] = (t.outstanding[p.currency] || 0) + p.outstanding;
-    }
-    return t;
+  // 거래(매입) / 기타 지출 두 섹션으로 나눠 보여준다 — 성격이 달라 소계도 따로 낸다.
+  // 거래 = 프로젝트에서 넘어온 벤더 청구서 + 수동 등록한 거래선지급.
+  const groups = useMemo(() => {
+    const isTrade = (p: FinancePayable) => p.source === "ap" || p.category === "거래선지급";
+    return [
+      { key: "trade", label: "Trade purchases · vendor bills", rows: rows.filter(isTrade) },
+      { key: "other", label: "Other costs · rent, payroll, utilities, taxes", rows: rows.filter((p) => !isTrade(p)) },
+    ];
   }, [rows]);
+  // 합계 3열(청구·지급·미지급) — 통화별 분리(미수 목록과 같은 규칙).
+  const totals = useMemo(() => payableTotals(rows), [rows]);
 
   function reload() {
     invalidateCache("finance:summary");
@@ -360,8 +361,13 @@ function PayablesTab() {
               <th>Recurrence</th><th>Status</th><th />
             </tr>
           </thead>
-          <tbody>
-            {rows.map((p) => {
+          {/* 섹션 = 거래(매입) / 기타 지출. 각 섹션 끝에 소계, 표 끝에 전체 합계. */}
+          {groups.map((g) => g.rows.length === 0 ? null : (
+          <tbody key={g.key}>
+            <tr className="fin-group-head">
+              <td colSpan={10}>{g.label}</td>
+            </tr>
+            {g.rows.map((p) => {
               const isAp = p.source === "ap";
               return (
               <tr key={`${p.source || "manual"}-${p.id}`}>
@@ -415,7 +421,22 @@ function PayablesTab() {
               </tr>
               );
             })}
+            {/* 섹션 소계 — 전체 합계와 구분되게 옅게. */}
+            {(() => {
+              const st = payableTotals(g.rows);
+              return (
+                <tr className="fin-group-sub">
+                  <td />
+                  <td className="fin-foot-name" colSpan={3}>Subtotal</td>
+                  <td className="num">{byCurrency(st.invoice)}</td>
+                  <td className="num">{byCurrency(st.paid)}</td>
+                  <td className="num">{byCurrency(st.outstanding)}</td>
+                  <td /><td /><td />
+                </tr>
+              );
+            })()}
           </tbody>
+          ))}
           {/* 합계 — 통화별 분리, 그 아래 참고용 KRW 환산(미수 목록과 같은 규칙). */}
           <tfoot>
             <tr className="foot-grand fin-foot-total">
@@ -466,6 +487,17 @@ function PayablesTab() {
       ) : null}
     </div>
   );
+}
+
+/** 지급 목록 합계 — 청구·지급·미지급 3열을 통화별로 모은다. */
+function payableTotals(rows: FinancePayable[]) {
+  const t = { invoice: {} as MoneyByCurrency, paid: {} as MoneyByCurrency, outstanding: {} as MoneyByCurrency };
+  for (const p of rows) {
+    t.invoice[p.currency] = (t.invoice[p.currency] || 0) + p.invoice_amount;
+    t.paid[p.currency] = (t.paid[p.currency] || 0) + p.paid_amount;
+    t.outstanding[p.currency] = (t.outstanding[p.currency] || 0) + p.outstanding;
+  }
+  return t;
 }
 
 /** 반복 항목의 다음 미납 회차일 — due_date 에서 주기만큼 더해가며 첫 미납 회차를 찾는다. */

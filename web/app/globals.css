@@ -9939,6 +9939,22 @@ table.mini tfoot .fin-foot-name { text-align: left; }
   background: #f8fafc;
   border-top: 1px solid var(--line);
 }
+/* 지급 목록 섹션 구분 — 거래(매입) / 기타 지출. 머리행 + 옅은 소계행. */
+.fin-group-head td {
+  background: #eef3f9;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  color: #45526a;
+  padding-top: 7px;
+  padding-bottom: 7px;
+}
+.fin-group-sub td {
+  background: #f8fafc;
+  color: #45526a;
+  font-weight: 600;
+  border-top: 1px solid var(--line);
+}
 /* 납부 기록 팝업 — 날짜 한두 칸만 받는 좁은 폼(세로 스택, 여백 최소). */
 .fin-pay-form { display: flex; flex-direction: column; gap: 10px; }
 .fin-pay-form .form-field { margin: 0; }
