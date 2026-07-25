@@ -498,6 +498,34 @@ class ARRecord(Base):
     created_at     = Column(DateTime, default=datetime.utcnow)
 
 
+class APRecord(Base):
+    """매입 청구(대금청구서·거래명세서) 및 전자세금계산서 수취 기록 — ARRecord 의 매입측 대응.
+
+    한 행 = 하나의 vendor P/O(po_id)에 대한 우리의 지급 의무. 프로젝트 9단계에서 벤더가
+    보낸 대금청구서/거래명세서 금액을 확정 입력하고, 10단계에서 전자세금계산서 수취 여부를
+    기록한다. Finance 의 지급(payable) 소스로 자동 연결된다(_ap_record_rows)."""
+    __tablename__ = "ap_records"
+    id             = Column(Integer, primary_key=True)
+    po_id          = Column(Integer, ForeignKey("purchase_orders.id"))  # 대응 vendor P/O
+    order_id       = Column(Integer, ForeignKey("orders.id"))           # 프로젝트/고객 롤업
+    vendor_id      = Column(Integer, ForeignKey("vendors.id"))
+    bill_no        = Column(String(60))    # 벤더 대금청구서/거래명세서 번호
+    bill_date      = Column(String(10))    # 청구서 발행일 YYYY-MM-DD
+    invoice_amount = Column(Float, default=0.0)   # 청구 총액(공급가액+VAT)
+    paid_amount    = Column(Float, default=0.0)   # 우리가 지급한 누계
+    currency       = Column(String(10), default="KRW")
+    vat_rate       = Column(Float, default=0.1)
+    due_date       = Column(String(10))    # 지급 예정일 YYYY-MM-DD
+    status         = Column(SAEnum(ARStatus), default=ARStatus.OUTSTANDING)
+    items          = Column(JSON, default=list)   # 청구 품목(설명·Part No.·수량·단가·금액)
+    # 전자세금계산서 수취(10단계) — vendor P/O 단위라 레코드에 직접 보관.
+    tax_received      = Column(Boolean, default=False)  # 전자세금계산서 수취 완료
+    tax_received_date = Column(String(10))              # 수취일 YYYY-MM-DD
+    tax_invoice_no    = Column(String(60))              # 전자세금계산서 승인번호
+    notes          = Column(Text)
+    created_at     = Column(DateTime, default=datetime.utcnow)
+
+
 class MarketingActivity(Base):
     """잠정(잠재) 고객사 대상 마케팅 활동 기록. RFQ 파이프라인과 무관하게 독립 관리.
 

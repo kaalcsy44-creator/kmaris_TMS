@@ -11,10 +11,14 @@ import {
   previewTaxInvoicePdf,
   recordArPayment,
   updateArRecord,
+  fetchApByOrder,
+  createApRecord,
+  updateApRecord,
+  deleteApRecord,
 } from "@/lib/api";
 import { can, canEditDeal, editBlockReason } from "@/lib/auth";
 import { useCachedData, invalidateCache } from "@/lib/useCachedData";
-import type { ArRow, DocumentDetail, DocumentWorkItem, PoWorkOptions, TaxInvoiceItem } from "@/lib/types";
+import type { ApByOrderRow, ArRow, DocumentDetail, DocumentWorkItem, PoWorkOptions, TaxInvoiceItem } from "@/lib/types";
 import { createPortal } from "react-dom";
 import CurrencyToggle from "@/components/common/CurrencyToggle";
 import {
@@ -102,6 +106,8 @@ export function ArOverview({
   const [stageTab, setStageTab] = useState<StageTab>(
     initialStage === 11 ? 11 : initialStage === 9 ? 9 : 10
   );
+  // 수취(AR, 고객 청구) / 지급(AP, 벤더 매입) 문서 탭.
+  const [docTab, setDocTab] = useState<"ar" | "ap">("ar");
   const rows = useMemo(() => data?.rows ?? [], [data]);
   const orderId = initialOrderId ?? null;
 
@@ -131,14 +137,345 @@ export function ArOverview({
   const match = rows.find((r) => r.order_id === orderId);
   // 9~11단계 모두 같은 대금청구서 편집기(ArAddForm)를 본문으로 쓴다 — P/O 간·단계 간 화면 일관성.
   // 레코드가 없으면 생성 폼, 있으면 편집 폼. 10·11단계는 그 아래 발행/수금 완료 바(MilestoneBar)를 덧붙인다.
+  // AR(수취) 옆에 AP(지급, 벤더 매입) 탭 — 각 벤더 P/O 의 대금청구서·전자세금계산서를 입력.
   return (
     <div className="embedded-detail">
-      <div className="form-section-title" style={{ marginTop: 0 }}>
-        {match ? "AR record (edit)" : "Add AR record"}
+      <div className="page-tabs ar-doc-tabs" style={{ marginBottom: 12 }}>
+        <button className={docTab === "ar" ? "on" : ""} onClick={() => setDocTab("ar")}>
+          Receivable · Customer (AR)
+        </button>
+        <button className={docTab === "ap" ? "on" : ""} onClick={() => setDocTab("ap")}>
+          Payable · Vendor (AP)
+        </button>
       </div>
-      <ArAddForm key={match?.id ?? `new-${orderId}`} options={options ?? null} fallbackOrderId={orderId} existing={match} onChanged={load} />
-      {match && stageTab !== 9 ? <MilestoneBar row={match} stage={stageTab} onChanged={load} /> : null}
+
+      {docTab === "ar" ? (
+        <>
+          <div className="form-section-title" style={{ marginTop: 0 }}>
+            {match ? "AR record (edit)" : "Add AR record"}
+          </div>
+          <ArAddForm key={match?.id ?? `new-${orderId}`} options={options ?? null} fallbackOrderId={orderId} existing={match} onChanged={load} />
+          {match && stageTab !== 9 ? <MilestoneBar row={match} stage={stageTab} onChanged={load} /> : null}
+        </>
+      ) : (
+        <ApSection orderId={orderId} stage={stageTab} onChanged={load} />
+      )}
     </div>
+  );
+}
+
+/** AP(매입 지급) 섹션 — 이 오더의 벤더 P/O 를 골라 대금청구서·전자세금계산서를 입력한다.
+ *  한 오더에 벤더 P/O 가 여러 개일 수 있어 P/O 선택기를 먼저 둔다(각 P/O = AP 1건). */
+function ApSection({ orderId, stage, onChanged }: { orderId: number; stage: StageTab; onChanged: () => void }) {
+  const cacheKey = `ap:by-order:${orderId}`;
+  const { data, error, refresh } = useCachedData(cacheKey, () => fetchApByOrder(orderId));
+  const [selPo, setSelPo] = useState<number | null>(null);
+  const poRows = useMemo(() => data?.rows ?? [], [data]);
+
+  useEffect(() => {
+    if (poRows.length && (selPo == null || !poRows.some((r) => r.po_id === selPo))) {
+      setSelPo(poRows[0].po_id);
+    }
+  }, [poRows, selPo]);
+
+  function reload() {
+    invalidateCache("finance:summary");
+    invalidateCache("finance:payables");
+    invalidateCache("finance:calendar");
+    onChanged();
+    return refresh();
+  }
+
+  if (error && !data) return <div className="state error">API error: {error.message}</div>;
+  if (!data) return <div className="state">Loading…</div>;
+  if (poRows.length === 0) {
+    return (
+      <div className="project-work-empty">
+        No vendor P/O on this order yet — send the Vendor P/O (stage 6) first. Vendor bills are recorded per P/O.
+      </div>
+    );
+  }
+
+  const current = poRows.find((r) => r.po_id === selPo) ?? poRows[0];
+
+  return (
+    <div>
+      <div className="project-select">
+        <label>Vendor P/O *</label>
+        <select value={current.po_id} onChange={(e) => setSelPo(Number(e.target.value))}>
+          {poRows.map((r) => (
+            <option key={r.po_id} value={r.po_id}>
+              {(r.po_no || `PO#${r.po_id}`)} · {r.vendor}{r.ap ? "  ✓ billed" : ""}
+            </option>
+          ))}
+        </select>
+      </div>
+      <ApAddForm key={current.po_id} row={current} orderId={orderId} stage={stage} onChanged={reload} />
+    </div>
+  );
+}
+
+type ApForm = {
+  bill_no: string;
+  bill_date: string;
+  currency: string;
+  vat_rate: number;
+  due_date: string;
+  paid_amount: number;
+  items: TaxInvoiceItem[];
+  notes: string;
+  tax_received: boolean;
+  tax_received_date: string;
+  tax_invoice_no: string;
+};
+
+/** AP(매입 청구) 편집기 — ArAddForm 의 매입측 대응. 선택된 벤더 P/O 1건에 대한 대금청구서/
+ *  거래명세서 금액을 확정 입력하고(품목은 P/O 자동 로드), 10단계에서 전자세금계산서 수취를 기록. */
+function ApAddForm({
+  row,
+  orderId,
+  stage,
+  onChanged,
+}: {
+  row: ApByOrderRow;
+  orderId: number;
+  stage: StageTab;
+  onChanged: () => void;
+}) {
+  const ap = row.ap;
+  const editing = !!ap;
+  const canEdit = can("ar", "create") || can("ar", "edit");
+  const poItems = useMemo(() => workItemsToTax(row.items), [row.items]);
+  const [form, setForm] = useState<ApForm>(() =>
+    ap
+      ? {
+          bill_no: ap.bill_no,
+          bill_date: ap.bill_date || today(),
+          currency: ap.currency,
+          vat_rate: ap.vat_rate,
+          due_date: ap.due_date || today(),
+          paid_amount: ap.paid_amount,
+          items: (ap.items || []).map((it) => ({ ...it })),
+          notes: ap.notes,
+          tax_received: ap.tax_received,
+          tax_received_date: ap.tax_received_date || today(),
+          tax_invoice_no: ap.tax_invoice_no,
+        }
+      : {
+          bill_no: "",
+          bill_date: today(),
+          currency: row.currency || "KRW",
+          vat_rate: 0.1,
+          due_date: today(),
+          paid_amount: 0,
+          items: poItems.map((it) => ({ ...it })),
+          notes: "",
+          tax_received: false,
+          tax_received_date: today(),
+          tax_invoice_no: "",
+        }
+  );
+  const [busy, setBusy] = useState(false);
+  const [delBusy, setDelBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const sel = useRowSelection();
+
+  const subtotal = taxSubtotal(form.items);
+  const vat = subtotal * num(form.vat_rate);
+  const total = Math.round(subtotal + vat);
+
+  function setItem(i: number, key: keyof TaxInvoiceItem, value: string) {
+    setForm((f) => {
+      const items = f.items.map((it, idx) => {
+        if (idx !== i) return it;
+        const numeric = key === "qty" || key === "unit_price";
+        const next = { ...it, [key]: numeric ? parseAmountInput(value) ?? 0 : value };
+        if (numeric) next.amount = num(next.qty) * num(next.unit_price);
+        return next;
+      });
+      return { ...f, items };
+    });
+  }
+  const addItem = () => setForm((f) => ({ ...f, items: [...f.items, { ...emptyTaxItem }] }));
+  const setItems = (items: TaxInvoiceItem[]) => setForm((f) => ({ ...f, items }));
+  const loadPo = () => { setItems(poItems.map((it) => ({ ...it }))); sel.clear(); };
+
+  async function save() {
+    if (!(form.due_date || "").trim()) { setErr("Enter a due date."); return; }
+    setBusy(true); setErr("");
+    try {
+      const body = {
+        po_id: row.po_id,
+        order_id: orderId,
+        vendor_id: row.vendor_id,
+        bill_no: form.bill_no,
+        bill_date: form.bill_date,
+        invoice_amount: total,
+        paid_amount: form.paid_amount,
+        currency: form.currency,
+        vat_rate: form.vat_rate,
+        due_date: form.due_date,
+        items: form.items,
+        notes: form.notes,
+        tax_received: form.tax_received,
+        tax_received_date: form.tax_received ? form.tax_received_date : "",
+        tax_invoice_no: form.tax_invoice_no,
+      };
+      if (ap) await updateApRecord(ap.id, body);
+      else await createApRecord(body);
+      onChanged();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeRecord() {
+    if (!ap) return;
+    if (!confirm("Delete this vendor bill (AP record)?")) return;
+    setDelBusy(true); setErr("");
+    try {
+      await deleteApRecord(ap.id);
+      onChanged();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Delete failed");
+    } finally {
+      setDelBusy(false);
+    }
+  }
+
+  const itemCols: ItemCol[] = [
+    { key: "__sel", fixed: true },
+    { key: "__seq", fixed: true, className: "seq" },
+    { key: "description", label: "Description" },
+    { key: "part_no", label: "Part No." },
+    { key: "qty", label: "Qty", className: "num" },
+    { key: "unit_price", label: "Unit Price", className: "num" },
+    { key: "amount", label: "Amount", className: "num" },
+  ];
+  const grid = useItemGrid("ap-bill-items", itemCols);
+
+  return (
+    <fieldset className="form-fieldset" disabled={!canEdit} style={{ border: 0, padding: 0, margin: 0 }}>
+      <div className="form-section-title" style={{ marginTop: 0 }}>
+        {editing ? "Vendor bill (edit)" : "Vendor bill (new)"} — {row.vendor}
+      </div>
+      <div className="form-grid">
+        <Field label="Bill No. (vendor)" value={form.bill_no} onChange={(v) => setForm({ ...form, bill_no: v })} />
+        <Field label="Bill date" value={form.bill_date} onChange={(v) => setForm({ ...form, bill_date: v })} type="date" />
+        <label className="form-field">
+          <span>Currency</span>
+          <CurrencyToggle value={form.currency || "KRW"} onChange={(v) => setForm({ ...form, currency: v })} />
+        </label>
+        <Field label="VAT %" value={String(Math.round(form.vat_rate * 100))} onChange={(v) => setForm({ ...form, vat_rate: (Number(v) || 0) / 100 })} type="number" />
+        <Field label="Due date" value={form.due_date} onChange={(v) => setForm({ ...form, due_date: v })} type="date" />
+        <Field label="Paid amount" value={String(form.paid_amount)} onChange={(v) => setForm({ ...form, paid_amount: Number(v) || 0 })} type="number" />
+      </div>
+
+      <div className="tax-items">
+        <div className="items-head">
+          <div className="form-section-title" style={{ margin: 0 }}>Item list</div>
+          <div className="items-head-actions">
+            <button type="button" className="btn sm" onClick={loadPo} disabled={poItems.length === 0}>Load P/O</button>
+            <ItemColsButton grid={grid} />
+            <DeleteSelectedButton sel={sel} onDelete={() => deleteSelectedRows(form.items, sel, setItems)} />
+            <button type="button" className="btn sm items-head-add" onClick={addItem}>+ Add</button>
+          </div>
+        </div>
+        <div className="table-wrap item-scroll">
+          <ItemGridStyle grid={grid} />
+          <table className={`mini wide lead-tools ${grid.tableClass}`}>
+            <thead>
+              <tr>
+                <ItemSelectHeaderCell count={form.items.length} sel={sel} />
+                <th className="seq">No.</th>
+                <ItemTh grid={grid} k="description">Description</ItemTh>
+                <ItemTh grid={grid} k="part_no">Part No.</ItemTh>
+                <ItemTh grid={grid} k="qty" className="num">Qty</ItemTh>
+                <ItemTh grid={grid} k="unit_price" className="num">Unit Price</ItemTh>
+                <ItemTh grid={grid} k="amount" className="num">Amount</ItemTh>
+              </tr>
+            </thead>
+            <tbody>
+              {form.items.length === 0 ? (
+                <tr><td colSpan={7} className="tax-items-empty">No items — “+ Add” or “Load P/O”.</td></tr>
+              ) : form.items.map((it, i) => (
+                <tr key={i} className={itemRowClass(i)}>
+                  <ItemSelectCell index={i} sel={sel} />
+                  <td className="seq">{i + 1}</td>
+                  <td><textarea className="desc" rows={1} value={it.description} onChange={(e) => setItem(i, "description", e.target.value)} /></td>
+                  <td><textarea className="wrapcell" rows={1} value={it.part_no} onChange={(e) => setItem(i, "part_no", e.target.value)} /></td>
+                  <td><input className="num" value={amountInputValue(it.qty)} onChange={(e) => setItem(i, "qty", e.target.value)} /></td>
+                  <td><input className="num" value={amountInputValue(it.unit_price)} onChange={(e) => setItem(i, "unit_price", e.target.value)} /></td>
+                  <td className="num">{it.amount.toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td /><td /><td /><td /><td />
+                <td className="total-label">Subtotal</td>
+                <td className="num total-value">{subtotal.toLocaleString()}</td>
+              </tr>
+              <tr>
+                <td /><td /><td /><td /><td />
+                <td className="total-label">VAT ({Math.round(form.vat_rate * 100)}%)</td>
+                <td className="num total-value">{Math.round(vat).toLocaleString()}</td>
+              </tr>
+              <tr className="foot-grand">
+                <td /><td /><td /><td /><td />
+                <td className="total-label">Total</td>
+                <td className="num total-value">{total.toLocaleString()}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+
+      {stage === 10 ? (
+        <div className="ar-milestone">
+          <div className="form-section-title">e-Tax invoice received (from vendor)</div>
+          <div className="milestone-row" style={{ marginBottom: 10 }}>
+            <span className={`ar-badge${form.tax_received ? "" : " overdue"}`}>
+              {form.tax_received ? `Received (${form.tax_received_date || "done"})` : "Not received"}
+            </span>
+          </div>
+          <label className="check-chip" style={{ cursor: "pointer" }}>
+            <input type="checkbox" checked={form.tax_received} onChange={(e) => setForm({ ...form, tax_received: e.target.checked })} /> e-Tax invoice received
+          </label>
+          {form.tax_received ? (
+            <div className="form-grid" style={{ marginTop: 8 }}>
+              <Field label="Received date" value={form.tax_received_date} onChange={(v) => setForm({ ...form, tax_received_date: v })} type="date" />
+              <Field label="e-Tax invoice No. (approval)" value={form.tax_invoice_no} onChange={(v) => setForm({ ...form, tax_invoice_no: v })} />
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      <label className="form-field ar-remarks" style={{ marginTop: 10 }}>
+        <span>Notes</span>
+        <textarea rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+      </label>
+
+      <div className="form-actions doc-actions">
+        <div className="doc-actions-left" />
+        <div className="doc-actions-center">
+          {err ? <span className="action-err">{err}</span> : null}
+          {!canEdit ? <span className="hint-inline">{editBlockReason("ar", 0)}</span> : null}
+        </div>
+        <div className="doc-actions-right">
+          {editing ? (
+            <button className="btn danger" disabled={busy || delBusy} onClick={removeRecord}>
+              {delBusy ? "Deleting…" : "Delete"}
+            </button>
+          ) : null}
+          <button className="btn primary" disabled={busy} onClick={save}>
+            {busy ? "Working…" : "Save"}
+          </button>
+        </div>
+      </div>
+    </fieldset>
   );
 }
 

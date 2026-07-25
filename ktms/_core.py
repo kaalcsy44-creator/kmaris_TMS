@@ -72,7 +72,7 @@ from db.models import (
     EmailTemplate,
     VendorRFQ, VendorQuote, Quotation, QuotationStatus, FollowUpLevel,
     Order, PurchaseOrder, ShippingAdvice, ProformaInvoice, CommercialInvoice,
-    PackingList, TaxInvoiceData, ARRecord, DeliveryProof,
+    PackingList, TaxInvoiceData, ARRecord, APRecord, DeliveryProof,
     RFQStatus, OrderStatus, ARStatus, WorkType, MarketingActivity, ScheduleEvent,
     MarketingAsset, FinancePayable,
 )
@@ -242,8 +242,8 @@ INTERNAL_STEPS = [
     "P/O Sent",                   # 6  (to Vendor)
     "Delivery Readiness",         # 7  (구 'Delivery Arrangement'(구 8)를 흡수)
     "Delivery Complete · POD",    # 8  (구 9)
-    "Tax Invoice · Billing",      # 9  (구 10)
-    "Tax Invoice Issued",         # 10 (구 11)
+    "Billing · Statement",        # 9  (구 10) — 매출 대금청구서·매입 거래명세서(금액 최종확인)
+    "Tax Invoice (e-Tax)",        # 10 (구 11) — 전자세금계산서 발행(고객)/수취(벤더)
     "Payment Completed",          # 11 (구 12)
 ]
 
@@ -1602,6 +1602,32 @@ class ARSave(BaseModel):
     bill_to_phone: str | None = None
 
 
+class APSave(BaseModel):
+    """매입 청구(AP) 저장 — ARSave 의 매입측 대응. 각 행은 하나의 vendor P/O(po_id)."""
+    po_id: int
+    order_id: int
+    vendor_id: int | None = None
+    bill_no: str | None = ""
+    bill_date: str | None = None
+    invoice_amount: float = 0.0
+    paid_amount: float = 0.0
+    currency: str = "KRW"
+    vat_rate: float | None = None
+    due_date: str | None = None
+    status: str = ""
+    items: list[dict] | None = None
+    notes: str | None = None
+    # 전자세금계산서 수취(10단계) — 미전달 시 기존값 유지.
+    tax_received: bool | None = None
+    tax_received_date: str | None = None
+    tax_invoice_no: str | None = None
+
+
+class APPayment(BaseModel):
+    amount: float
+    due_date: str | None = None
+
+
 class TaxInvoicePdfReq(BaseModel):
     # TAX INVOICE 미리보기 — 저장 없이 현재 편집값으로 PDF 렌더.
     invoice_no: str | None = ""
@@ -2161,6 +2187,49 @@ def _finance_receivable_rows(s) -> list[dict]:
             "due_date": r.due_date or "",
             "status": "연체" if overdue else status,
             "overdue": bool(overdue),
+        })
+    return rows
+
+
+def _ap_record_rows(s) -> list[dict]:
+    """매입(지급) 집계 — APRecord 기준. Finance 지급대장·미지급·캘린더에 사용.
+
+    한 행 = vendor P/O 하나에 대한 우리의 지급 의무. outstanding = 청구액 − 지급액.
+    """
+    today_str = date.today().isoformat()
+    ord_map = {o.id: o for o in s.query(Order).all()}
+    cust_names = {c.id: c.name for c in s.query(Customer).all()}
+    vendor_names = {v.id: v.name for v in s.query(Vendor).all()}
+    po_map = {p.id: p for p in s.query(PurchaseOrder).all()}
+    rows: list[dict] = []
+    for r in s.query(APRecord).all():
+        o = ord_map.get(r.order_id)
+        cust = cust_names.get(o.customer_id, "—") if o else "—"
+        vendor = vendor_names.get(r.vendor_id, "—")
+        po = po_map.get(r.po_id)
+        invoice = round(r.invoice_amount or 0, 2)
+        paid = round(r.paid_amount or 0, 2)
+        outstanding = round(invoice - paid, 2)
+        status = _enum_val(r.status)
+        overdue = status != ARStatus.PAID and bool(r.due_date) and r.due_date < today_str and outstanding > 0
+        rows.append({
+            "id": r.id,
+            "po_id": r.po_id,
+            "order_id": r.order_id,
+            "po_no": (po.po_no or "") if po else "",
+            "vendor": vendor,
+            "customer": cust,
+            "bill_no": r.bill_no or "",
+            "currency": r.currency or "KRW",
+            "invoice_amount": invoice,
+            "paid_amount": paid,
+            "outstanding": outstanding,
+            "due_date": r.due_date or "",
+            "status": "연체" if overdue else status,
+            "overdue": bool(overdue),
+            "tax_received": bool(r.tax_received),
+            "tax_received_date": r.tax_received_date or "",
+            "tax_invoice_no": r.tax_invoice_no or "",
         })
     return rows
 
@@ -2751,6 +2820,10 @@ class QuotationSendReq(BaseModel):
 
 # Public surface consumed by routers/*.py (split from this file).
 __all__ = [
+    "APPayment",
+    "APRecord",
+    "APSave",
+    "_ap_record_rows",
     "ARPayment",
     "ARRecord",
     "ARSave",

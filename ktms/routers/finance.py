@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 from _core import (
+    APRecord,
     ARRecord,
     Customer,
     Depends,
@@ -21,6 +22,7 @@ from _core import (
     USD_KRW_RATE,
     User,
     Vendor,
+    _ap_record_rows,
     _finance_occurrences,
     _finance_payable_paid_on,
     _finance_payable_row,
@@ -107,6 +109,17 @@ def finance_summary():
                 elif occ <= horizon:
                     upcoming.append((amt, cur))
                     by_cat[p.category or "기타"] = by_cat.get(p.category or "기타", 0.0) + _to_krw(amt, cur)
+        # ── 지급 — 매입 청구(APRecord) 미지급분(벤더 P/O별) 추가 반영 ──
+        for ap in _ap_record_rows(s):
+            if ap["outstanding"] <= 0:
+                continue
+            amt, cur, due = ap["outstanding"], ap["currency"], ap["due_date"]
+            if due and due < today_str:
+                overdue_pay.append((amt, cur))
+                by_cat["거래선지급"] = by_cat.get("거래선지급", 0.0) + _to_krw(amt, cur)
+            elif not due or due <= horizon:
+                upcoming.append((amt, cur))
+                by_cat["거래선지급"] = by_cat.get("거래선지급", 0.0) + _to_krw(amt, cur)
         payable_upcoming = _sum_by_currency(upcoming)
         payable_overdue = _sum_by_currency(overdue_pay)
         payable_krw = round(sum(_to_krw(a, c) for a, c in (upcoming + overdue_pay)), 0)
@@ -149,13 +162,44 @@ def finance_receivables():
 
 @app.get("/api/admin/finance/payables", dependencies=[Depends(require_token)])
 def finance_payables():
-    """지급대장 목록 — 원장(기준 행). 반복 항목은 캘린더에서 회차로 펼쳐진다."""
+    """지급대장 목록 — 수동 등록(FinancePayable) + 매입 청구(APRecord, 읽기전용).
+
+    AP 행은 프로젝트 9·10단계에서 편집하므로 여기서는 읽기전용으로 함께 보여준다.
+    반복 항목은 캘린더에서 회차로 펼쳐진다.
+    """
     s = get_session()
     try:
         vendor_names = {v.id: v.name for v in s.query(Vendor).all()}
         user_names = {u.id: u.username for u in s.query(User).all()}
         rows = s.query(FinancePayable).order_by(FinancePayable.due_date, FinancePayable.id).all()
-        return {"rows": [_finance_payable_row(p, vendor_names, user_names) for p in rows]}
+        out = [{**_finance_payable_row(p, vendor_names, user_names), "source": "manual"}
+               for p in rows]
+        # 매입 청구(AP) — vendor P/O별 미지급분을 읽기전용 지급 행으로 합류.
+        for ap in _ap_record_rows(s):
+            if ap["outstanding"] <= 0:
+                continue
+            out.append({
+                "id": ap["id"],
+                "source": "ap",
+                "category": "거래선지급",
+                "counterparty": ap["vendor"],
+                "vendor_id": None,
+                "description": ap["bill_no"] or ap["po_no"] or "",
+                "po_no": ap["po_no"],
+                "amount": ap["outstanding"],
+                "currency": ap["currency"],
+                "due_date": ap["due_date"],
+                "recurrence": "none",
+                "recur_until": "",
+                "paid": False,
+                "paid_date": "",
+                "paid_dates": [],
+                "notes": "",
+                "owner_id": 0,
+                "owner": "",
+            })
+        out.sort(key=lambda r: (r["due_date"] or "9999", r["source"] != "manual"))
+        return {"rows": out}
     finally:
         s.close()
 
@@ -454,10 +498,21 @@ def finance_cashflow(unit: str = "month", count: int = 6, opening: float = 0.0, 
                 idx = bucket_index(occ)
                 if idx >= 0:
                     outflow[idx] += _to_krw(p.amount or 0, p.currency or "KRW")
-        # 선택: 벤더 발주 원가를 발주일 기준 유출로 추정.
+        # 유출 — 매입 청구(AP) 미지급분을 지급 예정일 기준으로 반영.
+        ap_po_ids: set[int] = set()
+        for ap in _ap_record_rows(s):
+            ap_po_ids.add(ap["po_id"])
+            if ap["outstanding"] <= 0 or not ap["due_date"]:
+                continue
+            idx = bucket_index(ap["due_date"])
+            if idx >= 0:
+                outflow[idx] += _to_krw(ap["outstanding"], ap["currency"])
+        # 선택: 벤더 발주 원가를 발주일 기준 유출로 추정(AP 청구가 있는 P/O는 중복 방지 위해 제외).
         if include_po:
             ord_map = {o.id: o for o in s.query(Order).all()}
             for po in s.query(PurchaseOrder).all():
+                if po.id in ap_po_ids:
+                    continue
                 pd = _po_period_date(po)
                 if not pd:
                     continue
@@ -532,6 +587,22 @@ def finance_calendar(start: str = "", end: str = ""):
                     "paid": _finance_payable_paid_on(p, occ),
                     "ref_id": p.id,
                     "occurrence": occ,
+                })
+        # 지급 예정 — 매입 청구(AP) 미지급분(읽기전용, 프로젝트 단계에서 관리).
+        for ap in _ap_record_rows(s):
+            due = ap["due_date"]
+            if ap["outstanding"] > 0 and due and d0.isoformat() <= due <= d1.isoformat():
+                events.append({
+                    "kind": "payable",
+                    "date": due,
+                    "title": ap["vendor"] or ap["po_no"] or "Payable",
+                    "category": "거래선지급",
+                    "amount": ap["outstanding"],
+                    "currency": ap["currency"],
+                    "paid": False,
+                    "ref_id": ap["id"],
+                    "occurrence": None,
+                    "source": "ap",
                 })
         events.sort(key=lambda e: (e["date"], e["kind"]))
         return {"rows": events, "start": d0.isoformat(), "end": d1.isoformat()}

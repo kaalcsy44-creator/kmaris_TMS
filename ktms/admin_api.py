@@ -16,6 +16,7 @@ from routers import (  # noqa: F401  (import side effect: registers routes)
     po,
     documents,
     ar,
+    ap,
     finance,
     marketing,
     settings,

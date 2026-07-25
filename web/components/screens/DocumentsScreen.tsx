@@ -181,7 +181,7 @@ export function DocumentsOverview({
 const SVC_CFG: Record<SvcStage, { label: string; btn: string; done: (r: DocRow) => boolean }> = {
   7: { label: "Service Readiness", btn: "Service Readiness", done: (r) => r.svc_ready_done },
   8: { label: "Service Complete · Report", btn: "Service Report", done: (r) => r.has_pod },
-  9: { label: "Tax Invoice · Billing", btn: "Tax Invoice · Billing", done: (r) => r.svc_billed },
+  9: { label: "Billing · Statement", btn: "Billing · Statement", done: (r) => r.svc_billed },
 };
 
 // 서비스 단계별 입력 필드 스키마(7·8). 9는 청구 폼으로 별도 처리.

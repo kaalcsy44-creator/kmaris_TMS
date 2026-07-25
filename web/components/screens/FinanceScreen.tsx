@@ -282,16 +282,20 @@ function PayablesTab() {
             </tr>
           </thead>
           <tbody>
-            {rows.map((p) => (
-              <tr key={p.id}>
+            {rows.map((p) => {
+              const isAp = p.source === "ap";
+              return (
+              <tr key={`${p.source || "manual"}-${p.id}`}>
                 <td>{CATEGORY_LABEL[p.category] || p.category}</td>
-                <td>{p.counterparty || "—"}</td>
+                <td>{p.counterparty || "—"}{isAp && p.po_no ? <span className="muted"> · {p.po_no}</span> : null}</td>
                 <td>{p.description || "—"}</td>
                 <td className="num">{money(p.amount, p.currency)}</td>
                 <td>{p.due_date || "—"}</td>
-                <td>{RECURRENCE_LABEL[p.recurrence] || p.recurrence}</td>
+                <td>{isAp ? <span className="muted">Vendor bill</span> : (RECURRENCE_LABEL[p.recurrence] || p.recurrence)}</td>
                 <td>
-                  {p.recurrence === "none" ? (
+                  {isAp ? (
+                    <span className="wt-badge" title="Managed in project stage 9/10">Unpaid (AP)</span>
+                  ) : p.recurrence === "none" ? (
                     <button
                       type="button"
                       className={`wt-badge fin-paid-toggle${p.paid ? " on" : ""}`}
@@ -307,12 +311,19 @@ function PayablesTab() {
                 </td>
                 <td>
                   <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
-                    {can("finance", "edit") ? <button className="btn sm" onClick={() => setEditing(p)}>Edit</button> : null}
-                    {can("finance", "delete") ? <button className="btn danger sm" onClick={() => remove(p)}>Delete</button> : null}
+                    {isAp ? (
+                      <span className="hint-inline">Project stage 9/10</span>
+                    ) : (
+                      <>
+                        {can("finance", "edit") ? <button className="btn sm" onClick={() => setEditing(p)}>Edit</button> : null}
+                        {can("finance", "delete") ? <button className="btn danger sm" onClick={() => remove(p)}>Delete</button> : null}
+                      </>
+                    )}
                   </div>
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       )}
@@ -696,7 +707,8 @@ function CalendarTab() {
 
   async function togglePayable(e: FinanceCalendarEvent) {
     if (e.kind !== "payable" || !can("finance", "edit")) return;
-    await payFinancePayable(e.ref_id, !e.paid, e.occurrence);
+    if (e.source === "ap") return;   // 매입(AP) 이벤트는 읽기전용(프로젝트 단계에서 관리)
+    await payFinancePayable(e.ref_id, !e.paid, e.occurrence ?? undefined);
     invalidateCache("finance:summary");
     refresh();
   }

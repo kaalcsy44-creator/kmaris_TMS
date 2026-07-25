@@ -2753,7 +2753,7 @@ function WorkspacePanel({
 const RESET_STAGE_EVIDENCE: Record<number, string> = {
   7: "Commercial Invoice (+Packing List), Shipping Advice, and confirmation milestones",
   8: "the Proof of Delivery (POD) and delivery date",
-  9: "the Tax Invoice and its A/R record",
+  9: "the billing statement and its A/R (and A/P) records",
   10: "the manual completion of this stage",
   11: "the manual completion of this stage",
 };

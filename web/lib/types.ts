@@ -727,6 +727,62 @@ export type ArData = {
   rows: ArRow[];
 };
 
+/** 매입 청구(AP) 레코드 — ARRecord 의 매입측 대응. 벤더 P/O 1건에 1:1. */
+export type ApRow = {
+  id: number;
+  po_id: number;
+  order_id: number;
+  vendor_id: number | null;
+  po_no: string;
+  vendor: string;
+  bill_no: string;
+  bill_date: string;
+  invoice_amount: number;
+  paid_amount: number;
+  outstanding: number;
+  currency: string;
+  vat_rate: number;
+  due_date: string;
+  status: string;
+  items: TaxInvoiceItem[];
+  notes: string;
+  tax_received: boolean;
+  tax_received_date: string;
+  tax_invoice_no: string;
+};
+
+/** AP 탭의 벤더 P/O 1행 — 선택기 + (있으면) 그 P/O 의 AP 레코드. */
+export type ApByOrderRow = {
+  po_id: number;
+  po_no: string;
+  vendor_id: number | null;
+  vendor: string;
+  currency: string;
+  date: string;
+  items: DocumentWorkItem[];   // 원본 P/O 품목(Load P/O 로 청구 품목에 채움)
+  ap: ApRow | null;
+};
+
+/** AP 저장 바디(부분 저장 허용). */
+export type ApSave = {
+  po_id: number;
+  order_id: number;
+  vendor_id?: number | null;
+  bill_no?: string;
+  bill_date?: string;
+  invoice_amount?: number;
+  paid_amount?: number;
+  currency?: string;
+  vat_rate?: number | null;
+  due_date?: string;
+  status?: string;
+  items?: TaxInvoiceItem[];
+  notes?: string;
+  tax_received?: boolean;
+  tax_received_date?: string;
+  tax_invoice_no?: string;
+};
+
 // ── Finance(재무) ──────────────────────────────────────────────────────────────
 export type FinancePayable = {
   id: number;
@@ -745,6 +801,8 @@ export type FinancePayable = {
   notes: string;
   owner_id: number;
   owner: string;
+  source?: "manual" | "ap";   // "ap" = 매입 청구(APRecord) 유래, 읽기전용
+  po_no?: string;             // source==="ap" 일 때 연결된 벤더 P/O 번호
 };
 
 export type FinancePayableSave = {
@@ -837,7 +895,8 @@ export type FinanceCalendarEvent = {
   overdue?: boolean;
   paid?: boolean;
   ref_id: number;
-  occurrence?: string;
+  occurrence?: string | null;
+  source?: "manual" | "ap";   // "ap" = 매입 청구(읽기전용, 프로젝트 단계에서 관리)
 };
 
 export type DashboardData = {
