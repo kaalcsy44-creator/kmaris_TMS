@@ -29,13 +29,14 @@ import { can } from "@/lib/auth";
 import Modal from "@/components/common/Modal";
 import CurrencyToggle from "@/components/common/CurrencyToggle";
 
-// ── 표시 헬퍼 ──────────────────────────────────────────────────────────────────
+// ── Display helpers ────────────────────────────────────────────────────────────
+// Category codes are stored values (do not translate); labels below are display-only.
 const CATEGORIES = ["거래선지급", "임차료", "급여", "공과금", "세금", "기타"];
 const RECURRENCE_LABEL: Record<string, string> = {
-  none: "일회성",
-  monthly: "매월",
-  quarterly: "분기",
-  yearly: "매년",
+  none: "One-time",
+  monthly: "Monthly",
+  quarterly: "Quarterly",
+  yearly: "Yearly",
 };
 const CATEGORY_LABEL: Record<string, string> = {
   거래선지급: "Vendor payment",
@@ -62,7 +63,7 @@ function byCurrency(m: MoneyByCurrency): string {
 }
 const todayStr = () => new Date().toISOString().slice(0, 10);
 
-// ── 화면 ───────────────────────────────────────────────────────────────────────
+// ── Screen ───────────────────────────────────────────────────────────────────
 type Tab = "overview" | "receivables" | "payables" | "closing" | "cashflow" | "calendar";
 
 export default function FinanceScreen() {
@@ -71,10 +72,10 @@ export default function FinanceScreen() {
     <div className="action-tabs">
       <div className="page-tabs">
         <button className={tab === "overview" ? "on" : ""} onClick={() => setTab("overview")}>Overview</button>
-        <button className={tab === "receivables" ? "on" : ""} onClick={() => setTab("receivables")}>Receivables (수금)</button>
-        <button className={tab === "payables" ? "on" : ""} onClick={() => setTab("payables")}>Payables (지급)</button>
-        <button className={tab === "closing" ? "on" : ""} onClick={() => setTab("closing")}>Closing · VAT (결산·부가세)</button>
-        <button className={tab === "cashflow" ? "on" : ""} onClick={() => setTab("cashflow")}>Cash Flow (현금흐름)</button>
+        <button className={tab === "receivables" ? "on" : ""} onClick={() => setTab("receivables")}>Receivables</button>
+        <button className={tab === "payables" ? "on" : ""} onClick={() => setTab("payables")}>Payables</button>
+        <button className={tab === "closing" ? "on" : ""} onClick={() => setTab("closing")}>Closing · VAT</button>
+        <button className={tab === "cashflow" ? "on" : ""} onClick={() => setTab("cashflow")}>Cash Flow</button>
         <button className={tab === "calendar" ? "on" : ""} onClick={() => setTab("calendar")}>Calendar</button>
       </div>
 
@@ -97,20 +98,20 @@ function OverviewTab() {
   return (
     <div className="fin-overview">
       <div className="fin-kpis">
-        <KpiTile label="미수금 (Outstanding)" main={won(data.receivable.outstanding_krw)} sub={`${data.receivable.count} invoices · ${byCurrency(data.receivable.outstanding)}`} tone="blue" />
-        <KpiTile label="연체 미수 (Overdue AR)" main={byCurrency(data.receivable.overdue)} tone="red" />
-        <KpiTile label="지급 예정 (Payable, 30d + overdue)" main={won(data.payable.total_krw)} sub={byCurrency(data.payable.upcoming_30d)} tone="amber" />
-        <KpiTile label="연체 지급 (Overdue payable)" main={byCurrency(data.payable.overdue)} tone="red" />
+        <KpiTile label="Outstanding" main={won(data.receivable.outstanding_krw)} sub={`${data.receivable.count} invoices · ${byCurrency(data.receivable.outstanding)}`} tone="blue" />
+        <KpiTile label="Overdue AR" main={byCurrency(data.receivable.overdue)} tone="red" />
+        <KpiTile label="Payable (30d + overdue)" main={won(data.payable.total_krw)} sub={byCurrency(data.payable.upcoming_30d)} tone="amber" />
+        <KpiTile label="Overdue payable" main={byCurrency(data.payable.overdue)} tone="red" />
       </div>
 
       <div className="fin-overview-cols">
         <div className="panel">
-          <h3 className="form-title">거래선별 미수 (Receivables by customer)</h3>
+          <h3 className="form-title">Receivables by customer</h3>
           {data.by_customer.length === 0 ? (
-            <div className="muted">미수 잔액이 없습니다.</div>
+            <div className="muted">No outstanding balance.</div>
           ) : (
             <table className="mini">
-              <thead><tr><th>Customer</th><th className="num">Outstanding (₩ 환산)</th></tr></thead>
+              <thead><tr><th>Customer</th><th className="num">Outstanding (₩)</th></tr></thead>
               <tbody>
                 {data.by_customer.map((r) => (
                   <tr key={r.name}><td>{r.name}</td><td className="num">{won(r.outstanding_krw)}</td></tr>
@@ -121,12 +122,12 @@ function OverviewTab() {
         </div>
 
         <div className="panel">
-          <h3 className="form-title">지급 분류별 (Payables by category)</h3>
+          <h3 className="form-title">Payables by category</h3>
           {data.by_category.length === 0 ? (
-            <div className="muted">예정된 지급이 없습니다.</div>
+            <div className="muted">No scheduled payables.</div>
           ) : (
             <table className="mini">
-              <thead><tr><th>Category</th><th className="num">Amount (₩ 환산)</th></tr></thead>
+              <thead><tr><th>Category</th><th className="num">Amount (₩)</th></tr></thead>
               <tbody>
                 {data.by_category.map((r) => (
                   <tr key={r.name}><td>{CATEGORY_LABEL[r.name] || r.name}</td><td className="num">{won(r.amount_krw)}</td></tr>
@@ -137,7 +138,7 @@ function OverviewTab() {
         </div>
       </div>
       <p className="hint-inline" style={{ display: "block", marginTop: 10 }}>
-        ₩ 환산은 USD {data.usd_krw.toLocaleString()}원 기준의 참고 합계입니다. 통화별 실제 금액은 각 항목에서 확인하세요.
+        ₩ figures are reference totals converted at USD {data.usd_krw.toLocaleString()}. See each item for actual amounts by currency.
       </p>
     </div>
   );
@@ -153,7 +154,7 @@ function KpiTile({ label, main, sub, tone }: { label: string; main: string; sub?
   );
 }
 
-// ── Receivables (읽기 전용; 편집은 프로젝트 9~11단계에서) ───────────────────────
+// ── Receivables (read-only; editing lives in project stages 9–11) ──────────────
 function ReceivablesTab() {
   const { data, error } = useCachedData<{ rows: FinanceReceivable[] }>("finance:receivables", fetchFinanceReceivables);
   const [openOnly, setOpenOnly] = useState(true);
@@ -173,16 +174,16 @@ function ReceivablesTab() {
   return (
     <div className="panel">
       <div className="items-head">
-        <h3 className="form-title" style={{ margin: 0 }}>Receivables (미수금)</h3>
+        <h3 className="form-title" style={{ margin: 0 }}>Receivables</h3>
         <label className="check-chip" style={{ cursor: "pointer" }}>
-          <input type="checkbox" checked={openOnly} onChange={(e) => setOpenOnly(e.target.checked)} /> 미수 잔액만
+          <input type="checkbox" checked={openOnly} onChange={(e) => setOpenOnly(e.target.checked)} /> Outstanding only
         </label>
       </div>
       <p className="hint-inline" style={{ display: "block", margin: "4px 0 10px" }}>
-        수금 데이터는 프로젝트의 세금계산서·수금 단계에서 자동 반영됩니다. 여기서는 현황만 확인합니다.
+        Receivables are populated automatically from the project&apos;s tax-invoice and collection stages. This view is read-only.
       </p>
       {rows.length === 0 ? (
-        <div className="muted">표시할 미수 항목이 없습니다.</div>
+        <div className="muted">No receivables to show.</div>
       ) : (
         <table className="mini">
           <thead>
@@ -200,7 +201,7 @@ function ReceivablesTab() {
                 <td className="num">{money(r.invoice_amount, r.currency)}</td>
                 <td className="num">{money(r.paid_amount, r.currency)}</td>
                 <td className="num"><b>{money(r.outstanding, r.currency)}</b></td>
-                <td>{r.overdue ? <span className="wt-badge" style={{ background: "#fde2e1", color: "#c0392b" }}>연체</span> : r.status}</td>
+                <td>{r.overdue ? <span className="wt-badge" style={{ background: "#fde2e1", color: "#c0392b" }}>Overdue</span> : r.status}</td>
               </tr>
             ))}
           </tbody>
@@ -216,7 +217,7 @@ function ReceivablesTab() {
   );
 }
 
-// ── Payables (지급대장) ────────────────────────────────────────────────────────
+// ── Payables (payment ledger) ──────────────────────────────────────────────────
 const emptyPayable: FinancePayableSave = {
   category: "거래선지급",
   counterparty: "",
@@ -244,14 +245,14 @@ function PayablesTab() {
   }
 
   async function togglePaid(p: FinancePayable) {
-    // 반복 항목의 회차 납부는 캘린더에서 처리한다.
+    // Per-occurrence payment of recurring items is handled from the calendar.
     if (p.recurrence !== "none") return;
     await payFinancePayable(p.id, !p.paid);
     reload();
   }
 
   async function remove(p: FinancePayable) {
-    if (!confirm(`"${p.description || p.counterparty}" 지급 항목을 삭제할까요?`)) return;
+    if (!confirm(`Delete payable "${p.description || p.counterparty}"?`)) return;
     await deleteFinancePayable(p.id);
     reload();
   }
@@ -262,16 +263,16 @@ function PayablesTab() {
   return (
     <div className="panel">
       <div className="items-head">
-        <h3 className="form-title" style={{ margin: 0 }}>Payables (지급대장)</h3>
+        <h3 className="form-title" style={{ margin: 0 }}>Payables</h3>
         {can("finance", "create") ? (
-          <button className="btn primary sm" onClick={() => setAdding(true)}>+ 지급 항목 추가</button>
+          <button className="btn primary sm" onClick={() => setAdding(true)}>+ Add payable</button>
         ) : null}
       </div>
       <p className="hint-inline" style={{ display: "block", margin: "4px 0 10px" }}>
-        거래선 지급뿐 아니라 임차료·급여·공과금·세금 등 회사 지급을 등록합니다. 매월/분기/매년 반복 항목은 캘린더에 회차로 표시됩니다.
+        Register company payables — vendor payments as well as rent, payroll, utilities and taxes. Monthly/quarterly/yearly recurring items appear as occurrences on the calendar.
       </p>
       {rows.length === 0 ? (
-        <div className="muted">등록된 지급 항목이 없습니다.</div>
+        <div className="muted">No payables registered.</div>
       ) : (
         <table className="mini">
           <thead>
@@ -294,20 +295,20 @@ function PayablesTab() {
                     <button
                       type="button"
                       className={`wt-badge fin-paid-toggle${p.paid ? " on" : ""}`}
-                      title={canEdit ? "납부 상태 토글" : ""}
+                      title={canEdit ? "Toggle paid status" : ""}
                       disabled={!canEdit}
                       onClick={() => togglePaid(p)}
                     >
-                      {p.paid ? "납부완료" : "미납"}
+                      {p.paid ? "Paid" : "Unpaid"}
                     </button>
                   ) : (
-                    <span className="muted">{p.paid_dates.length}회 납부</span>
+                    <span className="muted">{p.paid_dates.length} paid</span>
                   )}
                 </td>
                 <td>
                   <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
-                    {can("finance", "edit") ? <button className="btn sm" onClick={() => setEditing(p)}>수정</button> : null}
-                    {can("finance", "delete") ? <button className="btn danger sm" onClick={() => remove(p)}>삭제</button> : null}
+                    {can("finance", "edit") ? <button className="btn sm" onClick={() => setEditing(p)}>Edit</button> : null}
+                    {can("finance", "delete") ? <button className="btn danger sm" onClick={() => remove(p)}>Delete</button> : null}
                   </div>
                 </td>
               </tr>
@@ -356,9 +357,9 @@ function PayableForm({
   }
 
   async function save() {
-    if (!(form.due_date || "").trim()) { setErr("지급 예정일을 입력하세요."); return; }
+    if (!(form.due_date || "").trim()) { setErr("Enter a due date."); return; }
     if (!(form.description || "").trim() && !(form.counterparty || "").trim()) {
-      setErr("내역 또는 거래선을 입력하세요."); return;
+      setErr("Enter a description or counterparty."); return;
     }
     setBusy(true); setErr("");
     try {
@@ -373,16 +374,16 @@ function PayableForm({
   }
 
   return (
-    <Modal title={rowId ? "지급 항목 수정" : "지급 항목 추가"} onClose={onClose} form>
+    <Modal title={rowId ? "Edit payable" : "Add payable"} onClose={onClose} form>
       <div className="form-grid">
         <label className="form-field">
-          <span>Category (분류)</span>
+          <span>Category</span>
           <select value={form.category} onChange={(e) => set("category", e.target.value)}>
-            {CATEGORIES.map((c) => <option key={c} value={c}>{CATEGORY_LABEL[c] || c} ({c})</option>)}
+            {CATEGORIES.map((c) => <option key={c} value={c}>{CATEGORY_LABEL[c] || c}</option>)}
           </select>
         </label>
         <label className="form-field">
-          <span>거래선 연결 (선택)</span>
+          <span>Vendor link (optional)</span>
           <select
             value={form.vendor_id ?? ""}
             onChange={(e) => {
@@ -391,16 +392,16 @@ function PayableForm({
               setForm((f) => ({ ...f, vendor_id: id, counterparty: v ? v.name : f.counterparty }));
             }}
           >
-            <option value="">— 직접 입력 —</option>
+            <option value="">— Manual entry —</option>
             {(vendors ?? []).map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
           </select>
         </label>
         <label className="form-field">
-          <span>Counterparty (거래선·수취인)</span>
-          <input value={form.counterparty} onChange={(e) => set("counterparty", e.target.value)} placeholder="예: 건물주 / 급여" />
+          <span>Counterparty</span>
+          <input value={form.counterparty} onChange={(e) => set("counterparty", e.target.value)} placeholder="e.g. Landlord / Payroll" />
         </label>
         <label className="form-field">
-          <span>Description (내역)</span>
+          <span>Description</span>
           <input value={form.description} onChange={(e) => set("description", e.target.value)} />
         </label>
         <label className="form-field">
@@ -412,18 +413,18 @@ function PayableForm({
           <CurrencyToggle value={form.currency || "KRW"} onChange={(v) => set("currency", v)} />
         </label>
         <label className="form-field">
-          <span>Due date (지급 예정일{form.recurrence !== "none" ? " · 최초 회차" : ""})</span>
+          <span>Due date{form.recurrence !== "none" ? " · first occurrence" : ""}</span>
           <input type="date" value={form.due_date} onChange={(e) => set("due_date", e.target.value)} />
         </label>
         <label className="form-field">
-          <span>Recurrence (반복)</span>
+          <span>Recurrence</span>
           <select value={form.recurrence} onChange={(e) => set("recurrence", e.target.value)}>
             {Object.entries(RECURRENCE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
         </label>
         {form.recurrence !== "none" ? (
           <label className="form-field">
-            <span>Repeat until (반복 종료, 선택)</span>
+            <span>Repeat until (optional)</span>
             <input type="date" value={form.recur_until} onChange={(e) => set("recur_until", e.target.value)} />
           </label>
         ) : null}
@@ -440,7 +441,7 @@ function PayableForm({
   );
 }
 
-// ── Closing · VAT (결산·부가세) ────────────────────────────────────────────────
+// ── Closing · VAT ──────────────────────────────────────────────────────────────
 type PeriodType = "month" | "quarter" | "half" | "year";
 
 function periodRange(type: PeriodType, year: number, idx: number): { start: string; end: string } {
@@ -461,6 +462,8 @@ function periodRange(type: PeriodType, year: number, idx: number): { start: stri
   return { start: `${year}-${pad(m)}-01`, end: `${year}-${pad(m)}-${lastDay(year, m)}` };
 }
 
+const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
 function ClosingTab() {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
@@ -468,10 +471,10 @@ function ClosingTab() {
   const [idx, setIdx] = useState(now.getMonth()); // month index by default
 
   const subOptions = useMemo(() => {
-    if (type === "year") return ["연간"];
-    if (type === "half") return ["상반기", "하반기"];
-    if (type === "quarter") return ["1분기", "2분기", "3분기", "4분기"];
-    return Array.from({ length: 12 }, (_, i) => `${i + 1}월`);
+    if (type === "year") return ["Full year"];
+    if (type === "half") return ["First half", "Second half"];
+    if (type === "quarter") return ["Q1", "Q2", "Q3", "Q4"];
+    return MONTH_ABBR.slice();
   }, [type]);
 
   const safeIdx = Math.min(idx, subOptions.length - 1);
@@ -485,10 +488,10 @@ function ClosingTab() {
     <div className="fin-overview">
       <div className="fin-period-bar">
         <select value={year} onChange={(e) => setYear(Number(e.target.value))}>
-          {years.map((y) => <option key={y} value={y}>{y}년</option>)}
+          {years.map((y) => <option key={y} value={y}>{y}</option>)}
         </select>
         <div className="seg-toggle" role="group" aria-label="Period type">
-          {([["month", "월간"], ["quarter", "분기"], ["half", "반기"], ["year", "연간"]] as [PeriodType, string][]).map(([t, label]) => (
+          {([["month", "Monthly"], ["quarter", "Quarterly"], ["half", "Half"], ["year", "Yearly"]] as [PeriodType, string][]).map(([t, label]) => (
             <button key={t} className={type === t ? "on" : ""} onClick={() => { setType(t); setIdx(0); }}>{label}</button>
           ))}
         </div>
@@ -504,46 +507,46 @@ function ClosingTab() {
       {!data ? <div className="state">Loading…</div> : (
         <>
           <div className="fin-kpis">
-            <KpiTile label="매출 (공급가액)" main={won(data.sales.supply_krw)} sub={`${data.sales.count}건 · 세액 ${won(data.sales.vat_krw)}`} tone="blue" />
-            <KpiTile label="매입 (원가)" main={won(data.purchase.cost_krw)} sub={`${data.purchase.count}건 · 추정 매입세액 ${won(data.purchase.vat_krw)}`} tone="amber" />
-            <KpiTile label="매출총이익 (마진)" main={won(data.margin_krw)} sub={`이익률 ${data.margin_pct}%`} tone="blue" />
+            <KpiTile label="Sales (supply value)" main={won(data.sales.supply_krw)} sub={`${data.sales.count} · VAT ${won(data.sales.vat_krw)}`} tone="blue" />
+            <KpiTile label="Purchases (cost)" main={won(data.purchase.cost_krw)} sub={`${data.purchase.count} · est. input VAT ${won(data.purchase.vat_krw)}`} tone="amber" />
+            <KpiTile label="Gross profit (margin)" main={won(data.margin_krw)} sub={`Margin ${data.margin_pct}%`} tone="blue" />
             <KpiTile
-              label={data.vat.payable_krw >= 0 ? "부가세 납부 예상" : "부가세 환급 예상"}
+              label={data.vat.payable_krw >= 0 ? "VAT payable (est.)" : "VAT refund (est.)"}
               main={won(Math.abs(data.vat.payable_krw))}
-              sub={`매출세액 ${won(data.vat.output_krw)} − 매입세액 ${won(data.vat.input_krw)}`}
+              sub={`Output VAT ${won(data.vat.output_krw)} − Input VAT ${won(data.vat.input_krw)}`}
               tone={data.vat.payable_krw >= 0 ? "red" : "blue"}
             />
           </div>
 
           <div className="panel">
-            <h3 className="form-title">월별 매출·매입 추이 ({year}년, ₩ 환산)</h3>
+            <h3 className="form-title">Monthly sales · purchases ({year}, ₩)</h3>
             <MonthlyBars labels={data.monthly.labels} sales={data.monthly.sales} purchase={data.monthly.purchase} />
           </div>
 
           <div className="fin-overview-cols">
             <div className="panel">
-              <h3 className="form-title">부가세 계산 (VAT)</h3>
+              <h3 className="form-title">VAT calculation</h3>
               <table className="mini">
                 <tbody>
-                  <tr><td>매출세액 (Output VAT)</td><td className="num">{won(data.vat.output_krw)}</td></tr>
-                  <tr><td>매입세액 (Input VAT, 추정)</td><td className="num">− {won(data.vat.input_krw)}</td></tr>
+                  <tr><td>Output VAT</td><td className="num">{won(data.vat.output_krw)}</td></tr>
+                  <tr><td>Input VAT (est.)</td><td className="num">− {won(data.vat.input_krw)}</td></tr>
                   <tr className="foot-grand">
-                    <td className="total-label">{data.vat.payable_krw >= 0 ? "납부세액" : "환급세액"}</td>
+                    <td className="total-label">{data.vat.payable_krw >= 0 ? "Payable" : "Refund"}</td>
                     <td className="num total-value">{won(Math.abs(data.vat.payable_krw))}</td>
                   </tr>
                 </tbody>
               </table>
               <p className="hint-inline" style={{ display: "block", marginTop: 8 }}>
-                수출(영세율)은 매출세액 0. 매입세액은 내수 매입 원가의 10%로 추정한 값입니다(정확한 신고는 세금계산서 기준).
+                Exports (zero-rated) carry 0 output VAT. Input VAT is estimated as 10% of domestic purchase cost (actual filing is based on tax invoices).
               </p>
             </div>
             <div className="panel">
-              <h3 className="form-title">거래선별 매출 (Top)</h3>
+              <h3 className="form-title">Sales by customer (Top)</h3>
               {data.by_customer.length === 0 ? (
-                <div className="muted">해당 기간 매출이 없습니다.</div>
+                <div className="muted">No sales in this period.</div>
               ) : (
                 <table className="mini">
-                  <thead><tr><th>Customer</th><th className="num">매출(공급가액, ₩)</th></tr></thead>
+                  <thead><tr><th>Customer</th><th className="num">Sales (supply, ₩)</th></tr></thead>
                   <tbody>
                     {data.by_customer.map((r) => (
                       <tr key={r.name}><td>{r.name}</td><td className="num">{won(r.sales_krw)}</td></tr>
@@ -564,7 +567,7 @@ function MonthlyBars({ labels, sales, purchase }: { labels: string[]; sales: num
   return (
     <div className="fin-bars">
       {labels.map((lab, i) => (
-        <div key={lab} className="fin-bar-col" title={`${lab} · 매출 ${won(sales[i])} · 매입 ${won(purchase[i])}`}>
+        <div key={lab} className="fin-bar-col" title={`${lab} · Sales ${won(sales[i])} · Purchases ${won(purchase[i])}`}>
           <div className="fin-bar-stack">
             <div className="fin-bar sales" style={{ height: `${(sales[i] / max) * 100}%` }} />
             <div className="fin-bar purchase" style={{ height: `${(purchase[i] / max) * 100}%` }} />
@@ -576,7 +579,7 @@ function MonthlyBars({ labels, sales, purchase }: { labels: string[]; sales: num
   );
 }
 
-// ── Cash Flow (현금흐름 예측) ───────────────────────────────────────────────────
+// ── Cash Flow (projection) ──────────────────────────────────────────────────────
 function CashFlowTab() {
   const [unit, setUnit] = useState<"month" | "week">("month");
   const [count, setCount] = useState(6);
@@ -596,21 +599,21 @@ function CashFlowTab() {
     <div className="fin-overview">
       <div className="fin-period-bar">
         <div className="seg-toggle" role="group" aria-label="Unit">
-          <button className={unit === "month" ? "on" : ""} onClick={() => { setUnit("month"); setCount(6); }}>월별</button>
-          <button className={unit === "week" ? "on" : ""} onClick={() => { setUnit("week"); setCount(12); }}>주별</button>
+          <button className={unit === "month" ? "on" : ""} onClick={() => { setUnit("month"); setCount(6); }}>Monthly</button>
+          <button className={unit === "week" ? "on" : ""} onClick={() => { setUnit("week"); setCount(12); }}>Weekly</button>
         </div>
         <label className="fin-inline-field">
-          구간 수
+          Periods
           <select value={count} onChange={(e) => setCount(Number(e.target.value))}>
             {(unit === "month" ? [3, 6, 12] : [8, 12, 16]).map((n) => <option key={n} value={n}>{n}</option>)}
           </select>
         </label>
         <label className="fin-inline-field">
-          기초잔고 (₩)
+          Opening balance (₩)
           <input type="number" value={openingInput} onChange={(e) => setOpeningInput(e.target.value)} style={{ width: 140 }} />
         </label>
         <label className="check-chip" style={{ cursor: "pointer" }}>
-          <input type="checkbox" checked={includePo} onChange={(e) => setIncludePo(e.target.checked)} /> 벤더 PO 유출 반영(추정)
+          <input type="checkbox" checked={includePo} onChange={(e) => setIncludePo(e.target.checked)} /> Include vendor PO outflow (est.)
         </label>
       </div>
 
@@ -618,16 +621,16 @@ function CashFlowTab() {
       {!data ? <div className="state">Loading…</div> : (
         <>
           <div className="fin-kpis">
-            <KpiTile label="예상 유입 (Inflow)" main={won(data.total_inflow)} tone="blue" />
-            <KpiTile label="예상 유출 (Outflow)" main={won(data.total_outflow)} tone="amber" />
-            <KpiTile label="기말 잔고 (Ending)" main={won(data.ending)} sub={`기초 ${won(data.opening)}`} tone={data.ending >= 0 ? "blue" : "red"} />
+            <KpiTile label="Projected inflow" main={won(data.total_inflow)} tone="blue" />
+            <KpiTile label="Projected outflow" main={won(data.total_outflow)} tone="amber" />
+            <KpiTile label="Ending balance" main={won(data.ending)} sub={`Opening ${won(data.opening)}`} tone={data.ending >= 0 ? "blue" : "red"} />
           </div>
 
           <div className="panel">
-            <h3 className="form-title">순증감 추이 (Net cash flow, ₩)</h3>
+            <h3 className="form-title">Net cash flow (₩)</h3>
             <div className="fin-net-chart">
               {data.rows.map((r) => (
-                <div key={r.label} className="fin-net-col" title={`${r.label} · 유입 ${won(r.inflow)} · 유출 ${won(r.outflow)} · 순 ${won(r.net)}`}>
+                <div key={r.label} className="fin-net-col" title={`${r.label} · Inflow ${won(r.inflow)} · Outflow ${won(r.outflow)} · Net ${won(r.net)}`}>
                   <div className="fin-net-track">
                     <div className="fin-net-mid" />
                     <div
@@ -642,10 +645,10 @@ function CashFlowTab() {
           </div>
 
           <div className="panel">
-            <h3 className="form-title">현금흐름 예측표</h3>
+            <h3 className="form-title">Cash flow projection</h3>
             <table className="mini">
               <thead>
-                <tr><th>기간</th><th className="num">유입</th><th className="num">유출</th><th className="num">순증감</th><th className="num">누적잔고</th></tr>
+                <tr><th>Period</th><th className="num">Inflow</th><th className="num">Outflow</th><th className="num">Net</th><th className="num">Cumulative</th></tr>
               </thead>
               <tbody>
                 {data.rows.map((r) => (
@@ -660,7 +663,7 @@ function CashFlowTab() {
               </tbody>
             </table>
             <p className="hint-inline" style={{ display: "block", marginTop: 8 }}>
-              유입=미수 수금 예정(AR due), 유출=지급대장 미납 회차{includePo ? " + 벤더 PO(발주일 추정)" : ""}. 연체·기지난 예정은 첫 구간에 반영됩니다. 누적잔고가 음수(빨강)면 현금 부족 구간입니다.
+              Inflow = receivables due (AR due), outflow = unpaid payable occurrences{includePo ? " + vendor POs (estimated from order date)" : ""}. Overdue / past-due items fall into the first period. A negative cumulative balance (red) marks a cash shortfall.
             </p>
           </div>
         </>
@@ -676,7 +679,7 @@ function CalendarTab() {
     return { y: d.getFullYear(), m: d.getMonth() }; // m: 0-11
   });
 
-  // 그리드 범위(월 첫 주 일요일 ~ 마지막 주 토요일).
+  // Grid range (Sunday of the first week … Saturday of the last week).
   const grid = useMemo(() => buildMonthGrid(month.y, month.m), [month]);
   const rangeKey = `finance:calendar:${grid.start}:${grid.end}`;
   const { data, error, refresh } = useCachedData(rangeKey, () => fetchFinanceCalendar(grid.start, grid.end));
@@ -714,8 +717,8 @@ function CalendarTab() {
         </div>
         <h3 className="form-title" style={{ margin: 0 }}>{monthLabel}</h3>
         <div className="fin-cal-legend">
-          <span className="fin-dot fin-dot--rec" /> 수금(AR)
-          <span className="fin-dot fin-dot--pay" /> 지급
+          <span className="fin-dot fin-dot--rec" /> Receivables (AR)
+          <span className="fin-dot fin-dot--pay" /> Payables
         </div>
       </div>
       {error && !data ? <div className="state error">API error: {error.message}</div> : null}
@@ -734,7 +737,7 @@ function CalendarTab() {
                     key={i}
                     type="button"
                     className={`fin-ev fin-ev--${e.kind}${e.overdue ? " overdue" : ""}${e.paid ? " paid" : ""}`}
-                    title={`${e.kind === "receivable" ? "수금" : "지급"} · ${e.title} · ${money(e.amount, e.currency)}${e.paid ? " (납부완료)" : ""}`}
+                    title={`${e.kind === "receivable" ? "Receivable" : "Payable"} · ${e.title} · ${money(e.amount, e.currency)}${e.paid ? " (paid)" : ""}`}
                     onClick={() => togglePayable(e)}
                   >
                     <span className="fin-ev-title">{e.title}</span>
@@ -747,7 +750,7 @@ function CalendarTab() {
         })}
       </div>
       <p className="hint-inline" style={{ display: "block", marginTop: 8 }}>
-        지급 항목을 클릭하면 납부 완료/미납을 토글합니다(반복 항목은 해당 회차만). 수금(AR)은 프로젝트 단계에서 관리됩니다.
+        Click a payable to toggle paid / unpaid (recurring items toggle only that occurrence). Receivables (AR) are managed from the project stages.
       </p>
     </div>
   );

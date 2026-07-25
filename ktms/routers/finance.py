@@ -163,9 +163,9 @@ def finance_payables():
 @app.post("/api/admin/finance/payables", dependencies=[Depends(require_token)])
 def create_finance_payable(body: FinancePayableIn, user: dict = Depends(get_current_user)):
     if not (body.description or "").strip() and not (body.counterparty or "").strip():
-        raise HTTPException(status_code=400, detail="내역 또는 거래선을 입력하세요.")
+        raise HTTPException(status_code=400, detail="Enter a description or counterparty.")
     if not (body.due_date or "").strip():
-        raise HTTPException(status_code=400, detail="지급 예정일을 입력하세요.")
+        raise HTTPException(status_code=400, detail="Enter a due date.")
     rec = (body.recurrence or "none")
     if rec not in FINANCE_RECURRENCES:
         rec = "none"
@@ -202,7 +202,7 @@ def update_finance_payable(row_id: int, body: FinancePayableIn):
     try:
         p = s.query(FinancePayable).filter_by(id=row_id).first()
         if not p:
-            raise HTTPException(status_code=404, detail="지급 항목을 찾을 수 없습니다.")
+            raise HTTPException(status_code=404, detail="Payable not found.")
         p.category = body.category or "기타"
         p.counterparty = (body.counterparty or "").strip()
         p.vendor_id = body.vendor_id or None
@@ -226,7 +226,7 @@ def pay_finance_payable(row_id: int, body: FinancePayablePayIn):
     try:
         p = s.query(FinancePayable).filter_by(id=row_id).first()
         if not p:
-            raise HTTPException(status_code=404, detail="지급 항목을 찾을 수 없습니다.")
+            raise HTTPException(status_code=404, detail="Payable not found.")
         if (p.recurrence or "none") == "none":
             p.paid = bool(body.paid)
             p.paid_date = date.today().isoformat() if body.paid else ""
@@ -252,7 +252,7 @@ def delete_finance_payable(row_id: int):
     try:
         p = s.query(FinancePayable).filter_by(id=row_id).first()
         if not p:
-            raise HTTPException(status_code=404, detail="지급 항목을 찾을 수 없습니다.")
+            raise HTTPException(status_code=404, detail="Payable not found.")
         s.delete(p)
         s.commit()
         return {"ok": True}
@@ -378,7 +378,8 @@ def finance_closing(start: str = "", end: str = "", year: int = 0):
             },
             "by_customer": by_customer,
             "monthly": {
-                "labels": [f"{m}월" for m in range(1, 13)],
+                "labels": ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                           "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
                 "sales": [round(x) for x in monthly_sales],
                 "purchase": [round(x) for x in monthly_purchase],
             },
@@ -524,7 +525,7 @@ def finance_calendar(start: str = "", end: str = ""):
                 events.append({
                     "kind": "payable",
                     "date": occ,
-                    "title": (p.counterparty or vendor_names.get(p.vendor_id, "") or p.description or "지급"),
+                    "title": (p.counterparty or vendor_names.get(p.vendor_id, "") or p.description or "Payable"),
                     "category": p.category or "기타",
                     "amount": round(p.amount or 0, 2),
                     "currency": p.currency or "KRW",
