@@ -592,6 +592,9 @@ class FinancePayable(Base):
     paid         = Column(Boolean, default=False)  # 일회성 항목 납부 완료
     paid_date    = Column(String(10))    # 일회성 항목 납부일 YYYY-MM-DD
     paid_dates   = Column(JSON, default=list)  # 반복 항목의 납부 완료 회차일 목록
+    # 실제 납부일 — 예정일(회차일)과 다를 수 있어 {회차일: 납부일} 로 따로 보관.
+    # (일회성 항목은 paid_date 사용. paid_dates 는 '납부 여부' 판정의 단일 소스로 유지)
+    payments     = Column(JSON, default=dict)
     notes        = Column(Text)
     owner_id     = Column(Integer, ForeignKey("users.id"), nullable=True)  # 등록자
     created_at   = Column(DateTime, default=datetime.utcnow)

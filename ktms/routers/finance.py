@@ -308,19 +308,27 @@ def pay_finance_payable(row_id: int, body: FinancePayablePayIn):
         p = s.query(FinancePayable).filter_by(id=row_id).first()
         if not p:
             raise HTTPException(status_code=404, detail="Payable not found.")
+        # 실제 납부일 — 미지정이면 오늘. 예정일과 달라도 그대로 기록한다.
+        paid_on = (body.paid_on or "").strip()[:10] or date.today().isoformat()
         if (p.recurrence or "none") == "none":
             p.paid = bool(body.paid)
-            p.paid_date = date.today().isoformat() if body.paid else ""
+            p.paid_date = paid_on if body.paid else ""
         else:
             occ = (body.occurrence or "").strip()
             if not occ:
                 raise HTTPException(status_code=400, detail="반복 항목은 회차일(occurrence)이 필요합니다.")
             dates = list(p.paid_dates or [])
+            pays = dict(getattr(p, "payments", None) or {})
             if body.paid and occ not in dates:
                 dates.append(occ)
             elif not body.paid and occ in dates:
                 dates.remove(occ)
+            if body.paid:
+                pays[occ] = paid_on
+            else:
+                pays.pop(occ, None)
             p.paid_dates = sorted(dates)
+            p.payments = pays
         s.commit()
         return {"ok": True}
     finally:
@@ -632,6 +640,9 @@ def finance_calendar(start: str = "", end: str = ""):
                     "amount": round(p.amount or 0, 2),
                     "currency": p.currency or "KRW",
                     "paid": _finance_payable_paid_on(p, occ),
+                    # 실제 납부일(예정일과 다를 수 있음). 일회성은 paid_date.
+                    "paid_on": ((p.paid_date or "") if (p.recurrence or "none") == "none"
+                                else (getattr(p, "payments", None) or {}).get(occ, "")),
                     "ref_id": p.id,
                     "occurrence": occ,
                 })

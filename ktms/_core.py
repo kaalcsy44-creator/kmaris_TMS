@@ -2114,6 +2114,8 @@ class FinancePayablePayIn(BaseModel):
     """납부 표시 토글. occurrence 를 주면(반복 항목의 특정 회차일) 그 회차만 토글."""
     paid: bool = True
     occurrence: str | None = None
+    # 실제 납부일(YYYY-MM-DD). 예정일과 다를 수 있어 별도로 받는다. 미지정 시 오늘.
+    paid_on: str | None = None
 
 
 def _finance_payable_paid_on(p: FinancePayable, iso: str) -> bool:
@@ -2136,8 +2138,12 @@ def _finance_payable_row(p: FinancePayable, vendor_names: dict, user_names: dict
         "recurrence": p.recurrence or "none",
         "recur_until": p.recur_until or "",
         "paid": bool(p.paid),
-        "paid_date": p.paid_date or "",
+        # 반복 항목의 paid_date 는 '가장 최근 실제 납부일'(회차일이 아님).
+        "paid_date": (p.paid_date or "") if (p.recurrence or "none") == "none"
+                     else max((getattr(p, "payments", None) or {}).values(), default=""),
         "paid_dates": list(p.paid_dates or []),
+        # {회차일: 실제 납부일} — 예정일과 다른 날 납부한 이력.
+        "payments": dict(getattr(p, "payments", None) or {}),
         "notes": p.notes or "",
         "owner_id": p.owner_id or 0,
         "owner": user_names.get(p.owner_id, "") if p.owner_id else "",

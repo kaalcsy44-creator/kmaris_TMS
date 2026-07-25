@@ -818,8 +818,9 @@ export type FinancePayable = {
   recurrence: "none" | "monthly" | "quarterly" | "yearly";
   recur_until: string;
   paid: boolean;
-  paid_date: string;
-  paid_dates: string[];
+  paid_date: string;            // 실제 납부일(반복 항목은 가장 최근 납부일)
+  paid_dates: string[];         // 반복 항목의 납부 완료 회차일
+  payments?: Record<string, string>;  // {회차일: 실제 납부일}
   notes: string;
   owner_id: number;
   owner: string;
@@ -920,6 +921,7 @@ export type FinanceCalendarEvent = {
   category?: string;
   overdue?: boolean;
   paid?: boolean;
+  paid_on?: string;           // 실제 납부일(예정일과 다를 수 있음)
   ref_id: number;
   occurrence?: string | null;
   source?: "manual" | "ap";   // "ap" = 매입 청구(읽기전용, 프로젝트 단계에서 관리)

@@ -704,8 +704,18 @@ export function updateFinancePayable(id: number, body: FinancePayableSave): Prom
 export function deleteFinancePayable(id: number): Promise<{ ok: boolean }> {
   return del(`/api/admin/finance/payables/${id}`);
 }
-export function payFinancePayable(id: number, paid: boolean, occurrence?: string): Promise<{ ok: boolean }> {
-  return post(`/api/admin/finance/payables/${id}/pay`, { paid, occurrence: occurrence ?? null });
+/** 납부 표시 토글. paidOn = 실제 납부일(예정일과 달라도 됨, 미지정 시 서버가 오늘로). */
+export function payFinancePayable(
+  id: number,
+  paid: boolean,
+  occurrence?: string,
+  paidOn?: string
+): Promise<{ ok: boolean }> {
+  return post(`/api/admin/finance/payables/${id}/pay`, {
+    paid,
+    occurrence: occurrence ?? null,
+    paid_on: paidOn ?? null,
+  });
 }
 export function fetchFinanceCalendar(start: string, end: string): Promise<{ rows: FinanceCalendarEvent[]; start: string; end: string }> {
   return get<{ rows: FinanceCalendarEvent[]; start: string; end: string }>(

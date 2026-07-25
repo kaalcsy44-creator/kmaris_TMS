@@ -301,6 +301,8 @@ function PayablesTab() {
   const { data, error, refresh } = useCachedData<{ rows: FinancePayable[]; fx: FxQuote }>("finance:payables", fetchFinancePayables);
   const [editing, setEditing] = useState<FinancePayable | null>(null);
   const [adding, setAdding] = useState(false);
+  // 납부 입력 대상 — 회차일(occurrence)과 실제 납부일을 함께 받는다.
+  const [paying, setPaying] = useState<{ row: FinancePayable; occurrence: string } | null>(null);
   const rows = useMemo(() => data?.rows ?? [], [data]);
   const canEdit = can("finance", "create") || can("finance", "edit");
   // 합계 3열(청구·지급·미지급) — 통화별 분리(미수 목록과 같은 규칙).
@@ -320,10 +322,9 @@ function PayablesTab() {
     return refresh();
   }
 
-  async function togglePaid(p: FinancePayable) {
-    // Per-occurrence payment of recurring items is handled from the calendar.
-    if (p.recurrence !== "none") return;
-    await payFinancePayable(p.id, !p.paid);
+  // 납부 처리는 항상 실제 납부일을 받는다(예정일과 다를 수 있음). 취소는 바로 해제.
+  async function undoPaid(p: FinancePayable, occurrence?: string) {
+    await payFinancePayable(p.id, false, occurrence);
     reload();
   }
 
@@ -379,17 +380,25 @@ function PayablesTab() {
                     <button
                       type="button"
                       className={`wt-badge fin-paid-toggle${p.paid ? " on" : ""}`}
-                      title={canEdit ? "Toggle paid status" : ""}
+                      title={canEdit ? (p.paid ? "Undo payment" : "Record payment") : ""}
                       disabled={!canEdit}
-                      onClick={() => togglePaid(p)}
+                      onClick={() => (p.paid ? undoPaid(p) : setPaying({ row: p, occurrence: p.due_date }))}
                     >
                       {p.paid ? "Paid" : "Unpaid"}
                     </button>
                   ) : (
-                    <span className="muted">{p.paid_dates.length} paid</span>
+                    <button
+                      type="button"
+                      className="wt-badge fin-paid-toggle"
+                      title={canEdit ? "Record a payment for one occurrence" : ""}
+                      disabled={!canEdit}
+                      onClick={() => setPaying({ row: p, occurrence: nextUnpaidOccurrence(p) })}
+                    >
+                      {p.paid_dates.length} paid
+                    </button>
                   )}
-                  {/* 지급 완료 건은 지급일을 상태 옆에 함께 보여준다(미수 목록과 동일). */}
-                  {!isAp && p.paid && p.paid_date ? <span className="fin-paid-on">{p.paid_date}</span> : null}
+                  {/* 지급 완료 건은 실제 납부일을 상태 옆에 함께 보여준다(미수 목록과 동일). */}
+                  {!isAp && p.paid_date ? <span className="fin-paid-on">{p.paid_date}</span> : null}
                 </td>
                 <td>
                   <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
@@ -432,6 +441,14 @@ function PayablesTab() {
         </table>
       )}
 
+      {paying ? (
+        <PaymentDateModal
+          row={paying.row}
+          occurrence={paying.occurrence}
+          onClose={() => setPaying(null)}
+          onSaved={() => { setPaying(null); reload(); }}
+        />
+      ) : null}
       {adding ? (
         <PayableForm
           initial={emptyPayable}
@@ -448,6 +465,88 @@ function PayablesTab() {
         />
       ) : null}
     </div>
+  );
+}
+
+/** 반복 항목의 다음 미납 회차일 — due_date 에서 주기만큼 더해가며 첫 미납 회차를 찾는다. */
+function nextUnpaidOccurrence(p: FinancePayable): string {
+  const step = p.recurrence === "monthly" ? 1 : p.recurrence === "quarterly" ? 3 : 12;
+  const paid = new Set(p.paid_dates || []);
+  const first = p.due_date || todayStr();
+  const [y, m, d] = first.split("-").map(Number);
+  for (let i = 0; i < 60; i += 1) {
+    const dt = new Date(y, m - 1 + step * i, 1);
+    // 말일 보정 — 그 달에 없는 날짜(31일 등)는 말일로 맞춘다(서버 규칙과 동일).
+    const last = new Date(dt.getFullYear(), dt.getMonth() + 1, 0).getDate();
+    dt.setDate(Math.min(d, last));
+    const iso = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+    if (p.recur_until && iso > p.recur_until) break;
+    if (!paid.has(iso)) return iso;
+  }
+  return first;
+}
+
+/** 납부 기록 — 예정일(회차일)과 실제 납부일이 다를 수 있어 둘 다 받는다. */
+function PaymentDateModal({
+  row,
+  occurrence,
+  onClose,
+  onSaved,
+}: {
+  row: FinancePayable;
+  occurrence: string;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const recurring = row.recurrence !== "none";
+  const [occ, setOcc] = useState(occurrence || row.due_date || todayStr());
+  const [paidOn, setPaidOn] = useState(todayStr());
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  async function save() {
+    setBusy(true);
+    setErr("");
+    try {
+      await payFinancePayable(row.id, true, recurring ? occ : undefined, paidOn);
+      onSaved();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Save failed");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal title="Record payment" onClose={onClose}>
+      <div className="form-grid">
+        <label className="form-field form-field--ro">
+          <span>Payable</span>
+          <div className="ro-value">{row.description || row.counterparty || "—"} · {money(row.amount, row.currency)}</div>
+        </label>
+        {recurring ? (
+          <label className="form-field">
+            <span>Scheduled occurrence</span>
+            <input type="date" value={occ} onChange={(e) => setOcc(e.target.value)} />
+          </label>
+        ) : (
+          <label className="form-field form-field--ro">
+            <span>Scheduled date</span>
+            <div className="ro-value">{row.due_date || "—"}</div>
+          </label>
+        )}
+        <label className="form-field">
+          <span>Payment date</span>
+          <input type="date" value={paidOn} onChange={(e) => setPaidOn(e.target.value)} />
+        </label>
+      </div>
+      <div className="form-actions">
+        {err ? <span className="action-err">{err}</span> : null}
+        <button className="btn" onClick={onClose} disabled={busy}>Cancel</button>
+        <button className="btn primary" onClick={save} disabled={busy || !paidOn}>
+          {busy ? "Saving…" : "Mark paid"}
+        </button>
+      </div>
+    </Modal>
   );
 }
 
@@ -816,11 +915,31 @@ function CalendarTab() {
     return map;
   }, [data]);
 
+  // 납부 처리는 실제 납부일을 받아야 하므로 입력창을 띄운다(해제는 즉시).
+  const [payingEvent, setPayingEvent] = useState<FinanceCalendarEvent | null>(null);
+  const [paidOn, setPaidOn] = useState(todayStr());
+
   async function togglePayable(e: FinanceCalendarEvent) {
     if (e.kind !== "payable" || !can("finance", "edit")) return;
     if (e.source === "ap") return;   // 매입(AP) 이벤트는 읽기전용(프로젝트 단계에서 관리)
-    await payFinancePayable(e.ref_id, !e.paid, e.occurrence ?? undefined);
+    if (!e.paid) {
+      setPaidOn(todayStr());
+      setPayingEvent(e);
+      return;
+    }
+    await payFinancePayable(e.ref_id, false, e.occurrence ?? undefined);
     invalidateCache("finance:summary");
+    invalidateCache("finance:payables");
+    refresh();
+  }
+
+  async function confirmPay() {
+    const e = payingEvent;
+    if (!e) return;
+    await payFinancePayable(e.ref_id, true, e.occurrence ?? undefined, paidOn);
+    setPayingEvent(null);
+    invalidateCache("finance:summary");
+    invalidateCache("finance:payables");
     refresh();
   }
 
@@ -860,7 +979,9 @@ function CalendarTab() {
                     key={i}
                     type="button"
                     className={`fin-ev fin-ev--${e.kind}${e.overdue ? " overdue" : ""}${e.paid ? " paid" : ""}`}
-                    title={`${e.kind === "receivable" ? "Receivable" : "Payable"} · ${e.title} · ${money(e.amount, e.currency)}${e.paid ? " (paid)" : ""}`}
+                    title={`${e.kind === "receivable" ? "Receivable" : "Payable"} · ${e.title} · ${money(e.amount, e.currency)}${
+                      e.paid ? ` (paid${e.paid_on ? ` ${e.paid_on}` : ""})` : ""
+                    }`}
                     onClick={() => togglePayable(e)}
                   >
                     <span className="fin-ev-title">{e.title}</span>
@@ -873,8 +994,30 @@ function CalendarTab() {
         })}
       </div>
       <p className="hint-inline" style={{ display: "block", marginTop: 8 }}>
-        Click a payable to toggle paid / unpaid (recurring items toggle only that occurrence). Receivables (AR) are managed from the project stages.
+        Click a payable to record its payment — you enter the date it was actually paid, which may differ from the scheduled date (recurring items settle one occurrence at a time). Click a paid one to undo. Receivables (AR) are managed from the project stages.
       </p>
+      {payingEvent ? (
+        <Modal title="Record payment" onClose={() => setPayingEvent(null)}>
+          <div className="form-grid">
+            <label className="form-field form-field--ro">
+              <span>Payable</span>
+              <div className="ro-value">{payingEvent.title} · {money(payingEvent.amount, payingEvent.currency)}</div>
+            </label>
+            <label className="form-field form-field--ro">
+              <span>Scheduled date</span>
+              <div className="ro-value">{payingEvent.occurrence || payingEvent.date}</div>
+            </label>
+            <label className="form-field">
+              <span>Payment date</span>
+              <input type="date" value={paidOn} onChange={(ev) => setPaidOn(ev.target.value)} />
+            </label>
+          </div>
+          <div className="form-actions">
+            <button className="btn" onClick={() => setPayingEvent(null)}>Cancel</button>
+            <button className="btn primary" onClick={confirmPay} disabled={!paidOn}>Mark paid</button>
+          </div>
+        </Modal>
+      ) : null}
     </div>
   );
 }
