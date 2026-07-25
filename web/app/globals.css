@@ -9921,9 +9921,14 @@ button.ov-tl-stage:hover {
 .fin-kpi--amber { border-left-color: #d68910; }
 .fin-kpi-label { font-size: 12px; color: var(--muted); font-weight: 600; }
 .fin-kpi-main { font-size: 22px; font-weight: 800; color: var(--navy); margin-top: 4px; font-variant-numeric: tabular-nums; }
-/* 통화별로 나눠 적는 KPI 금액 — 두 번째 줄부터는 조금 작게(₩ 다음 $ 등). */
-.fin-kpi-main .fin-kpi-line { line-height: 1.25; }
-.fin-kpi-main .fin-kpi-line + .fin-kpi-line { font-size: 18px; color: #33415c; }
+/* 통화별로 나눠 적는 금액(환산 없이 ₩·$ 각 줄). KPI 는 두 번째 줄부터 조금 작게. */
+.cur-line { line-height: 1.25; }
+.fin-kpi-main .cur-line + .cur-line { font-size: 18px; color: #33415c; }
+/* 미수 목록 합계행 — 라벨·금액을 본문보다 2pt 키운다. */
+.fin-foot-total .total-label,
+.fin-foot-total .total-value { font-size: calc(1em + 2pt); }
+/* 완납 건의 수금일 — 상태 라벨 옆 회색 작은 글씨. */
+.fin-paid-on { color: var(--muted); font-size: 11px; margin-left: 4px; }
 .fin-kpi-sub { font-size: 12px; color: #6b7684; margin-top: 3px; }
 .fin-overview-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 @media (max-width: 900px) { .fin-overview-cols { grid-template-columns: 1fr; } }

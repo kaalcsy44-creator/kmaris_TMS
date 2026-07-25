@@ -73,9 +73,17 @@ function byCurrencyLines(m: MoneyByCurrency): React.ReactNode {
   const keys = currencyKeys(m);
   if (!keys.length) return "—";
   return keys.map((c) => (
-    <div key={c} className="fin-kpi-line">{money(m[c], c)}</div>
+    <div key={c} className="cur-line">{money(m[c], c)}</div>
   ));
 }
+
+/** AR 상태(DB는 한글 enum) → 화면 표기. */
+const AR_STATUS_LABEL: Record<string, string> = {
+  미수: "Outstanding",
+  일부수금: "Partial",
+  완납: "Paid",
+  연체: "Overdue",
+};
 const todayStr = () => new Date().toISOString().slice(0, 10);
 
 // ── Screen ───────────────────────────────────────────────────────────────────
@@ -178,9 +186,14 @@ function ReceivablesTab() {
     const all = data?.rows ?? [];
     return openOnly ? all.filter((r) => r.outstanding > 0) : all;
   }, [data, openOnly]);
+  // 합계 3열(청구·수금·미수) — 통화별로 분리 집계.
   const totals = useMemo(() => {
-    const t: MoneyByCurrency = {};
-    for (const r of rows) t[r.currency] = (t[r.currency] || 0) + r.outstanding;
+    const t = { invoice: {} as MoneyByCurrency, paid: {} as MoneyByCurrency, outstanding: {} as MoneyByCurrency };
+    for (const r of rows) {
+      t.invoice[r.currency] = (t.invoice[r.currency] || 0) + r.invoice_amount;
+      t.paid[r.currency] = (t.paid[r.currency] || 0) + r.paid_amount;
+      t.outstanding[r.currency] = (t.outstanding[r.currency] || 0) + r.outstanding;
+    }
     return t;
   }, [rows]);
 
@@ -217,14 +230,27 @@ function ReceivablesTab() {
                 <td className="num">{money(r.invoice_amount, r.currency)}</td>
                 <td className="num">{money(r.paid_amount, r.currency)}</td>
                 <td className="num"><b>{money(r.outstanding, r.currency)}</b></td>
-                <td>{r.overdue ? <span className="wt-badge" style={{ background: "#fde2e1", color: "#c0392b" }}>Overdue</span> : r.status}</td>
+                <td>
+                  {r.overdue ? (
+                    <span className="wt-badge" style={{ background: "#fde2e1", color: "#c0392b" }}>Overdue</span>
+                  ) : (
+                    <>
+                      {AR_STATUS_LABEL[r.status] || r.status}
+                      {/* 완납 건은 수금일을 상태 옆에 함께 보여준다. */}
+                      {r.paid_date ? <span className="fin-paid-on"> {r.paid_date.slice(0, 10)}</span> : null}
+                    </>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>
           <tfoot>
-            <tr className="foot-grand">
-              <td className="total-label" colSpan={5}>Total outstanding</td>
-              <td className="num total-value" colSpan={2}>{byCurrency(totals)}</td>
+            <tr className="foot-grand fin-foot-total">
+              <td className="total-label" colSpan={3}>Total</td>
+              <td className="num total-value">{byCurrencyLines(totals.invoice)}</td>
+              <td className="num total-value">{byCurrencyLines(totals.paid)}</td>
+              <td className="num total-value">{byCurrencyLines(totals.outstanding)}</td>
+              <td />
             </tr>
           </tfoot>
         </table>

@@ -2192,6 +2192,18 @@ def _finance_receivable_rows(s) -> list[dict]:
     today_str = date.today().isoformat()
     ord_map = {o.id: o for o in s.query(Order).all()}
     cust_names = {c.id: c.name for c in s.query(Customer).all()}
+    # 수금 완료일 = 11단계 완료일(RFQ.stage_dates["11"]). 오더 수만큼 재조회하지 않도록
+    # RFQ 를 한 번에 읽어 매핑한다(견적 경유 연결도 함께 훑는다).
+    rfq_by_id = {q.id: q for q in s.query(RFQ).all()}
+    qtn_rfq = {q.id: q.rfq_id for q in s.query(Quotation).all()}
+
+    def _paid_date(order) -> str:
+        if not order:
+            return ""
+        rid = getattr(order, "rfq_id", None) or qtn_rfq.get(getattr(order, "quotation_id", None) or 0)
+        rfq = rfq_by_id.get(rid) if rid else None
+        return ((getattr(rfq, "stage_dates", None) or {}).get("11") or "") if rfq else ""
+
     rows: list[dict] = []
     for r in s.query(ARRecord).all():
         o = ord_map.get(r.order_id)
@@ -2212,6 +2224,8 @@ def _finance_receivable_rows(s) -> list[dict]:
             "paid_amount": paid,
             "outstanding": outstanding,
             "due_date": r.due_date or "",
+            # 완납 건에 표시할 수금일(11단계 완료일). 미완납이면 빈 값.
+            "paid_date": _paid_date(o) if outstanding <= 0 and invoice > 0 else "",
             "status": "연체" if overdue else status,
             "overdue": bool(overdue),
         })

@@ -847,6 +847,7 @@ export type FinanceReceivable = {
   paid_amount: number;
   outstanding: number;
   due_date: string;
+  paid_date?: string;    // 완납 건의 수금 완료일(11단계 완료일)
   status: string;
   overdue: boolean;
 };
