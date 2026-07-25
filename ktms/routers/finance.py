@@ -196,8 +196,18 @@ def finance_payables():
         vendor_names = {v.id: v.name for v in s.query(Vendor).all()}
         user_names = {u.id: u.username for u in s.query(User).all()}
         rows = s.query(FinancePayable).order_by(FinancePayable.due_date, FinancePayable.id).all()
-        out = [{**_finance_payable_row(p, vendor_names, user_names), "source": "manual"}
-               for p in rows]
+        # 청구/지급/미지급 3열은 미수 목록과 같은 뜻으로 채운다.
+        # 수동 등록은 지급 여부가 불리언이라 지급액 = (지급 완료면 전액), 반복 항목은
+        # 표시 금액이 1회차분이므로 그 회차(due_date)의 지급 여부로 판단한다.
+        out = []
+        for p in rows:
+            row = {**_finance_payable_row(p, vendor_names, user_names), "source": "manual"}
+            amount = row["amount"]
+            settled = row["paid"] if row["recurrence"] == "none" else (row["due_date"] in row["paid_dates"])
+            row["invoice_amount"] = amount
+            row["paid_amount"] = amount if settled else 0.0
+            row["outstanding"] = 0.0 if settled else amount
+            out.append(row)
         # 매입 청구(AP) — vendor P/O별 미지급분을 읽기전용 지급 행으로 합류.
         for ap in _ap_record_rows(s):
             if ap["outstanding"] <= 0:
@@ -211,6 +221,9 @@ def finance_payables():
                 "description": ap["bill_no"] or ap["po_no"] or "",
                 "po_no": ap["po_no"],
                 "amount": ap["outstanding"],
+                "invoice_amount": ap["invoice_amount"],
+                "paid_amount": ap["paid_amount"],
+                "outstanding": ap["outstanding"],
                 "currency": ap["currency"],
                 "due_date": ap["due_date"],
                 "recurrence": "none",

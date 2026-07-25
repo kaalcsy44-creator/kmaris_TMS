@@ -303,12 +303,13 @@ function PayablesTab() {
   const [adding, setAdding] = useState(false);
   const rows = useMemo(() => data?.rows ?? [], [data]);
   const canEdit = can("finance", "create") || can("finance", "edit");
-  // 합계는 통화별 분리(미수 목록과 같은 규칙). 반복 항목은 1회차 금액 기준.
+  // 합계 3열(청구·지급·미지급) — 통화별 분리(미수 목록과 같은 규칙).
   const totals = useMemo(() => {
-    const t = { all: {} as MoneyByCurrency, unpaid: {} as MoneyByCurrency };
+    const t = { invoice: {} as MoneyByCurrency, paid: {} as MoneyByCurrency, outstanding: {} as MoneyByCurrency };
     for (const p of rows) {
-      t.all[p.currency] = (t.all[p.currency] || 0) + p.amount;
-      if (!p.paid) t.unpaid[p.currency] = (t.unpaid[p.currency] || 0) + p.amount;
+      t.invoice[p.currency] = (t.invoice[p.currency] || 0) + p.invoice_amount;
+      t.paid[p.currency] = (t.paid[p.currency] || 0) + p.paid_amount;
+      t.outstanding[p.currency] = (t.outstanding[p.currency] || 0) + p.outstanding;
     }
     return t;
   }, [rows]);
@@ -353,8 +354,9 @@ function PayablesTab() {
         <table className="mini">
           <thead>
             <tr>
-              <th>Category</th><th>Counterparty</th><th>Description</th>
-              <th className="num">Amount</th><th>Due</th><th>Recurrence</th><th>Status</th><th />
+              <th>Category</th><th>Counterparty</th><th>Description</th><th>Due</th>
+              <th className="num">Invoice</th><th className="num">Paid</th><th className="num">Outstanding</th>
+              <th>Recurrence</th><th>Status</th><th />
             </tr>
           </thead>
           <tbody>
@@ -365,8 +367,10 @@ function PayablesTab() {
                 <td>{CATEGORY_LABEL[p.category] || p.category}</td>
                 <td>{p.counterparty || "—"}{isAp && p.po_no ? <span className="muted"> · {p.po_no}</span> : null}</td>
                 <td>{p.description || "—"}</td>
-                <td className="num">{money(p.amount, p.currency)}</td>
                 <td>{p.due_date || "—"}</td>
+                <td className="num">{money(p.invoice_amount, p.currency)}</td>
+                <td className="num">{money(p.paid_amount, p.currency)}</td>
+                <td className="num"><b>{money(p.outstanding, p.currency)}</b></td>
                 <td>{isAp ? <span className="muted">Vendor bill</span> : (RECURRENCE_LABEL[p.recurrence] || p.recurrence)}</td>
                 <td>
                   {isAp ? (
@@ -384,6 +388,8 @@ function PayablesTab() {
                   ) : (
                     <span className="muted">{p.paid_dates.length} paid</span>
                   )}
+                  {/* 지급 완료 건은 지급일을 상태 옆에 함께 보여준다(미수 목록과 동일). */}
+                  {!isAp && p.paid && p.paid_date ? <span className="fin-paid-on">{p.paid_date}</span> : null}
                 </td>
                 <td>
                   <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
@@ -405,22 +411,22 @@ function PayablesTab() {
           <tfoot>
             <tr className="foot-grand fin-foot-total">
               <td />
-              <td className="total-label fin-foot-name" colSpan={2}>Total</td>
-              <td className="num total-value">{byCurrencyLines(totals.all)}</td>
-              <td /><td />
-              <td className="total-value">Unpaid {byCurrency(totals.unpaid)}</td>
-              <td />
+              <td className="total-label fin-foot-name" colSpan={3}>Total</td>
+              <td className="num total-value">{byCurrencyLines(totals.invoice)}</td>
+              <td className="num total-value">{byCurrencyLines(totals.paid)}</td>
+              <td className="num total-value">{byCurrencyLines(totals.outstanding)}</td>
+              <td /><td /><td />
             </tr>
             <tr className="fin-foot-ref">
               <td />
-              <td className="fin-foot-name" colSpan={2}>
+              <td className="fin-foot-name" colSpan={3}>
                 Total (In KRW · 1 USD = {fx.rate.toLocaleString()}
                 {fx.source === "exim" ? ` · 매매기준율 ${fx.date}` : " · fixed rate"})
               </td>
-              <td className="num">{won(toKrw(totals.all, fx.rate))}</td>
-              <td /><td />
-              <td>Unpaid {won(toKrw(totals.unpaid, fx.rate))}</td>
-              <td />
+              <td className="num">{won(toKrw(totals.invoice, fx.rate))}</td>
+              <td className="num">{won(toKrw(totals.paid, fx.rate))}</td>
+              <td className="num">{won(toKrw(totals.outstanding, fx.rate))}</td>
+              <td /><td /><td />
             </tr>
           </tfoot>
         </table>

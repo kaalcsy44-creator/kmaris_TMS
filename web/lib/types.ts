@@ -809,6 +809,10 @@ export type FinancePayable = {
   vendor_id: number | null;
   description: string;
   amount: number;
+  // 미수 목록과 같은 3열(청구·지급·미지급). 반복 항목은 1회차 금액 기준.
+  invoice_amount: number;
+  paid_amount: number;
+  outstanding: number;
   currency: string;
   due_date: string;
   recurrence: "none" | "monthly" | "quarterly" | "yearly";
