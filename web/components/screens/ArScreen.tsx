@@ -139,7 +139,7 @@ export function ArOverview({
   // 레코드가 없으면 생성 폼, 있으면 편집 폼. 10·11단계는 그 아래 발행/수금 완료 바(MilestoneBar)를 덧붙인다.
   // AR(수취) 옆에 AP(지급, 벤더 매입) 탭 — 각 벤더 P/O 의 대금청구서·전자세금계산서를 입력.
   return (
-    <div className="embedded-detail">
+    <div className="embedded-detail ar-ap-detail">
       <div className="page-tabs ar-doc-tabs" style={{ marginBottom: 12 }}>
         <button className={docTab === "ar" ? "on" : ""} onClick={() => setDocTab("ar")}>
           Receivable · Customer (AR)

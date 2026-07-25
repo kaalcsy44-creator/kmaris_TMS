@@ -542,6 +542,13 @@ body {
   border: 1px solid #dde4ef;
   border-radius: 8px;
 }
+/* AR/AP 탭의 Order / Vendor P/O 선택기 — 배경 음영 없이 (다른 화면의 .project-select 은 유지). */
+.ar-ap-detail .project-select {
+  background: transparent;
+  border-color: transparent;
+  padding: 0;
+  margin: 6px 0 14px;
+}
 .project-select label {
   font-size: 12px;
   font-weight: 700;
@@ -7500,10 +7507,10 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 .wp-po-picker {
   justify-content: flex-start;
   gap: 10px;
-  padding: 8px 10px;
-  background: #f7fafd;
-  border: 1px solid var(--line);
-  border-radius: 10px;
+  padding: 8px 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
 }
 .wp-po-picker-label {
   font-size: 11px;
