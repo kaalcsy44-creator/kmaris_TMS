@@ -255,8 +255,10 @@ function ReceivablesTab() {
             ))}
           </tbody>
           <tfoot>
+            {/* 합계 라벨은 Invoice No. 열에서 시작하도록 첫 칸(Customer)을 비운다. */}
             <tr className="foot-grand fin-foot-total">
-              <td className="total-label" colSpan={3}>Total</td>
+              <td />
+              <td className="total-label fin-foot-name" colSpan={2}>Total</td>
               <td className="num total-value">{byCurrencyLines(totals.invoice)}</td>
               <td className="num total-value">{byCurrencyLines(totals.paid)}</td>
               <td className="num total-value">{byCurrencyLines(totals.outstanding)}</td>
@@ -264,9 +266,10 @@ function ReceivablesTab() {
             </tr>
             {/* 참고용 KRW 환산 — 오늘자 매매기준율(조회 실패 시 고정환율). 집계에는 쓰지 않는다. */}
             <tr className="fin-foot-ref">
-              <td colSpan={3}>
-                In KRW (ref.) · 1 USD = {fx.rate.toLocaleString()}
-                {fx.source === "exim" ? ` · 매매기준율 ${fx.date}` : " · fixed rate"}
+              <td />
+              <td className="fin-foot-name" colSpan={2}>
+                Total (In KRW · 1 USD = {fx.rate.toLocaleString()}
+                {fx.source === "exim" ? ` · 매매기준율 ${fx.date}` : " · fixed rate"})
               </td>
               <td className="num">{won(toKrw(totals.invoice, fx.rate))}</td>
               <td className="num">{won(toKrw(totals.paid, fx.rate))}</td>
