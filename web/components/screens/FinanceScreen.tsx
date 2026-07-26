@@ -312,7 +312,7 @@ function ReceivablesTab() {
   return (
     <div className="panel">
       <div className="items-head">
-        <h3 className="form-title" style={{ margin: 0 }}>Receivables</h3>
+        <h3 className="form-title fin-page-title" style={{ margin: 0 }}>Receivables</h3>
         <div className="items-head-actions">
           <label className="check-chip" style={{ cursor: "pointer" }}>
             <input type="checkbox" checked={openOnly} onChange={(e) => setOpenOnly(e.target.checked)} /> Outstanding only
@@ -805,7 +805,7 @@ function PayablesTab() {
   return (
     <div className="panel">
       <div className="items-head">
-        <h3 className="form-title" style={{ margin: 0 }}>Payables</h3>
+        <h3 className="form-title fin-page-title" style={{ margin: 0 }}>Payables</h3>
       </div>
       <p className="hint-inline" style={{ display: "block", margin: "4px 0 10px" }}>
         Vendor bills arrive here automatically from the project&apos;s billing stages and are read-only — click the bill number to open that project&apos;s stage 9 Payable (AP). The company&apos;s own costs — rent, payroll, utilities, taxes — are registered by hand in the second table; monthly/quarterly/yearly items appear as occurrences on the calendar.

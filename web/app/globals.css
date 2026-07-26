@@ -10067,6 +10067,12 @@ table.mini tfoot .fin-foot-name { text-align: left; }
   padding: 2px 2px 6px;
   min-height: 34px;
 }
+/* 페이지 제목(Receivables / Payables) — 섹션 제목(짙은 남색 굵게)과 크기가 비슷해 위계가
+   안 읽히던 자리. 한 포인트 키우고 회색으로 빼서, 아래 섹션 제목들을 감싸는 상위 이름으로 읽히게 한다. */
+.fin-page-title {
+  font-size: calc(16px + 1pt);
+  color: #6a7789;
+}
 /* 섹션 제목 — 음영 없이 글자만으로 구분한다. px+pt 혼합은 이 파일의 다른 확대 표기와 같은 방식. */
 .fin-sec-title {
   margin: 0;
