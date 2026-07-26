@@ -143,6 +143,8 @@ _MIGRATIONS = {
     "finance_payables": {
         # 실제 납부일 {회차일: 납부일} — 예정일과 다른 날 납부한 경우를 남긴다.
         "payments":        "JSON",
+        # 청구서·고지서 발행일(선택) — 벤더 청구서(ap_records.bill_date)와 같은 뜻.
+        "bill_date":       "VARCHAR(10)",
     },
 }
 

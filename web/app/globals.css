@@ -10087,9 +10087,17 @@ table.mini tfoot .fin-foot-name { text-align: left; }
 }
 /* 금액·상태·조작 열은 폭을 고정한다 — 앞쪽 열 구성이 서로 달라도 두 표와 합계 줄의
    숫자가 같은 자리에서 끝나야 위아래로 읽힌다. */
+.fin-pay-table .fin-w-cat { width: 118px; }
 .fin-pay-table .fin-w-money { width: 134px; }
-.fin-pay-table .fin-w-status { width: 152px; }
-.fin-pay-table .fin-w-act { width: 152px; }
+.fin-pay-table .fin-w-status { width: 132px; }
+.fin-pay-table .fin-w-rec { width: 112px; }
+.fin-pay-table .fin-w-act { width: 138px; }
+/* 수정·삭제는 아이콘 한 글자 — 정사각에 가깝게 좁히고 글자를 가운데 세운다. */
+.fin-pay-table .btn.tiny {
+  min-width: 26px;
+  padding: 0 6px;
+  font-size: 13px;
+}
 /* 전체 합계 줄 — 두 표를 합친 금액. 표 사이를 띄운 만큼 위와 확실히 떨어뜨린다. */
 .fin-pay-total { margin-top: 18px; }
 /* 납부 기록 팝업 — 날짜 한두 칸만 받는 좁은 폼(세로 스택, 여백 최소). */

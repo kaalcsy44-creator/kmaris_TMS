@@ -586,6 +586,9 @@ class FinancePayable(Base):
     description  = Column(String(200))   # 내역
     amount       = Column(Float, default=0.0)
     currency     = Column(String(10), default="KRW")
+    # 청구서 발행일 YYYY-MM-DD (선택) — 벤더 청구서(APRecord.bill_date)와 같은 뜻.
+    # 고지서·계산서를 받은 날. 없으면 빈 값.
+    bill_date    = Column(String(10))
     due_date     = Column(String(10))    # 지급 예정일 YYYY-MM-DD (반복이면 최초 회차일)
     recurrence   = Column(String(10), default="none")  # none/monthly/quarterly/yearly
     recur_until  = Column(String(10))    # 반복 종료일(비우면 무기한) YYYY-MM-DD

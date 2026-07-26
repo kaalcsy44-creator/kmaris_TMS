@@ -829,7 +829,7 @@ export type FinancePayable = {
   owner_id: number;
   owner: string;
   source?: "manual" | "ap";   // "ap" = 매입 청구(APRecord) 유래, 읽기전용
-  bill_date?: string;         // 벤더 청구서 발행일(9단계). 수동 등록 항목은 없음
+  bill_date?: string;         // 청구서·고지서 발행일(AP=9단계 입력값, 수동 등록=직접 입력)
   po_no?: string;             // source==="ap" 일 때 연결된 벤더 P/O 번호
   po_id?: number;             // source==="ap" 일 때 그 벤더 P/O id — 9단계 AP 탭 딥링크용
   order_id?: number;          // source==="ap" 일 때 이 청구가 속한 프로젝트(오더) — 딥링크용
@@ -842,6 +842,7 @@ export type FinancePayableSave = {
   description?: string;
   amount?: number;
   currency?: string;
+  bill_date?: string;
   due_date?: string;
   recurrence?: string;
   recur_until?: string;

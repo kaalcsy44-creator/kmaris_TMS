@@ -391,6 +391,7 @@ def create_finance_payable(body: FinancePayableIn, user: dict = Depends(get_curr
             description=(body.description or "").strip(),
             amount=body.amount or 0.0,
             currency=body.currency or "KRW",
+            bill_date=(body.bill_date or "").strip()[:10],
             due_date=body.due_date or "",
             recurrence=rec,
             recur_until=(body.recur_until or "") or None,
@@ -422,6 +423,7 @@ def update_finance_payable(row_id: int, body: FinancePayableIn):
         p.description = (body.description or "").strip()
         p.amount = body.amount or 0.0
         p.currency = body.currency or "KRW"
+        p.bill_date = (body.bill_date or "").strip()[:10]
         p.due_date = body.due_date or ""
         p.recurrence = rec
         p.recur_until = (body.recur_until or "") or None

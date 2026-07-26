@@ -2110,6 +2110,7 @@ class FinancePayableIn(BaseModel):
     description: str | None = ""
     amount: float | None = 0.0
     currency: str | None = "KRW"
+    bill_date: str | None = ""
     due_date: str | None = ""
     recurrence: str | None = "none"
     recur_until: str | None = ""
@@ -2154,6 +2155,7 @@ def _finance_payable_row(p: FinancePayable, vendor_names: dict, user_names: dict
         "description": p.description or "",
         "amount": round(p.amount or 0, 2),
         "currency": p.currency or "KRW",
+        "bill_date": p.bill_date or "",
         "due_date": p.due_date or "",
         "recurrence": p.recurrence or "none",
         "recur_until": p.recur_until or "",

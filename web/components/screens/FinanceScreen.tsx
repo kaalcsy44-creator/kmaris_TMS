@@ -625,13 +625,16 @@ function IncomeForm({
 }
 
 // ── Payables (payment ledger) ──────────────────────────────────────────────────
+// 등록 버튼이 기타 지출 섹션에 있으므로 기본 분류도 기타 — 거래선지급은 대개
+// 프로젝트에서 자동으로 넘어오고, 직접 넣을 때만 분류를 바꾼다.
 const emptyPayable: FinancePayableSave = {
-  category: "거래선지급",
+  category: "기타",
   counterparty: "",
   vendor_id: null,
   description: "",
   amount: 0,
   currency: "KRW",
+  bill_date: "",
   due_date: todayStr(),
   recurrence: "none",
   recur_until: "",
@@ -714,7 +717,17 @@ function PayablesTab() {
     );
   }
 
-  /** 조작 칸 — AP 는 프로젝트 단계로 가는 안내 링크, 수동 등록은 수정/삭제. */
+  /** 반복 칸 — 수동 등록 항목의 주기(+종료일). AP 는 1회성이라 그대로 One-time. */
+  function recurrenceCell(p: FinancePayable) {
+    return (
+      <td>
+        {RECURRENCE_LABEL[p.recurrence] || p.recurrence}
+        {p.recurrence !== "none" && p.recur_until ? <div className="muted">until {p.recur_until}</div> : null}
+      </td>
+    );
+  }
+
+  /** 조작 칸 — AP 는 프로젝트 단계로 가는 안내 링크, 수동 등록은 수정/삭제 아이콘. */
   function actionCell(p: FinancePayable) {
     return (
       <td>
@@ -723,8 +736,12 @@ function PayablesTab() {
             <ProjectDocLink orderId={p.order_id} label="Project stage 9/10" hint apPoId={p.po_id} />
           ) : (
             <>
-              {can("finance", "edit") ? <button className="btn sm" onClick={() => setEditing(p)}>Edit</button> : null}
-              {can("finance", "delete") ? <button className="btn danger sm" onClick={() => remove(p)}>Delete</button> : null}
+              {can("finance", "edit") ? (
+                <button className="btn tiny" title="Edit" aria-label="Edit" onClick={() => setEditing(p)}>✎</button>
+              ) : null}
+              {can("finance", "delete") ? (
+                <button className="btn tiny danger" title="Delete" aria-label="Delete" onClick={() => remove(p)}>×</button>
+              ) : null}
             </>
           )}
         </div>
@@ -752,14 +769,15 @@ function PayablesTab() {
           <table className="mini fin-pay-table">
             <thead>
               <tr>
-                <th>Vendor</th><th>Bill No. / Vendor P/O</th><th>Bill date</th><th>Due</th>
+                <th className="fin-w-cat">Category</th><th>Vendor</th><th>Bill No. / Vendor P/O</th><th>Bill date</th><th>Due</th>
                 <th className="num fin-w-money">Bill</th><th className="num fin-w-money">Paid</th><th className="num fin-w-money">Outstanding</th>
-                <th className="fin-w-status">Status</th><th className="fin-w-act" />
+                <th className="fin-w-status">Status</th><th className="fin-w-rec">Recurrence</th><th className="fin-w-act" />
               </tr>
             </thead>
             <tbody>
               {trade.map((p) => (
                 <tr key={`${p.source || "manual"}-${p.id}`}>
+                  <td>{CATEGORY_LABEL[p.category] || p.category}</td>
                   <td>{p.counterparty || "—"}</td>
                   {/* 청구서 번호 = 미수 목록의 Invoice No. 자리. AP 행은 그 아래 벤더 P/O 를
                       옅게 덧붙인다(번호가 아직 없으면 P/O 만 보인다). 수동 등록은 적요. */}
@@ -779,16 +797,17 @@ function PayablesTab() {
                   <td className="num">{money(p.paid_amount, p.currency)}</td>
                   <td className="num"><b>{money(p.outstanding, p.currency)}</b></td>
                   {statusCell(p)}
+                  {recurrenceCell(p)}
                   {actionCell(p)}
                 </tr>
               ))}
               <tr className="fin-group-sub">
                 <td />
-                <td className="fin-foot-name" colSpan={3}>Subtotal</td>
+                <td className="fin-foot-name" colSpan={4}>Subtotal</td>
                 <td className="num">{byCurrency(tradeSt.invoice)}</td>
                 <td className="num">{byCurrency(tradeSt.paid)}</td>
                 <td className="num">{byCurrency(tradeSt.outstanding)}</td>
-                <td /><td />
+                <td /><td /><td />
               </tr>
             </tbody>
           </table>
@@ -808,10 +827,11 @@ function PayablesTab() {
         ) : (
           <table className="mini fin-pay-table">
             <thead>
+              {/* 열 자리는 위 표와 동일 — 이름만 이 표의 항목에 맞춘다(등록 폼의 입력칸과 1:1). */}
               <tr>
-                <th>Category</th><th>Vendor / payee</th><th>Description</th><th>Due</th><th>Recurrence</th>
+                <th className="fin-w-cat">Category</th><th>Vendor / payee</th><th>Description</th><th>Bill date</th><th>Due</th>
                 <th className="num fin-w-money">Amount</th><th className="num fin-w-money">Paid</th><th className="num fin-w-money">Outstanding</th>
-                <th className="fin-w-status">Status</th><th className="fin-w-act" />
+                <th className="fin-w-status">Status</th><th className="fin-w-rec">Recurrence</th><th className="fin-w-act" />
               </tr>
             </thead>
             <tbody>
@@ -824,15 +844,13 @@ function PayablesTab() {
                     {p.description || "—"}
                     {p.notes ? <div className="muted">{p.notes}</div> : null}
                   </td>
+                  <td>{p.bill_date || "—"}</td>
                   <td>{p.due_date || "—"}</td>
-                  <td>
-                    {RECURRENCE_LABEL[p.recurrence] || p.recurrence}
-                    {p.recurrence !== "none" && p.recur_until ? <span className="muted"> · until {p.recur_until}</span> : null}
-                  </td>
                   <td className="num">{money(p.invoice_amount, p.currency)}</td>
                   <td className="num">{money(p.paid_amount, p.currency)}</td>
                   <td className="num"><b>{money(p.outstanding, p.currency)}</b></td>
                   {statusCell(p)}
+                  {recurrenceCell(p)}
                   {actionCell(p)}
                 </tr>
               ))}
@@ -842,7 +860,7 @@ function PayablesTab() {
                 <td className="num">{byCurrency(otherSt.invoice)}</td>
                 <td className="num">{byCurrency(otherSt.paid)}</td>
                 <td className="num">{byCurrency(otherSt.outstanding)}</td>
-                <td /><td />
+                <td /><td /><td />
               </tr>
             </tbody>
           </table>
@@ -855,7 +873,7 @@ function PayablesTab() {
           <colgroup>
             <col />
             <col className="fin-w-money" /><col className="fin-w-money" /><col className="fin-w-money" />
-            <col className="fin-w-status" /><col className="fin-w-act" />
+            <col className="fin-w-status" /><col className="fin-w-rec" /><col className="fin-w-act" />
           </colgroup>
           <tfoot>
             <tr className="foot-grand fin-foot-total">
@@ -863,7 +881,7 @@ function PayablesTab() {
               <td className="num total-value">{byCurrencyLines(totals.invoice)}</td>
               <td className="num total-value">{byCurrencyLines(totals.paid)}</td>
               <td className="num total-value">{byCurrencyLines(totals.outstanding)}</td>
-              <td /><td />
+              <td /><td /><td />
             </tr>
             {/* 참고용 KRW 환산 — 오늘자 매매기준율(조회 실패 시 고정환율). 집계에는 쓰지 않는다. */}
             <tr className="fin-foot-ref">
@@ -874,7 +892,7 @@ function PayablesTab() {
               <td className="num">{won(toKrw(totals.invoice, fx.rate))}</td>
               <td className="num">{won(toKrw(totals.paid, fx.rate))}</td>
               <td className="num">{won(toKrw(totals.outstanding, fx.rate))}</td>
-              <td /><td />
+              <td /><td /><td />
             </tr>
           </tfoot>
         </table>
@@ -1071,6 +1089,11 @@ function PayableForm({
         <label className="form-field">
           <span>Currency</span>
           <CurrencyToggle value={form.currency || "KRW"} onChange={(v) => set("currency", v)} />
+        </label>
+        <label className="form-field">
+          {/* 고지서·계산서를 받은 날(선택). 벤더 청구서의 발행일과 같은 뜻이라 목록에서 한 열에 모인다. */}
+          <span>Bill date (optional)</span>
+          <input type="date" value={form.bill_date || ""} onChange={(e) => set("bill_date", e.target.value)} />
         </label>
         <label className="form-field">
           <span>Due date{form.recurrence !== "none" ? " · first occurrence" : ""}</span>
