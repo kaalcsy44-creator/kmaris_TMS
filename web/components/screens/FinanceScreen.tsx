@@ -264,19 +264,19 @@ function ProjectDocLink({
   if (!orderId && !rfqId) return hint ? <span className="hint-inline">{text}</span> : <>{text}</>;
   // rfq 와 order 를 함께 넘긴다 — rfq 로 프로젝트를 찾고, order 로 그 프로젝트 안에서
   // 이 문서의 고객 P/O 를 고른다. (한 프로젝트에 P/O 가 여러 건일 수 있다.)
-  // 지급(AP) 행은 10단계로 연다 — 지급 확인(Payment)이 붙어 있는 단계라, 목록에서
-  // 누르면 바로 그 칸이 보인다. 수입(AR) 행은 청구서를 편집하는 9단계 그대로.
+  // 지급(AP) 행은 11단계(Payment Completed)로 연다 — 지급 확인 칸이 붙어 있는 단계라,
+  // 목록에서 누르면 바로 그 칸이 보인다. 수입(AR) 행은 청구서를 편집하는 9단계 그대로.
   const params = [
     rfqId ? `rfq=${rfqId}` : "",
     orderId ? `order=${orderId}` : "",
-    apPoId ? "stage=10" : "stage=9",
+    apPoId ? "stage=11" : "stage=9",
     apPoId ? `ap=${apPoId}` : "",
   ].filter(Boolean).join("&");
   return (
     <Link
       className={`fin-doc-link${hint ? " hint" : ""}`}
       href={`/project?${params}`}
-      title={apPoId ? "Open this vendor bill · stage 10 Payable (AP)" : "Open this project's billing · AR/AP stage"}
+      title={apPoId ? "Open this vendor bill · stage 11 Payable (AP)" : "Open this project's billing · AR/AP stage"}
     >
       {text}
     </Link>
@@ -761,11 +761,11 @@ function PayablesTab() {
       <td>
         {isAp ? (
           // 벤더 청구서도 기타 지출과 같은 Paid/Unpaid 칩으로 보여준다 — 다만 지급 기록은
-          // 프로젝트 10/11단계 AP 탭의 Payment 칸에서 하므로 여기서는 누를 수 없다.
+          // 프로젝트 11단계 AP 탭의 Payment 칸에서 하므로 여기서는 누를 수 없다.
           <button
             type="button"
             className={`wt-badge fin-paid-toggle${p.paid ? " on" : ""}`}
-            title="Record the payment in the project's stage 10/11 Payable (AP)"
+            title="Record the payment in the project's stage 11 Payable (AP)"
             disabled
           >
             {p.paid ? "Paid" : p.paid_amount > 0 ? "Partly paid" : "Unpaid"}
@@ -813,7 +813,7 @@ function PayablesTab() {
       <td>
         <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
           {p.source === "ap" ? (
-            <ProjectDocLink orderId={p.order_id} rfqId={p.rfq_id} label="Project stage 10" hint apPoId={p.po_id} />
+            <ProjectDocLink orderId={p.order_id} rfqId={p.rfq_id} label="Project stage 11" hint apPoId={p.po_id} />
           ) : (
             <>
               {can("finance", "edit") ? (
@@ -835,7 +835,7 @@ function PayablesTab() {
         <h3 className="form-title fin-page-title" style={{ margin: 0 }}>Payables</h3>
       </div>
       <p className="hint-inline" style={{ display: "block", margin: "4px 0 10px" }}>
-        Vendor bills arrive here automatically from the project&apos;s billing stages and are read-only — click the bill number to open that project&apos;s stage 10 Payable (AP), where the payment is confirmed. The company&apos;s own costs — rent, payroll, utilities, taxes — are registered by hand in the second table; monthly/quarterly/yearly items appear as occurrences on the calendar.
+        Vendor bills arrive here automatically from the project&apos;s billing stages and are read-only — click the bill number to open that project&apos;s stage 11 Payable (AP), where the payment is confirmed. The company&apos;s own costs — rent, payroll, utilities, taxes — are registered by hand in the second table; monthly/quarterly/yearly items appear as occurrences on the calendar.
       </p>
 
       {/* ── 거래 매입 — 프로젝트에서 넘어온 벤더 청구서(읽기전용). ─────────────── */}
@@ -1581,7 +1581,7 @@ function CalendarTab() {
                           }`
                         : `${e.kind === "receivable" ? "Receivable" : "Payable"} · ${e.title} · ${money(e.amount, e.currency)}${
                             e.paid ? ` (paid${e.paid_on ? ` ${e.paid_on}` : ""})` : ""
-                          }${e.source === "ap" ? " — recorded in the project's stage 10 Payable (AP)" : ""}`
+                          }${e.source === "ap" ? " — recorded in the project's stage 11 Payable (AP)" : ""}`
                     }
                     onClick={() => togglePayable(e)}
                   >
@@ -1596,7 +1596,7 @@ function CalendarTab() {
         })}
       </div>
       <p className="hint-inline" style={{ display: "block", marginTop: 8 }}>
-        Every item sits on its scheduled date until it settles, then appears again (✓) on the day the money actually moved. Click one of your own costs to record its payment — you enter the date it was really paid, which may differ from the scheduled date (recurring items settle one occurrence at a time); click a paid one to undo. Customer invoices (AR) and vendor bills (AP) are managed from the project stages instead — stage 11 Payment for collections, stage 10 Payable for vendor payments.
+        Every item sits on its scheduled date until it settles, then appears again (✓) on the day the money actually moved. Click one of your own costs to record its payment — you enter the date it was really paid, which may differ from the scheduled date (recurring items settle one occurrence at a time); click a paid one to undo. Customer invoices (AR) and vendor bills (AP) are managed from the project stages instead — both on stage 11, the Receivable tab for collections and the Payable tab for vendor payments.
       </p>
       {payingEvent ? (
         <Modal title="Record payment" onClose={() => setPayingEvent(null)} form maxWidth={340}>

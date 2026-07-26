@@ -61,7 +61,7 @@ def _ap_out(r: APRecord, po_no: str = "", vendor: str = "") -> dict:
 def ap_by_order(order_id: int):
     """이 오더의 vendor P/O 목록 + 각 P/O 의 AP 레코드(없으면 null).
 
-    프로젝트 9·10단계 AP 탭이 벤더 P/O 선택기와 편집 폼을 그리는 데 사용한다.
+    프로젝트 9~11단계 AP 탭이 벤더 P/O 선택기와 편집 폼을 그리는 데 사용한다.
     """
     s = get_session()
     try:

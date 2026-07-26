@@ -117,7 +117,7 @@ def _ar_receipts(ar_rows: list[dict], d0: date, d1: date) -> list[tuple[str, flo
 def _ap_payments(ap_rows: list[dict], d0: date, d1: date) -> list[tuple[str, float, str]]:
     """[d0,d1] 안에 실제로 지급한 벤더 청구 (지급일, 금액, 통화) 목록.
 
-    지급일은 9·10단계 AP 편집기의 Payment 칸에서 들어온다 — 비어 있으면 어느 달에 나갔는지
+    지급일은 11단계 AP 편집기의 Payment 칸에서 들어온다 — 비어 있으면 어느 달에 나갔는지
     알 수 없으므로 실적에서 뺀다(잔액 쪽에는 미지급으로 그대로 남는다).
     """
     lo, hi = d0.isoformat(), d1.isoformat()
@@ -986,7 +986,7 @@ def finance_calendar(start: str = "", end: str = ""):
                 })
         # 매입 청구(AP) — 미지급 잔액은 지급 예정일에, 지급한 금액은 실제 지급일에.
         # 수금(AR)과 같은 규칙이라 캘린더에서 예정과 실적이 나란히 읽힌다.
-        # 지급 기록은 프로젝트 10·11단계 AP 탭에서 하므로 여기서는 읽기전용(source="ap").
+        # 지급 기록은 프로젝트 11단계 AP 탭에서 하므로 여기서는 읽기전용(source="ap").
         for ap in _ap_record_rows(s):
             due = ap["due_date"]
             who = ap["vendor"] or ap["bill_no"] or ap["po_no"] or "Payable"

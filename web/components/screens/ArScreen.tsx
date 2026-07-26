@@ -539,9 +539,9 @@ function ApAddForm({
         </div>
       ) : null}
 
-      {/* 지급 확인 — 9단계는 청구서를 받는 자리라 빼고, 10·11단계에서만 낸다
-          (AR 쪽 MilestoneBar 를 stage !== 9 에 붙이는 것과 같은 규칙). */}
-      {stage !== 9 ? (
+      {/* 지급 확인 — 11단계(Payment Completed) 전용. 9단계는 청구서를 받는 자리,
+          10단계는 전자세금계산서 수취 자리라 각자 제 일만 한다. */}
+      {stage === 11 ? (
         <div className="ar-milestone">
           <div className="form-section-title">Payment (to vendor)</div>
           <div className="milestone-row">
