@@ -258,8 +258,20 @@ function ReceivablesTab() {
   }, [data, openOnly]);
   // 섹션 = 프로젝트 매출(AR) / 기타 수입. 성격이 달라 소계도 따로 낸다.
   const groups = useMemo(() => [
-    { key: "ar", label: "Sales · customer invoices (AR)", rows: rows.filter((r) => r.source !== "income") },
-    { key: "income", label: "Other income · interest, refunds, misc", rows: rows.filter((r) => r.source === "income") },
+    {
+      key: "ar",
+      title: "Sales",
+      sub: "customer invoices (AR)",
+      empty: "No customer invoices to show.",
+      rows: rows.filter((r) => r.source !== "income"),
+    },
+    {
+      key: "income",
+      title: "Other income",
+      sub: "interest, refunds, misc",
+      empty: "No other income registered.",
+      rows: rows.filter((r) => r.source === "income"),
+    },
   ], [rows]);
   // 합계 3열(청구·수금·미수) — 통화별로 분리 집계.
   const totals = useMemo(() => receivableTotals(rows), [rows]);
@@ -302,91 +314,112 @@ function ReceivablesTab() {
       <p className="hint-inline" style={{ display: "block", margin: "4px 0 10px" }}>
         Customer invoices arrive here automatically from the project&apos;s tax-invoice and collection stages and are read-only — click the invoice number to open that project&apos;s billing stage. Use <b>+ Add income</b> for money that is not project sales — interest, refunds, misc.
       </p>
-      {rows.length === 0 ? (
-        <div className="muted">No receivables to show.</div>
-      ) : (
-        <table className="mini">
-          <thead>
-            <tr>
-              <th>Customer</th><th>Invoice No.</th><th>Invoice date</th><th>Due</th>
-              <th className="num">Invoice</th><th className="num">Paid</th><th className="num">Outstanding</th><th>Status</th><th />
-            </tr>
-          </thead>
-          {groups.map((g) => g.rows.length === 0 ? null : (
-          <tbody key={g.key}>
-            <tr className="fin-group-head"><td colSpan={9}>{g.label}</td></tr>
-            {g.rows.map((r) => {
-              const isIncome = r.source === "income";
-              return (
-              <tr key={`${r.source || "ar"}-${r.id}`} className={r.overdue ? "fin-overdue" : ""}>
-                <td>{r.customer}</td>
-                <td>{isIncome ? (r.invoice_no || r.ci_no || "—") : <ProjectDocLink orderId={r.order_id} label={r.invoice_no || r.ci_no} />}</td>
-                {/* 발행일 — 9단계 대금청구서에 입력한 값. 기타 수입에는 없는 개념. */}
-                <td>{r.invoice_date || "—"}</td>
-                <td>{r.due_date || "—"}</td>
-                <td className="num">{money(r.invoice_amount, r.currency)}</td>
-                <td className="num">{money(r.paid_amount, r.currency)}</td>
-                <td className="num"><b>{money(r.outstanding, r.currency)}</b></td>
-                <td>
-                  {r.overdue ? (
-                    <span className="wt-badge" style={{ background: "#fde2e1", color: "#c0392b" }}>Overdue</span>
-                  ) : isIncome ? (
-                    // 기타 수입은 이 화면에서 바로 입금 처리(실제 입금일 입력).
-                    <button
-                      type="button"
-                      className={`wt-badge fin-paid-toggle${r.paid ? " on" : ""}`}
-                      title={canEdit ? (r.paid ? "Undo receipt" : "Record receipt") : ""}
-                      disabled={!canEdit}
-                      onClick={() =>
-                        r.recurrence !== "none"
-                          ? setReceiving({ row: r, occurrence: nextUnpaidOccurrence(asPayableLike(r)) })
-                          : r.paid
-                            ? undoReceived(r)
-                            : setReceiving({ row: r, occurrence: r.due_date })
-                      }
-                    >
-                      {r.recurrence !== "none" ? `${(r.paid_dates || []).length} received` : r.paid ? "Received" : "Expected"}
-                    </button>
-                  ) : (
-                    AR_STATUS_LABEL[r.status] || r.status
-                  )}
-                  {r.paid_date ? <span className="fin-paid-on">{r.paid_date}</span> : null}
-                </td>
-                <td>
-                  <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
-                    {isIncome ? (
-                      <>
-                        {can("finance", "edit") ? <button className="btn sm" onClick={() => setEditing(r)}>Edit</button> : null}
-                        {can("finance", "delete") ? <button className="btn danger sm" onClick={() => removeIncome(r)}>Delete</button> : null}
-                      </>
-                    ) : (
-                      <ProjectDocLink orderId={r.order_id} label="Project stage 9–11" hint />
-                    )}
-                  </div>
-                </td>
-              </tr>
-              );
-            })}
-            {(() => {
-              const st = receivableTotals(g.rows);
-              return (
-                <tr className="fin-group-sub">
-                  <td />
-                  <td className="fin-foot-name" colSpan={3}>Subtotal</td>
-                  <td className="num">{byCurrency(st.invoice)}</td>
-                  <td className="num">{byCurrency(st.paid)}</td>
-                  <td className="num">{byCurrency(st.outstanding)}</td>
-                  <td /><td />
+      {/* 섹션 = 프로젝트 매출(AR) / 기타 수입. 지급 목록과 같은 규칙 —
+          섹션마다 표를 따로 내고 각 표 끝에 소계, 두 표 아래 전체 합계. */}
+      {groups.map((g) => (
+        <section className="fin-sec" key={g.key}>
+          <div className="fin-sec-head">
+            <h4 className="fin-sec-title">{g.title} <span className="fin-sec-sub">· {g.sub}</span></h4>
+          </div>
+          {g.rows.length === 0 ? (
+            <div className="muted" style={{ padding: "8px 2px" }}>{g.empty}</div>
+          ) : (
+            <table className="mini fin-ledger">
+              <thead>
+                <tr>
+                  <th className="fin-w-party">Customer</th><th>Invoice No.</th>
+                  <th className="fin-w-date">Invoice date</th><th className="fin-w-date">Due</th>
+                  <th className="num fin-w-money">Invoice</th><th className="num fin-w-money">Paid</th><th className="num fin-w-money">Outstanding</th>
+                  <th className="fin-w-status">Status</th><th className="fin-w-act" />
                 </tr>
-              );
-            })()}
-          </tbody>
-          ))}
+              </thead>
+              <tbody>
+                {g.rows.map((r) => {
+                  const isIncome = r.source === "income";
+                  return (
+                  <tr key={`${r.source || "ar"}-${r.id}`} className={r.overdue ? "fin-overdue" : ""}>
+                    <td>{r.customer}</td>
+                    <td>{isIncome ? (r.invoice_no || r.ci_no || "—") : <ProjectDocLink orderId={r.order_id} label={r.invoice_no || r.ci_no} />}</td>
+                    {/* 발행일 — 9단계 대금청구서에 입력한 값. 기타 수입에는 없는 개념. */}
+                    <td>{r.invoice_date || "—"}</td>
+                    <td>{r.due_date || "—"}</td>
+                    <td className="num">{money(r.invoice_amount, r.currency)}</td>
+                    <td className="num">{money(r.paid_amount, r.currency)}</td>
+                    <td className="num">{money(r.outstanding, r.currency)}</td>
+                    <td>
+                      {r.overdue ? (
+                        <span className="wt-badge" style={{ background: "#fde2e1", color: "#c0392b" }}>Overdue</span>
+                      ) : isIncome ? (
+                        // 기타 수입은 이 화면에서 바로 입금 처리(실제 입금일 입력).
+                        <button
+                          type="button"
+                          className={`wt-badge fin-paid-toggle${r.paid ? " on" : ""}`}
+                          title={canEdit ? (r.paid ? "Undo receipt" : "Record receipt") : ""}
+                          disabled={!canEdit}
+                          onClick={() =>
+                            r.recurrence !== "none"
+                              ? setReceiving({ row: r, occurrence: nextUnpaidOccurrence(asPayableLike(r)) })
+                              : r.paid
+                                ? undoReceived(r)
+                                : setReceiving({ row: r, occurrence: r.due_date })
+                          }
+                        >
+                          {r.recurrence !== "none" ? `${(r.paid_dates || []).length} received` : r.paid ? "Received" : "Expected"}
+                        </button>
+                      ) : (
+                        AR_STATUS_LABEL[r.status] || r.status
+                      )}
+                      {r.paid_date ? <span className="fin-paid-on">{r.paid_date}</span> : null}
+                    </td>
+                    <td>
+                      <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                        {isIncome ? (
+                          <>
+                            {can("finance", "edit") ? (
+                              <button className="btn tiny" title="Edit" aria-label="Edit" onClick={() => setEditing(r)}>✎</button>
+                            ) : null}
+                            {can("finance", "delete") ? (
+                              <button className="btn tiny danger" title="Delete" aria-label="Delete" onClick={() => removeIncome(r)}>×</button>
+                            ) : null}
+                          </>
+                        ) : (
+                          <ProjectDocLink orderId={r.order_id} label="Project stage 9–11" hint />
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                  );
+                })}
+                {(() => {
+                  const st = receivableTotals(g.rows);
+                  return (
+                    <tr className="fin-group-sub">
+                      <td />
+                      <td className="fin-foot-name" colSpan={3}>Subtotal</td>
+                      <td className="num">{byCurrency(st.invoice)}</td>
+                      <td className="num">{byCurrency(st.paid)}</td>
+                      <td className="num">{byCurrency(st.outstanding)}</td>
+                      <td /><td />
+                    </tr>
+                  );
+                })()}
+              </tbody>
+            </table>
+          )}
+        </section>
+      ))}
+
+      {/* ── 전체 합계 — 두 표를 합친 금액. 열 폭을 위 표들과 맞춰 같은 자리에서 끝난다. ── */}
+      {rows.length === 0 ? null : (
+        <table className="mini fin-ledger fin-ledger-total">
+          <colgroup>
+            <col />
+            <col className="fin-w-money" /><col className="fin-w-money" /><col className="fin-w-money" />
+            <col className="fin-w-status" /><col className="fin-w-act" />
+          </colgroup>
           <tfoot>
-            {/* 합계 라벨은 Invoice No. 열에서 시작하도록 첫 칸(Customer)을 비운다. */}
             <tr className="foot-grand fin-foot-total">
-              <td />
-              <td className="total-label fin-foot-name" colSpan={3}>Total</td>
+              <td className="total-label fin-foot-name">Total</td>
               <td className="num total-value">{byCurrencyLines(totals.invoice)}</td>
               <td className="num total-value">{byCurrencyLines(totals.paid)}</td>
               <td className="num total-value">{byCurrencyLines(totals.outstanding)}</td>
@@ -394,8 +427,7 @@ function ReceivablesTab() {
             </tr>
             {/* 참고용 KRW 환산 — 오늘자 매매기준율(조회 실패 시 고정환율). 집계에는 쓰지 않는다. */}
             <tr className="fin-foot-ref">
-              <td />
-              <td className="fin-foot-name" colSpan={3}>
+              <td className="fin-foot-name">
                 Total (In KRW · 1 USD = {fx.rate.toLocaleString()}
                 {fx.source === "exim" ? ` · 매매기준율 ${fx.date}` : " · fixed rate"})
               </td>
@@ -768,15 +800,15 @@ function PayablesTab() {
       </p>
 
       {/* ── 거래 매입 — 프로젝트에서 넘어온 벤더 청구서(읽기전용). ─────────────── */}
-      <section className="fin-pay-sec">
-        <div className="fin-pay-sec-head">
+      <section className="fin-sec">
+        <div className="fin-sec-head">
           {/* 제목은 굵게, 어떤 항목이 들어오는지 설명하는 뒷부분은 옅게. */}
-          <h4 className="fin-pay-sec-title">Trade purchases <span className="fin-pay-sec-sub">· vendor bills</span></h4>
+          <h4 className="fin-sec-title">Trade purchases <span className="fin-sec-sub">· vendor bills</span></h4>
         </div>
         {trade.length === 0 ? (
           <div className="muted" style={{ padding: "8px 2px" }}>No vendor bills outstanding.</div>
         ) : (
-          <table className="mini fin-pay-table">
+          <table className="mini fin-ledger">
             <thead>
               <tr>
                 <th className="fin-w-cat">Category</th><th className="fin-w-party">Vendor</th><th>Bill No. / Vendor P/O</th><th className="fin-w-date">Bill date</th><th className="fin-w-date">Due</th>
@@ -825,9 +857,9 @@ function PayablesTab() {
       </section>
 
       {/* ── 기타 지출 — 여기서 직접 등록하는 항목. 열 구성은 등록 폼의 입력칸과 1:1. ── */}
-      <section className="fin-pay-sec">
-        <div className="fin-pay-sec-head">
-          <h4 className="fin-pay-sec-title">Other costs <span className="fin-pay-sec-sub">· rent, payroll, utilities, taxes</span></h4>
+      <section className="fin-sec">
+        <div className="fin-sec-head">
+          <h4 className="fin-sec-title">Other costs <span className="fin-sec-sub">· rent, payroll, utilities, taxes</span></h4>
           {can("finance", "create") ? (
             <button className="btn primary sm" onClick={() => setAdding(true)}>+ Add payable</button>
           ) : null}
@@ -835,7 +867,7 @@ function PayablesTab() {
         {other.length === 0 ? (
           <div className="muted" style={{ padding: "8px 2px" }}>No other costs registered.</div>
         ) : (
-          <table className="mini fin-pay-table">
+          <table className="mini fin-ledger">
             <thead>
               {/* 열 자리는 위 표와 동일 — 이름만 이 표의 항목에 맞춘다(등록 폼의 입력칸과 1:1). */}
               <tr>
@@ -879,7 +911,7 @@ function PayablesTab() {
 
       {/* ── 전체 합계 — 두 표를 합친 금액. 열 폭을 위 표들과 맞춰 같은 자리에서 끝난다. ── */}
       {rows.length === 0 ? null : (
-        <table className="mini fin-pay-table fin-pay-total">
+        <table className="mini fin-ledger fin-ledger-total">
           <colgroup>
             <col />
             <col className="fin-w-money" /><col className="fin-w-money" /><col className="fin-w-money" />

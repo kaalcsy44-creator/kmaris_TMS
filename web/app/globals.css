@@ -10049,26 +10049,17 @@ table.mini tfoot .fin-foot-name { text-align: left; }
   background: #f8fafc;
   border-top: 1px solid var(--line);
 }
-/* 지급 목록 섹션 구분 — 거래(매입) / 기타 지출. 머리행 + 옅은 소계행. */
-.fin-group-head td {
-  background: #eef3f9;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.2px;
-  color: #45526a;
-  padding-top: 7px;
-  padding-bottom: 7px;
-}
+/* 각 표 끝의 소계행 — 옅은 바탕으로 본문 행과 구분한다(글자색·굵기는 .fin-ledger 에서). */
 .fin-group-sub td {
   background: #f8fafc;
   color: #45526a;
   font-weight: 600;
   border-top: 1px solid var(--line);
 }
-/* 지급 목록 — 벤더 청구서(읽기전용) / 기타 지출(직접 등록) 두 표. 다루는 항목이 달라
-   열 구성도 다르므로 표를 나누고, 사이를 띄워 서로 다른 표임이 바로 보이게 한다. */
-.fin-pay-sec + .fin-pay-sec { margin-top: 26px; }
-.fin-pay-sec-head {
+/* 수입·지급 목록의 섹션(프로젝트 유래 / 직접 등록) — 성격이 다른 두 무리를 각각의 표로
+   내고 사이를 띄워, 소계가 어디까지의 합인지 표 모양만으로 읽히게 한다. */
+.fin-sec + .fin-sec { margin-top: 26px; }
+.fin-sec-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -10077,7 +10068,7 @@ table.mini tfoot .fin-foot-name { text-align: left; }
   min-height: 34px;
 }
 /* 섹션 제목 — 음영 없이 글자만으로 구분한다. px+pt 혼합은 이 파일의 다른 확대 표기와 같은 방식. */
-.fin-pay-sec-title {
+.fin-sec-title {
   margin: 0;
   font-size: calc(11px + 3pt);
   font-weight: 700;
@@ -10085,34 +10076,33 @@ table.mini tfoot .fin-foot-name { text-align: left; }
   color: var(--navy);
 }
 /* 제목 뒷부분(어떤 항목이 들어오는지) — 제목 자체가 아니라 설명이라 옅고 가늘게. */
-.fin-pay-sec-sub {
+.fin-sec-sub {
   font-weight: 400;
   color: var(--muted);
 }
-/* 금액·상태·조작 열은 폭을 고정한다 — 앞쪽 열 구성이 서로 달라도 두 표와 합계 줄의
-   숫자가 같은 자리에서 끝나야 위아래로 읽힌다. */
 /* 소계행 — 표 안의 합계라는 게 바로 읽히도록 검정 굵은 글씨(라벨·금액 모두). */
-.fin-pay-table .fin-group-sub td {
+.fin-ledger .fin-group-sub td {
   color: var(--ink);
   font-weight: 700;
 }
-/* 앞쪽 열도 폭을 고정한다 — 3~5열(청구서번호·적요 / 발행일 / 지급기일)이 두 표에서
-   같은 자리에 서려면, 그 앞뒤 열이 모두 고정이라 가운데 열만 남은 폭을 먹어야 한다. */
-.fin-pay-table .fin-w-cat { width: 118px; }
-.fin-pay-table .fin-w-party { width: 190px; }
-.fin-pay-table .fin-w-date { width: 112px; }
-.fin-pay-table .fin-w-money { width: 134px; }
-.fin-pay-table .fin-w-status { width: 132px; }
-.fin-pay-table .fin-w-rec { width: 112px; }
-.fin-pay-table .fin-w-act { width: 138px; }
+/* 열 폭 고정 — 표마다 열 구성이 조금씩 달라도(지급 목록의 분류·반복 열 등) 이름·금액이
+   같은 자리에 서야 두 표, 나아가 미수/지급 두 탭이 위아래로 나란히 읽힌다.
+   폭을 주지 않은 가운데 열(청구서번호·적요) 하나가 남은 폭을 모두 흡수한다. */
+.fin-ledger .fin-w-cat { width: 118px; }
+.fin-ledger .fin-w-party { width: 190px; }
+.fin-ledger .fin-w-date { width: 112px; }
+.fin-ledger .fin-w-money { width: 134px; }
+.fin-ledger .fin-w-status { width: 132px; }
+.fin-ledger .fin-w-rec { width: 112px; }
+.fin-ledger .fin-w-act { width: 138px; }
 /* 수정·삭제는 아이콘 한 글자 — 정사각에 가깝게 좁히고 글자를 가운데 세운다. */
-.fin-pay-table .btn.tiny {
+.fin-ledger .btn.tiny {
   min-width: 26px;
   padding: 0 6px;
   font-size: 13px;
 }
 /* 전체 합계 줄 — 두 표를 합친 금액. 표 사이를 띄운 만큼 위와 확실히 떨어뜨린다. */
-.fin-pay-total { margin-top: 18px; }
+.fin-ledger-total { margin-top: 18px; }
 /* 납부 기록 팝업 — 날짜 한두 칸만 받는 좁은 폼(세로 스택, 여백 최소). */
 .fin-pay-form { display: flex; flex-direction: column; gap: 10px; }
 .fin-pay-form .form-field { margin: 0; }
