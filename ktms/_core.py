@@ -1034,6 +1034,8 @@ def _item_view(it: dict) -> dict:
         "unit_price": unit,
         "amount": amount,
         "remark": it.get("remark") or "",
+        # 입력 단계에서 고른 품목 분류(선택). 편집기에서 다시 보여주기 위해 그대로 실어 보낸다.
+        "category_id": it.get("category_id"),
     }
 
 
@@ -1508,6 +1510,8 @@ class PoWorkItem(BaseModel):
     unit_price: float | None = 0
     amount: float | None = None
     remark: str | None = ""
+    # 품목 분류(선택) — 입력 단계에서 고르면 저장 시 품목 마스터 분류로 반영된다.
+    category_id: int | None = None
 
 
 class OrderCreate(BaseModel):
@@ -2730,6 +2734,8 @@ class RfqItemIn(BaseModel):
     serial_no: str | None = ""   # 시리얼 번호
     qty: float = 1
     remark: str | None = ""
+    # 품목 분류(선택) — 입력 단계에서 고르면 저장 시 품목 마스터 분류로 반영된다.
+    category_id: int | None = None
 
 
 class RfqSourceFileIn(BaseModel):

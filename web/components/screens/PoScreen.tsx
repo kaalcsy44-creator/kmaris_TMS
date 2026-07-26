@@ -52,6 +52,7 @@ import {
   useRowSelection,
 } from "@/components/common/itemTable";
 import { useItemGrid, ItemTh, ItemGridStyle, ItemColsButton, type ItemCol } from "@/components/common/itemGrid";
+import CategoryCell from "@/components/common/CategoryCell";
 import { tr } from "@/lib/labels";
 import type {
   PoDetail as PoDetailT,
@@ -2019,6 +2020,10 @@ function ItemEditor({
   // 품목표 헤더의 "+ Add" 옆에 넣을 보조 액션(예: "Load order items").
   headerActions?: React.ReactNode;
 }) {
+  // 분류는 별도 setter — patch() 의 숫자 파싱 분기를 타지 않는다.
+  function patchCategory(i: number, id: number | null) {
+    onChange(items.map((it, idx) => (idx === i ? { ...it, category_id: id } : it)));
+  }
   function patch(i: number, key: keyof PoWorkItem, value: string) {
     onChange(
       items.map((it, idx) => {
@@ -2046,6 +2051,9 @@ function ItemEditor({
     { key: "unit_price", label: `Unit price (${cur})`, className: "num" },
     { key: "amount", label: `Amount (${cur})`, className: "num" },
     { key: "remark", label: "Remark" },
+    // 품목 분류(선택) — 고르면 저장 시 품목 마스터 분류로 반영된다. 맨 끝에 두어
+    // 합계행(컬럼당 1셀) 구성에만 한 칸 추가하면 된다.
+    { key: "category", label: "Category" },
   ];
   const grid = useItemGrid("po-items", cols);
   // fields 순서 = 아래 keys.cell(i, 0..9) 열 번호. 여기 Amount 는 계산 컬럼이 아니라 직접 입력이라
@@ -2090,6 +2098,7 @@ function ItemEditor({
               <ItemTh grid={grid} k="unit_price" className="num">Unit price ({cur})</ItemTh>
               <ItemTh grid={grid} k="amount" className="num">Amount ({cur})</ItemTh>
               <ItemTh grid={grid} k="remark">Remark</ItemTh>
+              <ItemTh grid={grid} k="category">Category</ItemTh>
             </tr>
           </thead>
           <tbody>
@@ -2142,6 +2151,9 @@ function ItemEditor({
                 <td>
                   <textarea {...keys.cell(i, 9)} className="wrapcell" rows={1} value={it.remark ?? ""} onChange={(e) => patch(i, "remark", e.target.value)} />
                 </td>
+                <td>
+                  <CategoryCell value={it.category_id} onChange={(id) => patchCategory(i, id)} />
+                </td>
               </tr>
             ))}
           </tbody>
@@ -2163,6 +2175,7 @@ function ItemEditor({
                 <span className="fx-note">{fxRateText()}</span>
               </td>
               <td></td>{/* 12 remark */}
+              <td></td>{/* 13 category */}
             </tr>
           </tfoot>
         </table>

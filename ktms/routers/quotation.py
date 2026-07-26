@@ -50,6 +50,7 @@ from _core import (
 )
 from services.fx import get_deal_base_rate
 from services.mail_compose import build_attachments, compose_body
+from services.item_ledger import apply_line_categories
 
 
 @app.get("/api/admin/fx-rate", dependencies=[Depends(require_token)])
@@ -181,6 +182,8 @@ def create_customer_quote(rfq_id: int, body: CustomerQuoteCreate,
             created_by=(user.get("id") or None),   # 담당자 = 발행한 내부 직원
         )
         s.add(qtn)
+        # 라인에서 고른 분류(선택)를 품목 마스터에 반영 — 뒤에 다시 배정할 일을 없앤다.
+        apply_line_categories(s, items)
         s.commit()
         return {"ok": True, "id": qtn.id, "qtn_no": qtn.qtn_no or ""}
     finally:
@@ -270,6 +273,7 @@ def update_customer_quotation(qtn_id: int, body: CustomerQuoteUpdate):
             qtn.terms = body.terms
         if body.items is not None:
             qtn.items = body.items
+            apply_line_categories(s, qtn.items)
         if body.status is not None and body.status.strip():
             try:
                 qtn.status = QuotationStatus(body.status.strip())

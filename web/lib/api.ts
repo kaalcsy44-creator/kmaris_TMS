@@ -206,7 +206,7 @@ export function createRfq(body: {
   work_type?: string;
   request_channel?: string;
   notes?: string;
-  items: { part_no: string; description: string; type?: string; serial_no?: string; qty: number; remark?: string }[];
+  items: { part_no: string; description: string; type?: string; serial_no?: string; qty: number; remark?: string; category_id?: number | null }[];
   source_files?: { name: string; media_type?: string; item_count: number; at?: string }[];
 }): Promise<{ ok: boolean; id: number; rfq_no: string }> {
   return post("/api/admin/rfq", body);
@@ -226,7 +226,7 @@ export function updateRfq(
     notes?: string;
     received_at?: string;
     assignee_id?: number;
-    items?: { part_no: string; description: string; type?: string; serial_no?: string; qty: number; remark?: string }[];
+    items?: { part_no: string; description: string; type?: string; serial_no?: string; qty: number; remark?: string; category_id?: number | null }[];
     source_files?: { name: string; media_type?: string; item_count: number; at?: string }[];
   }
 ): Promise<{ ok: boolean; id: number }> {
@@ -1146,6 +1146,18 @@ export function assignItemLedgerCategory(body: {
   maker?: string;
 }): Promise<{ ok: boolean; item_id: number; stamped: number }> {
   return post("/api/admin/settings/item-ledger/assign", body);
+}
+/** 여러 품목을 한 분류로 일괄 배정(목록에서 체크한 행들). 한 트랜잭션으로 처리된다. */
+export function assignItemLedgerCategoryBulk(body: {
+  category_id: number | null;
+  targets: {
+    item_id?: number;
+    part_no?: string;
+    description?: string;
+    maker?: string;
+  }[];
+}): Promise<{ ok: boolean; assigned: number; stamped: number; skipped: number }> {
+  return post("/api/admin/settings/item-ledger/assign-bulk", body);
 }
 
 export function createSettingsUser(body: {

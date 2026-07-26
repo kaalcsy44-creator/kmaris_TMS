@@ -60,6 +60,7 @@ from _core import (
     require_token,
     steps_for,
 )
+from services.item_ledger import apply_line_categories
 
 
 
@@ -333,6 +334,7 @@ def create_rfq(body: RfqCreate, user: dict = Depends(get_current_user)):
             "serial_no": (it.serial_no or "").strip(),
             "qty": it.qty or 1,
             "remark": (it.remark or "").strip(),
+            "category_id": it.category_id,   # 입력 시 고른 품목 분류(선택). 없으면 None
         } for it in body.items if (it.part_no or it.description)]
         src_files = _clean_source_files(body.source_files)
 
@@ -368,6 +370,8 @@ def create_rfq(body: RfqCreate, user: dict = Depends(get_current_user)):
             created_by=(user.get("id") or None),   # 담당자 = 등록한 내부 직원
         )
         s.add(rfq)
+        # 라인에서 고른 분류(선택)를 품목 마스터에 반영 — 뒤에 다시 배정할 일을 없앤다.
+        apply_line_categories(s, items)
         s.commit()
         return {"ok": True, "id": rfq.id, "rfq_no": _rfq_no_disp(rfq_no)}
     finally:
@@ -455,7 +459,9 @@ def update_rfq(rfq_id: int, body: RfqUpdate):
                 "serial_no": (it.serial_no or "").strip(),
                 "qty": it.qty or 1,
                 "remark": (it.remark or "").strip(),
+                "category_id": it.category_id,   # 입력 시 고른 품목 분류(선택)
             } for it in body.items if (it.part_no or it.description)]
+            apply_line_categories(s, rfq.items)
         if body.source_files is not None:
             # 프론트가 현재 전체 목록을 보내므로 통째로 교체.
             rfq.source_files = _clean_source_files(body.source_files)

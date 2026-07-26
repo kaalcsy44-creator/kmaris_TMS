@@ -3210,6 +3210,26 @@ table.mini.items-edit input.num {
 table.mini.items-edit td:last-child {
   text-align: center;
 }
+/* ── 품목표 셀 안의 분류(Category) 선택 ─────────────────────────────────
+   RFQ·견적·발주 품목표 공용(CategoryCell). 입력 셀과 같은 높이·테두리로 맞추고,
+   경로가 길어도 셀을 넓히지 않도록 폭은 컬럼에 맡긴다(전체 경로는 툴팁). */
+select.cat-cell {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  height: 30px;
+  border: 1px solid #d7e2ee;
+  border-radius: 6px;
+  padding: 0 4px;
+  font-size: 12px;
+  color: var(--navy);
+  background: #fff;
+  box-sizing: border-box;
+}
+select.cat-cell:disabled {
+  background: #f4f6f9;
+  color: var(--muted);
+}
 /* 맨 좌측 행 삭제열 — items-edit 변형도 통일 포맷(가운데 정렬). */
 table.mini.items-edit th.row-tools,
 table.mini.items-edit td.row-tools {
@@ -8248,9 +8268,12 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   white-space: normal;
   word-break: break-word;
 }
-/* Category(Assign) 열은 표가 가로로 넘쳐도 항상 보이도록 우측 고정(sticky). */
+/* Category(Assign) 열은 표가 가로로 넘쳐도 항상 보이도록 우측 고정(sticky).
+   단 그 열이 맨 끝일 때만(.cat-sticky) — 순서를 바꿔 가운데로 오면 우측 열을 덮는다. */
 .ledger-cat {
   white-space: nowrap;
+}
+.ledger-table.cat-sticky .ledger-cat {
   position: sticky;
   right: 0;
   background: #fbfcfe;
@@ -8259,11 +8282,53 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 .ledger-row:hover .ledger-cat {
   background: #eef3fb;
 }
-.ledger-table thead th:last-child {
+/* Category 헤더도 같은 sticky. 컬럼 순서를 바꿀 수 있으므로 :last-child 가 아니라
+   컬럼 key 클래스로 지정한다. */
+.ledger-table.cat-sticky thead th.led-th-category {
   position: sticky;
   right: 0;
   background: #f4f7fb;
   box-shadow: -7px 0 7px -6px rgba(20, 40, 80, 0.16);
+}
+/* 선택 열(체크박스) — 좌측 고정 폭. 행 클릭(이력 열기)과 분리돼 있다. */
+.ledger-table th.row-tools,
+.ledger-table td.row-tools {
+  width: 34px;
+  text-align: center;
+  padding-left: 0;
+  padding-right: 0;
+}
+.ledger-row.row-picked {
+  background: #e8f0fd;
+}
+/* 헤더 라벨 = 순서 변경 드래그 손잡이. 우측 끝은 폭 조절 핸들(.pl-col-resizer). */
+.ledger-table thead th.pl-th {
+  position: relative;
+  cursor: default;
+}
+.ledger-table thead th.pl-th .ig-th-label {
+  cursor: grab;
+}
+.ledger-table thead th.pl-th.dragging {
+  opacity: 0.55;
+}
+/* 일괄 배정 모달의 대상 미리보기 목록 */
+.bulk-target-list {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  list-style: none;
+  max-height: 168px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fafc;
+  font-size: 12.5px;
+}
+.bulk-target-list li {
+  padding: 2px 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .ledger-cat button {
   max-width: 106px;

@@ -96,6 +96,7 @@ import {
 } from "./common/itemTable";
 import FxRateControl, { FxMode } from "./common/FxRateControl";
 import { useItemGrid, ItemTh, ItemGridStyle, ItemColsButton, type ItemCol } from "./common/itemGrid";
+import CategoryCell from "./common/CategoryCell";
 import QuotationPreview from "./QuotationPreview";
 
 /** 현재 시각 "YYYY-MM-DDTHH:MM" (datetime-local 기본값). */
@@ -3759,6 +3760,10 @@ function CustomerQuoteItemEditor({
       })
     );
   }
+  // 분류는 숫자/문자 필드가 아니라 별도 setter — patch() 의 재계산 분기를 타지 않는다.
+  function patchCategory(i: number, id: number | null) {
+    onChange(items.map((it, idx) => (idx === i ? { ...it, category_id: id } : it)));
+  }
   // 새 품목은 마지막 행의 단위·마진을 이어받아 견적 기준과 맞춘다.
   const blank = (): CustomerQuoteItem => {
     const last = items[items.length - 1];
@@ -3773,6 +3778,7 @@ function CustomerQuoteItemEditor({
       amount: 0,
       lead_time: "",
       remark: "",
+      category_id: null,
     };
   };
   function add() {
@@ -3813,6 +3819,9 @@ function CustomerQuoteItemEditor({
     { key: "amount", label: `Amount (${saleCur})`, className: "num" },
     { key: "lead_time", label: "Lead Time" },
     { key: "remark", label: "Remark" },
+    // 품목 분류(선택) — 고르면 저장 시 품목 마스터 분류로 반영된다. 맨 끝에 두어
+    // 그룹 헤더(Purchase·Sales)·합계행 세그먼트 계산에 영향을 주지 않는다.
+    { key: "category", label: "Category" },
   ];
   const grid = useItemGrid("cquote-items", cols);
   // fields 순서 = 아래 keys.cell(i, 0..10) 열 번호. Cost Amount·Amount 는 계산 컬럼이라 뺀다.
@@ -3920,6 +3929,7 @@ function CustomerQuoteItemEditor({
               <ItemTh grid={grid} k="amount" className="num">Amount ({saleCur})</ItemTh>
               <ItemTh grid={grid} k="lead_time">Lead Time</ItemTh>
               <ItemTh grid={grid} k="remark">Remark</ItemTh>
+              <ItemTh grid={grid} k="category">Category</ItemTh>
             </tr>
           </thead>
           <tbody>
@@ -3940,6 +3950,7 @@ function CustomerQuoteItemEditor({
                 <td className="num">{amountInputValue(it.amount)}</td>
                 <td><textarea {...keys.cell(i, 9)} className="wrapcell" rows={1} value={it.lead_time ?? ""} onChange={(e) => patch(i, "lead_time", e.target.value)} /></td>
                 <td><textarea {...keys.cell(i, 10)} className="wrapcell" rows={1} value={it.remark ?? ""} onChange={(e) => patch(i, "remark", e.target.value)} /></td>
+                <td><CategoryCell value={it.category_id} onChange={(id) => patchCategory(i, id)} /></td>
               </tr>
             ))}
           </tbody>

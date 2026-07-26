@@ -37,6 +37,7 @@ import {
   fetchItemPriceHistory,
   rebuildItemLedger,
   assignItemLedgerCategory,
+  assignItemLedgerCategoryBulk,
   fetchEmailTemplates,
   saveEmailTemplate,
   deleteEmailTemplate,
@@ -65,6 +66,8 @@ import { invalidateVendorLogos } from "@/lib/vendorLogos";
 import { fileToLogoDataUrl, imageFromClipboard } from "@/lib/imagePaste";
 import { PAYMENT_TERMS_PRESETS } from "@/lib/terms";
 import ComboBox from "@/components/common/ComboBox";
+import { useColumnLayout } from "@/components/common/useColumnLayout";
+import { ColumnResizer, ColumnsButton, dragHandleProps } from "@/components/common/tableLayout";
 
 type Tab =
   | "company" | "users" | "permissions"
@@ -1312,6 +1315,55 @@ type CatEditor = {
 // 선택된 분류 필터 — 전체 / 특정 분류(하위 포함) / 미연결(마스터 없음)
 type LedgerFilter = { kind: "all" } | { kind: "cat"; id: number } | { kind: "unmatched" };
 
+// 가격 목록표의 컬럼 정의 — 폭 조절·숨김·순서 변경(useColumnLayout, localStorage) 대상.
+// 좌측 선택 체크박스 열은 구조 컬럼이라 여기 넣지 않는다.
+const LEDGER_COLS: { key: string; label: string; width: number; numeric?: boolean }[] = [
+  { key: "part_no", label: "Part No.", width: 100 },
+  { key: "description", label: "Description", width: 320 },
+  { key: "maker", label: "Maker", width: 110 },
+  { key: "buy", label: "Buy", width: 128, numeric: true },
+  { key: "sell", label: "Sell", width: 128, numeric: true },
+  { key: "margin", label: "Margin", width: 72, numeric: true },
+  { key: "deals", label: "Deals", width: 56, numeric: true },
+  { key: "last", label: "Last", width: 84 },
+  { key: "category", label: "Category", width: 120 },
+];
+
+/** 목록 행의 안정적 식별자 — 마스터 연결 행은 item_id, 미연결 행은 품목 식별키. */
+function ledgerRowKey(it: ItemLedgerRow): string {
+  return it.item_id != null ? `i${it.item_id}` : `u:${it.part_no}|${it.description}`;
+}
+
+function ledgerCellClass(key: string, numeric?: boolean): string {
+  if (key === "description") return "ledger-desc";
+  if (key === "category") return "ledger-cat";
+  return numeric ? "num" : "";
+}
+
+/** Category 를 뺀 나머지 컬럼의 셀 값(Category 는 버튼이라 호출부에서 직접 렌더). */
+function ledgerCellValue(key: string, it: ItemLedgerRow): React.ReactNode {
+  switch (key) {
+    case "part_no":
+      return it.part_no || <span className="dash">—</span>;
+    case "description":
+      return it.description;
+    case "maker":
+      return it.maker || "";
+    case "buy":
+      return fmtPrice(it.buy);
+    case "sell":
+      return fmtPrice(it.sell);
+    case "margin":
+      return marginPct(it);
+    case "deals":
+      return `${it.buy_count}/${it.sell_count}`;
+    case "last":
+      return it.last_date || "";
+    default:
+      return null;
+  }
+}
+
 const SOURCE_LABEL: Record<string, string> = {
   vendor_quote: "Vendor Quote",
   po: "Purchase Order",
@@ -1354,6 +1406,18 @@ export function CategoriesTab() {
   const [assignRow, setAssignRow] = useState<ItemLedgerRow | null>(null);
   const [assignCat, setAssignCat] = useState<number | null>(null);
   const [assignBusy, setAssignBusy] = useState(false);
+  // 다중 선택 → 한 분류로 일괄 배정. 키는 ledgerRowKey(행 순서가 바뀌어도 유지된다).
+  const [picked, setPicked] = useState<Set<string>>(() => new Set());
+  const [bulkOpen, setBulkOpen] = useState(false);
+  // 목록표 컬럼 폭·순서·표시(브라우저에 저장).
+  const ledgerCols = useColumnLayout("item-ledger", LEDGER_COLS);
+  const [dragCol, setDragCol] = useState<string | null>(null);
+  const shownCols = ledgerCols.visibleKeys
+    .map((k) => LEDGER_COLS.find((c) => c.key === k))
+    .filter((c): c is (typeof LEDGER_COLS)[number] => !!c);
+  // Category 열 우측 고정(sticky)은 그 열이 맨 끝일 때만 — 순서를 바꿔 가운데로 오면
+  // 오른쪽 열들을 덮어버리므로 고정을 끈다.
+  const catSticky = shownCols[shownCols.length - 1]?.key === "category";
   // 트리↔목록 좌우 분할 폭(px). 구분선을 드래그해 조절. localStorage 로 유지.
   const [treeW, setTreeW] = useState<number>(() => {
     if (typeof window === "undefined") return 300;
@@ -1459,6 +1523,53 @@ export function CategoriesTab() {
   function closeAssign() {
     setAssignRow(null);
     setAssignBusy(false);
+  }
+
+  // ── 다중 선택 ─────────────────────────────────────────────────────────────
+  function toggleRow(it: ItemLedgerRow) {
+    const k = ledgerRowKey(it);
+    setPicked((prev) => {
+      const next = new Set(prev);
+      if (next.has(k)) next.delete(k);
+      else next.add(k);
+      return next;
+    });
+  }
+  /** 분류 가능한(Part No. 또는 설명이 있는) 행만 선택 대상. */
+  const selectable = filtered.filter((it) => it.part_no || it.description);
+  const pickedRows = selectable.filter((it) => picked.has(ledgerRowKey(it)));
+  const allPicked = selectable.length > 0 && pickedRows.length === selectable.length;
+  function toggleAll(on: boolean) {
+    setPicked(on ? new Set(selectable.map(ledgerRowKey)) : new Set());
+  }
+
+  function openBulk() {
+    setAssignCat(null);
+    setBulkOpen(true);
+    setErr("");
+  }
+  async function saveBulk() {
+    if (pickedRows.length === 0) return;
+    setAssignBusy(true);
+    setErr("");
+    try {
+      const r = await assignItemLedgerCategoryBulk({
+        category_id: assignCat,
+        targets: pickedRows.map((it) =>
+          it.item_id != null
+            ? { item_id: it.item_id }
+            : { part_no: it.part_no, description: it.description, maker: it.maker }
+        ),
+      });
+      setBulkOpen(false);
+      setPicked(new Set());
+      if (r.skipped > 0) setErr(`${r.skipped} item(s) skipped — no Part No. or description.`);
+      loadLedger();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Assign failed");
+    } finally {
+      setAssignBusy(false);
+    }
   }
   async function saveAssign() {
     if (!assignRow) return;
@@ -1695,9 +1806,15 @@ export function CategoriesTab() {
               <span className="ledger-count">{filtered.length}</span>
             </div>
             <div className="ledger-actions">
+              {canEdit && pickedRows.length > 0 ? (
+                <button className="btn tiny primary" onClick={openBulk}>
+                  Assign category ({pickedRows.length})
+                </button>
+              ) : null}
               {ledger?.built_at ? (
                 <span className="hint-inline">Built {fmtBuiltAt(ledger.built_at)}</span>
               ) : null}
+              <ColumnsButton cols={LEDGER_COLS} layout={ledgerCols} />
               {canEdit ? (
                 <button className="btn tiny" disabled={rebuilding} onClick={rebuild}>
                   {rebuilding ? "Rebuilding…" : "↻ Rebuild"}
@@ -1715,72 +1832,105 @@ export function CategoriesTab() {
             </div>
           ) : (
             <div className="table-wrap">
-              <table className="mini wide ledger-table">
+              <table className={`mini wide ledger-table customizable${catSticky ? " cat-sticky" : ""}`}>
                 <colgroup>
-                  <col style={{ width: 100 }} />
-                  <col />{/* Description — 남는 폭을 흡수해 표가 패널 전체를 채움 */}
-                  <col style={{ width: 110 }} />
-                  <col style={{ width: 128 }} />
-                  <col style={{ width: 128 }} />
-                  <col style={{ width: 72 }} />
-                  <col style={{ width: 56 }} />
-                  <col style={{ width: 84 }} />
-                  <col style={{ width: 120 }} />
+                  <col style={{ width: 34 }} />{/* 선택 체크박스 */}
+                  {shownCols.map((c) => {
+                    const w = ledgerCols.widths[c.key] ?? c.width;
+                    return <col key={c.key} style={{ width: w, minWidth: w }} />;
+                  })}
                 </colgroup>
                 <thead>
                   <tr>
-                    <th>Part No.</th>
-                    <th>Description</th>
-                    <th>Maker</th>
-                    <th className="num">Buy</th>
-                    <th className="num">Sell</th>
-                    <th className="num">Margin</th>
-                    <th className="num">Deals</th>
-                    <th>Last</th>
-                    <th>Category</th>
+                    <th className="row-tools">
+                      <input
+                        type="checkbox"
+                        className="row-check"
+                        aria-label="Select all items"
+                        checked={allPicked}
+                        disabled={selectable.length === 0}
+                        ref={(el) => {
+                          if (el) el.indeterminate = pickedRows.length > 0 && !allPicked;
+                        }}
+                        onChange={(e) => toggleAll(e.target.checked)}
+                      />
+                    </th>
+                    {shownCols.map((c) => (
+                      <th
+                        key={c.key}
+                        className={`pl-th led-th-${c.key}${c.numeric ? " num" : ""}${dragCol === c.key ? " dragging" : ""}`}
+                      >
+                        <span
+                          className="ig-th-label"
+                          {...dragHandleProps(c.key, ledgerCols, { active: dragCol, set: setDragCol })}
+                        >
+                          {c.label}
+                        </span>
+                        <ColumnResizer
+                          onResize={(px) => ledgerCols.setWidth(c.key, px)}
+                          onResizeEnd={ledgerCols.commitWidths}
+                        />
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((it, i) => (
-                    <tr
-                      key={it.item_id ?? `u${i}`}
-                      className="ledger-row"
-                      onClick={() => openHistory(it)}
-                      title="Show full price history"
-                    >
-                      <td>{it.part_no || <span className="dash">—</span>}</td>
-                      <td className="ledger-desc">{it.description}</td>
-                      <td>{it.maker || ""}</td>
-                      <td className="num">{fmtPrice(it.buy)}</td>
-                      <td className="num">{fmtPrice(it.sell)}</td>
-                      <td
-                        className="num"
-                        title={it.margin_cross ? "Converted to USD using each deal's stored FX rate (app rate if none)" : undefined}
+                  {filtered.map((it, i) => {
+                    const key = ledgerRowKey(it);
+                    const classifiable = !!(it.part_no || it.description);
+                    return (
+                      <tr
+                        key={it.item_id ?? `u${i}`}
+                        className={`ledger-row${picked.has(key) ? " row-picked" : ""}`}
+                        onClick={() => openHistory(it)}
+                        title="Show full price history"
                       >
-                        {marginPct(it)}
-                      </td>
-                      <td className="num">{it.buy_count}/{it.sell_count}</td>
-                      <td>{it.last_date || ""}</td>
-                      <td className="ledger-cat" onClick={(e) => e.stopPropagation()}>
-                        {canEdit ? (
-                          <button
-                            className="btn tiny"
-                            disabled={!it.part_no && !it.description}
+                        <td className="row-tools" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            className="row-check"
+                            aria-label="Select item"
+                            checked={picked.has(key)}
+                            disabled={!classifiable}
+                            onChange={() => toggleRow(it)}
+                          />
+                        </td>
+                        {shownCols.map((c) => (
+                          <td
+                            key={c.key}
+                            className={ledgerCellClass(c.key, c.numeric)}
                             title={
-                              it.part_no || it.description
-                                ? "Assign / change category"
-                                : "No Part No. or description — cannot classify"
+                              c.key === "margin" && it.margin_cross
+                                ? "Converted to USD using each deal's stored FX rate (app rate if none)"
+                                : undefined
                             }
-                            onClick={() => openAssign(it)}
+                            onClick={c.key === "category" ? (e) => e.stopPropagation() : undefined}
                           >
-                            {it.category_path ? `✎ ${it.category_path}` : "＋ Assign"}
-                          </button>
-                        ) : (
-                          it.category_path || <span className="dash">—</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                            {c.key === "category" ? (
+                              canEdit ? (
+                                <button
+                                  className="btn tiny"
+                                  disabled={!classifiable}
+                                  title={
+                                    classifiable
+                                      ? "Assign / change category"
+                                      : "No Part No. or description — cannot classify"
+                                  }
+                                  onClick={() => openAssign(it)}
+                                >
+                                  {it.category_path ? `✎ ${it.category_path}` : "＋ Assign"}
+                                </button>
+                              ) : (
+                                it.category_path || <span className="dash">—</span>
+                              )
+                            ) : (
+                              ledgerCellValue(c.key, it)
+                            )}
+                          </td>
+                        ))}
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -1836,6 +1986,35 @@ export function CategoriesTab() {
               </table>
             </div>
           )}
+        </Modal>
+      ) : null}
+
+      {bulkOpen ? (
+        <Modal
+          title={`Assign category — ${pickedRows.length} item(s)`}
+          onClose={() => setBulkOpen(false)}
+          form
+        >
+          <p className="hint-inline" style={{ display: "block", marginBottom: 10 }}>
+            Every selected item gets this classification. Items not yet in Item Master are
+            registered and their price history is linked.
+          </p>
+          <ul className="bulk-target-list">
+            {pickedRows.slice(0, 8).map((it) => (
+              <li key={ledgerRowKey(it)}>
+                {it.part_no ? <b>{it.part_no}</b> : null} {it.description}
+              </li>
+            ))}
+            {pickedRows.length > 8 ? <li className="muted">… {pickedRows.length - 8} more</li> : null}
+          </ul>
+          <CategoryPicker value={assignCat} onChange={setAssignCat} />
+          <div className="form-actions">
+            <button className="btn primary" disabled={assignBusy} onClick={saveBulk}>
+              {assignBusy ? "Saving…" : `Assign ${pickedRows.length}`}
+            </button>
+            <button className="btn" disabled={assignBusy} onClick={() => setBulkOpen(false)}>Cancel</button>
+            {err ? <span className="action-err">{err}</span> : null}
+          </div>
         </Modal>
       ) : null}
 

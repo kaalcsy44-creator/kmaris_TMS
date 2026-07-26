@@ -608,40 +608,78 @@ class ItemLedgerAssign(BaseModel):
     maker: str | None = ""
 
 
-@app.post("/api/admin/settings/item-ledger/assign", dependencies=[Depends(require_token)])
-def assign_item_ledger_category(body: ItemLedgerAssign):
-    """가격 이력 화면에서 품목에 분류를 배정한다.
+def _assign_one_category(s, target: "ItemLedgerAssign") -> tuple[int, int]:
+    """품목 1건에 분류를 배정하고 (item_id, 스탬프된 이력 행수) 반환. commit 은 호출자 책임.
 
     - item_id 있으면: 해당 마스터의 category_id 갱신(재분류).
-    - 없으면 part_no 로: 정규화 일치하는 기존 마스터가 있으면 연결·분류, 없으면 신규 생성.
-    이후 같은 part_no 의 미연결 이력 행을 이 마스터로 즉시 스탬프(전체 rebuild 불필요)."""
+    - 없으면 part_no(없으면 description) 로: 정규화 일치하는 기존 마스터가 있으면
+      연결·분류, 없으면 신규 생성. 이후 같은 키의 미연결 이력 행을 즉시 스탬프."""
+    if target.item_id:
+        master = s.query(ItemMaster).filter_by(id=target.item_id).first()
+        if not master:
+            raise HTTPException(status_code=404, detail="Item을 찾을 수 없습니다.")
+        master.category_id = target.category_id
+    else:
+        pn = (target.part_no or "").strip()
+        desc = (target.description or "").strip()
+        key = match_key(pn, desc)   # part_no 없으면 description 으로 식별(서비스 항목)
+        if not key:
+            raise HTTPException(status_code=400, detail="Part No.·설명이 모두 없는 품목은 분류할 수 없습니다.")
+        master = next((m for m in s.query(ItemMaster).all()
+                       if match_key(m.part_no, m.description) == key), None)
+        if master:
+            master.category_id = target.category_id
+        else:
+            master = ItemMaster(
+                part_no=pn, description=desc, maker=(target.maker or ""),
+                unit="PCS", category_id=target.category_id,
+            )
+            s.add(master)
+    s.flush()
+    return master.id, stamp_history_item(s, master.id)
+
+
+@app.post("/api/admin/settings/item-ledger/assign", dependencies=[Depends(require_token)])
+def assign_item_ledger_category(body: ItemLedgerAssign):
+    """가격 이력 화면에서 품목 1건에 분류를 배정한다(전체 rebuild 불필요)."""
     s = get_session()
     try:
-        if body.item_id:
-            master = s.query(ItemMaster).filter_by(id=body.item_id).first()
-            if not master:
-                raise HTTPException(status_code=404, detail="Item을 찾을 수 없습니다.")
-            master.category_id = body.category_id
-        else:
-            pn = (body.part_no or "").strip()
-            desc = (body.description or "").strip()
-            key = match_key(pn, desc)   # part_no 없으면 description 으로 식별(서비스 항목)
-            if not key:
-                raise HTTPException(status_code=400, detail="Part No.·설명이 모두 없는 품목은 분류할 수 없습니다.")
-            master = next((m for m in s.query(ItemMaster).all()
-                           if match_key(m.part_no, m.description) == key), None)
-            if master:
-                master.category_id = body.category_id
-            else:
-                master = ItemMaster(
-                    part_no=pn, description=desc, maker=(body.maker or ""),
-                    unit="PCS", category_id=body.category_id,
-                )
-                s.add(master)
-        s.flush()
-        stamped = stamp_history_item(s, master.id)
+        item_id, stamped = _assign_one_category(s, body)
         s.commit()
-        return {"ok": True, "item_id": master.id, "stamped": stamped}
+        return {"ok": True, "item_id": item_id, "stamped": stamped}
+    finally:
+        s.close()
+
+
+class ItemLedgerAssignBulk(BaseModel):
+    """여러 품목을 한 분류로 일괄 배정(목록에서 체크박스로 고른 행들)."""
+    category_id: int | None = None
+    targets: list[ItemLedgerAssign] = []
+
+
+@app.post("/api/admin/settings/item-ledger/assign-bulk", dependencies=[Depends(require_token)])
+def assign_item_ledger_category_bulk(body: ItemLedgerAssignBulk):
+    """선택한 품목들을 한 분류로 일괄 배정. 한 트랜잭션으로 처리한다.
+
+    분류할 수 없는 행(Part No.·설명이 모두 없음)은 실패로 세고 건너뛴다 —
+    한 행 때문에 나머지 배정이 통째로 무효가 되지 않도록."""
+    s = get_session()
+    try:
+        done = 0
+        stamped = 0
+        skipped = 0
+        for t in body.targets:
+            # 목록에서 온 각 행의 category_id 는 무시하고 일괄 지정값을 쓴다.
+            t.category_id = body.category_id
+            try:
+                _, n = _assign_one_category(s, t)
+            except HTTPException:
+                skipped += 1
+                continue
+            done += 1
+            stamped += n
+        s.commit()
+        return {"ok": True, "assigned": done, "stamped": stamped, "skipped": skipped}
     finally:
         s.close()
 

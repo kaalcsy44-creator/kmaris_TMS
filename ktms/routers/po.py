@@ -74,6 +74,7 @@ from _core import (
     steps_for,
 )
 from services.mail_compose import build_attachments, compose_body
+from services.item_ledger import apply_line_categories
 
 
 
@@ -435,6 +436,7 @@ def create_order(body: OrderCreate):
                 "unit_price": unit_price,
                 "amount": it.amount if it.amount is not None else qty * unit_price,
                 "remark": (it.remark or "").strip(),
+                "category_id": it.category_id,   # 입력 시 고른 품목 분류(선택)
             })
 
         order = Order(
@@ -455,6 +457,8 @@ def create_order(body: OrderCreate):
         s.add(order)
         if qtn:
             qtn.status = QuotationStatus.WON
+        # 라인에서 고른 분류(선택)를 품목 마스터에 반영.
+        apply_line_categories(s, items)
         s.commit()
         return {"ok": True, "id": order.id, "project_no": _project_no_for_order(s, order)}
     finally:
@@ -501,8 +505,10 @@ def update_order(order_id: int, body: OrderUpdate):
                     "unit_price": unit_price,
                     "amount": it.amount if it.amount is not None else qty * unit_price,
                     "remark": (it.remark or "").strip(),
+                    "category_id": it.category_id,   # 입력 시 고른 품목 분류(선택)
                 })
             order.items = items
+            apply_line_categories(s, items)
         if body.terms is not None:
             order.terms = body.terms or {}
         if body.source_files is not None:
@@ -579,6 +585,7 @@ def create_purchase_order(body: PurchaseOrderCreate):
                 "unit": it.unit or "PCS",
                 "unit_price": unit_price,
                 "amount": it.amount if it.amount is not None else qty * unit_price,
+                "category_id": it.category_id,   # 입력 시 고른 품목 분류(선택)
             })
 
         # 번호: 수동 입력값 우선(중복 검사), 비우면 자동 채번(KMS-ORD-yymm-nnn).
@@ -602,6 +609,7 @@ def create_purchase_order(body: PurchaseOrderCreate):
         )
         s.add(po)
         order.status = OrderStatus.PO_SENT
+        apply_line_categories(s, items)
         s.commit()
         return {"ok": True, "id": po.id, "po_no": po.po_no}
     finally:
@@ -687,8 +695,10 @@ def update_purchase_order(po_id: int, body: PurchaseOrderUpdate):
                     "unit_price": unit_price,
                     "amount": it.amount if it.amount is not None else qty * unit_price,
                     "remark": (it.remark or "").strip(),
+                    "category_id": it.category_id,   # 입력 시 고른 품목 분류(선택)
                 })
             po.items = items
+            apply_line_categories(s, items)
         if body.terms is not None:
             po.terms = body.terms or {}
         if body.source_files is not None:

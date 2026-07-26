@@ -268,6 +268,8 @@ export type PoWorkItem = {
   unit_price: number | null;
   amount: number | null;
   remark?: string;
+  /** 품목 분류(선택). 저장 시 품목 마스터 분류로 반영된다. */
+  category_id?: number | null;
 };
 
 export type RfqOcrResult = {
@@ -435,6 +437,8 @@ export type CustomerQuoteItem = {
   amount: number | null;
   lead_time?: string;
   remark?: string;
+  /** 품목 분류(선택). 저장 시 품목 마스터 분류로 반영된다. */
+  category_id?: number | null;
 };
 
 export type QuotationTerms = {
@@ -1116,6 +1120,8 @@ export type RfqItem = {
   unit_price: number | null;
   amount: number | null;
   remark?: string;
+  /** 품목 분류(선택). 저장 시 품목 마스터 분류로 반영된다. */
+  category_id?: number | null;
 };
 
 export type RfqStep = {

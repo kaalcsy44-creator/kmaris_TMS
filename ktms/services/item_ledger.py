@@ -203,6 +203,58 @@ def stamp_history_item(session, item_id: int) -> int:
     return n
 
 
+def apply_line_categories(session, items) -> int:
+    """문서 라인아이템에 담긴 category_id 를 품목 마스터 분류로 반영한다.
+
+    RFQ·견적·오더·발주서 저장 시 호출 — 입력 단계에서 고른 분류(선택 사항)를 그 자리에서
+    마스터에 세워, 나중에 Item > Category 화면에서 다시 배정할 일을 없앤다.
+      · 식별키(part_no, 없으면 description) 로 마스터를 찾고 없으면 새로 만든다.
+      · 이미 같은 분류면 건드리지 않는다(불필요한 쓰기 방지).
+      · 그 뒤 같은 키의 미연결 가격이력을 이 마스터로 스탬프.
+    반환 = 분류를 반영한 라인 수. commit 은 호출자 책임."""
+    lines = [
+        (match_key(it.get("part_no"), it.get("description")), it)
+        for _, it in _iter_lines(items)
+        if it.get("category_id") is not None
+    ]
+    lines = [(k, it) for k, it in lines if k]
+    if not lines:
+        return 0
+
+    masters = session.query(ItemMaster).order_by(ItemMaster.id).all()
+    by_key: dict[str, ItemMaster] = {}
+    for m in masters:
+        k = match_key(m.part_no, m.description)
+        if k and k not in by_key:
+            by_key[k] = m
+
+    n = 0
+    for key, line in lines:
+        try:
+            cat_id = int(line["category_id"])
+        except (TypeError, ValueError):
+            continue
+        master = by_key.get(key)
+        if master is None:
+            master = ItemMaster(
+                part_no=(line.get("part_no") or "").strip(),
+                description=(line.get("description") or "").strip(),
+                maker=(line.get("maker") or ""),
+                unit=(line.get("unit") or "PCS"),
+                category_id=cat_id,
+            )
+            session.add(master)
+            session.flush()
+            by_key[key] = master
+        elif master.category_id != cat_id:
+            master.category_id = cat_id
+        else:
+            continue   # 이미 같은 분류 — 스탬프만 필요하면 아래 rebuild 가 처리
+        stamp_history_item(session, master.id)
+        n += 1
+    return n
+
+
 def _sort_key(h):
     """최신순 정렬 키 — 거래일(없으면 빈문자=가장 과거) 그다음 id."""
     return (h.doc_date or "", h.id)

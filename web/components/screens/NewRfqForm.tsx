@@ -17,6 +17,7 @@ import type { CustomerOption, SettingsVessel, RfqSourceFile } from "@/lib/types"
 import { can, canEditDeal, editBlockReason } from "@/lib/auth";
 import CustomerName from "@/components/common/CustomerName";
 import { useColumnLayout } from "@/components/common/useColumnLayout";
+import CategoryCell from "@/components/common/CategoryCell";
 import { ColumnResizer, ColumnsButton } from "@/components/common/tableLayout";
 import {
   CopyRowsButton,
@@ -29,14 +30,23 @@ import {
 } from "@/components/common/itemTable";
 
 // 품목 표에서 폭 조절·숨김 가능한 컬럼(관리번호·순번 열 제외)과 셀 렌더 메타.
-type RfqItemColKey = "part_no" | "description" | "type" | "serial_no" | "qty" | "remark";
-const RFQ_ITEM_COLS: { key: RfqItemColKey; label: string; cellClass: string; num?: boolean }[] = [
+// category 는 텍스트 입력이 아니라 분류 select 셀이다(kind: "category").
+type RfqTextColKey = "part_no" | "description" | "type" | "serial_no" | "qty" | "remark";
+type RfqItemColKey = RfqTextColKey | "category";
+const RFQ_ITEM_COLS: {
+  key: RfqItemColKey;
+  label: string;
+  cellClass: string;
+  num?: boolean;
+  kind?: "category";
+}[] = [
   { key: "part_no", label: "Part No.", cellClass: "wrapcell" },
   { key: "description", label: "Description", cellClass: "desc" },
   { key: "type", label: "Type", cellClass: "wrapcell" },
   { key: "serial_no", label: "Serial No.", cellClass: "wrapcell" },
   { key: "qty", label: "Qty", cellClass: "num", num: true },
   { key: "remark", label: "Remark", cellClass: "wrapcell" },
+  { key: "category", label: "Category", cellClass: "", kind: "category" },
 ];
 const RFQ_ITEM_DEFAULT_W: Record<string, number> = {
   part_no: 160,
@@ -45,6 +55,7 @@ const RFQ_ITEM_DEFAULT_W: Record<string, number> = {
   serial_no: 130,
   qty: 84,
   remark: 160,
+  category: 150,
 };
 
 type ItemRow = {
@@ -54,6 +65,8 @@ type ItemRow = {
   serial_no: string;
   qty: string;
   remark: string;
+  /** 품목 분류(선택). 저장 시 품목 마스터 분류로 반영된다. */
+  category_id: number | null;
 };
 
 // 빈 품목 행 1개(초기값·+Add·reset 공용).
@@ -64,6 +77,7 @@ const EMPTY_ITEM: ItemRow = {
   serial_no: "",
   qty: "1",
   remark: "",
+  category_id: null,
 };
 
 // 고객이 RFQ를 보내온 수단(요청 수단). 자유 텍스트 컬럼이라 프리셋 외 값도 저장 가능.
@@ -198,6 +212,9 @@ export default function NewRfqForm({
       prev.map((it, idx) => (idx === i ? { ...it, [key]: val } : it))
     );
   }
+  function setItemCategory(i: number, id: number | null) {
+    setItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, category_id: id } : it)));
+  }
   function addItem() {
     setItems((prev) => [...prev, { ...EMPTY_ITEM }]);
   }
@@ -209,10 +226,12 @@ export default function NewRfqForm({
   }
   // 엑셀식 편집. 이 표는 숨긴 컬럼이 렌더에서 아예 빠지므로, 열 번호 = visibleItemCols 위치이고
   // fields 도 거기서 그대로 뽑으면 된다. 값은 전부 문자열로 담기므로 numeric 은 없다.
+  // 분류(select) 컬럼은 텍스트 필드가 아니므로 빈 키로 둔다 — 붙여넣기·Ctrl+D·Copy 가
+  // 그 자리를 건너뛴다(useItemGridKeys 가 falsy 필드 키를 무시).
   const itemKeys = useItemGridKeys<ItemRow>({
     items,
     onChange: setItems,
-    fields: visibleItemCols.map((c) => c.key),
+    fields: visibleItemCols.map((c) => (c.kind === "category" ? "" : c.key)),
     blank: () => ({ ...EMPTY_ITEM }),
     headers: visibleItemCols.map((c) => c.label),
     sel: itemSel,
@@ -306,6 +325,7 @@ export default function NewRfqForm({
               serial_no: it.serial_no ?? "",
               qty: String(it.qty ?? 1),
               remark: it.remark ?? "",
+              category_id: null,   // OCR 은 분류를 알 수 없다 — 필요하면 수동 선택
             });
           }
         }
@@ -382,6 +402,7 @@ export default function NewRfqForm({
               serial_no: it.serial_no ?? "",
               qty: String(it.qty ?? 1),
               remark: it.remark ?? "",
+              category_id: it.category_id ?? null,
             }))
           : [{ ...EMPTY_ITEM }]
       );
@@ -411,6 +432,7 @@ export default function NewRfqForm({
         serial_no: it.serial_no,
         qty: Number(it.qty) || 1,
         remark: it.remark,
+        category_id: it.category_id,
       }));
     try {
       if (editId) {
@@ -725,27 +747,42 @@ export default function NewRfqForm({
             <tr key={i}>
               <ItemSelectCell index={i} sel={itemSel} />
               <td className="seq">{i + 1}</td>
-              {visibleItemCols.map((c, ci) => (
-                <td key={c.key}>
-                  {c.num ? (
-                    <input
-                      {...itemKeys.cell(i, ci)}
-                      className={c.cellClass}
-                      value={it[c.key]}
-                      onChange={(e) => setItem(i, c.key, e.target.value)}
-                      inputMode="decimal"
-                    />
-                  ) : (
-                    <textarea
-                      {...itemKeys.cell(i, ci)}
-                      className={c.cellClass}
-                      rows={1}
-                      value={it[c.key]}
-                      onChange={(e) => setItem(i, c.key, e.target.value)}
-                    />
-                  )}
-                </td>
-              ))}
+              {visibleItemCols.map((c, ci) => {
+                if (c.kind === "category") {
+                  return (
+                    <td key={c.key}>
+                      <CategoryCell
+                        value={it.category_id}
+                        onChange={(id) => setItemCategory(i, id)}
+                        disabled={!canEditThis}
+                      />
+                    </td>
+                  );
+                }
+                // 나머지는 모두 문자열 필드(컬럼 key = ItemRow 필드명).
+                const tk = c.key as RfqTextColKey;
+                return (
+                  <td key={c.key}>
+                    {c.num ? (
+                      <input
+                        {...itemKeys.cell(i, ci)}
+                        className={c.cellClass}
+                        value={it[tk]}
+                        onChange={(e) => setItem(i, tk, e.target.value)}
+                        inputMode="decimal"
+                      />
+                    ) : (
+                      <textarea
+                        {...itemKeys.cell(i, ci)}
+                        className={c.cellClass}
+                        rows={1}
+                        value={it[tk]}
+                        onChange={(e) => setItem(i, tk, e.target.value)}
+                      />
+                    )}
+                  </td>
+                );
+              })}
             </tr>
           ))}
         </tbody>
