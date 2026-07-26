@@ -646,14 +646,12 @@ function PayablesTab() {
   const [paying, setPaying] = useState<{ row: FinancePayable; occurrence: string } | null>(null);
   const rows = useMemo(() => data?.rows ?? [], [data]);
   const canEdit = can("finance", "create") || can("finance", "edit");
-  // 거래(매입) / 기타 지출 두 섹션으로 나눠 보여준다 — 성격이 달라 소계도 따로 낸다.
-  // 거래 = 프로젝트에서 넘어온 벤더 청구서 + 수동 등록한 거래선지급.
-  const groups = useMemo(() => {
+  // 거래(매입) / 기타 지출 두 섹션 — 성격이 다르고 다루는 항목도 달라서 표를 따로 낸다.
+  // 벤더 청구서는 프로젝트에서 넘어온 읽기전용(청구서번호·발행일 중심), 기타 지출은
+  // 여기서 직접 등록하는 항목(분류·반복 중심)이라 열 구성이 서로 맞지 않는다.
+  const [trade, other] = useMemo(() => {
     const isTrade = (p: FinancePayable) => p.source === "ap" || p.category === "거래선지급";
-    return [
-      { key: "trade", label: "Trade purchases · vendor bills", rows: rows.filter(isTrade) },
-      { key: "other", label: "Other costs · rent, payroll, utilities, taxes", rows: rows.filter((p) => !isTrade(p)) },
-    ];
+    return [rows.filter(isTrade), rows.filter((p) => !isTrade(p))];
   }, [rows]);
   // 합계 3열(청구·지급·미지급) — 통화별 분리(미수 목록과 같은 규칙).
   const totals = useMemo(() => payableTotals(rows), [rows]);
@@ -679,128 +677,197 @@ function PayablesTab() {
   if (error && !data) return <div className="state error">API error: {error.message}</div>;
   if (!data) return <div className="state">Loading…</div>;
   const fx: FxQuote = data.fx ?? { rate: 0, date: "", source: "fixed" };
+  const tradeSt = payableTotals(trade);
+  const otherSt = payableTotals(other);
+
+  /** 상태 칸 — 두 표가 공유. AP(프로젝트 유래)는 읽기전용 배지, 수동 등록은 납부 토글. */
+  function statusCell(p: FinancePayable) {
+    const isAp = p.source === "ap";
+    return (
+      <td>
+        {isAp ? (
+          <span className="wt-badge" title="Managed in project stage 9/10">Unpaid (AP)</span>
+        ) : p.recurrence === "none" ? (
+          <button
+            type="button"
+            className={`wt-badge fin-paid-toggle${p.paid ? " on" : ""}`}
+            title={canEdit ? (p.paid ? "Undo payment" : "Record payment") : ""}
+            disabled={!canEdit}
+            onClick={() => (p.paid ? undoPaid(p) : setPaying({ row: p, occurrence: p.due_date }))}
+          >
+            {p.paid ? "Paid" : "Unpaid"}
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="wt-badge fin-paid-toggle"
+            title={canEdit ? "Record a payment for one occurrence" : ""}
+            disabled={!canEdit}
+            onClick={() => setPaying({ row: p, occurrence: nextUnpaidOccurrence(p) })}
+          >
+            {p.paid_dates.length} paid
+          </button>
+        )}
+        {/* 지급 완료 건은 실제 납부일을 상태 옆에 함께 보여준다(미수 목록과 동일). */}
+        {!isAp && p.paid_date ? <span className="fin-paid-on">{p.paid_date}</span> : null}
+      </td>
+    );
+  }
+
+  /** 조작 칸 — AP 는 프로젝트 단계로 가는 안내 링크, 수동 등록은 수정/삭제. */
+  function actionCell(p: FinancePayable) {
+    return (
+      <td>
+        <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+          {p.source === "ap" ? (
+            <ProjectDocLink orderId={p.order_id} label="Project stage 9/10" hint apPoId={p.po_id} />
+          ) : (
+            <>
+              {can("finance", "edit") ? <button className="btn sm" onClick={() => setEditing(p)}>Edit</button> : null}
+              {can("finance", "delete") ? <button className="btn danger sm" onClick={() => remove(p)}>Delete</button> : null}
+            </>
+          )}
+        </div>
+      </td>
+    );
+  }
 
   return (
     <div className="panel">
       <div className="items-head">
         <h3 className="form-title" style={{ margin: 0 }}>Payables</h3>
-        {can("finance", "create") ? (
-          <button className="btn primary sm" onClick={() => setAdding(true)}>+ Add payable</button>
-        ) : null}
       </div>
       <p className="hint-inline" style={{ display: "block", margin: "4px 0 10px" }}>
-        Vendor bills arrive here automatically from the project&apos;s billing stages and are read-only — click the bill number to open that project&apos;s billing stage. Use <b>+ Add payable</b> for the company&apos;s own costs — rent, payroll, utilities, taxes. Monthly/quarterly/yearly recurring items appear as occurrences on the calendar.
+        Vendor bills arrive here automatically from the project&apos;s billing stages and are read-only — click the bill number to open that project&apos;s stage 9 Payable (AP). The company&apos;s own costs — rent, payroll, utilities, taxes — are registered by hand in the second table; monthly/quarterly/yearly items appear as occurrences on the calendar.
       </p>
-      {rows.length === 0 ? (
-        <div className="muted">No payables registered.</div>
-      ) : (
-        <table className="mini">
-          <thead>
-            <tr>
-              <th>Vendor</th><th>Bill No. / Vendor P/O</th><th>Bill date</th><th>Due</th>
-              <th className="num">Bill</th><th className="num">Paid</th><th className="num">Outstanding</th>
-              <th>Status</th><th />
-            </tr>
-          </thead>
-          {/* 섹션 = 거래(매입) / 기타 지출. 각 섹션 끝에 소계, 표 끝에 전체 합계. */}
-          {groups.map((g) => g.rows.length === 0 ? null : (
-          <tbody key={g.key}>
-            <tr className="fin-group-head">
-              <td colSpan={9}>{g.label}</td>
-            </tr>
-            {g.rows.map((p) => {
-              const isAp = p.source === "ap";
-              return (
-              <tr key={`${p.source || "manual"}-${p.id}`}>
-                <td>{p.counterparty || "—"}</td>
-                {/* 청구서 번호 = 미수 목록의 Invoice No. 자리. AP 행은 그 아래 벤더 P/O 를
-                    옅게 덧붙인다(번호가 아직 없으면 P/O 만 보인다). 수동 등록은 적요. */}
-                <td>
-                  {isAp ? (
-                    <>
-                      <ProjectDocLink orderId={p.order_id} label={p.description} apPoId={p.po_id} />
-                      {p.po_no && p.po_no !== p.description ? <div className="muted">{p.po_no}</div> : null}
-                    </>
-                  ) : (
-                    p.description || CATEGORY_LABEL[p.category] || p.category || "—"
-                  )}
-                </td>
-                <td>{p.bill_date || "—"}</td>
-                <td>{p.due_date || "—"}</td>
-                <td className="num">{money(p.invoice_amount, p.currency)}</td>
-                <td className="num">{money(p.paid_amount, p.currency)}</td>
-                <td className="num"><b>{money(p.outstanding, p.currency)}</b></td>
-                <td>
-                  {isAp ? (
-                    <span className="wt-badge" title="Managed in project stage 9/10">Unpaid (AP)</span>
-                  ) : p.recurrence === "none" ? (
-                    <button
-                      type="button"
-                      className={`wt-badge fin-paid-toggle${p.paid ? " on" : ""}`}
-                      title={canEdit ? (p.paid ? "Undo payment" : "Record payment") : ""}
-                      disabled={!canEdit}
-                      onClick={() => (p.paid ? undoPaid(p) : setPaying({ row: p, occurrence: p.due_date }))}
-                    >
-                      {p.paid ? "Paid" : "Unpaid"}
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      className="wt-badge fin-paid-toggle"
-                      title={`${RECURRENCE_LABEL[p.recurrence] || p.recurrence}${canEdit ? " · Record a payment for one occurrence" : ""}`}
-                      disabled={!canEdit}
-                      onClick={() => setPaying({ row: p, occurrence: nextUnpaidOccurrence(p) })}
-                    >
-                      {p.paid_dates.length} paid
-                    </button>
-                  )}
-                  {/* 지급 완료 건은 실제 납부일을 상태 옆에 함께 보여준다(미수 목록과 동일). */}
-                  {!isAp && p.paid_date ? <span className="fin-paid-on">{p.paid_date}</span> : null}
-                </td>
-                <td>
-                  <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
-                    {isAp ? (
-                      <ProjectDocLink orderId={p.order_id} label="Project stage 9/10" hint apPoId={p.po_id} />
-                    ) : (
-                      <>
-                        {can("finance", "edit") ? <button className="btn sm" onClick={() => setEditing(p)}>Edit</button> : null}
-                        {can("finance", "delete") ? <button className="btn danger sm" onClick={() => remove(p)}>Delete</button> : null}
-                      </>
-                    )}
-                  </div>
-                </td>
+
+      {/* ── 거래 매입 — 프로젝트에서 넘어온 벤더 청구서(읽기전용). ─────────────── */}
+      <section className="fin-pay-sec">
+        <div className="fin-pay-sec-head">
+          <h4 className="fin-pay-sec-title">Trade purchases · vendor bills</h4>
+        </div>
+        {trade.length === 0 ? (
+          <div className="muted" style={{ padding: "8px 2px" }}>No vendor bills outstanding.</div>
+        ) : (
+          <table className="mini fin-pay-table">
+            <thead>
+              <tr>
+                <th>Vendor</th><th>Bill No. / Vendor P/O</th><th>Bill date</th><th>Due</th>
+                <th className="num fin-w-money">Bill</th><th className="num fin-w-money">Paid</th><th className="num fin-w-money">Outstanding</th>
+                <th className="fin-w-status">Status</th><th className="fin-w-act" />
               </tr>
-              );
-            })}
-            {/* 섹션 소계 — 전체 합계와 구분되게 옅게. */}
-            {(() => {
-              const st = payableTotals(g.rows);
-              return (
-                <tr className="fin-group-sub">
-                  <td />
-                  <td className="fin-foot-name" colSpan={3}>Subtotal</td>
-                  <td className="num">{byCurrency(st.invoice)}</td>
-                  <td className="num">{byCurrency(st.paid)}</td>
-                  <td className="num">{byCurrency(st.outstanding)}</td>
-                  <td /><td />
+            </thead>
+            <tbody>
+              {trade.map((p) => (
+                <tr key={`${p.source || "manual"}-${p.id}`}>
+                  <td>{p.counterparty || "—"}</td>
+                  {/* 청구서 번호 = 미수 목록의 Invoice No. 자리. AP 행은 그 아래 벤더 P/O 를
+                      옅게 덧붙인다(번호가 아직 없으면 P/O 만 보인다). 수동 등록은 적요. */}
+                  <td>
+                    {p.source === "ap" ? (
+                      <>
+                        <ProjectDocLink orderId={p.order_id} label={p.description} apPoId={p.po_id} />
+                        {p.po_no && p.po_no !== p.description ? <div className="muted">{p.po_no}</div> : null}
+                      </>
+                    ) : (
+                      p.description || "—"
+                    )}
+                  </td>
+                  <td>{p.bill_date || "—"}</td>
+                  <td>{p.due_date || "—"}</td>
+                  <td className="num">{money(p.invoice_amount, p.currency)}</td>
+                  <td className="num">{money(p.paid_amount, p.currency)}</td>
+                  <td className="num"><b>{money(p.outstanding, p.currency)}</b></td>
+                  {statusCell(p)}
+                  {actionCell(p)}
                 </tr>
-              );
-            })()}
-          </tbody>
-          ))}
-          {/* 합계 — 통화별 분리, 그 아래 참고용 KRW 환산(미수 목록과 같은 규칙). */}
+              ))}
+              <tr className="fin-group-sub">
+                <td />
+                <td className="fin-foot-name" colSpan={3}>Subtotal</td>
+                <td className="num">{byCurrency(tradeSt.invoice)}</td>
+                <td className="num">{byCurrency(tradeSt.paid)}</td>
+                <td className="num">{byCurrency(tradeSt.outstanding)}</td>
+                <td /><td />
+              </tr>
+            </tbody>
+          </table>
+        )}
+      </section>
+
+      {/* ── 기타 지출 — 여기서 직접 등록하는 항목. 열 구성은 등록 폼의 입력칸과 1:1. ── */}
+      <section className="fin-pay-sec">
+        <div className="fin-pay-sec-head">
+          <h4 className="fin-pay-sec-title">Other costs · rent, payroll, utilities, taxes</h4>
+          {can("finance", "create") ? (
+            <button className="btn primary sm" onClick={() => setAdding(true)}>+ Add payable</button>
+          ) : null}
+        </div>
+        {other.length === 0 ? (
+          <div className="muted" style={{ padding: "8px 2px" }}>No other costs registered.</div>
+        ) : (
+          <table className="mini fin-pay-table">
+            <thead>
+              <tr>
+                <th>Category</th><th>Vendor / payee</th><th>Description</th><th>Due</th><th>Recurrence</th>
+                <th className="num fin-w-money">Amount</th><th className="num fin-w-money">Paid</th><th className="num fin-w-money">Outstanding</th>
+                <th className="fin-w-status">Status</th><th className="fin-w-act" />
+              </tr>
+            </thead>
+            <tbody>
+              {other.map((p) => (
+                <tr key={`${p.source || "manual"}-${p.id}`}>
+                  <td>{CATEGORY_LABEL[p.category] || p.category}</td>
+                  <td>{p.counterparty || "—"}</td>
+                  {/* 메모는 별도 열까지 둘 만큼 길지 않아 적요 아래 옅게 붙인다. */}
+                  <td>
+                    {p.description || "—"}
+                    {p.notes ? <div className="muted">{p.notes}</div> : null}
+                  </td>
+                  <td>{p.due_date || "—"}</td>
+                  <td>
+                    {RECURRENCE_LABEL[p.recurrence] || p.recurrence}
+                    {p.recurrence !== "none" && p.recur_until ? <span className="muted"> · until {p.recur_until}</span> : null}
+                  </td>
+                  <td className="num">{money(p.invoice_amount, p.currency)}</td>
+                  <td className="num">{money(p.paid_amount, p.currency)}</td>
+                  <td className="num"><b>{money(p.outstanding, p.currency)}</b></td>
+                  {statusCell(p)}
+                  {actionCell(p)}
+                </tr>
+              ))}
+              <tr className="fin-group-sub">
+                <td />
+                <td className="fin-foot-name" colSpan={4}>Subtotal</td>
+                <td className="num">{byCurrency(otherSt.invoice)}</td>
+                <td className="num">{byCurrency(otherSt.paid)}</td>
+                <td className="num">{byCurrency(otherSt.outstanding)}</td>
+                <td /><td />
+              </tr>
+            </tbody>
+          </table>
+        )}
+      </section>
+
+      {/* ── 전체 합계 — 두 표를 합친 금액. 열 폭을 위 표들과 맞춰 같은 자리에서 끝난다. ── */}
+      {rows.length === 0 ? null : (
+        <table className="mini fin-pay-table fin-pay-total">
+          <colgroup>
+            <col />
+            <col className="fin-w-money" /><col className="fin-w-money" /><col className="fin-w-money" />
+            <col className="fin-w-status" /><col className="fin-w-act" />
+          </colgroup>
           <tfoot>
             <tr className="foot-grand fin-foot-total">
-              <td />
-              <td className="total-label fin-foot-name" colSpan={3}>Total</td>
+              <td className="total-label fin-foot-name">Total</td>
               <td className="num total-value">{byCurrencyLines(totals.invoice)}</td>
               <td className="num total-value">{byCurrencyLines(totals.paid)}</td>
               <td className="num total-value">{byCurrencyLines(totals.outstanding)}</td>
               <td /><td />
             </tr>
+            {/* 참고용 KRW 환산 — 오늘자 매매기준율(조회 실패 시 고정환율). 집계에는 쓰지 않는다. */}
             <tr className="fin-foot-ref">
-              <td />
-              <td className="fin-foot-name" colSpan={3}>
+              <td className="fin-foot-name">
                 Total (In KRW · 1 USD = {fx.rate.toLocaleString()}
                 {fx.source === "exim" ? ` · 매매기준율 ${fx.date}` : " · fixed rate"})
               </td>
