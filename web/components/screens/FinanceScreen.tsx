@@ -1314,7 +1314,10 @@ function CalendarTab() {
                     className={`fin-ev fin-ev--${e.kind}${e.overdue ? " overdue" : ""}${e.paid ? " paid" : ""}${e.actual ? " actual" : ""}`}
                     title={
                       e.actual
-                        ? `Paid ${e.paid_on} · ${e.title} · ${money(e.amount, e.currency)} (scheduled ${e.scheduled})`
+                        // 수금은 '납부'가 아니라 '입금'이다 — 방향에 맞는 말로 표기.
+                        ? `${e.kind === "receivable" ? "Received" : "Paid"} ${e.paid_on} · ${e.title} · ${money(e.amount, e.currency)}${
+                            e.scheduled ? ` (due ${e.scheduled})` : ""
+                          }`
                         : `${e.kind === "receivable" ? "Receivable" : "Payable"} · ${e.title} · ${money(e.amount, e.currency)}${
                             e.paid ? ` (paid${e.paid_on ? ` ${e.paid_on}` : ""})` : ""
                           }`
@@ -1332,7 +1335,7 @@ function CalendarTab() {
         })}
       </div>
       <p className="hint-inline" style={{ display: "block", marginTop: 8 }}>
-        Click a payable to record its payment — you enter the date it was actually paid, which may differ from the scheduled date (recurring items settle one occurrence at a time). Click a paid one to undo. Receivables (AR) are managed from the project stages.
+        Click a payable to record its payment — you enter the date it was actually paid, which may differ from the scheduled date (recurring items settle one occurrence at a time). Click a paid one to undo. Receivables (AR) are managed from the project stages: unpaid ones sit on their due date, and collected ones (✓) on the date the money actually arrived.
       </p>
       {payingEvent ? (
         <Modal title="Record payment" onClose={() => setPayingEvent(null)} form maxWidth={340}>

@@ -957,7 +957,9 @@ export type FinanceCalendarEvent = {
   actual?: boolean;           // true = 예정일이 아니라 '실제 납부일' 자리에 찍힌 이벤트
   ref_id: number;
   occurrence?: string | null;
-  source?: "manual" | "ap";   // "ap" = 매입 청구(읽기전용, 프로젝트 단계에서 관리)
+  // 이벤트 출처 — "ap"/"ar" = 프로젝트 단계에서 관리하는 청구·수금(읽기전용),
+  // "income" = 수동 등록 기타수입, "manual"(기본) = 수동 등록 지급.
+  source?: "manual" | "ap" | "ar" | "income";
 };
 
 export type DashboardData = {

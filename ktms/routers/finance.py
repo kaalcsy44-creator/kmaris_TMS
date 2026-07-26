@@ -741,7 +741,8 @@ def finance_calendar(start: str = "", end: str = ""):
     s = get_session()
     try:
         events: list[dict] = []
-        # 수금 예정 — 미수 잔액이 있는 AR 의 due_date.
+        # 수금 — 미수 잔액이 있으면 예정일(due_date)에, 완납이면 실제 입금일에 표시한다.
+        # (완납분을 빼면 캘린더가 '실제 들어온 돈'을 안 보여줘서 지급측과 어긋난다.)
         for r in _finance_receivable_rows(s):
             due = r["due_date"]
             if r["outstanding"] > 0 and due and d0.isoformat() <= due <= d1.isoformat():
@@ -753,6 +754,23 @@ def finance_calendar(start: str = "", end: str = ""):
                     "currency": r["currency"],
                     "overdue": r["overdue"],
                     "ref_id": r["id"],
+                    "source": "ar",
+                })
+            # 완납 — 입금일(없으면 11단계 완료일. _finance_receivable_rows 가 폴백까지 계산).
+            got = r["paid_date"]
+            if r["paid_amount"] > 0 and got and d0.isoformat() <= got <= d1.isoformat():
+                events.append({
+                    "kind": "receivable",
+                    "date": got,
+                    "title": r["customer"],
+                    "amount": r["paid_amount"],
+                    "currency": r["currency"],
+                    "paid": True,
+                    "paid_on": got,
+                    "scheduled": due,
+                    "actual": True,   # 예정일이 아니라 '실제 입금일' 자리 → ✓ 표시
+                    "ref_id": r["id"],
+                    "source": "ar",
                 })
         # 수입 예정 — 기타 수입(수동 등록). 반복 회차 포함, 실제 입금일에도 표시.
         customer_names = {c.id: c.name for c in s.query(Customer).all()}

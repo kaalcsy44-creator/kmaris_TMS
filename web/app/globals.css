@@ -10108,6 +10108,10 @@ table.mini tfoot .fin-foot-name { text-align: left; }
 .fin-ev.paid { background: #e8f6ee; color: #1e7a46; text-decoration: line-through; }
 /* 실제 납부일 자리에 찍힌 이벤트 — 예정일(취소선)과 달리 실제 지출이므로 취소선 없이 강조. */
 .fin-ev.paid.actual { text-decoration: none; font-weight: 600; border: 1px solid #9fd4b6; }
+/* 완료된 수금은 초록(지급 완료)이 아니라 AR 계열 파랑을 유지한다 — 범례(AR/지급)대로
+   돈이 들어온 건지 나간 건지 색으로 구분되어야 한다. */
+.fin-ev--receivable.paid { background: #dceaf7; color: #17618f; }
+.fin-ev--receivable.paid.actual { border-color: #9cc3e2; }
 .fin-ev-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fin-ev-amt { flex: none; font-variant-numeric: tabular-nums; font-weight: 700; }
 
