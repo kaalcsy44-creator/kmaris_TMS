@@ -346,6 +346,8 @@ def finance_payables():
                 "vendor_id": None,
                 "description": ap["bill_no"] or ap["po_no"] or "",
                 "po_no": ap["po_no"],
+                # 이 청구가 속한 프로젝트(오더) — 목록에서 해당 단계로 바로 들어가는 링크용.
+                "order_id": ap["order_id"],
                 "amount": ap["outstanding"],
                 "invoice_amount": ap["invoice_amount"],
                 "paid_amount": ap["paid_amount"],

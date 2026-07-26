@@ -10112,6 +10112,28 @@ table.mini tfoot .fin-foot-name { text-align: left; }
    돈이 들어온 건지 나간 건지 색으로 구분되어야 한다. */
 .fin-ev--receivable.paid { background: #dceaf7; color: #17618f; }
 .fin-ev--receivable.paid.actual { border-color: #9cc3e2; }
+/* 수금·매입청구 행의 문서번호 → 프로젝트 단계 링크. 표 안에서 눈에 띄되 요란하지 않게. */
+.fin-doc-link {
+  color: var(--blue);
+  font-weight: 600;
+  text-decoration: none;
+  border-bottom: 1px dotted color-mix(in srgb, var(--blue) 45%, transparent);
+}
+.fin-doc-link:hover {
+  text-decoration: none;
+  border-bottom-style: solid;
+}
+/* 표 우측 안내 문구 자리의 링크 — 안내 문구 크기·톤을 유지하고 hover 시에만 진해진다. */
+.fin-doc-link.hint {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+  border-bottom-color: transparent;
+}
+.fin-doc-link.hint:hover {
+  color: var(--blue);
+  border-bottom-color: color-mix(in srgb, var(--blue) 45%, transparent);
+}
 .fin-ev-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fin-ev-amt { flex: none; font-variant-numeric: tabular-nums; font-weight: 700; }
 

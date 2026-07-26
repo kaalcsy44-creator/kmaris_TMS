@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import {
   fetchFinanceSummary,
   fetchFinanceReceivables,
@@ -211,6 +212,36 @@ function receivableTotals(rows: FinanceReceivable[]) {
   return t;
 }
 
+/**
+ * 프로젝트 문서번호 → 그 프로젝트의 9단계(AR/AP 작업 화면) 링크.
+ * 수금(AR)·매입청구(AP) 행은 여기서 편집할 수 없고 프로젝트 단계에서 관리하므로,
+ * 번호를 눌러 그 자리로 바로 갈 수 있어야 한다. 오더 id 로 딥링크하면 목록이
+ * rfq_id 를 찾아 팝업을 열어 준다(ProjectsScreen 의 ?order= 처리).
+ */
+function ProjectDocLink({
+  orderId,
+  label,
+  hint,
+}: {
+  orderId?: number;
+  label?: string;
+  /** 표 우측의 안내 문구 자리 — 링크를 못 걸 때 옅은 안내 문구로 남긴다. */
+  hint?: boolean;
+}) {
+  const text = label || "—";
+  // 프로젝트를 특정할 수 없는 행(오더 연결 없음)은 링크 없이 원래 표기로 둔다.
+  if (!orderId) return hint ? <span className="hint-inline">{text}</span> : <>{text}</>;
+  return (
+    <Link
+      className={`fin-doc-link${hint ? " hint" : ""}`}
+      href={`/project?order=${orderId}&stage=9`}
+      title="Open this project's billing · AR/AP stage"
+    >
+      {text}
+    </Link>
+  );
+}
+
 // ── Receivables — 프로젝트 매출(AR, 읽기전용) + 기타 수입(수동 등록) ────────────
 function ReceivablesTab() {
   const { data, error, refresh } = useCachedData<{ rows: FinanceReceivable[]; fx: FxQuote }>("finance:receivables", fetchFinanceReceivables);
@@ -266,7 +297,7 @@ function ReceivablesTab() {
         </div>
       </div>
       <p className="hint-inline" style={{ display: "block", margin: "4px 0 10px" }}>
-        Customer invoices arrive here automatically from the project&apos;s tax-invoice and collection stages and are read-only. Use <b>+ Add income</b> for money that is not project sales — interest, refunds, misc.
+        Customer invoices arrive here automatically from the project&apos;s tax-invoice and collection stages and are read-only — click the invoice number to open that project&apos;s billing stage. Use <b>+ Add income</b> for money that is not project sales — interest, refunds, misc.
       </p>
       {rows.length === 0 ? (
         <div className="muted">No receivables to show.</div>
@@ -286,7 +317,7 @@ function ReceivablesTab() {
               return (
               <tr key={`${r.source || "ar"}-${r.id}`} className={r.overdue ? "fin-overdue" : ""}>
                 <td>{r.customer}</td>
-                <td>{r.invoice_no || r.ci_no || "—"}</td>
+                <td>{isIncome ? (r.invoice_no || r.ci_no || "—") : <ProjectDocLink orderId={r.order_id} label={r.invoice_no || r.ci_no} />}</td>
                 <td>{r.due_date || "—"}</td>
                 <td className="num">{money(r.invoice_amount, r.currency)}</td>
                 <td className="num">{money(r.paid_amount, r.currency)}</td>
@@ -324,7 +355,7 @@ function ReceivablesTab() {
                         {can("finance", "delete") ? <button className="btn danger sm" onClick={() => removeIncome(r)}>Delete</button> : null}
                       </>
                     ) : (
-                      <span className="hint-inline">Project stage 9–11</span>
+                      <ProjectDocLink orderId={r.order_id} label="Project stage 9–11" hint />
                     )}
                   </div>
                 </td>
@@ -653,7 +684,7 @@ function PayablesTab() {
         ) : null}
       </div>
       <p className="hint-inline" style={{ display: "block", margin: "4px 0 10px" }}>
-        Vendor bills arrive here automatically from the project&apos;s billing stages and are read-only. Use <b>+ Add payable</b> for the company&apos;s own costs — rent, payroll, utilities, taxes. Monthly/quarterly/yearly recurring items appear as occurrences on the calendar.
+        Vendor bills arrive here automatically from the project&apos;s billing stages and are read-only — click the bill number to open that project&apos;s billing stage. Use <b>+ Add payable</b> for the company&apos;s own costs — rent, payroll, utilities, taxes. Monthly/quarterly/yearly recurring items appear as occurrences on the calendar.
       </p>
       {rows.length === 0 ? (
         <div className="muted">No payables registered.</div>
@@ -678,7 +709,7 @@ function PayablesTab() {
               <tr key={`${p.source || "manual"}-${p.id}`}>
                 <td>{CATEGORY_LABEL[p.category] || p.category}</td>
                 <td>{p.counterparty || "—"}{isAp && p.po_no ? <span className="muted"> · {p.po_no}</span> : null}</td>
-                <td>{p.description || "—"}</td>
+                <td>{isAp ? <ProjectDocLink orderId={p.order_id} label={p.description} /> : (p.description || "—")}</td>
                 <td>{p.due_date || "—"}</td>
                 <td className="num">{money(p.invoice_amount, p.currency)}</td>
                 <td className="num">{money(p.paid_amount, p.currency)}</td>
@@ -714,7 +745,7 @@ function PayablesTab() {
                 <td>
                   <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
                     {isAp ? (
-                      <span className="hint-inline">Project stage 9/10</span>
+                      <ProjectDocLink orderId={p.order_id} label="Project stage 9/10" hint />
                     ) : (
                       <>
                         {can("finance", "edit") ? <button className="btn sm" onClick={() => setEditing(p)}>Edit</button> : null}
