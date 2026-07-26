@@ -1408,6 +1408,8 @@ export function CategoriesTab() {
   const [assignBusy, setAssignBusy] = useState(false);
   // 다중 선택 → 한 분류로 일괄 배정. 키는 ledgerRowKey(행 순서가 바뀌어도 유지된다).
   const [picked, setPicked] = useState<Set<string>>(() => new Set());
+  // Shift+클릭 구간 선택의 기준점(마지막으로 직접 누른 행의 key).
+  const [anchorKey, setAnchorKey] = useState<string | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
   // 목록표 컬럼 폭·순서·표시(브라우저에 저장).
   const ledgerCols = useColumnLayout("item-ledger", LEDGER_COLS);
@@ -1528,6 +1530,7 @@ export function CategoriesTab() {
   // ── 다중 선택 ─────────────────────────────────────────────────────────────
   function toggleRow(it: ItemLedgerRow) {
     const k = ledgerRowKey(it);
+    setAnchorKey(k);   // 다음 Shift+클릭의 구간 기준점
     setPicked((prev) => {
       const next = new Set(prev);
       if (next.has(k)) next.delete(k);
@@ -1541,6 +1544,36 @@ export function CategoriesTab() {
   const allPicked = selectable.length > 0 && pickedRows.length === selectable.length;
   function toggleAll(on: boolean) {
     setPicked(on ? new Set(selectable.map(ledgerRowKey)) : new Set());
+    setAnchorKey(null);
+  }
+
+  /**
+   * Shift+클릭 — 기준점(마지막으로 누른 행)부터 이번 행까지 한꺼번에.
+   * 구간에는 기준점의 현재 상태를 그대로 입힌다 → 체크 후 Shift+클릭이면 구간 전체 선택,
+   * 해제 후 Shift+클릭이면 구간 전체 해제(엑셀과 같은 감각).
+   * 기준점이 지금 목록에 없으면(필터 변경 등) 평범한 토글로 처리한다.
+   */
+  function extendRange(it: ItemLedgerRow) {
+    const keys = selectable.map(ledgerRowKey);
+    const to = keys.indexOf(ledgerRowKey(it));
+    const from = anchorKey ? keys.indexOf(anchorKey) : -1;
+    if (to < 0 || from < 0) {
+      toggleRow(it);
+      return;
+    }
+    const on = picked.has(keys[from]);
+    const [a, b] = from <= to ? [from, to] : [to, from];
+    // Shift+클릭이 남긴 텍스트 선택(파란 하이라이트)을 정리.
+    window.getSelection()?.removeAllRanges();
+    setPicked((prev) => {
+      const next = new Set(prev);
+      for (let i = a; i <= b; i++) {
+        if (on) next.add(keys[i]);
+        else next.delete(keys[i]);
+      }
+      return next;
+    });
+    setAnchorKey(keys[to]);
   }
 
   function openBulk() {
@@ -1847,6 +1880,7 @@ export function CategoriesTab() {
                         type="checkbox"
                         className="row-check"
                         aria-label="Select all items"
+                        title="Select all · Shift+click a row range to pick a block"
                         checked={allPicked}
                         disabled={selectable.length === 0}
                         ref={(el) => {
@@ -1882,16 +1916,31 @@ export function CategoriesTab() {
                       <tr
                         key={it.item_id ?? `u${i}`}
                         className={`ledger-row${picked.has(key) ? " row-picked" : ""}`}
-                        onClick={() => openHistory(it)}
-                        title="Show full price history"
+                        // 평소엔 이력 열기. Shift+클릭은 행 어디를 눌러도 구간 선택으로 —
+                        // 체크박스만 정확히 노리지 않아도 되게(그때 이력이 열리면 방해된다).
+                        onClick={(e) => {
+                          if (e.shiftKey && classifiable) {
+                            extendRange(it);
+                            return;
+                          }
+                          openHistory(it);
+                        }}
+                        title="Show full price history · Shift+click to select a range"
                       >
                         <td className="row-tools" onClick={(e) => e.stopPropagation()}>
                           <input
                             type="checkbox"
                             className="row-check"
                             aria-label="Select item"
+                            title="Shift+click to select a range"
                             checked={picked.has(key)}
                             disabled={!classifiable}
+                            // Shift+클릭은 기본 토글을 막고(→ onChange 안 남) 구간 선택으로 처리.
+                            onClick={(e) => {
+                              if (!e.shiftKey) return;
+                              e.preventDefault();
+                              extendRange(it);
+                            }}
                             onChange={() => toggleRow(it)}
                           />
                         </td>
