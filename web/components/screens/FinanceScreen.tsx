@@ -770,7 +770,8 @@ function PayablesTab() {
       {/* ── 거래 매입 — 프로젝트에서 넘어온 벤더 청구서(읽기전용). ─────────────── */}
       <section className="fin-pay-sec">
         <div className="fin-pay-sec-head">
-          <h4 className="fin-pay-sec-title">Trade purchases · vendor bills</h4>
+          {/* 제목은 굵게, 어떤 항목이 들어오는지 설명하는 뒷부분은 옅게. */}
+          <h4 className="fin-pay-sec-title">Trade purchases <span className="fin-pay-sec-sub">· vendor bills</span></h4>
         </div>
         {trade.length === 0 ? (
           <div className="muted" style={{ padding: "8px 2px" }}>No vendor bills outstanding.</div>
@@ -778,7 +779,7 @@ function PayablesTab() {
           <table className="mini fin-pay-table">
             <thead>
               <tr>
-                <th className="fin-w-cat">Category</th><th>Vendor</th><th>Bill No. / Vendor P/O</th><th>Bill date</th><th>Due</th>
+                <th className="fin-w-cat">Category</th><th className="fin-w-party">Vendor</th><th>Bill No. / Vendor P/O</th><th className="fin-w-date">Bill date</th><th className="fin-w-date">Due</th>
                 <th className="num fin-w-money">Bill</th><th className="num fin-w-money">Paid</th><th className="num fin-w-money">Outstanding</th>
                 <th className="fin-w-status">Status</th><th className="fin-w-rec">Recurrence</th><th className="fin-w-act" />
               </tr>
@@ -826,7 +827,7 @@ function PayablesTab() {
       {/* ── 기타 지출 — 여기서 직접 등록하는 항목. 열 구성은 등록 폼의 입력칸과 1:1. ── */}
       <section className="fin-pay-sec">
         <div className="fin-pay-sec-head">
-          <h4 className="fin-pay-sec-title">Other costs · rent, payroll, utilities, taxes</h4>
+          <h4 className="fin-pay-sec-title">Other costs <span className="fin-pay-sec-sub">· rent, payroll, utilities, taxes</span></h4>
           {can("finance", "create") ? (
             <button className="btn primary sm" onClick={() => setAdding(true)}>+ Add payable</button>
           ) : null}
@@ -838,7 +839,7 @@ function PayablesTab() {
             <thead>
               {/* 열 자리는 위 표와 동일 — 이름만 이 표의 항목에 맞춘다(등록 폼의 입력칸과 1:1). */}
               <tr>
-                <th className="fin-w-cat">Category</th><th>Vendor / payee</th><th>Description</th><th>Bill date</th><th>Due</th>
+                <th className="fin-w-cat">Category</th><th className="fin-w-party">Vendor / payee</th><th>Description</th><th className="fin-w-date">Bill date</th><th className="fin-w-date">Due</th>
                 <th className="num fin-w-money">Amount</th><th className="num fin-w-money">Paid</th><th className="num fin-w-money">Outstanding</th>
                 <th className="fin-w-status">Status</th><th className="fin-w-rec">Recurrence</th><th className="fin-w-act" />
               </tr>

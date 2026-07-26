@@ -10079,10 +10079,15 @@ table.mini tfoot .fin-foot-name { text-align: left; }
 /* 섹션 제목 — 음영 없이 글자만으로 구분한다. px+pt 혼합은 이 파일의 다른 확대 표기와 같은 방식. */
 .fin-pay-sec-title {
   margin: 0;
-  font-size: calc(11px + 1pt);
+  font-size: calc(11px + 3pt);
   font-weight: 700;
   letter-spacing: 0.2px;
   color: var(--navy);
+}
+/* 제목 뒷부분(어떤 항목이 들어오는지) — 제목 자체가 아니라 설명이라 옅고 가늘게. */
+.fin-pay-sec-sub {
+  font-weight: 400;
+  color: var(--muted);
 }
 /* 금액·상태·조작 열은 폭을 고정한다 — 앞쪽 열 구성이 서로 달라도 두 표와 합계 줄의
    숫자가 같은 자리에서 끝나야 위아래로 읽힌다. */
@@ -10091,7 +10096,11 @@ table.mini tfoot .fin-foot-name { text-align: left; }
   color: var(--ink);
   font-weight: 700;
 }
+/* 앞쪽 열도 폭을 고정한다 — 3~5열(청구서번호·적요 / 발행일 / 지급기일)이 두 표에서
+   같은 자리에 서려면, 그 앞뒤 열이 모두 고정이라 가운데 열만 남은 폭을 먹어야 한다. */
 .fin-pay-table .fin-w-cat { width: 118px; }
+.fin-pay-table .fin-w-party { width: 190px; }
+.fin-pay-table .fin-w-date { width: 112px; }
 .fin-pay-table .fin-w-money { width: 134px; }
 .fin-pay-table .fin-w-status { width: 132px; }
 .fin-pay-table .fin-w-rec { width: 112px; }
