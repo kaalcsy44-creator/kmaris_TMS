@@ -1475,12 +1475,20 @@ function CalendarTab() {
   return (
     <div className="panel">
       <div className="fin-cal-head">
-        <div className="fin-cal-nav">
-          <button className="btn sm" onClick={() => shift(-1)}>‹ Prev</button>
-          <button className="btn sm" onClick={() => setMonth(() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() }; })}>Today</button>
-          <button className="btn sm" onClick={() => shift(1)}>Next ›</button>
+        {/* 좌: 이번 달로 돌아오는 단추 하나 / 중앙: 화살표가 달을 양옆에서 감싼다 / 우: 범례.
+            보고 있는 달이 이번 달이면 Today는 갈 곳이 없으므로 눌리지 않게 둔다. */}
+        <div className="fin-cal-today">
+          <button
+            className="btn sm"
+            disabled={month.y === new Date().getFullYear() && month.m === new Date().getMonth()}
+            onClick={() => setMonth(() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() }; })}
+          >Today</button>
         </div>
-        <h3 className="form-title" style={{ margin: 0 }}>{monthLabel}</h3>
+        <div className="fin-cal-nav">
+          <button className="btn sm fin-cal-arrow" onClick={() => shift(-1)} aria-label="Previous month">‹</button>
+          <h3 className="form-title fin-cal-month">{monthLabel}</h3>
+          <button className="btn sm fin-cal-arrow" onClick={() => shift(1)} aria-label="Next month">›</button>
+        </div>
         <div className="fin-cal-legend">
           <span className="fin-dot fin-dot--rec" /> Receivables (AR)
           <span className="fin-dot fin-dot--pay" /> Payables
