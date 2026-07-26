@@ -10073,20 +10073,24 @@ table.mini tfoot .fin-foot-name { text-align: left; }
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  background: #eef3f9;
-  border-radius: 8px 8px 0 0;
-  padding: 6px 10px;
+  padding: 2px 2px 6px;
   min-height: 34px;
 }
+/* 섹션 제목 — 음영 없이 글자만으로 구분한다. px+pt 혼합은 이 파일의 다른 확대 표기와 같은 방식. */
 .fin-pay-sec-title {
   margin: 0;
-  font-size: 11px;
+  font-size: calc(11px + 1pt);
   font-weight: 700;
   letter-spacing: 0.2px;
-  color: #45526a;
+  color: var(--navy);
 }
 /* 금액·상태·조작 열은 폭을 고정한다 — 앞쪽 열 구성이 서로 달라도 두 표와 합계 줄의
    숫자가 같은 자리에서 끝나야 위아래로 읽힌다. */
+/* 소계행 — 표 안의 합계라는 게 바로 읽히도록 검정 굵은 글씨(라벨·금액 모두). */
+.fin-pay-table .fin-group-sub td {
+  color: var(--ink);
+  font-weight: 700;
+}
 .fin-pay-table .fin-w-cat { width: 118px; }
 .fin-pay-table .fin-w-money { width: 134px; }
 .fin-pay-table .fin-w-status { width: 132px; }

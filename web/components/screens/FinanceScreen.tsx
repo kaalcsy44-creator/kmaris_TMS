@@ -689,7 +689,16 @@ function PayablesTab() {
     return (
       <td>
         {isAp ? (
-          <span className="wt-badge" title="Managed in project stage 9/10">Unpaid (AP)</span>
+          // 벤더 청구서도 기타 지출과 같은 Paid/Unpaid 칩으로 보여준다 — 다만 지급 기록은
+          // 프로젝트 9/10단계에서 하므로 여기서는 누를 수 없다(같은 모양의 비활성 칩).
+          <button
+            type="button"
+            className="wt-badge fin-paid-toggle"
+            title="Record the payment in project stage 9/10"
+            disabled
+          >
+            Unpaid
+          </button>
         ) : p.recurrence === "none" ? (
           <button
             type="button"
@@ -795,7 +804,7 @@ function PayablesTab() {
                   <td>{p.due_date || "—"}</td>
                   <td className="num">{money(p.invoice_amount, p.currency)}</td>
                   <td className="num">{money(p.paid_amount, p.currency)}</td>
-                  <td className="num"><b>{money(p.outstanding, p.currency)}</b></td>
+                  <td className="num">{money(p.outstanding, p.currency)}</td>
                   {statusCell(p)}
                   {recurrenceCell(p)}
                   {actionCell(p)}
@@ -848,7 +857,7 @@ function PayablesTab() {
                   <td>{p.due_date || "—"}</td>
                   <td className="num">{money(p.invoice_amount, p.currency)}</td>
                   <td className="num">{money(p.paid_amount, p.currency)}</td>
-                  <td className="num"><b>{money(p.outstanding, p.currency)}</b></td>
+                  <td className="num">{money(p.outstanding, p.currency)}</td>
                   {statusCell(p)}
                   {recurrenceCell(p)}
                   {actionCell(p)}
