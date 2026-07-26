@@ -306,13 +306,10 @@ function ReceivablesTab() {
           <label className="check-chip" style={{ cursor: "pointer" }}>
             <input type="checkbox" checked={openOnly} onChange={(e) => setOpenOnly(e.target.checked)} /> Outstanding only
           </label>
-          {can("finance", "create") ? (
-            <button className="btn primary sm" onClick={() => setAdding(true)}>+ Add income</button>
-          ) : null}
         </div>
       </div>
       <p className="hint-inline" style={{ display: "block", margin: "4px 0 10px" }}>
-        Customer invoices arrive here automatically from the project&apos;s tax-invoice and collection stages and are read-only — click the invoice number to open that project&apos;s billing stage. Use <b>+ Add income</b> for money that is not project sales — interest, refunds, misc.
+        Customer invoices arrive here automatically from the project&apos;s tax-invoice and collection stages and are read-only — click the invoice number to open that project&apos;s billing stage. Money that is not project sales — interest, refunds, misc — is registered by hand in the second table.
       </p>
       {/* 섹션 = 프로젝트 매출(AR) / 기타 수입. 지급 목록과 같은 규칙 —
           섹션마다 표를 따로 내고 각 표 끝에 소계, 두 표 아래 전체 합계. */}
@@ -320,6 +317,10 @@ function ReceivablesTab() {
         <section className="fin-sec" key={g.key}>
           <div className="fin-sec-head">
             <h4 className="fin-sec-title">{g.title} <span className="fin-sec-sub">· {g.sub}</span></h4>
+            {/* 등록 버튼은 이 버튼이 행을 만드는 표(기타 수입) 위에 둔다 — 지급 목록과 같은 규칙. */}
+            {g.key === "income" && can("finance", "create") ? (
+              <button className="btn primary sm" onClick={() => setAdding(true)}>+ Add income</button>
+            ) : null}
           </div>
           {g.rows.length === 0 ? (
             <div className="muted" style={{ padding: "8px 2px" }}>{g.empty}</div>
