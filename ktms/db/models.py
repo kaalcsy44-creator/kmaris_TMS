@@ -519,6 +519,9 @@ class APRecord(Base):
     bill_date      = Column(String(10))    # 청구서 발행일 YYYY-MM-DD
     invoice_amount = Column(Float, default=0.0)   # 청구 총액(공급가액+VAT)
     paid_amount    = Column(Float, default=0.0)   # 우리가 지급한 누계
+    # 실제 지급일 YYYY-MM-DD — 예정일(due_date)이 아니라 돈이 나간 날. Finance 의
+    # '이번 달 실제 지급'·현금흐름 실적이 이 날짜로 회차를 잡는다(없으면 그 달에 못 붙는다).
+    paid_date      = Column(String(10))
     currency       = Column(String(10), default="KRW")
     vat_rate       = Column(Float, default=0.1)
     due_date       = Column(String(10))    # 지급 예정일 YYYY-MM-DD

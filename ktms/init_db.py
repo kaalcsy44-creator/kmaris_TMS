@@ -139,6 +139,8 @@ _MIGRATIONS = {
     },
     "ap_records": {
         "charges":         "JSON",
+        # 실제 지급일 — 지급 등록으로 잔액이 0이 된 날(예정일 due_date 와 다를 수 있다).
+        "paid_date":       "VARCHAR(10)",
     },
     "finance_payables": {
         # 실제 납부일 {회차일: 납부일} — 예정일과 다른 날 납부한 경우를 남긴다.

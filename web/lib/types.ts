@@ -759,6 +759,8 @@ export type ApRow = {
   bill_date: string;
   invoice_amount: number;
   paid_amount: number;
+  /** 실제 지급일 — 예정일(due_date)과 달리 돈이 나간 날. Finance 실적 집계의 기준. */
+  paid_date: string;
   outstanding: number;
   currency: string;
   vat_rate: number;
@@ -793,6 +795,7 @@ export type ApSave = {
   bill_date?: string;
   invoice_amount?: number;
   paid_amount?: number;
+  paid_date?: string;
   currency?: string;
   vat_rate?: number | null;
   due_date?: string;

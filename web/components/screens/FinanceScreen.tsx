@@ -256,7 +256,7 @@ function ProjectDocLink({
   label?: string;
   /** 표 우측의 안내 문구 자리 — 링크를 못 걸 때 옅은 안내 문구로 남긴다. */
   hint?: boolean;
-  /** 지급(AP) 행 전용 — 9단계를 AP 탭 + 이 벤더 P/O 가 선택된 상태로 연다. */
+  /** 지급(AP) 행 전용 — AP 탭 + 이 벤더 P/O 가 선택된 상태로 연다. */
   apPoId?: number;
 }) {
   const text = label || "—";
@@ -264,17 +264,19 @@ function ProjectDocLink({
   if (!orderId && !rfqId) return hint ? <span className="hint-inline">{text}</span> : <>{text}</>;
   // rfq 와 order 를 함께 넘긴다 — rfq 로 프로젝트를 찾고, order 로 그 프로젝트 안에서
   // 이 문서의 고객 P/O 를 고른다. (한 프로젝트에 P/O 가 여러 건일 수 있다.)
+  // 지급(AP) 행은 10단계로 연다 — 지급 확인(Payment)이 붙어 있는 단계라, 목록에서
+  // 누르면 바로 그 칸이 보인다. 수입(AR) 행은 청구서를 편집하는 9단계 그대로.
   const params = [
     rfqId ? `rfq=${rfqId}` : "",
     orderId ? `order=${orderId}` : "",
-    "stage=9",
+    apPoId ? "stage=10" : "stage=9",
     apPoId ? `ap=${apPoId}` : "",
   ].filter(Boolean).join("&");
   return (
     <Link
       className={`fin-doc-link${hint ? " hint" : ""}`}
       href={`/project?${params}`}
-      title={apPoId ? "Open this vendor bill · stage 9 Payable (AP)" : "Open this project's billing · AR/AP stage"}
+      title={apPoId ? "Open this vendor bill · stage 10 Payable (AP)" : "Open this project's billing · AR/AP stage"}
     >
       {text}
     </Link>
@@ -759,14 +761,14 @@ function PayablesTab() {
       <td>
         {isAp ? (
           // 벤더 청구서도 기타 지출과 같은 Paid/Unpaid 칩으로 보여준다 — 다만 지급 기록은
-          // 프로젝트 9/10단계에서 하므로 여기서는 누를 수 없다(같은 모양의 비활성 칩).
+          // 프로젝트 10/11단계 AP 탭의 Payment 칸에서 하므로 여기서는 누를 수 없다.
           <button
             type="button"
-            className="wt-badge fin-paid-toggle"
-            title="Record the payment in project stage 9/10"
+            className={`wt-badge fin-paid-toggle${p.paid ? " on" : ""}`}
+            title="Record the payment in the project's stage 10/11 Payable (AP)"
             disabled
           >
-            Unpaid
+            {p.paid ? "Paid" : p.paid_amount > 0 ? "Partly paid" : "Unpaid"}
           </button>
         ) : p.recurrence === "none" ? (
           <button
@@ -790,7 +792,7 @@ function PayablesTab() {
           </button>
         )}
         {/* 지급 완료 건은 실제 납부일을 상태 옆에 함께 보여준다(미수 목록과 동일). */}
-        {!isAp && p.paid_date ? <span className="fin-paid-on">{p.paid_date}</span> : null}
+        {p.paid_date ? <span className="fin-paid-on">{p.paid_date}</span> : null}
       </td>
     );
   }
@@ -811,7 +813,7 @@ function PayablesTab() {
       <td>
         <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
           {p.source === "ap" ? (
-            <ProjectDocLink orderId={p.order_id} rfqId={p.rfq_id} label="Project stage 9/10" hint apPoId={p.po_id} />
+            <ProjectDocLink orderId={p.order_id} rfqId={p.rfq_id} label="Project stage 10" hint apPoId={p.po_id} />
           ) : (
             <>
               {can("finance", "edit") ? (
@@ -833,7 +835,7 @@ function PayablesTab() {
         <h3 className="form-title fin-page-title" style={{ margin: 0 }}>Payables</h3>
       </div>
       <p className="hint-inline" style={{ display: "block", margin: "4px 0 10px" }}>
-        Vendor bills arrive here automatically from the project&apos;s billing stages and are read-only — click the bill number to open that project&apos;s stage 9 Payable (AP). The company&apos;s own costs — rent, payroll, utilities, taxes — are registered by hand in the second table; monthly/quarterly/yearly items appear as occurrences on the calendar.
+        Vendor bills arrive here automatically from the project&apos;s billing stages and are read-only — click the bill number to open that project&apos;s stage 10 Payable (AP), where the payment is confirmed. The company&apos;s own costs — rent, payroll, utilities, taxes — are registered by hand in the second table; monthly/quarterly/yearly items appear as occurrences on the calendar.
       </p>
 
       {/* ── 거래 매입 — 프로젝트에서 넘어온 벤더 청구서(읽기전용). ─────────────── */}
@@ -853,7 +855,7 @@ function PayablesTab() {
           </thead>
           <tbody>
             {trade.length === 0 ? (
-              <tr><td colSpan={11} className="mini-empty">No vendor bills outstanding.</td></tr>
+              <tr><td colSpan={11} className="mini-empty">No vendor bills yet.</td></tr>
             ) : null}
             {trade.map((p) => (
               <tr key={`${p.source || "manual"}-${p.id}`}>

@@ -21,6 +21,7 @@ from _core import (
     _ar_status_from_text,
     _enum_val,
     app,
+    date,
     get_session,
     require_token,
 )
@@ -41,6 +42,7 @@ def _ap_out(r: APRecord, po_no: str = "", vendor: str = "") -> dict:
         "bill_date": r.bill_date or "",
         "invoice_amount": invoice,
         "paid_amount": paid,
+        "paid_date": r.paid_date or "",
         "outstanding": round(invoice - paid, 2),
         "currency": r.currency or "KRW",
         "vat_rate": r.vat_rate if r.vat_rate is not None else 0.1,
@@ -110,6 +112,7 @@ def create_ap(body: APSave):
             bill_date=body.bill_date or "",
             invoice_amount=body.invoice_amount or 0.0,
             paid_amount=body.paid_amount or 0.0,
+            paid_date=body.paid_date or "",
             currency=body.currency or "KRW",
             vat_rate=body.vat_rate if body.vat_rate is not None else 0.1,
             due_date=body.due_date,
@@ -163,6 +166,12 @@ def update_ap(ap_id: int, body: APSave):
             ap.tax_received_date = body.tax_received_date
         if body.tax_invoice_no is not None:
             ap.tax_invoice_no = body.tax_invoice_no
+        if body.paid_date is not None:
+            ap.paid_date = body.paid_date
+        # 지급액을 0 으로 되돌리면 지급일도 함께 지운다 — 지급 안 한 건에 날짜만 남으면
+        # Finance 실적 집계가 있지도 않은 출금을 그 달에 잡는다.
+        if not (ap.paid_amount or 0):
+            ap.paid_date = ""
         s.commit()
         return {"ok": True, "id": ap.id, "status": _enum_val(ap.status)}
     finally:
@@ -185,7 +194,7 @@ def delete_ap(ap_id: int):
 
 @app.post("/api/admin/ap/{ap_id}/payment", dependencies=[Depends(require_token)])
 def ap_payment(ap_id: int, body: APPayment):
-    """지급 등록 — paid_amount 누적 후 상태 자동 갱신."""
+    """지급 등록 — paid_amount 누적 + 실제 지급일 기록 후 상태 자동 갱신."""
     s = get_session()
     try:
         ap = s.query(APRecord).filter_by(id=ap_id).first()
@@ -194,6 +203,8 @@ def ap_payment(ap_id: int, body: APPayment):
         if body.amount <= 0:
             raise HTTPException(status_code=400, detail="Payment amount must be greater than 0.")
         ap.paid_amount = (ap.paid_amount or 0) + body.amount
+        # 실제 지급일 — 여러 번 나눠 내면 마지막 지급일이 남는다(회차별 이력은 안 남긴다).
+        ap.paid_date = (body.paid_date or date.today().isoformat())[:10]
         if body.due_date:
             ap.due_date = body.due_date
         if ap.paid_amount >= (ap.invoice_amount or 0):
@@ -203,6 +214,7 @@ def ap_payment(ap_id: int, body: APPayment):
         else:
             ap.status = ARStatus.OUTSTANDING
         s.commit()
-        return {"ok": True, "paid_amount": ap.paid_amount, "status": _enum_val(ap.status)}
+        return {"ok": True, "paid_amount": ap.paid_amount, "paid_date": ap.paid_date or "",
+                "status": _enum_val(ap.status)}
     finally:
         s.close()

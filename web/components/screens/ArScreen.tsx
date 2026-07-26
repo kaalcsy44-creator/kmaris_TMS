@@ -272,6 +272,7 @@ type ApForm = {
   vat_rate: number;
   due_date: string;
   paid_amount: number;
+  paid_date: string;
   items: TaxInvoiceItem[];
   charges: ChargeForm;
   notes: string;
@@ -306,6 +307,7 @@ function ApAddForm({
           vat_rate: ap.vat_rate,
           due_date: ap.due_date || today(),
           paid_amount: ap.paid_amount,
+          paid_date: ap.paid_date || "",
           items: (ap.items || []).map((it) => ({ ...it })),
           charges: chargesToForm(ap.charges),
           notes: ap.notes,
@@ -320,6 +322,7 @@ function ApAddForm({
           vat_rate: 0.1,
           due_date: today(),
           paid_amount: 0,
+          paid_date: "",
           items: poItems.map((it) => ({ ...it })),
           charges: { ...emptyCharges },
           notes: "",
@@ -341,6 +344,13 @@ function ApAddForm({
   const setCharge = (key: keyof ChargeForm, v: string) =>
     setForm((f) => ({ ...f, charges: { ...f.charges, [key]: v } }));
 
+  // 지급 상태 — 저장된 status 가 아니라 지금 입력된 청구 총액·지급액에서 매번 계산한다
+  // (금액을 고치면 배지도 같이 따라와야 한다. 미수 목록도 같은 방식).
+  const outstanding = Math.round(total - num(form.paid_amount));
+  const payState = num(form.paid_amount) <= 0 ? "unpaid" : outstanding > 0 ? "partial" : "paid";
+  const payInFull = () => setForm((f) => ({ ...f, paid_amount: total, paid_date: f.paid_date || today() }));
+  const clearPayment = () => setForm((f) => ({ ...f, paid_amount: 0, paid_date: "" }));
+
   function setItem(i: number, key: keyof TaxInvoiceItem, value: string) {
     setForm((f) => {
       const items = f.items.map((it, idx) => {
@@ -359,6 +369,9 @@ function ApAddForm({
 
   async function save() {
     if (!(form.due_date || "").trim()) { setErr("Enter a due date."); return; }
+    if (num(form.paid_amount) > 0 && !(form.paid_date || "").trim()) {
+      setErr("Enter the date the payment was made."); return;
+    }
     setBusy(true); setErr("");
     try {
       const body = {
@@ -369,6 +382,9 @@ function ApAddForm({
         bill_date: form.bill_date,
         invoice_amount: total,
         paid_amount: form.paid_amount,
+        // 지급액이 0 이면 지급일도 비운다 — 안 낸 건에 날짜만 남으면 Finance 실적이
+        // 있지도 않은 출금을 그 달에 잡는다(서버도 같은 규칙으로 한 번 더 막는다).
+        paid_date: form.paid_amount > 0 ? form.paid_date : "",
         currency: form.currency,
         vat_rate: form.vat_rate,
         due_date: form.due_date,
@@ -424,8 +440,9 @@ function ApAddForm({
           <CurrencyToggle value={form.currency || "KRW"} onChange={(v) => setForm({ ...form, currency: v })} />
         </label>
         <Field label="VAT %" value={String(Math.round(form.vat_rate * 100))} onChange={(v) => setForm({ ...form, vat_rate: (Number(v) || 0) / 100 })} type="number" />
+        {/* 지급액·지급일은 아래 Payment 블록으로 옮겼다 — 청구서 내용(무엇을 얼마에 샀나)과
+            지급 사실(언제 얼마를 냈나)은 다른 일이라 섞이면 어느 쪽도 눈에 안 들어온다. */}
         <Field label="Due date" value={form.due_date} onChange={(v) => setForm({ ...form, due_date: v })} type="date" />
-        <MoneyField label="Paid amount" value={form.paid_amount} onChange={(v) => setForm({ ...form, paid_amount: parseAmountInput(v) ?? 0 })} />
       </div>
 
       <div className="tax-items">
@@ -519,6 +536,37 @@ function ApAddForm({
               <Field label="e-Tax invoice No. (approval)" value={form.tax_invoice_no} onChange={(v) => setForm({ ...form, tax_invoice_no: v })} />
             </div>
           ) : null}
+        </div>
+      ) : null}
+
+      {/* 지급 확인 — 9단계는 청구서를 받는 자리라 빼고, 10·11단계에서만 낸다
+          (AR 쪽 MilestoneBar 를 stage !== 9 에 붙이는 것과 같은 규칙). */}
+      {stage !== 9 ? (
+        <div className="ar-milestone">
+          <div className="form-section-title">Payment (to vendor)</div>
+          <div className="milestone-row">
+            <span className={`ar-badge${payState === "paid" ? "" : " overdue"}`}>
+              {payState === "paid"
+                ? `Paid${form.paid_date ? ` (${form.paid_date})` : ""}`
+                : payState === "partial"
+                  ? `Partly paid — ${outstanding.toLocaleString()} left`
+                  : "Unpaid"}
+            </span>
+            {payState === "unpaid" ? (
+              <button type="button" className="btn sm" onClick={payInFull}>
+                Pay in full ({total.toLocaleString()})
+              </button>
+            ) : (
+              <button type="button" className="btn sm" onClick={clearPayment}>Undo payment</button>
+            )}
+          </div>
+          <div className="form-grid">
+            <MoneyField label="Paid amount" value={form.paid_amount} onChange={(v) => setForm({ ...form, paid_amount: parseAmountInput(v) ?? 0 })} />
+            <Field label="Paid date" value={form.paid_date} onChange={(v) => setForm({ ...form, paid_date: v })} type="date" />
+          </div>
+          <p className="hint-inline" style={{ display: "block", marginTop: 8 }}>
+            The paid date is the day the money actually left, which may differ from the due date — Finance uses it to place this bill in the right month (Overview “Cash actually moved”, Cash Flow). Press Save to apply.
+          </p>
         </div>
       ) : null}
 

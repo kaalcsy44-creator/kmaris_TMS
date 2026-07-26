@@ -1617,6 +1617,8 @@ class APSave(BaseModel):
     bill_date: str | None = None
     invoice_amount: float = 0.0
     paid_amount: float = 0.0
+    # 실제 지급일 — 미전달 시 기존값 유지(부분 저장이 지급 기록을 지우지 않도록).
+    paid_date: str | None = None
     currency: str = "KRW"
     vat_rate: float | None = None
     due_date: str | None = None
@@ -1633,6 +1635,7 @@ class APSave(BaseModel):
 class APPayment(BaseModel):
     amount: float
     due_date: str | None = None
+    paid_date: str | None = None   # 실제 지급일(미전달이면 오늘)
 
 
 class TaxInvoicePdfReq(BaseModel):
@@ -2364,6 +2367,8 @@ def _ap_record_rows(s) -> list[dict]:
             "currency": r.currency or "KRW",
             "invoice_amount": invoice,
             "paid_amount": paid,
+            # 실제 지급일 — 예정일과 달리 '돈이 나간 날'. Finance 실적 집계가 이 날짜를 쓴다.
+            "paid_date": (r.paid_date or "")[:10],
             "outstanding": outstanding,
             "due_date": r.due_date or "",
             "status": "연체" if overdue else status,

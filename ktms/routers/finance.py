@@ -114,6 +114,17 @@ def _ar_receipts(ar_rows: list[dict], d0: date, d1: date) -> list[tuple[str, flo
             if r["paid_amount"] > 0 and r["paid_date"] and lo <= r["paid_date"] <= hi]
 
 
+def _ap_payments(ap_rows: list[dict], d0: date, d1: date) -> list[tuple[str, float, str]]:
+    """[d0,d1] 안에 실제로 지급한 벤더 청구 (지급일, 금액, 통화) 목록.
+
+    지급일은 9·10단계 AP 편집기의 Payment 칸에서 들어온다 — 비어 있으면 어느 달에 나갔는지
+    알 수 없으므로 실적에서 뺀다(잔액 쪽에는 미지급으로 그대로 남는다).
+    """
+    lo, hi = d0.isoformat(), d1.isoformat()
+    return [(r["paid_date"], r["paid_amount"], r["currency"]) for r in ap_rows
+            if r["paid_amount"] > 0 and r["paid_date"] and lo <= r["paid_date"] <= hi]
+
+
 def _by_currency_sort_key(per: dict) -> tuple:
     """통화별 합계 정렬 기준 — 환산 없이 KRW, USD, 그 외 최대값 순으로 비교."""
     rest = max([v for c, v in per.items() if c not in ("KRW", "USD")] or [0.0])
@@ -181,7 +192,8 @@ def finance_summary():
                     upcoming.append((amt, cur))
                     _add_by_currency(by_cat, p.category or "기타", amt, cur)
         # ── 지급 — 매입 청구(APRecord) 미지급분(벤더 P/O별) 추가 반영 ──
-        for ap in _ap_record_rows(s):
+        ap_rows = _ap_record_rows(s)
+        for ap in ap_rows:
             if ap["outstanding"] <= 0:
                 continue
             amt, cur, due = ap["outstanding"], ap["currency"], ap["due_date"]
@@ -201,7 +213,8 @@ def finance_summary():
         for p in payables:
             paid_out += [(amt, p.currency or "KRW")
                          for _, amt in _settled_occurrences(p, month_start, month_end)]
-        # 매입 청구(APRecord)는 지급일 컬럼이 없어 어느 달에 나갔는지 알 수 없다 — 제외.
+        # 매입 청구(APRecord) — 9·10단계 Payment 에서 기록한 실제 지급일 기준.
+        paid_out += [(amt, cur) for _, amt, cur in _ap_payments(ap_rows, month_start, month_end)]
 
         payable_upcoming = _sum_by_currency(upcoming)
         payable_overdue = _sum_by_currency(overdue_pay)
@@ -394,10 +407,11 @@ def finance_payables():
             row["paid_amount"] = amount if settled else 0.0
             row["outstanding"] = 0.0 if settled else amount
             out.append(row)
-        # 매입 청구(AP) — vendor P/O별 미지급분을 읽기전용 지급 행으로 합류.
+        # 매입 청구(AP) — vendor P/O별 청구를 읽기전용 지급 행으로 합류.
+        # 지급 완료분도 남긴다(기타 지출 표와 같은 규칙) — 냈다는 사실이 목록에서 사라지면
+        # 지급 확인을 어디서 했는지 되짚을 수가 없다.
         for ap in _ap_record_rows(s):
-            if ap["outstanding"] <= 0:
-                continue
+            settled = ap["invoice_amount"] > 0 and ap["outstanding"] <= 0
             out.append({
                 "id": ap["id"],
                 "source": "ap",
@@ -413,7 +427,7 @@ def finance_payables():
                 # 이 청구가 속한 프로젝트(오더·RFQ) — 목록에서 해당 단계로 바로 들어가는 링크용.
                 "order_id": ap["order_id"],
                 "rfq_id": ap["rfq_id"],
-                "amount": ap["outstanding"],
+                "amount": ap["invoice_amount"],
                 "invoice_amount": ap["invoice_amount"],
                 "paid_amount": ap["paid_amount"],
                 "outstanding": ap["outstanding"],
@@ -421,8 +435,8 @@ def finance_payables():
                 "due_date": ap["due_date"],
                 "recurrence": "none",
                 "recur_until": "",
-                "paid": False,
-                "paid_date": "",
+                "paid": settled,
+                "paid_date": ap["paid_date"],
                 "paid_dates": [],
                 "notes": "",
                 "owner_id": 0,
@@ -776,11 +790,10 @@ def finance_cashflow(unit: str = "month", count: int = 6, opening: float = 0.0,
                 if idx >= 0:
                     outflow[idx] += amt
                     act_out[idx] += amt
-        # 유출 — 매입 청구(AP) 미지급분을 지급 예정일 기준으로 반영.
-        # (지급 완료분은 APRecord 에 지급일 컬럼이 없어 구간에 못 넣는다.)
-        ap_po_ids: set[int] = set()
-        for ap in _ap_record_rows(s):
-            ap_po_ids.add(ap["po_id"])
+        # 유출 — 매입 청구(AP). 미지급 잔액은 지급 예정일에, 지급한 금액은 실제 지급일에.
+        ap_rows = _ap_record_rows(s)
+        ap_po_ids = {ap["po_id"] for ap in ap_rows}
+        for ap in ap_rows:
             if ap["outstanding"] <= 0 or not ap["due_date"]:
                 continue
             if (ap["currency"] or "KRW").upper() != cur_sel:
@@ -788,6 +801,13 @@ def finance_cashflow(unit: str = "month", count: int = 6, opening: float = 0.0,
             idx = bucket_index(ap["due_date"])
             if idx >= 0:
                 outflow[idx] += ap["outstanding"]
+        for when, amt, cur in _ap_payments(ap_rows, win_start, win_end):
+            if (cur or "KRW").upper() != cur_sel:
+                continue
+            idx = bucket_index(when)
+            if idx >= 0:
+                outflow[idx] += amt
+                act_out[idx] += amt
         # 선택: 벤더 발주 원가를 발주일 기준 유출로 추정(AP 청구가 있는 P/O는 중복 방지 위해 제외).
         if include_po:
             ord_map = {o.id: o for o in s.query(Order).all()}
