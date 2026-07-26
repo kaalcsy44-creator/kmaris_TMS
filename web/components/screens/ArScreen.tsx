@@ -120,10 +120,13 @@ type StageTab = 9 | 10 | 11;
 export function ArOverview({
   initialOrderId = null,
   initialStage = null,
+  initialApPoId = null,
   onChanged,
 }: {
   initialOrderId?: number | null;
   initialStage?: StageTab | null;
+  /** 지급대장(Payables)에서 벤더 청구서 번호를 눌러 온 경우 — AP 탭을 그 P/O 로 연다. */
+  initialApPoId?: number | null;
   /** 상위(프로젝트 팝업)의 파이프라인 새로고침 — 단계 완료가 즉시 단계 칩에 반영되게 한다. */
   onChanged?: () => void;
 } = {}) {
@@ -132,8 +135,8 @@ export function ArOverview({
   const [stageTab, setStageTab] = useState<StageTab>(
     initialStage === 11 ? 11 : initialStage === 9 ? 9 : 10
   );
-  // 수취(AR, 고객 청구) / 지급(AP, 벤더 매입) 문서 탭.
-  const [docTab, setDocTab] = useState<"ar" | "ap">("ar");
+  // 수취(AR, 고객 청구) / 지급(AP, 벤더 매입) 문서 탭. 지급대장에서 온 딥링크는 AP 로 연다.
+  const [docTab, setDocTab] = useState<"ar" | "ap">(initialApPoId ? "ap" : "ar");
   const rows = useMemo(() => data?.rows ?? [], [data]);
   const orderId = initialOrderId ?? null;
 
@@ -143,6 +146,11 @@ export function ArOverview({
     else if (initialStage === 10) setStageTab(10);
     else if (initialStage === 9) setStageTab(9);
   }, [initialStage]);
+
+  // 지급대장 딥링크(?ap=<po_id>)로 들어오면 문서 탭도 지급(AP)으로 맞춘다.
+  useEffect(() => {
+    if (initialApPoId) setDocTab("ap");
+  }, [initialApPoId]);
 
   function load() {
     invalidateCache("dashboard");
@@ -184,7 +192,7 @@ export function ArOverview({
           {match && stageTab !== 9 ? <MilestoneBar row={match} stage={stageTab} onChanged={load} /> : null}
         </>
       ) : (
-        <ApSection orderId={orderId} stage={stageTab} onChanged={load} />
+        <ApSection orderId={orderId} stage={stageTab} focusPoId={initialApPoId ?? null} onChanged={load} />
       )}
     </div>
   );
@@ -192,11 +200,27 @@ export function ArOverview({
 
 /** AP(매입 지급) 섹션 — 이 오더의 벤더 P/O 를 골라 대금청구서·전자세금계산서를 입력한다.
  *  한 오더에 벤더 P/O 가 여러 개일 수 있어 P/O 선택기를 먼저 둔다(각 P/O = AP 1건). */
-function ApSection({ orderId, stage, onChanged }: { orderId: number; stage: StageTab; onChanged: () => void }) {
+function ApSection({
+  orderId,
+  stage,
+  focusPoId = null,
+  onChanged,
+}: {
+  orderId: number;
+  stage: StageTab;
+  /** 지급대장에서 눌러 온 벤더 P/O — 목록이 로드되면 그 P/O 를 선택해 연다. */
+  focusPoId?: number | null;
+  onChanged: () => void;
+}) {
   const cacheKey = `ap:by-order:${orderId}`;
   const { data, error, refresh } = useCachedData(cacheKey, () => fetchApByOrder(orderId));
-  const [selPo, setSelPo] = useState<number | null>(null);
+  const [selPo, setSelPo] = useState<number | null>(focusPoId);
   const poRows = useMemo(() => data?.rows ?? [], [data]);
+
+  // 딥링크로 지정된 P/O 가 이 오더에 있으면 그 건을 연다(그 뒤엔 사용자의 선택이 우선).
+  useEffect(() => {
+    if (focusPoId && poRows.some((r) => r.po_id === focusPoId)) setSelPo(focusPoId);
+  }, [focusPoId, poRows]);
 
   useEffect(() => {
     if (poRows.length && (selPo == null || !poRows.some((r) => r.po_id === selPo))) {

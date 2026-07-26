@@ -222,11 +222,14 @@ function ProjectDocLink({
   orderId,
   label,
   hint,
+  apPoId,
 }: {
   orderId?: number;
   label?: string;
   /** 표 우측의 안내 문구 자리 — 링크를 못 걸 때 옅은 안내 문구로 남긴다. */
   hint?: boolean;
+  /** 지급(AP) 행 전용 — 9단계를 AP 탭 + 이 벤더 P/O 가 선택된 상태로 연다. */
+  apPoId?: number;
 }) {
   const text = label || "—";
   // 프로젝트를 특정할 수 없는 행(오더 연결 없음)은 링크 없이 원래 표기로 둔다.
@@ -234,8 +237,8 @@ function ProjectDocLink({
   return (
     <Link
       className={`fin-doc-link${hint ? " hint" : ""}`}
-      href={`/project?order=${orderId}&stage=9`}
-      title="Open this project's billing · AR/AP stage"
+      href={`/project?order=${orderId}&stage=9${apPoId ? `&ap=${apPoId}` : ""}`}
+      title={apPoId ? "Open this vendor bill · stage 9 Payable (AP)" : "Open this project's billing · AR/AP stage"}
     >
       {text}
     </Link>
@@ -715,7 +718,7 @@ function PayablesTab() {
                 <td>
                   {isAp ? (
                     <>
-                      <ProjectDocLink orderId={p.order_id} label={p.description} />
+                      <ProjectDocLink orderId={p.order_id} label={p.description} apPoId={p.po_id} />
                       {p.po_no && p.po_no !== p.description ? <div className="muted">{p.po_no}</div> : null}
                     </>
                   ) : (
@@ -757,7 +760,7 @@ function PayablesTab() {
                 <td>
                   <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
                     {isAp ? (
-                      <ProjectDocLink orderId={p.order_id} label="Project stage 9/10" hint />
+                      <ProjectDocLink orderId={p.order_id} label="Project stage 9/10" hint apPoId={p.po_id} />
                     ) : (
                       <>
                         {can("finance", "edit") ? <button className="btn sm" onClick={() => setEditing(p)}>Edit</button> : null}

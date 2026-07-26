@@ -346,6 +346,8 @@ def finance_payables():
                 "vendor_id": None,
                 "description": ap["bill_no"] or ap["po_no"] or "",
                 "po_no": ap["po_no"],
+                # 이 청구의 벤더 P/O — 9단계 AP 탭에서 그 P/O 를 바로 선택하는 딥링크용.
+                "po_id": ap["po_id"],
                 # 청구서 발행일 — 미수 목록의 invoice_date(대금청구서 발행일)와 대칭.
                 "bill_date": ap["bill_date"],
                 # 이 청구가 속한 프로젝트(오더) — 목록에서 해당 단계로 바로 들어가는 링크용.

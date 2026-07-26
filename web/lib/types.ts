@@ -831,6 +831,7 @@ export type FinancePayable = {
   source?: "manual" | "ap";   // "ap" = 매입 청구(APRecord) 유래, 읽기전용
   bill_date?: string;         // 벤더 청구서 발행일(9단계). 수동 등록 항목은 없음
   po_no?: string;             // source==="ap" 일 때 연결된 벤더 P/O 번호
+  po_id?: number;             // source==="ap" 일 때 그 벤더 P/O id — 9단계 AP 탭 딥링크용
   order_id?: number;          // source==="ap" 일 때 이 청구가 속한 프로젝트(오더) — 딥링크용
 };
 

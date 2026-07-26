@@ -119,12 +119,16 @@ export default function ProjectsScreen() {
   const deepOrder = params.get("order");
   const deepStage = params.get("stage");
   const deepVrfq = params.get("vrfq");
+  // ?ap=<po_id> — 지급대장에서 벤더 청구서 번호를 눌러 온 경우. 9단계를 AP(지급) 탭 +
+  // 그 벤더 P/O 가 선택된 상태로 연다.
+  const deepAp = params.get("ap");
   const deepView = params.get("view");
   const [deepLink, setDeepLink] = useState<{
     rfqId: number | null;
     orderId: number | null;
     stage: number | null;
     vrfqId: number | null;
+    apPoId: number | null;
     view: "work" | "overview";
   } | null>(null);
   useEffect(() => {
@@ -135,11 +139,12 @@ export default function ProjectsScreen() {
       orderId: deepOrder ? Number(deepOrder) : null,
       stage: deepStage ? Number(deepStage) : null,
       vrfqId: deepVrfq ? Number(deepVrfq) : null,
+      apPoId: deepAp ? Number(deepAp) : null,
       view: deepView === "overview" ? "overview" : "work",
     });
     // URL 정리 — 새로고침마다 같은 팝업이 다시 열리지 않도록 파라미터를 제거한다.
     router.replace("/project", { scroll: false });
-  }, [deepRfq, deepOrder, deepStage, deepVrfq, deepView, router]);
+  }, [deepRfq, deepOrder, deepStage, deepVrfq, deepAp, deepView, router]);
   // 내부확인용·고객확인용 모두 통합 파이프라인(rows) 사용. 단계 체계만 12 vs 7로 다름.
   const {
     data: pipeline,
@@ -223,6 +228,7 @@ export default function ProjectsScreen() {
               openOrderId={deepLink?.orderId ?? null}
               openStage={deepLink?.stage ?? null}
               openVrfqId={deepLink?.vrfqId ?? null}
+              openApPoId={deepLink?.apPoId ?? null}
               openView={deepLink?.view ?? "work"}
             />
           )}
@@ -522,6 +528,7 @@ function PipelineTable({
   openOrderId = null,
   openStage = null,
   openVrfqId = null,
+  openApPoId = null,
   openView = "work",
 }: {
   rows: PipelineRow[];
@@ -544,6 +551,8 @@ function PipelineTable({
   openOrderId?: number | null;
   openStage?: number | null;
   openVrfqId?: number | null;
+  // 딥링크로 9단계 진입 시 초점 벤더 P/O id(AP 탭 + 그 P/O 선택).
+  openApPoId?: number | null;
   openView?: "work" | "overview";
 }) {
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -552,6 +561,8 @@ function PipelineTable({
   const [deepStage, setDeepStage] = useState<number | null>(null);
   // 딥링크로 2단계 진입 시 초점 벤더 RFQ id(그 벤더 상세를 바로 선택).
   const [deepVrfqId, setDeepVrfqId] = useState<number | null>(null);
+  // 딥링크로 9단계 진입 시 초점 벤더 P/O id(지급대장에서 청구서 번호를 눌러 온 경우).
+  const [deepApPoId, setDeepApPoId] = useState<number | null>(null);
   // 딥링크 1회 소비 가드(행 로드 지연·재렌더 시 닫은 팝업이 다시 열리지 않도록).
   const deepConsumed = useRef(false);
   // 목록·상세 모달 공용 오픈 헬퍼(수동 오픈은 지정 단계 없음).
@@ -560,12 +571,14 @@ function PipelineTable({
     setSelectedId(id);
     setDeepStage(null);
     setDeepVrfqId(null);
+    setDeepApPoId(null);
   }, []);
   const openOverview = useCallback((id: number) => {
     setInitialModalView("overview");
     setSelectedId(id);
     setDeepStage(null);
     setDeepVrfqId(null);
+    setDeepApPoId(null);
   }, []);
   useEffect(() => {
     if (deepConsumed.current) return;
@@ -579,7 +592,8 @@ function PipelineTable({
     setSelectedId(id);
     setDeepStage(openStage && openStage > 0 ? openStage : null);
     setDeepVrfqId(openVrfqId && openVrfqId > 0 ? openVrfqId : null);
-  }, [openRfqId, openOrderId, openStage, openVrfqId, openView, rows]);
+    setDeepApPoId(openApPoId && openApPoId > 0 ? openApPoId : null);
+  }, [openRfqId, openOrderId, openStage, openVrfqId, openApPoId, openView, rows]);
   // 목록 표시 방식: 표(table) / 칸반 보드(board). 같은 데이터·같은 상세 모달 재사용.
   const [view, setView] = useState<"table" | "board">("board");
   // 현황판 전체 미리보기(A4 가로 이미지) 팝업 열림 여부.
@@ -1113,6 +1127,7 @@ function PipelineTable({
           onChanged={onChanged}
           initialStage={deepStage}
           initialVrfqId={deepVrfqId}
+          initialApPoId={deepApPoId}
           initialView={initialModalView}
           onNavigate={navigateSelected}
           onClose={() => {
@@ -1797,6 +1812,7 @@ export function PipelineModal({
   isNew,
   initialStage = null,
   initialVrfqId = null,
+  initialApPoId = null,
   initialView = "work",
 }: {
   r: PipelineRow;
@@ -1815,6 +1831,8 @@ export function PipelineModal({
   initialStage?: number | null;
   // 딥링크로 2단계 진입 시 초점 벤더 RFQ id(그 벤더 상세를 바로 선택).
   initialVrfqId?: number | null;
+  // 딥링크로 9단계 진입 시 초점 벤더 P/O id(AP 탭 + 그 P/O 의 청구서를 바로 연다).
+  initialApPoId?: number | null;
   initialView?: "work" | "overview";
 }) {
   const isNewProject = !!isNew;
@@ -1922,6 +1940,8 @@ export function PipelineModal({
   );
   // 2단계 진입 시 선택할 벤더 RFQ id — 개요의 특정 "RFQ Sent" 로그(또는 딥링크)에서 지정.
   const [focusVrfqId, setFocusVrfqId] = useState<number | null>(initialVrfqId ?? null);
+  // 9단계 진입 시 선택할 벤더 P/O id — 지급대장(Payables)에서 청구서 번호를 눌러 온 경우.
+  const [focusApPoId, setFocusApPoId] = useState<number | null>(initialApPoId ?? null);
   // 팝업 안 화면 전환: 단계 작업(work) ↔ 프로젝트 개요(overview).
   // 기억하지 않고 늘 work 로 연다 — 팝업을 여는 목적은 대개 단계를 진행시키는 것이라,
   // overview 로 굳어 있으면 작업하려던 사람이 매번 한 번 더 눌러야 한다.
@@ -1932,6 +1952,7 @@ export function PipelineModal({
   const openStageFromOverview = useCallback((no: number, vrfqId?: number) => {
     setSelectedStage(Math.min(Math.max(no, 1), 11));
     setFocusVrfqId(vrfqId ?? null);
+    setFocusApPoId(null);
     setModalView("work");
   }, []);
 
@@ -1944,6 +1965,7 @@ export function PipelineModal({
     prevRfqId.current = r.rfq_id;
     setSelectedStage(Math.min(Math.max(r.stage || 1, 1), 11));
     setFocusVrfqId(null);
+    setFocusApPoId(null);
   }, [r.rfq_id, r.stage]);
 
   // ←/→ 방향키로 이웃 프로젝트 전환. 입력 중(텍스트칸·선택·메모)엔 커서 이동이 우선이라
@@ -2616,6 +2638,7 @@ export function PipelineModal({
                 area={areaForStage(selectedStage)}
                 row={r}
                 focusVrfqId={focusVrfqId}
+                focusApPoId={focusApPoId}
                 onChanged={onChanged}
               />
             )}
@@ -2634,12 +2657,14 @@ function WorkspacePanel({
   area,
   row,
   focusVrfqId,
+  focusApPoId,
   onChanged,
 }: {
   stage: number;
   area: WorkspaceArea;
   row: PipelineRow;
   focusVrfqId?: number | null;
+  focusApPoId?: number | null;
   onChanged: () => void | Promise<unknown>;
 }) {
   // 이 프로젝트(RFQ)의 고객 P/O(오더)들 — 6~11단계는 어느 P/O 기준으로 진행할지 선택.
@@ -2727,6 +2752,7 @@ function WorkspacePanel({
             key={docReloadKey}
             initialOrderId={effectiveOrderId}
             initialStage={arStage as 9 | 10 | 11}
+            initialApPoId={focusApPoId ?? null}
             onChanged={onChanged}
           />
         </Suspense>
