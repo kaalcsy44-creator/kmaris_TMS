@@ -1482,6 +1482,25 @@ export function CategoriesTab() {
       .filter((c) => (c.parent_id ?? null) === pid)
       .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name));
 
+  // 분류별 배정 품목 수 — 트리 라벨 옆에 표시. 클릭하면 보이는 목록과 같은 기준이라
+  // 하위 분류(중·소)에 배정된 품목까지 상위 노드 수에 합산한다.
+  const catCount: Map<number, number> = (() => {
+    const direct = new Map<number, number>();
+    for (const it of ledger?.items ?? []) {
+      if (it.category_id != null) direct.set(it.category_id, (direct.get(it.category_id) ?? 0) + 1);
+    }
+    const total = new Map<number, number>();
+    const walk = (id: number, depth: number): number => {
+      if (depth > 5) return 0;   // 데이터 이상(순환)에도 멈추도록
+      let n = direct.get(id) ?? 0;
+      for (const k of rows.filter((r) => r.parent_id === id)) n += walk(k.id, depth + 1);
+      total.set(id, n);
+      return n;
+    };
+    for (const r of rows.filter((c) => (c.parent_id ?? null) === null)) walk(r.id, 1);
+    return total;
+  })();
+
   // 한 분류 노드의 자기 자신 + 모든 하위 분류 id 집합(필터링용).
   function descendantIds(id: number): Set<number> {
     const out = new Set<number>([id]);
@@ -1752,6 +1771,11 @@ export function CategoriesTab() {
             title="Show this category's item prices"
           >
             {node.name}
+            {/* 배정된 품목 수(하위 분류 포함) — 0이면 옅게. 목록을 열지 않고도 어디에
+                품목이 몰려 있는지 보인다. */}
+            <span className={`cat-node-count${(catCount.get(node.id) ?? 0) === 0 ? " zero" : ""}`}>
+              ({catCount.get(node.id) ?? 0})
+            </span>
             {!node.active ? <span className="cat-inactive">Inactive</span> : null}
           </span>
           <span className="cat-node-actions">

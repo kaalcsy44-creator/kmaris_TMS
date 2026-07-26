@@ -8062,6 +8062,25 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 .cat-node-name .cat-inactive {
   margin-left: 6px;
 }
+/* 분류별 배정 품목 수 — 이름 옆 보조 표기. 상위 노드는 하위 분류 합계다. */
+.cat-node-count {
+  margin-left: 5px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #7d8ba1;
+  font-variant-numeric: tabular-nums;
+}
+.cat-node-count.zero {
+  color: #c3cbd8;
+  font-weight: 500;
+}
+/* 대분류는 이름이 파란 볼드라 카운트도 같은 계열의 옅은 색으로 맞춘다. */
+.cat-l1 > .cat-node-row .cat-node-name .cat-node-count {
+  color: color-mix(in srgb, var(--blue) 55%, #8b98ab);
+}
+.cat-l1 > .cat-node-row .cat-node-name .cat-node-count.zero {
+  color: color-mix(in srgb, var(--blue) 28%, #ccd4e0);
+}
 /* 그룹(형제 목록) 맨 끝의 '+ 하위레벨 추가' 버튼 — 세로선 아래 끝에 위치.
    Activity Log 의 add 버튼처럼 평소엔 옅고 hover 시 진해진다. */
 .cat-addrow {
