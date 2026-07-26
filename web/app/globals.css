@@ -10172,7 +10172,9 @@ table.mini tfoot .fin-foot-name { text-align: left; }
   border: 0; border-radius: 5px; padding: 2px 5px; cursor: pointer; text-align: left;
   font-size: 11px; line-height: 1.2; min-width: 0;
 }
-.fin-ev--receivable { background: #e7f0fa; color: #1f4e79; cursor: default; }
+.fin-ev--receivable { background: #e7f0fa; color: #1f4e79; }
+/* 프로젝트 단계에서 관리하는 건(수금·매입청구) — 캘린더에서 못 누르므로 커서로 알린다. */
+.fin-ev.readonly { cursor: default; }
 .fin-ev--payable { background: #fdf1dd; color: #8a5a00; }
 .fin-ev.overdue { background: #fde2e1; color: #b0281c; }
 .fin-ev.paid { background: #e8f6ee; color: #1e7a46; text-decoration: line-through; }

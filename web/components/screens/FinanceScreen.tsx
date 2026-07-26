@@ -1496,6 +1496,11 @@ function CalendarTab() {
     return map;
   }, [data]);
 
+  // 프로젝트 단계에서 관리하는 청구·수금(AR/AP)은 캘린더에서 못 누른다 — 눌리는 것처럼
+  // 보이지 않게 커서·호버를 죽인다(수금은 원래 그랬고, 지급도 같은 규칙).
+  const readOnlyEvent = (e: FinanceCalendarEvent) =>
+    e.kind === "receivable" || e.source === "ap" || !can("finance", "edit");
+
   // 납부 처리는 실제 납부일을 받아야 하므로 입력창을 띄운다(해제는 즉시).
   const [payingEvent, setPayingEvent] = useState<FinanceCalendarEvent | null>(null);
   const [paidOn, setPaidOn] = useState(todayStr());
@@ -1567,7 +1572,7 @@ function CalendarTab() {
                   <button
                     key={i}
                     type="button"
-                    className={`fin-ev fin-ev--${e.kind}${e.overdue ? " overdue" : ""}${e.paid ? " paid" : ""}${e.actual ? " actual" : ""}`}
+                    className={`fin-ev fin-ev--${e.kind}${e.overdue ? " overdue" : ""}${e.paid ? " paid" : ""}${e.actual ? " actual" : ""}${readOnlyEvent(e) ? " readonly" : ""}`}
                     title={
                       e.actual
                         // 수금은 '납부'가 아니라 '입금'이다 — 방향에 맞는 말로 표기.
@@ -1576,7 +1581,7 @@ function CalendarTab() {
                           }`
                         : `${e.kind === "receivable" ? "Receivable" : "Payable"} · ${e.title} · ${money(e.amount, e.currency)}${
                             e.paid ? ` (paid${e.paid_on ? ` ${e.paid_on}` : ""})` : ""
-                          }`
+                          }${e.source === "ap" ? " — recorded in the project's stage 10 Payable (AP)" : ""}`
                     }
                     onClick={() => togglePayable(e)}
                   >
@@ -1591,7 +1596,7 @@ function CalendarTab() {
         })}
       </div>
       <p className="hint-inline" style={{ display: "block", marginTop: 8 }}>
-        Click a payable to record its payment — you enter the date it was actually paid, which may differ from the scheduled date (recurring items settle one occurrence at a time). Click a paid one to undo. Receivables (AR) are managed from the project stages: unpaid ones sit on their due date, and collected ones (✓) on the date the money actually arrived.
+        Every item sits on its scheduled date until it settles, then appears again (✓) on the day the money actually moved. Click one of your own costs to record its payment — you enter the date it was really paid, which may differ from the scheduled date (recurring items settle one occurrence at a time); click a paid one to undo. Customer invoices (AR) and vendor bills (AP) are managed from the project stages instead — stage 11 Payment for collections, stage 10 Payable for vendor payments.
       </p>
       {payingEvent ? (
         <Modal title="Record payment" onClose={() => setPayingEvent(null)} form maxWidth={340}>

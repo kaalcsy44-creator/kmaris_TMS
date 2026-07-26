@@ -984,18 +984,40 @@ def finance_calendar(start: str = "", end: str = ""):
                     "ref_id": p.id,
                     "occurrence": sched,
                 })
-        # 지급 예정 — 매입 청구(AP) 미지급분(읽기전용, 프로젝트 단계에서 관리).
+        # 매입 청구(AP) — 미지급 잔액은 지급 예정일에, 지급한 금액은 실제 지급일에.
+        # 수금(AR)과 같은 규칙이라 캘린더에서 예정과 실적이 나란히 읽힌다.
+        # 지급 기록은 프로젝트 10·11단계 AP 탭에서 하므로 여기서는 읽기전용(source="ap").
         for ap in _ap_record_rows(s):
             due = ap["due_date"]
+            who = ap["vendor"] or ap["bill_no"] or ap["po_no"] or "Payable"
             if ap["outstanding"] > 0 and due and d0.isoformat() <= due <= d1.isoformat():
                 events.append({
                     "kind": "payable",
                     "date": due,
-                    "title": ap["vendor"] or ap["po_no"] or "Payable",
+                    "title": who,
                     "category": "거래선지급",
                     "amount": ap["outstanding"],
                     "currency": ap["currency"],
+                    "overdue": ap["overdue"],
                     "paid": False,
+                    "ref_id": ap["id"],
+                    "occurrence": None,
+                    "source": "ap",
+                })
+            # 지급분 — 실제 지급일 자리에 ✓ 로. 부분지급이면 예정일 쪽에 잔액이 함께 남는다.
+            got = ap["paid_date"]
+            if ap["paid_amount"] > 0 and got and d0.isoformat() <= got <= d1.isoformat():
+                events.append({
+                    "kind": "payable",
+                    "date": got,
+                    "title": who,
+                    "category": "거래선지급",
+                    "amount": ap["paid_amount"],
+                    "currency": ap["currency"],
+                    "paid": True,
+                    "paid_on": got,
+                    "scheduled": due,
+                    "actual": True,
                     "ref_id": ap["id"],
                     "occurrence": None,
                     "source": "ap",
