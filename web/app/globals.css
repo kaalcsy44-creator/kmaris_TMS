@@ -10029,6 +10029,20 @@ button.ov-tl-stage:hover {
 .fin-kpi--blue { border-left-color: var(--blue); }
 .fin-kpi--red { border-left-color: #c0392b; }
 .fin-kpi--amber { border-left-color: #d68910; }
+/* 실적(이미 오간 돈) 타일 — 예정을 보는 위쪽 타일과 색으로 갈라 둔다. */
+.fin-kpi--green { border-left-color: #1e7a46; }
+.fin-kpis-cap {
+  /* .fin-overview 가 flex column gap:14 이라 위아래 간격은 거기서 온다. 위쪽만 조금 더. */
+  margin: 4px 2px 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  letter-spacing: 0.2px;
+}
+/* 실적 타일은 두 개뿐이라 auto-fit 에 맡기면 화면 절반씩 차지한다 — 폭을 묶어 왼쪽 정렬. */
+.fin-kpis--actual { grid-template-columns: repeat(auto-fit, minmax(220px, 300px)); justify-content: start; }
+/* 현금흐름 표에서 '이 중 이미 오간 금액' — 같은 칸의 보조 정보라 작고 옅게. */
+.fin-cf-actual { font-size: 11px; font-weight: 400; color: var(--muted); margin-top: 2px; }
 .fin-kpi-label { font-size: 12px; color: var(--muted); font-weight: 600; }
 .fin-kpi-main { font-size: 22px; font-weight: 800; color: var(--navy); margin-top: 4px; font-variant-numeric: tabular-nums; }
 /* 통화별로 나눠 적는 금액(환산 없이 ₩·$ 각 줄). KPI 는 두 번째 줄부터 조금 작게. */

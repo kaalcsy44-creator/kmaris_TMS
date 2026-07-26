@@ -72,6 +72,48 @@ def _today_usd_krw() -> dict:
     return {"rate": USD_KRW_RATE, "date": "", "source": "fixed"}
 
 
+def _month_bounds(d: date) -> tuple[date, date]:
+    """d 가 속한 달의 [1일, 말일]."""
+    start = d.replace(day=1)
+    nm, ny = (1, d.year + 1) if d.month == 12 else (d.month + 1, d.year)
+    return start, date.fromordinal(date(ny, nm, 1).toordinal() - 1)
+
+
+def _settled_occurrences(p, d0: date, d1: date) -> list[tuple[str, float]]:
+    """지급대장/기타수입 한 건에서 [d0,d1] 안에 '실제로 돈이 오간' (날짜, 금액) 목록.
+
+    예정(회차일)이 아니라 실제 결제일 기준이다 — 7/20 예정을 7/25 에 냈으면 7/25 에 잡힌다.
+    일회성은 paid_date(미입력이면 예정일로 폴백), 반복은 payments{회차일: 실제일} 을 쓰되
+    실제일 기록이 없는 옛 회차는 회차일을 결제일로 본다(paid_dates).
+    FinanceIncome 도 같은 필드 구성이라 그대로 통한다.
+    """
+    amount = round(p.amount or 0.0, 2)
+    lo, hi = d0.isoformat(), d1.isoformat()
+    out: list[tuple[str, float]] = []
+    if (p.recurrence or "none") == "none":
+        if p.paid:
+            when = ((p.paid_date or "")[:10] or (p.due_date or "")[:10])
+            if when and lo <= when <= hi:
+                out.append((when, amount))
+        return out
+    payments = dict(getattr(p, "payments", None) or {})
+    for occ in (p.paid_dates or []):
+        when = (payments.get(occ) or occ)[:10]
+        if when and lo <= when <= hi:
+            out.append((when, amount))
+    return out
+
+
+def _ar_receipts(ar_rows: list[dict], d0: date, d1: date) -> list[tuple[str, float, str]]:
+    """[d0,d1] 안에 실제로 입금된 매출채권 (입금일, 금액, 통화) 목록.
+
+    완납 건만 잡힌다 — 부분수금은 ARRecord 에 입금일을 남기는 자리가 없어 날짜를 못 매긴다.
+    """
+    lo, hi = d0.isoformat(), d1.isoformat()
+    return [(r["paid_date"], r["paid_amount"], r["currency"]) for r in ar_rows
+            if r["paid_amount"] > 0 and r["paid_date"] and lo <= r["paid_date"] <= hi]
+
+
 def _by_currency_sort_key(per: dict) -> tuple:
     """통화별 합계 정렬 기준 — 환산 없이 KRW, USD, 그 외 최대값 순으로 비교."""
     rest = max([v for c, v in per.items() if c not in ("KRW", "USD")] or [0.0])
@@ -90,7 +132,7 @@ def finance_meta():
 
 @app.get("/api/admin/finance/summary", dependencies=[Depends(require_token)])
 def finance_summary():
-    """재무 현황 요약 — 미수(수금)·지급 KPI + 거래선(고객)별 미수 통계.
+    """재무 현황 요약 — 잔액(미수·미지급) KPI + 이번 달 실제 입출금 + 거래선별 통계.
 
     통화는 환산하지 않고 통화별로 분리해 합계를 낸다(임의 환율로 뭉치면 실제 잔액과
     어긋나기 때문). 정렬만 KRW→USD→기타 순으로 비교한다.
@@ -100,9 +142,11 @@ def finance_summary():
         today = date.today()
         today_str = today.isoformat()
         horizon = (date.fromordinal(today.toordinal() + 30)).isoformat()
+        month_start, month_end = _month_bounds(today)
 
         # ── 수금(미수) — ARRecord + 기타 수입(수동 등록) ──
-        rec = _finance_receivable_rows(s) + _finance_income_rows(s)
+        ar_rows = _finance_receivable_rows(s)
+        rec = ar_rows + _finance_income_rows(s)
         rec_open = [r for r in rec if r["outstanding"] > 0]
         receivable_outstanding = _sum_by_currency((r["outstanding"], r["currency"]) for r in rec_open)
         receivable_overdue = _sum_by_currency(
@@ -147,6 +191,18 @@ def finance_summary():
             elif not due or due <= horizon:
                 upcoming.append((amt, cur))
                 _add_by_currency(by_cat, "거래선지급", amt, cur)
+        # ── 이번 달 실제 입출금 — 잔액 KPI 는 '아직 안 오간 돈'만 보므로, 완납된 건은
+        # 어느 타일에도 남지 않는다. 이미 들어오고 나간 돈을 볼 자리를 따로 둔다. ──
+        collected = [(amt, cur) for _, amt, cur in _ar_receipts(ar_rows, month_start, month_end)]
+        for inc in s.query(FinanceIncome).all():
+            collected += [(amt, inc.currency or "KRW")
+                          for _, amt in _settled_occurrences(inc, month_start, month_end)]
+        paid_out: list[tuple[float, str]] = []
+        for p in payables:
+            paid_out += [(amt, p.currency or "KRW")
+                         for _, amt in _settled_occurrences(p, month_start, month_end)]
+        # 매입 청구(APRecord)는 지급일 컬럼이 없어 어느 달에 나갔는지 알 수 없다 — 제외.
+
         payable_upcoming = _sum_by_currency(upcoming)
         payable_overdue = _sum_by_currency(overdue_pay)
         payable_total = _sum_by_currency(upcoming + overdue_pay)
@@ -166,6 +222,10 @@ def finance_summary():
                 "overdue": payable_overdue,
                 "total": payable_total,
             },
+            # 이번 달 실적(예정이 아니라 실제 오간 돈).
+            "month": month_start.strftime("%Y-%m"),
+            "collected_month": {"amount": _sum_by_currency(collected), "count": len(collected)},
+            "paid_month": {"amount": _sum_by_currency(paid_out), "count": len(paid_out)},
             "by_customer": by_customer[:12],
             "by_category": by_category,
         }
@@ -638,9 +698,12 @@ def _cashflow_buckets(unit: str, count: int) -> list[dict]:
 @app.get("/api/admin/finance/cashflow", dependencies=[Depends(require_token)])
 def finance_cashflow(unit: str = "month", count: int = 6, opening: float = 0.0,
                      include_po: int = 0, currency: str = "KRW"):
-    """현금흐름 예측 — 유입(미수 수금 예정)·유출(지급 예정 + 선택적 벤더 PO)·순증감·누적잔고.
+    """현금흐름 — 유입(수금)·유출(지급 + 선택적 벤더 PO)·순증감·누적잔고.
 
-    구간(월/주)별로 예상 유입/유출을 집계하고 opening(기초잔고)부터 누적잔고를 굴린다.
+    구간(월/주)별로 유입/유출을 집계하고 opening(기초잔고)부터 누적잔고를 굴린다.
+    각 구간은 '아직 안 온 예정'과 '이미 오간 실적'을 함께 담는다 — 이번 달에 이미 받은
+    돈이 어디에도 안 보이면 그 달 유입이 0 으로 읽히기 때문이다. 따라서 opening 은
+    '오늘 잔고'가 아니라 **첫 구간 시작일 기준 잔고**(월 단위면 이번 달 1일)여야 한다.
     과거(연체)로 이미 지난 예정은 첫 구간에 흡수한다.
     잔고는 한 통화 안에서만 의미가 있으므로 환산하지 않고 `currency` 통화 건만 집계한다.
     include_po=1 이면 벤더 발주(PurchaseOrder) 원가를 발주일 기준 유출로 추정 반영한다.
@@ -662,8 +725,16 @@ def finance_cashflow(unit: str = "month", count: int = 6, opening: float = 0.0,
     try:
         inflow = [0.0] * count
         outflow = [0.0] * count
-        # 유입 — 미수 잔액이 있는 AR + 미수령 기타 수입의 due_date.
-        for r in _finance_receivable_rows(s) + _finance_income_rows(s):
+        # 실적(이미 오간 돈)은 따로 세어 행에 같이 실어 준다 — 표에서 '예정이 아니라
+        # 이미 들어온 금액'을 구분해 볼 수 있게.
+        act_in = [0.0] * count
+        act_out = [0.0] * count
+        win_start = buckets[0]["start"]
+        win_end = buckets[-1]["end"]
+
+        # 유입(예정) — 미수 잔액이 있는 AR + 미수령 기타 수입의 due_date.
+        ar_rows = _finance_receivable_rows(s)
+        for r in ar_rows + _finance_income_rows(s):
             if r["outstanding"] <= 0 or not r["due_date"]:
                 continue
             if (r["currency"] or "KRW").upper() != cur_sel:
@@ -671,9 +742,24 @@ def finance_cashflow(unit: str = "month", count: int = 6, opening: float = 0.0,
             idx = bucket_index(r["due_date"])
             if idx >= 0:
                 inflow[idx] += r["outstanding"]
-        # 유출 — 지급대장 미납 회차.
-        win_start = buckets[0]["start"]
-        win_end = buckets[-1]["end"]
+        # 유입(실적) — 이 구간 안에 실제로 입금된 매출채권·기타 수입.
+        # 완납 건은 위 예정 루프에서 outstanding=0 으로 빠지므로 이중계상이 없다.
+        for when, amt, cur in _ar_receipts(ar_rows, win_start, win_end):
+            if (cur or "KRW").upper() != cur_sel:
+                continue
+            idx = bucket_index(when)
+            if idx >= 0:
+                inflow[idx] += amt
+                act_in[idx] += amt
+        for inc in s.query(FinanceIncome).all():
+            if (inc.currency or "KRW").upper() != cur_sel:
+                continue
+            for when, amt in _settled_occurrences(inc, win_start, win_end):
+                idx = bucket_index(when)
+                if idx >= 0:
+                    inflow[idx] += amt
+                    act_in[idx] += amt
+        # 유출 — 지급대장. 미납 회차는 예정일에, 납부된 회차는 실제 납부일에 담는다.
         # 첫 구간이 연체를 흡수하도록 과거 1년까지 회차를 펼쳐 담는다.
         scan_start = date.fromordinal(win_start.toordinal() - 400)
         for p in s.query(FinancePayable).all():
@@ -685,7 +771,13 @@ def finance_cashflow(unit: str = "month", count: int = 6, opening: float = 0.0,
                 idx = bucket_index(occ)
                 if idx >= 0:
                     outflow[idx] += p.amount or 0
+            for when, amt in _settled_occurrences(p, win_start, win_end):
+                idx = bucket_index(when)
+                if idx >= 0:
+                    outflow[idx] += amt
+                    act_out[idx] += amt
         # 유출 — 매입 청구(AP) 미지급분을 지급 예정일 기준으로 반영.
+        # (지급 완료분은 APRecord 에 지급일 컬럼이 없어 구간에 못 넣는다.)
         ap_po_ids: set[int] = set()
         for ap in _ap_record_rows(s):
             ap_po_ids.add(ap["po_id"])
@@ -723,6 +815,9 @@ def finance_cashflow(unit: str = "month", count: int = 6, opening: float = 0.0,
                 "end": b["end"].isoformat(),
                 "inflow": round(inflow[i]),
                 "outflow": round(outflow[i]),
+                # 위 금액 중 이미 오간 부분(나머지가 아직 안 온 예정).
+                "actual_inflow": round(act_in[i]),
+                "actual_outflow": round(act_out[i]),
                 "net": round(net),
                 "cumulative": round(cumulative),
             })
@@ -730,9 +825,13 @@ def finance_cashflow(unit: str = "month", count: int = 6, opening: float = 0.0,
             "unit": unit,
             "currency": cur_sel,
             "opening": round(opening),
+            # 기초잔고 기준일 — 화면이 '언제 기준으로 넣어야 하는 값'인지 안내한다.
+            "opening_as_of": buckets[0]["start"].isoformat(),
             "rows": rows,
             "total_inflow": round(sum(inflow)),
             "total_outflow": round(sum(outflow)),
+            "actual_inflow": round(sum(act_in)),
+            "actual_outflow": round(sum(act_out)),
             "ending": round(cumulative),
         }
     finally:

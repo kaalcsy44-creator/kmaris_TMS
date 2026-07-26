@@ -92,6 +92,13 @@ function byCurrencyLines(m: MoneyByCurrency): React.ReactNode {
   ));
 }
 
+/** "2026-07" → "Jul 2026". 실적 KPI·기초잔고 기준일처럼 기간을 밝혀야 할 때 쓴다. */
+function monthLabel(ym: string): string {
+  const [y, m] = (ym || "").split("-").map(Number);
+  if (!y || !m) return ym || "";
+  return new Date(y, m - 1, 1).toLocaleDateString("en-US", { month: "short", year: "numeric" });
+}
+
 /** 통화별 합계를 참고용 KRW 한 값으로 — 표시 전용(집계·저장에는 쓰지 않는다). */
 function toKrw(m: MoneyByCurrency, usdKrw: number): number {
   return Object.entries(m || {}).reduce(
@@ -151,6 +158,24 @@ function OverviewTab() {
         <KpiTile label="Overdue payable" main={byCurrencyLines(data.payable.overdue)} tone="red" />
       </div>
 
+      {/* 위 네 타일은 '아직 안 오간 돈'이라 완납되는 순간 값이 사라진다. 이미 들어오고
+          나간 돈은 여기서만 보이므로 줄을 나누고 색(초록)도 달리 준다. */}
+      <div className="fin-kpis-cap">Cash actually moved · {monthLabel(data.month)}</div>
+      <div className="fin-kpis fin-kpis--actual">
+        <KpiTile
+          label="Collected"
+          main={byCurrencyLines(data.collected_month.amount)}
+          sub={`${data.collected_month.count} received`}
+          tone="green"
+        />
+        <KpiTile
+          label="Paid out"
+          main={byCurrencyLines(data.paid_month.amount)}
+          sub={`${data.paid_month.count} settled`}
+          tone="green"
+        />
+      </div>
+
       <div className="fin-overview-cols">
         <div className="panel">
           <h3 className="form-title">Receivables by customer</h3>
@@ -191,7 +216,7 @@ function OverviewTab() {
   );
 }
 
-function KpiTile({ label, main, sub, tone }: { label: string; main: React.ReactNode; sub?: string; tone: "blue" | "red" | "amber" }) {
+function KpiTile({ label, main, sub, tone }: { label: string; main: React.ReactNode; sub?: string; tone: "blue" | "red" | "amber" | "green" }) {
   return (
     <div className={`fin-kpi fin-kpi--${tone}`}>
       <div className="fin-kpi-label">{label}</div>
@@ -1320,10 +1345,14 @@ function MonthlyBars({ labels, sales, purchase }: { labels: string[]; sales: num
 function CashFlowTab() {
   const [unit, setUnit] = useState<"month" | "week">("month");
   const [count, setCount] = useState(6);
-  const [openingInput, setOpeningInput] = useState("0");
   const [includePo, setIncludePo] = useState(false);
   // 잔고 곡선은 한 통화 안에서만 의미가 있으므로 환산 대신 통화를 골라 본다.
   const [currency, setCurrency] = useState("KRW");
+  // 기초잔고는 통화별로 따로 기억한다 — 하나만 두면 ₩ 로 넣은 값이 $ 로 바꾼 순간
+  // 그대로 달러로 읽혀(5천만원 → $50,000,000) 잔고 곡선 전체가 엉뚱해진다.
+  const [openingByCur, setOpeningByCur] = useState<Record<string, string>>({ KRW: "0", USD: "0" });
+  const openingInput = openingByCur[currency] ?? "0";
+  const setOpeningInput = (v: string) => setOpeningByCur((m) => ({ ...m, [currency]: v }));
   const opening = Number(openingInput) || 0;
   const cash = (n: number) => money(n, currency);
 
@@ -1334,6 +1363,14 @@ function CashFlowTab() {
     if (!data) return 1;
     return Math.max(1, ...data.rows.map((r) => Math.abs(r.net)));
   }, [data]);
+
+  // 기초잔고 기준일 = 첫 구간 시작일. 응답이 오기 전에도 라벨을 띄워야 해서
+  // 서버(_cashflow_buckets)와 같은 규칙으로 미리 계산하고, 오면 응답 값으로 맞춘다.
+  const openingAsOf = data?.opening_as_of ?? (() => {
+    const d = new Date();
+    const first = unit === "month" ? new Date(d.getFullYear(), d.getMonth(), 1) : d;
+    return `${first.getFullYear()}-${String(first.getMonth() + 1).padStart(2, "0")}-${String(first.getDate()).padStart(2, "0")}`;
+  })();
 
   return (
     <div className="fin-overview">
@@ -1353,7 +1390,9 @@ function CashFlowTab() {
           <button className={currency === "USD" ? "on" : ""} onClick={() => setCurrency("USD")}>$ USD</button>
         </div>
         <label className="fin-inline-field">
-          Opening balance ({sym(currency).trim()})
+          {/* 기준일을 라벨에 박아 둔다 — 첫 구간이 이번 달 1일부터라 '오늘 잔고'를 넣으면
+              이번 달에 이미 오간 돈이 두 번 세어진다. */}
+          Opening balance ({sym(currency).trim()}) <span className="muted">as of {openingAsOf}</span>
           <input inputMode="decimal" value={amountInputValue(openingInput)} onChange={(e) => setOpeningInput(e.target.value.replace(/,/g, ""))} style={{ width: 140 }} />
         </label>
         <label className="check-chip" style={{ cursor: "pointer" }}>
@@ -1365,16 +1404,26 @@ function CashFlowTab() {
       {!data ? <div className="state">Loading…</div> : (
         <>
           <div className="fin-kpis">
-            <KpiTile label="Projected inflow" main={cash(data.total_inflow)} tone="blue" />
-            <KpiTile label="Projected outflow" main={cash(data.total_outflow)} tone="amber" />
-            <KpiTile label="Ending balance" main={cash(data.ending)} sub={`Opening ${cash(data.opening)}`} tone={data.ending >= 0 ? "blue" : "red"} />
+            <KpiTile
+              label="Inflow"
+              main={cash(data.total_inflow)}
+              sub={data.actual_inflow ? `${cash(data.actual_inflow)} already received` : "all still expected"}
+              tone="blue"
+            />
+            <KpiTile
+              label="Outflow"
+              main={cash(data.total_outflow)}
+              sub={data.actual_outflow ? `${cash(data.actual_outflow)} already paid` : "all still scheduled"}
+              tone="amber"
+            />
+            <KpiTile label="Ending balance" main={cash(data.ending)} sub={`Opening ${cash(data.opening)} · ${openingAsOf}`} tone={data.ending >= 0 ? "blue" : "red"} />
           </div>
 
           <div className="panel">
             <h3 className="form-title">Net cash flow ({sym(currency).trim()})</h3>
             <div className="fin-net-chart">
               {data.rows.map((r) => (
-                <div key={r.label} className="fin-net-col" title={`${r.label} · Inflow ${cash(r.inflow)} · Outflow ${cash(r.outflow)} · Net ${cash(r.net)}`}>
+                <div key={r.label} className="fin-net-col" title={`${r.label} · Inflow ${cash(r.inflow)}${r.actual_inflow ? ` (${cash(r.actual_inflow)} received)` : ""} · Outflow ${cash(r.outflow)}${r.actual_outflow ? ` (${cash(r.actual_outflow)} paid)` : ""} · Net ${cash(r.net)}`}>
                   <div className="fin-net-track">
                     <div className="fin-net-mid" />
                     <div
@@ -1389,7 +1438,7 @@ function CashFlowTab() {
           </div>
 
           <div className="panel">
-            <h3 className="form-title">Cash flow projection</h3>
+            <h3 className="form-title">Cash flow</h3>
             <table className="mini">
               <thead>
                 <tr><th>Period</th><th className="num">Inflow</th><th className="num">Outflow</th><th className="num">Net</th><th className="num">Cumulative</th></tr>
@@ -1398,8 +1447,15 @@ function CashFlowTab() {
                 {data.rows.map((r) => (
                   <tr key={r.label} className={r.cumulative < 0 ? "fin-overdue" : ""}>
                     <td>{r.label}</td>
-                    <td className="num">{cash(r.inflow)}</td>
-                    <td className="num">{cash(r.outflow)}</td>
+                    {/* 이미 오간 부분은 금액 아래 옅게 덧붙인다 — 같은 칸의 나머지가 예정분. */}
+                    <td className="num">
+                      {cash(r.inflow)}
+                      {r.actual_inflow ? <div className="fin-cf-actual">{cash(r.actual_inflow)} received</div> : null}
+                    </td>
+                    <td className="num">
+                      {cash(r.outflow)}
+                      {r.actual_outflow ? <div className="fin-cf-actual">{cash(r.actual_outflow)} paid</div> : null}
+                    </td>
                     <td className="num" style={{ color: r.net >= 0 ? "#1e7a46" : "#c0392b" }}>{r.net >= 0 ? "+" : "−"}{cash(Math.abs(r.net))}</td>
                     <td className="num"><b>{cash(r.cumulative)}</b></td>
                   </tr>
@@ -1407,7 +1463,7 @@ function CashFlowTab() {
               </tbody>
             </table>
             <p className="hint-inline" style={{ display: "block", marginTop: 8 }}>
-              Inflow = receivables due (AR due), outflow = unpaid payable occurrences{includePo ? " + vendor POs (estimated from order date)" : ""}. Only {currency} items are counted — switch the currency toggle for the other book; nothing is converted. Overdue / past-due items fall into the first period. A negative cumulative balance (red) marks a cash shortfall.
+              Each period mixes money already moved (shown in grey under the amount, dated on the day it actually arrived or left) with money still expected — receivables by due date and unpaid payable occurrences{includePo ? " + vendor POs (estimated from order date)" : ""}. So the opening balance must be your balance on {openingAsOf}, not today&apos;s. Only {currency} items are counted — switch the currency toggle for the other book; nothing is converted. Overdue / past-due items fall into the first period. A negative cumulative balance (red) marks a cash shortfall.
             </p>
           </div>
         </>

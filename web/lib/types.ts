@@ -913,6 +913,11 @@ export type FinanceSummary = {
     overdue: MoneyByCurrency;
     total: MoneyByCurrency;
   };
+  /** 실적 KPI 가 가리키는 달(YYYY-MM). 잔액 KPI 와 달리 기간이 있는 값이라 함께 준다. */
+  month: string;
+  /** 이번 달에 실제로 들어온/나간 돈 — 잔액 KPI 에서는 완납 즉시 사라지는 값. */
+  collected_month: { amount: MoneyByCurrency; count: number };
+  paid_month: { amount: MoneyByCurrency; count: number };
   by_customer: { name: string; outstanding: MoneyByCurrency }[];
   by_category: { name: string; amount: MoneyByCurrency }[];
 };
@@ -935,18 +940,25 @@ export type FinanceCashflowRow = {
   end: string;
   inflow: number;
   outflow: number;
+  /** 위 유입·유출 중 이미 오간 금액(나머지가 아직 안 온 예정). */
+  actual_inflow: number;
+  actual_outflow: number;
   net: number;
   cumulative: number;
 };
 
-/** 현금흐름 예측 — 잔고는 한 통화 안에서만 의미가 있어 통화 1개 기준으로만 낸다. */
+/** 현금흐름 — 잔고는 한 통화 안에서만 의미가 있어 통화 1개 기준으로만 낸다. */
 export type FinanceCashflow = {
   unit: "month" | "week";
   currency: string;
   opening: number;
+  /** 기초잔고 기준일 — 첫 구간 시작일(월 단위면 이번 달 1일). */
+  opening_as_of: string;
   rows: FinanceCashflowRow[];
   total_inflow: number;
   total_outflow: number;
+  actual_inflow: number;
+  actual_outflow: number;
   ending: number;
 };
 
