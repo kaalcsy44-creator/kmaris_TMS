@@ -1559,14 +1559,11 @@ function CalendarTab() {
           <h3 className="form-title fin-cal-month">{monthLabel}</h3>
           <button className="btn sm fin-cal-arrow" onClick={() => shift(1)} aria-label="Next month">›</button>
         </div>
-        {/* 칸에 쓰이는 색을 모두 적는다 — 초록(지급 완료)이 빠져 있어 무슨 뜻인지 알 수 없었다.
-            완납된 수금은 초록이 아니라 AR 파랑을 유지하므로(돈의 방향이 우선) 초록은
-            '지급 완료'로만 적는다. */}
+        {/* 색은 돈의 방향 두 가지뿐 — 상태(예정/결제됨/연체)는 같은 계열의 농도가 말하므로
+            범례는 계열 이름만 적고, 농도 규칙은 표 아래 설명이 받는다. */}
         <div className="fin-legend fin-cal-legend">
-          <span className="fin-legend-item"><span className="fin-dot fin-dot--rec" /> Receivables (AR)</span>
-          <span className="fin-legend-item"><span className="fin-dot fin-dot--pay" /> Payables · due</span>
-          <span className="fin-legend-item"><span className="fin-dot fin-dot--paid" /> Payables · paid</span>
-          <span className="fin-legend-item"><span className="fin-dot fin-dot--overdue" /> Overdue</span>
+          <span className="fin-legend-item"><span className="fin-dot fin-dot--rec" /> Receivables (AR) · income</span>
+          <span className="fin-legend-item"><span className="fin-dot fin-dot--pay" /> Payables</span>
         </div>
       </div>
       {error && !data ? <div className="state error">API error: {error.message}</div> : null}
@@ -1608,7 +1605,7 @@ function CalendarTab() {
         })}
       </div>
       <p className="hint-inline" style={{ display: "block", marginTop: 8 }}>
-        Every item sits on its scheduled date until it settles, then appears again on the day the money actually moved — the scheduled entry is struck through and the ✓ entry is the real date. Click one of your own costs to record its payment — you enter the date it was really paid, which may differ from the scheduled date (recurring items settle one occurrence at a time); click a paid one to undo. Customer invoices (AR) and vendor bills (AP) are managed from the project stages instead — both on stage 11, the Receivable tab for collections and the Payable tab for vendor payments.
+        Colour is the direction of the money — blue comes in, amber goes out — and the shade is its state: pale is still expected, deeper has settled, and a solid block is overdue. Every item sits on its scheduled date until it settles, then appears again on the day the money actually moved — the scheduled entry is struck through and the ✓ entry is the real date. Click one of your own costs to record its payment — you enter the date it was really paid, which may differ from the scheduled date (recurring items settle one occurrence at a time); click a paid one to undo. Customer invoices (AR) and vendor bills (AP) are managed from the project stages instead — both on stage 11, the Receivable tab for collections and the Payable tab for vendor payments.
       </p>
       {payingEvent ? (
         <Modal title="Record payment" onClose={() => setPayingEvent(null)} form maxWidth={340}>

@@ -10165,9 +10165,6 @@ table.mini tfoot .fin-foot-name { text-align: left; }
 .fin-dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-left: 8px; }
 .fin-dot--rec { background: #2f6fb0; }
 .fin-dot--pay { background: #d68910; }
-/* 지급 완료(.fin-ev.paid)·연체(.fin-ev.overdue) 색 — 칸은 옅은 배경이라 점은 글자색을 쓴다. */
-.fin-dot--paid { background: #1e7a46; }
-.fin-dot--overdue { background: #b0281c; }
 /* 결산 막대차트용 — .fin-bar.sales / .fin-bar.purchase 와 반드시 같은 색이어야 한다. */
 .fin-dot--sales { background: #2f6fb0; }
 .fin-dot--purchase { background: #d68910; }
@@ -10184,18 +10181,28 @@ table.mini tfoot .fin-foot-name { text-align: left; }
   border: 0; border-radius: 5px; padding: 2px 5px; cursor: pointer; text-align: left;
   font-size: 11px; line-height: 1.2; min-width: 0;
 }
+/* 칸 색은 두 계열뿐이다 — 파랑 = 들어오는 돈(수금·기타수입), 주황 = 나가는 돈(지급).
+   상태는 색을 갈아끼우지 않고 같은 계열의 농도로 말한다: 옅음 = 예정, 진함 = 결제됨,
+   꽉 찬 색 = 연체. 그래야 돈의 방향이 먼저 읽히고 상태가 그 다음에 읽힌다.
+   (예전엔 결제됨이 초록, 연체가 빨강이라 색만 네 가지였고 방향이 지워졌다.) */
 .fin-ev--receivable { background: #e7f0fa; color: #1f4e79; }
+.fin-ev--payable { background: #fdf1dd; color: #8a5a00; }
 /* 프로젝트 단계에서 관리하는 건(수금·매입청구) — 캘린더에서 못 누르므로 커서로 알린다. */
 .fin-ev.readonly { cursor: default; }
-.fin-ev--payable { background: #fdf1dd; color: #8a5a00; }
-.fin-ev.overdue { background: #fde2e1; color: #b0281c; }
-.fin-ev.paid { background: #e8f6ee; color: #1e7a46; text-decoration: line-through; }
-/* 실제 납부일 자리에 찍힌 이벤트 — 예정일(취소선)과 달리 실제 지출이므로 취소선 없이 강조. */
-.fin-ev.paid.actual { text-decoration: none; font-weight: 600; border: 1px solid #9fd4b6; }
-/* 완료된 수금은 초록(지급 완료)이 아니라 AR 계열 파랑을 유지한다 — 범례(AR/지급)대로
-   돈이 들어온 건지 나간 건지 색으로 구분되어야 한다. */
-.fin-ev--receivable.paid { background: #dceaf7; color: #17618f; }
-.fin-ev--receivable.paid.actual { border-color: #9cc3e2; }
+/* 결제됨 — 같은 계열 한 단계 진하게. 예정일 자리는 취소선으로 '이미 지난 예정'임을 알린다. */
+.fin-ev--receivable.paid { background: #cfe1f4; color: #17618f; }
+.fin-ev--payable.paid { background: #fae0b8; color: #7a4f00; }
+.fin-ev.paid { text-decoration: line-through; }
+/* 실제 결제일 자리 — 예정(취소선)과 달리 실제로 오간 돈이라 취소선 없이 테두리로 세운다. */
+.fin-ev.paid.actual {
+  text-decoration: none;
+  font-weight: 600;
+  border: 1px solid color-mix(in srgb, currentColor 45%, transparent);
+}
+/* 연체 — 계열 색을 꽉 채우고 흰 글씨. 색상 계열은 그대로라 방향은 유지되고,
+   농도가 가장 세서 한 칸에 여러 건이 있어도 먼저 눈에 든다. */
+.fin-ev--receivable.overdue { background: #2f6fb0; color: #fff; }
+.fin-ev--payable.overdue { background: #b4720a; color: #fff; }
 /* 수금·매입청구 행의 문서번호 → 프로젝트 단계 링크. 표 안에서 눈에 띄되 요란하지 않게. */
 .fin-doc-link {
   color: var(--blue);
