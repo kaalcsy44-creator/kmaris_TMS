@@ -856,6 +856,7 @@ export type FinanceReceivable = {
   invoice_amount: number;
   paid_amount: number;
   outstanding: number;
+  invoice_date?: string; // 청구서 발행일(9단계 대금청구서). 기타 수입은 없음
   due_date: string;
   paid_date?: string;    // 완납 건의 수금 완료일(11단계 완료일 / 기타 수입은 실제 입금일)
   status: string;

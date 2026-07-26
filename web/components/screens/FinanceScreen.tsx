@@ -305,19 +305,21 @@ function ReceivablesTab() {
         <table className="mini">
           <thead>
             <tr>
-              <th>Customer</th><th>Invoice No.</th><th>Due</th>
+              <th>Customer</th><th>Invoice No.</th><th>Invoice date</th><th>Due</th>
               <th className="num">Invoice</th><th className="num">Paid</th><th className="num">Outstanding</th><th>Status</th><th />
             </tr>
           </thead>
           {groups.map((g) => g.rows.length === 0 ? null : (
           <tbody key={g.key}>
-            <tr className="fin-group-head"><td colSpan={8}>{g.label}</td></tr>
+            <tr className="fin-group-head"><td colSpan={9}>{g.label}</td></tr>
             {g.rows.map((r) => {
               const isIncome = r.source === "income";
               return (
               <tr key={`${r.source || "ar"}-${r.id}`} className={r.overdue ? "fin-overdue" : ""}>
                 <td>{r.customer}</td>
                 <td>{isIncome ? (r.invoice_no || r.ci_no || "—") : <ProjectDocLink orderId={r.order_id} label={r.invoice_no || r.ci_no} />}</td>
+                {/* 발행일 — 9단계 대금청구서에 입력한 값. 기타 수입에는 없는 개념. */}
+                <td>{r.invoice_date || "—"}</td>
                 <td>{r.due_date || "—"}</td>
                 <td className="num">{money(r.invoice_amount, r.currency)}</td>
                 <td className="num">{money(r.paid_amount, r.currency)}</td>
@@ -367,7 +369,7 @@ function ReceivablesTab() {
               return (
                 <tr className="fin-group-sub">
                   <td />
-                  <td className="fin-foot-name" colSpan={2}>Subtotal</td>
+                  <td className="fin-foot-name" colSpan={3}>Subtotal</td>
                   <td className="num">{byCurrency(st.invoice)}</td>
                   <td className="num">{byCurrency(st.paid)}</td>
                   <td className="num">{byCurrency(st.outstanding)}</td>
@@ -381,23 +383,23 @@ function ReceivablesTab() {
             {/* 합계 라벨은 Invoice No. 열에서 시작하도록 첫 칸(Customer)을 비운다. */}
             <tr className="foot-grand fin-foot-total">
               <td />
-              <td className="total-label fin-foot-name" colSpan={2}>Total</td>
+              <td className="total-label fin-foot-name" colSpan={3}>Total</td>
               <td className="num total-value">{byCurrencyLines(totals.invoice)}</td>
               <td className="num total-value">{byCurrencyLines(totals.paid)}</td>
               <td className="num total-value">{byCurrencyLines(totals.outstanding)}</td>
-              <td />
+              <td /><td />
             </tr>
             {/* 참고용 KRW 환산 — 오늘자 매매기준율(조회 실패 시 고정환율). 집계에는 쓰지 않는다. */}
             <tr className="fin-foot-ref">
               <td />
-              <td className="fin-foot-name" colSpan={2}>
+              <td className="fin-foot-name" colSpan={3}>
                 Total (In KRW · 1 USD = {fx.rate.toLocaleString()}
                 {fx.source === "exim" ? ` · 매매기준율 ${fx.date}` : " · fixed rate"})
               </td>
               <td className="num">{won(toKrw(totals.invoice, fx.rate))}</td>
               <td className="num">{won(toKrw(totals.paid, fx.rate))}</td>
               <td className="num">{won(toKrw(totals.outstanding, fx.rate))}</td>
-              <td />
+              <td /><td />
             </tr>
           </tfoot>
         </table>

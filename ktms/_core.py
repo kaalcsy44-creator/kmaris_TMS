@@ -2299,6 +2299,8 @@ def _finance_receivable_rows(s) -> list[dict]:
             "invoice_amount": invoice,
             "paid_amount": paid,
             "outstanding": outstanding,
+            # 청구서 발행일(9단계 대금청구서에 입력). 미입력이면 빈값.
+            "invoice_date": (r.invoice_date or "")[:10],
             "due_date": r.due_date or "",
             # 완납일 — 레코드에 기록된 날짜 우선, 없으면 11단계(수금 완료) 일시로 폴백.
             "paid_date": ((r.paid_date or "")[:10] or _stage11_date(o)) if settled else "",
