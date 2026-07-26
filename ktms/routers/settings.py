@@ -545,6 +545,32 @@ def settings_item_ledger():
         s.close()
 
 
+@app.get("/api/admin/settings/item-category-map", dependencies=[Depends(require_token)])
+def settings_item_category_map():
+    """품목 식별키 → 현재 마스터 분류. 품목표(RFQ·견적·발주)의 Category 셀이
+    라인에 저장된 값이 없을 때 마스터 분류를 그대로 보여주기 위해 쓴다.
+
+    키 규칙은 services.item_ledger.match_key 와 동일('P:'+part_no 또는 'D:'+설명).
+    분류는 마스터가 정본이므로, Item > Category 에서 배정한 결과가 이 맵을 통해
+    프로젝트 품목표에도 그대로 나타난다."""
+    s = get_session()
+    try:
+        cat_by_id = _category_maps(s)
+        out: dict[str, dict] = {}
+        for m in s.query(ItemMaster).order_by(ItemMaster.id).all():
+            k = match_key(m.part_no, m.description)
+            if not k or k in out:   # 중복 키는 가장 낮은 id 우선(build_master_index 와 동일)
+                continue
+            out[k] = {
+                "item_id": m.id,
+                "category_id": m.category_id,
+                "category_path": _category_path(cat_by_id, m.category_id),
+            }
+        return out
+    finally:
+        s.close()
+
+
 def _to_usd(price: float, cur: str | None, fx_rate: float | None) -> float:
     """KRW→USD 는 그 딜에 저장된 fx_rate(1 USD=? KRW) 우선, 없으면 앱 공통 환율."""
     if (cur or "USD") != "KRW":

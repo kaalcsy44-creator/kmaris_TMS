@@ -3950,7 +3950,7 @@ function CustomerQuoteItemEditor({
                 <td className="num">{amountInputValue(it.amount)}</td>
                 <td><textarea {...keys.cell(i, 9)} className="wrapcell" rows={1} value={it.lead_time ?? ""} onChange={(e) => patch(i, "lead_time", e.target.value)} /></td>
                 <td><textarea {...keys.cell(i, 10)} className="wrapcell" rows={1} value={it.remark ?? ""} onChange={(e) => patch(i, "remark", e.target.value)} /></td>
-                <td><CategoryCell value={it.category_id} onChange={(id) => patchCategory(i, id)} /></td>
+                <td><CategoryCell value={it.category_id} partNo={it.part_no} description={it.description} onChange={(id) => patchCategory(i, id)} /></td>
               </tr>
             ))}
           </tbody>

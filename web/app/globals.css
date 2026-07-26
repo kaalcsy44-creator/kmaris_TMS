@@ -3230,6 +3230,12 @@ select.cat-cell:disabled {
   background: #f4f6f9;
   color: var(--muted);
 }
+/* 이 라인에서 고른 값이 아니라 품목 마스터에서 따라온 분류 — 값이 왜 이미 채워져 있는지
+   알 수 있게 옅게 표시(그대로 두면 마스터 분류가 유지된다). */
+select.cat-cell.inherited {
+  color: #5a6b85;
+  border-style: dashed;
+}
 /* 맨 좌측 행 삭제열 — items-edit 변형도 통일 포맷(가운데 정렬). */
 table.mini.items-edit th.row-tools,
 table.mini.items-edit td.row-tools {

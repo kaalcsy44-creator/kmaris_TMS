@@ -1120,6 +1120,15 @@ export function deleteItemCategory(id: number): Promise<{ ok: boolean }> {
   return del(`/api/admin/settings/item-categories/${id}`);
 }
 
+/** 품목 식별키 → 마스터 분류. 품목표 Category 셀이 마스터 분류를 그대로 비추는 데 쓴다. */
+export type ItemCategoryMap = Record<
+  string,
+  { item_id: number; category_id: number | null; category_path: string }
+>;
+export function fetchItemCategoryMap(): Promise<ItemCategoryMap> {
+  return get<ItemCategoryMap>("/api/admin/settings/item-category-map");
+}
+
 // ── Item price ledger (품목별 구매가·판매가 이력) ─────────────────────────────
 export function fetchItemLedger(): Promise<ItemLedger> {
   return get<ItemLedger>("/api/admin/settings/item-ledger");

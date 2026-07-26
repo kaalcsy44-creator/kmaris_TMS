@@ -68,6 +68,7 @@ import { PAYMENT_TERMS_PRESETS } from "@/lib/terms";
 import ComboBox from "@/components/common/ComboBox";
 import { useColumnLayout } from "@/components/common/useColumnLayout";
 import { ColumnResizer, ColumnsButton, dragHandleProps } from "@/components/common/tableLayout";
+import { invalidateMasterCategories } from "@/components/common/CategoryCell";
 
 type Tab =
   | "company" | "users" | "permissions"
@@ -1198,9 +1199,22 @@ export function ItemsTab() {
       title="Item Master"
       empty={{ id: 0, part_no: "", description: "", maker: "", origin: "", unit: "PCS", hs_code: "", std_price: 0, category_id: null, category_path: "" }}
       load={fetchSettingsItems}
-      create={createSettingsItem}
-      update={updateSettingsItem}
-      remove={deleteSettingsItem}
+      // 마스터의 분류가 곧 품목표 Category 셀의 값이므로, 저장·삭제 후 공유 캐시를 비운다.
+      create={async (b) => {
+        const r = await createSettingsItem(b);
+        invalidateMasterCategories();
+        return r;
+      }}
+      update={async (id, b) => {
+        const r = await updateSettingsItem(id, b);
+        invalidateMasterCategories();
+        return r;
+      }}
+      remove={async (id) => {
+        const r = await deleteSettingsItem(id);
+        invalidateMasterCategories();
+        return r;
+      }}
       columns={[
         ["part_no", "Part No."],
         ["category_path", "Category", (r) => r.category_path
@@ -1494,6 +1508,7 @@ export function CategoriesTab() {
     setErr("");
     try {
       await rebuildItemLedger();
+      invalidateMasterCategories();
       loadLedger();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Rebuild failed");
@@ -1596,6 +1611,7 @@ export function CategoriesTab() {
       });
       setBulkOpen(false);
       setPicked(new Set());
+      invalidateMasterCategories();
       if (r.skipped > 0) setErr(`${r.skipped} item(s) skipped — no Part No. or description.`);
       loadLedger();
     } catch (e) {
@@ -1620,6 +1636,8 @@ export function CategoriesTab() {
             }
       );
       closeAssign();
+      // 프로젝트 품목표가 다음 조회에서 새 분류를 읽도록 공유 캐시를 비운다(양방향 동기화).
+      invalidateMasterCategories();
       loadLedger();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Assign failed");

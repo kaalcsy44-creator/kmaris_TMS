@@ -753,6 +753,8 @@ export default function NewRfqForm({
                     <td key={c.key}>
                       <CategoryCell
                         value={it.category_id}
+                        partNo={it.part_no}
+                        description={it.description}
                         onChange={(id) => setItemCategory(i, id)}
                         disabled={!canEditThis}
                       />

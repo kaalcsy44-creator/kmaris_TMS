@@ -2152,7 +2152,7 @@ function ItemEditor({
                   <textarea {...keys.cell(i, 9)} className="wrapcell" rows={1} value={it.remark ?? ""} onChange={(e) => patch(i, "remark", e.target.value)} />
                 </td>
                 <td>
-                  <CategoryCell value={it.category_id} onChange={(id) => patchCategory(i, id)} />
+                  <CategoryCell value={it.category_id} partNo={it.part_no} description={it.description} onChange={(id) => patchCategory(i, id)} />
                 </td>
               </tr>
             ))}
