@@ -1341,6 +1341,26 @@ table.perm-matrix td.perm-mod {
   font-weight: 600;
   white-space: nowrap;
 }
+/* 권한표 구분 머리글(상단 메뉴 / 단계별 작업) */
+table.perm-matrix tr.perm-group td {
+  text-align: left;
+  padding: 10px 8px 4px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+}
+table.perm-matrix tr.perm-group:first-child td {
+  padding-top: 2px;
+}
+.perm-mod-hint {
+  display: block;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+}
 .perm-cell input {
   width: 16px;
   height: 16px;

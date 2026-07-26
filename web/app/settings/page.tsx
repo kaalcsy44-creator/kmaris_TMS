@@ -577,17 +577,42 @@ function UsersTab() {
 }
 
 // ── 권한 매트릭스 편집 (admin 전용) ──────────────────────────────────────────
+// 라벨은 현재 상단 메뉴 기준. 권한 키(progress/rfq/po/documents/ar)는 API 가드가 그대로
+// 쓰므로 바꾸지 않는다 — 다만 RFQ·P/O·Documents·AR 은 전용 메뉴가 사라지고 프로젝트
+// 팝업의 단계별 작업 권한이 되었으므로 별도 그룹으로 묶어 보여준다.
 const MODULE_LABEL: Record<string, string> = {
   dashboard: "Dashboard",
-  progress: "Progress",
+  progress: "Projects",
   rfq: "RFQ & Quotation",
   po: "P/O",
   documents: "Documents",
   ar: "AR",
   finance: "Finance",
   marketing: "Marketing",
-  settings: "Settings · master data",
+  settings: "Settings",
 };
+// 메뉴명만으로 범위가 분명하지 않은 항목의 부연.
+const MODULE_HINT: Record<string, string> = {
+  progress: "Projects + Activity",
+  settings: "Settings + Item master",
+};
+// 표시 순서/그룹 — 상단 메뉴 순서대로 먼저, 단계별 작업 권한을 뒤에.
+const MENU_MODULES = ["dashboard", "progress", "finance", "marketing", "settings"];
+const STAGE_MODULES = ["rfq", "po", "documents", "ar"];
+
+/** 백엔드가 준 모듈 목록을 [메뉴 그룹, 단계 그룹]으로 재배열(모르는 키는 메뉴 그룹 끝). */
+function groupModules(modules: string[]): { title: string; modules: string[] }[] {
+  const known = new Set([...MENU_MODULES, ...STAGE_MODULES]);
+  const menu = [
+    ...MENU_MODULES.filter((m) => modules.includes(m)),
+    ...modules.filter((m) => !known.has(m)),
+  ];
+  const stage = STAGE_MODULES.filter((m) => modules.includes(m));
+  return [
+    { title: "Menu — 상단 메뉴", modules: menu },
+    { title: "Project stage work — 프로젝트 상세의 단계별 작업", modules: stage },
+  ].filter((g) => g.modules.length > 0);
+}
 const ACTION_LABEL: Record<string, string> = {
   view: "View",
   create: "Create",
@@ -693,27 +718,39 @@ function PermissionsTab() {
               </tr>
             </thead>
             <tbody>
-              {cfg!.modules.map((m) => (
-                <tr key={m}>
-                  <td className="perm-mod">{MODULE_LABEL[m] ?? m}</td>
-                  {cfg!.actions.map((a) => {
-                    const na = viewOnly.has(m) && a !== "view";
-                    return (
-                      <td key={a} className="perm-cell">
-                        {na ? (
-                          <span className="perm-na">—</span>
-                        ) : (
-                          <input
-                            type="checkbox"
-                            checked={!!state.perms[m]?.[a]}
-                            disabled={!editable}
-                            onChange={() => toggle(row.role, m, a)}
-                          />
-                        )}
+              {groupModules(cfg!.modules).map((g) => (
+                <Fragment key={g.title}>
+                  <tr className="perm-group">
+                    <td colSpan={1 + cfg!.actions.length}>{g.title}</td>
+                  </tr>
+                  {g.modules.map((m) => (
+                    <tr key={m}>
+                      <td className="perm-mod">
+                        {MODULE_LABEL[m] ?? m}
+                        {MODULE_HINT[m] ? (
+                          <span className="perm-mod-hint">{MODULE_HINT[m]}</span>
+                        ) : null}
                       </td>
-                    );
-                  })}
-                </tr>
+                      {cfg!.actions.map((a) => {
+                        const na = viewOnly.has(m) && a !== "view";
+                        return (
+                          <td key={a} className="perm-cell">
+                            {na ? (
+                              <span className="perm-na">—</span>
+                            ) : (
+                              <input
+                                type="checkbox"
+                                checked={!!state.perms[m]?.[a]}
+                                disabled={!editable}
+                                onChange={() => toggle(row.role, m, a)}
+                              />
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </Fragment>
               ))}
             </tbody>
           </table>
