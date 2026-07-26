@@ -2339,6 +2339,7 @@ def _ap_record_rows(s) -> list[dict]:
             "vendor": vendor,
             "customer": cust,
             "bill_no": r.bill_no or "",
+            "bill_date": (r.bill_date or "")[:10],
             "currency": r.currency or "KRW",
             "invoice_amount": invoice,
             "paid_amount": paid,

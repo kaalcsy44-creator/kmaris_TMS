@@ -694,29 +694,39 @@ function PayablesTab() {
         <table className="mini">
           <thead>
             <tr>
-              <th>Category</th><th>Counterparty</th><th>Description</th><th>Due</th>
-              <th className="num">Invoice</th><th className="num">Paid</th><th className="num">Outstanding</th>
-              <th>Recurrence</th><th>Status</th><th />
+              <th>Vendor</th><th>Bill No. / Vendor P/O</th><th>Bill date</th><th>Due</th>
+              <th className="num">Bill</th><th className="num">Paid</th><th className="num">Outstanding</th>
+              <th>Status</th><th />
             </tr>
           </thead>
           {/* 섹션 = 거래(매입) / 기타 지출. 각 섹션 끝에 소계, 표 끝에 전체 합계. */}
           {groups.map((g) => g.rows.length === 0 ? null : (
           <tbody key={g.key}>
             <tr className="fin-group-head">
-              <td colSpan={10}>{g.label}</td>
+              <td colSpan={9}>{g.label}</td>
             </tr>
             {g.rows.map((p) => {
               const isAp = p.source === "ap";
               return (
               <tr key={`${p.source || "manual"}-${p.id}`}>
-                <td>{CATEGORY_LABEL[p.category] || p.category}</td>
-                <td>{p.counterparty || "—"}{isAp && p.po_no ? <span className="muted"> · {p.po_no}</span> : null}</td>
-                <td>{isAp ? <ProjectDocLink orderId={p.order_id} label={p.description} /> : (p.description || "—")}</td>
+                <td>{p.counterparty || "—"}</td>
+                {/* 청구서 번호 = 미수 목록의 Invoice No. 자리. AP 행은 그 아래 벤더 P/O 를
+                    옅게 덧붙인다(번호가 아직 없으면 P/O 만 보인다). 수동 등록은 적요. */}
+                <td>
+                  {isAp ? (
+                    <>
+                      <ProjectDocLink orderId={p.order_id} label={p.description} />
+                      {p.po_no && p.po_no !== p.description ? <div className="muted">{p.po_no}</div> : null}
+                    </>
+                  ) : (
+                    p.description || CATEGORY_LABEL[p.category] || p.category || "—"
+                  )}
+                </td>
+                <td>{p.bill_date || "—"}</td>
                 <td>{p.due_date || "—"}</td>
                 <td className="num">{money(p.invoice_amount, p.currency)}</td>
                 <td className="num">{money(p.paid_amount, p.currency)}</td>
                 <td className="num"><b>{money(p.outstanding, p.currency)}</b></td>
-                <td>{isAp ? <span className="muted">Vendor bill</span> : (RECURRENCE_LABEL[p.recurrence] || p.recurrence)}</td>
                 <td>
                   {isAp ? (
                     <span className="wt-badge" title="Managed in project stage 9/10">Unpaid (AP)</span>
@@ -734,7 +744,7 @@ function PayablesTab() {
                     <button
                       type="button"
                       className="wt-badge fin-paid-toggle"
-                      title={canEdit ? "Record a payment for one occurrence" : ""}
+                      title={`${RECURRENCE_LABEL[p.recurrence] || p.recurrence}${canEdit ? " · Record a payment for one occurrence" : ""}`}
                       disabled={!canEdit}
                       onClick={() => setPaying({ row: p, occurrence: nextUnpaidOccurrence(p) })}
                     >
@@ -769,7 +779,7 @@ function PayablesTab() {
                   <td className="num">{byCurrency(st.invoice)}</td>
                   <td className="num">{byCurrency(st.paid)}</td>
                   <td className="num">{byCurrency(st.outstanding)}</td>
-                  <td /><td /><td />
+                  <td /><td />
                 </tr>
               );
             })()}
@@ -783,7 +793,7 @@ function PayablesTab() {
               <td className="num total-value">{byCurrencyLines(totals.invoice)}</td>
               <td className="num total-value">{byCurrencyLines(totals.paid)}</td>
               <td className="num total-value">{byCurrencyLines(totals.outstanding)}</td>
-              <td /><td /><td />
+              <td /><td />
             </tr>
             <tr className="fin-foot-ref">
               <td />
@@ -794,7 +804,7 @@ function PayablesTab() {
               <td className="num">{won(toKrw(totals.invoice, fx.rate))}</td>
               <td className="num">{won(toKrw(totals.paid, fx.rate))}</td>
               <td className="num">{won(toKrw(totals.outstanding, fx.rate))}</td>
-              <td /><td /><td />
+              <td /><td />
             </tr>
           </tfoot>
         </table>
@@ -977,7 +987,7 @@ function PayableForm({
           </select>
         </label>
         <label className="form-field">
-          <span>Counterparty</span>
+          <span>Vendor / payee</span>
           <input value={form.counterparty} onChange={(e) => set("counterparty", e.target.value)} placeholder="e.g. Landlord / Payroll" />
         </label>
         <label className="form-field">
