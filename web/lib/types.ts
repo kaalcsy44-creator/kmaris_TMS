@@ -833,6 +833,7 @@ export type FinancePayable = {
   po_no?: string;             // source==="ap" 일 때 연결된 벤더 P/O 번호
   po_id?: number;             // source==="ap" 일 때 그 벤더 P/O id — 9단계 AP 탭 딥링크용
   order_id?: number;          // source==="ap" 일 때 이 청구가 속한 프로젝트(오더) — 딥링크용
+  rfq_id?: number;            // source==="ap" 일 때 그 오더가 속한 프로젝트(RFQ) id
 };
 
 export type FinancePayableSave = {
@@ -852,6 +853,7 @@ export type FinancePayableSave = {
 export type FinanceReceivable = {
   id: number;
   order_id: number;
+  rfq_id?: number;       // 이 청구서가 속한 프로젝트 — 목록 → 프로젝트 팝업 딥링크용
   customer: string;
   ci_no: string;
   invoice_no: string;

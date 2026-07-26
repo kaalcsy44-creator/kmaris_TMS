@@ -220,11 +220,14 @@ function receivableTotals(rows: FinanceReceivable[]) {
  */
 function ProjectDocLink({
   orderId,
+  rfqId,
   label,
   hint,
   apPoId,
 }: {
   orderId?: number;
+  /** 이 문서가 속한 프로젝트(RFQ). 목록에서 프로젝트를 찾는 기준값 — order_id 보다 우선. */
+  rfqId?: number;
   label?: string;
   /** 표 우측의 안내 문구 자리 — 링크를 못 걸 때 옅은 안내 문구로 남긴다. */
   hint?: boolean;
@@ -232,12 +235,20 @@ function ProjectDocLink({
   apPoId?: number;
 }) {
   const text = label || "—";
-  // 프로젝트를 특정할 수 없는 행(오더 연결 없음)은 링크 없이 원래 표기로 둔다.
-  if (!orderId) return hint ? <span className="hint-inline">{text}</span> : <>{text}</>;
+  // 프로젝트를 특정할 수 없는 행(오더·프로젝트 연결 없음)은 링크 없이 원래 표기로 둔다.
+  if (!orderId && !rfqId) return hint ? <span className="hint-inline">{text}</span> : <>{text}</>;
+  // rfq 와 order 를 함께 넘긴다 — rfq 로 프로젝트를 찾고, order 로 그 프로젝트 안에서
+  // 이 문서의 고객 P/O 를 고른다. (한 프로젝트에 P/O 가 여러 건일 수 있다.)
+  const params = [
+    rfqId ? `rfq=${rfqId}` : "",
+    orderId ? `order=${orderId}` : "",
+    "stage=9",
+    apPoId ? `ap=${apPoId}` : "",
+  ].filter(Boolean).join("&");
   return (
     <Link
       className={`fin-doc-link${hint ? " hint" : ""}`}
-      href={`/project?order=${orderId}&stage=9${apPoId ? `&ap=${apPoId}` : ""}`}
+      href={`/project?${params}`}
       title={apPoId ? "Open this vendor bill · stage 9 Payable (AP)" : "Open this project's billing · AR/AP stage"}
     >
       {text}
@@ -341,7 +352,7 @@ function ReceivablesTab() {
                 return (
                 <tr key={`${r.source || "ar"}-${r.id}`} className={r.overdue ? "fin-overdue" : ""}>
                   <td>{r.customer}</td>
-                  <td>{isIncome ? (r.invoice_no || r.ci_no || "—") : <ProjectDocLink orderId={r.order_id} label={r.invoice_no || r.ci_no} />}</td>
+                  <td>{isIncome ? (r.invoice_no || r.ci_no || "—") : <ProjectDocLink orderId={r.order_id} rfqId={r.rfq_id} label={r.invoice_no || r.ci_no} />}</td>
                   {/* 발행일 — 9단계 대금청구서에 입력한 값. 기타 수입에는 없는 개념. */}
                   <td>{r.invoice_date || "—"}</td>
                   <td>{r.due_date || "—"}</td>
@@ -385,7 +396,7 @@ function ReceivablesTab() {
                           ) : null}
                         </>
                       ) : (
-                        <ProjectDocLink orderId={r.order_id} label="Project stage 9–11" hint />
+                        <ProjectDocLink orderId={r.order_id} rfqId={r.rfq_id} label="Project stage 9–11" hint />
                       )}
                     </div>
                   </td>
@@ -775,7 +786,7 @@ function PayablesTab() {
       <td>
         <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
           {p.source === "ap" ? (
-            <ProjectDocLink orderId={p.order_id} label="Project stage 9/10" hint apPoId={p.po_id} />
+            <ProjectDocLink orderId={p.order_id} rfqId={p.rfq_id} label="Project stage 9/10" hint apPoId={p.po_id} />
           ) : (
             <>
               {can("finance", "edit") ? (
@@ -828,7 +839,7 @@ function PayablesTab() {
                 <td>
                   {p.source === "ap" ? (
                     <>
-                      <ProjectDocLink orderId={p.order_id} label={p.description} apPoId={p.po_id} />
+                      <ProjectDocLink orderId={p.order_id} rfqId={p.rfq_id} label={p.description} apPoId={p.po_id} />
                       {p.po_no && p.po_no !== p.description ? <div className="muted">{p.po_no}</div> : null}
                     </>
                   ) : (

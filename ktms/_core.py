@@ -2265,11 +2265,15 @@ def _finance_receivable_rows(s) -> list[dict]:
     rfq_by_id = {q.id: q for q in s.query(RFQ).all()}
     qtn_rfq = {q.id: q.rfq_id for q in s.query(Quotation).all()}
 
-    def _stage11_date(order) -> str:
+    def _rfq_id_of(order) -> int:
+        """오더가 속한 프로젝트(RFQ) id — 직접 연결이 없으면 견적 경유로 찾는다."""
         if not order:
-            return ""
+            return 0
         rid = getattr(order, "rfq_id", None) or qtn_rfq.get(getattr(order, "quotation_id", None) or 0)
-        rfq = rfq_by_id.get(rid) if rid else None
+        return rid or 0
+
+    def _stage11_date(order) -> str:
+        rfq = rfq_by_id.get(_rfq_id_of(order))
         return ((getattr(rfq, "stage_dates", None) or {}).get("11") or "")[:10] if rfq else ""
 
     rows: list[dict] = []
@@ -2294,6 +2298,10 @@ def _finance_receivable_rows(s) -> list[dict]:
         rows.append({
             "id": r.id,
             "order_id": r.order_id,
+            # 이 청구서가 속한 프로젝트 — 목록에서 프로젝트 팝업으로 바로 가는 링크용.
+            # 한 프로젝트에 고객 P/O(오더)가 여러 건이면 order_id 만으로는 목록에서
+            # 프로젝트를 못 찾는다(파이프라인 행은 대표 오더 하나만 들고 있다).
+            "rfq_id": _rfq_id_of(o),
             "customer": cust,
             "ci_no": r.ci_no or "",
             "invoice_no": r.invoice_no or "",
@@ -2322,6 +2330,16 @@ def _ap_record_rows(s) -> list[dict]:
     cust_names = {c.id: c.name for c in s.query(Customer).all()}
     vendor_names = {v.id: v.name for v in s.query(Vendor).all()}
     po_map = {p.id: p for p in s.query(PurchaseOrder).all()}
+    # 오더 → 프로젝트(RFQ). 미수 목록과 같은 이유로 필요하다(대표 오더가 아닌 건도
+    # 목록에서 프로젝트를 찾을 수 있어야 한다). 견적 경유 연결도 함께 훑는다.
+    qtn_rfq = {q.id: q.rfq_id for q in s.query(Quotation).all()}
+
+    def _rfq_id_of(order) -> int:
+        if not order:
+            return 0
+        return (getattr(order, "rfq_id", None)
+                or qtn_rfq.get(getattr(order, "quotation_id", None) or 0) or 0)
+
     rows: list[dict] = []
     for r in s.query(APRecord).all():
         o = ord_map.get(r.order_id)
@@ -2337,6 +2355,7 @@ def _ap_record_rows(s) -> list[dict]:
             "id": r.id,
             "po_id": r.po_id,
             "order_id": r.order_id,
+            "rfq_id": _rfq_id_of(o),
             "po_no": (po.po_no or "") if po else "",
             "vendor": vendor,
             "customer": cust,
