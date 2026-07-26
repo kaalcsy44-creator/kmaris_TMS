@@ -1283,7 +1283,14 @@ function ClosingTab() {
           </div>
 
           <div className="panel">
-            <h3 className="form-title">Monthly sales · purchases ({year}, ₩)</h3>
+            {/* 두 계열이 색으로만 갈리므로 제목 줄에 범례를 함께 둔다(캘린더와 같은 자리·모양). */}
+            <div className="items-head">
+              <h3 className="form-title" style={{ margin: 0 }}>Monthly sales · purchases ({year}, ₩)</h3>
+              <div className="fin-legend">
+                <span className="fin-dot fin-dot--sales" /> Sales (supply value)
+                <span className="fin-dot fin-dot--purchase" /> Purchases (cost)
+              </div>
+            </div>
             <MonthlyBars labels={data.monthly.labels} sales={data.monthly.sales} purchase={data.monthly.purchase} />
           </div>
 
@@ -1552,7 +1559,7 @@ function CalendarTab() {
           <h3 className="form-title fin-cal-month">{monthLabel}</h3>
           <button className="btn sm fin-cal-arrow" onClick={() => shift(1)} aria-label="Next month">›</button>
         </div>
-        <div className="fin-cal-legend">
+        <div className="fin-legend fin-cal-legend">
           <span className="fin-dot fin-dot--rec" /> Receivables (AR)
           <span className="fin-dot fin-dot--pay" /> Payables
         </div>
