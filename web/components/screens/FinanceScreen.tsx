@@ -347,6 +347,12 @@ function OverviewTab() {
                       {row.net >= 0 ? "+" : "−"}{cash(Math.abs(row.net))}
                     </td>
                   </tr>
+                  {/* 빈 줄 하나 — 세 기둥의 총계 줄(Total in·Total out·Ending)이 같은 높이에
+                      서려면 본문 줄 수가 같아야 한다. 옆 기둥의 한 줄과 같은 높이로 비운다. */}
+                  <tr className="fin-bucket-gap" aria-hidden="true">
+                    <td>&nbsp;<div className="hint-inline">&nbsp;</div></td>
+                    <td className="num" />
+                  </tr>
                   <tr className="fin-period-total">
                     <td><b>Ending</b></td>
                     <td className="num" style={{ color: row.cumulative < 0 ? "#c0392b" : undefined }}>

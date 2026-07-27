@@ -10282,6 +10282,8 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 .fin-bucket--in { border-top-color: var(--blue); }
 .fin-bucket--out { border-top-color: #d68910; }
 .fin-bucket--balance { border-top-color: #1e7a46; }
+/* 총계 줄 높이를 맞추려고 비워 둔 줄 — 줄이 하나 더 있는 티가 나면 안 된다. */
+.fin-bucket-gap td { border-bottom-color: transparent; }
 /* 기둥 안의 표는 금액이 주인공이라 라벨 칸을 좁히지 않고 금액을 크게 잡는다. */
 .fin-bucket-card table.mini td.num { font-size: 14px; font-weight: 700; white-space: nowrap; }
 .fin-bucket-card .hint-inline { display: block; margin-top: 2px; }
