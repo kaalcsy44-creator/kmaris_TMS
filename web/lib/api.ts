@@ -40,6 +40,7 @@ import type {
   FinanceSummary,
   FinanceClosing,
   FinanceCashflow,
+  FinanceCashflowItems,
   FinanceCalendarEvent,
   SettingsCustomer,
   SettingsVendor,
@@ -763,6 +764,19 @@ export function fetchFinanceCashflow(
     `/api/admin/finance/cashflow?unit=${unit}&count=${count}&opening=${opening}` +
       `&include_po=${includePo ? 1 : 0}&currency=${encodeURIComponent(currency)}` +
       (start ? `&start=${encodeURIComponent(start)}` : "")
+  );
+}
+/** 현금흐름 한 구간의 건별 내역. first=창의 첫 칸(앞선 연체를 흡수하는 칸)인지. */
+export function fetchFinanceCashflowItems(
+  start: string,
+  end: string,
+  currency = "KRW",
+  includePo = false,
+  first = false
+): Promise<FinanceCashflowItems> {
+  return get<FinanceCashflowItems>(
+    `/api/admin/finance/cashflow/items?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}` +
+      `&currency=${encodeURIComponent(currency)}&include_po=${includePo ? 1 : 0}&first=${first ? 1 : 0}`
   );
 }
 

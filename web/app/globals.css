@@ -10260,6 +10260,15 @@ table.mini tfoot .fin-foot-name { text-align: left; }
 .fin-net-bar { position: absolute; left: 25%; width: 50%; border-radius: 3px; }
 .fin-net-bar.pos { background: #1e7a46; }
 .fin-net-bar.neg { background: #c0392b; }
+/* 막대 한 칸이 그 달의 내역으로 가는 링크 — 색은 그대로 두고 hover 로만 문임을 알린다. */
+a.fin-net-col { text-decoration: none; border-radius: 6px; }
+a.fin-net-col:hover { background: color-mix(in srgb, var(--blue) 7%, transparent); }
+a.fin-net-col:hover .fin-bar-label { color: var(--blue); }
+
+/* 현금흐름 한 구간의 건별 내역(/finance/period) */
+.fin-period-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
+.fin-period-title { margin: 0; font-size: 18px; }
+.fin-period-total td { border-top: 1px solid var(--line-strong); background: #f7f9fc; }
 
 /* AR 9~11단계: 대금청구서 편집(ArAddForm) 아래 발행/수금 완료 바 */
 .ar-milestone {

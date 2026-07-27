@@ -965,6 +965,37 @@ export type FinanceCashflow = {
   ending: number;
 };
 
+/** 현금흐름 한 구간을 건별로 펼친 내역 — 표의 한 칸을 눌러 들어가는 화면용. */
+export type FinanceCashflowItem = {
+  /** ar=매출채권, income=기타수입, payable=지급대장, ap=벤더청구, po=발주원가(추정) */
+  kind: "ar" | "income" | "payable" | "ap" | "po";
+  /** 예정분은 예정일, 실적분은 실제로 오간 날. */
+  date: string;
+  party: string;
+  ref: string;
+  memo: string;
+  amount: number;
+  /** true = 이미 오간 돈(실적), false = 아직 안 온 예정. */
+  actual: boolean;
+  overdue: boolean;
+  row_id: number;
+  order_id: number;
+  rfq_id: number;
+  po_id: number;
+};
+
+export type FinanceCashflowItems = {
+  start: string;
+  end: string;
+  currency: string;
+  inflow: FinanceCashflowItem[];
+  outflow: FinanceCashflowItem[];
+  total_inflow: number;
+  total_outflow: number;
+  actual_inflow: number;
+  actual_outflow: number;
+};
+
 export type FinanceCalendarEvent = {
   kind: "receivable" | "payable";
   date: string;

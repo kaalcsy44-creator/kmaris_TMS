@@ -870,6 +870,152 @@ def finance_cashflow(unit: str = "month", count: int = 6, opening: float = 0.0,
         s.close()
 
 
+@app.get("/api/admin/finance/cashflow/items", dependencies=[Depends(require_token)])
+def finance_cashflow_items(start: str = "", end: str = "", currency: str = "KRW",
+                           include_po: int = 0, first: int = 0):
+    """한 구간의 유입·유출을 건별로 펼친다 — 현금흐름 표의 한 칸을 열어 보는 화면용.
+
+    합계가 /cashflow 의 그 행과 정확히 맞아야 하므로 같은 규칙으로 담는다: 예정은
+    예정일(수금 due·지급 회차일), 실적은 실제로 오간 날. first=1 이면 그 구간이 창의
+    첫 칸이라는 뜻이고, 앞선 과거(연체·지난 회차)를 여기로 흡수한다.
+    """
+    try:
+        d0 = date.fromisoformat(start[:10])
+        d1 = date.fromisoformat(end[:10])
+    except ValueError:
+        raise HTTPException(status_code=400, detail="start/end 날짜 형식이 올바르지 않습니다(YYYY-MM-DD).")
+    if d1 < d0:
+        raise HTTPException(status_code=400, detail="end 는 start 보다 앞설 수 없습니다.")
+    cur_sel = (currency or "KRW").upper()
+    lo, hi = d0.isoformat(), d1.isoformat()
+    # 첫 칸이면 그 앞의 예정분까지 끌어온다(집계의 '연체 흡수'와 같은 규칙).
+    sched_lo = "" if first else lo
+
+    def scheduled_in(when: str) -> bool:
+        return bool(when) and when <= hi and when >= sched_lo
+
+    inflow: list[dict] = []
+    outflow: list[dict] = []
+    s = get_session()
+    try:
+        # 유입 — 미수 잔액(예정)과 실제 입금(실적).
+        ar_rows = _finance_receivable_rows(s)
+        for r in ar_rows:
+            if (r["currency"] or "KRW").upper() != cur_sel:
+                continue
+            if r["outstanding"] > 0 and scheduled_in(r["due_date"]):
+                inflow.append({
+                    "kind": "ar", "date": r["due_date"], "party": r["customer"],
+                    "ref": r["invoice_no"] or r["ci_no"] or "", "memo": "Receivable",
+                    "amount": r["outstanding"], "actual": False, "overdue": bool(r["overdue"]),
+                    "row_id": r["id"], "order_id": r["order_id"], "rfq_id": r["rfq_id"], "po_id": 0,
+                })
+            if r["paid_amount"] > 0 and r["paid_date"] and lo <= r["paid_date"] <= hi:
+                inflow.append({
+                    "kind": "ar", "date": r["paid_date"], "party": r["customer"],
+                    "ref": r["invoice_no"] or r["ci_no"] or "", "memo": "Receipt",
+                    "amount": r["paid_amount"], "actual": True, "overdue": False,
+                    "row_id": r["id"], "order_id": r["order_id"], "rfq_id": r["rfq_id"], "po_id": 0,
+                })
+        for r in _finance_income_rows(s):
+            if (r["currency"] or "KRW").upper() != cur_sel:
+                continue
+            if r["outstanding"] > 0 and scheduled_in(r["due_date"]):
+                inflow.append({
+                    "kind": "income", "date": r["due_date"], "party": r["counterparty"] or "—",
+                    "ref": r["description"], "memo": r["category"],
+                    "amount": r["outstanding"], "actual": False, "overdue": bool(r["overdue"]),
+                    "row_id": r["id"], "order_id": 0, "rfq_id": 0, "po_id": 0,
+                })
+        for inc in s.query(FinanceIncome).all():
+            if (inc.currency or "KRW").upper() != cur_sel:
+                continue
+            for when, amt in _settled_occurrences(inc, d0, d1):
+                inflow.append({
+                    "kind": "income", "date": when, "party": inc.counterparty or "—",
+                    "ref": inc.description or "", "memo": inc.category or "기타",
+                    "amount": amt, "actual": True, "overdue": False,
+                    "row_id": inc.id, "order_id": 0, "rfq_id": 0, "po_id": 0,
+                })
+
+        # 유출 — 지급대장(예정 회차 + 실제 납부), 매입 청구(AP), 선택적 벤더 P/O 추정.
+        vendor_names = {v.id: v.name for v in s.query(Vendor).all()}
+        scan_start = date.fromordinal(d0.toordinal() - 400) if first else d0
+        for p in s.query(FinancePayable).all():
+            if (p.currency or "KRW").upper() != cur_sel:
+                continue
+            who = p.counterparty or (vendor_names.get(p.vendor_id, "") if p.vendor_id else "") or "—"
+            for occ in _finance_occurrences(p, scan_start, d1):
+                if _finance_payable_paid_on(p, occ):
+                    continue
+                outflow.append({
+                    "kind": "payable", "date": occ, "party": who,
+                    "ref": p.description or "", "memo": p.category or "기타",
+                    "amount": round(p.amount or 0, 2), "actual": False,
+                    "overdue": occ < date.today().isoformat(),
+                    "row_id": p.id, "order_id": 0, "rfq_id": 0, "po_id": 0,
+                })
+            for when, amt in _settled_occurrences(p, d0, d1):
+                outflow.append({
+                    "kind": "payable", "date": when, "party": who,
+                    "ref": p.description or "", "memo": p.category or "기타",
+                    "amount": amt, "actual": True, "overdue": False,
+                    "row_id": p.id, "order_id": 0, "rfq_id": 0, "po_id": 0,
+                })
+        ap_rows = _ap_record_rows(s)
+        ap_po_ids = {ap["po_id"] for ap in ap_rows}
+        for ap in ap_rows:
+            if (ap["currency"] or "KRW").upper() != cur_sel:
+                continue
+            if ap["outstanding"] > 0 and scheduled_in(ap["due_date"]):
+                outflow.append({
+                    "kind": "ap", "date": ap["due_date"], "party": ap["vendor"],
+                    "ref": ap["bill_no"] or ap["po_no"] or "", "memo": "Vendor bill",
+                    "amount": ap["outstanding"], "actual": False, "overdue": bool(ap["overdue"]),
+                    "row_id": ap["id"], "order_id": ap["order_id"], "rfq_id": ap["rfq_id"], "po_id": ap["po_id"],
+                })
+            if ap["paid_amount"] > 0 and ap["paid_date"] and lo <= ap["paid_date"] <= hi:
+                outflow.append({
+                    "kind": "ap", "date": ap["paid_date"], "party": ap["vendor"],
+                    "ref": ap["bill_no"] or ap["po_no"] or "", "memo": "Payment",
+                    "amount": ap["paid_amount"], "actual": True, "overdue": False,
+                    "row_id": ap["id"], "order_id": ap["order_id"], "rfq_id": ap["rfq_id"], "po_id": ap["po_id"],
+                })
+        if include_po:
+            ord_map = {o.id: o for o in s.query(Order).all()}
+            for po in s.query(PurchaseOrder).all():
+                if po.id in ap_po_ids:
+                    continue
+                pd = _po_period_date(po)
+                if not scheduled_in(pd):
+                    continue
+                o = ord_map.get(po.order_id)
+                cur = (po.currency or (o.currency if o else "USD") or "USD").upper()
+                if cur != cur_sel:
+                    continue
+                outflow.append({
+                    "kind": "po", "date": pd, "party": vendor_names.get(po.vendor_id, "—"),
+                    "ref": po.po_no or "", "memo": "P/O cost (est.)",
+                    "amount": round(_po_cost(po), 2), "actual": False, "overdue": False,
+                    "row_id": po.id, "order_id": po.order_id or 0,
+                    "rfq_id": getattr(o, "rfq_id", 0) or 0, "po_id": po.id,
+                })
+
+        inflow.sort(key=lambda x: (x["date"], -x["amount"]))
+        outflow.sort(key=lambda x: (x["date"], -x["amount"]))
+        return {
+            "start": lo, "end": hi, "currency": cur_sel,
+            "inflow": inflow,
+            "outflow": outflow,
+            "total_inflow": round(sum(x["amount"] for x in inflow)),
+            "total_outflow": round(sum(x["amount"] for x in outflow)),
+            "actual_inflow": round(sum(x["amount"] for x in inflow if x["actual"])),
+            "actual_outflow": round(sum(x["amount"] for x in outflow if x["actual"])),
+        }
+    finally:
+        s.close()
+
+
 @app.get("/api/admin/finance/calendar", dependencies=[Depends(require_token)])
 def finance_calendar(start: str = "", end: str = ""):
     """캘린더용 이벤트 — 구간 [start, end] 의 수금 예정(미수 due)·지급 예정(회차) 목록."""

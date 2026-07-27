@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   fetchFinanceSummary,
   fetchFinanceReceivables,
@@ -28,6 +29,7 @@ import type {
   FinanceSummary,
   FinanceClosing,
   FinanceCashflow,
+  FinanceCashflowRow,
   FinanceCalendarEvent,
   MoneyByCurrency,
   FxQuote,
@@ -48,13 +50,13 @@ const RECURRENCE_LABEL: Record<string, string> = {
 };
 // 기타 수입 분류(저장값은 한글 코드, 표시만 영문).
 const INCOME_CATEGORIES = ["이자수입", "환급", "잡수입", "기타"];
-const INCOME_CATEGORY_LABEL: Record<string, string> = {
+export const INCOME_CATEGORY_LABEL: Record<string, string> = {
   이자수입: "Interest",
   환급: "Refund",
   잡수입: "Misc income",
   기타: "Other",
 };
-const CATEGORY_LABEL: Record<string, string> = {
+export const CATEGORY_LABEL: Record<string, string> = {
   거래선지급: "Vendor payment",
   임차료: "Rent",
   급여: "Payroll",
@@ -63,10 +65,10 @@ const CATEGORY_LABEL: Record<string, string> = {
   기타: "Other",
 };
 
-function sym(currency: string): string {
+export function sym(currency: string): string {
   return currency === "KRW" ? "₩" : currency === "USD" ? "$" : `${currency} `;
 }
-function money(amount: number, currency: string): string {
+export function money(amount: number, currency: string): string {
   return `${sym(currency)}${Math.round(amount).toLocaleString()}`;
 }
 function won(n: number): string {
@@ -125,8 +127,19 @@ const localMonthStr = () => localDayStr().slice(0, 7);
 // ── Screen ───────────────────────────────────────────────────────────────────
 type Tab = "overview" | "receivables" | "payables" | "closing" | "cashflow" | "calendar";
 
+const TABS: Tab[] = ["overview", "receivables", "payables", "closing", "cashflow", "calendar"];
+
 export default function FinanceScreen() {
-  const [tab, setTab] = useState<Tab>("overview");
+  // 탭은 주소에 남긴다 — 기간 상세 화면에서 돌아올 때, 그리고 링크를 주고받을 때
+  // 'Finance 의 어느 탭'인지가 주소만으로 정해져야 한다.
+  const router = useRouter();
+  const params = useSearchParams();
+  const fromUrl = params.get("tab") as Tab | null;
+  const [tab, setTabState] = useState<Tab>(fromUrl && TABS.includes(fromUrl) ? fromUrl : "overview");
+  const setTab = (t: Tab) => {
+    setTabState(t);
+    router.replace(t === "overview" ? "/finance" : `/finance?tab=${t}`, { scroll: false });
+  };
   return (
     <div className="action-tabs">
       <div className="page-tabs">
@@ -222,7 +235,7 @@ function OverviewTab() {
   );
 }
 
-function KpiTile({ label, main, sub, tone }: { label: string; main: React.ReactNode; sub?: string; tone: "blue" | "red" | "amber" | "green" }) {
+export function KpiTile({ label, main, sub, tone }: { label: string; main: React.ReactNode; sub?: string; tone: "blue" | "red" | "amber" | "green" }) {
   return (
     <div className={`fin-kpi fin-kpi--${tone}`}>
       <div className="fin-kpi-label">{label}</div>
@@ -249,7 +262,7 @@ function receivableTotals(rows: FinanceReceivable[]) {
  * 번호를 눌러 그 자리로 바로 갈 수 있어야 한다. 오더 id 로 딥링크하면 목록이
  * rfq_id 를 찾아 팝업을 열어 준다(ProjectsScreen 의 ?order= 처리).
  */
-function ProjectDocLink({
+export function ProjectDocLink({
   orderId,
   rfqId,
   label,
@@ -1357,6 +1370,24 @@ function MonthlyBars({ labels, sales, purchase }: { labels: string[]; sales: num
 }
 
 // ── Cash Flow (projection) ──────────────────────────────────────────────────────
+
+/**
+ * 현금흐름 한 칸 → 그 구간의 건별 내역 화면(/finance/period) 주소.
+ * first(창의 첫 칸)까지 넘겨야 상세의 합계가 표의 그 행과 맞는다 — 첫 칸은 앞선
+ * 연체까지 끌어안기 때문이다.
+ */
+function periodHref(r: FinanceCashflowRow, first: boolean, currency: string, includePo: boolean): string {
+  const q = new URLSearchParams({
+    start: r.start,
+    end: r.end,
+    label: r.label,
+    cur: currency,
+    po: includePo ? "1" : "0",
+    first: first ? "1" : "0",
+  });
+  return `/finance/period?${q.toString()}`;
+}
+
 function CashFlowTab() {
   const [unit, setUnit] = useState<"month" | "week">("month");
   const [count, setCount] = useState(6);
@@ -1458,8 +1489,14 @@ function CashFlowTab() {
           <div className="panel">
             <h3 className="form-title">Net cash flow ({sym(currency).trim()})</h3>
             <div className="fin-net-chart">
-              {data.rows.map((r) => (
-                <div key={r.label} className="fin-net-col" title={`${r.label} · Inflow ${cash(r.inflow)}${r.actual_inflow ? ` (${cash(r.actual_inflow)} received)` : ""} · Outflow ${cash(r.outflow)}${r.actual_outflow ? ` (${cash(r.actual_outflow)} paid)` : ""} · Net ${cash(r.net)}`}>
+              {/* 막대도 그 달의 내역으로 들어가는 문 — 눈에 걸린 달을 바로 열어 볼 수 있게. */}
+              {data.rows.map((r, i) => (
+                <Link
+                  key={r.label}
+                  className="fin-net-col"
+                  href={periodHref(r, i === 0, currency, includePo)}
+                  title={`${r.label} · Inflow ${cash(r.inflow)}${r.actual_inflow ? ` (${cash(r.actual_inflow)} received)` : ""} · Outflow ${cash(r.outflow)}${r.actual_outflow ? ` (${cash(r.actual_outflow)} paid)` : ""} · Net ${cash(r.net)} — click for the items`}
+                >
                   <div className="fin-net-track">
                     <div className="fin-net-mid" />
                     <div
@@ -1468,7 +1505,7 @@ function CashFlowTab() {
                     />
                   </div>
                   <div className="fin-bar-label">{r.label}</div>
-                </div>
+                </Link>
               ))}
             </div>
           </div>
@@ -1480,26 +1517,30 @@ function CashFlowTab() {
                 <tr><th>Period</th><th className="num">Inflow</th><th className="num">Outflow</th><th className="num">Net</th><th className="num">Cumulative</th></tr>
               </thead>
               <tbody>
-                {data.rows.map((r) => (
-                  <tr key={r.label} className={r.cumulative < 0 ? "fin-overdue" : ""}>
-                    <td>{r.label}</td>
-                    {/* 이미 오간 부분은 금액 아래 옅게 덧붙인다 — 같은 칸의 나머지가 예정분. */}
-                    <td className="num">
-                      {cash(r.inflow)}
-                      {r.actual_inflow ? <div className="fin-cf-actual">{cash(r.actual_inflow)} received</div> : null}
-                    </td>
-                    <td className="num">
-                      {cash(r.outflow)}
-                      {r.actual_outflow ? <div className="fin-cf-actual">{cash(r.actual_outflow)} paid</div> : null}
-                    </td>
-                    <td className="num" style={{ color: r.net >= 0 ? "#1e7a46" : "#c0392b" }}>{r.net >= 0 ? "+" : "−"}{cash(Math.abs(r.net))}</td>
-                    <td className="num"><b>{cash(r.cumulative)}</b></td>
-                  </tr>
-                ))}
+                {data.rows.map((r, i) => {
+                  // 기간 이름과 두 금액은 그 달의 건별 내역으로 들어가는 문이다.
+                  const href = periodHref(r, i === 0, currency, includePo);
+                  return (
+                    <tr key={r.label} className={r.cumulative < 0 ? "fin-overdue" : ""}>
+                      <td><Link className="fin-doc-link" href={href} title="Open this period's inflow / outflow items">{r.label}</Link></td>
+                      {/* 이미 오간 부분은 금액 아래 옅게 덧붙인다 — 같은 칸의 나머지가 예정분. */}
+                      <td className="num">
+                        <Link className="fin-doc-link" href={`${href}&side=in`}>{cash(r.inflow)}</Link>
+                        {r.actual_inflow ? <div className="fin-cf-actual">{cash(r.actual_inflow)} received</div> : null}
+                      </td>
+                      <td className="num">
+                        <Link className="fin-doc-link" href={`${href}&side=out`}>{cash(r.outflow)}</Link>
+                        {r.actual_outflow ? <div className="fin-cf-actual">{cash(r.actual_outflow)} paid</div> : null}
+                      </td>
+                      <td className="num" style={{ color: r.net >= 0 ? "#1e7a46" : "#c0392b" }}>{r.net >= 0 ? "+" : "−"}{cash(Math.abs(r.net))}</td>
+                      <td className="num"><b>{cash(r.cumulative)}</b></td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
             <p className="hint-inline" style={{ display: "block", marginTop: 8 }}>
-              Each period mixes money already moved (shown in grey under the amount, dated on the day it actually arrived or left) with money still expected — receivables by due date and unpaid payable occurrences{includePo ? " + vendor POs (estimated from order date)" : ""}. So the opening balance must be your balance on {openingAsOf}, not today&apos;s. Only {currency} items are counted — switch the currency toggle for the other book; nothing is converted. Overdue / past-due items fall into the first period. A negative cumulative balance (red) marks a cash shortfall.
+              Click a period to see the individual receipts and payments behind it. Each period mixes money already moved (shown in grey under the amount, dated on the day it actually arrived or left) with money still expected — receivables by due date and unpaid payable occurrences{includePo ? " + vendor POs (estimated from order date)" : ""}. So the opening balance must be your balance on {openingAsOf}, not today&apos;s. Only {currency} items are counted — switch the currency toggle for the other book; nothing is converted. Overdue / past-due items fall into the first period. A negative cumulative balance (red) marks a cash shortfall.
             </p>
           </div>
         </>
