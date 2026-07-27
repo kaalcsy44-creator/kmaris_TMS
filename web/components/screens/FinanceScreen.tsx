@@ -255,6 +255,11 @@ function OverviewTab() {
   const rowOpening = !data ? 0 : idx === 0 ? data.opening : rows[idx - 1].cumulative;
   // 기둥 머리에는 읽기 좋은 이름으로("2026-07" → "Jul 2026"). 주 단위는 그대로.
   const pickedLabel = !row ? "" : unit === "month" ? monthLabel(row.label) : row.label;
+  // 고른 칸부터 창 끝까지 중 잔고가 가장 낮은 칸 — 언제 바닥을 치는지가 현금 계획의 핵심이다.
+  const lowAhead = rows.slice(idx).reduce(
+    (lo, r) => (r.cumulative < lo.cumulative ? r : lo),
+    rows[idx] ?? rows[0]
+  );
 
   return (
     <div className="fin-overview">
@@ -335,6 +340,8 @@ function OverviewTab() {
             />
             <div className="panel fin-bucket-card fin-bucket--balance">
               <h3 className="form-title">Balance <span className="muted">· {pickedLabel}</span></h3>
+              {/* Net 은 Total in − Total out 이라 저 두 줄과 같은 높이에 서야 한 줄로 읽힌다.
+                  그래서 세 기둥 모두 본문 3줄 + 총계 1줄로 키를 맞춘다. */}
               <table className="mini">
                 <tbody>
                   <tr>
@@ -342,21 +349,28 @@ function OverviewTab() {
                     <td className="num">{cash(rowOpening)}</td>
                   </tr>
                   <tr>
-                    <td>Net<div className="hint-inline">in − out</div></td>
-                    <td className="num" style={{ color: row.net >= 0 ? "#1e7a46" : "#c0392b" }}>
-                      {row.net >= 0 ? "+" : "−"}{cash(Math.abs(row.net))}
+                    <td>Ending<div className="hint-inline">opening + net</div></td>
+                    <td className="num" style={{ color: row.cumulative < 0 ? "#c0392b" : undefined }}>
+                      {cash(row.cumulative)}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Low point ahead<div className="hint-inline">{lowAhead && lowAhead !== row ? lowAhead.label : "this period"}</div></td>
+                    <td className="num" style={{ color: lowAhead && lowAhead.cumulative < 0 ? "#c0392b" : undefined }}>
+                      {cash(lowAhead ? lowAhead.cumulative : row.cumulative)}
                     </td>
                   </tr>
                   <tr className="fin-period-total">
-                    <td><b>Ending</b></td>
-                    <td className="num" style={{ color: row.cumulative < 0 ? "#c0392b" : undefined }}>
-                      <b>{cash(row.cumulative)}</b>
+                    <td><b>Net</b></td>
+                    <td className="num" style={{ color: row.net >= 0 ? "#1e7a46" : "#c0392b" }}>
+                      <b>{row.net >= 0 ? "+" : "−"}{cash(Math.abs(row.net))}</b>
                     </td>
                   </tr>
                 </tbody>
               </table>
               <p className="hint-inline" style={{ display: "block", marginTop: 8 }}>
-                Rolled up from {cash(data.opening)} on {openingAsOf}. A negative ending balance marks a cash shortfall.
+                Rolled up from {cash(data.opening)} on {openingAsOf}. Low point ahead is the smallest balance from
+                this period to the end of the window — a negative one (red) marks a cash shortfall.
               </p>
             </div>
           </div>
