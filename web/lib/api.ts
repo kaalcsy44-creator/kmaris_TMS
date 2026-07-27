@@ -688,8 +688,11 @@ export function fetchArOverview(): Promise<ArData> {
 }
 
 // ── Finance(재무) — 수금/미수·지급대장·캘린더 ─────────────────────────────────
-export function fetchFinanceSummary(): Promise<FinanceSummary> {
-  return get<FinanceSummary>("/api/admin/finance/summary");
+/** month(YYYY-MM)는 '실제로 오간 돈' 집계에만 걸린다 — 잔액 KPI 는 늘 오늘 기준. */
+export function fetchFinanceSummary(month = ""): Promise<FinanceSummary> {
+  return get<FinanceSummary>(
+    `/api/admin/finance/summary${month ? `?month=${encodeURIComponent(month)}` : ""}`
+  );
 }
 export function fetchFinanceReceivables(): Promise<{ rows: FinanceReceivable[]; fx: FxQuote }> {
   return get<{ rows: FinanceReceivable[]; fx: FxQuote }>("/api/admin/finance/receivables");

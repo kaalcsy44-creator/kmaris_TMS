@@ -162,71 +162,142 @@ export default function FinanceScreen() {
 }
 
 // ── Overview ─────────────────────────────────────────────────────────────────
+
+/**
+ * 그 달 실적 타일 → 같은 달의 건별 내역(/finance/period).
+ * 상세 화면은 한 통화만 다루므로, 금액이 잡힌 통화 중 첫 번째(KRW→USD 순)로 연다.
+ */
+function monthItemsHref(
+  data: FinanceSummary,
+  amounts: MoneyByCurrency,
+  side: "in" | "out"
+): string {
+  const q = new URLSearchParams({
+    start: data.month_start,
+    end: data.month_end,
+    label: monthLabel(data.month),
+    cur: currencyKeys(amounts)[0] || "KRW",
+    po: "0",
+    first: "0",
+    side,
+    from: "overview",
+  });
+  return `/finance/period?${q.toString()}`;
+}
+
 function OverviewTab() {
-  const { data, error } = useCachedData<FinanceSummary>("finance:summary", fetchFinanceSummary);
+  // 달을 고를 수 있게 한다. 다만 '아직 안 오간 돈'(미수·미지급)은 특정 달의 몫이
+  // 아니라 오늘 기준 잔액이므로 달을 바꿔도 그대로다 — 초록 줄(실적)만 달을 따른다.
+  const [month, setMonth] = useState(localMonthStr());
+  const { data, error } = useCachedData<FinanceSummary>(
+    `finance:summary:${month}`,
+    () => fetchFinanceSummary(month)
+  );
+  const shiftMonth = (delta: number) => {
+    const [y, m] = month.split("-").map(Number);
+    const d = new Date(y, m - 1 + delta, 1);
+    setMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+  };
+  const thisMonth = localMonthStr();
+
   if (error && !data) return <div className="state error">API error: {error.message}</div>;
   if (!data) return <div className="state">Loading…</div>;
 
   return (
     <div className="fin-overview">
-      {/* 금액은 환산하지 않고 통화별로 그대로 보여준다(₩·$ 각 줄). */}
-      <div className="fin-kpis">
-        <KpiTile label="Outstanding" main={byCurrencyLines(data.receivable.outstanding)} sub={`${data.receivable.count} invoices`} tone="blue" />
-        <KpiTile label="Overdue AR" main={byCurrencyLines(data.receivable.overdue)} tone="red" />
-        <KpiTile label="Payable (30d + overdue)" main={byCurrencyLines(data.payable.total)} sub={`Due in 30d ${byCurrency(data.payable.upcoming_30d)}`} tone="amber" />
-        <KpiTile label="Overdue payable" main={byCurrencyLines(data.payable.overdue)} tone="red" />
+      <div className="fin-period-bar">
+        <label className="fin-inline-field">
+          Month
+          <input type="month" value={month} onChange={(e) => setMonth(e.target.value || thisMonth)} />
+        </label>
+        <button className="btn sm fin-cal-arrow" onClick={() => shiftMonth(-1)} aria-label="Previous month">‹</button>
+        <button className="btn sm fin-cal-arrow" onClick={() => shiftMonth(1)} aria-label="Next month">›</button>
+        <button className="btn sm" disabled={month === thisMonth} onClick={() => setMonth(thisMonth)}>This month</button>
+        <span className="hint-inline">
+          The month picks which cash actually moved. Outstanding and payable balances are as of today —
+          they belong to no single month.
+        </span>
       </div>
 
-      {/* 위 네 타일은 '아직 안 오간 돈'이라 완납되는 순간 값이 사라진다. 이미 들어오고
-          나간 돈은 여기서만 보이므로 줄을 나누고 색(초록)도 달리 준다. */}
-      <div className="fin-kpis-cap">Cash actually moved · {monthLabel(data.month)}</div>
-      <div className="fin-kpis fin-kpis--actual">
-        <KpiTile
-          label="Collected"
-          main={byCurrencyLines(data.collected_month.amount)}
-          sub={`${data.collected_month.count} received`}
-          tone="green"
-        />
-        <KpiTile
-          label="Paid out"
-          main={byCurrencyLines(data.paid_month.amount)}
-          sub={`${data.paid_month.count} settled`}
-          tone="green"
-        />
-      </div>
-
+      {/* 좌우로 갈라 놓는다: 왼쪽은 들어올 돈과 들어온 돈, 오른쪽은 나갈 돈과 나간 돈.
+          한 줄에 넷을 늘어놓으면 수금과 지급이 섞여 어느 쪽 숫자인지 매번 되짚어야 한다. */}
       <div className="fin-overview-cols">
-        <div className="panel">
-          <h3 className="form-title">Receivables by customer</h3>
-          {data.by_customer.length === 0 ? (
-            <div className="muted">No outstanding balance.</div>
-          ) : (
-            <table className="mini">
-              <thead><tr><th>Customer</th><th className="num">Outstanding</th></tr></thead>
-              <tbody>
-                {data.by_customer.map((r) => (
-                  <tr key={r.name}><td>{r.name}</td><td className="num">{byCurrency(r.outstanding)}</td></tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
+        <section className="fin-ov-col">
+          <h3 className="fin-ov-col-title">Receivables <span>money coming in</span></h3>
+          {/* 금액은 환산하지 않고 통화별로 그대로 보여준다(₩·$ 각 줄). */}
+          <div className="fin-kpis">
+            <KpiTile label="Outstanding" main={byCurrencyLines(data.receivable.outstanding)} sub={`${data.receivable.count} invoices`} tone="blue" />
+            <KpiTile label="Overdue AR" main={byCurrencyLines(data.receivable.overdue)} tone="red" />
+          </div>
 
-        <div className="panel">
-          <h3 className="form-title">Payables by category</h3>
-          {data.by_category.length === 0 ? (
-            <div className="muted">No scheduled payables.</div>
-          ) : (
-            <table className="mini">
-              <thead><tr><th>Category</th><th className="num">Amount</th></tr></thead>
-              <tbody>
-                {data.by_category.map((r) => (
-                  <tr key={r.name}><td>{CATEGORY_LABEL[r.name] || r.name}</td><td className="num">{byCurrency(r.amount)}</td></tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
+          {/* 위 타일은 '아직 안 온 돈'이라 완납되는 순간 값이 사라진다. 이미 들어온
+              돈은 여기서만 보이므로 줄을 나누고 색(초록)도 달리 준다. */}
+          <div className="fin-kpis-cap">Cash actually received · {monthLabel(data.month)}</div>
+          <div className="fin-kpis fin-kpis--actual">
+            <KpiTile
+              label="Collected"
+              main={byCurrencyLines(data.collected_month.amount)}
+              sub={`${data.collected_month.count} received`}
+              tone="green"
+            />
+          </div>
+          <Link className="fin-doc-link" href={monthItemsHref(data, data.collected_month.amount, "in")}>
+            See {monthLabel(data.month)} inflow item by item →
+          </Link>
+
+          <div className="panel">
+            <h3 className="form-title">Receivables by customer</h3>
+            {data.by_customer.length === 0 ? (
+              <div className="muted">No outstanding balance.</div>
+            ) : (
+              <table className="mini">
+                <thead><tr><th>Customer</th><th className="num">Outstanding</th></tr></thead>
+                <tbody>
+                  {data.by_customer.map((r) => (
+                    <tr key={r.name}><td>{r.name}</td><td className="num">{byCurrency(r.outstanding)}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </section>
+
+        <section className="fin-ov-col">
+          <h3 className="fin-ov-col-title">Payables <span>money going out</span></h3>
+          <div className="fin-kpis">
+            <KpiTile label="Payable (30d + overdue)" main={byCurrencyLines(data.payable.total)} sub={`Due in 30d ${byCurrency(data.payable.upcoming_30d)}`} tone="amber" />
+            <KpiTile label="Overdue payable" main={byCurrencyLines(data.payable.overdue)} tone="red" />
+          </div>
+
+          <div className="fin-kpis-cap">Cash actually paid · {monthLabel(data.month)}</div>
+          <div className="fin-kpis fin-kpis--actual">
+            <KpiTile
+              label="Paid out"
+              main={byCurrencyLines(data.paid_month.amount)}
+              sub={`${data.paid_month.count} settled`}
+              tone="green"
+            />
+          </div>
+          <Link className="fin-doc-link" href={monthItemsHref(data, data.paid_month.amount, "out")}>
+            See {monthLabel(data.month)} outflow item by item →
+          </Link>
+
+          <div className="panel">
+            <h3 className="form-title">Payables by category</h3>
+            {data.by_category.length === 0 ? (
+              <div className="muted">No scheduled payables.</div>
+            ) : (
+              <table className="mini">
+                <thead><tr><th>Category</th><th className="num">Amount</th></tr></thead>
+                <tbody>
+                  {data.by_category.map((r) => (
+                    <tr key={r.name}><td>{CATEGORY_LABEL[r.name] || r.name}</td><td className="num">{byCurrency(r.amount)}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </section>
       </div>
       <p className="hint-inline" style={{ display: "block", marginTop: 10 }}>
         Amounts are shown in their original currency — no FX conversion, so totals are never mixed across currencies.

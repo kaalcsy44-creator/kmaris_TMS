@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { fetchFinanceCashflowItems } from "@/lib/api";
 import { useCachedData } from "@/lib/useCachedData";
 import type { FinanceCashflowItem, FinanceCashflowItems } from "@/lib/types";
@@ -61,6 +61,15 @@ export default function FinancePeriodScreen() {
   const first = params.get("first") === "1";
   // Cash Flow 표에서 금액을 눌러 왔으면 그쪽 표를 먼저 보여 준다(둘 다 렌더는 한다).
   const side = params.get("side") === "out" ? "out" : params.get("side") === "in" ? "in" : "";
+  // 어디서 들어왔는지 — 돌아가기 링크가 떠나온 자리를 그대로 가리키게.
+  const from = params.get("from") || "";
+  const router = useRouter();
+  /** 통화만 바꾼 같은 기간 주소 — 잔고·합계는 한 통화 안에서만 의미가 있어 환산하지 않는다. */
+  const withCurrency = (cur: string) => {
+    const q = new URLSearchParams(params.toString());
+    q.set("cur", cur);
+    return `/finance/period?${q.toString()}`;
+  };
 
   const cash = (n: number) => money(n, currency);
   const valid = /^\d{4}-\d{2}-\d{2}$/.test(start) && /^\d{4}-\d{2}-\d{2}$/.test(end);
@@ -75,7 +84,8 @@ export default function FinancePeriodScreen() {
 
   const net = useMemo(() => (data ? data.total_inflow - data.total_outflow : 0), [data]);
 
-  const backHref = "/finance?tab=cashflow";
+  const backHref = from === "overview" ? "/finance" : "/finance?tab=cashflow";
+  const backLabel = from === "overview" ? "← Overview" : "← Cash Flow";
 
   if (!valid) {
     return (
@@ -89,10 +99,17 @@ export default function FinancePeriodScreen() {
   return (
     <div className="fin-overview">
       <div className="fin-period-head">
-        <Link className="btn sm" href={backHref}>← Cash Flow</Link>
+        <Link className="btn sm" href={backHref}>{backLabel}</Link>
         <h2 className="form-title fin-period-title">{label}</h2>
+        <div className="seg-toggle" role="group" aria-label="Currency">
+          {(["KRW", "USD"] as const).map((c) => (
+            <button key={c} className={currency === c ? "on" : ""} onClick={() => router.replace(withCurrency(c))}>
+              {c === "KRW" ? "₩ KRW" : "$ USD"}
+            </button>
+          ))}
+        </div>
         <span className="muted">
-          {start} → {end} · {currency}
+          {start} → {end}
           {includePo ? " · incl. vendor PO (est.)" : ""}
           {first ? " · absorbs earlier overdue" : ""}
         </span>

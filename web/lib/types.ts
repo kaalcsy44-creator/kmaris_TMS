@@ -918,6 +918,9 @@ export type FinanceSummary = {
   };
   /** 실적 KPI 가 가리키는 달(YYYY-MM). 잔액 KPI 와 달리 기간이 있는 값이라 함께 준다. */
   month: string;
+  /** 그 달의 [1일, 말일] — 화면이 기간 상세 링크를 만들 때 쓴다. */
+  month_start: string;
+  month_end: string;
   /** 이번 달에 실제로 들어온/나간 돈 — 잔액 KPI 에서는 완납 즉시 사라지는 값. */
   collected_month: { amount: MoneyByCurrency; count: number };
   paid_month: { amount: MoneyByCurrency; count: number };

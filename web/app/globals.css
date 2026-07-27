@@ -10140,8 +10140,15 @@ table.mini tfoot .fin-foot-name { text-align: left; }
 /* 완납 건의 수금일 — 금액 옆 회색 작은 글씨. */
 .fin-paid-on { color: var(--muted); font-size: 11px; margin-left: 6px; }
 .fin-kpi-sub { font-size: 12px; color: #6b7684; margin-top: 3px; }
-.fin-overview-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.fin-overview-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
 @media (max-width: 900px) { .fin-overview-cols { grid-template-columns: 1fr; } }
+/* Overview 좌우 기둥 — 왼쪽은 들어올/들어온 돈, 오른쪽은 나갈/나간 돈. */
+.fin-ov-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.fin-ov-col-title {
+  margin: 0; display: flex; align-items: baseline; gap: 8px;
+  font-size: 15px; font-weight: 800; color: var(--navy);
+}
+.fin-ov-col-title span { font-size: 12px; font-weight: 500; color: var(--muted); }
 .fin-overdue td { color: #c0392b; }
 .fin-paid-toggle {
   border: 1px solid var(--line-strong); background: #fff7f6; color: #c0392b; cursor: pointer;

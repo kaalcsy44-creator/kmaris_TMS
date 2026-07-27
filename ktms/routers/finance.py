@@ -142,18 +142,24 @@ def finance_meta():
 
 
 @app.get("/api/admin/finance/summary", dependencies=[Depends(require_token)])
-def finance_summary():
-    """재무 현황 요약 — 잔액(미수·미지급) KPI + 이번 달 실제 입출금 + 거래선별 통계.
+def finance_summary(month: str = ""):
+    """재무 현황 요약 — 잔액(미수·미지급) KPI + 그 달 실제 입출금 + 거래선별 통계.
 
     통화는 환산하지 않고 통화별로 분리해 합계를 낸다(임의 환율로 뭉치면 실제 잔액과
     어긋나기 때문). 정렬만 KRW→USD→기타 순으로 비교한다.
+    month(YYYY-MM)는 '실제로 오간 돈' 집계에만 걸린다 — 미수·미지급 잔액은 특정 달의
+    몫이 아니라 오늘 기준 잔액이라 달을 바꿔도 같은 값이어야 한다.
     """
     s = get_session()
     try:
         today = date.today()
         today_str = today.isoformat()
         horizon = (date.fromordinal(today.toordinal() + 30)).isoformat()
-        month_start, month_end = _month_bounds(today)
+        try:
+            anchor = date.fromisoformat(f"{month[:7]}-01") if month else today
+        except ValueError:
+            raise HTTPException(status_code=400, detail="month 형식이 올바르지 않습니다(YYYY-MM).")
+        month_start, month_end = _month_bounds(anchor)
 
         # ── 수금(미수) — ARRecord + 기타 수입(수동 등록) ──
         ar_rows = _finance_receivable_rows(s)
@@ -235,8 +241,10 @@ def finance_summary():
                 "overdue": payable_overdue,
                 "total": payable_total,
             },
-            # 이번 달 실적(예정이 아니라 실제 오간 돈).
+            # 그 달 실적(예정이 아니라 실제 오간 돈) + 화면이 기간을 링크로 넘길 때 쓸 경계.
             "month": month_start.strftime("%Y-%m"),
+            "month_start": month_start.isoformat(),
+            "month_end": month_end.isoformat(),
             "collected_month": {"amount": _sum_by_currency(collected), "count": len(collected)},
             "paid_month": {"amount": _sum_by_currency(paid_out), "count": len(paid_out)},
             "by_customer": by_customer[:12],
