@@ -10267,10 +10267,27 @@ table.mini tfoot .fin-foot-name { text-align: left; }
 .fin-net-bar { position: absolute; left: 25%; width: 50%; border-radius: 3px; }
 .fin-net-bar.pos { background: #1e7a46; }
 .fin-net-bar.neg { background: #c0392b; }
-/* 막대 한 칸이 그 달의 내역으로 가는 링크 — 색은 그대로 두고 hover 로만 문임을 알린다. */
-a.fin-net-col { text-decoration: none; border-radius: 6px; }
-a.fin-net-col:hover { background: color-mix(in srgb, var(--blue) 7%, transparent); }
-a.fin-net-col:hover .fin-bar-label { color: var(--blue); }
+/* 막대 한 칸을 누르면 위 세 기둥이 그 칸으로 바뀐다 — 고른 칸은 옅게 깔아 표시. */
+button.fin-net-col { border: 0; background: none; padding: 0; font: inherit; cursor: pointer; border-radius: 6px; }
+button.fin-net-col:hover { background: color-mix(in srgb, var(--blue) 7%, transparent); }
+button.fin-net-col:hover .fin-bar-label { color: var(--blue); }
+button.fin-net-col.on { background: color-mix(in srgb, var(--blue) 11%, transparent); }
+button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
+
+/* Overview 세 기둥 — 들어올 돈 / 나갈 돈 / 남는 돈. */
+.fin-three-cols { display: grid; grid-template-columns: 1fr 1fr 0.85fr; gap: 14px; align-items: start; }
+@media (max-width: 1100px) { .fin-three-cols { grid-template-columns: 1fr; } }
+.fin-bucket-card { border-top: 3px solid var(--line-strong); }
+.fin-bucket--in { border-top-color: var(--blue); }
+.fin-bucket--out { border-top-color: #d68910; }
+.fin-bucket--balance { border-top-color: #1e7a46; }
+/* 기둥 안의 표는 금액이 주인공이라 라벨 칸을 좁히지 않고 금액을 크게 잡는다. */
+.fin-bucket-card table.mini td.num { font-size: 14px; font-weight: 700; white-space: nowrap; }
+.fin-bucket-card .hint-inline { display: block; margin-top: 2px; }
+/* 현금흐름 표의 한 행을 눌러 위 기둥을 바꾼다. */
+.fin-row-pick { cursor: pointer; }
+.fin-row-pick:hover > td { background: color-mix(in srgb, var(--blue) 5%, transparent); }
+.fin-row-pick.on > td { background: color-mix(in srgb, var(--blue) 10%, transparent); font-weight: 700; }
 
 /* 현금흐름 한 구간의 건별 내역(/finance/period) */
 .fin-period-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }

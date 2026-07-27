@@ -763,12 +763,19 @@ def finance_cashflow(unit: str = "month", count: int = 6, opening: float = 0.0,
         # 이미 들어온 금액'을 구분해 볼 수 있게.
         act_in = [0.0] * count
         act_out = [0.0] * count
+        # 예정분을 출처별로 한 번 더 나눠 담는다 — 화면이 '수금 예정 / 기타수입 / 지급 예정 /
+        # 기타비용' 네 갈래로 보여 주기 때문. 예정과 실적은 서로 겹치지 않으므로
+        # in_ar + in_income + actual_inflow = inflow 가 그대로 성립한다(유출도 같다).
+        in_ar = [0.0] * count
+        in_income = [0.0] * count
+        out_ap = [0.0] * count
+        out_other = [0.0] * count
         win_start = buckets[0]["start"]
         win_end = buckets[-1]["end"]
 
         # 유입(예정) — 미수 잔액이 있는 AR + 미수령 기타 수입의 due_date.
         ar_rows = _finance_receivable_rows(s)
-        for r in ar_rows + _finance_income_rows(s):
+        for r, is_ar in [(r, True) for r in ar_rows] + [(r, False) for r in _finance_income_rows(s)]:
             if r["outstanding"] <= 0 or not r["due_date"]:
                 continue
             if (r["currency"] or "KRW").upper() != cur_sel:
@@ -776,6 +783,7 @@ def finance_cashflow(unit: str = "month", count: int = 6, opening: float = 0.0,
             idx = bucket_index(r["due_date"])
             if idx >= 0:
                 inflow[idx] += r["outstanding"]
+                (in_ar if is_ar else in_income)[idx] += r["outstanding"]
         # 유입(실적) — 이 구간 안에 실제로 입금된 매출채권·기타 수입.
         # 완납 건은 위 예정 루프에서 outstanding=0 으로 빠지므로 이중계상이 없다.
         for when, amt, cur in _ar_receipts(ar_rows, win_start, win_end):
@@ -799,12 +807,16 @@ def finance_cashflow(unit: str = "month", count: int = 6, opening: float = 0.0,
         for p in s.query(FinancePayable).all():
             if (p.currency or "KRW").upper() != cur_sel:
                 continue
+            # 지급대장의 '거래선지급'은 벤더 청구(AP)와 같은 성격이라 지급 예정 쪽에,
+            # 임차료·급여·공과금·세금 등은 기타비용 쪽에 담는다.
+            is_vendor = (p.category or "기타") == "거래선지급"
             for occ in _finance_occurrences(p, scan_start, win_end):
                 if _finance_payable_paid_on(p, occ):
                     continue
                 idx = bucket_index(occ)
                 if idx >= 0:
                     outflow[idx] += p.amount or 0
+                    (out_ap if is_vendor else out_other)[idx] += p.amount or 0
             for when, amt in _settled_occurrences(p, win_start, win_end):
                 idx = bucket_index(when)
                 if idx >= 0:
@@ -821,6 +833,7 @@ def finance_cashflow(unit: str = "month", count: int = 6, opening: float = 0.0,
             idx = bucket_index(ap["due_date"])
             if idx >= 0:
                 outflow[idx] += ap["outstanding"]
+                out_ap[idx] += ap["outstanding"]
         for when, amt, cur in _ap_payments(ap_rows, win_start, win_end):
             if (cur or "KRW").upper() != cur_sel:
                 continue
@@ -843,6 +856,7 @@ def finance_cashflow(unit: str = "month", count: int = 6, opening: float = 0.0,
                     cur = po.currency or (o.currency if o else "USD") or "USD"
                     if cur.upper() == cur_sel:
                         outflow[idx] += _po_cost(po)
+                        out_ap[idx] += _po_cost(po)
 
         rows = []
         cumulative = opening
@@ -858,6 +872,11 @@ def finance_cashflow(unit: str = "month", count: int = 6, opening: float = 0.0,
                 # 위 금액 중 이미 오간 부분(나머지가 아직 안 온 예정).
                 "actual_inflow": round(act_in[i]),
                 "actual_outflow": round(act_out[i]),
+                # 예정분의 출처별 내역. 실적과 합하면 위 inflow/outflow 가 된다.
+                "in_ar": round(in_ar[i]),
+                "in_income": round(in_income[i]),
+                "out_ap": round(out_ap[i]),
+                "out_other": round(out_other[i]),
                 "net": round(net),
                 "cumulative": round(cumulative),
             })
@@ -878,14 +897,33 @@ def finance_cashflow(unit: str = "month", count: int = 6, opening: float = 0.0,
         s.close()
 
 
+# 현금흐름 한 칸을 이루는 여섯 갈래. /cashflow 행의 in_ar·in_income·actual_inflow /
+# out_ap·out_other·actual_outflow 와 1:1 로 맞물린다(예정과 실적은 겹치지 않는다).
+# 지급대장의 '거래선지급'은 벤더 청구와 같은 성격이라 payables 쪽에서 센다.
+_INFLOW_BUCKETS = {"receivables", "income", "collected"}
+_CASHFLOW_BUCKETS = {
+    "receivables": lambda x: x["kind"] == "ar" and not x["actual"],
+    "income": lambda x: x["kind"] == "income" and not x["actual"],
+    "collected": lambda x: x["actual"],
+    "payables": lambda x: not x["actual"] and (
+        x["kind"] in ("ap", "po") or (x["kind"] == "payable" and x["memo"] == "거래선지급")
+    ),
+    "other": lambda x: not x["actual"] and x["kind"] == "payable" and x["memo"] != "거래선지급",
+    "paid": lambda x: x["actual"],
+}
+
+
 @app.get("/api/admin/finance/cashflow/items", dependencies=[Depends(require_token)])
 def finance_cashflow_items(start: str = "", end: str = "", currency: str = "KRW",
-                           include_po: int = 0, first: int = 0):
+                           include_po: int = 0, first: int = 0, bucket: str = ""):
     """한 구간의 유입·유출을 건별로 펼친다 — 현금흐름 표의 한 칸을 열어 보는 화면용.
 
     합계가 /cashflow 의 그 행과 정확히 맞아야 하므로 같은 규칙으로 담는다: 예정은
     예정일(수금 due·지급 회차일), 실적은 실제로 오간 날. first=1 이면 그 구간이 창의
     첫 칸이라는 뜻이고, 앞선 과거(연체·지난 회차)를 여기로 흡수한다.
+    bucket 을 주면 그 갈래만 남긴다 — 화면의 여섯 줄(receivables/income/collected/
+    payables/other/paid)이 각각 자기 몫만 열어 볼 수 있도록. 남은 합계는 /cashflow 행의
+    같은 이름 필드(in_ar·in_income·actual_inflow·out_ap·out_other·actual_outflow)와 맞는다.
     """
     try:
         d0 = date.fromisoformat(start[:10])
@@ -1011,8 +1049,14 @@ def finance_cashflow_items(start: str = "", end: str = "", currency: str = "KRW"
 
         inflow.sort(key=lambda x: (x["date"], -x["amount"]))
         outflow.sort(key=lambda x: (x["date"], -x["amount"]))
+        if bucket:
+            if bucket not in _CASHFLOW_BUCKETS:
+                raise HTTPException(status_code=400, detail=f"bucket 값이 올바르지 않습니다({', '.join(_CASHFLOW_BUCKETS)}).")
+            keep = _CASHFLOW_BUCKETS[bucket]
+            inflow = [x for x in inflow if keep(x)] if bucket in _INFLOW_BUCKETS else []
+            outflow = [] if bucket in _INFLOW_BUCKETS else [x for x in outflow if keep(x)]
         return {
-            "start": lo, "end": hi, "currency": cur_sel,
+            "start": lo, "end": hi, "currency": cur_sel, "bucket": bucket,
             "inflow": inflow,
             "outflow": outflow,
             "total_inflow": round(sum(x["amount"] for x in inflow)),

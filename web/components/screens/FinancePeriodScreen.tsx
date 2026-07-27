@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { fetchFinanceCashflowItems } from "@/lib/api";
 import { useCachedData } from "@/lib/useCachedData";
-import type { FinanceCashflowItem, FinanceCashflowItems } from "@/lib/types";
+import type { CashBucket, FinanceCashflowItem, FinanceCashflowItems } from "@/lib/types";
 import {
   CATEGORY_LABEL,
   INCOME_CATEGORY_LABEL,
@@ -31,9 +31,23 @@ function typeLabel(r: FinanceCashflowItem): string {
 }
 
 const EMPTY_ITEMS: FinanceCashflowItems = {
-  start: "", end: "", currency: "KRW", inflow: [], outflow: [],
+  start: "", end: "", currency: "KRW", bucket: "", inflow: [], outflow: [],
   total_inflow: 0, total_outflow: 0, actual_inflow: 0, actual_outflow: 0,
 };
+
+/** 여섯 갈래의 화면 이름 — Overview 의 세 기둥에 적힌 것과 같은 말을 쓴다. */
+const BUCKET_TITLE: Record<CashBucket, string> = {
+  receivables: "Receivables",
+  income: "Other income",
+  collected: "Collected",
+  payables: "Payables",
+  other: "Other costs",
+  paid: "Paid",
+};
+const IN_BUCKETS: CashBucket[] = ["receivables", "income", "collected"];
+function isBucket(v: string): v is CashBucket {
+  return v in BUCKET_TITLE;
+}
 
 /** "2026-07-01" → "Jul 1". 같은 구간 안이라 연도는 접어 둔다. */
 function dayLabel(iso: string): string {
@@ -59,10 +73,13 @@ export default function FinancePeriodScreen() {
   const currency = (params.get("cur") || "KRW").toUpperCase();
   const includePo = params.get("po") === "1";
   const first = params.get("first") === "1";
-  // Cash Flow 표에서 금액을 눌러 왔으면 그쪽 표를 먼저 보여 준다(둘 다 렌더는 한다).
-  const side = params.get("side") === "out" ? "out" : params.get("side") === "in" ? "in" : "";
-  // 어디서 들어왔는지 — 돌아가기 링크가 떠나온 자리를 그대로 가리키게.
-  const from = params.get("from") || "";
+  // Overview 세 기둥의 한 줄을 눌러 왔으면 그 갈래만 펼친다(비어 있으면 유입·유출 전부).
+  const bucketParam = params.get("bucket") || "";
+  const bucket: CashBucket | "" = isBucket(bucketParam) ? bucketParam : "";
+  // 갈래를 정하지 않고 금액만 눌러 왔으면 그쪽 표를 먼저 보여 준다(둘 다 렌더는 한다).
+  const side: "in" | "out" = bucket
+    ? (IN_BUCKETS.includes(bucket) ? "in" : "out")
+    : params.get("side") === "out" ? "out" : "in";
   const router = useRouter();
   /** 통화만 바꾼 같은 기간 주소 — 잔고·합계는 한 통화 안에서만 의미가 있어 환산하지 않는다. */
   const withCurrency = (cur: string) => {
@@ -74,24 +91,22 @@ export default function FinancePeriodScreen() {
   const cash = (n: number) => money(n, currency);
   const valid = /^\d{4}-\d{2}-\d{2}$/.test(start) && /^\d{4}-\d{2}-\d{2}$/.test(end);
 
-  const key = `finance:cashflow:items:${start}:${end}:${currency}:${includePo}:${first}`;
+  const key = `finance:cashflow:items:${start}:${end}:${currency}:${includePo}:${first}:${bucket}`;
   // 주소가 성치 않으면 서버를 부르지 않는다(아래에서 안내 화면으로 빠진다).
   const { data, error } = useCachedData<FinanceCashflowItems>(
     key,
-    () => (valid ? fetchFinanceCashflowItems(start, end, currency, includePo, first)
+    () => (valid ? fetchFinanceCashflowItems(start, end, currency, includePo, first, bucket)
                  : Promise.resolve(EMPTY_ITEMS))
   );
 
   const net = useMemo(() => (data ? data.total_inflow - data.total_outflow : 0), [data]);
-
-  const backHref = from === "overview" ? "/finance" : "/finance?tab=cashflow";
-  const backLabel = from === "overview" ? "← Overview" : "← Cash Flow";
+  const backHref = "/finance";
 
   if (!valid) {
     return (
       <div className="fin-overview">
-        <div className="state error">This page needs a period — open it from the Cash Flow table.</div>
-        <p><Link className="fin-doc-link" href={backHref}>← Back to Cash Flow</Link></p>
+        <div className="state error">This page needs a period — open it from the cash flow table.</div>
+        <p><Link className="fin-doc-link" href={backHref}>← Back to Finance</Link></p>
       </div>
     );
   }
@@ -99,8 +114,10 @@ export default function FinancePeriodScreen() {
   return (
     <div className="fin-overview">
       <div className="fin-period-head">
-        <Link className="btn sm" href={backHref}>{backLabel}</Link>
-        <h2 className="form-title fin-period-title">{label}</h2>
+        <Link className="btn sm" href={backHref}>← Finance</Link>
+        <h2 className="form-title fin-period-title">
+          {label}{bucket ? <span className="muted"> · {BUCKET_TITLE[bucket]}</span> : null}
+        </h2>
         <div className="seg-toggle" role="group" aria-label="Currency">
           {(["KRW", "USD"] as const).map((c) => (
             <button key={c} className={currency === c ? "on" : ""} onClick={() => router.replace(withCurrency(c))}>
@@ -118,27 +135,39 @@ export default function FinancePeriodScreen() {
       {error && !data ? <div className="state error">API error: {error.message}</div> : null}
       {!data ? <div className="state">Loading…</div> : (
         <>
-          <div className="fin-kpis">
-            <KpiTile
-              label="Inflow"
-              main={cash(data.total_inflow)}
-              sub={data.actual_inflow ? `${cash(data.actual_inflow)} already received` : "all still expected"}
-              tone="blue"
-            />
-            <KpiTile
-              label="Outflow"
-              main={cash(data.total_outflow)}
-              sub={data.actual_outflow ? `${cash(data.actual_outflow)} already paid` : "all still scheduled"}
-              tone="amber"
-            />
-            <KpiTile label="Net" main={`${net >= 0 ? "+" : "−"}${cash(Math.abs(net))}`} tone={net >= 0 ? "green" : "red"} />
-          </div>
+          {bucket ? (
+            <div className="fin-kpis fin-kpis--actual">
+              <KpiTile
+                label={BUCKET_TITLE[bucket]}
+                main={cash(side === "in" ? data.total_inflow : data.total_outflow)}
+                sub={`${(side === "in" ? data.inflow : data.outflow).length} items · ${label}`}
+                tone={side === "in" ? "blue" : "amber"}
+              />
+            </div>
+          ) : (
+            <div className="fin-kpis">
+              <KpiTile
+                label="Inflow"
+                main={cash(data.total_inflow)}
+                sub={data.actual_inflow ? `${cash(data.actual_inflow)} already received` : "all still expected"}
+                tone="blue"
+              />
+              <KpiTile
+                label="Outflow"
+                main={cash(data.total_outflow)}
+                sub={data.actual_outflow ? `${cash(data.actual_outflow)} already paid` : "all still scheduled"}
+                tone="amber"
+              />
+              <KpiTile label="Net" main={`${net >= 0 ? "+" : "−"}${cash(Math.abs(net))}`} tone={net >= 0 ? "green" : "red"} />
+            </div>
+          )}
 
-          {/* 표에서 유출 금액을 눌러 왔으면 유출을 위로 — 보러 온 표가 먼저 눈에 들게. */}
-          {(side === "out" ? (["out", "in"] as const) : (["in", "out"] as const)).map((s) => (
+          {/* 갈래가 걸렸으면 그 표 하나만. 아니면 둘 다 — 눌러 온 쪽을 위로 올린다. */}
+          {(bucket ? [side] : side === "out" ? (["out", "in"] as const) : (["in", "out"] as const)).map((s) => (
             <ItemPanel
               key={s}
               side={s}
+              title={bucket ? `${BUCKET_TITLE[bucket]} (${sym(currency).trim()})` : ""}
               rows={s === "in" ? data.inflow : data.outflow}
               total={s === "in" ? data.total_inflow : data.total_outflow}
               currency={currency}
@@ -156,17 +185,19 @@ export default function FinancePeriodScreen() {
   );
 }
 
-function ItemPanel({ side, rows, total, currency }: {
+function ItemPanel({ side, title, rows, total, currency }: {
   side: "in" | "out";
+  /** 갈래를 걸고 들어왔을 때의 제목(비우면 Inflow/Outflow). */
+  title?: string;
   rows: FinanceCashflowItem[];
   total: number;
   currency: string;
 }) {
   const cash = (n: number) => money(n, currency);
-  const title = `${side === "in" ? "Inflow" : "Outflow"} (${sym(currency).trim()})`;
+  const heading = title || `${side === "in" ? "Inflow" : "Outflow"} (${sym(currency).trim()})`;
   return (
     <div className="panel">
-      <h3 className="form-title">{title} <span className="muted">· {rows.length} item{rows.length === 1 ? "" : "s"}</span></h3>
+      <h3 className="form-title">{heading} <span className="muted">· {rows.length} item{rows.length === 1 ? "" : "s"}</span></h3>
       {rows.length === 0 ? (
         <div className="muted">Nothing in this period.</div>
       ) : (

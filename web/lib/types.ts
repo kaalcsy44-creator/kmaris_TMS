@@ -949,6 +949,11 @@ export type FinanceCashflowRow = {
   /** 위 유입·유출 중 이미 오간 금액(나머지가 아직 안 온 예정). */
   actual_inflow: number;
   actual_outflow: number;
+  /** 예정분의 출처별 내역. in_ar + in_income + actual_inflow = inflow (유출도 같다). */
+  in_ar: number;
+  in_income: number;
+  out_ap: number;
+  out_other: number;
   net: number;
   cumulative: number;
 };
@@ -987,10 +992,15 @@ export type FinanceCashflowItem = {
   po_id: number;
 };
 
+/** 현금흐름 한 칸을 이루는 여섯 갈래 — 화면의 여섯 줄과 1:1. */
+export type CashBucket = "receivables" | "income" | "collected" | "payables" | "other" | "paid";
+
 export type FinanceCashflowItems = {
   start: string;
   end: string;
   currency: string;
+  /** 걸린 갈래(없으면 전체). 이 값이 있으면 반대편 목록은 비어 있다. */
+  bucket: CashBucket | "";
   inflow: FinanceCashflowItem[];
   outflow: FinanceCashflowItem[];
   total_inflow: number;
