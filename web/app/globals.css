@@ -5808,7 +5808,7 @@ table.mini .num {
     padding: 0 14px 48px;
   }
 
-  /* Sticky page header/tabs would collide with the sticky top bar — let them flow */
+  /* 제목줄은 흘려보낸다 — 좁은 화면에서 고정할 만큼 값진 줄이 아니다. */
   .section-head {
     position: static;
     padding-top: 14px;
@@ -5817,12 +5817,17 @@ table.mini .num {
   .section-head h2 {
     font-size: 17px;
   }
+  /* 탭은 붙어 있어야 한다 — 폰에서는 한 탭이 화면 몇 개 길이라, 옮기려고 맨 위까지
+     되감는 일이 잦다. 여기서는 몸통 전체가 스크롤하므로 상단 바(58px) 아래에 세운다
+     — top:0 이면 z-index 가 낮은 탭이 남색 바 뒤로 숨는다. */
   .page-tabs {
-    position: static;
-    top: auto;
+    position: sticky;
+    top: 58px;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     white-space: nowrap;
+    /* 아래 내용이 탭 밑을 지나갈 때 경계가 보이게 — 배경만으로는 붙어 있는 티가 안 난다. */
+    box-shadow: 0 6px 10px -8px rgba(16, 32, 60, 0.45);
   }
   .page-tabs button {
     padding: 9px 13px;
@@ -10307,6 +10312,11 @@ table.mini tfoot .fin-foot-name { text-align: left; }
 .fin-bar.sales { background: #2f6fb0; }
 .fin-bar.purchase { background: #d68910; }
 .fin-bar-label { font-size: 11px; color: var(--muted); margin-top: 4px; }
+/* 폰에서는 눈금 하나가 30px 남짓 — 연도를 접어 "2026-07" 을 "07" 로 줄인다. */
+@media (max-width: 640px) {
+  .fin-lab-yr { display: none; }
+  .fin-bar-label { font-size: 10px; }
+}
 
 /* Cash flow */
 .fin-inline-field { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #55627a; }
@@ -10341,6 +10351,56 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 .fin-row-pick { cursor: pointer; }
 .fin-row-pick:hover > td { background: color-mix(in srgb, var(--blue) 5%, transparent); }
 .fin-row-pick.on > td { background: color-mix(in srgb, var(--blue) 10%, transparent); font-weight: 700; }
+
+/* 좁은 화면의 현금흐름 표 — 다섯 칸(구간·유입·유출·순액·잔고)은 폰에서 한 줄에 서지
+   못한다. 표를 구간마다 한 장의 카드로 접어, 구간 이름을 머리로 올리고 금액 넷을
+   2×2 로 앉힌다. 칸 이름은 사라진 머리줄 대신 data-label 이 옆에 붙어 말한다. */
+@media (max-width: 640px) {
+  .fin-cf-table, .fin-cf-table tbody, .fin-cf-table tr, .fin-cf-table td { display: block; }
+  .fin-cf-table thead { display: none; }
+  .fin-cf-table tr {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px 10px;
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    margin-bottom: 8px;
+    background: #fff;
+  }
+  .fin-cf-table tr.on { border-color: var(--blue); box-shadow: inset 0 0 0 1px var(--blue); }
+  /* 행 전체가 이미 카드라 칸마다 깔리던 선택 배경은 걷어낸다(테두리가 그 몫을 한다). */
+  .fin-cf-table tr > td { border: 0; padding: 2px 0; background: none !important; }
+  /* 구간 이름 — 카드의 머리. 두 칸을 가로지르고 밑줄로 금액과 나뉜다. */
+  .fin-cf-table td:first-child {
+    grid-column: 1 / -1;
+    font-weight: 700;
+    font-size: 13px;
+    color: var(--navy);
+    padding-bottom: 5px;
+    margin-bottom: 3px;
+    border-bottom: 1px solid var(--line);
+  }
+  /* 금액 칸 — 왼쪽에 이름(data-label), 오른쪽에 값. */
+  .fin-cf-table td.num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .fin-cf-table td.num::before {
+    content: attr(data-label);
+    flex: none;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--muted);
+  }
+  /* '이미 오간 돈' 줄은 값 아래가 아니라 그 줄 오른쪽 끝에 매달린다. */
+  .fin-cf-actual { width: 100%; text-align: right; margin-top: 0; }
+}
 
 /* 현금흐름 한 구간의 건별 내역(/finance/period) */
 .fin-period-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }

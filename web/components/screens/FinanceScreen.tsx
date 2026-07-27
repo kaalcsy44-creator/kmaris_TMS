@@ -518,7 +518,11 @@ function OverviewTab() {
                       style={{ height: `${(Math.abs(r.net) / maxNet) * 48}%`, [r.net >= 0 ? "bottom" : "top"]: "50%" } as React.CSSProperties}
                     />
                   </div>
-                  <div className="fin-bar-label">{r.label}</div>
+                  {/* 좁은 화면에서는 연도를 접는다 — 열 하나가 30px 남짓이라
+                      "2026-07" 은 두 줄로 접히고 눈금이 뭉개진다. */}
+                  <div className="fin-bar-label">
+                    {unit === "month" ? <><span className="fin-lab-yr">{r.label.slice(0, 5)}</span>{r.label.slice(5)}</> : r.label}
+                  </div>
                 </button>
               ))}
             </div>
@@ -526,7 +530,9 @@ function OverviewTab() {
 
           <div className="panel">
             <h3 className="form-title">Cash flow</h3>
-            <table className="mini">
+            {/* 좁은 화면에서는 다섯 칸이 한 줄에 못 선다 — CSS 가 이 표를 구간별 카드로
+                접고, 그때 칸 이름은 data-label 이 대신 말한다. */}
+            <table className="mini fin-cf-table">
               <thead>
                 <tr><th>Period</th><th className="num">Inflow</th><th className="num">Outflow</th><th className="num">Net</th><th className="num">Cumulative</th></tr>
               </thead>
@@ -540,16 +546,16 @@ function OverviewTab() {
                   >
                     <td>{r.label}</td>
                     {/* 이미 오간 부분은 금액 아래 옅게 덧붙인다 — 같은 칸의 나머지가 예정분. */}
-                    <td className="num">
+                    <td className="num" data-label="In">
                       {cash(r.inflow)}
                       {r.actual_inflow ? <div className="fin-cf-actual">{cash(r.actual_inflow)} received</div> : null}
                     </td>
-                    <td className="num">
+                    <td className="num" data-label="Out">
                       {cash(r.outflow)}
                       {r.actual_outflow ? <div className="fin-cf-actual">{cash(r.actual_outflow)} paid</div> : null}
                     </td>
-                    <td className="num" style={{ color: r.net >= 0 ? "#1e7a46" : "#c0392b" }}>{r.net >= 0 ? "+" : "−"}{cash(Math.abs(r.net))}</td>
-                    <td className="num"><b>{cash(r.cumulative)}</b></td>
+                    <td className="num" data-label="Net" style={{ color: r.net >= 0 ? "#1e7a46" : "#c0392b" }}>{r.net >= 0 ? "+" : "−"}{cash(Math.abs(r.net))}</td>
+                    <td className="num" data-label="Balance"><b>{cash(r.cumulative)}</b></td>
                   </tr>
                 ))}
               </tbody>
