@@ -115,6 +115,12 @@ const AR_STATUS_LABEL: Record<string, string> = {
   연체: "Overdue",
 };
 const todayStr = () => new Date().toISOString().slice(0, 10);
+/** 로컬 기준 오늘/이번 달 — toISOString(UTC)은 KST 아침에 하루 전으로 밀린다. */
+const localDayStr = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+const localMonthStr = () => localDayStr().slice(0, 7);
 
 // ── Screen ───────────────────────────────────────────────────────────────────
 type Tab = "overview" | "receivables" | "payables" | "closing" | "cashflow" | "calendar";
@@ -1364,9 +1370,14 @@ function CashFlowTab() {
   const setOpeningInput = (v: string) => setOpeningByCur((m) => ({ ...m, [currency]: v }));
   const opening = Number(openingInput) || 0;
   const cash = (n: number) => money(n, currency);
+  // 창의 시작점. 기본은 이번 달(주 단위면 오늘)이지만 뒤로 물려 1월부터도 볼 수 있다.
+  // 월/주는 입력 단위가 달라 따로 기억한다.
+  const [startMonth, setStartMonth] = useState(localMonthStr());
+  const [startDate, setStartDate] = useState(localDayStr());
+  const start = unit === "month" ? startMonth : startDate;
 
-  const key = `finance:cashflow:${unit}:${count}:${opening}:${includePo}:${currency}`;
-  const { data, error } = useCachedData<FinanceCashflow>(key, () => fetchFinanceCashflow(unit, count, opening, includePo, currency));
+  const key = `finance:cashflow:${unit}:${count}:${opening}:${includePo}:${currency}:${start}`;
+  const { data, error } = useCachedData<FinanceCashflow>(key, () => fetchFinanceCashflow(unit, count, opening, includePo, currency, start));
 
   const maxNet = useMemo(() => {
     if (!data) return 1;
@@ -1375,11 +1386,8 @@ function CashFlowTab() {
 
   // 기초잔고 기준일 = 첫 구간 시작일. 응답이 오기 전에도 라벨을 띄워야 해서
   // 서버(_cashflow_buckets)와 같은 규칙으로 미리 계산하고, 오면 응답 값으로 맞춘다.
-  const openingAsOf = data?.opening_as_of ?? (() => {
-    const d = new Date();
-    const first = unit === "month" ? new Date(d.getFullYear(), d.getMonth(), 1) : d;
-    return `${first.getFullYear()}-${String(first.getMonth() + 1).padStart(2, "0")}-${String(first.getDate()).padStart(2, "0")}`;
-  })();
+  const openingAsOf = data?.opening_as_of
+    ?? (unit === "month" ? `${startMonth || localMonthStr()}-01` : (startDate || localDayStr()));
 
   return (
     <div className="fin-overview">
@@ -1389,9 +1397,28 @@ function CashFlowTab() {
           <button className={unit === "week" ? "on" : ""} onClick={() => { setUnit("week"); setCount(12); }}>Weekly</button>
         </div>
         <label className="fin-inline-field">
+          {/* 시작점을 뒤로 물리면 지나간 달의 실적까지 함께 굴러간다 — 연초부터 되짚어 볼 때. */}
+          Start
+          {unit === "month" ? (
+            <input type="month" value={startMonth} onChange={(e) => setStartMonth(e.target.value || localMonthStr())} />
+          ) : (
+            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value || localDayStr())} />
+          )}
+        </label>
+        {unit === "month" ? (
+          <button
+            type="button"
+            className="btn sm"
+            title="Open the window at January and run it through December"
+            onClick={() => { setStartMonth(`${new Date().getFullYear()}-01`); setCount(12); }}
+          >
+            This year
+          </button>
+        ) : null}
+        <label className="fin-inline-field">
           Periods
           <select value={count} onChange={(e) => setCount(Number(e.target.value))}>
-            {(unit === "month" ? [3, 6, 12] : [8, 12, 16]).map((n) => <option key={n} value={n}>{n}</option>)}
+            {(unit === "month" ? [3, 6, 12, 18, 24] : [8, 12, 16, 24]).map((n) => <option key={n} value={n}>{n}</option>)}
           </select>
         </label>
         <div className="seg-toggle" role="group" aria-label="Currency">

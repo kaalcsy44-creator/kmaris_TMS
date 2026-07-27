@@ -687,9 +687,13 @@ def finance_closing(start: str = "", end: str = "", year: int = 0):
         s.close()
 
 
-def _cashflow_buckets(unit: str, count: int) -> list[dict]:
-    """오늘부터 count개 구간(월/주)의 [start, end, label]. 첫 구간은 과거(연체)를 흡수한다."""
-    today = date.today()
+def _cashflow_buckets(unit: str, count: int, anchor: date | None = None) -> list[dict]:
+    """anchor(기본 오늘)부터 count개 구간(월/주)의 [start, end, label].
+
+    첫 구간은 그 앞의 과거(연체·이미 지난 예정)를 흡수한다. anchor 를 과거로 주면
+    올해 1월부터처럼 지난 달을 포함해 되짚어 볼 수 있다.
+    """
+    today = anchor or date.today()
     out: list[dict] = []
     if unit == "week":
         for i in range(count):
@@ -711,7 +715,7 @@ def _cashflow_buckets(unit: str, count: int) -> list[dict]:
 
 @app.get("/api/admin/finance/cashflow", dependencies=[Depends(require_token)])
 def finance_cashflow(unit: str = "month", count: int = 6, opening: float = 0.0,
-                     include_po: int = 0, currency: str = "KRW"):
+                     include_po: int = 0, currency: str = "KRW", start: str = ""):
     """현금흐름 — 유입(수금)·유출(지급 + 선택적 벤더 PO)·순증감·누적잔고.
 
     구간(월/주)별로 유입/유출을 집계하고 opening(기초잔고)부터 누적잔고를 굴린다.
@@ -721,11 +725,19 @@ def finance_cashflow(unit: str = "month", count: int = 6, opening: float = 0.0,
     과거(연체)로 이미 지난 예정은 첫 구간에 흡수한다.
     잔고는 한 통화 안에서만 의미가 있으므로 환산하지 않고 `currency` 통화 건만 집계한다.
     include_po=1 이면 벤더 발주(PurchaseOrder) 원가를 발주일 기준 유출로 추정 반영한다.
+    start(YYYY-MM 또는 YYYY-MM-DD)를 주면 그 시점부터 창을 연다 — 올해 1월처럼 지나간
+    달을 앞에 붙여 실적을 함께 볼 수 있다. 비우면 오늘부터.
     """
     unit = "week" if unit == "week" else "month"
     cur_sel = (currency or "KRW").upper()
     count = max(1, min(count, 24))
-    buckets = _cashflow_buckets(unit, count)
+    anchor = None
+    if start:
+        try:
+            anchor = date.fromisoformat(start[:10] if len(start) > 7 else f"{start[:7]}-01")
+        except ValueError:
+            raise HTTPException(status_code=400, detail="start 날짜 형식이 올바르지 않습니다(YYYY-MM 또는 YYYY-MM-DD).")
+    buckets = _cashflow_buckets(unit, count, anchor)
     ends = [b["end"].isoformat() for b in buckets]
 
     def bucket_index(iso: str) -> int:

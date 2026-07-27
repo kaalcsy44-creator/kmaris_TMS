@@ -756,11 +756,13 @@ export function fetchFinanceCashflow(
   count: number,
   opening: number,
   includePo: boolean,
-  currency = "KRW"
+  currency = "KRW",
+  start = ""
 ): Promise<FinanceCashflow> {
   return get<FinanceCashflow>(
     `/api/admin/finance/cashflow?unit=${unit}&count=${count}&opening=${opening}` +
-      `&include_po=${includePo ? 1 : 0}&currency=${encodeURIComponent(currency)}`
+      `&include_po=${includePo ? 1 : 0}&currency=${encodeURIComponent(currency)}` +
+      (start ? `&start=${encodeURIComponent(start)}` : "")
   );
 }
 
