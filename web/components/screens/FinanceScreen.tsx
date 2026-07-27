@@ -1910,6 +1910,8 @@ function MonthlyBars({ labels, sales, purchase }: { labels: string[]; sales: num
 }
 
 // ── Calendar ─────────────────────────────────────────────────────────────────
+const DOW_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
 function CalendarTab() {
   const [month, setMonth] = useState(() => {
     const d = new Date();
@@ -1970,6 +1972,36 @@ function CalendarTab() {
     return { y: d.getFullYear(), m: d.getMonth() };
   });
 
+  // 한 건의 칸 — 표(달력)와 좁은 화면의 일정 목록이 같은 단추를 쓴다.
+  const eventButton = (e: FinanceCalendarEvent, key: number) => (
+    <button
+      key={key}
+      type="button"
+      className={`fin-ev fin-ev--${e.kind}${e.overdue ? " overdue" : ""}${e.paid ? " paid" : ""}${e.actual ? " actual" : ""}${readOnlyEvent(e) ? " readonly" : ""}`}
+      title={
+        e.actual
+          // 수금은 '납부'가 아니라 '입금'이다 — 방향에 맞는 말로 표기.
+          ? `${e.kind === "receivable" ? "Received" : "Paid"} ${e.paid_on} · ${e.title} · ${money(e.amount, e.currency)}${
+              e.scheduled ? ` (due ${e.scheduled})` : ""
+            }`
+          : `${e.kind === "receivable" ? "Receivable" : "Payable"} · ${e.title} · ${money(e.amount, e.currency)}${
+              e.paid ? ` (paid${e.paid_on ? ` ${e.paid_on}` : ""})` : ""
+            }${e.source === "ap" ? " — recorded in the project's stage 11 Payable (AP)" : ""}`
+      }
+      onClick={() => togglePayable(e)}
+    >
+      {/* 실제 납부일 자리에 찍힌 이벤트는 체크로 구분(예정일 이벤트는 취소선). */}
+      <span className="fin-ev-title">{e.actual ? `✓ ${e.title}` : e.title}</span>
+      <span className="fin-ev-amt">{money(e.amount, e.currency)}</span>
+    </button>
+  );
+
+  // 좁은 화면용 — 7칸 표는 한 칸이 손가락보다 좁아 제목도 금액도 남지 않는다.
+  // 이 달에 실제로 돈이 오가는 날만 골라 날짜별 목록으로 세운다(단추는 표와 동일).
+  const agendaDays = grid.days
+    .filter((day) => day.inMonth && (byDate.get(day.iso)?.length ?? 0) > 0)
+    .map((day) => ({ ...day, events: byDate.get(day.iso)! }));
+
   return (
     <div className="panel">
       <div className="fin-cal-head">
@@ -1996,7 +2028,7 @@ function CalendarTab() {
       </div>
       {error && !data ? <div className="state error">API error: {error.message}</div> : null}
       <div className="fin-cal-grid">
-        {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
+        {DOW_SHORT.map((d) => (
           <div key={d} className="fin-cal-dow">{d}</div>
         ))}
         {grid.days.map((day) => {
@@ -2005,32 +2037,27 @@ function CalendarTab() {
             <div key={day.iso} className={`fin-cal-cell${day.inMonth ? "" : " out"}${day.iso === todayStr() ? " today" : ""}`}>
               <div className="fin-cal-date">{day.d}</div>
               <div className="fin-cal-events">
-                {events.map((e, i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    className={`fin-ev fin-ev--${e.kind}${e.overdue ? " overdue" : ""}${e.paid ? " paid" : ""}${e.actual ? " actual" : ""}${readOnlyEvent(e) ? " readonly" : ""}`}
-                    title={
-                      e.actual
-                        // 수금은 '납부'가 아니라 '입금'이다 — 방향에 맞는 말로 표기.
-                        ? `${e.kind === "receivable" ? "Received" : "Paid"} ${e.paid_on} · ${e.title} · ${money(e.amount, e.currency)}${
-                            e.scheduled ? ` (due ${e.scheduled})` : ""
-                          }`
-                        : `${e.kind === "receivable" ? "Receivable" : "Payable"} · ${e.title} · ${money(e.amount, e.currency)}${
-                            e.paid ? ` (paid${e.paid_on ? ` ${e.paid_on}` : ""})` : ""
-                          }${e.source === "ap" ? " — recorded in the project's stage 11 Payable (AP)" : ""}`
-                    }
-                    onClick={() => togglePayable(e)}
-                  >
-                    {/* 실제 납부일 자리에 찍힌 이벤트는 체크로 구분(예정일 이벤트는 취소선). */}
-                    <span className="fin-ev-title">{e.actual ? `✓ ${e.title}` : e.title}</span>
-                    <span className="fin-ev-amt">{money(e.amount, e.currency)}</span>
-                  </button>
-                ))}
+                {events.map((e, i) => eventButton(e, i))}
               </div>
             </div>
           );
         })}
+      </div>
+      {/* 좁은 화면에서 표 대신 서는 목록 — 둘 중 하나만 보인다(CSS가 고른다). */}
+      <div className="fin-cal-agenda">
+        {agendaDays.length === 0 ? (
+          <div className="fin-cal-agenda-empty">Nothing scheduled this month.</div>
+        ) : (
+          agendaDays.map((day) => (
+            <div key={day.iso} className={`fin-cal-agenda-day${day.iso === todayStr() ? " today" : ""}`}>
+              <div className="fin-cal-agenda-date">
+                <span className="fin-cal-agenda-dow">{DOW_SHORT[new Date(`${day.iso}T00:00:00`).getDay()]}</span>
+                <span className="fin-cal-agenda-num">{day.d}</span>
+              </div>
+              <div className="fin-cal-agenda-events">{day.events.map((e, i) => eventButton(e, i))}</div>
+            </div>
+          ))
+        )}
       </div>
       <p className="hint-inline" style={{ display: "block", marginTop: 8 }}>
         Colour is the direction of the money — blue comes in, amber goes out — and the shade is its state: pale is still expected, deeper has settled, and a solid block is overdue. Every item sits on its scheduled date until it settles, then appears again on the day the money actually moved — the scheduled entry is struck through and the ✓ entry is the real date. Click one of your own costs to record its payment — you enter the date it was really paid, which may differ from the scheduled date (recurring items settle one occurrence at a time); click a paid one to undo. Customer invoices (AR) and vendor bills (AP) are managed from the project stages instead — both on stage 11, the Receivable tab for collections and the Payable tab for vendor payments.
