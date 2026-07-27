@@ -9239,6 +9239,16 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 .act-auto-label { font-weight: 700; }
 .act-mx-cell.wt-parts .act-auto-label { color: #1d4ed8; }
 .act-mx-cell.wt-service .act-auto-label { color: #137a44; }
+/* 라벨을 눌러 그 단계의 작업 팝업으로 — 버튼이지만 본문 글자와 같은 무게로 보이게 하고,
+   눌리는 곳이라는 신호는 hover 밑줄로만 준다(로그가 버튼밭처럼 보이지 않게). */
+.act-auto-link { padding: 0; border: 0; background: none; font: inherit; color: inherit;
+  font-weight: 700; text-align: left; cursor: pointer; }
+.act-auto-link:hover { text-decoration: underline; }
+/* 캘린더·다이제스트에선 .act-auto-label 색 규칙이 닿지 않아 라벨색을 여기서 준다. */
+.act-cal-act .act-auto-link,
+.act-digest-desc .act-auto-link { color: #1d4ed8; }
+.act-cal-proj.service .act-auto-link,
+.act-digest-row.service .act-auto-link { color: #137a44; }
 .act-tag { font-size: 10px; background: #eef3f9; color: #64748b; padding: 0 5px; border-radius: 8px; margin-right: 2px; }
 .act-tag.close { background: #fde8e8; color: #b91c1c; }
 .act-item.closed .act-text { color: #b91c1c; }

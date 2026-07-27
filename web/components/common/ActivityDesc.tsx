@@ -8,19 +8,38 @@ import type { Activity } from "@/lib/activity";
 // metaBlock: 상대·채널·담당자를 내용 아래 줄로 내린다(개요 타임라인용). 기본은 인라인.
 // hideStar: ★ 접두 표시를 생략한다 — 별도의 별표 토글 버튼이 있는 곳(개요 노트 편집)에서
 //           같은 별이 두 번 보이지 않게 한다.
+// onOpen: 주면 자동 단계 이벤트(RFQ Sent 등) 라벨이 그 단계 작업화면을 여는 버튼이 된다.
+//         활동 로그에서 눈에 띈 사건을 바로 그 편집 화면으로 이어 주려는 것.
 export default function ActivityDesc({
   act,
   metaBlock,
   hideStar,
+  onOpen,
 }: {
   act: Activity;
   metaBlock?: boolean;
   hideStar?: boolean;
+  onOpen?: () => void;
 }) {
   if (act.kind === "auto") {
     return (
       <>
-        {act.label}
+        {onOpen ? (
+          <button
+            type="button"
+            className="act-auto-link"
+            title={`Open stage ${act.stage} · ${act.label}`}
+            onClick={(e) => {
+              // 캘린더/다이제스트의 바깥 행 클릭(=개요 열기)까지 함께 타지 않게 막는다.
+              e.stopPropagation();
+              onOpen();
+            }}
+          >
+            {act.label}
+          </button>
+        ) : (
+          act.label
+        )}
         {act.party ? <span className="act-meta"> · {act.party}</span> : null}
         {act.pic ? <span className="act-note-pic">{act.pic}</span> : null}
       </>

@@ -162,6 +162,9 @@ export default function ActivityScreen() {
   const [view, setView] = useState<"deal" | "date">("deal"); // 탭: 딜별(카드) / 일자별(피드)
 
   const [overviewId, setOverviewId] = useState<number | null>(null);
+  // 주요(자동) 활동을 클릭해 들어온 경우의 목표 단계 — 팝업을 개요 대신 그 단계 작업화면으로 연다.
+  // null 이면 지금까지처럼 프로젝트 개요로 연다.
+  const [stageTarget, setStageTarget] = useState<{ stage: number; vrfqId?: number } | null>(null);
   const [digestOpen, setDigestOpen] = useState(false); // 프로젝트별 최근 활동 요약 팝업
   const [digestCount, setDigestCount] = useState(1); // 프로젝트별로 보여줄 최근 활동 개수
   const { data: customers } = useCachedData("settings:customers", fetchCustomers);
@@ -297,6 +300,20 @@ export default function ActivityScreen() {
         .map(({ row, acts }) => ({ row, acts: acts.slice(-digestCount) })),
     [dealRows, digestCount],
   );
+
+  // 프로젝트 번호/카드 클릭 → 개요. 목표 단계는 비운다.
+  const openOverview = useCallback((rfqId: number) => {
+    setStageTarget(null);
+    setOverviewId(rfqId);
+  }, []);
+
+  // 자동 단계 이벤트(RFQ Sent·Quote Received·P/O Sent …) 클릭 → 그 단계 작업 팝업.
+  // 2단계(RFQ Sent)는 발송 벤더별로 활동이 나뉘므로 그 벤더 RFQ 를 바로 선택해 연다.
+  const openActivityStage = useCallback((rfqId: number, a: Activity) => {
+    if (a.kind !== "auto") return;
+    setStageTarget({ stage: a.stage, vrfqId: a.vrfqId });
+    setOverviewId(rfqId);
+  }, []);
 
   async function toggleStar(rfqId: number, a: Activity) {
     if (a.kind !== "note") return;
@@ -461,7 +478,8 @@ export default function ActivityScreen() {
                   onDelete={(a) => removeNote(row.rfq_id, a)}
                   onSave={(a, patch) => saveNote(row.rfq_id, a, patch)}
                   onAdded={load}
-                  onOverview={() => setOverviewId(row.rfq_id)}
+                  onOverview={() => openOverview(row.rfq_id)}
+                  onOpenStage={(a) => openActivityStage(row.rfq_id, a)}
                 />
               ))}
             </div>
@@ -494,7 +512,7 @@ export default function ActivityScreen() {
                             <button
                               type="button"
                               className="act-cal-pno"
-                              onClick={() => setOverviewId(p.row.rfq_id)}
+                              onClick={() => openOverview(p.row.rfq_id)}
                               title="Project overview"
                             >
                               {splitProjectNo(p.row.project_no || p.row.kmaris_rfq_no || "—").code}
@@ -507,7 +525,10 @@ export default function ActivityScreen() {
                                 key={i}
                                 className={`act-cal-act ${a.kind === "note" ? "note" : a.kind === "close" ? "closed" : "auto"}${a.kind === "note" && a.note.star ? " star" : ""}`}
                               >
-                                <ActivityDesc act={a} />
+                                <ActivityDesc
+                                  act={a}
+                                  onOpen={a.kind === "auto" ? () => openActivityStage(p.row.rfq_id, a) : undefined}
+                                />
                               </li>
                             ))}
                           </ul>
@@ -565,7 +586,7 @@ export default function ActivityScreen() {
                   <li
                     key={row.rfq_id}
                     className={`act-digest-row${row.work_type === "서비스" ? " service" : ""}${row.cancelled ? " cancelled" : ""}`}
-                    onClick={() => { setOverviewId(row.rfq_id); setDigestOpen(false); }}
+                    onClick={() => { openOverview(row.rfq_id); setDigestOpen(false); }}
                     title="Project overview"
                   >
                     <div className="act-digest-head">
@@ -608,7 +629,16 @@ export default function ActivityScreen() {
                             {md(act.date)}
                             {hm(actTimeIso(act)) ? <span className="act-time"> {hm(actTimeIso(act))}</span> : null}
                           </span>
-                          <span className="act-digest-desc"><ActivityDesc act={act} /></span>
+                          <span className="act-digest-desc">
+                            <ActivityDesc
+                              act={act}
+                              onOpen={
+                                act.kind === "auto"
+                                  ? () => { openActivityStage(row.rfq_id, act); setDigestOpen(false); }
+                                  : undefined
+                              }
+                            />
+                          </span>
                           {/* 경과일 — 최신 log(맨 아래 행) 우측 끝에 배치. */}
                           {i === acts.length - 1 && ageDays != null ? (
                             <span className={`act-digest-age lv-${lv}`} title="Days since last activity">{ageDays}d</span>
@@ -630,9 +660,11 @@ export default function ActivityScreen() {
           customers={customers ?? []}
           vessels={vessels ?? []}
           onChanged={load}
-          onClose={() => setOverviewId(null)}
+          onClose={() => { setOverviewId(null); setStageTarget(null); }}
           onNavigate={navigateOverview}
-          initialView="overview"
+          initialView={stageTarget ? "work" : "overview"}
+          initialStage={stageTarget?.stage ?? null}
+          initialVrfqId={stageTarget?.vrfqId ?? null}
         />
       ) : null}
     </div>
@@ -672,6 +704,7 @@ function DealStageRow({
   onSave,
   onAdded,
   onOverview,
+  onOpenStage,
 }: {
   row: PipelineRow;
   acts: Activity[];
@@ -680,6 +713,7 @@ function DealStageRow({
   onSave: (a: Activity, patch: NotePatch) => Promise<void>;
   onAdded: () => void;
   onOverview: () => void;
+  onOpenStage: (a: Activity) => void;
 }) {
   const { code, date } = splitProjectNo(row.project_no || row.kmaris_rfq_no || "—");
   const vend = vendorOf(row);
@@ -761,7 +795,18 @@ function DealStageRow({
                       {a.kind === "auto" && hm(a.at || "") ? <span className="act-time">{hm(a.at || "")}</span> : null}
                     </span>
                     <span className="act-auto">
-                      {a.kind === "auto" ? <b className="act-auto-label">{a.label}</b> : null}
+                      {/* 단계 이벤트 라벨은 그 단계 작업 팝업으로 가는 링크 — 로그에서 본 사건을
+                          바로 편집 화면으로 잇는다(2단계는 해당 벤더 RFQ 를 바로 선택). */}
+                      {a.kind === "auto" ? (
+                        <button
+                          type="button"
+                          className="act-auto-label act-auto-link"
+                          title={`Open stage ${a.stage} · ${a.label}`}
+                          onClick={() => onOpenStage(a)}
+                        >
+                          {a.label}
+                        </button>
+                      ) : null}
                       {a.kind === "auto" && a.party ? <span className="act-meta"> · {a.party}</span> : null}
                     </span>
                   </li>
