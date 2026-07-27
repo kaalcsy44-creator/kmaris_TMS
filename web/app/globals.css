@@ -10053,7 +10053,17 @@ button.ov-tl-stage:hover {
 .fin-kpis--actual { grid-template-columns: repeat(auto-fit, minmax(220px, 300px)); justify-content: start; }
 /* Inflow·Outflow 안의 갈래 전환(Receivables / Other income / Collected …).
    페이지 탭보다 한 급 작게 — 이 화면 안에서 무엇을 보고 있는지만 가리킨다. */
-.fin-subtabs { margin: 2px 0 0; }
+.fin-subtabs { margin: 0; }
+/* 갈래 전환(왼쪽)과 기간 필터(오른쪽)가 한 줄에 선다. */
+.fin-subtab-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap; margin-top: 2px;
+}
+.fin-ledger-period { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.fin-ledger-period select {
+  height: 32px; border: 1px solid var(--input-border, #c7d0de); border-radius: 8px;
+  padding: 0 8px; background: #fff;
+}
 /* 목록(미수·지급) 화면 머리의 두 타일 — 표 폭 전체로 늘리면 머리가 무거워 보인다. */
 .fin-kpis--pair {
   grid-template-columns: repeat(auto-fit, minmax(220px, 320px));

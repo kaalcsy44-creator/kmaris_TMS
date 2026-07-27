@@ -134,18 +134,31 @@ const TABS: Tab[] = ["overview", "inflow", "outflow", "closing", "calendar"];
 /** 이름을 바꾸기 전 주소로 들어오는 링크 — 같은 자리로 보낸다. */
 const TAB_ALIAS: Record<string, Tab> = { receivables: "inflow", payables: "outflow" };
 
-export default function FinanceScreen() {
-  // 탭은 주소에 남긴다 — 기간 상세 화면에서 돌아올 때, 그리고 링크를 주고받을 때
-  // 'Finance 의 어느 탭'인지가 주소만으로 정해져야 한다.
+/** 주소의 질의값을 고쳐 쓴다 — 탭·갈래·기간이 모두 주소에 살아 링크로 오갈 수 있게. */
+function useFinanceNav() {
   const router = useRouter();
   const params = useSearchParams();
+  const setParams = (patch: Record<string, string>) => {
+    const q = new URLSearchParams(params.toString());
+    for (const [k, v] of Object.entries(patch)) {
+      if (v) q.set(k, v);
+      else q.delete(k);
+    }
+    const qs = q.toString();
+    router.replace(qs ? `/finance?${qs}` : "/finance", { scroll: false });
+  };
+  return { params, setParams };
+}
+
+export default function FinanceScreen() {
+  // 탭은 상태가 아니라 주소에서 읽는다 — Overview 의 한 줄이 '이 탭의 이 갈래, 이 달'
+  // 로 건너뛰는데, 상태로 들고 있으면 이미 떠 있는 화면이 주소만 바뀌고 안 따라온다.
+  const { params, setParams } = useFinanceNav();
   const fromUrl = params.get("tab") || "";
   const asTab = (TAB_ALIAS[fromUrl] ?? fromUrl) as Tab;
-  const [tab, setTabState] = useState<Tab>(TABS.includes(asTab) ? asTab : "overview");
-  const setTab = (t: Tab) => {
-    setTabState(t);
-    router.replace(t === "overview" ? "/finance" : `/finance?tab=${t}`, { scroll: false });
-  };
+  const tab: Tab = TABS.includes(asTab) ? asTab : "overview";
+  // 탭을 옮기면 그 탭의 갈래·기간은 새로 고른다(전 탭의 것이 따라오면 엉뚱해진다).
+  const setTab = (t: Tab) => setParams({ tab: t === "overview" ? "" : t, view: "", from: "", to: "" });
   return (
     <div className="action-tabs">
       <div className="page-tabs">
@@ -200,6 +213,118 @@ const BUCKET_HINT: Record<CashBucket, string> = {
  * first(창의 첫 칸)까지 넘겨야 상세의 합계가 표의 그 행과 맞는다 — 첫 칸은 앞선
  * 연체까지 끌어안기 때문이다. bucket 을 주면 그 갈래만 펼친 화면이 열린다.
  */
+/** 이번 달("2026-07") — 목록의 기간 필터 기본값. */
+const thisMonthStr = () => localDayStr().slice(0, 7);
+
+/** "2026-07" → ["2026-07-01", "2026-07-31"]. */
+function monthBounds(ym: string): [string, string] {
+  const [y, m] = ym.split("-").map(Number);
+  const last = new Date(y, m, 0).getDate();
+  return [`${ym}-01`, `${ym}-${String(last).padStart(2, "0")}`];
+}
+
+/** 구간 [lo,hi] 안인가. 한쪽이 비면 그쪽은 열려 있다(첫 구간이 과거를 흡수하는 규칙). */
+function inRange(d: string, lo: string, hi: string): boolean {
+  if (!d) return !lo && !hi;
+  return (!lo || d >= lo) && (!hi || d <= hi);
+}
+
+/**
+ * 반복 규칙을 [lo,hi] 안의 회차일로 펼친다 — 서버 _finance_occurrences 와 같은 규칙
+ * (말일 보정 포함). lo 가 비면 첫 회차부터 본다.
+ */
+function occurrencesIn(due: string, recurrence: string, recurUntil: string, lo: string, hi: string): string[] {
+  if (!due) return [];
+  const step = recurrence === "monthly" ? 1 : recurrence === "quarterly" ? 3 : recurrence === "yearly" ? 12 : 0;
+  if (!step) return inRange(due, lo, hi) ? [due] : [];
+  const [y, m, d] = due.split("-").map(Number);
+  const out: string[] = [];
+  for (let i = 0; i < 240; i += 1) {
+    const dt = new Date(y, m - 1 + step * i, 1);
+    const last = new Date(dt.getFullYear(), dt.getMonth() + 1, 0).getDate();
+    dt.setDate(Math.min(d, last));
+    const iso = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+    if (recurUntil && iso > recurUntil) break;
+    if (hi && iso > hi) break;
+    if (inRange(iso, lo, hi)) out.push(iso);
+  }
+  return out;
+}
+
+/** 예정일이 구간에 드는가 — 반복 항목은 회차 하나라도 들면 든 것으로 본다. */
+function dueInRange(
+  r: { due_date?: string; recurrence?: string; recur_until?: string },
+  lo: string,
+  hi: string
+): boolean {
+  if (!lo && !hi) return true;
+  return occurrencesIn(r.due_date || "", r.recurrence || "none", r.recur_until || "", lo, hi).length > 0;
+}
+
+/**
+ * 목록의 기간 필터 — 전체 / 한 달, 그리고 Overview 에서 넘어온 임의 구간(주 단위 등).
+ * 예정 항목은 예정일, 실적 항목은 실제로 오간 날을 기준으로 거른다.
+ */
+function LedgerPeriod({ from, to, onChange }: {
+  from: string;
+  to: string;
+  onChange: (from: string, to: string) => void;
+}) {
+  const ym = from.slice(0, 7);
+  const whole = Boolean(from) && Boolean(to) && from === monthBounds(ym)[0] && to === monthBounds(ym)[1];
+  const [y, m] = whole ? ym.split("-").map(Number) : [0, 0];
+  // 'Monthly' 로 넘어갈 때 어느 달을 펼칠지 — 지금 걸린 구간의 달, 없으면 이번 달.
+  const anchor = ym || (to ? to.slice(0, 7) : thisMonthStr());
+  return (
+    <div className="fin-ledger-period">
+      <div className="seg-toggle" role="group" aria-label="Period">
+        <button className={!from && !to ? "on" : ""} onClick={() => onChange("", "")}>All time</button>
+        <button
+          className={from || to ? "on" : ""}
+          onClick={() => onChange(...monthBounds(anchor))}
+        >
+          Monthly
+        </button>
+      </div>
+      {whole ? (
+        <label className="fin-inline-field">
+          <select value={m} onChange={(e) => onChange(...monthBounds(`${y}-${String(Number(e.target.value)).padStart(2, "0")}`))} aria-label="Month">
+            {MONTH_NAMES.map((name, i) => <option key={name} value={i + 1}>{name}</option>)}
+          </select>
+          <select value={y} onChange={(e) => onChange(...monthBounds(`${e.target.value}-${String(m).padStart(2, "0")}`))} aria-label="Year">
+            {startYears().map((yy) => <option key={yy} value={yy}>{yy}</option>)}
+          </select>
+        </label>
+      ) : from || to ? (
+        // Overview 의 주 단위 칸이나 '앞선 연체까지' 구간에서 넘어온 경우 — 그대로 보여 준다.
+        <span className="fin-inline-field">
+          {from ? from : "everything up to"} {from && to ? "→" : ""} {to}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+/** 유입 쪽 갈래 — 나머지는 유출. 목록 탭을 고를 때 쓴다. */
+const IN_BUCKETS: CashBucket[] = ["receivables", "income", "collected"];
+
+/**
+ * 현금흐름 한 칸의 한 줄 → 그 갈래를 다루는 목록 탭(Inflow/Outflow)의 같은 이름 화면,
+ * 기간까지 걸어서. 건별로 볼 자리가 목록에도 있는데 따로 만든 페이지로 보내면
+ * 같은 목록을 두 군데서 보게 된다.
+ * 첫 칸은 앞선 연체까지 끌어안으므로 시작을 열어 둔다(from 없음) — 그래야 목록의
+ * 합과 기둥의 금액이 맞는다.
+ */
+function ledgerHref(r: FinanceCashflowRow, first: boolean, bucket: CashBucket): string {
+  const q = new URLSearchParams({
+    tab: IN_BUCKETS.includes(bucket) ? "inflow" : "outflow",
+    view: bucket,
+    to: r.end,
+  });
+  if (!first) q.set("from", r.start);
+  return `/finance?${q.toString()}`;
+}
+
 function periodHref(
   r: FinanceCashflowRow,
   first: boolean,
@@ -324,9 +449,10 @@ function OverviewTab() {
               tone="in"
               lines={[["receivables", row.in_ar ?? 0], ["income", row.in_income ?? 0], ["collected", row.actual_inflow]]}
               totalLabel="Total in"
+              totalHref={`${periodHref(row, idx === 0, currency, includePo)}&side=in`}
               total={row.inflow}
               currency={currency}
-              href={(b) => periodHref(row, idx === 0, currency, includePo, b)}
+              href={(b) => ledgerHref(row, idx === 0, b)}
             />
             <BucketCard
               title="Out"
@@ -334,9 +460,10 @@ function OverviewTab() {
               tone="out"
               lines={[["payables", row.out_ap ?? 0], ["other", row.out_other ?? 0], ["paid", row.actual_outflow]]}
               totalLabel="Total out"
+              totalHref={`${periodHref(row, idx === 0, currency, includePo)}&side=out`}
               total={row.outflow}
               currency={currency}
-              href={(b) => periodHref(row, idx === 0, currency, includePo, b)}
+              href={(b) => ledgerHref(row, idx === 0, b)}
             />
             <div className="panel fin-bucket-card fin-bucket--balance">
               <h3 className="form-title">Balance <span className="muted">· {pickedLabel}</span></h3>
@@ -444,12 +571,14 @@ function OverviewTab() {
 }
 
 /** 한 구간의 유입(또는 유출) 세 갈래 + 합계. 각 줄은 그 갈래의 건별 목록으로 간다. */
-function BucketCard({ title, period, tone, lines, totalLabel, total, currency, href }: {
+function BucketCard({ title, period, tone, lines, totalLabel, totalHref, total, currency, href }: {
   title: string;
   period: string;
   tone: "in" | "out";
   lines: [CashBucket, number][];
   totalLabel: string;
+  /** 합계 줄 → 이 구간 전체를 한 화면에 펼친 기간 상세. */
+  totalHref: string;
   total: number;
   currency: string;
   href: (b: CashBucket) => string;
@@ -472,7 +601,11 @@ function BucketCard({ title, period, tone, lines, totalLabel, total, currency, h
             </tr>
           ))}
           <tr className="fin-period-total">
-            <td><b>{totalLabel}</b></td>
+            <td>
+              <Link className="fin-doc-link" href={totalHref} title={`Every item behind ${totalLabel.toLowerCase()} · ${period}`}>
+                <b>{totalLabel}</b>
+              </Link>
+            </td>
             <td className="num"><b>{cash(total)}</b></td>
           </tr>
         </tbody>
@@ -705,18 +838,29 @@ function InflowTab() {
   const { data, error, refresh } = useCachedData<{ rows: FinanceReceivable[]; fx: FxQuote }>("finance:receivables", fetchFinanceReceivables);
   // 오늘 기준 잔액·연체 — 목록의 합계는 지금 걸러 놓은 행만 세므로 따로 받는다.
   const { data: sum } = useCachedData<FinanceSummary>("finance:summary", () => fetchFinanceSummary());
-  // 세 갈래는 Overview 의 In 기둥과 같은 이름을 쓴다 — 같은 말이 같은 뜻이도록.
-  const [view, setView] = useState<InflowView>("receivables");
+  // 갈래와 기간은 주소에 산다 — Overview 의 한 줄이 'Inflow 의 Collected, 7월'로
+  // 곧장 건너뛰고, 그 화면을 그대로 링크로 넘길 수 있어야 한다.
+  const { params, setParams } = useFinanceNav();
+  const viewParam = params.get("view") || "";
+  const view: InflowView = (["receivables", "income", "collected"] as const).includes(viewParam as InflowView)
+    ? (viewParam as InflowView) : "receivables";
+  const setView = (v: InflowView) => setParams({ view: v === "receivables" ? "" : v });
+  const from = params.get("from") || "";
+  const to = params.get("to") || "";
   const [openOnly, setOpenOnly] = useState(true);
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<FinanceReceivable | null>(null);
   const [receiving, setReceiving] = useState<{ row: FinanceReceivable; occurrence: string } | null>(null);
   const all = useMemo(() => data?.rows ?? [], [data]);
   const rows = useMemo(() => {
-    const src = all.filter((r) => (view === "income" ? r.source === "income" : r.source !== "income"));
+    const src = all
+      .filter((r) => (view === "income" ? r.source === "income" : r.source !== "income"))
+      // 예정 항목은 예정일 기준 — 반복(기타수입)은 회차 하나라도 구간에 들면 남긴다.
+      .filter((r) => dueInRange(r, from, to));
     return openOnly ? src.filter((r) => r.outstanding > 0) : src;
-  }, [all, view, openOnly]);
-  const settled = useMemo(() => receiptRows(all), [all]);
+  }, [all, view, openOnly, from, to]);
+  // 실적은 실제로 오간 날 기준 — 현금흐름이 그 날짜로 세는 것과 같다.
+  const settled = useMemo(() => receiptRows(all).filter((r) => inRange(r.date, from, to)), [all, from, to]);
   const totals = useMemo(() => receivableTotals(rows), [rows]);
 
   function reload() {
@@ -768,10 +912,13 @@ function InflowTab() {
           <KpiTile label="Overdue" main={byCurrencyLines(sum.receivable.overdue)} sub="past the due date" tone="red" />
         </div>
       ) : null}
-      <div className="seg-toggle fin-subtabs" role="group" aria-label="Inflow view">
-        <button className={view === "receivables" ? "on" : ""} onClick={() => setView("receivables")}>Receivables</button>
-        <button className={view === "income" ? "on" : ""} onClick={() => setView("income")}>Other income</button>
-        <button className={view === "collected" ? "on" : ""} onClick={() => setView("collected")}>Collected</button>
+      <div className="fin-subtab-bar">
+        <div className="seg-toggle fin-subtabs" role="group" aria-label="Inflow view">
+          <button className={view === "receivables" ? "on" : ""} onClick={() => setView("receivables")}>Receivables</button>
+          <button className={view === "income" ? "on" : ""} onClick={() => setView("income")}>Other income</button>
+          <button className={view === "collected" ? "on" : ""} onClick={() => setView("collected")}>Collected</button>
+        </div>
+        <LedgerPeriod from={from} to={to} onChange={(f, t) => setParams({ from: f, to: t })} />
       </div>
       <p className="hint-inline" style={{ display: "block", margin: "8px 0 10px" }}>{hint}</p>
 
@@ -1115,8 +1262,14 @@ function OutflowTab() {
   const { data, error, refresh } = useCachedData<{ rows: FinancePayable[]; fx: FxQuote }>("finance:payables", fetchFinancePayables);
   // 오늘 기준 예정·연체와 분류별 합계 — 목록은 건별이라 이 두 가지를 스스로 답하지 못한다.
   const { data: sum } = useCachedData<FinanceSummary>("finance:summary", () => fetchFinanceSummary());
-  // 세 갈래는 Overview 의 Out 기둥과 같은 이름을 쓴다 — 같은 말이 같은 뜻이도록.
-  const [view, setView] = useState<OutflowView>("payables");
+  // 갈래와 기간은 주소에 산다(Inflow 와 같은 규약).
+  const { params, setParams } = useFinanceNav();
+  const viewParam = params.get("view") || "";
+  const view: OutflowView = (["payables", "other", "paid"] as const).includes(viewParam as OutflowView)
+    ? (viewParam as OutflowView) : "payables";
+  const setView = (v: OutflowView) => setParams({ view: v === "payables" ? "" : v });
+  const from = params.get("from") || "";
+  const to = params.get("to") || "";
   const [editing, setEditing] = useState<FinancePayable | null>(null);
   const [adding, setAdding] = useState(false);
   // 납부 입력 대상 — 회차일(occurrence)과 실제 납부일을 함께 받는다.
@@ -1128,12 +1281,15 @@ function OutflowTab() {
   // 여기서 직접 등록하는 항목(분류·반복 중심)이라 열 구성이 서로 맞지 않는다.
   const [trade, other] = useMemo(() => {
     const isTrade = (p: FinancePayable) => p.source === "ap" || p.category === "거래선지급";
-    return [rows.filter(isTrade), rows.filter((p) => !isTrade(p))];
-  }, [rows]);
+    // 예정 항목은 예정일 기준 — 반복(임차료·급여)은 회차 하나라도 구간에 들면 남긴다.
+    const inWindow = rows.filter((p) => dueInRange(p, from, to));
+    return [inWindow.filter(isTrade), inWindow.filter((p) => !isTrade(p))];
+  }, [rows, from, to]);
   // 보고 있는 갈래의 합계 3열(청구·지급·미지급) — 통화별 분리(수입 목록과 같은 규칙).
   const visible = view === "other" ? other : trade;
   const totals = useMemo(() => payableTotals(visible), [visible]);
-  const settled = useMemo(() => paymentRows(rows), [rows]);
+  // 실적은 실제로 나간 날 기준 — 현금흐름이 그 날짜로 세는 것과 같다.
+  const settled = useMemo(() => paymentRows(rows).filter((r) => inRange(r.date, from, to)), [rows, from, to]);
 
   function reload() {
     invalidateCache("finance:summary");
@@ -1249,10 +1405,13 @@ function OutflowTab() {
           <KpiTile label="Overdue" main={byCurrencyLines(sum.payable.overdue)} sub="past the due date" tone="red" />
         </div>
       ) : null}
-      <div className="seg-toggle fin-subtabs" role="group" aria-label="Outflow view">
-        <button className={view === "payables" ? "on" : ""} onClick={() => setView("payables")}>Payables</button>
-        <button className={view === "other" ? "on" : ""} onClick={() => setView("other")}>Other costs</button>
-        <button className={view === "paid" ? "on" : ""} onClick={() => setView("paid")}>Paid</button>
+      <div className="fin-subtab-bar">
+        <div className="seg-toggle fin-subtabs" role="group" aria-label="Outflow view">
+          <button className={view === "payables" ? "on" : ""} onClick={() => setView("payables")}>Payables</button>
+          <button className={view === "other" ? "on" : ""} onClick={() => setView("other")}>Other costs</button>
+          <button className={view === "paid" ? "on" : ""} onClick={() => setView("paid")}>Paid</button>
+        </div>
+        <LedgerPeriod from={from} to={to} onChange={(f, t) => setParams({ from: f, to: t })} />
       </div>
       <p className="hint-inline" style={{ display: "block", margin: "8px 0 10px" }}>
         {view === "payables"
