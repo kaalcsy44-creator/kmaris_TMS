@@ -9309,6 +9309,101 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 /* Add/Cancel 버튼 높이 축소(약 2/3 = 24px). .btn 의 height:36px 를 덮는다. */
 .act-add .act-add-go { height: 24px; padding: 0 14px; font-size: 12px; line-height: 1; }
 
+/* ── 활동로그: 좁은 화면 ──────────────────────────────────────────────────
+   By deal 은 프로젝트 1행 × 단계 4열, By date 는 요일 7열이다. 폰에서 그 열들은
+   50px 안팎이 되어 한글이 글자마다 줄바꿈된다. 두 표 모두 열을 세로로 풀어
+   '한 프로젝트 = 한 장', '하루 = 한 장'으로 쌓는다. */
+@media (max-width: 860px) {
+  /* 안쪽 스크롤 상자를 푼다 — 화면 안의 화면은 손가락으로 다루기 어렵고,
+     여기서는 페이지 자체가 스크롤한다(고정 머리줄도 그래서 필요 없어진다). */
+  .act-matrix {
+    grid-template-columns: 1fr;
+    max-height: none;
+    overflow: visible;
+    border: 0;
+    background: none;
+  }
+  .act-mx-hcell { display: none; }
+  /* 프로젝트 칸 = 그 딜의 머리. 아래 단계 칸들은 한 단 들여써서 딸린 것으로 읽힌다
+     (빈 단계는 접히므로, 몇 번째 칸이 바닥인지에 기대는 모양은 쓰지 않는다). */
+  .act-mx-info {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    margin-top: 14px;
+    padding: 10px 12px;
+  }
+  .act-mx-cell,
+  /* 표의 맨 끝 칸은 오른쪽 선을 지우게 되어 있었다 — 카드가 된 지금은 사방이 필요하다. */
+  .act-mx-cell:last-child {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    margin: 5px 0 0 12px;
+    padding: 8px 10px;
+  }
+  /* 머리줄이 사라졌으니 칸마다 제 단계 이름을 단다. */
+  .act-mx-cell::before {
+    content: attr(data-stage);
+    display: block;
+    margin-bottom: 4px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: #94a3b8;
+  }
+  /* 아무 일도 없었고 입력칸도 없는 단계는 접는다 — 빈 칸 넷을 스크롤할 이유가 없다. */
+  .act-mx-cell.empty { display: none; }
+  /* 활동 한 줄 — 날짜 폭을 조금 넓히고 글씨를 키운다(폰에서 11px 은 작다). */
+  .act-item { font-size: 12px; }
+  .act-date { width: 58px; }
+  .act-mx-cell .act-add input,
+  .act-mx-cell .act-add select,
+  .act-mx-cell .act-add-text,
+  .act-mx-cell .act-party-custom { font-size: 12px; padding: 5px 7px; }
+  .act-mx-cell .act-add input[type="datetime-local"],
+  .act-mx-cell .act-add input[type="date"] { font-size: 12px; }
+  .act-mx-cell .act-seg.sm button { font-size: 11px; padding: 3px 9px; }
+  .act-mx-cell .act-add-go { font-size: 11px; padding: 3px 12px; }
+
+  /* By date — 7열 달력을 하루씩 쌓는다. 활동이 없는 날은 접는다. */
+  .act-cal { max-height: none; min-height: 0; overflow: visible; }
+  .act-cal-weekdays { display: none; }
+  .act-cal-week { display: block; border: 0; }
+  .act-cal-day,
+  .act-cal-day:last-child {
+    border: 1px solid var(--border, #d8dee6);
+    border-radius: 8px;
+    margin-bottom: 8px;
+    min-height: 0;
+  }
+  .act-cal-day.empty { display: none; }
+}
+
+/* 손가락에는 hover 가 없다 — 이대로면 노트의 ★·수정·삭제가 영영 안 뜬다. 항상 띄우되
+   글자 위에 겹치는 오버레이는 접고, 노트 아래 제 줄에 오른쪽 정렬로 내려 앉힌다. */
+@media (hover: none) {
+  /* 넓은 터치 화면(태블릿)에서는 지금의 오버레이를 그대로 두고 띄우기만 한다 —
+     칸이 촘촘한 표에서 줄을 하나씩 더 늘리면 그게 더 성가시다. */
+  .act-actions { opacity: 1; pointer-events: auto; }
+}
+@media (hover: none) and (max-width: 860px) {
+  /* 폰에서는 칸이 곧 카드라 자리가 있다 — 글자 위에 겹치지 않게 제 줄로 내린다. */
+  .act-item { flex-wrap: wrap; }
+  .act-item .act-actions {
+    position: static;
+    width: 100%;
+    padding-left: 0;
+    margin-top: 2px;
+    background: none;
+    justify-content: flex-end;
+    gap: 14px;
+  }
+  /* 손가락 과녁을 키운다 — 글자 크기는 그대로 두고 눌리는 넓이만. */
+  .act-item .act-starbtn,
+  .act-item .act-edit-btn,
+  .act-item .act-del { padding: 2px 6px; }
+}
+
 /* ── 프로젝트 개요(읽기 전용) — /project/<rfq_id> ────────────────────────
    팀원 공유용 한 장짜리 현황. 위에서 아래로 머리글 → 단계 → 정보/활동 → 품목
    순의 문서형 흐름이라 화면에서 한눈에 들어오고 그대로 인쇄된다. */

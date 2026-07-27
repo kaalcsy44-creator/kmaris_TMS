@@ -774,7 +774,13 @@ function DealStageRow({
         // 지나왔거나 진행 중인 단계 열(ci ≤ 현재 단계 열)에 상단 업무타입 색 bar.
         const cur = ci <= addCol && !row.cancelled;
         return (
-        <div key={ci} className={`act-mx-cell ${STAGE_COLUMNS[ci].tone} ${isService ? "wt-service" : "wt-parts"}${cur ? (isService ? " cur-service" : " cur-parts") : ""}`}>
+        // data-stage / empty 는 좁은 화면용 — 거기선 열이 세로로 쌓여 상단 단계 머리줄이
+        // 사라지므로 칸마다 제 단계 이름을 달고, 빈 단계는 아예 접는다.
+        <div
+          key={ci}
+          className={`act-mx-cell ${STAGE_COLUMNS[ci].tone} ${isService ? "wt-service" : "wt-parts"}${cur ? (isService ? " cur-service" : " cur-parts") : ""}${cacts.length === 0 && ci !== addCol ? " empty" : ""}`}
+          data-stage={STAGE_COLUMNS[ci].label}
+        >
           {cacts.length > 0 ? (
             <ul className="act-list">
               {cacts.map((a, i) =>
