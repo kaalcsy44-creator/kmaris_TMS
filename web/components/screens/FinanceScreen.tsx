@@ -747,23 +747,6 @@ function ReceivablesTab() {
         </table>
       )}
 
-      {/* ── 거래선별 미수 — 위 표는 건별이라 '어느 고객에게 얼마나 물려 있나'가 안 보인다. ── */}
-      {sum && sum.by_customer.length ? (
-        <section className="fin-sec">
-          <div className="fin-sec-head">
-            <h4 className="fin-sec-title">By customer <span className="fin-sec-sub">· outstanding as of today</span></h4>
-          </div>
-          <table className="mini">
-            <thead><tr><th>Customer</th><th className="num">Outstanding</th></tr></thead>
-            <tbody>
-              {sum.by_customer.map((r) => (
-                <tr key={r.name}><td>{r.name}</td><td className="num">{byCurrency(r.outstanding)}</td></tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
-      ) : null}
-
       {receiving ? (
         <ReceiptDateModal
           row={receiving.row}
@@ -1272,23 +1255,6 @@ function PayablesTab() {
           </tfoot>
         </table>
       )}
-
-      {/* ── 분류별 — 위 표는 건별이라 '어디에 매달 얼마가 나가나'가 한눈에 안 잡힌다. ── */}
-      {sum && sum.by_category.length ? (
-        <section className="fin-sec">
-          <div className="fin-sec-head">
-            <h4 className="fin-sec-title">By category <span className="fin-sec-sub">· due in 30 days + overdue</span></h4>
-          </div>
-          <table className="mini">
-            <thead><tr><th>Category</th><th className="num">Amount</th></tr></thead>
-            <tbody>
-              {sum.by_category.map((r) => (
-                <tr key={r.name}><td>{CATEGORY_LABEL[r.name] || r.name}</td><td className="num">{byCurrency(r.amount)}</td></tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
-      ) : null}
 
       {paying ? (
         <PaymentDateModal
