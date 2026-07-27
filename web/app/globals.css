@@ -5833,6 +5833,17 @@ table.mini .num {
     padding: 9px 13px;
     font-size: 13px;
   }
+  /* sticky 는 조상 중 하나라도 스크롤 상자(overflow != visible)면 그 상자 안에 갇혀
+     — 화면이 아니라 그 상자를 기준으로 붙는다. 탭과 화면 사이의 조상들은 모두 열어 둔다.
+     (탭을 감싸는 래퍼는 페이지마다 .page 직속이거나 .action-tabs 한 겹이 더 있다.) */
+  .shell,
+  .shell-main,
+  .page,
+  .action-tabs,
+  .act-screen,
+  .fin-overview {
+    overflow: visible;
+  }
 
   /* Multi-column grids collapse */
   .dash-two,
@@ -10252,6 +10263,99 @@ table.mini tfoot .fin-foot-name { text-align: left; }
 }
 /* 전체 합계 줄 — 두 표를 합친 금액. 표 사이를 띄운 만큼 위와 확실히 떨어뜨린다. */
 .fin-ledger-total { margin-top: 18px; }
+
+/* ── 수입·지급 대장: 좁은 화면 ────────────────────────────────────────────
+   한 줄에 아홉~열한 칸(거래처·번호·날짜 둘·금액 셋·상태·반복·조작)이라 폰에서는
+   어떻게 줄여도 서지 않는다. 한 건을 한 장의 카드로 접는다: 거래처가 머리,
+   번호·적요가 그 아래 부제, 나머지는 이름표를 단 값으로 2열에 앉는다.
+   칸의 자리는 DOM 순서가 아니라 order 가 정한다 — 표마다 열 순서가 달라도
+   카드에서는 늘 '거래처 → 번호 → 값들 → 조작' 으로 읽히게. */
+@media (max-width: 860px) {
+  .fin-ledger,
+  .fin-ledger tbody,
+  .fin-ledger tfoot,
+  .fin-ledger tr,
+  .fin-ledger td { display: block; }
+  .fin-ledger thead,
+  .fin-ledger colgroup { display: none; }
+  .fin-ledger tr {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px 10px;
+    padding: 9px 11px;
+    margin-bottom: 8px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: #fff;
+  }
+  /* 기일이 지난 건 — 표에서는 행 배경이던 표시를 카드 테두리로 옮긴다. */
+  .fin-ledger tr.fin-overdue { border-color: #f3b8b4; }
+  .fin-ledger tr > td {
+    border: 0;
+    padding: 2px 0;
+    white-space: normal;
+    background: none;
+    text-align: left;
+  }
+  /* 값이 아예 없는 칸(자리맞춤용 빈 td)은 카드에서 자리를 차지할 이유가 없다. */
+  .fin-ledger tr > td:empty { display: none; }
+  .fin-ledger td.fin-c-title {
+    order: -3;
+    grid-column: 1 / -1;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--navy);
+  }
+  .fin-ledger td.fin-c-sub {
+    order: -2;
+    grid-column: 1 / -1;
+    padding-bottom: 6px;
+    margin-bottom: 3px;
+    border-bottom: 1px solid var(--line);
+  }
+  /* 이름표를 단 값 — 왼쪽에 이름, 오른쪽에 값. */
+  .fin-ledger td[data-label] {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .fin-ledger td[data-label]::before {
+    content: attr(data-label);
+    flex: none;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--muted);
+  }
+  .fin-ledger td.num { font-variant-numeric: tabular-nums; }
+  /* 통화별로 여러 줄인 합계(.cur-line) — 이름표 옆이 아니라 그 아래 오른쪽으로 흐르게. */
+  .fin-ledger td[data-label] > .cur-line { width: 100%; text-align: right; }
+  .fin-ledger td[data-label] > .cur-line:first-of-type { width: auto; }
+  /* 상태 칩과 조작 단추는 카드 바닥에 제 줄로 — 손가락 과녁이 좁아지지 않게. */
+  .fin-ledger td[data-label="Status"] { order: 1; grid-column: 1 / -1; }
+  .fin-ledger td.fin-c-act {
+    order: 2;
+    grid-column: 1 / -1;
+    margin-top: 4px;
+  }
+  .fin-ledger td.fin-c-act > div { justify-content: flex-end; }
+  /* 목록이 비었다는 안내는 카드가 아니라 한 줄 — 표 모양의 잔재를 지운다. */
+  .fin-ledger tr:has(> td.mini-empty) { display: block; padding: 0; }
+  .fin-ledger td.mini-empty { text-align: center; }
+  /* 합계·환산 줄 — 이름이 한 줄, 금액 셋이 그 아래 이름표를 달고 선다. */
+  .fin-ledger .fin-group-sub,
+  .fin-ledger .fin-foot-ref,
+  .fin-ledger .foot-grand { background: #f8fafc; }
+  .fin-ledger .fin-foot-name {
+    grid-column: 1 / -1;
+    padding-bottom: 5px;
+    margin-bottom: 3px;
+    border-bottom: 1px solid var(--line);
+    text-align: left;
+  }
+  .fin-ledger-total { margin-top: 10px; }
+}
 /* 납부 기록 팝업 — 날짜 한두 칸만 받는 좁은 폼(세로 스택, 여백 최소). */
 .fin-pay-form { display: flex; flex-direction: column; gap: 10px; }
 .fin-pay-form .form-field { margin: 0; }
