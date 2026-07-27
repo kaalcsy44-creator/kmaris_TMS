@@ -10051,6 +10051,9 @@ button.ov-tl-stage:hover {
 }
 /* 실적 타일은 두 개뿐이라 auto-fit 에 맡기면 화면 절반씩 차지한다 — 폭을 묶어 왼쪽 정렬. */
 .fin-kpis--actual { grid-template-columns: repeat(auto-fit, minmax(220px, 300px)); justify-content: start; }
+/* Inflow·Outflow 안의 갈래 전환(Receivables / Other income / Collected …).
+   페이지 탭보다 한 급 작게 — 이 화면 안에서 무엇을 보고 있는지만 가리킨다. */
+.fin-subtabs { margin: 2px 0 0; }
 /* 목록(미수·지급) 화면 머리의 두 타일 — 표 폭 전체로 늘리면 머리가 무거워 보인다. */
 .fin-kpis--pair {
   grid-template-columns: repeat(auto-fit, minmax(220px, 320px));

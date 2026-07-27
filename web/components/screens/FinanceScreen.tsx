@@ -126,17 +126,22 @@ const localDayStr = () => {
 
 // ── Screen ───────────────────────────────────────────────────────────────────
 // Cash Flow 는 따로 서지 않는다 — 잔액과 현금흐름은 같은 질문의 앞뒤라서 Overview 하나로 합쳤다.
-type Tab = "overview" | "receivables" | "payables" | "closing" | "calendar";
+// 목록 두 탭은 Overview 의 두 기둥과 같은 이름을 쓴다(Inflow/Outflow) — 같은 돈을
+// 한쪽에서는 '들어올 돈', 다른 쪽에서는 'Receivables' 라 부르면 매번 옮겨 읽어야 한다.
+type Tab = "overview" | "inflow" | "outflow" | "closing" | "calendar";
 
-const TABS: Tab[] = ["overview", "receivables", "payables", "closing", "calendar"];
+const TABS: Tab[] = ["overview", "inflow", "outflow", "closing", "calendar"];
+/** 이름을 바꾸기 전 주소로 들어오는 링크 — 같은 자리로 보낸다. */
+const TAB_ALIAS: Record<string, Tab> = { receivables: "inflow", payables: "outflow" };
 
 export default function FinanceScreen() {
   // 탭은 주소에 남긴다 — 기간 상세 화면에서 돌아올 때, 그리고 링크를 주고받을 때
   // 'Finance 의 어느 탭'인지가 주소만으로 정해져야 한다.
   const router = useRouter();
   const params = useSearchParams();
-  const fromUrl = params.get("tab") as Tab | null;
-  const [tab, setTabState] = useState<Tab>(fromUrl && TABS.includes(fromUrl) ? fromUrl : "overview");
+  const fromUrl = params.get("tab") || "";
+  const asTab = (TAB_ALIAS[fromUrl] ?? fromUrl) as Tab;
+  const [tab, setTabState] = useState<Tab>(TABS.includes(asTab) ? asTab : "overview");
   const setTab = (t: Tab) => {
     setTabState(t);
     router.replace(t === "overview" ? "/finance" : `/finance?tab=${t}`, { scroll: false });
@@ -145,15 +150,15 @@ export default function FinanceScreen() {
     <div className="action-tabs">
       <div className="page-tabs">
         <button className={tab === "overview" ? "on" : ""} onClick={() => setTab("overview")}>Overview</button>
-        <button className={tab === "receivables" ? "on" : ""} onClick={() => setTab("receivables")}>Receivables</button>
-        <button className={tab === "payables" ? "on" : ""} onClick={() => setTab("payables")}>Payables</button>
+        <button className={tab === "inflow" ? "on" : ""} onClick={() => setTab("inflow")}>Inflow</button>
+        <button className={tab === "outflow" ? "on" : ""} onClick={() => setTab("outflow")}>Outflow</button>
         <button className={tab === "closing" ? "on" : ""} onClick={() => setTab("closing")}>Closing · VAT</button>
         <button className={tab === "calendar" ? "on" : ""} onClick={() => setTab("calendar")}>Calendar</button>
       </div>
 
       {tab === "overview" && <OverviewTab />}
-      {tab === "receivables" && <ReceivablesTab />}
-      {tab === "payables" && <PayablesTab />}
+      {tab === "inflow" && <InflowTab />}
+      {tab === "outflow" && <OutflowTab />}
       {tab === "closing" && <ClosingTab />}
       {tab === "calendar" && <CalendarTab />}
     </div>
@@ -543,37 +548,175 @@ export function ProjectDocLink({
   );
 }
 
-// ── Receivables — 프로젝트 매출(AR, 읽기전용) + 기타 수입(수동 등록) ────────────
-function ReceivablesTab() {
+// ── Inflow — 들어올 돈(매출채권·기타수입)과 들어온 돈(수금) ─────────────────────
+// 세 갈래는 Overview 의 In 기둥과 같은 이름·같은 뜻이다: 예정 둘(출처별)과 실적 하나.
+
+/** 실적 한 건 — 실제로 오간 돈. 수금/지급 목록이 같은 모양을 쓴다. */
+type SettledRow = {
+  key: string;
+  /** 실제로 오간 날(모르면 빈 값 — 부분수금은 날짜를 남길 자리가 없다). */
+  date: string;
+  kind: string;
+  party: string;
+  ref: React.ReactNode;
+  amount: number;
+  currency: string;
+};
+
+/** 통화별 합계 — 실적 목록의 발밑 합계. */
+function settledTotals(rows: SettledRow[]): MoneyByCurrency {
+  const t: MoneyByCurrency = {};
+  for (const r of rows) t[r.currency] = (t[r.currency] || 0) + r.amount;
+  return t;
+}
+
+/**
+ * 수금 실적 — 매출채권 입금 + 기타수입 수령.
+ * 반복 기타수입은 납부한 회차마다 한 줄로 펼친다(실제 입금일이 있으면 그 날짜로).
+ */
+function receiptRows(rows: FinanceReceivable[]): SettledRow[] {
+  const out: SettledRow[] = [];
+  for (const r of rows) {
+    if (r.source === "income") {
+      const amount = r.amount ?? r.invoice_amount;
+      if ((r.recurrence ?? "none") === "none") {
+        if (r.paid) {
+          out.push({
+            key: `inc-${r.id}`, date: r.paid_date || r.due_date,
+            kind: INCOME_CATEGORY_LABEL[r.category || ""] || r.category || "Other income",
+            party: r.counterparty || r.customer, ref: r.description || "—",
+            amount, currency: r.currency,
+          });
+        }
+      } else {
+        for (const occ of r.paid_dates ?? []) {
+          out.push({
+            key: `inc-${r.id}-${occ}`, date: r.payments?.[occ] || occ,
+            kind: INCOME_CATEGORY_LABEL[r.category || ""] || r.category || "Other income",
+            party: r.counterparty || r.customer,
+            ref: <>{r.description || "—"} <span className="hint-inline">· due {occ}</span></>,
+            amount, currency: r.currency,
+          });
+        }
+      }
+    } else if (r.paid_amount > 0) {
+      out.push({
+        key: `ar-${r.id}`, date: r.paid_date || "", kind: "Sales",
+        party: r.customer,
+        ref: <ProjectDocLink orderId={r.order_id} rfqId={r.rfq_id} label={r.invoice_no || r.ci_no} />,
+        amount: r.paid_amount, currency: r.currency,
+      });
+    }
+  }
+  return out.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+}
+
+/** 지급 실적 — 벤더 청구 지급 + 기타비용 납부(반복은 회차별로 펼친다). */
+function paymentRows(rows: FinancePayable[]): SettledRow[] {
+  const out: SettledRow[] = [];
+  for (const p of rows) {
+    if (p.source === "ap") {
+      if (p.paid_amount > 0) {
+        out.push({
+          key: `ap-${p.id}`, date: p.paid_date || "", kind: "Vendor bill",
+          party: p.counterparty || "—",
+          ref: <ProjectDocLink orderId={p.order_id} rfqId={p.rfq_id} label={p.description || p.po_no} apPoId={p.po_id} />,
+          amount: p.paid_amount, currency: p.currency,
+        });
+      }
+    } else if ((p.recurrence ?? "none") === "none") {
+      if (p.paid) {
+        out.push({
+          key: `pay-${p.id}`, date: p.paid_date || p.due_date,
+          kind: CATEGORY_LABEL[p.category] || p.category,
+          party: p.counterparty || "—", ref: p.description || "—",
+          amount: p.amount, currency: p.currency,
+        });
+      }
+    } else {
+      for (const occ of p.paid_dates ?? []) {
+        out.push({
+          key: `pay-${p.id}-${occ}`, date: p.payments?.[occ] || occ,
+          kind: CATEGORY_LABEL[p.category] || p.category,
+          party: p.counterparty || "—",
+          ref: <>{p.description || "—"} <span className="hint-inline">· due {occ}</span></>,
+          amount: p.amount, currency: p.currency,
+        });
+      }
+    }
+  }
+  return out.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+}
+
+/** 실적 목록 — 언제·무엇으로·누구에게 오갔는지. 수금·지급이 같은 표를 쓴다. */
+function SettledTable({ rows, dateLabel, partyLabel, empty, fx }: {
+  rows: SettledRow[];
+  dateLabel: string;
+  partyLabel: string;
+  empty: string;
+  fx: FxQuote;
+}) {
+  const totals = settledTotals(rows);
+  return (
+    <>
+      <table className="mini fin-ledger">
+        <thead>
+          <tr>
+            <th className="fin-w-date">{dateLabel}</th>
+            <th className="fin-w-cat">Type</th>
+            <th className="fin-w-party">{partyLabel}</th>
+            <th>Reference</th>
+            <th className="num fin-w-money">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length === 0 ? <tr><td colSpan={5} className="mini-empty">{empty}</td></tr> : null}
+          {rows.map((r) => (
+            <tr key={r.key}>
+              {/* 날짜가 없는 건 = 부분수금 — 언제 들어왔는지 적을 자리가 레코드에 없다. */}
+              <td>{r.date || <span className="hint-inline">no date</span>}</td>
+              <td>{r.kind}</td>
+              <td>{r.party}</td>
+              <td>{r.ref}</td>
+              <td className="num">{money(r.amount, r.currency)}</td>
+            </tr>
+          ))}
+          <tr className="fin-group-sub">
+            <td className="fin-foot-name" colSpan={4}>Total · {rows.length} item{rows.length === 1 ? "" : "s"}</td>
+            <td className="num">{byCurrencyLines(totals)}</td>
+          </tr>
+          {/* 참고용 KRW 환산 — 오늘자 매매기준율(조회 실패 시 고정환율). 집계에는 쓰지 않는다. */}
+          <tr className="fin-foot-ref">
+            <td className="fin-foot-name" colSpan={4}>
+              Total (In KRW · 1 USD = {fx.rate.toLocaleString()}
+              {fx.source === "exim" ? ` · 매매기준율 ${fx.date}` : " · fixed rate"})
+            </td>
+            <td className="num">{won(toKrw(totals, fx.rate))}</td>
+          </tr>
+        </tbody>
+      </table>
+    </>
+  );
+}
+
+type InflowView = "receivables" | "income" | "collected";
+
+function InflowTab() {
   const { data, error, refresh } = useCachedData<{ rows: FinanceReceivable[]; fx: FxQuote }>("finance:receivables", fetchFinanceReceivables);
-  // 오늘 기준 잔액·연체와 거래선별 미수 — 목록은 건별이라 이 두 가지를 스스로 답하지 못한다.
+  // 오늘 기준 잔액·연체 — 목록의 합계는 지금 걸러 놓은 행만 세므로 따로 받는다.
   const { data: sum } = useCachedData<FinanceSummary>("finance:summary", () => fetchFinanceSummary());
+  // 세 갈래는 Overview 의 In 기둥과 같은 이름을 쓴다 — 같은 말이 같은 뜻이도록.
+  const [view, setView] = useState<InflowView>("receivables");
   const [openOnly, setOpenOnly] = useState(true);
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<FinanceReceivable | null>(null);
   const [receiving, setReceiving] = useState<{ row: FinanceReceivable; occurrence: string } | null>(null);
+  const all = useMemo(() => data?.rows ?? [], [data]);
   const rows = useMemo(() => {
-    const all = data?.rows ?? [];
-    return openOnly ? all.filter((r) => r.outstanding > 0) : all;
-  }, [data, openOnly]);
-  // 섹션 = 프로젝트 매출(AR) / 기타 수입. 성격이 달라 소계도 따로 낸다.
-  const groups = useMemo(() => [
-    {
-      key: "ar",
-      title: "Sales",
-      sub: "customer invoices (AR)",
-      empty: "No customer invoices to show.",
-      rows: rows.filter((r) => r.source !== "income"),
-    },
-    {
-      key: "income",
-      title: "Other income",
-      sub: "interest, refunds, misc",
-      empty: "No other income registered.",
-      rows: rows.filter((r) => r.source === "income"),
-    },
-  ], [rows]);
-  // 합계 3열(청구·수금·미수) — 통화별로 분리 집계.
+    const src = all.filter((r) => (view === "income" ? r.source === "income" : r.source !== "income"));
+    return openOnly ? src.filter((r) => r.outstanding > 0) : src;
+  }, [all, view, openOnly]);
+  const settled = useMemo(() => receiptRows(all), [all]);
   const totals = useMemo(() => receivableTotals(rows), [rows]);
 
   function reload() {
@@ -597,150 +740,130 @@ function ReceivablesTab() {
   if (!data) return <div className="state">Loading…</div>;
   const fx: FxQuote = data.fx ?? { rate: 0, date: "", source: "fixed" };
   const canEdit = can("finance", "create") || can("finance", "edit");
+  const hint = view === "receivables"
+    ? "Customer invoices arrive here automatically from the project's tax-invoice and collection stages and are read-only — click the invoice number to open that project's billing stage."
+    : view === "income"
+      ? "Money that is not project sales — interest, refunds, misc — is registered by hand here, and received here too."
+      : "Money that has actually arrived, dated on the day it came in. Sales and other income together, newest first.";
 
   return (
     <div className="panel">
       <div className="items-head">
-        <h3 className="form-title fin-page-title" style={{ margin: 0 }}>Receivables</h3>
+        <h3 className="form-title fin-page-title" style={{ margin: 0 }}>Inflow</h3>
         <div className="items-head-actions">
-          <label className="check-chip" style={{ cursor: "pointer" }}>
-            <input type="checkbox" checked={openOnly} onChange={(e) => setOpenOnly(e.target.checked)} /> Outstanding only
-          </label>
+          {view !== "collected" ? (
+            <label className="check-chip" style={{ cursor: "pointer" }}>
+              <input type="checkbox" checked={openOnly} onChange={(e) => setOpenOnly(e.target.checked)} /> Outstanding only
+            </label>
+          ) : null}
+          {view === "income" && can("finance", "create") ? (
+            <button className="btn primary sm" onClick={() => setAdding(true)}>+ Add income</button>
+          ) : null}
         </div>
       </div>
-      <p className="hint-inline" style={{ display: "block", margin: "4px 0 10px" }}>
-        Customer invoices arrive here automatically from the project&apos;s tax-invoice and collection stages and are read-only — click the invoice number to open that project&apos;s billing stage. Money that is not project sales — interest, refunds, misc — is registered by hand in the second table.
-      </p>
-      {/* 오늘 기준 두 숫자 — 목록의 합계는 지금 걸러 놓은 행만 세므로 따로 둔다. */}
+      {/* 오늘 기준 두 숫자 — 어느 갈래를 보고 있든 같은 값이라 위에 고정해 둔다. */}
       {sum ? (
         <div className="fin-kpis fin-kpis--pair">
           <KpiTile label="Outstanding" main={byCurrencyLines(sum.receivable.outstanding)} sub={`${sum.receivable.count} open invoices · as of today`} tone="blue" />
           <KpiTile label="Overdue" main={byCurrencyLines(sum.receivable.overdue)} sub="past the due date" tone="red" />
         </div>
       ) : null}
-      {/* 섹션 = 프로젝트 매출(AR) / 기타 수입. 지급 목록과 같은 규칙 —
-          섹션마다 표를 따로 내고 각 표 끝에 소계, 두 표 아래 전체 합계. */}
-      {groups.map((g) => (
-        <section className="fin-sec" key={g.key}>
-          <div className="fin-sec-head">
-            <h4 className="fin-sec-title">{g.title} <span className="fin-sec-sub">· {g.sub}</span></h4>
-            {/* 등록 버튼은 이 버튼이 행을 만드는 표(기타 수입) 위에 둔다 — 지급 목록과 같은 규칙. */}
-            {g.key === "income" && can("finance", "create") ? (
-              <button className="btn primary sm" onClick={() => setAdding(true)}>+ Add income</button>
-            ) : null}
-          </div>
-          {/* 행이 없어도 표(머리행)는 남긴다 — 어떤 항목이 들어오는 자리인지 보이도록. */}
-          <table className="mini fin-ledger">
-            <thead>
-              <tr>
-                <th className="fin-w-party">Customer</th><th>Invoice No.</th>
-                <th className="fin-w-date">Invoice date</th><th className="fin-w-date">Due</th>
-                <th className="num fin-w-money">Invoice</th><th className="num fin-w-money">Paid</th><th className="num fin-w-money">Outstanding</th>
-                <th className="fin-w-status">Status</th><th className="fin-w-act" />
-              </tr>
-            </thead>
-            <tbody>
-              {g.rows.length === 0 ? (
-                <tr><td colSpan={9} className="mini-empty">{g.empty}</td></tr>
-              ) : null}
-              {g.rows.map((r) => {
-                const isIncome = r.source === "income";
-                return (
-                <tr key={`${r.source || "ar"}-${r.id}`} className={r.overdue ? "fin-overdue" : ""}>
-                  <td>{r.customer}</td>
-                  <td>{isIncome ? (r.invoice_no || r.ci_no || "—") : <ProjectDocLink orderId={r.order_id} rfqId={r.rfq_id} label={r.invoice_no || r.ci_no} />}</td>
-                  {/* 발행일 — 9단계 대금청구서에 입력한 값. 기타 수입에는 없는 개념. */}
-                  <td>{r.invoice_date || "—"}</td>
-                  <td>{r.due_date || "—"}</td>
-                  <td className="num">{money(r.invoice_amount, r.currency)}</td>
-                  <td className="num">{money(r.paid_amount, r.currency)}</td>
-                  <td className="num">{money(r.outstanding, r.currency)}</td>
-                  <td>
-                    {/* 기타 수입은 이 화면에서 바로 입금 처리(실제 입금일 입력). 기일이 지난
-                        건도 눌러야 한다 — 연체 배지만 띄우면 늦게 들어온 돈을 영영 기록할 수
-                        없다. 그래서 연체는 배지 대신 이 단추의 색과 이름으로 알린다.
-                        프로젝트 매출(AR)은 9~11단계에서 수금하므로 여기서는 읽기전용. */}
-                    {isIncome ? (
-                      <button
-                        type="button"
-                        className={`wt-badge fin-paid-toggle${r.paid ? " on" : ""}${r.overdue ? " overdue" : ""}`}
-                        title={canEdit ? (r.paid ? "Undo receipt" : r.overdue ? "Record receipt (past due)" : "Record receipt") : ""}
-                        disabled={!canEdit}
-                        onClick={() =>
-                          r.recurrence !== "none"
-                            ? setReceiving({ row: r, occurrence: nextUnpaidOccurrence(asPayableLike(r)) })
-                            : r.paid
-                              ? undoReceived(r)
-                              : setReceiving({ row: r, occurrence: r.due_date })
-                        }
-                      >
-                        {r.recurrence !== "none"
-                          ? `${(r.paid_dates || []).length} received`
-                          : r.paid ? "Received" : r.overdue ? "Overdue" : "Expected"}
-                      </button>
-                    ) : r.overdue ? (
-                      <span className="wt-badge" style={{ background: "#fde2e1", color: "#c0392b" }}>Overdue</span>
-                    ) : (
-                      AR_STATUS_LABEL[r.status] || r.status
-                    )}
-                    {r.paid_date ? <span className="fin-paid-on">{r.paid_date}</span> : null}
-                  </td>
-                  <td>
-                    <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
-                      {isIncome ? (
-                        <>
-                          {can("finance", "edit") ? (
-                            <button className="btn tiny" title="Edit" aria-label="Edit" onClick={() => setEditing(r)}>✎</button>
-                          ) : null}
-                          {can("finance", "delete") ? (
-                            <button className="btn tiny danger" title="Delete" aria-label="Delete" onClick={() => removeIncome(r)}>×</button>
-                          ) : null}
-                        </>
-                      ) : (
-                        <ProjectDocLink orderId={r.order_id} rfqId={r.rfq_id} label="Project stage 9–11" hint />
-                      )}
-                    </div>
-                  </td>
-                </tr>
-                );
-              })}
-              {(() => {
-                const st = receivableTotals(g.rows);
-                return (
-                  <tr className="fin-group-sub">
-                    <td />
-                    <td className="fin-foot-name" colSpan={3}>Subtotal</td>
-                    <td className="num">{byCurrency(st.invoice)}</td>
-                    <td className="num">{byCurrency(st.paid)}</td>
-                    <td className="num">{byCurrency(st.outstanding)}</td>
-                    <td /><td />
-                  </tr>
-                );
-              })()}
-            </tbody>
-          </table>
-        </section>
-      ))}
+      <div className="seg-toggle fin-subtabs" role="group" aria-label="Inflow view">
+        <button className={view === "receivables" ? "on" : ""} onClick={() => setView("receivables")}>Receivables</button>
+        <button className={view === "income" ? "on" : ""} onClick={() => setView("income")}>Other income</button>
+        <button className={view === "collected" ? "on" : ""} onClick={() => setView("collected")}>Collected</button>
+      </div>
+      <p className="hint-inline" style={{ display: "block", margin: "8px 0 10px" }}>{hint}</p>
 
-      {/* ── 전체 합계 — 두 표를 합친 금액. 열 폭을 위 표들과 맞춰 같은 자리에서 끝난다. ── */}
-      {rows.length === 0 ? null : (
-        <table className="mini fin-ledger fin-ledger-total">
-          <colgroup>
-            <col />
-            <col className="fin-w-money" /><col className="fin-w-money" /><col className="fin-w-money" />
-            <col className="fin-w-status" /><col className="fin-w-act" />
-          </colgroup>
-          <tfoot>
-            <tr className="foot-grand fin-foot-total">
-              <td className="total-label fin-foot-name">Total</td>
-              <td className="num total-value">{byCurrencyLines(totals.invoice)}</td>
-              <td className="num total-value">{byCurrencyLines(totals.paid)}</td>
-              <td className="num total-value">{byCurrencyLines(totals.outstanding)}</td>
+      {view === "collected" ? (
+        <SettledTable rows={settled} dateLabel="Received" partyLabel="Customer" empty="Nothing received yet." fx={fx} />
+      ) : (
+        <table className="mini fin-ledger">
+          <thead>
+            <tr>
+              <th className="fin-w-party">Customer</th><th>Invoice No.</th>
+              <th className="fin-w-date">Invoice date</th><th className="fin-w-date">Due</th>
+              <th className="num fin-w-money">Invoice</th><th className="num fin-w-money">Paid</th><th className="num fin-w-money">Outstanding</th>
+              <th className="fin-w-status">Status</th><th className="fin-w-act" />
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <tr><td colSpan={9} className="mini-empty">{view === "income" ? "No other income registered." : "No customer invoices to show."}</td></tr>
+            ) : null}
+            {rows.map((r) => {
+              const isIncome = r.source === "income";
+              return (
+              <tr key={`${r.source || "ar"}-${r.id}`} className={r.overdue ? "fin-overdue" : ""}>
+                <td>{r.customer}</td>
+                <td>{isIncome ? (r.invoice_no || r.ci_no || "—") : <ProjectDocLink orderId={r.order_id} rfqId={r.rfq_id} label={r.invoice_no || r.ci_no} />}</td>
+                {/* 발행일 — 9단계 대금청구서에 입력한 값. 기타 수입에는 없는 개념. */}
+                <td>{r.invoice_date || "—"}</td>
+                <td>{r.due_date || "—"}</td>
+                <td className="num">{money(r.invoice_amount, r.currency)}</td>
+                <td className="num">{money(r.paid_amount, r.currency)}</td>
+                <td className="num">{money(r.outstanding, r.currency)}</td>
+                <td>
+                  {/* 기타 수입은 이 화면에서 바로 입금 처리(실제 입금일 입력). 기일이 지난
+                      건도 눌러야 한다 — 연체 배지만 띄우면 늦게 들어온 돈을 영영 기록할 수
+                      없다. 그래서 연체는 배지 대신 이 단추의 색과 이름으로 알린다.
+                      프로젝트 매출(AR)은 9~11단계에서 수금하므로 여기서는 읽기전용. */}
+                  {isIncome ? (
+                    <button
+                      type="button"
+                      className={`wt-badge fin-paid-toggle${r.paid ? " on" : ""}${r.overdue ? " overdue" : ""}`}
+                      title={canEdit ? (r.paid ? "Undo receipt" : r.overdue ? "Record receipt (past due)" : "Record receipt") : ""}
+                      disabled={!canEdit}
+                      onClick={() =>
+                        r.recurrence !== "none"
+                          ? setReceiving({ row: r, occurrence: nextUnpaidOccurrence(asPayableLike(r)) })
+                          : r.paid
+                            ? undoReceived(r)
+                            : setReceiving({ row: r, occurrence: r.due_date })
+                      }
+                    >
+                      {r.recurrence !== "none"
+                        ? `${(r.paid_dates || []).length} received`
+                        : r.paid ? "Received" : r.overdue ? "Overdue" : "Expected"}
+                    </button>
+                  ) : r.overdue ? (
+                    <span className="wt-badge" style={{ background: "#fde2e1", color: "#c0392b" }}>Overdue</span>
+                  ) : (
+                    AR_STATUS_LABEL[r.status] || r.status
+                  )}
+                  {r.paid_date ? <span className="fin-paid-on">{r.paid_date}</span> : null}
+                </td>
+                <td>
+                  <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                    {isIncome ? (
+                      <>
+                        {can("finance", "edit") ? (
+                          <button className="btn tiny" title="Edit" aria-label="Edit" onClick={() => setEditing(r)}>✎</button>
+                        ) : null}
+                        {can("finance", "delete") ? (
+                          <button className="btn tiny danger" title="Delete" aria-label="Delete" onClick={() => removeIncome(r)}>×</button>
+                        ) : null}
+                      </>
+                    ) : (
+                      <ProjectDocLink orderId={r.order_id} rfqId={r.rfq_id} label="Project stage 9–11" hint />
+                    )}
+                  </div>
+                </td>
+              </tr>
+              );
+            })}
+            <tr className="fin-group-sub">
+              <td />
+              <td className="fin-foot-name" colSpan={3}>Total</td>
+              <td className="num">{byCurrencyLines(totals.invoice)}</td>
+              <td className="num">{byCurrencyLines(totals.paid)}</td>
+              <td className="num">{byCurrencyLines(totals.outstanding)}</td>
               <td /><td />
             </tr>
             {/* 참고용 KRW 환산 — 오늘자 매매기준율(조회 실패 시 고정환율). 집계에는 쓰지 않는다. */}
             <tr className="fin-foot-ref">
-              <td className="fin-foot-name">
+              <td />
+              <td className="fin-foot-name" colSpan={3}>
                 Total (In KRW · 1 USD = {fx.rate.toLocaleString()}
                 {fx.source === "exim" ? ` · 매매기준율 ${fx.date}` : " · fixed rate"})
               </td>
@@ -749,7 +872,7 @@ function ReceivablesTab() {
               <td className="num">{won(toKrw(totals.outstanding, fx.rate))}</td>
               <td /><td />
             </tr>
-          </tfoot>
+          </tbody>
         </table>
       )}
 
@@ -986,10 +1109,14 @@ const emptyPayable: FinancePayableSave = {
   notes: "",
 };
 
-function PayablesTab() {
+type OutflowView = "payables" | "other" | "paid";
+
+function OutflowTab() {
   const { data, error, refresh } = useCachedData<{ rows: FinancePayable[]; fx: FxQuote }>("finance:payables", fetchFinancePayables);
   // 오늘 기준 예정·연체와 분류별 합계 — 목록은 건별이라 이 두 가지를 스스로 답하지 못한다.
   const { data: sum } = useCachedData<FinanceSummary>("finance:summary", () => fetchFinanceSummary());
+  // 세 갈래는 Overview 의 Out 기둥과 같은 이름을 쓴다 — 같은 말이 같은 뜻이도록.
+  const [view, setView] = useState<OutflowView>("payables");
   const [editing, setEditing] = useState<FinancePayable | null>(null);
   const [adding, setAdding] = useState(false);
   // 납부 입력 대상 — 회차일(occurrence)과 실제 납부일을 함께 받는다.
@@ -1003,8 +1130,10 @@ function PayablesTab() {
     const isTrade = (p: FinancePayable) => p.source === "ap" || p.category === "거래선지급";
     return [rows.filter(isTrade), rows.filter((p) => !isTrade(p))];
   }, [rows]);
-  // 합계 3열(청구·지급·미지급) — 통화별 분리(미수 목록과 같은 규칙).
-  const totals = useMemo(() => payableTotals(rows), [rows]);
+  // 보고 있는 갈래의 합계 3열(청구·지급·미지급) — 통화별 분리(수입 목록과 같은 규칙).
+  const visible = view === "other" ? other : trade;
+  const totals = useMemo(() => payableTotals(visible), [visible]);
+  const settled = useMemo(() => paymentRows(rows), [rows]);
 
   function reload() {
     invalidateCache("finance:summary");
@@ -1027,8 +1156,6 @@ function PayablesTab() {
   if (error && !data) return <div className="state error">API error: {error.message}</div>;
   if (!data) return <div className="state">Loading…</div>;
   const fx: FxQuote = data.fx ?? { rate: 0, date: "", source: "fixed" };
-  const tradeSt = payableTotals(trade);
-  const otherSt = payableTotals(other);
 
   /** 상태 칸 — 두 표가 공유. AP(프로젝트 유래)는 읽기전용 배지, 수동 등록은 납부 토글. */
   function statusCell(p: FinancePayable) {
@@ -1108,25 +1235,37 @@ function PayablesTab() {
   return (
     <div className="panel">
       <div className="items-head">
-        <h3 className="form-title fin-page-title" style={{ margin: 0 }}>Payables</h3>
+        <h3 className="form-title fin-page-title" style={{ margin: 0 }}>Outflow</h3>
+        <div className="items-head-actions">
+          {view === "other" && can("finance", "create") ? (
+            <button className="btn primary sm" onClick={() => setAdding(true)}>+ Add payable</button>
+          ) : null}
+        </div>
       </div>
-      <p className="hint-inline" style={{ display: "block", margin: "4px 0 10px" }}>
-        Vendor bills arrive here automatically from the project&apos;s billing stages and are read-only — click the bill number to open that project&apos;s stage 11 Payable (AP), where the payment is confirmed. The company&apos;s own costs — rent, payroll, utilities, taxes — are registered by hand in the second table; monthly/quarterly/yearly items appear as occurrences on the calendar.
-      </p>
-      {/* 오늘 기준 두 숫자 — 아래 합계는 등록된 전액이라 '곧 나갈 돈'을 말해 주지 않는다. */}
+      {/* 오늘 기준 두 숫자 — 어느 갈래를 보고 있든 같은 값이라 위에 고정해 둔다. */}
       {sum ? (
         <div className="fin-kpis fin-kpis--pair">
           <KpiTile label="Due in 30 days + overdue" main={byCurrencyLines(sum.payable.total)} sub={`Next 30 days ${byCurrency(sum.payable.upcoming_30d)}`} tone="amber" />
           <KpiTile label="Overdue" main={byCurrencyLines(sum.payable.overdue)} sub="past the due date" tone="red" />
         </div>
       ) : null}
+      <div className="seg-toggle fin-subtabs" role="group" aria-label="Outflow view">
+        <button className={view === "payables" ? "on" : ""} onClick={() => setView("payables")}>Payables</button>
+        <button className={view === "other" ? "on" : ""} onClick={() => setView("other")}>Other costs</button>
+        <button className={view === "paid" ? "on" : ""} onClick={() => setView("paid")}>Paid</button>
+      </div>
+      <p className="hint-inline" style={{ display: "block", margin: "8px 0 10px" }}>
+        {view === "payables"
+          ? "Vendor bills arrive here automatically from the project's billing stages and are read-only — click the bill number to open that project's stage 11 Payable (AP), where the payment is confirmed. Payments registered by hand under the vendor-payment category sit here too."
+          : view === "other"
+            ? "The company's own costs — rent, payroll, utilities, taxes — are registered by hand here; monthly/quarterly/yearly items appear as occurrences on the calendar."
+            : "Money that has actually left, dated on the day it went out. Vendor bills and other costs together, newest first."}
+      </p>
 
-      {/* ── 거래 매입 — 프로젝트에서 넘어온 벤더 청구서(읽기전용). ─────────────── */}
+      {view === "paid" ? (
+        <SettledTable rows={settled} dateLabel="Paid" partyLabel="Vendor / payee" empty="Nothing paid yet." fx={fx} />
+      ) : view === "payables" ? (
       <section className="fin-sec">
-        <div className="fin-sec-head">
-          {/* 제목은 굵게, 어떤 항목이 들어오는지 설명하는 뒷부분은 옅게. */}
-          <h4 className="fin-sec-title">Trade purchases <span className="fin-sec-sub">· vendor bills</span></h4>
-        </div>
         {/* 행이 없어도 표(머리행)는 남긴다 — 어떤 항목이 들어오는 자리인지 보이도록. */}
         <table className="mini fin-ledger">
           <thead>
@@ -1166,26 +1305,11 @@ function PayablesTab() {
                 {actionCell(p)}
               </tr>
             ))}
-            <tr className="fin-group-sub">
-              <td />
-              <td className="fin-foot-name" colSpan={4}>Subtotal</td>
-              <td className="num">{byCurrency(tradeSt.invoice)}</td>
-              <td className="num">{byCurrency(tradeSt.paid)}</td>
-              <td className="num">{byCurrency(tradeSt.outstanding)}</td>
-              <td /><td /><td />
-            </tr>
           </tbody>
         </table>
       </section>
-
-      {/* ── 기타 지출 — 여기서 직접 등록하는 항목. 열 구성은 등록 폼의 입력칸과 1:1. ── */}
+      ) : (
       <section className="fin-sec">
-        <div className="fin-sec-head">
-          <h4 className="fin-sec-title">Other costs <span className="fin-sec-sub">· rent, payroll, utilities, taxes</span></h4>
-          {can("finance", "create") ? (
-            <button className="btn primary sm" onClick={() => setAdding(true)}>+ Add payable</button>
-          ) : null}
-        </div>
         {/* 행이 없어도 표(머리행)는 남긴다 — 등록 버튼이 무엇을 만드는지 열 이름으로 보인다. */}
         <table className="mini fin-ledger">
           <thead>
@@ -1219,20 +1343,13 @@ function PayablesTab() {
                 {actionCell(p)}
               </tr>
             ))}
-            <tr className="fin-group-sub">
-              <td />
-              <td className="fin-foot-name" colSpan={4}>Subtotal</td>
-              <td className="num">{byCurrency(otherSt.invoice)}</td>
-              <td className="num">{byCurrency(otherSt.paid)}</td>
-              <td className="num">{byCurrency(otherSt.outstanding)}</td>
-              <td /><td /><td />
-            </tr>
           </tbody>
         </table>
       </section>
+      )}
 
-      {/* ── 전체 합계 — 두 표를 합친 금액. 열 폭을 위 표들과 맞춰 같은 자리에서 끝난다. ── */}
-      {rows.length === 0 ? null : (
+      {/* ── 합계 — 보고 있는 표의 금액. 열 폭을 위 표와 맞춰 같은 자리에서 끝난다. ── */}
+      {view === "paid" || visible.length === 0 ? null : (
         <table className="mini fin-ledger fin-ledger-total">
           <colgroup>
             <col />
