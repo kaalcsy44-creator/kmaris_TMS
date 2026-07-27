@@ -123,7 +123,6 @@ const localDayStr = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
-const localMonthStr = () => localDayStr().slice(0, 7);
 
 // ── Screen ───────────────────────────────────────────────────────────────────
 // Cash Flow 는 따로 서지 않는다 — 잔액과 현금흐름은 같은 질문의 앞뒤라서 Overview 하나로 합쳤다.
@@ -159,6 +158,14 @@ export default function FinanceScreen() {
       {tab === "calendar" && <CalendarTab />}
     </div>
   );
+}
+
+/** 기간 선택기의 월 이름 — 화면이 영문이라 브라우저 로캘을 타지 않게 직접 적는다. */
+const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+/** 고를 수 있는 시작 연도 — 지난 5년부터 다음 2년까지(예정은 그보다 멀리 잡히지 않는다). */
+function startYears(): number[] {
+  const y = new Date().getFullYear();
+  return Array.from({ length: 8 }, (_, i) => y - 5 + i);
 }
 
 // ── Overview — 잔액과 현금흐름을 한 화면에 ────────────────────────────────────
@@ -219,11 +226,11 @@ function OverviewTab() {
   const openingInput = openingByCur[currency] ?? "0";
   const setOpeningInput = (v: string) => setOpeningByCur((m) => ({ ...m, [currency]: v }));
   const opening = Number(openingInput) || 0;
-  // 창의 시작점. 기본은 이번 달(주 단위면 오늘)이지만 뒤로 물려 1월부터도 볼 수 있다.
-  // 월/주는 입력 단위가 달라 따로 기억한다.
-  const [startMonth, setStartMonth] = useState(localMonthStr());
-  const [startDate, setStartDate] = useState(localDayStr());
-  const start = unit === "month" ? startMonth : startDate;
+  // 창의 시작점(그 달 1일). 뒤로 물리면 1월부터도 볼 수 있다. 브라우저 기본 월 선택기는
+  // 창 언어를 따라가 한국어로 뜨므로, 화면 전체가 영문인 이 앱에서는 직접 고르게 둔다.
+  const [startY, setStartY] = useState(() => new Date().getFullYear());
+  const [startM, setStartM] = useState(() => new Date().getMonth() + 1);
+  const start = `${startY}-${String(startM).padStart(2, "0")}`;
   // 표에서 고른 한 칸(index) — 위쪽 세 기둥이 그 칸을 펼쳐 보여 준다.
   const [picked, setPicked] = useState<number | null>(null);
   const cash = (n: number) => money(n, currency);
@@ -233,10 +240,6 @@ function OverviewTab() {
     key,
     () => fetchFinanceCashflow(unit, count, opening, includePo, currency, start)
   );
-  // 오늘 기준 잔액(미수·미지급)과 거래선·분류별 표 — 어느 한 달의 몫이 아닌 값이라
-  // 기간 컨트롤과 무관하게 따로 받아 화면 아래에 둔다.
-  const { data: sum } = useCachedData<FinanceSummary>("finance:summary", () => fetchFinanceSummary());
-
   const rows = useMemo(() => data?.rows ?? [], [data]);
   const maxNet = useMemo(() => Math.max(1, ...rows.map((r) => Math.abs(r.net))), [rows]);
   // 기본 선택 = 오늘이 든 칸(창이 과거·미래로 벗어나 있으면 첫 칸).
@@ -246,8 +249,7 @@ function OverviewTab() {
   const row: FinanceCashflowRow | undefined = rows[idx];
   // 기초잔고 기준일 = 첫 구간 시작일. 응답이 오기 전에도 라벨을 띄워야 해서
   // 서버(_cashflow_buckets)와 같은 규칙으로 미리 계산하고, 오면 응답 값으로 맞춘다.
-  const openingAsOf = data?.opening_as_of
-    ?? (unit === "month" ? `${startMonth || localMonthStr()}-01` : (startDate || localDayStr()));
+  const openingAsOf = data?.opening_as_of ?? `${start}-01`;
   // 고른 칸의 기초잔고 = 앞 칸의 누적잔고(첫 칸이면 창 전체의 기초잔고).
   const rowOpening = !data ? 0 : idx === 0 ? data.opening : rows[idx - 1].cumulative;
   // 기둥 머리에는 읽기 좋은 이름으로("2026-07" → "Jul 2026"). 주 단위는 그대로.
@@ -261,24 +263,24 @@ function OverviewTab() {
           <button className={unit === "week" ? "on" : ""} onClick={() => { setUnit("week"); setCount(12); setPicked(null); }}>Weekly</button>
         </div>
         <label className="fin-inline-field">
-          {/* 시작점을 뒤로 물리면 지나간 달의 실적까지 함께 굴러간다 — 연초부터 되짚어 볼 때. */}
+          {/* 시작점을 뒤로 물리면 지나간 달의 실적까지 함께 굴러간다 — 연초부터 되짚어 볼 때.
+              주 단위도 같은 자리에서 시작한다(그 달 1일부터 N주). */}
           Start
-          {unit === "month" ? (
-            <input type="month" value={startMonth} onChange={(e) => { setStartMonth(e.target.value || localMonthStr()); setPicked(null); }} />
-          ) : (
-            <input type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value || localDayStr()); setPicked(null); }} />
-          )}
+          <select value={startM} onChange={(e) => { setStartM(Number(e.target.value)); setPicked(null); }} aria-label="Start month">
+            {MONTH_NAMES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+          </select>
+          <select value={startY} onChange={(e) => { setStartY(Number(e.target.value)); setPicked(null); }} aria-label="Start year">
+            {startYears().map((y) => <option key={y} value={y}>{y}</option>)}
+          </select>
         </label>
-        {unit === "month" ? (
-          <button
-            type="button"
-            className="btn sm"
-            title="Open the window at January and run it through December"
-            onClick={() => { setStartMonth(`${new Date().getFullYear()}-01`); setCount(12); setPicked(null); }}
-          >
-            This year
-          </button>
-        ) : null}
+        <button
+          type="button"
+          className="btn sm"
+          title="Open the window at January and run it through December"
+          onClick={() => { setStartY(new Date().getFullYear()); setStartM(1); setCount(12); setPicked(null); }}
+        >
+          This year
+        </button>
         <label className="fin-inline-field">
           Periods
           <select value={count} onChange={(e) => { setCount(Number(e.target.value)); setPicked(null); }}>
@@ -421,56 +423,6 @@ function OverviewTab() {
             </p>
           </div>
 
-          {sum ? (
-            <>
-              {/* 위는 기간의 이야기, 여기부터는 오늘의 이야기 — 잔액은 어느 달의 몫도 아니다. */}
-              <div className="fin-kpis-cap">As of today · balances that belong to no single period</div>
-              <div className="fin-kpis">
-                <KpiTile label="Outstanding" main={byCurrencyLines(sum.receivable.outstanding)} sub={`${sum.receivable.count} invoices`} tone="blue" />
-                <KpiTile label="Overdue AR" main={byCurrencyLines(sum.receivable.overdue)} tone="red" />
-                <KpiTile label="Payable (30d + overdue)" main={byCurrencyLines(sum.payable.total)} sub={`Due in 30d ${byCurrency(sum.payable.upcoming_30d)}`} tone="amber" />
-                <KpiTile label="Overdue payable" main={byCurrencyLines(sum.payable.overdue)} tone="red" />
-              </div>
-
-              <div className="fin-overview-cols">
-                <div className="panel">
-                  <h3 className="form-title">Receivables by customer</h3>
-                  {sum.by_customer.length === 0 ? (
-                    <div className="muted">No outstanding balance.</div>
-                  ) : (
-                    <table className="mini">
-                      <thead><tr><th>Customer</th><th className="num">Outstanding</th></tr></thead>
-                      <tbody>
-                        {sum.by_customer.map((r) => (
-                          <tr key={r.name}><td>{r.name}</td><td className="num">{byCurrency(r.outstanding)}</td></tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
-                </div>
-
-                <div className="panel">
-                  <h3 className="form-title">Payables by category</h3>
-                  {sum.by_category.length === 0 ? (
-                    <div className="muted">No scheduled payables.</div>
-                  ) : (
-                    <table className="mini">
-                      <thead><tr><th>Category</th><th className="num">Amount</th></tr></thead>
-                      <tbody>
-                        {sum.by_category.map((r) => (
-                          <tr key={r.name}><td>{CATEGORY_LABEL[r.name] || r.name}</td><td className="num">{byCurrency(r.amount)}</td></tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
-                </div>
-              </div>
-              <p className="hint-inline" style={{ display: "block", marginTop: 10 }}>
-                These four tiles and both tables are shown in their original currency — no FX conversion, so totals are
-                never mixed across currencies.
-              </p>
-            </>
-          ) : null}
         </>
       )}
     </div>
@@ -585,6 +537,8 @@ export function ProjectDocLink({
 // ── Receivables — 프로젝트 매출(AR, 읽기전용) + 기타 수입(수동 등록) ────────────
 function ReceivablesTab() {
   const { data, error, refresh } = useCachedData<{ rows: FinanceReceivable[]; fx: FxQuote }>("finance:receivables", fetchFinanceReceivables);
+  // 오늘 기준 잔액·연체와 거래선별 미수 — 목록은 건별이라 이 두 가지를 스스로 답하지 못한다.
+  const { data: sum } = useCachedData<FinanceSummary>("finance:summary", () => fetchFinanceSummary());
   const [openOnly, setOpenOnly] = useState(true);
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<FinanceReceivable | null>(null);
@@ -648,6 +602,13 @@ function ReceivablesTab() {
       <p className="hint-inline" style={{ display: "block", margin: "4px 0 10px" }}>
         Customer invoices arrive here automatically from the project&apos;s tax-invoice and collection stages and are read-only — click the invoice number to open that project&apos;s billing stage. Money that is not project sales — interest, refunds, misc — is registered by hand in the second table.
       </p>
+      {/* 오늘 기준 두 숫자 — 목록의 합계는 지금 걸러 놓은 행만 세므로 따로 둔다. */}
+      {sum ? (
+        <div className="fin-kpis fin-kpis--pair">
+          <KpiTile label="Outstanding" main={byCurrencyLines(sum.receivable.outstanding)} sub={`${sum.receivable.count} open invoices · as of today`} tone="blue" />
+          <KpiTile label="Overdue" main={byCurrencyLines(sum.receivable.overdue)} sub="past the due date" tone="red" />
+        </div>
+      ) : null}
       {/* 섹션 = 프로젝트 매출(AR) / 기타 수입. 지급 목록과 같은 규칙 —
           섹션마다 표를 따로 내고 각 표 끝에 소계, 두 표 아래 전체 합계. */}
       {groups.map((g) => (
@@ -777,6 +738,23 @@ function ReceivablesTab() {
           </tfoot>
         </table>
       )}
+
+      {/* ── 거래선별 미수 — 위 표는 건별이라 '어느 고객에게 얼마나 물려 있나'가 안 보인다. ── */}
+      {sum && sum.by_customer.length ? (
+        <section className="fin-sec">
+          <div className="fin-sec-head">
+            <h4 className="fin-sec-title">By customer <span className="fin-sec-sub">· outstanding as of today</span></h4>
+          </div>
+          <table className="mini">
+            <thead><tr><th>Customer</th><th className="num">Outstanding</th></tr></thead>
+            <tbody>
+              {sum.by_customer.map((r) => (
+                <tr key={r.name}><td>{r.name}</td><td className="num">{byCurrency(r.outstanding)}</td></tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      ) : null}
 
       {receiving ? (
         <ReceiptDateModal
@@ -1013,6 +991,8 @@ const emptyPayable: FinancePayableSave = {
 
 function PayablesTab() {
   const { data, error, refresh } = useCachedData<{ rows: FinancePayable[]; fx: FxQuote }>("finance:payables", fetchFinancePayables);
+  // 오늘 기준 예정·연체와 분류별 합계 — 목록은 건별이라 이 두 가지를 스스로 답하지 못한다.
+  const { data: sum } = useCachedData<FinanceSummary>("finance:summary", () => fetchFinanceSummary());
   const [editing, setEditing] = useState<FinancePayable | null>(null);
   const [adding, setAdding] = useState(false);
   // 납부 입력 대상 — 회차일(occurrence)과 실제 납부일을 함께 받는다.
@@ -1136,6 +1116,13 @@ function PayablesTab() {
       <p className="hint-inline" style={{ display: "block", margin: "4px 0 10px" }}>
         Vendor bills arrive here automatically from the project&apos;s billing stages and are read-only — click the bill number to open that project&apos;s stage 11 Payable (AP), where the payment is confirmed. The company&apos;s own costs — rent, payroll, utilities, taxes — are registered by hand in the second table; monthly/quarterly/yearly items appear as occurrences on the calendar.
       </p>
+      {/* 오늘 기준 두 숫자 — 아래 합계는 등록된 전액이라 '곧 나갈 돈'을 말해 주지 않는다. */}
+      {sum ? (
+        <div className="fin-kpis fin-kpis--pair">
+          <KpiTile label="Due in 30 days + overdue" main={byCurrencyLines(sum.payable.total)} sub={`Next 30 days ${byCurrency(sum.payable.upcoming_30d)}`} tone="amber" />
+          <KpiTile label="Overdue" main={byCurrencyLines(sum.payable.overdue)} sub="past the due date" tone="red" />
+        </div>
+      ) : null}
 
       {/* ── 거래 매입 — 프로젝트에서 넘어온 벤더 청구서(읽기전용). ─────────────── */}
       <section className="fin-sec">
@@ -1277,6 +1264,23 @@ function PayablesTab() {
           </tfoot>
         </table>
       )}
+
+      {/* ── 분류별 — 위 표는 건별이라 '어디에 매달 얼마가 나가나'가 한눈에 안 잡힌다. ── */}
+      {sum && sum.by_category.length ? (
+        <section className="fin-sec">
+          <div className="fin-sec-head">
+            <h4 className="fin-sec-title">By category <span className="fin-sec-sub">· due in 30 days + overdue</span></h4>
+          </div>
+          <table className="mini">
+            <thead><tr><th>Category</th><th className="num">Amount</th></tr></thead>
+            <tbody>
+              {sum.by_category.map((r) => (
+                <tr key={r.name}><td>{CATEGORY_LABEL[r.name] || r.name}</td><td className="num">{byCurrency(r.amount)}</td></tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      ) : null}
 
       {paying ? (
         <PaymentDateModal

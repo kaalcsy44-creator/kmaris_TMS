@@ -10051,6 +10051,12 @@ button.ov-tl-stage:hover {
 }
 /* 실적 타일은 두 개뿐이라 auto-fit 에 맡기면 화면 절반씩 차지한다 — 폭을 묶어 왼쪽 정렬. */
 .fin-kpis--actual { grid-template-columns: repeat(auto-fit, minmax(220px, 300px)); justify-content: start; }
+/* 목록(미수·지급) 화면 머리의 두 타일 — 표 폭 전체로 늘리면 머리가 무거워 보인다. */
+.fin-kpis--pair {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 320px));
+  justify-content: start;
+  margin-bottom: 12px;
+}
 /* 현금흐름 표에서 '이 중 이미 오간 금액' — 같은 칸의 보조 정보라 작고 옅게. */
 .fin-cf-actual { font-size: 11px; font-weight: 400; color: var(--muted); margin-top: 2px; }
 .fin-kpi-label { font-size: 12px; color: var(--muted); font-weight: 600; }
