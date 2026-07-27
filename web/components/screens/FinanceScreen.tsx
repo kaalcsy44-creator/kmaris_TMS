@@ -226,10 +226,11 @@ function OverviewTab() {
   const openingInput = openingByCur[currency] ?? "0";
   const setOpeningInput = (v: string) => setOpeningByCur((m) => ({ ...m, [currency]: v }));
   const opening = Number(openingInput) || 0;
-  // 창의 시작점(그 달 1일). 뒤로 물리면 1월부터도 볼 수 있다. 브라우저 기본 월 선택기는
-  // 창 언어를 따라가 한국어로 뜨므로, 화면 전체가 영문인 이 앱에서는 직접 고르게 둔다.
+  // 창의 시작점(그 달 1일). 기본은 올해 1월 — 한 해가 통째로 들어오는 편이 이번 달부터
+  // 앞만 보는 것보다 쓸모가 많다(지나간 달의 실적까지 함께 굴러간다).
+  // 브라우저 기본 월 선택기는 창 언어를 따라가 한국어로 뜨므로 직접 고르게 둔다.
   const [startY, setStartY] = useState(() => new Date().getFullYear());
-  const [startM, setStartM] = useState(() => new Date().getMonth() + 1);
+  const [startM, setStartM] = useState(1);
   const start = `${startY}-${String(startM).padStart(2, "0")}`;
   // 표에서 고른 한 칸(index) — 위쪽 세 기둥이 그 칸을 펼쳐 보여 준다.
   const [picked, setPicked] = useState<number | null>(null);
@@ -259,8 +260,10 @@ function OverviewTab() {
     <div className="fin-overview">
       <div className="fin-period-bar">
         <div className="seg-toggle" role="group" aria-label="Unit">
-          <button className={unit === "month" ? "on" : ""} onClick={() => { setUnit("month"); setCount(12); setPicked(null); }}>Monthly</button>
-          <button className={unit === "week" ? "on" : ""} onClick={() => { setUnit("week"); setCount(12); setPicked(null); }}>Weekly</button>
+          {/* 월 단위는 한 해를 통째로, 주 단위는 이번 달부터 — 1월부터 12주만 보면
+              지금이 창 밖으로 밀려나 고를 것이 없다. */}
+          <button className={unit === "month" ? "on" : ""} onClick={() => { setUnit("month"); setCount(12); setStartM(1); setPicked(null); }}>Monthly</button>
+          <button className={unit === "week" ? "on" : ""} onClick={() => { setUnit("week"); setCount(12); setStartY(new Date().getFullYear()); setStartM(new Date().getMonth() + 1); setPicked(null); }}>Weekly</button>
         </div>
         <label className="fin-inline-field">
           {/* 시작점을 뒤로 물리면 지나간 달의 실적까지 함께 굴러간다 — 연초부터 되짚어 볼 때.
@@ -647,14 +650,15 @@ function ReceivablesTab() {
                   <td className="num">{money(r.paid_amount, r.currency)}</td>
                   <td className="num">{money(r.outstanding, r.currency)}</td>
                   <td>
-                    {r.overdue ? (
-                      <span className="wt-badge" style={{ background: "#fde2e1", color: "#c0392b" }}>Overdue</span>
-                    ) : isIncome ? (
-                      // 기타 수입은 이 화면에서 바로 입금 처리(실제 입금일 입력).
+                    {/* 기타 수입은 이 화면에서 바로 입금 처리(실제 입금일 입력). 기일이 지난
+                        건도 눌러야 한다 — 연체 배지만 띄우면 늦게 들어온 돈을 영영 기록할 수
+                        없다. 그래서 연체는 배지 대신 이 단추의 색과 이름으로 알린다.
+                        프로젝트 매출(AR)은 9~11단계에서 수금하므로 여기서는 읽기전용. */}
+                    {isIncome ? (
                       <button
                         type="button"
-                        className={`wt-badge fin-paid-toggle${r.paid ? " on" : ""}`}
-                        title={canEdit ? (r.paid ? "Undo receipt" : "Record receipt") : ""}
+                        className={`wt-badge fin-paid-toggle${r.paid ? " on" : ""}${r.overdue ? " overdue" : ""}`}
+                        title={canEdit ? (r.paid ? "Undo receipt" : r.overdue ? "Record receipt (past due)" : "Record receipt") : ""}
                         disabled={!canEdit}
                         onClick={() =>
                           r.recurrence !== "none"
@@ -664,8 +668,12 @@ function ReceivablesTab() {
                               : setReceiving({ row: r, occurrence: r.due_date })
                         }
                       >
-                        {r.recurrence !== "none" ? `${(r.paid_dates || []).length} received` : r.paid ? "Received" : "Expected"}
+                        {r.recurrence !== "none"
+                          ? `${(r.paid_dates || []).length} received`
+                          : r.paid ? "Received" : r.overdue ? "Overdue" : "Expected"}
                       </button>
+                    ) : r.overdue ? (
+                      <span className="wt-badge" style={{ background: "#fde2e1", color: "#c0392b" }}>Overdue</span>
                     ) : (
                       AR_STATUS_LABEL[r.status] || r.status
                     )}

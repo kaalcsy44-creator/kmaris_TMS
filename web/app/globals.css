@@ -10148,19 +10148,14 @@ table.mini tfoot .fin-foot-name { text-align: left; }
 .fin-kpi-sub { font-size: 12px; color: #6b7684; margin-top: 3px; }
 .fin-overview-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
 @media (max-width: 900px) { .fin-overview-cols { grid-template-columns: 1fr; } }
-/* Overview 좌우 기둥 — 왼쪽은 들어올/들어온 돈, 오른쪽은 나갈/나간 돈. */
-.fin-ov-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-.fin-ov-col-title {
-  margin: 0; display: flex; align-items: baseline; gap: 8px;
-  font-size: 15px; font-weight: 800; color: var(--navy);
-}
-.fin-ov-col-title span { font-size: 12px; font-weight: 500; color: var(--muted); }
 .fin-overdue td { color: #c0392b; }
 .fin-paid-toggle {
   border: 1px solid var(--line-strong); background: #fff7f6; color: #c0392b; cursor: pointer;
   border-radius: 999px; padding: 2px 10px; font-size: 11px; font-weight: 700;
 }
 .fin-paid-toggle.on { background: #e8f6ee; color: #1e7a46; border-color: #bfe3cd; }
+/* 기일이 지난 미수령 건 — 눌러서 입금 처리할 수 있되 배지처럼 눈에 걸리게. */
+.fin-paid-toggle.overdue { background: #fde2e1; border-color: #f3b8b4; }
 .fin-paid-toggle:disabled { cursor: default; opacity: 0.7; }
 
 /* Calendar */
