@@ -814,6 +814,21 @@ def statistics(months: int = 12):
         cust_rev: dict[str, dict[str, float]] = {c: {} for c in CURS}
         item_rev: dict[str, dict[str, dict]] = {c: {} for c in CURS}
 
+        # Top 10 랭킹은 매출이 잡힌 곳이 한둘뿐이어도 항상 10줄을 채운다(요청).
+        # 아래 집계 루프를 돌면서 기간 내 거래가 있었던 품목을 후보로 모아 두고,
+        # 매출 0 으로 뒤에 붙인다. 우선순위: 수주(오더) 품목 → 견적 품목.
+        pad_ord_items: list[dict] = []
+        pad_qtn_items: list[dict] = []
+
+        def _pad_items(dst: list[dict], rows):
+            seen = {r["part_no"] for r in dst}
+            for it in (rows or []):
+                pn = str(it.get("part_no") or "").strip()
+                if not pn or pn in seen:
+                    continue
+                seen.add(pn)
+                dst.append({"part_no": pn, "description": str(it.get("description") or "").strip()})
+
         # ── 세금계산서 발행월 매핑 ───────────────────────────────────────────────
         # 매출 인식 시점 = 세금계산서(TaxInvoiceData) 실제 발행일. AR 은 CI 를 거쳐
         # 세금계산서로 연결된다. (예전엔 stage_dates["11"](=결제완료, 게다가 수동)을
@@ -858,6 +873,7 @@ def statistics(months: int = 12):
                 continue
             cur = _cur2(q.currency)
             quote_series[cur][mo] += _quotation_total(q.items or [], getattr(q, "discount_pct", 0) or 0)
+            _pad_items(pad_qtn_items, q.items)
 
         # ── 수주금액(오더 수주월 기준) ──────────────────────────────────────────
         for o in orders_all:
@@ -874,6 +890,7 @@ def statistics(months: int = 12):
                 cur = _cur2(getattr(o, "currency", None) or "USD")
                 amt = _total_amount(o.items or [])
             order_series[cur][mo] += amt
+            _pad_items(pad_ord_items, o.items)
 
         # ── 품목별 매출(청구 품목=CI items 기준, 기간 내) ────────────────────────
         for ci in all_ci:
@@ -892,7 +909,9 @@ def statistics(months: int = 12):
         def _series_list(series):
             return {cur: [round(series[cur][mo], 2) for mo in month_labels] for cur in CURS}
 
-        def _top(dmap, key_field, n=10):
+        def _top(dmap, key_field, n=10, pad=()):
+            """상위 n건. 매출이 잡힌 건이 n 보다 적으면 pad(기간 내 거래는 있었지만
+            매출 0인 거래처·품목)로 뒤를 채워 항상 n줄을 돌려준다."""
             out = {}
             for cur in CURS:
                 if key_field == "customer":
@@ -900,6 +919,15 @@ def statistics(months: int = 12):
                 else:
                     items = [{"part_no": r["part_no"], "description": r["description"], "amount": round(r["amount"], 2)} for r in dmap[cur].values()]
                 items.sort(key=lambda x: x["amount"], reverse=True)
+                key = (lambda x: x["name"]) if key_field == "customer" else (lambda x: x["part_no"])
+                have = {key(x) for x in items}
+                for cand in pad:
+                    if len(items) >= n:
+                        break
+                    if key(cand) in have:
+                        continue
+                    have.add(key(cand))
+                    items.append({**cand, "amount": 0.0})
                 out[cur] = items[:n]
             return out
 
@@ -1074,6 +1102,23 @@ def statistics(months: int = 12):
         project_margin.sort(key=lambda x: -x["sales_usd"])
         project_margin = project_margin[:20]
 
+        # ── Top 10 채우기 후보(매출 0) ──────────────────────────────────────────
+        # 거래처: 올해 RFQ 를 준 곳 먼저(최근 수신 순), 그래도 모자라면 등록된 거래처.
+        # 품목: 수주 품목 → 견적 품목. 둘 다 "거래는 있었는데 아직 청구 전"인 대상이다.
+        cust_pad: list[dict] = []
+        _cust_seen: set[str] = set()
+        for r in sorted(period_rfqs, key=lambda x: _rfq_recv_month(x), reverse=True):
+            nm = cust_names.get(r.customer_id, "")
+            if nm and nm not in _cust_seen:
+                _cust_seen.add(nm)
+                cust_pad.append({"name": nm})
+        for nm in sorted(set(cust_names.values())):
+            if nm and nm not in _cust_seen:
+                _cust_seen.add(nm)
+                cust_pad.append({"name": nm})
+        item_pad = pad_ord_items + [it for it in pad_qtn_items
+                                    if it["part_no"] not in {x["part_no"] for x in pad_ord_items}]
+
         return {
             "months": month_labels,
             # 축은 12월까지 있으므로, KPI 스트립이 기본으로 설 달을 따로 알려준다.
@@ -1089,8 +1134,8 @@ def statistics(months: int = 12):
             "funnel": funnel,
             "project_margin": project_margin,
             "usd_krw_rate": USD_KRW_RATE,
-            "customer_top": _top(cust_rev, "customer"),
-            "item_top": _top(item_rev, "item"),
+            "customer_top": _top(cust_rev, "customer", pad=cust_pad),
+            "item_top": _top(item_rev, "item", pad=item_pad),
             "kpi": _kpi(),
             "delivery_delays": delivery_delays,
             "alerts": {
