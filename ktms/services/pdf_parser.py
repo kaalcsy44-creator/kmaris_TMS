@@ -310,6 +310,70 @@ JSON schema (all strings on one line, no embedded newlines):
     return _parse_response(response.content[0].text)
 
 
+_CARD_SCHEMA = """{
+  "company": string|null,
+  "contact_name": string|null,
+  "job_title": string|null,
+  "address": string|null,
+  "tax_id": string|null,
+  "website": string|null,
+  "emails": [string],
+  "phones": [string],
+  "regions": [string]
+}"""
+
+_CARD_INSTRUCTIONS = (
+    "Read the attached business card (name card) and extract the contact's details. "
+    "company = the organization name (drop legal-form noise only if it is not printed). "
+    "contact_name = the person's name in the language it is printed in (Latin spelling if both "
+    "are shown). job_title = the person's title/department. address = the full street address as "
+    "printed, on one line, comma separated, including postal code and country when printed, but "
+    "WITHOUT the company name. tax_id = business/company registration "
+    "or VAT/GST/UEN number if printed (labels such as 'Business No.', 'BRN', 'UEN', 'VAT', "
+    "'Tax ID', '사업자등록번호'); null otherwise. emails = every email address on the card. "
+    "phones = every phone/mobile/fax number, keeping the printed formatting and any extension "
+    "(prefix fax numbers with 'Fax '). regions = the country (or city-state such as Hong Kong / "
+    "Singapore) the address belongs to, in English. "
+    "Use null for missing single values and [] for missing lists. Do NOT invent anything that is "
+    "not printed on the card, and do NOT infer the address or tax id from outside knowledge."
+)
+
+
+def parse_business_card_image(image_bytes: bytes, media_type: str) -> dict:
+    """명함 이미지(사진/캡쳐)에서 회사·담당자·주소·연락처를 추출."""
+    prompt = f"""{_CARD_INSTRUCTIONS}
+Output ONLY a single-line compact JSON object (no newlines, no markdown).
+
+JSON schema (all strings on one line, no embedded newlines):
+{_CARD_SCHEMA}"""
+    return _parse_image(image_bytes, media_type, prompt)
+
+
+def parse_business_card_pdf_document(pdf_bytes: bytes) -> dict:
+    """명함 PDF(스캔본 포함)를 Claude 비전으로 읽어 필드를 추출."""
+    import base64
+    client = _anthropic_client()
+    b64 = base64.standard_b64encode(pdf_bytes).decode()
+    prompt = f"""{_CARD_INSTRUCTIONS}
+The attached file is a scan or export of a business card.
+Output ONLY a single-line compact JSON object (no newlines, no markdown).
+
+JSON schema (all strings on one line, no embedded newlines):
+{_CARD_SCHEMA}"""
+    response = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=2048,
+        messages=[{
+            "role": "user",
+            "content": [
+                {"type": "document", "source": {"type": "base64", "media_type": "application/pdf", "data": b64}},
+                {"type": "text", "text": prompt},
+            ],
+        }],
+    )
+    return _parse_response(response.content[0].text)
+
+
 def parse_order_fields(text: str, customer_names: list[str] | None = None) -> dict:
     """Use Claude Haiku to extract structured Order (customer P/O) fields from PDF text."""
     client = _anthropic_client()

@@ -21,6 +21,7 @@ import {
   fetchSettingsUsers,
   fetchSettingsVendors,
   fetchSettingsVessels,
+  parseBusinessCard,
   updateCompanyProfile,
   updateSettingsCustomer,
   updateSettingsItem,
@@ -46,6 +47,7 @@ import {
 import type { PermissionsConfig, RolePermRow, EmailTemplatesData } from "@/lib/api";
 import type { PermGrid } from "@/lib/auth";
 import type {
+  BusinessCardOcr,
   CompanyProfile,
   CustomerOption,
   SettingsCustomer,
@@ -63,7 +65,7 @@ import AppShell, { SectionHead } from "@/components/AppShell";
 import Modal from "@/components/common/Modal";
 import { invalidateCustomerLogos } from "@/lib/customerLogos";
 import { invalidateVendorLogos } from "@/lib/vendorLogos";
-import { fileToLogoDataUrl, imageFromClipboard } from "@/lib/imagePaste";
+import { downscaleImageFile, fileToLogoDataUrl, imageFromClipboard } from "@/lib/imagePaste";
 import { PAYMENT_TERMS_PRESETS } from "@/lib/terms";
 import ComboBox from "@/components/common/ComboBox";
 import { useColumnLayout } from "@/components/common/useColumnLayout";
@@ -894,6 +896,49 @@ function CustomersTab() {
         ["tax_invoice_email", "Tax invoice email"],
       ]}
       required="name"
+      topForm={(form, setForm) => (
+        <BusinessCardScan
+          onApply={(card) => {
+            const { next, filled } = applyBusinessCard(form, card);
+            setForm(next);
+            return filled;
+          }}
+        />
+      )}
+      renderField={({ key, label, form, setForm, rows }) => {
+        // 회사명 = 기존 등록 목록에서 고르거나(같은 회사의 다른 담당자 추가) 새로 입력.
+        if (key === "name") {
+          return (
+            <PickOrTypeField
+              label={label}
+              value={form.name}
+              options={uniqStrings(rows.map((r) => r.name))}
+              placeholder="Select an existing customer or type a new one…"
+              onChange={(v) => setForm(withCompanyDefaults(form, rows, v))}
+            />
+          );
+        }
+        // 주소·사업자번호 = 같은 회사로 등록된 값 중 선택, 없으면 직접 입력.
+        if (key === "address" || key === "tax_id") {
+          const mates = sameCompanyRows(rows, form.name);
+          const options = uniqStrings(mates.map((r) => (key === "address" ? r.address : r.tax_id)));
+          return (
+            <PickOrTypeField
+              label={label}
+              value={String(form[key] ?? "")}
+              options={options}
+              placeholder={options.length ? "Select or type…" : "Type…"}
+              hint={
+                form.name.trim() && !options.length
+                  ? "No saved value for this customer — type it in."
+                  : ""
+              }
+              onChange={(v) => setForm({ ...form, [key]: v })}
+            />
+          );
+        }
+        return null;
+      }}
       extraForm={(form, setForm) => (
         <>
           <MultiValueField label="Email" placeholder="name@company.com" values={form.emails} onChange={(emails) => setForm({ ...form, emails })} />
@@ -912,6 +957,176 @@ function CustomersTab() {
       allowCopy
       copyHint="Copies this info into a new record — keep the company, change the contact/email/region for a different person."
     />
+  );
+}
+
+// 기존 등록값 중에서 고르거나(토글) 목록에 없으면 직접 입력하는 필드.
+function PickOrTypeField({
+  label,
+  value,
+  options,
+  onChange,
+  placeholder,
+  hint,
+}: {
+  label: string;
+  value: string;
+  options: string[];
+  onChange: (v: string) => void;
+  placeholder?: string;
+  hint?: string;
+}) {
+  return (
+    <div className="form-field">
+      <label>{label}</label>
+      <ComboBox value={value ?? ""} onChange={onChange} options={options} placeholder={placeholder} />
+      {hint ? <span className="hint-inline">{hint}</span> : null}
+    </div>
+  );
+}
+
+// 공백·중복(대소문자 무시) 제거한 선택지 목록.
+function uniqStrings(values: (string | undefined | null)[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const v of values) {
+    const t = (v ?? "").trim();
+    if (!t || seen.has(t.toLowerCase())) continue;
+    seen.add(t.toLowerCase());
+    out.push(t);
+  }
+  return out;
+}
+
+// 같은 회사명으로 등록된 레코드들(레코드 1건 = 담당자 1명이라 회사당 여러 행이 있다).
+function sameCompanyRows<T extends { name: string }>(rows: T[], name: string): T[] {
+  const key = (name || "").trim().toLowerCase();
+  if (!key) return [];
+  return rows.filter((r) => (r.name || "").trim().toLowerCase() === key);
+}
+
+// 회사명을 기존 목록에서 고르면(=정확히 일치하면) 그 회사에 등록된 공통 정보를
+// 빈 칸에 한해 자동으로 채운다. 이미 입력한 값은 건드리지 않는다.
+function withCompanyDefaults<T extends { name: string }>(form: T, rows: T[], name: string): T {
+  const rec = { ...form, name } as Record<string, unknown>;
+  const mates = sameCompanyRows(rows, name);
+  if (!mates.length) return rec as unknown as T;
+  for (const key of ["address", "tax_id", "tax_invoice_email", "payment_terms", "logo"]) {
+    if (!(key in rec) || String(rec[key] ?? "").trim()) continue;
+    const first = uniqStrings(mates.map((r) => String((r as Record<string, unknown>)[key] ?? "")))[0];
+    if (first) rec[key] = first;
+  }
+  return rec as unknown as T;
+}
+
+// 명함 인식 결과를 폼에 반영 — 빈 칸만 채우고, 이메일·연락처·지역은 없는 값만 추가한다.
+// 반환값 filled = 실제로 채워진 항목 라벨(사용자에게 무엇이 들어갔는지 보여주기 위함).
+function applyBusinessCard<
+  T extends { name: string; contact: string; address: string; emails: string[]; phones: string[]; regions: string[] }
+>(form: T, card: BusinessCardOcr): { next: T; filled: string[] } {
+  const rec = { ...form } as Record<string, unknown>;
+  const filled: string[] = [];
+
+  function text(key: string, label: string, value?: string) {
+    const v = (value ?? "").trim();
+    if (!v || !(key in rec) || String(rec[key] ?? "").trim()) return;
+    rec[key] = v;
+    filled.push(label);
+  }
+  function multi(key: string, label: string, values?: string[]) {
+    const cur = ((rec[key] as string[]) ?? []).filter((v) => v.trim());
+    const add = uniqStrings(values ?? []).filter(
+      (v) => !cur.some((c) => c.trim().toLowerCase() === v.toLowerCase())
+    );
+    if (!add.length) return;
+    rec[key] = [...cur, ...add];
+    filled.push(label);
+  }
+
+  text("name", "Company", card.company);
+  text("contact", "Contact name", card.contact_name);
+  text("address", "Address", card.address);
+  text("tax_id", "Tax ID", card.tax_id);
+  multi("emails", "Email", card.emails);
+  multi("phones", "Phone", card.phones);
+  multi("regions", "Region", card.regions);
+
+  return { next: rec as unknown as T, filled };
+}
+
+// 명함 스캔 패널 — 사진을 붙여넣거나(Ctrl+V) 파일을 고르면 Claude 비전이 읽어
+// 회사·담당자·주소·사업자번호·이메일·연락처를 아래 입력칸에 채워 준다.
+function BusinessCardScan({ onApply }: { onApply: (card: BusinessCardOcr) => string[] }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [filled, setFilled] = useState<string[]>([]);
+  const [preview, setPreview] = useState("");
+
+  async function scan(file: File | null) {
+    if (!file) return;
+    setBusy(true);
+    setErr("");
+    setFilled([]);
+    try {
+      if (file.type.startsWith("image/")) {
+        setPreview(await fileToLogoDataUrl(file, 320).catch(() => ""));
+      } else {
+        setPreview("");
+      }
+      const card = await parseBusinessCard(await downscaleImageFile(file));
+      const applied = onApply(card);
+      setFilled(applied);
+      if (!applied.length) {
+        setErr("명함에서 새로 채울 내용을 찾지 못했습니다(이미 입력된 칸은 덮어쓰지 않습니다).");
+      }
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "명함 인식 실패");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="bc-scan">
+      <div className="bc-scan-head">
+        <span className="bc-scan-title">📇 Scan business card</span>
+        <span className="hint-inline">
+          명함 사진을 붙여넣거나(Ctrl+V) 파일을 고르면 아래 칸이 자동으로 채워집니다 — 비어 있는 칸만
+          채우고, 이메일·연락처는 없는 값만 추가합니다.
+        </span>
+      </div>
+      <div
+        className="logo-drop bc-drop"
+        tabIndex={0}
+        onPaste={(e) => {
+          const img = imageFromClipboard(e);
+          if (img) {
+            e.preventDefault();
+            scan(img);
+          }
+        }}
+      >
+        {preview ? (
+          <img className="bc-preview" src={preview} alt="business card" />
+        ) : (
+          <span className="logo-hint">Click here and paste (Ctrl+V), or choose a photo / PDF</span>
+        )}
+      </div>
+      <div className="logo-actions">
+        <input
+          type="file"
+          accept="image/png,image/jpeg,image/webp,application/pdf"
+          disabled={busy}
+          onChange={(e) => {
+            scan(e.target.files?.[0] ?? null);
+            e.target.value = "";
+          }}
+        />
+        {busy ? <span className="hint-inline">Reading card…</span> : null}
+        {filled.length ? <span className="action-ok">Filled: {filled.join(", ")}</span> : null}
+        {err ? <span className="action-err">{err}</span> : null}
+      </div>
+    </div>
   );
 }
 
@@ -1087,6 +1302,42 @@ function VendorsTab() {
         ["specialization", "Specialization"],
       ]}
       required="name"
+      topForm={(form, setForm) => (
+        <BusinessCardScan
+          onApply={(card) => {
+            const { next, filled } = applyBusinessCard(form, card);
+            setForm(next);
+            return filled;
+          }}
+        />
+      )}
+      renderField={({ key, label, form, setForm, rows }) => {
+        if (key === "name") {
+          return (
+            <PickOrTypeField
+              label={label}
+              value={form.name}
+              options={uniqStrings(rows.map((r) => r.name))}
+              placeholder="Select an existing vendor or type a new one…"
+              onChange={(v) => setForm(withCompanyDefaults(form, rows, v))}
+            />
+          );
+        }
+        if (key === "address") {
+          const options = uniqStrings(sameCompanyRows(rows, form.name).map((r) => r.address));
+          return (
+            <PickOrTypeField
+              label={label}
+              value={form.address}
+              options={options}
+              placeholder={options.length ? "Select or type…" : "Type…"}
+              hint={form.name.trim() && !options.length ? "No saved address for this vendor — type it in." : ""}
+              onChange={(v) => setForm({ ...form, address: v })}
+            />
+          );
+        }
+        return null;
+      }}
       extraForm={(form, setForm) => (
         <>
           <MultiValueField label="Email" placeholder="name@company.com" values={form.emails} onChange={(emails) => setForm({ ...form, emails })} />
@@ -2179,6 +2430,8 @@ function MasterSection<T extends { id: number }>({
   required,
   numeric = [],
   extraForm,
+  topForm,
+  renderField,
   allowCopy = false,
   copyHint,
   onSaved,
@@ -2195,6 +2448,17 @@ function MasterSection<T extends { id: number }>({
   required: keyof T;
   numeric?: (keyof T)[];
   extraForm?: (form: T, setForm: (next: T) => void) => ReactNode;
+  // 폼 상단(입력 칸 위) 영역 — 명함 스캔 같은 자동 입력 도구를 넣는다.
+  topForm?: (form: T, setForm: (next: T) => void, rows: T[]) => ReactNode;
+  // fields 중 일부를 커스텀 입력으로 대체(예: 기존 값 목록에서 고르는 콤보박스).
+  // null 을 반환하면 기본 TextField 를 쓴다. rows = 현재 등록된 전체 목록.
+  renderField?: (ctx: {
+    key: keyof T;
+    label: string;
+    form: T;
+    setForm: (next: T) => void;
+    rows: T[];
+  }) => ReactNode | null;
   allowCopy?: boolean; // 기존 항목 정보를 복사해 새 레코드로 등록 허용
   copyHint?: string; // 복사 모드 안내 문구
   onSaved?: () => void; // 생성/수정/삭제 성공 후 호출(예: 로고 캐시 무효화)
@@ -2285,16 +2549,21 @@ function MasterSection<T extends { id: number }>({
   const editor = editId !== null ? (
     <Modal title={editorTitle} onClose={cancel} form>
       {copying && copyHint ? <div className="ms-copy-hint">{copyHint}</div> : null}
+      {topForm?.(form, setForm, rows)}
       <div className="form-grid">
-        {fields.map(([key, label]) => (
-          <TextField
-            key={String(key)}
-            label={label}
-            type={numeric.includes(key) ? "number" : "text"}
-            value={String(form[key] ?? "")}
-            onChange={(v) => setForm({ ...form, [key]: numeric.includes(key) ? Number(v) : v })}
-          />
-        ))}
+        {fields.map(([key, label]) => {
+          const custom = renderField?.({ key, label, form, setForm, rows });
+          if (custom) return <Fragment key={String(key)}>{custom}</Fragment>;
+          return (
+            <TextField
+              key={String(key)}
+              label={label}
+              type={numeric.includes(key) ? "number" : "text"}
+              value={String(form[key] ?? "")}
+              onChange={(v) => setForm({ ...form, [key]: numeric.includes(key) ? Number(v) : v })}
+            />
+          );
+        })}
         {extraForm?.(form, setForm)}
       </div>
       <div className="form-actions">

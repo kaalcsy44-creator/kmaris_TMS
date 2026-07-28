@@ -292,6 +292,19 @@ export type RfqOcrResult = {
   }[];
 };
 
+// 명함(사진·캡쳐·PDF) 인식 결과 — Customer/Vendor 등록 폼 자동 채우기용.
+export type BusinessCardOcr = {
+  company?: string;
+  contact_name?: string;
+  job_title?: string;
+  address?: string;
+  tax_id?: string;
+  website?: string;
+  emails?: string[];
+  phones?: string[];
+  regions?: string[];
+};
+
 export type OrderOcrResult = {
   customer_hint?: string | null;
   po_no?: string | null;

@@ -11,6 +11,7 @@ import type {
   PoDetail,
   PoWorkItem,
   PoWorkOptions,
+  BusinessCardOcr,
   RfqOcrResult,
   RfqSourceFile,
   OrderOcrResult,
@@ -336,6 +337,13 @@ export function parseRfqPdf(file: File): Promise<RfqOcrResult> {
   const fd = new FormData();
   fd.append("file", file);
   return postForm<RfqOcrResult>("/api/admin/ocr/rfq", fd);
+}
+
+// 명함(사진·캡쳐·PDF) 인식 — Customer/Vendor 등록 폼 자동 입력용.
+export function parseBusinessCard(file: File): Promise<BusinessCardOcr> {
+  const fd = new FormData();
+  fd.append("file", file);
+  return postForm<BusinessCardOcr>("/api/admin/ocr/business-card", fd);
 }
 
 export function parseOrderPdf(file: File): Promise<OrderOcrResult> {

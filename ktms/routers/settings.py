@@ -21,6 +21,11 @@ from _core import (
     EmailTemplateSave,
     EmailTemplatePreviewReq,
     EmailSignatureSave,
+    File,
+    UploadFile,
+    _ocr_image_media_type,
+    parse_business_card_image,
+    parse_business_card_pdf_document,
     SIGNATURE_DOC_TYPE,
     resolve_signature,
     save_signature,
@@ -111,6 +116,54 @@ def settings_customers():
                 for c in s.query(Customer).order_by(Customer.name).all()]
     finally:
         s.close()
+
+
+@app.post("/api/admin/ocr/business-card", dependencies=[Depends(require_token)])
+def ocr_business_card(file: UploadFile = File(...)):
+    """명함 자동 입력 — 사진·캡쳐(이미지) 또는 PDF 스캔본을 Claude 비전으로 읽어
+    회사·담당자·주소·사업자번호·이메일·연락처를 뽑아 준다(Customer/Vendor 등록 폼용)."""
+    fname = (file.filename or "").lower()
+    img_media = _ocr_image_media_type(file)
+    try:
+        file.file.seek(0)
+        if img_media:
+            data = parse_business_card_image(file.file.read(), img_media)
+        elif fname.endswith(".pdf"):
+            data = parse_business_card_pdf_document(file.file.read())
+        else:
+            raise HTTPException(status_code=400, detail="이미지(PNG·JPG·WEBP) 또는 PDF 파일만 업로드할 수 있습니다.")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"명함 인식 실패: {exc}") from exc
+
+    def _text(key: str) -> str:
+        v = data.get(key)
+        return str(v).strip() if v not in (None, "") else ""
+
+    def _list(key: str) -> list[str]:
+        raw = data.get(key)
+        if isinstance(raw, str):
+            raw = [raw]
+        out, seen = [], set()
+        for v in (raw or []):
+            t = str(v).strip()
+            if t and t.lower() not in seen:
+                seen.add(t.lower())
+                out.append(t)
+        return out
+
+    return {
+        "company": _text("company"),
+        "contact_name": _text("contact_name"),
+        "job_title": _text("job_title"),
+        "address": _text("address"),
+        "tax_id": _text("tax_id"),
+        "website": _text("website"),
+        "emails": _list("emails"),
+        "phones": _list("phones"),
+        "regions": _list("regions"),
+    }
 
 
 @app.post("/api/admin/settings/customers", dependencies=[Depends(require_token)])

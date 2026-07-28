@@ -61,6 +61,7 @@ from services.pdf_svc import (
 from services.pdf_parser import (
     extract_text_from_pdf, parse_order_fields, parse_rfq_fields,
     parse_rfq_image, parse_order_image,
+    parse_business_card_image, parse_business_card_pdf_document,
     parse_vendor_quote_text, parse_vendor_quote_image,
     parse_vendor_quote_pdf_document,
 )
@@ -3182,6 +3183,8 @@ __all__ = [
     "make_document_xlsx",
     "order_tracking_step",
     "os",
+    "parse_business_card_image",
+    "parse_business_card_pdf_document",
     "parse_order_fields",
     "parse_order_image",
     "parse_rfq_fields",

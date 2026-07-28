@@ -6118,6 +6118,40 @@ table.mini .num {
   margin-top: 8px;
 }
 
+/* 명함 스캔 패널 — Customer/Vendor 등록 폼 맨 위. 붙여넣기·파일선택으로 자동 입력. */
+.bc-scan {
+  border: 1px solid #cfe0fb;
+  background: #f5f9ff;
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+}
+.bc-scan-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.bc-scan-title {
+  font-weight: 700;
+  font-size: 13px;
+  color: #1d4ed8;
+}
+.bc-scan .bc-drop {
+  background: #fff;
+  min-height: 72px;
+}
+.bc-scan .logo-actions {
+  flex-wrap: wrap;
+}
+.bc-preview {
+  max-height: 120px;
+  max-width: 100%;
+  object-fit: contain;
+  border-radius: 4px;
+}
+
 /* ── Progress: Table / Board 뷰 토글 ─────────────────────────────────────── */
 .pl-view-toggle {
   display: inline-flex;
