@@ -6775,7 +6775,12 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   min-width: 0;
   margin-top: 1px;
 }
-.pl-card-contact-row .vendor-mono-wrap { flex: none; }
+/* 담당자(좌)를 쓰고 남은 폭을 배지가 모두 가져가 우측 끝에서부터 채운다.
+   벤더가 많으면 담당자 이름이 줄임표가 되고, 배지는 들어가는 만큼만 보인다. */
+.pl-card-contact-row .vendor-mono-wrap {
+  flex: 1 1 auto;
+  justify-content: flex-end;
+}
 /* 고객사 담당자 — 회색으로 낮춰, 좁으면 줄임표. vendor 배지는 우측 끝단 고정. */
 .pl-card-contact {
   flex: 0 1 auto;
@@ -6845,11 +6850,21 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   margin-top: 4px;
 }
 /* 연결 vendor 를 색상 이니셜 배지로 표시(로고 대신, 이름은 툴팁). */
+/* vendor 배지 줄 — 벤더 수만큼 전부 렌더하고, 자리가 없는 배지는 다음 줄로 흘러
+   보낸 뒤 한 줄 높이(18px)로 잘라 감춘다. 이렇게 하면 개수를 미리 정해두지 않아도
+   폭이 허락하는 만큼 배지가 늘어서고, 잘릴 때도 원이 반쪽 나지 않는다.
+   min-width 18px = 아무리 좁아도 배지 하나는 온전히 보이게. */
 .vendor-mono-wrap {
   display: inline-flex;
   align-items: center;
+  /* 넘친 줄이 위로 밀려 첫 줄이 반쯤 잘리지 않도록 줄을 위에서부터 쌓는다. */
+  align-content: flex-start;
+  flex-wrap: wrap;
   gap: 3px;
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 18px;
+  max-height: 18px;
+  overflow: hidden;
 }
 .vendor-mono {
   display: inline-flex;
@@ -6864,11 +6879,6 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   line-height: 1;
   color: #fff;
   flex: none;
-}
-.vendor-mono.more {
-  background: var(--head-bg);
-  color: var(--muted);
-  font-size: 9px;
 }
 /* 견적 미수신(RFQ만 발송) 벤더 — 흐린 점선 테두리 고스트 배지. */
 .vendor-mono.ghost {

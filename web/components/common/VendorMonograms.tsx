@@ -3,9 +3,10 @@
 // 프로젝트 카드에서 연결된 vendor를 "색상 이니셜 모노그램"으로 표시한다.
 // 벤더 로고 커버리지가 부분적(업로드된 것만)이라 로고 대신 이니셜 원형 배지를 쓰고,
 // 전체 이름은 hover 툴팁으로 제공한다. 여러 vendor(vrfq_vendors는 "\n", PO vendor는
-// "," 로 연결)를 분리해 최대 MAX개만 배지로 보여주고 나머지는 +N 으로 접는다.
-
-const MAX = 4;
+// "," 로 연결)를 분리해 전부 렌더하고, 한 줄에 들어가는 만큼만 보이게 하는 일은
+// CSS(.vendor-mono-wrap: flex-wrap + 한 줄 높이로 clip)에 맡긴다. 개수를 미리
+// 잘라 "+N" 으로 접으면 카드가 넓어도 배지가 늘 4개에서 멈춰 공간이 남았다.
+// 앞쪽(견적 제출 벤더)부터 채우므로, 잘리는 쪽은 항상 우선순위가 낮은 벤더다.
 
 /** "\n" 또는 "," 로 이어진 vendor 문자열을 개별 이름으로 분리(중복 제거). */
 function splitVendors(value: string): string[] {
@@ -52,8 +53,6 @@ export default function VendorMonograms({
       ? [...statuses].sort((a, b) => Number(b.quoted) - Number(a.quoted))
       : splitVendors(value || "").map((n) => ({ name: n, quoted: true }));
   if (entries.length === 0) return null;
-  const shown = entries.slice(0, MAX);
-  const extra = entries.length - shown.length;
   const label = entries
     .map((e) => (e.quoted ? e.name : `${e.name} (견적 미수신)`))
     .join(", ");
@@ -62,7 +61,7 @@ export default function VendorMonograms({
       className={`vendor-mono-wrap${className ? ` ${className}` : ""}`}
       title={`Vendor: ${label}`}
     >
-      {shown.map((e, i) => (
+      {entries.map((e, i) => (
         <span
           key={i}
           className={`vendor-mono${e.quoted ? "" : " ghost"}`}
@@ -72,14 +71,6 @@ export default function VendorMonograms({
           {initials(e.name)}
         </span>
       ))}
-      {extra > 0 ? (
-        <span
-          className="vendor-mono more"
-          title={entries.slice(MAX).map((e) => (e.quoted ? e.name : `${e.name} (견적 미수신)`)).join(", ")}
-        >
-          +{extra}
-        </span>
-      ) : null}
     </span>
   );
 }
