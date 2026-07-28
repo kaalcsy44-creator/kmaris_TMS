@@ -62,6 +62,7 @@ import WorkTypeBadge from "./WorkTypeBadge";
 import FilterTable, { ColumnDef } from "./common/FilterTable";
 import { identityColumns, projectNoColumn, statusColumns } from "./common/identityColumns";
 import VendorName from "./common/VendorName";
+import VendorSelect from "./common/VendorSelect";
 import CustomerName from "./common/CustomerName";
 import { imageFromClipboard } from "@/lib/imagePaste";
 import Modal from "./common/Modal";
@@ -1051,21 +1052,16 @@ function VendorRfqDetailModal({
               <div className="form-grid">
                 <div className="form-field">
                   <label>Vendor</label>
-                  <select
+                  <VendorSelect
                     value={vendorId}
-                    onChange={(e) => {
-                      const id = e.target.value === "" ? "" : Number(e.target.value);
+                    options={vendors}
+                    onChange={(id) => {
                       setVendorId(id);
                       // 벤더 선택 시 저장된 해당 벤더 이메일로 자동 변경.
                       const v = vendors.find((x) => x.id === id);
                       if (v) setEmail(v.email || "");
                     }}
-                  >
-                    <option value="">Select…</option>
-                    {vendors.map((v) => (
-                      <option key={v.id} value={v.id}>{v.name}</option>
-                    ))}
-                  </select>
+                  />
                 </div>
                 <div className="form-field">
                   <label>K-Maris RFQ No.</label>
@@ -2097,20 +2093,17 @@ function CustomerQuoteDetailModal({
           <div className="form-grid quote-meta-grid">
             <div className="form-field">
               <label>Select Vendor quote</label>
-              <select
+              <VendorSelect
                 value={importVqId}
-                onChange={(e) => setImportVqId(e.target.value === "" ? "" : Number(e.target.value))}
+                options={vendorQuotes.map((v) => ({
+                  id: v.id,
+                  name: v.vendor,
+                  label: `${v.received_date || "—"} · ${v.vendor} · ${v.vendor_quote_no}`,
+                }))}
+                placeholder={vendorQuotes.length === 0 ? "No Vendor quote received" : "Manual entry"}
                 disabled={vendorQuotes.length === 0}
-              >
-                <option value="">
-                  {vendorQuotes.length === 0 ? "No Vendor quote received" : "Manual entry"}
-                </option>
-                {vendorQuotes.map((v) => (
-                  <option key={v.id} value={v.id}>
-                    {v.received_date || "—"} · {v.vendor} · {v.vendor_quote_no}
-                  </option>
-                ))}
-              </select>
+                onChange={setImportVqId}
+              />
             </div>
             <div className="form-field">
               <label>Quotation No.</label>
@@ -2625,15 +2618,7 @@ function VendorRfqAction({
       <div className="form-grid">
         <div className="form-field">
           <label>Vendor</label>
-          <select
-            value={vendorId}
-            onChange={(e) => selectVendor(e.target.value === "" ? "" : Number(e.target.value))}
-          >
-            <option value="">Select…</option>
-            {vendors.map((v) => (
-              <option key={v.id} value={v.id}>{v.name}</option>
-            ))}
-          </select>
+          <VendorSelect value={vendorId} options={vendors} onChange={selectVendor} />
         </div>
         <div className="form-field">
           <label>K-Maris RFQ No.</label>
@@ -3017,19 +3002,13 @@ function VendorQuoteAction({
           <div className="received-fields">
             <div className="form-field">
               <label>Select Vendor RFQ</label>
-              <select
+              {/* 옵션 라벨이 벤더명이라 벤더 로고를 함께 보여준다(값은 Vendor RFQ id). */}
+              <VendorSelect
                 value={vrfqId}
-                onChange={(e) =>
-                  setVrfqId(e.target.value === "" ? "" : Number(e.target.value))
-                }
-              >
-                <option value="">Select Vendor RFQ…</option>
-                {vendorRfqs.map((v) => (
-                  <option key={v.id} value={v.id}>
-                    {v.vendor}
-                  </option>
-                ))}
-              </select>
+                options={vendorRfqs.map((v) => ({ id: v.id, name: v.vendor }))}
+                placeholder="Select Vendor RFQ…"
+                onChange={setVrfqId}
+              />
             </div>
             <div className="form-field">
               <label>Vendor quote no.</label>
@@ -3531,20 +3510,17 @@ function CustomerQuoteAction({
       <div className="form-grid quote-meta-grid">
         <div className="form-field">
           <label>Select Vendor quote</label>
-          <select
+          <VendorSelect
             value={importVqId}
-            onChange={(e) => setImportVqId(e.target.value === "" ? "" : Number(e.target.value))}
+            options={vendorQuotes.map((v) => ({
+              id: v.id,
+              name: v.vendor,
+              label: `${v.received_date || "—"} · ${v.vendor} · ${v.vendor_quote_no}`,
+            }))}
+            placeholder={vendorQuotes.length === 0 ? "No Vendor quote received" : "— Manual entry —"}
             disabled={vendorQuotes.length === 0}
-          >
-            <option value="">
-              {vendorQuotes.length === 0 ? "No Vendor quote received" : "— Manual entry —"}
-            </option>
-            {vendorQuotes.map((v) => (
-              <option key={v.id} value={v.id}>
-                {v.received_date || "—"} · {v.vendor} · {v.vendor_quote_no}
-              </option>
-            ))}
-          </select>
+            onChange={setImportVqId}
+          />
         </div>
         <div className="form-field">
           <label>Quotation No.</label>

@@ -27,6 +27,7 @@ import { useCachedData, invalidateCache } from "@/lib/useCachedData";
 import FilterTable, { ColumnDef } from "@/components/common/FilterTable";
 import { identityColumns, projectNoColumn } from "@/components/common/identityColumns";
 import VendorName from "@/components/common/VendorName";
+import VendorSelect from "@/components/common/VendorSelect";
 import CustomerName from "@/components/common/CustomerName";
 import Modal from "@/components/common/Modal";
 import BaseMetaRows, { ModalTitle } from "@/components/common/BaseMeta";
@@ -1112,12 +1113,7 @@ function VendorPoDetailModal({
           <div className="form-grid">
             <div className="form-field">
               <label>Vendor</label>
-              <select value={vendorId} onChange={(e) => setVendorId(e.target.value ? Number(e.target.value) : "")}>
-                <option value="">Select…</option>
-                {vendorChoices.map((v) => (
-                  <option key={v.id} value={v.id}>{v.name}</option>
-                ))}
-              </select>
+              <VendorSelect value={vendorId} options={vendorChoices} onChange={setVendorId} />
             </div>
             <div className="form-field">
               <label>K-Maris PO No.</label>
@@ -1704,14 +1700,7 @@ function VendorPoCreate({
         )}
         <div className="form-field">
           <label>Vendor</label>
-          <select value={vendorId} onChange={(e) => setVendorId(e.target.value ? Number(e.target.value) : "")}>
-            <option value="">Select…</option>
-            {vendorChoices.map((v) => (
-              <option key={v.id} value={v.id}>
-                {v.name}
-              </option>
-            ))}
-          </select>
+          <VendorSelect value={vendorId} options={vendorChoices} onChange={setVendorId} />
         </div>
         <div className="form-field">
           <label>K-Maris PO No.</label>
