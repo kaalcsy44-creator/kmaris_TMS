@@ -853,7 +853,9 @@ function InflowTab() {
   const setView = (v: InflowView) => setParams({ view: v === "receivables" ? "" : v });
   const from = params.get("from") || "";
   const to = params.get("to") || "";
-  const [openOnly, setOpenOnly] = useState(true);
+  // 원장은 기본적으로 전부 보여준다 — 켜 두면 수금이 끝난 청구서가 목록에서 사라져
+  // "그 청구서 어디 갔지"가 된다. 미수만 추리고 싶을 때만 사용자가 켠다.
+  const [openOnly, setOpenOnly] = useState(false);
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<FinanceReceivable | null>(null);
   const [receiving, setReceiving] = useState<{ row: FinanceReceivable; occurrence: string } | null>(null);
