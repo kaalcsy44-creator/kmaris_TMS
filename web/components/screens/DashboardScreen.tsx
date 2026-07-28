@@ -923,8 +923,11 @@ function StatisticsTab() {
   }
 
   const { ops, perf } = data;
-  // 선택 월 인덱스(기본 최신월) — 금액 KPI 3종은 월별 시계열에서 직접 뽑는다.
-  const lastIdx = stat.months.length - 1;
+  // 선택 월 인덱스(기본 이번 달) — 금액 KPI 3종은 월별 시계열에서 직접 뽑는다.
+  // 그래프 축은 1~12월이라 마지막 칸이 12월(미래)이다. KPI 는 아직 오지 않은 달로
+  // 넘어가지 않게 '이번 달'을 오른쪽 끝으로 삼는다.
+  const curIdx = stat.current_month ? stat.months.indexOf(stat.current_month) : -1;
+  const lastIdx = curIdx >= 0 ? curIdx : stat.months.length - 1;
   const idx = monthIdx == null ? lastIdx : Math.min(Math.max(monthIdx, 0), lastIdx);
   const selMonth = stat.months[idx];
   const isCurMonth = idx === lastIdx;
@@ -936,14 +939,17 @@ function StatisticsTab() {
 
   // 차트 데이터 변환 ---------------------------------------------------------
   const monthLabel = (m: string) => m.slice(2); // "2026-07" → "26-07"
+  // 축은 1~12월 전체지만, 아직 오지 않은 달은 0 이 아니라 "값 없음"(null)으로 둔다.
+  // 0 으로 그리면 추이선이 연말까지 바닥을 기어 실적이 떨어진 것처럼 보인다.
+  const future = (i: number) => lastIdx >= 0 && i > lastIdx;
   const trendData = stat.months.map((m, i) => ({
     month: monthLabel(m),
-    revenue: stat.series.revenue[cur][i],
+    revenue: future(i) ? null : stat.series.revenue[cur][i],
   }));
   const quoteVsOrder = stat.months.map((m, i) => ({
     month: monthLabel(m),
-    quote: stat.series.quote[cur][i],
-    order: stat.series.order[cur][i],
+    quote: future(i) ? null : stat.series.quote[cur][i],
+    order: future(i) ? null : stat.series.order[cur][i],
   }));
   const custTop = stat.customer_top[cur].map((r) => ({ name: r.name, amount: r.amount }));
   const itemTop = stat.item_top[cur].map((r) => ({
@@ -976,9 +982,8 @@ function StatisticsTab() {
   const money = (n: number) => Math.round(n).toLocaleString();
 
   // 신규 차트 데이터 -------------------------------------------------------
-  // 월간 RFQ 수신 그래프 — 축은 올해 1~12월 고정(수신 없는 달은 0으로 비운다).
-  // 구 버전 API 응답(rfq_months 없음)은 종전처럼 통계 기간(months)에 맞춘다.
-  const rfqData = (stat.rfq_months ?? stat.months).map((m, i) => ({
+  // 월간 RFQ 수신 그래프 — 축은 months(올해 1~12월). 수신 없는 달은 0으로 비운다.
+  const rfqData = stat.months.map((m, i) => ({
     month: monthLabel(m), count: stat.rfq_count[i] || 0, detail: stat.rfq_detail[i] || [],
   }));
   const toCur = (usd: number) => (cur === "KRW" ? usd * stat.usd_krw_rate : usd);

@@ -66,8 +66,9 @@ from _core import (
     timezone,
 )
 
-# 통계 그래프의 고정 시작 월(년, 월). 이 달부터 이번 달까지 누적 표시한다.
-STATS_START_YM = (2026, 5)
+# 통계 그래프의 가로축은 올해 1~12월 고정이다(아래 month_labels). 예전에는
+# STATS_START_YM(2026-05)부터 이번 달까지만 축에 올렸는데, 달이 바뀔 때마다 축
+# 길이가 달라져 그래프끼리·달끼리 비교가 어려웠다.
 
 
 
@@ -794,20 +795,14 @@ def statistics(months: int = 12):
                 if all(x.id != _o.id for x in _lst):
                     _lst.append(_o)
 
-        # ── 월 버킷(고정 시작월 STATS_START_YM ~ 이번 달, KST) ────────────────────
-        # 통계 그래프는 2026-05 부터 누적해서 보여준다(요청). 최대 36개월로 안전 제한.
+        # ── 월 버킷(올해 1~12월, KST) ─────────────────────────────────────────────
+        # 모든 월별 그래프가 같은 1~12월 축을 쓴다. 아직 오지 않은 달은 0으로 남는다.
         now_kst = datetime.now(timezone.utc) + timedelta(hours=9)
-        month_labels: list[str] = []
-        y, m = STATS_START_YM
-        while (y, m) <= (now_kst.year, now_kst.month):
-            month_labels.append(f"{y:04d}-{m:02d}")
-            m += 1
-            if m == 13:
-                m, y = 1, y + 1
-        month_labels = month_labels[-36:] or [f"{now_kst.year:04d}-{now_kst.month:02d}"]
+        month_labels: list[str] = [f"{now_kst.year:04d}-{m:02d}" for m in range(1, 13)]
         month_set = set(month_labels)
-        cur_month = month_labels[-1]
-        prev_month = month_labels[-2] if len(month_labels) >= 2 else ""
+        # KPI 스트립의 기준월 = 축의 마지막(12월)이 아니라 '이번 달'.
+        cur_month = f"{now_kst.year:04d}-{now_kst.month:02d}"
+        prev_month = f"{now_kst.year:04d}-{now_kst.month - 1:02d}" if now_kst.month > 1 else ""
 
         CURS = ("USD", "KRW")
         # series[currency][metric] = {month: amount}
@@ -983,18 +978,13 @@ def statistics(months: int = 12):
             recv = (getattr(r, "received_at", None) or r.date
                     or (r.created_at.isoformat() if r.created_at else ""))
             return _month_key(recv)
-        # 막대 그래프는 올해 1~12월을 통째로 축으로 쓴다(수신 없는 달은 0). 통계 기간
-        # (month_labels, STATS_START_YM~이번 달)에 맞춰 잘라내면 축 길이가 달마다
-        # 늘어나 달 사이 비교가 어려웠다. 아래 퍼널·마진은 종전대로 통계 기간 기준.
-        rfq_year_months = [f"{now_kst.year:04d}-{m:02d}" for m in range(1, 13)]
-        rfq_count = {mo: 0 for mo in rfq_year_months}
-        rfq_detail: dict[str, list] = {mo: [] for mo in rfq_year_months}
+        rfq_count = {mo: 0 for mo in month_labels}
+        rfq_detail: dict[str, list] = {mo: [] for mo in month_labels}
         period_rfqs = []
         for r in rfq_map.values():
             mo = _rfq_recv_month(r)
             if mo in month_set:
                 period_rfqs.append(r)
-            if mo in rfq_count:
                 rfq_count[mo] += 1
                 rfq_detail[mo].append({
                     "rfq_no": _rfq_no_disp(r.rfq_no),
@@ -1086,16 +1076,16 @@ def statistics(months: int = 12):
 
         return {
             "months": month_labels,
+            # 축은 12월까지 있으므로, KPI 스트립이 기본으로 설 달을 따로 알려준다.
+            "current_month": cur_month,
             "currencies": list(CURS),
             "series": {
                 "revenue": _series_list(rev_series),
                 "quote": _series_list(quote_series),
                 "order": _series_list(order_series),
             },
-            # 월간 RFQ 수신 그래프 전용 축(올해 1~12월) — 위 months 와 길이가 다르다.
-            "rfq_months": rfq_year_months,
-            "rfq_count": [rfq_count[mo] for mo in rfq_year_months],
-            "rfq_detail": [rfq_detail[mo] for mo in rfq_year_months],
+            "rfq_count": [rfq_count[mo] for mo in month_labels],
+            "rfq_detail": [rfq_detail[mo] for mo in month_labels],
             "funnel": funnel,
             "project_margin": project_margin,
             "usd_krw_rate": USD_KRW_RATE,
