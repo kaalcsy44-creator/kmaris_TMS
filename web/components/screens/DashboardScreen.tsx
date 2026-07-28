@@ -976,7 +976,9 @@ function StatisticsTab() {
   const money = (n: number) => Math.round(n).toLocaleString();
 
   // 신규 차트 데이터 -------------------------------------------------------
-  const rfqData = stat.months.map((m, i) => ({
+  // 월간 RFQ 수신 그래프 — 축은 올해 1~12월 고정(수신 없는 달은 0으로 비운다).
+  // 구 버전 API 응답(rfq_months 없음)은 종전처럼 통계 기간(months)에 맞춘다.
+  const rfqData = (stat.rfq_months ?? stat.months).map((m, i) => ({
     month: monthLabel(m), count: stat.rfq_count[i] || 0, detail: stat.rfq_detail[i] || [],
   }));
   const toCur = (usd: number) => (cur === "KRW" ? usd * stat.usd_krw_rate : usd);
@@ -1224,7 +1226,14 @@ function StatisticsTab() {
               <YAxis allowDecimals={false} tick={{ fontSize: 11 }} width={32} />
               <Tooltip content={<RfqTip />} />
               <Bar dataKey="count" fill="#0055a8" name="RFQ" radius={[3, 3, 0, 0]}>
-                <LabelList dataKey="count" position="top" style={{ fontSize: 11, fill: "#45526a" }} />
+                {/* 축이 1~12월 고정이라 수신 없는 달이 여럿 생긴다 — 0 은 라벨을 지워
+                    바닥에 0 이 줄줄이 찍히지 않게 한다(툴팁에는 "수신 없음"으로 안내). */}
+                <LabelList
+                  dataKey="count"
+                  position="top"
+                  style={{ fontSize: 11, fill: "#45526a" }}
+                  formatter={(v) => (Number(v) > 0 ? String(v) : "")}
+                />
               </Bar>
             </BarChart>
           </ResponsiveContainer>

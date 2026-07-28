@@ -983,13 +983,18 @@ def statistics(months: int = 12):
             recv = (getattr(r, "received_at", None) or r.date
                     or (r.created_at.isoformat() if r.created_at else ""))
             return _month_key(recv)
-        rfq_count = {mo: 0 for mo in month_labels}
-        rfq_detail: dict[str, list] = {mo: [] for mo in month_labels}
+        # 막대 그래프는 올해 1~12월을 통째로 축으로 쓴다(수신 없는 달은 0). 통계 기간
+        # (month_labels, STATS_START_YM~이번 달)에 맞춰 잘라내면 축 길이가 달마다
+        # 늘어나 달 사이 비교가 어려웠다. 아래 퍼널·마진은 종전대로 통계 기간 기준.
+        rfq_year_months = [f"{now_kst.year:04d}-{m:02d}" for m in range(1, 13)]
+        rfq_count = {mo: 0 for mo in rfq_year_months}
+        rfq_detail: dict[str, list] = {mo: [] for mo in rfq_year_months}
         period_rfqs = []
         for r in rfq_map.values():
             mo = _rfq_recv_month(r)
             if mo in month_set:
                 period_rfqs.append(r)
+            if mo in rfq_count:
                 rfq_count[mo] += 1
                 rfq_detail[mo].append({
                     "rfq_no": _rfq_no_disp(r.rfq_no),
@@ -1087,8 +1092,10 @@ def statistics(months: int = 12):
                 "quote": _series_list(quote_series),
                 "order": _series_list(order_series),
             },
-            "rfq_count": [rfq_count[mo] for mo in month_labels],
-            "rfq_detail": [rfq_detail[mo] for mo in month_labels],
+            # 월간 RFQ 수신 그래프 전용 축(올해 1~12월) — 위 months 와 길이가 다르다.
+            "rfq_months": rfq_year_months,
+            "rfq_count": [rfq_count[mo] for mo in rfq_year_months],
+            "rfq_detail": [rfq_detail[mo] for mo in rfq_year_months],
             "funnel": funnel,
             "project_margin": project_margin,
             "usd_krw_rate": USD_KRW_RATE,

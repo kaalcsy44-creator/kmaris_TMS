@@ -1453,8 +1453,9 @@ export type StatisticsData = {
   months: string[];
   currencies: CurrencyKey[];
   series: { revenue: StatSeries; quote: StatSeries; order: StatSeries };
-  rfq_count: number[];                 // 월간 RFQ 수신 건수(months 순서)
-  rfq_detail: StatRfqDetailRow[][];    // 월별 RFQ 상세(호버용, months 순서)
+  rfq_months?: string[];               // 월간 RFQ 그래프 축 = 올해 1~12월(months 와 별개)
+  rfq_count: number[];                 // 월간 RFQ 수신 건수(rfq_months 순서)
+  rfq_detail: StatRfqDetailRow[][];    // 월별 RFQ 상세(호버용, rfq_months 순서)
   funnel: StatFunnel;                  // RFQ→Quote→PO→Revenue 전환
   project_margin: StatProjectMargin[]; // 프로젝트별 마진(USD 환산)
   usd_krw_rate: number;                // 마진 KRW 환산용 고정환율
