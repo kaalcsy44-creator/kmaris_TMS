@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { tr } from "@/lib/labels";
 import {
   fetchCustomers,
@@ -112,7 +112,10 @@ export default function NewRfqForm({
   const [assigneeId, setAssigneeId] = useState<number>(0);   // 편집 대상 RFQ의 담당자(PIC) — 저장 시 보존(재지정은 상세 헤더에서)
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
   const [vessels, setVessels] = useState<SettingsVessel[]>([]);
+  // customerId 는 "고객사+담당자" 레코드 1건의 id(레코드1=담당자1). 화면에서는 회사명과
+  // 담당자를 두 개의 select 로 나눠 고르며, companyName 이 선택한 회사(1단계)를 들고 있다.
   const [customerId, setCustomerId] = useState<number | "">("");
+  const [companyName, setCompanyName] = useState("");
   const [vesselId, setVesselId] = useState<number | "">("");
   const [custRfqNo, setCustRfqNo] = useState("");
   const [contactPerson, setContactPerson] = useState("");
@@ -359,6 +362,7 @@ export default function NewRfqForm({
     setEditId(null);
     setAssigneeId(0);
     setCustomerId("");
+    setCompanyName("");
     setVesselId("");
     setCustRfqNo("");
     setContactPerson("");
@@ -385,6 +389,7 @@ export default function NewRfqForm({
       setLoadedRfqNo(d.rfq_no && d.rfq_no !== "-" ? d.rfq_no : "");
       setAssigneeId(d.assignee_id ?? 0);
       setCustomerId(d.customer_id || "");
+      setCompanyName(customers.find((c) => c.id === d.customer_id)?.name || "");
       setVesselId(d.vessel_id || "");
       setCustRfqNo(d.customer_rfq_no || "");
       setContactPerson(d.contact_person || "");
@@ -417,7 +422,7 @@ export default function NewRfqForm({
 
   async function submit() {
     if (customerId === "") {
-      setErr("Select a customer.");
+      setErr(companyName ? "Select a customer contact." : "Select a customer.");
       return;
     }
     setBusy(true);
@@ -478,6 +483,44 @@ export default function NewRfqForm({
   }
 
   const customerName = customerId === "" ? "" : (customers.find((c) => c.id === customerId)?.name || "");
+
+  // 회사 목록(중복 제거) — Customer select 는 회사명만 보여준다.
+  const companyNames = useMemo(() => {
+    const seen: string[] = [];
+    for (const c of customers) if (!seen.includes(c.name)) seen.push(c.name);
+    return seen;
+  }, [customers]);
+  // 선택한 회사에 속한 담당자 레코드들 — Customer contact select 의 선택지.
+  const companyContacts = useMemo(
+    () => (companyName ? customers.filter((c) => c.name === companyName) : []),
+    [customers, companyName]
+  );
+  // 목록 로드·불러오기·빠른등록 등으로 customerId 가 밖에서 정해지면 회사 select 를 맞춰준다.
+  useEffect(() => {
+    if (customerId === "") return;
+    const c = customers.find((x) => x.id === customerId);
+    if (c && c.name !== companyName) setCompanyName(c.name);
+  }, [customerId, customers, companyName]);
+
+  // 회사를 고르면 담당자 후보를 좁힌다. 담당자가 1명뿐이면 그대로 확정.
+  function pickCompany(name: string) {
+    setCompanyName(name);
+    const list = name ? customers.filter((c) => c.name === name) : [];
+    if (list.length === 1) {
+      setCustomerId(list[0].id);
+      setContactPerson(list[0].contact || "");
+    } else {
+      setCustomerId("");
+      setContactPerson("");
+    }
+  }
+
+  // 담당자를 고르면 해당 레코드가 이 RFQ 의 Customer 가 된다.
+  function pickContact(id: number | "") {
+    setCustomerId(id);
+    const c = id === "" ? undefined : customers.find((x) => x.id === id);
+    setContactPerson(c?.contact || "");
+  }
 
   return (
     <div className={embedded ? undefined : "panel form-panel"} onPaste={handlePaste}>
@@ -619,31 +662,40 @@ export default function NewRfqForm({
         <div className="basic-col">
           <div className="basic-col-title">Customer &amp; vessel</div>
           <Field label="Customer *">
-            <select
-              value={customerId}
-              onChange={(e) => {
-                const id = e.target.value === "" ? "" : Number(e.target.value);
-                setCustomerId(id);
-                // 선택한 Customer의 담당자를 함께 채운다(있으면).
-                const c = id === "" ? undefined : customers.find((x) => x.id === id);
-                if (c?.contact) setContactPerson(c.contact);
-              }}
-            >
+            <select value={companyName} onChange={(e) => pickCompany(e.target.value)}>
               <option value="">Select…</option>
-              {customers.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                  {c.contact ? ` — ${c.contact}` : ""}
+              {companyNames.map((n) => (
+                <option key={n} value={n}>
+                  {n}
                 </option>
               ))}
             </select>
           </Field>
-          <Field label="Customer contact">
-            <input
-              value={contactPerson}
-              onChange={(e) => setContactPerson(e.target.value)}
-              placeholder="Contact name/title (optional)"
-            />
+          <Field label={companyContacts.length > 1 ? "Customer contact *" : "Customer contact"}>
+            <select
+              value={customerId}
+              disabled={!companyName}
+              onChange={(e) =>
+                pickContact(e.target.value === "" ? "" : Number(e.target.value))
+              }
+            >
+              <option value="">
+                {companyName ? "Select contact…" : "Select a customer first"}
+              </option>
+              {companyContacts.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.contact || "(no contact)"}
+                </option>
+              ))}
+            </select>
+            {/* Auto-fill·기존 저장값이 선택한 담당자와 다를 때만 원래 값을 알려준다. */}
+            {contactPerson &&
+            customerId !== "" &&
+            contactPerson !== (customers.find((c) => c.id === customerId)?.contact || "") ? (
+              <div className="hint-inline" style={{ marginTop: 3 }}>
+                Saved as “{contactPerson}”
+              </div>
+            ) : null}
           </Field>
           <Field label="Vessel">
             <select
