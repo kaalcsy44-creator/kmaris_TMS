@@ -118,6 +118,114 @@ function toLocalDt(v?: string): string {
   return s.slice(0, 16);
 }
 
+// ── 견적 유효기간 ────────────────────────────────────────────────────────────
+// 견적서는 "Sent at 으로부터 N일" 로 정하고 만료일을 함께 적는다. 실무에선 30일이
+// 기본이라 신규 견적은 30일로 시드하고, 일수와 날짜 중 아무 쪽이나 고쳐도 다른 쪽이
+// 따라오게 한다(상호 동기화). 저장 값은 지금처럼 날짜(valid_until) 하나뿐이다.
+const DEFAULT_VALID_DAYS = 30;
+
+/** "YYYY-MM-DDTHH:MM" / "YYYY-MM-DD" 에서 날짜부만. 비면 오늘. */
+function dateOnly(v?: string): string {
+  const s = (v || "").trim();
+  if (s.length >= 10) return s.slice(0, 10);
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+/** 날짜 문자열 + n일. 서머타임 영향이 없도록 UTC 달력으로 계산한다. */
+function addDaysToDate(date: string, n: number): string {
+  const [y, m, d] = dateOnly(date).split("-").map(Number);
+  const t = new Date(Date.UTC(y, m - 1, d + n));
+  const p = (x: number) => String(x).padStart(2, "0");
+  return `${t.getUTCFullYear()}-${p(t.getUTCMonth() + 1)}-${p(t.getUTCDate())}`;
+}
+
+/** from → to 사이의 일수(음수 가능). 형식이 이상하면 null. */
+function daysBetweenDates(from: string, to: string): number | null {
+  const a = dateOnly(from);
+  const b = (to || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(a) || !/^\d{4}-\d{2}-\d{2}$/.test(b)) return null;
+  const [ay, am, ad] = a.split("-").map(Number);
+  const [by, bm, bd] = b.split("-").map(Number);
+  return Math.round((Date.UTC(by, bm - 1, bd) - Date.UTC(ay, am - 1, ad)) / 86400000);
+}
+
+/** 신규 문서의 기본 유효기간(발송일 + 30일). */
+function defaultValidUntil(sentAt: string): string {
+  return addDaysToDate(sentAt, DEFAULT_VALID_DAYS);
+}
+
+/** Valid until 입력 — [N]일 + 만료일 두 칸이 서로를 갱신한다. */
+function ValidUntilField({
+  sentAt,
+  value,
+  onChange,
+}: {
+  sentAt: string;          // 기준일(Sent at). 날짜부만 사용한다.
+  value: string;           // "YYYY-MM-DD" (빈 값 허용 = 기한 없음)
+  onChange: (v: string) => void;
+}) {
+  const base = dateOnly(sentAt);
+  const [days, setDays] = useState<string>(() => {
+    const d = daysBetweenDates(base, value);
+    return d === null ? "" : String(d);
+  });
+  // 상호 동기화: 날짜가 밖에서(또는 date 입력으로) 바뀌면 일수를 다시 계산하고,
+  // 기준일(Sent at)만 움직였으면 일수를 유지한 채 만료일을 같이 민다.
+  const prev = useRef({ base, value });
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+  useEffect(() => {
+    const baseMoved = prev.current.base !== base;
+    const valueMoved = prev.current.value !== value;
+    prev.current = { base, value };
+    if (baseMoved && !valueMoved) {
+      const n = Number(days);
+      if (days !== "" && Number.isFinite(n)) onChangeRef.current(addDaysToDate(base, n));
+      return;
+    }
+    if (valueMoved) {
+      const d = daysBetweenDates(base, value);
+      setDays(d === null ? "" : String(d));
+    }
+  }, [base, value, days]);
+
+  function onDays(text: string) {
+    setDays(text);
+    if (text.trim() === "") {
+      onChange("");
+      return;
+    }
+    const n = Number(text);
+    if (Number.isFinite(n)) onChange(addDaysToDate(base, n));
+  }
+
+  return (
+    <div className="form-field">
+      <label>Valid until</label>
+      <div className="valid-until-row">
+        <input
+          className="vu-days"
+          type="number"
+          min={0}
+          value={days}
+          onChange={(e) => onDays(e.target.value)}
+          aria-label="Valid for (days from Sent at)"
+        />
+        <span className="vu-unit">days from Sent at</span>
+        <input
+          className="vu-date"
+          type="date"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          aria-label="Valid until (date)"
+        />
+      </div>
+    </div>
+  );
+}
+
 // 원본 rfq_quotation.py 하단의 작업 segmented control(4탭)을 복원.
 const TABS = [
   { key: "new", label: "1. RFQ Received" },
@@ -1927,8 +2035,10 @@ function CustomerQuoteDetailModal({
         setDiscountPct(Number(data.discount_pct || 0));
         setFxRate(typeof data.fx_rate === "number" ? data.fx_rate : null);
         setFxMode(typeof data.fx_rate === "number" ? "manual" : "auto");
-        setSentAt(toLocalDt(data.sent_at || data.sent_date));
-        setValidUntil(data.valid_until || "");
+        const sent = toLocalDt(data.sent_at || data.sent_date);
+        setSentAt(sent);
+        // 기한이 비어 있던 옛 견적은 열 때 기본값(발송일 +30일)으로 채워 보여준다.
+        setValidUntil(data.valid_until || defaultValidUntil(sent));
         setStatus(data.status || "");
         // Payment Terms 미입력이면 고객 정보에 등록된 기본 결제조건으로 채운다(수정 가능).
         setTerms(withDefaultTerms(seedPaymentTerms(data.terms, data.default_payment_terms)));
@@ -2113,10 +2223,7 @@ function CustomerQuoteDetailModal({
               <label>Sent at</label>
               <input type="datetime-local" value={sentAt} onChange={(e) => setSentAt(e.target.value)} />
             </div>
-            <div className="form-field">
-              <label>Valid until</label>
-              <input type="date" value={validUntil} onChange={(e) => setValidUntil(e.target.value)} />
-            </div>
+            <ValidUntilField sentAt={sentAt} value={validUntil} onChange={setValidUntil} />
           </div>
 
           {/* 견적서 헤더 문서 필드(첨부 양식) — Messrs·Attn.·Ref No.
@@ -3366,7 +3473,8 @@ function CustomerQuoteAction({
   const [fxMode, setFxMode] = useState<FxMode>("auto");
   const [sentAt, setSentAt] = useState(nowLocalDt());
   const [items, setItems] = useState<CustomerQuoteItem[]>([]);
-  const [validUntil, setValidUntil] = useState("");
+  // 유효기간 기본 30일 — 화면에서 일수/날짜 어느 쪽으로든 고칠 수 있다.
+  const [validUntil, setValidUntil] = useState(() => defaultValidUntil(nowLocalDt()));
   const [defaultMargin, setDefaultMargin] = useState(20);
   const effRate = fxRate ?? USD_KRW_RATE;
   const [terms, setTerms] = useState<QuotationTerms>(
@@ -3543,10 +3651,7 @@ function CustomerQuoteAction({
           <label>Sent at</label>
           <input type="datetime-local" value={sentAt} onChange={(e) => setSentAt(e.target.value)} />
         </div>
-        <div className="form-field">
-          <label>Valid until</label>
-          <input type="date" value={validUntil} onChange={(e) => setValidUntil(e.target.value)} />
-        </div>
+        <ValidUntilField sentAt={sentAt} value={validUntil} onChange={setValidUntil} />
       </div>
 
       {/* 가격 설정 — 아래 Item list 단가 계산에 직접 반영. */}
