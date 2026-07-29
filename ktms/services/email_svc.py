@@ -172,13 +172,38 @@ def intro_signature(lang: str = "en") -> str:
     ))
 
 
+# 홍보 메일 템플릿에 쓰는 치환 토큰 — 저장된 템플릿에 수신자 이름을 박아두지 않고
+# 토큰으로 남겨야, 다음에 다른 사람에게 보낼 때 이름이 자동으로 바뀐다.
+# 값이 비면 fallback(담당자/Sir/Madam)으로 치환돼 인사말이 어색해지지 않는다.
+MARKETING_CONTACT_FALLBACK = {"en": "Sir/Madam", "kr": "담당자"}
+
+
+def render_marketing_tokens(text: str, contact_person: str = "",
+                            customer_name: str = "", lang: str = "en") -> str:
+    """홍보 메일 제목·본문의 {{contact}}·{{customer}} 토큰을 실제 수신자 값으로 치환."""
+    lang_n = "kr" if lang in ("ko", "kr") else "en"
+    contact = (contact_person or "").strip() or MARKETING_CONTACT_FALLBACK[lang_n]
+    return (text or "").replace("{{contact}}", contact) \
+                       .replace("{{customer}}", (customer_name or "").strip())
+
+
+def intro_email_body_tpl(kind: str = "intro", lang: str = "en") -> str:
+    """홍보/회사소개 메일 기본 본문 '원본'(수신자 이름 자리에 {{contact}} 토큰)."""
+    return _intro_email_body_raw(kind=kind, lang=lang)
+
+
 def intro_email_body(contact_person: str = "", customer_name: str = "",
                      kind: str = "intro", lang: str = "en") -> str:
     """홍보/회사소개 메일 기본 본문(서명 제외 — 서명은 별도 필드로 관리).
     담당자·고객사명이 있으면 인사말에 반영, 없으면 일반 인사말로 대체한다."""
-    greet_name = (contact_person or "").strip() or ((customer_name or "").strip())
+    return render_marketing_tokens(
+        _intro_email_body_raw(kind=kind, lang=lang), contact_person, customer_name, lang
+    )
+
+
+def _intro_email_body_raw(kind: str = "intro", lang: str = "en") -> str:
     if lang in ("ko", "kr"):
-        hello = f"{greet_name} 담당자님께," if greet_name else "안녕하십니까,"
+        hello = "{{contact}}님께,"
         if kind == "brochure":
             intro = (
                 "요청하신 제품 브로슈어를 첨부해 드립니다.\n\n"
@@ -193,7 +218,7 @@ def intro_email_body(contact_person: str = "", customer_name: str = "",
             )
         return f"{hello}\n\n{intro}\n"
 
-    hello = f"Dear {greet_name}," if greet_name else "Dear Sir/Madam,"
+    hello = "Dear {{contact}},"
     if kind == "brochure":
         intro = (
             "Please find attached our product brochure as requested.\n\n"

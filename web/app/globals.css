@@ -6123,6 +6123,21 @@ table.mini .num {
   color: #8a96a8;
   text-align: center;
 }
+/* 담당자 이름(showContact) — 회사명은 같고 사람만 다른 항목을 구분하는 보조 표기.
+   회사명이 길면 회사명 쪽이 먼저 줄고 담당자 이름은 끝까지 남게 flex-shrink 를 0 으로. */
+.cust-opt-contact {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+  color: #6b7684;
+}
+.cust-opt-contact::before {
+  content: "· ";
+  color: #b9c3d1;
+}
 /* 입력란(.form-field) 안에 넣었을 때 — 기본 min-width(320px)를 풀고 주변
    select/input(높이 32px·12px·둥근 8px)과 같은 모양으로 맞춘다. */
 .form-field .cust-select {
@@ -8777,6 +8792,32 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 .compose-tpl { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
 .compose-tpl-sep { width: 1px; height: 16px; background: var(--line, #d7e2ee); margin: 0 3px; }
 .compose-tpl-msg { font-size: 11.5px; font-weight: 600; color: #16a05a; white-space: nowrap; }
+/* 이 종류·언어에 저장해 둔 템플릿을 쓰고 있다는 표시 */
+.compose-tpl-flag {
+  padding: 1px 7px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #4a6a8f;
+  background: #eef3fa;
+  border-radius: 999px;
+}
+.compose-hint {
+  margin-top: -4px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: #7a8798;
+}
+/* 푸터: [Clear][템플릿 저장/초기화] ······ [Cancel][Send].
+   기본 규약(danger=좌측끝, margin-right:auto)을 템플릿 묶음으로 옮겨 둘을 왼쪽에 나란히 둔다. */
+.pl-modal-body .form-actions.compose-actions .btn.danger { margin-right: 0 !important; }
+.compose-foot-tpl {
+  order: -1;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: auto;
+}
 .chip-btn {
   padding: 3px 10px;
   font-size: 12px;
@@ -8908,14 +8949,16 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 .icon-btn svg { width: 16px; height: 16px; display: block; }
 
 /* CC 복수 입력 — 주소를 칩으로 쌓고, 마지막에 입력칸이 이어짐 */
+/* 주소 칩이 없을 땐 옆 입력란(.form-field input, 높이 32px·테두리 #d7e2ee)과 똑같이
+   보여야 한다 — 칩이 늘어나면 그때만 아래로 자란다. */
 .cc-chips {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 5px;
-  min-height: 38px;
-  padding: 5px 8px;
-  border: 1px solid var(--input-border, #c7d0de);
+  gap: 4px;
+  min-height: 32px;
+  padding: 3px 7px;
+  border: 1px solid #d7e2ee;
   border-radius: 8px;
   background: #fff;
   cursor: text;
@@ -8925,8 +8968,8 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 2px 4px 2px 9px;
-  font-size: 12.5px;
+  padding: 1px 4px 1px 9px;
+  font-size: 12px;
   color: #1d4ed8;
   background: #e4edfb;
   border-radius: 999px;
@@ -8944,10 +8987,12 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 .cc-chip-input {
   flex: 1;
   min-width: 120px;
+  height: 24px !important;
   border: none !important;
   outline: none;
-  padding: 2px 0 !important;
+  padding: 0 !important;
   font: inherit;
+  font-size: 12px;
   background: transparent;
 }
 

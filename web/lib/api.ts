@@ -891,11 +891,11 @@ export async function downloadMarketingAsset(id: number, filename: string): Prom
   URL.revokeObjectURL(url);
 }
 
+// 제목·본문은 수신자 이름 자리에 {{contact}} 토큰이 남아 있는 '원본'으로 내려온다
+// (실제 이름 치환은 작성 화면에서 — 수신자를 바꾸면 즉시 따라 바뀌게 하려고).
 export function marketingComposeDefaults(opts: {
   kind?: "intro" | "brochure";
   lang?: "en" | "ko";
-  contact?: string;
-  customer?: string;
 }): Promise<{
   from: string;
   subject: string;
@@ -904,12 +904,7 @@ export function marketingComposeDefaults(opts: {
   saved: boolean;
   smtp_configured: boolean;
 }> {
-  const p = new URLSearchParams({
-    kind: opts.kind ?? "intro",
-    lang: opts.lang ?? "en",
-    contact: opts.contact ?? "",
-    customer: opts.customer ?? "",
-  });
+  const p = new URLSearchParams({ kind: opts.kind ?? "intro", lang: opts.lang ?? "en" });
   return get(`/api/admin/marketing/compose-defaults?${p.toString()}`);
 }
 
@@ -939,6 +934,7 @@ export function sendMarketingEmail(input: {
   customerId?: number | null;
   prospectName?: string;
   contactPerson?: string;
+  lang?: "en" | "ko";
   assetIds?: number[];
   files?: File[];
 }): Promise<{ ok: boolean; id: number; sent_date: string }> {
@@ -953,6 +949,7 @@ export function sendMarketingEmail(input: {
   fd.append("customer_id", input.customerId ? String(input.customerId) : "");
   fd.append("prospect_name", input.prospectName ?? "");
   fd.append("contact_person", input.contactPerson ?? "");
+  fd.append("lang", input.lang ?? "en");
   fd.append("asset_ids", (input.assetIds ?? []).join(","));
   for (const f of input.files ?? []) fd.append("files", f);
   return postForm("/api/admin/marketing/send", fd);

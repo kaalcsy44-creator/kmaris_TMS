@@ -15,12 +15,16 @@ export default function CustomerSelect({
   onChange,
   emptyLabel = "— None —",
   disabled = false,
+  showContact = false,
 }: {
   value: number | "";
   options: CustomerOption[];
   onChange: (id: number | "") => void;
   emptyLabel?: string;       // "" 선택 시 표기(예: "— Prospect (not registered) —")
   disabled?: boolean;
+  // 레코드 1건 = 담당자 1명이라 같은 회사가 여러 번 나온다. 담당자를 골라야 하는
+  // 화면(메일 발송 등)에서는 회사명 뒤에 담당자 이름을 붙여 구분할 수 있게 한다.
+  showContact?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
@@ -78,7 +82,11 @@ export default function CustomerSelect({
 
   const selected = value === "" ? null : options.find((c) => c.id === value) ?? null;
   const ql = q.trim().toLowerCase();
-  const filtered = ql ? options.filter((c) => c.name.toLowerCase().includes(ql)) : options;
+  const filtered = ql
+    ? options.filter((c) =>
+        `${c.name} ${showContact ? c.contact ?? "" : ""}`.toLowerCase().includes(ql)
+      )
+    : options;
 
   function pick(id: number | "") {
     onChange(id);
@@ -91,6 +99,9 @@ export default function CustomerSelect({
       <span className="cust-name">
         {c.logo ? <img className="cust-logo" src={c.logo} alt="" /> : null}
         <span className="cust-name-text">{c.name}</span>
+        {showContact ? (
+          <span className="cust-opt-contact">{c.contact?.trim() || "(no contact)"}</span>
+        ) : null}
       </span>
     );
   }

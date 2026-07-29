@@ -25,6 +25,36 @@ function fmtSize(n: number): string {
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
+// ── 템플릿 토큰 ────────────────────────────────────────────────────────────────
+// 저장한 템플릿에는 수신자 이름 대신 {{contact}}·{{customer}} 토큰이 들어간다.
+// 화면에는 항상 치환된 결과(실제 이름)를 보여주고, 사용자가 고친 내용을 다시
+// 토큰 형태로 되돌려 저장한다 — 그래서 수신자를 바꾸면 이름이 자동으로 따라 바뀐다.
+const CONTACT_FALLBACK: Record<Lang, string> = { en: "Sir/Madam", ko: "담당자" };
+
+function renderTokens(tpl: string, contact: string, customer: string, lang: Lang): string {
+  return (tpl ?? "")
+    .replaceAll("{{contact}}", contact.trim() || CONTACT_FALLBACK[lang])
+    .replaceAll("{{customer}}", customer.trim());
+}
+
+// 화면 텍스트 → 템플릿 원본. 치환에 쓴 값과 똑같은 문자열을 토큰으로 되돌린다.
+// 두 글자 이하 값은 본문 곳곳에 우연히 걸릴 수 있어 건드리지 않고, 영문 이름은
+// 단어 경계를 확인해 "Sam" 이 "Sample" 안에서 잘리는 일이 없게 한다.
+function backToToken(text: string, value: string, token: string): string {
+  const v = value.trim();
+  if (v.length < 3) return text;
+  const esc = v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const ascii = /^[\x20-\x7F]+$/.test(v);
+  return text.replace(new RegExp(ascii ? `\\b${esc}\\b` : esc, "g"), token);
+}
+
+function toTokens(text: string, contact: string, customer: string, lang: Lang): string {
+  let out = text ?? "";
+  out = backToToken(out, contact.trim() || CONTACT_FALLBACK[lang], "{{contact}}");
+  out = backToToken(out, customer, "{{customer}}");
+  return out;
+}
+
 // Promotional / company-intro email composer. Left: recipient info. Right: content.
 export default function ComposeEmailModal({
   customers,
@@ -53,8 +83,9 @@ export default function ComposeEmailModal({
   const [kind, setKind] = useState<TplKind>("intro");
   const [lang, setLang] = useState<Lang>("en");
   const [from, setFrom] = useState("");
-  const [subject, setSubject] = useState("");
-  const [body, setBody] = useState("");
+  // 제목·본문은 토큰이 든 '원본'으로 들고 있는다(화면 표시는 renderTokens 로 치환).
+  const [subjectTpl, setSubjectTpl] = useState("");
+  const [bodyTpl, setBodyTpl] = useState("");
   const [signature, setSignature] = useState("");
   const [includeSignature, setIncludeSignature] = useState(true);
   const [smtpConfigured, setSmtpConfigured] = useState(true);
@@ -78,40 +109,71 @@ export default function ComposeEmailModal({
   const selectedName =
     customerId === "" ? prospectName : custById.get(customerId)?.name ?? "";
 
-  // Load template defaults — refetched when template kind / language / recipient changes.
-  // Only replace fields the user hasn't edited (still equal to the last template value).
-  const lastTpl = useRef<{ subject: string; body: string; signature: string } | null>(null);
+  // 화면에 보이는 값 = 원본 템플릿에 현재 수신자를 끼워 넣은 결과.
+  const subject = renderTokens(subjectTpl, contact, selectedName, lang);
+  const body = renderTokens(bodyTpl, contact, selectedName, lang);
+
+  // 종류·언어별로 편집 중인 초안을 기억한다 — Intro ↔ Brochure 를 오갈 때 각자
+  // 내용이 살아 있어야 한다(예전엔 첫 로드 뒤 본문이 아예 바뀌지 않는 버그가 있었다).
+  const drafts = useRef<Record<string, { subject: string; body: string; saved: boolean }>>({});
+  function stash(subj: string, bd: string, saved = savedTpl) {
+    drafts.current[`${kind}:${lang}`] = { subject: subj, body: bd, saved };
+  }
+
+  // 편집 결과는 다시 토큰으로 되돌려 보관 → 수신자를 바꾸면 이름만 갈아 끼워진다.
+  function editSubject(v: string) {
+    const t = toTokens(v, contact, selectedName, lang);
+    setSubjectTpl(t);
+    stash(t, bodyTpl);
+    if (tplMsg) setTplMsg("");
+  }
+  function editBody(v: string) {
+    const t = toTokens(v, contact, selectedName, lang);
+    setBodyTpl(t);
+    stash(subjectTpl, t);
+    if (tplMsg) setTplMsg("");
+  }
+
+  // 종류·언어를 바꾸면 그쪽 템플릿(또는 편집 중이던 초안)을 불러온다.
   useEffect(() => {
-    let cancelled = false;
     setTplMsg("");
-    marketingComposeDefaults({ kind, lang, contact, customer: selectedName })
+    const cached = drafts.current[`${kind}:${lang}`];
+    if (cached) {
+      setSubjectTpl(cached.subject);
+      setBodyTpl(cached.body);
+      setSavedTpl(cached.saved);
+      return;
+    }
+    let cancelled = false;
+    marketingComposeDefaults({ kind, lang })
       .then((d) => {
         if (cancelled) return;
         setFrom((prev) => prev || d.from);
         setSmtpConfigured(d.smtp_configured);
         setSavedTpl(d.saved);
-        setSubject((prev) => (!prev || prev === lastTpl.current?.subject ? d.subject : prev));
-        setBody((prev) => (!prev || prev === lastTpl.current?.body ? d.body : prev));
-        setSignature((prev) => (!prev || prev === lastTpl.current?.signature ? d.signature : prev));
-        lastTpl.current = { subject: d.subject, body: d.body, signature: d.signature };
+        setSubjectTpl(d.subject);
+        setBodyTpl(d.body);
+        setSignature((prev) => prev || d.signature);
+        drafts.current[`${kind}:${lang}`] = { subject: d.subject, body: d.body, saved: d.saved };
       })
       .catch(() => {});
     return () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kind, lang, contact, selectedName]);
+  }, [kind, lang]);
 
   // 현재 편집한 제목·본문을 이 종류·언어의 사용자 템플릿으로 저장 → 다음 작성 시 기본값.
+  // 저장되는 건 화면 텍스트가 아니라 토큰이 든 원본이라, 수신자 이름은 박히지 않는다.
   async function saveTpl() {
     setBusy(true);
     setErr("");
     setTplMsg("");
     try {
-      await saveMarketingTemplate({ kind, lang, subject, body });
-      lastTpl.current = { subject, body, signature };
+      await saveMarketingTemplate({ kind, lang, subject: subjectTpl, body: bodyTpl });
       setSavedTpl(true);
-      setTplMsg("Saved as default.");
+      stash(subjectTpl, bodyTpl, true);
+      setTplMsg("Saved as template.");
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Failed to save template.");
     } finally {
@@ -127,11 +189,11 @@ export default function ComposeEmailModal({
     setTplMsg("");
     try {
       await resetMarketingTemplate(kind, lang);
-      const d = await marketingComposeDefaults({ kind, lang, contact, customer: selectedName });
-      setSubject(d.subject);
-      setBody(d.body);
-      lastTpl.current = { subject: d.subject, body: d.body, signature };
+      const d = await marketingComposeDefaults({ kind, lang });
+      setSubjectTpl(d.subject);
+      setBodyTpl(d.body);
       setSavedTpl(false);
+      stash(d.subject, d.body, false);
       setTplMsg("Reset to default.");
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Failed to reset template.");
@@ -185,12 +247,12 @@ export default function ComposeEmailModal({
 
   function clearDraft() {
     if (!confirm("Clear all content?")) return;
-    setSubject("");
-    setBody("");
+    setSubjectTpl("");
+    setBodyTpl("");
+    stash("", "");
     setAssetIds([]);
     setFiles([]);
     setErr("");
-    lastTpl.current = null;
   }
 
   async function send() {
@@ -213,6 +275,7 @@ export default function ComposeEmailModal({
         customerId: customerId === "" ? null : customerId,
         prospectName,
         contactPerson: contact,
+        lang,
         assetIds,
         files,
       });
@@ -239,11 +302,13 @@ export default function ComposeEmailModal({
           <div className="compose-section-title">Recipient</div>
           <div className="project-select">
             <label>Customer (registered)</label>
+            {/* 같은 회사가 담당자 수만큼 나오므로 담당자 이름을 함께 보여준다. */}
             <CustomerSelect
               value={customerId}
               options={customers}
               onChange={pickCustomer}
               emptyLabel="— Prospect (not registered) —"
+              showContact
             />
           </div>
           {customerId === "" ? (
@@ -328,52 +393,22 @@ export default function ComposeEmailModal({
               >
                 KR
               </button>
-              <span className="compose-tpl-sep" />
-              <button
-                type="button"
-                className="chip-btn"
-                disabled={busy}
-                onClick={saveTpl}
-                title="Save this subject & body as the default for this type + language"
-              >
-                💾 Save
-              </button>
-              {savedTpl ? (
-                <button
-                  type="button"
-                  className="chip-btn"
-                  disabled={busy}
-                  onClick={resetTpl}
-                  title="Reset to the built-in default"
-                >
-                  ↺ Reset
-                </button>
-              ) : null}
-              {tplMsg ? <span className="compose-tpl-msg">{tplMsg}</span> : null}
+              {savedTpl ? <span className="compose-tpl-flag">saved</span> : null}
             </span>
           </div>
 
           <label className="form-field">
             <span>Subject</span>
-            <input
-              value={subject}
-              onChange={(e) => {
-                setSubject(e.target.value);
-                if (tplMsg) setTplMsg("");
-              }}
-            />
+            <input value={subject} onChange={(e) => editSubject(e.target.value)} />
           </label>
           <label className="form-field">
             <span>Body</span>
-            <textarea
-              rows={9}
-              value={body}
-              onChange={(e) => {
-                setBody(e.target.value);
-                if (tplMsg) setTplMsg("");
-              }}
-            />
+            <textarea rows={9} value={body} onChange={(e) => editBody(e.target.value)} />
           </label>
+          <div className="compose-hint">
+            Recipient names sync automatically — “{contact.trim() || CONTACT_FALLBACK[lang]}” is
+            stored as a placeholder, so a saved template greets whoever you pick next.
+          </div>
 
           <label className="form-field">
             <span className="compose-sig-head">
@@ -456,7 +491,7 @@ export default function ComposeEmailModal({
         </div>
       </div>
 
-      <div className="form-actions">
+      <div className="form-actions compose-actions">
         <button className="btn primary" disabled={busy || !email.trim()} onClick={send}>
           {busy ? "Sending…" : "Send"}
         </button>
@@ -466,6 +501,30 @@ export default function ComposeEmailModal({
         <button className="btn danger" disabled={busy} onClick={clearDraft}>
           Clear
         </button>
+        {/* 템플릿 저장 — 지금 화면의 제목·본문을 이 종류(Intro/Brochure) × 언어의 기본값으로. */}
+        <span className="compose-foot-tpl">
+          <button
+            className="btn ghost"
+            disabled={busy}
+            onClick={saveTpl}
+            title={`Save this subject & body as the default for ${
+              kind === "intro" ? "Company Intro" : "Brochure"
+            } · ${lang === "en" ? "EN" : "KR"}`}
+          >
+            💾 Save as template
+          </button>
+          {savedTpl ? (
+            <button
+              className="btn ghost"
+              disabled={busy}
+              onClick={resetTpl}
+              title="Reset to the built-in default"
+            >
+              ↺ Reset
+            </button>
+          ) : null}
+          {tplMsg ? <span className="compose-tpl-msg">{tplMsg}</span> : null}
+        </span>
         {err ? <span className="action-err">{err}</span> : null}
       </div>
     </Modal>

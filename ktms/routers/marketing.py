@@ -28,10 +28,11 @@ from _core import (
     default_from,
     get_current_user,
     get_session,
-    intro_email_body,
+    intro_email_body_tpl,
     intro_email_subject,
     intro_signature,
     os,
+    render_marketing_tokens,
     require_token,
     send_email,
     timedelta,
@@ -267,11 +268,12 @@ def _marketing_doc_type(kind: str) -> str:
 
 @app.get("/api/admin/marketing/compose-defaults", dependencies=[Depends(require_token)])
 def marketing_compose_defaults(
-    kind: str = "intro", lang: str = "en", contact: str = "", customer: str = "",
+    kind: str = "intro", lang: str = "en",
     user: dict = Depends(get_current_user),
 ):
     """작성 화면 기본값 — 저장된 사용자/회사 템플릿이 있으면 그 제목·본문을 우선 사용하고,
-    없으면 코드 내장 기본값(수신자 인사말 반영)으로 생성한다."""
+    없으면 코드 내장 기본값을 쓴다. 수신자 이름은 {{contact}} 토큰으로 남긴 '원본'을
+    그대로 내려주고, 실제 이름 치환은 작성 화면(과 발송 직전)에서 한다."""
     lang_n = "kr" if lang in ("ko", "kr") else "en"
     lang_db = "ko" if lang_n == "kr" else "en"
     s = get_session()
@@ -284,7 +286,7 @@ def marketing_compose_defaults(
     return {
         "from": default_from(),
         "subject": saved_subject or intro_email_subject(kind, lang_n),
-        "body": saved_body or intro_email_body(contact, customer, kind, lang_n),
+        "body": saved_body or intro_email_body_tpl(kind, lang_n),
         "signature": intro_signature(lang_n),
         # 저장된 사용자 템플릿이 있으면 True — 프론트에서 'Reset to default' 노출용.
         "saved": bool(tpl and tpl.user_id and (tpl.subject_tpl or tpl.body_tpl)),
@@ -350,6 +352,7 @@ def marketing_email_send(
     customer_id: str = Form(""),
     prospect_name: str = Form(""),
     contact_person: str = Form(""),
+    lang: str = Form("en"),
     asset_ids: str = Form(""),      # 라이브러리 첨부 id들(쉼표 구분)
     files: List[UploadFile] = File(default=[]),   # 즉석 업로드 첨부
     user: dict = Depends(get_current_user),
@@ -362,6 +365,17 @@ def marketing_email_send(
 
     s = get_session()
     try:
+        # 템플릿 토큰 치환 — 작성 화면이 이미 치환해 보내지만, 저장된 템플릿을 그대로
+        # 실어 보내는 경로가 생겨도 {{contact}} 가 고객에게 나가지 않도록 여기서 한 번 더.
+        cid_n = int(customer_id) if (customer_id or "").strip().isdigit() else None
+        cust_name = (prospect_name or "").strip()
+        if cid_n:
+            c = s.query(Customer).filter_by(id=cid_n).first()
+            if c:
+                cust_name = c.name or cust_name
+        subject = render_marketing_tokens(subject, contact_person, cust_name, lang)
+        body = render_marketing_tokens(body, contact_person, cust_name, lang)
+
         # 최종 본문 = 본문 + (서명 포함 시 서명)
         final_body = body or ""
         if include_signature and (signature or "").strip():
@@ -392,10 +406,9 @@ def marketing_email_send(
             raise HTTPException(status_code=400, detail="이메일 발송 실패 — SMTP 설정 또는 서버 상태를 확인하세요.")
 
         # 발송 성공 → 마케팅 활동 로그 자동 생성(표에 즉시 반영)
-        cid = int(customer_id) if (customer_id or "").strip().isdigit() else None
         today = (datetime.utcnow() + timedelta(hours=9)).strftime("%Y-%m-%d")
         activity = MarketingActivity(
-            customer_id=cid,
+            customer_id=cid_n,
             prospect_name=(prospect_name or "").strip(),
             contact_person=(contact_person or "").strip(),
             recipient_email=to,
