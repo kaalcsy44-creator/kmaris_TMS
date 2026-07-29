@@ -912,7 +912,6 @@ function CustomersTab() {
           <GroupNameCell key="n" rows={rs} open={open} />,
           <span key="r" className="ms-group-sub">{regionSummary(rs)}</span>,
           <span key="c" className="ms-group-sub">{nameSummary(rs)}</span>,
-          null,
         ],
         subFirst: () => <span className="ms-sub-mark">↳</span>,
         actions: (rs, addNew) => (
@@ -949,7 +948,6 @@ function CustomersTab() {
         )],
         ["country", "Region", (r) => <MultiCell values={r.regions} flat={r.country} />],
         ["contact", "Contact"],
-        ["email", "Email", (r) => <MultiCell values={r.emails} flat={r.email} />],
       ]}
       fields={[
         ["name", "Customer *"],
@@ -1506,7 +1504,6 @@ function VendorsTab() {
           <GroupNameCell key="n" rows={rs} open={open} />,
           <span key="r" className="ms-group-sub">{regionSummary(rs)}</span>,
           <span key="c" className="ms-group-sub">{nameSummary(rs)}</span>,
-          null,
           <span key="s" className="ms-group-sub">
             {summarize(uniqStrings(rs.map((r) => r.specialization)), " · ", 2)}
           </span>,
@@ -1546,7 +1543,6 @@ function VendorsTab() {
         )],
         ["country", "Region", (r) => <MultiCell values={r.regions} flat={r.country} />],
         ["contact", "Contact"],
-        ["email", "Email", (r) => <MultiCell values={r.emails} flat={r.email} />],
         ["specialization", "Specialization"],
       ]}
       fields={[
@@ -2846,8 +2842,7 @@ function MasterSection<T extends { id: number }>({
   // 검색 중에는 매칭된 담당자가 보여야 하므로 전부 펼친다.
   const expandAll = !!ql;
   const isOpen = (key: string) => expandAll || openKeys.has(key);
-  const multi = groups.filter((g) => g.rows.length > 1);
-  const allOpen = multi.length > 0 && multi.every((g) => openKeys.has(g.key));
+  const allOpen = groups.length > 0 && groups.every((g) => openKeys.has(g.key));
   function toggleGroup(key: string) {
     setOpenKeys((prev) => {
       const next = new Set(prev);
@@ -2862,7 +2857,7 @@ function MasterSection<T extends { id: number }>({
   const columnPair = (() => {
     if (!twoCol || !group || groups.length < 4) return null;
     const weight = (g: { key: string; rows: T[] }) =>
-      g.rows.length > 1 && isOpen(g.key) ? 1 + g.rows.length : 1;
+      isOpen(g.key) ? 1 + g.rows.length : 1;
     const half = groups.reduce((s, g) => s + weight(g), 0) / 2;
     const left: typeof groups = [];
     const right: typeof groups = [];
@@ -2891,24 +2886,20 @@ function MasterSection<T extends { id: number }>({
         <tbody>
           {!list
             ? filtered.map((row) => dataRow(row))
-            : list.map((g) =>
-                // 담당자 1명뿐인 회사는 묶지 않고 그대로 한 줄로 보여준다.
-                g.rows.length === 1 ? (
-                  dataRow(g.rows[0])
-                ) : (
-                  <Fragment key={g.key}>
-                    <tr className="ms-group" onClick={() => toggleGroup(g.key)}>
-                      {group?.cells(g.rows, isOpen(g.key)).map((node, i) => (
-                        <td key={i}>{node}</td>
-                      ))}
-                      <td className="ms-actcol" onClick={(e) => e.stopPropagation()}>
-                        {group?.actions?.(g.rows, () => openNewIn(g.rows))}
-                      </td>
-                    </tr>
-                    {isOpen(g.key) ? g.rows.map((row) => dataRow(row, true)) : null}
-                  </Fragment>
-                )
-              )}
+            : // 담당자가 1명이어도 똑같이 회사 행으로 묶는다(줄마다 모양이 달라지지 않게).
+              list.map((g) => (
+                <Fragment key={g.key}>
+                  <tr className="ms-group" onClick={() => toggleGroup(g.key)}>
+                    {group?.cells(g.rows, isOpen(g.key)).map((node, i) => (
+                      <td key={i}>{node}</td>
+                    ))}
+                    <td className="ms-actcol" onClick={(e) => e.stopPropagation()}>
+                      {group?.actions?.(g.rows, () => openNewIn(g.rows))}
+                    </td>
+                  </tr>
+                  {isOpen(g.key) ? g.rows.map((row) => dataRow(row, true)) : null}
+                </Fragment>
+              ))}
         </tbody>
       </table>
     );
@@ -3011,10 +3002,10 @@ function MasterSection<T extends { id: number }>({
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
-        {group && multi.length > 0 ? (
+        {group && groups.length > 0 ? (
           <button
             className="btn"
-            onClick={() => setOpenKeys(allOpen ? new Set() : new Set(multi.map((g) => g.key)))}
+            onClick={() => setOpenKeys(allOpen ? new Set() : new Set(groups.map((g) => g.key)))}
             title={allOpen ? "Collapse all" : "Expand all"}
           >
             {allOpen ? "⊟ Collapse" : "⊞ Expand"}
