@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { tr } from "@/lib/labels";
 import {
   fetchCustomers,
@@ -99,6 +99,7 @@ export default function NewRfqForm({
   onDeleted,
   autoLoadId,
   embedded,
+  onWorkTypeChange,
 }: {
   onCreated?: (rfqNo: string) => void;
   onCancel?: () => void;
@@ -107,6 +108,9 @@ export default function NewRfqForm({
   // embedded: 프로젝트 워크스페이스(단계 상세) 임베드용. 카드(.panel)·900px 제한을 빼고
   // 다른 단계(2~4) 처럼 컨테이너 폭에 꽉 차는 평면 레이아웃으로 렌더한다.
   embedded?: boolean;
+  // 업무타입(부품공급/서비스)이 바뀔 때 알린다 — 감싼 모달이 저장 전에도 업무타입 색
+  // (부품=블루 / 서비스=그린)으로 테마를 맞추는 데 쓴다.
+  onWorkTypeChange?: (workType: string) => void;
 }) {
   const [editId, setEditId] = useState<number | null>(null); // null=신규, >0=수정
   const [loadedRfqNo, setLoadedRfqNo] = useState("");        // 로드된 K-Maris RFQ No.(상단 헤드라인용)
@@ -142,6 +146,14 @@ export default function NewRfqForm({
   const itemCols = useColumnLayout("rfq-item-cols", RFQ_ITEM_COLS);
   const itemColW = (k: string) => itemCols.widths[k] ?? RFQ_ITEM_DEFAULT_W[k];
   const visibleItemCols = RFQ_ITEM_COLS.filter((c) => !itemCols.hidden.has(c.key));
+
+  // 업무타입 변경을 부모에 알린다 — select 선택뿐 아니라 불러오기·초기화도 함께 태운다.
+  // 콜백은 ref 로 들고 있어 부모가 인라인 함수를 넘겨도 effect 가 재실행되지 않는다.
+  const workTypeCbRef = useRef(onWorkTypeChange);
+  workTypeCbRef.current = onWorkTypeChange;
+  useEffect(() => {
+    workTypeCbRef.current?.(workType);
+  }, [workType]);
 
   function reloadCustomers(): Promise<CustomerOption[]> {
     return fetchCustomers()

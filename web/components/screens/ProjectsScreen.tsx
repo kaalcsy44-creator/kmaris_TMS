@@ -1847,6 +1847,9 @@ export function PipelineModal({
 }) {
   const isNewProject = !!isNew;
   const backdropMouseDown = useRef(false);
+  // 신규 등록 모드에서 폼이 들고 있는 업무타입 — 저장 전이라도 모달 테마(파랑/초록)를
+  // 선택한 업무타입에 맞추려고 NewRfqForm 에서 끌어올린다.
+  const [newWorkType, setNewWorkType] = useState("부품공급");
   // 딜 종결(취소/실주) 토글 — 종결 시 보드 Cancelled 존으로, 재활성 시 진행 컬럼으로 복귀.
   const [cancelBusy, setCancelBusy] = useState(false);
   // 종결 시 사유 선택 모달 상태. 재활성은 사유가 필요 없으므로 바로 처리한다.
@@ -2165,7 +2168,7 @@ export function PipelineModal({
   // 좌측 패널은 읽기전용 요약(+ 표시 항목 선택)만 담당한다.
   const rSteps = resolveSteps(steps, r.work_type || "부품공급");
 
-  const isService = (r.work_type || "부품공급") === "서비스";
+  const isService = (isNewProject ? newWorkType : r.work_type || "부품공급") === "서비스";
   const chain = buildStageChain(r, rSteps);
 
   function onBackdropMouseDown(e: React.MouseEvent<HTMLDivElement>) {
@@ -2639,6 +2642,7 @@ export function PipelineModal({
               <div className="project-work-panel embedded-workspace embedded-detail">
                 <NewRfqForm
                   embedded
+                  onWorkTypeChange={setNewWorkType}
                   onCreated={() => {
                     onChanged();
                     onClose();
