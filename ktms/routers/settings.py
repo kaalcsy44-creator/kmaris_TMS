@@ -67,6 +67,9 @@ from _core import (
     vendor_rfq_default_subject_tpl,
     vendor_rfq_default_body_tpl,
     preview_vendor_rfq_template,
+    intro_email_subject,
+    intro_email_body_tpl,
+    render_marketing_tokens,
 )
 from pydantic import BaseModel
 from sqlalchemy import func
@@ -903,6 +906,49 @@ def assignable_users():
 
 
 # ── 이메일 템플릿(담당자별 초안) ────────────────────────────────────────────
+# 설정 화면에서 편집할 수 있는 이메일 종류. key = EmailTemplate.doc_type 이며,
+# 발송 화면들이 같은 doc_type 으로 템플릿을 찾아 쓴다(개인 → 회사 기본 → 내장 기본).
+#   item_cols=True  : {{item_list}} 컬럼 선택이 있는 종류(Vendor RFQ)
+EMAIL_DOC_TYPES: dict[str, dict] = {
+    "vendor_rfq": {
+        "label": "Vendor RFQ",
+        "tokens": VENDOR_RFQ_TOKENS,
+        "item_cols": True,
+    },
+    "marketing_intro": {
+        "label": "Company Introduction",
+        "tokens": ["contact", "customer"],
+        "item_cols": False,
+        "marketing_kind": "intro",
+    },
+    "marketing_brochure": {
+        "label": "Brochure",
+        "tokens": ["contact", "customer"],
+        "item_cols": False,
+        "marketing_kind": "brochure",
+    },
+}
+
+
+def _email_doc_spec(doc_type: str) -> dict:
+    spec = EMAIL_DOC_TYPES.get(doc_type)
+    if not spec:
+        raise HTTPException(status_code=400, detail=f"알 수 없는 이메일 종류입니다: {doc_type}")
+    return spec
+
+
+def _email_tpl_defaults(doc_type: str, lang: str) -> dict:
+    """코드 내장 기본 템플릿(저장된 게 없을 때 편집기에 채워지는 값)."""
+    spec = _email_doc_spec(doc_type)
+    kind = spec.get("marketing_kind")
+    if kind:
+        lang_n = "kr" if lang == "ko" else "en"
+        return {"subject_tpl": intro_email_subject(kind, lang_n),
+                "body_tpl": intro_email_body_tpl(kind, lang_n)}
+    return {"subject_tpl": vendor_rfq_default_subject_tpl(lang),
+            "body_tpl": vendor_rfq_default_body_tpl(lang)}
+
+
 def _email_tpl_row(s, user_id, doc_type: str, lang: str):
     t = (s.query(EmailTemplate)
          .filter_by(user_id=user_id, doc_type=doc_type, lang=lang).first())
@@ -916,6 +962,8 @@ def _email_tpl_row(s, user_id, doc_type: str, lang: str):
 def get_email_templates(doc_type: str = "vendor_rfq",
                         user: dict = Depends(get_current_user)):
     """현재 사용자 개인 템플릿 + 회사 기본값 + 코드 내장 기본값/토큰·컬럼 카탈로그."""
+    spec = _email_doc_spec(doc_type)
+    has_cols = bool(spec["item_cols"])
     s = get_session()
     try:
         uid = user.get("id")
@@ -923,13 +971,13 @@ def get_email_templates(doc_type: str = "vendor_rfq",
         return {
             "doc_type": doc_type,
             "is_admin": user.get("role") == "admin",
-            "tokens": VENDOR_RFQ_TOKENS,
-            "item_cols": [{"key": k, "label_en": v[0], "label_ko": v[1]}
-                          for k, v in VENDOR_RFQ_ITEM_COLS.items()],
-            "default_item_cols": DEFAULT_VENDOR_RFQ_ITEM_COLS,
-            "defaults": {lang: {"subject_tpl": vendor_rfq_default_subject_tpl(lang),
-                                "body_tpl": vendor_rfq_default_body_tpl(lang)}
-                         for lang in langs},
+            # 편집 가능한 이메일 종류 탭 목록(설정 화면이 그대로 그린다).
+            "doc_types": [{"key": k, "label": v["label"]} for k, v in EMAIL_DOC_TYPES.items()],
+            "tokens": spec["tokens"],
+            "item_cols": ([{"key": k, "label_en": v[0], "label_ko": v[1]}
+                           for k, v in VENDOR_RFQ_ITEM_COLS.items()] if has_cols else []),
+            "default_item_cols": DEFAULT_VENDOR_RFQ_ITEM_COLS if has_cols else [],
+            "defaults": {lang: _email_tpl_defaults(doc_type, lang) for lang in langs},
             "user": {lang: _email_tpl_row(s, uid, doc_type, lang) for lang in langs},
             "company": {lang: _email_tpl_row(s, None, doc_type, lang) for lang in langs},
         }
@@ -940,13 +988,18 @@ def get_email_templates(doc_type: str = "vendor_rfq",
 @app.put("/api/admin/settings/email-templates", dependencies=[Depends(require_token)])
 def save_email_template(body: EmailTemplateSave, user: dict = Depends(get_current_user)):
     """개인/회사 이메일 템플릿 upsert. 회사(company) 편집은 admin 만."""
+    spec = _email_doc_spec(body.doc_type)
     scope = "company" if body.scope == "company" else "user"
     if scope == "company" and user.get("role") != "admin":
         raise HTTPException(status_code=403, detail="회사 기본 템플릿은 admin만 편집할 수 있습니다.")
     lang = "ko" if body.lang == "ko" else "en"
     user_id = None if scope == "company" else user.get("id")
-    cols = [c for c in ((body.options or {}).get("item_cols") or []) if c in VENDOR_RFQ_ITEM_COLS]
-    opts = {"item_cols": cols or DEFAULT_VENDOR_RFQ_ITEM_COLS}
+    if spec["item_cols"]:
+        cols = [c for c in ((body.options or {}).get("item_cols") or [])
+                if c in VENDOR_RFQ_ITEM_COLS]
+        opts = {"item_cols": cols or DEFAULT_VENDOR_RFQ_ITEM_COLS}
+    else:
+        opts = {}
     s = get_session()
     try:
         t = (s.query(EmailTemplate)
@@ -1019,6 +1072,20 @@ def put_email_signature(body: EmailSignatureSave, user: dict = Depends(get_curre
 @app.post("/api/admin/settings/email-templates/preview", dependencies=[Depends(require_token)])
 def preview_email_template(body: EmailTemplatePreviewReq):
     """미저장 템플릿을 샘플 데이터로 렌더 — 편집 중 실시간 미리보기용."""
+    spec = _email_doc_spec(body.doc_type)
+    kind = spec.get("marketing_kind")
+    if kind:
+        lang = "ko" if body.lang == "ko" else "en"
+        lang_n = "kr" if lang == "ko" else "en"
+        d = _email_tpl_defaults(body.doc_type, lang)
+        contact = "조예빈 부장" if lang == "ko" else "Wu Sheng"
+        customer = "SENDA group"
+        return {
+            "subject": render_marketing_tokens(
+                body.subject_tpl or d["subject_tpl"], contact, customer, lang_n),
+            "body": render_marketing_tokens(
+                body.body_tpl or d["body_tpl"], contact, customer, lang_n),
+        }
     subject, mail_body = preview_vendor_rfq_template(
         body.subject_tpl, body.body_tpl, body.options, body.lang)
     return {"subject": subject, "body": mail_body}

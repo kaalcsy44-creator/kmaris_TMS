@@ -1114,6 +1114,8 @@ export type EmailTplRow = {
 export type EmailTemplatesData = {
   doc_type: string;
   is_admin: boolean;
+  // 편집 가능한 이메일 종류(탭) — 서버가 카탈로그를 그대로 내려준다.
+  doc_types: { key: string; label: string }[];
   tokens: string[];
   item_cols: { key: string; label_en: string; label_ko: string }[];
   default_item_cols: string[];
@@ -1142,6 +1144,7 @@ export function deleteEmailTemplate(
   return del(`/api/admin/settings/email-templates?scope=${scope}&doc_type=${docType}&lang=${lang}`);
 }
 export function previewEmailTemplate(body: {
+  doc_type: string;
   lang: "en" | "ko";
   subject_tpl: string;
   body_tpl: string;

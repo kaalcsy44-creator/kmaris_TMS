@@ -2867,6 +2867,7 @@ class EmailTemplateSave(BaseModel):
 
 class EmailTemplatePreviewReq(BaseModel):
     """미저장 템플릿을 샘플 데이터로 렌더해 미리보기."""
+    doc_type: str = "vendor_rfq"
     lang: str = "en"
     subject_tpl: str = ""
     body_tpl: str = ""

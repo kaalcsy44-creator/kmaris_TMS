@@ -3075,7 +3075,18 @@ function stripId<T extends { id: number }>(row: T): Omit<T, "id"> {
 }
 
 // ── 이메일 템플릿 편집 탭 (담당자별 초안) ──────────────────────────────────────
+// 이메일 종류(doc_type)별 안내 문구. 종류 목록 자체는 서버(EMAIL_DOC_TYPES)가 준다.
+const EMAIL_DOC_HINT: Record<string, string> = {
+  vendor_rfq:
+    "Vendor RFQ 발송 초안(제목·본문)의 기본값입니다. 발송 화면에서는 언제든 다시 편집할 수 있습니다.",
+  marketing_intro:
+    "Marketing → Compose Email 의 Company Intro 기본값입니다. 수신자 이름은 {{contact}} 자리에 자동으로 채워집니다.",
+  marketing_brochure:
+    "Marketing → Compose Email 의 Brochure 기본값입니다. 수신자 이름은 {{contact}} 자리에 자동으로 채워집니다.",
+};
+
 function EmailTemplatesTab() {
+  const [docType, setDocType] = useState("vendor_rfq");
   const [data, setData] = useState<EmailTemplatesData | null>(null);
   const [scope, setScope] = useState<"user" | "company">("user");
   const [lang, setLang] = useState<"en" | "ko">("en");
@@ -3093,14 +3104,17 @@ function EmailTemplatesTab() {
   const lastFocus = useRef<"subject" | "body">("body");
   const previewSeq = useRef(0);
 
-  function load() {
-    fetchEmailTemplates("vendor_rfq")
+  function load(type = docType) {
+    fetchEmailTemplates(type)
       .then(setData)
       .catch((e) => setErr(e instanceof Error ? e.message : "Load failed"));
   }
+  // 종류(RFQ / Company Introduction …)를 바꾸면 그 종류의 템플릿을 다시 불러온다.
   useEffect(() => {
-    load();
-  }, []);
+    setData(null);
+    load(docType);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [docType]);
 
   // scope/lang/data 변화 시 해당 템플릿(없으면 기본값)을 폼에 채운다.
   useEffect(() => {
@@ -3130,6 +3144,7 @@ function EmailTemplatesTab() {
     const t = setTimeout(async () => {
       try {
         const p = await previewEmailTemplate({
+          doc_type: data.doc_type,
           lang,
           subject_tpl: subject,
           body_tpl: body,
@@ -3176,7 +3191,7 @@ function EmailTemplatesTab() {
     try {
       await saveEmailTemplate({
         scope,
-        doc_type: "vendor_rfq",
+        doc_type: docType,
         lang,
         subject_tpl: subject,
         body_tpl: body,
@@ -3197,7 +3212,7 @@ function EmailTemplatesTab() {
     setErr(null);
     setMsg(null);
     try {
-      await deleteEmailTemplate(scope, "vendor_rfq", lang);
+      await deleteEmailTemplate(scope, docType, lang);
       setMsg("Reset to default");
       load();
     } catch (e) {
@@ -3207,13 +3222,39 @@ function EmailTemplatesTab() {
     }
   }
 
-  if (!data) return <div className="panel">Loading…</div>;
+  // 종류 탭은 로딩 중에도 그대로 둔다(탭을 누른 뒤 화면이 통째로 사라지지 않게).
+  const typeTabs = (
+    <div className="email-tpl-types" role="tablist" aria-label="Email type">
+      {(data?.doc_types ?? [{ key: docType, label: "…" }]).map((t) => (
+        <button
+          key={t.key}
+          type="button"
+          role="tab"
+          aria-selected={docType === t.key}
+          className={`email-tpl-type${docType === t.key ? " on" : ""}`}
+          onClick={() => setDocType(t.key)}
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
+
+  if (!data) {
+    return (
+      <div className="panel email-tpl">
+        {typeTabs}
+        <div className="state">Loading…</div>
+      </div>
+    );
+  }
 
   return (
     <div className="panel email-tpl">
+      {typeTabs}
       <div className="hint-inline" style={{ marginBottom: 10 }}>
-        Vendor RFQ 발송 초안(제목·본문)의 기본값을 담당자별로 설정합니다. 발송 화면에서는 언제든 다시 편집할 수 있습니다.
-        토큰(<code>{"{{rfq_no}}"}</code> 등)은 발송 시 실제 값으로 치환됩니다.
+        {EMAIL_DOC_HINT[data.doc_type] ?? "발송 초안(제목·본문)의 기본값을 담당자별로 설정합니다."}{" "}
+        토큰(<code>{`{{${data.tokens[0] ?? "token"}}}`}</code> 등)은 발송 시 실제 값으로 치환됩니다.
       </div>
 
       <div className="email-tpl-toolbar">
@@ -3268,22 +3309,25 @@ function EmailTemplatesTab() {
             />
           </div>
 
-          <div className="form-field" style={{ marginTop: 8 }}>
-            <label>{"ITEM LIST columns  ({{item_list}})"}</label>
-            <div className="email-tpl-cols">
-              {data.item_cols.map((c) => (
-                <label key={c.key} className="email-tpl-col">
-                  <input
-                    type="checkbox"
-                    checked={cols.includes(c.key)}
-                    onChange={() => toggleCol(c.key)}
-                  />
-                  {lang === "ko" ? c.label_ko : c.label_en}
-                  <span className="muted"> ({c.key})</span>
-                </label>
-              ))}
+          {/* {{item_list}} 가 있는 종류(Vendor RFQ)에서만 컬럼 선택을 보여준다. */}
+          {data.item_cols.length ? (
+            <div className="form-field" style={{ marginTop: 8 }}>
+              <label>{"ITEM LIST columns  ({{item_list}})"}</label>
+              <div className="email-tpl-cols">
+                {data.item_cols.map((c) => (
+                  <label key={c.key} className="email-tpl-col">
+                    <input
+                      type="checkbox"
+                      checked={cols.includes(c.key)}
+                      onChange={() => toggleCol(c.key)}
+                    />
+                    {lang === "ko" ? c.label_ko : c.label_en}
+                    <span className="muted"> ({c.key})</span>
+                  </label>
+                ))}
+              </div>
             </div>
-          </div>
+          ) : null}
         </div>
 
         <div className="email-tpl-preview">

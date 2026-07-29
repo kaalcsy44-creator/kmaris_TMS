@@ -8683,6 +8683,29 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 .seg-toggle button + button { border-left: 1px solid var(--line); }
 .seg-toggle button.on { background: var(--navy); color: #fff; }
 
+/* 이메일 종류 탭(Vendor RFQ / Company Introduction / Brochure) — 페이지 탭(밑줄)보다
+   한 단계 아래 계층이라 알약형으로 구분한다. */
+.email-tpl-types {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+.email-tpl-type {
+  padding: 7px 15px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #5a6b85;
+  background: var(--head-bg, #eef2f8);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.email-tpl-type:hover { color: var(--navy); }
+.email-tpl-type.on { background: var(--navy); color: #fff; }
+
 .email-tpl-toolbar {
   display: flex;
   align-items: center;
