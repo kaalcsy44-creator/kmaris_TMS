@@ -23,6 +23,8 @@ import {
   fetchSettingsVessels,
   parseBusinessCard,
   updateCompanyProfile,
+  updateCustomerCompanyInfo,
+  updateVendorCompanyInfo,
   updateSettingsCustomer,
   updateSettingsItem,
   updateSettingsUser,
@@ -44,7 +46,7 @@ import {
   deleteEmailTemplate,
   previewEmailTemplate,
 } from "@/lib/api";
-import type { PermissionsConfig, RolePermRow, EmailTemplatesData } from "@/lib/api";
+import type { PermissionsConfig, RolePermRow, EmailTemplatesData, CompanyInfoSave } from "@/lib/api";
 import type { PermGrid } from "@/lib/auth";
 import type {
   BusinessCardOcr,
@@ -867,11 +869,71 @@ function MyPasswordChange() {
   );
 }
 
+const EMPTY_CUSTOMER: SettingsCustomer = {
+  id: 0, name: "", contact: "", contact_phone: "", email: "", country: "", address: "",
+  tax_id: "", tax_invoice_email: "", payment_terms: "", logo: "",
+  emails: [], phones: [], regions: [],
+};
+
 function CustomersTab() {
+  // 회사 공통정보 편집 대상 그룹(같은 회사명의 담당자 레코드들). null = 닫힘.
+  const [company, setCompany] = useState<SettingsCustomer[] | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const canCreate = can("settings", "create");
+
   return (
+    <>
+    {company ? (
+      <CompanyInfoModal
+        rows={company}
+        fields={[
+          ["address", "Address"],
+          ["tax_id", "Tax ID / Business No."],
+          ["tax_invoice_email", "Tax invoice email"],
+        ]}
+        save={updateCustomerCompanyInfo}
+        onClose={() => setCompany(null)}
+        onSaved={() => {
+          setCompany(null);
+          setReloadKey((k) => k + 1);
+          invalidateCustomerLogos();
+        }}
+      />
+    ) : null}
     <MasterSection<SettingsCustomer>
       title="Customer Management"
-      empty={{ id: 0, name: "", contact: "", contact_phone: "", email: "", country: "", address: "", tax_id: "", tax_invoice_email: "", payment_terms: "", logo: "", emails: [], phones: [], regions: [] }}
+      empty={EMPTY_CUSTOMER}
+      reloadKey={reloadKey}
+      searchText={contactSearchText}
+      group={{
+        by: (r) => r.name,
+        cells: (rs, open) => [
+          <GroupNameCell key="n" rows={rs} open={open} />,
+          <span key="r" className="ms-group-sub">{regionSummary(rs)}</span>,
+          <span key="c" className="ms-group-sub">{nameSummary(rs)}</span>,
+          null,
+        ],
+        subFirst: () => <span className="ms-sub-mark">↳</span>,
+        actions: (rs, addNew) => (
+          <>
+            <button
+              type="button"
+              className="ms-mini"
+              title="Company info — applies to all contacts of this company"
+              onClick={() => setCompany(rs)}
+            >
+              🏢
+            </button>
+            {canCreate ? (
+              <button type="button" className="ms-mini" title="Add a contact" onClick={addNew}>
+                ＋
+              </button>
+            ) : null}
+          </>
+        ),
+        newRow: (rs) => withCompanyDefaults(EMPTY_CUSTOMER, rs, rs[0].name),
+        summary: (g, n) => `${g} companies · ${n} contacts`,
+      }}
       load={fetchSettingsCustomers}
       create={createSettingsCustomer}
       update={updateSettingsCustomer}
@@ -957,6 +1019,136 @@ function CustomersTab() {
       allowCopy
       copyHint="Copies this info into a new record — keep the company, change the contact/email/region for a different person."
     />
+    </>
+  );
+}
+
+// 그룹(회사) 헤더의 첫 칸 — 펼침 화살표 + 로고 + 회사명 + 담당자 수.
+function GroupNameCell({
+  rows,
+  open,
+}: {
+  rows: { name: string; logo?: string }[];
+  open: boolean;
+}) {
+  const logo = rows.map((r) => r.logo).find((v) => v) || "";
+  return (
+    <span className="cust-name">
+      <span className="ms-caret" aria-hidden>{open ? "▾" : "▸"}</span>
+      {logo ? <img className="cust-logo" src={logo} alt="" /> : null}
+      <span className="cust-name-text">{rows[0].name || "—"}</span>
+      <span className="ms-badge">{rows.length}</span>
+    </span>
+  );
+}
+
+// 그룹 헤더의 지역 칸 — 담당자들의 지역을 중복 없이 모아 보여준다.
+function regionSummary(rows: { regions?: string[]; country?: string }[]): string {
+  const all = rows.flatMap((r) => (r.regions?.length ? r.regions : [r.country ?? ""]));
+  return summarize(uniqStrings(all), " · ", 3);
+}
+
+// 그룹 헤더의 담당자 칸 — 앞 2명만 쓰고 나머지는 "+N" 으로 줄인다(행이 길어지지 않게).
+function nameSummary(rows: { contact: string }[]): string {
+  return summarize(uniqStrings(rows.map((r) => r.contact)), ", ", 2);
+}
+
+function summarize(list: string[], sep: string, max: number): string {
+  if (!list.length) return "—";
+  return list.length <= max ? list.join(sep) : `${list.slice(0, max).join(sep)} +${list.length - max}`;
+}
+
+// 검색 대상 — 표에 접혀 있는 값(2번째 이메일·전화·주소)까지 포함해 찾을 수 있게 한다.
+function contactSearchText(r: {
+  name: string; contact: string; address?: string; specialization?: string;
+  emails?: string[]; phones?: string[]; regions?: string[];
+  email?: string; contact_phone?: string; country?: string;
+}): string {
+  return [
+    r.name, r.contact, r.address ?? "", r.specialization ?? "",
+    ...(r.emails ?? []), ...(r.phones ?? []), ...(r.regions ?? []),
+    r.email ?? "", r.contact_phone ?? "", r.country ?? "",
+  ].join(" ");
+}
+
+// 회사 공통정보 일괄 수정 — 같은 회사명으로 등록된 담당자 레코드 전체에 한 번에 반영한다.
+// (주소·사업자번호 같은 회사 단위 정보가 레코드마다 복제돼 있어 따로 고치면 어긋난다.)
+function CompanyInfoModal<
+  T extends { id: number; name: string; address: string; payment_terms: string; logo: string }
+>({
+  rows,
+  fields,
+  save,
+  onClose,
+  onSaved,
+}: {
+  rows: T[];
+  fields: [keyof T & keyof CompanyInfoSave, string][];
+  save: (body: CompanyInfoSave) => Promise<{ ok: boolean; updated: number }>;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const origName = rows[0].name;
+  // 각 필드의 시작값 = 등록된 값 중 첫 번째(비어 있지 않은 것).
+  const initial = (key: keyof T) => uniqStrings(rows.map((r) => String(r[key] ?? "")))[0] ?? "";
+  const [name, setName] = useState(origName);
+  const [vals, setVals] = useState<Record<string, string>>(() => {
+    const out: Record<string, string> = { payment_terms: initial("payment_terms" as keyof T), logo: initial("logo" as keyof T) };
+    for (const [key] of fields) out[String(key)] = initial(key as keyof T);
+    return out;
+  });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  // 담당자별로 값이 다른 필드 — 저장하면 하나로 통일된다는 걸 미리 알린다.
+  const mixed = [...fields, ["payment_terms", "Payment terms"] as (typeof fields)[number]]
+    .filter(([k]) => uniqStrings(rows.map((r) => String(r[k as keyof T] ?? ""))).length > 1)
+    .map(([, label]) => label);
+
+  async function submit() {
+    setBusy(true);
+    setErr("");
+    try {
+      const body: CompanyInfoSave = { name: origName, ...vals };
+      if (name.trim() && name.trim() !== origName) body.rename = name.trim();
+      await save(body);
+      onSaved();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Save failed");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal title={`🏢 Company info — ${origName}`} onClose={onClose} form>
+      <div className="ms-copy-hint">
+        Applies to all {rows.length} contacts of this company at once.
+        {mixed.length ? ` Currently different per contact: ${mixed.join(", ")} — saving will make them the same.` : ""}
+      </div>
+      <div className="form-grid">
+        <TextField label="Company name" value={name} onChange={setName} />
+        {fields.map(([key, label]) => (
+          <TextField
+            key={String(key)}
+            label={label}
+            value={vals[String(key)] ?? ""}
+            onChange={(v) => setVals({ ...vals, [String(key)]: v })}
+          />
+        ))}
+        <PaymentTermsField
+          value={vals.payment_terms ?? ""}
+          onChange={(v) => setVals({ ...vals, payment_terms: v })}
+        />
+        <LogoPasteField value={vals.logo ?? ""} onChange={(v) => setVals({ ...vals, logo: v })} />
+      </div>
+      <div className="form-actions">
+        <button className="btn primary" onClick={submit} disabled={busy || !name.trim()}>
+          {busy ? "Saving…" : `Save to ${rows.length} contacts`}
+        </button>
+        <button className="btn" onClick={onClose}>Cancel</button>
+        {err ? <span className="action-err">{err}</span> : null}
+      </div>
+    </Modal>
   );
 }
 
@@ -1273,11 +1465,71 @@ function LogoPasteField({
   );
 }
 
+const EMPTY_VENDOR: SettingsVendor = {
+  id: 0, name: "", contact: "", contact_phone: "", email: "", specialization: "",
+  country: "", address: "", payment_terms: "", logo: "", emails: [], phones: [], regions: [],
+};
+
 function VendorsTab() {
+  const [company, setCompany] = useState<SettingsVendor[] | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const canCreate = can("settings", "create");
+
   return (
+    <>
+    {company ? (
+      <CompanyInfoModal
+        rows={company}
+        fields={[
+          ["address", "Address"],
+          ["specialization", "Specialization"],
+        ]}
+        save={updateVendorCompanyInfo}
+        onClose={() => setCompany(null)}
+        onSaved={() => {
+          setCompany(null);
+          setReloadKey((k) => k + 1);
+          invalidateVendorLogos();
+        }}
+      />
+    ) : null}
     <MasterSection<SettingsVendor>
       title="Vendor Management"
-      empty={{ id: 0, name: "", contact: "", contact_phone: "", email: "", specialization: "", country: "", address: "", payment_terms: "", logo: "", emails: [], phones: [], regions: [] }}
+      empty={EMPTY_VENDOR}
+      reloadKey={reloadKey}
+      searchText={contactSearchText}
+      group={{
+        by: (r) => r.name,
+        cells: (rs, open) => [
+          <GroupNameCell key="n" rows={rs} open={open} />,
+          <span key="r" className="ms-group-sub">{regionSummary(rs)}</span>,
+          <span key="c" className="ms-group-sub">{nameSummary(rs)}</span>,
+          null,
+          <span key="s" className="ms-group-sub">
+            {summarize(uniqStrings(rs.map((r) => r.specialization)), " · ", 2)}
+          </span>,
+        ],
+        subFirst: () => <span className="ms-sub-mark">↳</span>,
+        actions: (rs, addNew) => (
+          <>
+            <button
+              type="button"
+              className="ms-mini"
+              title="Company info — applies to all contacts of this company"
+              onClick={() => setCompany(rs)}
+            >
+              🏢
+            </button>
+            {canCreate ? (
+              <button type="button" className="ms-mini" title="Add a contact" onClick={addNew}>
+                ＋
+              </button>
+            ) : null}
+          </>
+        ),
+        newRow: (rs) => withCompanyDefaults(EMPTY_VENDOR, rs, rs[0].name),
+        summary: (g, n) => `${g} vendors · ${n} contacts`,
+      }}
       load={fetchSettingsVendors}
       create={createSettingsVendor}
       update={updateSettingsVendor}
@@ -1356,6 +1608,7 @@ function VendorsTab() {
       allowCopy
       copyHint="Copies this info into a new record — keep the company, change the contact/email/region for a different person."
     />
+    </>
   );
 }
 
@@ -2435,6 +2688,9 @@ function MasterSection<T extends { id: number }>({
   allowCopy = false,
   copyHint,
   onSaved,
+  group,
+  searchText,
+  reloadKey = 0,
 }: {
   title: string;
   empty: T;
@@ -2462,6 +2718,23 @@ function MasterSection<T extends { id: number }>({
   allowCopy?: boolean; // 기존 항목 정보를 복사해 새 레코드로 등록 허용
   copyHint?: string; // 복사 모드 안내 문구
   onSaved?: () => void; // 생성/수정/삭제 성공 후 호출(예: 로고 캐시 무효화)
+  // 회사 단위 묶어보기(레코드 1건 = 담당자 1명이라 같은 회사가 여러 행으로 반복된다).
+  // 담당자가 2명 이상인 회사만 접었다 펴고, 1명뿐인 회사는 지금처럼 단일 행으로 둔다.
+  group?: {
+    by: (row: T) => string;
+    // 그룹 헤더 행의 각 칸(columns 와 같은 개수). expanded = 펼침 여부(화살표 표시용).
+    cells: (rows: T[], expanded: boolean) => ReactNode[];
+    // 하위 행의 첫 칸 — 기본은 빈칸(회사명·로고 반복을 없앤다).
+    subFirst?: (row: T) => ReactNode;
+    // 헤더 우측 버튼. addNew() = 그룹 공통정보가 채워진 신규 등록 폼 열기.
+    actions?: (rows: T[], addNew: () => void) => ReactNode;
+    newRow?: (rows: T[]) => T;
+    summary?: (groups: number, items: number) => string;
+  };
+  // 검색 대상 텍스트(기본: 표시 컬럼 값). 화면에 접혀 있는 값(2번째 이메일·전화·주소)까지 넓힐 때.
+  searchText?: (row: T) => string;
+  // 값이 바뀌면 목록을 다시 불러온다(바깥에서 저장했을 때 — 예: 회사 공통정보 일괄 수정).
+  reloadKey?: number;
 }) {
   const NEW_ID = -1; // editId 센티넬: 신규 등록 편집기
   const [rows, setRows] = useState<T[]>([]);
@@ -2470,6 +2743,7 @@ function MasterSection<T extends { id: number }>({
   const [q, setQ] = useState("");
   const [err, setErr] = useState("");
   const [copying, setCopying] = useState(false); // 복사 모드(기존 정보 복제 → 새 레코드)
+  const [openKeys, setOpenKeys] = useState<Set<string>>(new Set()); // 펼쳐 둔 그룹(회사)
   // 마스터 데이터 입력·수정·삭제 권한(= "settings" 모듈). admin 은 항상 true.
   const canCreate = can("settings", "create");
   const canEdit = can("settings", "edit");
@@ -2479,10 +2753,19 @@ function MasterSection<T extends { id: number }>({
     load().then(setRows).catch((e) => setErr(e instanceof Error ? e.message : "Load failed"));
   }
 
-  useEffect(refresh, []);
+  useEffect(refresh, [reloadKey]);
 
   function openNew() {
     setForm(empty);
+    setErr("");
+    setCopying(false);
+    setEditId(NEW_ID);
+  }
+  // 그룹(회사) 헤더의 "+ 담당자" — 회사 공통정보가 채워진 상태로 신규 등록 폼을 연다.
+  // 저장 후 목록이 새로 그려져도 그 회사는 펼친 채로 둔다(추가된 담당자가 바로 보이게).
+  function openNewIn(rows: T[]) {
+    if (group) setOpenKeys((prev) => new Set(prev).add(group.by(rows[0])));
+    setForm(group?.newRow?.(rows) ?? empty);
     setErr("");
     setCopying(false);
     setEditId(NEW_ID);
@@ -2537,9 +2820,69 @@ function MasterSection<T extends { id: number }>({
   const requiredValue = String(form[required] ?? "").trim();
   const ql = q.trim().toLowerCase();
   const filtered = ql
-    ? rows.filter((r) => columns.some(([key]) => String(r[key] ?? "").toLowerCase().includes(ql)))
+    ? rows.filter((r) =>
+        searchText
+          ? searchText(r).toLowerCase().includes(ql)
+          : columns.some(([key]) => String(r[key] ?? "").toLowerCase().includes(ql))
+      )
     : rows;
   const isEdit = !!editId && editId > 0;
+
+  // 같은 키(회사)끼리 묶기 — 원래 정렬 순서를 유지한다.
+  const groups: { key: string; rows: T[] }[] = [];
+  if (group) {
+    for (const r of filtered) {
+      const k = group.by(r);
+      const hit = groups.find((g) => g.key === k);
+      if (hit) hit.rows.push(r);
+      else groups.push({ key: k, rows: [r] });
+    }
+  }
+  // 검색 중에는 매칭된 담당자가 보여야 하므로 전부 펼친다.
+  const expandAll = !!ql;
+  const isOpen = (key: string) => expandAll || openKeys.has(key);
+  const multi = groups.filter((g) => g.rows.length > 1);
+  const allOpen = multi.length > 0 && multi.every((g) => openKeys.has(g.key));
+  function toggleGroup(key: string) {
+    setOpenKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  // 데이터 행 1건. sub=true 면 그룹에 속한 하위(담당자) 행 — 첫 칸은 비워 회사명 반복을 없앤다.
+  function dataRow(row: T, sub = false) {
+    return (
+      <tr
+        key={row.id}
+        className={`${sub ? "ms-sub" : ""}${row.id === editId ? " sel" : ""}`}
+        onClick={() => openEdit(row)}
+      >
+        {columns.map(([key, , renderCell], i) => (
+          <td key={String(key)}>
+            {sub && i === 0
+              ? group?.subFirst?.(row) ?? null
+              : renderCell
+              ? renderCell(row)
+              : String(row[key] ?? "") || "—"}
+          </td>
+        ))}
+        <td
+          className="ms-actcol"
+          onClick={(e) => {
+            e.stopPropagation();
+            openEdit(row);
+          }}
+        >
+          <span className="ms-edit-btn" title="Edit">
+            ✎
+          </span>
+        </td>
+      </tr>
+    );
+  }
 
   const editorTitle = isEdit
     ? `✎ Edit ${String(form[required] ?? "") || "item"}`
@@ -2597,12 +2940,24 @@ function MasterSection<T extends { id: number }>({
     <div className="panel">
       <div className="ms-toolbar">
         <h3 className="form-title">{title}</h3>
+        {group ? (
+          <span className="ms-count">{group.summary?.(groups.length, filtered.length)}</span>
+        ) : null}
         <input
           className="ms-search"
           placeholder="🔍 Search…"
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
+        {group && multi.length > 0 ? (
+          <button
+            className="btn"
+            onClick={() => setOpenKeys(allOpen ? new Set() : new Set(multi.map((g) => g.key)))}
+            title={allOpen ? "Collapse all" : "Expand all"}
+          >
+            {allOpen ? "⊟ Collapse" : "⊞ Expand"}
+          </button>
+        ) : null}
         {canCreate ? (
           <button className="btn primary" onClick={openNew} disabled={editId === NEW_ID}>
             + New
@@ -2626,30 +2981,26 @@ function MasterSection<T extends { id: number }>({
               </tr>
             </thead>
             <tbody>
-              {filtered.map((row) => (
-                <tr
-                  key={row.id}
-                  className={row.id === editId ? "sel" : ""}
-                  onClick={() => openEdit(row)}
-                >
-                  {columns.map(([key, , renderCell]) => (
-                    <td key={String(key)}>
-                      {renderCell ? renderCell(row) : String(row[key] ?? "") || "—"}
-                    </td>
-                  ))}
-                  <td
-                    className="ms-actcol"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openEdit(row);
-                    }}
-                  >
-                    <span className="ms-edit-btn" title="Edit">
-                      ✎
-                    </span>
-                  </td>
-                </tr>
-              ))}
+              {!group
+                ? filtered.map((row) => dataRow(row))
+                : groups.map((g) =>
+                    // 담당자 1명뿐인 회사는 묶지 않고 그대로 한 줄로 보여준다.
+                    g.rows.length === 1 ? (
+                      dataRow(g.rows[0])
+                    ) : (
+                      <Fragment key={g.key}>
+                        <tr className="ms-group" onClick={() => toggleGroup(g.key)}>
+                          {group.cells(g.rows, isOpen(g.key)).map((node, i) => (
+                            <td key={i}>{node}</td>
+                          ))}
+                          <td className="ms-actcol" onClick={(e) => e.stopPropagation()}>
+                            {group.actions?.(g.rows, () => openNewIn(g.rows))}
+                          </td>
+                        </tr>
+                        {isOpen(g.key) ? g.rows.map((row) => dataRow(row, true)) : null}
+                      </Fragment>
+                    )
+                  )}
             </tbody>
           </table>
         </div>

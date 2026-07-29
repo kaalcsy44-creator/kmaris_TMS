@@ -1030,6 +1030,28 @@ export function updateSettingsCustomer(
 export function deleteSettingsCustomer(id: number): Promise<{ ok: boolean }> {
   return del(`/api/admin/settings/customers/${id}`);
 }
+// 회사 공통정보(주소·사업자번호·결제조건·로고)를 같은 회사명의 담당자 레코드 전체에 일괄 반영.
+// 값을 넘긴 필드만 바뀐다(빈 문자열 = 지우기). rename = 회사명 자체 변경.
+export type CompanyInfoSave = {
+  name: string;
+  rename?: string;
+  address?: string;
+  tax_id?: string;
+  tax_invoice_email?: string;
+  payment_terms?: string;
+  specialization?: string;
+  logo?: string;
+};
+export function updateCustomerCompanyInfo(
+  body: CompanyInfoSave
+): Promise<{ ok: boolean; updated: number; name: string }> {
+  return put("/api/admin/settings/customers/company-info", body);
+}
+export function updateVendorCompanyInfo(
+  body: CompanyInfoSave
+): Promise<{ ok: boolean; updated: number; name: string }> {
+  return put("/api/admin/settings/vendors/company-info", body);
+}
 export function createSettingsVendor(body: {
   name: string;
   contact?: string;

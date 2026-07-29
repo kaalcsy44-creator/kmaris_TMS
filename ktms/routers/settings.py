@@ -188,6 +188,56 @@ def create_customer(body: CustomerCreate):
         s.close()
 
 
+class CompanyInfoSave(BaseModel):
+    """회사 공통정보 일괄 수정 — 레코드 1건 = 담당자 1명이라 주소·사업자번호 같은
+    회사 단위 정보가 담당자 수만큼 복제돼 있다. 같은 회사명의 모든 레코드에 한 번에 반영한다.
+    None 인 필드는 건드리지 않는다(빈 문자열 = 지우기)."""
+    name: str
+    rename: str | None = None            # 회사명 변경(같은 회사 전 레코드 일괄)
+    address: str | None = None
+    tax_id: str | None = None
+    tax_invoice_email: str | None = None
+    payment_terms: str | None = None
+    specialization: str | None = None    # Vendor 전용(고객사에서는 무시)
+    logo: str | None = None
+
+
+def _company_rows(session, Model, name: str) -> list:
+    """같은 회사명(대소문자·앞뒤 공백 무시)으로 등록된 레코드 전체."""
+    key = (name or "").strip().lower()
+    if not key:
+        return []
+    return [r for r in session.query(Model).all() if (r.name or "").strip().lower() == key]
+
+
+def _apply_company_info(rows: list, body: CompanyInfoSave, fields: tuple[str, ...]) -> str:
+    """회사 공통 필드를 rows 전체에 반영하고, 최종 회사명을 돌려준다."""
+    new_name = (body.rename or "").strip()
+    for r in rows:
+        for f in fields:
+            v = getattr(body, f)
+            if v is not None:
+                setattr(r, f, v)
+        if new_name:
+            r.name = new_name
+    return new_name or (body.name or "").strip()
+
+
+@app.put("/api/admin/settings/customers/company-info", dependencies=[Depends(require_token)])
+def update_customer_company(body: CompanyInfoSave):
+    s = get_session()
+    try:
+        rows = _company_rows(s, Customer, body.name)
+        if not rows:
+            raise HTTPException(status_code=404, detail="해당 회사로 등록된 고객사가 없습니다.")
+        name = _apply_company_info(
+            rows, body, ("address", "tax_id", "tax_invoice_email", "payment_terms", "logo"))
+        s.commit()
+        return {"ok": True, "updated": len(rows), "name": name}
+    finally:
+        s.close()
+
+
 @app.put("/api/admin/settings/customers/{row_id}", dependencies=[Depends(require_token)])
 def update_customer(row_id: int, body: CustomerCreate):
     s = get_session()
@@ -280,6 +330,21 @@ def create_vendor(body: VendorCreate):
         _apply_multi(v, body.emails, body.phones, body.regions)
         s.commit()
         return {"ok": True, "id": v.id}
+    finally:
+        s.close()
+
+
+@app.put("/api/admin/settings/vendors/company-info", dependencies=[Depends(require_token)])
+def update_vendor_company(body: CompanyInfoSave):
+    s = get_session()
+    try:
+        rows = _company_rows(s, Vendor, body.name)
+        if not rows:
+            raise HTTPException(status_code=404, detail="해당 회사로 등록된 공급사가 없습니다.")
+        name = _apply_company_info(
+            rows, body, ("address", "specialization", "payment_terms", "logo"))
+        s.commit()
+        return {"ok": True, "updated": len(rows), "name": name}
     finally:
         s.close()
 
