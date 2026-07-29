@@ -905,6 +905,7 @@ function CustomersTab() {
       empty={EMPTY_CUSTOMER}
       reloadKey={reloadKey}
       searchText={contactSearchText}
+      twoCol
       group={{
         by: (r) => r.name,
         cells: (rs, open) => [
@@ -1498,6 +1499,7 @@ function VendorsTab() {
       empty={EMPTY_VENDOR}
       reloadKey={reloadKey}
       searchText={contactSearchText}
+      twoCol
       group={{
         by: (r) => r.name,
         cells: (rs, open) => [
@@ -2690,6 +2692,7 @@ function MasterSection<T extends { id: number }>({
   onSaved,
   group,
   searchText,
+  twoCol = false,
   reloadKey = 0,
 }: {
   title: string;
@@ -2733,6 +2736,8 @@ function MasterSection<T extends { id: number }>({
   };
   // 검색 대상 텍스트(기본: 표시 컬럼 값). 화면에 접혀 있는 값(2번째 이메일·전화·주소)까지 넓힐 때.
   searchText?: (row: T) => string;
+  // 그룹 목록을 좁은 표 2개로 나눠 나란히 놓는다(넓은 화면의 빈 공간 줄이기).
+  twoCol?: boolean;
   // 값이 바뀌면 목록을 다시 불러온다(바깥에서 저장했을 때 — 예: 회사 공통정보 일괄 수정).
   reloadKey?: number;
 }) {
@@ -2852,6 +2857,63 @@ function MasterSection<T extends { id: number }>({
     });
   }
 
+  // 2열 배치 — 그룹을 위에서부터 채워 좌우 높이가 비슷해지게 자른다(신문 단 조판).
+  // 펼친 그룹은 담당자 행만큼 높아지므로 그만큼 무게를 더 준다.
+  const columnPair = (() => {
+    if (!twoCol || !group || groups.length < 4) return null;
+    const weight = (g: { key: string; rows: T[] }) =>
+      g.rows.length > 1 && isOpen(g.key) ? 1 + g.rows.length : 1;
+    const half = groups.reduce((s, g) => s + weight(g), 0) / 2;
+    const left: typeof groups = [];
+    const right: typeof groups = [];
+    let acc = 0;
+    for (const g of groups) {
+      if (acc < half) {
+        left.push(g);
+        acc += weight(g);
+      } else right.push(g);
+    }
+    return right.length ? [left, right] : null;
+  })();
+
+  // 표 하나. list=null 이면 그룹 없이 전체 행, 아니면 넘겨받은 그룹만 그린다.
+  function table(list: { key: string; rows: T[] }[] | null) {
+    return (
+      <table className="mini wide ms-table">
+        <thead>
+          <tr>
+            {columns.map(([, label]) => (
+              <th key={label}>{label}</th>
+            ))}
+            <th className="ms-actcol"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {!list
+            ? filtered.map((row) => dataRow(row))
+            : list.map((g) =>
+                // 담당자 1명뿐인 회사는 묶지 않고 그대로 한 줄로 보여준다.
+                g.rows.length === 1 ? (
+                  dataRow(g.rows[0])
+                ) : (
+                  <Fragment key={g.key}>
+                    <tr className="ms-group" onClick={() => toggleGroup(g.key)}>
+                      {group?.cells(g.rows, isOpen(g.key)).map((node, i) => (
+                        <td key={i}>{node}</td>
+                      ))}
+                      <td className="ms-actcol" onClick={(e) => e.stopPropagation()}>
+                        {group?.actions?.(g.rows, () => openNewIn(g.rows))}
+                      </td>
+                    </tr>
+                    {isOpen(g.key) ? g.rows.map((row) => dataRow(row, true)) : null}
+                  </Fragment>
+                )
+              )}
+        </tbody>
+      </table>
+    );
+  }
+
   // 데이터 행 1건. sub=true 면 그룹에 속한 하위(담당자) 행 — 첫 칸은 비워 회사명 반복을 없앤다.
   function dataRow(row: T, sub = false) {
     return (
@@ -2969,41 +3031,17 @@ function MasterSection<T extends { id: number }>({
 
       {filtered.length === 0 ? (
         <div className="state">{ql ? "No search results." : "No items registered."}</div>
-      ) : (
-        <div className="table-wrap">
-          <table className="mini wide ms-table">
-            <thead>
-              <tr>
-                {columns.map(([, label]) => (
-                  <th key={label}>{label}</th>
-                ))}
-                <th className="ms-actcol"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {!group
-                ? filtered.map((row) => dataRow(row))
-                : groups.map((g) =>
-                    // 담당자 1명뿐인 회사는 묶지 않고 그대로 한 줄로 보여준다.
-                    g.rows.length === 1 ? (
-                      dataRow(g.rows[0])
-                    ) : (
-                      <Fragment key={g.key}>
-                        <tr className="ms-group" onClick={() => toggleGroup(g.key)}>
-                          {group.cells(g.rows, isOpen(g.key)).map((node, i) => (
-                            <td key={i}>{node}</td>
-                          ))}
-                          <td className="ms-actcol" onClick={(e) => e.stopPropagation()}>
-                            {group.actions?.(g.rows, () => openNewIn(g.rows))}
-                          </td>
-                        </tr>
-                        {isOpen(g.key) ? g.rows.map((row) => dataRow(row, true)) : null}
-                      </Fragment>
-                    )
-                  )}
-            </tbody>
-          </table>
+      ) : columnPair ? (
+        // 넓은 화면에서 표가 옆으로 늘어져 빈칸만 커지는 걸 막으려고 좌우 2열로 나눈다.
+        <div className="ms-2col">
+          {columnPair.map((part, i) => (
+            <div key={i} className="table-wrap">
+              {table(part)}
+            </div>
+          ))}
         </div>
+      ) : (
+        <div className="table-wrap">{table(group ? groups : null)}</div>
       )}
     </div>
   );

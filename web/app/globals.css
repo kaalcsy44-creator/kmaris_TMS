@@ -1225,6 +1225,30 @@ body {
   background: #e2ebf8;
   border-color: #c7d6ea;
 }
+/* 그룹 헤더의 버튼 2개(회사정보·담당자추가)가 한 줄에 들어가도록 — table.mini.wide
+   의 마지막 컬럼 44px 규칙보다 선택자를 구체적으로 잡아 이긴다. */
+table.mini.wide th.ms-actcol,
+table.mini.wide td.ms-actcol {
+  width: 56px;
+  min-width: 56px;
+  white-space: nowrap;
+}
+/* 목록을 좌우 2열로 — 표 하나가 화면 폭을 다 차지하면 셀 사이 빈칸만 커진다.
+   각 열은 독립된 표라 한쪽을 펼쳐도 다른 쪽 행 높이에 영향을 주지 않는다. */
+.ms-2col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 20px;
+  align-items: start;
+}
+.ms-2col > .table-wrap {
+  min-width: 0;
+}
+@media (max-width: 1280px) {
+  .ms-2col {
+    grid-template-columns: 1fr;
+  }
+}
 .ms-editor {
   padding: 14px 16px;
   background: #f3f6fb;
