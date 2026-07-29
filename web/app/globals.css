@@ -1162,6 +1162,34 @@ body {
 .ms-table tbody tr {
   cursor: pointer;
 }
+/* 회사명 열은 줄바꿈하지 않는다(두 줄로 접히면 목록을 훑기 어렵다) — 남는 폭도
+   이 열이 가져가고, 나머지 열은 내용 폭 + 최소폭만 차지해 오른쪽으로 붙는다.
+   table.mini.wide 의 일반 컬럼 규칙(2번째 140px·3번째 180px 등)을 이기려고
+   선택자에 .ms-table 을 더해 구체성을 높였다. */
+table.mini.wide.ms-table th:first-child,
+table.mini.wide.ms-table td:first-child {
+  white-space: nowrap;
+}
+table.mini.wide.ms-table th:nth-child(n + 2):not(.ms-actcol),
+table.mini.wide.ms-table td:nth-child(n + 2):not(.ms-actcol) {
+  width: 1%;
+}
+/* Region — 짧아서 줄바꿈도, 최소폭도 필요 없다. */
+table.mini.wide.ms-table th:nth-child(2):not(.ms-actcol),
+table.mini.wide.ms-table td:nth-child(2):not(.ms-actcol) {
+  min-width: 0;
+  white-space: nowrap;
+}
+/* Contact — 담당자 이름이 여러 명 요약되므로 최소폭은 남겨 둔다(행이 세로로 길어지지 않게). */
+table.mini.wide.ms-table th:nth-child(3):not(.ms-actcol),
+table.mini.wide.ms-table td:nth-child(3):not(.ms-actcol) {
+  min-width: 150px;
+}
+/* 그 뒤 열(Vendor 의 Specialization 등). */
+table.mini.wide.ms-table th:nth-child(n + 4):not(.ms-actcol),
+table.mini.wide.ms-table td:nth-child(n + 4):not(.ms-actcol) {
+  min-width: 120px;
+}
 .ms-edit-btn {
   color: #8a97ab;
   font-size: 12px;
