@@ -16,6 +16,7 @@ import {
 import type { CustomerOption, SettingsVessel, RfqSourceFile } from "@/lib/types";
 import { can, canEditDeal, editBlockReason } from "@/lib/auth";
 import CustomerName from "@/components/common/CustomerName";
+import CustomerSelect from "@/components/common/CustomerSelect";
 import { useColumnLayout } from "@/components/common/useColumnLayout";
 import CategoryCell from "@/components/common/CategoryCell";
 import { ColumnResizer, ColumnsButton } from "@/components/common/tableLayout";
@@ -484,11 +485,16 @@ export default function NewRfqForm({
 
   const customerName = customerId === "" ? "" : (customers.find((c) => c.id === customerId)?.name || "");
 
-  // 회사 목록(중복 제거) — Customer select 는 회사명만 보여준다.
-  const companyNames = useMemo(() => {
-    const seen: string[] = [];
-    for (const c of customers) if (!seen.includes(c.name)) seen.push(c.name);
-    return seen;
+  // 회사 목록(중복 제거) — Customer select 는 회사명만 보여준다. 로고는 같은 회사의
+  // 담당자 레코드 중 로고가 등록된 첫 건에서 가져온다(레코드마다 비어 있을 수 있다).
+  const companyOptions = useMemo(() => {
+    const out: CustomerOption[] = [];
+    for (const c of customers) {
+      const hit = out.find((o) => o.name === c.name);
+      if (!hit) out.push({ id: c.id, name: c.name, logo: c.logo || "" });
+      else if (!hit.logo && c.logo) hit.logo = c.logo;
+    }
+    return out;
   }, [customers]);
   // 선택한 회사에 속한 담당자 레코드들 — Customer contact select 의 선택지.
   const companyContacts = useMemo(
@@ -662,14 +668,17 @@ export default function NewRfqForm({
         <div className="basic-col">
           <div className="basic-col-title">Customer &amp; vessel</div>
           <Field label="Customer *">
-            <select value={companyName} onChange={(e) => pickCompany(e.target.value)}>
-              <option value="">Select…</option>
-              {companyNames.map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
+            {/* 회사 로고를 함께 보여주려고 공용 CustomerSelect(버튼+팝오버)를 쓴다.
+                이 컴포넌트는 id 로 값을 주고받으므로 회사 대표 레코드의 id 로 매핑한다. */}
+            <CustomerSelect
+              value={companyOptions.find((o) => o.name === companyName)?.id ?? ""}
+              options={companyOptions}
+              onChange={(id) =>
+                pickCompany(id === "" ? "" : companyOptions.find((o) => o.id === id)?.name || "")
+              }
+              emptyLabel="Select…"
+              disabled={!canEditThis}
+            />
           </Field>
           <Field label={companyContacts.length > 1 ? "Customer contact *" : "Customer contact"}>
             <select

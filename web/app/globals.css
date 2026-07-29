@@ -6027,6 +6027,18 @@ table.mini .num {
   color: #8a96a8;
   text-align: center;
 }
+/* 입력란(.form-field) 안에 넣었을 때 — 기본 min-width(320px)를 풀고 주변
+   select/input(높이 32px·12px·둥근 8px)과 같은 모양으로 맞춘다. */
+.form-field .cust-select {
+  min-width: 0;
+}
+.form-field .cust-select-btn {
+  height: 32px;
+  padding: 0 10px;
+  font-size: 12px;
+  border-color: #d7e2ee;
+  border-radius: 8px;
+}
 
 /* 고객 관리 폼의 로고 붙여넣기 필드 */
 .logo-field {
