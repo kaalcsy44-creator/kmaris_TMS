@@ -922,7 +922,7 @@ function CustomersTab() {
               title="Company info — applies to all contacts of this company"
               onClick={() => setCompany(rs)}
             >
-              🏢
+              <CompanyIcon />
             </button>
             {canCreate ? (
               <button type="button" className="ms-mini" title="Add a contact" onClick={addNew}>
@@ -1019,6 +1019,18 @@ function CustomersTab() {
       copyHint="Copies this info into a new record — keep the company, change the contact/email/region for a different person."
     />
     </>
+  );
+}
+
+// 회사정보 버튼 아이콘 — 표 안에서 튀지 않게 선만 있는 단색(currentColor) 건물 모양.
+function CompanyIcon() {
+  return (
+    <svg className="ms-icon" viewBox="0 0 16 16" aria-hidden focusable="false">
+      <path d="M2.6 14V3.1a.6.6 0 0 1 .6-.6h6a.6.6 0 0 1 .6.6V14" />
+      <path d="M9.8 6.6h3a.6.6 0 0 1 .6.6V14" />
+      <path d="M1.3 14h13.4" />
+      <path d="M5 5.3h2M5 7.9h2M5 10.5h2M11.2 9.2h1M11.2 11.6h1" strokeLinecap="round" />
+    </svg>
   );
 }
 
@@ -1517,7 +1529,7 @@ function VendorsTab() {
               title="Company info — applies to all contacts of this company"
               onClick={() => setCompany(rs)}
             >
-              🏢
+              <CompanyIcon />
             </button>
             {canCreate ? (
               <button type="button" className="ms-mini" title="Add a contact" onClick={addNew}>

@@ -1216,6 +1216,7 @@ body {
   padding: 2px 4px;
   font-size: 12px;
   line-height: 1;
+  vertical-align: middle;
   background: none;
   border: 1px solid transparent;
   border-radius: 5px;
@@ -1224,6 +1225,20 @@ body {
 .ms-mini:hover {
   background: #e2ebf8;
   border-color: #c7d6ea;
+}
+/* 아이콘 버튼 — 색은 선(currentColor)에서만 나오게 두고, hover 때만 진해진다. */
+.ms-icon {
+  display: block;
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.3;
+  stroke-linejoin: round;
+  color: #8b97a8;
+}
+.ms-mini:hover .ms-icon {
+  color: #3f5372;
 }
 /* 그룹 헤더의 버튼 2개(회사정보·담당자추가)가 한 줄에 들어가도록 — table.mini.wide
    의 마지막 컬럼 44px 규칙보다 선택자를 구체적으로 잡아 이긴다. */
