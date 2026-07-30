@@ -3265,17 +3265,110 @@ table.mini.wide thead tr.ig-group-row th.grp-sales {
   background: #d3e2fb;
   border-bottom: 3px solid #2f6fed;
 }
-/* Purchase(Cost 9·Cost Amount 10)·Sales(Unit Price 12·Amount 13) 블럭화 —
+/* Purchase(Cost 7·Cost Amount 8)·Sales(Unit Price 10·Amount 11) 블럭화 —
    그룹 라벨 톤을 컬럼 헤더에 이어 하나의 색 블록으로 보이게(본문 행은 흰색 유지).
    이 표(ig-cquote-items)에만 적용해 다른 편집표에는 영향 없음. 물리 컬럼 위치 고정(재정렬 없음).
+   컬럼 구성 = 1선택 · 2No. · 3Part · 4Description · 5Qty · 6Unit · 7Cost · 8Cost Amount ·
+   9Margin · 10Unit Price · 11Amount (부수 필드는 상세 서브행으로 내려가 컬럼이 아니다).
    합계행(tfoot)은 colspan 세그먼트라 nth-child 대신 .foot-purchase/.foot-sales 클래스로 색을 준다. */
-.ig-cquote-items thead tr:not(.ig-group-row) th:nth-child(9),
-.ig-cquote-items thead tr:not(.ig-group-row) th:nth-child(10) {
+.ig-cquote-items thead tr:not(.ig-group-row) th:nth-child(7),
+.ig-cquote-items thead tr:not(.ig-group-row) th:nth-child(8) {
   background: #f8f2e6;
 }
-.ig-cquote-items thead tr:not(.ig-group-row) th:nth-child(12),
-.ig-cquote-items thead tr:not(.ig-group-row) th:nth-child(13) {
+.ig-cquote-items thead tr:not(.ig-group-row) th:nth-child(10),
+.ig-cquote-items thead tr:not(.ig-group-row) th:nth-child(11) {
   background: #e2ecfb;
+}
+/* Qty·Unit 은 짧은 값이므로 일반 규칙(num 104px · 5·6번째 110px)보다 좁게 잡는다 —
+   컬럼이 11개로 줄어든 만큼 표가 가로 스크롤 없이 들어가도록.
+   선택자에 table.mini.wide.lead-tools 를 그대로 붙인 건 우선순위 때문 —
+   기존 `table.mini.wide td:has(input.num)` 규칙(클래스 3개)을 이겨야 한다. */
+table.mini.wide.lead-tools.ig-cquote-items thead th:nth-child(5),
+table.mini.wide.lead-tools.ig-cquote-items tbody td:nth-child(5) {
+  min-width: 74px;
+}
+table.mini.wide.lead-tools.ig-cquote-items thead th:nth-child(6),
+table.mini.wide.lead-tools.ig-cquote-items tbody td:nth-child(6) {
+  min-width: 68px;
+}
+table.mini.wide.lead-tools.ig-cquote-items tbody td:nth-child(5) input,
+table.mini.wide.lead-tools.ig-cquote-items tbody td:nth-child(6) input {
+  min-width: 0;
+}
+/* No. 칸에 상세 펼침 캐럿이 함께 들어가므로 seq 열만 조금 넓힌다
+   (컬럼을 새로 추가하면 lead-tools 의 nth-child 폭 규칙이 한 칸씩 밀린다). */
+table.mini.wide.lead-tools.ig-cquote-items th.seq,
+table.mini.wide.lead-tools.ig-cquote-items td.seq {
+  width: 64px;
+  min-width: 64px;
+  white-space: nowrap;
+}
+/* 상세 펼침 캐럿 — 값이 들어 있는 행은 점(has)으로 접힌 상태에서도 표시한다. */
+.item-exp {
+  border: 0;
+  background: transparent;
+  color: #9aa8bd;
+  cursor: pointer;
+  font-size: 10px;
+  line-height: 1;
+  padding: 2px 3px;
+  margin-right: 2px;
+  transition: transform 0.12s, color 0.12s;
+}
+.item-exp:hover {
+  color: var(--blue);
+}
+.item-exp.on {
+  color: var(--blue);
+  transform: rotate(90deg);
+}
+.item-exp.has::after {
+  content: "";
+  display: inline-block;
+  width: 4px;
+  height: 4px;
+  margin-left: 2px;
+  border-radius: 50%;
+  background: #2f6fed;
+  vertical-align: top;
+}
+/* 상세 서브행 — 주행에서 내린 부수 필드(Type·Serial No.·Lead Time·Remark·Category).
+   참고 양식과 같이 "번호. 라벨 [값]" 을 한 줄에 흘려 놓는다. */
+table.mini.wide.lead-tools tbody tr.item-subrow > td {
+  background: #f2f6fc;
+  border-top: 0;
+  padding: 6px 10px 8px 62px;
+}
+.isr-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 18px;
+  min-width: 0;
+}
+.isr-f {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.isr-f.wide {
+  flex: 1 1 240px;
+}
+.isr-l {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 700;
+  color: #45526a;
+  white-space: nowrap;
+}
+.isr-f textarea.wrapcell {
+  min-width: 120px;
+  background: #fff;
+}
+.isr-f.wide textarea.wrapcell {
+  min-width: 0;
+  width: 100%;
 }
 /* 합계행 셀: "Total" 은 통합셀 가운데, 매입/매출 합계는 그룹색 배경. */
 table.mini.wide tfoot td.foot-total-label {
@@ -3942,8 +4035,167 @@ a.btn.primary:hover {
 .stage-card > .form-grid + .form-field {
   padding-top: 0;
 }
+/* ── 가격 설정 밴드(Pricing) ─────────────────────────────────────────────────
+   단가 계산 설정을 품목표 카드 바로 위에 붙여 "이 설정이 아래 표에 적용된다" 를
+   인접성으로 읽히게 한다(참고 양식의 Equipment 밴드와 같은 자리). 라벨은 위가 아니라
+   앞에 두어 좌→우로 한 문장처럼 읽힌다: Cost KRW → Sale USD @ FX … → round … → margin … */
+.pricing-band {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin: 14px 0 0;
+  padding: 9px 14px;
+  background: #eaf2fd;
+  border: 1px solid #c9dcf6;
+  border-bottom: 0;
+  border-radius: 10px 10px 0 0;
+}
+.pricing-band .pb-title {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #1a49c0;
+}
+/* 밴드 안에서는 폼 필드를 "라벨 + 컨트롤" 한 줄로 눕힌다. */
+.pricing-band .form-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.pricing-band .form-field label,
+.pricing-band .form-field > span {
+  margin-bottom: 0;
+  white-space: nowrap;
+  font-size: 11.5px;
+}
+.pricing-band .form-field select,
+.pricing-band .form-field input {
+  width: auto;
+  height: 30px;
+  font-size: 12px;
+}
+.pricing-band .currency-select {
+  min-width: 74px;
+}
+.pricing-band .fx-rate-input {
+  width: 96px;
+  min-width: 96px;
+}
+.pricing-band .fx-note-inline {
+  margin-top: 0;
+  white-space: nowrap;
+}
+.pricing-band .fx-toggle button {
+  font-size: 11px;
+}
+.pricing-band .btn {
+  height: 30px;
+}
+/* 입력 뒤에 붙는 단위 기호(%) — 라벨에 "(%)" 를 넣는 대신 값 옆에 둔다. */
+.pb-unit {
+  flex: 0 0 auto;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #45526a;
+}
+
+/* ── 요약 스트립(소계 − 할인 = 최종) ─────────────────────────────────────────
+   같은 총액이 표 합계행·이 요약·하단 저장바 세 군데 나오던 걸 계산식 한 줄로 줄인 것.
+   품목표 카드 바로 아래에 붙여 표의 합계에서 이어지는 흐름으로 읽히게 한다. */
+.summary-strip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin: 0 0 14px;
+  padding: 9px 14px;
+  background: #f7f9fc;
+  border: 1px solid #e3e9f2;
+  border-top: 0;
+  border-radius: 0 0 10px 10px;
+  font-variant-numeric: tabular-nums;
+}
+.summary-strip .pb-title {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.summary-strip .form-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.summary-strip .form-field label {
+  margin-bottom: 0;
+  white-space: nowrap;
+  font-size: 11.5px;
+}
+.summary-strip .form-field input {
+  width: auto;
+  height: 30px;
+  font-size: 12px;
+}
+.ss-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.ss-l {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #45526a;
+}
+.ss-item b {
+  font-size: 13px;
+  color: #2b3a4d;
+}
+.ss-op {
+  color: var(--muted);
+  font-weight: 700;
+}
+.ss-final {
+  margin-left: auto;
+}
+.ss-final .ss-l {
+  color: var(--navy);
+}
+.ss-final b {
+  font-size: 14px;
+  color: var(--navy);
+}
+/* 품목표 카드 아래에 곧바로 붙는 경우 카드의 아래 모서리·간격을 없애 한 덩어리로 만든다. */
+.stage-card--items:has(+ .summary-strip) {
+  margin-bottom: 0;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.stage-card--items:has(+ .summary-strip) > .table-wrap {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+/* 밴드와 품목표 카드는 한 덩어리로 붙인다(밴드 아래 테두리·모서리 제거). */
+.pricing-band + .stage-card--items {
+  margin-top: 0;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+.pricing-band + .stage-card--items > .items-head {
+  border-radius: 0;
+}
 /* 품목표 카드 — .items-head 가 제목 밴드 역할을 하고, 표는 카드에 딱 붙인다
    (.table-wrap 자체 테두리·그림자·우측 여백은 카드 안에서 해제). */
+.stage-card--items {
+  margin-top: 12px;
+}
 .stage-card--items > .items-head {
   margin: 0;
   padding: 7px 12px;
@@ -4317,17 +4569,6 @@ table.mini tfoot tr.foot-grand .total-value {
   cursor: pointer;
   font-size: 15px;
   line-height: 1;
-}
-/* 가격설정 — Item list 단가 계산에 직결. 6개 컨트롤을 한 줄로(FX 넓게, Apply는 내용폭). */
-.quote-price-grid {
-  grid-template-columns: 1fr 1fr 1.4fr 1fr 0.8fr auto;
-  align-items: end;
-}
-/* 폭이 좁아지면(정보 패널 펼침 등) 한 줄이 좁아지므로 3열로 접는다. */
-@media (max-width: 1200px) {
-  .quote-price-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
 }
 /* Received 단계(1·3·5) — 좌측=입력 필드(세로 1열), 우측=Auto-fill 도구·소스파일.
    상단이 세로로 길어지지 않고 화면 가로폭을 채우도록 좌/우 2분할. */
@@ -4783,16 +5024,16 @@ table.mini tbody tr.item-group-break td {
    짝수 행은 입력 박스까지 같은 톤으로 눕힌다. 포커스된 칸만 흰색으로 돌아와
    "지금 편집 중인 셀" 표시도 겸한다. 5행마다 들어가는 그룹 구분행(item-group-break)
    은 자체 톤을 유지하도록 제외. */
-table.mini.wide.lead-tools tbody tr:nth-child(even):not(.item-group-break) td {
+table.mini.wide.lead-tools tbody tr.item-row-alt:not(.item-group-break) td {
   background: #f7f9fc;
 }
-table.mini.wide.lead-tools tbody tr:nth-child(even):not(.item-group-break) input:not(:focus),
-table.mini.wide.lead-tools tbody tr:nth-child(even):not(.item-group-break) textarea:not(:focus) {
+table.mini.wide.lead-tools tbody tr.item-row-alt:not(.item-group-break) input:not(:focus),
+table.mini.wide.lead-tools tbody tr.item-row-alt:not(.item-group-break) textarea:not(:focus) {
   background: #f7f9fc;
 }
 /* 좌측 고정열(선택·No.)은 #fff 를 더 구체적인 선택자로 못박아 뒀으므로 같이 맞춘다. */
-.table-wrap table.mini.wide.lead-tools tbody tr:nth-child(even):not(.item-group-break) td.row-tools,
-.table-wrap table.mini.wide.lead-tools tbody tr:nth-child(even):not(.item-group-break) td.seq {
+.table-wrap table.mini.wide.lead-tools tbody tr.item-row-alt:not(.item-group-break) td.row-tools,
+.table-wrap table.mini.wide.lead-tools tbody tr.item-row-alt:not(.item-group-break) td.seq {
   background: #f7f9fc;
 }
 /* 컬럼 경계 — 헤더에만 있던 세로선을 본문에도 연장해 컬럼 정렬이 눈으로 이어지게. */

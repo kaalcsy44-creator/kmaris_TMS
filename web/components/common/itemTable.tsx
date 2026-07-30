@@ -267,8 +267,15 @@ function toNumber(value: number | string | null | undefined): number {
   return typeof value === "number" ? value : Number(String(value).replace(/,/g, ""));
 }
 
+// 품목 행에 붙는 클래스 — 5행마다 그룹 구분선 + 짝수행 zebra.
+// zebra 를 CSS :nth-child(even) 로 두면 상세 서브행(item-subrow)이 끼는 표에서 행 번호가
+// 어긋나므로, 품목 인덱스 기준으로 클래스를 직접 붙인다.
 export function itemRowClass(index: number): string | undefined {
-  return index > 0 && index % 5 === 0 ? "item-group-break" : undefined;
+  const cls = [
+    index > 0 && index % 5 === 0 ? "item-group-break" : "",
+    index % 2 === 1 ? "item-row-alt" : "",
+  ].filter(Boolean);
+  return cls.length ? cls.join(" ") : undefined;
 }
 
 type GridCell = HTMLInputElement | HTMLTextAreaElement;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import {
   fetchVendors,
   fetchRfqDetail,
@@ -83,6 +83,7 @@ import {
   DualCurrencyAmount,
   dualCurrencyText,
   fxRateText,
+  moneyText,
   useItemGridKeys,
   CopyRowsButton,
   ItemGridHint,
@@ -2249,25 +2250,25 @@ function CustomerQuoteDetailModal({
           </div>
           </div>
 
-          {/* 가격 설정 — 아래 Item list 단가 계산에 직접 반영. */}
-          <div className="stage-card">
-          <div className="form-section-title">Pricing <span className="section-hint">— applied to item unit prices</span></div>
-          <div className="form-grid quote-price-grid">
+          {/* 가격 설정 — 아래 Item list 단가 계산에 직접 반영되므로 표에 붙인 밴드로 둔다. */}
+          <div className="pricing-band">
+            <span className="pb-title">Pricing</span>
             <div className="form-field">
-              <label>Cost currency (vendor)</label>
+              <label>Cost</label>
               <CurrencyToggle
                 value={costCurrency}
                 onChange={(c) => { setCostCurrency(c); setItems((prev) => recomputeCustomerQuoteItems(prev, c, currency, roundDigits, effRate)); }}
               />
             </div>
             <div className="form-field">
-              <label>Sale currency (unit price)</label>
+              <label>→ Sale</label>
               <CurrencyToggle
                 value={currency}
                 onChange={(c) => { setCurrency(c); setItems((prev) => recomputeCustomerQuoteItems(prev, costCurrency, c, roundDigits, effRate)); }}
               />
             </div>
             <FxRateControl
+              label="FX 1 USD ="
               rate={fxRate}
               onRate={(v) => { setFxRate(v); setItems((prev) => recomputeCustomerQuoteItems(prev, costCurrency, currency, roundDigits, v ?? USD_KRW_RATE)); }}
               mode={fxMode}
@@ -2275,31 +2276,30 @@ function CustomerQuoteDetailModal({
               date={sentAt}
             />
             <div className="form-field">
-              <label>Round unit price up to</label>
+              <label>Round up to</label>
               <RoundUnitSelect
                 value={roundDigits}
                 onChange={(d) => { setRoundDigits(d); setItems((prev) => recomputeCustomerQuoteItems(prev, costCurrency, currency, d, effRate)); }}
               />
             </div>
             <div className="form-field">
-              <label>Default margin (%)</label>
+              <label>Margin</label>
               <input
                 className="num"
                 type="number"
+                style={{ width: 64 }}
                 value={defaultMargin}
                 onChange={(e) => setDefaultMargin(Number(e.target.value))}
               />
+              <span className="pb-unit">%</span>
             </div>
-            <div className="form-field" style={{ alignSelf: "end" }}>
-              <button
-                className="btn"
-                onClick={() => setItems((prev) => applyMarginToAll(prev, defaultMargin, costCurrency, currency, roundDigits))}
-                disabled={items.length === 0}
-              >
-                Apply
-              </button>
-            </div>
-          </div>
+            <button
+              className="btn"
+              onClick={() => setItems((prev) => applyMarginToAll(prev, defaultMargin, costCurrency, currency, roundDigits))}
+              disabled={items.length === 0}
+            >
+              Apply
+            </button>
           </div>
           <CustomerQuoteItemEditor
             items={items}
@@ -3270,7 +3270,7 @@ function VendorQuoteItemEditor({
   });
 
   return (
-    <div className="stage-card stage-card--items" style={{ marginTop: 12 }}>
+    <div className="stage-card stage-card--items">
       <div className="items-head">
         <div className="sub-h">Item list</div>
         <div className="items-head-actions">
@@ -3660,25 +3660,25 @@ function CustomerQuoteAction({
       </div>
       </div>
 
-      {/* 가격 설정 — 아래 Item list 단가 계산에 직접 반영. */}
-      <div className="stage-card">
-      <div className="form-section-title">Pricing <span className="section-hint">— applied to item unit prices</span></div>
-      <div className="form-grid quote-price-grid">
+      {/* 가격 설정 — 아래 Item list 단가 계산에 직접 반영되므로 표에 붙인 밴드로 둔다. */}
+      <div className="pricing-band">
+        <span className="pb-title">Pricing</span>
         <div className="form-field">
-          <label>Cost currency (vendor)</label>
+          <label>Cost</label>
           <CurrencyToggle
             value={costCurrency}
             onChange={(c) => { setCostCurrency(c); setItems((prev) => recomputeCustomerQuoteItems(prev, c, currency, roundDigits, effRate)); }}
           />
         </div>
         <div className="form-field">
-          <label>Sale currency (unit price)</label>
+          <label>→ Sale</label>
           <CurrencyToggle
             value={currency}
             onChange={(c) => { setCurrency(c); setItems((prev) => recomputeCustomerQuoteItems(prev, costCurrency, c, roundDigits, effRate)); }}
           />
         </div>
         <FxRateControl
+          label="FX 1 USD ="
           rate={fxRate}
           onRate={(v) => { setFxRate(v); setItems((prev) => recomputeCustomerQuoteItems(prev, costCurrency, currency, roundDigits, v ?? USD_KRW_RATE)); }}
           mode={fxMode}
@@ -3686,31 +3686,30 @@ function CustomerQuoteAction({
           date={sentAt}
         />
         <div className="form-field">
-          <label>Round unit price up to</label>
+          <label>Round up to</label>
           <RoundUnitSelect
             value={roundDigits}
             onChange={(d) => { setRoundDigits(d); setItems((prev) => recomputeCustomerQuoteItems(prev, costCurrency, currency, d, effRate)); }}
           />
         </div>
         <div className="form-field">
-          <label>Default margin (%)</label>
+          <label>Margin</label>
           <input
             className="num"
             type="number"
+            style={{ width: 64 }}
             value={defaultMargin}
             onChange={(e) => setDefaultMargin(Number(e.target.value))}
           />
+          <span className="pb-unit">%</span>
         </div>
-        <div className="form-field" style={{ alignSelf: "end" }}>
-          <button
-            className="btn"
-            onClick={() => setItems((prev) => applyMarginToAll(prev, defaultMargin, costCurrency, currency, roundDigits))}
-            disabled={items.length === 0}
-          >
-            Apply
-          </button>
-        </div>
-      </div>
+        <button
+          className="btn"
+          onClick={() => setItems((prev) => applyMarginToAll(prev, defaultMargin, costCurrency, currency, roundDigits))}
+          disabled={items.length === 0}
+        >
+          Apply
+        </button>
       </div>
 
       <CustomerQuoteItemEditor
@@ -3892,13 +3891,32 @@ function CustomerQuoteItemEditor({
   const purchaseTotal = items.reduce((sum, it) => sum + Number(it.cost_price || 0) * Number(it.qty || 1), 0);
   const total = items.reduce((sum, it) => sum + Number(it.amount || 0), 0);
   const sel = useRowSelection();
+  // 상세(서브행) 펼침 상태 — 품목 인덱스 기준. 행이 지워지면 인덱스가 밀리므로 함께 초기화한다.
+  const [openRows, setOpenRows] = useState<Set<number>>(() => new Set());
+  const [allOpen, setAllOpen] = useState(false);
+  const isOpen = (i: number) => allOpen || openRows.has(i);
+  // 전체 펼침(allOpen) 상태에서 캐럿을 누르면 그 행만 접혀야 한다 — 현재 펼쳐진 상태를
+  // openRows 로 실체화한 뒤 해당 행만 뒤집는다(안 그러면 나머지가 통째로 접힌다).
+  const toggleRow = (i: number) => {
+    const base = allOpen ? new Set(items.map((_, idx) => idx)) : openRows;
+    const next = new Set(base);
+    if (next.has(i)) next.delete(i);
+    else next.add(i);
+    setAllOpen(false);
+    setOpenRows(next);
+  };
+  // 접힌 상태에서도 "이 행엔 상세값이 있다" 를 캐럿에 표시하기 위한 판정.
+  const hasDetail = (it: CustomerQuoteItem) =>
+    Boolean(it.type || it.serial_no || it.lead_time || it.remark || it.category_id);
+
+  // 주행(main row)은 금액 계산에 쓰이는 컬럼만 둔다. 부수 필드(Type·Serial No.·Lead Time·
+  // Remark·Category)는 행을 펼쳤을 때 나오는 서브행으로 내렸다 — 15컬럼이 한 줄에 있어
+  // 가로 스크롤이 생기고 Description 이 두세 줄로 접히던 걸 없애기 위함.
   const cols: ItemCol[] = [
     { key: "__sel", fixed: true },
     { key: "__seq", fixed: true, className: "seq" },
     { key: "part_no", label: "Part No." },
     { key: "description", label: "Description" },
-    { key: "type", label: "Type" },
-    { key: "serial_no", label: "Serial No." },
     { key: "qty", label: "Qty", className: "num" },
     { key: "unit", label: "Unit" },
     { key: "cost", label: `Cost (${costCur})`, className: "num" },
@@ -3906,21 +3924,20 @@ function CustomerQuoteItemEditor({
     { key: "margin", label: "Margin %", className: "num" },
     { key: "unit_price", label: `Unit Price (${saleCur})`, className: "num" },
     { key: "amount", label: `Amount (${saleCur})`, className: "num" },
-    { key: "lead_time", label: "Lead Time" },
-    { key: "remark", label: "Remark" },
-    // 품목 분류(선택) — 고르면 저장 시 품목 마스터 분류로 반영된다. 맨 끝에 두어
-    // 그룹 헤더(Purchase·Sales)·합계행 세그먼트 계산에 영향을 주지 않는다.
-    { key: "category", label: "Category" },
   ];
   const grid = useItemGrid("cquote-items", cols);
-  // fields 순서 = 아래 keys.cell(i, 0..10) 열 번호. Cost Amount·Amount 는 계산 컬럼이라 뺀다.
+  // 서브행 <td colSpan> 이 덮을 칸 수 — 숨긴 컬럼을 빼고 센다.
+  const mainColSpan = grid.cols.filter((c) => c.fixed || !grid.layout.hidden.has(c.key)).length;
+  // fields 순서 = keys.cell(i, 0..10) 열 번호. Cost Amount·Amount 는 계산 컬럼이라 뺀다.
+  // 주행 필드(0~6)를 앞에, 서브행 필드(7~10)를 뒤에 둔다 — 엑셀에서 여러 컬럼을 한 번에
+  // 붙여넣을 때 화면에 보이는 주행 컬럼 순서와 맞아야 값이 제자리에 들어간다.
   const keys = useItemGridKeys<CustomerQuoteItem>({
     items,
     onChange,
-    fields: ["part_no", "description", "type", "serial_no", "qty", "unit", "cost_price", "margin_pct", "unit_price", "lead_time", "remark"],
+    fields: ["part_no", "description", "qty", "unit", "cost_price", "margin_pct", "unit_price", "type", "serial_no", "lead_time", "remark"],
     numeric: ["qty", "cost_price", "margin_pct", "unit_price"],
     blank,
-    headers: ["Part No.", "Description", "Type", "Serial No.", "Qty", "Unit", `Cost (${costCur})`, "Margin %", `Unit Price (${saleCur})`, "Lead Time", "Remark"],
+    headers: ["Part No.", "Description", "Qty", "Unit", `Cost (${costCur})`, "Margin %", `Unit Price (${saleCur})`, "Type", "Serial No.", "Lead Time", "Remark"],
     sel,
     normalizeRow,
   });
@@ -3950,8 +3967,8 @@ function CustomerQuoteItemEditor({
   const footRole = (key: string): "label" | "purchase" | "sales" | "empty" =>
     key === "cost_amount" ? "purchase"
       : key === "amount" ? "sales"
-        : key === "__seq" || key === "part_no" || key === "description" || key === "type" ||
-            key === "serial_no" || key === "qty" || key === "unit" ? "label"
+        : key === "__seq" || key === "part_no" || key === "description" ||
+            key === "qty" || key === "unit" ? "label"
           : "empty";
   const footSegments: { role: "label" | "purchase" | "sales" | "empty"; span: number; keys: string[] }[] = [];
   for (const c of grid.cols) {
@@ -3975,15 +3992,27 @@ function CustomerQuoteItemEditor({
   const footFxVisible = (k: string) => (grid.layout.widths[k] ?? 999) >= 130;
 
   return (
-    <div className="stage-card stage-card--items" style={{ marginTop: 12 }}>
+    <div className="stage-card stage-card--items">
       <div className="items-head">
         <div className="sub-h">Item list</div>
         <div className="items-head-actions">
           {headerActions}
+          {/* 상세 서브행 일괄 펼침 — 개별 행 캐럿(▸)과 별도. */}
+          <button
+            type="button"
+            className={`btn sm${allOpen ? " primary" : ""}`}
+            title="Show Type · Serial No. · Lead Time · Remark · Category for every row"
+            onClick={() => { setAllOpen((v) => !v); setOpenRows(new Set()); }}
+          >
+            {allOpen ? "Hide details" : "Details"}
+          </button>
           <ItemColsButton grid={grid} />
           <ItemGridHint />
           <CopyRowsButton grid={keys} sel={sel} />
-          <DeleteSelectedButton sel={sel} onDelete={() => deleteSelectedRows(items, sel, onChange)} />
+          <DeleteSelectedButton
+            sel={sel}
+            onDelete={() => { deleteSelectedRows(items, sel, onChange); setOpenRows(new Set()); }}
+          />
           <button className="btn sm items-head-add" onClick={add}>+ Add</button>
         </div>
       </div>
@@ -4008,8 +4037,6 @@ function CustomerQuoteItemEditor({
               <th className="seq">No.</th>
               <ItemTh grid={grid} k="part_no">Part No.</ItemTh>
               <ItemTh grid={grid} k="description">Description</ItemTh>
-              <ItemTh grid={grid} k="type">Type</ItemTh>
-              <ItemTh grid={grid} k="serial_no">Serial No.</ItemTh>
               <ItemTh grid={grid} k="qty" className="num">Qty</ItemTh>
               <ItemTh grid={grid} k="unit">Unit</ItemTh>
               <ItemTh grid={grid} k="cost" className="num">Cost ({costCur})</ItemTh>
@@ -4017,31 +4044,65 @@ function CustomerQuoteItemEditor({
               <ItemTh grid={grid} k="margin" className="num">Margin %</ItemTh>
               <ItemTh grid={grid} k="unit_price" className="num">Unit Price ({saleCur})</ItemTh>
               <ItemTh grid={grid} k="amount" className="num">Amount ({saleCur})</ItemTh>
-              <ItemTh grid={grid} k="lead_time">Lead Time</ItemTh>
-              <ItemTh grid={grid} k="remark">Remark</ItemTh>
-              <ItemTh grid={grid} k="category">Category</ItemTh>
             </tr>
           </thead>
           <tbody>
             {items.map((it, i) => (
-              <tr key={i} className={itemRowClass(i)}>
+              <Fragment key={i}>
+              <tr className={itemRowClass(i)}>
                 <ItemSelectCell index={i} sel={sel} />
-                <td className="seq">{i + 1}</td>
+                <td className="seq">
+                  <button
+                    type="button"
+                    className={`item-exp${isOpen(i) ? " on" : ""}${hasDetail(it) ? " has" : ""}`}
+                    title={isOpen(i) ? "Hide details" : "Show details (Type · Serial No. · Lead Time · Remark · Category)"}
+                    onClick={() => toggleRow(i)}
+                  >
+                    ▸
+                  </button>
+                  {i + 1}
+                </td>
                 <td><textarea {...keys.cell(i, 0)} className="wrapcell" rows={1} value={it.part_no} onChange={(e) => patch(i, "part_no", e.target.value)} /></td>
                 <td><textarea {...keys.cell(i, 1)} className="desc" rows={1} value={it.description} onChange={(e) => patch(i, "description", e.target.value)} /></td>
-                <td><textarea {...keys.cell(i, 2)} className="wrapcell" rows={1} value={it.type ?? ""} onChange={(e) => patch(i, "type", e.target.value)} /></td>
-                <td><textarea {...keys.cell(i, 3)} className="wrapcell" rows={1} value={it.serial_no ?? ""} onChange={(e) => patch(i, "serial_no", e.target.value)} /></td>
-                <td><input {...keys.cell(i, 4)} className="num" value={amountInputValue(it.qty)} onChange={(e) => patch(i, "qty", e.target.value)} /></td>
-                <td><input {...keys.cell(i, 5)} value={it.unit} onChange={(e) => patch(i, "unit", e.target.value)} /></td>
-                <td><input {...keys.cell(i, 6)} className="num" value={amountInputValue(it.cost_price)} onChange={(e) => patch(i, "cost_price", e.target.value)} /></td>
+                <td><input {...keys.cell(i, 2)} className="num" value={amountInputValue(it.qty)} onChange={(e) => patch(i, "qty", e.target.value)} /></td>
+                <td><input {...keys.cell(i, 3)} value={it.unit} onChange={(e) => patch(i, "unit", e.target.value)} /></td>
+                <td><input {...keys.cell(i, 4)} className="num" value={amountInputValue(it.cost_price)} onChange={(e) => patch(i, "cost_price", e.target.value)} /></td>
                 <td className="num">{amountInputValue(Number(it.cost_price || 0) * Number(it.qty || 1))}</td>
-                <td><input {...keys.cell(i, 7)} className="num" value={amountInputValue(it.margin_pct)} onChange={(e) => patch(i, "margin_pct", e.target.value)} /></td>
-                <td><input {...keys.cell(i, 8)} className="num" value={amountInputValue(it.unit_price)} onChange={(e) => patch(i, "unit_price", e.target.value)} /></td>
+                <td><input {...keys.cell(i, 5)} className="num" value={amountInputValue(it.margin_pct)} onChange={(e) => patch(i, "margin_pct", e.target.value)} /></td>
+                <td><input {...keys.cell(i, 6)} className="num" value={amountInputValue(it.unit_price)} onChange={(e) => patch(i, "unit_price", e.target.value)} /></td>
                 <td className="num">{amountInputValue(it.amount)}</td>
-                <td><textarea {...keys.cell(i, 9)} className="wrapcell" rows={1} value={it.lead_time ?? ""} onChange={(e) => patch(i, "lead_time", e.target.value)} /></td>
-                <td><textarea {...keys.cell(i, 10)} className="wrapcell" rows={1} value={it.remark ?? ""} onChange={(e) => patch(i, "remark", e.target.value)} /></td>
-                <td><CategoryCell value={it.category_id} partNo={it.part_no} description={it.description} onChange={(id) => patchCategory(i, id)} /></td>
               </tr>
+              {/* 상세 서브행 — 주행에서 내린 부수 필드. 접혀 있으면 렌더하지 않는다.
+                  colSpan 은 표시 중인 주행 칸 수와 맞춘다(컬럼을 숨겨도 정렬 유지). */}
+              {isOpen(i) ? (
+                <tr className="item-subrow">
+                  <td colSpan={mainColSpan}>
+                    <div className="isr-fields">
+                      <label className="isr-f">
+                        <span className="isr-l">1. Type</span>
+                        <textarea {...keys.cell(i, 7)} className="wrapcell" rows={1} value={it.type ?? ""} onChange={(e) => patch(i, "type", e.target.value)} />
+                      </label>
+                      <label className="isr-f">
+                        <span className="isr-l">2. Serial No.</span>
+                        <textarea {...keys.cell(i, 8)} className="wrapcell" rows={1} value={it.serial_no ?? ""} onChange={(e) => patch(i, "serial_no", e.target.value)} />
+                      </label>
+                      <label className="isr-f">
+                        <span className="isr-l">3. Lead Time</span>
+                        <textarea {...keys.cell(i, 9)} className="wrapcell" rows={1} value={it.lead_time ?? ""} onChange={(e) => patch(i, "lead_time", e.target.value)} />
+                      </label>
+                      <label className="isr-f wide">
+                        <span className="isr-l">4. Remark</span>
+                        <textarea {...keys.cell(i, 10)} className="wrapcell" rows={1} value={it.remark ?? ""} onChange={(e) => patch(i, "remark", e.target.value)} />
+                      </label>
+                      <span className="isr-f">
+                        <span className="isr-l">5. Category</span>
+                        <CategoryCell value={it.category_id} partNo={it.part_no} description={it.description} onChange={(id) => patchCategory(i, id)} />
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ) : null}
+              </Fragment>
             ))}
           </tbody>
           {/* 합계행 — colspan 세그먼트(.ig-foot)로 구성. "Total" 은 No.~Unit 통합셀 가운데,
@@ -4099,32 +4160,36 @@ function DiscountSummary({
 }) {
   const discountAmt = subtotal * (Number(discountPct || 0) / 100);
   const finalTotal = subtotal - discountAmt;
+  const cur = (currency || "USD").toUpperCase();
+  // 총액은 표 합계행(tfoot)·하단 저장바(FINAL)에도 나오므로 여기서는 계산식 한 줄로만 둔다
+  // ("소계 − 할인 = 최종"). 카드 4칸으로 벌려 놓으면 같은 숫자가 세 군데서 반복돼 읽기 어렵다.
   return (
-    <div className="stage-card" style={{ marginTop: 12 }}>
-      <div className="form-section-title">Summary</div>
-      <div className="form-grid">
+    <div className="summary-strip">
+      <span className="pb-title">Summary</span>
+      <span className="ss-item">
+        <span className="ss-l">Subtotal</span>
+        <b>{cur} {moneyText(subtotal)}</b>
+      </span>
+      <span className="ss-op">−</span>
       <div className="form-field">
-        <label>Subtotal</label>
-        <div className="static-value"><DualCurrencyAmount value={subtotal} currency={currency} rate={rate} /></div>
-      </div>
-      <div className="form-field">
-        <label>Discount (%)</label>
+        <label>Discount</label>
         <input
           className="num"
           type="number"
+          style={{ width: 64 }}
           value={discountPct}
           onChange={(e) => onDiscountChange(Number(e.target.value) || 0)}
         />
+        <span className="pb-unit">%</span>
       </div>
-      <div className="form-field">
-        <label>Discount amount</label>
-        <div className="static-value">- {dualCurrencyText(discountAmt, currency, rate)}</div>
-      </div>
-      <div className="form-field">
-        <label>Final total</label>
-        <div className="static-value"><b><DualCurrencyAmount value={finalTotal} currency={currency} rate={rate} /></b></div>
-      </div>
-      </div>
+      <span className="ss-item">
+        <b>{cur} {moneyText(discountAmt)}</b>
+      </span>
+      <span className="ss-op">=</span>
+      <span className="ss-item ss-final">
+        <span className="ss-l">Final</span>
+        <b>{dualCurrencyText(finalTotal, currency, rate)}</b>
+      </span>
     </div>
   );
 }
