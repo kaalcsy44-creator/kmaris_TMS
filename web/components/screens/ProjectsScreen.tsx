@@ -2717,7 +2717,7 @@ function WorkspacePanel({
   // (5단계는 CustomerPoTab 자체에 P/O 선택기가 있어 중복 표시하지 않는다.)
   const picker =
     stage >= 6 && projectOrders.length > 1 ? (
-      <div className="embedded-record-bar wp-po-picker">
+      <div className="embedded-record-bar wp-po-picker pane-row">
         <span className="wp-po-picker-label">P/O</span>
         <div className="embedded-record-picker" role="tablist" aria-label="Customer POs">
           {projectOrders.map((o) => (

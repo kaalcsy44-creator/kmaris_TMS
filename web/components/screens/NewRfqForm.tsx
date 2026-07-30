@@ -543,7 +543,7 @@ export default function NewRfqForm({
   return (
     <div className={embedded ? undefined : "panel form-panel"} onPaste={handlePaste}>
       {embedded && editId ? (
-        <div className="embedded-record-bar">
+        <div className="embedded-record-bar pane-row">
           <span className="embedded-record-current">
             <CustomerName name={customerName} />
             <b className="rec-doc-no">{loadedRfqNo}</b>

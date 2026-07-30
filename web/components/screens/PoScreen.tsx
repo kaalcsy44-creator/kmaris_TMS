@@ -209,7 +209,7 @@ function CustomerPoTab({
     const selected = projectOrders.find((o) => o.id === detailId) ?? projectOrders[0];
     return (
       <div className="embedded-po-list">
-        <div className="embedded-record-bar">
+        <div className="embedded-record-bar pane-row">
           {projectOrders.length > 1 ? (
             <div className="embedded-record-picker" role="tablist" aria-label="Customer POs">
               {projectOrders.map((o) => (
@@ -768,7 +768,7 @@ function VendorPoTab({
     const selected = pos.find((p) => p.id === detailId) ?? pos[0];
     return (
       <div className="embedded-po-list">
-        <div className="embedded-record-bar">
+        <div className="embedded-record-bar pane-row">
           {pos.length > 1 ? (
             <div className="embedded-record-picker" role="tablist" aria-label="Vendor POs">
               {pos.map((p) => (

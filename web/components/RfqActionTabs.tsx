@@ -480,7 +480,7 @@ function EmbeddedVendorRfq({
   const selected = mine.find((r) => r.id === selId) ?? mine[0];
   return (
     <div className="embedded-record-wrap">
-      <div className="embedded-record-bar">
+      <div className="embedded-record-bar pane-row">
         <div className="vrfq-head-left">
           {mine.length > 1 ? (
             <RecordPicker rows={mine} selectedId={selected.id} label={(r) => r.vendor ? <VendorName name={r.vendor} /> : `RFQ ${r.id}`} onSelect={setSelId} />
@@ -625,7 +625,7 @@ function EmbeddedVendorQuote({ rfqId, onChanged }: { rfqId: number | null; onCha
   const selected = mine.find((r) => r.id === selId) ?? mine[0];
   return (
     <div className="embedded-record-wrap">
-      <div className="embedded-record-bar">
+      <div className="embedded-record-bar pane-row">
         {mine.length > 1 ? (
           <RecordPicker
             rows={mine}
@@ -686,7 +686,7 @@ function EmbeddedCustomerQuote({ rfqId, onChanged }: { rfqId: number | null; onC
   const selected = mine.find((r) => r.id === selId) ?? mine[0];
   return (
     <div className="embedded-record-wrap">
-      <div className="embedded-record-bar">
+      <div className="embedded-record-bar pane-row">
         {mine.length > 1 ? (
           <RecordPicker rows={mine} selectedId={selected.id} label={(r) => r.qtn_no || `Quote ${r.id}`} onSelect={setSelId} />
         ) : (

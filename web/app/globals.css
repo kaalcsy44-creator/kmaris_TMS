@@ -14,6 +14,14 @@
      Windows 기본 Consolas / 최신 Cascadia 를 앞세워 Courier New 폴백(가독성 낮음)을 피한다. */
   --mono: "Cascadia Code", "Cascadia Mono", Consolas, "SF Mono", SFMono-Regular,
     Menlo, "Roboto Mono", "DejaVu Sans Mono", ui-monospace, monospace;
+  /* 편집창 상단에 겹쳐 고정되는 행들의 치수 — 번호 행(.pane-row)·탭 행(.pane-tabs)이
+     서로 틈 없이 쌓이도록 높이를 고정값으로 둔다. --pane-top 은 "그 스크롤 컨테이너에서
+     고정이 시작되는 기준선"이고, 컨테이너마다 아래에서 다시 정의한다. */
+  --pane-top: 0px;
+  --pane-row-h: 44px;
+  /* .stage-pane-head 높이(이동버튼 29 + 패딩 2·10 + 선 1 ≒ 42) 보다 2px 낮게 —
+     사이에 틈이 생기지 않게 하고, 겹치는 부분은 불투명한 헤더(z 6)가 덮는다. */
+  --pane-head-h: 40px;
 }
 
 * {
@@ -5235,7 +5243,7 @@ table.mini input[type="checkbox"].row-check:indeterminate::after {
    지금 어느 탭을 편집 중인지 항상 보이게 한다. */
 .pane-tabs {
   position: sticky;
-  top: 0;
+  top: var(--pane-top);
   /* .stage-pane-head(z 6)·.pl-pane-tabs(z 6) 보다 낮게 — 겹치는 경우 그쪽이 위. */
   z-index: 5;
   display: flex;
@@ -5266,17 +5274,67 @@ table.mini input[type="checkbox"].row-check:indeterminate::after {
   color: var(--blue);
   border-bottom-color: var(--blue);
 }
-/* 고정 위치는 그 탭 바를 감싼 스크롤 컨테이너가 무엇이냐에 따라 다르다.
-   7·8단계(문서)는 .project-stage-pane 이 스크롤되고 그 상단에 단계 헤더가 고정돼
-   있으므로 헤더 높이(이동버튼 29px + 패딩 2·10 + 선 1 ≒ 42px)만큼 내려 붙인다.
-   헤더보다 2px 낮게(40px) 잡아 사이에 틈이 생기지 않게 한다 — 겹치는 부분은 불투명한
-   헤더(z 6)가 덮는다. AR(9~11)·RFQ 계열은 편집창(.stage-fill)이 스크롤 컨테이너이고
-   헤더는 그 바깥이라 top:0 이 곧 헤더 바로 아래다. */
-.project-stage-pane .pane-tabs {
-  top: 40px;
+/* 고정 기준선(--pane-top)은 스크롤 컨테이너가 어디냐에 따라 다르다.
+   · 5~8단계(P/O·문서): .project-stage-pane 이 스크롤되고 그 상단에 단계 헤더가
+     고정돼 있으므로 헤더 높이만큼 내려서 시작한다.
+   · 2~4·9~11단계(RFQ·견적·AR): 편집창(.stage-fill)이 스크롤 컨테이너이고 헤더는 그
+     바깥이라 0 이 곧 헤더 바로 아래다.
+   변수는 상속되므로 .stage-fill 안쪽은 0, 그 밖(같은 패널 안)은 헤더 높이가 된다. */
+.project-stage-pane {
+  --pane-top: var(--pane-head-h);
 }
-.project-stage-pane .stage-fill .pane-tabs {
-  top: 0;
+.embedded-workspace.stage-fill {
+  --pane-top: 0px;
+}
+
+/* 탭 위에 견적·P/O 번호 행이 있으면 탭만 붙이면 안 된다 — 어느 견적/어느 P/O 를
+   편집 중인지가 스크롤과 함께 사라진다. 번호 행도 같이 고정해 [번호 행 + 탭 행]이
+   한 덩어리로 편집창 상단에 남게 한다. 둘 사이에 틈이 생기면 그 사이로 내용이 지나가
+   보이므로, 번호 행 높이를 고정값(--pane-row-h)으로 두고 아래 여백은 없앤다. */
+.pane-row {
+  position: sticky;
+  top: var(--pane-top);
+  /* 탭 행(z 5) 보다 위 — 높이가 어긋나도 번호 행이 탭을 덮는 쪽이 안전하다. */
+  z-index: 6;
+  /* 지나가는 내용이 비치지 않게 편집창 배경으로 덮는다. */
+  background: #fff;
+  flex: 0 0 auto;
+  height: var(--pane-row-h);
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+/* .embedded-record-bar / .wp-po-picker 의 기본값(아래 여백·줄바꿈·상하 패딩)은 고정
+   행에서 끈다 — 여백은 탭 행과의 틈이 되고, 줄바꿈은 높이를 흔들어 탭 행의 고정
+   위치를 어긋나게 한다. 그 규칙들이 파일 뒤쪽에 있어 선택자를 한 단계 더 세게 쓴다. */
+.embedded-record-bar.pane-row {
+  margin-bottom: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  flex-wrap: nowrap;
+}
+.pane-row .embedded-record-picker,
+.pane-row .vrfq-head-left {
+  flex-wrap: nowrap;
+}
+/* 6단계처럼 번호 행이 두 줄일 때(카드 밖 고객 P/O 선택기 + 카드 안 벤더 P/O 번호),
+   안쪽 행은 바깥 행 아래에 붙는다. */
+.project-stage-pane:has(> .pane-row) .project-work-panel .pane-row {
+  top: calc(var(--pane-top) + var(--pane-row-h));
+}
+/* 번호 행이 카드(.project-work-panel) 밖에 있는 7·8단계 — 카드 상단 여백을 없애
+   고정된 번호 행과 탭 행이 맞닿게 한다(틈으로 내용이 비치는 것을 막는다). */
+.project-stage-pane:has(> .pane-row) > .project-work-panel:not(.stage-fill) {
+  padding-top: 0;
+}
+/* 탭 행은 자기 위에 고정된 번호 행의 개수만큼 더 내려 붙는다. 세는 범위는 "같은 스크롤
+   컨테이너 안" — AR(9~11)의 P/O 선택기는 .stage-fill 밖(= 애초에 스크롤되지 않는 위치)
+   이라 세지 않는다. */
+.embedded-workspace.stage-fill:has(.pane-row) .pane-tabs,
+.project-stage-pane:not(:has(.stage-fill)):has(.pane-row) .pane-tabs {
+  top: calc(var(--pane-top) + var(--pane-row-h));
+}
+.project-stage-pane:not(:has(.stage-fill)):has(> .pane-row):has(.project-work-panel .pane-row) .pane-tabs {
+  top: calc(var(--pane-top) + 2 * var(--pane-row-h));
 }
 /* 탭 안에 들어간 발송 패널은 상단 구분선/여백 중복 제거 */
 .pane-tabs + .doc-send-panel {
@@ -8373,11 +8431,26 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   .project-stage-pane {
     overflow: visible;
   }
-  /* 이 폭에서는 패널이 아니라 .pl-modal-body 가 스크롤 컨테이너 — 편집창 탭 바의
-     단계 헤더 보정(top:44px)은 필요 없다. */
-  .project-stage-pane .pane-tabs,
-  .project-stage-pane .stage-fill .pane-tabs {
-    top: 0;
+  /* 이 폭에서는 패널 전환 탭(.pl-pane-tabs)과 단계 헤더가 이미 상단에 고정돼 있고
+     스크롤 컨테이너도 .pl-modal-body 로 바뀐다 — 번호 행·탭 행까지 겹쳐 고정하면
+     화면의 절반이 헤더가 된다. 이 폭에선 둘 다 흐름 안에 둔다. */
+  .pane-row,
+  .pane-tabs {
+    position: static;
+  }
+  .pane-row {
+    height: auto;
+    overflow: visible;
+  }
+  .pane-row .embedded-record-picker,
+  .pane-row .vrfq-head-left,
+  .embedded-record-bar.pane-row {
+    flex-wrap: wrap;
+  }
+  .embedded-record-bar.pane-row {
+    margin-bottom: 10px;
+    padding-top: 6px;
+    padding-bottom: 6px;
   }
   .pl-pane-tabs {
     display: flex;
@@ -8466,10 +8539,6 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   .pane-tabs button {
     padding: 8px 10px;
     font-size: 12px;
-  }
-  .project-stage-pane .pane-tabs,
-  .project-stage-pane .stage-fill .pane-tabs {
-    top: 0;
   }
   /* 스티키 푸터의 full-bleed 음수마진은 데스크톱 22px 패딩 기준이라, 축소된 폰
      패딩에서 그대로 두면 가로로 삐져나온다 → bleed 를 끄고 콘텐츠 폭에 맞춘다. */
