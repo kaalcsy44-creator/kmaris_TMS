@@ -12,7 +12,40 @@ type FxRef = {
   ttb: number | null; // 전신환 받으실 때 = 외화를 팔 때
   date: string;
   source: "exim" | "fixed";
-  reason?: "" | "no_key" | "no_data";
+  reason?: string;
+};
+
+/** 고시 조회 실패 사유 → 화면 문구 + 설명. 사유별로 손댈 곳이 달라 뭉뚱그리지 않는다. */
+const FX_FALLBACK: Record<string, { text: string; hint: string }> = {
+  no_key: {
+    text: "FX API key not set",
+    hint: "서버에 수출입은행 인증키(EXIM_API_KEY)가 없다. Render 환경변수에 등록 필요.",
+  },
+  bad_key: {
+    text: "FX API key rejected",
+    hint: "수출입은행이 인증키를 거부했다(result=3). 키 값을 확인.",
+  },
+  quota: {
+    text: "FX API daily limit reached",
+    hint: "수출입은행 API 일일 호출 한도를 넘겼다(result=4). 내일 다시 조회된다.",
+  },
+  network: {
+    text: "FX lookup failed",
+    hint: "수출입은행 API 요청이 실패했다(타임아웃·SSL·DNS 등).",
+  },
+  data_code: {
+    text: "FX lookup failed",
+    hint: "요청 DATA 코드 오류(result=2) — 서버 코드 문제.",
+  },
+  no_data: {
+    text: "No published rate",
+    hint: "그 날짜의 고시가 없다(주말·공휴일·오전 고시 전).",
+  },
+};
+// reason 자체가 없으면 백엔드가 아직 옛 버전 — 사유를 구분해 보내주지 않는다.
+const FX_FALLBACK_UNKNOWN = {
+  text: "Rate lookup unavailable",
+  hint: "백엔드가 조회 실패 사유를 보내지 않는다 — API 서버가 아직 이전 버전일 수 있다.",
 };
 
 const fmtRate = (v: number) =>
@@ -116,17 +149,14 @@ export default function FxRateControl({
         ) : failed ? (
           <span className="fx-ref-note">Lookup failed · fixed rate</span>
         ) : !ref ? null : ref.source !== "exim" ? (
-          <span
-            className="fx-ref-note"
-            title={
-              ref.reason === "no_key"
-                ? "서버에 수출입은행 API 키(EXIM_API_KEY)가 없어 고시 시세를 못 불러온다."
-                : "그 날짜의 고시가 없다(주말·공휴일·오전 고시 전)."
-            }
-          >
-            {ref.reason === "no_key" ? "FX API key not set" : "No published rate"} · fixed{" "}
-            {fmtRate(ref.base)}
-          </span>
+          (() => {
+            const f = (ref.reason && FX_FALLBACK[ref.reason]) || FX_FALLBACK_UNKNOWN;
+            return (
+              <span className="fx-ref-note" title={f.hint}>
+                {f.text} · fixed {fmtRate(ref.base)}
+              </span>
+            );
+          })()
         ) : (
           <>
             <span className="fx-ref-item" title="매매기준율">

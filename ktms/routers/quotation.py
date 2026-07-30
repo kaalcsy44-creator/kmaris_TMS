@@ -48,7 +48,7 @@ from _core import (
     default_from,
     USD_KRW_RATE,
 )
-from services.fx import get_rates, has_key as fx_has_key
+from services.fx import get_rates
 from services.mail_compose import build_attachments, compose_body
 from services.item_ledger import apply_line_categories
 
@@ -61,15 +61,14 @@ def fx_rate(date: str = "", cur: str = "USD"):
     '살 때(전신환 보내실 때)/팔 때(전신환 받으실 때)' 값이다.
     조회 실패(주말·공휴일·인증키 미설정 등)면 고정환율로 폴백하고 source=fixed 로 알린다.
     프런트 '매매기준율' 토글에서 사용한다."""
-    row, used = get_rates(date, cur)
+    row, used, err = get_rates(date, cur)
     if row is not None:
         return {"rate": round(row["base"], 4),
                 "tts": row["tts"], "ttb": row["ttb"], "reason": "",
                 "date_used": used, "cur": (cur or "USD").upper(), "source": "exim"}
-    # 폴백 사유를 함께 알려 화면에서 "키 미설정"과 "그날 고시 없음"을 구분한다 —
-    # 참고 시세가 안 보일 때 무엇을 해야 하는지가 바로 드러난다.
-    return {"rate": USD_KRW_RATE, "tts": None, "ttb": None,
-            "reason": "no_data" if fx_has_key() else "no_key",
+    # 폴백 사유(no_key·bad_key·quota·network·no_data)를 그대로 실어 보낸다 —
+    # 참고 시세가 안 보일 때 무엇을 고쳐야 하는지가 화면에서 바로 드러난다.
+    return {"rate": USD_KRW_RATE, "tts": None, "ttb": None, "reason": err,
             "date_used": "", "cur": (cur or "USD").upper(), "source": "fixed"}
 
 

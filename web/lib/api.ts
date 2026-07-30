@@ -1525,8 +1525,9 @@ export function fetchFxRate(
   date_used: string;
   cur: string;
   source: "exim" | "fixed";
-  // 폴백 사유 — no_key: 서버에 EXIM_API_KEY 미설정, no_data: 그 날짜 고시 없음.
-  reason?: "" | "no_key" | "no_data";
+  // 폴백 사유 — no_key(키 미설정) · bad_key(키 거부) · quota(일일한도) ·
+  // network(요청 실패) · data_code(코드 오류) · no_data(그 날짜 고시 없음).
+  reason?: "" | "no_key" | "bad_key" | "quota" | "network" | "data_code" | "no_data";
 }> {
   const q = new URLSearchParams({ date: (date || "").slice(0, 10), cur }).toString();
   return get(`/api/admin/fx-rate?${q}`);
