@@ -177,7 +177,7 @@ export function ArOverview({
   // AR(수취) 옆에 AP(지급, 벤더 매입) 탭 — 각 벤더 P/O 의 대금청구서·전자세금계산서를 입력.
   return (
     <div className="embedded-detail ar-ap-detail">
-      <div className="page-tabs ar-doc-tabs" style={{ marginBottom: 12 }}>
+      <div className="pane-tabs" role="tablist" aria-label="Receivable / Payable">
         <button className={docTab === "ar" ? "on" : ""} onClick={() => setDocTab("ar")}>
           Receivable · Customer (AR)
         </button>

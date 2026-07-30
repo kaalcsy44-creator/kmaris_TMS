@@ -11,7 +11,7 @@ export default function DetailTabBar({
   onTab: (t: DetailTab) => void;
 }) {
   return (
-    <div className="detail-tabs" role="tablist">
+    <div className="pane-tabs" role="tablist">
       <button
         type="button"
         role="tab"

@@ -153,7 +153,7 @@ export function DocumentsOverview({
   return (
     <div className="action-tabs embedded">
       {stage === "s7" ? (
-        <div className="seg-tabs" style={{ marginBottom: 12 }}>
+        <div className="pane-tabs" role="tablist" aria-label="Delivery documents">
           <button className={readyDoc === "pi" ? "on" : ""} onClick={() => setReadyDoc("pi")}>
             Proforma Invoice
           </button>

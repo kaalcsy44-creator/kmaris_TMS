@@ -3139,29 +3139,6 @@ table.mini td.mini-empty {
 }
 
 /* ── Settings ──────────────────────────────────────────────────────── */
-.seg-tabs {
-  display: inline-flex;
-  gap: 2px;
-  background: #e9eff7;
-  border-radius: 10px;
-  padding: 3px;
-  margin-bottom: 16px;
-}
-.seg-tabs button {
-  border: none;
-  background: transparent;
-  padding: 7px 18px;
-  font-size: 13px;
-  font-weight: 600;
-  color: #45526a;
-  border-radius: 8px;
-  cursor: pointer;
-}
-.seg-tabs button.on {
-  background: #fff;
-  color: var(--navy);
-  box-shadow: 0 1px 4px rgba(11, 29, 58, 0.12);
-}
 .add-row {
   display: flex;
   gap: 8px;
@@ -5249,33 +5226,60 @@ table.mini input[type="checkbox"].row-check:indeterminate::after {
   border-color: #9cc3e8;
 }
 
-/* 상세 모달 탭바(Detail / Email) — 2·4·6단계 */
-.detail-tabs {
+/* ── 편집창 안 탭 바(공용) ──────────────────────────────────────────────
+   단계 편집창을 탭으로 나누는 모든 곳이 이 한 스타일을 쓴다:
+     · 2·4·6단계 Detail / Email
+     · 7단계 문서 종류(Proforma Invoice / Commercial Invoice / …)
+     · 9~11단계 Receivable(AR) / Payable(AP)
+   음영 띠 + 밑줄형 선택 + 스크롤 컨테이너 상단 고정 — 품목 표를 한참 내려봐도
+   지금 어느 탭을 편집 중인지 항상 보이게 한다. */
+.pane-tabs {
+  position: sticky;
+  top: 0;
+  /* .stage-pane-head(z 6)·.pl-pane-tabs(z 6) 보다 낮게 — 겹치는 경우 그쪽이 위. */
+  z-index: 5;
   display: flex;
-  gap: 4px;
-  margin-bottom: 14px;
-  border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
+  gap: 2px;
+  margin: 0 0 12px;
+  padding: 4px 8px 0;
+  background: var(--page-bg);
+  border-bottom: 1px solid var(--line-strong);
+  border-radius: 8px 8px 0 0;
 }
-.detail-tabs button {
+.pane-tabs button {
   border: 0;
   background: transparent;
-  padding: 8px 16px;
+  padding: 9px 16px;
   font-size: 13px;
-  font-weight: 600;
-  color: #6b7a90;
+  font-weight: 700;
+  color: #5a6b85;
   cursor: pointer;
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
+  white-space: nowrap;
 }
-.detail-tabs button:hover {
+.pane-tabs button:hover {
   color: var(--navy);
 }
-.detail-tabs button.on {
+.pane-tabs button.on {
   color: var(--blue);
   border-bottom-color: var(--blue);
 }
+/* 고정 위치는 그 탭 바를 감싼 스크롤 컨테이너가 무엇이냐에 따라 다르다.
+   7·8단계(문서)는 .project-stage-pane 이 스크롤되고 그 상단에 단계 헤더가 고정돼
+   있으므로 헤더 높이(이동버튼 29px + 패딩 2·10 + 선 1 ≒ 42px)만큼 내려 붙인다.
+   헤더보다 2px 낮게(40px) 잡아 사이에 틈이 생기지 않게 한다 — 겹치는 부분은 불투명한
+   헤더(z 6)가 덮는다. AR(9~11)·RFQ 계열은 편집창(.stage-fill)이 스크롤 컨테이너이고
+   헤더는 그 바깥이라 top:0 이 곧 헤더 바로 아래다. */
+.project-stage-pane .pane-tabs {
+  top: 40px;
+}
+.project-stage-pane .stage-fill .pane-tabs {
+  top: 0;
+}
 /* 탭 안에 들어간 발송 패널은 상단 구분선/여백 중복 제거 */
-.detail-tabs + .doc-send-panel {
+.pane-tabs + .doc-send-panel {
   margin-top: 0;
   padding-top: 0;
   border-top: 0;
@@ -8369,6 +8373,12 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   .project-stage-pane {
     overflow: visible;
   }
+  /* 이 폭에서는 패널이 아니라 .pl-modal-body 가 스크롤 컨테이너 — 편집창 탭 바의
+     단계 헤더 보정(top:44px)은 필요 없다. */
+  .project-stage-pane .pane-tabs,
+  .project-stage-pane .stage-fill .pane-tabs {
+    top: 0;
+  }
   .pl-pane-tabs {
     display: flex;
     flex: 0 0 auto;
@@ -8446,17 +8456,20 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
     justify-content: flex-end;
     flex-wrap: wrap;
   }
-  /* 문서 하위탭(Commercial Invoice / Packing List / Shipping Advice) — 전체 폭
-     균등 분할로 터치 타깃 확대. */
-  .seg-tabs {
-    display: flex;
-    width: 100%;
+  /* 편집창 탭 바 — 폰에서는 줄바꿈 대신 한 줄 가로 스크롤(탭이 5개인 7단계 문서
+     하위탭도 한 줄 유지). 고정 위치는 각자의 스크롤 컨테이너 기준 top:0. */
+  .pane-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding: 3px 4px 0;
   }
-  .seg-tabs button {
-    flex: 1 1 0;
-    min-width: 0;
-    padding: 8px 6px;
+  .pane-tabs button {
+    padding: 8px 10px;
     font-size: 12px;
+  }
+  .project-stage-pane .pane-tabs,
+  .project-stage-pane .stage-fill .pane-tabs {
+    top: 0;
   }
   /* 스티키 푸터의 full-bleed 음수마진은 데스크톱 22px 패딩 기준이라, 축소된 폰
      패딩에서 그대로 두면 가로로 삐져나온다 → bleed 를 끄고 콘텐츠 폭에 맞춘다. */
