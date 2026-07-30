@@ -1513,11 +1513,21 @@ export function parseVendorQuoteFile(file: File): Promise<{ items: Partial<Vendo
   return postForm<{ items: Partial<VendorQuoteItem>[] }>("/api/admin/vendor-quote-parse", fd);
 }
 
-// 해당일의 매매기준율(수출입은행) 조회. source: "exim"(고시값) | "fixed"(폴백 고정환율).
+// 해당일의 고시환율(수출입은행) 조회. source: "exim"(고시값) | "fixed"(폴백 고정환율).
+// rate=매매기준율(계산용), tts=살 때(전신환 보내실 때), ttb=팔 때(전신환 받으실 때).
 export function fetchFxRate(
   date: string,
   cur = "USD"
-): Promise<{ rate: number; date_used: string; cur: string; source: "exim" | "fixed" }> {
+): Promise<{
+  rate: number;
+  tts: number | null;
+  ttb: number | null;
+  date_used: string;
+  cur: string;
+  source: "exim" | "fixed";
+  // 폴백 사유 — no_key: 서버에 EXIM_API_KEY 미설정, no_data: 그 날짜 고시 없음.
+  reason?: "" | "no_key" | "no_data";
+}> {
   const q = new URLSearchParams({ date: (date || "").slice(0, 10), cur }).toString();
   return get(`/api/admin/fx-rate?${q}`);
 }

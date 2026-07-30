@@ -56,6 +56,12 @@ services:
         sync: false
       - key: SMTP_PORT
         sync: false
+      # 한국수출입은행 환율 Open API 인증키 (services/fx.py). 없으면 매매기준율·
+      # 살 때(TTS)·팔 때(TTB) 조회가 모두 실패해 고정환율로 폴백하고, 환율 컨트롤에
+      # "FX API key not set" 으로 표시된다. 발급: https://www.koreaexim.go.kr
+      # -> 사이트 안내 -> 오픈 API -> 현재환율 (무료, 즉시 발급).
+      - key: EXIM_API_KEY
+        sync: false
       # Public customer tracking link base (services use TRACKING_BASE_URL;
       # defaults to https://www.k-maris.com/track).
       - key: TRACKING_BASE_URL

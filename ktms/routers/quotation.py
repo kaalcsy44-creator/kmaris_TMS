@@ -48,23 +48,29 @@ from _core import (
     default_from,
     USD_KRW_RATE,
 )
-from services.fx import get_deal_base_rate
+from services.fx import get_rates, has_key as fx_has_key
 from services.mail_compose import build_attachments, compose_body
 from services.item_ledger import apply_line_categories
 
 
 @app.get("/api/admin/fx-rate", dependencies=[Depends(require_token)])
 def fx_rate(date: str = "", cur: str = "USD"):
-    """해당일의 매매기준율(수출입은행) 조회. cur↔KRW 환율(1 cur = ? KRW).
+    """해당일의 고시환율(수출입은행) 조회. cur↔KRW 환율(1 cur = ? KRW).
 
+    rate 는 계산에 쓰는 매매기준율이고, tts/ttb 는 화면에 참고로 함께 보여주는
+    '살 때(전신환 보내실 때)/팔 때(전신환 받으실 때)' 값이다.
     조회 실패(주말·공휴일·인증키 미설정 등)면 고정환율로 폴백하고 source=fixed 로 알린다.
     프런트 '매매기준율' 토글에서 사용한다."""
-    rate, used = get_deal_base_rate(date, cur)
-    if rate is not None:
-        return {"rate": round(rate, 4), "date_used": used, "cur": (cur or "USD").upper(),
-                "source": "exim"}
-    return {"rate": USD_KRW_RATE, "date_used": "", "cur": (cur or "USD").upper(),
-            "source": "fixed"}
+    row, used = get_rates(date, cur)
+    if row is not None:
+        return {"rate": round(row["base"], 4),
+                "tts": row["tts"], "ttb": row["ttb"], "reason": "",
+                "date_used": used, "cur": (cur or "USD").upper(), "source": "exim"}
+    # 폴백 사유를 함께 알려 화면에서 "키 미설정"과 "그날 고시 없음"을 구분한다 —
+    # 참고 시세가 안 보일 때 무엇을 해야 하는지가 바로 드러난다.
+    return {"rate": USD_KRW_RATE, "tts": None, "ttb": None,
+            "reason": "no_data" if fx_has_key() else "no_key",
+            "date_used": "", "cur": (cur or "USD").upper(), "source": "fixed"}
 
 
 
