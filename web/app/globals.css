@@ -691,6 +691,32 @@ body {
   color: var(--blue);
   border-bottom-color: var(--blue);
 }
+/* 탭 줄 우측의 교차 페이지 링크(Progress ↔ Activity Log) — 프로젝트 개요의
+   "Activity Log →"(.proj-ov-actlink)와 같은 텍스트 링크 형태. 버튼 테두리를 두면
+   탭과 같은 줄에서 페이지 액션처럼 보여 탭 선택과 헷갈린다. */
+.page-tabs .page-navlink {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  align-self: center;
+  padding: 0 4px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--blue);
+  white-space: nowrap;
+  text-decoration: none;
+}
+.page-tabs .page-navlink:hover {
+  text-decoration: underline;
+}
+/* 화살표는 hover 시 살짝 나아간다 — 이동 링크임을 알린다. */
+.page-navlink .pn-arrow {
+  transition: transform 0.12s;
+}
+.page-navlink:hover .pn-arrow {
+  transform: translateX(2px);
+}
 
 /* Dashboard 섹션 소제목 — 탭(대제목) 아래 한 단계 낮은 회색 라벨 */
 .dash-subhead {

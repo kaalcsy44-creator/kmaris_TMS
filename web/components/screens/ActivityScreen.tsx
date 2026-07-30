@@ -413,8 +413,8 @@ export default function ActivityScreen() {
         >
           Activity (By date)
         </button>
-        <Link href="/project" className="btn sm" style={{ marginLeft: "auto" }}>
-          📋 Projects
+        <Link href="/project" className="page-navlink">
+          Projects <span className="pn-arrow">→</span>
         </Link>
       </div>
 

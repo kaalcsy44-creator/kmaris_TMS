@@ -176,8 +176,8 @@ export default function ProjectsScreen() {
         >
           Progress (Customer)
         </button>
-        <Link href="/activity" className="btn sm" style={{ marginLeft: "auto" }}>
-          🗒 Activity Log
+        <Link href="/activity" className="page-navlink">
+          Activity Log <span className="pn-arrow">→</span>
         </Link>
       </div>
 
