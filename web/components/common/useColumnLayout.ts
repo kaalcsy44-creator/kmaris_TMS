@@ -36,8 +36,10 @@ type Stored = {
 
 const KEY_PREFIX = "ktms.tableLayout.";
 /** 컬럼 폭 한계(px). 드래그 미리보기(ColumnResizer)와 저장(setWidth)이 동일 값을 써야 스냅이 없다. */
-export const COL_MIN_W = 60;
+export const COL_MIN_W = 44;
 export const COL_MAX_W = 900;
+/** 품목표(table.mini.wide) 셀의 좌우 패딩 합(4px 7px) — 지정 폭 → 셀 바깥폭 환산용. */
+export const CELL_PAD_W = 14;
 
 function load(tableId: string): Stored {
   if (typeof window === "undefined") return {};

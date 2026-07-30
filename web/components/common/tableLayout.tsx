@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { COL_MIN_W, COL_MAX_W, type ColumnLayout, type LayoutCol } from "./useColumnLayout";
+import { COL_MIN_W, COL_MAX_W, CELL_PAD_W, type ColumnLayout, type LayoutCol } from "./useColumnLayout";
 
 // useColumnLayout 과 함께 쓰는 공용 UI: 폭 조절 핸들 · 헤더 드래그 재정렬 · 컬럼 표시/숨김 메뉴.
 
@@ -9,10 +9,13 @@ import { COL_MIN_W, COL_MAX_W, type ColumnLayout, type LayoutCol } from "./useCo
 export function ColumnResizer({
   onResize,
   onResizeEnd,
+  colKey,
 }: {
   onResize: (px: number) => void;
   /** 드래그 종료 시 1회 호출(예: localStorage 저장). */
   onResizeEnd?: () => void;
+  /** 품목표 컬럼 key — 이 컬럼만 덮는 colspan 셀(그룹 헤더·합계행)도 함께 미리보기한다. */
+  colKey?: string;
 }) {
   function onPointerDown(e: React.PointerEvent<HTMLSpanElement>) {
     e.preventDefault();
@@ -43,13 +46,21 @@ export function ColumnResizer({
     function preview(w: number) {
       if (!liveStyle) return;
       const wpx = `${w}px`;
+      // 이 컬럼만 덮는 colspan 셀(그룹 헤더·합계행)도 같이 좁혀야 컬럼이 실제로 줄어든다
+      // (auto 폭인 1칸짜리 셀이 남아 있으면 브라우저가 지정 폭을 무시한다 — ItemGridStyle 주석 참고).
+      const spanPx = `${w + CELL_PAD_W}px`;
+      const spanRule = colKey
+        ? `table[data-col-resizing] [data-ig-span="${colKey}"]` +
+          `{box-sizing:border-box!important;width:${spanPx}!important;min-width:${spanPx}!important;max-width:${spanPx}!important}`
+        : "";
       liveStyle.textContent =
         `table[data-col-resizing]>colgroup>col:nth-child(${n})` +
         `{width:${wpx}!important;min-width:${wpx}!important}` +
         `table[data-col-resizing] thead th:not(.ig-group):nth-child(${n}),` +
         `table[data-col-resizing] tbody td:nth-child(${n}),` +
-        `table[data-col-resizing] tfoot td:nth-child(${n})` +
+        `table[data-col-resizing] tfoot td:not(.ig-foot):nth-child(${n})` +
         `{width:${wpx}!important;min-width:${wpx}!important;max-width:${wpx}!important}` +
+        spanRule +
         `table[data-col-resizing] tbody td:nth-child(${n}) input,` +
         `table[data-col-resizing] tbody td:nth-child(${n}) textarea{min-width:0!important}`;
     }

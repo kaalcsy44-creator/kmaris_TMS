@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { useColumnLayout, type ColumnLayout } from "./useColumnLayout";
+import { useColumnLayout, CELL_PAD_W, type ColumnLayout } from "./useColumnLayout";
 import { ColumnResizer, ColumnsButton } from "./tableLayout";
 
 // 편집 가능한 품목표(Item list)에 컬럼 폭 조절 + 컬럼 숨김을 붙이는 공용 도구.
@@ -20,6 +20,12 @@ export type ItemCol = {
   /** 선택 체크박스·No. 처럼 숨기거나 폭 조절하지 않는 구조 컬럼. */
   fixed?: boolean;
 };
+
+/** colspan 으로 직접 구성한 셀(그룹 헤더·합계행)에 붙이는 표식 — 덮는 컬럼 key 목록.
+ *  ItemGridStyle 이 이 표식을 보고 그 셀 폭도 컬럼 폭 합으로 함께 고정한다. */
+export function igSpan(keys: string[]) {
+  return { "data-ig-span": keys.join(",") };
+}
 
 export type ItemGridApi = {
   layout: ColumnLayout;
@@ -76,14 +82,21 @@ export function ItemTh({
           ✕
         </button>
       ) : null}
-      <ColumnResizer onResize={(px) => layout.setWidth(k, px)} onResizeEnd={layout.commitWidths} />
+      <ColumnResizer
+        colKey={k}
+        onResize={(px) => layout.setWidth(k, px)}
+        onResizeEnd={layout.commitWidths}
+      />
     </th>
   );
 }
 
-/** 현재 폭/숨김 상태를 물리 컬럼 위치 기준 CSS 로 방출(스코프 클래스로 이 표에만 적용). */
-export function ItemGridStyle({ grid }: { grid: ItemGridApi }) {
+/** 현재 폭/숨김 상태를 물리 컬럼 위치 기준 CSS 로 방출(스코프 클래스로 이 표에만 적용).
+ *  spans: colspan 으로 직접 구성한 셀들이 덮는 컬럼 key 목록(그룹 헤더행·합계행 세그먼트).
+ *  각 셀에 igSpan(keys) 표식을 함께 달아야 한다. */
+export function ItemGridStyle({ grid, spans }: { grid: ItemGridApi; spans?: string[][] }) {
   const { cols, colIndex, layout, tableClass } = grid;
+  const spanSig = (spans ?? []).map((keys) => keys.join(",")).join("|");
   const css = useMemo(() => {
     const rules: string[] = [];
     for (const c of cols) {
@@ -105,8 +118,21 @@ export function ItemGridStyle({ grid }: { grid: ItemGridApi }) {
         );
       }
     }
+    // colspan 셀은 위 nth-child 규칙에서 제외돼 폭이 auto 로 남는다. 그런데 한 컬럼만 덮는
+    // auto 셀이 하나라도 있으면 브라우저는 그 컬럼을 "폭 미지정"으로 보고 내용 기준으로 잡아버려,
+    // 드래그로 지정한 폭이 통째로 무시된다(실측: 합계행의 빈 1칸짜리 셀 때문에 Cost·Unit Price·
+    // Margin 이 안 좁아졌다). 덮는 컬럼 폭을 모두 알면 그 합(= 지정폭 + 셀 패딩)으로 같이 고정한다.
+    for (const keys of spans ?? []) {
+      if (!keys.length || !keys.every((k) => layout.widths[k])) continue;
+      const outer = keys.reduce((s, k) => s + layout.widths[k] + CELL_PAD_W, 0);
+      // 그룹 헤더행은 셀 패딩이 달라(0 10px) content-box 로는 어긋나므로 border-box 로 맞춘다.
+      rules.push(
+        `.${tableClass} [data-ig-span="${keys.join(",")}"]{box-sizing:border-box!important;width:${outer}px!important;min-width:${outer}px!important;max-width:${outer}px!important}`
+      );
+    }
     return rules.join("\n");
-  }, [cols, colIndex, layout.hidden, layout.widths, tableClass]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cols, colIndex, layout.hidden, layout.widths, tableClass, spanSig]);
   if (!css) return null;
   return <style dangerouslySetInnerHTML={{ __html: css }} />;
 }

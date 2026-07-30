@@ -3247,6 +3247,8 @@ table.mini.wide thead tr.ig-group-row th {
   letter-spacing: 0.1em;
   text-transform: uppercase;
   white-space: nowrap;
+  /* 컬럼을 아주 좁게 줄이면 라벨이 옆 칸으로 삐져나오지 않고 잘리도록. */
+  overflow: hidden;
   color: transparent;
   background: #eef2f7;
   border-bottom: 1px solid var(--line);
@@ -3287,6 +3289,13 @@ table.mini.wide tfoot td.foot-total-label {
 }
 .ig-cquote-items tfoot td.foot-sales {
   background: #e2ecfb;
+}
+/* 합계 금액·환율 주석은 기본적으로 한 줄(nowrap)이지만, 사용자가 그 컬럼(Cost Amount·Amount)을
+   좁히면 칸을 넘어 옆으로 삐져나온다. 품목표 합계행에서만 줄바꿈을 허용해 칸 안에 머물게 한다. */
+table.mini.wide.lead-tools tfoot .dual-line,
+table.mini.wide.lead-tools tfoot .fx-note {
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 /* ── RFQ 품목 편집 표(팝업 내) — 컨테이너 폭에 맞춰 넘치지 않게. ──────── */

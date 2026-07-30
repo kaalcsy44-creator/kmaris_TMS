@@ -96,7 +96,7 @@ import {
   useRowSelection,
 } from "./common/itemTable";
 import FxRateControl, { FxMode } from "./common/FxRateControl";
-import { useItemGrid, ItemTh, ItemGridStyle, ItemColsButton, type ItemCol } from "./common/itemGrid";
+import { useItemGrid, ItemTh, ItemGridStyle, ItemColsButton, igSpan, type ItemCol } from "./common/itemGrid";
 import CategoryCell from "./common/CategoryCell";
 import QuotationPreview from "./QuotationPreview";
 
@@ -3945,15 +3945,26 @@ function CustomerQuoteItemEditor({
         : key === "__seq" || key === "part_no" || key === "description" || key === "type" ||
             key === "serial_no" || key === "qty" || key === "unit" ? "label"
           : "empty";
-  const footSegments: { role: "label" | "purchase" | "sales" | "empty"; span: number }[] = [];
+  const footSegments: { role: "label" | "purchase" | "sales" | "empty"; span: number; keys: string[] }[] = [];
   for (const c of grid.cols) {
     if (!c.fixed && grid.layout.hidden.has(c.key)) continue;
     const role = footRole(c.key);
     const last = footSegments[footSegments.length - 1];
     // label·empty 는 연속 구간을 합치고, 값(purchase·sales)은 단일 칸으로 둔다.
-    if (last && last.role === role && role !== "purchase" && role !== "sales") last.span += 1;
-    else footSegments.push({ role, span: 1 });
+    if (last && last.role === role && role !== "purchase" && role !== "sales") {
+      last.span += 1;
+      last.keys.push(c.key);
+    } else {
+      footSegments.push({ role, span: 1, keys: [c.key] });
+    }
   }
+  // 그룹 헤더행·합계행은 colspan 으로 직접 만든 셀이라 컬럼 폭 규칙(nth-child)에서 빠진다.
+  // 어느 컬럼을 덮는지 알려 주면 ItemGridStyle 이 그 셀 폭도 함께 고정한다(없으면 auto 로 남은
+  // 1칸짜리 셀이 컬럼 폭 지정을 무력화해 그 컬럼만 안 좁아진다).
+  const gridSpans = [...groupSegments.map((s) => s.keys), ...footSegments.map((s) => s.keys)];
+  // 합계 칸을 아주 좁게 줄이면 금액이 여러 줄로 접히는데, 거기에 환율 주석까지 넣으면 행이
+  // 지나치게 높아진다. 그 컬럼이 좁을 때는 주석을 접어 둔다(환율은 표 위 컨트롤에도 보인다).
+  const footFxVisible = (k: string) => (grid.layout.widths[k] ?? 999) >= 130;
 
   return (
     <div style={{ marginTop: 12 }}>
@@ -3969,30 +3980,20 @@ function CustomerQuoteItemEditor({
         </div>
       </div>
       <div className="table-wrap item-scroll">
-        <ItemGridStyle grid={grid} />
+        <ItemGridStyle grid={grid} spans={gridSpans} />
         <table className={`mini wide lead-tools ${grid.tableClass}`}>
           <thead>
             <tr className="ig-group-row">
-              {groupSegments.map((s, gi) => {
-                // 한 컬럼만 덮는 그룹셀(예: Purchase·Sales 사이에 홀로 있는 Margin %)은
-                // auto 레이아웃에서 남는 폭을 그 셀이 홀로 흡수해, 사용자가 아무리 컬럼을
-                // 줄여도 그 컬럼이 안 좁아진다. 사용자가 폭을 지정한 컬럼이면 그룹셀도 같은
-                // 폭으로 고정해 컬럼과 함께 좁아지게 한다(그 외에는 기존대로 auto).
-                const soloW = s.span === 1 ? grid.layout.widths[s.keys[0]] : undefined;
-                const style = soloW
-                  ? { width: soloW, minWidth: soloW, maxWidth: soloW }
-                  : undefined;
-                return (
-                  <th
-                    key={gi}
-                    className={`ig-group${s.label ? ` grp-${s.label.toLowerCase()}` : ""}`}
-                    colSpan={s.span}
-                    style={style}
-                  >
-                    {s.label}
-                  </th>
-                );
-              })}
+              {groupSegments.map((s, gi) => (
+                <th
+                  key={gi}
+                  className={`ig-group${s.label ? ` grp-${s.label.toLowerCase()}` : ""}`}
+                  colSpan={s.span}
+                  {...igSpan(s.keys)}
+                >
+                  {s.label}
+                </th>
+              ))}
             </tr>
             <tr>
               <ItemSelectHeaderCell count={items.length} sel={sel} />
@@ -4042,25 +4043,29 @@ function CustomerQuoteItemEditor({
               {footSegments.map((s, fi) => {
                 if (s.role === "label")
                   return (
-                    <td key={fi} className="ig-foot foot-total-label" colSpan={s.span}>
+                    <td key={fi} className="ig-foot foot-total-label" colSpan={s.span} {...igSpan(s.keys)}>
                       Total
                     </td>
                   );
                 if (s.role === "purchase")
                   return (
-                    <td key={fi} className="ig-foot num total-value foot-purchase" colSpan={s.span}>
+                    <td key={fi} className="ig-foot num total-value foot-purchase" colSpan={s.span} {...igSpan(s.keys)}>
                       <DualCurrencyAmount value={purchaseTotal} currency={costCurrency} rate={rate} />
-                      <span className="fx-note">Purchase · {fxRateText(rate)}</span>
+                      {footFxVisible("cost_amount") ? (
+                        <span className="fx-note">Purchase · {fxRateText(rate)}</span>
+                      ) : null}
                     </td>
                   );
                 if (s.role === "sales")
                   return (
-                    <td key={fi} className="ig-foot num total-value foot-sales" colSpan={s.span}>
+                    <td key={fi} className="ig-foot num total-value foot-sales" colSpan={s.span} {...igSpan(s.keys)}>
                       <DualCurrencyAmount value={total} currency={currency} rate={rate} />
-                      <span className="fx-note">Sales · {fxRateText(rate)}</span>
+                      {footFxVisible("amount") ? (
+                        <span className="fx-note">Sales · {fxRateText(rate)}</span>
+                      ) : null}
                     </td>
                   );
-                return <td key={fi} className="ig-foot" colSpan={s.span} />;
+                return <td key={fi} className="ig-foot" colSpan={s.span} {...igSpan(s.keys)} />;
               })}
             </tr>
           </tfoot>
