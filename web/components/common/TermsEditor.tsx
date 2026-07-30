@@ -35,7 +35,7 @@ export default function TermsEditor({
   }
 
   return (
-    <div style={{ marginTop: 12 }}>
+    <div className="stage-card" style={{ marginTop: 12 }}>
       <div className="sub-h">Terms &amp; Conditions</div>
       <div className="form-grid">
         {field("incoterms", "Incoterms *")}

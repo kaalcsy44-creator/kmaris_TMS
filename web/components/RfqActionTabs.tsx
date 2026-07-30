@@ -2199,6 +2199,7 @@ function CustomerQuoteDetailModal({
 
           <fieldset className="form-fieldset" disabled={!canEditThis}>
           {/* 문서 정보 — 견적 식별·일자. 4필드 한 줄. */}
+          <div className="stage-card">
           <div className="form-section-title">Basic Info</div>
           <div className="form-grid quote-meta-grid">
             <div className="form-field">
@@ -2246,8 +2247,10 @@ function CustomerQuoteDetailModal({
               <input value={d.vessel || ""} readOnly disabled />
             </div>
           </div>
+          </div>
 
           {/* 가격 설정 — 아래 Item list 단가 계산에 직접 반영. */}
+          <div className="stage-card">
           <div className="form-section-title">Pricing <span className="section-hint">— applied to item unit prices</span></div>
           <div className="form-grid quote-price-grid">
             <div className="form-field">
@@ -2296,6 +2299,7 @@ function CustomerQuoteDetailModal({
                 Apply
               </button>
             </div>
+          </div>
           </div>
           <CustomerQuoteItemEditor
             items={items}
@@ -3266,7 +3270,7 @@ function VendorQuoteItemEditor({
   });
 
   return (
-    <div style={{ marginTop: 12 }}>
+    <div className="stage-card stage-card--items" style={{ marginTop: 12 }}>
       <div className="items-head">
         <div className="sub-h">Item list</div>
         <div className="items-head-actions">
@@ -3614,6 +3618,7 @@ function CustomerQuoteAction({
       {tab === "edit" ? (
       <>
       {/* 문서 정보 — 견적 식별·일자. 4필드 한 줄. */}
+      <div className="stage-card">
       <div className="form-section-title">Basic Info</div>
       <div className="form-grid quote-meta-grid">
         <div className="form-field">
@@ -3653,8 +3658,10 @@ function CustomerQuoteAction({
         </div>
         <ValidUntilField sentAt={sentAt} value={validUntil} onChange={setValidUntil} />
       </div>
+      </div>
 
       {/* 가격 설정 — 아래 Item list 단가 계산에 직접 반영. */}
+      <div className="stage-card">
       <div className="form-section-title">Pricing <span className="section-hint">— applied to item unit prices</span></div>
       <div className="form-grid quote-price-grid">
         <div className="form-field">
@@ -3703,6 +3710,7 @@ function CustomerQuoteAction({
             Apply
           </button>
         </div>
+      </div>
       </div>
 
       <CustomerQuoteItemEditor
@@ -3967,7 +3975,7 @@ function CustomerQuoteItemEditor({
   const footFxVisible = (k: string) => (grid.layout.widths[k] ?? 999) >= 130;
 
   return (
-    <div style={{ marginTop: 12 }}>
+    <div className="stage-card stage-card--items" style={{ marginTop: 12 }}>
       <div className="items-head">
         <div className="sub-h">Item list</div>
         <div className="items-head-actions">
@@ -4092,7 +4100,9 @@ function DiscountSummary({
   const discountAmt = subtotal * (Number(discountPct || 0) / 100);
   const finalTotal = subtotal - discountAmt;
   return (
-    <div className="form-grid" style={{ marginTop: 12 }}>
+    <div className="stage-card" style={{ marginTop: 12 }}>
+      <div className="form-section-title">Summary</div>
+      <div className="form-grid">
       <div className="form-field">
         <label>Subtotal</label>
         <div className="static-value"><DualCurrencyAmount value={subtotal} currency={currency} rate={rate} /></div>
@@ -4113,6 +4123,7 @@ function DiscountSummary({
       <div className="form-field">
         <label>Final total</label>
         <div className="static-value"><b><DualCurrencyAmount value={finalTotal} currency={currency} rate={rate} /></b></div>
+      </div>
       </div>
     </div>
   );
