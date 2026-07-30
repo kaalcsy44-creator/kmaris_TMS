@@ -4609,6 +4609,10 @@ table.mini tfoot tr.foot-grand .total-value {
 .basic-col {
   display: contents;
 }
+/* 한 행(3열)을 다 쓰는 필드 — 프로젝트명처럼 값이 긴 입력. */
+.received-fields .form-field.field-full {
+  grid-column: 1 / -1;
+}
 .basic-col-title {
   grid-column: 1 / -1; /* 그룹 제목은 한 행 전체를 차지하는 구분선. */
   margin-top: 4px;

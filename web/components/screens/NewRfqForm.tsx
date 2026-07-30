@@ -675,10 +675,10 @@ export default function NewRfqForm({
       ) : null}
 
       </aside>
-      {/* 좌측: 입력 필드(세로 1열, 성격별 그룹 스택). */}
+      {/* 좌측: 입력 필드 — 그룹 제목 없이 3열 그리드에 위에서부터 채운다(제목 두 줄이
+          차지하던 높이를 없애 항목이 한눈에 들어온다). 프로젝트명만 한 행 전체를 쓴다. */}
       <div className="received-fields">
         <div className="basic-col">
-          <div className="basic-col-title">Customer &amp; vessel</div>
           <Field label="Customer *">
             {/* 회사 로고를 함께 보여주려고 공용 CustomerSelect(버튼+팝오버)를 쓴다.
                 이 컴포넌트는 id 로 값을 주고받으므로 회사 대표 레코드의 id 로 매핑한다. */}
@@ -740,9 +740,6 @@ export default function NewRfqForm({
               placeholder="Customer reference no. (optional)"
             />
           </Field>
-        </div>
-        <div className="basic-col">
-          <div className="basic-col-title">Receipt details</div>
           <Field label="RFQ received at">
             <input
               type="datetime-local"
@@ -766,7 +763,8 @@ export default function NewRfqForm({
               ))}
             </select>
           </Field>
-          <Field label="Project title">
+          {/* 프로젝트명은 문장에 가까운 긴 값이라 3열을 다 쓴다. */}
+          <Field label="Project title" full>
             <input
               value={projectTitle}
               onChange={(e) => setProjectTitle(e.target.value)}
@@ -908,13 +906,16 @@ export default function NewRfqForm({
 
 function Field({
   label,
+  full,
   children,
 }: {
   label: string;
+  // full: 3열 그리드에서 한 행 전체를 쓰는 필드(긴 텍스트 입력).
+  full?: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <div className="form-field">
+    <div className={`form-field${full ? " field-full" : ""}`}>
       <label>{label}</label>
       {children}
     </div>
