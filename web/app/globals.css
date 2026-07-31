@@ -4092,9 +4092,22 @@ a.btn.primary:hover {
 .pricing-band .currency-select {
   min-width: 74px;
 }
-.pricing-band .fx-rate-input {
-  width: 96px;
-  min-width: 96px;
+/* 환율 입력란은 네 자리 숫자 하나만 받는다 — number 입력의 기본 폭(≈165px)을 그대로
+   두면 밴드 첫 줄을 혼자 다 먹어 Margin 이 다음 줄로 밀렸다. 값 폭에 맞춰 좁힌다.
+   (.pricing-band .form-field input 의 width:auto 가 더 구체적이라 input 을 붙여 이긴다.) */
+.pricing-band input.fx-rate-input {
+  flex: 0 0 auto;
+  width: 64px;
+  min-width: 0;
+  padding: 0 6px;
+  /* 좁힌 폭을 스핀 버튼이 다시 잡아먹지 않게 숨긴다 — 값은 직접 입력하거나 고시로 채운다. */
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.pricing-band input.fx-rate-input::-webkit-outer-spin-button,
+.pricing-band input.fx-rate-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 .pricing-band .fx-note-inline {
   margin-top: 0;
@@ -4119,6 +4132,16 @@ a.btn.primary:hover {
 }
 .pricing-band .btn {
   height: 30px;
+}
+/* Apply 는 설정이 아니라 실행 — 설정들이 첫 줄에 모이도록 줄을 끊고(0높이 스페이서)
+   버튼만 둘째 줄 오른쪽 끝에 세운다. */
+.pricing-band .pb-break {
+  flex: 1 0 100%;
+  height: 0;
+  margin: -4px 0;
+}
+.pricing-band .pb-apply {
+  margin-left: auto;
 }
 /* 입력 뒤에 붙는 단위 기호(%) — 라벨에 "(%)" 를 넣는 대신 값 옆에 둔다. */
 .pb-unit {

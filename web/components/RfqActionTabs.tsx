@@ -2300,9 +2300,11 @@ function CustomerQuoteDetailModal({
               />
               <span className="pb-unit">%</span>
             </div>
+            {/* Apply 는 설정이 아니라 실행 — 설정 줄과 섞이지 않게 줄을 끊고 오른쪽 끝에 세운다. */}
+            <span className="pb-break" aria-hidden />
             <button
               type="button"
-              className="btn"
+              className="btn pb-apply"
               onClick={applyPricing}
               disabled={items.length === 0}
               title="Apply the pricing settings above to every item below"
@@ -3719,9 +3721,11 @@ function CustomerQuoteAction({
           />
           <span className="pb-unit">%</span>
         </div>
+        {/* Apply 는 설정이 아니라 실행 — 설정 줄과 섞이지 않게 줄을 끊고 오른쪽 끝에 세운다. */}
+        <span className="pb-break" aria-hidden />
         <button
           type="button"
-          className="btn"
+          className="btn pb-apply"
           onClick={applyPricing}
           disabled={items.length === 0}
           title="Apply the pricing settings above to every item below"
