@@ -2178,6 +2178,13 @@ function CustomerQuoteDetailModal({
     setMsg(`Loaded ${vq.items.length} item(s) from quote ${vq.vendor_quote_no} (${vq.vendor}).`);
   }
 
+  // Pricing 밴드에 입력한 값(원가/판매 통화·환율·올림 단위·마진)을 Item list 전체에 한 번에 반영.
+  function applyPricing() {
+    if (items.length === 0) return;
+    setItems((prev) => applyMarginToAll(prev, defaultMargin, costCurrency, currency, roundDigits, effRate));
+    setMsg(pricingAppliedMsg(items.length, defaultMargin, costCurrency, currency, roundDigits, effRate));
+  }
+
   return (
     <Modal title={d ? <ModalTitle label={`Quotation — ${d.qtn_no}`} projectNo={d.project_no} /> : "Quotation details"} onClose={onClose} wide inline={inline}>
       {!d ? (
@@ -2294,9 +2301,11 @@ function CustomerQuoteDetailModal({
               <span className="pb-unit">%</span>
             </div>
             <button
+              type="button"
               className="btn"
-              onClick={() => setItems((prev) => applyMarginToAll(prev, defaultMargin, costCurrency, currency, roundDigits))}
+              onClick={applyPricing}
               disabled={items.length === 0}
+              title="Apply the pricing settings above to every item below"
             >
               Apply
             </button>
@@ -3543,6 +3552,13 @@ function CustomerQuoteAction({
     setMsg(`Loaded ${vq.items.length} item(s) from quote ${vq.vendor_quote_no} (${vq.vendor}).`);
   }
 
+  // Pricing 밴드에 입력한 값(원가/판매 통화·환율·올림 단위·마진)을 Item list 전체에 한 번에 반영.
+  function applyPricing() {
+    if (items.length === 0) return;
+    setItems((prev) => applyMarginToAll(prev, defaultMargin, costCurrency, currency, roundDigits, effRate));
+    setMsg(pricingAppliedMsg(items.length, defaultMargin, costCurrency, currency, roundDigits, effRate));
+  }
+
   const total = items.reduce((sum, it) => sum + Number(it.amount || 0), 0);
   const finalTotal = total * (1 - Number(discountPct || 0) / 100);
 
@@ -3704,9 +3720,11 @@ function CustomerQuoteAction({
           <span className="pb-unit">%</span>
         </div>
         <button
+          type="button"
           className="btn"
-          onClick={() => setItems((prev) => applyMarginToAll(prev, defaultMargin, costCurrency, currency, roundDigits))}
+          onClick={applyPricing}
           disabled={items.length === 0}
+          title="Apply the pricing settings above to every item below"
         >
           Apply
         </button>
@@ -4221,6 +4239,25 @@ const ROUND_DIGIT_OPTIONS: { value: number; label: string }[] = [
   { value: 0, label: "1" },
   { value: 2, label: "0.01" },
 ];
+
+const roundUnitLabel = (digits: number) =>
+  ROUND_DIGIT_OPTIONS.find((o) => o.value === digits)?.label ?? "1";
+
+// Apply 직후 안내 문구 — 어떤 설정이 몇 개 품목에 걸렸는지 그 자리에서 확인할 수 있게.
+function pricingAppliedMsg(
+  count: number,
+  marginPct: number,
+  costCur: string,
+  saleCur: string,
+  roundDigits: number,
+  rate: number
+): string {
+  const fx =
+    costCur.toUpperCase() === saleCur.toUpperCase()
+      ? ""
+      : ` · FX 1 USD = ${rate.toLocaleString(undefined, { maximumFractionDigits: 2 })} KRW`;
+  return `Applied to ${count} item(s) — margin ${marginPct}% · ${costCur} → ${saleCur}${fx} · round up to ${roundUnitLabel(roundDigits)}.`;
+}
 
 function RoundUnitSelect({ value, onChange }: { value: number; onChange: (v: number) => void }) {
   return (
