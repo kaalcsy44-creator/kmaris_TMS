@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchFxRate } from "@/lib/api";
 
 export type FxMode = "auto" | "manual";
@@ -51,6 +51,13 @@ const FX_FALLBACK_UNKNOWN = {
 const fmtRate = (v: number) =>
   v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+/** 오늘 날짜 "YYYY-MM-DD" (로컬 기준). */
+function todayLocal(): string {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
 // 통화 옆 환율(매매기준율/직접입력) 입력 컨트롤. 1 USD = ? KRW.
 // - "매매기준율": 지정한 날짜(date)의 수출입은행 고시값을 자동 조회(읽기전용).
 // - "직접입력": 사용자가 값을 직접 입력.
@@ -78,31 +85,41 @@ export default function FxRateControl({
   const [ref, setRef] = useState<FxRef | null>(null);
   const lastFetch = useRef<string>("");
 
+  const load = useCallback(
+    (d: string) => {
+      lastFetch.current = `${d}|${cur}`;
+      setLoading(true);
+      setFailed(false);
+      fetchFxRate(d, cur)
+        .then((r) =>
+          setRef({
+            base: r.rate,
+            tts: r.tts,
+            ttb: r.ttb,
+            date: r.date_used,
+            source: r.source,
+            reason: r.reason,
+          })
+        )
+        .catch(() => {
+          setRef(null);
+          setFailed(true);
+        })
+        .finally(() => setLoading(false));
+    },
+    [cur]
+  );
+
   // 고시 조회는 모드와 무관하게 날짜·통화가 바뀔 때만.
   useEffect(() => {
     const d = (date || "").slice(0, 10);
-    const key = `${d}|${cur}`;
-    if (lastFetch.current === key) return;
-    lastFetch.current = key;
-    setLoading(true);
-    setFailed(false);
-    fetchFxRate(d, cur)
-      .then((r) =>
-        setRef({
-          base: r.rate,
-          tts: r.tts,
-          ttb: r.ttb,
-          date: r.date_used,
-          source: r.source,
-          reason: r.reason,
-        })
-      )
-      .catch(() => {
-        setRef(null);
-        setFailed(true);
-      })
-      .finally(() => setLoading(false));
-  }, [date, cur]);
+    if (lastFetch.current === `${d}|${cur}`) return;
+    load(d);
+  }, [date, cur, load]);
+
+  // 문서 날짜가 며칠 지난 뒤 열면 참고줄도 그날 고시에 머문다 — 지금 시세를 확인해야
+  // 할 때 눌러 오늘자 고시로 갈아끼운다. 매매기준율 모드면 값도 함께 따라간다.
+  const stale = ref !== null && ref.date !== todayLocal();
 
   // 매매기준율 모드에서는 조회된 기준율을 그대로 값으로 쓴다.
   useEffect(() => {
@@ -175,6 +192,19 @@ export default function FxRateControl({
             <span className="fx-ref-date">{ref.date}</span>
           </>
         )}
+        <button
+          type="button"
+          className={`fx-ref-refresh${stale ? " stale" : ""}`}
+          onClick={() => load(todayLocal())}
+          disabled={loading}
+          title={
+            stale
+              ? `Look up today's published rate (${todayLocal()}) instead of ${ref?.date}`
+              : "Look up today's published rate again"
+          }
+        >
+          Update
+        </button>
       </div>
     </div>
   );

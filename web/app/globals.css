@@ -5441,6 +5441,29 @@ table.mini input[type="checkbox"].row-check:indeterminate::after {
 .fx-ref-date::before {
   content: "· ";
 }
+/* 참고줄 끝의 재조회 버튼 — 참고 정보 옆이라 참고줄과 같은 크기로 두고, 누를 수 있다는
+   것만 밑줄로 알린다. 고시일이 오늘이 아니면(stale) 색을 줘서 확인하라고 부른다. */
+.fx-ref-refresh {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: #8896a8;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.fx-ref-refresh:hover:not(:disabled) {
+  color: var(--navy);
+}
+.fx-ref-refresh.stale {
+  color: #2563eb;
+}
+.fx-ref-refresh:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
 
 /* 문서 생성 + 이메일 발송 공통 패널(2·4·6단계 상세) */
 .doc-send-panel {
