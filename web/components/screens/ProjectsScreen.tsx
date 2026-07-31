@@ -1305,7 +1305,10 @@ function PipelineBoard({
         return (
           <section
             key={ci}
-            className={`pl-board-col${col.variant ? ` ${col.variant}` : ""}`}
+            // 카드가 없는 단계는 자리만 지키도록 폭을 1/3로 줄인다(.is-empty).
+            className={`pl-board-col${col.variant ? ` ${col.variant}` : ""}${
+              cards.length === 0 ? " is-empty" : ""
+            }`}
           >
             <header className="pl-board-head">
               {/* 단계 작업은 카드 클릭 → 프로젝트 팝업에서 처리(별도 작업 페이지 없음). */}
@@ -1439,7 +1442,12 @@ function BoardPreviewModal({
                 {cols.map((col, ci) => {
                   const cards = rows.filter((r) => col.match(r));
                   return (
-                    <section key={ci} className={`pl-board-col${col.variant ? ` ${col.variant}` : ""}`}>
+                    <section
+                      key={ci}
+                      className={`pl-board-col${col.variant ? ` ${col.variant}` : ""}${
+                        cards.length === 0 ? " is-empty" : ""
+                      }`}
+                    >
                       <header className="pl-board-head">
                         <span className="pl-board-title" title={col.label}>{col.label}</span>
                         {!col.variant && col.label !== "RFQ" && columnSum(cards) ? (
