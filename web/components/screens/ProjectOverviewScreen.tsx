@@ -490,6 +490,11 @@ function StageTimeline({
 }) {
   // 어느 단계에 활동기록 입력창을 열어 뒀는지(한 번에 하나). null 이면 모두 닫힘.
   const [addStage, setAddStage] = useState<number | null>(null);
+  // 활동기록(노트)을 펼쳐 둔 단계. 기본은 모두 접힘 — 개요는 "지금 어디까지 왔나"를 한눈에
+  // 보는 자리라, 통화·메일 로그가 길게 깔리면 단계 진행이 묻힌다. 단계별로 ▾ 로 펼친다.
+  const [openNotes, setOpenNotes] = useState<number[]>([]);
+  const toggleNotes = (no: number) =>
+    setOpenNotes((prev) => (prev.includes(no) ? prev.filter((x) => x !== no) : [...prev, no]));
   // 노트 편집(★·수정·삭제)에 필요한 Party/Person 후보 — 이 딜의 고객사·벤더사와 담당자.
   const parties = activityParties(row);
   const persons = activityPersons(row);
@@ -579,8 +584,13 @@ function StageTimeline({
                         // 단계) 번호+제목만의 헤더 줄을 따로 얹어 모든 노트를 편집 가능한
                         // 행으로 남긴다 — 노트가 메인 자리로 올라가면 링크에 감싸여 편집할 수 없다.
                         const mainIdx = rows.findIndex((r) => r.kind === "auto");
+                        // 접히는 건 ★ 없는 활동기록뿐 — 단계 진행(자동 이벤트)과 ★ 표시한
+                        // 노트는 늘 보인다. 감추기는 CSS 로 한다(DOM 에는 남긴다) — 인쇄물엔
+                        // 접힌 것까지 다 나와야 하고, 펼침도 즉시 되어야 한다.
+                        const notesOpen = openNotes.includes(c.no);
+                        const hidable = notes.filter((n) => !n.note.star).length;
                         return (
-                          <ul className="ov-tl-acts">
+                          <ul className={`ov-tl-acts${notesOpen ? " notes-open" : ""}`}>
                             {mainIdx < 0 ? (
                               <li className="ov-tl-main">
                                 {rowLink(
@@ -643,6 +653,24 @@ function StageTimeline({
                                 </li>
                               );
                             })}
+                            {/* 접힌 활동기록 펼치기 — 이 단계의 로그 맨 아래에 한 줄. */}
+                            {hidable ? (
+                              <li className="ov-tl-morerow">
+                                <span className="ov-tl-gutter" />
+                                <button
+                                  type="button"
+                                  className="ov-tl-more"
+                                  onClick={() => toggleNotes(c.no)}
+                                  title={
+                                    notesOpen
+                                      ? "Collapse the activity log for this stage"
+                                      : "Show the activity log for this stage"
+                                  }
+                                >
+                                  {notesOpen ? "▴ hide log" : `▾ ${hidable} more`}
+                                </button>
+                              </li>
+                            ) : null}
                           </ul>
                         );
                       })()}
@@ -753,9 +781,10 @@ function OvNoteRow({
   const [form, setForm] = useState<ActivityNoteValue>(() => noteToForm(n));
 
   // 편집 불가 맥락 — 예전처럼 읽기 전용 한 줄(★ 접두 표시 유지).
+  // ov-tl-note: 개요에서 접히는 대상 표시(★ 는 접지 않는다) — 감추기는 CSS 가 한다.
   if (!onChanged) {
     return (
-      <li className={n.star ? "star" : undefined}>
+      <li className={`ov-tl-note${n.star ? " star" : ""}`}>
         <div className="ov-tl-row">
           <span className="ov-tl-gutter" />
           {dateEl}
@@ -810,7 +839,7 @@ function OvNoteRow({
 
   if (editing) {
     return (
-      <li className="ov-tl-noteedit">
+      <li className="ov-tl-note ov-tl-noteedit">
         <div className="ov-tl-row">
           <span className="ov-tl-gutter" />
           <div className="ov-tl-editform">
@@ -831,7 +860,7 @@ function OvNoteRow({
   }
 
   return (
-    <li className={n.star ? "star" : undefined}>
+    <li className={`ov-tl-note${n.star ? " star" : ""}`}>
       <div className="ov-tl-row ov-tl-noterow">
         <span className="ov-tl-gutter" />
         {dateEl}

@@ -10524,6 +10524,22 @@ button.ov-tl-stage:hover { background: color-mix(in srgb, var(--ov-tone) 12%, tr
   text-align: left; cursor: pointer; text-decoration: none; border-radius: 6px; }
 .ov-tl-rowlink:hover { background: color-mix(in srgb, var(--ov-tone) 8%, #fff); }
 .ov-tl-acts li.star .ov-tl-row { background: #fff9e8; border-radius: 4px; }
+/* 활동기록(통화·메일 로그)은 기본으로 접는다 — 개요에서 먼저 읽어야 하는 건 단계 진행이라
+   로그가 길게 깔리면 그게 묻힌다. ★ 로 표시한 건은 "주요"라 접지 않고, 나머지는 단계별
+   ▾ 버튼(.ov-tl-more)으로 펼친다. 감추기를 CSS 로 하는 이유는 아래 인쇄 규칙 때문 —
+   DOM 에 남아 있어야 접힌 채로 인쇄해도 로그가 빠지지 않는다. */
+.ov-tl-acts > li.ov-tl-note { display: none; }
+.ov-tl-acts > li.ov-tl-note.star,
+.ov-tl-acts.notes-open > li.ov-tl-note,
+/* 수정 중인 노트는 접기에 걸려 사라지면 안 된다(입력하던 내용이 화면에서 없어진다). */
+.ov-tl-acts > li.ov-tl-noteedit { display: list-item; }
+/* 더보기 — 로그 맨 아래 한 줄. 날짜 열과 시작점을 맞춘다(거터 19px + gap). */
+.ov-tl-morerow { display: flex; align-items: center; gap: 8px; padding: 1px 4px 2px 8px; }
+.ov-tl-more {
+  border: 0; background: none; padding: 1px 4px; border-radius: 5px;
+  font-family: inherit; font-size: var(--ov-t-meta); color: #7c8899; cursor: pointer;
+}
+.ov-tl-more:hover { background: color-mix(in srgb, var(--ov-tone) 10%, #fff); color: #405168; }
 .ov-tl-gutter { flex: none; width: 19px; }
 /* 완료 = 칸 색 점 + 선, 현재 = 흰 카드로 띄움, 미완료 = 흐리게.
    현재 단계 바탕이 흰색인 건 칸 톤 위에서 "떠 보이게" 하려는 것 — 색을 하나 더 쓰면
@@ -11104,6 +11120,10 @@ button.ov-tl-stage:hover {
   .proj-ov-actions, .proj-ov-back { display: none !important; }
   /* 활동기록 추가·수정 UI(입력 진입점·폼·노트 편집 버튼)는 인쇄물에 남길 게 아니다. */
   .ov-tl-add, .ov-tl-addform, .ov-tl-nactions { display: none !important; }
+  /* 화면에서 접어 둔 활동기록도 인쇄물에는 다 나온다 — 종이는 펼칠 수가 없다.
+     그래서 접기를 DOM 제거가 아니라 CSS 로 한다. 더보기 버튼 자체는 뺀다. */
+  .ov-tl-acts > li.ov-tl-note { display: list-item !important; }
+  .ov-tl-morerow { display: none !important; }
   .proj-ov-sec, .proj-ov-tl > li, .proj-ov-items tr { break-inside: avoid; }
   .proj-ov-tlcols { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
   /* 4칸 톤은 이 화면에서 "어느 단계 열인지"를 알려주는 장치라 인쇄에서도 남긴다 —
