@@ -10555,6 +10555,16 @@ button.ov-tl-stage:hover { background: color-mix(in srgb, var(--ov-tone) 12%, tr
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--ov-tone) 22%, transparent); }
 .proj-ov-tl > li.todo .ov-tl-label { color: #8792a5; font-weight: 600; }
 .proj-ov-tl > li.skip { opacity: 0.45; }
+/* 해당 없는 단계 표시 — 내수 부품공급의 7·8단계(C/I·PL·SA·POD)처럼 이 딜에서 밟지 않는
+   단계에 붙는다. 활동 기록이 남아 있는 단계에도 붙여야 한다: 흐림(.skip)만 걸려 있으면
+   "아직 못 한 단계"로 읽혀서, 다 끝난 딜인데 미완료처럼 보인다.
+   행 오른쪽 끝(margin-left:auto)에 칩으로 띄워 라벨·상대와 섞이지 않게 한다. */
+.ov-tl-na {
+  flex: none; align-self: flex-start; margin-left: auto;
+  padding: 0 6px; border: 1px solid #cfd7e2; border-radius: 999px; background: #fff;
+  color: #6e7c8f; font-size: var(--ov-t-meta); font-weight: 700; letter-spacing: 0.03em;
+  line-height: 1.5; white-space: nowrap;
+}
 /* 단계에 달린 사람이 쓴 노트 — 점 선 오른쪽으로 들여써 단계에 속함을 보인다. */
 .ov-tl-notes { list-style: none; margin: 0; padding: 0 4px 4px 36px; }
 .ov-tl-notes li { display: flex; gap: 6px; padding: 3px 0; font-size: var(--ov-t-body);

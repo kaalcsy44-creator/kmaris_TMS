@@ -571,12 +571,15 @@ function StageTimeline({
                               {children}
                             </Link>
                           );
+                        // 해당 없는 단계(내수 부품공급의 C/I·PL·SA·POD) 표시. 활동 기록이
+                        // 있어도 늘 붙인다 — 흐림(.skip)만으로는 "아직 안 한 단계"로 읽힌다.
+                        const naTag = c.skip ? <span className="ov-tl-na">N/A</span> : null;
                         if (!rows.length) {
                           return rowLink(
                             <>
                               <span className="ov-tl-dot">{c.no}</span>
                               <b className="ov-tl-label">{c.label}</b>
-                              {c.skip ? <span className="ov-tl-val">N/A</span> : null}
+                              {naTag}
                             </>,
                           );
                         }
@@ -597,6 +600,7 @@ function StageTimeline({
                                   <>
                                     <span className="ov-tl-dot">{c.no}</span>
                                     <b className="ov-tl-label">{c.label}</b>
+                                    {naTag}
                                   </>,
                                 )}
                               </li>
@@ -631,7 +635,7 @@ function StageTimeline({
                               if (i === mainIdx) {
                                 return (
                                   <li key={i} className="ov-tl-main">
-                                    {rowLink(<><span className="ov-tl-dot">{c.no}</span>{dateEl}{contentEl}</>, a.vrfqId)}
+                                    {rowLink(<><span className="ov-tl-dot">{c.no}</span>{dateEl}{contentEl}{naTag}</>, a.vrfqId)}
                                   </li>
                                 );
                               }
