@@ -74,7 +74,7 @@ export default function ProjectOverviewScreen({
   /** 작업 팝업 안에 끼워 넣는 모드 — 자체 머리글(신원·PIC·인쇄·뒤로)을 렌더하지 않는다. */
   embedded?: boolean;
   /** 단계 줄 클릭 처리. 주면 링크 대신 이 콜백을 쓴다(팝업 안에서 화면 전환). */
-  onOpenStage?: (stage: number, vrfqId?: number) => void;
+  onOpenStage?: (stage: number, vrfqId?: number, orderId?: number) => void;
   /** 활동기록을 이 화면에서 추가한 뒤 부모에게 알린다(팝업/목록 갱신). */
   onActivityChanged?: () => void | Promise<unknown>;
 }) {
@@ -233,6 +233,72 @@ function addCharges(base: number | null, extra: number | null | undefined): numb
   return (base ?? 0) + extra;
 }
 
+/** 문서번호에서 그 문서를 다루는 단계로 보내는 데 필요한 것. Items 묶음 머리로 내려간다. */
+type DocNav = {
+  rfqId: number;
+  /** 팝업 안(embedded)일 때만 있다 — 그 자리에서 작업 화면으로 전환한다. */
+  onOpenStage?: (stage: number, vrfqId?: number, orderId?: number) => void;
+};
+
+/** 문서번호를 다루는 단계 — Stages 스트립의 번호와 같다. */
+const DOC_STAGE = {
+  vendorQuote: 3, // 매입 견적(벤더에게 받은 견적)
+  quote: 4,       // 매출 견적(고객에게 보낸 견적)
+  customerPo: 5,  // 고객 P/O
+  vendorPo: 6,    // 벤더 P/O
+  ci: 7,          // C/I·PL·SA 등 선적서류
+} as const;
+
+const DOC_STAGE_NAME: Record<number, string> = {
+  3: "Quote Received",
+  4: "Quote Sent",
+  5: "P/O Received",
+  6: "P/O Sent",
+  7: "Delivery Readiness",
+};
+
+/**
+ * 문서번호 링크 — 그 번호를 만든/쓰는 단계의 작업 화면으로 보낸다.
+ * 팝업 안에서는 그 자리에서 단계를 바꾸고(onOpenStage), 페이지에서는 /project 딥링크로 연다.
+ * orderId 를 주면 오더가 여럿인 프로젝트에서 그 선박의 P/O 가 선택된 채로 열린다.
+ */
+function DocNoLink({
+  no,
+  stage,
+  orderId,
+  nav,
+}: {
+  no: string;
+  stage: number;
+  orderId?: number;
+  nav: DocNav;
+}) {
+  // 번호가 없는 자리(— 같은 자리표시)는 갈 곳이 없으니 그냥 글자로 둔다.
+  if (!no || no === "—") return <>{no}</>;
+  const title = `${no} — open stage ${stage} (${DOC_STAGE_NAME[stage] ?? "work"})`;
+  if (nav.onOpenStage) {
+    return (
+      <button
+        type="button"
+        className="ov-doc-link"
+        title={title}
+        onClick={() => nav.onOpenStage!(stage, undefined, orderId)}
+      >
+        {no}
+      </button>
+    );
+  }
+  return (
+    <Link
+      className="ov-doc-link"
+      title={title}
+      href={`/project?rfq=${nav.rfqId}&stage=${stage}${orderId ? `&order=${orderId}` : ""}`}
+    >
+      {no}
+    </Link>
+  );
+}
+
 
 /**
  * 마진율(%) — (매출 − 매입) / 매출. 통화가 다르면 매입을 매출 통화로 환산해 비교한다.
@@ -270,7 +336,7 @@ function Overview({
   rfqItems: RfqItem[] | null;
   vendorQuoteNo: string;
   embedded?: boolean;
-  onOpenStage?: (stage: number, vrfqId?: number) => void;
+  onOpenStage?: (stage: number, vrfqId?: number, orderId?: number) => void;
   /** 활동기록 추가 후 데이터 갱신 콜백. */
   onActivityAdded?: () => void | Promise<unknown>;
 }) {
@@ -370,6 +436,7 @@ function Overview({
         quotations={quotations}
         rfqItems={rfqItems}
         vendorQuoteNo={vendorQuoteNo}
+        nav={{ rfqId: row.rfq_id, onOpenStage }}
       />
     </div>
   );
@@ -417,7 +484,7 @@ function StageTimeline({
   chain: StageChainItem[];
   acts: Activity[];
   /** 주면 단계 줄이 링크 대신 이 콜백을 부른다(작업 팝업 안에서 화면 전환). */
-  onOpenStage?: (stage: number, vrfqId?: number) => void;
+  onOpenStage?: (stage: number, vrfqId?: number, orderId?: number) => void;
   /** 활동기록 추가 후 데이터 갱신 콜백. 주면 각 단계에 "+ note" 입력이 열린다. */
   onActivityAdded?: () => void | Promise<unknown>;
 }) {
@@ -869,6 +936,7 @@ function ItemsSection({
   quotations,
   rfqItems,
   vendorQuoteNo,
+  nav,
 }: {
   stage: number;
   orders: ProjectOrder[];
@@ -876,6 +944,7 @@ function ItemsSection({
   quotations: ProjectQuote[];
   rfqItems: RfqItem[] | null;
   vendorQuoteNo: string;
+  nav: DocNav;
 }) {
   const hasGroups = orders.length > 0 || quotations.length > 0;
   const phaseClass = (from: number) => (stage >= from ? "ov-phase-on" : "ov-phase-todo");
@@ -952,12 +1021,13 @@ function ItemsSection({
                   vendorPos={purchaseOrders.filter((p) => p.order_id === o.id)}
                   quote={quoteForOrder(o, quotations)}
                   vendorQuoteNo={vendorQuoteNo}
+                  nav={nav}
                 />
               ))
             ) : (
               // P/O 전 — 이 프로젝트의 견적을 건별로 한 묶음씩(견적번호 오름차순).
               quotations.map((q) => (
-                <QuoteOnlyGroup key={q.id} quoteId={q.id} vendorQuoteNo={vendorQuoteNo} />
+                <QuoteOnlyGroup key={q.id} quoteId={q.id} vendorQuoteNo={vendorQuoteNo} nav={nav} />
               ))
             )}
           </table>
@@ -989,12 +1059,14 @@ function OrderItemGroup({
   vendorPos,
   quote: quoteRow,
   vendorQuoteNo,
+  nav,
 }: {
   order: ProjectOrder;
   vendorPos: VendorPo[];
   /** 이 선박의 견적(목록 행). 없으면 견적 없이 발주된 선박. */
   quote: ProjectQuote | null;
   vendorQuoteNo: string;
+  nav: DocNav;
 }) {
   // 원가·마진은 견적 목록에 없고 상세에만 있어 따로 받는다(_item_view 가 원가를 지움).
   const qid = quoteRow?.id ?? 0;
@@ -1011,7 +1083,7 @@ function OrderItemGroup({
   const vpos = sortByDocNo(vendorPos, (p) => p.po_no, (p) => p.id);
   const vpoItems = vpos.flatMap((p) => p.items);
   const vpoCur = vpos[0]?.currency || order.currency || "USD";
-  const vpoNos = vpos.map((p) => p.po_no).filter(Boolean).join(" · ");
+  const vpoNos = vpos.map((p) => p.po_no).filter(Boolean);
 
   const qCur = quote?.currency || order.currency || "USD";
   const qCostCur = quote?.cost_currency || qCur;
@@ -1084,6 +1156,8 @@ function OrderItemGroup({
         quoteDocs={quote ? { pur: quote.vendor_quote_no || vendorQuoteNo, sales: quote.qtn_no || "—" } : null}
         poDocs={{ pur: vpoNos, sales: order.po_no || "—" }}
         ciNo={ci?.ci_no || ""}
+        orderId={order.id}
+        nav={nav}
       />
       {/* 합계를 품목 1번행 바로 위에 둔다 — 표를 끝까지 훑지 않고도 단계별 총액을 먼저 본다. */}
       <GroupTotal
@@ -1214,11 +1288,17 @@ function GroupHead({
   quoteDocs,
   poDocs,
   ciNo,
+  orderId,
+  nav,
 }: {
   vessel: string;
   quoteDocs: { pur: string; sales: string } | null;
-  poDocs: { pur: string; sales: string };
+  /** 벤더 P/O 는 한 오더에 여러 장일 수 있어 배열 — 번호마다 따로 링크한다. */
+  poDocs: { pur: string[]; sales: string };
   ciNo: string;
+  /** 이 묶음의 고객 P/O(오더). 5단계 이후 링크가 이 선박을 골라 연다. */
+  orderId?: number;
+  nav: DocNav;
 }) {
   return (
     <tr className="ov-grp-head">
@@ -1226,27 +1306,48 @@ function GroupHead({
         <span className="ov-grp-vessel">{vessel || "— no vessel —"}</span>
       </td>
       <td colSpan={3} className="ov-grp-doc q gs">
-        {quoteDocs ? <DocPair pur={quoteDocs.pur} sales={quoteDocs.sales} /> : <i className="muted">not quoted</i>}
+        {quoteDocs ? (
+          <DocPair
+            pur={<DocNoLink no={quoteDocs.pur} stage={DOC_STAGE.vendorQuote} nav={nav} />}
+            sales={<DocNoLink no={quoteDocs.sales} stage={DOC_STAGE.quote} nav={nav} />}
+            hasPur={!!quoteDocs.pur}
+          />
+        ) : (
+          <i className="muted">not quoted</i>
+        )}
       </td>
       <td colSpan={3} className="ov-grp-doc p gs">
         {poDocs.sales ? (
-          <DocPair pur={poDocs.pur} sales={poDocs.sales} />
+          <DocPair
+            pur={poDocs.pur.map((no, i) => (
+              <Fragment key={no}>
+                {i ? <span className="sep">·</span> : null}
+                <DocNoLink no={no} stage={DOC_STAGE.vendorPo} orderId={orderId} nav={nav} />
+              </Fragment>
+            ))}
+            sales={<DocNoLink no={poDocs.sales} stage={DOC_STAGE.customerPo} orderId={orderId} nav={nav} />}
+            hasPur={poDocs.pur.length > 0}
+          />
         ) : (
           <i className="muted">no P/O yet</i>
         )}
       </td>
       <td colSpan={3} className="ov-grp-doc c gs">
-        {ciNo || <i className="muted">not issued</i>}
+        {ciNo ? (
+          <DocNoLink no={ciNo} stage={DOC_STAGE.ci} orderId={orderId} nav={nav} />
+        ) : (
+          <i className="muted">not issued</i>
+        )}
       </td>
     </tr>
   );
 }
 
 /** "매입문서 → 매출문서". 매입문서가 없으면 매출문서만. */
-function DocPair({ pur, sales }: { pur: string; sales: string }) {
+function DocPair({ pur, sales, hasPur }: { pur: ReactNode; sales: ReactNode; hasPur: boolean }) {
   return (
     <>
-      {pur ? (
+      {hasPur ? (
         <>
           <span className="ov-doc-pur">{pur}</span>
           <span className="sep">→</span>
@@ -1314,7 +1415,15 @@ function GroupTotal({
 }
 
 /** P/O 전(4단계 이하) — 견적만 있는 프로젝트. Quote 열만 채우고 P/O·C/I 는 비운다. */
-function QuoteOnlyGroup({ quoteId, vendorQuoteNo }: { quoteId: number; vendorQuoteNo: string }) {
+function QuoteOnlyGroup({
+  quoteId,
+  vendorQuoteNo,
+  nav,
+}: {
+  quoteId: number;
+  vendorQuoteNo: string;
+  nav: DocNav;
+}) {
   const { data: quote } = useCachedData(`quotation:${quoteId}`, () =>
     fetchCustomerQuotationDetail(quoteId)
   );
@@ -1338,8 +1447,9 @@ function QuoteOnlyGroup({ quoteId, vendorQuoteNo }: { quoteId: number; vendorQuo
         vessel={quote.vessel}
         // 매입측 = 이 견적이 링크한 벤더 견적번호. 미링크(구 데이터)면 프로젝트 집계값으로 폴백.
         quoteDocs={{ pur: quote.vendor_quote_no || vendorQuoteNo, sales: quote.qtn_no || "—" }}
-        poDocs={{ pur: "", sales: "" }}
+        poDocs={{ pur: [], sales: "" }}
         ciNo=""
+        nav={nav}
       />
       {/* 합계를 품목 1번행 바로 위에 둔다(OrderItemGroup 과 동일 배치). */}
       <GroupTotal

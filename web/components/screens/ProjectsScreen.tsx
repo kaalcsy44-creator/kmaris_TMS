@@ -1970,13 +1970,14 @@ export function PipelineModal({
   // overview 로 굳어 있으면 작업하려던 사람이 매번 한 번 더 눌러야 한다.
   // 오래 읽는 용도는 페이지(/project/<id>)가 맡는다.
   const [modalView, setModalView] = useState<"work" | "overview">(initialView);
-  /** 개요의 단계 줄 클릭 → 그 단계의 작업 화면으로. 개요에서 짚은 곳을 바로 편집.
-   *  vrfqId 를 주면(2단계 RFQ Sent 로그) 그 벤더 RFQ 를 바로 선택해 연다. */
-  const openStageFromOverview = useCallback((no: number, vrfqId?: number) => {
+  /** 개요의 단계 줄·문서번호 클릭 → 그 단계의 작업 화면으로. 개요에서 짚은 곳을 바로 편집.
+   *  vrfqId 를 주면(2단계 RFQ Sent 로그) 그 벤더 RFQ 를, orderId 를 주면(Items 묶음의
+   *  P/O·C/I 번호) 그 선박의 고객 P/O 를 선택해 연다. */
+  const openStageFromOverview = useCallback((no: number, vrfqId?: number, orderId?: number) => {
     setSelectedStage(Math.min(Math.max(no, 1), 11));
     setFocusVrfqId(vrfqId ?? null);
     setFocusApPoId(null);
-    setFocusOrderId(null);
+    setFocusOrderId(orderId ?? null);
     setModalView("work");
   }, []);
 

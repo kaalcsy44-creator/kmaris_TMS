@@ -10720,6 +10720,16 @@ button.ov-tl-stage:hover { background: color-mix(in srgb, var(--ov-tone) 12%, tr
 .ov-grp-doc.c { color: #11824a; }
 /* 매입측 문서(벤더 견적·벤더 P/O)는 보조 정보 → 흐리게, 매출 문서를 앞세운다. */
 .ov-grp-doc .ov-doc-pur { font-weight: 400; color: var(--muted); }
+/* 문서번호 = 그 문서를 다루는 단계로 가는 링크. 색·굵기는 칸이 이미 단계를 알려주므로
+   물려받고, 점선 밑줄로만 "누를 수 있다"를 표시한다. 팝업 안에선 <button>, 페이지에선
+   <a> 로 그려지므로 버튼 기본 모양(테두리·바탕·폰트)을 지워 둘을 같게 맞춘다. */
+.ov-doc-link {
+  font: inherit; color: inherit; background: none; border: 0; padding: 0;
+  cursor: pointer; text-align: inherit;
+  text-decoration: underline dotted; text-underline-offset: 3px;
+  text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
+}
+.ov-doc-link:hover { text-decoration: underline solid; text-underline-offset: 3px; }
 .ov-grp-doc .sep { margin: 0 5px; color: var(--muted); }
 .ov-grp-doc i { font-style: normal; font-weight: 400; }
 /* 합계 행 — 묶음 머리와 같은 이유로 반투명. 머리보다 옅게 깔고 윗선으로 구분한다. */
