@@ -10554,7 +10554,11 @@ button.ov-tl-stage:hover { background: color-mix(in srgb, var(--ov-tone) 12%, tr
 .proj-ov-tl > li.current .ov-tl-dot {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--ov-tone) 22%, transparent); }
 .proj-ov-tl > li.todo .ov-tl-label { color: #8792a5; font-weight: 600; }
-.proj-ov-tl > li.skip { opacity: 0.45; }
+/* 해당 없는 단계는 흐리게 — 단, 흐려지는 건 그 단계 줄(번호·이름·N/A)뿐이다.
+   단계에 딸린 활동기록까지 덮으면 실제로 남긴 통화·메일 기록이 안 읽힌다. 내수 딜은
+   7·8단계가 N/A 인데 그 구간 로그는 거기 붙으므로(stageForNote) 자주 생기는 상황이다. */
+.proj-ov-tl > li.skip > .ov-tl-rowlink,
+.proj-ov-tl > li.skip > .ov-tl-acts > li.ov-tl-main { opacity: 0.45; }
 /* 해당 없는 단계 표시 — 내수 부품공급의 7·8단계(C/I·PL·SA·POD)처럼 이 딜에서 밟지 않는
    단계에 붙는다. 활동 기록이 남아 있는 단계에도 붙여야 한다: 흐림(.skip)만 걸려 있으면
    "아직 못 한 단계"로 읽혀서, 다 끝난 딜인데 미완료처럼 보인다.

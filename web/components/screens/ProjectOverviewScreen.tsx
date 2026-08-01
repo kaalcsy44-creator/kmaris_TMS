@@ -451,12 +451,16 @@ function actAt(a: Activity): string {
 
 /** 노트를 입력한 일시가 속한 단계로 자동 배치한다 — 그 시점에 "진행 중"이던 단계
  *  (= 완료 일시가 그 일시 이후인 가장 이른 단계). 모든 완료 단계보다 늦으면 현재 단계.
- *  일시를 못 읽으면 현재 단계. chain 은 no 오름차순, at 도 대체로 그에 따라 증가한다. */
+ *  일시를 못 읽으면 현재 단계. chain 은 no 오름차순, at 도 대체로 그에 따라 증가한다.
+ *
+ *  해당 없는 단계(N/A)도 완료 일시가 있으면 후보로 둔다 — 배치 기준은 "이 딜이 그 단계를
+ *  밟았는가"가 아니라 "그 시각에 어디까지 와 있었는가"다. 빼 두면 내수 딜의 7·8단계 구간
+ *  로그가 전부 9단계로 쏠려, 9단계 줄보다 열흘씩 이른 기록이 그 아래 쌓인다. */
 function stageForNote(chain: StageChainItem[], iso: string, current: number): number {
   const t = Date.parse((iso || "").slice(0, 16));
   if (Number.isNaN(t)) return current;
   for (const c of chain) {
-    if (c.skip || !c.at) continue;
+    if (!c.at) continue;
     const ct = Date.parse(c.at);
     if (!Number.isNaN(ct) && ct >= t) return c.no;
   }
@@ -587,14 +591,21 @@ function StageTimeline({
                         // 단계) 번호+제목만의 헤더 줄을 따로 얹어 모든 노트를 편집 가능한
                         // 행으로 남긴다 — 노트가 메인 자리로 올라가면 링크에 감싸여 편집할 수 없다.
                         // 늘 보이는 줄(단계 진행 + ★ 노트)과 접히는 줄(그 외 활동기록)을 나눈다.
-                        // 접히는 줄은 토글 아래에만 붙인다 — 시간순 사이사이에 끼워 넣으면 펼칠 때
-                        // 토글보다 위에 생기는 줄이 토글을 밀어내려, 방금 누른 버튼이 딴 데로 간다.
+                        // 접히는 줄은 토글 바로 아래에 통째로 붙는다 — 시간순 사이사이에 흩어 놓으면
+                        // 펼칠 때 토글 위에 줄이 생겨 방금 누른 버튼이 아래로 밀린다.
                         // 감추기는 CSS 가 한다(DOM 에는 남긴다) — 인쇄물엔 접힌 것도 다 나와야 한다.
                         const isLog = (a: Activity) => a.kind === "note" && !a.note.star;
                         const pinned = rows.filter((a) => !isLog(a));
                         const log = rows.filter(isLog);
                         const mainIdx = pinned.findIndex((r) => r.kind === "auto");
                         const notesOpen = openNotes.includes(c.no);
+                        // 블록을 통째로 첫 로그의 시각 자리에 끼운다 — 단계 완료보다 이른 기록이면
+                        // 단계 줄 위로 간다(그 단계를 끝내기까지 있었던 일이므로). 블록이 쪼개지지
+                        // 않으니 펼침은 늘 토글 아래로만 늘어나고, 토글은 제자리에 남는다.
+                        const logAt = log.length ? actAt(log[0]) : "";
+                        const logPos = log.length
+                          ? pinned.filter((a) => actAt(a) <= logAt).length
+                          : pinned.length;
                         // 활동 1줄 — 노트는 편집 가능한 행으로, 자동 이벤트는 단계/벤더 링크 행으로.
                         const renderRow = (a: Activity, key: string, isMain: boolean) => {
                           const dateEl = (
@@ -648,23 +659,11 @@ function StageTimeline({
                             </li>
                           );
                         };
-                        return (
-                          <ul className={`ov-tl-acts${notesOpen ? " notes-open" : ""}`}>
-                            {mainIdx < 0 ? (
-                              <li className="ov-tl-main">
-                                {rowLink(
-                                  <>
-                                    <span className="ov-tl-dot">{c.no}</span>
-                                    <b className="ov-tl-label">{c.label}</b>
-                                    {naTag}
-                                  </>,
-                                )}
-                              </li>
-                            ) : null}
-                            {pinned.map((a, i) => renderRow(a, `p${i}`, i === mainIdx))}
-                            {/* 접힌 활동기록 펼치기 — 늘 보이는 줄 바로 아래 고정. 펼쳐도 이 자리다. */}
-                            {log.length ? (
-                              <li className="ov-tl-morerow">
+                        const pinnedRows = pinned.map((a, i) => renderRow(a, `p${i}`, i === mainIdx));
+                        // 토글 + 접힌 로그 = 한 덩어리. 위 logPos 자리에 통째로 들어간다.
+                        const logBlock = log.length
+                          ? [
+                              <li key="more" className="ov-tl-morerow">
                                 <span className="ov-tl-gutter" />
                                 <button
                                   type="button"
@@ -678,9 +677,26 @@ function StageTimeline({
                                 >
                                   {notesOpen ? "▴ hide log" : `▾ ${log.length} more`}
                                 </button>
+                              </li>,
+                              ...log.map((a, i) => renderRow(a, `n${i}`, false)),
+                            ]
+                          : [];
+                        return (
+                          <ul className={`ov-tl-acts${notesOpen ? " notes-open" : ""}`}>
+                            {mainIdx < 0 ? (
+                              <li className="ov-tl-main">
+                                {rowLink(
+                                  <>
+                                    <span className="ov-tl-dot">{c.no}</span>
+                                    <b className="ov-tl-label">{c.label}</b>
+                                    {naTag}
+                                  </>,
+                                )}
                               </li>
                             ) : null}
-                            {log.map((a, i) => renderRow(a, `n${i}`, false))}
+                            {pinnedRows.slice(0, logPos)}
+                            {logBlock}
+                            {pinnedRows.slice(logPos)}
                           </ul>
                         );
                       })()}
