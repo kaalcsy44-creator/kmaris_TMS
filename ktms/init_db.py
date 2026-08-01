@@ -6,6 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
+from copy import deepcopy
 from datetime import datetime, date as _date
 
 import bcrypt
@@ -13,7 +14,7 @@ from sqlalchemy import text, inspect
 from db.engine import Base, get_engine, get_session
 from db.models import (
     User, UserRole, DocSequence, Customer, CustomerContact, Vendor, VendorContact,
-    RFQ, Quotation, VendorQuote, Order, ItemCategory, ItemPriceHistory,
+    RFQ, Quotation, VendorQuote, Order, ItemCategory, ItemMaster, ItemPriceHistory,
 )
 
 
@@ -386,23 +387,57 @@ def seed_sample_data():
         session.close()
 
 
+# 부품 기능(소분류) — 기자재를 가리지 않는 공용 어휘라 어느 기자재 밑에서나 같은 목록이다.
+# 고르는 사람이 기자재마다 다른 목록을 외우지 않아도 되고, "실링킷 매입가 추이"처럼
+# 기자재를 가로지르는 조회가 된다. 딱 맞는 기능이 없으면 중분류에서 멈추면 되므로
+# 여기에 "Other"는 두지 않는다(분류는 어느 깊이에서든 고를 수 있다).
+PART_FUNCTIONS = [
+    "Overhaul kit", "Seal & gasket", "Bearing & bushing", "Valve",
+    "Fuel & lubrication", "Electric parts", "Mechanical parts",
+]
+
+# 품목 분류 기본 트리 — 기자재군(대) > 기자재(중) > 부품 기능(소).
+#
+# 층마다 축이 하나다. 업무구분(부품공급/서비스)은 넣지 않는다 — 딜의 work_type 이 이미
+# 갖고 있고, 품목 트리에 넣으면 같은 부품이 두 가지로 갈라져 품목별 가격 이력이 쪼개진다.
+# 서비스 매출은 work_type × 분류 교차로 본다.
+#
+# 소분류는 물량이 있는 기자재에만 깔아 둔다 — 모든 기자재에 미리 깔면 노드만 수백 개가
+# 되고 정작 쓰이지 않는다. 필요해지면 Settings 에서 그 기자재 밑에 추가한다.
+ITEM_CATEGORY_TREE: dict[str, dict[str, list[str]]] = {
+    "Engine": {
+        "2-stroke": PART_FUNCTIONS,
+        "4-stroke": PART_FUNCTIONS,
+        "Turbocharger": [],
+        "Governor": [],
+    },
+    "Deck machinery": {
+        "Crane": PART_FUNCTIONS,
+        "Winch": [],
+        "Hatch cover": [],
+    },
+    "Auxiliary machinery": {
+        "Purifier": [], "Pump": [], "Compressor": [], "Boiler": [], "Cooler": [],
+    },
+    "Environmental": {"BWTS": [], "Incinerator": [], "OWS": [], "Scrubber": []},
+    "Safety": {"Life boat": [], "Elevator": [], "Fire fighting": []},
+    "Electrical & automation": {},
+    "Other": {},
+}
+
+
 def seed_item_categories():
     """Seed the default item category tree (Main>Sub>Detail). Idempotent — skips
     if any category already exists.
 
-    Default: Service/Parts > Engine·Other > 2·4 stroke / BWTS·Incinerator·…
+    Default: ITEM_CATEGORY_TREE (equipment group > equipment > part function).
     Bunkering·Provisions and others are added later by admins in Settings."""
     session = get_session()
     try:
         if session.query(ItemCategory).count() > 0:
             print("[SKIP] Item categories already exist.")
             return
-        equipment = ["BWTS", "Incinerator", "Elevator", "Life boat", "Crane", "ETC"]
-        tree = {
-            "Service": {"Engine": ["2 stroke", "4 stroke"], "Other Equipment": list(equipment)},
-            "Parts":   {"Engine": ["2 stroke", "4 stroke"], "Other":           list(equipment)},
-        }
-        for i, (l1, mids) in enumerate(tree.items()):
+        for i, (l1, mids) in enumerate(ITEM_CATEGORY_TREE.items()):
             n1 = ItemCategory(name=l1, parent_id=None, level=1, sort_order=i)
             session.add(n1)
             session.flush()
@@ -413,7 +448,7 @@ def seed_item_categories():
                 for k, l3 in enumerate(subs):
                     session.add(ItemCategory(name=l3, parent_id=n2.id, level=3, sort_order=k))
         session.commit()
-        print("[OK] Item categories seeded (Service/Parts > Engine·Other > …).")
+        print("[OK] Item categories seeded (Engine·Deck machinery·… > equipment > function).")
     finally:
         session.close()
 
@@ -432,6 +467,185 @@ _CATEGORY_RENAME = {
     "벙커링": "Bunkering",
     "선용품": "Provisions",
 }
+
+
+# 구 트리(업무구분 축) → 신 트리(기자재 축) 이동표.
+#
+# _PROMOTE: 신 경로를 "구 노드 그대로 옮겨서" 만든다 — id 가 살아남으므로 그 분류를 쓰던
+#   품목과 저장된 문서 라인이 손대지 않아도 새 자리를 가리킨다. 물량이 실린 가지를 고른다
+#   (Parts 쪽. Service 쪽은 같은 이름의 중복 가지라 아래 _MOVE 로 합친다).
+# _MOVE: 남는 구 노드의 참조를 어느 신 노드로 옮길지. 기자재 정보가 없는 노드(Parts·
+#   Service·Other·ETC)는 Other 로 모은다 — 원래도 분류가 안 된 품목들이다.
+_CATEGORY_PROMOTE = {
+    "Engine":                      "Parts > Engine",
+    "Engine > 2-stroke":           "Parts > Engine > 2 stroke",
+    "Engine > 4-stroke":           "Parts > Engine > 4 stroke",
+    "Deck machinery > Crane":      "Parts > Other > Crane",
+    "Environmental > BWTS":        "Parts > Other > BWTS",
+    "Environmental > Incinerator": "Parts > Other > Incinerator",
+    "Safety > Elevator":           "Parts > Other > Elevator",
+    "Safety > Life boat":          "Parts > Other > Life boat",
+    "Other":                       "Parts > Other > ETC",
+}
+_CATEGORY_MOVE = {
+    "Parts":                                   "Other",
+    "Parts > Other":                           "Other",
+    "Service":                                 "Other",
+    "Service > Engine":                        "Engine",
+    "Service > Engine > 2 stroke":             "Engine > 2-stroke",
+    "Service > Engine > 4 stroke":             "Engine > 4-stroke",
+    "Service > Other Equipment":               "Other",
+    "Service > Other Equipment > Crane":       "Deck machinery > Crane",
+    "Service > Other Equipment > BWTS":        "Environmental > BWTS",
+    "Service > Other Equipment > Incinerator": "Environmental > Incinerator",
+    "Service > Other Equipment > Elevator":    "Safety > Elevator",
+    "Service > Other Equipment > Life boat":   "Safety > Life boat",
+    "Service > Other Equipment > ETC":         "Other",
+}
+
+
+def _category_path_of(node, by_id) -> str:
+    """분류 노드 → '대 > 중 > 소' 경로. 순환 방어(최대 5뎁스)."""
+    names, cur, seen = [], node, set()
+    while cur is not None and cur.id not in seen and len(names) < 5:
+        seen.add(cur.id)
+        names.append((cur.name or "").strip())
+        cur = by_id.get(cur.parent_id) if cur.parent_id else None
+    return " > ".join(reversed(names))
+
+
+def _remap_line_categories(s, remap: dict) -> int:
+    """저장된 문서 라인의 category_id 를 새 분류 id 로 옮긴다.
+
+    분류는 품목 마스터가 정본이지만, 입력 시 고른 값이 문서 JSON 에도 남는다
+    (RFQ·견적·오더·발주서). 여기를 안 고치면 그 라인만 '(#id)' 로 뜬다.
+
+    JSON 컬럼은 사본을 고쳐서 통째로 대입해야 한다 — 읽어 온 값을 제자리에서 고치면
+    flush 때 '바뀐 값'과 '읽어 온 값'이 같은 객체라 변경이 감지되지 않고 조용히 안 써진다."""
+    from db.models import PurchaseOrder
+    n = 0
+    for Model in (RFQ, Quotation, Order, PurchaseOrder):
+        for row in s.query(Model).all():
+            items = row.items or []
+            if not isinstance(items, list):
+                continue
+            out = deepcopy(items)
+            changed = False
+            for it in out:
+                if not isinstance(it, dict):
+                    continue
+                cid = it.get("category_id")
+                if isinstance(cid, int) and cid in remap:
+                    it["category_id"] = remap[cid]
+                    changed = True
+            if changed:
+                row.items = out
+                n += 1
+    return n
+
+
+def migrate_restructure_item_categories():
+    """1회성: 품목 분류를 업무구분(Service/Parts) 축에서 기자재 축으로 재편한다.
+
+    구 트리는 1단이 Service/Parts 였다 — 그건 품목의 성질이 아니라 딜의 work_type 이라,
+    같은 부품이 두 가지에 나뉘어 품목별 가격 이력이 쪼개졌다. 3단의 뜻도 가지마다 달랐다
+    (Engine 밑=엔진 형식, Other 밑=기자재). 새 트리는 층마다 축이 하나다.
+
+    이동은 id 를 최대한 살린다(_CATEGORY_PROMOTE) — 그 분류를 쓰던 품목·문서 라인이
+    그대로 새 자리를 가리킨다. 살릴 수 없는 노드(Service 쪽 중복 등)는 참조를 대응 노드로
+    옮긴 뒤(_CATEGORY_MOVE) 지운다. 관리자가 직접 만든 분류는 매핑에 없으므로 손대지 않고,
+    지워질 노드 밑에 달려 있으면 대응 노드로 옮겨 붙인다.
+    applied_migrations 마커로 1회만 실행."""
+    eng = get_engine()
+    insp = inspect(eng)
+    if not insp.has_table("item_categories"):
+        return
+    with eng.begin() as conn:
+        conn.execute(text(
+            "CREATE TABLE IF NOT EXISTS applied_migrations (name VARCHAR(100) PRIMARY KEY)"))
+        if conn.execute(text(
+                "SELECT 1 FROM applied_migrations WHERE name='restructure_item_categories'")).first():
+            return  # 이미 적용됨
+
+    def done(msg: str):
+        with eng.begin() as conn:
+            conn.execute(text(
+                "INSERT INTO applied_migrations (name) VALUES ('restructure_item_categories')"))
+        print(msg)
+
+    s = get_session()
+    try:
+        cats = s.query(ItemCategory).all()
+        by_id = {c.id: c for c in cats}
+        old_by_path: dict[str, ItemCategory] = {}
+        for c in cats:
+            old_by_path.setdefault(_category_path_of(c, by_id), c)
+        # 구 트리가 아니면(새 트리로 시드된 DB) 할 일이 없다.
+        if "Parts" not in old_by_path and "Service" not in old_by_path:
+            done("[SKIP] restructure_item_categories: already on the equipment tree.")
+            return
+
+        # ── 새 트리를 세운다. 승격 대상이 있으면 그 노드를 옮겨서 쓴다(id 보존). ──
+        new_by_path: dict[str, ItemCategory] = {}
+        reused: set[int] = set()
+
+        def place(path: str, name: str, parent_id, level: int, sort_order: int):
+            donor = old_by_path.get(_CATEGORY_PROMOTE.get(path, ""))
+            if donor is None or donor.id in reused:
+                node = ItemCategory(name=name, parent_id=parent_id, level=level,
+                                    sort_order=sort_order, active=True)
+                s.add(node)
+                s.flush()
+            else:
+                node = donor
+                node.name, node.parent_id = name, parent_id
+                node.level, node.sort_order, node.active = level, sort_order, True
+            reused.add(node.id)
+            new_by_path[path] = node
+            return node
+
+        for i, (l1, mids) in enumerate(ITEM_CATEGORY_TREE.items()):
+            n1 = place(l1, l1, None, 1, i)
+            for j, (l2, funcs) in enumerate(mids.items()):
+                p2 = f"{l1} > {l2}"
+                n2 = place(p2, l2, n1.id, 2, j)
+                for k, l3 in enumerate(funcs):
+                    place(f"{p2} > {l3}", l3, n2.id, 3, k)
+        s.flush()
+
+        # ── 새 트리에 흡수되지 않은 구 노드 → 대응 노드로 참조를 옮기고 정리한다. ──
+        remap: dict[int, int] = {}
+        leftovers: list[tuple] = []
+        for path, c in old_by_path.items():
+            if c.id in reused:
+                continue
+            dest = new_by_path.get(_CATEGORY_MOVE.get(path, ""))
+            if dest is None:
+                continue          # 관리자가 만든 분류 — 그대로 둔다
+            remap[c.id] = dest.id
+            leftovers.append((c, dest))
+
+        n_items = 0
+        n_lines = 0
+        if remap:
+            for m in s.query(ItemMaster).filter(ItemMaster.category_id.in_(list(remap))).all():
+                m.category_id = remap[m.category_id]
+                n_items += 1
+            n_lines = _remap_line_categories(s, remap)
+            s.flush()
+
+        # 깊은 것부터 지운다 — 남은 자식(관리자 추가분)은 대응 노드로 옮겨 붙인다.
+        for c, dest in sorted(leftovers, key=lambda t: -(t[0].level or 1)):
+            for child in s.query(ItemCategory).filter_by(parent_id=c.id).all():
+                child.parent_id = dest.id
+                child.level = min((dest.level or 1) + 1, 3)
+            s.flush()
+            s.delete(c)
+        s.commit()
+    finally:
+        s.close()
+    done(f"[OK] restructure_item_categories applied: "
+         f"{len(reused)} nodes on the new tree, {n_items} items and {n_lines} documents remapped.")
 
 
 def migrate_widen_activity_type():
@@ -694,6 +908,8 @@ if __name__ == "__main__":
     seed_sample_data()
     seed_item_categories()
     migrate_translate_categories()
+    # 이름 변환(한글→영문) 뒤에 돌아야 경로 매핑이 맞는다.
+    migrate_restructure_item_categories()
     migrate_widen_activity_type()
     migrate_normalize_incoterms()
     migrate_backfill_price_history()

@@ -172,8 +172,11 @@ class Vessel(Base):
 class ItemCategory(Base):
     """품목 분류(대>중>소) 트리. 자기참조 parent_id 로 계층을 이룬다.
 
-    level: 1=대분류, 2=중분류, 3=소분류. (손그림: 서비스/부품 > 엔진/기타 > 2·4stroke/BWTS…)
-    벙커링·선용품 등 신규 분류는 Settings에서 코드 수정 없이 추가한다.
+    level: 1=기자재군, 2=기자재, 3=부품 기능.
+    (Engine·Deck machinery·… > 4-stroke·Crane·… > Overhaul kit·Seal & gasket·…)
+    층마다 축이 하나다 — 업무구분(부품공급/서비스)은 딜의 work_type 이 갖고 있으므로
+    여기 넣지 않는다. 넣으면 같은 부품이 두 가지로 갈라져 가격 이력이 쪼개진다.
+    기본 트리는 init_db.ITEM_CATEGORY_TREE, 그 뒤 추가는 Settings 에서 코드 수정 없이.
     sort_order 로 형제 노드 표시 순서를 제어(작을수록 먼저)."""
     __tablename__ = "item_categories"
     id         = Column(Integer, primary_key=True)
