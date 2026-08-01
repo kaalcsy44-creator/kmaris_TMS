@@ -586,12 +586,68 @@ function StageTimeline({
                         // 메인 활동 = 그 단계의 자동 이벤트(단계 완료). 없으면(노트만 있는
                         // 단계) 번호+제목만의 헤더 줄을 따로 얹어 모든 노트를 편집 가능한
                         // 행으로 남긴다 — 노트가 메인 자리로 올라가면 링크에 감싸여 편집할 수 없다.
-                        const mainIdx = rows.findIndex((r) => r.kind === "auto");
-                        // 접히는 건 ★ 없는 활동기록뿐 — 단계 진행(자동 이벤트)과 ★ 표시한
-                        // 노트는 늘 보인다. 감추기는 CSS 로 한다(DOM 에는 남긴다) — 인쇄물엔
-                        // 접힌 것까지 다 나와야 하고, 펼침도 즉시 되어야 한다.
+                        // 늘 보이는 줄(단계 진행 + ★ 노트)과 접히는 줄(그 외 활동기록)을 나눈다.
+                        // 접히는 줄은 토글 아래에만 붙인다 — 시간순 사이사이에 끼워 넣으면 펼칠 때
+                        // 토글보다 위에 생기는 줄이 토글을 밀어내려, 방금 누른 버튼이 딴 데로 간다.
+                        // 감추기는 CSS 가 한다(DOM 에는 남긴다) — 인쇄물엔 접힌 것도 다 나와야 한다.
+                        const isLog = (a: Activity) => a.kind === "note" && !a.note.star;
+                        const pinned = rows.filter((a) => !isLog(a));
+                        const log = rows.filter(isLog);
+                        const mainIdx = pinned.findIndex((r) => r.kind === "auto");
                         const notesOpen = openNotes.includes(c.no);
-                        const hidable = notes.filter((n) => !n.note.star).length;
+                        // 활동 1줄 — 노트는 편집 가능한 행으로, 자동 이벤트는 단계/벤더 링크 행으로.
+                        const renderRow = (a: Activity, key: string, isMain: boolean) => {
+                          const dateEl = (
+                            <span className="ov-tl-ndate">{md(a.date)}{hm(actAt(a)) ? ` ${hm(actAt(a))}` : ""}</span>
+                          );
+                          // 사람이 쓴 노트 — ★·수정·삭제가 가능한 편집 행으로 렌더한다.
+                          if (a.kind === "note") {
+                            return (
+                              <OvNoteRow
+                                key={key}
+                                a={a}
+                                dateEl={dateEl}
+                                rfqId={row.rfq_id}
+                                parties={parties}
+                                persons={persons}
+                                onChanged={onActivityAdded}
+                              />
+                            );
+                          }
+                          // rows 에는 close 가 섞이지 않지만(별도 처리), 타입 좁히기용 가드.
+                          if (a.kind !== "auto") return null;
+                          const contentEl = (
+                            <span className="ov-tl-ntext">
+                              <b className="ov-tl-actlabel">{a.label}</b>
+                              {a.party ? <span className="ov-tl-actmeta">{a.party}</span> : null}
+                            </span>
+                          );
+                          // 메인 활동 행(자동 이벤트) = 단계 번호 원형 + 작업화면 링크.
+                          if (isMain) {
+                            return (
+                              <li key={key} className="ov-tl-main">
+                                {rowLink(<><span className="ov-tl-dot">{c.no}</span>{dateEl}{contentEl}{naTag}</>, a.vrfqId)}
+                              </li>
+                            );
+                          }
+                          // 2단계 RFQ Sent 처럼 벤더 RFQ id 가 있는 보조 행은 그 벤더 상세로 가는 링크.
+                          if (a.vrfqId) {
+                            return (
+                              <li key={key}>
+                                {rowLink(<><span className="ov-tl-gutter" />{dateEl}{contentEl}</>, a.vrfqId)}
+                              </li>
+                            );
+                          }
+                          return (
+                            <li key={key}>
+                              <div className="ov-tl-row">
+                                <span className="ov-tl-gutter" />
+                                {dateEl}
+                                {contentEl}
+                              </div>
+                            </li>
+                          );
+                        };
                         return (
                           <ul className={`ov-tl-acts${notesOpen ? " notes-open" : ""}`}>
                             {mainIdx < 0 ? (
@@ -605,60 +661,9 @@ function StageTimeline({
                                 )}
                               </li>
                             ) : null}
-                            {rows.map((a, i) => {
-                              const dateEl = (
-                                <span className="ov-tl-ndate">{md(a.date)}{hm(actAt(a)) ? ` ${hm(actAt(a))}` : ""}</span>
-                              );
-                              // 사람이 쓴 노트 — ★·수정·삭제가 가능한 편집 행으로 렌더한다.
-                              if (a.kind === "note") {
-                                return (
-                                  <OvNoteRow
-                                    key={i}
-                                    a={a}
-                                    dateEl={dateEl}
-                                    rfqId={row.rfq_id}
-                                    parties={parties}
-                                    persons={persons}
-                                    onChanged={onActivityAdded}
-                                  />
-                                );
-                              }
-                              // rows 에는 close 가 섞이지 않지만(별도 처리), 타입 좁히기용 가드.
-                              if (a.kind !== "auto") return null;
-                              const contentEl = (
-                                <span className="ov-tl-ntext">
-                                  <b className="ov-tl-actlabel">{a.label}</b>
-                                  {a.party ? <span className="ov-tl-actmeta">{a.party}</span> : null}
-                                </span>
-                              );
-                              // 메인 활동 행(자동 이벤트) = 단계 번호 원형 + 작업화면 링크.
-                              if (i === mainIdx) {
-                                return (
-                                  <li key={i} className="ov-tl-main">
-                                    {rowLink(<><span className="ov-tl-dot">{c.no}</span>{dateEl}{contentEl}{naTag}</>, a.vrfqId)}
-                                  </li>
-                                );
-                              }
-                              // 2단계 RFQ Sent 처럼 벤더 RFQ id 가 있는 보조 행은 그 벤더 상세로 가는 링크.
-                              if (a.vrfqId) {
-                                return (
-                                  <li key={i}>
-                                    {rowLink(<><span className="ov-tl-gutter" />{dateEl}{contentEl}</>, a.vrfqId)}
-                                  </li>
-                                );
-                              }
-                              return (
-                                <li key={i}>
-                                  <div className="ov-tl-row">
-                                    <span className="ov-tl-gutter" />
-                                    {dateEl}
-                                    {contentEl}
-                                  </div>
-                                </li>
-                              );
-                            })}
-                            {/* 접힌 활동기록 펼치기 — 이 단계의 로그 맨 아래에 한 줄. */}
-                            {hidable ? (
+                            {pinned.map((a, i) => renderRow(a, `p${i}`, i === mainIdx))}
+                            {/* 접힌 활동기록 펼치기 — 늘 보이는 줄 바로 아래 고정. 펼쳐도 이 자리다. */}
+                            {log.length ? (
                               <li className="ov-tl-morerow">
                                 <span className="ov-tl-gutter" />
                                 <button
@@ -671,10 +676,11 @@ function StageTimeline({
                                       : "Show the activity log for this stage"
                                   }
                                 >
-                                  {notesOpen ? "▴ hide log" : `▾ ${hidable} more`}
+                                  {notesOpen ? "▴ hide log" : `▾ ${log.length} more`}
                                 </button>
                               </li>
                             ) : null}
+                            {log.map((a, i) => renderRow(a, `n${i}`, false))}
                           </ul>
                         );
                       })()}
