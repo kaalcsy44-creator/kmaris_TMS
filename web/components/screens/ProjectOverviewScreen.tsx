@@ -8,6 +8,7 @@ import {
   fetchCustomerQuotationDetail,
   fetchPoWorkOptions,
   fetchDocumentDetail,
+  fetchApByOrder,
   addRfqStageNote,
   updateRfqStageNote,
   deleteRfqStageNote,
@@ -25,7 +26,7 @@ import {
   type StageChainItem,
 } from "@/lib/deal";
 import { buildActivities, hm, md, splitProjectNo, type Activity } from "@/lib/activity";
-import type { PipelineRow, PoWorkOptions, RfqItem, StageNote } from "@/lib/types";
+import type { ApRow, PipelineRow, PoWorkOptions, RfqItem, StageNote } from "@/lib/types";
 import { vendorList } from "@/components/common/dealFields";
 import { convertCurrency, USD_KRW_RATE } from "@/components/common/itemTable";
 import { tr } from "@/lib/labels";
@@ -181,6 +182,55 @@ function sumLines(items: StageItem[]): number | null {
 function total(vals: (number | null)[]): number | null {
   const xs = vals.filter((v): v is number => v != null);
   return xs.length ? xs.reduce((a, b) => a + b, 0) : null;
+}
+
+/** 부대비용(Freight/Packing/Insurance) — 품목 단가 밖에서 문서 하단에 붙는 금액. */
+type Charges = { freight: number; packing: number; insurance: number; total: number };
+type ChargeKey = "freight" | "packing" | "insurance";
+const CHARGE_LABELS: [ChargeKey, string][] = [
+  ["freight", "Freight"],
+  ["packing", "Packing"],
+  ["insurance", "Insurance"],
+];
+
+/** 숫자로 읽는다 — 부대비용은 입력폼을 거쳐 문자열("1200")로 저장돼 있다. */
+function num(v: unknown): number {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * 문서에 기록된 부대비용을 읽는다. 매출측 C/I 는 terms JSON, 매입측 벤더 청구(AP)는
+ * charges JSON — 담기는 자리만 다르고 키(freight/packing/insurance)는 같다.
+ * 값이 하나도 없으면 null(= 그 문서엔 부대비용이 없다 → 줄을 만들지 않는다).
+ */
+function readCharges(
+  src: { freight?: unknown; packing?: unknown; insurance?: unknown } | null | undefined
+): Charges | null {
+  if (!src) return null;
+  const freight = num(src.freight);
+  const packing = num(src.packing);
+  const insurance = num(src.insurance);
+  const sum = freight + packing + insurance;
+  return sum ? { freight, packing, insurance, total: sum } : null;
+}
+
+/** VAT 율을 분수로 정규화 — C/I 는 퍼센트(10), AP/AR 은 분수(0.1) 규약이라 섞여 들어온다. */
+function vatFraction(v: number | null | undefined): number {
+  const r = num(v);
+  return r > 1 ? r / 100 : r;
+}
+
+/** VAT 줄 이름 — 매출·매입 세율이 같을 때만 율을 적는다(다르면 어느 쪽 율인지 오해된다). */
+function vatLabel(salesRate: number, purRate: number): string {
+  if (salesRate !== purRate) return "VAT";
+  return `VAT (${Math.round(salesRate * 1000) / 10}%)`;
+}
+
+/** 품목 합계에 부대비용을 더한다. 품목이 없어도(=null) 부대비용만으로 금액이 선다. */
+function addCharges(base: number | null, extra: number | null | undefined): number | null {
+  if (!extra) return base;
+  return (base ?? 0) + extra;
 }
 
 
@@ -953,6 +1003,9 @@ function OrderItemGroup({
   );
   const { data: doc } = useCachedData(`documents:${order.id}`, () => fetchDocumentDetail(order.id));
   const ci = doc?.ci ?? null;
+  // 부대비용(Freight/Packing/Insurance)·VAT — 매입측은 벤더 청구(AP)에 기록된다.
+  // 캐시 키는 AP 편집 화면(ArScreen)과 같은 것을 쓴다 — 같은 응답을 두 번 받지 않게.
+  const { data: apData } = useCachedData(`ap:by-order:${order.id}`, () => fetchApByOrder(order.id));
 
   // 매입 = 실제 Vendor P/O. 한 오더에 발주서가 여러 장이면 P/O 번호 순으로 이어 붙여 순서를 맞춘다.
   const vpos = sortByDocNo(vendorPos, (p) => p.po_no, (p) => p.id);
@@ -966,6 +1019,28 @@ function OrderItemGroup({
   const ciCur = ci?.currency || oCur;
   // 환산 기준은 견적에 저장된 환율(없으면 기본값). 통화가 다른 단계 간 마진 계산에만 쓰인다.
   const rate = quote?.fx_rate && quote.fx_rate > 0 ? quote.fx_rate : USD_KRW_RATE;
+
+  // ── 부대비용·VAT ─────────────────────────────────────────────────────────
+  // 품목 단가에는 들어가지 않고 문서 하단에 붙는 금액이라, 품목 줄 아래 별도 줄로 그리고
+  // 합계에 더한다. 실무상 견적·P/O 단계에는 없고 C/I(매출)와 벤더 청구(매입)에서 붙는다.
+  const ciCharges = readCharges(ci?.terms);
+  const apRecords = (apData?.rows ?? []).map((r) => r.ap).filter((a): a is ApRow => !!a);
+  // 벤더 청구가 여러 건(P/O 여러 장)이면 합산 — 통화가 다르면 벤더 P/O 통화로 환산해 더한다.
+  const apCharges = apRecords.reduce<Charges | null>((acc, a) => {
+    const c = readCharges(a.charges);
+    if (!c) return acc;
+    const conv = (v: number) => convertCurrency(v, a.currency, vpoCur, rate);
+    const add = { freight: conv(c.freight), packing: conv(c.packing), insurance: conv(c.insurance) };
+    return {
+      freight: (acc?.freight ?? 0) + add.freight,
+      packing: (acc?.packing ?? 0) + add.packing,
+      insurance: (acc?.insurance ?? 0) + add.insurance,
+      total: (acc?.total ?? 0) + add.freight + add.packing + add.insurance,
+    };
+  }, null);
+  const ciVatRate = vatFraction(ci?.vat_rate);
+  // 매입 VAT 율 — 벤더 청구서의 세율(국내 매입은 대개 10%). 여러 건이면 첫 값을 쓴다.
+  const apVatRate = vatFraction(apRecords.find((a) => a.vat_rate != null)?.vat_rate);
 
   const rows = order.items.length ? order.items : (quote?.items ?? []);
   // 품번으로 각 문서의 같은 품목을 찾는다. 아래 map 이 순서대로 돌면서 소비한다.
@@ -990,6 +1065,17 @@ function OrderItemGroup({
     };
   });
 
+  // C/I 단계 금액 = 품목 합계 + 부대비용(=공급가액). VAT 는 그 위에 따로 얹는다 —
+  // 마진은 공급가액끼리 봐야 뜻이 맞고(부가세는 남는 돈이 아니다), 청구 총액은 아래
+  // "Total incl. VAT" 줄에서 확인한다.
+  const ciPurSupply = addCharges(total(lines.map((l) => l.cPur)), apCharges?.total);
+  const ciSalesSupply = addCharges(total(lines.map((l) => l.cSales)), ciCharges?.total);
+  const ciPurVat = ciPurSupply == null ? null : ciPurSupply * apVatRate;
+  const ciSalesVat = ciSalesSupply == null ? null : ciSalesSupply * ciVatRate;
+  // 양쪽 다 0이면(수출처럼 영세율뿐이면) VAT 줄을 만들지 않는다. 한쪽만 붙는 경우
+  // (국내 매입 10% + 수출 매출 0%)는 흔하므로, 0 인 쪽도 0 으로 적어 대비를 보여준다.
+  const hasVat = !!(ciPurVat || ciSalesVat);
+
   return (
     <tbody className="ov-grp">
       <GroupHead
@@ -1005,8 +1091,8 @@ function OrderItemGroup({
         quoteSales={total(lines.map((l) => l.qSales))}
         poPur={total(lines.map((l) => l.pPur))}
         poSales={total(lines.map((l) => l.pSales))}
-        ciPur={total(lines.map((l) => l.cPur))}
-        ciSales={total(lines.map((l) => l.cSales))}
+        ciPur={ciPurSupply}
+        ciSales={ciSalesSupply}
         cur={{ qCostCur, qCur, vpoCur, oCur, ciCur }}
         rate={rate}
       />
@@ -1048,7 +1134,73 @@ function OrderItemGroup({
           </td>
         </tr>
       ))}
+      {/* 부대비용 — 값이 있는 항목만 한 줄씩. 위 Total 에는 이미 더해져 있다. */}
+      {CHARGE_LABELS.map(([k, label]) =>
+        apCharges?.[k] || ciCharges?.[k] ? (
+          <ExtraRow
+            key={k}
+            label={label}
+            pur={apCharges?.[k] ?? null}
+            sales={ciCharges?.[k] ?? null}
+            purCur={vpoCur}
+            salesCur={ciCur}
+          />
+        ) : null
+      )}
+      {hasVat ? (
+        <ExtraRow
+          label={vatLabel(ciVatRate, apVatRate)}
+          pur={ciPurVat}
+          sales={ciSalesVat}
+          purCur={vpoCur}
+          salesCur={ciCur}
+        />
+      ) : null}
+      {hasVat ? (
+        <ExtraRow
+          grand
+          label="Total incl. VAT"
+          pur={ciPurSupply == null ? null : ciPurSupply + (ciPurVat ?? 0)}
+          sales={ciSalesSupply == null ? null : ciSalesSupply + (ciSalesVat ?? 0)}
+          purCur={vpoCur}
+          salesCur={ciCur}
+        />
+      ) : null}
     </tbody>
+  );
+}
+
+/**
+ * 부대비용·VAT 한 줄 — 품목이 아니라 문서에 붙는 금액이라 품목 줄 아래에 따로 놓는다.
+ * 기록되는 자리가 C/I(매출)와 벤더 청구(매입)뿐이라 앞의 두 단계 칸은 비워 둔다 —
+ * "—"로 채우면 값이 있는 자리와 구분이 안 된다. 줄 단위 마진은 뜻이 없어 마진 칸도 비운다.
+ */
+function ExtraRow({
+  label,
+  pur,
+  sales,
+  purCur,
+  salesCur,
+  grand = false,
+}: {
+  label: string;
+  pur: number | null;
+  sales: number | null;
+  purCur: string;
+  salesCur: string;
+  grand?: boolean;
+}) {
+  return (
+    <tr className={`ov-grp-extra${grand ? " ov-grp-grand" : ""}`}>
+      <td colSpan={4} className="ov-it-extralabel">
+        {label}
+      </td>
+      <td className="num gs" colSpan={3} />
+      <td className="num gs" colSpan={3} />
+      <td className="num gs">{pur == null ? null : <Money value={pur} currency={purCur} />}</td>
+      <td className="num" />
+      <td className="num ov-sal">{sales == null ? null : <Money value={sales} currency={salesCur} />}</td>
+    </tr>
   );
 }
 

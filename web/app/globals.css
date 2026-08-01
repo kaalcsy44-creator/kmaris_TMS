@@ -10725,6 +10725,17 @@ button.ov-tl-stage:hover { background: color-mix(in srgb, var(--ov-tone) 12%, tr
 /* 합계 행 — 묶음 머리와 같은 이유로 반투명. 머리보다 옅게 깔고 윗선으로 구분한다. */
 .ov-grp-total td { background: rgba(11, 29, 58, 0.055) !important;
   border-top: 1px solid var(--line-strong); }
+/* 부대비용(Freight/Packing/Insurance)·VAT 줄 — 품목이 아니라 문서에 붙는 금액이라
+   이름을 합계 라벨과 같은 축(오른쪽 끝)에 두고 품목 줄보다 톤을 낮춘다. */
+.ov-it-extralabel { text-align: right; font-size: var(--ov-t-meta); font-weight: 600;
+  color: var(--muted); }
+.ov-grp-extra .ov-m, .ov-grp-extra .ov-m em { color: var(--muted); font-weight: 500; }
+/* 청구 총액(= 공급가액 + VAT) — 이 묶음의 마지막 줄이라 합계 행과 같은 무게로. */
+.ov-grp-extra.ov-grp-grand td { border-top: 1px solid var(--line-strong); }
+.ov-grp-grand .ov-it-extralabel { color: var(--navy); font-weight: 800;
+  font-size: var(--ov-t-cap); text-transform: uppercase; letter-spacing: 0.05em; }
+.ov-grp-grand .ov-m, .proj-ov-grid .ov-grp-grand .ov-sal .ov-m { color: var(--navy);
+  font-weight: 800; }
 .proj-ov-grid tbody tr:nth-child(even) td { background: transparent; }
 /* 행 강조도 반투명 — 덮어버리면 짚고 있는 행만 세로 줄이 사라진다. */
 .proj-ov-grid tbody tr:hover td { background: rgba(0, 85, 168, 0.09); }
@@ -11052,6 +11063,18 @@ button.ov-tl-stage:hover {
   font-size: var(--ov-t-meta);
   font-weight: 500;
 }
+/* 부대비용 줄 — 품목·합계보다 한 단 낮은 톤(위 refresh 규칙이 매출 칸을 진하게 덮어쓰므로
+   같은 자리에서 다시 낮춘다). 마지막 "Total incl. VAT" 줄만 합계 무게로 되돌린다. */
+.proj-ov-grid .ov-grp-extra .ov-m,
+.proj-ov-grid .ov-grp-extra .ov-sal .ov-m { color: #647288; font-weight: 550; }
+.proj-ov-grid .ov-grp-grand .ov-m,
+.proj-ov-grid .ov-grp-grand .ov-sal .ov-m {
+  color: #142945;
+  font-weight: 800;
+  font-size: calc(var(--ov-t-body) + 1px);
+}
+/* 바탕은 합계 행과 같은 방식으로 — 얼룩무늬(nth-child) 규칙이 더 강해 !important 가 필요하다. */
+.ov-grp-grand td { background: linear-gradient(180deg, #f9fbfc 0%, #f3f6f9 100%) !important; }
 .ov-m em { color: #8793a4; }
 
 @media print {
