@@ -16,6 +16,7 @@ import { useCachedData } from "@/lib/useCachedData";
 import type { CustomerOption, SettingsCustomer } from "@/lib/types";
 import Modal from "@/components/common/Modal";
 import CustomerSelect from "@/components/common/CustomerSelect";
+import { toggleBold, onBoldKey } from "@/lib/mdEdit";
 
 type TplKind = "intro" | "brochure";
 type Lang = "en" | "ko";
@@ -101,6 +102,7 @@ export default function ComposeEmailModal({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
 
   // 미리보기 — 수신자가 받게 될 HTML(서버가 발송과 같은 렌더러로 만든다).
   const [preview, setPreview] = useState(false);
@@ -506,13 +508,32 @@ export default function ComposeEmailModal({
                 <span>Subject</span>
                 <input value={subject} onChange={(e) => editSubject(e.target.value)} />
               </label>
-              <label className="form-field">
-                <span>Body</span>
-                <textarea rows={9} value={body} onChange={(e) => editBody(e.target.value)} />
-              </label>
+              <div className="form-field">
+                <span className="compose-sig-head">
+                  Body
+                  <span className="compose-sig-actions">
+                    <button
+                      type="button"
+                      className="chip-btn md-bold"
+                      title="선택한 부분을 굵게 (Ctrl+B) — 본문에는 **텍스트** 로 남습니다"
+                      onClick={() => toggleBold(bodyRef.current, editBody)}
+                    >
+                      B
+                    </button>
+                  </span>
+                </span>
+                <textarea
+                  ref={bodyRef}
+                  rows={9}
+                  value={body}
+                  onChange={(e) => editBody(e.target.value)}
+                  onKeyDown={(e) => onBoldKey(e, editBody)}
+                />
+              </div>
               <div className="compose-hint">
                 Recipient names sync automatically — “{contact.trim() || CONTACT_FALLBACK[lang]}” is
                 stored as a placeholder, so a saved template greets whoever you pick next.
+                굵게는 <code>**텍스트**</code> 로 표시됩니다(선택 후 B 또는 Ctrl+B).
               </div>
 
               <div className="form-field">

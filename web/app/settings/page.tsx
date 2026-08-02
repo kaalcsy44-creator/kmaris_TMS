@@ -57,6 +57,7 @@ import type {
   SignatureFields,
 } from "@/lib/api";
 import type { PermGrid } from "@/lib/auth";
+import { toggleBold, onBoldKey } from "@/lib/mdEdit";
 import type {
   BusinessCardOcr,
   CompanyProfile,
@@ -3546,7 +3547,17 @@ function EmailTemplatesTab() {
             />
           </div>
           <div className="form-field" style={{ marginTop: 8 }}>
-            <label>Body</label>
+            <label className="email-tpl-body-head">
+              Body
+              <button
+                type="button"
+                className="chip-btn md-bold"
+                title="선택한 부분을 굵게 (Ctrl+B) — 본문에는 **텍스트** 로 남습니다"
+                onClick={() => toggleBold(bodyRef.current, setBody)}
+              >
+                B
+              </button>
+            </label>
             <textarea
               ref={bodyRef}
               className="po-textarea"
@@ -3554,6 +3565,7 @@ function EmailTemplatesTab() {
               value={body}
               onFocus={() => (lastFocus.current = "body")}
               onChange={(e) => setBody(e.target.value)}
+              onKeyDown={(e) => onBoldKey(e, setBody)}
             />
           </div>
 

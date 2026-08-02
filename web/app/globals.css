@@ -9425,6 +9425,15 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   padding: 0;
 }
 
+/* 굵게 버튼 — 라벨 줄 오른쪽에 붙는 작은 토글. */
+.email-tpl-body-head { display: flex !important; align-items: center; justify-content: space-between; }
+.chip-btn.md-bold {
+  padding: 1px 9px;
+  font-weight: 800;
+  font-family: Georgia, "Times New Roman", serif;
+  line-height: 1.5;
+}
+
 /* 서명 편집기 — 좌: 입력 칸, 우: 발송과 같은 렌더의 미리보기 */
 .sig-form .form-field { margin-top: 8px; }
 /* 전역 .form-field textarea{min-height:240px} 는 본문 편집용이라 두세 줄짜리 서명 칸에는

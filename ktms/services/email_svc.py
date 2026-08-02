@@ -92,11 +92,26 @@ def _linkify(text: str) -> str:
     return _LINK_RE.sub(repl, text)
 
 
+# 굵게: **텍스트**. 본문 저장 포맷을 평문으로 유지하려고 마크다운 표기를 쓴다.
+# 별표 하나(*)는 목록 기호·각주로도 쓰여서 기울임까지 넓히지 않는다 — 오인식이 더 손해다.
+_BOLD_RE = re.compile(r"\*\*(?=\S)(.+?)(?<=\S)\*\*", re.DOTALL)
+
+
+def _bold(text: str) -> str:
+    return _BOLD_RE.sub(r"<strong>\1</strong>", text)
+
+
+def strip_markup(text: str) -> str:
+    """평문 파트용 — 굵게 표기를 걷어낸다. HTML 을 못 읽는 수신자에게 별표가
+    그대로 보이지 않도록, text/plain 에는 표기를 지운 문장을 싣는다."""
+    return _BOLD_RE.sub(r"\1", text or "")
+
+
 def _inline_html(line: str) -> str:
-    """한 줄을 HTML 로 — escape 후 링크화, 들여쓰기 공백 보존."""
+    """한 줄을 HTML 로 — escape 후 굵게·링크 처리, 들여쓰기 공백 보존."""
     esc = html_mod.escape(line.rstrip(), quote=False)
     indent = len(esc) - len(esc.lstrip(" "))
-    return "&nbsp;" * indent + _linkify(esc.lstrip(" "))
+    return "&nbsp;" * indent + _linkify(_bold(esc.lstrip(" ")))
 
 
 def text_to_html_fragment(text: str) -> str:
@@ -112,7 +127,7 @@ def text_to_html_fragment(text: str) -> str:
             return
         if any(_PREFORMATTED_RE.search(ln) for ln in para):
             joined = "<br>".join(
-                _linkify(html_mod.escape(ln.rstrip(), quote=False)) for ln in para
+                _linkify(_bold(html_mod.escape(ln.rstrip(), quote=False))) for ln in para
             )
             blocks.append(f'<pre style="{_PRE_STYLE}">{joined}</pre>')
         else:
@@ -203,7 +218,7 @@ def send_email(
     # 있으면 그 alternative 를 multipart/mixed 안에 넣어야 한다 — 평평하게 붙이면
     # 일부 클라이언트가 본문을 첨부로 취급한다.
     alt = MIMEMultipart("alternative")
-    alt.attach(MIMEText(body, "plain", "utf-8"))
+    alt.attach(MIMEText(strip_markup(body), "plain", "utf-8"))
     alt.attach(MIMEText(html_body or text_to_html(body), "html", "utf-8"))
 
     if attachments:
