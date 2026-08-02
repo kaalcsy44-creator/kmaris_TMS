@@ -13,6 +13,8 @@ import json
 import os
 from typing import Any, Dict, List
 
+from services.email_svc import EMAIL_FONT_STACK
+
 # 로고 자리의 브랜드 블록 — 첫 글자만 짙은 남색, 나머지는 파랑으로 그려 로고 모양을
 # 텍스트로 재현한다.
 BRAND = "K-MARIS"
@@ -199,8 +201,9 @@ def signature_html(fields: Any, lang: str = "en") -> str:
 
     closing = ""
     if f["closing"]:
+        # 맺음말은 서명 카드가 아니라 본문의 마지막 줄로 읽히므로 본문 글꼴을 쓴다.
         closing = (
-            f'<div style="font-family:{_FONT};font-size:15px;color:#222222;'
+            f'<div style="font-family:{EMAIL_FONT_STACK};font-size:15px;color:#222222;'
             f'margin:0 0 12px;">{_e(f["closing"])}</div>'
         )
 

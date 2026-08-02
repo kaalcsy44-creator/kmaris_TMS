@@ -44,8 +44,9 @@ def email_signature(default: str = "") -> str:
 # (Outlook 은 '일반 텍스트 글꼴' 설정을 쓰기 때문에 작고 고정폭으로 보인다). 발신자가
 # 타이포를 지정하려면 HTML 파트가 필요해서, 저장된 평문 본문을 발송 직전에 감싼다.
 # 본문 저장 포맷은 계속 평문이고, text/plain 파트도 그대로 함께 보낸다.
+# Verdana 는 한글 글리프가 없어서 한국어는 뒤의 한글 글꼴로 넘어간다(정상 동작).
 EMAIL_FONT_STACK = (
-    "Arial, Helvetica, 'Malgun Gothic', 'Apple SD Gothic Neo', "
+    "Verdana, Geneva, 'Malgun Gothic', 'Apple SD Gothic Neo', "
     "'Noto Sans KR', sans-serif"
 )
 EMAIL_BODY_STYLE = (
