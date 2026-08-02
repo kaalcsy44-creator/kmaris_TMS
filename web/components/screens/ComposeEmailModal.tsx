@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   fetchSettingsCustomers,
   fetchMarketingAssets,
+  fetchMarketingAssetObjectUrl,
   marketingComposeDefaults,
   saveMarketingTemplate,
   resetMarketingTemplate,
@@ -107,6 +108,18 @@ export default function ComposeEmailModal({
   const previewSeq = useRef(0);
   // 서명 칸을 직접 고쳤는지 — 고쳤다면 종류·언어를 바꿔도 그 편집을 덮어쓰지 않는다.
   const sigDirty = useRef(false);
+  // 서명만 따로 보는 미리보기(본문 전체 미리보기와 별개).
+  const [sigPreview, setSigPreview] = useState(false);
+  const [sigHtml, setSigHtml] = useState("");
+  const sigSeq = useRef(0);
+  // 첨부 미리보기로 만든 object URL — 모달을 닫을 때 정리한다.
+  const objectUrls = useRef<string[]>([]);
+  useEffect(
+    () => () => {
+      for (const u of objectUrls.current) URL.revokeObjectURL(u);
+    },
+    []
+  );
 
   const custById = useMemo(() => {
     const m = new Map<number, SettingsCustomer>();
@@ -280,6 +293,35 @@ export default function ComposeEmailModal({
     }, 300);
     return () => clearTimeout(t);
   }, [preview, body, signature, includeSignature]);
+
+  // 서명 미리보기 — 본문 없이 서명만 같은 렌더러로 그린다.
+  useEffect(() => {
+    if (!sigPreview) return;
+    const n = ++sigSeq.current;
+    const t = setTimeout(async () => {
+      try {
+        const r = await renderEmailPreview("", signature, true);
+        if (n === sigSeq.current) setSigHtml(r.html);
+      } catch {
+        /* 편집 중 일시적 실패는 무시 */
+      }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [sigPreview, signature]);
+
+  // 첨부 미리보기 — PDF·이미지는 브라우저가 새 탭에서 바로 열어 준다.
+  function openInTab(url: string) {
+    objectUrls.current.push(url);
+    window.open(url, "_blank", "noopener");
+  }
+  async function previewAsset(id: number) {
+    setErr("");
+    try {
+      openInTab(await fetchMarketingAssetObjectUrl(id));
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "미리보기를 열지 못했습니다.");
+    }
+  }
 
   async function send() {
     if (!email.trim()) {
@@ -473,28 +515,52 @@ export default function ComposeEmailModal({
                 stored as a placeholder, so a saved template greets whoever you pick next.
               </div>
 
-              <label className="form-field">
+              <div className="form-field">
                 <span className="compose-sig-head">
                   Signature
-                  <label className="compose-sig-toggle">
-                    <input
-                      type="checkbox"
-                      checked={includeSignature}
-                      onChange={(e) => setIncludeSignature(e.target.checked)}
-                    />
-                    Include in email
-                  </label>
+                  <span className="compose-sig-actions">
+                    <label className="compose-sig-toggle">
+                      <input
+                        type="checkbox"
+                        checked={includeSignature}
+                        onChange={(e) => setIncludeSignature(e.target.checked)}
+                      />
+                      Include in email
+                    </label>
+                    {/* 서명 칸은 평문이라 실제 모습(표 서명)을 여기서 바로 확인한다. */}
+                    <button
+                      type="button"
+                      className={`chip-btn${sigPreview ? "" : " on"}`}
+                      onClick={() => setSigPreview(false)}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      className={`chip-btn${sigPreview ? " on" : ""}`}
+                      onClick={() => setSigPreview(true)}
+                    >
+                      Preview
+                    </button>
+                  </span>
                 </span>
-                <textarea
-                  rows={4}
-                  value={signature}
-                  onChange={(e) => {
-                    sigDirty.current = true;
-                    setSignature(e.target.value);
-                  }}
-                  disabled={!includeSignature}
-                />
-              </label>
+                {sigPreview ? (
+                  <div
+                    className="compose-preview-body sig"
+                    dangerouslySetInnerHTML={{ __html: sigHtml }}
+                  />
+                ) : (
+                  <textarea
+                    rows={4}
+                    value={signature}
+                    onChange={(e) => {
+                      sigDirty.current = true;
+                      setSignature(e.target.value);
+                    }}
+                    disabled={!includeSignature}
+                  />
+                )}
+              </div>
               <div className="compose-hint">
                 Settings → Email Templates → Signature 에 저장한 서명입니다. 여기서 고치면
                 이번 발송에만 적용되며, 표 서명 대신 고친 평문이 나갑니다.
@@ -515,6 +581,15 @@ export default function ComposeEmailModal({
                     />
                     <span className="compose-asset-name">{a.label}</span>
                     <span className="compose-asset-size">{fmtSize(a.size)}</span>
+                    {/* label 안의 button 은 체크박스를 토글하지 않는다(대화형 요소). */}
+                    <button
+                      type="button"
+                      className="compose-asset-eye"
+                      title="새 탭에서 미리보기"
+                      onClick={() => previewAsset(a.id)}
+                    >
+                      Preview
+                    </button>
                   </label>
                 ))}
               </div>
@@ -548,6 +623,14 @@ export default function ComposeEmailModal({
                 {files.map((f, i) => (
                   <li key={i}>
                     {f.name} <span className="compose-asset-size">{fmtSize(f.size)}</span>
+                    <button
+                      type="button"
+                      className="compose-asset-eye"
+                      title="새 탭에서 미리보기"
+                      onClick={() => openInTab(URL.createObjectURL(f))}
+                    >
+                      Preview
+                    </button>
                     <button
                       type="button"
                       className="compose-file-x"

@@ -9489,6 +9489,21 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   word-break: break-word;
 }
 .compose-preview-body > div > :last-child { margin-bottom: 0 !important; }
+/* 서명만 보는 미리보기는 본문 미리보기보다 낮게 — 편집 textarea 와 비슷한 높이. */
+.compose-preview-body.sig { min-height: 128px; max-height: 320px; }
+/* 첨부 줄의 '미리보기' — 목록을 흐트러뜨리지 않게 글자 링크 모양으로 둔다. */
+.compose-sig-actions { display: inline-flex; align-items: center; gap: 6px; }
+.compose-asset-eye {
+  border: 0;
+  background: none;
+  padding: 0 2px;
+  font-size: 11px;
+  font-family: inherit;
+  color: var(--blue, #0055a8);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.compose-asset-eye:hover { color: #003b75; }
 /* 푸터: [Clear][템플릿 저장/초기화] ······ [Cancel][Send].
    기본 규약(danger=좌측끝, margin-right:auto)을 템플릿 묶음으로 옮겨 둘을 왼쪽에 나란히 둔다. */
 .pl-modal-body .form-actions.compose-actions .btn.danger { margin-right: 0 !important; }
@@ -9515,7 +9530,15 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   color: #1d4ed8;
   font-weight: 600;
 }
-.compose-sig-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+/* 전역 `.form-field > span{display:block}` 이 더 구체적이라 flex 가 먹지 않았다
+   (그래서 'Include in email' 이 제목 아래로 떨어져 있었다). 선택자를 맞춰 되살린다. */
+.compose-sig-head,
+.form-field > span.compose-sig-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
 .compose-sig-toggle {
   display: inline-flex;
   align-items: center;
