@@ -9498,8 +9498,10 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   word-break: break-word;
 }
 .compose-preview-body > div > :last-child { margin-bottom: 0 !important; }
-/* 서명만 보는 미리보기는 본문 미리보기보다 낮게 — 편집 textarea 와 비슷한 높이. */
-.compose-preview-body.sig { min-height: 128px; max-height: 320px; }
+/* 서명은 대여섯 줄이라 본문용 min-height(240px)가 과하다 — 절반으로. */
+.form-field textarea.compose-sig-text { min-height: 120px; }
+/* 미리보기도 같은 높이로 맞춰 Edit ↔ Preview 를 오갈 때 화면이 튀지 않게 한다. */
+.compose-preview-body.sig { min-height: 120px; max-height: 320px; }
 /* 첨부 줄의 '미리보기' — 목록을 흐트러뜨리지 않게 글자 링크 모양으로 둔다. */
 .compose-sig-actions { display: inline-flex; align-items: center; gap: 6px; }
 .compose-asset-eye {

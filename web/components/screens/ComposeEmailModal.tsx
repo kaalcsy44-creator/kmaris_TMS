@@ -570,6 +570,7 @@ export default function ComposeEmailModal({
                   />
                 ) : (
                   <textarea
+                    className="compose-sig-text"
                     rows={4}
                     value={signature}
                     onChange={(e) => {
