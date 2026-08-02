@@ -16,6 +16,8 @@ export default function CustomerSelect({
   emptyLabel = "— None —",
   disabled = false,
   showContact = false,
+  multiple = false,
+  selectedIds = [],
 }: {
   value: number | "";
   options: CustomerOption[];
@@ -25,6 +27,10 @@ export default function CustomerSelect({
   // 레코드 1건 = 담당자 1명이라 같은 회사가 여러 번 나온다. 담당자를 골라야 하는
   // 화면(메일 발송 등)에서는 회사명 뒤에 담당자 이름을 붙여 구분할 수 있게 한다.
   showContact?: boolean;
+  // 복수 선택 — 한 번 고를 때마다 닫지 않고 체크를 토글한다(같은 회사 담당자 여럿을
+  // 이어서 담는 화면용). 선택 상태는 부모가 selectedIds 로 넘긴다.
+  multiple?: boolean;
+  selectedIds?: number[];
 }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
@@ -90,13 +96,21 @@ export default function CustomerSelect({
 
   function pick(id: number | "") {
     onChange(id);
+    // 복수 선택 모드에서는 메뉴와 검색어를 그대로 둔다 — 같은 검색 결과에서 여러
+    // 담당자를 이어서 체크할 수 있어야 한다(고를 때마다 닫히면 매번 다시 찾아야 한다).
+    if (multiple) return;
     setOpen(false);
     setQ("");
   }
 
-  function optionInner(c: CustomerOption) {
+  function optionInner(c: CustomerOption, checked = false) {
     return (
       <span className="cust-name">
+        {multiple ? (
+          <span className={`cust-opt-check${checked ? " on" : ""}`} aria-hidden>
+            {checked ? "✓" : ""}
+          </span>
+        ) : null}
         {c.logo ? <img className="cust-logo" src={c.logo} alt="" /> : null}
         <span className="cust-name-text">{c.name}</span>
         {showContact ? (
@@ -139,28 +153,42 @@ export default function CustomerSelect({
                 autoFocus
               />
               <ul className="cust-select-list">
-                <li>
-                  <button
-                    type="button"
-                    className={`cust-select-opt${value === "" ? " on" : ""}`}
-                    onClick={() => pick("")}
-                  >
-                    <span className="cust-select-placeholder">{emptyLabel}</span>
-                  </button>
-                </li>
-                {filtered.map((c) => (
-                  <li key={c.id}>
+                {/* 복수 선택에는 "선택 안 함"이 없다 — 체크를 다시 눌러 빼면 된다. */}
+                {multiple ? null : (
+                  <li>
                     <button
                       type="button"
-                      className={`cust-select-opt${value === c.id ? " on" : ""}`}
-                      onClick={() => pick(c.id)}
+                      className={`cust-select-opt${value === "" ? " on" : ""}`}
+                      onClick={() => pick("")}
                     >
-                      {optionInner(c)}
+                      <span className="cust-select-placeholder">{emptyLabel}</span>
                     </button>
                   </li>
-                ))}
+                )}
+                {filtered.map((c) => {
+                  const on = multiple ? selectedIds.includes(c.id) : value === c.id;
+                  return (
+                    <li key={c.id}>
+                      <button
+                        type="button"
+                        className={`cust-select-opt${on ? " on" : ""}`}
+                        onClick={() => pick(c.id)}
+                      >
+                        {optionInner(c, on)}
+                      </button>
+                    </li>
+                  );
+                })}
                 {filtered.length === 0 ? <li className="cust-select-empty">No matches</li> : null}
               </ul>
+              {multiple ? (
+                <div className="cust-select-foot">
+                  <span className="cust-select-count">{selectedIds.length} selected</span>
+                  <button type="button" className="btn ghost" onClick={() => setOpen(false)}>
+                    Done
+                  </button>
+                </div>
+              ) : null}
             </div>,
             document.body
           )

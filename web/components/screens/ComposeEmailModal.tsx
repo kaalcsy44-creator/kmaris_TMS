@@ -253,15 +253,15 @@ export default function ComposeEmailModal({
   }
 
   // ── 수신자 목록 ────────────────────────────────────────────────────
-  // 드롭다운은 '고르는' 칸이 아니라 '추가하는' 칸이다 — 고르면 바로 목록에 들어간다.
-  function addCustomer(id: number | "") {
+  // 드롭다운은 '고르는' 칸이 아니라 '담는' 칸이다 — 체크하면 목록에 들어가고 다시
+  // 누르면 빠진다. 메뉴는 닫히지 않아 같은 회사의 담당자 여럿을 이어서 담을 수 있다.
+  function toggleCustomer(id: number | "") {
     if (id === "") return;
     const c = custById.get(id);
     if (!c) return;
     setErr("");
     setRecips((cur) => {
-      // 같은 담당자(고객 레코드)를 두 번 넣지 않는다.
-      if (cur.some((r) => r.customerId === id)) return cur;
+      if (cur.some((r) => r.customerId === id)) return cur.filter((r) => r.customerId !== id);
       return [...cur, {
         key: newKey(),
         customerId: id,
@@ -271,6 +271,12 @@ export default function ComposeEmailModal({
       }];
     });
   }
+
+  // 드롭다운에 체크 표시할 고객 레코드 id 들.
+  const pickedIds = useMemo(
+    () => recips.map((r) => r.customerId).filter((x): x is number => x !== null),
+    [recips]
+  );
 
   function addProspect() {
     const email = draft.email.trim();
@@ -453,9 +459,11 @@ export default function ComposeEmailModal({
             <CustomerSelect
               value=""
               options={customers}
-              onChange={addCustomer}
-              emptyLabel="+ Pick a customer to add"
+              onChange={toggleCustomer}
+              emptyLabel="+ Pick customers to add"
               showContact
+              multiple
+              selectedIds={pickedIds}
             />
           </div>
 
