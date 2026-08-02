@@ -361,9 +361,9 @@ def _parse_recipients(raw: str) -> list[dict]:
     try:
         data = json.loads(raw or "[]")
     except ValueError:
-        raise HTTPException(status_code=400, detail="수신자 목록을 읽지 못했습니다.")
+        raise HTTPException(status_code=400, detail="Could not read the recipient list.")
     if not isinstance(data, list):
-        raise HTTPException(status_code=400, detail="수신자 목록 형식이 올바르지 않습니다.")
+        raise HTTPException(status_code=400, detail="The recipient list format is invalid.")
     out: list[dict] = []
     seen: set[str] = set()
     for r in data:
@@ -413,7 +413,7 @@ def marketing_email_send(
     if not recips:
         to = (to or "").strip()
         if not to:
-            raise HTTPException(status_code=400, detail="수신자 이메일을 입력하세요.")
+            raise HTTPException(status_code=400, detail="Enter a recipient email.")
         cid = (customer_id or "").strip()
         recips = [{
             "email": to,
@@ -424,7 +424,7 @@ def marketing_email_send(
     if len(recips) > MAX_BULK_RECIPIENTS:
         raise HTTPException(
             status_code=400,
-            detail=f"한 번에 최대 {MAX_BULK_RECIPIENTS}명까지 보낼 수 있습니다(현재 {len(recips)}명).",
+            detail=f"Up to {MAX_BULK_RECIPIENTS} recipients per send (got {len(recips)}).",
         )
 
     s = get_session()
@@ -510,7 +510,7 @@ def marketing_email_send(
         if not sent_emails:
             raise HTTPException(
                 status_code=400,
-                detail="이메일 발송 실패 — SMTP 설정 또는 서버 상태를 확인하세요.",
+                detail="Email sending failed - check the SMTP settings or the server status.",
             )
         return {
             "ok": True,
@@ -566,11 +566,11 @@ def save_marketing_cc_presets(rows: List[dict] = Body(default=[], embed=True)):
         if not email or email.lower() in seen:
             continue
         if not _CC_EMAIL_RE.match(email):
-            raise HTTPException(status_code=400, detail=f"이메일 형식이 아닙니다: {email}")
+            raise HTTPException(status_code=400, detail=f"Not a valid email address: {email}")
         seen.add(email.lower())
         clean.append({"email": email, "label": (r.get("label") or "").strip()[:60]})
     if len(clean) > _CC_PRESET_MAX:
-        raise HTTPException(status_code=400, detail=f"CC 주소는 최대 {_CC_PRESET_MAX}개까지 등록할 수 있습니다.")
+        raise HTTPException(status_code=400, detail=f"You can register at most {_CC_PRESET_MAX} CC addresses.")
     s = get_session()
     try:
         t = (s.query(EmailTemplate)

@@ -67,7 +67,7 @@ export default function CcField({
       await saveCcPresets(rows);
       await refresh();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "CC 주소록을 저장하지 못했습니다.");
+      setErr(e instanceof Error ? e.message : "Could not save the CC address book.");
     } finally {
       setBusy(false);
     }
@@ -98,7 +98,7 @@ export default function CcField({
             type="button"
             className={`chip-btn${edit ? " on" : ""}`}
             onClick={() => setEdit((v) => !v)}
-            title="자주 쓰는 CC 주소를 등록·삭제합니다"
+            title="Add or remove frequently used CC addresses"
           >
             {edit ? "Done" : "Manage"}
           </button>
@@ -179,7 +179,7 @@ export default function CcField({
             }}
           />
           <input
-            placeholder="표시 이름(선택)"
+            placeholder="Display name (optional)"
             value={draft.label}
             onChange={(e) => setDraft((c) => ({ ...c, label: e.target.value }))}
             onKeyDown={(e) => {
@@ -205,7 +205,7 @@ export default function CcField({
               onClick={() => persist([...presets, ...unsaved.map((email) => ({ email, label: "" }))])}
               title={unsaved.join(", ")}
             >
-              현재 CC {unsaved.length}건 등록
+              Save current CC ({unsaved.length})
             </button>
           ) : null}
         </div>
@@ -213,8 +213,8 @@ export default function CcField({
 
       {err ? <div className="action-err">{err}</div> : null}
       <div className="compose-hint">
-        자주 쓰는 참조 주소는 Manage 로 등록해 두면 다음부터 클릭 한 번으로 넣을 수
-        있습니다(팀 공용).
+        Register frequently used CC addresses under Manage and add them with one click
+        next time (shared across the team).
       </div>
     </div>
   );

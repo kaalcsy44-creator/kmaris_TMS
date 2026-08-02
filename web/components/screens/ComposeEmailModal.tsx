@@ -369,21 +369,24 @@ export default function ComposeEmailModal({
     try {
       showPreview(a.label || a.filename, a.mime, await fetchMarketingAssetObjectUrl(a.id));
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "미리보기를 열지 못했습니다.");
+      setErr(e instanceof Error ? e.message : "Could not open the preview.");
     }
   }
 
   async function send() {
     if (!recips.length) {
-      setErr("수신자를 한 명 이상 추가하세요.");
+      setErr("Add at least one recipient.");
       return;
     }
     if (missingEmail) {
-      setErr("이메일 주소가 비어 있는 수신자가 있습니다.");
+      setErr("A recipient is missing an email address.");
       return;
     }
     // 여러 명에게 나가는 건 되돌릴 수 없으니 한 번 확인한다.
-    if (recips.length > 1 && !confirm(`${recips.length}명에게 각각 개별 발송합니다. 계속할까요?`)) {
+    if (
+      recips.length > 1 &&
+      !confirm(`Send a separate email to each of the ${recips.length} recipients?`)
+    ) {
       return;
     }
     const cc = [...ccList, ...(ccInput.trim() ? [ccInput.trim()] : [])].join(", ");
@@ -414,7 +417,9 @@ export default function ComposeEmailModal({
         // 보낸 사람은 목록에서 빼고 실패한 사람만 남긴다 — 그대로 다시 누르면 재시도.
         const done = new Set((r.sent ?? []).map((e) => e.toLowerCase()));
         setRecips((cur) => cur.filter((x) => !done.has(x.email.trim().toLowerCase())));
-        setErr(`${(r.sent ?? []).length}건 발송, ${failed.length}건 실패: ${failed.join(", ")}`);
+        setErr(
+          `Sent ${(r.sent ?? []).length}, failed ${failed.length}: ${failed.join(", ")}`
+        );
         return;
       }
       onSent();
@@ -449,7 +454,7 @@ export default function ComposeEmailModal({
               value=""
               options={customers}
               onChange={addCustomer}
-              emptyLabel="+ 고객을 골라 목록에 추가"
+              emptyLabel="+ Pick a customer to add"
               showContact
             />
           </div>
@@ -460,9 +465,9 @@ export default function ComposeEmailModal({
                 <li key={r.key} className={`recip-row${r.email.trim() ? "" : " bad"}`}>
                   <div className="recip-head">
                     <span className="recip-name">
-                      {r.name || (r.customerId ? "(unnamed)" : "(미등록 고객)")}
+                      {r.name || (r.customerId ? "(unnamed)" : "(prospect)")}
                     </span>
-                    {i === 0 ? <span className="recip-lead">미리보기 기준</span> : null}
+                    {i === 0 ? <span className="recip-lead">preview uses this</span> : null}
                     <button
                       type="button"
                       className="cc-chip-x"
@@ -475,7 +480,7 @@ export default function ComposeEmailModal({
                   <div className="recip-fields">
                     <input
                       value={r.contact}
-                      placeholder="담당자 (Dear …)"
+                      placeholder="Contact (Dear …)"
                       onChange={(e) => editRecip(r.key, { contact: e.target.value })}
                     />
                     <input
@@ -490,7 +495,7 @@ export default function ComposeEmailModal({
             </ul>
           ) : (
             <div className="hint-inline" style={{ margin: "6px 0" }}>
-              위에서 고객을 고르거나, 아래에 직접 입력해 수신자를 추가하세요.
+              Pick a registered customer above, or type an unregistered one below.
             </div>
           )}
 
@@ -498,12 +503,12 @@ export default function ComposeEmailModal({
           <div className="recip-add">
             <input
               value={draft.name}
-              placeholder="회사명 (미등록)"
+              placeholder="Company (prospect)"
               onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
             />
             <input
               value={draft.contact}
-              placeholder="담당자"
+              placeholder="Contact"
               onChange={(e) => setDraft((d) => ({ ...d, contact: e.target.value }))}
             />
             <input
@@ -528,9 +533,9 @@ export default function ComposeEmailModal({
             </button>
           </div>
           <div className="compose-hint">
-            수신자가 여러 명이면 한 통에 묶지 않고 <b>각자에게 따로</b> 보냅니다 — 인사말의
-            이름(Dear …)도 각 담당자 이름으로 바뀝니다. 다른 수신자 주소는 서로 보이지
-            않습니다. CC 주소는 메일마다 함께 나갑니다.
+            Each recipient gets <b>a separate email</b> greeting them by their own name
+            (Dear …); nobody sees the other addresses. CC addresses go out with every
+            message.
           </div>
 
           <label className="form-field">
@@ -594,8 +599,9 @@ export default function ComposeEmailModal({
                 <div className="hint-inline">Rendering…</div>
               )}
               <div className="compose-hint">
-                수신자가 보게 될 모습입니다{includeSignature ? " (서명 포함)" : ""}. 첨부는
-                아래에서 확인하세요.
+                This is what the recipient will see
+                {includeSignature ? " (signature included)" : ""}. Attachments are listed
+                below.
               </div>
             </div>
           ) : (
@@ -611,7 +617,7 @@ export default function ComposeEmailModal({
                     <button
                       type="button"
                       className="chip-btn md-bold"
-                      title="선택한 부분을 굵게 (Ctrl+B) — 본문에는 **텍스트** 로 남습니다"
+                      title="Bold the selection (Ctrl+B) — stored in the body as **text**"
                       onClick={() => toggleBold(bodyRef.current, editBody)}
                     >
                       B
@@ -630,9 +636,9 @@ export default function ComposeEmailModal({
                 Recipient names sync automatically — “{contact.trim() || CONTACT_FALLBACK[lang]}” is
                 stored as a placeholder, so a saved template greets whoever you pick next.
                 {recips.length > 1
-                  ? ` 지금은 ${recips.length}명이라 화면에는 첫 번째 수신자 이름으로 보이고, 나머지는 각자 이름으로 나갑니다.`
+                  ? ` With ${recips.length} recipients, the draft shows the first one's name — everyone else gets their own.`
                   : ""}{" "}
-                굵게는 <code>**텍스트**</code> 로 표시됩니다(선택 후 B 또는 Ctrl+B).
+                Bold shows as <code>**text**</code> (select, then B or Ctrl+B).
               </div>
 
               <div className="form-field">
@@ -683,8 +689,9 @@ export default function ComposeEmailModal({
                 )}
               </div>
               <div className="compose-hint">
-                Settings → Email Templates → Signature 에 저장한 서명입니다. 여기서 고치면
-                이번 발송에만 적용되며, 표 서명 대신 고친 평문이 나갑니다.
+                This is the signature saved under Settings → Email Templates → Signature.
+                Editing it here applies to this send only, and sends the edited plain text
+                instead of the table signature.
               </div>
             </>
           )}
@@ -706,7 +713,7 @@ export default function ComposeEmailModal({
                     <button
                       type="button"
                       className="compose-asset-eye"
-                      title="새 탭에서 미리보기"
+                      title="Preview"
                       onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
@@ -751,7 +758,7 @@ export default function ComposeEmailModal({
                     <button
                       type="button"
                       className="compose-asset-eye"
-                      title="미리보기"
+                      title="Preview"
                       onClick={() => showPreview(f.name, f.type, URL.createObjectURL(f))}
                     >
                       Preview
@@ -782,7 +789,8 @@ export default function ComposeEmailModal({
                   <iframe src={filePreview.url} title={filePreview.name} />
                 ) : (
                   <div className="hint-inline" style={{ padding: 12 }}>
-                    이 형식({filePreview.mime || "unknown"})은 브라우저에서 미리보기가 안 됩니다.
+                    This file type ({filePreview.mime || "unknown"}) cannot be previewed in
+                    the browser.
                   </div>
                 )}
               </div>
