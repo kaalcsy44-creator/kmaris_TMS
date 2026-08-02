@@ -64,6 +64,9 @@ _BULLET_RE = re.compile(r"^\s*[-•*]\s+(.*)$")
 # 블록(Vendor RFQ 의 ITEM LIST)은 비례 글꼴로 옮기면 정렬이 무너진다. 이런 블록만
 # 고정폭으로 남겨 원래 모양을 지킨다.
 _PREFORMATTED_RE = re.compile(r"\S {3,}\S|[─-╿]")  # 정렬 공백 | 괘선
+# 문단 구분을 넘어서는 빈 줄 한 칸. 높이만 있는 빈 div 는 Outlook 이 접어 버려서
+# &nbsp; 를 넣고 글자 크기를 0 으로 눌러 둔다.
+_SPACER = '<div style="height:20px;line-height:20px;font-size:0;">&nbsp;</div>'
 _PRE_STYLE = (
     "margin:0 0 14px;font-family:Consolas,'Courier New',monospace;"
     "font-size:14px;line-height:1.5;white-space:pre-wrap;"
@@ -148,11 +151,18 @@ def text_to_html_fragment(text: str) -> str:
             )
             items.clear()
 
+    blank_run = 0
     for raw in lines:
         if not raw.strip():
             flush_para()
             flush_items()
+            blank_run += 1
             continue
+        # 빈 줄 하나는 문단 구분(문단 아래 여백)이고, 그 이상은 작성자가 일부러 띄운
+        # 간격이다. 앞뒤에 내용이 있을 때만 넣어 본문 위아래에 빈 칸이 남지 않게 한다.
+        if blocks and blank_run > 1:
+            blocks.extend([_SPACER] * (blank_run - 1))
+        blank_run = 0
         m = _BULLET_RE.match(raw)
         if m:
             flush_para()
