@@ -71,6 +71,13 @@ from _core import (
     intro_email_body_tpl,
     render_marketing_tokens,
     text_to_html_fragment,
+    resolve_signature_fields,
+    signature_html,
+    signature_html_for,
+    signature_text,
+    default_sig_fields,
+    normalize_sig_fields,
+    html_document,
 )
 from pydantic import BaseModel
 from sqlalchemy import func
@@ -1048,26 +1055,54 @@ def get_email_signature(lang: str = "en", user: dict = Depends(get_current_user)
     try:
         own = (s.query(EmailTemplate)
                .filter_by(user_id=user.get("id"), doc_type=SIGNATURE_DOC_TYPE, lang=lang).first())
+        fields = resolve_signature_fields(s, user.get("id"), lang)
         return {
             "lang": lang,
             "signature": resolve_signature(s, user.get("id"), lang),
             "is_personal": bool(own and (own.body_tpl or "").strip()),
+            # 구조화(표) 서명 — 없으면 편집 폼을 채울 출발값을 대신 준다.
+            "fields": fields or default_sig_fields(lang, _sig_user_seed(s, user)),
+            "has_fields": bool(fields),
+            "html": signature_html(fields, lang) if fields else "",
         }
     finally:
         s.close()
 
 
+def _sig_user_seed(s, user: dict) -> dict:
+    """서명 폼 첫 입력값에 쓸 로그인 사용자 정보(이름·이메일)."""
+    u = s.query(User).filter_by(id=user.get("id")).first() if user.get("id") else None
+    return {
+        "name": (getattr(u, "name", "") or user.get("name") or ""),
+        "email": (getattr(u, "email", "") or ""),
+    }
+
+
 @app.put("/api/admin/settings/email-signature", dependencies=[Depends(require_token)])
 def put_email_signature(body: EmailSignatureSave, user: dict = Depends(get_current_user)):
     """담당자 개인 서명 저장 — 이후 모든 단계 발송 화면의 기본 서명이 된다.
-    빈 문자열로 저장하면 개인 서명을 지우고 회사/내장 기본으로 되돌아간다."""
+    fields 를 주면 표 서명(HTML), 없으면 평문 서명으로 저장한다.
+    빈 값으로 저장하면 개인 서명을 지우고 회사/내장 기본으로 되돌아간다."""
     lang = "ko" if body.lang == "ko" else "en"
     s = get_session()
     try:
-        save_signature(s, user.get("id"), lang, body.signature)
-        return {"ok": True, "signature": resolve_signature(s, user.get("id"), lang)}
+        save_signature(s, user.get("id"), lang, body.signature, getattr(body, "fields", None))
+        fields = resolve_signature_fields(s, user.get("id"), lang)
+        return {
+            "ok": True,
+            "signature": resolve_signature(s, user.get("id"), lang),
+            "html": signature_html(fields, lang) if fields else "",
+        }
     finally:
         s.close()
+
+
+@app.post("/api/admin/settings/email-signature/preview", dependencies=[Depends(require_token)])
+def preview_email_signature(body: EmailSignatureSave):
+    """편집 중인 서명 필드 → 발송에 쓰일 HTML/평문 그대로. 저장 전 미리보기용."""
+    lang = "ko" if body.lang == "ko" else "en"
+    fields = normalize_sig_fields(getattr(body, "fields", None) or {}, lang)
+    return {"html": signature_html(fields, lang), "text": signature_text(fields, lang)}
 
 
 @app.post("/api/admin/settings/email-templates/preview", dependencies=[Depends(require_token)])
@@ -1098,15 +1133,29 @@ def preview_email_template(body: EmailTemplatePreviewReq):
 
 
 class EmailRenderReq(BaseModel):
-    """작성 화면에서 편집 중인 본문(토큰 치환 끝난 평문)."""
+    """작성 화면에서 편집 중인 본문(토큰 치환 끝난 평문)과 서명."""
     text: str = ""
+    signature: str = ""
+    include_signature: bool = True
 
 
 @app.post("/api/admin/email/render-preview", dependencies=[Depends(require_token)])
-def render_email_preview(body: EmailRenderReq):
-    """평문 본문 → 발송 HTML 파트와 똑같은 조각. 발송 화면 미리보기가 클라이언트에서
-    따로 렌더하면 실제 메일과 어긋나므로, 서버의 렌더러 하나만 쓴다."""
-    return {"html": text_to_html_fragment(body.text or "")}
+def render_email_preview(body: EmailRenderReq, user: dict = Depends(get_current_user)):
+    """평문 본문(+서명) → 발송 HTML 파트와 똑같은 조각. 발송 화면 미리보기가 클라이언트
+    에서 따로 렌더하면 실제 메일과 어긋나므로, 서버의 렌더러 하나만 쓴다.
+    서명 처리도 발송과 같은 규칙이다 — 저장된 표 서명 그대로면 표로, 손댔으면 평문으로."""
+    text = body.text or ""
+    sig = (body.signature or "").strip()
+    if not (body.include_signature and sig):
+        return {"html": text_to_html_fragment(text)}
+    s = get_session()
+    try:
+        sig_html = signature_html_for(s, user.get("id"), sig)
+    finally:
+        s.close()
+    if sig_html:
+        return {"html": text_to_html_fragment(text) + sig_html}
+    return {"html": text_to_html_fragment(f"{text.rstrip()}\n\n{sig}\n")}
 
 
 @app.get("/api/admin/settings/users", dependencies=[Depends(require_token)])

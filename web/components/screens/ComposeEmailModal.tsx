@@ -261,26 +261,21 @@ export default function ComposeEmailModal({
     setErr("");
   }
 
-  // 발송 본문 = 본문 + (포함 시)서명 — 서버 발송 경로와 같은 방식으로 합친다.
-  const finalBody = useMemo(() => {
-    if (!includeSignature || !signature.trim()) return body;
-    return `${body.replace(/\s+$/, "")}\n\n${signature.trim()}\n`;
-  }, [body, signature, includeSignature]);
-
-  // 미리보기가 열려 있을 때만, 입력이 멈추면 서버 렌더를 갱신한다.
+  // 미리보기가 열려 있을 때만, 입력이 멈추면 서버 렌더를 갱신한다. 본문과 서명을
+  // 따로 넘겨야 서버가 발송과 똑같은 규칙으로 서명을 표/평문 중 하나로 그린다.
   useEffect(() => {
     if (!preview) return;
     const seq = ++previewSeq.current;
     const t = setTimeout(async () => {
       try {
-        const r = await renderEmailPreview(finalBody);
+        const r = await renderEmailPreview(body, signature, includeSignature);
         if (seq === previewSeq.current) setPreviewHtml(r.html);
       } catch {
         /* 편집 중 일시적 실패는 무시 — 다음 입력에서 다시 시도된다. */
       }
     }, 300);
     return () => clearTimeout(t);
-  }, [preview, finalBody]);
+  }, [preview, body, signature, includeSignature]);
 
   async function send() {
     if (!email.trim()) {

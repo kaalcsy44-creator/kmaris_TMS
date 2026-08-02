@@ -53,7 +53,11 @@ from services.email_svc import (
     quotation_email_body, quotation_email_subject, send_email,
     shipping_advice_email_body, email_signature, default_from,
     intro_email_subject, intro_email_body, intro_email_body_tpl,
-    render_marketing_tokens, intro_signature, text_to_html_fragment,
+    render_marketing_tokens, intro_signature, text_to_html_fragment, html_document,
+)
+from services.email_sig import (
+    signature_html, signature_text, default_fields as default_sig_fields,
+    normalize_fields as normalize_sig_fields, has_content as sig_has_content,
 )
 from services.pdf_svc import (
     build_payload, build_po_payload, generate_pdf, generate_po_pdf,
@@ -1315,18 +1319,55 @@ def resolve_signature(s, user_id, lang: str) -> str:
     return email_signature(default=_default_signature(lang))
 
 
-def save_signature(s, user_id, lang: str, text: str) -> None:
-    """담당자 개인 서명 upsert. 빈 문자열로 저장하면 기본 서명으로 되돌아간다."""
+def save_signature(s, user_id, lang: str, text: str, fields=None) -> None:
+    """담당자 개인 서명 upsert. 빈 문자열로 저장하면 기본 서명으로 되돌아간다.
+
+    fields 를 주면 구조화 서명(HTML)으로 저장한다 — options 에 필드를, body_tpl 에는
+    같은 내용의 평문판을 넣어 둔다. text/plain 파트와 서명을 직접 손보는 발송 화면은
+    계속 평문을 쓰기 때문에 둘을 나란히 들고 있어야 한다."""
     lang = "ko" if lang == "ko" else "en"
     t = (s.query(EmailTemplate)
          .filter_by(user_id=user_id, doc_type=SIGNATURE_DOC_TYPE, lang=lang).first())
     if not t:
         t = EmailTemplate(user_id=user_id, doc_type=SIGNATURE_DOC_TYPE, lang=lang)
         s.add(t)
-    t.body_tpl = (text or "").strip()
+    if fields is not None and sig_has_content(fields):
+        norm = normalize_sig_fields(fields, lang)
+        t.options = {"sig_fields": norm}
+        t.body_tpl = signature_text(norm, lang)
+    else:
+        t.options = {}
+        t.body_tpl = (text or "").strip()
     t.subject_tpl = ""
     t.updated_at = datetime.utcnow()
     s.commit()
+
+
+def resolve_signature_fields(s, user_id, lang: str):
+    """구조화 서명 필드 — 개인 → 회사 기본 순. 없으면 None(평문 서명만 있는 상태)."""
+    lang = "ko" if lang == "ko" else "en"
+    tpl = _resolve_email_template(s, user_id, SIGNATURE_DOC_TYPE, lang)
+    fields = (tpl.options or {}).get("sig_fields") if tpl else None
+    return fields if (fields and sig_has_content(fields)) else None
+
+
+def signature_html_for(s, user_id, text: str):
+    """발송 화면이 보낸 서명 평문에 대응하는 HTML 서명을 찾는다.
+
+    발송 화면은 서명을 평문으로 들고 있어서, 저장된 구조화 서명을 그대로 쓰는지
+    사용자가 손댔는지를 글자로 비교한다. 손댔으면 그 편집을 존중해 None 을 돌려주고
+    (호출부가 평문을 그대로 HTML 로 렌더한다), 그대로면 표 서명을 쓴다.
+    언어는 저장된 두 벌(en·ko) 중 일치하는 쪽으로 자동 판별한다."""
+    body = (text or "").strip()
+    if not body:
+        return None
+    for lang in ("en", "ko"):
+        fields = resolve_signature_fields(s, user_id, lang)
+        if not fields:
+            continue
+        if " ".join(signature_text(fields, lang).split()) == " ".join(body.split()):
+            return signature_html(fields, lang)
+    return None
 
 
 def build_vendor_rfq_email(s, user_id, rfq, cust, vessel, vendor, notes, lang,
@@ -2875,9 +2916,11 @@ class EmailTemplatePreviewReq(BaseModel):
 
 
 class EmailSignatureSave(BaseModel):
-    """담당자 개인 이메일 서명 저장. 빈 문자열이면 개인 서명 해제(상위 기본값 사용)."""
+    """담당자 개인 이메일 서명 저장. 빈 문자열이면 개인 서명 해제(상위 기본값 사용).
+    fields 가 있으면 표(HTML) 서명으로 저장하고 평문판은 자동 생성한다."""
     lang: str = "en"
     signature: str = ""
+    fields: dict | None = None
 
 
 class StageDateUpdate(BaseModel):
@@ -3155,6 +3198,14 @@ __all__ = [
     "EmailSignatureSave",
     "SIGNATURE_DOC_TYPE",
     "resolve_signature",
+    "resolve_signature_fields",
+    "signature_html_for",
+    "signature_html",
+    "signature_text",
+    "default_sig_fields",
+    "normalize_sig_fields",
+    "sig_has_content",
+    "html_document",
     "save_signature",
     "EmailTemplatePreviewReq",
     "build_vendor_rfq_email",

@@ -33,6 +33,7 @@ from _core import (
     VendorPoPreview,
     VendorQuote,
     resolve_signature,
+    signature_html_for,
     VendorRFQ,
     Vessel,
     _base_meta,
@@ -73,7 +74,7 @@ from _core import (
     default_from,
     steps_for,
 )
-from services.mail_compose import build_attachments, compose_body
+from services.mail_compose import build_attachments, compose_body, compose_parts
 from services.item_ledger import apply_line_categories
 
 
@@ -829,6 +830,7 @@ def vendor_po_send(
     format: str = Form("pdf"),
     include_document: bool = Form(True),
     files: List[UploadFile] = File(default=[]),
+    user: dict = Depends(get_current_user),
 ):
     """발주서 이메일 발송 — 생성 문서(PDF/XLSX) + 사용자가 추가한 첨부.
     include_document=False 면 문서를 만들지 않고 본문(+업로드 첨부)만 보낸다."""
@@ -857,10 +859,17 @@ def vendor_po_send(
                 generated = (f"{po.po_no}_PurchaseOrder.xlsx", make_document_xlsx("purchase_order", payload))
             else:
                 generated = (f"{po.po_no}_PurchaseOrder.pdf", generate_po_pdf(payload))
+        # 저장된 표 서명(HTML)을 손대지 않고 그대로 쓰는 발송이면 HTML 파트에 그 표를
+        # 붙인다. 서명을 화면에서 고쳤다면 None 이 돌아와 고친 평문이 그대로 나간다.
+        mail_text, mail_html = compose_parts(
+            body, notes, signature, include_signature,
+            signature_html_for(s, user.get("id"), signature),
+        )
         sent = send_email(
             to=to.strip(),
             subject=subject,
-            body=compose_body(body, notes, signature, include_signature),
+            body=mail_text,
+            html_body=mail_html,
             attachments=build_attachments(generated, files),
             cc=cc.strip(),
             from_addr=from_email.strip(),

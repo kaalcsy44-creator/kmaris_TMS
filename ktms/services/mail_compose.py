@@ -33,6 +33,23 @@ def compose_body(body: str, notes: str = "", signature: str = "",
     return "\n\n".join(p for p in parts if p) + "\n"
 
 
+def compose_parts(body: str, notes: str = "", signature: str = "",
+                  include_signature: bool = True,
+                  sig_html: Optional[str] = None) -> Tuple[str, Optional[str]]:
+    """(평문 본문, HTML 문서) — send_email 의 두 파트에 그대로 넘긴다.
+
+    sig_html 이 있으면(= 저장된 표 서명을 손대지 않고 그대로 쓰는 발송) HTML 파트에는
+    평문 서명 대신 그 표를 붙인다. 없으면 HTML 은 None 이고, send_email 이 평문 전체를
+    자동 렌더한다 — 즉 서명을 직접 고친 발송은 고친 그대로 나간다."""
+    from services.email_svc import html_document, text_to_html_fragment
+
+    text = compose_body(body, notes, signature, include_signature)
+    if not sig_html or not include_signature:
+        return text, None
+    fragment = text_to_html_fragment(compose_body(body, notes, "", False))
+    return text, html_document(fragment + sig_html)
+
+
 def read_uploads(files: Optional[Sequence[UploadFile]]) -> List[Attachment]:
     """업로드된 파일을 (파일명, bytes) 로 읽는다. 빈 파일은 무시."""
     out: List[Attachment] = []

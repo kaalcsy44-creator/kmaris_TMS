@@ -35,6 +35,9 @@ from _core import (
     render_marketing_tokens,
     require_token,
     send_email,
+    signature_html_for,
+    text_to_html_fragment,
+    html_document,
     timedelta,
 )
 from fastapi import Body
@@ -376,10 +379,16 @@ def marketing_email_send(
         subject = render_marketing_tokens(subject, contact_person, cust_name, lang)
         body = render_marketing_tokens(body, contact_person, cust_name, lang)
 
-        # 최종 본문 = 본문 + (서명 포함 시 서명)
+        # 최종 본문 = 본문 + (서명 포함 시 서명). HTML 파트는 저장된 표 서명을 그대로
+        # 쓰는 경우에만 따로 조립하고, 서명을 손댔으면 평문 그대로 렌더되게 둔다.
         final_body = body or ""
+        sig_html = None
         if include_signature and (signature or "").strip():
             final_body = f"{final_body.rstrip()}\n\n{signature.strip()}\n"
+            sig_html = signature_html_for(s, user.get("id"), signature)
+        final_html = (
+            html_document(text_to_html_fragment(body or "") + sig_html) if sig_html else None
+        )
 
         # 첨부 조립: 라이브러리 자료 → 즉석 업로드 순
         attachments: list[tuple[str, bytes]] = []
@@ -398,6 +407,7 @@ def marketing_email_send(
             to=to,
             subject=subject or "",
             body=final_body,
+            html_body=final_html,
             attachments=attachments,
             cc=(cc or "").strip(),
             from_addr=(from_email or "").strip(),

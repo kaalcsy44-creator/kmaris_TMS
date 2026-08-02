@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
   createSettingsCustomer,
@@ -45,8 +45,17 @@ import {
   saveEmailTemplate,
   deleteEmailTemplate,
   previewEmailTemplate,
+  fetchEmailSignature,
+  saveEmailSignature,
+  previewEmailSignature,
 } from "@/lib/api";
-import type { PermissionsConfig, RolePermRow, EmailTemplatesData, CompanyInfoSave } from "@/lib/api";
+import type {
+  PermissionsConfig,
+  RolePermRow,
+  EmailTemplatesData,
+  CompanyInfoSave,
+  SignatureFields,
+} from "@/lib/api";
 import type { PermGrid } from "@/lib/auth";
 import type {
   BusinessCardOcr,
@@ -3085,6 +3094,224 @@ const EMAIL_DOC_HINT: Record<string, string> = {
     "Marketing → Compose Email 의 Brochure 기본값입니다. 수신자 이름은 {{contact}} 자리에 자동으로 채워집니다.",
 };
 
+// 서명은 제목·본문 템플릿이 아니라 구조화 필드라서, 종류 탭에 끼워 넣되 편집기는 따로 둔다.
+const SIG_TAB = "__signature";
+
+// 여러 줄 칸(이메일·주소 등)은 화면에선 줄바꿈 문자열, 서버로는 배열로 오간다.
+type SigForm = Omit<SignatureFields, "emails" | "address" | "tagline" | "services"> & {
+  emails: string;
+  address: string;
+  tagline: string;
+  services: string;
+};
+const toForm = (f: SignatureFields): SigForm => ({
+  ...f,
+  emails: (f.emails ?? []).join("\n"),
+  address: (f.address ?? []).join("\n"),
+  tagline: (f.tagline ?? []).join("\n"),
+  services: (f.services ?? []).join("\n"),
+});
+const toFields = (f: SigForm): SignatureFields => {
+  const lines = (v: string) =>
+    v.split("\n").map((x) => x.trim()).filter(Boolean);
+  return {
+    ...f,
+    emails: lines(f.emails),
+    address: lines(f.address),
+    tagline: lines(f.tagline),
+    services: lines(f.services),
+  };
+};
+
+// 담당자 서명 편집기 — 칸을 채우면 회사 표준 디자인의 표 서명이 만들어진다.
+// 로고까지 전부 텍스트라 수신자가 이미지를 차단해도 연락처가 그대로 보인다.
+function SignatureEditor() {
+  const [lang, setLang] = useState<"en" | "ko">("en");
+  const [form, setForm] = useState<SigForm | null>(null);
+  const [saved, setSaved] = useState(false);   // 이 언어에 저장해 둔 표 서명이 있는지
+  const [html, setHtml] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const seq = useRef(0);
+
+  const load = useCallback(() => {
+    setForm(null);
+    fetchEmailSignature(lang)
+      .then((d) => {
+        setForm(toForm(d.fields));
+        setSaved(d.has_fields);
+        setMsg(null);
+        setErr(null);
+      })
+      .catch((e) => setErr(e instanceof Error ? e.message : "Load failed"));
+  }, [lang]);
+  useEffect(() => load(), [load]);
+
+  // 실시간 미리보기 — 발송에 쓰이는 렌더러를 그대로 태운다(화면 = 수신자가 볼 모습).
+  useEffect(() => {
+    if (!form) return;
+    const n = ++seq.current;
+    const t = setTimeout(async () => {
+      try {
+        const r = await previewEmailSignature(lang, toFields(form));
+        if (n === seq.current) setHtml(r.html);
+      } catch {
+        /* 편집 중 일시적 실패는 무시 */
+      }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [form, lang]);
+
+  function set<K extends keyof SigForm>(key: K, value: SigForm[K]) {
+    setForm((f) => (f ? { ...f, [key]: value } : f));
+  }
+
+  async function doSave() {
+    if (!form) return;
+    setBusy(true);
+    setErr(null);
+    setMsg(null);
+    try {
+      await saveEmailSignature(lang, "", toFields(form));
+      setSaved(true);
+      setMsg("Saved — 이후 모든 발송 화면의 기본 서명이 됩니다.");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function doReset() {
+    if (!window.confirm("Remove your signature? Sending will fall back to the default."))
+      return;
+    setBusy(true);
+    setErr(null);
+    setMsg(null);
+    try {
+      await saveEmailSignature(lang, "", null);
+      setMsg("Removed — 기본 서명으로 돌아갑니다.");
+      load();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Reset failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!form) return <div className="state">Loading…</div>;
+
+  return (
+    <>
+      <div className="hint-inline" style={{ marginBottom: 10 }}>
+        견적서·발주서·Vendor RFQ·홍보 메일의 서명입니다. 칸을 채우면 회사 표준 디자인으로
+        조립되며, 로고까지 전부 텍스트라 수신자가 이미지를 차단해도 그대로 보입니다.
+      </div>
+
+      <div className="email-tpl-toolbar">
+        <span className="seg-toggle" role="group" aria-label="Language">
+          <button className={lang === "en" ? "on" : ""} onClick={() => setLang("en")}>EN</button>
+          <button className={lang === "ko" ? "on" : ""} onClick={() => setLang("ko")}>KO</button>
+        </span>
+        <span className={`email-tpl-badge ${saved ? "custom" : "default"}`}>
+          {saved ? "Customized" : "Using default"}
+        </span>
+      </div>
+
+      <div className="email-tpl-split">
+        <div className="email-tpl-editor sig-form">
+          <div className="sub-h">담당자</div>
+          <label className="form-field">
+            <span>Name</span>
+            <input value={form.name} onChange={(e) => set("name", e.target.value)} />
+          </label>
+          <label className="form-field">
+            <span>Title</span>
+            <input value={form.title} onChange={(e) => set("title", e.target.value)} />
+          </label>
+          <div className="sig-row">
+            <label className="form-field sig-row-label">
+              <span>Phone label</span>
+              <input
+                value={form.mobile_label}
+                onChange={(e) => set("mobile_label", e.target.value)}
+                placeholder="Mobile"
+              />
+            </label>
+            <label className="form-field">
+              <span>Phone</span>
+              <input value={form.mobile} onChange={(e) => set("mobile", e.target.value)} />
+            </label>
+          </div>
+          <label className="form-field">
+            <span>Email (한 줄에 하나)</span>
+            <textarea rows={2} value={form.emails} onChange={(e) => set("emails", e.target.value)} />
+          </label>
+          <label className="form-field">
+            <span>Website</span>
+            <input value={form.website} onChange={(e) => set("website", e.target.value)} />
+          </label>
+          <label className="form-field">
+            <span>Address (한 줄에 하나)</span>
+            <textarea
+              rows={3}
+              value={form.address}
+              onChange={(e) => set("address", e.target.value)}
+            />
+          </label>
+
+          <div className="sub-h" style={{ marginTop: 14 }}>회사 공통</div>
+          <label className="form-field">
+            <span>Closing</span>
+            <input value={form.closing} onChange={(e) => set("closing", e.target.value)} />
+          </label>
+          <label className="form-field">
+            <span>Tagline (한 줄에 하나)</span>
+            <textarea
+              rows={2}
+              value={form.tagline}
+              onChange={(e) => set("tagline", e.target.value)}
+            />
+          </label>
+          <label className="form-field">
+            <span>Services (한 줄에 하나)</span>
+            <textarea
+              rows={2}
+              value={form.services}
+              onChange={(e) => set("services", e.target.value)}
+            />
+          </label>
+          <label className="form-field">
+            <span>Disclaimer</span>
+            <textarea
+              rows={2}
+              value={form.disclaimer}
+              onChange={(e) => set("disclaimer", e.target.value)}
+            />
+          </label>
+        </div>
+
+        <div className="email-tpl-preview">
+          <div className="sub-h">Preview</div>
+          <div className="email-tpl-preview-body" dangerouslySetInnerHTML={{ __html: html }} />
+        </div>
+      </div>
+
+      <div className="form-actions">
+        <button className="btn primary" onClick={doSave} disabled={busy}>
+          {busy ? "Working…" : "Save"}
+        </button>
+        <button className="btn" onClick={doReset} disabled={busy || !saved}>
+          Remove signature
+        </button>
+        {msg ? <span className="action-ok">{msg}</span> : null}
+        {err ? <span className="action-err">{err}</span> : null}
+      </div>
+    </>
+  );
+}
+
 function EmailTemplatesTab() {
   const [docType, setDocType] = useState("vendor_rfq");
   const [data, setData] = useState<EmailTemplatesData | null>(null);
@@ -3106,12 +3333,14 @@ function EmailTemplatesTab() {
   const previewSeq = useRef(0);
 
   function load(type = docType) {
+    if (type === SIG_TAB) return;   // 서명 탭은 자체 편집기가 스스로 불러온다
     fetchEmailTemplates(type)
       .then(setData)
       .catch((e) => setErr(e instanceof Error ? e.message : "Load failed"));
   }
   // 종류(RFQ / Company Introduction …)를 바꾸면 그 종류의 템플릿을 다시 불러온다.
   useEffect(() => {
+    if (docType === SIG_TAB) return;
     setData(null);
     load(docType);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -3238,8 +3467,26 @@ function EmailTemplatesTab() {
           {t.label}
         </button>
       ))}
+      <button
+        type="button"
+        role="tab"
+        aria-selected={docType === SIG_TAB}
+        className={`email-tpl-type${docType === SIG_TAB ? " on" : ""}`}
+        onClick={() => setDocType(SIG_TAB)}
+      >
+        Signature
+      </button>
     </div>
   );
+
+  if (docType === SIG_TAB) {
+    return (
+      <div className="panel email-tpl">
+        {typeTabs}
+        <SignatureEditor />
+      </div>
+    );
+  }
 
   if (!data) {
     return (

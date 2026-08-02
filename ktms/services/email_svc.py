@@ -151,8 +151,8 @@ def text_to_html_fragment(text: str) -> str:
     return f'<div style="{EMAIL_BODY_STYLE}">' + "".join(blocks) + "</div>"
 
 
-def text_to_html(text: str) -> str:
-    """평문 본문 → 발송용 HTML 문서 전체."""
+def html_document(fragment: str) -> str:
+    """HTML 조각(본문 + 서명) → 발송용 문서 전체."""
     return (
         "<!DOCTYPE html><html><head>"
         '<meta charset="utf-8">'
@@ -160,9 +160,14 @@ def text_to_html(text: str) -> str:
         "</head>"
         '<body style="margin:0;padding:0;background:#ffffff;'
         '-webkit-text-size-adjust:100%;">'
-        + text_to_html_fragment(text)
+        + (fragment or "")
         + "</body></html>"
     )
+
+
+def text_to_html(text: str) -> str:
+    """평문 본문 → 발송용 HTML 문서 전체."""
+    return html_document(text_to_html_fragment(text))
 
 
 def send_email(

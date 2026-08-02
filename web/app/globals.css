@@ -9425,6 +9425,13 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   padding: 0;
 }
 
+/* 서명 편집기 — 좌: 입력 칸, 우: 발송과 같은 렌더의 미리보기 */
+.sig-form .form-field { margin-top: 8px; }
+.sig-form .sub-h { margin-bottom: 2px; }
+.sig-row { display: flex; gap: 10px; align-items: flex-end; }
+.sig-row .form-field { flex: 1 1 auto; min-width: 0; }
+.sig-row .sig-row-label { flex: 0 0 132px; }
+
 /* ── 홍보 이메일 작성 모달(좌: 수신정보 / 우: 메일내용) ─────────────────────────── */
 .compose-split {
   display: grid;

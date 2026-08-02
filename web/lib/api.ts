@@ -468,19 +468,49 @@ function docEmailFormData(p: DocEmailSend): FormData {
   return fd;
 }
 
-/** 담당자 이메일 서명 — 발송 화면 기본값(개인 → 회사 → 내장 기본 순으로 해석된 값). */
-export function fetchEmailSignature(
-  lang: "en" | "ko"
-): Promise<{ lang: string; signature: string; is_personal: boolean }> {
+/** 표(HTML) 서명의 입력 필드. 여러 줄 칸(이메일·주소 등)은 배열로 오간다. */
+export interface SignatureFields {
+  closing: string;
+  name: string;
+  title: string;
+  mobile_label: string;
+  mobile: string;
+  emails: string[];
+  website: string;
+  address: string[];
+  tagline: string[];
+  services: string[];
+  disclaimer: string;
+}
+
+/** 담당자 이메일 서명 — 발송 화면 기본값(개인 → 회사 → 내장 기본 순으로 해석된 값).
+ *  fields 는 표 서명의 입력값(없으면 폼을 채울 출발값), has_fields 로 구분한다. */
+export function fetchEmailSignature(lang: "en" | "ko"): Promise<{
+  lang: string;
+  signature: string;
+  is_personal: boolean;
+  fields: SignatureFields;
+  has_fields: boolean;
+  html: string;
+}> {
   return get(`/api/admin/settings/email-signature?lang=${lang}`);
 }
 
-/** 개인 서명 저장(이후 모든 단계의 기본 서명). 빈 문자열이면 해제. */
+/** 개인 서명 저장(이후 모든 단계의 기본 서명). fields 를 주면 표 서명으로 저장한다. */
 export function saveEmailSignature(
   lang: "en" | "ko",
-  signature: string
-): Promise<{ ok: boolean; signature: string }> {
-  return put(`/api/admin/settings/email-signature`, { lang, signature });
+  signature: string,
+  fields?: SignatureFields | null
+): Promise<{ ok: boolean; signature: string; html: string }> {
+  return put(`/api/admin/settings/email-signature`, { lang, signature, fields });
+}
+
+/** 편집 중인 서명 필드 → 발송에 쓰일 HTML/평문 그대로(저장 전 미리보기). */
+export function previewEmailSignature(
+  lang: "en" | "ko",
+  fields: SignatureFields
+): Promise<{ html: string; text: string }> {
+  return post(`/api/admin/settings/email-signature/preview`, { lang, fields });
 }
 
 export function previewVendorPo(poId: number, lang: "en" | "ko"): Promise<VendorPoPreview> {
@@ -1153,9 +1183,18 @@ export function previewEmailTemplate(body: {
 }): Promise<{ subject: string; body: string; body_html?: string }> {
   return post("/api/admin/settings/email-templates/preview", body);
 }
-/** 편집 중인 평문 본문을 발송용 HTML 로 렌더 — 발송 화면 미리보기용. */
-export function renderEmailPreview(text: string): Promise<{ html: string }> {
-  return post("/api/admin/email/render-preview", { text });
+/** 편집 중인 본문(+서명)을 발송용 HTML 로 렌더 — 발송 화면 미리보기용.
+ *  서명 처리도 발송과 같은 규칙(저장된 표 서명 그대로면 표, 손댔으면 평문)이다. */
+export function renderEmailPreview(
+  text: string,
+  signature = "",
+  includeSignature = true
+): Promise<{ html: string }> {
+  return post("/api/admin/email/render-preview", {
+    text,
+    signature,
+    include_signature: includeSignature,
+  });
 }
 
 // ── 품목 분류 트리(대>중>소) ──────────────────────────────────────────────────
