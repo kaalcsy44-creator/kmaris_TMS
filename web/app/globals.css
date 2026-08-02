@@ -9427,6 +9427,9 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 
 /* 서명 편집기 — 좌: 입력 칸, 우: 발송과 같은 렌더의 미리보기 */
 .sig-form .form-field { margin-top: 8px; }
+/* 전역 .form-field textarea{min-height:240px} 는 본문 편집용이라 두세 줄짜리 서명 칸에는
+   과하다. 여기서만 1/3 로 낮춘다(필요하면 사용자가 모서리를 끌어 늘릴 수 있다). */
+.sig-form .form-field textarea { min-height: 80px; }
 .sig-form .sub-h { margin-bottom: 2px; }
 .sig-row { display: flex; gap: 10px; align-items: flex-end; }
 .sig-row .form-field { flex: 1 1 auto; min-width: 0; }
