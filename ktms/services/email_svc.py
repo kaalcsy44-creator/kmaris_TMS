@@ -49,9 +49,12 @@ EMAIL_FONT_STACK = (
     "Verdana, Geneva, 'Malgun Gothic', 'Apple SD Gothic Neo', "
     "'Noto Sans KR', sans-serif"
 )
+# 폭은 제한하지 않는다 — 예전엔 640px 로 묶어 뒀는데, 수신함이 아무리 넓어도 그
+# 지점에서 줄이 꺾여 작성자가 쓰지도 않은 자리에서 문장이 끊긴 것처럼 보였다.
+# 평문 메일처럼 읽는 창 너비에 맞춰 흐르게 둔다.
 EMAIL_BODY_STYLE = (
     f"font-family:{EMAIL_FONT_STACK};font-size:15px;line-height:1.6;"
-    "color:#222222;max-width:640px;"
+    "color:#222222;"
 )
 _LINK_STYLE = "color:#1a5fb4;"
 # 링크 인식: URL(https://, www.) 과 메일주소. 이미 escape 된 텍스트 위에서 돌린다.
