@@ -1153,6 +1153,10 @@ export function previewEmailTemplate(body: {
 }): Promise<{ subject: string; body: string; body_html?: string }> {
   return post("/api/admin/settings/email-templates/preview", body);
 }
+/** 편집 중인 평문 본문을 발송용 HTML 로 렌더 — 발송 화면 미리보기용. */
+export function renderEmailPreview(text: string): Promise<{ html: string }> {
+  return post("/api/admin/email/render-preview", { text });
+}
 
 // ── 품목 분류 트리(대>중>소) ──────────────────────────────────────────────────
 export function fetchItemCategories(): Promise<ItemCategory[]> {

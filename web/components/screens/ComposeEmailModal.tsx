@@ -7,6 +7,7 @@ import {
   marketingComposeDefaults,
   saveMarketingTemplate,
   resetMarketingTemplate,
+  renderEmailPreview,
   sendMarketingEmail,
   type MarketingAsset,
 } from "@/lib/api";
@@ -99,6 +100,11 @@ export default function ComposeEmailModal({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // 미리보기 — 수신자가 받게 될 HTML(서버가 발송과 같은 렌더러로 만든다).
+  const [preview, setPreview] = useState(false);
+  const [previewHtml, setPreviewHtml] = useState("");
+  const previewSeq = useRef(0);
 
   const custById = useMemo(() => {
     const m = new Map<number, SettingsCustomer>();
@@ -255,6 +261,27 @@ export default function ComposeEmailModal({
     setErr("");
   }
 
+  // 발송 본문 = 본문 + (포함 시)서명 — 서버 발송 경로와 같은 방식으로 합친다.
+  const finalBody = useMemo(() => {
+    if (!includeSignature || !signature.trim()) return body;
+    return `${body.replace(/\s+$/, "")}\n\n${signature.trim()}\n`;
+  }, [body, signature, includeSignature]);
+
+  // 미리보기가 열려 있을 때만, 입력이 멈추면 서버 렌더를 갱신한다.
+  useEffect(() => {
+    if (!preview) return;
+    const seq = ++previewSeq.current;
+    const t = setTimeout(async () => {
+      try {
+        const r = await renderEmailPreview(finalBody);
+        if (seq === previewSeq.current) setPreviewHtml(r.html);
+      } catch {
+        /* 편집 중 일시적 실패는 무시 — 다음 입력에서 다시 시도된다. */
+      }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [preview, finalBody]);
+
   async function send() {
     if (!email.trim()) {
       setErr("Enter a recipient email.");
@@ -394,41 +421,80 @@ export default function ComposeEmailModal({
                 KR
               </button>
               {savedTpl ? <span className="compose-tpl-flag">saved</span> : null}
+              <span className="compose-tpl-sep" />
+              {/* 편집 ↔ 미리보기. 미리보기는 서버가 발송용 HTML 로 렌더한 결과라
+                  수신자가 실제로 보게 될 글꼴·크기·목록 그대로다. */}
+              <button
+                type="button"
+                className={`chip-btn${preview ? "" : " on"}`}
+                onClick={() => setPreview(false)}
+              >
+                Edit
+              </button>
+              <button
+                type="button"
+                className={`chip-btn${preview ? " on" : ""}`}
+                onClick={() => setPreview(true)}
+              >
+                Preview
+              </button>
             </span>
           </div>
 
-          <label className="form-field">
-            <span>Subject</span>
-            <input value={subject} onChange={(e) => editSubject(e.target.value)} />
-          </label>
-          <label className="form-field">
-            <span>Body</span>
-            <textarea rows={9} value={body} onChange={(e) => editBody(e.target.value)} />
-          </label>
-          <div className="compose-hint">
-            Recipient names sync automatically — “{contact.trim() || CONTACT_FALLBACK[lang]}” is
-            stored as a placeholder, so a saved template greets whoever you pick next.
-          </div>
-
-          <label className="form-field">
-            <span className="compose-sig-head">
-              Signature
-              <label className="compose-sig-toggle">
-                <input
-                  type="checkbox"
-                  checked={includeSignature}
-                  onChange={(e) => setIncludeSignature(e.target.checked)}
+          {preview ? (
+            <div className="compose-preview">
+              <div className="compose-preview-subj">
+                <b>Subject:</b> {subject}
+              </div>
+              {previewHtml ? (
+                <div
+                  className="compose-preview-body"
+                  dangerouslySetInnerHTML={{ __html: previewHtml }}
                 />
-                Include in email
+              ) : (
+                <div className="hint-inline">Rendering…</div>
+              )}
+              <div className="compose-hint">
+                수신자가 보게 될 모습입니다{includeSignature ? " (서명 포함)" : ""}. 첨부는
+                아래에서 확인하세요.
+              </div>
+            </div>
+          ) : (
+            <>
+              <label className="form-field">
+                <span>Subject</span>
+                <input value={subject} onChange={(e) => editSubject(e.target.value)} />
               </label>
-            </span>
-            <textarea
-              rows={4}
-              value={signature}
-              onChange={(e) => setSignature(e.target.value)}
-              disabled={!includeSignature}
-            />
-          </label>
+              <label className="form-field">
+                <span>Body</span>
+                <textarea rows={9} value={body} onChange={(e) => editBody(e.target.value)} />
+              </label>
+              <div className="compose-hint">
+                Recipient names sync automatically — “{contact.trim() || CONTACT_FALLBACK[lang]}” is
+                stored as a placeholder, so a saved template greets whoever you pick next.
+              </div>
+
+              <label className="form-field">
+                <span className="compose-sig-head">
+                  Signature
+                  <label className="compose-sig-toggle">
+                    <input
+                      type="checkbox"
+                      checked={includeSignature}
+                      onChange={(e) => setIncludeSignature(e.target.checked)}
+                    />
+                    Include in email
+                  </label>
+                </span>
+                <textarea
+                  rows={4}
+                  value={signature}
+                  onChange={(e) => setSignature(e.target.value)}
+                  disabled={!includeSignature}
+                />
+              </label>
+            </>
+          )}
 
           <div className="form-field">
             <span>Attachments</span>

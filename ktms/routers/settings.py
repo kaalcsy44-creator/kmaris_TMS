@@ -1097,6 +1097,18 @@ def preview_email_template(body: EmailTemplatePreviewReq):
     }
 
 
+class EmailRenderReq(BaseModel):
+    """작성 화면에서 편집 중인 본문(토큰 치환 끝난 평문)."""
+    text: str = ""
+
+
+@app.post("/api/admin/email/render-preview", dependencies=[Depends(require_token)])
+def render_email_preview(body: EmailRenderReq):
+    """평문 본문 → 발송 HTML 파트와 똑같은 조각. 발송 화면 미리보기가 클라이언트에서
+    따로 렌더하면 실제 메일과 어긋나므로, 서버의 렌더러 하나만 쓴다."""
+    return {"html": text_to_html_fragment(body.text or "")}
+
+
 @app.get("/api/admin/settings/users", dependencies=[Depends(require_token)])
 def settings_users(user: dict = Depends(get_current_user)):
     if user.get("role") != "admin":

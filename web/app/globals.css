@@ -9463,6 +9463,22 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   line-height: 1.45;
   color: #7a8798;
 }
+/* 미리보기 = 서버가 만든 발송용 HTML 조각. 글꼴·크기·여백은 그 조각의 인라인
+   스타일(수신자가 보는 값)이 들고 있으므로, 여기선 메일 창처럼 흰 바탕만 깐다.
+   높이는 편집 모드와 비슷하게 잡아 토글할 때 모달이 튀지 않게 한다. */
+.compose-preview { display: flex; flex-direction: column; gap: 8px; }
+.compose-preview-subj { font-size: 13px; color: var(--ink); }
+.compose-preview-body {
+  background: #fff;
+  border: 1px solid var(--line, #e3e9f2);
+  border-radius: 8px;
+  padding: 14px 16px;
+  min-height: 360px;
+  max-height: 52vh;
+  overflow: auto;
+  word-break: break-word;
+}
+.compose-preview-body > div > :last-child { margin-bottom: 0 !important; }
 /* 푸터: [Clear][템플릿 저장/초기화] ······ [Cancel][Send].
    기본 규약(danger=좌측끝, margin-right:auto)을 템플릿 묶음으로 옮겨 둘을 왼쪽에 나란히 둔다. */
 .pl-modal-body .form-actions.compose-actions .btn.danger { margin-right: 0 !important; }
