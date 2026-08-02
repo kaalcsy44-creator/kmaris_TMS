@@ -9748,6 +9748,57 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   background: transparent;
 }
 
+/* 등록해 둔 CC 주소 — 위 입력칸의 chip 과 헷갈리지 않게 테두리만 있는 옅은 알약으로
+   두고, 고른 것(.on)만 chip 과 같은 파란 배경으로 채운다. */
+.cc-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+.cc-preset {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #d7e2ee;
+  border-radius: 999px;
+  background: #fff;
+  padding-right: 2px;
+}
+.cc-preset.on {
+  border-color: #b9d0f4;
+  background: #e4edfb;
+}
+.cc-preset-pick {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  color: #55637a;
+  padding: 2px 9px;
+  border-radius: 999px;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cc-preset.on .cc-preset-pick { color: #1d4ed8; }
+.cc-preset-pick:hover { color: #1d4ed8; }
+.cc-preset-add {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+.cc-preset-add input {
+  flex: 1 1 150px;
+  min-width: 120px;
+  height: 30px;
+  font-size: 12px;
+}
+.cc-preset-add .btn { padding: 4px 10px; font-size: 12px; }
+
 /* ── 프로젝트 관리번호 표기: 번호(진하고 크게, 컨테이너 색 상속=잘 보임) +
    날짜((yymmdd) 비볼드·1px 작게·회색 유지). 고유 클래스로 기존 .proj-no(회색)와 분리. */
 .pjno { white-space: nowrap; }

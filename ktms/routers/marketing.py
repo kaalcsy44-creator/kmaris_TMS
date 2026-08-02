@@ -1,6 +1,8 @@
 """K-Maris TMS — marketing routes (split from admin_api.py; behavior unchanged)."""
 from __future__ import annotations
 
+import re
+
 from _core import (
     Customer,
     Depends,
@@ -437,6 +439,70 @@ def marketing_email_send(
         s.add(activity)
         s.commit()
         return {"ok": True, "id": activity.id, "sent_date": today}
+    finally:
+        s.close()
+
+
+# ── CC 주소록(자주 쓰는 참조 주소) ──────────────────────────────────────────────
+# 참조로 늘 넣는 주소(내부 영업 계정·대표 메일 등)를 미리 등록해 두고 작성 화면에서
+# 클릭으로 고른다. 팀이 함께 쓰는 한 벌이라 회사 공용 행(user_id=NULL)에 담는다 —
+# 목록 하나 때문에 테이블을 새로 만들 이유가 없어 EmailTemplate.options 를 재사용한다.
+CC_PRESET_DOC_TYPE = "cc_presets"
+_CC_EMAIL_RE = re.compile(r"^[^@\s,;]+@[^@\s,;]+\.[^@\s,;]+$")
+_CC_PRESET_MAX = 50
+
+
+def _cc_preset_rows(s) -> list[dict]:
+    t = (s.query(EmailTemplate)
+         .filter_by(user_id=None, doc_type=CC_PRESET_DOC_TYPE, lang="en").first())
+    out: list[dict] = []
+    for r in ((t.options or {}).get("rows") if t else None) or []:
+        if not isinstance(r, dict):
+            continue
+        email = (r.get("email") or "").strip()
+        if email:
+            out.append({"email": email, "label": (r.get("label") or "").strip()})
+    return out
+
+
+@app.get("/api/admin/marketing/cc-presets", dependencies=[Depends(require_token)])
+def marketing_cc_presets():
+    s = get_session()
+    try:
+        return {"rows": _cc_preset_rows(s)}
+    finally:
+        s.close()
+
+
+@app.put("/api/admin/marketing/cc-presets", dependencies=[Depends(require_token)])
+def save_marketing_cc_presets(rows: List[dict] = Body(default=[], embed=True)):
+    """CC 주소록 저장 — 목록 전체를 통째로 교체한다(추가·삭제 모두 이 경로)."""
+    clean: list[dict] = []
+    seen: set[str] = set()
+    for r in rows or []:
+        if not isinstance(r, dict):
+            continue
+        email = (r.get("email") or "").strip()
+        if not email or email.lower() in seen:
+            continue
+        if not _CC_EMAIL_RE.match(email):
+            raise HTTPException(status_code=400, detail=f"이메일 형식이 아닙니다: {email}")
+        seen.add(email.lower())
+        clean.append({"email": email, "label": (r.get("label") or "").strip()[:60]})
+    if len(clean) > _CC_PRESET_MAX:
+        raise HTTPException(status_code=400, detail=f"CC 주소는 최대 {_CC_PRESET_MAX}개까지 등록할 수 있습니다.")
+    s = get_session()
+    try:
+        t = (s.query(EmailTemplate)
+             .filter_by(user_id=None, doc_type=CC_PRESET_DOC_TYPE, lang="en").first())
+        if not t:
+            t = EmailTemplate(user_id=None, doc_type=CC_PRESET_DOC_TYPE, lang="en")
+            s.add(t)
+        # JSON 컬럼은 새 dict 로 갈아 끼워야 변경이 감지된다(제자리 수정 금지).
+        t.options = {**(t.options or {}), "rows": clean}
+        t.updated_at = datetime.utcnow()
+        s.commit()
+        return {"ok": True, "rows": clean}
     finally:
         s.close()
 

@@ -953,6 +953,18 @@ export function resetMarketingTemplate(kind: "intro" | "brochure", lang: "en" | 
   return del(`/api/admin/marketing/compose-template?kind=${kind}&lang=${lang}`);
 }
 
+// 자주 쓰는 CC 주소록(팀 공용) — 작성 화면에서 클릭으로 골라 넣는다.
+export type CcPreset = { email: string; label: string };
+
+export function fetchCcPresets(): Promise<{ rows: CcPreset[] }> {
+  return get("/api/admin/marketing/cc-presets");
+}
+
+// 목록 전체 교체(추가·삭제 모두 이 경로).
+export function saveCcPresets(rows: CcPreset[]): Promise<{ ok: boolean; rows: CcPreset[] }> {
+  return put("/api/admin/marketing/cc-presets", { rows });
+}
+
 export function sendMarketingEmail(input: {
   to: string;
   subject: string;

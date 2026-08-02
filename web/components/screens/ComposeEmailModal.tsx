@@ -10,7 +10,10 @@ import {
   resetMarketingTemplate,
   renderEmailPreview,
   sendMarketingEmail,
+  fetchCcPresets,
+  saveCcPresets,
   type MarketingAsset,
+  type CcPreset,
 } from "@/lib/api";
 import { useCachedData } from "@/lib/useCachedData";
 import type { CustomerOption, SettingsCustomer } from "@/lib/types";
@@ -75,6 +78,12 @@ export default function ComposeEmailModal({
     fetchMarketingAssets
   );
   const assets = useMemo(() => assetData?.rows ?? [], [assetData]);
+  // 자주 쓰는 CC 주소(팀 공용) — 등록해 두고 클릭으로 골라 넣는다.
+  const { data: ccPresetData, refresh: refreshCcPresets } = useCachedData(
+    "marketing-cc-presets",
+    fetchCcPresets
+  );
+  const ccPresets = useMemo(() => ccPresetData?.rows ?? [], [ccPresetData]);
 
   const [customerId, setCustomerId] = useState<number | "">("");
   const [prospectName, setProspectName] = useState("");
@@ -82,6 +91,10 @@ export default function ComposeEmailModal({
   const [email, setEmail] = useState("");
   const [ccList, setCcList] = useState<string[]>([]);
   const [ccInput, setCcInput] = useState("");
+  // 주소록 편집 모드 + 새 주소 입력값, 저장 중 표시.
+  const [ccEdit, setCcEdit] = useState(false);
+  const [newCc, setNewCc] = useState({ email: "", label: "" });
+  const [ccBusy, setCcBusy] = useState(false);
 
   // 홍보 메일은 회사소개 한 종류다 — 브로슈어는 별도 템플릿 없이 파일만 첨부한다.
   const kind: TplKind = "intro";
@@ -263,6 +276,48 @@ export default function ComposeEmailModal({
     }
   }
 
+  // ── CC 주소록: 등록해 둔 주소를 클릭으로 넣고 뺀다 ─────────────────
+  function toggleCcPreset(addr: string) {
+    setCcList((cur) => (cur.includes(addr) ? cur.filter((x) => x !== addr) : [...cur, addr]));
+  }
+
+  async function persistCcPresets(rows: CcPreset[]) {
+    setCcBusy(true);
+    setErr("");
+    try {
+      await saveCcPresets(rows);
+      await refreshCcPresets();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "CC 주소록을 저장하지 못했습니다.");
+    } finally {
+      setCcBusy(false);
+    }
+  }
+
+  async function addCcPreset() {
+    const email = newCc.email.trim();
+    if (!email) return;
+    if (ccPresets.some((p) => p.email.toLowerCase() === email.toLowerCase())) {
+      setNewCc({ email: "", label: "" });
+      return;
+    }
+    await persistCcPresets([...ccPresets, { email, label: newCc.label.trim() }]);
+    setNewCc({ email: "", label: "" });
+  }
+
+  function removeCcPreset(email: string) {
+    persistCcPresets(ccPresets.filter((p) => p.email !== email));
+  }
+
+  // 지금 CC 칸에 넣은 주소 중 아직 주소록에 없는 것들을 한 번에 등록.
+  const unsavedCc = ccList.filter(
+    (a) => !ccPresets.some((p) => p.email.toLowerCase() === a.toLowerCase())
+  );
+  function saveCurrentCc() {
+    if (!unsavedCc.length) return;
+    persistCcPresets([...ccPresets, ...unsavedCc.map((email) => ({ email, label: "" }))]);
+  }
+
   function toggleAsset(id: number) {
     setAssetIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
   }
@@ -413,7 +468,19 @@ export default function ComposeEmailModal({
             <input value={from} onChange={(e) => setFrom(e.target.value)} />
           </label>
           <div className="form-field">
-            <span>CC (multiple)</span>
+            <span className="compose-sig-head">
+              CC (multiple)
+              <span className="compose-sig-actions">
+                <button
+                  type="button"
+                  className={`chip-btn${ccEdit ? " on" : ""}`}
+                  onClick={() => setCcEdit((v) => !v)}
+                  title="자주 쓰는 CC 주소를 등록·삭제합니다"
+                >
+                  {ccEdit ? "Done" : "Manage"}
+                </button>
+              </span>
+            </span>
             <div className="cc-chips" onClick={() => document.getElementById("cc-input")?.focus()}>
               {ccList.map((addr) => (
                 <span key={addr} className="cc-chip">
@@ -438,6 +505,90 @@ export default function ComposeEmailModal({
                 onKeyDown={onCcKeyDown}
                 onBlur={() => commitCc(ccInput)}
               />
+            </div>
+
+            {/* 등록해 둔 주소 — 클릭하면 위 CC 칸에 들어가고, 다시 누르면 빠진다. */}
+            {ccPresets.length ? (
+              <div className="cc-presets">
+                {ccPresets.map((p) => {
+                  const on = ccList.includes(p.email);
+                  return (
+                    <span key={p.email} className={`cc-preset${on ? " on" : ""}`}>
+                      <button
+                        type="button"
+                        className="cc-preset-pick"
+                        onClick={() => toggleCcPreset(p.email)}
+                        title={p.email}
+                      >
+                        {on ? "✓ " : "+ "}
+                        {p.label || p.email}
+                      </button>
+                      {ccEdit ? (
+                        <button
+                          type="button"
+                          className="cc-chip-x"
+                          disabled={ccBusy}
+                          onClick={() => removeCcPreset(p.email)}
+                          aria-label={`Remove ${p.email} from the address book`}
+                        >
+                          ×
+                        </button>
+                      ) : null}
+                    </span>
+                  );
+                })}
+              </div>
+            ) : null}
+
+            {ccEdit ? (
+              <div className="cc-preset-add">
+                <input
+                  type="email"
+                  placeholder="email@company.com"
+                  value={newCc.email}
+                  onChange={(e) => setNewCc((c) => ({ ...c, email: e.target.value }))}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      addCcPreset();
+                    }
+                  }}
+                />
+                <input
+                  placeholder="표시 이름(선택)"
+                  value={newCc.label}
+                  onChange={(e) => setNewCc((c) => ({ ...c, label: e.target.value }))}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      addCcPreset();
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  className="btn ghost"
+                  disabled={ccBusy || !newCc.email.trim()}
+                  onClick={addCcPreset}
+                >
+                  + Add
+                </button>
+                {unsavedCc.length ? (
+                  <button
+                    type="button"
+                    className="btn ghost"
+                    disabled={ccBusy}
+                    onClick={saveCurrentCc}
+                    title={unsavedCc.join(", ")}
+                  >
+                    현재 CC {unsavedCc.length}건 등록
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+            <div className="compose-hint">
+              자주 쓰는 참조 주소는 Manage 로 등록해 두면 다음부터 클릭 한 번으로 넣을 수
+              있습니다(팀 공용).
             </div>
           </div>
         </div>
