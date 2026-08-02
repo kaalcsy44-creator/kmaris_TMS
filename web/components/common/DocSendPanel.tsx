@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { getToken } from "@/lib/auth";
+import CcField from "@/components/common/CcField";
 
 // 문서 생성(다운로드) + 이메일 미리보기 + 발송(첨부) 공통 패널.
 // 2·4·6단계 상세편집 페이지에서 공유한다. 단계별 API 차이는 콜백(onPreview/onSend/
@@ -74,7 +75,10 @@ export default function DocSendPanel({
   const [format, setFormat] = useState<DocFormat>(formats[0] ?? "pdf");
   const [to, setTo] = useState("");
   const [from, setFrom] = useState("");
-  const [cc, setCc] = useState("");
+  // CC 는 칩(주소 배열)으로 다루고, 서버로는 예전처럼 쉼표 문자열로 넘긴다.
+  // ccPending = 아직 Enter 로 확정하지 않고 입력칸에 남은 글자(발송 시 함께 싣는다).
+  const [ccList, setCcList] = useState<string[]>([]);
+  const [ccPending, setCcPending] = useState("");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [notes, setNotes] = useState("");
@@ -166,6 +170,7 @@ export default function DocSendPanel({
     setMsg(null);
     setErr(null);
     try {
+      const cc = [...ccList, ...(ccPending.trim() ? [ccPending.trim()] : [])].join(", ");
       const r = await onSend({
         to, from, cc, subject, body, notes, signature, includeSignature,
         format, includeDocument: includeDoc, lang, files,
@@ -211,8 +216,9 @@ export default function DocSendPanel({
         err ? <div className="action-err" style={{ marginTop: 8 }}>{err}</div> : null
       ) : (
         <>
-          {/* 주소 3열 → Subject 는 아래 전폭 단독 행(제목이 길어 잘리던 문제). */}
-          <div className="mail-addr-grid">
+          {/* From·수신자는 2열, CC 는 아래 전폭 — 칩과 주소록이 좁은 칸에서 접히지 않게.
+              Subject 는 그 아래 전폭 단독 행(제목이 길어 잘리던 문제). */}
+          <div className="mail-addr-grid two">
             <div className="form-field">
               <label>From (sender)</label>
               <input value={from} onChange={(e) => setFrom(e.target.value)} placeholder="sales@k-maris.com" />
@@ -221,13 +227,18 @@ export default function DocSendPanel({
               <label>Recipient email</label>
               <input value={to} onChange={(e) => setTo(e.target.value)} />
             </div>
-            <div className="form-field">
-              <label>CC</label>
-              <input value={cc} onChange={(e) => setCc(e.target.value)} placeholder="comma-separated (optional)" />
-            </div>
           </div>
           <div className="hint-inline" style={{ marginTop: 2 }}>
             From only changes the sender if it is a verified send-as alias on the SMTP account; otherwise the provider keeps the configured sender.
+          </div>
+          <div style={{ marginTop: 8 }}>
+            <CcField
+              value={ccList}
+              onChange={setCcList}
+              onPendingChange={setCcPending}
+              label="CC"
+              inputId="doc-cc-input"
+            />
           </div>
           {/* 제목 + 언어·초안 재생성을 한 줄에. 셋 다 "이 초안을 어떻게 만들/고칠까"에 속하고,
               따로 두면 폭만 넓은 빈 줄이 하나 더 생긴다. */}
