@@ -105,6 +105,8 @@ export default function ComposeEmailModal({
   const [preview, setPreview] = useState(false);
   const [previewHtml, setPreviewHtml] = useState("");
   const previewSeq = useRef(0);
+  // 서명 칸을 직접 고쳤는지 — 고쳤다면 종류·언어를 바꿔도 그 편집을 덮어쓰지 않는다.
+  const sigDirty = useRef(false);
 
   const custById = useMemo(() => {
     const m = new Map<number, SettingsCustomer>();
@@ -159,7 +161,9 @@ export default function ComposeEmailModal({
         setSavedTpl(d.saved);
         setSubjectTpl(d.subject);
         setBodyTpl(d.body);
-        setSignature((prev) => prev || d.signature);
+        // 서명은 손대기 전까진 항상 서버 값으로 맞춘다 — 그래야 Settings 에서 바꾼
+        // 서명이나 EN↔KR 전환이 그대로 따라온다. 직접 고친 뒤에는 건드리지 않는다.
+        setSignature((prev) => (sigDirty.current ? prev : d.signature));
         drafts.current[`${kind}:${lang}`] = { subject: d.subject, body: d.body, saved: d.saved };
       })
       .catch(() => {});
@@ -484,10 +488,17 @@ export default function ComposeEmailModal({
                 <textarea
                   rows={4}
                   value={signature}
-                  onChange={(e) => setSignature(e.target.value)}
+                  onChange={(e) => {
+                    sigDirty.current = true;
+                    setSignature(e.target.value);
+                  }}
                   disabled={!includeSignature}
                 />
               </label>
+              <div className="compose-hint">
+                Settings → Email Templates → Signature 에 저장한 서명입니다. 여기서 고치면
+                이번 발송에만 적용되며, 표 서명 대신 고친 평문이 나갑니다.
+              </div>
             </>
           )}
 

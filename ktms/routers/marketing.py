@@ -35,6 +35,7 @@ from _core import (
     render_marketing_tokens,
     require_token,
     send_email,
+    SIGNATURE_DOC_TYPE,
     signature_html_for,
     text_to_html_fragment,
     html_document,
@@ -284,13 +285,17 @@ def marketing_compose_defaults(
         tpl = _resolve_email_template(s, user.get("id"), _marketing_doc_type(kind), lang_db)
         saved_subject = tpl.subject_tpl if (tpl and tpl.subject_tpl) else ""
         saved_body = tpl.body_tpl if (tpl and tpl.body_tpl) else ""
+        # 서명은 다른 발송 화면(견적·PO·RFQ)과 같은 것을 쓴다 — Settings 에 저장한
+        # 담당자 서명이 있으면 그것, 없을 때만 홍보 메일 기본 서명.
+        sig_row = _resolve_email_template(s, user.get("id"), SIGNATURE_DOC_TYPE, lang_db)
+        saved_sig = (sig_row.body_tpl or "").strip() if sig_row else ""
     finally:
         s.close()
     return {
         "from": default_from(),
         "subject": saved_subject or intro_email_subject(kind, lang_n),
         "body": saved_body or intro_email_body_tpl(kind, lang_n),
-        "signature": intro_signature(lang_n),
+        "signature": saved_sig or intro_signature(lang_n),
         # 저장된 사용자 템플릿이 있으면 True — 프론트에서 'Reset to default' 노출용.
         "saved": bool(tpl and tpl.user_id and (tpl.subject_tpl or tpl.body_tpl)),
         "smtp_configured": bool(os.getenv("SMTP_USER") and os.getenv("SMTP_PASSWORD")),
