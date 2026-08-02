@@ -9548,10 +9548,15 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   justify-content: space-between;
   gap: 8px;
 }
-.compose-sig-toggle {
+/* 이 모달의 <label> 들은 입력칸 제목이 아니라 체크박스 줄이다. 전역
+   `.form-field label{display:block;font-weight:700}` 이 더 구체적이라 flex 와 gap 이
+   죽어서 글자가 서로 달라붙어 있었다 — 선택자를 맞춰 되살린다. */
+.compose-sig-toggle,
+.form-field label.compose-sig-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
+  margin-bottom: 0;
   font-weight: 400;
   font-size: 12px;
   color: var(--muted, #6b7688);
@@ -9567,14 +9572,18 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   border-radius: 8px;
   padding: 6px;
 }
-.compose-asset {
+.compose-asset,
+.form-field label.compose-asset {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 6px;
+  gap: 10px;
+  padding: 6px 8px;
+  margin-bottom: 0;
   border-radius: 6px;
   cursor: pointer;
   font-size: 13px;
+  font-weight: 400;
+  color: var(--ink);
 }
 .compose-asset:hover { background: var(--page-bg, #f4f7fb); }
 .compose-asset.on { background: #e4edfb; }

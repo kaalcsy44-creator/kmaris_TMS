@@ -314,13 +314,23 @@ export default function ComposeEmailModal({
   // 첨부 미리보기 — PDF·이미지는 브라우저가 새 탭에서 바로 열어 준다.
   function openInTab(url: string) {
     objectUrls.current.push(url);
-    window.open(url, "_blank", "noopener");
+    window.open(url, "_blank");
   }
   async function previewAsset(id: number) {
     setErr("");
+    // 팝업 차단기는 클릭 직후의 window.open 만 허용한다. 파일을 받아온 뒤에 열면
+    // 차단돼 아무 일도 일어나지 않으므로, 빈 탭을 먼저 열고 주소를 나중에 넣는다.
+    const tab = window.open("", "_blank");
+    if (!tab) {
+      setErr("팝업이 차단되어 미리보기를 열지 못했습니다. 이 사이트의 팝업을 허용해 주세요.");
+      return;
+    }
     try {
-      openInTab(await fetchMarketingAssetObjectUrl(id));
+      const url = await fetchMarketingAssetObjectUrl(id);
+      objectUrls.current.push(url);
+      tab.location.href = url;
     } catch (e) {
+      tab.close();
       setErr(e instanceof Error ? e.message : "미리보기를 열지 못했습니다.");
     }
   }
@@ -602,12 +612,16 @@ export default function ComposeEmailModal({
                     />
                     <span className="compose-asset-name">{a.label}</span>
                     <span className="compose-asset-size">{fmtSize(a.size)}</span>
-                    {/* label 안의 button 은 체크박스를 토글하지 않는다(대화형 요소). */}
+                    {/* label 안이라 기본 동작(체크박스 토글)을 막고 미리보기만 연다. */}
                     <button
                       type="button"
                       className="compose-asset-eye"
                       title="새 탭에서 미리보기"
-                      onClick={() => previewAsset(a.id)}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        previewAsset(a.id);
+                      }}
                     >
                       Preview
                     </button>
