@@ -929,13 +929,9 @@ EMAIL_DOC_TYPES: dict[str, dict] = {
         "item_cols": False,
         "marketing_kind": "intro",
     },
-    "marketing_brochure": {
-        "label": "Brochure",
-        "tokens": ["contact", "customer"],
-        "item_cols": False,
-        "marketing_kind": "brochure",
-    },
 }
+# 브로슈어는 별도 템플릿 없이 회사소개 메일에 파일만 첨부하는 방식으로 정리해서,
+# 편집 대상 종류에서 뺐다. 저장된 marketing_brochure 행은 건드리지 않는다(무해).
 
 
 def _email_doc_spec(doc_type: str) -> dict:

@@ -3090,9 +3090,7 @@ const EMAIL_DOC_HINT: Record<string, string> = {
   vendor_rfq:
     "Vendor RFQ 발송 초안(제목·본문)의 기본값입니다. 발송 화면에서는 언제든 다시 편집할 수 있습니다.",
   marketing_intro:
-    "Marketing → Compose Email 의 Company Intro 기본값입니다. 수신자 이름은 {{contact}} 자리에 자동으로 채워집니다.",
-  marketing_brochure:
-    "Marketing → Compose Email 의 Brochure 기본값입니다. 수신자 이름은 {{contact}} 자리에 자동으로 채워집니다.",
+    "Marketing → Compose Email 의 기본값입니다. 수신자 이름은 {{contact}} 자리에 자동으로 채워집니다.",
 };
 
 // 서명은 제목·본문 템플릿이 아니라 구조화 필드라서, 종류 탭에 끼워 넣되 편집기는 따로 둔다.

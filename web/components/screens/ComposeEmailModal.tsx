@@ -83,7 +83,8 @@ export default function ComposeEmailModal({
   const [ccList, setCcList] = useState<string[]>([]);
   const [ccInput, setCcInput] = useState("");
 
-  const [kind, setKind] = useState<TplKind>("intro");
+  // 홍보 메일은 회사소개 한 종류다 — 브로슈어는 별도 템플릿 없이 파일만 첨부한다.
+  const kind: TplKind = "intro";
   const [lang, setLang] = useState<Lang>("en");
   const [from, setFrom] = useState("");
   // 제목·본문은 토큰이 든 '원본'으로 들고 있는다(화면 표시는 renderTokens 로 치환).
@@ -114,7 +115,9 @@ export default function ComposeEmailModal({
   const [sigPreview, setSigPreview] = useState(false);
   const [sigHtml, setSigHtml] = useState("");
   const sigSeq = useRef(0);
-  // 첨부 미리보기로 만든 object URL — 모달을 닫을 때 정리한다.
+  // 첨부 미리보기(모달 안 인라인) — 만든 object URL 은 닫을 때 정리한다.
+  const [filePreview, setFilePreview] =
+    useState<{ name: string; mime: string; url: string } | null>(null);
   const objectUrls = useRef<string[]>([]);
   useEffect(
     () => () => {
@@ -136,8 +139,8 @@ export default function ComposeEmailModal({
   const subject = renderTokens(subjectTpl, contact, selectedName, lang);
   const body = renderTokens(bodyTpl, contact, selectedName, lang);
 
-  // 종류·언어별로 편집 중인 초안을 기억한다 — Intro ↔ Brochure 를 오갈 때 각자
-  // 내용이 살아 있어야 한다(예전엔 첫 로드 뒤 본문이 아예 바뀌지 않는 버그가 있었다).
+  // 언어별로 편집 중인 초안을 기억한다 — EN ↔ KR 을 오갈 때 각자 내용이 살아
+  // 있어야 한다(예전엔 첫 로드 뒤 본문이 아예 바뀌지 않는 버그가 있었다).
   const drafts = useRef<Record<string, { subject: string; body: string; saved: boolean }>>({});
   function stash(subj: string, bd: string, saved = savedTpl) {
     drafts.current[`${kind}:${lang}`] = { subject: subj, body: bd, saved };
@@ -311,26 +314,26 @@ export default function ComposeEmailModal({
     return () => clearTimeout(t);
   }, [sigPreview, signature]);
 
-  // 첨부 미리보기 — PDF·이미지는 브라우저가 새 탭에서 바로 열어 준다.
-  function openInTab(url: string) {
+  // 첨부 미리보기 — 새 탭은 팝업 차단에 걸려 아무 반응도 없어 보이므로, 이 모달
+  // 안에서 연다. PDF·이미지는 브라우저가 그대로 그려 준다.
+  function showPreview(name: string, mime: string, url: string) {
     objectUrls.current.push(url);
-    window.open(url, "_blank");
+    setFilePreview((prev) => {
+      if (prev) URL.revokeObjectURL(prev.url);
+      return { name, mime, url };
+    });
   }
-  async function previewAsset(id: number) {
+  function closeFilePreview() {
+    setFilePreview((prev) => {
+      if (prev) URL.revokeObjectURL(prev.url);
+      return null;
+    });
+  }
+  async function previewAsset(a: MarketingAsset) {
     setErr("");
-    // 팝업 차단기는 클릭 직후의 window.open 만 허용한다. 파일을 받아온 뒤에 열면
-    // 차단돼 아무 일도 일어나지 않으므로, 빈 탭을 먼저 열고 주소를 나중에 넣는다.
-    const tab = window.open("", "_blank");
-    if (!tab) {
-      setErr("팝업이 차단되어 미리보기를 열지 못했습니다. 이 사이트의 팝업을 허용해 주세요.");
-      return;
-    }
     try {
-      const url = await fetchMarketingAssetObjectUrl(id);
-      objectUrls.current.push(url);
-      tab.location.href = url;
+      showPreview(a.label || a.filename, a.mime, await fetchMarketingAssetObjectUrl(a.id));
     } catch (e) {
-      tab.close();
       setErr(e instanceof Error ? e.message : "미리보기를 열지 못했습니다.");
     }
   }
@@ -444,21 +447,6 @@ export default function ComposeEmailModal({
           <div className="compose-section-title">
             Message
             <span className="compose-tpl">
-              <button
-                type="button"
-                className={`chip-btn${kind === "intro" ? " on" : ""}`}
-                onClick={() => setKind("intro")}
-              >
-                Company Intro
-              </button>
-              <button
-                type="button"
-                className={`chip-btn${kind === "brochure" ? " on" : ""}`}
-                onClick={() => setKind("brochure")}
-              >
-                Brochure
-              </button>
-              <span className="compose-tpl-sep" />
               <button
                 type="button"
                 className={`chip-btn${lang === "en" ? " on" : ""}`}
@@ -620,7 +608,7 @@ export default function ComposeEmailModal({
                       onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
-                        previewAsset(a.id);
+                        previewAsset(a);
                       }}
                     >
                       Preview
@@ -661,8 +649,8 @@ export default function ComposeEmailModal({
                     <button
                       type="button"
                       className="compose-asset-eye"
-                      title="새 탭에서 미리보기"
-                      onClick={() => openInTab(URL.createObjectURL(f))}
+                      title="미리보기"
+                      onClick={() => showPreview(f.name, f.type, URL.createObjectURL(f))}
                     >
                       Preview
                     </button>
@@ -676,6 +664,26 @@ export default function ComposeEmailModal({
                   </li>
                 ))}
               </ul>
+            ) : null}
+
+            {filePreview ? (
+              <div className="compose-file-preview">
+                <div className="compose-file-preview-head">
+                  <span className="compose-asset-name">{filePreview.name}</span>
+                  <button type="button" className="compose-file-x" onClick={closeFilePreview}>
+                    ×
+                  </button>
+                </div>
+                {filePreview.mime.startsWith("image/") ? (
+                  <img src={filePreview.url} alt={filePreview.name} />
+                ) : filePreview.mime.includes("pdf") ? (
+                  <iframe src={filePreview.url} title={filePreview.name} />
+                ) : (
+                  <div className="hint-inline" style={{ padding: 12 }}>
+                    이 형식({filePreview.mime || "unknown"})은 브라우저에서 미리보기가 안 됩니다.
+                  </div>
+                )}
+              </div>
             ) : null}
           </div>
         </div>
@@ -697,9 +705,9 @@ export default function ComposeEmailModal({
             className="btn ghost"
             disabled={busy}
             onClick={saveTpl}
-            title={`Save this subject & body as the default for ${
-              kind === "intro" ? "Company Intro" : "Brochure"
-            } · ${lang === "en" ? "EN" : "KR"}`}
+            title={`Save this subject & body as the default · ${
+              lang === "en" ? "EN" : "KR"
+            }`}
           >
             💾 Save as template
           </button>

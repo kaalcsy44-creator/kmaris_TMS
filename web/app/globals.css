@@ -9513,6 +9513,34 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   cursor: pointer;
 }
 .compose-asset-eye:hover { color: #003b75; }
+/* 첨부 미리보기 — 새 탭은 팝업 차단에 걸리므로 모달 안에서 연다. */
+.compose-file-preview {
+  margin-top: 10px;
+  border: 1px solid var(--line, #d7e2ee);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--page-bg, #f4f7fb);
+}
+.compose-file-preview-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+  border-bottom: 1px solid var(--line, #d7e2ee);
+  background: #fff;
+}
+.compose-file-preview iframe,
+.compose-file-preview img {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: #fff;
+}
+.compose-file-preview iframe { height: 420px; }
+.compose-file-preview img { height: auto; max-height: 420px; object-fit: contain; }
 /* 푸터: [Clear][템플릿 저장/초기화] ······ [Cancel][Send].
    기본 규약(danger=좌측끝, margin-right:auto)을 템플릿 묶음으로 옮겨 둘을 왼쪽에 나란히 둔다. */
 .pl-modal-body .form-actions.compose-actions .btn.danger { margin-right: 0 !important; }
