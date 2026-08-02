@@ -8,6 +8,7 @@ import smtplib
 from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.utils import formataddr, parseaddr
 from typing import List, Optional, Tuple
 
 
@@ -21,9 +22,17 @@ def _cfg():
     }
 
 
+# 수신함에 굵게 뜨는 발신자 이름. 서명·본문과 같은 회사명으로 통일한다.
+FROM_DISPLAY_NAME = "K-MARIS Energy & Solutions"
+
+
 def default_from() -> str:
-    """UI 의 From 기본값으로 노출할 발신 주소(SMTP_FROM)."""
-    return _cfg()["from"]
+    """UI 의 From 기본값 — 주소는 SMTP_FROM, 표시 이름은 위 상수로 맞춘다.
+    SMTP_FROM 은 배포 환경에서 직접 넣는 값이라 예전 이름이 남아 있을 수 있어,
+    이름만 코드에서 덮어쓴다(주소를 바꾸면 발송 계정과 어긋난다)."""
+    raw = _cfg()["from"]
+    _, addr = parseaddr(raw)
+    return formataddr((FROM_DISPLAY_NAME, addr)) if addr else raw
 
 
 def email_signature(default: str = "") -> str:
