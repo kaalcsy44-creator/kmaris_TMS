@@ -1,6 +1,7 @@
 """K-Maris TMS — marketing routes (split from admin_api.py; behavior unchanged)."""
 from __future__ import annotations
 
+import json
 import re
 
 from _core import (
@@ -350,9 +351,41 @@ def reset_marketing_template(
         s.close()
 
 
+# 한 번에 보낼 수 있는 수신자 수. 같은 메일을 인사말만 바꿔 한 통씩 보내므로
+# SMTP 계정의 시간당 한도에 걸리지 않을 만큼만 허용한다.
+MAX_BULK_RECIPIENTS = 50
+
+
+def _parse_recipients(raw: str) -> list[dict]:
+    """작성 화면이 보내는 수신자 목록(JSON) → 정규화. 같은 주소는 한 번만 남긴다."""
+    try:
+        data = json.loads(raw or "[]")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="수신자 목록을 읽지 못했습니다.")
+    if not isinstance(data, list):
+        raise HTTPException(status_code=400, detail="수신자 목록 형식이 올바르지 않습니다.")
+    out: list[dict] = []
+    seen: set[str] = set()
+    for r in data:
+        if not isinstance(r, dict):
+            continue
+        email = (r.get("email") or "").strip()
+        if not email or email.lower() in seen:
+            continue
+        seen.add(email.lower())
+        cid = str(r.get("customer_id") or "").strip()
+        out.append({
+            "email": email,
+            "customer_id": int(cid) if cid.isdigit() else None,
+            "prospect_name": (r.get("prospect_name") or "").strip(),
+            "contact_person": (r.get("contact_person") or "").strip(),
+        })
+    return out
+
+
 @app.post("/api/admin/marketing/send", dependencies=[Depends(require_token)])
 def marketing_email_send(
-    to: str = Form(...),
+    to: str = Form(""),
     subject: str = Form(""),
     body: str = Form(""),
     signature: str = Form(""),
@@ -362,42 +395,42 @@ def marketing_email_send(
     customer_id: str = Form(""),
     prospect_name: str = Form(""),
     contact_person: str = Form(""),
+    # 여러 고객에게 한 번에 — [{email, customer_id, prospect_name, contact_person}, …].
+    # 비어 있으면 아래 단건 필드(to/customer_id/…)를 수신자 한 명으로 본다.
+    recipients: str = Form(""),
     lang: str = Form("en"),
     asset_ids: str = Form(""),      # 라이브러리 첨부 id들(쉼표 구분)
     files: List[UploadFile] = File(default=[]),   # 즉석 업로드 첨부
     user: dict = Depends(get_current_user),
 ):
-    """홍보 이메일 발송 — 라이브러리 자료 + 즉석 업로드 첨부. 발송 성공 시
-    MarketingActivity 로그를 자동 생성해 활동 목록에 남긴다."""
-    to = (to or "").strip()
-    if not to:
-        raise HTTPException(status_code=400, detail="수신자 이메일을 입력하세요.")
+    """홍보 이메일 발송 — 라이브러리 자료 + 즉석 업로드 첨부.
+
+    수신자가 여러 명이면 한 통에 몰아 넣지 않고 각자에게 따로 보낸다 — 인사말의
+    {{contact}}·{{customer}} 를 그 사람 이름으로 치환해야 하고, 서로의 주소가
+    수신함에 노출되어서도 안 되기 때문이다. 발송 성공한 수신자마다
+    MarketingActivity 로그를 남긴다(한 명이 실패해도 나머지는 그대로 발송)."""
+    recips = _parse_recipients(recipients)
+    if not recips:
+        to = (to or "").strip()
+        if not to:
+            raise HTTPException(status_code=400, detail="수신자 이메일을 입력하세요.")
+        cid = (customer_id or "").strip()
+        recips = [{
+            "email": to,
+            "customer_id": int(cid) if cid.isdigit() else None,
+            "prospect_name": (prospect_name or "").strip(),
+            "contact_person": (contact_person or "").strip(),
+        }]
+    if len(recips) > MAX_BULK_RECIPIENTS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"한 번에 최대 {MAX_BULK_RECIPIENTS}명까지 보낼 수 있습니다(현재 {len(recips)}명).",
+        )
 
     s = get_session()
     try:
-        # 템플릿 토큰 치환 — 작성 화면이 이미 치환해 보내지만, 저장된 템플릿을 그대로
-        # 실어 보내는 경로가 생겨도 {{contact}} 가 고객에게 나가지 않도록 여기서 한 번 더.
-        cid_n = int(customer_id) if (customer_id or "").strip().isdigit() else None
-        cust_name = (prospect_name or "").strip()
-        if cid_n:
-            c = s.query(Customer).filter_by(id=cid_n).first()
-            if c:
-                cust_name = c.name or cust_name
-        subject = render_marketing_tokens(subject, contact_person, cust_name, lang)
-        body = render_marketing_tokens(body, contact_person, cust_name, lang)
-
-        # 최종 본문 = 본문 + (서명 포함 시 서명). HTML 파트는 저장된 표 서명을 그대로
-        # 쓰는 경우에만 따로 조립하고, 서명을 손댔으면 평문 그대로 렌더되게 둔다.
-        final_body = body or ""
-        sig_html = None
-        if include_signature and (signature or "").strip():
-            final_body = f"{final_body.rstrip()}\n\n{signature.strip()}\n"
-            sig_html = signature_html_for(s, user.get("id"), signature)
-        final_html = (
-            html_document(text_to_html_fragment(body or "") + sig_html) if sig_html else None
-        )
-
-        # 첨부 조립: 라이브러리 자료 → 즉석 업로드 순
+        # 첨부 조립: 라이브러리 자료 → 즉석 업로드 순. 수신자마다 다시 읽지 않도록
+        # 한 번만 만들어 두고 모든 메일에 같은 바이트를 붙인다.
         attachments: list[tuple[str, bytes]] = []
         wanted_ids = [int(x) for x in (asset_ids or "").split(",") if x.strip().isdigit()]
         if wanted_ids:
@@ -410,35 +443,82 @@ def marketing_email_send(
             if data:
                 attachments.append((f.filename or "attachment", data))
 
-        sent = send_email(
-            to=to,
-            subject=subject or "",
-            body=final_body,
-            html_body=final_html,
-            attachments=attachments,
-            cc=(cc or "").strip(),
-            from_addr=(from_email or "").strip(),
-        )
-        if not sent:
-            raise HTTPException(status_code=400, detail="이메일 발송 실패 — SMTP 설정 또는 서버 상태를 확인하세요.")
+        # 표 서명 HTML 은 수신자와 무관하므로 한 번만 만든다(서명을 손댔으면 None).
+        sig_html = (signature_html_for(s, user.get("id"), signature)
+                    if include_signature and (signature or "").strip() else None)
 
-        # 발송 성공 → 마케팅 활동 로그 자동 생성(표에 즉시 반영)
         today = (datetime.utcnow() + timedelta(hours=9)).strftime("%Y-%m-%d")
-        activity = MarketingActivity(
-            customer_id=cid_n,
-            prospect_name=(prospect_name or "").strip(),
-            contact_person=(contact_person or "").strip(),
-            recipient_email=to,
-            activity_date=today,
-            channel="Email",
-            activity_type="Intro email",
-            subject=subject or "",
-            notes="홍보 이메일 발송" + (f" (첨부 {len(attachments)}건)" if attachments else ""),
-            owner_id=user.get("id") or None,
-        )
-        s.add(activity)
+        cc_addrs = (cc or "").strip()
+        from_addr = (from_email or "").strip()
+        note = "홍보 이메일 발송" + (f" (첨부 {len(attachments)}건)" if attachments else "")
+        first_id = None
+        sent_emails: list[str] = []
+        failed: list[str] = []
+
+        for r in recips:
+            # 템플릿 토큰 치환 — 작성 화면이 이미 치환해 보내지만, 저장된 템플릿을 그대로
+            # 실어 보내는 경로가 생겨도 {{contact}} 가 고객에게 나가지 않도록 여기서 한 번 더.
+            cust_name = r["prospect_name"]
+            if r["customer_id"]:
+                c = s.query(Customer).filter_by(id=r["customer_id"]).first()
+                if c:
+                    cust_name = c.name or cust_name
+            subj_r = render_marketing_tokens(subject, r["contact_person"], cust_name, lang)
+            body_r = render_marketing_tokens(body, r["contact_person"], cust_name, lang)
+
+            # 최종 본문 = 본문 + (서명 포함 시 서명). HTML 파트는 저장된 표 서명을 그대로
+            # 쓰는 경우에만 따로 조립하고, 서명을 손댔으면 평문 그대로 렌더되게 둔다.
+            final_body = body_r or ""
+            if include_signature and (signature or "").strip():
+                final_body = f"{final_body.rstrip()}\n\n{signature.strip()}\n"
+            final_html = (
+                html_document(text_to_html_fragment(body_r or "") + sig_html) if sig_html else None
+            )
+
+            ok = send_email(
+                to=r["email"],
+                subject=subj_r or "",
+                body=final_body,
+                html_body=final_html,
+                attachments=attachments,
+                cc=cc_addrs,
+                from_addr=from_addr,
+            )
+            if not ok:
+                failed.append(r["email"])
+                continue
+
+            # 발송 성공 → 마케팅 활동 로그 자동 생성(표에 즉시 반영)
+            activity = MarketingActivity(
+                customer_id=r["customer_id"],
+                prospect_name=r["prospect_name"],
+                contact_person=r["contact_person"],
+                recipient_email=r["email"],
+                activity_date=today,
+                channel="Email",
+                activity_type="Intro email",
+                subject=subj_r or "",
+                notes=note,
+                owner_id=user.get("id") or None,
+            )
+            s.add(activity)
+            s.flush()
+            first_id = first_id or activity.id
+            sent_emails.append(r["email"])
+
         s.commit()
-        return {"ok": True, "id": activity.id, "sent_date": today}
+        if not sent_emails:
+            raise HTTPException(
+                status_code=400,
+                detail="이메일 발송 실패 — SMTP 설정 또는 서버 상태를 확인하세요.",
+            )
+        return {
+            "ok": True,
+            "id": first_id,
+            "sent_date": today,
+            "sent": sent_emails,
+            "failed": failed,
+        }
     finally:
         s.close()
 

@@ -965,8 +965,18 @@ export function saveCcPresets(rows: CcPreset[]): Promise<{ ok: boolean; rows: Cc
   return put("/api/admin/marketing/cc-presets", { rows });
 }
 
+// 수신자 한 명 = 메일 한 통. 여러 명을 주면 서버가 인사말({{contact}})을 각자
+// 이름으로 바꿔 따로 보낸다(서로의 주소는 노출되지 않는다).
+export type MarketingRecipient = {
+  email: string;
+  customer_id: number | null;
+  prospect_name: string;
+  contact_person: string;
+};
+
 export function sendMarketingEmail(input: {
   to: string;
+  recipients?: MarketingRecipient[];
   subject: string;
   body: string;
   signature?: string;
@@ -979,9 +989,16 @@ export function sendMarketingEmail(input: {
   lang?: "en" | "ko";
   assetIds?: number[];
   files?: File[];
-}): Promise<{ ok: boolean; id: number; sent_date: string }> {
+}): Promise<{
+  ok: boolean;
+  id: number;
+  sent_date: string;
+  sent: string[];
+  failed: string[];
+}> {
   const fd = new FormData();
   fd.append("to", input.to);
+  fd.append("recipients", JSON.stringify(input.recipients ?? []));
   fd.append("subject", input.subject ?? "");
   fd.append("body", input.body ?? "");
   fd.append("signature", input.signature ?? "");

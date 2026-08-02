@@ -59,6 +59,21 @@ function toTokens(text: string, contact: string, customer: string, lang: Lang): 
   return out;
 }
 
+// 수신자 한 명 = 메일 한 통. customerId 가 없으면 미등록(잠정) 고객이다.
+type Recipient = {
+  key: string;
+  customerId: number | null;
+  name: string;      // 회사명(등록 고객) 또는 잠정사 이름
+  contact: string;   // 인사말에 들어갈 담당자 이름
+  email: string;
+};
+
+let recipSeq = 0;
+function newKey(): string {
+  recipSeq += 1;
+  return `r${recipSeq}`;
+}
+
 // Promotional / company-intro email composer. Left: recipient info. Right: content.
 export default function ComposeEmailModal({
   customers,
@@ -77,10 +92,11 @@ export default function ComposeEmailModal({
   );
   const assets = useMemo(() => assetData?.rows ?? [], [assetData]);
 
-  const [customerId, setCustomerId] = useState<number | "">("");
-  const [prospectName, setProspectName] = useState("");
-  const [contact, setContact] = useState("");
-  const [email, setEmail] = useState("");
+  // 수신자 목록 — 한 명이면 예전과 같고, 여러 명이면 인사말만 각자 이름으로 바꿔
+  // 한 통씩 따로 나간다(서로의 주소는 보이지 않는다).
+  const [recips, setRecips] = useState<Recipient[]>([]);
+  // 미등록(잠정) 고객을 직접 넣을 때 쓰는 입력 줄.
+  const [draft, setDraft] = useState({ name: "", contact: "", email: "" });
   const [ccList, setCcList] = useState<string[]>([]);
   // 아직 Enter 로 확정하지 않고 CC 입력칸에 남아 있는 글자 — 바로 Send 를 눌러도
   // 그 주소가 빠지지 않게 발송 때 함께 싣는다.
@@ -135,8 +151,11 @@ export default function ComposeEmailModal({
     return m;
   }, [fullCustomers]);
 
-  const selectedName =
-    customerId === "" ? prospectName : custById.get(customerId)?.name ?? "";
+  // 제목·본문 화면 표시는 첫 번째 수신자 기준 — 나머지 수신자에게는 서버가 각자
+  // 이름으로 다시 치환해 보낸다(미리보기는 "첫 수신자가 받을 모습"이다).
+  const lead = recips[0];
+  const contact = lead?.contact ?? "";
+  const selectedName = lead?.name ?? "";
 
   // 화면에 보이는 값 = 원본 템플릿에 현재 수신자를 끼워 넣은 결과.
   const subject = renderTokens(subjectTpl, contact, selectedName, lang);
@@ -233,17 +252,51 @@ export default function ComposeEmailModal({
     }
   }
 
-  function pickCustomer(id: number | "") {
-    setCustomerId(id);
-    if (id !== "") {
-      const c = custById.get(id);
-      if (c) {
-        setProspectName("");
-        setContact(c.contact || "");
-        setEmail(c.email || "");
-      }
-    }
+  // ── 수신자 목록 ────────────────────────────────────────────────────
+  // 드롭다운은 '고르는' 칸이 아니라 '추가하는' 칸이다 — 고르면 바로 목록에 들어간다.
+  function addCustomer(id: number | "") {
+    if (id === "") return;
+    const c = custById.get(id);
+    if (!c) return;
+    setErr("");
+    setRecips((cur) => {
+      // 같은 담당자(고객 레코드)를 두 번 넣지 않는다.
+      if (cur.some((r) => r.customerId === id)) return cur;
+      return [...cur, {
+        key: newKey(),
+        customerId: id,
+        name: c.name || "",
+        contact: c.contact || "",
+        email: c.email || "",
+      }];
+    });
   }
+
+  function addProspect() {
+    const email = draft.email.trim();
+    if (!email) return;
+    setErr("");
+    setRecips((cur) => [...cur, {
+      key: newKey(),
+      customerId: null,
+      name: draft.name.trim(),
+      contact: draft.contact.trim(),
+      email,
+    }]);
+    setDraft({ name: "", contact: "", email: "" });
+  }
+
+  function editRecip(key: string, patch: Partial<Recipient>) {
+    setRecips((cur) => cur.map((r) => (r.key === key ? { ...r, ...patch } : r)));
+  }
+
+  function removeRecip(key: string) {
+    setRecips((cur) => cur.filter((r) => r.key !== key));
+  }
+
+  // 보낼 수 있는 상태인지 — 주소가 빈 줄이 하나라도 있으면 막는다.
+  const missingEmail = recips.some((r) => !r.email.trim());
+  const canSend = recips.length > 0 && !missingEmail;
 
   function toggleAsset(id: number) {
     setAssetIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
@@ -321,29 +374,49 @@ export default function ComposeEmailModal({
   }
 
   async function send() {
-    if (!email.trim()) {
-      setErr("Enter a recipient email.");
+    if (!recips.length) {
+      setErr("수신자를 한 명 이상 추가하세요.");
+      return;
+    }
+    if (missingEmail) {
+      setErr("이메일 주소가 비어 있는 수신자가 있습니다.");
+      return;
+    }
+    // 여러 명에게 나가는 건 되돌릴 수 없으니 한 번 확인한다.
+    if (recips.length > 1 && !confirm(`${recips.length}명에게 각각 개별 발송합니다. 계속할까요?`)) {
       return;
     }
     const cc = [...ccList, ...(ccInput.trim() ? [ccInput.trim()] : [])].join(", ");
     setBusy(true);
     setErr("");
     try {
-      await sendMarketingEmail({
-        to: email.trim(),
-        subject,
-        body,
+      const r = await sendMarketingEmail({
+        to: recips[0].email.trim(),
+        recipients: recips.map((x) => ({
+          email: x.email.trim(),
+          customer_id: x.customerId,
+          prospect_name: x.customerId ? "" : x.name.trim(),
+          contact_person: x.contact.trim(),
+        })),
+        // 제목·본문은 토큰이 든 원본을 보낸다 — 수신자 이름 치환은 서버가 각자에게 한다.
+        subject: subjectTpl,
+        body: bodyTpl,
         signature,
         includeSignature,
         cc,
         from,
-        customerId: customerId === "" ? null : customerId,
-        prospectName,
-        contactPerson: contact,
         lang,
         assetIds,
         files,
       });
+      const failed = r.failed ?? [];
+      if (failed.length) {
+        // 보낸 사람은 목록에서 빼고 실패한 사람만 남긴다 — 그대로 다시 누르면 재시도.
+        const done = new Set((r.sent ?? []).map((e) => e.toLowerCase()));
+        setRecips((cur) => cur.filter((x) => !done.has(x.email.trim().toLowerCase())));
+        setErr(`${(r.sent ?? []).length}건 발송, ${failed.length}건 실패: ${failed.join(", ")}`);
+        return;
+      }
       onSent();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Failed to send.");
@@ -364,32 +437,102 @@ export default function ComposeEmailModal({
       <div className="compose-split">
         {/* ── Left: recipient info ───────────────────────────── */}
         <div className="compose-col">
-          <div className="compose-section-title">Recipient</div>
+          <div className="compose-section-title">
+            Recipients
+            {recips.length ? <span className="recip-count">{recips.length}</span> : null}
+          </div>
           <div className="project-select">
             <label>Customer (registered)</label>
-            {/* 같은 회사가 담당자 수만큼 나오므로 담당자 이름을 함께 보여준다. */}
+            {/* 고르면 바로 아래 목록에 추가된다(여러 명 선택 가능). 같은 회사가 담당자
+                수만큼 나오므로 담당자 이름을 함께 보여준다. */}
             <CustomerSelect
-              value={customerId}
+              value=""
               options={customers}
-              onChange={pickCustomer}
-              emptyLabel="— Prospect (not registered) —"
+              onChange={addCustomer}
+              emptyLabel="+ 고객을 골라 목록에 추가"
               showContact
             />
           </div>
-          {customerId === "" ? (
-            <label className="form-field">
-              <span>Prospect name</span>
-              <input value={prospectName} onChange={(e) => setProspectName(e.target.value)} />
-            </label>
-          ) : null}
-          <label className="form-field">
-            <span>Contact</span>
-            <input value={contact} onChange={(e) => setContact(e.target.value)} />
-          </label>
-          <label className="form-field">
-            <span>Email *</span>
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-          </label>
+
+          {recips.length ? (
+            <ul className="recip-list">
+              {recips.map((r, i) => (
+                <li key={r.key} className={`recip-row${r.email.trim() ? "" : " bad"}`}>
+                  <div className="recip-head">
+                    <span className="recip-name">
+                      {r.name || (r.customerId ? "(unnamed)" : "(미등록 고객)")}
+                    </span>
+                    {i === 0 ? <span className="recip-lead">미리보기 기준</span> : null}
+                    <button
+                      type="button"
+                      className="cc-chip-x"
+                      onClick={() => removeRecip(r.key)}
+                      aria-label={`Remove ${r.email || r.name}`}
+                    >
+                      ×
+                    </button>
+                  </div>
+                  <div className="recip-fields">
+                    <input
+                      value={r.contact}
+                      placeholder="담당자 (Dear …)"
+                      onChange={(e) => editRecip(r.key, { contact: e.target.value })}
+                    />
+                    <input
+                      type="email"
+                      value={r.email}
+                      placeholder="email@company.com"
+                      onChange={(e) => editRecip(r.key, { email: e.target.value })}
+                    />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="hint-inline" style={{ margin: "6px 0" }}>
+              위에서 고객을 고르거나, 아래에 직접 입력해 수신자를 추가하세요.
+            </div>
+          )}
+
+          {/* 미등록(잠정) 고객 직접 추가 */}
+          <div className="recip-add">
+            <input
+              value={draft.name}
+              placeholder="회사명 (미등록)"
+              onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
+            />
+            <input
+              value={draft.contact}
+              placeholder="담당자"
+              onChange={(e) => setDraft((d) => ({ ...d, contact: e.target.value }))}
+            />
+            <input
+              type="email"
+              value={draft.email}
+              placeholder="email@company.com"
+              onChange={(e) => setDraft((d) => ({ ...d, email: e.target.value }))}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  addProspect();
+                }
+              }}
+            />
+            <button
+              type="button"
+              className="btn ghost"
+              disabled={!draft.email.trim()}
+              onClick={addProspect}
+            >
+              + Add
+            </button>
+          </div>
+          <div className="compose-hint">
+            수신자가 여러 명이면 한 통에 묶지 않고 <b>각자에게 따로</b> 보냅니다 — 인사말의
+            이름(Dear …)도 각 담당자 이름으로 바뀝니다. 다른 수신자 주소는 서로 보이지
+            않습니다. CC 주소는 메일마다 함께 나갑니다.
+          </div>
+
           <label className="form-field">
             <span>From</span>
             <input value={from} onChange={(e) => setFrom(e.target.value)} />
@@ -486,6 +629,9 @@ export default function ComposeEmailModal({
               <div className="compose-hint">
                 Recipient names sync automatically — “{contact.trim() || CONTACT_FALLBACK[lang]}” is
                 stored as a placeholder, so a saved template greets whoever you pick next.
+                {recips.length > 1
+                  ? ` 지금은 ${recips.length}명이라 화면에는 첫 번째 수신자 이름으로 보이고, 나머지는 각자 이름으로 나갑니다.`
+                  : ""}{" "}
                 굵게는 <code>**텍스트**</code> 로 표시됩니다(선택 후 B 또는 Ctrl+B).
               </div>
 
@@ -646,8 +792,12 @@ export default function ComposeEmailModal({
       </div>
 
       <div className="form-actions compose-actions">
-        <button className="btn primary" disabled={busy || !email.trim()} onClick={send}>
-          {busy ? "Sending…" : "Send"}
+        <button className="btn primary" disabled={busy || !canSend} onClick={send}>
+          {busy
+            ? "Sending…"
+            : recips.length > 1
+              ? `Send to ${recips.length}`
+              : "Send"}
         </button>
         <button className="btn" disabled={busy} onClick={onClose}>
           Cancel
