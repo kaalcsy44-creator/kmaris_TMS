@@ -9402,15 +9402,27 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   .email-tpl-split .email-tpl-preview { position: static; max-height: none; }
 }
 .email-tpl-preview-subj { font-size: 13px; margin: 6px 0 8px; }
+/* 미리보기 본문 = 서버가 만든 발송용 HTML 조각. 글꼴·크기·여백은 그 조각의 인라인
+   스타일이 들고 있으므로(수신자가 보는 값 그대로) 여기선 메일 클라이언트처럼
+   흰 바탕만 깔아 준다. */
 .email-tpl-preview-body {
-  white-space: pre-wrap;
   word-break: break-word;
+  margin: 0;
+  background: #ffffff;
+  border-radius: 8px;
+  padding: 12px 14px;
+  overflow-x: auto;
+}
+.email-tpl-preview-body > div > :last-child { margin-bottom: 0 !important; }
+/* body_html 이 없는 구버전 응답용 평문 폴백. */
+.email-tpl-preview-body.plain {
+  white-space: pre-wrap;
   font-family: var(--mono);
   font-size: 13px;
   line-height: 1.55;
-  margin: 0;
   color: var(--ink);
-  overflow-x: auto;
+  background: none;
+  padding: 0;
 }
 
 /* ── 홍보 이메일 작성 모달(좌: 수신정보 / 우: 메일내용) ─────────────────────────── */

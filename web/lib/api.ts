@@ -1149,7 +1149,8 @@ export function previewEmailTemplate(body: {
   subject_tpl: string;
   body_tpl: string;
   options: { item_cols: string[] };
-}): Promise<{ subject: string; body: string }> {
+  // body_html = 실제 발송 HTML 파트와 같은 렌더 결과(수신자가 보는 모습)
+}): Promise<{ subject: string; body: string; body_html?: string }> {
   return post("/api/admin/settings/email-templates/preview", body);
 }
 

@@ -3094,7 +3094,8 @@ function EmailTemplatesTab() {
   const [body, setBody] = useState("");
   const [cols, setCols] = useState<string[]>([]);
   const [customized, setCustomized] = useState(false);
-  const [preview, setPreview] = useState<{ subject: string; body: string } | null>(null);
+  const [preview, setPreview] =
+    useState<{ subject: string; body: string; body_html?: string } | null>(null);
   const [previewing, setPreviewing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -3338,7 +3339,16 @@ function EmailTemplatesTab() {
           {preview ? (
             <>
               <div className="email-tpl-preview-subj"><b>Subject:</b> {preview.subject}</div>
-              <pre className="email-tpl-preview-body">{preview.body}</pre>
+              {/* 서버가 발송용 HTML 파트와 같은 렌더러로 만든 조각 — 수신자가 보는
+                  그대로다. 구버전 응답(body_html 없음)에서는 평문으로 되돌아간다. */}
+              {preview.body_html ? (
+                <div
+                  className="email-tpl-preview-body"
+                  dangerouslySetInnerHTML={{ __html: preview.body_html }}
+                />
+              ) : (
+                <pre className="email-tpl-preview-body plain">{preview.body}</pre>
+              )}
             </>
           ) : (
             <div className="muted">Rendering…</div>

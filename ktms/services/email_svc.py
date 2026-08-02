@@ -1,5 +1,6 @@
 """Simple SMTP email sender with PDF attachment support."""
 from __future__ import annotations
+import html as html_mod
 import json
 import os
 import re
@@ -38,6 +39,132 @@ def email_signature(default: str = "") -> str:
         return default
 
 
+# ── 본문 텍스트 → HTML 렌더 ──────────────────────────────────────────────────
+# 메일을 text/plain 으로만 보내면 글꼴·크기를 수신 클라이언트가 제 설정대로 그린다
+# (Outlook 은 '일반 텍스트 글꼴' 설정을 쓰기 때문에 작고 고정폭으로 보인다). 발신자가
+# 타이포를 지정하려면 HTML 파트가 필요해서, 저장된 평문 본문을 발송 직전에 감싼다.
+# 본문 저장 포맷은 계속 평문이고, text/plain 파트도 그대로 함께 보낸다.
+EMAIL_FONT_STACK = (
+    "Arial, Helvetica, 'Malgun Gothic', 'Apple SD Gothic Neo', "
+    "'Noto Sans KR', sans-serif"
+)
+EMAIL_BODY_STYLE = (
+    f"font-family:{EMAIL_FONT_STACK};font-size:15px;line-height:1.6;"
+    "color:#222222;max-width:640px;"
+)
+_LINK_STYLE = "color:#1a5fb4;"
+# 링크 인식: URL(https://, www.) 과 메일주소. 이미 escape 된 텍스트 위에서 돌린다.
+_LINK_RE = re.compile(
+    r"(https?://[^\s<>\"']+|www\.[^\s<>\"']+|[\w.+-]+@[\w-]+\.[\w.-]*\w)"
+)
+# 목록으로 볼 글머리표. 대시(–, —)는 문장 첫머리 강조로도 쓰여서 제외한다
+# (예: "— KTMS 자동 발송" 같은 꼬리말이 목록으로 잡히지 않게).
+_BULLET_RE = re.compile(r"^\s*[-•*]\s+(.*)$")
+# 공백을 여러 개 넣어 열을 맞췄거나(예: "Vessel        : MV SAMPLE") 괘선을 그린
+# 블록(Vendor RFQ 의 ITEM LIST)은 비례 글꼴로 옮기면 정렬이 무너진다. 이런 블록만
+# 고정폭으로 남겨 원래 모양을 지킨다.
+_PREFORMATTED_RE = re.compile(r"\S {3,}\S|[─-╿]")  # 정렬 공백 | 괘선
+_PRE_STYLE = (
+    "margin:0 0 14px;font-family:Consolas,'Courier New',monospace;"
+    "font-size:14px;line-height:1.5;white-space:pre-wrap;"
+)
+
+
+def _linkify(text: str) -> str:
+    def repl(m: "re.Match[str]") -> str:
+        token = m.group(0)
+        # 문장 끝 부호가 링크에 딸려 들어가지 않게 뒤로 뺀다. ';' 는 &amp; 같은
+        # escape 시퀀스를 깨뜨리므로 대상에서 제외한다.
+        trail = ""
+        while token and token[-1] in ".,)]}!?":
+            trail = token[-1] + trail
+            token = token[:-1]
+        if not token:
+            return trail
+        if token.startswith("www."):
+            href = "https://" + token
+        elif "@" in token and not token.startswith("http"):
+            href = "mailto:" + token
+        else:
+            href = token
+        return f'<a href="{href}" style="{_LINK_STYLE}">{token}</a>{trail}'
+
+    return _LINK_RE.sub(repl, text)
+
+
+def _inline_html(line: str) -> str:
+    """한 줄을 HTML 로 — escape 후 링크화, 들여쓰기 공백 보존."""
+    esc = html_mod.escape(line.rstrip(), quote=False)
+    indent = len(esc) - len(esc.lstrip(" "))
+    return "&nbsp;" * indent + _linkify(esc.lstrip(" "))
+
+
+def text_to_html_fragment(text: str) -> str:
+    """평문 본문 → HTML 조각(<div>). 빈 줄은 문단 구분, '- ' 로 시작하는 줄은
+    목록으로 묶는다. 미리보기와 실제 발송이 같은 결과를 내도록 이 함수 하나만 쓴다."""
+    lines = (text or "").replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    blocks: List[str] = []
+    para: List[str] = []
+    items: List[str] = []
+
+    def flush_para() -> None:
+        if not para:
+            return
+        if any(_PREFORMATTED_RE.search(ln) for ln in para):
+            joined = "<br>".join(
+                _linkify(html_mod.escape(ln.rstrip(), quote=False)) for ln in para
+            )
+            blocks.append(f'<pre style="{_PRE_STYLE}">{joined}</pre>')
+        else:
+            blocks.append(
+                '<p style="margin:0 0 14px;">'
+                + "<br>".join(_inline_html(ln) for ln in para)
+                + "</p>"
+            )
+        para.clear()
+
+    def flush_items() -> None:
+        if items:
+            lis = "".join(
+                f'<li style="margin:0 0 4px;">{it}</li>' for it in items
+            )
+            blocks.append(
+                '<ul style="margin:0 0 14px;padding-left:22px;">' + lis + "</ul>"
+            )
+            items.clear()
+
+    for raw in lines:
+        if not raw.strip():
+            flush_para()
+            flush_items()
+            continue
+        m = _BULLET_RE.match(raw)
+        if m:
+            flush_para()
+            items.append(_inline_html(m.group(1)))
+        else:
+            flush_items()
+            para.append(raw)   # 블록 전체를 보고 고정폭 여부를 정하므로 원문 그대로 모은다
+    flush_para()
+    flush_items()
+
+    return f'<div style="{EMAIL_BODY_STYLE}">' + "".join(blocks) + "</div>"
+
+
+def text_to_html(text: str) -> str:
+    """평문 본문 → 발송용 HTML 문서 전체."""
+    return (
+        "<!DOCTYPE html><html><head>"
+        '<meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width, initial-scale=1">'
+        "</head>"
+        '<body style="margin:0;padding:0;background:#ffffff;'
+        '-webkit-text-size-adjust:100%;">'
+        + text_to_html_fragment(text)
+        + "</body></html>"
+    )
+
+
 def send_email(
     to: str,
     subject: str,
@@ -45,6 +172,7 @@ def send_email(
     attachments: Optional[List[Tuple[str, bytes]]] = None,
     cc: str = "",
     from_addr: str = "",
+    html_body: Optional[str] = None,
 ) -> bool:
     """
     Send an email via SMTP.
@@ -66,19 +194,28 @@ def send_email(
     to_list = _addrs(to)
     cc_list = _addrs(cc)
 
-    msg = MIMEMultipart()
+    # 본문은 text/plain + text/html 두 벌(multipart/alternative)로 보낸다. 첨부가
+    # 있으면 그 alternative 를 multipart/mixed 안에 넣어야 한다 — 평평하게 붙이면
+    # 일부 클라이언트가 본문을 첨부로 취급한다.
+    alt = MIMEMultipart("alternative")
+    alt.attach(MIMEText(body, "plain", "utf-8"))
+    alt.attach(MIMEText(html_body or text_to_html(body), "html", "utf-8"))
+
+    if attachments:
+        msg: MIMEMultipart = MIMEMultipart("mixed")
+        msg.attach(alt)
+        for filename, data in attachments:
+            part = MIMEApplication(data, Name=filename)
+            part["Content-Disposition"] = f'attachment; filename="{filename}"'
+            msg.attach(part)
+    else:
+        msg = alt
+
     msg["From"] = sender
     msg["To"] = ", ".join(to_list)
     msg["Subject"] = subject
     if cc_list:
         msg["Cc"] = ", ".join(cc_list)
-
-    msg.attach(MIMEText(body, "plain", "utf-8"))
-
-    for filename, data in (attachments or []):
-        part = MIMEApplication(data, Name=filename)
-        part["Content-Disposition"] = f'attachment; filename="{filename}"'
-        msg.attach(part)
 
     try:
         with smtplib.SMTP(cfg["host"], cfg["port"]) as server:

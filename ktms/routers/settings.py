@@ -70,6 +70,7 @@ from _core import (
     intro_email_subject,
     intro_email_body_tpl,
     render_marketing_tokens,
+    text_to_html_fragment,
 )
 from pydantic import BaseModel
 from sqlalchemy import func
@@ -1071,7 +1072,9 @@ def put_email_signature(body: EmailSignatureSave, user: dict = Depends(get_curre
 
 @app.post("/api/admin/settings/email-templates/preview", dependencies=[Depends(require_token)])
 def preview_email_template(body: EmailTemplatePreviewReq):
-    """미저장 템플릿을 샘플 데이터로 렌더 — 편집 중 실시간 미리보기용."""
+    """미저장 템플릿을 샘플 데이터로 렌더 — 편집 중 실시간 미리보기용.
+    body_html 은 실제 발송 HTML 파트와 같은 렌더러를 태운 결과라, 미리보기가 곧
+    수신자가 보게 될 모습이다."""
     spec = _email_doc_spec(body.doc_type)
     kind = spec.get("marketing_kind")
     if kind:
@@ -1080,15 +1083,18 @@ def preview_email_template(body: EmailTemplatePreviewReq):
         d = _email_tpl_defaults(body.doc_type, lang)
         contact = "조예빈 부장" if lang == "ko" else "Wu Sheng"
         customer = "SENDA group"
-        return {
-            "subject": render_marketing_tokens(
-                body.subject_tpl or d["subject_tpl"], contact, customer, lang_n),
-            "body": render_marketing_tokens(
-                body.body_tpl or d["body_tpl"], contact, customer, lang_n),
-        }
-    subject, mail_body = preview_vendor_rfq_template(
-        body.subject_tpl, body.body_tpl, body.options, body.lang)
-    return {"subject": subject, "body": mail_body}
+        subject = render_marketing_tokens(
+            body.subject_tpl or d["subject_tpl"], contact, customer, lang_n)
+        mail_body = render_marketing_tokens(
+            body.body_tpl or d["body_tpl"], contact, customer, lang_n)
+    else:
+        subject, mail_body = preview_vendor_rfq_template(
+            body.subject_tpl, body.body_tpl, body.options, body.lang)
+    return {
+        "subject": subject,
+        "body": mail_body,
+        "body_html": text_to_html_fragment(mail_body),
+    }
 
 
 @app.get("/api/admin/settings/users", dependencies=[Depends(require_token)])

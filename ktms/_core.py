@@ -53,7 +53,7 @@ from services.email_svc import (
     quotation_email_body, quotation_email_subject, send_email,
     shipping_advice_email_body, email_signature, default_from,
     intro_email_subject, intro_email_body, intro_email_body_tpl,
-    render_marketing_tokens, intro_signature,
+    render_marketing_tokens, intro_signature, text_to_html_fragment,
 )
 from services.pdf_svc import (
     build_payload, build_po_payload, generate_pdf, generate_po_pdf,
