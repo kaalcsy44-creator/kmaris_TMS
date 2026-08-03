@@ -811,11 +811,7 @@ def _deal_progress(s, rfq, order) -> tuple[int, dict[str, str]]:
         if vquotes:
             # 3단계 일시 = 실제 견적 수신일시(received_at 수동입력) 우선,
             # 없으면 수신일(received_date), 그래도 없으면 레코드 생성시각.
-            def _vq_recv(q) -> str:
-                return ((getattr(q, "received_at", None) or "").strip()
-                        or _date_iso(q.received_date)
-                        or _kst_iso(q.created_at))
-            _set(3, min((r for r in (_vq_recv(q) for q in vquotes) if r), default=""))
+            _set(3, min((r for r in (_vquote_recv_iso(q) for q in vquotes) if r), default=""))
     # 4) Customer Quot. 발신 — 발신 일시(sent_at, 시각 포함) 우선. 없으면 발신일(날짜만),
     #    그래도 없으면 레코드 생성시각. (sent_date 는 sent_at 의 날짜부 미러라 시각이 없다.)
     if quo:
@@ -911,6 +907,13 @@ def _project_no_map(s) -> dict[int, str]:
 def _vrfq_sent_iso(v) -> str:
     """Vendor RFQ 발신 일시(iso) — 수동 입력(sent_at) 우선, 없으면 생성 시각."""
     return (getattr(v, "sent_at", None) or "") or _kst_iso(v.created_at)
+
+
+def _vquote_recv_iso(q) -> str:
+    """Vendor Quote 수신 일시(iso) — 수동 입력(received_at) 우선, 없으면 수신일, 없으면 생성 시각."""
+    return ((getattr(q, "received_at", None) or "").strip()
+            or _date_iso(getattr(q, "received_date", None))
+            or _kst_iso(q.created_at))
 
 
 def _date_iso(d: str | None) -> str:

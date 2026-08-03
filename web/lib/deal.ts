@@ -14,6 +14,16 @@ function pushUnique(out: string[], v: string | undefined) {
   if (t && t !== "—" && !out.includes(t)) out.push(t);
 }
 
+/** 견적을 실제로 보내온 벤더들 — 3단계(Quote Received) 표기용.
+ *  근거는 수신 이력(quote_receipts) → 벤더별 quoted 플래그 순. 둘 다 없는 옛 데이터는 ""
+ *  (RFQ 발송 벤더 전체를 "견적 준 곳"으로 둔갑시키지 않는다). */
+export function quotedVendorsOf(r: PipelineRow): string {
+  const out: string[] = [];
+  for (const q of r.quote_receipts ?? []) pushUnique(out, q.vendor);
+  if (!out.length) for (const v of r.rfq_vendors ?? []) if (v.quoted) pushUnique(out, v.name);
+  return out.join(", ");
+}
+
 /** 활동로그 Party(소통 상대 회사) 드롭다운 후보 — 이 딜의 고객사 + 연결된 벤더사(들). */
 export function activityParties(r: PipelineRow): string[] {
   const out: string[] = [];

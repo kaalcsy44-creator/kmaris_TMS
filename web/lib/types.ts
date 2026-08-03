@@ -1161,6 +1161,9 @@ export type PipelineRow = {
   rfq_vendors?: { name: string; quoted: boolean; declined?: boolean; contact?: string }[];
   // RFQ 발송 이력 — 벤더 RFQ 1건 = 발송 1건(중복제거 없음). 업무일지에서 발송별 별도 행 표시.
   rfq_sends?: { id: number; vendor: string; sent_at: string }[];
+  // 견적 수신 이력 — 벤더 견적 1건 = 수신 1건. 견적을 실제로 준 벤더는 이 목록이 근거다
+  // (RFQ 를 보낸 벤더 전체가 아니다). 3단계 활동을 수신별 별도 행으로 표시.
+  quote_receipts?: { id: number; vendor: string; received_at: string; quote_no?: string }[];
   stage: number;
   status: string;
   cancelled?: boolean;            // 종결(취소/실주) — 보드 Cancelled 존 분류

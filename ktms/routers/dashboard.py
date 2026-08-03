@@ -53,6 +53,7 @@ from _core import (
     _status_label,
     _total_amount,
     _vrfq_sent_iso,
+    _vquote_recv_iso,
     app,
     cached_aggregate,
     date,
@@ -173,6 +174,19 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
                 ({"id": x.id, "vendor": vendor_names.get(x.vendor_id, "—"), "sent_at": _vrfq_sent_iso(x)}
                  for x in vrfqs),
                 key=lambda e: e["sent_at"] or "",
+            )
+
+            # 견적 수신 이력 — 벤더 견적 1건 = 수신 1건. "어느 벤더에서 실제로 견적을 받았나"는
+            # 이 목록만이 근거다(RFQ 를 보낸 벤더 전체가 아니라). 업무일지·개요의 3단계
+            # 활동을 수신 1건씩 별도 행으로 표시한다. 수신 일시 오름차순.
+            _vrfq_vendor = {x.id: vendor_names.get(x.vendor_id, "—") for x in vrfqs}
+            quote_receipts = sorted(
+                ({"id": vq.id,
+                  "vendor": _vrfq_vendor.get(vq.vendor_rfq_id, "—"),
+                  "received_at": _vquote_recv_iso(vq),
+                  "quote_no": getattr(vq, "vendor_quote_no", None) or ""}
+                 for vq in vqs),
+                key=lambda e: e["received_at"] or "",
             )
 
             # 4) Customer Quot. 발신
@@ -354,6 +368,8 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
                 "rfq_vendors": rfq_vendors_status,
                 # RFQ 발송 이력(벤더별·발송별) — 업무일지에서 발송 1건씩 별도 행으로 표시.
                 "rfq_sends": rfq_sends,
+                # 견적 수신 이력(벤더별·견적별) — 3단계 활동을 수신 1건씩 별도 행으로 표시.
+                "quote_receipts": quote_receipts,
                 "vendor_email": vendor_po_email,
                 # 상태 · 단계 일시
                 "stage": stage,

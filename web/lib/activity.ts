@@ -7,7 +7,7 @@
 
 import type { PipelineRow, StageNote } from "@/lib/types";
 import { closeReasonLabel } from "@/lib/api";
-import { vendorOf } from "@/lib/deal";
+import { vendorOf, quotedVendorsOf } from "@/lib/deal";
 
 export type Activity =
   // at: 정렬용 전체 일시(iso). 같은 날 여러 발송을 시각순으로 잇는다. 없으면 date(YYYY-MM-DD)로 정렬.
@@ -66,7 +66,9 @@ export function autoParty(stage: number, row: PipelineRow): string {
   switch (stage) {
     case 1: return cust ? `from ${cust}` : "";   // RFQ Received
     case 2: return vend ? `to ${vend}` : "";     // RFQ Sent
-    case 3: return vend ? `from ${vend}` : "";   // Quote Received
+    // Quote Received — 견적을 실제로 준 벤더만. RFQ 를 보낸 벤더 전체(vendorOf)를 쓰면
+    // 한 곳에서만 받은 견적이 "모든 벤더에서 받음"으로 보인다.
+    case 3: { const q = quotedVendorsOf(row); return q ? `from ${q}` : ""; }
     case 4: return cust ? `to ${cust}` : "";     // Quote Sent
     case 5: return cust ? `from ${cust}` : "";   // P/O Received
     case 6: return vend ? `to ${vend}` : "";     // P/O Sent
@@ -99,6 +101,26 @@ export function buildActivities(row: PipelineRow, steps: string[]): Activity[] {
           pic: row.assignee,
           at,
           vrfqId: send.id,
+        });
+      }
+      continue;
+    }
+    // 3단계(Quote Received): 벤더 견적 수신 1건 = 활동 1건. RFQ 를 보낸 벤더 중 견적을
+    // 준 곳만, 각자의 수신 일시로 남긴다. quote_receipts 가 없는 옛 데이터는 아래 단일
+    // 처리로 폴백(그 경우 상대는 autoParty 가 quoted 플래그로 추린다).
+    if (n === 3 && row.quote_receipts?.length) {
+      for (const recv of row.quote_receipts) {
+        const at = recv.received_at || "";
+        const date = at.slice(0, 10);
+        if (!date) continue;
+        out.push({
+          kind: "auto",
+          date,
+          stage: 3,
+          label: steps[2] || "Stage 3",
+          party: recv.vendor ? `from ${recv.vendor}` : "",
+          pic: row.assignee,
+          at,
         });
       }
       continue;
