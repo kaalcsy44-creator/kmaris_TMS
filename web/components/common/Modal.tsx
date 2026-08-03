@@ -71,7 +71,8 @@ export default function Modal({
         {resize.handles}
         <div className="pl-modal-head pl-modal-head--drag" {...resize.dragHandleProps}>
           <span className="intl-title">
-            <b>{title}</b>
+            {/* pl-selectable: 제목 글자는 드래그 손잡이에서 빼 복사할 수 있게(옆 빈 자리는 손잡이). */}
+            <b className="pl-selectable">{title}</b>
           </span>
           <button type="button" className="pl-modal-close" onClick={onClose} aria-label="Close">
             ×

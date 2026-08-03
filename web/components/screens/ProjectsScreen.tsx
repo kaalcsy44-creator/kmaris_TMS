@@ -2146,8 +2146,10 @@ export function PipelineModal({
     document.addEventListener("pointerup", onUp);
   }
   // 헤더를 잡고 드래그해 팝업 위치를 옮긴다(크기 유지). 버튼·선택 등 조작 요소 위에선 시작 안 함.
+  // .pl-selectable(프로젝트 번호·제목·선박명) 위에서도 시작하지 않는다 — 드래그를 걸면
+  // preventDefault 가 블록지정을 막아 제목을 복사할 수 없다. 제목 옆 빈 자리는 그대로 손잡이.
   function startDrag(e: React.PointerEvent) {
-    if ((e.target as HTMLElement).closest("button, a, input, select, textarea")) return;
+    if ((e.target as HTMLElement).closest("button, a, input, select, textarea, .pl-selectable")) return;
     e.preventDefault();
     const el = modalRef.current;
     if (!el) return;
@@ -2267,11 +2269,12 @@ export function PipelineModal({
             </span>
           ) : (
             <span className="intl-title">
-              <b><ProjectNo value={r.project_no} /></b>
+              {/* pl-selectable: 드래그 손잡이에서 빼 블록지정·복사가 되게 한다(번호·제목·선박명). */}
+              <b className="pl-selectable"><ProjectNo value={r.project_no} /></b>
               <WorkTypeBadge type={r.work_type} />
-              {r.project_title ? <span className="pl-proj-name">{r.project_title}</span> : null}
+              {r.project_title ? <span className="pl-proj-name pl-selectable">{r.project_title}</span> : null}
               {r.vessels || r.vessel ? (
-                <span className="pl-proj-vessel">
+                <span className="pl-proj-vessel pl-selectable">
                   · {(r.vessels || r.vessel).split("\n").filter(Boolean).join(" · ")}
                 </span>
               ) : null}

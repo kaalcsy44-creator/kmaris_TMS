@@ -76,8 +76,9 @@ export function useResizable(opts?: { minW?: number; minH?: number; storageKey?:
   }
 
   // 헤더를 잡고 드래그해 위치를 옮긴다(크기는 유지). 버튼 등 조작 요소 위에선 시작 안 함.
+  // .pl-selectable(제목 글자)도 제외 — 드래그를 걸면 블록지정·복사가 막힌다.
   function startDrag(e: React.PointerEvent) {
-    if ((e.target as HTMLElement).closest("button, a, input, select, textarea, [role='group']")) return;
+    if ((e.target as HTMLElement).closest("button, a, input, select, textarea, [role='group'], .pl-selectable")) return;
     e.preventDefault();
     const el = ref.current;
     if (!el) return;

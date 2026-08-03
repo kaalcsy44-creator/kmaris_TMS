@@ -2957,14 +2957,20 @@ table.mini td.mini-empty {
 .pl-modal-head .intl-title {
   flex: 1;
 }
-/* 헤더를 잡고 드래그해 팝업 이동 — 빈 영역·제목은 이동 커서, 버튼·입력은 각자 커서 유지. */
+/* 헤더를 잡고 드래그해 팝업 이동 — 빈 영역은 이동 커서, 버튼·입력은 각자 커서 유지. */
 .pl-modal-head--drag {
   cursor: move;
   touch-action: none;
 }
-.pl-modal-head--drag .intl-title,
-.pl-modal-head--drag .pl-proj-name {
+.pl-modal-head--drag .intl-title {
   cursor: move;
+}
+/* 프로젝트 번호·제목·선박명은 드래그 손잡이에서 뺀 글자 — 마우스로 긁어 복사한다.
+   (제목 옆 남는 자리는 .intl-title 이라 여전히 창을 옮기는 손잡이) */
+.pl-modal-head--drag .pl-selectable {
+  cursor: text;
+  user-select: text;
+  -webkit-user-select: text;
 }
 .pl-modal-head--drag button,
 .pl-modal-head--drag select,
