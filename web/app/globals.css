@@ -4404,6 +4404,12 @@ a.btn.primary:hover {
 .doc-parties--single {
   grid-template-columns: minmax(0, 1fr);
 }
+/* 블록이 하나뿐이면 테두리는 가를 상대가 없다 — 떼고 위아래 섹션과 같은 폭에 맞춘다
+   (입력란이 문서정보·운송정보 칸과 같은 선에서 시작한다). */
+.doc-parties--single .doc-party {
+  border: 0;
+  padding: 0;
+}
 .doc-party-grid--row {
   grid-template-columns: repeat(3, minmax(0, 1fr)) 2fr;
 }
