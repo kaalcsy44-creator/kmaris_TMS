@@ -1984,11 +1984,13 @@ function ReadonlyField({ label, value, wide }: { label: string; value: string; w
 
 // 자주 쓰는 값 제안 목록(datalist) — 목록 선택도, 직접 입력도 모두 가능한 콤보박스.
 const PORT_OPTIONS = [
-  "Busan, Korea", "Incheon, Korea", "Gwangyang, Korea", "Ulsan, Korea", "Pyeongtaek, Korea",
+  "Busan, Korea", "Busan New Port, Korea", "Incheon, Korea", "Incheon Airport, Korea",
+  "Gwangyang, Korea", "Ulsan, Korea", "Pyeongtaek, Korea",
   "Shanghai, China", "Ningbo, China", "Qingdao, China", "Hong Kong",
-  "Singapore", "Port Klang, Malaysia", "Tokyo, Japan", "Kobe, Japan",
-  "Rotterdam, Netherlands", "Hamburg, Germany", "Antwerp, Belgium",
-  "Los Angeles, USA", "Long Beach, USA", "Jebel Ali, UAE",
+  "Singapore", "Port Klang, Malaysia", "Tokyo, Japan", "Yokohama, Japan", "Kobe, Japan",
+  "Kaohsiung, Taiwan", "Ho Chi Minh, Vietnam", "Rotterdam, Netherlands", "Hamburg, Germany",
+  "Antwerp, Belgium", "Piraeus, Greece", "Istanbul, Turkey",
+  "Los Angeles, USA", "Long Beach, USA", "Houston, USA", "Jebel Ali, UAE", "Fujairah, UAE",
 ];
 const CARRIER_OPTIONS = [
   "TBD", "Maersk", "MSC", "CMA CGM", "HMM", "ONE", "Hapag-Lloyd", "Evergreen", "COSCO", "Yang Ming",
@@ -2001,12 +2003,17 @@ const BL_AWB_OPTIONS = [
   "House B/L", "Master B/L", "House AWB", "Master AWB", "Express Release", "N/A",
 ];
 const UNIT_OPTIONS = ["PCS", "SET", "EA", "UNIT", "KG", "M", "M2", "M3", "L", "ROLL", "BOX", "PAIR", "LOT"];
+// Incoterms® 2020 열한 가지 전부 — 문서의 Incoterms 칸에 그대로 인쇄된다.
 const INCOTERMS_OPTIONS = [
-  "EXW (Ex Works)", "FCA (Free Carrier)", "FOB (Free On Board)",
-  "CFR (Cost and Freight)", "CIF (Cost, Insurance and Freight)", "DAP (Delivered at Place)",
+  "EXW (Ex Works)", "FCA (Free Carrier)", "FAS (Free Alongside Ship)", "FOB (Free On Board)",
+  "CFR (Cost and Freight)", "CIF (Cost, Insurance and Freight)", "CPT (Carriage Paid To)",
+  "CIP (Carriage and Insurance Paid To)", "DAP (Delivered at Place)",
+  "DPU (Delivered at Place Unloaded)", "DDP (Delivered Duty Paid)",
 ];
 const PAYMENT_OPTIONS = [
-  "T/T in advance", "T/T 30 days", "T/T 60 days", "L/C at sight", "Net 30", "Net 60", "COD",
+  "T/T in advance", "T/T 15 days", "T/T 30 days", "T/T 45 days", "T/T 60 days", "T/T 90 days",
+  "50% in advance / 50% before shipment", "L/C at sight", "L/C 30 days", "L/C 60 days",
+  "Net 30", "Net 60", "COD",
 ];
 // 포장 방법(문서의 Shipping Information · Packing 칸). 합계의 Packing(포장비)과 다르다.
 const PACKING_OPTIONS = [
@@ -2063,7 +2070,10 @@ function composeShippingMarks(s: Record<string, string>): string {
   return lines.join("\n");
 }
 
-// 콤보박스 입력(목록 제안 + 자유 입력). Field 와 동일한 form-field 레이아웃.
+// 선택 목록 + 직접 입력. 목록은 통화 선택처럼 펼쳐 고르는 드롭다운이다
+// (datalist 콤보는 이미 적힌 값으로 목록이 걸러져 전체 선택지를 볼 수 없었다).
+// 목록에 없는 값(저장된 값·직접 입력)은 맨 위에 그대로 남겨 고른 상태로 보인다.
+const COMBO_MANUAL = "__manual__";
 function ComboField({
   label,
   value,
@@ -2075,16 +2085,37 @@ function ComboField({
   onChange: (v: string) => void;
   options: string[];
 }) {
-  const listId = useId();
+  const [manual, setManual] = useState(false);
+  if (manual) {
+    return (
+      <label className="form-field">
+        <span>{label}</span>
+        <div className="combo-manual">
+          <input value={value} autoFocus onChange={(e) => onChange(e.target.value)} />
+          <button type="button" className="btn sm" title="Choose from the list" onClick={() => setManual(false)}>
+            list
+          </button>
+        </div>
+      </label>
+    );
+  }
   return (
     <label className="form-field">
       <span>{label}</span>
-      <input list={listId} value={value} onChange={(e) => onChange(e.target.value)} />
-      <datalist id={listId}>
+      <select
+        value={value}
+        onChange={(e) => {
+          if (e.target.value === COMBO_MANUAL) { setManual(true); return; }
+          onChange(e.target.value);
+        }}
+      >
+        <option value="">— Select —</option>
+        {value && !options.includes(value) ? <option value={value}>{value}</option> : null}
         {options.map((o) => (
-          <option key={o} value={o} />
+          <option key={o} value={o}>{o}</option>
         ))}
-      </datalist>
+        <option value={COMBO_MANUAL}>Type manually…</option>
+      </select>
     </label>
   );
 }

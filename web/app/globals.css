@@ -4410,6 +4410,16 @@ a.btn.primary:hover {
     grid-template-columns: 1fr;
   }
 }
+/* 선택 목록 필드의 '직접 입력' 모드 — 입력란 + 목록으로 돌아가는 작은 버튼 한 줄. */
+.combo-manual {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.combo-manual input {
+  flex: 1;
+  min-width: 0;
+}
 /* 문서 폼 좌우 2단: 좌=Basic info, 우=Shipping Marks 로 넓은 스테이지 창의
    우측 여백을 활용한다(세로 스크롤 절감). */
 .doc-cols {
