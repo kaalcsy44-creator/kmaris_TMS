@@ -11,8 +11,20 @@ _config_path = Path(__file__).resolve().parent.parent / "config" / "company.json
 
 
 def _load_company() -> Dict[str, Any]:
-    with open(_config_path, encoding="utf-8") as f:
-        return json.load(f)
+    """문서에 찍히는 회사 정보(레터헤드·계좌). 설정 화면이 저장하는 값과 같은 곳에서 읽는다
+    — 예전에는 여기만 파일을 읽어, 화면에서 계좌를 고쳐도 인쇄물은 그대로였다."""
+    try:
+        from services.company_profile import read_company_profile
+        data = read_company_profile()
+        if data:
+            return data
+    except Exception:
+        pass
+    try:
+        with open(_config_path, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
 
 
 def _customer_dict(customer) -> Dict[str, Any]:

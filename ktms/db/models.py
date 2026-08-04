@@ -243,6 +243,19 @@ class DocSequence(Base):
     last_seq = Column(Integer, default=0)
 
 
+class AppSetting(Base):
+    """앱 전역 설정 — key 1개 = JSON 값 1개. 현재 사용처는 회사 프로필("company").
+
+    설정을 파일(config/company.json)에 두면 Render 처럼 배포마다 컨테이너를 새로 만드는
+    환경에서 저장한 값이 다음 배포 때 통째로 사라진다(실제로 계좌 정보가 그렇게 날아갔다).
+    설정은 DB 에 둔다 — 파일은 최초 1회 씨앗값으로만 읽는다.
+    """
+    __tablename__ = "app_settings"
+    key        = Column(String(64), primary_key=True)
+    value      = Column(JSON, default=dict)
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
+
 class EmailTemplate(Base):
     """담당자별(또는 회사 공용) 이메일 초안 템플릿.
 

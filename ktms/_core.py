@@ -2722,17 +2722,16 @@ class CompanyProfile(BaseModel):
 _COMPANY_CONFIG = ROOT / "config" / "company.json"
 
 
+# 회사 프로필은 DB(app_settings)에 둔다 — services.company_profile 참고.
+# 파일에 쓰던 시절에는 배포·재시작마다 저장한 값이 사라졌다(컨테이너 디스크는 임시).
 def _read_company_profile() -> dict:
-    try:
-        import json
-        return json.loads(_COMPANY_CONFIG.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
+    from services.company_profile import read_company_profile
+    return read_company_profile()
 
 
 def _write_company_profile(data: dict) -> None:
-    import json
-    _COMPANY_CONFIG.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    from services.company_profile import write_company_profile
+    write_company_profile(data)
 
 
 class RolePermSave(BaseModel):
