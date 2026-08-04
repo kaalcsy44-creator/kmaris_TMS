@@ -1735,8 +1735,60 @@ def _quotation_total(items, discount_pct: float = 0.0) -> float:
     return amt * (1 - disc / 100.0)
 
 
+def _same_person(a: str, b: str) -> bool:
+    return str(a or "").strip().casefold() == str(b or "").strip().casefold()
+
+
+class _DealContactCustomer:
+    """고객 레코드 + 이 거래의 담당자. 담당자 이름이 고객 마스터에 없는 사람일 때만 쓴다.
+
+    Customer 와 같은 속성을 읽기 전용으로 흉내내므로 문서 생성·payload 가 그대로 쓸 수 있다.
+    이메일은 비운다 — 등록된 사람이 아니라 주소를 모르는데, 다른 사람 주소를 문서에 찍는 것보다
+    빈칸이 낫다(화면의 Buyer e-mail 칸에 직접 적으면 그 값이 인쇄된다)."""
+
+    def __init__(self, base, contact: str):
+        self.id = base.id
+        self.name = base.name
+        self.address = base.address
+        self.contact = contact
+        self.contact_phone = ""
+        self.email = ""
+        self.tax_id = base.tax_id
+        # 회사 단위 값(청구서 Bill to 선택지 등)은 그대로 이어받는다.
+        self.emails = getattr(base, "emails", None) or []
+        self.phones = getattr(base, "phones", None) or []
+        self.tax_invoice_email = getattr(base, "tax_invoice_email", "") or ""
+
+
 def _customer_for_order(session, order: Order):
-    return session.query(Customer).filter_by(id=order.customer_id).first()
+    """오더의 고객 — 담당자(contact·email)는 이 거래의 RFQ 에 적힌 담당자를 따른다.
+
+    고객 마스터는 "레코드 1개 = 담당자 1명"이라 같은 회사라도 담당자마다 레코드가 다르다.
+    그래서 오더에 붙은 레코드가 1단계 RFQ 에서 고른 담당자와 다르면(예: 오더를 회사의 다른
+    담당자 레코드로 만든 경우) 문서 BUYER 칸과 발송 메일이 엉뚱한 사람으로 나간다.
+    이 거래의 상대는 RFQ 에 기록된 담당자이므로 그쪽을 우선한다 — 단 같은 회사일 때만
+    (회사가 아예 다르면 오더 쪽이 맞다)."""
+    cust = session.query(Customer).filter_by(id=order.customer_id).first()
+    rfq = _rfq_for_order(session, order)
+    if not rfq or not cust:
+        return cust
+    rc = (session.query(Customer).filter_by(id=rfq.customer_id).first()
+          if getattr(rfq, "customer_id", None) else None)
+    if rc and not _same_person(rc.name, cust.name):
+        # RFQ 와 오더의 고객사 자체가 다르다 — 이 오더의 상대는 오더 쪽이므로 담당자도 건드리지 않는다.
+        return cust
+    # 1) RFQ 가 고른 담당자 레코드(같은 회사)면 그 레코드를 통째로 쓴다 — 이메일·전화까지 그 사람 것.
+    if rc and rc.id != cust.id:
+        cust = rc
+    name = str(getattr(rfq, "contact_person", "") or "").strip()
+    if not name or _same_person(name, cust.contact):
+        return cust
+    # 2) RFQ 에 적힌 담당자 이름이 레코드와 다르면 같은 회사의 다른 담당자 레코드에서 찾는다.
+    for c in session.query(Customer).filter(Customer.name == cust.name).all():
+        if _same_person(name, c.contact):
+            return c
+    # 3) 등록된 담당자가 아니면(자동 추출로 이름만 적힌 경우) 이름만 RFQ 값을 쓴다.
+    return _DealContactCustomer(cust, name)
 
 
 def _customer_contacts_brief(session, customer_id: int) -> list[dict]:

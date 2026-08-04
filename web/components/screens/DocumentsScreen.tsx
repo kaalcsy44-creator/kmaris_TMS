@@ -995,8 +995,9 @@ function ProformaInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChang
       </div>
       <PartiesSection order={data.order} shipping={shipping} setShipping={setShipping} />
       <p className="hint-inline" style={{ marginTop: 6 }}>
-        Leave a buyer field empty to print the customer master value shown in grey. Leave the consignee empty when the goods
-        are consigned to the buyer. The consignee company is shared with the Shipping Marks tab (C/O line).
+        Leave a buyer field empty to print the grey value — the contact registered for this deal on the RFQ, with the rest
+        from the customer master. Leave the consignee empty when the goods are consigned to the buyer. The consignee company
+        is shared with the Shipping Marks tab (C/O line).
       </p>
       <div className="sub-h doc-sec-h">Shipping information</div>
       <div className="form-grid doc-form-grid">
@@ -1178,8 +1179,9 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
       </div>
       <PartiesSection order={data.order} shipping={shipping} setShipping={setShipping} />
       <p className="hint-inline" style={{ marginTop: 6 }}>
-        Leave a buyer field empty to print the customer master value shown in grey. Leave the consignee empty when the goods
-        are consigned to the buyer. The consignee company is shared with the Shipping Marks tab (C/O line).
+        Leave a buyer field empty to print the grey value — the contact registered for this deal on the RFQ, with the rest
+        from the customer master. Leave the consignee empty when the goods are consigned to the buyer. The consignee company
+        is shared with the Shipping Marks tab (C/O line).
       </p>
       <div className="sub-h doc-sec-h">Shipping information</div>
       <div className="form-grid doc-form-grid">
