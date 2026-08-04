@@ -638,26 +638,6 @@ export function deletePackingList(orderId: number): Promise<{ ok: boolean }> {
   return del(`/api/admin/documents/${orderId}/pl`);
 }
 
-export function saveShippingAdvice(
-  orderId: number,
-  body: { sa_no?: string; date?: string; shipping: Record<string, string> }
-): Promise<{ ok: boolean; id: number; sa_no: string }> {
-  return post(`/api/admin/documents/${orderId}/sa`, body);
-}
-
-export function deleteShippingAdvice(orderId: number): Promise<{ ok: boolean }> {
-  return del(`/api/admin/documents/${orderId}/sa`);
-}
-
-export function sendShippingAdvice(
-  orderId: number,
-  to: string,
-  subject: string,
-  body: string
-): Promise<{ ok: boolean; sent_date: string }> {
-  return post(`/api/admin/documents/${orderId}/sa/send`, { to, subject, body });
-}
-
 export function saveTaxInvoice(
   orderId: number,
   body: {
@@ -674,7 +654,7 @@ export function saveTaxInvoice(
 
 export function documentDownloadUrl(
   orderId: number,
-  kind: "pi/pdf" | "ci/pdf" | "ci/xlsx" | "sm/pdf" | "sm/xlsx" | "pl/pdf" | "pl/xlsx" | "sa/pdf" | "tax/xlsx"
+  kind: "pi/pdf" | "ci/pdf" | "ci/xlsx" | "sm/pdf" | "sm/xlsx" | "pl/pdf" | "pl/xlsx" | "tax/xlsx"
 ): string {
   return `${API_BASE}/api/admin/documents/${orderId}/${kind}`;
 }

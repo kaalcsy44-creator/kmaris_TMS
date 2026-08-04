@@ -11,10 +11,7 @@ import {
   deleteCommercialInvoice,
   savePackingList,
   deletePackingList,
-  saveShippingAdvice,
-  deleteShippingAdvice,
   saveTaxInvoice,
-  sendShippingAdvice,
   updateDocumentMilestone,
   uploadPod,
   podDownloadUrl,
@@ -69,13 +66,12 @@ type StageTab = "s7" | "s8" | "s9";
 type WorkView = "parts" | "service";
 
 // 문서 종류 → 표시 라벨(작업 모달 제목 등).
-type DocKind = "pi" | "ci" | "sm" | "pl" | "sa" | "pod" | "tax";
+type DocKind = "pi" | "ci" | "sm" | "pl" | "pod" | "tax";
 const KIND_CFG: Record<DocKind, { label: string }> = {
   pi: { label: "Proforma Invoice" },
   ci: { label: "Commercial Invoice" },
   sm: { label: "Shipping Marks" },
   pl: { label: "Packing List" },
-  sa: { label: "Shipping Advice" },
   pod: { label: "POD" },
   tax: { label: "Tax Invoice" },
 };
@@ -100,7 +96,7 @@ export function DocumentsOverview({
     s === 8 ? "s8" : s === 9 ? "s9" : "s7";
   const [workView, setWorkView] = useState<WorkView>(initialView === "service" ? "service" : "parts");
   const [stage, setStage] = useState<StageTab>(stageFromProp(initialStage));
-  const [readyDoc, setReadyDoc] = useState<"pi" | "ci" | "sm" | "pl" | "sa">("ci"); // 7단계 하위(Proforma(선택)/CI/PL/Shipping Marks/SA)
+  const [readyDoc, setReadyDoc] = useState<"pi" | "ci" | "sm" | "pl">("ci"); // 7단계 하위(Proforma(선택)/CI/PL/Shipping Marks)
 
   const { data: overview, refresh } = useCachedData(
     "documents:overview",
@@ -167,9 +163,6 @@ export function DocumentsOverview({
           </button>
           <button className={readyDoc === "sm" ? "on" : ""} onClick={() => setReadyDoc("sm")}>
             Shipping Marks
-          </button>
-          <button className={readyDoc === "sa" ? "on" : ""} onClick={() => setReadyDoc("sa")}>
-            Shipping Advice
           </button>
         </div>
       ) : null}
@@ -690,8 +683,6 @@ function DocEditorContent({
             <ShippingMarksTab key={`sm-${data.order.id}-${data.ci?.id ?? 0}`} data={data} onChanged={afterChange} />
           ) : kind === "pl" ? (
             <PackingListTab key={`pl-${data.order.id}-${data.pl?.id ?? 0}`} data={data} onChanged={afterChange} />
-          ) : kind === "sa" ? (
-            <ShippingAdviceTab key={`sa-${data.order.id}-${data.sa?.id ?? 0}`} data={data} onChanged={afterChange} />
           ) : kind === "pod" ? (
             <PodTab key={`pod-${data.order.id}`} data={data} onChanged={afterChange} />
           ) : (
@@ -1489,160 +1480,6 @@ function PackingListTab({ data, onChanged }: { data: DocumentDetail; onChanged: 
   );
 }
 
-function ShippingAdviceTab({ data, onChanged }: { data: DocumentDetail; onChanged: () => void }) {
-  const [saNo, setSaNo] = useState(data.sa?.sa_no || "");
-  const [date, setDate] = useState(data.sa?.date || today());
-  const [shipping, setShipping] = useState<Record<string, string>>({
-    port_loading: "Busan, Korea",
-    port_discharge: "",
-    carrier: "TBD",
-    bl_awb_no: "TBD",
-    etd: "",
-    eta: "",
-    ...defaultMarkFields(data.order),
-    ...(data.ci?.shipping || {}), // CI 의 선적정보·Shipping Marks(sm_*) 상속
-    ...(data.sa?.shipping || {}), // SA 자체 저장값 우선
-  });
-  const [to, setTo] = useState(data.order.customer_email || "");
-  const [subject, setSubject] = useState(data.sa?.sa_no ? `[K-MARIS] Shipping Advice ${data.sa.sa_no}` : "");
-  const [body, setBody] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [ackMissing, setAckMissing] = useState(false);
-  const editable = canEditDoc(data);
-
-  // SA 는 CI 기준으로 발송되므로 CI 가 오더와 일치하는지 발송 전 검증한다.
-  const ciMissing = data.ci?.missing || [];
-
-  async function save() {
-    setBusy(true);
-    try {
-      const outShipping = { ...shipping, shipping_marks: composeShippingMarks(shipping) };
-      await saveShippingAdvice(data.order.id, { sa_no: saNo, date, shipping: outShipping });
-      onChanged();
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function send() {
-    setBusy(true);
-    try {
-      await sendShippingAdvice(data.order.id, to, subject, body);
-      onChanged();
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  function cancel() {
-    setSaNo(data.sa?.sa_no || "");
-    setDate(data.sa?.date || today());
-    setShipping({
-      port_loading: "Busan, Korea",
-      port_discharge: "",
-      carrier: "TBD",
-      bl_awb_no: "TBD",
-      etd: "",
-      eta: "",
-      ...defaultMarkFields(data.order),
-      ...(data.ci?.shipping || {}),
-      ...(data.sa?.shipping || {}),
-    });
-  }
-
-  async function del() {
-    if (!data.sa) return;
-    if (!confirm("Delete this Shipping Advice?")) return;
-    setBusy(true);
-    try {
-      await deleteShippingAdvice(data.order.id);
-      onChanged();
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "Delete failed");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="doc-tab">
-      {/* 8단계(Delivery arrangement) 마일스톤 — Customer 확인 / Vendor 서류 확인 */}
-      <OrderMilestones data={data} onChanged={onChanged} />
-      <fieldset className="form-fieldset" disabled={!editable}>
-      <div className="doc-cols">
-      <div className="doc-col">
-      <div className="sub-h">Basic info</div>
-      <div className="form-grid doc-form-grid">
-        <Field label="SA No." value={saNo} onChange={setSaNo} />
-        <Field label="SA Date" value={date} onChange={setDate} type="date" />
-        {/* 거래조건은 Commercial Invoice 를 그대로 따라간다(선적통보는 CI 기준 안내). */}
-        <ShippingFields shipping={shipping} setShipping={setShipping} terms={data.ci?.terms || {}} />
-      </div>
-      </div>
-      </div>
-      {data.ci ? (
-        <MissingWarning missing={ciMissing} />
-      ) : (
-        <div className="alert-warn">No CI yet. The SA is sent based on CI items — create a CI first.</div>
-      )}
-      <div className="form-grid">
-        <Field label="Recipient email" value={to} onChange={setTo} />
-        <Field label="Subject" value={subject} onChange={setSubject} />
-      </div>
-      <textarea
-        className="po-textarea small"
-        placeholder="Leave the body empty to send the default Shipping Advice email body."
-        value={body}
-        onChange={(e) => setBody(e.target.value)}
-      />
-      {ciMissing.length > 0 ? (
-        <label className="check-inline" style={{ marginTop: 8 }}>
-          <input type="checkbox" checked={ackMissing} onChange={(e) => setAckMissing(e.target.checked)} />
-          I have reviewed {ciMissing.length} missing/short-quantity item(s) and will send as is.
-        </label>
-      ) : null}
-      </fieldset>
-      <div className="form-actions doc-actions">
-        <div className="doc-actions-left">
-          <DocPreviewButton orderId={data.order.id} kind="sa/pdf" filename="Shipping Advice.pdf" disabled={!data.sa} />
-          <DownloadButton orderId={data.order.id} kind="sa/pdf" disabled={!data.sa} label="Download" />
-        </div>
-        <div className="doc-actions-center">
-          <span className="hint-inline">
-            SMTP {data.smtp_configured ? "configured" : "not configured"} {data.sa?.sent_date ? `· sent ${data.sa.sent_date}` : ""}
-          </span>
-        </div>
-        <div className="doc-actions-right">
-          {editable ? (
-            <>
-              {data.sa ? (
-                <button className="btn danger" disabled={busy} onClick={del}>
-                  Delete
-                </button>
-              ) : null}
-              <button
-                className="btn"
-                disabled={busy || !data.sa || !to.trim() || (ciMissing.length > 0 && !ackMissing)}
-                onClick={send}
-              >
-                Send SA email
-              </button>
-              <button className="btn" disabled={busy} onClick={cancel}>
-                Cancel
-              </button>
-              <button className="btn primary" disabled={busy || data.order.id === 0} onClick={save}>
-                Save
-              </button>
-            </>
-          ) : (
-            <span className="hint-inline">{editBlockReason("documents", data.order.assignee_id)}</span>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function TaxInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChanged: () => void }) {
   const [taxNo, setTaxNo] = useState(data.tax?.tax_no || "");
   const [date, setDate] = useState(data.tax?.date || today());
@@ -2414,7 +2251,7 @@ function DownloadButton({
   disabled,
 }: {
   orderId: number;
-  kind: "ci/pdf" | "ci/xlsx" | "sm/pdf" | "sm/xlsx" | "pl/pdf" | "pl/xlsx" | "sa/pdf" | "tax/xlsx";
+  kind: "ci/pdf" | "ci/xlsx" | "sm/pdf" | "sm/xlsx" | "pl/pdf" | "pl/xlsx" | "tax/xlsx";
   label: string;
   disabled: boolean;
 }) {
@@ -2452,7 +2289,7 @@ function DocPreviewButton({
   xlsxKind,
 }: {
   orderId: number;
-  kind: "pi/pdf" | "ci/pdf" | "sm/pdf" | "pl/pdf" | "sa/pdf";
+  kind: "pi/pdf" | "ci/pdf" | "sm/pdf" | "pl/pdf";
   filename: string;
   disabled: boolean;
   // 지정 시 미리보기 우측상단에 Excel 다운로드 버튼을 노출한다.
