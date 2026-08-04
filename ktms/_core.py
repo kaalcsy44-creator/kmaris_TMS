@@ -1045,6 +1045,8 @@ def _item_view(it: dict) -> dict:
         "description": it.get("description") or "",
         "type": it.get("type") or "",
         "serial_no": it.get("serial_no") or "",
+        # 제조사 — 저장은 되는데 여기서 빠져 있어 편집기로 돌아오면 늘 빈 칸이었다.
+        "maker": it.get("maker") or "",
         "qty": qty,
         "unit": it.get("unit") or "",
         "unit_price": unit,
@@ -1052,6 +1054,8 @@ def _item_view(it: dict) -> dict:
         "remark": it.get("remark") or "",
         # 입력 단계에서 고른 품목 분류(선택). 편집기에서 다시 보여주기 위해 그대로 실어 보낸다.
         "category_id": it.get("category_id"),
+        # "문서에서 제외" 표식 — 다시 열었을 때도 제외 상태로 보여야 한다.
+        "excluded": bool(it.get("excluded")),
     }
 
 
@@ -1565,6 +1569,8 @@ class PoWorkItem(BaseModel):
     remark: str | None = ""
     # 품목 분류(선택) — 입력 단계에서 고르면 저장 시 품목 마스터 분류로 반영된다.
     category_id: int | None = None
+    # "문서에서 제외" 표식 — 행은 남기고 발행 P/O·합계에서만 뺀다(kmaris_docs.normalize_items).
+    excluded: bool = False
 
 
 class OrderCreate(BaseModel):

@@ -2277,15 +2277,20 @@ function blankItem(): PoWorkItem {
 function normalizeItem(it: Partial<PoWorkItem>): PoWorkItem {
   const qty = Number(it.qty ?? 1) || 1;
   const unitPrice = it.unit_price ?? 0;
+  // 표에 있는 칸은 하나도 빠뜨리지 않는다 — 여기서 빠진 필드는 불러올 때 빈 칸으로 보이고
+  // 저장할 때 조용히 지워진다(Type·Serial No.·Category 가 그렇게 사라지고 있었다).
   return {
     part_no: it.part_no ?? "",
     description: it.description ?? "",
+    type: it.type ?? "",
+    serial_no: it.serial_no ?? "",
     maker: it.maker ?? "",
     qty,
     unit: it.unit ?? "PCS",
     unit_price: unitPrice,
     amount: it.amount ?? qty * Number(unitPrice ?? 0),
     remark: it.remark ?? "",
+    category_id: it.category_id ?? null,
     // 제외 표식은 저장·재열람에서 살아남아야 한다(그래야 표에서 되살릴 수 있다).
     ...(it.excluded ? { excluded: true as const } : {}),
   };

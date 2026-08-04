@@ -438,6 +438,8 @@ def create_order(body: OrderCreate):
                 "amount": it.amount if it.amount is not None else qty * unit_price,
                 "remark": (it.remark or "").strip(),
                 "category_id": it.category_id,   # 입력 시 고른 품목 분류(선택)
+                # "문서에서 제외" 표식 — 여기서 빠지면 화면에서 제외해도 저장이 안 된다.
+                "excluded": bool(it.excluded),
             })
 
         order = Order(
@@ -507,6 +509,8 @@ def update_order(order_id: int, body: OrderUpdate):
                     "amount": it.amount if it.amount is not None else qty * unit_price,
                     "remark": (it.remark or "").strip(),
                     "category_id": it.category_id,   # 입력 시 고른 품목 분류(선택)
+                    # "문서에서 제외" 표식 — 여기서 빠지면 화면에서 제외해도 저장이 안 된다.
+                    "excluded": bool(it.excluded),
                 })
             order.items = items
             apply_line_categories(s, items)
@@ -586,7 +590,10 @@ def create_purchase_order(body: PurchaseOrderCreate):
                 "unit": it.unit or "PCS",
                 "unit_price": unit_price,
                 "amount": it.amount if it.amount is not None else qty * unit_price,
+                "remark": (it.remark or "").strip(),
                 "category_id": it.category_id,   # 입력 시 고른 품목 분류(선택)
+                # "문서에서 제외" 표식 — 여기서 빠지면 화면에서 제외해도 저장이 안 된다.
+                "excluded": bool(it.excluded),
             })
 
         # 번호: 수동 입력값 우선(중복 검사), 비우면 자동 채번(KMS-ORD-yymm-nnn).
@@ -697,6 +704,8 @@ def update_purchase_order(po_id: int, body: PurchaseOrderUpdate):
                     "amount": it.amount if it.amount is not None else qty * unit_price,
                     "remark": (it.remark or "").strip(),
                     "category_id": it.category_id,   # 입력 시 고른 품목 분류(선택)
+                    # "문서에서 제외" 표식 — 여기서 빠지면 화면에서 제외해도 저장이 안 된다.
+                    "excluded": bool(it.excluded),
                 })
             po.items = items
             apply_line_categories(s, items)
