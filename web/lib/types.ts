@@ -767,6 +767,8 @@ export type TaxInvoiceItem = {
   qty: number;
   unit_price: number;
   amount: number;
+  // 문서에서 제외한 행 — DocumentWorkItem.excluded 와 같은 규칙(표에는 남고 발행 문서·합계에서 빠짐).
+  excluded?: boolean;
 };
 
 export type ArData = {

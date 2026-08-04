@@ -27,6 +27,11 @@ import {
   ItemSelectHeaderCell,
   ItemSelectCell,
   DeleteSelectedButton,
+  ExcludeSelectedButton,
+  ExcludedCountNote,
+  includedRows,
+  includedSeqNos,
+  isRowExcluded,
   amountInputValue,
   parseAmountInput,
   itemRowClass,
@@ -337,7 +342,9 @@ function ApAddForm({
   const sel = useRowSelection();
 
   // 합계 = 품목 소계 + 부대비용(Freight/Packing/Insurance) + VAT.
+  // 소계는 "문서에서 제외"한 행을 뺀 값 — AR 청구서와 같은 규칙.
   const subtotal = taxSubtotal(form.items);
+  const seqNos = includedSeqNos(form.items);
   const extras = chargesTotal(form.charges);
   const vat = (subtotal + extras) * num(form.vat_rate);
   const total = Math.round(subtotal + extras + vat);
@@ -448,9 +455,11 @@ function ApAddForm({
       <div className="tax-items">
         <div className="items-head">
           <div className="form-section-title" style={{ margin: 0 }}>Item list</div>
+          <ExcludedCountNote items={form.items} />
           <div className="items-head-actions">
             <button type="button" className="btn sm" onClick={loadPo} disabled={poItems.length === 0}>Load P/O</button>
             <ItemColsButton grid={grid} />
+            <ExcludeSelectedButton items={form.items} sel={sel} onChange={setItems} />
             <DeleteSelectedButton sel={sel} onDelete={() => deleteSelectedRows(form.items, sel, setItems)} />
             <button type="button" className="btn sm items-head-add" onClick={addItem}>+ Add</button>
           </div>
@@ -473,9 +482,11 @@ function ApAddForm({
               {form.items.length === 0 ? (
                 <tr><td colSpan={7} className="tax-items-empty">No items — “+ Add” or “Load P/O”.</td></tr>
               ) : form.items.map((it, i) => (
-                <tr key={i} className={itemRowClass(i)}>
+                <tr key={i} className={itemRowClass(i, isRowExcluded(it))}>
                   <ItemSelectCell index={i} sel={sel} />
-                  <td className="seq">{i + 1}</td>
+                  <td className="seq" title={isRowExcluded(it) ? "Excluded from this bill" : undefined}>
+                    {seqNos[i] ?? "—"}
+                  </td>
                   <td><textarea className="desc" rows={1} value={it.description} onChange={(e) => setItem(i, "description", e.target.value)} /></td>
                   <td><textarea className="wrapcell" rows={1} value={it.part_no} onChange={(e) => setItem(i, "part_no", e.target.value)} /></td>
                   <td><input className="num" value={amountInputValue(it.qty)} onChange={(e) => setItem(i, "qty", e.target.value)} /></td>
@@ -683,7 +694,7 @@ function MilestoneBar({ row, stage, onChanged }: { row: ArRow; stage: 10 | 11; o
   );
 }
 
-/** 작업 품목(CI·P/O 공용) → 세금계산서 청구 품목(설명·Part No.·수량·단가·금액). */
+/** 작업 품목(CI·PI·P/O 공용) → 세금계산서 청구 품목(설명·Part No.·수량·단가·금액). */
 function workItemsToTax(items: DocumentWorkItem[] | undefined | null): TaxInvoiceItem[] {
   return (items ?? []).map((it) => {
     const qty = num(it.qty);
@@ -694,6 +705,9 @@ function workItemsToTax(items: DocumentWorkItem[] | undefined | null): TaxInvoic
       qty,
       unit_price,
       amount: num(it.amount) || qty * unit_price,
+      // 문서에서 제외(excluded)한 행도 표식째로 가져온다 — CI/PI 에서 뺀 품목이 청구서에서
+      // 되살아나면 안 되고, 그렇다고 지워버리면 무엇을 뺐는지가 사라진다(표에서 Restore 가능).
+      ...(it.excluded ? { excluded: true as const } : {}),
     };
   });
 }
@@ -703,12 +717,19 @@ function ciItemsToTax(d: DocumentDetail | null): TaxInvoiceItem[] {
   return workItemsToTax(d?.ci?.items);
 }
 
-/** P/O(오더) 품목 → 세금계산서 청구 품목. CI가 없을 때의 대체 소스. */
+/** PI(프로포마) 품목 → 세금계산서 청구 품목. CI가 아직 없을 때의 대체 소스. */
+function piItemsToTax(d: DocumentDetail | null): TaxInvoiceItem[] {
+  return workItemsToTax(d?.pi?.items);
+}
+
+/** P/O(오더) 품목 → 세금계산서 청구 품목. CI·PI 가 모두 없을 때의 대체 소스. */
 function poItemsToTax(d: DocumentDetail | null): TaxInvoiceItem[] {
   return workItemsToTax(d?.order?.items);
 }
 
-const taxSubtotal = (items: TaxInvoiceItem[]) => items.reduce((s, it) => s + num(it.amount), 0);
+/** 청구 소계 — 문서에 실리는 행만 더한다(제외 행은 발행 문서에도 안 나가므로 청구액에서도 빠진다). */
+const taxSubtotal = (items: TaxInvoiceItem[]) =>
+  includedRows(items).reduce((s, it) => s + num(it.amount), 0);
 
 /** 기존 AR 레코드 → 편집 폼 초기값. */
 function arRowToForm(r: ArRow): ArForm {
@@ -760,7 +781,9 @@ function ArAddForm({
   const [invMode, setInvMode] = useState<"auto" | "manual">(editing ? "manual" : "auto");
   // "Load CI" 버튼용 — 선택 오더의 CI 품목을 보관했다가 필요 시 표에 다시 채운다.
   const [ciItems, setCiItems] = useState<TaxInvoiceItem[]>([]);
-  // CI가 없을 때의 대체 소스 — 오더(P/O) 품목. "Load P/O" 로 표에 채운다.
+  // CI가 없을 때의 대체 소스 — PI(프로포마) 품목. "Load PI" 로 표에 채운다.
+  const [piItems, setPiItems] = useState<TaxInvoiceItem[]>([]);
+  // CI·PI 가 모두 없을 때의 대체 소스 — 오더(P/O) 품목. "Load P/O" 로 표에 채운다.
   const [poItems, setPoItems] = useState<TaxInvoiceItem[]>([]);
   // 청구처(Bill to) 선택지 — 저장된 고객 정보(담당자·이메일·연락처·세금계산서 수신메일).
   const [billOpts, setBillOpts] = useState<{
@@ -781,15 +804,17 @@ function ArAddForm({
         if (!alive) return;
         const autoInv = d.order.po_no ? `${d.order.po_no}-INV` : "";
         const ci = ciItemsToTax(d);
+        const pi = piItemsToTax(d);
         const po = poItemsToTax(d);
-        // CI가 있으면 CI 품목이 기본값, 없으면 P/O 품목으로 대체.
-        const auto = ci.length ? ci : po;
+        // CI가 있으면 CI 품목이 기본값, 없으면 PI, 그것도 없으면 P/O 품목으로 대체.
+        const auto = ci.length ? ci : pi.length ? pi : po;
         const contacts = d.order.customer_contacts ?? [];
         const primary = contacts[0];
         const flatContact = d.order.customer_contact || "";
         const taxInvoiceEmail = d.order.customer_tax_invoice_email || "";
         setAutoInvoiceNo(autoInv);
         setCiItems(ci);
+        setPiItems(pi);
         setPoItems(po);
         setBillOpts({
           taxInvoiceEmail,
@@ -868,14 +893,12 @@ function ArAddForm({
   }
   const addItem = () => setForm((f) => ({ ...f, items: [...f.items, { ...emptyTaxItem }] }));
   const setItems = (items: TaxInvoiceItem[]) => setForm((f) => ({ ...f, items }));
-  // Load CI / Load P/O — 선택 오더의 품목을 표에 다시 채운다(현재 편집 내용 대체).
-  const loadCi = () => { setItems(ciItems.map((it) => ({ ...it }))); sel.clear(); };
-  const loadPo = () => { setItems(poItems.map((it) => ({ ...it }))); sel.clear(); };
-  // CI가 있으면 CI를, 없으면 P/O를 불러오는 버튼으로 노출한다.
-  const hasCi = ciItems.length > 0;
-  const loadLabel = hasCi ? "Load CI" : "Load P/O";
-  const loadSource = hasCi ? loadCi : loadPo;
-  const loadDisabled = (hasCi ? ciItems : poItems).length === 0;
+  // Load CI / PI / P/O — 선택 오더의 품목을 표에 그대로 다시 채운다(현재 편집 내용 대체).
+  // 상거래 문서에서 제외한 행은 제외 상태 그대로 들어온다 — 청구서에서 되살리려면 Restore.
+  const loadItems = ciItems.length ? ciItems : piItems.length ? piItems : poItems;
+  const loadLabel = ciItems.length ? "Load CI" : piItems.length ? "Load PI" : "Load P/O";
+  const loadSource = () => { setItems(loadItems.map((it) => ({ ...it }))); sel.clear(); };
+  const loadDisabled = loadItems.length === 0;
   // Cancel — 편집 중이면 저장된 값으로, 신규면 빈 폼으로 되돌린다(오더 선택은 유지).
   const cancel = () => {
     if (existing) { setForm(arRowToForm(existing)); setInvMode("manual"); }
@@ -900,7 +923,10 @@ function ArAddForm({
   }
 
   // 합계 = 품목 소계 + 부대비용(Freight/Packing/Insurance), 여기에 VAT 를 매긴다.
+  // 소계는 제외 행을 뺀 값이라 화면·PDF·저장 청구액이 언제나 같은 숫자가 된다.
   const subtotal = taxSubtotal(form.items);
+  // 표시용 행 번호 — 제외 행은 번호를 건너뛴다(발행 PDF 의 No. 와 같아진다).
+  const seqNos = includedSeqNos(form.items);
   const extras = chargesTotal(form.charges);
   const vat = (subtotal + extras) * num(form.vat_rate);
   const total = Math.round(subtotal + extras + vat);
@@ -999,9 +1025,11 @@ function ArAddForm({
       <div className="tax-items">
         <div className="items-head">
           <div className="form-section-title" style={{ margin: 0 }}>Item list</div>
+          <ExcludedCountNote items={form.items} />
           <div className="items-head-actions">
             <button type="button" className="btn sm" onClick={loadSource} disabled={loadDisabled}>{loadLabel}</button>
             <ItemColsButton grid={grid} />
+            <ExcludeSelectedButton items={form.items} sel={sel} onChange={setItems} />
             <DeleteSelectedButton sel={sel} onDelete={() => deleteSelectedRows(form.items, sel, setItems)} />
             <button type="button" className="btn sm items-head-add" onClick={addItem}>+ Add</button>
           </div>
@@ -1024,9 +1052,12 @@ function ArAddForm({
               {form.items.length === 0 ? (
                 <tr><td colSpan={7} className="tax-items-empty">No items — “+ Add” or “{loadLabel}”.</td></tr>
               ) : form.items.map((it, i) => (
-                <tr key={i} className={itemRowClass(i)}>
+                <tr key={i} className={itemRowClass(i, isRowExcluded(it))}>
                   <ItemSelectCell index={i} sel={sel} />
-                  <td className="seq">{i + 1}</td>
+                  {/* 제외 행은 번호를 비운다 — 발행 문서에는 그 줄이 없기 때문. */}
+                  <td className="seq" title={isRowExcluded(it) ? "Excluded from this document" : undefined}>
+                    {seqNos[i] ?? "—"}
+                  </td>
                   <td><textarea className="desc" rows={1} value={it.description} onChange={(e) => setItem(i, "description", e.target.value)} /></td>
                   <td><textarea className="wrapcell" rows={1} value={it.part_no} onChange={(e) => setItem(i, "part_no", e.target.value)} /></td>
                   <td><input className="num" value={amountInputValue(it.qty)} onChange={(e) => setItem(i, "qty", e.target.value)} /></td>
