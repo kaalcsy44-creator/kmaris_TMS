@@ -116,6 +116,72 @@ export function DeleteSelectedButton({
   );
 }
 
+// ── 품목 "문서에서 제외"(Exclude) ─────────────────────────────────────────────
+// Delete 와 다르다: 행은 표에 남고(회색 처리) 언제든 되살릴 수 있으며, 저장도 된다.
+// 대신 합계에서 빠지고 발행 문서(미리보기·PDF·Excel)에는 출력되지 않는다
+// (서버 normalize_items 가 excluded 표식을 보고 거른 뒤 번호를 다시 매긴다).
+export type ExcludableItem = { excluded?: boolean };
+
+export function isRowExcluded(item: ExcludableItem | null | undefined): boolean {
+  return !!item?.excluded;
+}
+
+/** 문서에 실제로 실리는 행만 — 화면 합계는 이 목록으로 계산해 문서와 일치시킨다. */
+export function includedRows<T extends ExcludableItem>(items: T[]): T[] {
+  return (items || []).filter((it) => !isRowExcluded(it));
+}
+
+/** 표시용 행 번호 — 제외 행은 번호를 건너뛰고(null) 나머지가 1..n 으로 이어진다.
+ *  발행 문서의 No. 와 같은 번호가 되도록 서버 renumber 규칙과 맞춘 계산이다. */
+export function includedSeqNos<T extends ExcludableItem>(items: T[]): (number | null)[] {
+  let n = 0;
+  return (items || []).map((it) => (isRowExcluded(it) ? null : ++n));
+}
+
+/** 선택 행을 문서에서 제외/복원하는 토글 버튼. 선택이 모두 제외 상태면 "Restore" 가 된다. */
+export function ExcludeSelectedButton<T extends ExcludableItem>({
+  items,
+  sel,
+  onChange,
+}: {
+  items: T[];
+  sel: RowSelection;
+  onChange: (next: T[]) => void;
+}) {
+  const picked = Array.from(sel.selected).filter((i) => i >= 0 && i < items.length);
+  // 선택이 모두 제외 상태 → 복원, 하나라도 포함 상태 → 제외(섞여 있으면 제외로 통일).
+  const restore = picked.length > 0 && picked.every((i) => isRowExcluded(items[i]));
+  return (
+    <button
+      type="button"
+      className="btn sm items-head-exclude"
+      disabled={picked.length === 0}
+      title={
+        restore
+          ? "선택한 행을 문서에 다시 포함합니다."
+          : "선택한 행을 문서(미리보기·PDF·Excel)에서 제외합니다. 표에는 남아 있어 언제든 되살릴 수 있습니다."
+      }
+      onClick={() =>
+        onChange(items.map((it, i) => (picked.includes(i) ? { ...it, excluded: !restore } : it)))
+      }
+    >
+      {restore ? "Restore" : "Exclude"}
+      {picked.length > 0 ? ` (${picked.length})` : ""}
+    </button>
+  );
+}
+
+/** 품목표 제목 옆에 붙는 "n개 제외됨" 안내. 제외된 행이 없으면 아무것도 그리지 않는다. */
+export function ExcludedCountNote({ items }: { items: ExcludableItem[] }) {
+  const n = (items || []).filter(isRowExcluded).length;
+  if (!n) return null;
+  return (
+    <span className="items-head-note" title="제외된 행은 표에만 남고 발행 문서에는 나오지 않습니다.">
+      {n} excluded from this document
+    </span>
+  );
+}
+
 export function parseAmountInput(value: string): number | null {
   const normalized = value.replace(/,/g, "").trim();
   if (normalized === "") return null;
@@ -270,10 +336,12 @@ function toNumber(value: number | string | null | undefined): number {
 // 품목 행에 붙는 클래스 — 5행마다 그룹 구분선 + 짝수행 zebra.
 // zebra 를 CSS :nth-child(even) 로 두면 상세 서브행(item-subrow)이 끼는 표에서 행 번호가
 // 어긋나므로, 품목 인덱스 기준으로 클래스를 직접 붙인다.
-export function itemRowClass(index: number): string | undefined {
+// excluded=true 면 "문서에서 제외" 표시(회색 처리)를 함께 붙인다.
+export function itemRowClass(index: number, excluded = false): string | undefined {
   const cls = [
     index > 0 && index % 5 === 0 ? "item-group-break" : "",
     index % 2 === 1 ? "item-row-alt" : "",
+    excluded ? "item-row-excluded" : "",
   ].filter(Boolean);
   return cls.length ? cls.join(" ") : undefined;
 }

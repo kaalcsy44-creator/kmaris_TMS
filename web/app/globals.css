@@ -5332,6 +5332,47 @@ table.mini input[type="checkbox"].row-check:indeterminate::after {
   color: #0055a8;
   border-color: #9cc3e8;
 }
+/* "n excluded from this document" — 제목 바로 옆에 붙는 안내(액션 버튼은 계속 오른쪽 끝). */
+.items-head-note {
+  margin-right: auto;
+  font-size: 11px;
+  color: #8a6d3b;
+  background: #fdf6e3;
+  border: 1px solid #ecd9a8;
+  border-radius: 6px;
+  padding: 1px 7px;
+  cursor: help;
+  white-space: nowrap;
+}
+
+/* ── 문서에서 제외한 품목 행 ──────────────────────────────────────────────
+   Delete 와 달리 행은 남지만 발행 문서(미리보기·PDF·Excel)와 합계에서는 빠진다.
+   "여기 있지만 문서에는 안 나간다"가 한눈에 보이도록 회색 + 취소선으로 눕히고,
+   되살리기 전에도 값은 그대로 편집할 수 있게 포커스된 칸만 정상 표기로 되돌린다.
+   선택자에 클래스를 두 번 적은 것은 zebra(.item-row-alt)·구분행(.item-group-break) 규칙보다
+   우선순위를 확실히 올리기 위해서다 — 그 규칙들이 고정열 배경까지 못박아 두고 있다. */
+.table-wrap table.mini.wide.lead-tools tbody tr.item-row-excluded.item-row-excluded td,
+.table-wrap table.mini.wide.lead-tools tbody tr.item-row-excluded.item-row-excluded td.row-tools,
+.table-wrap table.mini.wide.lead-tools tbody tr.item-row-excluded.item-row-excluded td.seq {
+  background: #f1f3f6;
+}
+.table-wrap table.mini.wide.lead-tools tbody tr.item-row-excluded.item-row-excluded td.row-tools {
+  box-shadow: inset 3px 0 0 #b6c0ce;
+}
+.table-wrap table.mini.wide.lead-tools tbody tr.item-row-excluded.item-row-excluded td.seq {
+  color: #9aa6b6;
+}
+table.mini.wide.lead-tools tbody tr.item-row-excluded.item-row-excluded input:not(:focus),
+table.mini.wide.lead-tools tbody tr.item-row-excluded.item-row-excluded textarea:not(:focus) {
+  background: #f1f3f6;
+  color: #8b97a8;
+  text-decoration: line-through;
+}
+table.mini.wide.lead-tools tbody tr.item-row-excluded.item-row-excluded input:focus,
+table.mini.wide.lead-tools tbody tr.item-row-excluded.item-row-excluded textarea:focus {
+  background: #fff;
+  text-decoration: none;
+}
 
 /* ── 편집창 안 탭 바(공용) ──────────────────────────────────────────────
    단계 편집창을 탭으로 나누는 모든 곳이 이 한 스타일을 쓴다:

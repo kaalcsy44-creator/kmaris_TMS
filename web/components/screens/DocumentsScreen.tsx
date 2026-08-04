@@ -37,7 +37,12 @@ import {
   deleteSelectedRows,
   DualCurrencyAmount,
   dualCurrencyText,
+  ExcludedCountNote,
+  ExcludeSelectedButton,
   fxRateText,
+  includedRows,
+  includedSeqNos,
+  isRowExcluded,
   useItemGridKeys,
   CopyRowsButton,
   ItemGridHint,
@@ -497,7 +502,7 @@ function ServiceBillingForm({ data, onChanged, onClose }: { data: DocumentDetail
   const [err, setErr] = useState<string | null>(null);
   const editable = canEditDoc(data);
 
-  const itemTotal = useMemo(() => items.reduce((sum, item) => sum + num(item.amount), 0), [items]);
+  const itemTotal = useMemo(() => includedRows(items).reduce((sum, item) => sum + num(item.amount), 0), [items]);
   const extraTotal = useMemo(
     () => num(labor) + num(travel) + num(material) + num(other),
     [labor, travel, material, other]
@@ -923,7 +928,8 @@ function ProformaInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChang
   const [insurance, setInsurance] = useState(data.pi?.terms?.insurance || "");
   const [busy, setBusy] = useState(false);
   // Total invoice value = 품목 소계 + Freight + Packing + Insurance + VAT (선적 전 견적성 송장).
-  const subtotal = useMemo(() => items.reduce((sum, i) => sum + num(i.amount), 0), [items]);
+  // 소계는 문서에서 제외한 행을 뺀 금액(발행 PDF·Excel 과 같은 기준).
+  const subtotal = useMemo(() => includedRows(items).reduce((sum, i) => sum + num(i.amount), 0), [items]);
   const extras = num(freight) + num(packing) + num(insurance);
   const vatAmount = (subtotal + extras) * (num(vatRate) / 100);
   const totalInvoiceValue = subtotal + extras + vatAmount;
@@ -1099,7 +1105,8 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
   const [insurance, setInsurance] = useState(data.ci?.terms?.insurance || "");
   const [busy, setBusy] = useState(false);
   // Total invoice value = 품목 소계 + Freight + Packing + Insurance + VAT.
-  const subtotal = useMemo(() => items.reduce((sum, i) => sum + num(i.amount), 0), [items]);
+  // 소계는 문서에서 제외한 행을 뺀 금액(발행 PDF·Excel 과 같은 기준).
+  const subtotal = useMemo(() => includedRows(items).reduce((sum, i) => sum + num(i.amount), 0), [items]);
   const extras = num(freight) + num(packing) + num(insurance);
   const vatAmount = (subtotal + extras) * (num(vatRate) / 100);
   const totalInvoiceValue = subtotal + extras + vatAmount;
@@ -1489,7 +1496,7 @@ function TaxInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChanged: (
   const [items, setItems] = useState<DocumentWorkItem[]>(normalizeItems(data.tax?.items || data.ci?.items || data.order.items));
   const [busy, setBusy] = useState(false);
   const currency = data.ci?.currency || "USD";
-  const total = useMemo(() => items.reduce((sum, item) => sum + num(item.amount), 0), [items]);
+  const total = useMemo(() => includedRows(items).reduce((sum, item) => sum + num(item.amount), 0), [items]);
   const editable = canEditDoc(data);
 
   async function save() {
@@ -2002,12 +2009,15 @@ function ItemEditor({
     next[i] = item;
     setItems(next);
   }
-  const total = items.reduce((sum, item) => sum + num(item.amount), 0);
+  // 합계·행 번호는 "문서에 실리는 행"(제외하지 않은 행)만 기준으로 삼아 발행 문서와 일치시킨다.
+  const shown = includedRows(items);
+  const seqNos = includedSeqNos(items);
+  const total = shown.reduce((sum, item) => sum + num(item.amount), 0);
   // Packing List 합계 — 포장수량·중량·용적 자동합산(빈 값은 0으로 무시).
-  const pkgTotal = items.reduce((s, it) => s + num(it.pkg_qty), 0);
-  const nwTotal = items.reduce((s, it) => s + num(it.net_weight), 0);
-  const gwTotal = items.reduce((s, it) => s + num(it.gross_weight), 0);
-  const measTotal = items.reduce((s, it) => s + num(it.measurement), 0);
+  const pkgTotal = shown.reduce((s, it) => s + num(it.pkg_qty), 0);
+  const nwTotal = shown.reduce((s, it) => s + num(it.net_weight), 0);
+  const gwTotal = shown.reduce((s, it) => s + num(it.gross_weight), 0);
+  const measTotal = shown.reduce((s, it) => s + num(it.measurement), 0);
   const fmtNum = (n: number) => (n ? n.toLocaleString(undefined, { maximumFractionDigits: 3 }) : "");
   const sel = useRowSelection();
   const cur = (currency || "USD").toUpperCase();
@@ -2075,11 +2085,13 @@ function ItemEditor({
     <div style={{ marginTop: 16 }}>
       <div className="items-head">
         <div className="sub-h">Item list</div>
+        <ExcludedCountNote items={items} />
         <div className="items-head-actions">
           {headerActions}
           <ItemColsButton grid={grid} />
           <ItemGridHint />
           <CopyRowsButton grid={keys} sel={sel} />
+          <ExcludeSelectedButton items={items} sel={sel} onChange={setItems} />
           <DeleteSelectedButton sel={sel} onDelete={() => deleteSelectedRows(items, sel, setItems)} />
           <button className="btn sm items-head-add" onClick={() => setItems([...items, blankItem(packing)])}>+ Add</button>
         </div>
@@ -2121,9 +2133,12 @@ function ItemEditor({
           </thead>
           <tbody>
             {items.map((item, i) => (
-              <tr key={i} className={itemRowClass(i)}>
+              <tr key={i} className={itemRowClass(i, isRowExcluded(item))}>
                 <ItemSelectCell index={i} sel={sel} />
-                <td className="seq">{i + 1}</td>
+                {/* 제외 행은 번호를 비우고(발행 문서 번호와 어긋나지 않게) 제외 표식만 남긴다. */}
+                <td className="seq" title={isRowExcluded(item) ? "Excluded from this document" : undefined}>
+                  {seqNos[i] ?? "—"}
+                </td>
                 <td><textarea {...keys.cell(i, 0)} className="wrapcell" rows={1} value={item.part_no || ""} onChange={(e) => patch(i, "part_no", e.target.value)} /></td>
                 <td><textarea {...keys.cell(i, 1)} className="desc" rows={1} value={item.description || ""} onChange={(e) => patch(i, "description", e.target.value)} /></td>
                 <td><textarea {...keys.cell(i, 2)} className="wrapcell" rows={1} value={item.maker || ""} onChange={(e) => patch(i, "maker", e.target.value)} /></td>
@@ -2401,6 +2416,8 @@ function normalizeItems(items: DocumentWorkItem[], packing = false): DocumentWor
     gross_weight: item.gross_weight || "",
     measurement: item.measurement ?? "",
     dimension: item.dimension || "",
+    // 문서 제외 표식은 저장값에서 그대로 이어받는다(다시 열어도 제외 상태 유지).
+    excluded: !!item.excluded,
   }));
 }
 

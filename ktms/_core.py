@@ -656,7 +656,11 @@ def _items_cost_total(items) -> float:
 
 
 def _total_amount(items) -> float:
-    return sum(float(i.get("amount", 0) or 0) for i in (items or []))
+    # 문서에서 제외(excluded)한 행은 발행 문서에 나가지 않으므로 금액에서도 뺀다
+    # (services.kmaris_docs.normalize_items 와 같은 규칙 — 화면 합계·PDF·청구액이 한 값이 되게).
+    return sum(
+        float(i.get("amount", 0) or 0) for i in (items or []) if not i.get("excluded")
+    )
 
 
 def _enum_val(v) -> str:
@@ -1814,6 +1818,9 @@ def _missing_items(order_items: list[dict], doc_items: list[dict]) -> list[dict]
 
     doc_qty: dict[str, float] = {}
     for item in doc_items or []:
+        # "문서에서 제외"(excluded)한 행도 여기서는 처리된 것으로 센다 — 이 경고는 오더 품목을
+        # 빠뜨렸는지 보는 장치이고, 제외는 (다른 항목에 합쳐 넣는 등) 의도한 선택이라
+        # 품목표 머리의 "n excluded from this document" 안내로 이미 드러난다.
         k = key(item)
         if k:
             doc_qty[k] = doc_qty.get(k, 0.0) + qty(item)

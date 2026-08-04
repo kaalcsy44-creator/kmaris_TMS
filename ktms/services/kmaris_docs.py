@@ -130,8 +130,13 @@ def _num(value: Any) -> float:
 
 
 def normalize_items(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """발행용 품목 목록 — 화면에서 "문서에서 제외"(excluded)한 행은 여기서 빠진다.
+    PDF·Excel·합계(calc_totals)가 모두 이 함수를 거치므로 제외 규칙은 이 한 곳에만 둔다.
+    빠진 행이 있으면 남은 행의 No. 를 1..n 으로 다시 매겨 문서에 번호 구멍이 없게 한다."""
+    kept = [raw for raw in (items or []) if not (isinstance(raw, dict) and raw.get("excluded"))]
+    renumber = len(kept) != len(items or [])
     normalized: List[Dict[str, Any]] = []
-    for i, raw in enumerate(items, start=1):
+    for i, raw in enumerate(kept, start=1):
         qty = _num(raw.get("qty", 0))
         unit_price = _num(raw.get("unit_price", 0))
         amount = raw.get("amount")
@@ -139,7 +144,7 @@ def normalize_items(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             amount = qty * unit_price
         normalized.append(
             {
-                "item_no": raw.get("item_no") or i,
+                "item_no": i if renumber else (raw.get("item_no") or i),
                 "part_no": raw.get("part_no", ""),
                 "description": raw.get("description", ""),
                 "maker": raw.get("maker", ""),

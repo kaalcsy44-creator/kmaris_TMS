@@ -602,6 +602,9 @@ export type DocumentWorkItem = {
   gross_weight?: string | number;
   measurement?: string | number;
   dimension?: string;
+  // 문서에서 제외한 행 — 삭제와 달리 편집표에는 남고(회색) 언제든 되살릴 수 있다.
+  // 저장은 되지만 합계와 발행 문서(PDF·Excel)에서는 빠진다(서버 normalize_items 가 거른다).
+  excluded?: boolean;
 };
 
 export type DocumentDetail = {
