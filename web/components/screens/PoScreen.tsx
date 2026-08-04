@@ -2032,7 +2032,7 @@ function ItemEditor({
   // 합계·행번호는 "문서에서 제외"한 행을 뺀 값 — 발행 P/O(PDF)와 같은 숫자가 되게.
   const total = includedRows(items).reduce((sum, it) => sum + Number(it.amount || 0), 0);
   const seqNos = includedSeqNos(items);
-  const sel = useRowSelection();
+  const sel = useRowSelection(items.length);
   const cur = (currency || "USD").toUpperCase();
   const cols: ItemCol[] = [
     { key: "__sel", fixed: true },

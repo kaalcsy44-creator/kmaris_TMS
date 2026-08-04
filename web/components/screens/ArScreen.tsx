@@ -341,7 +341,7 @@ function ApAddForm({
   const [busy, setBusy] = useState(false);
   const [delBusy, setDelBusy] = useState(false);
   const [err, setErr] = useState("");
-  const sel = useRowSelection();
+  const sel = useRowSelection(form.items.length);
 
   // 합계 = 품목 소계 + 부대비용(Freight/Packing/Insurance) + VAT.
   // 소계는 "문서에서 제외"한 행을 뺀 값 — AR 청구서와 같은 규칙.
@@ -795,7 +795,7 @@ function ArAddForm({
     phones: string[];
     contacts: { name: string; email: string; phone: string; position: string }[];
   }>({ taxInvoiceEmail: "", contactName: "", emails: [], phones: [], contacts: [] });
-  const sel = useRowSelection();
+  const sel = useRowSelection(form.items.length);
 
   // 오더 선택 시 해당 프로젝트/CI 정보를 불러와 빈 항목 자동 입력.
   useEffect(() => {

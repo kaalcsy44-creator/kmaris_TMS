@@ -234,7 +234,7 @@ export default function NewRfqForm({
   function addItem() {
     setItems((prev) => [...prev, { ...EMPTY_ITEM }]);
   }
-  const itemSel = useRowSelection();
+  const itemSel = useRowSelection(items.length);
   function deleteSelectedItems() {
     if (itemSel.count === 0) return;
     setItems((prev) => prev.filter((_, idx) => !itemSel.selected.has(idx)));

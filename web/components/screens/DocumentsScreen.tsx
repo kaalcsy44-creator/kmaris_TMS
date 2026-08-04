@@ -2193,7 +2193,7 @@ function ItemEditor({
   // 합계행 Measurement 칸의 안내값 — 치수를 적었으면 그걸로 계산한 용적을 미리 보여준다.
   const dimMeasurement = packingTotals ? dimMeasurementText(packingTotals.values) : "";
   const fmtNum = (n: number) => (n ? n.toLocaleString(undefined, { maximumFractionDigits: 3 }) : "");
-  const sel = useRowSelection();
+  const sel = useRowSelection(items.length);
   const cur = (currency || "USD").toUpperCase();
   const unitListId = useId();
   const cols: ItemCol[] = [

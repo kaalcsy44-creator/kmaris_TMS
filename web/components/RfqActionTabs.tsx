@@ -1375,7 +1375,7 @@ function VendorRfqItemEditor({
   function add() {
     onChange([...items, blank()]);
   }
-  const sel = useRowSelection();
+  const sel = useRowSelection(items.length);
   const cols: ItemCol[] = [
     { key: "__sel", fixed: true },
     { key: "__seq", fixed: true, className: "seq" },
@@ -2598,7 +2598,7 @@ function VendorRfqAction({
   function addItem() {
     setRfqItems((prev) => [...prev, blankItem()]);
   }
-  const itemSel = useRowSelection();
+  const itemSel = useRowSelection(rfqItems.length);
   const itemGridCols: ItemCol[] = [
     { key: "__sel", fixed: true },
     { key: "__seq", fixed: true, className: "seq" },
@@ -3249,7 +3249,7 @@ function VendorQuoteItemEditor({
     (sum, it) => sum + Number(it.cost_price || 0) * Number(it.qty || 1),
     0
   );
-  const sel = useRowSelection();
+  const sel = useRowSelection(items.length);
   const cur = (currency || "USD").toUpperCase();
   const cols: ItemCol[] = [
     { key: "__sel", fixed: true },
@@ -3912,7 +3912,7 @@ function CustomerQuoteItemEditor({
   // 매입 합계(원가×수량, 원가 통화) · 매출 합계(판매 Amount, 판매 통화)를 각각 표기.
   const purchaseTotal = items.reduce((sum, it) => sum + Number(it.cost_price || 0) * Number(it.qty || 1), 0);
   const total = items.reduce((sum, it) => sum + Number(it.amount || 0), 0);
-  const sel = useRowSelection();
+  const sel = useRowSelection(items.length);
   // 상세(서브행) 펼침 상태 — 품목 인덱스 기준. 행이 지워지면 인덱스가 밀리므로 함께 초기화한다.
   const [openRows, setOpenRows] = useState<Set<number>>(() => new Set());
   const [allOpen, setAllOpen] = useState(false);

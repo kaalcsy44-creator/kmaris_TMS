@@ -18,8 +18,18 @@ export type RowSelection = {
   count: number;
 };
 
-export function useRowSelection(): RowSelection {
+/** rowCount 를 주면 표에 없는 행의 선택은 자동으로 털어낸다. 선택이 행 인덱스 기준이라
+ *  행이 줄면(삭제·다른 문서로 전환·Load 로 교체) 사라진 행이 선택으로 남아 "Delete (1)" 처럼
+ *  버튼 숫자만 세는 유령 선택이 생기고, 눌러도 아무 일도 일어나지 않는다. */
+export function useRowSelection(rowCount?: number): RowSelection {
   const [selected, setSelected] = useState<Set<number>>(() => new Set());
+  useEffect(() => {
+    if (rowCount === undefined) return;
+    setSelected((prev) => {
+      const kept = Array.from(prev).filter((i) => i < rowCount);
+      return kept.length === prev.size ? prev : new Set(kept);
+    });
+  }, [rowCount]);
   const toggle = useCallback((i: number) => {
     setSelected((prev) => {
       const next = new Set(prev);
@@ -66,17 +76,20 @@ export function ItemSelectHeaderCell({
   const some = sel.count > 0 && !all;
   return (
     <th className="row-tools">
-      <input
-        type="checkbox"
-        className="row-check"
-        aria-label="Select all rows"
-        checked={all}
-        disabled={count === 0}
-        ref={(el) => {
-          if (el) el.indeterminate = some;
-        }}
-        onChange={(e) => sel.setAll(count, e.target.checked)}
-      />
+      {/* 셀 전체를 클릭 영역으로 — 15px 체크박스만 노리면 빗나간 클릭이 "안 눌린다"로 보인다. */}
+      <label className="row-check-hit">
+        <input
+          type="checkbox"
+          className="row-check"
+          aria-label="Select all rows"
+          checked={all}
+          disabled={count === 0}
+          ref={(el) => {
+            if (el) el.indeterminate = some;
+          }}
+          onChange={(e) => sel.setAll(count, e.target.checked)}
+        />
+      </label>
     </th>
   );
 }
@@ -85,13 +98,15 @@ export function ItemSelectHeaderCell({
 export function ItemSelectCell({ index, sel }: { index: number; sel: RowSelection }) {
   return (
     <td className="row-tools">
-      <input
-        type="checkbox"
-        className="row-check"
-        aria-label={`Select row ${index + 1}`}
-        checked={sel.isSelected(index)}
-        onChange={() => sel.toggle(index)}
-      />
+      <label className="row-check-hit">
+        <input
+          type="checkbox"
+          className="row-check"
+          aria-label={`Select row ${index + 1}`}
+          checked={sel.isSelected(index)}
+          onChange={() => sel.toggle(index)}
+        />
+      </label>
     </td>
   );
 }

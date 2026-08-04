@@ -5137,7 +5137,10 @@ table.mini tbody tr.item-group-break td {
 table.mini.wide.lead-tools tbody tr.item-row-alt:not(.item-group-break) td {
   background: #f7f9fc;
 }
-table.mini.wide.lead-tools tbody tr.item-row-alt:not(.item-group-break) input:not(:focus),
+/* :not(.row-check) — 이 규칙은 값 입력칸(흰 배경)을 눕히려는 것이다. 선택 체크박스까지
+   칠하면 선택자가 더 구체적이라 .row-check:checked 의 파란 배경을 이겨버려서, 체크한 행이
+   짝수행이면 체크가 안 먹은 것처럼 보인다(흰 체크표시가 연한 배경에 묻힌다). */
+table.mini.wide.lead-tools tbody tr.item-row-alt:not(.item-group-break) input:not(:focus):not(.row-check),
 table.mini.wide.lead-tools tbody tr.item-row-alt:not(.item-group-break) textarea:not(:focus) {
   background: #f7f9fc;
 }
@@ -5252,6 +5255,16 @@ table.mini tfoot .total-value .fx-note {
    커스텀(appearance:none) 체크박스 — 표 input 100% 폭 규칙과 충돌하지 않고,
    sticky 고정열 안에서 네이티브 체크박스가 스크롤 시 사라지는 크로미움 리페인트
    버그도 피한다. 강한 선택자로 table.mini(.wide/.items-edit) input 규칙을 이긴다. */
+/* 체크박스를 감싸 셀 전체를 클릭 영역으로 만드는 라벨(행 선택 열 · 헤더 전체선택). */
+table.mini .row-check-hit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 22px;
+  margin: 0;
+  cursor: pointer;
+}
 table.mini input[type="checkbox"].row-check,
 .items-head input[type="checkbox"].row-check {
   appearance: none;
@@ -5270,8 +5283,11 @@ table.mini input[type="checkbox"].row-check,
   background: #fff;
   cursor: pointer;
 }
-table.mini input[type="checkbox"].row-check:checked,
-table.mini input[type="checkbox"].row-check:indeterminate {
+/* 클래스를 두 번 적어 우선순위를 올린다 — zebra(.item-row-alt)·제외행(.item-row-excluded)
+   처럼 "행 전체의 input" 을 칠하는 규칙이 선택 표시(파란 배경)를 덮으면 체크가 안 먹은 것처럼
+   보인다. 선택 상태는 어떤 행 규칙보다 우선해야 한다. */
+table.mini input[type="checkbox"].row-check.row-check:checked,
+table.mini input[type="checkbox"].row-check.row-check:indeterminate {
   background: var(--blue, #0055a8);
   border-color: var(--blue, #0055a8);
 }
@@ -5380,13 +5396,15 @@ table.mini input[type="checkbox"].row-check:indeterminate::after {
 .table-wrap table.mini.wide.lead-tools tbody tr.item-row-excluded.item-row-excluded td.seq {
   color: #9aa6b6;
 }
-table.mini.wide.lead-tools tbody tr.item-row-excluded.item-row-excluded input:not(:focus),
+/* 값 입력칸만 회색·취소선으로 눕힌다 — 선택 체크박스(.row-check)는 제외해야
+   제외된 행도 평소처럼 선택 상태(파란 체크)가 보인다(Restore 하려면 골라야 하므로). */
+table.mini.wide.lead-tools tbody tr.item-row-excluded.item-row-excluded input:not(:focus):not(.row-check),
 table.mini.wide.lead-tools tbody tr.item-row-excluded.item-row-excluded textarea:not(:focus) {
   background: #f1f3f6;
   color: #8b97a8;
   text-decoration: line-through;
 }
-table.mini.wide.lead-tools tbody tr.item-row-excluded.item-row-excluded input:focus,
+table.mini.wide.lead-tools tbody tr.item-row-excluded.item-row-excluded input:focus:not(.row-check),
 table.mini.wide.lead-tools tbody tr.item-row-excluded.item-row-excluded textarea:focus {
   background: #fff;
   text-decoration: none;
