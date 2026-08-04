@@ -1903,6 +1903,8 @@ def _document_detail_payload(session, order: Order) -> dict:
             "status": _enum_val(order.status),
             "customer": cust.name if cust else "",
             "customer_email": cust.email if cust else "",
+            # 문서(CI/PL)의 BUYER 칸에 인쇄되는 주소 — 화면에서도 같은 값을 보여준다.
+            "customer_address": (cust.address or "") if cust else "",
             "customer_tax_id": cust.tax_id if cust else "",
             # 청구서(Bill to) 선택지 — 저장된 고객 정보에서 고르거나 직접 입력.
             # 담당자는 person-centric 모델이라 Customer.contact(대표 담당자명)를 기본으로 쓴다.

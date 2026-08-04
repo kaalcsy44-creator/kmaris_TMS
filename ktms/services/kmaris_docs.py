@@ -373,12 +373,20 @@ def _info_tables(data: Dict[str, Any], doc_type: str):
         else "Supplier / Seller" if is_po
         else "Customer / Buyer"
     )
+    # 송장류는 문서에 적어 넣은 매수인이 고객 마스터보다 우선하고, 수하인이 매수인과
+    # 다르면 한 줄 덧붙인다(수하인·매수인이 다른 거래를 문서에서 구분해 보이게).
+    consignee_party = None
+    if doc_type in {"proforma_invoice", "commercial_invoice", "packing_list", "shipping_advice"}:
+        consignee_party, buyer_party = doc_parties(data)
+        customer = {**customer, **buyer_party}
     left_rows = [
         [_p(f"<b>{party_label}</b>", s["base"]), _p(customer.get("name", ""), s["base"])],
         [_p("Address", s["base"]), _p(customer.get("address", ""), s["base"])],
         [_p("Contact", s["base"]), _p(customer.get("contact", ""), s["base"])],
         [_p("Email", s["base"]), _p(customer.get("email", ""), s["base"])],
     ]
+    if consignee_party and consignee_party.get("name") and consignee_party["name"] != customer.get("name"):
+        left_rows.append([_p("Consignee", s["base"]), _p(consignee_party["name"], s["base"])])
     mid_rows = [
         [_p("<b>Vessel</b>", s["base"]), _p(vessel.get("name", ""), s["base"])],
         [_p("IMO No.", s["base"]), _p(vessel.get("imo", ""), s["base"])],
@@ -661,6 +669,43 @@ def _terms_block(data: Dict[str, Any], doc_type: str):
     return table
 
 
+def doc_parties(data: Dict[str, Any]) -> tuple[Dict[str, str], Dict[str, str]]:
+    """문서에 인쇄할 (수하인 CONSIGNEE, 매수인 BUYER).
+
+    수하인과 매수인은 다른 회사일 수 있어 문서(shipping)에 따로 담는다.
+      · 매수인 — buyer_* 를 적어 넣었으면 그 값, 비어 있으면 고객 마스터 값.
+      · 수하인 — 회사명(sm_consignee)이 있으면 consignee_* 값, 없으면 매수인과 같다.
+    """
+    customer = data.get("customer", {}) or {}
+    shipping = data.get("shipping", {}) or {}
+
+    def pick(key: str, fallback: str) -> str:
+        return (shipping.get(key) or "").strip() or fallback
+
+    buyer = {
+        "name": pick("buyer_name", customer.get("name", "") or ""),
+        "address": pick("buyer_address", customer.get("address", "") or ""),
+        "contact": pick("buyer_contact", customer.get("contact", "") or ""),
+        "email": pick("buyer_email", customer.get("email", "") or ""),
+    }
+    if not (shipping.get("sm_consignee") or "").strip():
+        return dict(buyer), buyer
+    consignee = {
+        "name": (shipping.get("sm_consignee") or "").strip(),
+        "address": (shipping.get("consignee_address") or "").strip(),
+        "contact": (shipping.get("consignee_contact") or "").strip(),
+        "email": (shipping.get("consignee_email") or "").strip(),
+    }
+    return consignee, buyer
+
+
+def party_lines(party: Dict[str, str]) -> list[str]:
+    """당사자 블록 3줄 — 회사명 / 주소 / 담당자·이메일(문서 서식과 같은 구성)."""
+    contact = "    ".join(x for x in (party.get("contact", ""), party.get("email", "")) if x)
+    return [party.get("name", ""), party.get("address", ""),
+            f"Contact: {contact}" if contact else ""]
+
+
 def _vessel_imo(shipping: Dict[str, Any], vessel: Dict[str, Any] | None) -> str:
     """문서의 'Vessel / IMO No.' 칸 — 문서에 적어 넣은 선명이 우선, 없으면 선박 마스터."""
     vessel = vessel or {}
@@ -828,13 +873,11 @@ def _make_commercial_invoice_pdf(data: Dict[str, Any], company: Dict[str, Any]) 
                               ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]))
     story.append(info)
 
-    buyer = [customer.get("name", ""), customer.get("address", ""),
-             f"Contact: {customer.get('contact', '')}    {customer.get('email', '')}"]
-    ship = [("Ship Agent", shipping.get("sm_consignee", "")),
-            ("Vessel / IMO", " / ".join(x for x in [shipping.get("sm_vessel") or vessel.get("name", ""), vessel.get("imo", "")] if x)),
-            ("", "")]
-    rows = [[p("CONSIGNEE / BUYER", "section"), "", p("SHIP TO / C/O", "section"), ""]]
-    rows += [[p(buyer[i]), "", p(ship[i][0]), p(ship[i][1])] for i in range(3)]
+    # 수하인·매수인은 다른 회사일 수 있어 두 칸으로 나눠 인쇄한다(문서 서식과 동일).
+    consignee_party, buyer_party = doc_parties(data)
+    consignee_lines, buyer_lines = party_lines(consignee_party), party_lines(buyer_party)
+    rows = [[p("CONSIGNEE", "section"), "", p("BUYER (if different)", "section"), ""]]
+    rows += [[p(consignee_lines[i]), "", p(buyer_lines[i]), ""] for i in range(3)]
     consignee = Table(rows, colWidths=[col_widths[0] + col_widths[1], col_widths[2] + col_widths[3],
                                       col_widths[4] + col_widths[5], col_widths[6] + col_widths[7]])
     consignee.setStyle(TableStyle([("SPAN", (0, 0), (1, 0)), ("SPAN", (2, 0), (3, 0)),
@@ -842,7 +885,7 @@ def _make_commercial_invoice_pdf(data: Dict[str, Any], company: Dict[str, Any]) 
                                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
                                    ("FONTNAME", (0, 0), (-1, 0), DEFAULT_BOLD_FONT),
                                    ("SPAN", (0, 1), (1, 1)), ("SPAN", (0, 2), (1, 2)), ("SPAN", (0, 3), (1, 3)),
-                                   ("BACKGROUND", (2, 1), (2, -1), LIGHT_GRAY), ("FONTNAME", (2, 1), (2, -1), DEFAULT_BOLD_FONT),
+                                   ("SPAN", (2, 1), (3, 1)), ("SPAN", (2, 2), (3, 2)), ("SPAN", (2, 3), (3, 3)),
                                    ("GRID", (0, 0), (-1, -1), .35, MID_GRAY), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
                                    ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
                                    ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]))
@@ -1394,13 +1437,11 @@ def _make_packing_list_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> byt
                               ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]))
     story.append(info)
 
-    buyer = [customer.get("name", ""), customer.get("address", ""),
-             f"Contact: {customer.get('contact', '')}    {customer.get('email', '')}"]
-    ship = [("Ship Agent", shipping.get("sm_consignee", "")),
-            ("Vessel / IMO", " / ".join(x for x in [shipping.get("sm_vessel") or vessel.get("name", ""), vessel.get("imo", "")] if x)),
-            ("B/L or AWB No.", shipping.get("bl_awb_no", ""))]
-    rows = [[p("CONSIGNEE / BUYER", "section"), "", p("SHIP TO / C/O", "section"), ""]]
-    rows += [[p(buyer[i]), "", p(ship[i][0]), p(ship[i][1])] for i in range(3)]
+    # 수하인·매수인은 다른 회사일 수 있어 두 칸으로 나눠 인쇄한다(Commercial Invoice 와 동일).
+    consignee_party, buyer_party = doc_parties(data)
+    consignee_lines, buyer_lines = party_lines(consignee_party), party_lines(buyer_party)
+    rows = [[p("CONSIGNEE", "section"), "", p("BUYER (if different)", "section"), ""]]
+    rows += [[p(consignee_lines[i]), "", p(buyer_lines[i]), ""] for i in range(3)]
     consignee = Table(rows, colWidths=[col_widths[0] + col_widths[1], col_widths[2] + col_widths[3],
                                       col_widths[4] + col_widths[5], col_widths[6] + col_widths[7]])
     consignee.setStyle(TableStyle([("SPAN", (0, 0), (1, 0)), ("SPAN", (2, 0), (3, 0)),
@@ -1408,7 +1449,7 @@ def _make_packing_list_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> byt
                                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
                                    ("FONTNAME", (0, 0), (-1, 0), DEFAULT_BOLD_FONT),
                                    ("SPAN", (0, 1), (1, 1)), ("SPAN", (0, 2), (1, 2)), ("SPAN", (0, 3), (1, 3)),
-                                   ("BACKGROUND", (2, 1), (2, -1), LIGHT_GRAY), ("FONTNAME", (2, 1), (2, -1), DEFAULT_BOLD_FONT),
+                                   ("SPAN", (2, 1), (3, 1)), ("SPAN", (2, 2), (3, 2)), ("SPAN", (2, 3), (3, 3)),
                                    ("GRID", (0, 0), (-1, -1), .35, MID_GRAY), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
                                    ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
                                    ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]))

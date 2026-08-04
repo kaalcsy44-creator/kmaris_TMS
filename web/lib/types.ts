@@ -615,6 +615,7 @@ export type DocumentDetail = {
     status: string;
     customer: string;
     customer_email: string;
+    customer_address: string;   // 문서의 BUYER 칸 주소(고객 마스터 값)
     customer_tax_id: string;
     // 청구서(Bill to) 선택지 — 저장된 고객 정보에서 고르거나 직접 입력.
     customer_contact?: string;   // 대표 담당자명(person-centric flat 필드)

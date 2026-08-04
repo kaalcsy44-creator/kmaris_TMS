@@ -13,7 +13,9 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
 
-from services.kmaris_docs import normalize_items, calc_totals, _num, DOC_TITLES
+from services.kmaris_docs import (
+    normalize_items, calc_totals, _num, DOC_TITLES, doc_parties, party_lines,
+)
 
 _CONFIG_DIR = Path(__file__).resolve().parent.parent / "config"
 _TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
@@ -247,23 +249,15 @@ def make_commercial_invoice_xlsx(
         r += 1
 
     # ── Consignee / Ship-to ──────────────────────────────────────────────
-    merge(r, 1, r, 4); put(r, 1, "CONSIGNEE / BUYER", fill=section, font=white_sec, align=left)
-    merge(r, 5, r, 8); put(r, 5, "SHIP TO / C/O", fill=section, font=white_sec, align=left)
+    # 수하인·매수인은 다른 회사일 수 있어 두 칸으로 나눠 인쇄한다(PDF 와 동일).
+    merge(r, 1, r, 4); put(r, 1, "CONSIGNEE", fill=section, font=white_sec, align=left)
+    merge(r, 5, r, 8); put(r, 5, "BUYER (if different)", fill=section, font=white_sec, align=left)
     bd(r, 1, r, 4, section); bd(r, 5, r, 8, section); r += 1
-    buyer = [
-        customer.get("name", ""),
-        customer.get("address", ""),
-        f"Contact: {customer.get('contact', '')}    {customer.get('email', '')}",
-    ]
-    ship_to = [
-        ("Ship Agent", shipping.get("sm_consignee", "")),
-        ("Vessel / IMO", " / ".join(x for x in [shipping.get("sm_vessel", "") or vessel.get("name", ""), vessel.get("imo", "")] if x)),
-        ("", ""),
-    ]
+    consignee_party, buyer_party = doc_parties(data)
+    consignee_lines, buyer_lines = party_lines(consignee_party), party_lines(buyer_party)
     for i in range(3):
-        merge(r, 1, r, 4); put(r, 1, buyer[i], font=normal, align=left); bd(r, 1, r, 4)
-        merge(r, 5, r, 6); put(r, 5, ship_to[i][0], fill=gray, font=boldsm, align=left)
-        merge(r, 7, r, 8); put(r, 7, ship_to[i][1], font=normal, align=left); bd(r, 5, r, 8)
+        merge(r, 1, r, 4); put(r, 1, consignee_lines[i], font=normal, align=left); bd(r, 1, r, 4)
+        merge(r, 5, r, 8); put(r, 5, buyer_lines[i], font=normal, align=left); bd(r, 5, r, 8)
         r += 1
 
     # ── Shipping information ─────────────────────────────────────────────
@@ -535,23 +529,15 @@ def make_packing_list_xlsx(
         r += 1
 
     # ── Consignee / Ship-to ──────────────────────────────────────────────
-    merge(r, 1, r, 5); put(r, 1, "CONSIGNEE / BUYER", fill=section, font=white_sec, align=left)
-    merge(r, 6, r, 9); put(r, 6, "SHIP TO / C/O", fill=section, font=white_sec, align=left)
+    # 수하인·매수인은 다른 회사일 수 있어 두 칸으로 나눠 인쇄한다(PDF 와 동일).
+    merge(r, 1, r, 5); put(r, 1, "CONSIGNEE", fill=section, font=white_sec, align=left)
+    merge(r, 6, r, 9); put(r, 6, "BUYER (if different)", fill=section, font=white_sec, align=left)
     bd(r, 1, r, 5, section); bd(r, 6, r, 9, section); r += 1
-    buyer = [
-        customer.get("name", ""),
-        customer.get("address", ""),
-        f"Contact: {customer.get('contact', '')}    {customer.get('email', '')}",
-    ]
-    ship_to = [
-        ("Ship Agent", shipping.get("sm_consignee", "")),
-        ("Vessel / IMO", " / ".join(x for x in [shipping.get("sm_vessel", "") or vessel.get("name", ""), vessel.get("imo", "")] if x)),
-        ("B/L or AWB No.", shipping.get("bl_awb_no", "")),
-    ]
+    consignee_party, buyer_party = doc_parties(data)
+    consignee_lines, buyer_lines = party_lines(consignee_party), party_lines(buyer_party)
     for i in range(3):
-        merge(r, 1, r, 5); put(r, 1, buyer[i], font=normal, align=left); bd(r, 1, r, 5)
-        merge(r, 6, r, 7); put(r, 6, ship_to[i][0], fill=gray, font=boldsm, align=left)
-        merge(r, 8, r, 9); put(r, 8, ship_to[i][1], font=normal, align=left); bd(r, 6, r, 9)
+        merge(r, 1, r, 5); put(r, 1, consignee_lines[i], font=normal, align=left); bd(r, 1, r, 5)
+        merge(r, 6, r, 9); put(r, 6, buyer_lines[i], font=normal, align=left); bd(r, 6, r, 9)
         r += 1
 
     # ── Shipping information ─────────────────────────────────────────────

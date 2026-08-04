@@ -1010,7 +1010,8 @@ function ProformaInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChang
         <PartyFields order={data.order} shipping={shipping} setShipping={setShipping} />
       </div>
       <p className="hint-inline" style={{ marginTop: 6 }}>
-        Buyer details come from the customer master. Consignee, vessel and country of origin are shared with the Shipping Marks tab.
+        Leave a buyer field empty to print the customer master value shown in grey. Leave the consignee empty when the goods
+        are consigned to the buyer. The consignee company is shared with the Shipping Marks tab (C/O line).
       </p>
       <div className="sub-h doc-sec-h">Shipping information</div>
       <div className="form-grid doc-form-grid">
@@ -1201,7 +1202,8 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
         <PartyFields order={data.order} shipping={shipping} setShipping={setShipping} />
       </div>
       <p className="hint-inline" style={{ marginTop: 6 }}>
-        Buyer details come from the customer master. Consignee, vessel and country of origin are shared with the Shipping Marks tab.
+        Leave a buyer field empty to print the customer master value shown in grey. Leave the consignee empty when the goods
+        are consigned to the buyer. The consignee company is shared with the Shipping Marks tab (C/O line).
       </p>
       <div className="sub-h doc-sec-h">Shipping information</div>
       <div className="form-grid doc-form-grid">
@@ -1749,7 +1751,24 @@ function BankInfoSection({ currency }: { currency: string }) {
   );
 }
 
-/** CONSIGNEE · BUYER — 수하인(포워더·선사 대리점)은 직접 입력, 매수인은 고객 마스터 값. */
+/** CONSIGNEE · BUYER — 수하인(포워더·선사 대리점)과 매수인은 서로 다른 회사일 수 있어
+ *  네 칸(회사명·주소·담당자·이메일)을 각각 따로 받는다.
+ *  · 수하인: 문서에만 있는 정보라 여기서 직접 입력(비우면 매수인과 같은 것으로 인쇄).
+ *  · 매수인: 고객 마스터 값이 기본이고, 이 문서에서만 다르게 찍을 때 덮어쓴다(비우면 마스터). */
+const BUYER_FIELDS: { key: string; label: string; master: (o: DocumentDetail["order"]) => string }[] = [
+  { key: "buyer_name", label: "Buyer · Company Name", master: (o) => o.customer || "" },
+  { key: "buyer_address", label: "Buyer · Address", master: (o) => o.customer_address || "" },
+  { key: "buyer_contact", label: "Buyer · Contact", master: (o) => o.customer_contact || "" },
+  { key: "buyer_email", label: "Buyer · e-mail", master: (o) => o.customer_email || "" },
+];
+// 수하인 — 회사명은 Shipping Marks 의 C/O 와 같은 값(sm_consignee)을 그대로 쓴다.
+const CONSIGNEE_FIELDS: { key: string; label: string }[] = [
+  { key: "sm_consignee", label: "Consignee · Company Name" },
+  { key: "consignee_address", label: "Consignee · Address" },
+  { key: "consignee_contact", label: "Consignee · Contact" },
+  { key: "consignee_email", label: "Consignee · e-mail" },
+];
+
 function PartyFields({
   order,
   shipping,
@@ -1762,15 +1781,19 @@ function PartyFields({
   /** Packing List 처럼 Commercial Invoice 값을 그대로 따라가는 화면은 읽기전용. */
   readonly?: boolean;
 }) {
+  const set = (key: string) => (v: string) => setShipping({ ...shipping, [key]: v });
   return (
     <>
-      {readonly
-        ? <ReadonlyField label="Consignee · Company Name" value={shipping.sm_consignee || ""} />
-        : <Field label="Consignee · Company Name" value={shipping.sm_consignee || ""} onChange={(v) => setShipping({ ...shipping, sm_consignee: v })} />}
-      {/* 매수인은 고객 마스터에서 그대로 인쇄된다 — 여기서는 무엇이 찍히는지만 보여준다. */}
-      <ReadonlyField label="Buyer · Company Name" value={order.customer || ""} />
-      <ReadonlyField label="Buyer · Contact" value={order.customer_contact || ""} />
-      <ReadonlyField label="Buyer · e-mail" value={order.customer_email || ""} />
+      {CONSIGNEE_FIELDS.map(({ key, label }) => (
+        readonly
+          ? <ReadonlyField key={key} label={label} value={shipping[key] || ""} />
+          : <Field key={key} label={label} value={shipping[key] || ""} onChange={set(key)} />
+      ))}
+      {BUYER_FIELDS.map(({ key, label, master }) => (
+        readonly
+          ? <ReadonlyField key={key} label={label} value={shipping[key] || master(order)} />
+          : <Field key={key} label={label} value={shipping[key] || ""} onChange={set(key)} placeholder={master(order)} />
+      ))}
     </>
   );
 }
@@ -1924,16 +1947,19 @@ function Field({
   value,
   onChange,
   type = "text",
+  placeholder,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   type?: string;
+  // 비워두면 그대로 인쇄되는 기본값(예: 고객 마스터의 매수인 정보)을 흐리게 보여준다.
+  placeholder?: string;
 }) {
   return (
     <label className="form-field">
       <span>{label}</span>
-      <input type={type} value={value} onChange={(e) => onChange(e.target.value)} />
+      <input type={type} value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
     </label>
   );
 }
@@ -2538,7 +2564,7 @@ function emptyDocDetail(): DocumentDetail {
   return {
     order: {
       id: 0, rfq_id: 0, assignee_id: 0, po_no: "", kms_order_no: "", date: "", status: "",
-      customer: "", customer_email: "", customer_tax_id: "", vessel: "",
+      customer: "", customer_email: "", customer_address: "", customer_tax_id: "", vessel: "",
       project_title: "", project_no: "", first_rfq_at: "", work_type: "", vendor: "", trade_type: "", service_info: {},
       tracking_token: "", consignee_confirmed_date: "", vendor_docs_sent_date: "",
       items: [],
