@@ -15,6 +15,7 @@ from openpyxl.utils import get_column_letter
 
 from services.kmaris_docs import (
     normalize_items, calc_totals, _num, DOC_TITLES, doc_parties, party_lines,
+    packing_totals,
 )
 
 _CONFIG_DIR = Path(__file__).resolve().parent.parent / "config"
@@ -96,7 +97,7 @@ def _compose_marks(sh: Dict[str, Any]) -> str:
     if sh.get("sm_gross_weight"): push(f"G.W.: {sh['sm_gross_weight']} KG")
     dim = [sh.get("sm_dim_l"), sh.get("sm_dim_w"), sh.get("sm_dim_h")]
     if any(d and str(d).strip() for d in dim):
-        push("DIM.: " + " × ".join((str(d).strip() if d and str(d).strip() else "-") for d in dim) + " MM")
+        push("DIM.: " + " × ".join((str(d).strip() if d and str(d).strip() else "-") for d in dim) + " CM")
     if sh.get("sm_port_delivery"): push(f"PORT OF DELIVERY: {sh['sm_port_delivery']}")
     if sh.get("sm_final_dest"): push(f"FINAL DESTINATION: {sh['sm_final_dest']}")
     push(sh.get("sm_origin"))
@@ -609,14 +610,15 @@ def make_packing_list_xlsx(
         r += 1
     last_data = r - 1 if items else first_data
 
-    # ── 합계행 — 포장 수량/중량/용적 자동합산(수식) ──────────────────────
-    tot_pkgs = sum(_num(it.get("pkg_qty")) for it in items)
+    # ── 합계행 — 전체 포장 규격을 직접 적었으면 그 값, 아니면 품목별 합산(수식) ─────
+    tot = packing_totals(data)
     merge(r, 1, r, 5); put(r, 1, "TOTAL", fill=lightblue, font=bold, align=right)
-    put(r, 6, (tot_pkgs or ""), fill=lightblue, font=bold, align=right)
-    for c in (7, 8, 9):
+    put(r, 6, tot["packages"], fill=lightblue, font=bold, align=right)
+    for c, key in ((7, "net_weight"), (8, "gross_weight"), (9, "measurement")):
         col = get_column_letter(c)
-        formula = f"=SUM({col}{first_data}:{col}{last_data})" if items else 0
-        put(r, c, formula, fill=lightblue, font=bold, align=right, fmt=num_fmt)
+        # 직접 적은 값이 있으면 그 숫자를, 없으면 품목 합계 수식을 넣는다(엑셀에서 이어서 편집 가능).
+        value = _num(tot[key]) if tot[key] else (f"=SUM({col}{first_data}:{col}{last_data})" if items else 0)
+        put(r, c, value, fill=lightblue, font=bold, align=right, fmt=num_fmt)
     bd(r, 1, r, NCOL); ws.row_dimensions[r].height = 18
     r += 2
 
@@ -798,7 +800,7 @@ def make_shipping_mark_xlsx(
 
     # ── 실측(중량·치수·케이스) ────────────────────────────────────────────
     dim = [shipping.get("sm_dim_l"), shipping.get("sm_dim_w"), shipping.get("sm_dim_h")]
-    dim_txt = (" × ".join((str(d).strip() if d and str(d).strip() else "-") for d in dim) + " MM"
+    dim_txt = (" × ".join((str(d).strip() if d and str(d).strip() else "-") for d in dim) + " CM"
                if any(d and str(d).strip() for d in dim) else "")
     metrics = [
         [("N.W.", f"{shipping['sm_net_weight']} KG" if shipping.get("sm_net_weight") else ""),

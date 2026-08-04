@@ -1212,7 +1212,7 @@ def compose_shipping_marks(sh: Dict[str, Any]) -> str:
     if sh.get("sm_gross_weight"): push(f"G.W.: {sh['sm_gross_weight']} KG")
     dim = [sh.get("sm_dim_l"), sh.get("sm_dim_w"), sh.get("sm_dim_h")]
     if any(d and str(d).strip() for d in dim):
-        push("DIM.: " + " × ".join((str(d).strip() if d and str(d).strip() else "-") for d in dim) + " MM")
+        push("DIM.: " + " × ".join((str(d).strip() if d and str(d).strip() else "-") for d in dim) + " CM")
     if sh.get("sm_port_delivery"): push(f"PORT OF DELIVERY: {sh['sm_port_delivery']}")
     if sh.get("sm_final_dest"): push(f"FINAL DESTINATION: {sh['sm_final_dest']}")
     push(sh.get("sm_origin"))
@@ -1320,7 +1320,7 @@ def _make_shipping_mark_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> by
 
     # ── 실측(중량·치수·케이스) 표 ────────────────────────────────────────
     dim = [shipping.get("sm_dim_l"), shipping.get("sm_dim_w"), shipping.get("sm_dim_h")]
-    dim_txt = " × ".join((str(d).strip() if d and str(d).strip() else "-") for d in dim) + " MM" if any(d and str(d).strip() for d in dim) else ""
+    dim_txt = " × ".join((str(d).strip() if d and str(d).strip() else "-") for d in dim) + " CM" if any(d and str(d).strip() for d in dim) else ""
     m_rows = [[p("N.W.", "section"), p(f"{shipping.get('sm_net_weight', '')} KG" if shipping.get("sm_net_weight") else ""),
                p("G.W.", "section"), p(f"{shipping.get('sm_gross_weight', '')} KG" if shipping.get("sm_gross_weight") else "")],
               [p("DIMENSION", "section"), p(dim_txt),
@@ -1356,6 +1356,49 @@ def _pkg_text(it: Dict[str, Any]) -> str:
     k = str(it.get("pkg_kind") or "").strip()
     combined = f"{q} {k}".strip()
     return combined or str(it.get("package") or "").strip()
+
+
+def _g(v: float) -> str:
+    """합계 숫자 표기 — 0/빈값은 빈 칸으로 둔다(서식에 0 이 줄줄이 찍히지 않게)."""
+    return f"{v:g}" if v else ""
+
+
+def packing_totals(data: Dict[str, Any]) -> Dict[str, str]:
+    """Packing List 합계행 값 — 화면에서 직접 적은 "전체 포장 규격"이 있으면 그 값을 쓰고,
+    없으면 지금까지처럼 품목별 입력을 합산한다.
+
+    여러 품목이 상자 하나에 함께 들어가는 선적은 무게·치수를 품목별로 나눌 수 없어 전체를
+    한 번만 적는다. 그 값은 Shipping Marks 와 같은 칸(shipping.sm_*)에 저장되므로 케이스 수·
+    중량·치수가 마크와 늘 같은 값이 된다. 포장 종류는 따로 적지 않으면 거래조건의 Packing 을 쓴다.
+    반환값은 서식에 그대로 넣을 문자열이며, 빈 문자열이면 그 칸은 비워 둔다."""
+    shipping = data.get("shipping") or {}
+    terms = data.get("terms") or {}
+    items = normalize_items(data.get("items", []))
+
+    def sm(key: str) -> str:
+        return str(shipping.get(key, "") or "").strip()
+
+    # 포장 개수를 적었을 때만 "1 Carton Box" 처럼 종류를 붙인다 — 개수 없이 종류만 있으면
+    # 품목별 합계가 곧 개수이고, 품목마다 종류가 다를 수 있어 숫자만 적는다(기존 동작).
+    cases = sm("sm_total_cases")
+    kind = sm("sm_pkg_kind") or str(terms.get("packing_type", "") or "").strip()
+    packages = f"{cases} {kind}".strip() if cases else _g(sum(_num(it.get("pkg_qty")) for it in items))
+    net = sm("sm_net_weight") or _g(sum(_num(it.get("net_weight")) for it in items))
+    gross = sm("sm_gross_weight") or _g(sum(_num(it.get("gross_weight")) for it in items))
+    dims = [sm("sm_dim_l"), sm("sm_dim_w"), sm("sm_dim_h")]
+    measurement = sm("sm_measurement")
+    if not measurement and all(dims):
+        # 치수는 cm 로 적는다 — 용적(m³)은 세 변의 곱을 100³ 으로 나눈 값.
+        measurement = _g(round(_num(dims[0]) * _num(dims[1]) * _num(dims[2]) / 1_000_000, 4))
+    if not measurement:
+        measurement = _g(sum(_num(it.get("measurement")) for it in items))
+    return {
+        "packages": packages,
+        "net_weight": net,
+        "gross_weight": gross,
+        "measurement": measurement,
+        "dimension": " × ".join(dims) if all(dims) else "",
+    }
 
 
 def _make_packing_list_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> bytes:
@@ -1506,16 +1549,11 @@ def _make_packing_list_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> byt
                           p(f"{it['qty']:g}", "tiny"), p(it["unit"], "tiny"), p(_pkg_text(it), "tiny"),
                           p(_numtxt(it.get("net_weight")), "tiny"), p(_numtxt(it.get("gross_weight")), "tiny"),
                           p(_numtxt(it.get("measurement")), "tiny")])
-    # 합계행 — 포장 수량/중량/용적 자동합산.
-    tot_pkgs = sum(_num(it.get("pkg_qty")) for it in items)
-    tot_nw = sum(_num(it.get("net_weight")) for it in items)
-    tot_gw = sum(_num(it.get("gross_weight")) for it in items)
-    tot_meas = sum(_num(it.get("measurement")) for it in items)
-
-    def _tot(v):
-        return f"{v:g}" if v else ""
+    # 합계행 — 전체 포장 규격을 직접 적었으면 그 값, 아니면 품목별 합산(packing_totals).
+    tot = packing_totals(data)
     item_rows.append([p("", "th"), p("TOTAL", "th"), p("", "th"), p("", "th"), p("", "th"),
-                      p(_tot(tot_pkgs), "th"), p(_tot(tot_nw), "th"), p(_tot(tot_gw), "th"), p(_tot(tot_meas), "th")])
+                      p(tot["packages"], "th"), p(tot["net_weight"], "th"),
+                      p(tot["gross_weight"], "th"), p(tot["measurement"], "th")])
     item_table = Table(item_rows, colWidths=pl_w, repeatRows=1)
     last = len(item_rows) - 1
     cmds = [("BACKGROUND", (0, 0), (-1, 0), NAVY), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),

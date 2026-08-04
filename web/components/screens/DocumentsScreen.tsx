@@ -1377,6 +1377,31 @@ function PackingListTab({ data, onChanged }: { data: DocumentDetail; onChanged: 
   const [busy, setBusy] = useState(false);
   const editable = canEditDoc(data);
 
+  // 선적 전체 포장 규격(케이스 수·중량·치수·용적)은 Shipping Marks 와 같은 칸이라 CI 에 저장한다 —
+  // 그래야 두 탭이 같은 값을 보고, 어느 쪽에서 고쳐도 마크와 Packing List 가 같이 움직인다.
+  async function saveSharedPackingTotals() {
+    if (!data.ci) return;
+    const ciShipping = { ...(data.ci.shipping || {}) };
+    let changed = false;
+    for (const key of Object.values(PACKING_TOTAL_KEYS)) {
+      const value = shipping[key] ?? "";
+      if ((ciShipping[key] ?? "") !== value) {
+        ciShipping[key] = value;
+        changed = true;
+      }
+    }
+    if (!changed) return;
+    await saveCommercialInvoice(data.order.id, {
+      ci_no: data.ci.ci_no,
+      date: data.ci.date,
+      currency: data.ci.currency,
+      vat_rate: data.ci.vat_rate,
+      items: data.ci.items || [],
+      shipping: { ...ciShipping, shipping_marks: composeShippingMarks(ciShipping) },
+      terms: data.ci.terms || {},
+    });
+  }
+
   async function save() {
     setBusy(true);
     try {
@@ -1387,6 +1412,7 @@ function PackingListTab({ data, onChanged }: { data: DocumentDetail; onChanged: 
         if (shipping[k] !== undefined && shipping[k] !== "") outShipping[k] = shipping[k];
       }
       await savePackingList(data.order.id, { pl_no: plNo, date, items, packing_info: packingInfo, shipping: outShipping });
+      await saveSharedPackingTotals();
       onChanged();
     } finally {
       setBusy(false);
@@ -1450,7 +1476,18 @@ function PackingListTab({ data, onChanged }: { data: DocumentDetail; onChanged: 
             Load CI items
           </button>
         }
+        // 상자 하나에 여러 품목이 들어가는 선적 — 합계행에 전체 포장 규격을 직접 적는다.
+        packingTotals={{
+          values: packingTotalsOf(shipping),
+          onChange: (patch) => setShipping({ ...shipping, ...packingTotalsPatch(patch) }),
+          kindPlaceholder: data.ci?.terms?.packing_type || "",
+        }}
       />
+      <p className="hint-inline" style={{ marginTop: 6 }}>
+        여러 품목이 상자 하나에 들어가면 품목별로 나누지 말고 <b>합계행에 전체 포장 규격</b>(개수·종류·N.W.·G.W.·용적·L×W×H cm)을
+        적으세요. 비워 두면 품목별 입력의 합계(회색 안내값)가 문서에 나갑니다. 이 값은 <b>Shipping Marks 탭의 케이스 수·중량·치수와 같은 값</b>이라
+        한쪽에서 고치면 양쪽 다 바뀝니다. 용적은 치수를 적으면 자동으로 계산해 보여줍니다.
+      </p>
       <label className="form-field" style={{ marginTop: 16 }}>
         <span>Packing Information</span>
         <textarea
@@ -1758,7 +1795,7 @@ function ShippingMarksSection({
         <Field label="Total Number of Cases" value={shipping.sm_total_cases ?? ""} onChange={set("sm_total_cases")} type="number" />
         {/* 무게·치수는 넓은 폭이 필요 없어 한 행에 좁은 입력란으로 모아 배치. */}
         <div className="form-field sm-metrics">
-          <span>Weight (kg) &amp; Dimension (mm)</span>
+          <span>Weight (kg) &amp; Dimension (cm)</span>
           <div className="sm-metrics-row">
             <span className="sm-metric"><em>N.W.</em><input type="number" value={shipping.sm_net_weight ?? ""} onChange={(e) => set("sm_net_weight")(e.target.value)} /></span>
             <span className="sm-metric"><em>G.W.</em><input type="number" value={shipping.sm_gross_weight ?? ""} onChange={(e) => set("sm_gross_weight")(e.target.value)} /></span>
@@ -1980,7 +2017,8 @@ function composeShippingMarks(s: Record<string, string>): string {
   if (s.sm_net_weight) push(`N.W.: ${s.sm_net_weight} KG`);
   if (s.sm_gross_weight) push(`G.W.: ${s.sm_gross_weight} KG`);
   const dim = [s.sm_dim_l, s.sm_dim_w, s.sm_dim_h];
-  if (dim.some((v) => v && v.trim())) push(`DIM.: ${dim.map((v) => (v && v.trim()) || "-").join(" × ")} MM`);
+  // 치수 단위는 cm — Packing List 의 전체 포장 규격과 같은 칸(sm_dim_*)을 쓰므로 단위도 같아야 한다.
+  if (dim.some((v) => v && v.trim())) push(`DIM.: ${dim.map((v) => (v && v.trim()) || "-").join(" × ")} CM`);
   if (s.sm_port_delivery) push(`PORT OF DELIVERY: ${s.sm_port_delivery}`);
   if (s.sm_final_dest) push(`FINAL DESTINATION: ${s.sm_final_dest}`);
   push(s.sm_origin);
@@ -2053,6 +2091,57 @@ function VatRateSelect({ value, onChange }: { value: string; onChange: (v: strin
   );
 }
 
+/** 선적 전체의 포장 규격 — 여러 품목이 상자 하나에 들어가면 무게·치수를 품목별로 나눌 수 없어
+ *  합계행에 한 번만 적는다. 저장 위치는 Shipping Marks 와 같은 칸(shipping.sm_*)이라
+ *  Packing List 와 Shipping Marks 탭이 늘 같은 케이스 수·중량·치수를 본다. */
+type PackingTotals = {
+  cases: string;
+  kind: string;
+  net_weight: string;
+  gross_weight: string;
+  measurement: string;
+  dim_l: string;
+  dim_w: string;
+  dim_h: string;
+};
+
+/** PackingTotals 필드 → shipping(sm_*) 키 — Shipping Marks 탭과 공유하는 저장 위치. */
+const PACKING_TOTAL_KEYS: Record<keyof PackingTotals, string> = {
+  cases: "sm_total_cases",
+  kind: "sm_pkg_kind",
+  net_weight: "sm_net_weight",
+  gross_weight: "sm_gross_weight",
+  measurement: "sm_measurement",
+  dim_l: "sm_dim_l",
+  dim_w: "sm_dim_w",
+  dim_h: "sm_dim_h",
+};
+
+function packingTotalsOf(shipping: Record<string, string>): PackingTotals {
+  const out = {} as PackingTotals;
+  for (const [field, key] of Object.entries(PACKING_TOTAL_KEYS)) {
+    out[field as keyof PackingTotals] = shipping[key] || "";
+  }
+  return out;
+}
+
+function packingTotalsPatch(patch: Partial<PackingTotals>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [field, value] of Object.entries(patch)) {
+    out[PACKING_TOTAL_KEYS[field as keyof PackingTotals]] = value ?? "";
+  }
+  return out;
+}
+
+/** 치수(cm)로 계산한 용적(m³) — 세 변이 모두 있을 때만. 서버(packing_totals)와 같은 규칙이라
+ *  화면에 보여주는 값과 문서에 찍히는 값이 어긋나지 않는다. */
+function dimMeasurementText(v: PackingTotals): string {
+  const [l, w, h] = [v.dim_l, v.dim_w, v.dim_h].map((x) => num(x));
+  if (!l || !w || !h) return "";
+  const m3 = Math.round((l * w * h) / 100) / 10000; // cm³ → m³, 소수 4자리
+  return m3 ? String(m3) : "";
+}
+
 function ItemEditor({
   items,
   setItems,
@@ -2061,6 +2150,7 @@ function ItemEditor({
   tableId,
   headerActions,
   footerRows,
+  packingTotals,
 }: {
   items: DocumentWorkItem[];
   setItems: (items: DocumentWorkItem[]) => void;
@@ -2069,6 +2159,14 @@ function ItemEditor({
   tableId: string;
   // 품목표 헤더의 "+ Add" 옆에 넣을 보조 액션(예: "Load order items").
   headerActions?: React.ReactNode;
+  // Packing List 전용 — 합계행을 입력란으로 바꿔 선적 전체의 포장 규격을 직접 받는다.
+  // 비워 두면 품목별 입력의 합계(placeholder 로 보여주는 값)가 그대로 문서에 나간다.
+  packingTotals?: {
+    values: PackingTotals;
+    onChange: (patch: Partial<PackingTotals>) => void;
+    /** 포장 종류를 따로 안 적었을 때 문서에 쓰이는 값 — Commercial Invoice 의 Packing. */
+    kindPlaceholder?: string;
+  };
   // 지정 시(금액 문서 전용) 기본 Total 합계행 대신 이 행들을 표 tfoot 에 렌더 —
   // Proforma Invoice 의 Subtotal/Freight/Packing/Insurance/VAT/Total invoice value 처럼
   // 품목 컬럼(Unit Price=라벨, Amount=값)에 정렬해 표 안에 넣는다.
@@ -2092,6 +2190,8 @@ function ItemEditor({
   const nwTotal = shown.reduce((s, it) => s + num(it.net_weight), 0);
   const gwTotal = shown.reduce((s, it) => s + num(it.gross_weight), 0);
   const measTotal = shown.reduce((s, it) => s + num(it.measurement), 0);
+  // 합계행 Measurement 칸의 안내값 — 치수를 적었으면 그걸로 계산한 용적을 미리 보여준다.
+  const dimMeasurement = packingTotals ? dimMeasurementText(packingTotals.values) : "";
   const fmtNum = (n: number) => (n ? n.toLocaleString(undefined, { maximumFractionDigits: 3 }) : "");
   const sel = useRowSelection();
   const cur = (currency || "USD").toUpperCase();
@@ -2293,7 +2393,8 @@ function ItemEditor({
               )}
             </tfoot>
           ) : (
-            /* Packing 합계행 — 포장수량·N.W.·G.W.·Measurement 자동합산. 컬럼당 1셀. */
+            /* Packing 합계행 — 컬럼당 1셀. packingTotals 를 주면 선적 전체 포장 규격을 직접
+               입력받고(품목별 합계는 placeholder 로만 보여준다), 안 주면 합산값만 표시한다. */
             <tfoot>
               <tr>
                 <td></td>{/* 1 sel */}
@@ -2303,12 +2404,67 @@ function ItemEditor({
                 <td></td>{/* 5 maker */}
                 <td></td>{/* 6 qty */}
                 <td className="total-label">Total</td>{/* 7 unit */}
-                <td className="num total-value">{fmtNum(pkgTotal)}</td>{/* 8 pkg_qty */}
-                <td></td>{/* 9 pkg_kind */}
-                <td className="num total-value">{fmtNum(nwTotal)}</td>{/* 10 net_weight */}
-                <td className="num total-value">{fmtNum(gwTotal)}</td>{/* 11 gross_weight */}
-                <td className="num total-value">{fmtNum(measTotal)}</td>{/* 12 measurement */}
-                <td></td>{/* 13 dimension */}
+                {packingTotals ? (
+                  <>
+                    <td>{/* 8 pkg_qty */}
+                      <input
+                        className="num" value={packingTotals.values.cases}
+                        placeholder={fmtNum(pkgTotal)} title="Total number of packages"
+                        onChange={(e) => packingTotals.onChange({ cases: e.target.value })}
+                      />
+                    </td>
+                    <td>{/* 9 pkg_kind */}
+                      <input
+                        value={packingTotals.values.kind}
+                        placeholder={packingTotals.kindPlaceholder || "Carton Box"}
+                        title="Kind of packages"
+                        onChange={(e) => packingTotals.onChange({ kind: e.target.value })}
+                      />
+                    </td>
+                    <td>{/* 10 net_weight */}
+                      <input
+                        className="num" value={packingTotals.values.net_weight}
+                        placeholder={fmtNum(nwTotal)} title="Net weight (kg)"
+                        onChange={(e) => packingTotals.onChange({ net_weight: e.target.value })}
+                      />
+                    </td>
+                    <td>{/* 11 gross_weight */}
+                      <input
+                        className="num" value={packingTotals.values.gross_weight}
+                        placeholder={fmtNum(gwTotal)} title="Gross weight (kg)"
+                        onChange={(e) => packingTotals.onChange({ gross_weight: e.target.value })}
+                      />
+                    </td>
+                    <td>{/* 12 measurement */}
+                      <input
+                        className="num" value={packingTotals.values.measurement}
+                        placeholder={dimMeasurement || fmtNum(measTotal)} title="Measurement (m³)"
+                        onChange={(e) => packingTotals.onChange({ measurement: e.target.value })}
+                      />
+                    </td>
+                    <td>{/* 13 dimension — L × W × H (cm) */}
+                      <span className="pack-dim">
+                        <input value={packingTotals.values.dim_l} placeholder="L" title="Length (cm)"
+                          onChange={(e) => packingTotals.onChange({ dim_l: e.target.value })} />
+                        <em>×</em>
+                        <input value={packingTotals.values.dim_w} placeholder="W" title="Width (cm)"
+                          onChange={(e) => packingTotals.onChange({ dim_w: e.target.value })} />
+                        <em>×</em>
+                        <input value={packingTotals.values.dim_h} placeholder="H" title="Height (cm)"
+                          onChange={(e) => packingTotals.onChange({ dim_h: e.target.value })} />
+                      </span>
+                    </td>
+                  </>
+                ) : (
+                  <>
+                    <td className="num total-value">{fmtNum(pkgTotal)}</td>{/* 8 pkg_qty */}
+                    <td></td>{/* 9 pkg_kind */}
+                    <td className="num total-value">{fmtNum(nwTotal)}</td>{/* 10 net_weight */}
+                    <td className="num total-value">{fmtNum(gwTotal)}</td>{/* 11 gross_weight */}
+                    <td className="num total-value">{fmtNum(measTotal)}</td>{/* 12 measurement */}
+                    <td></td>{/* 13 dimension */}
+                  </>
+                )}
                 <td></td>{/* 14 remark */}
               </tr>
             </tfoot>

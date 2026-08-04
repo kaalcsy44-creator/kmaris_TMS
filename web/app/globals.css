@@ -5345,6 +5345,24 @@ table.mini input[type="checkbox"].row-check:indeterminate::after {
   white-space: nowrap;
 }
 
+/* Packing List 합계행의 치수 칸 — L × W × H 를 한 칸 안에 좁게 넣는다(cm). */
+.pack-dim {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.pack-dim input {
+  min-width: 0;
+  width: 100%;
+  text-align: center;
+}
+.pack-dim em {
+  flex: 0 0 auto;
+  font-style: normal;
+  color: var(--muted);
+  font-size: 11px;
+}
+
 /* ── 문서에서 제외한 품목 행 ──────────────────────────────────────────────
    Delete 와 달리 행은 남지만 발행 문서(미리보기·PDF·Excel)와 합계에서는 빠진다.
    "여기 있지만 문서에는 안 나간다"가 한눈에 보이도록 회색 + 취소선으로 눕히고,
