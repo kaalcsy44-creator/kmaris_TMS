@@ -313,7 +313,9 @@ function ApAddForm({
           due_date: ap.due_date || today(),
           paid_amount: ap.paid_amount,
           paid_date: ap.paid_date || "",
-          items: (ap.items || []).map((it) => ({ ...it })),
+          // 저장된 청구 품목이 기본. 비어 있으면(금액만 먼저 잡아둔 건 등) 벤더 P/O 품목으로
+          // 채운다 — 빈 표를 보여주고 Load P/O 를 누르게 하는 것보다 낫다. 제외 표식도 따라온다.
+          items: (ap.items?.length ? ap.items : poItems).map((it) => ({ ...it })),
           charges: chargesToForm(ap.charges),
           notes: ap.notes,
           tax_received: ap.tax_received,

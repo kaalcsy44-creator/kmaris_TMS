@@ -41,7 +41,12 @@ import {
   DeleteSelectedButton,
   deleteSelectedRows,
   DualCurrencyAmount,
+  ExcludeSelectedButton,
+  ExcludedCountNote,
   fxRateText,
+  includedRows,
+  includedSeqNos,
+  isRowExcluded,
   useItemGridKeys,
   CopyRowsButton,
   ItemGridHint,
@@ -686,7 +691,7 @@ function OrderDetailModal({
           <div className="form-actions">
             <StageTotal
               label="Total"
-              value={items.reduce((s, it) => s + Number(it.amount || 0), 0)}
+              value={includedRows(items).reduce((s, it) => s + Number(it.amount || 0), 0)}
               currency={currency}
             />
             {!canEditThis ? (
@@ -1160,7 +1165,7 @@ function VendorPoDetailModal({
             <div className="doc-actions-center">
               <StageTotal
                 label="Total"
-                value={items.reduce((s, it) => s + Number(it.amount || 0), 0)}
+                value={includedRows(items).reduce((s, it) => s + Number(it.amount || 0), 0)}
                 currency={currency}
               />
             </div>
@@ -1542,7 +1547,7 @@ function CustomerPoNewForm({
       <div className="form-actions">
         <StageTotal
           label="Total"
-          value={items.reduce((s, it) => s + Number(it.amount || 0), 0)}
+          value={includedRows(items).reduce((s, it) => s + Number(it.amount || 0), 0)}
           currency={currency}
         />
         <button
@@ -1757,7 +1762,7 @@ function VendorPoCreate({
       <div className="form-actions">
         <StageTotal
           label="Total"
-          value={items.reduce((s, it) => s + Number(it.amount || 0), 0)}
+          value={includedRows(items).reduce((s, it) => s + Number(it.amount || 0), 0)}
           currency={currency}
         />
         <button
@@ -2024,7 +2029,9 @@ function ItemEditor({
       })
     );
   }
-  const total = items.reduce((sum, it) => sum + Number(it.amount || 0), 0);
+  // 합계·행번호는 "문서에서 제외"한 행을 뺀 값 — 발행 P/O(PDF)와 같은 숫자가 되게.
+  const total = includedRows(items).reduce((sum, it) => sum + Number(it.amount || 0), 0);
+  const seqNos = includedSeqNos(items);
   const sel = useRowSelection();
   const cur = (currency || "USD").toUpperCase();
   const cols: ItemCol[] = [
@@ -2061,11 +2068,13 @@ function ItemEditor({
     <div style={{ marginTop: 16 }}>
       <div className="items-head">
         <div className="sub-h">Item list</div>
+        <ExcludedCountNote items={items} />
         <div className="items-head-actions">
           {headerActions}
           <ItemColsButton grid={grid} />
           <ItemGridHint />
           <CopyRowsButton grid={keys} sel={sel} />
+          <ExcludeSelectedButton items={items} sel={sel} onChange={onChange} />
           <DeleteSelectedButton sel={sel} onDelete={() => deleteSelectedRows(items, sel, onChange)} />
           <button className="btn sm items-head-add" onClick={() => onChange([...items, blankItem()])}>+ Add</button>
         </div>
@@ -2092,9 +2101,12 @@ function ItemEditor({
           </thead>
           <tbody>
             {items.map((it, i) => (
-              <tr key={i} className={itemRowClass(i)}>
+              <tr key={i} className={itemRowClass(i, isRowExcluded(it))}>
                 <ItemSelectCell index={i} sel={sel} />
-                <td className="seq">{i + 1}</td>
+                {/* 제외 행은 번호를 비운다 — 발행 P/O 에는 그 줄이 없기 때문. */}
+                <td className="seq" title={isRowExcluded(it) ? "Excluded from this document" : undefined}>
+                  {seqNos[i] ?? "—"}
+                </td>
                 <td>
                   <textarea {...keys.cell(i, 0)} className="wrapcell" rows={1} value={it.part_no} onChange={(e) => patch(i, "part_no", e.target.value)} />
                 </td>
@@ -2274,6 +2286,8 @@ function normalizeItem(it: Partial<PoWorkItem>): PoWorkItem {
     unit_price: unitPrice,
     amount: it.amount ?? qty * Number(unitPrice ?? 0),
     remark: it.remark ?? "",
+    // 제외 표식은 저장·재열람에서 살아남아야 한다(그래야 표에서 되살릴 수 있다).
+    ...(it.excluded ? { excluded: true as const } : {}),
   };
 }
 

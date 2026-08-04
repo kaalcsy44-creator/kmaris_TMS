@@ -648,6 +648,9 @@ def _kst(dt) -> str:
 def _items_cost_total(items) -> float:
     tot = 0.0
     for it in (items or []):
+        # 문서에서 제외한 행은 발주서에 나가지 않으므로 원가에서도 뺀다(_total_amount 와 같은 규칙).
+        if it.get("excluded"):
+            continue
         try:
             tot += float(it.get("cost_price", 0) or 0) * float(it.get("qty", 1) or 1)
         except (TypeError, ValueError):

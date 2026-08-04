@@ -270,6 +270,8 @@ export type PoWorkItem = {
   remark?: string;
   /** 품목 분류(선택). 저장 시 품목 마스터 분류로 반영된다. */
   category_id?: number | null;
+  /** 문서에서 제외한 행 — DocumentWorkItem.excluded 와 같은 규칙(표에는 남고 발행 문서·합계에서 빠짐). */
+  excluded?: boolean;
 };
 
 export type RfqOcrResult = {
