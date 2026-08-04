@@ -40,6 +40,11 @@ import { useItemGrid, ItemGridStyle, ItemTh, ItemColsButton, type ItemCol } from
 
 const today = () => new Date().toISOString().slice(0, 10);
 
+/** datetime-local 입력에 넣을 수 있는 값으로. 날짜만 있는 값('YYYY-MM-DD')은 시각을 붙인다 —
+ *  안 붙이면 입력이 그 값을 못 읽고 빈 칸으로 그려서 저장된 날짜가 없는 것처럼 보인다. */
+const localDateTime = (v: string | undefined | null) =>
+  (v || "").length === 10 ? `${v}T00:00` : (v || "");
+
 /** 현재 로컬(KST) 벽시계를 datetime-local 입력 형식 'YYYY-MM-DDTHH:MM' 으로. */
 const nowLocal = () => {
   const d = new Date();
@@ -615,14 +620,18 @@ function MilestoneBar({ row, stage, onChanged }: { row: ArRow; stage: 10 | 11; o
   const canEditThis = can("ar", "edit") && canEditDeal(row.assignee_id);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [issuedAt, setIssuedAt] = useState(row.tax_issued_date || nowLocal());
-  const [amount, setAmount] = useState(row.outstanding > 0 ? String(row.outstanding) : "");
-  const [payDue, setPayDue] = useState(row.due_date || today());
-  const [paidAt, setPaidAt] = useState(row.paid_date || nowLocal());
   const done = stage === 10 ? row.tax_issued : row.paid_done;
   // PI 로 갈음한 발행 — 되돌릴 수동 완료 기록이 없으므로 Undo 를 내밀면 안 된다
   // (눌러도 아무 변화가 없다). 대신 "무엇이 대신했는지" 를 적어 준다.
   const byPi = stage === 10 && !!row.tax_covered_by_pi;
+  // 발행 일시 칸의 초기값. PI 로 갈음한 건은 PI 발행일이 곧 세금계산서 발행일은 아니므로
+  // 그 날짜를 넣지 않는다 — 이 칸은 "전자세금계산서도 따로 끊었을 때만" 채우는 자리다.
+  const [issuedAt, setIssuedAt] = useState(
+    (byPi ? "" : localDateTime(row.tax_issued_date)) || nowLocal()
+  );
+  const [amount, setAmount] = useState(row.outstanding > 0 ? String(row.outstanding) : "");
+  const [payDue, setPayDue] = useState(row.due_date || today());
+  const [paidAt, setPaidAt] = useState(localDateTime(row.paid_date) || nowLocal());
 
   async function complete(flag: boolean) {
     setBusy(true);
