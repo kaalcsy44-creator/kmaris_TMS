@@ -4400,12 +4400,12 @@ a.btn.primary:hover {
   grid-column: 1 / -1;
 }
 /* Proforma Invoice — 수하인 없이 매수인만 받는 배치. 블록이 행을 다 쓰므로 네 칸을
-   한 줄에 나란히 세운다(주소만 값이 길어 한 칸 더 넓게). */
+   한 줄에 나란히 세운다. 주소는 값이 길어 행의 40%(나머지 세 칸은 각 20%)를 준다. */
 .doc-parties--single {
   grid-template-columns: minmax(0, 1fr);
 }
 .doc-party-grid--row {
-  grid-template-columns: repeat(3, minmax(0, 1fr)) 1.5fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) 2fr;
 }
 @media (max-width: 900px) {
   .doc-parties {
