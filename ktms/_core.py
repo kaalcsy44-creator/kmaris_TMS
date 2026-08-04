@@ -2157,7 +2157,8 @@ class FinancePayableIn(BaseModel):
     counterparty: str | None = ""
     vendor_id: int | None = None
     description: str | None = ""
-    amount: float | None = 0.0
+    amount: float | None = 0.0          # 지급 총액(공급가액 + 부가세)
+    vat_amount: float | None = 0.0      # 총액에 포함된 부가세(매입세액)
     currency: str | None = "KRW"
     bill_date: str | None = ""
     due_date: str | None = ""
@@ -2203,6 +2204,9 @@ def _finance_payable_row(p: FinancePayable, vendor_names: dict, user_names: dict
         "vendor_id": p.vendor_id,
         "description": p.description or "",
         "amount": round(p.amount or 0, 2),
+        # 총액에 포함된 부가세와 그 나머지(공급가액) — 결산·부가세 화면이 쓰는 값.
+        "vat_amount": round(getattr(p, "vat_amount", None) or 0, 2),
+        "supply_amount": round((p.amount or 0) - (getattr(p, "vat_amount", None) or 0), 2),
         "currency": p.currency or "KRW",
         "bill_date": p.bill_date or "",
         "due_date": p.due_date or "",

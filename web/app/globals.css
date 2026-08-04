@@ -11634,6 +11634,12 @@ table.mini tfoot .fin-foot-name { text-align: left; }
 .fin-pay-form { display: flex; flex-direction: column; gap: 10px; }
 .fin-pay-form .form-field { margin: 0; }
 .fin-pay-target { font-size: 13px; font-weight: 600; color: var(--navy); }
+/* 지급 등록의 합계 칸 — 공급가액 + 부가세를 되비추기만 하는 자리(입력 불가). */
+.fin-total-ro[readonly] {
+  background: #f4f7fb;
+  color: #2b3a4d;
+  font-weight: 600;
+}
 /* 완납 건의 수금일 — 금액 옆 회색 작은 글씨. */
 .fin-paid-on { color: var(--muted); font-size: 11px; margin-left: 6px; }
 .fin-kpi-sub { font-size: 12px; color: #6b7684; margin-top: 3px; }

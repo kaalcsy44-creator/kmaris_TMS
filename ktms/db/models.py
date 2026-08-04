@@ -590,7 +590,10 @@ class FinancePayable(Base):
     counterparty = Column(String(200))   # 거래선·수취인(자유 입력)
     vendor_id    = Column(Integer, ForeignKey("vendors.id"), nullable=True)  # 등록 거래선 연결(선택)
     description  = Column(String(200))   # 내역
-    amount       = Column(Float, default=0.0)
+    amount       = Column(Float, default=0.0)   # 지급 총액(공급가액 + 부가세)
+    # 총액에 포함된 부가세(매입세액). 공급가액 = amount - vat_amount.
+    # 결산·부가세 화면의 매입세액 집계에 그대로 쓰인다(면세·급여 등은 0).
+    vat_amount   = Column(Float, default=0.0)
     currency     = Column(String(10), default="KRW")
     # 청구서 발행일 YYYY-MM-DD (선택) — 벤더 청구서(APRecord.bill_date)와 같은 뜻.
     # 고지서·계산서를 받은 날. 없으면 빈 값.

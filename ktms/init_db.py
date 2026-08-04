@@ -148,6 +148,8 @@ _MIGRATIONS = {
         "payments":        "JSON",
         # 청구서·고지서 발행일(선택) — 벤더 청구서(ap_records.bill_date)와 같은 뜻.
         "bill_date":       "VARCHAR(10)",
+        # 총액(amount)에 포함된 부가세 — 결산·부가세의 매입세액 집계용(기존 행은 0).
+        "vat_amount":      "FLOAT DEFAULT 0",
     },
 }
 

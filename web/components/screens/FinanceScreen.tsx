@@ -1258,6 +1258,7 @@ const emptyPayable: FinancePayableSave = {
   vendor_id: null,
   description: "",
   amount: 0,
+  vat_amount: 0,
   currency: "KRW",
   bill_date: "",
   due_date: todayStr(),
@@ -1504,7 +1505,12 @@ function OutflowTab() {
                 </td>
                 <td data-label="Billed">{p.bill_date || "—"}</td>
                 <td data-label="Due">{p.due_date || "—"}</td>
-                <td className="num" data-label="Amount">{money(p.invoice_amount, p.currency)}</td>
+                {/* 총액 아래에 그 안의 부가세를 옅게 — 결산의 매입세액으로 넘어가는 값이라
+                    목록에서 바로 확인할 수 있어야 한다. */}
+                <td className="num" data-label="Amount">
+                  {money(p.invoice_amount, p.currency)}
+                  {p.vat_amount ? <div className="muted">VAT {money(p.vat_amount, p.currency)}</div> : null}
+                </td>
                 <td className="num" data-label="Paid">{money(p.paid_amount, p.currency)}</td>
                 <td className="num" data-label="Outstanding">{money(p.outstanding, p.currency)}</td>
                 {statusCell(p)}
@@ -1664,6 +1670,16 @@ function PaymentDateModal({
   );
 }
 
+/** 자동 부가세율 — 급여·세금(납부한 세금)과 외화 건은 매입세액이 없어 0. 그 밖은 10%. */
+function autoVatRate(category: string, currency: string): number {
+  if ((currency || "KRW").toUpperCase() !== "KRW") return 0;
+  return category === "급여" || category === "세금" ? 0 : 0.1;
+}
+
+const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+/** 저장은 총액(amount)이 기준 — 공급가액은 총액에서 부가세를 뺀 나머지로 되돌린다. */
+const supplyOf = (f: FinancePayableSave) => round2((f.amount || 0) - (f.vat_amount || 0));
+
 function PayableForm({
   initial,
   rowId,
@@ -1678,11 +1694,31 @@ function PayableForm({
   const [form, setForm] = useState<FinancePayableSave>({ ...initial });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  // 부가세 자동(공급가액의 10%) 여부 — 직접 고쳐 넣으면 그 값을 그대로 둔다.
+  // 수정 화면은 이미 저장된 값이 정답이므로 자동 계산을 걸지 않는다.
+  const [vatAuto, setVatAuto] = useState(!rowId);
   const { data: vendors } = useCachedData("settings:vendors-opt", fetchVendors);
 
   function set<K extends keyof FinancePayableSave>(k: K, v: FinancePayableSave[K]) {
     setForm((f) => ({ ...f, [k]: v }));
   }
+
+  /** 공급가액·부가세를 총액(amount)과 부가세로 접어 넣는다 — 총액 = 공급가액 + 부가세. */
+  function withMoney(f: FinancePayableSave, supply: number, vat: number): FinancePayableSave {
+    const v = round2(Math.max(0, vat));
+    return { ...f, amount: round2(round2(supply) + v), vat_amount: v };
+  }
+
+  /** 분류·통화가 바뀌면 자동 부가세율도 달라진다(급여·외화는 0) — 자동일 때만 다시 계산. */
+  function withAutoVat(f: FinancePayableSave): FinancePayableSave {
+    if (!vatAuto) return f;
+    const supply = supplyOf(f);
+    return withMoney(f, supply, Math.round(supply * autoVatRate(f.category || "기타", f.currency || "KRW")));
+  }
+
+  const supply = supplyOf(form);
+  const vat = form.vat_amount || 0;
+  const vatRate = autoVatRate(form.category || "기타", form.currency || "KRW");
 
   async function save() {
     if (!(form.due_date || "").trim()) { setErr("Enter a due date."); return; }
@@ -1706,7 +1742,13 @@ function PayableForm({
       <div className="form-grid">
         <label className="form-field">
           <span>Category</span>
-          <select value={form.category} onChange={(e) => set("category", e.target.value)}>
+          <select
+            value={form.category}
+            onChange={(e) => {
+              const c = e.target.value;
+              setForm((f) => withAutoVat({ ...f, category: c }));
+            }}
+          >
             {CATEGORIES.map((c) => <option key={c} value={c}>{CATEGORY_LABEL[c] || c}</option>)}
           </select>
         </label>
@@ -1732,13 +1774,55 @@ function PayableForm({
           <span>Description</span>
           <input value={form.description} onChange={(e) => set("description", e.target.value)} />
         </label>
+        {/* 공급가액·부가세를 나눠 받는다 — 결산의 부가세 계산이 추정 없이 이 값을 쓴다.
+            저장은 총액(amount)과 그 안의 부가세(vat_amount)로, 공급가액은 그 차액이다. */}
         <label className="form-field">
-          <span>Amount</span>
-          <input className="num" inputMode="decimal" value={amountInputValue(form.amount)} onChange={(e) => set("amount", parseAmountInput(e.target.value) ?? 0)} />
+          <span>Supply value</span>
+          <input
+            className="num"
+            inputMode="decimal"
+            value={amountInputValue(supply)}
+            onChange={(e) => {
+              const s = parseAmountInput(e.target.value) ?? 0;
+              setForm((f) => withMoney(f, s, vatAuto ? Math.round(s * autoVatRate(f.category || "기타", f.currency || "KRW")) : (f.vat_amount || 0)));
+            }}
+          />
+        </label>
+        <label className="form-field">
+          <span>
+            VAT
+            {vatAuto && vatRate > 0 ? <span className="hint-inline"> · auto 10%</span> : null}
+            {!vatAuto ? (
+              <button
+                type="button"
+                className="btn tiny"
+                style={{ marginLeft: 6 }}
+                title="Set VAT back to 10% of the supply value"
+                onClick={() => { setVatAuto(true); setForm((f) => withMoney(f, supplyOf(f), Math.round(supplyOf(f) * autoVatRate(f.category || "기타", f.currency || "KRW")))); }}
+              >
+                10%
+              </button>
+            ) : null}
+          </span>
+          <input
+            className="num"
+            inputMode="decimal"
+            value={amountInputValue(vat)}
+            onChange={(e) => {
+              // 직접 고친 값은 그대로 둔다(면세·불공제·끝수 차이). 총액은 다시 합쳐진다.
+              setVatAuto(false);
+              const v = parseAmountInput(e.target.value) ?? 0;
+              setForm((f) => withMoney(f, supplyOf(f), v));
+            }}
+          />
+        </label>
+        <label className="form-field">
+          <span>Total (paid)</span>
+          <input className="num fin-total-ro" value={amountInputValue(form.amount)} readOnly tabIndex={-1} />
         </label>
         <label className="form-field">
           <span>Currency</span>
-          <CurrencyToggle value={form.currency || "KRW"} onChange={(v) => set("currency", v)} />
+          <CurrencyToggle value={form.currency || "KRW"} onChange={(v) => setForm((f) => withAutoVat({ ...f, currency: v }))} />
         </label>
         <label className="form-field">
           {/* 고지서·계산서를 받은 날(선택). 벤더 청구서의 발행일과 같은 뜻이라 목록에서 한 열에 모인다. */}
@@ -1766,6 +1850,10 @@ function PayableForm({
         <span>Notes</span>
         <textarea rows={2} value={form.notes} onChange={(e) => set("notes", e.target.value)} />
       </label>
+      <p className="hint-inline" style={{ display: "block", marginTop: 8 }}>
+        Enter the supply value and the VAT as printed on the tax invoice — the total is what you actually pay, and
+        the VAT feeds the input VAT on Closing · VAT. Payroll, tax payments and foreign-currency items default to no VAT.
+      </p>
       <div className="form-actions">
         <button className="btn primary" disabled={busy} onClick={save}>{busy ? "Working…" : "Save"}</button>
         {err ? <span className="action-err">{err}</span> : null}
@@ -1869,7 +1957,15 @@ function ClosingTab() {
               <table className="mini">
                 <tbody>
                   <tr><td>Output VAT</td><td className="num">{won(data.vat.output_krw)}</td></tr>
-                  <tr><td>Input VAT (est.)</td><td className="num">− {won(data.vat.input_krw)}</td></tr>
+                  {/* 매입세액은 두 갈래 — 프로젝트 매입(원가의 10% 추정)과 기타 지출(입력값). */}
+                  <tr><td>Input VAT · purchases (est.)</td><td className="num">− {won(data.vat.input_purchase_krw ?? data.vat.input_krw)}</td></tr>
+                  <tr>
+                    <td>
+                      Input VAT · other costs
+                      {data.other_costs ? <span className="muted"> ({data.other_costs.count})</span> : null}
+                    </td>
+                    <td className="num">− {won(data.vat.input_other_krw ?? 0)}</td>
+                  </tr>
                   <tr className="foot-grand">
                     <td className="total-label">{data.vat.payable_krw >= 0 ? "Payable" : "Refund"}</td>
                     <td className="num total-value">{won(Math.abs(data.vat.payable_krw))}</td>
@@ -1877,7 +1973,9 @@ function ClosingTab() {
                 </tbody>
               </table>
               <p className="hint-inline" style={{ display: "block", marginTop: 8 }}>
-                Exports (zero-rated) carry 0 output VAT. Input VAT is estimated as 10% of domestic purchase cost (actual filing is based on tax invoices).
+                Exports (zero-rated) carry 0 output VAT. Purchase input VAT is estimated as 10% of domestic purchase cost;
+                other costs use the VAT entered on each payable, so register rent, utilities and the like with the supply
+                value and VAT split (actual filing is based on tax invoices).
               </p>
             </div>
             <div className="panel">

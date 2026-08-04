@@ -828,7 +828,9 @@ export type FinancePayable = {
   counterparty: string;
   vendor_id: number | null;
   description: string;
-  amount: number;
+  amount: number;               // 지급 총액(공급가액 + 부가세)
+  vat_amount?: number;          // 총액에 포함된 부가세(매입세액). AP 유래 행은 없음
+  supply_amount?: number;       // 공급가액 = amount − vat_amount
   // 미수 목록과 같은 3열(청구·지급·미지급). 반복 항목은 1회차 금액 기준.
   invoice_amount: number;
   paid_amount: number;
@@ -857,7 +859,8 @@ export type FinancePayableSave = {
   counterparty?: string;
   vendor_id?: number | null;
   description?: string;
-  amount?: number;
+  amount?: number;      // 지급 총액(공급가액 + 부가세)
+  vat_amount?: number;  // 그 중 부가세 — 결산·부가세의 매입세액으로 집계된다
   currency?: string;
   bill_date?: string;
   due_date?: string;
@@ -945,9 +948,18 @@ export type FinanceClosing = {
   period: { start: string; end: string; year: number };
   sales: { supply_krw: number; vat_krw: number; total_krw: number; count: number };
   purchase: { cost_krw: number; vat_krw: number; count: number };
+  /** 기타 지출(수동 등록) — 마진에는 넣지 않고 매입세액 계산에만 쓰는 값. */
+  other_costs?: { supply_krw: number; vat_krw: number; count: number };
   margin_krw: number;
   margin_pct: number;
-  vat: { output_krw: number; input_krw: number; payable_krw: number };
+  vat: {
+    output_krw: number;
+    input_krw: number;
+    /** 매입세액의 출처 — 프로젝트 매입(10% 추정) / 기타 지출(입력값). */
+    input_purchase_krw?: number;
+    input_other_krw?: number;
+    payable_krw: number;
+  };
   by_customer: { name: string; sales_krw: number }[];
   monthly: { labels: string[]; sales: number[]; purchase: number[] };
   usd_krw: number;

@@ -64,6 +64,15 @@ def _add_by_currency(bucket: dict, key: str, amount: float, currency: str) -> No
     per[cur] = round(per.get(cur, 0.0) + (amount or 0.0), 2)
 
 
+def _vat_within(amount: float | None, vat: float | None) -> float:
+    """총액에 포함시킬 부가세 — 음수와 총액 초과를 막는다(공급가액이 음수가 되지 않도록)."""
+    total = round(float(amount or 0.0), 2)
+    v = round(float(vat or 0.0), 2)
+    if v <= 0:
+        return 0.0
+    return min(v, abs(total)) if total else 0.0
+
+
 def _today_usd_krw() -> dict:
     """오늘자 USD 매매기준율(수출입은행). 실패하면 고정환율로 폴백한다."""
     rate, used = get_deal_base_rate(date.today().isoformat(), "USD")
@@ -473,6 +482,7 @@ def create_finance_payable(body: FinancePayableIn, user: dict = Depends(get_curr
             vendor_id=body.vendor_id or None,
             description=(body.description or "").strip(),
             amount=body.amount or 0.0,
+            vat_amount=_vat_within(body.amount, body.vat_amount),
             currency=body.currency or "KRW",
             bill_date=(body.bill_date or "").strip()[:10],
             due_date=body.due_date or "",
@@ -505,6 +515,7 @@ def update_finance_payable(row_id: int, body: FinancePayableIn):
         p.vendor_id = body.vendor_id or None
         p.description = (body.description or "").strip()
         p.amount = body.amount or 0.0
+        p.vat_amount = _vat_within(body.amount, body.vat_amount)
         p.currency = body.currency or "KRW"
         p.bill_date = (body.bill_date or "").strip()[:10]
         p.due_date = body.due_date or ""
@@ -595,7 +606,8 @@ def finance_closing(start: str = "", end: str = "", year: int = 0):
     """기간 결산 — 매출(공급가액·매출세액)·매입(원가·추정 매입세액)·마진·부가세(납부/환급).
 
     통화 혼재는 USD_KRW_RATE 로 KRW 환산해 집계한다. 수출(영세율)은 매출세액 0으로 본다.
-    매입세액은 내수 매입 원가의 10% 로 추정(매입 세액 별도 저장이 없음)한다.
+    프로젝트 매입세액은 내수 매입 원가의 10% 로 추정(매입 세액 별도 저장이 없음)하고,
+    기타 지출은 등록 시 공급가액과 나눠 받은 부가세를 그대로 매입세액에 더한다.
     year 를 주면 그 해 12개월 매출/매입 추이(KRW)도 반환한다.
     """
     try:
@@ -639,7 +651,7 @@ def finance_closing(start: str = "", end: str = "", year: int = 0):
             if ys <= pd <= ye:
                 monthly_sales[int(pd[5:7]) - 1] += supply_krw
 
-        purchase_cost = input_vat = 0.0
+        purchase_cost = purchase_vat = 0.0
         purchase_count = 0
         for po in s.query(PurchaseOrder).all():
             pd = _po_period_date(po)
@@ -652,10 +664,35 @@ def finance_closing(start: str = "", end: str = "", year: int = 0):
             vat_krw = cost_krw * 0.1 if trade == "내수" else 0.0
             if s0 <= pd <= s1:
                 purchase_cost += cost_krw
-                input_vat += vat_krw
+                purchase_vat += vat_krw
                 purchase_count += 1
             if ys <= pd <= ye:
                 monthly_purchase[int(pd[5:7]) - 1] += cost_krw
+
+        # 기타 지출(수동 등록 지급대장)의 매입세액 — 임차료·공과금처럼 프로젝트와 무관한
+        # 비용도 세금계산서를 받으면 매입세액이 된다. 등록할 때 공급가액과 나눠 받은
+        # 부가세를 추정 없이 그대로 쓴다(부가세 0으로 넣은 급여·면세 건은 자연히 빠진다).
+        other_supply = other_vat = 0.0
+        other_count = 0
+        for p in s.query(FinancePayable).all():
+            vat = float(getattr(p, "vat_amount", None) or 0.0)
+            if vat <= 0:
+                continue
+            supply = float(p.amount or 0.0) - vat
+            cur = p.currency or "KRW"
+            if (p.recurrence or "none") == "none":
+                # 세금계산서를 받은 날 기준 — 없으면 지급 예정일로 본다.
+                pdt = (p.bill_date or "")[:10] or (p.due_date or "")[:10]
+                hits = 1 if pdt and s0 <= pdt <= s1 else 0
+            else:
+                # 반복 항목(월 임차료 등)은 구간에 든 회차 수만큼 잡는다.
+                hits = len(_finance_occurrences(p, d0, d1))
+            if not hits:
+                continue
+            other_vat += _to_krw(vat, cur) * hits
+            other_supply += _to_krw(supply, cur) * hits
+            other_count += hits
+        input_vat = purchase_vat + other_vat
 
         by_customer = [
             {"name": k, "sales_krw": round(v)}
@@ -672,14 +709,23 @@ def finance_closing(start: str = "", end: str = "", year: int = 0):
             },
             "purchase": {
                 "cost_krw": round(purchase_cost),
-                "vat_krw": round(input_vat),
+                "vat_krw": round(purchase_vat),
                 "count": purchase_count,
+            },
+            # 기타 지출 — 마진(매출-매입원가)에는 넣지 않고 부가세 계산에만 쓰는 값.
+            "other_costs": {
+                "supply_krw": round(other_supply),
+                "vat_krw": round(other_vat),
+                "count": other_count,
             },
             "margin_krw": round(sales_supply - purchase_cost),
             "margin_pct": round((sales_supply - purchase_cost) / sales_supply * 100, 1) if sales_supply else 0.0,
             "vat": {
                 "output_krw": round(output_vat),
                 "input_krw": round(input_vat),
+                # 매입세액의 출처 — 프로젝트 매입(10% 추정) / 기타 지출(입력값 그대로).
+                "input_purchase_krw": round(purchase_vat),
+                "input_other_krw": round(other_vat),
                 "payable_krw": round(output_vat - input_vat),  # 양수=납부, 음수=환급
             },
             "by_customer": by_customer,
