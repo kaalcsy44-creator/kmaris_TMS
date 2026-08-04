@@ -513,11 +513,12 @@ def make_packing_list_xlsx(
         f"Tel: {company.get('phone', '')}    Email: {company.get('sales_email', '')}",
         f"Business Reg. No.: {company.get('business_no', '')}",
     ]
+    # Packing List 는 자체 번호·발행일이 없다 — 딸려 나가는 송장의 번호·발행일을 싣는다.
     pl_info = [
-        ("P/L No.", data.get("doc_no", "")),
-        ("P/L Date", data.get("date", "")),
         ("Invoice No.", shipping.get("ci_no", "")),
+        ("Invoice Date", shipping.get("ci_date", "") or data.get("date", "")),
         ("P.O. No.", shipping.get("po_no", "")),
+        ("", ""),
         ("", ""),
     ]
     for i in range(5):

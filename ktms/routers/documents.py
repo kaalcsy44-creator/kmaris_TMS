@@ -603,7 +603,8 @@ def packing_list_pdf(order_id: int):
             raise HTTPException(status_code=404, detail="Packing List瑜?李얠쓣 ???놁뒿?덈떎.")
         payload = _packing_list_payload(s, order, ci, pl)
         pdf = generate_pdf("packing_list", payload)
-        return _doc_file_response(pdf, f"{pl.pl_no}_PL.pdf", "application/pdf")
+        # 번호는 화면이 자동으로 정해 보내지만(P/O 번호-PL), 그 전에 저장된 건은 비어 있을 수 있다.
+        return _doc_file_response(pdf, f"{pl.pl_no or order.po_no or 'PACKING_LIST'}_PL.pdf", "application/pdf")
     finally:
         s.close()
 
@@ -623,7 +624,7 @@ def packing_list_xlsx(order_id: int):
         xlsx = generate_pl_xlsx(payload)
         return _doc_file_response(
             xlsx,
-            f"{pl.pl_no}_PackingList.xlsx",
+            f"{pl.pl_no or order.po_no or 'PACKING_LIST'}_PackingList.xlsx",
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
     finally:
@@ -644,7 +645,9 @@ def _packing_list_payload(s, order, ci, pl) -> dict:
         shipping=merged_shipping, po_no=order.po_no or "",
         export_ref=_project_no_for_order(s, order),
     )
+    # PL 서식의 머리표는 딸린 송장의 번호·발행일을 싣는다(PL 자체 번호·날짜는 없다).
     payload["shipping"]["ci_no"] = ci.ci_no or ""
+    payload["shipping"]["ci_date"] = ci.date or ""
     payload["packing_info"] = pl.packing_info or ""
     return payload
 

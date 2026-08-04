@@ -1423,9 +1423,10 @@ def _make_packing_list_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> byt
     exporter = [company.get("company_name_en", ""), address_top, address_bottom,
                 f"Tel: {company.get('phone', '')}    Email: {company.get('sales_email', '')}",
                 f"Business Reg. No.: {company.get('business_no', '')}"]
-    invoice = [("P/L No.", data.get("doc_no", "")), ("P/L Date", data.get("date", "")),
-               ("Invoice No.", shipping.get("ci_no", "")),
-               ("P.O. No.", shipping.get("po_no", "")), ("", "")]
+    # Packing List 는 자체 번호·발행일이 없다 — 딸려 나가는 송장의 번호·발행일을 싣는다.
+    invoice = [("Invoice No.", shipping.get("ci_no", "")),
+               ("Invoice Date", shipping.get("ci_date", "") or data.get("date", "")),
+               ("P.O. No.", shipping.get("po_no", "")), ("", ""), ("", "")]
     rows = [[p("EXPORTER / SELLER", "section"), "", p("PACKING LIST INFORMATION", "section"), ""]]
     rows += [[p(exporter[i]), "", p(invoice[i][0]), p(invoice[i][1])] for i in range(5)]
     info = Table(rows, colWidths=[col_widths[0] + col_widths[1], col_widths[2] + col_widths[3],
