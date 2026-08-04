@@ -1005,10 +1005,7 @@ function ProformaInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChang
         <Field label="Invoice Date" value={date} onChange={setDate} type="date" />
         <ReadonlyField label="PO No." value={data.order.po_no || ""} />
       </div>
-      <div className="sub-h doc-sec-h">Consignee · Buyer</div>
-      <div className="form-grid doc-form-grid">
-        <PartyFields order={data.order} shipping={shipping} setShipping={setShipping} />
-      </div>
+      <PartiesSection order={data.order} shipping={shipping} setShipping={setShipping} />
       <p className="hint-inline" style={{ marginTop: 6 }}>
         Leave a buyer field empty to print the customer master value shown in grey. Leave the consignee empty when the goods
         are consigned to the buyer. The consignee company is shared with the Shipping Marks tab (C/O line).
@@ -1197,10 +1194,7 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
         <Field label="Invoice Date" value={date} onChange={setDate} type="date" />
         <ReadonlyField label="PO No." value={data.order.po_no || ""} />
       </div>
-      <div className="sub-h doc-sec-h">Consignee · Buyer</div>
-      <div className="form-grid doc-form-grid">
-        <PartyFields order={data.order} shipping={shipping} setShipping={setShipping} />
-      </div>
+      <PartiesSection order={data.order} shipping={shipping} setShipping={setShipping} />
       <p className="hint-inline" style={{ marginTop: 6 }}>
         Leave a buyer field empty to print the customer master value shown in grey. Leave the consignee empty when the goods
         are consigned to the buyer. The consignee company is shared with the Shipping Marks tab (C/O line).
@@ -1433,10 +1427,7 @@ function PackingListTab({ data, onChanged }: { data: DocumentDetail; onChanged: 
         <ReadonlyField label="Invoice Date" value={data.ci?.date || ""} />
         <ReadonlyField label="PO No." value={data.order.po_no || ""} />
       </div>
-      <div className="sub-h doc-sec-h">Consignee · Buyer</div>
-      <div className="form-grid doc-form-grid">
-        <PartyFields order={data.order} shipping={shipping} setShipping={setShipping} readonly />
-      </div>
+      <PartiesSection order={data.order} shipping={shipping} setShipping={setShipping} readonly />
       <div className="sub-h doc-sec-h">Shipping information</div>
       <div className="form-grid doc-form-grid">
         <ShippingFields shipping={shipping} setShipping={setShipping} terms={data.ci?.terms || {}} readonlyKeys={PL_READONLY_KEYS} />
@@ -1755,21 +1746,23 @@ function BankInfoSection({ currency }: { currency: string }) {
  *  네 칸(회사명·주소·담당자·이메일)을 각각 따로 받는다.
  *  · 수하인: 문서에만 있는 정보라 여기서 직접 입력(비우면 매수인과 같은 것으로 인쇄).
  *  · 매수인: 고객 마스터 값이 기본이고, 이 문서에서만 다르게 찍을 때 덮어쓴다(비우면 마스터). */
+// 칸 이름은 문서와 같게 — 어느 당사자인지는 좌우 블록 제목이 말해준다.
 const BUYER_FIELDS: { key: string; label: string; master: (o: DocumentDetail["order"]) => string }[] = [
-  { key: "buyer_name", label: "Buyer · Company Name", master: (o) => o.customer || "" },
-  { key: "buyer_address", label: "Buyer · Address", master: (o) => o.customer_address || "" },
-  { key: "buyer_contact", label: "Buyer · Contact", master: (o) => o.customer_contact || "" },
-  { key: "buyer_email", label: "Buyer · e-mail", master: (o) => o.customer_email || "" },
+  { key: "buyer_name", label: "Company Name", master: (o) => o.customer || "" },
+  { key: "buyer_address", label: "Address", master: (o) => o.customer_address || "" },
+  { key: "buyer_contact", label: "Contact", master: (o) => o.customer_contact || "" },
+  { key: "buyer_email", label: "e-mail", master: (o) => o.customer_email || "" },
 ];
 // 수하인 — 회사명은 Shipping Marks 의 C/O 와 같은 값(sm_consignee)을 그대로 쓴다.
 const CONSIGNEE_FIELDS: { key: string; label: string }[] = [
-  { key: "sm_consignee", label: "Consignee · Company Name" },
-  { key: "consignee_address", label: "Consignee · Address" },
-  { key: "consignee_contact", label: "Consignee · Contact" },
-  { key: "consignee_email", label: "Consignee · e-mail" },
+  { key: "sm_consignee", label: "Company Name" },
+  { key: "consignee_address", label: "Address" },
+  { key: "consignee_contact", label: "Contact" },
+  { key: "consignee_email", label: "e-mail" },
 ];
 
-function PartyFields({
+/** 발행 문서처럼 수하인·매수인을 좌우 두 칸으로 나눠 세운다(각 칸은 독립된 당사자 블록). */
+function PartiesSection({
   order,
   shipping,
   setShipping,
@@ -1783,18 +1776,28 @@ function PartyFields({
 }) {
   const set = (key: string) => (v: string) => setShipping({ ...shipping, [key]: v });
   return (
-    <>
-      {CONSIGNEE_FIELDS.map(({ key, label }) => (
-        readonly
-          ? <ReadonlyField key={key} label={label} value={shipping[key] || ""} />
-          : <Field key={key} label={label} value={shipping[key] || ""} onChange={set(key)} />
-      ))}
-      {BUYER_FIELDS.map(({ key, label, master }) => (
-        readonly
-          ? <ReadonlyField key={key} label={label} value={shipping[key] || master(order)} />
-          : <Field key={key} label={label} value={shipping[key] || ""} onChange={set(key)} placeholder={master(order)} />
-      ))}
-    </>
+    <div className="doc-parties">
+      <section className="doc-party">
+        <div className="sub-h">Consignee</div>
+        <div className="form-grid doc-party-grid">
+          {CONSIGNEE_FIELDS.map(({ key, label }) => (
+            readonly
+              ? <ReadonlyField key={key} label={label} value={shipping[key] || ""} />
+              : <Field key={key} label={label} value={shipping[key] || ""} onChange={set(key)} />
+          ))}
+        </div>
+      </section>
+      <section className="doc-party">
+        <div className="sub-h">Buyer (if different)</div>
+        <div className="form-grid doc-party-grid">
+          {BUYER_FIELDS.map(({ key, label, master }) => (
+            readonly
+              ? <ReadonlyField key={key} label={label} value={shipping[key] || master(order)} />
+              : <Field key={key} label={label} value={shipping[key] || ""} onChange={set(key)} placeholder={master(order)} />
+          ))}
+        </div>
+      </section>
+    </div>
   );
 }
 
