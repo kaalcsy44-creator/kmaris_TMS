@@ -905,7 +905,12 @@ function OrderMilestones({ data, onChanged }: { data: DocumentDetail; onChanged:
 // Proforma Invoice(선택) — 선적 전 발행하는 견적성 송장. Commercial Invoice 와 동일한
 // Basic info + Item list 구성이나 별도 레코드(pi)에 저장되며 하위 문서를 만들지 않는다.
 function ProformaInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChanged: () => void }) {
-  const [piNo, setPiNo] = useState(data.pi?.pi_no || "");
+  // PI 번호 자동생성 규칙 = P/O 번호 + "-PI" (Commercial Invoice 의 "-CI" 와 같은 방식).
+  const autoPiNo = data.order.po_no ? `${data.order.po_no}-PI` : "";
+  const [piNo, setPiNo] = useState(data.pi?.pi_no || autoPiNo);
+  const [piMode, setPiMode] = useState<"auto" | "manual">(
+    data.pi?.pi_no && data.pi.pi_no !== autoPiNo ? "manual" : "auto",
+  );
   const [date, setDate] = useState(data.pi?.date || today());
   // 통화·거래조건·선적 장소는 상위 단계(고객 P/O·견적)에서 정한 값을 이어받는다(빈 칸만).
   const [currency, setCurrency] = useState(data.pi?.currency || data.order.doc_defaults?.currency || "USD");
@@ -950,7 +955,8 @@ function ProformaInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChang
   }
 
   function cancel() {
-    setPiNo(data.pi?.pi_no || "");
+    setPiNo(data.pi?.pi_no || autoPiNo);
+    setPiMode(data.pi?.pi_no && data.pi.pi_no !== autoPiNo ? "manual" : "auto");
     setDate(data.pi?.date || today());
     setCurrency(data.pi?.currency || data.order.doc_defaults?.currency || "USD");
     setVatRate(data.pi?.vat_rate ?? 0);
@@ -989,7 +995,20 @@ function ProformaInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChang
         </span>
       </div>
       <div className="form-grid doc-form-grid">
-        <Field label="Invoice No." value={piNo} onChange={setPiNo} />
+        <label className="form-field">
+          <span>Invoice No.</span>
+          {piMode === "auto" ? (
+            <select value="auto" onChange={(e) => { if (e.target.value === "manual") setPiMode("manual"); }}>
+              <option value="auto">{autoPiNo ? `${autoPiNo} (auto)` : "Auto-generate"}</option>
+              <option value="manual">Manual entry…</option>
+            </select>
+          ) : (
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <input value={piNo} onChange={(e) => setPiNo(e.target.value)} placeholder="PI No.…" autoFocus style={{ flex: 1 }} />
+              <button type="button" className="btn sm" onClick={() => { setPiMode("auto"); setPiNo(autoPiNo); }} title="Use auto number">auto</button>
+            </div>
+          )}
+        </label>
         <Field label="Invoice Date" value={date} onChange={setDate} type="date" />
         <ReadonlyField label="PO No." value={data.order.po_no || ""} />
       </div>
@@ -1331,8 +1350,11 @@ const PL_READONLY_KEYS = new Set([
 const PL_EDITABLE_KEYS = ["carrier", "bl_awb_no", "etd", "eta"];
 
 function PackingListTab({ data, onChanged }: { data: DocumentDetail; onChanged: () => void }) {
-  const [plNo, setPlNo] = useState(data.pl?.pl_no || "");
-  const [date, setDate] = useState(data.pl?.date || today());
+  // Packing List 는 자체 번호·발행일이 없다 — 송장(Commercial Invoice)에 딸려 나가는 서류라
+  // 머리표에 송장번호·송장일자를 싣는다. 저장·파일명·문서 현황 목록에 쓸 식별자만 있으면 되므로
+  // 번호는 "P/O 번호-PL", 날짜는 송장일자로 자동으로 정한다(입력란 없음).
+  const plNo = data.pl?.pl_no || (data.order.po_no ? `${data.order.po_no}-PL` : "");
+  const date = data.pl?.date || data.ci?.date || today();
   const [packingInfo, setPackingInfo] = useState(data.pl?.packing_info || "");
   const seed = data.pl?.items || data.ci?.items || data.order.items;
   const [items, setItems] = useState<DocumentWorkItem[]>(normalizeItems(seed, true));
@@ -1372,8 +1394,6 @@ function PackingListTab({ data, onChanged }: { data: DocumentDetail; onChanged: 
   }
 
   function cancel() {
-    setPlNo(data.pl?.pl_no || "");
-    setDate(data.pl?.date || today());
     setPackingInfo(data.pl?.packing_info || "");
     setItems(normalizeItems(data.pl?.items || data.ci?.items || data.order.items, true));
     setShipping(initialShipping());
@@ -1402,12 +1422,10 @@ function PackingListTab({ data, onChanged }: { data: DocumentDetail; onChanged: 
       <fieldset className="form-fieldset" disabled={!editable}>
       <div className="doc-cols">
       <div className="doc-col">
-      {/* 입력 순서·이름은 발행되는 Packing List 서식 그대로. 서식의 머리표는 송장번호를
-          싣기 때문에 Commercial Invoice 번호·발행일을 함께 읽기전용으로 보여준다. */}
+      {/* 입력 순서·이름은 발행되는 Packing List 서식 그대로 — 서식의 머리표는 이 서류가 딸린
+          송장(Commercial Invoice)의 번호·발행일을 싣는다(Packing List 자체 번호·날짜는 없다). */}
       <div className="sub-h">Packing list information</div>
       <div className="form-grid doc-form-grid">
-        <Field label="Packing List No." value={plNo} onChange={setPlNo} />
-        <Field label="Packing List Date" value={date} onChange={setDate} type="date" />
         <ReadonlyField label="Invoice No." value={data.ci?.ci_no || ""} />
         <ReadonlyField label="Invoice Date" value={data.ci?.date || ""} />
         <ReadonlyField label="PO No." value={data.order.po_no || ""} />
