@@ -733,6 +733,9 @@ export type ArRow = {
   notes: string;
   tax_issued: boolean;
   tax_issued_date: string;
+  /** 프로포마 인보이스로 갈음한 발행 — 수동 완료 표시가 아니라 PI 존재가 근거다. */
+  tax_covered_by_pi?: boolean;
+  tax_pi_no?: string;
   paid_done: boolean;
   paid_date: string;
   vessel: string;

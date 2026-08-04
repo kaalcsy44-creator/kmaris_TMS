@@ -733,13 +733,16 @@ def _deal_progress(s, rfq, order) -> tuple[int, dict[str, str]]:
               .order_by(ShippingAdvice.created_at.asc()).first())
         ci = (s.query(CommercialInvoice).filter_by(order_id=order.id)
               .order_by(CommercialInvoice.created_at.asc()).first())
+        # 프로포마 인보이스 — 10단계(세금계산서 발행)를 대신한다(아래 pi_covers_tax).
+        pi = (s.query(ProformaInvoice).filter_by(order_id=order.id)
+              .order_by(ProformaInvoice.created_at.asc()).first())
         tax = (s.query(TaxInvoiceData).filter_by(ci_id=ci.id)
                .order_by(TaxInvoiceData.created_at.asc()).first()) if ci else None
         ars = s.query(ARRecord).filter_by(order_id=order.id).all()
         pod = (s.query(DeliveryProof).filter_by(order_id=order.id)
                .order_by(DeliveryProof.created_at.asc()).first())
     else:
-        pos, sa, ci, tax, ars, pod = [], None, None, None, [], None
+        pos, sa, ci, pi, tax, ars, pod = [], None, None, None, None, [], None
 
     # ── (1) 단계 번호 ─────────────────────────────────────────────────────────
     stage = 1
@@ -801,6 +804,15 @@ def _deal_progress(s, rfq, order) -> tuple[int, dict[str, str]]:
         if sd.get(k):
             stage = max(stage, int(k))
 
+    # 10) 프로포마 인보이스로 청구한 건은 국내 전자세금계산서를 따로 끊지 않는다 —
+    # 발행할 세금계산서가 없으므로 PI 발행을 10단계 완료로 본다(수동 완료 버튼 불필요).
+    # 다만 PI 존재만으로 10단계까지 끌어올리지는 않는다: PI 는 보통 7단계(선적 전)에 나가므로
+    # 그랬다간 아직 출고도 안 한 건이 파이프라인에서 세금계산서 단계로 보인다.
+    # 청구가 시작된 뒤(9단계 이상)에만 적용한다.
+    pi_covers_tax = pi is not None and stage >= 9
+    if pi_covers_tax:
+        stage = max(stage, 10)
+
     # ── (2) 단계별 자동 완료 일시 ─────────────────────────────────────────────
     # 근거 레코드가 존재하는 단계만 채운다(수동 stage_dates 미입력 시 표시·기본값).
     # 10·11단계는 근거 레코드가 없어 자동값 없음(수동 완료로만 표시).
@@ -843,7 +855,11 @@ def _deal_progress(s, rfq, order) -> tuple[int, dict[str, str]]:
         # 9) Tax Invoice 작성 · 대금 청구 — Tax/AR 근거만 (구 10)
         _set(9, (_date_iso(tax.date) or _kst_iso(tax.created_at) if tax else "")
              or _kst_iso(min((a.created_at for a in ars if a.created_at), default=None)))
-        # 10) 세금계산서 발행 · 11) 대금 결제 완료 — 수동 완료(stage_dates)로만 표시
+        # 10) 세금계산서 발행 — PI 로 갈음한 건은 PI 발행일이 완료 일시.
+        #     그 외에는 근거 레코드가 없다(수동 완료 stage_dates 로만 표시).
+        # 11) 대금 결제 완료 — 수동 완료(stage_dates)로만 표시
+        if pi_covers_tax:
+            _set(10, _date_iso(pi.date) or _kst_iso(pi.created_at))
 
     result = (stage, auto)
     _dp_cache[_dp_key] = result

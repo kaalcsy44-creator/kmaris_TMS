@@ -10,6 +10,7 @@ from _core import (
     Depends,
     HTTPException,
     Order,
+    ProformaInvoice,
     PurchaseOrder,
     Response,
     User,
@@ -40,6 +41,9 @@ def ar_overview():
         vendor_names = {v.id: v.name for v in s.query(Vendor).all()}
         user_names = {u.id: u.username for u in s.query(User).all()}
         ord_map = {o.id: o for o in s.query(Order).all()}
+        # 프로포마 인보이스를 발행한 오더 — 10단계(세금계산서 발행)를 PI 로 갈음한다
+        # (_core._deal_progress 의 pi_covers_tax 와 같은 규칙). 오더당 최신 1건만 본다.
+        pi_by_order = {p.order_id: p for p in s.query(ProformaInvoice).order_by(ProformaInvoice.id).all()}
         # order_id → 발주 Vendor 이름들(중복 제거, 발주 순)
         po_vendors_by_order: dict[int, list[str]] = {}
         for po in s.query(PurchaseOrder).order_by(PurchaseOrder.id).all():
@@ -68,6 +72,8 @@ def ar_overview():
             # 11) 세금계산서 발행 · 12) 대금 결제 완료 — RFQ.stage_dates 의 수동 완료 표시
             rfq = _rfq_for_order(s, o) if o else None
             sd = (getattr(rfq, "stage_dates", None) or {}) if rfq else {}
+            # 세금계산서 발행 = 수동 완료 또는 PI 발행(둘 중 먼저 있는 쪽이 완료 일시).
+            pi = pi_by_order.get(r.order_id)
             rows.append({
                 "id": r.id,
                 "order_id": r.order_id,
@@ -98,8 +104,12 @@ def ar_overview():
                 "bill_to_email": r.bill_to_email or "",
                 "bill_to_phone": r.bill_to_phone or "",
                 # 단계 재번호(구 8 제거) 후: 세금계산서 발행=10, 수금 완료=11.
-                "tax_issued": bool(sd.get("10")),
-                "tax_issued_date": sd.get("10", "") or "",
+                "tax_issued": bool(sd.get("10")) or pi is not None,
+                "tax_issued_date": sd.get("10", "") or (pi.date or "" if pi else ""),
+                # PI 로 갈음한 건 — 화면에서 "무엇으로 갈음했는지" 를 보여주고,
+                # 되돌릴 수동 완료가 없다는 것도 함께 알려야 한다(Undo 가 먹지 않는다).
+                "tax_covered_by_pi": pi is not None and not sd.get("10"),
+                "tax_pi_no": (pi.pi_no or "") if pi else "",
                 "paid_done": bool(sd.get("11")),
                 "paid_date": sd.get("11", "") or "",
                 # 공통 식별 컬럼

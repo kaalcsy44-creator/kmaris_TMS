@@ -620,6 +620,9 @@ function MilestoneBar({ row, stage, onChanged }: { row: ArRow; stage: 10 | 11; o
   const [payDue, setPayDue] = useState(row.due_date || today());
   const [paidAt, setPaidAt] = useState(row.paid_date || nowLocal());
   const done = stage === 10 ? row.tax_issued : row.paid_done;
+  // PI 로 갈음한 발행 — 되돌릴 수동 완료 기록이 없으므로 Undo 를 내밀면 안 된다
+  // (눌러도 아무 변화가 없다). 대신 "무엇이 대신했는지" 를 적어 준다.
+  const byPi = stage === 10 && !!row.tax_covered_by_pi;
 
   async function complete(flag: boolean) {
     setBusy(true);
@@ -646,7 +649,9 @@ function MilestoneBar({ row, stage, onChanged }: { row: ArRow; stage: 10 | 11; o
       <div className="milestone-row" style={{ marginBottom: 10 }}>
         <span className={`ar-badge${done ? "" : " overdue"}`}>
           {stage === 10
-            ? (row.tax_issued ? `Issued (${row.tax_issued_date || "done"})` : "Not issued")
+            ? (row.tax_issued
+                ? (byPi ? `Covered by Proforma Invoice${row.tax_pi_no ? ` ${row.tax_pi_no}` : ""}` : `Issued (${row.tax_issued_date || "done"})`)
+                : "Not issued")
             : (row.paid_done ? `Paid (${row.paid_date || "done"})` : "Pending")}
         </span>
         {stage === 11 ? (
@@ -672,6 +677,12 @@ function MilestoneBar({ row, stage, onChanged }: { row: ArRow; stage: 10 | 11; o
             Leave the amount empty to just mark it complete; enter an amount to record the payment and complete.
           </p>
         ) : null}
+        {byPi ? (
+          <p className="hint-inline" style={{ display: "block", margin: "6px 0 0" }}>
+            This deal is billed on a Proforma Invoice, so there is no domestic e-Tax invoice to issue — the stage
+            counts as done from the PI date. Only fill this in if you issue an e-Tax invoice as well.
+          </p>
+        ) : null}
       </fieldset>
       <div className="form-actions">
         {!canEditThis ? (
@@ -683,7 +694,7 @@ function MilestoneBar({ row, stage, onChanged }: { row: ArRow; stage: 10 | 11; o
                 ? (stage === 10 ? "Save issued date" : "Save paid date")
                 : (stage === 10 ? "Complete tax invoice issuance" : "Complete payment")}
             </button>
-            {done ? (
+            {done && !byPi ? (
               <button className="btn" disabled={busy} onClick={() => complete(false)}>
                 {stage === 10 ? "Undo issuance" : "Undo completion"}
               </button>
