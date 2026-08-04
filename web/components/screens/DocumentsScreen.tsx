@@ -22,6 +22,7 @@ import {
   savePodNotes,
   saveServiceStage,
   deleteServiceStage,
+  fetchCompanyProfile,
 } from "@/lib/api";
 import { getToken, can, canEditDeal, editBlockReason } from "@/lib/auth";
 import { useResizable } from "@/lib/useResizable";
@@ -99,7 +100,7 @@ export function DocumentsOverview({
     s === 8 ? "s8" : s === 9 ? "s9" : "s7";
   const [workView, setWorkView] = useState<WorkView>(initialView === "service" ? "service" : "parts");
   const [stage, setStage] = useState<StageTab>(stageFromProp(initialStage));
-  const [readyDoc, setReadyDoc] = useState<"pi" | "ci" | "sm" | "pl" | "sa">("ci"); // 7단계 하위(Proforma(선택)/CI/Shipping Marks/PL/SA)
+  const [readyDoc, setReadyDoc] = useState<"pi" | "ci" | "sm" | "pl" | "sa">("ci"); // 7단계 하위(Proforma(선택)/CI/PL/Shipping Marks/SA)
 
   const { data: overview, refresh } = useCachedData(
     "documents:overview",
@@ -160,11 +161,12 @@ export function DocumentsOverview({
           <button className={readyDoc === "ci" ? "on" : ""} onClick={() => setReadyDoc("ci")}>
             Commercial Invoice
           </button>
-          <button className={readyDoc === "sm" ? "on" : ""} onClick={() => setReadyDoc("sm")}>
-            Shipping Marks
-          </button>
+          {/* 탭 순서는 실제 발행 순서(PI → CI → PL) 그대로 — 케이스 마킹·선적통보는 그 뒤. */}
           <button className={readyDoc === "pl" ? "on" : ""} onClick={() => setReadyDoc("pl")}>
             Packing List
+          </button>
+          <button className={readyDoc === "sm" ? "on" : ""} onClick={() => setReadyDoc("sm")}>
+            Shipping Marks
           </button>
           <button className={readyDoc === "sa" ? "on" : ""} onClick={() => setReadyDoc("sa")}>
             Shipping Advice
@@ -991,25 +993,36 @@ function ProformaInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChang
       <fieldset className="form-fieldset" disabled={!editable}>
       <div className="doc-cols">
       <div className="doc-col">
+      {/* 입력 순서·이름은 발행되는 Proforma Invoice 서식 그대로. */}
       <div className="sub-h" style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
-        <span>Basic info</span>
+        <span>Invoice information</span>
         <span className="hint-inline" style={{ fontWeight: 400 }}>
           <b>Optional</b> pre-shipment document · saved independently of the Commercial Invoice
         </span>
       </div>
       <div className="form-grid doc-form-grid">
-        <Field label="PI No." value={piNo} onChange={setPiNo} />
-        <Field label="PI Date" value={date} onChange={setDate} type="date" />
+        <Field label="Invoice No." value={piNo} onChange={setPiNo} />
+        <Field label="Invoice Date" value={date} onChange={setDate} type="date" />
+        <ReadonlyField label="PO No." value={data.order.po_no || ""} />
+      </div>
+      <div className="sub-h doc-sec-h">Consignee · Buyer</div>
+      <div className="form-grid doc-form-grid">
+        <PartyFields order={data.order} shipping={shipping} setShipping={setShipping} />
+      </div>
+      <p className="hint-inline" style={{ marginTop: 6 }}>
+        Buyer details come from the customer master. Consignee, vessel and country of origin are shared with the Shipping Marks tab.
+      </p>
+      <div className="sub-h doc-sec-h">Shipping information</div>
+      <div className="form-grid doc-form-grid">
+        <ShippingFields shipping={shipping} setShipping={setShipping} terms={terms} setTerms={setTerms} />
         <label className="form-field">
           <span>Currency</span>
           <CurrencyToggle value={currency} onChange={setCurrency} />
         </label>
         <VatRateSelect value={String(vatRate)} onChange={(v) => setVatRate(num(v))} />
-        <ShippingFields shipping={shipping} setShipping={setShipping} />
-        <ComboField label="Incoterms" value={terms.incoterms || ""} onChange={(v) => setTerms({ ...terms, incoterms: v })} options={INCOTERMS_OPTIONS} />
-        <ComboField label="Payment Terms" value={terms.payment_terms || ""} onChange={(v) => setTerms({ ...terms, payment_terms: v })} options={PAYMENT_OPTIONS} />
         <Field label="HS Code (optional)" value={shipping.hs_code || ""} onChange={(v) => setShipping({ ...shipping, hs_code: v })} />
       </div>
+      <BankInfoSection currency={currency} />
       </div>
       </div>
       <ItemEditor
@@ -1162,11 +1175,12 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
       <fieldset className="form-fieldset" disabled={!editable}>
       <div className="doc-cols">
       <div className="doc-col">
-      <div className="sub-h">Basic info</div>
-      {/* 좌열: 문서정보(4)·선적정보(7)·HS Code(1) = 12필드, 절반폭 2열 배치. */}
+      {/* 입력 순서·이름은 발행되는 Commercial Invoice 서식 그대로 —
+          머리표(Invoice No./Date/PO No.) → Consignee·Buyer → Shipping information. */}
+      <div className="sub-h">Invoice information</div>
       <div className="form-grid doc-form-grid">
         <label className="form-field">
-          <span>CI No.</span>
+          <span>Invoice No.</span>
           {ciMode === "auto" ? (
             <select value="auto" onChange={(e) => { if (e.target.value === "manual") setCiMode("manual"); }}>
               <option value="auto">{autoCiNo ? `${autoCiNo} (auto)` : "Auto-generate"}</option>
@@ -1179,15 +1193,24 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
             </div>
           )}
         </label>
-        <Field label="CI Date" value={date} onChange={setDate} type="date" />
+        <Field label="Invoice Date" value={date} onChange={setDate} type="date" />
+        <ReadonlyField label="PO No." value={data.order.po_no || ""} />
+      </div>
+      <div className="sub-h doc-sec-h">Consignee · Buyer</div>
+      <div className="form-grid doc-form-grid">
+        <PartyFields order={data.order} shipping={shipping} setShipping={setShipping} />
+      </div>
+      <p className="hint-inline" style={{ marginTop: 6 }}>
+        Buyer details come from the customer master. Consignee, vessel and country of origin are shared with the Shipping Marks tab.
+      </p>
+      <div className="sub-h doc-sec-h">Shipping information</div>
+      <div className="form-grid doc-form-grid">
+        <ShippingFields shipping={shipping} setShipping={setShipping} terms={terms} setTerms={setTerms} />
         <label className="form-field">
           <span>Currency</span>
           <CurrencyToggle value={currency} onChange={setCurrency} />
         </label>
         <VatRateSelect value={String(vatRate)} onChange={(v) => setVatRate(num(v))} />
-        <ShippingFields shipping={shipping} setShipping={setShipping} />
-        <ComboField label="Incoterms" value={terms.incoterms || ""} onChange={(v) => setTerms({ ...terms, incoterms: v })} options={INCOTERMS_OPTIONS} />
-        <ComboField label="Payment Terms" value={terms.payment_terms || ""} onChange={(v) => setTerms({ ...terms, payment_terms: v })} options={PAYMENT_OPTIONS} />
         <Field label="HS Code (optional)" value={shipping.hs_code || ""} onChange={(v) => setShipping({ ...shipping, hs_code: v })} />
       </div>
       </div>
@@ -1398,12 +1421,23 @@ function PackingListTab({ data, onChanged }: { data: DocumentDetail; onChanged: 
       <fieldset className="form-fieldset" disabled={!editable}>
       <div className="doc-cols">
       <div className="doc-col">
-      <div className="sub-h">Basic info</div>
-      {/* 좌열: 문서정보(PL No./Date) + 선적정보(CI 상속·수정가능). */}
+      {/* 입력 순서·이름은 발행되는 Packing List 서식 그대로. 서식의 머리표는 송장번호를
+          싣기 때문에 Commercial Invoice 번호·발행일을 함께 읽기전용으로 보여준다. */}
+      <div className="sub-h">Packing list information</div>
       <div className="form-grid doc-form-grid">
-        <Field label="PL No." value={plNo} onChange={setPlNo} />
-        <Field label="PL Date" value={date} onChange={setDate} type="date" />
-        <ShippingFields shipping={shipping} setShipping={setShipping} readonlyKeys={PL_READONLY_KEYS} />
+        <Field label="Packing List No." value={plNo} onChange={setPlNo} />
+        <Field label="Packing List Date" value={date} onChange={setDate} type="date" />
+        <ReadonlyField label="Invoice No." value={data.ci?.ci_no || ""} />
+        <ReadonlyField label="Invoice Date" value={data.ci?.date || ""} />
+        <ReadonlyField label="PO No." value={data.order.po_no || ""} />
+      </div>
+      <div className="sub-h doc-sec-h">Consignee · Buyer</div>
+      <div className="form-grid doc-form-grid">
+        <PartyFields order={data.order} shipping={shipping} setShipping={setShipping} readonly />
+      </div>
+      <div className="sub-h doc-sec-h">Shipping information</div>
+      <div className="form-grid doc-form-grid">
+        <ShippingFields shipping={shipping} setShipping={setShipping} terms={data.ci?.terms || {}} readonlyKeys={PL_READONLY_KEYS} />
       </div>
       <p className="hint-inline" style={{ marginTop: 6 }}>
         회색 항목은 Commercial Invoice 값을 그대로 표시합니다(수정 불가). 운송 정보만 이 Packing List 에서 수정·저장됩니다. 케이스 마킹은 Shipping Marks 탭에서 관리합니다.
@@ -1548,7 +1582,8 @@ function ShippingAdviceTab({ data, onChanged }: { data: DocumentDetail; onChange
       <div className="form-grid doc-form-grid">
         <Field label="SA No." value={saNo} onChange={setSaNo} />
         <Field label="SA Date" value={date} onChange={setDate} type="date" />
-        <ShippingFields shipping={shipping} setShipping={setShipping} />
+        {/* 거래조건은 Commercial Invoice 를 그대로 따라간다(선적통보는 CI 기준 안내). */}
+        <ShippingFields shipping={shipping} setShipping={setShipping} terms={data.ci?.terms || {}} />
       </div>
       </div>
       </div>
@@ -1686,40 +1721,117 @@ function TaxInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChanged: (
   );
 }
 
-// 선적정보 입력 필드들 — 래핑 그리드 없이 Field 조각만 반환해 상위 폼 그리드에
-// 함께 배치(문서정보와 같은 4열 트랙에 정렬)한다.
+// ── 문서 서식(Proforma / Commercial Invoice / Packing List)과 같은 묶음·이름 ──
+// 실제 발행 문서는 「머리표(Invoice No./Date/PO No.) → CONSIGNEE·BUYER →
+// SHIPPING INFORMATION → 품목표」 순서라, 입력 화면도 같은 순서·같은 이름으로 나눈다.
+
+/** BANK INFORMATION — Proforma Invoice 하단 송금 계좌. 회사 정보(Settings)에서 그대로
+ *  인쇄되는 값이라 여기서는 무엇이 찍히는지만 보여준다(수정은 Settings · Company). */
+function BankInfoSection({ currency }: { currency: string }) {
+  const { data: company } = useCachedData("settings:company", fetchCompanyProfile);
+  const foreign = (currency || "USD").toUpperCase() !== "KRW";
+  const holder = (foreign ? company?.fx_bank_holder : company?.bank_holder) || company?.company_name_en || "";
+  const bank = (foreign ? company?.fx_bank_name : company?.bank_name) || "";
+  const account = (foreign ? company?.fx_bank_account : company?.bank_account) || "";
+  return (
+    <>
+      <div className="sub-h doc-sec-h">Bank information</div>
+      <div className="form-grid doc-form-grid">
+        <ReadonlyField label="Remittee's name" value={holder} />
+        <ReadonlyField label="Bank Name & Address" value={bank} />
+        <ReadonlyField label="Swift Code" value={company?.swift || ""} />
+        <ReadonlyField label="Remittee's Account No." value={account} />
+      </div>
+      <p className="hint-inline" style={{ marginTop: 6 }}>
+        {foreign ? "Foreign-currency account" : "KRW account"} from Settings · Company — edit it there.
+      </p>
+    </>
+  );
+}
+
+/** CONSIGNEE · BUYER — 수하인(포워더·선사 대리점)은 직접 입력, 매수인은 고객 마스터 값. */
+function PartyFields({
+  order,
+  shipping,
+  setShipping,
+  readonly,
+}: {
+  order: DocumentDetail["order"];
+  shipping: Record<string, string>;
+  setShipping: (v: Record<string, string>) => void;
+  /** Packing List 처럼 Commercial Invoice 값을 그대로 따라가는 화면은 읽기전용. */
+  readonly?: boolean;
+}) {
+  return (
+    <>
+      {readonly
+        ? <ReadonlyField label="Consignee · Company Name" value={shipping.sm_consignee || ""} />
+        : <Field label="Consignee · Company Name" value={shipping.sm_consignee || ""} onChange={(v) => setShipping({ ...shipping, sm_consignee: v })} />}
+      {/* 매수인은 고객 마스터에서 그대로 인쇄된다 — 여기서는 무엇이 찍히는지만 보여준다. */}
+      <ReadonlyField label="Buyer · Company Name" value={order.customer || ""} />
+      <ReadonlyField label="Buyer · Contact" value={order.customer_contact || ""} />
+      <ReadonlyField label="Buyer · e-mail" value={order.customer_email || ""} />
+    </>
+  );
+}
+
+// SHIPPING INFORMATION 입력 필드들 — 래핑 그리드 없이 Field 조각만 반환해 상위 폼
+// 그리드에 함께 배치(문서정보와 같은 트랙에 정렬)한다. 순서·이름은 발행 문서와 동일.
 function ShippingFields({
   shipping,
   setShipping,
+  terms,
+  setTerms,
   readonlyKeys,
 }: {
   shipping: Record<string, string>;
   setShipping: (v: Record<string, string>) => void;
+  // 거래조건(Incoterms/Payment Terms/Packing) — setTerms 가 없으면 읽기전용으로 표시한다.
+  terms?: Record<string, string>;
+  setTerms?: (v: Record<string, string>) => void;
   // 이 키들은 입력란 대신 읽기전용 텍스트로 표시(Packing List 의 확정 정보). 없으면 전부 편집 가능.
   readonlyKeys?: Set<string>;
 }) {
   const set = (key: string) => (v: string) => setShipping({ ...shipping, [key]: v });
+  const setTerm = (key: string) => (v: string) => setTerms?.({ ...(terms || {}), [key]: v });
   const ro = (key: string) => readonlyKeys?.has(key);
+  const t = terms || {};
   return (
     <>
-      {ro("port_loading")
-        ? <ReadonlyField label="Port of Loading" value={shipping.port_loading || ""} />
-        : <ComboField label="Port of Loading" value={shipping.port_loading || ""} onChange={set("port_loading")} options={PORT_OPTIONS} />}
-      {ro("port_discharge")
-        ? <ReadonlyField label="Port of Discharge" value={shipping.port_discharge || ""} />
-        : <ComboField label="Port of Discharge" value={shipping.port_discharge || ""} onChange={set("port_discharge")} options={PORT_OPTIONS} />}
+      {ro("sm_vessel")
+        ? <ReadonlyField label="Vessel / IMO No." value={shipping.sm_vessel || ""} />
+        : <Field label="Vessel / IMO No." value={shipping.sm_vessel || ""} onChange={set("sm_vessel")} />}
       {ro("carrier")
         ? <ReadonlyField label="Carrier" value={shipping.carrier || ""} />
         : <ComboField label="Carrier" value={shipping.carrier || ""} onChange={set("carrier")} options={CARRIER_OPTIONS} />}
       {ro("bl_awb_no")
         ? <ReadonlyField label="B/L or AWB No." value={shipping.bl_awb_no || ""} />
         : <ComboField label="B/L or AWB No." value={shipping.bl_awb_no || ""} onChange={set("bl_awb_no")} options={BL_AWB_OPTIONS} />}
+      {ro("port_loading")
+        ? <ReadonlyField label="Place of Departure" value={shipping.port_loading || ""} />
+        : <ComboField label="Place of Departure" value={shipping.port_loading || ""} onChange={set("port_loading")} options={PORT_OPTIONS} />}
+      {ro("port_discharge")
+        ? <ReadonlyField label="Place of Destination" value={shipping.port_discharge || ""} />
+        : <ComboField label="Place of Destination" value={shipping.port_discharge || ""} onChange={set("port_discharge")} options={PORT_OPTIONS} />}
       {ro("etd")
         ? <ReadonlyField label="ETD" value={shipping.etd || ""} />
         : <Field label="ETD" value={shipping.etd || ""} onChange={set("etd")} type="date" />}
       {ro("eta")
         ? <ReadonlyField label="ETA" value={shipping.eta || ""} />
         : <Field label="ETA" value={shipping.eta || ""} onChange={set("eta")} type="date" />}
+      {setTerms
+        ? <ComboField label="Incoterms" value={t.incoterms || ""} onChange={setTerm("incoterms")} options={INCOTERMS_OPTIONS} />
+        : <ReadonlyField label="Incoterms" value={t.incoterms || ""} />}
+      {setTerms
+        ? <ComboField label="Payment Terms" value={t.payment_terms || ""} onChange={setTerm("payment_terms")} options={PAYMENT_OPTIONS} />
+        : <ReadonlyField label="Payment Terms" value={t.payment_terms || ""} />}
+      {/* 포장 방법(Carton Box 등) — 하단 합계의 Packing(포장비)과는 다른 값이라 키도 따로. */}
+      {setTerms
+        ? <ComboField label="Packing" value={t.packing_type || ""} onChange={setTerm("packing_type")} options={PACKING_OPTIONS} />
+        : <ReadonlyField label="Packing" value={t.packing_type || ""} />}
+      {ro("sm_origin")
+        ? <ReadonlyField label="Country of Origin" value={shipping.sm_origin || ""} />
+        : <ComboField label="Country of Origin" value={shipping.sm_origin || ""} onChange={set("sm_origin")} options={ORIGIN_OPTIONS} />}
     </>
   );
 }
@@ -1862,6 +1974,10 @@ const INCOTERMS_OPTIONS = [
 ];
 const PAYMENT_OPTIONS = [
   "T/T in advance", "T/T 30 days", "T/T 60 days", "L/C at sight", "Net 30", "Net 60", "COD",
+];
+// 포장 방법(문서의 Shipping Information · Packing 칸). 합계의 Packing(포장비)과 다르다.
+const PACKING_OPTIONS = [
+  "Carton Box", "Wooden Case", "Wooden Pallet", "Crate", "Drum", "Bulk", "Maker's Original Packing",
 ];
 
 // ── Shipping Marks 섹션 선택지 ─────────────────────────────────────────────

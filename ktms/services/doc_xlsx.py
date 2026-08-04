@@ -269,17 +269,21 @@ def make_commercial_invoice_xlsx(
     # ── Shipping information ─────────────────────────────────────────────
     merge(r, 1, r, NCOL); put(r, 1, "SHIPPING INFORMATION", fill=section, font=white_sec, align=left)
     bd(r, 1, r, NCOL, section); r += 1
+    # 항목 이름·순서는 입력 화면(7단계 Commercial Invoice 탭)과 같게 맞춘다.
     r = pairs_block([
-        ("Vessel", shipping.get("sm_vessel", "") or vessel.get("name", "")),
+        ("Vessel / IMO No.", " / ".join(x for x in [shipping.get("sm_vessel", "") or vessel.get("name", ""), vessel.get("imo", "")] if x)),
         ("Carrier", shipping.get("carrier", "")),
-        ("Port of Loading", shipping.get("port_loading", "")),
-        ("Port of Discharge", shipping.get("port_discharge", "")),
-        ("Incoterms", terms.get("incoterms", "")),
-        ("Payment Terms", terms.get("payment_terms", "")),
+        ("Place of Departure", shipping.get("port_loading", "")),
+        ("Place of Destination", shipping.get("port_discharge", "")),
         ("ETD", shipping.get("etd", "")),
         ("ETA", shipping.get("eta", "")),
-        ("Currency", currency),
+        ("Incoterms", terms.get("incoterms", "")),
+        ("Payment Terms", terms.get("payment_terms", "")),
+        # 포장 방법(Carton Box 등) — 아래 합계의 Packing(포장비)과 다른 값.
+        ("Packing", terms.get("packing_type", "")),
         ("Country of Origin", shipping.get("sm_origin", "")),
+        ("Currency", currency),
+        ("", ""),
     ], r)
 
     # Shipping Marks(케이스 마킹)는 별도 문서로 분리 — CI Excel 에는 출력하지 않는다.
@@ -399,6 +403,8 @@ def make_packing_list_xlsx(
     customer = data.get("customer", {}) or {}
     vessel = data.get("vessel", {}) or {}
     shipping = data.get("shipping", {}) or {}
+    # 거래조건(Incoterms/Payment Terms/Packing)은 Commercial Invoice 값을 그대로 싣는다.
+    terms = data.get("terms", {}) or {}
     items = normalize_items(data.get("items", []))
     num_fmt = "#,##0.###"
 
@@ -551,15 +557,20 @@ def make_packing_list_xlsx(
     # ── Shipping information ─────────────────────────────────────────────
     merge(r, 1, r, NCOL); put(r, 1, "SHIPPING INFORMATION", fill=section, font=white_sec, align=left)
     bd(r, 1, r, NCOL, section); r += 1
+    # 항목 이름·순서는 입력 화면(7단계 Packing List 탭)과 같게 맞춘다.
     r = pairs_block([
-        ("Vessel", shipping.get("sm_vessel", "") or vessel.get("name", "")),
+        ("Vessel / IMO No.", " / ".join(x for x in [shipping.get("sm_vessel", "") or vessel.get("name", ""), vessel.get("imo", "")] if x)),
         ("Carrier", shipping.get("carrier", "")),
-        ("Port of Loading", shipping.get("port_loading", "")),
-        ("Port of Discharge", shipping.get("port_discharge", "")),
+        ("Place of Departure", shipping.get("port_loading", "")),
+        ("Place of Destination", shipping.get("port_discharge", "")),
         ("ETD", shipping.get("etd", "")),
         ("ETA", shipping.get("eta", "")),
+        ("Incoterms", terms.get("incoterms", "")),
+        ("Payment Terms", terms.get("payment_terms", "")),
+        ("Packing", terms.get("packing_type", "")),
         ("Country of Origin", shipping.get("sm_origin", "")),
         ("Final Destination", shipping.get("sm_final_dest", "")),
+        ("", ""),
     ], r)
 
     # ── Shipping marks ───────────────────────────────────────────────────

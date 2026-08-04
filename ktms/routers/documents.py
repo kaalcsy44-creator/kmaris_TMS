@@ -638,7 +638,8 @@ def _packing_list_payload(s, order, ci, pl) -> dict:
         doc_no=pl.pl_no, date=pl.date,
         customer=_customer_for_order(s, order),
         vessel=_vessel_for_order(s, order),
-        items=pl.items or [], terms={},
+        # 거래조건(Incoterms/Payment Terms/Packing)은 PL 서식에도 실리며 CI 값을 따른다.
+        items=pl.items or [], terms=ci.terms or {},
         currency=ci.currency or "USD",
         shipping=merged_shipping, po_no=order.po_no or "",
         export_ref=_project_no_for_order(s, order),

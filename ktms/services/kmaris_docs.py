@@ -591,12 +591,25 @@ def _terms_block(data: Dict[str, Any], doc_type: str):
             [
                 ["Payment Terms", terms.get("payment_terms", "")],
                 ["Delivery Place", terms.get("delivery_place", "")],
-                ["Packing", terms.get("packing", "")],
+                # 포장 방법(Carton Box 등) — 하단 합계의 Packing(포장비)과 다른 값.
+                ["Packing", terms.get("packing_type") or terms.get("packing", "")],
                 ["Warranty", terms.get("warranty", "")],
                 ["Remarks", terms.get("remarks", "")],
             ]
         )
         if doc_type == "proforma_invoice":
+            # 선적 정보 — 입력 화면(Proforma Invoice 탭)의 Shipping information 과 같은 이름.
+            rows.extend(
+                [
+                    ["Vessel / IMO No.", _vessel_imo(shipping, data.get("vessel"))],
+                    ["Carrier", shipping.get("carrier", "")],
+                    ["Place of Departure", shipping.get("port_loading", "")],
+                    ["Place of Destination", shipping.get("port_discharge", "")],
+                    ["ETD", shipping.get("etd", "")],
+                    ["ETA", shipping.get("eta", "")],
+                    ["Country of Origin", shipping.get("sm_origin", "")],
+                ]
+            )
             rows.extend(
                 [
                     ["Bank", company.get("bank_name", "")],
@@ -616,8 +629,8 @@ def _terms_block(data: Dict[str, Any], doc_type: str):
     if doc_type in {"packing_list", "shipping_advice"}:
         rows.extend(
             [
-                ["Port of Loading", shipping.get("port_loading", "")],
-                ["Port of Discharge", shipping.get("port_discharge", "")],
+                ["Place of Departure", shipping.get("port_loading", "")],
+                ["Place of Destination", shipping.get("port_discharge", "")],
                 ["Carrier", shipping.get("carrier", "")],
                 ["B/L or AWB No.", shipping.get("bl_awb_no", "")],
                 ["ETD", shipping.get("etd", "")],
@@ -648,6 +661,14 @@ def _terms_block(data: Dict[str, Any], doc_type: str):
     return table
 
 
+def _vessel_imo(shipping: Dict[str, Any], vessel: Dict[str, Any] | None) -> str:
+    """문서의 'Vessel / IMO No.' 칸 — 문서에 적어 넣은 선명이 우선, 없으면 선박 마스터."""
+    vessel = vessel or {}
+    name = (shipping.get("sm_vessel") or vessel.get("name", "") or "").strip()
+    imo = (vessel.get("imo", "") or "").strip()
+    return " / ".join(x for x in (name, imo) if x)
+
+
 def _commercial_shipping_block(data: Dict[str, Any]):
     """Render the CI footer in the same section order and field grouping as the XLSX."""
     s = _styles()
@@ -673,24 +694,26 @@ def _commercial_shipping_block(data: Dict[str, Any]):
 
     rows = [
         [_p("<b>SHIPPING INFORMATION</b>", s["section"]), "", _p("<b>SHIPPING INFORMATION</b>", s["section"]), ""],
-        [_p("Vessel", s["small"]), _p(shipping.get("sm_vessel", ""), s["small"]), _p("Carrier", s["small"]), _p(shipping.get("carrier", ""), s["small"])],
-        [_p("Port of Loading", s["small"]), _p(shipping.get("port_loading", ""), s["small"]), _p("Port of Discharge", s["small"]), _p(shipping.get("port_discharge", ""), s["small"])],
+        [_p("Vessel / IMO No.", s["small"]), _p(_vessel_imo(shipping, data.get("vessel")), s["small"]), _p("Carrier", s["small"]), _p(shipping.get("carrier", ""), s["small"])],
+        [_p("Place of Departure", s["small"]), _p(shipping.get("port_loading", ""), s["small"]), _p("Place of Destination", s["small"]), _p(shipping.get("port_discharge", ""), s["small"])],
         [_p("B/L or AWB No.", s["small"]), _p(shipping.get("bl_awb_no", ""), s["small"]), _p("ETD / ETA", s["small"]), _p(f"{shipping.get('etd', '')} / {shipping.get('eta', '')}", s["small"])],
         [_p("Incoterms", s["small"]), _p(terms.get("incoterms", ""), s["small"]), _p("Payment Terms", s["small"]), _p(terms.get("payment_terms", ""), s["small"])],
+        [_p("Packing", s["small"]), _p(terms.get("packing_type", ""), s["small"]), _p("Country of Origin", s["small"]), _p(shipping.get("sm_origin", ""), s["small"])],
         [_p("<b>SHIPPING MARKS</b>", s["section"]), "", "", ""],
         [_p(marks, s["small"]), "", "", ""],
         [_p("<b>PACKING &amp; DECLARATION</b>", s["section"]), "", "", ""],
         [_p("Total Packages", s["small"]), _p(shipping.get("sm_total_cases", ""), s["small"]), _p("N.W. / G.W. (kg)", s["small"]), _p(f"{shipping.get('sm_net_weight', '')} / {shipping.get('sm_gross_weight', '')}", s["small"])],
         [_p("Dimension (mm)", s["small"]), _p(dim if dim != "- x - x -" else "", s["small"]), _p("Country of Origin", s["small"]), _p(shipping.get("sm_origin", ""), s["small"])],
     ]
+    # 행 인덱스: 0 머리 / 1-5 선적정보 / 6 마크 머리 / 7 마크 / 8 포장·선언 머리 / 9-10 포장.
     table = Table(rows, colWidths=[38 * mm, 97 * mm, 38 * mm, 97 * mm])
     table.setStyle(TableStyle([
         ("SPAN", (0, 0), (1, 0)), ("SPAN", (2, 0), (3, 0)),
-        ("SPAN", (0, 5), (3, 5)), ("SPAN", (0, 6), (3, 6)), ("SPAN", (0, 7), (3, 7)),
-        ("BACKGROUND", (0, 0), (-1, 0), BLUE), ("BACKGROUND", (0, 5), (-1, 5), BLUE),
-        ("BACKGROUND", (0, 7), (-1, 7), BLUE),
-        ("BACKGROUND", (0, 1), (0, 4), LIGHT_GRAY), ("BACKGROUND", (2, 1), (2, 4), LIGHT_GRAY),
-        ("BACKGROUND", (0, 8), (0, 9), LIGHT_GRAY), ("BACKGROUND", (2, 8), (2, 9), LIGHT_GRAY),
+        ("SPAN", (0, 6), (3, 6)), ("SPAN", (0, 7), (3, 7)), ("SPAN", (0, 8), (3, 8)),
+        ("BACKGROUND", (0, 0), (-1, 0), BLUE), ("BACKGROUND", (0, 6), (-1, 6), BLUE),
+        ("BACKGROUND", (0, 8), (-1, 8), BLUE),
+        ("BACKGROUND", (0, 1), (0, 5), LIGHT_GRAY), ("BACKGROUND", (2, 1), (2, 5), LIGHT_GRAY),
+        ("BACKGROUND", (0, 9), (0, 10), LIGHT_GRAY), ("BACKGROUND", (2, 9), (2, 10), LIGHT_GRAY),
         ("GRID", (0, 0), (-1, -1), 0.35, MID_GRAY), ("VALIGN", (0, 0), (-1, -1), "TOP"),
         ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
         ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
@@ -824,12 +847,14 @@ def _make_commercial_invoice_pdf(data: Dict[str, Any], company: Dict[str, Any]) 
                                    ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
                                    ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]))
     story += [consignee, section("SHIPPING INFORMATION")]
+    # 항목 이름·순서는 입력 화면(7단계 Commercial Invoice 탭)과 같게 맞춘다.
     shipping_rows = [[p(a), p(b), p(c), p(d)] for a, b, c, d in [
-        ("Vessel", shipping.get("sm_vessel") or vessel.get("name", ""), "Carrier", shipping.get("carrier", "")),
-        ("Port of Loading", shipping.get("port_loading", ""), "Port of Discharge", shipping.get("port_discharge", "")),
-        ("Incoterms", terms.get("incoterms", ""), "Payment Terms", terms.get("payment_terms", "")),
+        ("Vessel / IMO No.", _vessel_imo(shipping, vessel), "Carrier", shipping.get("carrier", "")),
+        ("Place of Departure", shipping.get("port_loading", ""), "Place of Destination", shipping.get("port_discharge", "")),
         ("ETD", shipping.get("etd", ""), "ETA", shipping.get("eta", "")),
-        ("Currency", currency, "Country of Origin", shipping.get("sm_origin", ""))]]
+        ("Incoterms", terms.get("incoterms", ""), "Payment Terms", terms.get("payment_terms", "")),
+        ("Packing", terms.get("packing_type", ""), "Country of Origin", shipping.get("sm_origin", "")),
+        ("Currency", currency, "", "")]]
     shipping_table = Table(shipping_rows, colWidths=[col_widths[0] + col_widths[1], col_widths[2] + col_widths[3],
                                                      col_widths[4] + col_widths[5], col_widths[6] + col_widths[7]])
     shipping_table.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), .35, MID_GRAY),
@@ -1292,6 +1317,8 @@ def _make_packing_list_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> byt
     customer = data.get("customer", {}) or {}
     vessel = data.get("vessel", {}) or {}
     shipping = data.get("shipping", {}) or {}
+    # 거래조건(Incoterms/Payment Terms/Packing)은 Commercial Invoice 값을 그대로 싣는다.
+    terms = data.get("terms", {}) or {}
     items = normalize_items(data.get("items", []))
     currency = (data.get("currency") or "USD").upper()
     buffer = io.BytesIO()
@@ -1386,11 +1413,14 @@ def _make_packing_list_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> byt
                                    ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
                                    ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]))
     story += [consignee, section("SHIPPING INFORMATION")]
+    # 항목 이름·순서는 입력 화면(7단계 Packing List 탭)과 같게 맞춘다.
     shipping_rows = [[p(a), p(b), p(c), p(d)] for a, b, c, d in [
-        ("Vessel", shipping.get("sm_vessel") or vessel.get("name", ""), "Carrier", shipping.get("carrier", "")),
-        ("Port of Loading", shipping.get("port_loading", ""), "Port of Discharge", shipping.get("port_discharge", "")),
+        ("Vessel / IMO No.", _vessel_imo(shipping, vessel), "Carrier", shipping.get("carrier", "")),
+        ("Place of Departure", shipping.get("port_loading", ""), "Place of Destination", shipping.get("port_discharge", "")),
         ("ETD", shipping.get("etd", ""), "ETA", shipping.get("eta", "")),
-        ("Country of Origin", shipping.get("sm_origin", ""), "Final Destination", shipping.get("sm_final_dest", ""))]]
+        ("Incoterms", terms.get("incoterms", ""), "Payment Terms", terms.get("payment_terms", "")),
+        ("Packing", terms.get("packing_type", ""), "Country of Origin", shipping.get("sm_origin", "")),
+        ("Final Destination", shipping.get("sm_final_dest", ""), "", "")]]
     shipping_table = Table(shipping_rows, colWidths=[col_widths[0] + col_widths[1], col_widths[2] + col_widths[3],
                                                      col_widths[4] + col_widths[5], col_widths[6] + col_widths[7]])
     shipping_table.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), .35, MID_GRAY),

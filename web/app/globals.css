@@ -4368,6 +4368,11 @@ a.btn.primary:hover {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+/* 문서 폼 안의 두 번째 이후 소제목(Consignee·Buyer / Shipping information …) —
+   앞 그리드와 붙지 않게 위 여백을 준다(발행 문서의 섹션 구분과 같은 리듬). */
+.doc-sec-h {
+  margin-top: 16px;
+}
 /* 문서 폼 좌우 2단: 좌=Basic info, 우=Shipping Marks 로 넓은 스테이지 창의
    우측 여백을 활용한다(세로 스크롤 절감). */
 .doc-cols {
