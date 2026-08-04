@@ -1012,11 +1012,10 @@ function ProformaInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChang
         <Field label="Invoice Date" value={date} onChange={setDate} type="date" />
         <ReadonlyField label="PO No." value={data.order.po_no || ""} />
       </div>
-      <PartiesSection order={data.order} shipping={shipping} setShipping={setShipping} />
+      <PartiesSection order={data.order} shipping={shipping} setShipping={setShipping} buyerOnly />
       <p className="hint-inline" style={{ marginTop: 6 }}>
         Leave a buyer field empty to print the grey value — the contact registered for this deal on the RFQ, with the rest
-        from the customer master. Leave the consignee empty when the goods are consigned to the buyer. The consignee company
-        is shared with the Shipping Marks tab (C/O line).
+        from the customer master.
       </p>
       <div className="sub-h doc-sec-h">Shipping information</div>
       <div className="form-grid doc-form-grid">
@@ -1654,14 +1653,31 @@ function PartiesSection({
   shipping,
   setShipping,
   readonly,
+  buyerOnly,
 }: {
   order: DocumentDetail["order"];
   shipping: Record<string, string>;
   setShipping: (v: Record<string, string>) => void;
   /** Packing List 처럼 Commercial Invoice 값을 그대로 따라가는 화면은 읽기전용. */
   readonly?: boolean;
+  /** Proforma Invoice — 선적 전 문서라 수하인을 받지 않는다. 매수인 한 블록만 한 줄로 세운다.
+   *  (수하인을 비워 두면 발행 문서는 매수인을 수하인 자리에 그대로 찍는다 — doc_parties.) */
+  buyerOnly?: boolean;
 }) {
   const set = (key: string) => (v: string) => setShipping({ ...shipping, [key]: v });
+  const buyer = (
+    <section className="doc-party">
+      <div className="sub-h">{buyerOnly ? "Buyer" : "Buyer (if different)"}</div>
+      <div className={`form-grid doc-party-grid${buyerOnly ? " doc-party-grid--row" : ""}`}>
+        {BUYER_FIELDS.map(({ key, label, wide, master }) => (
+          readonly
+            ? <ReadonlyField key={key} label={label} value={shipping[key] || master(order)} wide={wide && !buyerOnly} />
+            : <Field key={key} label={label} value={shipping[key] || ""} onChange={set(key)} placeholder={master(order)} wide={wide && !buyerOnly} />
+        ))}
+      </div>
+    </section>
+  );
+  if (buyerOnly) return <div className="doc-parties doc-parties--single">{buyer}</div>;
   return (
     <div className="doc-parties">
       <section className="doc-party">
@@ -1674,16 +1690,7 @@ function PartiesSection({
           ))}
         </div>
       </section>
-      <section className="doc-party">
-        <div className="sub-h">Buyer (if different)</div>
-        <div className="form-grid doc-party-grid">
-          {BUYER_FIELDS.map(({ key, label, wide, master }) => (
-            readonly
-              ? <ReadonlyField key={key} label={label} value={shipping[key] || master(order)} wide={wide} />
-              : <Field key={key} label={label} value={shipping[key] || ""} onChange={set(key)} placeholder={master(order)} wide={wide} />
-          ))}
-        </div>
-      </section>
+      {buyer}
     </div>
   );
 }
