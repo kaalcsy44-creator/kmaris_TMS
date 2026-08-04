@@ -4391,14 +4391,23 @@ a.btn.primary:hover {
 .doc-party > .sub-h {
   margin-bottom: 8px;
 }
+/* 한 당사자 블록: [회사명·담당자·이메일] 한 줄 + [주소] 한 줄. */
 .doc-party-grid {
-  grid-template-columns: minmax(0, 1fr);
-  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px 10px;
+}
+.doc-party-grid .form-field--wide {
+  grid-column: 1 / -1;
 }
 @media (max-width: 900px) {
   .doc-parties {
     grid-template-columns: 1fr;
     gap: 10px;
+  }
+}
+@media (max-width: 620px) {
+  .doc-party-grid {
+    grid-template-columns: 1fr;
   }
 }
 /* 문서 폼 좌우 2단: 좌=Basic info, 우=Shipping Marks 로 넓은 스테이지 창의

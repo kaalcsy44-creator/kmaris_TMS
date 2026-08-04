@@ -1747,18 +1747,19 @@ function BankInfoSection({ currency }: { currency: string }) {
  *  · 수하인: 문서에만 있는 정보라 여기서 직접 입력(비우면 매수인과 같은 것으로 인쇄).
  *  · 매수인: 고객 마스터 값이 기본이고, 이 문서에서만 다르게 찍을 때 덮어쓴다(비우면 마스터). */
 // 칸 이름은 문서와 같게 — 어느 당사자인지는 좌우 블록 제목이 말해준다.
-const BUYER_FIELDS: { key: string; label: string; master: (o: DocumentDetail["order"]) => string }[] = [
+// 배치는 한 블록 안에서 [회사명·담당자·이메일] 한 줄, [주소] 한 줄(wide) — 주소만 길다.
+const BUYER_FIELDS: { key: string; label: string; wide?: boolean; master: (o: DocumentDetail["order"]) => string }[] = [
   { key: "buyer_name", label: "Company Name", master: (o) => o.customer || "" },
-  { key: "buyer_address", label: "Address", master: (o) => o.customer_address || "" },
   { key: "buyer_contact", label: "Contact", master: (o) => o.customer_contact || "" },
   { key: "buyer_email", label: "e-mail", master: (o) => o.customer_email || "" },
+  { key: "buyer_address", label: "Address", wide: true, master: (o) => o.customer_address || "" },
 ];
 // 수하인 — 회사명은 Shipping Marks 의 C/O 와 같은 값(sm_consignee)을 그대로 쓴다.
-const CONSIGNEE_FIELDS: { key: string; label: string }[] = [
+const CONSIGNEE_FIELDS: { key: string; label: string; wide?: boolean }[] = [
   { key: "sm_consignee", label: "Company Name" },
-  { key: "consignee_address", label: "Address" },
   { key: "consignee_contact", label: "Contact" },
   { key: "consignee_email", label: "e-mail" },
+  { key: "consignee_address", label: "Address", wide: true },
 ];
 
 /** 발행 문서처럼 수하인·매수인을 좌우 두 칸으로 나눠 세운다(각 칸은 독립된 당사자 블록). */
@@ -1780,20 +1781,20 @@ function PartiesSection({
       <section className="doc-party">
         <div className="sub-h">Consignee</div>
         <div className="form-grid doc-party-grid">
-          {CONSIGNEE_FIELDS.map(({ key, label }) => (
+          {CONSIGNEE_FIELDS.map(({ key, label, wide }) => (
             readonly
-              ? <ReadonlyField key={key} label={label} value={shipping[key] || ""} />
-              : <Field key={key} label={label} value={shipping[key] || ""} onChange={set(key)} />
+              ? <ReadonlyField key={key} label={label} value={shipping[key] || ""} wide={wide} />
+              : <Field key={key} label={label} value={shipping[key] || ""} onChange={set(key)} wide={wide} />
           ))}
         </div>
       </section>
       <section className="doc-party">
         <div className="sub-h">Buyer (if different)</div>
         <div className="form-grid doc-party-grid">
-          {BUYER_FIELDS.map(({ key, label, master }) => (
+          {BUYER_FIELDS.map(({ key, label, wide, master }) => (
             readonly
-              ? <ReadonlyField key={key} label={label} value={shipping[key] || master(order)} />
-              : <Field key={key} label={label} value={shipping[key] || ""} onChange={set(key)} placeholder={master(order)} />
+              ? <ReadonlyField key={key} label={label} value={shipping[key] || master(order)} wide={wide} />
+              : <Field key={key} label={label} value={shipping[key] || ""} onChange={set(key)} placeholder={master(order)} wide={wide} />
           ))}
         </div>
       </section>
@@ -1951,6 +1952,7 @@ function Field({
   onChange,
   type = "text",
   placeholder,
+  wide,
 }: {
   label: string;
   value: string;
@@ -1958,9 +1960,11 @@ function Field({
   type?: string;
   // 비워두면 그대로 인쇄되는 기본값(예: 고객 마스터의 매수인 정보)을 흐리게 보여준다.
   placeholder?: string;
+  // 주소처럼 긴 값 — 그리드 한 줄을 통째로 쓴다.
+  wide?: boolean;
 }) {
   return (
-    <label className="form-field">
+    <label className={`form-field${wide ? " form-field--wide" : ""}`}>
       <span>{label}</span>
       <input type={type} value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
     </label>
@@ -1969,9 +1973,9 @@ function Field({
 
 // 확정 정보(CI 상속·수정 불가)를 입력란 대신 읽기전용 텍스트로 표시. Packing List 에서
 // "값은 CI 를 따라가되 여기서는 못 고침" 을 나타낸다.
-function ReadonlyField({ label, value }: { label: string; value: string }) {
+function ReadonlyField({ label, value, wide }: { label: string; value: string; wide?: boolean }) {
   return (
-    <div className="form-field form-field--ro">
+    <div className={`form-field form-field--ro${wide ? " form-field--wide" : ""}`}>
       <span>{label}</span>
       <div className="ro-value" title={value}>{value || "—"}</div>
     </div>
