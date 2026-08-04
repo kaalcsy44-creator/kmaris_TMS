@@ -639,6 +639,16 @@ export type DocumentDetail = {
     vendor_docs_sent_date: string;
     pod_notes?: string;          // 8) Delivery Complete · POD 메모
     items: DocumentWorkItem[];
+    // 상위 단계에서 이미 입력한 값 — 문서(PI/CI)의 빈 칸을 채우는 기본값.
+    // 우선순위는 고객 P/O(5단계) > 견적(3·4단계)이며, sources 는 각 값이 어느 단계에서 왔는지.
+    doc_defaults?: {
+      incoterms: string;
+      payment_terms: string;
+      packing: string;        // 포장 방법 — 문서에서는 terms.packing_type 칸에 들어간다
+      delivery_place: string; // Incoterms 의 지정 장소(규칙에 따라 출발지/도착지)
+      currency: string;
+      sources: Record<string, "order" | "quotation">;
+    };
   };
   pod: null | { id: number; filename: string; uploaded_at: string };
   stage_done: { "7": boolean; "8": boolean; "10": boolean; "11": boolean };

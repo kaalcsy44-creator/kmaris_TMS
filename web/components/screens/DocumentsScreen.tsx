@@ -907,22 +907,23 @@ function OrderMilestones({ data, onChanged }: { data: DocumentDetail; onChanged:
 function ProformaInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChanged: () => void }) {
   const [piNo, setPiNo] = useState(data.pi?.pi_no || "");
   const [date, setDate] = useState(data.pi?.date || today());
-  const [currency, setCurrency] = useState(data.pi?.currency || "USD");
+  // 통화·거래조건·선적 장소는 상위 단계(고객 P/O·견적)에서 정한 값을 이어받는다(빈 칸만).
+  const [currency, setCurrency] = useState(data.pi?.currency || data.order.doc_defaults?.currency || "USD");
   const [vatRate, setVatRate] = useState(data.pi?.vat_rate ?? 0);
   const [items, setItems] = useState<DocumentWorkItem[]>(normalizeItems(data.pi?.items || data.order.items));
   const firstHs = (data.pi?.items || data.order.items || []).find((i) => i.hs_code)?.hs_code || "";
-  const [shipping, setShipping] = useState<Record<string, string>>({
-    port_loading: "Busan, Korea",
-    port_discharge: "",
-    carrier: "TBD",
-    bl_awb_no: "TBD",
-    etd: "",
-    eta: "",
-    hs_code: firstHs,
-    ...defaultMarkFields(data.order),
-    ...(data.pi?.shipping || {}),
-  });
-  const [terms, setTerms] = useState<Record<string, string>>(data.pi?.terms || {});
+  function initialTerms(): Record<string, string> {
+    return docDefaultTerms(data.order, data.pi?.terms);
+  }
+  function initialShipping(): Record<string, string> {
+    return {
+      hs_code: firstHs,
+      ...defaultMarkFields(data.order),
+      ...docDefaultShipping(data.order, initialTerms().incoterms || "", data.pi?.shipping),
+    };
+  }
+  const [shipping, setShipping] = useState<Record<string, string>>(initialShipping());
+  const [terms, setTerms] = useState<Record<string, string>>(initialTerms());
   const [freight, setFreight] = useState(data.pi?.terms?.freight || "");
   const [packing, setPacking] = useState(data.pi?.terms?.packing || "");
   const [insurance, setInsurance] = useState(data.pi?.terms?.insurance || "");
@@ -951,21 +952,11 @@ function ProformaInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChang
   function cancel() {
     setPiNo(data.pi?.pi_no || "");
     setDate(data.pi?.date || today());
-    setCurrency(data.pi?.currency || "USD");
+    setCurrency(data.pi?.currency || data.order.doc_defaults?.currency || "USD");
     setVatRate(data.pi?.vat_rate ?? 0);
     setItems(normalizeItems(data.pi?.items || data.order.items));
-    setShipping({
-      port_loading: "Busan, Korea",
-      port_discharge: "",
-      carrier: "TBD",
-      bl_awb_no: "TBD",
-      etd: "",
-      eta: "",
-      hs_code: firstHs,
-      ...defaultMarkFields(data.order),
-      ...(data.pi?.shipping || {}),
-    });
-    setTerms(data.pi?.terms || {});
+    setShipping(initialShipping());
+    setTerms(initialTerms());
     setFreight(data.pi?.terms?.freight || "");
     setPacking(data.pi?.terms?.packing || "");
     setInsurance(data.pi?.terms?.insurance || "");
@@ -1017,6 +1008,7 @@ function ProformaInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChang
         <VatRateSelect value={String(vatRate)} onChange={(v) => setVatRate(num(v))} />
         <Field label="HS Code (optional)" value={shipping.hs_code || ""} onChange={(v) => setShipping({ ...shipping, hs_code: v })} />
       </div>
+      <DocDefaultsHint order={data.order} />
       <BankInfoSection currency={currency} />
       </div>
       </div>
@@ -1082,24 +1074,26 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
     data.ci?.ci_no && data.ci.ci_no !== autoCiNo ? "manual" : "auto",
   );
   const [date, setDate] = useState(data.ci?.date || today());
-  const [currency, setCurrency] = useState(data.ci?.currency || "USD");
+  // 통화·거래조건·선적 장소는 상위 단계(고객 P/O·견적)에서 정한 값을 이어받는다(빈 칸만).
+  const [currency, setCurrency] = useState(data.ci?.currency || data.order.doc_defaults?.currency || "USD");
   const [vatRate, setVatRate] = useState(data.ci?.vat_rate ?? 0);
   const [items, setItems] = useState<DocumentWorkItem[]>(normalizeItems(data.ci?.items || data.order.items));
   // HS Code 는 문서 단위 단일 값(선적 단위) — shipping.hs_code 에 저장하고 저장 시 전 품목에 반영.
   const firstHs = (data.ci?.items || data.order.items || []).find((i) => i.hs_code)?.hs_code || "";
-  const [shipping, setShipping] = useState<Record<string, string>>({
-    port_loading: "Busan, Korea",
-    port_discharge: "",
-    carrier: "TBD",
-    bl_awb_no: "TBD",
-    etd: "",
-    eta: "",
-    hs_code: firstHs,
-    ...defaultMarkFields(data.order),
-    ...(data.ci?.shipping || {}),
-  });
   // Incoterms · Payment Terms — CI/PDF/Excel 의 Shipping Information 에 출력.
-  const [terms, setTerms] = useState<Record<string, string>>(data.ci?.terms || {});
+  function initialTerms(): Record<string, string> {
+    return docDefaultTerms(data.order, data.ci?.terms);
+  }
+  function initialShipping(): Record<string, string> {
+    return {
+      hs_code: firstHs,
+      ...defaultMarkFields(data.order),
+      // 저장값 우선 + 빈 운송·장소 칸은 상위 단계 값(없으면 기존 기본값)으로 채운다.
+      ...docDefaultShipping(data.order, initialTerms().incoterms || "", data.ci?.shipping),
+    };
+  }
+  const [shipping, setShipping] = useState<Record<string, string>>(initialShipping());
+  const [terms, setTerms] = useState<Record<string, string>>(initialTerms());
   const [freight, setFreight] = useState(data.ci?.terms?.freight || "");
   const [packing, setPacking] = useState(data.ci?.terms?.packing || "");
   const [insurance, setInsurance] = useState(data.ci?.terms?.insurance || "");
@@ -1132,21 +1126,11 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
     setCiNo(data.ci?.ci_no || autoCiNo);
     setCiMode(data.ci?.ci_no && data.ci.ci_no !== autoCiNo ? "manual" : "auto");
     setDate(data.ci?.date || today());
-    setCurrency(data.ci?.currency || "USD");
+    setCurrency(data.ci?.currency || data.order.doc_defaults?.currency || "USD");
     setVatRate(data.ci?.vat_rate ?? 0);
     setItems(normalizeItems(data.ci?.items || data.order.items));
-    setShipping({
-      port_loading: "Busan, Korea",
-      port_discharge: "",
-      carrier: "TBD",
-      bl_awb_no: "TBD",
-      etd: "",
-      eta: "",
-      hs_code: firstHs,
-      ...defaultMarkFields(data.order),
-      ...(data.ci?.shipping || {}),
-    });
-    setTerms(data.ci?.terms || {});
+    setShipping(initialShipping());
+    setTerms(initialTerms());
     setFreight(data.ci?.terms?.freight || "");
     setPacking(data.ci?.terms?.packing || "");
     setInsurance(data.ci?.terms?.insurance || "");
@@ -1207,6 +1191,7 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
         <VatRateSelect value={String(vatRate)} onChange={(v) => setVatRate(num(v))} />
         <Field label="HS Code (optional)" value={shipping.hs_code || ""} onChange={(v) => setShipping({ ...shipping, hs_code: v })} />
       </div>
+      <DocDefaultsHint order={data.order} />
       </div>
       </div>
       <ItemEditor
@@ -1874,6 +1859,75 @@ const FINAL_DEST_OPTIONS = [
 const ORIGIN_OPTIONS = ["Made in Korea", "Made in China", "Made in Japan", "Made in Germany", "Made in USA"];
 const CASE_NO_OPTIONS = ["1-UP", "1 OF 1", "1-2", "1-3", "1-5", "1-10"];
 const HANDLING_OPTIONS = ["THIS SIDE UP", "KEEP DRY", "FRAGILE", "HANDLE WITH CARE", "DO NOT STACK", "USE NO HOOKS", "KEEP AWAY FROM HEAT"];
+
+// ── 상위 단계에서 이미 입력한 값 이어받기 ──────────────────────────────────
+// 거래조건(Incoterms·Payment Terms·Packing·Place)과 통화는 5단계 고객 P/O 나 3·4단계 견적에서
+// 이미 정해진다. 문서에서 같은 값을 다시 입력하게 두면 어긋나기 쉬우므로, 서버가 내려주는
+// order.doc_defaults(오더 > 견적 우선순위로 고른 값)로 문서의 "빈 칸만" 채운다.
+// 저장된 문서 값이 있으면 언제나 그 값이 이긴다 — 문서에서 고친 내용은 문서에 남는다.
+
+/** Incoterms 의 지정 장소(Place)가 도착지를 뜻하는지 — E·F 조건(EXW·FCA·FAS·FOB)은 출발지,
+ *  나머지 C·D 조건(CFR·CIF·CPT·CIP·DAP·DPU·DDP)은 도착지를 가리킨다. 미입력이면 출발지로 본다. */
+function placeIsDestination(incoterms: string): boolean {
+  const t = (incoterms || "").trim();
+  return !!t && !/^(EXW|FCA|FAS|FOB)\b/i.test(t);
+}
+
+/** 문서 거래조건 초깃값 — 저장값 우선, 빈 칸만 상위 단계 값으로 채운다. */
+function docDefaultTerms(
+  order: DocumentDetail["order"],
+  saved?: Record<string, string> | null,
+): Record<string, string> {
+  const d = order.doc_defaults;
+  const out: Record<string, string> = { ...(saved || {}) };
+  const fill = (key: string, value?: string) => {
+    if (value && !String(out[key] || "").trim()) out[key] = value;
+  };
+  fill("incoterms", d?.incoterms);
+  fill("payment_terms", d?.payment_terms);
+  // 견적·오더의 Packing(포장 방법)은 문서에서 packing_type 칸에 들어간다
+  // (문서의 packing 키는 하단 합계의 포장비 금액이라 이름만 같고 뜻이 다르다).
+  fill("packing_type", d?.packing);
+  return out;
+}
+
+/** 선적정보 초깃값 — 저장값 > 상위 단계 값 > 기존 기본값(Busan, Korea · TBD).
+ *  상위 단계의 Place 는 Incoterms 규칙에 따라 출발지/도착지 중 맞는 칸으로 들어간다. */
+function docDefaultShipping(
+  order: DocumentDetail["order"],
+  incoterms: string,
+  saved?: Record<string, string> | null,
+): Record<string, string> {
+  const out: Record<string, string> = {
+    port_loading: "",
+    port_discharge: "",
+    carrier: "TBD",
+    bl_awb_no: "TBD",
+    etd: "",
+    eta: "",
+    ...(saved || {}),
+  };
+  const place = order.doc_defaults?.delivery_place || "";
+  const key = placeIsDestination(incoterms) ? "port_discharge" : "port_loading";
+  if (place && !String(out[key] || "").trim()) out[key] = place;
+  if (!String(out.port_loading || "").trim()) out.port_loading = "Busan, Korea";
+  return out;
+}
+
+/** 상위 단계 값을 가져다 썼을 때 그 사실을 알려주는 한 줄 안내. 가져온 값이 없으면 표시하지 않는다. */
+function DocDefaultsHint({ order }: { order: DocumentDetail["order"] }) {
+  const used = Object.values(order.doc_defaults?.sources || {});
+  if (!used.length) return null;
+  const stages = [
+    used.includes("order") ? "customer P/O (stage 5)" : "",
+    used.includes("quotation") ? "quotation (stage 3)" : "",
+  ].filter(Boolean).join(" and ");
+  return (
+    <p className="hint-inline" style={{ marginTop: 6 }}>
+      Empty terms and currency are filled from the {stages}. Changing them here affects this document only.
+    </p>
+  );
+}
 
 // Shipping Marks 구조화 필드 기본값(오더 정보로 프리필). 저장값이 있으면 덮어쓴다.
 function defaultMarkFields(order: { vessel?: string; po_no?: string; customer?: string; kms_order_no?: string }): Record<string, string> {

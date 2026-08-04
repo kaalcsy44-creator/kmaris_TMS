@@ -1870,6 +1870,48 @@ def _rfq_for_order(session, order: Order):
     return None
 
 
+def _doc_defaults(session, order: Order) -> dict:
+    """상위 단계에서 이미 입력한 값 — 새 문서(Proforma/Commercial Invoice)의 기본값.
+
+    우선순위는 고객 P/O(5단계 Order) > 고객 견적(3·4단계 Quotation). 같은 거래에서
+    나중에 확정된 값이 문서에 실려야 하므로 오더 값을 먼저 본다. 어느 단계에서 왔는지
+    (sources)도 함께 내려보내 화면이 "어디서 채웠는지" 알려줄 수 있게 한다.
+    값이 없으면 빈 문자열 — 화면은 기존 기본값을 그대로 쓴다."""
+    q = None
+    if getattr(order, "quotation_id", None):
+        q = session.query(Quotation).filter_by(id=order.quotation_id).first()
+    ot = order.terms if isinstance(getattr(order, "terms", None), dict) else {}
+    qt = (q.terms if (q and isinstance(q.terms, dict)) else {}) or {}
+    out: dict = {}
+    sources: dict = {}
+    for k in ("payment_terms", "packing"):
+        ov, qv = str(ot.get(k) or "").strip(), str(qt.get(k) or "").strip()
+        out[k] = ov or qv
+        if ov:
+            sources[k] = "order"
+        elif qv:
+            sources[k] = "quotation"
+    # Incoterms 와 Place 는 한 쌍으로 읽어야 한다 — "EXW Busan" 의 Busan 은 출발지지만
+    # "CIF Rotterdam" 의 Rotterdam 은 도착지다. 둘을 다른 단계에서 섞어 오면 장소의 뜻이
+    # 뒤바뀌므로, 오더가 둘 중 하나라도 채웠으면 오더 쪽 쌍을, 아니면 견적 쪽 쌍을 통째로 쓴다.
+    pair_from_order = any(str(ot.get(k) or "").strip() for k in ("incoterms", "delivery_place"))
+    pair = ot if pair_from_order else qt
+    for k in ("incoterms", "delivery_place"):
+        v = str(pair.get(k) or "").strip()
+        out[k] = v
+        if v:
+            sources[k] = "order" if pair_from_order else "quotation"
+    cur = str(getattr(order, "currency", "") or "").strip()
+    if cur:
+        sources["currency"] = "order"
+    elif q and (q.currency or "").strip():
+        cur = q.currency.strip()
+        sources["currency"] = "quotation"
+    out["currency"] = cur.upper()
+    out["sources"] = sources
+    return out
+
+
 def _document_detail_payload(session, order: Order) -> dict:
     cust = _customer_for_order(session, order)
     vessel = _vessel_for_order(session, order)
@@ -1934,6 +1976,8 @@ def _document_detail_payload(session, order: Order) -> dict:
             "vendor_docs_sent_date": order.vendor_docs_sent_date or "",
             "pod_notes": getattr(order, "pod_notes", None) or "",
             "items": order.items or [],
+            # 상위 단계(고객 P/O·견적)에서 이미 입력한 거래조건·통화 — 문서 기본값으로 쓴다.
+            "doc_defaults": _doc_defaults(session, order),
         },
         "pod": None if not pod else {
             "id": pod.id,
