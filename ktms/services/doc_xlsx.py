@@ -14,8 +14,10 @@ from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
 
 from services.kmaris_docs import (
-    normalize_items, calc_totals, _num, DOC_TITLES, doc_parties, party_lines,
-    packing_totals, PI_COLUMN_UNITS, PI_MIN_ITEM_ROWS, pi_decimals, pi_charges, pi_doc_date,
+    normalize_items, calc_totals, _num, DOC_TITLES, doc_parties,
+    packing_totals, _dim_parts, _invoice_shipping_rows,
+    PI_COLUMN_UNITS, PI_MIN_ITEM_ROWS, PL_COLUMN_UNITS, PL_MIN_ITEM_ROWS,
+    pi_decimals, pi_charges, pi_doc_date,
 )
 
 _CONFIG_DIR = Path(__file__).resolve().parent.parent / "config"
@@ -105,66 +107,67 @@ def _compose_marks(sh: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def make_commercial_invoice_xlsx(
-    data: Dict[str, Any], company: Optional[Dict[str, Any]] = None
-) -> bytes:
-    """Commercial Invoice 전용 Excel — 편집 페이지(CI 탭)의 모든 입력을 그대로 반영한다.
-    레이아웃: 타이틀 → Exporter/Invoice info → Consignee/Ship-to → Shipping info →
-    Shipping marks → 품목표(금액=수식) → 합계(Freight/Packing/Insurance 편집가능) → 포장/선언/서명.
+class _FormSheet:
+    """송장 계열 Excel(PI · CI · PL) 공통 서식 — 레터헤드·머리띠·라벨표·서명 블록.
+
+    같은 문서의 PDF(kmaris_docs._DocForm)와 같은 열 너비를 쓰기 때문에 두 파일의 칸이
+    정확히 겹친다. blocks 는 라벨·값 네 칸의 (시작열, 끝열) 이라, 8열 문서(PI/CI)와
+    13열 문서(PL)를 같은 코드로 그린다.
     """
-    company = company or {}
-    currency = (data.get("currency") or "USD").upper()
-    customer = data.get("customer", {}) or {}
-    vessel = data.get("vessel", {}) or {}
-    terms = data.get("terms", {}) or {}
-    shipping = data.get("shipping", {}) or {}
-    items = normalize_items(data.get("items", []))
-    num_fmt = "#,##0.00" if currency == "USD" else "#,##0"
 
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "Commercial Invoice"
-    ws.sheet_view.showGridLines = False
+    NAVY = "0B1D3A"
+    BAND = "1F3B66"
+    GRAY = "F4F6F8"
+    LIGHTBLUE = "EAF3FF"
+    ALT = "FAFBFC"
+    BORDER = "C8D2E0"
 
-    navy = PatternFill("solid", fgColor="0B1D3A")
-    blue = PatternFill("solid", fgColor="0055A8")
-    section = PatternFill("solid", fgColor="1F3B66")
-    gray = PatternFill("solid", fgColor="F4F6F8")
-    lightblue = PatternFill("solid", fgColor="EAF3FF")
-    alt = PatternFill("solid", fgColor="FAFBFC")
+    def __init__(self, ws, widths, blocks):
+        self.ws = ws
+        self.widths = widths
+        self.ncol = len(widths)
+        self.blocks = blocks
+        for i, w in enumerate(widths, start=1):
+            ws.column_dimensions[get_column_letter(i)].width = w
+        ws.sheet_view.showGridLines = False
 
-    white_lg = Font(name="Noto Sans KR", color="0B1D3A", bold=True, size=19)
-    white_sm = Font(name="Noto Sans KR", color="FFFFFF", size=9)
-    white_sec = Font(name="Noto Sans KR", color="FFFFFF", bold=True, size=10)
-    white_hdr = Font(name="Noto Sans KR", color="FFFFFF", bold=True, size=9)
-    bold = Font(name="Noto Sans KR", bold=True)
-    boldsm = Font(name="Noto Sans KR", bold=True, size=9)
-    normal = Font(name="Noto Sans KR", size=9)
+        self.navy = PatternFill("solid", fgColor=self.NAVY)
+        self.band_fill = PatternFill("solid", fgColor=self.BAND)
+        self.gray = PatternFill("solid", fgColor=self.GRAY)
+        self.lightblue = PatternFill("solid", fgColor=self.LIGHTBLUE)
+        self.alt = PatternFill("solid", fgColor=self.ALT)
 
-    thin = Side(style="thin", color="C8D2E0")
-    bdr = Border(top=thin, bottom=thin, left=thin, right=thin)
-    center = Alignment(horizontal="center", vertical="center", wrap_text=True)
-    left = Alignment(horizontal="left", vertical="center", wrap_text=True)
-    right = Alignment(horizontal="right", vertical="center")
-    left_top = Alignment(horizontal="left", vertical="top", wrap_text=True)
+        self.title_font = Font(name="Noto Sans KR", color=self.NAVY, bold=True, size=19)
+        self.company_font = Font(name="Noto Sans KR", size=14)
+        self.small = Font(name="Noto Sans KR", size=9)
+        self.white_sec = Font(name="Noto Sans KR", color="FFFFFF", bold=True, size=10)
+        self.white_hdr = Font(name="Noto Sans KR", color="FFFFFF", bold=True, size=9)
+        self.boldsm = Font(name="Noto Sans KR", bold=True, size=9)
+        self.bold = Font(name="Noto Sans KR", bold=True, size=11)
+        self.normal = Font(name="Noto Sans KR", size=9)
+        self.item_font = Font(name="Noto Sans KR", size=11)
 
-    NCOL = 8
-    widths = [6, 14.5, 16, 13.5, 12, 8, 14, 18.28515625]
-    for i, w in enumerate(widths, start=1):
-        ws.column_dimensions[get_column_letter(i)].width = w
+        self.thin = Side(style="thin", color=self.BORDER)
+        self.bdr = Border(top=self.thin, bottom=self.thin, left=self.thin, right=self.thin)
+        self.center = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        self.left = Alignment(horizontal="left", vertical="center", wrap_text=True)
+        self.right = Alignment(horizontal="right", vertical="center")
+        self.left_top = Alignment(horizontal="left", vertical="top", wrap_text=True)
 
-    def merge(r1, c1, r2, c2):
-        ws.merge_cells(start_row=r1, start_column=c1, end_row=r2, end_column=c2)
+    # ── 저수준 도우미 ─────────────────────────────────────────────────────
+    def merge(self, r1, c1, r2, c2):
+        if (r1, c1) != (r2, c2):
+            self.ws.merge_cells(start_row=r1, start_column=c1, end_row=r2, end_column=c2)
 
-    def bd(r1, c1, r2, c2, fill=None):
+    def bd(self, r1, c1, r2, c2, fill=None):
         for rr in range(r1, r2 + 1):
             for cc in range(c1, c2 + 1):
-                ws.cell(rr, cc).border = bdr
+                self.ws.cell(rr, cc).border = self.bdr
                 if fill:
-                    ws.cell(rr, cc).fill = fill
+                    self.ws.cell(rr, cc).fill = fill
 
-    def put(r, c, v="", *, fill=None, font=None, align=None, fmt=None):
-        x = ws.cell(r, c, v)
+    def put(self, r, c, v="", *, fill=None, font=None, align=None, fmt=None):
+        x = self.ws.cell(r, c, v)
         if fill:
             x.fill = fill
         if font:
@@ -175,206 +178,283 @@ def make_commercial_invoice_xlsx(
             x.number_format = fmt
         return x
 
-    def pairs_block(rows, start_row):
-        """label:value 쌍 리스트를 한 행에 2쌍씩(좌: 1-4, 우: 5-8) 배치."""
-        r = start_row
-        for i in range(0, len(rows), 2):
-            chunk = rows[i:i + 2]
-            k, v = chunk[0]
-            merge(r, 1, r, 2); put(r, 1, k, fill=gray, font=boldsm, align=left)
-            merge(r, 3, r, 4); put(r, 3, v, font=normal, align=left)
-            bd(r, 1, r, 4)
-            if len(chunk) > 1:
-                k2, v2 = chunk[1]
-                merge(r, 5, r, 6); put(r, 5, k2, fill=gray, font=boldsm, align=left)
-                merge(r, 7, r, 8); put(r, 7, v2, font=normal, align=left)
-            else:
-                merge(r, 5, r, 8)
-            bd(r, 5, r, 8)
-            r += 1
-        return r
+    def cell(self, r, block, value, *, font=None, fill=None, align=None, fmt=None):
+        """네 칸(라벨1·값1·라벨2·값2) 중 하나를 채운다."""
+        c1, c2 = self.blocks[block]
+        self.merge(r, c1, r, c2)
+        return self.put(r, c1, value, font=font, fill=fill, align=align, fmt=fmt)
 
-    def add_image(path, anchor, w, h):
+    def add_image(self, path, anchor, w, h):
         try:
             from openpyxl.drawing.image import Image as XLImage
-            img = XLImage(path); img.width = w; img.height = h
-            ws.add_image(img, anchor)
+            img = XLImage(path)
+            img.width, img.height = w, h
+            self.ws.add_image(img, anchor)
             return True
         except Exception:
             return False
 
-    r = 1
-    # ── 회사 로고(선택: config/logo.png) — 맨 상단 좌측에 얹는다 ─────────────
-    logo = _find_asset("logo_K-maris.png", "logo.png", "logo.jpg", "logo.jpeg")
-    if logo:
-        add_image(logo, f"A{r}", 105, 35)
-    # ── 타이틀 + 회사 배너 ────────────────────────────────────────────────
-    merge(r, 1, r, NCOL); put(r, 1, "COMMERCIAL INVOICE", font=white_lg, align=center)
-    bd(r, 1, r, NCOL); ws.row_dimensions[r].height = 53.6; r += 1
-    banner = "   |   ".join(x for x in [
-        company.get("company_name_en", "K-MARIS Energy & Solutions Co., Ltd."),
-        company.get("sales_email", ""), company.get("website", ""),
-    ] if x)
-    merge(r, 1, r, NCOL); put(r, 1, banner, fill=blue, font=white_sm, align=center)
-    bd(r, 1, r, NCOL, blue); ws.row_dimensions[r].height = 16; r += 2
+    # ── 블록 ──────────────────────────────────────────────────────────────
+    def letterhead(self, company, title):
+        """1~6행 — 로고 + 가운데 회사명·주소·연락처 + 문서 제목(PDF 레터헤드와 같은 내용)."""
+        logo = _find_asset("logo_icon.jpg", "logo_icon.png", "logo_K-maris.png", "logo.png", "logo.jpg")
+        if logo:
+            self.add_image(logo, "A1", 96, 45)
+        self.cell(1, "full", company.get("company_name_en", "K-MARIS Energy & Solutions Co., Ltd."),
+                  font=self.company_font, align=self.center)
+        self.cell(2, "full", company.get("address_en") or company.get("address", ""),
+                  font=self.small, align=self.center)
+        contact = " | ".join(x for x in [
+            f"Tel: {company.get('phone', '')}" if company.get("phone") else "",
+            company.get("sales_email", ""), company.get("website", ""),
+        ] if x)
+        self.cell(3, "full", contact, font=self.small, align=self.center)
+        self.cell(5, "full", title, font=self.title_font, align=self.center)
+        for row, height in ((1, 37.2), (2, 14.1), (3, 14.1), (4, 15.6), (5, 30), (6, 13.8)):
+            self.ws.row_dimensions[row].height = height
+        return 7
 
-    # ── Exporter / Invoice information ───────────────────────────────────
-    merge(r, 1, r, 4); put(r, 1, "EXPORTER / SELLER", fill=section, font=white_sec, align=left)
-    merge(r, 5, r, 8); put(r, 5, "INVOICE INFORMATION", fill=section, font=white_sec, align=left)
-    bd(r, 1, r, 4, section); bd(r, 5, r, 8, section); r += 1
-    address = company.get("address_en") or company.get("address", "")
-    address_top, address_bottom = address, ""
-    if " Seoul" in address:
-        address_top, address_bottom = address.split(" Seoul", 1)
-        address_bottom = "Seoul" + address_bottom
-    exporter = [
-        company.get("company_name_en", ""),
-        address_top,
-        address_bottom,
-        f"Tel: {company.get('phone', '')}    Email: {company.get('sales_email', '')}",
-        f"Business Reg. No.: {company.get('business_no', '')}",
-    ]
-    inv_info = [
-        ("Invoice No.", data.get("doc_no", "")),
-        ("Invoice Date", data.get("date", "")),
-        ("P.O. No.", shipping.get("po_no", "")),
-        ("Quotation Ref.", data.get("quotation_ref") or shipping.get("export_ref", "")),
-        ("", ""),
-    ]
-    for i in range(5):
-        merge(r, 1, r, 4); put(r, 1, exporter[i], font=normal, align=left); bd(r, 1, r, 4)
-        merge(r, 5, r, 6); put(r, 5, inv_info[i][0], fill=gray, font=boldsm, align=left)
-        merge(r, 7, r, 8); put(r, 7, inv_info[i][1], font=normal, align=left); bd(r, 5, r, 8)
-        if i == 3:
-            ws.row_dimensions[r].height = 17.6
+    def doc_info(self, r, rows):
+        """문서 정보(송장번호·일자·PO No.) — 참조 양식처럼 오른쪽 반쪽에만 그린다."""
+        from datetime import date as _date
+        for k, v in rows:
+            self.cell(r, "label2", k, fill=self.gray, font=self.boldsm, align=self.left)
+            c = self.cell(r, "value2", v, font=self.normal, align=self.left)
+            if isinstance(v, _date):
+                c.number_format = "dd-mmm-yyyy"
+            self.bd(r, self.blocks["label2"][0], r, self.ncol)
+            r += 1
+        return r
+
+    def band(self, r, *titles):
+        """섹션 머리띠 — 제목 하나면 전폭, 둘이면 좌우로 나눈다(CONSIGNEE | BUYER)."""
+        if len(titles) == 1:
+            self.cell(r, "full", f" {titles[0]}", fill=self.band_fill, font=self.white_sec, align=self.left)
+            self.bd(r, 1, r, self.ncol, self.band_fill)
+        else:
+            split = self.blocks["value1"][1]
+            self.merge(r, 1, r, split)
+            self.put(r, 1, f" {titles[0]}", fill=self.band_fill, font=self.white_sec, align=self.left)
+            self.merge(r, split + 1, r, self.ncol)
+            self.put(r, split + 1, f" {titles[1]}", fill=self.band_fill, font=self.white_sec, align=self.left)
+            self.bd(r, 1, r, self.ncol, self.band_fill)
+        self.ws.row_dimensions[r].height = 17.4
+        return r + 1
+
+    def pair_row(self, r, k1, v1, k2, v2, *, value_align=None, height=17.4):
+        """'라벨 | 값 | 라벨 | 값' 한 행."""
+        from datetime import date as _date
+        va = value_align or self.left
+        for block, value, is_label in (("label1", k1, True), ("value1", v1, False),
+                                       ("label2", k2, True), ("value2", v2, False)):
+            c = self.cell(r, block, value,
+                          fill=self.gray if is_label else None,
+                          font=self.boldsm if is_label else self.normal,
+                          align=self.left if is_label else va)
+            if isinstance(value, _date):
+                c.number_format = "dd-mmm-yyyy"
+        self.bd(r, 1, r, self.ncol)
+        self.ws.row_dimensions[r].height = height
+        return r + 1
+
+    def pairs(self, r, rows, *, value_align=None, heights=None):
+        for i, (k1, v1, k2, v2) in enumerate(rows):
+            r = self.pair_row(r, k1, v1, k2, v2, value_align=value_align,
+                              height=(heights or {}).get(i, 17.4))
+        return r
+
+    def item_header(self, r, headers):
+        """품목표 머리행 — headers 는 (제목, 시작열, 끝열) 목록."""
+        for title, c1, c2 in headers:
+            self.merge(r, c1, r, c2)
+            self.put(r, c1, title, fill=self.navy, font=self.white_hdr, align=self.center)
+        self.bd(r, 1, r, self.ncol, self.navy)
+        self.ws.row_dimensions[r].height = 24
+        return r + 1
+
+    def item_row_height(self, description, chars_per_line):
+        """병합 셀은 Excel 이 자동 높이를 못 잡는다 — 품명 길이로 줄 수를 어림한다."""
+        text = str(description or "")
+        lines = max(len(text.split("\n")), -(-len(text) // chars_per_line), 1)
+        return 14.5 * lines + 8
+
+    def declaration(self, r, text):
+        self.cell(r, "full", text, font=self.normal, align=self.left)
+        for cc in range(1, self.ncol + 1):
+            self.ws.cell(r, cc).border = Border(top=self.thin, bottom=self.thin)
+        return r + 1
+
+    def signature(self, r, cells):
+        """서명 칸 — (시작열, 끝열, 라벨, 이미지파일, 폭, 높이) 목록. 3행을 차지한다."""
+        for row, height in ((r, 28.05), (r + 1, 20.1), (r + 2, 21)):
+            self.ws.row_dimensions[row].height = height
+        for c1, c2, text, image, w, h in cells:
+            self.merge(r, c1, r + 2, c2)
+            self.put(r, c1, text, font=self.boldsm, align=self.left_top)
+            self.bd(r, c1, r + 2, c2)
+            if image:
+                self.add_image(image, f"{get_column_letter(c1 + 1)}{r + 1}", w, h)
+        return r + 3
+
+    def page_setup(self, last_row, *, scale=None):
+        ws = self.ws
+        ws.page_setup.paperSize = ws.PAPERSIZE_A4
+        ws.page_setup.orientation = ws.ORIENTATION_PORTRAIT
+        if scale:
+            ws.page_setup.scale = scale
+        else:
+            ws.page_setup.fitToWidth = 1
+            ws.page_setup.fitToHeight = 0
+            ws.sheet_properties.pageSetUpPr.fitToPage = True
+        ws.print_area = f"A1:{get_column_letter(self.ncol)}{last_row}"
+        ws.sheet_view.zoomScale = 85
+        ws.page_margins.left = 0.24
+        ws.page_margins.right = 0.24
+        ws.page_margins.top = 0.4
+        ws.page_margins.bottom = 0.32
+
+
+# 라벨·값 네 칸의 열 위치 — 8열 문서(PI/CI)와 13열 문서(PL).
+_BLOCKS_8 = {"label1": (1, 2), "value1": (3, 4), "label2": (5, 6), "value2": (7, 8), "full": (1, 8)}
+_BLOCKS_13 = {"label1": (1, 2), "value1": (3, 5), "label2": (6, 7), "value2": (8, 13), "full": (1, 13)}
+
+_SIGN_ASSET = ("Authorized signature_Sungyeon Cho.jpg", "signature.png", "signature.jpg", "sign.png")
+_STAMP_ASSET = ("Company stamp_K-Maris Energy & Solutions.jpg", "stamp.png", "stamp.jpg", "seal.png")
+
+
+def _invoice_money_format(currency: str) -> str:
+    """금액 서식 — 0 은 '-' 로 찍히는 회계 서식(참조 양식과 같다)."""
+    if pi_decimals(currency):
+        return '_-* #,##0.00_-;\\-* #,##0.00_-;_-* "-"_-;_-@_-'
+    return '_-* #,##0_-;\\-* #,##0_-;_-* "-"_-;_-@_-'
+
+
+def _invoice_doc_date(value: Any):
+    """송장 일자 — 엑셀에서 날짜로 다룰 수 있게 date 로, 아니면 원문 문자열."""
+    from datetime import date as _date
+    try:
+        return _date.fromisoformat(str(value or "")[:10])
+    except ValueError:
+        return pi_doc_date(value)
+
+
+def _invoice_sheet(data: Dict[str, Any], company: Dict[str, Any], title: str, sheet_name: str):
+    """PI·CI 공통 뼈대(레터헤드 → 문서정보) — 두 문서의 위쪽 절반은 완전히 같다."""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = sheet_name
+    form = _FormSheet(ws, PI_COLUMN_UNITS, _BLOCKS_8)
+    shipping = data.get("shipping", {}) or {}
+    r = form.letterhead(company, title)
+    r = form.doc_info(r, [("Invoice No.", data.get("doc_no", "")),
+                          ("Invoice Date", _invoice_doc_date(data.get("date", ""))),
+                          ("PO No.", shipping.get("po_no", ""))])
+    return wb, form, r + 1
+
+
+def _invoice_items_and_totals(form: "_FormSheet", data: Dict[str, Any], r: int, currency: str):
+    """PI·CI 공통 품목표 + 합계 — 금액은 수식이라 받는 쪽에서 고쳐도 합계가 따라온다."""
+    items = normalize_items(data.get("items", []))
+    shipping = data.get("shipping", {}) or {}
+    money = pi_charges(data)
+    num_fmt = _invoice_money_format(currency)
+
+    r = form.item_header(r, [("No.", 1, 1), ("Description", 2, 3), ("Part No.", 4, 4), ("HS Code", 5, 5),
+                             ("Qty", 6, 6), ("Unit Price", 7, 7), (f"Amount ({currency})", 8, 8)])
+    first = r
+    for i in range(max(len(items), PI_MIN_ITEM_ROWS)):
+        it = items[i] if i < len(items) else None
+        form.put(r, 1, it["item_no"] if it else "", font=form.item_font, align=form.center)
+        form.merge(r, 2, r, 3)
+        form.put(r, 2, it["description"] if it else "", font=form.item_font, align=form.left)
+        form.put(r, 4, it["part_no"] if it else "", font=form.item_font, align=form.left)
+        form.put(r, 5, (it.get("hs_code") or shipping.get("hs_code", "")) if it else "",
+                 font=form.item_font, align=form.center)
+        form.put(r, 6, _num(it["qty"]) if it else "", font=form.item_font, align=form.center)
+        form.put(r, 7, _num(it["unit_price"]) if it else "", font=form.item_font, align=form.right, fmt=num_fmt)
+        form.put(r, 8, f'=IF(F{r}="","",F{r}*G{r})', font=form.item_font, align=form.right, fmt=num_fmt)
+        form.bd(r, 1, r, form.ncol, None if it else form.alt)
+        form.ws.row_dimensions[r].height = form.item_row_height(it["description"], 30) if it else 18
         r += 1
+    last = r - 1
 
-    # ── Consignee / Ship-to ──────────────────────────────────────────────
-    # 수하인·매수인은 다른 회사일 수 있어 두 칸으로 나눠 인쇄한다(PDF 와 동일).
-    merge(r, 1, r, 4); put(r, 1, "CONSIGNEE", fill=section, font=white_sec, align=left)
-    merge(r, 5, r, 8); put(r, 5, "BUYER (if different)", fill=section, font=white_sec, align=left)
-    bd(r, 1, r, 4, section); bd(r, 5, r, 8, section); r += 1
-    consignee_party, buyer_party = doc_parties(data)
-    consignee_lines, buyer_lines = party_lines(consignee_party), party_lines(buyer_party)
-    for i in range(3):
-        merge(r, 1, r, 4); put(r, 1, consignee_lines[i], font=normal, align=left); bd(r, 1, r, 4)
-        merge(r, 5, r, 8); put(r, 5, buyer_lines[i], font=normal, align=left); bd(r, 5, r, 8)
-        r += 1
-
-    # ── Shipping information ─────────────────────────────────────────────
-    merge(r, 1, r, NCOL); put(r, 1, "SHIPPING INFORMATION", fill=section, font=white_sec, align=left)
-    bd(r, 1, r, NCOL, section); r += 1
-    # 항목 이름·순서는 입력 화면(7단계 Commercial Invoice 탭)과 같게 맞춘다.
-    r = pairs_block([
-        ("Vessel / IMO No.", " / ".join(x for x in [shipping.get("sm_vessel", "") or vessel.get("name", ""), vessel.get("imo", "")] if x)),
-        ("Carrier", shipping.get("carrier", "")),
-        ("Place of Departure", shipping.get("port_loading", "")),
-        ("Place of Destination", shipping.get("port_discharge", "")),
-        ("ETD", shipping.get("etd", "")),
-        ("ETA", shipping.get("eta", "")),
-        ("Incoterms", terms.get("incoterms", "")),
-        ("Payment Terms", terms.get("payment_terms", "")),
-        # 포장 방법(Carton Box 등) — 아래 합계의 Packing(포장비)과 다른 값.
-        ("Packing", terms.get("packing_type", "")),
-        ("Country of Origin", shipping.get("sm_origin", "")),
-        ("Currency", currency),
-        ("", ""),
-    ], r)
-
-    # Shipping Marks(케이스 마킹)는 별도 문서로 분리 — CI Excel 에는 출력하지 않는다.
-
-    # ── 품목 표 ───────────────────────────────────────────────────────────
-    hrow = r
-    put(hrow, 1, "No.", fill=navy, font=white_hdr, align=center)
-    merge(hrow, 2, hrow, 3); put(hrow, 2, "Description", fill=navy, font=white_hdr, align=center)
-    put(hrow, 4, "Part No.", fill=navy, font=white_hdr, align=center)
-    put(hrow, 5, "HS Code", fill=navy, font=white_hdr, align=center)
-    put(hrow, 6, "Qty", fill=navy, font=white_hdr, align=center)
-    put(hrow, 7, "Unit Price", fill=navy, font=white_hdr, align=center)
-    put(hrow, 8, f"Amount ({currency})", fill=navy, font=white_hdr, align=center)
-    bd(hrow, 1, hrow, NCOL, navy); ws.row_dimensions[hrow].height = 24
-    r = hrow + 1
-    first_data = r
-    for i, it in enumerate(items):
-        put(r, 1, it["item_no"], align=center)
-        merge(r, 2, r, 3); put(r, 2, it["description"], align=left)
-        put(r, 4, it["part_no"], align=left)
-        put(r, 5, it.get("hs_code", "") or shipping.get("hs_code", ""), align=center)
-        put(r, 6, _num(it["qty"]), align=center)
-        put(r, 7, _num(it["unit_price"]), align=right, fmt=num_fmt)
-        put(r, 8, f"=F{r}*G{r}", align=right, fmt=num_fmt)  # 금액 = 수량 × 단가(수식)
-        if i % 2 == 1:
-            for cc in range(1, NCOL + 1):
-                ws.cell(r, cc).fill = alt
-        bd(r, 1, r, NCOL); ws.row_dimensions[r].height = 18
-        r += 1
-    last_data = r - 1 if items else first_data
-
-    # ── 합계(수식) — Freight/Packing/Insurance 는 사용자가 채우면 TOTAL 자동합산 ──
-    def total_line(label, value, is_total=False):
+    def total_line(label, value):
         nonlocal r
-        merge(r, 6, r, 7)
-        lc = put(r, 6, label, fill=(lightblue if is_total else gray),
-                 font=(bold if is_total else boldsm), align=right)
-        vc = put(r, 8, value, align=right, fmt=num_fmt)
-        if is_total:
-            vc.fill = lightblue; vc.font = bold
-            ws.row_dimensions[r].height = 18
-        bd(r, 6, r, 8)
+        form.merge(r, 6, r, 7)
+        form.put(r, 6, label, fill=form.gray, font=form.boldsm, align=form.right)
+        form.put(r, 8, value, font=form.item_font, align=form.right, fmt=num_fmt)
+        form.bd(r, 6, r, form.ncol)
+        form.ws.row_dimensions[r].height = 18
         ref = f"H{r}"
         r += 1
         return ref
-    sref = total_line("Subtotal", f"=SUM(H{first_data}:H{last_data})" if items else 0)
-    fref = total_line("Freight", 0)
-    pref = total_line("Packing", 0)
-    iref = total_line("Insurance", 0)
-    vref = total_line("VAT", f"={sref}*{_num(data.get('vat_rate', 0))}")
-    total_line("TOTAL INVOICE VALUE", f"={sref}+{fref}+{pref}+{iref}+{vref}", is_total=True)
 
-    # ── 포장 정보 / 선언 / 서명 ───────────────────────────────────────────
+    sref = total_line("Subtotal", f"=SUM(H{first}:H{last})")
+    fref = total_line("Freight", money["freight"])
+    pref = total_line("Packing", money["packing"])
+    iref = total_line("Insurance", money["insurance"])
+    # VAT 는 부대비용까지 더한 금액에 매긴다(입력 화면·PDF 와 같은 계산).
+    vref = total_line("VAT", f"=({sref}+{fref}+{pref}+{iref})*{money['vat_rate']}")
+    form.merge(r, 1, r, 7)
+    form.put(r, 1, "TOTAL INVOICE VALUE", fill=form.lightblue, font=form.bold, align=form.center)
+    form.put(r, 8, f"={sref}+{fref}+{pref}+{iref}+{vref}", fill=form.lightblue, font=form.bold,
+             align=form.right, fmt=num_fmt)
+    form.bd(r, 1, r, form.ncol)
+    form.ws.row_dimensions[r].height = 18
+    return r + 1
+
+
+def _invoice_closing(form: "_FormSheet", company: Dict[str, Any], r: int, doc_label: str,
+                     extra_cell: bool = False) -> int:
+    """DECLARATION + 서명·직인 — 세 문서가 같이 쓴다."""
     r += 1
-    merge(r, 1, r, NCOL); put(r, 1, "PACKING & DECLARATION", fill=section, font=white_sec, align=left)
-    bd(r, 1, r, NCOL, section); r += 1
-    r = pairs_block([
-        ("Total Packages", shipping.get("sm_total_cases", "")),
-        ("Net Weight (kg)", shipping.get("sm_net_weight", "")),
-        ("Gross Weight (kg)", shipping.get("sm_gross_weight", "")),
-        ("Country of Origin", shipping.get("sm_origin", "")),
-    ], r)
-    merge(r, 1, r, NCOL)
-    put(r, 1, "We hereby certify that this Commercial Invoice is true and correct.",
-        font=normal, align=left); bd(r, 1, r, NCOL); r += 2
-    sig_row = r
-    ws.row_dimensions[sig_row].height = 28
-    ws.row_dimensions[sig_row + 1].height = 20.15
-    ws.row_dimensions[sig_row + 2].height = 21
-    merge(sig_row, 1, sig_row + 2, 4)
-    put(sig_row, 1, "Authorized Signature", font=boldsm, align=left_top); bd(sig_row, 1, sig_row + 2, 4)
-    merge(sig_row, 5, sig_row + 2, 8)
-    put(sig_row, 5, f"{company.get('company_name_en', '')}\n(Company Stamp)", font=boldsm, align=left_top)
-    bd(sig_row, 5, sig_row + 2, 8)
-    # 서명·직인 이미지(선택: config/signature.png, config/stamp.png) — 라벨 아래에 얹는다.
-    sign = _find_asset("Authorized signature_Sungyeon Cho.jpg", "signature.png", "signature.jpg", "sign.png")
-    stamp = _find_asset("Company stamp_K-Maris Energy & Solutions.jpg", "stamp.png", "stamp.jpg", "seal.png")
-    if sign:
-        add_image(sign, f"B{sig_row + 1}", 130, 44)
-    if stamp:
-        add_image(stamp, f"F{sig_row + 1}", 78, 78)
+    r = form.band(r, "DECLARATION")
+    r = form.declaration(r, f"We hereby certify that this {doc_label} is true and correct.")
+    r += 1
+    sign = _find_asset(*_SIGN_ASSET)
+    stamp = _find_asset(*_STAMP_ASSET)
+    company_name = f"{company.get('company_name_en', '')}\n(Company Stamp)"
+    if extra_cell:   # Packing List — 수령 확인 칸이 하나 더 붙는다.
+        cells = [(1, 3, "Authorized Signature", sign, 130, 44),
+                 (4, 7, company_name, stamp, 66, 66),
+                 (8, 13, "Received by\n(Company Stamp & Date)", None, 0, 0)]
+    else:
+        cells = [(1, 4, "Authorized Signature", sign, 130, 44),
+                 (5, 8, company_name, stamp, 66, 66)]
+    return form.signature(r, cells) - 1
 
-    final_row = sig_row + 2
-    ws.page_setup.paperSize = ws.PAPERSIZE_A4
-    ws.page_setup.orientation = ws.ORIENTATION_PORTRAIT
-    ws.page_setup.scale = 90
-    ws.page_setup.fitToWidth = None
-    ws.page_setup.fitToHeight = None
-    ws.sheet_properties.pageSetUpPr.fitToPage = True
-    ws.print_area = f"A1:H{final_row}"
-    ws.sheet_view.zoomScale = 75
-    ws.page_margins.left = 0.25
-    ws.page_margins.right = 0.25
-    ws.page_margins.top = 0.3
-    ws.page_margins.bottom = 0.3
 
+def make_commercial_invoice_xlsx(
+    data: Dict[str, Any], company: Optional[Dict[str, Any]] = None
+) -> bytes:
+    """Commercial Invoice 전용 Excel — templates/'commercial invoice_sample.xlsx' 서식 그대로.
+
+    구성: 레터헤드 → 문서정보 → CONSIGNEE | BUYER(if different) → SHIPPING INFORMATION →
+    품목표(금액=수식) → 합계 → DECLARATION → 서명. 같은 payload 로 만드는 PDF 와 칸이 겹친다.
+    """
+    company = company or {}
+    currency = (data.get("currency") or "USD").upper()
+    shipping = data.get("shipping", {}) or {}
+    terms = data.get("terms", {}) or {}
+    consignee, buyer = doc_parties(data)
+
+    wb, form, r = _invoice_sheet(data, company, "COMMERCIAL INVOICE", "Commercial Invoice")
+    r = form.band(r, "CONSIGNEE", "BUYER (if different)")
+    r = form.pairs(r, [("Company Name", consignee.get("name", ""), "Company Name", buyer.get("name", "")),
+                       ("Address", consignee.get("address", ""), "Address", buyer.get("address", "")),
+                       ("Contact", consignee.get("contact", ""), "Contact", buyer.get("contact", "")),
+                       ("e-mail", consignee.get("email", ""), "e-mail", buyer.get("email", ""))],
+                   heights={1: 34.2})
+    r = form.band(r, "SHIPPING INFORMATION")
+    r = form.pairs(r, _invoice_shipping_rows(data, "Incoterms® 2020") + [
+        ("Packing", terms.get("packing_type", ""), "Country of Origin", shipping.get("sm_origin", "")),
+        ("Currency", currency, "", ""),
+    ])
+    r += 1
+    r = _invoice_items_and_totals(form, data, r, currency)
+    last = _invoice_closing(form, company, r, "Commercial Invoice")
+
+    form.page_setup(last)
     _apply_noto_font(wb)   # 전체 글꼴 Noto Sans KR 통일(모든 문서 Excel 공통)
     out = io.BytesIO()
     wb.save(out)
@@ -386,278 +466,60 @@ def make_proforma_invoice_xlsx(
 ) -> bytes:
     """Proforma Invoice 전용 Excel — templates/'proforma invoice_sample.xlsx' 서식 그대로.
 
-    같은 payload 로 만드는 PDF(kmaris_docs._make_proforma_invoice_pdf)와 열 격자
-    (PI_COLUMN_UNITS)·항목·순서가 모두 같아, 두 파일이 같은 문서로 보인다.
-    금액 칸은 수식(수량×단가·SUM)이라 받는 쪽에서 숫자를 고치면 합계가 따라 움직인다.
+    Commercial Invoice 와 같은 뼈대에, 당사자는 매수인 한 칸이고 합계 아래 BANK
+    INFORMATION 이 붙는다는 점만 다르다. 금액 칸은 수식(수량×단가·SUM)이라 받는 쪽에서
+    숫자를 고치면 합계가 따라 움직인다.
     """
-    from datetime import date as _date
-
     company = company or {}
     currency = (data.get("currency") or "USD").upper()
     shipping = data.get("shipping", {}) or {}
-    terms = data.get("terms", {}) or {}
-    items = normalize_items(data.get("items", []))
-    money = pi_charges(data)
-    dec = pi_decimals(currency)
-    # 회계 서식 — 0 은 '-' 로 찍혀 부대비용이 없는 줄이 0.00 으로 차지 않는다(참조 양식과 같다).
-    num_fmt = ('_-* #,##0.00_-;\\-* #,##0.00_-;_-* "-"_-;_-@_-' if dec
-               else '_-* #,##0_-;\\-* #,##0_-;_-* "-"_-;_-@_-')
-
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "Proforma Invoice"
-    ws.sheet_view.showGridLines = False
-
-    navy = PatternFill("solid", fgColor="0B1D3A")
-    section_fill = PatternFill("solid", fgColor="1F3B66")
-    gray = PatternFill("solid", fgColor="F4F6F8")
-    lightblue = PatternFill("solid", fgColor="EAF3FF")
-    alt = PatternFill("solid", fgColor="FAFBFC")
-
-    title_font = Font(name="Noto Sans KR", color="0B1D3A", bold=True, size=19)
-    company_font = Font(name="Noto Sans KR", size=14)
-    small = Font(name="Noto Sans KR", size=9)
-    white_sec = Font(name="Noto Sans KR", color="FFFFFF", bold=True, size=10)
-    white_hdr = Font(name="Noto Sans KR", color="FFFFFF", bold=True, size=9)
-    boldsm = Font(name="Noto Sans KR", bold=True, size=9)
-    bold = Font(name="Noto Sans KR", bold=True, size=11)
-    normal = Font(name="Noto Sans KR", size=9)
-    item_font = Font(name="Noto Sans KR", size=11)
-
-    thin = Side(style="thin", color="C8D2E0")
-    bdr = Border(top=thin, bottom=thin, left=thin, right=thin)
-    center = Alignment(horizontal="center", vertical="center", wrap_text=True)
-    left = Alignment(horizontal="left", vertical="center", wrap_text=True)
-    right = Alignment(horizontal="right", vertical="center")
-    left_top = Alignment(horizontal="left", vertical="top", wrap_text=True)
-
-    NCOL = 8
-    for i, w in enumerate(PI_COLUMN_UNITS, start=1):
-        ws.column_dimensions[get_column_letter(i)].width = w
-
-    def merge(r1, c1, r2, c2):
-        ws.merge_cells(start_row=r1, start_column=c1, end_row=r2, end_column=c2)
-
-    def bd(r1, c1, r2, c2, fill=None):
-        for rr in range(r1, r2 + 1):
-            for cc in range(c1, c2 + 1):
-                ws.cell(rr, cc).border = bdr
-                if fill:
-                    ws.cell(rr, cc).fill = fill
-
-    def put(r, c, v="", *, fill=None, font=None, align=None, fmt=None):
-        x = ws.cell(r, c, v)
-        if fill:
-            x.fill = fill
-        if font:
-            x.font = font
-        if align:
-            x.alignment = align
-        if fmt:
-            x.number_format = fmt
-        return x
-
-    def band(r, title):
-        """섹션 머리띠(BUYER / SHIPPING INFORMATION / BANK INFORMATION / DECLARATION)."""
-        merge(r, 1, r, NCOL)
-        put(r, 1, f" {title}", fill=section_fill, font=white_sec, align=left)
-        bd(r, 1, r, NCOL, section_fill)
-        ws.row_dimensions[r].height = 17.4
-
-    def pair_row(r, k1, v1, k2, v2, *, value_align=None, height=None):
-        """'라벨 | 값 | 라벨 | 값' 한 행 — A:B / C:D / E:F / G:H."""
-        va = value_align or left
-        merge(r, 1, r, 2); put(r, 1, k1, fill=gray, font=boldsm, align=left)
-        merge(r, 3, r, 4); put(r, 3, v1, font=normal, align=va)
-        merge(r, 5, r, 6); put(r, 5, k2, fill=gray, font=boldsm, align=left)
-        merge(r, 7, r, 8); put(r, 7, v2, font=normal, align=va)
-        bd(r, 1, r, NCOL)
-        ws.row_dimensions[r].height = height or 17.4
-
-    def add_image(path, anchor, w, h):
-        try:
-            from openpyxl.drawing.image import Image as XLImage
-            img = XLImage(path); img.width = w; img.height = h
-            ws.add_image(img, anchor)
-            return True
-        except Exception:
-            return False
-
-    # ── 레터헤드 — 로고 + 가운데 회사명·주소·연락처(PDF 레터헤드와 같은 내용) ──
-    logo = _find_asset("logo_icon.jpg", "logo_icon.png", "logo_K-maris.png", "logo.png", "logo.jpg")
-    if logo:
-        add_image(logo, "A1", 96, 45)
-    merge(1, 1, 1, NCOL)
-    put(1, 1, company.get("company_name_en", "K-MARIS Energy & Solutions Co., Ltd."),
-        font=company_font, align=center)
-    ws.row_dimensions[1].height = 37.2
-    merge(2, 1, 2, NCOL)
-    put(2, 1, company.get("address_en") or company.get("address", ""), font=small, align=center)
-    ws.row_dimensions[2].height = 14.1
-    contact = " | ".join(x for x in [
-        f"Tel: {company.get('phone', '')}" if company.get("phone") else "",
-        company.get("sales_email", ""), company.get("website", ""),
-    ] if x)
-    merge(3, 1, 3, NCOL)
-    put(3, 1, contact, font=small, align=center)
-    ws.row_dimensions[3].height = 14.1
-    merge(5, 1, 5, NCOL)
-    put(5, 1, "PROFORMA INVOICE", font=title_font, align=center)
-    ws.row_dimensions[4].height = 15.6
-    ws.row_dimensions[5].height = 30
-    ws.row_dimensions[6].height = 13.8
-
-    # ── 문서 정보 — 참조 양식처럼 오른쪽 반쪽에만 그린다 ──────────────────
-    r = 7
-    doc_date = data.get("date", "")
-    try:
-        doc_date = _date.fromisoformat(str(doc_date)[:10])
-    except ValueError:
-        doc_date = pi_doc_date(doc_date)
-    for k, v in [("Invoice No.", data.get("doc_no", "")), ("Invoice Date", doc_date),
-                 ("PO No.", shipping.get("po_no", ""))]:
-        merge(r, 5, r, 6); put(r, 5, k, fill=gray, font=boldsm, align=left)
-        merge(r, 7, r, 8)
-        cell = put(r, 7, v, font=normal, align=left)
-        if isinstance(v, _date):
-            cell.number_format = "dd-mmm-yyyy"
-        bd(r, 5, r, NCOL)
-        r += 1
-
-    # ── BUYER ─────────────────────────────────────────────────────────────
-    r += 1
-    band(r, "BUYER"); r += 1
     _, buyer = doc_parties(data)
-    pair_row(r, "Company Name", buyer.get("name", ""), "Address", buyer.get("address", ""), height=30.6)
-    r += 1
-    pair_row(r, "Contact", buyer.get("contact", ""), "e-mail", buyer.get("email", ""), height=18.6)
-    r += 2
 
-    # ── SHIPPING INFORMATION — 이름·순서는 입력 화면(PI 탭)과 같다 ─────────
-    band(r, "SHIPPING INFORMATION"); r += 1
-    vessel = data.get("vessel", {}) or {}
-    vessel_imo = " / ".join(x for x in [shipping.get("sm_vessel", "") or vessel.get("name", ""),
-                                        vessel.get("imo", "")] if x)
-    for k1, v1, k2, v2 in [
-        ("Vessel / IMO No.", vessel_imo, "Carrier", shipping.get("carrier", "")),
-        ("Place of Departure", shipping.get("port_loading", ""), "Place of Destination", shipping.get("port_discharge", "")),
-        ("ETD", shipping.get("etd", ""), "ETA", shipping.get("eta", "")),
-        ("Incoterms", terms.get("incoterms", ""), "Payment Terms", terms.get("payment_terms", "")),
+    wb, form, r = _invoice_sheet(data, company, "PROFORMA INVOICE", "Proforma Invoice")
+    r = form.band(r, "BUYER")
+    r = form.pairs(r, [("Company Name", buyer.get("name", ""), "Address", buyer.get("address", "")),
+                       ("Contact", buyer.get("contact", ""), "e-mail", buyer.get("email", ""))],
+                   heights={0: 30.6, 1: 18.6})
+    r += 1
+    r = form.band(r, "SHIPPING INFORMATION")
+    r = form.pairs(r, _invoice_shipping_rows(data) + [
         ("Currency", currency, "Country of Origin", shipping.get("sm_origin", "")),
-    ]:
-        pair_row(r, k1, v1, k2, v2)
-        r += 1
+    ])
     r += 1
-
-    # ── 품목 표 ───────────────────────────────────────────────────────────
-    hrow = r
-    put(hrow, 1, "No.", fill=navy, font=white_hdr, align=center)
-    merge(hrow, 2, hrow, 3); put(hrow, 2, "Description", fill=navy, font=white_hdr, align=center)
-    put(hrow, 4, "Part No.", fill=navy, font=white_hdr, align=center)
-    put(hrow, 5, "HS Code", fill=navy, font=white_hdr, align=center)
-    put(hrow, 6, "Qty", fill=navy, font=white_hdr, align=center)
-    put(hrow, 7, "Unit Price", fill=navy, font=white_hdr, align=center)
-    put(hrow, 8, f"Amount ({currency})", fill=navy, font=white_hdr, align=center)
-    bd(hrow, 1, hrow, NCOL, navy); ws.row_dimensions[hrow].height = 24
-    r = hrow + 1
-    first_data = r
-    # 품목이 적어도 참조 양식처럼 빈 줄을 채워 표 높이를 유지한다(수식은 그대로 살아 있다).
-    for i in range(max(len(items), PI_MIN_ITEM_ROWS)):
-        it = items[i] if i < len(items) else None
-        put(r, 1, it["item_no"] if it else "", font=item_font, align=center)
-        merge(r, 2, r, 3); put(r, 2, it["description"] if it else "", font=item_font, align=left)
-        put(r, 4, it["part_no"] if it else "", font=item_font, align=left)
-        put(r, 5, (it.get("hs_code") or shipping.get("hs_code", "")) if it else "", font=item_font, align=center)
-        put(r, 6, _num(it["qty"]) if it else "", font=item_font, align=center)
-        put(r, 7, _num(it["unit_price"]) if it else "", font=item_font, align=right, fmt=num_fmt)
-        put(r, 8, f"=IF(F{r}=\"\",\"\",F{r}*G{r})", font=item_font, align=right, fmt=num_fmt)
-        bd(r, 1, r, NCOL, None if it else alt)
-        # 병합 셀(B:C)은 Excel 이 자동 높이를 못 잡는다 — 품명 길이로 줄 수를 어림해 높이를 준다.
-        # 30 = B+C 열 폭에 11pt 로 들어가는 대략적인 글자 수.
-        lines = max(1, -(-len(str(it["description"] or "")) // 30)) if it else 1
-        ws.row_dimensions[r].height = (14.5 * lines + 8) if it else 18
-        r += 1
-    last_data = r - 1
-
-    # ── 합계 — 라벨은 F:G(Unit Price 칸), 값은 H(Amount 칸) ────────────────
-    def total_line(label, value):
-        nonlocal r
-        merge(r, 6, r, 7)
-        put(r, 6, label, fill=gray, font=boldsm, align=right)
-        put(r, 8, value, font=item_font, align=right, fmt=num_fmt)
-        bd(r, 6, r, NCOL)
-        ws.row_dimensions[r].height = 18
-        ref = f"H{r}"
-        r += 1
-        return ref
-
-    sref = total_line("Subtotal", f"=SUM(H{first_data}:H{last_data})")
-    fref = total_line("Freight", money["freight"])
-    pref = total_line("Packing", money["packing"])
-    iref = total_line("Insurance", money["insurance"])
-    # VAT 는 부대비용까지 더한 금액에 매긴다(입력 화면·PDF 와 같은 계산).
-    vref = total_line("VAT", f"=({sref}+{fref}+{pref}+{iref})*{money['vat_rate']}")
-    merge(r, 1, r, 7)
-    put(r, 1, "TOTAL INVOICE VALUE", fill=lightblue, font=bold, align=center)
-    put(r, 8, f"={sref}+{fref}+{pref}+{iref}+{vref}", fill=lightblue, font=bold, align=right, fmt=num_fmt)
-    bd(r, 1, r, NCOL)
-    ws.row_dimensions[r].height = 18
-    r += 2
+    r = _invoice_items_and_totals(form, data, r, currency)
 
     # ── BANK INFORMATION — 통화에 맞는 계좌(외화/원화)를 Settings 에서 가져온다 ──
-    band(r, "BANK INFORMATION"); r += 1
+    r += 1
+    r = form.band(r, "BANK INFORMATION")
     foreign = currency != "KRW"
     holder = (company.get("fx_bank_holder") if foreign else company.get("bank_holder")) or company.get("company_name_en", "")
     bank_name = (company.get("fx_bank_name") if foreign else company.get("bank_name")) or ""
     account = (company.get("fx_bank_account") if foreign else company.get("bank_account")) or ""
-    pair_row(r, "Remittee's name", holder, "Bank Name & Address", bank_name, value_align=center)
-    r += 1
-    pair_row(r, "Swift Code", company.get("swift", ""), "Remittee's Account No.", account, value_align=center)
-    r += 1
+    r = form.pairs(r, [("Remittee's name", holder, "Bank Name & Address", bank_name),
+                       ("Swift Code", company.get("swift", ""), "Remittee's Account No.", account)],
+                   value_align=form.center)
 
-    # ── DECLARATION / 서명 ────────────────────────────────────────────────
-    band(r, "DECLARATION"); r += 1
-    merge(r, 1, r, NCOL)
-    put(r, 1, "We hereby certify that this Proforma Invoice is true and correct.",
-        font=normal, align=left)
-    for cc in range(1, NCOL + 1):
-        ws.cell(r, cc).border = Border(top=thin, bottom=thin)
-    r += 2
-
-    sig_row = r
-    ws.row_dimensions[sig_row].height = 28.05
-    ws.row_dimensions[sig_row + 1].height = 20.1
-    ws.row_dimensions[sig_row + 2].height = 21
-    merge(sig_row, 1, sig_row + 2, 4)
-    put(sig_row, 1, "Authorized Signature", font=boldsm, align=left_top)
-    bd(sig_row, 1, sig_row + 2, 4)
-    merge(sig_row, 5, sig_row + 2, 8)
-    put(sig_row, 5, f"{company.get('company_name_en', '')}\n(Company Stamp)", font=boldsm, align=left_top)
-    bd(sig_row, 5, sig_row + 2, 8)
-    sign = _find_asset("Authorized signature_Sungyeon Cho.jpg", "signature.png", "signature.jpg", "sign.png")
-    stamp = _find_asset("Company stamp_K-Maris Energy & Solutions.jpg", "stamp.png", "stamp.jpg", "seal.png")
-    if sign:
-        add_image(sign, f"C{sig_row + 1}", 130, 44)
-    if stamp:
-        add_image(stamp, f"H{sig_row + 1}", 66, 66)
-
-    final_row = sig_row + 2
-    ws.page_setup.paperSize = ws.PAPERSIZE_A4
-    ws.page_setup.orientation = ws.ORIENTATION_PORTRAIT
-    ws.page_setup.fitToWidth = 1
-    ws.page_setup.fitToHeight = 0
-    ws.sheet_properties.pageSetUpPr.fitToPage = True
-    ws.print_area = f"A1:H{final_row}"
-    ws.sheet_view.zoomScale = 85
-    ws.page_margins.left = 0.24
-    ws.page_margins.right = 0.24
-    ws.page_margins.top = 0.4
-    ws.page_margins.bottom = 0.32
-
+    last = _invoice_closing(form, company, r - 1, "Proforma Invoice")
+    form.page_setup(last)
     _apply_noto_font(wb)   # 전체 글꼴 Noto Sans KR 통일(모든 문서 Excel 공통)
     out = io.BytesIO()
     wb.save(out)
     return out.getvalue()
+
+
+def _numcell(value: Any):
+    """숫자 칸 — 숫자로 읽히면 숫자로 넣어 Excel 이 계산·서식을 걸 수 있게 한다.
+    빈 값과 0 은 빈 칸으로 둔다(서식에 0 이 줄줄이 찍히지 않게)."""
+    text = str(value if value is not None else "").strip()
+    if not text:
+        return ""
+    try:
+        n = float(text)
+    except ValueError:
+        return text
+    if n == 0:
+        return ""
+    return int(n) if n == int(n) else n
 
 
 def _pkg_text_xlsx(it: Dict[str, Any]) -> str:
@@ -671,279 +533,111 @@ def _pkg_text_xlsx(it: Dict[str, Any]) -> str:
 def make_packing_list_xlsx(
     data: Dict[str, Any], company: Optional[Dict[str, Any]] = None
 ) -> bytes:
-    """Packing List 전용 Excel — Commercial Invoice 와 같은 섹션 구조. 가격 열은 없고
-    포장(No.&Kind of Packages)·중량(N.W./G.W.)·용적(Measurement) 열과 합계행을 갖는다."""
+    """Packing List 전용 Excel — templates/'packing list_sample.xlsx' 서식 그대로.
+
+    Commercial Invoice 와 같은 위쪽 구성(레터헤드 → 문서정보 → 당사자 → 선적정보)에,
+    가격 대신 포장(No.&Kind of Packages)·중량(N.W./G.W.)·치수(L·W·H)·용적(Meas.) 열과
+    TOTAL 행을 갖는다. 열 격자(PL_COLUMN_UNITS)는 같은 문서의 PDF 와 같다.
+    """
     company = company or {}
-    customer = data.get("customer", {}) or {}
-    vessel = data.get("vessel", {}) or {}
     shipping = data.get("shipping", {}) or {}
-    # 거래조건(Incoterms/Payment Terms/Packing)은 Commercial Invoice 값을 그대로 싣는다.
     terms = data.get("terms", {}) or {}
     items = normalize_items(data.get("items", []))
+    consignee, buyer = doc_parties(data)
     num_fmt = "#,##0.###"
 
     wb = Workbook()
     ws = wb.active
     ws.title = "Packing List"
-    ws.sheet_view.showGridLines = False
+    form = _FormSheet(ws, PL_COLUMN_UNITS, _BLOCKS_13)
 
-    navy = PatternFill("solid", fgColor="0B1D3A")
-    blue = PatternFill("solid", fgColor="0055A8")
-    section = PatternFill("solid", fgColor="1F3B66")
-    gray = PatternFill("solid", fgColor="F4F6F8")
-    lightblue = PatternFill("solid", fgColor="EAF3FF")
-    alt = PatternFill("solid", fgColor="FAFBFC")
-
-    white_lg = Font(name="Noto Sans KR", color="0B1D3A", bold=True, size=19)
-    white_sm = Font(name="Noto Sans KR", color="FFFFFF", size=9)
-    white_sec = Font(name="Noto Sans KR", color="FFFFFF", bold=True, size=10)
-    white_hdr = Font(name="Noto Sans KR", color="FFFFFF", bold=True, size=9)
-    bold = Font(name="Noto Sans KR", bold=True)
-    boldsm = Font(name="Noto Sans KR", bold=True, size=9)
-    normal = Font(name="Noto Sans KR", size=9)
-
-    thin = Side(style="thin", color="C8D2E0")
-    bdr = Border(top=thin, bottom=thin, left=thin, right=thin)
-    center = Alignment(horizontal="center", vertical="center", wrap_text=True)
-    left = Alignment(horizontal="left", vertical="center", wrap_text=True)
-    right = Alignment(horizontal="right", vertical="center")
-    left_top = Alignment(horizontal="left", vertical="top", wrap_text=True)
-
-    NCOL = 9
-    widths = [6, 20, 14, 7, 8, 13, 11, 11, 12]
-    for i, w in enumerate(widths, start=1):
-        ws.column_dimensions[get_column_letter(i)].width = w
-
-    def merge(r1, c1, r2, c2):
-        ws.merge_cells(start_row=r1, start_column=c1, end_row=r2, end_column=c2)
-
-    def bd(r1, c1, r2, c2, fill=None):
-        for rr in range(r1, r2 + 1):
-            for cc in range(c1, c2 + 1):
-                ws.cell(rr, cc).border = bdr
-                if fill:
-                    ws.cell(rr, cc).fill = fill
-
-    def put(r, c, v="", *, fill=None, font=None, align=None, fmt=None):
-        x = ws.cell(r, c, v)
-        if fill:
-            x.fill = fill
-        if font:
-            x.font = font
-        if align:
-            x.alignment = align
-        if fmt:
-            x.number_format = fmt
-        return x
-
-    def add_image(path, anchor, w, h):
-        try:
-            from openpyxl.drawing.image import Image as XLImage
-            img = XLImage(path); img.width = w; img.height = h
-            ws.add_image(img, anchor)
-            return True
-        except Exception:
-            return False
-
-    def pairs_block(rows, start_row):
-        """label:value 쌍을 한 행에 2쌍씩(좌: 1-5, 우: 6-9) 배치."""
-        r = start_row
-        for i in range(0, len(rows), 2):
-            chunk = rows[i:i + 2]
-            k, v = chunk[0]
-            merge(r, 1, r, 2); put(r, 1, k, fill=gray, font=boldsm, align=left)
-            merge(r, 3, r, 5); put(r, 3, v, font=normal, align=left)
-            bd(r, 1, r, 5)
-            if len(chunk) > 1:
-                k2, v2 = chunk[1]
-                merge(r, 6, r, 7); put(r, 6, k2, fill=gray, font=boldsm, align=left)
-                merge(r, 8, r, 9); put(r, 8, v2, font=normal, align=left)
-            else:
-                merge(r, 6, r, 9)
-            bd(r, 6, r, 9)
-            r += 1
-        return r
-
-    r = 1
-    logo = _find_asset("logo_K-maris.png", "logo.png", "logo.jpg", "logo.jpeg")
-    if logo:
-        add_image(logo, f"A{r}", 105, 35)
-    merge(r, 1, r, NCOL); put(r, 1, "PACKING LIST", font=white_lg, align=center)
-    bd(r, 1, r, NCOL); ws.row_dimensions[r].height = 53.6; r += 1
-    banner = "   |   ".join(x for x in [
-        company.get("company_name_en", "K-MARIS Energy & Solutions Co., Ltd."),
-        company.get("sales_email", ""), company.get("website", ""),
-    ] if x)
-    merge(r, 1, r, NCOL); put(r, 1, banner, fill=blue, font=white_sm, align=center)
-    bd(r, 1, r, NCOL, blue); ws.row_dimensions[r].height = 16; r += 2
-
-    # ── Exporter / Packing list information ──────────────────────────────
-    merge(r, 1, r, 5); put(r, 1, "EXPORTER / SELLER", fill=section, font=white_sec, align=left)
-    merge(r, 6, r, 9); put(r, 6, "PACKING LIST INFORMATION", fill=section, font=white_sec, align=left)
-    bd(r, 1, r, 5, section); bd(r, 6, r, 9, section); r += 1
-    address = company.get("address_en") or company.get("address", "")
-    address_top, address_bottom = address, ""
-    if " Seoul" in address:
-        address_top, address_bottom = address.split(" Seoul", 1)
-        address_bottom = "Seoul" + address_bottom
-    exporter = [
-        company.get("company_name_en", ""),
-        address_top,
-        address_bottom,
-        f"Tel: {company.get('phone', '')}    Email: {company.get('sales_email', '')}",
-        f"Business Reg. No.: {company.get('business_no', '')}",
-    ]
+    r = form.letterhead(company, "PACKING LIST")
     # Packing List 는 자체 번호·발행일이 없다 — 딸려 나가는 송장의 번호·발행일을 싣는다.
-    pl_info = [
-        ("Invoice No.", shipping.get("ci_no", "")),
-        ("Invoice Date", shipping.get("ci_date", "") or data.get("date", "")),
-        ("P.O. No.", shipping.get("po_no", "")),
-        ("", ""),
-        ("", ""),
-    ]
-    for i in range(5):
-        merge(r, 1, r, 5); put(r, 1, exporter[i], font=normal, align=left); bd(r, 1, r, 5)
-        merge(r, 6, r, 7); put(r, 6, pl_info[i][0], fill=gray, font=boldsm, align=left)
-        merge(r, 8, r, 9); put(r, 8, pl_info[i][1], font=normal, align=left); bd(r, 6, r, 9)
-        if i == 3:
-            ws.row_dimensions[r].height = 17.6
-        r += 1
+    r = form.doc_info(r, [("Invoice No.", shipping.get("ci_no", "") or data.get("doc_no", "")),
+                          ("Invoice Date", _invoice_doc_date(shipping.get("ci_date", "") or data.get("date", ""))),
+                          ("PO No.", shipping.get("po_no", ""))])
+    r += 1
+    r = form.band(r, "CONSIGNEE", "BUYER (if different)")
+    r = form.pairs(r, [("Company Name", consignee.get("name", ""), "Company Name", buyer.get("name", "")),
+                       ("Address", consignee.get("address", ""), "Address", buyer.get("address", "")),
+                       ("Contact", consignee.get("contact", ""), "Contact", buyer.get("contact", "")),
+                       ("e-mail", consignee.get("email", ""), "e-mail", buyer.get("email", ""))],
+                   heights={1: 29.4})
+    r = form.band(r, "SHIPPING INFORMATION")
+    r = form.pairs(r, _invoice_shipping_rows(data) + [
+        ("Packing", terms.get("packing_type", ""), "Country of Origin", shipping.get("sm_origin", "")),
+    ])
+    r += 1
 
-    # ── Consignee / Ship-to ──────────────────────────────────────────────
-    # 수하인·매수인은 다른 회사일 수 있어 두 칸으로 나눠 인쇄한다(PDF 와 동일).
-    merge(r, 1, r, 5); put(r, 1, "CONSIGNEE", fill=section, font=white_sec, align=left)
-    merge(r, 6, r, 9); put(r, 6, "BUYER (if different)", fill=section, font=white_sec, align=left)
-    bd(r, 1, r, 5, section); bd(r, 6, r, 9, section); r += 1
-    consignee_party, buyer_party = doc_parties(data)
-    consignee_lines, buyer_lines = party_lines(consignee_party), party_lines(buyer_party)
-    for i in range(3):
-        merge(r, 1, r, 5); put(r, 1, consignee_lines[i], font=normal, align=left); bd(r, 1, r, 5)
-        merge(r, 6, r, 9); put(r, 6, buyer_lines[i], font=normal, align=left); bd(r, 6, r, 9)
-        r += 1
-
-    # ── Shipping information ─────────────────────────────────────────────
-    merge(r, 1, r, NCOL); put(r, 1, "SHIPPING INFORMATION", fill=section, font=white_sec, align=left)
-    bd(r, 1, r, NCOL, section); r += 1
-    # 항목 이름·순서는 입력 화면(7단계 Packing List 탭)과 같게 맞춘다.
-    r = pairs_block([
-        ("Vessel / IMO No.", " / ".join(x for x in [shipping.get("sm_vessel", "") or vessel.get("name", ""), vessel.get("imo", "")] if x)),
-        ("Carrier", shipping.get("carrier", "")),
-        ("Place of Departure", shipping.get("port_loading", "")),
-        ("Place of Destination", shipping.get("port_discharge", "")),
-        ("ETD", shipping.get("etd", "")),
-        ("ETA", shipping.get("eta", "")),
-        ("Incoterms", terms.get("incoterms", "")),
-        ("Payment Terms", terms.get("payment_terms", "")),
-        ("Packing", terms.get("packing_type", "")),
-        ("Country of Origin", shipping.get("sm_origin", "")),
-        ("Final Destination", shipping.get("sm_final_dest", "")),
-        ("", ""),
-    ], r)
-
-    # ── Shipping marks ───────────────────────────────────────────────────
-    merge(r, 1, r, NCOL); put(r, 1, "SHIPPING MARKS", fill=section, font=white_sec, align=left)
-    bd(r, 1, r, NCOL, section); r += 1
-    marks = _compose_marks(shipping) or (shipping.get("shipping_marks") or "").strip()
-    mark_lines = marks.splitlines()
-    split_at = (len(mark_lines) + 1) // 2
-    marks_h = 5
-    merge(r, 1, r + marks_h - 1, 5)
-    put(r, 1, "\n".join(mark_lines[:split_at]), font=normal, align=left_top)
-    merge(r, 6, r + marks_h - 1, 9)
-    put(r, 6, "\n".join(mark_lines[split_at:]), font=normal, align=left_top)
-    bd(r, 1, r + marks_h - 1, 5)
-    bd(r, 6, r + marks_h - 1, 9)
-    r += marks_h
-
-    # ── 품목 표(가격 없음) ─────────────────────────────────────────────────
+    # ── 품목 표 — 머리행 2줄, Dim.(cm) 아래 L/W/H 세 칸 ──────────────────
     hrow = r
-    heads = ["No.", "Description", "Part No.", "Q'ty", "Unit", "No. & Kind of Packages",
-             "N.W. (kg)", "G.W. (kg)", "Meas. (m³)"]
-    for c, h in enumerate(heads, start=1):
-        put(hrow, c, h, fill=navy, font=white_hdr, align=center)
-    bd(hrow, 1, hrow, NCOL, navy); ws.row_dimensions[hrow].height = 26
-    r = hrow + 1
-    first_data = r
+    for title, c1, c2 in [("No.", 1, 1), ("Description", 2, 3), ("Part No.", 4, 4), ("Q'ty", 5, 5),
+                          ("Unit", 6, 6), ("No. & Kind of Packages", 7, 7), ("N.W. (kg)", 8, 8),
+                          ("G.W. (kg)", 9, 9), ("Meas. (m³)", 13, 13)]:
+        form.merge(hrow, c1, hrow + 1, c2)
+        form.put(hrow, c1, title, fill=form.navy, font=form.white_hdr, align=form.center)
+    form.merge(hrow, 10, hrow, 12)
+    form.put(hrow, 10, "Dim. (cm)", fill=form.navy, font=form.white_hdr, align=form.center)
+    for i, axis in enumerate(("L", "W", "H")):
+        form.put(hrow + 1, 10 + i, axis, fill=form.navy, font=form.white_hdr, align=form.center)
+    form.bd(hrow, 1, hrow + 1, form.ncol, form.navy)
+    form.ws.row_dimensions[hrow].height = 20.4
+    form.ws.row_dimensions[hrow + 1].height = 17.4
+    r = hrow + 2
 
-    def _numval(v):
-        try:
-            f = float(v)
-            return f if f else ""
-        except (TypeError, ValueError):
-            return str(v).strip() if v not in (None, "") else ""
-
-    for i, it in enumerate(items):
-        put(r, 1, it["item_no"], align=center)
-        put(r, 2, it["description"], align=left)
-        put(r, 3, it["part_no"], align=left)
-        put(r, 4, _num(it["qty"]), align=center)
-        put(r, 5, it["unit"], align=center)
-        put(r, 6, _pkg_text_xlsx(it), align=left)
-        put(r, 7, _numval(it.get("net_weight")), align=right, fmt=num_fmt)
-        put(r, 8, _numval(it.get("gross_weight")), align=right, fmt=num_fmt)
-        put(r, 9, _numval(it.get("measurement")), align=right, fmt=num_fmt)
-        if i % 2 == 1:
-            for cc in range(1, NCOL + 1):
-                ws.cell(r, cc).fill = alt
-        bd(r, 1, r, NCOL); ws.row_dimensions[r].height = 18
+    first = r
+    for i in range(max(len(items), PL_MIN_ITEM_ROWS)):
+        it = items[i] if i < len(items) else None
+        dims = _dim_parts(it.get("dimension")) if it else ["", "", ""]
+        form.put(r, 1, it["item_no"] if it else "", font=form.item_font, align=form.center)
+        form.merge(r, 2, r, 3)
+        form.put(r, 2, it["description"] if it else "", font=form.item_font, align=form.left)
+        form.put(r, 4, it["part_no"] if it else "", font=form.item_font, align=form.left)
+        form.put(r, 5, _num(it["qty"]) if it else "", font=form.item_font, align=form.center)
+        form.put(r, 6, it["unit"] if it else "", font=form.item_font, align=form.center)
+        form.put(r, 7, _pkg_text_xlsx(it) if it else "", font=form.item_font, align=form.center)
+        form.put(r, 8, _numcell(it.get("net_weight")) if it else "", font=form.item_font,
+                 align=form.right, fmt=num_fmt)
+        form.put(r, 9, _numcell(it.get("gross_weight")) if it else "", font=form.item_font,
+                 align=form.right, fmt=num_fmt)
+        for j, d in enumerate(dims):
+            form.put(r, 10 + j, _numcell(d), font=form.item_font, align=form.center, fmt=num_fmt)
+        form.put(r, 13, _numcell(it.get("measurement")) if it else "", font=form.item_font,
+                 align=form.right, fmt="#,##0.####")
+        form.bd(r, 1, r, form.ncol, None if it else form.alt)
+        form.ws.row_dimensions[r].height = form.item_row_height(it["description"], 26) if it else 18
         r += 1
-    last_data = r - 1 if items else first_data
+    last = r - 1
 
-    # ── 합계행 — 전체 포장 규격을 직접 적었으면 그 값, 아니면 품목별 합산(수식) ─────
+    # ── TOTAL 행 — 전체 포장 규격을 직접 적었으면 그 값, 아니면 품목별 합산 ──
     tot = packing_totals(data)
-    merge(r, 1, r, 5); put(r, 1, "TOTAL", fill=lightblue, font=bold, align=right)
-    put(r, 6, tot["packages"], fill=lightblue, font=bold, align=right)
-    for c, key in ((7, "net_weight"), (8, "gross_weight"), (9, "measurement")):
-        col = get_column_letter(c)
-        # 직접 적은 값이 있으면 그 숫자를, 없으면 품목 합계 수식을 넣는다(엑셀에서 이어서 편집 가능).
-        value = _num(tot[key]) if tot[key] else (f"=SUM({col}{first_data}:{col}{last_data})" if items else 0)
-        put(r, c, value, fill=lightblue, font=bold, align=right, fmt=num_fmt)
-    bd(r, 1, r, NCOL); ws.row_dimensions[r].height = 18
-    r += 2
+    form.merge(r, 1, r, 4)
+    form.put(r, 1, "TOTAL", fill=form.lightblue, font=form.bold, align=form.center)
+    form.put(r, 5, f"=SUM(E{first}:E{last})", fill=form.lightblue, font=form.bold, align=form.center)
+    form.put(r, 6, items[0]["unit"] if items else "", fill=form.lightblue, font=form.bold, align=form.center)
+    form.put(r, 7, tot["packages"], fill=form.lightblue, font=form.bold, align=form.right)
+    form.put(r, 8, _numcell(tot["net_weight"]), fill=form.lightblue, font=form.bold, align=form.right, fmt=num_fmt)
+    form.put(r, 9, _numcell(tot["gross_weight"]), fill=form.lightblue, font=form.bold, align=form.right, fmt=num_fmt)
+    for j, key in enumerate(("sm_dim_l", "sm_dim_w", "sm_dim_h")):
+        form.put(r, 10 + j, _numcell(shipping.get(key)), fill=form.lightblue, font=form.bold,
+                 align=form.center, fmt=num_fmt)
+    form.put(r, 13, _numcell(tot["measurement"]), fill=form.lightblue, font=form.bold,
+             align=form.right, fmt="#,##0.####")
+    form.bd(r, 1, r, form.ncol)
+    form.ws.row_dimensions[r].height = 20
+    r += 1
 
-    # ── Packing Information(자유 메모) ────────────────────────────────────
+    # ── Packing Information(자유 메모) — 적었을 때만 붙인다 ────────────────
     packing_info = (data.get("packing_info") or "").strip()
     if packing_info:
-        merge(r, 1, r, NCOL); put(r, 1, "PACKING INFORMATION", fill=section, font=white_sec, align=left)
-        bd(r, 1, r, NCOL, section); r += 1
-        merge(r, 1, r + 1, NCOL); put(r, 1, packing_info, font=normal, align=left_top)
-        bd(r, 1, r + 1, NCOL); r += 2
+        r += 1
+        r = form.band(r, "PACKING INFORMATION")
+        form.cell(r, "full", packing_info, font=form.normal, align=form.left)
+        form.bd(r, 1, r, form.ncol)
+        r += 1
 
-    merge(r, 1, r, NCOL)
-    put(r, 1, "We hereby certify that this Packing List is true and correct.",
-        font=normal, align=left); bd(r, 1, r, NCOL); r += 2
-
-    # ── 서명 / 직인 ───────────────────────────────────────────────────────
-    sig_row = r
-    ws.row_dimensions[sig_row].height = 28
-    ws.row_dimensions[sig_row + 1].height = 20.15
-    ws.row_dimensions[sig_row + 2].height = 21
-    merge(sig_row, 1, sig_row + 2, 5)
-    put(sig_row, 1, "Authorized Signature", font=boldsm, align=left_top); bd(sig_row, 1, sig_row + 2, 5)
-    merge(sig_row, 6, sig_row + 2, 9)
-    put(sig_row, 6, f"{company.get('company_name_en', '')}\n(Company Stamp)", font=boldsm, align=left_top)
-    bd(sig_row, 6, sig_row + 2, 9)
-    sign = _find_asset("Authorized signature_Sungyeon Cho.jpg", "signature.png", "signature.jpg", "sign.png")
-    stamp = _find_asset("Company stamp_K-Maris Energy & Solutions.jpg", "stamp.png", "stamp.jpg", "seal.png")
-    if sign:
-        add_image(sign, f"B{sig_row + 1}", 130, 44)
-    if stamp:
-        add_image(stamp, f"G{sig_row + 1}", 78, 78)
-
-    final_row = sig_row + 2
-    ws.page_setup.paperSize = ws.PAPERSIZE_A4
-    ws.page_setup.orientation = ws.ORIENTATION_PORTRAIT
-    ws.page_setup.scale = 90
-    ws.page_setup.fitToWidth = None
-    ws.page_setup.fitToHeight = None
-    ws.sheet_properties.pageSetUpPr.fitToPage = True
-    ws.print_area = f"A1:I{final_row}"
-    ws.sheet_view.zoomScale = 75
-    ws.page_margins.left = 0.25
-    ws.page_margins.right = 0.25
-    ws.page_margins.top = 0.3
-    ws.page_margins.bottom = 0.3
-
+    last_row = _invoice_closing(form, company, r, "Packing List", extra_cell=True)
+    form.page_setup(last_row)
     _apply_noto_font(wb)   # 전체 글꼴 Noto Sans KR 통일(모든 문서 Excel 공통)
     out = io.BytesIO()
     wb.save(out)

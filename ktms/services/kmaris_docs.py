@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import json
+import re
 from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
@@ -784,205 +785,61 @@ def _footer(canvas, doc):
 
 
 def _make_commercial_invoice_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> bytes:
-    """Commercial Invoice PDF whose visual structure mirrors the dedicated XLSX."""
+    """Commercial Invoice PDF — templates/'commercial invoice_sample' 서식 그대로.
+
+    구성: 레터헤드 → 문서정보(우측 반쪽) → CONSIGNEE | BUYER(if different) →
+    SHIPPING INFORMATION → 품목표 → 합계 → DECLARATION → 서명·직인.
+    Proforma Invoice 와 같은 격자(_DocForm)를 쓰고, 당사자 칸이 둘이라는 점과
+    은행 정보가 없다는 점만 다르다.
+    """
     s = _styles()
-    customer = data.get("customer", {}) or {}
-    vessel = data.get("vessel", {}) or {}
-    terms = data.get("terms", {}) or {}
     shipping = data.get("shipping", {}) or {}
     items = normalize_items(data.get("items", []))
     currency = (data.get("currency") or "USD").upper()
-    totals = calc_totals(items, _num(data.get("vat_rate", 0)))
-    buffer = io.BytesIO()
-    page_width = 190 * mm
-    doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=10 * mm,
-                            rightMargin=10 * mm, topMargin=7 * mm, bottomMargin=12 * mm,
-                            title="COMMERCIAL INVOICE")
+    consignee, buyer = doc_parties(data)
+    money = pi_charges(data)
+    dec = pi_decimals(currency)
 
-    # Keep every block on the same vertical grid. These are the PDF equivalents
-    # of the eight Excel columns (6, 20, 16, 14, 12, 8, 14, 16).
-    excel_units = [6, 14.5, 16, 13.5, 12, 8, 14, 18.28515625]
-    col_widths = [page_width * unit / sum(excel_units) for unit in excel_units]
-    half_widths = [sum(col_widths[:4]), sum(col_widths[4:])]
+    def amount(value: Any) -> str:
+        v = _num(value)
+        return "-" if abs(v) < 0.5 / (10 ** dec) else f"{v:,.{dec}f}"
 
-    asset_roots = [Path(__file__).resolve().parents[2], Path(__file__).resolve().parent.parent / "config"]
+    buffer, doc, page_width = _form_doc("COMMERCIAL INVOICE")
+    form = _DocForm(PI_COLUMN_UNITS, page_width, s)
+    quad = form.cols(2, 2, 2, 2)
+    item_w = form.cols(1, 2, 1, 1, 1, 1, 1)
+    half = form.cols(4, 4)
 
-    def asset(*names):
-        for root in asset_roots:
-            for name in names:
-                candidate = root / name
-                if candidate.exists():
-                    return candidate
-        return None
-
-    def image(path, max_width, max_height):
-        if not path:
-            return ""
-        from PIL import Image as PILImage
-        with PILImage.open(path) as source:
-            width, height = source.size
-        scale = min(max_width / width, max_height / height)
-        return Image(str(path), width=width * scale, height=height * scale)
-
-    def p(value, style="small"):
-        text = str(value or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        return Paragraph(text.replace("\n", "<br/>"), s[style])
-
-    def section(title):
-        t = Table([[p(title, "section")]], colWidths=[page_width])
-        t.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#1F3B66")),
-                               ("TEXTCOLOR", (0, 0), (-1, -1), colors.white),
-                               ("FONTNAME", (0, 0), (-1, -1), DEFAULT_BOLD_FONT),
-                               ("LEFTPADDING", (0, 0), (-1, -1), 4),
-                               ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]))
-        return t
-
-    def grid(rows, widths, label_cols=()):
-        t = Table(rows, colWidths=[w * mm for w in widths])
-        cmds = [("GRID", (0, 0), (-1, -1), .35, MID_GRAY), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
-                ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]
-        for col in label_cols:
-            cmds += [("BACKGROUND", (col, 0), (col, -1), LIGHT_GRAY),
-                     ("FONTNAME", (col, 0), (col, -1), DEFAULT_BOLD_FONT)]
-        t.setStyle(TableStyle(cmds))
-        return t
-
-    story = []
+    story: List[Any] = []
     story += _letterhead(company, "COMMERCIAL INVOICE", s)
+    story += [form.doc_info([("Invoice No.", data.get("doc_no", "")),
+                             ("Invoice Date", pi_doc_date(data.get("date", ""))),
+                             ("PO No.", shipping.get("po_no", ""))], quad), Spacer(1, 3 * mm)]
 
-    address = company.get("address_en") or company.get("address", "")
-    address_top, address_bottom = address, ""
-    if " Seoul" in address:
-        address_top, address_bottom = address.split(" Seoul", 1)
-        address_bottom = "Seoul" + address_bottom
-    exporter = [company.get("company_name_en", ""), address_top, address_bottom,
-                f"Tel: {company.get('phone', '')}    Email: {company.get('sales_email', '')}",
-                f"Business Reg. No.: {company.get('business_no', '')}"]
-    invoice = [("Invoice No.", data.get("doc_no", "")), ("Invoice Date", data.get("date", "")),
-               ("P.O. No.", shipping.get("po_no", "")),
-               ("Quotation Ref.", data.get("quotation_ref") or shipping.get("export_ref", "")), ("", "")]
-    rows = [[p("EXPORTER / SELLER", "section"), "", p("INVOICE INFORMATION", "section"), ""]]
-    rows += [[p(exporter[i]), "", p(invoice[i][0]), p(invoice[i][1])] for i in range(5)]
-    info = Table(rows, colWidths=[col_widths[0] + col_widths[1], col_widths[2] + col_widths[3],
-                                 col_widths[4] + col_widths[5], col_widths[6] + col_widths[7]])
-    info.setStyle(TableStyle([("SPAN", (0, 0), (1, 0)), ("SPAN", (2, 0), (3, 0)),
-                              ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1F3B66")),
-                              ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-                              ("FONTNAME", (0, 0), (-1, 0), DEFAULT_BOLD_FONT),
-                              ("SPAN", (0, 1), (1, 1)), ("SPAN", (0, 2), (1, 2)), ("SPAN", (0, 3), (1, 3)),
-                              ("SPAN", (0, 4), (1, 4)), ("SPAN", (0, 5), (1, 5)),
-                              ("BACKGROUND", (2, 1), (2, -1), LIGHT_GRAY), ("FONTNAME", (2, 1), (2, -1), DEFAULT_BOLD_FONT),
-                              ("GRID", (0, 0), (-1, -1), .35, MID_GRAY), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                              ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
-                              ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]))
-    story.append(info)
+    # 수하인·매수인은 다른 회사일 수 있어 두 칸으로 나눠 인쇄한다.
+    story += [form.band("CONSIGNEE", "BUYER (if different)", widths=form.cols(4, 4)),
+              form.pairs([("Company Name", consignee.get("name", ""), "Company Name", buyer.get("name", "")),
+                          ("Address", consignee.get("address", ""), "Address", buyer.get("address", "")),
+                          ("Contact", consignee.get("contact", ""), "Contact", buyer.get("contact", "")),
+                          ("e-mail", consignee.get("email", ""), "e-mail", buyer.get("email", ""))], quad)]
 
-    # 수하인·매수인은 다른 회사일 수 있어 두 칸으로 나눠 인쇄한다(문서 서식과 동일).
-    consignee_party, buyer_party = doc_parties(data)
-    consignee_lines, buyer_lines = party_lines(consignee_party), party_lines(buyer_party)
-    rows = [[p("CONSIGNEE", "section"), "", p("BUYER (if different)", "section"), ""]]
-    rows += [[p(consignee_lines[i]), "", p(buyer_lines[i]), ""] for i in range(3)]
-    consignee = Table(rows, colWidths=[col_widths[0] + col_widths[1], col_widths[2] + col_widths[3],
-                                      col_widths[4] + col_widths[5], col_widths[6] + col_widths[7]])
-    consignee.setStyle(TableStyle([("SPAN", (0, 0), (1, 0)), ("SPAN", (2, 0), (3, 0)),
-                                   ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1F3B66")),
-                                   ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-                                   ("FONTNAME", (0, 0), (-1, 0), DEFAULT_BOLD_FONT),
-                                   ("SPAN", (0, 1), (1, 1)), ("SPAN", (0, 2), (1, 2)), ("SPAN", (0, 3), (1, 3)),
-                                   ("SPAN", (2, 1), (3, 1)), ("SPAN", (2, 2), (3, 2)), ("SPAN", (2, 3), (3, 3)),
-                                   ("GRID", (0, 0), (-1, -1), .35, MID_GRAY), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                                   ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
-                                   ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]))
-    story += [consignee, section("SHIPPING INFORMATION")]
-    # 항목 이름·순서는 입력 화면(7단계 Commercial Invoice 탭)과 같게 맞춘다.
-    shipping_rows = [[p(a), p(b), p(c), p(d)] for a, b, c, d in [
-        ("Vessel / IMO No.", _vessel_imo(shipping, vessel), "Carrier", shipping.get("carrier", "")),
-        ("Place of Departure", shipping.get("port_loading", ""), "Place of Destination", shipping.get("port_discharge", "")),
-        ("ETD", shipping.get("etd", ""), "ETA", shipping.get("eta", "")),
-        ("Incoterms", terms.get("incoterms", ""), "Payment Terms", terms.get("payment_terms", "")),
-        ("Packing", terms.get("packing_type", ""), "Country of Origin", shipping.get("sm_origin", "")),
-        ("Currency", currency, "", "")]]
-    shipping_table = Table(shipping_rows, colWidths=[col_widths[0] + col_widths[1], col_widths[2] + col_widths[3],
-                                                     col_widths[4] + col_widths[5], col_widths[6] + col_widths[7]])
-    shipping_table.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), .35, MID_GRAY),
-        ("BACKGROUND", (0, 0), (0, -1), LIGHT_GRAY), ("BACKGROUND", (2, 0), (2, -1), LIGHT_GRAY),
-        ("FONTNAME", (0, 0), (0, -1), DEFAULT_BOLD_FONT), ("FONTNAME", (2, 0), (2, -1), DEFAULT_BOLD_FONT),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LEFTPADDING", (0, 0), (-1, -1), 4),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 4), ("TOPPADDING", (0, 0), (-1, -1), 3),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]))
-    # Shipping Marks(케이스 마킹)는 별도 문서(Shipping Mark PDF)로 분리 — CI 에는 출력하지 않는다.
-    story += [shipping_table]
+    story += [form.band("SHIPPING INFORMATION"),
+              form.pairs(_invoice_shipping_rows(data, "Incoterms® 2020")
+                         + [("Packing", (data.get("terms", {}) or {}).get("packing_type", ""),
+                             "Country of Origin", shipping.get("sm_origin", "")),
+                            ("Currency", currency, "", "")], quad),
+              Spacer(1, 3 * mm)]
 
-    headers = ["No.", "Description", "Part No.", "HS Code", "Qty", "Unit Price", f"Amount ({currency})"]
-    item_rows = [[p(h, "th") for h in headers]]
-    for it in items:
-        item_rows.append([p(it["item_no"], "tiny"), p(it["description"], "tiny"), p(it["part_no"], "tiny"),
-                          p(it.get("hs_code") or shipping.get("hs_code", ""), "tiny"), p(f"{it['qty']:g}", "tiny"),
-                          p(f"{it['unit_price']:,.2f}", "tiny"), p(f"{it['amount']:,.2f}", "tiny")])
-    item_table = Table(item_rows, colWidths=[col_widths[0], col_widths[1] + col_widths[2], col_widths[3],
-                                             col_widths[4], col_widths[5], col_widths[6], col_widths[7]], repeatRows=1)
-    cmds = [("BACKGROUND", (0, 0), (-1, 0), NAVY), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-            ("GRID", (0, 0), (-1, -1), .35, MID_GRAY), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("ALIGN", (4, 1), (-1, -1), "RIGHT"), ("LEFTPADDING", (0, 0), (-1, -1), 3),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 3), ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]
-    for i in range(2, len(item_rows), 2): cmds.append(("BACKGROUND", (0, i), (-1, i), colors.HexColor("#FAFBFC")))
-    item_table.setStyle(TableStyle(cmds)); story.append(item_table)
+    story.append(_invoice_item_table(form, data, items, currency, item_w, amount))
+    story += _invoice_totals_tables(form, item_w, money, amount)
+    story += [Spacer(1, 3 * mm), form.band("DECLARATION"),
+              form.declaration("We hereby certify that this Commercial Invoice is true and correct."),
+              Spacer(1, 2 * mm)]
+    sign_img, stamp_img = _form_signature_images()
+    story += [form.signature([("Authorized Signature", sign_img, 40 * mm),
+                              (f"{company.get('company_name_en', '')}\n(Company Stamp)", stamp_img, 22 * mm)], half),
+              Spacer(1, 2 * mm), _footer_center(s)]
 
-    total_rows = [[p(label), p(f"{value:,.2f}")] for label, value in [
-        ("Subtotal", totals["subtotal"]), ("Freight", 0), ("Packing", 0), ("Insurance", 0),
-        ("VAT", totals["vat"]), ("TOTAL INVOICE VALUE", totals["total"])]]
-    total_inner = Table(total_rows, colWidths=[col_widths[5] + col_widths[6], col_widths[7]])
-    total_table = Table([["", total_inner]], colWidths=[sum(col_widths[:5]), col_widths[5] + col_widths[6] + col_widths[7]])
-    total_inner.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), .35, MID_GRAY),
-        ("BACKGROUND", (0, 0), (0, -1), LIGHT_GRAY), ("BACKGROUND", (0, -1), (-1, -1), LIGHT_BLUE),
-        ("ALIGN", (1, 0), (1, -1), "RIGHT"), ("FONTNAME", (0, -1), (-1, -1), DEFAULT_BOLD_FONT),
-        ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4)]))
-    total_table.setStyle(TableStyle([
-        ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-        ("TOPPADDING", (0, 0), (-1, -1), 0), ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-    ]))
-    story += [total_table, Spacer(1, 2 * mm), section("PACKING & DECLARATION")]
-    packing = [[p(a), p(b), p(c), p(d)] for a, b, c, d in [
-        ("Total Packages", shipping.get("sm_total_cases", ""), "Net Weight (kg)", shipping.get("sm_net_weight", "")),
-        ("Gross Weight (kg)", shipping.get("sm_gross_weight", ""), "Country of Origin", shipping.get("sm_origin", ""))]]
-    packing_table = Table(packing, colWidths=[col_widths[0] + col_widths[1], col_widths[2] + col_widths[3],
-                                              col_widths[4] + col_widths[5], col_widths[6] + col_widths[7]])
-    packing_table.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), .35, MID_GRAY),
-        ("BACKGROUND", (0, 0), (0, -1), LIGHT_GRAY), ("BACKGROUND", (2, 0), (2, -1), LIGHT_GRAY),
-        ("FONTNAME", (0, 0), (0, -1), DEFAULT_BOLD_FONT), ("FONTNAME", (2, 0), (2, -1), DEFAULT_BOLD_FONT),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LEFTPADDING", (0, 0), (-1, -1), 4),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 4), ("TOPPADDING", (0, 0), (-1, -1), 3),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]))
-    declaration = Table([[p("We hereby certify that this Commercial Invoice is true and correct.")]],
-                        colWidths=[page_width])
-    declaration.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), .35, MID_GRAY),
-                                      ("LEFTPADDING", (0, 0), (-1, -1), 4)]))
-    story += [packing_table, declaration]
-    signature_image = image(asset("Authorized signature_Sungyeon Cho.jpg", "signature.png", "signature.jpg"), 35 * mm, 11 * mm)
-    stamp_image = image(asset("Company stamp_K-Maris Energy & Solutions.jpg", "stamp.png", "stamp.jpg"), 14 * mm, 14 * mm)
-    left_sign = Table([[p("Authorized Signature", "base"), signature_image]], colWidths=[32 * mm, half_widths[0] - 32 * mm])
-    right_sign = Table([[p(f"{company.get('company_name_en', '')}\n(Company Stamp)", "base"), stamp_image]],
-                       colWidths=[half_widths[1] - 25 * mm, 25 * mm])
-    inner_sign_style = TableStyle([
-        ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
-        ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-    ])
-    left_sign.setStyle(inner_sign_style)
-    right_sign.setStyle(inner_sign_style)
-    sign = Table([[left_sign, right_sign]], colWidths=half_widths, rowHeights=[15 * mm])
-    sign.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), .35, MID_GRAY),
-                              ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                              ("FONTNAME", (0, 0), (-1, -1), DEFAULT_BOLD_FONT),
-                              ("LEFTPADDING", (0, 0), (-1, -1), 0),
-                              ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-                              ("TOPPADDING", (0, 0), (-1, -1), 0),
-                              ("BOTTOMPADDING", (0, 0), (-1, -1), 0)]))
-    story.append(sign)
-    story.append(Spacer(1, 2 * mm))
-    story.append(_footer_center(s))
     doc.build(story, onFirstPage=_footer, onLaterPages=_footer)
     return buffer.getvalue()
 
@@ -994,6 +851,20 @@ PDF(_make_proforma_invoice_pdf)와 Excel(doc_xlsx.make_proforma_invoice_xlsx)이
 
 PI_MIN_ITEM_ROWS = 5
 """품목이 적어도 표를 이 행수만큼 빈 줄로 채운다(참조 양식과 같은 인상)."""
+
+PL_COLUMN_UNITS = [6, 13.1, 18.6, 13, 5.9, 6, 14.6, 8.1, 8.1, 4.4, 4.4, 4.4, 10.7]
+"""Packing List 13열 격자 — templates/'packing list_sample.xlsx' 의 열 너비.
+A=No. / B+C=Description / D=Part No. / E=Q'ty / F=Unit / G=No.&Kind of Packages /
+H=N.W. / I=G.W. / J·K·L=Dim.(L·W·H) / M=Meas. — PDF·Excel 이 함께 쓴다."""
+
+PL_MIN_ITEM_ROWS = 10
+
+
+def _dim_parts(text: Any) -> List[str]:
+    """품목 치수 문자열('30 x 23 x 21')을 L·W·H 세 칸으로 나눈다.
+    세 조각으로 갈라지지 않으면(자유 형식) 세 칸 모두 비운다 — 서식이 어긋나느니 비우는 편이 낫다."""
+    parts = [x.strip() for x in re.split(r"[x×*]", str(text or "")) if x.strip()]
+    return parts if len(parts) == 3 else ["", "", ""]
 
 
 def pi_decimals(currency: str) -> int:
@@ -1035,17 +906,193 @@ def pi_doc_date(value: Any) -> str:
         return text
 
 
+class _DocForm:
+    """송장 계열 문서(Proforma Invoice · Commercial Invoice · Packing List) 공통 서식 조립기.
+
+    templates/*_sample 세 문서는 같은 격자·머리띠·라벨표·서명 블록을 쓴다. units 는 짝이 되는
+    Excel 시트의 열 너비 목록이라, 같은 units 를 쓰는 Excel 과 PDF 의 칸 위치가 정확히 겹친다.
+    폭 계산·색·여백이 전부 여기 한 곳에 있어, 서식을 손보면 세 문서가 함께 따라온다.
+    """
+
+    CELL = [("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+            ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]
+    BAND = colors.HexColor("#1F3B66")
+    ALT_ROW = colors.HexColor("#FAFBFC")
+
+    def __init__(self, units: List[float], page_width: float, s: Dict[str, ParagraphStyle]):
+        self.s = s
+        self.page_width = page_width
+        self.w = [page_width * u / sum(units) for u in units]
+        self.label = ParagraphStyle("KMFormLabel", parent=s["small"], fontName=DEFAULT_BOLD_FONT)
+        self.th = ParagraphStyle("KMFormTh", parent=s["small"], fontName=DEFAULT_BOLD_FONT,
+                                 textColor=colors.white, alignment=TA_CENTER)
+        self.center = ParagraphStyle("KMFormCenter", parent=s["base"], alignment=TA_CENTER)
+        self.right = ParagraphStyle("KMFormRight", parent=s["base"], alignment=TA_RIGHT)
+        self.grand = ParagraphStyle("KMFormGrand", parent=s["base"], fontName=DEFAULT_BOLD_FONT,
+                                    alignment=TA_CENTER)
+        self.grand_right = ParagraphStyle("KMFormGrandR", parent=self.right, fontName=DEFAULT_BOLD_FONT)
+
+    def cols(self, *spans: int) -> List[float]:
+        """열 묶음 크기 → 폭 목록. cols(2, 2, 2, 2) 는 [A+B, C+D, E+F, G+H] 를 준다."""
+        out, i = [], 0
+        for n in spans:
+            out.append(sum(self.w[i:i + n]))
+            i += n
+        return out
+
+    def p(self, value: Any, style: Any = "small") -> Paragraph:
+        return _p(value, style if isinstance(style, ParagraphStyle) else self.s[style])
+
+    def band(self, *titles: str, widths: Optional[List[float]] = None) -> Table:
+        """섹션 머리띠 — 제목 하나면 전폭, 둘이면 좌우로 나눈다(CONSIGNEE | BUYER)."""
+        t = Table([[self.p(x, "section") for x in titles]], colWidths=widths or [self.page_width])
+        t.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), self.BAND),
+                               ("GRID", (0, 0), (-1, -1), .35, MID_GRAY)] + self.CELL))
+        return t
+
+    def pairs(self, rows: List[tuple], widths: List[float], value_style: Any = "small") -> Table:
+        """'라벨 | 값 | 라벨 | 값' 표 — 라벨 칸은 회색 볼드."""
+        t = Table([[self.p(a, self.label), self.p(b, value_style),
+                    self.p(c, self.label), self.p(d, value_style)] for a, b, c, d in rows],
+                  colWidths=widths)
+        t.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), .35, MID_GRAY),
+                               ("BACKGROUND", (0, 0), (0, -1), LIGHT_GRAY),
+                               ("BACKGROUND", (2, 0), (2, -1), LIGHT_GRAY)] + self.CELL))
+        return t
+
+    def doc_info(self, rows: List[tuple], widths: List[float]) -> Table:
+        """문서 정보(송장번호·일자·PO No.) — 참조 양식처럼 오른쪽 반쪽에만 그린다."""
+        t = Table([["", "", self.p(k, self.label), self.p(v)] for k, v in rows], colWidths=widths)
+        t.setStyle(TableStyle([("GRID", (2, 0), (-1, -1), .35, MID_GRAY),
+                               ("BACKGROUND", (2, 0), (2, -1), LIGHT_GRAY)] + self.CELL))
+        return t
+
+    def declaration(self, text: str) -> Table:
+        t = Table([[self.p(text)]], colWidths=[self.page_width])
+        t.setStyle(TableStyle([("LINEABOVE", (0, 0), (-1, -1), .35, MID_GRAY),
+                               ("LINEBELOW", (0, 0), (-1, -1), .35, MID_GRAY)] + self.CELL))
+        return t
+
+    def signature(self, cells: List[tuple], widths: List[float], height: float = 20 * mm) -> Table:
+        """서명 칸들 — (라벨, 이미지, 이미지칸 폭) 목록. 이미지는 라벨 오른쪽에 놓는다."""
+        inner_style = TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"),
+                                  ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                                  ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 0)])
+        row = []
+        for (text, img, img_w), width in zip(cells, widths):
+            img_w = min(img_w, width * 0.5)
+            inner = Table([[self.p(text, self.label), img]], colWidths=[width - img_w, img_w])
+            inner.setStyle(inner_style)
+            row.append(inner)
+        t = Table([row], colWidths=widths, rowHeights=[height])
+        t.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), .35, MID_GRAY),
+                               ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                               ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                               ("TOPPADDING", (0, 0), (-1, -1), 0), ("BOTTOMPADDING", (0, 0), (-1, -1), 0)]))
+        return t
+
+    def item_style(self, row_count: int, extra: Optional[List[tuple]] = None) -> TableStyle:
+        """품목표 공통 스타일 — 남색 머리행 + 격자 + 짝수행 옅은 바탕."""
+        cmds = [("BACKGROUND", (0, 0), (-1, 0), NAVY),
+                ("GRID", (0, 0), (-1, -1), .35, MID_GRAY)] + self.CELL
+        for i in range(2, row_count, 2):
+            cmds.append(("BACKGROUND", (0, i), (-1, i), self.ALT_ROW))
+        return TableStyle(cmds + (extra or []))
+
+
+def _form_signature_images() -> tuple:
+    """서명·직인 이미지(없으면 빈 칸) — 세 문서가 같은 크기로 쓴다."""
+    sign = _pdf_image(_pdf_asset("Authorized signature_Sungyeon Cho.jpg", "signature.png", "signature.jpg"),
+                      35 * mm, 11 * mm)
+    stamp = _pdf_image(_pdf_asset("Company stamp_K-Maris Energy & Solutions.jpg", "stamp.png", "stamp.jpg"),
+                       16 * mm, 16 * mm)
+    return sign, stamp
+
+
+def _form_doc(title: str) -> tuple:
+    """송장 계열 PDF 의 공통 페이지 설정(세로 A4·10mm 여백)."""
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=10 * mm, rightMargin=10 * mm,
+                            topMargin=7 * mm, bottomMargin=12 * mm, title=title,
+                            author="K-MARIS Energy & Solutions Co., Ltd.")
+    return buffer, doc, 190 * mm
+
+
+def _invoice_shipping_rows(data: Dict[str, Any], incoterms_label: str = "Incoterms") -> List[tuple]:
+    """SHIPPING INFORMATION 블록의 공통 앞 네 줄 — 이름·순서는 입력 화면(7단계 각 탭)과 같다.
+    마지막 줄(Packing·Currency·Country of Origin)은 문서마다 달라 각 문서가 덧붙인다."""
+    shipping = data.get("shipping", {}) or {}
+    terms = data.get("terms", {}) or {}
+    return [
+        ("Vessel / IMO No.", _vessel_imo(shipping, data.get("vessel")), "Carrier", shipping.get("carrier", "")),
+        ("Place of Departure", shipping.get("port_loading", ""),
+         "Place of Destination", shipping.get("port_discharge", "")),
+        ("ETD", pi_doc_date(shipping.get("etd", "")), "ETA", pi_doc_date(shipping.get("eta", ""))),
+        (incoterms_label, terms.get("incoterms", ""), "Payment Terms", terms.get("payment_terms", "")),
+    ]
+
+
+def _invoice_totals_tables(form: _DocForm, item_w: List[float], money: Dict[str, float],
+                           amount) -> List[Any]:
+    """합계 블록 — 라벨은 Unit Price 칸, 값은 Amount 칸. PI·CI 가 같이 쓴다."""
+    rows = [("Subtotal", money["subtotal"]), ("Freight", money["freight"]),
+            ("Packing", money["packing"]), ("Insurance", money["insurance"]), ("VAT", money["vat"])]
+    totals = Table([["", form.p(k, form.label), form.p(amount(v), form.right)] for k, v in rows],
+                   colWidths=[sum(item_w[:5]), item_w[5], item_w[6]])
+    totals.setStyle(TableStyle([("GRID", (1, 0), (-1, -1), .35, MID_GRAY),
+                                ("LINEBEFORE", (0, 0), (0, -1), .35, MID_GRAY),
+                                ("LINEAFTER", (0, 0), (0, -1), .35, MID_GRAY),
+                                ("BACKGROUND", (1, 0), (1, -1), LIGHT_GRAY)] + form.CELL))
+    grand = Table([[form.p("TOTAL INVOICE VALUE", form.grand),
+                    form.p(amount(money["total"]), form.grand_right)]],
+                  colWidths=[sum(item_w[:6]), item_w[6]])
+    grand.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), .35, MID_GRAY),
+                               ("BACKGROUND", (0, 0), (-1, -1), LIGHT_BLUE)] + form.CELL))
+    return [totals, grand]
+
+
+def _invoice_item_table(form: _DocForm, data: Dict[str, Any], items: List[Dict[str, Any]],
+                        currency: str, item_w: List[float], amount) -> Table:
+    """PI·CI 품목표 — No./Description/Part No./HS Code/Qty/Unit Price/Amount 7열.
+    품목이 적으면 참조 양식처럼 빈 줄로 채워 표 높이를 지킨다."""
+    shipping = data.get("shipping", {}) or {}
+    headers = ["No.", "Description", "Part No.", "HS Code", "Qty", "Unit Price", f"Amount ({currency})"]
+    rows: List[List[Any]] = [[form.p(h, form.th) for h in headers]]
+    for it in items:
+        rows.append([form.p(it["item_no"], form.center), form.p(it["description"], "base"),
+                     form.p(it["part_no"], "base"),
+                     form.p(it.get("hs_code") or shipping.get("hs_code", ""), form.center),
+                     form.p(f"{it['qty']:g}", form.center), form.p(amount(it["unit_price"]), form.right),
+                     form.p(amount(it["amount"]), form.right)])
+    filler = max(0, PI_MIN_ITEM_ROWS - len(items))
+    rows += [[""] * 7 for _ in range(filler)]
+    table = Table(rows, colWidths=item_w, repeatRows=1,
+                  rowHeights=[None] * (len(items) + 1) + [16] * filler)
+    table.setStyle(form.item_style(len(rows)))
+    return table
+
+
+def _bank_block(form: _DocForm, company: Dict[str, Any], currency: str, quad: List[float]) -> List[Any]:
+    """BANK INFORMATION — 통화에 맞는 계좌(외화/원화)를 Settings 에서 가져온다."""
+    foreign = currency != "KRW"
+    holder = (company.get("fx_bank_holder") if foreign else company.get("bank_holder")) or company.get("company_name_en", "")
+    bank = (company.get("fx_bank_name") if foreign else company.get("bank_name")) or ""
+    account = (company.get("fx_bank_account") if foreign else company.get("bank_account")) or ""
+    rows = [("Remittee's name", holder, "Bank Name & Address", bank),
+            ("Swift Code", company.get("swift", ""), "Remittee's Account No.", account)]
+    return [form.band("BANK INFORMATION"), form.pairs(rows, quad, value_style=form.center)]
+
+
 def _make_proforma_invoice_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> bytes:
     """Proforma Invoice PDF — templates/'proforma invoice_sample' 서식 그대로.
 
     구성: 레터헤드 → 문서정보(우측 반쪽) → BUYER → SHIPPING INFORMATION → 품목표 →
     합계(Subtotal/Freight/Packing/Insurance/VAT/TOTAL INVOICE VALUE) → BANK INFORMATION →
-    DECLARATION → 서명·직인. 같은 payload 로 만드는 Excel 과 칸 위치가 겹치도록
-    PI_COLUMN_UNITS(엑셀 열 너비)를 그대로 비율로 환산해 쓴다.
+    DECLARATION → 서명·직인.
     """
     s = _styles()
     shipping = data.get("shipping", {}) or {}
-    terms = data.get("terms", {}) or {}
     items = normalize_items(data.get("items", []))
     currency = (data.get("currency") or "USD").upper()
     _, buyer = doc_parties(data)
@@ -1057,147 +1104,35 @@ def _make_proforma_invoice_pdf(data: Dict[str, Any], company: Dict[str, Any]) ->
         v = _num(value)
         return "-" if abs(v) < 0.5 / (10 ** dec) else f"{v:,.{dec}f}"
 
-    buffer = io.BytesIO()
-    page_width = 190 * mm
-    doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=10 * mm, rightMargin=10 * mm,
-                            topMargin=7 * mm, bottomMargin=12 * mm, title="PROFORMA INVOICE",
-                            author="K-MARIS Energy & Solutions Co., Ltd.")
-
-    cw = [page_width * u / sum(PI_COLUMN_UNITS) for u in PI_COLUMN_UNITS]
-    quad = [cw[0] + cw[1], cw[2] + cw[3], cw[4] + cw[5], cw[6] + cw[7]]   # 라벨·값 4칸
-    item_w = [cw[0], cw[1] + cw[2], cw[3], cw[4], cw[5], cw[6], cw[7]]    # 품목표 7칸
-    half = [sum(cw[:4]), sum(cw[4:])]                                     # 서명 2칸
-    label_font = ParagraphStyle("KMPiLabel", parent=s["small"], fontName=DEFAULT_BOLD_FONT)
-    th = ParagraphStyle("KMPiTh", parent=s["small"], fontName=DEFAULT_BOLD_FONT, textColor=colors.white,
-                        alignment=TA_CENTER)
-    center = ParagraphStyle("KMPiCenter", parent=s["base"], alignment=TA_CENTER)
-    right = ParagraphStyle("KMPiRight", parent=s["base"], alignment=TA_RIGHT)
-
-    def p(value: Any, style: str | ParagraphStyle = "small") -> Paragraph:
-        return _p(value, style if isinstance(style, ParagraphStyle) else s[style])
-
-    CELL = [("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
-            ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]
-
-    def section(title: str) -> Table:
-        t = Table([[p(title, "section")]], colWidths=[page_width])
-        t.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#1F3B66")),
-                               ("GRID", (0, 0), (-1, -1), .35, MID_GRAY)] + CELL))
-        return t
-
-    def pairs(rows: List[tuple]) -> Table:
-        """'라벨 | 값 | 라벨 | 값' 두 쌍짜리 행들 — 라벨 칸은 회색 볼드."""
-        t = Table([[p(a, label_font), p(b), p(c, label_font), p(d)] for a, b, c, d in rows],
-                  colWidths=quad)
-        t.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), .35, MID_GRAY),
-                               ("BACKGROUND", (0, 0), (0, -1), LIGHT_GRAY),
-                               ("BACKGROUND", (2, 0), (2, -1), LIGHT_GRAY)] + CELL))
-        return t
+    buffer, doc, page_width = _form_doc("PROFORMA INVOICE")
+    form = _DocForm(PI_COLUMN_UNITS, page_width, s)
+    quad = form.cols(2, 2, 2, 2)                       # 라벨·값 4칸
+    item_w = form.cols(1, 2, 1, 1, 1, 1, 1)            # 품목표 7칸
+    half = form.cols(4, 4)                             # 서명 2칸
 
     story: List[Any] = []
     story += _letterhead(company, "PROFORMA INVOICE", s)
-
-    # ── 문서 정보 — 참조 양식처럼 오른쪽 반쪽에만 그린다 ──────────────────
-    head_rows = [("Invoice No.", data.get("doc_no", "")),
-                 ("Invoice Date", pi_doc_date(data.get("date", ""))),
-                 ("PO No.", shipping.get("po_no", ""))]
-    head = Table([["", "", p(k, label_font), p(v)] for k, v in head_rows], colWidths=quad)
-    head.setStyle(TableStyle([("GRID", (2, 0), (-1, -1), .35, MID_GRAY),
-                              ("BACKGROUND", (2, 0), (2, -1), LIGHT_GRAY)] + CELL))
-    story += [head, Spacer(1, 3 * mm)]
-
-    # ── BUYER ─────────────────────────────────────────────────────────────
-    story += [section("BUYER"),
-              pairs([("Company Name", buyer.get("name", ""), "Address", buyer.get("address", "")),
-                     ("Contact", buyer.get("contact", ""), "e-mail", buyer.get("email", ""))]),
+    story += [form.doc_info([("Invoice No.", data.get("doc_no", "")),
+                             ("Invoice Date", pi_doc_date(data.get("date", ""))),
+                             ("PO No.", shipping.get("po_no", ""))], quad), Spacer(1, 3 * mm)]
+    story += [form.band("BUYER"),
+              form.pairs([("Company Name", buyer.get("name", ""), "Address", buyer.get("address", "")),
+                          ("Contact", buyer.get("contact", ""), "e-mail", buyer.get("email", ""))], quad),
               Spacer(1, 3 * mm)]
-
-    # ── SHIPPING INFORMATION — 이름·순서는 입력 화면(PI 탭)과 같다 ─────────
-    story += [section("SHIPPING INFORMATION"), pairs([
-        ("Vessel / IMO No.", _vessel_imo(shipping, data.get("vessel")), "Carrier", shipping.get("carrier", "")),
-        ("Place of Departure", shipping.get("port_loading", ""), "Place of Destination", shipping.get("port_discharge", "")),
-        ("ETD", shipping.get("etd", ""), "ETA", shipping.get("eta", "")),
-        ("Incoterms", terms.get("incoterms", ""), "Payment Terms", terms.get("payment_terms", "")),
-        ("Currency", currency, "Country of Origin", shipping.get("sm_origin", "")),
-    ]), Spacer(1, 3 * mm)]
-
-    # ── 품목표 ────────────────────────────────────────────────────────────
-    headers = ["No.", "Description", "Part No.", "HS Code", "Qty", "Unit Price", f"Amount ({currency})"]
-    rows: List[List[Any]] = [[p(h, th) for h in headers]]
-    for it in items:
-        rows.append([p(it["item_no"], center), p(it["description"], "base"), p(it["part_no"], "base"),
-                     p(it.get("hs_code") or shipping.get("hs_code", ""), center),
-                     p(f"{it['qty']:g}", center), p(amount(it["unit_price"]), right),
-                     p(amount(it["amount"]), right)])
-    for _ in range(max(0, PI_MIN_ITEM_ROWS - len(items))):   # 참조 양식처럼 빈 줄로 채운다
-        rows.append([""] * 7)
-    item_table = Table(rows, colWidths=item_w, repeatRows=1,
-                       rowHeights=[None] * (len(items) + 1) + [16] * max(0, PI_MIN_ITEM_ROWS - len(items)))
-    cmds = [("BACKGROUND", (0, 0), (-1, 0), NAVY), ("GRID", (0, 0), (-1, -1), .35, MID_GRAY)] + CELL
-    for i in range(2, len(rows), 2):
-        cmds.append(("BACKGROUND", (0, i), (-1, i), colors.HexColor("#FAFBFC")))
-    item_table.setStyle(TableStyle(cmds))
-    story.append(item_table)
-
-    # ── 합계 — 라벨은 Unit Price 칸, 값은 Amount 칸에 맞춘다 ───────────────
-    total_rows = [("Subtotal", money["subtotal"]), ("Freight", money["freight"]),
-                  ("Packing", money["packing"]), ("Insurance", money["insurance"]),
-                  ("VAT", money["vat"])]
-    totals = Table([["", p(k, label_font), p(amount(v), right)] for k, v in total_rows],
-                   colWidths=[sum(item_w[:5]), item_w[5], item_w[6]])
-    totals.setStyle(TableStyle([("GRID", (1, 0), (-1, -1), .35, MID_GRAY),
-                                ("LINEAFTER", (0, 0), (0, -1), .35, MID_GRAY),
-                                ("LINEBEFORE", (0, 0), (0, -1), .35, MID_GRAY),
-                                ("ALIGN", (1, 0), (1, -1), "RIGHT"),
-                                ("BACKGROUND", (1, 0), (1, -1), LIGHT_GRAY)] + CELL))
-    grand = Table([[p("TOTAL INVOICE VALUE", ParagraphStyle("KMPiGrandL", parent=s["base"],
-                                                            fontName=DEFAULT_BOLD_FONT, alignment=TA_CENTER)),
-                    p(amount(money["total"]), ParagraphStyle("KMPiGrandV", parent=right,
-                                                             fontName=DEFAULT_BOLD_FONT))]],
-                  colWidths=[sum(item_w[:6]), item_w[6]])
-    grand.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), .35, MID_GRAY),
-                               ("BACKGROUND", (0, 0), (-1, -1), LIGHT_BLUE)] + CELL))
-    story += [totals, grand, Spacer(1, 3 * mm)]
-
-    # ── BANK INFORMATION — 통화에 맞는 계좌(외화/원화)를 Settings 에서 가져온다 ──
-    foreign = currency != "KRW"
-    holder = (company.get("fx_bank_holder") if foreign else company.get("bank_holder")) or company.get("company_name_en", "")
-    bank = (company.get("fx_bank_name") if foreign else company.get("bank_name")) or ""
-    account = (company.get("fx_bank_account") if foreign else company.get("bank_account")) or ""
-    bank_rows = [("Remittee's name", holder, "Bank Name & Address", bank),
-                 ("Swift Code", company.get("swift", ""), "Remittee's Account No.", account)]
-    bank_table = Table([[p(a, label_font), p(b, center), p(c, label_font), p(d, center)]
-                        for a, b, c, d in bank_rows], colWidths=quad)
-    bank_table.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), .35, MID_GRAY),
-                                    ("BACKGROUND", (0, 0), (0, -1), LIGHT_GRAY),
-                                    ("BACKGROUND", (2, 0), (2, -1), LIGHT_GRAY)] + CELL))
-    story += [section("BANK INFORMATION"), bank_table]
-
-    # ── DECLARATION / 서명 ────────────────────────────────────────────────
-    declaration = Table([[p("We hereby certify that this Proforma Invoice is true and correct.")]],
-                        colWidths=[page_width])
-    declaration.setStyle(TableStyle([("LINEBELOW", (0, 0), (-1, -1), .35, MID_GRAY),
-                                     ("LINEABOVE", (0, 0), (-1, -1), .35, MID_GRAY)] + CELL))
-    story += [section("DECLARATION"), declaration, Spacer(1, 2 * mm)]
-
-    sign_img = _pdf_image(_pdf_asset("Authorized signature_Sungyeon Cho.jpg", "signature.png", "signature.jpg"), 35 * mm, 11 * mm)
-    stamp_img = _pdf_image(_pdf_asset("Company stamp_K-Maris Energy & Solutions.jpg", "stamp.png", "stamp.jpg"), 16 * mm, 16 * mm)
-    inner = TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 4),
-                        ("RIGHTPADDING", (0, 0), (-1, -1), 4), ("TOPPADDING", (0, 0), (-1, -1), 3),
-                        ("BOTTOMPADDING", (0, 0), (-1, -1), 0)])
-    left_sign = Table([[p("Authorized Signature", label_font), sign_img]],
-                      colWidths=[32 * mm, half[0] - 32 * mm])
-    right_sign = Table([[p(f"{company.get('company_name_en', '')}\n(Company Stamp)", label_font), stamp_img]],
-                       colWidths=[half[1] - 25 * mm, 25 * mm])
-    left_sign.setStyle(inner)
-    right_sign.setStyle(inner)
-    sign = Table([[left_sign, right_sign]], colWidths=half, rowHeights=[20 * mm])
-    sign.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), .35, MID_GRAY),
-                              ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                              ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-                              ("TOPPADDING", (0, 0), (-1, -1), 0), ("BOTTOMPADDING", (0, 0), (-1, -1), 0)]))
-    story += [sign, Spacer(1, 2 * mm), _footer_center(s)]
+    story += [form.band("SHIPPING INFORMATION"),
+              form.pairs(_invoice_shipping_rows(data)
+                         + [("Currency", currency, "Country of Origin", shipping.get("sm_origin", ""))], quad),
+              Spacer(1, 3 * mm)]
+    story.append(_invoice_item_table(form, data, items, currency, item_w, amount))
+    story += _invoice_totals_tables(form, item_w, money, amount)
+    story += [Spacer(1, 3 * mm)] + _bank_block(form, company, currency, quad)
+    story += [form.band("DECLARATION"),
+              form.declaration("We hereby certify that this Proforma Invoice is true and correct."),
+              Spacer(1, 2 * mm)]
+    sign_img, stamp_img = _form_signature_images()
+    story += [form.signature([("Authorized Signature", sign_img, 40 * mm),
+                              (f"{company.get('company_name_en', '')}\n(Company Stamp)", stamp_img, 22 * mm)], half),
+              Spacer(1, 2 * mm), _footer_center(s)]
 
     doc.build(story, onFirstPage=_footer, onLaterPages=_footer)
     return buffer.getvalue()
@@ -1618,215 +1553,104 @@ def packing_totals(data: Dict[str, Any]) -> Dict[str, str]:
 
 
 def _make_packing_list_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> bytes:
-    """Packing List PDF — Commercial Invoice 와 동일한 섹션 구조. 가격 열은 없고
-    포장(No.&Kind of Packages)·중량(N.W./G.W.)·용적(Measurement) 열과 합계행을 갖는다."""
+    """Packing List PDF — templates/'packing list_sample' 서식 그대로.
+
+    구성: 레터헤드 → 문서정보(우측 반쪽) → CONSIGNEE | BUYER(if different) →
+    SHIPPING INFORMATION → 품목표(가격 없음·포장/중량/치수/용적) → TOTAL 행 →
+    DECLARATION → 서명·직인·수령 확인. 송장(PI/CI)과 같은 조립기(_DocForm)를 쓰되
+    열 격자만 Packing List 전용(PL_COLUMN_UNITS, 13열)이다.
+    """
     s = _styles()
-    customer = data.get("customer", {}) or {}
-    vessel = data.get("vessel", {}) or {}
     shipping = data.get("shipping", {}) or {}
-    # 거래조건(Incoterms/Payment Terms/Packing)은 Commercial Invoice 값을 그대로 싣는다.
     terms = data.get("terms", {}) or {}
     items = normalize_items(data.get("items", []))
-    currency = (data.get("currency") or "USD").upper()
-    buffer = io.BytesIO()
-    page_width = 190 * mm
-    doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=10 * mm,
-                            rightMargin=10 * mm, topMargin=7 * mm, bottomMargin=12 * mm,
-                            title="PACKING LIST")
 
-    # 상단 정보 블록은 CI 와 같은 8-단위 격자(4분할)를 그대로 쓴다.
-    excel_units = [6, 14.5, 16, 13.5, 12, 8, 14, 18.28515625]
-    col_widths = [page_width * unit / sum(excel_units) for unit in excel_units]
-    half_widths = [sum(col_widths[:4]), sum(col_widths[4:])]
+    buffer, doc, page_width = _form_doc("PACKING LIST")
+    form = _DocForm(PL_COLUMN_UNITS, page_width, s)
+    quad = form.cols(2, 3, 2, 6)                                  # 라벨·값 4칸
+    item_w = form.cols(1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1)        # 품목표 12칸
+    signs = form.cols(3, 4, 6)                                    # 서명 3칸
+    consignee, buyer = doc_parties(data)
 
-    asset_roots = [Path(__file__).resolve().parents[2], Path(__file__).resolve().parent.parent / "config"]
-
-    def asset(*names):
-        for root in asset_roots:
-            for name in names:
-                candidate = root / name
-                if candidate.exists():
-                    return candidate
-        return None
-
-    def image(path, max_width, max_height):
-        if not path:
-            return ""
-        from PIL import Image as PILImage
-        with PILImage.open(path) as source:
-            width, height = source.size
-        scale = min(max_width / width, max_height / height)
-        return Image(str(path), width=width * scale, height=height * scale)
-
-    def p(value, style="small"):
-        text = str(value or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        return Paragraph(text.replace("\n", "<br/>"), s[style])
-
-    def section(title):
-        t = Table([[p(title, "section")]], colWidths=[page_width])
-        t.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#1F3B66")),
-                               ("TEXTCOLOR", (0, 0), (-1, -1), colors.white),
-                               ("FONTNAME", (0, 0), (-1, -1), DEFAULT_BOLD_FONT),
-                               ("LEFTPADDING", (0, 0), (-1, -1), 4),
-                               ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]))
-        return t
-
-    story = []
-    story += _letterhead(company, "PACKING LIST", s)
-
-    address = company.get("address_en") or company.get("address", "")
-    address_top, address_bottom = address, ""
-    if " Seoul" in address:
-        address_top, address_bottom = address.split(" Seoul", 1)
-        address_bottom = "Seoul" + address_bottom
-    exporter = [company.get("company_name_en", ""), address_top, address_bottom,
-                f"Tel: {company.get('phone', '')}    Email: {company.get('sales_email', '')}",
-                f"Business Reg. No.: {company.get('business_no', '')}"]
-    # Packing List 는 자체 번호·발행일이 없다 — 딸려 나가는 송장의 번호·발행일을 싣는다.
-    invoice = [("Invoice No.", shipping.get("ci_no", "")),
-               ("Invoice Date", shipping.get("ci_date", "") or data.get("date", "")),
-               ("P.O. No.", shipping.get("po_no", "")), ("", ""), ("", "")]
-    rows = [[p("EXPORTER / SELLER", "section"), "", p("PACKING LIST INFORMATION", "section"), ""]]
-    rows += [[p(exporter[i]), "", p(invoice[i][0]), p(invoice[i][1])] for i in range(5)]
-    info = Table(rows, colWidths=[col_widths[0] + col_widths[1], col_widths[2] + col_widths[3],
-                                 col_widths[4] + col_widths[5], col_widths[6] + col_widths[7]])
-    info.setStyle(TableStyle([("SPAN", (0, 0), (1, 0)), ("SPAN", (2, 0), (3, 0)),
-                              ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1F3B66")),
-                              ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-                              ("FONTNAME", (0, 0), (-1, 0), DEFAULT_BOLD_FONT),
-                              ("SPAN", (0, 1), (1, 1)), ("SPAN", (0, 2), (1, 2)), ("SPAN", (0, 3), (1, 3)),
-                              ("SPAN", (0, 4), (1, 4)), ("SPAN", (0, 5), (1, 5)),
-                              ("BACKGROUND", (2, 1), (2, -1), LIGHT_GRAY), ("FONTNAME", (2, 1), (2, -1), DEFAULT_BOLD_FONT),
-                              ("GRID", (0, 0), (-1, -1), .35, MID_GRAY), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                              ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
-                              ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]))
-    story.append(info)
-
-    # 수하인·매수인은 다른 회사일 수 있어 두 칸으로 나눠 인쇄한다(Commercial Invoice 와 동일).
-    consignee_party, buyer_party = doc_parties(data)
-    consignee_lines, buyer_lines = party_lines(consignee_party), party_lines(buyer_party)
-    rows = [[p("CONSIGNEE", "section"), "", p("BUYER (if different)", "section"), ""]]
-    rows += [[p(consignee_lines[i]), "", p(buyer_lines[i]), ""] for i in range(3)]
-    consignee = Table(rows, colWidths=[col_widths[0] + col_widths[1], col_widths[2] + col_widths[3],
-                                      col_widths[4] + col_widths[5], col_widths[6] + col_widths[7]])
-    consignee.setStyle(TableStyle([("SPAN", (0, 0), (1, 0)), ("SPAN", (2, 0), (3, 0)),
-                                   ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1F3B66")),
-                                   ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-                                   ("FONTNAME", (0, 0), (-1, 0), DEFAULT_BOLD_FONT),
-                                   ("SPAN", (0, 1), (1, 1)), ("SPAN", (0, 2), (1, 2)), ("SPAN", (0, 3), (1, 3)),
-                                   ("SPAN", (2, 1), (3, 1)), ("SPAN", (2, 2), (3, 2)), ("SPAN", (2, 3), (3, 3)),
-                                   ("GRID", (0, 0), (-1, -1), .35, MID_GRAY), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                                   ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
-                                   ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]))
-    story += [consignee, section("SHIPPING INFORMATION")]
-    # 항목 이름·순서는 입력 화면(7단계 Packing List 탭)과 같게 맞춘다.
-    shipping_rows = [[p(a), p(b), p(c), p(d)] for a, b, c, d in [
-        ("Vessel / IMO No.", _vessel_imo(shipping, vessel), "Carrier", shipping.get("carrier", "")),
-        ("Place of Departure", shipping.get("port_loading", ""), "Place of Destination", shipping.get("port_discharge", "")),
-        ("ETD", shipping.get("etd", ""), "ETA", shipping.get("eta", "")),
-        ("Incoterms", terms.get("incoterms", ""), "Payment Terms", terms.get("payment_terms", "")),
-        ("Packing", terms.get("packing_type", ""), "Country of Origin", shipping.get("sm_origin", "")),
-        ("Final Destination", shipping.get("sm_final_dest", ""), "", "")]]
-    shipping_table = Table(shipping_rows, colWidths=[col_widths[0] + col_widths[1], col_widths[2] + col_widths[3],
-                                                     col_widths[4] + col_widths[5], col_widths[6] + col_widths[7]])
-    shipping_table.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), .35, MID_GRAY),
-        ("BACKGROUND", (0, 0), (0, -1), LIGHT_GRAY), ("BACKGROUND", (2, 0), (2, -1), LIGHT_GRAY),
-        ("FONTNAME", (0, 0), (0, -1), DEFAULT_BOLD_FONT), ("FONTNAME", (2, 0), (2, -1), DEFAULT_BOLD_FONT),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LEFTPADDING", (0, 0), (-1, -1), 4),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 4), ("TOPPADDING", (0, 0), (-1, -1), 3),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]))
-    story += [shipping_table, section("SHIPPING MARKS")]
-
-    # 병합된 sm_*(CI 상속 + PL 수정) 로 항상 재구성. 없으면 저장된 문자열로 폴백.
-    marks = compose_shipping_marks(shipping) or (shipping.get("shipping_marks") or "").strip()
-    mark_lines = marks.splitlines()
-    split_at = (len(mark_lines) + 1) // 2
-    marks_table = Table([[p("\n".join(mark_lines[:split_at])), p("\n".join(mark_lines[split_at:]))]],
-                        colWidths=half_widths)
-    marks_table.setStyle(TableStyle([("BOX", (0, 0), (-1, -1), .35, MID_GRAY), ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                                     ("LINEBEFORE", (1, 0), (1, -1), .35, MID_GRAY),
-                                     ("LEFTPADDING", (0, 0), (-1, -1), 4), ("TOPPADDING", (0, 0), (-1, -1), 4),
-                                     ("BOTTOMPADDING", (0, 0), (-1, -1), 4)]))
-    story.append(marks_table)
-
-    # ── 품목 표(가격 없음) ─────────────────────────────────────────────────
-    # 9열: No · Description · Part No · Qty · Unit · No.&Kind of Pkgs · N.W.(kg) · G.W.(kg) · Meas.(m³)
-    pl_units = [5, 22, 14, 7, 8, 15, 11, 11, 11]
-    pl_w = [page_width * u / sum(pl_units) for u in pl_units]
-    headers = ["No.", "Description", "Part No.", "Q'ty", "Unit", "No. & Kind\nof Packages",
-               "N.W. (kg)", "G.W. (kg)", "Meas. (m³)"]
-    item_rows = [[p(h, "th") for h in headers]]
-
-    def _numtxt(v):
+    def num(v: Any) -> str:
+        """0·빈값은 빈 칸 — 서식에 0 이 줄줄이 찍히지 않게."""
         return str(v).strip() if v not in (None, "", 0, 0.0) else ""
 
+    story: List[Any] = []
+    story += _letterhead(company, "PACKING LIST", s)
+    # Packing List 는 자체 번호·발행일이 없다 — 딸려 나가는 송장의 번호·발행일을 싣는다.
+    story += [form.doc_info([("Invoice No.", shipping.get("ci_no", "") or data.get("doc_no", "")),
+                             ("Invoice Date", pi_doc_date(shipping.get("ci_date", "") or data.get("date", ""))),
+                             ("PO No.", shipping.get("po_no", ""))], quad), Spacer(1, 3 * mm)]
+    story += [form.band("CONSIGNEE", "BUYER (if different)", widths=form.cols(5, 8)),
+              form.pairs([("Company Name", consignee.get("name", ""), "Company Name", buyer.get("name", "")),
+                          ("Address", consignee.get("address", ""), "Address", buyer.get("address", "")),
+                          ("Contact", consignee.get("contact", ""), "Contact", buyer.get("contact", "")),
+                          ("e-mail", consignee.get("email", ""), "e-mail", buyer.get("email", ""))], quad)]
+    story += [form.band("SHIPPING INFORMATION"),
+              form.pairs(_invoice_shipping_rows(data)
+                         + [("Packing", terms.get("packing_type", ""),
+                             "Country of Origin", shipping.get("sm_origin", ""))], quad),
+              Spacer(1, 3 * mm)]
+
+    # ── 품목 표(가격 없음) — 머리행 2줄, Dim.(cm) 아래 L/W/H 세 칸 ───────────
+    head1 = [form.p(h, form.th) for h in
+             ["No.", "Description", "Part No.", "Q'ty", "Unit", "No. & Kind of Packages",
+              "N.W. (kg)", "G.W. (kg)", "Dim. (cm)", "", "", "Meas. (m³)"]]
+    head2 = ["", "", "", "", "", "", "", ""] + [form.p(x, form.th) for x in ("L", "W", "H")] + [""]
+    rows: List[List[Any]] = [head1, head2]
     for it in items:
-        item_rows.append([p(it["item_no"], "tiny"), p(it["description"], "tiny"), p(it["part_no"], "tiny"),
-                          p(f"{it['qty']:g}", "tiny"), p(it["unit"], "tiny"), p(_pkg_text(it), "tiny"),
-                          p(_numtxt(it.get("net_weight")), "tiny"), p(_numtxt(it.get("gross_weight")), "tiny"),
-                          p(_numtxt(it.get("measurement")), "tiny")])
+        dims = _dim_parts(it.get("dimension"))
+        rows.append([form.p(it["item_no"], form.center), form.p(it["description"], "base"),
+                     form.p(it["part_no"], "base"), form.p(f"{it['qty']:g}", form.center),
+                     form.p(it["unit"], form.center), form.p(_pkg_text(it), form.center),
+                     form.p(num(it.get("net_weight")), form.right), form.p(num(it.get("gross_weight")), form.right)]
+                    + [form.p(d, form.center) for d in dims]
+                    + [form.p(num(it.get("measurement")), form.right)])
+    filler = max(0, PL_MIN_ITEM_ROWS - len(items))
+    rows += [[""] * 12 for _ in range(filler)]
+
     # 합계행 — 전체 포장 규격을 직접 적었으면 그 값, 아니면 품목별 합산(packing_totals).
     tot = packing_totals(data)
-    item_rows.append([p("", "th"), p("TOTAL", "th"), p("", "th"), p("", "th"), p("", "th"),
-                      p(tot["packages"], "th"), p(tot["net_weight"], "th"),
-                      p(tot["gross_weight"], "th"), p(tot["measurement"], "th")])
-    item_table = Table(item_rows, colWidths=pl_w, repeatRows=1)
-    last = len(item_rows) - 1
-    cmds = [("BACKGROUND", (0, 0), (-1, 0), NAVY), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-            ("GRID", (0, 0), (-1, -1), .35, MID_GRAY), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("ALIGN", (3, 1), (4, -1), "CENTER"), ("ALIGN", (6, 1), (-1, -1), "RIGHT"),
-            ("LEFTPADDING", (0, 0), (-1, -1), 3), ("RIGHTPADDING", (0, 0), (-1, -1), 3),
-            ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
-            # 합계행 강조.
-            ("BACKGROUND", (0, last), (-1, last), LIGHT_BLUE),
-            ("TEXTCOLOR", (0, last), (-1, last), colors.black),
-            ("FONTNAME", (0, last), (-1, last), DEFAULT_BOLD_FONT),
-            ("SPAN", (1, last), (4, last))]
-    for i in range(2, len(item_rows) - 1, 2):
-        cmds.append(("BACKGROUND", (0, i), (-1, i), colors.HexColor("#FAFBFC")))
-    item_table.setStyle(TableStyle(cmds))
-    story.append(item_table)
+    dims = [num(shipping.get("sm_dim_l")), num(shipping.get("sm_dim_w")), num(shipping.get("sm_dim_h"))]
+    unit = items[0]["unit"] if items else ""
+    total_row = [form.p("TOTAL", form.grand), "", "",
+                 form.p(_g(sum(_num(it["qty"]) for it in items)), form.grand),
+                 form.p(unit, form.grand), form.p(tot["packages"], form.grand_right),
+                 form.p(tot["net_weight"], form.grand_right), form.p(tot["gross_weight"], form.grand_right)] \
+        + [form.p(d, form.grand) for d in dims] + [form.p(tot["measurement"], form.grand_right)]
+    rows.append(total_row)
 
-    # ── Packing Information(자유 메모) + 선언 ─────────────────────────────
+    last = len(rows) - 1
+    table = Table(rows, colWidths=item_w, repeatRows=2,
+                  rowHeights=[None, None] + [None] * len(items) + [15] * filler + [None])
+    table.setStyle(form.item_style(len(rows) - 1, extra=[
+        ("BACKGROUND", (0, 0), (-1, 1), NAVY),
+        ("SPAN", (0, 0), (0, 1)), ("SPAN", (1, 0), (1, 1)), ("SPAN", (2, 0), (2, 1)),
+        ("SPAN", (3, 0), (3, 1)), ("SPAN", (4, 0), (4, 1)), ("SPAN", (5, 0), (5, 1)),
+        ("SPAN", (6, 0), (6, 1)), ("SPAN", (7, 0), (7, 1)), ("SPAN", (8, 0), (10, 0)),
+        ("SPAN", (11, 0), (11, 1)),
+        ("BACKGROUND", (0, last), (-1, last), LIGHT_BLUE), ("SPAN", (0, last), (2, last)),
+    ]))
+    story.append(table)
+
+    # ── Packing Information(자유 메모) — 적었을 때만 붙인다 ────────────────
     packing_info = (data.get("packing_info") or "").strip()
     if packing_info:
-        story += [Spacer(1, 2 * mm), section("PACKING INFORMATION")]
-        note = Table([[p(packing_info)]], colWidths=[page_width])
+        note = Table([[form.p(packing_info)]], colWidths=[page_width])
         note.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), .35, MID_GRAY),
-                                  ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                                  ("LEFTPADDING", (0, 0), (-1, -1), 4), ("TOPPADDING", (0, 0), (-1, -1), 4),
-                                  ("BOTTOMPADDING", (0, 0), (-1, -1), 4)]))
-        story.append(note)
-    story.append(Spacer(1, 2 * mm))
-    declaration = Table([[p("We hereby certify that this Packing List is true and correct.")]],
-                        colWidths=[page_width])
-    declaration.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), .35, MID_GRAY),
-                                      ("LEFTPADDING", (0, 0), (-1, -1), 4)]))
-    story.append(declaration)
+                                  ("VALIGN", (0, 0), (-1, -1), "TOP")] + form.CELL))
+        story += [Spacer(1, 3 * mm), form.band("PACKING INFORMATION"), note]
 
-    signature_image = image(asset("Authorized signature_Sungyeon Cho.jpg", "signature.png", "signature.jpg"), 35 * mm, 11 * mm)
-    stamp_image = image(asset("Company stamp_K-Maris Energy & Solutions.jpg", "stamp.png", "stamp.jpg"), 14 * mm, 14 * mm)
-    left_sign = Table([[p("Authorized Signature", "base"), signature_image]], colWidths=[32 * mm, half_widths[0] - 32 * mm])
-    right_sign = Table([[p(f"{company.get('company_name_en', '')}\n(Company Stamp)", "base"), stamp_image]],
-                       colWidths=[half_widths[1] - 25 * mm, 25 * mm])
-    inner_sign_style = TableStyle([
-        ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
-        ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-    ])
-    left_sign.setStyle(inner_sign_style)
-    right_sign.setStyle(inner_sign_style)
-    sign = Table([[left_sign, right_sign]], colWidths=half_widths, rowHeights=[15 * mm])
-    sign.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), .35, MID_GRAY),
-                              ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                              ("FONTNAME", (0, 0), (-1, -1), DEFAULT_BOLD_FONT),
-                              ("LEFTPADDING", (0, 0), (-1, -1), 0),
-                              ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-                              ("TOPPADDING", (0, 0), (-1, -1), 0),
-                              ("BOTTOMPADDING", (0, 0), (-1, -1), 0)]))
-    story += [Spacer(1, 2 * mm), sign]
-    story.append(Spacer(1, 2 * mm))
-    story.append(_footer_center(s))
+    story += [Spacer(1, 3 * mm), form.band("DECLARATION"),
+              form.declaration("We hereby certify that this Packing List is true and correct."),
+              Spacer(1, 2 * mm)]
+    sign_img, stamp_img = _form_signature_images()
+    story += [form.signature([("Authorized Signature", sign_img, 40 * mm),
+                              (f"{company.get('company_name_en', '')}\n(Company Stamp)", stamp_img, 22 * mm),
+                              ("Received by\n(Company Stamp & Date)", "", 0)], signs),
+              Spacer(1, 2 * mm), _footer_center(s)]
+
     doc.build(story, onFirstPage=_footer, onLaterPages=_footer)
     return buffer.getvalue()
 
