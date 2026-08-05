@@ -59,6 +59,7 @@ from _core import (
     generate_tax_xlsx,
     generate_ci_xlsx,
     generate_pl_xlsx,
+    generate_pi_xlsx,
     get_session,
     make_document_xlsx,
     require_token,
@@ -289,6 +290,19 @@ def save_proforma_invoice(order_id: int, body: ProformaInvoiceSave):
         s.close()
 
 
+def _pi_payload(s, order, pi) -> dict:
+    """Proforma Invoice 발행 payload — PDF·Excel 이 같은 값을 쓰도록 한 곳에서 만든다."""
+    return build_payload(
+        doc_no=pi.pi_no, date=pi.date,
+        customer=_customer_for_order(s, order),
+        vessel=_vessel_for_order(s, order),
+        items=pi.items or [], terms=pi.terms or {},
+        currency=pi.currency or "USD", vat_rate=pi.vat_rate or 0.0,
+        shipping=pi.shipping or {}, po_no=order.po_no or "",
+        export_ref=_project_no_for_order(s, order),
+    )
+
+
 @app.get("/api/admin/documents/{order_id}/pi/pdf",
          dependencies=[Depends(require_token)])
 def proforma_invoice_pdf(order_id: int):
@@ -298,17 +312,27 @@ def proforma_invoice_pdf(order_id: int):
         pi = _latest_pi(s, order_id) if order else None
         if not order or not pi:
             raise HTTPException(status_code=404, detail="Proforma Invoice가 없습니다.")
-        payload = build_payload(
-            doc_no=pi.pi_no, date=pi.date,
-            customer=_customer_for_order(s, order),
-            vessel=_vessel_for_order(s, order),
-            items=pi.items or [], terms=pi.terms or {},
-            currency=pi.currency or "USD", vat_rate=pi.vat_rate or 0.0,
-            shipping=pi.shipping or {}, po_no=order.po_no or "",
-            export_ref=_project_no_for_order(s, order),
-        )
-        pdf = generate_pdf("proforma_invoice", payload)
+        pdf = generate_pdf("proforma_invoice", _pi_payload(s, order, pi))
         return _doc_file_response(pdf, f"{pi.pi_no}_PI.pdf", "application/pdf")
+    finally:
+        s.close()
+
+
+@app.get("/api/admin/documents/{order_id}/pi/xlsx",
+         dependencies=[Depends(require_token)])
+def proforma_invoice_xlsx(order_id: int):
+    """Proforma Invoice 전용 Excel — PI PDF 와 같은 데이터·같은 서식."""
+    s = get_session()
+    try:
+        order = s.query(Order).filter_by(id=order_id).first()
+        pi = _latest_pi(s, order_id) if order else None
+        if not order or not pi:
+            raise HTTPException(status_code=404, detail="Proforma Invoice가 없습니다.")
+        xlsx = generate_pi_xlsx(_pi_payload(s, order, pi))
+        return _doc_file_response(
+            xlsx, f"{pi.pi_no}_ProformaInvoice.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
     finally:
         s.close()
 

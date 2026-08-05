@@ -1056,7 +1056,7 @@ function ProformaInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChang
       </fieldset>
       <div className="form-actions doc-actions">
         <div className="doc-actions-left">
-          <DocPreviewButton orderId={data.order.id} kind="pi/pdf" filename="Proforma Invoice.pdf" disabled={!data.pi} />
+          <DocPreviewButton orderId={data.order.id} kind="pi/pdf" filename="Proforma Invoice.pdf" disabled={!data.pi} xlsxKind="pi/xlsx" />
         </div>
         <div className="doc-actions-center">
           <span className="hint-inline">Total invoice value {dualCurrencyText(totalInvoiceValue, currency)} · {fxRateText()}</span>
@@ -2545,7 +2545,7 @@ function DocPreviewButton({
   filename: string;
   disabled: boolean;
   // 지정 시 미리보기 우측상단에 Excel 다운로드 버튼을 노출한다.
-  xlsxKind?: "ci/xlsx" | "sm/xlsx" | "pl/xlsx";
+  xlsxKind?: "pi/xlsx" | "ci/xlsx" | "sm/xlsx" | "pl/xlsx";
 }) {
   const [url, setUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);

@@ -987,6 +987,222 @@ def _make_commercial_invoice_pdf(data: Dict[str, Any], company: Dict[str, Any]) 
     return buffer.getvalue()
 
 
+PI_COLUMN_UNITS = [6, 14.5, 19.296875, 13.5, 12, 8, 14, 18.296875]
+"""Proforma Invoice 8열 격자 — templates/'proforma invoice_sample.xlsx' 의 열 너비.
+PDF(_make_proforma_invoice_pdf)와 Excel(doc_xlsx.make_proforma_invoice_xlsx)이 같은
+격자를 쓰기 때문에 두 파일의 칸 위치가 정확히 겹친다. 여기만 고치면 둘 다 바뀐다."""
+
+PI_MIN_ITEM_ROWS = 5
+"""품목이 적어도 표를 이 행수만큼 빈 줄로 채운다(참조 양식과 같은 인상)."""
+
+
+def pi_decimals(currency: str) -> int:
+    """송장 금액 소수 자리 — 소수 단위가 없는 통화(원·엔)만 정수로 찍는다."""
+    return 0 if (currency or "").upper() in {"KRW", "JPY"} else 2
+
+
+def pi_charges(data: Dict[str, Any]) -> Dict[str, float]:
+    """Proforma Invoice 합계 — 입력 화면(PI 탭)과 같은 계산.
+    Total invoice value = 품목 소계 + Freight + Packing + Insurance + VAT,
+    VAT 는 부대비용까지 더한 금액에 매긴다."""
+    terms = data.get("terms", {}) or {}
+
+    def charge(key: str) -> float:
+        try:
+            return float(terms.get(key) or 0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    subtotal = sum(_num(it.get("amount", 0)) for it in normalize_items(data.get("items", [])))
+    freight, packing, insurance = charge("freight"), charge("packing"), charge("insurance")
+    rate = _num(data.get("vat_rate", 0))
+    if rate > 1:  # 프론트는 퍼센트(10), 이 모듈은 분수(0.1) 규약.
+        rate /= 100.0
+    taxable = subtotal + freight + packing + insurance
+    vat = taxable * rate
+    return {
+        "subtotal": subtotal, "freight": freight, "packing": packing,
+        "insurance": insurance, "vat_rate": rate, "vat": vat, "total": taxable + vat,
+    }
+
+
+def pi_doc_date(value: Any) -> str:
+    """송장 일자 표기 — 참조 양식과 같은 '05-Aug-2026'. 날짜가 아니면 원문 그대로."""
+    text = str(value or "").strip()
+    try:
+        return date.fromisoformat(text[:10]).strftime("%d-%b-%Y")
+    except ValueError:
+        return text
+
+
+def _make_proforma_invoice_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> bytes:
+    """Proforma Invoice PDF — templates/'proforma invoice_sample' 서식 그대로.
+
+    구성: 레터헤드 → 문서정보(우측 반쪽) → BUYER → SHIPPING INFORMATION → 품목표 →
+    합계(Subtotal/Freight/Packing/Insurance/VAT/TOTAL INVOICE VALUE) → BANK INFORMATION →
+    DECLARATION → 서명·직인. 같은 payload 로 만드는 Excel 과 칸 위치가 겹치도록
+    PI_COLUMN_UNITS(엑셀 열 너비)를 그대로 비율로 환산해 쓴다.
+    """
+    s = _styles()
+    shipping = data.get("shipping", {}) or {}
+    terms = data.get("terms", {}) or {}
+    items = normalize_items(data.get("items", []))
+    currency = (data.get("currency") or "USD").upper()
+    _, buyer = doc_parties(data)
+    money = pi_charges(data)
+    dec = pi_decimals(currency)
+
+    def amount(value: Any) -> str:
+        """0 은 참조 양식처럼 '-' 로 — 부대비용이 없는 줄을 0.00 으로 채우지 않는다."""
+        v = _num(value)
+        return "-" if abs(v) < 0.5 / (10 ** dec) else f"{v:,.{dec}f}"
+
+    buffer = io.BytesIO()
+    page_width = 190 * mm
+    doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=10 * mm, rightMargin=10 * mm,
+                            topMargin=7 * mm, bottomMargin=12 * mm, title="PROFORMA INVOICE",
+                            author="K-MARIS Energy & Solutions Co., Ltd.")
+
+    cw = [page_width * u / sum(PI_COLUMN_UNITS) for u in PI_COLUMN_UNITS]
+    quad = [cw[0] + cw[1], cw[2] + cw[3], cw[4] + cw[5], cw[6] + cw[7]]   # 라벨·값 4칸
+    item_w = [cw[0], cw[1] + cw[2], cw[3], cw[4], cw[5], cw[6], cw[7]]    # 품목표 7칸
+    half = [sum(cw[:4]), sum(cw[4:])]                                     # 서명 2칸
+    label_font = ParagraphStyle("KMPiLabel", parent=s["small"], fontName=DEFAULT_BOLD_FONT)
+    th = ParagraphStyle("KMPiTh", parent=s["small"], fontName=DEFAULT_BOLD_FONT, textColor=colors.white,
+                        alignment=TA_CENTER)
+    center = ParagraphStyle("KMPiCenter", parent=s["base"], alignment=TA_CENTER)
+    right = ParagraphStyle("KMPiRight", parent=s["base"], alignment=TA_RIGHT)
+
+    def p(value: Any, style: str | ParagraphStyle = "small") -> Paragraph:
+        return _p(value, style if isinstance(style, ParagraphStyle) else s[style])
+
+    CELL = [("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+            ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]
+
+    def section(title: str) -> Table:
+        t = Table([[p(title, "section")]], colWidths=[page_width])
+        t.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#1F3B66")),
+                               ("GRID", (0, 0), (-1, -1), .35, MID_GRAY)] + CELL))
+        return t
+
+    def pairs(rows: List[tuple]) -> Table:
+        """'라벨 | 값 | 라벨 | 값' 두 쌍짜리 행들 — 라벨 칸은 회색 볼드."""
+        t = Table([[p(a, label_font), p(b), p(c, label_font), p(d)] for a, b, c, d in rows],
+                  colWidths=quad)
+        t.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), .35, MID_GRAY),
+                               ("BACKGROUND", (0, 0), (0, -1), LIGHT_GRAY),
+                               ("BACKGROUND", (2, 0), (2, -1), LIGHT_GRAY)] + CELL))
+        return t
+
+    story: List[Any] = []
+    story += _letterhead(company, "PROFORMA INVOICE", s)
+
+    # ── 문서 정보 — 참조 양식처럼 오른쪽 반쪽에만 그린다 ──────────────────
+    head_rows = [("Invoice No.", data.get("doc_no", "")),
+                 ("Invoice Date", pi_doc_date(data.get("date", ""))),
+                 ("PO No.", shipping.get("po_no", ""))]
+    head = Table([["", "", p(k, label_font), p(v)] for k, v in head_rows], colWidths=quad)
+    head.setStyle(TableStyle([("GRID", (2, 0), (-1, -1), .35, MID_GRAY),
+                              ("BACKGROUND", (2, 0), (2, -1), LIGHT_GRAY)] + CELL))
+    story += [head, Spacer(1, 3 * mm)]
+
+    # ── BUYER ─────────────────────────────────────────────────────────────
+    story += [section("BUYER"),
+              pairs([("Company Name", buyer.get("name", ""), "Address", buyer.get("address", "")),
+                     ("Contact", buyer.get("contact", ""), "e-mail", buyer.get("email", ""))]),
+              Spacer(1, 3 * mm)]
+
+    # ── SHIPPING INFORMATION — 이름·순서는 입력 화면(PI 탭)과 같다 ─────────
+    story += [section("SHIPPING INFORMATION"), pairs([
+        ("Vessel / IMO No.", _vessel_imo(shipping, data.get("vessel")), "Carrier", shipping.get("carrier", "")),
+        ("Place of Departure", shipping.get("port_loading", ""), "Place of Destination", shipping.get("port_discharge", "")),
+        ("ETD", shipping.get("etd", ""), "ETA", shipping.get("eta", "")),
+        ("Incoterms", terms.get("incoterms", ""), "Payment Terms", terms.get("payment_terms", "")),
+        ("Currency", currency, "Country of Origin", shipping.get("sm_origin", "")),
+    ]), Spacer(1, 3 * mm)]
+
+    # ── 품목표 ────────────────────────────────────────────────────────────
+    headers = ["No.", "Description", "Part No.", "HS Code", "Qty", "Unit Price", f"Amount ({currency})"]
+    rows: List[List[Any]] = [[p(h, th) for h in headers]]
+    for it in items:
+        rows.append([p(it["item_no"], center), p(it["description"], "base"), p(it["part_no"], "base"),
+                     p(it.get("hs_code") or shipping.get("hs_code", ""), center),
+                     p(f"{it['qty']:g}", center), p(amount(it["unit_price"]), right),
+                     p(amount(it["amount"]), right)])
+    for _ in range(max(0, PI_MIN_ITEM_ROWS - len(items))):   # 참조 양식처럼 빈 줄로 채운다
+        rows.append([""] * 7)
+    item_table = Table(rows, colWidths=item_w, repeatRows=1,
+                       rowHeights=[None] * (len(items) + 1) + [16] * max(0, PI_MIN_ITEM_ROWS - len(items)))
+    cmds = [("BACKGROUND", (0, 0), (-1, 0), NAVY), ("GRID", (0, 0), (-1, -1), .35, MID_GRAY)] + CELL
+    for i in range(2, len(rows), 2):
+        cmds.append(("BACKGROUND", (0, i), (-1, i), colors.HexColor("#FAFBFC")))
+    item_table.setStyle(TableStyle(cmds))
+    story.append(item_table)
+
+    # ── 합계 — 라벨은 Unit Price 칸, 값은 Amount 칸에 맞춘다 ───────────────
+    total_rows = [("Subtotal", money["subtotal"]), ("Freight", money["freight"]),
+                  ("Packing", money["packing"]), ("Insurance", money["insurance"]),
+                  ("VAT", money["vat"])]
+    totals = Table([["", p(k, label_font), p(amount(v), right)] for k, v in total_rows],
+                   colWidths=[sum(item_w[:5]), item_w[5], item_w[6]])
+    totals.setStyle(TableStyle([("GRID", (1, 0), (-1, -1), .35, MID_GRAY),
+                                ("LINEAFTER", (0, 0), (0, -1), .35, MID_GRAY),
+                                ("LINEBEFORE", (0, 0), (0, -1), .35, MID_GRAY),
+                                ("ALIGN", (1, 0), (1, -1), "RIGHT"),
+                                ("BACKGROUND", (1, 0), (1, -1), LIGHT_GRAY)] + CELL))
+    grand = Table([[p("TOTAL INVOICE VALUE", ParagraphStyle("KMPiGrandL", parent=s["base"],
+                                                            fontName=DEFAULT_BOLD_FONT, alignment=TA_CENTER)),
+                    p(amount(money["total"]), ParagraphStyle("KMPiGrandV", parent=right,
+                                                             fontName=DEFAULT_BOLD_FONT))]],
+                  colWidths=[sum(item_w[:6]), item_w[6]])
+    grand.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), .35, MID_GRAY),
+                               ("BACKGROUND", (0, 0), (-1, -1), LIGHT_BLUE)] + CELL))
+    story += [totals, grand, Spacer(1, 3 * mm)]
+
+    # ── BANK INFORMATION — 통화에 맞는 계좌(외화/원화)를 Settings 에서 가져온다 ──
+    foreign = currency != "KRW"
+    holder = (company.get("fx_bank_holder") if foreign else company.get("bank_holder")) or company.get("company_name_en", "")
+    bank = (company.get("fx_bank_name") if foreign else company.get("bank_name")) or ""
+    account = (company.get("fx_bank_account") if foreign else company.get("bank_account")) or ""
+    bank_rows = [("Remittee's name", holder, "Bank Name & Address", bank),
+                 ("Swift Code", company.get("swift", ""), "Remittee's Account No.", account)]
+    bank_table = Table([[p(a, label_font), p(b, center), p(c, label_font), p(d, center)]
+                        for a, b, c, d in bank_rows], colWidths=quad)
+    bank_table.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), .35, MID_GRAY),
+                                    ("BACKGROUND", (0, 0), (0, -1), LIGHT_GRAY),
+                                    ("BACKGROUND", (2, 0), (2, -1), LIGHT_GRAY)] + CELL))
+    story += [section("BANK INFORMATION"), bank_table]
+
+    # ── DECLARATION / 서명 ────────────────────────────────────────────────
+    declaration = Table([[p("We hereby certify that this Proforma Invoice is true and correct.")]],
+                        colWidths=[page_width])
+    declaration.setStyle(TableStyle([("LINEBELOW", (0, 0), (-1, -1), .35, MID_GRAY),
+                                     ("LINEABOVE", (0, 0), (-1, -1), .35, MID_GRAY)] + CELL))
+    story += [section("DECLARATION"), declaration, Spacer(1, 2 * mm)]
+
+    sign_img = _pdf_image(_pdf_asset("Authorized signature_Sungyeon Cho.jpg", "signature.png", "signature.jpg"), 35 * mm, 11 * mm)
+    stamp_img = _pdf_image(_pdf_asset("Company stamp_K-Maris Energy & Solutions.jpg", "stamp.png", "stamp.jpg"), 16 * mm, 16 * mm)
+    inner = TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                        ("RIGHTPADDING", (0, 0), (-1, -1), 4), ("TOPPADDING", (0, 0), (-1, -1), 3),
+                        ("BOTTOMPADDING", (0, 0), (-1, -1), 0)])
+    left_sign = Table([[p("Authorized Signature", label_font), sign_img]],
+                      colWidths=[32 * mm, half[0] - 32 * mm])
+    right_sign = Table([[p(f"{company.get('company_name_en', '')}\n(Company Stamp)", label_font), stamp_img]],
+                       colWidths=[half[1] - 25 * mm, 25 * mm])
+    left_sign.setStyle(inner)
+    right_sign.setStyle(inner)
+    sign = Table([[left_sign, right_sign]], colWidths=half, rowHeights=[20 * mm])
+    sign.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), .35, MID_GRAY),
+                              ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                              ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                              ("TOPPADDING", (0, 0), (-1, -1), 0), ("BOTTOMPADDING", (0, 0), (-1, -1), 0)]))
+    story += [sign, Spacer(1, 2 * mm), _footer_center(s)]
+
+    doc.build(story, onFirstPage=_footer, onLaterPages=_footer)
+    return buffer.getvalue()
+
+
 def _kor_won_amount(value: Any) -> str:
     """숫자 금액 → 한글 정식 표기 '일금...원정' (예: 471438 → 일금사십칠만일천사백삼십팔원정)."""
     n = int(round(_num(value)))
@@ -2170,6 +2386,8 @@ def make_pdf(doc_type: str, data: Dict[str, Any], company: Optional[Dict[str, An
         return _make_purchase_order_pdf(payload, payload["company"])
     if doc_type == "commercial_invoice":
         return _make_commercial_invoice_pdf(payload, payload["company"])
+    if doc_type == "proforma_invoice":
+        return _make_proforma_invoice_pdf(payload, payload["company"])
     if doc_type == "tax_invoice":
         return _make_tax_invoice_pdf(payload, payload["company"])
     if doc_type == "shipping_mark":
