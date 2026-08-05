@@ -15,7 +15,7 @@ from openpyxl.utils import get_column_letter
 
 from services.kmaris_docs import (
     normalize_items, calc_totals, _num, DOC_TITLES, doc_parties,
-    packing_totals, _dim_parts, _invoice_shipping_rows,
+    packing_totals, consignee_mark_lines, _dim_parts, _invoice_shipping_rows,
     PI_COLUMN_UNITS, PI_MIN_ITEM_ROWS, PL_COLUMN_UNITS, PL_MIN_ITEM_ROWS,
     pi_decimals, pi_charges, pi_doc_date,
 )
@@ -81,14 +81,15 @@ def _apply_noto_font(wb: "Workbook") -> None:
 
 
 def _compose_marks(sh: Dict[str, Any]) -> str:
-    """구조화 Shipping Marks(sm_*)를 여러 줄 문자열로 합성 — 프론트 composeShippingMarks 와
+    """구조화 Shipping Mark(sm_*)를 여러 줄 문자열로 합성 — 프론트 composeShippingMarks 와
     동일 규약(무게·치수 포함). 저장된 shipping_marks 문자열이 없거나 비어도 항상 재구성한다."""
     lines = []
     def push(v):
         if v and str(v).strip():
             lines.append(str(v).strip())
     push(sh.get("sm_type"))
-    if sh.get("sm_consignee"): push(f"C/O {sh['sm_consignee']}")
+    for line in consignee_mark_lines(sh):
+        push(line)
     if sh.get("sm_vessel"): push(f"M/V {str(sh['sm_vessel']).upper()}")
     if sh.get("sm_po_no"): push(f"P.O. NO.: {sh['sm_po_no']}")
     if sh.get("sm_ref_no"): push(f"REF. NO.: {sh['sm_ref_no']}")
@@ -100,7 +101,6 @@ def _compose_marks(sh: Dict[str, Any]) -> str:
     dim = [sh.get("sm_dim_l"), sh.get("sm_dim_w"), sh.get("sm_dim_h")]
     if any(d and str(d).strip() for d in dim):
         push("DIM.: " + " × ".join((str(d).strip() if d and str(d).strip() else "-") for d in dim) + " CM")
-    if sh.get("sm_port_delivery"): push(f"PORT OF DELIVERY: {sh['sm_port_delivery']}")
     if sh.get("sm_final_dest"): push(f"FINAL DESTINATION: {sh['sm_final_dest']}")
     push(sh.get("sm_origin"))
     push(sh.get("sm_handling"))
@@ -738,8 +738,7 @@ def make_shipping_mark_xlsx(
     lines = []
     if shipping.get("sm_type"):
         lines.append(str(shipping["sm_type"]).upper())
-    if shipping.get("sm_consignee"):
-        lines.append(f"C/O {shipping['sm_consignee']}")
+    lines += consignee_mark_lines(shipping)
     if shipping.get("sm_vessel"):
         lines.append(f"M/V {str(shipping['sm_vessel']).upper()}")
     elif vessel.get("name"):
@@ -750,8 +749,6 @@ def make_shipping_mark_xlsx(
         lines.append(f"REF. NO. : {shipping['sm_ref_no']}")
     if shipping.get("sm_desc"):
         lines.append(str(shipping["sm_desc"]).upper())
-    if shipping.get("sm_port_delivery"):
-        lines.append(f"PORT OF DELIVERY : {str(shipping['sm_port_delivery']).upper()}")
     if shipping.get("sm_final_dest"):
         lines.append(f"FINAL DESTINATION : {str(shipping['sm_final_dest']).upper()}")
     if shipping.get("sm_case_no"):
@@ -762,7 +759,9 @@ def make_shipping_mark_xlsx(
         lines.append("(NO SHIPPING MARK DATA)")
 
     box_top = r
-    box_bottom = r + 15
+    # 16행이 기본 높이고, 줄이 그보다 많으면(수하인 주소 등) 박스를 늘린다 — 병합 셀은
+    # 자동으로 커지지 않아 고정해 두면 긴 마크가 테두리 안에서 잘린다.
+    box_bottom = r + max(15, len(lines) + 1)
     merge(box_top, 1, box_bottom, NCOL)
     put(box_top, 1, "\n".join(lines), font=mark_font, align=center)
     bd(box_top, 1, box_bottom, NCOL,

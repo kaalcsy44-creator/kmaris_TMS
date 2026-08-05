@@ -75,7 +75,7 @@ type DocKind = "pi" | "ci" | "sm" | "pl" | "pod" | "tax";
 const KIND_CFG: Record<DocKind, { label: string }> = {
   pi: { label: "Proforma Invoice" },
   ci: { label: "Commercial Invoice" },
-  sm: { label: "Shipping Marks" },
+  sm: { label: "Shipping Mark" },
   pl: { label: "Packing List" },
   pod: { label: "POD" },
   tax: { label: "Tax Invoice" },
@@ -101,7 +101,7 @@ export function DocumentsOverview({
     s === 8 ? "s8" : s === 9 ? "s9" : "s7";
   const [workView, setWorkView] = useState<WorkView>(initialView === "service" ? "service" : "parts");
   const [stage, setStage] = useState<StageTab>(stageFromProp(initialStage));
-  const [readyDoc, setReadyDoc] = useState<"pi" | "ci" | "sm" | "pl">("ci"); // 7단계 하위(Proforma(선택)/CI/PL/Shipping Marks)
+  const [readyDoc, setReadyDoc] = useState<"pi" | "ci" | "sm" | "pl">("ci"); // 7단계 하위(Proforma(선택)/CI/PL/Shipping Mark)
 
   const { data: overview, refresh } = useCachedData(
     "documents:overview",
@@ -167,7 +167,7 @@ export function DocumentsOverview({
             Packing List
           </button>
           <button className={readyDoc === "sm" ? "on" : ""} onClick={() => setReadyDoc("sm")}>
-            Shipping Marks
+            Shipping Mark
           </button>
         </div>
       ) : null}
@@ -1130,7 +1130,7 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
     try {
       // 단일 HS Code 를 모든 품목에 반영해 PDF(품목별 HS 열)와 일관되게 유지.
       const outItems = items.map((it) => ({ ...it, hs_code: shipping.hs_code || it.hs_code || "" }));
-      // 구조화 Shipping Marks → PDF 출력용 문자열로 합성해 함께 저장.
+      // 구조화 Shipping Mark → PDF 출력용 문자열로 합성해 함께 저장.
       const outShipping = { ...shipping, shipping_marks: composeShippingMarks(shipping) };
       const outTerms = { ...terms, freight, packing, insurance };
       await saveCommercialInvoice(data.order.id, { ci_no: ciNo, date, currency, vat_rate: vatRate, items: outItems, shipping: outShipping, terms: outTerms });
@@ -1199,7 +1199,7 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
       <p className="hint-inline" style={{ marginTop: 6 }}>
         Leave a buyer field empty to print the grey value — the contact registered for this deal on the RFQ, with the rest
         from the customer master. Leave the consignee empty when the goods are consigned to the buyer. The consignee company
-        is shared with the Shipping Marks tab (C/O line).
+        is shared with the Shipping Mark tab (C/O line).
       </p>
       <div className="sub-h doc-sec-h">Shipping information</div>
       <div className="form-grid doc-form-grid">
@@ -1269,7 +1269,7 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
   );
 }
 
-// Shipping Marks 전용 탭 — 케이스 마킹(sm_*) 입력. 값은 CI 레코드의 shipping 에 저장되며
+// Shipping Mark 전용 탭 — 케이스 마킹(sm_*) 입력. 값은 CI 레코드의 shipping 에 저장되며
 // 저장은 기존 CI 엔드포인트를 재사용(다른 CI 필드는 그대로 보존하고 sm_* 만 갱신).
 function ShippingMarksTab({ data, onChanged }: { data: DocumentDetail; onChanged: () => void }) {
   const [shipping, setShipping] = useState<Record<string, string>>({
@@ -1315,7 +1315,7 @@ function ShippingMarksTab({ data, onChanged }: { data: DocumentDetail; onChanged
       </fieldset>
       <div className="form-actions doc-actions">
         <div className="doc-actions-left">
-          <DocPreviewButton orderId={data.order.id} kind="sm/pdf" filename="Shipping Marks.pdf" disabled={!data.ci} xlsxKind="sm/xlsx" />
+          <DocPreviewButton orderId={data.order.id} kind="sm/pdf" filename="Shipping Mark.pdf" disabled={!data.ci} xlsxKind="sm/xlsx" />
         </div>
         <div className="doc-actions-center" />
         <div className="doc-actions-right">
@@ -1343,9 +1343,9 @@ function ShippingMarksTab({ data, onChanged }: { data: DocumentDetail; onChanged
 const PL_READONLY_KEYS = new Set([
   "port_loading", "port_discharge",
   "sm_type", "sm_vessel", "sm_consignee", "sm_po_no", "sm_ref_no", "sm_desc",
-  "sm_port_delivery", "sm_final_dest", "sm_origin",
+  "sm_final_dest", "sm_origin",
 ]);
-// 케이스 마킹(sm_*)은 Shipping Marks 탭에서 CI 에 저장하므로 PL 은 운송 정보만 자체 저장한다.
+// 케이스 마킹(sm_*)은 Shipping Mark 탭에서 CI 에 저장하므로 PL 은 운송 정보만 자체 저장한다.
 const PL_EDITABLE_KEYS = ["carrier", "bl_awb_no", "etd", "eta"];
 
 function PackingListTab({ data, onChanged }: { data: DocumentDetail; onChanged: () => void }) {
@@ -1357,7 +1357,7 @@ function PackingListTab({ data, onChanged }: { data: DocumentDetail; onChanged: 
   const [packingInfo, setPackingInfo] = useState(data.pl?.packing_info || "");
   const seed = data.pl?.items || data.ci?.items || data.order.items;
   const [items, setItems] = useState<DocumentWorkItem[]>(normalizeItems(seed, true));
-  // 선적정보·Shipping Marks — CI 값을 기본 상속하고, PL 이 저장한 값이 있으면 그것을 우선.
+  // 선적정보·Shipping Mark — CI 값을 기본 상속하고, PL 이 저장한 값이 있으면 그것을 우선.
   // 사용자가 수정한 항목만 PL 로 저장되며 나머지는 CI 를 따라간다.
   function initialShipping(): Record<string, string> {
     return {
@@ -1376,7 +1376,7 @@ function PackingListTab({ data, onChanged }: { data: DocumentDetail; onChanged: 
   const [busy, setBusy] = useState(false);
   const editable = canEditDoc(data);
 
-  // 선적 전체 포장 규격(케이스 수·중량·치수·용적)은 Shipping Marks 와 같은 칸이라 CI 에 저장한다 —
+  // 선적 전체 포장 규격(케이스 수·중량·치수·용적)은 Shipping Mark 와 같은 칸이라 CI 에 저장한다 —
   // 그래야 두 탭이 같은 값을 보고, 어느 쪽에서 고쳐도 마크와 Packing List 가 같이 움직인다.
   async function saveSharedPackingTotals() {
     if (!data.ci) return;
@@ -1405,7 +1405,7 @@ function PackingListTab({ data, onChanged }: { data: DocumentDetail; onChanged: 
     setBusy(true);
     try {
       // 수정 가능한 키만 PL 에 저장 → 확정 정보는 저장하지 않아 항상 CI 를 상속(라이브).
-      // Shipping Marks 문자열은 백엔드가 병합된 sm_* 로 재구성하므로 여기서 저장하지 않는다.
+      // Shipping Mark 문자열은 백엔드가 병합된 sm_* 로 재구성하므로 여기서 저장하지 않는다.
       const outShipping: Record<string, string> = {};
       for (const k of PL_EDITABLE_KEYS) {
         if (shipping[k] !== undefined && shipping[k] !== "") outShipping[k] = shipping[k];
@@ -1461,7 +1461,7 @@ function PackingListTab({ data, onChanged }: { data: DocumentDetail; onChanged: 
         <ShippingFields shipping={shipping} setShipping={setShipping} terms={data.ci?.terms || {}} readonlyKeys={PL_READONLY_KEYS} />
       </div>
       <p className="hint-inline" style={{ marginTop: 6 }}>
-        회색 항목은 Commercial Invoice 값을 그대로 표시합니다(수정 불가). 운송 정보만 이 Packing List 에서 수정·저장됩니다. 케이스 마킹은 Shipping Marks 탭에서 관리합니다.
+        회색 항목은 Commercial Invoice 값을 그대로 표시합니다(수정 불가). 운송 정보만 이 Packing List 에서 수정·저장됩니다. 케이스 마킹은 Shipping Mark 탭에서 관리합니다.
       </p>
       </div>
       </div>
@@ -1484,7 +1484,7 @@ function PackingListTab({ data, onChanged }: { data: DocumentDetail; onChanged: 
       />
       <p className="hint-inline" style={{ marginTop: 6 }}>
         여러 품목이 상자 하나에 들어가면 품목별로 나누지 말고 <b>합계행에 전체 포장 규격</b>(개수·종류·N.W.·G.W.·용적·L×W×H cm)을
-        적으세요. 비워 두면 품목별 입력의 합계(회색 안내값)가 문서에 나갑니다. 이 값은 <b>Shipping Marks 탭의 케이스 수·중량·치수와 같은 값</b>이라
+        적으세요. 비워 두면 품목별 입력의 합계(회색 안내값)가 문서에 나갑니다. 이 값은 <b>Shipping Mark 탭의 케이스 수·중량·치수와 같은 값</b>이라
         한쪽에서 고치면 양쪽 다 바뀝니다. 용적은 치수를 적으면 자동으로 계산해 보여줍니다.
       </p>
       <label className="form-field" style={{ marginTop: 16 }}>
@@ -1639,7 +1639,7 @@ const BUYER_FIELDS: { key: string; label: string; wide?: boolean; master: (o: Do
   { key: "buyer_email", label: "e-mail", master: (o) => o.customer_email || "" },
   { key: "buyer_address", label: "Address", wide: true, master: (o) => o.customer_address || "" },
 ];
-// 수하인 — 회사명은 Shipping Marks 의 C/O 와 같은 값(sm_consignee)을 그대로 쓴다.
+// 수하인 — 회사명은 Shipping Mark 의 C/O 와 같은 값(sm_consignee)을 그대로 쓴다.
 const CONSIGNEE_FIELDS: { key: string; label: string; wide?: boolean }[] = [
   { key: "sm_consignee", label: "Company Name" },
   { key: "consignee_contact", label: "Contact" },
@@ -1756,7 +1756,7 @@ function ShippingFields({
   );
 }
 
-// 선적 마크(Shipping Marks) — 구조화 입력 섹션(Item list 와 동일 위계의 제목).
+// 선적 마크(Shipping Mark) — 구조화 입력 섹션(Item list 와 동일 위계의 제목).
 // 각 항목은 shipping.sm_* 키에 저장하고, 저장 시 composeShippingMarks 로 여러 줄
 // 문자열(shipping.shipping_marks)을 만들어 PDF 에 출력한다.
 function ShippingMarksSection({
@@ -1778,7 +1778,7 @@ function ShippingMarksSection({
   };
   return (
     <div className="sm-section">
-      <div className="sub-h">Shipping Marks</div>
+      <div className="sub-h">Shipping Mark</div>
       <div className="form-grid doc-form-grid">
         {ro("sm_type")
           ? <ReadonlyField label="Shipping mark type" value={shipping.sm_type ?? ""} />
@@ -1789,6 +1789,11 @@ function ShippingMarksSection({
         {ro("sm_consignee")
           ? <ReadonlyField label="C/O Company / Ship Agent" value={shipping.sm_consignee ?? ""} />
           : <Field label="C/O Company / Ship Agent" value={shipping.sm_consignee ?? ""} onChange={set("sm_consignee")} />}
+        {/* C/O 주소 — Commercial Invoice 의 CONSIGNEE 주소와 같은 칸(consignee_address)이라
+            어느 탭에서 고쳐도 함께 바뀐다. 마크에서는 C/O 회사명 바로 아래 줄에 찍힌다. */}
+        {ro("consignee_address")
+          ? <ReadonlyField label="C/O Address" value={shipping.consignee_address ?? ""} wide />
+          : <Field label="C/O Address" value={shipping.consignee_address ?? ""} onChange={set("consignee_address")} wide />}
         {ro("sm_po_no")
           ? <ReadonlyField label="P.O. No." value={shipping.sm_po_no ?? ""} />
           : <Field label="P.O. No." value={shipping.sm_po_no ?? ""} onChange={set("sm_po_no")} />}
@@ -1814,9 +1819,6 @@ function ShippingMarksSection({
             <span className="sm-metric"><em>H</em><input type="number" value={shipping.sm_dim_h ?? ""} onChange={(e) => set("sm_dim_h")(e.target.value)} /></span>
           </div>
         </div>
-        {ro("sm_port_delivery")
-          ? <ReadonlyField label="Port of Delivery" value={shipping.sm_port_delivery ?? ""} />
-          : <ComboField label="Port of Delivery" value={shipping.sm_port_delivery ?? ""} onChange={set("sm_port_delivery")} options={PORT_DELIVERY_OPTIONS} />}
         {ro("sm_final_dest")
           ? <ReadonlyField label="Final Destination" value={shipping.sm_final_dest ?? ""} />
           : <ComboField label="Final Destination" value={shipping.sm_final_dest ?? ""} onChange={set("sm_final_dest")} options={FINAL_DEST_OPTIONS} />}
@@ -1913,9 +1915,8 @@ const PACKING_OPTIONS = [
   "Carton Box", "Wooden Case", "Wooden Pallet", "Crate", "Drum", "Bulk", "Maker's Original Packing",
 ];
 
-// ── Shipping Marks 섹션 선택지 ─────────────────────────────────────────────
+// ── Shipping Mark 섹션 선택지 ──────────────────────────────────────────────
 const SM_TYPE_OPTIONS = ["SHIP'S SPARES IN TRANSIT", "SHIP'S STORES", "COMMERCIAL CARGO"];
-const PORT_DELIVERY_OPTIONS = ["Busan, Korea", "Incheon, Korea", "Gwangyang, Korea", "Ulsan, Korea", "Pyeongtaek, Korea"];
 const FINAL_DEST_OPTIONS = [
   "Hong Kong", "Singapore", "Shanghai, China", "Ningbo, China", "Tokyo, Japan",
   "Kaohsiung, Taiwan", "Rotterdam, Netherlands", "Hamburg, Germany", "Los Angeles, USA", "Jebel Ali, UAE",
@@ -1993,7 +1994,7 @@ function DocDefaultsHint({ order }: { order: DocumentDetail["order"] }) {
   );
 }
 
-// Shipping Marks 구조화 필드 기본값(오더 정보로 프리필). 저장값이 있으면 덮어쓴다.
+// Shipping Mark 구조화 필드 기본값(오더 정보로 프리필). 저장값이 있으면 덮어쓴다.
 function defaultMarkFields(order: { vessel?: string; po_no?: string; customer?: string; kms_order_no?: string }): Record<string, string> {
   return {
     sm_type: "SHIP'S SPARES IN TRANSIT",
@@ -2004,17 +2005,21 @@ function defaultMarkFields(order: { vessel?: string; po_no?: string; customer?: 
     sm_ref_no: order.kms_order_no || "KMS-ORD-yymm-nnn",
     sm_desc: "MARINE SPARE PARTS",
     sm_case_no: "1-UP",
-    sm_port_delivery: "Busan, Korea",
     sm_origin: "Made in Korea",
   };
 }
 
-// 구조화 Shipping Marks 필드 → PDF 출력용 여러 줄 마크 문자열(비어있는 항목은 생략).
+// 구조화 Shipping Mark 필드 → PDF 출력용 여러 줄 마크 문자열(비어있는 항목은 생략).
+// 백엔드 kmaris_docs.compose_shipping_marks·doc_xlsx._compose_marks 와 같은 규약.
 function composeShippingMarks(s: Record<string, string>): string {
   const lines: string[] = [];
   const push = (v?: string) => { if (v && v.trim()) lines.push(v.trim()); };
   push(s.sm_type);
-  if (s.sm_consignee) push(`C/O ${s.sm_consignee}`);
+  // 수하인 — 회사명 다음에 주소를 줄마다 이어 붙인다(현장에서 인도처를 알 수 있어야 한다).
+  if (s.sm_consignee) {
+    push(`C/O ${s.sm_consignee}`);
+    (s.consignee_address || "").split("\n").forEach((line) => push(line));
+  }
   if (s.sm_vessel) push(`M/V ${s.sm_vessel.toUpperCase()}`);
   if (s.sm_po_no) push(`P.O. NO.: ${s.sm_po_no}`);
   if (s.sm_ref_no) push(`REF. NO.: ${s.sm_ref_no}`);
@@ -2026,7 +2031,6 @@ function composeShippingMarks(s: Record<string, string>): string {
   const dim = [s.sm_dim_l, s.sm_dim_w, s.sm_dim_h];
   // 치수 단위는 cm — Packing List 의 전체 포장 규격과 같은 칸(sm_dim_*)을 쓰므로 단위도 같아야 한다.
   if (dim.some((v) => v && v.trim())) push(`DIM.: ${dim.map((v) => (v && v.trim()) || "-").join(" × ")} CM`);
-  if (s.sm_port_delivery) push(`PORT OF DELIVERY: ${s.sm_port_delivery}`);
   if (s.sm_final_dest) push(`FINAL DESTINATION: ${s.sm_final_dest}`);
   push(s.sm_origin);
   push(s.sm_handling);
@@ -2099,8 +2103,8 @@ function VatRateSelect({ value, onChange }: { value: string; onChange: (v: strin
 }
 
 /** 선적 전체의 포장 규격 — 여러 품목이 상자 하나에 들어가면 무게·치수를 품목별로 나눌 수 없어
- *  합계행에 한 번만 적는다. 저장 위치는 Shipping Marks 와 같은 칸(shipping.sm_*)이라
- *  Packing List 와 Shipping Marks 탭이 늘 같은 케이스 수·중량·치수를 본다. */
+ *  합계행에 한 번만 적는다. 저장 위치는 Shipping Mark 와 같은 칸(shipping.sm_*)이라
+ *  Packing List 와 Shipping Mark 탭이 늘 같은 케이스 수·중량·치수를 본다. */
 type PackingTotals = {
   cases: string;
   kind: string;
@@ -2112,7 +2116,7 @@ type PackingTotals = {
   dim_h: string;
 };
 
-/** PackingTotals 필드 → shipping(sm_*) 키 — Shipping Marks 탭과 공유하는 저장 위치. */
+/** PackingTotals 필드 → shipping(sm_*) 키 — Shipping Mark 탭과 공유하는 저장 위치. */
 const PACKING_TOTAL_KEYS: Record<keyof PackingTotals, string> = {
   cases: "sm_total_cases",
   kind: "sm_pkg_kind",

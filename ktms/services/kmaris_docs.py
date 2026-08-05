@@ -649,7 +649,7 @@ def _terms_block(data: Dict[str, Any], doc_type: str):
                 ["B/L or AWB No.", shipping.get("bl_awb_no", "")],
                 ["ETD", shipping.get("etd", "")],
                 ["ETA", shipping.get("eta", "")],
-                ["Shipping Marks", shipping.get("shipping_marks", "")],
+                ["Shipping Mark", shipping.get("shipping_marks", "")],
             ]
         )
 
@@ -1341,8 +1341,21 @@ def _make_tax_invoice_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> byte
     return buffer.getvalue()
 
 
+def consignee_mark_lines(sh: Dict[str, Any]) -> List[str]:
+    """마크의 수하인 블록 — 'C/O 회사명' 다음에 그 회사 주소를 줄마다 이어 붙인다.
+    주소는 Commercial Invoice 의 CONSIGNEE 주소(consignee_address)와 같은 칸이라
+    한쪽에서 고치면 다른 쪽도 따라간다. 화물이 어디로 가는지가 마크의 핵심이라
+    회사명만 찍고 주소를 빼면 현장에서 인도처를 알 수 없다."""
+    name = str(sh.get("sm_consignee") or "").strip()
+    if not name:
+        return []
+    lines = [f"C/O {name}"]
+    lines += [x.strip() for x in str(sh.get("consignee_address") or "").splitlines() if x.strip()]
+    return lines
+
+
 def compose_shipping_marks(sh: Dict[str, Any]) -> str:
-    """구조화 Shipping Marks(sm_*)를 여러 줄 문자열로 재구성 — 프론트 composeShippingMarks·
+    """구조화 Shipping Mark(sm_*)를 여러 줄 문자열로 재구성 — 프론트 composeShippingMarks·
     doc_xlsx._compose_marks 와 동일 규약. PL 은 CI 상속값+PL 수정값이 병합된 sh 를 받아
     저장된 shipping_marks 문자열 대신 항상 최신 sm_* 로 재구성한다."""
     lines: List[str] = []
@@ -1352,7 +1365,8 @@ def compose_shipping_marks(sh: Dict[str, Any]) -> str:
             lines.append(str(v).strip())
 
     push(sh.get("sm_type"))
-    if sh.get("sm_consignee"): push(f"C/O {sh['sm_consignee']}")
+    for line in consignee_mark_lines(sh):
+        push(line)
     if sh.get("sm_vessel"): push(f"M/V {str(sh['sm_vessel']).upper()}")
     if sh.get("sm_po_no"): push(f"P.O. NO.: {sh['sm_po_no']}")
     if sh.get("sm_ref_no"): push(f"REF. NO.: {sh['sm_ref_no']}")
@@ -1364,7 +1378,6 @@ def compose_shipping_marks(sh: Dict[str, Any]) -> str:
     dim = [sh.get("sm_dim_l"), sh.get("sm_dim_w"), sh.get("sm_dim_h")]
     if any(d and str(d).strip() for d in dim):
         push("DIM.: " + " × ".join((str(d).strip() if d and str(d).strip() else "-") for d in dim) + " CM")
-    if sh.get("sm_port_delivery"): push(f"PORT OF DELIVERY: {sh['sm_port_delivery']}")
     if sh.get("sm_final_dest"): push(f"FINAL DESTINATION: {sh['sm_final_dest']}")
     push(sh.get("sm_origin"))
     push(sh.get("sm_handling"))
@@ -1435,8 +1448,8 @@ def _make_shipping_mark_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> by
     flow = []
     if shipping.get("sm_type"):
         flow += [mline(str(shipping["sm_type"]).upper(), head_style), Spacer(1, 3 * mm)]
-    if shipping.get("sm_consignee"):
-        flow.append(mline(f"C/O {shipping['sm_consignee']}"))
+    for line in consignee_mark_lines(shipping):
+        flow.append(mline(line))
     if shipping.get("sm_vessel"):
         flow.append(mline(f"M/V {str(shipping['sm_vessel']).upper()}"))
     elif vessel.get("name"):
@@ -1448,10 +1461,8 @@ def _make_shipping_mark_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> by
         flow.append(mline(f"REF. NO. : {shipping['sm_ref_no']}"))
     if shipping.get("sm_desc"):
         flow += [Spacer(1, 2 * mm), mline(str(shipping["sm_desc"]).upper(), desc_style)]
-    if shipping.get("sm_port_delivery") or shipping.get("sm_final_dest"):
+    if shipping.get("sm_final_dest"):
         flow.append(Spacer(1, 2 * mm))
-    if shipping.get("sm_port_delivery"):
-        flow.append(mline(f"PORT OF DELIVERY : {str(shipping['sm_port_delivery']).upper()}"))
     if shipping.get("sm_final_dest"):
         flow.append(mline(f"FINAL DESTINATION : {str(shipping['sm_final_dest']).upper()}"))
     flow.append(Spacer(1, 2 * mm))
@@ -1462,11 +1473,17 @@ def _make_shipping_mark_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> by
     if not flow:
         flow.append(mline("(NO SHIPPING MARK DATA)"))
 
-    mark_box = Table([[flow]], colWidths=[page_width], rowHeights=[92 * mm])
-    mark_box.setStyle(TableStyle([("BOX", (0, 0), (-1, -1), 1.4, colors.black),
-                                  ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-                                  ("LEFTPADDING", (0, 0), (-1, -1), 10), ("RIGHTPADDING", (0, 0), (-1, -1), 10),
-                                  ("TOPPADDING", (0, 0), (-1, -1), 8), ("BOTTOMPADDING", (0, 0), (-1, -1), 8)]))
+    # 마크 박스는 92mm 를 기본 높이로 두되, 줄이 많으면(수하인 주소 등) 내용에 맞춰 늘린다.
+    # 높이를 92mm 로 고정하면 긴 마크의 첫 줄·끝 줄이 테두리 밖으로 잘려 나간다.
+    box_style = TableStyle([("BOX", (0, 0), (-1, -1), 1.4, colors.black),
+                            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                            ("LEFTPADDING", (0, 0), (-1, -1), 10), ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+                            ("TOPPADDING", (0, 0), (-1, -1), 8), ("BOTTOMPADDING", (0, 0), (-1, -1), 8)])
+    mark_box = Table([[flow]], colWidths=[page_width])
+    mark_box.setStyle(box_style)
+    if mark_box.wrap(page_width, 10 ** 6)[1] < 92 * mm:
+        mark_box = Table([[flow]], colWidths=[page_width], rowHeights=[92 * mm])
+        mark_box.setStyle(box_style)
     story += [mark_box, Spacer(1, 5 * mm)]
 
     # ── 실측(중량·치수·케이스) 표 ────────────────────────────────────────
