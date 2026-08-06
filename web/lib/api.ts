@@ -484,25 +484,50 @@ export interface SignatureFields {
 }
 
 /** 담당자 이메일 서명 — 발송 화면 기본값(개인 → 회사 → 내장 기본 순으로 해석된 값).
- *  fields 는 표 서명의 입력값(없으면 폼을 채울 출발값), has_fields 로 구분한다. */
-export function fetchEmailSignature(lang: "en" | "ko"): Promise<{
+ *  fields 는 표 서명의 입력값(없으면 폼을 채울 출발값), has_fields 로 구분한다.
+ *  userId 를 주면 그 담당자의 서명을 본다(발송 화면의 서명 선택, 관리자의 대리 편집). */
+export function fetchEmailSignature(lang: "en" | "ko", userId?: number | null): Promise<{
   lang: string;
+  user_id: number;
   signature: string;
   is_personal: boolean;
   fields: SignatureFields;
   has_fields: boolean;
   html: string;
 }> {
-  return get(`/api/admin/settings/email-signature?lang=${lang}`);
+  const q = userId == null ? "" : `&user_id=${userId}`;
+  return get(`/api/admin/settings/email-signature?lang=${lang}${q}`);
 }
 
-/** 개인 서명 저장(이후 모든 단계의 기본 서명). fields 를 주면 표 서명으로 저장한다. */
+/** 담당자별 서명 목록 — 발송 화면에서 누구 이름으로 서명할지 고르는 선택지.
+ *  평문까지 함께 와서 고르는 즉시 서명칸을 바꿀 수 있다. */
+export interface SignatureOwner {
+  user_id: number;
+  username: string;
+  name: string;
+  signature: string;
+  is_default: boolean;   // 개인 서명 없이 회사/내장 기본을 쓰는 사람
+}
+export function fetchEmailSignatures(
+  lang: "en" | "ko" = "en"
+): Promise<{ lang: string; me: number; rows: SignatureOwner[] }> {
+  return get(`/api/admin/email/signatures?lang=${lang}`);
+}
+
+/** 개인 서명 저장(이후 모든 단계의 기본 서명). fields 를 주면 표 서명으로 저장한다.
+ *  userId 는 관리자가 다른 담당자의 서명을 대신 만들 때만 준다. */
 export function saveEmailSignature(
   lang: "en" | "ko",
   signature: string,
-  fields?: SignatureFields | null
-): Promise<{ ok: boolean; signature: string; html: string }> {
-  return put(`/api/admin/settings/email-signature`, { lang, signature, fields });
+  fields?: SignatureFields | null,
+  userId?: number | null
+): Promise<{ ok: boolean; user_id: number; signature: string; html: string }> {
+  return put(`/api/admin/settings/email-signature`, {
+    lang,
+    signature,
+    fields,
+    user_id: userId ?? null,
+  });
 }
 
 /** 편집 중인 서명 필드 → 발송에 쓰일 HTML/평문 그대로(저장 전 미리보기). */

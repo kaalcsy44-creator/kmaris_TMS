@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { getToken } from "@/lib/auth";
 import { renderEmailPreview } from "@/lib/api";
 import CcField from "@/components/common/CcField";
+import SignaturePicker from "@/components/common/SignaturePicker";
 import { toggleBold, onBoldKey } from "@/lib/mdEdit";
 
 // 문서 생성(다운로드) + 이메일 미리보기 + 발송(첨부) 공통 패널.
@@ -90,6 +91,8 @@ export default function DocSendPanel({
   const [notes, setNotes] = useState("");
   const [signature, setSignature] = useState("");
   const [includeSignature, setIncludeSignature] = useState(true);
+  // 어느 담당자의 서명을 싣고 있는지(null = 로그인 사용자 = 서버가 준 기본값).
+  const [sigOwner, setSigOwner] = useState<number | null>(null);
   // 생성 문서(견적서·발주서 등) 첨부 여부. 기본은 붙임 — 이 화면의 본래 목적이 문서 발송이다.
   const [includeDoc, setIncludeDoc] = useState(true);
   const [files, setFiles] = useState<File[]>([]);
@@ -203,6 +206,7 @@ export default function DocSendPanel({
       setSubject(p.subject);
       setBody(p.body);
       setSignature(p.signature ?? "");
+      setSigOwner(null);   // 초안을 다시 만들면 서명도 로그인 사용자 것으로 돌아간다
       setSmtpConfigured(p.smtp_configured);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Preview generation failed");
@@ -427,7 +431,19 @@ export default function DocSendPanel({
 
                 <div className="form-field">
                   <label className="mail-sig-head">
-                    <span>Signature</span>
+                    <span className="mail-sig-title">
+                      Signature
+                      {/* 담당자별 서명 — 고르면 그 사람의 서명이 그대로 실린다. */}
+                      <SignaturePicker
+                        lang={lang}
+                        value={sigOwner}
+                        disabled={!includeSignature}
+                        onPick={(id, text) => {
+                          setSigOwner(id);
+                          setSignature(text);
+                        }}
+                      />
+                    </span>
                     <span className="mail-sig-tools">
                       <label className="mail-sig-toggle">
                         <input

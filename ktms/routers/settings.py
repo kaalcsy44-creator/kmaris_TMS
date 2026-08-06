@@ -1043,21 +1043,27 @@ def delete_email_template(scope: str = "user", doc_type: str = "vendor_rfq",
 
 
 @app.get("/api/admin/settings/email-signature", dependencies=[Depends(require_token)])
-def get_email_signature(lang: str = "en", user: dict = Depends(get_current_user)):
+def get_email_signature(lang: str = "en", user_id: int | None = None,
+                        user: dict = Depends(get_current_user)):
     """발송 화면에 채울 담당자 서명 — 개인 → 회사 기본 → 내장 기본 순으로 해석한 값과,
-    개인 서명을 따로 저장해 뒀는지 여부(is_personal)를 함께 준다."""
+    개인 서명을 따로 저장해 뒀는지 여부(is_personal)를 함께 준다.
+
+    user_id 를 주면 그 담당자의 서명을 본다(발송 화면의 '서명 불러오기', 관리자의 대리
+    편집). 서명은 메일에 그대로 실려 나가는 공개 정보라 읽기는 막지 않는다."""
     lang = "ko" if lang == "ko" else "en"
     s = get_session()
     try:
+        uid = user_id or user.get("id")
         own = (s.query(EmailTemplate)
-               .filter_by(user_id=user.get("id"), doc_type=SIGNATURE_DOC_TYPE, lang=lang).first())
-        fields = resolve_signature_fields(s, user.get("id"), lang)
+               .filter_by(user_id=uid, doc_type=SIGNATURE_DOC_TYPE, lang=lang).first())
+        fields = resolve_signature_fields(s, uid, lang)
         return {
             "lang": lang,
-            "signature": resolve_signature(s, user.get("id"), lang),
+            "user_id": uid,
+            "signature": resolve_signature(s, uid, lang),
             "is_personal": bool(own and (own.body_tpl or "").strip()),
             # 구조화(표) 서명 — 없으면 편집 폼을 채울 출발값을 대신 준다.
-            "fields": fields or default_sig_fields(lang, _sig_user_seed(s, user)),
+            "fields": fields or default_sig_fields(lang, _sig_user_seed(s, uid, user)),
             "has_fields": bool(fields),
             "html": signature_html(fields, lang) if fields else "",
         }
@@ -1065,28 +1071,77 @@ def get_email_signature(lang: str = "en", user: dict = Depends(get_current_user)
         s.close()
 
 
-def _sig_user_seed(s, user: dict) -> dict:
-    """서명 폼 첫 입력값에 쓸 로그인 사용자 정보(이름·이메일)."""
-    u = s.query(User).filter_by(id=user.get("id")).first() if user.get("id") else None
+def _sig_user_seed(s, uid, user: dict) -> dict:
+    """서명 폼 첫 입력값에 쓸 담당자 정보(이름·이메일). 로그인 사용자 본인이면
+    토큰에 담긴 이름도 대비책으로 쓴다."""
+    u = s.query(User).filter_by(id=uid).first() if uid else None
+    fallback = (user.get("username") or "") if uid == user.get("id") else ""
     return {
-        "name": (getattr(u, "name", "") or user.get("name") or ""),
+        "name": (getattr(u, "name", "") or getattr(u, "username", "") or fallback or ""),
         "email": (getattr(u, "email", "") or ""),
     }
+
+
+@app.get("/api/admin/email/signatures", dependencies=[Depends(require_token)])
+def list_email_signatures(lang: str = "en", user: dict = Depends(get_current_user)):
+    """담당자별 서명 목록 — 발송 화면에서 "누구 이름으로 서명할지" 고르는 선택지.
+
+    개인 서명을 저장해 둔 담당자 전원 + (없더라도) 로그인 사용자를 준다. 평문까지 함께
+    내려 화면에서 고르는 즉시 서명칸이 바뀌게 한다(추가 왕복 없음)."""
+    lang = "ko" if lang == "ko" else "en"
+    s = get_session()
+    try:
+        me = user.get("id")
+        rows = []
+        for t, u in (s.query(EmailTemplate, User)
+                     .join(User, User.id == EmailTemplate.user_id)
+                     .filter(EmailTemplate.doc_type == SIGNATURE_DOC_TYPE,
+                             EmailTemplate.lang == lang)
+                     .all()):
+            text = (t.body_tpl or "").strip()
+            if not text or not u.is_active:
+                continue
+            rows.append({
+                "user_id": u.id,
+                "username": u.username,
+                "name": getattr(u, "name", "") or u.username,
+                "signature": text,
+                "is_default": False,
+            })
+        if not any(r["user_id"] == me for r in rows):
+            # 아직 개인 서명을 안 만든 사용자 — 회사/내장 기본이 그의 서명이다.
+            rows.append({
+                "user_id": me,
+                "username": user.get("username") or user.get("name") or "me",
+                "name": _sig_user_seed(s, me, user)["name"] or "Me",
+                "signature": resolve_signature(s, me, lang),
+                "is_default": True,
+            })
+        # 본인 먼저, 그다음 이름순 — 자기 서명이 늘 첫 선택지가 되게.
+        rows.sort(key=lambda r: (r["user_id"] != me, (r["name"] or "").lower()))
+        return {"lang": lang, "me": me, "rows": rows}
+    finally:
+        s.close()
 
 
 @app.put("/api/admin/settings/email-signature", dependencies=[Depends(require_token)])
 def put_email_signature(body: EmailSignatureSave, user: dict = Depends(get_current_user)):
     """담당자 개인 서명 저장 — 이후 모든 단계 발송 화면의 기본 서명이 된다.
     fields 를 주면 표 서명(HTML), 없으면 평문 서명으로 저장한다.
-    빈 값으로 저장하면 개인 서명을 지우고 회사/내장 기본으로 되돌아간다."""
+    빈 값으로 저장하면 개인 서명을 지우고 회사/내장 기본으로 되돌아간다.
+    남의 서명을 대신 만들어 두는 건 관리자만 할 수 있다."""
     lang = "ko" if body.lang == "ko" else "en"
+    uid = body.user_id or user.get("id")
+    if uid != user.get("id") and user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="다른 담당자의 서명은 관리자만 편집할 수 있습니다.")
     s = get_session()
     try:
-        save_signature(s, user.get("id"), lang, body.signature, getattr(body, "fields", None))
-        fields = resolve_signature_fields(s, user.get("id"), lang)
+        save_signature(s, uid, lang, body.signature, getattr(body, "fields", None))
+        fields = resolve_signature_fields(s, uid, lang)
         return {
             "ok": True,
-            "signature": resolve_signature(s, user.get("id"), lang),
+            "user_id": uid,
+            "signature": resolve_signature(s, uid, lang),
             "html": signature_html(fields, lang) if fields else "",
         }
     finally:

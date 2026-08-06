@@ -1387,15 +1387,26 @@ def signature_html_for(s, user_id, text: str):
     발송 화면은 서명을 평문으로 들고 있어서, 저장된 구조화 서명을 그대로 쓰는지
     사용자가 손댔는지를 글자로 비교한다. 손댔으면 그 편집을 존중해 None 을 돌려주고
     (호출부가 평문을 그대로 HTML 로 렌더한다), 그대로면 표 서명을 쓴다.
-    언어는 저장된 두 벌(en·ko) 중 일치하는 쪽으로 자동 판별한다."""
-    body = (text or "").strip()
+    언어는 저장된 두 벌(en·ko) 중 일치하는 쪽으로 자동 판별한다.
+
+    발송 화면에서 다른 담당자의 서명을 불러와 보낼 수 있으므로, 로그인 사용자 것이
+    아니면 저장된 서명 전체에서 같은 글자를 찾는다 — 못 찾으면 표가 아니라 평문으로
+    나갈 뿐이라, 남의 서명이 섞여 들어가는 위험은 없다(글자가 이미 일치해야 한다)."""
+    body = " ".join((text or "").split())
     if not body:
         return None
+    # 로그인 사용자 것부터 — 대개 자기 서명으로 나간다.
     for lang in ("en", "ko"):
         fields = resolve_signature_fields(s, user_id, lang)
-        if not fields:
+        if fields and " ".join(signature_text(fields, lang).split()) == body:
+            return signature_html(fields, lang)
+    for t in (s.query(EmailTemplate)
+              .filter(EmailTemplate.doc_type == SIGNATURE_DOC_TYPE).all()):
+        fields = (t.options or {}).get("sig_fields")
+        if not (fields and sig_has_content(fields)):
             continue
-        if " ".join(signature_text(fields, lang).split()) == " ".join(body.split()):
+        lang = "ko" if t.lang == "ko" else "en"
+        if " ".join(signature_text(fields, lang).split()) == body:
             return signature_html(fields, lang)
     return None
 
@@ -3053,10 +3064,12 @@ class EmailTemplatePreviewReq(BaseModel):
 
 class EmailSignatureSave(BaseModel):
     """담당자 개인 이메일 서명 저장. 빈 문자열이면 개인 서명 해제(상위 기본값 사용).
-    fields 가 있으면 표(HTML) 서명으로 저장하고 평문판은 자동 생성한다."""
+    fields 가 있으면 표(HTML) 서명으로 저장하고 평문판은 자동 생성한다.
+    user_id 는 남의 서명을 대신 편집할 때만 쓴다(관리자) — 없으면 본인."""
     lang: str = "en"
     signature: str = ""
     fields: dict | None = None
+    user_id: int | None = None
 
 
 class StageDateUpdate(BaseModel):

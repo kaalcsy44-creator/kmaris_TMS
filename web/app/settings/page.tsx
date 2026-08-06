@@ -3133,10 +3133,26 @@ function SignatureEditor() {
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const seq = useRef(0);
+  // 서명은 담당자별로 저장된다. 관리자는 여기서 담당자를 골라 그 사람 서명을 만들어 둘
+  // 수 있고(그 사람이 아직 로그인해 본 적 없어도 발송 화면에서 불러 쓸 수 있다),
+  // 그 외 사용자는 본인 것만 편집한다.
+  const admin = isAdmin();
+  const me = getUser();
+  const [users, setUsers] = useState<SettingsUser[]>([]);
+  const [pic, setPic] = useState<number>(me?.id ?? 0);
+
+  useEffect(() => {
+    if (!admin) return;
+    fetchSettingsUsers()
+      .then((rows) => setUsers(rows.filter((u) => u.is_active)))
+      .catch(() => {
+        /* 목록을 못 받으면 본인 서명만 편집한다 — 선택기만 빠진다. */
+      });
+  }, [admin]);
 
   const load = useCallback(() => {
     setForm(null);
-    fetchEmailSignature(lang)
+    fetchEmailSignature(lang, pic || null)
       .then((d) => {
         setForm(toForm(d.fields));
         setSaved(d.has_fields);
@@ -3144,7 +3160,7 @@ function SignatureEditor() {
         setErr(null);
       })
       .catch((e) => setErr(e instanceof Error ? e.message : "Load failed"));
-  }, [lang]);
+  }, [lang, pic]);
   useEffect(() => load(), [load]);
 
   // 실시간 미리보기 — 발송에 쓰이는 렌더러를 그대로 태운다(화면 = 수신자가 볼 모습).
@@ -3172,9 +3188,13 @@ function SignatureEditor() {
     setErr(null);
     setMsg(null);
     try {
-      await saveEmailSignature(lang, "", toFields(form));
+      await saveEmailSignature(lang, "", toFields(form), pic || null);
       setSaved(true);
-      setMsg("Saved — 이후 모든 발송 화면의 기본 서명이 됩니다.");
+      setMsg(
+        pic === (me?.id ?? 0)
+          ? "Saved — 이후 모든 발송 화면의 기본 서명이 됩니다."
+          : "Saved — 발송 화면의 서명 선택에서 이 담당자를 고르면 불러옵니다."
+      );
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Save failed");
     } finally {
@@ -3189,7 +3209,7 @@ function SignatureEditor() {
     setErr(null);
     setMsg(null);
     try {
-      await saveEmailSignature(lang, "", null);
+      await saveEmailSignature(lang, "", null, pic || null);
       setMsg("Removed — 기본 서명으로 돌아갑니다.");
       load();
     } catch (e) {
@@ -3209,6 +3229,19 @@ function SignatureEditor() {
       </div>
 
       <div className="email-tpl-toolbar">
+        {admin && users.length > 1 ? (
+          <label className="sig-pic-pick">
+            담당자
+            <select value={pic} onChange={(e) => setPic(Number(e.target.value))}>
+              {users.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.username}
+                  {u.id === (me?.id ?? 0) ? " (me)" : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
         <span className="seg-toggle" role="group" aria-label="Language">
           <button className={lang === "en" ? "on" : ""} onClick={() => setLang("en")}>EN</button>
           <button className={lang === "ko" ? "on" : ""} onClick={() => setLang("ko")}>KO</button>
@@ -3219,18 +3252,20 @@ function SignatureEditor() {
       </div>
 
       <div className="email-tpl-split">
+        {/* 칸이 짧은 것들은 2~3열로 묶고, 여러 줄이 들어가는 것(이메일·주소·태그라인 등)만
+            한 줄을 다 쓴다 — 세로로 길게 늘어놓으면 미리보기와 나란히 보기 어렵다. */}
         <div className="email-tpl-editor sig-form">
           <div className="sub-h">담당자</div>
-          <label className="form-field">
-            <span>Name</span>
-            <input value={form.name} onChange={(e) => set("name", e.target.value)} />
-          </label>
-          <label className="form-field">
-            <span>Title</span>
-            <input value={form.title} onChange={(e) => set("title", e.target.value)} />
-          </label>
-          <div className="sig-row">
-            <label className="form-field sig-row-label">
+          <div className="sig-grid">
+            <label className="form-field sig-c2">
+              <span>Name</span>
+              <input value={form.name} onChange={(e) => set("name", e.target.value)} />
+            </label>
+            <label className="form-field sig-c2">
+              <span>Title</span>
+              <input value={form.title} onChange={(e) => set("title", e.target.value)} />
+            </label>
+            <label className="form-field sig-c1">
               <span>Phone label</span>
               <input
                 value={form.mobile_label}
@@ -3238,57 +3273,59 @@ function SignatureEditor() {
                 placeholder="Mobile"
               />
             </label>
-            <label className="form-field">
+            <label className="form-field sig-c1">
               <span>Phone</span>
               <input value={form.mobile} onChange={(e) => set("mobile", e.target.value)} />
             </label>
+            <label className="form-field sig-c2">
+              <span>Website</span>
+              <input value={form.website} onChange={(e) => set("website", e.target.value)} />
+            </label>
+            <label className="form-field sig-c4">
+              <span>Email (한 줄에 하나)</span>
+              <textarea rows={2} value={form.emails} onChange={(e) => set("emails", e.target.value)} />
+            </label>
+            <label className="form-field sig-c4">
+              <span>Address (한 줄에 하나)</span>
+              <textarea
+                rows={2}
+                value={form.address}
+                onChange={(e) => set("address", e.target.value)}
+              />
+            </label>
           </div>
-          <label className="form-field">
-            <span>Email (한 줄에 하나)</span>
-            <textarea rows={2} value={form.emails} onChange={(e) => set("emails", e.target.value)} />
-          </label>
-          <label className="form-field">
-            <span>Website</span>
-            <input value={form.website} onChange={(e) => set("website", e.target.value)} />
-          </label>
-          <label className="form-field">
-            <span>Address (한 줄에 하나)</span>
-            <textarea
-              rows={3}
-              value={form.address}
-              onChange={(e) => set("address", e.target.value)}
-            />
-          </label>
 
           <div className="sub-h" style={{ marginTop: 14 }}>회사 공통</div>
-          <label className="form-field">
-            <span>Closing</span>
-            <input value={form.closing} onChange={(e) => set("closing", e.target.value)} />
-          </label>
-          <label className="form-field">
-            <span>Tagline (한 줄에 하나)</span>
-            <textarea
-              rows={2}
-              value={form.tagline}
-              onChange={(e) => set("tagline", e.target.value)}
-            />
-          </label>
-          <label className="form-field">
-            <span>Services (한 줄에 하나)</span>
-            <textarea
-              rows={2}
-              value={form.services}
-              onChange={(e) => set("services", e.target.value)}
-            />
-          </label>
-          <label className="form-field">
-            <span>Disclaimer</span>
-            <textarea
-              rows={2}
-              value={form.disclaimer}
-              onChange={(e) => set("disclaimer", e.target.value)}
-            />
-          </label>
+          <div className="sig-grid">
+            <label className="form-field sig-c2">
+              <span>Closing</span>
+              <input value={form.closing} onChange={(e) => set("closing", e.target.value)} />
+            </label>
+            <label className="form-field sig-c2">
+              <span>Tagline (한 줄에 하나)</span>
+              <textarea
+                rows={2}
+                value={form.tagline}
+                onChange={(e) => set("tagline", e.target.value)}
+              />
+            </label>
+            <label className="form-field sig-c2">
+              <span>Services (한 줄에 하나)</span>
+              <textarea
+                rows={2}
+                value={form.services}
+                onChange={(e) => set("services", e.target.value)}
+              />
+            </label>
+            <label className="form-field sig-c2">
+              <span>Disclaimer</span>
+              <textarea
+                rows={2}
+                value={form.disclaimer}
+                onChange={(e) => set("disclaimer", e.target.value)}
+              />
+            </label>
+          </div>
         </div>
 
         <div className="email-tpl-preview">

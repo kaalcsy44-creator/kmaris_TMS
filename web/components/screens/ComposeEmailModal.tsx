@@ -17,6 +17,7 @@ import type { CustomerOption, SettingsCustomer } from "@/lib/types";
 import Modal from "@/components/common/Modal";
 import CcField from "@/components/common/CcField";
 import CustomerSelect from "@/components/common/CustomerSelect";
+import SignaturePicker from "@/components/common/SignaturePicker";
 import { toggleBold, onBoldKey } from "@/lib/mdEdit";
 
 type TplKind = "intro" | "brochure";
@@ -111,6 +112,8 @@ export default function ComposeEmailModal({
   const [bodyTpl, setBodyTpl] = useState("");
   const [signature, setSignature] = useState("");
   const [includeSignature, setIncludeSignature] = useState(true);
+  // 어느 담당자의 서명을 싣고 있는지(null = 로그인 사용자 = 서버가 준 기본값).
+  const [sigOwner, setSigOwner] = useState<number | null>(null);
   const [smtpConfigured, setSmtpConfigured] = useState(true);
   // 현재 종류·언어에 사용자가 저장한 템플릿이 있는지 + 저장/초기화 안내 문구.
   const [savedTpl, setSavedTpl] = useState(false);
@@ -651,7 +654,20 @@ export default function ComposeEmailModal({
 
               <div className="form-field">
                 <span className="compose-sig-head">
-                  Signature
+                  <span className="mail-sig-title">
+                    Signature
+                    {/* 담당자별 서명 — 고르면 그 사람의 서명이 그대로 실린다. */}
+                    <SignaturePicker
+                      lang={lang}
+                      value={sigOwner}
+                      disabled={!includeSignature}
+                      onPick={(id, text) => {
+                        sigDirty.current = true;   // 서버 기본값이 덮어쓰지 않게
+                        setSigOwner(id);
+                        setSignature(text);
+                      }}
+                    />
+                  </span>
                   <span className="compose-sig-actions">
                     <label className="compose-sig-toggle">
                       <input
