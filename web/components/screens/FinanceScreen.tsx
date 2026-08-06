@@ -1324,41 +1324,47 @@ function OutflowTab() {
   if (!data) return <div className="state">Loading…</div>;
   const fx: FxQuote = data.fx ?? { rate: 0, date: "", source: "fixed" };
 
-  /** 상태 칸 — 두 표가 공유. AP(프로젝트 유래)는 읽기전용 배지, 수동 등록은 납부 토글. */
+  /** 상태 칸 — 두 표가 공유. AP(프로젝트 유래)는 읽기전용 배지, 수동 등록은 납부 토글.
+      미납은 미수 목록과 같은 말로 나눈다: 기일 전이면 Outstanding, 지났으면 Overdue. */
   function statusCell(p: FinancePayable) {
     const isAp = p.source === "ap";
+    const late = !!p.overdue && !p.paid;
     return (
       <td data-label="Status">
         {isAp ? (
-          // 벤더 청구서도 기타 지출과 같은 Paid/Unpaid 칩으로 보여준다 — 다만 지급 기록은
+          // 벤더 청구서도 기타 지출과 같은 칩으로 보여준다 — 다만 지급 기록은
           // 프로젝트 11단계 AP 탭의 Payment 칸에서 하므로 여기서는 누를 수 없다.
           <button
             type="button"
-            className={`wt-badge fin-paid-toggle${p.paid ? " on" : ""}`}
+            className={`wt-badge fin-paid-toggle${p.paid ? " on" : ""}${late ? " overdue" : ""}`}
             title="Record the payment in the project's stage 11 Payable (AP)"
             disabled
           >
-            {p.paid ? "Paid" : p.paid_amount > 0 ? "Partly paid" : "Unpaid"}
+            {p.paid
+              ? "Paid"
+              : late
+                ? p.paid_amount > 0 ? "Partly paid · overdue" : "Overdue"
+                : p.paid_amount > 0 ? "Partly paid" : "Outstanding"}
           </button>
         ) : p.recurrence === "none" ? (
           <button
             type="button"
-            className={`wt-badge fin-paid-toggle${p.paid ? " on" : ""}`}
-            title={canEdit ? (p.paid ? "Undo payment" : "Record payment") : ""}
+            className={`wt-badge fin-paid-toggle${p.paid ? " on" : ""}${late ? " overdue" : ""}`}
+            title={canEdit ? (p.paid ? "Undo payment" : late ? "Record payment (past due)" : "Record payment") : ""}
             disabled={!canEdit}
             onClick={() => (p.paid ? undoPaid(p) : setPaying({ row: p, occurrence: p.due_date }))}
           >
-            {p.paid ? "Paid" : "Unpaid"}
+            {p.paid ? "Paid" : late ? "Overdue" : "Outstanding"}
           </button>
         ) : (
           <button
             type="button"
-            className="wt-badge fin-paid-toggle"
-            title={canEdit ? "Record a payment for one occurrence" : ""}
+            className={`wt-badge fin-paid-toggle${late ? " overdue" : ""}`}
+            title={canEdit ? (late ? "Record a payment (an occurrence is past due)" : "Record a payment for one occurrence") : ""}
             disabled={!canEdit}
             onClick={() => setPaying({ row: p, occurrence: nextUnpaidOccurrence(p) })}
           >
-            {p.paid_dates.length} paid
+            {p.paid_dates.length} paid{late ? " · overdue" : ""}
           </button>
         )}
         {/* 지급 완료 건은 실제 납부일을 상태 옆에 함께 보여준다(미수 목록과 동일). */}
@@ -1450,7 +1456,7 @@ function OutflowTab() {
               <tr><td colSpan={11} className="mini-empty">No vendor bills yet.</td></tr>
             ) : null}
             {trade.map((p) => (
-              <tr key={`${p.source || "manual"}-${p.id}`}>
+              <tr key={`${p.source || "manual"}-${p.id}`} className={p.overdue && !p.paid ? "fin-overdue" : ""}>
                 <td data-label="Category">{CATEGORY_LABEL[p.category] || p.category}</td>
                 <td className="fin-c-title">{p.counterparty || "—"}</td>
                 {/* 청구서 번호 = 미수 목록의 Invoice No. 자리. AP 행은 그 아래 벤더 P/O 를
@@ -1495,7 +1501,7 @@ function OutflowTab() {
               <tr><td colSpan={11} className="mini-empty">No other costs registered.</td></tr>
             ) : null}
             {other.map((p) => (
-              <tr key={`${p.source || "manual"}-${p.id}`}>
+              <tr key={`${p.source || "manual"}-${p.id}`} className={p.overdue && !p.paid ? "fin-overdue" : ""}>
                 <td data-label="Category">{CATEGORY_LABEL[p.category] || p.category}</td>
                 <td className="fin-c-title">{p.counterparty || "—"}</td>
                 {/* 메모는 별도 열까지 둘 만큼 길지 않아 적요 아래 옅게 붙인다. */}

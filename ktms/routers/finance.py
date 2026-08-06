@@ -400,6 +400,22 @@ def receive_finance_income(row_id: int, body: FinancePayablePayIn):
         s.close()
 
 
+def _payable_overdue(p, settled: bool, today_str: str) -> bool:
+    """이 지급 건이 연체인가 — 아직 안 낸 채로 지급 예정일이 지났는가.
+
+    반복 항목은 표시 금액이 1회차분이라 '그 회차'만 보면 옛날에 낸 회차 하나로 계속
+    정상으로 보인다. 그래서 오늘까지 도래한 회차 중 미납이 하나라도 있으면 연체로 본다
+    — Overview 의 Overdue 타일이 세는 것과 같은 규칙이다."""
+    if (p.recurrence or "none") == "none":
+        return (not settled) and bool(p.due_date) and p.due_date < today_str
+    today = date.fromisoformat(today_str)
+    start = today - timedelta(days=365)
+    return any(
+        occ < today_str and not _finance_payable_paid_on(p, occ)
+        for occ in _finance_occurrences(p, start, today)
+    )
+
+
 @app.get("/api/admin/finance/payables", dependencies=[Depends(require_token)])
 def finance_payables():
     """지급대장 목록 — 수동 등록(FinancePayable) + 매입 청구(APRecord, 읽기전용).
@@ -409,6 +425,7 @@ def finance_payables():
     """
     s = get_session()
     try:
+        today_str = date.today().isoformat()
         vendor_names = {v.id: v.name for v in s.query(Vendor).all()}
         user_names = {u.id: u.username for u in s.query(User).all()}
         rows = s.query(FinancePayable).order_by(FinancePayable.due_date, FinancePayable.id).all()
@@ -423,6 +440,7 @@ def finance_payables():
             row["invoice_amount"] = amount
             row["paid_amount"] = amount if settled else 0.0
             row["outstanding"] = 0.0 if settled else amount
+            row["overdue"] = _payable_overdue(p, settled, today_str)
             out.append(row)
         # 매입 청구(AP) — vendor P/O별 청구를 읽기전용 지급 행으로 합류.
         # 지급 완료분도 남긴다(기타 지출 표와 같은 규칙) — 냈다는 사실이 목록에서 사라지면
@@ -453,6 +471,8 @@ def finance_payables():
                 "recurrence": "none",
                 "recur_until": "",
                 "paid": settled,
+                # 미수 목록과 같은 뜻 — 잔액이 남은 채 지급 예정일이 지난 건.
+                "overdue": ap["overdue"],
                 "paid_date": ap["paid_date"],
                 "paid_dates": [],
                 "notes": "",

@@ -861,6 +861,9 @@ export type FinancePayable = {
   recurrence: "none" | "monthly" | "quarterly" | "yearly";
   recur_until: string;
   paid: boolean;
+  // 미납인 채 지급 예정일이 지난 건(미수 목록의 같은 이름 필드와 대칭).
+  // 반복 항목은 오늘까지 도래한 회차 중 미납이 하나라도 있으면 true.
+  overdue?: boolean;
   paid_date: string;            // 실제 납부일(반복 항목은 가장 최근 납부일)
   paid_dates: string[];         // 반복 항목의 납부 완료 회차일
   payments?: Record<string, string>;  // {회차일: 실제 납부일}
