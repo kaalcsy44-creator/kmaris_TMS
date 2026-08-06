@@ -29,6 +29,7 @@ import { identityColumns, projectNoColumn } from "@/components/common/identityCo
 import VendorName from "@/components/common/VendorName";
 import VendorSelect from "@/components/common/VendorSelect";
 import CustomerName from "@/components/common/CustomerName";
+import RecordStrip from "@/components/common/RecordStrip";
 import Modal from "@/components/common/Modal";
 import BaseMetaRows, { ModalTitle } from "@/components/common/BaseMeta";
 import CurrencyToggle from "@/components/common/CurrencyToggle";
@@ -216,7 +217,7 @@ function CustomerPoTab({
       <div className="embedded-po-list">
         <div className="embedded-record-bar pane-row">
           {projectOrders.length > 1 ? (
-            <div className="embedded-record-picker" role="tablist" aria-label="Customer POs">
+            <RecordStrip ariaLabel="Customer POs" activeKey={selected.id}>
               {projectOrders.map((o) => (
                 <button
                   key={o.id}
@@ -227,7 +228,7 @@ function CustomerPoTab({
                   {o.po_no || o.vessel || `PO ${o.id}`}
                 </button>
               ))}
-            </div>
+            </RecordStrip>
           ) : (
             <span className="embedded-record-current">
               <CustomerName name={selected.customer || ""} />
@@ -775,7 +776,7 @@ function VendorPoTab({
       <div className="embedded-po-list">
         <div className="embedded-record-bar pane-row">
           {pos.length > 1 ? (
-            <div className="embedded-record-picker" role="tablist" aria-label="Vendor POs">
+            <RecordStrip ariaLabel="Vendor POs" activeKey={selected.id}>
               {pos.map((p) => (
                 <button
                   key={p.id}
@@ -786,7 +787,7 @@ function VendorPoTab({
                   {p.vendor || p.po_no || `PO ${p.id}`}
                 </button>
               ))}
-            </div>
+            </RecordStrip>
           ) : (
             <span className="embedded-record-current">
               <VendorName name={selected.vendor || ""} />

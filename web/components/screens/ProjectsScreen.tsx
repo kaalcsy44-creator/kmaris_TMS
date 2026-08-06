@@ -38,6 +38,7 @@ import { ColumnResizer, ColumnsButton, dragHandleProps } from "@/components/comm
 import type { PipelineRow, CustomerOption, SettingsVessel, StageNote } from "@/lib/types";
 import WorkTypeBadge from "@/components/WorkTypeBadge";
 import CustomerName from "@/components/common/CustomerName";
+import RecordStrip from "@/components/common/RecordStrip";
 import FilterSelect from "@/components/common/FilterSelect";
 import ActivityNoteForm, {
   initialNoteValue,
@@ -2731,7 +2732,7 @@ function WorkspacePanel({
     stage >= 6 && projectOrders.length > 1 ? (
       <div className="embedded-record-bar wp-po-picker pane-row">
         <span className="wp-po-picker-label">P/O</span>
-        <div className="embedded-record-picker" role="tablist" aria-label="Customer POs">
+        <RecordStrip ariaLabel="Customer POs" activeKey={effectiveOrderId}>
           {projectOrders.map((o) => (
             <button
               key={o.id}
@@ -2742,7 +2743,7 @@ function WorkspacePanel({
               {o.po_no || o.vessel || `PO ${o.id}`}
             </button>
           ))}
-        </div>
+        </RecordStrip>
       </div>
     ) : null;
 

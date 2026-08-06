@@ -5504,6 +5504,9 @@ table.mini.wide.lead-tools tbody tr.item-row-excluded.item-row-excluded textarea
   padding-top: 0;
   padding-bottom: 0;
   flex-wrap: nowrap;
+  /* 행 전체가 옆으로 스크롤되면 오른쪽 버튼(No quote·+ Send another)까지 화면 밖으로
+     나간다. 넘치는 건 벤더 탭뿐이므로 스크롤은 그 레인(.rec-strip)에만 맡긴다. */
+  overflow: hidden;
 }
 .pane-row .embedded-record-picker,
 .pane-row .vrfq-head-left {
@@ -8508,6 +8511,85 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   font-weight: 600;
   white-space: nowrap;
 }
+/* ── 레코드 탭 가로 스크롤 레인 ─────────────────────────────────────────────
+   벤더가 늘어도 한 줄을 유지한다. 칩만 이 레인 안에서 넘치고, 옆의 번호 배지·버튼은
+   레인 밖이라 항상 제자리에 보인다. */
+.rec-strip {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.rec-strip .embedded-record-picker {
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  margin-bottom: 0;
+  padding: 3px 0;
+  /* 네이티브 스크롤바는 감춘다 — ‹ › 와 가장자리 그라데이션이 대신 알려 준다. */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.rec-strip .embedded-record-picker::-webkit-scrollbar { display: none; }
+/* 칩은 조금 더 촘촘하게 — 벤더가 많아도 한 화면에 더 들어오게. */
+.rec-strip .embedded-record-picker > button {
+  flex: 0 0 auto;
+  gap: 6px;
+  padding: 4px 10px;
+  font-size: 11.5px;
+}
+.rec-strip .embedded-record-picker .cust-logo { width: 16px; height: 16px; }
+/* 벤더 이름이 길어도 칩 하나가 레인을 다 먹지 않게 — 넘치면 말줄임. */
+.rec-strip .embedded-record-picker .cust-name-text {
+  display: inline-block;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.rec-strip-nav {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: #5b6b85;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+.rec-strip-nav:hover:not(:disabled) { border-color: var(--blue); color: var(--blue); }
+.rec-strip-nav:disabled { opacity: 0.3; cursor: default; }
+/* 잘린 쪽 가장자리를 흐리게 — 더 있다는 신호(스크롤바를 감춘 대신). */
+.rec-strip::before,
+.rec-strip::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 24px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+  z-index: 1;
+}
+.rec-strip::before {
+  left: 22px;
+  background: linear-gradient(90deg, #fff, rgba(255, 255, 255, 0));
+}
+.rec-strip::after {
+  right: 22px;
+  background: linear-gradient(270deg, #fff, rgba(255, 255, 255, 0));
+}
+.rec-strip.over.fade-l::before,
+.rec-strip.over.fade-r::after { opacity: 1; }
 .embedded-record-picker button.on {
   border-color: var(--blue);
   background: #eff6ff;
@@ -8575,6 +8657,14 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   align-items: center;
   gap: 10px;
 }
+/* 레코드가 하나뿐인 행(탭 대신 이름만) — 이름이 길어도 옆 버튼을 밀어내지 않게 줄인다.
+   행이 더 이상 옆으로 스크롤되지 않으므로(위 overflow:hidden) 밀려난 버튼은 못 누른다. */
+.embedded-record-bar.pane-row .embedded-record-current { min-width: 0; }
+.embedded-record-bar.pane-row .embedded-record-current .cust-name-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 /* 로고 옆 회사이름은 작게 — 보조 정보로 둔다. */
 .embedded-record-current .cust-name-text {
   font-size: 12.5px;
@@ -8590,6 +8680,8 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 .rec-doc-no {
   display: inline-flex;
   align-items: center;
+  flex: 0 0 auto;          /* 벤더 탭이 늘어나도 번호는 줄지도 접히지도 않는다 */
+  white-space: nowrap;
   min-width: 92px;
   min-height: 24px;
   padding: 2px 10px;
@@ -8606,7 +8698,15 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
+  /* 남는 폭을 이쪽이 다 받고(안에서 탭 레인이 스크롤된다), 오른쪽 버튼은 밀리지 않는다. */
+  flex: 1 1 auto;
   min-width: 0;
+}
+.vrfq-head-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
 }
 /* 선택 탭(멀티 레코드) 안에서 번호를 칩으로 표시. */
 .rec-quote-no {
@@ -8680,6 +8780,14 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
     margin-bottom: 10px;
     padding-top: 6px;
     padding-bottom: 6px;
+    /* 이 폭에선 행이 흐름 안에서 여러 줄로 접힌다 — 잘라내면 안 된다. */
+    overflow: visible;
+  }
+  /* 좁은 화면에선 가로 스크롤 대신 그냥 접는다(세로로 늘어날 공간이 있다).
+     넘치지 않게 되므로 ‹ › 버튼도 저절로 사라진다. */
+  .rec-strip .embedded-record-picker {
+    flex-wrap: wrap;
+    overflow-x: visible;
   }
   .pl-pane-tabs {
     display: flex;

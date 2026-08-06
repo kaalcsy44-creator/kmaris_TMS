@@ -71,6 +71,7 @@ import BaseMetaRows, { ModalTitle } from "./common/BaseMeta";
 import CurrencyToggle from "./common/CurrencyToggle";
 import TermsEditor from "./common/TermsEditor";
 import DocSendPanel from "./common/DocSendPanel";
+import RecordStrip from "./common/RecordStrip";
 import DetailTabBar, { DetailTab } from "./common/DetailTabBar";
 import SourceFilesList from "./common/SourceFilesList";
 import { withDefaultTerms } from "@/lib/terms";
@@ -367,6 +368,8 @@ function EmptyStage({ text }: { text: string }) {
   );
 }
 
+// 레코드 선택 탭(벤더 RFQ·견적·발주 등). 여러 개면 칩으로 고른다 — 개수가 늘면
+// RecordStrip 이 한 줄을 유지한 채 가로로 스크롤한다.
 function RecordPicker<T extends { id: number }>({
   rows,
   selectedId,
@@ -380,7 +383,7 @@ function RecordPicker<T extends { id: number }>({
 }) {
   if (rows.length <= 1) return null;
   return (
-    <div className="embedded-record-picker" role="tablist">
+    <RecordStrip activeKey={selectedId}>
       {rows.map((r) => (
         <button
           key={r.id}
@@ -391,7 +394,7 @@ function RecordPicker<T extends { id: number }>({
           {label(r)}
         </button>
       ))}
-    </div>
+    </RecordStrip>
   );
 }
 
@@ -490,7 +493,7 @@ function EmbeddedVendorRfq({
           {/* 배지는 선택된 Vendor RFQ 고유 번호(001·002…). 프로젝트 공통 번호가 아님. */}
           <b className="rec-doc-no">{selected.kmaris_rfq_no || project?.vrfq_kmaris_no || ""}</b>
         </div>
-        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+        <div className="vrfq-head-right">
           {/* 견적 불가 통보 표시 — 프로젝트 Vendor 필드에서 이 벤더를 취소선(제외) 처리한다.
               견적이 이미 수신된(quote_count>0) 벤더는 표시가 무의미하므로 숨긴다. */}
           {selected.quote_count === 0 ? (
