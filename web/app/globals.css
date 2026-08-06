@@ -5647,31 +5647,24 @@ table.mini.wide.lead-tools tbody tr.item-row-excluded.item-row-excluded textarea
   border-top: 1px solid var(--line);
 }
 /* ── 단계 이메일 작성(2·4·6 · DocSendPanel) ───────────────────────────────
-   주소 3열(From·To·CC) → 그 아래 Subject 는 전폭 단독 행. Subject 를 주소칸과 같은
-   grid 에 두면 제목이 칸 폭에 눌려 잘려 보인다(제목은 대개 가장 길다). */
-.mail-addr-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-  margin-top: 8px;
+   좌: 봉투(From·수신자·CC·첨부) / 우: 내용(제목·본문·노트·서명). 각 칸 안에서는 1열.
+   세로로만 쌓으면 본문을 편집하는 동안 수신자·첨부가 화면 밖으로 밀린다.
+   홍보 메일 작성창(.compose-split)과 같은 뼈대를 쓰되 폭 비율만 이 화면에 맞춘다. */
+/* 폭 비율은 .compose-split(홍보 메일 작성창)이 뒤에서 같은 속성을 다시 잡으므로
+   .doc-send-panel 로 한 단계 감싸 명시도를 올린다 — 같은 이유로 접히는 규칙도 따로 둔다. */
+.doc-send-panel .doc-send-split {
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  margin-top: 10px;
 }
-/* CC 가 칩+주소록으로 아래 전폭 행으로 빠진 화면(문서 발송 패널)은 2열. */
-.mail-addr-grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-@media (max-width: 760px) {
-  .mail-addr-grid { grid-template-columns: 1fr; }
+@media (max-width: 900px) {
+  .doc-send-panel .doc-send-split { grid-template-columns: 1fr; }
 }
-/* Notes·Signature — 본문(.po-textarea 240px)의 절반 높이로 좌우 2열.
-   아래 규칙들은 .doc-send-panel 로 한 단계 감싼다: .form-field textarea/label 쪽이
+/* 양쪽 머리줄(Recipients · Message)을 같은 높이로 — 오른쪽은 칩 버튼을 품고 있어
+   그냥 두면 두 칸의 첫 입력란 윗선이 어긋난다. */
+.doc-send-split .compose-section-title { min-height: 34px; }
+.doc-send-panel .doc-send-from-hint { margin-top: -6px; }
+/* 아래 규칙들은 .doc-send-panel 로 한 단계 감싼다: .form-field textarea/label 쪽이
    min-height:240px · display:block 을 걸고 있어 클래스 하나로는 특이도에서 진다. */
-.mail-compose-2col {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  margin-top: 8px;
-}
-@media (max-width: 760px) {
-  .mail-compose-2col { grid-template-columns: 1fr; }
-}
 .doc-send-panel .mail-notes,
 .doc-send-panel .mail-sig {
   width: 100%;
@@ -5700,10 +5693,9 @@ table.mini.wide.lead-tools tbody tr.item-row-excluded.item-row-excluded textarea
   gap: 10px;
   flex-wrap: wrap;
 }
-/* Notes·Signature 라벨 높이 맞추기 — 서명 쪽은 Include 토글과 Edit/Preview 칩을 품고
-   있어 줄 높이가 달라지면 두 입력란의 윗선이 어긋난다. 두 라벨 줄을 같은 높이로 고정해
-   나란히 시작하게 한다(칩 높이 ≈ 26px). */
-.doc-send-panel .mail-compose-2col .form-field > label {
+/* 라벨 줄 높이 고정 — Body·Signature 라벨은 칩(B, Edit/Preview)을 품고 있어 그냥 두면
+   같은 칸의 다른 입력란과 윗선이 어긋난다(칩 높이 ≈ 26px). */
+.doc-send-panel .compose-col .form-field > label {
   display: flex;
   align-items: center;
   min-height: 26px;
@@ -5714,7 +5706,6 @@ table.mini.wide.lead-tools tbody tr.item-row-excluded.item-row-excluded textarea
    Message 머리줄 · 본문/서명 미리보기 · 첨부 목록. 클래스는 그쪽(.compose-*)을 그대로
    쓰고, 이 패널의 폭·높이에만 맞춘다. */
 .doc-send-panel .doc-send-msg-head {
-  margin-top: 14px;
   margin-bottom: 2px;
 }
 /* 본문 편집칸(.po-textarea 240px)과 같은 높이 — Edit ↔ Preview 로 화면이 튀지 않게. */
@@ -5767,24 +5758,6 @@ table.mini.wide.lead-tools tbody tr.item-row-excluded.item-row-excluded textarea
   line-height: 1;
   color: inherit;
 }
-/* 제목 + 언어·초안 재생성을 한 줄에. 제목이 남는 폭을 다 쓴다. */
-.mail-subject-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.mail-subject-row input {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-.mail-subject-row .doc-send-inline,
-.mail-subject-row .btn {
-  flex: 0 0 auto;
-}
-@media (max-width: 760px) {
-  .mail-subject-row { flex-wrap: wrap; }
-  .mail-subject-row input { flex-basis: 100%; }
-}
 .mail-sig-tools {
   display: inline-flex;
   align-items: center;
@@ -5799,7 +5772,7 @@ table.mini.wide.lead-tools tbody tr.item-row-excluded.item-row-excluded textarea
   color: var(--muted);
   cursor: pointer;
 }
-/* 첨부 목록 — 생성 문서 칩 + 업로드 칩 + 추가 버튼이 한 줄에 흐른다. */
+/* 첨부 라벨 오른쪽의 합계 용량(한도 초과면 빨갛게). */
 .mail-attach-size {
   font-size: 11px;
   font-weight: 400;
@@ -5810,125 +5783,11 @@ table.mini.wide.lead-tools tbody tr.item-row-excluded.item-row-excluded textarea
   color: #b42318;
   font-weight: 700;
 }
-.mail-attach-list {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-.mail-attach {
-  display: inline-flex;
-  align-items: center;
-  flex-wrap: nowrap;   /* 칩 안에서 줄이 접히면 파일명이 아래로 밀려 셀렉트에 가린다 */
-  gap: 6px;
-  max-width: 100%;
-  padding: 3px 8px;
-  border: 1px solid var(--line-strong);
-  border-radius: 14px;
-  background: #fff;
-  font-size: 11.5px;
-}
-/* 생성 문서(견적서 등) — 시스템이 만드는 첨부라 톤을 구분한다. 체크를 끄면 흐려진다. */
-.mail-attach.generated {
-  background: #eef4fb;
-  border-color: #b9d3ee;
-  color: #0b3d6e;
-  padding-left: 6px;
-}
-.mail-attach.generated.off {
-  background: var(--head-bg);
-  border-color: var(--line-strong);
-  color: var(--muted);
-}
-.mail-attach-pick {
-  display: inline-flex;
-  align-items: center;
-  flex-wrap: nowrap;
-  gap: 5px;
-  min-width: 0;        /* 이게 없으면 flex 아이템이 내용 폭 아래로 못 줄어 이름이 안 잘린다 */
-  cursor: pointer;
-}
-.mail-attach-pick input[type="checkbox"] {
-  flex: none;
-  margin: 0;
-}
-.mail-attach.generated.off .mail-attach-name {
-  text-decoration: line-through;
-}
-/* 포맷 셀렉트 — 기본 폭이 넓어 파일명을 밀어낸다. 내용에 맞춰 좁게 고정.
-   칩이 .form-field 안에 있어 전역 `.form-field select{width:100%;height:32px}`가
-   더 높은 명시도로 이겨 셀렉트를 전폭으로 부풀리고 파일명을 잘라먹었다.
-   `.mail-attach` 스코프로 명시도를 올려 폭·높이를 되돌린다. */
-.mail-attach .mail-attach-fmt {
-  flex: none;
-  width: auto;
-  height: 20px;
-  padding: 0 4px;
-  border: 1px solid #b9d3ee;
-  border-radius: 5px;
-  background: #fff;
-  font-size: 10.5px;
-  line-height: 1;
-  color: inherit;
-}
-.mail-attach-dl {
-  border: 0;
-  background: none;
-  color: inherit;
-  cursor: pointer;
-  padding: 0 1px;
-  font-size: 12px;
-  line-height: 1;
-  opacity: 0.75;
-}
-.mail-attach-dl:hover { opacity: 1; }
-.mail-attach-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
-  max-width: 260px;
-}
-.mail-attach-size-sm {
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
-.mail-attach-x {
-  border: 0;
-  background: none;
-  color: #94a3b8;
-  cursor: pointer;
-  padding: 0 1px;
-  font-size: 12px;
-  line-height: 1;
-}
-.mail-attach-x:hover {
-  color: #b42318;
-}
 .doc-send-row {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
-}
-.doc-send-spacer {
-  flex: 1 1 auto;
-}
-.doc-send-inline {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: #55627a;
-}
-.doc-send-inline select {
-  height: 28px;
-  border: 1px solid #d7e2ee;
-  border-radius: 6px;
-  padding: 0 6px;
-  font-size: 12px;
-  font-family: inherit;
-  background: #fff;
 }
 
 /* "Load vendor quote" — 여러 공급사 견적 중 선택기 + 버튼 묶음 */
