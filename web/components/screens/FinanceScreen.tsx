@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import {
   fetchFinanceSummary,
   fetchFinanceReceivables,
@@ -134,19 +134,58 @@ const TABS: Tab[] = ["overview", "inflow", "outflow", "closing", "calendar"];
 /** 이름을 바꾸기 전 주소로 들어오는 링크 — 같은 자리로 보낸다. */
 const TAB_ALIAS: Record<string, Tab> = { receivables: "inflow", payables: "outflow" };
 
-/** 주소의 질의값을 고쳐 쓴다 — 탭·갈래·기간이 모두 주소에 살아 링크로 오갈 수 있게. */
+/** 주소의 질의값을 고쳐 쓴다 — 탭·갈래·기간이 모두 주소에 살아 링크로 오갈 수 있게.
+ *
+ * 갱신은 router.replace 가 아니라 history.replaceState 로 한다. 같은 페이지의 질의값만
+ * 바뀌는데도 router.replace 는 매번 라우터 전환(서버 RSC 왕복)을 걸고, 그동안 화면은
+ * 이전 탭에 머문다 — 눌러도 안 넘어가는 것처럼 보이던 원인이다. 얕은 갱신은 즉시
+ * 끝나고, 아래 구독으로 이 화면의 훅 인스턴스들(탭 머리·Inflow·Outflow)이 같은 값을
+ * 함께 본다. 뒤로/앞으로와 딥링크도 그대로 동작한다.
+ */
+const navListeners = new Set<(qs: string) => void>();
+
 function useFinanceNav() {
-  const router = useRouter();
-  const params = useSearchParams();
-  const setParams = (patch: Record<string, string>) => {
-    const q = new URLSearchParams(params.toString());
+  // 첫 진입·딥링크 값. 브라우저에서는 주소창이 늘 최신이므로 그쪽을 먼저 본다
+  // (탭을 옮기며 새로 붙는 컴포넌트가 한 박자 늦은 값으로 시작하지 않게).
+  const urlParams = useSearchParams();
+  const [qs, setQs] = useState(() =>
+    typeof window === "undefined" ? urlParams.toString() : window.location.search.replace(/^\?/, "")
+  );
+
+  // 라우터 쪽에서 주소가 바뀌는 경우(다른 화면에서 넘어온 링크 등)를 따라간다.
+  // 단, 라우터가 실제 주소와 다른 값을 들고 있으면(내 얕은 갱신이 아직 반영되기 전)
+  // 무시한다 — 그대로 받으면 방금 옮긴 탭이 이전 탭으로 되튄다.
+  useEffect(() => {
+    const fromRouter = urlParams.toString();
+    if (fromRouter === window.location.search.replace(/^\?/, "")) setQs(fromRouter);
+  }, [urlParams]);
+
+  useEffect(() => {
+    const onSet = (next: string) => setQs(next);
+    const onPop = () => setQs(window.location.search.replace(/^\?/, ""));
+    navListeners.add(onSet);
+    window.addEventListener("popstate", onPop);
+    return () => {
+      navListeners.delete(onSet);
+      window.removeEventListener("popstate", onPop);
+    };
+  }, []);
+
+  const params = useMemo(() => new URLSearchParams(qs), [qs]);
+
+  const setParams = useCallback((patch: Record<string, string>) => {
+    // 기준은 항상 지금 주소 — 이 훅을 쓰는 컴포넌트가 여럿이라 각자의 사본을 믿으면
+    // 한쪽이 뒤처진 값으로 덮어쓸 수 있다.
+    const q = new URLSearchParams(window.location.search);
     for (const [k, v] of Object.entries(patch)) {
       if (v) q.set(k, v);
       else q.delete(k);
     }
-    const qs = q.toString();
-    router.replace(qs ? `/finance?${qs}` : "/finance", { scroll: false });
-  };
+    const next = q.toString();
+    window.history.replaceState(null, "", next ? `/finance?${next}` : "/finance");
+    for (const notify of Array.from(navListeners)) notify(next);
+  }, []);
+
   return { params, setParams };
 }
 

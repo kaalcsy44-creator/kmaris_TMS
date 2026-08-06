@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { fetchFinanceCashflowItems } from "@/lib/api";
 import { useCachedData } from "@/lib/useCachedData";
 import type { CashBucket, FinanceCashflowItem, FinanceCashflowItems } from "@/lib/types";
@@ -66,7 +66,23 @@ function dayLabel(iso: string): string {
  */
 
 export default function FinancePeriodScreen() {
-  const params = useSearchParams();
+  const urlParams = useSearchParams();
+  // 통화 토글은 같은 페이지의 질의값만 바꾼다. router.replace 로 하면 그때마다 라우터
+  // 전환(서버 왕복)이 걸려 눌러도 한참 안 바뀌는 것처럼 보인다 — 얕게 갱신하고 화면은
+  // 이 상태로 즉시 되돌린다(Finance 화면의 useFinanceNav 와 같은 이유).
+  const [qs, setQs] = useState(() =>
+    typeof window === "undefined" ? urlParams.toString() : window.location.search.replace(/^\?/, "")
+  );
+  useEffect(() => {
+    const fromRouter = urlParams.toString();
+    if (fromRouter === window.location.search.replace(/^\?/, "")) setQs(fromRouter);
+  }, [urlParams]);
+  useEffect(() => {
+    const onPop = () => setQs(window.location.search.replace(/^\?/, ""));
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+  const params = useMemo(() => new URLSearchParams(qs), [qs]);
   const start = params.get("start") || "";
   const end = params.get("end") || "";
   const label = params.get("label") || (start && end ? `${start} ~ ${end}` : "");
@@ -80,12 +96,13 @@ export default function FinancePeriodScreen() {
   const side: "in" | "out" = bucket
     ? (IN_BUCKETS.includes(bucket) ? "in" : "out")
     : params.get("side") === "out" ? "out" : "in";
-  const router = useRouter();
-  /** 통화만 바꾼 같은 기간 주소 — 잔고·합계는 한 통화 안에서만 의미가 있어 환산하지 않는다. */
-  const withCurrency = (cur: string) => {
-    const q = new URLSearchParams(params.toString());
+  /** 통화만 바꿔 다시 그린다 — 잔고·합계는 한 통화 안에서만 의미가 있어 환산하지 않는다. */
+  const pickCurrency = (cur: string) => {
+    const q = new URLSearchParams(window.location.search);
     q.set("cur", cur);
-    return `/finance/period?${q.toString()}`;
+    const next = q.toString();
+    window.history.replaceState(null, "", `/finance/period?${next}`);
+    setQs(next);
   };
 
   const cash = (n: number) => money(n, currency);
@@ -120,7 +137,7 @@ export default function FinancePeriodScreen() {
         </h2>
         <div className="seg-toggle" role="group" aria-label="Currency">
           {(["KRW", "USD"] as const).map((c) => (
-            <button key={c} className={currency === c ? "on" : ""} onClick={() => router.replace(withCurrency(c))}>
+            <button key={c} className={currency === c ? "on" : ""} onClick={() => pickCurrency(c)}>
               {c === "KRW" ? "₩ KRW" : "$ USD"}
             </button>
           ))}
