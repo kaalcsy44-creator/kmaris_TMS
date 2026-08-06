@@ -5700,13 +5700,72 @@ table.mini.wide.lead-tools tbody tr.item-row-excluded.item-row-excluded textarea
   gap: 10px;
   flex-wrap: wrap;
 }
-/* Notes·Signature 라벨 높이 맞추기 — 서명 쪽은 Include 토글을 품고 있어 줄 높이가
-   달라지면 두 입력란의 윗선이 어긋난다. 두 라벨 줄을 같은 높이로 고정해 나란히 시작하게 한다. */
+/* Notes·Signature 라벨 높이 맞추기 — 서명 쪽은 Include 토글과 Edit/Preview 칩을 품고
+   있어 줄 높이가 달라지면 두 입력란의 윗선이 어긋난다. 두 라벨 줄을 같은 높이로 고정해
+   나란히 시작하게 한다(칩 높이 ≈ 26px). */
 .doc-send-panel .mail-compose-2col .form-field > label {
   display: flex;
   align-items: center;
-  min-height: 24px;
+  min-height: 26px;
   margin-bottom: 3px;
+}
+
+/* ── 홍보 메일 작성창(ComposeEmailModal)과 맞춘 조각들 ─────────────────────────
+   Message 머리줄 · 본문/서명 미리보기 · 첨부 목록. 클래스는 그쪽(.compose-*)을 그대로
+   쓰고, 이 패널의 폭·높이에만 맞춘다. */
+.doc-send-panel .doc-send-msg-head {
+  margin-top: 14px;
+  margin-bottom: 2px;
+}
+/* 본문 편집칸(.po-textarea 240px)과 같은 높이 — Edit ↔ Preview 로 화면이 튀지 않게. */
+.doc-send-panel .compose-preview-body {
+  min-height: 240px;
+  max-height: 60vh;
+}
+/* 서명은 2열 안 절반 높이 칸이라 편집칸(120px)에 맞춘다. */
+.doc-send-panel .compose-preview-body.sig {
+  min-height: 120px;
+  max-height: 200px;
+}
+.doc-send-panel .compose-hint {
+  margin-top: 2px;
+  margin-bottom: 2px;
+}
+/* 생성 문서 행 — 시스템이 만드는 첨부라 사용자가 올린 파일과 톤을 구분한다. */
+.doc-send-panel .compose-asset.generated { color: #0b3d6e; }
+/* 체크 영역만 label — 셀렉트·버튼은 형제라 눌러도 첨부 체크가 뒤집히지 않는다. */
+.doc-send-panel .compose-asset-pick,
+.doc-send-panel .form-field label.compose-asset-pick {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  margin-bottom: 0;
+  font-weight: 400;
+  font-size: 13px;
+  color: inherit;
+  cursor: pointer;
+}
+.doc-send-panel .compose-asset-pick input[type="checkbox"] { flex: none; margin: 0; }
+.doc-send-panel .compose-asset.generated.on { background: #e7f0fb; }
+.doc-send-panel .compose-asset.generated:not(.on) .compose-asset-name {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+/* 포맷 셀렉트 — 전역 `.form-field select{width:100%}` 가 이겨 파일명을 밀어낸다.
+   행 안에서만 내용 폭으로 되돌린다. */
+.doc-send-panel .compose-asset .compose-asset-fmt {
+  flex: none;
+  width: auto;
+  height: 22px;
+  padding: 0 4px;
+  border: 1px solid #b9d3ee;
+  border-radius: 5px;
+  background: #fff;
+  font-size: 10.5px;
+  line-height: 1;
+  color: inherit;
 }
 /* 제목 + 언어·초안 재생성을 한 줄에. 제목이 남는 폭을 다 쓴다. */
 .mail-subject-row {

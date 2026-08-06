@@ -2,7 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { getToken } from "@/lib/auth";
+import { renderEmailPreview } from "@/lib/api";
 import CcField from "@/components/common/CcField";
+import { toggleBold, onBoldKey } from "@/lib/mdEdit";
 
 // 문서 생성(다운로드) + 이메일 미리보기 + 발송(첨부) 공통 패널.
 // 2·4·6단계 상세편집 페이지에서 공유한다. 단계별 API 차이는 콜백(onPreview/onSend/
@@ -14,6 +16,10 @@ import CcField from "@/components/common/CcField";
 //
 // 첨부는 생성 문서(Attach 포맷으로 고른 PDF/XLSX — 서버가 붙인다) + 여기서 올린 파일.
 // 올린 파일은 보관하지 않고 발송 시에만 붙는다.
+//
+// 작성 화면의 구조(Message 머리줄 · Edit↔Preview · 굵게 · 서명 미리보기 · 첨부 목록)는
+// 홍보 메일 작성창(ComposeEmailModal)과 맞춘다 — 같은 일을 하는 두 화면이 서로 다르게
+// 생겼을 이유가 없고, 미리보기 렌더도 서버의 같은 엔드포인트를 쓴다.
 export type DocFormat = "pdf" | "xlsx";
 
 export interface DocPreview {
@@ -93,6 +99,26 @@ export default function DocSendPanel({
   const [err, setErr] = useState<string | null>(null);
   const autoRan = useRef(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
+
+  // 미리보기 — 수신자가 받게 될 HTML(서버가 발송과 같은 렌더러로 만든다).
+  const [preview, setPreview] = useState(false);
+  const [previewHtml, setPreviewHtml] = useState("");
+  const previewSeq = useRef(0);
+  // 서명만 따로 보는 미리보기(본문 전체 미리보기와 별개).
+  const [sigPreview, setSigPreview] = useState(false);
+  const [sigHtml, setSigHtml] = useState("");
+  const sigSeq = useRef(0);
+  // 첨부 미리보기(패널 안 인라인) — 만든 object URL 은 닫을 때/떠날 때 정리한다.
+  const [filePreview, setFilePreview] =
+    useState<{ name: string; mime: string; url: string } | null>(null);
+  const objectUrls = useRef<string[]>([]);
+  useEffect(
+    () => () => {
+      for (const u of objectUrls.current) URL.revokeObjectURL(u);
+    },
+    []
+  );
 
   // 표시 용량은 업로드분만 — 생성 문서는 발송 시점에 서버가 만들어 크기를 미리 알 수 없다.
   const attachTotal = files.reduce((n, f) => n + f.size, 0);
@@ -113,15 +139,18 @@ export default function DocSendPanel({
     setErr(null);
   }
 
+  async function fetchDoc(fmt: DocFormat): Promise<Blob> {
+    const res = await fetch(downloadUrl(fmt), {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    });
+    if (!res.ok) throw new Error("File download failed");
+    return res.blob();
+  }
+
   async function download(fmt: DocFormat) {
     setErr(null);
     try {
-      const res = await fetch(downloadUrl(fmt), {
-        headers: { Authorization: `Bearer ${getToken()}` },
-      });
-      if (!res.ok) throw new Error("File download failed");
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
+      const url = URL.createObjectURL(await fetchDoc(fmt));
       const a = document.createElement("a");
       a.href = url;
       a.download = downloadName(fmt);
@@ -129,6 +158,33 @@ export default function DocSendPanel({
       URL.revokeObjectURL(url);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "File download failed");
+    }
+  }
+
+  // ── 첨부 미리보기 ─────────────────────────────────────────────────
+  // 새 탭은 팝업 차단에 걸려 아무 반응도 없어 보이므로 이 패널 안에서 연다.
+  // PDF·이미지는 브라우저가 그대로 그려 준다.
+  function showPreview(name: string, mime: string, url: string) {
+    objectUrls.current.push(url);
+    setFilePreview((prev) => {
+      if (prev) URL.revokeObjectURL(prev.url);
+      return { name, mime, url };
+    });
+  }
+  function closeFilePreview() {
+    setFilePreview((prev) => {
+      if (prev) URL.revokeObjectURL(prev.url);
+      return null;
+    });
+  }
+  // 생성 문서는 서버가 그 자리에서 만든다 — 내려받은 것과 같은 파일을 그대로 띄운다.
+  async function previewGenerated() {
+    setErr(null);
+    try {
+      const blob = await fetchDoc(format);
+      showPreview(downloadName(format), blob.type || "application/pdf", URL.createObjectURL(blob));
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Could not open the preview.");
     }
   }
 
@@ -164,6 +220,40 @@ export default function DocSendPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [emailEnabled, disabled]);
 
+  // 실제 발송되는 본문 = body + notes(서버 compose_body 와 같은 규칙: 빈 조각은 건너뛰고
+  // 사이에 빈 줄 하나). 서명은 서버가 표/평문 규칙으로 따로 붙이므로 여기서 합치지 않는다.
+  const composedBody = [body.trim(), notes.trim()].filter(Boolean).join("\n\n");
+
+  // 미리보기가 열려 있을 때만, 입력이 멈추면 서버 렌더를 갱신한다.
+  useEffect(() => {
+    if (!preview) return;
+    const seq = ++previewSeq.current;
+    const t = setTimeout(async () => {
+      try {
+        const r = await renderEmailPreview(composedBody, signature, includeSignature);
+        if (seq === previewSeq.current) setPreviewHtml(r.html);
+      } catch {
+        /* 편집 중 일시적 실패는 무시 — 다음 입력에서 다시 시도된다. */
+      }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [preview, composedBody, signature, includeSignature]);
+
+  // 서명 미리보기 — 본문 없이 서명만 같은 렌더러로 그린다(평문 칸이라 실제 표 서명을 확인).
+  useEffect(() => {
+    if (!sigPreview) return;
+    const n = ++sigSeq.current;
+    const t = setTimeout(async () => {
+      try {
+        const r = await renderEmailPreview("", signature, true);
+        if (n === sigSeq.current) setSigHtml(r.html);
+      } catch {
+        /* 편집 중 일시적 실패는 무시 */
+      }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [sigPreview, signature]);
+
   async function send() {
     if (!onSend) return;
     setBusy(true);
@@ -193,8 +283,8 @@ export default function DocSendPanel({
       ) : null}
 
       {/* 이메일을 쓰지 않는 다운로드 전용 모드에만 남는 줄(포맷별 내려받기).
-          이메일 모드에서는 첨부 칩 안의 ↓ 로 같은 파일을 받고, Lang·초안 재생성은
-          Subject 줄로 옮겨 빈 줄이 생기지 않게 했다. */}
+          이메일 모드에서는 첨부 목록의 Preview·↓ 로 같은 파일을 보고 받고, 초안 재생성은
+          Message 머리줄에 있다. */}
       {!emailEnabled ? (
         <div className="doc-send-row">
           {formats.map((f) => (
@@ -240,62 +330,152 @@ export default function DocSendPanel({
               inputId="doc-cc-input"
             />
           </div>
-          {/* 제목 + 언어·초안 재생성을 한 줄에. 셋 다 "이 초안을 어떻게 만들/고칠까"에 속하고,
-              따로 두면 폭만 넓은 빈 줄이 하나 더 생긴다. */}
-          <div className="form-field" style={{ marginTop: 8 }}>
-            <label>Subject</label>
-            <div className="mail-subject-row">
-              <input value={subject} onChange={(e) => setSubject(e.target.value)} />
+          {/* Message 머리줄 — 초안 재생성 + 편집↔미리보기. 홍보 메일 작성창과 같은 구조로,
+              미리보기는 서버가 발송용 HTML 로 렌더한 결과라 수신자가 볼 모습 그대로다. */}
+          <div className="compose-section-title doc-send-msg-head">
+            Message
+            <span className="compose-tpl">
               <button
                 type="button"
-                className="btn sm"
+                className="chip-btn"
                 onClick={makePreview}
                 disabled={disabled || busy}
                 title="Regenerate the draft from the template (overwrites your edits)"
               >
                 {busy ? "…" : "↻ Regenerate draft"}
               </button>
-            </div>
-          </div>
-          <div className="form-field" style={{ marginTop: 8 }}>
-            <label>Body</label>
-            <textarea className="po-textarea" value={body} onChange={(e) => setBody(e.target.value)} />
+              <span className="compose-tpl-sep" />
+              <button
+                type="button"
+                className={`chip-btn${preview ? "" : " on"}`}
+                onClick={() => setPreview(false)}
+              >
+                Edit
+              </button>
+              <button
+                type="button"
+                className={`chip-btn${preview ? " on" : ""}`}
+                onClick={() => setPreview(true)}
+              >
+                Preview
+              </button>
+            </span>
           </div>
 
-          {/* Notes(본문 뒤 문단) · Signature 는 본문만큼 길 일이 없어 좌우 2열 · 절반 높이. */}
-          <div className="mail-compose-2col">
-            <div className="form-field">
-              <label>Notes (optional)</label>
-              <textarea
-                className="mail-notes"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Added after the body, before the signature."
-              />
+          {preview ? (
+            <div className="compose-preview">
+              <div className="compose-preview-subj">
+                <b>Subject:</b> {subject}
+              </div>
+              {previewHtml ? (
+                <div
+                  className="compose-preview-body"
+                  dangerouslySetInnerHTML={{ __html: previewHtml }}
+                />
+              ) : (
+                <div className="hint-inline">Rendering…</div>
+              )}
+              <div className="compose-hint">
+                This is what the recipient will see
+                {includeSignature ? " (signature included)" : ""}. Attachments are listed
+                below.
+              </div>
             </div>
+          ) : (
+            <>
+              <div className="form-field">
+                <label>Subject</label>
+                <input value={subject} onChange={(e) => setSubject(e.target.value)} />
+              </div>
+              <div className="form-field" style={{ marginTop: 8 }}>
+                <label className="mail-sig-head">
+                  <span>Body</span>
+                  <span className="mail-sig-tools">
+                    <button
+                      type="button"
+                      className="chip-btn md-bold"
+                      title="Bold the selection (Ctrl+B) — stored in the body as **text**"
+                      onClick={() => toggleBold(bodyRef.current, setBody)}
+                    >
+                      B
+                    </button>
+                  </span>
+                </label>
+                <textarea
+                  ref={bodyRef}
+                  className="po-textarea"
+                  value={body}
+                  onChange={(e) => setBody(e.target.value)}
+                  onKeyDown={(e) => onBoldKey(e, setBody)}
+                />
+              </div>
+              <div className="compose-hint">
+                Bold shows as <code>**text**</code> (select, then B or Ctrl+B).
+              </div>
 
-            <div className="form-field">
-              <label className="mail-sig-head">
-                <span>Signature</span>
-                <span className="mail-sig-tools">
-                  <label className="mail-sig-toggle">
-                    <input
-                      type="checkbox"
-                      checked={includeSignature}
-                      onChange={(e) => setIncludeSignature(e.target.checked)}
-                    />
-                    Include
+              {/* Notes(본문 뒤 문단) · Signature 는 본문만큼 길 일이 없어 좌우 2열 · 절반 높이. */}
+              <div className="mail-compose-2col">
+                <div className="form-field">
+                  <label>Notes (optional)</label>
+                  <textarea
+                    className="mail-notes"
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    placeholder="Added after the body, before the signature."
+                  />
+                </div>
+
+                <div className="form-field">
+                  <label className="mail-sig-head">
+                    <span>Signature</span>
+                    <span className="mail-sig-tools">
+                      <label className="mail-sig-toggle">
+                        <input
+                          type="checkbox"
+                          checked={includeSignature}
+                          onChange={(e) => setIncludeSignature(e.target.checked)}
+                        />
+                        Include
+                      </label>
+                      {/* 서명 칸은 평문이라 실제 모습(표 서명)을 여기서 바로 확인한다. */}
+                      <button
+                        type="button"
+                        className={`chip-btn${sigPreview ? "" : " on"}`}
+                        onClick={() => setSigPreview(false)}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        className={`chip-btn${sigPreview ? " on" : ""}`}
+                        onClick={() => setSigPreview(true)}
+                      >
+                        Preview
+                      </button>
+                    </span>
                   </label>
-                </span>
-              </label>
-              <textarea
-                className="mail-sig"
-                value={signature}
-                onChange={(e) => setSignature(e.target.value)}
-                disabled={!includeSignature}
-              />
-            </div>
-          </div>
+                  {sigPreview ? (
+                    <div
+                      className="compose-preview-body sig"
+                      dangerouslySetInnerHTML={{ __html: sigHtml }}
+                    />
+                  ) : (
+                    <textarea
+                      className="mail-sig"
+                      value={signature}
+                      onChange={(e) => setSignature(e.target.value)}
+                      disabled={!includeSignature}
+                    />
+                  )}
+                </div>
+              </div>
+              <div className="compose-hint">
+                This is the signature saved under Settings → Email Templates → Signature.
+                Editing it here applies to this send only, and sends the edited plain text
+                instead of the table signature.
+              </div>
+            </>
+          )}
 
           {/* 첨부 — 이 메일에 무엇이 붙는지 한 곳에서 다 보이게 한다.
               생성 문서도 체크를 끄면 빠진다(서버가 아예 만들지 않는다). 포맷 선택·내려받기도
@@ -307,19 +487,26 @@ export default function DocSendPanel({
                 {fmtSize(attachTotal)} / {fmtSize(MAX_ATTACH_TOTAL)}
               </span>
             </label>
-            <div className="mail-attach-list">
-              <span className={`mail-attach generated${includeDoc ? "" : " off"}`}>
-                <label className="mail-attach-pick" title="이 문서를 첨부합니다(끄면 본문만 발송)">
+            {/* 생성 문서는 홍보 메일의 '저장된 파일' 자리에 해당한다 — 같은 목록 행 구조로,
+                체크로 붙이고 끄며 Preview 로 실제 파일을 확인한다. */}
+            <div className="compose-assets">
+              {/* 체크박스+파일명만 <label> 로 묶는다 — 포맷 셀렉트·버튼까지 감싸면 그것들을
+                  누를 때 첨부 체크가 함께 뒤집힌다. */}
+              <div className={`compose-asset generated${includeDoc ? " on" : ""}`}>
+                <label
+                  className="compose-asset-pick"
+                  title="이 문서를 첨부합니다(끄면 본문만 발송)"
+                >
                   <input
                     type="checkbox"
                     checked={includeDoc}
                     onChange={(e) => setIncludeDoc(e.target.checked)}
                   />
-                  <span className="mail-attach-name">{downloadName(format)}</span>
+                  <span className="compose-asset-name">{downloadName(format)}</span>
                 </label>
                 {formats.length > 1 ? (
                   <select
-                    className="mail-attach-fmt"
+                    className="compose-asset-fmt"
                     value={format}
                     onChange={(e) => setFormat(e.target.value as DocFormat)}
                     disabled={!includeDoc}
@@ -330,32 +517,30 @@ export default function DocSendPanel({
                     ))}
                   </select>
                 ) : null}
+                {format === "pdf" ? (
+                  <button
+                    type="button"
+                    className="compose-asset-eye"
+                    title="Preview"
+                    onClick={previewGenerated}
+                  >
+                    Preview
+                  </button>
+                ) : null}
                 <button
                   type="button"
-                  className="mail-attach-dl"
+                  className="compose-asset-eye"
                   title="이 문서를 내려받아 확인"
                   onClick={() => download(format)}
                 >
                   ↓
                 </button>
-              </span>
-              {files.map((f, i) => (
-                <span key={`${f.name}:${f.size}:${i}`} className="mail-attach">
-                  <span className="mail-attach-name">📎 {f.name}</span>
-                  <span className="mail-attach-size-sm">{fmtSize(f.size)}</span>
-                  <button
-                    type="button"
-                    className="mail-attach-x"
-                    title="Remove"
-                    onClick={() => setFiles((prev) => prev.filter((_, idx) => idx !== i))}
-                  >
-                    ✕
-                  </button>
-                </span>
-              ))}
+              </div>
+            </div>
+            <div className="compose-upload">
               <button
                 type="button"
-                className="btn ghost xs"
+                className="btn ghost"
                 onClick={() => fileRef.current?.click()}
                 disabled={disabled}
               >
@@ -372,6 +557,52 @@ export default function DocSendPanel({
                 }}
               />
             </div>
+            {files.length ? (
+              <ul className="compose-files">
+                {files.map((f, i) => (
+                  <li key={`${f.name}:${f.size}:${i}`}>
+                    📎 {f.name} <span className="compose-asset-size">{fmtSize(f.size)}</span>
+                    <button
+                      type="button"
+                      className="compose-asset-eye"
+                      title="Preview"
+                      onClick={() => showPreview(f.name, f.type, URL.createObjectURL(f))}
+                    >
+                      Preview
+                    </button>
+                    <button
+                      type="button"
+                      className="compose-file-x"
+                      title="Remove"
+                      onClick={() => setFiles((prev) => prev.filter((_, idx) => idx !== i))}
+                    >
+                      ×
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+
+            {filePreview ? (
+              <div className="compose-file-preview">
+                <div className="compose-file-preview-head">
+                  <span className="compose-asset-name">{filePreview.name}</span>
+                  <button type="button" className="compose-file-x" onClick={closeFilePreview}>
+                    ×
+                  </button>
+                </div>
+                {filePreview.mime.startsWith("image/") ? (
+                  <img src={filePreview.url} alt={filePreview.name} />
+                ) : filePreview.mime.includes("pdf") ? (
+                  <iframe src={filePreview.url} title={filePreview.name} />
+                ) : (
+                  <div className="hint-inline" style={{ padding: 12 }}>
+                    This file type ({filePreview.mime || "unknown"}) cannot be previewed in
+                    the browser.
+                  </div>
+                )}
+              </div>
+            ) : null}
             {overSize ? (
               <div className="action-err" style={{ marginTop: 4 }}>
                 첨부 용량이 한도를 넘었습니다 — 파일을 줄여주세요.
