@@ -45,6 +45,7 @@ _MIGRATIONS = {
         "sent_at": "VARCHAR(16)",
         "cost_currency": "VARCHAR(10)",
         "round_digits": "INTEGER",
+        "margin_pct": "FLOAT",
         "discount_pct": "FLOAT",
         "fx_rate": "FLOAT",
         "vendor_quote_id": "INTEGER",

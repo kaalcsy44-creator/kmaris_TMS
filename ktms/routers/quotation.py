@@ -175,6 +175,7 @@ def create_customer_quote(rfq_id: int, body: CustomerQuoteCreate,
             currency=(body.currency or "USD"),
             cost_currency=(body.cost_currency or None),
             round_digits=body.round_digits,
+            margin_pct=body.margin_pct,
             discount_pct=(body.discount_pct or 0.0),
             fx_rate=body.fx_rate,
             vendor_quote_id=(body.vendor_quote_id or None),  # 원가 출처로 고른 벤더 견적
@@ -222,6 +223,8 @@ def customer_quotation_detail(qtn_id: int):
             "currency": qtn.currency or "USD",
             "cost_currency": getattr(qtn, "cost_currency", None) or "",
             "round_digits": getattr(qtn, "round_digits", None),
+            # Pricing 밴드 기본 마진 — 저장 전 견적(옛 데이터)은 null 이라 화면에서 품목 마진으로 시드한다.
+            "margin_pct": getattr(qtn, "margin_pct", None),
             "discount_pct": getattr(qtn, "discount_pct", 0) or 0,
             "fx_rate": getattr(qtn, "fx_rate", None),
             "amount": round(_quotation_total(qtn.items or [], getattr(qtn, "discount_pct", 0) or 0), 2),
@@ -265,6 +268,8 @@ def update_customer_quotation(qtn_id: int, body: CustomerQuoteUpdate):
             qtn.cost_currency = body.cost_currency or None
         if body.round_digits is not None:
             qtn.round_digits = body.round_digits
+        if body.margin_pct is not None:
+            qtn.margin_pct = body.margin_pct
         if body.discount_pct is not None:
             qtn.discount_pct = body.discount_pct
         if body.fx_rate is not None:

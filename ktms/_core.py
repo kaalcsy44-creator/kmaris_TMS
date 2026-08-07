@@ -3144,6 +3144,7 @@ class CustomerQuoteCreate(BaseModel):
     currency: str = "USD"
     cost_currency: str | None = None
     round_digits: int | None = None
+    margin_pct: float | None = None    # Pricing 밴드 기본 마진(%) — 재편집 시 그대로 복원
     discount_pct: float | None = None
     fx_rate: float | None = None       # 적용 환율(1 USD = ? KRW). 매매기준율/직접입력
     amount: float | None = None
@@ -3160,6 +3161,7 @@ class CustomerQuoteUpdate(BaseModel):
     currency: str | None = None
     cost_currency: str | None = None
     round_digits: int | None = None
+    margin_pct: float | None = None
     discount_pct: float | None = None
     fx_rate: float | None = None
     items: list[dict] | None = None

@@ -1631,13 +1631,15 @@ export function createCustomerQuote(
   roundDigits?: number,
   discountPct?: number,
   fxRate?: number | null,
-  vendorQuoteId?: number | null
+  vendorQuoteId?: number | null,
+  marginPct?: number
 ): Promise<{ ok: boolean; id: number; qtn_no: string }> {
   return post(`/api/admin/rfq/${rfqId}/customer-quote`, {
     qtn_no: qtnNo,
     currency,
     cost_currency: costCurrency,
     round_digits: roundDigits,
+    margin_pct: marginPct,
     discount_pct: discountPct,
     fx_rate: fxRate,
     amount,
@@ -1743,6 +1745,7 @@ export function updateCustomerQuotation(
     currency?: string;
     cost_currency?: string;
     round_digits?: number;
+    margin_pct?: number;      // Pricing 밴드 기본 마진(%) — 다시 열 때 그대로 복원
     discount_pct?: number;
     fx_rate?: number | null;
     items?: CustomerQuoteItem[];

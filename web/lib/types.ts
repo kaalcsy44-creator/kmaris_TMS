@@ -1370,6 +1370,7 @@ export type CustomerQuotationDetail = {
   currency: string;
   cost_currency?: string;
   round_digits?: number;
+  margin_pct?: number | null; // Pricing 밴드 기본 마진(%). 저장 전 옛 견적은 null
   discount_pct?: number;
   fx_rate?: number | null; // 적용 환율(1 USD = ? KRW). 매매기준율/직접입력
   amount: number;

@@ -2014,7 +2014,7 @@ function CustomerQuoteDetailModal({
   const [items, setItems] = useState<CustomerQuoteItem[]>([]);
   const [vendorQuotes, setVendorQuotes] = useState<VendorQuoteForImport[]>([]);
   const [importVqId, setImportVqId] = useState<number | "">("");
-  const [defaultMargin, setDefaultMargin] = useState(20);
+  const [defaultMargin, setDefaultMargin] = useState(DEFAULT_MARGIN_PCT);
   const effRate = fxRate ?? USD_KRW_RATE;
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -2035,6 +2035,10 @@ function CustomerQuoteDetailModal({
         setCostCurrency(data.cost_currency || data.currency || "USD");
         setRoundDigits(
           typeof data.round_digits === "number" ? data.round_digits : DEFAULT_ROUND_DIGITS
+        );
+        // 저장해 둔 Pricing 마진. 이 컬럼이 생기기 전 견적은 값이 없어 품목 마진에서 되살린다.
+        setDefaultMargin(
+          typeof data.margin_pct === "number" ? data.margin_pct : itemsMargin(data.items) ?? DEFAULT_MARGIN_PCT
         );
         setDiscountPct(Number(data.discount_pct || 0));
         setFxRate(typeof data.fx_rate === "number" ? data.fx_rate : null);
@@ -2078,6 +2082,7 @@ function CustomerQuoteDetailModal({
       currency,
       cost_currency: costCurrency,
       round_digits: roundDigits,
+      margin_pct: defaultMargin,
       discount_pct: discountPct,
       fx_rate: fxRate,
       sent_at: sentAt,
@@ -3514,7 +3519,7 @@ function CustomerQuoteAction({
   const [items, setItems] = useState<CustomerQuoteItem[]>([]);
   // 유효기간 기본 30일 — 화면에서 일수/날짜 어느 쪽으로든 고칠 수 있다.
   const [validUntil, setValidUntil] = useState(() => defaultValidUntil(nowLocalDt()));
-  const [defaultMargin, setDefaultMargin] = useState(20);
+  const [defaultMargin, setDefaultMargin] = useState(DEFAULT_MARGIN_PCT);
   const effRate = fxRate ?? USD_KRW_RATE;
   const [terms, setTerms] = useState<QuotationTerms>(
     withDefaultTerms({ remarks: "Bank charges outside Korea shall be borne by Buyer." })
@@ -3604,7 +3609,7 @@ function CustomerQuoteAction({
     setMsg(null);
     setErr(null);
     try {
-      const r = await createCustomerQuote(rfqId, currency, finalTotal, items, validUntil, undefined, terms, qtnNo, sentAt, costCurrency, roundDigits, discountPct, fxRate, importVqId === "" ? null : importVqId);
+      const r = await createCustomerQuote(rfqId, currency, finalTotal, items, validUntil, undefined, terms, qtnNo, sentAt, costCurrency, roundDigits, discountPct, fxRate, importVqId === "" ? null : importVqId, defaultMargin);
       setQtn({ id: r.id, qtn_no: r.qtn_no });
       setMsg(`Sent — ${r.qtn_no}`);
       onDone();
@@ -4276,6 +4281,22 @@ const DEFAULT_ROUND_DIGITS = -3;
 // 화면에는 아무 경고가 없어 "Apply 를 눌러도 판매가가 안 바뀐다"로 보였다. 그래서 값이
 // 범위를 벗어나면 계산을 조용히 넘기지 않고 아래 문구로 알린다.
 const MAX_MARGIN_PCT = 100;
+
+// Pricing 밴드 마진의 최초값 — 저장된 값도, 품목에서 읽을 값도 없을 때만 쓴다.
+const DEFAULT_MARGIN_PCT = 20;
+
+// 품목들이 공유하는 마진(%) — 밴드 마진을 따로 저장하기 전에 만든 견적을 다시 열 때,
+// 화면에 20% 가 찍혀 실제 단가와 어긋나 보이던 걸 막으려고 품목에서 되살린다.
+// 행마다 마진이 다르면 가장 많이 쓰인 값을 쓴다(같은 수면 첫 행 기준).
+function itemsMargin(items: CustomerQuoteItem[] | undefined | null): number | null {
+  const values = (items || []).map((it) => Number(it.margin_pct || 0));
+  if (values.length === 0) return null;
+  const tally = new Map<number, number>();
+  for (const v of values) tally.set(v, (tally.get(v) ?? 0) + 1);
+  let best = values[0];
+  for (const [v, n] of tally) if (n > (tally.get(best) ?? 0)) best = v;
+  return best;
+}
 
 function isUnreachableMargin(pct: number | null | undefined): boolean {
   return Number(pct || 0) >= MAX_MARGIN_PCT;
