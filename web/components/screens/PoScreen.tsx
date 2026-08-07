@@ -2046,13 +2046,13 @@ function ItemEditor({
     { key: "qty", label: "Qty", className: "num", phone: true },
     { key: "unit", label: "Unit" },
     { key: "unit_price", label: `Unit price (${cur})`, className: "num", phone: true },
-    { key: "amount", label: `Amount (${cur})`, className: "num", phone: true },
+    { key: "amount", label: `Amount (${cur})`, className: "num" },
     { key: "remark", label: "Remark" },
     // 품목 분류(선택) — 고르면 저장 시 품목 마스터 분류로 반영된다. 맨 끝에 두어
     // 합계행(컬럼당 1셀) 구성에만 한 칸 추가하면 된다.
     { key: "category", label: "Category" },
   ];
-  const grid = useItemGrid("po-items", cols);
+  const grid = useItemGrid("po-items", cols, { phoneHideFoot: true });
   // fields 순서 = 아래 keys.cell(i, 0..9) 열 번호. 여기 Amount 는 계산 컬럼이 아니라 직접 입력이라
   // fields 에 포함하고 재계산(normalizeRow)도 두지 않는다 — patch() 도 다시 계산하지 않는다.
   const keys = useItemGridKeys<PoWorkItem>({

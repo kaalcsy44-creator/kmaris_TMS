@@ -1382,7 +1382,7 @@ function VendorRfqItemEditor({
   const cols: ItemCol[] = [
     { key: "__sel", fixed: true },
     { key: "__seq", fixed: true, className: "seq" },
-    { key: "part_no", label: "Part No.", phone: true },
+    { key: "part_no", label: "Part No." },
     { key: "description", label: "Description", phone: true },
     { key: "type", label: "Type" },
     { key: "serial_no", label: "Serial No." },
@@ -2631,7 +2631,7 @@ function VendorRfqAction({
   const itemGridCols: ItemCol[] = [
     { key: "__sel", fixed: true },
     { key: "__seq", fixed: true, className: "seq" },
-    { key: "part_no", label: "Part No.", phone: true },
+    { key: "part_no", label: "Part No." },
     { key: "description", label: "Description", phone: true },
     { key: "type", label: "Type" },
     { key: "serial_no", label: "Serial No." },
@@ -3292,11 +3292,11 @@ function VendorQuoteItemEditor({
     { key: "qty", label: "Qty", className: "num", phone: true },
     { key: "unit", label: "Unit" },
     { key: "unit_price", label: `Unit Price (${cur})`, className: "num", phone: true },
-    { key: "amount", label: `Amount (${cur})`, className: "num", phone: true },
+    { key: "amount", label: `Amount (${cur})`, className: "num" },
     { key: "lead_time", label: "Lead Time" },
     { key: "remark", label: "Remark" },
   ];
-  const grid = useItemGrid("vquote-items", cols);
+  const grid = useItemGrid("vquote-items", cols, { phoneHideFoot: true });
   // 엑셀식 편집 — fields 는 아래 keys.cell(i, 0..10) 열 번호와 순서가 같아야 한다.
   // Amount 는 계산 컬럼이라 입력이 없고 열 번호도 차지하지 않으므로 뺀다.
   const keys = useItemGridKeys<VendorQuoteItem>({
@@ -3997,7 +3997,7 @@ function CustomerQuoteItemEditor({
     { key: "cost_amount", label: `Cost Amount (${costCur})`, className: "num" },
     { key: "margin", label: "Margin %", className: "num" },
     { key: "unit_price", label: `Unit Price (${saleCur})`, className: "num", phone: true },
-    { key: "amount", label: `Amount (${saleCur})`, className: "num", phone: true },
+    { key: "amount", label: `Amount (${saleCur})`, className: "num" },
     { key: "remark", label: "Remark" },
   ];
   const grid = useItemGrid("cquote-items", cols);

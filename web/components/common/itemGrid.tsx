@@ -47,13 +47,24 @@ export type ItemGridApi = {
   tableClass: string;
   /** 이 표가 폰 접기를 지원하는지(= phone 표식을 단 컬럼이 있는지). */
   foldable: boolean;
+  /** 접었을 때 합계행(tfoot)까지 감출지 — 합계 숫자가 접힌 컬럼(Amount)에 들어 있는 표용. */
+  phoneHideFoot: boolean;
   /** 폰에서 지금 접혀 있는지. 데스크톱 표시에는 영향이 없다. */
   phoneFold: boolean;
   togglePhoneFold: () => void;
 };
 
 /** 품목표 컬럼 커스터마이즈(폭·숨김) 상태. tableId 별로 localStorage 에 저장된다. */
-export function useItemGrid(tableId: string, cols: ItemCol[]): ItemGridApi {
+export function useItemGrid(
+  tableId: string,
+  cols: ItemCol[],
+  opts?: {
+    /** 합계행의 금액 칸이 폰에서 접히는 컬럼(주로 Amount)에 있는 표 — 접을 때 합계행도 함께
+     *  내린다. 라벨만 남고 숫자가 사라지는 꼴을 막기 위함이며, 총액은 편집창 하단 바에 있다.
+     *  합계행에 직접 입력하는 칸(부대비용·포장 합계)이 있는 표에는 쓰지 않는다. */
+    phoneHideFoot?: boolean;
+  },
+): ItemGridApi {
   const hideableCols = useMemo(
     () => cols.filter((c) => !c.fixed).map((c) => ({ key: c.key, label: c.label ?? c.key })),
     [cols]
@@ -86,7 +97,17 @@ export function useItemGrid(tableId: string, cols: ItemCol[]): ItemGridApi {
       return next;
     });
   }, []);
-  return { layout, hideableCols, cols, colIndex, tableClass, foldable, phoneFold, togglePhoneFold };
+  return {
+    layout,
+    hideableCols,
+    cols,
+    colIndex,
+    tableClass,
+    foldable,
+    phoneHideFoot: Boolean(opts?.phoneHideFoot),
+    phoneFold,
+    togglePhoneFold,
+  };
 }
 
 /** 폭 조절 핸들 + 숨김(✕) 버튼을 가진 헤더 셀. fixed 컬럼은 이 대신 일반 <th> 를 쓴다. */
@@ -129,7 +150,7 @@ export function ItemTh({
  *  spans: colspan 으로 직접 구성한 셀들이 덮는 컬럼 key 목록(그룹 헤더행·합계행 세그먼트).
  *  각 셀에 igSpan(keys) 표식을 함께 달아야 한다. */
 export function ItemGridStyle({ grid, spans }: { grid: ItemGridApi; spans?: string[][] }) {
-  const { cols, colIndex, layout, tableClass, foldable, phoneFold } = grid;
+  const { cols, colIndex, layout, tableClass, foldable, phoneFold, phoneHideFoot } = grid;
   const spanSig = (spans ?? []).map((keys) => keys.join(",")).join("|");
   const css = useMemo(() => {
     const rules: string[] = [];
@@ -174,6 +195,17 @@ export function ItemGridStyle({ grid, spans }: { grid: ItemGridApi; spans?: stri
       const folded = cols
         .filter((c) => !c.fixed && !c.phone && !layout.hidden.has(c.key))
         .map((c) => colSel(colIndex[c.key]));
+      // 남는 숫자 칸은 값 길이에 맞춰 못 박는다. 폭을 auto 로 두면 입력칸의 기본 폭
+      // (약 20자)이 컬럼 폭을 정해 버려서, 남은 폭을 다 먹고 Description 을 짓누른다.
+      const narrow = cols
+        .filter((c) => !c.fixed && c.phone && !layout.hidden.has(c.key))
+        .map((c) => {
+          const isNum = c.className?.includes("num") || c.key === "qty";
+          if (!isNum) return null;
+          const w = c.key === "qty" || c.key === "pkg_qty" ? 46 : 76;
+          return `${colSel(colIndex[c.key])}{width:${w}px!important;min-width:${w}px!important;max-width:${w}px!important}`;
+        })
+        .filter((s): s is string => s !== null);
       const phoneRules = [
         ...(folded.length ? [`${folded.join(",")}{display:none!important}`] : []),
         // 그룹 헤더행·colspan 합계행은 "보이는 컬럼 수" 를 JS 로 계산해 만든 행이라
@@ -186,12 +218,17 @@ export function ItemGridStyle({ grid, spans }: { grid: ItemGridApi; spans?: stri
         // 두 열 사이가 벌어지고 그 틈으로 스크롤되는 옆 컬럼이 비쳐 보인다.
         `.${tableClass} th:not(.row-tools):not(.seq),.${tableClass} td:not(.row-tools):not(.seq){width:auto!important;min-width:0!important;max-width:none!important}`,
         `.${tableClass} td input,.${tableClass} td textarea{min-width:0!important}`,
+        // 폭 못박기는 위의 auto 해제보다 뒤에 와야 이긴다(같은 !important · 같은 구체성).
+        ...narrow,
+        // 합계 숫자가 접힌 컬럼에 들어 있는 표는 합계행째 내린다 — 라벨만 남고 값이 빈
+        // 줄이 되기 때문. 총액은 편집창 하단 바(FINAL·Total invoice value)에 있다.
+        ...(phoneHideFoot ? [`.${tableClass} tfoot{display:none!important}`] : []),
       ];
       rules.push(`@media (max-width:${PHONE_MAX}px){${phoneRules.join("")}}`);
     }
     return rules.join("\n");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cols, colIndex, layout.hidden, layout.widths, tableClass, spanSig, foldable, phoneFold]);
+  }, [cols, colIndex, layout.hidden, layout.widths, tableClass, spanSig, foldable, phoneFold, phoneHideFoot]);
   if (!css) return null;
   return <style dangerouslySetInnerHTML={{ __html: css }} />;
 }

@@ -2220,17 +2220,21 @@ function ItemEditor({
           { key: "pkg_qty", label: "Pkgs", className: "num", phone: true },
           { key: "pkg_kind", label: "Kind" },
           { key: "net_weight", label: "N.W." },
-          { key: "gross_weight", label: "G.W.", phone: true },
+          { key: "gross_weight", label: "G.W." },
           { key: "measurement", label: "Meas. (m³)", className: "num" },
           { key: "dimension", label: "Dimension" },
         ]
       : [
           { key: "unit_price", label: `Unit Price (${cur})`, className: "num", phone: true },
-          { key: "amount", label: `Amount (${cur})`, className: "num", phone: true },
+          // 부대비용(Freight·Packing·Insurance) 입력칸이 합계행의 Amount 칸에 들어가는 문서
+          // (PI·CI)에서는 폰에서도 Amount 열을 남긴다 — 접으면 그 입력칸까지 사라진다.
+          { key: "amount", label: `Amount (${cur})`, className: "num", phone: Boolean(footerRows) },
         ]),
     { key: "remark", label: "Remark" },
   ];
-  const grid = useItemGrid(tableId, cols);
+  // 합계행이 "Total" 한 줄뿐인 문서만 폰에서 합계행을 내린다(총액은 하단 바에 있다).
+  // 포장 합계·부대비용처럼 직접 입력하는 칸이 있는 합계행은 그대로 둔다.
+  const grid = useItemGrid(tableId, cols, { phoneHideFoot: !packing && !footerRows });
   // fields 순서 = 아래 keys.cell(i, …) 열 번호. Packing List 와 금액 문서는 중간 컬럼 구성이
   // 통째로 달라 열 번호도 갈린다(공통 0..4 뒤가 갈리고 Remark 는 11 또는 7).
   const keys = useItemGridKeys<DocumentWorkItem>({
@@ -2413,8 +2417,10 @@ function ItemEditor({
                 <td></td>{/* 3 part_no */}
                 <td></td>{/* 4 description */}
                 <td></td>{/* 5 maker */}
-                <td></td>{/* 6 qty */}
-                <td className="total-label">Total</td>{/* 7 unit */}
+                {/* 합계 라벨은 Qty 칸에 둔다 — 폰에서 핵심 칸만 남길 때 Unit 은 접히므로,
+                    거기 두면 합계줄이 라벨 없이 숫자만 남는다(Qty 는 항상 보인다). */}
+                <td className="total-label">Total</td>{/* 6 qty */}
+                <td></td>{/* 7 unit */}
                 {packingTotals ? (
                   <>
                     <td>{/* 8 pkg_qty */}
