@@ -947,7 +947,10 @@ function InflowTab() {
               <input type="checkbox" checked={openOnly} onChange={(e) => setOpenOnly(e.target.checked)} /> Outstanding only
             </label>
           ) : null}
-          {view === "income" && can("finance", "create") ? (
+          {/* 등록 버튼은 갈래와 무관하게 늘 같은 자리에 둔다 — 수입을 적으려고 먼저
+              "Other income" 탭을 찾아 들어가야 했던 걸 없앤다. 저장하면 그 항목이 보이는
+              갈래로 옮겨 준다(아래 onSaved). */}
+          {can("finance", "create") ? (
             <button className="btn primary sm" onClick={() => setAdding(true)}>+ Add income</button>
           ) : null}
         </div>
@@ -1081,7 +1084,13 @@ function InflowTab() {
         />
       ) : null}
       {adding ? (
-        <IncomeForm initial={emptyIncome} onClose={() => setAdding(false)} onSaved={() => { setAdding(false); reload(); }} />
+        // 저장한 항목은 "Other income" 갈래에 들어간다 — 다른 갈래에서 등록했어도
+        // 결과가 보이는 곳으로 옮겨 준다(등록하고 아무 일도 안 일어난 것처럼 보이지 않게).
+        <IncomeForm
+          initial={emptyIncome}
+          onClose={() => setAdding(false)}
+          onSaved={() => { setAdding(false); setView("income"); reload(); }}
+        />
       ) : null}
       {editing ? (
         <IncomeForm
@@ -1449,7 +1458,10 @@ function OutflowTab() {
       <div className="items-head">
         <h3 className="form-title fin-page-title" style={{ margin: 0 }}>Outflow</h3>
         <div className="items-head-actions">
-          {view === "other" && can("finance", "create") ? (
+          {/* 등록 버튼은 갈래와 무관하게 늘 같은 자리에 둔다 — 지출을 적으려고 먼저
+              "Other costs" 탭으로 옮겨 가야 했던 걸 없앤다. 저장하면 그 항목이 실제로
+              보이는 갈래로 옮겨 준다(아래 onSaved). */}
+          {can("finance", "create") ? (
             <button className="btn primary sm" onClick={() => setAdding(true)}>+ Add payable</button>
           ) : null}
         </div>
@@ -1608,10 +1620,16 @@ function OutflowTab() {
         />
       ) : null}
       {adding ? (
+        // 손으로 등록한 지출은 분류가 '거래선지급'이면 Payables, 그 외에는 Other costs 로
+        // 들어간다 — 저장 뒤 그 갈래로 옮겨 방금 넣은 항목이 바로 보이게 한다.
         <PayableForm
           initial={emptyPayable}
           onClose={() => setAdding(false)}
-          onSaved={() => { setAdding(false); reload(); }}
+          onSaved={(category) => {
+            setAdding(false);
+            setView(category === "거래선지급" ? "payables" : "other");
+            reload();
+          }}
         />
       ) : null}
       {editing ? (
@@ -1734,7 +1752,8 @@ function PayableForm({
   initial: FinancePayableSave;
   rowId?: number;
   onClose: () => void;
-  onSaved: () => void;
+  /** 저장한 분류를 넘겨준다 — 목록이 그 항목이 실제로 보이는 갈래로 옮겨 가는 데 쓴다. */
+  onSaved: (category: string) => void;
 }) {
   const [form, setForm] = useState<FinancePayableSave>({ ...initial });
   const [busy, setBusy] = useState(false);
@@ -1774,7 +1793,8 @@ function PayableForm({
     try {
       if (rowId) await updateFinancePayable(rowId, form);
       else await createFinancePayable(form);
-      onSaved();
+      // 저장한 분류를 함께 알려 준다 — 목록이 이 항목이 들어간 갈래로 옮겨 갈 수 있게.
+      onSaved(form.category || "");
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Save failed");
     } finally {
