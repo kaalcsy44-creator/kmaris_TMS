@@ -33,6 +33,7 @@ import {
 import { INFO_FIELDS, DEFAULT_INFO_FIELDS } from "@/components/common/dealFields";
 import { lastActivityISO, daysSinceISO } from "@/lib/activity";
 import { sortByDocNo } from "@/lib/sort";
+import { isOnScrollbar } from "@/lib/scrollbar";
 import { useColumnLayout } from "@/components/common/useColumnLayout";
 import { ColumnResizer, ColumnsButton, dragHandleProps } from "@/components/common/tableLayout";
 import type { PipelineRow, CustomerOption, SettingsVessel, StageNote } from "@/lib/types";
@@ -1478,7 +1479,11 @@ function BoardPreviewModal({
   return (
     <div
       className="pl-modal-backdrop board-prev-backdrop"
-      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      onMouseDown={(e) => {
+        if (e.target !== e.currentTarget) return;
+        if (isOnScrollbar(e.currentTarget, e.clientX, e.clientY)) return; // 스크롤바 드래그
+        onClose();
+      }}
       role="presentation"
     >
       <div className="board-prev" onMouseDown={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
@@ -2246,7 +2251,9 @@ export function PipelineModal({
   const chain = buildStageChain(r, rSteps);
 
   function onBackdropMouseDown(e: React.MouseEvent<HTMLDivElement>) {
-    backdropMouseDown.current = e.target === e.currentTarget;
+    // 오버레이 스크롤바를 잡은 것은 배경 클릭이 아니다 — 끌어서 화면을 내릴 수 있게 둔다.
+    backdropMouseDown.current =
+      e.target === e.currentTarget && !isOnScrollbar(e.currentTarget, e.clientX, e.clientY);
   }
 
   function onBackdropClick(e: React.MouseEvent<HTMLDivElement>) {

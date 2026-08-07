@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { useResizable } from "@/lib/useResizable";
+import { isOnScrollbar } from "@/lib/scrollbar";
 
 // 공용 모달 — Progress 상세 모달과 동일한 pl-modal* 스타일을 재사용한다.
 // 신규 등록 폼·상세(보기/수정) 양쪽에서 사용. 배경 클릭/ESC 로 닫힌다.
@@ -43,7 +44,9 @@ export default function Modal({
   }
 
   function onBackdropMouseDown(e: React.MouseEvent<HTMLDivElement>) {
-    backdropMouseDown.current = e.target === e.currentTarget;
+    // 오버레이 스크롤바를 잡은 것은 배경 클릭이 아니다 — 끌어서 화면을 내릴 수 있게 둔다.
+    backdropMouseDown.current =
+      e.target === e.currentTarget && !isOnScrollbar(e.currentTarget, e.clientX, e.clientY);
   }
 
   function onBackdropClick(e: React.MouseEvent<HTMLDivElement>) {
