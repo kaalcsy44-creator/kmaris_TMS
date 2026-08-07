@@ -2039,14 +2039,14 @@ function ItemEditor({
     { key: "__sel", fixed: true },
     { key: "__seq", fixed: true, className: "seq" },
     { key: "part_no", label: "Part No." },
-    { key: "description", label: "Description" },
+    { key: "description", label: "Description", phone: true },
     { key: "type", label: "Type" },
     { key: "serial_no", label: "Serial No." },
     { key: "maker", label: "Maker" },
-    { key: "qty", label: "Qty", className: "num" },
+    { key: "qty", label: "Qty", className: "num", phone: true },
     { key: "unit", label: "Unit" },
-    { key: "unit_price", label: `Unit price (${cur})`, className: "num" },
-    { key: "amount", label: `Amount (${cur})`, className: "num" },
+    { key: "unit_price", label: `Unit price (${cur})`, className: "num", phone: true },
+    { key: "amount", label: `Amount (${cur})`, className: "num", phone: true },
     { key: "remark", label: "Remark" },
     // 품목 분류(선택) — 고르면 저장 시 품목 마스터 분류로 반영된다. 맨 끝에 두어
     // 합계행(컬럼당 1셀) 구성에만 한 칸 추가하면 된다.

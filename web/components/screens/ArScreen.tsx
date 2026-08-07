@@ -445,11 +445,11 @@ function ApAddForm({
   const itemCols: ItemCol[] = [
     { key: "__sel", fixed: true },
     { key: "__seq", fixed: true, className: "seq" },
-    { key: "description", label: "Description" },
+    { key: "description", label: "Description", phone: true },
     { key: "part_no", label: "Part No." },
-    { key: "qty", label: "Qty", className: "num" },
-    { key: "unit_price", label: "Unit Price", className: "num" },
-    { key: "amount", label: "Amount", className: "num" },
+    { key: "qty", label: "Qty", className: "num", phone: true },
+    { key: "unit_price", label: "Unit Price", className: "num", phone: true },
+    { key: "amount", label: "Amount", className: "num", phone: true },
   ];
   const grid = useItemGrid("ap-bill-items", itemCols);
 
@@ -505,8 +505,8 @@ function ApAddForm({
                   </td>
                   <td><textarea className="desc" rows={1} value={it.description} onChange={(e) => setItem(i, "description", e.target.value)} /></td>
                   <td><textarea className="wrapcell" rows={1} value={it.part_no} onChange={(e) => setItem(i, "part_no", e.target.value)} /></td>
-                  <td><input className="num" value={amountInputValue(it.qty)} onChange={(e) => setItem(i, "qty", e.target.value)} /></td>
-                  <td><input className="num" value={amountInputValue(it.unit_price)} onChange={(e) => setItem(i, "unit_price", e.target.value)} /></td>
+                  <td><input className="num" inputMode="decimal" value={amountInputValue(it.qty)} onChange={(e) => setItem(i, "qty", e.target.value)} /></td>
+                  <td><input className="num" inputMode="decimal" value={amountInputValue(it.unit_price)} onChange={(e) => setItem(i, "unit_price", e.target.value)} /></td>
                   <td className="num">{it.amount.toLocaleString()}</td>
                 </tr>
               ))}
@@ -1003,11 +1003,11 @@ function ArAddForm({
   const itemCols: ItemCol[] = [
     { key: "__sel", fixed: true },
     { key: "__seq", fixed: true, className: "seq" },
-    { key: "description", label: "Description" },
+    { key: "description", label: "Description", phone: true },
     { key: "part_no", label: "Part No." },
-    { key: "qty", label: "Qty", className: "num" },
-    { key: "unit_price", label: "Unit Price", className: "num" },
-    { key: "amount", label: "Amount", className: "num" },
+    { key: "qty", label: "Qty", className: "num", phone: true },
+    { key: "unit_price", label: "Unit Price", className: "num", phone: true },
+    { key: "amount", label: "Amount", className: "num", phone: true },
   ];
   const grid = useItemGrid("ar-tax-items", itemCols);
 
@@ -1126,8 +1126,8 @@ function ArAddForm({
                   </td>
                   <td><textarea className="desc" rows={1} value={it.description} onChange={(e) => setItem(i, "description", e.target.value)} /></td>
                   <td><textarea className="wrapcell" rows={1} value={it.part_no} onChange={(e) => setItem(i, "part_no", e.target.value)} /></td>
-                  <td><input className="num" value={amountInputValue(it.qty)} onChange={(e) => setItem(i, "qty", e.target.value)} /></td>
-                  <td><input className="num" value={amountInputValue(it.unit_price)} onChange={(e) => setItem(i, "unit_price", e.target.value)} /></td>
+                  <td><input className="num" inputMode="decimal" value={amountInputValue(it.qty)} onChange={(e) => setItem(i, "qty", e.target.value)} /></td>
+                  <td><input className="num" inputMode="decimal" value={amountInputValue(it.unit_price)} onChange={(e) => setItem(i, "unit_price", e.target.value)} /></td>
                   <td className="num">{it.amount.toLocaleString()}</td>
                 </tr>
               ))}

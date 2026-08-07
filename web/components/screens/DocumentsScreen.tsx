@@ -2211,22 +2211,22 @@ function ItemEditor({
     { key: "__sel", fixed: true },
     { key: "__seq", fixed: true, className: "seq" },
     { key: "part_no", label: "Part No." },
-    { key: "description", label: "Description" },
+    { key: "description", label: "Description", phone: true },
     { key: "maker", label: "Maker" },
-    { key: "qty", label: "Qty", className: "num" },
+    { key: "qty", label: "Qty", className: "num", phone: true },
     { key: "unit", label: "Unit" },
     ...(packing
       ? [
-          { key: "pkg_qty", label: "Pkgs", className: "num" },
+          { key: "pkg_qty", label: "Pkgs", className: "num", phone: true },
           { key: "pkg_kind", label: "Kind" },
           { key: "net_weight", label: "N.W." },
-          { key: "gross_weight", label: "G.W." },
+          { key: "gross_weight", label: "G.W.", phone: true },
           { key: "measurement", label: "Meas. (m³)", className: "num" },
           { key: "dimension", label: "Dimension" },
         ]
       : [
-          { key: "unit_price", label: `Unit Price (${cur})`, className: "num" },
-          { key: "amount", label: `Amount (${cur})`, className: "num" },
+          { key: "unit_price", label: `Unit Price (${cur})`, className: "num", phone: true },
+          { key: "amount", label: `Amount (${cur})`, className: "num", phone: true },
         ]),
     { key: "remark", label: "Remark" },
   ];

@@ -456,6 +456,8 @@ export type ItemGridKeys = {
   cell: (row: number, col: number) => {
     "data-grid-row": number;
     "data-grid-col": number;
+    /** 숫자 필드에만 붙는다 — 폰에서 숫자 키패드가 뜨게. */
+    inputMode?: "decimal";
     onKeyDown: (e: KeyboardEvent<GridCell>) => void;
     onPaste: (e: ClipboardEvent<GridCell>) => void;
   };
@@ -609,6 +611,8 @@ export function useItemGridKeys<T extends object>({
     cell: (row, col) => ({
       "data-grid-row": row,
       "data-grid-col": col,
+      // 수량·단가처럼 숫자로 저장하는 칸은 폰에서 숫자 키패드로 열리게 한다.
+      ...(numeric.includes(fields[col]) ? { inputMode: "decimal" as const } : null),
       onKeyDown,
       onPaste,
     }),
