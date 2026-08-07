@@ -181,7 +181,10 @@ export function ItemGridStyle({ grid, spans }: { grid: ItemGridApi; spans?: stri
         // 아래 Summary 줄에 그대로 있다).
         `.${tableClass} thead tr.ig-group-row{display:none!important}`,
         `.${tableClass} tfoot tr:has(td.ig-foot){display:none!important}`,
-        `.${tableClass} th,.${tableClass} td{width:auto!important;min-width:0!important;max-width:none!important}`,
+        // 좌측 고정열(체크박스 .row-tools · No. .seq)은 폭을 풀지 않는다 — .seq 의 sticky
+        // 위치가 "row-tools 열 폭 32px" 를 전제로 left:32px 이라, 폭이 내용에 따라 달라지면
+        // 두 열 사이가 벌어지고 그 틈으로 스크롤되는 옆 컬럼이 비쳐 보인다.
+        `.${tableClass} th:not(.row-tools):not(.seq),.${tableClass} td:not(.row-tools):not(.seq){width:auto!important;min-width:0!important;max-width:none!important}`,
         `.${tableClass} td input,.${tableClass} td textarea{min-width:0!important}`,
       ];
       rules.push(`@media (max-width:${PHONE_MAX}px){${phoneRules.join("")}}`);
