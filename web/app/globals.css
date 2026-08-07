@@ -7208,6 +7208,7 @@ table.mini .num {
 }
 
 /* ── Progress: 칸반 보드 ──────────────────────────────────────────────────── */
+.pl-board-wrap { position: relative; }
 .pl-board {
   display: flex;
   gap: 12px;
@@ -7215,6 +7216,41 @@ table.mini .num {
   overflow-x: auto;
   padding: 4px 2px 12px;
 }
+/* 보드 좌우 이동 — 스크롤 영역의 좌·우 세로면에 붙는 투명 버튼.
+   평소엔 거의 보이지 않다가 보드에 마우스를 올리면 옅게 떠오른다(← → 키와 동일 동작). */
+.pl-board-nav {
+  position: absolute;
+  top: 0;
+  bottom: 12px; /* .pl-board 아래 여백(스크롤바 자리)만큼 뺀다 */
+  width: 40px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  cursor: pointer;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--ink);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.pl-board-nav.left {
+  left: 0;
+  border-radius: 12px 0 0 12px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0));
+}
+.pl-board-nav.right {
+  right: 0;
+  border-radius: 0 12px 12px 0;
+  background: linear-gradient(270deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0));
+}
+.pl-board-wrap:hover .pl-board-nav { opacity: 0.5; }
+.pl-board-nav:hover { opacity: 1; }
+/* 그 방향으로 더 갈 곳이 없으면 숨긴다. */
+.pl-board-nav.off { display: none; }
 .pl-board-col {
   /* 각 단계는 담은 하위 열 수만큼만 폭을 차지하고(내용 크기), 넘치는 폭은
      .pl-board 의 가로 스크롤로 처리한다. 카드가 4개 이하인 단계는 1열(≈258px). */

@@ -1297,53 +1297,115 @@ function PipelineBoard({
     c.variant === "cancelled" ? showCancelled : c.variant === "done" ? showDone : true,
   );
 
+  // 좌우 이동 — 보드 양 옆 세로면의 투명 버튼과 ← → 키가 같은 스크롤을 공유한다.
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const [edge, setEdge] = useState({ left: false, right: false });
+  const syncEdges = useCallback(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const max = el.scrollWidth - el.clientWidth;
+    setEdge({ left: el.scrollLeft > 4, right: el.scrollLeft < max - 4 });
+  }, []);
+  const scrollByX = useCallback((dir: 1 | -1, page = false) => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    // 키는 한 열씩(≈242+12), 가장자리 버튼은 화면 한 폭씩 밀어 준다.
+    const step = page ? Math.max(254, el.clientWidth * 0.85) : 254;
+    el.scrollBy({ left: dir * step, behavior: "smooth" });
+  }, []);
+  // 컬럼 수·창 크기가 바뀌면 남은 스크롤 여유를 다시 계산(버튼 노출 여부).
+  useEffect(() => {
+    syncEdges();
+    const el = scrollerRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(syncEdges);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [syncEdges, cols.length]);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      // 입력 중이거나 팝업(.pl-modal-backdrop)이 떠 있으면 기본 동작에 맡긴다.
+      const t = e.target as HTMLElement | null;
+      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+      if (document.querySelector(".pl-modal-backdrop")) return;
+      e.preventDefault();
+      scrollByX(e.key === "ArrowRight" ? 1 : -1);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [scrollByX]);
+
   return (
-    <div className="pl-board">
-      {cols.map((col, ci) => {
-        const cards = rows.filter((r) => col.match(r));
-        // Cancelled 존은 종결 딜이 하나도 없으면 아예 표시하지 않는다(평소 보드는 깔끔하게).
-        if (col.variant === "cancelled" && cards.length === 0) return null;
-        return (
-          <section
-            key={ci}
-            // 카드가 없는 단계는 자리만 지키도록 폭을 1/3로 줄인다(.is-empty).
-            className={`pl-board-col${col.variant ? ` ${col.variant}` : ""}${
-              cards.length === 0 ? " is-empty" : ""
-            }`}
-          >
-            <header className="pl-board-head">
-              {/* 단계 작업은 카드 클릭 → 프로젝트 팝업에서 처리(별도 작업 페이지 없음). */}
-              <span className="pl-board-title" title={col.label}>{col.label}</span>
-              {/* 진행 금액 합계 — 견적 이후 단계만(RFQ는 금액 미확정, 종결/완료 존은 제외). */}
-              {!col.variant && col.label !== "RFQ" && columnSum(cards) ? (
-                <span className="pl-board-sum" title="Total amount in this stage">
-                  {columnSum(cards)}
-                </span>
-              ) : null}
-              <span className="pl-board-count">{cards.length}</span>
-            </header>
-            <div className="pl-board-list">
-              {cards.length === 0 ? (
-                <div className="pl-board-empty">—</div>
-              ) : (
-                cards.map((r) => (
-                  <BoardCard
-                    key={`b-${r.rfq_id}`}
-                    r={r}
-                    steps={steps}
-                    stage={stageOf(r)}
-                    sel={selectedId === r.rfq_id}
-                    compact={compact !== flipped.has(r.rfq_id)}
-                    onClick={() => onSelect(r.rfq_id)}
-                    onOverview={() => onOverview(r.rfq_id)}
-                    onToggle={() => toggleCard(r.rfq_id)}
-                  />
-                ))
-              )}
-            </div>
-          </section>
-        );
-      })}
+    <div className="pl-board-wrap">
+      <button
+        type="button"
+        className={`pl-board-nav left${edge.left ? "" : " off"}`}
+        onClick={() => scrollByX(-1, true)}
+        tabIndex={-1}
+        aria-hidden="true"
+        title="이전 단계로 (←)"
+      >
+        ‹
+      </button>
+      <button
+        type="button"
+        className={`pl-board-nav right${edge.right ? "" : " off"}`}
+        onClick={() => scrollByX(1, true)}
+        tabIndex={-1}
+        aria-hidden="true"
+        title="다음 단계로 (→)"
+      >
+        ›
+      </button>
+      <div className="pl-board" ref={scrollerRef} onScroll={syncEdges}>
+        {cols.map((col, ci) => {
+          const cards = rows.filter((r) => col.match(r));
+          // Cancelled 존은 종결 딜이 하나도 없으면 아예 표시하지 않는다(평소 보드는 깔끔하게).
+          if (col.variant === "cancelled" && cards.length === 0) return null;
+          return (
+            <section
+              key={ci}
+              // 카드가 없는 단계는 자리만 지키도록 폭을 1/3로 줄인다(.is-empty).
+              className={`pl-board-col${col.variant ? ` ${col.variant}` : ""}${
+                cards.length === 0 ? " is-empty" : ""
+              }`}
+            >
+              <header className="pl-board-head">
+                {/* 단계 작업은 카드 클릭 → 프로젝트 팝업에서 처리(별도 작업 페이지 없음). */}
+                <span className="pl-board-title" title={col.label}>{col.label}</span>
+                {/* 진행 금액 합계 — 견적 이후 단계만(RFQ는 금액 미확정, 종결/완료 존은 제외). */}
+                {!col.variant && col.label !== "RFQ" && columnSum(cards) ? (
+                  <span className="pl-board-sum" title="Total amount in this stage">
+                    {columnSum(cards)}
+                  </span>
+                ) : null}
+                <span className="pl-board-count">{cards.length}</span>
+              </header>
+              <div className="pl-board-list">
+                {cards.length === 0 ? (
+                  <div className="pl-board-empty">—</div>
+                ) : (
+                  cards.map((r) => (
+                    <BoardCard
+                      key={`b-${r.rfq_id}`}
+                      r={r}
+                      steps={steps}
+                      stage={stageOf(r)}
+                      sel={selectedId === r.rfq_id}
+                      compact={compact !== flipped.has(r.rfq_id)}
+                      onClick={() => onSelect(r.rfq_id)}
+                      onOverview={() => onOverview(r.rfq_id)}
+                      onToggle={() => toggleCard(r.rfq_id)}
+                    />
+                  ))
+                )}
+              </div>
+            </section>
+          );
+        })}
+      </div>
     </div>
   );
 }
