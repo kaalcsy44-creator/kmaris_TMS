@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import TouchScrollbars from "@/components/common/TouchScrollbars";
 
 // 링크 공유(Open Graph) 시 노출되는 사이트 전역 이름·설명. 특정 페이지(RFQ 등)가
 // 아니라 앱 자체를 나타내야 하므로 앱 이름으로 고정한다. 개별 페이지가 자체 title 을
@@ -46,11 +45,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ko">
-      <body suppressHydrationWarning>
-        {children}
-        {/* 터치 기기에서 잡아 끌 수 있는 스크롤바(body 직속이어야 position:fixed 가 안 깨진다). */}
-        <TouchScrollbars />
-      </body>
+      <body suppressHydrationWarning>{children}</body>
     </html>
   );
 }

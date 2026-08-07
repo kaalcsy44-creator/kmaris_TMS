@@ -7251,10 +7251,32 @@ table.mini .num {
 .pl-board-nav:hover { opacity: 1; }
 /* 그 방향으로 더 갈 곳이 없으면 숨긴다. */
 .pl-board-nav.off { display: none; }
-/* 손가락에는 hover 가 없어 영영 안 보이는데 자리는 차지한다(가장자리 탭을 삼킨다).
-   터치 기기에서는 아예 걷어내고 터치 스크롤바(.tsb-thumb)에 맡긴다. */
+/* 손가락에는 hover 가 없다 — 그대로 두면 영영 안 보이는 채로 보드 양 끝 40px 띠가
+   카드 탭만 삼킨다. 터치 기기에서는 항상 옅게 띄우되, 띠 전체가 아니라 세로 가운데의
+   작은 원만 눌리게 줄여 카드가 가려지는 면적을 최소로 한다. */
 @media (hover: none) {
-  .pl-board-nav { display: none; }
+  .pl-board-nav {
+    top: 50%;
+    bottom: auto;
+    transform: translateY(-50%);
+    width: 38px;
+    height: 38px;
+    font-size: 22px;
+    border: 1px solid var(--line);
+    box-shadow: 0 2px 8px rgba(11, 29, 58, 0.18);
+  }
+  /* 가장자리 그라데이션·한쪽 모서리 둥글기를 원형 알약으로 되돌린다(둘 다 클래스 2개
+     짜리 규칙이라 같은 구체성으로 덮어써야 한다). */
+  .pl-board-nav.left,
+  .pl-board-nav.right {
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.94);
+  }
+  .pl-board-nav.left { left: 3px; }
+  .pl-board-nav.right { right: 3px; }
+  /* hover 로 뜨는 규칙(.pl-board-wrap:hover ...)과 같은 구체성으로, 뒤에 두어 이긴다 —
+     탭 뒤 hover 가 눌어붙는 기기에서도 밝기가 흔들리지 않게. */
+  .pl-board-wrap .pl-board-nav { opacity: 0.85; }
 }
 .pl-board-col {
   /* 각 단계는 담은 하위 열 수만큼만 폭을 차지하고(내용 크기), 넘치는 폭은
@@ -12421,32 +12443,4 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
     border-color: var(--navy);
     color: #fff;
   }
-}
-
-/* ── 터치 스크롤바(TouchScrollbars) ────────────────────────────────────────
-   손가락으로 잡아 끄는 엄지. 방금 만진 스크롤 영역 위에만 잠깐 떠 있는다.
-   레이어는 클릭을 통과시키고(pointer-events:none) 엄지만 받는다. */
-.tsb-layer {
-  position: fixed;
-  inset: 0;
-  z-index: 2000;
-  pointer-events: none;
-}
-.tsb-thumb {
-  position: fixed;
-  pointer-events: auto;
-  /* 브라우저의 기본 팬 동작에 뺏기지 않게 — 이 엄지 위 제스처는 우리가 처리한다. */
-  touch-action: none;
-  border-radius: 999px;
-  background: rgba(11, 29, 58, 0.42);
-  border: 2px solid rgba(255, 255, 255, 0.8);
-  box-shadow: 0 1px 5px rgba(11, 29, 58, 0.3);
-  animation: tsb-in 0.12s ease-out;
-}
-.tsb-thumb.on {
-  background: rgba(11, 29, 58, 0.72);
-}
-@keyframes tsb-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
 }
