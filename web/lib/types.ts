@@ -179,7 +179,9 @@ export type CompanyProfile = {
   email_signature: string;   // 이메일 본문 하단 공용 서명(비우면 기본 서명)
 };
 
-export type VendorOption = { id: number; name: string; email: string; logo?: string };
+// uses = 거래 빈도(보낸 Vendor RFQ + 발행한 Vendor P/O 건수). 드롭다운에서
+// 자주 거래하는 벤더를 위쪽 그룹으로 올리는 데 쓴다.
+export type VendorOption = { id: number; name: string; email: string; logo?: string; uses?: number };
 
 export type PoRow = {
   id: number;

@@ -33,7 +33,7 @@ from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from sqlalchemy import event as _sa_event, text
+from sqlalchemy import event as _sa_event, func, text
 from sqlalchemy.orm import Session as _SASession
 
 from db.engine import get_session, get_engine
@@ -925,6 +925,30 @@ def _project_no_map(s) -> dict[int, str]:
     except Exception:
         pass
     return out
+
+
+def vendor_usage_counts(s) -> dict[int, int]:
+    """벤더별 거래 빈도 {vendor_id: 건수} — 보낸 Vendor RFQ + 발행한 Vendor P/O 합계.
+    실제로 자주 거래하는 벤더를 드롭다운 위쪽에 모아 주는 데 쓴다(이름순 목록에서
+    매번 스크롤해 찾지 않도록). 집계라 벤더 마스터 조회에서 한 번만 계산한다."""
+    counts: dict[int, int] = {}
+    for model in (VendorRFQ, PurchaseOrder):
+        rows = (s.query(model.vendor_id, func.count(model.id))
+                .filter(model.vendor_id.isnot(None))
+                .group_by(model.vendor_id).all())
+        for vid, n in rows:
+            counts[vid] = counts.get(vid, 0) + int(n or 0)
+    return counts
+
+
+def vendor_options(s) -> list[dict]:
+    """드롭다운용 벤더 마스터 — 이름순 + 거래 빈도(uses). 정렬(자주 거래 우선)은
+    uses 를 보고 화면(VendorSelect)에서 그룹으로 나눠 처리한다."""
+    uses = vendor_usage_counts(s)
+    return [{"id": v.id, "name": v.name, "email": v.email or "",
+             "logo": getattr(v, "logo", None) or "",
+             "uses": uses.get(v.id, 0)}
+            for v in s.query(Vendor).order_by(Vendor.name).all()]
 
 
 def _vrfq_sent_iso(v) -> str:

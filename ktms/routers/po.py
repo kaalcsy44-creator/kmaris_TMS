@@ -73,6 +73,7 @@ from _core import (
     send_email,
     default_from,
     steps_for,
+    vendor_options,
 )
 from services.mail_compose import build_attachments, compose_body, compose_parts
 from services.item_ledger import apply_line_categories
@@ -251,11 +252,8 @@ def po_work_options():
             "name": v.name,
             "customer_id": v.customer_id,
         } for v in s.query(Vessel).order_by(Vessel.name).all()]
-        vendors = [{
-            "id": v.id,
-            "name": v.name,
-            "email": v.email or "",
-        } for v in s.query(Vendor).order_by(Vendor.name).all()]
+        # 이름순 + 거래 빈도(uses) — 자주 거래하는 벤더를 드롭다운 위쪽에 모으는 데 쓴다.
+        vendors = vendor_options(s)
 
         cust_names = {c["id"]: c["name"] for c in customers}
         vessel_names = {v["id"]: v["name"] for v in vessels}

@@ -57,10 +57,12 @@ from _core import (
     _write_company_profile,
     app,
     bcrypt,
+    cached_aggregate,
     datetime,
     get_current_user,
     get_session,
     require_token,
+    vendor_options,
     VENDOR_RFQ_ITEM_COLS,
     VENDOR_RFQ_TOKENS,
     DEFAULT_VENDOR_RFQ_ITEM_COLS,
@@ -100,12 +102,12 @@ def customers():
 
 
 @app.get("/api/admin/vendors", dependencies=[Depends(require_token)])
+@cached_aggregate()
 def vendors():
+    # 이름순 + 거래 빈도(uses). 빈도 집계가 붙어 매 드롭다운마다 재계산하지 않도록 캐시한다.
     s = get_session()
     try:
-        return [{"id": v.id, "name": v.name, "email": v.email or "",
-                 "logo": getattr(v, "logo", None) or ""}
-                for v in s.query(Vendor).order_by(Vendor.name).all()]
+        return vendor_options(s)
     finally:
         s.close()
 

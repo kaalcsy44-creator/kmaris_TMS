@@ -7008,6 +7008,21 @@ table.mini .num {
 .vsel-item.on {
   font-weight: 700;
 }
+/* 그룹 머리글 — 자주 거래하는 벤더(위)와 나머지 이름순 목록(아래)을 갈라 준다.
+   선택 대상이 아니라 옵션과 확실히 다르게(작게·대문자·회색) 보이게 한다. */
+.vsel-group {
+  padding: 8px 8px 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #8a96a8;
+  cursor: default;
+}
+.vsel-item + .vsel-group {
+  margin-top: 4px;
+  border-top: 1px solid #eaf0f7;
+}
 
 /* 명함 스캔 패널 — Customer/Vendor 등록 폼 맨 위. 붙여넣기·파일선택으로 자동 입력. */
 .bc-scan {
