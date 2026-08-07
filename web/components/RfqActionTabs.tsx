@@ -3990,16 +3990,19 @@ function CustomerQuoteItemEditor({
     { key: "__sel", fixed: true },
     { key: "__seq", fixed: true, className: "seq" },
     { key: "part_no", label: "Part No." },
-    { key: "description", label: "Description", phone: true },
-    { key: "qty", label: "Qty", className: "num", phone: true },
+    { key: "description", label: "Description" },
+    { key: "qty", label: "Qty", className: "num" },
     { key: "unit", label: "Unit" },
     { key: "cost", label: `Cost (${costCur})`, className: "num" },
     { key: "cost_amount", label: `Cost Amount (${costCur})`, className: "num" },
     { key: "margin", label: "Margin %", className: "num" },
-    { key: "unit_price", label: `Unit Price (${saleCur})`, className: "num", phone: true },
+    { key: "unit_price", label: `Unit Price (${saleCur})`, className: "num" },
     { key: "amount", label: `Amount (${saleCur})`, className: "num" },
     { key: "remark", label: "Remark" },
   ];
+  // 폰 접기(phone 표식)를 쓰지 않는 유일한 품목표 — 이 표의 일은 "원가(Purchase) → 마진 →
+  // 판매가(Sales)" 를 나란히 놓고 값을 맞추는 것이라, 그중 무엇을 감춰도 표가 제 일을
+  // 못 한다. 폰에서도 전 컬럼을 그대로 두고 좌우 스크롤로 본다(좌측 체크박스·No. 는 고정).
   const grid = useItemGrid("cquote-items", cols);
   // 서브행 <td colSpan> 이 덮을 칸 수 — 숨긴 컬럼을 빼고 센다.
   const mainColSpan = grid.cols.filter((c) => c.fixed || !grid.layout.hidden.has(c.key)).length;
