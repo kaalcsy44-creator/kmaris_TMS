@@ -9035,18 +9035,28 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   .pl-resize-h {
     display: none;
   }
-  /* 헤더: 제목은 한 줄 전체, PIC·Close deal·닫기는 아래 줄 우측으로 정렬. */
+  /* 헤더 3줄 배치 — 위에서부터
+       1) Work/Overview · PIC · Close deal · ✕  (order:-1 로 맨 위로 끌어올린다)
+       2) ‹ › + 프로젝트 번호·업무유형          (방향 버튼이 번호 왼쪽에 붙는다)
+       3) 제목·선박명                            (2)줄에서 넘친 만큼 이어서 접힘)
+     DOM 순서(‹› → 제목 → 우측컨트롤)는 그대로 두고 flex order 로만 바꾼다. */
   .pl-modal-head {
     flex-wrap: wrap;
     row-gap: 8px;
-  }
-  .pl-modal-head .intl-title {
-    flex: 1 1 100%;
+    /* 제목이 여러 줄로 접혀도 ‹ › 는 첫 줄(번호)에 붙어 있어야 한다 — 세로 가운데 정렬
+       이면 긴 제목에서 버튼만 중간으로 내려간다. */
+    align-items: flex-start;
   }
   .pl-head-right {
+    order: -1;
     flex: 1 1 100%;
     justify-content: flex-end;
     flex-wrap: wrap;
+  }
+  /* 번호와 같은 줄에 남도록 100% 를 풀고 남는 폭을 나눠 갖는다. */
+  .pl-modal-head .intl-title {
+    flex: 1 1 0;
+    min-width: 0;
   }
   /* 편집창 탭 바 — 폰에서는 줄바꿈 대신 한 줄 가로 스크롤(탭이 5개인 7단계 문서
      하위탭도 한 줄 유지). 고정 위치는 각자의 스크롤 컨테이너 기준 top:0. */
