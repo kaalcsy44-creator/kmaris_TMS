@@ -1713,6 +1713,10 @@ class VendorPoSend(BaseModel):
 class ARPayment(BaseModel):
     amount: float
     due_date: str | None = None
+    # True = amount 를 '이 청구서로 지금까지 받은 총액'으로 그대로 설정(화면에서 쓰는 방식).
+    # 같은 값을 다시 보내도 결과가 같아, 완료 버튼을 두 번 눌러도 수금이 겹쳐 쌓이지 않는다.
+    # False(기본) = 기존 누적 방식 — 외부/구 호출 호환용.
+    set_total: bool = False
 
 
 class ARSave(BaseModel):

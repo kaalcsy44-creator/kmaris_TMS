@@ -199,7 +199,12 @@ export function ArOverview({
       {docTab === "ar" ? (
         <>
           <ArAddForm key={match?.id ?? `new-${orderId}`} options={options ?? null} fallbackOrderId={orderId} existing={match} onChanged={load} />
-          {match && stageTab !== 9 ? <MilestoneBar row={match} stage={stageTab} onChanged={load} /> : null}
+          {/* key = AR 레코드 id — P/O 를 바꾸면 완료 바의 입력값(수금액·일자)도 그 청구서 것으로
+              다시 채워진다. key 가 없으면 앞서 보던 P/O 의 금액이 그대로 남아 엉뚱한 청구서에
+              저장된다(P/O A 금액이 B 에 기록되던 원인). */}
+          {match && stageTab !== 9 ? (
+            <MilestoneBar key={match.id} row={match} stage={stageTab} onChanged={load} />
+          ) : null}
           {/* 9단계는 완료 바가 없다(청구서 저장이 곧 완료) — 벤더측 잔여만 한 줄로 알린다. */}
           {match && stageTab === 9 ? (
             <div className="ar-milestone ar-milestone--note"><ApGate row={match} stage={9} /></div>
@@ -650,7 +655,12 @@ function MilestoneBar({ row, stage, onChanged }: { row: ArRow; stage: 10 | 11; o
   const [issuedAt, setIssuedAt] = useState(
     (byPi ? "" : localDateTime(row.tax_issued_date)) || nowLocal()
   );
-  const [amount, setAmount] = useState(row.outstanding > 0 ? String(row.outstanding) : "");
+  // 수금 칸은 '이 청구서로 지금까지 받은 총액'이다(누적 입력이 아니다). 이미 기록된 금액이
+  // 있으면 그 값을, 없으면 잔액을 채워 둔다 — 완료 버튼을 다시 눌러도 같은 총액을 다시
+  // 저장할 뿐이라 수금이 겹쳐 쌓이지 않고, 잘못 들어간 금액도 여기서 고쳐 저장하면 된다.
+  const [amount, setAmount] = useState(
+    row.paid_amount > 0 ? String(row.paid_amount) : row.outstanding > 0 ? String(row.outstanding) : ""
+  );
   const [payDue, setPayDue] = useState(row.due_date || today());
   const [paidAt, setPaidAt] = useState(localDateTime(row.paid_date) || nowLocal());
 
@@ -659,8 +669,9 @@ function MilestoneBar({ row, stage, onChanged }: { row: ArRow; stage: 10 | 11; o
     setErr(null);
     try {
       if (stage === 11 && flag) {
-        const amt = num(amount);
-        if (amt > 0) await recordArPayment(row.id, amt, payDue);
+        // 빈 칸 = 금액은 건드리지 않고 완료만 표시. 0 을 넣으면 기록된 수금을 취소한다.
+        const text = amount.trim();
+        if (text !== "") await recordArPayment(row.id, num(text), payDue, true);
       }
       await completeOrderStage(row.order_id, stage, flag, flag ? (stage === 10 ? issuedAt : paidAt) : undefined);
       onChanged();
@@ -686,7 +697,15 @@ function MilestoneBar({ row, stage, onChanged }: { row: ArRow; stage: 10 | 11; o
         </span>
         {stage === 11 ? (
           <span className="hint-inline" style={{ marginLeft: 10 }}>
-            Outstanding {row.outstanding.toLocaleString()} {row.currency}
+            Invoice {row.invoice_amount.toLocaleString()} · received {row.paid_amount.toLocaleString()} ·
+            outstanding {row.outstanding.toLocaleString()} {row.currency}
+          </span>
+        ) : null}
+        {/* 받은 금액이 청구액을 넘었다 = 같은 수금이 두 번 들어갔거나 금액을 잘못 넣은 것.
+            아래 칸에 올바른 총액을 넣고 다시 저장하면 그 값으로 정정된다. */}
+        {stage === 11 && row.outstanding < 0 ? (
+          <span className="hint-inline ap-gate wait" style={{ marginLeft: 10 }}>
+            Received more than invoiced — fix the total below and save again.
           </span>
         ) : null}
         {/* 이 단계는 매출(AR)·매입(AP)이 모두 끝나야 완료다 — 벤더측이 남았으면 여기서 알린다
@@ -699,7 +718,7 @@ function MilestoneBar({ row, stage, onChanged }: { row: ArRow; stage: 10 | 11; o
             <Field label="Issued at" value={issuedAt} onChange={setIssuedAt} type="datetime-local" />
           ) : (
             <>
-              <MoneyField label="Payment amount" value={amount} onChange={setAmount} />
+              <MoneyField label="Payment received (total)" value={amount} onChange={setAmount} />
               <Field label="Payment date / due" value={payDue} onChange={setPayDue} type="date" />
               <Field label="Paid at" value={paidAt} onChange={setPaidAt} type="datetime-local" />
             </>
@@ -707,7 +726,8 @@ function MilestoneBar({ row, stage, onChanged }: { row: ArRow; stage: 10 | 11; o
         </div>
         {stage === 11 ? (
           <p className="hint-inline" style={{ display: "block", margin: "6px 0 0" }}>
-            Leave the amount empty to just mark it complete; enter an amount to record the payment and complete.
+            The amount is the total received against this invoice, not an addition — saving twice records it once.
+            Leave it empty to just mark the stage complete, or enter 0 to undo a payment recorded by mistake.
           </p>
         ) : null}
         {byPi ? (

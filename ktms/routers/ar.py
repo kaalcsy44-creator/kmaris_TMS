@@ -329,15 +329,25 @@ def delete_ar(ar_id: int):
 
 @app.post("/api/admin/ar/{ar_id}/payment", dependencies=[Depends(require_token)])
 def ar_payment(ar_id: int, body: ARPayment):
-    """수금 등록 — paid_amount 누적 후 상태 자동 갱신."""
+    """수금 등록 — 상태 자동 갱신.
+
+    set_total=True 면 amount 를 '지금까지 받은 총액'으로 그대로 설정한다(멱등). 화면의
+    수금 칸이 이 방식이라, 완료 버튼을 다시 눌러도 같은 금액이 두 번 쌓이지 않고 잘못
+    들어간 금액도 올바른 총액으로 고쳐 저장할 수 있다(0 을 보내면 수금 취소).
+    set_total=False(기본)면 기존처럼 받은 금액을 누적한다."""
     s = get_session()
     try:
         ar = s.query(ARRecord).filter_by(id=ar_id).first()
         if not ar:
             raise HTTPException(status_code=404, detail="AR 레코드를 찾을 수 없습니다.")
-        if body.amount <= 0:
-            raise HTTPException(status_code=400, detail="수금액은 0보다 커야 합니다.")
-        ar.paid_amount = (ar.paid_amount or 0) + body.amount
+        if body.set_total:
+            if body.amount < 0:
+                raise HTTPException(status_code=400, detail="수금 총액은 0 이상이어야 합니다.")
+            ar.paid_amount = body.amount
+        else:
+            if body.amount <= 0:
+                raise HTTPException(status_code=400, detail="수금액은 0보다 커야 합니다.")
+            ar.paid_amount = (ar.paid_amount or 0) + body.amount
         if body.due_date:
             ar.due_date = body.due_date
         if ar.paid_amount >= (ar.invoice_amount or 0):

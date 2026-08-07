@@ -1369,14 +1369,18 @@ export function arSoaXlsxUrl(status?: string, currency?: string): string {
   return `${API_BASE}/api/admin/ar/soa.xlsx${qs ? `?${qs}` : ""}`;
 }
 
+// setTotal=true 면 amount 가 '지금까지 받은 총액'(멱등) — 같은 값을 다시 보내도 수금이
+// 겹쳐 쌓이지 않고, 잘못 들어간 금액도 올바른 총액으로 고쳐 저장된다(0 = 수금 취소).
 export function recordArPayment(
   arId: number,
   amount: number,
-  dueDate?: string
+  dueDate?: string,
+  setTotal = false
 ): Promise<{ ok: boolean; paid_amount: number; status: string }> {
   return post(`/api/admin/ar/${arId}/payment`, {
     amount,
     due_date: dueDate ?? null,
+    set_total: setTotal,
   });
 }
 
