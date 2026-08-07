@@ -5892,6 +5892,15 @@ table.mini.wide.lead-tools tbody tr.item-row-excluded.item-row-excluded textarea
   overflow-y: auto;
   /* 우측 여백 — 표 카드가 스테이지 창 스크롤바에 바짝 붙지 않도록 살짝 띄운다. */
   margin-right: 8px;
+  /* 세로 스크롤바 자리를 항상 비워 둔다. 안 그러면 스크롤바가 마지막 컬럼(Remark) 위에
+     겹쳐 앉아 입력값 오른쪽이 잘려 보인다(행이 늘어날 때만 잘려 더 헷갈린다). */
+  scrollbar-gutter: stable;
+}
+/* 마지막 컬럼은 표 오른쪽 끝에 맞닿는다 — 칸 안쪽에 여백을 줘서 입력 상자가 경계선에
+   달라붙지 않게 한다(가로 스크롤을 끝까지 밀었을 때의 '우측 공백'). */
+.table-wrap.item-scroll table.mini.wide th:last-child,
+.table-wrap.item-scroll table.mini.wide td:last-child {
+  padding-right: 12px;
 }
 .table-wrap.item-scroll table.mini thead th {
   position: sticky;
