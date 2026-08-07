@@ -12375,13 +12375,9 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
   table.mini.wide td {
     padding: 3px 5px;
   }
-  /* iOS Safari 는 16px 미만 입력칸에 포커스하면 화면을 자동 확대한다 — 칸을 하나
-     고칠 때마다 화면이 튀던 원인. 글자를 16px 로 올리고 손가락 과녁도 함께 키운다. */
-  .table-wrap.item-scroll table.mini input:not([type="checkbox"]),
-  .table-wrap.item-scroll table.mini textarea {
-    font-size: 16px;
-    min-height: 34px;
-  }
+  /* 입력칸 글자는 데스크톱과 같은 12px 로 둔다. 16px 로 올리면 iOS 의 포커스 자동확대는
+     막지만, 입력칸의 기본 폭(20자)이 그만큼 벌어져 숫자 칸이 Description 을 밀어내고
+     줄바꿈이 늘어 표가 더 어수선해진다 — 밀도를 택했다. */
   /* No. 칸은 번호(+펼침 캐럿)만 담으면 되니 데스크톱 폭(52px)을 줄인다. */
   .table-wrap.item-scroll table.mini .seq {
     width: 40px;
