@@ -962,7 +962,7 @@ def make_quotation_costing_xlsx(
     data: Dict[str, Any], company: Optional[Dict[str, Any]] = None
 ) -> bytes:
     """고객 견적서(COSTING SHEET) Excel — sales + PURCHASE(원가) + MARGIN 포함(내부용)."""
-    from services.kmaris_docs import quotation_standard_terms
+    from services.kmaris_docs import quotation_remark_lines, quotation_standard_terms
 
     company = company or {}
     customer = data.get("customer", {}) or {}
@@ -1210,8 +1210,20 @@ def make_quotation_costing_xlsx(
             ws.cell(r, col).fill = navy
         ws.row_dimensions[r].height = 16
 
-    # ── Terms & Conditions ─────────────────────────────────────────────
+    # ── Remark ─────────────────────────────────────────────────────────
+    # 4단계 Remarks 입력 — PDF 와 같은 자리(품목표와 T&C 사이)에 같은 형식으로 둔다.
     r = trow + 2
+    remark_lines = quotation_remark_lines(terms)
+    if remark_lines:
+        section_bar(r, "Remark"); r += 1
+        for line in remark_lines:
+            merge(r, 1, r, NCOL)
+            ws.cell(r, 1, f"• {line}").alignment = left
+            ws.row_dimensions[r].height = 13
+            r += 1
+        r += 1
+
+    # ── Terms & Conditions ─────────────────────────────────────────────
     section_bar(r, "Terms & Conditions"); r += 1
     for line in quotation_standard_terms(terms):
         merge(r, 1, r, NCOL)

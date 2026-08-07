@@ -465,7 +465,11 @@ export type QuotationTerms = {
   shipment_method?: string;
   packing?: string;
   warranty?: string;
-  remarks?: string;
+  remarks?: string;          // 견적서 Remark 섹션(품목표와 T&C 사이) 본문
+  // 견적서에 찍을 표준 T&C 문장 id 목록(web/lib/terms.ts QUOTATION_CLAUSES).
+  // 값이 없으면 "고른 적 없음" = 전체 문장 인쇄(기존 견적 그대로).
+  clauses?: string[];
+  extra_clauses?: string[];  // 사용자가 직접 추가한 T&C 문장(표준 문장 뒤에 붙는다)
   // 견적서 헤더 문서 필드(첨부 양식) — terms JSON 에 함께 보관.
   messrs?: string;
   attn?: string;

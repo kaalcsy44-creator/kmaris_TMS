@@ -74,7 +74,7 @@ import DocSendPanel from "./common/DocSendPanel";
 import RecordStrip from "./common/RecordStrip";
 import DetailTabBar, { DetailTab } from "./common/DetailTabBar";
 import SourceFilesList from "./common/SourceFilesList";
-import { withDefaultTerms } from "@/lib/terms";
+import { withDefaultTerms, TERM_TEXT_KEYS } from "@/lib/terms";
 import { sortByDocNo } from "@/lib/sort";
 import {
   amountInputValue,
@@ -2361,7 +2361,7 @@ function CustomerQuoteDetailModal({
             currency={currency}
             rate={effRate}
           />
-          <TermsEditor terms={terms} onChange={setTerms} />
+          <TermsEditor terms={terms} onChange={setTerms} clauses />
           </fieldset>
           <div className="form-actions quote-editor-actions">
             <button className="btn" onClick={openPreview} disabled={busy || dlBusy}>
@@ -3449,9 +3449,10 @@ function mergeTermsFromVendorQuote(
 ): QuotationTerms {
   if (!vqTerms) return prev;
   const next = { ...prev };
-  (Object.keys(vqTerms) as (keyof QuotationTerms)[]).forEach((k) => {
+  // 문자열 조건만 옮긴다 — 견적서 약관 선택(clauses)은 고객 견적 고유값이라 제외.
+  TERM_TEXT_KEYS.forEach((k) => {
     const v = vqTerms[k];
-    if (v != null && String(v).trim() !== "") next[k] = v;
+    if (v != null && v.trim() !== "") next[k] = v;
   });
   return next;
 }
@@ -3806,7 +3807,7 @@ function CustomerQuoteAction({
         rate={effRate}
       />
 
-      <TermsEditor terms={terms} onChange={setTerms} />
+      <TermsEditor terms={terms} onChange={setTerms} clauses />
 
       <div className="form-actions">
         <StageTotal label="Final" value={finalTotal} currency={currency} rate={effRate} />
@@ -3979,11 +3980,12 @@ function CustomerQuoteItemEditor({
   };
   // 접힌 상태에서도 "이 행엔 상세값이 있다" 를 캐럿에 표시하기 위한 판정.
   const hasDetail = (it: CustomerQuoteItem) =>
-    Boolean(it.type || it.serial_no || it.lead_time || it.remark || it.category_id);
+    Boolean(it.type || it.serial_no || it.lead_time || it.category_id);
 
-  // 주행(main row)은 금액 계산에 쓰이는 컬럼만 둔다. 부수 필드(Type·Serial No.·Lead Time·
-  // Remark·Category)는 행을 펼쳤을 때 나오는 서브행으로 내렸다 — 15컬럼이 한 줄에 있어
-  // 가로 스크롤이 생기고 Description 이 두세 줄로 접히던 걸 없애기 위함.
+  // 주행(main row)은 금액 계산에 쓰이는 컬럼 + 견적서에 그대로 찍히는 Remark 를 둔다.
+  // 나머지 부수 필드(Type·Serial No.·Lead Time·Category)는 행을 펼쳤을 때 나오는 서브행으로
+  // 내렸다 — 15컬럼이 한 줄에 있어 가로 스크롤이 생기고 Description 이 접히던 걸 없애기 위함.
+  // (Remark 는 견적서 품목표에 컬럼으로 인쇄되므로 표에서 바로 보이고 채워져야 한다.)
   const cols: ItemCol[] = [
     { key: "__sel", fixed: true },
     { key: "__seq", fixed: true, className: "seq" },
@@ -3996,20 +3998,21 @@ function CustomerQuoteItemEditor({
     { key: "margin", label: "Margin %", className: "num" },
     { key: "unit_price", label: `Unit Price (${saleCur})`, className: "num" },
     { key: "amount", label: `Amount (${saleCur})`, className: "num" },
+    { key: "remark", label: "Remark" },
   ];
   const grid = useItemGrid("cquote-items", cols);
   // 서브행 <td colSpan> 이 덮을 칸 수 — 숨긴 컬럼을 빼고 센다.
   const mainColSpan = grid.cols.filter((c) => c.fixed || !grid.layout.hidden.has(c.key)).length;
   // fields 순서 = keys.cell(i, 0..10) 열 번호. Cost Amount·Amount 는 계산 컬럼이라 뺀다.
-  // 주행 필드(0~6)를 앞에, 서브행 필드(7~10)를 뒤에 둔다 — 엑셀에서 여러 컬럼을 한 번에
+  // 주행 필드(0~7)를 앞에, 서브행 필드(8~10)를 뒤에 둔다 — 엑셀에서 여러 컬럼을 한 번에
   // 붙여넣을 때 화면에 보이는 주행 컬럼 순서와 맞아야 값이 제자리에 들어간다.
   const keys = useItemGridKeys<CustomerQuoteItem>({
     items,
     onChange,
-    fields: ["part_no", "description", "qty", "unit", "cost_price", "margin_pct", "unit_price", "type", "serial_no", "lead_time", "remark"],
+    fields: ["part_no", "description", "qty", "unit", "cost_price", "margin_pct", "unit_price", "remark", "type", "serial_no", "lead_time"],
     numeric: ["qty", "cost_price", "margin_pct", "unit_price"],
     blank,
-    headers: ["Part No.", "Description", "Qty", "Unit", `Cost (${costCur})`, "Margin %", `Unit Price (${saleCur})`, "Type", "Serial No.", "Lead Time", "Remark"],
+    headers: ["Part No.", "Description", "Qty", "Unit", `Cost (${costCur})`, "Margin %", `Unit Price (${saleCur})`, "Remark", "Type", "Serial No.", "Lead Time"],
     sel,
     normalizeRow,
   });
@@ -4073,7 +4076,7 @@ function CustomerQuoteItemEditor({
           <button
             type="button"
             className={`btn sm${allOpen ? " primary" : ""}`}
-            title="Show Type · Serial No. · Lead Time · Remark · Category for every row"
+            title="Show Type · Serial No. · Lead Time · Category for every row"
             onClick={() => { setAllOpen((v) => !v); setOpenRows(new Set()); }}
           >
             {allOpen ? "Hide details" : "Details"}
@@ -4116,6 +4119,7 @@ function CustomerQuoteItemEditor({
               <ItemTh grid={grid} k="margin" className="num">Margin %</ItemTh>
               <ItemTh grid={grid} k="unit_price" className="num">Unit Price ({saleCur})</ItemTh>
               <ItemTh grid={grid} k="amount" className="num">Amount ({saleCur})</ItemTh>
+              <ItemTh grid={grid} k="remark">Remark</ItemTh>
             </tr>
           </thead>
           <tbody>
@@ -4127,7 +4131,7 @@ function CustomerQuoteItemEditor({
                   <button
                     type="button"
                     className={`item-exp${isOpen(i) ? " on" : ""}${hasDetail(it) ? " has" : ""}`}
-                    title={isOpen(i) ? "Hide details" : "Show details (Type · Serial No. · Lead Time · Remark · Category)"}
+                    title={isOpen(i) ? "Hide details" : "Show details (Type · Serial No. · Lead Time · Category)"}
                     onClick={() => toggleRow(i)}
                   >
                     ▸
@@ -4150,6 +4154,8 @@ function CustomerQuoteItemEditor({
                 /></td>
                 <td><input {...keys.cell(i, 6)} className="num" value={amountInputValue(it.unit_price)} onChange={(e) => patch(i, "unit_price", e.target.value)} /></td>
                 <td className="num">{amountInputValue(it.amount)}</td>
+                {/* 견적서 품목표의 Remark 칸에 그대로 찍히는 값. */}
+                <td><textarea {...keys.cell(i, 7)} className="wrapcell" rows={1} value={it.remark ?? ""} onChange={(e) => patch(i, "remark", e.target.value)} /></td>
               </tr>
               {/* 상세 서브행 — 주행에서 내린 부수 필드. 접혀 있으면 렌더하지 않는다.
                   colSpan 은 표시 중인 주행 칸 수와 맞춘다(컬럼을 숨겨도 정렬 유지). */}
@@ -4157,24 +4163,21 @@ function CustomerQuoteItemEditor({
                 <tr className="item-subrow">
                   <td colSpan={mainColSpan}>
                     <div className="isr-fields">
+                      {/* Remark 는 주행 컬럼으로 올라갔다(견적서 품목표에 그대로 인쇄되는 값). */}
                       <label className="isr-f">
                         <span className="isr-l">1. Type</span>
-                        <textarea {...keys.cell(i, 7)} className="wrapcell" rows={1} value={it.type ?? ""} onChange={(e) => patch(i, "type", e.target.value)} />
+                        <textarea {...keys.cell(i, 8)} className="wrapcell" rows={1} value={it.type ?? ""} onChange={(e) => patch(i, "type", e.target.value)} />
                       </label>
                       <label className="isr-f">
                         <span className="isr-l">2. Serial No.</span>
-                        <textarea {...keys.cell(i, 8)} className="wrapcell" rows={1} value={it.serial_no ?? ""} onChange={(e) => patch(i, "serial_no", e.target.value)} />
+                        <textarea {...keys.cell(i, 9)} className="wrapcell" rows={1} value={it.serial_no ?? ""} onChange={(e) => patch(i, "serial_no", e.target.value)} />
                       </label>
                       <label className="isr-f">
                         <span className="isr-l">3. Lead Time</span>
-                        <textarea {...keys.cell(i, 9)} className="wrapcell" rows={1} value={it.lead_time ?? ""} onChange={(e) => patch(i, "lead_time", e.target.value)} />
-                      </label>
-                      <label className="isr-f wide">
-                        <span className="isr-l">4. Remark</span>
-                        <textarea {...keys.cell(i, 10)} className="wrapcell" rows={1} value={it.remark ?? ""} onChange={(e) => patch(i, "remark", e.target.value)} />
+                        <textarea {...keys.cell(i, 10)} className="wrapcell" rows={1} value={it.lead_time ?? ""} onChange={(e) => patch(i, "lead_time", e.target.value)} />
                       </label>
                       <span className="isr-f">
-                        <span className="isr-l">5. Category</span>
+                        <span className="isr-l">4. Category</span>
                         <CategoryCell value={it.category_id} partNo={it.part_no} description={it.description} onChange={(id) => patchCategory(i, id)} />
                       </span>
                     </div>

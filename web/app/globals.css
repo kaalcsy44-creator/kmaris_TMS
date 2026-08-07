@@ -4052,6 +4052,61 @@ a.btn.primary:hover {
 .stage-card > .form-grid + .form-field {
   padding-top: 0;
 }
+/* ── 견적서 표준 약관 고르기(Terms & Conditions 카드 안) ─────────────────────
+   문서 하단에 찍힐 문장을 4단계에서 켜고 끈다. 문장이 길어 한 줄에 하나씩 두고,
+   체크된 문장만 진하게 해 "지금 인쇄될 목록"이 한눈에 읽히게 한다. */
+.stage-card > .clause-picker {
+  padding: 0 14px 4px;
+}
+.clause-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 6px;
+}
+.clause-title {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--navy);
+}
+.clause-count {
+  margin-right: auto;
+  font-size: 11px;
+  color: #7a8699;
+}
+.clause-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid #e3e9f2;
+  border-radius: 8px;
+  max-height: 190px;
+  overflow-y: auto;
+  background: #fbfcfe;
+}
+.clause-list > li + li {
+  border-top: 1px solid #eef2f8;
+}
+.clause-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 10px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: #8a95a6;
+  cursor: pointer;
+}
+.clause-item.on {
+  color: var(--ink);
+  background: #fff;
+}
+.clause-item input {
+  margin-top: 2px;
+  width: auto;
+  flex: 0 0 auto;
+  accent-color: var(--blue);
+}
 /* ── 가격 설정 밴드(Pricing) ─────────────────────────────────────────────────
    단가 계산 설정을 품목표 카드 바로 위에 붙여 "이 설정이 아래 표에 적용된다" 를
    인접성으로 읽히게 한다(참고 양식의 Equipment 밴드와 같은 자리). 라벨은 위가 아니라

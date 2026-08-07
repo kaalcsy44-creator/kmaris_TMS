@@ -1683,28 +1683,56 @@ def _qnum(value: Any) -> str:
     return f"{q:,.2f}"
 
 
-def quotation_standard_terms(terms: Dict[str, Any], validity_days: int = 30) -> List[str]:
-    """QUOTATION / COSTING SHEET 하단 표준 Terms & Conditions. 편집된 terms 값을 끼워 넣어 동기화."""
+def quotation_clause_catalog(terms: Dict[str, Any], validity_days: int = 30) -> List[tuple]:
+    """QUOTATION / COSTING SHEET 표준 Terms & Conditions 문장 목록 [(id, 문장)].
+
+    id 는 견적에 저장되는 선택값(terms["clauses"])의 계약이다 — 화면(4단계)에서 문장을
+    골라 넣을 수 있게 웹의 QUOTATION_CLAUSES(web/lib/terms.ts)가 같은 id·같은 문장을
+    들고 있으니, 문구를 고치면 양쪽을 함께 고쳐야 화면과 문서가 어긋나지 않는다.
+    거래조건 필드(Incoterms·결제·보증)는 문장에 그때그때 끼워 넣어 항상 최신값으로 찍힌다."""
     incoterms = terms.get("incoterms") or "EXW (Ex Works)"
     place = terms.get("delivery_place") or "Busan, Republic of Korea"
     payment = terms.get("payment_terms") or "T/T in advance"
     warranty = terms.get("warranty") or "6 months from delivery"
-    lines = [
-        f"Quotation validity: {validity_days} days from quotation date.",
-        "Price, availability, and delivery time are subject to final confirmation upon order placement.",
-        f"Delivery term: {incoterms} {place}, Incoterms 2020.",
-        "Freight, customs duty, local tax, and other logistics charges are excluded unless otherwise stated.",
-        f"Payment term: {payment}",
-        "Buyer to confirm part number, description, quantity, engine type, and technical suitability before order.",
-        "Certificates are excluded unless specifically stated.",
-        "Cancellation or return may not be accepted after order confirmation, especially for specially ordered or non-stock items.",
-        f"Warranty follows {warranty}.",
-        "The unit price suggested is based on the complete order with complete quantities. In case of reduction for qty, "
-        "it may constitute a variation to the contract, subject to mutual agreement.",
+    return [
+        ("validity", f"Quotation validity: {validity_days} days from quotation date."),
+        ("confirmation", "Price, availability, and delivery time are subject to final confirmation upon order placement."),
+        ("delivery_term", f"Delivery term: {incoterms} {place}, Incoterms 2020."),
+        ("charges_excluded", "Freight, customs duty, local tax, and other logistics charges are excluded unless otherwise stated."),
+        ("payment_term", f"Payment term: {payment}"),
+        ("buyer_check", "Buyer to confirm part number, description, quantity, engine type, and technical suitability before order."),
+        ("certificates", "Certificates are excluded unless specifically stated."),
+        ("cancellation", "Cancellation or return may not be accepted after order confirmation, especially for specially ordered or non-stock items."),
+        ("warranty", f"Warranty follows {warranty}."),
+        ("complete_order", "The unit price suggested is based on the complete order with complete quantities. In case of reduction for qty, "
+                           "it may constitute a variation to the contract, subject to mutual agreement."),
     ]
-    if terms.get("remarks") and str(terms["remarks"]).strip():
-        lines.append(str(terms["remarks"]).strip())
+
+
+def quotation_standard_terms(terms: Dict[str, Any], validity_days: int = 30) -> List[str]:
+    """문서에 찍을 Terms & Conditions 문장들.
+
+    terms["clauses"] 가 있으면 그 id 들만 골라 찍는다(4단계에서 선택한 문장). 값이 없는
+    옛 견적은 선택 이력이 없다는 뜻이라 전부 찍는다 — 기존 견적서 내용이 바뀌지 않게.
+    terms["extra_clauses"] 는 사용자가 직접 추가한 문장으로 표준 문장 뒤에 붙인다.
+    Remarks 는 여기 섞지 않는다 — 품목표와 T&C 사이의 별도 Remark 섹션에서 찍는다."""
+    catalog = quotation_clause_catalog(terms, validity_days)
+    picked = terms.get("clauses")
+    if isinstance(picked, list):
+        chosen = set(str(c) for c in picked)
+        lines = [text for cid, text in catalog if cid in chosen]
+    else:
+        lines = [text for _cid, text in catalog]
+    for extra in (terms.get("extra_clauses") or []):
+        if str(extra).strip():
+            lines.append(str(extra).strip())
     return lines
+
+
+def quotation_remark_lines(terms: Dict[str, Any]) -> List[str]:
+    """Remark 섹션 본문 — 4단계 Remarks 입력을 줄 단위로 나눈 것(빈 줄 제외)."""
+    raw = str(terms.get("remarks") or "").strip()
+    return [line.strip() for line in raw.splitlines() if line.strip()]
 
 
 def _make_quotation_costing_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> bytes:
@@ -1837,6 +1865,18 @@ def _make_quotation_costing_pdf(data: Dict[str, Any], company: Dict[str, Any]) -
             tcmds.append(("BACKGROUND", (0, r), (-1, r), colors.HexColor("#FAFBFC")))
     items_table.setStyle(TableStyle(tcmds))
     story += [items_table, Spacer(1, 5 * mm)]
+
+    # ── Remark ────────────────────────────────────────────────────────
+    # 4단계에서 입력한 견적 전체 비고. 품목표 바로 아래(=T&C 위)에 T&C 와 같은 형식으로
+    # 둔다 — 이 견적에만 해당하는 이야기를 표준 약관보다 먼저 읽히게 하기 위함.
+    remark_lines = quotation_remark_lines(terms)
+    if remark_lines:
+        story.append(section("Remark"))
+        story.append(Spacer(1, 2 * mm))
+        for line in remark_lines:
+            story.append(_p(f"• {line}", s["small"]))
+            story.append(Spacer(1, 1 * mm))
+        story.append(Spacer(1, 3 * mm))
 
     # ── Terms & Conditions ────────────────────────────────────────────
     story.append(section("Terms & Conditions"))
