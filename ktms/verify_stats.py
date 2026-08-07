@@ -28,7 +28,7 @@ except Exception:
 # 앱과 '완전히 동일한' 집계 함수를 재사용해 로직 차이가 없도록 한다.
 from _core import (  # noqa: E402
     get_session, _quotation_total, _total_amount, _cur2, _month_key,
-    _rfq_for_order,
+    _rfq_for_order, manual_stage_dates,
 )
 from db.models import (  # noqa: E402
     Order, Quotation, ARRecord, RFQ, Customer, CommercialInvoice, TaxInvoiceData,
@@ -119,8 +119,7 @@ def main() -> None:
             if ci and tax_date_by_ci.get(ci.id):
                 return _month_key(tax_date_by_ci[ci.id])
             o = order_map.get(a.order_id)
-            rfq = _rfq_for_order(s, o) if o else None
-            sd = (getattr(rfq, "stage_dates", None) or {}) if rfq else {}
+            sd = manual_stage_dates(_rfq_for_order(s, o) if o else None, o)
             return _month_key(sd.get("10") or "")
 
         rev = {"USD": 0.0, "KRW": 0.0}

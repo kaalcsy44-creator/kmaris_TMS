@@ -12235,3 +12235,17 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
   padding-top: 14px;
   border-top: 2px solid var(--line-strong);
 }
+/* 완료 바 없이 안내 한 줄만 두는 경우(9단계) — 구분선만 얇게. */
+.ar-milestone--note {
+  padding-top: 10px;
+  border-top-width: 1px;
+}
+/* 매입(AP) 잔여 안내 — 이 단계를 막고 있는 쪽을 색으로 구분한다.
+   대기(주황)는 "AR 은 됐는데 벤더측이 남았다"를 뜻한다. */
+.ap-gate.wait {
+  color: #b06a00;
+  font-weight: 600;
+}
+.ap-gate.ok {
+  color: #1a7a4a;
+}

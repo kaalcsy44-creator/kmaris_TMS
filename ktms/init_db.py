@@ -90,6 +90,9 @@ _MIGRATIONS = {
         "pod_notes":         "TEXT",
         "trade_type":        "VARCHAR(10) DEFAULT '수출'",
         "service_info":      "JSON",
+        # 수동 완료 표시(7·8·10·11)를 고객 P/O 단위로 보관. NULL = 아직 오더별 기록 없음
+        # → migrate_split_stage_dates_to_orders 가 프로젝트 값에서 채운다.
+        "stage_dates":       "JSON",
         # DEFAULT 없이 추가 → 기존 오더는 NULL 로 남아 연결 견적 통화를 그대로 상속(회귀 방지).
         # 신규 오더는 create_order 에서 통화를 명시 저장한다.
         "currency":          "VARCHAR(10)",
@@ -898,6 +901,41 @@ def migrate_backfill_price_history():
     print(f"[OK] backfill_price_history applied: {n} price rows built.")
 
 
+def migrate_split_stage_dates_to_orders():
+    """프로젝트(RFQ) 단위로 찍혀 있던 수동 완료 표시를 각 고객 P/O(오더)로 복사한다.
+
+    9~11단계(청구·세금계산서·수금)는 P/O마다 시점이 다르다 — 한 P/O는 결제가 끝났는데
+    다른 P/O는 다음 달에 들어오는 식이다. 그래서 완료 표시를 오더별로 옮겼고, 이 마이그레이션이
+    기존 표시를 각 오더에 그대로 물려준다(전환 시점에 진행 상태가 뒤로 밀리지 않게).
+    orders.stage_dates 가 NULL 인 행만 채우므로 재실행해도 안전하다."""
+    eng = get_engine()
+    insp = inspect(eng)
+    if not (insp.has_table("orders") and insp.has_table("rfqs")):
+        return
+    cols = {c["name"] for c in insp.get_columns("orders")}
+    if "stage_dates" not in cols:
+        return
+    from db.models import Order, Quotation, RFQ
+    s = get_session()
+    try:
+        stage_dates_by_rfq = {r.id: (r.stage_dates or {}) for r in s.query(RFQ).all()}
+        rfq_by_quotation = {q.id: q.rfq_id for q in s.query(Quotation).all()}
+        filled = 0
+        for o in s.query(Order).all():
+            if o.stage_dates is not None:
+                continue
+            rid = o.rfq_id or rfq_by_quotation.get(o.quotation_id or 0)
+            o.stage_dates = dict(stage_dates_by_rfq.get(rid) or {})
+            filled += 1
+        if filled:
+            s.commit()
+            print(f"[OK] orders.stage_dates seeded from project stage dates: {filled} order(s).")
+        else:
+            print("[SKIP] orders.stage_dates already seeded.")
+    finally:
+        s.close()
+
+
 if __name__ == "__main__":
     print("Initializing KTMS database...")
     create_tables()
@@ -915,5 +953,6 @@ if __name__ == "__main__":
     migrate_restructure_item_categories()
     migrate_widen_activity_type()
     migrate_normalize_incoterms()
+    migrate_split_stage_dates_to_orders()
     migrate_backfill_price_history()
     print("Done.")

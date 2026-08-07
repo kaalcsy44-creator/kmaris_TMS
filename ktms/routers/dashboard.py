@@ -60,6 +60,7 @@ from _core import (
     datetime,
     get_current_user,
     get_session,
+    manual_stage_dates,
     order_tracking_step,
     require_token,
     rfq_tracking_step,
@@ -306,7 +307,8 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
             first_item = (_it0.get("description") or _it0.get("part_no") or "").strip()
 
             # 단계 일시·노트 + 다음 액션(P3). stage_auto 는 한 번만 계산해 재사용.
-            _sd = getattr(r, "stage_dates", None) or {}
+            # 수동 완료 일시는 이 행이 대표로 잡은 고객 P/O(o) 기준 — stage_auto 와 같은 오더.
+            _sd = manual_stage_dates(r, o)
             _auto = _stage_auto_times(s, r, o)
             _sn = getattr(r, "stage_notes", None) or {}
             _lost = _enum_val(r.status) == RFQStatus.LOST.value
@@ -679,7 +681,7 @@ def dashboard():
                 "customer": cust_names.get(r.customer_id, "—"),
                 "vessel": (vessel_names.get(r.vessel_id) if r.vessel_id else "") or "",
                 "customer_vessel": _cv(r.customer_id, r.vessel_id),
-                "stage_dates": getattr(r, "stage_dates", None) or {},
+                "stage_dates": manual_stage_dates(r, o),
                 "stage_auto": _stage_auto_times(s, r, o),
                 "status": _enum_val(r.status),
                 "item_count": len(r.items or []),
@@ -740,7 +742,7 @@ def statistics(months: int = 12):
     """통계 대시보드 — 월별 시계열(매출·견적·수주), 랭킹(고객·품목), KPI, 업무알림.
 
     금액은 USD/KRW 통화별로 분리 집계(환산 없음, 프런트 토글로 전환).
-    매출 인식 시점은 세금계산서 발행일(RFQ.stage_dates["11"]) 기준.
+    매출 인식 시점은 세금계산서 발행일 기준(수동 완료 표시는 고객 P/O 단위).
     """
     months = max(1, min(int(months or 12), 36))
     s = get_session()
@@ -866,8 +868,7 @@ def statistics(months: int = 12):
                 return _month_key(_tax_date_by_ci[ci.id])
             # 폴백: 수동 '세금계산서 발행'(stage 10) 완료일
             o = order_map.get(a.order_id)
-            rfq = _rfq_of(o)
-            sd = (getattr(rfq, "stage_dates", None) or {}) if rfq else {}
+            sd = manual_stage_dates(_rfq_of(o), o)
             return _month_key(sd.get("10") or "")
 
         # ── 매출(세금계산서 발행 기준) + 고객사 랭킹 ─────────────────────────────
@@ -980,8 +981,8 @@ def statistics(months: int = 12):
                     today_delivery.append({"order_id": o.id, "project_no": pno, "customer": _cust_of(o), "date": pd})
                 elif today_iso < pd[:10] <= week_iso:
                     week_delivery.append({"order_id": o.id, "project_no": pno, "customer": _cust_of(o), "date": pd})
-            # 미청구: 인도완료(delivered_date) 이나 세금계산서(11단계) 미발행
-            sd = (getattr(rfq, "stage_dates", None) or {}) if rfq else {}
+            # 미청구: 인도완료(delivered_date) 이나 세금계산서 미발행 — 이 P/O 기준
+            sd = manual_stage_dates(rfq, o)
             if delivered and not sd.get("11"):
                 uninvoiced.append({"order_id": o.id, "project_no": pno, "customer": _cust_of(o), "date": o.delivered_date or ""})
 
@@ -1203,8 +1204,7 @@ def statistics_debug(month: str | None = None):
             if ci and _tax_date_by_ci.get(ci.id):
                 return _month_key(_tax_date_by_ci[ci.id])
             o = order_map.get(a.order_id)
-            rfq = _rfq_for_order(s, o) if o else None
-            sd = (getattr(rfq, "stage_dates", None) or {}) if rfq else {}
+            sd = manual_stage_dates(_rfq_for_order(s, o) if o else None, o)
             return _month_key(sd.get("10") or "")
 
         # ── Orders Won — statistics() order_series 와 동일 로직 ──

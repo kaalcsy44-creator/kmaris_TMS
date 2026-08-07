@@ -200,6 +200,10 @@ export function ArOverview({
         <>
           <ArAddForm key={match?.id ?? `new-${orderId}`} options={options ?? null} fallbackOrderId={orderId} existing={match} onChanged={load} />
           {match && stageTab !== 9 ? <MilestoneBar row={match} stage={stageTab} onChanged={load} /> : null}
+          {/* 9단계는 완료 바가 없다(청구서 저장이 곧 완료) — 벤더측 잔여만 한 줄로 알린다. */}
+          {match && stageTab === 9 ? (
+            <div className="ar-milestone ar-milestone--note"><ApGate row={match} stage={9} /></div>
+          ) : null}
         </>
       ) : (
         <ApSection orderId={orderId} stage={stageTab} focusPoId={initialApPoId ?? null} onChanged={load} />
@@ -616,6 +620,23 @@ function ApAddForm({
 
 /** 10·11단계 완료 바 — 대금청구서 편집(ArAddForm) 아래에 붙는 발행/수금 완료 액션.
  *  청구서 필드는 위 ArAddForm 에서 편집하므로, 여기서는 발행일/수금액 등 마일스톤만 다룬다. */
+/** 매입(AP)측 잔여 안내 — 이 단계를 막고 있는 벤더 P/O 건수를 한 줄로 알려 준다.
+ *  9·10·11 단계는 고객측(AR)과 벤더측(AP)이 모두 끝나야 완료로 계산된다. */
+function ApGate({ row, stage }: { row: ArRow; stage: StageTab }) {
+  const total = row.ap_total ?? 0;
+  if (!total) return null;   // 벤더 P/O 가 없는 딜은 매입측이 없다.
+  const done = stage === 9 ? row.ap_billed : stage === 10 ? row.ap_tax : row.ap_paid;
+  const label = stage === 9 ? "vendor bill received" : stage === 10 ? "vendor tax invoice received" : "vendor paid";
+  if ((done ?? 0) >= total) {
+    return <span className="hint-inline ap-gate ok" style={{ marginLeft: 10 }}>Vendor side (AP) complete — {total}/{total} {label}</span>;
+  }
+  return (
+    <span className="hint-inline ap-gate wait" style={{ marginLeft: 10 }}>
+      Waiting on Payable · Vendor (AP) — {done ?? 0}/{total} {label}. This stage completes when both AR and AP are done.
+    </span>
+  );
+}
+
 function MilestoneBar({ row, stage, onChanged }: { row: ArRow; stage: 10 | 11; onChanged: () => void }) {
   const canEditThis = can("ar", "edit") && canEditDeal(row.assignee_id);
   const [busy, setBusy] = useState(false);
@@ -668,6 +689,9 @@ function MilestoneBar({ row, stage, onChanged }: { row: ArRow; stage: 10 | 11; o
             Outstanding {row.outstanding.toLocaleString()} {row.currency}
           </span>
         ) : null}
+        {/* 이 단계는 매출(AR)·매입(AP)이 모두 끝나야 완료다 — 벤더측이 남았으면 여기서 알린다
+            (AR 만 완료 처리하고 "왜 단계가 안 넘어가지?" 로 헤매지 않게). */}
+        <ApGate row={row} stage={stage} />
       </div>
       <fieldset className="form-fieldset" disabled={!canEditThis}>
         <div className="form-grid">

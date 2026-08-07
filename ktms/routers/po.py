@@ -72,6 +72,7 @@ from _core import (
     require_token,
     send_email,
     default_from,
+    set_manual_stage,
     steps_for,
     vendor_options,
 )
@@ -895,7 +896,8 @@ def vendor_po_send(
 @app.post("/api/admin/orders/{order_id}/stage/{stage}/complete",
           dependencies=[Depends(require_token)])
 def complete_order_stage(order_id: int, stage: int, body: StageCompleteBody):
-    """10·11 등 수동 완료 단계를 토글한다. 완료 시 RFQ.stage_dates[stage]=지정 시각(없으면 현재)."""
+    """10·11 등 수동 완료 단계를 토글한다. 완료 시 이 고객 P/O(오더)의 stage_dates[stage]에
+    지정 시각(없으면 현재)을 기록한다 — 같은 프로젝트의 다른 P/O 는 영향받지 않는다."""
     if not (1 <= stage <= len(INTERNAL_STEPS)):
         raise HTTPException(status_code=400, detail="잘못된 단계 번호입니다.")
     s = get_session()
@@ -906,13 +908,8 @@ def complete_order_stage(order_id: int, stage: int, body: StageCompleteBody):
         rfq = _rfq_for_order(s, order)
         if not rfq:
             raise HTTPException(status_code=400, detail="연결된 RFQ가 없습니다.")
-        dates = dict(getattr(rfq, "stage_dates", None) or {})
-        key = str(stage)
-        if body.done:
-            dates[key] = (body.at or "").strip()[:16] or _kst_iso(datetime.utcnow())
-        else:
-            dates.pop(key, None)
-        rfq.stage_dates = dates
+        at = ((body.at or "").strip()[:16] or _kst_iso(datetime.utcnow())) if body.done else None
+        set_manual_stage(rfq, order, stage, at)
         s.commit()
         return {"ok": True, "stage": _pipeline_stage(s, rfq.id), "done": body.done}
     finally:

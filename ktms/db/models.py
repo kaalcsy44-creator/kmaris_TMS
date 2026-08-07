@@ -386,6 +386,10 @@ class Order(Base):
     currency       = Column(String(10), default="USD")  # 주문 통화(USD/KRW). 미지정 시 연결 견적 통화 사용
     trade_type     = Column(String(10), default="수출", nullable=False)  # 거래구분: 수출/내수(국내공급)
     service_info   = Column(JSON, default=dict)  # 서비스 업무 7~10단계 입력값 {"7":{...},...}
+    # 수동 완료 표시 {"11":"2026-08-07T15:02", ...} — 고객 P/O(오더) 단위로 기록한다.
+    # 한 프로젝트에 P/O가 여러 건이면 A는 결제 완료, B는 아직 미결제일 수 있어서다.
+    # NULL 이면 오더별 기록이 생기기 전(구 데이터) — 프로젝트(RFQ.stage_dates) 값을 쓴다.
+    stage_dates    = Column(JSON, default=dict)
     status         = Column(SAEnum(OrderStatus), default=OrderStatus.RECEIVED)
     promised_delivery = Column(String(10))   # 약속 납기일 YYYY-MM-DD (납기 준수 측정 기준)
     shipped_date      = Column(String(10))   # 실제 출고일 (출고→송장 Cycle Time 기준)

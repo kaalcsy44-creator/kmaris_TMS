@@ -62,8 +62,10 @@ from _core import (
     generate_pi_xlsx,
     get_session,
     make_document_xlsx,
+    manual_stage_dates,
     require_token,
     send_email,
+    set_manual_stage,
     shipping_advice_email_body,
 )
 
@@ -113,10 +115,10 @@ def documents_overview():
             sa = sa_by_order.get(o.id)
             pod = pod_by_order.get(o.id)
             ci_id = ci.id if ci else None
-            # 업무타입(서비스)·서비스 단계(7·8 수동완료) 상태 — RFQ.stage_dates 기준
+            # 업무타입(서비스)·서비스 단계(7·8 수동완료) 상태 — 이 고객 P/O(오더) 기준
             rfq = _rfq_for_order(s, o)
             wt = _enum_val(rfq.work_type) if (rfq and rfq.work_type) else "부품공급"
-            sd = (getattr(rfq, "stage_dates", None) or {}) if rfq else {}
+            sd = manual_stage_dates(rfq, o)
             svc = getattr(o, "service_info", None) or {}
             rows.append({
                 "id": o.id,
@@ -168,7 +170,7 @@ def document_detail(order_id: int):
           dependencies=[Depends(require_token)])
 def save_service_stage(order_id: int, body: ServiceStageSave):
     """서비스 업무 7~9단계 입력값 저장 + 단계 완료 처리.
-    7·8 은 RFQ.stage_dates 로 완료, 9 는 청구내역으로 AR 레코드를 생성/갱신한다."""
+    7·8 은 이 고객 P/O(오더)의 stage_dates 로 완료, 9 는 청구내역으로 AR 레코드를 생성/갱신한다."""
     if body.stage not in (7, 8, 9):
         raise HTTPException(status_code=400, detail="잘못된 서비스 단계입니다.")
     s = get_session()
@@ -182,13 +184,8 @@ def save_service_stage(order_id: int, body: ServiceStageSave):
 
         if body.stage in (7, 8):
             rfq = _rfq_for_order(s, order)
-            if rfq:
-                dates = dict(getattr(rfq, "stage_dates", None) or {})
-                if body.complete:
-                    dates[str(body.stage)] = _kst_iso(datetime.utcnow())
-                else:
-                    dates.pop(str(body.stage), None)
-                rfq.stage_dates = dates
+            set_manual_stage(rfq, order, body.stage,
+                             _kst_iso(datetime.utcnow()) if body.complete else None)
         elif body.stage == 9 and body.complete:
             def _f(v) -> float:
                 try:
@@ -229,11 +226,7 @@ def delete_service_stage(order_id: int, stage: int):
         info.pop(str(stage), None)
         order.service_info = info
         if stage in (7, 8):
-            rfq = _rfq_for_order(s, order)
-            if rfq:
-                dates = dict(getattr(rfq, "stage_dates", None) or {})
-                dates.pop(str(stage), None)
-                rfq.stage_dates = dates
+            set_manual_stage(_rfq_for_order(s, order), order, stage, None)
         if stage == 9:
             s.query(ARRecord).filter_by(order_id=order.id).delete(synchronize_session=False)
         s.commit()
@@ -570,11 +563,8 @@ def reset_stage(order_id: int, stage: int):
             if any(_enum_val(a.status) == "완납" for a in ars):
                 raise HTTPException(status_code=400,
                     detail="AR이 '완납'으로 표시돼 있습니다. AR 화면에서 결제를 먼저 해제하세요.")
-        # 공통: 해당 단계의 수동 완료 플래그·서비스 입력 제거.
-        if rfq:
-            dates = dict(getattr(rfq, "stage_dates", None) or {})
-            dates.pop(str(stage), None)
-            rfq.stage_dates = dates
+        # 공통: 이 P/O 의 수동 완료 플래그·서비스 입력 제거(다른 P/O 는 건드리지 않는다).
+        set_manual_stage(rfq, order, stage, None)
         info = dict(getattr(order, "service_info", None) or {})
         info.pop(str(stage), None)
         order.service_info = info

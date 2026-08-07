@@ -201,11 +201,13 @@ def _sync_schema() -> None:
         from db.engine import Base
         from init_db import (
             migrate_columns, migrate_normalize_incoterms, migrate_backfill_price_history,
+            migrate_split_stage_dates_to_orders,
         )
 
         Base.metadata.create_all(bind=get_engine())
         migrate_columns()
         migrate_normalize_incoterms()   # 'EXW Busan' 등 기존 incoterms 값 표준 라벨로 1회 정규화
+        migrate_split_stage_dates_to_orders()  # 단계 완료 표시를 프로젝트 → 고객 P/O 단위로 이관
         migrate_backfill_price_history()  # 품목 구매/판매가 이력 초기 백필(마커 가드 1회)
     except Exception as exc:  # 스키마 동기화 실패가 앱 기동을 막지 않도록 로그만 남긴다.
         print(f"[WARN] startup schema sync skipped: {exc}", file=sys.stderr)
@@ -739,13 +741,26 @@ def _deal_progress(s, rfq, order) -> tuple[int, dict[str, str]]:
         tax = (s.query(TaxInvoiceData).filter_by(ci_id=ci.id)
                .order_by(TaxInvoiceData.created_at.asc()).first()) if ci else None
         ars = s.query(ARRecord).filter_by(order_id=order.id).all()
+        # 매입측(AP) — 벤더 P/O 1건 = AP 1건. 9~11단계는 매출(AR)만이 아니라 이 매입까지
+        # 끝나야 완료로 본다(벤더 청구서 수취·세금계산서 수취·지급).
+        aps = s.query(APRecord).filter_by(order_id=order.id).all()
         pod = (s.query(DeliveryProof).filter_by(order_id=order.id)
                .order_by(DeliveryProof.created_at.asc()).first())
     else:
-        pos, sa, ci, pi, tax, ars, pod = [], None, None, None, None, [], None
+        pos, sa, ci, pi, tax, ars, aps, pod = [], None, None, None, None, [], [], None
+
+    # ── 매입(AP) 완료 여부 — 이 오더의 벤더 P/O 전부가 각 단계를 통과했는지 ────────
+    # 벤더 P/O 가 없으면(발주 없는 딜) 매입측은 따질 것이 없어 통과로 본다.
+    _ap_by_po = {a.po_id: a for a in aps}
+    _ap_of = lambda po: _ap_by_po.get(po.id)
+    ap_all_billed = all(_ap_of(p) is not None for p in pos)
+    ap_all_tax = all(getattr(_ap_of(p), "tax_received", False) for p in pos)
+    ap_all_paid = all(_enum_val(getattr(_ap_of(p), "status", None)) == "완납" for p in pos)
 
     # ── (1) 단계 번호 ─────────────────────────────────────────────────────────
     stage = 1
+    ar_billed = False   # 매출측 청구 근거 — AR 레코드 또는 CI 기반 세금계산서 데이터
+    ar_paid = False     # 매출측 수금 완료 — AR 상태 '완납'
     if vrfqs:
         stage = max(stage, 2)
         if vquotes:
@@ -786,21 +801,23 @@ def _deal_progress(s, rfq, order) -> tuple[int, dict[str, str]]:
             # 8) 운송 완료 · POD 수취 — POD 파일 업로드 시 완료 (구 9)
             if pod:
                 stage = max(stage, 8)
-            # 9) Tax Invoice 작성 · 대금 청구 — Tax Invoice Data 생성 시 (구 10)
+            # 9) 대금 청구 — 세금계산서 데이터(구 10) 도 매출측 근거로 본다.
             if ci and tax:
-                stage = max(stage, 9)
+                ar_billed = True
 
-        if ars:
+        ar_billed = ar_billed or bool(ars)
+        ar_paid = any(_enum_val(a.status) == "완납" for a in ars)
+        # 9) 청구 — 고객 청구(AR)와 벤더 청구서 수취(AP)가 모두 잡혀야 이 단계로 본다.
+        if ar_billed and ap_all_billed:
             stage = max(stage, 9)
-            if any(_enum_val(a.status) == "완납" for a in ars):
-                stage = max(stage, 11)
 
-    # 수동 완료(완료 버튼/POD)로 stage_dates 에 표시된 단계를 반영.
+    # 수동 완료(완료 버튼/POD)로 표시된 단계를 반영.
     # (자동 근거가 약하거나 없는 단계만 — 의도치 않은 점프 방지)
-    sd = getattr(rfq, "stage_dates", None) or {}
+    # 표시는 이 고객 P/O(order) 것만 본다 — 같은 프로젝트의 다른 P/O 가 결제 완료라고
+    # 이 P/O 까지 완료로 올라가면 안 된다.
+    sd = manual_stage_dates(rfq, order)
     # 서비스 업무는 7·8단계(Service Readiness/Complete)도 수동 완료로 진행한다.
-    manual_keys = ("7", "8", "10", "11") if is_service else ("8", "10", "11")
-    for k in manual_keys:
+    for k in (("7", "8") if is_service else ("8",)):
         if sd.get(k):
             stage = max(stage, int(k))
 
@@ -810,8 +827,12 @@ def _deal_progress(s, rfq, order) -> tuple[int, dict[str, str]]:
     # 그랬다간 아직 출고도 안 한 건이 파이프라인에서 세금계산서 단계로 보인다.
     # 청구가 시작된 뒤(9단계 이상)에만 적용한다.
     pi_covers_tax = pi is not None and stage >= 9
-    if pi_covers_tax:
+    # 10·11 단계는 매출(AR)·매입(AP) 양쪽이 끝나야 완료다 — 고객에게 세금계산서를 끊고
+    # 수금까지 마쳐도 벤더 세금계산서 수취·지급이 남아 있으면 그 P/O 는 아직 진행 중이다.
+    if (bool(sd.get("10")) or pi_covers_tax) and ap_all_tax:
         stage = max(stage, 10)
+    if (bool(sd.get("11")) or ar_paid) and ap_all_paid:
+        stage = max(stage, 11)
 
     # ── (2) 단계별 자동 완료 일시 ─────────────────────────────────────────────
     # 근거 레코드가 존재하는 단계만 채운다(수동 stage_dates 미입력 시 표시·기본값).
@@ -1969,8 +1990,42 @@ def _tracking_url(kind: str, token: str | None) -> str:
     return f"{base}?type={kind}&token={token}"
 
 
+def manual_stage_dates(rfq, order) -> dict:
+    """수동 완료 표시 {단계번호: 완료일시} — 고객 P/O(오더) 단위로 읽는다.
+
+    청구(9)·세금계산서(10)·수금(11)은 P/O마다 시점이 다르다(A는 이번 달 입금, B는 다음 달).
+    그래서 완료 표시를 오더에 두고, 오더가 아직 자기 기록을 갖기 전(NULL, 구 데이터)이면
+    프로젝트 단위로 찍어 둔 값을 그대로 쓴다. 오더가 없으면(고객 P/O 이전) 프로젝트 값."""
+    if order is not None:
+        own = getattr(order, "stage_dates", None)
+        if own is not None:
+            return dict(own)
+    return dict(getattr(rfq, "stage_dates", None) or {})
+
+
+def set_manual_stage(rfq, order, stage: int, value: str | None) -> dict:
+    """오더의 수동 완료 표시를 갱신(value 가 비면 해제)하고 갱신된 dict 를 돌려준다.
+
+    첫 갱신 때는 프로젝트 값을 물려받은 상태에서 시작해, 이후로는 그 오더가 자기 기록을
+    갖는다(해제도 그 오더에만 남는다 — 프로젝트 값이 되살아나지 않게).
+    오더가 없으면 예전처럼 프로젝트(RFQ)에 기록한다. JSON 컬럼은 새 dict 로 재할당해야
+    변경이 감지되므로 항상 복사본을 만들어 넣는다."""
+    key = str(stage)
+    val = (value or "").strip()
+    dates = manual_stage_dates(rfq, order)
+    if val:
+        dates[key] = val
+    else:
+        dates.pop(key, None)
+    if order is not None:
+        order.stage_dates = dates
+    elif rfq is not None:
+        rfq.stage_dates = dates
+    return dates
+
+
 def _rfq_for_order(session, order: Order):
-    """오더 → 연결된 RFQ(단계 완료 표시는 RFQ.stage_dates 에 저장됨)."""
+    """오더 → 연결된 RFQ(프로젝트). 단계 완료 표시는 오더별(Order.stage_dates)."""
     if getattr(order, "rfq_id", None):
         rfq = session.query(RFQ).filter_by(id=order.rfq_id).first()
         if rfq:
@@ -2035,7 +2090,7 @@ def _document_detail_payload(session, order: Order) -> dict:
     pod = (session.query(DeliveryProof).filter_by(order_id=order.id)
            .order_by(DeliveryProof.created_at.desc()).first())
     rfq = _rfq_for_order(session, order)
-    sd = (getattr(rfq, "stage_dates", None) or {}) if rfq else {}
+    sd = manual_stage_dates(rfq, order)
     # 발주된 Vendor(들) — 이 오더의 PurchaseOrder vendor_id → Vendor.name (중복 제거)
     pos = session.query(PurchaseOrder).filter_by(order_id=order.id).all()
     vendor_ids = [po.vendor_id for po in pos if po.vendor_id]
@@ -2222,7 +2277,7 @@ def _manual_doc_no(session, Model, col, body_val, current_id):
     return no
 
 
-# ── 단계 완료 콜 — 오더 기준으로 RFQ.stage_dates 에 완료 표시(8·10·11) ──────────
+# ── 단계 완료 콜 — 그 고객 P/O(Order.stage_dates)에 완료 표시(7·8·10·11) ────────
 class StageCompleteBody(BaseModel):
     done: bool = True
     at: str | None = None  # 'YYYY-MM-DDTHH:MM' (KST 벽시계) — 생략 시 현재시각
@@ -2478,8 +2533,8 @@ def _finance_receivable_rows(s) -> list[dict]:
     today_str = date.today().isoformat()
     ord_map = {o.id: o for o in s.query(Order).all()}
     cust_names = {c.id: c.name for c in s.query(Customer).all()}
-    # 수금 완료일 = 11단계 완료일(RFQ.stage_dates["11"]). 오더 수만큼 재조회하지 않도록
-    # RFQ 를 한 번에 읽어 매핑한다(견적 경유 연결도 함께 훑는다).
+    # 수금 완료일 = 이 P/O(오더)의 11단계 완료일. 오더 수만큼 재조회하지 않도록
+    # RFQ 를 한 번에 읽어 매핑한다(견적 경유 연결도 함께 훑는다 — 구 데이터 폴백용).
     rfq_by_id = {q.id: q for q in s.query(RFQ).all()}
     qtn_rfq = {q.id: q.rfq_id for q in s.query(Quotation).all()}
 
@@ -2492,7 +2547,7 @@ def _finance_receivable_rows(s) -> list[dict]:
 
     def _stage11_date(order) -> str:
         rfq = rfq_by_id.get(_rfq_id_of(order))
-        return ((getattr(rfq, "stage_dates", None) or {}).get("11") or "")[:10] if rfq else ""
+        return (manual_stage_dates(rfq, order).get("11") or "")[:10]
 
     rows: list[dict] = []
     for r in s.query(ARRecord).all():

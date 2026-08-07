@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from _core import (
+    APRecord,
     ARPayment,
     ARRecord,
     ARSave,
@@ -26,9 +27,23 @@ from _core import (
     date,
     get_session,
     io,
+    manual_stage_dates,
     require_token,
 )
 
+
+
+def _ap_progress(po_ids: list, ap_by_po: dict) -> dict:
+    """이 오더의 매입(AP) 진척 — 벤더 P/O 총건수와 단계별 완료 건수.
+    9(청구서 수취)·10(전자세금계산서 수취)·11(지급 완료)이 각각 총건수와 같아야
+    그 단계가 완료된다(_core._deal_progress 의 ap_all_* 와 같은 판정)."""
+    aps = [ap_by_po.get(pid) for pid in po_ids]
+    return {
+        "ap_total": len(po_ids),
+        "ap_billed": sum(1 for a in aps if a is not None),
+        "ap_tax": sum(1 for a in aps if a is not None and a.tax_received),
+        "ap_paid": sum(1 for a in aps if a is not None and _enum_val(a.status) == "완납"),
+    }
 
 
 @app.get("/api/admin/ar-overview", dependencies=[Depends(require_token)])
@@ -44,15 +59,20 @@ def ar_overview():
         # 프로포마 인보이스를 발행한 오더 — 10단계(세금계산서 발행)를 PI 로 갈음한다
         # (_core._deal_progress 의 pi_covers_tax 와 같은 규칙). 오더당 최신 1건만 본다.
         pi_by_order = {p.order_id: p for p in s.query(ProformaInvoice).order_by(ProformaInvoice.id).all()}
-        # order_id → 발주 Vendor 이름들(중복 제거, 발주 순)
+        # order_id → 발주 Vendor 이름들(중복 제거, 발주 순) + 벤더 P/O id 목록
         po_vendors_by_order: dict[int, list[str]] = {}
+        po_ids_by_order: dict[int, list[int]] = {}
         for po in s.query(PurchaseOrder).order_by(PurchaseOrder.id).all():
+            po_ids_by_order.setdefault(po.order_id, []).append(po.id)
             nm = vendor_names.get(po.vendor_id)
             if not nm:
                 continue
             lst = po_vendors_by_order.setdefault(po.order_id, [])
             if nm not in lst:
                 lst.append(nm)
+        # 매입(AP) 진행 — 9~11단계는 매출(AR)·매입(AP) 양쪽이 끝나야 완료라, 화면에서
+        # "AR 은 끝났는데 왜 단계가 안 넘어가지?" 를 알 수 있게 벤더측 진척을 함께 내려보낸다.
+        ap_by_po = {a.po_id: a for a in s.query(APRecord).all()}
         today_str = date.today().isoformat()
 
         rows = []
@@ -69,9 +89,10 @@ def ar_overview():
                 out_usd += outstanding
                 if overdue:
                     overdue_usd += outstanding
-            # 11) 세금계산서 발행 · 12) 대금 결제 완료 — RFQ.stage_dates 의 수동 완료 표시
+            # 10) 세금계산서 발행 · 11) 대금 결제 완료 — 이 고객 P/O(오더)의 수동 완료 표시.
+            # 프로젝트가 아니라 오더 단위라, 같은 프로젝트의 P/O 라도 결제일이 다를 수 있다.
             rfq = _rfq_for_order(s, o) if o else None
-            sd = (getattr(rfq, "stage_dates", None) or {}) if rfq else {}
+            sd = manual_stage_dates(rfq, o)
             # 세금계산서 발행 = 수동 완료 또는 PI 발행(둘 중 먼저 있는 쪽이 완료 일시).
             pi = pi_by_order.get(r.order_id)
             rows.append({
@@ -112,6 +133,9 @@ def ar_overview():
                 "tax_pi_no": (pi.pi_no or "") if pi else "",
                 "paid_done": bool(sd.get("11")),
                 "paid_date": sd.get("11", "") or "",
+                # 매입(AP) 진척 — 이 오더의 벤더 P/O 총건수 대비 청구서 수취·세금계산서
+                # 수취·지급 완료 건수. 셋 다 총건수와 같아야 9·10·11 단계가 완료된다.
+                **_ap_progress(po_ids_by_order.get(r.order_id, []), ap_by_po),
                 # 공통 식별 컬럼
                 "vessel": (vessel_names.get(o.vessel_id, "") if o and o.vessel_id else ""),
                 "trade_type": (o.trade_type or "수출") if o else "수출",

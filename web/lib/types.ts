@@ -744,6 +744,12 @@ export type ArRow = {
   tax_pi_no?: string;
   paid_done: boolean;
   paid_date: string;
+  // 매입(AP) 진척 — 이 P/O 의 벤더 P/O 총건수 대비 완료 건수. 9·10·11 단계는
+  // 매출(AR)·매입(AP)이 모두 끝나야 완료라, 남은 쪽을 화면에 표시하는 데 쓴다.
+  ap_total: number;
+  ap_billed: number;   // 벤더 대금청구서 수취(9단계)
+  ap_tax: number;      // 벤더 전자세금계산서 수취(10단계)
+  ap_paid: number;     // 벤더 지급 완료(11단계)
   vessel: string;
   work_type: string;
   trade_type: string;
