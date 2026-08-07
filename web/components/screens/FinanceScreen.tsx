@@ -1733,11 +1733,22 @@ function PaymentDateModal({
   );
 }
 
-/** 자동 부가세율 — 급여·세금(납부한 세금)과 외화 건은 매입세액이 없어 0. 그 밖은 10%. */
+/** 분류·통화로 정하는 기본 부가세율 — 급여·세금(납부한 세금)과 외화 건은 매입세액이 없어 0.
+ *  그 밖은 10%. 어디까지나 처음 채워 주는 값이고, 실제 세율은 폼에서 직접 고른다. */
 function autoVatRate(category: string, currency: string): number {
   if ((currency || "KRW").toUpperCase() !== "KRW") return 0;
   return category === "급여" || category === "세금" ? 0 : 0.1;
 }
+
+/** 부가세 입력 방식 — 세율을 고르거나("0.1"·"0"), 금액을 직접 넣는다("custom").
+ *  급여·경비 클레임처럼 부가세가 아예 없는 지출이 흔해 0% 를 한 번에 고를 수 있어야 한다. */
+type VatChoice = "0.1" | "0" | "custom";
+const VAT_CHOICES: { value: VatChoice; label: string }[] = [
+  { value: "0.1", label: "10%" },
+  { value: "0", label: "0% · none" },
+  { value: "custom", label: "Custom" },
+];
+const rateChoice = (rate: number): VatChoice => (rate === 0.1 ? "0.1" : rate === 0 ? "0" : "custom");
 
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 /** 저장은 총액(amount)이 기준 — 공급가액은 총액에서 부가세를 뺀 나머지로 되돌린다. */
@@ -1758,9 +1769,15 @@ function PayableForm({
   const [form, setForm] = useState<FinancePayableSave>({ ...initial });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
-  // 부가세 자동(공급가액의 10%) 여부 — 직접 고쳐 넣으면 그 값을 그대로 둔다.
-  // 수정 화면은 이미 저장된 값이 정답이므로 자동 계산을 걸지 않는다.
-  const [vatAuto, setVatAuto] = useState(!rowId);
+  // 부가세율 — 신규는 분류·통화의 기본율에서 시작하고, 수정은 저장된 금액에서 되읽는다
+  // (10%로 딱 떨어지면 10%, 0이면 0%, 그 밖은 직접 입력으로 본다).
+  const [vatChoice, setVatChoice] = useState<VatChoice>(() => {
+    if (!rowId) return rateChoice(autoVatRate(initial.category || "기타", initial.currency || "KRW"));
+    const s = supplyOf(initial);
+    const v = initial.vat_amount || 0;
+    if (v === 0) return "0";
+    return s > 0 && Math.abs(v - Math.round(s * 0.1)) <= 1 ? "0.1" : "custom";
+  });
   const { data: vendors } = useCachedData("settings:vendors-opt", fetchVendors);
 
   function set<K extends keyof FinancePayableSave>(k: K, v: FinancePayableSave[K]) {
@@ -1773,16 +1790,26 @@ function PayableForm({
     return { ...f, amount: round2(round2(supply) + v), vat_amount: v };
   }
 
-  /** 분류·통화가 바뀌면 자동 부가세율도 달라진다(급여·외화는 0) — 자동일 때만 다시 계산. */
-  function withAutoVat(f: FinancePayableSave): FinancePayableSave {
-    if (!vatAuto) return f;
-    const supply = supplyOf(f);
-    return withMoney(f, supply, Math.round(supply * autoVatRate(f.category || "기타", f.currency || "KRW")));
+  /** 고른 세율로 부가세를 다시 계산 — 공급가액은 그대로 두고 총액만 다시 합친다. */
+  function withRate(f: FinancePayableSave, rate: number): FinancePayableSave {
+    const s = supplyOf(f);
+    return withMoney(f, s, Math.round(s * rate));
+  }
+
+  /** 분류·통화를 바꿨을 때 — 직접 입력이 아니면 그쪽 기본율(급여·외화는 0)로 따라간다.
+   *  세율 선택도 함께 옮겨 화면에 보이는 값과 실제 계산이 어긋나지 않게 한다. */
+  function applyCategoryOrCurrency(next: FinancePayableSave) {
+    if (vatChoice === "custom") {
+      setForm(next);
+      return;
+    }
+    const rate = autoVatRate(next.category || "기타", next.currency || "KRW");
+    setVatChoice(rateChoice(rate));
+    setForm(withRate(next, rate));
   }
 
   const supply = supplyOf(form);
   const vat = form.vat_amount || 0;
-  const vatRate = autoVatRate(form.category || "기타", form.currency || "KRW");
 
   async function save() {
     if (!(form.due_date || "").trim()) { setErr("Enter a due date."); return; }
@@ -1809,10 +1836,7 @@ function PayableForm({
           <span>Category</span>
           <select
             value={form.category}
-            onChange={(e) => {
-              const c = e.target.value;
-              setForm((f) => withAutoVat({ ...f, category: c }));
-            }}
+            onChange={(e) => applyCategoryOrCurrency({ ...form, category: e.target.value })}
           >
             {CATEGORIES.map((c) => <option key={c} value={c}>{CATEGORY_LABEL[c] || c}</option>)}
           </select>
@@ -1849,45 +1873,50 @@ function PayableForm({
             value={amountInputValue(supply)}
             onChange={(e) => {
               const s = parseAmountInput(e.target.value) ?? 0;
-              setForm((f) => withMoney(f, s, vatAuto ? Math.round(s * autoVatRate(f.category || "기타", f.currency || "KRW")) : (f.vat_amount || 0)));
+              // 세율을 골라 둔 상태면 공급가액이 바뀔 때 부가세도 그 비율로 따라간다.
+              setForm((f) => withMoney(f, s, vatChoice === "custom" ? (f.vat_amount || 0) : Math.round(s * Number(vatChoice))));
             }}
           />
         </label>
-        <label className="form-field">
-          <span>
+        {/* 부가세 — 세율을 직접 고른다. 급여·경비 클레임처럼 부가세가 없는 지출은 0%,
+            면세·불공제·끝수 조정처럼 비율로 안 떨어지는 건만 Custom 으로 금액을 넣는다.
+            (라벨 안에 select 를 두면 클릭이 금액 칸으로 새므로 div 로 짠다.) */}
+        <div className="form-field">
+          <span className="fin-vat-label">
             VAT
-            {vatAuto && vatRate > 0 ? <span className="hint-inline"> · auto 10%</span> : null}
-            {!vatAuto ? (
-              <button
-                type="button"
-                className="btn tiny"
-                style={{ marginLeft: 6 }}
-                title="Set VAT back to 10% of the supply value"
-                onClick={() => { setVatAuto(true); setForm((f) => withMoney(f, supplyOf(f), Math.round(supplyOf(f) * autoVatRate(f.category || "기타", f.currency || "KRW")))); }}
-              >
-                10%
-              </button>
-            ) : null}
+            <select
+              className="fin-vat-rate"
+              value={vatChoice}
+              aria-label="VAT rate"
+              onChange={(e) => {
+                const v = e.target.value as VatChoice;
+                setVatChoice(v);
+                if (v !== "custom") setForm((f) => withRate(f, Number(v)));
+              }}
+            >
+              {VAT_CHOICES.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
           </span>
           <input
             className="num"
             inputMode="decimal"
             value={amountInputValue(vat)}
+            title={vatChoice === "custom" ? "" : "Set the rate to Custom to type a VAT amount that is not a plain percentage."}
             onChange={(e) => {
-              // 직접 고친 값은 그대로 둔다(면세·불공제·끝수 차이). 총액은 다시 합쳐진다.
-              setVatAuto(false);
+              // 금액을 직접 고치면 세율 선택도 Custom 으로 넘어간다(값이 덮어써지지 않게).
+              setVatChoice("custom");
               const v = parseAmountInput(e.target.value) ?? 0;
               setForm((f) => withMoney(f, supplyOf(f), v));
             }}
           />
-        </label>
+        </div>
         <label className="form-field">
           <span>Total (paid)</span>
           <input className="num fin-total-ro" value={amountInputValue(form.amount)} readOnly tabIndex={-1} />
         </label>
         <label className="form-field">
           <span>Currency</span>
-          <CurrencyToggle value={form.currency || "KRW"} onChange={(v) => setForm((f) => withAutoVat({ ...f, currency: v }))} />
+          <CurrencyToggle value={form.currency || "KRW"} onChange={(v) => applyCategoryOrCurrency({ ...form, currency: v })} />
         </label>
         <label className="form-field">
           {/* 고지서·계산서를 받은 날(선택). 벤더 청구서의 발행일과 같은 뜻이라 목록에서 한 열에 모인다. */}
@@ -1916,8 +1945,9 @@ function PayableForm({
         <textarea rows={2} value={form.notes} onChange={(e) => set("notes", e.target.value)} />
       </label>
       <p className="hint-inline" style={{ display: "block", marginTop: 8 }}>
-        Enter the supply value and the VAT as printed on the tax invoice — the total is what you actually pay, and
-        the VAT feeds the input VAT on Closing · VAT. Payroll, tax payments and foreign-currency items default to no VAT.
+        Enter the supply value and pick the VAT rate as printed on the tax invoice — the total is what you actually
+        pay, and the VAT feeds the input VAT on Closing · VAT. Payroll, expense claims, tax payments and
+        foreign-currency items carry no VAT, so put those at 0%.
       </p>
       <div className="form-actions">
         <button className="btn primary" disabled={busy} onClick={save}>{busy ? "Working…" : "Save"}</button>
