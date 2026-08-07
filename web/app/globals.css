@@ -22,6 +22,9 @@
   /* .stage-pane-head 높이(이동버튼 29 + 패딩 2·10 + 선 1 ≒ 42) 보다 2px 낮게 —
      사이에 틈이 생기지 않게 하고, 겹치는 부분은 불투명한 헤더(z 6)가 덮는다. */
   --pane-head-h: 40px;
+  /* 품목표(Item list) 박스의 오른쪽 들여쓰기 — 표 끝선과 창 스크롤바 사이 여백.
+     본문 글꼴 12px 기준 알파벳 세 글자쯤 되는 폭. 모든 단계의 품목표가 이 값을 공유한다. */
+  --item-list-gutter: 24px;
 }
 
 * {
@@ -5890,8 +5893,8 @@ table.mini.wide.lead-tools tbody tr.item-row-excluded.item-row-excluded textarea
 .table-wrap.item-scroll {
   max-height: 340px;
   overflow-y: auto;
-  /* 우측 여백 — 표 카드가 스테이지 창 스크롤바에 바짝 붙지 않도록 살짝 띄운다. */
-  margin-right: 8px;
+  /* 우측 여백 — 표 끝선이 스테이지 창 스크롤바에 달라붙지 않게 들인다(아래 묶음 규칙 참조). */
+  margin-right: var(--item-list-gutter);
   /* 세로 스크롤바 자리를 항상 비워 둔다. 안 그러면 스크롤바가 마지막 컬럼(Remark) 위에
      겹쳐 앉아 입력값 오른쪽이 잘려 보인다(행이 늘어날 때만 잘려 더 헷갈린다). */
   scrollbar-gutter: stable;
@@ -5901,6 +5904,24 @@ table.mini.wide.lead-tools tbody tr.item-row-excluded.item-row-excluded textarea
 .table-wrap.item-scroll table.mini.wide th:last-child,
 .table-wrap.item-scroll table.mini.wide td:last-child {
   padding-right: 12px;
+}
+/* ── Item list 섹션 우측 여백 ──────────────────────────────────────────────
+   모든 단계(견적·발주·문서·대금청구 등)의 품목표 박스는 오른쪽 끝선을 --item-list-gutter
+   만큼 들인다. 표만 들이면 머리줄의 "+ Add" 가 표 밖으로 튀어나오므로 머리줄도 같이 민다
+   (품목표가 뒤따르는 머리줄에만 — Finance 등 다른 .items-head 는 해당 없음). */
+.items-head:has(~ .table-wrap.item-scroll) {
+  margin-right: var(--item-list-gutter);
+}
+/* 카드로 감싼 품목표는 카드가 곧 섹션 박스다. 위아래로 맞붙는 Pricing 밴드·Summary 줄까지
+   한 덩어리로 들이고, 카드 안쪽 요소는 카드 폭에 맞춰 되돌린다(이중 들여쓰기 방지). */
+.stage-card--items,
+.pricing-band,
+.summary-strip {
+  margin-right: var(--item-list-gutter);
+}
+.stage-card--items > .items-head,
+.stage-card--items > .table-wrap.item-scroll {
+  margin-right: 0;
 }
 .table-wrap.item-scroll table.mini thead th {
   position: sticky;
