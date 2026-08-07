@@ -2179,11 +2179,22 @@ function CustomerQuoteDetailModal({
     if (vq.currency) setCostCurrency(vq.currency);
     setTerms((prev) => mergeTermsFromVendorQuote(prev, vq.terms));
     setMsg(`Loaded ${vq.items.length} item(s) from quote ${vq.vendor_quote_no} (${vq.vendor}).`);
+    // 품목은 들어왔지만 기본 마진이 계산 불가 값이면 단가가 원가 그대로 들어온다 — 알려 준다.
+    setErr(marginRangeError(defaultMargin));
   }
 
   // Pricing 밴드에 입력한 값(원가/판매 통화·환율·올림 단위·마진)을 Item list 전체에 한 번에 반영.
   function applyPricing() {
     if (items.length === 0) return;
+    // 마진이 계산 불가능한 값이면 아무것도 바꾸지 않고 이유를 알린다(예전에는 마진 없이
+    // 원가만 환산돼 "반영이 안 된다"로 보였다).
+    const bad = marginRangeError(defaultMargin);
+    if (bad) {
+      setMsg(null);
+      setErr(bad);
+      return;
+    }
+    setErr(null);
     setItems((prev) => applyMarginToAll(prev, defaultMargin, costCurrency, currency, roundDigits, effRate));
     setMsg(pricingAppliedMsg(items.length, defaultMargin, costCurrency, currency, roundDigits, effRate));
   }
@@ -2295,16 +2306,26 @@ function CustomerQuoteDetailModal({
             <div className="form-field">
               <label>Margin</label>
               <input
-                className="num"
+                className={"num" + (isUnreachableMargin(defaultMargin) ? " num-bad" : "")}
                 type="number"
+                max={MAX_MARGIN_PCT}
                 style={{ width: 64 }}
                 value={defaultMargin}
                 onChange={(e) => setDefaultMargin(Number(e.target.value))}
+                title={`Margin on the sale price — unit price = cost ÷ (1 − margin). Must be under ${MAX_MARGIN_PCT}% (50% = twice the cost).`}
               />
               <span className="pb-unit">%</span>
+              {/* 마진%가 원가의 몇 배인지 — "마진 100% = 2배"로 오해하기 쉬워 배수를 같이 보여준다. */}
+              <MarginFactorHint pct={defaultMargin} />
             </div>
             {/* Apply 는 설정이 아니라 실행 — 설정 줄과 섞이지 않게 줄을 끊고 오른쪽 끝에 세운다. */}
             <span className="pb-break" aria-hidden />
+            {/* 잘못된 마진은 Apply 를 누르기 전에, 버튼 바로 옆에서 알린다. */}
+            {isUnreachableMargin(defaultMargin) ? (
+              <span className="pb-warn">
+                Margin must stay under {MAX_MARGIN_PCT}% — it is measured on the sale price, so 50% sells at twice the cost.
+              </span>
+            ) : null}
             <button
               type="button"
               className="btn pb-apply"
@@ -3555,11 +3576,22 @@ function CustomerQuoteAction({
     if (vq.currency) setCostCurrency(vq.currency);
     setTerms((prev) => mergeTermsFromVendorQuote(prev, vq.terms));
     setMsg(`Loaded ${vq.items.length} item(s) from quote ${vq.vendor_quote_no} (${vq.vendor}).`);
+    // 품목은 들어왔지만 기본 마진이 계산 불가 값이면 단가가 원가 그대로 들어온다 — 알려 준다.
+    setErr(marginRangeError(defaultMargin));
   }
 
   // Pricing 밴드에 입력한 값(원가/판매 통화·환율·올림 단위·마진)을 Item list 전체에 한 번에 반영.
   function applyPricing() {
     if (items.length === 0) return;
+    // 마진이 계산 불가능한 값이면 아무것도 바꾸지 않고 이유를 알린다(예전에는 마진 없이
+    // 원가만 환산돼 "반영이 안 된다"로 보였다).
+    const bad = marginRangeError(defaultMargin);
+    if (bad) {
+      setMsg(null);
+      setErr(bad);
+      return;
+    }
+    setErr(null);
     setItems((prev) => applyMarginToAll(prev, defaultMargin, costCurrency, currency, roundDigits, effRate));
     setMsg(pricingAppliedMsg(items.length, defaultMargin, costCurrency, currency, roundDigits, effRate));
   }
@@ -3716,16 +3748,26 @@ function CustomerQuoteAction({
         <div className="form-field">
           <label>Margin</label>
           <input
-            className="num"
+            className={"num" + (isUnreachableMargin(defaultMargin) ? " num-bad" : "")}
             type="number"
+            max={MAX_MARGIN_PCT}
             style={{ width: 64 }}
             value={defaultMargin}
             onChange={(e) => setDefaultMargin(Number(e.target.value))}
+            title={`Margin on the sale price — unit price = cost ÷ (1 − margin). Must be under ${MAX_MARGIN_PCT}% (50% = twice the cost).`}
           />
           <span className="pb-unit">%</span>
+          {/* 마진%가 원가의 몇 배인지 — "마진 100% = 2배"로 오해하기 쉬워 배수를 같이 보여준다. */}
+          <MarginFactorHint pct={defaultMargin} />
         </div>
         {/* Apply 는 설정이 아니라 실행 — 설정 줄과 섞이지 않게 줄을 끊고 오른쪽 끝에 세운다. */}
         <span className="pb-break" aria-hidden />
+        {/* 잘못된 마진은 Apply 를 누르기 전에, 버튼 바로 옆에서 알린다. */}
+        {isUnreachableMargin(defaultMargin) ? (
+          <span className="pb-warn">
+            Margin must stay under {MAX_MARGIN_PCT}% — it is measured on the sale price, so 50% sells at twice the cost.
+          </span>
+        ) : null}
         <button
           type="button"
           className="btn pb-apply"
@@ -4093,7 +4135,14 @@ function CustomerQuoteItemEditor({
                 <td><input {...keys.cell(i, 3)} value={it.unit} onChange={(e) => patch(i, "unit", e.target.value)} /></td>
                 <td><input {...keys.cell(i, 4)} className="num" value={amountInputValue(it.cost_price)} onChange={(e) => patch(i, "cost_price", e.target.value)} /></td>
                 <td className="num">{amountInputValue(Number(it.cost_price || 0) * Number(it.qty || 1))}</td>
-                <td><input {...keys.cell(i, 5)} className="num" value={amountInputValue(it.margin_pct)} onChange={(e) => patch(i, "margin_pct", e.target.value)} /></td>
+                {/* 100% 이상은 단가를 낼 수 없는 값이라(원가 그대로 계산됨) 칸을 빨갛게 표시한다. */}
+                <td><input
+                  {...keys.cell(i, 5)}
+                  className={"num" + (isUnreachableMargin(it.margin_pct) ? " num-bad" : "")}
+                  title={isUnreachableMargin(it.margin_pct) ? marginRangeError(Number(it.margin_pct || 0)) ?? "" : undefined}
+                  value={amountInputValue(it.margin_pct)}
+                  onChange={(e) => patch(i, "margin_pct", e.target.value)}
+                /></td>
                 <td><input {...keys.cell(i, 6)} className="num" value={amountInputValue(it.unit_price)} onChange={(e) => patch(i, "unit_price", e.target.value)} /></td>
                 <td className="num">{amountInputValue(it.amount)}</td>
               </tr>
@@ -4222,6 +4271,30 @@ function DiscountSummary({
 // 자릿수(ROUNDUP num_digits) 기본값 — 엑셀 템플릿과 동일하게 1,000단위 올림.
 const DEFAULT_ROUND_DIGITS = -3;
 
+// 마진은 앱 전체가 판매가 기준((판매−원가)/판매)이라 100% 이상은 성립하지 않는다
+// (단가 = 원가 ÷ (1 − 마진) 에서 분모가 0 이하). 이 경우 계산식은 원가를 그대로 돌려주는데,
+// 화면에는 아무 경고가 없어 "Apply 를 눌러도 판매가가 안 바뀐다"로 보였다. 그래서 값이
+// 범위를 벗어나면 계산을 조용히 넘기지 않고 아래 문구로 알린다.
+const MAX_MARGIN_PCT = 100;
+
+function isUnreachableMargin(pct: number | null | undefined): boolean {
+  return Number(pct || 0) >= MAX_MARGIN_PCT;
+}
+
+// 마진% → 원가 대비 판매가 배수. 계산 못 하는 값(≥100%)이나 0에서는 아무것도 안 보여 준다.
+function MarginFactorHint({ pct }: { pct: number }) {
+  const m = Number(pct || 0);
+  if (!m || isUnreachableMargin(m)) return null;
+  return <span className="pb-factor">= cost × {(1 / (1 - m / 100)).toFixed(2)}</span>;
+}
+
+function marginRangeError(pct: number): string | null {
+  if (!isUnreachableMargin(pct)) return null;
+  return `Margin ${pct}% is not reachable — margin is measured on the sale price `
+    + `(unit price = cost ÷ (1 − margin)), so it must stay under ${MAX_MARGIN_PCT}%. `
+    + `Use 50% to sell at twice the cost, 66.7% for three times.`;
+}
+
 // 단가 = ROUNDUP( (원가를 판매통화로 환산) / (1 - 마진%), roundDigits ).
 // 엑셀 =ROUNDUP(cost/(1-markup), -3) 방식(판매가 기준 마진). costCur/saleCur 로 환율 적용.
 function calcUnitPrice(
@@ -4234,6 +4307,8 @@ function calcUnitPrice(
 ) {
   const converted = convertCurrency(cost, costCur, saleCur, rate);
   const denom = 1 - Number(marginPct || 0) / 100;
+  // 마진 100% 이상이면 분모가 0 이하 — 값을 낼 수 없어 원가를 그대로 둔다(∞·음수 방지).
+  // 이 상태를 사용자가 모르고 지나치지 않게 isUnreachableMargin() 으로 미리 막고 표시한다.
   const priced = denom > 0 ? converted / denom : converted;
   return roundUp(priced, roundDigits);
 }

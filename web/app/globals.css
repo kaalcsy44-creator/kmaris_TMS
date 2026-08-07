@@ -4139,6 +4139,14 @@ a.btn.primary:hover {
 .pricing-band .btn {
   height: 30px;
 }
+/* 계산이 성립하지 않는 값(마진 100% 이상 — 단가 = 원가 ÷ (1 − 마진))이 들어간 입력칸.
+   Apply 를 눌러도 판매가가 그대로인 이유가 값 자체에 있다는 걸 그 자리에서 보이게 한다. */
+.num-bad,
+input.num-bad {
+  border-color: #e0a3a3;
+  background: #fff6f6;
+  color: #b23b3b;
+}
 /* Apply 는 설정이 아니라 실행 — 설정들이 첫 줄에 모이도록 줄을 끊고(0높이 스페이서)
    버튼만 둘째 줄 오른쪽 끝에 세운다. */
 .pricing-band .pb-break {
@@ -4148,6 +4156,22 @@ a.btn.primary:hover {
 }
 .pricing-band .pb-apply {
   margin-left: auto;
+}
+/* 마진%가 원가의 몇 배인지 — 값 옆 참고 표시라 톤을 낮춰 입력값과 구분한다. */
+.pricing-band .pb-factor {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: #5b6b85;
+  white-space: nowrap;
+}
+/* 마진이 계산 불가 값일 때 Apply 옆에 붙는 경고 — 눌러 봐야 아무 일도 안 일어나므로
+   버튼에 손이 가기 전에 같은 줄에서 읽히게 둔다. */
+.pricing-band .pb-warn {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #b23b3b;
 }
 /* 입력 뒤에 붙는 단위 기호(%) — 라벨에 "(%)" 를 넣는 대신 값 옆에 둔다. */
 .pb-unit {
