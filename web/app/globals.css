@@ -12449,7 +12449,9 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 .fin-daybook .fin-db-c-desc,
 .fin-daybook .fin-db-c-ref { white-space: normal; overflow-wrap: anywhere; }
 .fin-daybook .fin-db-c-ref { color: var(--muted); font-size: 11px; }
-.fin-daybook .fin-db-bal { font-variant-numeric: tabular-nums; font-weight: 700; }
+/* 줄마다의 잔고는 굵게 쓰지 않는다 — 열두 줄이 모두 굵으면 강조가 아니라 벽이 된다.
+   이 칸에서 굵은 건 맨 아래 Total 줄의 기말잔고 하나뿐이고, 그래야 그 하나가 보인다. */
+.fin-daybook .fin-db-bal { font-variant-numeric: tabular-nums; font-weight: 400; }
 .fin-daybook .num { font-variant-numeric: tabular-nums; }
 /* 날이 바뀌는 줄에만 실선을 둬, 같은 날의 여러 건이 한 덩어리로 읽히게. */
 .fin-daybook tbody tr.fin-db-daystart > td { border-top: 1px solid var(--line-strong); }
