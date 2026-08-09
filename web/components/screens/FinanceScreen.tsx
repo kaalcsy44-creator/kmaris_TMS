@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
@@ -372,6 +372,9 @@ function OverviewTab() {
   const start = `${startY}-${String(startM).padStart(2, "0")}`;
   // 표에서 고른 한 칸(index) — 위쪽 세 기둥이 그 칸을 펼쳐 보여 준다.
   const [picked, setPicked] = useState<number | null>(null);
+  // 고른 칸의 일자별 장부를 표 안에서 펼쳐 두었는가. 펼치는 자리는 늘 고른 칸 하나뿐이라
+  // '어느 줄이 열렸나'를 따로 들고 있을 필요가 없다 — 여닫이 상태만 있으면 된다.
+  const [daybookOpen, setDaybookOpen] = useState(false);
   const cash = (n: number) => money(n, currency);
 
   const key = `finance:cashflow:${unit}:${count}:${opening}:${includePo}:${currency}:${start}`;
@@ -428,6 +431,21 @@ function OverviewTab() {
             {(unit === "month" ? [3, 6, 12, 18, 24] : [8, 12, 16, 24]).map((n) => <option key={n} value={n}>{n}</option>)}
           </select>
         </label>
+        {/* 어느 칸을 들여다볼지 — 아래 차트·표를 눌러도 같은 값이 바뀐다. 여기 둔 이유는
+            창이 열두 칸이라, 표까지 내려가지 않고도 달을 바꿔 볼 수 있어야 해서다. */}
+        <label className="fin-inline-field">
+          Showing
+          <select
+            value={idx}
+            onChange={(e) => setPicked(Number(e.target.value))}
+            aria-label="Period in focus"
+            disabled={!rows.length}
+          >
+            {rows.map((r, i) => (
+              <option key={r.label} value={i}>{unit === "month" ? monthLabel(r.label) : r.label}</option>
+            ))}
+          </select>
+        </label>
         <div className="seg-toggle" role="group" aria-label="Currency">
           <button className={currency === "KRW" ? "on" : ""} onClick={() => setCurrency("KRW")}>₩ KRW</button>
           <button className={currency === "USD" ? "on" : ""} onClick={() => setCurrency("USD")}>$ USD</button>
@@ -451,23 +469,25 @@ function OverviewTab() {
               갈래 금액에 ?? 0 을 두는 건 배포 시차 때문 — 백엔드가 아직 옛 버전이면
               그 필드가 비어 와서 NaN 이 찍힌다. */}
           <div className="fin-three-cols">
+            {/* 이름은 Cash Flow 표의 칸 이름과 같은 말을 쓴다 — 같은 금액을 위에서는
+                'In', 아래에서는 'Inflow' 라 부르면 매번 옮겨 읽어야 한다. */}
             <BucketCard
-              title="In"
+              title="Inflow"
               period={pickedLabel}
               tone="in"
               lines={[["receivables", row.in_ar ?? 0], ["income", row.in_income ?? 0], ["collected", row.actual_inflow]]}
-              totalLabel="Total in"
+              totalLabel="Total inflow"
               totalHref={`${periodHref(row, idx === 0, currency, includePo)}&side=in`}
               total={row.inflow}
               currency={currency}
               href={(b) => ledgerHref(row, idx === 0, b)}
             />
             <BucketCard
-              title="Out"
+              title="Outflow"
               period={pickedLabel}
               tone="out"
               lines={[["payables", row.out_ap ?? 0], ["other", row.out_other ?? 0], ["paid", row.actual_outflow]]}
-              totalLabel="Total out"
+              totalLabel="Total outflow"
               totalHref={`${periodHref(row, idx === 0, currency, includePo)}&side=out`}
               total={row.outflow}
               currency={currency}
@@ -482,12 +502,12 @@ function OverviewTab() {
                     <td className="num">{cash(rowOpening)}</td>
                   </tr>
                   <tr>
-                    <td>Net<div className="hint-inline">in − out</div></td>
+                    <td>Net<div className="hint-inline">inflow − outflow</div></td>
                     <td className="num" style={{ color: row.net >= 0 ? "#1e7a46" : "#c0392b" }}>
                       {row.net >= 0 ? "+" : "−"}{cash(Math.abs(row.net))}
                     </td>
                   </tr>
-                  {/* 빈 줄 하나 — 세 기둥의 총계 줄(Total in·Total out·Ending)이 같은 높이에
+                  {/* 빈 줄 하나 — 세 기둥의 총계 줄(Total inflow·Total outflow·Ending)이 같은 높이에
                       서려면 본문 줄 수가 같아야 한다. 옆 기둥의 한 줄과 같은 높이로 비운다. */}
                   <tr className="fin-bucket-gap" aria-hidden="true">
                     <td>&nbsp;<div className="hint-inline">&nbsp;</div></td>
@@ -545,50 +565,78 @@ function OverviewTab() {
                 <tr><th>Period</th><th className="num">Inflow</th><th className="num">Outflow</th><th className="num">Net</th><th className="num">Cumulative</th></tr>
               </thead>
               <tbody>
-                {rows.map((r, i) => (
-                  <tr
-                    key={r.label}
-                    className={`fin-row-pick${i === idx ? " on" : ""}${r.cumulative < 0 ? " fin-overdue" : ""}`}
-                    onClick={() => setPicked(i)}
-                    title="Show this period in the three columns above"
-                  >
-                    <td>{r.label}</td>
-                    {/* 이미 오간 부분은 금액 아래 옅게 덧붙인다 — 같은 칸의 나머지가 예정분. */}
-                    <td className="num" data-label="In">
-                      {cash(r.inflow)}
-                      {r.actual_inflow ? <div className="fin-cf-actual">{cash(r.actual_inflow)} received</div> : null}
-                    </td>
-                    <td className="num" data-label="Out">
-                      {cash(r.outflow)}
-                      {r.actual_outflow ? <div className="fin-cf-actual">{cash(r.actual_outflow)} paid</div> : null}
-                    </td>
-                    <td className="num" data-label="Net" style={{ color: r.net >= 0 ? "#1e7a46" : "#c0392b" }}>{r.net >= 0 ? "+" : "−"}{cash(Math.abs(r.net))}</td>
-                    <td className="num" data-label="Balance"><b>{cash(r.cumulative)}</b></td>
-                  </tr>
-                ))}
+                {rows.map((r, i) => {
+                  const open = i === idx && daybookOpen;
+                  return (
+                    <Fragment key={r.label}>
+                      <tr
+                        className={`fin-row-pick${i === idx ? " on" : ""}${open ? " fin-cf-open" : ""}${r.cumulative < 0 ? " fin-overdue" : ""}`}
+                        onClick={() => setPicked(i)}
+                        title="Show this period in the three columns above"
+                      >
+                        <td>
+                          {/* 이 줄의 안쪽(일자별 장부)을 그 자리에서 여닫는다. 열 수 있는 줄은
+                              늘 고른 줄이므로, 다른 줄의 손잡이를 누르면 그 줄로 옮겨 가며 열린다. */}
+                          <button
+                            type="button"
+                            className="fin-cf-toggle"
+                            aria-expanded={open}
+                            aria-label={`${open ? "Hide" : "Show"} the daybook for ${r.label}`}
+                            title={open ? "Hide this period's daybook" : "Open this period day by day"}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPicked(i);
+                              setDaybookOpen(i === idx ? !daybookOpen : true);
+                            }}
+                          >
+                            {open ? "▾" : "▸"}
+                          </button>
+                          {r.label}
+                        </td>
+                        {/* 이미 오간 부분은 금액 아래 옅게 덧붙인다 — 같은 칸의 나머지가 예정분. */}
+                        <td className="num" data-label="Inflow">
+                          {cash(r.inflow)}
+                          {r.actual_inflow ? <div className="fin-cf-actual">{cash(r.actual_inflow)} received</div> : null}
+                        </td>
+                        <td className="num" data-label="Outflow">
+                          {cash(r.outflow)}
+                          {r.actual_outflow ? <div className="fin-cf-actual">{cash(r.actual_outflow)} paid</div> : null}
+                        </td>
+                        <td className="num" data-label="Net" style={{ color: r.net >= 0 ? "#1e7a46" : "#c0392b" }}>{r.net >= 0 ? "+" : "−"}{cash(Math.abs(r.net))}</td>
+                        <td className="num" data-label="Balance"><b>{cash(r.cumulative)}</b></td>
+                      </tr>
+                      {/* 펼친 줄의 안쪽 — 기간·통화·기초잔고를 그대로 물려받으므로 이 장부의
+                          합계와 기말잔고는 바로 위 행의 Inflow·Outflow·Cumulative 와 같은 값이다. */}
+                      {open ? (
+                        <tr className="fin-cf-detail">
+                          <td colSpan={5}>
+                            <FinanceDaybook
+                              start={r.start}
+                              end={r.end}
+                              label={unit === "month" ? monthLabel(r.label) : r.label}
+                              opening={i === 0 ? data.opening : rows[i - 1].cumulative}
+                              currency={currency}
+                              includePo={includePo}
+                              first={i === 0}
+                            />
+                          </td>
+                        </tr>
+                      ) : null}
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
             <p className="hint-inline" style={{ display: "block", marginTop: 8 }}>
-              Click a period to break it down above and open its daybook below; click a line up there for the items
-              behind it. Each period mixes money already moved (grey, dated on the day it actually arrived or left)
-              with money still expected — receivables by due date and unpaid payable occurrences{includePo ? " + vendor POs (estimated from order date)" : ""}.
+              Click a period to break it down in the three columns above, or the ▸ handle to open it day by day right
+              here; click a line up there for the items behind it. Each period mixes money already moved (grey, dated
+              on the day it actually arrived or left) with money still expected — receivables by due date and unpaid
+              payable occurrences{includePo ? " + vendor POs (estimated from order date)" : ""}.
               So the opening balance must be your balance on {openingAsOf}, not today&apos;s. Only {currency} items are
               counted — switch the currency toggle for the other book; nothing is converted. Overdue / past-due items
               fall into the first period.
             </p>
           </div>
-
-          {/* 고른 칸의 안쪽 — 표의 그 한 줄을 날짜순 장부로 펼친다. 기간·통화·기초잔고를
-              그대로 물려받으므로 여기 합계와 기말잔고는 위 표의 그 행과 같은 값이다. */}
-          <FinanceDaybook
-            start={row.start}
-            end={row.end}
-            label={pickedLabel}
-            opening={rowOpening}
-            currency={currency}
-            includePo={includePo}
-            first={idx === 0}
-          />
         </>
       )}
     </div>

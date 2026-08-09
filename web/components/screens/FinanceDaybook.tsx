@@ -13,16 +13,16 @@ import {
 } from "@/components/screens/financeShared";
 
 /**
- * Daybook — Overview 에서 고른 한 구간의 자금 내역을 날짜순 한 장부로.
+ * Daybook — Cash Flow 표의 한 줄을 그 자리에서 날짜순 장부로 펼친 것.
  *
- * 위쪽 Cash Flow 표는 한 달을 한 줄(유입·유출·잔고)로 접어 놓는다. 실제로 통장을 맞출
- * 때 필요한 건 그 안쪽이다: 며칠에 무엇이 나가고 무엇이 들어와 잔고가 얼마가 되는가.
- * 이 패널은 표에서 누른 그 한 줄을 날짜순으로 펼치고, 줄마다 그 시점의 통장잔고를
- * 굴려 적는다.
+ * 표는 한 달을 한 줄(유입·유출·잔고)로 접어 놓는다. 실제로 통장을 맞출 때 필요한 건
+ * 그 안쪽이다: 며칠에 무엇이 들어오고 무엇이 나가 잔고가 얼마가 되는가. 이 조각은
+ * 표의 그 행 바로 아래에 펼쳐지며, 줄마다 그 시점의 통장잔고를 굴려 적는다.
  *
- * 자기 조작칸을 두지 않는다 — 기간·통화·기초잔고는 모두 Overview 의 것을 그대로 받는다.
- * 새 집계도 만들지 않는다: 표의 그 칸과 같은 API·같은 규칙(/cashflow/items, 같은 통화,
- * 같은 first 여부)이라, 이 장부의 합계와 기말잔고는 표의 그 행과 정확히 같은 값이 된다.
+ * 유입이 왼쪽, 유출이 오른쪽 — 위 표(Inflow·Outflow)와 세 기둥의 순서 그대로다.
+ * 자기 조작칸은 두지 않는다: 기간·통화·기초잔고는 모두 표에서 그대로 받는다. 새 집계도
+ * 만들지 않는다 — 같은 API·같은 규칙(/cashflow/items, 같은 통화, 같은 first 여부)이라
+ * 이 장부의 합계와 기말잔고는 펼쳐 놓은 그 행과 정확히 같은 값이 된다.
  */
 
 /** 한 줄 = 한 건. side 는 어느 쪽 칸에 앉을지, balance 는 그 건까지 굴린 잔고. */
@@ -121,66 +121,68 @@ export default function FinanceDaybook({ start, end, label, opening, currency, i
   const ending = opening + totalIn - totalOut;
 
   return (
-    <div className="panel">
-      <h3 className="form-title">
+    <div className="fin-db-wrap">
+      <h4 className="fin-db-title">
         Daybook <span className="muted">· {label} · line by line ({sym(currency).trim()})</span>
-      </h3>
+      </h4>
       {error && !data ? <div className="state error">API error: {error.message}</div> : null}
       {!data ? <div className="state">Loading…</div> : (
         <>
-          <table className="mini fin-daybook">
-            <colgroup>
-              <col className="fin-db-w-date" />
-              <col /><col className="fin-db-w-ref" /><col className="fin-db-w-money" />
-              <col /><col className="fin-db-w-ref" /><col className="fin-db-w-money" />
-              <col className="fin-db-w-bal" />
-            </colgroup>
-            <thead>
-              <tr>
-                <th rowSpan={2}>Date</th>
-                <th colSpan={3} className="fin-db-grp fin-db-grp--out">Out</th>
-                <th colSpan={3} className="fin-db-grp fin-db-grp--in">In</th>
-                <th rowSpan={2} className="num">Balance</th>
-              </tr>
-              <tr>
-                <th>Description</th><th>Reference</th><th className="num">Amount</th>
-                <th>Description</th><th>Reference</th><th className="num">Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              {/* 첫 줄은 이월 — 잔고가 어디서 출발했는지 표 안에서 읽히게. */}
-              <tr className="fin-db-carry">
-                <td>{start.slice(5)}</td>
-                <td colSpan={6}>Carried forward into {label}</td>
-                <td className="num" style={{ color: opening < 0 ? "#c0392b" : undefined }}>{cash(opening)}</td>
-              </tr>
-              {rows.length === 0 ? (
-                <tr><td className="mini-empty" colSpan={8}>Nothing moved in this period.</td></tr>
-              ) : rows.map((r, i) => (
-                <DaybookLine
-                  key={`${r.item.kind}-${r.item.row_id}-${r.item.date}-${r.item.actual ? "a" : "e"}-${r.side}-${i}`}
-                  row={r}
-                  start={start}
-                  end={end}
-                  currency={currency}
-                />
-              ))}
-              <tr className="fin-period-total fin-db-total">
-                <td colSpan={3}><b>Total</b></td>
-                <td className="num" data-label="Out"><b>{cash(totalOut)}</b></td>
-                <td colSpan={2} />
-                <td className="num" data-label="In"><b>{cash(totalIn)}</b></td>
-                <td className="num" data-label="Balance" style={{ color: ending < 0 ? "#c0392b" : undefined }}>
-                  <b>{cash(ending)}</b>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+          <div className="fin-db-scroll">
+            <table className="mini fin-daybook">
+              <colgroup>
+                <col className="fin-db-w-date" />
+                <col /><col className="fin-db-w-ref" /><col className="fin-db-w-money" />
+                <col /><col className="fin-db-w-ref" /><col className="fin-db-w-money" />
+                <col className="fin-db-w-bal" />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th rowSpan={2}>Date</th>
+                  <th colSpan={3} className="fin-db-grp fin-db-grp--in">Inflow</th>
+                  <th colSpan={3} className="fin-db-grp fin-db-grp--out">Outflow</th>
+                  <th rowSpan={2} className="num">Balance</th>
+                </tr>
+                <tr>
+                  <th>Description</th><th>Reference</th><th className="num">Amount</th>
+                  <th>Description</th><th>Reference</th><th className="num">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {/* 첫 줄은 이월 — 잔고가 어디서 출발했는지 표 안에서 읽히게. */}
+                <tr className="fin-db-carry">
+                  <td>{start.slice(5)}</td>
+                  <td colSpan={6}>Carried forward into {label}</td>
+                  <td className="num" style={{ color: opening < 0 ? "#c0392b" : undefined }}>{cash(opening)}</td>
+                </tr>
+                {rows.length === 0 ? (
+                  <tr><td className="mini-empty" colSpan={8}>Nothing moved in this period.</td></tr>
+                ) : rows.map((r, i) => (
+                  <DaybookLine
+                    key={`${r.item.kind}-${r.item.row_id}-${r.item.date}-${r.item.actual ? "a" : "e"}-${r.side}-${i}`}
+                    row={r}
+                    start={start}
+                    end={end}
+                    currency={currency}
+                  />
+                ))}
+                <tr className="fin-period-total fin-db-total">
+                  <td colSpan={3}><b>Total</b></td>
+                  <td className="num" data-label="Inflow"><b>{cash(totalIn)}</b></td>
+                  <td colSpan={2} />
+                  <td className="num" data-label="Outflow"><b>{cash(totalOut)}</b></td>
+                  <td className="num" data-label="Balance" style={{ color: ending < 0 ? "#c0392b" : undefined }}>
+                    <b>{cash(ending)}</b>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
           <p className="hint-inline" style={{ display: "block", marginTop: 10 }}>
             One line per movement, in date order, with the bank balance rolled forward line by line. Money already
             moved sits on the day it actually moved and is marked ✓; money still expected sits on its due date, so
-            the balance below that point is a projection. The total and the closing balance are the {label} row of
-            the table above, opened up.
+            the balance below that point is a projection. The total and the closing balance are the {label} row
+            above, opened up.
           </p>
         </>
       )}
@@ -231,19 +233,20 @@ function DaybookLine({ row, start, end, currency }: {
       {/* 날짜는 늘 적어 두고, 같은 날의 두 번째 줄부터는 표에서만 감춘다 — 폰에서는
           한 건이 한 장의 카드로 서기 때문에 카드마다 날짜가 보여야 한다. */}
       <td className={`fin-db-date${dayStart ? "" : " fin-db-date--rep"}`}>{dayCell(r.date, start, end)}</td>
-      {side === "out" ? (
+      {/* 유입이 왼쪽, 유출이 오른쪽 — 위 표·세 기둥과 같은 순서. */}
+      {side === "in" ? (
         <>
-          <td className="fin-db-c-desc" data-label="Out">{desc}</td>
+          <td className="fin-db-c-desc" data-label="Inflow">{desc}</td>
           <td className="fin-db-c-ref">{ref}</td>
-          <td className="num" data-label="Out">{cash(r.amount)}</td>
+          <td className="num" data-label="Inflow">{cash(r.amount)}</td>
           <td className="fin-db-c-desc" /><td className="fin-db-c-ref" /><td className="num" />
         </>
       ) : (
         <>
           <td className="fin-db-c-desc" /><td className="fin-db-c-ref" /><td className="num" />
-          <td className="fin-db-c-desc" data-label="In">{desc}</td>
+          <td className="fin-db-c-desc" data-label="Outflow">{desc}</td>
           <td className="fin-db-c-ref">{ref}</td>
-          <td className="num" data-label="In">{cash(r.amount)}</td>
+          <td className="num" data-label="Outflow">{cash(r.amount)}</td>
         </>
       )}
       <td className="num fin-db-bal" data-label="Balance" style={{ color: balance < 0 ? "#c0392b" : undefined }}>

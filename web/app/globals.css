@@ -12262,6 +12262,35 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 .fin-row-pick { cursor: pointer; }
 .fin-row-pick:hover > td { background: color-mix(in srgb, var(--blue) 5%, transparent); }
 .fin-row-pick.on > td { background: color-mix(in srgb, var(--blue) 10%, transparent); font-weight: 700; }
+/* 펼쳐진 줄은 아래 장부와 한 덩어리 — 사이의 밑줄을 지워 둘이 이어져 보이게 한다. */
+.fin-row-pick.fin-cf-open > td { border-bottom-color: transparent; }
+/* 줄의 안쪽을 여는 손잡이 — 구간 이름 앞에 붙는다. */
+.fin-cf-toggle {
+  width: 20px;
+  height: 20px;
+  margin-right: 6px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: #fff;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1;
+  vertical-align: baseline;
+  cursor: pointer;
+}
+.fin-cf-toggle:hover { border-color: var(--blue); color: var(--blue); }
+.fin-cf-toggle[aria-expanded="true"] { background: var(--navy); border-color: var(--navy); color: #fff; }
+/* 펼쳐진 장부가 앉는 줄 — 칸이 아니라 서랍이라 표의 여백·선을 걷어낸다. */
+.fin-cf-detail > td {
+  padding: 0;
+  background: #fbfcfe;
+  border-bottom: 1px solid var(--line-strong);
+}
+.fin-db-wrap { padding: 4px 12px 14px; }
+.fin-db-title { margin: 0 0 8px; font-size: 13px; font-weight: 700; color: var(--navy); }
+/* 여덟 칸이 든 표라 좁은 화면에서는 이 서랍 안에서만 가로로 민다. */
+.fin-db-scroll { overflow-x: auto; }
 
 /* 좁은 화면의 현금흐름 표 — 다섯 칸(구간·유입·유출·순액·잔고)은 폰에서 한 줄에 서지
    못한다. 표를 구간마다 한 장의 카드로 접어, 구간 이름을 머리로 올리고 금액 넷을
@@ -12311,6 +12340,30 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
   }
   /* '이미 오간 돈' 줄은 값 아래가 아니라 그 줄 오른쪽 끝에 매달린다. */
   .fin-cf-actual { width: 100%; text-align: right; margin-top: 0; }
+  /* 펼친 장부는 또 하나의 카드가 아니라 바로 위 카드에 딸린 서랍이다 — 격자·테두리를
+     걷어내고 카드와 붙여, 어느 구간의 안쪽인지 자리로 읽히게 한다. */
+  .fin-cf-table tr.fin-cf-detail {
+    display: block;
+    grid-template-columns: none;
+    padding: 0;
+    margin: -10px 0 8px;
+    border: 1px solid var(--line);
+    border-top: 0;
+    border-radius: 0 0 10px 10px;
+    background: #fbfcfe;
+  }
+  .fin-cf-table tr.fin-cf-detail > td {
+    display: block;
+    grid-column: auto;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    font-weight: 400;
+    font-size: 12px;
+    color: inherit;
+  }
+  /* 카드와 서랍이 이어져 보이도록 카드의 아래 모서리를 편다. */
+  .fin-cf-table tr:has(+ tr.fin-cf-detail) { border-radius: 10px 10px 0 0; margin-bottom: 0; }
 }
 
 /* 현금흐름 한 구간의 건별 내역(/finance/period) */
@@ -12318,10 +12371,11 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 .fin-period-title { margin: 0; font-size: 18px; }
 .fin-period-total td { border-top: 1px solid var(--line-strong); background: #f7f9fc; }
 
-/* ── Daybook — Overview 에서 고른 한 구간을 날짜순 한 장부로 ──────────────────
-   가운데를 세로선으로 갈라 왼쪽은 나간 돈, 오른쪽은 들어온 돈. 한 줄은 자기 쪽
-   세 칸만 채우므로, 어느 편의 줄인지는 글을 읽기 전에 자리로 먼저 읽힌다. */
-.fin-daybook { table-layout: fixed; }
+/* ── Daybook — Cash Flow 표의 한 줄을 그 자리에서 날짜순으로 펼친 장부 ────────
+   가운데를 세로선으로 갈라 왼쪽은 들어온 돈, 오른쪽은 나간 돈(위 표와 같은 순서).
+   한 줄은 자기 쪽 세 칸만 채우므로, 어느 편의 줄인지는 글을 읽기 전에 자리로 먼저
+   읽힌다. 폭이 고정이라 좁은 화면에서는 .fin-db-scroll 안에서 가로로 민다. */
+.fin-daybook { table-layout: fixed; min-width: 760px; }
 .fin-daybook .fin-db-w-date { width: 62px; }
 .fin-daybook .fin-db-w-ref { width: 150px; }
 .fin-daybook .fin-db-w-money { width: 126px; }
@@ -12332,8 +12386,8 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
   letter-spacing: 0.4px;
   border-bottom: 1px solid var(--line);
 }
-.fin-daybook .fin-db-grp--out { color: #a35c00; background: #fdf6ec; }
 .fin-daybook .fin-db-grp--in { color: #1b5e93; background: #eef4fb; }
+.fin-daybook .fin-db-grp--out { color: #a35c00; background: #fdf6ec; }
 /* 가운데 경계 — 나간 돈 칸의 끝과 잔고 앞에 세로선을 세운다. 머리는 두 줄짜리라
    (Out/In 묶음 줄 + 칸 이름 줄) 줄마다 세는 자리가 다르다. */
 .fin-daybook thead tr:first-child th:nth-child(2),
@@ -12374,6 +12428,9 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 @media (max-width: 860px) {
   .fin-daybook, .fin-daybook tbody, .fin-daybook tr, .fin-daybook td { display: block; }
   .fin-daybook thead, .fin-daybook colgroup { display: none; }
+  /* 카드로 접히면 가로로 밀 것이 없다 — 폭 하한과 스크롤 상자를 함께 푼다. */
+  .fin-daybook { min-width: 0; }
+  .fin-db-scroll { overflow-x: visible; }
   .fin-daybook tbody tr {
     position: relative;
     display: grid;
