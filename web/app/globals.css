@@ -12333,14 +12333,23 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 }
 .fin-cf-toggle:hover { border-color: var(--blue); color: var(--blue); }
 .fin-cf-toggle[aria-expanded="true"] { background: var(--navy); border-color: var(--navy); color: #fff; }
-/* 펼쳐진 장부가 앉는 줄 — 칸이 아니라 서랍이라 표의 여백·선을 걷어낸다. */
+/* 펼쳐진 장부가 앉는 줄 — 표의 한 칸이 아니라 그 행에서 열린 서랍이다.
+   가로로는 밀 수 없으므로(안쪽 표가 바깥 표와 세로줄을 맞춰야 한다) 깊이로 가른다:
+   바탕을 흰 면에서 한 단 낮추고, 위·아래 모서리에 안쪽 그림자를 둬 월별 줄들보다
+   한 겹 아래로 보이게 한다. 왼쪽 띠는 이 서랍이 어느 행의 것인지 가리킨다. */
 .fin-cf-detail > td {
   padding: 0;
-  background: #fbfcfe;
-  border-bottom: 1px solid var(--line-strong);
+  background: #e9eff7;
+  border-bottom: 2px solid var(--line-strong);
+  box-shadow:
+    inset 4px 0 0 var(--blue),
+    inset 0 8px 10px -8px rgba(11, 29, 58, 0.38),
+    inset 0 -7px 9px -8px rgba(11, 29, 58, 0.22);
 }
+/* 서랍을 연 행은 그 띠를 이어받는다 — 행과 서랍이 하나의 덩어리로 읽히게. */
+.fin-row-pick.fin-cf-open > td:first-child { box-shadow: inset 4px 0 0 var(--blue); }
 /* 좌우 여백은 0 — 안쪽 표가 바깥 표와 세로줄을 맞춰야 해서 한 칸도 밀 수 없다. */
-.fin-db-wrap { padding: 0 0 12px; }
+.fin-db-wrap { padding: 4px 0 12px; }
 .fin-db-wrap .hint-inline { padding: 0 8px; }
 .fin-db-scroll { overflow-x: auto; }
 
@@ -12402,7 +12411,8 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
     border: 1px solid var(--line);
     border-top: 0;
     border-radius: 0 0 10px 10px;
-    background: #fbfcfe;
+    /* 넓은 화면과 같은 바닥색 — 카드로 접혀도 '한 겹 아래'라는 신호는 유지한다. */
+    background: #e9eff7;
   }
   .fin-cf-table tr.fin-cf-detail > td {
     display: block;
@@ -12449,25 +12459,29 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 .fin-daybook .fin-db-c-desc,
 .fin-daybook .fin-db-c-ref { white-space: normal; overflow-wrap: anywhere; }
 .fin-daybook .fin-db-c-ref { color: var(--muted); font-size: 11px; }
-/* 줄마다의 잔고는 굵게 쓰지 않는다 — 열두 줄이 모두 굵으면 강조가 아니라 벽이 된다.
-   이 칸에서 굵은 건 맨 아래 Total 줄의 기말잔고 하나뿐이고, 그래야 그 하나가 보인다. */
+/* 줄마다의 잔고도, 이월 잔고도 굵게 쓰지 않는다 — 잔고 칸이 통째로 굵으면 강조가
+   아니라 벽이 된다. 이 서랍 안에는 굵힐 숫자가 하나도 없다. 기말잔고는 바로 위 행이
+   굵게 적고 있고, 마지막 줄이 그 아래에 나란히 선다. */
 .fin-daybook .fin-db-bal { font-variant-numeric: tabular-nums; font-weight: 400; }
 .fin-daybook .num { font-variant-numeric: tabular-nums; }
 /* 날이 바뀌는 줄에만 실선을 둬, 같은 날의 여러 건이 한 덩어리로 읽히게. */
 .fin-daybook tbody tr.fin-db-daystart > td { border-top: 1px solid var(--line-strong); }
-/* 이미 오간 돈은 옅은 바탕으로 — 아직 예정인 줄과 눈으로 갈린다(엑셀의 음영과 같은 뜻). */
-.fin-daybook tbody tr.fin-db-settled > td { background: #f6f8fa; }
+/* 서랍 바닥이 흰 면보다 어두우므로, 줄들은 그 위에 흰 종이처럼 얹힌다 — 위 월별 줄들과
+   같은 흰색이 아니라 반투명이라, 여기가 다른 층이라는 게 색으로 남는다. */
+.fin-daybook tbody tr > td { background: rgba(255, 255, 255, 0.66); }
+/* 이미 오간 돈은 바탕을 걷어 바닥이 비치게 — 아직 예정인 줄과 눈으로 갈린다
+   (엑셀에서 음영으로 하던 구분과 같은 뜻). */
+.fin-daybook tbody tr.fin-db-settled > td { background: transparent; }
 .fin-daybook .fin-db-done { color: #1e7a46; font-weight: 600; }
 .fin-daybook .fin-db-late { color: #c0392b; }
 /* 전월 이월 줄 — 본문이 아니라 출발점이라 옅게 눕힌다. */
-.fin-daybook tr.fin-db-carry td {
-  background: #fbfcfe;
+.fin-daybook tbody tr.fin-db-carry > td {
+  background: transparent;
   color: var(--muted);
   font-style: italic;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--line-strong);
 }
-.fin-daybook tr.fin-db-carry td.num { font-style: normal; font-weight: 700; color: var(--ink); }
-.fin-daybook tr.fin-db-total td { font-size: 13px; }
+.fin-daybook tbody tr.fin-db-carry > td.num { font-style: normal; color: var(--ink); }
 
 /* 좁은 화면 — 여덟 칸은 어떻게 줄여도 서지 않는다. 한 건을 한 줄짜리 카드로 접고,
    나간 돈/들어온 돈은 왼쪽 색 띠로 구분한다(빈 반쪽 칸은 통째로 감춘다). */
@@ -12485,7 +12499,13 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
     border: 1px solid var(--line);
     border-radius: 10px;
     margin-bottom: 8px;
+    /* 카드가 서랍 바닥 위에 얹힌 종이가 된다 — 바탕은 칸이 아니라 카드가 진다. */
+    background: rgba(255, 255, 255, 0.66);
   }
+  .fin-daybook tbody tr > td { background: transparent; }
+  /* 이미 오간 건·이월 줄은 바탕을 걷어 바닥이 비치게(넓은 화면과 같은 규칙). */
+  .fin-daybook tbody tr.fin-db-settled,
+  .fin-daybook tbody tr.fin-db-carry { background: transparent; }
   .fin-daybook tbody tr::before {
     content: "";
     position: absolute;

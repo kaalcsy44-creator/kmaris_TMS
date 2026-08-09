@@ -115,10 +115,6 @@ export default function FinanceDaybook({ start, end, label, opening, currency, i
     });
   }, [data, opening]);
 
-  const totalIn = data?.total_inflow ?? 0;
-  const totalOut = data?.total_outflow ?? 0;
-  const ending = opening + totalIn - totalOut;
-
   return (
     <div className="fin-db-wrap">
       {error && !data ? <div className="state error">API error: {error.message}</div> : null}
@@ -128,8 +124,8 @@ export default function FinanceDaybook({ start, end, label, opening, currency, i
             <table className="mini fin-daybook">
               {/* 폭은 위 Cash Flow 표(fin-cf-w-*)와 짝을 이룬다 — Inflow 세 칸의 오른쪽 끝이
                   그 표의 Inflow 칸 끝과, Outflow 는 Outflow 칸 끝과, Balance 는 그쪽 Balance
-                  칸 끝과 맞는다. 그래서 아래 Total 줄과 마지막 잔고가 바로 위 행의 같은
-                  금액 아래에 정확히 선다. */}
+                  칸 끝과 맞는다. 그래서 마지막 줄의 잔고가 바로 위 행의 기말잔고 아래에
+                  정확히 선다. */}
               <colgroup>
                 <col className="fin-db-w-date" />
                 <col className="fin-db-w-desc" /><col className="fin-db-w-ref" /><col className="fin-db-w-money" />
@@ -157,23 +153,17 @@ export default function FinanceDaybook({ start, end, label, opening, currency, i
                     currency={currency}
                   />
                 ))}
-                <tr className="fin-period-total fin-db-total">
-                  <td colSpan={3}><b>Total</b></td>
-                  <td className="num" data-label="Inflow"><b>{cash(totalIn)}</b></td>
-                  <td colSpan={2} />
-                  <td className="num" data-label="Outflow"><b>{cash(totalOut)}</b></td>
-                  <td className="num" data-label="Balance" style={{ color: ending < 0 ? "#c0392b" : undefined }}>
-                    <b>{cash(ending)}</b>
-                  </td>
-                </tr>
+                {/* 합계 줄은 두지 않는다 — 유입·유출 합과 기말잔고는 바로 위에 펼쳐 놓은
+                    그 행이 이미 같은 칸에 적고 있고, 마지막 줄의 잔고가 곧 기말잔고다.
+                    같은 세 숫자를 한 화면에 세 번 적는 셈이 된다. */}
               </tbody>
             </table>
           </div>
           <p className="hint-inline" style={{ display: "block", marginTop: 10 }}>
             One line per movement, in date order, with the bank balance rolled forward line by line. Money already
             moved sits on the day it actually moved and is marked ✓; money still expected sits on its due date, so
-            the balance below that point is a projection. The total and the closing balance are the {label} row
-            above, opened up.
+            the balance below that point is a projection. These lines add up to the {label} row above — the last
+            balance here is that row&apos;s closing balance.
           </p>
         </>
       )}
