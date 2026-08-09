@@ -12318,34 +12318,9 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 .fin-period-title { margin: 0; font-size: 18px; }
 .fin-period-total td { border-top: 1px solid var(--line-strong); background: #f7f9fc; }
 
-/* ── Daybook — 한 달의 자금 내역을 날짜순 한 장부로 ──────────────────────────
+/* ── Daybook — Overview 에서 고른 한 구간을 날짜순 한 장부로 ──────────────────
    가운데를 세로선으로 갈라 왼쪽은 나간 돈, 오른쪽은 들어온 돈. 한 줄은 자기 쪽
    세 칸만 채우므로, 어느 편의 줄인지는 글을 읽기 전에 자리로 먼저 읽힌다. */
-.fin-db-nav { display: flex; align-items: center; gap: 6px; }
-/* 엑셀 자금 리스트의 월별 시트 탭 자리 — 한 해가 한 줄에 선다. */
-.fin-db-months { display: flex; gap: 4px; flex-wrap: wrap; margin: -4px 2px 0; }
-.fin-db-month {
-  min-width: 46px;
-  height: 26px;
-  padding: 0 8px;
-  border: 1px solid var(--line);
-  border-bottom-width: 0;
-  border-radius: 6px 6px 0 0;
-  background: #f2f5f9;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  cursor: pointer;
-}
-.fin-db-month:hover { background: #e8eef6; color: var(--ink); }
-.fin-db-month.on {
-  background: #fff;
-  color: var(--navy);
-  border-color: var(--line-strong);
-  box-shadow: inset 0 2px 0 var(--navy);
-}
-
 .fin-daybook { table-layout: fixed; }
 .fin-daybook .fin-db-w-date { width: 62px; }
 .fin-daybook .fin-db-w-ref { width: 150px; }
@@ -12393,8 +12368,6 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 }
 .fin-daybook tr.fin-db-carry td.num { font-style: normal; font-weight: 700; color: var(--ink); }
 .fin-daybook tr.fin-db-total td { font-size: 13px; }
-/* 월 요약 — 표 하나짜리 패널이라 폭을 묶어 왼쪽에 세운다. */
-.fin-db-summary { max-width: 420px; }
 
 /* 좁은 화면 — 여덟 칸은 어떻게 줄여도 서지 않는다. 한 건을 한 줄짜리 카드로 접고,
    나간 돈/들어온 돈은 왼쪽 색 띠로 구분한다(빈 반쪽 칸은 통째로 감춘다). */
@@ -12443,7 +12416,6 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
   .fin-daybook .fin-db-c-desc::before { display: none; }
   .fin-daybook .fin-db-c-ref { grid-column: 1 / -1; }
   .fin-daybook tr.fin-db-carry td { grid-column: 1 / -1; }
-  .fin-db-summary { max-width: none; }
 }
 
 /* AR 9~11단계: 대금청구서 편집(ArAddForm) 아래 발행/수금 완료 바 */

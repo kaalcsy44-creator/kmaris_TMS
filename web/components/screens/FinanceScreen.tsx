@@ -39,7 +39,7 @@ import { can } from "@/lib/auth";
 import Modal from "@/components/common/Modal";
 import CurrencyToggle from "@/components/common/CurrencyToggle";
 import { amountInputValue, parseAmountInput } from "@/components/common/itemTable";
-import DaybookTab from "@/components/screens/FinanceDaybookTab";
+import FinanceDaybook from "@/components/screens/FinanceDaybook";
 import {
   CATEGORY_LABEL,
   INCOME_CATEGORY_LABEL,
@@ -112,11 +112,9 @@ const todayStr = () => new Date().toISOString().slice(0, 10);
 // Cash Flow 는 따로 서지 않는다 — 잔액과 현금흐름은 같은 질문의 앞뒤라서 Overview 하나로 합쳤다.
 // 목록 두 탭은 Overview 의 두 기둥과 같은 이름을 쓴다(Inflow/Outflow) — 같은 돈을
 // 한쪽에서는 '들어올 돈', 다른 쪽에서는 'Receivables' 라 부르면 매번 옮겨 읽어야 한다.
-// Daybook 은 Overview 바로 옆 — 같은 돈을 한 달 한 줄(Overview)로 볼지, 날짜순 장부로
-// 펼쳐 볼지의 차이라서 둘이 붙어 있어야 오가며 읽힌다.
-type Tab = "overview" | "daybook" | "inflow" | "outflow" | "closing" | "calendar";
+type Tab = "overview" | "inflow" | "outflow" | "closing" | "calendar";
 
-const TABS: Tab[] = ["overview", "daybook", "inflow", "outflow", "closing", "calendar"];
+const TABS: Tab[] = ["overview", "inflow", "outflow", "closing", "calendar"];
 /** 이름을 바꾸기 전 주소로 들어오는 링크 — 같은 자리로 보낸다. */
 const TAB_ALIAS: Record<string, Tab> = { receivables: "inflow", payables: "outflow" };
 
@@ -188,7 +186,6 @@ export default function FinanceScreen() {
     <div className="action-tabs">
       <div className="page-tabs">
         <button className={tab === "overview" ? "on" : ""} onClick={() => setTab("overview")}>Overview</button>
-        <button className={tab === "daybook" ? "on" : ""} onClick={() => setTab("daybook")}>Daybook</button>
         <button className={tab === "inflow" ? "on" : ""} onClick={() => setTab("inflow")}>Inflow</button>
         <button className={tab === "outflow" ? "on" : ""} onClick={() => setTab("outflow")}>Outflow</button>
         <button className={tab === "closing" ? "on" : ""} onClick={() => setTab("closing")}>Closing · VAT</button>
@@ -196,7 +193,6 @@ export default function FinanceScreen() {
       </div>
 
       {tab === "overview" && <OverviewTab />}
-      {tab === "daybook" && <DaybookTab />}
       {tab === "inflow" && <InflowTab />}
       {tab === "outflow" && <OutflowTab />}
       {tab === "closing" && <ClosingTab />}
@@ -573,15 +569,26 @@ function OverviewTab() {
               </tbody>
             </table>
             <p className="hint-inline" style={{ display: "block", marginTop: 8 }}>
-              Click a period to break it down above; click a line up there for the items behind it. Each period mixes
-              money already moved (grey, dated on the day it actually arrived or left) with money still expected —
-              receivables by due date and unpaid payable occurrences{includePo ? " + vendor POs (estimated from order date)" : ""}.
+              Click a period to break it down above and open its daybook below; click a line up there for the items
+              behind it. Each period mixes money already moved (grey, dated on the day it actually arrived or left)
+              with money still expected — receivables by due date and unpaid payable occurrences{includePo ? " + vendor POs (estimated from order date)" : ""}.
               So the opening balance must be your balance on {openingAsOf}, not today&apos;s. Only {currency} items are
               counted — switch the currency toggle for the other book; nothing is converted. Overdue / past-due items
               fall into the first period.
             </p>
           </div>
 
+          {/* 고른 칸의 안쪽 — 표의 그 한 줄을 날짜순 장부로 펼친다. 기간·통화·기초잔고를
+              그대로 물려받으므로 여기 합계와 기말잔고는 위 표의 그 행과 같은 값이다. */}
+          <FinanceDaybook
+            start={row.start}
+            end={row.end}
+            label={pickedLabel}
+            opening={rowOpening}
+            currency={currency}
+            includePo={includePo}
+            first={idx === 0}
+          />
         </>
       )}
     </div>
