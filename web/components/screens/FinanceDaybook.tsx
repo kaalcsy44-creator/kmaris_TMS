@@ -31,6 +31,12 @@ type DaybookRow = {
   balance: number;
   /** 그 날의 첫 줄인가 — 날짜를 여기서만 적고 위에 구분선을 둔다. */
   dayStart: boolean;
+  /**
+   * 이 줄의 잔고가 예측인가. 예정 건이 한 번이라도 지나가면 그 아래 잔고는 전부
+   * 예측이 된다 — 그 뒤에 실제로 오간 건이 섞여 있어도 마찬가지다(앞의 예정이 빗나가면
+   * 같이 어긋난다). 그래서 줄 자체가 예정인지가 아니라 '여기까지 예정을 만났는가'로 센다.
+   */
+  projected: boolean;
 };
 
 /** 통장에 찍힐 이름 — 사람이 붙인 적요가 있으면 그것, 없으면 상대처·분류로 대신한다. */
@@ -107,11 +113,13 @@ export default function FinanceDaybook({ start, end, label, opening, currency, i
     );
     let balance = opening;
     let prevDay = "";
+    let metExpected = false;
     return merged.map(({ item, side }) => {
       balance += side === "in" ? item.amount : -item.amount;
       const dayStart = item.date !== prevDay;
       prevDay = item.date;
-      return { item, side, balance, dayStart };
+      metExpected = metExpected || !item.actual;
+      return { item, side, balance, dayStart, projected: metExpected };
     });
   }, [data, opening]);
 
@@ -179,7 +187,7 @@ function DaybookLine({ row, start, end, currency }: {
   end: string;
   currency: string;
 }) {
-  const { item: r, side, balance, dayStart } = row;
+  const { item: r, side, balance, dayStart, projected } = row;
   const cash = (n: number) => money(n, currency);
   const linked = r.kind === "ar" || r.kind === "ap" || r.kind === "po";
   const desc = (
@@ -206,7 +214,9 @@ function DaybookLine({ row, start, end, currency }: {
     "fin-db-row",
     `fin-db-row--${side}`,
     dayStart ? "fin-db-daystart" : "",
-    r.actual ? "fin-db-settled" : "",
+    // 아직 오지 않은 돈은 글자를 낮춘다 — 실제로 오간 건과 나란히 놓였을 때 어느 쪽이
+    // 사실이고 어느 쪽이 아직 예정인지가 읽기 전에 갈리도록.
+    r.actual ? "" : "fin-db-expected",
     r.overdue ? "fin-overdue" : "",
   ].filter(Boolean).join(" ");
 
@@ -232,7 +242,13 @@ function DaybookLine({ row, start, end, currency }: {
           <td className="num" data-label="Outflow">{cash(r.amount)}</td>
         </>
       )}
-      <td className="num fin-db-bal" data-label="Balance" style={{ color: balance < 0 ? "#c0392b" : undefined }}>
+      {/* 예정 건을 한 번 지난 뒤의 잔고는 사실이 아니라 예측 — 아래 안내가 말로 하는 것을
+          여기서는 색으로 보여 준다. 마이너스 잔고는 그래도 붉게 남긴다(경고가 먼저다). */}
+      <td
+        className={`num fin-db-bal${projected ? " fin-db-proj" : ""}`}
+        data-label="Balance"
+        style={{ color: balance < 0 ? "#c0392b" : undefined }}
+      >
         {cash(balance)}
       </td>
     </tr>

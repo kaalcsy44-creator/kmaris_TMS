@@ -12471,11 +12471,20 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 /* 날이 바뀌는 줄에만 실선을 둬, 같은 날의 여러 건이 한 덩어리로 읽히게. */
 .fin-daybook tbody tr.fin-db-daystart > td { border-top: 1px solid var(--line-strong); }
 /* 서랍 바닥이 흰 면보다 어두우므로, 줄들은 그 위에 흰 종이처럼 얹힌다 — 위 월별 줄들과
-   같은 흰색이 아니라 반투명이라, 여기가 다른 층이라는 게 색으로 남는다. */
+   같은 흰색이 아니라 반투명이라, 여기가 다른 층이라는 게 색으로 남는다.
+   실적/예정은 바탕으로 가르지 않는다. 바탕까지 나서면 '층'을 말하던 신호와 '상태'를
+   말하는 신호가 같은 자리에서 겹쳐 둘 다 흐려진다 — 그 구분은 아래 글자가 맡는다. */
 .fin-daybook tbody tr > td { background: rgba(255, 255, 255, 0.66); }
-/* 이미 오간 돈은 바탕을 걷어 바닥이 비치게 — 아직 예정인 줄과 눈으로 갈린다
-   (엑셀에서 음영으로 하던 구분과 같은 뜻). */
-.fin-daybook tbody tr.fin-db-settled > td { background: transparent; }
+/* 아직 오지 않은 돈 — 보통 굵기의 회색으로 물린다. 실제로 오간 건과 나란히 서 있어도
+   어느 쪽이 사실이고 어느 쪽이 예정인지 글을 읽기 전에 갈린다. */
+.fin-daybook tbody tr.fin-db-expected > td,
+.fin-daybook tbody tr.fin-db-expected .fin-db-desc { color: var(--muted); font-weight: 400; }
+/* 연체는 예정이지만 물러나면 안 된다 — 늦었다는 경고가 예측이라는 사실보다 급하다. */
+.fin-daybook tbody tr.fin-db-expected.fin-overdue > td,
+.fin-daybook tbody tr.fin-db-expected.fin-overdue .fin-db-desc { color: #c0392b; }
+/* 예정을 한 번 지난 뒤의 잔고는 예측이다 — 그 줄이 실적이어도 앞의 예정이 빗나가면
+   함께 어긋나므로, 거기서부터 잔고 칸을 회색으로 낮춘다. */
+.fin-daybook tbody td.fin-db-proj { color: var(--muted); }
 .fin-daybook .fin-db-done { color: #1e7a46; font-weight: 600; }
 .fin-daybook .fin-db-late { color: #c0392b; }
 /* 전월 이월 줄 — 본문이 아니라 출발점이라 옅게 눕힌다. */
@@ -12507,8 +12516,7 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
     background: rgba(255, 255, 255, 0.66);
   }
   .fin-daybook tbody tr > td { background: transparent; }
-  /* 이미 오간 건·이월 줄은 바탕을 걷어 바닥이 비치게(넓은 화면과 같은 규칙). */
-  .fin-daybook tbody tr.fin-db-settled,
+  /* 이월 줄은 본문이 아니라 출발점이라 바탕을 걷어 바닥이 비치게(넓은 화면과 같은 규칙). */
   .fin-daybook tbody tr.fin-db-carry { background: transparent; }
   .fin-daybook tbody tr::before {
     content: "";
