@@ -12444,8 +12444,6 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 .fin-daybook tbody td:nth-child(7) { border-right: 1px solid var(--line-strong); }
 .fin-daybook td { vertical-align: top; }
 .fin-daybook .fin-db-date { font-variant-numeric: tabular-nums; color: var(--muted); font-weight: 600; }
-/* 같은 날의 두 번째 줄부터 — 자리는 지키고 글자만 감춘다. */
-.fin-daybook .fin-db-date--rep { visibility: hidden; }
 .fin-daybook .fin-db-desc { font-weight: 600; color: var(--ink); }
 /* 적요는 사람이 쓴 문장이라 길다 — table.mini 의 nowrap 을 여기서만 푼다. */
 .fin-daybook .fin-db-c-desc,
@@ -12505,7 +12503,6 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
     grid-column: 1 / -1;
     font-size: 11px;
   }
-  .fin-daybook .fin-db-date--rep { visibility: visible; }
   .fin-daybook td[data-label] { text-align: right; }
   .fin-daybook td[data-label]::before {
     content: attr(data-label);

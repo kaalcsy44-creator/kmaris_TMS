@@ -221,9 +221,10 @@ function DaybookLine({ row, start, end, currency }: {
 
   return (
     <tr className={cls}>
-      {/* 날짜는 늘 적어 두고, 같은 날의 두 번째 줄부터는 표에서만 감춘다 — 폰에서는
-          한 건이 한 장의 카드로 서기 때문에 카드마다 날짜가 보여야 한다. */}
-      <td className={`fin-db-date${dayStart ? "" : " fin-db-date--rep"}`}>{dayCell(r.date, start, end)}</td>
+      {/* 날짜는 줄마다 빠짐없이 적는다. 같은 날의 두 번째 줄부터를 비워 두면 눈이 위로
+          거슬러 올라가야 날짜를 알 수 있고, 통장과 한 줄씩 대조할 때는 그 한 번이 매번의
+          품이 된다. 날이 바뀌는 자리는 dayStart 가 긋는 가로선이 따로 표시한다. */}
+      <td className="fin-db-date">{dayCell(r.date, start, end)}</td>
       {/* 유입이 왼쪽, 유출이 오른쪽 — 위 표·세 기둥과 같은 순서. */}
       {side === "in" ? (
         <>
