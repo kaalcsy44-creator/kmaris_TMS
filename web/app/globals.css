@@ -12232,6 +12232,16 @@ table.mini tfoot .fin-foot-name { text-align: left; }
 /* Cash flow */
 .fin-inline-field { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #55627a; }
 .fin-inline-field select, .fin-inline-field input { height: 32px; border: 1px solid var(--input-border, #c7d0de); border-radius: 8px; padding: 0 8px; background: #fff; }
+/* 지금 들여다보는 구간 — 이 줄의 다른 칸들은 창을 어떻게 뜰지 정하는 설정이고, 이것만은
+   '아래에 지금 무엇이 보이는가'를 말한다. 그 한 칸만 굵게 세워 눈이 먼저 닿게 한다. */
+.fin-focus-field { color: var(--navy); font-weight: 700; }
+.fin-focus-select {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--navy);
+  border-color: var(--navy) !important;
+  box-shadow: 0 1px 0 rgba(16, 42, 77, 0.12);
+}
 .fin-net-chart { display: flex; align-items: stretch; gap: 8px; height: 160px; }
 .fin-net-col { flex: 1 1 0; display: flex; flex-direction: column; min-width: 0; }
 .fin-net-track { position: relative; flex: 1; }
@@ -12255,9 +12265,19 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 .fin-bucket--balance { border-top-color: #1e7a46; }
 /* 총계 줄 높이를 맞추려고 비워 둔 줄 — 줄이 하나 더 있는 티가 나면 안 된다. */
 .fin-bucket-gap td { border-bottom-color: transparent; }
+/* 제목 뒤에 붙는 구간 이름 — 제목이 아니라 '언제의 것인가'를 밝히는 말이라, 굵기를
+   빼고 회색으로 낮춘다(어느 구간인지는 위 Showing 칸이 굵게 말한다). */
+.fin-bucket-card .form-title .muted { font-weight: 400; color: var(--muted); }
 /* 기둥 안의 표는 금액이 주인공이라 라벨 칸을 좁히지 않고 금액을 크게 잡는다. */
 .fin-bucket-card table.mini td.num { font-size: 14px; font-weight: 700; white-space: nowrap; }
 .fin-bucket-card .hint-inline { display: block; margin-top: 2px; }
+/* 폭 고정 — 행을 펼치면 그 아래 일자별 장부가 같은 자를 쓴다(.fin-db-w-* 와 짝).
+   8 + 34 + 34 + 10 + 14 = 100. */
+.fin-cf-table { table-layout: fixed; }
+.fin-cf-table .fin-cf-w-period { width: 8%; }
+.fin-cf-table .fin-cf-w-flow { width: 34%; }
+.fin-cf-table .fin-cf-w-net { width: 10%; }
+.fin-cf-table .fin-cf-w-cum { width: 14%; }
 /* 현금흐름 표의 한 행을 눌러 위 기둥을 바꾼다. */
 .fin-row-pick { cursor: pointer; }
 .fin-row-pick:hover > td { background: color-mix(in srgb, var(--blue) 5%, transparent); }
@@ -12287,9 +12307,9 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
   background: #fbfcfe;
   border-bottom: 1px solid var(--line-strong);
 }
-.fin-db-wrap { padding: 4px 12px 14px; }
-.fin-db-title { margin: 0 0 8px; font-size: 13px; font-weight: 700; color: var(--navy); }
-/* 여덟 칸이 든 표라 좁은 화면에서는 이 서랍 안에서만 가로로 민다. */
+/* 좌우 여백은 0 — 안쪽 표가 바깥 표와 세로줄을 맞춰야 해서 한 칸도 밀 수 없다. */
+.fin-db-wrap { padding: 0 0 12px; }
+.fin-db-wrap .hint-inline { padding: 0 8px; }
 .fin-db-scroll { overflow-x: auto; }
 
 /* 좁은 화면의 현금흐름 표 — 다섯 칸(구간·유입·유출·순액·잔고)은 폰에서 한 줄에 서지
@@ -12297,7 +12317,7 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
    2×2 로 앉힌다. 칸 이름은 사라진 머리줄 대신 data-label 이 옆에 붙어 말한다. */
 @media (max-width: 640px) {
   .fin-cf-table, .fin-cf-table tbody, .fin-cf-table tr, .fin-cf-table td { display: block; }
-  .fin-cf-table thead { display: none; }
+  .fin-cf-table thead, .fin-cf-table colgroup { display: none; }
   .fin-cf-table tr {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -12375,11 +12395,17 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
    가운데를 세로선으로 갈라 왼쪽은 들어온 돈, 오른쪽은 나간 돈(위 표와 같은 순서).
    한 줄은 자기 쪽 세 칸만 채우므로, 어느 편의 줄인지는 글을 읽기 전에 자리로 먼저
    읽힌다. 폭이 고정이라 좁은 화면에서는 .fin-db-scroll 안에서 가로로 민다. */
-.fin-daybook { table-layout: fixed; min-width: 760px; }
-.fin-daybook .fin-db-w-date { width: 62px; }
-.fin-daybook .fin-db-w-ref { width: 150px; }
-.fin-daybook .fin-db-w-money { width: 126px; }
-.fin-daybook .fin-db-w-bal { width: 142px; }
+.fin-daybook { table-layout: fixed; }
+/* 폭은 위 Cash Flow 표와 한 벌이다(.fin-cf-w-* 참고). 세 덩어리의 오른쪽 끝이 그 표의
+   Inflow · Outflow · Cumulative 칸 끝과 각각 맞아떨어지도록 백분율을 나눠 놓았다:
+   8 + (17+8+9) + (17+8+9) + 24 = 100, 저쪽은 8 + 34 + 34 + (10+14) = 100. */
+.fin-daybook .fin-db-w-date { width: 8%; }
+.fin-daybook .fin-db-w-desc { width: 17%; }
+.fin-daybook .fin-db-w-ref { width: 8%; }
+.fin-daybook .fin-db-w-money { width: 9%; }
+/* 잔고는 저쪽 Net + Cumulative 두 칸의 폭을 함께 쓴다 — 장부에는 줄마다의 순증감이
+   따로 없고, 오른끝에 붙는 이 숫자가 저 표의 Cumulative 와 같은 값이기 때문이다. */
+.fin-daybook .fin-db-w-bal { width: 24%; }
 /* 두 갈래의 머리 — 색은 Overview 의 In(파랑)·Out(주황) 기둥과 같은 뜻으로 쓴다. */
 .fin-daybook .fin-db-grp {
   text-align: center;
@@ -12428,8 +12454,7 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 @media (max-width: 860px) {
   .fin-daybook, .fin-daybook tbody, .fin-daybook tr, .fin-daybook td { display: block; }
   .fin-daybook thead, .fin-daybook colgroup { display: none; }
-  /* 카드로 접히면 가로로 밀 것이 없다 — 폭 하한과 스크롤 상자를 함께 푼다. */
-  .fin-daybook { min-width: 0; }
+  /* 카드로 접히면 가로로 밀 것이 없다 — 스크롤 상자를 푼다. */
   .fin-db-scroll { overflow-x: visible; }
   .fin-daybook tbody tr {
     position: relative;

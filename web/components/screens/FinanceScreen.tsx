@@ -433,9 +433,10 @@ function OverviewTab() {
         </label>
         {/* 어느 칸을 들여다볼지 — 아래 차트·표를 눌러도 같은 값이 바뀐다. 여기 둔 이유는
             창이 열두 칸이라, 표까지 내려가지 않고도 달을 바꿔 볼 수 있어야 해서다. */}
-        <label className="fin-inline-field">
+        <label className="fin-inline-field fin-focus-field">
           Showing
           <select
+            className="fin-focus-select"
             value={idx}
             onChange={(e) => setPicked(Number(e.target.value))}
             aria-label="Period in focus"
@@ -476,7 +477,7 @@ function OverviewTab() {
               period={pickedLabel}
               tone="in"
               lines={[["receivables", row.in_ar ?? 0], ["income", row.in_income ?? 0], ["collected", row.actual_inflow]]}
-              totalLabel="Total inflow"
+              totalLabel="Total"
               totalHref={`${periodHref(row, idx === 0, currency, includePo)}&side=in`}
               total={row.inflow}
               currency={currency}
@@ -487,7 +488,7 @@ function OverviewTab() {
               period={pickedLabel}
               tone="out"
               lines={[["payables", row.out_ap ?? 0], ["other", row.out_other ?? 0], ["paid", row.actual_outflow]]}
-              totalLabel="Total outflow"
+              totalLabel="Total"
               totalHref={`${periodHref(row, idx === 0, currency, includePo)}&side=out`}
               total={row.outflow}
               currency={currency}
@@ -561,6 +562,16 @@ function OverviewTab() {
             {/* 좁은 화면에서는 다섯 칸이 한 줄에 못 선다 — CSS 가 이 표를 구간별 카드로
                 접고, 그때 칸 이름은 data-label 이 대신 말한다. */}
             <table className="mini fin-cf-table">
+              {/* 폭을 못박아 두는 건 아래로 펼쳐지는 일자별 장부와 세로줄을 맞추기 위해서다 —
+                  장부의 Inflow·Outflow 합계와 마지막 잔고가 이 행의 같은 칸 바로 아래에
+                  서야, 둘이 같은 값이라는 게 눈으로 읽힌다(globals.css 의 fin-db-w-* 와 짝). */}
+              <colgroup>
+                <col className="fin-cf-w-period" />
+                <col className="fin-cf-w-flow" />
+                <col className="fin-cf-w-flow" />
+                <col className="fin-cf-w-net" />
+                <col className="fin-cf-w-cum" />
+              </colgroup>
               <thead>
                 <tr><th>Period</th><th className="num">Inflow</th><th className="num">Outflow</th><th className="num">Net</th><th className="num">Cumulative</th></tr>
               </thead>

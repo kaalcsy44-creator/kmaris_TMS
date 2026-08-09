@@ -9,7 +9,6 @@ import {
   INCOME_CATEGORY_LABEL,
   ProjectDocLink,
   money,
-  sym,
 } from "@/components/screens/financeShared";
 
 /**
@@ -122,18 +121,19 @@ export default function FinanceDaybook({ start, end, label, opening, currency, i
 
   return (
     <div className="fin-db-wrap">
-      <h4 className="fin-db-title">
-        Daybook <span className="muted">· {label} · line by line ({sym(currency).trim()})</span>
-      </h4>
       {error && !data ? <div className="state error">API error: {error.message}</div> : null}
       {!data ? <div className="state">Loading…</div> : (
         <>
           <div className="fin-db-scroll">
             <table className="mini fin-daybook">
+              {/* 폭은 위 Cash Flow 표(fin-cf-w-*)와 짝을 이룬다 — Inflow 세 칸의 오른쪽 끝이
+                  그 표의 Inflow 칸 끝과, Outflow 는 Outflow 칸 끝과, Balance 는 Cumulative
+                  칸 끝과 맞는다. 그래서 아래 Total 줄과 마지막 잔고가 바로 위 행의 같은
+                  금액 아래에 정확히 선다. */}
               <colgroup>
                 <col className="fin-db-w-date" />
-                <col /><col className="fin-db-w-ref" /><col className="fin-db-w-money" />
-                <col /><col className="fin-db-w-ref" /><col className="fin-db-w-money" />
+                <col className="fin-db-w-desc" /><col className="fin-db-w-ref" /><col className="fin-db-w-money" />
+                <col className="fin-db-w-desc" /><col className="fin-db-w-ref" /><col className="fin-db-w-money" />
                 <col className="fin-db-w-bal" />
               </colgroup>
               <thead>
