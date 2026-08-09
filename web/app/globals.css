@@ -12257,14 +12257,33 @@ button.fin-net-col.on { background: color-mix(in srgb, var(--blue) 11%, transpar
 button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 
 /* Overview 세 기둥 — 들어올 돈 / 나갈 돈 / 남는 돈. */
-.fin-three-cols { display: grid; grid-template-columns: 1fr 1fr 0.85fr; gap: 14px; align-items: start; }
+/* 유입·유출·잔고의 색 — 세 기둥의 머리띠와 Cash Flow 표의 칸 머리가 같은 값을 쓴다.
+   같은 돈을 가리키는 두 자리라, 색이 조금이라도 다르면 별개의 것으로 읽힌다.
+   -ink 는 옅은 바탕 위에 앉는 글자용(띠 색 그대로 쓰면 대비가 모자란다). */
+.fin-overview {
+  --fin-in: #0055a8;   --fin-in-ink: #1b5e93;   --fin-in-tint: #eef4fb;
+  --fin-out: #d68910;  --fin-out-ink: #a35c00;  --fin-out-tint: #fdf6ec;
+  --fin-bal: #1e7a46;  --fin-bal-ink: #1a6b41;  --fin-bal-tint: #eff7f2;
+}
+/* 기둥의 폭은 아래 표의 칸 묶음과 같은 비율이다 — Inflow 기둥은 Period+Inflow(42),
+   Outflow 는 Outflow(34), Balance 는 Net+Balance(24) 위에 선다. 그래서 기둥 사이의
+   틈이 표의 칸 경계와 같은 자리에 떨어지고, 아래 세로선이 그 자리를 이어받는다. */
+.fin-three-cols { display: grid; grid-template-columns: 42fr 34fr 24fr; gap: 14px; align-items: start; }
+/* 좁아지면 정렬을 포기한다 — 24% 로 묶인 Balance 기둥이 먼저 못 견딘다(금액 한 줄이
+   라벨을 밀어낸다). 줄 세우기는 넓은 화면에서만 얻는 덤이고, 읽히는 게 먼저다. */
+@media (max-width: 1300px) { .fin-three-cols { grid-template-columns: 1fr 1fr 0.85fr; } }
 @media (max-width: 1100px) { .fin-three-cols { grid-template-columns: 1fr; } }
 .fin-bucket-card { border-top: 3px solid var(--line-strong); }
-.fin-bucket--in { border-top-color: var(--blue); }
-.fin-bucket--out { border-top-color: #d68910; }
-.fin-bucket--balance { border-top-color: #1e7a46; }
+.fin-bucket--in { border-top-color: var(--fin-in, #0055a8); }
+.fin-bucket--out { border-top-color: var(--fin-out, #d68910); }
+.fin-bucket--balance { border-top-color: var(--fin-bal, #1e7a46); }
 /* 총계 줄 높이를 맞추려고 비워 둔 줄 — 줄이 하나 더 있는 티가 나면 안 된다. */
 .fin-bucket-gap td { border-bottom-color: transparent; }
+/* 기둥 이름도 자기 색으로 — 아래 표의 같은 이름을 인 칸 머리와 같은 글자색이라,
+   'Inflow 기둥'과 'Inflow 칸'이 한눈에 짝지어진다. */
+.fin-bucket--in .form-title { color: var(--fin-in-ink, #1b5e93); }
+.fin-bucket--out .form-title { color: var(--fin-out-ink, #a35c00); }
+.fin-bucket--balance .form-title { color: var(--fin-bal-ink, #1a6b41); }
 /* 제목 뒤에 붙는 구간 이름 — 제목이 아니라 '언제의 것인가'를 밝히는 말이라, 굵기를
    빼고 회색으로 낮춘다(어느 구간인지는 위 Showing 칸이 굵게 말한다). */
 .fin-bucket-card .form-title .muted { font-weight: 400; color: var(--muted); }
@@ -12278,6 +12297,19 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 .fin-cf-table .fin-cf-w-flow { width: 34%; }
 .fin-cf-table .fin-cf-w-net { width: 10%; }
 .fin-cf-table .fin-cf-w-cum { width: 14%; }
+/* 칸 머리에 그 기둥의 띠를 그대로 두른다 — 위에서 파란 카드로 읽은 금액이 아래에서는
+   파란 머리를 인 칸에 서 있어, 둘이 같은 것임을 색으로 잇는다. 선을 접은 표라
+   border-top 대신 inset 그림자로 띠를 그린다(칸끼리 선이 합쳐지며 어긋나지 않게).
+   Net 만 색이 없다 — 위에 짝이 되는 기둥이 없는, 두 칸의 차이일 뿐이라서. */
+.fin-cf-table thead th:nth-child(2) { box-shadow: inset 0 3px 0 var(--fin-in); background: var(--fin-in-tint); color: var(--fin-in-ink); }
+.fin-cf-table thead th:nth-child(3) { box-shadow: inset 0 3px 0 var(--fin-out); background: var(--fin-out-tint); color: var(--fin-out-ink); }
+.fin-cf-table thead th:nth-child(5) { box-shadow: inset 0 3px 0 var(--fin-bal); background: var(--fin-bal-tint); color: var(--fin-bal-ink); }
+/* 칸 묶음을 가르는 세로선 — 위 기둥 사이의 틈과 같은 자리에 서고, 행을 펼치면
+   장부의 같은 선(.fin-daybook tbody td:nth-child(4)·(7))이 그대로 이어받는다. */
+.fin-cf-table th:nth-child(2),
+.fin-cf-table th:nth-child(3),
+.fin-cf-table tbody td:nth-child(2),
+.fin-cf-table tbody td:nth-child(3) { border-right: 1px solid var(--line-strong); }
 /* 현금흐름 표의 한 행을 눌러 위 기둥을 바꾼다. */
 .fin-row-pick { cursor: pointer; }
 .fin-row-pick:hover > td { background: color-mix(in srgb, var(--blue) 5%, transparent); }
