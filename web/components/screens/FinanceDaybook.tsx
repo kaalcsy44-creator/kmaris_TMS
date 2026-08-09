@@ -159,11 +159,12 @@ export default function FinanceDaybook({ start, end, label, opening, currency, i
               </tbody>
             </table>
           </div>
+          {/* 한 줄만 남긴다. '날짜순 한 건씩'도 '합이 위 행과 같다'도 보면 알 수 있는 것들이고,
+              서랍을 열 때마다 같은 문단을 다시 읽힐 이유가 없다. 보아서는 알 수 없는 건
+              하나뿐이다 — 예정 건이 섞여 있어 그 아래 잔고는 사실이 아니라 예측이라는 것. */}
           <p className="hint-inline" style={{ display: "block", marginTop: 10 }}>
-            One line per movement, in date order, with the bank balance rolled forward line by line. Money already
-            moved sits on the day it actually moved and is marked ✓; money still expected sits on its due date, so
-            the balance below that point is a projection. These lines add up to the {label} row above — the last
-            balance here is that row&apos;s closing balance.
+            ✓ already moved, on the day it moved; the rest sit on their due date, so the balance past them is a
+            projection.
           </p>
         </>
       )}

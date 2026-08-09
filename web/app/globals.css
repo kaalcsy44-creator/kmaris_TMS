@@ -12348,8 +12348,12 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 }
 /* 서랍을 연 행은 그 띠를 이어받는다 — 행과 서랍이 하나의 덩어리로 읽히게. */
 .fin-row-pick.fin-cf-open > td:first-child { box-shadow: inset 4px 0 0 var(--blue); }
-/* 좌우 여백은 0 — 안쪽 표가 바깥 표와 세로줄을 맞춰야 해서 한 칸도 밀 수 없다. */
-.fin-db-wrap { padding: 4px 0 12px; }
+/* 좌우 여백은 0 — 안쪽 표가 바깥 표와 세로줄을 맞춰야 해서 한 칸도 밀 수 없다.
+   white-space 를 되돌리는 건 이 서랍이 앉은 칸이 table.mini td 라 nowrap 을 물고
+   있고, 그게 상속되는 성질이라 안쪽 글줄이 안 접히기 때문이다 — 접히지 않은 한 줄이
+   칸을 벌리면 폭을 못박은 바깥 표까지 화면 밖으로 밀려난다. 장부 표의 칸들은
+   table.mini td 규칙을 직접 받으므로 여기 영향 없이 nowrap 을 유지한다. */
+.fin-db-wrap { padding: 4px 0 12px; white-space: normal; }
 .fin-db-wrap .hint-inline { padding: 0 8px; }
 .fin-db-scroll { overflow-x: auto; }
 
