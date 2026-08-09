@@ -13,7 +13,7 @@ import {
   ProjectDocLink,
   money,
   sym,
-} from "@/components/screens/FinanceScreen";
+} from "@/components/screens/financeShared";
 
 /**
  * 한 건이 어떤 돈인지 — 출처 + (지급대장·기타수입은) 분류까지.

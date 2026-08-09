@@ -39,8 +39,24 @@ import { can } from "@/lib/auth";
 import Modal from "@/components/common/Modal";
 import CurrencyToggle from "@/components/common/CurrencyToggle";
 import { amountInputValue, parseAmountInput } from "@/components/common/itemTable";
+import DaybookTab from "@/components/screens/FinanceDaybookTab";
+import {
+  CATEGORY_LABEL,
+  INCOME_CATEGORY_LABEL,
+  KpiTile,
+  MONTH_NAMES,
+  ProjectDocLink,
+  localDayStr,
+  money,
+  monthBounds,
+  monthLabel,
+  startYears,
+  sym,
+} from "@/components/screens/financeShared";
 
 // ── Display helpers ────────────────────────────────────────────────────────────
+// 통화·달 이름·KPI 타일·문서번호 링크는 Finance 화면들이 함께 쓰므로 financeShared 에 있다
+// (위 import 참고). 여기 남은 것들은 이 화면에서만 쓰는 목록·폼용 표기다.
 // Category codes are stored values (do not translate); labels below are display-only.
 const CATEGORIES = ["거래선지급", "임차료", "급여", "공과금", "세금", "기타"];
 const RECURRENCE_LABEL: Record<string, string> = {
@@ -51,27 +67,7 @@ const RECURRENCE_LABEL: Record<string, string> = {
 };
 // 기타 수입 분류(저장값은 한글 코드, 표시만 영문).
 const INCOME_CATEGORIES = ["이자수입", "환급", "잡수입", "기타"];
-export const INCOME_CATEGORY_LABEL: Record<string, string> = {
-  이자수입: "Interest",
-  환급: "Refund",
-  잡수입: "Misc income",
-  기타: "Other",
-};
-export const CATEGORY_LABEL: Record<string, string> = {
-  거래선지급: "Vendor payment",
-  임차료: "Rent",
-  급여: "Payroll",
-  공과금: "Utilities",
-  세금: "Tax",
-  기타: "Other",
-};
 
-export function sym(currency: string): string {
-  return currency === "KRW" ? "₩" : currency === "USD" ? "$" : `${currency} `;
-}
-export function money(amount: number, currency: string): string {
-  return `${sym(currency)}${Math.round(amount).toLocaleString()}`;
-}
 function won(n: number): string {
   return `₩${Math.round(n).toLocaleString()}`;
 }
@@ -95,13 +91,6 @@ function byCurrencyLines(m: MoneyByCurrency): React.ReactNode {
   ));
 }
 
-/** "2026-07" → "Jul 2026". 실적 KPI·기초잔고 기준일처럼 기간을 밝혀야 할 때 쓴다. */
-function monthLabel(ym: string): string {
-  const [y, m] = (ym || "").split("-").map(Number);
-  if (!y || !m) return ym || "";
-  return new Date(y, m - 1, 1).toLocaleDateString("en-US", { month: "short", year: "numeric" });
-}
-
 /** 통화별 합계를 참고용 KRW 한 값으로 — 표시 전용(집계·저장에는 쓰지 않는다). */
 function toKrw(m: MoneyByCurrency, usdKrw: number): number {
   return Object.entries(m || {}).reduce(
@@ -118,19 +107,16 @@ const AR_STATUS_LABEL: Record<string, string> = {
   연체: "Overdue",
 };
 const todayStr = () => new Date().toISOString().slice(0, 10);
-/** 로컬 기준 오늘/이번 달 — toISOString(UTC)은 KST 아침에 하루 전으로 밀린다. */
-const localDayStr = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-};
 
 // ── Screen ───────────────────────────────────────────────────────────────────
 // Cash Flow 는 따로 서지 않는다 — 잔액과 현금흐름은 같은 질문의 앞뒤라서 Overview 하나로 합쳤다.
 // 목록 두 탭은 Overview 의 두 기둥과 같은 이름을 쓴다(Inflow/Outflow) — 같은 돈을
 // 한쪽에서는 '들어올 돈', 다른 쪽에서는 'Receivables' 라 부르면 매번 옮겨 읽어야 한다.
-type Tab = "overview" | "inflow" | "outflow" | "closing" | "calendar";
+// Daybook 은 Overview 바로 옆 — 같은 돈을 한 달 한 줄(Overview)로 볼지, 날짜순 장부로
+// 펼쳐 볼지의 차이라서 둘이 붙어 있어야 오가며 읽힌다.
+type Tab = "overview" | "daybook" | "inflow" | "outflow" | "closing" | "calendar";
 
-const TABS: Tab[] = ["overview", "inflow", "outflow", "closing", "calendar"];
+const TABS: Tab[] = ["overview", "daybook", "inflow", "outflow", "closing", "calendar"];
 /** 이름을 바꾸기 전 주소로 들어오는 링크 — 같은 자리로 보낸다. */
 const TAB_ALIAS: Record<string, Tab> = { receivables: "inflow", payables: "outflow" };
 
@@ -202,6 +188,7 @@ export default function FinanceScreen() {
     <div className="action-tabs">
       <div className="page-tabs">
         <button className={tab === "overview" ? "on" : ""} onClick={() => setTab("overview")}>Overview</button>
+        <button className={tab === "daybook" ? "on" : ""} onClick={() => setTab("daybook")}>Daybook</button>
         <button className={tab === "inflow" ? "on" : ""} onClick={() => setTab("inflow")}>Inflow</button>
         <button className={tab === "outflow" ? "on" : ""} onClick={() => setTab("outflow")}>Outflow</button>
         <button className={tab === "closing" ? "on" : ""} onClick={() => setTab("closing")}>Closing · VAT</button>
@@ -209,20 +196,13 @@ export default function FinanceScreen() {
       </div>
 
       {tab === "overview" && <OverviewTab />}
+      {tab === "daybook" && <DaybookTab />}
       {tab === "inflow" && <InflowTab />}
       {tab === "outflow" && <OutflowTab />}
       {tab === "closing" && <ClosingTab />}
       {tab === "calendar" && <CalendarTab />}
     </div>
   );
-}
-
-/** 기간 선택기의 월 이름 — 화면이 영문이라 브라우저 로캘을 타지 않게 직접 적는다. */
-const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-/** 고를 수 있는 시작 연도 — 지난 5년부터 다음 2년까지(예정은 그보다 멀리 잡히지 않는다). */
-function startYears(): number[] {
-  const y = new Date().getFullYear();
-  return Array.from({ length: 8 }, (_, i) => y - 5 + i);
 }
 
 // ── Overview — 잔액과 현금흐름을 한 화면에 ────────────────────────────────────
@@ -254,13 +234,6 @@ const BUCKET_HINT: Record<CashBucket, string> = {
  */
 /** 이번 달("2026-07") — 목록의 기간 필터 기본값. */
 const thisMonthStr = () => localDayStr().slice(0, 7);
-
-/** "2026-07" → ["2026-07-01", "2026-07-31"]. */
-function monthBounds(ym: string): [string, string] {
-  const [y, m] = ym.split("-").map(Number);
-  const last = new Date(y, m, 0).getDate();
-  return [`${ym}-01`, `${ym}-${String(last).padStart(2, "0")}`];
-}
 
 /** 구간 [lo,hi] 안인가. 한쪽이 비면 그쪽은 열려 있다(첫 구간이 과거를 흡수하는 규칙). */
 function inRange(d: string, lo: string, hi: string): boolean {
@@ -659,16 +632,6 @@ function BucketCard({ title, period, tone, lines, totalLabel, totalHref, total, 
   );
 }
 
-export function KpiTile({ label, main, sub, tone }: { label: string; main: React.ReactNode; sub?: string; tone: "blue" | "red" | "amber" | "green" }) {
-  return (
-    <div className={`fin-kpi fin-kpi--${tone}`}>
-      <div className="fin-kpi-label">{label}</div>
-      <div className="fin-kpi-main">{main}</div>
-      {sub ? <div className="fin-kpi-sub">{sub}</div> : null}
-    </div>
-  );
-}
-
 /** 수입 목록 합계 — 청구·수금·미수 3열을 통화별로 모은다. */
 function receivableTotals(rows: FinanceReceivable[]) {
   const t = { invoice: {} as MoneyByCurrency, paid: {} as MoneyByCurrency, outstanding: {} as MoneyByCurrency };
@@ -678,52 +641,6 @@ function receivableTotals(rows: FinanceReceivable[]) {
     t.outstanding[r.currency] = (t.outstanding[r.currency] || 0) + r.outstanding;
   }
   return t;
-}
-
-/**
- * 프로젝트 문서번호 → 그 프로젝트의 9단계(AR/AP 작업 화면) 링크.
- * 수금(AR)·매입청구(AP) 행은 여기서 편집할 수 없고 프로젝트 단계에서 관리하므로,
- * 번호를 눌러 그 자리로 바로 갈 수 있어야 한다. 오더 id 로 딥링크하면 목록이
- * rfq_id 를 찾아 팝업을 열어 준다(ProjectsScreen 의 ?order= 처리).
- */
-export function ProjectDocLink({
-  orderId,
-  rfqId,
-  label,
-  hint,
-  apPoId,
-}: {
-  orderId?: number;
-  /** 이 문서가 속한 프로젝트(RFQ). 목록에서 프로젝트를 찾는 기준값 — order_id 보다 우선. */
-  rfqId?: number;
-  label?: string;
-  /** 표 우측의 안내 문구 자리 — 링크를 못 걸 때 옅은 안내 문구로 남긴다. */
-  hint?: boolean;
-  /** 지급(AP) 행 전용 — AP 탭 + 이 벤더 P/O 가 선택된 상태로 연다. */
-  apPoId?: number;
-}) {
-  const text = label || "—";
-  // 프로젝트를 특정할 수 없는 행(오더·프로젝트 연결 없음)은 링크 없이 원래 표기로 둔다.
-  if (!orderId && !rfqId) return hint ? <span className="hint-inline">{text}</span> : <>{text}</>;
-  // rfq 와 order 를 함께 넘긴다 — rfq 로 프로젝트를 찾고, order 로 그 프로젝트 안에서
-  // 이 문서의 고객 P/O 를 고른다. (한 프로젝트에 P/O 가 여러 건일 수 있다.)
-  // 지급(AP) 행은 11단계(Payment Completed)로 연다 — 지급 확인 칸이 붙어 있는 단계라,
-  // 목록에서 누르면 바로 그 칸이 보인다. 수입(AR) 행은 청구서를 편집하는 9단계 그대로.
-  const params = [
-    rfqId ? `rfq=${rfqId}` : "",
-    orderId ? `order=${orderId}` : "",
-    apPoId ? "stage=11" : "stage=9",
-    apPoId ? `ap=${apPoId}` : "",
-  ].filter(Boolean).join("&");
-  return (
-    <Link
-      className={`fin-doc-link${hint ? " hint" : ""}`}
-      href={`/project?${params}`}
-      title={apPoId ? "Open this vendor bill · stage 11 Payable (AP)" : "Open this project's billing · AR/AP stage"}
-    >
-      {text}
-    </Link>
-  );
 }
 
 // ── Inflow — 들어올 돈(매출채권·기타수입)과 들어온 돈(수금) ─────────────────────
