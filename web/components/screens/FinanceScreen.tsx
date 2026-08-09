@@ -573,7 +573,12 @@ function OverviewTab() {
                 <col className="fin-cf-w-cum" />
               </colgroup>
               <thead>
-                <tr><th>Period</th><th className="num">Inflow</th><th className="num">Outflow</th><th className="num">Net</th><th className="num">Cumulative</th></tr>
+                {/* 이 머리줄은 펼쳐진 장부의 머리 노릇도 한다 — 두 표가 같은 자를 쓰므로
+                    장부는 자기 머리줄을 따로 세우지 않는다(FinanceDaybook 참고).
+                    Cumulative 를 Balance 라 부르는 이유: 이 값은 기초잔고에서 순증감을
+                    굴린 그 구간 끝의 통장잔고 자체다. 장부가 줄마다 굴리는 잔고와 같은
+                    것이고, 그 마지막 값이 바로 이 칸이다. */}
+                <tr><th>Period</th><th className="num">Inflow</th><th className="num">Outflow</th><th className="num">Net</th><th className="num">Balance</th></tr>
               </thead>
               <tbody>
                 {rows.map((r, i) => {
@@ -617,7 +622,7 @@ function OverviewTab() {
                         <td className="num" data-label="Balance"><b>{cash(r.cumulative)}</b></td>
                       </tr>
                       {/* 펼친 줄의 안쪽 — 기간·통화·기초잔고를 그대로 물려받으므로 이 장부의
-                          합계와 기말잔고는 바로 위 행의 Inflow·Outflow·Cumulative 와 같은 값이다. */}
+                          합계와 기말잔고는 바로 위 행의 Inflow·Outflow·Balance 와 같은 값이다. */}
                       {open ? (
                         <tr className="fin-cf-detail">
                           <td colSpan={5}>

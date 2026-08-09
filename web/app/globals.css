@@ -12397,29 +12397,17 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
    읽힌다. 폭이 고정이라 좁은 화면에서는 .fin-db-scroll 안에서 가로로 민다. */
 .fin-daybook { table-layout: fixed; }
 /* 폭은 위 Cash Flow 표와 한 벌이다(.fin-cf-w-* 참고). 세 덩어리의 오른쪽 끝이 그 표의
-   Inflow · Outflow · Cumulative 칸 끝과 각각 맞아떨어지도록 백분율을 나눠 놓았다:
+   Inflow · Outflow · Balance 칸 끝과 각각 맞아떨어지도록 백분율을 나눠 놓았다:
    8 + (17+8+9) + (17+8+9) + 24 = 100, 저쪽은 8 + 34 + 34 + (10+14) = 100. */
 .fin-daybook .fin-db-w-date { width: 8%; }
 .fin-daybook .fin-db-w-desc { width: 17%; }
 .fin-daybook .fin-db-w-ref { width: 8%; }
 .fin-daybook .fin-db-w-money { width: 9%; }
-/* 잔고는 저쪽 Net + Cumulative 두 칸의 폭을 함께 쓴다 — 장부에는 줄마다의 순증감이
-   따로 없고, 오른끝에 붙는 이 숫자가 저 표의 Cumulative 와 같은 값이기 때문이다. */
+/* 잔고는 저쪽 Net + Balance 두 칸의 폭을 함께 쓴다 — 장부에는 줄마다의 순증감이
+   따로 없고, 오른끝에 붙는 이 숫자가 저 표의 Balance 와 같은 값이기 때문이다. */
 .fin-daybook .fin-db-w-bal { width: 24%; }
-/* 두 갈래의 머리 — 색은 Overview 의 In(파랑)·Out(주황) 기둥과 같은 뜻으로 쓴다. */
-.fin-daybook .fin-db-grp {
-  text-align: center;
-  letter-spacing: 0.4px;
-  border-bottom: 1px solid var(--line);
-}
-.fin-daybook .fin-db-grp--in { color: #1b5e93; background: #eef4fb; }
-.fin-daybook .fin-db-grp--out { color: #a35c00; background: #fdf6ec; }
-/* 가운데 경계 — 나간 돈 칸의 끝과 잔고 앞에 세로선을 세운다. 머리는 두 줄짜리라
-   (Out/In 묶음 줄 + 칸 이름 줄) 줄마다 세는 자리가 다르다. */
-.fin-daybook thead tr:first-child th:nth-child(2),
-.fin-daybook thead tr:first-child th:nth-child(3),
-.fin-daybook thead tr:last-child th:nth-child(3),
-.fin-daybook thead tr:last-child th:nth-child(6),
+/* 가운데 경계 — 유입 칸의 끝과 잔고 앞에 세로선을 세운다. 이 표에는 머리줄이 없으므로
+   (위 표의 머리를 빌려 쓴다) 세 덩어리를 갈라 주는 건 이 두 선뿐이다. */
 .fin-daybook tbody td:nth-child(4),
 .fin-daybook tbody td:nth-child(7) { border-right: 1px solid var(--line-strong); }
 .fin-daybook td { vertical-align: top; }
@@ -12453,7 +12441,7 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
    나간 돈/들어온 돈은 왼쪽 색 띠로 구분한다(빈 반쪽 칸은 통째로 감춘다). */
 @media (max-width: 860px) {
   .fin-daybook, .fin-daybook tbody, .fin-daybook tr, .fin-daybook td { display: block; }
-  .fin-daybook thead, .fin-daybook colgroup { display: none; }
+  .fin-daybook colgroup { display: none; }
   /* 카드로 접히면 가로로 밀 것이 없다 — 스크롤 상자를 푼다. */
   .fin-db-scroll { overflow-x: visible; }
   .fin-daybook tbody tr {

@@ -127,7 +127,7 @@ export default function FinanceDaybook({ start, end, label, opening, currency, i
           <div className="fin-db-scroll">
             <table className="mini fin-daybook">
               {/* 폭은 위 Cash Flow 표(fin-cf-w-*)와 짝을 이룬다 — Inflow 세 칸의 오른쪽 끝이
-                  그 표의 Inflow 칸 끝과, Outflow 는 Outflow 칸 끝과, Balance 는 Cumulative
+                  그 표의 Inflow 칸 끝과, Outflow 는 Outflow 칸 끝과, Balance 는 그쪽 Balance
                   칸 끝과 맞는다. 그래서 아래 Total 줄과 마지막 잔고가 바로 위 행의 같은
                   금액 아래에 정확히 선다. */}
               <colgroup>
@@ -136,18 +136,9 @@ export default function FinanceDaybook({ start, end, label, opening, currency, i
                 <col className="fin-db-w-desc" /><col className="fin-db-w-ref" /><col className="fin-db-w-money" />
                 <col className="fin-db-w-bal" />
               </colgroup>
-              <thead>
-                <tr>
-                  <th rowSpan={2}>Date</th>
-                  <th colSpan={3} className="fin-db-grp fin-db-grp--in">Inflow</th>
-                  <th colSpan={3} className="fin-db-grp fin-db-grp--out">Outflow</th>
-                  <th rowSpan={2} className="num">Balance</th>
-                </tr>
-                <tr>
-                  <th>Description</th><th>Reference</th><th className="num">Amount</th>
-                  <th>Description</th><th>Reference</th><th className="num">Amount</th>
-                </tr>
-              </thead>
+              {/* 머리줄이 없다 — 바로 위 Cash Flow 표의 Period · Inflow · Outflow · Balance
+                  가 같은 자리에 서 있어 그것이 이 표의 머리 노릇을 한다. 여기서 한 벌 더
+                  세우면 같은 이름이 두 줄 겹쳐 어느 쪽 표를 읽는지 흐려진다. */}
               <tbody>
                 {/* 첫 줄은 이월 — 잔고가 어디서 출발했는지 표 안에서 읽히게. */}
                 <tr className="fin-db-carry">
