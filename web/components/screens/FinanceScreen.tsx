@@ -461,7 +461,7 @@ function OverviewTab() {
                 것인지를 한 번만 말한다(기둥마다 이름 뒤에 "· Aug 2026" 을 되풀이하던
                 것을 여기로 모았다). 고르는 칸이기도 하다: 아래 차트·표를 눌러도 같은
                 값이 바뀌고, 여기서 바꾸면 세 기둥이 그 구간으로 옮겨 간다. */}
-            <div className="fin-three-lead">
+            <div className="panel fin-bucket-card fin-three-lead">
               <label className="fin-inline-field fin-focus-field">
                 <span className="fin-focus-cap">Showing</span>
                 <select
