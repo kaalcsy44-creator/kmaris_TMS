@@ -295,6 +295,13 @@ body {
 .gsearch-input::placeholder {
   color: #8fa0b6;
 }
+/* type="search" 가 딸려 오게 하는 브라우저 기본 지우개 — 칸을 검색칸이라고 밝히려고 쓴
+   type 이지, 단추를 하나 더 얻으려던 게 아니다(지우는 건 Ctrl+A 나 Esc 로 충분하다). */
+.gsearch-input::-webkit-search-cancel-button,
+.gsearch-input::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+}
 .gsearch-input:focus {
   outline: none;
   width: 300px;

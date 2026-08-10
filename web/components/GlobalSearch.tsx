@@ -104,6 +104,9 @@ export default function GlobalSearch() {
 
   function onKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Escape") {
+      // type="search" 는 Esc 에 제 값을 지우는 것이 기본 동작 — 그 손은 막는다. 여기서
+      // Esc 는 '펼친 결과를 접는다'는 뜻이고, 찾던 말까지 지우면 다시 쳐야 한다.
+      e.preventDefault();
       setOpen(false);
       inputRef.current?.blur();
       return;
@@ -136,9 +139,21 @@ export default function GlobalSearch() {
           d="M21 21l-4.3-4.3M11 18a7 7 0 1 1 0-14 7 7 0 0 1 0 14Z"
         />
       </svg>
+      {/*
+        검색칸임을 브라우저에게도 분명히 해 둔다. 그냥 텍스트 칸으로 두면 비밀번호 폼이
+        있는 화면(설정 → Users)에서 크롬이 이 칸을 그 폼의 아이디 칸으로 착각해 저장된
+        사용자명을 채워 넣는다 — 탭을 열자마자 검색어가 제 이름으로 박히고 결과가 펼쳐진다.
+        폼 쪽(설정 화면)에도 울타리를 쳐 두었지만, 머리줄은 모든 화면에 서 있으므로
+        이 칸도 스스로 막아 둔다. data-* 둘은 1Password·LastPass 용.
+      */}
       <input
         ref={inputRef}
         className="gsearch-input"
+        type="search"
+        name="global-search"
+        autoComplete="off"
+        data-1p-ignore=""
+        data-lpignore="true"
         placeholder="Search everything… (Ctrl+K)"
         value={q}
         onChange={(e) => setQ(e.target.value)}

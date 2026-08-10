@@ -476,8 +476,11 @@ function UsersTab() {
   const editor = editId !== null ? (
     <Modal title={editorTitle} onClose={cancel} form>
       <div className="form-grid">
-        <TextField label="Username *" value={form.username} onChange={(v) => setForm({ ...form, username: v })} />
-        <TextField label="Email" value={form.email} onChange={(v) => setForm({ ...form, email: v })} />
+        {/* 관리자가 '남의 계정'을 만들거나 고치는 자리다 — 브라우저가 저장해 둔 제 아이디·
+            비밀번호를 밀어 넣으면 엉뚱한 사람의 계정이 만들어진다. 그래서 이 칸들은
+            자동완성 대상이 아니라고 못박아 둔다(비밀번호는 new-password 로). */}
+        <TextField label="Username *" value={form.username} onChange={(v) => setForm({ ...form, username: v })} autoComplete="off" />
+        <TextField label="Email" value={form.email} onChange={(v) => setForm({ ...form, email: v })} autoComplete="off" />
         <label className="form-field">
           <span>Role</span>
           <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
@@ -491,6 +494,7 @@ function UsersTab() {
           value={password}
           onChange={setPassword}
           type="password"
+          autoComplete="new-password"
         />
         <label className="check-inline">
           <input
@@ -863,11 +867,25 @@ function MyPasswordChange() {
   return (
     <div className="subpanel" style={{ marginTop: 20 }}>
       <div className="sub-h">Change my password{me ? ` — ${me.username}` : ""}</div>
-      <div className="form-grid">
-        <TextField label="Current password" value={oldPw} onChange={setOldPw} type="password" />
-        <TextField label="New password" value={newPw} onChange={setNewPw} type="password" />
-        <TextField label="Confirm new password" value={newPw2} onChange={setNewPw2} type="password" />
-      </div>
+      {/*
+        진짜 <form> 으로 감싸고 계정 칸을 함께 둔다 — 모양 때문이 아니라 브라우저 때문이다.
+        비밀번호 칸만 덩그러니 있으면 크롬은 '이건 로그인 폼'이라 보고 아이디 칸을 스스로
+        찾아 나서는데, 이 페이지에서 그 앞의 텍스트 입력은 머리줄의 전역 검색창뿐이라
+        거기에 저장된 사용자명을 채워 넣는다(그래서 Users 탭만 열면 검색창에 제 이름이
+        박히고 결과 목록이 펼쳐졌다). 폼으로 울타리를 치고 autocomplete 로 각 칸이 무엇인지
+        밝혀 두면, 채울 곳이 이 안에서 정해져 검색창까지 손이 뻗지 않는다.
+        계정 칸은 감춰 두되 지우지는 않는다 — 비밀번호 관리자가 '어느 계정의 비밀번호가
+        바뀌었는지' 알아야 저장된 항목을 갱신해 준다.
+      */}
+      <form
+        className="form-grid"
+        onSubmit={(e) => { e.preventDefault(); if (oldPw && newPw && newPw2) submit(); }}
+      >
+        <input type="text" name="username" autoComplete="username" value={me?.username ?? ""} readOnly hidden />
+        <TextField label="Current password" value={oldPw} onChange={setOldPw} type="password" autoComplete="current-password" />
+        <TextField label="New password" value={newPw} onChange={setNewPw} type="password" autoComplete="new-password" />
+        <TextField label="Confirm new password" value={newPw2} onChange={setNewPw2} type="password" autoComplete="new-password" />
+      </form>
       <div className="form-actions">
         <button className="btn primary" onClick={submit} disabled={!oldPw || !newPw || !newPw2}>
           Change password
@@ -3065,16 +3083,19 @@ function TextField({
   value,
   onChange,
   type = "text",
+  autoComplete,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   type?: string;
+  /** 브라우저·비밀번호 관리자에게 이 칸이 무엇인지 밝힌다(비밀번호 칸에서 특히 중요). */
+  autoComplete?: string;
 }) {
   return (
     <label className="form-field">
       <span>{label}</span>
-      <input type={type} value={value} onChange={(e) => onChange(e.target.value)} />
+      <input type={type} value={value} onChange={(e) => onChange(e.target.value)} autoComplete={autoComplete} />
     </label>
   );
 }
