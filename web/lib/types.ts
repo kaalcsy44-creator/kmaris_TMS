@@ -1010,7 +1010,11 @@ export type FinanceCashflowRow = {
   /** 위 유입·유출 중 이미 오간 금액(나머지가 아직 안 온 예정). */
   actual_inflow: number;
   actual_outflow: number;
-  /** 예정분의 출처별 내역. in_ar + in_income + actual_inflow = inflow (유출도 같다). */
+  /**
+   * 예정분의 출처별 내역. in_ar + in_income + actual_inflow = inflow (유출도 같다).
+   * 단 예정을 잔고 밖에 세워 두면(include_expected=0) 이 갈래들은 inflow 밖에 있는
+   * '잔고에 넣지 않은 예정'이 된다 — 내역은 그대로 보여 주되 잔고는 건드리지 않는다.
+   */
   in_ar: number;
   in_income: number;
   out_ap: number;
@@ -1022,6 +1026,13 @@ export type FinanceCashflowRow = {
    */
   overdue_in: number;
   overdue_out: number;
+  /**
+   * 아직 예정일이 오지 않은 미정산(연체와 겹치지 않는다). include_expected=0 이면 위
+   * inflow/outflow **밖에** 있고 — 잔고는 실제로 오간 돈만으로 굴러간다 — 1 이면 그
+   * 안에 든 예정분이다. 옛 백엔드는 이 필드를 보내지 않는다(그때는 늘 굴린 값).
+   */
+  expected_in?: number;
+  expected_out?: number;
   net: number;
   cumulative: number;
 };
@@ -1042,6 +1053,14 @@ export type FinanceCashflow = {
   overdue_in: number;
   overdue_out: number;
   overdue_included: boolean;
+  /** 창 전체의 예정(아직 예정일 전) — 잔고 밖에 세워 두었을 때 그 크기. */
+  expected_in?: number;
+  expected_out?: number;
+  /**
+   * 이 집계가 예정을 굴렸는가. 스위치가 아니라 이 값으로 화면이 정한다 — 옛 백엔드는
+   * 이 필드가 없고(undefined), 그때 집계는 예정을 그대로 굴린 값이라 화면만 빼면 어긋난다.
+   */
+  expected_included?: boolean;
   ending: number;
 };
 

@@ -93,7 +93,7 @@ function daysLate(iso: string): number {
   return Math.max(0, Math.round((today - due) / 86400000));
 }
 
-export default function FinanceDaybook({ start, end, label, opening, currency, includePo, parkOverdue, first }: {
+export default function FinanceDaybook({ start, end, label, opening, currency, includePo, parkOverdue, parkExpected, first }: {
   start: string;
   end: string;
   /** 구간 이름 — 위 표의 Period 칸과 같은 말("2026-08", "8/1~8/7"). */
@@ -108,6 +108,13 @@ export default function FinanceDaybook({ start, end, label, opening, currency, i
    * 받는다(부모가 응답을 보고 정한다).
    */
   parkOverdue: boolean;
+  /**
+   * 예정(아직 안 오간 돈)을 통째로 잔고 밖에 세워 둘지 — parkOverdue 와 같은 이유로
+   * 부모가 응답을 보고 정한다. 켜지면 잔고 칸은 실제로 오간 돈만으로 굴러가고, 예정 줄은
+   * 제자리(예정일)에 그대로 서되 잔고 칸을 비운다. 연체는 예정의 부분집합이라 이 값이
+   * 켜져 있으면 parkOverdue 와 무관하게 함께 세워진다.
+   */
+  parkExpected: boolean;
   /** 창의 첫 칸인가 — 그렇다면 앞선 연체·지난 회차까지 이 장부가 끌어안는다. */
   first: boolean;
 }) {
@@ -133,10 +140,12 @@ export default function FinanceDaybook({ start, end, label, opening, currency, i
     let prevDay = "";
     let metExpected = false;
     return merged.map(({ item, side }) => {
-      // 연체는 잔고를 움직이지 않는다 — 예정일이 지나도록 오지 않은 돈이라, 이것으로
-      // 굴린 잔고는 이 줄 하나가 아니라 그 아래 전부와 다음 구간까지 함께 틀어진다.
-      // 줄은 제자리(원래 결제일)에 그대로 두고, 잔고 칸만 비운다.
-      const parked = item.overdue && parkOverdue;
+      // 아직 오지 않은 돈은 잔고를 움직이지 않는다 — 줄은 제자리(예정일)에 그대로 두고
+      // 잔고 칸만 비운다. 두 갈래로 세워 둔다:
+      //  · parkExpected — 예정 전부. 잔고를 '통장에 찍힌 것'으로 볼 때.
+      //  · parkOverdue  — 그중 날짜가 지난 것만. 예정으로 앞을 내다보되, 오지 않은 돈으로
+      //    굴린 잔고가 그 아래 전부와 다음 구간까지 함께 틀어지는 것은 막을 때.
+      const parked = (!item.actual && parkExpected) || (item.overdue && parkOverdue);
       if (!parked) balance += side === "in" ? item.amount : -item.amount;
       const dayStart = item.date !== prevDay;
       prevDay = item.date;
@@ -145,7 +154,7 @@ export default function FinanceDaybook({ start, end, label, opening, currency, i
       metExpected = metExpected || (!item.actual && !parked);
       return { item, side, balance: parked ? null : balance, dayStart, projected: metExpected };
     });
-  }, [data, opening, parkOverdue]);
+  }, [data, opening, parkOverdue, parkExpected]);
 
   return (
     <div className="fin-db-wrap">
@@ -193,14 +202,19 @@ export default function FinanceDaybook({ start, end, label, opening, currency, i
               </tbody>
             </table>
           </div>
-          {/* 한 줄만 남긴다. '날짜순 한 건씩'도 '합이 위 행과 같다'도 보면 알 수 있는 것들이고,
-              서랍을 열 때마다 같은 문단을 다시 읽힐 이유가 없다. 보아서는 알 수 없는 건
-              하나뿐이다 — 예정 건이 섞여 있어 그 아래 잔고는 사실이 아니라 예측이라는 것. */}
+          {/* 한 줄만 남긴다. '날짜순 한 건씩'도 '합이 아래 행과 같다'도 보면 알 수 있는
+              것들이고, 서랍을 열 때마다 같은 문단을 다시 읽힐 이유가 없다. 보아서는 알 수
+              없는 건 잔고 칸이 무엇을 세고 있는가 하나뿐이다 — 예정을 굴린 예측인지,
+              실제로 오간 돈만인지. */}
           <p className="hint-inline" style={{ display: "block", marginTop: 10 }}>
-            ✓ already moved, on the day it moved; the rest sit on their due date, so the balance past them is a
-            projection.{rows.some((r) => r.balance === null)
-              ? " Overdue lines stay on the date they were due and show — for balance: the money has not moved, so it is not counted."
-              : ""}
+            {parkExpected
+              ? "✓ already moved, on the day it moved — the balance counts these and nothing else. The rest sit on their due date and show — for balance: scheduled is not settled, so it is not counted here."
+              : <>
+                  ✓ already moved, on the day it moved; the rest sit on their due date, so the balance past them is a
+                  projection.{rows.some((r) => r.balance === null)
+                    ? " Overdue lines stay on the date they were due and show — for balance: the money has not moved, so it is not counted."
+                    : ""}
+                </>}
           </p>
         </>
       )}

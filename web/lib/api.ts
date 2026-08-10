@@ -807,12 +807,19 @@ export function fetchFinanceCashflow(
   currency = "KRW",
   start = "",
   /** 연체(예정일이 지난 미정산)를 잔고에 태울지 — 기본은 흐름 밖에 세워 둔다. */
-  includeOverdue = false
+  includeOverdue = false,
+  /**
+   * 예정(아직 안 오간 돈)을 잔고에 태울지 — 기본은 세워 둔다. 끄면 잔고가 통장을 그대로
+   * 비추고(실제로 오간 돈만), 켜면 앞으로의 부족을 미리 보는 예측이 된다.
+   * 연체는 예정의 부분집합이라 이걸 끄면 includeOverdue 는 뜻을 잃는다(서버가 함께 끈다).
+   */
+  includeExpected = false
 ): Promise<FinanceCashflow> {
   return get<FinanceCashflow>(
     `/api/admin/finance/cashflow?unit=${unit}&count=${count}&opening=${opening}` +
       `&include_po=${includePo ? 1 : 0}&currency=${encodeURIComponent(currency)}` +
       `&include_overdue=${includeOverdue ? 1 : 0}` +
+      `&include_expected=${includeExpected ? 1 : 0}` +
       (start ? `&start=${encodeURIComponent(start)}` : "")
   );
 }

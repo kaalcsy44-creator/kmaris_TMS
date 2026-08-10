@@ -11890,6 +11890,17 @@ button.ov-tl-stage:hover {
 /* 그 칸에 밀려 있는 돈 — 실적 줄과 같은 자리·같은 크기지만 색으로 갈린다. 기본값에서는
    이 금액이 위 합계 '밖'에 있으므로, 회색으로 물리면 위 숫자의 일부로 읽힌다. */
 .fin-cf-overdue { font-size: 11px; font-weight: 600; color: #c0392b; margin-top: 2px; }
+/* 잔고 밖에 세워 둔 예정 — 연체 줄과 같은 자리에 서는 '합계 밖의 돈'이라 옅은 회색이
+   아니라 제 색을 준다. 다만 연체의 붉은색과는 갈라야 한다: 밀린 돈이 아니라 아직 날이
+   오지 않은 돈이고, 둘이 한 칸에 나란히 설 수 있어 색이 같으면 구분이 사라진다. */
+.fin-cf-parked { font-size: 11px; font-weight: 600; color: #5b6b82; margin-top: 2px; }
+/* 세 기둥에서 합계에 들지 않은 갈래 — 줄을 지우지 않고 눕힌다(무엇이 예정되어 있는지는
+   남기되, 더해서 합계가 나오지 않는 줄임을 알린다). */
+.fin-bucket-card tr.fin-bucket-off > td { color: var(--muted); }
+.fin-bucket-card tr.fin-bucket-off > td.num { font-style: italic; }
+/* 고를 것이 없는 스위치 — 지우지 않고 눕혀 둔다(왜 못 고르는지는 title 이 말한다). */
+.check-chip.off { opacity: 0.5; }
+.check-chip.off:hover { border-color: var(--line); }
 .fin-kpi-label { font-size: 12px; color: var(--muted); font-weight: 600; }
 .fin-kpi-main { font-size: 22px; font-weight: 800; color: var(--navy); margin-top: 4px; font-variant-numeric: tabular-nums; }
 /* 통화별로 나눠 적는 금액(환산 없이 ₩·$ 각 줄). KPI 는 두 번째 줄부터 조금 작게. */
@@ -12480,8 +12491,8 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
     font-weight: 600;
     color: var(--muted);
   }
-  /* '이미 오간 돈' 줄은 값 아래가 아니라 그 줄 오른쪽 끝에 매달린다. */
-  .fin-cf-actual { width: 100%; text-align: right; margin-top: 0; }
+  /* '이미 오간 돈'·'잔고 밖 예정' 줄은 값 아래가 아니라 그 줄 오른쪽 끝에 매달린다. */
+  .fin-cf-actual, .fin-cf-parked { width: 100%; text-align: right; margin-top: 0; }
   /* 펼친 장부는 또 하나의 카드가 아니라 바로 '아래' 카드에 딸린 서랍이다 — 격자·테두리를
      걷어내고 카드와 붙여, 어느 구간의 안쪽인지 자리로 읽히게 한다. */
   .fin-cf-table tr.fin-cf-detail {

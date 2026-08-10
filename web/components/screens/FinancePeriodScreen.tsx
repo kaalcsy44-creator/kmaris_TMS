@@ -101,7 +101,10 @@ export default function FinancePeriodScreen() {
   // 연체를 합계에 넣을지 — Overview 의 같은 이름 스위치를 주소로 물려받는다. 기본은
   // 빼고 센다(오지 않은 돈은 잔고가 아니다). 여기 합계가 저쪽 표의 그 행과 맞아야 하므로
   // 규칙도 같아야 한다.
-  const includeOverdue = params.get("ovd") === "1";
+  // 예정(아직 안 오간 돈)을 합계에 넣을지 — 같은 스위치를 주소로 물려받는다. 기본은
+  // 빼고 센다. 연체는 예정의 부분집합이라, 예정을 통째로 빼면 연체 스위치는 뜻을 잃는다.
+  const includeExpected = params.get("exp") === "1";
+  const includeOverdue = params.get("ovd") === "1" && includeExpected;
   // Overview 세 기둥의 한 줄을 눌러 왔으면 그 갈래만 펼친다(비어 있으면 유입·유출 전부).
   const bucketParam = params.get("bucket") || "";
   const bucket: CashBucket | "" = isBucket(bucketParam) ? bucketParam : "";
@@ -129,17 +132,25 @@ export default function FinancePeriodScreen() {
                  : Promise.resolve(EMPTY_ITEMS))
   );
 
-  // 서버가 주는 total_* 는 연체까지 다 더한 값이라, 빼고 볼 때는 여기서 다시 센다 —
-  // 그래야 Overview 표의 그 행·그 칸과 같은 숫자가 나온다.
+  // 서버가 주는 total_* 는 예정·연체까지 다 더한 값이라, 빼고 볼 때는 여기서 다시 센다 —
+  // 그래야 Overview 표의 그 행·그 칸과 같은 숫자가 나온다. 잔고 밖에 세워 둔 금액은
+  // 표 발밑에 따로 적으므로, 어느 갈래를 얼마나 뺐는지도 함께 돌려준다.
   const sums = useMemo(() => {
-    const add = (rows: FinanceCashflowItem[], parked: boolean) =>
-      rows.reduce((t, r) => t + (!!r.overdue === parked ? r.amount : 0), 0);
-    const odIn = data ? add(data.inflow, true) : 0;
-    const odOut = data ? add(data.outflow, true) : 0;
-    const inflow = (data?.total_inflow ?? 0) - (includeOverdue ? 0 : odIn);
-    const outflow = (data?.total_outflow ?? 0) - (includeOverdue ? 0 : odOut);
-    return { inflow, outflow, odIn, odOut, net: inflow - outflow };
-  }, [data, includeOverdue]);
+    /** 조건에 맞는 줄만 더한다. */
+    const add = (rows: FinanceCashflowItem[], keep: (r: FinanceCashflowItem) => boolean) =>
+      rows.reduce((t, r) => t + (keep(r) ? r.amount : 0), 0);
+    // 연체 = 예정 중 날짜가 지난 것. 예정을 통째로 뺄 때는 '연체가 아닌 예정'을 따로 세어
+    // 둘을 각각 적는다(합쳐 적으면 어느 쪽이 밀린 돈인지가 사라진다).
+    const odIn = data ? add(data.inflow, (r) => !!r.overdue) : 0;
+    const odOut = data ? add(data.outflow, (r) => !!r.overdue) : 0;
+    const expIn = data ? add(data.inflow, (r) => !r.actual && !r.overdue) : 0;
+    const expOut = data ? add(data.outflow, (r) => !r.actual && !r.overdue) : 0;
+    const offIn = (includeOverdue ? 0 : odIn) + (includeExpected ? 0 : expIn);
+    const offOut = (includeOverdue ? 0 : odOut) + (includeExpected ? 0 : expOut);
+    const inflow = (data?.total_inflow ?? 0) - offIn;
+    const outflow = (data?.total_outflow ?? 0) - offOut;
+    return { inflow, outflow, odIn, odOut, expIn, expOut, net: inflow - outflow };
+  }, [data, includeOverdue, includeExpected]);
   const net = sums.net;
   const backHref = "/finance";
 
@@ -212,7 +223,9 @@ export default function FinancePeriodScreen() {
               rows={s === "in" ? data.inflow : data.outflow}
               total={s === "in" ? sums.inflow : sums.outflow}
               overdue={s === "in" ? sums.odIn : sums.odOut}
+              expected={s === "in" ? sums.expIn : sums.expOut}
               includeOverdue={includeOverdue}
+              includeExpected={includeExpected}
               currency={currency}
             />
           ))}
@@ -228,16 +241,19 @@ export default function FinancePeriodScreen() {
   );
 }
 
-function ItemPanel({ side, title, rows, total, overdue, includeOverdue, currency }: {
+function ItemPanel({ side, title, rows, total, overdue, expected, includeOverdue, includeExpected, currency }: {
   side: "in" | "out";
   /** 갈래를 걸고 들어왔을 때의 제목(비우면 Inflow/Outflow). */
   title?: string;
   rows: FinanceCashflowItem[];
-  /** 합계 — 연체를 뺀(또는 넣은) 값. 아래 줄들의 단순 합이 아닐 수 있다. */
+  /** 합계 — 예정·연체를 뺀(또는 넣은) 값. 아래 줄들의 단순 합이 아닐 수 있다. */
   total: number;
   /** 그중 연체 금액. 빼고 셀 때는 이 값이 total 밖에 있다는 뜻이라 따로 적는다. */
   overdue: number;
+  /** 그중 아직 예정일이 오지 않은 미정산(연체와 겹치지 않는다). 같은 이유로 따로 적는다. */
+  expected: number;
   includeOverdue: boolean;
+  includeExpected: boolean;
   currency: string;
 }) {
   const cash = (n: number) => money(n, currency);
@@ -282,8 +298,15 @@ function ItemPanel({ side, title, rows, total, overdue, includeOverdue, currency
                 <td className="num">{cash(r.amount)}</td>
               </tr>
             ))}
-            {/* 연체를 빼고 셀 때는 합계가 위 줄들의 단순 합이 아니다 — 얼마를 빼고 센
-                것인지 그 자리에서 밝힌다(안 밝히면 더해 보는 사람이 틀렸다고 읽는다). */}
+            {/* 예정·연체를 빼고 셀 때는 합계가 위 줄들의 단순 합이 아니다 — 얼마를 빼고
+                센 것인지 그 자리에서 밝힌다(안 밝히면 더해 보는 사람이 틀렸다고 읽는다).
+                예정이 큰 덩어리이고 연체는 그중 날짜가 지난 몫이라 예정을 먼저 적는다. */}
+            {expected && !includeExpected ? (
+              <tr className="fin-period-overdue">
+                <td colSpan={5}>Expected — not counted in the total</td>
+                <td className="num">−{cash(expected)}</td>
+              </tr>
+            ) : null}
             {overdue ? (
               <tr className="fin-period-overdue">
                 <td colSpan={5}>
