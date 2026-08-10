@@ -431,22 +431,9 @@ function OverviewTab() {
             {(unit === "month" ? [3, 6, 12, 18, 24] : [8, 12, 16, 24]).map((n) => <option key={n} value={n}>{n}</option>)}
           </select>
         </label>
-        {/* 어느 칸을 들여다볼지 — 아래 차트·표를 눌러도 같은 값이 바뀐다. 여기 둔 이유는
-            창이 열두 칸이라, 표까지 내려가지 않고도 달을 바꿔 볼 수 있어야 해서다. */}
-        <label className="fin-inline-field fin-focus-field">
-          Showing
-          <select
-            className="fin-focus-select"
-            value={idx}
-            onChange={(e) => setPicked(Number(e.target.value))}
-            aria-label="Period in focus"
-            disabled={!rows.length}
-          >
-            {rows.map((r, i) => (
-              <option key={r.label} value={i}>{unit === "month" ? monthLabel(r.label) : r.label}</option>
-            ))}
-          </select>
-        </label>
+        {/* '어느 칸을 들여다볼지'는 이 줄에 없다 — 이 줄은 창을 어떻게 뜰지 정하는
+            설정들이고, 그건 아래 세 기둥이 무엇을 말하는지를 정하는 것이라 기둥 바로
+            왼쪽(표의 Period 칸 자리)에 서 있다. */}
         <div className="seg-toggle" role="group" aria-label="Currency">
           <button className={currency === "KRW" ? "on" : ""} onClick={() => setCurrency("KRW")}>₩ KRW</button>
           <button className={currency === "USD" ? "on" : ""} onClick={() => setCurrency("USD")}>$ USD</button>
@@ -470,6 +457,26 @@ function OverviewTab() {
               갈래 금액에 ?? 0 을 두는 건 배포 시차 때문 — 백엔드가 아직 옛 버전이면
               그 필드가 비어 와서 NaN 이 찍힌다. */}
           <div className="fin-three-cols">
+            {/* 앞머리 — 아래 표의 Period 칸과 같은 자리에 서서, 세 기둥이 어느 구간의
+                것인지를 한 번만 말한다(기둥마다 이름 뒤에 "· Aug 2026" 을 되풀이하던
+                것을 여기로 모았다). 고르는 칸이기도 하다: 아래 차트·표를 눌러도 같은
+                값이 바뀌고, 여기서 바꾸면 세 기둥이 그 구간으로 옮겨 간다. */}
+            <div className="fin-three-lead">
+              <label className="fin-inline-field fin-focus-field">
+                <span className="fin-focus-cap">Showing</span>
+                <select
+                  className="fin-focus-select"
+                  value={idx}
+                  onChange={(e) => setPicked(Number(e.target.value))}
+                  aria-label="Period in focus"
+                  disabled={!rows.length}
+                >
+                  {rows.map((r, i) => (
+                    <option key={r.label} value={i}>{unit === "month" ? monthLabel(r.label) : r.label}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
             {/* 이름은 Cash Flow 표의 칸 이름과 같은 말을 쓴다 — 같은 금액을 위에서는
                 'In', 아래에서는 'Inflow' 라 부르면 매번 옮겨 읽어야 한다. */}
             <BucketCard
@@ -495,7 +502,8 @@ function OverviewTab() {
               href={(b) => ledgerHref(row, idx === 0, b)}
             />
             <div className="panel fin-bucket-card fin-bucket--balance">
-              <h3 className="form-title">Balance <span className="muted">· {pickedLabel}</span></h3>
+              {/* 구간 이름은 왼쪽 앞머리가 세 기둥을 대신해 한 번만 적는다. */}
+              <h3 className="form-title">Balance</h3>
               <table className="mini">
                 <tbody>
                   <tr>
@@ -675,7 +683,8 @@ function BucketCard({ title, period, tone, lines, totalLabel, totalHref, total, 
   const cash = (n: number) => money(n, currency);
   return (
     <div className={`panel fin-bucket-card fin-bucket--${tone}`}>
-      <h3 className="form-title">{title} <span className="muted">· {period}</span></h3>
+      {/* 구간 이름은 왼쪽 앞머리가 한 번만 적는다 — period 는 링크 설명(title)에만 남는다. */}
+      <h3 className="form-title">{title}</h3>
       <table className="mini">
         <tbody>
           {lines.map(([b, amount]) => (
