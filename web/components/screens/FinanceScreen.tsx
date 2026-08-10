@@ -208,17 +208,26 @@ export default function FinanceScreen() {
 // 예전 Cash Flow 탭이 여기로 합쳐졌다. '얼마 남았나'와 '얼마 들어오고 나가나'는
 // 같은 질문의 앞뒤인데 탭이 갈라져 있어 매번 오가야 했다.
 
-/** 현금흐름 한 칸을 이루는 여섯 갈래 — 서버 bucket 값과 같은 이름. */
+/**
+ * 현금흐름 한 칸을 이루는 여섯 갈래 — 서버 bucket 값(키)은 그대로 두고 이름만 화면용.
+ *
+ * 첫 줄을 'Receivables'·'Payables' 라 부르지 않는다. 그 말은 '아직 안 받은/안 낸 돈'이라
+ * 는 뜻이고, 그렇다면 둘째 줄(기타수입·기타비용)도 똑같이 미수·미지급이라 이름이 갈래를
+ * 가르지 못한다. 이 셋을 실제로 가르는 것은 정산 여부가 아니라 돈의 출처다 —
+ * 거래에서 나온 것인가(매출·매입), 그 밖인가(이자·임차료·급여), 이미 오갔는가.
+ * 그래서 첫 줄은 Sales / Purchases 로 부른다. 미정산이라는 사실은 딸린 한 줄(due)과
+ * 건별 상태(Receivable / Payable)가 이미 말하고 있다.
+ */
 const BUCKET_LABEL: Record<CashBucket, string> = {
-  receivables: "Receivables",
+  receivables: "Sales",
   income: "Other income",
   collected: "Received",
-  payables: "Payables",
+  payables: "Purchases",
   other: "Other costs",
   paid: "Paid",
 };
 const BUCKET_HINT: Record<CashBucket, string> = {
-  receivables: "invoices due",
+  receivables: "customer invoices due",
   income: "other income due",
   collected: "already in the account",
   payables: "vendor bills due",
@@ -1176,7 +1185,7 @@ function InflowTab() {
       ) : null}
       <div className="fin-subtab-bar">
         <div className="seg-toggle fin-subtabs" role="group" aria-label="Inflow view">
-          <button className={view === "receivables" ? "on" : ""} onClick={() => setView("receivables")}>Receivables</button>
+          <button className={view === "receivables" ? "on" : ""} onClick={() => setView("receivables")}>Sales</button>
           <button className={view === "income" ? "on" : ""} onClick={() => setView("income")}>Other income</button>
           <button className={view === "collected" ? "on" : ""} onClick={() => setView("collected")}>Received</button>
         </div>
@@ -1747,7 +1756,7 @@ function OutflowTab() {
       ) : null}
       <div className="fin-subtab-bar">
         <div className="seg-toggle fin-subtabs" role="group" aria-label="Outflow view">
-          <button className={view === "payables" ? "on" : ""} onClick={() => setView("payables")}>Payables</button>
+          <button className={view === "payables" ? "on" : ""} onClick={() => setView("payables")}>Purchases</button>
           <button className={view === "other" ? "on" : ""} onClick={() => setView("other")}>Other costs</button>
           <button className={view === "paid" ? "on" : ""} onClick={() => setView("paid")}>Paid</button>
         </div>
@@ -1762,7 +1771,7 @@ function OutflowTab() {
           ? "Vendor bills arrive here automatically from the project's billing stages and are read-only — click the bill number to open that project's stage 11 Payable (AP), where the payment is confirmed. Payments registered by hand under the vendor-payment category sit here too."
           : view === "other"
             ? "The company's own costs — rent, payroll, utilities, taxes — are registered by hand here; monthly/quarterly/yearly items appear as occurrences on the calendar."
-            : "Money that has actually left, dated on the day it went out. Vendor bills and other costs together, newest first."}
+            : "Money that has actually left, dated on the day it went out. Purchases and other costs together, newest first."}
       </p>
 
       {view === "paid" ? (
@@ -2472,7 +2481,7 @@ function CalendarTab() {
         {/* 색은 돈의 방향 두 가지뿐 — 상태(예정/결제됨/연체)는 같은 계열의 농도가 말하므로
             범례는 계열 이름만 적고, 농도 규칙은 표 아래 설명이 받는다. */}
         <div className="fin-legend fin-cal-legend">
-          <span className="fin-legend-item"><span className="fin-dot fin-dot--rec" /> Receivables (AR) · income</span>
+          <span className="fin-legend-item"><span className="fin-dot fin-dot--rec" /> Sales (AR) · other income</span>
           <span className="fin-legend-item"><span className="fin-dot fin-dot--pay" /> Payables</span>
         </div>
       </div>
