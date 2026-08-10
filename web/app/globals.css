@@ -12015,8 +12015,6 @@ table.mini tfoot .fin-foot-name { text-align: left; }
   padding: 0 6px;
   font-size: 13px;
 }
-/* 전체 합계 줄 — 두 표를 합친 금액. 표 사이를 띄운 만큼 위와 확실히 떨어뜨린다. */
-.fin-ledger-total { margin-top: 18px; }
 
 /* ── 수입·지급 대장: 좁은 화면 ────────────────────────────────────────────
    한 줄에 아홉~열한 칸(거래처·번호·날짜 둘·금액 셋·상태·반복·조작)이라 폰에서는
@@ -12108,7 +12106,6 @@ table.mini tfoot .fin-foot-name { text-align: left; }
     border-bottom: 1px solid var(--line);
     text-align: left;
   }
-  .fin-ledger-total { margin-top: 10px; }
 }
 /* 납부 기록 팝업 — 날짜 한두 칸만 받는 좁은 폼(세로 스택, 여백 최소). */
 .fin-pay-form { display: flex; flex-direction: column; gap: 10px; }

@@ -1646,6 +1646,47 @@ function OutflowTab() {
     );
   }
 
+  /**
+   * 합계 두 줄 — 보고 있는 표의 발밑. 표 '안'(tfoot)에 들어가야 한다.
+   *
+   * 전에는 합계만 따로 떼어 낸 표에 그렸고, 그 표는 앞 다섯 칸을 하나로 묶어 두었다.
+   * 표가 둘이면 칸 폭도 따로 정해진다 — table-layout:auto 는 제 표의 내용만 보고 폭을
+   * 나누므로, 폭 지정(fin-w-money)을 똑같이 걸어 두어도 두 표의 세로선은 어긋난다.
+   * 그래서 합계 금액이 위 금액들과 오른쪽 끝을 맞추지 못했다. 같은 표의 tfoot 이면
+   * 칸이 하나뿐이라 어긋날 자리가 없다.
+   *
+   * 열은 11칸 — 앞 다섯(분류·상대처·적요·청구일·예정일)을 묶고, 금액 셋을 제자리에 놓고,
+   * 뒤 셋(상태·반복·조작)은 비운다.
+   */
+  function totalsFoot(amountLabel: string) {
+    if (visible.length === 0) return null;
+    return (
+      <tfoot>
+        <tr className="foot-grand fin-foot-total">
+          <td className="total-label fin-foot-name" colSpan={5}>Total</td>
+          <td className="num total-value" data-label={amountLabel}>{byCurrencyLines(totals.invoice)}</td>
+          <td className="num total-value" data-label="Paid">{byCurrencyLines(totals.paid)}</td>
+          <td className="num total-value" data-label="Payable">{byCurrencyLines(totals.outstanding)}</td>
+          <td colSpan={3} />
+        </tr>
+        {/* 참고용 KRW 환산 — 오늘자 매매기준율(조회 실패 시 고정환율). 집계에는 쓰지 않는다.
+            ₩ 만 남은 표에서는 접는다(같은 숫자를 한 줄 더 적는 셈이라). */}
+        {needsKrwRef(totals.invoice, totals.paid, totals.outstanding) ? (
+          <tr className="fin-foot-ref">
+            <td className="fin-foot-name" colSpan={5}>
+              Total (In KRW · 1 USD = {fx.rate.toLocaleString()}
+              {fx.source === "exim" ? ` · 매매기준율 ${fx.date}` : " · fixed rate"})
+            </td>
+            <td className="num" data-label={amountLabel}>{won(toKrw(totals.invoice, fx.rate))}</td>
+            <td className="num" data-label="Paid">{won(toKrw(totals.paid, fx.rate))}</td>
+            <td className="num" data-label="Payable">{won(toKrw(totals.outstanding, fx.rate))}</td>
+            <td colSpan={3} />
+          </tr>
+        ) : null}
+      </tfoot>
+    );
+  }
+
   /** 반복 칸 — 수동 등록 항목의 주기(+종료일). AP 는 1회성이라 그대로 One-time. */
   function recurrenceCell(p: FinancePayable) {
     return (
@@ -1768,6 +1809,7 @@ function OutflowTab() {
               </tr>
             ))}
           </tbody>
+          {totalsFoot("Bill")}
         </table>
       </section>
       ) : (
@@ -1811,42 +1853,9 @@ function OutflowTab() {
               </tr>
             ))}
           </tbody>
+          {totalsFoot("Amount")}
         </table>
       </section>
-      )}
-
-      {/* ── 합계 — 보고 있는 표의 금액. 열 폭을 위 표와 맞춰 같은 자리에서 끝난다. ── */}
-      {view === "paid" || visible.length === 0 ? null : (
-        <table className="mini fin-ledger fin-ledger-total">
-          <colgroup>
-            <col />
-            <col className="fin-w-money" /><col className="fin-w-money" /><col className="fin-w-money" />
-            <col className="fin-w-status" /><col className="fin-w-rec" /><col className="fin-w-act" />
-          </colgroup>
-          <tfoot>
-            <tr className="foot-grand fin-foot-total">
-              <td className="total-label fin-foot-name">Total</td>
-              <td className="num total-value" data-label="Amount">{byCurrencyLines(totals.invoice)}</td>
-              <td className="num total-value" data-label="Paid">{byCurrencyLines(totals.paid)}</td>
-              <td className="num total-value" data-label="Payable">{byCurrencyLines(totals.outstanding)}</td>
-              <td /><td /><td />
-            </tr>
-            {/* 참고용 KRW 환산 — 오늘자 매매기준율(조회 실패 시 고정환율). 집계에는 쓰지 않는다.
-                ₩ 만 남은 표에서는 접는다(같은 숫자를 한 줄 더 적는 셈이라). */}
-            {needsKrwRef(totals.invoice, totals.paid, totals.outstanding) ? (
-              <tr className="fin-foot-ref">
-                <td className="fin-foot-name">
-                  Total (In KRW · 1 USD = {fx.rate.toLocaleString()}
-                  {fx.source === "exim" ? ` · 매매기준율 ${fx.date}` : " · fixed rate"})
-                </td>
-                <td className="num" data-label="Amount">{won(toKrw(totals.invoice, fx.rate))}</td>
-                <td className="num" data-label="Paid">{won(toKrw(totals.paid, fx.rate))}</td>
-                <td className="num" data-label="Payable">{won(toKrw(totals.outstanding, fx.rate))}</td>
-                <td /><td /><td />
-              </tr>
-            ) : null}
-          </tfoot>
-        </table>
       )}
 
       {paying ? (
