@@ -12336,17 +12336,18 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 /* 펼쳐진 장부가 앉는 줄 — 표의 한 칸이 아니라 그 행에서 열린 서랍이다.
    가로로는 밀 수 없으므로(안쪽 표가 바깥 표와 세로줄을 맞춰야 한다) 깊이로 가른다:
    바탕을 흰 면에서 한 단 낮추고, 위·아래 모서리에 안쪽 그림자를 둬 월별 줄들보다
-   한 겹 아래로 보이게 한다. 왼쪽 띠는 이 서랍이 어느 행의 것인지 가리킨다. */
+   한 겹 아래로 보이게 한다. 왼쪽 띠는 두지 않는다 — 서랍이 어느 행의 것인지는 바로
+   위에 붙어 있다는 자리와 그 행에 선 띠가 이미 말하고, 여기까지 띠를 늘어뜨리면
+   그 세로선이 장부의 첫 칸 옆에 또 하나의 기둥처럼 서서 날짜를 안으로 밀어 넣는다. */
 .fin-cf-detail > td {
   padding: 0;
   background: #e9eff7;
   border-bottom: 2px solid var(--line-strong);
   box-shadow:
-    inset 4px 0 0 var(--blue),
     inset 0 8px 10px -8px rgba(11, 29, 58, 0.38),
     inset 0 -7px 9px -8px rgba(11, 29, 58, 0.22);
 }
-/* 서랍을 연 행은 그 띠를 이어받는다 — 행과 서랍이 하나의 덩어리로 읽히게. */
+/* 서랍을 연 행에만 띠를 둔다 — 어느 행이 열려 있는지 표시하는 표식이다. */
 .fin-row-pick.fin-cf-open > td:first-child { box-shadow: inset 4px 0 0 var(--blue); }
 /* 좌우 여백은 0 — 안쪽 표가 바깥 표와 세로줄을 맞춰야 해서 한 칸도 밀 수 없다.
    white-space 를 되돌리는 건 이 서랍이 앉은 칸이 table.mini td 라 nowrap 을 물고
@@ -12457,6 +12458,11 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 .fin-daybook tbody td:nth-child(4),
 .fin-daybook tbody td:nth-child(7) { border-right: 1px solid var(--line-strong); }
 .fin-daybook td { vertical-align: top; }
+/* 날짜 칸은 바로 위 행의 구간 이름과 같은 선에서 시작한다 — "2026-08" 아래로 "08-01,
+   08-07…" 이 한 줄로 떨어져, 서랍 안의 날들이 그 달의 안쪽임을 자리로 말한다.
+   그 이름은 앞에 여닫이 손잡이를 달고 있어 칸 왼쪽에서 그만큼 밀려 서 있으므로,
+   여기서도 같은 만큼(손잡이 20px + 그 뒤 여백 6px) 들여 놓는다. */
+.fin-daybook tbody td:first-child { padding-left: calc(8px + 26px); }
 .fin-daybook .fin-db-date { font-variant-numeric: tabular-nums; color: var(--muted); font-weight: 600; }
 .fin-daybook .fin-db-desc { font-weight: 600; color: var(--ink); }
 /* 적요는 사람이 쓴 문장이라 길다 — table.mini 의 nowrap 을 여기서만 푼다. */
@@ -12533,6 +12539,8 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
   .fin-daybook tbody td:nth-child(7) { border-right: 0; border-top: 0; }
   /* 값이 없는 반대편 칸은 자리도 차지하지 않는다. */
   .fin-daybook tbody td:empty { display: none; }
+  /* 카드로 접히면 맞출 상대(위 행의 구간 이름)가 사라진다 — 들여쓰기를 되돌린다. */
+  .fin-daybook tbody td:first-child { padding-left: 8px; }
   .fin-daybook .fin-db-date {
     grid-column: 1 / -1;
     font-size: 11px;
