@@ -426,9 +426,17 @@ function OverviewTab() {
   const start = `${startY}-${String(startM).padStart(2, "0")}`;
   // 표에서 고른 한 칸(index) — 위쪽 세 기둥이 그 칸을 펼쳐 보여 준다.
   const [picked, setPicked] = useState<number | null>(null);
-  // 고른 칸의 일자별 장부를 표 안에서 펼쳐 두었는가. 펼치는 자리는 늘 고른 칸 하나뿐이라
-  // '어느 줄이 열렸나'를 따로 들고 있을 필요가 없다 — 여닫이 상태만 있으면 된다.
-  const [daybookOpen, setDaybookOpen] = useState(false);
+  // 일자별 장부를 펼쳐 둔 구간들(구간 이름으로 기억한다). 여러 달을 동시에 열어 둘 수
+  // 있어야 8월과 9월을 오르내리며 견줄 수 있다 — 하나만 열리면 9월을 여는 순간 8월이
+  // 닫혀, 두 달을 나란히 놓고 보려면 매번 다시 열어야 한다. index 가 아니라 이름으로
+  // 기억하는 건 창(시작월·구간 수)이 바뀌면 같은 index 가 다른 달을 가리키기 때문이다.
+  const [openRows, setOpenRows] = useState<Set<string>>(new Set());
+  const toggleRow = (label: string) =>
+    setOpenRows((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(label)) next.add(label);
+      return next;
+    });
   const cash = (n: number) => money(n, currency);
 
   const key = `finance:cashflow:${unit}:${count}:${opening}:${includePo}:${currency}:${start}:${includeOverdue}:${includeExpected}`;
@@ -718,7 +726,7 @@ function OverviewTab() {
               </thead>
               <tbody>
                 {rows.map((r, i) => {
-                  const open = i === idx && daybookOpen;
+                  const open = openRows.has(r.label);
                   const periodRow = (
                     <tr
                       className={`fin-row-pick${i === idx ? " on" : ""}${open ? " fin-cf-open" : ""}${r.cumulative < 0 ? " fin-overdue" : ""}`}
@@ -726,8 +734,9 @@ function OverviewTab() {
                       title="Show this period in the three columns above"
                     >
                       <td>
-                        {/* 이 줄의 안쪽(일자별 장부)을 그 자리에서 여닫는다. 열 수 있는 줄은
-                            늘 고른 줄이므로, 다른 줄의 손잡이를 누르면 그 줄로 옮겨 가며 열린다. */}
+                        {/* 이 줄의 안쪽(일자별 장부)을 그 자리에서 여닫는다. 줄마다 따로
+                            여닫히므로 여러 달을 동시에 펼쳐 둘 수 있다 — 다른 줄을 연다고
+                            이 줄이 닫히지 않는다. 누른 줄로 위 세 기둥도 함께 옮겨 온다. */}
                         <button
                           type="button"
                           className="fin-cf-toggle"
@@ -737,7 +746,7 @@ function OverviewTab() {
                           onClick={(e) => {
                             e.stopPropagation();
                             setPicked(i);
-                            setDaybookOpen(i === idx ? !daybookOpen : true);
+                            toggleRow(r.label);
                           }}
                         >
                           {open ? "▾" : "▸"}
