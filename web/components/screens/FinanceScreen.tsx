@@ -209,35 +209,6 @@ export default function FinanceScreen() {
 // 같은 질문의 앞뒤인데 탭이 갈라져 있어 매번 오가야 했다.
 
 /**
- * 현금흐름 한 칸을 이루는 여섯 갈래 — 서버 bucket 값(키)은 그대로 두고 이름만 화면용.
- *
- * 이름이 두 마디인 건 갈래가 두 겹이기 때문이다. 앞마디는 그 돈이 어디쯤 와 있는가
- * (Receivables·Payables = 아직 안 오간 돈 / Received·Paid = 이미 오간 돈), 뒷마디는
- * 어디서 나온 돈인가(거래에서 나온 매출·매입인가, 그 밖인가)다.
- *
- * 한 마디로는 못 가른다: 앞의 두 줄을 'Sales'·'Other income' 이라고만 부르면 둘 다
- * 미수라는 사실이 이름에서 사라지고, 반대로 첫 줄만 'Receivables' 라 부르면 둘째 줄도
- * 똑같이 미수인데 첫 줄만 그런 것처럼 읽힌다. 그래서 둘 다 앞마디를 달고, 세 번째 줄은
- * 앞마디만으로 충분하다(이미 오간 돈에는 출처를 따로 묻지 않는다 — 합쳐 한 줄이다).
- */
-const BUCKET_LABEL: Record<CashBucket, string> = {
-  receivables: "Receivables · Sales",
-  income: "Receivables · Other income",
-  collected: "Received",
-  payables: "Payables · Purchases",
-  other: "Payables · Other costs",
-  paid: "Paid",
-};
-const BUCKET_HINT: Record<CashBucket, string> = {
-  receivables: "customer invoices due",
-  income: "other income due",
-  collected: "already in the account",
-  payables: "vendor bills due",
-  other: "rent · payroll · utilities · tax",
-  paid: "already out of the account",
-};
-
-/**
  * 현금흐름 한 칸 → 그 구간의 건별 내역 화면(/finance/period) 주소.
  * first(창의 첫 칸)까지 넘겨야 상세의 합계가 표의 그 행과 맞는다 — 첫 칸은 앞선
  * 연체까지 끌어안기 때문이다. bucket 을 주면 그 갈래만 펼친 화면이 열린다.
@@ -355,12 +326,29 @@ function LedgerCurrency({ cur, onChange }: { cur: LedgerCur; onChange: (c: Ledge
 }
 
 /**
- * 실적 목록(Received·Paid)을 출처로 한 번 더 거를 때 쓰는 값 — 세 기둥 격자의 한 칸이
- * 'Received × Sales' 처럼 두 조건으로 좁힌 목록을 열기 때문이다. 빈 값이면 둘 다.
+ * 목록을 정산 여부로 거를 때 쓰는 값 — 세 기둥 격자의 세로축(Receivables/Received,
+ * Payables/Paid)이 그대로 넘어온다. 갈래 서브탭이 격자의 가로축(Sales·Other·Total)이므로,
+ * 둘을 합치면 격자의 칸 하나가 목록 화면 하나에 1:1 로 대응한다. 빈 값이면 전부.
  */
-type LedgerSrc = "trade" | "other";
-function asLedgerSrc(v: string | null): LedgerSrc | "" {
-  return v === "trade" || v === "other" ? v : "";
+type LedgerStatus = "due" | "settled";
+function asLedgerStatus(v: string | null): LedgerStatus | "" {
+  return v === "due" || v === "settled" ? v : "";
+}
+
+/** 정산 여부 필터 — 이름은 방향에 따라 다르다(미수/수금 vs 미지급/지급). */
+function LedgerStatusPick({ st, names, onChange }: {
+  st: LedgerStatus | "";
+  /** [아직 안 오간 것, 이미 오간 것] — Receivable/Received · Payable/Paid. */
+  names: [string, string];
+  onChange: (v: LedgerStatus | "") => void;
+}) {
+  return (
+    <div className="seg-toggle" role="group" aria-label="Settled or not">
+      <button className={st === "" ? "on" : ""} onClick={() => onChange("")}>All</button>
+      <button className={st === "due" ? "on" : ""} onClick={() => onChange("due")}>{names[0]}</button>
+      <button className={st === "settled" ? "on" : ""} onClick={() => onChange("settled")}>{names[1]}</button>
+    </div>
+  );
 }
 
 /** 통화별 합계에서 고른 통화만 남긴다. */
@@ -373,8 +361,6 @@ function needsKrwRef(...maps: MoneyByCurrency[]): boolean {
   return maps.some((m) => currencyKeys(m).some((c) => c !== "KRW"));
 }
 
-/** 유입 쪽 갈래 — 나머지는 유출. 목록 탭을 고를 때 쓴다. */
-const IN_BUCKETS: CashBucket[] = ["receivables", "income", "collected"];
 
 /**
  * 현금흐름 한 칸의 한 줄 → 그 갈래를 다루는 목록 탭(Inflow/Outflow)의 같은 이름 화면,
@@ -387,18 +373,23 @@ const IN_BUCKETS: CashBucket[] = ["receivables", "income", "collected"];
 function ledgerHref(
   r: FinanceCashflowRow,
   first: boolean,
-  bucket: CashBucket,
+  side: "in" | "out",
+  /** 격자의 세로칸 — 거래에서 나온 돈(매출·매입) / 그 밖 / 둘 다. */
+  col: "trade" | "other" | "total",
   currency: string,
-  /** 실적 목록을 출처로 한 번 더 거를 때 — 격자의 'Received × Sales' 같은 칸이 쓴다. */
-  src?: LedgerSrc
+  /** 격자의 가로줄 — 아직 안 오간 것 / 이미 오간 것. 빈 값이면 전부. */
+  st?: LedgerStatus
 ): string {
+  const view = col === "total" ? "total"
+    : col === "other" ? (side === "in" ? "income" : "other")
+      : (side === "in" ? "receivables" : "payables");
   const q = new URLSearchParams({
-    tab: IN_BUCKETS.includes(bucket) ? "inflow" : "outflow",
-    view: bucket,
+    tab: side === "in" ? "inflow" : "outflow",
+    view,
     to: r.end,
     cur: currency,
   });
-  if (src) q.set("src", src);
+  if (st) q.set("st", st);
   if (!first) q.set("from", r.start);
   return `/finance?${q.toString()}`;
 }
@@ -612,6 +603,11 @@ function OverviewTab() {
               period={pickedLabel}
               tone="in"
               cols={["Sales", "Other income"]}
+              colHref={[
+                ledgerHref(row, idx === 0, "in", "trade", currency),
+                ledgerHref(row, idx === 0, "in", "other", currency),
+                ledgerHref(row, idx === 0, "in", "total", currency),
+              ]}
               due={{
                 label: "Receivables",
                 hint: "not settled yet",
@@ -619,7 +615,11 @@ function OverviewTab() {
                 other: row.in_income ?? 0,
                 total: (row.in_ar ?? 0) + (row.in_income ?? 0),
                 parked: parkExpected,
-                href: [ledgerHref(row, idx === 0, "receivables", currency), ledgerHref(row, idx === 0, "income", currency)],
+                href: [
+                  ledgerHref(row, idx === 0, "in", "trade", currency, "due"),
+                  ledgerHref(row, idx === 0, "in", "other", currency, "due"),
+                ],
+                totalHref: ledgerHref(row, idx === 0, "in", "total", currency, "due"),
               }}
               settled={{
                 label: "Received",
@@ -629,10 +629,10 @@ function OverviewTab() {
                 total: row.actual_inflow,
                 split: typeof row.actual_in_ar === "number",
                 href: [
-                  ledgerHref(row, idx === 0, "collected", currency, "trade"),
-                  ledgerHref(row, idx === 0, "collected", currency, "other"),
+                  ledgerHref(row, idx === 0, "in", "trade", currency, "settled"),
+                  ledgerHref(row, idx === 0, "in", "other", currency, "settled"),
                 ],
-                totalHref: ledgerHref(row, idx === 0, "collected", currency),
+                totalHref: ledgerHref(row, idx === 0, "in", "total", currency, "settled"),
               }}
               allHref={`${periodHref(row, idx === 0, currency, includePo, overdueRolled, !parkExpected)}&side=in`}
               currency={currency}
@@ -642,6 +642,11 @@ function OverviewTab() {
               period={pickedLabel}
               tone="out"
               cols={["Purchases", "Other costs"]}
+              colHref={[
+                ledgerHref(row, idx === 0, "out", "trade", currency),
+                ledgerHref(row, idx === 0, "out", "other", currency),
+                ledgerHref(row, idx === 0, "out", "total", currency),
+              ]}
               due={{
                 label: "Payables",
                 hint: "not settled yet",
@@ -649,7 +654,11 @@ function OverviewTab() {
                 other: row.out_other ?? 0,
                 total: (row.out_ap ?? 0) + (row.out_other ?? 0),
                 parked: parkExpected,
-                href: [ledgerHref(row, idx === 0, "payables", currency), ledgerHref(row, idx === 0, "other", currency)],
+                href: [
+                  ledgerHref(row, idx === 0, "out", "trade", currency, "due"),
+                  ledgerHref(row, idx === 0, "out", "other", currency, "due"),
+                ],
+                totalHref: ledgerHref(row, idx === 0, "out", "total", currency, "due"),
               }}
               settled={{
                 label: "Paid",
@@ -659,10 +668,10 @@ function OverviewTab() {
                 total: row.actual_outflow,
                 split: typeof row.actual_out_ap === "number",
                 href: [
-                  ledgerHref(row, idx === 0, "paid", currency, "trade"),
-                  ledgerHref(row, idx === 0, "paid", currency, "other"),
+                  ledgerHref(row, idx === 0, "out", "trade", currency, "settled"),
+                  ledgerHref(row, idx === 0, "out", "other", currency, "settled"),
                 ],
-                totalHref: ledgerHref(row, idx === 0, "paid", currency),
+                totalHref: ledgerHref(row, idx === 0, "out", "total", currency, "settled"),
               }}
               allHref={`${periodHref(row, idx === 0, currency, includePo, overdueRolled, !parkExpected)}&side=out`}
               currency={currency}
@@ -949,12 +958,14 @@ type BucketRow = {
  * 세로로 더하면 그 출처의 전부, 가로로 더하면 그 상태의 전부(Total 칸).
  * 칸마다 그 조건으로 걸러 낸 목록으로 간다.
  */
-function BucketCard({ title, period, tone, cols, due, settled, allHref, currency }: {
+function BucketCard({ title, period, tone, cols, colHref, due, settled, allHref, currency }: {
   title: string;
   period: string;
   tone: "in" | "out";
   /** 가로 두 칸의 이름 — [거래, 그 밖]. */
   cols: [string, string];
+  /** 그 칸 이름이 여는 목록 — [거래, 그 밖, 합계]. 정산 여부는 걸지 않는다(그 세로칸 전부). */
+  colHref: [string, string, string];
   /** 윗줄 = 아직 안 오간 돈(Receivables · Payables). */
   due: BucketRow;
   /** 아랫줄 = 이미 오간 돈(Received · Paid). */
@@ -997,11 +1008,15 @@ function BucketCard({ title, period, tone, cols, due, settled, allHref, currency
       </h3>
       <table className="mini fin-bucket-grid">
         <thead>
+          {/* 칸 이름도 문이다 — 그 세로칸 전부(미수와 실적을 함께)를 목록으로 연다.
+              아래 금액 칸은 거기에 정산 여부까지 걸어 한 칸으로 좁힌 것이다. */}
           <tr>
             <th />
-            <th className="num">{cols[0]}</th>
-            <th className="num">{cols[1]}</th>
-            <th className="num">Total</th>
+            {[cols[0], cols[1], "Total"].map((name, i) => (
+              <th className="num" key={name}>
+                <Link className="fin-cell-link" href={colHref[i]} title={`${name} · ${period}`}>{name}</Link>
+              </th>
+            ))}
           </tr>
         </thead>
         <tbody>
@@ -1027,179 +1042,7 @@ function receivableTotals(rows: FinanceReceivable[]) {
 // ── Inflow — 들어올 돈(매출채권·기타수입)과 들어온 돈(수금) ─────────────────────
 // 세 갈래는 Overview 의 In 기둥과 같은 이름·같은 뜻이다: 예정 둘(출처별)과 실적 하나.
 
-/** 실적 한 건 — 실제로 오간 돈. 수금/지급 목록이 같은 모양을 쓴다. */
-type SettledRow = {
-  key: string;
-  /** 거래에서 나온 돈인가(매출·매입) 그 밖인가 — 격자의 'Received × Sales' 칸이 이걸로 거른다. */
-  src: LedgerSrc;
-  /** 실제로 오간 날(모르면 빈 값 — 부분수금은 날짜를 남길 자리가 없다). */
-  date: string;
-  kind: string;
-  party: string;
-  ref: React.ReactNode;
-  amount: number;
-  currency: string;
-};
-
-/** 통화별 합계 — 실적 목록의 발밑 합계. */
-function settledTotals(rows: SettledRow[]): MoneyByCurrency {
-  const t: MoneyByCurrency = {};
-  for (const r of rows) t[r.currency] = (t[r.currency] || 0) + r.amount;
-  return t;
-}
-
-/**
- * 수금 실적 — 매출채권 입금 + 기타수입 수령.
- * 반복 기타수입은 납부한 회차마다 한 줄로 펼친다(실제 입금일이 있으면 그 날짜로).
- */
-function receiptRows(rows: FinanceReceivable[]): SettledRow[] {
-  const out: SettledRow[] = [];
-  for (const r of rows) {
-    if (r.source === "income") {
-      const amount = r.amount ?? r.invoice_amount;
-      if ((r.recurrence ?? "none") === "none") {
-        if (r.paid) {
-          out.push({
-            key: `inc-${r.id}`, src: "other", date: r.paid_date || r.due_date,
-            kind: INCOME_CATEGORY_LABEL[r.category || ""] || r.category || "Other income",
-            party: r.counterparty || r.customer, ref: r.description || "—",
-            amount, currency: r.currency,
-          });
-        }
-      } else {
-        for (const occ of r.paid_dates ?? []) {
-          out.push({
-            key: `inc-${r.id}-${occ}`, src: "other", date: r.payments?.[occ] || occ,
-            kind: INCOME_CATEGORY_LABEL[r.category || ""] || r.category || "Other income",
-            party: r.counterparty || r.customer,
-            ref: <>{r.description || "—"} <span className="hint-inline">· due {occ}</span></>,
-            amount, currency: r.currency,
-          });
-        }
-      }
-    } else if (r.paid_amount > 0) {
-      out.push({
-        key: `ar-${r.id}`, src: "trade", date: r.paid_date || "", kind: "Sales",
-        party: r.customer,
-        ref: <ProjectDocLink orderId={r.order_id} rfqId={r.rfq_id} label={r.invoice_no || r.ci_no} />,
-        amount: r.paid_amount, currency: r.currency,
-      });
-    }
-  }
-  return out.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
-}
-
-/** 지급 실적 — 벤더 청구 지급 + 기타비용 납부(반복은 회차별로 펼친다). */
-function paymentRows(rows: FinancePayable[]): SettledRow[] {
-  const out: SettledRow[] = [];
-  for (const p of rows) {
-    if (p.source === "ap") {
-      if (p.paid_amount > 0) {
-        out.push({
-          key: `ap-${p.id}`, src: "trade", date: p.paid_date || "", kind: "Vendor bill",
-          party: p.counterparty || "—",
-          ref: <ProjectDocLink orderId={p.order_id} rfqId={p.rfq_id} label={p.description || p.po_no} apPoId={p.po_id} />,
-          amount: p.paid_amount, currency: p.currency,
-        });
-      }
-    } else if ((p.recurrence ?? "none") === "none") {
-      if (p.paid) {
-        out.push({
-          key: `pay-${p.id}`, src: p.category === "거래선지급" ? "trade" : "other",
-          date: p.paid_date || p.due_date,
-          kind: CATEGORY_LABEL[p.category] || p.category,
-          party: p.counterparty || "—", ref: p.description || "—",
-          amount: p.amount, currency: p.currency,
-        });
-      }
-    } else {
-      for (const occ of p.paid_dates ?? []) {
-        out.push({
-          key: `pay-${p.id}-${occ}`, src: p.category === "거래선지급" ? "trade" : "other",
-          date: p.payments?.[occ] || occ,
-          kind: CATEGORY_LABEL[p.category] || p.category,
-          party: p.counterparty || "—",
-          ref: <>{p.description || "—"} <span className="hint-inline">· due {occ}</span></>,
-          amount: p.amount, currency: p.currency,
-        });
-      }
-    }
-  }
-  return out.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
-}
-
-/** 실적 목록 — 언제·무엇으로·누구에게 오갔는지. 수금·지급이 같은 표를 쓴다. */
-function SettledTable({ rows, dateLabel, partyLabel, empty, fx }: {
-  rows: SettledRow[];
-  dateLabel: string;
-  partyLabel: string;
-  empty: string;
-  fx: FxQuote;
-}) {
-  const totals = settledTotals(rows);
-  return (
-    <>
-      <table className="mini fin-ledger">
-        <thead>
-          <tr>
-            <th className="fin-w-date">{dateLabel}</th>
-            <th className="fin-w-cat">Type</th>
-            <th className="fin-w-party">{partyLabel}</th>
-            <th>Reference</th>
-            <th className="num fin-w-money">Amount</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.length === 0 ? <tr><td colSpan={5} className="mini-empty">{empty}</td></tr> : null}
-          {rows.map((r) => (
-            <tr key={r.key}>
-              {/* 날짜가 없는 건 = 부분수금 — 언제 들어왔는지 적을 자리가 레코드에 없다. */}
-              <td data-label={dateLabel}>{r.date || <span className="hint-inline">no date</span>}</td>
-              <td data-label="Type">{r.kind}</td>
-              <td className="fin-c-title">{r.party}</td>
-              <td className="fin-c-sub">{r.ref}</td>
-              <td className="num" data-label="Amount">{money(r.amount, r.currency)}</td>
-            </tr>
-          ))}
-          <tr className="fin-group-sub">
-            <td className="fin-foot-name" colSpan={4}>Total · {rows.length} item{rows.length === 1 ? "" : "s"}</td>
-            <td className="num" data-label="Amount">{byCurrencyLines(totals)}</td>
-          </tr>
-          {/* 참고용 KRW 환산 — 오늘자 매매기준율(조회 실패 시 고정환율). 집계에는 쓰지 않는다.
-              환산할 것이 없으면(₩만 남은 표) 같은 숫자를 한 줄 더 적을 뿐이라 접는다. */}
-          {needsKrwRef(totals) ? (
-            <tr className="fin-foot-ref">
-              <td className="fin-foot-name" colSpan={4}>
-                Total (In KRW · 1 USD = {fx.rate.toLocaleString()}
-                {fx.source === "exim" ? ` · 매매기준율 ${fx.date}` : " · fixed rate"})
-              </td>
-              <td className="num">{won(toKrw(totals, fx.rate))}</td>
-            </tr>
-          ) : null}
-        </tbody>
-      </table>
-    </>
-  );
-}
-
-/**
- * 출처 필터가 걸려 있음을 밝히는 칩 — 세 기둥 격자의 한 칸에서 넘어오면 목록이 이미
- * 좁혀져 있다. 그걸 말해 주지 않으면 '왜 이것뿐이지'가 되고, 푸는 길도 없다.
- */
-function SrcChip({ src, cols, onClear }: {
-  src: LedgerSrc;
-  /** [거래 갈래 이름, 그 밖 갈래 이름] — 기둥 격자의 가로 칸 이름과 같은 말. */
-  cols: [string, string];
-  onClear: () => void;
-}) {
-  return (
-    <button type="button" className="check-chip fin-src-chip" onClick={onClear} title="Show both">
-      {src === "trade" ? cols[0] : cols[1]} only <span aria-hidden="true">×</span>
-    </button>
-  );
-}
-
-type InflowView = "receivables" | "income" | "collected";
+type InflowView = "receivables" | "income" | "total";
 
 function InflowTab() {
   const { data, error, refresh } = useCachedData<{ rows: FinanceReceivable[]; fx: FxQuote }>("finance:receivables", fetchFinanceReceivables);
@@ -1209,38 +1052,29 @@ function InflowTab() {
   // 곧장 건너뛰고, 그 화면을 그대로 링크로 넘길 수 있어야 한다.
   const { params, setParams } = useFinanceNav();
   const viewParam = params.get("view") || "";
-  const view: InflowView = (["receivables", "income", "collected"] as const).includes(viewParam as InflowView)
+  const view: InflowView = (["receivables", "income", "total"] as const).includes(viewParam as InflowView)
     ? (viewParam as InflowView) : "receivables";
-  // 갈래를 손으로 바꾸면 출처 필터는 푼다 — 격자의 한 칸에서 넘어온 조건이라,
-  // 다른 갈래를 고른 뒤에도 남아 있으면 목록이 왜 짧은지 알 수 없다.
-  const setView = (v: InflowView) => setParams({ view: v === "receivables" ? "" : v, src: "" });
+  const setView = (v: InflowView) => setParams({ view: v === "receivables" ? "" : v });
   const from = params.get("from") || "";
   const to = params.get("to") || "";
   // 통화도 주소에 산다(갈래·기간과 같은 규약) — '₩만 본 이 화면'을 그대로 넘길 수 있게.
   const cur = asLedgerCur(params.get("cur"));
-  // 세 기둥 격자의 'Received × Sales' 같은 칸에서 넘어오면 출처까지 걸려 있다.
-  const src = asLedgerSrc(params.get("src"));
-  // 원장은 기본적으로 전부 보여준다 — 켜 두면 수금이 끝난 청구서가 목록에서 사라져
-  // "그 청구서 어디 갔지"가 된다. 미수만 추리고 싶을 때만 사용자가 켠다.
-  const [openOnly, setOpenOnly] = useState(false);
+  // 정산 여부 — 격자의 세로축이 그대로 넘어온다. 기본은 전부(수금이 끝난 청구서가
+  // 목록에서 사라지면 "그 청구서 어디 갔지"가 된다).
+  const st = asLedgerStatus(params.get("st"));
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<FinanceReceivable | null>(null);
   const [receiving, setReceiving] = useState<{ row: FinanceReceivable; occurrence: string } | null>(null);
   const all = useMemo(() => data?.rows ?? [], [data]);
-  const rows = useMemo(() => {
-    const src = all
-      .filter((r) => (view === "income" ? r.source === "income" : r.source !== "income"))
-      .filter((r) => r.currency === cur)
-      // 예정 항목은 예정일 기준 — 반복(기타수입)은 회차 하나라도 구간에 들면 남긴다.
-      .filter((r) => dueInRange(r, from, to));
-    return openOnly ? src.filter((r) => r.outstanding > 0) : src;
-  }, [all, view, openOnly, from, to, cur]);
-  // 실적은 실제로 오간 날 기준 — 현금흐름이 그 날짜로 세는 것과 같다.
-  const settled = useMemo(
-    () => receiptRows(all).filter((r) =>
-      r.currency === cur && (!src || r.src === src) && inRange(r.date, from, to)),
-    [all, from, to, cur, src]
-  );
+  const rows = useMemo(() => all
+    // Total 갈래는 출처를 가리지 않는다 — 매출과 기타수입을 한 표에 담는다.
+    .filter((r) => (view === "total" ? true : view === "income" ? r.source === "income" : r.source !== "income"))
+    .filter((r) => r.currency === cur)
+    // 예정 항목은 예정일 기준 — 반복(기타수입)은 회차 하나라도 구간에 들면 남긴다.
+    .filter((r) => dueInRange(r, from, to))
+    // 미수만/수금분만 — 한 건이 둘 다일 수 있으므로(부분수금) 어느 쪽으로도 걸린다.
+    .filter((r) => (st === "due" ? r.outstanding > 0 : st === "settled" ? r.paid_amount > 0 : true)),
+  [all, view, st, from, to, cur]);
   const totals = useMemo(() => receivableTotals(rows), [rows]);
   // 머리 KPI 는 기간·갈래와 무관한 '오늘 기준' 값이지만, 통화는 따른다 — 한 통화만 보기로
   // 해 놓고 그 위에 다른 통화 줄이 남아 있으면 무엇을 보고 있는지가 흐려진다. 건수도 함께
@@ -1275,18 +1109,13 @@ function InflowTab() {
     ? "Customer invoices arrive here automatically from the project's tax-invoice and collection stages and are read-only — click the invoice number to open that project's billing stage."
     : view === "income"
       ? "Money that is not project sales — interest, refunds, misc — is registered by hand here, and received here too."
-      : "Money that has actually arrived, dated on the day it came in. Sales and other income together, newest first.";
+      : "Sales and other income in one list. Each line carries what was invoiced, what has come in and what is still owed, so the three filters on the right cut it the same way the Overview grid does.";
 
   return (
     <div className="panel">
       <div className="items-head">
         <h3 className="form-title fin-page-title" style={{ margin: 0 }}>Inflow</h3>
         <div className="items-head-actions">
-          {view !== "collected" ? (
-            <label className="check-chip" style={{ cursor: "pointer" }}>
-              <input type="checkbox" checked={openOnly} onChange={(e) => setOpenOnly(e.target.checked)} /> Receivable only
-            </label>
-          ) : null}
           {/* 등록 버튼은 갈래와 무관하게 늘 같은 자리에 둔다 — 수입을 적으려고 먼저
               "Other income" 탭을 찾아 들어가야 했던 걸 없앤다. 저장하면 그 항목이 보이는
               갈래로 옮겨 준다(아래 onSaved). */}
@@ -1311,124 +1140,120 @@ function InflowTab() {
         <div className="seg-toggle fin-subtabs" role="group" aria-label="Inflow view">
           <button className={view === "receivables" ? "on" : ""} onClick={() => setView("receivables")}>Sales</button>
           <button className={view === "income" ? "on" : ""} onClick={() => setView("income")}>Other income</button>
-          <button className={view === "collected" ? "on" : ""} onClick={() => setView("collected")}>Received</button>
+          <button className={view === "total" ? "on" : ""} onClick={() => setView("total")}>Total</button>
         </div>
         {/* 무엇을 걸러 볼지는 오른쪽에 모아 둔다 — 왼쪽 갈래(무엇을 보는가)와 갈라서. */}
         <div className="fin-ledger-filters">
-          {src && view === "collected"
-            ? <SrcChip src={src} cols={["Sales", "Other income"]} onClear={() => setParams({ src: "" })} />
-            : null}
+          <LedgerStatusPick st={st} names={["Receivable", "Received"]} onChange={(v) => setParams({ st: v })} />
           <LedgerCurrency cur={cur} onChange={(c) => setParams({ cur: c })} />
           <LedgerPeriod from={from} to={to} onChange={(f, t) => setParams({ from: f, to: t })} />
         </div>
       </div>
       <p className="hint-inline" style={{ display: "block", margin: "8px 0 10px" }}>{hint}</p>
 
-      {view === "collected" ? (
-        <SettledTable rows={settled} dateLabel="Received" partyLabel="Customer" empty="Nothing received yet." fx={fx} />
-      ) : (
-        <table className="mini fin-ledger">
-          <thead>
-            <tr>
-              <th className="fin-w-party">Customer</th><th>Invoice No.</th>
-              <th className="fin-w-date">Invoice date</th><th className="fin-w-date">Due</th>
-              <th className="num fin-w-money">Invoice</th><th className="num fin-w-money">Received</th><th className="num fin-w-money">Receivable</th>
-              <th className="fin-w-status">Status</th><th className="fin-w-act" />
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 ? (
-              <tr><td colSpan={9} className="mini-empty">{view === "income" ? "No other income registered." : "No customer invoices to show."}</td></tr>
-            ) : null}
-            {rows.map((r) => {
-              const isIncome = r.source === "income";
-              return (
-              <tr key={`${r.source || "ar"}-${r.id}`} className={r.overdue ? "fin-overdue" : ""}>
-                {/* fin-c-title / fin-c-sub / data-label 은 좁은 화면용 — 거기서 이 행은
-                    카드가 되고, 머리줄이 사라진 자리를 칸마다의 이름이 대신한다. */}
-                <td className="fin-c-title">{r.customer}</td>
-                <td className="fin-c-sub">{isIncome ? (r.invoice_no || r.ci_no || "—") : <ProjectDocLink orderId={r.order_id} rfqId={r.rfq_id} label={r.invoice_no || r.ci_no} />}</td>
-                {/* 발행일 — 9단계 대금청구서에 입력한 값. 기타 수입에는 없는 개념. */}
-                <td data-label="Invoiced">{r.invoice_date || "—"}</td>
-                <td data-label="Due">{r.due_date || "—"}</td>
-                <td className="num" data-label="Invoice">{money(r.invoice_amount, r.currency)}</td>
-                <td className="num" data-label="Received">{money(r.paid_amount, r.currency)}</td>
-                <td className="num" data-label="Receivable">{money(r.outstanding, r.currency)}</td>
-                <td data-label="Status">
-                  {/* 기타 수입은 이 화면에서 바로 입금 처리(실제 입금일 입력). 기일이 지난
-                      건도 눌러야 한다 — 연체 배지만 띄우면 늦게 들어온 돈을 영영 기록할 수
-                      없다. 그래서 연체는 배지 대신 이 단추의 색과 이름으로 알린다.
-                      프로젝트 매출(AR)은 9~11단계에서 수금하므로 여기서는 읽기전용. */}
+      <table className="mini fin-ledger">
+        <thead>
+          <tr>
+            <th className="fin-w-party">Customer</th><th>Invoice No.</th>
+            <th className="fin-w-date">Invoice date</th><th className="fin-w-date">Due</th>
+            <th className="num fin-w-money">Invoice</th><th className="num fin-w-money">Received</th><th className="num fin-w-money">Receivable</th>
+            <th className="fin-w-status">Status</th><th className="fin-w-act" />
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length === 0 ? (
+            <tr><td colSpan={9} className="mini-empty">{
+              st ? "Nothing in this period matches that filter."
+                : view === "income" ? "No other income registered." : "No customer invoices to show."}</td></tr>
+          ) : null}
+          {rows.map((r) => {
+            const isIncome = r.source === "income";
+            return (
+            <tr key={`${r.source || "ar"}-${r.id}`} className={r.overdue ? "fin-overdue" : ""}>
+              {/* fin-c-title / fin-c-sub / data-label 은 좁은 화면용 — 거기서 이 행은
+                  카드가 되고, 머리줄이 사라진 자리를 칸마다의 이름이 대신한다. */}
+              <td className="fin-c-title">{r.customer}</td>
+              <td className="fin-c-sub">{isIncome ? (r.invoice_no || r.ci_no || "—") : <ProjectDocLink orderId={r.order_id} rfqId={r.rfq_id} label={r.invoice_no || r.ci_no} />}</td>
+              {/* 발행일 — 9단계 대금청구서에 입력한 값. 기타 수입에는 없는 개념. */}
+              <td data-label="Invoiced">{r.invoice_date || "—"}</td>
+              <td data-label="Due">{r.due_date || "—"}</td>
+              <td className="num" data-label="Invoice">{money(r.invoice_amount, r.currency)}</td>
+              <td className="num" data-label="Received">{money(r.paid_amount, r.currency)}</td>
+              <td className="num" data-label="Receivable">{money(r.outstanding, r.currency)}</td>
+              <td data-label="Status">
+                {/* 기타 수입은 이 화면에서 바로 입금 처리(실제 입금일 입력). 기일이 지난
+                    건도 눌러야 한다 — 연체 배지만 띄우면 늦게 들어온 돈을 영영 기록할 수
+                    없다. 그래서 연체는 배지 대신 이 단추의 색과 이름으로 알린다.
+                    프로젝트 매출(AR)은 9~11단계에서 수금하므로 여기서는 읽기전용. */}
+                {isIncome ? (
+                  <button
+                    type="button"
+                    className={`wt-badge fin-paid-toggle${r.paid ? " on" : ""}${r.overdue ? " overdue" : ""}`}
+                    title={canEdit ? (r.paid ? "Undo receipt" : r.overdue ? "Record receipt (past due)" : "Record receipt") : ""}
+                    disabled={!canEdit}
+                    onClick={() =>
+                      r.recurrence !== "none"
+                        ? setReceiving({ row: r, occurrence: nextUnpaidOccurrence(asPayableLike(r)) })
+                        : r.paid
+                          ? undoReceived(r)
+                          : setReceiving({ row: r, occurrence: r.due_date })
+                    }
+                  >
+                    {r.recurrence !== "none"
+                      ? `${(r.paid_dates || []).length} received`
+                      : r.paid ? "Received" : r.overdue ? "Overdue" : "Expected"}
+                  </button>
+                ) : r.overdue ? (
+                  <span className="wt-badge" style={{ background: "#fde2e1", color: "#c0392b" }}>Overdue</span>
+                ) : (
+                  AR_STATUS_LABEL[r.status] || r.status
+                )}
+                {r.paid_date ? <span className="fin-paid-on">{r.paid_date}</span> : null}
+              </td>
+              <td className="fin-c-act">
+                <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
                   {isIncome ? (
-                    <button
-                      type="button"
-                      className={`wt-badge fin-paid-toggle${r.paid ? " on" : ""}${r.overdue ? " overdue" : ""}`}
-                      title={canEdit ? (r.paid ? "Undo receipt" : r.overdue ? "Record receipt (past due)" : "Record receipt") : ""}
-                      disabled={!canEdit}
-                      onClick={() =>
-                        r.recurrence !== "none"
-                          ? setReceiving({ row: r, occurrence: nextUnpaidOccurrence(asPayableLike(r)) })
-                          : r.paid
-                            ? undoReceived(r)
-                            : setReceiving({ row: r, occurrence: r.due_date })
-                      }
-                    >
-                      {r.recurrence !== "none"
-                        ? `${(r.paid_dates || []).length} received`
-                        : r.paid ? "Received" : r.overdue ? "Overdue" : "Expected"}
-                    </button>
-                  ) : r.overdue ? (
-                    <span className="wt-badge" style={{ background: "#fde2e1", color: "#c0392b" }}>Overdue</span>
+                    <>
+                      {can("finance", "edit") ? (
+                        <button className="btn tiny" title="Edit" aria-label="Edit" onClick={() => setEditing(r)}>✎</button>
+                      ) : null}
+                      {can("finance", "delete") ? (
+                        <button className="btn tiny danger" title="Delete" aria-label="Delete" onClick={() => removeIncome(r)}>×</button>
+                      ) : null}
+                    </>
                   ) : (
-                    AR_STATUS_LABEL[r.status] || r.status
+                    <ProjectDocLink orderId={r.order_id} rfqId={r.rfq_id} label="Project stage 9–11" hint />
                   )}
-                  {r.paid_date ? <span className="fin-paid-on">{r.paid_date}</span> : null}
-                </td>
-                <td className="fin-c-act">
-                  <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
-                    {isIncome ? (
-                      <>
-                        {can("finance", "edit") ? (
-                          <button className="btn tiny" title="Edit" aria-label="Edit" onClick={() => setEditing(r)}>✎</button>
-                        ) : null}
-                        {can("finance", "delete") ? (
-                          <button className="btn tiny danger" title="Delete" aria-label="Delete" onClick={() => removeIncome(r)}>×</button>
-                        ) : null}
-                      </>
-                    ) : (
-                      <ProjectDocLink orderId={r.order_id} rfqId={r.rfq_id} label="Project stage 9–11" hint />
-                    )}
-                  </div>
-                </td>
-              </tr>
-              );
-            })}
-            <tr className="fin-group-sub">
+                </div>
+              </td>
+            </tr>
+            );
+          })}
+          <tr className="fin-group-sub">
+            <td />
+            <td className="fin-foot-name" colSpan={3}>Total</td>
+            <td className="num" data-label="Invoice">{byCurrencyLines(totals.invoice)}</td>
+            <td className="num" data-label="Received">{byCurrencyLines(totals.paid)}</td>
+            <td className="num" data-label="Receivable">{byCurrencyLines(totals.outstanding)}</td>
+            <td /><td />
+          </tr>
+          {/* 참고용 KRW 환산 — 오늘자 매매기준율(조회 실패 시 고정환율). 집계에는 쓰지 않는다.
+              ₩ 만 남은 표에서는 접는다(같은 숫자를 한 줄 더 적는 셈이라). */}
+          {needsKrwRef(totals.invoice, totals.paid, totals.outstanding) ? (
+            <tr className="fin-foot-ref">
               <td />
-              <td className="fin-foot-name" colSpan={3}>Total</td>
-              <td className="num" data-label="Invoice">{byCurrencyLines(totals.invoice)}</td>
-              <td className="num" data-label="Received">{byCurrencyLines(totals.paid)}</td>
-              <td className="num" data-label="Receivable">{byCurrencyLines(totals.outstanding)}</td>
+              <td className="fin-foot-name" colSpan={3}>
+                Total (In KRW · 1 USD = {fx.rate.toLocaleString()}
+                {fx.source === "exim" ? ` · 매매기준율 ${fx.date}` : " · fixed rate"})
+              </td>
+              <td className="num" data-label="Invoice">{won(toKrw(totals.invoice, fx.rate))}</td>
+              <td className="num" data-label="Received">{won(toKrw(totals.paid, fx.rate))}</td>
+              <td className="num" data-label="Receivable">{won(toKrw(totals.outstanding, fx.rate))}</td>
               <td /><td />
             </tr>
-            {/* 참고용 KRW 환산 — 오늘자 매매기준율(조회 실패 시 고정환율). 집계에는 쓰지 않는다.
-                ₩ 만 남은 표에서는 접는다(같은 숫자를 한 줄 더 적는 셈이라). */}
-            {needsKrwRef(totals.invoice, totals.paid, totals.outstanding) ? (
-              <tr className="fin-foot-ref">
-                <td />
-                <td className="fin-foot-name" colSpan={3}>
-                  Total (In KRW · 1 USD = {fx.rate.toLocaleString()}
-                  {fx.source === "exim" ? ` · 매매기준율 ${fx.date}` : " · fixed rate"})
-                </td>
-                <td className="num" data-label="Invoice">{won(toKrw(totals.invoice, fx.rate))}</td>
-                <td className="num" data-label="Received">{won(toKrw(totals.paid, fx.rate))}</td>
-                <td className="num" data-label="Receivable">{won(toKrw(totals.outstanding, fx.rate))}</td>
-                <td /><td />
-              </tr>
-            ) : null}
-          </tbody>
-        </table>
-      )}
+          ) : null}
+        </tbody>
+      </table>
 
       {receiving ? (
         <ReceiptDateModal
@@ -1670,7 +1495,8 @@ const emptyPayable: FinancePayableSave = {
   notes: "",
 };
 
-type OutflowView = "payables" | "other" | "paid";
+// 갈래 = 격자의 가로축(Inflow 와 같은 규약). 'Paid' 는 상태라 st 필터로 옮겼다.
+type OutflowView = "payables" | "other" | "total";
 
 function OutflowTab() {
   const { data, error, refresh } = useCachedData<{ rows: FinancePayable[]; fx: FxQuote }>("finance:payables", fetchFinancePayables);
@@ -1679,15 +1505,14 @@ function OutflowTab() {
   // 갈래와 기간은 주소에 산다(Inflow 와 같은 규약).
   const { params, setParams } = useFinanceNav();
   const viewParam = params.get("view") || "";
-  const view: OutflowView = (["payables", "other", "paid"] as const).includes(viewParam as OutflowView)
+  const view: OutflowView = (["payables", "other", "total"] as const).includes(viewParam as OutflowView)
     ? (viewParam as OutflowView) : "payables";
-  // 갈래를 바꾸면 출처 필터는 푼다(Inflow 와 같은 규약).
-  const setView = (v: OutflowView) => setParams({ view: v === "payables" ? "" : v, src: "" });
+  const setView = (v: OutflowView) => setParams({ view: v === "payables" ? "" : v });
   const from = params.get("from") || "";
   const to = params.get("to") || "";
   // 통화 필터 — Inflow 와 같은 규약(주소의 cur).
   const cur = asLedgerCur(params.get("cur"));
-  const src = asLedgerSrc(params.get("src"));
+  const st = asLedgerStatus(params.get("st"));
   const [editing, setEditing] = useState<FinancePayable | null>(null);
   const [adding, setAdding] = useState(false);
   // 납부 입력 대상 — 회차일(occurrence)과 실제 납부일을 함께 받는다.
@@ -1697,21 +1522,22 @@ function OutflowTab() {
   // 거래(매입) / 기타 지출 두 섹션 — 성격이 다르고 다루는 항목도 달라서 표를 따로 낸다.
   // 벤더 청구서는 프로젝트에서 넘어온 읽기전용(청구서번호·발행일 중심), 기타 지출은
   // 여기서 직접 등록하는 항목(분류·반복 중심)이라 열 구성이 서로 맞지 않는다.
-  const [trade, other] = useMemo(() => {
+  // 보고 있는 갈래의 행 — 거래(매입)냐 그 밖이냐, Total 이면 둘 다. 가르는 규칙은
+  // 백엔드의 out_ap/out_other 와 같다(지급대장의 '거래선지급'은 벤더 청구와 한 갈래).
+  const visible = useMemo(() => {
     const isTrade = (p: FinancePayable) => p.source === "ap" || p.category === "거래선지급";
-    // 예정 항목은 예정일 기준 — 반복(임차료·급여)은 회차 하나라도 구간에 들면 남긴다.
-    const inWindow = rows.filter((p) => p.currency === cur && dueInRange(p, from, to));
-    return [inWindow.filter(isTrade), inWindow.filter((p) => !isTrade(p))];
-  }, [rows, from, to, cur]);
-  // 보고 있는 갈래의 합계 3열(청구·지급·미지급) — 통화별 분리(수입 목록과 같은 규칙).
-  const visible = view === "other" ? other : trade;
+    return rows
+      .filter((p) => p.currency === cur)
+      // 예정 항목은 예정일 기준 — 반복(임차료·급여)은 회차 하나라도 구간에 들면 남긴다.
+      .filter((p) => dueInRange(p, from, to))
+      .filter((p) => (view === "total" ? true : view === "other" ? !isTrade(p) : isTrade(p)))
+      // 미지급만/지급분만 — 반복 항목은 회차 하나라도 납부했으면 지급분에 든다.
+      .filter((p) => (st === "due" ? p.outstanding > 0
+        : st === "settled" ? (p.paid_amount > 0 || p.paid || (p.paid_dates?.length ?? 0) > 0)
+          : true));
+  }, [rows, view, st, from, to, cur]);
+  // 합계 3열(청구·지급·미지급) — 통화별 분리(수입 목록과 같은 규칙).
   const totals = useMemo(() => payableTotals(visible), [visible]);
-  // 실적은 실제로 나간 날 기준 — 현금흐름이 그 날짜로 세는 것과 같다.
-  const settled = useMemo(
-    () => paymentRows(rows).filter((r) =>
-      r.currency === cur && (!src || r.src === src) && inRange(r.date, from, to)),
-    [rows, from, to, cur, src]
-  );
 
   function reload() {
     invalidateCache("finance:summary");
@@ -1888,13 +1714,11 @@ function OutflowTab() {
         <div className="seg-toggle fin-subtabs" role="group" aria-label="Outflow view">
           <button className={view === "payables" ? "on" : ""} onClick={() => setView("payables")}>Purchases</button>
           <button className={view === "other" ? "on" : ""} onClick={() => setView("other")}>Other costs</button>
-          <button className={view === "paid" ? "on" : ""} onClick={() => setView("paid")}>Paid</button>
+          <button className={view === "total" ? "on" : ""} onClick={() => setView("total")}>Total</button>
         </div>
         {/* 무엇을 걸러 볼지는 오른쪽에 모아 둔다 — 왼쪽 갈래(무엇을 보는가)와 갈라서. */}
         <div className="fin-ledger-filters">
-          {src && view === "paid"
-            ? <SrcChip src={src} cols={["Purchases", "Other costs"]} onClear={() => setParams({ src: "" })} />
-            : null}
+          <LedgerStatusPick st={st} names={["Payable", "Paid"]} onChange={(v) => setParams({ st: v })} />
           <LedgerCurrency cur={cur} onChange={(c) => setParams({ cur: c })} />
           <LedgerPeriod from={from} to={to} onChange={(f, t) => setParams({ from: f, to: t })} />
         </div>
@@ -1904,32 +1728,40 @@ function OutflowTab() {
           ? "Vendor bills arrive here automatically from the project's billing stages and are read-only — click the bill number to open that project's stage 11 Payable (AP), where the payment is confirmed. Payments registered by hand under the vendor-payment category sit here too."
           : view === "other"
             ? "The company's own costs — rent, payroll, utilities, taxes — are registered by hand here; monthly/quarterly/yearly items appear as occurrences on the calendar."
-            : "Money that has actually left, dated on the day it went out. Purchases and other costs together, newest first."}
+            : "Purchases and other costs in one list. Each line carries what was billed, what has gone out and what is still owed, so the three filters on the right cut it the same way the Overview grid does."}
       </p>
 
-      {view === "paid" ? (
-        <SettledTable rows={settled} dateLabel="Paid" partyLabel="Vendor / payee" empty="Nothing paid yet." fx={fx} />
-      ) : view === "payables" ? (
+      {/* 표는 하나 — 세 갈래가 같은 열을 쓰기 때문이다(벤더 청구든 임차료든 '분류·상대처·
+          적요·날짜 둘·금액 셋·상태·반복'으로 적힌다). 갈래마다 표를 따로 두었을 때는
+          Total 을 낼 자리가 없었고, 같은 표를 두 벌 손봐야 했다. 이름 두 개만 갈린다:
+          거래 쪽은 청구서 번호와 'Bill', 그 밖은 적요와 'Amount'. */}
       <section className="fin-sec">
-        {/* 행이 없어도 표(머리행)는 남긴다 — 어떤 항목이 들어오는 자리인지 보이도록. */}
         <table className="mini fin-ledger">
           <thead>
             <tr>
-              <th className="fin-w-cat">Category</th><th className="fin-w-party">Vendor</th><th>Bill No. / Vendor P/O</th><th className="fin-w-date">Bill date</th><th className="fin-w-date">Due</th>
-              <th className="num fin-w-money">Bill</th><th className="num fin-w-money">Paid</th><th className="num fin-w-money">Payable</th>
+              <th className="fin-w-cat">Category</th>
+              <th className="fin-w-party">{view === "payables" ? "Vendor" : "Vendor / payee"}</th>
+              <th>{view === "payables" ? "Bill No. / Vendor P/O" : view === "other" ? "Description" : "Reference"}</th>
+              <th className="fin-w-date">Bill date</th><th className="fin-w-date">Due</th>
+              <th className="num fin-w-money">{view === "payables" ? "Bill" : "Amount"}</th>
+              <th className="num fin-w-money">Paid</th><th className="num fin-w-money">Payable</th>
               <th className="fin-w-status">Status</th><th className="fin-w-rec">Recurrence</th><th className="fin-w-act" />
             </tr>
           </thead>
           <tbody>
-            {trade.length === 0 ? (
-              <tr><td colSpan={11} className="mini-empty">No vendor bills yet.</td></tr>
+            {/* 행이 없어도 표(머리행)는 남긴다 — 어떤 항목이 들어오는 자리인지 보이도록. */}
+            {visible.length === 0 ? (
+              <tr><td colSpan={11} className="mini-empty">{
+                st ? "Nothing in this period matches that filter."
+                  : view === "other" ? "No other costs registered." : "No vendor bills yet."}</td></tr>
             ) : null}
-            {trade.map((p) => (
+            {visible.map((p) => (
               <tr key={`${p.source || "manual"}-${p.id}`} className={p.overdue && !p.paid ? "fin-overdue" : ""}>
                 <td data-label="Category">{CATEGORY_LABEL[p.category] || p.category}</td>
                 <td className="fin-c-title">{p.counterparty || "—"}</td>
                 {/* 청구서 번호 = 미수 목록의 Invoice No. 자리. AP 행은 그 아래 벤더 P/O 를
-                    옅게 덧붙인다(번호가 아직 없으면 P/O 만 보인다). 수동 등록은 적요. */}
+                    옅게 덧붙인다(번호가 아직 없으면 P/O 만 보인다). 수동 등록은 적요이고,
+                    메모는 별도 열까지 둘 만큼 길지 않아 그 아래 옅게 붙인다. */}
                 <td className="fin-c-sub">
                   {p.source === "ap" ? (
                     <>
@@ -1937,53 +1769,17 @@ function OutflowTab() {
                       {p.po_no && p.po_no !== p.description ? <div className="muted">{p.po_no}</div> : null}
                     </>
                   ) : (
-                    p.description || "—"
+                    <>
+                      {p.description || "—"}
+                      {p.notes ? <div className="muted">{p.notes}</div> : null}
+                    </>
                   )}
-                </td>
-                <td data-label="Billed">{p.bill_date || "—"}</td>
-                <td data-label="Due">{p.due_date || "—"}</td>
-                <td className="num" data-label="Bill">{money(p.invoice_amount, p.currency)}</td>
-                <td className="num" data-label="Paid">{money(p.paid_amount, p.currency)}</td>
-                <td className="num" data-label="Payable">{money(p.outstanding, p.currency)}</td>
-                {statusCell(p)}
-                {recurrenceCell(p)}
-                {actionCell(p)}
-              </tr>
-            ))}
-          </tbody>
-          {totalsFoot("Bill")}
-        </table>
-      </section>
-      ) : (
-      <section className="fin-sec">
-        {/* 행이 없어도 표(머리행)는 남긴다 — 등록 버튼이 무엇을 만드는지 열 이름으로 보인다. */}
-        <table className="mini fin-ledger">
-          <thead>
-            {/* 열 자리는 위 표와 동일 — 이름만 이 표의 항목에 맞춘다(등록 폼의 입력칸과 1:1). */}
-            <tr>
-              <th className="fin-w-cat">Category</th><th className="fin-w-party">Vendor / payee</th><th>Description</th><th className="fin-w-date">Bill date</th><th className="fin-w-date">Due</th>
-              <th className="num fin-w-money">Amount</th><th className="num fin-w-money">Paid</th><th className="num fin-w-money">Payable</th>
-              <th className="fin-w-status">Status</th><th className="fin-w-rec">Recurrence</th><th className="fin-w-act" />
-            </tr>
-          </thead>
-          <tbody>
-            {other.length === 0 ? (
-              <tr><td colSpan={11} className="mini-empty">No other costs registered.</td></tr>
-            ) : null}
-            {other.map((p) => (
-              <tr key={`${p.source || "manual"}-${p.id}`} className={p.overdue && !p.paid ? "fin-overdue" : ""}>
-                <td data-label="Category">{CATEGORY_LABEL[p.category] || p.category}</td>
-                <td className="fin-c-title">{p.counterparty || "—"}</td>
-                {/* 메모는 별도 열까지 둘 만큼 길지 않아 적요 아래 옅게 붙인다. */}
-                <td className="fin-c-sub">
-                  {p.description || "—"}
-                  {p.notes ? <div className="muted">{p.notes}</div> : null}
                 </td>
                 <td data-label="Billed">{p.bill_date || "—"}</td>
                 <td data-label="Due">{p.due_date || "—"}</td>
                 {/* 총액 아래에 그 안의 부가세를 옅게 — 결산의 매입세액으로 넘어가는 값이라
                     목록에서 바로 확인할 수 있어야 한다. */}
-                <td className="num" data-label="Amount">
+                <td className="num" data-label={view === "payables" ? "Bill" : "Amount"}>
                   {money(p.invoice_amount, p.currency)}
                   {p.vat_amount ? <div className="muted">VAT {money(p.vat_amount, p.currency)}</div> : null}
                 </td>
@@ -1995,10 +1791,9 @@ function OutflowTab() {
               </tr>
             ))}
           </tbody>
-          {totalsFoot("Amount")}
+          {totalsFoot(view === "payables" ? "Bill" : "Amount")}
         </table>
       </section>
-      )}
 
       {paying ? (
         <PaymentDateModal
