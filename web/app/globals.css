@@ -11932,7 +11932,8 @@ button.ov-tl-stage:hover {
 .fin-cf-parked { font-size: 11px; font-weight: 600; color: #5b6b82; margin-top: 2px; }
 /* 세 기둥에서 합계에 들지 않은 갈래 — 줄을 지우지 않고 눕힌다(무엇이 예정되어 있는지는
    남기되, 더해서 합계가 나오지 않는 줄임을 알린다). */
-.fin-bucket-card tr.fin-bucket-off > td { color: var(--muted); }
+.fin-bucket-card tr.fin-bucket-off > td,
+.fin-bucket-card tr.fin-bucket-off > th { color: var(--muted); }
 .fin-bucket-card tr.fin-bucket-off > td.num { font-style: italic; }
 /* 고를 것이 없는 스위치 — 지우지 않고 눕혀 둔다(왜 못 고르는지는 title 이 말한다). */
 .check-chip.off { opacity: 0.5; }
@@ -12417,10 +12418,50 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 /* 제목 뒤에 붙는 구간 이름 — 제목이 아니라 '언제의 것인가'를 밝히는 말이라, 굵기를
    빼고 회색으로 낮춘다(어느 구간인지는 위 Showing 칸이 굵게 말한다). */
 .fin-bucket-card .form-title .muted { font-weight: 400; color: var(--muted); }
+/* ── 기둥 격자 — 세로 정산여부(Receivables/Received) × 가로 출처(Sales/Other) ──── */
+/* 머리줄은 칸 이름만 — 본문 금액보다 한 단 낮춰, 격자의 뼈대로만 읽히게 한다. */
+.fin-bucket-grid thead th {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  padding-bottom: 2px;
+  border-bottom: 1px solid var(--line);
+}
+/* 줄 이름 칸(th[scope=row]) — 본문 글씨로 되돌린다(기본 th 는 가운데·작게 정렬된다). */
+.fin-bucket-grid tbody th {
+  text-align: left;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink);
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+}
+/* 금액 칸은 좁다 — 세 칸이 나란히 서므로 글자를 한 급 줄이고 합계만 제 크기로 남긴다. */
+.fin-bucket-card table.mini.fin-bucket-grid td.num { font-size: 13px; }
+.fin-bucket-card table.mini.fin-bucket-grid td.num:last-child { font-size: 14px; }
+.fin-bucket-grid thead th:last-child { color: var(--ink); }
+/* 금액이 곧 그 조건의 목록으로 가는 문이다 — 파랗게 물들이지 않고(숫자가 먼저 읽혀야
+   한다) 가리켰을 때만 밑줄로 밝힌다. */
+.fin-bucket-grid .fin-cell-link {
+  color: inherit;
+  text-decoration: none;
+  border-bottom: 1px dotted transparent;
+}
+.fin-bucket-grid .fin-cell-link:hover {
+  color: var(--blue);
+  border-bottom-color: color-mix(in srgb, var(--blue) 45%, transparent);
+}
+/* 갈래별로 갈라 오지 않은 값(옛 백엔드) — 0 이 아니라 '모른다'는 뜻이라 줄표로 둔다. */
+.fin-bucket-grid .fin-cell-none { color: #c2cbd8; }
+/* 걸려 있는 출처 필터를 밝히는 칩 — 누르면 풀린다. */
+.fin-src-chip { cursor: pointer; border-color: var(--blue); color: #1d4ed8; font-weight: 600; }
+.fin-src-chip:hover { background: #e4edfb; }
+
 /* 세 기둥의 마지막 줄 — Received · Paid · Ending. 서로 짝이 되는 줄이라(앞의 둘이 그
    잔고를 만든 돈이다) 한 규칙에서 함께 칠한다: 따로 적어 두면 언젠가 한쪽만 손대게 되고,
    그러면 나란히 선 세 칸의 발밑 색이 어긋난다. 줄 높이는 셋 다 이름 + 딸린 한 줄로 맞다. */
 .fin-bucket-card table.mini tr.fin-bucket-settled > td,
+.fin-bucket-card table.mini tr.fin-bucket-settled > th,
 .fin-bucket-card table.mini tr.fin-period-total > td {
   border-top: 1px solid var(--line-strong);
   background: #f7f9fc;

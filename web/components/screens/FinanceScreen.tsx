@@ -354,6 +354,15 @@ function LedgerCurrency({ cur, onChange }: { cur: LedgerCur; onChange: (c: Ledge
   );
 }
 
+/**
+ * 실적 목록(Received·Paid)을 출처로 한 번 더 거를 때 쓰는 값 — 세 기둥 격자의 한 칸이
+ * 'Received × Sales' 처럼 두 조건으로 좁힌 목록을 열기 때문이다. 빈 값이면 둘 다.
+ */
+type LedgerSrc = "trade" | "other";
+function asLedgerSrc(v: string | null): LedgerSrc | "" {
+  return v === "trade" || v === "other" ? v : "";
+}
+
 /** 통화별 합계에서 고른 통화만 남긴다. */
 function pickCurrency(m: MoneyByCurrency, cur: LedgerCur): MoneyByCurrency {
   return (m && cur in m) ? { [cur]: m[cur] } : {};
@@ -375,13 +384,21 @@ const IN_BUCKETS: CashBucket[] = ["receivables", "income", "collected"];
  * 합과 기둥의 금액이 맞는다. 통화도 같은 이유로 걸어 보낸다: 이 기둥은 고른 통화 하나만
  * 세고 있어, 통화를 안 걸면 목록에 다른 통화가 섞여 합이 어긋난다.
  */
-function ledgerHref(r: FinanceCashflowRow, first: boolean, bucket: CashBucket, currency: string): string {
+function ledgerHref(
+  r: FinanceCashflowRow,
+  first: boolean,
+  bucket: CashBucket,
+  currency: string,
+  /** 실적 목록을 출처로 한 번 더 거를 때 — 격자의 'Received × Sales' 같은 칸이 쓴다. */
+  src?: LedgerSrc
+): string {
   const q = new URLSearchParams({
     tab: IN_BUCKETS.includes(bucket) ? "inflow" : "outflow",
     view: bucket,
     to: r.end,
     cur: currency,
   });
+  if (src) q.set("src", src);
   if (!first) q.set("from", r.start);
   return `/finance?${q.toString()}`;
 }
@@ -594,21 +611,61 @@ function OverviewTab() {
               title="Inflow"
               period={pickedLabel}
               tone="in"
-              lines={[["receivables", row.in_ar ?? 0], ["income", row.in_income ?? 0], ["collected", row.actual_inflow]]}
-              parked={parkExpected ? ["receivables", "income"] : []}
+              cols={["Sales", "Other income"]}
+              due={{
+                label: "Receivables",
+                hint: "not settled yet",
+                trade: row.in_ar ?? 0,
+                other: row.in_income ?? 0,
+                total: (row.in_ar ?? 0) + (row.in_income ?? 0),
+                parked: parkExpected,
+                href: [ledgerHref(row, idx === 0, "receivables", currency), ledgerHref(row, idx === 0, "income", currency)],
+              }}
+              settled={{
+                label: "Received",
+                hint: "already in the account",
+                trade: row.actual_in_ar ?? 0,
+                other: row.actual_in_income ?? 0,
+                total: row.actual_inflow,
+                split: typeof row.actual_in_ar === "number",
+                href: [
+                  ledgerHref(row, idx === 0, "collected", currency, "trade"),
+                  ledgerHref(row, idx === 0, "collected", currency, "other"),
+                ],
+                totalHref: ledgerHref(row, idx === 0, "collected", currency),
+              }}
               allHref={`${periodHref(row, idx === 0, currency, includePo, overdueRolled, !parkExpected)}&side=in`}
               currency={currency}
-              href={(b) => ledgerHref(row, idx === 0, b, currency)}
             />
             <BucketCard
               title="Outflow"
               period={pickedLabel}
               tone="out"
-              lines={[["payables", row.out_ap ?? 0], ["other", row.out_other ?? 0], ["paid", row.actual_outflow]]}
-              parked={parkExpected ? ["payables", "other"] : []}
+              cols={["Purchases", "Other costs"]}
+              due={{
+                label: "Payables",
+                hint: "not settled yet",
+                trade: row.out_ap ?? 0,
+                other: row.out_other ?? 0,
+                total: (row.out_ap ?? 0) + (row.out_other ?? 0),
+                parked: parkExpected,
+                href: [ledgerHref(row, idx === 0, "payables", currency), ledgerHref(row, idx === 0, "other", currency)],
+              }}
+              settled={{
+                label: "Paid",
+                hint: "already out of the account",
+                trade: row.actual_out_ap ?? 0,
+                other: row.actual_out_other ?? 0,
+                total: row.actual_outflow,
+                split: typeof row.actual_out_ap === "number",
+                href: [
+                  ledgerHref(row, idx === 0, "paid", currency, "trade"),
+                  ledgerHref(row, idx === 0, "paid", currency, "other"),
+                ],
+                totalHref: ledgerHref(row, idx === 0, "paid", currency),
+              }}
               allHref={`${periodHref(row, idx === 0, currency, includePo, overdueRolled, !parkExpected)}&side=out`}
               currency={currency}
-              href={(b) => ledgerHref(row, idx === 0, b, currency)}
             />
             <div className="panel fin-bucket-card fin-bucket--balance">
               {/* 구간 이름은 왼쪽 앞머리가 세 기둥을 대신해 한 번만 적는다. */}
@@ -658,7 +715,10 @@ function OverviewTab() {
                     <td className="num">{cash(rowOpening)}</td>
                   </tr>
                   <tr>
-                    <td>Net<div className="hint-inline">inflow − outflow</div></td>
+                    {/* 예정을 잔고 밖에 세워 두면 이 값은 '실제로 오간 돈끼리의 차'다 —
+                        옆 두 기둥의 아랫줄(Received·Paid) 합계끼리 뺀 것. 그 말을 그대로
+                        적어 두면 어느 숫자에서 왔는지 눈으로 따라갈 수 있다. */}
+                    <td>Net<div className="hint-inline">{parkExpected ? "received − paid" : "inflow − outflow"}</div></td>
                     <td className="num" style={{ color: row.net >= 0 ? "#1e7a46" : "#c0392b" }}>
                       {row.net >= 0 ? "+" : "−"}{cash(Math.abs(row.net))}
                     </td>
@@ -860,59 +920,93 @@ function OverviewTab() {
   );
 }
 
-/** 한 구간의 유입(또는 유출) 세 갈래. 각 줄은 그 갈래의 건별 목록으로 간다. */
-function BucketCard({ title, period, tone, lines, parked, allHref, currency, href }: {
+/** 격자의 한 줄 — 두 갈래 금액과 그 합, 그리고 칸마다 열리는 목록. */
+type BucketRow = {
+  label: string;
+  hint: string;
+  /** 거래에서 나온 돈(매출·매입). */
+  trade: number;
+  /** 그 밖(기타수입·임차료·급여 등). */
+  other: number;
+  total: number;
+  /** 잔고 밖에 세워 둔 줄인가 — 금액은 적되 잔고에는 안 들어 있다. */
+  parked?: boolean;
+  /**
+   * 갈래별 금액이 실제로 갈라져 오는가. 옛 백엔드는 실적을 합계로만 보내므로(배포 시차)
+   * 그때 두 칸에 0 을 적으면 '아무것도 안 들어왔다'는 거짓말이 된다 — 줄표로 비운다.
+   */
+  split?: boolean;
+  /** [거래 칸, 그 밖 칸] 목록 주소. */
+  href: [string, string];
+  /** 합계 칸의 목록 주소(없으면 카드의 allHref). */
+  totalHref?: string;
+};
+
+/**
+ * 한 구간의 유입(또는 유출)을 격자로 — 세로는 정산 여부(미수/실적), 가로는 출처
+ * (거래/그 밖). 두 겹으로 갈리는 갈래라 줄로만 세우면 여섯 줄이 되고, 어느 둘이 같은
+ * 종류인지가 이름의 앞마디를 읽어야만 잡혔다. 격자로 놓으면 그 관계가 자리로 읽힌다:
+ * 세로로 더하면 그 출처의 전부, 가로로 더하면 그 상태의 전부(Total 칸).
+ * 칸마다 그 조건으로 걸러 낸 목록으로 간다.
+ */
+function BucketCard({ title, period, tone, cols, due, settled, allHref, currency }: {
   title: string;
   period: string;
   tone: "in" | "out";
-  lines: [CashBucket, number][];
-  /**
-   * 잔고 밖에 세워 둔 갈래 — 금액은 그대로 적되 잔고에는 들어 있지 않다. 줄을 지우지
-   * 않는 건 '무엇이 예정되어 있나'가 사라지면 안 되기 때문이고, 옅게 눕히는 건 잔고를
-   * 움직이지 않은 줄임을 그 자리에서 알리기 위해서다.
-   */
-  parked?: CashBucket[];
+  /** 가로 두 칸의 이름 — [거래, 그 밖]. */
+  cols: [string, string];
+  /** 윗줄 = 아직 안 오간 돈(Receivables · Payables). */
+  due: BucketRow;
+  /** 아랫줄 = 이미 오간 돈(Received · Paid). */
+  settled: BucketRow;
   /** 기둥 이름 → 이 구간 전체를 한 화면에 펼친 기간 상세. */
   allHref: string;
   currency: string;
-  href: (b: CashBucket) => string;
 }) {
   const cash = (n: number) => money(n, currency);
-  const isParked = (b: CashBucket) => !!parked?.includes(b);
+  /** 금액 한 칸 — 누르면 그 칸이 가리키는 목록이 열린다. */
+  const cell = (amount: number, href: string, what: string, shown = true) => (
+    <td className="num">
+      {shown ? (
+        <Link className="fin-cell-link" href={href} title={`${what} · ${period}`}>{cash(amount)}</Link>
+      ) : (
+        <span className="fin-cell-none" title="This period's figure is not split by source yet">—</span>
+      )}
+    </td>
+  );
+  /** 격자 한 줄. 음영은 아랫줄(실적)에만 — 옆 기둥의 Ending 과 짝이 되는 자리라서다. */
+  const line = (r: BucketRow, isSettled: boolean) => (
+    <tr className={`${isSettled ? "fin-bucket-settled" : ""}${r.parked ? " fin-bucket-off" : ""}`}>
+      <th scope="row">
+        {r.label}
+        <div className="hint-inline">{r.hint}{r.parked ? " · not in balance" : ""}</div>
+      </th>
+      {cell(r.trade, r.href[0], `${r.label} · ${cols[0]}`, r.split !== false)}
+      {cell(r.other, r.href[1], `${r.label} · ${cols[1]}`, r.split !== false)}
+      {cell(r.total, r.totalHref ?? allHref, `${r.label} · all`)}
+    </tr>
+  );
   return (
     <div className={`panel fin-bucket-card fin-bucket--${tone}`}>
-      {/* 기둥 이름이 곧 '이 구간 전부'로 가는 문이다 — 합계 줄에 달려 있던 링크를 여기로
-          올렸다. 구간 이름은 왼쪽 앞머리가 한 번만 적는다(여기서는 링크 설명에만 남는다). */}
+      {/* 기둥 이름이 곧 '이 구간 전부'로 가는 문이다. 구간 이름은 왼쪽 앞머리가 한 번만
+          적는다(여기서는 링크 설명에만 남는다). */}
       <h3 className="form-title">
         <Link className="fin-doc-link" href={allHref} title={`Every ${title.toLowerCase()} item · ${period}`}>
           {title}
         </Link>
       </h3>
-      {/* 합계 줄은 두지 않는다. 예정을 잔고 밖에 세워 두면(기본값) 세 줄이 더해서 하나가
-          되지 않아 '합계'라 부를 것이 없고, 그때 그 자리에 적히던 값은 바로 위 실적 줄과
-          같은 숫자였다 — 같은 값을 두 줄에 적으면 어느 쪽이 답인지가 흐려진다.
-          구간의 유입·유출 합계는 아래 Cash flow 표의 그 행이 이미 적고 있다. */}
-      <table className="mini">
+      <table className="mini fin-bucket-grid">
+        <thead>
+          <tr>
+            <th />
+            <th className="num">{cols[0]}</th>
+            <th className="num">{cols[1]}</th>
+            <th className="num">Total</th>
+          </tr>
+        </thead>
         <tbody>
-          {/* 마지막 줄(이미 오간 돈)은 옆 기둥의 Ending 과 같은 자리·같은 무게로 세운다 —
-              세 기둥의 발밑에서 서로 짝이 되는 줄이라(이 줄이 곧 그 잔고를 만든 돈이다),
-              음영과 윗선이 나란히 이어져야 셋이 한 줄로 읽힌다. */}
-          {lines.map(([b, amount], i) => (
-            <tr
-              key={b}
-              className={`${i === lines.length - 1 ? "fin-bucket-settled" : ""}${isParked(b) ? " fin-bucket-off" : ""}`}
-            >
-              <td>
-                <Link className="fin-doc-link" href={href(b)} title={`Open the ${BUCKET_LABEL[b].toLowerCase()} items for ${period}`}>
-                  {BUCKET_LABEL[b]}
-                </Link>
-                <div className="hint-inline">
-                  {BUCKET_HINT[b]}{isParked(b) ? " · not in balance" : ""}
-                </div>
-              </td>
-              <td className="num">{cash(amount)}</td>
-            </tr>
-          ))}
+          {line(due, false)}
+          {line(settled, true)}
         </tbody>
       </table>
     </div>
@@ -936,6 +1030,8 @@ function receivableTotals(rows: FinanceReceivable[]) {
 /** 실적 한 건 — 실제로 오간 돈. 수금/지급 목록이 같은 모양을 쓴다. */
 type SettledRow = {
   key: string;
+  /** 거래에서 나온 돈인가(매출·매입) 그 밖인가 — 격자의 'Received × Sales' 칸이 이걸로 거른다. */
+  src: LedgerSrc;
   /** 실제로 오간 날(모르면 빈 값 — 부분수금은 날짜를 남길 자리가 없다). */
   date: string;
   kind: string;
@@ -964,7 +1060,7 @@ function receiptRows(rows: FinanceReceivable[]): SettledRow[] {
       if ((r.recurrence ?? "none") === "none") {
         if (r.paid) {
           out.push({
-            key: `inc-${r.id}`, date: r.paid_date || r.due_date,
+            key: `inc-${r.id}`, src: "other", date: r.paid_date || r.due_date,
             kind: INCOME_CATEGORY_LABEL[r.category || ""] || r.category || "Other income",
             party: r.counterparty || r.customer, ref: r.description || "—",
             amount, currency: r.currency,
@@ -973,7 +1069,7 @@ function receiptRows(rows: FinanceReceivable[]): SettledRow[] {
       } else {
         for (const occ of r.paid_dates ?? []) {
           out.push({
-            key: `inc-${r.id}-${occ}`, date: r.payments?.[occ] || occ,
+            key: `inc-${r.id}-${occ}`, src: "other", date: r.payments?.[occ] || occ,
             kind: INCOME_CATEGORY_LABEL[r.category || ""] || r.category || "Other income",
             party: r.counterparty || r.customer,
             ref: <>{r.description || "—"} <span className="hint-inline">· due {occ}</span></>,
@@ -983,7 +1079,7 @@ function receiptRows(rows: FinanceReceivable[]): SettledRow[] {
       }
     } else if (r.paid_amount > 0) {
       out.push({
-        key: `ar-${r.id}`, date: r.paid_date || "", kind: "Sales",
+        key: `ar-${r.id}`, src: "trade", date: r.paid_date || "", kind: "Sales",
         party: r.customer,
         ref: <ProjectDocLink orderId={r.order_id} rfqId={r.rfq_id} label={r.invoice_no || r.ci_no} />,
         amount: r.paid_amount, currency: r.currency,
@@ -1000,7 +1096,7 @@ function paymentRows(rows: FinancePayable[]): SettledRow[] {
     if (p.source === "ap") {
       if (p.paid_amount > 0) {
         out.push({
-          key: `ap-${p.id}`, date: p.paid_date || "", kind: "Vendor bill",
+          key: `ap-${p.id}`, src: "trade", date: p.paid_date || "", kind: "Vendor bill",
           party: p.counterparty || "—",
           ref: <ProjectDocLink orderId={p.order_id} rfqId={p.rfq_id} label={p.description || p.po_no} apPoId={p.po_id} />,
           amount: p.paid_amount, currency: p.currency,
@@ -1009,7 +1105,8 @@ function paymentRows(rows: FinancePayable[]): SettledRow[] {
     } else if ((p.recurrence ?? "none") === "none") {
       if (p.paid) {
         out.push({
-          key: `pay-${p.id}`, date: p.paid_date || p.due_date,
+          key: `pay-${p.id}`, src: p.category === "거래선지급" ? "trade" : "other",
+          date: p.paid_date || p.due_date,
           kind: CATEGORY_LABEL[p.category] || p.category,
           party: p.counterparty || "—", ref: p.description || "—",
           amount: p.amount, currency: p.currency,
@@ -1018,7 +1115,8 @@ function paymentRows(rows: FinancePayable[]): SettledRow[] {
     } else {
       for (const occ of p.paid_dates ?? []) {
         out.push({
-          key: `pay-${p.id}-${occ}`, date: p.payments?.[occ] || occ,
+          key: `pay-${p.id}-${occ}`, src: p.category === "거래선지급" ? "trade" : "other",
+          date: p.payments?.[occ] || occ,
           kind: CATEGORY_LABEL[p.category] || p.category,
           party: p.counterparty || "—",
           ref: <>{p.description || "—"} <span className="hint-inline">· due {occ}</span></>,
@@ -1084,6 +1182,23 @@ function SettledTable({ rows, dateLabel, partyLabel, empty, fx }: {
   );
 }
 
+/**
+ * 출처 필터가 걸려 있음을 밝히는 칩 — 세 기둥 격자의 한 칸에서 넘어오면 목록이 이미
+ * 좁혀져 있다. 그걸 말해 주지 않으면 '왜 이것뿐이지'가 되고, 푸는 길도 없다.
+ */
+function SrcChip({ src, cols, onClear }: {
+  src: LedgerSrc;
+  /** [거래 갈래 이름, 그 밖 갈래 이름] — 기둥 격자의 가로 칸 이름과 같은 말. */
+  cols: [string, string];
+  onClear: () => void;
+}) {
+  return (
+    <button type="button" className="check-chip fin-src-chip" onClick={onClear} title="Show both">
+      {src === "trade" ? cols[0] : cols[1]} only <span aria-hidden="true">×</span>
+    </button>
+  );
+}
+
 type InflowView = "receivables" | "income" | "collected";
 
 function InflowTab() {
@@ -1096,11 +1211,15 @@ function InflowTab() {
   const viewParam = params.get("view") || "";
   const view: InflowView = (["receivables", "income", "collected"] as const).includes(viewParam as InflowView)
     ? (viewParam as InflowView) : "receivables";
-  const setView = (v: InflowView) => setParams({ view: v === "receivables" ? "" : v });
+  // 갈래를 손으로 바꾸면 출처 필터는 푼다 — 격자의 한 칸에서 넘어온 조건이라,
+  // 다른 갈래를 고른 뒤에도 남아 있으면 목록이 왜 짧은지 알 수 없다.
+  const setView = (v: InflowView) => setParams({ view: v === "receivables" ? "" : v, src: "" });
   const from = params.get("from") || "";
   const to = params.get("to") || "";
   // 통화도 주소에 산다(갈래·기간과 같은 규약) — '₩만 본 이 화면'을 그대로 넘길 수 있게.
   const cur = asLedgerCur(params.get("cur"));
+  // 세 기둥 격자의 'Received × Sales' 같은 칸에서 넘어오면 출처까지 걸려 있다.
+  const src = asLedgerSrc(params.get("src"));
   // 원장은 기본적으로 전부 보여준다 — 켜 두면 수금이 끝난 청구서가 목록에서 사라져
   // "그 청구서 어디 갔지"가 된다. 미수만 추리고 싶을 때만 사용자가 켠다.
   const [openOnly, setOpenOnly] = useState(false);
@@ -1118,8 +1237,9 @@ function InflowTab() {
   }, [all, view, openOnly, from, to, cur]);
   // 실적은 실제로 오간 날 기준 — 현금흐름이 그 날짜로 세는 것과 같다.
   const settled = useMemo(
-    () => receiptRows(all).filter((r) => r.currency === cur && inRange(r.date, from, to)),
-    [all, from, to, cur]
+    () => receiptRows(all).filter((r) =>
+      r.currency === cur && (!src || r.src === src) && inRange(r.date, from, to)),
+    [all, from, to, cur, src]
   );
   const totals = useMemo(() => receivableTotals(rows), [rows]);
   // 머리 KPI 는 기간·갈래와 무관한 '오늘 기준' 값이지만, 통화는 따른다 — 한 통화만 보기로
@@ -1195,6 +1315,9 @@ function InflowTab() {
         </div>
         {/* 무엇을 걸러 볼지는 오른쪽에 모아 둔다 — 왼쪽 갈래(무엇을 보는가)와 갈라서. */}
         <div className="fin-ledger-filters">
+          {src && view === "collected"
+            ? <SrcChip src={src} cols={["Sales", "Other income"]} onClear={() => setParams({ src: "" })} />
+            : null}
           <LedgerCurrency cur={cur} onChange={(c) => setParams({ cur: c })} />
           <LedgerPeriod from={from} to={to} onChange={(f, t) => setParams({ from: f, to: t })} />
         </div>
@@ -1558,11 +1681,13 @@ function OutflowTab() {
   const viewParam = params.get("view") || "";
   const view: OutflowView = (["payables", "other", "paid"] as const).includes(viewParam as OutflowView)
     ? (viewParam as OutflowView) : "payables";
-  const setView = (v: OutflowView) => setParams({ view: v === "payables" ? "" : v });
+  // 갈래를 바꾸면 출처 필터는 푼다(Inflow 와 같은 규약).
+  const setView = (v: OutflowView) => setParams({ view: v === "payables" ? "" : v, src: "" });
   const from = params.get("from") || "";
   const to = params.get("to") || "";
   // 통화 필터 — Inflow 와 같은 규약(주소의 cur).
   const cur = asLedgerCur(params.get("cur"));
+  const src = asLedgerSrc(params.get("src"));
   const [editing, setEditing] = useState<FinancePayable | null>(null);
   const [adding, setAdding] = useState(false);
   // 납부 입력 대상 — 회차일(occurrence)과 실제 납부일을 함께 받는다.
@@ -1583,8 +1708,9 @@ function OutflowTab() {
   const totals = useMemo(() => payableTotals(visible), [visible]);
   // 실적은 실제로 나간 날 기준 — 현금흐름이 그 날짜로 세는 것과 같다.
   const settled = useMemo(
-    () => paymentRows(rows).filter((r) => r.currency === cur && inRange(r.date, from, to)),
-    [rows, from, to, cur]
+    () => paymentRows(rows).filter((r) =>
+      r.currency === cur && (!src || r.src === src) && inRange(r.date, from, to)),
+    [rows, from, to, cur, src]
   );
 
   function reload() {
@@ -1766,6 +1892,9 @@ function OutflowTab() {
         </div>
         {/* 무엇을 걸러 볼지는 오른쪽에 모아 둔다 — 왼쪽 갈래(무엇을 보는가)와 갈라서. */}
         <div className="fin-ledger-filters">
+          {src && view === "paid"
+            ? <SrcChip src={src} cols={["Purchases", "Other costs"]} onClear={() => setParams({ src: "" })} />
+            : null}
           <LedgerCurrency cur={cur} onChange={(c) => setParams({ cur: c })} />
           <LedgerPeriod from={from} to={to} onChange={(f, t) => setParams({ from: f, to: t })} />
         </div>

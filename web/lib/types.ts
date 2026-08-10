@@ -1011,6 +1011,16 @@ export type FinanceCashflowRow = {
   actual_inflow: number;
   actual_outflow: number;
   /**
+   * 그 실적의 출처별 내역 — 예정 쪽 in_ar·in_income·out_ap·out_other 와 같은 갈래.
+   * actual_in_ar + actual_in_income = actual_inflow (유출도 같다). 화면의 세 기둥이
+   * '미수·실적 × 매출·기타' 격자라 실적도 같은 갈래로 갈라져야 한다.
+   * 옛 백엔드는 보내지 않는다(그때 격자 아랫줄은 합계 칸만 채워진다).
+   */
+  actual_in_ar?: number;
+  actual_in_income?: number;
+  actual_out_ap?: number;
+  actual_out_other?: number;
+  /**
    * 예정분의 출처별 내역. in_ar + in_income + actual_inflow = inflow (유출도 같다).
    * 단 예정을 잔고 밖에 세워 두면(include_expected=0) 이 갈래들은 inflow 밖에 있는
    * '잔고에 넣지 않은 예정'이 된다 — 내역은 그대로 보여 주되 잔고는 건드리지 않는다.

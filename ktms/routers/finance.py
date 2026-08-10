@@ -847,6 +847,13 @@ def finance_cashflow(unit: str = "month", count: int = 6, opening: float = 0.0,
         # 이미 들어온 금액'을 구분해 볼 수 있게.
         act_in = [0.0] * count
         act_out = [0.0] * count
+        # 그 실적을 출처별로 한 번 더 — 화면의 세 기둥이 '미수·실적 × 매출·기타' 격자라,
+        # 실적도 예정과 같은 갈래로 갈라져야 격자의 아래 줄이 채워진다.
+        # act_in_ar + act_in_income = act_in (유출도 같다).
+        act_in_ar = [0.0] * count
+        act_in_income = [0.0] * count
+        act_out_ap = [0.0] * count
+        act_out_other = [0.0] * count
         # 예정분을 출처별로 한 번 더 나눠 담는다 — 화면이 '수금 예정 / 기타수입 / 지급 예정 /
         # 기타비용' 네 갈래로 보여 주기 때문. 예정과 실적은 서로 겹치지 않으므로
         # in_ar + in_income + actual_inflow = inflow 가 그대로 성립한다(유출도 같다).
@@ -907,6 +914,7 @@ def finance_cashflow(unit: str = "month", count: int = 6, opening: float = 0.0,
             if idx >= 0:
                 inflow[idx] += amt
                 act_in[idx] += amt
+                act_in_ar[idx] += amt
         for inc in s.query(FinanceIncome).all():
             if (inc.currency or "KRW").upper() != cur_sel:
                 continue
@@ -915,6 +923,7 @@ def finance_cashflow(unit: str = "month", count: int = 6, opening: float = 0.0,
                 if idx >= 0:
                     inflow[idx] += amt
                     act_in[idx] += amt
+                    act_in_income[idx] += amt
         # 유출 — 지급대장. 미납 회차는 예정일에, 납부된 회차는 실제 납부일에 담는다.
         # 첫 구간이 연체를 흡수하도록 과거 1년까지 회차를 펼쳐 담는다.
         scan_start = date.fromordinal(win_start.toordinal() - 400)
@@ -945,6 +954,7 @@ def finance_cashflow(unit: str = "month", count: int = 6, opening: float = 0.0,
                 if idx >= 0:
                     outflow[idx] += amt
                     act_out[idx] += amt
+                    (act_out_ap if is_vendor else act_out_other)[idx] += amt
         # 유출 — 매입 청구(AP). 미지급 잔액은 지급 예정일에, 지급한 금액은 실제 지급일에.
         ap_rows = _ap_record_rows(s)
         ap_po_ids = {ap["po_id"] for ap in ap_rows}
@@ -970,6 +980,7 @@ def finance_cashflow(unit: str = "month", count: int = 6, opening: float = 0.0,
             if idx >= 0:
                 outflow[idx] += amt
                 act_out[idx] += amt
+                act_out_ap[idx] += amt
         # 선택: 벤더 발주 원가를 발주일 기준 유출로 추정(AP 청구가 있는 P/O는 중복 방지 위해 제외).
         if include_po:
             ord_map = {o.id: o for o in s.query(Order).all()}
@@ -1004,6 +1015,11 @@ def finance_cashflow(unit: str = "month", count: int = 6, opening: float = 0.0,
                 # 위 금액 중 이미 오간 부분(나머지가 아직 안 온 예정).
                 "actual_inflow": round(act_in[i]),
                 "actual_outflow": round(act_out[i]),
+                # 그 실적의 출처별 내역 — 예정 쪽 in_ar·in_income·out_ap·out_other 와 같은 갈래.
+                "actual_in_ar": round(act_in_ar[i]),
+                "actual_in_income": round(act_in_income[i]),
+                "actual_out_ap": round(act_out_ap[i]),
+                "actual_out_other": round(act_out_other[i]),
                 # 예정분의 출처별 내역. 실적과 합하면 위 inflow/outflow 가 된다.
                 "in_ar": round(in_ar[i]),
                 "in_income": round(in_income[i]),
