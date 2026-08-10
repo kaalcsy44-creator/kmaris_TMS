@@ -320,21 +320,28 @@ function LedgerPeriod({ from, to, onChange }: {
  * 있고(현금흐름 화면의 ₩/$ 토글과 같은 규칙), 환산값을 목록에 섞으면 어느 숫자가 실제로
  * 오간 금액인지가 흐려진다. 참고용 KRW 환산은 표 발밑에 한 줄로만 남는다.
  */
-type LedgerCur = "" | "KRW" | "USD";
+type LedgerCur = "KRW" | "USD";
 
+/** 주소의 cur → 통화. 없거나 모르는 값이면 원화 — 이 회사의 장부는 ₩ 가 기본이다. */
+function asLedgerCur(v: string | null): LedgerCur {
+  return (v || "").toUpperCase() === "USD" ? "USD" : "KRW";
+}
+
+/**
+ * 통화는 둘 중 하나만 고른다 — '전부 한 표에'는 두지 않는다. 섞어 놓으면 합계가 통화마다
+ * 한 줄씩 쌓여 어느 숫자가 이 표의 답인지 흐려지고, 정렬도 금액 순으로 읽히지 않는다.
+ */
 function LedgerCurrency({ cur, onChange }: { cur: LedgerCur; onChange: (c: LedgerCur) => void }) {
   return (
     <div className="seg-toggle" role="group" aria-label="Currency">
-      <button className={cur === "" ? "on" : ""} onClick={() => onChange("")} title="Every currency in one list">All</button>
       <button className={cur === "KRW" ? "on" : ""} onClick={() => onChange("KRW")}>₩ KRW</button>
       <button className={cur === "USD" ? "on" : ""} onClick={() => onChange("USD")}>$ USD</button>
     </div>
   );
 }
 
-/** 통화별 합계에서 고른 통화만 남긴다 — 빈 값이면 그대로(전 통화). */
+/** 통화별 합계에서 고른 통화만 남긴다. */
 function pickCurrency(m: MoneyByCurrency, cur: LedgerCur): MoneyByCurrency {
-  if (!cur) return m || {};
   return (m && cur in m) ? { [cur]: m[cur] } : {};
 }
 
@@ -1066,8 +1073,7 @@ function InflowTab() {
   const from = params.get("from") || "";
   const to = params.get("to") || "";
   // 통화도 주소에 산다(갈래·기간과 같은 규약) — '₩만 본 이 화면'을 그대로 넘길 수 있게.
-  const curParam = (params.get("cur") || "").toUpperCase();
-  const cur: LedgerCur = curParam === "KRW" || curParam === "USD" ? curParam : "";
+  const cur = asLedgerCur(params.get("cur"));
   // 원장은 기본적으로 전부 보여준다 — 켜 두면 수금이 끝난 청구서가 목록에서 사라져
   // "그 청구서 어디 갔지"가 된다. 미수만 추리고 싶을 때만 사용자가 켠다.
   const [openOnly, setOpenOnly] = useState(false);
@@ -1078,14 +1084,14 @@ function InflowTab() {
   const rows = useMemo(() => {
     const src = all
       .filter((r) => (view === "income" ? r.source === "income" : r.source !== "income"))
-      .filter((r) => !cur || r.currency === cur)
+      .filter((r) => r.currency === cur)
       // 예정 항목은 예정일 기준 — 반복(기타수입)은 회차 하나라도 구간에 들면 남긴다.
       .filter((r) => dueInRange(r, from, to));
     return openOnly ? src.filter((r) => r.outstanding > 0) : src;
   }, [all, view, openOnly, from, to, cur]);
   // 실적은 실제로 오간 날 기준 — 현금흐름이 그 날짜로 세는 것과 같다.
   const settled = useMemo(
-    () => receiptRows(all).filter((r) => (!cur || r.currency === cur) && inRange(r.date, from, to)),
+    () => receiptRows(all).filter((r) => r.currency === cur && inRange(r.date, from, to)),
     [all, from, to, cur]
   );
   const totals = useMemo(() => receivableTotals(rows), [rows]);
@@ -1093,7 +1099,7 @@ function InflowTab() {
   // 해 놓고 그 위에 다른 통화 줄이 남아 있으면 무엇을 보고 있는지가 흐려진다. 건수도 함께
   // 다시 센다(서버가 준 count 는 전 통화 기준이라 그대로 두면 금액과 짝이 맞지 않는다).
   const openCount = useMemo(
-    () => (cur ? all.filter((r) => r.outstanding > 0 && r.currency === cur).length : null),
+    () => all.filter((r) => r.outstanding > 0 && r.currency === cur).length,
     [all, cur]
   );
 
@@ -1148,7 +1154,7 @@ function InflowTab() {
           <KpiTile
             label="Outstanding"
             main={byCurrencyLines(pickCurrency(sum.receivable.outstanding, cur))}
-            sub={`${openCount ?? sum.receivable.count} open invoices · as of today`}
+            sub={`${openCount} open invoices · as of today`}
             tone="blue"
           />
           <KpiTile label="Overdue" main={byCurrencyLines(pickCurrency(sum.receivable.overdue, cur))} sub="past the due date" tone="red" />
@@ -1529,8 +1535,7 @@ function OutflowTab() {
   const from = params.get("from") || "";
   const to = params.get("to") || "";
   // 통화 필터 — Inflow 와 같은 규약(주소의 cur).
-  const curParam = (params.get("cur") || "").toUpperCase();
-  const cur: LedgerCur = curParam === "KRW" || curParam === "USD" ? curParam : "";
+  const cur = asLedgerCur(params.get("cur"));
   const [editing, setEditing] = useState<FinancePayable | null>(null);
   const [adding, setAdding] = useState(false);
   // 납부 입력 대상 — 회차일(occurrence)과 실제 납부일을 함께 받는다.
@@ -1543,7 +1548,7 @@ function OutflowTab() {
   const [trade, other] = useMemo(() => {
     const isTrade = (p: FinancePayable) => p.source === "ap" || p.category === "거래선지급";
     // 예정 항목은 예정일 기준 — 반복(임차료·급여)은 회차 하나라도 구간에 들면 남긴다.
-    const inWindow = rows.filter((p) => (!cur || p.currency === cur) && dueInRange(p, from, to));
+    const inWindow = rows.filter((p) => p.currency === cur && dueInRange(p, from, to));
     return [inWindow.filter(isTrade), inWindow.filter((p) => !isTrade(p))];
   }, [rows, from, to, cur]);
   // 보고 있는 갈래의 합계 3열(청구·지급·미지급) — 통화별 분리(수입 목록과 같은 규칙).
@@ -1551,7 +1556,7 @@ function OutflowTab() {
   const totals = useMemo(() => payableTotals(visible), [visible]);
   // 실적은 실제로 나간 날 기준 — 현금흐름이 그 날짜로 세는 것과 같다.
   const settled = useMemo(
-    () => paymentRows(rows).filter((r) => (!cur || r.currency === cur) && inRange(r.date, from, to)),
+    () => paymentRows(rows).filter((r) => r.currency === cur && inRange(r.date, from, to)),
     [rows, from, to, cur]
   );
 
