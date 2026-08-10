@@ -12136,8 +12136,9 @@ table.mini tfoot .fin-foot-name { text-align: left; }
 .fin-cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
 .fin-cal-dow { background: var(--head-bg); text-align: center; font-size: 12px; font-weight: 700; color: #55627a; padding: 6px 0; }
 .fin-cal-cell { background: #fff; min-height: 96px; min-width: 0; padding: 4px 5px; display: flex; flex-direction: column; gap: 3px; }
+/* 첫 주·끝 주의 옆 달 칸 — 요일을 맞추려고 놓았을 뿐 내용이 없다(달력은 이 달만 그린다).
+   바탕만 한 단 낮춰, 이 달이 어느 요일에서 시작하고 끝나는지가 여백으로 읽히게 한다. */
 .fin-cal-cell.out { background: #fafbfd; }
-.fin-cal-cell.out .fin-cal-date { color: #c2cbd8; }
 .fin-cal-cell.today { box-shadow: inset 0 0 0 2px var(--blue); }
 .fin-cal-date { font-size: 12px; font-weight: 700; color: #55627a; }
 .fin-cal-events { display: flex; flex-direction: column; gap: 2px; min-width: 0; }

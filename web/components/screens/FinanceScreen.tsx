@@ -2453,9 +2453,13 @@ function CalendarTab() {
           <div key={d} className="fin-cal-dow">{d}</div>
         ))}
         {grid.days.map((day) => {
+          // 앞뒤 주를 채우는 옆 달 칸은 자리만 지키고 비운다 — 날짜도 일정도 적지 않는다.
+          // 격자를 맞추려고 놓은 칸이지 이 달의 하루가 아니고, 거기 숫자와 금액이 적혀
+          // 있으면 이 달의 첫날·마지막날이 어디인지가 한눈에 안 잡힌다.
+          if (!day.inMonth) return <div key={day.iso} className="fin-cal-cell out" aria-hidden="true" />;
           const events = byDate.get(day.iso) ?? [];
           return (
-            <div key={day.iso} className={`fin-cal-cell${day.inMonth ? "" : " out"}${day.iso === todayStr() ? " today" : ""}`}>
+            <div key={day.iso} className={`fin-cal-cell${day.iso === todayStr() ? " today" : ""}`}>
               <div className="fin-cal-date">{day.d}</div>
               <div className="fin-cal-events">
                 {events.map((e, i) => eventButton(e, i))}
@@ -2509,8 +2513,13 @@ function buildMonthGrid(y: number, m: number) {
   const first = new Date(y, m, 1);
   const startOffset = first.getDay(); // 0=Sun
   const gridStart = new Date(y, m, 1 - startOffset);
+  // 이 달의 마지막 날이 든 주까지만 그린다 — 6주를 고정으로 깔면 달에 따라 다음 달만
+  // 가득한 줄이 하나 더 붙는다. 그 줄은 이 달에 대해 아무 말도 하지 않으면서 자리를
+  // 차지하고, 거기 실린 다음 달 일정이 이 달 것으로 읽힌다.
+  const last = new Date(y, m + 1, 0);
+  const cells = startOffset + last.getDate() + (6 - last.getDay());
   const days: { iso: string; d: number; inMonth: boolean }[] = [];
-  for (let i = 0; i < 42; i++) {
+  for (let i = 0; i < cells; i++) {
     const dt = new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + i);
     days.push({
       iso: `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`,
@@ -2518,5 +2527,8 @@ function buildMonthGrid(y: number, m: number) {
       inMonth: dt.getMonth() === m,
     });
   }
-  return { days, start: days[0].iso, end: days[days.length - 1].iso };
+  // 불러올 구간은 격자가 아니라 '이 달'이다 — 앞뒤로 삐져나온 칸은 비워 두므로(달력은
+  // 이 달의 이야기만 한다) 그 날짜의 일정은 받아도 놓을 자리가 없다.
+  const iso = (dt: Date) => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+  return { days, start: iso(first), end: iso(last) };
 }
