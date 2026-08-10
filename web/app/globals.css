@@ -12386,8 +12386,10 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 .fin-row-pick { cursor: pointer; }
 .fin-row-pick:hover > td { background: color-mix(in srgb, var(--blue) 5%, transparent); }
 .fin-row-pick.on > td { background: color-mix(in srgb, var(--blue) 10%, transparent); font-weight: 700; }
-/* 펼쳐진 줄은 아래 장부와 한 덩어리 — 사이의 밑줄을 지워 둘이 이어져 보이게 한다. */
-.fin-row-pick.fin-cf-open > td { border-bottom-color: transparent; }
+/* 펼쳐진 줄은 '위' 장부와 한 덩어리다 — 서랍이 먼저 오고 그 구간의 합계 줄이 서랍을
+   닫는다(FinanceScreen 의 detailRow → periodRow 순서). 그래서 덩어리를 닫는 굵은 선은
+   서랍 아래가 아니라 합계 줄 아래에 선다. */
+.fin-row-pick.fin-cf-open > td { border-bottom: 2px solid var(--line-strong); }
 /* 줄의 안쪽을 여는 손잡이 — 구간 이름 앞에 붙는다. */
 .fin-cf-toggle {
   width: 20px;
@@ -12409,12 +12411,14 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
    가로로는 밀 수 없으므로(안쪽 표가 바깥 표와 세로줄을 맞춰야 한다) 깊이로 가른다:
    바탕을 흰 면에서 한 단 낮추고, 위·아래 모서리에 안쪽 그림자를 둬 월별 줄들보다
    한 겹 아래로 보이게 한다. 왼쪽 띠는 두지 않는다 — 서랍이 어느 행의 것인지는 바로
-   위에 붙어 있다는 자리와 그 행에 선 띠가 이미 말하고, 여기까지 띠를 늘어뜨리면
-   그 세로선이 장부의 첫 칸 옆에 또 하나의 기둥처럼 서서 날짜를 안으로 밀어 넣는다. */
+   아래에 붙어 있다는 자리와 그 행에 선 띠가 이미 말하고, 여기까지 띠를 늘어뜨리면
+   그 세로선이 장부의 첫 칸 옆에 또 하나의 기둥처럼 서서 날짜를 안으로 밀어 넣는다.
+   밑줄은 두지 않는다 — 바로 아래 합계 줄이 이 서랍의 결론이라 둘 사이를 선으로
+   가르면 안 된다. */
 .fin-cf-detail > td {
   padding: 0;
   background: #e9eff7;
-  border-bottom: 2px solid var(--line-strong);
+  border-bottom: 0;
   box-shadow:
     inset 0 8px 10px -8px rgba(11, 29, 58, 0.38),
     inset 0 -7px 9px -8px rgba(11, 29, 58, 0.22);
@@ -12478,16 +12482,16 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
   }
   /* '이미 오간 돈' 줄은 값 아래가 아니라 그 줄 오른쪽 끝에 매달린다. */
   .fin-cf-actual { width: 100%; text-align: right; margin-top: 0; }
-  /* 펼친 장부는 또 하나의 카드가 아니라 바로 위 카드에 딸린 서랍이다 — 격자·테두리를
+  /* 펼친 장부는 또 하나의 카드가 아니라 바로 '아래' 카드에 딸린 서랍이다 — 격자·테두리를
      걷어내고 카드와 붙여, 어느 구간의 안쪽인지 자리로 읽히게 한다. */
   .fin-cf-table tr.fin-cf-detail {
     display: block;
     grid-template-columns: none;
     padding: 0;
-    margin: -10px 0 8px;
+    margin: 0 0 -10px;
     border: 1px solid var(--line);
-    border-top: 0;
-    border-radius: 0 0 10px 10px;
+    border-bottom: 0;
+    border-radius: 10px 10px 0 0;
     /* 넓은 화면과 같은 바닥색 — 카드로 접혀도 '한 겹 아래'라는 신호는 유지한다. */
     background: #e9eff7;
   }
@@ -12501,8 +12505,8 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
     font-size: 12px;
     color: inherit;
   }
-  /* 카드와 서랍이 이어져 보이도록 카드의 아래 모서리를 편다. */
-  .fin-cf-table tr:has(+ tr.fin-cf-detail) { border-radius: 10px 10px 0 0; margin-bottom: 0; }
+  /* 서랍과 카드가 이어져 보이도록 카드의 위 모서리를 편다. */
+  .fin-cf-table tr.fin-cf-detail + tr { border-radius: 0 0 10px 10px; }
 }
 
 /* 현금흐름 한 구간의 건별 내역(/finance/period) */

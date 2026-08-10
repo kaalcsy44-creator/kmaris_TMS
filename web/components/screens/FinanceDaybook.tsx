@@ -16,7 +16,9 @@ import {
  *
  * 표는 한 달을 한 줄(유입·유출·잔고)로 접어 놓는다. 실제로 통장을 맞출 때 필요한 건
  * 그 안쪽이다: 며칠에 무엇이 들어오고 무엇이 나가 잔고가 얼마가 되는가. 이 조각은
- * 표의 그 행 바로 아래에 펼쳐지며, 줄마다 그 시점의 통장잔고를 굴려 적는다.
+ * 표의 그 행 바로 '위'에 펼쳐지며, 줄마다 그 시점의 통장잔고를 굴려 적는다 — 앞 구간의
+ * 기말잔고 바로 아래에서 출발해 마지막 줄이 그 행의 기말잔고로 닿게(합계는 내역의
+ * 결론이지 머리말이 아니다).
  *
  * 유입이 왼쪽, 유출이 오른쪽 — 위 표(Inflow·Outflow)와 세 기둥의 순서 그대로다.
  * 자기 조작칸은 두지 않는다: 기간·통화·기초잔고는 모두 표에서 그대로 받는다. 새 집계도
@@ -152,9 +154,9 @@ export default function FinanceDaybook({ start, end, label, opening, currency, i
         <>
           <div className="fin-db-scroll">
             <table className="mini fin-daybook">
-              {/* 폭은 위 Cash Flow 표(fin-cf-w-*)와 짝을 이룬다 — Inflow 세 칸의 오른쪽 끝이
+              {/* 폭은 바깥 Cash Flow 표(fin-cf-w-*)와 짝을 이룬다 — Inflow 세 칸의 오른쪽 끝이
                   그 표의 Inflow 칸 끝과, Outflow 는 Outflow 칸 끝과, Balance 는 그쪽 Balance
-                  칸 끝과 맞는다. 그래서 마지막 줄의 잔고가 바로 위 행의 기말잔고 아래에
+                  칸 끝과 맞는다. 그래서 마지막 줄의 잔고가 바로 아래 행의 기말잔고 위에
                   정확히 선다. */}
               <colgroup>
                 <col className="fin-db-w-date" />
@@ -162,9 +164,10 @@ export default function FinanceDaybook({ start, end, label, opening, currency, i
                 <col className="fin-db-w-desc" /><col className="fin-db-w-ref" /><col className="fin-db-w-money" />
                 <col className="fin-db-w-bal" />
               </colgroup>
-              {/* 머리줄이 없다 — 바로 위 Cash Flow 표의 Period · Inflow · Outflow · Balance
-                  가 같은 자리에 서 있어 그것이 이 표의 머리 노릇을 한다. 여기서 한 벌 더
-                  세우면 같은 이름이 두 줄 겹쳐 어느 쪽 표를 읽는지 흐려진다. */}
+              {/* 머리줄이 없다 — 이 표를 품은 Cash Flow 표의 머리줄(Period · Inflow ·
+                  Outflow · Balance)이 같은 자리·같은 폭으로 서 있어 그것이 이 표의 머리
+                  노릇을 한다. 여기서 한 벌 더 세우면 같은 이름이 두 줄 겹쳐 어느 쪽 표를
+                  읽는지 흐려진다. */}
               <tbody>
                 {/* 첫 줄은 이월 — 잔고가 어디서 출발했는지 표 안에서 읽히게. */}
                 <tr className="fin-db-carry">
@@ -183,9 +186,10 @@ export default function FinanceDaybook({ start, end, label, opening, currency, i
                     currency={currency}
                   />
                 ))}
-                {/* 합계 줄은 두지 않는다 — 유입·유출 합과 기말잔고는 바로 위에 펼쳐 놓은
-                    그 행이 이미 같은 칸에 적고 있고, 마지막 줄의 잔고가 곧 기말잔고다.
-                    같은 세 숫자를 한 화면에 세 번 적는 셈이 된다. */}
+                {/* 합계 줄은 두지 않는다 — 유입·유출 합과 기말잔고는 바로 아래에서 이
+                    서랍을 닫는 그 구간 행이 같은 칸에 적고 있고(그 행이 곧 이 장부의
+                    합계 줄이다), 마지막 줄의 잔고가 곧 기말잔고다. 여기 한 벌 더 두면
+                    같은 세 숫자가 잇달아 두 번 선다. */}
               </tbody>
             </table>
           </div>

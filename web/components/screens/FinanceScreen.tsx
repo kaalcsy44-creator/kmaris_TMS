@@ -629,74 +629,83 @@ function OverviewTab() {
               <tbody>
                 {rows.map((r, i) => {
                   const open = i === idx && daybookOpen;
+                  const periodRow = (
+                    <tr
+                      className={`fin-row-pick${i === idx ? " on" : ""}${open ? " fin-cf-open" : ""}${r.cumulative < 0 ? " fin-overdue" : ""}`}
+                      onClick={() => setPicked(i)}
+                      title="Show this period in the three columns above"
+                    >
+                      <td>
+                        {/* 이 줄의 안쪽(일자별 장부)을 그 자리에서 여닫는다. 열 수 있는 줄은
+                            늘 고른 줄이므로, 다른 줄의 손잡이를 누르면 그 줄로 옮겨 가며 열린다. */}
+                        <button
+                          type="button"
+                          className="fin-cf-toggle"
+                          aria-expanded={open}
+                          aria-label={`${open ? "Hide" : "Show"} the daybook for ${r.label}`}
+                          title={open ? "Hide this period's daybook" : "Open this period day by day"}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPicked(i);
+                            setDaybookOpen(i === idx ? !daybookOpen : true);
+                          }}
+                        >
+                          {open ? "▾" : "▸"}
+                        </button>
+                        {r.label}
+                      </td>
+                      {/* 이미 오간 부분은 금액 아래 옅게 덧붙인다 — 같은 칸의 나머지가 예정분.
+                          연체는 그 아래 한 줄 더 — 기본은 위 금액 '밖'의 돈이라, 이 줄이
+                          없으면 그 달에 얼마가 밀려 있는지가 표에서 사라진다. */}
+                      <td className="num" data-label="Inflow">
+                        {cash(r.inflow)}
+                        {r.actual_inflow ? <div className="fin-cf-actual">{cash(r.actual_inflow)} received</div> : null}
+                        {r.overdue_in ? (
+                          <div className="fin-cf-overdue" title={includeOverdue ? "Included above" : "Kept out of the balance"}>
+                            {cash(r.overdue_in)} overdue
+                          </div>
+                        ) : null}
+                      </td>
+                      <td className="num" data-label="Outflow">
+                        {cash(r.outflow)}
+                        {r.actual_outflow ? <div className="fin-cf-actual">{cash(r.actual_outflow)} paid</div> : null}
+                        {r.overdue_out ? (
+                          <div className="fin-cf-overdue" title={includeOverdue ? "Included above" : "Kept out of the balance"}>
+                            {cash(r.overdue_out)} overdue
+                          </div>
+                        ) : null}
+                      </td>
+                      <td className="num" data-label="Net" style={{ color: r.net >= 0 ? "#1e7a46" : "#c0392b" }}>{r.net >= 0 ? "+" : "−"}{cash(Math.abs(r.net))}</td>
+                      <td className="num" data-label="Balance"><b>{cash(r.cumulative)}</b></td>
+                    </tr>
+                  );
+                  // 펼친 줄의 안쪽 — 기간·통화·기초잔고를 그대로 물려받으므로 이 장부의
+                  // 합계와 기말잔고는 바로 아래 행의 Inflow·Outflow·Balance 와 같은 값이다.
+                  const detailRow = (
+                    <tr className="fin-cf-detail">
+                      <td colSpan={5}>
+                        <FinanceDaybook
+                          start={r.start}
+                          end={r.end}
+                          label={unit === "month" ? monthLabel(r.label) : r.label}
+                          opening={i === 0 ? data.opening : rows[i - 1].cumulative}
+                          currency={currency}
+                          includePo={includePo}
+                          parkOverdue={parkOverdue}
+                          first={i === 0}
+                        />
+                      </td>
+                    </tr>
+                  );
+                  // 서랍이 먼저, 구간 줄이 그 아래 — 합계는 안쪽 내역의 결론이지 머리말이
+                  // 아니다. 이 순서라야 읽는 순서가 잔고가 굴러가는 순서와 같아진다:
+                  // 앞 구간의 기말잔고 → 이월 → 하루하루 → 이 구간의 기말잔고 → 다음 구간.
+                  // 합계를 위에 두면 아직 읽지 않은 내역의 답이 먼저 나와, 그 숫자가 어느
+                  // 구간의 것인지(위쪽 달인지 아래 내역의 달인지)가 흐려진다.
                   return (
                     <Fragment key={r.label}>
-                      <tr
-                        className={`fin-row-pick${i === idx ? " on" : ""}${open ? " fin-cf-open" : ""}${r.cumulative < 0 ? " fin-overdue" : ""}`}
-                        onClick={() => setPicked(i)}
-                        title="Show this period in the three columns above"
-                      >
-                        <td>
-                          {/* 이 줄의 안쪽(일자별 장부)을 그 자리에서 여닫는다. 열 수 있는 줄은
-                              늘 고른 줄이므로, 다른 줄의 손잡이를 누르면 그 줄로 옮겨 가며 열린다. */}
-                          <button
-                            type="button"
-                            className="fin-cf-toggle"
-                            aria-expanded={open}
-                            aria-label={`${open ? "Hide" : "Show"} the daybook for ${r.label}`}
-                            title={open ? "Hide this period's daybook" : "Open this period day by day"}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setPicked(i);
-                              setDaybookOpen(i === idx ? !daybookOpen : true);
-                            }}
-                          >
-                            {open ? "▾" : "▸"}
-                          </button>
-                          {r.label}
-                        </td>
-                        {/* 이미 오간 부분은 금액 아래 옅게 덧붙인다 — 같은 칸의 나머지가 예정분.
-                            연체는 그 아래 한 줄 더 — 기본은 위 금액 '밖'의 돈이라, 이 줄이
-                            없으면 그 달에 얼마가 밀려 있는지가 표에서 사라진다. */}
-                        <td className="num" data-label="Inflow">
-                          {cash(r.inflow)}
-                          {r.actual_inflow ? <div className="fin-cf-actual">{cash(r.actual_inflow)} received</div> : null}
-                          {r.overdue_in ? (
-                            <div className="fin-cf-overdue" title={includeOverdue ? "Included above" : "Kept out of the balance"}>
-                              {cash(r.overdue_in)} overdue
-                            </div>
-                          ) : null}
-                        </td>
-                        <td className="num" data-label="Outflow">
-                          {cash(r.outflow)}
-                          {r.actual_outflow ? <div className="fin-cf-actual">{cash(r.actual_outflow)} paid</div> : null}
-                          {r.overdue_out ? (
-                            <div className="fin-cf-overdue" title={includeOverdue ? "Included above" : "Kept out of the balance"}>
-                              {cash(r.overdue_out)} overdue
-                            </div>
-                          ) : null}
-                        </td>
-                        <td className="num" data-label="Net" style={{ color: r.net >= 0 ? "#1e7a46" : "#c0392b" }}>{r.net >= 0 ? "+" : "−"}{cash(Math.abs(r.net))}</td>
-                        <td className="num" data-label="Balance"><b>{cash(r.cumulative)}</b></td>
-                      </tr>
-                      {/* 펼친 줄의 안쪽 — 기간·통화·기초잔고를 그대로 물려받으므로 이 장부의
-                          합계와 기말잔고는 바로 위 행의 Inflow·Outflow·Balance 와 같은 값이다. */}
-                      {open ? (
-                        <tr className="fin-cf-detail">
-                          <td colSpan={5}>
-                            <FinanceDaybook
-                              start={r.start}
-                              end={r.end}
-                              label={unit === "month" ? monthLabel(r.label) : r.label}
-                              opening={i === 0 ? data.opening : rows[i - 1].cumulative}
-                              currency={currency}
-                              includePo={includePo}
-                              parkOverdue={parkOverdue}
-                              first={i === 0}
-                            />
-                          </td>
-                        </tr>
-                      ) : null}
+                      {open ? detailRow : null}
+                      {periodRow}
                     </Fragment>
                   );
                 })}
