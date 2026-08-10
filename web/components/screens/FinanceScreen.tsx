@@ -619,7 +619,10 @@ function OverviewTab() {
                       하나 끼워 두었다.) 그래서 Ending 은 옆 기둥의 실적 줄과 나란히 선다 —
                       잔고를 만든 것이 그 줄이므로 자리로도 맞는 짝이다. */}
                   <tr className="fin-period-total">
-                    <td><b>Ending</b></td>
+                    {/* 딸린 한 줄은 옆 기둥의 마지막 줄과 키를 맞추는 몫도 한다 — 셋 다
+                        이름 아래 한 줄이 붙어야 세 기둥의 발밑이 같은 높이에 선다.
+                        말은 Opening('carried in')과 짝을 이룬다. */}
+                    <td><b>Ending</b><div className="hint-inline">carried out</div></td>
                     <td className="num" style={{ color: row.cumulative < 0 ? "#c0392b" : undefined }}>
                       <b>{cash(row.cumulative)}</b>
                     </td>
@@ -878,8 +881,14 @@ function BucketCard({ title, period, tone, lines, parked, allHref, currency, hre
           구간의 유입·유출 합계는 아래 Cash flow 표의 그 행이 이미 적고 있다. */}
       <table className="mini">
         <tbody>
-          {lines.map(([b, amount]) => (
-            <tr key={b} className={isParked(b) ? "fin-bucket-off" : ""}>
+          {/* 마지막 줄(이미 오간 돈)은 옆 기둥의 Ending 과 같은 자리·같은 무게로 세운다 —
+              세 기둥의 발밑에서 서로 짝이 되는 줄이라(이 줄이 곧 그 잔고를 만든 돈이다),
+              음영과 윗선이 나란히 이어져야 셋이 한 줄로 읽힌다. */}
+          {lines.map(([b, amount], i) => (
+            <tr
+              key={b}
+              className={`${i === lines.length - 1 ? "fin-bucket-settled" : ""}${isParked(b) ? " fin-bucket-off" : ""}`}
+            >
               <td>
                 <Link className="fin-doc-link" href={href(b)} title={`Open the ${BUCKET_LABEL[b].toLowerCase()} items for ${period}`}>
                   {BUCKET_LABEL[b]}

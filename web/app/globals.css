@@ -12409,6 +12409,14 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 /* 제목 뒤에 붙는 구간 이름 — 제목이 아니라 '언제의 것인가'를 밝히는 말이라, 굵기를
    빼고 회색으로 낮춘다(어느 구간인지는 위 Showing 칸이 굵게 말한다). */
 .fin-bucket-card .form-title .muted { font-weight: 400; color: var(--muted); }
+/* 세 기둥의 마지막 줄 — Received · Paid · Ending. 서로 짝이 되는 줄이라(앞의 둘이 그
+   잔고를 만든 돈이다) 한 규칙에서 함께 칠한다: 따로 적어 두면 언젠가 한쪽만 손대게 되고,
+   그러면 나란히 선 세 칸의 발밑 색이 어긋난다. 줄 높이는 셋 다 이름 + 딸린 한 줄로 맞다. */
+.fin-bucket-card table.mini tr.fin-bucket-settled > td,
+.fin-bucket-card table.mini tr.fin-period-total > td {
+  border-top: 1px solid var(--line-strong);
+  background: #f7f9fc;
+}
 /* 기둥 이름은 '이 구간 전부'로 가는 문이기도 하다 — 다만 제목 자리라 파랗게 물들이지
    않는다. 평소엔 제목 그대로 서 있고, 가리켰을 때만 눌리는 것임을 밝힌다. */
 .fin-bucket-card .form-title .fin-doc-link {
