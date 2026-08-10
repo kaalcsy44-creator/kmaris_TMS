@@ -338,6 +338,8 @@ function periodHref(
   first: boolean,
   currency: string,
   includePo: boolean,
+  /** 연체를 합계에 넣어 볼지 — 이 화면과 같은 규칙으로 펼쳐지도록 함께 넘긴다. */
+  includeOverdue: boolean,
   bucket?: CashBucket
 ): string {
   const q = new URLSearchParams({
@@ -347,6 +349,7 @@ function periodHref(
     cur: currency,
     po: includePo ? "1" : "0",
     first: first ? "1" : "0",
+    ovd: includeOverdue ? "1" : "0",
   });
   if (bucket) q.set("bucket", bucket);
   return `/finance/period?${q.toString()}`;
@@ -356,6 +359,10 @@ function OverviewTab() {
   const [unit, setUnit] = useState<"month" | "week">("month");
   const [count, setCount] = useState(12);
   const [includePo, setIncludePo] = useState(false);
+  // 연체(예정일이 지난 미정산)를 잔고에 태울지. 기본은 끄고 본다 — 오지 않은 돈으로 굴린
+  // 잔고는 그 구간 하나가 아니라 그 뒤 모든 구간을 함께 틀리게 만든다. 켜면 예전처럼
+  // 흐름에 넣어, '받을 것을 다 받고 낼 것을 다 냈다면' 얼마가 되는지도 볼 수 있다.
+  const [includeOverdue, setIncludeOverdue] = useState(false);
   // 잔고 곡선은 한 통화 안에서만 의미가 있으므로 환산 대신 통화를 골라 본다.
   const [currency, setCurrency] = useState("KRW");
   // 기초잔고는 통화별로 따로 기억한다 — 하나만 두면 ₩ 로 넣은 값이 $ 로 바꾼 순간
@@ -377,12 +384,17 @@ function OverviewTab() {
   const [daybookOpen, setDaybookOpen] = useState(false);
   const cash = (n: number) => money(n, currency);
 
-  const key = `finance:cashflow:${unit}:${count}:${opening}:${includePo}:${currency}:${start}`;
+  const key = `finance:cashflow:${unit}:${count}:${opening}:${includePo}:${currency}:${start}:${includeOverdue}`;
   const { data, error } = useCachedData<FinanceCashflow>(
     key,
-    () => fetchFinanceCashflow(unit, count, opening, includePo, currency, start)
+    () => fetchFinanceCashflow(unit, count, opening, includePo, currency, start, includeOverdue)
   );
   const rows = useMemo(() => data?.rows ?? [], [data]);
+  // 이 집계가 연체를 흐름 밖에 세워 두었나 — 펼친 장부가 같은 규칙으로 굴려야 마지막
+  // 잔고가 그 행의 기말잔고와 어긋나지 않는다. 스위치가 아니라 응답을 보고 정하는 건
+  // 배포 시차 때문이다: 백엔드가 아직 옛 버전이면 overdue_in 자체가 오지 않고, 그때
+  // 집계는 연체를 흐름에 그대로 넣은 값이라 장부만 빼면 둘이 어긋난다.
+  const parkOverdue = typeof rows[0]?.overdue_in === "number" && !includeOverdue;
   const maxNet = useMemo(() => Math.max(1, ...rows.map((r) => Math.abs(r.net))), [rows]);
   // 기본 선택 = 오늘이 든 칸(창이 과거·미래로 벗어나 있으면 첫 칸).
   const todayIso = localDayStr();
@@ -447,6 +459,10 @@ function OverviewTab() {
         <label className="check-chip" style={{ cursor: "pointer" }}>
           <input type="checkbox" checked={includePo} onChange={(e) => setIncludePo(e.target.checked)} /> Include vendor PO outflow (est.)
         </label>
+        {/* 연체를 흐름에 태워 보는 스위치 — 기본은 꺼짐(잔고 밖에 세워 둔다). */}
+        <label className="check-chip" style={{ cursor: "pointer" }} title="Overdue items are unsettled, so by default they are kept out of the balance. Tick to roll them in.">
+          <input type="checkbox" checked={includeOverdue} onChange={(e) => setIncludeOverdue(e.target.checked)} /> Include overdue in balance
+        </label>
       </div>
 
       {error && !data ? <div className="state error">API error: {error.message}</div> : null}
@@ -485,7 +501,7 @@ function OverviewTab() {
               tone="in"
               lines={[["receivables", row.in_ar ?? 0], ["income", row.in_income ?? 0], ["collected", row.actual_inflow]]}
               totalLabel="Total"
-              totalHref={`${periodHref(row, idx === 0, currency, includePo)}&side=in`}
+              totalHref={`${periodHref(row, idx === 0, currency, includePo, includeOverdue)}&side=in`}
               total={row.inflow}
               currency={currency}
               href={(b) => ledgerHref(row, idx === 0, b)}
@@ -496,7 +512,7 @@ function OverviewTab() {
               tone="out"
               lines={[["payables", row.out_ap ?? 0], ["other", row.out_other ?? 0], ["paid", row.actual_outflow]]}
               totalLabel="Total"
-              totalHref={`${periodHref(row, idx === 0, currency, includePo)}&side=out`}
+              totalHref={`${periodHref(row, idx === 0, currency, includePo, includeOverdue)}&side=out`}
               total={row.outflow}
               currency={currency}
               href={(b) => ledgerHref(row, idx === 0, b)}
@@ -533,6 +549,28 @@ function OverviewTab() {
               <p className="hint-inline" style={{ display: "block", marginTop: 8 }}>
                 Rolled up from {cash(data.opening)} on {openingAsOf}. A negative ending balance marks a cash shortfall.
               </p>
+              {/* 잔고 밖에 세워 둔 돈 — 잔고 바로 아래에 붙여 둔다. 이 두 줄이 없으면
+                  '연체는 안 셌다'는 사실이 화면 어디에도 남지 않아, 잔고가 그만큼 좋아
+                  보이거나(미지급) 나빠 보이는(미수) 이유를 알 수 없다. */}
+              {row.overdue_in || row.overdue_out ? (
+                <div className={`fin-overdue-note${includeOverdue ? " in" : ""}`}>
+                  <div className="fin-overdue-cap">
+                    {includeOverdue ? "Of this balance, still unsettled" : "Not in this balance"}
+                  </div>
+                  {row.overdue_in ? (
+                    <div className="fin-overdue-line">
+                      <span>Overdue in<span className="hint-inline"> to collect</span></span>
+                      <b className="num">+{cash(row.overdue_in)}</b>
+                    </div>
+                  ) : null}
+                  {row.overdue_out ? (
+                    <div className="fin-overdue-line">
+                      <span>Overdue out<span className="hint-inline"> to pay</span></span>
+                      <b className="num">−{cash(row.overdue_out)}</b>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           </div>
 
@@ -617,14 +655,26 @@ function OverviewTab() {
                           </button>
                           {r.label}
                         </td>
-                        {/* 이미 오간 부분은 금액 아래 옅게 덧붙인다 — 같은 칸의 나머지가 예정분. */}
+                        {/* 이미 오간 부분은 금액 아래 옅게 덧붙인다 — 같은 칸의 나머지가 예정분.
+                            연체는 그 아래 한 줄 더 — 기본은 위 금액 '밖'의 돈이라, 이 줄이
+                            없으면 그 달에 얼마가 밀려 있는지가 표에서 사라진다. */}
                         <td className="num" data-label="Inflow">
                           {cash(r.inflow)}
                           {r.actual_inflow ? <div className="fin-cf-actual">{cash(r.actual_inflow)} received</div> : null}
+                          {r.overdue_in ? (
+                            <div className="fin-cf-overdue" title={includeOverdue ? "Included above" : "Kept out of the balance"}>
+                              {cash(r.overdue_in)} overdue
+                            </div>
+                          ) : null}
                         </td>
                         <td className="num" data-label="Outflow">
                           {cash(r.outflow)}
                           {r.actual_outflow ? <div className="fin-cf-actual">{cash(r.actual_outflow)} paid</div> : null}
+                          {r.overdue_out ? (
+                            <div className="fin-cf-overdue" title={includeOverdue ? "Included above" : "Kept out of the balance"}>
+                              {cash(r.overdue_out)} overdue
+                            </div>
+                          ) : null}
                         </td>
                         <td className="num" data-label="Net" style={{ color: r.net >= 0 ? "#1e7a46" : "#c0392b" }}>{r.net >= 0 ? "+" : "−"}{cash(Math.abs(r.net))}</td>
                         <td className="num" data-label="Balance"><b>{cash(r.cumulative)}</b></td>
@@ -641,6 +691,7 @@ function OverviewTab() {
                               opening={i === 0 ? data.opening : rows[i - 1].cumulative}
                               currency={currency}
                               includePo={includePo}
+                              parkOverdue={parkOverdue}
                               first={i === 0}
                             />
                           </td>
@@ -657,8 +708,11 @@ function OverviewTab() {
               on the day it actually arrived or left) with money still expected — receivables by due date and unpaid
               payable occurrences{includePo ? " + vendor POs (estimated from order date)" : ""}.
               So the opening balance must be your balance on {openingAsOf}, not today&apos;s. Only {currency} items are
-              counted — switch the currency toggle for the other book; nothing is converted. Overdue / past-due items
-              fall into the first period.
+              counted — switch the currency toggle for the other book; nothing is converted. Anything already past its
+              date and still unsettled stays on that date as overdue{includeOverdue
+                ? ", and is rolled into the balance because you asked for it."
+                : ", and is left out of the balance — it is money that has not moved."} Past-due items from before the
+              window fall into the first period.
             </p>
           </div>
         </>

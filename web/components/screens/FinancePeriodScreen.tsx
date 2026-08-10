@@ -49,6 +49,15 @@ function isBucket(v: string): v is CashBucket {
   return v in BUCKET_TITLE;
 }
 
+/** 예정일에서 오늘까지 며칠 지났나 — 연체 줄에 "12 days overdue" 로 적는다. */
+function daysLate(iso: string): number {
+  const due = Date.parse(`${iso}T00:00:00`);
+  if (Number.isNaN(due)) return 0;
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  return Math.max(0, Math.round((today - due) / 86400000));
+}
+
 /** "2026-07-01" → "Jul 1". 같은 구간 안이라 연도는 접어 둔다. */
 function dayLabel(iso: string): string {
   const [y, m, d] = (iso || "").split("-").map(Number);
@@ -89,6 +98,10 @@ export default function FinancePeriodScreen() {
   const currency = (params.get("cur") || "KRW").toUpperCase();
   const includePo = params.get("po") === "1";
   const first = params.get("first") === "1";
+  // 연체를 합계에 넣을지 — Overview 의 같은 이름 스위치를 주소로 물려받는다. 기본은
+  // 빼고 센다(오지 않은 돈은 잔고가 아니다). 여기 합계가 저쪽 표의 그 행과 맞아야 하므로
+  // 규칙도 같아야 한다.
+  const includeOverdue = params.get("ovd") === "1";
   // Overview 세 기둥의 한 줄을 눌러 왔으면 그 갈래만 펼친다(비어 있으면 유입·유출 전부).
   const bucketParam = params.get("bucket") || "";
   const bucket: CashBucket | "" = isBucket(bucketParam) ? bucketParam : "";
@@ -116,7 +129,18 @@ export default function FinancePeriodScreen() {
                  : Promise.resolve(EMPTY_ITEMS))
   );
 
-  const net = useMemo(() => (data ? data.total_inflow - data.total_outflow : 0), [data]);
+  // 서버가 주는 total_* 는 연체까지 다 더한 값이라, 빼고 볼 때는 여기서 다시 센다 —
+  // 그래야 Overview 표의 그 행·그 칸과 같은 숫자가 나온다.
+  const sums = useMemo(() => {
+    const add = (rows: FinanceCashflowItem[], parked: boolean) =>
+      rows.reduce((t, r) => t + (!!r.overdue === parked ? r.amount : 0), 0);
+    const odIn = data ? add(data.inflow, true) : 0;
+    const odOut = data ? add(data.outflow, true) : 0;
+    const inflow = (data?.total_inflow ?? 0) - (includeOverdue ? 0 : odIn);
+    const outflow = (data?.total_outflow ?? 0) - (includeOverdue ? 0 : odOut);
+    return { inflow, outflow, odIn, odOut, net: inflow - outflow };
+  }, [data, includeOverdue]);
+  const net = sums.net;
   const backHref = "/finance";
 
   if (!valid) {
@@ -156,7 +180,7 @@ export default function FinancePeriodScreen() {
             <div className="fin-kpis fin-kpis--actual">
               <KpiTile
                 label={BUCKET_TITLE[bucket]}
-                main={cash(side === "in" ? data.total_inflow : data.total_outflow)}
+                main={cash(side === "in" ? sums.inflow : sums.outflow)}
                 sub={`${(side === "in" ? data.inflow : data.outflow).length} items · ${label}`}
                 tone={side === "in" ? "blue" : "amber"}
               />
@@ -165,13 +189,13 @@ export default function FinancePeriodScreen() {
             <div className="fin-kpis">
               <KpiTile
                 label="Inflow"
-                main={cash(data.total_inflow)}
+                main={cash(sums.inflow)}
                 sub={data.actual_inflow ? `${cash(data.actual_inflow)} already received` : "all still expected"}
                 tone="blue"
               />
               <KpiTile
                 label="Outflow"
-                main={cash(data.total_outflow)}
+                main={cash(sums.outflow)}
                 sub={data.actual_outflow ? `${cash(data.actual_outflow)} already paid` : "all still scheduled"}
                 tone="amber"
               />
@@ -186,7 +210,9 @@ export default function FinancePeriodScreen() {
               side={s}
               title={bucket ? `${BUCKET_TITLE[bucket]} (${sym(currency).trim()})` : ""}
               rows={s === "in" ? data.inflow : data.outflow}
-              total={s === "in" ? data.total_inflow : data.total_outflow}
+              total={s === "in" ? sums.inflow : sums.outflow}
+              overdue={s === "in" ? sums.odIn : sums.odOut}
+              includeOverdue={includeOverdue}
               currency={currency}
             />
           ))}
@@ -202,12 +228,16 @@ export default function FinancePeriodScreen() {
   );
 }
 
-function ItemPanel({ side, title, rows, total, currency }: {
+function ItemPanel({ side, title, rows, total, overdue, includeOverdue, currency }: {
   side: "in" | "out";
   /** 갈래를 걸고 들어왔을 때의 제목(비우면 Inflow/Outflow). */
   title?: string;
   rows: FinanceCashflowItem[];
+  /** 합계 — 연체를 뺀(또는 넣은) 값. 아래 줄들의 단순 합이 아닐 수 있다. */
   total: number;
+  /** 그중 연체 금액. 빼고 셀 때는 이 값이 total 밖에 있다는 뜻이라 따로 적는다. */
+  overdue: number;
+  includeOverdue: boolean;
   currency: string;
 }) {
   const cash = (n: number) => money(n, currency);
@@ -244,11 +274,24 @@ function ItemPanel({ side, title, rows, total, currency }: {
                 <td>
                   {r.actual
                     ? <span className="fin-cf-actual">{side === "in" ? "Received" : "Paid"}</span>
-                    : r.overdue ? <b>Overdue</b> : <span className="muted">Expected</span>}
+                    // 며칠 늦었는지까지 — Date 칸이 원래 결제일이므로 둘이 한 줄에서 읽힌다.
+                    : r.overdue
+                      ? <b title={`Due ${r.date}`}>{daysLate(r.date)} days overdue</b>
+                      : <span className="muted">Expected</span>}
                 </td>
                 <td className="num">{cash(r.amount)}</td>
               </tr>
             ))}
+            {/* 연체를 빼고 셀 때는 합계가 위 줄들의 단순 합이 아니다 — 얼마를 빼고 센
+                것인지 그 자리에서 밝힌다(안 밝히면 더해 보는 사람이 틀렸다고 읽는다). */}
+            {overdue ? (
+              <tr className="fin-period-overdue">
+                <td colSpan={5}>
+                  {includeOverdue ? "Of which overdue (included)" : "Overdue — not counted in the total"}
+                </td>
+                <td className="num">{includeOverdue ? "" : "−"}{cash(overdue)}</td>
+              </tr>
+            ) : null}
             <tr className="fin-period-total">
               <td colSpan={5}><b>Total</b></td>
               <td className="num"><b>{cash(total)}</b></td>

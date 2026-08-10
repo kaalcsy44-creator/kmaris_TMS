@@ -1015,6 +1015,13 @@ export type FinanceCashflowRow = {
   in_income: number;
   out_ap: number;
   out_other: number;
+  /**
+   * 예정일이 지났는데 아직 안 오간 돈. 기본은 위 inflow/outflow **밖에** 있다 —
+   * 오지 않은 돈으로 잔고를 굴리면 그 뒤 모든 구간이 함께 틀어지기 때문이다.
+   * include_overdue=1 로 부르면 흐름 안에 들어가고, 이 값은 '그중 연체분'이 된다.
+   */
+  overdue_in: number;
+  overdue_out: number;
   net: number;
   cumulative: number;
 };
@@ -1031,6 +1038,10 @@ export type FinanceCashflow = {
   total_outflow: number;
   actual_inflow: number;
   actual_outflow: number;
+  /** 창 전체에 묶여 있는 연체 — 기말잔고 밖의 돈(include_overdue=1 이면 그 안의 연체분). */
+  overdue_in: number;
+  overdue_out: number;
+  overdue_included: boolean;
   ending: number;
 };
 

@@ -28,7 +28,8 @@ import {
 type DaybookRow = {
   item: FinanceCashflowItem;
   side: "in" | "out";
-  balance: number;
+  /** 이 건까지 굴린 잔고. 잔고를 움직이지 않는 줄(연체)이면 null — 칸을 비워 둔다. */
+  balance: number | null;
   /** 그 날의 첫 줄인가 — 날짜를 여기서만 적고 위에 구분선을 둔다. */
   dayStart: boolean;
   /**
@@ -81,7 +82,16 @@ function dayCell(iso: string, start: string, end: string): string {
   return iso >= start && iso <= end ? iso.slice(5) : iso;
 }
 
-export default function FinanceDaybook({ start, end, label, opening, currency, includePo, first }: {
+/** 예정일에서 오늘까지 며칠 지났나 — 연체 줄에 "12 days overdue" 로 적는다. */
+function daysLate(iso: string): number {
+  const due = Date.parse(`${iso}T00:00:00`);
+  if (Number.isNaN(due)) return 0;
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  return Math.max(0, Math.round((today - due) / 86400000));
+}
+
+export default function FinanceDaybook({ start, end, label, opening, currency, includePo, parkOverdue, first }: {
   start: string;
   end: string;
   /** 구간 이름 — 위 표의 Period 칸과 같은 말("2026-08", "8/1~8/7"). */
@@ -90,6 +100,12 @@ export default function FinanceDaybook({ start, end, label, opening, currency, i
   opening: number;
   currency: string;
   includePo: boolean;
+  /**
+   * 연체를 잔고 밖에 세워 둘지 — 위 표를 낸 집계와 같은 값이어야 이 장부의 마지막 잔고가
+   * 그 행의 기말잔고와 정확히 같아진다. 그래서 '연체를 뺄까'가 아니라 '저 집계가 뺐나'로
+   * 받는다(부모가 응답을 보고 정한다).
+   */
+  parkOverdue: boolean;
   /** 창의 첫 칸인가 — 그렇다면 앞선 연체·지난 회차까지 이 장부가 끌어안는다. */
   first: boolean;
 }) {
@@ -115,13 +131,19 @@ export default function FinanceDaybook({ start, end, label, opening, currency, i
     let prevDay = "";
     let metExpected = false;
     return merged.map(({ item, side }) => {
-      balance += side === "in" ? item.amount : -item.amount;
+      // 연체는 잔고를 움직이지 않는다 — 예정일이 지나도록 오지 않은 돈이라, 이것으로
+      // 굴린 잔고는 이 줄 하나가 아니라 그 아래 전부와 다음 구간까지 함께 틀어진다.
+      // 줄은 제자리(원래 결제일)에 그대로 두고, 잔고 칸만 비운다.
+      const parked = item.overdue && parkOverdue;
+      if (!parked) balance += side === "in" ? item.amount : -item.amount;
       const dayStart = item.date !== prevDay;
       prevDay = item.date;
-      metExpected = metExpected || !item.actual;
-      return { item, side, balance, dayStart, projected: metExpected };
+      // 예측 표시는 '잔고를 움직인 예정'만 센다 — 세워 둔 연체는 잔고를 건드리지 않아
+      // 그 아래 잔고를 예측으로 만들지 않는다.
+      metExpected = metExpected || (!item.actual && !parked);
+      return { item, side, balance: parked ? null : balance, dayStart, projected: metExpected };
     });
-  }, [data, opening]);
+  }, [data, opening, parkOverdue]);
 
   return (
     <div className="fin-db-wrap">
@@ -172,7 +194,9 @@ export default function FinanceDaybook({ start, end, label, opening, currency, i
               하나뿐이다 — 예정 건이 섞여 있어 그 아래 잔고는 사실이 아니라 예측이라는 것. */}
           <p className="hint-inline" style={{ display: "block", marginTop: 10 }}>
             ✓ already moved, on the day it moved; the rest sit on their due date, so the balance past them is a
-            projection.
+            projection.{rows.some((r) => r.balance === null)
+              ? " Overdue lines stay on the date they were due and show — for balance: the money has not moved, so it is not counted."
+              : ""}
           </p>
         </>
       )}
@@ -197,7 +221,11 @@ function DaybookLine({ row, start, end, currency }: {
         {tagOf(r)}
         {r.actual
           ? <span className="fin-db-done"> · ✓ {side === "in" ? "received" : "paid"}</span>
-          : r.overdue ? <b className="fin-db-late"> · overdue</b> : <span> · expected</span>}
+          // 연체는 '늦었다'로 끝내지 않고 며칠인지까지 적는다 — 사흘 늦은 건과 석 달 늦은
+          // 건은 같은 말로 부를 수 없다. 날짜 칸이 원래 결제일이므로 둘이 한 줄에서 읽힌다.
+          : r.overdue
+            ? <b className="fin-db-late"> · {daysLate(r.date)} days overdue</b>
+            : <span> · expected</span>}
       </div>
     </>
   );
@@ -243,14 +271,22 @@ function DaybookLine({ row, start, end, currency }: {
         </>
       )}
       {/* 예정 건을 한 번 지난 뒤의 잔고는 사실이 아니라 예측 — 아래 안내가 말로 하는 것을
-          여기서는 색으로 보여 준다. 마이너스 잔고는 그래도 붉게 남긴다(경고가 먼저다). */}
-      <td
-        className={`num fin-db-bal${projected ? " fin-db-proj" : ""}`}
-        data-label="Balance"
-        style={{ color: balance < 0 ? "#c0392b" : undefined }}
-      >
-        {cash(balance)}
-      </td>
+          여기서는 색으로 보여 준다. 마이너스 잔고는 그래도 붉게 남긴다(경고가 먼저다).
+          잔고를 움직이지 않은 줄(세워 둔 연체)은 숫자 대신 줄표 — 앞줄의 잔고를 한 번 더
+          적으면 이 건으로 잔고가 움직인 것처럼 읽힌다. */}
+      {balance === null ? (
+        <td className="num fin-db-bal fin-db-parked" data-label="Balance" title="Unsettled — not counted in the balance">
+          —
+        </td>
+      ) : (
+        <td
+          className={`num fin-db-bal${projected ? " fin-db-proj" : ""}`}
+          data-label="Balance"
+          style={{ color: balance < 0 ? "#c0392b" : undefined }}
+        >
+          {cash(balance)}
+        </td>
+      )}
     </tr>
   );
 }

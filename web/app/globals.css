@@ -11887,6 +11887,9 @@ button.ov-tl-stage:hover {
 }
 /* 현금흐름 표에서 '이 중 이미 오간 금액' — 같은 칸의 보조 정보라 작고 옅게. */
 .fin-cf-actual { font-size: 11px; font-weight: 400; color: var(--muted); margin-top: 2px; }
+/* 그 칸에 밀려 있는 돈 — 실적 줄과 같은 자리·같은 크기지만 색으로 갈린다. 기본값에서는
+   이 금액이 위 합계 '밖'에 있으므로, 회색으로 물리면 위 숫자의 일부로 읽힌다. */
+.fin-cf-overdue { font-size: 11px; font-weight: 600; color: #c0392b; margin-top: 2px; }
 .fin-kpi-label { font-size: 12px; color: var(--muted); font-weight: 600; }
 .fin-kpi-main { font-size: 22px; font-weight: 800; color: var(--navy); margin-top: 4px; font-variant-numeric: tabular-nums; }
 /* 통화별로 나눠 적는 금액(환산 없이 ₩·$ 각 줄). KPI 는 두 번째 줄부터 조금 작게. */
@@ -12314,6 +12317,37 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 .fin-bucket--balance { border-top-color: var(--fin-bal, #1e7a46); }
 /* 총계 줄 높이를 맞추려고 비워 둔 줄 — 줄이 하나 더 있는 티가 나면 안 된다. */
 .fin-bucket-gap td { border-bottom-color: transparent; }
+/* 잔고 밖에 세워 둔 연체 — 잔고 표의 일부가 아니라 그 아래 붙는 따로 된 쪽지다.
+   위에 실선을 긋고 붉은 기를 옅게 깔아, 이 숫자들이 Ending 에 더해지지 않았음을
+   자리와 색으로 먼저 말한다. */
+.fin-overdue-note {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--line-strong);
+  border-radius: 0 0 8px 8px;
+  background: #fdf1ef;
+}
+/* 켜서 흐름에 태운 경우엔 경고가 아니라 '그중 얼마'라는 안내다 — 바탕을 중립으로. */
+.fin-overdue-note.in { background: #f4f7fb; }
+.fin-overdue-cap {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+.fin-overdue-note .fin-overdue-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+  color: #a03227;
+  padding: 1px 0;
+}
+.fin-overdue-note.in .fin-overdue-line { color: var(--ink); }
+.fin-overdue-note .fin-overdue-line .num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fin-overdue-note .hint-inline { display: inline; }
 /* 기둥 이름도 자기 색으로 — 아래 표의 같은 이름을 인 칸 머리와 같은 글자색이라,
    'Inflow 기둥'과 'Inflow 칸'이 한눈에 짝지어진다. */
 .fin-bucket--in .form-title { color: var(--fin-in-ink, #1b5e93); }
@@ -12475,6 +12509,9 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 .fin-period-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
 .fin-period-title { margin: 0; font-size: 18px; }
 .fin-period-total td { border-top: 1px solid var(--line-strong); background: #f7f9fc; }
+/* 합계 바로 위에 붙는 '뺀 금액' 줄 — 합계의 일부가 아니라 합계를 읽는 단서라, 굵기 없이
+   붉게만 적는다. */
+.fin-period-overdue td { color: #a03227; background: #fdf1ef; }
 
 /* ── Daybook — Cash Flow 표의 한 줄을 그 자리에서 날짜순으로 펼친 장부 ────────
    가운데를 세로선으로 갈라 왼쪽은 들어온 돈, 오른쪽은 나간 돈(위 표와 같은 순서).
@@ -12529,6 +12566,9 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 /* 예정을 한 번 지난 뒤의 잔고는 예측이다 — 그 줄이 실적이어도 앞의 예정이 빗나가면
    함께 어긋나므로, 거기서부터 잔고 칸을 회색으로 낮춘다. */
 .fin-daybook tbody td.fin-db-proj { color: var(--muted); }
+/* 잔고를 움직이지 않은 줄의 잔고 칸 — 줄표 하나. 옅게 두어 그 위아래 잔고가 이어져
+   읽히게 한다(이 줄에서 잔고는 멈춰 있는 것이 아니라 관여하지 않는다). */
+.fin-daybook tbody td.fin-db-parked { color: #b9c3d1; }
 .fin-daybook .fin-db-done { color: #1e7a46; font-weight: 600; }
 .fin-daybook .fin-db-late { color: #c0392b; }
 /* 전월 이월 줄 — 본문이 아니라 출발점이라 옅게 눕힌다. */

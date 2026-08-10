@@ -805,11 +805,14 @@ export function fetchFinanceCashflow(
   opening: number,
   includePo: boolean,
   currency = "KRW",
-  start = ""
+  start = "",
+  /** 연체(예정일이 지난 미정산)를 잔고에 태울지 — 기본은 흐름 밖에 세워 둔다. */
+  includeOverdue = false
 ): Promise<FinanceCashflow> {
   return get<FinanceCashflow>(
     `/api/admin/finance/cashflow?unit=${unit}&count=${count}&opening=${opening}` +
       `&include_po=${includePo ? 1 : 0}&currency=${encodeURIComponent(currency)}` +
+      `&include_overdue=${includeOverdue ? 1 : 0}` +
       (start ? `&start=${encodeURIComponent(start)}` : "")
   );
 }

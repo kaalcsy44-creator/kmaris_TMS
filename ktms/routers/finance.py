@@ -789,8 +789,15 @@ def _cashflow_buckets(unit: str, count: int, anchor: date | None = None) -> list
 
 @app.get("/api/admin/finance/cashflow", dependencies=[Depends(require_token)])
 def finance_cashflow(unit: str = "month", count: int = 6, opening: float = 0.0,
-                     include_po: int = 0, currency: str = "KRW", start: str = ""):
+                     include_po: int = 0, currency: str = "KRW", start: str = "",
+                     include_overdue: int = 0):
     """현금흐름 — 유입(수금)·유출(지급 + 선택적 벤더 PO)·순증감·누적잔고.
+
+    연체(예정일이 이미 지났는데 아직 안 오간 건)는 기본적으로 **잔고에서 뺀다**. 오지
+    않은 돈으로 굴린 잔고는 그 뒤 모든 구간을 함께 틀리게 만들기 때문이다. 대신 어느
+    구간에 얼마가 묶여 있는지를 overdue_in/overdue_out 으로 따로 실어 보내, 화면이
+    잔고 옆에 나란히 적을 수 있게 한다. include_overdue=1 이면 예전처럼 흐름에 넣어
+    굴린다(그때도 overdue_in/out 은 '그중 연체분'으로 그대로 온다).
 
     구간(월/주)별로 유입/유출을 집계하고 opening(기초잔고)부터 누적잔고를 굴린다.
     각 구간은 '아직 안 온 예정'과 '이미 오간 실적'을 함께 담는다 — 이번 달에 이미 받은
@@ -836,6 +843,16 @@ def finance_cashflow(unit: str = "month", count: int = 6, opening: float = 0.0,
         in_income = [0.0] * count
         out_ap = [0.0] * count
         out_other = [0.0] * count
+        # 연체분 — 예정일이 지났는데 아직 안 오간 돈. 기본은 흐름 밖에 세워 두고(잔고를
+        # 굴리지 않는다) 여기에만 담는다. include_overdue=1 이면 흐름에도 함께 담기므로
+        # 그때 이 값은 '그중 연체분'이라는 뜻이 된다.
+        odue_in = [0.0] * count
+        odue_out = [0.0] * count
+        today_iso = date.today().isoformat()
+
+        def flows(overdue: bool) -> bool:
+            """흐름(유입·유출·잔고)에 태울 건인가 — 연체가 아니거나, 연체까지 넣어 볼 때."""
+            return bool(include_overdue) or not overdue
         win_start = buckets[0]["start"]
         win_end = buckets[-1]["end"]
 
@@ -848,8 +865,11 @@ def finance_cashflow(unit: str = "month", count: int = 6, opening: float = 0.0,
                 continue
             idx = bucket_index(r["due_date"])
             if idx >= 0:
-                inflow[idx] += r["outstanding"]
-                (in_ar if is_ar else in_income)[idx] += r["outstanding"]
+                if r["overdue"]:
+                    odue_in[idx] += r["outstanding"]
+                if flows(r["overdue"]):
+                    inflow[idx] += r["outstanding"]
+                    (in_ar if is_ar else in_income)[idx] += r["outstanding"]
         # 유입(실적) — 이 구간 안에 실제로 입금된 매출채권·기타 수입.
         # 완납 건은 위 예정 루프에서 outstanding=0 으로 빠지므로 이중계상이 없다.
         for when, amt, cur in _ar_receipts(ar_rows, win_start, win_end):
@@ -881,8 +901,14 @@ def finance_cashflow(unit: str = "month", count: int = 6, opening: float = 0.0,
                     continue
                 idx = bucket_index(occ)
                 if idx >= 0:
-                    outflow[idx] += p.amount or 0
-                    (out_ap if is_vendor else out_other)[idx] += p.amount or 0
+                    # 지급대장은 회차마다 예정일이 따로라, 연체 여부도 그 회차 날짜로 본다
+                    # (건별 목록 /cashflow/items 와 같은 규칙).
+                    od = occ < today_iso
+                    if od:
+                        odue_out[idx] += p.amount or 0
+                    if flows(od):
+                        outflow[idx] += p.amount or 0
+                        (out_ap if is_vendor else out_other)[idx] += p.amount or 0
             for when, amt in _settled_occurrences(p, win_start, win_end):
                 idx = bucket_index(when)
                 if idx >= 0:
@@ -898,8 +924,11 @@ def finance_cashflow(unit: str = "month", count: int = 6, opening: float = 0.0,
                 continue
             idx = bucket_index(ap["due_date"])
             if idx >= 0:
-                outflow[idx] += ap["outstanding"]
-                out_ap[idx] += ap["outstanding"]
+                if ap["overdue"]:
+                    odue_out[idx] += ap["outstanding"]
+                if flows(ap["overdue"]):
+                    outflow[idx] += ap["outstanding"]
+                    out_ap[idx] += ap["outstanding"]
         for when, amt, cur in _ap_payments(ap_rows, win_start, win_end):
             if (cur or "KRW").upper() != cur_sel:
                 continue
@@ -943,6 +972,10 @@ def finance_cashflow(unit: str = "month", count: int = 6, opening: float = 0.0,
                 "in_income": round(in_income[i]),
                 "out_ap": round(out_ap[i]),
                 "out_other": round(out_other[i]),
+                # 예정일이 지났는데 아직 안 오간 돈. include_overdue=0 이면 위 inflow/
+                # outflow 밖에 있고, 1 이면 그 안에 든 금액 중 연체분이다.
+                "overdue_in": round(odue_in[i]),
+                "overdue_out": round(odue_out[i]),
                 "net": round(net),
                 "cumulative": round(cumulative),
             })
@@ -957,6 +990,10 @@ def finance_cashflow(unit: str = "month", count: int = 6, opening: float = 0.0,
             "total_outflow": round(sum(outflow)),
             "actual_inflow": round(sum(act_in)),
             "actual_outflow": round(sum(act_out)),
+            # 창 전체에 묶여 있는 연체 — 화면이 기말잔고 옆에 '이 잔고 밖의 돈'으로 적는다.
+            "overdue_in": round(sum(odue_in)),
+            "overdue_out": round(sum(odue_out)),
+            "overdue_included": bool(include_overdue),
             "ending": round(cumulative),
         }
     finally:
