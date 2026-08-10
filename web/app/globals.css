@@ -12377,6 +12377,17 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
   border-radius: 0 0 8px 8px;
   background: #fdf1ef;
 }
+/* 카드 맨 위에 서는 경우 — 옆 두 기둥의 미수·미지급 줄과 같은 높이에 두려고 잔고 표
+   위로 올라왔다(그 줄들의 합이 여기 적히는 값이다). 그래서 선도 뒤집는다: 잔고 밑에
+   붙을 때는 위에 선을 그어 '이건 잔고 밖'이라 했지만, 위에 설 때는 아래에 그어야 그
+   선이 여기와 잔고 사이를 가른다. */
+.fin-overdue-note--top {
+  margin-top: 0;
+  margin-bottom: 12px;
+  border-top: 0;
+  border-bottom: 1px solid var(--line-strong);
+  border-radius: 8px 8px 0 0;
+}
 /* 켜서 흐름에 태운 경우엔 경고가 아니라 '그중 얼마'라는 안내다 — 바탕을 중립으로. */
 .fin-overdue-note.in { background: #f4f7fb; }
 .fin-overdue-cap {

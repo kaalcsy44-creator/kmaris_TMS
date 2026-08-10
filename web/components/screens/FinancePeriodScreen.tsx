@@ -37,11 +37,11 @@ const EMPTY_ITEMS: FinanceCashflowItems = {
 
 /** 여섯 갈래의 화면 이름 — Overview 의 세 기둥에 적힌 것과 같은 말을 쓴다. */
 const BUCKET_TITLE: Record<CashBucket, string> = {
-  receivables: "Sales",
-  income: "Other income",
+  receivables: "Receivables · Sales",
+  income: "Receivables · Other income",
   collected: "Received",
-  payables: "Purchases",
-  other: "Other costs",
+  payables: "Payables · Purchases",
+  other: "Payables · Other costs",
   paid: "Paid",
 };
 const IN_BUCKETS: CashBucket[] = ["receivables", "income", "collected"];

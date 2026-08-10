@@ -211,19 +211,21 @@ export default function FinanceScreen() {
 /**
  * 현금흐름 한 칸을 이루는 여섯 갈래 — 서버 bucket 값(키)은 그대로 두고 이름만 화면용.
  *
- * 첫 줄을 'Receivables'·'Payables' 라 부르지 않는다. 그 말은 '아직 안 받은/안 낸 돈'이라
- * 는 뜻이고, 그렇다면 둘째 줄(기타수입·기타비용)도 똑같이 미수·미지급이라 이름이 갈래를
- * 가르지 못한다. 이 셋을 실제로 가르는 것은 정산 여부가 아니라 돈의 출처다 —
- * 거래에서 나온 것인가(매출·매입), 그 밖인가(이자·임차료·급여), 이미 오갔는가.
- * 그래서 첫 줄은 Sales / Purchases 로 부른다. 미정산이라는 사실은 딸린 한 줄(due)과
- * 건별 상태(Receivable / Payable)가 이미 말하고 있다.
+ * 이름이 두 마디인 건 갈래가 두 겹이기 때문이다. 앞마디는 그 돈이 어디쯤 와 있는가
+ * (Receivables·Payables = 아직 안 오간 돈 / Received·Paid = 이미 오간 돈), 뒷마디는
+ * 어디서 나온 돈인가(거래에서 나온 매출·매입인가, 그 밖인가)다.
+ *
+ * 한 마디로는 못 가른다: 앞의 두 줄을 'Sales'·'Other income' 이라고만 부르면 둘 다
+ * 미수라는 사실이 이름에서 사라지고, 반대로 첫 줄만 'Receivables' 라 부르면 둘째 줄도
+ * 똑같이 미수인데 첫 줄만 그런 것처럼 읽힌다. 그래서 둘 다 앞마디를 달고, 세 번째 줄은
+ * 앞마디만으로 충분하다(이미 오간 돈에는 출처를 따로 묻지 않는다 — 합쳐 한 줄이다).
  */
 const BUCKET_LABEL: Record<CashBucket, string> = {
-  receivables: "Sales",
-  income: "Other income",
+  receivables: "Receivables · Sales",
+  income: "Receivables · Other income",
   collected: "Received",
-  payables: "Purchases",
-  other: "Other costs",
+  payables: "Payables · Purchases",
+  other: "Payables · Other costs",
   paid: "Paid",
 };
 const BUCKET_HINT: Record<CashBucket, string> = {
@@ -611,44 +613,15 @@ function OverviewTab() {
             <div className="panel fin-bucket-card fin-bucket--balance">
               {/* 구간 이름은 왼쪽 앞머리가 세 기둥을 대신해 한 번만 적는다. */}
               <h3 className="form-title">Balance</h3>
-              <table className="mini">
-                <tbody>
-                  <tr>
-                    <td>Opening<div className="hint-inline">carried in</div></td>
-                    <td className="num">{cash(rowOpening)}</td>
-                  </tr>
-                  <tr>
-                    <td>Net<div className="hint-inline">inflow − outflow</div></td>
-                    <td className="num" style={{ color: row.net >= 0 ? "#1e7a46" : "#c0392b" }}>
-                      {row.net >= 0 ? "+" : "−"}{cash(Math.abs(row.net))}
-                    </td>
-                  </tr>
-                  {/* 세 기둥 모두 세 줄 — 옆의 두 기둥이 합계 줄을 걷어내면서 줄 수가 맞았다.
-                      (예전에는 그 합계 줄과 Ending 을 같은 높이에 세우려고 여기 빈 줄을
-                      하나 끼워 두었다.) 그래서 Ending 은 옆 기둥의 실적 줄과 나란히 선다 —
-                      잔고를 만든 것이 그 줄이므로 자리로도 맞는 짝이다. */}
-                  <tr className="fin-period-total">
-                    {/* 딸린 한 줄은 옆 기둥의 마지막 줄과 키를 맞추는 몫도 한다 — 셋 다
-                        이름 아래 한 줄이 붙어야 세 기둥의 발밑이 같은 높이에 선다.
-                        말은 Opening('carried in')과 짝을 이룬다. */}
-                    <td><b>Ending</b><div className="hint-inline">carried out</div></td>
-                    <td className="num" style={{ color: row.cumulative < 0 ? "#c0392b" : undefined }}>
-                      <b>{cash(row.cumulative)}</b>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-              <p className="hint-inline" style={{ display: "block", marginTop: 8 }}>
-                Rolled up from {cash(data.opening)} on {openingAsOf}.{parkExpected
-                  ? " It counts only money that actually moved — scheduled items are listed but left out."
-                  : ""} A negative ending balance marks a cash shortfall.
-              </p>
-              {/* 잔고 밖에 세워 둔 돈 — 잔고 바로 아래에 붙여 둔다. 이 줄들이 없으면
-                  '예정·연체는 안 셌다'는 사실이 화면 어디에도 남지 않아, 잔고가 그만큼 좋아
-                  보이거나(미지급) 나빠 보이는(미수) 이유를 알 수 없다. 예정을 먼저, 연체를
-                  뒤에 적는다 — 예정이 더 큰 덩어리이고, 연체는 그중 날짜가 지난 몫이다. */}
+              {/* 잔고 밖에 세워 둔 돈 — 카드 맨 위, 옆 두 기둥의 미수·미지급 줄과 같은
+                  높이에 둔다. 여기 적히는 값이 바로 그 줄들의 합이기 때문이다(Expected in =
+                  Receivables 두 줄, Expected out = Payables 두 줄). 잔고 밑에 두었을 때는
+                  그 관계가 화면 반대편 끝과 이어져 눈으로 잡히지 않았다.
+                  이 줄들이 없으면 '예정·연체는 안 셌다'는 사실이 화면 어디에도 남지 않아,
+                  잔고가 그만큼 좋아 보이거나(미지급) 나빠 보이는(미수) 이유를 알 수 없다.
+                  예정을 먼저, 연체를 뒤에 — 예정이 큰 덩어리이고 연체는 그중 날짜가 지난 몫. */}
               {(parkExpected && ((row.expected_in ?? 0) || (row.expected_out ?? 0))) || row.overdue_in || row.overdue_out ? (
-                <div className={`fin-overdue-note${overdueRolled ? " in" : ""}`}>
+                <div className={`fin-overdue-note fin-overdue-note--top${overdueRolled ? " in" : ""}`}>
                   <div className="fin-overdue-cap">
                     {overdueRolled ? "Of this balance, still unsettled" : "Not in this balance"}
                   </div>
@@ -678,6 +651,37 @@ function OverviewTab() {
                   ) : null}
                 </div>
               ) : null}
+              <table className="mini">
+                <tbody>
+                  <tr>
+                    <td>Opening<div className="hint-inline">carried in</div></td>
+                    <td className="num">{cash(rowOpening)}</td>
+                  </tr>
+                  <tr>
+                    <td>Net<div className="hint-inline">inflow − outflow</div></td>
+                    <td className="num" style={{ color: row.net >= 0 ? "#1e7a46" : "#c0392b" }}>
+                      {row.net >= 0 ? "+" : "−"}{cash(Math.abs(row.net))}
+                    </td>
+                  </tr>
+                  {/* 이 표는 잔고가 만들어지는 계산이다 — 기초에서 순증감을 굴려 기말로.
+                      위의 '잔고 밖' 상자만큼 아래로 내려앉아 옆 기둥과 줄이 딱 맞지는
+                      않지만, 줄맞춤보다 '저 합계가 이 두 줄의 합'임을 곁에서 보이는 편이
+                      낫다는 판단이다(그 상자가 위로 올라온 이유). */}
+                  <tr className="fin-period-total">
+                    {/* 딸린 한 줄은 Opening('carried in')과 짝을 이룬다 — 기초에서 받아
+                        기말로 넘긴다는 같은 말의 앞뒤. */}
+                    <td><b>Ending</b><div className="hint-inline">carried out</div></td>
+                    <td className="num" style={{ color: row.cumulative < 0 ? "#c0392b" : undefined }}>
+                      <b>{cash(row.cumulative)}</b>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <p className="hint-inline" style={{ display: "block", marginTop: 8 }}>
+                Rolled up from {cash(data.opening)} on {openingAsOf}.{parkExpected
+                  ? " It counts only money that actually moved — scheduled items are listed but left out."
+                  : ""} A negative ending balance marks a cash shortfall.
+              </p>
             </div>
           </div>
 
