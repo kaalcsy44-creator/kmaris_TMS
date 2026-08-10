@@ -1337,6 +1337,13 @@ table.mini.wide td.ms-actcol {
     grid-template-columns: 1fr;
   }
 }
+/* 칸이 많은 표(선박: 이름·IMO·종류·선적·고객)는 반으로 갈리면 더 일찍 좁아진다 —
+   한 줄로 되돌리는 폭을 그만큼 넓게 잡는다. */
+@media (max-width: 1560px) {
+  .ms-2col--wide {
+    grid-template-columns: 1fr;
+  }
+}
 .ms-editor {
   padding: 14px 16px;
   background: #f3f6fb;

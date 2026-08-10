@@ -1659,6 +1659,9 @@ function VesselsTab() {
   return (
     <MasterSection<SettingsVessel>
       title="Vessel Management"
+      // 한 줄에 다섯 칸뿐이라 넓은 화면에서는 표 오른쪽이 통째로 비고 목록만 길어진다 —
+      // 좌우 2열로 나눠 그 빈칸을 목록의 뒷부분으로 채운다(고객·거래선 표와 같은 규칙).
+      twoCol
       empty={{ id: 0, name: "", imo: "", vessel_type: "", ais_flag: "", engine_type: "", hull_no: "", customer_id: null, customer: "" }}
       load={fetchSettingsVessels}
       create={(body) => {
@@ -2911,8 +2914,18 @@ function MasterSection<T extends { id: number }>({
     return right.length ? [left, right] : null;
   })();
 
-  // 표 하나. list=null 이면 그룹 없이 전체 행, 아니면 넘겨받은 그룹만 그린다.
-  function table(list: { key: string; rows: T[] }[] | null) {
+  // 묶지 않는 목록(선박·품목처럼 한 줄이 한 건)의 2열 배치. 줄 높이가 고르므로 그냥
+  // 반으로 자르면 좌우가 맞는다. 짧은 목록은 자르지 않는다 — 두 동강 난 표가 한 표보다
+  // 읽기 나쁘고, 애초에 남는 빈칸도 없다.
+  const rowPair = (() => {
+    if (!twoCol || group || filtered.length < 8) return null;
+    const half = Math.ceil(filtered.length / 2);
+    return [filtered.slice(0, half), filtered.slice(half)];
+  })();
+
+  // 표 하나. list=null 이면 그룹 없이 행을 그대로 그리고(only 를 주면 그중 일부만 —
+  // 2열로 자른 한쪽), 아니면 넘겨받은 그룹만 그린다.
+  function table(list: { key: string; rows: T[] }[] | null, only?: T[]) {
     return (
       <table className="mini wide ms-table">
         <thead>
@@ -2925,7 +2938,7 @@ function MasterSection<T extends { id: number }>({
         </thead>
         <tbody>
           {!list
-            ? filtered.map((row) => dataRow(row))
+            ? (only ?? filtered).map((row) => dataRow(row))
             : // 담당자가 1명이어도 똑같이 회사 행으로 묶는다(줄마다 모양이 달라지지 않게).
               list.map((g) => (
                 <Fragment key={g.key}>
@@ -3068,6 +3081,16 @@ function MasterSection<T extends { id: number }>({
           {columnPair.map((part, i) => (
             <div key={i} className="table-wrap">
               {table(part)}
+            </div>
+          ))}
+        </div>
+      ) : rowPair ? (
+        // 같은 이유의 2열 — 이쪽은 묶음이 없어 행을 반씩 나눠 놓는다. 칸이 많은 표는
+        // 반으로 갈리면 더 일찍 좁아지므로 한 줄로 되돌리는 폭을 넉넉히 잡는다.
+        <div className={`ms-2col${columns.length >= 4 ? " ms-2col--wide" : ""}`}>
+          {rowPair.map((part, i) => (
+            <div key={i} className="table-wrap">
+              {table(null, part)}
             </div>
           ))}
         </div>
