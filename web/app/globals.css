@@ -12330,7 +12330,7 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 .fin-cf-table thead th:nth-child(3) { box-shadow: inset 0 3px 0 var(--fin-out); background: var(--fin-out-tint); color: var(--fin-out-ink); }
 .fin-cf-table thead th:nth-child(5) { box-shadow: inset 0 3px 0 var(--fin-bal); background: var(--fin-bal-tint); color: var(--fin-bal-ink); }
 /* 칸 묶음을 가르는 세로선 — 위 기둥 사이의 틈과 같은 자리에 서고, 행을 펼치면
-   장부의 같은 선(.fin-daybook tbody td:nth-child(4)·(7))이 그대로 이어받는다. */
+   장부의 같은 선(.fin-daybook tbody td:nth-child(4)·(7))이 그대로 이어받는다.
    자식 결합자(>)로 못박아 두는 건 장부가 이 표의 칸 안에 들어앉은 표이기 때문이다 —
    그냥 두면 장부의 둘째·셋째 칸(유입 쪽 적요·번호)까지 이 선을 물려받아, 유입에만
    없던 세로줄이 두 개 더 서고 유출 쪽과 짝이 맞지 않게 된다. */
