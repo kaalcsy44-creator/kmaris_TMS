@@ -313,6 +313,36 @@ function LedgerPeriod({ from, to, onChange }: {
   );
 }
 
+/**
+ * 목록의 통화 필터 — 빈 값이면 통화를 가리지 않는다(전부 한 표에, 합계는 통화별 줄).
+ *
+ * 환산해서 섞지 않고 '고른 통화만' 남기는 방식이다. 잔고·합계는 한 통화 안에서만 뜻이
+ * 있고(현금흐름 화면의 ₩/$ 토글과 같은 규칙), 환산값을 목록에 섞으면 어느 숫자가 실제로
+ * 오간 금액인지가 흐려진다. 참고용 KRW 환산은 표 발밑에 한 줄로만 남는다.
+ */
+type LedgerCur = "" | "KRW" | "USD";
+
+function LedgerCurrency({ cur, onChange }: { cur: LedgerCur; onChange: (c: LedgerCur) => void }) {
+  return (
+    <div className="seg-toggle" role="group" aria-label="Currency">
+      <button className={cur === "" ? "on" : ""} onClick={() => onChange("")} title="Every currency in one list">All</button>
+      <button className={cur === "KRW" ? "on" : ""} onClick={() => onChange("KRW")}>₩ KRW</button>
+      <button className={cur === "USD" ? "on" : ""} onClick={() => onChange("USD")}>$ USD</button>
+    </div>
+  );
+}
+
+/** 통화별 합계에서 고른 통화만 남긴다 — 빈 값이면 그대로(전 통화). */
+function pickCurrency(m: MoneyByCurrency, cur: LedgerCur): MoneyByCurrency {
+  if (!cur) return m || {};
+  return (m && cur in m) ? { [cur]: m[cur] } : {};
+}
+
+/** 환산해 볼 것이 남았는가 — KRW 만 남은 표에 'In KRW' 줄을 한 번 더 적지 않기 위해. */
+function needsKrwRef(...maps: MoneyByCurrency[]): boolean {
+  return maps.some((m) => currencyKeys(m).some((c) => c !== "KRW"));
+}
+
 /** 유입 쪽 갈래 — 나머지는 유출. 목록 탭을 고를 때 쓴다. */
 const IN_BUCKETS: CashBucket[] = ["receivables", "income", "collected"];
 
@@ -321,13 +351,15 @@ const IN_BUCKETS: CashBucket[] = ["receivables", "income", "collected"];
  * 기간까지 걸어서. 건별로 볼 자리가 목록에도 있는데 따로 만든 페이지로 보내면
  * 같은 목록을 두 군데서 보게 된다.
  * 첫 칸은 앞선 연체까지 끌어안으므로 시작을 열어 둔다(from 없음) — 그래야 목록의
- * 합과 기둥의 금액이 맞는다.
+ * 합과 기둥의 금액이 맞는다. 통화도 같은 이유로 걸어 보낸다: 이 기둥은 고른 통화 하나만
+ * 세고 있어, 통화를 안 걸면 목록에 다른 통화가 섞여 합이 어긋난다.
  */
-function ledgerHref(r: FinanceCashflowRow, first: boolean, bucket: CashBucket): string {
+function ledgerHref(r: FinanceCashflowRow, first: boolean, bucket: CashBucket, currency: string): string {
   const q = new URLSearchParams({
     tab: IN_BUCKETS.includes(bucket) ? "inflow" : "outflow",
     view: bucket,
     to: r.end,
+    cur: currency,
   });
   if (!first) q.set("from", r.start);
   return `/finance?${q.toString()}`;
@@ -539,7 +571,7 @@ function OverviewTab() {
               totalHref={`${periodHref(row, idx === 0, currency, includePo, overdueRolled, !parkExpected)}&side=in`}
               total={row.inflow}
               currency={currency}
-              href={(b) => ledgerHref(row, idx === 0, b)}
+              href={(b) => ledgerHref(row, idx === 0, b, currency)}
             />
             <BucketCard
               title="Outflow"
@@ -551,7 +583,7 @@ function OverviewTab() {
               totalHref={`${periodHref(row, idx === 0, currency, includePo, overdueRolled, !parkExpected)}&side=out`}
               total={row.outflow}
               currency={currency}
-              href={(b) => ledgerHref(row, idx === 0, b)}
+              href={(b) => ledgerHref(row, idx === 0, b, currency)}
             />
             <div className="panel fin-bucket-card fin-bucket--balance">
               {/* 구간 이름은 왼쪽 앞머리가 세 기둥을 대신해 한 번만 적는다. */}
@@ -1001,14 +1033,17 @@ function SettledTable({ rows, dateLabel, partyLabel, empty, fx }: {
             <td className="fin-foot-name" colSpan={4}>Total · {rows.length} item{rows.length === 1 ? "" : "s"}</td>
             <td className="num" data-label="Amount">{byCurrencyLines(totals)}</td>
           </tr>
-          {/* 참고용 KRW 환산 — 오늘자 매매기준율(조회 실패 시 고정환율). 집계에는 쓰지 않는다. */}
-          <tr className="fin-foot-ref">
-            <td className="fin-foot-name" colSpan={4}>
-              Total (In KRW · 1 USD = {fx.rate.toLocaleString()}
-              {fx.source === "exim" ? ` · 매매기준율 ${fx.date}` : " · fixed rate"})
-            </td>
-            <td className="num">{won(toKrw(totals, fx.rate))}</td>
-          </tr>
+          {/* 참고용 KRW 환산 — 오늘자 매매기준율(조회 실패 시 고정환율). 집계에는 쓰지 않는다.
+              환산할 것이 없으면(₩만 남은 표) 같은 숫자를 한 줄 더 적을 뿐이라 접는다. */}
+          {needsKrwRef(totals) ? (
+            <tr className="fin-foot-ref">
+              <td className="fin-foot-name" colSpan={4}>
+                Total (In KRW · 1 USD = {fx.rate.toLocaleString()}
+                {fx.source === "exim" ? ` · 매매기준율 ${fx.date}` : " · fixed rate"})
+              </td>
+              <td className="num">{won(toKrw(totals, fx.rate))}</td>
+            </tr>
+          ) : null}
         </tbody>
       </table>
     </>
@@ -1030,6 +1065,9 @@ function InflowTab() {
   const setView = (v: InflowView) => setParams({ view: v === "receivables" ? "" : v });
   const from = params.get("from") || "";
   const to = params.get("to") || "";
+  // 통화도 주소에 산다(갈래·기간과 같은 규약) — '₩만 본 이 화면'을 그대로 넘길 수 있게.
+  const curParam = (params.get("cur") || "").toUpperCase();
+  const cur: LedgerCur = curParam === "KRW" || curParam === "USD" ? curParam : "";
   // 원장은 기본적으로 전부 보여준다 — 켜 두면 수금이 끝난 청구서가 목록에서 사라져
   // "그 청구서 어디 갔지"가 된다. 미수만 추리고 싶을 때만 사용자가 켠다.
   const [openOnly, setOpenOnly] = useState(false);
@@ -1040,13 +1078,24 @@ function InflowTab() {
   const rows = useMemo(() => {
     const src = all
       .filter((r) => (view === "income" ? r.source === "income" : r.source !== "income"))
+      .filter((r) => !cur || r.currency === cur)
       // 예정 항목은 예정일 기준 — 반복(기타수입)은 회차 하나라도 구간에 들면 남긴다.
       .filter((r) => dueInRange(r, from, to));
     return openOnly ? src.filter((r) => r.outstanding > 0) : src;
-  }, [all, view, openOnly, from, to]);
+  }, [all, view, openOnly, from, to, cur]);
   // 실적은 실제로 오간 날 기준 — 현금흐름이 그 날짜로 세는 것과 같다.
-  const settled = useMemo(() => receiptRows(all).filter((r) => inRange(r.date, from, to)), [all, from, to]);
+  const settled = useMemo(
+    () => receiptRows(all).filter((r) => (!cur || r.currency === cur) && inRange(r.date, from, to)),
+    [all, from, to, cur]
+  );
   const totals = useMemo(() => receivableTotals(rows), [rows]);
+  // 머리 KPI 는 기간·갈래와 무관한 '오늘 기준' 값이지만, 통화는 따른다 — 한 통화만 보기로
+  // 해 놓고 그 위에 다른 통화 줄이 남아 있으면 무엇을 보고 있는지가 흐려진다. 건수도 함께
+  // 다시 센다(서버가 준 count 는 전 통화 기준이라 그대로 두면 금액과 짝이 맞지 않는다).
+  const openCount = useMemo(
+    () => (cur ? all.filter((r) => r.outstanding > 0 && r.currency === cur).length : null),
+    [all, cur]
+  );
 
   function reload() {
     invalidateCache("finance:summary");
@@ -1096,8 +1145,13 @@ function InflowTab() {
       {/* 오늘 기준 두 숫자 — 어느 갈래를 보고 있든 같은 값이라 위에 고정해 둔다. */}
       {sum ? (
         <div className="fin-kpis fin-kpis--pair">
-          <KpiTile label="Outstanding" main={byCurrencyLines(sum.receivable.outstanding)} sub={`${sum.receivable.count} open invoices · as of today`} tone="blue" />
-          <KpiTile label="Overdue" main={byCurrencyLines(sum.receivable.overdue)} sub="past the due date" tone="red" />
+          <KpiTile
+            label="Outstanding"
+            main={byCurrencyLines(pickCurrency(sum.receivable.outstanding, cur))}
+            sub={`${openCount ?? sum.receivable.count} open invoices · as of today`}
+            tone="blue"
+          />
+          <KpiTile label="Overdue" main={byCurrencyLines(pickCurrency(sum.receivable.overdue, cur))} sub="past the due date" tone="red" />
         </div>
       ) : null}
       <div className="fin-subtab-bar">
@@ -1106,7 +1160,11 @@ function InflowTab() {
           <button className={view === "income" ? "on" : ""} onClick={() => setView("income")}>Other income</button>
           <button className={view === "collected" ? "on" : ""} onClick={() => setView("collected")}>Collected</button>
         </div>
-        <LedgerPeriod from={from} to={to} onChange={(f, t) => setParams({ from: f, to: t })} />
+        {/* 무엇을 걸러 볼지는 오른쪽에 모아 둔다 — 왼쪽 갈래(무엇을 보는가)와 갈라서. */}
+        <div className="fin-ledger-filters">
+          <LedgerCurrency cur={cur} onChange={(c) => setParams({ cur: c })} />
+          <LedgerPeriod from={from} to={to} onChange={(f, t) => setParams({ from: f, to: t })} />
+        </div>
       </div>
       <p className="hint-inline" style={{ display: "block", margin: "8px 0 10px" }}>{hint}</p>
 
@@ -1197,18 +1255,21 @@ function InflowTab() {
               <td className="num" data-label="Outstanding">{byCurrencyLines(totals.outstanding)}</td>
               <td /><td />
             </tr>
-            {/* 참고용 KRW 환산 — 오늘자 매매기준율(조회 실패 시 고정환율). 집계에는 쓰지 않는다. */}
-            <tr className="fin-foot-ref">
-              <td />
-              <td className="fin-foot-name" colSpan={3}>
-                Total (In KRW · 1 USD = {fx.rate.toLocaleString()}
-                {fx.source === "exim" ? ` · 매매기준율 ${fx.date}` : " · fixed rate"})
-              </td>
-              <td className="num" data-label="Invoice">{won(toKrw(totals.invoice, fx.rate))}</td>
-              <td className="num" data-label="Paid">{won(toKrw(totals.paid, fx.rate))}</td>
-              <td className="num" data-label="Outstanding">{won(toKrw(totals.outstanding, fx.rate))}</td>
-              <td /><td />
-            </tr>
+            {/* 참고용 KRW 환산 — 오늘자 매매기준율(조회 실패 시 고정환율). 집계에는 쓰지 않는다.
+                ₩ 만 남은 표에서는 접는다(같은 숫자를 한 줄 더 적는 셈이라). */}
+            {needsKrwRef(totals.invoice, totals.paid, totals.outstanding) ? (
+              <tr className="fin-foot-ref">
+                <td />
+                <td className="fin-foot-name" colSpan={3}>
+                  Total (In KRW · 1 USD = {fx.rate.toLocaleString()}
+                  {fx.source === "exim" ? ` · 매매기준율 ${fx.date}` : " · fixed rate"})
+                </td>
+                <td className="num" data-label="Invoice">{won(toKrw(totals.invoice, fx.rate))}</td>
+                <td className="num" data-label="Paid">{won(toKrw(totals.paid, fx.rate))}</td>
+                <td className="num" data-label="Outstanding">{won(toKrw(totals.outstanding, fx.rate))}</td>
+                <td /><td />
+              </tr>
+            ) : null}
           </tbody>
         </table>
       )}
@@ -1467,6 +1528,9 @@ function OutflowTab() {
   const setView = (v: OutflowView) => setParams({ view: v === "payables" ? "" : v });
   const from = params.get("from") || "";
   const to = params.get("to") || "";
+  // 통화 필터 — Inflow 와 같은 규약(주소의 cur).
+  const curParam = (params.get("cur") || "").toUpperCase();
+  const cur: LedgerCur = curParam === "KRW" || curParam === "USD" ? curParam : "";
   const [editing, setEditing] = useState<FinancePayable | null>(null);
   const [adding, setAdding] = useState(false);
   // 납부 입력 대상 — 회차일(occurrence)과 실제 납부일을 함께 받는다.
@@ -1479,14 +1543,17 @@ function OutflowTab() {
   const [trade, other] = useMemo(() => {
     const isTrade = (p: FinancePayable) => p.source === "ap" || p.category === "거래선지급";
     // 예정 항목은 예정일 기준 — 반복(임차료·급여)은 회차 하나라도 구간에 들면 남긴다.
-    const inWindow = rows.filter((p) => dueInRange(p, from, to));
+    const inWindow = rows.filter((p) => (!cur || p.currency === cur) && dueInRange(p, from, to));
     return [inWindow.filter(isTrade), inWindow.filter((p) => !isTrade(p))];
-  }, [rows, from, to]);
+  }, [rows, from, to, cur]);
   // 보고 있는 갈래의 합계 3열(청구·지급·미지급) — 통화별 분리(수입 목록과 같은 규칙).
   const visible = view === "other" ? other : trade;
   const totals = useMemo(() => payableTotals(visible), [visible]);
   // 실적은 실제로 나간 날 기준 — 현금흐름이 그 날짜로 세는 것과 같다.
-  const settled = useMemo(() => paymentRows(rows).filter((r) => inRange(r.date, from, to)), [rows, from, to]);
+  const settled = useMemo(
+    () => paymentRows(rows).filter((r) => (!cur || r.currency === cur) && inRange(r.date, from, to)),
+    [rows, from, to, cur]
+  );
 
   function reload() {
     invalidateCache("finance:summary");
@@ -1607,8 +1674,14 @@ function OutflowTab() {
       {/* 오늘 기준 두 숫자 — 어느 갈래를 보고 있든 같은 값이라 위에 고정해 둔다. */}
       {sum ? (
         <div className="fin-kpis fin-kpis--pair">
-          <KpiTile label="Due in 30 days + overdue" main={byCurrencyLines(sum.payable.total)} sub={`Next 30 days ${byCurrency(sum.payable.upcoming_30d)}`} tone="amber" />
-          <KpiTile label="Overdue" main={byCurrencyLines(sum.payable.overdue)} sub="past the due date" tone="red" />
+          {/* 기간·갈래와 무관한 '오늘 기준' 값이지만 통화 필터는 따른다(Inflow 와 같은 이유). */}
+          <KpiTile
+            label="Due in 30 days + overdue"
+            main={byCurrencyLines(pickCurrency(sum.payable.total, cur))}
+            sub={`Next 30 days ${byCurrency(pickCurrency(sum.payable.upcoming_30d, cur))}`}
+            tone="amber"
+          />
+          <KpiTile label="Overdue" main={byCurrencyLines(pickCurrency(sum.payable.overdue, cur))} sub="past the due date" tone="red" />
         </div>
       ) : null}
       <div className="fin-subtab-bar">
@@ -1617,7 +1690,11 @@ function OutflowTab() {
           <button className={view === "other" ? "on" : ""} onClick={() => setView("other")}>Other costs</button>
           <button className={view === "paid" ? "on" : ""} onClick={() => setView("paid")}>Paid</button>
         </div>
-        <LedgerPeriod from={from} to={to} onChange={(f, t) => setParams({ from: f, to: t })} />
+        {/* 무엇을 걸러 볼지는 오른쪽에 모아 둔다 — 왼쪽 갈래(무엇을 보는가)와 갈라서. */}
+        <div className="fin-ledger-filters">
+          <LedgerCurrency cur={cur} onChange={(c) => setParams({ cur: c })} />
+          <LedgerPeriod from={from} to={to} onChange={(f, t) => setParams({ from: f, to: t })} />
+        </div>
       </div>
       <p className="hint-inline" style={{ display: "block", margin: "8px 0 10px" }}>
         {view === "payables"
@@ -1734,17 +1811,20 @@ function OutflowTab() {
               <td className="num total-value" data-label="Outstanding">{byCurrencyLines(totals.outstanding)}</td>
               <td /><td /><td />
             </tr>
-            {/* 참고용 KRW 환산 — 오늘자 매매기준율(조회 실패 시 고정환율). 집계에는 쓰지 않는다. */}
-            <tr className="fin-foot-ref">
-              <td className="fin-foot-name">
-                Total (In KRW · 1 USD = {fx.rate.toLocaleString()}
-                {fx.source === "exim" ? ` · 매매기준율 ${fx.date}` : " · fixed rate"})
-              </td>
-              <td className="num" data-label="Amount">{won(toKrw(totals.invoice, fx.rate))}</td>
-              <td className="num" data-label="Paid">{won(toKrw(totals.paid, fx.rate))}</td>
-              <td className="num" data-label="Outstanding">{won(toKrw(totals.outstanding, fx.rate))}</td>
-              <td /><td /><td />
-            </tr>
+            {/* 참고용 KRW 환산 — 오늘자 매매기준율(조회 실패 시 고정환율). 집계에는 쓰지 않는다.
+                ₩ 만 남은 표에서는 접는다(같은 숫자를 한 줄 더 적는 셈이라). */}
+            {needsKrwRef(totals.invoice, totals.paid, totals.outstanding) ? (
+              <tr className="fin-foot-ref">
+                <td className="fin-foot-name">
+                  Total (In KRW · 1 USD = {fx.rate.toLocaleString()}
+                  {fx.source === "exim" ? ` · 매매기준율 ${fx.date}` : " · fixed rate"})
+                </td>
+                <td className="num" data-label="Amount">{won(toKrw(totals.invoice, fx.rate))}</td>
+                <td className="num" data-label="Paid">{won(toKrw(totals.paid, fx.rate))}</td>
+                <td className="num" data-label="Outstanding">{won(toKrw(totals.outstanding, fx.rate))}</td>
+                <td /><td /><td />
+              </tr>
+            ) : null}
           </tfoot>
         </table>
       )}

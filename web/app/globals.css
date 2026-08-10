@@ -11874,6 +11874,8 @@ button.ov-tl-stage:hover {
   display: flex; align-items: center; justify-content: space-between;
   gap: 12px; flex-wrap: wrap; margin-top: 2px;
 }
+/* 목록을 거르는 손잡이들(통화·기간) — 갈래 서브탭과 한 줄에 서되 오른쪽에 모인다. */
+.fin-ledger-filters { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .fin-ledger-period { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .fin-ledger-period select {
   height: 32px; border: 1px solid var(--input-border, #c7d0de); border-radius: 8px;
