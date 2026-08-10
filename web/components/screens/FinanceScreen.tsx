@@ -100,10 +100,13 @@ function toKrw(m: MoneyByCurrency, usdKrw: number): number {
 }
 
 /** AR 상태(DB는 한글 enum) → 화면 표기. */
+// 들어오는 돈의 상태 — 아직 안 온 것은 Receivable, 온 것은 Received 로 부른다.
+// 나가는 돈(Payable / Paid)과 짝을 맞춘 말이라, 어느 쪽 돈인지가 상태 하나로 읽힌다
+// ("Paid" 를 양쪽에 쓰면 수금인지 지급인지 표를 보고서야 안다).
 const AR_STATUS_LABEL: Record<string, string> = {
-  미수: "Outstanding",
-  일부수금: "Partial",
-  완납: "Paid",
+  미수: "Receivable",
+  일부수금: "Partly received",
+  완납: "Received",
   연체: "Overdue",
 };
 const todayStr = () => new Date().toISOString().slice(0, 10);
@@ -209,7 +212,7 @@ export default function FinanceScreen() {
 const BUCKET_LABEL: Record<CashBucket, string> = {
   receivables: "Receivables",
   income: "Other income",
-  collected: "Collected",
+  collected: "Received",
   payables: "Payables",
   other: "Other costs",
   paid: "Paid",
@@ -217,10 +220,10 @@ const BUCKET_LABEL: Record<CashBucket, string> = {
 const BUCKET_HINT: Record<CashBucket, string> = {
   receivables: "invoices due",
   income: "other income due",
-  collected: "already received",
+  collected: "already in the account",
   payables: "vendor bills due",
   other: "rent · payroll · utilities · tax",
-  paid: "already paid",
+  paid: "already out of the account",
 };
 
 /**
@@ -582,9 +585,7 @@ function OverviewTab() {
               tone="in"
               lines={[["receivables", row.in_ar ?? 0], ["income", row.in_income ?? 0], ["collected", row.actual_inflow]]}
               parked={parkExpected ? ["receivables", "income"] : []}
-              totalLabel="Total"
-              totalHref={`${periodHref(row, idx === 0, currency, includePo, overdueRolled, !parkExpected)}&side=in`}
-              total={row.inflow}
+              allHref={`${periodHref(row, idx === 0, currency, includePo, overdueRolled, !parkExpected)}&side=in`}
               currency={currency}
               href={(b) => ledgerHref(row, idx === 0, b, currency)}
             />
@@ -594,9 +595,7 @@ function OverviewTab() {
               tone="out"
               lines={[["payables", row.out_ap ?? 0], ["other", row.out_other ?? 0], ["paid", row.actual_outflow]]}
               parked={parkExpected ? ["payables", "other"] : []}
-              totalLabel="Total"
-              totalHref={`${periodHref(row, idx === 0, currency, includePo, overdueRolled, !parkExpected)}&side=out`}
-              total={row.outflow}
+              allHref={`${periodHref(row, idx === 0, currency, includePo, overdueRolled, !parkExpected)}&side=out`}
               currency={currency}
               href={(b) => ledgerHref(row, idx === 0, b, currency)}
             />
@@ -615,12 +614,10 @@ function OverviewTab() {
                       {row.net >= 0 ? "+" : "−"}{cash(Math.abs(row.net))}
                     </td>
                   </tr>
-                  {/* 빈 줄 하나 — 세 기둥의 총계 줄(Total inflow·Total outflow·Ending)이 같은 높이에
-                      서려면 본문 줄 수가 같아야 한다. 옆 기둥의 한 줄과 같은 높이로 비운다. */}
-                  <tr className="fin-bucket-gap" aria-hidden="true">
-                    <td>&nbsp;<div className="hint-inline">&nbsp;</div></td>
-                    <td className="num" />
-                  </tr>
+                  {/* 세 기둥 모두 세 줄 — 옆의 두 기둥이 합계 줄을 걷어내면서 줄 수가 맞았다.
+                      (예전에는 그 합계 줄과 Ending 을 같은 높이에 세우려고 여기 빈 줄을
+                      하나 끼워 두었다.) 그래서 Ending 은 옆 기둥의 실적 줄과 나란히 선다 —
+                      잔고를 만든 것이 그 줄이므로 자리로도 맞는 짝이다. */}
                   <tr className="fin-period-total">
                     <td><b>Ending</b></td>
                     <td className="num" style={{ color: row.cumulative < 0 ? "#c0392b" : undefined }}>
@@ -847,22 +844,20 @@ function OverviewTab() {
   );
 }
 
-/** 한 구간의 유입(또는 유출) 세 갈래 + 합계. 각 줄은 그 갈래의 건별 목록으로 간다. */
-function BucketCard({ title, period, tone, lines, parked, totalLabel, totalHref, total, currency, href }: {
+/** 한 구간의 유입(또는 유출) 세 갈래. 각 줄은 그 갈래의 건별 목록으로 간다. */
+function BucketCard({ title, period, tone, lines, parked, allHref, currency, href }: {
   title: string;
   period: string;
   tone: "in" | "out";
   lines: [CashBucket, number][];
   /**
-   * 잔고 밖에 세워 둔 갈래 — 금액은 그대로 적되 합계에는 들어 있지 않다. 줄을 지우지
-   * 않는 건 '무엇이 예정되어 있나'가 사라지면 안 되기 때문이고, 옅게 눕히는 건 더해서
-   * 합계가 나오지 않는 줄임을 그 자리에서 알리기 위해서다.
+   * 잔고 밖에 세워 둔 갈래 — 금액은 그대로 적되 잔고에는 들어 있지 않다. 줄을 지우지
+   * 않는 건 '무엇이 예정되어 있나'가 사라지면 안 되기 때문이고, 옅게 눕히는 건 잔고를
+   * 움직이지 않은 줄임을 그 자리에서 알리기 위해서다.
    */
   parked?: CashBucket[];
-  totalLabel: string;
-  /** 합계 줄 → 이 구간 전체를 한 화면에 펼친 기간 상세. */
-  totalHref: string;
-  total: number;
+  /** 기둥 이름 → 이 구간 전체를 한 화면에 펼친 기간 상세. */
+  allHref: string;
   currency: string;
   href: (b: CashBucket) => string;
 }) {
@@ -870,8 +865,17 @@ function BucketCard({ title, period, tone, lines, parked, totalLabel, totalHref,
   const isParked = (b: CashBucket) => !!parked?.includes(b);
   return (
     <div className={`panel fin-bucket-card fin-bucket--${tone}`}>
-      {/* 구간 이름은 왼쪽 앞머리가 한 번만 적는다 — period 는 링크 설명(title)에만 남는다. */}
-      <h3 className="form-title">{title}</h3>
+      {/* 기둥 이름이 곧 '이 구간 전부'로 가는 문이다 — 합계 줄에 달려 있던 링크를 여기로
+          올렸다. 구간 이름은 왼쪽 앞머리가 한 번만 적는다(여기서는 링크 설명에만 남는다). */}
+      <h3 className="form-title">
+        <Link className="fin-doc-link" href={allHref} title={`Every ${title.toLowerCase()} item · ${period}`}>
+          {title}
+        </Link>
+      </h3>
+      {/* 합계 줄은 두지 않는다. 예정을 잔고 밖에 세워 두면(기본값) 세 줄이 더해서 하나가
+          되지 않아 '합계'라 부를 것이 없고, 그때 그 자리에 적히던 값은 바로 위 실적 줄과
+          같은 숫자였다 — 같은 값을 두 줄에 적으면 어느 쪽이 답인지가 흐려진다.
+          구간의 유입·유출 합계는 아래 Cash flow 표의 그 행이 이미 적고 있다. */}
       <table className="mini">
         <tbody>
           {lines.map(([b, amount]) => (
@@ -887,14 +891,6 @@ function BucketCard({ title, period, tone, lines, parked, totalLabel, totalHref,
               <td className="num">{cash(amount)}</td>
             </tr>
           ))}
-          <tr className="fin-period-total">
-            <td>
-              <Link className="fin-doc-link" href={totalHref} title={`Every item behind ${totalLabel.toLowerCase()} · ${period}`}>
-                <b>{totalLabel}</b>
-              </Link>
-            </td>
-            <td className="num"><b>{cash(total)}</b></td>
-          </tr>
         </tbody>
       </table>
     </div>
@@ -1146,7 +1142,7 @@ function InflowTab() {
         <div className="items-head-actions">
           {view !== "collected" ? (
             <label className="check-chip" style={{ cursor: "pointer" }}>
-              <input type="checkbox" checked={openOnly} onChange={(e) => setOpenOnly(e.target.checked)} /> Outstanding only
+              <input type="checkbox" checked={openOnly} onChange={(e) => setOpenOnly(e.target.checked)} /> Receivable only
             </label>
           ) : null}
           {/* 등록 버튼은 갈래와 무관하게 늘 같은 자리에 둔다 — 수입을 적으려고 먼저
@@ -1161,7 +1157,7 @@ function InflowTab() {
       {sum ? (
         <div className="fin-kpis fin-kpis--pair">
           <KpiTile
-            label="Outstanding"
+            label="Receivable"
             main={byCurrencyLines(pickCurrency(sum.receivable.outstanding, cur))}
             sub={`${openCount} open invoices · as of today`}
             tone="blue"
@@ -1173,7 +1169,7 @@ function InflowTab() {
         <div className="seg-toggle fin-subtabs" role="group" aria-label="Inflow view">
           <button className={view === "receivables" ? "on" : ""} onClick={() => setView("receivables")}>Receivables</button>
           <button className={view === "income" ? "on" : ""} onClick={() => setView("income")}>Other income</button>
-          <button className={view === "collected" ? "on" : ""} onClick={() => setView("collected")}>Collected</button>
+          <button className={view === "collected" ? "on" : ""} onClick={() => setView("collected")}>Received</button>
         </div>
         {/* 무엇을 걸러 볼지는 오른쪽에 모아 둔다 — 왼쪽 갈래(무엇을 보는가)와 갈라서. */}
         <div className="fin-ledger-filters">
@@ -1191,7 +1187,7 @@ function InflowTab() {
             <tr>
               <th className="fin-w-party">Customer</th><th>Invoice No.</th>
               <th className="fin-w-date">Invoice date</th><th className="fin-w-date">Due</th>
-              <th className="num fin-w-money">Invoice</th><th className="num fin-w-money">Paid</th><th className="num fin-w-money">Outstanding</th>
+              <th className="num fin-w-money">Invoice</th><th className="num fin-w-money">Received</th><th className="num fin-w-money">Receivable</th>
               <th className="fin-w-status">Status</th><th className="fin-w-act" />
             </tr>
           </thead>
@@ -1211,8 +1207,8 @@ function InflowTab() {
                 <td data-label="Invoiced">{r.invoice_date || "—"}</td>
                 <td data-label="Due">{r.due_date || "—"}</td>
                 <td className="num" data-label="Invoice">{money(r.invoice_amount, r.currency)}</td>
-                <td className="num" data-label="Paid">{money(r.paid_amount, r.currency)}</td>
-                <td className="num" data-label="Outstanding">{money(r.outstanding, r.currency)}</td>
+                <td className="num" data-label="Received">{money(r.paid_amount, r.currency)}</td>
+                <td className="num" data-label="Receivable">{money(r.outstanding, r.currency)}</td>
                 <td data-label="Status">
                   {/* 기타 수입은 이 화면에서 바로 입금 처리(실제 입금일 입력). 기일이 지난
                       건도 눌러야 한다 — 연체 배지만 띄우면 늦게 들어온 돈을 영영 기록할 수
@@ -1266,8 +1262,8 @@ function InflowTab() {
               <td />
               <td className="fin-foot-name" colSpan={3}>Total</td>
               <td className="num" data-label="Invoice">{byCurrencyLines(totals.invoice)}</td>
-              <td className="num" data-label="Paid">{byCurrencyLines(totals.paid)}</td>
-              <td className="num" data-label="Outstanding">{byCurrencyLines(totals.outstanding)}</td>
+              <td className="num" data-label="Received">{byCurrencyLines(totals.paid)}</td>
+              <td className="num" data-label="Receivable">{byCurrencyLines(totals.outstanding)}</td>
               <td /><td />
             </tr>
             {/* 참고용 KRW 환산 — 오늘자 매매기준율(조회 실패 시 고정환율). 집계에는 쓰지 않는다.
@@ -1280,8 +1276,8 @@ function InflowTab() {
                   {fx.source === "exim" ? ` · 매매기준율 ${fx.date}` : " · fixed rate"})
                 </td>
                 <td className="num" data-label="Invoice">{won(toKrw(totals.invoice, fx.rate))}</td>
-                <td className="num" data-label="Paid">{won(toKrw(totals.paid, fx.rate))}</td>
-                <td className="num" data-label="Outstanding">{won(toKrw(totals.outstanding, fx.rate))}</td>
+                <td className="num" data-label="Received">{won(toKrw(totals.paid, fx.rate))}</td>
+                <td className="num" data-label="Receivable">{won(toKrw(totals.outstanding, fx.rate))}</td>
                 <td /><td />
               </tr>
             ) : null}
@@ -1592,7 +1588,8 @@ function OutflowTab() {
   const fx: FxQuote = data.fx ?? { rate: 0, date: "", source: "fixed" };
 
   /** 상태 칸 — 두 표가 공유. AP(프로젝트 유래)는 읽기전용 배지, 수동 등록은 납부 토글.
-      미납은 미수 목록과 같은 말로 나눈다: 기일 전이면 Outstanding, 지났으면 Overdue. */
+      말은 수입 목록과 짝을 이룬다: 기일 전이면 Payable(저쪽은 Receivable), 지났으면
+      Overdue, 끝났으면 Paid(저쪽은 Received). */
   function statusCell(p: FinancePayable) {
     const isAp = p.source === "ap";
     const late = !!p.overdue && !p.paid;
@@ -1611,7 +1608,7 @@ function OutflowTab() {
               ? "Paid"
               : late
                 ? p.paid_amount > 0 ? "Partly paid · overdue" : "Overdue"
-                : p.paid_amount > 0 ? "Partly paid" : "Outstanding"}
+                : p.paid_amount > 0 ? "Partly paid" : "Payable"}
           </button>
         ) : p.recurrence === "none" ? (
           <button
@@ -1621,7 +1618,7 @@ function OutflowTab() {
             disabled={!canEdit}
             onClick={() => (p.paid ? undoPaid(p) : setPaying({ row: p, occurrence: p.due_date }))}
           >
-            {p.paid ? "Paid" : late ? "Overdue" : "Outstanding"}
+            {p.paid ? "Paid" : late ? "Overdue" : "Payable"}
           </button>
         ) : (
           <button
@@ -1727,7 +1724,7 @@ function OutflowTab() {
           <thead>
             <tr>
               <th className="fin-w-cat">Category</th><th className="fin-w-party">Vendor</th><th>Bill No. / Vendor P/O</th><th className="fin-w-date">Bill date</th><th className="fin-w-date">Due</th>
-              <th className="num fin-w-money">Bill</th><th className="num fin-w-money">Paid</th><th className="num fin-w-money">Outstanding</th>
+              <th className="num fin-w-money">Bill</th><th className="num fin-w-money">Paid</th><th className="num fin-w-money">Payable</th>
               <th className="fin-w-status">Status</th><th className="fin-w-rec">Recurrence</th><th className="fin-w-act" />
             </tr>
           </thead>
@@ -1755,7 +1752,7 @@ function OutflowTab() {
                 <td data-label="Due">{p.due_date || "—"}</td>
                 <td className="num" data-label="Bill">{money(p.invoice_amount, p.currency)}</td>
                 <td className="num" data-label="Paid">{money(p.paid_amount, p.currency)}</td>
-                <td className="num" data-label="Outstanding">{money(p.outstanding, p.currency)}</td>
+                <td className="num" data-label="Payable">{money(p.outstanding, p.currency)}</td>
                 {statusCell(p)}
                 {recurrenceCell(p)}
                 {actionCell(p)}
@@ -1772,7 +1769,7 @@ function OutflowTab() {
             {/* 열 자리는 위 표와 동일 — 이름만 이 표의 항목에 맞춘다(등록 폼의 입력칸과 1:1). */}
             <tr>
               <th className="fin-w-cat">Category</th><th className="fin-w-party">Vendor / payee</th><th>Description</th><th className="fin-w-date">Bill date</th><th className="fin-w-date">Due</th>
-              <th className="num fin-w-money">Amount</th><th className="num fin-w-money">Paid</th><th className="num fin-w-money">Outstanding</th>
+              <th className="num fin-w-money">Amount</th><th className="num fin-w-money">Paid</th><th className="num fin-w-money">Payable</th>
               <th className="fin-w-status">Status</th><th className="fin-w-rec">Recurrence</th><th className="fin-w-act" />
             </tr>
           </thead>
@@ -1798,7 +1795,7 @@ function OutflowTab() {
                   {p.vat_amount ? <div className="muted">VAT {money(p.vat_amount, p.currency)}</div> : null}
                 </td>
                 <td className="num" data-label="Paid">{money(p.paid_amount, p.currency)}</td>
-                <td className="num" data-label="Outstanding">{money(p.outstanding, p.currency)}</td>
+                <td className="num" data-label="Payable">{money(p.outstanding, p.currency)}</td>
                 {statusCell(p)}
                 {recurrenceCell(p)}
                 {actionCell(p)}
@@ -1822,7 +1819,7 @@ function OutflowTab() {
               <td className="total-label fin-foot-name">Total</td>
               <td className="num total-value" data-label="Amount">{byCurrencyLines(totals.invoice)}</td>
               <td className="num total-value" data-label="Paid">{byCurrencyLines(totals.paid)}</td>
-              <td className="num total-value" data-label="Outstanding">{byCurrencyLines(totals.outstanding)}</td>
+              <td className="num total-value" data-label="Payable">{byCurrencyLines(totals.outstanding)}</td>
               <td /><td /><td />
             </tr>
             {/* 참고용 KRW 환산 — 오늘자 매매기준율(조회 실패 시 고정환율). 집계에는 쓰지 않는다.
@@ -1835,7 +1832,7 @@ function OutflowTab() {
                 </td>
                 <td className="num" data-label="Amount">{won(toKrw(totals.invoice, fx.rate))}</td>
                 <td className="num" data-label="Paid">{won(toKrw(totals.paid, fx.rate))}</td>
-                <td className="num" data-label="Outstanding">{won(toKrw(totals.outstanding, fx.rate))}</td>
+                <td className="num" data-label="Payable">{won(toKrw(totals.outstanding, fx.rate))}</td>
                 <td /><td /><td />
               </tr>
             ) : null}

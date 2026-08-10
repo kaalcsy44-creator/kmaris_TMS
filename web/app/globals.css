@@ -12370,8 +12370,6 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 .fin-bucket--in { border-top-color: var(--fin-in, #0055a8); }
 .fin-bucket--out { border-top-color: var(--fin-out, #d68910); }
 .fin-bucket--balance { border-top-color: var(--fin-bal, #1e7a46); }
-/* 총계 줄 높이를 맞추려고 비워 둔 줄 — 줄이 하나 더 있는 티가 나면 안 된다. */
-.fin-bucket-gap td { border-bottom-color: transparent; }
 /* 잔고 밖에 세워 둔 연체 — 잔고 표의 일부가 아니라 그 아래 붙는 따로 된 쪽지다.
    위에 실선을 긋고 붉은 기를 옅게 깔아, 이 숫자들이 Ending 에 더해지지 않았음을
    자리와 색으로 먼저 말한다. */
@@ -12411,6 +12409,17 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 /* 제목 뒤에 붙는 구간 이름 — 제목이 아니라 '언제의 것인가'를 밝히는 말이라, 굵기를
    빼고 회색으로 낮춘다(어느 구간인지는 위 Showing 칸이 굵게 말한다). */
 .fin-bucket-card .form-title .muted { font-weight: 400; color: var(--muted); }
+/* 기둥 이름은 '이 구간 전부'로 가는 문이기도 하다 — 다만 제목 자리라 파랗게 물들이지
+   않는다. 평소엔 제목 그대로 서 있고, 가리켰을 때만 눌리는 것임을 밝힌다. */
+.fin-bucket-card .form-title .fin-doc-link {
+  color: inherit;
+  font-weight: inherit;
+  border-bottom-color: transparent;
+}
+.fin-bucket-card .form-title .fin-doc-link:hover {
+  color: var(--blue);
+  border-bottom-color: color-mix(in srgb, var(--blue) 45%, transparent);
+}
 /* 기둥 안의 표는 금액이 주인공이라 라벨 칸을 좁히지 않고 금액을 크게 잡는다. */
 .fin-bucket-card table.mini td.num { font-size: 14px; font-weight: 700; white-space: nowrap; }
 .fin-bucket-card .hint-inline { display: block; margin-top: 2px; }

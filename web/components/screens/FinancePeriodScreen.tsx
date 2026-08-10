@@ -39,7 +39,7 @@ const EMPTY_ITEMS: FinanceCashflowItems = {
 const BUCKET_TITLE: Record<CashBucket, string> = {
   receivables: "Receivables",
   income: "Other income",
-  collected: "Collected",
+  collected: "Received",
   payables: "Payables",
   other: "Other costs",
   paid: "Paid",
