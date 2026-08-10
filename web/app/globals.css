@@ -1325,24 +1325,29 @@ table.mini.wide td.ms-actcol {
    각 열은 독립된 표라 한쪽을 펼쳐도 다른 쪽 행 높이에 영향을 주지 않는다. */
 .ms-2col {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  /* 두 열로 설지는 창 크기가 아니라 '이 자리에 두 표가 들어가는가'로 정한다 — 패널
+     안쪽 폭은 창보다 좁고, 브라우저 확대·축소(125%·150%)에 따라서도 달라져서 화면 폭에
+     걸어 둔 기준은 맞을 때보다 틀릴 때가 많다. 한 칸이 요구하는 폭에 못 미치면 auto-fit
+     이 알아서 한 열로 되돌린다. */
+  grid-template-columns: repeat(auto-fit, minmax(480px, 1fr));
   gap: 0 20px;
   align-items: start;
 }
 .ms-2col > .table-wrap {
   min-width: 0;
 }
-@media (max-width: 1280px) {
-  .ms-2col {
-    grid-template-columns: 1fr;
-  }
+/* 2열로 갈린 표는 폭이 반이다 — 칸마다 못박아 둔 최소폭(아래 ms-table 규칙)을 그대로
+   두면 표가 제 칸을 넘어 가로 스크롤이 생긴다. 여기서는 최소폭을 풀어 내용 길이에
+   맡긴다(길면 접히는 건 원래도 하던 대로). 선택자에 table.mini.wide 를 그대로 붙이는
+   건 아래 그 규칙들을 이기기 위해서다(구체성). */
+.ms-2col table.mini.wide.ms-table th:nth-child(n + 2):not(.ms-actcol),
+.ms-2col table.mini.wide.ms-table td:nth-child(n + 2):not(.ms-actcol) {
+  min-width: 0;
 }
-/* 칸이 많은 표(선박: 이름·IMO·종류·선적·고객)는 반으로 갈리면 더 일찍 좁아진다 —
-   한 줄로 되돌리는 폭을 그만큼 넓게 잡는다. */
-@media (max-width: 1560px) {
-  .ms-2col--wide {
-    grid-template-columns: 1fr;
-  }
+/* 칸이 많은 표(선박: 이름·IMO·종류·선적·고객)는 반으로 갈리면 더 일찍 좁아지므로
+   한 칸에 요구하는 폭을 조금 더 잡는다 — 위 auto-fit 이 그만큼 늦게 두 열로 선다. */
+.ms-2col--wide {
+  grid-template-columns: repeat(auto-fit, minmax(600px, 1fr));
 }
 .ms-editor {
   padding: 14px 16px;
