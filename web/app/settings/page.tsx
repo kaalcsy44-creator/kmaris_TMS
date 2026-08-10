@@ -1662,6 +1662,9 @@ function VesselsTab() {
       // 한 줄에 다섯 칸뿐이라 넓은 화면에서는 표 오른쪽이 통째로 비고 목록만 길어진다 —
       // 좌우 2열로 나눠 그 빈칸을 목록의 뒷부분으로 채운다(고객·거래선 표와 같은 규칙).
       twoCol
+      // 칸마다 값이 한 낱말(IMO·선종·선적·고객)이라, 남는 폭을 이름 칸에 몰아주는 기본
+      // 배분은 이 표에 맞지 않는다 — 칸마다 내용에 비례해 나눠 갖게 한다.
+      tableClass="ms-table--even"
       empty={{ id: 0, name: "", imo: "", vessel_type: "", ais_flag: "", engine_type: "", hull_no: "", customer_id: null, customer: "" }}
       load={fetchSettingsVessels}
       create={(body) => {
@@ -2732,6 +2735,7 @@ function MasterSection<T extends { id: number }>({
   group,
   searchText,
   twoCol = false,
+  tableClass = "",
   reloadKey = 0,
 }: {
   title: string;
@@ -2777,6 +2781,9 @@ function MasterSection<T extends { id: number }>({
   searchText?: (row: T) => string;
   // 그룹 목록을 좁은 표 2개로 나눠 나란히 놓는다(넓은 화면의 빈 공간 줄이기).
   twoCol?: boolean;
+  // 표에 덧붙일 클래스 — 칸 폭 배분을 이 표의 내용에 맞게 갈아끼울 때(globals.css 참고).
+  // ms-table--even = 남는 폭을 첫 칸에 몰아주지 않고 칸마다 내용에 비례해 나눠 준다.
+  tableClass?: string;
   // 값이 바뀌면 목록을 다시 불러온다(바깥에서 저장했을 때 — 예: 회사 공통정보 일괄 수정).
   reloadKey?: number;
 }) {
@@ -2927,7 +2934,7 @@ function MasterSection<T extends { id: number }>({
   // 2열로 자른 한쪽), 아니면 넘겨받은 그룹만 그린다.
   function table(list: { key: string; rows: T[] }[] | null, only?: T[]) {
     return (
-      <table className="mini wide ms-table">
+      <table className={`mini wide ms-table${tableClass ? ` ${tableClass}` : ""}`}>
         <thead>
           <tr>
             {columns.map(([, label]) => (
