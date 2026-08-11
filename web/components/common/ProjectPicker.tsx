@@ -1,15 +1,14 @@
 "use client";
 
-// 딜(프로젝트) 선택 드롭다운 — 번호만 늘어놓는 네이티브 <select> 대신, 한 줄에서
-// "어느 딜인지"를 알아볼 수 있게 번호·업무 타입(Parts/Service 색)·고객 로고·고객명·
-// 프로젝트명·선박을 함께 보여준다. 미분류 메일을 딜에 붙일 때 번호만 보고 고르기는
-// 어렵다 — 사람이 기억하는 건 "그 크레인 건", "그 배" 쪽이다.
-// 옵션에 이미지를 넣을 수 없어 CustomerSelect 와 같은 구조(버튼 + body portal 팝오버)로 짰다.
+// 딜(프로젝트) 선택 드롭다운 — 줄 모양은 네이티브 <select> 때와 같다
+// ("P-026(260811) · SOLUNA MARINETECH · ORIENTAL Crane Spare parts"). 거기에 세 가지만
+// 얹었다: 번호를 업무 타입 색(Parts 파랑 / Service 초록)으로, 고객명 앞에 로고, 끝에 선박명.
+// <option> 안에는 이미지도 색도 넣을 수 없어 CustomerSelect 와 같은 구조
+// (버튼 + body portal 팝오버)로 짰다 — 보이는 것은 그대로 두고 그릴 수만 있게.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useCustomerLogo } from "@/lib/customerLogos";
 import ProjectNo from "@/components/common/ProjectNo";
-import WorkTypeBadge from "@/components/WorkTypeBadge";
 
 export type ProjectPickOption = {
   rfqId: number;
@@ -120,13 +119,7 @@ export default function ProjectPicker({
         onClick={() => setOpen((o) => !o)}
       >
         <span className="pjpick-val">
-          {selected ? (
-            <>
-              <ProjectNo value={selected.no} />
-              <WorkTypeBadge type={selected.workType} />
-              <span className="pjpick-cust">{selected.customer}</span>
-            </>
-          ) : (
+          {selected ? <OptionLine o={selected} logo={logoFor(selected.customer)} /> : (
             <span className="pjpick-placeholder">{placeholder}</span>
           )}
         </span>
@@ -158,29 +151,17 @@ export default function ProjectPicker({
                     <span className="pjpick-placeholder">{placeholder}</span>
                   </button>
                 </li>
-                {filtered.map((o) => {
-                  const logo = logoFor(o.customer);
-                  return (
-                    <li key={o.rfqId}>
-                      <button
-                        type="button"
-                        className={`pjpick-opt${o.rfqId === value ? " on" : ""}`}
-                        onClick={() => pick(o.rfqId)}
-                      >
-                        <span className="pjpick-l1">
-                          <ProjectNo value={o.no} />
-                          <WorkTypeBadge type={o.workType} />
-                          {logo ? <img className="cust-logo" src={logo} alt="" /> : null}
-                          <span className="pjpick-cust">{o.customer || "—"}</span>
-                        </span>
-                        <span className="pjpick-l2">
-                          <span className="pjpick-title">{o.title || "(untitled)"}</span>
-                          {o.vessel ? <span className="pjpick-vessel">⚓ {o.vessel}</span> : null}
-                        </span>
-                      </button>
-                    </li>
-                  );
-                })}
+                {filtered.map((o) => (
+                  <li key={o.rfqId}>
+                    <button
+                      type="button"
+                      className={`pjpick-opt${o.rfqId === value ? " on" : ""}`}
+                      onClick={() => pick(o.rfqId)}
+                    >
+                      <OptionLine o={o} logo={logoFor(o.customer)} />
+                    </button>
+                  </li>
+                ))}
                 {filtered.length === 0 ? <li className="pjpick-empty">No matches</li> : null}
               </ul>
             </div>,
@@ -188,5 +169,22 @@ export default function ProjectPicker({
           )
         : null}
     </div>
+  );
+}
+
+// 한 줄 = 예전 <option> 문구 그대로 + 번호 색·로고·선박명. 나머지는 본문 색 그대로 둔다
+// (고객명을 굵게 하거나 제목을 회색으로 내리면 정작 읽어야 할 것이 뒤로 물러난다).
+function OptionLine({ o, logo }: { o: ProjectPickOption; logo?: string }) {
+  const service = (o.workType || "부품공급") === "서비스";
+  return (
+    <span className="pjpick-line">
+      <span className={`pjpick-no ${service ? "service" : "parts"}`}>
+        <ProjectNo value={o.no} />
+      </span>
+      {logo ? <img className="cust-logo" src={logo} alt="" /> : null}
+      <span className="pjpick-text">
+        {[o.customer, o.title, o.vessel].filter(Boolean).join(" · ")}
+      </span>
+    </span>
   );
 }

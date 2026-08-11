@@ -12001,9 +12001,14 @@ table.mini.wide.umail-table td.umail-c-assign { width: 340px; }
 .pjpick-val { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; overflow: hidden; }
 .pjpick-caret { flex-shrink: 0; color: #8a96a8; font-size: 11px; }
 .pjpick-placeholder { color: #8a96a8; }
-.pjpick-cust {
-  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  font-weight: 600; color: #2b3a4d;
+/* 한 줄 = 번호 · 고객 · 프로젝트명 · 선박. 번호만 업무 타입 색을 쓰고 나머지는 본문 색. */
+.pjpick-line { display: flex; align-items: center; gap: 6px; min-width: 0; width: 100%; }
+.pjpick-no { flex-shrink: 0; }
+.pjpick-no.parts { color: #1d4ed8; }
+.pjpick-no.service { color: #137a44; }
+.pjpick-line .cust-logo { flex-shrink: 0; }
+.pjpick-text {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #33445c;
 }
 .pjpick-menu {
   z-index: 2000; padding: 6px; background: #fff; border: 1px solid #c7d0de;
@@ -12015,19 +12020,11 @@ table.mini.wide.umail-table td.umail-c-assign { width: 340px; }
 }
 .pjpick-list { list-style: none; margin: 0; padding: 0; max-height: 340px; overflow-y: auto; }
 .pjpick-opt {
-  display: flex; flex-direction: column; gap: 2px; width: 100%; padding: 6px 8px;
-  text-align: left; background: none; border: 0; border-radius: 5px; cursor: pointer;
+  display: flex; width: 100%; padding: 5px 8px; font-size: 12.5px; text-align: left;
+  background: none; border: 0; border-radius: 5px; cursor: pointer;
 }
 .pjpick-opt:hover { background: #eef3fb; }
 .pjpick-opt.on { background: #e1ebfb; }
-.pjpick-l1 { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.pjpick-l1 .cust-logo { flex-shrink: 0; }
-.pjpick-l2 {
-  display: flex; align-items: baseline; gap: 8px; min-width: 0; padding-left: 2px;
-  font-size: 11.5px; color: #5c6b7d;
-}
-.pjpick-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pjpick-vessel { flex-shrink: 0; font-weight: 600; color: #2b6cb0; }
 .pjpick-empty { padding: 10px 8px; font-size: 13px; color: #8a96a8; text-align: center; }
 /* 추천 근거 — 왜 이 딜을 골라 뒀는지. 붙인 것이 아니라 골라 둔 것이다. */
 .umail-why {
