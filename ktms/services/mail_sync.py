@@ -477,9 +477,11 @@ def suggest_projects(s, msgs: list[EmailMessage]) -> dict[int, dict]:
             score = (2.0 if len(shared) >= 2 else 1.0 if shared else 0.0) + (1.0 if party else 0.0)
             if not score:
                 continue
-            why = ("제목이 겹칩니다: " + " · ".join(sorted(shared)[:3])) if shared else "이 거래처의 그 시기 딜"
+            # why 는 화면에 그대로 찍히는 문구다 — 나머지 화면과 같이 영문으로 쓴다.
+            why = ("subject shares " + " · ".join(sorted(shared)[:3])) if shared \
+                else "the only deal with this counterpart at the time"
             if shared and party:
-                why += " · 같은 거래처"
+                why += " · same counterpart"
             scored.append((score, why, d["rfq_id"]))
         if not scored:
             continue

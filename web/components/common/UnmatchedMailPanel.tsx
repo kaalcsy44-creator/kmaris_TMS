@@ -18,6 +18,7 @@ import { hm, md } from "@/lib/activity";
 // 서버는 근거(같은 대화·문서번호·같은 제목)가 분명한 것은 Auto-match 로 스스로
 // 붙이고, 근거가 모자란 대화에는 추천 딜만 달아 둔다(붙이지는 않는다) — 추측으로
 // 붙은 이력은 비어 있는 것보다 나쁘기 때문이다. 확정은 사람이 한 번 누른다.
+// 화면 문구는 나머지 화면과 같이 영문으로 쓴다(주석만 국문).
 export default function UnmatchedMailPanel({
   projects,
 }: {
@@ -47,7 +48,7 @@ export default function UnmatchedMailPanel({
         return next;
       });
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "미분류 메일을 불러오지 못했습니다.");
+      setErr(e instanceof Error ? e.message : "Could not load unmatched mail.");
     }
   }, []);
 
@@ -62,15 +63,15 @@ export default function UnmatchedMailPanel({
     try {
       const r = await syncMail();
       setNote(
-        `메일함에서 ${r.scanned}통 확인 · 새로 보관 ${r.stored}통 · 이미 있던 것 ${r.dup}통 · `
-        + `등록된 거래처와 무관 ${r.skipped}통`
-        + (r.auto_matched ? ` · 자동 배정 ${r.auto_matched}통` : "")
-        + (r.summarized ? ` · 요약 ${r.summarized}건` : "")
-        + (r.pending ? ` · 아직 안 읽은 이전 메일 ${r.pending}통(Sync 를 더 누르세요)` : "")
+        `Scanned ${r.scanned} in the mailbox · kept ${r.stored} new · ${r.dup} already stored · `
+        + `${r.skipped} unrelated to registered parties`
+        + (r.auto_matched ? ` · auto-matched ${r.auto_matched}` : "")
+        + (r.summarized ? ` · summarized ${r.summarized}` : "")
+        + (r.pending ? ` · ${r.pending} older mails still unread (press Sync again)` : "")
       );
       await load();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "동기화 실패");
+      setErr(e instanceof Error ? e.message : "Sync failed");
     } finally {
       setBusy(false);
     }
@@ -84,13 +85,13 @@ export default function UnmatchedMailPanel({
       const r = await autoMatchMail();
       setNote(
         r.total
-          ? `${r.total}통을 자동으로 배정했습니다 — 같은 대화 ${r.thread} · 문서번호 ${r.docno} · `
-            + `같은 제목 ${r.subject}. 남은 미분류 ${r.unmatched}통.`
-          : `자동으로 붙일 근거가 있는 메일이 없습니다 — 남은 ${r.unmatched}통은 아래에서 골라 주세요.`
+          ? `Matched ${r.total} automatically — same thread ${r.thread} · document no. ${r.docno} · `
+            + `same subject ${r.subject}. ${r.unmatched} still unmatched.`
+          : `Nothing left with hard evidence to match — pick a deal for the remaining ${r.unmatched} below.`
       );
       await load();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "자동 배정 실패");
+      setErr(e instanceof Error ? e.message : "Auto-match failed");
     } finally {
       setBusy(false);
     }
@@ -104,12 +105,12 @@ export default function UnmatchedMailPanel({
     try {
       const r = await assignMail(g.ids[g.ids.length - 1], rfqId, true, g.ids);
       setNote(
-        `메일 ${r.updated}통을 이 딜로 옮겼습니다(대화 전체).`
-        + (r.spread ? ` 같은 근거로 ${r.spread}통이 따라 들어갔습니다.` : "")
+        `Moved ${r.updated} mails to this deal (the whole conversation).`
+        + (r.spread ? ` ${r.spread} more followed on the same evidence.` : "")
       );
       await load();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "배정 실패");
+      setErr(e instanceof Error ? e.message : "Assign failed");
     } finally {
       setBusy(false);
     }
@@ -122,30 +123,30 @@ export default function UnmatchedMailPanel({
       <div className="umail-head">
         <span className="act-count">
           unmatched mail · {status?.unmatched ?? total}
-          {status ? <span className="umail-total"> / {status.total} 보관</span> : null}
-          {groups ? <span className="umail-total"> · {groups.length} 대화</span> : null}
+          {status ? <span className="umail-total"> / {status.total} stored</span> : null}
+          {groups ? <span className="umail-total"> · {groups.length} conversations</span> : null}
         </span>
         <div className="umail-actions">
           {status && !status.configured ? (
             <span className="hint-inline">
-              메일함이 연결되지 않았습니다 — 서버에 IMAP_USER · IMAP_PASSWORD 를 넣으세요.
+              The mailbox is not connected — set IMAP_USER · IMAP_PASSWORD on the server.
             </span>
           ) : (
             <span className="hint-inline">
               {status?.account}
-              {lastSync(status) ? ` · 마지막 동기화 ${lastSync(status)}` : ""}
+              {lastSync(status) ? ` · last sync ${lastSync(status)}` : ""}
             </span>
           )}
           <button
             className="btn sm"
             disabled={busy || !groups?.length}
-            title="같은 대화·문서번호·같은 제목처럼 근거가 분명한 메일을 한 번에 붙입니다."
+            title="File every mail whose deal is a matter of record — same thread, deal document number, or the same subject."
             onClick={autoMatch}
           >
             ✨ Auto-match
           </button>
           <button className="btn sm" disabled={busy || status?.configured === false} onClick={sync}>
-            {busy ? "가져오는 중…" : "↻ Sync"}
+            {busy ? "Fetching…" : "↻ Sync"}
           </button>
         </div>
       </div>
@@ -159,7 +160,7 @@ export default function UnmatchedMailPanel({
         <div className="state">Loading…</div>
       ) : groups.length === 0 ? (
         <p className="mail-empty">
-          미분류 메일이 없습니다 — 가져온 메일이 모두 딜에 붙었습니다.
+          No unmatched mail — every mail we fetched is filed under a deal.
         </p>
       ) : (
         <table className="mini wide umail-table">
@@ -177,7 +178,7 @@ export default function UnmatchedMailPanel({
                 <td className="umail-c-when">
                   {when(g.last_at)}
                   {g.count > 1 && g.first_at !== g.last_at ? (
-                    <div className="umail-since">부터 {md(g.first_at)}</div>
+                    <div className="umail-since">since {md(g.first_at)}</div>
                   ) : null}
                 </td>
                 <td className="umail-c-party">
@@ -193,10 +194,10 @@ export default function UnmatchedMailPanel({
                     type="button"
                     className="umail-subject as-link"
                     onClick={() => setOpen((o) => ({ ...o, [g.key]: !o[g.key] }))}
-                    title="이 대화의 메일 보기"
+                    title="Show the mails in this conversation"
                   >
                     {g.subject}
-                    {g.count > 1 ? <span className="umail-count">{g.count}통</span> : null}
+                    {g.count > 1 ? <span className="umail-count">{g.count} mails</span> : null}
                     <span className="umail-caret">{open[g.key] ? "▾" : "▸"}</span>
                   </button>
                   {open[g.key] ? (
@@ -205,7 +206,7 @@ export default function UnmatchedMailPanel({
                         <li key={m.id}>
                           <span className="mail-dir">{m.direction === "out" ? "→" : "←"}</span>
                           <span className="umail-msg-when">{when(m.sent_at)}</span>
-                          <span className="umail-msg-subj">{m.subject || "(제목 없음)"}</span>
+                          <span className="umail-msg-subj">{m.subject || "(no subject)"}</span>
                           <span className="umail-sum">{m.summary || snippet(m)}</span>
                         </li>
                       ))}
@@ -223,7 +224,7 @@ export default function UnmatchedMailPanel({
                       setPicked((p) => ({ ...p, [g.key]: Number(e.target.value) }))
                     }
                   >
-                    <option value="">— 프로젝트 선택 —</option>
+                    <option value="">— Select project —</option>
                     {projects.map((p) => (
                       <option key={p.rfqId} value={p.rfqId}>{p.label}</option>
                     ))}
@@ -233,11 +234,11 @@ export default function UnmatchedMailPanel({
                     disabled={busy || !picked[g.key]}
                     onClick={() => assign(g)}
                   >
-                    배정
+                    Assign
                   </button>
                   {/* 추천은 골라만 두고 붙이지 않는다 — 왜 그 딜인지 근거를 함께 보여 준다. */}
                   {g.suggest && picked[g.key] === g.suggest.rfq_id ? (
-                    <div className="umail-why" title={g.suggest.why}>추천 · {g.suggest.why}</div>
+                    <div className="umail-why" title={g.suggest.why}>Suggested · {g.suggest.why}</div>
                   ) : null}
                 </td>
               </tr>
@@ -268,5 +269,5 @@ function when(iso: string): string {
 
 function snippet(msg: MailMessage): string {
   const body = (msg.body_text || "").replace(/\s+/g, " ").trim();
-  return body ? `${body.slice(0, 140)}${body.length > 140 ? "…" : ""}` : "(본문 없음)";
+  return body ? `${body.slice(0, 140)}${body.length > 140 ? "…" : ""}` : "(no body)";
 }

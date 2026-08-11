@@ -15,6 +15,7 @@ import { hm, md } from "@/lib/activity";
 //   (1) 언제 누구와 무엇이 오갔는지 시간순으로 읽히게 하고
 //   (2) 한 통 한 통의 용건을 요약 한 줄로 먼저 보여주고(원문은 접어 둔다)
 //   (3) 딜 전체 흐름을 몇 줄로 갈무리해 "지금 공이 누구에게 있는지"를 알려 준다.
+// 화면 문구는 나머지 화면과 같이 영문으로 쓴다(주석만 국문).
 export default function ProjectMailPanel({ rfqId }: { rfqId: number }) {
   const [data, setData] = useState<ProjectMail | null>(null);
   const [configured, setConfigured] = useState<boolean | null>(null);
@@ -28,7 +29,7 @@ export default function ProjectMailPanel({ rfqId }: { rfqId: number }) {
     try {
       setData(await fetchProjectMail(rfqId));
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "메일을 불러오지 못했습니다.");
+      setErr(e instanceof Error ? e.message : "Could not load mail.");
     }
   }, [rfqId]);
 
@@ -39,14 +40,14 @@ export default function ProjectMailPanel({ rfqId }: { rfqId: number }) {
       .catch(() => setConfigured(false));
   }, [load]);
 
-  async function run(name: string, fn: () => Promise<unknown>) {
+  async function run(name: string, label: string, fn: () => Promise<unknown>) {
     setBusy(name);
     setErr("");
     try {
       await fn();
       await load();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : `${name} 실패`);
+      setErr(e instanceof Error ? e.message : `${label} failed`);
     } finally {
       setBusy("");
     }
@@ -55,7 +56,7 @@ export default function ProjectMailPanel({ rfqId }: { rfqId: number }) {
   // Sync 는 결과를 말해 줘야 한다 — 이 딜에 아무것도 안 붙었을 때, 메일함을 못 읽은
   // 것인지 / 거래처와 오간 메일이 없던 것인지 / 다른 딜로 갔는지가 갈리기 때문이다.
   async function sync() {
-    setBusy("동기화");
+    setBusy("sync");
     setErr("");
     setNote("");
     try {
@@ -64,23 +65,24 @@ export default function ProjectMailPanel({ rfqId }: { rfqId: number }) {
       const after = await fetchProjectMail(rfqId);
       setData(after);
       const gained = after.count - before;
-      const parts = [`메일함에서 ${r.scanned}통 확인`];
-      if (r.stored) parts.push(`새로 보관 ${r.stored}통`);
-      if (r.dup) parts.push(`이미 있던 것 ${r.dup}통`);
-      if (r.skipped) parts.push(`등록된 거래처와 무관 ${r.skipped}통`);
-      if (r.pending) parts.push(`아직 안 읽은 이전 메일 ${r.pending}통 — Sync 를 더 누르세요`);
-      parts.push(gained > 0 ? `이 딜에 ${gained}통 연결` : "이 딜에 붙은 새 메일은 없음");
+      const parts = [`Scanned ${r.scanned} in the mailbox`];
+      if (r.stored) parts.push(`kept ${r.stored} new`);
+      if (r.dup) parts.push(`${r.dup} already stored`);
+      if (r.skipped) parts.push(`${r.skipped} unrelated to registered parties`);
+      if (r.auto_matched) parts.push(`auto-matched ${r.auto_matched}`);
+      if (r.pending) parts.push(`${r.pending} older mails still unread — press Sync again`);
+      parts.push(gained > 0 ? `${gained} linked to this deal` : "no new mail for this deal");
       setNote(parts.join(" · "));
       const st = await fetchMailStatus().catch(() => null);
       if (st) {
         setStatusNote(
           st.unmatched > 0 && gained === 0
-            ? `보관된 메일 ${st.total}통 중 ${st.unmatched}통이 미분류입니다 — Activity → Mail (unmatched) 에서 이 딜로 배정할 수 있습니다.`
+            ? `${st.unmatched} of ${st.total} stored mails are still unmatched — assign them to this deal in Activity → Mail (unmatched).`
             : ""
         );
       }
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "동기화 실패");
+      setErr(e instanceof Error ? e.message : "Sync failed");
     } finally {
       setBusy("");
     }
@@ -101,22 +103,22 @@ export default function ProjectMailPanel({ rfqId }: { rfqId: number }) {
             disabled={!!busy || configured === false}
             title={
               configured === false
-                ? "메일함이 연결되지 않았습니다 — IMAP_USER/IMAP_PASSWORD 를 설정하세요."
-                : "회사 메일함에서 새 메일을 가져옵니다"
+                ? "Mailbox is not connected — set IMAP_USER / IMAP_PASSWORD."
+                : "Fetch new mail from the company mailbox"
             }
             onClick={sync}
           >
-            {busy === "동기화" ? "가져오는 중…" : "↻ Sync"}
+            {busy === "sync" ? "Fetching…" : "↻ Sync"}
           </button>
           {missingSummary ? (
             <button
               type="button"
               className="btn sm"
               disabled={!!busy}
-              title="아직 요약이 없는 메일의 요약을 만듭니다"
-              onClick={() => run("요약", () => fetchProjectMail(rfqId, true))}
+              title="Write summaries for the mails that do not have one yet"
+              onClick={() => run("summary", "Summarize", () => fetchProjectMail(rfqId, true))}
             >
-              {busy === "요약" ? "요약 중…" : "요약 채우기"}
+              {busy === "summary" ? "Summarizing…" : "Fill summaries"}
             </button>
           ) : null}
           {data && data.count > 0 ? (
@@ -124,10 +126,10 @@ export default function ProjectMailPanel({ rfqId }: { rfqId: number }) {
               type="button"
               className="btn sm"
               disabled={!!busy}
-              title="이 딜의 메일 흐름을 3~5줄로 정리합니다"
-              onClick={() => run("정리", () => buildProjectMailRollup(rfqId))}
+              title="Sum up how this deal's mail has gone, in 3–5 lines"
+              onClick={() => run("digest", "Digest", () => buildProjectMailRollup(rfqId))}
             >
-              {busy === "정리" ? "정리 중…" : data.rollup ? "다시 정리" : "AI 정리"}
+              {busy === "digest" ? "Writing…" : data.rollup ? "Redo digest" : "AI digest"}
             </button>
           ) : null}
         </span>
@@ -140,7 +142,7 @@ export default function ProjectMailPanel({ rfqId }: { rfqId: number }) {
       {data?.rollup ? (
         <div className="mail-rollup">
           {data.rollup_stale ? (
-            <span className="mail-stale">새 메일이 온 뒤라 아래 정리는 그 이전까지입니다.</span>
+            <span className="mail-stale">New mail has arrived since this digest was written.</span>
           ) : null}
           {data.rollup.split("\n").filter(Boolean).map((line, i) => (
             <p key={i}>{line.replace(/^[-•]\s*/, "")}</p>
@@ -149,12 +151,12 @@ export default function ProjectMailPanel({ rfqId }: { rfqId: number }) {
       ) : null}
 
       {!data ? (
-        <p className="mail-empty">불러오는 중…</p>
+        <p className="mail-empty">Loading…</p>
       ) : threads.length === 0 ? (
         <p className="mail-empty">
           {configured === false
-            ? "메일함이 연결되지 않았습니다. 서버에 IMAP_USER · IMAP_PASSWORD 를 넣으면 고객·벤더와 오간 메일이 여기에 쌓입니다."
-            : "이 딜에 연결된 메일이 아직 없습니다. Sync 로 메일함을 읽거나, Activity 화면의 미분류 메일에서 이 딜로 배정하세요."}
+            ? "The mailbox is not connected. Set IMAP_USER · IMAP_PASSWORD on the server and mail exchanged with customers and vendors will collect here."
+            : "No mail is linked to this deal yet. Run Sync to read the mailbox, or assign it from the unmatched mail on the Activity screen."}
         </p>
       ) : (
         <ol className="mail-threads">
@@ -194,10 +196,10 @@ function MailThreadRow({
       <button type="button" className="mail-thread-h" onClick={onToggle}>
         <span className="mail-caret" aria-hidden>{open ? "▾" : "▸"}</span>
         <PartyTag name={thread.party} kind={thread.party_kind} />
-        <span className="mail-subject">{thread.subject || "(제목 없음)"}</span>
-        {thread.count > 1 ? <span className="mail-count">{thread.count}통</span> : null}
+        <span className="mail-subject">{thread.subject || "(no subject)"}</span>
+        {thread.count > 1 ? <span className="mail-count">{thread.count} mails</span> : null}
         <span className="mail-when">{when(thread.last_at)}</span>
-        <span className="mail-dir" title={last?.direction === "out" ? "발신" : "수신"}>
+        <span className="mail-dir" title={last?.direction === "out" ? "Sent" : "Received"}>
           {last?.direction === "out" ? "→" : "←"}
         </span>
       </button>
@@ -221,7 +223,7 @@ function MailRow({ msg }: { msg: MailMessage }) {
   return (
     <li className={`mail-msg ${msg.direction}`}>
       <div className="mail-msg-h">
-        <span className="mail-dir" title={msg.direction === "out" ? "발신" : "수신"}>
+        <span className="mail-dir" title={msg.direction === "out" ? "Sent" : "Received"}>
           {msg.direction === "out" ? "→" : "←"}
         </span>
         <span className="mail-when">{when(msg.sent_at)}</span>
@@ -236,14 +238,14 @@ function MailRow({ msg }: { msg: MailMessage }) {
           </span>
         ) : null}
         <button type="button" className="mail-raw-btn" onClick={() => setRaw((v) => !v)}>
-          {raw ? "원문 접기" : "원문"}
+          {raw ? "Hide original" : "Original"}
         </button>
       </div>
       <p className="mail-sum">{msg.summary || snippet(msg)}</p>
       {raw ? (
         <pre className="mail-raw">
-          {msg.body_text || "(본문 없음)"}
-          {msg.truncated ? "\n\n… (본문이 길어 여기까지만 보관합니다 — 원본은 메일함에 있습니다)" : ""}
+          {msg.body_text || "(no body)"}
+          {msg.truncated ? "\n\n… (kept up to here — the full message is in the mailbox)" : ""}
         </pre>
       ) : null}
     </li>
@@ -267,5 +269,5 @@ function when(iso: string): string {
 /** 요약이 아직 없을 때 대신 보여줄 본문 앞머리. */
 function snippet(msg: MailMessage | undefined): string {
   const body = (msg?.body_text || "").replace(/\s+/g, " ").trim();
-  return body ? `${body.slice(0, 120)}${body.length > 120 ? "…" : ""}` : "(요약 없음)";
+  return body ? `${body.slice(0, 120)}${body.length > 120 ? "…" : ""}` : "(no summary yet)";
 }
