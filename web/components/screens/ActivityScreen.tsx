@@ -513,7 +513,7 @@ export default function ActivityScreen() {
             </div>
           ) : null}
         </>
-      ) : (
+      ) : view === "date" ? (
         <>
           {totalActs === 0 ? <div className="state">No activity to show.</div> : null}
           {totalActs > 0 ? (
@@ -569,7 +569,7 @@ export default function ActivityScreen() {
             </div>
           ) : null}
         </>
-      )}
+      ) : null}
       {digestOpen ? (
         <Modal
           title={
