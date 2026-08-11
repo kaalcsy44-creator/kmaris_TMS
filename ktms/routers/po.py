@@ -75,6 +75,7 @@ from _core import (
     set_manual_stage,
     steps_for,
     vendor_options,
+    customer_options,
 )
 from services.mail_compose import build_attachments, compose_body, compose_parts
 from services.item_ledger import apply_line_categories
@@ -262,7 +263,8 @@ def po_work_options():
     """P/O 작업 탭용 옵션 — Streamlit Customer P/O / Vendor P/O 탭 데이터."""
     s = get_session()
     try:
-        customers = [{"id": c.id, "name": c.name} for c in s.query(Customer).order_by(Customer.name).all()]
+        # 고객·벤더 모두 이름순 + 거래 빈도(uses) — 자주 거래하는 곳을 드롭다운 위쪽에 모으는 데 쓴다.
+        customers = customer_options(s)
         vessels = [{
             "id": v.id,
             "name": v.name,

@@ -973,6 +973,30 @@ def vendor_options(s) -> list[dict]:
             for v in s.query(Vendor).order_by(Vendor.name).all()]
 
 
+def customer_usage_counts(s) -> dict[int, int]:
+    """고객사별 거래 빈도 {customer_id: 건수} — 받은 RFQ + 받은 고객 P/O 합계.
+    벤더와 같은 이유다: 고객 레코드가 담당자 단위라 목록이 길고, 실제로 일이 오가는
+    곳은 몇 곳뿐이라 이름순만으로는 매번 스크롤해 찾아야 한다."""
+    counts: dict[int, int] = {}
+    for model in (RFQ, Order):
+        rows = (s.query(model.customer_id, func.count(model.id))
+                .filter(model.customer_id.isnot(None))
+                .group_by(model.customer_id).all())
+        for cid, n in rows:
+            counts[cid] = counts.get(cid, 0) + int(n or 0)
+    return counts
+
+
+def customer_options(s) -> list[dict]:
+    """드롭다운용 고객 마스터 — 이름순 + 거래 빈도(uses). 정렬(자주 거래 우선)은
+    uses 를 보고 화면(CustomerSelect)에서 그룹으로 나눠 처리한다."""
+    uses = customer_usage_counts(s)
+    return [{"id": c.id, "name": c.name, "contact": c.contact or "",
+             "logo": getattr(c, "logo", None) or "",
+             "uses": uses.get(c.id, 0)}
+            for c in s.query(Customer).order_by(Customer.name).all()]
+
+
 def _vrfq_sent_iso(v) -> str:
     """Vendor RFQ 발신 일시(iso) — 수동 입력(sent_at) 우선, 없으면 생성 시각."""
     return (getattr(v, "sent_at", None) or "") or _kst_iso(v.created_at)

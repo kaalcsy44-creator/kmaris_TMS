@@ -59,6 +59,7 @@ from _core import (
     app,
     bcrypt,
     cached_aggregate,
+    customer_options,
     datetime,
     get_current_user,
     get_session,
@@ -92,12 +93,12 @@ from services.item_ledger import (
 
 
 @app.get("/api/admin/customers", dependencies=[Depends(require_token)])
+@cached_aggregate()
 def customers():
+    # 이름순 + 거래 빈도(uses). 빈도 집계가 붙어 매 드롭다운마다 재계산하지 않도록 캐시한다.
     s = get_session()
     try:
-        return [{"id": c.id, "name": c.name, "contact": c.contact or "",
-                 "logo": getattr(c, "logo", None) or ""}
-                for c in s.query(Customer).order_by(Customer.name).all()]
+        return customer_options(s)
     finally:
         s.close()
 

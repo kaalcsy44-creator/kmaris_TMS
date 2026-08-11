@@ -32,7 +32,9 @@ export type RfqOverview = {
   rows: RfqRow[];
 };
 
-export type CustomerOption = { id: number; name: string; contact?: string; logo?: string };
+// uses = 거래 빈도(받은 RFQ + 고객 P/O 건수). 드롭다운에서 자주 거래하는 고객사를
+// 위쪽 그룹으로 올리는 데 쓴다(CustomerSelect).
+export type CustomerOption = { id: number; name: string; contact?: string; logo?: string; uses?: number };
 
 // 레코드 1건 = 담당자 1명(person-centric). 이메일·연락처·지역은 여러 개 등록 가능하며
 // 각 리스트의 첫 값(대표)이 flat contact 필드로 미러링돼 문서·메일에 쓰인다.

@@ -6914,6 +6914,20 @@ table.mini .num {
   color: #8a96a8;
   text-align: center;
 }
+/* 자주 거래하는 고객사 / 전체 목록을 가르는 머리글(VendorSelect 의 .vsel-group 과 같은 모양). */
+.cust-select-group {
+  padding: 8px 8px 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #8a96a8;
+  cursor: default;
+}
+.cust-select-list li + .cust-select-group {
+  margin-top: 4px;
+  border-top: 1px solid #eaf0f7;
+}
 /* 복수 선택 — 항목 앞 체크박스와, 담은 개수를 보여 주는 메뉴 바닥줄. */
 .cust-opt-check {
   flex: 0 0 auto;

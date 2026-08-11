@@ -499,12 +499,17 @@ export default function NewRfqForm({
 
   // 회사 목록(중복 제거) — Customer select 는 회사명만 보여준다. 로고는 같은 회사의
   // 담당자 레코드 중 로고가 등록된 첫 건에서 가져온다(레코드마다 비어 있을 수 있다).
+  // 거래 빈도(uses)는 담당자 레코드별로 매겨지므로 회사 단위로 합산한다 — 그래야
+  // 담당자가 여럿인 회사가 실제 거래량대로 목록 위쪽에 올라온다.
   const companyOptions = useMemo(() => {
     const out: CustomerOption[] = [];
     for (const c of customers) {
       const hit = out.find((o) => o.name === c.name);
-      if (!hit) out.push({ id: c.id, name: c.name, logo: c.logo || "" });
-      else if (!hit.logo && c.logo) hit.logo = c.logo;
+      if (!hit) out.push({ id: c.id, name: c.name, logo: c.logo || "", uses: c.uses || 0 });
+      else {
+        if (!hit.logo && c.logo) hit.logo = c.logo;
+        hit.uses = (hit.uses || 0) + (c.uses || 0);
+      }
     }
     return out;
   }, [customers]);

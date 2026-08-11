@@ -3,11 +3,15 @@
 // 고객사 선택 드롭다운 — 각 옵션 앞에 등록된 회사 로고를 함께 표시한다.
 // 네이티브 <select>는 이미지를 못 넣으므로 버튼+팝오버로 구성한다. 모달 내부의
 // overflow 클리핑을 피하려고 메뉴는 body 로 portal + position:fixed 로 띄운다.
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { CustomerOption } from "@/lib/types";
 
 type MenuPos = { left: number; width: number; top?: number; bottom?: number };
+
+// 상단 "Frequent" 그룹에 올릴 최대 고객 수(VendorSelect 와 같은 규칙).
+// 너무 길면 "위쪽 = 자주 쓰는 것" 이라는 이점이 사라진다.
+const FREQUENT_MAX = 8;
 
 export default function CustomerSelect({
   value,
@@ -94,6 +98,24 @@ export default function CustomerSelect({
       )
     : options;
 
+  // 자주 거래하는 고객사를 앞으로 빼고, 나머지는 받은 순서(이름순) 그대로 뒤에 붙인다.
+  // 검색 중에는 결과가 이미 좁혀져 있어 나누지 않는다. uses 가 실려 오지 않는 목록도
+  // 순서를 그대로 둔다.
+  const { ordered, frequentCount } = useMemo(() => {
+    if (ql) return { ordered: filtered, frequentCount: 0 };
+    const top = filtered
+      .filter((c) => (c.uses ?? 0) > 0)
+      .sort((a, b) => (b.uses ?? 0) - (a.uses ?? 0) || a.name.localeCompare(b.name))
+      .slice(0, FREQUENT_MAX);
+    if (top.length < 2) return { ordered: filtered, frequentCount: 0 };  // 한 곳뿐이면 나눌 이유가 없다.
+    const ids = new Set(top.map((c) => c.id));
+    return {
+      ordered: [...top, ...filtered.filter((c) => !ids.has(c.id))],
+      frequentCount: top.length,
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [options, ql]);
+
   function pick(id: number | "") {
     onChange(id);
     // 복수 선택 모드에서는 메뉴와 검색어를 그대로 둔다 — 같은 검색 결과에서 여러
@@ -165,21 +187,30 @@ export default function CustomerSelect({
                     </button>
                   </li>
                 )}
-                {filtered.map((c) => {
+                {ordered.map((c, i) => {
                   const on = multiple ? selectedIds.includes(c.id) : value === c.id;
                   return (
-                    <li key={c.id}>
-                      <button
-                        type="button"
-                        className={`cust-select-opt${on ? " on" : ""}`}
-                        onClick={() => pick(c.id)}
-                      >
-                        {optionInner(c, on)}
-                      </button>
-                    </li>
+                    <Fragment key={c.id}>
+                      {/* 두 그룹으로 나뉜 경우에만 구분 머리글을 끼운다. */}
+                      {frequentCount > 0 && i === 0 ? (
+                        <li className="cust-select-group">Frequent</li>
+                      ) : null}
+                      {frequentCount > 0 && i === frequentCount ? (
+                        <li className="cust-select-group">All customers</li>
+                      ) : null}
+                      <li>
+                        <button
+                          type="button"
+                          className={`cust-select-opt${on ? " on" : ""}`}
+                          onClick={() => pick(c.id)}
+                        >
+                          {optionInner(c, on)}
+                        </button>
+                      </li>
+                    </Fragment>
                   );
                 })}
-                {filtered.length === 0 ? <li className="cust-select-empty">No matches</li> : null}
+                {ordered.length === 0 ? <li className="cust-select-empty">No matches</li> : null}
               </ul>
               {multiple ? (
                 <div className="cust-select-foot">
