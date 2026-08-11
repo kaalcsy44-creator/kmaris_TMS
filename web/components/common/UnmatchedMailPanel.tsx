@@ -10,6 +10,7 @@ import {
 } from "@/lib/api";
 import type { MailMessage, MailStatus, UnmatchedMailGroup } from "@/lib/types";
 import { hm, md } from "@/lib/activity";
+import ProjectPicker, { type ProjectPickOption } from "@/components/common/ProjectPicker";
 
 // 미분류 메일 — 거래처와 오갔지만 어느 딜 것인지 아직 정해지지 않은 메일.
 //
@@ -22,8 +23,8 @@ import { hm, md } from "@/lib/activity";
 export default function UnmatchedMailPanel({
   projects,
 }: {
-  /** 배정 대상 목록(최근 딜이 위). */
-  projects: { rfqId: number; label: string }[];
+  /** 배정 대상 목록(최근 딜이 위). 번호만으로는 고르기 어려워 고객·프로젝트명·선박까지 함께 넘긴다. */
+  projects: ProjectPickOption[];
 }) {
   const [groups, setGroups] = useState<UnmatchedMailGroup[] | null>(null);
   const [status, setStatus] = useState<MailStatus | null>(null);
@@ -222,17 +223,13 @@ export default function UnmatchedMailPanel({
                   )}
                 </td>
                 <td className="umail-c-assign">
-                  <select
+                  <ProjectPicker
                     value={picked[g.key] ?? ""}
-                    onChange={(e) =>
-                      setPicked((p) => ({ ...p, [g.key]: Number(e.target.value) }))
+                    options={projects}
+                    onChange={(id) =>
+                      setPicked((p) => ({ ...p, [g.key]: id === "" ? 0 : id }))
                     }
-                  >
-                    <option value="">— Select project —</option>
-                    {projects.map((p) => (
-                      <option key={p.rfqId} value={p.rfqId}>{p.label}</option>
-                    ))}
-                  </select>
+                  />
                   <button
                     className="btn sm primary"
                     disabled={busy || !picked[g.key]}

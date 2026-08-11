@@ -42,6 +42,16 @@ function vendorStatusesFor(r: PipelineRow): { name: string; quoted: boolean }[] 
   return r.rfq_vendors && r.rfq_vendors.length ? r.rfq_vendors : undefined;
 }
 
+// 딜에 걸린 선박 한 줄 — 오더별로 여러 척이면 첫 척에 "+N" 을 붙인다(줄바꿈 목록이 온다).
+function vesselLabel(r: PipelineRow): string {
+  const list = (r.vessels || r.vessel || "")
+    .split("\n")
+    .map((v) => v.trim())
+    .filter(Boolean);
+  if (!list.length) return "";
+  return list.length > 1 ? `${list[0]} +${list.length - 1}` : list[0];
+}
+
 // 내부 11단계 → 5개 버킷(RFQ 1–2 / Quote 3–4 / PO 5–6 / Documents 7–9 / AR 10–11).
 const PHASES: { label: string; from: number; to: number }[] = [
   { label: "RFQ", from: 1, to: 2 },
@@ -382,7 +392,8 @@ export default function ActivityScreen() {
   }, [view, buckets, weekView]);
 
   // 미분류 메일을 붙일 딜 목록 — 화면 필터와 무관하게 전부(닫힌 딜의 옛 메일도 배정한다).
-  // 번호 내림차순이라 최근 딜이 위에 온다.
+  // 번호 내림차순이라 최근 딜이 위에 온다. 번호만으로는 어느 건인지 떠올리기 어려워
+  // 업무 타입·고객·프로젝트명·선박을 함께 넘긴다(ProjectPicker 가 한 줄로 보여준다).
   const mailProjects = useMemo(
     () =>
       [...(data?.rows ?? [])]
@@ -390,9 +401,11 @@ export default function ActivityScreen() {
         .reverse()
         .map((r) => ({
           rfqId: r.rfq_id,
-          label: [r.project_no || r.kmaris_rfq_no, r.customer, r.project_title]
-            .filter(Boolean)
-            .join(" · "),
+          no: r.project_no || r.kmaris_rfq_no || "",
+          workType: r.work_type || "부품공급",
+          customer: r.customer || "",
+          title: r.project_title || "",
+          vessel: vesselLabel(r),
         })),
     [data]
   );

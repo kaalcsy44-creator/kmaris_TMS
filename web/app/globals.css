@@ -11988,6 +11988,47 @@ table.mini.wide.umail-table td.umail-c-assign { width: 340px; }
 .umail-msg-when { font-size: 11px; color: #8a96a8; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .umail-msg-subj { font-size: 12px; color: var(--navy); overflow-wrap: anywhere; }
 .umail-msgs .umail-sum { grid-column: 3; margin-top: 0; }
+/* ── 딜 선택 드롭다운(ProjectPicker) ──────────────────────────────────────────
+   번호만 늘어놓지 않고 업무 타입·고객 로고·프로젝트명·선박을 두 줄로 보여준다.
+   메뉴는 body portal + position:fixed(인라인) — 여기선 그 외 표현만. */
+.pjpick { width: 100%; }
+.pjpick-btn {
+  display: flex; align-items: center; gap: 6px; width: 100%; padding: 6px 9px;
+  font-size: 12.5px; text-align: left; border: 1px solid #c7d0de; border-radius: 6px;
+  background: #fff; cursor: pointer;
+}
+.pjpick-btn:disabled { background: #f1f4f9; color: #8a96a8; cursor: not-allowed; }
+.pjpick-val { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; overflow: hidden; }
+.pjpick-caret { flex-shrink: 0; color: #8a96a8; font-size: 11px; }
+.pjpick-placeholder { color: #8a96a8; }
+.pjpick-cust {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-weight: 600; color: #2b3a4d;
+}
+.pjpick-menu {
+  z-index: 2000; padding: 6px; background: #fff; border: 1px solid #c7d0de;
+  border-radius: 8px; box-shadow: 0 10px 30px rgba(20, 35, 65, 0.22);
+}
+.pjpick-search {
+  width: 100%; padding: 6px 9px; margin-bottom: 6px; font-size: 13px;
+  border: 1px solid var(--line-strong, #cbd8e8); border-radius: 6px;
+}
+.pjpick-list { list-style: none; margin: 0; padding: 0; max-height: 340px; overflow-y: auto; }
+.pjpick-opt {
+  display: flex; flex-direction: column; gap: 2px; width: 100%; padding: 6px 8px;
+  text-align: left; background: none; border: 0; border-radius: 5px; cursor: pointer;
+}
+.pjpick-opt:hover { background: #eef3fb; }
+.pjpick-opt.on { background: #e1ebfb; }
+.pjpick-l1 { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.pjpick-l1 .cust-logo { flex-shrink: 0; }
+.pjpick-l2 {
+  display: flex; align-items: baseline; gap: 8px; min-width: 0; padding-left: 2px;
+  font-size: 11.5px; color: #5c6b7d;
+}
+.pjpick-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pjpick-vessel { flex-shrink: 0; font-weight: 600; color: #2b6cb0; }
+.pjpick-empty { padding: 10px 8px; font-size: 13px; color: #8a96a8; text-align: center; }
 /* 추천 근거 — 왜 이 딜을 골라 뒀는지. 붙인 것이 아니라 골라 둔 것이다. */
 .umail-why {
   margin-top: 4px; font-size: 10.5px; line-height: 1.4; color: #2f6f3e;
