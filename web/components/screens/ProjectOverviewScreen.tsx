@@ -31,6 +31,7 @@ import { vendorList } from "@/components/common/dealFields";
 import { convertCurrency, USD_KRW_RATE } from "@/components/common/itemTable";
 import { tr } from "@/lib/labels";
 import CustomerName from "@/components/common/CustomerName";
+import ProjectMailPanel from "@/components/common/ProjectMailPanel";
 import ActivityDesc from "@/components/common/ActivityDesc";
 import ActivityNoteForm, {
   initialNoteValue,
@@ -428,6 +429,10 @@ function Overview({
         onOpenStage={onOpenStage}
         onActivityAdded={onActivityAdded}
       />
+
+      {/* 이 딜에서 고객·벤더와 오간 메일 — 단계 진행 바로 다음, 품목·금액 앞에 둔다.
+          "무슨 일이 있었나"가 "얼마짜리인가"보다 먼저 읽히는 순서다. */}
+      <ProjectMailPanel rfqId={row.rfq_id} />
 
       <ItemsSection
         stage={row.stage}

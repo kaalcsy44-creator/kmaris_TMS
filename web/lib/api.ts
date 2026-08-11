@@ -65,6 +65,10 @@ import type {
   StatisticsData,
   StatDebugData,
   SearchData,
+  MailMessage,
+  MailStatus,
+  MailSyncResult,
+  ProjectMail,
 } from "./types";
 
 function authHeaders(json = false): HeadersInit {
@@ -1829,4 +1833,32 @@ export function deletePurchaseOrder(
   id: number
 ): Promise<{ ok: boolean; po_no: string }> {
   return del(`/api/admin/vendor-pos/${id}`);
+}
+
+// ── 프로젝트 메일 이력 ────────────────────────────────────────────────────────
+// 메일 본체는 회사 메일함에 있고, KTMS 는 거래처와 오간 것만 담아 딜에 붙여 둔다.
+// summarize=true 면 아직 요약이 없는 메일을 이 호출에서 만든다(느리다 — 버튼에만 쓴다).
+// 새 메일 요약은 동기화가 이미 채워 두므로 화면을 열 때는 false 로 곧장 받는다.
+export function fetchProjectMail(rfqId: number, summarize = false): Promise<ProjectMail> {
+  return get<ProjectMail>(`/api/admin/mail/project/${rfqId}${summarize ? "?summarize=1" : ""}`);
+}
+export function fetchMailStatus(): Promise<MailStatus> {
+  return get<MailStatus>("/api/admin/mail/status");
+}
+export function syncMail(): Promise<MailSyncResult> {
+  return post<MailSyncResult>("/api/admin/mail/sync", {});
+}
+export function buildProjectMailRollup(rfqId: number): Promise<{ ok: boolean; rollup: string }> {
+  return post(`/api/admin/mail/project/${rfqId}/rollup`, {});
+}
+export function fetchUnmatchedMail(limit = 100): Promise<{ count: number; messages: MailMessage[] }> {
+  return get(`/api/admin/mail/unmatched?limit=${limit}`);
+}
+// rfqId=null 이면 연결을 끊어 미분류로 되돌린다. 기본은 같은 스레드 전체.
+export function assignMail(
+  msgId: number,
+  rfqId: number | null,
+  wholeThread = true
+): Promise<{ ok: boolean; updated: number }> {
+  return put(`/api/admin/mail/${msgId}/assign`, { rfq_id: rfqId, whole_thread: wholeThread });
 }

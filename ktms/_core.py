@@ -75,7 +75,7 @@ from services.doc_xlsx import make_document_xlsx
 from services.quote_response_parser import parse_vendor_quote_bytes, excel_to_text
 from db.models import (
     RFQ, Customer, CustomerContact, Vessel, Vendor, VendorContact, User, UserRole, RolePermission, ItemMaster, ItemCategory, DocSequence,
-    EmailTemplate,
+    EmailTemplate, EmailMessage, EmailSyncState,
     VendorRFQ, VendorQuote, Quotation, QuotationStatus, FollowUpLevel,
     Order, PurchaseOrder, ShippingAdvice, ProformaInvoice, CommercialInvoice,
     PackingList, TaxInvoiceData, ARRecord, APRecord, DeliveryProof,
@@ -3437,6 +3437,8 @@ __all__ = [
     "_vendor_po_email_body",
     "_vendor_rfq_email_body",
     "EmailTemplate",
+    "EmailMessage",
+    "EmailSyncState",
     "EmailTemplateSave",
     "EmailSignatureSave",
     "SIGNATURE_DOC_TYPE",

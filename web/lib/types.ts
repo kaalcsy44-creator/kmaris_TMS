@@ -1597,3 +1597,60 @@ export type MarketingOverview = {
     by_type: Record<string, number>;
   };
 };
+
+// ── 프로젝트 메일 이력(회사 메일함 IMAP 동기화) ───────────────────────────────
+// 한 통 = MailMessage, 한 대화 = MailThread. summary 는 Claude 가 만든 한두 줄이고,
+// 비어 있으면 아직 만들지 않은 것(화면에서 열면 서버가 채운다).
+export type MailAttachment = { name: string; size: number };
+export type MailMessage = {
+  id: number;
+  direction: "in" | "out";      // in = 수신, out = 발신
+  sent_at: string;              // "YYYY-MM-DDTHH:MM" (KST)
+  subject: string;
+  from_addr: string;
+  from_name: string;
+  to_addrs: string[];
+  cc_addrs: string[];
+  party: string;                // 상대 회사명(등록된 고객·벤더면 이름, 아니면 주소)
+  party_kind: "customer" | "vendor" | "";
+  summary: string;
+  body_text: string;
+  truncated: boolean;
+  attachments: MailAttachment[];
+  match_by: string;             // thread | subject | manual — 이 딜에 붙은 근거
+  thread_key: string;
+  rfq_id: number | null;
+};
+export type MailThread = {
+  thread_key: string;
+  subject: string;
+  party: string;
+  party_kind: "customer" | "vendor" | "";
+  first_at: string;
+  last_at: string;
+  count: number;
+  messages: MailMessage[];
+};
+export type ProjectMail = {
+  rfq_id: number;
+  count: number;
+  threads: MailThread[];
+  rollup: string;         // 딜 전체 흐름 요약(3~5줄). 빈 문자열 = 아직 만들지 않음
+  rollup_stale: boolean;  // 요약을 만든 뒤 새 메일이 왔다
+};
+export type MailStatus = {
+  configured: boolean;
+  host: string;
+  account: string;
+  total: number;
+  unmatched: number;
+  folders: { folder: string; last_uid: number; last_synced_at: string; last_error: string }[];
+};
+export type MailSyncResult = {
+  ok: boolean;
+  stored: number;
+  skipped: number;
+  dup: number;
+  summarized?: number;
+  folders: Record<string, { stored?: number; skipped?: number; dup?: number; error?: string }>;
+};

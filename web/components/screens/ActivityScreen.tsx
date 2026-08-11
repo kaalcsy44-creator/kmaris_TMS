@@ -23,6 +23,7 @@ import {
   type Activity,
 } from "@/lib/activity";
 import CustomerName from "@/components/common/CustomerName";
+import UnmatchedMailPanel from "@/components/common/UnmatchedMailPanel";
 import FilterSelect from "@/components/common/FilterSelect";
 import VendorMonograms from "@/components/common/VendorMonograms";
 import ActivityDesc from "@/components/common/ActivityDesc";
@@ -159,7 +160,7 @@ export default function ActivityScreen() {
   const [ageF, setAgeF] = useState<string[]>([]);
   const [custF, setCustF] = useState<string[]>([]);
   const [vendF, setVendF] = useState<string[]>([]);
-  const [view, setView] = useState<"deal" | "date">("deal"); // 탭: 딜별(카드) / 일자별(피드)
+  const [view, setView] = useState<"deal" | "date" | "mail">("deal"); // 탭: 딜별(카드) / 일자별(피드) / 미분류 메일
 
   const [overviewId, setOverviewId] = useState<number | null>(null);
   // 주요(자동) 활동을 클릭해 들어온 경우의 목표 단계 — 팝업을 개요 대신 그 단계 작업화면으로 연다.
@@ -380,6 +381,22 @@ export default function ActivityScreen() {
     return [...rows].sort(byProjectNo).map((r) => r.rfq_id);
   }, [view, buckets, weekView]);
 
+  // 미분류 메일을 붙일 딜 목록 — 화면 필터와 무관하게 전부(닫힌 딜의 옛 메일도 배정한다).
+  // 번호 내림차순이라 최근 딜이 위에 온다.
+  const mailProjects = useMemo(
+    () =>
+      [...(data?.rows ?? [])]
+        .sort(byProjectNo)
+        .reverse()
+        .map((r) => ({
+          rfqId: r.rfq_id,
+          label: [r.project_no || r.kmaris_rfq_no, r.customer, r.project_title]
+            .filter(Boolean)
+            .join(" · "),
+        })),
+    [data]
+  );
+
   // 마지막에서 다음은 처음, 처음에서 이전은 마지막으로 순환(ProjectsScreen 과 동일).
   const navigateOverview = useCallback(
     (dir: -1 | 1) => {
@@ -413,11 +430,19 @@ export default function ActivityScreen() {
         >
           Activity (By date)
         </button>
+        {/* 메일함에서 가져왔지만 아직 어느 딜 것인지 정해지지 않은 메일 — 여기서 배정한다. */}
+        <button
+          className={view === "mail" ? "on" : ""}
+          onClick={() => setView("mail")}
+        >
+          Mail (unmatched)
+        </button>
         <Link href="/project" className="page-navlink">
           Projects <span className="pn-arrow">→</span>
         </Link>
       </div>
 
+      {view === "mail" ? null : (
       <div className="act-toolbar">
         <span className="act-count">
           {view === "deal" ? `stage activity by deal · ${totalDeals}` : `stage activity by date · ${totalActs}`}
@@ -457,6 +482,9 @@ export default function ActivityScreen() {
           <button className="btn sm" onClick={() => window.print()}>Print</button>
         </div>
       </div>
+      )}
+
+      {view === "mail" ? <UnmatchedMailPanel projects={mailProjects} /> : null}
 
       {view === "deal" ? (
         <>

@@ -674,3 +674,55 @@ class MarketingAsset(Base):
     data        = Column(LargeBinary)
     owner_id    = Column(Integer, ForeignKey("users.id"), nullable=True)  # 업로더
     created_at  = Column(DateTime, default=datetime.utcnow)
+
+
+# ── Email history ─────────────────────────────────────────────────────────────
+
+class EmailMessage(Base):
+    """회사 메일함에서 가져온 메일 1통 — 프로젝트(RFQ)와 거래처에 연결해 보관한다.
+
+    IMAP 동기화(services/mail_sync.py)가 받은편지함·보낸편지함을 읽어 채운다.
+    저장 대상은 Settings 에 등록된 고객·벤더 주소와 오간 메일, 그리고 이미 저장한
+    메일의 답장(스레드)뿐이다 — 사내·개인 메일은 아예 들이지 않는다.
+
+    본문은 평문만, 그것도 상한(MAX_BODY_CHARS)까지만 담는다. 첨부는 이름·크기만
+    남긴다(원본은 메일함에 있고, DB 전송량은 아껴야 한다)."""
+    __tablename__ = "email_messages"
+    id          = Column(Integer, primary_key=True)
+    # RFC Message-ID — 같은 메일을 두 번 담지 않게 하는 기준이자 스레드의 마디.
+    message_id  = Column(String(400), unique=True, index=True)
+    in_reply_to = Column(String(400))            # 직전 메일의 Message-ID
+    refs        = Column(JSON, default=list)     # References 헤더(스레드 조상 전부)
+    thread_key  = Column(String(400), index=True)  # 스레드 뿌리의 Message-ID(없으면 자기 자신)
+    direction   = Column(String(3))              # in = 수신, out = 발신
+    from_addr   = Column(String(320))
+    from_name   = Column(String(200))
+    to_addrs    = Column(JSON, default=list)
+    cc_addrs    = Column(JSON, default=list)
+    subject     = Column(String(500))
+    body_text   = Column(Text)                   # 평문 본문(상한까지)
+    truncated   = Column(Boolean, default=False)  # 본문을 상한에서 잘랐는지
+    attachments = Column(JSON, default=list)     # [{"name": "...", "size": 12345}]
+    sent_at     = Column(String(16), index=True)  # "YYYY-MM-DDTHH:MM" (KST)
+    # 연결 — 프로젝트(딜)와 상대 거래처. 못 붙인 메일은 rfq_id=NULL 로 '미분류 함'에 남는다.
+    rfq_id      = Column(Integer, ForeignKey("rfqs.id"), nullable=True, index=True)
+    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=True)
+    vendor_id   = Column(Integer, ForeignKey("vendors.id"), nullable=True)
+    # 어떻게 붙었는지 — thread | subject | manual. 자동 연결을 사람이 검증할 수 있게 남긴다.
+    match_by    = Column(String(20))
+    summary     = Column(Text)                   # Claude 한두 줄 요약(없으면 아직 안 만든 것)
+    summarized_at = Column(DateTime)
+    created_at  = Column(DateTime, default=datetime.utcnow)
+
+
+class EmailSyncState(Base):
+    """IMAP 동기화 진행 표시 — 폴더별로 어디까지 읽었는지.
+
+    UID 는 폴더 안에서만 뜻이 있고 uid_validity 가 바뀌면 전부 무효가 되므로 함께 둔다
+    (바뀌면 처음부터 다시 읽되, message_id 유일 제약이 중복 저장을 막는다)."""
+    __tablename__ = "email_sync_state"
+    folder       = Column(String(200), primary_key=True)
+    uid_validity = Column(String(40))
+    last_uid     = Column(Integer, default=0)
+    last_synced_at = Column(DateTime)
+    last_error   = Column(Text)
