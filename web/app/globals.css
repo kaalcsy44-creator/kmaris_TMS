@@ -11955,16 +11955,19 @@ table.mini.wide.umail-table th.umail-c-when,
 table.mini.wide.umail-table td.umail-c-when {
   width: 92px; white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--muted);
 }
+/* 224px = 가장 긴 거래선("M.T.M SHIP MANAGEMENT PTE. LTD")이 한 줄에 들어가는 폭.
+   이름 하나가 두 줄로 접히면 행 높이가 들쭉날쭉해져 목록을 훑기 어렵다. */
 table.mini.wide.umail-table th.umail-c-party,
-table.mini.wide.umail-table td.umail-c-party { width: 156px; }
+table.mini.wide.umail-table td.umail-c-party { width: 224px; }
 table.mini.wide.umail-table th.umail-c-assign,
 table.mini.wide.umail-table td.umail-c-assign { width: 340px; }
 .umail-c-assign select { width: 100%; max-width: 100%; }
 .umail-c-assign { white-space: nowrap; }
-/* 상대가 여럿이면 세로로 쌓는다 — 칸 폭을 넘겨 이름이 잘리지 않게 각 칸 안에서 접힌다. */
+/* 상대가 여럿이면 세로로 쌓는다. 이름 하나는 접지 않고 한 줄로 두되, 위 폭을 넘는
+   드문 이름만 끝을 줄인다(전체 이름은 마우스를 올리면 보인다). */
 .umail-parties { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
 .umail-parties .mail-party {
-  max-width: 100%; white-space: normal; overflow: visible; overflow-wrap: anywhere; line-height: 1.35;
+  max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .umail-subject { font-weight: 600; color: var(--navy); overflow-wrap: anywhere; }
 .umail-sum { margin-top: 2px; font-size: 11.5px; line-height: 1.45; color: #5c6b7d; overflow-wrap: anywhere; }

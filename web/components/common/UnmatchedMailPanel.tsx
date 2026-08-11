@@ -188,7 +188,11 @@ export default function UnmatchedMailPanel({
                   <div className="umail-parties">
                     {g.parties.length === 0 ? <span className="mail-party unknown">—</span> : null}
                     {g.parties.map((p, i) => (
-                      <span key={p} className={`mail-party ${i === 0 ? g.party_kind || "unknown" : "unknown"}`}>
+                      <span
+                        key={p}
+                        className={`mail-party ${i === 0 ? g.party_kind || "unknown" : "unknown"}`}
+                        title={p}
+                      >
                         {p}
                       </span>
                     ))}
