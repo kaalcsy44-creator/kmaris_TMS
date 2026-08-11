@@ -182,12 +182,16 @@ export default function UnmatchedMailPanel({
                   ) : null}
                 </td>
                 <td className="umail-c-party">
-                  {g.parties.length === 0 ? <span className="mail-party unknown">—</span> : null}
-                  {g.parties.map((p, i) => (
-                    <span key={p} className={`mail-party ${i === 0 ? g.party_kind || "unknown" : "unknown"}`}>
-                      {p}
-                    </span>
-                  ))}
+                  {/* 상대가 여럿인 대화(전달·참조)는 한 줄에 늘어놓지 않고 쌓는다 —
+                      가로로 늘어나면 그만큼 대화 칸이 오른쪽으로 밀린다. */}
+                  <div className="umail-parties">
+                    {g.parties.length === 0 ? <span className="mail-party unknown">—</span> : null}
+                    {g.parties.map((p, i) => (
+                      <span key={p} className={`mail-party ${i === 0 ? g.party_kind || "unknown" : "unknown"}`}>
+                        {p}
+                      </span>
+                    ))}
+                  </div>
                 </td>
                 <td>
                   <button
