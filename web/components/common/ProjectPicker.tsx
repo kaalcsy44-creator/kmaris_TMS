@@ -21,8 +21,9 @@ export type ProjectPickOption = {
 
 type MenuPos = { left: number; width: number; top?: number; bottom?: number };
 
-// 팝오버 최소 폭 — 버튼(=칸)이 좁아도 한 줄이 접히지 않을 만큼은 편다.
-const MENU_MIN_WIDTH = 460;
+// 팝오버 최소 폭 — 버튼(=칸)은 좁지만 메뉴는 한 줄(번호·고객·프로젝트명·선박)이 끝까지
+// 보일 만큼 편다. 화면이 그보다 좁으면 화면 폭에 맞춰 줄어들고, 그때만 끝이 잘린다.
+const MENU_MIN_WIDTH = 900;
 
 export default function ProjectPicker({
   value,
