@@ -11956,6 +11956,31 @@ button.ov-tl-stage:hover {
 .umail-c-assign { white-space: nowrap; }
 .umail-subject { font-weight: 600; color: var(--navy); overflow-wrap: anywhere; }
 .umail-sum { margin-top: 2px; font-size: 11.5px; line-height: 1.45; color: #5c6b7d; overflow-wrap: anywhere; }
+/* 대화 한 줄 — 제목을 누르면 그 안의 메일이 펼쳐진다. */
+.umail-subject.as-link {
+  display: block; width: 100%; text-align: left; background: none; border: 0; padding: 0;
+  font: inherit; font-weight: 600; color: var(--navy); cursor: pointer;
+}
+.umail-subject.as-link:hover { text-decoration: underline; }
+.umail-count {
+  margin-left: 6px; padding: 0 6px; border-radius: 999px; background: #eaf0f7;
+  font-size: 10.5px; font-weight: 700; color: #5c6b7d; vertical-align: 1px;
+}
+.umail-caret { margin-left: 5px; font-size: 10px; color: #8a96a8; }
+.umail-since { font-size: 10.5px; color: #8a96a8; }
+.umail-msgs { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.umail-msgs li {
+  display: grid; grid-template-columns: 16px 92px 1fr; gap: 4px 6px; align-items: baseline;
+  padding: 4px 6px; border-left: 2px solid #eaf0f7;
+}
+.umail-msg-when { font-size: 11px; color: #8a96a8; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.umail-msg-subj { font-size: 12px; color: var(--navy); overflow-wrap: anywhere; }
+.umail-msgs .umail-sum { grid-column: 3; margin-top: 0; }
+/* 추천 근거 — 왜 이 딜을 골라 뒀는지. 붙인 것이 아니라 골라 둔 것이다. */
+.umail-why {
+  margin-top: 4px; font-size: 10.5px; line-height: 1.4; color: #2f6f3e;
+  white-space: normal; overflow-wrap: anywhere;
+}
 
 /* ── Finance(재무) 화면 ─────────────────────────────────────────────────────── */
 .fin-overview { display: flex; flex-direction: column; gap: 14px; }

@@ -1619,7 +1619,7 @@ export type MailMessage = {
   body_text: string;
   truncated: boolean;
   attachments: MailAttachment[];
-  match_by: string;             // thread | subject | manual — 이 딜에 붙은 근거
+  match_by: string;             // thread | docno | subject | manual — 이 딜에 붙은 근거
   thread_key: string;
   rfq_id: number | null;
 };
@@ -1648,6 +1648,30 @@ export type MailStatus = {
   unmatched: number;
   folders: { folder: string; last_uid: number; last_synced_at: string; last_error: string }[];
 };
+// 미분류 메일은 '대화' 단위로 다룬다 — 한 번 고르면 그 대화 전체가 같은 딜로 간다.
+// suggest 는 서버가 매긴 추천(제목 겹침·거래처·시기)일 뿐, 붙지는 않은 상태다.
+export type MailSuggest = { rfq_id: number; why: string };
+export type UnmatchedMailGroup = {
+  key: string;
+  subject: string;              // 답장 표시(RE:/回复:)를 걷어낸 제목
+  parties: string[];            // 이 대화에 나온 상대(최근 순, 최대 3)
+  party_kind: "customer" | "vendor" | "";
+  first_at: string;
+  last_at: string;
+  count: number;
+  ids: number[];
+  messages: MailMessage[];
+  suggest: MailSuggest | null;
+};
+// 자동 배정 결과 — 근거별 건수. thread=같은 대화, docno=문서번호, subject=같은 제목.
+export type MailAutoMatchResult = {
+  ok: boolean;
+  thread: number;
+  docno: number;
+  subject: number;
+  total: number;
+  unmatched: number;   // 아직 남은 미분류 통수
+};
 export type MailSyncResult = {
   ok: boolean;
   scanned: number;   // 메일함에서 훑은 통수(저장 여부와 무관)
@@ -1656,6 +1680,7 @@ export type MailSyncResult = {
   dup: number;
   pending: number;   // 기간 안에 아직 안 읽은 이전 메일(Sync 를 더 누르면 이어 읽는다)
   summarized?: number;
+  auto_matched?: number;  // 동기화 직후 자동으로 딜에 붙은 통수
   folders: Record<
     string,
     { scanned?: number; stored?: number; skipped?: number; dup?: number; pending?: number; error?: string }

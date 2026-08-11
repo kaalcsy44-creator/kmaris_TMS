@@ -35,9 +35,11 @@ from email.message import Message
 from email.utils import getaddresses, parsedate_to_datetime
 from typing import Iterable
 
+from sqlalchemy import func
+
 from db.models import (
     Customer, CustomerContact, EmailMessage, EmailSyncState, Order,
-    PurchaseOrder, Quotation, RFQ, User, Vendor, VendorContact, VendorRFQ, WorkType,
+    PurchaseOrder, Quotation, RFQ, User, Vendor, VendorContact, VendorRFQ, Vessel, WorkType,
 )
 
 # 본문 보관 상한 — 요약과 원문 확인에는 충분하고, 첨부 인용문이 통째로 들어오는
@@ -214,7 +216,7 @@ def _project_no_map(s) -> dict[int, str]:
     (services 는 _core 를 import 할 수 없어 여기서 같은 순서로 다시 센다.)"""
     rows = [((r.received_at or r.date or ""), r.id,
              "S" if getattr(r.work_type, "value", r.work_type) == WorkType.SERVICE.value else "P")
-            for r in s.query(RFQ).all()]
+            for r in s.query(RFQ.id, RFQ.received_at, RFQ.date, RFQ.work_type).all()]
     rows.sort(key=lambda t: (t[0] or "9999-99-99", t[1]))
     counters = {"P": 0, "S": 0}
     out: dict[int, str] = {}
@@ -228,7 +230,7 @@ def doc_no_index(s) -> dict[str, int]:
     """딜을 가리키는 문서번호 → rfq_id. 제목·본문에서 이 토큰을 찾아 연결한다.
 
     너무 짧거나 흔한 번호(숫자만, 3자 미만)는 넣지 않는다 — 우연히 걸리면 남의 딜에
-    메일이 붙는다."""
+    메일이 붙는다. 문서마다 번호 열만 읽는다(품목 JSON 까지 끌어올 이유가 없다)."""
     idx: dict[str, int] = {}
 
     def put(no: str, rfq_id: int | None) -> None:
@@ -238,26 +240,20 @@ def doc_no_index(s) -> dict[str, int]:
 
     for rid, pno in _project_no_map(s).items():
         put(pno, rid)
-    for r in s.query(RFQ).all():
+    for r in s.query(RFQ.id, RFQ.rfq_no, RFQ.customer_rfq_no).all():
         put(r.rfq_no or "", r.id)
         put(r.customer_rfq_no or "", r.id)
-    for vr in s.query(VendorRFQ).all():
-        put(getattr(vr, "kmaris_rfq_no", "") or "", vr.rfq_id)
-    for q in s.query(Quotation).all():
+    for vr in s.query(VendorRFQ.rfq_id, VendorRFQ.kmaris_rfq_no).all():
+        put(vr.kmaris_rfq_no or "", vr.rfq_id)
+    for q in s.query(Quotation.rfq_id, Quotation.qtn_no).all():
         put(q.qtn_no or "", q.rfq_id)
-    for o in s.query(Order).all():
+    order_rfq = {o.id: o.rfq_id for o in s.query(Order.id, Order.rfq_id).all()}
+    for o in s.query(Order.rfq_id, Order.po_no).all():
         put(o.po_no or "", o.rfq_id)
-    for p in s.query(PurchaseOrder).all():
-        put(getattr(p, "po_no", "") or "", _po_rfq_id(s, p))
+    # Vendor P/O 는 딜에 바로 매달려 있지 않고 오더를 거친다.
+    for p in s.query(PurchaseOrder.order_id, PurchaseOrder.po_no).all():
+        put(p.po_no or "", order_rfq.get(p.order_id))
     return idx
-
-
-def _po_rfq_id(s, po) -> int | None:
-    """Vendor P/O → 딜(RFQ) id. P/O 는 오더에 매달려 있다."""
-    if not getattr(po, "order_id", None):
-        return None
-    order = s.query(Order).filter_by(id=po.order_id).first()
-    return order.rfq_id if order else None
 
 
 def match_project(s, msg_ids: Iterable[str], subject: str, body: str,
@@ -273,13 +269,228 @@ def match_project(s, msg_ids: Iterable[str], subject: str, body: str,
     haystack = f"{subject}\n{body[:4000]}".upper()
     for token, rfq_id in docs.items():
         if token in haystack:
-            return rfq_id, "subject"
+            return rfq_id, "docno"
     return None, ""
 
 
 def thread_key_of(msg_ids: list[str], message_id: str) -> str:
     """스레드 묶음 키 — References 의 맨 앞(뿌리)이 있으면 그것, 없으면 자기 자신."""
     return (msg_ids[0] if msg_ids else "") or message_id
+
+
+# ── 제목으로 같은 대화 알아보기 ───────────────────────────────────────────────
+#
+# 회신 헤더(In-Reply-To·References)는 생각보다 자주 끊긴다 — 전달(FW), 웹메일에서
+# 새로 쓴 답장, 중국·한국 클라이언트의 제목 접두어("回复:", "답장:") 등. 그래서
+# 스레드만으로는 절반도 못 붙는다. 답장 표시를 걷어낸 제목이 같으면 사실상 같은
+# 대화라는 걸 사람은 한눈에 알아보므로, 그 판단을 그대로 규칙으로 쓴다.
+_REPLY_MARK_RE = re.compile(
+    r"^\s*(?:\[[^\]\r\n]{1,40}\]"
+    r"|(?:re|ref|reply|fw|fwd|forward(?:ed)?|답장|회신|전달|回复|回覆|答复|回信|轉發|转发|轉寄|转寄)"
+    r"\s*(?:\[\d+\])?\s*[:：])\s*",
+    re.I,
+)
+# 제목 열쇠로 쓰기에 너무 흔한 낱말 — 이것만 남는 제목("RE: RFQ")은 열쇠가 못 된다.
+_SUBJ_STOP = {
+    "RE", "FW", "FWD", "RFQ", "REQUEST", "QUOTATION", "QUOTE", "QUOTE.", "INQUIRY", "ENQUIRY",
+    "OFFER", "ORDER", "MAIL", "EMAIL", "FOR", "AND", "THE", "OF", "AT", "TO", "ON", "IN",
+    "YOUR", "OUR", "PLS", "PLEASE", "DEAR", "견적", "문의", "요청", "회신", "안녕하세요",
+}
+
+
+def normalize_subject(subject: str) -> str:
+    """답장·전달 표시와 앞머리 [태그] 를 걷어낸 제목(대문자·공백 정리)."""
+    s = subject or ""
+    for _ in range(8):                     # "RE: FW: [K-MARIS] …" 처럼 겹쳐 붙는다
+        t = _REPLY_MARK_RE.sub("", s)
+        if t == s:
+            break
+        s = t
+    return re.sub(r"\s+", " ", s).strip().upper()
+
+
+def subject_key(subject: str) -> str:
+    """같은 대화를 가르는 제목 열쇠. 너무 짧거나 흔한 제목이면 빈 문자열 —
+    "RE: RFQ" 같은 제목으로 묶으면 남의 딜 메일이 섞인다."""
+    norm = normalize_subject(subject)
+    strong = [w for w in re.split(r"[^0-9A-Z가-힣/._-]+", norm)
+              if len(w) >= 3 and w not in _SUBJ_STOP]
+    return norm if len(norm) >= 12 and len(strong) >= 2 else ""
+
+
+def _day(sent_at: str) -> str:
+    return (sent_at or "")[:10]
+
+
+def _gap_days(a: str, b: str) -> int | None:
+    """a - b (일). 둘 중 하나라도 날짜로 읽히지 않으면 None."""
+    try:
+        return (datetime.strptime(_day(a), "%Y-%m-%d")
+                - datetime.strptime(_day(b), "%Y-%m-%d")).days
+    except ValueError:
+        return None
+
+
+def _days_apart(a: str, b: str) -> int:
+    """두 'YYYY-MM-DD' 사이의 일수. 한쪽이라도 비면 아주 멀다고 본다."""
+    gap = _gap_days(a, b)
+    return 10_000 if gap is None else abs(gap)
+
+
+# 같은 제목이라도 이만큼 떨어져 있으면 다른 건으로 본다 — 같은 배·같은 부품으로
+# 반년 뒤 다시 문의가 오면 그건 새 딜이다.
+SUBJECT_WINDOW_DAYS = 150
+
+
+# ── 자동 배정 ─────────────────────────────────────────────────────────────────
+
+def auto_match(s, max_passes: int = 5) -> dict:
+    """미분류 메일 중 근거가 분명한 것만 딜에 붙인다. 반환 {thread, docno, subject, total}.
+
+    근거는 세 가지고, 어느 것도 추측이 아니다.
+      thread  — 같은 대화(스레드 뿌리·References·Message-ID)의 메일이 이미 그 딜에 있다
+      docno   — 제목·본문에 그 딜의 문서번호(P-024 / KMS-RFQ-… / 견적·P/O 번호)가 있다
+      subject — 답장 표시를 걷어낸 제목이 그 딜의 메일과 같다(같은 기간, 후보 딜이 하나)
+    후보 딜이 둘 이상이면 붙이지 않는다 — 틀린 딜의 이력은 비어 있는 것보다 나쁘다.
+    한 통이 붙으면 그 대화의 나머지가 다시 근거가 되므로 더 붙일 게 없을 때까지 돈다."""
+    counts = {"thread": 0, "docno": 0, "subject": 0, "total": 0}
+    docs = doc_no_index(s)
+    # 판단에 쓰는 열만 읽는다 — 본문까지 통째로 끌어오면 메일 수백 통이 그대로
+    # DB 전송량이 된다(문서번호는 본문 앞부분이면 충분하다).
+    keys = (EmailMessage.id, EmailMessage.thread_key, EmailMessage.message_id,
+            EmailMessage.in_reply_to, EmailMessage.refs, EmailMessage.subject,
+            EmailMessage.sent_at, EmailMessage.rfq_id)
+    head = func.substr(EmailMessage.body_text, 1, 4000).label("body_head")
+    for _ in range(max(1, max_passes)):
+        unmatched = (s.query(*keys, head)
+                     .filter(EmailMessage.rfq_id.is_(None)).all())
+        if not unmatched:
+            break
+        matched = s.query(*keys).filter(EmailMessage.rfq_id.isnot(None)).all()
+
+        # 이미 붙은 메일에서 '이 열쇠는 이 딜' 색인을 만든다. 값이 두 개 이상이면
+        # 그 열쇠는 쓰지 않는다(어느 딜인지 정할 수 없다).
+        threads: dict[str, set[int]] = {}
+        ids: dict[str, set[int]] = {}
+        subjects: dict[str, set[int]] = {}
+        subject_days: dict[tuple[str, int], list[str]] = {}
+        for m in matched:
+            if m.thread_key:
+                threads.setdefault(m.thread_key, set()).add(m.rfq_id)
+            for key in [m.message_id, m.in_reply_to, *(m.refs or [])]:
+                if key:
+                    ids.setdefault(key, set()).add(m.rfq_id)
+            sk = subject_key(m.subject or "")
+            if sk:
+                subjects.setdefault(sk, set()).add(m.rfq_id)
+                subject_days.setdefault((sk, m.rfq_id), []).append(m.sent_at or "")
+
+        # 같은 (딜, 근거) 로 정해진 메일은 한 번의 UPDATE 로 묶어 옮긴다.
+        decided: dict[tuple[int, str], list[int]] = {}
+        for m in unmatched:
+            rfq_id, why = None, ""
+            chain = [k for k in [m.thread_key, m.message_id, m.in_reply_to, *(m.refs or [])] if k]
+            for key in chain:
+                hit = threads.get(key) or ids.get(key)
+                if hit and len(hit) == 1:
+                    rfq_id, why = next(iter(hit)), "thread"
+                    break
+            if not rfq_id:
+                haystack = f"{m.subject or ''}\n{m.body_head or ''}".upper()
+                for token, rid in docs.items():
+                    if token in haystack:
+                        rfq_id, why = rid, "docno"
+                        break
+            if not rfq_id:
+                sk = subject_key(m.subject or "")
+                near = {rid for rid in subjects.get(sk, set())
+                        if any(_days_apart(m.sent_at or "", d) <= SUBJECT_WINDOW_DAYS
+                               for d in subject_days.get((sk, rid), []))} if sk else set()
+                if len(near) == 1:
+                    rfq_id, why = next(iter(near)), "subject"
+            if rfq_id:
+                decided.setdefault((rfq_id, why), []).append(m.id)
+                counts[why] += 1
+                counts["total"] += 1
+        for (rfq_id, why), mail_ids in decided.items():
+            (s.query(EmailMessage).filter(EmailMessage.id.in_(mail_ids))
+             .update({EmailMessage.rfq_id: rfq_id, EmailMessage.match_by: why},
+                     synchronize_session=False))
+        s.commit()
+        if not decided:
+            break
+    return counts
+
+
+# ── 후보 추천(자동으로 붙이지는 않는다) ───────────────────────────────────────
+
+def _words(text: str) -> set[str]:
+    """낱말 집합 — 3자 이상, 흔한 낱말 제외. 제목과 딜 이름을 견주는 데 쓴다."""
+    return {w for w in re.split(r"[^0-9A-Za-z가-힣]+", (text or "").upper())
+            if len(w) >= 3 and w not in _SUBJ_STOP}
+
+
+def _deal_profiles(s) -> list[dict]:
+    """딜별 대조표 — 이름 낱말·상대 거래처·시작일. 추천 점수를 매기는 재료."""
+    vendors: dict[int, set[int]] = {}
+    for vr in s.query(VendorRFQ.rfq_id, VendorRFQ.vendor_id).all():
+        if vr.rfq_id and vr.vendor_id:
+            vendors.setdefault(vr.rfq_id, set()).add(vr.vendor_id)
+    vessel_names = {v.id: v.name or "" for v in s.query(Vessel.id, Vessel.name).all()}
+    out = []
+    for r in s.query(RFQ.id, RFQ.project_title, RFQ.customer_rfq_no, RFQ.vessel_id,
+                     RFQ.customer_id, RFQ.received_at, RFQ.date).all():
+        out.append({
+            "rfq_id": r.id,
+            "words": _words(" ".join([r.project_title or "", r.customer_rfq_no or "",
+                                      vessel_names.get(r.vessel_id, "")])),
+            "customer_id": r.customer_id,
+            "vendor_ids": vendors.get(r.id, set()),
+            "start": _day(r.received_at or r.date or ""),
+        })
+    return out
+
+
+# 메일이 딜의 시작일보다 이만큼 앞서거나(문의 전 사전 연락) 뒤처지면 후보에서 뺀다.
+SUGGEST_BEFORE_DAYS = 21
+SUGGEST_AFTER_DAYS = 240
+
+
+def suggest_projects(s, msgs: list[EmailMessage]) -> dict[int, dict]:
+    """붙일 근거가 없는 메일에 '아마 이 딜' 후보를 하나씩 달아 준다 — 자동으로 붙이지는
+    않는다. 제목과 딜 이름이 겹치는지, 상대가 그 딜의 고객·벤더인지, 시기가 맞는지를
+    보고 1등이 2등보다 확실할 때만 내놓는다. 확정은 화면에서 사람이 누른다."""
+    deals = _deal_profiles(s)
+    names = {rid: no for rid, no in _project_no_map(s).items()}
+    out: dict[int, dict] = {}
+    for m in msgs:
+        day = _day(m.sent_at or "")
+        subj = _words(normalize_subject(m.subject or ""))
+        scored: list[tuple[float, str, int]] = []
+        for d in deals:
+            gap = _gap_days(day, d["start"])
+            if gap is None or gap < -SUGGEST_BEFORE_DAYS or gap > SUGGEST_AFTER_DAYS:
+                continue
+            shared = subj & d["words"]
+            party = ((m.customer_id and m.customer_id == d["customer_id"])
+                     or (m.vendor_id and m.vendor_id in d["vendor_ids"]))
+            score = (2.0 if len(shared) >= 2 else 1.0 if shared else 0.0) + (1.0 if party else 0.0)
+            if not score:
+                continue
+            why = ("제목이 겹칩니다: " + " · ".join(sorted(shared)[:3])) if shared else "이 거래처의 그 시기 딜"
+            if shared and party:
+                why += " · 같은 거래처"
+            scored.append((score, why, d["rfq_id"]))
+        if not scored:
+            continue
+        scored.sort(key=lambda t: (-t[0], t[2]))
+        best = scored[0]
+        runner = scored[1][0] if len(scored) > 1 else 0.0
+        # 1등이 2등과 같은 점수면 고르지 않는다 — 그건 추천이 아니라 동전 던지기다.
+        if best[0] < 1.5 or best[0] <= runner:
+            continue
+        out[m.id] = {"rfq_id": best[2], "why": best[1], "label": names.get(best[2], "")}
+    return out
 
 
 # ── IMAP 동기화 ───────────────────────────────────────────────────────────────

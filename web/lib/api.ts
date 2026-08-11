@@ -68,6 +68,8 @@ import type {
   MailMessage,
   MailStatus,
   MailSyncResult,
+  MailAutoMatchResult,
+  UnmatchedMailGroup,
   ProjectMail,
 } from "./types";
 
@@ -1851,14 +1853,27 @@ export function syncMail(): Promise<MailSyncResult> {
 export function buildProjectMailRollup(rfqId: number): Promise<{ ok: boolean; rollup: string }> {
   return post(`/api/admin/mail/project/${rfqId}/rollup`, {});
 }
-export function fetchUnmatchedMail(limit = 100): Promise<{ count: number; messages: MailMessage[] }> {
+// 미분류 메일 — 대화(groups) 단위로 온다. 본문은 미리보기 길이까지만 실려 온다.
+export function fetchUnmatchedMail(
+  limit = 200
+): Promise<{ count: number; groups: UnmatchedMailGroup[] }> {
   return get(`/api/admin/mail/unmatched?limit=${limit}`);
 }
+// 근거(같은 대화·문서번호·같은 제목)가 분명한 미분류 메일을 서버가 스스로 붙인다.
+export function autoMatchMail(): Promise<MailAutoMatchResult> {
+  return post<MailAutoMatchResult>("/api/admin/mail/auto-match", {});
+}
 // rfqId=null 이면 연결을 끊어 미분류로 되돌린다. 기본은 같은 스레드 전체.
+// ids 를 함께 넘기면 그 메일들(=화면에서 묶어 보여 준 대화 전체)이 같이 옮겨진다.
 export function assignMail(
   msgId: number,
   rfqId: number | null,
-  wholeThread = true
-): Promise<{ ok: boolean; updated: number }> {
-  return put(`/api/admin/mail/${msgId}/assign`, { rfq_id: rfqId, whole_thread: wholeThread });
+  wholeThread = true,
+  ids: number[] = []
+): Promise<{ ok: boolean; updated: number; spread: number }> {
+  return put(`/api/admin/mail/${msgId}/assign`, {
+    rfq_id: rfqId,
+    whole_thread: wholeThread,
+    ids,
+  });
 }
