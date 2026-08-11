@@ -146,6 +146,21 @@ def po_overview():
         s.close()
 
 
+def _order_vessel(s, order):
+    """오더 문서(발주서·CI/PL 메일)에 인쇄할 선박 — 오더 값이 먼저, 비었으면 딜·견적 것.
+
+    오더의 vessel_id 는 화면에서 고칠 수 있는 값이라 있으면 그것이 옳다. 다만 선박을
+    딜에만 넣어 둔 경우(오더를 만든 뒤 등록하는 등) 오더 사본은 비어 있는데, 목록·상세는
+    이미 딜 값으로 메워 보여 준다. 문서만 빈칸으로 나가면 화면과 종이가 어긋난다."""
+    if not order:
+        return None
+    rfq = _rfq_for_order(s, order)
+    qtn = (s.query(Quotation).filter_by(id=order.quotation_id).first()
+           if getattr(order, "quotation_id", None) else None)
+    vid = order.vessel_id or (rfq.vessel_id if rfq else None) or (qtn.vessel_id if qtn else None)
+    return s.query(Vessel).filter_by(id=vid).first() if vid else None
+
+
 @app.get("/api/admin/order/{order_id}", dependencies=[Depends(require_token)])
 def order_detail(order_id: int):
     """Order 1건 상세 — 고객 P/O, Vendor P/O, 품목, 연결 문서."""
@@ -744,7 +759,7 @@ def vendor_po_preview(po_id: int, body: VendorPoPreview,
             raise HTTPException(status_code=404, detail="발주서를 찾을 수 없습니다.")
         vendor = s.query(Vendor).filter_by(id=po.vendor_id).first()
         order = s.query(Order).filter_by(id=po.order_id).first()
-        vessel = s.query(Vessel).filter_by(id=order.vessel_id).first() if order and order.vessel_id else None
+        vessel = _order_vessel(s, order)
         lang = "ko" if body.lang == "ko" else "en"
         subject = (
             f"[K-MARIS] 발주서 송부 — {po.po_no} / {vessel.name if vessel else po.po_no}"
@@ -775,7 +790,7 @@ def vendor_po_pdf(po_id: int):
             raise HTTPException(status_code=404, detail="발주서를 찾을 수 없습니다.")
         vendor = s.query(Vendor).filter_by(id=po.vendor_id).first()
         order = s.query(Order).filter_by(id=po.order_id).first()
-        vessel = s.query(Vessel).filter_by(id=order.vessel_id).first() if order and order.vessel_id else None
+        vessel = _order_vessel(s, order)
         payload = build_po_payload(
             po_no=po.po_no,
             date=po.date or date.today().isoformat(),
@@ -804,7 +819,7 @@ def vendor_po_xlsx(po_id: int):
             raise HTTPException(status_code=404, detail="발주서를 찾을 수 없습니다.")
         vendor = s.query(Vendor).filter_by(id=po.vendor_id).first()
         order = s.query(Order).filter_by(id=po.order_id).first()
-        vessel = s.query(Vessel).filter_by(id=order.vessel_id).first() if order and order.vessel_id else None
+        vessel = _order_vessel(s, order)
         payload = build_po_payload(
             po_no=po.po_no,
             date=po.date or date.today().isoformat(),
@@ -851,7 +866,7 @@ def vendor_po_send(
             raise HTTPException(status_code=400, detail="수신자 이메일을 입력하세요.")
         vendor = s.query(Vendor).filter_by(id=po.vendor_id).first()
         order = s.query(Order).filter_by(id=po.order_id).first()
-        vessel = s.query(Vessel).filter_by(id=order.vessel_id).first() if order and order.vessel_id else None
+        vessel = _order_vessel(s, order)
         generated = None
         if include_document:
             payload = build_po_payload(

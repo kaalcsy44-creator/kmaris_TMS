@@ -206,8 +206,8 @@ def customer_quotation_detail(qtn_id: int):
         if not qtn:
             raise HTTPException(status_code=404, detail="견적서를 찾을 수 없습니다.")
         cust = s.query(Customer).filter_by(id=qtn.customer_id).first()
-        vessel = s.query(Vessel).filter_by(id=qtn.vessel_id).first() if qtn.vessel_id else None
-        rfq = s.query(RFQ).filter_by(id=qtn.rfq_id).first() if qtn.rfq_id else None
+        # 선박은 문서와 같은 규칙으로 고른다(딜 우선) — 상세와 인쇄물이 달라지지 않게.
+        vessel, rfq = _deal_vessel(s, qtn)
         # 원가 출처로 선택해 둔 벤더 견적(있으면) — 편집기 드롭다운 시드·문서 표기용.
         vq_id = getattr(qtn, "vendor_quote_id", None)
         vq = s.query(VendorQuote).filter_by(id=vq_id).first() if vq_id else None
@@ -251,6 +251,12 @@ def update_customer_quotation(qtn_id: int, body: CustomerQuoteUpdate):
         qtn = s.query(Quotation).filter_by(id=qtn_id).first()
         if not qtn:
             raise HTTPException(status_code=404, detail="견적서를 찾을 수 없습니다.")
+        # 딜에 선박이 (뒤늦게) 등록·변경됐으면 저장하는 김에 사본도 맞춘다 — 목록의
+        # Vessel 칸도 같은 값을 읽는다. 문서 자체는 _deal_vessel 로 이미 딜을 따른다.
+        if qtn.rfq_id:
+            _rfq = s.query(RFQ).filter_by(id=qtn.rfq_id).first()
+            if _rfq and _rfq.vessel_id and qtn.vessel_id != _rfq.vessel_id:
+                qtn.vessel_id = _rfq.vessel_id
         if body.qtn_no is not None:
             qtn_no = body.qtn_no.strip()
             if qtn_no:
@@ -315,12 +321,23 @@ def delete_customer_quotation(qtn_id: int):
         s.close()
 
 
+def _deal_vessel(s, qtn):
+    """견적서에 인쇄할 선박 — 딜(RFQ)에 등록된 선박이 먼저다.
+
+    Quotation.vessel_id 는 발행 시점에 딜에서 베껴 둔 사본이라, 선박을 나중에 넣거나
+    고치면 사본만 옛것으로 남는다. 편집기의 Ship Name 칸은 딜 값을 그대로 보여주므로
+    (읽기전용), 화면과 종이가 어긋나지 않으려면 문서도 딜을 따라야 한다.
+    RFQ 없이 만든 견적서만 제 사본을 쓴다."""
+    rfq = s.query(RFQ).filter_by(id=qtn.rfq_id).first() if getattr(qtn, "rfq_id", None) else None
+    vid = (rfq.vessel_id if rfq else None) or qtn.vessel_id
+    return (s.query(Vessel).filter_by(id=vid).first() if vid else None), rfq
+
+
 def _quotation_payload(s, qtn):
     """견적서 문서(PDF/Excel) payload — 고객·선박·품목·약관 + 헤더 문서필드.
     Messrs·Attn.·Ref No. 는 terms JSON 에 저장(비어 있으면 담당자/고객 RFQ No. 로 시드)."""
     cust = s.query(Customer).filter_by(id=qtn.customer_id).first()
-    vessel = s.query(Vessel).filter_by(id=qtn.vessel_id).first() if qtn.vessel_id else None
-    rfq = s.query(RFQ).filter_by(id=qtn.rfq_id).first() if getattr(qtn, "rfq_id", None) else None
+    vessel, rfq = _deal_vessel(s, qtn)
     project_title = (getattr(rfq, "project_title", None) or "") if rfq else ""
     tm = qtn.terms or {}
     ref_no = tm.get("ref_no") or ((getattr(rfq, "customer_rfq_no", None) or "") if rfq else "")
