@@ -183,8 +183,12 @@ function OptionLine({ o, logo }: { o: ProjectPickOption; logo?: string }) {
         <ProjectNo value={o.no} />
       </span>
       {logo ? <img className="cust-logo" src={logo} alt="" /> : null}
+      {/* 고객·선박은 곁들이는 정보라 회색으로 물리고, 딜을 가리키는 프로젝트명만 본문 색으로. */}
       <span className="pjpick-text">
-        {[o.customer, o.title, o.vessel].filter(Boolean).join(" · ")}
+        {o.customer ? <span className="pjpick-side">{o.customer}</span> : null}
+        {o.customer && o.title ? <span className="pjpick-side"> · </span> : null}
+        <span className="pjpick-name">{o.title || "(untitled)"}</span>
+        {o.vessel ? <span className="pjpick-side"> · {o.vessel}</span> : null}
       </span>
     </span>
   );

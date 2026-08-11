@@ -12010,6 +12010,8 @@ table.mini.wide.umail-table td.umail-c-assign { width: 340px; }
 .pjpick-text {
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #33445c;
 }
+.pjpick-side { color: #93a0b1; }          /* 고객사·선박 — 딸림 정보 */
+.pjpick-name { color: #1f2d3f; font-weight: 600; }  /* 프로젝트명 — 이 줄에서 읽을 것 */
 .pjpick-menu {
   z-index: 2000; padding: 6px; background: #fff; border: 1px solid #c7d0de;
   border-radius: 8px; box-shadow: 0 10px 30px rgba(20, 35, 65, 0.22);
