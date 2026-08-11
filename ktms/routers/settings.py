@@ -16,6 +16,7 @@ from _core import (
     VendorRFQ,
     _apply_multi,
     _multi_out,
+    _mv_list,
     Depends,
     EmailTemplate,
     EmailTemplateSave,
@@ -123,6 +124,7 @@ def settings_customers():
                  "tax_invoice_email": getattr(c, "tax_invoice_email", None) or "",
                  "payment_terms": getattr(c, "payment_terms", None) or "",
                  "logo": getattr(c, "logo", None) or "",
+                 "addresses": _multi_out(getattr(c, "addresses", None), c.address),
                  "emails": _multi_out(getattr(c, "emails", None), c.email),
                  "phones": _multi_out(getattr(c, "phones", None), getattr(c, "contact_phone", None)),
                  "regions": _multi_out(getattr(c, "regions", None), c.country)}
@@ -193,8 +195,8 @@ def create_customer(body: CustomerCreate):
                      payment_terms=body.payment_terms or "",
                      logo=body.logo or "")
         s.add(c)
-        # 다중 이메일·연락처·지역 저장 + 첫 값(대표)을 flat 컬럼에 미러링.
-        _apply_multi(c, body.emails, body.phones, body.regions)
+        # 다중 주소·이메일·연락처·지역 저장 + 첫 값(대표)을 flat 컬럼에 미러링.
+        _apply_multi(c, body.emails, body.phones, body.regions, body.addresses)
         s.commit()
         return {"ok": True, "id": c.id}
     finally:
@@ -207,7 +209,8 @@ class CompanyInfoSave(BaseModel):
     None 인 필드는 건드리지 않는다(빈 문자열 = 지우기)."""
     name: str
     rename: str | None = None            # 회사명 변경(같은 회사 전 레코드 일괄)
-    address: str | None = None
+    # 본사·지사 주소 목록(첫 값=대표). flat address 는 여기서 파생된다.
+    addresses: list[str] | None = None
     tax_id: str | None = None
     tax_invoice_email: str | None = None
     payment_terms: str | None = None
@@ -224,13 +227,18 @@ def _company_rows(session, Model, name: str) -> list:
 
 
 def _apply_company_info(rows: list, body: CompanyInfoSave, fields: tuple[str, ...]) -> str:
-    """회사 공통 필드를 rows 전체에 반영하고, 최종 회사명을 돌려준다."""
+    """회사 공통 필드를 rows 전체에 반영하고, 최종 회사명을 돌려준다.
+    주소는 본사·지사 목록이라 리스트로 넣고 첫 값(대표)을 flat address 에 미러링한다."""
     new_name = (body.rename or "").strip()
+    addrs = None if body.addresses is None else _mv_list(body.addresses)
     for r in rows:
         for f in fields:
             v = getattr(body, f)
             if v is not None:
                 setattr(r, f, v)
+        if addrs is not None:
+            r.addresses = list(addrs)
+            r.address = addrs[0] if addrs else ""
         if new_name:
             r.name = new_name
     return new_name or (body.name or "").strip()
@@ -244,7 +252,7 @@ def update_customer_company(body: CompanyInfoSave):
         if not rows:
             raise HTTPException(status_code=404, detail="해당 회사로 등록된 고객사가 없습니다.")
         name = _apply_company_info(
-            rows, body, ("address", "tax_id", "tax_invoice_email", "payment_terms", "logo"))
+            rows, body, ("tax_id", "tax_invoice_email", "payment_terms", "logo"))
         s.commit()
         return {"ok": True, "updated": len(rows), "name": name}
     finally:
@@ -269,8 +277,8 @@ def update_customer(row_id: int, body: CustomerCreate):
         c.payment_terms = body.payment_terms or ""
         if body.logo is not None:
             c.logo = body.logo
-        # 다중 이메일·연락처·지역 갱신 + 첫 값(대표)을 flat 컬럼에 미러링.
-        _apply_multi(c, body.emails, body.phones, body.regions)
+        # 다중 주소·이메일·연락처·지역 갱신 + 첫 값(대표)을 flat 컬럼에 미러링.
+        _apply_multi(c, body.emails, body.phones, body.regions, body.addresses)
         s.commit()
         return {"ok": True, "id": c.id}
     finally:
@@ -319,6 +327,7 @@ def settings_vendors():
                  "country": v.country or "", "address": v.address or "",
                  "payment_terms": getattr(v, "payment_terms", None) or "",
                  "logo": getattr(v, "logo", None) or "",
+                 "addresses": _multi_out(getattr(v, "addresses", None), v.address),
                  "emails": _multi_out(getattr(v, "emails", None), v.email),
                  "phones": _multi_out(getattr(v, "phones", None), getattr(v, "contact_phone", None)),
                  "regions": _multi_out(getattr(v, "regions", None), v.country)}
@@ -340,7 +349,7 @@ def create_vendor(body: VendorCreate):
                    payment_terms=body.payment_terms or "",
                    logo=body.logo or "")
         s.add(v)
-        _apply_multi(v, body.emails, body.phones, body.regions)
+        _apply_multi(v, body.emails, body.phones, body.regions, body.addresses)
         s.commit()
         return {"ok": True, "id": v.id}
     finally:
@@ -355,7 +364,7 @@ def update_vendor_company(body: CompanyInfoSave):
         if not rows:
             raise HTTPException(status_code=404, detail="해당 회사로 등록된 공급사가 없습니다.")
         name = _apply_company_info(
-            rows, body, ("address", "specialization", "payment_terms", "logo"))
+            rows, body, ("specialization", "payment_terms", "logo"))
         s.commit()
         return {"ok": True, "updated": len(rows), "name": name}
     finally:
@@ -379,7 +388,7 @@ def update_vendor(row_id: int, body: VendorCreate):
         v.payment_terms = body.payment_terms or ""
         if body.logo is not None:
             v.logo = body.logo
-        _apply_multi(v, body.emails, body.phones, body.regions)
+        _apply_multi(v, body.emails, body.phones, body.regions, body.addresses)
         s.commit()
         return {"ok": True, "id": v.id}
     finally:

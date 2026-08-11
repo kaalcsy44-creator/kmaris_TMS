@@ -1633,11 +1633,20 @@ function BankInfoSection({ currency }: { currency: string }) {
  *  · 매수인: 고객 마스터 값이 기본이고, 이 문서에서만 다르게 찍을 때 덮어쓴다(비우면 마스터). */
 // 칸 이름은 문서와 같게 — 어느 당사자인지는 좌우 블록 제목이 말해준다.
 // 배치는 한 블록 안에서 [회사명·담당자·이메일] 한 줄, [주소] 한 줄(wide) — 주소만 길다.
-const BUYER_FIELDS: { key: string; label: string; wide?: boolean; master: (o: DocumentDetail["order"]) => string }[] = [
+// 매수인 주소는 고객사에 본사·지사가 여러 곳이면 그중에서 골라 찍는다(비우면 대표 주소).
+const BUYER_FIELDS: {
+  key: string; label: string; wide?: boolean;
+  master: (o: DocumentDetail["order"]) => string;
+  options?: (o: DocumentDetail["order"]) => string[];
+}[] = [
   { key: "buyer_name", label: "Company Name", master: (o) => o.customer || "" },
   { key: "buyer_contact", label: "Contact", master: (o) => o.customer_contact || "" },
   { key: "buyer_email", label: "e-mail", master: (o) => o.customer_email || "" },
-  { key: "buyer_address", label: "Address", wide: true, master: (o) => o.customer_address || "" },
+  {
+    key: "buyer_address", label: "Address", wide: true,
+    master: (o) => o.customer_address || "",
+    options: (o) => o.customer_addresses ?? [],
+  },
 ];
 // 수하인 — 회사명은 Shipping Mark 의 C/O 와 같은 값(sm_consignee)을 그대로 쓴다.
 const CONSIGNEE_FIELDS: { key: string; label: string; wide?: boolean }[] = [
@@ -1669,10 +1678,10 @@ function PartiesSection({
     <section className="doc-party">
       <div className="sub-h">{buyerOnly ? "Buyer" : "Buyer (if different)"}</div>
       <div className={`form-grid doc-party-grid${buyerOnly ? " doc-party-grid--row" : ""}`}>
-        {BUYER_FIELDS.map(({ key, label, wide, master }) => (
+        {BUYER_FIELDS.map(({ key, label, wide, master, options }) => (
           readonly
             ? <ReadonlyField key={key} label={label} value={shipping[key] || master(order)} wide={wide && !buyerOnly} />
-            : <Field key={key} label={label} value={shipping[key] || ""} onChange={set(key)} placeholder={master(order)} wide={wide && !buyerOnly} />
+            : <Field key={key} label={label} value={shipping[key] || ""} onChange={set(key)} placeholder={master(order)} wide={wide && !buyerOnly} options={options?.(order)} />
         ))}
       </div>
     </section>
@@ -1848,6 +1857,7 @@ function Field({
   type = "text",
   placeholder,
   wide,
+  options,
 }: {
   label: string;
   value: string;
@@ -1857,11 +1867,28 @@ function Field({
   placeholder?: string;
   // 주소처럼 긴 값 — 그리드 한 줄을 통째로 쓴다.
   wide?: boolean;
+  // 고를 수 있는 값(예: 고객사에 등록된 본사·지사 주소). 직접 입력도 그대로 된다.
+  options?: string[];
 }) {
+  const listId = useId();
+  const list = (options ?? []).filter(Boolean);
   return (
     <label className={`form-field${wide ? " form-field--wide" : ""}`}>
       <span>{label}</span>
-      <input type={type} value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
+      <input
+        type={type}
+        value={value}
+        placeholder={placeholder}
+        list={list.length ? listId : undefined}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      {list.length ? (
+        <datalist id={listId}>
+          {list.map((o) => (
+            <option key={o} value={o} />
+          ))}
+        </datalist>
+      ) : null}
     </label>
   );
 }

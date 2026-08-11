@@ -43,11 +43,12 @@ export type SettingsCustomer = {
   contact_phone: string;
   email: string;
   country: string;
-  address: string;
+  address: string;   // 대표 주소(addresses[0] 미러링 — 문서·PDF 가 쓰는 값)
   tax_id: string;
   tax_invoice_email: string;
   payment_terms: string;
   logo: string;
+  addresses: string[];   // 본사·지사 주소(첫 값=대표)
   emails: string[];
   phones: string[];
   regions: string[];
@@ -60,9 +61,10 @@ export type SettingsVendor = {
   email: string;
   specialization: string;
   country: string;
-  address: string;
+  address: string;   // 대표 주소(addresses[0] 미러링)
   payment_terms: string;
   logo: string;
+  addresses: string[];   // 본사·지사 주소(첫 값=대표)
   emails: string[];
   phones: string[];
   regions: string[];
@@ -626,7 +628,8 @@ export type DocumentDetail = {
     status: string;
     customer: string;
     customer_email: string;
-    customer_address: string;   // 문서의 BUYER 칸 주소(고객 마스터 값)
+    customer_address: string;   // 문서의 BUYER 칸 주소(고객 마스터의 대표 주소)
+    customer_addresses?: string[];   // 본사·지사 주소 목록(BUYER 칸에서 골라 쓴다)
     customer_tax_id: string;
     // 청구서(Bill to) 선택지 — 저장된 고객 정보에서 고르거나 직접 입력.
     customer_contact?: string;   // 대표 담당자명(person-centric flat 필드)

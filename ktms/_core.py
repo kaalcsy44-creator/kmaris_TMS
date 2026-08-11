@@ -2125,6 +2125,8 @@ def _document_detail_payload(session, order: Order) -> dict:
             "customer_email": cust.email if cust else "",
             # 문서(CI/PL)의 BUYER 칸에 인쇄되는 주소 — 화면에서도 같은 값을 보여준다.
             "customer_address": (cust.address or "") if cust else "",
+            # 본사·지사 주소 목록 — 문서에서 대표 주소 대신 다른 곳을 찍을 때 고른다.
+            "customer_addresses": (cust.addresses or []) if cust else [],
             "customer_tax_id": cust.tax_id if cust else "",
             # 청구서(Bill to) 선택지 — 저장된 고객 정보에서 고르거나 직접 입력.
             # 담당자는 person-centric 모델이라 Customer.contact(대표 담당자명)를 기본으로 쓴다.
@@ -2675,7 +2677,9 @@ class CustomerCreate(BaseModel):
     tax_invoice_email: str | None = ""   # 세금계산서 수신 전용 메일
     payment_terms: str | None = ""   # 기본 결제조건
     logo: str | None = ""    # 회사 로고 data URL(붙여넣기). None=변경 안 함(수정 시)
-    # 담당자 1명이 여러 이메일·연락처·지역을 가질 수 있어 다중값. 첫 값=대표(문서·메일용).
+    # 한 회사에 본사·지사가 여럿이고, 담당자 1명이 여러 이메일·연락처·지역을 가질 수 있어
+    # 다중값. 첫 값=대표(문서·메일용).
+    addresses: list[str] | None = None
     emails: list[str] | None = None
     phones: list[str] | None = None
     regions: list[str] | None = None
@@ -2691,6 +2695,7 @@ class VendorCreate(BaseModel):
     address: str | None = ""
     payment_terms: str | None = ""   # 기본 결제조건
     logo: str | None = ""    # 회사 로고 data URL(붙여넣기). None=변경 안 함(수정 시)
+    addresses: list[str] | None = None   # 다중 주소(본사·지사, 첫 값=대표)
     emails: list[str] | None = None
     phones: list[str] | None = None
     regions: list[str] | None = None
@@ -2733,15 +2738,18 @@ def _mv_list(raw) -> list[str]:
     return [str(x).strip() for x in (raw or []) if str(x).strip()]
 
 
-def _apply_multi(obj, emails, phones, regions) -> None:
-    """고객/공급사에 다중 이메일·연락처·지역을 저장하고, 각 리스트의 첫 값(대표)을
-    flat 컬럼(email/contact_phone/country)에 미러링한다. 기존 소비처(PDF·메일·목록) 호환.
+def _apply_multi(obj, emails, phones, regions, addresses=None) -> None:
+    """고객/공급사에 다중 주소·이메일·연락처·지역을 저장하고, 각 리스트의 첫 값(대표)을
+    flat 컬럼(address/email/contact_phone/country)에 미러링한다.
+    기존 소비처(PDF·메일·목록) 호환.
 
     리스트가 None(미전송)이면 현재 flat 값을 리스트로 승격해 보존한다(빠른등록 호환)."""
+    ad = _mv_list(addresses) if addresses is not None else _mv_list([obj.address])
     em = _mv_list(emails) if emails is not None else _mv_list([obj.email])
     ph = _mv_list(phones) if phones is not None else _mv_list([obj.contact_phone])
     rg = _mv_list(regions) if regions is not None else _mv_list([obj.country])
-    obj.emails, obj.phones, obj.regions = em, ph, rg
+    obj.addresses, obj.emails, obj.phones, obj.regions = ad, em, ph, rg
+    obj.address = ad[0] if ad else ""
     obj.email = em[0] if em else ""
     obj.contact_phone = ph[0] if ph else ""
     obj.country = rg[0] if rg else ""
@@ -3266,6 +3274,7 @@ __all__ = [
     "_sync_contacts",
     "_apply_multi",
     "_multi_out",
+    "_mv_list",
     "ProformaInvoice",
     "ProformaInvoiceSave",
     "CompanyProfile",

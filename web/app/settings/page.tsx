@@ -900,7 +900,7 @@ function MyPasswordChange() {
 const EMPTY_CUSTOMER: SettingsCustomer = {
   id: 0, name: "", contact: "", contact_phone: "", email: "", country: "", address: "",
   tax_id: "", tax_invoice_email: "", payment_terms: "", logo: "",
-  emails: [], phones: [], regions: [],
+  addresses: [], emails: [], phones: [], regions: [],
 };
 
 function CustomersTab() {
@@ -915,7 +915,6 @@ function CustomersTab() {
       <CompanyInfoModal
         rows={company}
         fields={[
-          ["address", "Address"],
           ["tax_id", "Tax ID / Business No."],
           ["tax_invoice_email", "Tax invoice email"],
         ]}
@@ -1007,10 +1006,20 @@ function CustomersTab() {
             />
           );
         }
-        // 주소·사업자번호 = 같은 회사로 등록된 값 중 선택, 없으면 직접 입력.
-        if (key === "address" || key === "tax_id") {
-          const mates = sameCompanyRows(rows, form.name);
-          const options = uniqStrings(mates.map((r) => (key === "address" ? r.address : r.tax_id)));
+        // 주소 = 한 회사에 본사·지사가 여럿일 수 있어 다중값. 첫 줄(대표)이 문서에 인쇄된다.
+        if (key === "address") {
+          return (
+            <MultiValueField
+              label={label}
+              placeholder="Head office / branch address"
+              values={form.addresses}
+              onChange={(addresses) => setForm({ ...form, addresses, address: addresses[0] ?? "" })}
+            />
+          );
+        }
+        // 사업자번호 = 같은 회사로 등록된 값 중 선택, 없으면 직접 입력.
+        if (key === "tax_id") {
+          const options = uniqStrings(sameCompanyRows(rows, form.name).map((r) => r.tax_id));
           return (
             <PickOrTypeField
               label={label}
@@ -1100,12 +1109,12 @@ function summarize(list: string[], sep: string, max: number): string {
 // 검색 대상 — 표에 접혀 있는 값(2번째 이메일·전화·주소)까지 포함해 찾을 수 있게 한다.
 function contactSearchText(r: {
   name: string; contact: string; address?: string; specialization?: string;
-  emails?: string[]; phones?: string[]; regions?: string[];
+  addresses?: string[]; emails?: string[]; phones?: string[]; regions?: string[];
   email?: string; contact_phone?: string; country?: string;
 }): string {
   return [
     r.name, r.contact, r.address ?? "", r.specialization ?? "",
-    ...(r.emails ?? []), ...(r.phones ?? []), ...(r.regions ?? []),
+    ...(r.addresses ?? []), ...(r.emails ?? []), ...(r.phones ?? []), ...(r.regions ?? []),
     r.email ?? "", r.contact_phone ?? "", r.country ?? "",
   ].join(" ");
 }
@@ -1113,7 +1122,10 @@ function contactSearchText(r: {
 // 회사 공통정보 일괄 수정 — 같은 회사명으로 등록된 담당자 레코드 전체에 한 번에 반영한다.
 // (주소·사업자번호 같은 회사 단위 정보가 레코드마다 복제돼 있어 따로 고치면 어긋난다.)
 function CompanyInfoModal<
-  T extends { id: number; name: string; address: string; payment_terms: string; logo: string }
+  T extends {
+    id: number; name: string; address: string; addresses: string[];
+    payment_terms: string; logo: string;
+  }
 >({
   rows,
   fields,
@@ -1136,6 +1148,8 @@ function CompanyInfoModal<
     for (const [key] of fields) out[String(key)] = initial(key as keyof T);
     return out;
   });
+  // 주소는 회사 단위 다중값(본사·지사) — 담당자별로 갈라져 있어도 여기서 한 목록으로 모은다.
+  const [addresses, setAddresses] = useState<string[]>(() => companyAddresses(rows));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
@@ -1148,7 +1162,7 @@ function CompanyInfoModal<
     setBusy(true);
     setErr("");
     try {
-      const body: CompanyInfoSave = { name: origName, ...vals };
+      const body: CompanyInfoSave = { name: origName, ...vals, addresses };
       if (name.trim() && name.trim() !== origName) body.rename = name.trim();
       await save(body);
       onSaved();
@@ -1166,6 +1180,12 @@ function CompanyInfoModal<
       </div>
       <div className="form-grid">
         <TextField label="Company name" value={name} onChange={setName} />
+        <MultiValueField
+          label="Address"
+          placeholder="Head office / branch address"
+          values={addresses}
+          onChange={setAddresses}
+        />
         {fields.map(([key, label]) => (
           <TextField
             key={String(key)}
@@ -1242,18 +1262,34 @@ function withCompanyDefaults<T extends { name: string }>(form: T, rows: T[], nam
   const rec = { ...form, name } as Record<string, unknown>;
   const mates = sameCompanyRows(rows, name);
   if (!mates.length) return rec as unknown as T;
-  for (const key of ["address", "tax_id", "tax_invoice_email", "payment_terms", "logo"]) {
+  for (const key of ["tax_id", "tax_invoice_email", "payment_terms", "logo"]) {
     if (!(key in rec) || String(rec[key] ?? "").trim()) continue;
     const first = uniqStrings(mates.map((r) => String((r as Record<string, unknown>)[key] ?? "")))[0];
     if (first) rec[key] = first;
   }
+  // 주소는 회사 단위 정보(본사·지사) — 등록된 곳 전부를 그대로 물려준다.
+  if ("addresses" in rec && !((rec.addresses as string[]) ?? []).length) {
+    const list = companyAddresses(mates as { name: string; addresses?: string[]; address?: string }[]);
+    if (list.length) {
+      rec.addresses = list;
+      rec.address = list[0];
+    }
+  }
   return rec as unknown as T;
+}
+
+// 회사에 등록된 주소 전부(담당자 레코드마다 복제돼 있으므로 합쳐서 중복 제거).
+function companyAddresses(rows: { addresses?: string[]; address?: string }[]): string[] {
+  return uniqStrings(rows.flatMap((r) => (r.addresses?.length ? r.addresses : [r.address ?? ""])));
 }
 
 // 명함 인식 결과를 폼에 반영 — 빈 칸만 채우고, 이메일·연락처·지역은 없는 값만 추가한다.
 // 반환값 filled = 실제로 채워진 항목 라벨(사용자에게 무엇이 들어갔는지 보여주기 위함).
 function applyBusinessCard<
-  T extends { name: string; contact: string; address: string; emails: string[]; phones: string[]; regions: string[] }
+  T extends {
+    name: string; contact: string; address: string;
+    addresses: string[]; emails: string[]; phones: string[]; regions: string[];
+  }
 >(form: T, card: BusinessCardOcr): { next: T; filled: string[] } {
   const rec = { ...form } as Record<string, unknown>;
   const filled: string[] = [];
@@ -1276,8 +1312,10 @@ function applyBusinessCard<
 
   text("name", "Company", card.company);
   text("contact", "Contact name", card.contact_name);
-  text("address", "Address", card.address);
   text("tax_id", "Tax ID", card.tax_id);
+  // 명함의 주소는 그 담당자가 있는 곳 — 이미 등록된 본사·지사 목록에 없을 때만 덧붙인다.
+  multi("addresses", "Address", card.address ? [card.address] : []);
+  rec.address = ((rec.addresses as string[]) ?? [])[0] ?? "";
   multi("emails", "Email", card.emails);
   multi("phones", "Phone", card.phones);
   multi("regions", "Region", card.regions);
@@ -1506,7 +1544,8 @@ function LogoPasteField({
 
 const EMPTY_VENDOR: SettingsVendor = {
   id: 0, name: "", contact: "", contact_phone: "", email: "", specialization: "",
-  country: "", address: "", payment_terms: "", logo: "", emails: [], phones: [], regions: [],
+  country: "", address: "", payment_terms: "", logo: "",
+  addresses: [], emails: [], phones: [], regions: [],
 };
 
 function VendorsTab() {
@@ -1520,7 +1559,6 @@ function VendorsTab() {
       <CompanyInfoModal
         rows={company}
         fields={[
-          ["address", "Address"],
           ["specialization", "Specialization"],
         ]}
         save={updateVendorCompanyInfo}
@@ -1613,16 +1651,14 @@ function VendorsTab() {
             />
           );
         }
+        // 주소 = 본사·지사가 여럿일 수 있어 다중값. 첫 줄(대표)이 문서에 인쇄된다.
         if (key === "address") {
-          const options = uniqStrings(sameCompanyRows(rows, form.name).map((r) => r.address));
           return (
-            <PickOrTypeField
+            <MultiValueField
               label={label}
-              value={form.address}
-              options={options}
-              placeholder={options.length ? "Select or type…" : "Type…"}
-              hint={form.name.trim() && !options.length ? "No saved address for this vendor — type it in." : ""}
-              onChange={(v) => setForm({ ...form, address: v })}
+              placeholder="Head office / branch address"
+              values={form.addresses}
+              onChange={(addresses) => setForm({ ...form, addresses, address: addresses[0] ?? "" })}
             />
           );
         }
