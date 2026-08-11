@@ -1648,9 +1648,14 @@ export type MailStatus = {
 };
 export type MailSyncResult = {
   ok: boolean;
+  scanned: number;   // 메일함에서 훑은 통수(저장 여부와 무관)
   stored: number;
-  skipped: number;
+  skipped: number;   // 등록된 거래처와 무관해 담지 않은 것
   dup: number;
+  pending: number;   // 기간 안에 아직 안 읽은 이전 메일(Sync 를 더 누르면 이어 읽는다)
   summarized?: number;
-  folders: Record<string, { stored?: number; skipped?: number; dup?: number; error?: string }>;
+  folders: Record<
+    string,
+    { scanned?: number; stored?: number; skipped?: number; dup?: number; pending?: number; error?: string }
+  >;
 };

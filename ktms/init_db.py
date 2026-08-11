@@ -73,6 +73,10 @@ _MIGRATIONS = {
         "vessel_type": "VARCHAR(60)",
         "ais_flag": "VARCHAR(60)",
     },
+    "email_sync_state": {
+        # 읽은 구간의 아래쪽 경계(옛 메일 방향). 첫 배포 뒤 추가된 컬럼.
+        "backfill_uid": "INTEGER DEFAULT 0",
+    },
     "vendor_quotes": {
         "vendor_quote_no": "VARCHAR(100)",
         "received_at": "VARCHAR(16)",
@@ -901,6 +905,30 @@ def migrate_backfill_price_history():
         conn.execute(text(
             "INSERT INTO applied_migrations (name) VALUES ('backfill_price_history')"))
     print(f"[OK] backfill_price_history applied: {n} price rows built.")
+
+
+def migrate_reset_mail_sync_cursor():
+    """1회성: 메일 동기화 커서를 처음으로 되돌린다.
+
+    첫 구현은 기간(120일) 안의 **오래된** 메일부터 한도만큼 가져왔다. 메일이 많은 계정은
+    한도가 몇 달 전 메일로 다 소진돼 최근 메일이 한 통도 안 들어오고, 커서만 과거 어딘가에
+    박힌다. 최신부터 읽도록 고쳤으니 그 커서는 버려야 한다 — 안 그러면 과거부터 오늘까지
+    Sync 를 수십 번 눌러야 따라잡는다.
+    이미 담은 메일은 message_id 유일 제약이 걸러 주므로 다시 읽어도 중복되지 않는다."""
+    eng = get_engine()
+    insp = inspect(eng)
+    if not insp.has_table("email_sync_state"):
+        return
+    with eng.begin() as conn:
+        conn.execute(text(
+            "CREATE TABLE IF NOT EXISTS applied_migrations (name VARCHAR(100) PRIMARY KEY)"))
+        if conn.execute(text(
+                "SELECT 1 FROM applied_migrations WHERE name='reset_mail_sync_cursor'")).first():
+            return
+        n = conn.execute(text("UPDATE email_sync_state SET last_uid=0, backfill_uid=0")).rowcount
+        conn.execute(text(
+            "INSERT INTO applied_migrations (name) VALUES ('reset_mail_sync_cursor')"))
+    print(f"[OK] reset_mail_sync_cursor applied: {n} folder cursor(s) rewound.")
 
 
 def migrate_split_stage_dates_to_orders():

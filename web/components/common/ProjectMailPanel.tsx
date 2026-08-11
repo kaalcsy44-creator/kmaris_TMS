@@ -20,6 +20,8 @@ export default function ProjectMailPanel({ rfqId }: { rfqId: number }) {
   const [configured, setConfigured] = useState<boolean | null>(null);
   const [busy, setBusy] = useState("");   // 진행 중 작업 이름(버튼 비활성 + 안내)
   const [err, setErr] = useState("");
+  const [note, setNote] = useState("");   // 마지막 Sync 결과 한 줄
+  const [statusNote, setStatusNote] = useState("");  // 미분류 안내(있을 때만)
   const [open, setOpen] = useState<string[]>([]);   // 펼친 스레드 키
 
   const load = useCallback(async () => {
@@ -50,6 +52,40 @@ export default function ProjectMailPanel({ rfqId }: { rfqId: number }) {
     }
   }
 
+  // Sync 는 결과를 말해 줘야 한다 — 이 딜에 아무것도 안 붙었을 때, 메일함을 못 읽은
+  // 것인지 / 거래처와 오간 메일이 없던 것인지 / 다른 딜로 갔는지가 갈리기 때문이다.
+  async function sync() {
+    setBusy("동기화");
+    setErr("");
+    setNote("");
+    try {
+      const r = await syncMail();
+      const before = data?.count ?? 0;
+      const after = await fetchProjectMail(rfqId);
+      setData(after);
+      const gained = after.count - before;
+      const parts = [`메일함에서 ${r.scanned}통 확인`];
+      if (r.stored) parts.push(`새로 보관 ${r.stored}통`);
+      if (r.dup) parts.push(`이미 있던 것 ${r.dup}통`);
+      if (r.skipped) parts.push(`등록된 거래처와 무관 ${r.skipped}통`);
+      if (r.pending) parts.push(`아직 안 읽은 이전 메일 ${r.pending}통 — Sync 를 더 누르세요`);
+      parts.push(gained > 0 ? `이 딜에 ${gained}통 연결` : "이 딜에 붙은 새 메일은 없음");
+      setNote(parts.join(" · "));
+      const st = await fetchMailStatus().catch(() => null);
+      if (st) {
+        setStatusNote(
+          st.unmatched > 0 && gained === 0
+            ? `보관된 메일 ${st.total}통 중 ${st.unmatched}통이 미분류입니다 — Activity → Mail (unmatched) 에서 이 딜로 배정할 수 있습니다.`
+            : ""
+        );
+      }
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "동기화 실패");
+    } finally {
+      setBusy("");
+    }
+  }
+
   const threads = data?.threads ?? [];
   const missingSummary = threads.some((t) => t.messages.some((m) => !m.summary));
 
@@ -68,7 +104,7 @@ export default function ProjectMailPanel({ rfqId }: { rfqId: number }) {
                 ? "메일함이 연결되지 않았습니다 — IMAP_USER/IMAP_PASSWORD 를 설정하세요."
                 : "회사 메일함에서 새 메일을 가져옵니다"
             }
-            onClick={() => run("동기화", syncMail)}
+            onClick={sync}
           >
             {busy === "동기화" ? "가져오는 중…" : "↻ Sync"}
           </button>
@@ -98,6 +134,8 @@ export default function ProjectMailPanel({ rfqId }: { rfqId: number }) {
       </h2>
 
       {err ? <div className="action-err">{err}</div> : null}
+      {note ? <div className="mail-note">{note}</div> : null}
+      {statusNote ? <div className="mail-note">{statusNote}</div> : null}
 
       {data?.rollup ? (
         <div className="mail-rollup">

@@ -19,8 +19,9 @@
   IMAP_HOST(기본 imap.gmail.com) · IMAP_PORT(993) · IMAP_USER · IMAP_PASSWORD
     비우면 SMTP_USER / SMTP_PASSWORD 를 그대로 쓴다(같은 계정이면 추가 설정이 없다).
   IMAP_FOLDERS  쉼표 구분 폴더 이름. 비우면 INBOX + 서버가 \\Sent 로 표시한 폴더.
-  IMAP_SINCE_DAYS(120)  폴더를 처음 읽을 때 거슬러 올라갈 기간.
-  IMAP_MAX_PER_SYNC(300)  한 번의 동기화에서 가져올 최대 통수(폴더 합계).
+  IMAP_SINCE_DAYS(120)  읽어 들일 기간(이보다 오래된 메일은 보지 않는다).
+  IMAP_MAX_PER_SYNC(200)  한 번의 동기화에서 가져올 최대 통수(폴더 수로 나눠 쓴다).
+    한 번에 다 못 읽으면 남은 통수를 알려 준다 — Sync 를 다시 누르면 이어 읽는다.
 """
 from __future__ import annotations
 
@@ -55,7 +56,7 @@ def mail_config() -> dict:
         "password": os.getenv("IMAP_PASSWORD", "") or os.getenv("SMTP_PASSWORD", ""),
         "folders": [f.strip() for f in (os.getenv("IMAP_FOLDERS", "") or "").split(",") if f.strip()],
         "since_days": int(os.getenv("IMAP_SINCE_DAYS", "120")),
-        "max_per_sync": int(os.getenv("IMAP_MAX_PER_SYNC", "300")),
+        "max_per_sync": int(os.getenv("IMAP_MAX_PER_SYNC", "200")),
     }
 
 
@@ -309,19 +310,35 @@ def _folders(conn: imaplib.IMAP4_SSL, cfg: dict) -> list[str]:
     return out
 
 
-def _search_uids(conn: imaplib.IMAP4_SSL, last_uid: int, since_days: int) -> list[int]:
-    """이어 읽기 — 지난번 UID 다음부터. 처음이면 최근 since_days 일치만."""
-    if last_uid:
-        criteria = ["UID", f"{last_uid + 1}:*"]
-    else:
-        since = (datetime.now(timezone.utc) - timedelta(days=since_days)).strftime("%d-%b-%Y")
-        criteria = ["SINCE", since]
-    typ, data = conn.uid("SEARCH", None, *criteria)
+def _window_uids(conn: imaplib.IMAP4_SSL, since_days: int) -> list[int]:
+    """최근 since_days 일 안의 UID 전부(오름차순). 번호만 받아 오므로 가볍다."""
+    since = (datetime.now(timezone.utc) - timedelta(days=since_days)).strftime("%d-%b-%Y")
+    typ, data = conn.uid("SEARCH", None, "SINCE", since)
     if typ != "OK" or not data or not data[0]:
         return []
-    uids = [int(x) for x in data[0].split()]
-    # UID n:* 는 일치가 없어도 마지막 통을 돌려준다 — 이미 읽은 것은 걸러낸다.
-    return sorted(u for u in uids if u > last_uid)
+    return sorted(int(x) for x in data[0].split())
+
+
+def _pick_uids(window: list[int], state: EmailSyncState, budget: int) -> tuple[list[int], list[int]]:
+    """이번에 읽을 UID → (새 메일, 거슬러 읽을 옛 메일).
+
+    읽은 구간을 [backfill_uid, last_uid] 로 기억하고 그 양끝을 넓혀 간다.
+      · 첫 동기화는 창의 **최신** 쪽부터 집는다. 옛것부터 집으면 한도(max_per_sync)가
+        몇 달 전 메일로 다 소진돼, 정작 지금 진행 중인 딜의 메일이 한 통도 안 들어온다.
+      · 그 뒤로는 새 메일을 오래된 순서로 이어 붙여 읽는다(구간이 끊기지 않게).
+      · 예산이 남으면 창 안의 못 읽은 옛 메일을 최신 쪽부터 거슬러 채운다.
+    """
+    if not window or budget <= 0:
+        return [], []
+    if not state.last_uid:
+        return window[-budget:], []
+    fresh = [u for u in window if u > state.last_uid][:budget]
+    remaining = budget - len(fresh)
+    older: list[int] = []
+    floor = state.backfill_uid or 0
+    if remaining > 0 and floor > window[0]:
+        older = [u for u in window if u < floor][-remaining:]
+    return fresh, older
 
 
 def _store_message(s, msg: Message, folder: str, own: set[str],
@@ -391,13 +408,17 @@ def sync_mailbox(s, folder_limit: int | None = None) -> dict:
     parties = party_index(s)
     docs = doc_no_index(s)
     budget = folder_limit or cfg["max_per_sync"]
-    result = {"stored": 0, "skipped": 0, "dup": 0, "folders": {}}
+    # scanned = 훑은 통수. stored 가 0 일 때 "메일함을 못 읽은 것"인지 "읽었지만 등록된
+    # 거래처와 오간 게 없던 것"인지 화면이 구분해 말할 수 있어야 한다.
+    result = {"scanned": 0, "stored": 0, "skipped": 0, "dup": 0, "pending": 0, "folders": {}}
 
     conn = _connect(cfg)
     try:
-        for folder in _folders(conn, cfg):
-            if budget <= 0:
-                break
+        folders = _folders(conn, cfg)
+        # 한도는 폴더마다 나눠 준다. 통째로 쓰게 두면 받은편지함이 다 먹어 보낸편지함은
+        # 한 통도 못 읽는다 — 그러면 발신 이력이 통째로 비어 보인다.
+        budget = max(1, budget // max(1, len(folders)))
+        for folder in folders:
             state = s.query(EmailSyncState).filter_by(folder=folder).first()
             if not state:
                 state = EmailSyncState(folder=folder, last_uid=0)
@@ -413,10 +434,13 @@ def sync_mailbox(s, folder_limit: int | None = None) -> dict:
                 # (이미 담은 메일은 message_id 유일 제약이 dup 으로 걸러 준다).
                 if validity and state.uid_validity and validity != state.uid_validity:
                     state.last_uid = 0
+                    state.backfill_uid = 0
                 state.uid_validity = validity or state.uid_validity
 
-                uids = _search_uids(conn, state.last_uid or 0, cfg["since_days"])[:budget]
-                counts = {"stored": 0, "skipped": 0, "dup": 0}
+                window = _window_uids(conn, cfg["since_days"])
+                fresh, older = _pick_uids(window, state, budget)
+                uids = sorted(set(fresh) | set(older))
+                counts = {"scanned": len(uids), "stored": 0, "skipped": 0, "dup": 0}
                 for uid in uids:
                     typ, data = conn.uid("FETCH", str(uid), "(RFC822)")
                     if typ != "OK" or not data or not isinstance(data[0], tuple):
@@ -425,8 +449,15 @@ def sync_mailbox(s, folder_limit: int | None = None) -> dict:
                         s, email.message_from_bytes(data[0][1]), folder, own, parties, docs)
                     counts[outcome] += 1
                     result[outcome] += 1
-                    state.last_uid = max(state.last_uid or 0, uid)
-                budget -= len(uids)
+                # 읽은 구간 [backfill_uid, last_uid] 를 이번에 집은 만큼 넓힌다.
+                if uids:
+                    state.last_uid = max(state.last_uid or 0, max(uids))
+                    state.backfill_uid = (min(uids) if not state.backfill_uid
+                                          else min(state.backfill_uid, min(uids)))
+                # 창 안에 아직 안 읽은 옛 메일이 몇 통 남았는지 — Sync 를 더 눌러야 하는지 알린다.
+                counts["pending"] = len([u for u in window if u < (state.backfill_uid or 0)])
+                result["pending"] += counts["pending"]
+                result["scanned"] += counts["scanned"]
                 state.last_synced_at = datetime.utcnow()
                 state.last_error = ""
                 result["folders"][folder] = counts

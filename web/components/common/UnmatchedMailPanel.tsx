@@ -43,8 +43,12 @@ export default function UnmatchedMailPanel({
     setNote("");
     try {
       const r = await syncMail();
-      setNote(`새 메일 ${r.stored}통 저장 · ${r.dup} 중복 · ${r.skipped} 제외(거래처 아님)`
-        + (r.summarized ? ` · 요약 ${r.summarized}건` : ""));
+      setNote(
+        `메일함에서 ${r.scanned}통 확인 · 새로 보관 ${r.stored}통 · 이미 있던 것 ${r.dup}통 · `
+        + `등록된 거래처와 무관 ${r.skipped}통`
+        + (r.summarized ? ` · 요약 ${r.summarized}건` : "")
+        + (r.pending ? ` · 아직 안 읽은 이전 메일 ${r.pending}통(Sync 를 더 누르세요)` : "")
+      );
       await load();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "동기화 실패");

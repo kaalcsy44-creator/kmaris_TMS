@@ -723,6 +723,9 @@ class EmailSyncState(Base):
     __tablename__ = "email_sync_state"
     folder       = Column(String(200), primary_key=True)
     uid_validity = Column(String(40))
+    # 읽은 구간 = [backfill_uid, last_uid]. 새 메일은 위로, 못 읽은 옛 메일은 아래로 넓힌다
+    # (첫 동기화가 최신부터 집기 때문에 아래쪽 경계를 따로 들고 있어야 한다).
     last_uid     = Column(Integer, default=0)
+    backfill_uid = Column(Integer, default=0)
     last_synced_at = Column(DateTime)
     last_error   = Column(Text)
