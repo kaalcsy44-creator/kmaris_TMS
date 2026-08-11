@@ -5937,28 +5937,32 @@ table.mini.wide.lead-tools tbody tr.item-row-excluded.item-row-excluded textarea
   font-size: 12px;
 }
 
-/* ── 품목 편집 표 — 목록만 세로 스크롤(헤더·합계 고정) ─────────────────────
-   폼 전체가 아니라 품목 표 안에서만 스크롤되게 한다. 어떤 mini 표에도 안전. */
-.table-wrap.item-scroll {
-  max-height: 340px;
-  overflow-y: auto;
+/* ── 품목 편집 표 — 품목 수만큼 그대로 펼친다 ──────────────────────────────
+   표 안에 세로 스크롤을 두면 스테이지 창 스크롤과 두 겹이 된다. 한 행짜리 표에도
+   스크롤바가 붙는데(가로 스크롤바가 안쪽 높이를 먹어 15px 남짓이 넘친다), 이 손잡이는
+   잡아도 사실상 움직일 곳이 없다. 세로는 잠그고 표를 내용 높이만큼 세운다 —
+   품목이 많으면 스테이지 창 하나만 굴리면 된다.
+   가로는 그대로 스크롤한다(컬럼 폭 합이 창보다 넓을 수 있다 — 폭은 Columns 로 줄인다). */
+.table-wrap.item-box {
+  overflow-y: hidden;
+  /* 편집창(.stage-fill)은 세로 flex 라 이 상자도 flex 아이템이다. 기본값(shrink:1)이면
+     자리가 모자랄 때 상자가 내용보다 낮게 눌리는데, 세로 스크롤이 없는 지금은 눌린
+     만큼 행이 잘려 사라진다. 눌리지 않게 못 박아 두면 넘치는 만큼 편집창이 스크롤한다. */
+  flex: none;
   /* 우측 여백 — 표 끝선이 스테이지 창 스크롤바에 달라붙지 않게 들인다(아래 묶음 규칙 참조). */
   margin-right: var(--item-list-gutter);
-  /* 세로 스크롤바 자리를 항상 비워 둔다. 안 그러면 스크롤바가 마지막 컬럼(Remark) 위에
-     겹쳐 앉아 입력값 오른쪽이 잘려 보인다(행이 늘어날 때만 잘려 더 헷갈린다). */
-  scrollbar-gutter: stable;
 }
 /* 마지막 컬럼은 표 오른쪽 끝에 맞닿는다 — 칸 안쪽에 여백을 줘서 입력 상자가 경계선에
    달라붙지 않게 한다(가로 스크롤을 끝까지 밀었을 때의 '우측 공백'). */
-.table-wrap.item-scroll table.mini.wide th:last-child,
-.table-wrap.item-scroll table.mini.wide td:last-child {
+.table-wrap.item-box table.mini.wide th:last-child,
+.table-wrap.item-box table.mini.wide td:last-child {
   padding-right: 12px;
 }
 /* ── Item list 섹션 우측 여백 ──────────────────────────────────────────────
    모든 단계(견적·발주·문서·대금청구 등)의 품목표 박스는 오른쪽 끝선을 --item-list-gutter
    만큼 들인다. 표만 들이면 머리줄의 "+ Add" 가 표 밖으로 튀어나오므로 머리줄도 같이 민다
    (품목표가 뒤따르는 머리줄에만 — Finance 등 다른 .items-head 는 해당 없음). */
-.items-head:has(~ .table-wrap.item-scroll) {
+.items-head:has(~ .table-wrap.item-box) {
   margin-right: var(--item-list-gutter);
 }
 /* 카드로 감싼 품목표는 카드가 곧 섹션 박스다. 위아래로 맞붙는 Pricing 밴드·Summary 줄까지
@@ -5969,29 +5973,13 @@ table.mini.wide.lead-tools tbody tr.item-row-excluded.item-row-excluded textarea
   margin-right: var(--item-list-gutter);
 }
 .stage-card--items > .items-head,
-.stage-card--items > .table-wrap.item-scroll {
+.stage-card--items > .table-wrap.item-box {
   margin-right: 0;
 }
-.table-wrap.item-scroll table.mini thead th {
-  position: sticky;
-  top: 0;
-  z-index: 3;
-}
-/* 그룹 헤더가 있는 표는 2행(그룹+컬럼 헤더) 모두 세로 고정.
-   그룹행은 top:0, 컬럼 헤더행은 그룹행 높이(24px)만큼 내려 붙인다. */
-.table-wrap.item-scroll table.mini thead tr.ig-group-row th {
-  top: 0;
-  z-index: 4;
-}
-.table-wrap.item-scroll table.mini thead tr.ig-group-row + tr th {
-  top: 24px;
-}
-.table-wrap.item-scroll table.mini tfoot td {
-  position: sticky;
-  bottom: 0;
-  z-index: 3;
-}
-/* 품목표 좌측 고정열 — 가로 스크롤 시 삭제(×) 열과 No.(seq) 열을 왼쪽에 고정. */
+/* 머리줄·합계줄 세로 고정(sticky top/bottom)은 없앴다 — 표 안에서 세로로 스크롤하지
+   않으니 붙들어 둘 일이 없고, 고정은 겹침만 만든다.
+   좌측 고정열은 그대로 둔다 — 가로 스크롤은 남아 있다.
+   품목표 좌측 고정열 — 가로 스크롤 시 삭제(×) 열과 No.(seq) 열을 왼쪽에 고정. */
 .table-wrap table.mini.wide.lead-tools th.row-tools,
 .table-wrap table.mini.wide.lead-tools td.row-tools {
   position: sticky;
@@ -12786,26 +12774,14 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 /* ── 품목표(Item list) 폰 최적화 ───────────────────────────────────────────
    데스크톱 품목표는 컬럼 12개짜리 스프레드시트라 폰(≈360px)에 그대로 들어가면
    최소 폭 합이 화면의 두 배를 넘고, 스크롤 영역이 한 화면에 넷까지 겹친다.
-   여기서는 (1) 낭비되는 폭을 걷어내고 (2) 표 안의 세로 스크롤을 없애 스크롤을
-   한 겹으로 만들고 (3) 손가락·모바일 키보드에 맞게 입력칸을 키운다.
+   여기서는 (1) 낭비되는 폭을 걷어내고 (2) 손가락·모바일 키보드에 맞게 입력칸을 키운다.
+   (표 안 세로 스크롤은 이제 어느 화면에서도 없다 — item-box 규칙 참고.)
    보이는 컬럼 수를 줄이는 "핵심 칸만" 접기는 ItemGridStyle 이 표마다 방출한다. */
 @media (max-width: 640px) {
   /* 데스크톱 스크롤바를 피하려고 둔 우측 여백(48px) — 폰에서는 순수 손실이라 없앤다.
      품목표 카드·머리줄·Pricing 밴드·Summary 줄이 모두 이 변수를 쓴다. */
   :root {
     --item-list-gutter: 0px;
-  }
-  /* 표 안의 세로 스크롤(340px 상한)은 폰에서 2행만 보여주고 스크롤바만 하나 더
-     만든다 → 상한을 풀어 표를 통째로 펼치고, 바깥 작업 패널 스크롤 하나만 남긴다. */
-  .table-wrap.item-scroll {
-    max-height: none;
-    scrollbar-gutter: auto;
-  }
-  /* 세로로 스크롤하지 않으니 머리줄·합계줄 고정도 할 일이 없다(겹침만 유발). */
-  .table-wrap.item-scroll table.mini thead th,
-  .table-wrap.item-scroll table.mini thead tr.ig-group-row th,
-  .table-wrap.item-scroll table.mini tfoot td {
-    position: static;
   }
   /* 도구줄 — 제목과 버튼을 한 줄에 밀어 넣으면 넘쳐 잘린다. 제목 줄 / 버튼 줄로 나누고
      버튼은 우측 정렬로 접히게 둔다(가로 스크롤을 하나 더 만들지 않는다). */
@@ -12833,7 +12809,7 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
      막지만, 입력칸의 기본 폭(20자)이 그만큼 벌어져 숫자 칸이 Description 을 밀어내고
      줄바꿈이 늘어 표가 더 어수선해진다 — 밀도를 택했다. */
   /* No. 칸은 번호(+펼침 캐럿)만 담으면 되니 데스크톱 폭(52px)을 줄인다. */
-  .table-wrap.item-scroll table.mini .seq {
+  .table-wrap.item-box table.mini .seq {
     width: 40px;
     min-width: 40px;
   }

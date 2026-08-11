@@ -2080,7 +2080,7 @@ function ItemEditor({
           <button className="btn sm items-head-add" onClick={() => onChange([...items, blankItem()])}>+ Add</button>
         </div>
       </div>
-      <div className="table-wrap item-scroll">
+      <div className="table-wrap item-box">
         <ItemGridStyle grid={grid} />
         <table className={`mini wide lead-tools ${grid.tableClass}`}>
           <thead>

@@ -786,7 +786,7 @@ export default function NewRfqForm({
           <button type="button" className="btn sm items-head-add" onClick={addItem}>+ Add</button>
         </div>
       </div>
-      <div className="table-wrap item-scroll">
+      <div className="table-wrap item-box">
       <table className="mini items-edit resizable-cols">
         <colgroup>
           <col style={{ width: 32 }} />

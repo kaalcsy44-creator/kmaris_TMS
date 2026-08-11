@@ -480,7 +480,7 @@ function ApAddForm({
             <button type="button" className="btn sm items-head-add" onClick={addItem}>+ Add</button>
           </div>
         </div>
-        <div className="table-wrap item-scroll">
+        <div className="table-wrap item-box">
           <ItemGridStyle grid={grid} />
           <table className={`mini wide lead-tools ${grid.tableClass}`}>
             <thead>
@@ -1100,7 +1100,7 @@ function ArAddForm({
             <button type="button" className="btn sm items-head-add" onClick={addItem}>+ Add</button>
           </div>
         </div>
-        <div className="table-wrap item-scroll">
+        <div className="table-wrap item-box">
           <ItemGridStyle grid={grid} />
           <table className={`mini wide lead-tools ${grid.tableClass}`}>
             <thead>

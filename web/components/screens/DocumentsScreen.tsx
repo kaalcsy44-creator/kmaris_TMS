@@ -2317,7 +2317,7 @@ function ItemEditor({
           <option key={o} value={o} />
         ))}
       </datalist>
-      <div className="table-wrap item-scroll">
+      <div className="table-wrap item-box">
         <ItemGridStyle grid={grid} />
         <table className={`mini wide lead-tools ${grid.tableClass}`}>
           <thead>

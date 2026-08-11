@@ -1415,7 +1415,7 @@ function VendorRfqItemEditor({
           <button className="btn sm items-head-add" onClick={add}>+ Add</button>
         </div>
       </div>
-      <div className="table-wrap compact item-scroll">
+      <div className="table-wrap compact item-box">
         <ItemGridStyle grid={grid} />
         <table className={`mini wide lead-tools ${grid.tableClass}`}>
           <thead>
@@ -2811,7 +2811,7 @@ function VendorRfqAction({
               <button className="btn sm items-head-add" onClick={addItem}>+ Add</button>
             </div>
           </div>
-          <div className="table-wrap compact item-scroll">
+          <div className="table-wrap compact item-box">
             <ItemGridStyle grid={grid} />
             <table className={`mini wide lead-tools ${grid.tableClass}`}>
               <thead>
@@ -3322,7 +3322,7 @@ function VendorQuoteItemEditor({
           <button className="btn sm items-head-add" onClick={add}>+ Add</button>
         </div>
       </div>
-      <div className="table-wrap item-scroll">
+      <div className="table-wrap item-box">
         <ItemGridStyle grid={grid} />
         <table className={`mini wide lead-tools ${grid.tableClass}`}>
           <thead>
@@ -4094,7 +4094,7 @@ function CustomerQuoteItemEditor({
           <button className="btn sm items-head-add" onClick={add}>+ Add</button>
         </div>
       </div>
-      <div className="table-wrap item-scroll">
+      <div className="table-wrap item-box">
         <ItemGridStyle grid={grid} spans={gridSpans} />
         <table className={`mini wide lead-tools ${grid.tableClass}`}>
           <thead>
