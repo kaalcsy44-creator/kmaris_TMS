@@ -9,6 +9,7 @@ import {
 } from "@/lib/api";
 import type { MailMessage, MailThread, ProjectMail } from "@/lib/types";
 import { hm, md } from "@/lib/activity";
+import PartyName from "@/components/common/PartyName";
 
 // 프로젝트 메일 이력 — 이 딜에서 고객·벤더와 오간 메일을 대화(스레드) 단위로 보여준다.
 // 메일 본체는 회사 메일함에 있고 여기 있는 건 사본이므로, 화면의 일은 세 가지다:
@@ -195,7 +196,7 @@ function MailThreadRow({
     <li className={`mail-thread${open ? " open" : ""}`}>
       <button type="button" className="mail-thread-h" onClick={onToggle}>
         <span className="mail-caret" aria-hidden>{open ? "▾" : "▸"}</span>
-        <PartyTag name={thread.party} kind={thread.party_kind} />
+        <PartyName name={thread.party} kind={thread.party_kind} />
         <span className="mail-subject">{thread.subject || "(no subject)"}</span>
         {thread.count > 1 ? <span className="mail-count">{thread.count} mails</span> : null}
         <span className="mail-when">{when(thread.last_at)}</span>
@@ -249,14 +250,6 @@ function MailRow({ msg }: { msg: MailMessage }) {
         </pre>
       ) : null}
     </li>
-  );
-}
-
-function PartyTag({ name, kind }: { name: string; kind: string }) {
-  return (
-    <span className={`mail-party ${kind || "unknown"}`} title={kind === "vendor" ? "Vendor" : kind === "customer" ? "Customer" : ""}>
-      {name || "—"}
-    </span>
   );
 }
 

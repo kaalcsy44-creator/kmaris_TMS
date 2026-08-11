@@ -11906,11 +11906,11 @@ button.ov-tl-stage:hover {
 .mail-thread-h:hover { background: #f3f7fc; }
 .mail-caret { color: var(--muted); font-size: 10px; }
 /* 상대 — 고객은 파랑, 벤더는 초록. 어느 쪽과의 대화인지 색으로 먼저 읽힌다. */
-.mail-party { flex: 0 0 auto; max-width: 190px; overflow: hidden; text-overflow: ellipsis;
-  white-space: nowrap; font-size: 11.5px; font-weight: 700; padding: 1px 7px;
-  border-radius: 999px; background: #eef2f7; color: #4a5a6e; }
-.mail-party.customer { background: #e8f0fe; color: #1a56c4; }
-.mail-party.vendor { background: #e7f5ec; color: #1a7a4a; }
+/* 메일 상대 — 로고 + 이름. 색 배지·굵은 글씨를 걷어냈다(눈은 제목에 먼저 가야 한다). */
+.mail-party { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 5px;
+  max-width: 190px; font-size: 11.5px; font-weight: 400; color: #46586e; }
+.mail-party-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mail-party .cust-logo { width: 16px; height: 16px; }  /* 11.5px 줄에 맞춘 크기 */
 .mail-subject { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis;
   white-space: nowrap; font-size: var(--ov-t-body); font-weight: 600; color: var(--navy); }
 .mail-count { flex: 0 0 auto; font-size: 11px; font-weight: 700; color: var(--blue); }
@@ -11965,10 +11965,8 @@ table.mini.wide.umail-table td.umail-c-assign { width: 340px; }
 .umail-c-assign { white-space: nowrap; }
 /* 상대가 여럿이면 세로로 쌓는다. 이름 하나는 접지 않고 한 줄로 두되, 위 폭을 넘는
    드문 이름만 끝을 줄인다(전체 이름은 마우스를 올리면 보인다). */
-.umail-parties { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
-.umail-parties .mail-party {
-  max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
+.umail-parties { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.umail-parties .mail-party { max-width: 100%; }
 .umail-subject { font-weight: 600; color: var(--navy); overflow-wrap: anywhere; }
 .umail-sum { margin-top: 2px; font-size: 11.5px; line-height: 1.45; color: #5c6b7d; overflow-wrap: anywhere; }
 /* 대화 한 줄 — 제목을 누르면 그 안의 메일이 펼쳐진다. */

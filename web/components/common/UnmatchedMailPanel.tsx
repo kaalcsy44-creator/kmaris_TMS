@@ -11,6 +11,7 @@ import {
 import type { MailMessage, MailStatus, UnmatchedMailGroup } from "@/lib/types";
 import { hm, md } from "@/lib/activity";
 import ProjectPicker, { type ProjectPickOption } from "@/components/common/ProjectPicker";
+import PartyName from "@/components/common/PartyName";
 
 // 미분류 메일 — 거래처와 오갔지만 어느 딜 것인지 아직 정해지지 않은 메일.
 //
@@ -186,15 +187,9 @@ export default function UnmatchedMailPanel({
                   {/* 상대가 여럿인 대화(전달·참조)는 한 줄에 늘어놓지 않고 쌓는다 —
                       가로로 늘어나면 그만큼 대화 칸이 오른쪽으로 밀린다. */}
                   <div className="umail-parties">
-                    {g.parties.length === 0 ? <span className="mail-party unknown">—</span> : null}
+                    {g.parties.length === 0 ? <PartyName name="" /> : null}
                     {g.parties.map((p, i) => (
-                      <span
-                        key={p}
-                        className={`mail-party ${i === 0 ? g.party_kind || "unknown" : "unknown"}`}
-                        title={p}
-                      >
-                        {p}
-                      </span>
+                      <PartyName key={p} name={p} kind={i === 0 ? g.party_kind : undefined} />
                     ))}
                   </div>
                 </td>
