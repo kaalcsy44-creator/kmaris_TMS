@@ -35,6 +35,7 @@ from _core import (
     _first_rfq_iso,
     _fmt_received,
     _items_cost_total,
+    cheapest_vendor_quote,
     _kst,
     _month_key,
     _order_for_rfq,
@@ -129,21 +130,9 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
                 _vq_no = getattr(vq0, "vendor_quote_no", None) or "—"
                 vquote_no = str(_vq_no) + (f"  (외 {len(vqs) - 1}건)" if len(vqs) > 1 else "")
                 vquote_at = _kst(vq0.created_at)
-                # 매입(견적) 금액은 수신한 모든 벤더 견적을 합산한다(견적이 여러 건이면
-                # 각 견적이 서로 다른 품목을 담당 → 전체 매입원가). 통화가 섞이면 USD로
-                # 환산해 합산하고, 대표(최신) 견적 통화로 표기.
-                _disp_vcur = (getattr(vq0, "currency", None) or "USD").upper()
-                _vendor_usd_sum = 0.0
-                for _vq in vqs:
-                    _vc = (getattr(_vq, "currency", None) or "USD").upper()
-                    _vt = _items_cost_total(_vq.items)
-                    _vendor_usd_sum += (_vt / USD_KRW_RATE) if _vc == "KRW" else _vt
-                vendor_usd = _vendor_usd_sum
-                vendor_amount = (
-                    _dual_money(_vendor_usd_sum * USD_KRW_RATE, "KRW")
-                    if _disp_vcur == "KRW"
-                    else _dual_money(_vendor_usd_sum, "USD")
-                )
+                # 매입(견적) 금액은 받은 견적 중 가장 싼 것. 합산하지 않는다 —
+                # 같은 품목을 여러 벤더에 물은 경쟁 견적이라 더하면 원가가 부푼다.
+                vendor_usd, vendor_amount = cheapest_vendor_quote(vqs)
             else:
                 vquote_no, vquote_at, vendor_amount = "", "", ""
                 vendor_usd = None
@@ -261,6 +250,7 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
             _po_nos: list[str] = []
             _sales_usd = 0.0
             _purchase_usd = 0.0
+            _purchase_cur = ""   # 발주서 통화 — 매입액은 고객 오더가 아니라 이 통화로 적는다
             _has_po = False
             for oo in orders_all:
                 _ovid = oo.vessel_id or r.vessel_id
@@ -277,6 +267,8 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
                     _pt = _total_amount(_vp.items or []) or _items_cost_total(_vp.items or [])
                     _pc = (getattr(_vp, "currency", None) or _oc or "USD").upper()
                     _purchase_usd += (_pt / USD_KRW_RATE) if _pc == "KRW" else _pt
+                    if not _purchase_cur:
+                        _purchase_cur = _pc
 
             _disp = (getattr(orders_all[0], "currency", None) or "USD").upper() if orders_all \
                 else ((qtn.currency or "USD").upper() if qtn else "USD")
@@ -284,9 +276,16 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
             def _money_disp(usd: float) -> str:
                 return _dual_money(usd * USD_KRW_RATE, "KRW") if _disp == "KRW" else _dual_money(usd, "USD")
 
-            # 매출: 오더 있으면 오더 합산, 없으면 고객 견적. 매입: 발주서 있으면 합산, 없으면 벤더 견적.
+            # 매출: 오더 있으면 오더 합산, 없으면 고객 견적. 매입: 발주서 있으면 합산
+            # (발주는 실제 매입이라 여러 건이면 더하는 게 맞다), 없으면 가장 싼 벤더 견적.
+            # 매입 통화는 발주서의 것을 쓴다 — 고객 오더가 USD 라고 원화 발주를 USD 로
+            # 적으면 숫자는 맞는데 통화가 거짓이 된다.
             sales_total = _money_disp(_sales_usd) if orders_all else customer_amount
-            purchase_total = _money_disp(_purchase_usd) if _has_po else vendor_amount
+            purchase_total = (
+                (_dual_money(_purchase_usd * USD_KRW_RATE, "KRW") if _purchase_cur == "KRW"
+                 else _dual_money(_purchase_usd, "USD"))
+                if _has_po else vendor_amount
+            )
 
             _s_usd = _sales_usd if orders_all else (customer_usd or 0.0)
             _p_usd = _purchase_usd if _has_po else (vendor_usd or 0.0)

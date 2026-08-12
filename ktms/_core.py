@@ -661,6 +661,28 @@ def _items_cost_total(items) -> float:
     return tot
 
 
+def cheapest_vendor_quote(quotes) -> tuple[float | None, str]:
+    """받은 벤더 견적 중 **가장 싼 것** → (USD 환산액, 표시 문자열). 없으면 (None, "").
+
+    합산하지 않는다. 같은 품목을 여러 벤더에 물어 받는 경쟁 견적이 이 바닥의 기본이라,
+    합치면 매입원가가 벤더 수만큼 부풀고 마진이 음수로 뒤집힌다(3사 견적을 더해 마진이
+    -56.5% 로 찍히던 것이 이 때문이다). 발주가 나가면 그 P/O 가 실제 매입이므로, 이
+    값은 그 전까지 쓰는 추정치다 — 우리가 살 값은 그중 제일 싼 것이다.
+
+    통화는 **고른 그 견적의 것**을 그대로 쓴다. 합계를 '최신 견적의 통화'로 적던 예전
+    방식은 원화 견적을 USD 로 적어 내보냈다."""
+    priced: list[tuple[float, float, str]] = []
+    for q in quotes or []:
+        cur = (getattr(q, "currency", None) or "USD").upper()
+        total = _items_cost_total(getattr(q, "items", None))
+        if total:
+            priced.append(((total / USD_KRW_RATE) if cur == "KRW" else total, total, cur))
+    if not priced:
+        return None, ""
+    usd, raw, cur = min(priced, key=lambda t: t[0])
+    return usd, _dual_money(raw, cur)
+
+
 def _total_amount(items) -> float:
     # 문서에서 제외(excluded)한 행은 발행 문서에 나가지 않으므로 금액에서도 뺀다
     # (services.kmaris_docs.normalize_items 와 같은 규칙 — 화면 합계·PDF·청구액이 한 값이 되게).

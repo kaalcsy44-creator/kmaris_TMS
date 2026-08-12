@@ -480,10 +480,12 @@ function MoneyRow({ row }: { row: PipelineRow }) {
   const has = row.sales_total || row.purchase_total || row.margin_amount;
   if (!has) return null;
   const loss = row.margin_pct != null && row.margin_pct < 0;
+  // 매입 → 매출 → 마진 순. 마진은 앞 두 값의 결과라 마지막에 놓여야 눈이 좌에서
+  // 우로 읽으며 계산을 따라간다.
   return (
     <p className="brief-money">
-      <Money label="Sales" value={row.sales_total} />
       <Money label="Purchase" value={row.purchase_total} />
+      <Money label="Sales" value={row.sales_total} />
       <Money label="Margin" value={row.margin_amount} tone={loss ? "loss" : ""}>
         {row.margin_pct != null ? (
           <span className="brief-money-pct">{row.margin_pct}%</span>

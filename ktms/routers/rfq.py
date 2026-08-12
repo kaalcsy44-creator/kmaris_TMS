@@ -40,6 +40,7 @@ from _core import (
     _fmt_received,
     _item_view,
     _items_cost_total,
+    cheapest_vendor_quote,
     _kst,
     _kst_iso,
     _new_tmp_rfq_no,
@@ -114,19 +115,9 @@ def rfq_overview(customer_id: int | None = None, work_type: str | None = None,
                 _vq_no = getattr(vq0, "vendor_quote_no", None) or "—"
                 vq_main = str(_vq_no) + (f"  (외 {len(vqs) - 1}건)" if len(vqs) > 1 else "")
                 vq_at = _kst(vq0.created_at)
-                # 매입(견적) 금액은 수신한 모든 벤더 견적을 합산(견적이 여러 건이면 각기 다른
-                # 품목 담당 → 전체 매입원가). 통화 혼재 시 USD 환산 합산 후 대표 통화로 표기.
-                _disp_vcur = (getattr(vq0, "currency", None) or "USD").upper()
-                _vendor_usd_sum = 0.0
-                for _vq in vqs:
-                    _vc = (getattr(_vq, "currency", None) or "USD").upper()
-                    _vt = _items_cost_total(_vq.items)
-                    _vendor_usd_sum += (_vt / USD_KRW_RATE) if _vc == "KRW" else _vt
-                vendor_amount = (
-                    _dual_money(_vendor_usd_sum * USD_KRW_RATE, "KRW")
-                    if _disp_vcur == "KRW"
-                    else _dual_money(_vendor_usd_sum, "USD")
-                )
+                # 매입(견적) 금액은 받은 견적 중 가장 싼 것(경쟁 견적이라 합산하지 않는다).
+                # 파이프라인 목록과 같은 값이어야 하므로 같은 함수를 쓴다.
+                _, vendor_amount = cheapest_vendor_quote(vqs)
             else:
                 vq_main, vq_at, vendor_amount = "", "", ""
 
