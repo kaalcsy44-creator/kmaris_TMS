@@ -180,8 +180,6 @@ export default function ActivityScreen() {
   // 주요(자동) 활동을 클릭해 들어온 경우의 목표 단계 — 팝업을 개요 대신 그 단계 작업화면으로 연다.
   // null 이면 지금까지처럼 프로젝트 개요로 연다.
   const [stageTarget, setStageTarget] = useState<{ stage: number; vrfqId?: number } | null>(null);
-  const [digestOpen, setDigestOpen] = useState(false); // 프로젝트별 최근 활동 요약 팝업
-  const [digestCount, setDigestCount] = useState(1); // 프로젝트별로 보여줄 최근 활동 개수
   const { data: customers } = useCachedData("settings:customers", fetchCustomers);
   const { data: vessels } = useCachedData("settings:vessels", fetchSettingsVessels);
 
@@ -305,16 +303,6 @@ export default function ActivityScreen() {
       return la < lb ? 1 : la > lb ? -1 : 0;
     });
   }, [buckets]);
-
-  // 다이제스트 — 프로젝트별 '가장 최근 활동 N건'. dealRows 는 이미 최신활동 내림차순 정렬이라
-  // 각 딜의 최근 N개 활동을 시간 오름차순(최신이 아래)으로 담고, 활동 없는 딜은 제외한다.
-  const digestRows = useMemo(
-    () =>
-      dealRows
-        .filter(({ acts }) => acts.length > 0)
-        .map(({ row, acts }) => ({ row, acts: acts.slice(-digestCount) })),
-    [dealRows, digestCount],
-  );
 
   // 프로젝트 번호/카드 클릭 → 개요. 목표 단계는 비운다.
   const openOverview = useCallback((rfqId: number) => {
@@ -492,10 +480,12 @@ export default function ActivityScreen() {
             onClick={() => { setAssigneeF([]); setStatusF(["active"]); setStageF([]); setAgeF([]); setCustF([]); setVendF([]); setQ(""); setDateFilter("all"); }}>
             Reset
           </button>
-          {/* 프로젝트별 '가장 최근 활동 1건'만 취합한 요약 팝업 — 현재 필터를 그대로 반영. */}
-          <button className="btn sm" onClick={() => setDigestOpen(true)} title="Latest activity per project">
-            🗒 Digest
-          </button>
+          {/* 프로젝트별 최근 활동 요약은 Dashboard 의 Briefing 탭으로 옮겼다 —
+              같은 카드에 메일과 AI 요약까지 함께 놓여야 상황이 한 번에 읽힌다.
+              여기 있던 팝업은 그 화면과 내용이 겹쳐 지웠고, 자리만 링크로 남긴다. */}
+          <Link className="btn sm" href="/" title="Latest activity and mail per project">
+            🗒 Briefing
+          </Link>
           <button className="btn sm" onClick={() => window.print()}>Print</button>
         </div>
       </div>
@@ -586,117 +576,6 @@ export default function ActivityScreen() {
             </div>
           ) : null}
         </>
-      ) : null}
-      {digestOpen ? (
-        <Modal
-          title={
-            <span className="act-digest-titlebar">
-              <span>Latest activity · {digestRows.length} projects</span>
-              {/* 프로젝트별로 보여줄 최근 활동 개수 — 기본 1건. */}
-              <span className="act-digest-count" role="group" aria-label="Activities per project">
-                <span className="act-digest-count-lbl">Show</span>
-                {[1, 2, 3, 5].map((n) => (
-                  <button
-                    key={n}
-                    type="button"
-                    className={`act-digest-count-btn${digestCount === n ? " on" : ""}`}
-                    onClick={() => setDigestCount(n)}
-                  >
-                    {n}
-                  </button>
-                ))}
-              </span>
-            </span>
-          }
-          onClose={() => setDigestOpen(false)}
-          maxWidth={1600}
-        >
-          {digestRows.length === 0 ? (
-            <div className="state">No activity to show.</div>
-          ) : (
-            <ul className="act-digest">
-              {digestRows.map(({ row, acts }) => {
-                const { code, date } = splitProjectNo(row.project_no || row.kmaris_rfq_no || "—");
-                const ageDays = daysSinceISO(lastActivityISO(row));
-                const lv: "normal" | "warn" | "urgent" =
-                  row.next_level ??
-                  (!row.cancelled && ageDays != null
-                    ? ageDays >= 14 ? "urgent" : ageDays >= 7 ? "warn" : "normal"
-                    : "normal");
-                const vend = vendorOf(row);
-                // 최신 완료 단계 라벨(현재 stage) — 카드 우측 상단.
-                const stageLabel = row.stage > 0 ? (steps[row.stage - 1] || "") : "";
-                const vessel = (row.vessels || row.vessel || "").split("\n").filter(Boolean).join(" · ");
-                return (
-                  <li
-                    key={row.rfq_id}
-                    className={`act-digest-row${row.work_type === "서비스" ? " service" : ""}${row.cancelled ? " cancelled" : ""}`}
-                    onClick={() => { openOverview(row.rfq_id); setDigestOpen(false); }}
-                    title="Project overview"
-                  >
-                    <div className="act-digest-head">
-                      <span className="act-digest-code">{code}</span>
-                      {date ? <span className="act-digest-date">{date}</span> : null}
-                      <span className="act-digest-title">{row.project_title || "(untitled)"}</span>
-                      {vessel ? <span className="act-digest-vessel" title={vessel}>· {vessel}</span> : null}
-                    </div>
-                    {(row.customer || vend) ? (
-                      <div className="act-digest-parties">
-                        {row.customer ? (
-                          <span className="act-digest-cust">
-                            <CustomerName name={row.customer} />
-                            {row.contact_person ? <span className="act-digest-contact"> · {row.contact_person}</span> : null}
-                          </span>
-                        ) : null}
-                        {vend ? <span className="act-digest-sep">/</span> : null}
-                        {vend ? <VendorMonograms value={vend} statuses={vendorStatusesFor(row)} /> : null}
-                      </div>
-                    ) : null}
-                    {/* 단계바 — 기본정보와 활동로그 사이. 얇은 세그먼트로 현 진행단계를 표시하고,
-                        완료(현 단계)명은 바 끝에. 색상은 업무타입(Parts=파랑/서비스=초록)에 맞춘다. */}
-                    {steps.length > 0 ? (
-                      <div
-                        className="act-digest-stagebar"
-                        title={stageLabel ? `Current stage: ${stageLabel}` : undefined}
-                      >
-                        <div className="act-digest-steps">
-                          {steps.map((_, i) => (
-                            <span key={i} className={`act-digest-step${i < row.stage ? " on" : ""}`} />
-                          ))}
-                        </div>
-                        {stageLabel ? <span className="act-digest-stagelbl">{stageLabel}</span> : null}
-                      </div>
-                    ) : null}
-                    <ul className="act-digest-acts">
-                      {acts.map((act, i) => (
-                        <li key={i} className="act-digest-act">
-                          <span className="act-digest-when">
-                            {md(act.date)}
-                            {hm(actTimeIso(act)) ? <span className="act-time"> {hm(actTimeIso(act))}</span> : null}
-                          </span>
-                          <span className="act-digest-desc">
-                            <ActivityDesc
-                              act={act}
-                              onOpen={
-                                act.kind === "auto"
-                                  ? () => { openActivityStage(row.rfq_id, act); setDigestOpen(false); }
-                                  : undefined
-                              }
-                            />
-                          </span>
-                          {/* 경과일 — 최신 log(맨 아래 행) 우측 끝에 배치. */}
-                          {i === acts.length - 1 && ageDays != null ? (
-                            <span className={`act-digest-age lv-${lv}`} title="Days since last activity">{ageDays}d</span>
-                          ) : null}
-                        </li>
-                      ))}
-                    </ul>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </Modal>
       ) : null}
       {overviewId != null && data?.rows.find((row) => row.rfq_id === overviewId) ? (
         <PipelineModal

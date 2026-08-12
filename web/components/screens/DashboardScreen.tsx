@@ -27,7 +27,7 @@ import type {
   StatDebugData,
 } from "@/lib/types";
 import { PipelineModal } from "@/components/screens/ProjectsScreen";
-import MailDigestTab from "@/components/screens/MailDigestTab";
+import BriefingTab from "@/components/screens/BriefingTab";
 import { MarketingForm, emptyForm as emptyMarketingForm } from "@/components/screens/MarketingScreen";
 import {
   ResponsiveContainer, LineChart, Line, BarChart, Bar,
@@ -55,28 +55,30 @@ function daysBetween(a: string, b: string): number {
   return Math.round((da - db) / 86_400_000);
 }
 
-type Tab = "home" | "mail" | "stats";
+type Tab = "briefing" | "home" | "stats";
 
 export default function DashboardScreen() {
-  const [tab, setTab] = useState<Tab>("home");
+  // 첫 화면은 Briefing — 로그인해서 가장 먼저 보는 것은 "지금 무슨 일이 벌어지고
+  // 있고 다음 차례가 누구인가"여야 한다. Home 의 목록들은 그다음이다.
+  const [tab, setTab] = useState<Tab>("briefing");
 
   return (
     <>
       <div className="page-tabs">
+        {/* Briefing — 딜별 사건(단계 이벤트)과 메일을 한 카드에 합친 아침 화면.
+            Home 과 pipeline 캐시를 공유하므로 탭 전환에 드는 조회는 /mail/digest 뿐이다. */}
+        <button className={tab === "briefing" ? "on" : ""} onClick={() => setTab("briefing")}>
+          Briefing
+        </button>
         <button className={tab === "home" ? "on" : ""} onClick={() => setTab("home")}>
           Home
-        </button>
-        {/* Mail — 딜별 메일 요약 카드. Home 과 pipeline 캐시를 공유하므로 탭 전환에
-            드는 조회는 /mail/digest 하나뿐이다. */}
-        <button className={tab === "mail" ? "on" : ""} onClick={() => setTab("mail")}>
-          Mail
         </button>
         <button className={tab === "stats" ? "on" : ""} onClick={() => setTab("stats")}>
           Statistics
         </button>
       </div>
 
-      {tab === "home" ? <HomeTab /> : tab === "mail" ? <MailDigestTab /> : <StatisticsTab />}
+      {tab === "briefing" ? <BriefingTab /> : tab === "home" ? <HomeTab /> : <StatisticsTab />}
     </>
   );
 }

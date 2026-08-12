@@ -10562,73 +10562,6 @@ select.sig-owner-pick,
 /* 탭(By deal / By date)은 Progress 와 공용인 .page-tabs 사용. 여기선 건수 라벨만. */
 .act-count { color: var(--muted); font-size: 12px; }
 
-/* ── 다이제스트 팝업 — 프로젝트별 '가장 최근 활동 N건'을 2열 카드로 취합 ─────────── */
-.act-digest-titlebar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
-.act-digest-count { display: inline-flex; align-items: center; gap: 3px; }
-.act-digest-count-lbl { font-size: 11px; font-weight: 600; color: var(--muted); margin-right: 2px; }
-.act-digest-count-btn { min-width: 22px; padding: 2px 6px; font-size: 11px; font-weight: 700;
-  border: 1px solid var(--line); background: #fff; color: var(--muted);
-  border-radius: 6px; cursor: pointer; }
-.act-digest-count-btn:hover { border-color: var(--blue); color: var(--blue); }
-.act-digest-count-btn.on { background: var(--blue); border-color: var(--blue); color: #fff; }
-
-/* 2열 그리드 — 좁은 화면(좁은 모달)에서는 1열로 접힌다.
-   기본 .pl-modal-body 는 overflow:hidden(좌우 2단 전용)이라, 목록 자체가
-   세로 스크롤 컨테이너가 되어 내용이 길어도 잘리지 않게 한다. */
-.act-digest { list-style: none; margin: 0; padding: 8px;
-  flex: 1 1 auto; min-width: 0; min-height: 0; overflow-y: auto; align-content: start;
-  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px;
-  /* 카드 사이 여백에 옅은 음영 → 흰 카드가 떠 보여 카드별 구분이 뚜렷해진다. */
-  background: #f2f5fa; border-radius: 8px; }
-/* 모든 카드에 좌측 라인 — 업무타입 색으로 구분(Parts=파랑 / 서비스=초록). */
-.act-digest-row { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px;
-  cursor: pointer; border-left: 3px solid var(--blue); background: #fff; }
-.act-digest-row:hover { background: #e4ecf9; border-color: var(--blue); }
-.act-digest-row.service { border-left-color: #7c9; }
-.act-digest-row.cancelled { opacity: .6; }
-.act-digest-head { display: flex; align-items: baseline; gap: 6px; }
-.act-digest-code { flex: none; font-weight: 800; font-size: 14px; color: var(--blue); }
-/* 서비스 업무타입 카드의 프로젝트 번호는 녹색계열(좌측 라인과 동일 톤). */
-.act-digest-row.service .act-digest-code { color: #2f7d53; }
-.act-digest-date { flex: none; font-size: 10px; color: var(--muted); }
-/* 프로젝트명도 업무타입 색상으로(Parts=파랑 / 서비스=초록) — 카드 번호와 동일 톤. */
-.act-digest-title { flex: 0 1 auto; min-width: 0; font-size: 14.5px; font-weight: 600; color: var(--blue);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.act-digest-row.service .act-digest-title { color: #2f7d53; }
-/* 선박명 — 프로젝트명 우측. 공간이 부족하면 프로젝트명보다 먼저 줄인다(높은 flex-shrink). */
-.act-digest-vessel { flex: 0 20 auto; min-width: 0; font-size: 11px; color: var(--muted);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* 단계바 — 기본정보와 활동로그 사이. 얇은 세그먼트로 현 진행단계를 표시하고, 완료 단계명은 바 끝에.
-   채움색은 업무타입에 맞춘다(Parts=파랑 #0055a8 / 서비스=초록 #11824a). */
-.act-digest-stagebar { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
-.act-digest-steps { flex: 1 1 auto; min-width: 0; display: flex; gap: 2px; }
-.act-digest-step { flex: 1 1 0; height: 4px; border-radius: 2px; background: #e4e9f1; }
-.act-digest-step.on { background: #0055a8; }
-.act-digest-row.service .act-digest-step.on { background: #11824a; }
-.act-digest-stagelbl { flex: none; font-size: 10px; font-weight: 700; white-space: nowrap; color: #0055a8; }
-.act-digest-row.service .act-digest-stagelbl { color: #11824a; }
-.act-digest-age { flex: none; margin-left: auto; align-self: flex-start; font-size: 10px; font-weight: 700;
-  padding: 1px 6px; border-radius: 6px; background: var(--head-bg); color: var(--muted); }
-.act-digest-age.lv-warn { background: #fff3e0; color: #9a5b00; }
-.act-digest-age.lv-urgent { background: #fdeaea; color: #b42318; }
-.act-digest-parties { display: flex; align-items: center; flex-wrap: wrap; gap: 4px;
-  margin-top: 3px; font-size: 11px; color: var(--muted); }
-/* 고객명(로고+텍스트)과 담당자를 같은 flex 축에서 수직 중앙 정렬 → 담당자 처짐 방지. */
-.act-digest-cust { display: inline-flex; align-items: center; min-width: 0; }
-.act-digest-contact { color: var(--muted); white-space: nowrap; }
-.act-digest-sep { color: var(--line); }
-.act-digest-acts { list-style: none; margin: 5px 0 0; padding: 5px 0 0;
-  border-top: 1px dashed var(--line); display: flex; flex-direction: column; gap: 3px; }
-.act-digest-act { display: flex; gap: 8px; font-size: 12px; }
-.act-digest-when { flex: none; font-weight: 700; color: var(--muted); min-width: 52px; }
-.act-digest-desc { min-width: 0; color: var(--ink); }
-@media (max-width: 1100px) {
-  .act-digest { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
-@media (max-width: 780px) {
-  .act-digest { grid-template-columns: 1fr; }
-}
-
 /* ── 일자별 · 주간 캘린더(7열) ─────────────────────────────────────────
    주(월요일 시작)가 한 행, 위=이전 주·아래=다음 주. 좁은 화면은 가로 스크롤.
    요일 헤더 고정을 위해 .act-cal 이 직접 세로 스크롤 컨테이너가 되어야 한다.
@@ -10933,11 +10866,11 @@ select.sig-owner-pick,
 .act-auto-link { padding: 0; border: 0; background: none; font: inherit; color: inherit;
   font-weight: 700; text-align: left; cursor: pointer; }
 .act-auto-link:hover { text-decoration: underline; }
-/* 캘린더·다이제스트에선 .act-auto-label 색 규칙이 닿지 않아 라벨색을 여기서 준다. */
+/* 캘린더·브리핑에선 .act-auto-label 색 규칙이 닿지 않아 라벨색을 여기서 준다. */
 .act-cal-act .act-auto-link,
-.act-digest-desc .act-auto-link { color: #1d4ed8; }
+.brief-line-desc .act-auto-link { color: #1d4ed8; }
 .act-cal-proj.service .act-auto-link,
-.act-digest-row.service .act-auto-link { color: #137a44; }
+.brief-card.service .act-auto-link { color: #137a44; }
 .act-tag { font-size: 10px; background: #eef3f9; color: #64748b; padding: 0 5px; border-radius: 8px; margin-right: 2px; }
 .act-tag.close { background: #fde8e8; color: #b91c1c; }
 .act-item.closed .act-text { color: #b91c1c; }
@@ -11990,14 +11923,14 @@ table.mini.wide.umail-table td.umail-c-assign { width: 340px; }
 .umail-msg-subj { font-size: 12px; color: var(--navy); overflow-wrap: anywhere; }
 .umail-msgs .umail-sum { grid-column: 3; margin-top: 0; }
 
-/* ── 메일 요약 카드(Dashboard · Mail 탭) ───────────────────────────────────────
-   프로젝트 하나가 카드 하나. 아침에 훑는 화면이라 카드 한 장이 위에서 아래로
-   신원(번호·제목·단계) → 지금 상태(공이 누구에게) → 흐름(AI 요약) → 최근 몇 줄
-   순으로 읽히게 둔다. Home 탭의 정사각 카드와 달리 높이는 내용이 정한다. */
-.mail-digest { margin-top: 14px; }
-.mail-digest-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
-.mail-digest-chips { display: flex; gap: 6px; }
-.mail-digest-acts { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+/* ── Briefing 카드(Dashboard 첫 탭) ───────────────────────────────────────────
+   프로젝트 하나가 카드 하나. 위에서 아래로 신원 → 상대 → 진행바 → 지금 상태 →
+   AI 요약 → 사건·메일을 섞은 최근 줄 순으로 읽히게 둔다. Home 탭의 정사각 카드와
+   달리 높이는 내용이 정한다(딜마다 오간 양이 다르다). */
+.brief { margin-top: 14px; }
+.brief-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.brief-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.brief-acts { margin-left: auto; display: flex; align-items: center; gap: 10px; }
 .mail-chip {
   padding: 5px 11px; border: 1px solid var(--line-strong); border-radius: 999px;
   background: #fff; font-size: 12px; color: #4a5a70; cursor: pointer;
@@ -12005,43 +11938,71 @@ table.mini.wide.umail-table td.umail-c-assign { width: 340px; }
 .mail-chip b { margin-left: 5px; font-weight: 700; color: var(--navy); font-variant-numeric: tabular-nums; }
 .mail-chip:hover { background: var(--hover); }
 .mail-chip.on { border-color: var(--blue); background: var(--sel); color: var(--navy); }
-/* 미분류는 숨기지 않는다 — 카드에 안 잡힌 메일이 있다는 걸 알려야 목록을 믿을 수 있다. */
-.mail-digest-unmatched { font-size: 11.5px; font-weight: 700; color: #a06a1c; text-decoration: none; }
-.mail-digest-unmatched:hover { text-decoration: underline; }
+/* 카드마다 보여 줄 최근 줄 수 — 아침엔 1~3줄, 파고들 땐 8줄. */
+.brief-show { display: inline-flex; align-items: center; gap: 3px; }
+.brief-show-lbl { font-size: 11px; font-weight: 600; color: var(--muted); margin-right: 2px; }
+.brief-show-btn {
+  min-width: 22px; padding: 2px 6px; font-size: 11px; font-weight: 700;
+  border: 1px solid var(--line); background: #fff; color: var(--muted);
+  border-radius: 6px; cursor: pointer;
+}
+.brief-show-btn:hover { border-color: var(--blue); color: var(--blue); }
+.brief-show-btn.on { background: var(--blue); border-color: var(--blue); color: #fff; }
+/* 미분류·미등록은 숨기지 않는다 — 카드가 조용한 이유가 "일이 없어서"가 아닐 수 있다. */
+.brief-warn { font-size: 11.5px; font-weight: 700; color: #a06a1c; text-decoration: none; }
+.brief-warn:hover { text-decoration: underline; }
 
-.mail-digest-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; align-items: start; }
-.mail-card {
-  display: flex; flex-direction: column; gap: 7px; padding: 12px 14px 10px;
-  border: 1px solid var(--line); border-left: 3px solid var(--line-strong);
+.brief-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; align-items: start; }
+.brief-card {
+  display: flex; flex-direction: column; gap: 6px; padding: 11px 13px 9px;
+  border: 1px solid var(--line); border-left: 3px solid var(--blue);
   border-radius: 10px; background: #fff; box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
 }
+.brief-card.service { border-left-color: #7c9; }
 /* 우리가 쥐고 있는 건 — 왼쪽 선만 물들인다(카드 전체를 칠하면 목록이 시끄러워진다). */
-.mail-card.waiting { border-left-color: #d97706; }
-.mail-card-head {
+.brief-card.waiting { border-left-color: #d97706; }
+.brief-head {
   display: flex; align-items: baseline; gap: 7px; width: 100%;
   border: 0; background: none; padding: 0; text-align: left; cursor: pointer;
 }
-.mail-card-no { flex: 0 0 auto; font-size: 12.5px; }
-.mail-card-title {
+.brief-no { flex: 0 0 auto; font-size: 12.5px; }
+.brief-title {
   flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   font-size: 13px; font-weight: 700; color: var(--navy);
 }
-.mail-card-head:hover .mail-card-title { text-decoration: underline; }
-.mail-card-stage {
-  flex: 0 0 auto; max-width: 108px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+.brief-head:hover .brief-title { text-decoration: underline; }
+.brief-stage {
+  flex: 0 0 auto; max-width: 116px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   padding: 1px 7px; border-radius: 999px; background: #eaf0f7;
   font-size: 10.5px; font-weight: 700; color: #48586d;
 }
-.mail-card-pic { flex: 0 0 auto; font-size: 11px; color: var(--muted); }
-.mail-card-parties { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.mail-card-vessel { font-size: 11px; color: var(--muted); }
-.mail-card-state { display: flex; align-items: baseline; gap: 8px; }
+.brief-pic { flex: 0 0 auto; font-size: 11px; color: var(--muted); }
+.brief-parties { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; font-size: 11px; }
+.brief-cust { display: inline-flex; align-items: center; min-width: 0; }
+.brief-contact { color: var(--muted); white-space: nowrap; }
+.brief-vessel {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted);
+}
+/* 진행바 — 얇은 세그먼트. 색은 업무타입에 맞춘다(Parts=파랑 / 서비스=초록). */
+.brief-steps { display: flex; gap: 2px; margin: 1px 0 2px; }
+.brief-step { flex: 1 1 0; height: 4px; border-radius: 2px; background: #e4e9f1; }
+.brief-step.on { background: #0055a8; }
+.brief-card.service .brief-step.on { background: #11824a; }
+.brief-state { display: flex; align-items: baseline; gap: 8px; }
 .mail-turn { font-size: 11.5px; font-weight: 700; color: #5c6b7d; }
 .mail-turn.ours { color: #b45309; }
 .mail-turn.ours::before { content: "● "; }
-.mail-card-when {
-  margin-left: auto; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums;
+.brief-when {
+  margin-left: auto; display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums;
 }
+.brief-age {
+  font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 6px;
+  background: var(--head-bg); color: var(--muted);
+}
+.brief-age.lv-warn { background: #fff3e0; color: #9a5b00; }
+.brief-age.lv-urgent { background: #fdeaea; color: #b42318; }
+
 /* AI 요약 — 카드에서 가장 먼저 읽혀야 하는 부분. 딜 화면의 .mail-rollup 과 같은 판. */
 .mail-card-rollup {
   list-style: none; margin: 0; padding: 8px 11px;
@@ -12054,7 +12015,7 @@ table.mini.wide.umail-table td.umail-c-assign { width: 340px; }
 .mail-card-label {
   display: inline-block; min-width: 52px; margin-right: 6px;
   font-size: 10.5px; font-weight: 800; color: #6b7c93; letter-spacing: .02em;
-  text-transform: none; vertical-align: 1px;
+  vertical-align: 1px;
 }
 /* "다음"은 이 카드에서 유일하게 행동을 요구하는 줄이다 — 한 칸 더 세워 둔다. */
 .mail-card-rollup li.next { font-weight: 600; color: #12233f; }
@@ -12062,37 +12023,47 @@ table.mini.wide.umail-table td.umail-c-assign { width: 340px; }
 /* 요약을 만든 뒤 새 메일이 온 카드 — 감추지 않고 흐리게 두고, 새 메일은 아래 줄에. */
 .mail-card-rollup.stale { background: #fbfcfe; border-left-color: #c3ccd9; }
 .mail-card-since { font-size: 10.5px; font-weight: 700; color: #a06a1c; }
-.mail-card-nodigest { margin: 0; font-size: 11px; color: var(--muted); font-style: italic; }
-.mail-card-recent { list-style: none; margin: 0; padding: 0; }
-.mail-card-recent li {
-  display: grid; grid-template-columns: 14px 74px 1fr; gap: 2px 6px; align-items: baseline;
-  padding: 4px 0; border-top: 1px dashed #e6edf6;
+
+/* 최근 줄 — 사건(단계 이벤트)과 메일을 한 시간축에 섞는다. 둘은 같은 이야기의 두 면이라
+   줄 간격을 같게 두고, 사건은 굵은 라벨로 / 메일은 방향 화살표로만 갈라 보이게 한다. */
+.brief-lines { list-style: none; margin: 0; padding: 0; }
+.brief-line {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px;
+  padding: 4px 0; border-top: 1px dashed #e6edf6; font-size: 11.5px; line-height: 1.45;
 }
-.mail-card-recent .mail-dir { font-size: 12px; }
-.mail-card-party {
-  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  font-size: 11px; color: #46586e;
+.brief-line-when {
+  flex: 0 0 auto; min-width: 60px; font-weight: 700; color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
-.mail-card-sum {
-  grid-column: 3; font-size: 11.5px; line-height: 1.45; color: #5c6b7d;
-  overflow: hidden; text-overflow: ellipsis; display: -webkit-box;
-  -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+.brief-line-when .act-time { font-weight: 400; }
+.brief-line-party {
+  flex: 0 0 auto; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: #46586e;
 }
-.mail-card-foot {
-  display: flex; align-items: center; gap: 8px; padding-top: 7px;
+.brief-line-desc { flex: 1 1 60%; min-width: 0; color: var(--ink); }
+/* 메일 줄의 요약은 두 줄까지 — 그 이상은 딜을 열어 읽을 일이다. */
+.brief-line.mail .brief-line-desc {
+  color: #5c6b7d; overflow: hidden; text-overflow: ellipsis;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.brief-line .mail-dir { flex: 0 0 auto; font-size: 12px; font-weight: 800; color: #7c8aa0; }
+.brief-line.out .mail-dir { color: var(--blue); }
+.brief-line.in .mail-dir { color: #1a7a4a; }
+
+.brief-foot {
+  display: flex; align-items: center; gap: 8px; padding-top: 6px;
   border-top: 1px solid var(--line); font-size: 11px; color: var(--muted);
 }
-.mail-card-new { color: #a06a1c; font-weight: 700; }
 .mail-card-open {
   margin-left: auto; border: 0; background: none; padding: 0;
   font-size: 11.5px; font-weight: 700; color: var(--blue); cursor: pointer;
 }
 .mail-card-open:hover { text-decoration: underline; }
-@media (max-width: 1280px) {
-  .mail-digest-grid { grid-template-columns: repeat(2, 1fr); }
+@media (max-width: 1400px) {
+  .brief-grid { grid-template-columns: repeat(2, 1fr); }
 }
-@media (max-width: 860px) {
-  .mail-digest-grid { grid-template-columns: 1fr; }
+@media (max-width: 900px) {
+  .brief-grid { grid-template-columns: 1fr; }
 }
 
 /* ── 딜 선택 드롭다운(ProjectPicker) ──────────────────────────────────────────

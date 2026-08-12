@@ -32,8 +32,10 @@ from services import mail_auto, mail_sync
 
 # 한 번의 동기화 뒤 자동으로 요약할 메일 수 상한(프로젝트에 붙은 것 우선).
 _AUTO_SUMMARY_LIMIT = 30
-# 요약 카드에 실을 최근 메일 줄 수 / 한 번에 내보낼 카드 상한.
-_DIGEST_RECENT = 3
+# 카드에 실을 최근 메일 줄 수 / 한 번에 내보낼 카드 상한.
+# 화면이 이 메일들을 단계 이벤트와 한 시간축에 섞은 뒤 사용자가 고른 줄 수(Show 1~8)
+# 만큼 자른다 — 그래서 서버는 가장 많이 볼 만큼을 넉넉히 실어 보낸다.
+_DIGEST_RECENT = 8
 _DIGEST_MAX_CARDS = 60
 # 마지막 메일이 '수신'인 채로 이만큼 지나면 "우리 차례"로 보고 카드를 위로 올린다.
 WAITING_DAYS = 2
