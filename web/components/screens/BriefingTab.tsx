@@ -368,6 +368,18 @@ function BriefCard({
         {vessel ? <span className="brief-vessel" title={vessel}>{vessel}</span> : null}
       </div>
 
+      {/* 무엇을, 얼마에 — 카드는 위에서 아래로 "누구와(상대) → 무엇을(품목) →
+          얼마에(금액) → 어디까지(단계) → 누구 차례(상태) → 무슨 일이(줄)"로 읽힌다. */}
+      {row.first_item ? (
+        <p className="brief-item" title={row.first_item}>
+          {row.first_item}
+          {row.item_count > 1 ? (
+            <span className="brief-item-more"> 외 {row.item_count - 1}개 품목</span>
+          ) : null}
+        </p>
+      ) : null}
+      <MoneyRow row={row} />
+
       {steps.length ? (
         <div className="brief-steps" title={stageLabel ? `Current stage: ${stageLabel}` : undefined}>
           {steps.map((_, i) => (
@@ -458,6 +470,53 @@ function BriefCard({
       </div>
     </section>
   );
+}
+
+// 판매·매입·마진 한 줄. 값은 서버가 이미 이중통화 문자열("USD 12,500 KRW 17,000,000")로
+// 만들어 준다 — 카드 폭에 그 여섯 덩이를 다 늘어놓을 수 없으니 앞 통화만 세우고 나머지는
+// 마우스를 올렸을 때 보여 준다(같은 세 숫자를 Projects 화면도 Sales/Purchase/Margin 으로
+// 부른다 — 이름이 화면마다 달라지면 같은 값인지 알아보기 어렵다).
+function MoneyRow({ row }: { row: PipelineRow }) {
+  const has = row.sales_total || row.purchase_total || row.margin_amount;
+  if (!has) return null;
+  const loss = row.margin_pct != null && row.margin_pct < 0;
+  return (
+    <p className="brief-money">
+      <Money label="Sales" value={row.sales_total} />
+      <Money label="Purchase" value={row.purchase_total} />
+      <Money label="Margin" value={row.margin_amount} tone={loss ? "loss" : ""}>
+        {row.margin_pct != null ? (
+          <span className="brief-money-pct">{row.margin_pct}%</span>
+        ) : null}
+      </Money>
+    </p>
+  );
+}
+
+function Money({
+  label,
+  value,
+  tone = "",
+  children,
+}: {
+  label: string;
+  value?: string | null;
+  tone?: string;
+  children?: React.ReactNode;
+}) {
+  if (!value) return null;
+  return (
+    <span className={`brief-money-cell${tone ? ` ${tone}` : ""}`} title={value}>
+      <span className="brief-money-lbl">{label}</span>
+      {primaryAmount(value)}
+      {children}
+    </span>
+  );
+}
+
+/** "USD 12,500 KRW 17,000,000" → "USD 12,500". 둘째 통화는 툴팁에만 남긴다. */
+function primaryAmount(value: string): string {
+  return value.trim().split(/\s+(?=[A-Z]{3}\s)/)[0] || value;
 }
 
 // 요약 한 줄 — "진행: …" 처럼 라벨이 붙어 오면 라벨만 떼어 굵게 세운다.
