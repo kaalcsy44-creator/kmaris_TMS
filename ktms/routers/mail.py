@@ -6,10 +6,10 @@ Claude 요약을 채운다.
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+import sys
+from datetime import datetime
 
 from pydantic import BaseModel
-from sqlalchemy import func
 
 from db.models import AppSetting
 from _core import (
@@ -27,11 +27,9 @@ from _core import (
     get_session,
     require_token,
 )
-from services.mail_summary import ensure_summaries, summarize_project
-from services import mail_sync
+from services.mail_summary import ROLLUP_KEY as _ROLLUP_KEY, build_project_rollup, ensure_summaries
+from services import mail_auto, mail_sync
 
-# 프로젝트 롤업 요약 캐시 키 — 마지막 메일이 그대로면 다시 만들지 않는다.
-_ROLLUP_KEY = "mail_rollup"
 # 한 번의 동기화 뒤 자동으로 요약할 메일 수 상한(프로젝트에 붙은 것 우선).
 _AUTO_SUMMARY_LIMIT = 30
 # 요약 카드에 실을 최근 메일 줄 수 / 한 번에 내보낼 카드 상한.
@@ -140,15 +138,27 @@ def _threads(s, msgs: list[EmailMessage]) -> list[dict]:
 
 @app.get("/api/admin/mail/status", dependencies=[Depends(require_token)])
 def mail_status():
-    """메일 연동 상태 — 설정 여부, 폴더별 마지막 동기화, 미분류 통수."""
+    """메일 연동 상태 — 설정 여부, 자동 실행 예정·결과, 폴더별 마지막 동기화, 미분류 통수."""
     s = get_session()
     try:
+        cfg = mail_auto.config()
+        last = mail_auto.state(s)
         return {
             "configured": mail_sync.is_configured(),
             "host": mail_sync.mail_config()["host"],
             "account": mail_sync.mail_config()["user"],
             "total": s.query(EmailMessage.id).count(),
             "unmatched": s.query(EmailMessage.id).filter(EmailMessage.rfq_id.is_(None)).count(),
+            # 등록되지 않은 상대가 몇 곳인지 — 대시보드가 회사 메일의 얼마를 담고
+            # 있는지 가늠하는 유일한 단서다.
+            "unknown": len(mail_sync.unknown_addresses(s)),
+            "auto": {
+                "enabled": cfg["enabled"],
+                "at": cfg["at"],
+                "next_run": mail_auto.next_run_at(s),
+                "last_run_at": last.get("last_run_at", ""),
+                "last_result": last.get("result", {}),
+            },
             "folders": [
                 {"folder": st.folder,
                  "last_uid": st.last_uid or 0,
@@ -157,6 +167,35 @@ def mail_status():
                 for st in s.query(EmailSyncState).all()
             ],
         }
+    finally:
+        s.close()
+
+
+@app.get("/api/admin/mail/unknown-addresses", dependencies=[Depends(require_token)])
+def mail_unknown_addresses():
+    """메일은 오갔지만 Settings 에 등록되지 않은 상대 — 많이 온 순.
+
+    저장 범위를 등록된 거래처로 좁힌 대가로 이 주소들의 메일은 통째로 버려진다.
+    여기서 진짜 거래처를 골라 고객·벤더로 등록하면 다음 동기화부터 들어온다."""
+    s = get_session()
+    try:
+        return {"rows": mail_sync.unknown_addresses(s)}
+    finally:
+        s.close()
+
+
+class MailIgnoreAddr(BaseModel):
+    addr: str
+
+
+@app.post("/api/admin/mail/unknown-addresses/ignore", dependencies=[Depends(require_token)])
+def mail_ignore_unknown(body: MailIgnoreAddr):
+    """이 주소는 거래처가 아니다 — 목록에서 내리고 다음 동기화에서도 세지 않는다.
+    (거르지 않으면 뉴스레터·알림이 목록을 채워 정작 볼 것을 덮는다.)"""
+    s = get_session()
+    try:
+        mail_sync.ignore_unknown_address(s, body.addr)
+        return {"ok": True, "rows": mail_sync.unknown_addresses(s)}
     finally:
         s.close()
 
@@ -212,42 +251,13 @@ def project_mail(rfq_id: int, summarize: bool = False):
         s.close()
 
 
-def _build_rollup(s, rfq_id: int) -> str:
-    """이 딜의 메일 흐름을 3~5줄로 만들어 저장하고 그 글을 돌려준다.
-
-    재료는 통별 요약이라 AI 호출은 1회다(요약이 아직 없는 메일은 먼저 채운다).
-    딜 화면의 "AI digest" 버튼과 대시보드의 일괄 생성이 같은 이 함수를 쓴다 —
-    캐시 모양(last_id 로 낡음을 가리는 것)이 두 곳에서 어긋나면 안 된다."""
-    msgs = (s.query(EmailMessage).filter_by(rfq_id=rfq_id)
-            .order_by(EmailMessage.sent_at).all())
-    if not msgs:
-        return ""
-    ensure_summaries(s, msgs, limit=_AUTO_SUMMARY_LIMIT)
-    rfq = s.query(RFQ).filter_by(id=rfq_id).first()
-    title = " · ".join(x for x in [_project_no_map(s).get(rfq_id, ""),
-                                   (rfq.project_title if rfq else "")] if x)
-    text = summarize_project(
-        [{"sent_at": m.sent_at, "direction": m.direction,
-          "party": _party_name(s, m), "summary": m.summary} for m in msgs],
-        title or f"RFQ {rfq_id}")
-    key = f"{_ROLLUP_KEY}:{rfq_id}"
-    row = s.query(AppSetting).filter_by(key=key).first()
-    value = {"text": text, "last_id": max(m.id for m in msgs),
-             "at": datetime.utcnow().isoformat(timespec="seconds")}
-    if row:
-        row.value, row.updated_at = value, datetime.utcnow()
-    else:
-        s.add(AppSetting(key=key, value=value, updated_at=datetime.utcnow()))
-    s.commit()
-    return text
-
-
 @app.post("/api/admin/mail/project/{rfq_id}/rollup", dependencies=[Depends(require_token)])
 def project_mail_rollup(rfq_id: int):
     """이 딜의 메일 흐름을 3~5줄로 — 개별 요약을 재료로 한 번만 만들고 캐시한다."""
     s = get_session()
     try:
-        return {"ok": True, "rollup": _build_rollup(s, rfq_id)}
+        title = _project_no_map(s).get(rfq_id, "")
+        return {"ok": True, "rollup": build_project_rollup(s, rfq_id, title)}
     finally:
         s.close()
 
@@ -264,30 +274,6 @@ def _waiting_days(last_at: str, direction: str) -> int:
     except ValueError:
         return 0
     return max(0, (datetime.now(mail_sync.KST).date() - day).days)
-
-
-def _cutoff(window: int) -> str:
-    """조회 창의 시작 시각 — sent_at 과 같은 'YYYY-MM-DDTHH:MM'(KST) 꼴이라 문자열로 견준다."""
-    return (datetime.now(mail_sync.KST) - timedelta(days=window)).strftime("%Y-%m-%dT%H:%M")
-
-
-def _live_deals(s, window: int) -> dict[int, tuple[int, str, int]]:
-    """카드가 될 딜 → (전체 통수, 마지막 메일 시각, 마지막 메일 id).
-
-    집계만 받아 온다 — 행을 끌어오면 딜 수십 개의 본문이 통째로 따라온다.
-    최근 window 일 안에 메일이 오갔고 종결되지 않은 딜만 남긴다(끝난 딜의 메일을
-    아침마다 다시 읽을 이유가 없다)."""
-    cutoff = _cutoff(window)
-    totals = (s.query(EmailMessage.rfq_id,
-                      func.count(EmailMessage.id),
-                      func.max(EmailMessage.sent_at),
-                      func.max(EmailMessage.id))
-              .filter(EmailMessage.rfq_id.isnot(None))
-              .group_by(EmailMessage.rfq_id).all())
-    closed = {r.id for r in s.query(RFQ.id, RFQ.closed_at).all() if (r.closed_at or "").strip()}
-    return {rid: (cnt, last_at or "", last_id)
-            for rid, cnt, last_at, last_id in totals
-            if rid not in closed and (last_at or "") >= cutoff}
 
 
 def _rollup_cache(s, rfq_ids) -> dict[int, dict]:
@@ -315,7 +301,7 @@ def mail_digest(days: int = 14):
     s = get_session()
     try:
         window = max(1, min(days, 365))
-        live = _live_deals(s, window)
+        live = mail_sync.live_deals(s, window)
         unmatched = s.query(EmailMessage.id).filter(EmailMessage.rfq_id.is_(None)).count()
         if not live:
             return {"days": window, "waiting_after": WAITING_DAYS,
@@ -327,7 +313,7 @@ def mail_digest(days: int = 14):
                         EmailMessage.from_addr, EmailMessage.to_addrs,
                         EmailMessage.customer_id, EmailMessage.vendor_id)
                 .filter(EmailMessage.rfq_id.in_(list(live)),
-                        EmailMessage.sent_at >= _cutoff(window))
+                        EmailMessage.sent_at >= mail_sync.cutoff_at(window))
                 .order_by(EmailMessage.sent_at).all())
         groups: dict[int, list] = {}
         for m in rows:
@@ -387,14 +373,16 @@ def mail_digest_refresh(days: int = 14, limit: int = 10):
     s = get_session()
     try:
         window = max(1, min(days, 365))
-        live = _live_deals(s, window)
+        live = mail_sync.live_deals(s, window)
         cache = _rollup_cache(s, live)
         todo = [rid for rid, (_, _, last_id) in live.items()
                 if (cache.get(rid) or {}).get("last_id") != last_id]
         todo.sort(key=lambda rid: live[rid][1], reverse=True)
         picked = todo[:max(1, min(limit, 30))]
+        # 번호(P-024)는 RFQ 전수 조회라 한 번만 세어 딜마다 나눠 쓴다.
+        nos = _project_no_map(s) if picked else {}
         for rid in picked:
-            _build_rollup(s, rid)
+            build_project_rollup(s, rid, nos.get(rid, ""))
         return {"ok": True, "written": len(picked), "remaining": len(todo) - len(picked)}
     finally:
         s.close()
@@ -526,3 +514,15 @@ def summarize_one(msg_id: int, force: bool = False):
         return {"ok": True, "summary": m.summary or ""}
     finally:
         s.close()
+
+
+@app.on_event("startup")
+def _start_mail_auto_sync() -> None:
+    """매일 도는 메일 정리를 띄운다(services/mail_auto.py).
+
+    _core 의 스키마 동기화 startup 뒤에 등록되므로 표는 이미 만들어져 있다.
+    스레드를 못 띄워도 앱은 떠야 한다 — 수동 Sync 버튼은 그대로 동작한다."""
+    try:
+        mail_auto.start()
+    except Exception as exc:
+        print(f"[WARN] mail auto-sync not started: {exc}", file=sys.stderr)

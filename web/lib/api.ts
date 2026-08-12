@@ -68,6 +68,7 @@ import type {
   MailDigest,
   MailMessage,
   MailStatus,
+  MailUnknownAddr,
   MailSyncResult,
   MailAutoMatchResult,
   UnmatchedMailGroup,
@@ -1847,6 +1848,16 @@ export function fetchProjectMail(rfqId: number, summarize = false): Promise<Proj
 }
 export function fetchMailStatus(): Promise<MailStatus> {
   return get<MailStatus>("/api/admin/mail/status");
+}
+// 등록되지 않은 상대 — 이 주소들의 메일은 지금 저장되지 않고 버려진다.
+export function fetchMailUnknownAddresses(): Promise<{ rows: MailUnknownAddr[] }> {
+  return get("/api/admin/mail/unknown-addresses");
+}
+// 거래처가 아닌 주소(뉴스레터·알림)를 목록에서 내린다 — 다음 동기화에서도 세지 않는다.
+export function ignoreMailUnknownAddress(
+  addr: string
+): Promise<{ ok: boolean; rows: MailUnknownAddr[] }> {
+  return post("/api/admin/mail/unknown-addresses/ignore", { addr });
 }
 export function syncMail(): Promise<MailSyncResult> {
   return post<MailSyncResult>("/api/admin/mail/sync", {});

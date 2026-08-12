@@ -1,7 +1,8 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   createSettingsCustomer,
   createSettingsItem,
@@ -48,7 +49,12 @@ import {
   fetchEmailSignature,
   saveEmailSignature,
   previewEmailSignature,
+  fetchMailStatus,
+  fetchMailUnknownAddresses,
+  ignoreMailUnknownAddress,
+  syncMail,
 } from "@/lib/api";
+import type { MailStatus, MailUnknownAddr } from "@/lib/types";
 import type {
   PermissionsConfig,
   RolePermRow,
@@ -86,7 +92,7 @@ import { invalidateMasterCategories } from "@/components/common/CategoryCell";
 
 type Tab =
   | "company" | "users" | "permissions"
-  | "customers" | "vendors" | "vessels" | "email" | "account";
+  | "customers" | "vendors" | "vessels" | "email" | "mail" | "account";
 
 const emptyCompany: CompanyProfile = {
   company_name_en: "",
@@ -114,17 +120,27 @@ export default function SettingsPage() {
   return (
     // Projects 페이지와 동일하게 전체 폭 사용(wide) — 목록/가격표가 넓게 보이도록.
     <AppShell active="settings" wide>
-      <Settings />
+      {/* Settings 가 useSearchParams(?tab=) 를 쓰므로 Suspense 로 감싼다. */}
+      <Suspense fallback={<div className="state">Loading…</div>}>
+        <Settings />
+      </Suspense>
     </AppShell>
   );
 }
 
 function Settings() {
   const admin = isAdmin();
+  // 다른 화면에서 특정 탭으로 곧장 보내는 링크(?tab=mail 등)를 받는다.
+  const params = useSearchParams();
   // 마스터 데이터(고객사·Vendor·선박·품목) 관리 = "settings" 권한. admin 은 항상 허용.
   // 회사/사용자/권한 설정은 admin 전용으로 유지한다.
   const canMaster = admin || can("settings", "view");
-  const [tab, setTab] = useState<Tab>(admin ? "company" : canMaster ? "customers" : "account");
+  const [tab, setTab] = useState<Tab>(() => {
+    const asked = params.get("tab") as Tab | null;
+    // 링크로 들어온 탭이라도 권한이 없으면 기본 탭으로 — Mailbox 는 admin 전용이다.
+    if (asked === "mail" && admin) return asked;
+    return admin ? "company" : canMaster ? "customers" : "account";
+  });
 
   // 마스터 데이터 권한도 없는 사용자(예: 권한 없는 viewer)는 본인 비밀번호 변경만.
   if (!admin && !canMaster) {
@@ -150,6 +166,7 @@ function Settings() {
         { key: "vendors", label: "Vendor" },
         { key: "vessels", label: "Vessels" },
         { key: "email", label: "Email Templates" },
+        { key: "mail", label: "Mailbox" },
       ]
     : [
         { key: "customers", label: "Customer" },
@@ -179,6 +196,7 @@ function Settings() {
       {tab === "vendors" && <VendorsTab />}
       {tab === "vessels" && <VesselsTab />}
       {tab === "email" && <EmailTemplatesTab />}
+      {admin && tab === "mail" && <MailboxTab />}
       {tab === "account" && (
         <div className="panel">
           <MyPasswordChange />
@@ -3745,6 +3763,195 @@ function EmailTemplatesTab() {
         {msg ? <span className="action-ok">{msg}</span> : null}
         {err ? <span className="action-err">{err}</span> : null}
       </div>
+    </div>
+  );
+}
+
+/* ── Mailbox — 회사 메일함 연동 상태와, 아직 등록되지 않은 상대 ─────────────────
+   메일 이력의 저장 범위는 "Settings 에 등록된 고객·벤더와 오간 메일"이다. 좁게 잡은
+   덕에 사내·개인 메일이 들어오지 않지만, 대가로 **아직 등록하지 않은 거래처의 메일은
+   통째로 버려진다.** 그동안 남는 건 skipped 통수뿐이라 무엇을 놓쳤는지 알 길이 없었고,
+   그러면 "이 대시보드가 우리 메일의 얼마를 담고 있나"에 답할 수 없다.
+   이 화면은 그 물음에 답하는 자리다 — 버린 메일의 상대를 세어 보여 주고, 진짜 거래처면
+   Customer/Vendor 탭에서 등록하게 하고, 아니면 눌러서 목록에서 내리게 한다. */
+function MailboxTab() {
+  const [status, setStatus] = useState<MailStatus | null>(null);
+  const [rows, setRows] = useState<MailUnknownAddr[] | null>(null);
+  const [busy, setBusy] = useState("");
+  const [note, setNote] = useState("");
+  const [err, setErr] = useState("");
+
+  const load = useCallback(async () => {
+    try {
+      const [st, un] = await Promise.all([fetchMailStatus(), fetchMailUnknownAddresses()]);
+      setStatus(st);
+      setRows(un.rows);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Could not load mailbox status");
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  // 수동 Sync — 자동 실행이 하루 한 번이라, 지금 당장 받아 보고 싶을 때 쓴다.
+  async function syncNow() {
+    setBusy("sync");
+    setErr("");
+    setNote("");
+    try {
+      const r = await syncMail();
+      const parts = [`Scanned ${r.scanned}`];
+      if (r.stored) parts.push(`kept ${r.stored}`);
+      if (r.dup) parts.push(`${r.dup} already stored`);
+      if (r.skipped) parts.push(`${r.skipped} from unregistered parties`);
+      if (r.auto_matched) parts.push(`auto-matched ${r.auto_matched}`);
+      if (r.pending) parts.push(`${r.pending} older mails still unread`);
+      setNote(parts.join(" · "));
+      await load();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Sync failed");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function ignore(addr: string) {
+    setBusy(addr);
+    setErr("");
+    try {
+      setRows((await ignoreMailUnknownAddress(addr)).rows);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Could not ignore");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  if (!status) return <div className="state">{err || "Loading…"}</div>;
+
+  const auto = status.auto;
+  const last = auto.last_result || {};
+  const lastParts = Object.entries(last)
+    .filter(([k, v]) => k !== "at" && k !== "error" && v)
+    .map(([k, v]) => `${k} ${v}`);
+
+  return (
+    <div className="panel">
+      <h3 className="form-title">Mailbox connection</h3>
+      {!status.configured ? (
+        <p className="hint-inline" style={{ display: "block", marginBottom: 10 }}>
+          The mailbox is not connected. Set <b>IMAP_USER</b> and <b>IMAP_PASSWORD</b> on the
+          server (they fall back to SMTP_USER / SMTP_PASSWORD), then press Sync.
+        </p>
+      ) : null}
+      <table className="mini wide">
+        <tbody>
+          <tr>
+            <th style={{ width: 200 }}>Account</th>
+            <td>{status.account || "—"} <span className="muted">@ {status.host}</span></td>
+          </tr>
+          <tr>
+            <th>Stored mail</th>
+            <td>
+              {status.total} kept
+              {status.unmatched > 0 ? (
+                <> · <a href="/activity?view=mail">{status.unmatched} unmatched</a></>
+              ) : null}
+            </td>
+          </tr>
+          <tr>
+            <th>Daily run</th>
+            <td>
+              {auto.enabled ? (
+                <>
+                  every day at <b>{auto.at}</b> KST
+                  {auto.next_run ? <span className="muted"> · next {auto.next_run}</span> : null}
+                </>
+              ) : (
+                <span className="muted">off (MAIL_AUTO_SYNC=0)</span>
+              )}
+            </td>
+          </tr>
+          <tr>
+            <th>Last run</th>
+            <td>
+              {auto.last_run_at ? (
+                <>
+                  {auto.last_run_at}
+                  {lastParts.length ? <span className="muted"> · {lastParts.join(" · ")}</span> : null}
+                  {last.error ? <div className="action-err">{String(last.error)}</div> : null}
+                </>
+              ) : (
+                <span className="muted">has not run yet</span>
+              )}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <div className="form-actions">
+        <button className="btn" onClick={syncNow} disabled={!!busy || !status.configured}>
+          {busy === "sync" ? "Fetching…" : "↻ Sync now"}
+        </button>
+        {note ? <span className="action-ok">{note}</span> : null}
+        {err ? <span className="action-err">{err}</span> : null}
+      </div>
+
+      <h3 className="form-title" style={{ marginTop: 22 }}>
+        Unregistered counterparts
+        {rows && rows.length ? <span className="muted"> — {rows.length}</span> : null}
+      </h3>
+      <p className="hint-inline" style={{ display: "block", marginBottom: 8 }}>
+        Mail was exchanged with these addresses but they are not registered as a customer or
+        vendor, so <b>none of it is being stored.</b> Register the real counterparts on the
+        Customer / Vendor tab — their mail arrives from the next sync. Dismiss the rest.
+      </p>
+      {rows === null ? (
+        <div className="state">Loading…</div>
+      ) : rows.length === 0 ? (
+        <div className="state">
+          {status.total === 0
+            ? "Nothing yet — run a sync first."
+            : "Every counterpart we exchanged mail with is registered. 🎉"}
+        </div>
+      ) : (
+        <div className="table-wrap">
+          <table className="mini wide">
+            <thead>
+              <tr>
+                <th>Address</th>
+                <th>Name</th>
+                <th className="num">Mails</th>
+                <th>Last</th>
+                <th>Latest subject</th>
+                <th style={{ width: 90 }} />
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.addr}>
+                  <td>{r.addr}</td>
+                  <td>{r.name || "—"}</td>
+                  <td className="num">{r.count}</td>
+                  <td>{(r.last_at || "").slice(0, 10) || "—"}</td>
+                  <td className="muted">{r.subject || "—"}</td>
+                  <td>
+                    <button
+                      className="btn sm"
+                      disabled={!!busy}
+                      title="Not a counterpart — stop counting this address"
+                      onClick={() => ignore(r.addr)}
+                    >
+                      {busy === r.addr ? "…" : "Dismiss"}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

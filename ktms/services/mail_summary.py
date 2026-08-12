@@ -11,10 +11,12 @@ from __future__ import annotations
 import re
 from datetime import datetime
 
-from db.models import EmailMessage
+from db.models import AppSetting, Customer, EmailMessage, RFQ, Vendor
 from services.pdf_parser import _anthropic_client
 
 MODEL = "claude-haiku-4-5-20251001"
+# 딜별 롤업 저장 키(AppSetting). 화면·자동 실행·수동 버튼이 같은 자리를 본다.
+ROLLUP_KEY = "mail_rollup"
 # 요약에 넣을 본문 길이 — 메일의 용건은 거의 앞머리에 있고, 뒤는 인용된 이전 대화다.
 BODY_CHARS = 3_000
 
@@ -120,3 +122,52 @@ def summarize_project(rows: list[dict], project: str) -> str:
         return "".join(getattr(b, "text", "") for b in res.content).strip()[:2000]
     except Exception as exc:
         return f"(요약을 만들지 못했습니다: {exc})"
+
+
+def build_project_rollup(s, rfq_id: int, title: str = "") -> str:
+    """이 딜의 메일 흐름을 3~5줄로 만들어 AppSetting 에 저장하고 그 글을 돌려준다.
+
+    title 은 프롬프트에 얹을 딜 이름이다. 화면에 보이는 번호(P-024)를 쓰고 싶으면
+    호출부가 넘긴다 — 그 번호를 매기는 계산이 RFQ 전수 조회라, 딜을 여러 개 도는
+    쪽에서 한 번만 계산해 나눠 쓰게 하려는 것이다. 비우면 rfq_no 로 대신한다.
+
+    딜 화면의 "AI digest" 버튼, 대시보드의 일괄 생성, 매일 도는 자동 실행이 모두
+    이것을 부른다 — 저장 모양(last_id 로 낡음을 가리는 것)이 세 곳에서 어긋나면
+    화면이 낡은 요약을 새것처럼 보여 주게 된다.
+
+    재료는 통별 요약이라 AI 호출은 1회다(요약이 아직 없는 메일은 먼저 채운다)."""
+    msgs = (s.query(EmailMessage).filter_by(rfq_id=rfq_id)
+            .order_by(EmailMessage.sent_at).all())
+    if not msgs:
+        return ""
+    ensure_summaries(s, msgs, limit=30)
+    names = {
+        "customer": {c.id: c.name for c in s.query(Customer.id, Customer.name).all()},
+        "vendor": {v.id: v.name for v in s.query(Vendor.id, Vendor.name).all()},
+    }
+
+    def party(m: EmailMessage) -> str:
+        if m.customer_id:
+            return names["customer"].get(m.customer_id, "") or m.from_addr or ""
+        if m.vendor_id:
+            return names["vendor"].get(m.vendor_id, "") or m.from_addr or ""
+        return m.from_addr if m.direction == "in" else ", ".join(m.to_addrs or [])
+
+    rfq = s.query(RFQ.id, RFQ.rfq_no, RFQ.project_title).filter_by(id=rfq_id).first()
+    label = " · ".join(x for x in [title or (rfq.rfq_no if rfq else ""),
+                                   (rfq.project_title if rfq else "")] if x)
+    text = summarize_project(
+        [{"sent_at": m.sent_at, "direction": m.direction,
+          "party": party(m), "summary": m.summary} for m in msgs],
+        label or f"RFQ {rfq_id}")
+
+    key = f"{ROLLUP_KEY}:{rfq_id}"
+    row = s.query(AppSetting).filter_by(key=key).first()
+    value = {"text": text, "last_id": max(m.id for m in msgs),
+             "at": datetime.utcnow().isoformat(timespec="seconds")}
+    if row:
+        row.value, row.updated_at = value, datetime.utcnow()
+    else:
+        s.add(AppSetting(key=key, value=value, updated_at=datetime.utcnow()))
+    s.commit()
+    return text

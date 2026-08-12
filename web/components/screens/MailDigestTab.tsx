@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   fetchCustomers,
   fetchMailDigest,
+  fetchMailStatus,
   fetchPipeline,
   fetchSettingsVessels,
   refreshMailDigests,
@@ -38,6 +39,9 @@ export default function MailDigestTab() {
     useCachedData("pipeline", () => fetchPipeline());
   const { data: customers } = useCachedData("settings:customers", fetchCustomers);
   const { data: vessels } = useCachedData("settings:vessels", fetchSettingsVessels);
+  // 연동 상태는 카드를 그리는 데 필요하지 않다 — 실패해도 화면은 그대로 나와야 한다.
+  const { data: status } = useCachedData("mail:status", () =>
+    fetchMailStatus().catch(() => null));
 
   const [filter, setFilter] = useState<Filter>("all");
   const [busy, setBusy] = useState(false);
@@ -113,6 +117,13 @@ export default function MailDigestTab() {
           {digest.unmatched > 0 ? (
             <Link className="mail-digest-unmatched" href="/activity?view=mail">
               {digest.unmatched} unmatched
+            </Link>
+          ) : null}
+          {/* 등록 안 된 상대의 메일은 저장조차 되지 않는다 — 카드에 없는 이유가
+              "일이 없어서"가 아닐 수 있다는 걸 여기서 말해 준다. */}
+          {status && status.unknown > 0 ? (
+            <Link className="mail-digest-unmatched" href="/settings?tab=mail">
+              {status.unknown} unregistered
             </Link>
           ) : null}
           {missing > 0 ? (

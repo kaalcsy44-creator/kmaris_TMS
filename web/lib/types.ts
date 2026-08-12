@@ -1673,7 +1673,24 @@ export type MailStatus = {
   account: string;
   total: number;
   unmatched: number;
+  unknown: number;              // 등록되지 않은 상대 수 — 그만큼의 메일이 버려지고 있다
+  auto: {
+    enabled: boolean;
+    at: string;                 // "06:00" (KST)
+    next_run: string;
+    last_run_at: string;
+    last_result: Record<string, number | string>;
+  };
   folders: { folder: string; last_uid: number; last_synced_at: string; last_error: string }[];
+};
+// 메일은 오갔지만 Settings 에 없는 상대. 저장 범위를 등록된 거래처로 좁힌 대가라,
+// 이 목록이 곧 "대시보드가 놓치고 있는 것"이다.
+export type MailUnknownAddr = {
+  addr: string;
+  count: number;
+  last_at: string;
+  name: string;                 // 메일 표시 이름(있으면)
+  subject: string;              // 가장 최근 제목 한 줄
 };
 // 미분류 메일은 '대화' 단위로 다룬다 — 한 번 고르면 그 대화 전체가 같은 딜로 간다.
 // suggest 는 서버가 매긴 추천(제목 겹침·거래처·시기)일 뿐, 붙지는 않은 상태다.

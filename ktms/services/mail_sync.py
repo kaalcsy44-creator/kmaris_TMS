@@ -29,6 +29,7 @@ import email
 import imaplib
 import os
 import re
+import threading
 from datetime import datetime, timedelta, timezone
 from email.header import decode_header, make_header
 from email.message import Message
@@ -38,7 +39,7 @@ from typing import Iterable
 from sqlalchemy import func
 
 from db.models import (
-    Customer, CustomerContact, EmailMessage, EmailSyncState, Order,
+    AppSetting, Customer, CustomerContact, EmailMessage, EmailSyncState, Order,
     PurchaseOrder, Quotation, RFQ, User, Vendor, VendorContact, VendorRFQ, Vessel, WorkType,
 )
 
@@ -46,6 +47,10 @@ from db.models import (
 # 메일에 DB 를 내주지 않을 만큼. 넘으면 잘라 두고 truncated 로 표시한다.
 MAX_BODY_CHARS = 20_000
 KST = timezone(timedelta(hours=9))
+
+# 동기화는 한 번에 하나만. 매일 도는 자동 실행과 사람이 누른 Sync 가 겹치면 같은
+# 메일을 두 번 집어 message_id 유일 제약에서 터지고, IMAP 연결도 둘로 늘어난다.
+_SYNC_LOCK = threading.Lock()
 
 
 # ── 설정 ──────────────────────────────────────────────────────────────────────
@@ -182,6 +187,78 @@ def own_addresses(s) -> set[str]:
         if mail and mail.strip():
             out.add(mail.strip().lower())
     return {a for a in out if "@" in a}
+
+
+# ── 등록되지 않은 상대 주소 ───────────────────────────────────────────────────
+#
+# 저장 범위를 "등록된 거래처와 오간 메일"로 좁힌 대가가 있다. 아직 Settings 에 넣지
+# 않은 거래처의 메일은 통째로 버려지고, 남는 건 skipped 통수뿐이라 무엇을 놓쳤는지
+# 알 길이 없다. 그러면 "이 대시보드가 우리 메일의 얼마를 담고 있나"에 답할 수 없다.
+# 그래서 버릴 때 상대 주소만 세어 둔다(본문·제목 전문은 담지 않는다 — 저장하지 않기로
+# 한 메일이다). 사람은 이 목록을 보고 진짜 거래처만 골라 등록하면 된다.
+UNKNOWN_KEY = "mail_unknown_addrs"     # {addr: {count, last_at, name, subject}}
+UNKNOWN_IGNORE_KEY = "mail_unknown_ignored"   # [addr] — 다시 보지 않기로 한 주소
+UNKNOWN_MAX = 60                       # 보관할 주소 수(많이 온 순으로 자른다)
+
+
+def _setting(s, key: str, default):
+    row = s.query(AppSetting).filter_by(key=key).first()
+    return row.value if row and row.value is not None else default
+
+
+def _save_setting(s, key: str, value) -> None:
+    row = s.query(AppSetting).filter_by(key=key).first()
+    if row:
+        row.value, row.updated_at = value, datetime.utcnow()
+    else:
+        s.add(AppSetting(key=key, value=value, updated_at=datetime.utcnow()))
+
+
+def unknown_addresses(s) -> list[dict]:
+    """등록되지 않은 상대 주소 — 많이 온 순. 무시하기로 한 주소는 빼고 돌려준다."""
+    seen = _setting(s, UNKNOWN_KEY, {}) or {}
+    ignored = set(_setting(s, UNKNOWN_IGNORE_KEY, []) or [])
+    known = set(party_index(s))
+    out = [{"addr": a, **v} for a, v in seen.items()
+           if a not in ignored and a not in known]
+    out.sort(key=lambda r: (-int(r.get("count") or 0), r.get("addr", "")))
+    return out
+
+
+def ignore_unknown_address(s, addr: str) -> None:
+    """이 주소는 거래처가 아니다 — 목록에서 내리고 다음 동기화에서도 세지 않는다."""
+    a = (addr or "").strip().lower()
+    if not a:
+        return
+    ignored = list(_setting(s, UNKNOWN_IGNORE_KEY, []) or [])
+    if a not in ignored:
+        ignored.append(a)
+    _save_setting(s, UNKNOWN_IGNORE_KEY, ignored[-500:])
+    seen = dict(_setting(s, UNKNOWN_KEY, {}) or {})
+    seen.pop(a, None)
+    _save_setting(s, UNKNOWN_KEY, seen)
+    s.commit()
+
+
+def _merge_unknown(s, found: dict[str, dict]) -> None:
+    """이번 동기화에서 만난 미등록 주소를 기존 집계에 합친다(통수는 누적)."""
+    if not found:
+        return
+    seen = dict(_setting(s, UNKNOWN_KEY, {}) or {})
+    ignored = set(_setting(s, UNKNOWN_IGNORE_KEY, []) or [])
+    for addr, hit in found.items():
+        if addr in ignored:
+            continue
+        cur = dict(seen.get(addr) or {})
+        cur["count"] = int(cur.get("count") or 0) + hit["count"]
+        # 이름·제목은 가장 최근 것으로 — 무엇을 놓치고 있는지 가늠할 단서다.
+        if (hit.get("last_at") or "") >= (cur.get("last_at") or ""):
+            cur["last_at"] = hit.get("last_at") or cur.get("last_at") or ""
+            cur["name"] = hit.get("name") or cur.get("name") or ""
+            cur["subject"] = hit.get("subject") or cur.get("subject") or ""
+        seen[addr] = cur
+    top = sorted(seen.items(), key=lambda kv: -int(kv[1].get("count") or 0))[:UNKNOWN_MAX]
+    _save_setting(s, UNKNOWN_KEY, dict(top))
 
 
 def party_index(s) -> dict[str, tuple[str, int, str]]:
@@ -422,6 +499,32 @@ def auto_match(s, max_passes: int = 5) -> dict:
     return counts
 
 
+# ── 최근에 움직인 딜 ──────────────────────────────────────────────────────────
+
+def cutoff_at(days: int) -> str:
+    """조회 창의 시작 시각 — sent_at 과 같은 'YYYY-MM-DDTHH:MM'(KST) 꼴이라 문자열로 견준다."""
+    return (datetime.now(KST) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M")
+
+
+def live_deals(s, days: int = 14) -> dict[int, tuple[int, str, int]]:
+    """최근 days 일 안에 메일이 오간 열린 딜 → (전체 통수, 마지막 메일 시각, 마지막 메일 id).
+
+    집계만 받아 온다 — 행을 끌어오면 딜 수십 개의 본문이 통째로 따라온다. 대시보드
+    카드와 자동 실행의 요약 대상이 같은 이 목록에서 나온다(끝난 딜의 메일을 아침마다
+    다시 읽을 이유가 없다)."""
+    cutoff = cutoff_at(days)
+    totals = (s.query(EmailMessage.rfq_id,
+                      func.count(EmailMessage.id),
+                      func.max(EmailMessage.sent_at),
+                      func.max(EmailMessage.id))
+              .filter(EmailMessage.rfq_id.isnot(None))
+              .group_by(EmailMessage.rfq_id).all())
+    closed = {r.id for r in s.query(RFQ.id, RFQ.closed_at).all() if (r.closed_at or "").strip()}
+    return {rid: (cnt, last_at or "", last_id)
+            for rid, cnt, last_at, last_id in totals
+            if rid not in closed and (last_at or "") >= cutoff}
+
+
 # ── 후보 추천(자동으로 붙이지는 않는다) ───────────────────────────────────────
 
 def _words(text: str) -> set[str]:
@@ -554,9 +657,24 @@ def _pick_uids(window: list[int], state: EmailSyncState, budget: int) -> tuple[l
     return fresh, older
 
 
+def _note_unknown(found: dict[str, dict], addrs: list[str], msg: Message, sent_at: str) -> None:
+    """저장하지 않은 메일의 상대 주소를 세어 둔다 — 주소·표시이름·제목 한 줄까지만."""
+    for addr in addrs[:2]:      # 수신자가 여럿이면 앞의 둘만(참조까지 세면 잡음이 된다)
+        hit = found.setdefault(addr, {"count": 0, "last_at": "", "name": "", "subject": ""})
+        hit["count"] += 1
+        if sent_at >= (hit["last_at"] or ""):
+            hit["last_at"] = sent_at
+            hit["name"] = (getaddresses([msg.get("From") or ""])[0][0] or "")[:120]
+            hit["subject"] = _hdr(msg, "Subject")[:120]
+
+
 def _store_message(s, msg: Message, folder: str, own: set[str],
-                   parties: dict[str, tuple[str, int, str]], docs: dict[str, int]) -> str:
-    """메일 1통 저장. 반환: stored | skipped(관계없는 메일) | dup(이미 있음)."""
+                   parties: dict[str, tuple[str, int, str]], docs: dict[str, int],
+                   unknown: dict[str, dict] | None = None) -> str:
+    """메일 1통 저장. 반환: stored | skipped(관계없는 메일) | dup(이미 있음).
+
+    unknown 을 넘기면 저장하지 않은 메일의 상대 주소를 거기에 세어 둔다 — 아직
+    등록하지 않은 거래처를 나중에 화면에서 찾아낼 수 있게."""
     message_id = (_hdr(msg, "Message-ID") or "").strip()
     if not message_id:
         # Message-ID 없는 메일은 중복 판별을 할 수 없다 — 발신시각+제목으로 대신 만든다.
@@ -578,7 +696,13 @@ def _store_message(s, msg: Message, folder: str, own: set[str],
     known_thread = bool(parents) and bool(
         s.query(EmailMessage.id).filter(EmailMessage.message_id.in_(parents)).first())
     if not party and not known_thread:
-        return "skipped"   # 등록된 거래처와도, 담아 둔 스레드와도 무관한 메일
+        # 등록된 거래처와도, 담아 둔 스레드와도 무관한 메일. 버리되 상대는 세어 둔다 —
+        # 받은 메일이면 보낸 사람이, 보낸 메일이면 받는 사람이 '아직 모르는 거래처'다.
+        if unknown is not None:
+            addrs = ([from_addr] if direction == "in" else to_addrs)
+            _note_unknown(unknown, [a for a in addrs if a and a not in own],
+                          msg, sent_at_kst(msg))
+        return "skipped"
 
     subject = _hdr(msg, "Subject")
     body, attachments = body_and_attachments(msg)
@@ -612,7 +736,19 @@ def sync_mailbox(s, folder_limit: int | None = None) -> dict:
     """메일함을 읽어 새 메일을 저장한다. 반환: 폴더별 처리 건수 요약.
 
     한 번에 max_per_sync 통까지만 가져오고, 어디까지 읽었는지 EmailSyncState 에
-    남긴다(다음 호출이 그다음부터 이어 읽는다)."""
+    남긴다(다음 호출이 그다음부터 이어 읽는다).
+
+    이미 동기화가 돌고 있으면 기다리지 않고 곧장 알린다 — 자동 실행이 도는 중에
+    사람이 Sync 를 눌렀을 때, 말없이 멈춰 있는 것보다 이유를 듣는 편이 낫다."""
+    if not _SYNC_LOCK.acquire(blocking=False):
+        raise RuntimeError("이미 동기화가 진행 중입니다 — 끝난 뒤 다시 시도하세요.")
+    try:
+        return _sync_mailbox(s, folder_limit)
+    finally:
+        _SYNC_LOCK.release()
+
+
+def _sync_mailbox(s, folder_limit: int | None = None) -> dict:
     cfg = mail_config()
     if not cfg["user"] or not cfg["password"]:
         raise RuntimeError("IMAP 계정이 설정되지 않았습니다 — IMAP_USER/IMAP_PASSWORD "
@@ -624,6 +760,8 @@ def sync_mailbox(s, folder_limit: int | None = None) -> dict:
     # scanned = 훑은 통수. stored 가 0 일 때 "메일함을 못 읽은 것"인지 "읽었지만 등록된
     # 거래처와 오간 게 없던 것"인지 화면이 구분해 말할 수 있어야 한다.
     result = {"scanned": 0, "stored": 0, "skipped": 0, "dup": 0, "pending": 0, "folders": {}}
+    # 이번에 버린 메일의 상대 주소 — 폴더를 다 돌고 나서 한 번에 합친다.
+    unknown: dict[str, dict] = {}
 
     conn = _connect(cfg)
     try:
@@ -659,7 +797,8 @@ def sync_mailbox(s, folder_limit: int | None = None) -> dict:
                     if typ != "OK" or not data or not isinstance(data[0], tuple):
                         continue
                     outcome = _store_message(
-                        s, email.message_from_bytes(data[0][1]), folder, own, parties, docs)
+                        s, email.message_from_bytes(data[0][1]), folder, own, parties, docs,
+                        unknown)
                     counts[outcome] += 1
                     result[outcome] += 1
                 # 읽은 구간 [backfill_uid, last_uid] 를 이번에 집은 만큼 넓힌다.
@@ -687,4 +826,9 @@ def sync_mailbox(s, folder_limit: int | None = None) -> dict:
             conn.logout()
         except Exception:
             pass
+    try:
+        _merge_unknown(s, unknown)
+        s.commit()
+    except Exception:          # 집계는 부수적인 것 — 실패해도 동기화 결과는 살린다
+        s.rollback()
     return result

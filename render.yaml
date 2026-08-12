@@ -66,5 +66,14 @@ services:
       # defaults to https://www.k-maris.com/track).
       - key: TRACKING_BASE_URL
         sync: false
+      # 메일 자동 정리(services/mail_auto.py)는 코드 기본값으로 그냥 돈다 — 아래는
+      # 바꾸고 싶을 때만 Render 대시보드에서 직접 추가하면 되는 값들이라 여기서
+      # 묻지 않는다(빈 값이 프롬프트로 뜨면 배포마다 걸린다).
+      #   MAIL_AUTO_SYNC     1     0 이면 자동 실행 끄기(수동 Sync 버튼은 그대로)
+      #   MAIL_SYNC_AT       06:00 KST 실행 시각. 이 시각을 지나면 그날 몫을 돌린다
+      #   MAIL_AUTO_DIGESTS  10    한 번에 만들 대시보드 요약 수(딜당 AI 호출 1회)
+      #   MAIL_AUTO_CHECK_MIN 10   "오늘 몫을 했나" 확인 주기(분)
+      # IMAP 계정은 별도 키가 없으면 위 SMTP_USER / SMTP_PASSWORD 를 그대로 쓴다
+      # (다른 계정으로 읽으려면 IMAP_USER / IMAP_PASSWORD 를 추가한다).
       - key: PYTHON_VERSION
         value: "3.12.8"
