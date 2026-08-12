@@ -13,6 +13,7 @@ import {
   updateRfqStageNote,
   deleteRfqStageNote,
   closeReasonLabel,
+  fetchProjectMail,
 } from "@/lib/api";
 import { useCachedData } from "@/lib/useCachedData";
 import { sortByDocNo } from "@/lib/sort";
@@ -26,12 +27,12 @@ import {
   type StageChainItem,
 } from "@/lib/deal";
 import { buildActivities, hm, md, splitProjectNo, type Activity } from "@/lib/activity";
-import type { ApRow, PipelineRow, PoWorkOptions, RfqItem, StageNote } from "@/lib/types";
+import type { ApRow, MailMessage, PipelineRow, PoWorkOptions, RfqItem, StageNote } from "@/lib/types";
 import { vendorList } from "@/components/common/dealFields";
 import { convertCurrency, USD_KRW_RATE } from "@/components/common/itemTable";
 import { tr } from "@/lib/labels";
 import CustomerName from "@/components/common/CustomerName";
-import ProjectMailPanel from "@/components/common/ProjectMailPanel";
+import ProjectMailPanel, { projectMailKey } from "@/components/common/ProjectMailPanel";
 import ActivityDesc from "@/components/common/ActivityDesc";
 import ActivityNoteForm, {
   initialNoteValue,
@@ -341,6 +342,10 @@ function Overview({
   /** 활동기록 추가 후 데이터 갱신 콜백. */
   onActivityAdded?: () => void | Promise<unknown>;
 }) {
+  // 이 딜의 메일 — 아래 Mail 패널과 같은 캐시 키라 조회는 한 번이고, 거기서 Sync 를
+  // 누르면 단계 보드의 메일 줄까지 함께 갱신된다.
+  const { data: mail } = useCachedData(projectMailKey(row.rfq_id), () =>
+    fetchProjectMail(row.rfq_id));
   const rSteps = resolveSteps(steps, row.work_type);
   const chain = buildStageChain(row, rSteps);
   const acts = buildActivities(row, rSteps);
@@ -426,6 +431,7 @@ function Overview({
         row={row}
         chain={chain}
         acts={acts}
+        mails={(mail?.threads ?? []).flatMap((t) => t.messages)}
         onOpenStage={onOpenStage}
         onActivityAdded={onActivityAdded}
       />
@@ -461,6 +467,29 @@ function actAt(a: Activity): string {
  *  해당 없는 단계(N/A)도 완료 일시가 있으면 후보로 둔다 — 배치 기준은 "이 딜이 그 단계를
  *  밟았는가"가 아니라 "그 시각에 어디까지 와 있었는가"다. 빼 두면 내수 딜의 7·8단계 구간
  *  로그가 전부 9단계로 쏠려, 9단계 줄보다 열흘씩 이른 기록이 그 아래 쌓인다. */
+/** 접히는 활동 로그의 한 줄 — 사람이 쓴 노트이거나, 오간 메일이거나. */
+type LogItem = { at: string; act?: Activity; mail?: MailMessage };
+
+/** 메일 한 줄 — 방향·상대·요약. 노트와 달리 여기서 고칠 것이 없어 링크도 편집도 없다.
+ *  원문은 아래 Mail 목록에서 편다(이 자리는 "언제 무슨 말이 오갔나"만 알려 준다). */
+function renderMailRow(m: MailMessage, key: string) {
+  return (
+    <li key={key} className={`ov-tl-mail ${m.direction}`}>
+      <div className="ov-tl-row">
+        <span className="ov-tl-gutter" />
+        <span className="ov-tl-ndate">
+          {md(m.sent_at)}{hm(m.sent_at) ? ` ${hm(m.sent_at)}` : ""}
+        </span>
+        <span className="ov-tl-ntext">
+          <span className="ov-tl-maildir">{m.direction === "out" ? "→" : "←"}</span>
+          {m.party ? <span className="ov-tl-mailparty">{m.party}</span> : null}
+          <span className="ov-tl-mailsum">{m.summary || m.subject || "(no subject)"}</span>
+        </span>
+      </div>
+    </li>
+  );
+}
+
 function stageForNote(chain: StageChainItem[], iso: string, current: number): number {
   const t = Date.parse((iso || "").slice(0, 16));
   if (Number.isNaN(t)) return current;
@@ -486,12 +515,15 @@ function StageTimeline({
   row,
   chain,
   acts,
+  mails,
   onOpenStage,
   onActivityAdded,
 }: {
   row: PipelineRow;
   chain: StageChainItem[];
   acts: Activity[];
+  /** 이 딜에서 오간 메일 — 보낸/받은 시각이 속한 단계의 활동 로그에 함께 놓인다. */
+  mails: MailMessage[];
   /** 주면 단계 줄이 링크 대신 이 콜백을 부른다(작업 팝업 안에서 화면 전환). */
   onOpenStage?: (stage: number, vrfqId?: number, orderId?: number) => void;
   /** 활동기록 추가 후 데이터 갱신 콜백. 주면 각 단계에 "+ note" 입력이 열린다. */
@@ -520,6 +552,14 @@ function StageTimeline({
       const s = stageForNote(chain, a.note.datetime || a.note.at || a.date, row.stage);
       notesOf.set(s, [...(notesOf.get(s) ?? []), a]);
     } else closeAct = a;
+  }
+  // 메일도 노트와 같은 규칙으로 단계에 놓는다 — 보낸/받은 시각이 어느 단계 안에서
+  // 일어났는지가 그 메일이 속할 자리다. 별도의 메일 타임라인을 아래에 또 두면, 같은
+  // 이야기의 "무엇을 했다"와 "무슨 말이 오갔다"가 화면 위아래로 갈라진다.
+  const mailOf = new Map<number, MailMessage[]>();
+  for (const m of mails) {
+    const s = stageForNote(chain, m.sent_at, row.stage);
+    mailOf.set(s, [...(mailOf.get(s) ?? []), m]);
   }
   const done = Math.max(0, Math.min(row.stage, chain.length));
 
@@ -601,13 +641,19 @@ function StageTimeline({
                         // 감추기는 CSS 가 한다(DOM 에는 남긴다) — 인쇄물엔 접힌 것도 다 나와야 한다.
                         const isLog = (a: Activity) => a.kind === "note" && !a.note.star;
                         const pinned = rows.filter((a) => !isLog(a));
-                        const log = rows.filter(isLog);
                         const mainIdx = pinned.findIndex((r) => r.kind === "auto");
                         const notesOpen = openNotes.includes(c.no);
+                        // 접히는 로그 = 평범한 노트 + 이 단계에서 오간 메일. 시간순으로
+                        // 한 줄씩 섞는다 — 둘은 같은 단계에서 일어난 같은 일의 두 면이다.
+                        const log: LogItem[] = [
+                          ...rows.filter(isLog).map((a) => ({ at: actAt(a), act: a })),
+                          ...(mailOf.get(c.no) ?? []).map((m) => ({ at: m.sent_at, mail: m })),
+                        ].sort((x, y) => x.at.localeCompare(y.at));
+                        const mailCount = (mailOf.get(c.no) ?? []).length;
                         // 블록을 통째로 첫 로그의 시각 자리에 끼운다 — 단계 완료보다 이른 기록이면
                         // 단계 줄 위로 간다(그 단계를 끝내기까지 있었던 일이므로). 블록이 쪼개지지
                         // 않으니 펼침은 늘 토글 아래로만 늘어나고, 토글은 제자리에 남는다.
-                        const logAt = log.length ? actAt(log[0]) : "";
+                        const logAt = log.length ? log[0].at : "";
                         const logPos = log.length
                           ? pinned.filter((a) => actAt(a) <= logAt).length
                           : pinned.length;
@@ -680,10 +726,15 @@ function StageTimeline({
                                       : "Show the activity log for this stage"
                                   }
                                 >
-                                  {notesOpen ? "▴ hide log" : `▾ ${log.length} more`}
+                                  {notesOpen
+                                    ? "▴ hide log"
+                                    : `▾ ${log.length} more${mailCount ? ` · ${mailCount} mail` : ""}`}
                                 </button>
                               </li>,
-                              ...log.map((a, i) => renderRow(a, `n${i}`, false)),
+                              ...log.map((it, i) =>
+                                it.act
+                                  ? renderRow(it.act, `n${i}`, false)
+                                  : renderMailRow(it.mail as MailMessage, `m${i}`)),
                             ]
                           : [];
                         return (

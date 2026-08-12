@@ -11250,6 +11250,17 @@ button.ov-tl-stage:hover { background: color-mix(in srgb, var(--ov-tone) 12%, tr
 .ov-tl-ndate { flex: none; width: 58px; color: var(--muted); font-size: var(--ov-t-meta);
   font-variant-numeric: tabular-nums; padding-top: 1px; white-space: nowrap; }
 .ov-tl-ntext { min-width: 0; word-break: break-word; }
+/* 오간 메일 한 줄 — 같은 단계의 활동 로그에 노트와 나란히 선다. 단계 진행(굵은 라벨)이
+   주인공이라, 메일은 방향 화살표와 상대만 세우고 요약은 본문 색으로 낮춰 둔다. */
+.ov-tl-mail .ov-tl-ntext { display: flex; align-items: baseline; gap: 5px; flex-wrap: wrap; }
+.ov-tl-maildir { flex: none; font-weight: 800; color: #7c8aa0; }
+.ov-tl-mail.out .ov-tl-maildir { color: var(--blue); }
+.ov-tl-mail.in .ov-tl-maildir { color: #1a7a4a; }
+.ov-tl-mailparty {
+  flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: var(--ov-t-meta); color: #46586e;
+}
+.ov-tl-mailsum { flex: 1 1 60%; min-width: 0; color: #5c6b7d; overflow-wrap: anywhere; }
 /* 노트 행 — 내용(.ov-tl-ntext)이 우측 끝까지 폭을 쓰고, ★·수정·삭제는 hover 시에만 그 위에
    겹쳐 뜬다(Activity Log 의 .act-actions 와 같은 방식). 아이콘 뒤엔 행 배경색으로 페이드를 깔아
    글자와 겹쳐도 지저분하지 않게 한다 — 노트 행은 칸 배경(--ov-bg) 위에, ★ 노트는 노란 톤 위에.

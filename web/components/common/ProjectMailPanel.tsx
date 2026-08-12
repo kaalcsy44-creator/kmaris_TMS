@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   buildProjectMailRollup,
   fetchMailStatus,
@@ -10,6 +10,10 @@ import {
 import type { MailMessage, MailThread, ProjectMail } from "@/lib/types";
 import { hm, md } from "@/lib/activity";
 import PartyName from "@/components/common/PartyName";
+import { useCachedData } from "@/lib/useCachedData";
+
+/** 이 딜의 메일 캐시 키 — 개요의 단계 보드도 같은 키로 읽어 한 번만 조회한다. */
+export const projectMailKey = (rfqId: number) => `mail:project:${rfqId}`;
 
 // 프로젝트 메일 이력 — 이 딜에서 고객·벤더와 오간 메일을 대화(스레드) 단위로 보여준다.
 // 메일 본체는 회사 메일함에 있고 여기 있는 건 사본이므로, 화면의 일은 세 가지다:
@@ -18,7 +22,10 @@ import PartyName from "@/components/common/PartyName";
 //   (3) 딜 전체 흐름을 몇 줄로 갈무리해 "지금 공이 누구에게 있는지"를 알려 준다.
 // 화면 문구는 나머지 화면과 같이 영문으로 쓴다(주석만 국문).
 export default function ProjectMailPanel({ rfqId }: { rfqId: number }) {
-  const [data, setData] = useState<ProjectMail | null>(null);
+  // 단계 보드와 같은 캐시 키를 쓴다 — 한 화면에서 같은 목록을 두 번 받아 올 이유가 없고,
+  // 여기서 Sync 를 눌러 새로 고치면 위 보드의 메일 줄도 함께 최신이 된다.
+  const { data, error: loadErr, refresh } = useCachedData(projectMailKey(rfqId), () =>
+    fetchProjectMail(rfqId));
   const [configured, setConfigured] = useState<boolean | null>(null);
   const [busy, setBusy] = useState("");   // 진행 중 작업 이름(버튼 비활성 + 안내)
   const [err, setErr] = useState("");
@@ -26,27 +33,18 @@ export default function ProjectMailPanel({ rfqId }: { rfqId: number }) {
   const [statusNote, setStatusNote] = useState("");  // 미분류 안내(있을 때만)
   const [open, setOpen] = useState<string[]>([]);   // 펼친 스레드 키
 
-  const load = useCallback(async () => {
-    try {
-      setData(await fetchProjectMail(rfqId));
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "Could not load mail.");
-    }
-  }, [rfqId]);
-
   useEffect(() => {
-    load();
     fetchMailStatus()
       .then((st) => setConfigured(st.configured))
       .catch(() => setConfigured(false));
-  }, [load]);
+  }, []);
 
   async function run(name: string, label: string, fn: () => Promise<unknown>) {
     setBusy(name);
     setErr("");
     try {
       await fn();
-      await load();
+      await refresh();
     } catch (e) {
       setErr(e instanceof Error ? e.message : `${label} failed`);
     } finally {
@@ -63,8 +61,7 @@ export default function ProjectMailPanel({ rfqId }: { rfqId: number }) {
     try {
       const r = await syncMail();
       const before = data?.count ?? 0;
-      const after = await fetchProjectMail(rfqId);
-      setData(after);
+      const after = await refresh();
       const gained = after.count - before;
       const parts = [`Scanned ${r.scanned} in the mailbox`];
       if (r.stored) parts.push(`kept ${r.stored} new`);
@@ -136,7 +133,7 @@ export default function ProjectMailPanel({ rfqId }: { rfqId: number }) {
         </span>
       </h2>
 
-      {err ? <div className="action-err">{err}</div> : null}
+      {err || loadErr ? <div className="action-err">{err || loadErr?.message}</div> : null}
       {note ? <div className="mail-note">{note}</div> : null}
       {statusNote ? <div className="mail-note">{statusNote}</div> : null}
 
