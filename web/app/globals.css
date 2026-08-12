@@ -11967,9 +11967,19 @@ table.mini.wide.umail-table td.umail-c-assign { width: 340px; }
 .brief-warn { font-size: 11.5px; font-weight: 700; color: #a06a1c; text-decoration: none; }
 .brief-warn:hover { text-decoration: underline; }
 
-.brief-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; align-items: start; }
+/* minmax(0, 1fr) 이어야 한다 — 그냥 1fr 은 minmax(auto, 1fr) 이라, 칸 안에 트랙보다
+   넓은 것(긴 문서번호, 줄바꿈 안 되는 토큰)이 하나라도 있으면 트랙이 그만큼 밀려
+   페이지에 가로 스크롤이 생긴다. 그러면 상단 고정 줄은 세로로만 붙어 있고 가로로는
+   함께 밀려, 옆으로 스크롤했을 때 그 자리로 카드가 지나간다. */
+.brief-grid {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px; align-items: start;
+}
 .brief-card {
   display: flex; flex-direction: column; gap: 6px; padding: 11px 13px 9px;
+  /* 그리드 칸(flex/grid 항목)의 기본 최소폭은 내용 크기다 — 0 으로 풀어야 트랙 안에서
+     줄어들고, 넘치는 글자는 아래 규칙들이 접거나 줄인다. */
+  min-width: 0;
   border: 1px solid var(--line); border-left: 3px solid var(--blue);
   border-radius: 10px; background: #fff; box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
 }
@@ -11992,8 +12002,15 @@ table.mini.wide.umail-table td.umail-c-assign { width: 340px; }
   font-size: 10.5px; font-weight: 700; color: #48586d;
 }
 .brief-pic { flex: 0 0 auto; font-size: 11px; color: var(--muted); }
-.brief-parties { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; font-size: 11px; }
-.brief-cust { display: inline-flex; align-items: center; min-width: 0; }
+.brief-parties {
+  display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
+  min-width: 0; font-size: 11px;
+}
+/* 거래처 이름은 길다("M.T.M SHIP MANAGEMENT PTE. LTD") — 칸을 넓히지 말고 끝을 줄인다. */
+.brief-cust {
+  display: inline-flex; align-items: center; min-width: 0; max-width: 100%;
+  overflow: hidden; white-space: nowrap;
+}
 .brief-contact { color: var(--muted); white-space: nowrap; }
 .brief-vessel {
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted);
@@ -12020,11 +12037,15 @@ table.mini.wide.umail-table td.umail-c-assign { width: 340px; }
 
 /* AI 요약 — 카드에서 가장 먼저 읽혀야 하는 부분. 딜 화면의 .mail-rollup 과 같은 판. */
 .mail-card-rollup {
-  list-style: none; margin: 0; padding: 8px 11px;
+  list-style: none; margin: 0; min-width: 0; padding: 8px 11px;
   border: 1px solid #dbe6f5; border-left: 3px solid var(--blue); border-radius: 8px;
   background: #f6f9fe;
 }
-.mail-card-rollup li { font-size: 12px; line-height: 1.5; color: #23364d; }
+/* 요약 줄에는 문서번호가 그대로 실린다(KMS-QUO-2607-011, PO#EHZM-20260803DIESEL …) —
+   공백 없이 긴 토큰이라 어디서든 끊어 주지 않으면 카드를 옆으로 밀어 버린다. */
+.mail-card-rollup li {
+  font-size: 12px; line-height: 1.5; color: #23364d; overflow-wrap: anywhere;
+}
 .mail-card-rollup li + li { margin-top: 3px; }
 /* 라벨(진행·쟁점·금액·납기·다음) — 눈이 줄머리를 훑고 필요한 줄에만 멈추게. */
 .mail-card-label {
@@ -12055,7 +12076,7 @@ table.mini.wide.umail-table td.umail-c-assign { width: 340px; }
   flex: 0 0 auto; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   color: #46586e;
 }
-.brief-line-desc { flex: 1 1 60%; min-width: 0; color: var(--ink); }
+.brief-line-desc { flex: 1 1 60%; min-width: 0; color: var(--ink); overflow-wrap: anywhere; }
 /* 메일 줄의 요약은 두 줄까지 — 그 이상은 딜을 열어 읽을 일이다. */
 .brief-line.mail .brief-line-desc {
   color: #5c6b7d; overflow: hidden; text-overflow: ellipsis;
@@ -12075,10 +12096,10 @@ table.mini.wide.umail-table td.umail-c-assign { width: 340px; }
 }
 .mail-card-open:hover { text-decoration: underline; }
 @media (max-width: 1400px) {
-  .brief-grid { grid-template-columns: repeat(2, 1fr); }
+  .brief-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 900px) {
-  .brief-grid { grid-template-columns: 1fr; }
+  .brief-grid { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* ── 딜 선택 드롭다운(ProjectPicker) ──────────────────────────────────────────
