@@ -12090,8 +12090,17 @@ table.mini.wide.umail-table td.umail-c-assign { width: 340px; }
   display: flex; align-items: center; gap: 8px; padding-top: 6px;
   border-top: 1px solid var(--line); font-size: 11px; color: var(--muted);
 }
+/* 통수는 왼쪽에 남고 나머지는 오른쪽으로 — more 가 있든 없든 Open 은 끝을 지킨다. */
+.brief-foot > span { margin-right: auto; }
+/* "N more" — 이 카드만 펴고 접는다. 원래 푸터에 있던 글자를 그대로 누르는 자리로
+   만든 것이라, 버튼처럼 무겁게 보이지 않게 본문과 같은 무게로 둔다. */
+.brief-more {
+  border: 0; background: none; padding: 0;
+  font: inherit; color: var(--muted); cursor: pointer;
+}
+.brief-more:hover { color: var(--blue); text-decoration: underline; }
 .mail-card-open {
-  margin-left: auto; border: 0; background: none; padding: 0;
+  margin-left: 10px; border: 0; background: none; padding: 0;
   font-size: 11.5px; font-weight: 700; color: var(--blue); cursor: pointer;
 }
 .mail-card-open:hover { text-decoration: underline; }

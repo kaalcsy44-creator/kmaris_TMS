@@ -71,7 +71,11 @@ export default function BriefingTab() {
     fetchMailStatus().catch(() => null));
 
   const [filter, setFilter] = useState<Filter>("all");
-  const [show, setShow] = useState(3);          // 카드마다 보여 줄 최근 줄 수
+  // 두 컨트롤은 서로 다른 질문에 답한다. show 는 "오늘 이 보드를 얼마나 촘촘히 볼까"
+  // 라는 밀도이고, expanded 는 "이 건만 더 보여줘"라는 한 건에 대한 요청이다. 한 건이
+  // 궁금할 때마다 밀도를 올리면 15장이 다 늘어나 보던 자리를 잃는다.
+  const [show, setShow] = useState(3);          // 카드마다 보여 줄 최근 줄 수(기본값)
+  const [expanded, setExpanded] = useState<number[]>([]);   // 통째로 편 카드(딜 번호)
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
   const [err, setErr] = useState("");
@@ -212,7 +216,10 @@ export default function BriefingTab() {
                 key={n}
                 type="button"
                 className={`brief-show-btn${show === n ? " on" : ""}`}
-                onClick={() => setShow(n)}
+                // 밀도를 새로 정하면 개별로 펴 둔 카드는 접는다 — 이 버튼은 "전부
+                // 이만큼"이라는 뜻이어야 하고, 그러지 않으면 눌러도 안 변하는 카드가
+                // 남아 컨트롤을 믿을 수 없게 된다.
+                onClick={() => { setShow(n); setExpanded([]); }}
               >
                 {n}
               </button>
@@ -255,6 +262,14 @@ export default function BriefingTab() {
               card={c}
               steps={steps}
               show={show}
+              open={expanded.includes(c.row.rfq_id)}
+              onToggle={() =>
+                setExpanded((prev) =>
+                  prev.includes(c.row.rfq_id)
+                    ? prev.filter((id) => id !== c.row.rfq_id)
+                    : [...prev, c.row.rfq_id]
+                )
+              }
               waitingAfter={waitingAfter}
               onOpen={() => { setStageTarget(null); setOpenRfqId(c.row.rfq_id); }}
               onOpenStage={(act) => {
@@ -304,6 +319,8 @@ function BriefCard({
   card,
   steps,
   show,
+  open,
+  onToggle,
   waitingAfter,
   onOpen,
   onOpenStage,
@@ -311,6 +328,8 @@ function BriefCard({
   card: Card;
   steps: string[];
   show: number;
+  open: boolean;               // 이 카드만 통째로 편 상태
+  onToggle: () => void;
   waitingAfter: number;
   onOpen: () => void;
   onOpenStage: (act: Activity) => void;
@@ -397,7 +416,7 @@ function BriefCard({
       {/* 사건과 메일을 한 시간축에. 사건은 굵은 라벨(Quote Sent…), 메일은 방향 화살표로
           갈라 보이되 줄 간격은 같다 — 둘은 같은 이야기의 두 면이다. */}
       <ol className="brief-lines">
-        {card.lines.slice(0, show).map((l, i) => (
+        {card.lines.slice(0, open ? card.lines.length : show).map((l, i) => (
           <li key={i} className={l.kind === "mail" ? `brief-line mail ${l.dir}` : "brief-line act"}>
             <span className="brief-line-when">
               {md(l.at)}
@@ -427,8 +446,14 @@ function BriefCard({
             ? `${card.mailCount} mail${card.mailCount === 1 ? "" : "s"}`
             : "no mail linked"}
           {card.mailCount && (!mail || mail.recent_count === 0) ? ` · none in ${DAYS}d` : ""}
-          {card.lines.length > show ? ` · ${card.lines.length - show} more` : ""}
         </span>
+        {/* 이 카드만 펴고 접는 자리 — 새 버튼을 달지 않고 원래 있던 "N more" 를 누를 수
+            있게 했다. 카드마다 같은 장식이 하나씩 늘면 보드가 그만큼 시끄러워진다. */}
+        {card.lines.length > show ? (
+          <button type="button" className="brief-more" onClick={onToggle}>
+            {open ? "show less ▴" : `${card.lines.length - show} more ▾`}
+          </button>
+        ) : null}
         <button type="button" className="mail-card-open" onClick={onOpen}>Open ▸</button>
       </div>
     </section>
