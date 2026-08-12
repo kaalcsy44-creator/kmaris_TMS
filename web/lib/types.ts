@@ -460,6 +460,9 @@ export type CustomerQuoteItem = {
   remark?: string;
   /** 품목 분류(선택). 저장 시 품목 마스터 분류로 반영된다. */
   category_id?: number | null;
+  /** 문서에서 제외한 행 — 서버 _item_view 가 늘 실어 보낸다. 금액 0 과 다른 상태다
+   *  (0 = 이 문서에 들어 있고 값이 0, 제외 = 이 문서에 나가지 않음). */
+  excluded?: boolean;
 };
 
 export type QuotationTerms = {

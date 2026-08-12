@@ -11249,6 +11249,12 @@ button.ov-tl-stage:hover { background: color-mix(in srgb, var(--ov-tone) 12%, tr
 .ov-tl-notes li.star { background: #fffbe9; border-radius: 4px; }
 .ov-tl-ndate { flex: none; width: 58px; color: var(--muted); font-size: var(--ov-t-meta);
   font-variant-numeric: tabular-nums; padding-top: 1px; white-space: nowrap; }
+/* 문서에서 뺀 줄 — "값 없음(—)"도 "0 원"도 아닌 세 번째 상태다. 취소선으로 "이 문서에는
+   안 나갔다"를 말하되, 값이 있는 칸보다 눈에 늦게 들어오게 옅게 둔다. */
+.ov-excl {
+  color: #98a3b3; font-size: var(--ov-t-meta); font-weight: 600;
+  text-decoration: line-through; text-decoration-color: #c3ccd9;
+}
 .ov-tl-ntext { min-width: 0; word-break: break-word; }
 /* 오간 메일 한 줄 — 같은 단계의 활동 로그에 노트와 나란히 선다. 단계 진행(굵은 라벨)이
    주인공이라, 메일은 방향 화살표와 상대만 세우고 요약은 본문 색으로 낮춰 둔다. */

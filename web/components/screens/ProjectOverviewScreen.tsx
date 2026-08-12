@@ -166,11 +166,22 @@ function quoteForOrder(order: ProjectOrder, quotes: ProjectQuote[]): ProjectQuot
   const vid = order.vessel_id || 0;
   return (vid && quotes.find((q) => (q.vessel_id || 0) === vid)) || null;
 }
-type StageItem = { qty?: number; unit_price?: number | null; amount?: number | null };
+type StageItem = {
+  qty?: number;
+  unit_price?: number | null;
+  amount?: number | null;
+  /** 그 문서에서 뺀 줄 — 표에는 남지만 발행 문서와 합계에서는 빠진다. */
+  excluded?: boolean;
+};
 
-/** 품목 1줄의 금액 — amount 가 있으면 그대로, 없으면 단가×수량으로 보정. */
+/** 품목 1줄의 금액 — amount 가 있으면 그대로, 없으면 단가×수량으로 보정.
+ *
+ *  문서에서 뺀 줄은 null 을 준다. 금액 0 과 같은 뜻이 아니다 — 0 은 "이 문서에 들어
+ *  있고 값이 0"(끼워 준 부품)이고, 제외는 "이 문서에 안 나간다"(발주하지 않음)다.
+ *  둘이 같은 얼굴이면 무엇이 실제로 납품됐는지 표에서 읽을 수 없다. null 로 두면
+ *  합계에서도 자동으로 빠져 서버의 발행 규칙(_total_amount)과 어긋나지 않는다. */
 function lineAmount(it: StageItem | undefined): number | null {
-  if (!it) return null;
+  if (!it || it.excluded) return null;
   if (it.amount != null) return Number(it.amount);
   if (it.unit_price == null) return null;
   return Number(it.unit_price) * Number(it.qty || 1);
@@ -1149,8 +1160,20 @@ function ItemsSection({
 }
 
 /** 통화 + 금액 한 줄(조밀). 값이 없으면 —. 0 으로 보이면 "무료"로 오해되므로 구분한다.
- *  0 은 아직 값이 없다는 뜻이라 .zero 로 톤만 낮춘다(표기는 그대로 둔다). */
-function Money({ value, currency }: { value: number | null | undefined; currency: string }) {
+ *  0 은 아직 값이 없다는 뜻이라 .zero 로 톤만 낮춘다(표기는 그대로 둔다).
+ *
+ *  excluded 는 "이 문서에서 뺀 줄"이라 —(없음)과도 0(값이 0)과도 다르게 적는다.
+ *  그러지 않으면 "발주에서 빠진 품목"과 "끼워 준 0원 품목"이 같은 칸으로 보인다. */
+function Money({
+  value,
+  currency,
+  excluded,
+}: {
+  value: number | null | undefined;
+  currency: string;
+  excluded?: boolean;
+}) {
+  if (excluded) return <span className="ov-excl" title="Excluded from this document">excl.</span>;
   if (value == null || !Number.isFinite(value)) return <span className="muted">—</span>;
   return (
     <span className={`ov-m${Math.round(value) === 0 ? " zero" : ""}`}>
@@ -1159,8 +1182,8 @@ function Money({ value, currency }: { value: number | null | undefined; currency
   );
 }
 
-function Pct({ value }: { value: number | null }) {
-  if (value == null) return <span className="muted">—</span>;
+function Pct({ value, excluded }: { value: number | null; excluded?: boolean }) {
+  if (excluded || value == null) return <span className="muted">—</span>;
   return <span className="ov-pct">{value}%</span>;
 }
 
@@ -1236,14 +1259,24 @@ function OrderItemGroup({
     const qIt = matchQuote(it, i);
     const vIt = matchVpo(it, i);
     const cIt = matchCi(it, i);
+    // 제외는 단계마다 따로 정한다 — 견적에는 넣었다가 발주에서 뺀 품목이 흔하다.
+    // 매입/매출도 서로 다른 문서(벤더 P/O vs 고객 P/O)라 각각의 표식을 본다.
+    const qEx = !!qIt?.excluded;
+    const vEx = !!vIt?.excluded;
     return {
       it,
       qIt,
-      qPur: qIt?.cost_price == null ? null : Number(qIt.cost_price) * Number(qIt.qty || 1),
+      qEx,
+      vEx,
+      pSalesEx: !!it.excluded,
+      cSalesEx: !!cIt?.excluded,
+      qPur: qEx || qIt?.cost_price == null
+        ? null
+        : Number(qIt.cost_price) * Number(qIt.qty || 1),
       qSales: lineAmount(qIt),
       pPur: lineAmount(vIt),
       pSales: lineAmount(it),
-      cPur: ciPurchase(vIt, cIt),
+      cPur: vEx ? null : ciPurchase(vIt, cIt),
       cSales: lineAmount(cIt),
     };
   });
@@ -1291,31 +1324,37 @@ function OrderItemGroup({
             {ln.it.unit ? ` ${ln.it.unit}` : ""}
           </td>
           <td className="num gs">
-            <Money value={ln.qPur} currency={qCostCur} />
+            <Money value={ln.qPur} currency={qCostCur} excluded={ln.qEx} />
           </td>
           <td className="num">
-            <Pct value={ln.qIt?.margin_pct ?? null} />
+            <Pct value={ln.qIt?.margin_pct ?? null} excluded={ln.qEx} />
           </td>
           <td className="num ov-sal">
-            <Money value={ln.qSales} currency={qCur} />
+            <Money value={ln.qSales} currency={qCur} excluded={ln.qEx} />
           </td>
           <td className="num gs">
-            <Money value={ln.pPur} currency={vpoCur} />
+            <Money value={ln.pPur} currency={vpoCur} excluded={ln.vEx} />
           </td>
           <td className="num">
-            <Pct value={marginPct(ln.pSales, ln.pPur, oCur, vpoCur, rate)} />
+            <Pct
+              value={marginPct(ln.pSales, ln.pPur, oCur, vpoCur, rate)}
+              excluded={ln.vEx || ln.pSalesEx}
+            />
           </td>
           <td className="num ov-sal">
-            <Money value={ln.pSales} currency={oCur} />
+            <Money value={ln.pSales} currency={oCur} excluded={ln.pSalesEx} />
           </td>
           <td className="num gs">
-            <Money value={ln.cPur} currency={vpoCur} />
+            <Money value={ln.cPur} currency={vpoCur} excluded={ln.vEx} />
           </td>
           <td className="num">
-            <Pct value={marginPct(ln.cSales, ln.cPur, ciCur, vpoCur, rate)} />
+            <Pct
+              value={marginPct(ln.cSales, ln.cPur, ciCur, vpoCur, rate)}
+              excluded={ln.vEx || ln.cSalesEx}
+            />
           </td>
           <td className="num ov-sal">
-            <Money value={ln.cSales} currency={ciCur} />
+            <Money value={ln.cSales} currency={ciCur} excluded={ln.cSalesEx} />
           </td>
         </tr>
       ))}
@@ -1564,7 +1603,10 @@ function QuoteOnlyGroup({
       />
       {/* 합계를 품목 1번행 바로 위에 둔다(OrderItemGroup 과 동일 배치). */}
       <GroupTotal
-        quotePur={sumLines(quote.items.map((x) => ({ amount: (x.cost_price ?? 0) * (x.qty || 1) })))}
+        quotePur={sumLines(quote.items.map((x) => ({
+          amount: (x.cost_price ?? 0) * (x.qty || 1),
+          excluded: x.excluded,
+        })))}
         quoteSales={quote.amount ?? sumLines(quote.items)}
         poPur={null}
         poSales={null}
@@ -1584,15 +1626,20 @@ function QuoteOnlyGroup({
           </td>
           <td className="num gs">
             <Money
-              value={it.cost_price == null ? null : Number(it.cost_price) * Number(it.qty || 1)}
+              value={
+                it.excluded || it.cost_price == null
+                  ? null
+                  : Number(it.cost_price) * Number(it.qty || 1)
+              }
               currency={qCostCur}
+              excluded={it.excluded}
             />
           </td>
           <td className="num">
-            <Pct value={it.margin_pct ?? null} />
+            <Pct value={it.margin_pct ?? null} excluded={it.excluded} />
           </td>
           <td className="num ov-sal">
-            <Money value={lineAmount(it)} currency={qCur} />
+            <Money value={lineAmount(it)} currency={qCur} excluded={it.excluded} />
           </td>
           <td className="num gs" colSpan={6}>
             <span className="muted">—</span>
