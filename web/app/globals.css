@@ -692,6 +692,10 @@ body {
   background: var(--page-bg);
   padding-top: 6px;
 }
+/* 탭 줄의 높이 — 패딩 6 + 버튼 약 37 + 아래 선 1. 이 줄 밑에 또 고정할 것(예:
+   Briefing 의 필터 줄)이 자기 top 을 여기서 가져간다. 몇 px 어긋나도 탭이 z-index 로
+   위에 있어 틈이 보이지 않는다. */
+:root { --page-tabs-h: 44px; }
 .page-tabs button {
   border: none;
   background: transparent;
@@ -11927,8 +11931,19 @@ table.mini.wide.umail-table td.umail-c-assign { width: 340px; }
    프로젝트 하나가 카드 하나. 위에서 아래로 신원 → 상대 → 진행바 → 지금 상태 →
    AI 요약 → 사건·메일을 섞은 최근 줄 순으로 읽히게 둔다. Home 탭의 정사각 카드와
    달리 높이는 내용이 정한다(딜마다 오간 양이 다르다). */
-.brief { margin-top: 14px; }
-.brief-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+/* 여백은 아래 필터 줄이 패딩으로 낸다 — 그래야 그 줄이 고정됐을 때 여백까지 함께
+   불투명하게 덮여, 카드가 그 사이로 비쳐 지나가지 않는다. */
+.brief { margin-top: 0; }
+/* 필터·도구 줄은 탭 바로 아래에 붙여 둔다 — 카드를 한참 내려가서 본 뒤에도 "지금 어느
+   묶음을 보고 있는지"와 Show 조절이 손 닿는 곳에 있어야 한다. 스크롤은 이 줄 아래
+   카드들에만 걸린다. 탭(z 29)이 이 줄(z 28) 위에 그려지므로 top 이 1~2px 어긋나도
+   그 사이로 카드가 비쳐 보이지 않는다. */
+.brief-bar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  position: sticky; top: calc(var(--page-tabs-h) - 1px); z-index: 28;
+  background: var(--page-bg);
+  margin: 0 0 4px; padding: 10px 0;
+}
 .brief-chips { display: flex; gap: 6px; flex-wrap: wrap; }
 .brief-acts { margin-left: auto; display: flex; align-items: center; gap: 10px; }
 .mail-chip {
