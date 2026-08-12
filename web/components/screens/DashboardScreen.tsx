@@ -26,7 +26,7 @@ import type {
   ScheduleRow, CustomerOption, StatisticsData, StatAlertRow, CurrencyKey,
   StatDebugData,
 } from "@/lib/types";
-import { PipelineModal } from "@/components/screens/ProjectsScreen";
+import { PipelineModal, byProjectNo } from "@/components/screens/ProjectsScreen";
 import BriefingTab from "@/components/screens/BriefingTab";
 import { MarketingForm, emptyForm as emptyMarketingForm } from "@/components/screens/MarketingScreen";
 import {
@@ -218,6 +218,23 @@ function HomeTab() {
     const row = orderId ? byOrderId.get(orderId) : undefined;
     if (row) setOpenRfqId(row.rfq_id);
     else router.push(fallback);
+  }
+
+  // 팝업의 ← → — Home 의 카드는 견적·P/O·연체처럼 저마다 다른 목록이라 "인접"의 뜻이
+  // 카드마다 달라진다. 그래서 Projects 화면과 같은 프로젝트 번호순으로 넘긴다. 양 끝에서
+  // 순환한다.
+  const navOrder = useMemo(
+    () => [...pipeRows].sort(byProjectNo).map((r) => r.rfq_id),
+    [pipeRows]
+  );
+  function navigateProject(dir: -1 | 1) {
+    setOpenRfqId((cur) => {
+      if (cur == null || !navOrder.length) return cur;
+      const idx = navOrder.indexOf(cur);
+      if (idx < 0) return cur;
+      const n = navOrder.length;
+      return navOrder[(((idx + dir) % n) + n) % n];
+    });
   }
 
   async function reloadAfterProjectEdit() {
@@ -598,6 +615,7 @@ function HomeTab() {
           customers={customers ?? []}
           vessels={vessels ?? []}
           onChanged={reloadAfterProjectEdit}
+          onNavigate={navigateProject}
           onClose={() => setOpenRfqId(null)}
         />
       ) : null}

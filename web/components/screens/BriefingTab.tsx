@@ -187,6 +187,20 @@ export default function BriefingTab() {
     ? (pipeline?.rows ?? []).find((r) => r.rfq_id === openRfqId) ?? null
     : null;
 
+  // 팝업의 ← → — 지금 보고 있는 **카드 순서**로 옮겨간다(필터와 정렬이 반영된 그 순서).
+  // 프로젝트 번호순으로 넘기면 화면에 없는 딜로 튀어, 방금 훑던 자리를 잃는다.
+  // 양 끝에서는 순환한다 — 다른 화면의 ← → 와 같은 규칙.
+  function navigate(dir: -1 | 1) {
+    setStageTarget(null);
+    setOpenRfqId((cur) => {
+      if (cur == null || !shown.length) return cur;
+      const idx = shown.findIndex((c) => c.row.rfq_id === cur);
+      if (idx < 0) return cur;
+      const n = shown.length;
+      return shown[(((idx + dir) % n) + n) % n].row.rfq_id;
+    });
+  }
+
   const loadErr = digestErr ?? pipeErr;
   if (loadErr) return <div className="action-err">{loadErr.message}</div>;
   if (!pipeline) return <div className="state">Loading…</div>;
@@ -290,6 +304,7 @@ export default function BriefingTab() {
           vessels={vessels ?? []}
           onChanged={() => Promise.all([refreshPipeline(), refresh()])}
           onClose={() => { setOpenRfqId(null); setStageTarget(null); }}
+          onNavigate={navigate}
           initialView={stageTarget ? "work" : "overview"}
           initialStage={stageTarget?.stage ?? null}
           initialVrfqId={stageTarget?.vrfqId ?? null}
