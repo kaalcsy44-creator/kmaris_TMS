@@ -1667,6 +1667,9 @@ export type MailDigest = {
   waiting_after: number;      // 이 날수 이상 쥐고 있으면 "우리 차례"로 올린다
   rows: MailDigestRow[];
   unmatched: number;          // 어느 딜에도 안 붙은 메일 — 카드에 안 잡힌 것들
+  // rfq_id(문자열) → 그 딜의 전체 메일 통수. rows 에 못 실린 딜까지 전부 담는다 —
+  // 화면이 "메일이 아예 없는 딜"과 "이번 응답에 안 실린 딜"을 혼동하지 않게.
+  has_mail: Record<string, number>;
 };
 export type MailStatus = {
   configured: boolean;

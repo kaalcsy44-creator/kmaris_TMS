@@ -348,9 +348,14 @@ def mail_digest(days: int = 14):
         cache = _rollup_cache(s, picked)
         cutoff = mail_sync.cutoff_at(window)
         out = []
-        for rid, msgs in groups.items():
-            count, _, last_id = live[rid]
-            last = msgs[-1]
+        # groups 가 아니라 picked 를 돈다. 고른 딜인데 _HISTORY_DAYS 안에 메일이 한 통도
+        # 없으면 groups 에는 자리가 없는데, 그때 행을 빼 버리면 화면은 그것을 "메일이
+        # 없는 딜"로 읽는다 — P-007 을 잃었던 것과 똑같은 실수다. 통수와 마지막 시각은
+        # 집계에서 이미 알고 있으니, 줄만 비운 채로 내보낸다.
+        for rid in picked:
+            msgs = groups.get(rid, [])
+            count, last_at, last_id = live[rid]
+            last = msgs[-1] if msgs else None
             tail = msgs[-_DIGEST_RECENT:]
             # 상대는 최근에 등장한 순서로 — 카드 머리에 두어 곳만 보여 준다.
             parties: list[str] = []
@@ -372,9 +377,9 @@ def mail_digest(days: int = 14):
                 # 화면은 그래도 아래 recent 로 마지막 대화를 보여 준다.
                 "recent_count": len([m for m in msgs if (m.sent_at or "") >= cutoff]),
                 "parties": parties[:4],
-                "last_at": last.sent_at or "",
-                "last_dir": last.direction or "in",
-                "waiting_days": _waiting_days(last.sent_at or "", last.direction or ""),
+                "last_at": last_at,
+                "last_dir": (last.direction or "in") if last else "",
+                "waiting_days": _waiting_days(last.sent_at or "", last.direction or "") if last else 0,
                 "rollup": cached.get("text", ""),
                 "rollup_stale": bool(cached.get("text")) and not fresh,
                 "new_since": new_since,
@@ -390,14 +395,28 @@ def mail_digest(days: int = 14):
         out.sort(key=lambda r: r["last_at"], reverse=True)          # ② 최근에 움직인 순
         out.sort(key=lambda r: (0 if r["waiting_days"] >= WAITING_DAYS else 1,
                                 -r["waiting_days"]))                # ① 우리가 오래 쥔 것부터
-        return {"days": window, "waiting_after": WAITING_DAYS,
-                "rows": out[:_DIGEST_MAX_CARDS], "unmatched": unmatched}
+        return {
+            "days": window,
+            "waiting_after": WAITING_DAYS,
+            "rows": out,
+            "unmatched": unmatched,
+            # 메일이 한 통이라도 있는 열린 딜 전부 → 통수. 상한(_DIGEST_MAX_CARDS)에
+            # 걸려 rows 에 못 실린 딜을 화면이 "메일 없는 딜"로 오해하지 않게 하는
+            # 안전줄이다. 딜당 정수 하나라 상한을 아무리 늘려도 응답이 무거워지지 않는다.
+            "has_mail": {str(rid): live[rid][0] for rid in live},
+        }
     finally:
         s.close()
 
 
+class MailDigestRefresh(BaseModel):
+    # 화면이 "이 카드들의 요약이 비었다"고 짚어 준 딜. 비우면 서버가 최근 순으로 고른다.
+    rfq_ids: list[int] = []
+    limit: int = 10
+
+
 @app.post("/api/admin/mail/digest/refresh", dependencies=[Depends(require_token)])
-def mail_digest_refresh(days: int = 14, limit: int = 10):
+def mail_digest_refresh(body: MailDigestRefresh | None = None, days: int = 14, limit: int = 10):
     """요약이 없거나 낡은 카드의 AI 롤업을 채운다(한 번에 limit 건까지).
 
     화면을 여는 길목에서 딜 수만큼 AI 를 부를 수는 없어서 생성을 이 버튼으로 떼어
@@ -405,15 +424,21 @@ def mail_digest_refresh(days: int = 14, limit: int = 10):
     채운다(딜 하나당 AI 호출 1회).
 
     대상은 화면에 오르는 딜과 같아야 한다 — 기간으로 좁히면, 메일은 3주 전이 마지막
-    이지만 단계는 이번 주에 움직인 딜이 카드로는 보이면서 요약만 영영 비어 있게 된다."""
+    이지만 단계는 이번 주에 움직인 딜이 카드로는 보이면서 요약만 영영 비어 있게 된다.
+    그래서 화면이 rfq_ids 로 "지금 보이는데 요약이 빈 카드"를 직접 짚어 준다. 카드가
+    될 자격에는 메일뿐 아니라 단계 이벤트도 걸리는데, 그건 화면만 아는 사실이다."""
     s = get_session()
     try:
         window = max(1, min(days, 365))
         live = mail_sync.live_deals(s, None)
         cache = _rollup_cache(s, live)
-        todo = [rid for rid, (_, _, last_id) in live.items()
-                if (cache.get(rid) or {}).get("last_id") != last_id]
+        asked = [rid for rid in (body.rfq_ids if body else []) if rid in live]
+        pool = asked or list(live)
+        todo = [rid for rid in pool
+                if (cache.get(rid) or {}).get("last_id") != live[rid][2]]
         todo.sort(key=lambda rid: live[rid][1], reverse=True)
+        if body and body.limit:
+            limit = body.limit
         picked = todo[:max(1, min(limit, 30))]
         # 번호(P-024)는 RFQ 전수 조회라 한 번만 세어 딜마다 나눠 쓴다.
         nos = _project_no_map(s) if picked else {}

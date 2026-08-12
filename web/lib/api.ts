@@ -1870,11 +1870,13 @@ export function fetchMailDigest(days = 14): Promise<MailDigest> {
   return get<MailDigest>(`/api/admin/mail/digest?days=${days}`);
 }
 // 요약이 없거나 낡은 카드의 AI 롤업을 채운다(딜당 호출 1회라 상한을 두고 나눠 부른다).
+// rfqIds 로 "지금 화면에서 요약이 빈 카드"를 짚어 준다 — 카드가 될 자격에는 단계
+// 이벤트도 걸리는데 서버는 그걸 모르므로, 비워 두면 엉뚱한 딜의 요약을 만들 수 있다.
 export function refreshMailDigests(
-  days = 14,
+  rfqIds: number[] = [],
   limit = 10
 ): Promise<{ ok: boolean; written: number; remaining: number }> {
-  return post(`/api/admin/mail/digest/refresh?days=${days}&limit=${limit}`, {});
+  return post("/api/admin/mail/digest/refresh", { rfq_ids: rfqIds, limit });
 }
 // 미분류 메일 — 대화(groups) 단위로 온다. 본문은 미리보기 길이까지만 실려 온다.
 export function fetchUnmatchedMail(

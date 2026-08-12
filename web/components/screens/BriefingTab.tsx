@@ -51,6 +51,9 @@ type Line =
 type Card = {
   row: PipelineRow;
   mail: MailDigestRow | null;
+  // 이 딜에 붙은 전체 메일 통수. mail 이 null 이어도 0 이 아닐 수 있다 — 집계 상한에
+  // 걸려 이번 응답에 안 실렸을 뿐인 경우다. "메일 없음"을 이 값으로 판단한다.
+  mailCount: number;
   lines: Line[];
   lastAt: string;             // 사건·메일 통틀어 마지막 움직임
   waitingDays: number;        // 마지막 메일이 수신인 채 지난 날수(메일 없으면 0)
@@ -114,6 +117,7 @@ export default function BriefingTab() {
       out.push({
         row,
         mail,
+        mailCount: mail?.count ?? digest?.has_mail?.[String(row.rfq_id)] ?? 0,
         lines,
         lastAt: lines[0]?.at || lastActivityISO(row),
         waitingDays: mail?.waiting_days ?? 0,
@@ -136,6 +140,9 @@ export default function BriefingTab() {
     !c.mail || c.mail.recent_count === 0 ? "nomail"
       : c.waitingDays >= waitingAfter ? "ours" : "theirs";
 
+  // 요약이 비어 있는 **카드**의 딜 번호 — 이걸 그대로 서버에 짚어 준다.
+  const needDigest = cards.filter((c) => c.mail && !c.mail.rollup).map((c) => c.row.rfq_id);
+
   const counts = useMemo(() => {
     const n = { all: cards.length, ours: 0, theirs: 0, nomail: 0 };
     for (const c of cards) n[groupOf(c) as "ours" | "theirs" | "nomail"] += 1;
@@ -149,9 +156,7 @@ export default function BriefingTab() {
     [cards, filter, waitingAfter]
   );
 
-  // 요약이 아직 없는 **카드** 수 — 집계에 실려 온 딜 전체가 아니다(화면에 없는 딜의
-  // 요약을 만들라고 권할 이유가 없다).
-  const missing = cards.filter((c) => c.mail && !c.mail.rollup).length;
+  const missing = needDigest.length;
 
   // 롤업 생성은 딜당 AI 호출 1회다. 한 번에 다 만들지 않고 상한까지만 만든 뒤
   // 남은 수를 알려 준다 — 눌러 놓고 20초를 기다리게 하는 것보다 낫다.
@@ -160,7 +165,7 @@ export default function BriefingTab() {
     setErr("");
     setNote("");
     try {
-      const r = await refreshMailDigests(DAYS, 10);
+      const r = await refreshMailDigests(needDigest, 10);
       await refresh();
       setNote(
         r.remaining > 0
@@ -354,12 +359,13 @@ function BriefCard({
 
       <div className="brief-state">
         {/* 메일이 아예 없는 것과, 있는데 요즘 조용한 것은 다른 상태다 — 뒤엣것은
-            아래에 그 딜의 마지막 대화가 그대로 실려 있다. */}
+            아래에 그 딜의 마지막 대화가 그대로 실려 있다. 통수는 mailCount 로 본다
+            (집계 상한에 걸려 이번 응답에 안 실린 딜도 "없음"이 아니다). */}
         <span className={`mail-turn${waiting ? " ours" : ""}`}>
-          {!mail
+          {!card.mailCount
             ? "No mail linked"
-            : mail.recent_count === 0
-              ? `Quiet since ${md(mail.last_at)}`
+            : !mail || mail.recent_count === 0
+              ? `Quiet since ${md(mail?.last_at || card.lastAt)}`
               : waiting
                 ? `Our move · ${card.waitingDays}d`
                 : mail.last_dir === "in"
@@ -417,8 +423,10 @@ function BriefCard({
 
       <div className="brief-foot">
         <span>
-          {mail ? `${mail.count} mail${mail.count === 1 ? "" : "s"}` : "no mail linked"}
-          {mail && mail.recent_count === 0 ? ` · none in ${DAYS}d` : ""}
+          {card.mailCount
+            ? `${card.mailCount} mail${card.mailCount === 1 ? "" : "s"}`
+            : "no mail linked"}
+          {card.mailCount && (!mail || mail.recent_count === 0) ? ` · none in ${DAYS}d` : ""}
           {card.lines.length > show ? ` · ${card.lines.length - show} more` : ""}
         </span>
         <button type="button" className="mail-card-open" onClick={onOpen}>Open ▸</button>
