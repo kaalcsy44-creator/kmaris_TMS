@@ -361,14 +361,12 @@ function BriefCard({
 
   return (
     <section className={`brief-card${waiting ? " waiting" : ""}${row.work_type === "서비스" ? " service" : ""}`}>
+      {/* 제목 줄에는 제목만 둔다. 단계 배지가 여기 있으면 카드마다 다른 길이로 제목을
+          잘라 먹어, 정작 딜을 알아보게 하는 글자가 먼저 사라졌다. 배지는 아래
+          진행바 옆으로 — 몇 번째 칸까지 찼는지를 바로 그 자리에서 읽게 된다. */}
       <button type="button" className="brief-head" onClick={onOpen}>
         <span className="brief-no"><ProjectNo value={row.project_no} /></span>
         <span className="brief-title">{row.project_title || "(untitled)"}</span>
-        {stageLabel ? (
-          <span className="brief-stage" title={`Current stage: ${stageLabel}`}>
-            {row.stage} {stageLabel}
-          </span>
-        ) : null}
         {row.assignee ? <span className="brief-pic">{row.assignee}</span> : null}
       </button>
 
@@ -395,11 +393,18 @@ function BriefCard({
       ) : null}
       <MoneyRow row={row} />
 
-      {steps.length ? (
-        <div className="brief-steps" title={stageLabel ? `Current stage: ${stageLabel}` : undefined}>
-          {steps.map((_, i) => (
-            <span key={i} className={`brief-step${i < row.stage ? " on" : ""}`} />
-          ))}
+      {steps.length || stageLabel ? (
+        <div className="brief-track" title={stageLabel ? `Current stage: ${stageLabel}` : undefined}>
+          <div className="brief-steps">
+            {steps.map((_, i) => (
+              <span key={i} className={`brief-step${i < row.stage ? " on" : ""}`} />
+            ))}
+          </div>
+          {stageLabel ? (
+            <span className="brief-stage">
+              <b>{row.stage}</b> {stageLabel}
+            </span>
+          ) : null}
         </div>
       ) : null}
 
@@ -536,20 +541,63 @@ function primaryAmount(value: string): string {
   return value.trim().split(/\s+(?=[A-Z]{3}\s)/)[0] || value;
 }
 
-// 요약 한 줄 — "진행: …" 처럼 라벨이 붙어 오면 라벨만 떼어 굵게 세운다.
+// 요약 한 줄 — "진행: …" 처럼 라벨이 붙어 오면 라벨만 떼어 왼쪽 칸에 세운다.
 // 넷 중 하나일 때만 라벨로 본다(본문에 콜론이 있다고 라벨이 되면 안 된다).
 // 예전에 만들어 둔 "- 문장" 꼴 요약도 그대로 한 줄로 나온다.
-const ROLLUP_LABELS = ["진행", "쟁점", "금액·납기", "다음"];
+//
+// 네 줄은 무게가 다르다. '진행'은 이미 지나간 배경이고, '다음'은 오늘 손을 대야 하는
+// 유일한 줄이다. 같은 크기·같은 검정으로 찍으면 넷이 한 덩어리로 뭉쳐 아무것도 먼저
+// 읽히지 않는다 — 그래서 라벨은 흐리게 옆으로 빼고, 본문만 종류별로 힘을 달리한다.
+const ROLLUP_KIND: Record<string, string> = {
+  "진행": "flow",
+  "쟁점": "issue",
+  "금액·납기": "terms",
+  "다음": "next",
+};
 
 function RollupLine({ text }: { text: string }) {
   const at = text.search(/[:：]/);
   const label = at > 0 ? text.slice(0, at).trim() : "";
-  if (!ROLLUP_LABELS.includes(label)) return <li>{text}</li>;
+  const kind = ROLLUP_KIND[label];
+  if (!kind) return <li className="plain">{text}</li>;
+  const body = text.slice(at + 1).trim();
   return (
-    <li className={label === "다음" ? "next" : undefined}>
+    <li className={kind}>
       <b className="mail-card-label">{label}</b>
-      {text.slice(at + 1).trim()}
+      <span className="mail-card-val">
+        {kind === "flow" ? <FlowText text={body} />
+          : kind === "terms" ? <TermsText text={body} />
+            : body}
+      </span>
     </li>
+  );
+}
+
+/** 진행 줄 — "7/30 상대 → 한 일 → 8/3 …" 꼴의 긴 사슬. 통째로 두면 벽처럼 읽히니
+ *  날짜는 굵게 세우고 이음표는 흐리게 눕혀, 눈이 마디마다 쉴 자리를 만든다. */
+function FlowText({ text }: { text: string }) {
+  return (
+    <>
+      {text.split(/(→|\d{1,2}\/\d{1,2})/g).map((p, i) =>
+        p === "→" ? <span key={i} className="rollup-arrow">→</span>
+          : /^\d{1,2}\/\d{1,2}$/.test(p) ? <b key={i} className="rollup-date">{p}</b>
+            : <span key={i}>{p}</span>
+      )}
+    </>
+  );
+}
+
+/** 금액·납기 줄 — 이 줄에서 눈이 찾는 건 숫자 하나다. 자릿점 있는 금액만 세운다
+ *  (납기 "14일"까지 굵히면 줄 전체가 굵어져 아무것도 안 세운 것과 같아진다). */
+function TermsText({ text }: { text: string }) {
+  return (
+    <>
+      {text.split(/(\d{1,3}(?:,\d{3})+)/g).map((p, i) =>
+        /^\d{1,3}(?:,\d{3})+$/.test(p)
+          ? <b key={i} className="rollup-num">{p}</b>
+          : <span key={i}>{p}</span>
+      )}
+    </>
   );
 }
 
