@@ -45,6 +45,19 @@ _HISTORY_DAYS = 180
 WAITING_DAYS = 2
 
 
+def _unmatched(q):
+    """'아직 딜을 못 정한 메일' 조건 — 딜이 없고, 딜이 있을 수 없다고 표시하지도 않은 것.
+
+    회사 소개·인사·자동회신처럼 애초에 딜이 없는 메일까지 미분류 함에 섞이면, 처리할
+    수 없는 줄만 남아 함 자체를 아무도 안 보게 된다. not_deal 은 그 줄을 내리는 표시다."""
+    return q.filter(EmailMessage.rfq_id.is_(None),
+                    (EmailMessage.not_deal.is_(None)) | (EmailMessage.not_deal.is_(False)))
+
+
+def _unmatched_count(s) -> int:
+    return _unmatched(s.query(EmailMessage.id)).count()
+
+
 def _party_name(s, m: EmailMessage, names: dict | None = None) -> str:
     """메일 상대 회사명 — 등록된 고객·벤더면 그 이름, 아니면 주소.
     수백 통을 한 번에 내보낼 때는 names(미리 읽어 둔 이름표)를 넘겨 통마다 DB 를
@@ -154,7 +167,7 @@ def mail_status():
             "host": mail_sync.mail_config()["host"],
             "account": mail_sync.mail_config()["user"],
             "total": s.query(EmailMessage.id).count(),
-            "unmatched": s.query(EmailMessage.id).filter(EmailMessage.rfq_id.is_(None)).count(),
+            "unmatched": _unmatched_count(s),
             # 등록되지 않은 상대가 몇 곳인지 — 대시보드가 회사 메일의 얼마를 담고
             # 있는지 가늠하는 유일한 단서다.
             "unknown": len(mail_sync.unknown_addresses(s)),
@@ -324,7 +337,7 @@ def mail_digest(days: int = 14):
         # 기간과 무관하게 '메일이 있는 열린 딜' 전부를 후보로 두고, 마지막 메일이
         # 최신인 순으로 상한까지만 싣는다.
         live = mail_sync.live_deals(s, None)
-        unmatched = s.query(EmailMessage.id).filter(EmailMessage.rfq_id.is_(None)).count()
+        unmatched = _unmatched_count(s)
         if not live:
             return {"days": window, "waiting_after": WAITING_DAYS,
                     "rows": [], "unmatched": unmatched}
@@ -456,16 +469,22 @@ def _group_key(m: EmailMessage) -> str:
 
 
 @app.get("/api/admin/mail/unmatched", dependencies=[Depends(require_token)])
-def unmatched_mail(limit: int = 200):
+def unmatched_mail(limit: int = 200, filed: int = 0):
     """어느 딜에도 붙지 못한 메일 — 대화 단위로 묶어 돌려준다.
 
     한 통씩 늘어놓으면 수백 줄이 되지만, 실제로 사람이 판단할 단위는 '대화'다.
     묶어 두면 한 번 고르는 것으로 그 대화 전체가 같은 딜로 간다. 근거가 없어 자동
-    배정을 못 한 대화에는 추천 딜(suggest)을 달아 주되, 붙이지는 않는다."""
+    배정을 못 한 대화에는 추천 딜(suggest)을 달아 주되, 붙이지는 않는다.
+
+    filed=1 이면 '딜 아님'으로 내려 둔 대화를 대신 보여 준다 — 되돌릴 수 있어야
+    사람이 마음 놓고 내릴 수 있다."""
     s = get_session()
     try:
-        msgs = (s.query(EmailMessage).filter(EmailMessage.rfq_id.is_(None))
-                .order_by(EmailMessage.sent_at.desc()).limit(max(1, min(limit, 500))).all())
+        base = s.query(EmailMessage)
+        base = (base.filter(EmailMessage.rfq_id.is_(None), EmailMessage.not_deal.is_(True))
+                if filed else _unmatched(base))
+        msgs = (base.order_by(EmailMessage.sent_at.desc())
+                .limit(max(1, min(limit, 500))).all())
         names = _party_names(s)
         hints = mail_sync.suggest_projects(s, msgs)
         groups: dict[str, list[EmailMessage]] = {}
@@ -507,7 +526,44 @@ def unmatched_mail(limit: int = 200):
                 "suggest": suggest,
             })
         out.sort(key=lambda g: g["last_at"], reverse=True)
-        return {"count": len(msgs), "groups": out}
+        filed_count = (s.query(EmailMessage.id)
+                       .filter(EmailMessage.rfq_id.is_(None),
+                               EmailMessage.not_deal.is_(True)).count())
+        return {"count": len(msgs), "groups": out, "filed": filed_count}
+    finally:
+        s.close()
+
+
+class MailNotDeal(BaseModel):
+    ids: list[int] = []         # 화면이 묶어 보낸 대화 전체
+    whole_thread: bool = True   # 같은 스레드의 메일도 함께
+    value: bool = True          # False = 되돌리기(다시 미분류로)
+
+
+@app.put("/api/admin/mail/not-deal", dependencies=[Depends(require_token)])
+def mark_not_deal(body: MailNotDeal):
+    """이 대화는 어느 딜에도 속하지 않는다 — 미분류 함에서 내린다.
+
+    회사 소개·인사·자동회신처럼 딜이 있을 수 없는 메일이 미분류 함에 쌓이면, 아무리
+    눌러도 줄어들지 않는 목록이 되어 함 자체가 방치된다. 지우지는 않는다 — 거래처와
+    오간 기록이고, value=False 로 언제든 되돌릴 수 있다."""
+    s = get_session()
+    try:
+        picked = set(body.ids or [])
+        if not picked:
+            raise HTTPException(status_code=400, detail="대상 메일이 없습니다.")
+        targets = {t.id: t for t in s.query(EmailMessage).filter(EmailMessage.id.in_(picked)).all()}
+        if body.whole_thread:
+            keys = {t.thread_key for t in targets.values() if t.thread_key}
+            if keys:
+                for t in s.query(EmailMessage).filter(EmailMessage.thread_key.in_(keys)).all():
+                    targets[t.id] = t
+        for t in targets.values():
+            # 이미 딜에 붙은 메일은 건드리지 않는다 — 그건 딜의 이력이다.
+            if t.rfq_id is None:
+                t.not_deal = bool(body.value)
+        s.commit()
+        return {"ok": True, "updated": len(targets), "unmatched": _unmatched_count(s)}
     finally:
         s.close()
 
@@ -520,7 +576,7 @@ def auto_match_mail():
     try:
         counts = mail_sync.auto_match(s)
         return {"ok": True, **counts,
-                "unmatched": s.query(EmailMessage.id).filter(EmailMessage.rfq_id.is_(None)).count()}
+                "unmatched": _unmatched_count(s)}
     finally:
         s.close()
 

@@ -711,6 +711,11 @@ class EmailMessage(Base):
     # 어떻게 붙었는지 — thread | docno | vessel | subject | manual.
     # 자동 연결을 사람이 검증할 수 있게 남긴다.
     match_by    = Column(String(20))
+    # 어느 딜에도 속할 수 없는 메일 — 회사 소개·인사·자동회신 같은 것들.
+    # 미분류 함은 "아직 딜을 못 정한 메일"이 쌓이는 곳이라, 애초에 딜이 없는 메일이
+    # 섞여 있으면 처리할 수 없는 줄만 남아 함 자체가 방치된다. 지우지는 않는다 —
+    # 거래처와 오간 기록이고, 되돌릴 수 있어야 한다.
+    not_deal    = Column(Boolean, default=False)
     summary     = Column(Text)                   # Claude 한두 줄 요약(없으면 아직 안 만든 것)
     summarized_at = Column(DateTime)
     created_at  = Column(DateTime, default=datetime.utcnow)

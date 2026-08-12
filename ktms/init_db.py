@@ -161,6 +161,10 @@ _MIGRATIONS = {
         # 총액(amount)에 포함된 부가세 — 결산·부가세의 매입세액 집계용(기존 행은 0).
         "vat_amount":      "FLOAT DEFAULT 0",
     },
+    "email_messages": {
+        # 어느 딜에도 속할 수 없는 메일(회사 소개·인사·자동회신). 미분류 함에서 내린다.
+        "not_deal":        "BOOLEAN DEFAULT FALSE",
+    },
 }
 
 

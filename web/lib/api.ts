@@ -1879,10 +1879,20 @@ export function refreshMailDigests(
   return post("/api/admin/mail/digest/refresh", { rfq_ids: rfqIds, limit });
 }
 // 미분류 메일 — 대화(groups) 단위로 온다. 본문은 미리보기 길이까지만 실려 온다.
+// filed=true 면 '딜 아님'으로 내려 둔 대화를 대신 본다(되돌리기용).
 export function fetchUnmatchedMail(
-  limit = 200
-): Promise<{ count: number; groups: UnmatchedMailGroup[] }> {
-  return get(`/api/admin/mail/unmatched?limit=${limit}`);
+  limit = 200,
+  filed = false
+): Promise<{ count: number; groups: UnmatchedMailGroup[]; filed: number }> {
+  return get(`/api/admin/mail/unmatched?limit=${limit}${filed ? "&filed=1" : ""}`);
+}
+// 이 대화는 어느 딜에도 속하지 않는다(회사 소개·인사·자동회신) — 미분류 함에서 내린다.
+// value=false 로 되돌린다. 지우는 게 아니라 표시만 바꾸는 것이다.
+export function markMailNotDeal(
+  ids: number[],
+  value = true
+): Promise<{ ok: boolean; updated: number; unmatched: number }> {
+  return put("/api/admin/mail/not-deal", { ids, whole_thread: true, value });
 }
 // 근거(같은 대화·문서번호·같은 제목)가 분명한 미분류 메일을 서버가 스스로 붙인다.
 export function autoMatchMail(): Promise<MailAutoMatchResult> {

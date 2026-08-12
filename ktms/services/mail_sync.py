@@ -510,8 +510,12 @@ def auto_match(s, max_passes: int = 5) -> dict:
             EmailMessage.sent_at, EmailMessage.rfq_id, EmailMessage.attachments)
     head = func.substr(EmailMessage.body_text, 1, DOC_SCAN_CHARS).label("body_head")
     for _ in range(max(1, max_passes)):
+        # '딜 아님'으로 내려 둔 메일(회사 소개·인사·자동회신)은 후보에서 뺀다 — 붙일
+        # 딜이 없다고 사람이 이미 판단한 것을 제목이 비슷하다고 되살리면 안 된다.
         unmatched = (s.query(*keys, head)
-                     .filter(EmailMessage.rfq_id.is_(None)).all())
+                     .filter(EmailMessage.rfq_id.is_(None),
+                             (EmailMessage.not_deal.is_(None))
+                             | (EmailMessage.not_deal.is_(False))).all())
         if not unmatched:
             break
         matched = (s.query(*keys[:-1])   # 첨부는 색인에 쓰지 않는다

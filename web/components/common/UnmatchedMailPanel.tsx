@@ -6,6 +6,7 @@ import {
   autoMatchMail,
   fetchMailStatus,
   fetchUnmatchedMail,
+  markMailNotDeal,
   syncMail,
 } from "@/lib/api";
 import type { MailMessage, MailStatus, UnmatchedMailGroup } from "@/lib/types";
@@ -36,11 +37,18 @@ export default function UnmatchedMailPanel({
   const [picked, setPicked] = useState<Record<string, number>>({});
   // 펼쳐 놓은 대화 — 안에 어떤 메일이 들어 있는지 확인하고 고를 수 있게.
   const [open, setOpen] = useState<Record<string, boolean>>({});
+  // '딜 아님'으로 내려 둔 대화를 보는 중인가 — 되돌릴 수 있어야 마음 놓고 내린다.
+  const [showFiled, setShowFiled] = useState(false);
+  const [filedCount, setFiledCount] = useState(0);
 
   const load = useCallback(async () => {
     try {
-      const [list, st] = await Promise.all([fetchUnmatchedMail(300), fetchMailStatus()]);
+      const [list, st] = await Promise.all([
+        fetchUnmatchedMail(300, showFiled),
+        fetchMailStatus(),
+      ]);
       setGroups(list.groups);
+      setFiledCount(list.filed);
       setStatus(st);
       setPicked((prev) => {
         const next = { ...prev };
@@ -52,7 +60,7 @@ export default function UnmatchedMailPanel({
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Could not load unmatched mail.");
     }
-  }, []);
+  }, [showFiled]);
 
   useEffect(() => {
     load();
@@ -118,14 +126,34 @@ export default function UnmatchedMailPanel({
     }
   }
 
+  // 딜에 붙일 수 없는 대화(회사 소개·인사·자동회신)를 함에서 내린다. 지우지 않는다.
+  async function notDeal(g: UnmatchedMailGroup, value: boolean) {
+    setBusy(true);
+    setErr("");
+    try {
+      const r = await markMailNotDeal(g.ids, value);
+      setNote(
+        value
+          ? `Filed ${r.updated} mails as not deal-related. ${r.unmatched} still unmatched.`
+          : `Put ${r.updated} mails back in the unmatched list.`
+      );
+      await load();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Could not file this conversation");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const total = groups?.reduce((n, g) => n + g.count, 0) ?? 0;
 
   return (
     <div className="umail">
       <div className="umail-head">
         <span className="act-count">
-          unmatched mail · {status?.unmatched ?? total}
-          {status ? <span className="umail-total"> / {status.total} stored</span> : null}
+          {showFiled ? "not deal-related · " : "unmatched mail · "}
+          {showFiled ? total : status?.unmatched ?? total}
+          {status && !showFiled ? <span className="umail-total"> / {status.total} stored</span> : null}
           {groups ? <span className="umail-total"> · {groups.length} conversations</span> : null}
         </span>
         <div className="umail-actions">
@@ -139,9 +167,20 @@ export default function UnmatchedMailPanel({
               {lastSync(status) ? ` · last sync ${lastSync(status)}` : ""}
             </span>
           )}
+          {/* 내려 둔 대화를 다시 볼 수 있어야, 내리는 판단이 되돌릴 수 있는 것이 된다. */}
+          {filedCount > 0 || showFiled ? (
+            <button
+              className={`btn sm${showFiled ? " primary" : ""}`}
+              disabled={busy}
+              title="Conversations filed as not deal-related"
+              onClick={() => setShowFiled((v) => !v)}
+            >
+              {showFiled ? "← Back to unmatched" : `Not deal-related (${filedCount})`}
+            </button>
+          ) : null}
           <button
             className="btn sm"
-            disabled={busy || !groups?.length}
+            disabled={busy || !groups?.length || showFiled}
             title="File every mail whose deal is a matter of record — same thread, deal document number, or the same subject."
             onClick={autoMatch}
           >
@@ -162,7 +201,9 @@ export default function UnmatchedMailPanel({
         <div className="state">Loading…</div>
       ) : groups.length === 0 ? (
         <p className="mail-empty">
-          No unmatched mail — every mail we fetched is filed under a deal.
+          {showFiled
+            ? "Nothing filed as not deal-related."
+            : "No unmatched mail — every mail we fetched is filed under a deal."}
         </p>
       ) : (
         <table className="mini wide umail-table">
@@ -222,24 +263,42 @@ export default function UnmatchedMailPanel({
                   )}
                 </td>
                 <td className="umail-c-assign">
-                  <ProjectPicker
-                    value={picked[g.key] ?? ""}
-                    options={projects}
-                    onChange={(id) =>
-                      setPicked((p) => ({ ...p, [g.key]: id === "" ? 0 : id }))
-                    }
-                  />
-                  <button
-                    className="btn sm primary"
-                    disabled={busy || !picked[g.key]}
-                    onClick={() => assign(g)}
-                  >
-                    Assign
-                  </button>
-                  {/* 추천은 골라만 두고 붙이지 않는다 — 왜 그 딜인지 근거를 함께 보여 준다. */}
-                  {g.suggest && picked[g.key] === g.suggest.rfq_id ? (
-                    <div className="umail-why" title={g.suggest.why}>Suggested · {g.suggest.why}</div>
-                  ) : null}
+                  {showFiled ? (
+                    <button className="btn sm" disabled={busy} onClick={() => notDeal(g, false)}>
+                      ↩ Put back
+                    </button>
+                  ) : (
+                    <>
+                      <ProjectPicker
+                        value={picked[g.key] ?? ""}
+                        options={projects}
+                        onChange={(id) =>
+                          setPicked((p) => ({ ...p, [g.key]: id === "" ? 0 : id }))
+                        }
+                      />
+                      <button
+                        className="btn sm primary"
+                        disabled={busy || !picked[g.key]}
+                        onClick={() => assign(g)}
+                      >
+                        Assign
+                      </button>
+                      {/* 딜이 있을 수 없는 대화 — 회사 소개·인사·자동회신. 내려 두지
+                          않으면 아무리 눌러도 줄지 않는 목록이 되어 함이 방치된다. */}
+                      <button
+                        className="btn sm umail-notdeal"
+                        disabled={busy}
+                        title="No deal to file this under — introductions, greetings, auto-replies"
+                        onClick={() => notDeal(g, true)}
+                      >
+                        Not a deal
+                      </button>
+                      {/* 추천은 골라만 두고 붙이지 않는다 — 왜 그 딜인지 근거를 함께 보여 준다. */}
+                      {g.suggest && picked[g.key] === g.suggest.rfq_id ? (
+                        <div className="umail-why" title={g.suggest.why}>Suggested · {g.suggest.why}</div>
+                      ) : null}
+                    </>
+                  )}
                 </td>
               </tr>
             ))}

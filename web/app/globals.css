@@ -11900,6 +11900,10 @@ table.mini.wide.umail-table th.umail-c-assign,
 table.mini.wide.umail-table td.umail-c-assign { width: 340px; }
 .umail-c-assign select { width: 100%; max-width: 100%; }
 .umail-c-assign { white-space: nowrap; }
+/* "Not a deal" — 배정만큼 자주 쓰는 자리지만 주된 동작은 아니다. Assign 옆에 두되
+   눈에 먼저 들어오지 않게 옅게 둔다(누르면 그 대화가 함에서 내려간다). */
+.umail-notdeal { margin-left: 6px; color: #6b7c93; }
+.umail-notdeal:hover { color: #b45309; border-color: #e0b070; }
 /* 상대가 여럿이면 세로로 쌓는다. 이름 하나는 접지 않고 한 줄로 두되, 위 폭을 넘는
    드문 이름만 끝을 줄인다(전체 이름은 마우스를 올리면 보인다). */
 .umail-parties { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
