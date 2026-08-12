@@ -166,10 +166,13 @@ def _finish(s, now: datetime, out: dict) -> None:
 
 
 def _write_digests(s, limit: int) -> int:
-    """대시보드 카드의 AI 요약을 채운다 — 없거나 낡은 딜만, 최근 것부터 limit 건."""
+    """대시보드 카드의 AI 요약을 채운다 — 없거나 낡은 딜만, 최근 것부터 limit 건.
+
+    기간으로 좁히지 않는다(days=None) — 화면에 오르는 딜과 대상이 달라지면, 메일은
+    오래됐지만 단계는 이번 주에 움직인 딜의 요약이 영영 비어 있게 된다."""
     if limit <= 0:
         return 0
-    live = mail_sync.live_deals(s, days=14)
+    live = mail_sync.live_deals(s, days=None)
     if not live:
         return 0
     keys = {f"{ROLLUP_KEY}:{rid}": rid for rid in live}

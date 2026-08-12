@@ -36,7 +36,11 @@ _AUTO_SUMMARY_LIMIT = 30
 # 화면이 이 메일들을 단계 이벤트와 한 시간축에 섞은 뒤 사용자가 고른 줄 수(Show 1~8)
 # 만큼 자른다 — 그래서 서버는 가장 많이 볼 만큼을 넉넉히 실어 보낸다.
 _DIGEST_RECENT = 8
-_DIGEST_MAX_CARDS = 60
+_DIGEST_MAX_CARDS = 80
+# 카드에 실을 메일을 찾을 때 거슬러 올라가는 한계. 조회 기간(days)과 달리 이건
+# "얼마나 옛 대화까지 카드에 실을까"이지 "어느 딜을 보여줄까"가 아니다. IMAP 이 애초에
+# 120일까지만 읽어 오므로 이보다 옛 메일은 거의 없고, 스캔 행 수에 상한이 생긴다.
+_HISTORY_DAYS = 180
 # 마지막 메일이 '수신'인 채로 이만큼 지나면 "우리 차례"로 보고 카드를 위로 올린다.
 WAITING_DAYS = 2
 
@@ -309,37 +313,48 @@ def mail_digest(days: int = 14):
     파이프라인 목록과 rfq_id 로 맞추면 되고, 같은 계산을 두 번 할 이유가 없다.
 
     AI 는 부르지 않는다. 롤업은 이미 만들어 둔 것만 실어 보내고, 없는 카드는
-    최근 메일 요약으로 대신한다(생성은 /digest/refresh 가 따로 맡는다)."""
+    최근 메일 요약으로 대신한다(생성은 /digest/refresh 가 따로 맡는다).
+
+    days 는 **어느 딜이 '최근에 움직였나'를 세는 자**일 뿐, 메일 이력을 자르는 칼이
+    아니다(recent_count 로 알려 준다). 마지막 메일이 3주 전이어도 이번 주에 단계가
+    움직인 딜은 화면에 오르고, 그 카드에는 그 딜의 마지막 메일들이 그대로 실려야 한다."""
     s = get_session()
     try:
         window = max(1, min(days, 365))
-        live = mail_sync.live_deals(s, window)
+        # 기간과 무관하게 '메일이 있는 열린 딜' 전부를 후보로 두고, 마지막 메일이
+        # 최신인 순으로 상한까지만 싣는다.
+        live = mail_sync.live_deals(s, None)
         unmatched = s.query(EmailMessage.id).filter(EmailMessage.rfq_id.is_(None)).count()
         if not live:
             return {"days": window, "waiting_after": WAITING_DAYS,
                     "rows": [], "unmatched": unmatched}
+        picked = sorted(live, key=lambda rid: live[rid][1], reverse=True)[:_DIGEST_MAX_CARDS]
 
-        # 카드에 쓰는 열만 — body_text 는 건드리지 않는다.
+        # 카드에 쓰는 열만 — body_text 는 건드리지 않는다. 조회 기간(days)이 아니라
+        # 훨씬 넓은 _HISTORY_DAYS 로 읽는다: 기간은 어느 딜을 보여줄지 정할 뿐이고,
+        # 카드에 실릴 대화는 그 딜의 마지막 것이어야 하기 때문이다.
         rows = (s.query(EmailMessage.id, EmailMessage.rfq_id, EmailMessage.sent_at,
                         EmailMessage.direction, EmailMessage.subject, EmailMessage.summary,
                         EmailMessage.from_addr, EmailMessage.to_addrs,
                         EmailMessage.customer_id, EmailMessage.vendor_id)
-                .filter(EmailMessage.rfq_id.in_(list(live)),
-                        EmailMessage.sent_at >= mail_sync.cutoff_at(window))
+                .filter(EmailMessage.rfq_id.in_(picked),
+                        EmailMessage.sent_at >= mail_sync.cutoff_at(_HISTORY_DAYS))
                 .order_by(EmailMessage.sent_at).all())
         groups: dict[int, list] = {}
         for m in rows:
             groups.setdefault(m.rfq_id, []).append(m)
 
         names = _party_names(s)
-        cache = _rollup_cache(s, live)
+        cache = _rollup_cache(s, picked)
+        cutoff = mail_sync.cutoff_at(window)
         out = []
         for rid, msgs in groups.items():
             count, _, last_id = live[rid]
             last = msgs[-1]
+            tail = msgs[-_DIGEST_RECENT:]
             # 상대는 최근에 등장한 순서로 — 카드 머리에 두어 곳만 보여 준다.
             parties: list[str] = []
-            for m in reversed(msgs):
+            for m in reversed(tail):
                 p = _party_name(s, m, names)
                 if p and p not in parties:
                     parties.append(p)
@@ -353,7 +368,9 @@ def mail_digest(days: int = 14):
             out.append({
                 "rfq_id": rid,
                 "count": count,
-                "recent_count": len(msgs),
+                # 조회 기간 안에 오간 통수. 0 이면 "이 딜은 요즘 조용하다"는 뜻이고,
+                # 화면은 그래도 아래 recent 로 마지막 대화를 보여 준다.
+                "recent_count": len([m for m in msgs if (m.sent_at or "") >= cutoff]),
                 "parties": parties[:4],
                 "last_at": last.sent_at or "",
                 "last_dir": last.direction or "in",
@@ -366,7 +383,7 @@ def mail_digest(days: int = 14):
                     "direction": m.direction or "in",
                     "party": _party_name(s, m, names),
                     "summary": (m.summary or "").strip() or (m.subject or ""),
-                } for m in reversed(msgs[-_DIGEST_RECENT:])],
+                } for m in reversed(tail)],
             })
 
         # 정렬은 두 덩이다. 파이썬 정렬이 안정적이라 뒤 정렬이 앞 정렬을 보존한다.
@@ -385,11 +402,14 @@ def mail_digest_refresh(days: int = 14, limit: int = 10):
 
     화면을 여는 길목에서 딜 수만큼 AI 를 부를 수는 없어서 생성을 이 버튼으로 떼어
     놓았다. 최근에 움직인 딜부터 채우고 남은 건수를 돌려준다 — 다시 누르면 이어서
-    채운다(딜 하나당 AI 호출 1회)."""
+    채운다(딜 하나당 AI 호출 1회).
+
+    대상은 화면에 오르는 딜과 같아야 한다 — 기간으로 좁히면, 메일은 3주 전이 마지막
+    이지만 단계는 이번 주에 움직인 딜이 카드로는 보이면서 요약만 영영 비어 있게 된다."""
     s = get_session()
     try:
         window = max(1, min(days, 365))
-        live = mail_sync.live_deals(s, window)
+        live = mail_sync.live_deals(s, None)
         cache = _rollup_cache(s, live)
         todo = [rid for rid, (_, _, last_id) in live.items()
                 if (cache.get(rid) or {}).get("last_id") != last_id]

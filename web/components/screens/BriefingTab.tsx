@@ -94,7 +94,11 @@ export default function BriefingTab() {
       const mail = mailBy.get(row.rfq_id) ?? null;
       const acts = buildActivities(row, steps);
       const recentAct = acts.filter((a) => actIso(a) >= floor);
-      if (!mail && !recentAct.length) continue;
+      // 카드가 될 자격은 "요즘 움직였나"로 정한다 — 최근 메일이 있거나 최근 사건이
+      // 있거나. 다만 자격이 생긴 뒤에는 그 딜의 **마지막 대화를 기간과 무관하게**
+      // 싣는다. 메일이 3주 전이 마지막이어도 44통이 쌓인 딜이라면, 그 사연이야말로
+      // 카드에서 읽고 싶은 것이다.
+      if (!(mail && mail.recent_count > 0) && !recentAct.length) continue;
 
       const lines: Line[] = [
         ...recentAct.map((act) => ({ at: actIso(act), kind: "act" as const, act })),
@@ -127,23 +131,27 @@ export default function BriefingTab() {
     return out;
   }, [pipeline, digest, steps, waitingAfter]);
 
-  const counts = useMemo(() => ({
-    all: cards.length,
-    ours: cards.filter((c) => c.waitingDays >= waitingAfter).length,
-    theirs: cards.filter((c) => c.mail && c.waitingDays < waitingAfter).length,
-    nomail: cards.filter((c) => !c.mail).length,
-  }), [cards, waitingAfter]);
+  // 세 묶음은 서로 겹치지 않고 합이 전체다 — 칩의 수를 더하면 All 이 되어야 한다.
+  const groupOf = (c: Card): Filter =>
+    !c.mail || c.mail.recent_count === 0 ? "nomail"
+      : c.waitingDays >= waitingAfter ? "ours" : "theirs";
+
+  const counts = useMemo(() => {
+    const n = { all: cards.length, ours: 0, theirs: 0, nomail: 0 };
+    for (const c of cards) n[groupOf(c) as "ours" | "theirs" | "nomail"] += 1;
+    return n;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cards, waitingAfter]);
 
   const shown = useMemo(
-    () => cards.filter((c) =>
-      filter === "ours" ? c.waitingDays >= waitingAfter
-        : filter === "theirs" ? !!c.mail && c.waitingDays < waitingAfter
-          : filter === "nomail" ? !c.mail
-            : true),
+    () => cards.filter((c) => filter === "all" || groupOf(c) === filter),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [cards, filter, waitingAfter]
   );
 
-  const missing = (digest?.rows ?? []).filter((r) => !r.rollup).length;
+  // 요약이 아직 없는 **카드** 수 — 집계에 실려 온 딜 전체가 아니다(화면에 없는 딜의
+  // 요약을 만들라고 권할 이유가 없다).
+  const missing = cards.filter((c) => c.mail && !c.mail.rollup).length;
 
   // 롤업 생성은 딜당 AI 호출 1회다. 한 번에 다 만들지 않고 상한까지만 만든 뒤
   // 남은 수를 알려 준다 — 눌러 놓고 20초를 기다리게 하는 것보다 낫다.
@@ -185,10 +193,10 @@ export default function BriefingTab() {
           <Chip on={filter === "theirs"} onClick={() => setFilter("theirs")}>
             Waiting on them <b>{counts.theirs}</b>
           </Chip>
-          {/* 메일이 한 통도 안 붙은 딜 — 정말 조용한 건일 수도, 메일이 딜에 못 붙고
-              미분류에 쌓여 있을 수도 있다. 둘 다 아침에 봐야 하는 것이다. */}
+          {/* 최근 메일이 없는 딜 — 단계는 움직였는데 메일이 조용한 건들이다. 정말
+              조용할 수도, 메일이 딜에 못 붙고 미분류에 쌓여 있을 수도 있다. */}
           <Chip on={filter === "nomail"} onClick={() => setFilter("nomail")}>
-            No mail <b>{counts.nomail}</b>
+            No recent mail <b>{counts.nomail}</b>
           </Chip>
         </span>
         <span className="brief-acts">
@@ -345,14 +353,18 @@ function BriefCard({
       ) : null}
 
       <div className="brief-state">
+        {/* 메일이 아예 없는 것과, 있는데 요즘 조용한 것은 다른 상태다 — 뒤엣것은
+            아래에 그 딜의 마지막 대화가 그대로 실려 있다. */}
         <span className={`mail-turn${waiting ? " ours" : ""}`}>
-          {waiting
-            ? `Our move · ${card.waitingDays}d`
-            : !mail
-              ? "No mail linked"
-              : mail.last_dir === "in"
-                ? "Just received"
-                : "Waiting on them"}
+          {!mail
+            ? "No mail linked"
+            : mail.recent_count === 0
+              ? `Quiet since ${md(mail.last_at)}`
+              : waiting
+                ? `Our move · ${card.waitingDays}d`
+                : mail.last_dir === "in"
+                  ? "Just received"
+                  : "Waiting on them"}
         </span>
         <span className="brief-when">
           {md(card.lastAt)}
@@ -406,6 +418,7 @@ function BriefCard({
       <div className="brief-foot">
         <span>
           {mail ? `${mail.count} mail${mail.count === 1 ? "" : "s"}` : "no mail linked"}
+          {mail && mail.recent_count === 0 ? ` · none in ${DAYS}d` : ""}
           {card.lines.length > show ? ` · ${card.lines.length - show} more` : ""}
         </span>
         <button type="button" className="mail-card-open" onClick={onOpen}>Open ▸</button>

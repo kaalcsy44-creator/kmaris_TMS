@@ -588,13 +588,15 @@ def cutoff_at(days: int) -> str:
     return (datetime.now(KST) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M")
 
 
-def live_deals(s, days: int = 14) -> dict[int, tuple[int, str, int]]:
-    """최근 days 일 안에 메일이 오간 열린 딜 → (전체 통수, 마지막 메일 시각, 마지막 메일 id).
+def live_deals(s, days: int | None = 14) -> dict[int, tuple[int, str, int]]:
+    """메일이 있는 열린 딜 → (전체 통수, 마지막 메일 시각, 마지막 메일 id).
 
-    집계만 받아 온다 — 행을 끌어오면 딜 수십 개의 본문이 통째로 따라온다. 대시보드
-    카드와 자동 실행의 요약 대상이 같은 이 목록에서 나온다(끝난 딜의 메일을 아침마다
-    다시 읽을 이유가 없다)."""
-    cutoff = cutoff_at(days)
+    days 를 주면 그 기간 안에 메일이 오간 딜만, None 이면 메일이 있는 열린 딜 전부.
+    **기간은 '어느 딜을 화면에 올릴까'를 정할 때만 쓴다.** 딜의 메일 이력 자체를
+    기간으로 자르면 안 된다 — 마지막 메일이 3주 전이어도 단계는 이번 주에 움직이는
+    딜이 흔하고(P-007 처럼), 그 카드에서 정작 사연을 담은 44통이 통째로 사라진다.
+
+    집계만 받아 온다 — 행을 끌어오면 딜 수십 개의 본문이 통째로 따라온다."""
     totals = (s.query(EmailMessage.rfq_id,
                       func.count(EmailMessage.id),
                       func.max(EmailMessage.sent_at),
@@ -602,6 +604,7 @@ def live_deals(s, days: int = 14) -> dict[int, tuple[int, str, int]]:
               .filter(EmailMessage.rfq_id.isnot(None))
               .group_by(EmailMessage.rfq_id).all())
     closed = {r.id for r in s.query(RFQ.id, RFQ.closed_at).all() if (r.closed_at or "").strip()}
+    cutoff = cutoff_at(days) if days else ""
     return {rid: (cnt, last_at or "", last_id)
             for rid, cnt, last_at, last_id in totals
             if rid not in closed and (last_at or "") >= cutoff}
