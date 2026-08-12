@@ -6,9 +6,10 @@ Claude 요약을 채운다.
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from pydantic import BaseModel
+from sqlalchemy import func
 
 from db.models import AppSetting
 from _core import (
@@ -21,6 +22,7 @@ from _core import (
     Vendor,
     _project_no_map,
     app,
+    cached_aggregate,
     get_current_user,
     get_session,
     require_token,
@@ -32,6 +34,11 @@ from services import mail_sync
 _ROLLUP_KEY = "mail_rollup"
 # 한 번의 동기화 뒤 자동으로 요약할 메일 수 상한(프로젝트에 붙은 것 우선).
 _AUTO_SUMMARY_LIMIT = 30
+# 요약 카드에 실을 최근 메일 줄 수 / 한 번에 내보낼 카드 상한.
+_DIGEST_RECENT = 3
+_DIGEST_MAX_CARDS = 60
+# 마지막 메일이 '수신'인 채로 이만큼 지나면 "우리 차례"로 보고 카드를 위로 올린다.
+WAITING_DAYS = 2
 
 
 def _party_name(s, m: EmailMessage, names: dict | None = None) -> str:
@@ -205,33 +212,190 @@ def project_mail(rfq_id: int, summarize: bool = False):
         s.close()
 
 
+def _build_rollup(s, rfq_id: int) -> str:
+    """이 딜의 메일 흐름을 3~5줄로 만들어 저장하고 그 글을 돌려준다.
+
+    재료는 통별 요약이라 AI 호출은 1회다(요약이 아직 없는 메일은 먼저 채운다).
+    딜 화면의 "AI digest" 버튼과 대시보드의 일괄 생성이 같은 이 함수를 쓴다 —
+    캐시 모양(last_id 로 낡음을 가리는 것)이 두 곳에서 어긋나면 안 된다."""
+    msgs = (s.query(EmailMessage).filter_by(rfq_id=rfq_id)
+            .order_by(EmailMessage.sent_at).all())
+    if not msgs:
+        return ""
+    ensure_summaries(s, msgs, limit=_AUTO_SUMMARY_LIMIT)
+    rfq = s.query(RFQ).filter_by(id=rfq_id).first()
+    title = " · ".join(x for x in [_project_no_map(s).get(rfq_id, ""),
+                                   (rfq.project_title if rfq else "")] if x)
+    text = summarize_project(
+        [{"sent_at": m.sent_at, "direction": m.direction,
+          "party": _party_name(s, m), "summary": m.summary} for m in msgs],
+        title or f"RFQ {rfq_id}")
+    key = f"{_ROLLUP_KEY}:{rfq_id}"
+    row = s.query(AppSetting).filter_by(key=key).first()
+    value = {"text": text, "last_id": max(m.id for m in msgs),
+             "at": datetime.utcnow().isoformat(timespec="seconds")}
+    if row:
+        row.value, row.updated_at = value, datetime.utcnow()
+    else:
+        s.add(AppSetting(key=key, value=value, updated_at=datetime.utcnow()))
+    s.commit()
+    return text
+
+
 @app.post("/api/admin/mail/project/{rfq_id}/rollup", dependencies=[Depends(require_token)])
 def project_mail_rollup(rfq_id: int):
     """이 딜의 메일 흐름을 3~5줄로 — 개별 요약을 재료로 한 번만 만들고 캐시한다."""
     s = get_session()
     try:
-        msgs = (s.query(EmailMessage).filter_by(rfq_id=rfq_id)
+        return {"ok": True, "rollup": _build_rollup(s, rfq_id)}
+    finally:
+        s.close()
+
+
+# ── 프로젝트별 요약 카드(대시보드 Mail 탭) ────────────────────────────────────
+
+def _waiting_days(last_at: str, direction: str) -> int:
+    """마지막 메일이 '수신'인 채로 며칠이 지났는지 — 우리가 공을 쥐고 있는 날수.
+    우리가 마지막으로 보냈으면 0이다(공은 상대에게 있다)."""
+    if direction != "in" or not last_at:
+        return 0
+    try:
+        day = datetime.strptime(last_at[:10], "%Y-%m-%d").date()
+    except ValueError:
+        return 0
+    return max(0, (datetime.now(mail_sync.KST).date() - day).days)
+
+
+def _cutoff(window: int) -> str:
+    """조회 창의 시작 시각 — sent_at 과 같은 'YYYY-MM-DDTHH:MM'(KST) 꼴이라 문자열로 견준다."""
+    return (datetime.now(mail_sync.KST) - timedelta(days=window)).strftime("%Y-%m-%dT%H:%M")
+
+
+def _live_deals(s, window: int) -> dict[int, tuple[int, str, int]]:
+    """카드가 될 딜 → (전체 통수, 마지막 메일 시각, 마지막 메일 id).
+
+    집계만 받아 온다 — 행을 끌어오면 딜 수십 개의 본문이 통째로 따라온다.
+    최근 window 일 안에 메일이 오갔고 종결되지 않은 딜만 남긴다(끝난 딜의 메일을
+    아침마다 다시 읽을 이유가 없다)."""
+    cutoff = _cutoff(window)
+    totals = (s.query(EmailMessage.rfq_id,
+                      func.count(EmailMessage.id),
+                      func.max(EmailMessage.sent_at),
+                      func.max(EmailMessage.id))
+              .filter(EmailMessage.rfq_id.isnot(None))
+              .group_by(EmailMessage.rfq_id).all())
+    closed = {r.id for r in s.query(RFQ.id, RFQ.closed_at).all() if (r.closed_at or "").strip()}
+    return {rid: (cnt, last_at or "", last_id)
+            for rid, cnt, last_at, last_id in totals
+            if rid not in closed and (last_at or "") >= cutoff}
+
+
+def _rollup_cache(s, rfq_ids) -> dict[int, dict]:
+    """딜별 저장된 롤업 — 카드 수만큼 조회하지 않고 한 번에 읽는다."""
+    ids = list(rfq_ids)
+    if not ids:
+        return {}
+    keys = {f"{_ROLLUP_KEY}:{rid}": rid for rid in ids}
+    rows = s.query(AppSetting.key, AppSetting.value).filter(AppSetting.key.in_(list(keys))).all()
+    return {keys[r.key]: (r.value or {}) for r in rows if r.key in keys}
+
+
+@app.get("/api/admin/mail/digest", dependencies=[Depends(require_token)])
+@cached_aggregate()
+def mail_digest(days: int = 14):
+    """프로젝트별 메일 요약 카드 — 대시보드 Mail 탭이 한 번에 읽는 집계.
+
+    카드마다 /mail/project/{id} 를 부르면 요청이 딜 수만큼 늘고, 그 응답에는 본문
+    원문이 통째로 들어 있다. 여기서는 본문을 아예 읽지 않고(요약 열만) 한 번에 묶어
+    돌려준다. 프로젝트 이름·단계·담당자는 넣지 않는다 — 화면이 이미 갖고 있는
+    파이프라인 목록과 rfq_id 로 맞추면 되고, 같은 계산을 두 번 할 이유가 없다.
+
+    AI 는 부르지 않는다. 롤업은 이미 만들어 둔 것만 실어 보내고, 없는 카드는
+    최근 메일 요약으로 대신한다(생성은 /digest/refresh 가 따로 맡는다)."""
+    s = get_session()
+    try:
+        window = max(1, min(days, 365))
+        live = _live_deals(s, window)
+        unmatched = s.query(EmailMessage.id).filter(EmailMessage.rfq_id.is_(None)).count()
+        if not live:
+            return {"days": window, "waiting_after": WAITING_DAYS,
+                    "rows": [], "unmatched": unmatched}
+
+        # 카드에 쓰는 열만 — body_text 는 건드리지 않는다.
+        rows = (s.query(EmailMessage.id, EmailMessage.rfq_id, EmailMessage.sent_at,
+                        EmailMessage.direction, EmailMessage.subject, EmailMessage.summary,
+                        EmailMessage.from_addr, EmailMessage.to_addrs,
+                        EmailMessage.customer_id, EmailMessage.vendor_id)
+                .filter(EmailMessage.rfq_id.in_(list(live)),
+                        EmailMessage.sent_at >= _cutoff(window))
                 .order_by(EmailMessage.sent_at).all())
-        if not msgs:
-            return {"ok": True, "rollup": ""}
-        ensure_summaries(s, msgs, limit=_AUTO_SUMMARY_LIMIT)
-        rfq = s.query(RFQ).filter_by(id=rfq_id).first()
-        title = " · ".join(x for x in [_project_no_map(s).get(rfq_id, ""),
-                                       (rfq.project_title if rfq else "")] if x)
-        text = summarize_project(
-            [{"sent_at": m.sent_at, "direction": m.direction,
-              "party": _party_name(s, m), "summary": m.summary} for m in msgs],
-            title or f"RFQ {rfq_id}")
-        key = f"{_ROLLUP_KEY}:{rfq_id}"
-        row = s.query(AppSetting).filter_by(key=key).first()
-        value = {"text": text, "last_id": max(m.id for m in msgs),
-                 "at": datetime.utcnow().isoformat(timespec="seconds")}
-        if row:
-            row.value, row.updated_at = value, datetime.utcnow()
-        else:
-            s.add(AppSetting(key=key, value=value, updated_at=datetime.utcnow()))
-        s.commit()
-        return {"ok": True, "rollup": text}
+        groups: dict[int, list] = {}
+        for m in rows:
+            groups.setdefault(m.rfq_id, []).append(m)
+
+        names = _party_names(s)
+        cache = _rollup_cache(s, live)
+        out = []
+        for rid, msgs in groups.items():
+            count, _, last_id = live[rid]
+            last = msgs[-1]
+            # 상대는 최근에 등장한 순서로 — 카드 머리에 두어 곳만 보여 준다.
+            parties: list[str] = []
+            for m in reversed(msgs):
+                p = _party_name(s, m, names)
+                if p and p not in parties:
+                    parties.append(p)
+            cached = cache.get(rid) or {}
+            fresh = cached.get("last_id") == last_id
+            out.append({
+                "rfq_id": rid,
+                "count": count,
+                "recent_count": len(msgs),
+                "parties": parties[:4],
+                "last_at": last.sent_at or "",
+                "last_dir": last.direction or "in",
+                "waiting_days": _waiting_days(last.sent_at or "", last.direction or ""),
+                # 낡은 롤업은 아예 내보내지 않는다 — 지난주 상황을 오늘 일로 읽는 게
+                # 제일 나쁘다. 대신 낡았다는 사실(rollup_stale)만 알린다.
+                "rollup": cached.get("text", "") if fresh else "",
+                "rollup_stale": bool(cached.get("text")) and not fresh,
+                "recent": [{
+                    "sent_at": m.sent_at or "",
+                    "direction": m.direction or "in",
+                    "party": _party_name(s, m, names),
+                    "summary": (m.summary or "").strip() or (m.subject or ""),
+                } for m in reversed(msgs[-_DIGEST_RECENT:])],
+            })
+
+        # 정렬은 두 덩이다. 파이썬 정렬이 안정적이라 뒤 정렬이 앞 정렬을 보존한다.
+        out.sort(key=lambda r: r["last_at"], reverse=True)          # ② 최근에 움직인 순
+        out.sort(key=lambda r: (0 if r["waiting_days"] >= WAITING_DAYS else 1,
+                                -r["waiting_days"]))                # ① 우리가 오래 쥔 것부터
+        return {"days": window, "waiting_after": WAITING_DAYS,
+                "rows": out[:_DIGEST_MAX_CARDS], "unmatched": unmatched}
+    finally:
+        s.close()
+
+
+@app.post("/api/admin/mail/digest/refresh", dependencies=[Depends(require_token)])
+def mail_digest_refresh(days: int = 14, limit: int = 10):
+    """요약이 없거나 낡은 카드의 AI 롤업을 채운다(한 번에 limit 건까지).
+
+    화면을 여는 길목에서 딜 수만큼 AI 를 부를 수는 없어서 생성을 이 버튼으로 떼어
+    놓았다. 최근에 움직인 딜부터 채우고 남은 건수를 돌려준다 — 다시 누르면 이어서
+    채운다(딜 하나당 AI 호출 1회)."""
+    s = get_session()
+    try:
+        window = max(1, min(days, 365))
+        live = _live_deals(s, window)
+        cache = _rollup_cache(s, live)
+        todo = [rid for rid, (_, _, last_id) in live.items()
+                if (cache.get(rid) or {}).get("last_id") != last_id]
+        todo.sort(key=lambda rid: live[rid][1], reverse=True)
+        picked = todo[:max(1, min(limit, 30))]
+        for rid in picked:
+            _build_rollup(s, rid)
+        return {"ok": True, "written": len(picked), "remaining": len(todo) - len(picked)}
     finally:
         s.close()
 

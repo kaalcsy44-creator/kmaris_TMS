@@ -1640,6 +1640,33 @@ export type ProjectMail = {
   rollup: string;         // 딜 전체 흐름 요약(3~5줄). 빈 문자열 = 아직 만들지 않음
   rollup_stale: boolean;  // 요약을 만든 뒤 새 메일이 왔다
 };
+// 대시보드 Mail 탭 — 프로젝트 하나가 카드 하나. 프로젝트 이름·단계·담당자는 여기
+// 없다(화면이 이미 갖고 있는 pipeline 목록과 rfq_id 로 맞춘다). 서버는 본문을 싣지
+// 않고 요약만 보낸다.
+export type MailDigestLine = {
+  sent_at: string;
+  direction: "in" | "out";
+  party: string;
+  summary: string;
+};
+export type MailDigestRow = {
+  rfq_id: number;
+  count: number;              // 이 딜의 전체 메일 통수
+  recent_count: number;       // 그중 조회 기간(days) 안의 통수
+  parties: string[];          // 최근 등장 순 상대(최대 4)
+  last_at: string;
+  last_dir: "in" | "out";
+  waiting_days: number;       // 마지막이 수신인 채 지난 날수(0 = 공이 상대에게)
+  rollup: string;             // 저장된 AI 요약. 빈 문자열 = 아직 없거나 낡음
+  rollup_stale: boolean;      // 요약을 만든 뒤 새 메일이 왔다
+  recent: MailDigestLine[];   // 최근 메일 몇 통(최신이 위)
+};
+export type MailDigest = {
+  days: number;
+  waiting_after: number;      // 이 날수 이상 쥐고 있으면 "우리 차례"로 올린다
+  rows: MailDigestRow[];
+  unmatched: number;          // 어느 딜에도 안 붙은 메일 — 카드에 안 잡힌 것들
+};
 export type MailStatus = {
   configured: boolean;
   host: string;

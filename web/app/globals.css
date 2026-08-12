@@ -11989,6 +11989,100 @@ table.mini.wide.umail-table td.umail-c-assign { width: 340px; }
 .umail-msg-when { font-size: 11px; color: #8a96a8; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .umail-msg-subj { font-size: 12px; color: var(--navy); overflow-wrap: anywhere; }
 .umail-msgs .umail-sum { grid-column: 3; margin-top: 0; }
+
+/* ── 메일 요약 카드(Dashboard · Mail 탭) ───────────────────────────────────────
+   프로젝트 하나가 카드 하나. 아침에 훑는 화면이라 카드 한 장이 위에서 아래로
+   신원(번호·제목·단계) → 지금 상태(공이 누구에게) → 흐름(AI 요약) → 최근 몇 줄
+   순으로 읽히게 둔다. Home 탭의 정사각 카드와 달리 높이는 내용이 정한다. */
+.mail-digest { margin-top: 14px; }
+.mail-digest-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.mail-digest-chips { display: flex; gap: 6px; }
+.mail-digest-acts { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.mail-chip {
+  padding: 5px 11px; border: 1px solid var(--line-strong); border-radius: 999px;
+  background: #fff; font-size: 12px; color: #4a5a70; cursor: pointer;
+}
+.mail-chip b { margin-left: 5px; font-weight: 700; color: var(--navy); font-variant-numeric: tabular-nums; }
+.mail-chip:hover { background: var(--hover); }
+.mail-chip.on { border-color: var(--blue); background: var(--sel); color: var(--navy); }
+/* 미분류는 숨기지 않는다 — 카드에 안 잡힌 메일이 있다는 걸 알려야 목록을 믿을 수 있다. */
+.mail-digest-unmatched { font-size: 11.5px; font-weight: 700; color: #a06a1c; text-decoration: none; }
+.mail-digest-unmatched:hover { text-decoration: underline; }
+
+.mail-digest-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; align-items: start; }
+.mail-card {
+  display: flex; flex-direction: column; gap: 7px; padding: 12px 14px 10px;
+  border: 1px solid var(--line); border-left: 3px solid var(--line-strong);
+  border-radius: 10px; background: #fff; box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+}
+/* 우리가 쥐고 있는 건 — 왼쪽 선만 물들인다(카드 전체를 칠하면 목록이 시끄러워진다). */
+.mail-card.waiting { border-left-color: #d97706; }
+.mail-card-head {
+  display: flex; align-items: baseline; gap: 7px; width: 100%;
+  border: 0; background: none; padding: 0; text-align: left; cursor: pointer;
+}
+.mail-card-no { flex: 0 0 auto; font-size: 12.5px; }
+.mail-card-title {
+  flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 13px; font-weight: 700; color: var(--navy);
+}
+.mail-card-head:hover .mail-card-title { text-decoration: underline; }
+.mail-card-stage {
+  flex: 0 0 auto; max-width: 108px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  padding: 1px 7px; border-radius: 999px; background: #eaf0f7;
+  font-size: 10.5px; font-weight: 700; color: #48586d;
+}
+.mail-card-pic { flex: 0 0 auto; font-size: 11px; color: var(--muted); }
+.mail-card-parties { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.mail-card-vessel { font-size: 11px; color: var(--muted); }
+.mail-card-state { display: flex; align-items: baseline; gap: 8px; }
+.mail-turn { font-size: 11.5px; font-weight: 700; color: #5c6b7d; }
+.mail-turn.ours { color: #b45309; }
+.mail-turn.ours::before { content: "● "; }
+.mail-card-when {
+  margin-left: auto; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums;
+}
+/* AI 요약 — 카드에서 가장 먼저 읽혀야 하는 부분. 딜 화면의 .mail-rollup 과 같은 판. */
+.mail-card-rollup {
+  list-style: none; margin: 0; padding: 8px 11px;
+  border: 1px solid #dbe6f5; border-left: 3px solid var(--blue); border-radius: 8px;
+  background: #f6f9fe;
+}
+.mail-card-rollup li { font-size: 12px; line-height: 1.5; color: #23364d; }
+.mail-card-rollup li + li { margin-top: 3px; }
+.mail-card-nodigest { margin: 0; font-size: 11px; color: var(--muted); font-style: italic; }
+.mail-card-recent { list-style: none; margin: 0; padding: 0; }
+.mail-card-recent li {
+  display: grid; grid-template-columns: 14px 74px 1fr; gap: 2px 6px; align-items: baseline;
+  padding: 4px 0; border-top: 1px dashed #e6edf6;
+}
+.mail-card-recent .mail-dir { font-size: 12px; }
+.mail-card-party {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 11px; color: #46586e;
+}
+.mail-card-sum {
+  grid-column: 3; font-size: 11.5px; line-height: 1.45; color: #5c6b7d;
+  overflow: hidden; text-overflow: ellipsis; display: -webkit-box;
+  -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.mail-card-foot {
+  display: flex; align-items: center; gap: 8px; padding-top: 7px;
+  border-top: 1px solid var(--line); font-size: 11px; color: var(--muted);
+}
+.mail-card-new { color: #a06a1c; font-weight: 700; }
+.mail-card-open {
+  margin-left: auto; border: 0; background: none; padding: 0;
+  font-size: 11.5px; font-weight: 700; color: var(--blue); cursor: pointer;
+}
+.mail-card-open:hover { text-decoration: underline; }
+@media (max-width: 1280px) {
+  .mail-digest-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 860px) {
+  .mail-digest-grid { grid-template-columns: 1fr; }
+}
+
 /* ── 딜 선택 드롭다운(ProjectPicker) ──────────────────────────────────────────
    번호만 늘어놓지 않고 업무 타입·고객 로고·프로젝트명·선박을 두 줄로 보여준다.
    메뉴는 body portal + position:fixed(인라인) — 여기선 그 외 표현만. */

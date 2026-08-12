@@ -27,6 +27,7 @@ import type {
   StatDebugData,
 } from "@/lib/types";
 import { PipelineModal } from "@/components/screens/ProjectsScreen";
+import MailDigestTab from "@/components/screens/MailDigestTab";
 import { MarketingForm, emptyForm as emptyMarketingForm } from "@/components/screens/MarketingScreen";
 import {
   ResponsiveContainer, LineChart, Line, BarChart, Bar,
@@ -54,7 +55,7 @@ function daysBetween(a: string, b: string): number {
   return Math.round((da - db) / 86_400_000);
 }
 
-type Tab = "home" | "stats";
+type Tab = "home" | "mail" | "stats";
 
 export default function DashboardScreen() {
   const [tab, setTab] = useState<Tab>("home");
@@ -65,12 +66,17 @@ export default function DashboardScreen() {
         <button className={tab === "home" ? "on" : ""} onClick={() => setTab("home")}>
           Home
         </button>
+        {/* Mail — 딜별 메일 요약 카드. Home 과 pipeline 캐시를 공유하므로 탭 전환에
+            드는 조회는 /mail/digest 하나뿐이다. */}
+        <button className={tab === "mail" ? "on" : ""} onClick={() => setTab("mail")}>
+          Mail
+        </button>
         <button className={tab === "stats" ? "on" : ""} onClick={() => setTab("stats")}>
           Statistics
         </button>
       </div>
 
-      {tab === "home" ? <HomeTab /> : <StatisticsTab />}
+      {tab === "home" ? <HomeTab /> : tab === "mail" ? <MailDigestTab /> : <StatisticsTab />}
     </>
   );
 }

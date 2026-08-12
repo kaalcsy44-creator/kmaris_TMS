@@ -65,6 +65,7 @@ import type {
   StatisticsData,
   StatDebugData,
   SearchData,
+  MailDigest,
   MailMessage,
   MailStatus,
   MailSyncResult,
@@ -1852,6 +1853,17 @@ export function syncMail(): Promise<MailSyncResult> {
 }
 export function buildProjectMailRollup(rfqId: number): Promise<{ ok: boolean; rollup: string }> {
   return post(`/api/admin/mail/project/${rfqId}/rollup`, {});
+}
+// 대시보드 Mail 탭 — 딜별 요약 카드를 한 번에. AI 는 부르지 않으므로 빠르다.
+export function fetchMailDigest(days = 14): Promise<MailDigest> {
+  return get<MailDigest>(`/api/admin/mail/digest?days=${days}`);
+}
+// 요약이 없거나 낡은 카드의 AI 롤업을 채운다(딜당 호출 1회라 상한을 두고 나눠 부른다).
+export function refreshMailDigests(
+  days = 14,
+  limit = 10
+): Promise<{ ok: boolean; written: number; remaining: number }> {
+  return post(`/api/admin/mail/digest/refresh?days=${days}&limit=${limit}`, {});
 }
 // 미분류 메일 — 대화(groups) 단위로 온다. 본문은 미리보기 길이까지만 실려 온다.
 export function fetchUnmatchedMail(

@@ -170,7 +170,11 @@ export default function ActivityScreen() {
   const [ageF, setAgeF] = useState<string[]>([]);
   const [custF, setCustF] = useState<string[]>([]);
   const [vendF, setVendF] = useState<string[]>([]);
-  const [view, setView] = useState<"deal" | "date" | "mail">("deal"); // 탭: 딜별(카드) / 일자별(피드) / 미분류 메일
+  // 탭: 딜별(카드) / 일자별(피드) / 미분류 메일. 대시보드 Mail 탭의 "N unmatched"
+  // 링크가 ?view=mail 로 넘어오므로 초기값을 주소에서 받는다.
+  const [view, setView] = useState<"deal" | "date" | "mail">(
+    () => (params.get("view") === "mail" ? "mail" : "deal"),
+  );
 
   const [overviewId, setOverviewId] = useState<number | null>(null);
   // 주요(자동) 활동을 클릭해 들어온 경우의 목표 단계 — 팝업을 개요 대신 그 단계 작업화면으로 연다.
