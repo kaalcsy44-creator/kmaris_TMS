@@ -205,7 +205,7 @@ function DigestCard({
   // 요약이 아직 없는 카드는 비워 두지 않고 최근 메일 줄로 대신한다 — 이미 DB 에
   // 있는 값이라 공짜고, "아직 안 만들었다"는 사실은 흐린 글씨로만 알린다.
   const lines = row.rollup
-    ? row.rollup.split("\n").map((l) => l.replace(/^[-•]\s*/, "")).filter(Boolean)
+    ? row.rollup.split("\n").map((l) => l.replace(/^[-•]\s*/, "").trim()).filter(Boolean)
     : [];
 
   return (
@@ -244,10 +244,17 @@ function DigestCard({
       </div>
 
       {lines.length ? (
-        <ul className="mail-card-rollup">
+        <ul className={`mail-card-rollup${row.rollup_stale ? " stale" : ""}`}>
           {lines.map((l, i) => (
-            <li key={i}>{l}</li>
+            <RollupLine key={i} text={l} />
           ))}
+          {row.rollup_stale ? (
+            <li className="mail-card-since">
+              {row.new_since > 0
+                ? `+ ${row.new_since} newer mail${row.new_since === 1 ? "" : "s"} below`
+                : "newer mail has arrived since this"}
+            </li>
+          ) : null}
         </ul>
       ) : (
         <p className="mail-card-nodigest">No digest yet — showing the latest mail.</p>
@@ -275,6 +282,23 @@ function DigestCard({
         </button>
       </div>
     </section>
+  );
+}
+
+// 요약 한 줄 — "진행: …" 처럼 라벨이 붙어 오면 라벨만 떼어 굵게 세운다.
+// 넷 중 하나일 때만 라벨로 본다(본문에 콜론이 있다고 라벨이 되면 안 된다).
+// 예전에 만들어 둔 "- 문장" 꼴 요약도 그대로 한 줄로 나온다.
+const ROLLUP_LABELS = ["진행", "쟁점", "금액·납기", "다음"];
+
+function RollupLine({ text }: { text: string }) {
+  const at = text.search(/[:：]/);
+  const label = at > 0 ? text.slice(0, at).trim() : "";
+  if (!ROLLUP_LABELS.includes(label)) return <li>{text}</li>;
+  return (
+    <li className={label === "다음" ? "next" : undefined}>
+      <b className="mail-card-label">{label}</b>
+      {text.slice(at + 1).trim()}
+    </li>
   );
 }
 

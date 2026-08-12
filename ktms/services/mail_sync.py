@@ -7,13 +7,16 @@
 이미 담아 둔 메일의 답장(스레드)뿐이다. 사내 공지·개인 메일·광고는 애초에 저장하지
 않는다(보관 범위를 설명할 수 있어야 하고, DB 전송량도 아껴야 한다).
 
-프로젝트 연결은 두 단계로 시도한다.
+프로젝트 연결은 근거가 또렷한 순서로 시도한다.
   1) 스레드 — In-Reply-To·References 가 이미 저장된 메일을 가리키면 그 프로젝트.
      회신 메일은 이 경로로 거의 다 붙는다(제목이 바뀌어도 따라간다).
-  2) 문서번호 — 제목·본문에 그 딜의 번호(P-024 / KMS-RFQ-2608-017 / 견적·P/O 번호)가
-     있으면 그 프로젝트.
+  2) 문서번호 — 제목·**첨부 파일이름**·본문에 그 딜의 번호(P-024 / KMS-RFQ-2608-017 /
+     견적·P/O 번호)가 있으면 그 프로젝트. 첨부 이름을 보는 게 값싸고 잘 맞는다 —
+     견적서·발주서는 번호를 파일 이름에 달고 오는데 본문은 "첨부 참조"뿐인 일이 흔하다.
+  3) 선박 — 그 배가 걸린 딜이 하나뿐이고 배 이름이 제목·본문에 있으면 그 프로젝트.
 붙지 못한 메일은 rfq_id 없이 남아 '미분류' 목록에서 사람이 한 번에 배정한다.
-(추측으로 붙이면 틀린 딜의 이력이 되는데, 그건 비어 있는 것보다 나쁘다.)
+(추측으로 붙이면 틀린 딜의 이력이 되는데, 그건 비어 있는 것보다 나쁘다. 그래서 어느
+ 근거든 후보 딜이 둘 이상이면 붙이지 않는다.)
 
 환경변수
   IMAP_HOST(기본 imap.gmail.com) · IMAP_PORT(993) · IMAP_USER · IMAP_PASSWORD
@@ -48,9 +51,27 @@ from db.models import (
 MAX_BODY_CHARS = 20_000
 KST = timezone(timedelta(hours=9))
 
+
+class SyncBusy(RuntimeError):
+    """이미 동기화가 돌고 있다 — 실패가 아니라 '지금은 아니다'. 화면은 이것을 오류로
+    보여 주지 말고, 돌고 있다는 사실로 보여 줘야 한다."""
+
+    def __init__(self, started_at: str = ""):
+        super().__init__("A sync is already running.")
+        self.started_at = started_at
+
 # 동기화는 한 번에 하나만. 매일 도는 자동 실행과 사람이 누른 Sync 가 겹치면 같은
 # 메일을 두 번 집어 message_id 유일 제약에서 터지고, IMAP 연결도 둘로 늘어난다.
 _SYNC_LOCK = threading.Lock()
+_SYNC_STARTED_AT = ""      # 지금 도는 동기화가 시작한 시각(KST). 안 돌면 빈 문자열.
+
+
+def is_syncing() -> str:
+    """동기화가 돌고 있으면 시작 시각, 아니면 빈 문자열.
+
+    화면이 "지금 돌고 있다"를 말할 수 있어야 한다 — 아침 자동 실행은 몇 분씩 걸리는데,
+    그동안 상태가 '아직 안 돌았음'으로 보이면 사람은 버튼을 누르고 거절만 당한다."""
+    return _SYNC_STARTED_AT
 
 
 # ── 설정 ──────────────────────────────────────────────────────────────────────
@@ -333,9 +354,53 @@ def doc_no_index(s) -> dict[str, int]:
     return idx
 
 
+# 선박 이름으로 알아보기 — 이 바닥에서 배 이름만큼 딜을 정확히 가리키는 낱말은 없다.
+# 다만 같은 배로 딜이 여러 건 도는 일이 흔하므로, 후보가 하나일 때만 쓴다.
+# 너무 짧거나 흔한 이름(MV, STAR 한 낱말짜리)은 우연히 걸리므로 아예 넣지 않는다.
+_VESSEL_STOP = {"MV", "MT", "MS", "SS", "HULL", "NEW", "NO", "THE", "VESSEL", "SHIP"}
+
+
+def _vessel_token(name: str) -> str:
+    """선박 이름을 견줄 꼴로 — 접두어(M/V, MT)를 떼고 대문자·단일 공백."""
+    t = re.sub(r"^\s*(?:M\s*[./]?\s*[VT]|MV|MT|MS|SS)\b[\s.:-]*", "", (name or "").upper())
+    t = re.sub(r"[^0-9A-Z ]+", " ", t)
+    return re.sub(r"\s+", " ", t).strip()
+
+
+def vessel_index(s) -> dict[str, set[int]]:
+    """선박 이름 → 그 배가 걸린 딜들. 후보가 둘 이상인 이름은 호출부가 걸러 쓴다."""
+    names = {v.id: _vessel_token(v.name or "") for v in s.query(Vessel.id, Vessel.name).all()}
+    idx: dict[str, set[int]] = {}
+    for r in s.query(RFQ.id, RFQ.vessel_id).all():
+        token = names.get(r.vessel_id or 0, "")
+        # 한 낱말짜리 흔한 이름은 본문에서 우연히 걸린다 — 두 낱말이거나 6자 이상만.
+        if not token or token in _VESSEL_STOP:
+            continue
+        if len(token) < 6 and " " not in token:
+            continue
+        idx.setdefault(token, set()).add(r.id)
+    return idx
+
+
+def _haystack(subject: str, body: str, attachments: list | None = None) -> str:
+    """문서번호·선박 이름을 찾을 본문 — 제목 + 본문 앞부분 + 첨부 파일이름.
+
+    첨부 이름을 넣는 게 값싸고 정확하다. 견적서·발주서는 거의 늘 문서번호를 파일
+    이름에 달고 오는데(KMS-QTN-2608-017.pdf), 정작 본문에는 "첨부 참조"만 있는
+    메일이 흔하다 — 그런 메일이 그동안 통째로 미분류로 남았다."""
+    files = " ".join(str((a or {}).get("name", "")) for a in (attachments or [])[:20])
+    return f"{subject}\n{files}\n{body[:DOC_SCAN_CHARS]}".upper()
+
+
+# 문서번호를 찾을 본문 길이. 인용된 지난 대화에 번호가 있는 일이 잦아 앞머리만으로는
+# 놓친다. 미분류 한 통당 이만큼 읽어도 수백 통 기준 몇 백 KB 다.
+DOC_SCAN_CHARS = 8_000
+
+
 def match_project(s, msg_ids: Iterable[str], subject: str, body: str,
-                  docs: dict[str, int]) -> tuple[int | None, str]:
-    """(rfq_id, 연결 근거). 스레드 → 문서번호 순으로 본다. 못 찾으면 (None, '')."""
+                  docs: dict[str, int], attachments: list | None = None,
+                  vessels: dict[str, set[int]] | None = None) -> tuple[int | None, str]:
+    """(rfq_id, 연결 근거). 스레드 → 문서번호 → 선박 순. 못 찾으면 (None, '')."""
     parents = [m for m in msg_ids if m]
     if parents:
         hit = (s.query(EmailMessage)
@@ -343,10 +408,13 @@ def match_project(s, msg_ids: Iterable[str], subject: str, body: str,
                .order_by(EmailMessage.id.desc()).first())
         if hit:
             return hit.rfq_id, "thread"
-    haystack = f"{subject}\n{body[:4000]}".upper()
+    haystack = _haystack(subject, body, attachments)
     for token, rfq_id in docs.items():
         if token in haystack:
             return rfq_id, "docno"
+    for token, rids in (vessels or {}).items():
+        if len(rids) == 1 and token in haystack:
+            return next(iter(rids)), "vessel"
     return None, ""
 
 
@@ -422,28 +490,32 @@ SUBJECT_WINDOW_DAYS = 150
 # ── 자동 배정 ─────────────────────────────────────────────────────────────────
 
 def auto_match(s, max_passes: int = 5) -> dict:
-    """미분류 메일 중 근거가 분명한 것만 딜에 붙인다. 반환 {thread, docno, subject, total}.
+    """미분류 메일 중 근거가 분명한 것만 딜에 붙인다. 반환 {thread, docno, vessel, subject, total}.
 
-    근거는 세 가지고, 어느 것도 추측이 아니다.
+    근거는 네 가지고, 어느 것도 추측이 아니다.
       thread  — 같은 대화(스레드 뿌리·References·Message-ID)의 메일이 이미 그 딜에 있다
-      docno   — 제목·본문에 그 딜의 문서번호(P-024 / KMS-RFQ-… / 견적·P/O 번호)가 있다
+      docno   — 제목·첨부 이름·본문에 그 딜의 문서번호(P-024 / KMS-RFQ-… / 견적·P/O)가 있다
+      vessel  — 그 배가 걸린 딜이 하나뿐이고, 배 이름이 제목·본문에 있다
       subject — 답장 표시를 걷어낸 제목이 그 딜의 메일과 같다(같은 기간, 후보 딜이 하나)
     후보 딜이 둘 이상이면 붙이지 않는다 — 틀린 딜의 이력은 비어 있는 것보다 나쁘다.
     한 통이 붙으면 그 대화의 나머지가 다시 근거가 되므로 더 붙일 게 없을 때까지 돈다."""
-    counts = {"thread": 0, "docno": 0, "subject": 0, "total": 0}
+    counts = {"thread": 0, "docno": 0, "vessel": 0, "subject": 0, "total": 0}
     docs = doc_no_index(s)
+    vessels = vessel_index(s)
     # 판단에 쓰는 열만 읽는다 — 본문까지 통째로 끌어오면 메일 수백 통이 그대로
-    # DB 전송량이 된다(문서번호는 본문 앞부분이면 충분하다).
+    # DB 전송량이 된다. 첨부는 이름만 든 짧은 JSON 이라 함께 읽어도 가볍고,
+    # 견적서·발주서의 문서번호가 거기 붙어 오는 일이 아주 많다.
     keys = (EmailMessage.id, EmailMessage.thread_key, EmailMessage.message_id,
             EmailMessage.in_reply_to, EmailMessage.refs, EmailMessage.subject,
-            EmailMessage.sent_at, EmailMessage.rfq_id)
-    head = func.substr(EmailMessage.body_text, 1, 4000).label("body_head")
+            EmailMessage.sent_at, EmailMessage.rfq_id, EmailMessage.attachments)
+    head = func.substr(EmailMessage.body_text, 1, DOC_SCAN_CHARS).label("body_head")
     for _ in range(max(1, max_passes)):
         unmatched = (s.query(*keys, head)
                      .filter(EmailMessage.rfq_id.is_(None)).all())
         if not unmatched:
             break
-        matched = s.query(*keys).filter(EmailMessage.rfq_id.isnot(None)).all()
+        matched = (s.query(*keys[:-1])   # 첨부는 색인에 쓰지 않는다
+                   .filter(EmailMessage.rfq_id.isnot(None)).all())
 
         # 이미 붙은 메일에서 '이 열쇠는 이 딜' 색인을 만든다. 값이 두 개 이상이면
         # 그 열쇠는 쓰지 않는다(어느 딜인지 정할 수 없다).
@@ -472,11 +544,21 @@ def auto_match(s, max_passes: int = 5) -> dict:
                 if hit and len(hit) == 1:
                     rfq_id, why = next(iter(hit)), "thread"
                     break
+            # 제목 + 첨부 이름 + 본문 앞부분. 견적서·발주서는 문서번호를 파일 이름에
+            # 달고 오는데 본문에는 "첨부 참조"만 있는 일이 흔하다 — 그런 메일이
+            # 그동안 통째로 미분류에 남았다.
+            haystack = _haystack(m.subject or "", m.body_head or "", m.attachments)
             if not rfq_id:
-                haystack = f"{m.subject or ''}\n{m.body_head or ''}".upper()
                 for token, rid in docs.items():
                     if token in haystack:
                         rfq_id, why = rid, "docno"
+                        break
+            if not rfq_id:
+                # 배 이름은 이 바닥에서 가장 또렷한 단서다. 다만 같은 배로 딜이 여러 건
+                # 도는 일이 흔하므로 후보가 하나일 때만 쓴다.
+                for token, rids in vessels.items():
+                    if len(rids) == 1 and token in haystack:
+                        rfq_id, why = next(iter(rids)), "vessel"
                         break
             if not rfq_id:
                 sk = subject_key(m.subject or "")
@@ -670,7 +752,8 @@ def _note_unknown(found: dict[str, dict], addrs: list[str], msg: Message, sent_a
 
 def _store_message(s, msg: Message, folder: str, own: set[str],
                    parties: dict[str, tuple[str, int, str]], docs: dict[str, int],
-                   unknown: dict[str, dict] | None = None) -> str:
+                   unknown: dict[str, dict] | None = None,
+                   vessels: dict[str, set[int]] | None = None) -> str:
     """메일 1통 저장. 반환: stored | skipped(관계없는 메일) | dup(이미 있음).
 
     unknown 을 넘기면 저장하지 않은 메일의 상대 주소를 거기에 세어 둔다 — 아직
@@ -707,7 +790,7 @@ def _store_message(s, msg: Message, folder: str, own: set[str],
     subject = _hdr(msg, "Subject")
     body, attachments = body_and_attachments(msg)
     truncated = len(body) > MAX_BODY_CHARS
-    rfq_id, match_by = match_project(s, parents, subject, body, docs)
+    rfq_id, match_by = match_project(s, parents, subject, body, docs, attachments, vessels)
 
     s.add(EmailMessage(
         message_id=message_id[:400],
@@ -740,11 +823,14 @@ def sync_mailbox(s, folder_limit: int | None = None) -> dict:
 
     이미 동기화가 돌고 있으면 기다리지 않고 곧장 알린다 — 자동 실행이 도는 중에
     사람이 Sync 를 눌렀을 때, 말없이 멈춰 있는 것보다 이유를 듣는 편이 낫다."""
+    global _SYNC_STARTED_AT
     if not _SYNC_LOCK.acquire(blocking=False):
-        raise RuntimeError("이미 동기화가 진행 중입니다 — 끝난 뒤 다시 시도하세요.")
+        raise SyncBusy(_SYNC_STARTED_AT)
+    _SYNC_STARTED_AT = datetime.now(KST).strftime("%Y-%m-%d %H:%M")
     try:
         return _sync_mailbox(s, folder_limit)
     finally:
+        _SYNC_STARTED_AT = ""
         _SYNC_LOCK.release()
 
 
@@ -756,6 +842,7 @@ def _sync_mailbox(s, folder_limit: int | None = None) -> dict:
     own = own_addresses(s)
     parties = party_index(s)
     docs = doc_no_index(s)
+    vessels = vessel_index(s)
     budget = folder_limit or cfg["max_per_sync"]
     # scanned = 훑은 통수. stored 가 0 일 때 "메일함을 못 읽은 것"인지 "읽었지만 등록된
     # 거래처와 오간 게 없던 것"인지 화면이 구분해 말할 수 있어야 한다.
@@ -798,7 +885,7 @@ def _sync_mailbox(s, folder_limit: int | None = None) -> dict:
                         continue
                     outcome = _store_message(
                         s, email.message_from_bytes(data[0][1]), folder, own, parties, docs,
-                        unknown)
+                        unknown, vessels)
                     counts[outcome] += 1
                     result[outcome] += 1
                 # 읽은 구간 [backfill_uid, last_uid] 를 이번에 집은 만큼 넓힌다.

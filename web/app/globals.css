@@ -12050,6 +12050,18 @@ table.mini.wide.umail-table td.umail-c-assign { width: 340px; }
 }
 .mail-card-rollup li { font-size: 12px; line-height: 1.5; color: #23364d; }
 .mail-card-rollup li + li { margin-top: 3px; }
+/* 라벨(진행·쟁점·금액·납기·다음) — 눈이 줄머리를 훑고 필요한 줄에만 멈추게. */
+.mail-card-label {
+  display: inline-block; min-width: 52px; margin-right: 6px;
+  font-size: 10.5px; font-weight: 800; color: #6b7c93; letter-spacing: .02em;
+  text-transform: none; vertical-align: 1px;
+}
+/* "다음"은 이 카드에서 유일하게 행동을 요구하는 줄이다 — 한 칸 더 세워 둔다. */
+.mail-card-rollup li.next { font-weight: 600; color: #12233f; }
+.mail-card-rollup li.next .mail-card-label { color: var(--blue); }
+/* 요약을 만든 뒤 새 메일이 온 카드 — 감추지 않고 흐리게 두고, 새 메일은 아래 줄에. */
+.mail-card-rollup.stale { background: #fbfcfe; border-left-color: #c3ccd9; }
+.mail-card-since { font-size: 10.5px; font-weight: 700; color: #a06a1c; }
 .mail-card-nodigest { margin: 0; font-size: 11px; color: var(--muted); font-style: italic; }
 .mail-card-recent { list-style: none; margin: 0; padding: 0; }
 .mail-card-recent li {

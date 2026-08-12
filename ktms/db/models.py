@@ -708,7 +708,8 @@ class EmailMessage(Base):
     rfq_id      = Column(Integer, ForeignKey("rfqs.id"), nullable=True, index=True)
     customer_id = Column(Integer, ForeignKey("customers.id"), nullable=True)
     vendor_id   = Column(Integer, ForeignKey("vendors.id"), nullable=True)
-    # 어떻게 붙었는지 — thread | subject | manual. 자동 연결을 사람이 검증할 수 있게 남긴다.
+    # 어떻게 붙었는지 — thread | docno | vessel | subject | manual.
+    # 자동 연결을 사람이 검증할 수 있게 남긴다.
     match_by    = Column(String(20))
     summary     = Column(Text)                   # Claude 한두 줄 요약(없으면 아직 안 만든 것)
     summarized_at = Column(DateTime)

@@ -158,6 +158,9 @@ def mail_status():
                 "next_run": mail_auto.next_run_at(s),
                 "last_run_at": last.get("last_run_at", ""),
                 "last_result": last.get("result", {}),
+                # 지금 돌고 있으면 시작 시각. 아침 자동 실행은 몇 분씩 걸리는데 그동안
+                # "아직 안 돌았음"으로 보이면, 사람은 버튼을 눌러 거절만 당한다.
+                "running_since": mail_sync.is_syncing(),
             },
             "folders": [
                 {"folder": st.folder,
@@ -208,6 +211,13 @@ def mail_sync_now(summarize: bool = True):
     try:
         try:
             result = mail_sync.sync_mailbox(s)
+        except mail_sync.SyncBusy as busy:
+            # 실패가 아니라 '지금은 아니다' — 아침 자동 실행이 도는 중일 때가 대부분이다.
+            # 409 로 갈라 두면 화면이 이것만 다르게(오류 빨간 줄이 아니라 안내로) 다룬다.
+            raise HTTPException(
+                status_code=409,
+                detail=f"A sync is already running{f' (since {busy.started_at})' if busy.started_at else ''}"
+                       " — it will finish on its own.") from busy
         except Exception as exc:
             raise HTTPException(status_code=400, detail=f"메일 동기화 실패: {exc}") from exc
         # 방금 담은 메일이 옛 메일의 근거가 되기도 한다(끊긴 스레드의 뒷부분이 먼저
@@ -333,6 +343,11 @@ def mail_digest(days: int = 14):
                     parties.append(p)
             cached = cache.get(rid) or {}
             fresh = cached.get("last_id") == last_id
+            # 요약을 만든 뒤 들어온 메일 수. 낡은 요약을 감추는 대신 이 숫자를 달아
+            # 함께 보여 준다 — 아래에 그 새 메일들이 줄로 붙으므로, "지난 요약 + 그
+            # 뒤로 온 것"을 나란히 읽는 편이 아무것도 없는 것보다 훨씬 빠르다.
+            new_since = (len([m for m in msgs if m.id > (cached.get("last_id") or 0)])
+                         if cached.get("text") and not fresh else 0)
             out.append({
                 "rfq_id": rid,
                 "count": count,
@@ -341,10 +356,9 @@ def mail_digest(days: int = 14):
                 "last_at": last.sent_at or "",
                 "last_dir": last.direction or "in",
                 "waiting_days": _waiting_days(last.sent_at or "", last.direction or ""),
-                # 낡은 롤업은 아예 내보내지 않는다 — 지난주 상황을 오늘 일로 읽는 게
-                # 제일 나쁘다. 대신 낡았다는 사실(rollup_stale)만 알린다.
-                "rollup": cached.get("text", "") if fresh else "",
+                "rollup": cached.get("text", ""),
                 "rollup_stale": bool(cached.get("text")) and not fresh,
+                "new_since": new_since,
                 "recent": [{
                     "sent_at": m.sent_at or "",
                     "direction": m.direction or "in",

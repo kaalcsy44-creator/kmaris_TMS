@@ -1657,8 +1657,9 @@ export type MailDigestRow = {
   last_at: string;
   last_dir: "in" | "out";
   waiting_days: number;       // 마지막이 수신인 채 지난 날수(0 = 공이 상대에게)
-  rollup: string;             // 저장된 AI 요약. 빈 문자열 = 아직 없거나 낡음
-  rollup_stale: boolean;      // 요약을 만든 뒤 새 메일이 왔다
+  rollup: string;             // 저장된 AI 요약. 빈 문자열 = 아직 만든 적 없음
+  rollup_stale: boolean;      // 요약을 만든 뒤 새 메일이 왔다(요약은 그대로 보여준다)
+  new_since: number;          // 그 요약 뒤로 들어온 메일 수
   recent: MailDigestLine[];   // 최근 메일 몇 통(최신이 위)
 };
 export type MailDigest = {
@@ -1680,6 +1681,7 @@ export type MailStatus = {
     next_run: string;
     last_run_at: string;
     last_result: Record<string, number | string>;
+    running_since: string;      // 지금 돌고 있으면 시작 시각, 아니면 빈 문자열
   };
   folders: { folder: string; last_uid: number; last_synced_at: string; last_error: string }[];
 };

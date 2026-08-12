@@ -3877,7 +3877,9 @@ function MailboxTab() {
           <tr>
             <th>Last run</th>
             <td>
-              {auto.last_run_at ? (
+              {auto.running_since ? (
+                <b>running now — started {auto.running_since}</b>
+              ) : auto.last_run_at ? (
                 <>
                   {auto.last_run_at}
                   {lastParts.length ? <span className="muted"> · {lastParts.join(" · ")}</span> : null}
@@ -3891,9 +3893,19 @@ function MailboxTab() {
         </tbody>
       </table>
       <div className="form-actions">
-        <button className="btn" onClick={syncNow} disabled={!!busy || !status.configured}>
-          {busy === "sync" ? "Fetching…" : "↻ Sync now"}
+        {/* 이미 돌고 있으면 누르게 두지 않는다 — 눌러도 거절만 당한다. */}
+        <button
+          className="btn"
+          onClick={syncNow}
+          disabled={!!busy || !status.configured || !!auto.running_since}
+        >
+          {busy === "sync" || auto.running_since ? "Syncing…" : "↻ Sync now"}
         </button>
+        {auto.running_since ? (
+          <button className="btn" onClick={load} disabled={!!busy}>
+            Refresh status
+          </button>
+        ) : null}
         {note ? <span className="action-ok">{note}</span> : null}
         {err ? <span className="action-err">{err}</span> : null}
       </div>
