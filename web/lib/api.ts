@@ -65,6 +65,7 @@ import type {
   StatisticsData,
   StatDebugData,
   SearchData,
+  MailDateRow,
   MailDigest,
   MailMessage,
   MailStatus,
@@ -1864,6 +1865,10 @@ export function syncMail(): Promise<MailSyncResult> {
 }
 export function buildProjectMailRollup(rfqId: number): Promise<{ ok: boolean; rollup: string }> {
   return post(`/api/admin/mail/project/${rfqId}/rollup`, {});
+}
+// 업무일지 주간 캘린더 — 기간 안의 딜 메일을 날짜별로 훑기 위한 가벼운 목록.
+export function fetchMailByDate(days = 120): Promise<{ days: number; rows: MailDateRow[] }> {
+  return get(`/api/admin/mail/by-date?days=${days}`);
 }
 // 대시보드 Mail 탭 — 딜별 요약 카드를 한 번에. AI 는 부르지 않으므로 빠르다.
 export function fetchMailDigest(days = 14): Promise<MailDigest> {

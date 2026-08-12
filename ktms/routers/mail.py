@@ -422,6 +422,41 @@ def mail_digest(days: int = 14):
         s.close()
 
 
+@app.get("/api/admin/mail/by-date", dependencies=[Depends(require_token)])
+@cached_aggregate()
+def mail_by_date(days: int = 120, limit: int = 2000):
+    """딜에 붙은 메일을 날짜별로 훑을 수 있게 가볍게 — 업무일지의 주간 캘린더가 쓴다.
+
+    카드용 집계(/mail/digest)는 딜마다 최근 몇 통씩만 싣는다. 캘린더는 그 반대로 여러
+    주에 걸쳐 '그날 무슨 말이 오갔나'를 봐야 하므로, 기간 안의 메일을 한 통도 빠뜨리지
+    않되 통마다 실어 보내는 것은 최소로 한다(본문·제목·첨부 없음).
+
+    days 는 IMAP 이 읽어 오는 기간(기본 120일)과 맞춰 두었다 — 그보다 옛 메일은 애초에
+    DB 에 없다."""
+    s = get_session()
+    try:
+        window = max(1, min(days, 365))
+        rows = (s.query(EmailMessage.id, EmailMessage.rfq_id, EmailMessage.sent_at,
+                        EmailMessage.direction, EmailMessage.subject, EmailMessage.summary,
+                        EmailMessage.from_addr, EmailMessage.to_addrs,
+                        EmailMessage.customer_id, EmailMessage.vendor_id)
+                .filter(EmailMessage.rfq_id.isnot(None),
+                        EmailMessage.sent_at >= mail_sync.cutoff_at(window))
+                .order_by(EmailMessage.sent_at.desc())
+                .limit(max(1, min(limit, 5000))).all())
+        names = _party_names(s)
+        return {"days": window, "rows": [{
+            "id": m.id,
+            "rfq_id": m.rfq_id,
+            "sent_at": m.sent_at or "",
+            "direction": m.direction or "in",
+            "party": _party_name(s, m, names),
+            "summary": (m.summary or "").strip() or (m.subject or ""),
+        } for m in rows]}
+    finally:
+        s.close()
+
+
 class MailDigestRefresh(BaseModel):
     # 화면이 "이 카드들의 요약이 비었다"고 짚어 준 딜. 비우면 서버가 최근 순으로 고른다.
     rfq_ids: list[int] = []

@@ -10629,6 +10629,16 @@ select.sig-owner-pick,
 .act-cal-act.closed { color: #b91c1c; }
 .act-cal-act.closed::before { background: #b91c1c; }
 .act-cal-act.star { background: #fff8e6; border-radius: 3px; padding-right: 4px; }
+/* 그날 오간 메일 — 단계 이벤트와 같은 칸에 서지만 뼈대는 이벤트다. 점 대신 방향 화살표를
+   앞에 세워 한눈에 갈라 보이게 하고, 글자는 한 톤 낮춘다. */
+.act-cal-mail { font-size: 11px; line-height: 1.4; color: #64748b;
+  padding: 1px 0 1px 11px; text-indent: -11px; overflow-wrap: break-word; }
+.act-cal-maildir { font-weight: 800; color: #7c8aa0; margin-right: 3px; }
+.act-cal-mail.out .act-cal-maildir { color: #0055a8; }
+.act-cal-mail.in .act-cal-maildir { color: #1a7a4a; }
+.act-cal-mailwhen { color: #94a3b8; font-variant-numeric: tabular-nums; margin-right: 3px; }
+.act-cal-mailparty { color: #46586e; margin-right: 3px; }
+.act-cal-mailsum { color: #64748b; }
 .act-drow-star { color: #f59e0b; margin-right: 3px; }
 .act-filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .act-search { min-width: 200px; padding: 5px 9px; border: 1px solid var(--border, #d8dee6);

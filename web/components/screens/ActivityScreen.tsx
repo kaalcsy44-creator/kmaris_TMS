@@ -7,11 +7,12 @@ import {
   fetchPipeline,
   fetchCustomers,
   fetchSettingsVessels,
+  fetchMailByDate,
   addRfqStageNote,
   updateRfqStageNote,
   deleteRfqStageNote,
 } from "@/lib/api";
-import type { PipelineData, PipelineRow, StageNote } from "@/lib/types";
+import type { MailDateRow, PipelineData, PipelineRow, StageNote } from "@/lib/types";
 import { vendorOf, activityParties, activityPersons } from "@/lib/deal";
 import {
   buildActivities,
@@ -182,6 +183,10 @@ export default function ActivityScreen() {
   const [stageTarget, setStageTarget] = useState<{ stage: number; vrfqId?: number } | null>(null);
   const { data: customers } = useCachedData("settings:customers", fetchCustomers);
   const { data: vessels } = useCachedData("settings:vessels", fetchSettingsVessels);
+  // 그날 오간 메일 — 캘린더가 프로젝트 칸에 함께 놓는다. 실패해도 캘린더는 그대로 나와야
+  // 하므로(메일 연동은 선택 기능이다) 오류를 삼키고 빈 목록으로 둔다.
+  const { data: mailByDate } = useCachedData("mail:by-date", () =>
+    fetchMailByDate().catch(() => null));
 
   function load() {
     fetchPipeline()
@@ -253,22 +258,34 @@ export default function ActivityScreen() {
   const weekView = useMemo(() => {
     // 필터를 통과한 활동을 평탄화(날짜 없는 건은 캘린더에서 제외).
     const flat: { row: PipelineRow; act: Activity }[] = [];
+    const passing = new Map<number, PipelineRow>();
     for (const row of data?.rows ?? []) {
       if (!rowPasses(row)) continue;
+      passing.set(row.rfq_id, row);
       let acts = buildActivities(row, steps);
       if (targetDate) acts = acts.filter((a) => a.date === targetDate);
       for (const act of acts) if (act.date) flat.push({ row, act });
     }
     // 주(월요일 ISO) → 날짜 → 프로젝트(rfq_id) 로 3단계 그룹화.
-    const weeks = new Map<string, Map<string, Map<number, { row: PipelineRow; acts: Activity[] }>>>();
-    for (const { row, act } of flat) {
-      const ws = weekStart(act.date);
+    type Cell = { row: PipelineRow; acts: Activity[]; mails: MailDateRow[] };
+    const weeks = new Map<string, Map<string, Map<number, Cell>>>();
+    const cellFor = (row: PipelineRow, date: string): Cell => {
+      const ws = weekStart(date);
       if (!weeks.has(ws)) weeks.set(ws, new Map());
-      const days = weeks.get(ws) as Map<string, Map<number, { row: PipelineRow; acts: Activity[] }>>;
-      if (!days.has(act.date)) days.set(act.date, new Map());
-      const projs = days.get(act.date) as Map<number, { row: PipelineRow; acts: Activity[] }>;
-      if (!projs.has(row.rfq_id)) projs.set(row.rfq_id, { row, acts: [] });
-      (projs.get(row.rfq_id) as { row: PipelineRow; acts: Activity[] }).acts.push(act);
+      const days = weeks.get(ws) as Map<string, Map<number, Cell>>;
+      if (!days.has(date)) days.set(date, new Map());
+      const projs = days.get(date) as Map<number, Cell>;
+      if (!projs.has(row.rfq_id)) projs.set(row.rfq_id, { row, acts: [], mails: [] });
+      return projs.get(row.rfq_id) as Cell;
+    };
+    for (const { row, act } of flat) cellFor(row, act.date).acts.push(act);
+    // 그날 오간 메일도 같은 자리에 놓는다 — 단계 이벤트와 메일은 같은 하루의 두 면이고,
+    // 메일만 오간 날에도 그 딜은 그날 움직인 것이다(그 경우 칸이 새로 생긴다).
+    for (const m of mailByDate?.rows ?? []) {
+      const row = passing.get(m.rfq_id);
+      const date = (m.sent_at || "").slice(0, 10);
+      if (!row || !date || (targetDate && date !== targetDate)) continue;
+      cellFor(row, date).mails.push(m);
     }
     // 주 오름차순(위=이전) → 각 주를 월~일 7칸으로 채운다.
     return Array.from(weeks.keys()).sort().map((ws) => {
@@ -282,12 +299,15 @@ export default function ActivityScreen() {
               return pa < pb ? -1 : pa > pb ? 1 : 0;
             })
           : [];
-        for (const p of projects) p.acts.sort((x, y) => actStageSort(x) - actStageSort(y));
+        for (const p of projects) {
+          p.acts.sort((x, y) => actStageSort(x) - actStageSort(y));
+          p.mails.sort((x, y) => x.sent_at.localeCompare(y.sent_at));
+        }
         days.push({ date, projects });
       }
       return { start: ws, days };
     });
-  }, [data, steps, rowPasses, targetDate]);
+  }, [data, steps, rowPasses, targetDate, mailByDate]);
 
   const totalActs = weekView.reduce(
     (s, w) => s + w.days.reduce((ds, d) => ds + d.projects.reduce((ps, p) => ps + p.acts.length, 0), 0),
@@ -566,6 +586,23 @@ export default function ActivityScreen() {
                                 />
                               </li>
                             ))}
+                            {/* 그날 오간 메일 — 단계 이벤트 아래에 시각순으로. 이벤트가
+                                굵은 라벨로 하루의 뼈대를 잡고, 메일은 그 사이에 무슨 말이
+                                오갔는지를 채운다. 시각을 앞에 세워 순서가 읽히게 한다. */}
+                            {p.mails.map((m) => (
+                              <li key={`m${m.id}`} className={`act-cal-mail ${m.direction}`}>
+                                <span className="act-cal-maildir">
+                                  {m.direction === "out" ? "→" : "←"}
+                                </span>
+                                {hm(m.sent_at) ? (
+                                  <span className="act-cal-mailwhen">{hm(m.sent_at)}</span>
+                                ) : null}
+                                {m.party ? (
+                                  <span className="act-cal-mailparty">{m.party}</span>
+                                ) : null}
+                                <span className="act-cal-mailsum">{m.summary}</span>
+                              </li>
+                            ))}
                           </ul>
                         </div>
                       ))}
@@ -596,7 +633,10 @@ export default function ActivityScreen() {
 }
 
 // 주간 캘린더용 타입/헬퍼.
-type DayCell = { date: string; projects: { row: PipelineRow; acts: Activity[] }[] };
+type DayCell = {
+  date: string;
+  projects: { row: PipelineRow; acts: Activity[]; mails: MailDateRow[] }[];
+};
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 function actStageSort(a: Activity): number {
   return a.kind === "close" ? 99 : a.stage;

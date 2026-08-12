@@ -1665,6 +1665,8 @@ export type MailDigestRow = {
   new_since: number;          // 그 요약 뒤로 들어온 메일 수
   recent: MailDigestLine[];   // 최근 메일 몇 통(최신이 위)
 };
+// 날짜별로 훑는 메일 한 줄 — 업무일지 주간 캘린더용. 본문·제목·첨부는 실리지 않는다.
+export type MailDateRow = MailDigestLine & { id: number; rfq_id: number };
 export type MailDigest = {
   days: number;
   waiting_after: number;      // 이 날수 이상 쥐고 있으면 "우리 차례"로 올린다
