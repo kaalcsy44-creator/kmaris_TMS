@@ -1,5 +1,6 @@
 import { API_BASE } from "./config";
 import { getToken, clearAuth } from "./auth";
+import { invalidateCache } from "./useCachedData";
 import type { PermGrid } from "./auth";
 import type {
   RfqOverview,
@@ -1597,7 +1598,7 @@ export function createVendorQuote(
   sourceFiles?: RfqSourceFile[],
   fxRate?: number | null
 ): Promise<{ ok: boolean; vendor_quote_no: string }> {
-  return post(`/api/admin/rfq/${rfqId}/vendor-quote`, {
+  return post<{ ok: boolean; vendor_quote_no: string }>(`/api/admin/rfq/${rfqId}/vendor-quote`, {
     vendor_rfq_id: vendorRfqId,
     vendor_quote_no: vendorQuoteNo,
     amount,
@@ -1608,6 +1609,9 @@ export function createVendorQuote(
     terms,
     source_files: sourceFiles,
     fx_rate: fxRate,
+  }).then((r) => {
+    dropVendorQuoteCaches();
+    return r;
   });
 }
 
@@ -1660,7 +1664,7 @@ export function createCustomerQuote(
   vendorQuoteId?: number | null,
   marginPct?: number
 ): Promise<{ ok: boolean; id: number; qtn_no: string }> {
-  return post(`/api/admin/rfq/${rfqId}/customer-quote`, {
+  return post<{ ok: boolean; id: number; qtn_no: string }>(`/api/admin/rfq/${rfqId}/customer-quote`, {
     qtn_no: qtnNo,
     currency,
     cost_currency: costCurrency,
@@ -1675,6 +1679,9 @@ export function createCustomerQuote(
     remarks,
     terms,
     vendor_quote_id: vendorQuoteId ?? null,
+  }).then((r) => {
+    dropQuotationCaches();
+    return r;
   });
 }
 
@@ -1749,13 +1756,41 @@ export function updateVendorQuote(
     source_files?: RfqSourceFile[];
   }
 ): Promise<{ ok: boolean; vendor_quote_no: string; currency?: string }> {
-  return put(`/api/admin/vendor-quote/${id}`, body);
+  return put<{ ok: boolean; vendor_quote_no: string; currency?: string }>(
+    `/api/admin/vendor-quote/${id}`,
+    body
+  ).then((r) => {
+    dropVendorQuoteCaches();
+    return r;
+  });
 }
 
 export function deleteVendorQuote(
   id: number
 ): Promise<{ ok: boolean; vendor_quote_no: string }> {
-  return del(`/api/admin/vendor-quote/${id}`);
+  return del<{ ok: boolean; vendor_quote_no: string }>(`/api/admin/vendor-quote/${id}`).then((r) => {
+    dropVendorQuoteCaches();
+    return r;
+  });
+}
+
+/**
+ * 견적을 고쳐 쓰면 그 견적을 읽고 있던 캐시를 버린다.
+ *
+ * 개요(Items 표)는 견적 상세를 `quotation:<id>` 로, 견적 목록을 `po:work-options` 로 캐시해
+ * 두고 15초 안에 다시 마운트되면 재요청을 생략한다. 저장하고 곧바로 Overview 로 넘어가는
+ * 건 몇 초짜리 동작이라 늘 그 15초 안에 들어가고, 그래서 방금 바꾼 원가 출처(벤더 견적
+ * 링크)가 표에 반영되지 않은 채로 보였다 — "연결했는데 안 바뀐다".
+ */
+function dropQuotationCaches() {
+  invalidateCache("quotation:");
+  invalidateCache("po:work-options");
+}
+
+/** 벤더 견적을 고쳐 쓰면 개요가 읽는 수신 견적 목록도 버린다(번호·금액·통화가 바뀐다). */
+function dropVendorQuoteCaches() {
+  invalidateCache("rfq:vendor-quotes:");
+  dropQuotationCaches();   // 견적 머리의 매입측 번호가 이 목록에서 온다
 }
 
 export function fetchCustomerQuotationDetail(
@@ -1782,13 +1817,19 @@ export function updateCustomerQuotation(
     vendor_quote_id?: number | null; // 원가 출처 벤더 견적. null 이면 링크 해제.
   }
 ): Promise<{ ok: boolean; qtn_no: string }> {
-  return put(`/api/admin/quotation/${id}`, body);
+  return put<{ ok: boolean; qtn_no: string }>(`/api/admin/quotation/${id}`, body).then((r) => {
+    dropQuotationCaches();
+    return r;
+  });
 }
 
 export function deleteCustomerQuotation(
   id: number
 ): Promise<{ ok: boolean; qtn_no: string }> {
-  return del(`/api/admin/quotation/${id}`);
+  return del<{ ok: boolean; qtn_no: string }>(`/api/admin/quotation/${id}`).then((r) => {
+    dropQuotationCaches();
+    return r;
+  });
 }
 
 export function updateOrder(

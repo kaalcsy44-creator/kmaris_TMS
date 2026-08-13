@@ -11505,6 +11505,8 @@ button.ov-tl-stage:hover { background: color-mix(in srgb, var(--ov-tone) 12%, tr
 }
 /* 이 묶음의 윗선 — 위 묶음과 붙어 보이지 않게 한 칸 띄우는 대신 선으로 가른다. */
 .ov-grp-alt .ov-grp-head td { border-top: 2px solid var(--line-strong); }
+/* 견적 상세를 못 받았을 때의 한 줄 — 빈 QUOTE 칸이 "견적 없음"으로 읽히지 않게. */
+.ov-load-err { color: #b42318; font-weight: 600; }
 /* 문서번호 = 그 문서를 다루는 단계로 가는 링크. 색·굵기는 칸이 이미 단계를 알려주므로
    물려받고, 점선 밑줄로만 "누를 수 있다"를 표시한다. 팝업 안에선 <button>, 페이지에선
    <a> 로 그려지므로 버튼 기본 모양(테두리·바탕·폰트)을 지워 둘을 같게 맞춘다. */

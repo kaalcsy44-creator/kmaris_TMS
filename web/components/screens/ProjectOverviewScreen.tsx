@@ -1307,7 +1307,7 @@ function OrderItemGroup({
 }) {
   // 원가·마진은 견적 목록에 없고 상세에만 있어 따로 받는다(_item_view 가 원가를 지움).
   const qid = quoteRow?.id ?? 0;
-  const { data: quote } = useCachedData(`quotation:${qid}`, () =>
+  const { data: quote, error: quoteErr } = useCachedData(`quotation:${qid}`, () =>
     qid ? fetchCustomerQuotationDetail(qid) : Promise.resolve(null)
   );
   const { data: doc } = useCachedData(`documents:${order.id}`, () => fetchDocumentDetail(order.id));
@@ -1420,6 +1420,17 @@ function OrderItemGroup({
         orderId={order.id}
         nav={nav}
       />
+      {/* 견적 상세를 못 받으면 QUOTE 칸이 통째로 빈다 — 그 꼴이 "견적이 없다"와 똑같아서,
+          이유를 적어 두지 않으면 데이터가 잘못된 줄 알고 딜을 뒤지게 된다. */}
+      {quoteErr && qid ? (
+        <tr>
+          <td colSpan={13} className="proj-ov-empty">
+            <span className="ov-load-err">
+              Quote details could not be loaded — {quoteErr.message}
+            </span>
+          </td>
+        </tr>
+      ) : null}
       {/* 합계를 품목 1번행 바로 위에 둔다 — 표를 끝까지 훑지 않고도 단계별 총액을 먼저 본다. */}
       <GroupTotal
         quotePur={total(lines.map((l) => l.qPur))}
