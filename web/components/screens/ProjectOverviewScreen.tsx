@@ -28,7 +28,15 @@ import {
   type StageChainItem,
 } from "@/lib/deal";
 import { buildActivities, hm, md, splitProjectNo, type Activity } from "@/lib/activity";
-import type { ApRow, MailMessage, PipelineRow, PoWorkOptions, RfqItem, StageNote } from "@/lib/types";
+import type {
+  ApRow,
+  MailMessage,
+  PipelineRow,
+  PoWorkOptions,
+  RfqItem,
+  StageNote,
+  VendorQuoteItem,
+} from "@/lib/types";
 import { vendorList } from "@/components/common/dealFields";
 import { convertCurrency, USD_KRW_RATE } from "@/components/common/itemTable";
 import { tr } from "@/lib/labels";
@@ -141,6 +149,7 @@ export default function ProjectOverviewScreen({
       vrfqId: v.vendor_rfq_id ?? undefined,
       amount: vqTotal(v.items ?? []),
       currency: v.currency || "USD",
+      items: v.items ?? [],
     }))
     .filter((v) => v.no && v.no !== "—")
     .sort((a, b) => a.id - b.id);
@@ -180,6 +189,21 @@ type VqRef = {
   vrfqId?: number;
   amount: number | null;
   currency: string;
+  /** 그 견적서의 품목 줄 — 대안 묶음의 Purchase 열을 품목별로 채운다. */
+  items: VendorQuoteItem[];
+};
+
+/** 대안 견적 묶음이 매출측으로 빌려 쓰는 기준 줄 — 품목과 이 딜의 판매가.
+ *  벤더 견적에는 판매가가 없다. 매출을 비워 두면 마진도 못 세워, 애초에 견적을 더 받은
+ *  이유(그래서 마진이 얼마나 달라지나)가 화면에서 사라진다. 그래서 **같은 판매가**에
+ *  이 벤더의 원가를 대 본다 — 바뀌는 건 Purchase 와 Margin 뿐이다. */
+type AltBase = {
+  part_no?: string;
+  description?: string;
+  qty?: number;
+  unit?: string;
+  sales: number | null;
+  salesEx: boolean;
 };
 
 /** 벤더 견적서 총액 — 단가가 매겨진 줄만 더한다(하나도 없으면 null = "금액 미기재"). */
@@ -370,8 +394,19 @@ function marginPct(
   rate: number
 ): number | null {
   if (sales == null || purchase == null || !sales) return null;
+  // 시스템이 아는 환율은 USD↔KRW 하나뿐이다(딜에 저장된 fx_rate). 그 밖의 통화쌍은
+  // convertCurrency 가 금액을 그대로 돌려주므로, 계산하면 EUR 를 USD 로 친 마진이 나온다.
+  // 몇 %쯤 어긋난 숫자는 없는 것보다 나쁘다 — 그 숫자로 어디서 살지를 정하게 된다.
+  if (!convertible(purCur, salesCur)) return null;
   const p = convertCurrency(purchase, purCur, salesCur, rate);
   return Math.round(((sales - p) / sales) * 1000) / 10;
+}
+
+/** 환산할 수 있는 통화쌍인가 — 같은 통화이거나 USD↔KRW. */
+function convertible(a: string, b: string): boolean {
+  const x = (a || "USD").toUpperCase();
+  const y = (b || "USD").toUpperCase();
+  return x === y || (x === "USD" && y === "KRW") || (x === "KRW" && y === "USD");
 }
 
 function Overview({
@@ -1360,7 +1395,19 @@ function OrderItemGroup({
   // (국내 매입 10% + 수출 매출 0%)는 흔하므로, 0 인 쪽도 0 으로 적어 대비를 보여준다.
   const hasVat = !!(ciPurVat || ciSalesVat);
 
+  // 대안 견적 묶음이 빌려 쓸 매출측 — 이 딜의 고객 견적 판매가와 그 품목.
+  const altBase: AltBase[] = lines.map((l) => ({
+    part_no: l.it.part_no,
+    description: l.it.description || l.qIt?.description || "",
+    qty: l.it.qty,
+    unit: l.it.unit,
+    sales: l.qSales,
+    salesEx: l.qEx,
+  }));
+  const alts = altQuotes(vendorQuotes, quote?.vendor_quote_id ?? null);
+
   return (
+    <>
     <tbody className="ov-grp">
       <GroupHead
         vessel={order.vessel}
@@ -1428,11 +1475,6 @@ function OrderItemGroup({
           </td>
         </tr>
       ))}
-      {/* 비교용으로 더 받아 둔 벤더 견적 — 품목 줄 바로 아래. 위 Total 에는 더하지 않는다
-          (경쟁 견적이라 더하면 원가가 부푼다 — 같은 이유로 대시보드도 합산하지 않는다). */}
-      {altQuotes(vendorQuotes, quote?.vendor_quote_id ?? null).map((v) => (
-        <AltQuoteRow key={v.id} vq={v} nav={nav} />
-      ))}
       {/* 부대비용 — 값이 있는 항목만 한 줄씩. 위 Total 에는 이미 더해져 있다. */}
       {CHARGE_LABELS.map(([k, label]) =>
         apCharges?.[k] || ciCharges?.[k] ? (
@@ -1466,33 +1508,130 @@ function OrderItemGroup({
         />
       ) : null}
     </tbody>
+    {/* 원가로 쓰지 않은 견적은 묶음을 한 벌씩 더 그린다 — 위 묶음과 같은 자리, 같은 판매가.
+        합계에는 넣지 않는다(경쟁 견적은 합이 아니라 대안이다). */}
+    {alts.map((v) => (
+      <AltQuoteGroup
+        key={v.id}
+        vessel={order.vessel}
+        vq={v}
+        qtnNo={quote?.qtn_no || "—"}
+        base={altBase}
+        salesCur={qCur}
+        rate={rate}
+        nav={nav}
+      />
+    ))}
+    </>
   );
 }
 
 /**
- * 원가로 쓰지 않은 벤더 견적 한 줄 — 번호와 그 견적서 총액.
+ * 원가로 쓰지 않은 벤더 견적 — 위 묶음과 **같은 꼴**로 한 벌 더 그린다.
+ * 선박 줄부터 Total, 품목, 마진율, 판매가까지 자리가 같아서 두 묶음을 위아래로 겹쳐 읽으면
+ * 바뀐 칸(Purchase·Margin)만 눈에 들어온다. 한 줄짜리 각주로는 "그래서 마진이 얼마나
+ * 달라지나"가 안 보였다 — 여러 곳에 물어본 이유가 그 차이다.
  *
- * 표의 QUOTE Purchase 열은 "고객 견적이 원가로 삼은 한 건"의 값이라, 비교하려고 더 받아 둔
- * 견적은 묶음 머리에 번호로만 남고 금액을 세울 자리가 없었다. 품목 줄 아래에 한 줄씩 놓아
- * 같은 열(Purchase) 아래에서 위의 원가와 세로로 견줘지게 한다 — 여러 곳에 물어본 이유가
- * 값이니, 값이 같은 축에 서지 않으면 물어본 보람이 화면에 남지 않는다.
+ * 판매가는 이 딜의 고객 견적 값을 그대로 빌린다(벤더 견적에는 판매가가 없다). 그러니
+ * 이 묶음이 답하는 질문은 하나다 — "같은 값에 팔면서 이쪽에서 샀다면?"
+ * P/O·C/I 칸은 비운다. 발주는 한 번뿐이라, 채우면 두 번 산 것처럼 읽힌다.
  */
-function AltQuoteRow({ vq, nav }: { vq: VqRef; nav: DocNav }) {
+function AltQuoteGroup({
+  vessel,
+  vq,
+  qtnNo,
+  base,
+  salesCur,
+  rate,
+  nav,
+}: {
+  vessel: string;
+  vq: VqRef;
+  /** 판매가를 빌려 온 고객 견적번호 — 어느 매출과 견준 마진인지 밝힌다. */
+  qtnNo: string;
+  base: AltBase[];
+  salesCur: string;
+  rate: number;
+  nav: DocNav;
+}) {
+  // 품목 짝맞춤은 본 묶음과 같은 규칙(품번 우선, 없으면 순서).
+  const match = makeItemMatcher(vq.items);
+  const rows = base.map((b, i) => {
+    const it = match(b, i);
+    const pur =
+      it && it.cost_price != null ? Number(it.cost_price) * Number(it.qty || 1) : null;
+    return { b, pur };
+  });
+  const purTotal = total(rows.map((r) => r.pur));
+  const salesTotal = total(base.map((b) => b.sales));
   return (
-    <tr className="ov-grp-extra ov-grp-altq">
-      <td colSpan={4} className="ov-it-extralabel">
-        <span className="ov-altq-lbl">Also quoted</span>
-        <DocNoLink no={vq.no} stage={DOC_STAGE.vendorQuote} vrfqId={vq.vrfqId} nav={nav} />
-        {vq.vendor ? <span className="ov-altq-vendor">{vq.vendor}</span> : null}
-      </td>
-      <td className="num gs">
-        {vq.amount == null ? null : <Money value={vq.amount} currency={vq.currency} />}
-      </td>
-      <td className="num" />
-      <td className="num ov-sal" />
-      <td className="num gs" colSpan={3} />
-      <td className="num gs" colSpan={3} />
-    </tr>
+    <tbody className="ov-grp ov-grp-alt">
+      <tr className="ov-grp-head">
+        <td colSpan={4}>
+          <span className="ov-grp-vessel">{vessel || "— no vessel —"}</span>
+          <span className="ov-alt-tag">
+            Also quoted{vq.vendor ? ` · ${vq.vendor}` : ""}
+          </span>
+        </td>
+        <td colSpan={3} className="ov-grp-doc q gs">
+          <DocPair
+            hasPur
+            pur={
+              <DocNoLink
+                no={vq.no}
+                stage={DOC_STAGE.vendorQuote}
+                vrfqId={vq.vrfqId}
+                nav={nav}
+              />
+            }
+            sales={<DocNoLink no={qtnNo} stage={DOC_STAGE.quote} nav={nav} />}
+          />
+        </td>
+        <td colSpan={3} className="ov-grp-doc p gs" />
+        <td colSpan={3} className="ov-grp-doc c gs" />
+      </tr>
+      <tr className="ov-grp-total">
+        <td colSpan={4} className="ov-it-totlabel">
+          Total
+        </td>
+        <td className="num gs">
+          <Money value={purTotal} currency={vq.currency} />
+        </td>
+        <td className="num">
+          <Pct value={marginPct(salesTotal, purTotal, salesCur, vq.currency, rate)} />
+        </td>
+        <td className="num ov-it-total">
+          <Money value={salesTotal} currency={salesCur} />
+        </td>
+        <td className="num gs" colSpan={3} />
+        <td className="num gs" colSpan={3} />
+      </tr>
+      {rows.map(({ b, pur }, i) => (
+        <tr key={i}>
+          <td className="ov-it-n">{i + 1}</td>
+          <td className="ov-it-part">{b.part_no || <span className="muted">—</span>}</td>
+          <td>{b.description || "—"}</td>
+          <td className="ov-it-qty">
+            {Number(b.qty || 1)}
+            {b.unit ? ` ${b.unit}` : ""}
+          </td>
+          <td className="num gs">
+            <Money value={pur} currency={vq.currency} />
+          </td>
+          <td className="num">
+            <Pct
+              value={marginPct(b.sales, pur, salesCur, vq.currency, rate)}
+              excluded={b.salesEx}
+            />
+          </td>
+          <td className="num ov-sal">
+            <Money value={b.sales} currency={salesCur} excluded={b.salesEx} />
+          </td>
+          <td className="num gs" colSpan={3} />
+          <td className="num gs" colSpan={3} />
+        </tr>
+      ))}
+    </tbody>
   );
 }
 
@@ -1738,7 +1877,16 @@ function QuoteOnlyGroup({
   const qCur = quote.currency || "USD";
   const qCostCur = quote.cost_currency || qCur;
   const rate = quote.fx_rate && quote.fx_rate > 0 ? quote.fx_rate : USD_KRW_RATE;
+  const altBase: AltBase[] = quote.items.map((it) => ({
+    part_no: it.part_no,
+    description: it.description,
+    qty: it.qty,
+    unit: it.unit,
+    sales: lineAmount(it),
+    salesEx: !!it.excluded,
+  }));
   return (
+    <>
     <tbody className="ov-grp">
       <GroupHead
         vessel={quote.vessel}
@@ -1795,11 +1943,21 @@ function QuoteOnlyGroup({
           </td>
         </tr>
       ))}
-      {/* 비교용으로 더 받아 둔 벤더 견적(OrderItemGroup 과 같은 자리·같은 규칙). */}
-      {altQuotes(vendorQuotes, quote.vendor_quote_id ?? null).map((v) => (
-        <AltQuoteRow key={v.id} vq={v} nav={nav} />
-      ))}
     </tbody>
+    {/* 비교용으로 더 받아 둔 벤더 견적(OrderItemGroup 과 같은 자리·같은 규칙). */}
+    {altQuotes(vendorQuotes, quote.vendor_quote_id ?? null).map((v) => (
+      <AltQuoteGroup
+        key={v.id}
+        vessel={quote.vessel}
+        vq={v}
+        qtnNo={quote.qtn_no || "—"}
+        base={altBase}
+        salesCur={qCur}
+        rate={rate}
+        nav={nav}
+      />
+    ))}
+    </>
   );
 }
 

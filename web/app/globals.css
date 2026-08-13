@@ -11493,10 +11493,18 @@ button.ov-tl-stage:hover { background: color-mix(in srgb, var(--ov-tone) 12%, tr
    건만 진하게 둔다 — 같은 무게로 찍으면 어느 값이 원가로 들어갔는지 표에서 읽을 수 없고,
    빼 버리면 비교하려고 받아 둔 견적이 개요에서 통째로 사라진다. */
 .ov-grp-doc .ov-doc-pur .ov-vq.src { font-weight: 600; color: #4a5a70; }
-/* 비교용으로 더 받아 둔 벤더 견적 줄 — 라벨 칸에 "Also quoted + 번호 + 벤더"를 세우고
-   금액은 QUOTE Purchase 칸에 둔다. 위의 원가와 같은 열에 서야 세로로 견줘진다. */
-.ov-grp-altq .ov-altq-lbl { margin-right: 6px; font-weight: 400; }
-.ov-grp-altq .ov-altq-vendor { margin-left: 6px; font-weight: 400; opacity: 0.85; }
+/* 비교용으로 더 받아 둔 벤더 견적 묶음 — 본 묶음과 자리는 같게, 무게는 낮게. 같은 굵기로
+   그리면 발주를 두 번 한 것처럼 읽힌다. 선박 이름 옆의 꼬리표가 "이건 안 산 쪽"을 말한다. */
+.ov-grp-alt .ov-grp-head td, .ov-grp-alt .ov-grp-total td { opacity: 0.92; }
+.ov-grp-alt .ov-grp-vessel { font-weight: 600; }
+.ov-alt-tag {
+  margin-left: 8px; padding: 1px 7px; border-radius: 999px;
+  background: #eef2f7; color: #6b7c93;
+  font-size: var(--ov-t-cap); font-weight: 700; letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+/* 이 묶음의 윗선 — 위 묶음과 붙어 보이지 않게 한 칸 띄우는 대신 선으로 가른다. */
+.ov-grp-alt .ov-grp-head td { border-top: 2px solid var(--line-strong); }
 /* 문서번호 = 그 문서를 다루는 단계로 가는 링크. 색·굵기는 칸이 이미 단계를 알려주므로
    물려받고, 점선 밑줄로만 "누를 수 있다"를 표시한다. 팝업 안에선 <button>, 페이지에선
    <a> 로 그려지므로 버튼 기본 모양(테두리·바탕·폰트)을 지워 둘을 같게 맞춘다. */
