@@ -801,6 +801,9 @@ def rfq_vendor_quotes(rfq_id: int):
             vrfq = vrfq_map.get(q.vendor_rfq_id)
             out.append({
                 "id": q.id,
+                # 이 견적이 어느 Vendor RFQ 에 대한 답인지 — 개요에서 번호를 누르면 그 벤더의
+                # 3단계 탭이 열린 채로 뜨게 하는 데 쓴다(벤더가 여럿이면 어느 탭인지가 중요).
+                "vendor_rfq_id": q.vendor_rfq_id,
                 "vendor_quote_no": getattr(q, "vendor_quote_no", None) or "—",
                 "vendor": vendor_names.get(vrfq.vendor_id, "—") if vrfq else "—",
                 "received_date": q.received_date or "",

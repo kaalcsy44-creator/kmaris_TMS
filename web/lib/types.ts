@@ -510,6 +510,8 @@ export type VendorQuoteOverviewRow = {
 
 export type VendorQuoteForImport = {
   id: number;
+  /** 이 견적이 답한 Vendor RFQ. 개요의 번호 링크가 그 벤더 탭을 열 때 쓴다. */
+  vendor_rfq_id?: number | null;
   vendor_quote_no: string;
   vendor: string;
   received_date: string;
