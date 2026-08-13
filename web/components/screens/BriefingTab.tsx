@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   fetchCustomers,
@@ -229,6 +229,100 @@ export default function BriefingTab() {
     });
   }
 
+  // ── 카드를 좌우로 넘긴다 ───────────────────────────────────────────────────
+  // 카드를 세로로 쌓으면 열다섯 장을 보는 동안 상단 필터 줄이 멀어지고, 지금 몇 번째를
+  // 보고 있는지도 잃는다. 그래서 트랙 하나에 옆으로 세우고 드래그와 양옆 화살표로 옮긴다.
+  // Cols 는 이제 "한 번에 몇 장을 볼까"라는 뜻이 된다 — 밀도라는 성격은 그대로다.
+  const trackRef = useRef<HTMLDivElement | null>(null);
+  const drag = useRef<{ x: number; left: number; moved: boolean } | null>(null);
+  const dragged = useRef(false);   // 방금 끈 뒤라면 뒤따라오는 click 을 삼킨다
+  const goal = useRef<number | null>(null);   // 부드럽게 가는 중인 목적지
+  const [atStart, setAtStart] = useState(true);
+  const [atEnd, setAtEnd] = useState(true);
+
+  const updateEnds = useCallback(() => {
+    const el = trackRef.current;
+    if (!el) return;
+    if (goal.current != null && Math.abs(el.scrollLeft - goal.current) < 1) goal.current = null;
+    setAtStart(el.scrollLeft <= 1);
+    setAtEnd(el.scrollLeft >= el.scrollWidth - el.clientWidth - 1);
+  }, []);
+
+  // 카드 수·열 수·펼침이 바뀌면 트랙 길이가 바뀐다 — 양 끝 판정을 다시 한다.
+  useEffect(() => { updateEnds(); }, [updateEnds, shown, cols, show, expanded]);
+  useEffect(() => {
+    window.addEventListener("resize", updateEnds);
+    return () => window.removeEventListener("resize", updateEnds);
+  }, [updateEnds]);
+  // 묶음을 바꾸면 처음부터 본다 — 다른 목록의 열두 번째 자리에 남아 있을 이유가 없다.
+  useEffect(() => {
+    goal.current = null;
+    trackRef.current?.scrollTo({ left: 0 });
+  }, [filter]);
+
+  /** 카드 한 장의 이동 폭(카드 폭 + 간격). 두 장의 offsetLeft 차이가 가장 정확하다. */
+  function cardStep(el: HTMLDivElement): number {
+    const kids = el.children;
+    if (kids.length >= 2) {
+      const d = (kids[1] as HTMLElement).offsetLeft - (kids[0] as HTMLElement).offsetLeft;
+      if (d > 0) return d;
+    }
+    return el.clientWidth || 1;
+  }
+
+  /** 화살표 한 번에 카드 한 장 — 한 화면씩 건너뛰면 방금 읽던 카드가 사라진다.
+   *  연타는 목적지에서부터 센다. 지금 위치에서 세면 부드럽게 가는 도중의 어중간한
+   *  자리가 기준이 되어, 두 번 눌러도 한 장밖에 안 넘어간다. */
+  function go(dir: -1 | 1) {
+    const el = trackRef.current;
+    if (!el) return;
+    const s = cardStep(el);
+    const from = goal.current ?? el.scrollLeft;
+    const max = Math.max(0, el.scrollWidth - el.clientWidth);
+    const left = Math.min(max, Math.max(0, (Math.round(from / s) + dir) * s));
+    goal.current = left;
+    el.scrollTo({ left, behavior: "smooth" });
+  }
+
+  function onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    dragged.current = false;
+    goal.current = null;
+    const el = trackRef.current;
+    if (e.button !== 0 || !el) return;
+    drag.current = { x: e.clientX, left: el.scrollLeft, moved: false };
+  }
+
+  function onPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    const d = drag.current;
+    const el = trackRef.current;
+    if (!d || !el) return;
+    const dx = e.clientX - d.x;
+    if (!d.moved) {
+      if (Math.abs(dx) < 6) return;   // 6px 넘게 끌어야 넘기기 — 그 아래는 클릭이다
+      d.moved = true;
+      dragged.current = true;
+      // 끄는 동안은 스냅을 끈다. 켜 둔 채 scrollLeft 를 밀면 브라우저가 매번 가장
+      // 가까운 카드로 되돌려, 손을 따라오지 않고 덜컥거린다.
+      el.classList.add("dragging");
+      try { el.setPointerCapture(e.pointerId); } catch { /* 캡처 못 해도 끌기는 된다 */ }
+    }
+    el.scrollLeft = d.left - dx;
+  }
+
+  function endDrag(e: React.PointerEvent<HTMLDivElement>) {
+    const d = drag.current;
+    const el = trackRef.current;
+    drag.current = null;
+    if (!d || !el) return;
+    el.classList.remove("dragging");
+    try { el.releasePointerCapture(e.pointerId); } catch { /* 이미 풀렸다 */ }
+    // 손을 뗀 자리에서 가장 가까운 카드에 맞춘다(스냅을 껐던 만큼 우리가 맞춘다).
+    if (d.moved) {
+      const s = cardStep(el);
+      el.scrollTo({ left: Math.round(el.scrollLeft / s) * s, behavior: "smooth" });
+    }
+  }
+
   const loadErr = digestErr ?? pipeErr;
   if (loadErr) return <div className="action-err">{loadErr.message}</div>;
   if (!pipeline) return <div className="state">Loading…</div>;
@@ -313,30 +407,57 @@ export default function BriefingTab() {
             : "Nothing in this filter."}
         </p>
       ) : (
-        <div className={`brief-grid cols-${cols}`}>
-          {shown.map((c) => (
-            <BriefCard
-              key={c.row.rfq_id}
-              card={c}
-              steps={steps}
-              show={show}
-              open={expanded.includes(c.row.rfq_id)}
-              onToggle={() =>
-                setExpanded((prev) =>
-                  prev.includes(c.row.rfq_id)
-                    ? prev.filter((id) => id !== c.row.rfq_id)
-                    : [...prev, c.row.rfq_id]
-                )
-              }
-              waitingAfter={waitingAfter}
-              onOpen={() => { setStageTarget(null); setOpenRfqId(c.row.rfq_id); }}
-              onOpenStage={(act) => {
-                if (act.kind !== "auto") return;
-                setStageTarget({ stage: act.stage, vrfqId: act.vrfqId });
-                setOpenRfqId(c.row.rfq_id);
-              }}
-            />
-          ))}
+        <div className="brief-deck">
+          <DeckNav dir={-1} disabled={atStart} onClick={() => go(-1)} />
+          <div
+            ref={trackRef}
+            className={`brief-track cols-${cols}`}
+            role="group"
+            aria-label="Project cards"
+            tabIndex={0}
+            onScroll={updateEnds}
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={endDrag}
+            onPointerCancel={endDrag}
+            // 끌고 나서 손을 뗀 자리가 마침 버튼 위였다고 그 버튼이 눌리면 안 된다.
+            onClickCapture={(e) => {
+              if (!dragged.current) return;
+              dragged.current = false;
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+            onKeyDown={(e) => {
+              if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+              e.preventDefault();
+              go(e.key === "ArrowLeft" ? -1 : 1);
+            }}
+          >
+            {shown.map((c) => (
+              <BriefCard
+                key={c.row.rfq_id}
+                card={c}
+                steps={steps}
+                show={show}
+                open={expanded.includes(c.row.rfq_id)}
+                onToggle={() =>
+                  setExpanded((prev) =>
+                    prev.includes(c.row.rfq_id)
+                      ? prev.filter((id) => id !== c.row.rfq_id)
+                      : [...prev, c.row.rfq_id]
+                  )
+                }
+                waitingAfter={waitingAfter}
+                onOpen={() => { setStageTarget(null); setOpenRfqId(c.row.rfq_id); }}
+                onOpenStage={(act) => {
+                  if (act.kind !== "auto") return;
+                  setStageTarget({ stage: act.stage, vrfqId: act.vrfqId });
+                  setOpenRfqId(c.row.rfq_id);
+                }}
+              />
+            ))}
+          </div>
+          <DeckNav dir={1} disabled={atEnd} onClick={() => go(1)} />
         </div>
       )}
 
@@ -370,6 +491,33 @@ function Chip({
   return (
     <button type="button" className={`mail-chip${on ? " on" : ""}`} onClick={onClick}>
       {children}
+    </button>
+  );
+}
+
+// 트랙 양옆의 세로로 긴 버튼. 카드 줄과 같은 높이라 어디를 눌러도 넘어가고, 세로로
+// 긴 카드를 읽으며 내려가도 손 닿는 자리에 남는다(화살표 글자만 화면 안에 붙어 온다).
+// 딜 하나가 겨우 몇 장일 때 화살표가 벽처럼 보이지 않게, 끝에서는 흐려 둔다.
+function DeckNav({
+  dir,
+  disabled,
+  onClick,
+}: {
+  dir: -1 | 1;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  const prev = dir < 0;
+  return (
+    <button
+      type="button"
+      className={`brief-nav${prev ? " prev" : " next"}`}
+      disabled={disabled}
+      onClick={onClick}
+      title={prev ? "Previous card (←)" : "Next card (→)"}
+      aria-label={prev ? "Previous card" : "Next card"}
+    >
+      <span aria-hidden>{prev ? "‹" : "›"}</span>
     </button>
   );
 }

@@ -12062,19 +12062,57 @@ table.mini.wide.umail-table td.umail-c-assign { width: 340px; }
 .brief-warn { font-size: 11.5px; font-weight: 700; color: #a06a1c; text-decoration: none; }
 .brief-warn:hover { text-decoration: underline; }
 
-/* minmax(0, 1fr) 이어야 한다 — 그냥 1fr 은 minmax(auto, 1fr) 이라, 칸 안에 트랙보다
-   넓은 것(긴 문서번호, 줄바꿈 안 되는 토큰)이 하나라도 있으면 트랙이 그만큼 밀려
-   페이지에 가로 스크롤이 생긴다. 그러면 상단 고정 줄은 세로로만 붙어 있고 가로로는
-   함께 밀려, 옆으로 스크롤했을 때 그 자리로 카드가 지나간다. */
-/* 열 수는 화면이 정한다(cols-2 / cols-3, 상단 Cols 스위치·localStorage). 좁아지면
-   아래 미디어쿼리가 고른 값과 무관하게 접는다 — 480px 짜리 3열은 어차피 못 읽는다. */
-.brief-grid { display: grid; gap: 14px; align-items: start; }
-.brief-grid.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.brief-grid.cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+/* 카드는 세로로 쌓지 않고 옆으로 넘긴다 — 화살표(‹ ›)와 드래그, 트랙패드 가로 스크롤이
+   모두 같은 트랙 하나를 민다. 가로 스크롤은 이 트랙 안에서만 일어나야 한다: 페이지가
+   통째로 가로로 밀리면 상단 고정 줄은 세로로만 붙어 있고 가로로는 함께 밀려, 옆으로
+   스크롤했을 때 그 자리로 카드가 지나간다. */
+.brief-deck { display: flex; align-items: stretch; gap: 8px; }
+/* 열 수는 이제 "한 번에 몇 장을 볼까"다(cols-2 / cols-3, 상단 Cols 스위치·localStorage).
+   좁아지면 아래 미디어쿼리가 고른 값과 무관하게 접는다 — 480px 짜리 3열은 못 읽는다. */
+.brief-track {
+  --cols: 2;
+  --deck-gap: 14px;
+  flex: 1 1 auto; min-width: 0;
+  display: flex; align-items: flex-start; gap: var(--deck-gap);
+  overflow-x: auto; overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  /* 그림자와 스크롤바가 카드 모서리를 먹지 않게 위아래로 조금 띄운다. */
+  padding: 2px 0 8px;
+  scrollbar-width: thin; scrollbar-color: #c7d2e0 transparent;
+  cursor: grab;
+}
+.brief-track:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.brief-track::-webkit-scrollbar { height: 8px; }
+.brief-track::-webkit-scrollbar-thumb { background: #c7d2e0; border-radius: 4px; }
+.brief-track::-webkit-scrollbar-track { background: transparent; }
+/* 끄는 동안은 스냅을 끈다 — 켜 둔 채 scrollLeft 를 밀면 매번 가장 가까운 카드로
+   되돌아가 손을 따라오지 않는다. 손을 뗀 뒤 맞추는 일은 스크립트가 한다. */
+.brief-track.dragging { scroll-snap-type: none; cursor: grabbing; user-select: none; }
+.brief-track.cols-2 { --cols: 2; }
+.brief-track.cols-3 { --cols: 3; }
+.brief-track > .brief-card {
+  flex: 0 0 calc((100% - (var(--cols) - 1) * var(--deck-gap)) / var(--cols));
+  scroll-snap-align: start;
+}
+/* 트랙과 같은 높이의 세로 버튼. 카드가 화면보다 길어도 화살표 글자는 sticky 로 눈높이에
+   남아, 아래까지 읽고 나서 마우스를 위로 되돌리지 않아도 다음 장으로 넘어간다. */
+.brief-nav {
+  flex: 0 0 26px; align-self: stretch; min-height: 140px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 0; border: 1px solid var(--line); border-radius: 10px;
+  background: #fff; color: #6b7c93; cursor: pointer;
+}
+.brief-nav:hover:not(:disabled) { border-color: var(--blue); background: var(--sel); color: var(--blue); }
+.brief-nav:disabled { opacity: 0.3; cursor: default; }
+.brief-nav span {
+  position: sticky; top: calc(var(--page-tabs-h) + 96px);
+  font-size: 22px; font-weight: 700; line-height: 1;
+}
 .brief-card {
   display: flex; flex-direction: column; gap: 6px; padding: 11px 13px 9px;
-  /* 그리드 칸(flex/grid 항목)의 기본 최소폭은 내용 크기다 — 0 으로 풀어야 트랙 안에서
-     줄어들고, 넘치는 글자는 아래 규칙들이 접거나 줄인다. */
+  /* flex 항목의 기본 최소폭은 내용 크기다 — 0 으로 풀어야 정해 준 폭(트랙 폭 ÷ 열 수)
+     안에 들어앉고, 넘치는 글자는 아래 규칙들이 접거나 줄인다. 안 그러면 긴 문서번호
+     하나가 카드를 밀어 넓혀, 한 화면에 몇 장이 보이는지가 카드마다 달라진다. */
   min-width: 0;
   border: 1px solid var(--line); border-left: 3px solid var(--blue);
   border-radius: 10px; background: #fff; box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
@@ -12246,10 +12284,10 @@ table.mini.wide.umail-table td.umail-c-assign { width: 340px; }
 }
 .mail-card-open:hover { text-decoration: underline; }
 @media (max-width: 1400px) {
-  .brief-grid.cols-2, .brief-grid.cols-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .brief-track.cols-2, .brief-track.cols-3 { --cols: 2; }
 }
 @media (max-width: 900px) {
-  .brief-grid.cols-2, .brief-grid.cols-3 { grid-template-columns: minmax(0, 1fr); }
+  .brief-track.cols-2, .brief-track.cols-3 { --cols: 1; }
 }
 
 /* ── 딜 선택 드롭다운(ProjectPicker) ──────────────────────────────────────────
