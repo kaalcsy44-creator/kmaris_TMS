@@ -32,6 +32,10 @@ export default function ProjectMailPanel({ rfqId }: { rfqId: number }) {
   const [note, setNote] = useState("");   // 마지막 Sync 결과 한 줄
   const [statusNote, setStatusNote] = useState("");  // 미분류 안내(있을 때만)
   const [open, setOpen] = useState<string[]>([]);   // 펼친 스레드 키
+  // 목록 자체를 접어 둔다. 개요에서 먼저 읽어야 하는 건 위 단계 보드와 AI 정리이고,
+  // 메일 목록은 15~40줄로 길어 그 아래 것(품목·금액)을 화면 밖으로 밀어낸다. 근황은
+  // 정리 네 줄이 이미 말해 주니, 한 통씩 확인하고 싶을 때만 펼친다.
+  const [listOpen, setListOpen] = useState(false);
 
   useEffect(() => {
     fetchMailStatus()
@@ -157,22 +161,37 @@ export default function ProjectMailPanel({ rfqId }: { rfqId: number }) {
             : "No mail is linked to this deal yet. Run Sync to read the mailbox, or assign it from the unmatched mail on the Activity screen."}
         </p>
       ) : (
-        <ol className="mail-threads">
-          {threads.map((t) => (
-            <MailThreadRow
-              key={t.thread_key}
-              thread={t}
-              open={open.includes(t.thread_key)}
-              onToggle={() =>
-                setOpen((prev) =>
-                  prev.includes(t.thread_key)
-                    ? prev.filter((k) => k !== t.thread_key)
-                    : [...prev, t.thread_key]
-                )
-              }
-            />
-          ))}
-        </ol>
+        <>
+          {/* 목록을 여는 자리. 감추기는 CSS 가 한다(DOM 에는 남긴다) — 종이는 펼칠 수가
+              없으니 인쇄물에는 접힌 것도 다 나와야 한다(아래 @media print). */}
+          <button
+            type="button"
+            className={`mail-listtoggle${listOpen ? " on" : ""}`}
+            onClick={() => setListOpen((v) => !v)}
+            title={listOpen ? "Collapse the mail list" : "Show every mail in this deal"}
+          >
+            <span className="mail-caret" aria-hidden>{listOpen ? "▾" : "▸"}</span>
+            {listOpen
+              ? "Hide mail list"
+              : `Show ${threads.length} conversation${threads.length === 1 ? "" : "s"}`}
+          </button>
+          <ol className={`mail-threads${listOpen ? " open" : ""}`}>
+            {threads.map((t) => (
+              <MailThreadRow
+                key={t.thread_key}
+                thread={t}
+                open={open.includes(t.thread_key)}
+                onToggle={() =>
+                  setOpen((prev) =>
+                    prev.includes(t.thread_key)
+                      ? prev.filter((k) => k !== t.thread_key)
+                      : [...prev, t.thread_key]
+                  )
+                }
+              />
+            ))}
+          </ol>
+        </>
       )}
     </section>
   );
