@@ -481,9 +481,12 @@ def mail_digest_refresh(body: MailDigestRefresh | None = None, days: int = 14, l
         live = mail_sync.live_deals(s, None)
         cache = _rollup_cache(s, live)
         asked = [rid for rid in (body.rfq_ids if body else []) if rid in live]
-        pool = asked or list(live)
-        todo = [rid for rid in pool
-                if (cache.get(rid) or {}).get("last_id") != live[rid][2]]
+        # 화면이 짚어 준 딜은 새 메일이 없어도 다시 쓴다. "다시 써야 하나"를 마지막
+        # 메일 번호만으로는 판단할 수 없다 — 메일은 그대로인데 요약 형식이 바뀌어
+        # 옛 서술형으로 남은 것도 있고, 그건 화면만 아는 사실이다. 짚어 주지 않았을
+        # 때만 예전대로 '새 메일이 온 딜'을 서버가 고른다.
+        todo = asked or [rid for rid in live
+                         if (cache.get(rid) or {}).get("last_id") != live[rid][2]]
         todo.sort(key=lambda rid: live[rid][1], reverse=True)
         if body and body.limit:
             limit = body.limit

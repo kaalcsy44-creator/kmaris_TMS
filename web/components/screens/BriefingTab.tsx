@@ -144,8 +144,11 @@ export default function BriefingTab() {
     !c.mail || c.mail.recent_count === 0 ? "nomail"
       : c.waitingDays >= waitingAfter ? "ours" : "theirs";
 
-  // 요약이 비어 있는 **카드**의 딜 번호 — 이걸 그대로 서버에 짚어 준다.
-  const needDigest = cards.filter((c) => c.mail && !c.mail.rollup).map((c) => c.row.rfq_id);
+  // 다시 써야 할 **카드**의 딜 번호 — 이걸 그대로 서버에 짚어 준다. 비어 있는 것뿐
+  // 아니라 라벨 없는 옛 형식도 대상이다(아래 isLabelled 주석).
+  const needDigest = cards
+    .filter((c) => c.mail && !isLabelled(c.mail.rollup))
+    .map((c) => c.row.rfq_id);
 
   const counts = useMemo(() => {
     const n = { all: cards.length, ours: 0, theirs: 0, nomail: 0 };
@@ -554,6 +557,19 @@ const ROLLUP_KIND: Record<string, string> = {
   "금액·납기": "terms",
   "다음": "next",
 };
+
+/** 라벨 붙은 요약인가 — 라벨 규격(진행/쟁점/금액·납기/다음)이 생기기 전에 만들어 둔
+ *  요약은 서술형 문단이라 카드에서 한 덩이 글로 읽힌다. 마지막 메일이 그대로면 서버는
+ *  그 요약을 "최신"으로 보고 영영 다시 쓰지 않으므로, 화면이 옛 형식을 알아보고 빈
+ *  요약과 같이 취급해 다시 쓸 목록에 넣는다. */
+function isLabelled(rollup?: string | null): boolean {
+  if (!rollup) return false;
+  return rollup.split("\n").some((raw) => {
+    const line = raw.replace(/^[-•]\s*/, "").trim();
+    const at = line.search(/[:：]/);
+    return at > 0 && ROLLUP_KIND[line.slice(0, at).trim()] !== undefined;
+  });
+}
 
 function RollupLine({ text }: { text: string }) {
   const at = text.search(/[:：]/);
