@@ -9,6 +9,7 @@ import {
 } from "@/lib/api";
 import type { MailMessage, MailThread, ProjectMail } from "@/lib/types";
 import { hm, md } from "@/lib/activity";
+import { parseRollupLine } from "@/lib/rollup";
 import PartyName from "@/components/common/PartyName";
 import { useCachedData } from "@/lib/useCachedData";
 
@@ -146,9 +147,19 @@ export default function ProjectMailPanel({ rfqId }: { rfqId: number }) {
           {data.rollup_stale ? (
             <span className="mail-stale">New mail has arrived since this digest was written.</span>
           ) : null}
-          {data.rollup.split("\n").filter(Boolean).map((line, i) => (
-            <p key={i}>{line.replace(/^[-•]\s*/, "")}</p>
-          ))}
+          {/* 라벨(Progress·Issue·Terms·Next)은 Briefing 카드와 같은 규칙으로 떼어
+              세운다 — 같은 텍스트가 화면마다 다른 꼴로 나오면 같은 것으로 안 읽힌다. */}
+          {data.rollup.split("\n").filter(Boolean).map((line, i) => {
+            const p = parseRollupLine(line);
+            return p ? (
+              <p key={i} className={`mail-rollup-${p.kind}`}>
+                <b className="mail-rollup-label">{p.label}</b>
+                {p.body}
+              </p>
+            ) : (
+              <p key={i}>{line.replace(/^[-•]\s*/, "")}</p>
+            );
+          })}
         </div>
       ) : null}
 

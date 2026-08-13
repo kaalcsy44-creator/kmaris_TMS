@@ -18,6 +18,7 @@ import CustomerName from "@/components/common/CustomerName";
 import ProjectNo from "@/components/common/ProjectNo";
 import VendorMonograms from "@/components/common/VendorMonograms";
 import { buildActivities, daysSinceISO, hm, lastActivityISO, md } from "@/lib/activity";
+import { isLabelledRollup, parseRollupLine } from "@/lib/rollup";
 import type { Activity } from "@/lib/activity";
 import { vendorOf } from "@/lib/deal";
 
@@ -78,10 +79,10 @@ export default function BriefingTab() {
   // 궁금할 때마다 밀도를 올리면 15장이 다 늘어나 보던 자리를 잃는다.
   const [show, setShow] = useState(3);          // 카드마다 보여 줄 최근 줄 수(기본값)
   const [expanded, setExpanded] = useState<number[]>([]);   // 통째로 편 카드(딜 번호)
-  // 열 수 — 모니터 폭과 취향에 따라 갈리는 문제다. 3열은 한 화면에 더 많은 딜을
-  // 올려 훑기에 좋고(카드 하나는 15% 짧아지지만 2열은 행이 5→8로 늘어 전체 스크롤은
-  // 오히려 길어진다), 2열은 카드 하나를 편히 읽기에 좋다. 기본은 훑기(3열)에 둔다.
-  const [cols, setCols] = useState(3);
+  // 열 수 — 3열은 한 화면에 더 많은 딜을 올리고, 2열은 요약 네 줄이 접히지 않아 카드
+  // 하나가 그 자리에서 다 읽힌다. 훑는 것보다 읽는 쪽을 기본으로 둔다(요청) — 카드에
+  // 실린 게 문장이라, 두세 줄로 접히면 훑기의 이득도 같이 사라진다.
+  const [cols, setCols] = useState(2);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
   const [err, setErr] = useState("");
@@ -171,7 +172,7 @@ export default function BriefingTab() {
   // 다시 써야 할 **카드**의 딜 번호 — 이걸 그대로 서버에 짚어 준다. 비어 있는 것뿐
   // 아니라 라벨 없는 옛 형식도 대상이다(아래 isLabelled 주석).
   const needDigest = cards
-    .filter((c) => c.mail && !isLabelled(c.mail.rollup))
+    .filter((c) => c.mail && !isLabelledRollup(c.mail.rollup))
     .map((c) => c.row.rfq_id);
 
   const counts = useMemo(() => {
@@ -584,39 +585,17 @@ function primaryAmount(value: string): string {
   return value.trim().split(/\s+(?=[A-Z]{3}\s)/)[0] || value;
 }
 
-// 요약 한 줄 — "진행: …" 처럼 라벨이 붙어 오면 라벨만 떼어 왼쪽 칸에 세운다.
-// 넷 중 하나일 때만 라벨로 본다(본문에 콜론이 있다고 라벨이 되면 안 된다).
+// 요약 한 줄 — "진행: …" 처럼 라벨이 붙어 오면 라벨만 떼어 왼쪽 칸에 세운다(파싱과
+// 영문 라벨은 lib/rollup 이 맡는다 — 딜 화면의 Mail 정리도 같은 규칙을 쓴다).
 // 예전에 만들어 둔 "- 문장" 꼴 요약도 그대로 한 줄로 나온다.
 //
-// 네 줄은 무게가 다르다. '진행'은 이미 지나간 배경이고, '다음'은 오늘 손을 대야 하는
+// 네 줄은 무게가 다르다. Progress 는 이미 지나간 배경이고, Next 는 오늘 손을 대야 하는
 // 유일한 줄이다. 같은 크기·같은 검정으로 찍으면 넷이 한 덩어리로 뭉쳐 아무것도 먼저
 // 읽히지 않는다 — 그래서 라벨은 흐리게 옆으로 빼고, 본문만 종류별로 힘을 달리한다.
-const ROLLUP_KIND: Record<string, string> = {
-  "진행": "flow",
-  "쟁점": "issue",
-  "금액·납기": "terms",
-  "다음": "next",
-};
-
-/** 라벨 붙은 요약인가 — 라벨 규격(진행/쟁점/금액·납기/다음)이 생기기 전에 만들어 둔
- *  요약은 서술형 문단이라 카드에서 한 덩이 글로 읽힌다. 마지막 메일이 그대로면 서버는
- *  그 요약을 "최신"으로 보고 영영 다시 쓰지 않으므로, 화면이 옛 형식을 알아보고 빈
- *  요약과 같이 취급해 다시 쓸 목록에 넣는다. */
-function isLabelled(rollup?: string | null): boolean {
-  if (!rollup) return false;
-  return rollup.split("\n").some((raw) => {
-    const line = raw.replace(/^[-•]\s*/, "").trim();
-    const at = line.search(/[:：]/);
-    return at > 0 && ROLLUP_KIND[line.slice(0, at).trim()] !== undefined;
-  });
-}
-
 function RollupLine({ text }: { text: string }) {
-  const at = text.search(/[:：]/);
-  const label = at > 0 ? text.slice(0, at).trim() : "";
-  const kind = ROLLUP_KIND[label];
-  if (!kind) return <li className="plain">{text}</li>;
-  const body = text.slice(at + 1).trim();
+  const parsed = parseRollupLine(text);
+  if (!parsed) return <li className="plain">{text}</li>;
+  const { kind, label, body } = parsed;
   return (
     <li className={kind}>
       <b className="mail-card-label">{label}</b>
