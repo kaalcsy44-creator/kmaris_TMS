@@ -1628,6 +1628,9 @@ export function fetchFxRate(
   cur = "USD"
 ): Promise<{
   rate: number;
+  /** 고시 단위 — JPY(100) 처럼 100단위로 고시되는 통화가 있다. 1단위당 환율은 rate/unit.
+   *  구 백엔드는 이 값을 안 보낸다(없으면 1). */
+  unit?: number;
   tts: number | null;
   ttb: number | null;
   date_used: string;

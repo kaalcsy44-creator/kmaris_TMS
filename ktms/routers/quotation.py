@@ -64,12 +64,15 @@ def fx_rate(date: str = "", cur: str = "USD"):
     프런트 '매매기준율' 토글에서 사용한다."""
     row, used, err = get_rates(date, cur)
     if row is not None:
-        return {"rate": round(row["base"], 4),
+        # unit — JPY(100) 처럼 100단위로 고시되는 통화의 단위. 1단위당 환율은 rate/unit.
+        return {"rate": round(row["base"], 4), "unit": row.get("unit", 1),
                 "tts": row["tts"], "ttb": row["ttb"], "reason": "",
                 "date_used": used, "cur": (cur or "USD").upper(), "source": "exim"}
     # 폴백 사유(no_key·bad_key·quota·network·no_data)를 그대로 실어 보낸다 —
     # 참고 시세가 안 보일 때 무엇을 고쳐야 하는지가 화면에서 바로 드러난다.
-    return {"rate": USD_KRW_RATE, "tts": None, "ttb": None, "reason": err,
+    # 폴백 값은 **USD 고정환율**이다 — 요청 통화가 USD 가 아니면 이 값을 환산에 쓰면 안 된다
+    # (source=fixed 로 구분해 두는 이유). 참고 표시용으로만 쓴다.
+    return {"rate": USD_KRW_RATE, "unit": 1, "tts": None, "ttb": None, "reason": err,
             "date_used": "", "cur": (cur or "USD").upper(), "source": "fixed"}
 
 

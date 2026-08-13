@@ -46,8 +46,9 @@ def _parse_rate(text: str) -> float | None:
 def _fetch_day(date_yyyymmdd: str, cur: str) -> tuple[dict | None, str]:
     """단일 날짜의 고시 조회 → (값, 실패사유). 성공하면 사유는 "".
 
-    JPY(100) 처럼 100 단위로 고시되는 통화는 cur_unit 에 단위가 붙는다 — 값은 그대로
-    두고(고시 원문 그대로) 호출측이 통화 표기와 함께 쓴다."""
+    JPY(100) 처럼 100 단위로 고시되는 통화는 cur_unit 에 단위가 붙는다 — 값은 고시 원문
+    그대로 두고, 그 단위를 unit 으로 함께 돌려준다. 1단위당 환율이 필요한 계산(통화 환산)은
+    base/unit 을 쓰고, 화면에 고시를 그대로 보여주는 자리는 base 를 쓴다."""
     key = os.getenv("EXIM_API_KEY", "").strip()
     if not key:
         return None, "no_key"
@@ -74,14 +75,28 @@ def _fetch_day(date_yyyymmdd: str, cur: str) -> tuple[dict | None, str]:
             return None, {2: "data_code", 3: "bad_key", 4: "quota"}[code]
     want = (cur or "USD").upper()
     for row in rows:
-        if str(row.get("cur_unit", "")).upper().startswith(want):
+        unit_txt = str(row.get("cur_unit", "")).upper()
+        if unit_txt.startswith(want):
             base = _parse_rate(row.get("deal_bas_r"))
             if base is None:
                 return None, "no_data"
             return {"base": base,
+                    "unit": _parse_unit(unit_txt),
                     "tts": _parse_rate(row.get("tts")),
                     "ttb": _parse_rate(row.get("ttb"))}, ""
     return None, "no_data"
+
+
+def _parse_unit(cur_unit: str) -> int:
+    """"JPY(100)" → 100, "USD" → 1. 고시 단위를 모르면 1로 본다(원문 그대로 쓰는 셈)."""
+    left = cur_unit.find("(")
+    if left < 0:
+        return 1
+    try:
+        n = int(cur_unit[left + 1:cur_unit.find(")", left)].strip())
+    except ValueError:
+        return 1
+    return n if n > 0 else 1
 
 
 def get_rates(date_str: str, cur: str = "USD") -> tuple[dict | None, str, str]:

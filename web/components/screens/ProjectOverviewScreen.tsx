@@ -15,6 +15,7 @@ import {
   closeReasonLabel,
   fetchProjectMail,
   fetchRfqVendorQuotes,
+  fetchFxRate,
 } from "@/lib/api";
 import { useCachedData } from "@/lib/useCachedData";
 import { sortByDocNo } from "@/lib/sort";
@@ -149,6 +150,7 @@ export default function ProjectOverviewScreen({
       vrfqId: v.vendor_rfq_id ?? undefined,
       amount: vqTotal(v.items ?? []),
       currency: v.currency || "USD",
+      receivedDate: (v.received_at || v.received_date || "").slice(0, 10),
       items: v.items ?? [],
     }))
     .filter((v) => v.no && v.no !== "—")
@@ -189,6 +191,8 @@ type VqRef = {
   vrfqId?: number;
   amount: number | null;
   currency: string;
+  /** 받은 날짜 — 이 견적의 통화를 환산할 고시환율의 기준일이 된다. */
+  receivedDate: string;
   /** 그 견적서의 품목 줄 — 대안 묶음의 Purchase 열을 품목별로 채운다. */
   items: VendorQuoteItem[];
 };
@@ -391,22 +395,82 @@ function marginPct(
   purchase: number | null,
   salesCur: string,
   purCur: string,
-  rate: number
+  rate: number,
+  krwPer?: KrwPer
 ): number | null {
   if (sales == null || purchase == null || !sales) return null;
-  // 시스템이 아는 환율은 USD↔KRW 하나뿐이다(딜에 저장된 fx_rate). 그 밖의 통화쌍은
-  // convertCurrency 가 금액을 그대로 돌려주므로, 계산하면 EUR 를 USD 로 친 마진이 나온다.
-  // 몇 %쯤 어긋난 숫자는 없는 것보다 나쁘다 — 그 숫자로 어디서 살지를 정하게 된다.
-  if (!convertible(purCur, salesCur)) return null;
-  const p = convertCurrency(purchase, purCur, salesCur, rate);
+  const p = convertAmount(purchase, purCur, salesCur, rate, krwPer);
+  // 환산할 길이 없으면 마진도 없다. 몇 %쯤 어긋난 숫자는 없는 것보다 나쁘다 —
+  // 그 숫자로 어디서 살지를 정하게 된다.
+  if (p == null) return null;
   return Math.round(((sales - p) / sales) * 1000) / 10;
 }
 
-/** 환산할 수 있는 통화쌍인가 — 같은 통화이거나 USD↔KRW. */
+/** 통화 → 1단위당 KRW. 모르는 통화면 null(= 환산 불가). */
+type KrwPer = (cur: string) => number | null;
+
+/**
+ * 금액 환산 — USD↔KRW 는 딜에 저장된 환율로, 그 밖의 통화는 고시환율(krwPer)로 KRW 를
+ * 거쳐 넘어간다. 회사가 환율을 생각하는 방식이 원화 기준이라 중간 통화도 KRW 로 둔다.
+ * 어느 한쪽 환율이라도 모르면 null — 지어낸 값으로 환산하지 않는다.
+ */
+function convertAmount(
+  amount: number,
+  from: string,
+  to: string,
+  rate: number,
+  krwPer?: KrwPer
+): number | null {
+  const f = (from || "USD").toUpperCase();
+  const t = (to || "USD").toUpperCase();
+  if (convertible(f, t)) return convertCurrency(amount, f, t, rate);
+  const kf = krwPer?.(f) ?? null;
+  const kt = krwPer?.(t) ?? null;
+  if (kf == null || kt == null || !kt) return null;
+  return (amount * kf) / kt;
+}
+
+/** 딜에 저장된 환율만으로 환산되는 통화쌍인가 — 같은 통화이거나 USD↔KRW. */
 function convertible(a: string, b: string): boolean {
   const x = (a || "USD").toUpperCase();
   const y = (b || "USD").toUpperCase();
   return x === y || (x === "USD" && y === "KRW") || (x === "KRW" && y === "USD");
+}
+
+/**
+ * 그 통화의 1단위당 KRW — KRW·USD 는 조회 없이 알고(USD 는 딜에 저장된 환율),
+ * 나머지는 문서 날짜의 수출입은행 고시를 받아 온다.
+ *
+ * 딜 환율(fx_rate)은 화면 어디서나 "1 USD = ? KRW"로만 저장돼 있어 EUR 견적을 환산할 수가
+ * 없었다. 벤더 견적마다 환율을 새로 입력받는 대신 그 문서의 **받은 날짜** 고시를 쓴다 —
+ * 사람이 다시 채워 넣지 않아도 이미 쌓인 견적까지 전부 환산되고, 근거도 그날 고시 하나로
+ * 분명하다. 조회 실패 시 서버는 USD 고정환율을 폴백으로 주므로(source=fixed) 그 값은
+ * 버린다. EUR 를 1,350원으로 치는 마진이야말로 없느니만 못하다.
+ */
+function useKrwRate(cur: string, date: string | undefined, usdKrw: number): number | null {
+  const c = (cur || "USD").toUpperCase();
+  const d = (date || "").slice(0, 10);
+  const known = c === "KRW" || c === "USD";
+  // 지난 날짜의 고시는 바뀌지 않고 오늘 고시도 하루 한 번이라, 오래 들고 있어도 된다.
+  const { data } = useCachedData(
+    `fx:${d || "today"}:${c}`,
+    () => (known ? Promise.resolve(null) : fetchFxRate(d, c)),
+    6 * 3600_000
+  );
+  if (c === "KRW") return 1;
+  if (c === "USD") return usdKrw;
+  if (!data || data.source !== "exim" || !(data.rate > 0)) return null;
+  return data.rate / (data.unit && data.unit > 0 ? data.unit : 1);
+}
+
+/** 환산 근거 한 줄(마진 칸 툴팁) — 환산해서 낸 값인지, 못 냈다면 왜인지.
+ *  환산이 필요 없는 통화쌍에서는 호출하지 않는다(호출부의 convertible 판정). */
+function fxNote(cur: string, krw: number | null): string {
+  const c = (cur || "").toUpperCase();
+  if (krw == null) return `No published KRW rate for ${c} — margin not computed`;
+  return `Converted at 1 ${c} = ${krw.toLocaleString(undefined, {
+    maximumFractionDigits: 2,
+  })} KRW`;
 }
 
 function Overview({
@@ -1283,9 +1347,28 @@ function Money({
   );
 }
 
-function Pct({ value, excluded }: { value: number | null; excluded?: boolean }) {
-  if (excluded || value == null) return <span className="muted">—</span>;
-  return <span className="ov-pct">{value}%</span>;
+/** 마진 한 칸. note 는 환산 근거(고시환율) — 숫자가 어디서 왔는지 마우스로 확인된다.
+ *  값이 없을 때도 note 를 달아 둔다: 왜 비었는지가 그 자리에서 읽혀야 한다. */
+function Pct({
+  value,
+  excluded,
+  note,
+}: {
+  value: number | null;
+  excluded?: boolean;
+  note?: string;
+}) {
+  if (excluded || value == null)
+    return (
+      <span className="muted" title={note || undefined}>
+        —
+      </span>
+    );
+  return (
+    <span className="ov-pct" title={note || undefined}>
+      {value}%
+    </span>
+  );
 }
 
 /** 한 선박(=고객 P/O) 묶음 — 그 P/O 의 품목을 기준 행으로 삼고 견적·C/I 를 순서로 맞춘다. */
@@ -1328,6 +1411,19 @@ function OrderItemGroup({
   const ciCur = ci?.currency || oCur;
   // 환산 기준은 견적에 저장된 환율(없으면 기본값). 통화가 다른 단계 간 마진 계산에만 쓰인다.
   const rate = quote?.fx_rate && quote.fx_rate > 0 ? quote.fx_rate : USD_KRW_RATE;
+  // 딜 환율은 USD↔KRW 뿐이라, 그 밖의 통화(EUR 원가 등)는 문서 날짜의 고시로 환산한다.
+  const qDate = quote?.sent_date || quote?.date || "";
+  const krwQCost = useKrwRate(qCostCur, qDate, rate);
+  const krwQSales = useKrwRate(qCur, qDate, rate);
+  const krwPer: KrwPer = (c) => {
+    const u = (c || "USD").toUpperCase();
+    if (u === "KRW") return 1;
+    if (u === "USD") return rate;
+    if (u === qCostCur.toUpperCase()) return krwQCost;
+    if (u === qCur.toUpperCase()) return krwQSales;
+    return null;   // P/O·C/I 통화까지 조회하지는 않는다 — 여태 USD·KRW 뿐이었다
+  };
+  const qFxNote = convertible(qCostCur, qCur) ? "" : fxNote(qCostCur, krwQCost);
 
   // ── 부대비용·VAT ─────────────────────────────────────────────────────────
   // 품목 단가에는 들어가지 않고 문서 하단에 붙는 금액이라, 품목 줄 아래 별도 줄로 그리고
@@ -1441,6 +1537,8 @@ function OrderItemGroup({
         ciSales={ciSalesSupply}
         cur={{ qCostCur, qCur, vpoCur, oCur, ciCur }}
         rate={rate}
+        krwPer={krwPer}
+        qNote={qFxNote}
       />
       {lines.map((ln, i) => (
         <tr key={i}>
@@ -1530,6 +1628,7 @@ function OrderItemGroup({
         base={altBase}
         salesCur={qCur}
         rate={rate}
+        krwPer={krwPer}
         nav={nav}
       />
     ))}
@@ -1554,6 +1653,7 @@ function AltQuoteGroup({
   base,
   salesCur,
   rate,
+  krwPer: parentKrw,
   nav,
 }: {
   vessel: string;
@@ -1563,8 +1663,15 @@ function AltQuoteGroup({
   base: AltBase[];
   salesCur: string;
   rate: number;
+  /** 본 묶음이 이미 아는 환율(판매 통화 등). 이 견적의 통화만 여기서 더 받아 온다. */
+  krwPer: KrwPer;
   nav: DocNav;
 }) {
+  // 이 견적의 통화가 EUR 처럼 딜 환율 밖이면 받은 날짜의 고시로 환산한다.
+  const krwVq = useKrwRate(vq.currency, vq.receivedDate, rate);
+  const krwPer: KrwPer = (c) =>
+    (c || "").toUpperCase() === vq.currency.toUpperCase() ? krwVq : parentKrw(c);
+  const note = convertible(vq.currency, salesCur) ? "" : fxNote(vq.currency, krwVq);
   // 품목 짝맞춤은 본 묶음과 같은 규칙(품번 우선, 없으면 순서).
   const match = makeItemMatcher(vq.items);
   const rows = base.map((b, i) => {
@@ -1609,7 +1716,10 @@ function AltQuoteGroup({
           <Money value={purTotal} currency={vq.currency} />
         </td>
         <td className="num">
-          <Pct value={marginPct(salesTotal, purTotal, salesCur, vq.currency, rate)} />
+          <Pct
+            value={marginPct(salesTotal, purTotal, salesCur, vq.currency, rate, krwPer)}
+            note={note}
+          />
         </td>
         <td className="num ov-it-total">
           <Money value={salesTotal} currency={salesCur} />
@@ -1631,8 +1741,9 @@ function AltQuoteGroup({
           </td>
           <td className="num">
             <Pct
-              value={marginPct(b.sales, pur, salesCur, vq.currency, rate)}
+              value={marginPct(b.sales, pur, salesCur, vq.currency, rate, krwPer)}
               excluded={b.salesEx}
+              note={note}
             />
           </td>
           <td className="num ov-sal">
@@ -1813,6 +1924,8 @@ function GroupTotal({
   ciSales,
   cur,
   rate,
+  krwPer,
+  qNote,
 }: {
   quotePur: number | null;
   quoteSales: number | null;
@@ -1822,6 +1935,10 @@ function GroupTotal({
   ciSales: number | null;
   cur: { qCostCur: string; qCur: string; vpoCur: string; oCur: string; ciCur: string };
   rate: number;
+  /** 딜 환율 밖의 통화(EUR 원가 등)를 환산할 고시환율. 없으면 그런 칸은 비워진다. */
+  krwPer?: KrwPer;
+  /** 환산 근거 한 줄 — Quote 마진 칸의 툴팁. */
+  qNote?: string;
 }) {
   return (
     <tr className="ov-grp-total">
@@ -1832,7 +1949,10 @@ function GroupTotal({
         <Money value={quotePur} currency={cur.qCostCur} />
       </td>
       <td className="num">
-        <Pct value={marginPct(quoteSales, quotePur, cur.qCur, cur.qCostCur, rate)} />
+        <Pct
+          value={marginPct(quoteSales, quotePur, cur.qCur, cur.qCostCur, rate, krwPer)}
+          note={qNote}
+        />
       </td>
       <td className="num ov-it-total">
         <Money value={quoteSales} currency={cur.qCur} />
@@ -1874,6 +1994,22 @@ function QuoteOnlyGroup({
   const { data: quote } = useCachedData(`quotation:${quoteId}`, () =>
     fetchCustomerQuotationDetail(quoteId)
   );
+  // 훅은 아래 "불러오는 중" 반환보다 위에 있어야 한다 — 호출 순서가 렌더마다 같아야 하므로.
+  const qCur = quote?.currency || "USD";
+  const qCostCur = quote?.cost_currency || qCur;
+  const rate = quote?.fx_rate && quote.fx_rate > 0 ? quote.fx_rate : USD_KRW_RATE;
+  const qDate = quote?.sent_date || quote?.date || "";
+  const krwQCost = useKrwRate(qCostCur, qDate, rate);
+  const krwQSales = useKrwRate(qCur, qDate, rate);
+  const krwPer: KrwPer = (c) => {
+    const u = (c || "USD").toUpperCase();
+    if (u === "KRW") return 1;
+    if (u === "USD") return rate;
+    if (u === qCostCur.toUpperCase()) return krwQCost;
+    if (u === qCur.toUpperCase()) return krwQSales;
+    return null;
+  };
+  const qFxNote = convertible(qCostCur, qCur) ? "" : fxNote(qCostCur, krwQCost);
   if (!quote) {
     return (
       <tbody>
@@ -1885,9 +2021,6 @@ function QuoteOnlyGroup({
       </tbody>
     );
   }
-  const qCur = quote.currency || "USD";
-  const qCostCur = quote.cost_currency || qCur;
-  const rate = quote.fx_rate && quote.fx_rate > 0 ? quote.fx_rate : USD_KRW_RATE;
   const altBase: AltBase[] = quote.items.map((it) => ({
     part_no: it.part_no,
     description: it.description,
@@ -1922,6 +2055,8 @@ function QuoteOnlyGroup({
         ciSales={null}
         cur={{ qCostCur, qCur, vpoCur: qCur, oCur: qCur, ciCur: qCur }}
         rate={rate}
+        krwPer={krwPer}
+        qNote={qFxNote}
       />
       {quote.items.map((it, i) => (
         <tr key={i}>
@@ -1965,6 +2100,7 @@ function QuoteOnlyGroup({
         base={altBase}
         salesCur={qCur}
         rate={rate}
+        krwPer={krwPer}
         nav={nav}
       />
     ))}
