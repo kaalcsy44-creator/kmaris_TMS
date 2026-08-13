@@ -11493,6 +11493,9 @@ button.ov-tl-stage:hover { background: color-mix(in srgb, var(--ov-tone) 12%, tr
    건만 진하게 둔다 — 같은 무게로 찍으면 어느 값이 원가로 들어갔는지 표에서 읽을 수 없고,
    빼 버리면 비교하려고 받아 둔 견적이 개요에서 통째로 사라진다. */
 .ov-grp-doc .ov-doc-pur .ov-vq.src { font-weight: 600; color: #4a5a70; }
+/* 번호 옆의 견적 금액 — 견적서에 적힌 총액. 표의 Purchase 열은 "고객 견적이 원가로 삼은
+   값"이라 둘이 갈릴 수 있고, 갈릴 때 그게 보이는 편이 낫다. */
+.ov-grp-doc .ov-vq-amt { margin-left: 5px; font-variant-numeric: tabular-nums; }
 /* 문서번호 = 그 문서를 다루는 단계로 가는 링크. 색·굵기는 칸이 이미 단계를 알려주므로
    물려받고, 점선 밑줄로만 "누를 수 있다"를 표시한다. 팝업 안에선 <button>, 페이지에선
    <a> 로 그려지므로 버튼 기본 모양(테두리·바탕·폰트)을 지워 둘을 같게 맞춘다. */

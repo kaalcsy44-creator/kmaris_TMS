@@ -139,6 +139,8 @@ export default function ProjectOverviewScreen({
       no: v.vendor_quote_no || "",
       vendor: v.vendor || "",
       vrfqId: v.vendor_rfq_id ?? undefined,
+      amount: vqTotal(v.items ?? []),
+      currency: v.currency || "USD",
     }))
     .filter((v) => v.no && v.no !== "—")
     .sort((a, b) => a.id - b.id);
@@ -168,8 +170,25 @@ export default function ProjectOverviewScreen({
   );
 }
 
-/** 이 프로젝트가 받은 벤더 견적 한 건 — Quote 묶음 머리의 매입측에 번호로 선다. */
-type VqRef = { id: number; no: string; vendor: string; vrfqId?: number };
+/** 이 프로젝트가 받은 벤더 견적 한 건 — Quote 묶음 머리의 매입측에 번호로 선다.
+ *  amount 는 그 견적서에 적힌 금액(Σ 단가×수량)이다. 표의 QUOTE Purchase 열과 다를 수
+ *  있는데, 그 열은 "고객 견적이 원가로 삼은 값"이라 견적서를 받은 뒤 손을 댔으면 갈린다. */
+type VqRef = {
+  id: number;
+  no: string;
+  vendor: string;
+  vrfqId?: number;
+  amount: number | null;
+  currency: string;
+};
+
+/** 벤더 견적서 총액 — 단가가 매겨진 줄만 더한다(하나도 없으면 null = "금액 미기재"). */
+function vqTotal(items: { qty?: number; cost_price?: number | null }[]): number | null {
+  const priced = items.filter((it) => it.cost_price != null);
+  return priced.length
+    ? priced.reduce((a, it) => a + Number(it.cost_price) * Number(it.qty || 1), 0)
+    : null;
+}
 
 type ProjectOrder = PoWorkOptions["orders"][number];
 type VendorPo = PoWorkOptions["purchase_orders"][number];
@@ -1541,6 +1560,13 @@ function GroupHead({
                         vrfqId={v.vrfqId}
                         nav={nav}
                       />
+                      {/* 번호만으로는 비교가 안 된다 — 여러 곳에 물어본 이유가 값이라,
+                          받은 금액이 번호 옆에 같이 서야 그 자리에서 견줘진다. */}
+                      {v.amount != null ? (
+                        <span className="ov-vq-amt">
+                          {v.currency} {Math.round(v.amount).toLocaleString()}
+                        </span>
+                      ) : null}
                     </span>
                   </Fragment>
                 ))
