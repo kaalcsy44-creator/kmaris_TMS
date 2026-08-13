@@ -1428,6 +1428,11 @@ function OrderItemGroup({
           </td>
         </tr>
       ))}
+      {/* 비교용으로 더 받아 둔 벤더 견적 — 품목 줄 바로 아래. 위 Total 에는 더하지 않는다
+          (경쟁 견적이라 더하면 원가가 부푼다 — 같은 이유로 대시보드도 합산하지 않는다). */}
+      {altQuotes(vendorQuotes, quote?.vendor_quote_id ?? null).map((v) => (
+        <AltQuoteRow key={v.id} vq={v} nav={nav} />
+      ))}
       {/* 부대비용 — 값이 있는 항목만 한 줄씩. 위 Total 에는 이미 더해져 있다. */}
       {CHARGE_LABELS.map(([k, label]) =>
         apCharges?.[k] || ciCharges?.[k] ? (
@@ -1462,6 +1467,38 @@ function OrderItemGroup({
       ) : null}
     </tbody>
   );
+}
+
+/**
+ * 원가로 쓰지 않은 벤더 견적 한 줄 — 번호와 그 견적서 총액.
+ *
+ * 표의 QUOTE Purchase 열은 "고객 견적이 원가로 삼은 한 건"의 값이라, 비교하려고 더 받아 둔
+ * 견적은 묶음 머리에 번호로만 남고 금액을 세울 자리가 없었다. 품목 줄 아래에 한 줄씩 놓아
+ * 같은 열(Purchase) 아래에서 위의 원가와 세로로 견줘지게 한다 — 여러 곳에 물어본 이유가
+ * 값이니, 값이 같은 축에 서지 않으면 물어본 보람이 화면에 남지 않는다.
+ */
+function AltQuoteRow({ vq, nav }: { vq: VqRef; nav: DocNav }) {
+  return (
+    <tr className="ov-grp-extra ov-grp-altq">
+      <td colSpan={4} className="ov-it-extralabel">
+        <span className="ov-altq-lbl">Also quoted</span>
+        <DocNoLink no={vq.no} stage={DOC_STAGE.vendorQuote} vrfqId={vq.vrfqId} nav={nav} />
+        {vq.vendor ? <span className="ov-altq-vendor">{vq.vendor}</span> : null}
+      </td>
+      <td className="num gs">
+        {vq.amount == null ? null : <Money value={vq.amount} currency={vq.currency} />}
+      </td>
+      <td className="num" />
+      <td className="num ov-sal" />
+      <td className="num gs" colSpan={3} />
+      <td className="num gs" colSpan={3} />
+    </tr>
+  );
+}
+
+/** 원가로 쓴 한 건을 뺀 나머지 — 그 한 건은 이미 표의 QUOTE 열이 말하고 있다. */
+function altQuotes(vendorQuotes: VqRef[], srcVqId: number | null): VqRef[] {
+  return vendorQuotes.filter((v) => v.id !== srcVqId);
 }
 
 /**
@@ -1560,13 +1597,6 @@ function GroupHead({
                         vrfqId={v.vrfqId}
                         nav={nav}
                       />
-                      {/* 번호만으로는 비교가 안 된다 — 여러 곳에 물어본 이유가 값이라,
-                          받은 금액이 번호 옆에 같이 서야 그 자리에서 견줘진다. */}
-                      {v.amount != null ? (
-                        <span className="ov-vq-amt">
-                          {v.currency} {Math.round(v.amount).toLocaleString()}
-                        </span>
-                      ) : null}
                     </span>
                   </Fragment>
                 ))
@@ -1764,6 +1794,10 @@ function QuoteOnlyGroup({
             <span className="muted">—</span>
           </td>
         </tr>
+      ))}
+      {/* 비교용으로 더 받아 둔 벤더 견적(OrderItemGroup 과 같은 자리·같은 규칙). */}
+      {altQuotes(vendorQuotes, quote.vendor_quote_id ?? null).map((v) => (
+        <AltQuoteRow key={v.id} vq={v} nav={nav} />
       ))}
     </tbody>
   );
