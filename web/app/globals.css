@@ -12053,10 +12053,11 @@ table.mini.wide.umail-table td.umail-c-assign { width: 340px; }
    넓은 것(긴 문서번호, 줄바꿈 안 되는 토큰)이 하나라도 있으면 트랙이 그만큼 밀려
    페이지에 가로 스크롤이 생긴다. 그러면 상단 고정 줄은 세로로만 붙어 있고 가로로는
    함께 밀려, 옆으로 스크롤했을 때 그 자리로 카드가 지나간다. */
-.brief-grid {
-  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px; align-items: start;
-}
+/* 열 수는 화면이 정한다(cols-2 / cols-3, 상단 Cols 스위치·localStorage). 좁아지면
+   아래 미디어쿼리가 고른 값과 무관하게 접는다 — 480px 짜리 3열은 어차피 못 읽는다. */
+.brief-grid { display: grid; gap: 14px; align-items: start; }
+.brief-grid.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.brief-grid.cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .brief-card {
   display: flex; flex-direction: column; gap: 6px; padding: 11px 13px 9px;
   /* 그리드 칸(flex/grid 항목)의 기본 최소폭은 내용 크기다 — 0 으로 풀어야 트랙 안에서
@@ -12230,10 +12231,10 @@ table.mini.wide.umail-table td.umail-c-assign { width: 340px; }
 }
 .mail-card-open:hover { text-decoration: underline; }
 @media (max-width: 1400px) {
-  .brief-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .brief-grid.cols-2, .brief-grid.cols-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 900px) {
-  .brief-grid { grid-template-columns: minmax(0, 1fr); }
+  .brief-grid.cols-2, .brief-grid.cols-3 { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* ── 딜 선택 드롭다운(ProjectPicker) ──────────────────────────────────────────

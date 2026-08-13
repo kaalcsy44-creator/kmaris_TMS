@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   fetchCustomers,
@@ -42,6 +42,8 @@ type Filter = "all" | "ours" | "theirs" | "nomail";
 
 const DAYS = 14;              // 이 기간 안에 움직인 딜만 카드가 된다
 const SHOW_CHOICES = [1, 3, 5, 8];
+const COL_CHOICES = [2, 3];
+const COLS_KEY = "ktms.brief.cols";
 
 // 카드 한 줄이 되는 것 — 사건이거나 메일이거나. 시간축 하나에 섞어 세운다.
 type Line =
@@ -76,11 +78,33 @@ export default function BriefingTab() {
   // 궁금할 때마다 밀도를 올리면 15장이 다 늘어나 보던 자리를 잃는다.
   const [show, setShow] = useState(3);          // 카드마다 보여 줄 최근 줄 수(기본값)
   const [expanded, setExpanded] = useState<number[]>([]);   // 통째로 편 카드(딜 번호)
+  // 열 수 — 모니터 폭과 취향에 따라 갈리는 문제다. 3열은 한 화면에 더 많은 딜을
+  // 올려 훑기에 좋고(카드 하나는 15% 짧아지지만 2열은 행이 5→8로 늘어 전체 스크롤은
+  // 오히려 길어진다), 2열은 카드 하나를 편히 읽기에 좋다. 기본은 훑기(3열)에 둔다.
+  const [cols, setCols] = useState(3);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
   const [err, setErr] = useState("");
   const [openRfqId, setOpenRfqId] = useState<number | null>(null);
   const [stageTarget, setStageTarget] = useState<{ stage: number; vrfqId?: number } | null>(null);
+
+  // 고른 열 수는 기억한다. 첫 렌더 뒤에 읽어 서버/클라 첫 그림을 같게 유지한다.
+  useEffect(() => {
+    try {
+      const v = Number(window.localStorage.getItem(COLS_KEY));
+      if (v === 2 || v === 3) setCols(v);
+    } catch {
+      /* 저장소를 못 읽으면 기본값(3열) */
+    }
+  }, []);
+  function pickCols(n: number) {
+    setCols(n);
+    try {
+      window.localStorage.setItem(COLS_KEY, String(n));
+    } catch {
+      /* 저장 실패는 무시 — 이번 화면에서만 적용된다 */
+    }
+  }
 
   const steps = useMemo(() => pipeline?.steps ?? [], [pipeline]);
   const waitingAfter = digest?.waiting_after ?? 2;
@@ -242,6 +266,22 @@ export default function BriefingTab() {
               </button>
             ))}
           </span>
+          {/* 열 수 — Show 와 같은 꼴의 옆 스위치. 둘 다 "이 보드를 어떻게 볼까"라는
+              한 가지 질문의 두 축(세로 밀도 · 가로 폭)이라 나란히 둔다. */}
+          <span className="brief-show" role="group" aria-label="Columns">
+            <span className="brief-show-lbl">Cols</span>
+            {COL_CHOICES.map((n) => (
+              <button
+                key={n}
+                type="button"
+                className={`brief-show-btn${cols === n ? " on" : ""}`}
+                title={n === 2 ? "Two wide cards — easier to read one" : "Three cards — more deals on screen"}
+                onClick={() => pickCols(n)}
+              >
+                {n}
+              </button>
+            ))}
+          </span>
           {digest && digest.unmatched > 0 ? (
             <Link className="brief-warn" href="/activity?view=mail">
               {digest.unmatched} unmatched
@@ -272,7 +312,7 @@ export default function BriefingTab() {
             : "Nothing in this filter."}
         </p>
       ) : (
-        <div className="brief-grid">
+        <div className={`brief-grid cols-${cols}`}>
           {shown.map((c) => (
             <BriefCard
               key={c.row.rfq_id}
