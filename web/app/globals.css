@@ -12029,6 +12029,17 @@ table.mini.wide.umail-table td.umail-c-assign { width: 340px; }
 /* 여백은 아래 필터 줄이 패딩으로 낸다 — 그래야 그 줄이 고정됐을 때 여백까지 함께
    불투명하게 덮여, 카드가 그 사이로 비쳐 지나가지 않는다. */
 .brief { margin-top: 0; }
+/* 세로 스크롤은 카드 **안**에서만 일어난다. 이 상자가 창의 남은 높이를 그대로 채우고
+   (높이는 스크립트가 재서 넣는다), 위의 필터·Show·Cols 줄은 이 상자 밖에 있어 아예
+   움직일 수 없다. sticky 로만 붙여 두면 스크롤 컨테이너가 페이지라 사정이 조금만
+   달라져도 풀린다 — 페이지가 가로로 밀리거나, 중간에 overflow 가 하나 끼거나.
+   스크롤을 이 상자가 아니라 카드가 맡는 이유: 카드를 옆으로 세우면 줄의 높이는 가장 긴
+   카드가 정한다. 상자가 스크롤하면 짧은 카드 옆의 빈 공간까지 같이 내려가, 스물네 줄짜리
+   딜 하나 때문에 세 줄짜리 딜 옆에 허공이 생긴다. */
+.brief-body { overflow: hidden; }
+/* 브리핑은 화면을 꽉 채운다 — .page 의 아래 여백(64px)이 남아 있으면 그만큼 페이지가
+   세로로 밀려, 고정해 둔 줄이 화면 밖으로 나간다. */
+.page:has(> .brief) { padding-bottom: 12px; }
 /* 필터·도구 줄은 탭 바로 아래에 붙여 둔다 — 카드를 한참 내려가서 본 뒤에도 "지금 어느
    묶음을 보고 있는지"와 Show 조절이 손 닿는 곳에 있어야 한다. 스크롤은 이 줄 아래
    카드들에만 걸린다. 탭(z 29)이 이 줄(z 28) 위에 그려지므로 top 이 1~2px 어긋나도
@@ -12066,13 +12077,16 @@ table.mini.wide.umail-table td.umail-c-assign { width: 340px; }
    모두 같은 트랙 하나를 민다. 가로 스크롤은 이 트랙 안에서만 일어나야 한다: 페이지가
    통째로 가로로 밀리면 상단 고정 줄은 세로로만 붙어 있고 가로로는 함께 밀려, 옆으로
    스크롤했을 때 그 자리로 카드가 지나간다. */
-.brief-deck { display: flex; align-items: stretch; gap: 8px; }
+.brief-deck { display: flex; align-items: stretch; gap: 8px; height: 100%; }
 /* 열 수는 이제 "한 번에 몇 장을 볼까"다(cols-2 / cols-3, 상단 Cols 스위치·localStorage).
    좁아지면 아래 미디어쿼리가 고른 값과 무관하게 접는다 — 480px 짜리 3열은 못 읽는다. */
-.brief-track {
+/* 이름이 rail 인 이유: .brief-track 은 카드 **안**의 진행바 줄이 이미 쓰고 있다(아래).
+   같은 이름을 쓰면 그쪽의 align-items: center 가 이 줄에 흘러들어 카드가 세로 가운데로
+   내려앉는다. 실제로 그렇게 났던 자리다. */
+.brief-rail {
   --cols: 2;
   --deck-gap: 14px;
-  flex: 1 1 auto; min-width: 0;
+  flex: 1 1 auto; min-width: 0; height: 100%;
   display: flex; align-items: flex-start; gap: var(--deck-gap);
   overflow-x: auto; overscroll-behavior-x: contain;
   scroll-snap-type: x mandatory;
@@ -12081,21 +12095,25 @@ table.mini.wide.umail-table td.umail-c-assign { width: 340px; }
   scrollbar-width: thin; scrollbar-color: #c7d2e0 transparent;
   cursor: grab;
 }
-.brief-track:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
-.brief-track::-webkit-scrollbar { height: 8px; }
-.brief-track::-webkit-scrollbar-thumb { background: #c7d2e0; border-radius: 4px; }
-.brief-track::-webkit-scrollbar-track { background: transparent; }
+.brief-rail:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.brief-rail::-webkit-scrollbar { height: 8px; }
+.brief-rail::-webkit-scrollbar-thumb { background: #c7d2e0; border-radius: 4px; }
+.brief-rail::-webkit-scrollbar-track { background: transparent; }
 /* 끄는 동안은 스냅을 끈다 — 켜 둔 채 scrollLeft 를 밀면 매번 가장 가까운 카드로
    되돌아가 손을 따라오지 않는다. 손을 뗀 뒤 맞추는 일은 스크립트가 한다. */
-.brief-track.dragging { scroll-snap-type: none; cursor: grabbing; user-select: none; }
-.brief-track.cols-2 { --cols: 2; }
-.brief-track.cols-3 { --cols: 3; }
-.brief-track > .brief-card {
+.brief-rail.dragging { scroll-snap-type: none; cursor: grabbing; user-select: none; }
+.brief-rail.cols-2 { --cols: 2; }
+.brief-rail.cols-3 { --cols: 3; }
+/* 카드는 자기 폭을 정해 받고(트랙 폭 ÷ 열 수), 높이는 틀을 넘지 않는다. 넘치는 딜은
+   카드 안에서 스크롤된다 — 틀이 고정이라 위의 필터 줄도, 옆의 화살표도 제자리를 지킨다. */
+.brief-rail > .brief-card {
   flex: 0 0 calc((100% - (var(--cols) - 1) * var(--deck-gap)) / var(--cols));
+  max-height: 100%; overflow-y: auto; overscroll-behavior-y: contain;
   scroll-snap-align: start;
+  scrollbar-width: thin; scrollbar-color: #c7d2e0 transparent;
 }
-/* 트랙과 같은 높이의 세로 버튼. 카드가 화면보다 길어도 화살표 글자는 sticky 로 눈높이에
-   남아, 아래까지 읽고 나서 마우스를 위로 되돌리지 않아도 다음 장으로 넘어간다. */
+/* 카드 줄과 같은 높이의 세로 버튼 — 틀이 고정이라 화살표는 늘 같은 자리에 있다.
+   어디를 눌러도 넘어가므로, 카드 아래쪽을 읽다가 마우스를 위로 되돌릴 일이 없다. */
 .brief-nav {
   flex: 0 0 26px; align-self: stretch; min-height: 140px;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -12104,10 +12122,7 @@ table.mini.wide.umail-table td.umail-c-assign { width: 340px; }
 }
 .brief-nav:hover:not(:disabled) { border-color: var(--blue); background: var(--sel); color: var(--blue); }
 .brief-nav:disabled { opacity: 0.3; cursor: default; }
-.brief-nav span {
-  position: sticky; top: calc(var(--page-tabs-h) + 96px);
-  font-size: 22px; font-weight: 700; line-height: 1;
-}
+.brief-nav span { font-size: 22px; font-weight: 700; line-height: 1; }
 .brief-card {
   display: flex; flex-direction: column; gap: 6px; padding: 11px 13px 9px;
   /* flex 항목의 기본 최소폭은 내용 크기다 — 0 으로 풀어야 정해 준 폭(트랙 폭 ÷ 열 수)
@@ -12284,10 +12299,10 @@ table.mini.wide.umail-table td.umail-c-assign { width: 340px; }
 }
 .mail-card-open:hover { text-decoration: underline; }
 @media (max-width: 1400px) {
-  .brief-track.cols-2, .brief-track.cols-3 { --cols: 2; }
+  .brief-rail.cols-2, .brief-rail.cols-3 { --cols: 2; }
 }
 @media (max-width: 900px) {
-  .brief-track.cols-2, .brief-track.cols-3 { --cols: 1; }
+  .brief-rail.cols-2, .brief-rail.cols-3 { --cols: 1; }
 }
 
 /* ── 딜 선택 드롭다운(ProjectPicker) ──────────────────────────────────────────

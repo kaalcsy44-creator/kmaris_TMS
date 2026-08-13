@@ -231,17 +231,46 @@ export default function BriefingTab() {
 
   // ── 카드를 좌우로 넘긴다 ───────────────────────────────────────────────────
   // 카드를 세로로 쌓으면 열다섯 장을 보는 동안 상단 필터 줄이 멀어지고, 지금 몇 번째를
-  // 보고 있는지도 잃는다. 그래서 트랙 하나에 옆으로 세우고 드래그와 양옆 화살표로 옮긴다.
+  // 보고 있는지도 잃는다. 그래서 한 줄(레일)에 옆으로 세우고 드래그와 양옆 화살표로 옮긴다.
   // Cols 는 이제 "한 번에 몇 장을 볼까"라는 뜻이 된다 — 밀도라는 성격은 그대로다.
-  const trackRef = useRef<HTMLDivElement | null>(null);
+  const barRef = useRef<HTMLDivElement | null>(null);
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+  const railRef = useRef<HTMLDivElement | null>(null);
   const drag = useRef<{ x: number; left: number; moved: boolean } | null>(null);
   const dragged = useRef(false);   // 방금 끈 뒤라면 뒤따라오는 click 을 삼킨다
   const goal = useRef<number | null>(null);   // 부드럽게 가는 중인 목적지
   const [atStart, setAtStart] = useState(true);
   const [atEnd, setAtEnd] = useState(true);
 
+  // 카드 자리는 창의 남은 높이를 그대로 차지하고, 세로 스크롤은 그 안에서만 일어난다.
+  // 높이를 상수로 빼지 않고 재는 이유는 위에 얹힌 것들(상단 바·탭 줄·필터 줄)이 창 폭에
+  // 따라 접히고 늘기 때문이다 — 한 줄이 두 줄이 되는 순간 상수는 어긋난다.
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+    const fit = () => {
+      const top = el.getBoundingClientRect().top;
+      // 아주 낮은 창에서는 억지로 줄이지 않는다 — 그럴 땐 페이지가 스크롤되고,
+      // 필터 줄은 sticky 로 버틴다(아래 CSS).
+      el.style.height = `${Math.max(320, window.innerHeight - top - 12)}px`;
+    };
+    fit();
+    // 한 번 더. 방금까지 내용이 길어 페이지가 내려가 있었다면 첫 측정은 그 내려간
+    // 자리에서 잰 값이다 — 높이를 넣어 페이지가 제자리로 돌아온 다음 프레임에 다시 잰다.
+    const again = requestAnimationFrame(fit);
+    window.addEventListener("resize", fit);
+    // 칩이 두 줄로 접히면 필터 줄이 두꺼워진다 — 그때도 카드 자리를 다시 맞춘다.
+    const ro = new ResizeObserver(fit);
+    if (barRef.current) ro.observe(barRef.current);
+    return () => {
+      cancelAnimationFrame(again);
+      window.removeEventListener("resize", fit);
+      ro.disconnect();
+    };
+  }, [pipeline, err, note]);
+
   const updateEnds = useCallback(() => {
-    const el = trackRef.current;
+    const el = railRef.current;
     if (!el) return;
     if (goal.current != null && Math.abs(el.scrollLeft - goal.current) < 1) goal.current = null;
     setAtStart(el.scrollLeft <= 1);
@@ -257,7 +286,7 @@ export default function BriefingTab() {
   // 묶음을 바꾸면 처음부터 본다 — 다른 목록의 열두 번째 자리에 남아 있을 이유가 없다.
   useEffect(() => {
     goal.current = null;
-    trackRef.current?.scrollTo({ left: 0 });
+    railRef.current?.scrollTo({ left: 0 });
   }, [filter]);
 
   /** 카드 한 장의 이동 폭(카드 폭 + 간격). 두 장의 offsetLeft 차이가 가장 정확하다. */
@@ -274,7 +303,7 @@ export default function BriefingTab() {
    *  연타는 목적지에서부터 센다. 지금 위치에서 세면 부드럽게 가는 도중의 어중간한
    *  자리가 기준이 되어, 두 번 눌러도 한 장밖에 안 넘어간다. */
   function go(dir: -1 | 1) {
-    const el = trackRef.current;
+    const el = railRef.current;
     if (!el) return;
     const s = cardStep(el);
     const from = goal.current ?? el.scrollLeft;
@@ -287,14 +316,14 @@ export default function BriefingTab() {
   function onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
     dragged.current = false;
     goal.current = null;
-    const el = trackRef.current;
+    const el = railRef.current;
     if (e.button !== 0 || !el) return;
     drag.current = { x: e.clientX, left: el.scrollLeft, moved: false };
   }
 
   function onPointerMove(e: React.PointerEvent<HTMLDivElement>) {
     const d = drag.current;
-    const el = trackRef.current;
+    const el = railRef.current;
     if (!d || !el) return;
     const dx = e.clientX - d.x;
     if (!d.moved) {
@@ -311,7 +340,7 @@ export default function BriefingTab() {
 
   function endDrag(e: React.PointerEvent<HTMLDivElement>) {
     const d = drag.current;
-    const el = trackRef.current;
+    const el = railRef.current;
     drag.current = null;
     if (!d || !el) return;
     el.classList.remove("dragging");
@@ -329,7 +358,7 @@ export default function BriefingTab() {
 
   return (
     <div className="brief">
-      <div className="brief-bar">
+      <div className="brief-bar" ref={barRef}>
         <span className="brief-chips">
           <Chip on={filter === "all"} onClick={() => setFilter("all")}>All <b>{counts.all}</b></Chip>
           <Chip on={filter === "ours"} onClick={() => setFilter("ours")}>
@@ -400,6 +429,11 @@ export default function BriefingTab() {
       {err ? <div className="action-err">{err}</div> : null}
       {note ? <div className="mail-note">{note}</div> : null}
 
+      {/* 카드가 놓이는 틀. 창의 남은 높이를 그대로 차지하고 스스로는 스크롤하지 않는다 —
+          위의 필터·Show·Cols 줄이 이 틀 **밖**에 있으니 움직일 방법이 없다. sticky 로만
+          붙여 두면 스크롤 컨테이너가 페이지라, 화면 사정이 조금만 달라져도 풀린다.
+          긴 딜은 카드 안에서 스크롤된다(globals.css 의 .brief-rail > .brief-card). */}
+      <div className="brief-body" ref={bodyRef}>
       {shown.length === 0 ? (
         <p className="mail-empty">
           {cards.length === 0
@@ -410,8 +444,8 @@ export default function BriefingTab() {
         <div className="brief-deck">
           <DeckNav dir={-1} disabled={atStart} onClick={() => go(-1)} />
           <div
-            ref={trackRef}
-            className={`brief-track cols-${cols}`}
+            ref={railRef}
+            className={`brief-rail cols-${cols}`}
             role="group"
             aria-label="Project cards"
             tabIndex={0}
@@ -460,6 +494,7 @@ export default function BriefingTab() {
           <DeckNav dir={1} disabled={atEnd} onClick={() => go(1)} />
         </div>
       )}
+      </div>
 
       {openRow ? (
         <PipelineModal
