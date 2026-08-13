@@ -11168,12 +11168,12 @@ select.sig-owner-pick,
 .ov-tlcol.p { color: var(--ov-p); --ov-tone: var(--ov-p); --ov-bg: var(--ov-p-bg); --ov-hd: var(--ov-p-hd); }
 .ov-tlcol.c { color: var(--ov-c); --ov-tone: var(--ov-c); --ov-bg: var(--ov-c-bg); --ov-hd: var(--ov-c-hd); }
 .proj-ov-tl { list-style: none; margin: 0; padding: 0; color: var(--ink); }
-.proj-ov-tl > li { position: relative; padding: 0 8px 0 0; }
-/* 단계를 잇는 세로선 — 점(dot) 중앙(좌측 22px)을 지난다. 마지막 항목은 아래로 끊는다. */
-.proj-ov-tl > li::before { content: ""; position: absolute; left: 22px; top: 0; bottom: 0;
-  width: 2px; background: var(--line); }
-.proj-ov-tl > li:first-child::before { top: 14px; }
-.proj-ov-tl > li:last-child::before { bottom: calc(100% - 14px); }
+/* 단계 번호 원형과 그것을 꿰던 세로선을 걷어냈다. 칸 하나가 화면의 25% 뿐인데 왼쪽
+   22px 을 뼈대에 내주면 본문이 그만큼 좁아져 서너 글자마다 줄이 바뀌었다 — 세로로
+   길어지는 값이 세로선이 주던 이득보다 컸다. 단계의 경계는 줄 사이 가는 선이,
+   무슨 사건인지는 굵은 라벨(RFQ Sent…)이, 현재 단계는 흰 바탕이 대신 말해 준다. */
+.proj-ov-tl > li { position: relative; padding: 0; }
+.proj-ov-tl > li + li { border-top: 1px solid var(--line); }
 /* 단계 줄 — 페이지에선 <a>(URL 이동), 팝업 안에선 <button>(그 자리에서 작업 화면 전환).
    버튼 기본 스타일(배경·테두리·폰트)을 지워 둘이 같은 줄로 보이게 한다. */
 .ov-tl-stage { display: flex; align-items: center; gap: 6px; padding: 5px 0 5px 10px;
@@ -11201,19 +11201,29 @@ button.ov-tl-stage:hover { background: color-mix(in srgb, var(--ov-tone) 12%, tr
   white-space: nowrap; }
 /* 단계 활동 목록(.ov-tl-notes)에 섞이는 메인 활동(수·발신) 줄 — 라벨(RFQ Sent 등)은
    볼드 + 단계 매칭색, 뒤따르는 상대(to/from …)는 옅게. 날짜는 앞 열(.ov-tl-ndate)에 정렬. */
-.ov-tl-actlabel { font-weight: 700; color: var(--ov-tone); }
+.ov-tl-actlabel { flex: 0 1 auto; min-width: 0; font-weight: 700; color: var(--ov-tone);
+  overflow-wrap: anywhere; }
 /* 상대(from/to …)는 라벨 아래 줄로 내리고(노트 메타와 같은 꼴), 글자 크기도 meta 급으로 통일. */
 .ov-tl-actmeta { display: block; margin-top: 1px; color: var(--muted); font-size: var(--ov-t-meta); }
 .proj-ov .act-meta { font-size: var(--ov-t-meta); }
-/* 헤더 없는 단계 활동 목록 — 각 행이 [번호 원형/빈 거터][날짜][내용]. 메인 활동 행은
-   번호 원형을 얹고 통째로 작업화면 링크(.ov-tl-rowlink)가 된다. 날짜 열은 두 행종류에서
-   같은 x 에서 시작하도록 원형과 빈 거터 폭(19px)을 맞춘다. */
+/* 헤더 없는 단계 활동 목록 — 행 하나가 두 줄이다.
+     머리줄  [날짜][짧은 이름 — 라벨 / 메일 방향·상대]
+     본문줄  [긴 글 — 칸의 왼쪽 끝부터 오른쪽 끝까지]
+   본문을 날짜 오른쪽에 세우면 25% 폭 칸에서 쓸 수 있는 자리가 100px 남짓이라 문장이
+   서너 글자마다 접혀 카드가 아래로 한없이 길어졌다. 한 줄 내주고 폭을 두 배로 받는
+   거래다. 대신 날짜는 혼자 남지 않도록 본문보다 크고 진하게 세운다. */
 .ov-tl-acts { list-style: none; margin: 0; padding: 0 0 4px; }
 .ov-tl-row, .ov-tl-rowlink {
-  display: flex; align-items: flex-start; gap: 8px; width: 100%;
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 1px 6px; width: 100%;
   /* log 내용은 본문(body)보다 1px 작게(요청). */
-  padding: 3px 4px 3px 8px; font-size: calc(var(--ov-t-body) - 1px); color: #405168; line-height: 1.45;
+  padding: 3px 6px; font-size: calc(var(--ov-t-body) - 1px); color: #405168; line-height: 1.45;
 }
+/* 머리줄 다음에 오는 것은 모두 제 줄을 통째로 쓴다(flex-basis 100%) — 이 한 줄이
+   "내어쓰기"의 전부다. 왼쪽 끝은 행 패딩(6px)뿐이라 날짜와 같은 세로선에 선다. */
+.ov-tl-row > .ov-tl-ntext,
+.ov-tl-rowlink > .ov-tl-ntext,
+.ov-tl-actmeta,
+.ov-tl-mailsum { flex: 1 1 100%; min-width: 0; }
 /* font: inherit 는 버튼의 font-size 까지 상위(큰 기본값)로 되돌려 라벨이 커졌다.
    family 만 상속하고 크기는 위 규칙의 body 급을 그대로 쓴다(로그 내용과 동일 크기). */
 .ov-tl-rowlink { border: 0; background: none; font-family: inherit; font-weight: inherit; color: #405168;
@@ -11229,14 +11239,13 @@ button.ov-tl-stage:hover { background: color-mix(in srgb, var(--ov-tone) 12%, tr
 .ov-tl-acts.notes-open > li.ov-tl-note,
 /* 수정 중인 노트는 접기에 걸려 사라지면 안 된다(입력하던 내용이 화면에서 없어진다). */
 .ov-tl-acts > li.ov-tl-noteedit { display: list-item; }
-/* 더보기 — 로그 맨 아래 한 줄. 날짜 열과 시작점을 맞춘다(거터 19px + gap). */
-.ov-tl-morerow { display: flex; align-items: center; gap: 8px; padding: 1px 4px 2px 8px; }
+/* 더보기 — 로그 맨 아래 한 줄. 날짜와 같은 왼쪽 선에서 시작한다. */
+.ov-tl-morerow { display: flex; align-items: center; gap: 8px; padding: 1px 4px 2px 4px; }
 .ov-tl-more {
   border: 0; background: none; padding: 1px 4px; border-radius: 5px;
   font-family: inherit; font-size: var(--ov-t-meta); color: #7c8899; cursor: pointer;
 }
 .ov-tl-more:hover { background: color-mix(in srgb, var(--ov-tone) 10%, #fff); color: #405168; }
-.ov-tl-gutter { flex: none; width: 19px; }
 /* 완료 = 칸 색 점 + 선, 현재 = 흰 카드로 띄움, 미완료 = 흐리게.
    현재 단계 바탕이 흰색인 건 칸 톤 위에서 "떠 보이게" 하려는 것 — 색을 하나 더 쓰면
    칸 색과 부딪힌다. */
@@ -11265,6 +11274,15 @@ button.ov-tl-stage:hover { background: color-mix(in srgb, var(--ov-tone) 12%, tr
   color: #6e7c8f; font-size: var(--ov-t-meta); font-weight: 700; letter-spacing: 0.03em;
   line-height: 1.5; white-space: nowrap;
 }
+/* 현재 단계 — 번호 원형과 그 링이 하던 "여기까지 왔다"를 대신한다. 왼쪽에 자리를 쓰지
+   않도록 머리줄 오른쪽 끝에 세운다(N/A 와 같은 자리). 둘이 함께 서면 NOW 가 앞이다. */
+.ov-tl-now {
+  flex: none; align-self: flex-start; margin-left: auto;
+  padding: 0 6px; border-radius: 999px; background: var(--ov-tone);
+  color: #fff; font-size: var(--ov-t-cap); font-weight: 800; letter-spacing: 0.06em;
+  line-height: 1.7; white-space: nowrap;
+}
+.ov-tl-now + .ov-tl-na { margin-left: 4px; }
 /* 단계에 달린 사람이 쓴 노트 — 점 선 오른쪽으로 들여써 단계에 속함을 보인다. */
 .ov-tl-notes { list-style: none; margin: 0; padding: 0 4px 4px 36px; }
 .ov-tl-notes li { display: flex; gap: 6px; padding: 3px 0; font-size: var(--ov-t-body);
@@ -11273,8 +11291,10 @@ button.ov-tl-stage:hover { background: color-mix(in srgb, var(--ov-tone) 12%, tr
    이 페이지 안에서만 보조(meta) 급으로 맞춘다. */
 .proj-ov .act-pic { font-size: var(--ov-t-meta); }
 .ov-tl-notes li.star { background: #fffbe9; border-radius: 4px; }
-.ov-tl-ndate { flex: none; width: 58px; color: var(--muted); font-size: var(--ov-t-meta);
-  font-variant-numeric: tabular-nums; padding-top: 1px; white-space: nowrap; }
+/* 날짜 — 이제 본문과 같은 줄에서 겨루지 않고 머리줄의 첫 글자로 선다. 그 자리에서
+   행의 눈금 노릇을 하려면 본문(body−1)보다 커야 한다: 한 급 올리고 진하게 세운다. */
+.ov-tl-ndate { flex: none; color: #33455e; font-size: var(--ov-t-body); font-weight: 800;
+  font-variant-numeric: tabular-nums; letter-spacing: -0.01em; white-space: nowrap; }
 /* 문서에서 뺀 줄 — "값 없음(—)"도 "0 원"도 아닌 세 번째 상태다. 취소선으로 "이 문서에는
    안 나갔다"를 말하되, 값이 있는 칸보다 눈에 늦게 들어오게 옅게 둔다. */
 .ov-excl {
@@ -11282,23 +11302,24 @@ button.ov-tl-stage:hover { background: color-mix(in srgb, var(--ov-tone) 12%, tr
   text-decoration: line-through; text-decoration-color: #c3ccd9;
 }
 .ov-tl-ntext { min-width: 0; word-break: break-word; }
-/* 오간 메일 한 줄 — 같은 단계의 활동 로그에 노트와 나란히 선다. 단계 진행(굵은 라벨)이
-   주인공이라, 메일은 방향 화살표와 상대만 세우고 요약은 본문 색으로 낮춰 둔다. */
-.ov-tl-mail .ov-tl-ntext { display: flex; align-items: baseline; gap: 5px; flex-wrap: wrap; }
+/* 오간 메일 한 줄 — 같은 단계의 활동 로그에 노트와 나란히 선다. 방향 화살표와 상대는
+   날짜 옆 머리줄에, 요약은 아래 줄 왼쪽 끝부터. 단계 진행(굵은 라벨)이 주인공이라
+   요약은 본문 색으로 낮춰 둔다. */
 .ov-tl-maildir { flex: none; font-weight: 800; color: #7c8aa0; }
 .ov-tl-mail.out .ov-tl-maildir { color: var(--blue); }
 .ov-tl-mail.in .ov-tl-maildir { color: #1a7a4a; }
 .ov-tl-mailparty {
-  flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   font-size: var(--ov-t-meta); color: #46586e;
 }
-.ov-tl-mailsum { flex: 1 1 60%; min-width: 0; color: #5c6b7d; overflow-wrap: anywhere; }
+.ov-tl-mailsum { color: #5c6b7d; overflow-wrap: anywhere; }
 /* 노트 행 — 내용(.ov-tl-ntext)이 우측 끝까지 폭을 쓰고, ★·수정·삭제는 hover 시에만 그 위에
    겹쳐 뜬다(Activity Log 의 .act-actions 와 같은 방식). 아이콘 뒤엔 행 배경색으로 페이드를 깔아
    글자와 겹쳐도 지저분하지 않게 한다 — 노트 행은 칸 배경(--ov-bg) 위에, ★ 노트는 노란 톤 위에.
    기본 상태의 '별표됨' 표시는 행 배경 노란 톤(.ov-tl-acts li.star .ov-tl-row)이 맡는다. */
 .ov-tl-noterow { position: relative; }
-.ov-tl-noterow .ov-tl-ntext { flex: 1 1 auto; }
+/* 노트 본문도 제 줄을 통째로 쓴다 — 머리줄에는 날짜만 남는다. */
+.ov-tl-noterow .ov-tl-ntext { flex: 1 1 100%; }
 .ov-tl-nactions {
   position: absolute; top: 2px; right: 2px; display: inline-flex; align-items: center; gap: 3px;
   padding-left: 20px; opacity: 0; pointer-events: none; transition: opacity .12s;
@@ -11323,7 +11344,7 @@ button.ov-tl-stage:hover { background: color-mix(in srgb, var(--ov-tone) 12%, tr
 .ov-tl-editform { flex: 1 1 auto; min-width: 0; }
 /* 단계별 활동기록 추가 — 개요에서 바로 작성하는 진입점. 평소엔 옅게, hover/focus 시 진해진다.
    인쇄·공유용 화면이라 기본은 눈에 띄지 않게 두고 필요할 때만 드러낸다. */
-.ov-tl-add { margin: 1px 0 4px 40px; padding: 1px 6px; border: 1px dashed transparent;
+.ov-tl-add { margin: 1px 0 4px 6px; padding: 1px 6px; border: 1px dashed transparent;
   background: none; color: #9aa6b8; font-size: var(--ov-t-meta); cursor: pointer;
   border-radius: 5px; opacity: 0.55; transition: opacity .12s, color .12s, border-color .12s; }
 .proj-ov-tl > li:hover .ov-tl-add,
@@ -11334,7 +11355,7 @@ button.ov-tl-stage:hover { background: color-mix(in srgb, var(--ov-tone) 12%, tr
   border: 1px dashed color-mix(in srgb, var(--ov-tone) 35%, #cfd8e4); color: var(--ov-tone);
   opacity: 0.9; text-align: center; }
 .ov-tl-addfoot:hover { opacity: 1; }
-.ov-tl-addform { margin: 2px 4px 8px 40px; }
+.ov-tl-addform { margin: 2px 4px 8px 6px; }
 /* 폼은 조밀한 개요 안에 들어가므로 공용 폼을 한 톤 작게 눌러 준다.
    인라인 수정 폼(.ov-tl-editform)도 같은 조밀함을 공유한다. */
 .ov-tl-addform .act-add,
@@ -11655,8 +11676,6 @@ button.ov-tl-stage:hover { background: color-mix(in srgb, var(--ov-tone) 12%, tr
   padding-right: 4px;
   border-radius: 7px;
 }
-/* 단계 번호 사이 연결선은 표시하지 않는다(요청). */
-.proj-ov-tl > li::before { display: none; }
 .ov-tl-stage {
   gap: 7px;
   min-height: 34px;
@@ -11696,19 +11715,12 @@ button.ov-tl-stage:hover {
   background: var(--ov-work);
   color: #fff;
 }
-.proj-ov-tl > li.done::before,
-.proj-ov-tl > li.current::before {
-  background: color-mix(in srgb, var(--ov-tone) 28%, #fff);
-}
 /* 현재 단계를 감싸는 카드(배경·좌측 바·그림자) 효과는 표시하지 않는다(요청).
-   현재 단계 식별은 채워진 원형 + 원형 링(아래)만으로 충분하다. */
+   식별은 행 오른쪽 끝의 NOW 칩이 맡는다 — 왼쪽에 자리를 쓰지 않는 표식이라야
+   본문이 칸 왼쪽 끝에서 시작할 수 있다. */
 .proj-ov-tl > li.current {
   background: none;
   box-shadow: none;
-}
-.proj-ov-tl > li.current .ov-tl-dot {
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ov-work) 18%, transparent),
-    0 2px 4px color-mix(in srgb, var(--ov-work) 24%, transparent);
 }
 .proj-ov-tl > li.todo .ov-tl-label { color: #8995a6; }
 .proj-ov-tl > li.todo {
@@ -11727,7 +11739,6 @@ button.ov-tl-stage:hover {
   line-height: 1.45;
 }
 .ov-tl-notes li.star { padding: 4px 6px; background: #fff9e8; }
-.ov-tl-ndate { width: 58px; color: #8995a6; }
 
 .proj-ov-items th,
 .proj-ov-items td {

@@ -486,16 +486,15 @@ type LogItem = { at: string; act?: Activity; mail?: MailMessage };
 function renderMailRow(m: MailMessage, key: string) {
   return (
     <li key={key} className={`ov-tl-mail ${m.direction}`}>
+      {/* 머리줄은 [날짜 · 방향 · 상대], 본문은 그 아래 칸 왼쪽 끝부터. 요약이 상대 이름
+          오른쪽에서 시작하면 25% 폭 칸에서는 한 줄에 서너 글자밖에 못 들어간다. */}
       <div className="ov-tl-row">
-        <span className="ov-tl-gutter" />
         <span className="ov-tl-ndate">
           {md(m.sent_at)}{hm(m.sent_at) ? ` ${hm(m.sent_at)}` : ""}
         </span>
-        <span className="ov-tl-ntext">
-          <span className="ov-tl-maildir">{m.direction === "out" ? "→" : "←"}</span>
-          {m.party ? <span className="ov-tl-mailparty">{m.party}</span> : null}
-          <span className="ov-tl-mailsum">{m.summary || m.subject || "(no subject)"}</span>
-        </span>
+        <span className="ov-tl-maildir">{m.direction === "out" ? "→" : "←"}</span>
+        {m.party ? <span className="ov-tl-mailparty">{m.party}</span> : null}
+        <span className="ov-tl-mailsum">{m.summary || m.subject || "(no subject)"}</span>
       </div>
     </li>
   );
@@ -634,11 +633,14 @@ function StageTimeline({
                         // 해당 없는 단계(내수 부품공급의 C/I·PL·SA·POD) 표시. 활동 기록이
                         // 있어도 늘 붙인다 — 흐림(.skip)만으로는 "아직 안 한 단계"로 읽힌다.
                         const naTag = c.skip ? <span className="ov-tl-na">N/A</span> : null;
+                        // 지금 어디까지 왔나 — 번호 원형과 그 링이 하던 표시다. 왼쪽 자리를
+                        // 쓰지 않도록 행 오른쪽 끝 칩으로 옮겼다(N/A 와 같은 자리·같은 꼴).
+                        const nowTag = c.no === row.stage ? <span className="ov-tl-now">NOW</span> : null;
                         if (!rows.length) {
                           return rowLink(
                             <>
-                              <span className="ov-tl-dot">{c.no}</span>
                               <b className="ov-tl-label">{c.label}</b>
+                              {nowTag}
                               {naTag}
                             </>,
                           );
@@ -689,17 +691,21 @@ function StageTimeline({
                           }
                           // rows 에는 close 가 섞이지 않지만(별도 처리), 타입 좁히기용 가드.
                           if (a.kind !== "auto") return null;
-                          const contentEl = (
-                            <span className="ov-tl-ntext">
+                          // 머리줄은 [날짜][라벨][칩], 본문줄은 상대 표기. 라벨(RFQ Sent…)은
+                          // 짧고 그 줄이 무슨 사건인지 알려 주는 이름이라 날짜 옆에 두고,
+                          // 긴 상대 표기만 아래 줄 왼쪽 끝부터 흐르게 한다.
+                          const contentEl = (tags?: ReactNode) => (
+                            <>
                               <b className="ov-tl-actlabel">{a.label}</b>
+                              {tags}
                               {a.party ? <span className="ov-tl-actmeta">{a.party}</span> : null}
-                            </span>
+                            </>
                           );
-                          // 메인 활동 행(자동 이벤트) = 단계 번호 원형 + 작업화면 링크.
+                          // 메인 활동 행(자동 이벤트) = 그 단계의 작업화면으로 가는 링크.
                           if (isMain) {
                             return (
                               <li key={key} className="ov-tl-main">
-                                {rowLink(<><span className="ov-tl-dot">{c.no}</span>{dateEl}{contentEl}{naTag}</>, a.vrfqId)}
+                                {rowLink(<>{dateEl}{contentEl(<>{nowTag}{naTag}</>)}</>, a.vrfqId)}
                               </li>
                             );
                           }
@@ -707,16 +713,15 @@ function StageTimeline({
                           if (a.vrfqId) {
                             return (
                               <li key={key}>
-                                {rowLink(<><span className="ov-tl-gutter" />{dateEl}{contentEl}</>, a.vrfqId)}
+                                {rowLink(<>{dateEl}{contentEl()}</>, a.vrfqId)}
                               </li>
                             );
                           }
                           return (
                             <li key={key}>
                               <div className="ov-tl-row">
-                                <span className="ov-tl-gutter" />
                                 {dateEl}
-                                {contentEl}
+                                {contentEl()}
                               </div>
                             </li>
                           );
@@ -726,7 +731,6 @@ function StageTimeline({
                         const logBlock = log.length
                           ? [
                               <li key="more" className="ov-tl-morerow">
-                                <span className="ov-tl-gutter" />
                                 <button
                                   type="button"
                                   className="ov-tl-more"
@@ -754,8 +758,8 @@ function StageTimeline({
                               <li className="ov-tl-main">
                                 {rowLink(
                                   <>
-                                    <span className="ov-tl-dot">{c.no}</span>
                                     <b className="ov-tl-label">{c.label}</b>
+                                    {nowTag}
                                     {naTag}
                                   </>,
                                 )}
@@ -879,7 +883,6 @@ function OvNoteRow({
     return (
       <li className={`ov-tl-note${n.star ? " star" : ""}`}>
         <div className="ov-tl-row">
-          <span className="ov-tl-gutter" />
           {dateEl}
           <span className="ov-tl-ntext"><ActivityDesc act={a} metaBlock /></span>
         </div>
@@ -934,7 +937,6 @@ function OvNoteRow({
     return (
       <li className="ov-tl-note ov-tl-noteedit">
         <div className="ov-tl-row">
-          <span className="ov-tl-gutter" />
           <div className="ov-tl-editform">
             <ActivityNoteForm
               value={form}
@@ -955,7 +957,6 @@ function OvNoteRow({
   return (
     <li className={`ov-tl-note${n.star ? " star" : ""}`}>
       <div className="ov-tl-row ov-tl-noterow">
-        <span className="ov-tl-gutter" />
         {dateEl}
         <span className="ov-tl-ntext">
           <ActivityDesc act={a} metaBlock hideStar />
