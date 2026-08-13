@@ -11293,11 +11293,13 @@ button.ov-tl-stage:hover { background: color-mix(in srgb, var(--ov-tone) 12%, tr
    이 페이지 안에서만 보조(meta) 급으로 맞춘다. */
 .proj-ov .act-pic { font-size: var(--ov-t-meta); }
 .ov-tl-notes li.star { background: #fffbe9; border-radius: 4px; }
-/* 날짜 — 머리줄의 첫 글자. 본문(body−1)보다 한 급 커서 눈금 노릇은 하되, 굵기나
-   진한 색으로 세우지는 않는다(요청). 머리줄에서 눈에 먼저 들어와야 하는 건 옆에 선
-   사건 이름(RFQ Received…)이고, 날짜는 그것을 언제 했는지 받쳐 주는 자리다. */
-.ov-tl-ndate { flex: none; color: #8995a6; font-size: var(--ov-t-body); font-weight: 500;
+/* 일시 — 머리줄의 첫 글자. 날짜와 시각은 무게가 다르다: 칸을 세로로 훑을 때 눈이
+   잡는 건 "며칠"이고, 시각은 그 날 안에서의 순서일 뿐이다. 날짜는 굵게 검정으로,
+   시각은 그 뒤에 한 급 작은 회색으로 붙인다. */
+.ov-tl-ndate { flex: none; color: #1f2d3d; font-size: var(--ov-t-body); font-weight: 700;
   font-variant-numeric: tabular-nums; letter-spacing: -0.01em; white-space: nowrap; }
+.ov-tl-ntime { margin-left: 4px; font-size: calc(var(--ov-t-body) - 1px); font-weight: 400;
+  color: #8995a6; }
 /* 문서에서 뺀 줄 — "값 없음(—)"도 "0 원"도 아닌 세 번째 상태다. 취소선으로 "이 문서에는
    안 나갔다"를 말하되, 값이 있는 칸보다 눈에 늦게 들어오게 옅게 둔다. */
 .ov-excl {

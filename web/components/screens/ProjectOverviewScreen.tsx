@@ -481,6 +481,18 @@ function actAt(a: Activity): string {
 /** 접히는 활동 로그의 한 줄 — 사람이 쓴 노트이거나, 오간 메일이거나. */
 type LogItem = { at: string; act?: Activity; mail?: MailMessage };
 
+/** 머리줄의 일시 — 날짜와 시각은 무게가 다르다. 세로로 훑을 때 눈이 잡는 건 날짜라
+ *  굵게 검정으로 두고, 시각은 그 날 안에서의 순서일 뿐이라 한 급 작은 회색으로 붙인다. */
+function OvWhen({ date, at }: { date: string; at: string }) {
+  const t = hm(at);
+  return (
+    <span className="ov-tl-ndate">
+      {md(date)}
+      {t ? <span className="ov-tl-ntime">{t}</span> : null}
+    </span>
+  );
+}
+
 /** 메일 한 줄 — 방향·상대·요약. 노트와 달리 여기서 고칠 것이 없어 링크도 편집도 없다.
  *  원문은 아래 Mail 목록에서 편다(이 자리는 "언제 무슨 말이 오갔나"만 알려 준다). */
 function renderMailRow(m: MailMessage, key: string) {
@@ -489,9 +501,7 @@ function renderMailRow(m: MailMessage, key: string) {
       {/* 머리줄은 [날짜 · 방향 · 상대], 본문은 그 아래 칸 왼쪽 끝부터. 요약이 상대 이름
           오른쪽에서 시작하면 25% 폭 칸에서는 한 줄에 서너 글자밖에 못 들어간다. */}
       <div className="ov-tl-row">
-        <span className="ov-tl-ndate">
-          {md(m.sent_at)}{hm(m.sent_at) ? ` ${hm(m.sent_at)}` : ""}
-        </span>
+        <OvWhen date={m.sent_at} at={m.sent_at} />
         <span className="ov-tl-maildir">{m.direction === "out" ? "→" : "←"}</span>
         {m.party ? <span className="ov-tl-mailparty">{m.party}</span> : null}
         <span className="ov-tl-mailsum">{m.summary || m.subject || "(no subject)"}</span>
@@ -672,9 +682,7 @@ function StageTimeline({
                           : pinned.length;
                         // 활동 1줄 — 노트는 편집 가능한 행으로, 자동 이벤트는 단계/벤더 링크 행으로.
                         const renderRow = (a: Activity, key: string, isMain: boolean) => {
-                          const dateEl = (
-                            <span className="ov-tl-ndate">{md(a.date)}{hm(actAt(a)) ? ` ${hm(actAt(a))}` : ""}</span>
-                          );
+                          const dateEl = <OvWhen date={a.date} at={actAt(a)} />;
                           // 사람이 쓴 노트 — ★·수정·삭제가 가능한 편집 행으로 렌더한다.
                           if (a.kind === "note") {
                             return (
