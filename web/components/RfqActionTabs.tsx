@@ -3963,6 +3963,13 @@ function CustomerQuoteItemEditor({
   // 매입 합계(원가×수량, 원가 통화) · 매출 합계(판매 Amount, 판매 통화)를 각각 표기.
   const purchaseTotal = items.reduce((sum, it) => sum + Number(it.cost_price || 0) * Number(it.qty || 1), 0);
   const total = items.reduce((sum, it) => sum + Number(it.amount || 0), 0);
+  // 이 견적이 실제로 남기는 마진 — 행마다 입력한 마진%가 아니라 합계끼리의 결과다.
+  // 둘은 자주 어긋난다: 단가를 올림 단위로 올리고(40% → 40.5%), 행마다 마진을 달리
+  // 주고, 어떤 행은 단가를 손으로 고친다. 행 값만 보이면 "40%짜리 견적"이라고 읽지만
+  // 정작 확인해야 하는 건 이 한 숫자다. 매입은 판매 통화로 환산해 같은 자로 잰다.
+  const purchaseInSale = convertCurrency(purchaseTotal, costCurrency, currency, rate);
+  const profit = total - purchaseInSale;
+  const marginPct = total > 0 ? (profit / total) * 100 : null;
   const sel = useRowSelection(items.length);
   // 상세(서브행) 펼침 상태 — 품목 인덱스 기준. 행이 지워지면 인덱스가 밀리므로 함께 초기화한다.
   const [openRows, setOpenRows] = useState<Set<number>>(() => new Set());
@@ -3979,13 +3986,16 @@ function CustomerQuoteItemEditor({
     setOpenRows(next);
   };
   // 접힌 상태에서도 "이 행엔 상세값이 있다" 를 캐럿에 표시하기 위한 판정.
+  // (Lead Time 은 주행 컬럼으로 올라갔으므로 여기서 세지 않는다.)
   const hasDetail = (it: CustomerQuoteItem) =>
-    Boolean(it.type || it.serial_no || it.lead_time || it.category_id);
+    Boolean(it.type || it.serial_no || it.category_id);
 
-  // 주행(main row)은 금액 계산에 쓰이는 컬럼 + 견적서에 그대로 찍히는 Remark 를 둔다.
-  // 나머지 부수 필드(Type·Serial No.·Lead Time·Category)는 행을 펼쳤을 때 나오는 서브행으로
+  // 주행(main row)은 금액 계산에 쓰이는 컬럼 + 견적서에 그대로 찍히는 Lead Time·Remark 를
+  // 둔다. 나머지 부수 필드(Type·Serial No.·Category)는 행을 펼쳤을 때 나오는 서브행으로
   // 내렸다 — 15컬럼이 한 줄에 있어 가로 스크롤이 생기고 Description 이 접히던 걸 없애기 위함.
-  // (Remark 는 견적서 품목표에 컬럼으로 인쇄되므로 표에서 바로 보이고 채워져야 한다.)
+  // (Lead Time 과 Remark 는 견적서 품목표에 컬럼으로 인쇄되므로 표에서 바로 보이고 채워져야
+  // 한다. 특히 납기는 공급사 견적에서 그대로 넘어오는 값이라 서브행에 숨어 있으면 무엇이
+  // 실려 왔는지 행마다 펴 봐야 알 수 있었다.)
   const cols: ItemCol[] = [
     { key: "__sel", fixed: true },
     { key: "__seq", fixed: true, className: "seq" },
@@ -3998,6 +4008,7 @@ function CustomerQuoteItemEditor({
     { key: "margin", label: "Margin %", className: "num" },
     { key: "unit_price", label: `Unit Price (${saleCur})`, className: "num" },
     { key: "amount", label: `Amount (${saleCur})`, className: "num" },
+    { key: "lead_time", label: "Lead Time" },
     { key: "remark", label: "Remark" },
   ];
   // 폰 접기(phone 표식)를 쓰지 않는 유일한 품목표 — 이 표의 일은 "원가(Purchase) → 마진 →
@@ -4007,15 +4018,15 @@ function CustomerQuoteItemEditor({
   // 서브행 <td colSpan> 이 덮을 칸 수 — 숨긴 컬럼을 빼고 센다.
   const mainColSpan = grid.cols.filter((c) => c.fixed || !grid.layout.hidden.has(c.key)).length;
   // fields 순서 = keys.cell(i, 0..10) 열 번호. Cost Amount·Amount 는 계산 컬럼이라 뺀다.
-  // 주행 필드(0~7)를 앞에, 서브행 필드(8~10)를 뒤에 둔다 — 엑셀에서 여러 컬럼을 한 번에
+  // 주행 필드(0~8)를 앞에, 서브행 필드(9~10)를 뒤에 둔다 — 엑셀에서 여러 컬럼을 한 번에
   // 붙여넣을 때 화면에 보이는 주행 컬럼 순서와 맞아야 값이 제자리에 들어간다.
   const keys = useItemGridKeys<CustomerQuoteItem>({
     items,
     onChange,
-    fields: ["part_no", "description", "qty", "unit", "cost_price", "margin_pct", "unit_price", "remark", "type", "serial_no", "lead_time"],
+    fields: ["part_no", "description", "qty", "unit", "cost_price", "margin_pct", "unit_price", "lead_time", "remark", "type", "serial_no"],
     numeric: ["qty", "cost_price", "margin_pct", "unit_price"],
     blank,
-    headers: ["Part No.", "Description", "Qty", "Unit", `Cost (${costCur})`, "Margin %", `Unit Price (${saleCur})`, "Remark", "Type", "Serial No.", "Lead Time"],
+    headers: ["Part No.", "Description", "Qty", "Unit", `Cost (${costCur})`, "Margin %", `Unit Price (${saleCur})`, "Lead Time", "Remark", "Type", "Serial No."],
     sel,
     normalizeRow,
   });
@@ -4042,19 +4053,21 @@ function CustomerQuoteItemEditor({
   // 합계행(tfoot)도 colspan 으로 구성한다 — "Total" 라벨을 No.~Unit 구간을 통합한 셀 가운데에
   // 두고, 매입 합계는 Cost Amount 칸, 매출 합계는 Amount 칸에 둔다. 그룹행과 같은 방식으로
   // 숨김 컬럼을 건너뛰어 항상 정렬을 맞춘다(.ig-foot → ItemGridStyle nth-child 규칙에서 제외).
-  const footRole = (key: string): "label" | "purchase" | "sales" | "empty" =>
+  type FootRole = "label" | "purchase" | "margin" | "sales" | "empty";
+  const footRole = (key: string): FootRole =>
     key === "cost_amount" ? "purchase"
-      : key === "amount" ? "sales"
-        : key === "__seq" || key === "part_no" || key === "description" ||
-            key === "qty" || key === "unit" ? "label"
-          : "empty";
-  const footSegments: { role: "label" | "purchase" | "sales" | "empty"; span: number; keys: string[] }[] = [];
+      : key === "margin" ? "margin"
+        : key === "amount" ? "sales"
+          : key === "__seq" || key === "part_no" || key === "description" ||
+              key === "qty" || key === "unit" ? "label"
+            : "empty";
+  const footSegments: { role: FootRole; span: number; keys: string[] }[] = [];
   for (const c of grid.cols) {
     if (!c.fixed && grid.layout.hidden.has(c.key)) continue;
     const role = footRole(c.key);
     const last = footSegments[footSegments.length - 1];
-    // label·empty 는 연속 구간을 합치고, 값(purchase·sales)은 단일 칸으로 둔다.
-    if (last && last.role === role && role !== "purchase" && role !== "sales") {
+    // label·empty 는 연속 구간을 합치고, 값(purchase·margin·sales)은 단일 칸으로 둔다.
+    if (last && last.role === role && role !== "purchase" && role !== "margin" && role !== "sales") {
       last.span += 1;
       last.keys.push(c.key);
     } else {
@@ -4079,7 +4092,7 @@ function CustomerQuoteItemEditor({
           <button
             type="button"
             className={`btn sm${allOpen ? " primary" : ""}`}
-            title="Show Type · Serial No. · Lead Time · Category for every row"
+            title="Show Type · Serial No. · Category for every row"
             onClick={() => { setAllOpen((v) => !v); setOpenRows(new Set()); }}
           >
             {allOpen ? "Hide details" : "Details"}
@@ -4122,6 +4135,7 @@ function CustomerQuoteItemEditor({
               <ItemTh grid={grid} k="margin" className="num">Margin %</ItemTh>
               <ItemTh grid={grid} k="unit_price" className="num">Unit Price ({saleCur})</ItemTh>
               <ItemTh grid={grid} k="amount" className="num">Amount ({saleCur})</ItemTh>
+              <ItemTh grid={grid} k="lead_time">Lead Time</ItemTh>
               <ItemTh grid={grid} k="remark">Remark</ItemTh>
             </tr>
           </thead>
@@ -4134,7 +4148,7 @@ function CustomerQuoteItemEditor({
                   <button
                     type="button"
                     className={`item-exp${isOpen(i) ? " on" : ""}${hasDetail(it) ? " has" : ""}`}
-                    title={isOpen(i) ? "Hide details" : "Show details (Type · Serial No. · Lead Time · Category)"}
+                    title={isOpen(i) ? "Hide details" : "Show details (Type · Serial No. · Category)"}
                     onClick={() => toggleRow(i)}
                   >
                     ▸
@@ -4157,8 +4171,10 @@ function CustomerQuoteItemEditor({
                 /></td>
                 <td><input {...keys.cell(i, 6)} className="num" value={amountInputValue(it.unit_price)} onChange={(e) => patch(i, "unit_price", e.target.value)} /></td>
                 <td className="num">{amountInputValue(it.amount)}</td>
+                {/* 납기 — 공급사 견적에서 그대로 넘어오고 견적서 품목표에도 인쇄되는 값. */}
+                <td><textarea {...keys.cell(i, 7)} className="wrapcell" rows={1} value={it.lead_time ?? ""} onChange={(e) => patch(i, "lead_time", e.target.value)} /></td>
                 {/* 견적서 품목표의 Remark 칸에 그대로 찍히는 값. */}
-                <td><textarea {...keys.cell(i, 7)} className="wrapcell" rows={1} value={it.remark ?? ""} onChange={(e) => patch(i, "remark", e.target.value)} /></td>
+                <td><textarea {...keys.cell(i, 8)} className="wrapcell" rows={1} value={it.remark ?? ""} onChange={(e) => patch(i, "remark", e.target.value)} /></td>
               </tr>
               {/* 상세 서브행 — 주행에서 내린 부수 필드. 접혀 있으면 렌더하지 않는다.
                   colSpan 은 표시 중인 주행 칸 수와 맞춘다(컬럼을 숨겨도 정렬 유지). */}
@@ -4166,21 +4182,17 @@ function CustomerQuoteItemEditor({
                 <tr className="item-subrow">
                   <td colSpan={mainColSpan}>
                     <div className="isr-fields">
-                      {/* Remark 는 주행 컬럼으로 올라갔다(견적서 품목표에 그대로 인쇄되는 값). */}
+                      {/* Lead Time·Remark 는 주행 컬럼으로 올라갔다(견적서 품목표에 그대로 인쇄되는 값). */}
                       <label className="isr-f">
                         <span className="isr-l">1. Type</span>
-                        <textarea {...keys.cell(i, 8)} className="wrapcell" rows={1} value={it.type ?? ""} onChange={(e) => patch(i, "type", e.target.value)} />
+                        <textarea {...keys.cell(i, 9)} className="wrapcell" rows={1} value={it.type ?? ""} onChange={(e) => patch(i, "type", e.target.value)} />
                       </label>
                       <label className="isr-f">
                         <span className="isr-l">2. Serial No.</span>
-                        <textarea {...keys.cell(i, 9)} className="wrapcell" rows={1} value={it.serial_no ?? ""} onChange={(e) => patch(i, "serial_no", e.target.value)} />
-                      </label>
-                      <label className="isr-f">
-                        <span className="isr-l">3. Lead Time</span>
-                        <textarea {...keys.cell(i, 10)} className="wrapcell" rows={1} value={it.lead_time ?? ""} onChange={(e) => patch(i, "lead_time", e.target.value)} />
+                        <textarea {...keys.cell(i, 10)} className="wrapcell" rows={1} value={it.serial_no ?? ""} onChange={(e) => patch(i, "serial_no", e.target.value)} />
                       </label>
                       <span className="isr-f">
-                        <span className="isr-l">4. Category</span>
+                        <span className="isr-l">3. Category</span>
                         <CategoryCell value={it.category_id} partNo={it.part_no} description={it.description} onChange={(id) => patchCategory(i, id)} />
                       </span>
                     </div>
@@ -4208,6 +4220,32 @@ function CustomerQuoteItemEditor({
                       {footFxVisible("cost_amount") ? (
                         <span className="fx-note">Purchase · {fxRateText(rate)}</span>
                       ) : null}
+                    </td>
+                  );
+                {/* 최종 마진 — 매출 합계 기준(= (매출 − 매입) ÷ 매출). 행에 적은 마진%가
+                    아니라 올림·개별 수정까지 반영된 결과라, 손실이면 붉게 세운다. */}
+                if (s.role === "margin")
+                  return (
+                    <td
+                      key={fi}
+                      className={`ig-foot num total-value foot-margin${profit < 0 ? " loss" : ""}`}
+                      colSpan={s.span}
+                      {...igSpan(s.keys)}
+                      title={
+                        marginPct == null
+                          ? undefined
+                          : `Final margin on the sale total — (${dualCurrencyText(total, currency, rate)}`
+                            + ` − ${dualCurrencyText(purchaseInSale, currency, rate)}) ÷ sales`
+                      }
+                    >
+                      {marginPct == null ? null : (
+                        <span className="dual-amount">
+                          <span className="dual-line primary">{marginPct.toFixed(1)}%</span>
+                          <span className="dual-line converted">
+                            {moneyText(profit)} {(currency || "USD").toUpperCase()}
+                          </span>
+                        </span>
+                      )}
                     </td>
                   );
                 if (s.role === "sales")

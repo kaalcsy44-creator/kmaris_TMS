@@ -3442,6 +3442,22 @@ table.mini.wide tfoot td.foot-total-label {
 .ig-cquote-items tfoot td.foot-sales {
   background: #e2ecfb;
 }
+/* 최종 마진 — 매입칸과 매출칸 사이에 놓인 이 견적의 결론이다. 양쪽 그룹색 어디에도
+   속하지 않으니 중립 배경에 초록 글자로 세우고, 마이너스면 붉게 뒤집는다. */
+.ig-cquote-items tfoot td.foot-margin {
+  background: #f2f6f3;
+  color: #12734a;
+  font-weight: 700;
+}
+.ig-cquote-items tfoot td.foot-margin .dual-line.converted {
+  color: #5d7a6b;
+  font-weight: 500;
+}
+.ig-cquote-items tfoot td.foot-margin.loss {
+  background: #fdf1f0;
+  color: #b42318;
+}
+.ig-cquote-items tfoot td.foot-margin.loss .dual-line.converted { color: #a4635c; }
 /* 합계 금액·환율 주석은 기본적으로 한 줄(nowrap)이지만, 사용자가 그 컬럼(Cost Amount·Amount)을
    좁히면 칸을 넘어 옆으로 삐져나온다. 품목표 합계행에서만 줄바꿈을 허용해 칸 안에 머물게 한다. */
 table.mini.wide.lead-tools tfoot .dual-line,
