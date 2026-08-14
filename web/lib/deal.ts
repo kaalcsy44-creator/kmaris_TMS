@@ -139,6 +139,24 @@ export function makeItemMatcher<T extends { part_no?: string }>(items: T[]) {
   };
 }
 
+/**
+ * 활동기록을 어느 단계 밑에 붙일지 — 그 시각에 아직 끝나지 않았던 첫 단계.
+ *
+ * 오늘 쓰는 노트는 결국 현재 단계로 가지만, 날짜를 며칠 앞으로 돌려 적을 때(지난주
+ * 통화를 뒤늦게 남길 때)는 그때 진행 중이던 단계에 붙어야 개요 화면의 타임라인이
+ * 사실대로 읽힌다. 단계를 알 수 없으면 현재 단계.
+ */
+export function stageForNote(chain: StageChainItem[], iso: string, current: number): number {
+  const t = Date.parse((iso || "").slice(0, 16));
+  if (Number.isNaN(t)) return current;
+  for (const c of chain) {
+    if (!c.at) continue;
+    const ct = Date.parse(c.at);
+    if (!Number.isNaN(ct) && ct >= t) return c.no;
+  }
+  return current;
+}
+
 export type StageChainItem = {
   no: number;
   label: string;

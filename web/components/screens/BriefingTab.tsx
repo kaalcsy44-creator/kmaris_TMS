@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
+  addRfqStageNote,
   fetchCustomers,
   fetchMailDigest,
   fetchMailStatus,
@@ -20,7 +21,19 @@ import VendorMonograms from "@/components/common/VendorMonograms";
 import { buildActivities, daysSinceISO, hm, lastActivityISO, md } from "@/lib/activity";
 import { isLabelledRollup, parseRollupLine } from "@/lib/rollup";
 import type { Activity } from "@/lib/activity";
-import { vendorOf } from "@/lib/deal";
+import ActivityNoteForm, {
+  initialNoteValue,
+  noteFormToPatch,
+  type ActivityNoteValue,
+} from "@/components/common/ActivityNoteForm";
+import {
+  activityParties,
+  activityPersons,
+  buildStageChain,
+  resolveSteps,
+  stageForNote,
+  vendorOf,
+} from "@/lib/deal";
 
 // Briefing — 아침에 가장 먼저 여는 화면. 프로젝트 하나가 카드 하나다.
 //
@@ -488,6 +501,9 @@ export default function BriefingTab() {
                   setStageTarget({ stage: act.stage, vrfqId: act.vrfqId });
                   setOpenRfqId(c.row.rfq_id);
                 }}
+                // 새 기록은 파이프라인에서 온다(stage_notes) — 메일 집계는 건드리지 않으니
+                // 그쪽까지 다시 부르지 않는다.
+                onAdded={refreshPipeline}
               />
             ))}
           </div>
@@ -566,6 +582,7 @@ function BriefCard({
   waitingAfter,
   onOpen,
   onOpenStage,
+  onAdded,
 }: {
   card: Card;
   steps: string[];
@@ -575,8 +592,10 @@ function BriefCard({
   waitingAfter: number;
   onOpen: () => void;
   onOpenStage: (act: Activity) => void;
+  onAdded: () => void | Promise<unknown>;
 }) {
   const { row, mail } = card;
+  const [adding, setAdding] = useState(false);
   const waiting = card.waitingDays >= waitingAfter;
   const stageLabel = row.stage > 0 ? steps[row.stage - 1] || "" : "";
   const vessel = (row.vessels || row.vessel || "").split("\n").filter(Boolean).join(" · ");
@@ -699,6 +718,18 @@ function BriefCard({
         ))}
       </ol>
 
+      {/* 카드에서 바로 남기는 활동기록. 읽던 자리에서 쓰게 하려는 것이라, 폼은 지금 읽고
+          있던 줄 바로 아래에 편다 — 카드를 열거나 Activity 로 건너가면 방금 읽은 맥락을
+          잃는다. */}
+      {adding ? (
+        <BriefAddNote
+          row={row}
+          steps={steps}
+          onDone={async () => { setAdding(false); await onAdded(); }}
+          onCancel={() => setAdding(false)}
+        />
+      ) : null}
+
       <div className="brief-foot">
         <span>
           {card.mailCount
@@ -706,6 +737,15 @@ function BriefCard({
             : "no mail linked"}
           {card.mailCount && (!mail || mail.recent_count === 0) ? ` · none in ${DAYS}d` : ""}
         </span>
+        <button
+          type="button"
+          className={`brief-add${adding ? " on" : ""}`}
+          onClick={() => setAdding((v) => !v)}
+          title={adding ? "Cancel" : "Add an activity note to this deal"}
+          aria-label="Add activity note"
+        >
+          {adding ? "×" : "+"}
+        </button>
         {/* 이 카드만 펴고 접는 자리 — 새 버튼을 달지 않고 원래 있던 "N more" 를 누를 수
             있게 했다. 카드마다 같은 장식이 하나씩 늘면 보드가 그만큼 시끄러워진다. */}
         {card.lines.length > show ? (
@@ -716,6 +756,62 @@ function BriefCard({
         <button type="button" className="mail-card-open" onClick={onOpen}>Open ▸</button>
       </div>
     </section>
+  );
+}
+
+// 카드 안의 활동기록 입력. 폼은 Activity·개요 화면과 같은 것을 쓰고(ActivityNoteForm),
+// 저장도 같은 stage_notes 로 간다 — 여기서 남긴 줄이 다른 화면에서 안 보이면, 화면마다
+// 다른 업무일지를 쓰는 셈이 된다.
+//
+// 붙는 단계는 고르게 하지 않고 입력한 일시로 정한다(stageForNote). 카드에는 단계를 고를
+// 자리가 없고, 지금 남기는 기록은 대개 지금 단계의 일이다.
+function BriefAddNote({
+  row,
+  steps,
+  onDone,
+  onCancel,
+}: {
+  row: PipelineRow;
+  steps: string[];
+  onDone: () => void | Promise<unknown>;
+  onCancel: () => void;
+}) {
+  const [form, setForm] = useState<ActivityNoteValue>(() => initialNoteValue());
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  async function submit() {
+    if (!form.text.trim()) return;
+    setBusy(true);
+    setErr("");
+    try {
+      const patch = noteFormToPatch(form);
+      const chain = buildStageChain(row, resolveSteps(steps, row.work_type));
+      const stage = stageForNote(chain, patch.datetime || "", row.stage);
+      await addRfqStageNote(row.rfq_id, stage, patch);
+      await onDone();
+    } catch (e) {
+      // 실패를 카드 안에서 말한다 — 폼은 그대로 두어 쓴 내용을 잃지 않게.
+      setErr(e instanceof Error ? e.message : "Could not save the note");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="brief-add-note">
+      <ActivityNoteForm
+        value={form}
+        onChange={setForm}
+        onSubmit={submit}
+        onCancel={onCancel}
+        submitLabel="Add"
+        busy={busy}
+        partyPresets={activityParties(row)}
+        personPresets={activityPersons(row)}
+      />
+      {err ? <div className="action-err">{err}</div> : null}
+    </div>
   );
 }
 

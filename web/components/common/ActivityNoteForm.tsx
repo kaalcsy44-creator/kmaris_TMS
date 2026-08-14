@@ -23,6 +23,32 @@ export type ActivityNoteValue = {
   pic: string;
 };
 
+/** 활동기록 저장 payload. 폼과 같은 파일에 둔다 — 쓰는 화면마다 모양이 갈라지지 않게. */
+export type NotePatch = {
+  text: string;
+  datetime?: string;
+  direction?: string;
+  party?: string;
+  person?: string;
+  channel?: string;
+  star?: boolean;
+  pic?: string;
+};
+
+/** 폼 값 → 저장 payload. 빈 값은 보내지 않아 서버가 '미지정'으로 남긴다. */
+export function noteFormToPatch(v: ActivityNoteValue): NotePatch {
+  return {
+    text: v.text.trim(),
+    datetime: v.datetime,
+    direction: v.direction || undefined,
+    party: v.party || undefined,
+    person: v.person || undefined,
+    channel: v.channel || undefined,
+    star: v.star,
+    pic: v.pic.trim() || undefined,
+  };
+}
+
 const CHANNEL_PRESETS = ["Email", "Message", "Call"];
 
 /** datetime-local 기본값(현재 시각, 분 단위) "YYYY-MM-DDTHH:MM". */

@@ -30,7 +30,9 @@ import VendorMonograms from "@/components/common/VendorMonograms";
 import ActivityDesc from "@/components/common/ActivityDesc";
 import ActivityNoteForm, {
   initialNoteValue,
+  noteFormToPatch as formToPatch,
   type ActivityNoteValue,
+  type NotePatch,
 } from "@/components/common/ActivityNoteForm";
 import { PipelineModal, byProjectNo } from "@/components/screens/ProjectsScreen";
 import Modal from "@/components/common/Modal";
@@ -152,7 +154,6 @@ function todayISO(): string {
 }
 
 // 기존 활동 노트 수정 시 전달하는 값.
-type NotePatch = { text: string; datetime?: string; direction?: string; party?: string; person?: string; channel?: string; star?: boolean; pic?: string };
 
 
 export default function ActivityScreen() {
@@ -808,20 +809,6 @@ function noteToForm(n: StageNote): ActivityNoteValue {
     star: !!n.star,
     pic: n.pic || "",
   });
-}
-
-/** 폼 값 → 저장 payload. 빈 값은 보내지 않아 서버가 '미지정'으로 남긴다. */
-function formToPatch(v: ActivityNoteValue): NotePatch {
-  return {
-    text: v.text.trim(),
-    datetime: v.datetime,
-    direction: v.direction || undefined,
-    party: v.party || undefined,
-    person: v.person || undefined,
-    channel: v.channel || undefined,
-    star: v.star,
-    pic: v.pic.trim() || undefined,
-  };
 }
 
 // 기존 활동 노트 1건 — 표시/인라인 수정 토글.

@@ -22,6 +22,7 @@ import { sortByDocNo } from "@/lib/sort";
 import {
   resolveSteps,
   buildStageChain,
+  stageForNote,
   makeItemMatcher,
   ciPurchase,
   activityParties,
@@ -46,6 +47,7 @@ import ProjectMailPanel, { projectMailKey } from "@/components/common/ProjectMai
 import ActivityDesc from "@/components/common/ActivityDesc";
 import ActivityNoteForm, {
   initialNoteValue,
+  noteFormToPatch,
   type ActivityNoteValue,
 } from "@/components/common/ActivityNoteForm";
 import WorkTypeBadge from "@/components/WorkTypeBadge";
@@ -657,17 +659,6 @@ function renderMailRow(m: MailMessage, key: string) {
   );
 }
 
-function stageForNote(chain: StageChainItem[], iso: string, current: number): number {
-  const t = Date.parse((iso || "").slice(0, 16));
-  if (Number.isNaN(t)) return current;
-  for (const c of chain) {
-    if (!c.at) continue;
-    const ct = Date.parse(c.at);
-    if (!Number.isNaN(ct) && ct >= t) return c.no;
-  }
-  return current;
-}
-
 /**
  * 단계 + 활동 — 단계가 뼈대, 사람이 쓴 노트가 그 단계 아래 붙는다.
  *
@@ -977,21 +968,6 @@ function StageTimeline({
   );
 }
 
-/** 활동기록(stage note) → 저장 payload. 빈 값은 보내지 않아 서버가 '미지정'으로 남긴다.
- *  (ActivityScreen 의 formToPatch 와 같은 규칙 — 두 화면이 같은 stage_notes 에 쓴다.) */
-function noteFormToPatch(v: ActivityNoteValue) {
-  return {
-    text: v.text.trim(),
-    datetime: v.datetime,
-    direction: v.direction || undefined,
-    party: v.party || undefined,
-    person: v.person || undefined,
-    channel: v.channel || undefined,
-    star: v.star,
-    pic: v.pic.trim() || undefined,
-  };
-}
-
 /** 저장된 노트 → 폼 값(ActivityScreen 의 noteToForm 과 같은 규칙). */
 function noteToForm(n: StageNote): ActivityNoteValue {
   return initialNoteValue({
@@ -1177,7 +1153,7 @@ function StageAddNote({
     setBusy(true);
     try {
       const patch = noteFormToPatch(form);
-      const stage = stageForNote(chain, patch.datetime, currentStage);
+      const stage = stageForNote(chain, patch.datetime || "", currentStage);
       await addRfqStageNote(rfqId, stage, patch);
       await onDone();
     } finally {
