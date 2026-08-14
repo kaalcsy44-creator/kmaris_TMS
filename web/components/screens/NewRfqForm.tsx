@@ -15,6 +15,7 @@ import {
 } from "@/lib/api";
 import type { CustomerOption, SettingsVessel, RfqSourceFile } from "@/lib/types";
 import { can, canEditDeal, editBlockReason } from "@/lib/auth";
+import Modal from "@/components/common/Modal";
 import CustomerName from "@/components/common/CustomerName";
 import CustomerSelect from "@/components/common/CustomerSelect";
 import { useColumnLayout } from "@/components/common/useColumnLayout";
@@ -142,6 +143,13 @@ export default function NewRfqForm({
   const [vesselHint, setVesselHint] = useState("");
   // Auto-fill 로 업로드·추출한 소스 파일 메타(RFQ 저장 시 함께 보관 → 재접속해도 유지).
   const [ocrFiles, setOcrFiles] = useState<RfqSourceFile[]>([]);
+  // Copy as new — 이 RFQ 를 새 딜로 복제(품목 선택 가능). 성격이 다른 품목을 여러 딜로
+  // 쪼갤 때 쓴다. move=true 면 고른 품목을 원본에서 빼내 "분할"이 된다.
+  const [copyOpen, setCopyOpen] = useState(false);
+  const [copyPick, setCopyPick] = useState<Set<number>>(() => new Set());
+  const [copyMove, setCopyMove] = useState(false);
+  const [copyBusy, setCopyBusy] = useState(false);
+  const [copyErr, setCopyErr] = useState<string | null>(null);
   // 품목 표 컬럼 폭(헤더 경계 드래그로 조절, localStorage 유지).
   const itemCols = useColumnLayout("rfq-item-cols", RFQ_ITEM_COLS);
   const itemColW = (k: string) => itemCols.widths[k] ?? RFQ_ITEM_DEFAULT_W[k];
@@ -433,15 +441,9 @@ export default function NewRfqForm({
     }
   }
 
-  async function submit() {
-    if (customerId === "") {
-      setErr(companyName ? "Select a customer contact." : "Select a customer.");
-      return;
-    }
-    setBusy(true);
-    setErr(null);
-    setMsg(null);
-    const cleanItems = items
+  // 화면의 품목 행 → API 페이로드(내용 없는 행은 버린다).
+  function toApiItems(rows: ItemRow[]) {
+    return rows
       .filter((it) => it.part_no.trim() || it.description.trim())
       .map((it) => ({
         part_no: it.part_no,
@@ -452,18 +454,36 @@ export default function NewRfqForm({
         remark: it.remark,
         category_id: it.category_id,
       }));
+  }
+
+  // 품목을 뺀 헤더 필드 — 저장·복사가 같은 값을 쓰도록 한 곳에서 만든다.
+  function headerPayload() {
+    return {
+      customer_rfq_no: custRfqNo,
+      contact_person: contactPerson,
+      received_at: receivedAt || undefined,
+      project_title: projectTitle,
+      work_type: workType,
+      request_channel: requestChannel,
+      notes,
+    };
+  }
+
+  async function submit() {
+    if (customerId === "") {
+      setErr(companyName ? "Select a customer contact." : "Select a customer.");
+      return;
+    }
+    setBusy(true);
+    setErr(null);
+    setMsg(null);
+    const cleanItems = toApiItems(items);
     try {
       if (editId) {
         await updateRfq(editId, {
+          ...headerPayload(),
           customer_id: customerId,
           vessel_id: vesselId === "" ? 0 : vesselId,
-          customer_rfq_no: custRfqNo,
-          contact_person: contactPerson,
-          received_at: receivedAt || undefined,
-          project_title: projectTitle,
-          work_type: workType,
-          request_channel: requestChannel,
-          notes,
           assignee_id: assigneeId,   // 담당자(PIC) 재지정. 0 → 미지정 해제
           items: cleanItems,
           source_files: ocrFiles,
@@ -472,15 +492,9 @@ export default function NewRfqForm({
         onCreated?.(""); // 목록·상위 새로고침
       } else {
         const r = await createRfq({
+          ...headerPayload(),
           customer_id: customerId,
           vessel_id: vesselId === "" ? undefined : vesselId,
-          customer_rfq_no: custRfqNo,
-          contact_person: contactPerson,
-          received_at: receivedAt || undefined,
-          project_title: projectTitle,
-          work_type: workType,
-          request_channel: requestChannel,
-          notes,
           items: cleanItems,
           source_files: ocrFiles,
         });
@@ -492,6 +506,93 @@ export default function NewRfqForm({
       setErr(e instanceof Error ? e.message : editId ? "Update failed" : "Create failed");
     } finally {
       setBusy(false);
+    }
+  }
+
+  // 내용이 있는 품목 행의 인덱스 — 복사 대화상자의 선택 대상.
+  const copyableRows = items
+    .map((it, i) => ({ it, i }))
+    .filter(({ it }) => it.part_no.trim() || it.description.trim());
+
+  function openCopy() {
+    // 표에서 이미 체크해 둔 행이 있으면 그대로 가져오고, 없으면 전체를 고른 상태로 연다.
+    const preset = itemSel.count
+      ? copyableRows.filter(({ i }) => itemSel.selected.has(i)).map(({ i }) => i)
+      : copyableRows.map(({ i }) => i);
+    setCopyPick(new Set(preset));
+    setCopyMove(false);
+    setCopyErr(null);
+    setCopyOpen(true);
+  }
+
+  function toggleCopyPick(i: number) {
+    setCopyPick((prev) => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i);
+      else next.add(i);
+      return next;
+    });
+  }
+
+  // 지금 화면의 헤더 + 고른 품목으로 새 RFQ(=새 딜)를 만든다.
+  // move 면 고른 품목을 원본에서 빼고 원본도 함께 저장한다(딜 분할).
+  async function runCopy() {
+    if (customerId === "") {
+      setCopyErr(companyName ? "Select a customer contact." : "Select a customer.");
+      return;
+    }
+    const picked = toApiItems(items.filter((_, i) => copyPick.has(i)));
+    if (!picked.length) {
+      setCopyErr("Select at least one item to copy.");
+      return;
+    }
+    const restRows = items.filter((_, i) => !copyPick.has(i));
+    const rest = toApiItems(restRows);
+    if (copyMove && !rest.length) {
+      setCopyErr("Moving every item would leave the source RFQ empty. Leave one behind, or uncheck Move.");
+      return;
+    }
+    setCopyBusy(true);
+    setCopyErr(null);
+    try {
+      const r = await createRfq({
+        ...headerPayload(),
+        customer_id: customerId,
+        vessel_id: vesselId === "" ? undefined : vesselId,
+        items: picked,
+        source_files: ocrFiles,
+      });
+      // 신규 생성은 로그인 사용자를 담당자로 잡으므로, 원본 담당자(PIC)에 맞춰준다.
+      if (assigneeId > 0) {
+        try {
+          await updateRfq(r.id, { assignee_id: assigneeId });
+        } catch {
+          /* 담당자 보정 실패는 복사 자체를 되돌릴 만한 일이 아니다 */
+        }
+      }
+      if (copyMove && editId) {
+        await updateRfq(editId, {
+          ...headerPayload(),
+          customer_id: customerId,
+          vessel_id: vesselId === "" ? 0 : vesselId,
+          assignee_id: assigneeId,
+          items: rest,
+          source_files: ocrFiles,
+        });
+        setItems(restRows.length ? restRows : [{ ...EMPTY_ITEM }]);
+        itemSel.clear();
+      }
+      setCopyOpen(false);
+      setMsg(
+        `${copyMove ? "Split" : "Copied"} — ${r.rfq_no} · ${picked.length} item${
+          picked.length === 1 ? "" : "s"
+        }`
+      );
+      onCreated?.(""); // 목록·상위 새로고침 — 새 딜이 보이도록
+    } catch (e) {
+      setCopyErr(e instanceof Error ? e.message : "Copy failed");
+    } finally {
+      setCopyBusy(false);
     }
   }
 
@@ -897,6 +998,17 @@ export default function NewRfqForm({
             {busy ? "Working…" : editId ? "Save RFQ" : "Create RFQ"}
           </button>
         )}
+        {/* 이 RFQ 를 새 딜로 복제 — 품목을 골라 복사하거나, 골라서 떼어내(분할) 다른 딜로 보낸다. */}
+        {editId && can("rfq", "create") ? (
+          <button
+            className="btn"
+            onClick={openCopy}
+            disabled={busy || customerId === ""}
+            title="Copy this RFQ into a new deal (pick which items go with it)"
+          >
+            📋 Copy as new
+          </button>
+        ) : null}
         {onDeleted && editId && canDeleteThis ? (
           <button className="btn danger" onClick={handleDelete} disabled={busy}>
             Delete
@@ -905,6 +1017,90 @@ export default function NewRfqForm({
         {msg ? <span className="action-ok">{msg}</span> : null}
         {err ? <span className="action-err">{err}</span> : null}
       </div>
+
+      {copyOpen ? (
+        <Modal title="📋 Copy RFQ as a new deal" onClose={() => setCopyOpen(false)} form maxWidth={720}>
+          <div className="hint-inline">
+            Creates a new Customer RFQ with this deal’s header ({customerName || "—"}
+            {projectTitle ? ` · ${projectTitle}` : ""}) and the items you pick below. Stage 2+
+            records (vendor RFQs, quotes) are not copied — the new deal starts at stage 1.
+          </div>
+
+          <div className="items-head" style={{ marginTop: 14 }}>
+            <div className="sub-h">Items to copy ({copyPick.size}/{copyableRows.length})</div>
+            <div className="items-head-actions">
+              <button
+                type="button"
+                className="btn sm"
+                onClick={() => setCopyPick(new Set(copyableRows.map(({ i }) => i)))}
+              >
+                All
+              </button>
+              <button type="button" className="btn sm" onClick={() => setCopyPick(new Set())}>
+                None
+              </button>
+            </div>
+          </div>
+          <div className="table-wrap item-box">
+            <table className="mini">
+              <thead>
+                <tr>
+                  <th style={{ width: 32 }} />
+                  <th className="seq">#</th>
+                  <th>Part No.</th>
+                  <th>Description</th>
+                  <th className="num">Qty</th>
+                </tr>
+              </thead>
+              <tbody>
+                {copyableRows.map(({ it, i }) => (
+                  <tr key={i}>
+                    <td>
+                      <input
+                        type="checkbox"
+                        checked={copyPick.has(i)}
+                        onChange={() => toggleCopyPick(i)}
+                        aria-label={`Copy item ${i + 1}`}
+                      />
+                    </td>
+                    <td className="seq">{i + 1}</td>
+                    <td className="wrapcell">{it.part_no || "—"}</td>
+                    <td className="desc">{it.description || "—"}</td>
+                    <td className="num">{it.qty}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <label className="form-field" style={{ marginTop: 14, flexDirection: "row", gap: 8, alignItems: "center" }}>
+            <input
+              type="checkbox"
+              checked={copyMove}
+              onChange={(e) => setCopyMove(e.target.checked)}
+              disabled={!canEditThis}
+            />
+            <span>
+              Move — remove the picked items from this RFQ (split the deal). This saves the
+              current form to the source RFQ as well.
+            </span>
+          </label>
+
+          <div className="form-actions">
+            <button
+              className="btn primary"
+              onClick={runCopy}
+              disabled={copyBusy || copyPick.size === 0 || (copyMove && !canEditThis)}
+            >
+              {copyBusy ? "Working…" : copyMove ? "Split into new deal" : "Create copy"}
+            </button>
+            <button className="btn" onClick={() => setCopyOpen(false)} disabled={copyBusy}>
+              Cancel
+            </button>
+            {copyErr ? <span className="action-err">{copyErr}</span> : null}
+          </div>
+        </Modal>
+      ) : null}
     </div>
   );
 }
