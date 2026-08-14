@@ -3833,9 +3833,13 @@ function MailboxTab() {
 
   const auto = status.auto;
   const last = auto.last_result || {};
-  const lastParts = Object.entries(last)
-    .filter(([k, v]) => k !== "at" && k !== "error" && v)
-    .map(([k, v]) => `${k} ${v}`);
+  const resultParts = (r: Record<string, number | string>) =>
+    Object.entries(r || {})
+      .filter(([k, v]) => k !== "at" && k !== "error" && k !== "ok" && v)
+      .map(([k, v]) => `${k} ${v}`);
+  const lastParts = resultParts(last);
+  const manual = status.manual || { last_at: "", last_result: {} };
+  const manualParts = resultParts(manual.last_result);
 
   return (
     <div className="panel">
@@ -3874,8 +3878,11 @@ function MailboxTab() {
               )}
             </td>
           </tr>
+          {/* 아침 자동 실행과 사람이 누른 Sync 를 한 줄에 섞지 않는다 — 예전에는 이
+              줄이 자동 실행만 가리켜, Sync 를 눌러도 값이 그대로라 아무 일도 안 일어난
+              것처럼 보였다. */}
           <tr>
-            <th>Last run</th>
+            <th>Last daily run</th>
             <td>
               {auto.running_since ? (
                 <b>running now — started {auto.running_since}</b>
@@ -3887,6 +3894,24 @@ function MailboxTab() {
                 </>
               ) : (
                 <span className="muted">has not run yet</span>
+              )}
+            </td>
+          </tr>
+          <tr>
+            <th>Last manual sync</th>
+            <td>
+              {manual.last_at ? (
+                <>
+                  {manual.last_at}
+                  {manualParts.length ? (
+                    <span className="muted"> · {manualParts.join(" · ")}</span>
+                  ) : null}
+                  {/* 수동 Sync 는 카드 요약을 만들지 않는다 — 브리핑 요약이 비어 있을 때
+                      여기를 보고 "동기화는 됐는데 요약이 없구나"를 알 수 있어야 한다. */}
+                  <span className="muted"> · digests are written by the daily run</span>
+                </>
+              ) : (
+                <span className="muted">not pressed yet</span>
               )}
             </td>
           </tr>

@@ -1693,6 +1693,11 @@ export type MailStatus = {
     last_result: Record<string, number | string>;
     running_since: string;      // 지금 돌고 있으면 시작 시각, 아니면 빈 문자열
   };
+  // 사람이 누른 Sync. 자동 실행과 하는 일이 달라(카드 요약을 만들지 않는다) 따로 남긴다.
+  manual: {
+    last_at: string;
+    last_result: Record<string, number | string>;
+  };
   folders: { folder: string; last_uid: number; last_synced_at: string; last_error: string }[];
 };
 // 메일은 오갔지만 Settings 에 없는 상대. 저장 범위를 등록된 거래처로 좁힌 대가라,

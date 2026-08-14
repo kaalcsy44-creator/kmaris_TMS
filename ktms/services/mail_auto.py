@@ -79,6 +79,24 @@ def _save_state(s, value: dict) -> None:
     s.commit()
 
 
+def record_manual(s, result: dict) -> None:
+    """사람이 누른 Sync 를 남긴다 — 자동 실행의 하루 한 번 판정은 건드리지 않는다.
+
+    last_run_date 까지 오늘로 찍으면 due() 가 False 가 되어 그날 자동 실행이 통째로
+    건너뛰어진다. 수동 Sync 는 카드 요약(digests)까지 만들지는 않으므로, 그러면
+    대시보드 요약만 조용히 비어 있게 된다. 그래서 날짜는 그대로 두고 수동 기록만
+    따로 얹는다."""
+    now = datetime.now(mail_sync.KST)
+    try:
+        value = dict(state(s))
+        value["last_manual_at"] = now.strftime("%Y-%m-%d %H:%M")
+        value["last_manual_result"] = {k: v for k, v in (result or {}).items() if k != "folders"}
+        _save_state(s, value)
+    except Exception as exc:
+        s.rollback()
+        print(f"[WARN] manual sync not recorded: {exc}", file=sys.stderr)
+
+
 def due(s, now: datetime | None = None) -> bool:
     """지금 오늘 몫을 돌려야 하는가 — 실행 시각을 지났고 오늘 아직 안 돌았으면."""
     cfg = config()

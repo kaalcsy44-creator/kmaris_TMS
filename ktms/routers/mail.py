@@ -181,6 +181,12 @@ def mail_status():
                 # "아직 안 돌았음"으로 보이면, 사람은 버튼을 눌러 거절만 당한다.
                 "running_since": mail_sync.is_syncing(),
             },
+            # 사람이 누른 Sync — 자동 실행과 섞지 않는다. 둘은 하는 일이 다르고
+            # (수동은 카드 요약을 만들지 않는다), 화면에서도 갈라 보여 준다.
+            "manual": {
+                "last_at": last.get("last_manual_at", ""),
+                "last_result": last.get("last_manual_result", {}),
+            },
             "folders": [
                 {"folder": st.folder,
                  "last_uid": st.last_uid or 0,
@@ -247,6 +253,9 @@ def mail_sync_now(summarize: bool = True):
                      .filter(EmailMessage.summary.is_(None), EmailMessage.rfq_id.isnot(None))
                      .order_by(EmailMessage.id.desc()).limit(_AUTO_SUMMARY_LIMIT).all())
             result["summarized"] = ensure_summaries(s, fresh, limit=_AUTO_SUMMARY_LIMIT)
+        # 눌렀다는 사실을 남긴다 — 안 남기면 Settings 의 "Last run"이 아침 자동 실행에
+        # 머물러, 방금 누른 사람에게는 아무 일도 안 일어난 것처럼 보인다.
+        mail_auto.record_manual(s, result)
         return {"ok": True, **result}
     finally:
         s.close()
