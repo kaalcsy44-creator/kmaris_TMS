@@ -14,6 +14,7 @@ import {
 import { useCachedData } from "@/lib/useCachedData";
 import type { MailDigestRow, PipelineRow } from "@/lib/types";
 import { PipelineModal } from "@/components/screens/ProjectsScreen";
+import Modal from "@/components/common/Modal";
 import ActivityDesc from "@/components/common/ActivityDesc";
 import CustomerName from "@/components/common/CustomerName";
 import ProjectNo from "@/components/common/ProjectNo";
@@ -100,6 +101,7 @@ export default function BriefingTab() {
   const [note, setNote] = useState("");
   const [err, setErr] = useState("");
   const [openRfqId, setOpenRfqId] = useState<number | null>(null);
+  const [addRfqId, setAddRfqId] = useState<number | null>(null);   // 활동기록 팝업을 연 딜
   const [stageTarget, setStageTarget] = useState<{ stage: number; vrfqId?: number } | null>(null);
 
   // 고른 열 수는 기억한다. 첫 렌더 뒤에 읽어 서버/클라 첫 그림을 같게 유지한다.
@@ -226,6 +228,11 @@ export default function BriefingTab() {
 
   const openRow = openRfqId != null
     ? (pipeline?.rows ?? []).find((r) => r.rfq_id === openRfqId) ?? null
+    : null;
+  // 활동기록 팝업은 카드 밖(화면 끝)에서 연다 — 카드 안에서 열면 좁은 칸에 폼이 눌리고,
+  // 카드가 제 높이 안에서 스크롤되므로 폼이 잘려 보인다.
+  const addRow = addRfqId != null
+    ? (pipeline?.rows ?? []).find((r) => r.rfq_id === addRfqId) ?? null
     : null;
 
   // 팝업의 ← → — 지금 보고 있는 **카드 순서**로 옮겨간다(필터와 정렬이 반영된 그 순서).
@@ -501,9 +508,7 @@ export default function BriefingTab() {
                   setStageTarget({ stage: act.stage, vrfqId: act.vrfqId });
                   setOpenRfqId(c.row.rfq_id);
                 }}
-                // 새 기록은 파이프라인에서 온다(stage_notes) — 메일 집계는 건드리지 않으니
-                // 그쪽까지 다시 부르지 않는다.
-                onAdded={refreshPipeline}
+                onAdd={() => setAddRfqId(c.row.rfq_id)}
               />
             ))}
           </div>
@@ -525,6 +530,23 @@ export default function BriefingTab() {
           initialStage={stageTarget?.stage ?? null}
           initialVrfqId={stageTarget?.vrfqId ?? null}
         />
+      ) : null}
+
+      {addRow ? (
+        <Modal
+          title={`Add activity · ${addRow.project_no}${addRow.project_title ? ` ${addRow.project_title}` : ""}`}
+          onClose={() => setAddRfqId(null)}
+          form
+        >
+          <BriefAddNote
+            row={addRow}
+            steps={steps}
+            // 새 기록은 파이프라인에서 온다(stage_notes) — 메일 집계는 건드리지 않으니
+            // 그쪽까지 다시 부르지 않는다.
+            onDone={async () => { setAddRfqId(null); await refreshPipeline(); }}
+            onCancel={() => setAddRfqId(null)}
+          />
+        </Modal>
       ) : null}
     </div>
   );
@@ -582,7 +604,7 @@ function BriefCard({
   waitingAfter,
   onOpen,
   onOpenStage,
-  onAdded,
+  onAdd,
 }: {
   card: Card;
   steps: string[];
@@ -592,10 +614,9 @@ function BriefCard({
   waitingAfter: number;
   onOpen: () => void;
   onOpenStage: (act: Activity) => void;
-  onAdded: () => void | Promise<unknown>;
+  onAdd: () => void;
 }) {
   const { row, mail } = card;
-  const [adding, setAdding] = useState(false);
   const waiting = card.waitingDays >= waitingAfter;
   const stageLabel = row.stage > 0 ? steps[row.stage - 1] || "" : "";
   const vessel = (row.vessels || row.vessel || "").split("\n").filter(Boolean).join(" · ");
@@ -691,6 +712,21 @@ function BriefCard({
         </ul>
       ) : null}
 
+      {/* 활동기록을 더하는 자리는 기록이 쌓이는 자리 바로 위다 — 방금 읽은 줄 아래에
+          한 줄 더 얹는 일이라, 푸터(카드 관리 줄)보다 여기가 맞다. */}
+      <div className="brief-log-head">
+        <span className="brief-log-title">Activity</span>
+        <button
+          type="button"
+          className="brief-add"
+          onClick={onAdd}
+          title="Add an activity note to this deal"
+          aria-label="Add activity note"
+        >
+          +
+        </button>
+      </div>
+
       {/* 사건과 메일을 한 시간축에. 사건은 굵은 라벨(Quote Sent…), 메일은 방향 화살표로
           갈라 보이되 줄 간격은 같다 — 둘은 같은 이야기의 두 면이다. */}
       <ol className="brief-lines">
@@ -718,18 +754,6 @@ function BriefCard({
         ))}
       </ol>
 
-      {/* 카드에서 바로 남기는 활동기록. 읽던 자리에서 쓰게 하려는 것이라, 폼은 지금 읽고
-          있던 줄 바로 아래에 편다 — 카드를 열거나 Activity 로 건너가면 방금 읽은 맥락을
-          잃는다. */}
-      {adding ? (
-        <BriefAddNote
-          row={row}
-          steps={steps}
-          onDone={async () => { setAdding(false); await onAdded(); }}
-          onCancel={() => setAdding(false)}
-        />
-      ) : null}
-
       <div className="brief-foot">
         <span>
           {card.mailCount
@@ -737,15 +761,6 @@ function BriefCard({
             : "no mail linked"}
           {card.mailCount && (!mail || mail.recent_count === 0) ? ` · none in ${DAYS}d` : ""}
         </span>
-        <button
-          type="button"
-          className={`brief-add${adding ? " on" : ""}`}
-          onClick={() => setAdding((v) => !v)}
-          title={adding ? "Cancel" : "Add an activity note to this deal"}
-          aria-label="Add activity note"
-        >
-          {adding ? "×" : "+"}
-        </button>
         {/* 이 카드만 펴고 접는 자리 — 새 버튼을 달지 않고 원래 있던 "N more" 를 누를 수
             있게 했다. 카드마다 같은 장식이 하나씩 늘면 보드가 그만큼 시끄러워진다. */}
         {card.lines.length > show ? (
@@ -759,7 +774,7 @@ function BriefCard({
   );
 }
 
-// 카드 안의 활동기록 입력. 폼은 Activity·개요 화면과 같은 것을 쓰고(ActivityNoteForm),
+// 활동기록 입력 팝업의 속. 폼은 Activity·개요 화면과 같은 것을 쓰고(ActivityNoteForm),
 // 저장도 같은 stage_notes 로 간다 — 여기서 남긴 줄이 다른 화면에서 안 보이면, 화면마다
 // 다른 업무일지를 쓰는 셈이 된다.
 //
