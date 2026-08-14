@@ -29,7 +29,7 @@ import type { QuotationTerms } from "./types";
 export const DEFAULT_TERMS = {
   incoterms: "EXW (Ex Works)",
   delivery_place: "Busan, Republic of Korea",
-  payment_terms: "T/T 30 days after delivery",
+  payment_terms: "100% T/T in advance",
   warranty: "6 months from delivery",
 } satisfies QuotationTerms;
 

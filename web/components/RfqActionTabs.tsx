@@ -1597,7 +1597,7 @@ function VendorQuoteDetailModal({
   const [d, setD] = useState<VendorQuoteDetail | null>(null);
   const [no, setNo] = useState("");
   const [receivedAt, setReceivedAt] = useState("");
-  const [currency, setCurrency] = useState("USD");
+  const [currency, setCurrency] = useState(DEFAULT_COST_CURRENCY);
   const [notes, setNotes] = useState("");
   const [items, setItems] = useState<VendorQuoteItem[]>([]);
   const [terms, setTerms] = useState<QuotationTerms>(withDefaultTerms());
@@ -1618,7 +1618,7 @@ function VendorQuoteDetailModal({
         setD(data);
         setNo(data.vendor_quote_no || "");
         setReceivedAt(data.received_at || "");
-        setCurrency(data.currency || "USD");
+        setCurrency(data.currency || DEFAULT_COST_CURRENCY);
         setNotes(data.notes || "");
         setItems((data.items || []).map(normalizeVendorQuoteItem));
         setFxRate(typeof data.fx_rate === "number" ? data.fx_rate : null);
@@ -1997,8 +1997,8 @@ function CustomerQuoteDetailModal({
   const [d, setD] = useState<CustomerQuotationDetail | null>(null);
   const [tab, setTab] = useState<DetailTab>("edit");
   const [qtnNo, setQtnNo] = useState("");
-  const [currency, setCurrency] = useState("USD");
-  const [costCurrency, setCostCurrency] = useState("USD");
+  const [currency, setCurrency] = useState(DEFAULT_SALE_CURRENCY);
+  const [costCurrency, setCostCurrency] = useState(DEFAULT_COST_CURRENCY);
   const [roundDigits, setRoundDigits] = useState<number>(DEFAULT_ROUND_DIGITS);
   const [discountPct, setDiscountPct] = useState<number>(0);
   const [fxRate, setFxRate] = useState<number | null>(null);
@@ -2031,8 +2031,9 @@ function CustomerQuoteDetailModal({
       .then((data) => {
         setD(data);
         setQtnNo(data.qtn_no || "");
-        setCurrency(data.currency || "USD");
-        setCostCurrency(data.cost_currency || data.currency || "USD");
+        setCurrency(data.currency || DEFAULT_SALE_CURRENCY);
+        // cost_currency 컬럼이 생기기 전 견적은 원가·판매가 같은 통화였다 — 그때는 판매 통화를 따른다.
+        setCostCurrency(data.cost_currency || data.currency || DEFAULT_COST_CURRENCY);
         setRoundDigits(
           typeof data.round_digits === "number" ? data.round_digits : DEFAULT_ROUND_DIGITS
         );
@@ -2953,7 +2954,7 @@ function VendorQuoteAction({
   const [vrfqId, setVrfqId] = useState<number | "">("");
   const [no, setNo] = useState("");
   const [receivedAt, setReceivedAt] = useState(nowLocalDt());
-  const [currency, setCurrency] = useState("USD");
+  const [currency, setCurrency] = useState(DEFAULT_COST_CURRENCY);
   const [notes, setNotes] = useState("");
   const [items, setItems] = useState<VendorQuoteItem[]>([]);
   const [terms, setTerms] = useState<QuotationTerms>(withDefaultTerms());
@@ -3086,7 +3087,7 @@ function VendorQuoteAction({
       );
       setMsg(`Registered — ${r.vendor_quote_no}`);
       setNo("");
-      setCurrency("USD");
+      setCurrency(DEFAULT_COST_CURRENCY);
       setNotes("");
       setItems([]);
       setTerms(withDefaultTerms());
@@ -3510,8 +3511,8 @@ function CustomerQuoteAction({
   // Quotation No. 채번 방식: auto(자동 KMS-QUO-yymm-nnn) / manual(직접 입력).
   const [noMode, setNoMode] = useState<"auto" | "manual">("auto");
   const [autoNo, setAutoNo] = useState(""); // 자동채번 미리보기(다음 KMS-QUO 번호)
-  const [currency, setCurrency] = useState("USD");
-  const [costCurrency, setCostCurrency] = useState("USD");
+  const [currency, setCurrency] = useState(DEFAULT_SALE_CURRENCY);
+  const [costCurrency, setCostCurrency] = useState(DEFAULT_COST_CURRENCY);
   const [roundDigits, setRoundDigits] = useState<number>(DEFAULT_ROUND_DIGITS);
   const [discountPct, setDiscountPct] = useState<number>(0);
   const [fxRate, setFxRate] = useState<number | null>(null);
@@ -3560,7 +3561,7 @@ function CustomerQuoteAction({
             qty: Number(it.qty || 1),
             unit: it.unit || "PCS",
             cost_price: 0,
-            margin_pct: 20,
+            margin_pct: DEFAULT_MARGIN_PCT,
             unit_price: 0,
             amount: 0,
           }))
@@ -4327,10 +4328,16 @@ const DEFAULT_ROUND_DIGITS = -3;
 const MAX_MARGIN_PCT = 100;
 
 // Pricing 밴드 마진의 최초값 — 저장된 값도, 품목에서 읽을 값도 없을 때만 쓴다.
-const DEFAULT_MARGIN_PCT = 20;
+const DEFAULT_MARGIN_PCT = 40;
+
+// 통화 최초값 — 매입(공급사 견적·원가)은 국내 공급사가 원화로 견적하는 게 보통이라 KRW,
+// 매출(고객 견적 판매가)은 선주·해외 고객 상대라 USD 로 시작한다. 저장된 값이 있으면
+// 그쪽이 이기고, 화면에서도 언제든 바꿀 수 있다.
+const DEFAULT_COST_CURRENCY = "KRW";
+const DEFAULT_SALE_CURRENCY = "USD";
 
 // 품목들이 공유하는 마진(%) — 밴드 마진을 따로 저장하기 전에 만든 견적을 다시 열 때,
-// 화면에 20% 가 찍혀 실제 단가와 어긋나 보이던 걸 막으려고 품목에서 되살린다.
+// 화면에 기본 마진이 찍혀 실제 단가와 어긋나 보이던 걸 막으려고 품목에서 되살린다.
 // 행마다 마진이 다르면 가장 많이 쓰인 값을 쓴다(같은 수면 첫 행 기준).
 function itemsMargin(items: CustomerQuoteItem[] | undefined | null): number | null {
   const values = (items || []).map((it) => Number(it.margin_pct || 0));
