@@ -12335,9 +12335,26 @@ table.mini.wide.umail-table td.umail-c-assign { width: 340px; }
   font-size: 12px; color: #64748b; cursor: pointer;
 }
 .brief-add:hover { border-color: var(--blue); color: var(--blue); }
-/* 팝업 안의 활동기록 폼 — 좁은 칸이 아니므로 Activity 화면의 기본 크기를 그대로 쓴다. */
-.brief-add-note .act-add { gap: 8px; }
-.brief-add-note .act-add-text { min-width: 0; }
+/* 팝업 안의 활동기록 폼(act-add--dialog) — 앱 표준 폼(form-grid·form-field)을 그대로
+   쓰되, 이 폼에만 있는 두 조각(세그먼트 버튼·체크박스)이 입력칸 규칙에 걸리지 않게 푼다.
+   .form-field input 은 폭 100%·높이 34px 이라, 그대로 두면 체크박스가 한 칸을 채운다. */
+.act-add--dialog { display: flex; flex-direction: column; gap: 14px; }
+.act-add--dialog .act-add-dirline { display: flex; align-items: center; gap: 12px; height: 34px; }
+.act-add--dialog .act-seg { height: 34px; }
+.act-add--dialog .act-seg button { height: 100%; padding: 0 14px; font-size: 12.5px; }
+.act-add--dialog .act-check input[type="checkbox"] {
+  width: auto; height: auto; padding: 0; border-radius: 3px;
+}
+.act-add--dialog .act-party-custom { margin-top: 6px; }
+/* 내용칸 — 전역 .form-field textarea{min-height:240px} 를 이기려면 클래스 2개가 필요하다
+   (.ar-remarks 와 같은 방식). 팝업 하나가 화면을 다 덮을 만큼 길어지지 않게 한다. */
+.form-field.act-note-field textarea {
+  width: 100%; min-height: 96px; height: 96px; resize: vertical;
+  border: 1px solid #cdd9e8; border-radius: 8px; padding: 8px 10px;
+  font-family: inherit; font-size: 12.5px; background: #fff;
+}
+/* 푸터는 손대지 않는다 — 다른 편집 팝업과 같은 규약(우측 정렬·primary 가 맨 오른쪽)을
+   그대로 받는다. 여기서 여백을 다시 잡으면 이 팝업만 다른 모양이 된다. */
 @media (max-width: 1400px) {
   .brief-rail.cols-2, .brief-rail.cols-3 { --cols: 2; }
 }

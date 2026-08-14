@@ -824,6 +824,7 @@ function BriefAddNote({
         busy={busy}
         partyPresets={activityParties(row)}
         personPresets={activityPersons(row)}
+        dialog
       />
       {err ? <div className="action-err">{err}</div> : null}
     </div>

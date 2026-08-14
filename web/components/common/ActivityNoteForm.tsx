@@ -147,6 +147,7 @@ export default function ActivityNoteForm({
   busy = false,
   partyPresets = [],
   personPresets = [],
+  dialog = false,
 }: {
   value: ActivityNoteValue;
   onChange: (v: ActivityNoteValue) => void;
@@ -156,93 +157,172 @@ export default function ActivityNoteForm({
   busy?: boolean;
   partyPresets?: string[]; // Party 후보 — 이 딜의 고객사·벤더사명(deal.activityParties)
   personPresets?: string[]; // Person 후보 — 이 딜의 고객/벤더 담당자(deal.activityPersons)
+  // dialog: 팝업 배치 — 칸마다 제목을 달고 앱 표준 폼(form-grid·form-field)으로 놓는다.
+  // 목록 안에 끼워 넣는 기본 배치는 폭이 없어 제목을 못 달고 placeholder 로 대신하는데,
+  // 팝업에는 그럴 이유가 없다(줄바꿈이 제멋대로 나던 것도 그래서다).
+  dialog?: boolean;
 }) {
   const picOptions = usePicOptions(value.pic);
   const set = <K extends keyof ActivityNoteValue>(k: K, v: ActivityNoteValue[K]) =>
     onChange({ ...value, [k]: v });
 
+  // 칸은 한 벌만 만들고 배치만 둘로 나눈다 — 두 벌로 두면 화면마다 남길 수 있는
+  // 정보가 갈라진다(이 파일이 애초에 하나로 모인 이유).
+  const whenField = (
+    // 일시 — 네이티브 datetime-local(숫자 직접입력). 날짜·시각을 키보드로 바로 친다.
+    <input
+      type="datetime-local"
+      value={value.datetime}
+      title="Activity time"
+      onChange={(e) => set("datetime", e.target.value)}
+    />
+  );
+  const dirField = (
+    <div className="act-seg sm">
+      {(["in", "out"] as const).map((d) => (
+        <button
+          key={d}
+          type="button"
+          className={value.direction === d ? "on" : ""}
+          onClick={() => set("direction", value.direction === d ? "" : d)}
+          title={d === "in" ? "Received (수신)" : "Sent (발신)"}
+        >
+          {d === "in" ? "From" : "To"}
+        </button>
+      ))}
+    </div>
+  );
+  const partyField = (
+    <PresetSelect
+      value={value.party}
+      onChange={(v) => set("party", v)}
+      placeholder={dialog ? "—" : "Party —"}
+      presets={partyPresets}
+    />
+  );
+  const personField = (
+    <PresetSelect
+      value={value.person}
+      onChange={(v) => set("person", v)}
+      placeholder={dialog ? "—" : "Person —"}
+      presets={personPresets}
+    />
+  );
+  const channelField = (
+    <PresetSelect
+      value={value.channel}
+      onChange={(v) => set("channel", v)}
+      placeholder={dialog ? "—" : "Channel —"}
+      presets={CHANNEL_PRESETS}
+    />
+  );
+  const picField = (
+    <select
+      className="act-add-pic"
+      value={value.pic}
+      title="담당자(작성자)"
+      onChange={(e) => set("pic", e.target.value)}
+    >
+      {value.pic ? null : <option value="">PIC —</option>}
+      {picOptions.map((u) => (
+        <option key={u} value={u}>{u}</option>
+      ))}
+    </select>
+  );
+  const starField = (
+    <label className="act-check">
+      <input type="checkbox" checked={value.star} onChange={(e) => set("star", e.target.checked)} />
+      {dialog ? " ★ priority" : " ★"}
+    </label>
+  );
+  // 내용 — Enter=저장, Shift+Enter=줄바꿈. 팝업은 폭이 있으니 몇 줄 더 준다.
+  const textField = (
+    <textarea
+      className="act-add-text"
+      placeholder="Activity note (e.g. Waiting for PO / requested update)"
+      value={value.text}
+      rows={dialog ? 4 : 2}
+      onChange={(e) => set("text", e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSubmit(); }
+        if (e.key === "Escape") onCancel();
+      }}
+      autoFocus
+    />
+  );
+  const submitBtn = (label: string) => (
+    <button
+      type="button"
+      className={`btn ${dialog ? "primary" : "sm primary act-add-go"}`}
+      disabled={busy || !value.text.trim()}
+      onClick={onSubmit}
+    >
+      {busy ? "…" : label}
+    </button>
+  );
+
+  if (dialog) {
+    return (
+      <div className="act-add act-add--dialog">
+        <div className="form-grid">
+          <div className="form-field">
+            <label>When</label>
+            {whenField}
+          </div>
+          {/* 방향과 ★ 는 한 칸에 — 둘 다 값이 아니라 표시라, 입력칸 사이에 끼면 눈이 걸린다. */}
+          <div className="form-field">
+            <label>Direction</label>
+            <div className="act-add-dirline">
+              {dirField}
+              {starField}
+            </div>
+          </div>
+          <div className="form-field">
+            <label>Party</label>
+            {partyField}
+          </div>
+          <div className="form-field">
+            <label>Person</label>
+            {personField}
+          </div>
+          <div className="form-field">
+            <label>Channel</label>
+            {channelField}
+          </div>
+          <div className="form-field">
+            <label>PIC</label>
+            {picField}
+          </div>
+        </div>
+        <div className="form-field act-note-field">
+          <label>Note</label>
+          {textField}
+        </div>
+        <div className="form-actions">
+          <button type="button" className="btn" onClick={onCancel}>Cancel</button>
+          {submitBtn(submitLabel)}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="act-add">
       {/* 1행: 일시 · From/To · Party · Channel · 담당자 · ★ */}
       <div className="act-add-row">
-        {/* 일시 — 네이티브 datetime-local(숫자 직접입력). 날짜·시각을 키보드로 바로 친다. */}
-        <input
-          type="datetime-local"
-          value={value.datetime}
-          title="Activity time"
-          onChange={(e) => set("datetime", e.target.value)}
-        />
-        <div className="act-seg sm">
-          {(["in", "out"] as const).map((d) => (
-            <button
-              key={d}
-              type="button"
-              className={value.direction === d ? "on" : ""}
-              onClick={() => set("direction", value.direction === d ? "" : d)}
-              title={d === "in" ? "Received (수신)" : "Sent (발신)"}
-            >
-              {d === "in" ? "From" : "To"}
-            </button>
-          ))}
-        </div>
-        <PresetSelect
-          value={value.party}
-          onChange={(v) => set("party", v)}
-          placeholder="Party —"
-          presets={partyPresets}
-        />
-        <PresetSelect
-          value={value.person}
-          onChange={(v) => set("person", v)}
-          placeholder="Person —"
-          presets={personPresets}
-        />
-        <PresetSelect
-          value={value.channel}
-          onChange={(v) => set("channel", v)}
-          placeholder="Channel —"
-          presets={CHANNEL_PRESETS}
-        />
-        <select
-          className="act-add-pic"
-          value={value.pic}
-          title="담당자(작성자)"
-          onChange={(e) => set("pic", e.target.value)}
-        >
-          {value.pic ? null : <option value="">PIC —</option>}
-          {picOptions.map((u) => (
-            <option key={u} value={u}>{u}</option>
-          ))}
-        </select>
-        <label className="act-check">
-          <input type="checkbox" checked={value.star} onChange={(e) => set("star", e.target.checked)} /> ★
-        </label>
+        {whenField}
+        {dirField}
+        {partyField}
+        {personField}
+        {channelField}
+        {picField}
+        {starField}
       </div>
-      {/* 2행: 내용 — Enter=저장, Shift+Enter=줄바꿈. */}
-      <div className="act-add-row">
-        <textarea
-          className="act-add-text"
-          placeholder="Activity note (e.g. Waiting for PO / requested update)"
-          value={value.text}
-          rows={2}
-          onChange={(e) => set("text", e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSubmit(); }
-            if (e.key === "Escape") onCancel();
-          }}
-          autoFocus
-        />
-      </div>
+      {/* 2행: 내용 */}
+      <div className="act-add-row">{textField}</div>
       {/* 3행: 저장 · 취소 */}
       <div className="act-add-row">
-        <button
-          type="button"
-          className="btn sm primary act-add-go"
-          disabled={busy || !value.text.trim()}
-          onClick={onSubmit}
-        >
-          {busy ? "…" : submitLabel}
-        </button>
+        {submitBtn(submitLabel)}
         <button type="button" className="btn sm act-add-go" onClick={onCancel}>Cancel</button>
       </div>
     </div>
