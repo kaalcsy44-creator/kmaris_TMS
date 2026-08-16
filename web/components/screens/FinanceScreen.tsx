@@ -40,6 +40,7 @@ import Modal from "@/components/common/Modal";
 import CurrencyToggle from "@/components/common/CurrencyToggle";
 import { amountInputValue, parseAmountInput } from "@/components/common/itemTable";
 import FinanceDaybook from "@/components/screens/FinanceDaybook";
+import FinanceProfitTab from "@/components/screens/FinanceProfit";
 import {
   CATEGORY_LABEL,
   INCOME_CATEGORY_LABEL,
@@ -115,9 +116,11 @@ const todayStr = () => new Date().toISOString().slice(0, 10);
 // Cash Flow 는 따로 서지 않는다 — 잔액과 현금흐름은 같은 질문의 앞뒤라서 Overview 하나로 합쳤다.
 // 목록 두 탭은 Overview 의 두 기둥과 같은 이름을 쓴다(Inflow/Outflow) — 같은 돈을
 // 한쪽에서는 '들어올 돈', 다른 쪽에서는 'Receivables' 라 부르면 매번 옮겨 읽어야 한다.
-type Tab = "overview" | "inflow" | "outflow" | "closing" | "calendar";
+// Profit 은 Outflow 다음에 선다 — 들어온 돈, 나간 돈, 그래서 남은 돈. Closing · VAT 는
+// 그 뒤다(신고를 위해 한 기간을 다시 세로로 파는 화면이라 성격이 다르다).
+type Tab = "overview" | "inflow" | "outflow" | "profit" | "closing" | "calendar";
 
-const TABS: Tab[] = ["overview", "inflow", "outflow", "closing", "calendar"];
+const TABS: Tab[] = ["overview", "inflow", "outflow", "profit", "closing", "calendar"];
 /** 이름을 바꾸기 전 주소로 들어오는 링크 — 같은 자리로 보낸다. */
 const TAB_ALIAS: Record<string, Tab> = { receivables: "inflow", payables: "outflow" };
 
@@ -191,6 +194,7 @@ export default function FinanceScreen() {
         <button className={tab === "overview" ? "on" : ""} onClick={() => setTab("overview")}>Overview</button>
         <button className={tab === "inflow" ? "on" : ""} onClick={() => setTab("inflow")}>Inflow</button>
         <button className={tab === "outflow" ? "on" : ""} onClick={() => setTab("outflow")}>Outflow</button>
+        <button className={tab === "profit" ? "on" : ""} onClick={() => setTab("profit")}>Profit</button>
         <button className={tab === "closing" ? "on" : ""} onClick={() => setTab("closing")}>Closing · VAT</button>
         <button className={tab === "calendar" ? "on" : ""} onClick={() => setTab("calendar")}>Calendar</button>
       </div>
@@ -198,6 +202,7 @@ export default function FinanceScreen() {
       {tab === "overview" && <OverviewTab />}
       {tab === "inflow" && <InflowTab />}
       {tab === "outflow" && <OutflowTab />}
+      {tab === "profit" && <FinanceProfitTab />}
       {tab === "closing" && <ClosingTab />}
       {tab === "calendar" && <CalendarTab />}
     </div>

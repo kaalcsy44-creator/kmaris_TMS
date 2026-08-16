@@ -1011,6 +1011,26 @@ export type FinanceClosing = {
   usd_krw: number;
 };
 
+/**
+ * 월별 손익 — 매출 − 비용 − 세금. 모든 줄이 12칸(1~12월) 배열이고 단위는 KRW.
+ * 합계·순수익은 화면에서 더한다(추정 부가세를 세금에 넣고 빼는 스위치가 화면에 있다).
+ */
+export type FinanceProfit = {
+  year: number;
+  labels: string[];
+  revenue: { sales: number[]; other_income: number[] };
+  costs: {
+    purchase: number[];
+    /** 수동 지급대장의 분류별 운영비(공급가액). key 는 저장값(한글 코드). */
+    operating: { key: string; values: number[] }[];
+    /** '거래선지급' 분류 — 벤더 P/O 원가와 겹쳐 합계 밖에 세워 두는 줄. */
+    vendor_manual: number[];
+  };
+  taxes: { vat: number[]; payments: number[] };
+  vat_detail: { output: number[]; input: number[] };
+  usd_krw: number;
+};
+
 export type FinanceCashflowRow = {
   label: string;
   start: string;

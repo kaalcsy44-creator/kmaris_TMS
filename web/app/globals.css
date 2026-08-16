@@ -12695,6 +12695,9 @@ table.mini tfoot .fin-foot-name { text-align: left; }
 /* 결산 막대차트용 — .fin-bar.sales / .fin-bar.purchase 와 반드시 같은 색이어야 한다. */
 .fin-dot--sales { background: #2f6fb0; }
 .fin-dot--purchase { background: #d68910; }
+/* 손익 막대차트용 — .fin-net-bar.pos / .neg 와 같은 색. */
+.fin-dot--profit { background: #1e7a46; }
+.fin-dot--loss { background: #c0392b; }
 /* 일곱 칸은 반드시 같은 너비여야 한다 — 그냥 1fr 이면 minmax(auto,1fr) 이라 긴 제목이
    든 칸이 제 min-content 만큼 넓어져 표가 옆으로 밀리고 마지막 열이 잘린다. */
 .fin-cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
@@ -12809,6 +12812,68 @@ table.mini tfoot .fin-foot-name { text-align: left; }
   .fin-lab-yr { display: none; }
   .fin-bar-label { font-size: 10px; }
 }
+
+/* Profit — 월별 손익 장표(줄=항목, 칸=달) */
+/* 열넷(항목 + 12개월 + 합계)은 좁은 화면에서 반드시 넘친다. 표만 옆으로 굴리고
+   항목 이름 칸은 그 자리에 붙잡아 둔다 — 굴리는 동안 이름이 사라지면 숫자가 어느 줄
+   것인지 알 수 없다. */
+.fin-pl-scroll { overflow-x: auto; }
+table.mini.fin-pl { min-width: 900px; }
+table.mini.fin-pl th, table.mini.fin-pl td { padding: 5px 8px; }
+table.mini.fin-pl .fin-pl-name {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: #fff;
+  text-align: left;
+  padding-left: 20px;   /* 소계·총계보다 한 칸 들여 쓴 세부 줄 */
+  color: #45526a;
+}
+table.mini.fin-pl thead .fin-pl-name { background: #f7fafd; }
+table.mini.fin-pl .tot { background: #f4f8fc; font-weight: 700; }
+/* 0 은 값이 아니라 '없음' — 숫자와 같은 무게로 찍히면 열두 칸이 전부 숫자로 보인다. */
+table.mini.fin-pl .zero { color: #c2cbd8; }
+table.mini.fin-pl .neg { color: #c0392b; }
+/* 묶음의 소계 — 위에 선을 그어 그 위 몇 줄이 이 줄로 모인다는 것을 보인다. */
+table.mini.fin-pl tr.fin-pl-sum td {
+  font-weight: 700;
+  color: var(--navy);
+  background: #f7fafd;
+  border-top: 1px solid var(--line-strong);
+}
+table.mini.fin-pl tr.fin-pl-sum .fin-pl-name { background: #f7fafd; padding-left: 8px; }
+table.mini.fin-pl tr.fin-pl-sum .tot { background: #eef4fb; }
+/* 맨 아랫줄 — 이 표가 답하려는 한 가지. */
+table.mini.fin-pl tr.fin-pl-grand td {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--navy);
+  background: var(--accent-soft, #eaf3ff);
+  border-top: 2px solid var(--line-strong);
+  border-bottom: 0;
+}
+table.mini.fin-pl tr.fin-pl-grand .fin-pl-name { background: var(--accent-soft, #eaf3ff); padding-left: 8px; }
+table.mini.fin-pl tr.fin-pl-grand .neg { color: #c0392b; }
+/* 합계 밖의 참고 줄(중복이라 빼 둔 것, 세금에서 제외한 부가세) — 옅게 눕힌다. */
+table.mini.fin-pl tr.fin-pl-note td, table.mini.fin-pl tr.fin-pl-note .zero { color: var(--muted); }
+table.mini.fin-pl tr.fin-pl-note .neg { color: #d08a82; }
+/* 막대 끝의 값 꼬리표 — 0선 위아래 어느 쪽이든 막대가 자란 쪽 바깥에 앉는다. */
+/* .fin-net-chart 는 이 블록보다 아래(Cash flow)에 있어 같은 명시도로는 지지 않는다 —
+   두 클래스를 함께 걸어 키만 이 화면 몫으로 올린다(꼬리표가 앉을 자리가 필요하다). */
+.fin-net-chart.fin-pl-chart { height: 190px; }
+.fin-pl-cap {
+  position: absolute;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.2;
+  padding: 2px 0;
+  white-space: nowrap;
+}
+.fin-pl-cap.pos { color: #1e7a46; }
+.fin-pl-cap.neg { color: #c0392b; }
 
 /* Cash flow */
 .fin-inline-field { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #55627a; }

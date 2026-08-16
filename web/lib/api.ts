@@ -41,6 +41,7 @@ import type {
   FxQuote,
   FinanceSummary,
   FinanceClosing,
+  FinanceProfit,
   FinanceCashflow,
   FinanceCashflowItems,
   CashBucket,
@@ -808,6 +809,9 @@ export function fetchFinanceClosing(start: string, end: string, year: number): P
   return get<FinanceClosing>(
     `/api/admin/finance/closing?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}&year=${year}`
   );
+}
+export function fetchFinanceProfit(year: number): Promise<FinanceProfit> {
+  return get<FinanceProfit>(`/api/admin/finance/profit?year=${year}`);
 }
 export function fetchFinanceCashflow(
   unit: "month" | "week",

@@ -761,6 +761,126 @@ def finance_closing(start: str = "", end: str = "", year: int = 0):
         s.close()
 
 
+def _payable_occurrences_in_year(p, y0: date, y1: date) -> list[str]:
+    """그 해에 이 지급/수입 건이 비용(수입)으로 잡히는 날짜들.
+
+    일회성은 세금계산서를 받은 날(없으면 지급 예정일) 하루, 반복은 그 해에 든 회차일
+    전부 — 결산·부가세 화면의 기타 지출 집계와 같은 규약이다. FinanceIncome 도 같은
+    필드 구성이라 그대로 통한다(다만 수입에는 bill_date 가 없어 예정일로 떨어진다).
+    """
+    if (p.recurrence or "none") == "none":
+        d = (getattr(p, "bill_date", "") or "")[:10] or (p.due_date or "")[:10]
+        return [d] if d and y0.isoformat() <= d <= y1.isoformat() else []
+    return _finance_occurrences(p, y0, y1)
+
+
+@app.get("/api/admin/finance/profit", dependencies=[Depends(require_token)])
+def finance_profit(year: int = 0):
+    """월별 순수익 — 매출 − 비용 − 세금.
+
+    Closing · VAT 와 같은 발생 기준·같은 환산(USD_KRW_RATE)을 쓰되, 거기서 마진 밖에
+    세워 두었던 것들(운영비·기타수입·세금)까지 한 장의 손익계산서로 모은다.
+    각 줄은 12개월 배열로 돌려주고, 합계와 순수익은 화면에서 더한다 — 세금(추정 부가세)을
+    넣고 빼는 스위치가 화면에 있어, 그 계산을 서버가 미리 굳혀 두면 스위치가 무의미해진다.
+
+    - 매출: AR 공급가액(부가세 제외). 매입: 벤더 P/O 원가.
+    - 운영비: 수동 지급대장의 공급가액(부가세 제외 — 매입세액은 세금 줄에서 환급된다).
+      '거래선지급' 분류는 벤더 P/O 원가와 겹치므로 합계 밖에 따로 세운다.
+    - 세금: 그 달의 추정 부가세(매출세액 − 매입세액)와 '세금' 분류 지급액.
+    """
+    year = year or date.today().year
+    y0, y1 = date(year, 1, 1), date(year, 12, 31)
+    ys, ye = y0.isoformat(), y1.isoformat()
+
+    def z() -> list[float]:
+        return [0.0] * 12
+
+    s = get_session()
+    try:
+        ord_map = {o.id: o for o in s.query(Order).all()}
+
+        sales, output_vat = z(), z()
+        for r in s.query(ARRecord).all():
+            pd = _ar_period_date(r)
+            if not pd or not (ys <= pd <= ye):
+                continue
+            o = ord_map.get(r.order_id)
+            trade = (o.trade_type if o else "수출") or "수출"
+            inv_krw = _to_krw(r.invoice_amount or 0, r.currency or "USD")
+            vat_rate = 0.0 if trade == "수출" else (r.vat_rate if r.vat_rate is not None else 0.1)
+            supply_krw = inv_krw / (1 + vat_rate) if vat_rate else inv_krw
+            i = int(pd[5:7]) - 1
+            sales[i] += supply_krw
+            output_vat[i] += inv_krw - supply_krw
+
+        purchase, input_vat_purchase = z(), z()
+        for po in s.query(PurchaseOrder).all():
+            pd = _po_period_date(po)
+            if not pd or not (ys <= pd <= ye):
+                continue
+            o = ord_map.get(po.order_id)
+            trade = (o.trade_type if o else "수출") or "수출"
+            cur = po.currency or (o.currency if o else "USD") or "USD"
+            cost_krw = _to_krw(_po_cost(po), cur)
+            i = int(pd[5:7]) - 1
+            purchase[i] += cost_krw
+            if trade == "내수":
+                input_vat_purchase[i] += cost_krw * 0.1
+
+        # 수동 지급대장 — 분류별로 나눈다. 세금은 세금 줄로, 거래선지급은 합계 밖으로.
+        operating: dict[str, list[float]] = {}
+        tax_payments, input_vat_other, vendor_manual = z(), z(), z()
+        for p in s.query(FinancePayable).all():
+            cur = p.currency or "KRW"
+            amount = float(p.amount or 0.0)
+            vat = float(getattr(p, "vat_amount", None) or 0.0)
+            supply_krw = _to_krw(amount - vat, cur)
+            vat_krw = _to_krw(vat, cur)
+            cat = p.category or "기타"
+            for occ in _payable_occurrences_in_year(p, y0, y1):
+                i = int(occ[5:7]) - 1
+                input_vat_other[i] += vat_krw
+                if cat == "세금":
+                    tax_payments[i] += _to_krw(amount, cur)
+                elif cat == "거래선지급":
+                    vendor_manual[i] += supply_krw
+                else:
+                    operating.setdefault(cat, z())[i] += supply_krw
+
+        other_income = z()
+        for r in s.query(FinanceIncome).all():
+            amount_krw = _to_krw(float(r.amount or 0.0), r.currency or "KRW")
+            for occ in _payable_occurrences_in_year(r, y0, y1):
+                other_income[int(occ[5:7]) - 1] += amount_krw
+
+        input_vat = [input_vat_purchase[i] + input_vat_other[i] for i in range(12)]
+        vat = [output_vat[i] - input_vat[i] for i in range(12)]
+
+        def r12(xs: list[float]) -> list[int]:
+            return [round(x) for x in xs]
+
+        return {
+            "year": year,
+            "labels": ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                       "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
+            "revenue": {"sales": r12(sales), "other_income": r12(other_income)},
+            "costs": {
+                "purchase": r12(purchase),
+                # 분류 순서는 등록 폼과 같게 — 표에서 줄이 매달 자리를 바꾸지 않도록.
+                "operating": [
+                    {"key": cat, "values": r12(operating[cat])}
+                    for cat in FINANCE_CATEGORIES if cat in operating
+                ],
+                "vendor_manual": r12(vendor_manual),
+            },
+            "taxes": {"vat": r12(vat), "payments": r12(tax_payments)},
+            "vat_detail": {"output": r12(output_vat), "input": r12(input_vat)},
+            "usd_krw": USD_KRW_RATE,
+        }
+    finally:
+        s.close()
+
+
 def _cashflow_buckets(unit: str, count: int, anchor: date | None = None) -> list[dict]:
     """anchor(기본 오늘)부터 count개 구간(월/주)의 [start, end, label].
 

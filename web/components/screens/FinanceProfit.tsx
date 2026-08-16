@@ -1,0 +1,248 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { fetchFinanceProfit } from "@/lib/api";
+import { useCachedData } from "@/lib/useCachedData";
+import type { FinanceProfit } from "@/lib/types";
+import { CATEGORY_LABEL, KpiTile } from "@/components/screens/financeShared";
+
+/**
+ * Profit — 한 해의 월별 손익을 한 장으로. 매출 − 비용 − 세금 = 순수익.
+ *
+ * Closing · VAT 는 고른 한 기간을 세로로 파고드는 화면이라(그 기간의 매출·매입·부가세),
+ * '어느 달이 남았고 어느 달이 밑졌나'는 달을 바꿔 가며 열두 번 읽어야 알 수 있었다.
+ * 여기서는 축을 돌린다 — 줄이 손익계산서의 항목, 칸이 달이다. 그래서 한 눈에 읽히는 건
+ * 각 달의 값이 아니라 줄의 모양(어느 비용이 언제 튀는가)과 맨 아랫줄의 부호다.
+ *
+ * 계산 규약은 Closing · VAT 와 같다(같은 발생 기준·같은 환산). 다만 거기서 마진 밖에
+ * 세워 두었던 것들 — 운영비·기타수입·세금 — 까지 이 표는 끝까지 뺀다. 그래서 매출총이익
+ * (Closing 의 Gross profit)과 이 표의 Net profit 은 다른 값이며, 그 차이가 곧 아래 세
+ * 묶음(운영비·부가세·세금 납부)이다.
+ */
+
+/** 12칸 배열끼리 더하기 — 손익 줄들의 소계는 전부 이 한 가지 모양이다. */
+function addRows(...rows: number[][]): number[] {
+  return Array.from({ length: 12 }, (_, i) => rows.reduce((s, r) => s + (r[i] || 0), 0));
+}
+const sumOf = (row: number[]) => row.reduce((s, n) => s + n, 0);
+
+/** 표 칸의 금액 — 0은 점 하나로 눕힌다(열두 칸 중 대부분이 0인 줄이 많다). */
+function cell(n: number): React.ReactNode {
+  if (!Math.round(n)) return <span className="zero">–</span>;
+  const s = Math.abs(Math.round(n)).toLocaleString();
+  return n < 0 ? <span className="neg">−{s}</span> : s;
+}
+
+/** 막대 위 꼬리표 — 자릿수를 다 적으면 열두 칸이 서로 밀린다. */
+function compact(n: number): string {
+  const a = Math.abs(n);
+  const sign = n < 0 ? "−" : "";
+  if (a >= 1e8) return `${sign}₩${(a / 1e8).toFixed(a >= 1e9 ? 0 : 1)}억`;
+  if (a >= 1e4) return `${sign}₩${(a / 1e4).toFixed(a >= 1e6 ? 0 : 1)}만`;
+  return `${sign}₩${Math.round(a).toLocaleString()}`;
+}
+const won = (n: number) => `${n < 0 ? "−" : ""}₩${Math.abs(Math.round(n)).toLocaleString()}`;
+
+/** 표의 한 줄 — 이름과 12칸, 그리고 어떤 줄인지(소계·총계·참고). */
+type Line = {
+  name: string;
+  values: number[];
+  kind?: "sum" | "grand" | "note";
+  /** 합계 밖의 줄(참고용)임을 알리는 꼬리말. */
+  hint?: string;
+};
+
+export default function FinanceProfitTab() {
+  const now = new Date();
+  const [year, setYear] = useState(now.getFullYear());
+  // 추정 부가세를 세금에 넣을지. 부가세를 실제 납부한 달에 '세금' 분류로 등록해 두었다면
+  // 두 번 빠지므로 끌 수 있어야 한다(어느 쪽을 쓰든 줄은 표에 그대로 남는다).
+  const [withVat, setWithVat] = useState(true);
+
+  const { data, error } = useCachedData<FinanceProfit>(
+    `finance:profit:${year}`,
+    () => fetchFinanceProfit(year)
+  );
+  const years = Array.from({ length: 6 }, (_, i) => now.getFullYear() - i);
+
+  const model = useMemo(() => {
+    if (!data) return null;
+    const revenue = addRows(data.revenue.sales, data.revenue.other_income);
+    const opex = data.costs.operating.map((o) => o.values);
+    const costs = addRows(data.costs.purchase, ...opex);
+    const taxes = addRows(withVat ? data.taxes.vat : [], data.taxes.payments);
+    const net = Array.from({ length: 12 }, (_, i) => revenue[i] - costs[i] - taxes[i]);
+
+    // 거래선지급을 손으로 등록한 경우에만 그 줄을 보인다 — 벤더 P/O 원가와 겹쳐서
+    // 합계에는 넣지 않는다(넣으면 같은 매입이 두 번 빠진다).
+    const vendorManual: Line[] = sumOf(data.costs.vendor_manual)
+      ? [{
+          name: "Vendor payment (manual)",
+          values: data.costs.vendor_manual,
+          kind: "note",
+          hint: "not counted — already in Purchases",
+        }]
+      : [];
+
+    const lines: Line[] = [
+      { name: "Sales (supply value)", values: data.revenue.sales },
+      { name: "Other income", values: data.revenue.other_income },
+      { name: "Revenue", values: revenue, kind: "sum" },
+      { name: "Purchases (cost)", values: data.costs.purchase },
+      ...data.costs.operating.map((o) => ({
+        name: CATEGORY_LABEL[o.key] || o.key,
+        values: o.values,
+      })),
+      ...vendorManual,
+      { name: "Costs", values: costs, kind: "sum" },
+      {
+        name: "VAT (est.)",
+        values: data.taxes.vat,
+        kind: withVat ? undefined : "note",
+        hint: withVat ? undefined : "not counted — tax payments only",
+      },
+      { name: "Tax payments", values: data.taxes.payments },
+      { name: "Taxes", values: taxes, kind: "sum" },
+      { name: "Net profit", values: net, kind: "grand" },
+    ];
+    return { lines, revenue, costs, taxes, net };
+  }, [data, withVat]);
+
+  return (
+    <div className="fin-overview">
+      <div className="fin-period-bar">
+        <select value={year} onChange={(e) => setYear(Number(e.target.value))}>
+          {years.map((y) => <option key={y} value={y}>{y}</option>)}
+        </select>
+        <span className="fin-period-range">{year}-01-01 ~ {year}-12-31</span>
+        <label className="check-chip" style={{ marginLeft: "auto", cursor: "pointer" }}>
+          <input type="checkbox" checked={withVat} onChange={(e) => setWithVat(e.target.checked)} />
+          {" "}Count estimated VAT as tax
+        </label>
+      </div>
+
+      {error && !data ? <div className="state error">API error: {error.message}</div> : null}
+      {!data || !model ? <div className="state">Loading…</div> : (
+        <>
+          <div className="fin-kpis">
+            <KpiTile
+              label={`Revenue (${year})`}
+              main={won(sumOf(model.revenue))}
+              sub={`Sales ${won(sumOf(data.revenue.sales))} · Other ${won(sumOf(data.revenue.other_income))}`}
+              tone="blue"
+            />
+            <KpiTile
+              label="Costs"
+              main={won(sumOf(model.costs))}
+              sub={`Purchases ${won(sumOf(data.costs.purchase))} · Operating ${won(sumOf(model.costs) - sumOf(data.costs.purchase))}`}
+              tone="amber"
+            />
+            <KpiTile
+              label="Taxes"
+              main={won(sumOf(model.taxes))}
+              sub={withVat
+                ? `VAT (est.) ${won(sumOf(data.taxes.vat))} · Paid ${won(sumOf(data.taxes.payments))}`
+                : `Tax payments only · VAT (est.) ${won(sumOf(data.taxes.vat))} excluded`}
+              tone="red"
+            />
+            <KpiTile
+              label="Net profit"
+              main={won(sumOf(model.net))}
+              sub={sumOf(model.revenue)
+                ? `Margin ${(sumOf(model.net) / sumOf(model.revenue) * 100).toFixed(1)}% · ${model.net.filter((n) => n > 0).length} of 12 months in profit`
+                : "No revenue this year"}
+              tone={sumOf(model.net) >= 0 ? "green" : "red"}
+            />
+          </div>
+
+          <div className="panel">
+            <div className="items-head">
+              <h3 className="form-title" style={{ margin: 0 }}>Monthly net profit ({year}, ₩)</h3>
+              <div className="fin-legend">
+                <span className="fin-legend-item"><span className="fin-dot fin-dot--profit" /> Profit</span>
+                <span className="fin-legend-item"><span className="fin-dot fin-dot--loss" /> Loss</span>
+              </div>
+            </div>
+            <NetBars labels={data.labels} net={model.net} revenue={model.revenue} costs={model.costs} taxes={model.taxes} />
+          </div>
+
+          <div className="panel">
+            <h3 className="form-title">Revenue − costs − taxes = net profit (₩)</h3>
+            <div className="fin-pl-scroll">
+              <table className="mini fin-pl">
+                <thead>
+                  <tr>
+                    <th className="fin-pl-name">Line</th>
+                    {data.labels.map((m) => <th key={m} className="num">{m}</th>)}
+                    <th className="num tot">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {model.lines.map((l) => (
+                    <tr key={l.name} className={l.kind ? `fin-pl-${l.kind}` : ""}>
+                      <td className="fin-pl-name">
+                        {l.name}
+                        {l.hint ? <span className="hint-inline"> {l.hint}</span> : null}
+                      </td>
+                      {l.values.map((v, i) => (
+                        <td key={i} className="num">{cell(v)}</td>
+                      ))}
+                      <td className="num tot">{cell(sumOf(l.values))}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="hint-inline" style={{ display: "block", marginTop: 8 }}>
+              Accrual basis, same as Closing · VAT — sales sit on the invoice date, purchases on the P/O date and
+              operating costs on the tax-invoice date (recurring items on each occurrence). Amounts are supply
+              values: VAT is stripped out of both sides and settled once on the VAT line, where a negative figure
+              is a refund. Foreign currency is converted at the fixed rate (₩{data.usd_krw.toLocaleString()}/$).
+              Register payroll, rent and the like under Outflow so they land on their own line here.
+            </p>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** 월별 순수익 막대 — 0선을 가운데 두고 이익은 위, 손실은 아래로 자란다. */
+function NetBars({ labels, net, revenue, costs, taxes }: {
+  labels: string[];
+  net: number[];
+  revenue: number[];
+  costs: number[];
+  taxes: number[];
+}) {
+  const max = Math.max(1, ...net.map(Math.abs));
+  return (
+    <div className="fin-net-chart fin-pl-chart">
+      {labels.map((lab, i) => (
+        <div
+          key={lab}
+          className="fin-net-col"
+          title={`${lab} · Revenue ${won(revenue[i])} · Costs ${won(costs[i])} · Taxes ${won(taxes[i])} · Net ${won(net[i])}`}
+        >
+          <div className="fin-net-track">
+            <div className="fin-net-mid" />
+            {/* 값 꼬리표는 막대가 자라는 쪽 바깥에 — 0선 위아래 어느 쪽이든 막대 끝을 따라간다. */}
+            {Math.round(net[i]) ? (
+              <div
+                className={`fin-pl-cap ${net[i] >= 0 ? "pos" : "neg"}`}
+                style={{ [net[i] >= 0 ? "bottom" : "top"]: `calc(50% + ${(Math.abs(net[i]) / max) * 48}%)` } as React.CSSProperties}
+              >
+                {compact(net[i])}
+              </div>
+            ) : null}
+            <div
+              className={`fin-net-bar ${net[i] >= 0 ? "pos" : "neg"}`}
+              style={{ height: `${(Math.abs(net[i]) / max) * 48}%`, [net[i] >= 0 ? "bottom" : "top"]: "50%" } as React.CSSProperties}
+            />
+          </div>
+          <div className="fin-bar-label">{lab}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
