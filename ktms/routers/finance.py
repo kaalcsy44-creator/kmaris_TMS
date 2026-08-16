@@ -498,12 +498,93 @@ def _payable_overdue(p, settled: bool, today_str: str) -> bool:
     )
 
 
+# 외화 입금 한 건마다 은행이 떼는 해외 타발송금 수취수수료. 원화 정액이라 입금 통화로는
+# 그날 환율만큼 달라진다($8,200 보내면 $8,193.18 이 들어오고, 그 차액이 이것이다).
+INBOUND_FEE_CATEGORY = "수수료"
+INBOUND_FEE_KRW = 10_000.0
+
+_DAY_RATE_CACHE: dict[tuple[str, str], tuple[float, str]] = {}
+
+
+def _day_rate(day: str, cur: str) -> tuple[float, str]:
+    """그날의 매매기준율(1 cur = ? KRW) → (환율, 실제 고시일). 실패하면 (고정환율, "")."""
+    cur = (cur or "USD").upper()
+    key = (day, cur)
+    if key in _DAY_RATE_CACHE:
+        return _DAY_RATE_CACHE[key]
+    row, used, _err = get_rates(day, cur)
+    out = ((float(row["base"]) / float(row.get("unit") or 1), used) if row and row.get("base")
+           else (USD_KRW_RATE if cur == "USD" else 1.0, ""))
+    _DAY_RATE_CACHE[key] = out
+    return out
+
+
+def _inbound_fee_rows(s) -> list[dict]:
+    """외화 수금마다 붙는 은행 수취수수료 — 계산해서 세우는 행이다(등록하지 않는다).
+
+    이 비용은 청구서가 오지 않는다. 입금되는 순간 은행이 떼고 나머지만 통장에 꽂히므로,
+    아무도 등록하지 않으면 장부에서 영영 빠진다 — 그런데 우리 AR 은 '청구액이 다 들어왔다'로
+    기록되니(받은 금액이 아니라) 그 차액만큼 손익이 부풀어 있었다.
+
+    금액은 원화 정액(₩10,000)을 그날 매매기준율로 입금 통화에 옮긴 값이다. 그래서 건마다
+    외화 금액이 다르다 — 산출근거를 행마다 함께 적어 두는 이유다(notes).
+    원화 수금은 이 수수료가 없으므로 세우지 않는다.
+    """
+    out: list[dict] = []
+    for r in _finance_receivable_rows(s):
+        cur = (r["currency"] or "").upper()
+        day = (r["paid_date"] or "")[:10]
+        # 실제로 들어온 건에만 붙는다 — 입금일을 모르면 어느 날 환율인지도 정할 수 없다.
+        if cur in ("", "KRW") or r["paid_amount"] <= 0 or not day:
+            continue
+        rate, used = _day_rate(day, cur)
+        fee = round(INBOUND_FEE_KRW / rate, 2) if rate else 0.0
+        if not fee:
+            continue
+        basis = (f"₩{INBOUND_FEE_KRW:,.0f} ÷ ₩{rate:,.2f}/{cur}"
+                 + (f" · 매매기준율 {used}" if used else " · fixed rate"))
+        out.append({
+            # 파생 행이라 실제 지급 id 와 겹치지 않게 음수로 둔다(화면 key 전용).
+            "id": -r["id"],
+            "source": "bankfee",
+            "category": INBOUND_FEE_CATEGORY,
+            "counterparty": r["customer"],
+            "vendor_id": None,
+            "description": f"Receiving fee · {r['invoice_no'] or r['ci_no'] or 'remittance'}",
+            "notes": basis,
+            "amount": fee,
+            "vat_amount": 0.0,
+            "invoice_amount": fee,
+            # 입금되는 순간 떼인 돈이라 미지급이 남지 않는다 — 언제나 정산 완료다.
+            "paid_amount": fee,
+            "outstanding": 0.0,
+            "currency": cur,
+            "fx_rate": rate,
+            "bill_date": day,
+            "due_date": day,
+            "recurrence": "none",
+            "recur_until": "",
+            "paid": True,
+            "overdue": False,
+            "paid_date": day,
+            "paid_dates": [],
+            "payments": {},
+            "order_id": r["order_id"],
+            "rfq_id": r.get("rfq_id") or 0,
+            "owner_id": 0,
+            "owner": "",
+        })
+    return out
+
+
 @app.get("/api/admin/finance/payables", dependencies=[Depends(require_token)])
 def finance_payables():
     """지급대장 목록 — 수동 등록(FinancePayable) + 매입 청구(APRecord, 읽기전용).
 
     AP 행은 프로젝트 9·10단계에서 편집하므로 여기서는 읽기전용으로 함께 보여준다.
     반복 항목은 캘린더에서 회차로 펼쳐진다.
+    외화 수금의 은행 수취수수료(_inbound_fee_rows)도 읽기전용 행으로 합류한다 — 청구서가
+    오지 않는 비용이라 계산해 세우지 않으면 장부에서 통째로 빠진다.
     """
     s = get_session()
     try:
@@ -561,6 +642,8 @@ def finance_payables():
                 "owner_id": 0,
                 "owner": "",
             })
+        # 외화 수금마다 붙는 은행 수취수수료 — 계산해 세우는 읽기전용 행.
+        out.extend(_inbound_fee_rows(s))
         out.sort(key=lambda r: (r["due_date"] or "9999", r["source"] != "manual"))
         return {"rows": out, "fx": _today_usd_krw()}
     finally:
@@ -1177,6 +1260,20 @@ def finance_profit(year: int = 0):
                 else:
                     operating.setdefault(cat, z())[i] += supply_krw
                     note(f"op:{cat}", i, who, supply_krw)
+
+        # 은행 수취수수료 — 외화가 들어오는 순간 떼인 돈이라 등록될 일이 없다. 계산해서
+        # 그 입금이 있던 달의 비용으로 세운다(원화로는 건당 정액이라 늘 ₩10,000 이다).
+        for f in _inbound_fee_rows(s):
+            day = f["due_date"]
+            if not (ys <= day <= ye):
+                continue
+            i = int(day[5:7]) - 1
+            # 원화 정액을 그대로 쓴다 — 표시용 외화 금액($6.48)은 센트에서 반올림된 값이라
+            # 다시 곱하면 ₩1 씩 어긋난다. 이 비용의 참값은 애초에 원화 쪽이다.
+            operating.setdefault(INBOUND_FEE_CATEGORY, z())[i] += INBOUND_FEE_KRW
+            # 툴팁에서는 건을 가릴 수 있을 만큼만 — 산출근거 전문은 Outflow 목록의 그 행에 있다.
+            ref = f["description"].replace("Receiving fee · ", "")
+            note(f"op:{INBOUND_FEE_CATEGORY}", i, f"{f['counterparty']} · {ref} ({day})", INBOUND_FEE_KRW)
 
         # 기타수입과 투자금 — 통장에는 나란히 들어오지만 손익에서는 갈린다. 투자금은 판 것이
         # 아니라 넣은 것이라(자본 유입) 수익이 아니고, 여기 섞이면 매출 없는 달이 흑자로 보인다.

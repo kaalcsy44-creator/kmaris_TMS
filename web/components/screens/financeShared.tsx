@@ -25,6 +25,7 @@ export const CATEGORY_LABEL: Record<string, string> = {
   임차료: "Rent",
   급여: "Payroll",
   공과금: "Utilities",
+  수수료: "Bank fee",
   세금: "Tax",
   기타: "Other",
 };

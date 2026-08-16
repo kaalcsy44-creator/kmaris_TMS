@@ -62,7 +62,7 @@ import {
 // 통화·달 이름·KPI 타일·문서번호 링크는 Finance 화면들이 함께 쓰므로 financeShared 에 있다
 // (위 import 참고). 여기 남은 것들은 이 화면에서만 쓰는 목록·폼용 표기다.
 // Category codes are stored values (do not translate); labels below are display-only.
-const CATEGORIES = ["거래선지급", "컨설팅비", "임차료", "급여", "공과금", "세금", "기타"];
+const CATEGORIES = ["거래선지급", "컨설팅비", "임차료", "급여", "공과금", "수수료", "세금", "기타"];
 /** 소개 수수료 분류 — 금액이 프로젝트 매출에서 계산되는 유일한 지급이라 이름을 상수로 둔다. */
 const CONSULTING = "컨설팅비";
 const RECURRENCE_LABEL: Record<string, string> = {
@@ -1590,21 +1590,25 @@ function OutflowTab() {
       말은 수입 목록과 짝을 이룬다: 기일 전이면 Payable(저쪽은 Receivable), 지났으면
       Overdue, 끝났으면 Paid(저쪽은 Received). */
   function statusCell(p: FinancePayable) {
-    const isAp = p.source === "ap";
+    // 손으로 등록한 행이 아니면(벤더 청구·은행 수수료) 여기서 상태를 바꿀 수 없다.
+    const derived = (p.source || "manual") !== "manual";
     const late = !!p.overdue && !p.paid;
     return (
       <td data-label="Status">
-        {isAp ? (
+        {derived ? (
           // 벤더 청구서도 기타 지출과 같은 칩으로 보여준다 — 다만 지급 기록은
           // 프로젝트 11단계 AP 탭의 Payment 칸에서 하므로 여기서는 누를 수 없다.
+          // 수취수수료는 입금되는 순간 떼인 돈이라 애초에 기록할 것이 없다.
           <button
             type="button"
             className={`wt-badge fin-paid-toggle${p.paid ? " on" : ""}${late ? " overdue" : ""}`}
-            title="Record the payment in the project's stage 11 Payable (AP)"
+            title={p.source === "bankfee"
+              ? "Deducted by the bank as the money came in"
+              : "Record the payment in the project's stage 11 Payable (AP)"}
             disabled
           >
             {p.paid
-              ? "Paid"
+              ? p.source === "bankfee" ? "Deducted" : "Paid"
               : late
                 ? p.paid_amount > 0 ? "Partly paid · overdue" : "Overdue"
                 : p.paid_amount > 0 ? "Partly paid" : "Payable"}
@@ -1692,7 +1696,10 @@ function OutflowTab() {
     return (
       <td className="fin-c-act">
         <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
-          {p.source === "ap" ? (
+          {p.source === "bankfee" ? (
+            // 수금에 딸려 나온 행이라 고칠 것이 없다 — 그 수금이 있는 자리로 보낸다.
+            <ProjectDocLink orderId={p.order_id} rfqId={p.rfq_id} label="From this receipt" hint />
+          ) : p.source === "ap" ? (
             <ProjectDocLink orderId={p.order_id} rfqId={p.rfq_id} label="Project stage 11" hint apPoId={p.po_id} />
           ) : (
             <>
@@ -1755,7 +1762,7 @@ function OutflowTab() {
           : view === "consulting"
             ? "Introducer commission. The table above works out what each project owes — its sales times the fee rate agreed on the RFQ — and Register turns one of those lines into a payable with the consultant and the amount already filled in. The list below is what has actually been booked."
             : view === "other"
-              ? "The company's own costs — rent, payroll, utilities, taxes — are registered by hand here; monthly/quarterly/yearly items appear as occurrences on the calendar."
+              ? "The company's own costs — rent, payroll, utilities, taxes — are registered by hand here; monthly/quarterly/yearly items appear as occurrences on the calendar. Bank receiving fees on foreign-currency collections are worked out for you and shown read-only, with the arithmetic under each line."
               : "Purchases and other costs in one list. Each line carries what was billed, what has gone out and what is still owed, so the four filters on the right cut it the same way the Overview grid does."}
       </p>
 
@@ -1804,6 +1811,12 @@ function OutflowTab() {
                     <>
                       <ProjectDocLink orderId={p.order_id} rfqId={p.rfq_id} label={p.description} apPoId={p.po_id} />
                       {p.po_no && p.po_no !== p.description ? <div className="muted">{p.po_no}</div> : null}
+                    </>
+                  ) : p.source === "bankfee" ? (
+                    // 산출근거를 적요 아래에 그대로 — 이 금액이 왜 이 값인지가 행 안에서 끝난다.
+                    <>
+                      <ProjectDocLink orderId={p.order_id} rfqId={p.rfq_id} label={p.description} />
+                      <div className="muted">{p.notes}</div>
                     </>
                   ) : (
                     <>

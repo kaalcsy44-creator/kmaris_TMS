@@ -894,7 +894,9 @@ export type FinancePayable = {
   notes: string;
   owner_id: number;
   owner: string;
-  source?: "manual" | "ap";   // "ap" = 매입 청구(APRecord) 유래, 읽기전용
+  // "ap" = 매입 청구(APRecord) 유래, "bankfee" = 외화 수금에서 떼인 은행 수취수수료를
+  // 계산해 세운 행. 둘 다 읽기전용이다(등록해서 만든 행이 아니다).
+  source?: "manual" | "ap" | "bankfee";
   bill_date?: string;         // 청구서·고지서 발행일(AP=9단계 입력값, 수동 등록=직접 입력)
   po_no?: string;             // source==="ap" 일 때 연결된 벤더 P/O 번호
   po_id?: number;             // source==="ap" 일 때 그 벤더 P/O id — 9단계 AP 탭 딥링크용
