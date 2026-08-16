@@ -55,25 +55,23 @@ type Line = {
 };
 
 /**
- * 칸 하나의 툴팁 — "6월 · Purchases ₩8,060,000" 아래에 거래선/금액을 몇 줄.
+ * 칸 하나의 툴팁 — 거래선/금액만 몇 줄.
+ *
+ * 합계는 적지 않는다. 그 값은 커서가 놓인 칸에 이미 적혀 있고, 어느 달 어느 줄인지도
+ * 커서의 위치가 말한다 — 툴팁이 그걸 되풀이하면 정작 보러 온 내역이 한 줄 밀린다.
  *
  * 브라우저 기본 툴팁(title)을 쓴다. 직접 그린 팝오버는 12×14 칸 위에서 스크롤·경계와
  * 싸워야 하는데, 여기서 원하는 건 잠깐 훑는 것뿐이라 그 값을 치를 이유가 없다.
  * 내역이 없거나 0인 칸은 빈 문자열을 돌려줘 툴팁 자체가 뜨지 않게 한다.
  */
-function tip(
-  details: FinanceProfit["details"],
-  line: Line,
-  month: number,
-  label: string
-): string {
-  const v = line.values[month];
-  if (!details || !line.detail || !Math.round(v)) return "";
+function tip(details: FinanceProfit["details"], line: Line, month: number): string {
+  if (!details || !line.detail || !Math.round(line.values[month])) return "";
   const cellDetail = details[line.detail]?.[String(month)];
   if (!cellDetail || cellDetail.rows.length === 0) return "";
   const body = cellDetail.rows.map((r) => `${r.name} / ${won(r.amount)}`);
+  // 접어 둔 나머지는 합계가 아니라 '여기 더 있다'는 표시라 남긴다.
   if (cellDetail.more) body.push(`+${cellDetail.more} more / ${won(cellDetail.more_amount)}`);
-  return [`${label} · ${line.name} ${won(v)}`, ...body].join("\n");
+  return body.join("\n");
 }
 
 export default function FinanceProfitTab() {
@@ -270,7 +268,7 @@ export default function FinanceProfitTab() {
                           한 칸에 담을 수 있는 건 합계 하나뿐인데, 대개 다음 질문이
                           "그게 누구 건인가"라서. 내역이 없는 줄(소계·부가세)은 그냥 둔다. */}
                       {l.values.map((v, i) => (
-                        <td key={i} className="num" title={tip(data.details, l, i, data.labels[i])}>
+                        <td key={i} className="num" title={tip(data.details, l, i)}>
                           {cell(v)}
                         </td>
                       ))}
