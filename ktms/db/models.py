@@ -542,6 +542,9 @@ class ARRecord(Base):
     currency       = Column(String(10), default="USD")
     due_date       = Column(String(10))
     paid_date      = Column(String(10))   # 완납일 — 수금 등록으로 잔액이 0이 된 날
+    # 이 입금에서 은행이 떼어간 수취수수료(입금 통화). 통장에 찍힌 금액이 청구액보다
+    # 이만큼 모자랐다는 기록이다 — 수금액은 청구액으로 채워 두므로 그 차액은 여기에만 남는다.
+    bank_fee       = Column(Float, default=0.0)
     status         = Column(SAEnum(ARStatus), default=ARStatus.OUTSTANDING)
     notes          = Column(Text)
     # 세금계산서(대금청구서) 문서 필드 — 9단계 편집창에서 입력, TAX INVOICE PDF 생성에 사용.

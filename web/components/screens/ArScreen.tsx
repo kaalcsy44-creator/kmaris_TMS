@@ -10,6 +10,7 @@ import {
   fetchPoWorkOptions,
   previewTaxInvoicePdf,
   recordArPayment,
+  fetchFxRate,
   updateArRecord,
   fetchApByOrder,
   createApRecord,
@@ -663,6 +664,27 @@ function MilestoneBar({ row, stage, onChanged }: { row: ArRow; stage: 10 | 11; o
   );
   const [payDue, setPayDue] = useState(row.due_date || today());
   const [paidAt, setPaidAt] = useState(localDateTime(row.paid_date) || nowLocal());
+  // 외화 입금은 은행이 수취수수료를 떼고 넣어 준다 — 통장에 찍힌 그대로 적으면 늘 몇
+  // 달러가 모자라 부분수금이 되고, 그러면 완납일이 안 남아 수수료를 계산할 날짜조차
+  // 없어진다. 그 수수료만큼은 못 받은 돈이 아니라 이미 나간 비용으로 본다.
+  const foreign = (row.currency || "USD").toUpperCase() !== "KRW";
+  const [bankFee, setBankFee] = useState(true);
+  // 입금일 그날의 고시로 미리 계산해 보여 준다 — 저장하기 전에 얼마가 얹히는지 알도록.
+  const payDay = (paidAt || "").slice(0, 10) || today();
+  const [feeQuote, setFeeQuote] = useState<{ fee: number; rate: number; date: string } | null>(null);
+  useEffect(() => {
+    if (!foreign || stage !== 11) { setFeeQuote(null); return; }
+    let alive = true;
+    fetchFxRate(payDay, row.currency || "USD")
+      .then((q) => {
+        const rate = q.rate / (q.unit || 1);
+        if (alive && rate) {
+          setFeeQuote({ fee: Math.round((10000 / rate) * 100) / 100, rate, date: q.date_used });
+        }
+      })
+      .catch(() => { if (alive) setFeeQuote(null); });
+    return () => { alive = false; };
+  }, [foreign, stage, payDay, row.currency]);
 
   async function complete(flag: boolean) {
     setBusy(true);
@@ -671,7 +693,8 @@ function MilestoneBar({ row, stage, onChanged }: { row: ArRow; stage: 10 | 11; o
       if (stage === 11 && flag) {
         // 빈 칸 = 금액은 건드리지 않고 완료만 표시. 0 을 넣으면 기록된 수금을 취소한다.
         const text = amount.trim();
-        if (text !== "") await recordArPayment(row.id, num(text), payDue, true);
+        // 입금일은 '적은 날'이 아니라 '들어온 날' — 수수료 환율의 기준일이라 반드시 넘긴다.
+        if (text !== "") await recordArPayment(row.id, num(text), payDue, true, payDay, foreign && bankFee);
       }
       await completeOrderStage(row.order_id, stage, flag, flag ? (stage === 10 ? issuedAt : paidAt) : undefined);
       onChanged();
@@ -724,10 +747,27 @@ function MilestoneBar({ row, stage, onChanged }: { row: ArRow; stage: 10 | 11; o
             </>
           )}
         </div>
+        {/* 외화 입금에만 뜬다 — 원화에는 수취수수료가 없다. 입금일을 바꾸면 그날 고시로
+            다시 계산된다(칸 위의 'Paid at' 날짜가 곧 기준일이다). */}
+        {stage === 11 && foreign ? (
+          <label className="check-chip" style={{ display: "inline-flex", marginTop: 8, cursor: "pointer" }}>
+            <input type="checkbox" checked={bankFee} onChange={(e) => setBankFee(e.target.checked)} />
+            {" "}Bank deducted its receiving fee
+            {feeQuote ? (
+              <span className="hint-inline" style={{ marginLeft: 6 }}>
+                ≈ {row.currency} {feeQuote.fee.toLocaleString()} (₩10,000 ÷ ₩{feeQuote.rate.toLocaleString()}
+                {feeQuote.date ? ` · 매매기준율 ${feeQuote.date}` : " · fixed rate"})
+              </span>
+            ) : null}
+          </label>
+        ) : null}
         {stage === 11 ? (
           <p className="hint-inline" style={{ display: "block", margin: "6px 0 0" }}>
             The amount is the total received against this invoice, not an addition — saving twice records it once.
             Leave it empty to just mark the stage complete, or enter 0 to undo a payment recorded by mistake.
+            {foreign
+              ? " Enter what actually landed in the account: the receiving fee is added back for the settlement check, so the invoice still closes, and the fee itself appears as a cost under Outflow → Other costs."
+              : ""}
           </p>
         ) : null}
         {byPi ? (

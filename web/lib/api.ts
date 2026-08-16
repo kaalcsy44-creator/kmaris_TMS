@@ -1429,12 +1429,25 @@ export function recordArPayment(
   arId: number,
   amount: number,
   dueDate?: string,
-  setTotal = false
-): Promise<{ ok: boolean; paid_amount: number; status: string }> {
+  setTotal = false,
+  /** 실제로 돈이 들어온 날 — 수취수수료 환율의 기준일. 비우면 서버가 오늘로 본다. */
+  paidOn?: string,
+  /** 외화 입금에서 은행이 수수료를 떼고 넣어 주었는가(그만큼 모자란 입금도 완납으로 본다). */
+  bankFee = true
+): Promise<{
+  ok: boolean;
+  paid_amount: number;
+  status: string;
+  /** 완납 판정에 얹은 수취수수료(입금 통화). 원화 건은 0. */
+  bank_fee: number;
+  paid_date: string;
+}> {
   return post(`/api/admin/ar/${arId}/payment`, {
     amount,
     due_date: dueDate ?? null,
     set_total: setTotal,
+    paid_on: paidOn ?? null,
+    bank_fee: bankFee,
   });
 }
 

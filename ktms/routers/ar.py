@@ -19,6 +19,7 @@ from _core import (
     Vessel,
     _ar_status_from_text,
     _enum_val,
+    inbound_fee_in,
     _first_rfq_iso,
     _project_no_for_order,
     _project_no_map,
@@ -334,7 +335,18 @@ def ar_payment(ar_id: int, body: ARPayment):
     set_total=True 면 amount 를 '지금까지 받은 총액'으로 그대로 설정한다(멱등). 화면의
     수금 칸이 이 방식이라, 완료 버튼을 다시 눌러도 같은 금액이 두 번 쌓이지 않고 잘못
     들어간 금액도 올바른 총액으로 고쳐 저장할 수 있다(0 을 보내면 수금 취소).
-    set_total=False(기본)면 기존처럼 받은 금액을 누적한다."""
+    set_total=False(기본)면 기존처럼 받은 금액을 누적한다.
+
+    외화 입금은 은행이 수취수수료를 떼고 넣어 준다 — $8,200 을 청구했는데 통장에는
+    $8,193.18 이 꽂힌다. 통장에 찍힌 그대로 적으면 늘 몇 달러가 모자라 영영 '부분수금'이
+    되고, 그러면 완납일이 남지 않아 수수료를 계산할 날짜조차 없어진다(수수료가 수수료의
+    기록을 막는 셈이다).
+
+    그 차액은 못 받은 돈이 아니다 — 고객은 청구액 전부를 갚았고 은행이 중간에서 제 몫을
+    가져간 것이다. 그래서 bank_fee 가 켜져 있으면 수금액을 청구액에 맞춰 채우고(받을 돈은
+    0 이 된다) 차액은 우리 비용으로 넘긴다. 그 비용은 Outflow 에 수수료 행으로 선다
+    (_inbound_fee_rows — 같은 입금일·같은 고시환율을 근거로 적는다).
+    """
     s = get_session()
     try:
         ar = s.query(ARRecord).filter_by(id=ar_id).first()
@@ -350,10 +362,29 @@ def ar_payment(ar_id: int, body: ARPayment):
             ar.paid_amount = (ar.paid_amount or 0) + body.amount
         if body.due_date:
             ar.due_date = body.due_date
-        if ar.paid_amount >= (ar.invoice_amount or 0):
+        # 입금일 — 화면에서 받은 실제 입금일이 우선이고, 없을 때만 오늘로 본다. 이 날짜가
+        # 곧 수수료 환율의 기준일이라 '적은 날'이 아니라 '들어온 날'이어야 한다.
+        paid_on = (body.paid_on or "").strip()[:10] or date.today().isoformat()
+        # 통장에 찍힌 금액이 청구액보다 수수료만큼 모자란 경우 — 고객은 전액을 갚았고 그
+        # 차액은 은행이 가져간 것이다. 그러니 미수로 남겨 두면 안 된다: 받을 돈은 0 이 되고
+        # (수금액을 청구액에 맞춘다), 그 차액은 우리 비용으로 Outflow 에 선다.
+        fee = 0.0
+        shortfall = round((ar.invoice_amount or 0) - (ar.paid_amount or 0), 2)
+        if body.bank_fee and (ar.paid_amount or 0) > 0 and shortfall > 0:
+            est, _rate, _used = inbound_fee_in(ar.currency or "USD", paid_on)
+            # 예상 수수료의 3배까지만 수수료로 본다 — 은행이 쓰는 환율이 고시와 조금 다르고
+            # 센트에서 반올림도 되지만, 그 범위를 넘는 차액은 덜 받은 것이지 수수료가 아니다.
+            if est and shortfall <= est * 3:
+                fee = shortfall
+                ar.paid_amount = round(ar.invoice_amount or 0, 2)
+        # 실제로 떼인 금액을 남긴다 — 수금액을 청구액으로 채우고 나면 그 차액은 여기에만
+        # 남고, Outflow 의 수수료 행이 추정 대신 이 값을 쓴다(두 화면 숫자가 갈리지 않게).
+        ar.bank_fee = round(fee, 2)
+        # 오차 1센트 — 은행이 센트에서 반올림하므로 정확히 맞아떨어지지 않는다.
+        if ar.paid_amount >= (ar.invoice_amount or 0) - 0.01:
             ar.status = ARStatus.PAID
             # 완납일은 최초로 잔액이 0이 된 날. 이미 있으면 유지(재수정 시 날짜 밀림 방지).
-            ar.paid_date = ar.paid_date or date.today().isoformat()
+            ar.paid_date = ar.paid_date or paid_on
         elif ar.paid_amount > 0:
             ar.status = ARStatus.PARTIAL
             ar.paid_date = None
@@ -361,6 +392,8 @@ def ar_payment(ar_id: int, body: ARPayment):
             ar.status = ARStatus.OUTSTANDING
             ar.paid_date = None
         s.commit()
-        return {"ok": True, "paid_amount": ar.paid_amount, "status": _enum_val(ar.status)}
+        return {"ok": True, "paid_amount": ar.paid_amount, "status": _enum_val(ar.status),
+                # 화면이 "차액 얼마를 수수료로 보아 완납 처리했는지"를 그대로 알릴 수 있게.
+                "bank_fee": round(fee, 2), "paid_date": ar.paid_date or ""}
     finally:
         s.close()

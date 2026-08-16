@@ -150,6 +150,8 @@ _MIGRATIONS = {
         "charges":         "JSON",
         # 완납일 — 수금 등록으로 잔액이 0이 된 날(미기록 건은 11단계 완료일로 폴백).
         "paid_date":       "VARCHAR(10)",
+        # 이 입금에서 은행이 떼어간 수취수수료(입금 통화). 구 데이터는 0(추정으로 계산).
+        "bank_fee":        "FLOAT DEFAULT 0",
     },
     "ap_records": {
         "charges":         "JSON",

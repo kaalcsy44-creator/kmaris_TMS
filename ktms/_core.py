@@ -1764,6 +1764,13 @@ class ARPayment(BaseModel):
     # 같은 값을 다시 보내도 결과가 같아, 완료 버튼을 두 번 눌러도 수금이 겹쳐 쌓이지 않는다.
     # False(기본) = 기존 누적 방식 — 외부/구 호출 호환용.
     set_total: bool = False
+    # 실제로 돈이 들어온 날. 비우면 오늘로 본다 — 지난 입금을 뒤늦게 적을 때 오늘로 밀리면
+    # 그날 환율로 매기는 은행 수수료가 엉뚱한 값이 된다.
+    paid_on: str | None = None
+    # 외화 입금에서 은행이 수취수수료를 떼고 넣어 주었는가. 켜져 있으면 그만큼 모자란
+    # 입금도 완납으로 보고(못 받은 것이 아니라 이미 비용으로 나간 것이므로), 그 수수료는
+    # Outflow 에 비용 행으로 선다.
+    bank_fee: bool = True
 
 
 class ARSave(BaseModel):
@@ -2425,6 +2432,45 @@ FINANCE_CATEGORIES = ["거래선지급", "컨설팅비", "임차료", "급여", 
 # 기타 수입 분류 — 프로젝트 매출(AR)이 아닌 입금.
 # 투자금은 통장에 들어오지만 매출이 아니다(자본 유입) — 손익표는 이 분류를 수익에서 뺀다.
 FINANCE_INCOME_CATEGORIES = ["이자수입", "환급", "투자금", "잡수입", "기타"]
+
+# ── 해외 타발송금 수취수수료 ──────────────────────────────────────────────────
+# 외화가 들어올 때 은행이 떼는 건당 정액. 원화로 매겨지므로 입금 통화로는 그날 환율만큼
+# 달라진다($8,200 보내면 $8,193.18 이 들어오고, 그 차액이 이것이다).
+# 수금 등록(ar)과 지출 집계(finance) 두 곳이 같은 값·같은 환율을 봐야 해서 여기 둔다.
+INBOUND_FEE_KRW = 10_000.0
+INBOUND_FEE_CATEGORY = "수수료"
+
+_DAY_RATE_CACHE: dict[tuple[str, str], tuple[float, str]] = {}
+
+
+def day_base_rate(day: str, cur: str) -> tuple[float, str]:
+    """그날의 매매기준율(1 cur = ? KRW) → (환율, 실제 고시일). 실패하면 (고정환율, "")."""
+    from services.fx import get_rates
+
+    cur = (cur or "USD").upper()
+    if cur == "KRW":
+        return 1.0, ""
+    key = (day, cur)
+    if key in _DAY_RATE_CACHE:
+        return _DAY_RATE_CACHE[key]
+    row, used, _err = get_rates(day, cur)
+    out = ((float(row["base"]) / float(row.get("unit") or 1), used) if row and row.get("base")
+           else (USD_KRW_RATE if cur == "USD" else 1.0, ""))
+    _DAY_RATE_CACHE[key] = out
+    return out
+
+
+def inbound_fee_in(cur: str, day: str) -> tuple[float, float, str]:
+    """그날 그 통화로 환산한 수취수수료 → (수수료, 적용환율, 고시일). 원화면 (0, 1, "").
+
+    금액이 건마다 다른 이유가 여기 다 들어 있다 — 정액은 원화 쪽이고, 외화 금액은 그날
+    고시로 나눈 결과다. 그래서 호출부는 산출근거를 그대로 적어 둘 수 있다.
+    """
+    cur = (cur or "").upper()
+    if not cur or cur == "KRW" or not day:
+        return 0.0, 1.0, ""
+    rate, used = day_base_rate(day, cur)
+    return (round(INBOUND_FEE_KRW / rate, 2) if rate else 0.0), rate, used
 FINANCE_RECURRENCES = {"none", "monthly", "quarterly", "yearly"}
 
 
@@ -2651,6 +2697,8 @@ def _finance_receivable_rows(s) -> list[dict]:
             "due_date": r.due_date or "",
             # 완납일 — 레코드에 기록된 날짜 우선, 없으면 11단계(수금 완료) 일시로 폴백.
             "paid_date": ((r.paid_date or "")[:10] or _stage11_date(o)) if settled else "",
+            # 이 입금에서 은행이 실제로 떼어간 수취수수료(입금 통화). 0 = 기록 없음.
+            "bank_fee": round(float(getattr(r, "bank_fee", None) or 0), 2),
             "status": status,
             "overdue": bool(overdue),
         })
@@ -3424,6 +3472,10 @@ __all__ = [
     "FinanceIncomeIn",
     "FINANCE_CATEGORIES",
     "FINANCE_INCOME_CATEGORIES",
+    "INBOUND_FEE_KRW",
+    "INBOUND_FEE_CATEGORY",
+    "day_base_rate",
+    "inbound_fee_in",
     "FINANCE_RECURRENCES",
     "_finance_income_row",
     "_finance_payable_row",

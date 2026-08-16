@@ -10,6 +10,9 @@ from _core import (
     APRecord,
     ARRecord,
     Consultant,
+    INBOUND_FEE_CATEGORY,
+    INBOUND_FEE_KRW,
+    inbound_fee_in,
     Customer,
     Depends,
     Quotation,
@@ -498,27 +501,6 @@ def _payable_overdue(p, settled: bool, today_str: str) -> bool:
     )
 
 
-# 외화 입금 한 건마다 은행이 떼는 해외 타발송금 수취수수료. 원화 정액이라 입금 통화로는
-# 그날 환율만큼 달라진다($8,200 보내면 $8,193.18 이 들어오고, 그 차액이 이것이다).
-INBOUND_FEE_CATEGORY = "수수료"
-INBOUND_FEE_KRW = 10_000.0
-
-_DAY_RATE_CACHE: dict[tuple[str, str], tuple[float, str]] = {}
-
-
-def _day_rate(day: str, cur: str) -> tuple[float, str]:
-    """그날의 매매기준율(1 cur = ? KRW) → (환율, 실제 고시일). 실패하면 (고정환율, "")."""
-    cur = (cur or "USD").upper()
-    key = (day, cur)
-    if key in _DAY_RATE_CACHE:
-        return _DAY_RATE_CACHE[key]
-    row, used, _err = get_rates(day, cur)
-    out = ((float(row["base"]) / float(row.get("unit") or 1), used) if row and row.get("base")
-           else (USD_KRW_RATE if cur == "USD" else 1.0, ""))
-    _DAY_RATE_CACHE[key] = out
-    return out
-
-
 def _inbound_fee_rows(s) -> list[dict]:
     """외화 수금마다 붙는 은행 수취수수료 — 계산해서 세우는 행이다(등록하지 않는다).
 
@@ -537,12 +519,19 @@ def _inbound_fee_rows(s) -> list[dict]:
         # 실제로 들어온 건에만 붙는다 — 입금일을 모르면 어느 날 환율인지도 정할 수 없다.
         if cur in ("", "KRW") or r["paid_amount"] <= 0 or not day:
             continue
-        rate, used = _day_rate(day, cur)
-        fee = round(INBOUND_FEE_KRW / rate, 2) if rate else 0.0
+        est, rate, used = inbound_fee_in(cur, day)
+        quote = (f"₩{rate:,.2f}/{cur}" + (f" · 매매기준율 {used}" if used else " · fixed rate"))
+        # 수금할 때 통장 금액과 청구액의 차이로 실제 떼인 금액을 적어 두었으면 그것이 참값이다.
+        # 옛 수금(그 기록이 없는 건)은 정액 ₩10,000 을 그날 환율로 옮겨 추정한다.
+        actual = round(float(r.get("bank_fee") or 0), 2)
+        if actual > 0:
+            fee = actual
+            basis = f"invoiced {r['invoice_amount']:,.2f} − received {r['invoice_amount'] - actual:,.2f} · {quote}"
+        else:
+            fee = est
+            basis = f"₩{INBOUND_FEE_KRW:,.0f} ÷ {quote}"
         if not fee:
             continue
-        basis = (f"₩{INBOUND_FEE_KRW:,.0f} ÷ ₩{rate:,.2f}/{cur}"
-                 + (f" · 매매기준율 {used}" if used else " · fixed rate"))
         out.append({
             # 파생 행이라 실제 지급 id 와 겹치지 않게 음수로 둔다(화면 key 전용).
             "id": -r["id"],
@@ -560,6 +549,8 @@ def _inbound_fee_rows(s) -> list[dict]:
             "outstanding": 0.0,
             "currency": cur,
             "fx_rate": rate,
+            # 추정이 아니라 통장에서 확인된 금액인가 — 화면·집계가 둘을 가릴 수 있게.
+            "actual": actual > 0,
             "bill_date": day,
             "due_date": day,
             "recurrence": "none",
@@ -1268,12 +1259,13 @@ def finance_profit(year: int = 0):
             if not (ys <= day <= ye):
                 continue
             i = int(day[5:7]) - 1
-            # 원화 정액을 그대로 쓴다 — 표시용 외화 금액($6.48)은 센트에서 반올림된 값이라
-            # 다시 곱하면 ₩1 씩 어긋난다. 이 비용의 참값은 애초에 원화 쪽이다.
-            operating.setdefault(INBOUND_FEE_CATEGORY, z())[i] += INBOUND_FEE_KRW
+            # 실제로 떼인 금액이 기록돼 있으면 그것을 그날 환율로 옮긴다. 없으면 정액
+            # ₩10,000 을 그대로 쓴다 — 추정 외화 금액을 되곱하면 ₩1 씩 어긋나기 때문이다.
+            krw = round(f["amount"] * f["fx_rate"]) if f.get("actual") else INBOUND_FEE_KRW
+            operating.setdefault(INBOUND_FEE_CATEGORY, z())[i] += krw
             # 툴팁에서는 건을 가릴 수 있을 만큼만 — 산출근거 전문은 Outflow 목록의 그 행에 있다.
             ref = f["description"].replace("Receiving fee · ", "")
-            note(f"op:{INBOUND_FEE_CATEGORY}", i, f"{f['counterparty']} · {ref} ({day})", INBOUND_FEE_KRW)
+            note(f"op:{INBOUND_FEE_CATEGORY}", i, f"{f['counterparty']} · {ref} ({day})", krw)
 
         # 기타수입과 투자금 — 통장에는 나란히 들어오지만 손익에서는 갈린다. 투자금은 판 것이
         # 아니라 넣은 것이라(자본 유입) 수익이 아니고, 여기 섞이면 매출 없는 달이 흑자로 보인다.
