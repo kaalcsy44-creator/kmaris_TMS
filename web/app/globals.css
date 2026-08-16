@@ -12806,7 +12806,9 @@ table.mini tfoot .fin-foot-name { text-align: left; }
 .fin-bar { width: 42%; min-height: 1px; border-radius: 3px 3px 0 0; }
 .fin-bar.sales { background: #2f6fb0; }
 .fin-bar.purchase { background: #d68910; }
-.fin-bar-label { font-size: 11px; color: var(--muted); margin-top: 4px; }
+/* 눈금 이름은 가운데로 — 막대는 칸 한가운데(left:25%/width:50%)에 서는데 라벨만
+   칸 너비를 다 차지한 채 왼쪽에 붙으면, 둘이 같은 달이라는 것이 눈에 안 보인다. */
+.fin-bar-label { font-size: 11px; color: var(--muted); margin-top: 4px; text-align: center; }
 /* 폰에서는 눈금 하나가 30px 남짓 — 연도를 접어 "2026-07" 을 "07" 로 줄인다. */
 @media (max-width: 640px) {
   .fin-lab-yr { display: none; }
