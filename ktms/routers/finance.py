@@ -44,12 +44,82 @@ from _core import (
     require_token,
     timedelta,
 )
-from services.fx import get_deal_base_rate
+from calendar import monthrange
+
+from services.fx import get_deal_base_rate, get_rates
 
 
 def _to_krw(amount: float, currency: str) -> float:
     """단일 헤드라인 집계용 KRW 환산(USD만 환산, 그 외 원값)."""
     return amount * USD_KRW_RATE if (currency or "").upper() == "USD" else amount
+
+
+# ('YYYY-MM-DD 조회일', 통화) → (환율, 실제 고시일). 프로세스 메모리 캐시.
+_MONTH_RATE_CACHE: dict[tuple[str, str], tuple[float, str]] = {}
+
+
+def _month_end_rate(ym: str, cur: str) -> tuple[float, str]:
+    """그 달 **말일** 기준 매매기준율(1 cur = ? KRW) → (환율, 실제 고시일).
+
+    외화 거래를 원화 손익으로 옮길 때 쓰는 한 가지 규칙이다. 건별로 그날 고시를 쓰면 같은
+    달 안에 환율이 여러 개가 되어 '이 달 매출'을 손으로 검산할 수 없고, 고정환율은 해가
+    바뀌어도 그대로라 실제와 벌어진다. 달의 마지막 고시 하나로 그 달을 통일한다 — 그래서
+    한 달의 모든 줄(매출·매입·수수료)이 같은 환율 위에 서고, 비율이 그대로 읽힌다.
+
+    아직 오지 않은 달(이번 달 포함)은 말일 고시가 없으므로 오늘까지 당겨 조회한다.
+    조회 실패(EXIM_API_KEY 미설정·연휴 등)면 고정환율로 폴백하고 고시일을 빈값으로 둔다 —
+    화면이 '지금 보는 숫자가 고시 기준인가 고정환율인가'를 밝힐 수 있게.
+    """
+    cur = (cur or "USD").upper()
+    if cur == "KRW":
+        return 1.0, ""
+    y, m = int(ym[:4]), int(ym[5:7])
+    ask = min(date(y, m, monthrange(y, m)[1]), date.today())
+    key = (ask.isoformat(), cur)
+    if key in _MONTH_RATE_CACHE:
+        return _MONTH_RATE_CACHE[key]
+    row, used, _err = get_rates(ask.isoformat(), cur)
+    if row and row.get("base"):
+        out = (float(row["base"]) / float(row.get("unit") or 1), used)
+    else:
+        # 폴백은 USD 고정환율뿐 — 그 밖의 통화는 환산하지 않는다(_to_krw 와 같은 규약).
+        out = (USD_KRW_RATE if cur == "USD" else 1.0, "")
+    _MONTH_RATE_CACHE[key] = out
+    return out
+
+
+def _payable_krw(p, amount: float, ym: str, seen: dict | None = None) -> float:
+    """지급 한 건의 원화 환산 — 이 건에 적어 둔 적용환율이 있으면 그것을 먼저 쓴다.
+
+    외화 지급은 실제로 송금한 날의 은행 환율로 통장에서 빠져나간다. 그 값을 입력해 두었다면
+    그것이 이 지출의 진짜 원화 금액이고, 달의 대표 환율보다 정확하다. 비어 있는 건(아직 안
+    낸 예정분 등)만 그 달 말일 고시로 옮긴다.
+    """
+    cur = (p.currency or "KRW").upper()
+    if not amount or cur == "KRW":
+        return amount or 0.0
+    rate = getattr(p, "fx_rate", None)
+    if rate and rate > 0:
+        if seen is not None:
+            seen[f"{ym}:{cur}:entered"] = {"month": ym, "cur": cur, "rate": round(float(rate), 4),
+                                           "date": "", "entered": True}
+        return amount * float(rate)
+    return _krw_in(amount, cur, ym, seen)
+
+
+def _krw_in(amount: float, currency: str, ym: str, seen: dict | None = None) -> float:
+    """ym('YYYY-MM') 달의 말일 고시로 환산한 원화액. seen 에 쓴 환율을 적어 둔다.
+
+    seen 은 화면에 '무슨 환율로 옮겼는지'를 밝히기 위한 것 — 실제로 환산이 일어난 달만
+    담기므로, 원화 거래뿐인 달은 각주에 나타나지 않는다.
+    """
+    cur = (currency or "KRW").upper()
+    if not amount or cur == "KRW":
+        return amount or 0.0
+    rate, used = _month_end_rate(ym, cur)
+    if seen is not None:
+        seen[f"{ym}:{cur}"] = {"month": ym, "cur": cur, "rate": round(rate, 4), "date": used}
+    return amount * rate
 
 
 def _sum_by_currency(pairs) -> dict:
@@ -66,6 +136,14 @@ def _add_by_currency(bucket: dict, key: str, amount: float, currency: str) -> No
     cur = (currency or "KRW").upper()
     per = bucket.setdefault(key, {})
     per[cur] = round(per.get(cur, 0.0) + (amount or 0.0), 2)
+
+
+def _fx_rate_in(body) -> float | None:
+    """저장할 적용환율 — 원화 지급이나 0 이하 입력은 비운다(환산할 것이 없다)."""
+    if (body.currency or "KRW").upper() == "KRW":
+        return None
+    rate = float(body.fx_rate or 0)
+    return rate if rate > 0 else None
 
 
 def _vat_within(amount: float | None, vat: float | None) -> float:
@@ -508,6 +586,7 @@ def create_finance_payable(body: FinancePayableIn, user: dict = Depends(get_curr
             amount=body.amount or 0.0,
             vat_amount=_vat_within(body.amount, body.vat_amount),
             currency=body.currency or "KRW",
+            fx_rate=_fx_rate_in(body),
             rfq_id=body.rfq_id or None,
             bill_date=(body.bill_date or "").strip()[:10],
             due_date=body.due_date or "",
@@ -542,6 +621,7 @@ def update_finance_payable(row_id: int, body: FinancePayableIn):
         p.amount = body.amount or 0.0
         p.vat_amount = _vat_within(body.amount, body.vat_amount)
         p.currency = body.currency or "KRW"
+        p.fx_rate = _fx_rate_in(body)
         p.rfq_id = body.rfq_id or None
         p.bill_date = (body.bill_date or "").strip()[:10]
         p.due_date = body.due_date or ""
@@ -651,7 +731,8 @@ def _po_cost(po) -> float:
 def finance_closing(start: str = "", end: str = "", year: int = 0):
     """기간 결산 — 매출(공급가액·매출세액)·매입(원가·추정 매입세액)·마진·부가세(납부/환급).
 
-    통화 혼재는 USD_KRW_RATE 로 KRW 환산해 집계한다. 수출(영세율)은 매출세액 0으로 본다.
+    외화는 그 거래가 속한 **달의 말일 매매기준율**로 환산한다(_month_end_rate). 수출(영세율)은
+    매출세액 0으로 본다.
     프로젝트 매입세액은 내수 매입 원가의 10% 로 추정(매입 세액 별도 저장이 없음)하고,
     기타 지출은 등록 시 공급가액과 나눠 받은 부가세를 그대로 매입세액에 더한다.
     year 를 주면 그 해 12개월 매출/매입 추이(KRW)도 반환한다.
@@ -670,6 +751,8 @@ def finance_closing(start: str = "", end: str = "", year: int = 0):
     try:
         ord_map = {o.id: o for o in s.query(Order).all()}
         cust_names = {c.id: c.name for c in s.query(Customer).all()}
+        # 실제로 환산에 쓴 환율 — 화면 각주가 '무슨 환율로 옮겼는지'를 밝히는 데 쓴다.
+        fx_seen: dict[str, dict] = {}
 
         sales_supply = output_vat = sales_total = 0.0
         by_cust: dict[str, float] = {}
@@ -683,8 +766,9 @@ def finance_closing(start: str = "", end: str = "", year: int = 0):
                 continue
             o = ord_map.get(r.order_id)
             cur = r.currency or "USD"
-            inv_krw = _to_krw(r.invoice_amount or 0, cur)
-            supply_krw = _to_krw(_ar_supply(r, o), cur)
+            ym = pd[:7]
+            inv_krw = _krw_in(r.invoice_amount or 0, cur, ym, fx_seen)
+            supply_krw = _krw_in(_ar_supply(r, o), cur, ym, fx_seen)
             vat_krw = inv_krw - supply_krw
             if s0 <= pd <= s1:
                 sales_supply += supply_krw
@@ -705,7 +789,7 @@ def finance_closing(start: str = "", end: str = "", year: int = 0):
             o = ord_map.get(po.order_id)
             trade = (o.trade_type if o else "수출") or "수출"
             cur = po.currency or (o.currency if o else "USD") or "USD"
-            cost_krw = _to_krw(_po_cost(po), cur)
+            cost_krw = _krw_in(_po_cost(po), cur, pd[:7], fx_seen)
             vat_krw = cost_krw * 0.1 if trade == "내수" else 0.0
             if s0 <= pd <= s1:
                 purchase_cost += cost_krw
@@ -728,15 +812,16 @@ def finance_closing(start: str = "", end: str = "", year: int = 0):
             if (p.recurrence or "none") == "none":
                 # 세금계산서를 받은 날 기준 — 없으면 지급 예정일로 본다.
                 pdt = (p.bill_date or "")[:10] or (p.due_date or "")[:10]
-                hits = 1 if pdt and s0 <= pdt <= s1 else 0
+                hits = [pdt] if pdt and s0 <= pdt <= s1 else []
             else:
                 # 반복 항목(월 임차료 등)은 구간에 든 회차 수만큼 잡는다.
-                hits = len(_finance_occurrences(p, d0, d1))
-            if not hits:
-                continue
-            other_vat += _to_krw(vat, cur) * hits
-            other_supply += _to_krw(supply, cur) * hits
-            other_count += hits
+                hits = _finance_occurrences(p, d0, d1)
+            # 회차마다 그 달의 환율로 옮긴다 — 여러 달에 걸친 반복 외화 건이 한 환율로
+            # 뭉치지 않게(원화 건은 어느 쪽이든 같은 값이라 달라지는 것이 없다).
+            for occ in hits:
+                other_vat += _payable_krw(p, vat, occ[:7], fx_seen)
+                other_supply += _payable_krw(p, supply, occ[:7], fx_seen)
+                other_count += 1
         input_vat = purchase_vat + other_vat
 
         by_customer = [
@@ -780,10 +865,26 @@ def finance_closing(start: str = "", end: str = "", year: int = 0):
                 "sales": [round(x) for x in monthly_sales],
                 "purchase": [round(x) for x in monthly_purchase],
             },
+            "fx": _fx_note(fx_seen),
             "usd_krw": USD_KRW_RATE,
         }
     finally:
         s.close()
+
+
+def _fx_note(seen: dict) -> dict:
+    """환산에 실제로 쓴 환율 목록 — 화면 각주용. 원화뿐인 기간이면 빈 목록이다.
+
+    fallback=True 는 고시를 못 받아 고정환율로 옮긴 건이 섞여 있다는 뜻이다(EXIM_API_KEY
+    미설정 등). 숫자만 보면 알 수 없는 사실이라 화면이 그렇다고 말할 수 있어야 한다.
+    """
+    rows = sorted(seen.values(), key=lambda r: (r["month"], r["cur"]))
+    return {
+        "basis": "month_end",
+        "rates": rows,
+        "fallback": any(not r.get("date") and not r.get("entered") for r in rows),
+        "fixed": USD_KRW_RATE,
+    }
 
 
 CONSULTING_CATEGORY = "컨설팅비"
@@ -867,16 +968,10 @@ def finance_consulting():
                 currency = "KRW"
                 amount = sum(_to_krw(v, k) for k, v in sales.items())
             fee = round(amount * rate / 100.0, 2)
-            # 지급 통화는 컨설턴트에게 맞춘다 — 계좌가 원화면 수수료도 원화로 낸다.
-            pay_cur = (c.currency if c else None) or currency
-            if pay_cur == currency:
-                pay_amount = fee
-            elif pay_cur == "KRW":
-                pay_amount = round(_to_krw(fee, currency), 2)
-            elif currency == "KRW" and pay_cur == "USD":
-                pay_amount = round(fee / USD_KRW_RATE, 2)
-            else:
-                pay_cur, pay_amount = currency, fee
+            # 수수료는 **판 통화 그대로** 낸다 — 달러로 받은 돈에서 떼어 달러로 보내는 것이
+            # 실제 흐름이라, 여기서 원화로 바꿔 두면 환전 손익이 없는 자리에 환율이 끼어든다.
+            # (환율은 실제로 송금하는 순간에만 정해지고, 그 값은 지급 등록 화면에서 받는다.)
+            pay_cur, pay_amount = currency, fee
             paid_rows = booked.get(r.id) or []
             rows.append({
                 "rfq_id": r.id,
@@ -922,7 +1017,7 @@ def _payable_occurrences_in_year(p, y0: date, y1: date) -> list[str]:
 def finance_profit(year: int = 0):
     """월별 순수익 — 매출 − 비용 − 세금.
 
-    Closing · VAT 와 같은 발생 기준·같은 환산(USD_KRW_RATE)을 쓰되, 거기서 마진 밖에
+    Closing · VAT 와 같은 발생 기준·같은 환산(그 달 말일 매매기준율)을 쓰되, 거기서 마진 밖에
     세워 두었던 것들(운영비·기타수입·세금)까지 한 장의 손익계산서로 모은다.
     각 줄은 12개월 배열로 돌려주고, 합계와 순수익은 화면에서 더한다 — 세금(추정 부가세)을
     넣고 빼는 스위치가 화면에 있어, 그 계산을 서버가 미리 굳혀 두면 스위치가 무의미해진다.
@@ -964,6 +1059,7 @@ def finance_profit(year: int = 0):
                           or qtn_rfq.get(getattr(o, "quotation_id", None) or 0) or 0)
                    for o in orders}
 
+        fx_seen: dict[str, dict] = {}
         sales, output_vat, consulting = z(), z(), z()
         for r in s.query(ARRecord).all():
             pd = _ar_period_date(r)
@@ -971,8 +1067,8 @@ def finance_profit(year: int = 0):
                 continue
             o = ord_map.get(r.order_id)
             cur = r.currency or "USD"
-            inv_krw = _to_krw(r.invoice_amount or 0, cur)
-            supply_krw = _to_krw(_ar_supply(r, o), cur)
+            inv_krw = _krw_in(r.invoice_amount or 0, cur, pd[:7], fx_seen)
+            supply_krw = _krw_in(_ar_supply(r, o), cur, pd[:7], fx_seen)
             i = int(pd[5:7]) - 1
             sales[i] += supply_krw
             output_vat[i] += inv_krw - supply_krw
@@ -989,7 +1085,7 @@ def finance_profit(year: int = 0):
             o = ord_map.get(po.order_id)
             trade = (o.trade_type if o else "수출") or "수출"
             cur = po.currency or (o.currency if o else "USD") or "USD"
-            cost_krw = _to_krw(_po_cost(po), cur)
+            cost_krw = _krw_in(_po_cost(po), cur, pd[:7], fx_seen)
             i = int(pd[5:7]) - 1
             purchase[i] += cost_krw
             if trade == "내수":
@@ -999,11 +1095,8 @@ def finance_profit(year: int = 0):
         operating: dict[str, list[float]] = {}
         tax_payments, input_vat_other, vendor_manual, consulting_booked = z(), z(), z(), z()
         for p in s.query(FinancePayable).all():
-            cur = p.currency or "KRW"
             amount = float(p.amount or 0.0)
             vat = float(getattr(p, "vat_amount", None) or 0.0)
-            supply_krw = _to_krw(amount - vat, cur)
-            vat_krw = _to_krw(vat, cur)
             cat = p.category or "기타"
             # 요율이 걸린 딜의 수수료 지급은 위에서 이미 매출월에 세었다 — 여기서는
             # 정산분으로만 적는다. 근거가 될 딜이 없는 수수료(소개자를 지운 뒤 등록한 건 등)는
@@ -1011,9 +1104,12 @@ def finance_profit(year: int = 0):
             accrued = cat == CONSULTING_CATEGORY and bool(consultant_rate.get(getattr(p, "rfq_id", None) or 0))
             for occ in _payable_occurrences_in_year(p, y0, y1):
                 i = int(occ[5:7]) - 1
-                input_vat_other[i] += vat_krw
+                # 환산은 회차마다 — 외화 반복 건이 한 환율로 뭉치지 않게. 적용환율을 적어
+                # 둔 건은 그 값이 쓰인다(_payable_krw).
+                supply_krw = _payable_krw(p, amount - vat, occ[:7], fx_seen)
+                input_vat_other[i] += _payable_krw(p, vat, occ[:7], fx_seen)
                 if cat == "세금":
-                    tax_payments[i] += _to_krw(amount, cur)
+                    tax_payments[i] += _payable_krw(p, amount, occ[:7], fx_seen)
                 elif cat == "거래선지급":
                     vendor_manual[i] += supply_krw
                 elif cat == CONSULTING_CATEGORY:
@@ -1023,9 +1119,9 @@ def finance_profit(year: int = 0):
 
         other_income = z()
         for r in s.query(FinanceIncome).all():
-            amount_krw = _to_krw(float(r.amount or 0.0), r.currency or "KRW")
+            amount = float(r.amount or 0.0)
             for occ in _payable_occurrences_in_year(r, y0, y1):
-                other_income[int(occ[5:7]) - 1] += amount_krw
+                other_income[int(occ[5:7]) - 1] += _krw_in(amount, r.currency or "KRW", occ[:7], fx_seen)
 
         input_vat = [input_vat_purchase[i] + input_vat_other[i] for i in range(12)]
         vat = [output_vat[i] - input_vat[i] for i in range(12)]
@@ -1053,6 +1149,7 @@ def finance_profit(year: int = 0):
             },
             "taxes": {"vat": r12(vat), "payments": r12(tax_payments)},
             "vat_detail": {"output": r12(output_vat), "input": r12(input_vat)},
+            "fx": _fx_note(fx_seen),
             "usd_krw": USD_KRW_RATE,
         }
     finally:

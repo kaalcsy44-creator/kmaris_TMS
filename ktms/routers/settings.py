@@ -510,6 +510,9 @@ def _consultant_row(c) -> dict:
         "swift": c.swift or "",
         # 미지정(NULL)은 0 이 아니라 기본 10% 로 읽는다 — 화면·수수료 계산이 같은 규칙.
         "default_rate": c.default_rate if c.default_rate is not None else 10.0,
+        # 계좌 통화 — 기록용이다. 수수료는 그 딜을 판 통화 그대로 지급하므로(달러로 받은
+        # 돈에서 떼어 달러로 보낸다) 지급 통화를 여기서 정하지 않는다. 다만 달러 계좌가
+        # 있는지는 송금 전에 알아야 하는 사실이라 남긴다.
         "currency": c.currency or "KRW",
         "notes": c.notes or "",
     }

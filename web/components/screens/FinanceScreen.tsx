@@ -11,6 +11,7 @@ import {
   fetchFinanceClosing,
   fetchFinanceConsulting,
   fetchFinanceCashflow,
+  fetchFxRate,
   createFinancePayable,
   updateFinancePayable,
   deleteFinancePayable,
@@ -1823,6 +1824,13 @@ function OutflowTab() {
                 <td className="num" data-label={view === "payables" ? "Bill" : "Amount"}>
                   {money(p.invoice_amount, p.currency)}
                   {p.vat_amount ? <div className="muted">VAT {money(p.vat_amount, p.currency)}</div> : null}
+                  {/* 적용환율을 적어 둔 외화 건은 원화로 얼마인지도 함께 — 손익·결산이
+                      집계에 쓰는 바로 그 값이라, 목록에서 확인할 수 있어야 한다. */}
+                  {p.fx_rate ? (
+                    <div className="muted">
+                      {won(p.invoice_amount * p.fx_rate)} @{p.fx_rate.toLocaleString()}
+                    </div>
+                  ) : null}
                 </td>
                 <td className="num" data-label="Paid">{money(p.paid_amount, p.currency)}</td>
                 <td className="num" data-label="Payable">{money(p.outstanding, p.currency)}</td>
@@ -1957,12 +1965,9 @@ function ConsultingBasis({ onRegister }: { onRegister: (prefill: FinancePayableS
                   {r.basis === "order" ? <div className="hint-inline">customer P/O</div> : null}
                 </td>
                 <td className="num fin-consult-rate">{r.rate}%</td>
-                <td className="num fin-consult-fee">
-                  {money(r.fee, r.currency)}
-                  {r.pay_currency !== r.currency ? (
-                    <div className="muted">pay {money(r.pay_amount, r.pay_currency)}</div>
-                  ) : null}
-                </td>
+                {/* 판 통화 그대로 낸다 — 달러 딜이면 달러로. 원화 환산은 실제로 송금할 때
+                    적용환율과 함께 정해지므로 여기서는 미리 바꿔 두지 않는다. */}
+                <td className="num fin-consult-fee">{money(r.fee, r.currency)}</td>
                 <td className="num">
                   {booked ? byCurrencyLines(r.registered) : <span className="dash">—</span>}
                 </td>
@@ -2074,6 +2079,80 @@ function PaymentDateModal({
         </button>
       </div>
     </Modal>
+  );
+}
+
+/**
+ * 외화 지급의 적용환율 — 이 건이 원화로 얼마인지를 정하는 한 칸.
+ *
+ * 기본값은 그 날짜의 매매기준율(수출입은행 고시)이다. 다만 여기 남길 값은 고시가 아니라
+ * **실제로 은행에서 적용받은 환율**이라, 채워 넣은 뒤 손으로 고칠 수 있어야 한다 — 그래서
+ * 자동 조회는 사람이 아직 손대지 않은 동안에만 값을 밀어 넣는다. 날짜(계산서일·지급 예정일)를
+ * 바꾸면 그 날 고시로 다시 따라오되, 이미 고쳐 둔 값은 건드리지 않는다.
+ */
+function PayableFxField({
+  form,
+  set,
+}: {
+  form: FinancePayableSave;
+  set: <K extends keyof FinancePayableSave>(k: K, v: FinancePayableSave[K]) => void;
+}) {
+  const cur = form.currency || "USD";
+  const on = (form.bill_date || "").slice(0, 10) || (form.due_date || "").slice(0, 10) || todayStr();
+  // 손으로 고쳤는가 — 고친 뒤에는 날짜가 바뀌어도 고시로 덮어쓰지 않는다.
+  const [touched, setTouched] = useState(() => !!form.fx_rate);
+  const [quote, setQuote] = useState<{ rate: number; date: string; source: string } | null>(null);
+  const [err, setErr] = useState("");
+
+  useEffect(() => {
+    let alive = true;
+    setErr("");
+    fetchFxRate(on, cur)
+      .then((q) => {
+        if (!alive) return;
+        const rate = q.rate / (q.unit || 1);
+        setQuote({ rate, date: q.date_used, source: q.source });
+        if (q.source !== "exim") setErr(q.reason === "no_key" ? "FX API key not set" : "quote unavailable");
+        // 아직 사람이 손대지 않았다면 고시값으로 채운다.
+        if (!touched) set("fx_rate", Math.round(rate * 100) / 100);
+      })
+      .catch(() => { if (alive) setErr("quote failed"); });
+    return () => { alive = false; };
+    // touched 는 의도적으로 뺀다 — 손댄 뒤에 다시 조회해 덮어쓰지 않게.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [on, cur]);
+
+  const rate = form.fx_rate || 0;
+  return (
+    // label 이 아니라 div — 라벨 안에 버튼을 두면 클릭이 금액 칸으로 새어 든다
+    // (부가세 칸이 select 를 div 로 감싼 것과 같은 이유).
+    <div className="form-field">
+      <span className="fin-vat-label">
+        FX rate (₩ per {sym(cur).trim()})
+        {quote ? (
+          <button
+            type="button"
+            className="btn tiny fin-fx-reset"
+            title={quote.date ? `매매기준율 ${quote.date}` : "fixed rate (no quote)"}
+            onClick={() => { setTouched(false); set("fx_rate", Math.round(quote.rate * 100) / 100); }}
+          >
+            매매기준율 {quote.rate.toLocaleString()}
+          </button>
+        ) : null}
+      </span>
+      <input
+        className="num"
+        inputMode="decimal"
+        value={amountInputValue(rate)}
+        onChange={(e) => { setTouched(true); set("fx_rate", parseAmountInput(e.target.value) ?? 0); }}
+      />
+      <span className="hint-inline">
+        {rate
+          ? `≈ ${won(Math.round((form.amount || 0) * rate))} on ${on}`
+          : `Leave blank to convert at that month's base rate.`}
+        {err ? ` · ${err}` : ""}
+      </span>
+    </div>
   );
 }
 
@@ -2329,6 +2408,10 @@ function PayableForm({
           <span>Currency</span>
           <CurrencyToggle value={form.currency || "KRW"} onChange={(v) => applyCategoryOrCurrency({ ...form, currency: v })} />
         </label>
+        {/* 외화 지급에만 묻는다 — 이 건이 통장에서 원화 얼마로 빠져나가는가. 손익·결산은
+            그 달 말일 매매기준율로 환산하지만, 실제로 송금한 날의 환율을 적어 두면 그것이
+            이 지출의 진짜 원화 금액이므로 집계가 그 값을 쓴다. */}
+        {(form.currency || "KRW") !== "KRW" ? <PayableFxField form={form} set={set} /> : null}
         <label className="form-field">
           {/* 고지서·계산서를 받은 날(선택). 벤더 청구서의 발행일과 같은 뜻이라 목록에서 한 열에 모인다. */}
           <span>Bill date (optional)</span>

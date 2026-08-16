@@ -2437,6 +2437,8 @@ class FinancePayableIn(BaseModel):
     amount: float | None = 0.0          # 지급 총액(공급가액 + 부가세)
     vat_amount: float | None = 0.0      # 총액에 포함된 부가세(매입세액)
     currency: str | None = "KRW"
+    # 외화 지급에 적용한 환율(1 외화 = ? KRW). 원화 건은 비운다.
+    fx_rate: float | None = None
     bill_date: str | None = ""
     due_date: str | None = ""
     recurrence: str | None = "none"
@@ -2498,6 +2500,8 @@ def _finance_payable_row(p: FinancePayable, vendor_names: dict, user_names: dict
         "payments": dict(getattr(p, "payments", None) or {}),
         # 이 지급이 걸린 프로젝트(컨설팅 수수료 등) — 목록에서 그 딜로 가는 링크용.
         "rfq_id": getattr(p, "rfq_id", None) or 0,
+        # 외화 지급에 적용한 환율(1 외화 = ? KRW). 미입력이면 0 — 화면이 '아직 안 정해졌다'로 읽는다.
+        "fx_rate": float(getattr(p, "fx_rate", None) or 0),
         "notes": p.notes or "",
         "owner_id": p.owner_id or 0,
         "owner": user_names.get(p.owner_id, "") if p.owner_id else "",

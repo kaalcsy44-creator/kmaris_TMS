@@ -661,6 +661,9 @@ class FinancePayable(Base):
     # 실제 납부일 — 예정일(회차일)과 다를 수 있어 {회차일: 납부일} 로 따로 보관.
     # (일회성 항목은 paid_date 사용. paid_dates 는 '납부 여부' 판정의 단일 소스로 유지)
     payments     = Column(JSON, default=dict)
+    # 외화 지급에 실제로 적용한 환율(1 외화 = ? KRW). 송금하는 날 은행에서 정해지는 값이라
+    # 그 달의 대표 환율(매매기준율)보다 정확하다 — 적혀 있으면 원화 집계가 이 값을 쓴다.
+    fx_rate      = Column(Float, nullable=True)
     # 이 지급이 걸린 프로젝트(RFQ) — 컨설팅 수수료처럼 '어느 딜에서 나온 지급인가'가
     # 금액의 근거인 항목에만 채운다. 벤더 청구(AP)는 오더에 매여 있어 이 칸을 쓰지 않는다.
     rfq_id       = Column(Integer, ForeignKey("rfqs.id"), nullable=True)

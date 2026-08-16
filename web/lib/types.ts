@@ -889,6 +889,8 @@ export type FinancePayable = {
   paid_date: string;            // 실제 납부일(반복 항목은 가장 최근 납부일)
   paid_dates: string[];         // 반복 항목의 납부 완료 회차일
   payments?: Record<string, string>;  // {회차일: 실제 납부일}
+  /** 외화 지급에 적용한 환율(1 외화 = ? KRW). 0 = 미입력(그 달 매매기준율로 환산된다). */
+  fx_rate?: number;
   notes: string;
   owner_id: number;
   owner: string;
@@ -912,6 +914,8 @@ export type FinancePayableSave = {
   amount?: number;      // 지급 총액(공급가액 + 부가세)
   vat_amount?: number;  // 그 중 부가세 — 결산·부가세의 매입세액으로 집계된다
   currency?: string;
+  /** 외화 지급에 적용한 환율(1 외화 = ? KRW). 원화 건은 비운다. */
+  fx_rate?: number;
   bill_date?: string;
   due_date?: string;
   recurrence?: string;
@@ -1040,6 +1044,17 @@ export type FinanceSummary = {
   by_category: { name: string; amount: MoneyByCurrency }[];
 };
 
+/**
+ * 원화로 옮길 때 실제로 쓴 환율 — 화면 각주용. 외화 거래가 없으면 rates 는 빈 배열이다.
+ * fallback=true 는 고시를 못 받아 고정환율로 옮긴 건이 섞여 있다는 뜻(EXIM_API_KEY 미설정 등).
+ */
+export type FxNote = {
+  basis: "month_end";
+  rates: { month: string; cur: string; rate: number; date: string; entered?: boolean }[];
+  fallback: boolean;
+  fixed: number;
+};
+
 export type FinanceClosing = {
   period: { start: string; end: string; year: number };
   sales: { supply_krw: number; vat_krw: number; total_krw: number; count: number };
@@ -1058,6 +1073,7 @@ export type FinanceClosing = {
   };
   by_customer: { name: string; sales_krw: number }[];
   monthly: { labels: string[]; sales: number[]; purchase: number[] };
+  fx?: FxNote;
   usd_krw: number;
 };
 
@@ -1082,6 +1098,7 @@ export type FinanceProfit = {
   };
   taxes: { vat: number[]; payments: number[] };
   vat_detail: { output: number[]; input: number[] };
+  fx?: FxNote;
   usd_krw: number;
 };
 

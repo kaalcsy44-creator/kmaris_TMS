@@ -165,6 +165,8 @@ _MIGRATIONS = {
         "vat_amount":      "FLOAT DEFAULT 0",
         # 이 지급이 걸린 프로젝트(RFQ) — 컨설팅 수수료가 어느 딜의 매출에서 나왔는지.
         "rfq_id":          "INTEGER",
+        # 외화 지급에 실제로 적용한 환율(1 외화 = ? KRW). 원화 건은 비어 있다.
+        "fx_rate":         "FLOAT",
     },
     "email_messages": {
         # 어느 딜에도 속할 수 없는 메일(회사 소개·인사·자동회신). 미분류 함에서 내린다.

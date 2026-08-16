@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { fetchFinanceProfit } from "@/lib/api";
 import { useCachedData } from "@/lib/useCachedData";
 import type { FinanceProfit } from "@/lib/types";
-import { CATEGORY_LABEL, KpiTile } from "@/components/screens/financeShared";
+import { CATEGORY_LABEL, KpiTile, monthLabel } from "@/components/screens/financeShared";
 
 /**
  * Profit — 한 해의 월별 손익을 한 장으로. 매출 − 비용 − 세금 = 순수익.
@@ -216,13 +216,41 @@ export default function FinanceProfitTab() {
               the sale rather than the payment: each one lands in the month its project was invoiced, at the rate
               agreed on that RFQ, so it is already a cost here before anyone books the payable. Amounts are supply
               values: VAT is stripped out of both sides and settled once on the VAT line, where a negative figure
-              is a refund. Foreign currency is converted at the fixed rate (₩{data.usd_krw.toLocaleString()}/$).
-              Register payroll, rent and the like under Outflow so they land on their own line here.
+              is a refund. Register payroll, rent and the like under Outflow so they land on their own line here.
             </p>
+            <FxFootnote fx={data.fx} fixed={data.usd_krw} />
           </div>
         </>
       )}
     </div>
+  );
+}
+
+/**
+ * 환산 각주 — 이 표의 외화가 무슨 환율로 원화가 되었는지.
+ *
+ * 없어도 표는 읽히지만, 그 표가 맞는지 따져 보려면 반드시 있어야 하는 줄이다: 달러 매출
+ * 한 줄이 원화로 얼마가 되었는지는 환율을 모르면 검산할 수 없다. 원화 거래뿐인 해에는
+ * 아무것도 그리지 않는다 — 말할 것이 없다.
+ */
+function FxFootnote({ fx, fixed }: { fx?: FinanceProfit["fx"]; fixed: number }) {
+  if (!fx || fx.rates.length === 0) return null;
+  return (
+    <p className="hint-inline" style={{ display: "block", marginTop: 4 }}>
+      Foreign currency is converted at each month&apos;s closing base rate (매매기준율):{" "}
+      {/* 같은 달·통화가 두 번 나올 수 있다 — 예정분은 고시, 지급분은 적어 둔 적용환율. */}
+      {fx.rates.map((r, i) => (
+        <span key={`${r.month}-${r.cur}-${i}`}>
+          {i ? " · " : ""}
+          {monthLabel(r.month)} {r.cur} ₩{r.rate.toLocaleString()}
+          {r.entered ? " (as paid)" : ""}
+        </span>
+      ))}
+      {fx.fallback
+        ? ` — some months fell back to the fixed rate ₩${fixed.toLocaleString()} because no quote was available (set EXIM_API_KEY).`
+        : "."}
+      {" "}Payments that recorded the rate actually applied are converted at that rate instead.
+    </p>
   );
 }
 

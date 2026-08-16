@@ -1816,7 +1816,7 @@ function ConsultantsTab() {
         ["bank_name", "Bank", (r) => (r.bank_account
           ? <span>{r.bank_name} <span className="muted">{r.bank_account}</span></span>
           : <span className="dash">Not registered</span>)],
-        ["currency", "Pay in"],
+        ["currency", "Account"],
       ]}
       fields={[
         ["name", "Consultant *"],
@@ -1845,11 +1845,17 @@ function ConsultantsTab() {
             />
           </label>
           <label className="form-field">
-            <span>Pay in</span>
+            {/* 지급 통화를 정하는 칸이 아니다 — 수수료는 그 딜을 판 통화 그대로 나간다
+                (달러로 받은 돈에서 떼어 달러로 보낸다). 여기 적는 건 이 사람이 어떤 계좌를
+                가졌는가라는 사실이고, 달러 딜 수수료를 보내기 전에 확인할 값이다. */}
+            <span>Account currency</span>
             <select value={form.currency || "KRW"} onChange={(e) => setForm({ ...form, currency: e.target.value })}>
               <option value="KRW">KRW ₩</option>
               <option value="USD">USD $</option>
             </select>
+            <span className="hint-inline">
+              For reference — a fee is paid in the currency its project sold in.
+            </span>
           </label>
           <label className="form-field" style={{ gridColumn: "1 / -1" }}>
             <span>Notes</span>
