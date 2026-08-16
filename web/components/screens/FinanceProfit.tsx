@@ -69,7 +69,7 @@ export default function FinanceProfitTab() {
     if (!data) return null;
     const revenue = addRows(data.revenue.sales, data.revenue.other_income);
     const opex = data.costs.operating.map((o) => o.values);
-    const costs = addRows(data.costs.purchase, ...opex);
+    const costs = addRows(data.costs.purchase, data.costs.consulting, ...opex);
     const taxes = addRows(withVat ? data.taxes.vat : [], data.taxes.payments);
     const net = Array.from({ length: 12 }, (_, i) => revenue[i] - costs[i] - taxes[i]);
 
@@ -84,11 +84,28 @@ export default function FinanceProfitTab() {
         }]
       : [];
 
+    // 수수료는 매출월에 서고, 실제로 등록한 지급은 그 의무의 정산이라 합계 밖이다.
+    // 소개자를 쓰지 않는 해에는 두 줄 다 감춘다 — 운영비 분류와 같은 규칙(값이 있어야 줄이 선다).
+    const consultingLines: Line[] = [
+      ...(sumOf(data.costs.consulting) || sumOf(data.costs.consulting_booked)
+        ? [{ name: "Consulting fee", values: data.costs.consulting } as Line]
+        : []),
+      ...(sumOf(data.costs.consulting_booked)
+        ? [{
+            name: "└ registered as payable",
+            values: data.costs.consulting_booked,
+            kind: "note",
+            hint: "not counted — settles the accrual above",
+          } as Line]
+        : []),
+    ];
+
     const lines: Line[] = [
       { name: "Sales (supply value)", values: data.revenue.sales },
       { name: "Other income", values: data.revenue.other_income },
       { name: "Revenue", values: revenue, kind: "sum" },
       { name: "Purchases (cost)", values: data.costs.purchase },
+      ...consultingLines,
       ...data.costs.operating.map((o) => ({
         name: CATEGORY_LABEL[o.key] || o.key,
         values: o.values,
@@ -195,7 +212,9 @@ export default function FinanceProfitTab() {
             </div>
             <p className="hint-inline" style={{ display: "block", marginTop: 8 }}>
               Accrual basis, same as Closing · VAT — sales sit on the invoice date, purchases on the P/O date and
-              operating costs on the tax-invoice date (recurring items on each occurrence). Amounts are supply
+              operating costs on the tax-invoice date (recurring items on each occurrence). Consulting fees follow
+              the sale rather than the payment: each one lands in the month its project was invoiced, at the rate
+              agreed on that RFQ, so it is already a cost here before anyone books the payable. Amounts are supply
               values: VAT is stripped out of both sides and settled once on the VAT line, where a negative figure
               is a refund. Foreign currency is converted at the fixed rate (₩{data.usd_krw.toLocaleString()}/$).
               Register payroll, rent and the like under Outflow so they land on their own line here.

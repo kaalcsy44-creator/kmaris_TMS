@@ -1071,6 +1071,10 @@ export type FinanceProfit = {
   revenue: { sales: number[]; other_income: number[] };
   costs: {
     purchase: number[];
+    /** 소개 수수료 — 매출이 선 달에 요율만큼 잡은 발생분(합계에 든다). */
+    consulting: number[];
+    /** 그 의무를 실제로 등록한 지급 건 — 같은 돈이라 합계 밖에 세워 두는 줄. */
+    consulting_booked: number[];
     /** 수동 지급대장의 분류별 운영비(공급가액). key 는 저장값(한글 코드). */
     operating: { key: string; values: number[] }[];
     /** '거래선지급' 분류 — 벤더 P/O 원가와 겹쳐 합계 밖에 세워 두는 줄. */

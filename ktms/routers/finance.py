@@ -613,6 +613,26 @@ def _ar_period_date(r) -> str:
     return ""
 
 
+def _ar_vat_rate(r, order) -> float:
+    """이 청구에 붙은 부가세율 — 수출(영세율)은 0, 내수는 저장값(기본 10%)."""
+    trade = (order.trade_type if order else "수출") or "수출"
+    if trade == "수출":
+        return 0.0
+    return r.vat_rate if r.vat_rate is not None else 0.1
+
+
+def _ar_supply(r, order) -> float:
+    """청구 총액에서 부가세를 뺀 공급가액. 통화는 그대로 둔다(환산하지 않는다).
+
+    '매출'을 말하는 자리는 전부 이 값을 쓴다. 부가세는 고객에게 받아 국가에 내는 돈이라
+    우리 매출이 아니고 — 소개 수수료의 근거도 같은 값이어야 한다. 결산·손익 화면의
+    매출줄과 다른 base 로 수수료를 매기면, 두 화면을 나란히 놓고 검산할 수가 없다.
+    """
+    amount = r.invoice_amount or 0.0
+    rate = _ar_vat_rate(r, order)
+    return amount / (1 + rate) if rate else amount
+
+
 def _po_period_date(po) -> str:
     for v in (po.date, po.sent_date):
         if (v or "").strip():
@@ -662,10 +682,9 @@ def finance_closing(start: str = "", end: str = "", year: int = 0):
             if not pd:
                 continue
             o = ord_map.get(r.order_id)
-            trade = (o.trade_type if o else "수출") or "수출"
-            inv_krw = _to_krw(r.invoice_amount or 0, r.currency or "USD")
-            vat_rate = 0.0 if trade == "수출" else (r.vat_rate if r.vat_rate is not None else 0.1)
-            supply_krw = inv_krw / (1 + vat_rate) if vat_rate else inv_krw
+            cur = r.currency or "USD"
+            inv_krw = _to_krw(r.invoice_amount or 0, cur)
+            supply_krw = _to_krw(_ar_supply(r, o), cur)
             vat_krw = inv_krw - supply_krw
             if s0 <= pd <= s1:
                 sales_supply += supply_krw
@@ -779,9 +798,12 @@ def finance_consulting():
     그 딜이 얼마에 팔렸는지가 정해지면 수수료도 정해진다. 그래서 여기서는 등록된 지급을
     나열하는 대신 근거를 먼저 세운다 — 프로젝트, 매출액, 요율, 그래서 얼마.
 
-    매출액은 그 프로젝트의 고객 청구(AR) 합계다(통화별). 아직 청구 전이면 고객 P/O 금액을
-    임시 근거로 쓰고 basis='order' 로 알린다 — 확정 전 숫자임을 화면이 밝힐 수 있게.
-    이미 등록한 컨설팅비 지급은 rfq_id 로 되찾아 같은 줄에 붙인다(중복 등록 방지).
+    매출액은 그 프로젝트의 고객 청구(AR) **공급가액** 합계다(통화별) — 부가세는 받아서
+    국가에 내는 돈이라 우리 매출이 아니고, 손익 화면의 매출줄도 같은 값이라 두 화면을
+    나란히 놓고 검산할 수 있어야 한다. 수출(영세율) 건은 총액과 공급가액이 같다.
+    아직 청구 전이면 고객 P/O 금액을 임시 근거로 쓰고 basis='order' 로 알린다 — 확정 전
+    숫자임을 화면이 밝힐 수 있게. 이미 등록한 컨설팅비 지급은 rfq_id 로 되찾아 같은 줄에
+    붙인다(중복 등록 방지).
     """
     s = get_session()
     try:
@@ -800,6 +822,7 @@ def finance_consulting():
 
         # 프로젝트별 매출 — 청구(AR)가 있으면 그것이 매출이고, 없으면 오더 금액으로 대신한다.
         orders = s.query(Order).all()
+        ord_map = {o.id: o for o in orders}
         ord_rfq = {o.id: rfq_of(o) for o in orders}
         invoiced: dict[int, dict[str, float]] = {}
         last_invoice: dict[int, str] = {}
@@ -808,7 +831,8 @@ def finance_consulting():
             if rid not in rfq_ids:
                 continue
             cur = (r.currency or "USD").upper()
-            invoiced.setdefault(rid, {})[cur] = invoiced.get(rid, {}).get(cur, 0.0) + (r.invoice_amount or 0.0)
+            supply = _ar_supply(r, ord_map.get(r.order_id))
+            invoiced.setdefault(rid, {})[cur] = invoiced.get(rid, {}).get(cur, 0.0) + supply
             when = _ar_period_date(r)
             if when > last_invoice.get(rid, ""):
                 last_invoice[rid] = when
@@ -904,6 +928,10 @@ def finance_profit(year: int = 0):
     넣고 빼는 스위치가 화면에 있어, 그 계산을 서버가 미리 굳혀 두면 스위치가 무의미해진다.
 
     - 매출: AR 공급가액(부가세 제외). 매입: 벤더 P/O 원가.
+    - 소개 수수료: **매출이 선 달에** 그 매출의 요율만큼 잡는다(발생주의). 언제 송금했는지가
+      아니라 어느 달의 매출에서 생긴 의무인지가 이 비용의 자리다 — 지급을 미루면 그 달만
+      이익이 부풀고 낸 달이 갑자기 적자로 보이던 것을 없앤다. 그래서 등록된 지급 건은
+      같은 의무를 또 세지 않도록 합계 밖(consulting_booked)에 정산분으로 따로 둔다.
     - 운영비: 수동 지급대장의 공급가액(부가세 제외 — 매입세액은 세금 줄에서 환급된다).
       '거래선지급' 분류는 벤더 P/O 원가와 겹치므로 합계 밖에 따로 세운다.
     - 세금: 그 달의 추정 부가세(매출세액 − 매입세액)와 '세금' 분류 지급액.
@@ -917,21 +945,41 @@ def finance_profit(year: int = 0):
 
     s = get_session()
     try:
-        ord_map = {o.id: o for o in s.query(Order).all()}
+        orders = s.query(Order).all()
+        ord_map = {o.id: o for o in orders}
+        # 소개 수수료를 매출과 같은 자리에 붙이기 위한 준비 — 오더가 속한 딜과 그 딜의 요율.
+        # 요율이 정해진 딜(소개자가 걸린 딜)만 담는다: 나머지는 곱할 것이 없다.
+        qtn_rfq = {q.id: q.rfq_id for q in s.query(Quotation).all()}
+        consultant_rate: dict[int, float] = {}
+        for r in s.query(RFQ).all():
+            cid = getattr(r, "consultant_id", None)
+            if not cid:
+                continue
+            rate = getattr(r, "consultant_rate", None)
+            if rate is None:
+                c = s.query(Consultant).filter_by(id=cid).first()
+                rate = (c.default_rate if c and c.default_rate is not None else DEFAULT_CONSULTING_RATE)
+            consultant_rate[r.id] = float(rate)
+        ord_rfq = {o.id: (getattr(o, "rfq_id", None)
+                          or qtn_rfq.get(getattr(o, "quotation_id", None) or 0) or 0)
+                   for o in orders}
 
-        sales, output_vat = z(), z()
+        sales, output_vat, consulting = z(), z(), z()
         for r in s.query(ARRecord).all():
             pd = _ar_period_date(r)
             if not pd or not (ys <= pd <= ye):
                 continue
             o = ord_map.get(r.order_id)
-            trade = (o.trade_type if o else "수출") or "수출"
-            inv_krw = _to_krw(r.invoice_amount or 0, r.currency or "USD")
-            vat_rate = 0.0 if trade == "수출" else (r.vat_rate if r.vat_rate is not None else 0.1)
-            supply_krw = inv_krw / (1 + vat_rate) if vat_rate else inv_krw
+            cur = r.currency or "USD"
+            inv_krw = _to_krw(r.invoice_amount or 0, cur)
+            supply_krw = _to_krw(_ar_supply(r, o), cur)
             i = int(pd[5:7]) - 1
             sales[i] += supply_krw
             output_vat[i] += inv_krw - supply_krw
+            # 이 청구가 소개자 있는 딜의 것이면, 같은 달에 수수료도 함께 선다.
+            rate = consultant_rate.get(ord_rfq.get(r.order_id) or 0)
+            if rate:
+                consulting[i] += supply_krw * rate / 100.0
 
         purchase, input_vat_purchase = z(), z()
         for po in s.query(PurchaseOrder).all():
@@ -949,7 +997,7 @@ def finance_profit(year: int = 0):
 
         # 수동 지급대장 — 분류별로 나눈다. 세금은 세금 줄로, 거래선지급은 합계 밖으로.
         operating: dict[str, list[float]] = {}
-        tax_payments, input_vat_other, vendor_manual = z(), z(), z()
+        tax_payments, input_vat_other, vendor_manual, consulting_booked = z(), z(), z(), z()
         for p in s.query(FinancePayable).all():
             cur = p.currency or "KRW"
             amount = float(p.amount or 0.0)
@@ -957,6 +1005,10 @@ def finance_profit(year: int = 0):
             supply_krw = _to_krw(amount - vat, cur)
             vat_krw = _to_krw(vat, cur)
             cat = p.category or "기타"
+            # 요율이 걸린 딜의 수수료 지급은 위에서 이미 매출월에 세었다 — 여기서는
+            # 정산분으로만 적는다. 근거가 될 딜이 없는 수수료(소개자를 지운 뒤 등록한 건 등)는
+            # 아무 데서도 안 세게 되므로 그때만 제 날짜로 비용에 넣는다.
+            accrued = cat == CONSULTING_CATEGORY and bool(consultant_rate.get(getattr(p, "rfq_id", None) or 0))
             for occ in _payable_occurrences_in_year(p, y0, y1):
                 i = int(occ[5:7]) - 1
                 input_vat_other[i] += vat_krw
@@ -964,6 +1016,8 @@ def finance_profit(year: int = 0):
                     tax_payments[i] += _to_krw(amount, cur)
                 elif cat == "거래선지급":
                     vendor_manual[i] += supply_krw
+                elif cat == CONSULTING_CATEGORY:
+                    (consulting_booked if accrued else consulting)[i] += supply_krw
                 else:
                     operating.setdefault(cat, z())[i] += supply_krw
 
@@ -986,6 +1040,10 @@ def finance_profit(year: int = 0):
             "revenue": {"sales": r12(sales), "other_income": r12(other_income)},
             "costs": {
                 "purchase": r12(purchase),
+                # 소개 수수료 — 매출월에 잡은 발생분(합계에 든다).
+                "consulting": r12(consulting),
+                # 그 의무를 실제로 등록한 지급 건 — 같은 돈이라 합계 밖에 세운다.
+                "consulting_booked": r12(consulting_booked),
                 # 분류 순서는 등록 폼과 같게 — 표에서 줄이 매달 자리를 바꾸지 않도록.
                 "operating": [
                     {"key": cat, "values": r12(operating[cat])}
