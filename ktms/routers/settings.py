@@ -30,6 +30,8 @@ from _core import (
     SIGNATURE_DOC_TYPE,
     resolve_signature,
     save_signature,
+    Consultant,
+    ConsultantCreate,
     HTTPException,
     ItemCategory,
     ItemCategorySave,
@@ -483,6 +485,103 @@ def delete_vessel(row_id: int):
         if not v:
             raise HTTPException(status_code=404, detail="Vessel을 찾을 수 없습니다.")
         s.delete(v)
+        s.commit()
+        return {"ok": True}
+    finally:
+        s.close()
+
+
+# ── Consultants (소개자 마스터) ───────────────────────────────────────────────
+# 고객·거래선과 같은 모양의 CRUD 다. 다른 점은 담는 것이 계좌라는 것 — 이 마스터가
+# 답하는 질문은 "누구에게 연락하나"가 아니라 "수수료를 어디로 보내나"이다.
+
+def _consultant_row(c) -> dict:
+    return {
+        "id": c.id,
+        "name": c.name or "",
+        "company": c.company or "",
+        "phone": c.phone or "",
+        "email": c.email or "",
+        "country": c.country or "",
+        "tax_id": c.tax_id or "",
+        "bank_name": c.bank_name or "",
+        "bank_account": c.bank_account or "",
+        "bank_holder": c.bank_holder or "",
+        "swift": c.swift or "",
+        # 미지정(NULL)은 0 이 아니라 기본 10% 로 읽는다 — 화면·수수료 계산이 같은 규칙.
+        "default_rate": c.default_rate if c.default_rate is not None else 10.0,
+        "currency": c.currency or "KRW",
+        "notes": c.notes or "",
+    }
+
+
+def _apply_consultant(c, body: ConsultantCreate) -> None:
+    c.name = body.name.strip()
+    c.company = (body.company or "").strip()
+    c.phone = (body.phone or "").strip()
+    c.email = (body.email or "").strip()
+    c.country = (body.country or "").strip()
+    c.tax_id = (body.tax_id or "").strip()
+    c.bank_name = (body.bank_name or "").strip()
+    c.bank_account = (body.bank_account or "").strip()
+    c.bank_holder = (body.bank_holder or "").strip()
+    c.swift = (body.swift or "").strip()
+    c.default_rate = 10.0 if body.default_rate is None else float(body.default_rate)
+    c.currency = (body.currency or "KRW").upper()
+    c.notes = (body.notes or "").strip()
+
+
+@app.get("/api/admin/settings/consultants", dependencies=[Depends(require_token)])
+def settings_consultants():
+    s = get_session()
+    try:
+        return [_consultant_row(c) for c in s.query(Consultant).order_by(Consultant.name).all()]
+    finally:
+        s.close()
+
+
+@app.post("/api/admin/settings/consultants", dependencies=[Depends(require_token)])
+def create_consultant(body: ConsultantCreate):
+    if not body.name.strip():
+        raise HTTPException(status_code=400, detail="컨설턴트 이름을 입력하세요.")
+    s = get_session()
+    try:
+        c = Consultant()
+        _apply_consultant(c, body)
+        s.add(c)
+        s.commit()
+        return {"ok": True, "id": c.id}
+    finally:
+        s.close()
+
+
+@app.put("/api/admin/settings/consultants/{row_id}", dependencies=[Depends(require_token)])
+def update_consultant(row_id: int, body: ConsultantCreate):
+    if not body.name.strip():
+        raise HTTPException(status_code=400, detail="컨설턴트 이름을 입력하세요.")
+    s = get_session()
+    try:
+        c = s.query(Consultant).filter_by(id=row_id).first()
+        if not c:
+            raise HTTPException(status_code=404, detail="Consultant을 찾을 수 없습니다.")
+        _apply_consultant(c, body)
+        s.commit()
+        return {"ok": True, "id": c.id}
+    finally:
+        s.close()
+
+
+@app.delete("/api/admin/settings/consultants/{row_id}", dependencies=[Depends(require_token)])
+def delete_consultant(row_id: int):
+    s = get_session()
+    try:
+        c = s.query(Consultant).filter_by(id=row_id).first()
+        if not c:
+            raise HTTPException(status_code=404, detail="Consultant을 찾을 수 없습니다.")
+        # 이 사람을 소개자로 걸어 둔 딜은 남는다 — 연결만 끊어 프로젝트가 깨지지 않게 한다
+        # (이미 등록한 수수료 지급 건은 상대처 이름을 제 안에 들고 있어 그대로 남는다).
+        s.query(RFQ).filter_by(consultant_id=row_id).update({"consultant_id": None})
+        s.delete(c)
         s.commit()
         return {"ok": True}
     finally:

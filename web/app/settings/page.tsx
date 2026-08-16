@@ -31,6 +31,10 @@ import {
   updateSettingsUser,
   updateSettingsVendor,
   updateSettingsVessel,
+  fetchSettingsConsultants,
+  createSettingsConsultant,
+  updateSettingsConsultant,
+  deleteSettingsConsultant,
   fetchRolePermissions,
   updateRolePermissions,
   fetchItemCategories,
@@ -77,6 +81,7 @@ import type {
   SettingsUser,
   SettingsVendor,
   SettingsVessel,
+  SettingsConsultant,
 } from "@/lib/types";
 import { getUser, isAdmin, can } from "@/lib/auth";
 import AppShell, { SectionHead } from "@/components/AppShell";
@@ -92,7 +97,7 @@ import { invalidateMasterCategories } from "@/components/common/CategoryCell";
 
 type Tab =
   | "company" | "users" | "permissions"
-  | "customers" | "vendors" | "vessels" | "email" | "mail" | "account";
+  | "customers" | "vendors" | "vessels" | "consultants" | "email" | "mail" | "account";
 
 const emptyCompany: CompanyProfile = {
   company_name_en: "",
@@ -165,6 +170,7 @@ function Settings() {
         { key: "customers", label: "Customer" },
         { key: "vendors", label: "Vendor" },
         { key: "vessels", label: "Vessels" },
+        { key: "consultants", label: "Consultant" },
         { key: "email", label: "Email Templates" },
         { key: "mail", label: "Mailbox" },
       ]
@@ -172,6 +178,7 @@ function Settings() {
         { key: "customers", label: "Customer" },
         { key: "vendors", label: "Vendor" },
         { key: "vessels", label: "Vessels" },
+        { key: "consultants", label: "Consultant" },
         { key: "email", label: "Email Templates" },
         { key: "account", label: "My Account" },
       ];
@@ -195,6 +202,7 @@ function Settings() {
       {tab === "customers" && <CustomersTab />}
       {tab === "vendors" && <VendorsTab />}
       {tab === "vessels" && <VesselsTab />}
+      {tab === "consultants" && <ConsultantsTab />}
       {tab === "email" && <EmailTemplatesTab />}
       {admin && tab === "mail" && <MailboxTab />}
       {tab === "account" && (
@@ -1772,6 +1780,80 @@ function VesselsTab() {
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
             </select>
+          </label>
+        </>
+      )}
+    />
+  );
+}
+
+/**
+ * Consultant — 딜을 물어다 준 사람과, 그에게 수수료를 보낼 계좌.
+ *
+ * 고객·거래선 탭과 같은 모양이되 담는 것이 다르다. 여기 적힌 값은 대부분 지급하는 순간에만
+ * 쓰인다 — 그래서 목록에 세우는 다섯 칸은 연락처가 아니라 '얼마를(요율) 어디로(계좌)'다.
+ * 요율은 이 사람의 기본값이고, 딜마다 다르게 정한 값은 프로젝트 1단계가 들고 있다.
+ */
+function ConsultantsTab() {
+  return (
+    <MasterSection<SettingsConsultant>
+      title="Consultant Management"
+      twoCol
+      tableClass="ms-table--even"
+      empty={{
+        id: 0, name: "", company: "", phone: "", email: "", country: "", tax_id: "",
+        bank_name: "", bank_account: "", bank_holder: "", swift: "",
+        default_rate: 10, currency: "KRW", notes: "",
+      }}
+      load={fetchSettingsConsultants}
+      create={createSettingsConsultant}
+      update={updateSettingsConsultant}
+      remove={deleteSettingsConsultant}
+      columns={[
+        ["name", "Consultant"],
+        ["company", "Company"],
+        ["default_rate", "Fee rate", (r) => `${r.default_rate}%`],
+        ["bank_name", "Bank", (r) => (r.bank_account
+          ? <span>{r.bank_name} <span className="muted">{r.bank_account}</span></span>
+          : <span className="dash">Not registered</span>)],
+        ["currency", "Pay in"],
+      ]}
+      fields={[
+        ["name", "Consultant *"],
+        ["company", "Company"],
+        ["phone", "Phone"],
+        ["email", "Email"],
+        ["country", "Country / region"],
+        ["tax_id", "Business / ID no."],
+        ["bank_name", "Bank"],
+        ["bank_account", "Account no."],
+        ["bank_holder", "Account holder"],
+        ["swift", "SWIFT (overseas)"],
+      ]}
+      required="name"
+      searchText={(r) => [r.name, r.company, r.email, r.phone, r.bank_name, r.bank_account].join(" ")}
+      extraForm={(form, setForm) => (
+        <>
+          <label className="form-field">
+            {/* 딜에서 따로 정하지 않으면 이 값이 그대로 수수료율이 된다. */}
+            <span>Default fee rate (% of sales)</span>
+            <input
+              className="num"
+              inputMode="decimal"
+              value={String(form.default_rate ?? "")}
+              onChange={(e) => setForm({ ...form, default_rate: Number(e.target.value) || 0 })}
+            />
+          </label>
+          <label className="form-field">
+            <span>Pay in</span>
+            <select value={form.currency || "KRW"} onChange={(e) => setForm({ ...form, currency: e.target.value })}>
+              <option value="KRW">KRW ₩</option>
+              <option value="USD">USD $</option>
+            </select>
+          </label>
+          <label className="form-field" style={{ gridColumn: "1 / -1" }}>
+            <span>Notes</span>
+            <textarea rows={2} value={form.notes || ""} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
           </label>
         </>
       )}

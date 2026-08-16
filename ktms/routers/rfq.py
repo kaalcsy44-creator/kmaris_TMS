@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from _core import (
+    Consultant,
     Customer,
     Depends,
     File,
@@ -194,6 +195,8 @@ def rfq_detail(rfq_id: int):
         cust = s.query(Customer).filter_by(id=r.customer_id).first()
         vessel = s.query(Vessel).filter_by(id=r.vessel_id).first() if r.vessel_id else None
         pic = s.query(User).filter_by(id=r.created_by).first() if r.created_by else None
+        cid = getattr(r, "consultant_id", None)
+        consultant = s.query(Consultant).filter_by(id=cid).first() if cid else None
         stage = _pipeline_stage(s, r.id)
 
         vrfqs = (s.query(VendorRFQ).filter_by(rfq_id=r.id)
@@ -253,6 +256,11 @@ def rfq_detail(rfq_id: int):
             "date": r.date or "",
             "notes": r.notes or "",
             "request_channel": getattr(r, "request_channel", None) or "",
+            # 소개자(컨설턴트) — 이름까지 함께 준다. 1단계 화면은 목록을 따로 받아 고르지만,
+            # 지워진 컨설턴트를 걸어 둔 옛 딜은 id 만으로 아무것도 못 그린다.
+            "consultant_id": getattr(r, "consultant_id", None) or 0,
+            "consultant": (consultant.name if consultant else ""),
+            "consultant_rate": getattr(r, "consultant_rate", None),
             "follow_up_level": _enum_val(r.follow_up_level) if r.follow_up_level else "B",
             "stage": stage,
             "status": _status_label(stage, r.work_type),
@@ -350,6 +358,9 @@ def create_rfq(body: RfqCreate, user: dict = Depends(get_current_user)):
             project_title=(body.project_title or "").strip() or None,
             work_type=work_type,
             request_channel=(body.request_channel or "").strip() or None,
+            consultant_id=body.consultant_id or None,
+            # 음수 = 비움(컨설턴트 기본율을 따른다) — 수정 API 와 같은 규약.
+            consultant_rate=(None if (body.consultant_rate or -1) < 0 else body.consultant_rate),
             notes=(body.notes or "").strip() or None,
             customer_id=cust.id,
             vessel_id=body.vessel_id,
@@ -422,6 +433,11 @@ def update_rfq(rfq_id: int, body: RfqUpdate):
             rfq.project_title = body.project_title.strip() or None
         if body.request_channel is not None:
             rfq.request_channel = body.request_channel.strip() or None
+        # 소개자 — 0 은 '연결 해제'다(선박과 같은 규약). 수수료율은 음수를 비우기로 읽는다.
+        if body.consultant_id is not None:
+            rfq.consultant_id = body.consultant_id or None
+        if body.consultant_rate is not None:
+            rfq.consultant_rate = None if body.consultant_rate < 0 else body.consultant_rate
         if body.notes is not None:
             rfq.notes = body.notes.strip() or None
         if body.work_type is not None:

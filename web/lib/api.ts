@@ -42,6 +42,8 @@ import type {
   FinanceSummary,
   FinanceClosing,
   FinanceProfit,
+  FinanceConsultingRow,
+  SettingsConsultant,
   FinanceCashflow,
   FinanceCashflowItems,
   CashBucket,
@@ -219,6 +221,8 @@ export function createRfq(body: {
   project_title?: string;
   work_type?: string;
   request_channel?: string;
+  consultant_id?: number;
+  consultant_rate?: number | null;
   notes?: string;
   items: { part_no: string; description: string; type?: string; serial_no?: string; qty: number; remark?: string; category_id?: number | null }[];
   source_files?: { name: string; media_type?: string; item_count: number; at?: string }[];
@@ -237,6 +241,9 @@ export function updateRfq(
     project_title?: string;
     work_type?: string;
     request_channel?: string;
+    // 0 → 소개자 연결 해제. 요율은 음수를 '비우기'(컨설턴트 기본율로 되돌림)로 읽는다.
+    consultant_id?: number;
+    consultant_rate?: number;
     notes?: string;
     received_at?: string;
     assignee_id?: number;
@@ -813,6 +820,9 @@ export function fetchFinanceClosing(start: string, end: string, year: number): P
 export function fetchFinanceProfit(year: number): Promise<FinanceProfit> {
   return get<FinanceProfit>(`/api/admin/finance/profit?year=${year}`);
 }
+export function fetchFinanceConsulting(): Promise<{ rows: FinanceConsultingRow[]; usd_krw: number }> {
+  return get<{ rows: FinanceConsultingRow[]; usd_krw: number }>("/api/admin/finance/consulting");
+}
 export function fetchFinanceCashflow(
   unit: "month" | "week",
   count: number,
@@ -1184,6 +1194,23 @@ export function updateSettingsVessel(
 }
 export function deleteSettingsVessel(id: number): Promise<{ ok: boolean }> {
   return del(`/api/admin/settings/vessels/${id}`);
+}
+
+// 소개자(컨설턴트) 마스터 — 선박·품목과 같은 규약의 CRUD.
+export function fetchSettingsConsultants(): Promise<SettingsConsultant[]> {
+  return get<SettingsConsultant[]>("/api/admin/settings/consultants");
+}
+export function createSettingsConsultant(body: Omit<SettingsConsultant, "id">): Promise<{ ok: boolean; id: number }> {
+  return post("/api/admin/settings/consultants", body);
+}
+export function updateSettingsConsultant(
+  id: number,
+  body: Omit<SettingsConsultant, "id">
+): Promise<{ ok: boolean; id: number }> {
+  return put(`/api/admin/settings/consultants/${id}`, body);
+}
+export function deleteSettingsConsultant(id: number): Promise<{ ok: boolean }> {
+  return del(`/api/admin/settings/consultants/${id}`);
 }
 
 export function createSettingsItem(body: Omit<SettingsItem, "id">): Promise<{ ok: boolean; id: number }> {

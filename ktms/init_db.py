@@ -39,6 +39,9 @@ _MIGRATIONS = {
         "close_reason": "VARCHAR(40)",
         "close_reason_note": "TEXT",
         "closed_at": "VARCHAR(16)",
+        # 소개자(컨설턴트)와 이 딜만의 수수료율(%) — 비우면 컨설턴트 기본율.
+        "consultant_id": "INTEGER",
+        "consultant_rate": "FLOAT",
     },
     "quotations": {
         "created_by": "INTEGER",
@@ -160,6 +163,8 @@ _MIGRATIONS = {
         "bill_date":       "VARCHAR(10)",
         # 총액(amount)에 포함된 부가세 — 결산·부가세의 매입세액 집계용(기존 행은 0).
         "vat_amount":      "FLOAT DEFAULT 0",
+        # 이 지급이 걸린 프로젝트(RFQ) — 컨설팅 수수료가 어느 딜의 매출에서 나왔는지.
+        "rfq_id":          "INTEGER",
     },
     "email_messages": {
         # 어느 딜에도 속할 수 없는 메일(회사 소개·인사·자동회신). 미분류 함에서 내린다.

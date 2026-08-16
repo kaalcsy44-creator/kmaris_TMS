@@ -897,13 +897,17 @@ export type FinancePayable = {
   po_no?: string;             // source==="ap" 일 때 연결된 벤더 P/O 번호
   po_id?: number;             // source==="ap" 일 때 그 벤더 P/O id — 9단계 AP 탭 딥링크용
   order_id?: number;          // source==="ap" 일 때 이 청구가 속한 프로젝트(오더) — 딥링크용
-  rfq_id?: number;            // source==="ap" 일 때 그 오더가 속한 프로젝트(RFQ) id
+  // 이 지급이 걸린 프로젝트(RFQ). AP 유래 행은 그 오더의 프로젝트, 수동 등록은 컨설팅
+  // 수수료처럼 '어느 딜의 매출에서 나온 지급인가'가 금액의 근거인 항목에만 채워진다.
+  rfq_id?: number;
 };
 
 export type FinancePayableSave = {
   category?: string;
   counterparty?: string;
   vendor_id?: number | null;
+  /** 이 지급이 걸린 프로젝트(RFQ) — 컨설팅 수수료가 어느 딜의 매출에서 나왔는지. */
+  rfq_id?: number | null;
   description?: string;
   amount?: number;      // 지급 총액(공급가액 + 부가세)
   vat_amount?: number;  // 그 중 부가세 — 결산·부가세의 매입세액으로 집계된다
@@ -913,6 +917,52 @@ export type FinancePayableSave = {
   recurrence?: string;
   recur_until?: string;
   notes?: string;
+};
+
+/** 소개자(컨설턴트) 마스터 — Settings 의 Consultant 탭이 쓰는 한 행. */
+export type SettingsConsultant = {
+  id: number;
+  name: string;
+  company: string;
+  phone: string;
+  email: string;
+  country: string;
+  tax_id: string;
+  bank_name: string;
+  bank_account: string;
+  bank_holder: string;
+  swift: string;
+  /** 기본 수수료율(%) — 딜에서 따로 정하지 않으면 이 값. */
+  default_rate: number;
+  currency: string;
+  notes: string;
+};
+
+/**
+ * 소개 수수료 한 줄 = 소개자가 걸린 프로젝트 하나. 금액은 우리가 정하는 값이 아니라
+ * 매출에서 계산되는 값이라, 지급 목록이 아니라 그 근거(매출·요율)를 먼저 담는다.
+ */
+export type FinanceConsultingRow = {
+  rfq_id: number;
+  project_no: string;
+  rfq_no: string;
+  project_title: string;
+  customer: string;
+  consultant_id: number;
+  consultant: string;
+  /** 지급 계좌 한 줄 표기(은행 + 계좌번호). 미등록이면 빈값. */
+  bank: string;
+  rate: number;              // %
+  currency: string;          // 매출 통화
+  sales_amount: number;
+  /** invoiced = 고객 청구 합계, order = 아직 청구 전이라 오더 금액으로 잡은 임시값. */
+  basis: "invoiced" | "order" | "none";
+  fee: number;               // 매출 통화 기준 수수료
+  pay_currency: string;      // 컨설턴트 계좌 통화로 환산한 지급액
+  pay_amount: number;
+  invoice_date: string;      // 마지막 청구일(지급 예정일의 출발점)
+  registered: MoneyByCurrency;   // 이미 등록한 수수료 지급 합계
+  registered_count: number;
 };
 
 export type FinanceReceivable = {
@@ -1361,6 +1411,11 @@ export type RfqDetail = {
   date: string;
   notes: string;
   request_channel: string;
+  /** 소개자(컨설턴트) — 0 = 없음. 이름도 함께 온다(지워진 소개자를 건 옛 딜 대비). */
+  consultant_id: number;
+  consultant: string;
+  /** 이 딜만의 수수료율(%). null = 컨설턴트 기본율을 따른다. */
+  consultant_rate: number | null;
   follow_up_level: string;
   stage: number;
   status: string;

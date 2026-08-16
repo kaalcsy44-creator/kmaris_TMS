@@ -80,7 +80,7 @@ from db.models import (
     Order, PurchaseOrder, ShippingAdvice, ProformaInvoice, CommercialInvoice,
     PackingList, TaxInvoiceData, ARRecord, APRecord, DeliveryProof,
     RFQStatus, OrderStatus, ARStatus, WorkType, MarketingActivity, ScheduleEvent,
-    MarketingAsset, FinancePayable, FinanceIncome,
+    MarketingAsset, FinancePayable, FinanceIncome, Consultant,
 )
 
 # ── App / CORS ────────────────────────────────────────────────────────────────
@@ -2419,7 +2419,9 @@ def _schedule_guard(e: ScheduleEvent, user: dict) -> None:
 
 
 # ── Finance: 지급대장(payables) + 수입대장(incomes) + 재무 집계 ────────────────
-FINANCE_CATEGORIES = ["거래선지급", "임차료", "급여", "공과금", "세금", "기타"]
+# 컨설팅비는 프로젝트 매출에서 산출되는 지급이라 나머지 운영비와 성격이 다르다 —
+# Outflow 에서도 제 갈래(Consulting fee)를 따로 갖는다.
+FINANCE_CATEGORIES = ["거래선지급", "컨설팅비", "임차료", "급여", "공과금", "세금", "기타"]
 # 기타 수입 분류 — 프로젝트 매출(AR)이 아닌 입금.
 FINANCE_INCOME_CATEGORIES = ["이자수입", "환급", "잡수입", "기타"]
 FINANCE_RECURRENCES = {"none", "monthly", "quarterly", "yearly"}
@@ -2429,6 +2431,8 @@ class FinancePayableIn(BaseModel):
     category: str | None = "기타"
     counterparty: str | None = ""
     vendor_id: int | None = None
+    # 이 지급이 걸린 프로젝트(RFQ) — 컨설팅 수수료가 어느 딜의 매출에서 나왔는지.
+    rfq_id: int | None = None
     description: str | None = ""
     amount: float | None = 0.0          # 지급 총액(공급가액 + 부가세)
     vat_amount: float | None = 0.0      # 총액에 포함된 부가세(매입세액)
@@ -2492,6 +2496,8 @@ def _finance_payable_row(p: FinancePayable, vendor_names: dict, user_names: dict
         "paid_dates": list(p.paid_dates or []),
         # {회차일: 실제 납부일} — 예정일과 다른 날 납부한 이력.
         "payments": dict(getattr(p, "payments", None) or {}),
+        # 이 지급이 걸린 프로젝트(컨설팅 수수료 등) — 목록에서 그 딜로 가는 링크용.
+        "rfq_id": getattr(p, "rfq_id", None) or 0,
         "notes": p.notes or "",
         "owner_id": p.owner_id or 0,
         "owner": user_names.get(p.owner_id, "") if p.owner_id else "",
@@ -2746,6 +2752,23 @@ class VendorCreate(BaseModel):
     emails: list[str] | None = None
     phones: list[str] | None = None
     regions: list[str] | None = None
+
+
+class ConsultantCreate(BaseModel):
+    """소개자(컨설턴트) 등록·수정. 계좌는 수수료를 낼 때 그대로 쓰는 값이라 함께 받는다."""
+    name: str
+    company: str | None = ""
+    phone: str | None = ""
+    email: str | None = ""
+    country: str | None = ""
+    tax_id: str | None = ""
+    bank_name: str | None = ""
+    bank_account: str | None = ""
+    bank_holder: str | None = ""
+    swift: str | None = ""
+    default_rate: float | None = 10.0   # 기본 수수료율(%)
+    currency: str | None = "KRW"
+    notes: str | None = ""
 
 
 def _serialize_contacts(session, ChildModel, fk_attr: str, parent_id: int) -> list[dict]:
@@ -3140,6 +3163,8 @@ class RfqCreate(BaseModel):
     project_title: str | None = ""
     work_type: str | None = "부품공급"
     request_channel: str | None = ""   # 고객 요청 수단: Email/Phone/SMS/WhatsApp/WeChat 등
+    consultant_id: int | None = None   # 소개자(컨설턴트). 0/None = 없음
+    consultant_rate: float | None = None  # 이 딜만의 수수료율(%). 비우면 컨설턴트 기본율
     notes: str | None = ""             # 내부 메모(자유 서술)
     items: list[RfqItemIn] = []
     source_files: list[RfqSourceFileIn] = []   # Auto-fill 소스 파일 메타(영구 보관)
@@ -3160,6 +3185,10 @@ class RfqUpdate(BaseModel):
     project_title: str | None = None
     work_type: str | None = None
     request_channel: str | None = None  # 고객 요청 수단
+    # 소개자(컨설턴트). 0 → 연결 해제. None → 변경 안 함(다른 필드와 같은 규약).
+    consultant_id: int | None = None
+    # 이 딜만의 수수료율(%). 음수 → 비우기(컨설턴트 기본율로 되돌림).
+    consultant_rate: float | None = None
     notes: str | None = None            # 내부 메모(자유 서술)
     received_at: str | None = None      # "YYYY-MM-DDTHH:MM"
     assignee_id: int | None = None      # 담당자(PIC) = created_by. 0 → 미지정 해제
@@ -3325,6 +3354,8 @@ __all__ = [
     "ProformaInvoice",
     "ProformaInvoiceSave",
     "CompanyProfile",
+    "Consultant",
+    "ConsultantCreate",
     "Customer",
     "CustomerCreate",
     "CustomerQuoteCreate",

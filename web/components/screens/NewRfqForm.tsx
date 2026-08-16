@@ -5,6 +5,7 @@ import { tr } from "@/lib/labels";
 import {
   fetchCustomers,
   fetchSettingsVessels,
+  fetchSettingsConsultants,
   createRfq,
   updateRfq,
   fetchRfqDetail,
@@ -13,7 +14,7 @@ import {
   createSettingsCustomer,
   createSettingsVessel,
 } from "@/lib/api";
-import type { CustomerOption, SettingsVessel, RfqSourceFile } from "@/lib/types";
+import type { CustomerOption, SettingsVessel, SettingsConsultant, RfqSourceFile } from "@/lib/types";
 import { can, canEditDeal, editBlockReason } from "@/lib/auth";
 import Modal from "@/components/common/Modal";
 import CustomerName from "@/components/common/CustomerName";
@@ -128,6 +129,10 @@ export default function NewRfqForm({
   const [projectTitle, setProjectTitle] = useState("");
   const [workType, setWorkType] = useState("부품공급");
   const [requestChannel, setRequestChannel] = useState("");
+  // 소개자(컨설턴트)와 이 딜만의 수수료율. rate 는 빈 문자열이면 컨설턴트 기본율을 따른다.
+  const [consultants, setConsultants] = useState<SettingsConsultant[]>([]);
+  const [consultantId, setConsultantId] = useState<number | "">("");
+  const [consultantRate, setConsultantRate] = useState("");
   const [notes, setNotes] = useState("");
   const [receivedAt, setReceivedAt] = useState(nowLocal());
   const [items, setItems] = useState<ItemRow[]>([
@@ -189,6 +194,8 @@ export default function NewRfqForm({
   useEffect(() => {
     reloadCustomers();
     reloadVessels();
+    // 소개자 목록 — 없으면(마스터 미등록) 칸은 그대로 두고 안내만 바뀐다.
+    fetchSettingsConsultants().then(setConsultants).catch(() => setConsultants([]));
   }, []);
 
   // 상세 모달 진입 시: 지정된 RFQ를 즉시 불러와 수정 모드로 전환.
@@ -417,6 +424,8 @@ export default function NewRfqForm({
       setProjectTitle(d.project_title || "");
       setWorkType(d.work_type || "부품공급");
       setRequestChannel(d.request_channel || "");
+      setConsultantId(d.consultant_id || "");
+      setConsultantRate(d.consultant_rate == null ? "" : String(d.consultant_rate));
       setNotes(d.notes || "");
       setReceivedAt(d.received_at || nowLocal());
       setItems(
@@ -465,6 +474,10 @@ export default function NewRfqForm({
       project_title: projectTitle,
       work_type: workType,
       request_channel: requestChannel,
+      // 0 = 소개자 없음(연결 해제). 요율은 비우면 -1 로 보내 컨설턴트 기본율로 되돌린다
+      // (0 은 '수수료 0%'라는 뜻이 있는 값이라 '비움'의 표시로 쓸 수 없다).
+      consultant_id: consultantId === "" ? 0 : consultantId,
+      consultant_rate: consultantRate.trim() === "" ? -1 : Number(consultantRate),
       notes,
     };
   }
@@ -869,6 +882,41 @@ export default function NewRfqForm({
               ))}
             </select>
           </Field>
+          {/* 소개자 — 딜이 어디서 왔는지는 지금이 아니면 남지 않는다. 수수료를 낼 때가
+              되면(매출이 확정된 뒤) 누가 물어다 준 건인지 아무도 기억하지 못한다. */}
+          <Field label="Consultant (introducer)">
+            <select
+              value={consultantId}
+              onChange={(e) => setConsultantId(e.target.value === "" ? "" : Number(e.target.value))}
+            >
+              <option value="">None</option>
+              {consultants.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}{c.company ? ` · ${c.company}` : ""}
+                </option>
+              ))}
+            </select>
+            {consultants.length === 0 ? (
+              <div className="hint-inline" style={{ marginTop: 3 }}>
+                Register consultants in Settings → Consultant.
+              </div>
+            ) : null}
+          </Field>
+          {/* 요율은 소개자를 고른 뒤에만 묻는다 — 그 전에는 대답할 것이 없는 칸이다. */}
+          {consultantId !== "" ? (
+            <Field label="Fee rate (%)">
+              <input
+                className="num"
+                inputMode="decimal"
+                value={consultantRate}
+                placeholder={String(consultants.find((c) => c.id === consultantId)?.default_rate ?? 10)}
+                onChange={(e) => setConsultantRate(e.target.value)}
+              />
+              <div className="hint-inline" style={{ marginTop: 3 }}>
+                Of this project&apos;s sales. Leave blank to use the consultant&apos;s default.
+              </div>
+            </Field>
+          ) : null}
           {/* 프로젝트명은 문장에 가까운 긴 값이라 3열을 다 쓴다. */}
           <Field label="Project title" full>
             <input

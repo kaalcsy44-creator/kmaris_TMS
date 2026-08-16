@@ -9,6 +9,7 @@ import {
   fetchFinancePayables,
   fetchFinanceCalendar,
   fetchFinanceClosing,
+  fetchFinanceConsulting,
   fetchFinanceCashflow,
   createFinancePayable,
   updateFinancePayable,
@@ -28,6 +29,7 @@ import type {
   FinanceReceivable,
   FinanceSummary,
   FinanceClosing,
+  FinanceConsultingRow,
   FinanceCashflow,
   FinanceCashflowRow,
   CashBucket,
@@ -59,7 +61,9 @@ import {
 // 통화·달 이름·KPI 타일·문서번호 링크는 Finance 화면들이 함께 쓰므로 financeShared 에 있다
 // (위 import 참고). 여기 남은 것들은 이 화면에서만 쓰는 목록·폼용 표기다.
 // Category codes are stored values (do not translate); labels below are display-only.
-const CATEGORIES = ["거래선지급", "임차료", "급여", "공과금", "세금", "기타"];
+const CATEGORIES = ["거래선지급", "컨설팅비", "임차료", "급여", "공과금", "세금", "기타"];
+/** 소개 수수료 분류 — 금액이 프로젝트 매출에서 계산되는 유일한 지급이라 이름을 상수로 둔다. */
+const CONSULTING = "컨설팅비";
 const RECURRENCE_LABEL: Record<string, string> = {
   none: "One-time",
   monthly: "Monthly",
@@ -1489,6 +1493,7 @@ const emptyPayable: FinancePayableSave = {
   category: "기타",
   counterparty: "",
   vendor_id: null,
+  rfq_id: null,
   description: "",
   amount: 0,
   vat_amount: 0,
@@ -1501,7 +1506,10 @@ const emptyPayable: FinancePayableSave = {
 };
 
 // 갈래 = 격자의 가로축(Inflow 와 같은 규약). 'Paid' 는 상태라 st 필터로 옮겼다.
-type OutflowView = "payables" | "other" | "total";
+// 컨설팅비가 제 갈래를 갖는 이유: 나머지 지출은 받은 청구서를 적는 일이지만, 이것은
+// 매출에서 계산해 내는 일이다. 그 계산의 근거(어느 딜이 얼마에 팔렸나)는 다른 세 갈래의
+// 어느 열에도 들어갈 자리가 없어, 표 위에 따로 세운다.
+type OutflowView = "payables" | "consulting" | "other" | "total";
 
 function OutflowTab() {
   const { data, error, refresh } = useCachedData<{ rows: FinancePayable[]; fx: FxQuote }>("finance:payables", fetchFinancePayables);
@@ -1510,7 +1518,7 @@ function OutflowTab() {
   // 갈래와 기간은 주소에 산다(Inflow 와 같은 규약).
   const { params, setParams } = useFinanceNav();
   const viewParam = params.get("view") || "";
-  const view: OutflowView = (["payables", "other", "total"] as const).includes(viewParam as OutflowView)
+  const view: OutflowView = (["payables", "consulting", "other", "total"] as const).includes(viewParam as OutflowView)
     ? (viewParam as OutflowView) : "payables";
   const setView = (v: OutflowView) => setParams({ view: v === "payables" ? "" : v });
   const from = params.get("from") || "";
@@ -1519,7 +1527,8 @@ function OutflowTab() {
   const cur = asLedgerCur(params.get("cur"));
   const st = asLedgerStatus(params.get("st"));
   const [editing, setEditing] = useState<FinancePayable | null>(null);
-  const [adding, setAdding] = useState(false);
+  // 등록 폼에 미리 채워 넣을 값 — 빈 폼이면 emptyPayable, 수수료 줄에서 열면 그 딜의 값.
+  const [adding, setAdding] = useState<FinancePayableSave | null>(null);
   // 납부 입력 대상 — 회차일(occurrence)과 실제 납부일을 함께 받는다.
   const [paying, setPaying] = useState<{ row: FinancePayable; occurrence: string } | null>(null);
   const rows = useMemo(() => data?.rows ?? [], [data]);
@@ -1531,11 +1540,18 @@ function OutflowTab() {
   // 백엔드의 out_ap/out_other 와 같다(지급대장의 '거래선지급'은 벤더 청구와 한 갈래).
   const visible = useMemo(() => {
     const isTrade = (p: FinancePayable) => p.source === "ap" || p.category === "거래선지급";
+    const inView = (p: FinancePayable) => {
+      if (view === "total") return true;
+      if (view === "consulting") return p.category === CONSULTING;
+      if (view === "payables") return isTrade(p);
+      // Other costs — 남은 것 전부. 컨설팅비는 제 갈래로 빠져 여기 다시 세지 않는다.
+      return !isTrade(p) && p.category !== CONSULTING;
+    };
     return rows
       .filter((p) => p.currency === cur)
       // 예정 항목은 예정일 기준 — 반복(임차료·급여)은 회차 하나라도 구간에 들면 남긴다.
       .filter((p) => dueInRange(p, from, to))
-      .filter((p) => (view === "total" ? true : view === "other" ? !isTrade(p) : isTrade(p)))
+      .filter(inView)
       // 미지급만/지급분만 — 반복 항목은 회차 하나라도 납부했으면 지급분에 든다.
       .filter((p) => (st === "due" ? p.outstanding > 0
         : st === "settled" ? (p.paid_amount > 0 || p.paid || (p.paid_dates?.length ?? 0) > 0)
@@ -1547,6 +1563,8 @@ function OutflowTab() {
   function reload() {
     invalidateCache("finance:summary");
     invalidateCache("finance:calendar");
+    // 수수료 근거표는 '이미 등록된 지급'을 함께 세므로 지급이 바뀌면 같이 다시 읽는다.
+    invalidateCache("finance:consulting");
     return refresh();
   }
 
@@ -1698,7 +1716,7 @@ function OutflowTab() {
               "Other costs" 탭으로 옮겨 가야 했던 걸 없앤다. 저장하면 그 항목이 실제로
               보이는 갈래로 옮겨 준다(아래 onSaved). */}
           {can("finance", "create") ? (
-            <button className="btn primary sm" onClick={() => setAdding(true)}>+ Add payable</button>
+            <button className="btn primary sm" onClick={() => setAdding(emptyPayable)}>+ Add payable</button>
           ) : null}
         </div>
       </div>
@@ -1718,6 +1736,7 @@ function OutflowTab() {
       <div className="fin-subtab-bar">
         <div className="seg-toggle fin-subtabs" role="group" aria-label="Outflow view">
           <button className={view === "payables" ? "on" : ""} onClick={() => setView("payables")}>Purchases</button>
+          <button className={view === "consulting" ? "on" : ""} onClick={() => setView("consulting")}>Consulting fee</button>
           <button className={view === "other" ? "on" : ""} onClick={() => setView("other")}>Other costs</button>
           <button className={view === "total" ? "on" : ""} onClick={() => setView("total")}>Total</button>
         </div>
@@ -1731,10 +1750,16 @@ function OutflowTab() {
       <p className="hint-inline" style={{ display: "block", margin: "8px 0 10px" }}>
         {view === "payables"
           ? "Vendor bills arrive here automatically from the project's billing stages and are read-only — click the bill number to open that project's stage 11 Payable (AP), where the payment is confirmed. Payments registered by hand under the vendor-payment category sit here too."
-          : view === "other"
-            ? "The company's own costs — rent, payroll, utilities, taxes — are registered by hand here; monthly/quarterly/yearly items appear as occurrences on the calendar."
-            : "Purchases and other costs in one list. Each line carries what was billed, what has gone out and what is still owed, so the three filters on the right cut it the same way the Overview grid does."}
+          : view === "consulting"
+            ? "Introducer commission. The table above works out what each project owes — its sales times the fee rate agreed on the RFQ — and Register turns one of those lines into a payable with the consultant and the amount already filled in. The list below is what has actually been booked."
+            : view === "other"
+              ? "The company's own costs — rent, payroll, utilities, taxes — are registered by hand here; monthly/quarterly/yearly items appear as occurrences on the calendar."
+              : "Purchases and other costs in one list. Each line carries what was billed, what has gone out and what is still owed, so the four filters on the right cut it the same way the Overview grid does."}
       </p>
+
+      {/* 수수료의 근거 — 등록된 지급 목록 '위'에 둔다. 이 갈래에서 먼저 답해야 할 질문은
+          '무엇을 냈나'가 아니라 '얼마를 내야 하나'이고, 그 답은 아래 표에 없다. */}
+      {view === "consulting" ? <ConsultingBasis onRegister={setAdding} /> : null}
 
       {/* 표는 하나 — 세 갈래가 같은 열을 쓰기 때문이다(벤더 청구든 임차료든 '분류·상대처·
           적요·날짜 둘·금액 셋·상태·반복'으로 적힌다). 갈래마다 표를 따로 두었을 때는
@@ -1745,8 +1770,12 @@ function OutflowTab() {
           <thead>
             <tr>
               <th className="fin-w-cat">Category</th>
-              <th className="fin-w-party">{view === "payables" ? "Vendor" : "Vendor / payee"}</th>
-              <th>{view === "payables" ? "Bill No. / Vendor P/O" : view === "other" ? "Description" : "Reference"}</th>
+              <th className="fin-w-party">
+                {view === "payables" ? "Vendor" : view === "consulting" ? "Consultant" : "Vendor / payee"}
+              </th>
+              <th>{view === "payables" ? "Bill No. / Vendor P/O"
+                : view === "consulting" ? "Project"
+                  : view === "other" ? "Description" : "Reference"}</th>
               <th className="fin-w-date">Bill date</th><th className="fin-w-date">Due</th>
               <th className="num fin-w-money">{view === "payables" ? "Bill" : "Amount"}</th>
               <th className="num fin-w-money">Paid</th><th className="num fin-w-money">Payable</th>
@@ -1758,7 +1787,8 @@ function OutflowTab() {
             {visible.length === 0 ? (
               <tr><td colSpan={11} className="mini-empty">{
                 st ? "Nothing in this period matches that filter."
-                  : view === "other" ? "No other costs registered." : "No vendor bills yet."}</td></tr>
+                  : view === "consulting" ? "No consulting fee registered yet — use Register on a line above."
+                    : view === "other" ? "No other costs registered." : "No vendor bills yet."}</td></tr>
             ) : null}
             {visible.map((p) => (
               <tr key={`${p.source || "manual"}-${p.id}`} className={p.overdue && !p.paid ? "fin-overdue" : ""}>
@@ -1775,7 +1805,13 @@ function OutflowTab() {
                     </>
                   ) : (
                     <>
-                      {p.description || "—"}
+                      {/* 프로젝트에 매인 지급(컨설팅 수수료)은 적요에서 그 딜로 건너뛴다 —
+                          금액의 근거가 거기 있어서 "왜 이 금액인가"는 늘 그리로 간다. */}
+                      {p.rfq_id ? (
+                        <ProjectDocLink rfqId={p.rfq_id} label={p.description || "—"} />
+                      ) : (
+                        p.description || "—"
+                      )}
                       {p.notes ? <div className="muted">{p.notes}</div> : null}
                     </>
                   )}
@@ -1809,14 +1845,16 @@ function OutflowTab() {
         />
       ) : null}
       {adding ? (
-        // 손으로 등록한 지출은 분류가 '거래선지급'이면 Payables, 그 외에는 Other costs 로
-        // 들어간다 — 저장 뒤 그 갈래로 옮겨 방금 넣은 항목이 바로 보이게 한다.
+        // 손으로 등록한 지출은 분류가 '거래선지급'이면 Payables, 컨설팅비면 그 갈래,
+        // 그 외에는 Other costs 로 들어간다 — 저장 뒤 그 갈래로 옮겨 방금 넣은 항목이
+        // 바로 보이게 한다.
         <PayableForm
-          initial={emptyPayable}
-          onClose={() => setAdding(false)}
+          initial={adding}
+          onClose={() => setAdding(null)}
           onSaved={(category) => {
-            setAdding(false);
-            setView(category === "거래선지급" ? "payables" : "other");
+            setAdding(null);
+            setView(category === "거래선지급" ? "payables"
+              : category === CONSULTING ? "consulting" : "other");
             reload();
           }}
         />
@@ -1830,6 +1868,123 @@ function OutflowTab() {
         />
       ) : null}
     </div>
+  );
+}
+
+/**
+ * 소개 수수료의 근거 — 소개자가 걸린 프로젝트마다 '매출 × 요율 = 수수료'.
+ *
+ * 아래 지급 목록과 나란히 두지 않고 그 위에 세운다. 목록은 이미 낸 것을 적고, 이 표는
+ * 내야 할 것을 센다 — 같은 갈래 안의 서로 다른 두 질문이라 열이 겹치지 않는다.
+ * 요율은 프로젝트 1단계에서 정한 값(없으면 컨설턴트 기본율)이고, 매출은 그 딜의 고객
+ * 청구 합계다. 아직 청구 전이면 고객 P/O 금액을 임시 근거로 쓰고 그렇다고 밝힌다.
+ */
+function ConsultingBasis({ onRegister }: { onRegister: (prefill: FinancePayableSave) => void }) {
+  const { data, error } = useCachedData<{ rows: FinanceConsultingRow[]; usd_krw: number }>(
+    "finance:consulting",
+    fetchFinanceConsulting
+  );
+  const canCreate = can("finance", "create");
+  const rows = data?.rows ?? [];
+
+  function prefill(r: FinanceConsultingRow): FinancePayableSave {
+    return {
+      ...emptyPayable,
+      category: CONSULTING,
+      counterparty: r.consultant,
+      rfq_id: r.rfq_id,
+      description: `Consulting fee · ${r.project_no || r.rfq_no || r.customer}`,
+      // 수수료는 이미 계산된 값이라 총액으로 그대로 넣는다(부가세는 폼에서 고른다).
+      amount: r.pay_amount,
+      vat_amount: 0,
+      currency: r.pay_currency,
+      // 지급 예정일은 마지막 청구일에서 출발한다 — 수수료는 매출이 선 다음의 일이다.
+      due_date: r.invoice_date || todayStr(),
+      notes: `${r.rate}% of ${money(r.sales_amount, r.currency)} sales`
+        + (r.basis === "order" ? " (customer P/O — not invoiced yet)" : ""),
+    };
+  }
+
+  if (error && !data) return <div className="state error">API error: {error.message}</div>;
+  if (!data) return <div className="state">Loading…</div>;
+
+  return (
+    <section className="fin-sec fin-consult">
+      <div className="items-head">
+        <h4 className="sub-h" style={{ margin: 0 }}>Fee due by project</h4>
+        <span className="hint-inline">
+          Sales × the rate agreed on the RFQ. Set the introducer on the project&apos;s stage 1.
+        </span>
+      </div>
+      <table className="mini fin-consult-table">
+        <thead>
+          <tr>
+            <th>Project</th>
+            <th>Customer</th>
+            <th>Consultant</th>
+            <th className="num">Sales</th>
+            <th className="num fin-consult-rate">Rate</th>
+            <th className="num">Fee</th>
+            <th className="num">Registered</th>
+            <th className="fin-w-act" />
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length === 0 ? (
+            <tr>
+              <td colSpan={8} className="mini-empty">
+                No project has an introducer yet — set one on the project&apos;s stage 1 (RFQ received).
+              </td>
+            </tr>
+          ) : null}
+          {rows.map((r) => {
+            const booked = currencyKeys(r.registered).length > 0;
+            return (
+              <tr key={r.rfq_id} className={booked ? "" : "fin-consult-open"}>
+                <td className="fin-c-title">
+                  <ProjectDocLink rfqId={r.rfq_id} label={r.project_no || r.rfq_no || `#${r.rfq_id}`} />
+                  {r.project_title ? <div className="muted">{r.project_title}</div> : null}
+                </td>
+                <td>{r.customer}</td>
+                <td>
+                  {r.consultant || <span className="dash">—</span>}
+                  {/* 계좌를 여기 함께 보이는 이유: 지급 직전에 확인하는 값이고, 비어 있다면
+                      등록하러 가야 한다는 뜻이라 그 사실 자체가 이 표의 정보다. */}
+                  {r.bank ? <div className="muted">{r.bank}</div> : <div className="hint-inline">No account on file</div>}
+                </td>
+                <td className="num">
+                  {r.basis === "none" ? <span className="dash">Not sold yet</span> : money(r.sales_amount, r.currency)}
+                  {r.basis === "order" ? <div className="hint-inline">customer P/O</div> : null}
+                </td>
+                <td className="num fin-consult-rate">{r.rate}%</td>
+                <td className="num fin-consult-fee">
+                  {money(r.fee, r.currency)}
+                  {r.pay_currency !== r.currency ? (
+                    <div className="muted">pay {money(r.pay_amount, r.pay_currency)}</div>
+                  ) : null}
+                </td>
+                <td className="num">
+                  {booked ? byCurrencyLines(r.registered) : <span className="dash">—</span>}
+                </td>
+                <td className="fin-c-act">
+                  {canCreate && r.basis !== "none" ? (
+                    <button
+                      className="btn tiny"
+                      title={booked
+                        ? "Register another payment for this project (split payments)"
+                        : "Create the payable with the consultant and amount filled in"}
+                      onClick={() => onRegister(prefill(r))}
+                    >
+                      {booked ? "+ Again" : "Register"}
+                    </button>
+                  ) : null}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </section>
   );
 }
 
@@ -1926,7 +2081,9 @@ function PaymentDateModal({
  *  그 밖은 10%. 어디까지나 처음 채워 주는 값이고, 실제 세율은 폼에서 직접 고른다. */
 function autoVatRate(category: string, currency: string): number {
   if ((currency || "KRW").toUpperCase() !== "KRW") return 0;
-  return category === "급여" || category === "세금" ? 0 : 0.1;
+  // 소개 수수료도 0 에서 출발한다 — 개인 소개자는 세금계산서 대신 원천징수 대상이라
+  // 부가세가 붙지 않는 쪽이 흔하다(법인 소개자면 폼에서 10% 로 되돌린다).
+  return category === "급여" || category === "세금" || category === CONSULTING ? 0 : 0.1;
 }
 
 /** 부가세 입력 방식 — 세율을 고르거나("0.1"·"0"), 금액을 직접 넣는다("custom").
@@ -1968,9 +2125,42 @@ function PayableForm({
     return s > 0 && Math.abs(v - Math.round(s * 0.1)) <= 1 ? "0.1" : "custom";
   });
   const { data: vendors } = useCachedData("settings:vendors-opt", fetchVendors);
+  // 소개 수수료일 때만 필요한 목록 — 프로젝트를 고르면 소개자·금액이 함께 따라온다.
+  // (분류를 바꿔 가며 열어 볼 수 있어 조건 없이 걸어 둔다 — 캐시라 왕복은 한 번뿐이다.)
+  const { data: consulting } = useCachedData<{ rows: FinanceConsultingRow[]; usd_krw: number }>(
+    "finance:consulting",
+    fetchFinanceConsulting
+  );
+  const isConsulting = form.category === CONSULTING;
 
   function set<K extends keyof FinancePayableSave>(k: K, v: FinancePayableSave[K]) {
     setForm((f) => ({ ...f, [k]: v }));
+  }
+
+  /**
+   * 프로젝트를 고르면 그 딜의 수수료가 통째로 채워진다 — 소개자 이름, 요율로 계산한
+   * 금액, 그리고 근거를 적은 메모. 손으로 옮겨 적을 것이 남지 않게 하는 것이 요점이다:
+   * 이 금액은 사람이 정하는 값이 아니라 매출에서 나오는 값이라, 다시 두드리면 틀린다.
+   */
+  function pickProject(rfqId: number) {
+    const r = (consulting?.rows ?? []).find((x) => x.rfq_id === rfqId);
+    if (!r) {
+      setForm((f) => ({ ...f, rfq_id: null }));
+      return;
+    }
+    setVatChoice(rateChoice(autoVatRate(CONSULTING, r.pay_currency)));
+    setForm((f) => ({
+      ...f,
+      rfq_id: r.rfq_id,
+      counterparty: r.consultant || f.counterparty,
+      description: `Consulting fee · ${r.project_no || r.rfq_no || r.customer}`,
+      amount: r.pay_amount,
+      vat_amount: 0,
+      currency: r.pay_currency,
+      due_date: f.due_date || r.invoice_date || todayStr(),
+      notes: `${r.rate}% of ${money(r.sales_amount, r.currency)} sales`
+        + (r.basis === "order" ? " (customer P/O — not invoiced yet)" : ""),
+    }));
   }
 
   /** 공급가액·부가세를 총액(amount)과 부가세로 접어 넣는다 — 총액 = 공급가액 + 부가세. */
@@ -1988,6 +2178,9 @@ function PayableForm({
   /** 분류·통화를 바꿨을 때 — 직접 입력이 아니면 그쪽 기본율(급여·외화는 0)로 따라간다.
    *  세율 선택도 함께 옮겨 화면에 보이는 값과 실제 계산이 어긋나지 않게 한다. */
   function applyCategoryOrCurrency(next: FinancePayableSave) {
+    // 수수료가 아닌 분류로 옮기면 프로젝트 연결은 뜻을 잃는다 — 남겨 두면 임차료가
+    // 어느 딜에 매인 것처럼 저장된다.
+    if (next.category !== CONSULTING) next = { ...next, rfq_id: null };
     if (vatChoice === "custom") {
       setForm(next);
       return;
@@ -2005,6 +2198,9 @@ function PayableForm({
     if (!(form.description || "").trim() && !(form.counterparty || "").trim()) {
       setErr("Enter a description or counterparty."); return;
     }
+    // 수수료는 어느 딜의 매출에서 나왔는지가 곧 그 금액의 근거다 — 딜 없이 저장하면
+    // 근거표가 이 지급을 되찾지 못해 같은 수수료를 또 등록하게 된다.
+    if (isConsulting && !form.rfq_id) { setErr("Select the project this fee belongs to."); return; }
     setBusy(true); setErr("");
     try {
       if (rowId) await updateFinancePayable(rowId, form);
@@ -2030,23 +2226,49 @@ function PayableForm({
             {CATEGORIES.map((c) => <option key={c} value={c}>{CATEGORY_LABEL[c] || c}</option>)}
           </select>
         </label>
+        {/* 소개 수수료는 거래선이 아니라 '어느 딜'에 매인다 — 그 자리에 프로젝트를 세운다.
+            고르면 소개자·금액·근거가 함께 따라온다. */}
+        {isConsulting ? (
+          <label className="form-field">
+            <span>Project *</span>
+            <select
+              value={form.rfq_id ?? ""}
+              onChange={(e) => pickProject(e.target.value ? Number(e.target.value) : 0)}
+            >
+              <option value="">— Select a project —</option>
+              {(consulting?.rows ?? []).map((r) => (
+                <option key={r.rfq_id} value={r.rfq_id}>
+                  {(r.project_no || r.rfq_no || `#${r.rfq_id}`)} · {r.customer} · {r.consultant}
+                </option>
+              ))}
+            </select>
+            {(consulting?.rows ?? []).length === 0 ? (
+              <span className="hint-inline">No project has an introducer yet — set one on stage 1.</span>
+            ) : null}
+          </label>
+        ) : (
+          <label className="form-field">
+            <span>Vendor link (optional)</span>
+            <select
+              value={form.vendor_id ?? ""}
+              onChange={(e) => {
+                const id = e.target.value ? Number(e.target.value) : null;
+                const v = (vendors ?? []).find((x) => x.id === id);
+                setForm((f) => ({ ...f, vendor_id: id, counterparty: v ? v.name : f.counterparty }));
+              }}
+            >
+              <option value="">— Manual entry —</option>
+              {(vendors ?? []).map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+            </select>
+          </label>
+        )}
         <label className="form-field">
-          <span>Vendor link (optional)</span>
-          <select
-            value={form.vendor_id ?? ""}
-            onChange={(e) => {
-              const id = e.target.value ? Number(e.target.value) : null;
-              const v = (vendors ?? []).find((x) => x.id === id);
-              setForm((f) => ({ ...f, vendor_id: id, counterparty: v ? v.name : f.counterparty }));
-            }}
-          >
-            <option value="">— Manual entry —</option>
-            {(vendors ?? []).map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
-          </select>
-        </label>
-        <label className="form-field">
-          <span>Vendor / payee</span>
-          <input value={form.counterparty} onChange={(e) => set("counterparty", e.target.value)} placeholder="e.g. Landlord / Payroll" />
+          <span>{isConsulting ? "Consultant" : "Vendor / payee"}</span>
+          <input
+            value={form.counterparty}
+            onChange={(e) => set("counterparty", e.target.value)}
+            placeholder={isConsulting ? "Filled in from the project" : "e.g. Landlord / Payroll"}
+          />
         </label>
         <label className="form-field">
           <span>Description</span>

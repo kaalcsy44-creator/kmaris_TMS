@@ -9,8 +9,12 @@ from __future__ import annotations
 from _core import (
     APRecord,
     ARRecord,
+    Consultant,
     Customer,
     Depends,
+    Quotation,
+    RFQ,
+    _project_no_map,
     FINANCE_CATEGORIES,
     FINANCE_INCOME_CATEGORIES,
     FINANCE_RECURRENCES,
@@ -504,6 +508,7 @@ def create_finance_payable(body: FinancePayableIn, user: dict = Depends(get_curr
             amount=body.amount or 0.0,
             vat_amount=_vat_within(body.amount, body.vat_amount),
             currency=body.currency or "KRW",
+            rfq_id=body.rfq_id or None,
             bill_date=(body.bill_date or "").strip()[:10],
             due_date=body.due_date or "",
             recurrence=rec,
@@ -537,6 +542,7 @@ def update_finance_payable(row_id: int, body: FinancePayableIn):
         p.amount = body.amount or 0.0
         p.vat_amount = _vat_within(body.amount, body.vat_amount)
         p.currency = body.currency or "KRW"
+        p.rfq_id = body.rfq_id or None
         p.bill_date = (body.bill_date or "").strip()[:10]
         p.due_date = body.due_date or ""
         p.recurrence = rec
@@ -757,6 +763,120 @@ def finance_closing(start: str = "", end: str = "", year: int = 0):
             },
             "usd_krw": USD_KRW_RATE,
         }
+    finally:
+        s.close()
+
+
+CONSULTING_CATEGORY = "컨설팅비"
+DEFAULT_CONSULTING_RATE = 10.0   # 소개 수수료 기본율(%) — 딜·컨설턴트에 값이 없을 때.
+
+
+@app.get("/api/admin/finance/consulting", dependencies=[Depends(require_token)])
+def finance_consulting():
+    """소개 수수료 산출 — 소개자가 걸린 프로젝트마다 '매출 × 수수료율'.
+
+    지급대장의 다른 줄들과 달리 이 금액은 우리가 정하는 값이 아니라 **계산되는** 값이다:
+    그 딜이 얼마에 팔렸는지가 정해지면 수수료도 정해진다. 그래서 여기서는 등록된 지급을
+    나열하는 대신 근거를 먼저 세운다 — 프로젝트, 매출액, 요율, 그래서 얼마.
+
+    매출액은 그 프로젝트의 고객 청구(AR) 합계다(통화별). 아직 청구 전이면 고객 P/O 금액을
+    임시 근거로 쓰고 basis='order' 로 알린다 — 확정 전 숫자임을 화면이 밝힐 수 있게.
+    이미 등록한 컨설팅비 지급은 rfq_id 로 되찾아 같은 줄에 붙인다(중복 등록 방지).
+    """
+    s = get_session()
+    try:
+        consultants = {c.id: c for c in s.query(Consultant).all()}
+        rfqs = [r for r in s.query(RFQ).all() if getattr(r, "consultant_id", None)]
+        if not rfqs:
+            return {"rows": [], "usd_krw": USD_KRW_RATE}
+        rfq_ids = {r.id for r in rfqs}
+        cust_names = {c.id: c.name for c in s.query(Customer).all()}
+        qtn_rfq = {q.id: q.rfq_id for q in s.query(Quotation).all()}
+        proj_no = _project_no_map(s)
+
+        def rfq_of(o) -> int:
+            return (getattr(o, "rfq_id", None)
+                    or qtn_rfq.get(getattr(o, "quotation_id", None) or 0) or 0)
+
+        # 프로젝트별 매출 — 청구(AR)가 있으면 그것이 매출이고, 없으면 오더 금액으로 대신한다.
+        orders = s.query(Order).all()
+        ord_rfq = {o.id: rfq_of(o) for o in orders}
+        invoiced: dict[int, dict[str, float]] = {}
+        last_invoice: dict[int, str] = {}
+        for r in s.query(ARRecord).all():
+            rid = ord_rfq.get(r.order_id) or 0
+            if rid not in rfq_ids:
+                continue
+            cur = (r.currency or "USD").upper()
+            invoiced.setdefault(rid, {})[cur] = invoiced.get(rid, {}).get(cur, 0.0) + (r.invoice_amount or 0.0)
+            when = _ar_period_date(r)
+            if when > last_invoice.get(rid, ""):
+                last_invoice[rid] = when
+        ordered: dict[int, dict[str, float]] = {}
+        for o in orders:
+            rid = ord_rfq.get(o.id) or 0
+            if rid not in rfq_ids or rid in invoiced:
+                continue
+            cur = (o.currency or "USD").upper()
+            ordered.setdefault(rid, {})[cur] = ordered.get(rid, {}).get(cur, 0.0) + _total_amount(o.items)
+
+        # 이미 등록한 수수료 지급 — 프로젝트별로 모아 둔다(한 딜에 분할 지급이 있을 수 있다).
+        booked: dict[int, list] = {}
+        for p in s.query(FinancePayable).filter_by(category=CONSULTING_CATEGORY).all():
+            rid = getattr(p, "rfq_id", None) or 0
+            if rid:
+                booked.setdefault(rid, []).append(p)
+
+        rows = []
+        for r in sorted(rfqs, key=lambda x: proj_no.get(x.id, ""), reverse=True):
+            c = consultants.get(r.consultant_id)
+            rate = r.consultant_rate
+            if rate is None:
+                rate = (c.default_rate if c and c.default_rate is not None else DEFAULT_CONSULTING_RATE)
+            sales = invoiced.get(r.id) or ordered.get(r.id) or {}
+            basis = "invoiced" if r.id in invoiced else ("order" if r.id in ordered else "none")
+            # 통화가 섞이면 KRW 로 모아 한 줄로 만든다 — 한 딜의 수수료를 통화별로 쪼개
+            # 두 번 지급하지는 않기 때문이다. 단일 통화면 그 통화 그대로 둔다.
+            if len(sales) == 1:
+                currency, amount = next(iter(sales.items()))
+            else:
+                currency = "KRW"
+                amount = sum(_to_krw(v, k) for k, v in sales.items())
+            fee = round(amount * rate / 100.0, 2)
+            # 지급 통화는 컨설턴트에게 맞춘다 — 계좌가 원화면 수수료도 원화로 낸다.
+            pay_cur = (c.currency if c else None) or currency
+            if pay_cur == currency:
+                pay_amount = fee
+            elif pay_cur == "KRW":
+                pay_amount = round(_to_krw(fee, currency), 2)
+            elif currency == "KRW" and pay_cur == "USD":
+                pay_amount = round(fee / USD_KRW_RATE, 2)
+            else:
+                pay_cur, pay_amount = currency, fee
+            paid_rows = booked.get(r.id) or []
+            rows.append({
+                "rfq_id": r.id,
+                "project_no": proj_no.get(r.id, ""),
+                "rfq_no": r.rfq_no or "",
+                "project_title": r.project_title or "",
+                "customer": cust_names.get(r.customer_id, "—"),
+                "consultant_id": r.consultant_id,
+                "consultant": (c.name if c else ""),
+                "bank": (f"{c.bank_name} {c.bank_account}".strip() if c and c.bank_account else ""),
+                "rate": round(float(rate), 2),
+                "currency": currency,
+                "sales_amount": round(amount, 2),
+                "basis": basis,
+                "fee": fee,
+                "pay_currency": pay_cur,
+                "pay_amount": pay_amount,
+                # 지급 예정일의 출발점 — 마지막 청구일(없으면 빈값, 화면이 오늘로 채운다).
+                "invoice_date": last_invoice.get(r.id, ""),
+                # 등록된 지급(있으면). 금액은 통화별로 나눠 담아 표에서 그대로 견준다.
+                "registered": _sum_by_currency([(p.amount or 0.0, p.currency) for p in paid_rows]),
+                "registered_count": len(paid_rows),
+            })
+        return {"rows": rows, "usd_krw": USD_KRW_RATE}
     finally:
         s.close()
 

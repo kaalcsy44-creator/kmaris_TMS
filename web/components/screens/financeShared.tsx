@@ -20,6 +20,7 @@ export const INCOME_CATEGORY_LABEL: Record<string, string> = {
 };
 export const CATEGORY_LABEL: Record<string, string> = {
   거래선지급: "Vendor payment",
+  컨설팅비: "Consulting fee",
   임차료: "Rent",
   급여: "Payroll",
   공과금: "Utilities",

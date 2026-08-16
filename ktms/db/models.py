@@ -133,6 +133,32 @@ class Vendor(Base):
     created_at     = Column(DateTime, default=datetime.utcnow)
 
 
+class Consultant(Base):
+    """소개자(컨설턴트) — 딜을 물어다 준 사람. 프로젝트 매출의 몇 %를 수수료로 지급한다.
+
+    고객·거래선과 나란한 또 하나의 상대처지만 그 둘과 성격이 다르다: 물건을 사지도 팔지도
+    않고, 우리가 그에게 내는 돈은 언제나 '어느 프로젝트가 얼마에 팔렸는가'에서 나온다.
+    그래서 마스터에 계좌를 함께 둔다 — 지급할 때마다 어디로 보내는지 다시 묻지 않도록.
+    """
+    __tablename__ = "consultants"
+    id           = Column(Integer, primary_key=True)
+    name         = Column(String(200), nullable=False)   # 사람 이름(지급 상대처로 쓰인다)
+    company      = Column(String(200))
+    phone        = Column(String(50))
+    email        = Column(String(200))
+    country      = Column(String(100))
+    tax_id       = Column(String(100))    # 사업자등록번호(개인이면 주민/외국인 등록번호)
+    bank_name    = Column(String(120))
+    bank_account = Column(String(120))
+    bank_holder  = Column(String(120))    # 예금주(이름과 다를 수 있다)
+    swift        = Column(String(60))     # 해외 송금용
+    # 기본 수수료율(%) — 프로젝트에서 따로 정하지 않으면 이 값, 그것도 없으면 10%.
+    default_rate = Column(Float, default=10.0)
+    currency     = Column(String(10), default="KRW")   # 수수료 지급 통화
+    notes        = Column(Text)
+    created_at   = Column(DateTime, default=datetime.utcnow)
+
+
 class CustomerContact(Base):
     """고객사 담당자(회사 1 : 담당자 N). 회사의 flat contact/email/phone 은 대표(primary)를 미러링한다."""
     __tablename__ = "customer_contacts"
@@ -310,6 +336,11 @@ class RFQ(Base):
     # Auto-fill 소스 파일 메타(영구 보관). [{"name","media_type","item_count","at"}]
     source_files     = Column(JSON, default=list)
     tracking_token   = Column(String(64), unique=True, default=lambda: secrets.token_urlsafe(32))
+    # 소개자(컨설턴트) — 이 딜을 물어다 준 사람. 1단계에서 받아 둔다: 수수료를 지급할 때가
+    # 되면(매출이 확정된 뒤) 누구에게 얼마를 주기로 했는지 기억나지 않기 때문이다.
+    consultant_id    = Column(Integer, ForeignKey("consultants.id"), nullable=True)
+    # 이 딜만의 수수료율(%). 비우면 컨설턴트의 기본율, 그것도 없으면 10%.
+    consultant_rate  = Column(Float, nullable=True)
     created_by       = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at       = Column(DateTime, default=datetime.utcnow)
 
@@ -630,6 +661,9 @@ class FinancePayable(Base):
     # 실제 납부일 — 예정일(회차일)과 다를 수 있어 {회차일: 납부일} 로 따로 보관.
     # (일회성 항목은 paid_date 사용. paid_dates 는 '납부 여부' 판정의 단일 소스로 유지)
     payments     = Column(JSON, default=dict)
+    # 이 지급이 걸린 프로젝트(RFQ) — 컨설팅 수수료처럼 '어느 딜에서 나온 지급인가'가
+    # 금액의 근거인 항목에만 채운다. 벤더 청구(AP)는 오더에 매여 있어 이 칸을 쓰지 않는다.
+    rfq_id       = Column(Integer, ForeignKey("rfqs.id"), nullable=True)
     notes        = Column(Text)
     owner_id     = Column(Integer, ForeignKey("users.id"), nullable=True)  # 등록자
     created_at   = Column(DateTime, default=datetime.utcnow)

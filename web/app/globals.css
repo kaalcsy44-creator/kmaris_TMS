@@ -12813,6 +12813,20 @@ table.mini tfoot .fin-foot-name { text-align: left; }
   .fin-bar-label { font-size: 10px; }
 }
 
+/* Consulting fee — 지급 목록 위에 서는 '근거' 표(프로젝트별 매출 × 요율).
+   아래 원장과 다른 표라는 것이 한눈에 보여야 한다 — 같은 mini 표를 쓰되 옅은 바탕에
+   앉혀 '이건 아직 장부가 아니다(내야 할 것을 센 것이다)'를 색으로 말한다. */
+.fin-consult { background: #f7fafd; border: 1px solid #e3eaf3; border-radius: 10px; padding: 10px 12px 4px; margin-bottom: 14px; }
+.fin-consult .items-head { margin-bottom: 6px; }
+.fin-consult table.mini th { background: transparent; }
+.fin-consult table.mini td, .fin-consult table.mini th { border-bottom-color: #e3eaf3; }
+.fin-consult table.mini tr:last-child td { border-bottom: 0; }
+.fin-consult-rate { width: 66px; }
+/* 이 표가 답하는 한 가지 — 얼마인가. 그 칸만 무게를 준다. */
+.fin-consult-fee { font-weight: 700; color: var(--navy); }
+/* 아직 등록하지 않은 줄 = 해야 할 일이 남은 줄. 왼쪽에 표시를 세워 눈이 먼저 닿게. */
+.fin-consult-open td:first-child { box-shadow: inset 3px 0 0 var(--fin-out, #d68910); }
+
 /* Profit — 월별 손익 장표(줄=항목, 칸=달) */
 /* 열넷(항목 + 12개월 + 합계)은 좁은 화면에서 반드시 넘친다. 표만 옆으로 굴리고
    항목 이름 칸은 그 자리에 붙잡아 둔다 — 굴리는 동안 이름이 사라지면 숫자가 어느 줄
