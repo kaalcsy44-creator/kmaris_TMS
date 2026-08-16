@@ -889,6 +889,34 @@ def _fx_note(seen: dict) -> dict:
 
 CONSULTING_CATEGORY = "컨설팅비"
 DEFAULT_CONSULTING_RATE = 10.0   # 소개 수수료 기본율(%) — 딜·컨설턴트에 값이 없을 때.
+INVESTMENT_CATEGORY = "투자금"   # 기타수입 중 자본 유입 — 매출이 아니라 손익에서 뺀다.
+
+# 법인세 과세표준 구간(2023년 개정, 2024 사업연도~) — (구간 상한, 세율).
+# 지방소득세(법인분)는 산출 법인세액의 10% 를 따로 더한다.
+CORPORATE_BRACKETS: list[tuple[float, float]] = [
+    (2e8, 0.09),        # 2억 이하 9%
+    (200e8, 0.19),      # 2억 초과 ~ 200억 19%
+    (3000e8, 0.21),     # 200억 초과 ~ 3,000억 21%
+    (float("inf"), 0.24),  # 3,000억 초과 24%
+]
+
+
+def _corporate_tax(base: float) -> tuple[float, float]:
+    """과세표준 → (법인세, 지방소득세). 결손이면 둘 다 0.
+
+    어디까지나 **시뮬레이션**이다. 실제 과세표준은 세무조정(감가상각 한도·접대비 한도·
+    이월결손금 공제·세액공제 등)을 거쳐 정해지므로 여기 값과 다르다. 이 숫자의 쓸모는
+    '지금 흐름대로 가면 연말에 이만큼을 떼어 둬야 한다'를 매달 눈에 보이게 하는 데 있다.
+    """
+    if base <= 0:
+        return 0.0, 0.0
+    tax, lower = 0.0, 0.0
+    for upper, rate in CORPORATE_BRACKETS:
+        if base <= lower:
+            break
+        tax += (min(base, upper) - lower) * rate
+        lower = upper
+    return tax, tax * 0.1
 
 
 @app.get("/api/admin/finance/consulting", dependencies=[Depends(require_token)])
@@ -1029,7 +1057,12 @@ def finance_profit(year: int = 0):
       같은 의무를 또 세지 않도록 합계 밖(consulting_booked)에 정산분으로 따로 둔다.
     - 운영비: 수동 지급대장의 공급가액(부가세 제외 — 매입세액은 세금 줄에서 환급된다).
       '거래선지급' 분류는 벤더 P/O 원가와 겹치므로 합계 밖에 따로 세운다.
-    - 세금: 그 달의 추정 부가세(매출세액 − 매입세액)와 '세금' 분류 지급액.
+    - 투자금: 통장에는 들어오지만 매출이 아니다(자본 유입) — 수익에서 빼고 따로 보인다.
+    - 세금: 그 달의 추정 부가세(매출세액 − 매입세액), '세금' 분류 지급액, 그리고 연간
+      법인세 추정액을 이익이 난 달에 나눠 실은 값.
+
+    details 는 칸마다의 내역(거래선/금액)이다 — 표는 한 칸에 한 숫자만 보여줄 수 있는데,
+    "6월 매입 806만"이 한 건인지 열 건인지가 대개 다음 질문이라 마우스만 올리면 답이 나오게 한다.
     """
     year = year or date.today().year
     y0, y1 = date(year, 1, 1), date(year, 12, 31)
@@ -1038,23 +1071,39 @@ def finance_profit(year: int = 0):
     def z() -> list[float]:
         return [0.0] * 12
 
+    # 칸별 내역 — {줄 key: {월: {이름: 금액}}}. 같은 상대처의 여러 건은 한 줄로 합친다
+    # (툴팁은 '무엇이 들어 있나'를 훑는 자리지 원장이 아니다).
+    detail: dict[str, dict[int, dict[str, float]]] = {}
+
+    def note(key: str, i: int, name: str, amount: float) -> None:
+        if not amount:
+            return
+        cell = detail.setdefault(key, {}).setdefault(i, {})
+        nm = (name or "—").strip() or "—"
+        cell[nm] = cell.get(nm, 0.0) + amount
+
     s = get_session()
     try:
         orders = s.query(Order).all()
         ord_map = {o.id: o for o in orders}
+        cust_names = {c.id: c.name for c in s.query(Customer).all()}
+        vendor_names = {v.id: v.name for v in s.query(Vendor).all()}
         # 소개 수수료를 매출과 같은 자리에 붙이기 위한 준비 — 오더가 속한 딜과 그 딜의 요율.
         # 요율이 정해진 딜(소개자가 걸린 딜)만 담는다: 나머지는 곱할 것이 없다.
         qtn_rfq = {q.id: q.rfq_id for q in s.query(Quotation).all()}
+        consultants = {c.id: c for c in s.query(Consultant).all()}
         consultant_rate: dict[int, float] = {}
+        consultant_name: dict[int, str] = {}
         for r in s.query(RFQ).all():
             cid = getattr(r, "consultant_id", None)
             if not cid:
                 continue
+            c = consultants.get(cid)
             rate = getattr(r, "consultant_rate", None)
             if rate is None:
-                c = s.query(Consultant).filter_by(id=cid).first()
                 rate = (c.default_rate if c and c.default_rate is not None else DEFAULT_CONSULTING_RATE)
             consultant_rate[r.id] = float(rate)
+            consultant_name[r.id] = (c.name if c else "")
         ord_rfq = {o.id: (getattr(o, "rfq_id", None)
                           or qtn_rfq.get(getattr(o, "quotation_id", None) or 0) or 0)
                    for o in orders}
@@ -1072,10 +1121,15 @@ def finance_profit(year: int = 0):
             i = int(pd[5:7]) - 1
             sales[i] += supply_krw
             output_vat[i] += inv_krw - supply_krw
+            who = cust_names.get(o.customer_id, "—") if o else "—"
+            note("sales", i, who, supply_krw)
             # 이 청구가 소개자 있는 딜의 것이면, 같은 달에 수수료도 함께 선다.
-            rate = consultant_rate.get(ord_rfq.get(r.order_id) or 0)
+            rid = ord_rfq.get(r.order_id) or 0
+            rate = consultant_rate.get(rid)
             if rate:
-                consulting[i] += supply_krw * rate / 100.0
+                fee = supply_krw * rate / 100.0
+                consulting[i] += fee
+                note("consulting", i, f"{consultant_name.get(rid) or '—'} · {who} {rate:g}%", fee)
 
         purchase, input_vat_purchase = z(), z()
         for po in s.query(PurchaseOrder).all():
@@ -1088,6 +1142,7 @@ def finance_profit(year: int = 0):
             cost_krw = _krw_in(_po_cost(po), cur, pd[:7], fx_seen)
             i = int(pd[5:7]) - 1
             purchase[i] += cost_krw
+            note("purchase", i, vendor_names.get(po.vendor_id, "—"), cost_krw)
             if trade == "내수":
                 input_vat_purchase[i] += cost_krw * 0.1
 
@@ -1108,23 +1163,53 @@ def finance_profit(year: int = 0):
                 # 둔 건은 그 값이 쓰인다(_payable_krw).
                 supply_krw = _payable_krw(p, amount - vat, occ[:7], fx_seen)
                 input_vat_other[i] += _payable_krw(p, vat, occ[:7], fx_seen)
+                who = (p.counterparty or "").strip() or (p.description or "").strip() or "—"
                 if cat == "세금":
-                    tax_payments[i] += _payable_krw(p, amount, occ[:7], fx_seen)
+                    paid = _payable_krw(p, amount, occ[:7], fx_seen)
+                    tax_payments[i] += paid
+                    note("tax_payments", i, who, paid)
                 elif cat == "거래선지급":
                     vendor_manual[i] += supply_krw
+                    note("vendor_manual", i, who, supply_krw)
                 elif cat == CONSULTING_CATEGORY:
                     (consulting_booked if accrued else consulting)[i] += supply_krw
+                    note("consulting_booked" if accrued else "consulting", i, who, supply_krw)
                 else:
                     operating.setdefault(cat, z())[i] += supply_krw
+                    note(f"op:{cat}", i, who, supply_krw)
 
-        other_income = z()
+        # 기타수입과 투자금 — 통장에는 나란히 들어오지만 손익에서는 갈린다. 투자금은 판 것이
+        # 아니라 넣은 것이라(자본 유입) 수익이 아니고, 여기 섞이면 매출 없는 달이 흑자로 보인다.
+        other_income, investment = z(), z()
         for r in s.query(FinanceIncome).all():
             amount = float(r.amount or 0.0)
+            cat = r.category or "기타"
+            who = (r.counterparty or "").strip() or (r.description or "").strip() or "—"
             for occ in _payable_occurrences_in_year(r, y0, y1):
-                other_income[int(occ[5:7]) - 1] += _krw_in(amount, r.currency or "KRW", occ[:7], fx_seen)
+                i = int(occ[5:7]) - 1
+                krw = _krw_in(amount, r.currency or "KRW", occ[:7], fx_seen)
+                if cat == INVESTMENT_CATEGORY:
+                    investment[i] += krw
+                    note("investment", i, who, krw)
+                else:
+                    other_income[i] += krw
+                    note("other_income", i, who, krw)
 
         input_vat = [input_vat_purchase[i] + input_vat_other[i] for i in range(12)]
         vat = [output_vat[i] - input_vat[i] for i in range(12)]
+
+        # 법인세 시뮬레이션 — 연간 세전이익 하나로 세액을 내고, 그것을 이익이 난 달에
+        # 그 달 이익의 비중대로 나눠 싣는다. 12로 균등히 나누면 매출이 없던 달까지 세금을
+        # 지고 적자로 찍혀, 달을 견주어 보는 이 표에서 오히려 사실을 가린다.
+        # (실제 납부는 3월 신고·8월 중간예납이라 현금 시점과는 다르다 — 여기 값은 '떼어 둘 몫'이다.)
+        pretax = [sales[i] + other_income[i] - purchase[i] - consulting[i]
+                  - sum(v[i] for v in operating.values()) for i in range(12)]
+        base = sum(pretax)
+        nat_tax, local_tax = _corporate_tax(base)
+        total_tax = nat_tax + local_tax
+        gains = [x if x > 0 else 0.0 for x in pretax]
+        gain_sum = sum(gains)
+        corporate = [total_tax * (g / gain_sum) if gain_sum else 0.0 for g in gains]
 
         def r12(xs: list[float]) -> list[int]:
             return [round(x) for x in xs]
@@ -1133,7 +1218,12 @@ def finance_profit(year: int = 0):
             "year": year,
             "labels": ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
                        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
-            "revenue": {"sales": r12(sales), "other_income": r12(other_income)},
+            "revenue": {
+                "sales": r12(sales),
+                "other_income": r12(other_income),
+                # 자본 유입 — 수익이 아니라 합계 밖에 세운다.
+                "investment": r12(investment),
+            },
             "costs": {
                 "purchase": r12(purchase),
                 # 소개 수수료 — 매출월에 잡은 발생분(합계에 든다).
@@ -1147,13 +1237,43 @@ def finance_profit(year: int = 0):
                 ],
                 "vendor_manual": r12(vendor_manual),
             },
-            "taxes": {"vat": r12(vat), "payments": r12(tax_payments)},
+            "taxes": {
+                "vat": r12(vat),
+                "payments": r12(tax_payments),
+                # 연간 추정 법인세를 이익 난 달에 나눠 실은 값(화면 스위치로 켜고 끈다).
+                "corporate": r12(corporate),
+            },
+            "corporate_tax": {
+                "base": round(base),               # 세전이익(= 수익 − 비용)
+                "national": round(nat_tax),        # 법인세
+                "local": round(local_tax),         # 지방소득세(법인세액의 10%)
+                "total": round(total_tax),
+                # 이 과세표준에 실제로 걸린 최고 구간 — 화면이 근거를 한 줄로 밝히는 데 쓴다.
+                "top_rate": next((r for u, r in CORPORATE_BRACKETS if base <= u), CORPORATE_BRACKETS[-1][1]) if base > 0 else 0.0,
+            },
             "vat_detail": {"output": r12(output_vat), "input": r12(input_vat)},
+            # 칸별 내역 — {줄 key: {월(문자열): {"rows": [{name, amount}], "more": n}}}.
+            # 큰 것부터 몇 개만 남긴다: 툴팁은 훑어보는 자리라 다 적으면 오히려 안 읽힌다.
+            "details": {
+                key: {
+                    str(i): _detail_cell(cell)
+                    for i, cell in months.items()
+                }
+                for key, months in detail.items()
+            },
             "fx": _fx_note(fx_seen),
             "usd_krw": USD_KRW_RATE,
         }
     finally:
         s.close()
+
+
+def _detail_cell(cell: dict[str, float], limit: int = 6) -> dict:
+    """한 칸의 내역 → 큰 것부터 limit 개 + 나머지 건수. 툴팁 한 화면에 들어갈 만큼만."""
+    rows = sorted(cell.items(), key=lambda kv: abs(kv[1]), reverse=True)
+    head = [{"name": n, "amount": round(v)} for n, v in rows[:limit]]
+    rest = rows[limit:]
+    return {"rows": head, "more": len(rest), "more_amount": round(sum(v for _, v in rest))}
 
 
 def _cashflow_buckets(unit: str, count: int, anchor: date | None = None) -> list[dict]:

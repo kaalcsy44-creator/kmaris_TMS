@@ -72,7 +72,8 @@ const RECURRENCE_LABEL: Record<string, string> = {
   yearly: "Yearly",
 };
 // 기타 수입 분류(저장값은 한글 코드, 표시만 영문).
-const INCOME_CATEGORIES = ["이자수입", "환급", "잡수입", "기타"];
+// 투자금은 통장에는 들어오지만 매출이 아니다 — 손익표(Profit)가 이 분류를 수익에서 뺀다.
+const INCOME_CATEGORIES = ["이자수입", "환급", "투자금", "잡수입", "기타"];
 
 function won(n: number): string {
   return `₩${Math.round(n).toLocaleString()}`;

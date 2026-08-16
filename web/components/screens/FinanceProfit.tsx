@@ -50,7 +50,31 @@ type Line = {
   kind?: "sum" | "grand" | "note";
   /** 합계 밖의 줄(참고용)임을 알리는 꼬리말. */
   hint?: string;
+  /** 이 줄의 내역이 details 의 어느 key 에 있는지. 없으면 칸에 툴팁이 붙지 않는다. */
+  detail?: string;
 };
+
+/**
+ * 칸 하나의 툴팁 — "6월 · Purchases ₩8,060,000" 아래에 거래선/금액을 몇 줄.
+ *
+ * 브라우저 기본 툴팁(title)을 쓴다. 직접 그린 팝오버는 12×14 칸 위에서 스크롤·경계와
+ * 싸워야 하는데, 여기서 원하는 건 잠깐 훑는 것뿐이라 그 값을 치를 이유가 없다.
+ * 내역이 없거나 0인 칸은 빈 문자열을 돌려줘 툴팁 자체가 뜨지 않게 한다.
+ */
+function tip(
+  details: FinanceProfit["details"],
+  line: Line,
+  month: number,
+  label: string
+): string {
+  const v = line.values[month];
+  if (!details || !line.detail || !Math.round(v)) return "";
+  const cellDetail = details[line.detail]?.[String(month)];
+  if (!cellDetail || cellDetail.rows.length === 0) return "";
+  const body = cellDetail.rows.map((r) => `${r.name} / ${won(r.amount)}`);
+  if (cellDetail.more) body.push(`+${cellDetail.more} more / ${won(cellDetail.more_amount)}`);
+  return [`${label} · ${line.name} ${won(v)}`, ...body].join("\n");
+}
 
 export default function FinanceProfitTab() {
   const now = new Date();
@@ -58,6 +82,8 @@ export default function FinanceProfitTab() {
   // 추정 부가세를 세금에 넣을지. 부가세를 실제 납부한 달에 '세금' 분류로 등록해 두었다면
   // 두 번 빠지므로 끌 수 있어야 한다(어느 쪽을 쓰든 줄은 표에 그대로 남는다).
   const [withVat, setWithVat] = useState(true);
+  // 법인세 시뮬레이션을 세금에 넣을지. 추정일 뿐이라(세무조정 전) 끄고 볼 수 있어야 한다.
+  const [withTax, setWithTax] = useState(true);
 
   const { data, error } = useCachedData<FinanceProfit>(
     `finance:profit:${year}`,
@@ -70,7 +96,11 @@ export default function FinanceProfitTab() {
     const revenue = addRows(data.revenue.sales, data.revenue.other_income);
     const opex = data.costs.operating.map((o) => o.values);
     const costs = addRows(data.costs.purchase, data.costs.consulting, ...opex);
-    const taxes = addRows(withVat ? data.taxes.vat : [], data.taxes.payments);
+    const taxes = addRows(
+      withVat ? data.taxes.vat : [],
+      data.taxes.payments,
+      withTax ? data.taxes.corporate : []
+    );
     const net = Array.from({ length: 12 }, (_, i) => revenue[i] - costs[i] - taxes[i]);
 
     // 거래선지급을 손으로 등록한 경우에만 그 줄을 보인다 — 벤더 P/O 원가와 겹쳐서
@@ -81,6 +111,20 @@ export default function FinanceProfitTab() {
           values: data.costs.vendor_manual,
           kind: "note",
           hint: "not counted — already in Purchases",
+          detail: "vendor_manual",
+        }]
+      : [];
+
+    // 투자금 — 통장에는 들어왔지만 판 것이 아니라 넣은 것이다. 수익 합계 밖에 세우되
+    // 숨기지는 않는다: 그 달에 돈이 들어온 것은 사실이고, 없으면 '왜 잔고가 늘었나'를
+    // 이 표에서 설명할 수 없다.
+    const investmentLine: Line[] = sumOf(data.revenue.investment)
+      ? [{
+          name: "Investment (capital in)",
+          values: data.revenue.investment,
+          kind: "note",
+          hint: "not revenue — money put in, not sold",
+          detail: "investment",
         }]
       : [];
 
@@ -88,7 +132,7 @@ export default function FinanceProfitTab() {
     // 소개자를 쓰지 않는 해에는 두 줄 다 감춘다 — 운영비 분류와 같은 규칙(값이 있어야 줄이 선다).
     const consultingLines: Line[] = [
       ...(sumOf(data.costs.consulting) || sumOf(data.costs.consulting_booked)
-        ? [{ name: "Consulting fee", values: data.costs.consulting } as Line]
+        ? [{ name: "Consulting fee", values: data.costs.consulting, detail: "consulting" } as Line]
         : []),
       ...(sumOf(data.costs.consulting_booked)
         ? [{
@@ -96,19 +140,22 @@ export default function FinanceProfitTab() {
             values: data.costs.consulting_booked,
             kind: "note",
             hint: "not counted — settles the accrual above",
+            detail: "consulting_booked",
           } as Line]
         : []),
     ];
 
     const lines: Line[] = [
-      { name: "Sales (supply value)", values: data.revenue.sales },
-      { name: "Other income", values: data.revenue.other_income },
+      { name: "Sales (supply value)", values: data.revenue.sales, detail: "sales" },
+      { name: "Other income", values: data.revenue.other_income, detail: "other_income" },
+      ...investmentLine,
       { name: "Revenue", values: revenue, kind: "sum" },
-      { name: "Purchases (cost)", values: data.costs.purchase },
+      { name: "Purchases (cost)", values: data.costs.purchase, detail: "purchase" },
       ...consultingLines,
       ...data.costs.operating.map((o) => ({
         name: CATEGORY_LABEL[o.key] || o.key,
         values: o.values,
+        detail: `op:${o.key}`,
       })),
       ...vendorManual,
       { name: "Costs", values: costs, kind: "sum" },
@@ -118,12 +165,20 @@ export default function FinanceProfitTab() {
         kind: withVat ? undefined : "note",
         hint: withVat ? undefined : "not counted — tax payments only",
       },
-      { name: "Tax payments", values: data.taxes.payments },
+      { name: "Tax payments", values: data.taxes.payments, detail: "tax_payments" },
+      {
+        name: "Corporate tax (est.)",
+        values: data.taxes.corporate,
+        kind: withTax ? undefined : "note",
+        hint: withTax
+          ? `${(data.corporate_tax.top_rate * 100).toFixed(0)}% + 10% local, spread over profitable months`
+          : "not counted — switch it on above",
+      },
       { name: "Taxes", values: taxes, kind: "sum" },
       { name: "Net profit", values: net, kind: "grand" },
     ];
     return { lines, revenue, costs, taxes, net };
-  }, [data, withVat]);
+  }, [data, withVat, withTax]);
 
   return (
     <div className="fin-overview">
@@ -136,6 +191,10 @@ export default function FinanceProfitTab() {
           <input type="checkbox" checked={withVat} onChange={(e) => setWithVat(e.target.checked)} />
           {" "}Count estimated VAT as tax
         </label>
+        <label className="check-chip" style={{ cursor: "pointer" }}>
+          <input type="checkbox" checked={withTax} onChange={(e) => setWithTax(e.target.checked)} />
+          {" "}Simulate corporate tax
+        </label>
       </div>
 
       {error && !data ? <div className="state error">API error: {error.message}</div> : null}
@@ -145,7 +204,9 @@ export default function FinanceProfitTab() {
             <KpiTile
               label={`Revenue (${year})`}
               main={won(sumOf(model.revenue))}
-              sub={`Sales ${won(sumOf(data.revenue.sales))} · Other ${won(sumOf(data.revenue.other_income))}`}
+              sub={sumOf(data.revenue.investment)
+                ? `Sales ${won(sumOf(data.revenue.sales))} · Other ${won(sumOf(data.revenue.other_income))} · investment ${won(sumOf(data.revenue.investment))} excluded`
+                : `Sales ${won(sumOf(data.revenue.sales))} · Other ${won(sumOf(data.revenue.other_income))}`}
               tone="blue"
             />
             <KpiTile
@@ -157,9 +218,13 @@ export default function FinanceProfitTab() {
             <KpiTile
               label="Taxes"
               main={won(sumOf(model.taxes))}
-              sub={withVat
-                ? `VAT (est.) ${won(sumOf(data.taxes.vat))} · Paid ${won(sumOf(data.taxes.payments))}`
-                : `Tax payments only · VAT (est.) ${won(sumOf(data.taxes.vat))} excluded`}
+              sub={[
+                withVat ? `VAT ${won(sumOf(data.taxes.vat))}` : `VAT ${won(sumOf(data.taxes.vat))} excluded`,
+                `Paid ${won(sumOf(data.taxes.payments))}`,
+                withTax
+                  ? `Corporate (est.) ${won(data.corporate_tax.total)}`
+                  : `Corporate ${won(data.corporate_tax.total)} excluded`,
+              ].join(" · ")}
               tone="red"
             />
             <KpiTile
@@ -201,8 +266,13 @@ export default function FinanceProfitTab() {
                         {l.name}
                         {l.hint ? <span className="hint-inline"> {l.hint}</span> : null}
                       </td>
+                      {/* 칸에 마우스를 올리면 그 숫자를 이룬 거래선·금액이 뜬다 — 표가
+                          한 칸에 담을 수 있는 건 합계 하나뿐인데, 대개 다음 질문이
+                          "그게 누구 건인가"라서. 내역이 없는 줄(소계·부가세)은 그냥 둔다. */}
                       {l.values.map((v, i) => (
-                        <td key={i} className="num">{cell(v)}</td>
+                        <td key={i} className="num" title={tip(data.details, l, i, data.labels[i])}>
+                          {cell(v)}
+                        </td>
                       ))}
                       <td className="num tot">{cell(sumOf(l.values))}</td>
                     </tr>
@@ -217,6 +287,15 @@ export default function FinanceProfitTab() {
               agreed on that RFQ, so it is already a cost here before anyone books the payable. Amounts are supply
               values: VAT is stripped out of both sides and settled once on the VAT line, where a negative figure
               is a refund. Register payroll, rent and the like under Outflow so they land on their own line here.
+              Hover any figure to see what it is made of.
+            </p>
+            <p className="hint-inline" style={{ display: "block", marginTop: 4 }}>
+              Corporate tax is a simulation, not a filing: {won(data.corporate_tax.base)} pre-tax profit taxed at
+              the {(data.corporate_tax.top_rate * 100).toFixed(0)}% bracket gives {won(data.corporate_tax.national)}{" "}
+              plus {won(data.corporate_tax.local)} local income tax, and that year total is spread across the months
+              that made a profit. The real base is settled by tax adjustments (depreciation and entertainment caps,
+              loss carry-forward, credits), and the money actually leaves in March and August — treat this line as
+              the share to set aside, not a due date.
             </p>
             <FxFootnote fx={data.fx} fixed={data.usd_krw} />
           </div>

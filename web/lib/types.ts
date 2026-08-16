@@ -1084,7 +1084,12 @@ export type FinanceClosing = {
 export type FinanceProfit = {
   year: number;
   labels: string[];
-  revenue: { sales: number[]; other_income: number[] };
+  revenue: {
+    sales: number[];
+    other_income: number[];
+    /** 투자금(자본 유입) — 통장에는 들어오지만 매출이 아니라 합계 밖에 세우는 줄. */
+    investment: number[];
+  };
   costs: {
     purchase: number[];
     /** 소개 수수료 — 매출이 선 달에 요율만큼 잡은 발생분(합계에 든다). */
@@ -1096,8 +1101,30 @@ export type FinanceProfit = {
     /** '거래선지급' 분류 — 벤더 P/O 원가와 겹쳐 합계 밖에 세워 두는 줄. */
     vendor_manual: number[];
   };
-  taxes: { vat: number[]; payments: number[] };
+  taxes: {
+    vat: number[];
+    payments: number[];
+    /** 연간 추정 법인세를 이익 난 달에 나눠 실은 값(화면 스위치로 켜고 끈다). */
+    corporate: number[];
+  };
+  /** 법인세 시뮬레이션의 근거 — 세전이익과 그 위에서 나온 세액. */
+  corporate_tax: {
+    base: number;
+    national: number;
+    local: number;
+    total: number;
+    top_rate: number;
+  };
   vat_detail: { output: number[]; input: number[] };
+  /**
+   * 칸별 내역 — details["sales"]["5"] = 6월 매출을 이룬 거래선/금액. 운영비는 "op:임차료"
+   * 처럼 분류 코드를 붙인 key 를 쓴다. 큰 것부터 몇 개만 담고 나머지는 건수로 접는다.
+   */
+  details?: Record<string, Record<string, {
+    rows: { name: string; amount: number }[];
+    more: number;
+    more_amount: number;
+  }>>;
   fx?: FxNote;
   usd_krw: number;
 };

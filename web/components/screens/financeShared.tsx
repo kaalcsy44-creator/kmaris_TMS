@@ -15,6 +15,7 @@ import Link from "next/link";
 export const INCOME_CATEGORY_LABEL: Record<string, string> = {
   이자수입: "Interest",
   환급: "Refund",
+  투자금: "Investment",
   잡수입: "Misc income",
   기타: "Other",
 };
