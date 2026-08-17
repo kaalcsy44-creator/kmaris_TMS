@@ -699,67 +699,77 @@ function OverviewTab() {
             <div className="panel fin-bucket-card fin-bucket--balance">
               {/* 구간 이름은 왼쪽 앞머리가 세 기둥을 대신해 한 번만 적는다. */}
               <h3 className="form-title">Balance</h3>
-              {/* 잔고 밖에 세워 둔 돈 — 카드 맨 위, 옆 두 기둥의 미수·미지급 줄과 같은
-                  높이에 둔다. 여기 적히는 값이 바로 그 줄들의 합이기 때문이다(Expected in =
-                  Receivables 두 줄, Expected out = Payables 두 줄). 잔고 밑에 두었을 때는
-                  그 관계가 화면 반대편 끝과 이어져 눈으로 잡히지 않았다.
-                  이 줄들이 없으면 '예정·연체는 안 셌다'는 사실이 화면 어디에도 남지 않아,
-                  잔고가 그만큼 좋아 보이거나(미지급) 나빠 보이는(미수) 이유를 알 수 없다.
-                  예정을 먼저, 연체를 뒤에 — 예정이 큰 덩어리이고 연체는 그중 날짜가 지난 몫. */}
-              {(parkExpected && ((row.expected_in ?? 0) || (row.expected_out ?? 0))) || row.overdue_in || row.overdue_out ? (
-                <div className={`fin-overdue-note fin-overdue-note--top${overdueRolled ? " in" : ""}`}>
-                  <div className="fin-overdue-cap">
-                    {overdueRolled ? "Of this balance, still unsettled" : "Not in this balance"}
-                  </div>
-                  {parkExpected && (row.expected_in ?? 0) ? (
-                    <div className="fin-overdue-line">
-                      <span>Expected in<span className="hint-inline"> not due yet</span></span>
-                      <b className="num">+{cash(row.expected_in ?? 0)}</b>
-                    </div>
-                  ) : null}
-                  {parkExpected && (row.expected_out ?? 0) ? (
-                    <div className="fin-overdue-line">
-                      <span>Expected out<span className="hint-inline"> not due yet</span></span>
-                      <b className="num">−{cash(row.expected_out ?? 0)}</b>
-                    </div>
-                  ) : null}
-                  {row.overdue_in ? (
-                    <div className="fin-overdue-line">
-                      <span>Overdue in<span className="hint-inline"> to collect</span></span>
-                      <b className="num">+{cash(row.overdue_in)}</b>
-                    </div>
-                  ) : null}
-                  {row.overdue_out ? (
-                    <div className="fin-overdue-line">
-                      <span>Overdue out<span className="hint-inline"> to pay</span></span>
-                      <b className="num">−{cash(row.overdue_out)}</b>
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-              <table className="mini">
-                <tbody>
+              {/* 이 카드는 옆 두 기둥과 같은 세 칸으로 짜인다 — 머리줄(칸 이름 ↔ Opening),
+                  윗줄(Receivables·Payables ↔ 잔고 밖의 돈), 아랫줄(Received·Paid ↔ Net).
+                  같은 줄에 선 것끼리 실제로 같은 것을 말하기 때문이다: 밖에 세워 둔 돈은
+                  옆 윗줄들의 합이고, Net 은 옆 아랫줄들의 차다. Ending 만 짝 없이 발밑에
+                  남는다 — 이 표에서만 나오는 값(기초 + 순증감)이라서. */}
+              <table className="mini fin-balance-grid">
+                <thead>
+                  {/* 기초잔고 — 계산의 출발점이라 머리줄 자리. 딸린 한 줄은 Ending 의
+                      'carried out' 과 짝을 이룬다(받아서 넘긴다는 같은 말의 앞뒤). */}
                   <tr>
-                    <td>Opening<div className="hint-inline">carried in</div></td>
-                    <td className="num">{cash(rowOpening)}</td>
+                    <th scope="row">Opening<div className="hint-inline">carried in</div></th>
+                    <th className="num">{cash(rowOpening)}</th>
                   </tr>
+                </thead>
+                <tbody>
+                  {/* 잔고 밖에 세워 둔 돈 — 옆 두 기둥의 미수·미지급 줄과 같은 자리에 둔다.
+                      여기 적히는 값이 바로 그 줄들의 합이기 때문이다(Expected in =
+                      Receivables 두 줄, Expected out = Payables 두 줄).
+                      이 줄이 없으면 '예정·연체는 안 셌다'는 사실이 화면 어디에도 남지 않아,
+                      잔고가 그만큼 좋아 보이거나(미지급) 나빠 보이는(미수) 이유를 알 수 없다.
+                      예정을 먼저, 연체를 뒤에 — 예정이 큰 덩어리이고 연체는 그중 날이 지난 몫.
+                      세울 것이 없어도 줄은 비운 채로 남긴다: 그래야 아래 Net 이 옆의
+                      Received·Paid 와 계속 나란히 선다. */}
                   <tr>
-                    {/* 예정을 잔고 밖에 세워 두면 이 값은 '실제로 오간 돈끼리의 차'다 —
-                        옆 두 기둥의 아랫줄(Received·Paid) 합계끼리 뺀 것. 그 말을 그대로
-                        적어 두면 어느 숫자에서 왔는지 눈으로 따라갈 수 있다. */}
-                    <td>Net<div className="hint-inline">{parkExpected ? "received − paid" : "inflow − outflow"}</div></td>
+                    <td className="fin-balance-parked" colSpan={2}>
+                      {(parkExpected && ((row.expected_in ?? 0) || (row.expected_out ?? 0))) || row.overdue_in || row.overdue_out ? (
+                        <div className={`fin-overdue-note fin-overdue-note--row${overdueRolled ? " in" : ""}`}>
+                          <div className="fin-overdue-cap">
+                            {overdueRolled ? "Of this balance, still unsettled" : "Not in this balance"}
+                          </div>
+                          {parkExpected && (row.expected_in ?? 0) ? (
+                            <div className="fin-overdue-line">
+                              <span>Expected in<span className="hint-inline"> not due yet</span></span>
+                              <b className="num">+{cash(row.expected_in ?? 0)}</b>
+                            </div>
+                          ) : null}
+                          {parkExpected && (row.expected_out ?? 0) ? (
+                            <div className="fin-overdue-line">
+                              <span>Expected out<span className="hint-inline"> not due yet</span></span>
+                              <b className="num">−{cash(row.expected_out ?? 0)}</b>
+                            </div>
+                          ) : null}
+                          {row.overdue_in ? (
+                            <div className="fin-overdue-line">
+                              <span>Overdue in<span className="hint-inline"> to collect</span></span>
+                              <b className="num">+{cash(row.overdue_in)}</b>
+                            </div>
+                          ) : null}
+                          {row.overdue_out ? (
+                            <div className="fin-overdue-line">
+                              <span>Overdue out<span className="hint-inline"> to pay</span></span>
+                              <b className="num">−{cash(row.overdue_out)}</b>
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </td>
+                  </tr>
+                  {/* 예정을 잔고 밖에 세워 두면 이 값은 '실제로 오간 돈끼리의 차'다 —
+                      옆 두 기둥의 아랫줄(Received·Paid) 합계끼리 뺀 것. 그 둘과 같은 줄에
+                      서고 같은 음영을 받아, 어느 숫자에서 왔는지 자리로 먼저 읽힌다. */}
+                  <tr className="fin-bucket-settled">
+                    <th scope="row">Net<div className="hint-inline">{parkExpected ? "received − paid" : "inflow − outflow"}</div></th>
                     <td className="num" style={{ color: row.net >= 0 ? "#1e7a46" : "#c0392b" }}>
                       {row.net >= 0 ? "+" : "−"}{cash(Math.abs(row.net))}
                     </td>
                   </tr>
-                  {/* 이 표는 잔고가 만들어지는 계산이다 — 기초에서 순증감을 굴려 기말로.
-                      위의 '잔고 밖' 상자만큼 아래로 내려앉아 옆 기둥과 줄이 딱 맞지는
-                      않지만, 줄맞춤보다 '저 합계가 이 두 줄의 합'임을 곁에서 보이는 편이
-                      낫다는 판단이다(그 상자가 위로 올라온 이유). */}
+                  {/* 기초에서 순증감을 굴린 그 구간 끝의 통장잔고 — 위 두 줄의 결과라
+                      발밑에 따로 선다. */}
                   <tr className="fin-period-total">
-                    {/* 딸린 한 줄은 Opening('carried in')과 짝을 이룬다 — 기초에서 받아
-                        기말로 넘긴다는 같은 말의 앞뒤. */}
-                    <td><b>Ending</b><div className="hint-inline">carried out</div></td>
+                    <th scope="row"><b>Ending</b><div className="hint-inline">carried out</div></th>
                     <td className="num" style={{ color: row.cumulative < 0 ? "#c0392b" : undefined }}>
                       <b>{cash(row.cumulative)}</b>
                     </td>

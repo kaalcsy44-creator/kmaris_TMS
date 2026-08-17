@@ -13023,17 +13023,16 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
   border-radius: 0 0 8px 8px;
   background: #fdf1ef;
 }
-/* 카드 맨 위에 서는 경우 — 옆 두 기둥의 미수·미지급 줄과 같은 높이에 두려고 잔고 표
-   위로 올라왔다(그 줄들의 합이 여기 적히는 값이다). 그래서 선도 뒤집는다: 잔고 밑에
-   붙을 때는 위에 선을 그어 '이건 잔고 밖'이라 했지만, 위에 설 때는 아래에 그어야 그
-   선이 여기와 잔고 사이를 가른다. */
-.fin-overdue-note--top {
-  margin-top: 0;
-  margin-bottom: 12px;
+/* 잔고 표 안의 한 줄로 서는 경우 — 옆 두 기둥의 미수·미지급 줄과 같은 자리다(그 줄들의
+   합이 여기 적히는 값이다). 칸을 통째로 채우므로 바깥 여백도 모서리도 두지 않는다. */
+.fin-overdue-note--row {
+  margin: 0;
+  padding: 5px 8px;
   border-top: 0;
-  border-bottom: 1px solid var(--line-strong);
-  border-radius: 8px 8px 0 0;
+  border-radius: 0;
+  height: 100%;
 }
+.fin-balance-grid td.fin-balance-parked { padding: 0; border-bottom: 1px solid var(--line); }
 /* 켜서 흐름에 태운 경우엔 경고가 아니라 '그중 얼마'라는 안내다 — 바탕을 중립으로. */
 .fin-overdue-note.in { background: #f4f7fb; }
 .fin-overdue-cap {
@@ -13071,6 +13070,10 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
   color: var(--muted);
   padding-bottom: 2px;
   border-bottom: 1px solid var(--line);
+  /* 옆 잔고 카드의 Opening 줄과 높이를 맞추느라 이 띠가 두 줄만큼 넓어졌다 — 이름은
+     아래로 붙여 제가 이름표인 금액 바로 위에 서게 둔다(가운데 뜨면 어느 칸의 이름인지
+     흐려진다). */
+  vertical-align: bottom;
 }
 /* 줄 이름 칸(th[scope=row]) — 본문 글씨로 되돌린다(기본 th 는 가운데·작게 정렬된다). */
 .fin-bucket-grid tbody th {
@@ -13081,6 +13084,32 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
   padding: 6px 8px;
   border-bottom: 1px solid var(--line);
 }
+/* 잔고 카드도 옆 기둥과 같은 짜임이다 — 머리줄 하나 + 본문 줄 셋. 다만 머리줄에 서는
+   것이 칸 이름이 아니라 금액(Opening)이라, 옆의 작은 회색 이름줄과 달리 본문 글자로
+   둔다. 이름 칸은 th 라 옆 기둥의 줄 이름 칸과 같은 바탕을 자동으로 물려받는다. */
+.fin-balance-grid thead th,
+.fin-balance-grid tbody th {
+  text-align: left;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink);
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+}
+.fin-balance-grid thead th.num { text-align: right; font-size: 14px; white-space: nowrap; }
+.fin-balance-grid th .hint-inline { font-weight: 400; }
+/* 세 카드의 줄을 가로로 맞춘다 — 칸 이름줄 ↔ Opening, 미수·미지급 ↔ 잔고 밖의 돈,
+   실적(Received·Paid) ↔ Net. 표는 서로의 높이를 모르므로 같은 최소 높이를 못박는 수밖에
+   없다. 표에서 height 는 최소값처럼 동작하니, 내용이 더 크면 그 줄만 자란다 — 밖에 세워
+   둔 돈이 여러 줄인 달에는 그 칸이 커지며 아래가 밀린다. 드문 경우이고, 그때는 줄맞춤보다
+   값이 다 보이는 편이 낫다. */
+.fin-three-cols { --fin-band: 50px; }
+.fin-bucket-grid thead th,
+.fin-balance-grid thead th,
+.fin-bucket-grid tbody th,
+.fin-bucket-grid tbody td,
+.fin-balance-grid tbody th,
+.fin-balance-grid tbody td { height: var(--fin-band); }
 /* 줄 이름 아래 딸린 설명("not settled yet · not in balance", "already in the account")
    은 이름이 아니라 그 이름을 풀어 쓴 말이라, 굵기를 물려받지 않는다 — 둘이 같은 무게로
    서면 어느 쪽이 줄 이름인지가 흐려진다. */
