@@ -125,6 +125,9 @@ export default function ProjectsScreen() {
   // 그 벤더 P/O 가 선택된 상태로 연다.
   const deepAp = params.get("ap");
   const deepView = params.get("view");
+  // ?back=<주소> — 어디서 눌러 왔는지. 팝업을 닫으면 그 자리로 되돌려 보낸다(지급대장에서
+  // 청구서 번호를 누른 사람은 프로젝트 목록이 아니라 보던 대장으로 돌아가야 한다).
+  const deepBack = params.get("back");
   const [deepLink, setDeepLink] = useState<{
     rfqId: number | null;
     orderId: number | null;
@@ -132,6 +135,7 @@ export default function ProjectsScreen() {
     vrfqId: number | null;
     apPoId: number | null;
     view: "work" | "overview";
+    back: string | null;
   } | null>(null);
   useEffect(() => {
     if (!deepRfq && !deepOrder) return;
@@ -143,10 +147,12 @@ export default function ProjectsScreen() {
       vrfqId: deepVrfq ? Number(deepVrfq) : null,
       apPoId: deepAp ? Number(deepAp) : null,
       view: deepView === "overview" ? "overview" : "work",
+      // 같은 사이트 안의 주소만 받는다 — 밖으로 튕겨 나갈 여지를 두지 않는다.
+      back: deepBack && deepBack.startsWith("/") && !deepBack.startsWith("//") ? deepBack : null,
     });
     // URL 정리 — 새로고침마다 같은 팝업이 다시 열리지 않도록 파라미터를 제거한다.
     router.replace("/project", { scroll: false });
-  }, [deepRfq, deepOrder, deepStage, deepVrfq, deepAp, deepView, router]);
+  }, [deepRfq, deepOrder, deepStage, deepVrfq, deepAp, deepView, deepBack, router]);
   // 내부확인용·고객확인용 모두 통합 파이프라인(rows) 사용. 단계 체계만 12 vs 7로 다름.
   const {
     data: pipeline,
@@ -232,6 +238,7 @@ export default function ProjectsScreen() {
               openVrfqId={deepLink?.vrfqId ?? null}
               openApPoId={deepLink?.apPoId ?? null}
               openView={deepLink?.view ?? "work"}
+              openBack={deepLink?.back ?? null}
             />
           )}
         </>
@@ -532,6 +539,7 @@ function PipelineTable({
   openVrfqId = null,
   openApPoId = null,
   openView = "work",
+  openBack = null,
 }: {
   rows: PipelineRow[];
   steps: string[];
@@ -556,6 +564,8 @@ function PipelineTable({
   // 딥링크로 9단계 진입 시 초점 벤더 P/O id(AP 탭 + 그 P/O 선택).
   openApPoId?: number | null;
   openView?: "work" | "overview";
+  /** 딥링크로 왔을 때 팝업을 닫으면 돌아갈 주소(없으면 이 목록에 남는다). */
+  openBack?: string | null;
 }) {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [initialModalView, setInitialModalView] = useState<"work" | "overview">("work");
@@ -569,6 +579,9 @@ function PipelineTable({
   const [deepOrderId, setDeepOrderId] = useState<number | null>(null);
   // 딥링크 1회 소비 가드(행 로드 지연·재렌더 시 닫은 팝업이 다시 열리지 않도록).
   const deepConsumed = useRef(false);
+  // 딥링크로 들어온 사람이 돌아갈 자리. 목록에서 직접 연 팝업은 돌아갈 곳이 없으므로 비운다.
+  const backRef = useRef<string | null>(null);
+  const backRouter = useRouter();
   // 목록·상세 모달 공용 오픈 헬퍼(수동 오픈은 지정 단계 없음).
   const openRow = useCallback((id: number) => {
     setInitialModalView("work");
@@ -577,6 +590,7 @@ function PipelineTable({
     setDeepVrfqId(null);
     setDeepApPoId(null);
     setDeepOrderId(null);
+    backRef.current = null;
   }, []);
   const openOverview = useCallback((id: number) => {
     setInitialModalView("overview");
@@ -585,6 +599,7 @@ function PipelineTable({
     setDeepVrfqId(null);
     setDeepApPoId(null);
     setDeepOrderId(null);
+    backRef.current = null;
   }, []);
   useEffect(() => {
     if (deepConsumed.current) return;
@@ -601,7 +616,8 @@ function PipelineTable({
     setDeepVrfqId(openVrfqId && openVrfqId > 0 ? openVrfqId : null);
     setDeepApPoId(openApPoId && openApPoId > 0 ? openApPoId : null);
     setDeepOrderId(openOrderId && openOrderId > 0 ? openOrderId : null);
-  }, [openRfqId, openOrderId, openStage, openVrfqId, openApPoId, openView, rows]);
+    backRef.current = openBack || null;
+  }, [openRfqId, openOrderId, openStage, openVrfqId, openApPoId, openView, openBack, rows]);
   // 목록 표시 방식: 표(table) / 칸반 보드(board). 같은 데이터·같은 상세 모달 재사용.
   const [view, setView] = useState<"table" | "board">("board");
   // 현황판 전체 미리보기(A4 가로 이미지) 팝업 열림 여부.
@@ -1143,6 +1159,11 @@ function PipelineTable({
             setSelectedId(null);
             setDeepStage(null);
             setDeepVrfqId(null);
+            // 다른 화면에서 눌러 들어온 팝업이면 그 자리로 돌려보낸다 — 여기 남으면
+            // 보던 목록의 갈래·기간·스크롤을 다시 찾아 들어가야 한다.
+            const back = backRef.current;
+            backRef.current = null;
+            if (back) backRouter.push(back);
           }}
         />
       ) : null}

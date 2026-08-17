@@ -110,11 +110,18 @@ export function ProjectDocLink({
   // 이 문서의 고객 P/O 를 고른다. (한 프로젝트에 P/O 가 여러 건일 수 있다.)
   // 지급(AP) 행은 11단계(Payment Completed)로 연다 — 지급 확인 칸이 붙어 있는 단계라,
   // 목록에서 누르면 바로 그 칸이 보인다. 수입(AR) 행은 청구서를 편집하는 9단계 그대로.
+  // 돌아올 자리 — 팝업을 닫으면 이 주소로 되돌린다. 없으면 프로젝트 목록에 남는데,
+  // 여기서 넘어온 사람이 보고 있던 것은 그 목록이 아니라 지금 이 대장이다.
+  // (렌더 시점의 주소를 그대로 담는다 — 갈래·기간·통화 필터까지 함께 살아난다.)
+  const back = typeof window !== "undefined"
+    ? `${window.location.pathname}${window.location.search}`
+    : "";
   const params = [
     rfqId ? `rfq=${rfqId}` : "",
     orderId ? `order=${orderId}` : "",
     apPoId ? "stage=11" : "stage=9",
     apPoId ? `ap=${apPoId}` : "",
+    back ? `back=${encodeURIComponent(back)}` : "",
   ].filter(Boolean).join("&");
   return (
     <Link
