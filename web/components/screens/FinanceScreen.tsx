@@ -41,6 +41,7 @@ import type {
 import { can } from "@/lib/auth";
 import Modal from "@/components/common/Modal";
 import CurrencyToggle from "@/components/common/CurrencyToggle";
+import { HeadTh, useHeadMenu, type HeadCol } from "@/components/common/tableHeadMenu";
 import { amountInputValue, parseAmountInput } from "@/components/common/itemTable";
 import FinanceDaybook from "@/components/screens/FinanceDaybook";
 import FinanceProfitTab from "@/components/screens/FinanceProfit";
@@ -1559,8 +1560,27 @@ function OutflowTab() {
         : st === "settled" ? (p.paid_amount > 0 || p.paid || (p.paid_dates?.length ?? 0) > 0)
           : true));
   }, [rows, view, st, from, to, cur]);
+
+  // 머리행에서 거는 정렬·필터 — 위쪽 갈래/기간/통화 필터가 고른 목록을 다시 자른다.
+  // 분류·상대처·상태·반복은 값이 몇 개 안 되니 고르는 목록으로, 날짜 둘은 기간으로,
+  // 금액 셋은 숫자로 정렬한다. 적요는 값이 행마다 달라 필터 없이 정렬만 준다.
+  const headCols = useMemo<HeadCol<FinancePayable>[]>(() => [
+    { key: "category", text: (p) => CATEGORY_LABEL[p.category] || p.category, filter: "facet" },
+    { key: "party", text: (p) => p.counterparty || "", filter: "facet", emptyLabel: "Unspecified" },
+    { key: "desc", text: (p) => p.description || "" },
+    { key: "bill_date", text: (p) => p.bill_date || "", filter: "date" },
+    { key: "due_date", text: (p) => p.due_date || "", filter: "date" },
+    { key: "amount", text: (p) => String(p.invoice_amount), sortValue: (p) => p.invoice_amount },
+    { key: "paid", text: (p) => String(p.paid_amount), sortValue: (p) => p.paid_amount },
+    { key: "outstanding", text: (p) => String(p.outstanding), sortValue: (p) => p.outstanding },
+    { key: "status", text: (p) => payableStatus(p).label, sortValue: (p) => payableStatus(p).rank, filter: "facet" },
+    { key: "recurrence", text: (p) => RECURRENCE_LABEL[p.recurrence] || p.recurrence, filter: "facet" },
+  ], []);
+  const head = useHeadMenu(headCols, view);
+  const shown = head.apply(visible);
   // 합계 3열(청구·지급·미지급) — 통화별 분리(수입 목록과 같은 규칙).
-  const totals = useMemo(() => payableTotals(visible), [visible]);
+  // 보이는 행의 합이다 — 머리행 필터로 잘라 낸 행은 발밑 합계에서도 빠진다.
+  const totals = payableTotals(shown);
 
   function reload() {
     invalidateCache("finance:summary");
@@ -1653,7 +1673,7 @@ function OutflowTab() {
    * 뒤 셋(상태·반복·조작)은 비운다.
    */
   function totalsFoot(amountLabel: string) {
-    if (visible.length === 0) return null;
+    if (shown.length === 0) return null;
     return (
       <tfoot>
         <tr className="foot-grand fin-foot-total">
@@ -1774,32 +1794,49 @@ function OutflowTab() {
           적요·날짜 둘·금액 셋·상태·반복'으로 적힌다). 갈래마다 표를 따로 두었을 때는
           Total 을 낼 자리가 없었고, 같은 표를 두 벌 손봐야 했다. 이름 두 개만 갈린다:
           거래 쪽은 청구서 번호와 'Bill', 그 밖은 적요와 'Amount'. */}
+      {/* 머리행 필터가 걸렸을 때만 나타나는 줄 — 몇 줄이 남았는지와 되돌리는 버튼.
+          아무것도 걸지 않았으면 자리도 차지하지 않는다. */}
+      {head.filtersActive ? (
+        <div className="fin-head-filter-bar">
+          <span className="pl-search-count">{shown.length} / {visible.length}</span>
+          <button type="button" className="pl-filter-reset" onClick={head.resetFilters}>Reset column filters</button>
+        </div>
+      ) : null}
+
       <section className="fin-sec">
         <table className="mini fin-ledger">
           <thead>
             <tr>
-              <th className="fin-w-cat">Category</th>
-              <th className="fin-w-party">
+              {/* 머리 칸을 누르면 그 열로 오름/내림 정렬하거나 값을 골라 거를 수 있다. */}
+              <HeadTh menu={head} col="category" className="fin-w-cat">Category</HeadTh>
+              <HeadTh menu={head} col="party" className="fin-w-party">
                 {view === "payables" ? "Vendor" : view === "consulting" ? "Consultant" : "Vendor / payee"}
-              </th>
-              <th>{view === "payables" ? "Bill No. / Vendor P/O"
+              </HeadTh>
+              <HeadTh menu={head} col="desc">{view === "payables" ? "Bill No. / Vendor P/O"
                 : view === "consulting" ? "Project"
-                  : view === "other" ? "Description" : "Reference"}</th>
-              <th className="fin-w-date">Bill date</th><th className="fin-w-date">Due</th>
-              <th className="num fin-w-money">{view === "payables" ? "Bill" : "Amount"}</th>
-              <th className="num fin-w-money">Paid</th><th className="num fin-w-money">Payable</th>
-              <th className="fin-w-status">Status</th><th className="fin-w-rec">Recurrence</th><th className="fin-w-act" />
+                  : view === "other" ? "Description" : "Reference"}</HeadTh>
+              <HeadTh menu={head} col="bill_date" className="fin-w-date">Bill date</HeadTh>
+              <HeadTh menu={head} col="due_date" className="fin-w-date">Due</HeadTh>
+              <HeadTh menu={head} col="amount" className="num fin-w-money" numeric>
+                {view === "payables" ? "Bill" : "Amount"}
+              </HeadTh>
+              <HeadTh menu={head} col="paid" className="num fin-w-money" numeric>Paid</HeadTh>
+              <HeadTh menu={head} col="outstanding" className="num fin-w-money" numeric>Payable</HeadTh>
+              <HeadTh menu={head} col="status" className="fin-w-status">Status</HeadTh>
+              <HeadTh menu={head} col="recurrence" className="fin-w-rec">Recurrence</HeadTh>
+              <th className="fin-w-act" />
             </tr>
           </thead>
           <tbody>
             {/* 행이 없어도 표(머리행)는 남긴다 — 어떤 항목이 들어오는 자리인지 보이도록. */}
-            {visible.length === 0 ? (
+            {shown.length === 0 ? (
               <tr><td colSpan={11} className="mini-empty">{
-                st ? "Nothing in this period matches that filter."
-                  : view === "consulting" ? "No consulting fee registered yet — use Register on a line above."
-                    : view === "other" ? "No other costs registered." : "No vendor bills yet."}</td></tr>
+                head.filtersActive ? "No line matches the column filters."
+                  : st ? "Nothing in this period matches that filter."
+                    : view === "consulting" ? "No consulting fee registered yet — use Register on a line above."
+                      : view === "other" ? "No other costs registered." : "No vendor bills yet."}</td></tr>
             ) : null}
-            {visible.map((p) => (
+            {shown.map((p) => (
               <tr key={`${p.source || "manual"}-${p.id}`} className={p.overdue && !p.paid ? "fin-overdue" : ""}>
                 <td data-label="Category">{CATEGORY_LABEL[p.category] || p.category}</td>
                 <td className="fin-c-title">{p.counterparty || "—"}</td>
@@ -1857,6 +1894,7 @@ function OutflowTab() {
           {totalsFoot(view === "payables" ? "Bill" : "Amount")}
         </table>
       </section>
+      {head.renderMenu()}
 
       {paying ? (
         <PaymentDateModal
@@ -2005,6 +2043,21 @@ function ConsultingBasis({ onRegister }: { onRegister: (prefill: FinancePayableS
       </table>
     </section>
   );
+}
+
+/**
+ * 상태 칸을 한 낱말로 — 머리행의 상태 필터가 고를 수 있는 값.
+ *
+ * 표에 그려지는 배지는 반복 항목이면 "3 paid" 처럼 회차 수를 달고 나오는데, 그대로
+ * 쓰면 회차 수마다 다른 값이 되어 고를 수 없다. 여기서는 묻는 것("낸 건가, 밀린 건가")
+ * 만 남긴다. 순번은 급한 것부터 — 정렬하면 밀린 건이 위로 온다.
+ */
+function payableStatus(p: FinancePayable): { label: string; rank: number } {
+  const late = !!p.overdue && !p.paid;
+  const part = p.paid_amount > 0 || (p.paid_dates?.length ?? 0) > 0;
+  if (p.paid) return { label: p.source === "bankfee" ? "Deducted" : "Paid", rank: 4 };
+  if (late) return { label: part ? "Partly paid · overdue" : "Overdue", rank: part ? 1 : 0 };
+  return part ? { label: "Partly paid", rank: 2 } : { label: "Payable", rank: 3 };
 }
 
 /** 지급 목록 합계 — 청구·지급·미지급 3열을 통화별로 모은다. */
