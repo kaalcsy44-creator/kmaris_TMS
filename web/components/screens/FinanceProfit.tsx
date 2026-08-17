@@ -50,6 +50,52 @@ function compact(n: number): string {
 }
 const won = (n: number) => `${n < 0 ? "−" : ""}₩${Math.abs(Math.round(n)).toLocaleString()}`;
 
+/**
+ * 칸의 크기 — 달을 몇 개씩 묶어 한 칸으로 볼 것인가.
+ *
+ * 열두 칸은 '언제 튀었나'를 보는 데는 좋지만 '분기로는 어땠나'를 묻는 순간 머리로 더해야
+ * 한다. 서버는 늘 열두 달을 내려주고, 묶는 일만 화면에서 한다 — 어떤 묶음이든 같은 값을
+ * 더한 것이라 두 눈금이 어긋날 여지가 없다.
+ */
+type Unit = "month" | "quarter" | "half" | "year";
+const UNIT_LABEL: Record<Unit, string> = {
+  month: "Monthly", quarter: "Quarterly", half: "Half-year", year: "Yearly",
+};
+const UNIT_SIZE: Record<Unit, number> = { month: 1, quarter: 3, half: 6, year: 12 };
+
+/** 이 눈금의 칸들 — 각 칸의 이름과 그 칸이 품는 달(0~11). */
+function unitGroups(unit: Unit, year: number, labels: string[]): { label: string; months: number[] }[] {
+  const size = UNIT_SIZE[unit];
+  return Array.from({ length: 12 / size }, (_, g) => {
+    const months = Array.from({ length: size }, (_, k) => g * size + k);
+    const label = unit === "month" ? (labels[g] || "")
+      : unit === "quarter" ? `Q${g + 1}`
+        : unit === "half" ? `H${g + 1}`
+          : String(year);
+    return { label, months };
+  });
+}
+
+/** 한 칸의 내역 여럿을 하나로 — 같은 이름은 합치고, 큰 것부터 남긴 나머지는 접는다. */
+function mergeCells(cells: { rows: { name: string; amount: number }[]; more: number; more_amount: number }[]) {
+  const by = new Map<string, number>();
+  let more = 0;
+  let moreAmount = 0;
+  for (const c of cells) {
+    for (const r of c.rows) by.set(r.name, (by.get(r.name) ?? 0) + r.amount);
+    more += c.more;
+    moreAmount += c.more_amount;
+  }
+  const sorted = [...by.entries()].sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
+  const head = sorted.slice(0, 6);
+  const rest = sorted.slice(6);
+  return {
+    rows: head.map(([name, amount]) => ({ name, amount: Math.round(amount) })),
+    more: more + rest.length,
+    more_amount: Math.round(moreAmount + rest.reduce((s, [, v]) => s + v, 0)),
+  };
+}
+
 /** 표의 한 줄 — 이름과 12칸, 그리고 어떤 줄인지(소계·총계·참고). */
 type Line = {
   name: string;
@@ -89,6 +135,8 @@ export default function FinanceProfitTab() {
   const [withVat, setWithVat] = useState(true);
   // 법인세 시뮬레이션을 세금에 넣을지. 추정일 뿐이라(세무조정 전) 끄고 볼 수 있어야 한다.
   const [withTax, setWithTax] = useState(true);
+  // 칸의 크기 — 달/분기/반기/연간. 서버는 늘 열두 달을 주고 묶기만 여기서 한다.
+  const [unit, setUnit] = useState<Unit>("month");
 
   const { data, error } = useCachedData<FinanceProfit>(
     `finance:profit:${year}`,
@@ -184,8 +232,33 @@ export default function FinanceProfitTab() {
       { name: "Taxes", values: taxes, kind: "sum" },
       { name: "Net profit", values: net, kind: "grand" },
     ];
-    return { lines, revenue, costs, taxes, net };
-  }, [data, withVat, withTax]);
+
+    // 여기까지는 늘 열두 달이다. 고른 눈금으로 묶는 일은 마지막에 한 번만 — 더하기는
+    // 순서를 타지 않으므로 어느 줄을 묶든 아래 합계·순수익과 어긋나지 않는다.
+    const groups = unitGroups(unit, year, data.labels);
+    const fold = (xs: number[]) => groups.map((g) => g.months.reduce((s, i) => s + (xs[i] || 0), 0));
+    const details: FinanceProfit["details"] = {};
+    for (const [key, months] of Object.entries(data.details ?? {})) {
+      const cells: Record<string, ReturnType<typeof mergeCells>> = {};
+      groups.forEach((g, gi) => {
+        const found = g.months.map((m) => months[String(m)]).filter(Boolean);
+        if (found.length) cells[String(gi)] = mergeCells(found);
+      });
+      details[key] = cells;
+    }
+    return {
+      labels: groups.map((g) => g.label),
+      lines: lines.map((l) => ({ ...l, values: fold(l.values) })),
+      details,
+      revenue: fold(revenue),
+      costs: fold(costs),
+      taxes: fold(taxes),
+      net: fold(net),
+      // 월 단위 순수익은 눈금과 무관하게 남긴다 — KPI 의 '열두 달 중 몇 달이 흑자인가'는
+      // 묶어 보는 중에도 같은 뜻이어야 하는 문장이다.
+      monthlyNet: net,
+    };
+  }, [data, withVat, withTax, unit, year]);
 
   return (
     <div className="fin-overview">
@@ -194,6 +267,15 @@ export default function FinanceProfitTab() {
           {years.map((y) => <option key={y} value={y}>{y}</option>)}
         </select>
         <span className="fin-period-range">{year}-01-01 ~ {year}-12-31</span>
+        {/* 칸의 크기 — 같은 해를 열두 칸으로 볼지 넷·둘·하나로 볼지. Overview 의
+            Monthly/Weekly 토글과 같은 자리·같은 모양이라 옮겨 다녀도 손이 기억한다. */}
+        <div className="seg-toggle" role="group" aria-label="Column size">
+          {(["month", "quarter", "half", "year"] as Unit[]).map((u) => (
+            <button key={u} className={unit === u ? "on" : ""} onClick={() => setUnit(u)}>
+              {UNIT_LABEL[u]}
+            </button>
+          ))}
+        </div>
         <label className="check-chip" style={{ marginLeft: "auto", cursor: "pointer" }}>
           <input type="checkbox" checked={withVat} onChange={(e) => setWithVat(e.target.checked)} />
           {" "}Count estimated VAT as tax
@@ -238,7 +320,7 @@ export default function FinanceProfitTab() {
               label="Net profit"
               main={won(sumOf(model.net))}
               sub={sumOf(model.revenue)
-                ? `Margin ${(sumOf(model.net) / sumOf(model.revenue) * 100).toFixed(1)}% · ${model.net.filter((n) => n > 0).length} of 12 months in profit`
+                ? `Margin ${(sumOf(model.net) / sumOf(model.revenue) * 100).toFixed(1)}% · ${model.monthlyNet.filter((n) => n > 0).length} of 12 months in profit`
                 : "No revenue this year"}
               tone={sumOf(model.net) >= 0 ? "green" : "red"}
             />
@@ -246,23 +328,27 @@ export default function FinanceProfitTab() {
 
           <div className="panel">
             <div className="items-head">
-              <h3 className="form-title" style={{ margin: 0 }}>Monthly net profit ({year}, ₩)</h3>
+              <h3 className="form-title" style={{ margin: 0 }}>
+                {UNIT_LABEL[unit]} net profit ({year}, ₩)
+              </h3>
               <div className="fin-legend">
                 <span className="fin-legend-item"><span className="fin-dot fin-dot--profit" /> Profit</span>
                 <span className="fin-legend-item"><span className="fin-dot fin-dot--loss" /> Loss</span>
               </div>
             </div>
-            <NetBars labels={data.labels} net={model.net} revenue={model.revenue} costs={model.costs} taxes={model.taxes} />
+            <NetBars labels={model.labels} net={model.net} revenue={model.revenue} costs={model.costs} taxes={model.taxes} />
           </div>
 
           <div className="panel">
             <h3 className="form-title">Revenue − costs − taxes = net profit (₩)</h3>
             <div className="fin-pl-scroll">
-              <table className="mini fin-pl">
+              {/* 칸이 넷 이하면 좁은 화면에서도 넘칠 일이 없다 — 열두 달용 최소 폭을 그대로
+                  걸어 두면 분기·반기로 접었는데도 표가 옆으로 굴러다닌다. */}
+              <table className={`mini fin-pl${model.labels.length <= 6 ? " fin-pl--few" : ""}`}>
                 <thead>
                   <tr>
                     <th className="fin-pl-name">Line</th>
-                    {data.labels.map((m) => <th key={m} className="num">{m}</th>)}
+                    {model.labels.map((m) => <th key={m} className="num">{m}</th>)}
                     <th className="num tot">Total</th>
                   </tr>
                 </thead>
@@ -277,7 +363,7 @@ export default function FinanceProfitTab() {
                           한 칸에 담을 수 있는 건 합계 하나뿐인데, 대개 다음 질문이
                           "그게 누구 건인가"라서. 내역이 없는 줄(소계·부가세)은 그냥 둔다. */}
                       {l.values.map((v, i) => (
-                        <td key={i} className="num" title={tip(data.details, l, i)}>
+                        <td key={i} className="num" title={tip(model.details, l, i)}>
                           {cell(v)}
                         </td>
                       ))}

@@ -12875,6 +12875,8 @@ table.mini tfoot .fin-foot-name { text-align: left; }
    이름 칸·합계 칸과 같은 몫이라, 열두 달이 서로 맞물린다). 이름 칸을 16% 로 묶어 두는
    덕에 달 칸이 각각 6.17% 씩 돌아간다 — 예전에는 이름이 한 줄로 늘어나며 달 칸을 밀었다. */
 table.mini.fin-pl { min-width: 1240px; table-layout: fixed; }
+/* 분기·반기·연간으로 접으면 칸이 넷 이하라 최소 폭이 필요 없다. */
+table.mini.fin-pl.fin-pl--few { min-width: 0; }
 table.mini.fin-pl th, table.mini.fin-pl td { padding: 5px 8px; }
 table.mini.fin-pl .fin-pl-name {
   position: sticky;
