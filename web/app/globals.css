@@ -5062,6 +5062,17 @@ table.mini tfoot tr.foot-grand .total-value {
   color: var(--navy);
   margin-bottom: 4px;
 }
+/* 칸 아래 붙는 참고 줄(옆 장부의 날짜·수수료의 근거) — 위 규칙이 라벨을 굵은 남색으로
+   칠하는데, 이건 라벨이 아니라 곁들인 말이다. 같은 무게로 서면 무엇을 입력하는 칸인지가
+   흐려지므로 회색 보통 글씨로 낮추고, 여백도 위로 옮긴다(입력칸 다음에 오는 줄이라). */
+.form-field > span.hint-inline {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted);
+  margin-top: 4px;
+  margin-bottom: 0;
+  line-height: 1.4;
+}
 .form-field select,
 .form-field input {
   width: 100%;

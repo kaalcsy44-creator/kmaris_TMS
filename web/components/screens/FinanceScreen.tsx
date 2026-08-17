@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
@@ -2263,6 +2263,9 @@ const VAT_CHOICES: { value: VatChoice; label: string }[] = [
 ];
 const rateChoice = (rate: number): VatChoice => (rate === 0.1 ? "0.1" : rate === 0 ? "0" : "custom");
 
+/** 소개 수수료의 근거 — 이 딜의 매출(그 통화)과 요율, 그리고 거기서 나온 수수료. */
+type FeeBase = { sales: number; currency: string; rate: number; fee: number };
+
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 /** 저장은 총액(amount)이 기준 — 공급가액은 총액에서 부가세를 뺀 나머지로 되돌린다. */
 const supplyOf = (f: FinancePayableSave) => round2((f.amount || 0) - (f.vat_amount || 0));
@@ -2318,8 +2321,47 @@ function PayableForm({
     return last ? { last, count: ar.length } : null;
   }, [receivables, form.rfq_id]);
 
+  /**
+   * 이 수수료의 근거 — 어느 딜의 매출 얼마에 몇 %인가.
+   *
+   * 금액은 사람이 정하는 값이 아니라 이 셋에서 나온다. 그래서 화면에 그대로 적어 두고
+   * (공급가액 칸 아래), 통화나 환율이 바뀌면 여기서 다시 계산한다.
+   */
+  const feeBase = useMemo<FeeBase | null>(() => {
+    if (!isConsulting || !form.rfq_id) return null;
+    const r = (consulting?.rows ?? []).find((x) => x.rfq_id === form.rfq_id);
+    return r ? { sales: r.sales_amount, currency: r.currency, rate: r.rate, fee: r.fee } : null;
+  }, [consulting, form.rfq_id, isConsulting]);
+  // 상태 갱신 함수는 렌더 밖에서 도므로 최신 근거를 ref 로 들려 보낸다.
+  const feeBaseRef = useRef(feeBase);
+  feeBaseRef.current = feeBase;
+
+  /**
+   * 수수료를 지급 통화로 환산 — 매출과 같은 통화면 그대로, 다르면 적용환율로 옮긴다.
+   * fx_rate 는 '외화 1단위 = ₩?' 이라, 원화 매출을 외화로 낼 때는 나누고 그 반대는 곱한다.
+   * 환율을 아직 모르면 null 을 준다: 그때 금액을 건드리면 적어 둔 값이 0으로 지워진다.
+   */
+  function feeIn(base: FeeBase, currency: string, fxRate: number): number | null {
+    if ((currency || "KRW") === base.currency) return base.fee;
+    if (!fxRate) return null;
+    return base.currency === "KRW" ? round2(base.fee / fxRate) : round2(base.fee * fxRate);
+  }
+
+  /** 근거에서 다시 계산한 수수료를 폼에 접어 넣는다. vatRate 를 주면 그 세율로 계산한다. */
+  function withFee(f: FinancePayableSave, base: FeeBase, vatRate?: number | null): FinancePayableSave {
+    const amount = feeIn(base, f.currency || "KRW", f.fx_rate || 0);
+    if (amount == null) return f;
+    const r = vatRate === undefined ? (vatChoice === "custom" ? null : Number(vatChoice)) : vatRate;
+    return r == null ? withMoney(f, amount, f.vat_amount || 0) : withMoney(f, amount, Math.round(amount * r));
+  }
+
   function set<K extends keyof FinancePayableSave>(k: K, v: FinancePayableSave[K]) {
-    setForm((f) => ({ ...f, [k]: v }));
+    setForm((f) => {
+      const next = { ...f, [k]: v };
+      // 환율이 정해지면(고시 조회·직접 입력) 그 통화의 수수료도 함께 정해진다 — 소개비는
+      // 매출에서 나오는 값이라, 환율만 바뀌고 금액이 그대로면 틀린 값이 남는다.
+      return k === "fx_rate" && feeBaseRef.current ? withFee(next, feeBaseRef.current) : next;
+    });
   }
 
   /**
@@ -2366,13 +2408,18 @@ function PayableForm({
     // 수수료가 아닌 분류로 옮기면 프로젝트 연결은 뜻을 잃는다 — 남겨 두면 임차료가
     // 어느 딜에 매인 것처럼 저장된다.
     if (next.category !== CONSULTING) next = { ...next, rfq_id: null };
-    if (vatChoice === "custom") {
-      setForm(next);
-      return;
+    let vatRate: number | null = null;
+    let out = next;
+    if (vatChoice !== "custom") {
+      vatRate = autoVatRate(next.category || "기타", next.currency || "KRW");
+      setVatChoice(rateChoice(vatRate));
+      out = withRate(next, vatRate);
     }
-    const rate = autoVatRate(next.category || "기타", next.currency || "KRW");
-    setVatChoice(rateChoice(rate));
-    setForm(withRate(next, rate));
+    // 통화를 바꾸면 수수료도 그 통화의 값이 된다 — 원화 1,049,000 이 달러 칸에 그대로
+    // 남아 $1,049,000 이 되던 것을 막는다. 환율을 아직 모르는 순간(방금 USD 로 바꾼
+    // 직후)에는 그대로 두고, FX 칸이 고시를 물어온 뒤 set() 이 다시 맞춘다.
+    if (next.category === CONSULTING && feeBase) out = withFee(out, feeBase, vatRate);
+    setForm(out);
   }
 
   const supply = supplyOf(form);
@@ -2473,6 +2520,20 @@ function PayableForm({
               setForm((f) => withMoney(f, s, vatChoice === "custom" ? (f.vat_amount || 0) : Math.round(s * Number(vatChoice))));
             }}
           />
+          {/* 이 금액이 어디서 나왔는지 — 매출 × 요율. 손으로 고칠 수 있는 칸이라, 근거를
+              곁에 두어야 고친 값이 근거와 어긋났는지 그 자리에서 보인다. 지급 통화가
+              매출 통화와 다르면 환산까지 이어 적는다(무슨 환율로 얼마가 되었는가). */}
+          {feeBase ? (
+            <span className="hint-inline">
+              Base {money(feeBase.sales, feeBase.currency)} sales × {feeBase.rate}% ={" "}
+              {money(feeBase.fee, feeBase.currency)}
+              {(form.currency || "KRW") !== feeBase.currency ? (
+                form.fx_rate
+                  ? ` → ${money(feeIn(feeBase, form.currency || "KRW", form.fx_rate) ?? 0, form.currency || "KRW")} at ${form.fx_rate.toLocaleString()}`
+                  : " — set the FX rate below to convert"
+              ) : ""}
+            </span>
+          ) : null}
         </label>
         {/* 부가세 — 세율을 직접 고른다. 급여·경비 클레임처럼 부가세가 없는 지출은 0%,
             면세·불공제·끝수 조정처럼 비율로 안 떨어지는 건만 Custom 으로 금액을 넣는다.
