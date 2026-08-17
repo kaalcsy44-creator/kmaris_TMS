@@ -1237,6 +1237,15 @@ def finance_profit(year: int = 0):
                           or qtn_rfq.get(getattr(o, "quotation_id", None) or 0) or 0)
                    for o in orders}
 
+        # 내역에 붙일 프로젝트 번호 — 거래선 이름만으로는 '어느 건인가'가 안 갈린다
+        # (한 고객과 여러 딜을 하고, 벤더는 더 그렇다). 번호가 앞에 서면 툴팁의 한 줄이
+        # 곧바로 그 프로젝트를 가리킨다.
+        proj_no = _project_no_map(s)
+
+        def named(order_id: int, party: str) -> str:
+            no = proj_no.get(ord_rfq.get(order_id or 0) or 0, "")
+            return f"{no} · {party}" if no else party
+
         fx_seen: dict[str, dict] = {}
         sales, output_vat, consulting = z(), z(), z()
         for r in s.query(ARRecord).all():
@@ -1251,7 +1260,9 @@ def finance_profit(year: int = 0):
             sales[i] += supply_krw
             output_vat[i] += inv_krw - supply_krw
             who = cust_names.get(o.customer_id, "—") if o else "—"
-            note("sales", i, who, supply_krw)
+            note("sales", i, named(r.order_id, who), supply_krw)
+            # 부가세 내역도 건별로 — 그 달의 세액이 어느 청구서에서 나왔는지가 답이다.
+            note("vat", i, named(r.order_id, who), inv_krw - supply_krw)
             # 이 청구가 소개자 있는 딜의 것이면, 같은 달에 수수료도 함께 선다.
             rid = ord_rfq.get(r.order_id) or 0
             rate = consultant_rate.get(rid)
@@ -1272,10 +1283,15 @@ def finance_profit(year: int = 0):
             cur = ap.currency or (o.currency if o else "KRW") or "KRW"
             supply, vat = _ap_amounts(ap)
             cost_krw = _krw_in(supply, cur, pd[:7], fx_seen)
+            vat_krw = _krw_in(vat, cur, pd[:7], fx_seen)
             i = int(pd[5:7]) - 1
             purchase[i] += cost_krw
-            note("purchase", i, vendor_names.get(ap.vendor_id, "—"), cost_krw)
-            input_vat_purchase[i] += _krw_in(vat, cur, pd[:7], fx_seen)
+            who = named(ap.order_id, vendor_names.get(ap.vendor_id, "—"))
+            note("purchase", i, who, cost_krw)
+            input_vat_purchase[i] += vat_krw
+            # 매입세액은 부호를 뒤집어 적는다 — 받은 세액에서 빼는 몫이라, 툴팁의 줄들을
+            # 그대로 더하면 그 칸의 값이 나온다.
+            note("vat", i, who, -vat_krw)
 
         # 수동 지급대장 — 분류별로 나눈다. 세금은 세금 줄로, 거래선지급은 합계 밖으로.
         operating: dict[str, list[float]] = {}
@@ -1293,8 +1309,12 @@ def finance_profit(year: int = 0):
                 # 환산은 회차마다 — 외화 반복 건이 한 환율로 뭉치지 않게. 적용환율을 적어
                 # 둔 건은 그 값이 쓰인다(_payable_krw).
                 supply_krw = _payable_krw(p, amount - vat, occ[:7], fx_seen)
-                input_vat_other[i] += _payable_krw(p, vat, occ[:7], fx_seen)
+                vat_krw = _payable_krw(p, vat, occ[:7], fx_seen)
+                input_vat_other[i] += vat_krw
                 who = (p.counterparty or "").strip() or (p.description or "").strip() or "—"
+                # 기타 지출의 매입세액도 그 항목 이름으로 — 임차료·공과금이 각자 제 이름으로
+                # 부가세 줄에 선다(무엇을 사면서 낸 세금인지가 곧 답이라서).
+                note("vat", i, who, -vat_krw)
                 if cat == "세금":
                     paid = _payable_krw(p, amount, occ[:7], fx_seen)
                     tax_payments[i] += paid
@@ -1343,13 +1363,8 @@ def finance_profit(year: int = 0):
 
         input_vat = [input_vat_purchase[i] + input_vat_other[i] for i in range(12)]
         vat = [output_vat[i] - input_vat[i] for i in range(12)]
-        # 추정 부가세의 내역 — 이 줄만은 거래선 목록이 답이 아니다. 물어보게 되는 것은
-        # "누구 것인가"가 아니라 "왜 이 값인가"이고, 그 답은 받은 세액에서 낸 세액을 뺀
-        # 뺄셈이다. 세 줄의 합이 칸의 값과 정확히 같아 그 자리에서 검산된다.
-        for i in range(12):
-            note("vat", i, "Output VAT · sales", output_vat[i])
-            note("vat", i, "Input VAT · purchases", -input_vat_purchase[i])
-            note("vat", i, "Input VAT · other costs", -input_vat_other[i])
+        # 부가세 줄의 내역은 위 세 곳(매출 청구·벤더 청구·기타 지출)에서 건별로 적어 두었다.
+        # 매출세액은 그대로, 매입세액은 부호를 뒤집어 — 줄들을 더하면 그 칸의 값이 된다.
 
         # 법인세 시뮬레이션 — 연간 세전이익 하나로 세액을 내고, 그것을 이익이 난 달에
         # 그 달 이익의 비중대로 나눠 싣는다. 12로 균등히 나누면 매출이 없던 달까지 세금을
