@@ -817,8 +817,9 @@ export function fetchFinanceClosing(start: string, end: string, year: number): P
     `/api/admin/finance/closing?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}&year=${year}`
   );
 }
-export function fetchFinanceProfit(year: number): Promise<FinanceProfit> {
-  return get<FinanceProfit>(`/api/admin/finance/profit?year=${year}`);
+/** full=true 면 칸별 내역을 접지 않고 전부 받는다(표 안에 줄로 펼쳐 보는 화면용). */
+export function fetchFinanceProfit(year: number, full = false): Promise<FinanceProfit> {
+  return get<FinanceProfit>(`/api/admin/finance/profit?year=${year}${full ? "&detail=full" : ""}`);
 }
 export function fetchFinanceConsulting(): Promise<{ rows: FinanceConsultingRow[]; usd_krw: number }> {
   return get<{ rows: FinanceConsultingRow[]; usd_krw: number }>("/api/admin/finance/consulting");

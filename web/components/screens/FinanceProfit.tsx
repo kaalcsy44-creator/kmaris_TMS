@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { fetchFinanceProfit } from "@/lib/api";
 import { useCachedData } from "@/lib/useCachedData";
 import type { FinanceProfit } from "@/lib/types";
@@ -63,17 +63,33 @@ const UNIT_LABEL: Record<Unit, string> = {
 };
 const UNIT_SIZE: Record<Unit, number> = { month: 1, quarter: 3, half: 6, year: 12 };
 
-/** 이 눈금의 칸들 — 각 칸의 이름과 그 칸이 품는 달(0~11). */
-function unitGroups(unit: Unit, year: number, labels: string[]): { label: string; months: number[] }[] {
+/**
+ * 이 눈금의 칸들 — 각 칸의 이름과 그 칸이 품는 달(0~11).
+ *
+ * 고른 구간(from~to) 안의 달만 담는다. 분기·반기는 달력의 분기·반기를 그대로 쓰되 구간에
+ * 걸친 부분만 넣으므로, 2~5월을 고르면 Q1 은 2·3월만 품은 칸이 된다 — 임의 구간을 고르는
+ * 화면에서 달력 분기를 새로 정의하는 것보다, 걸친 만큼만 보여 주는 편이 덜 놀랍다.
+ */
+function unitGroups(
+  unit: Unit, year: number, labels: string[], from: number, to: number,
+): { label: string; months: number[] }[] {
+  const months = Array.from({ length: to - from + 1 }, (_, k) => from - 1 + k);
+  if (unit === "year") {
+    const span = from === 1 && to === 12 ? String(year)
+      : `${labels[from - 1]}~${labels[to - 1]} ${year}`;
+    return [{ label: span, months }];
+  }
+  if (unit === "month") return months.map((m) => ({ label: labels[m] || "", months: [m] }));
   const size = UNIT_SIZE[unit];
-  return Array.from({ length: 12 / size }, (_, g) => {
-    const months = Array.from({ length: size }, (_, k) => g * size + k);
-    const label = unit === "month" ? (labels[g] || "")
-      : unit === "quarter" ? `Q${g + 1}`
-        : unit === "half" ? `H${g + 1}`
-          : String(year);
-    return { label, months };
-  });
+  const out: { label: string; months: number[] }[] = [];
+  for (const m of months) {
+    const g = Math.floor(m / size);
+    const label = unit === "quarter" ? `Q${g + 1}` : `H${g + 1}`;
+    const last = out[out.length - 1];
+    if (last && last.label === label) last.months.push(m);
+    else out.push({ label, months: [m] });
+  }
+  return out;
 }
 
 /** 한 칸의 내역 여럿을 하나로 — 같은 이름은 합치고, 큰 것부터 남긴 나머지는 접는다. */
@@ -137,12 +153,18 @@ export default function FinanceProfitTab() {
   const [withTax, setWithTax] = useState(true);
   // 칸의 크기 — 달/분기/반기/연간. 서버는 늘 열두 달을 주고 묶기만 여기서 한다.
   const [unit, setUnit] = useState<Unit>("month");
+  // 볼 구간(그 해 안의 달 범위). 기본은 한 해 전체.
+  const [from, setFrom] = useState(1);
+  const [to, setTo] = useState(12);
+  // 줄마다 그 줄을 이룬 거래선·항목을 표 안에 펼쳐 볼지. 켜면 내역을 접지 않고 받는다.
+  const [expanded, setExpanded] = useState(false);
 
   const { data, error } = useCachedData<FinanceProfit>(
-    `finance:profit:${year}`,
-    () => fetchFinanceProfit(year)
+    `finance:profit:${year}${expanded ? ":full" : ""}`,
+    () => fetchFinanceProfit(year, expanded)
   );
   const years = Array.from({ length: 6 }, (_, i) => now.getFullYear() - i);
+  const monthNames = data?.labels ?? [];
 
   const model = useMemo(() => {
     if (!data) return null;
@@ -235,7 +257,7 @@ export default function FinanceProfitTab() {
 
     // 여기까지는 늘 열두 달이다. 고른 눈금으로 묶는 일은 마지막에 한 번만 — 더하기는
     // 순서를 타지 않으므로 어느 줄을 묶든 아래 합계·순수익과 어긋나지 않는다.
-    const groups = unitGroups(unit, year, data.labels);
+    const groups = unitGroups(unit, year, data.labels, from, to);
     const fold = (xs: number[]) => groups.map((g) => g.months.reduce((s, i) => s + (xs[i] || 0), 0));
     const details: FinanceProfit["details"] = {};
     for (const [key, months] of Object.entries(data.details ?? {})) {
@@ -246,10 +268,36 @@ export default function FinanceProfitTab() {
       });
       details[key] = cells;
     }
+    // 줄마다의 내역 — 그 줄을 이룬 거래선·항목을 칸 수만큼의 배열로 편다. 툴팁이 칸 하나를
+    // 세로로 들여다보는 것이라면, 이쪽은 같은 내역을 가로로 눕혀 '이 거래선이 달마다 얼마'를
+    // 보이게 한다. 큰 것부터 — 표를 훑으면 그 줄을 만든 것이 무엇인지 위에서부터 읽힌다.
+    const breakdown: Record<string, { name: string; values: number[] }[]> = {};
+    for (const [key, cells] of Object.entries(details)) {
+      const by = new Map<string, number[]>();
+      groups.forEach((_, gi) => {
+        const cell = cells[String(gi)];
+        if (!cell) return;
+        for (const r of cell.rows) {
+          if (!by.has(r.name)) by.set(r.name, new Array(groups.length).fill(0));
+          by.get(r.name)![gi] += r.amount;
+        }
+        // 접힌 나머지가 있으면 한 줄로 남긴다 — 합계와 어긋나 보이지 않게.
+        if (cell.more) {
+          const label = `+${cell.more} more`;
+          if (!by.has(label)) by.set(label, new Array(groups.length).fill(0));
+          by.get(label)![gi] += cell.more_amount;
+        }
+      });
+      breakdown[key] = [...by.entries()]
+        .map(([name, values]) => ({ name, values }))
+        .sort((a, b) => Math.abs(sumOf(b.values)) - Math.abs(sumOf(a.values)));
+    }
+
     return {
       labels: groups.map((g) => g.label),
       lines: lines.map((l) => ({ ...l, values: fold(l.values) })),
       details,
+      breakdown,
       revenue: fold(revenue),
       costs: fold(costs),
       taxes: fold(taxes),
@@ -258,7 +306,7 @@ export default function FinanceProfitTab() {
       // 묶어 보는 중에도 같은 뜻이어야 하는 문장이다.
       monthlyNet: net,
     };
-  }, [data, withVat, withTax, unit, year]);
+  }, [data, withVat, withTax, unit, year, from, to]);
 
   return (
     <div className="fin-overview">
@@ -266,7 +314,21 @@ export default function FinanceProfitTab() {
         <select value={year} onChange={(e) => setYear(Number(e.target.value))}>
           {years.map((y) => <option key={y} value={y}>{y}</option>)}
         </select>
-        <span className="fin-period-range">{year}-01-01 ~ {year}-12-31</span>
+        {/* 볼 구간 — 한 해 안에서 시작달·끝달을 고른다. 아래 표·그래프·내역이 모두 이
+            구간만 센다(합계 칸도 이 구간의 합이다). 해를 넘나드는 구간은 손익의 다른 값들
+            (법인세 추정 같은)이 한 해 단위라 여기서 다루지 않는다. */}
+        <span className="fin-inline-field">
+          <select value={from} onChange={(e) => { const v = Number(e.target.value); setFrom(v); if (v > to) setTo(v); }} aria-label="From month">
+            {monthNames.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+          </select>
+          <span className="fin-period-range">~</span>
+          <select value={to} onChange={(e) => { const v = Number(e.target.value); setTo(v); if (v < from) setFrom(v); }} aria-label="To month">
+            {monthNames.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+          </select>
+        </span>
+        {from !== 1 || to !== 12 ? (
+          <button type="button" className="btn tiny" onClick={() => { setFrom(1); setTo(12); }}>Full year</button>
+        ) : null}
         {/* 칸의 크기 — 같은 해를 열두 칸으로 볼지 넷·둘·하나로 볼지. Overview 의
             Monthly/Weekly 토글과 같은 자리·같은 모양이라 옮겨 다녀도 손이 기억한다. */}
         <div className="seg-toggle" role="group" aria-label="Column size">
@@ -283,6 +345,12 @@ export default function FinanceProfitTab() {
         <label className="check-chip" style={{ cursor: "pointer" }}>
           <input type="checkbox" checked={withTax} onChange={(e) => setWithTax(e.target.checked)} />
           {" "}Simulate corporate tax
+        </label>
+        {/* 켜면 줄마다 그 줄을 이룬 것들이 표 안에 펼쳐진다 — 칸마다 마우스를 올려
+            확인하던 것을 한 화면에서 읽는다. 켤 때만 내역을 접지 않고 받아 온다. */}
+        <label className="check-chip" style={{ cursor: "pointer" }}>
+          <input type="checkbox" checked={expanded} onChange={(e) => setExpanded(e.target.checked)} />
+          {" "}Show breakdown
         </label>
       </div>
 
@@ -354,21 +422,34 @@ export default function FinanceProfitTab() {
                 </thead>
                 <tbody>
                   {model.lines.map((l) => (
-                    <tr key={l.name} className={l.kind ? `fin-pl-${l.kind}` : ""}>
-                      <td className="fin-pl-name">
-                        {l.name}
-                        {l.hint ? <span className="hint-inline"> {l.hint}</span> : null}
-                      </td>
-                      {/* 칸에 마우스를 올리면 그 숫자를 이룬 거래선·금액이 뜬다 — 표가
-                          한 칸에 담을 수 있는 건 합계 하나뿐인데, 대개 다음 질문이
-                          "그게 누구 건인가"라서. 내역이 없는 줄(소계·부가세)은 그냥 둔다. */}
-                      {l.values.map((v, i) => (
-                        <td key={i} className="num" title={tip(model.details, l, i)}>
-                          {cell(v)}
+                    <Fragment key={l.name}>
+                      <tr className={l.kind ? `fin-pl-${l.kind}` : ""}>
+                        <td className="fin-pl-name">
+                          {l.name}
+                          {l.hint ? <span className="hint-inline"> {l.hint}</span> : null}
                         </td>
-                      ))}
-                      <td className="num tot">{cell(sumOf(l.values))}</td>
-                    </tr>
+                        {/* 칸에 마우스를 올리면 그 숫자를 이룬 거래선·금액이 뜬다 — 표가
+                            한 칸에 담을 수 있는 건 합계 하나뿐인데, 대개 다음 질문이
+                            "그게 누구 건인가"라서. 내역이 없는 줄(소계·부가세)은 그냥 둔다. */}
+                        {l.values.map((v, i) => (
+                          <td key={i} className="num" title={tip(model.details, l, i)}>
+                            {cell(v)}
+                          </td>
+                        ))}
+                        <td className="num tot">{cell(sumOf(l.values))}</td>
+                      </tr>
+                      {/* 펼친 보기 — 그 줄을 이룬 것들이 바로 아래에 한 줄씩. 같은 칸을
+                          쓰므로 세로로 훑으면 위 합계가 어떻게 나뉘는지가 그대로 읽힌다. */}
+                      {expanded && l.detail
+                        ? (model.breakdown[l.detail] ?? []).map((b) => (
+                          <tr key={`${l.name}:${b.name}`} className="fin-pl-item">
+                            <td className="fin-pl-name">{b.name}</td>
+                            {b.values.map((v, i) => <td key={i} className="num">{cell(v)}</td>)}
+                            <td className="num tot">{cell(sumOf(b.values))}</td>
+                          </tr>
+                        ))
+                        : null}
+                    </Fragment>
                   ))}
                 </tbody>
               </table>

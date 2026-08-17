@@ -12918,6 +12918,19 @@ table.mini.fin-pl tr.fin-pl-grand td {
 }
 table.mini.fin-pl tr.fin-pl-grand .fin-pl-name { background: var(--accent-soft, #eaf3ff); padding-left: 8px; }
 table.mini.fin-pl tr.fin-pl-grand .neg { color: #c0392b; }
+/* 펼친 내역 줄 — 위 줄을 이룬 거래선·항목. 손익 항목이 아니라 그 항목의 안이므로
+   한 칸 더 들여 쓰고 글자를 낮춘다(줄 이름이 아니라 '무엇이 들어 있나'의 목록이다). */
+table.mini.fin-pl tr.fin-pl-item > td {
+  font-size: 11px;
+  color: #5b6b82;
+  background: #fcfdff;
+}
+table.mini.fin-pl tr.fin-pl-item .fin-pl-name {
+  padding-left: 34px;
+  color: #5b6b82;
+  background: #fcfdff;
+}
+table.mini.fin-pl tr.fin-pl-item .tot { background: #f8fbfe; font-weight: 400; }
 /* 합계 밖의 참고 줄(중복이라 빼 둔 것, 세금에서 제외한 부가세) — 옅게 눕힌다. */
 table.mini.fin-pl tr.fin-pl-note td, table.mini.fin-pl tr.fin-pl-note .zero { color: var(--muted); }
 table.mini.fin-pl tr.fin-pl-note .neg { color: #d08a82; }

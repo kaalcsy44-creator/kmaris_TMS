@@ -1225,7 +1225,7 @@ def _payable_occurrences_in_year(p, y0: date, y1: date) -> list[str]:
 
 
 @app.get("/api/admin/finance/profit", dependencies=[Depends(require_token)])
-def finance_profit(year: int = 0):
+def finance_profit(year: int = 0, detail: str = ""):
     """월별 순수익 — 매출 − 비용 − 세금.
 
     Closing · VAT 와 같은 발생 기준·같은 환산(그 달 말일 매매기준율)을 쓰되, 거기서 마진 밖에
@@ -1493,9 +1493,11 @@ def finance_profit(year: int = 0):
             "vat_detail": {"output": r12(output_vat), "input": r12(input_vat)},
             # 칸별 내역 — {줄 key: {월(문자열): {"rows": [{name, amount}], "more": n}}}.
             # 큰 것부터 몇 개만 남긴다: 툴팁은 훑어보는 자리라 다 적으면 오히려 안 읽힌다.
+            # detail=full 이면 접지 않는다 — 표 안에 줄로 펼쳐 보는 화면은 빠진 건이 있으면
+            # 합계와 어긋나 보이기 때문이다(툴팁은 훑는 자리라 접어도 되지만 그쪽은 아니다).
             "details": {
                 key: {
-                    str(i): _detail_cell(cell)
+                    str(i): _detail_cell(cell, 500 if detail == "full" else 6)
                     for i, cell in months.items()
                 }
                 for key, months in detail.items()
