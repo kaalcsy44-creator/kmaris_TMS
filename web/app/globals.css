@@ -13064,9 +13064,12 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 .fin-bucket-card .form-title .muted { font-weight: 400; color: var(--muted); }
 /* ── 기둥 격자 — 세로 정산여부(Receivables/Received) × 가로 출처(Sales/Other) ──── */
 /* 머리줄은 칸 이름만 — 본문 금액보다 한 단 낮춰, 격자의 뼈대로만 읽히게 한다. */
+/* 출처 칸 이름(Sales·Other income·Purchases·Other costs)은 굵기를 뺀다 — 합계를 이루는
+   부분값의 이름표라, 굵게 두면 오른쪽 끝 Total 과 무게가 같아져 어느 쪽이 이 카드의
+   답인지가 흐려진다. Total 만 굵게 남긴다(아래 :last-child). */
 .fin-bucket-grid thead th {
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 400;
   color: var(--muted);
   padding-bottom: 2px;
   border-bottom: 1px solid var(--line);
@@ -13114,10 +13117,12 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
    은 이름이 아니라 그 이름을 풀어 쓴 말이라, 굵기를 물려받지 않는다 — 둘이 같은 무게로
    서면 어느 쪽이 줄 이름인지가 흐려진다. */
 .fin-bucket-grid tbody th .hint-inline { font-weight: 400; }
-/* 금액 칸은 좁다 — 세 칸이 나란히 서므로 글자를 한 급 줄이고 합계만 제 크기로 남긴다. */
-.fin-bucket-card table.mini.fin-bucket-grid td.num { font-size: 13px; }
-.fin-bucket-card table.mini.fin-bucket-grid td.num:last-child { font-size: 14px; }
-.fin-bucket-grid thead th:last-child { color: var(--ink); }
+/* 금액 칸은 좁다 — 세 칸이 나란히 서므로 글자를 한 급 줄이고 합계만 제 크기로 남긴다.
+   굵기도 같은 규칙을 따른다: 부분값은 보통 굵기로 두고 합계만 굵게. 이름줄과 금액줄이
+   같은 대비를 쓰므로, 세로로 훑으면 '어느 칸이 합계인가'가 한 번에 잡힌다. */
+.fin-bucket-card table.mini.fin-bucket-grid td.num { font-size: 13px; font-weight: 400; }
+.fin-bucket-card table.mini.fin-bucket-grid td.num:last-child { font-size: 14px; font-weight: 700; }
+.fin-bucket-grid thead th:last-child { color: var(--ink); font-weight: 700; }
 /* 금액이 곧 그 조건의 목록으로 가는 문이다 — 파랗게 물들이지 않고(숫자가 먼저 읽혀야
    한다) 가리켰을 때만 밑줄로 밝힌다. */
 .fin-bucket-grid .fin-cell-link {
