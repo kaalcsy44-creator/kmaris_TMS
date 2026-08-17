@@ -1243,7 +1243,9 @@ def finance_profit(year: int = 0):
         proj_no = _project_no_map(s)
 
         def named(order_id: int, party: str) -> str:
-            no = proj_no.get(ord_rfq.get(order_id or 0) or 0, "")
+            # 번호만 — 뒤의 수신일(P-011(260714) 의 괄호)은 여기서 가릴 것이 아니다.
+            # 툴팁은 한 줄이 좁고, 어느 딜인지는 번호만으로 이미 갈린다.
+            no = proj_no.get(ord_rfq.get(order_id or 0) or 0, "").split("(")[0]
             return f"{no} · {party}" if no else party
 
         fx_seen: dict[str, dict] = {}
