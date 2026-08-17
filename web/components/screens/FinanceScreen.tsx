@@ -2290,6 +2290,24 @@ function PayableForm({
   );
   const isConsulting = form.category === CONSULTING;
 
+  // 이 지급이 매인 딜의 매출 청구서 — 우리 쪽 두 날짜가 무엇에 기대고 있는지 옆에
+  // 세워 둔다. 고쳐 쓰라는 값이 아니라 견주라는 값이다: 소개비의 기일은 저쪽 청구가
+  // 언제 서고 언제 들어왔는지에서 나오는데, 그걸 보려고 Inflow 탭을 다녀와야 했다.
+  const { data: receivables } = useCachedData<{ rows: FinanceReceivable[]; fx: FxQuote }>(
+    "finance:receivables",
+    fetchFinanceReceivables
+  );
+  const salesRef = useMemo(() => {
+    const rid = form.rfq_id || 0;
+    if (!rid) return null;
+    // 한 딜에 청구가 여러 건이면 마지막 것을 세운다 — 수수료도 마지막 입금을 따라간다.
+    const ar = (receivables?.rows ?? [])
+      .filter((r) => (r.source ?? "ar") === "ar" && r.rfq_id === rid)
+      .sort((a, b) => (a.invoice_date || a.due_date || "").localeCompare(b.invoice_date || b.due_date || ""));
+    const last = ar[ar.length - 1];
+    return last ? { last, count: ar.length } : null;
+  }, [receivables, form.rfq_id]);
+
   function set<K extends keyof FinancePayableSave>(k: K, v: FinancePayableSave[K]) {
     setForm((f) => ({ ...f, [k]: v }));
   }
@@ -2494,10 +2512,27 @@ function PayableForm({
           {/* 고지서·계산서를 받은 날(선택). 벤더 청구서의 발행일과 같은 뜻이라 목록에서 한 열에 모인다. */}
           <span>Bill date (optional)</span>
           <input type="date" value={form.bill_date || ""} onChange={(e) => set("bill_date", e.target.value)} />
+          {/* 그 딜의 매출 청구서는 언제 섰나 — 이 지급의 청구일을 견줄 자리. */}
+          {salesRef ? (
+            <span className="hint-inline">
+              Sales {salesRef.last.invoice_no || salesRef.last.ci_no || "invoice"} billed{" "}
+              {salesRef.last.invoice_date || "—"}
+              {salesRef.count > 1 ? ` · latest of ${salesRef.count}` : ""}
+            </span>
+          ) : null}
         </label>
         <label className="form-field">
           <span>Due date{form.recurrence !== "none" ? " · first occurrence" : ""}</span>
           <input type="date" value={form.due_date} onChange={(e) => set("due_date", e.target.value)} />
+          {/* 그 매출이 언제 들어오기로 했고 실제로 언제 들어왔나 — 수수료 기일(입금 + 1주일)의 근거. */}
+          {salesRef ? (
+            <span className="hint-inline">
+              Sales due {salesRef.last.due_date || "—"}
+              {salesRef.last.paid_date
+                ? ` · collected ${salesRef.last.paid_date}`
+                : ` · ${salesRef.last.outstanding > 0 ? "not collected yet" : "collection date unknown"}`}
+            </span>
+          ) : null}
         </label>
         <label className="form-field">
           <span>Recurrence</span>
