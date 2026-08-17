@@ -13139,13 +13139,19 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
    없다. 표에서 height 는 최소값처럼 동작하니, 내용이 더 크면 그 줄만 자란다 — 밖에 세워
    둔 돈이 여러 줄인 달에는 그 칸이 커지며 아래가 밀린다. 드문 경우이고, 그때는 줄맞춤보다
    값이 다 보이는 편이 낫다. */
-.fin-three-cols { --fin-band: 50px; }
+/* 가운데 줄(미수·미지급 ↔ 잔고 밖의 돈)만 한 줄 더 높다 — 저쪽은 이름줄 아래 금액이
+   한 줄 이상 서고, 이쪽은 꼬리말이 두 줄로 선다. 그 줄만 따로 못박아 두면 어느 달에
+   무엇이 걸려 있든(예정만, 연체만, 둘 다) 세 카드가 같은 높이로 남는다. */
+.fin-three-cols { --fin-band: 50px; --fin-band-due: 66px; }
 .fin-bucket-grid thead th,
 .fin-balance-grid thead th,
 .fin-bucket-grid tbody th,
 .fin-bucket-grid tbody td,
 .fin-balance-grid tbody th,
 .fin-balance-grid tbody td { height: var(--fin-band); }
+.fin-bucket-grid tbody tr:first-child > th,
+.fin-bucket-grid tbody tr:first-child > td,
+.fin-balance-grid td.fin-balance-parked { height: var(--fin-band-due); }
 /* 줄 이름 아래 딸린 설명("not settled yet · not in balance", "already in the account")
    은 이름이 아니라 그 이름을 풀어 쓴 말이라, 굵기를 물려받지 않는다 — 둘이 같은 무게로
    서면 어느 쪽이 줄 이름인지가 흐려진다. */

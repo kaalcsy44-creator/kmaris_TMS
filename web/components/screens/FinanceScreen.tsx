@@ -1020,7 +1020,12 @@ function BucketCard({ title, period, tone, cols, colHref, due, settled, allHref,
     <tr className={`${isSettled ? "fin-bucket-settled" : ""}${r.parked ? " fin-bucket-off" : ""}`}>
       <th scope="row">
         {r.label}
-        <div className="hint-inline">{r.hint}{r.parked ? " · not in balance" : ""}</div>
+        {/* 꼬리말은 줄을 나눠 적는다 — 옆 잔고 카드의 '잔고 밖' 상자가 이름줄 + 금액 줄로
+            서기 때문이다. 한 줄로 두면 이 칸만 낮아 세 카드의 줄이 어긋나 보인다. */}
+        <div className="hint-inline">
+          {r.hint}
+          {r.parked ? <><br />not in balance</> : null}
+        </div>
       </th>
       {cell(r.trade, r.href[0], `${r.label} · ${cols[0]}`, r.split !== false)}
       {cell(r.other, r.href[1], `${r.label} · ${cols[1]}`, r.split !== false)}
