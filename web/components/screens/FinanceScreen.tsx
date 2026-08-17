@@ -1744,6 +1744,19 @@ function OutflowTab() {
               {can("finance", "edit") ? (
                 <button className="btn tiny" title="Edit" aria-label="Edit" onClick={() => setEditing(p)}>✎</button>
               ) : null}
+              {/* 다음 달 것을 적을 때 지난달 줄에서 시작한다 — 임차료·급여처럼 매달 같은
+                  자리에 같은 금액이 서는 항목이 대부분이라, 날짜만 한 달 밀어 열어 준다.
+                  저장하기 전까지는 아무것도 만들어지지 않으므로 그 자리에서 고치면 된다. */}
+              {can("finance", "create") ? (
+                <button
+                  className="btn tiny"
+                  title="Copy as new — same details with the dates moved on a month"
+                  aria-label="Copy as new"
+                  onClick={() => setAdding(nextMonthCopy(p))}
+                >
+                  ⧉
+                </button>
+              ) : null}
               {can("finance", "delete") ? (
                 <button className="btn tiny danger" title="Delete" aria-label="Delete" onClick={() => remove(p)}>×</button>
               ) : null}
@@ -2265,6 +2278,53 @@ const rateChoice = (rate: number): VatChoice => (rate === 0.1 ? "0.1" : rate ===
 
 /** 소개 수수료의 근거 — 이 딜의 매출(그 통화)과 요율, 그리고 거기서 나온 수수료. */
 type FeeBase = { sales: number; currency: string; rate: number; fee: number };
+
+/**
+ * "2026-07-31" + 1개월 → "2026-08-31". 그 달에 없는 날(31일)은 말일로 당긴다.
+ * 'YYYY-MM' 만 준 경우(비용 귀속 기간)는 같은 형식으로 돌려준다.
+ */
+function addMonths(value: string, n: number): string {
+  const v = (value || "").trim();
+  if (!v) return "";
+  const [ys, ms, ds] = v.slice(0, 10).split("-");
+  const y = Number(ys);
+  const m = Number(ms);
+  if (!y || !m) return v;
+  const t = new Date(y, m - 1 + n, 1);
+  const p = (x: number) => String(x).padStart(2, "0");
+  const ym = `${t.getFullYear()}-${p(t.getMonth() + 1)}`;
+  if (!ds) return ym;
+  const last = new Date(t.getFullYear(), t.getMonth() + 1, 0).getDate();
+  return `${ym}-${p(Math.min(Number(ds) || 1, last))}`;
+}
+
+/**
+ * 이 줄을 그대로 베낀 '다음 달' 등록감 — 날짜만 한 달 밀고 나머지는 손대지 않는다.
+ *
+ * 매달 같은 항목을 다시 두드리는 일을 없애는 것이 목적이라, 금액·분류·거래선·부가세는
+ * 물론 비용 귀속 기간까지 그대로 따라간다. 납부 여부는 따라가지 않는다(새 건은 미납에서
+ * 시작한다 — 서버가 그렇게 만든다).
+ */
+function nextMonthCopy(p: FinancePayable): FinancePayableSave {
+  return {
+    category: p.category,
+    counterparty: p.counterparty,
+    vendor_id: p.vendor_id ?? null,
+    rfq_id: p.rfq_id || null,
+    description: p.description,
+    amount: p.amount,
+    vat_amount: p.vat_amount || 0,
+    currency: p.currency,
+    fx_rate: p.fx_rate || undefined,
+    bill_date: addMonths(p.bill_date || "", 1),
+    due_date: addMonths(p.due_date || "", 1),
+    recurrence: p.recurrence,
+    recur_until: p.recur_until || "",
+    accrual_from: addMonths(p.accrual_from || "", 1),
+    accrual_to: addMonths(p.accrual_to || "", 1),
+    notes: p.notes || "",
+  };
+}
 
 /** 이 지급이 덮는 달 목록 — 백엔드 _accrual_months 와 같은 규칙(화면에서 몫을 미리 보여준다). */
 function accrualMonths(f: FinancePayableSave): string[] {
