@@ -12962,7 +12962,16 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
    16px 짜리 고르는 칸이라 화살표까지 얹으면 그 폭에 들어가지 않는다. 넓은 화면에서는
    8fr 이 내용보다 크므로 줄이 그대로 맞고, 좁아지면 줄맞춤을 조금 내주고 값을 지킨다 —
    잘린 연도보다 몇 px 어긋난 경계가 낫다. */
-.fin-three-cols { display: grid; grid-template-columns: minmax(auto, 8fr) 34fr 34fr 24fr; gap: 14px; }
+/* 좌우 여백은 아래 Cash Flow 표가 앉은 자리에 맞춘다 — 그 표는 패널 안에 있어서
+   테두리 1px + 안쪽 여백 18px 만큼 들여져 있는데, 이 격자는 패널 밖이라 화면 끝까지
+   벌어져 있었다. 비율(8·34·34·24)이 같아도 자를 대는 시작점이 다르면 카드 경계와 칸
+   경계가 십수 px 씩 어긋난다 — 같은 폭을 재려면 같은 자에서 시작해야 한다. */
+.fin-three-cols {
+  display: grid;
+  grid-template-columns: minmax(auto, 8fr) 34fr 34fr 24fr;
+  gap: 14px;
+  padding: 0 19px;
+}
 /* 앞머리도 옆의 셋과 같은 카드다 — 다만 금액이 아니라 '언제의 것인가'만 담는다.
    윗띠에 색을 두지 않는 건 이것이 세 갈래 중 하나가 아니라 그 셋을 묶는 말이라서다
    (.fin-bucket-card 의 기본 회색 띠를 그대로 쓴다). */
@@ -12991,7 +13000,8 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 /* 좁아지면 정렬을 포기한다 — 24% 로 묶인 Balance 기둥이 먼저 못 견딘다(금액 한 줄이
    라벨을 밀어낸다). 줄 세우기는 넓은 화면에서만 얻는 덤이고, 읽히는 게 먼저다. */
 @media (max-width: 1300px) {
-  .fin-three-cols { grid-template-columns: auto 1fr 1fr 0.85fr; }
+  /* 줄맞춤을 포기하는 폭이면 들여쓰기도 뜻을 잃는다 — 아래 패널들과 같은 끝에 선다. */
+  .fin-three-cols { grid-template-columns: auto 1fr 1fr 0.85fr; padding: 0; }
 }
 /* 한 줄에 하나씩 접히면 앞머리는 그 줄들의 머리글이 된다 — 폭이 통째로 남으므로
    고르는 칸은 제 내용 폭까지만 늘린다. */
@@ -13071,6 +13081,10 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
   padding: 6px 8px;
   border-bottom: 1px solid var(--line);
 }
+/* 줄 이름 아래 딸린 설명("not settled yet · not in balance", "already in the account")
+   은 이름이 아니라 그 이름을 풀어 쓴 말이라, 굵기를 물려받지 않는다 — 둘이 같은 무게로
+   서면 어느 쪽이 줄 이름인지가 흐려진다. */
+.fin-bucket-grid tbody th .hint-inline { font-weight: 400; }
 /* 금액 칸은 좁다 — 세 칸이 나란히 서므로 글자를 한 급 줄이고 합계만 제 크기로 남긴다. */
 .fin-bucket-card table.mini.fin-bucket-grid td.num { font-size: 13px; }
 .fin-bucket-card table.mini.fin-bucket-grid td.num:last-child { font-size: 14px; }
