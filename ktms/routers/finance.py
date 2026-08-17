@@ -801,29 +801,33 @@ def _po_cost(po) -> float:
     return _total_amount(po.items) or _items_cost_total(po.items)
 
 
-def _po_billed(po, ap, trade: str) -> tuple[float, float]:
-    """이 발주의 매입 원가(공급가액)와 매입세액 → (원가, 세액). 환산 전, 그 거래의 통화.
+def _ap_period_date(ap) -> str:
+    """매입 인식일 — 청구서 발행일 우선, 없으면 지급 예정일, 그래도 없으면 생성일(KST).
 
-    **벤더 청구(AP)가 들어와 있으면 그것이 확정 금액이다.** 발주서에 없던 부대비용
-    (운임·포장·보험)이 청구서에서 붙고, 부가세도 추정이 아니라 청구서에 적힌 세율로
-    갈린다 — 발주 품목 합계만 세면 그 차액이 어느 화면에도 나타나지 않는다(포장비
-    ₩80,000 이 손익의 매입줄에서 사라지던 이유).
-
-    청구 전이면 발주 금액을 추정치로 쓰고, 매입세액은 내수일 때 10% 로 어림한다.
-    현금흐름 화면이 이미 같은 규약을 쓴다: AP 가 선 P/O 는 추정에서 빼고 청구액으로 센다.
+    매출이 송장일에 서는 것(_ar_period_date)과 짝이다. 발주일이 아니라 청구일인 이유:
+    발주는 '사겠다'는 약속이고 비용은 청구서가 와야 확정된다. 발주일로 세면 아직 오지도
+    않은 청구가 그 달의 비용이 되고, 견적만 하고 발주로 이어지지 않은 건까지 매입에
+    섞인다.
     """
-    if ap is not None:
-        amount = float(ap.invoice_amount or 0.0)
-        rate = ap.vat_rate if ap.vat_rate is not None else 0.0
-        supply = amount / (1 + rate) if rate else amount
-        return supply, amount - supply
-    cost = _po_cost(po)
-    return cost, (cost * 0.1 if trade == "내수" else 0.0)
+    for v in (ap.bill_date, ap.due_date):
+        if (v or "").strip():
+            return v[:10]
+    if ap.created_at:
+        return (ap.created_at + timedelta(hours=9)).date().isoformat()
+    return ""
 
 
-def _ap_by_po(s) -> dict[int, APRecord]:
-    """vendor P/O id → 그 P/O 의 벤더 청구(있으면). AP 는 P/O 하나에 하나뿐이다."""
-    return {a.po_id: a for a in s.query(APRecord).all() if a.po_id}
+def _ap_amounts(ap) -> tuple[float, float]:
+    """벤더 청구 한 건의 (공급가액, 매입세액). 환산 전 — 그 청구서의 통화 그대로.
+
+    총액에서 청구서에 적힌 세율로 부가세를 가른다. 발주 품목 합계가 아니라 청구액을
+    쓰므로 운임·포장·보험 같은 부대비용이 원가에 그대로 들어오고, 매입세액도 추정이
+    아니라 청구서의 세율이 된다(내수라고 무조건 10% 로 어림하던 것을 없앤다).
+    """
+    amount = float(ap.invoice_amount or 0.0)
+    rate = ap.vat_rate if ap.vat_rate is not None else 0.0
+    supply = amount / (1 + rate) if rate else amount
+    return supply, amount - supply
 
 
 @app.get("/api/admin/finance/closing", dependencies=[Depends(require_token)])
@@ -879,18 +883,16 @@ def finance_closing(start: str = "", end: str = "", year: int = 0):
             if ys <= pd <= ye:
                 monthly_sales[int(pd[5:7]) - 1] += supply_krw
 
+        # 매입은 벤더 청구(AP) 기준 — 발주가 아니라 청구서가 비용을 만든다(_ap_period_date).
         purchase_cost = purchase_vat = 0.0
         purchase_count = 0
-        ap_of = _ap_by_po(s)
-        for po in s.query(PurchaseOrder).all():
-            pd = _po_period_date(po)
+        for ap in s.query(APRecord).all():
+            pd = _ap_period_date(ap)
             if not pd:
                 continue
-            o = ord_map.get(po.order_id)
-            trade = (o.trade_type if o else "수출") or "수출"
-            ap = ap_of.get(po.id)
-            cur = (ap.currency if ap is not None else None) or po.currency or (o.currency if o else "USD") or "USD"
-            supply, vat = _po_billed(po, ap, trade)
+            o = ord_map.get(ap.order_id)
+            cur = ap.currency or (o.currency if o else "KRW") or "KRW"
+            supply, vat = _ap_amounts(ap)
             cost_krw = _krw_in(supply, cur, pd[:7], fx_seen)
             vat_krw = _krw_in(vat, cur, pd[:7], fx_seen)
             if s0 <= pd <= s1:
@@ -1175,7 +1177,9 @@ def finance_profit(year: int = 0):
     각 줄은 12개월 배열로 돌려주고, 합계와 순수익은 화면에서 더한다 — 세금(추정 부가세)을
     넣고 빼는 스위치가 화면에 있어, 그 계산을 서버가 미리 굳혀 두면 스위치가 무의미해진다.
 
-    - 매출: AR 공급가액(부가세 제외). 매입: 벤더 P/O 원가.
+    - 매출: AR 공급가액(부가세 제외, 송장일 기준). 매입: 벤더 청구(AP) 공급가액(청구일 기준).
+      둘 다 '청구서가 선 날'에 잡는다 — 발주일로 세면 아직 청구도 오지 않은 돈이 비용이 되고,
+      견적·발주에서 멈춘 딜까지 매입에 섞인다.
     - 소개 수수료: **매출이 선 달에** 그 매출의 요율만큼 잡는다(발생주의). 언제 송금했는지가
       아니라 어느 달의 매출에서 생긴 의무인지가 이 비용의 자리다 — 지급을 미루면 그 달만
       이익이 부풀고 낸 달이 갑자기 적자로 보이던 것을 없앤다. 그래서 등록된 지급 건은
@@ -1256,24 +1260,21 @@ def finance_profit(year: int = 0):
                 consulting[i] += fee
                 note("consulting", i, f"{consultant_name.get(rid) or '—'} · {who} {rate:g}%", fee)
 
+        # 매입은 벤더 청구(AP) 기준 — 발주가 아니라 청구서가 비용을 만든다. 발주만 있고
+        # 청구가 오지 않은 건은 아직 비용이 아니므로 여기 서지 않는다(견적·발주 단계에서
+        # 멈춘 딜이 매입으로 잡히던 것을 없앤다). 예정 지출은 현금흐름 화면이 따로 센다.
         purchase, input_vat_purchase = z(), z()
-        ap_of = _ap_by_po(s)
-        for po in s.query(PurchaseOrder).all():
-            pd = _po_period_date(po)
+        for ap in s.query(APRecord).all():
+            pd = _ap_period_date(ap)
             if not pd or not (ys <= pd <= ye):
                 continue
-            o = ord_map.get(po.order_id)
-            trade = (o.trade_type if o else "수출") or "수출"
-            ap = ap_of.get(po.id)
-            cur = (ap.currency if ap is not None else None) or po.currency or (o.currency if o else "USD") or "USD"
-            supply, vat = _po_billed(po, ap, trade)
+            o = ord_map.get(ap.order_id)
+            cur = ap.currency or (o.currency if o else "KRW") or "KRW"
+            supply, vat = _ap_amounts(ap)
             cost_krw = _krw_in(supply, cur, pd[:7], fx_seen)
             i = int(pd[5:7]) - 1
             purchase[i] += cost_krw
-            # 청구가 아직 안 온 발주는 그렇다고 밝힌다 — 같은 매입줄에 확정 금액과 발주
-            # 추정치가 섞여 서므로, 어느 쪽인지 모르면 합계가 왜 이 값인지 따질 수 없다.
-            who = vendor_names.get(po.vendor_id, "—")
-            note("purchase", i, who if ap is not None else f"{who} · P/O est.", cost_krw)
+            note("purchase", i, vendor_names.get(ap.vendor_id, "—"), cost_krw)
             input_vat_purchase[i] += _krw_in(vat, cur, pd[:7], fx_seen)
 
         # 수동 지급대장 — 분류별로 나눈다. 세금은 세금 줄로, 거래선지급은 합계 밖으로.
@@ -1342,6 +1343,13 @@ def finance_profit(year: int = 0):
 
         input_vat = [input_vat_purchase[i] + input_vat_other[i] for i in range(12)]
         vat = [output_vat[i] - input_vat[i] for i in range(12)]
+        # 추정 부가세의 내역 — 이 줄만은 거래선 목록이 답이 아니다. 물어보게 되는 것은
+        # "누구 것인가"가 아니라 "왜 이 값인가"이고, 그 답은 받은 세액에서 낸 세액을 뺀
+        # 뺄셈이다. 세 줄의 합이 칸의 값과 정확히 같아 그 자리에서 검산된다.
+        for i in range(12):
+            note("vat", i, "Output VAT · sales", output_vat[i])
+            note("vat", i, "Input VAT · purchases", -input_vat_purchase[i])
+            note("vat", i, "Input VAT · other costs", -input_vat_other[i])
 
         # 법인세 시뮬레이션 — 연간 세전이익 하나로 세액을 내고, 그것을 이익이 난 달에
         # 그 달 이익의 비중대로 나눠 싣는다. 12로 균등히 나누면 매출이 없던 달까지 세금을

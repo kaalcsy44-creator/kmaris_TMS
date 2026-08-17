@@ -2730,8 +2730,8 @@ function ClosingTab() {
               <table className="mini">
                 <tbody>
                   <tr><td>Output VAT</td><td className="num">{won(data.vat.output_krw)}</td></tr>
-                  {/* 매입세액은 두 갈래 — 프로젝트 매입(원가의 10% 추정)과 기타 지출(입력값). */}
-                  <tr><td>Input VAT · purchases (est.)</td><td className="num">− {won(data.vat.input_purchase_krw ?? data.vat.input_krw)}</td></tr>
+                  {/* 매입세액은 두 갈래 — 프로젝트 매입(벤더 청구서의 세율)과 기타 지출(입력값). */}
+                  <tr><td>Input VAT · purchases</td><td className="num">− {won(data.vat.input_purchase_krw ?? data.vat.input_krw)}</td></tr>
                   <tr>
                     <td>
                       Input VAT · other costs
@@ -2746,9 +2746,11 @@ function ClosingTab() {
                 </tbody>
               </table>
               <p className="hint-inline" style={{ display: "block", marginTop: 8 }}>
-                Exports (zero-rated) carry 0 output VAT. Purchase input VAT is estimated as 10% of domestic purchase cost;
-                other costs use the VAT entered on each payable, so register rent, utilities and the like with the supply
-                value and VAT split (actual filing is based on tax invoices).
+                Exports (zero-rated) carry 0 output VAT. Both sides count what was billed: sales on the customer
+                invoice, purchases on the vendor bill entered at stage 9 — a P/O with no bill against it yet is not
+                a purchase here. Purchase input VAT comes from the rate on that bill, other costs from the VAT
+                entered on each payable, so register rent, utilities and the like with the supply value and VAT
+                split (actual filing is based on tax invoices).
               </p>
             </div>
             <div className="panel">

@@ -169,6 +169,8 @@ export default function FinanceProfitTab() {
         values: data.taxes.vat,
         kind: withVat ? undefined : "note",
         hint: withVat ? undefined : "not counted — tax payments only",
+        // 이 줄의 내역은 거래선이 아니라 뺄셈이다 — 받은 세액에서 낸 세액 둘을 뺀 것.
+        detail: "vat",
       },
       { name: "Tax payments", values: data.taxes.payments, detail: "tax_payments" },
       {
@@ -286,8 +288,10 @@ export default function FinanceProfitTab() {
               </table>
             </div>
             <p className="hint-inline" style={{ display: "block", marginTop: 8 }}>
-              Accrual basis, same as Closing · VAT — sales sit on the invoice date, purchases on the P/O date and
-              operating costs on the tax-invoice date (recurring items on each occurrence). Consulting fees follow
+              Accrual basis, same as Closing · VAT — both sides sit on the date they were billed: sales on the
+              customer invoice, purchases on the vendor bill entered at stage 9, and operating costs on the
+              tax-invoice date (recurring items on each occurrence). A vendor P/O with no bill against it yet is
+              not a cost here — it is money expected out, and Overview counts it there. Consulting fees follow
               the sale rather than the payment: each one lands in the month its project was invoiced, at the rate
               agreed on that RFQ, so it is already a cost here before anyone books the payable. Amounts are supply
               values: VAT is stripped out of both sides and settled once on the VAT line, where a negative figure
