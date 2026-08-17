@@ -670,6 +670,11 @@ class FinancePayable(Base):
     # 이 지급이 걸린 프로젝트(RFQ) — 컨설팅 수수료처럼 '어느 딜에서 나온 지급인가'가
     # 금액의 근거인 항목에만 채운다. 벤더 청구(AP)는 오더에 매여 있어 이 칸을 쓰지 않는다.
     rfq_id       = Column(Integer, ForeignKey("rfqs.id"), nullable=True)
+    # 이 비용이 걸리는 기간 'YYYY-MM' (선택). 고지서 한 장이 여러 달을 덮을 때 쓴다 —
+    # 4대보험 두 달치를 한 번에 고지받는 경우처럼. 채워 두면 손익·결산이 그 달들에
+    # 금액을 고르게 나눠 싣는다(비우면 청구일 한 달에 통째로 선다).
+    accrual_from = Column(String(7))
+    accrual_to   = Column(String(7))
     notes        = Column(Text)
     owner_id     = Column(Integer, ForeignKey("users.id"), nullable=True)  # 등록자
     created_at   = Column(DateTime, default=datetime.utcnow)

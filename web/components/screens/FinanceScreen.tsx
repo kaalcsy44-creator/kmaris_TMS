@@ -2266,6 +2266,21 @@ const rateChoice = (rate: number): VatChoice => (rate === 0.1 ? "0.1" : rate ===
 /** 소개 수수료의 근거 — 이 딜의 매출(그 통화)과 요율, 그리고 거기서 나온 수수료. */
 type FeeBase = { sales: number; currency: string; rate: number; fee: number };
 
+/** 이 지급이 덮는 달 목록 — 백엔드 _accrual_months 와 같은 규칙(화면에서 몫을 미리 보여준다). */
+function accrualMonths(f: FinancePayableSave): string[] {
+  const a = (f.accrual_from || "").slice(0, 7);
+  const b = (f.accrual_to || "").slice(0, 7) || a;
+  if (a.length !== 7 || b.length !== 7 || b < a) return [];
+  const out: string[] = [];
+  let y = Number(a.slice(0, 4));
+  let m = Number(a.slice(5, 7));
+  while (`${y}-${String(m).padStart(2, "0")}` <= b && out.length < 60) {
+    out.push(`${y}-${String(m).padStart(2, "0")}`);
+    if (m === 12) { y += 1; m = 1; } else { m += 1; }
+  }
+  return out;
+}
+
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 /** 저장은 총액(amount)이 기준 — 공급가액은 총액에서 부가세를 뺀 나머지로 되돌린다. */
 const supplyOf = (f: FinancePayableSave) => round2((f.amount || 0) - (f.vat_amount || 0));
@@ -2616,6 +2631,43 @@ function PayableForm({
             <span>Repeat until (optional)</span>
             <input type="date" value={form.recur_until} onChange={(e) => set("recur_until", e.target.value)} />
           </label>
+        ) : null}
+        {/* 고지서 한 장이 여러 달을 덮을 때 — 4대보험 6·7월분을 8월에 한 번에 받는 식이다.
+            비워 두면 청구일 한 달에 통째로 선다. 반복 항목은 회차 자체가 달을 나누므로 묻지 않는다. */}
+        {form.recurrence === "none" ? (
+          <div className="form-field fin-accrual" style={{ gridColumn: "1 / -1" }}>
+            <span>Cost period (optional)</span>
+            <div className="fin-accrual-row">
+              <input
+                type="month"
+                value={form.accrual_from || ""}
+                aria-label="Cost period from"
+                onChange={(e) => set("accrual_from", e.target.value)}
+              />
+              <span className="fin-accrual-tilde">~</span>
+              <input
+                type="month"
+                value={form.accrual_to || ""}
+                aria-label="Cost period to"
+                onChange={(e) => set("accrual_to", e.target.value)}
+              />
+              {form.accrual_from || form.accrual_to ? (
+                <button
+                  type="button"
+                  className="btn tiny"
+                  onClick={() => setForm((f) => ({ ...f, accrual_from: "", accrual_to: "" }))}
+                >
+                  Clear
+                </button>
+              ) : null}
+            </div>
+            <span className="hint-inline">
+              {accrualMonths(form).length > 1
+                ? `Split evenly over ${accrualMonths(form).length} months — ${money(
+                  (form.amount || 0) / accrualMonths(form).length, form.currency || "KRW")} each in Profit.`
+                : "One bill covering several months — set the months it belongs to and Profit spreads it evenly. Leave blank to book it all on the bill date."}
+            </span>
+          </div>
         ) : null}
       </div>
       <label className="form-field" style={{ marginTop: 10 }}>

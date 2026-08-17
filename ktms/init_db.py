@@ -169,6 +169,10 @@ _MIGRATIONS = {
         "rfq_id":          "INTEGER",
         # 외화 지급에 실제로 적용한 환율(1 외화 = ? KRW). 원화 건은 비어 있다.
         "fx_rate":         "FLOAT",
+        # 이 비용이 걸리는 기간 'YYYY-MM' — 고지서 한 장이 여러 달을 덮을 때(4대보험
+        # 두 달치 합산 고지 등) 손익이 그 달들에 나눠 싣는다. 기존 행은 NULL = 안 나눔.
+        "accrual_from":    "VARCHAR(7)",
+        "accrual_to":      "VARCHAR(7)",
     },
     "email_messages": {
         # 어느 딜에도 속할 수 없는 메일(회사 소개·인사·자동회신). 미분류 함에서 내린다.

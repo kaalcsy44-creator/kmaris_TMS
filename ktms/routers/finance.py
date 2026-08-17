@@ -666,6 +666,8 @@ def create_finance_payable(body: FinancePayableIn, user: dict = Depends(get_curr
             due_date=body.due_date or "",
             recurrence=rec,
             recur_until=(body.recur_until or "") or None,
+            accrual_from=(body.accrual_from or "").strip()[:7] or None,
+            accrual_to=(body.accrual_to or "").strip()[:7] or None,
             paid=False,
             paid_dates=[],
             notes=body.notes or "",
@@ -701,6 +703,8 @@ def update_finance_payable(row_id: int, body: FinancePayableIn):
         p.due_date = body.due_date or ""
         p.recurrence = rec
         p.recur_until = (body.recur_until or "") or None
+        p.accrual_from = (body.accrual_from or "").strip()[:7] or None
+        p.accrual_to = (body.accrual_to or "").strip()[:7] or None
         p.notes = body.notes or ""
         s.commit()
         return {"ok": True, "id": p.id}
@@ -1173,6 +1177,40 @@ def finance_consulting():
         s.close()
 
 
+def _accrual_months(p) -> list[str]:
+    """이 지급이 덮는 달 목록 ['2026-06', '2026-07'] — 기간을 적어 두지 않았으면 빈 목록.
+
+    고지서 한 장이 여러 달을 덮는 경우가 있다: 4대보험 6·7월분을 8월에 한 번에 고지받는
+    식이다. 그것을 청구일 한 달에 통째로 실으면 그 달만 비용이 두 배로 튀고 앞 달은 비어
+    보인다 — 달을 견주어 보는 표에서 사실을 가리는 셈이라, 걸리는 달들에 나눠 싣는다.
+    """
+    a = (getattr(p, "accrual_from", None) or "")[:7]
+    b = (getattr(p, "accrual_to", None) or "")[:7] or a
+    if not a or len(a) != 7 or len(b) != 7 or b < a:
+        return []
+    out: list[str] = []
+    y, m = int(a[:4]), int(a[5:7])
+    while f"{y:04d}-{m:02d}" <= b and len(out) < 60:
+        out.append(f"{y:04d}-{m:02d}")
+        y, m = (y + 1, 1) if m == 12 else (y, m + 1)
+    return out
+
+
+def _payable_accrual(p, y0: date, y1: date) -> list[tuple[str, float]]:
+    """비용으로 잡히는 (날짜, 몫). 몫을 다 더하면 그 해에 걸리는 만큼이 된다.
+
+    반복 항목은 회차마다 온전한 한 건이므로 몫이 1이다. 기간을 적어 둔 일회성 항목만
+    달수로 나눈다(6·7월 두 달이면 각 0.5). 그 밖에는 지금까지와 같이 청구일 하루에 1.
+    """
+    if (p.recurrence or "none") != "none":
+        return [(d, 1.0) for d in _finance_occurrences(p, y0, y1)]
+    months = _accrual_months(p)
+    if months:
+        share = 1.0 / len(months)
+        return [(f"{m}-01", share) for m in months if y0.isoformat() <= f"{m}-01" <= y1.isoformat()]
+    return [(d, 1.0) for d in _payable_occurrences_in_year(p, y0, y1)]
+
+
 def _payable_occurrences_in_year(p, y0: date, y1: date) -> list[str]:
     """그 해에 이 지급/수입 건이 비용(수입)으로 잡히는 날짜들.
 
@@ -1327,24 +1365,29 @@ def finance_profit(year: int = 0):
             # 정산분으로만 적는다. 근거가 될 딜이 없는 수수료(소개자를 지운 뒤 등록한 건 등)는
             # 아무 데서도 안 세게 되므로 그때만 제 날짜로 비용에 넣는다.
             accrued = cat == CONSULTING_CATEGORY and bool(consultant_rate.get(getattr(p, "rfq_id", None) or 0))
+            # 딜에 매인 지급(수수료·거래선지급)은 그 프로젝트 번호를 앞에 세운다 —
+            # 위 매출·매입 줄과 같은 규칙이라, 같은 딜의 줄들이 툴팁에서 서로 짝지어진다.
+            who = named_rfq(
+                getattr(p, "rfq_id", None) or 0,
+                (p.counterparty or "").strip() or (p.description or "").strip() or "—",
+            )
+            # 매입세액은 나누지 않는다 — 공제 시기는 세금계산서를 받은 날 하나로 정해지고,
+            # 비용을 여러 달에 나눠 실었다고 해서 그 공제까지 나뉘지는 않는다.
             for occ in _payable_occurrences_in_year(p, y0, y1):
+                vat_krw = _payable_krw(p, vat, occ[:7], fx_seen)
+                input_vat_other[int(occ[5:7]) - 1] += vat_krw
+                # 기타 지출의 매입세액도 그 항목 이름으로 — 임차료·공과금이 각자 제 이름으로
+                # 부가세 줄에 선다(무엇을 사면서 낸 세금인지가 곧 답이라서).
+                note("vat", int(occ[5:7]) - 1, who, -vat_krw)
+            for occ, share in _payable_accrual(p, y0, y1):
                 i = int(occ[5:7]) - 1
                 # 환산은 회차마다 — 외화 반복 건이 한 환율로 뭉치지 않게. 적용환율을 적어
                 # 둔 건은 그 값이 쓰인다(_payable_krw).
-                supply_krw = _payable_krw(p, amount - vat, occ[:7], fx_seen)
-                vat_krw = _payable_krw(p, vat, occ[:7], fx_seen)
-                input_vat_other[i] += vat_krw
-                # 딜에 매인 지급(수수료·거래선지급)은 그 프로젝트 번호를 앞에 세운다 —
-                # 위 매출·매입 줄과 같은 규칙이라, 같은 딜의 줄들이 툴팁에서 서로 짝지어진다.
-                who = named_rfq(
-                    getattr(p, "rfq_id", None) or 0,
-                    (p.counterparty or "").strip() or (p.description or "").strip() or "—",
-                )
-                # 기타 지출의 매입세액도 그 항목 이름으로 — 임차료·공과금이 각자 제 이름으로
-                # 부가세 줄에 선다(무엇을 사면서 낸 세금인지가 곧 답이라서).
-                note("vat", i, who, -vat_krw)
+                supply_krw = _payable_krw(p, (amount - vat) * share, occ[:7], fx_seen)
                 if cat == "세금":
-                    paid = _payable_krw(p, amount, occ[:7], fx_seen)
+                    # 세금 줄은 총액 기준(부가세를 가르지 않는다) — 다만 여러 달을 덮는
+                    # 고지서면 그 몫만큼만 이 달에 싣는다(4대보험 6·7월분 합산 고지 등).
+                    paid = _payable_krw(p, amount * share, occ[:7], fx_seen)
                     tax_payments[i] += paid
                     note("tax_payments", i, who, paid)
                 elif cat == "거래선지급":

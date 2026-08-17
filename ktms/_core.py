@@ -2490,6 +2490,9 @@ class FinancePayableIn(BaseModel):
     due_date: str | None = ""
     recurrence: str | None = "none"
     recur_until: str | None = ""
+    # 이 비용이 걸리는 기간 'YYYY-MM' — 여러 달을 덮는 고지서를 그 달들에 나눠 싣는다.
+    accrual_from: str | None = ""
+    accrual_to: str | None = ""
     notes: str | None = ""
 
 
@@ -2538,6 +2541,9 @@ def _finance_payable_row(p: FinancePayable, vendor_names: dict, user_names: dict
         "due_date": p.due_date or "",
         "recurrence": p.recurrence or "none",
         "recur_until": p.recur_until or "",
+        # 이 비용이 걸리는 기간(YYYY-MM) — 비어 있으면 청구일 한 달에 통째로 선다.
+        "accrual_from": getattr(p, "accrual_from", None) or "",
+        "accrual_to": getattr(p, "accrual_to", None) or "",
         "paid": bool(p.paid),
         # 반복 항목의 paid_date 는 '가장 최근 실제 납부일'(회차일이 아님).
         "paid_date": (p.paid_date or "") if (p.recurrence or "none") == "none"

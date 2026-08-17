@@ -882,6 +882,9 @@ export type FinancePayable = {
   due_date: string;
   recurrence: "none" | "monthly" | "quarterly" | "yearly";
   recur_until: string;
+  /** 이 비용이 걸리는 기간 'YYYY-MM' — 여러 달을 덮는 고지서를 그 달들에 나눠 싣는다. */
+  accrual_from?: string;
+  accrual_to?: string;
   paid: boolean;
   // 미납인 채 지급 예정일이 지난 건(미수 목록의 같은 이름 필드와 대칭).
   // 반복 항목은 오늘까지 도래한 회차 중 미납이 하나라도 있으면 true.
@@ -922,6 +925,9 @@ export type FinancePayableSave = {
   due_date?: string;
   recurrence?: string;
   recur_until?: string;
+  /** 이 비용이 걸리는 기간 'YYYY-MM' — 비우면 청구일 한 달에 통째로 선다. */
+  accrual_from?: string;
+  accrual_to?: string;
   notes?: string;
 };
 
