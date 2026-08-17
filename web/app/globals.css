@@ -13163,6 +13163,10 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 /* 기둥 안의 표는 금액이 주인공이라 라벨 칸을 좁히지 않고 금액을 크게 잡는다. */
 .fin-bucket-card table.mini td.num { font-size: 14px; font-weight: 700; white-space: nowrap; }
 .fin-bucket-card .hint-inline { display: block; margin-top: 2px; }
+/* 다만 '잔고 밖' 쪽지 안의 꼬리말(to pay·not due yet)은 제 줄 이름에 이어 붙는 말이라
+   같은 줄에 남는다. 위 규칙에 밀려 아래로 떨어지면 한 줄짜리 쪽지가 두 줄이 되고, 그만큼
+   이 칸이 옆 기둥의 미수·미지급 줄보다 커져 아래 Net 이 Received·Paid 에서 어긋났다. */
+.fin-bucket-card .fin-overdue-note .hint-inline { display: inline; margin-top: 0; }
 /* 폭 고정 — 행을 펼치면 그 아래 일자별 장부가 같은 자를 쓴다(.fin-db-w-* 와 짝).
    8 + 34 + 34 + 10 + 14 = 100. */
 .fin-cf-table { table-layout: fixed; }
