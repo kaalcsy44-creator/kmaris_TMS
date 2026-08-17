@@ -12867,17 +12867,26 @@ table.mini tfoot .fin-foot-name { text-align: left; }
    항목 이름 칸은 그 자리에 붙잡아 둔다 — 굴리는 동안 이름이 사라지면 숫자가 어느 줄
    것인지 알 수 없다. */
 .fin-pl-scroll { overflow-x: auto; }
-table.mini.fin-pl { min-width: 900px; }
+/* 폭을 백분율로 못박는다 — 위 막대그래프가 같은 자를 쓴다(.fin-pl-chart 의 좌우 여백이
+   이름 칸·합계 칸과 같은 몫이라, 열두 달이 서로 맞물린다). 이름 칸을 16% 로 묶어 두는
+   덕에 달 칸이 각각 6.17% 씩 돌아간다 — 예전에는 이름이 한 줄로 늘어나며 달 칸을 밀었다. */
+table.mini.fin-pl { min-width: 1240px; table-layout: fixed; }
 table.mini.fin-pl th, table.mini.fin-pl td { padding: 5px 8px; }
 table.mini.fin-pl .fin-pl-name {
   position: sticky;
   left: 0;
   z-index: 1;
+  width: 16%;
   background: #fff;
   text-align: left;
   padding-left: 20px;   /* 소계·총계보다 한 칸 들여 쓴 세부 줄 */
   color: #45526a;
+  /* 이름은 접어서 폭을 아낀다 — "Investment (capital in) not revenue …" 같은 줄이
+     한 줄로 뻗으면 그만큼 열두 달이 좁아진다. 숫자 칸은 그대로 한 줄이다. */
+  white-space: normal;
+  line-height: 1.35;
 }
+table.mini.fin-pl .tot { width: 10%; }
 table.mini.fin-pl thead .fin-pl-name { background: #f7fafd; }
 table.mini.fin-pl .tot { background: #f4f8fc; font-weight: 700; }
 /* 0 은 값이 아니라 '없음' — 숫자와 같은 무게로 찍히면 열두 칸이 전부 숫자로 보인다. */
@@ -12909,7 +12918,16 @@ table.mini.fin-pl tr.fin-pl-note .neg { color: #d08a82; }
 /* 막대 끝의 값 꼬리표 — 0선 위아래 어느 쪽이든 막대가 자란 쪽 바깥에 앉는다. */
 /* .fin-net-chart 는 이 블록보다 아래(Cash flow)에 있어 같은 명시도로는 지지 않는다 —
    두 클래스를 함께 걸어 키만 이 화면 몫으로 올린다(꼬리표가 앉을 자리가 필요하다). */
-.fin-net-chart.fin-pl-chart { height: 190px; }
+/* 막대는 아래 표의 달 칸 위에 선다 — 표가 쓰는 자(이름 16% · 달 12칸 · 합계 10%)를
+   좌우 여백으로 그대로 옮겨 온다. 칸 사이 간격은 두지 않는다: 간격이 있으면 그만큼
+   경계가 밀려 여덟 번째 달쯤에서 눈에 띄게 어긋난다(막대는 칸의 가운데 50% 만 차지하니
+   간격 없이도 서로 붙지 않는다). */
+.fin-net-chart.fin-pl-chart {
+  height: 190px;
+  gap: 0;
+  padding-left: 16%;
+  padding-right: 10%;
+}
 .fin-pl-cap {
   position: absolute;
   left: 0;
