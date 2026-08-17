@@ -1047,6 +1047,26 @@ def finance_consulting():
             cur = (o.currency or "USD").upper()
             ordered.setdefault(rid, {})[cur] = ordered.get(rid, {}).get(cur, 0.0) + _total_amount(o.items)
 
+        # 매출이 실제로 들어왔는가 — 수수료를 언제 내보낼지가 여기서 정해진다. 소개비는
+        # 받은 돈에서 떼어 주는 것이라, 고객 돈이 통장에 들어오기 전에는 지급 예정일이
+        # 있을 수 없다. 청구가 여러 건이면 마지막 한 건까지 들어와야 '입금 완료'이고,
+        # 완납일 판정·폴백(11단계 완료일)은 미수 목록과 같은 규칙을 쓴다.
+        collected: dict[int, str] = {}
+        pending: set[int] = set()
+        for row in _finance_receivable_rows(s):
+            rid = row.get("rfq_id") or 0
+            # 금액이 서지 않은 청구서(9단계에서 자리만 만들어 둔 것)는 매출에도 들지
+            # 않으므로 여기서도 세지 않는다 — 그것 하나 때문에 '아직 미입금'이 되면
+            # 다 들어온 딜의 예정일까지 막힌다.
+            if rid not in rfq_ids or row["invoice_amount"] <= 0:
+                continue
+            when = row.get("paid_date") or ""
+            # 덜 들어온 건, 그리고 들어왔다지만 날짜를 모르는 건 — 둘 다 '아직'으로 둔다.
+            if row["outstanding"] > 0 or not when:
+                pending.add(rid)
+            elif when > collected.get(rid, ""):
+                collected[rid] = when
+
         # 이미 등록한 수수료 지급 — 프로젝트별로 모아 둔다(한 딜에 분할 지급이 있을 수 있다).
         booked: dict[int, list] = {}
         for p in s.query(FinancePayable).filter_by(category=CONSULTING_CATEGORY).all():
@@ -1091,8 +1111,11 @@ def finance_consulting():
                 "fee": fee,
                 "pay_currency": pay_cur,
                 "pay_amount": pay_amount,
-                # 지급 예정일의 출발점 — 마지막 청구일(없으면 빈값, 화면이 오늘로 채운다).
+                # 마지막 청구일 — 언제 청구가 섰는지를 보여줄 때만 쓴다.
                 "invoice_date": last_invoice.get(r.id, ""),
+                # 이 프로젝트의 매출이 전액 입금된 날. 아직 덜 들어왔으면 빈값이고,
+                # 그때는 지급 예정일도 비워 둔다(화면이 이 날짜 + 1주일로 채운다).
+                "collected_date": "" if r.id in pending else collected.get(r.id, ""),
                 # 등록된 지급(있으면). 금액은 통화별로 나눠 담아 표에서 그대로 견준다.
                 "registered": _sum_by_currency([(p.amount or 0.0, p.currency) for p in paid_rows]),
                 "registered_count": len(paid_rows),

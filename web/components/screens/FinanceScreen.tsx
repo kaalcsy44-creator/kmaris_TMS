@@ -118,6 +118,14 @@ const AR_STATUS_LABEL: Record<string, string> = {
   연체: "Overdue",
 };
 const todayStr = () => new Date().toISOString().slice(0, 10);
+/** "2026-06-16" + 7일 → "2026-06-23". 빈 날짜는 그대로 빈값으로 돌려준다. */
+function addDays(iso: string, n: number): string {
+  if (!iso) return "";
+  const d = new Date(`${iso}T00:00`);
+  d.setDate(d.getDate() + n);
+  const p = (v: number) => String(v).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
 
 // ── Screen ───────────────────────────────────────────────────────────────────
 // Cash Flow 는 따로 서지 않는다 — 잔액과 현금흐름은 같은 질문의 앞뒤라서 Overview 하나로 합쳤다.
@@ -1958,10 +1966,13 @@ function ConsultingBasis({ onRegister }: { onRegister: (prefill: FinancePayableS
       amount: r.pay_amount,
       vat_amount: 0,
       currency: r.pay_currency,
-      // 지급 예정일은 마지막 청구일에서 출발한다 — 수수료는 매출이 선 다음의 일이다.
-      due_date: r.invoice_date || todayStr(),
+      // 지급 예정일 = 그 딜의 매출이 들어온 날 + 1주일. 소개비는 받은 돈에서 떼어 주는
+      // 것이라 입금 전에는 예정일이 없다 — 그때는 비워 두고 사람이 정하게 한다
+      // (청구일 기준으로 넣어 두면 아직 들어오지도 않은 돈에 기일부터 서는 셈이었다).
+      due_date: r.collected_date ? addDays(r.collected_date, 7) : "",
       notes: `${r.rate}% of ${money(r.sales_amount, r.currency)} sales`
-        + (r.basis === "order" ? " (customer P/O — not invoiced yet)" : ""),
+        + (r.basis === "order" ? " (customer P/O — not invoiced yet)" : "")
+        + (r.collected_date ? ` · collected ${r.collected_date}` : " · not collected yet"),
     };
   }
 

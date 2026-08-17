@@ -966,7 +966,9 @@ export type FinanceConsultingRow = {
   fee: number;               // 매출 통화 기준 수수료
   pay_currency: string;      // 컨설턴트 계좌 통화로 환산한 지급액
   pay_amount: number;
-  invoice_date: string;      // 마지막 청구일(지급 예정일의 출발점)
+  invoice_date: string;      // 마지막 청구일
+  /** 그 프로젝트 매출이 전액 입금된 날 — 지급 예정일(입금 + 1주일)의 출발점. 미입금이면 빈값. */
+  collected_date: string;
   registered: MoneyByCurrency;   // 이미 등록한 수수료 지급 합계
   registered_count: number;
 };
