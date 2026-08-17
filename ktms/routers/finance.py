@@ -775,14 +775,32 @@ def _ar_vat_rate(r, order) -> float:
     return r.vat_rate if r.vat_rate is not None else 0.1
 
 
+def _charges_total(charges) -> float:
+    """부대비용 합계 — 운임·포장·보험. 청구서 합계에서 품목 소계 다음에 붙는 세 줄."""
+    c = charges or {}
+    return sum(float(c.get(k) or 0) for k in ("freight", "packing", "insurance"))
+
+
 def _ar_supply(r, order) -> float:
-    """청구 총액에서 부가세를 뺀 공급가액. 통화는 그대로 둔다(환산하지 않는다).
+    """청구서의 공급가액 = 품목 소계 + 부대비용. 통화는 그대로 둔다(환산하지 않는다).
 
     '매출'을 말하는 자리는 전부 이 값을 쓴다. 부가세는 고객에게 받아 국가에 내는 돈이라
-    우리 매출이 아니고 — 소개 수수료의 근거도 같은 값이어야 한다. 결산·손익 화면의
-    매출줄과 다른 base 로 수수료를 매기면, 두 화면을 나란히 놓고 검산할 수가 없다.
+    우리 매출이 아니고 — 소개 수수료의 근거도 같은 값이어야 한다.
+
+    **총액을 세율로 되나누지 않는다.** 그 세율은 오더의 거래구분(수출/내수)에서 오는데,
+    청구서에 실제로 적힌 세금과 어긋날 수 있다: 수출 오더로 잡힌 딜이 국내 고객에게
+    부가세 10% 를 붙여 청구하면, 되나누기는 세율을 0 으로 보고 총액을 통째로 매출로
+    세운다(₩471,438 짜리 청구서가 공급가액 ₩428,580 이 아니라 ₩471,438 로 서던 이유).
+    품목과 부대비용은 서류에 찍힌 값 그대로라 그런 어긋남이 없다.
+
+    품목이 비어 있는 옛 기록만 총액에서 되나눈다. 품목이 있어도 총액과 아귀가 맞지
+    않으면(총액을 손으로 고쳐 둔 건 등) 같은 폴백을 쓴다 — 차액이 부가세로 볼 수 있는
+    범위(0~30%)를 벗어나면 품목 합계를 그 청구서의 공급가액이라 할 수 없다.
     """
-    amount = r.invoice_amount or 0.0
+    amount = float(r.invoice_amount or 0.0)
+    base = _total_amount(r.items) + _charges_total(getattr(r, "charges", None))
+    if base > 0 and 0 <= amount - base <= base * 0.3:
+        return base
     rate = _ar_vat_rate(r, order)
     return amount / (1 + rate) if rate else amount
 
