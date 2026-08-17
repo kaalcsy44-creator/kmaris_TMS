@@ -801,6 +801,31 @@ def _po_cost(po) -> float:
     return _total_amount(po.items) or _items_cost_total(po.items)
 
 
+def _po_billed(po, ap, trade: str) -> tuple[float, float]:
+    """이 발주의 매입 원가(공급가액)와 매입세액 → (원가, 세액). 환산 전, 그 거래의 통화.
+
+    **벤더 청구(AP)가 들어와 있으면 그것이 확정 금액이다.** 발주서에 없던 부대비용
+    (운임·포장·보험)이 청구서에서 붙고, 부가세도 추정이 아니라 청구서에 적힌 세율로
+    갈린다 — 발주 품목 합계만 세면 그 차액이 어느 화면에도 나타나지 않는다(포장비
+    ₩80,000 이 손익의 매입줄에서 사라지던 이유).
+
+    청구 전이면 발주 금액을 추정치로 쓰고, 매입세액은 내수일 때 10% 로 어림한다.
+    현금흐름 화면이 이미 같은 규약을 쓴다: AP 가 선 P/O 는 추정에서 빼고 청구액으로 센다.
+    """
+    if ap is not None:
+        amount = float(ap.invoice_amount or 0.0)
+        rate = ap.vat_rate if ap.vat_rate is not None else 0.0
+        supply = amount / (1 + rate) if rate else amount
+        return supply, amount - supply
+    cost = _po_cost(po)
+    return cost, (cost * 0.1 if trade == "내수" else 0.0)
+
+
+def _ap_by_po(s) -> dict[int, APRecord]:
+    """vendor P/O id → 그 P/O 의 벤더 청구(있으면). AP 는 P/O 하나에 하나뿐이다."""
+    return {a.po_id: a for a in s.query(APRecord).all() if a.po_id}
+
+
 @app.get("/api/admin/finance/closing", dependencies=[Depends(require_token)])
 def finance_closing(start: str = "", end: str = "", year: int = 0):
     """기간 결산 — 매출(공급가액·매출세액)·매입(원가·추정 매입세액)·마진·부가세(납부/환급).
@@ -856,15 +881,18 @@ def finance_closing(start: str = "", end: str = "", year: int = 0):
 
         purchase_cost = purchase_vat = 0.0
         purchase_count = 0
+        ap_of = _ap_by_po(s)
         for po in s.query(PurchaseOrder).all():
             pd = _po_period_date(po)
             if not pd:
                 continue
             o = ord_map.get(po.order_id)
             trade = (o.trade_type if o else "수출") or "수출"
-            cur = po.currency or (o.currency if o else "USD") or "USD"
-            cost_krw = _krw_in(_po_cost(po), cur, pd[:7], fx_seen)
-            vat_krw = cost_krw * 0.1 if trade == "내수" else 0.0
+            ap = ap_of.get(po.id)
+            cur = (ap.currency if ap is not None else None) or po.currency or (o.currency if o else "USD") or "USD"
+            supply, vat = _po_billed(po, ap, trade)
+            cost_krw = _krw_in(supply, cur, pd[:7], fx_seen)
+            vat_krw = _krw_in(vat, cur, pd[:7], fx_seen)
             if s0 <= pd <= s1:
                 purchase_cost += cost_krw
                 purchase_vat += vat_krw
@@ -1229,19 +1257,24 @@ def finance_profit(year: int = 0):
                 note("consulting", i, f"{consultant_name.get(rid) or '—'} · {who} {rate:g}%", fee)
 
         purchase, input_vat_purchase = z(), z()
+        ap_of = _ap_by_po(s)
         for po in s.query(PurchaseOrder).all():
             pd = _po_period_date(po)
             if not pd or not (ys <= pd <= ye):
                 continue
             o = ord_map.get(po.order_id)
             trade = (o.trade_type if o else "수출") or "수출"
-            cur = po.currency or (o.currency if o else "USD") or "USD"
-            cost_krw = _krw_in(_po_cost(po), cur, pd[:7], fx_seen)
+            ap = ap_of.get(po.id)
+            cur = (ap.currency if ap is not None else None) or po.currency or (o.currency if o else "USD") or "USD"
+            supply, vat = _po_billed(po, ap, trade)
+            cost_krw = _krw_in(supply, cur, pd[:7], fx_seen)
             i = int(pd[5:7]) - 1
             purchase[i] += cost_krw
-            note("purchase", i, vendor_names.get(po.vendor_id, "—"), cost_krw)
-            if trade == "내수":
-                input_vat_purchase[i] += cost_krw * 0.1
+            # 청구가 아직 안 온 발주는 그렇다고 밝힌다 — 같은 매입줄에 확정 금액과 발주
+            # 추정치가 섞여 서므로, 어느 쪽인지 모르면 합계가 왜 이 값인지 따질 수 없다.
+            who = vendor_names.get(po.vendor_id, "—")
+            note("purchase", i, who if ap is not None else f"{who} · P/O est.", cost_krw)
+            input_vat_purchase[i] += _krw_in(vat, cur, pd[:7], fx_seen)
 
         # 수동 지급대장 — 분류별로 나눈다. 세금은 세금 줄로, 거래선지급은 합계 밖으로.
         operating: dict[str, list[float]] = {}
