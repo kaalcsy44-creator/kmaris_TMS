@@ -33,13 +33,20 @@ function cell(n: number): React.ReactNode {
   return n < 0 ? <span className="neg">−{s}</span> : s;
 }
 
-/** 막대 위 꼬리표 — 자릿수를 다 적으면 열두 칸이 서로 밀린다. */
+/**
+ * 막대 위 꼬리표 — 천 원 단위로 줄여 적는다(3,410K). 자릿수를 다 적으면 열두 칸이
+ * 서로 밀린다.
+ *
+ * 만·억으로 접던 것을 K 로 바꾼 이유는 눈금이 한 자리로 통일되기 때문이다: 만과 억이
+ * 섞이면 341만과 1.2억이 나란히 서서 어느 쪽이 큰지를 단위부터 읽어야 했다. K 하나로
+ * 두면 자릿수만 보고 견줄 수 있다. ₩ 는 떼어 낸다 — 그래프 제목이 이미 통화를 말한다.
+ * 천 원이 안 되는 값만 그대로 적는다(0K 로 접히면 없는 값처럼 보인다).
+ */
 function compact(n: number): string {
   const a = Math.abs(n);
   const sign = n < 0 ? "−" : "";
-  if (a >= 1e8) return `${sign}₩${(a / 1e8).toFixed(a >= 1e9 ? 0 : 1)}억`;
-  if (a >= 1e4) return `${sign}₩${(a / 1e4).toFixed(a >= 1e6 ? 0 : 1)}만`;
-  return `${sign}₩${Math.round(a).toLocaleString()}`;
+  if (a < 1000) return `${sign}${Math.round(a)}`;
+  return `${sign}${Math.round(a / 1000).toLocaleString()}K`;
 }
 const won = (n: number) => `${n < 0 ? "−" : ""}₩${Math.abs(Math.round(n)).toLocaleString()}`;
 
