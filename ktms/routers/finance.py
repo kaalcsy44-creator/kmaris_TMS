@@ -1350,9 +1350,9 @@ def finance_profit(year: int = 0):
             # ₩10,000 을 그대로 쓴다 — 추정 외화 금액을 되곱하면 ₩1 씩 어긋나기 때문이다.
             krw = round(f["amount"] * f["fx_rate"]) if f.get("actual") else INBOUND_FEE_KRW
             operating.setdefault(INBOUND_FEE_CATEGORY, z())[i] += krw
-            # 툴팁에서는 건을 가릴 수 있을 만큼만 — 산출근거 전문은 Outflow 목록의 그 행에 있다.
-            ref = f["description"].replace("Receiving fee · ", "")
-            note(f"op:{INBOUND_FEE_CATEGORY}", i, f"{f['counterparty']} · {ref} ({day})", krw)
+            # 다른 줄들과 같은 형식으로 — 프로젝트 번호와 거래선까지. 송장번호·입금일까지
+            # 적으면 한 줄이 길어지기만 한다(그 건의 산출근거 전문은 Outflow 목록에 있다).
+            note(f"op:{INBOUND_FEE_CATEGORY}", i, named_rfq(f.get("rfq_id") or 0, f["counterparty"]), krw)
 
         # 기타수입과 투자금 — 통장에는 나란히 들어오지만 손익에서는 갈린다. 투자금은 판 것이
         # 아니라 넣은 것이라(자본 유입) 수익이 아니고, 여기 섞이면 매출 없는 달이 흑자로 보인다.
