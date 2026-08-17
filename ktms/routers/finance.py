@@ -1242,11 +1242,14 @@ def finance_profit(year: int = 0):
         # 곧바로 그 프로젝트를 가리킨다.
         proj_no = _project_no_map(s)
 
-        def named(order_id: int, party: str) -> str:
+        def named_rfq(rfq_id: int, party: str) -> str:
             # 번호만 — 뒤의 수신일(P-011(260714) 의 괄호)은 여기서 가릴 것이 아니다.
             # 툴팁은 한 줄이 좁고, 어느 딜인지는 번호만으로 이미 갈린다.
-            no = proj_no.get(ord_rfq.get(order_id or 0) or 0, "").split("(")[0]
+            no = proj_no.get(rfq_id or 0, "").split("(")[0]
             return f"{no} · {party}" if no else party
+
+        def named(order_id: int, party: str) -> str:
+            return named_rfq(ord_rfq.get(order_id or 0) or 0, party)
 
         fx_seen: dict[str, dict] = {}
         sales, output_vat, consulting = z(), z(), z()
@@ -1271,7 +1274,7 @@ def finance_profit(year: int = 0):
             if rate:
                 fee = supply_krw * rate / 100.0
                 consulting[i] += fee
-                note("consulting", i, f"{consultant_name.get(rid) or '—'} · {who} {rate:g}%", fee)
+                note("consulting", i, named_rfq(rid, f"{consultant_name.get(rid) or '—'} · {who} {rate:g}%"), fee)
 
         # 매입은 벤더 청구(AP) 기준 — 발주가 아니라 청구서가 비용을 만든다. 발주만 있고
         # 청구가 오지 않은 건은 아직 비용이 아니므로 여기 서지 않는다(견적·발주 단계에서
@@ -1313,7 +1316,12 @@ def finance_profit(year: int = 0):
                 supply_krw = _payable_krw(p, amount - vat, occ[:7], fx_seen)
                 vat_krw = _payable_krw(p, vat, occ[:7], fx_seen)
                 input_vat_other[i] += vat_krw
-                who = (p.counterparty or "").strip() or (p.description or "").strip() or "—"
+                # 딜에 매인 지급(수수료·거래선지급)은 그 프로젝트 번호를 앞에 세운다 —
+                # 위 매출·매입 줄과 같은 규칙이라, 같은 딜의 줄들이 툴팁에서 서로 짝지어진다.
+                who = named_rfq(
+                    getattr(p, "rfq_id", None) or 0,
+                    (p.counterparty or "").strip() or (p.description or "").strip() or "—",
+                )
                 # 기타 지출의 매입세액도 그 항목 이름으로 — 임차료·공과금이 각자 제 이름으로
                 # 부가세 줄에 선다(무엇을 사면서 낸 세금인지가 곧 답이라서).
                 note("vat", i, who, -vat_krw)
