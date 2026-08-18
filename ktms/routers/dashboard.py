@@ -36,6 +36,7 @@ from _core import (
     _fmt_received,
     _items_cost_total,
     cheapest_vendor_quote,
+    day_base_rate,
     _kst,
     _month_key,
     _order_for_rfq,
@@ -578,6 +579,9 @@ def dashboard():
         for a in ars:
             if a.status in {ARStatus.OUTSTANDING, ARStatus.PARTIAL, ARStatus.OVERDUE}:
                 ar_out[_cur2(a.currency)] += (a.invoice_amount or 0) - (a.paid_amount or 0)
+        # 통계 탭의 'KRW 환산' 토글이 읽는 버킷 — USD 미수금을 오늘자 매매기준율로 옮겨
+        # KRW 미수금과 한 숫자로 더한다(원통화 버킷은 그대로 남는다).
+        ar_out["KRWC"] = round(ar_out["KRW"] + ar_out["USD"] * day_base_rate(today_iso, "USD")[0], 2)
         ar_outstanding = ar_out["USD"]   # 하위호환(ar_outstanding_usd)
 
         urgent = [q for q in quotes
@@ -822,6 +826,12 @@ def statistics(months: int = 12):
         prev_month = f"{now_kst.year:04d}-{now_kst.month - 1:02d}" if now_kst.month > 1 else ""
 
         CURS = ("USD", "KRW")
+        # 화면에 내보내는 통화 버킷 = 원통화 둘 + KRW 환산 합계(KRWC).
+        # 집계는 끝까지 원통화로만 하고, 환산은 마지막에 한 번만 한다 — 그래야 환율이
+        # 달라져도 원통화 숫자는 그대로 남아, 무엇이 환산분인지 되짚을 수 있다.
+        KRWC = "KRWC"
+        CUR_KEYS = (*CURS, KRWC)
+        fx_rate, fx_date = day_base_rate(now_kst.strftime("%Y-%m-%d"), "USD")
         # series[currency][metric] = {month: amount}
         def _blank():
             return {cur: {mo: 0.0 for mo in month_labels} for cur in CURS}
@@ -922,14 +932,35 @@ def statistics(months: int = 12):
                 rec = item_rev[cur].setdefault(pn, {"part_no": pn, "description": it.get("description") or "", "amount": 0.0})
                 rec["amount"] += float(amt or 0)
 
+        # ── KRW 환산 버킷 채우기 ────────────────────────────────────────────────
+        # USD 버킷을 오늘자 매매기준율로 옮겨 KRW 버킷과 더한다. 매출이 두 통화로 갈려
+        # 있어서 한쪽만 보면 그 달 실적이 반쪽으로 보이는데, 이 버킷은 둘을 한 숫자로 읽게
+        # 해 준다. 랭킹(고객·품목)도 합친 뒤에 다시 줄을 세워야 순서가 맞는다.
+        for _series in (rev_series, quote_series, order_series):
+            _series[KRWC] = {mo: _series["KRW"][mo] + _series["USD"][mo] * fx_rate
+                             for mo in month_labels}
+        cust_rev[KRWC] = {
+            nm: cust_rev["KRW"].get(nm, 0.0) + cust_rev["USD"].get(nm, 0.0) * fx_rate
+            for nm in set(cust_rev["KRW"]) | set(cust_rev["USD"])
+        }
+        item_rev[KRWC] = {}
+        for _pn in set(item_rev["KRW"]) | set(item_rev["USD"]):
+            _kr = item_rev["KRW"].get(_pn)
+            _us = item_rev["USD"].get(_pn)
+            item_rev[KRWC][_pn] = {
+                "part_no": _pn,
+                "description": (_kr or _us or {}).get("description", ""),
+                "amount": (_kr or {}).get("amount", 0.0) + (_us or {}).get("amount", 0.0) * fx_rate,
+            }
+
         def _series_list(series):
-            return {cur: [round(series[cur][mo], 2) for mo in month_labels] for cur in CURS}
+            return {cur: [round(series[cur][mo], 2) for mo in month_labels] for cur in CUR_KEYS}
 
         def _top(dmap, key_field, n=10, pad=()):
             """상위 n건. 매출이 잡힌 건이 n 보다 적으면 pad(기간 내 거래는 있었지만
             매출 0인 거래처·품목)로 뒤를 채워 항상 n줄을 돌려준다."""
             out = {}
-            for cur in CURS:
+            for cur in CUR_KEYS:
                 if key_field == "customer":
                     items = [{"name": k, "amount": round(v, 2)} for k, v in dmap[cur].items()]
                 else:
@@ -950,7 +981,7 @@ def statistics(months: int = 12):
         # ── KPI(이번 달 + 전월대비) ─────────────────────────────────────────────
         def _kpi():
             out = {}
-            for cur in CURS:
+            for cur in CUR_KEYS:
                 out[cur] = {
                     "revenue": round(rev_series[cur][cur_month], 2),
                     "revenue_prev": round(rev_series[cur].get(prev_month, 0.0), 2) if prev_month else 0.0,
@@ -1139,7 +1170,7 @@ def statistics(months: int = 12):
             "months": month_labels,
             # 축은 12월까지 있으므로, KPI 스트립이 기본으로 설 달을 따로 알려준다.
             "current_month": cur_month,
-            "currencies": list(CURS),
+            "currencies": list(CUR_KEYS),
             "series": {
                 "revenue": _series_list(rev_series),
                 "quote": _series_list(quote_series),
@@ -1150,6 +1181,9 @@ def statistics(months: int = 12):
             "funnel": funnel,
             "project_margin": project_margin,
             "usd_krw_rate": USD_KRW_RATE,
+            # KRW 환산에 실제로 쓴 환율 — 고시를 못 받아 고정환율로 내려갔는지까지 밝힌다.
+            "fx": {"rate": round(fx_rate, 4), "date": fx_date,
+                   "source": "exim" if fx_date else "fixed"},
             "customer_top": _top(cust_rev, "customer", pad=cust_pad),
             "item_top": _top(item_rev, "item", pad=item_pad),
             "kpi": _kpi(),

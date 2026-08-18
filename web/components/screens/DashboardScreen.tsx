@@ -23,7 +23,7 @@ import { useCachedData, invalidateCache } from "@/lib/useCachedData";
 import { can, canEditDeal, getUser, isAdmin } from "@/lib/auth";
 import type {
   QtnRow, PipelineRow, ArRow, PoRow, MarketingRow, MarketingOverview,
-  ScheduleRow, CustomerOption, StatisticsData, StatAlertRow, CurrencyKey,
+  ScheduleRow, CustomerOption, StatisticsData, StatAlertRow, CurrencyKey, StatCurKey,
   StatDebugData,
 } from "@/lib/types";
 import { PipelineModal, byProjectNo } from "@/components/screens/ProjectsScreen";
@@ -887,9 +887,17 @@ function SubHead({ title, sub }: { title: string; sub?: string }) {
   );
 }
 
+/* 통계 탭 통화 버킷 — 원통화 둘 + KRW 환산 합계.
+   "KRW 환산"은 USD 실적을 매매기준율로 옮겨 KRW 실적과 더한 값이다. 두 통화로 갈린 실적을
+   한쪽만 보면 그 달이 반쪽으로 보여서, 합계를 한 숫자로 읽을 자리를 따로 둔다.
+   라벨(=사람에게 보일 이름)과 단위(=금액 앞에 붙는 통화)가 달라 둘을 나눠 쓴다. */
+const STAT_CUR_KEYS: StatCurKey[] = ["USD", "KRW", "KRWC"];
+const curLabel = (c: StatCurKey) => (c === "KRWC" ? "KRW 환산" : c);
+const curUnit = (c: StatCurKey): CurrencyKey => (c === "KRWC" ? "KRW" : c);
+
 /* 통화별 금액 포맷 — KRW 는 정수, USD 는 정수(대시보드 요약용). */
-function fmtMoney(cur: CurrencyKey, n: number): string {
-  return `${cur} ${Math.round(n).toLocaleString()}`;
+function fmtMoney(cur: StatCurKey, n: number): string {
+  return `${curUnit(cur)} ${Math.round(n).toLocaleString()}`;
 }
 
 /* 전월 대비 증감 배지. prev=0 이면 표시 안 함. */
@@ -930,7 +938,7 @@ function phaseOfStage(stage: number): number {
 function StatisticsTab() {
   const { data, error } = useCachedData("dashboard", fetchDashboard);
   const { data: stat } = useCachedData("statistics", () => fetchStatistics(12));
-  const [cur, setCur] = useState<CurrencyKey>("USD");
+  const [cur, setCur] = useState<StatCurKey>("USD");
   // 금액 KPI 월 이동 — null 이면 최신(이번 달). 절대 인덱스로 저장하고 로드 후 clamp.
   const [monthIdx, setMonthIdx] = useState<number | null>(null);
   // 프로젝트 Sales/Purchase 차트 단계 필터.
@@ -1012,7 +1020,10 @@ function StatisticsTab() {
   const rfqData = stat.months.map((m, i) => ({
     month: monthLabel(m), count: stat.rfq_count[i] || 0, detail: stat.rfq_detail[i] || [],
   }));
-  const toCur = (usd: number) => (cur === "KRW" ? usd * stat.usd_krw_rate : usd);
+  // 프로젝트 마진은 USD 로 정규화돼 오므로 화면 통화로 되돌린다. 'KRW 환산'은 서버가
+  // 실제로 쓴 매매기준율(stat.fx)을 그대로 써야 KPI·랭킹과 같은 환율 위에 선다.
+  const fxRate = cur === "KRWC" ? (stat.fx?.rate || stat.usd_krw_rate) : stat.usd_krw_rate;
+  const toCur = (usd: number) => (cur === "USD" ? usd : usd * fxRate);
   const marginData = stat.project_margin.map((p) => ({
     ...p,
     name: p.project_no,
@@ -1028,8 +1039,7 @@ function StatisticsTab() {
     { stage: "Order (PO)", count: stat.funnel.order, rate: stat.funnel.order_rate, label: "PO / Quote" },
     { stage: "Revenue", count: stat.funnel.revenue, rate: stat.funnel.revenue_rate, label: "Revenue / PO" },
   ];
-  const marginDisp = (usd: number) =>
-    cur === "KRW" ? `KRW ${money(usd * stat.usd_krw_rate)}` : `USD ${money(usd)}`;
+  const marginDisp = (usd: number) => `${curUnit(cur)} ${money(toCur(usd))}`;
 
   // 커스텀 호버 툴팁(상세내역) --------------------------------------------
   function RfqTip({ active, payload }: { active?: boolean; payload?: { payload: typeof rfqData[number] }[] }) {
@@ -1103,10 +1113,20 @@ function StatisticsTab() {
   return (
     <>
       <div className="stat-toolbar">
+        {/* 환산 중일 때만 어떤 환율로 옮겼는지 밝힌다 — 합계가 환율에 따라 달라지므로,
+            숫자만 두면 검산할 근거가 없다. */}
+        {cur === "KRWC" ? (
+          <span className="stat-fx-note">
+            USD → KRW {fxRate.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+            {stat.fx?.source === "exim"
+              ? ` · 매매기준율${stat.fx.date ? ` (${stat.fx.date} 고시)` : ""}`
+              : " · 고정환율(고시 조회 실패)"}
+          </span>
+        ) : null}
         <div className="stat-cur-toggle">
-          {(["USD", "KRW"] as CurrencyKey[]).map((c) => (
+          {STAT_CUR_KEYS.map((c) => (
             <button key={c} className={cur === c ? "on" : ""} onClick={() => setCur(c)}>
-              {c}
+              {curLabel(c)}
             </button>
           ))}
         </div>
@@ -1130,7 +1150,7 @@ function StatisticsTab() {
             aria-label="Next month" title="Next month"
           >›</button>
         </span>
-        <span className="s">{cur}</span>
+        <span className="s">{curLabel(cur)}</span>
       </div>
       <div className="kpi-row">
         <Kpi label="Revenue" value={fmtMoney(cur, mRevenue)} sub="Tax-invoiced"
@@ -1147,8 +1167,8 @@ function StatisticsTab() {
         <Kpi label="Hit Rate" value={`${perf.hit_rate}%`} sub="PO conversion" accent="#8e44ad" />
         <Kpi label="Gross Margin" value={`${perf.gross_margin_pct}%`} sub="Gross margin %" accent="#1a7a4a" />
         <Kpi label="AR Outstanding"
-          value={`${cur} ${num(Math.round(data.kpi.ar_outstanding?.[cur] ?? (cur === "USD" ? data.kpi.ar_outstanding_usd : 0)))}`}
-          sub={`Outstanding (${cur})`}
+          value={`${curUnit(cur)} ${num(Math.round(data.kpi.ar_outstanding?.[cur] ?? (cur === "USD" ? data.kpi.ar_outstanding_usd : 0)))}`}
+          sub={`Outstanding (${curLabel(cur)})`}
           accent={ops.overdue ? "#dc3545" : "#0055a8"}
           chip={{ text: `Overdue ${ops.overdue}`, tone: ops.overdue ? "red" : "gray" }} />
         <Kpi label="Delivery Delays" value={stat.delivery_delays} sub="Past promised date"
@@ -1289,7 +1309,7 @@ function StatisticsTab() {
 
         {/* 프로젝트별 Sales/Purchase — 세로 그룹 막대. hue=단계, 채도=매출/매입. */}
         <div className="stat-chart stat-chart--wide">
-          <SubHead title="Project Sales vs Purchase" sub={`프로젝트별 매출·매입 (${cur}) · 호버 상세`} />
+          <SubHead title="Project Sales vs Purchase" sub={`프로젝트별 매출·매입 (${curLabel(cur)}) · 호버 상세`} />
           <div className="stat-margin-controls">
             <div className="stat-cur-toggle sm">
               {(["All", ...STAGE_KEYS] as const).map((sname) => (

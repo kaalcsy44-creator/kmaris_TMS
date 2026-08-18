@@ -1274,7 +1274,7 @@ export type DashboardData = {
     active_orders: number;
     monthly_quotes: number;
     ar_outstanding_usd: number;
-    ar_outstanding?: Record<CurrencyKey, number>;   // 통화별 미수금(대시보드 토글용)
+    ar_outstanding?: Record<StatCurKey, number>;    // 통화별 미수금(대시보드 토글용, KRWC=환산합)
   };
   ops: {
     urgent: number;
@@ -1654,9 +1654,13 @@ export type SearchData = { results: SearchResult[]; query: string };
 
 // ── 통계 대시보드 ─────────────────────────────────────────────────────────────
 export type CurrencyKey = "USD" | "KRW";
-export type StatSeries = Record<CurrencyKey, number[]>;
-export type StatCustomerTop = Record<CurrencyKey, { name: string; amount: number }[]>;
-export type StatItemTop = Record<CurrencyKey, { part_no: string; description: string; amount: number }[]>;
+// 통계 탭의 통화 버킷 — 원통화 둘에 "KRWC"(USD를 매매기준율로 환산해 KRW와 합산한 값)를
+// 더한 것. 문서의 통화(CurrencyKey)와는 다른 개념이라 타입을 따로 둔다 — KRWC 로 저장되는
+// 문서는 없고, 오직 화면에서 합쳐 보기 위한 키다.
+export type StatCurKey = CurrencyKey | "KRWC";
+export type StatSeries = Record<StatCurKey, number[]>;
+export type StatCustomerTop = Record<StatCurKey, { name: string; amount: number }[]>;
+export type StatItemTop = Record<StatCurKey, { part_no: string; description: string; amount: number }[]>;
 export type StatKpiCur = {
   revenue: number; revenue_prev: number;
   order: number; order_prev: number;
@@ -1687,16 +1691,17 @@ export type StatProjectMargin = {
 export type StatisticsData = {
   months: string[];                    // 그래프 가로축 = 올해 1~12월
   current_month?: string;              // 이번 달("YYYY-MM") — KPI 스트립의 기본·최대 월
-  currencies: CurrencyKey[];
+  currencies: StatCurKey[];
   series: { revenue: StatSeries; quote: StatSeries; order: StatSeries };
   rfq_count: number[];                 // 월간 RFQ 수신 건수(months 순서)
   rfq_detail: StatRfqDetailRow[][];    // 월별 RFQ 상세(호버용, months 순서)
   funnel: StatFunnel;                  // RFQ→Quote→PO→Revenue 전환
   project_margin: StatProjectMargin[]; // 프로젝트별 마진(USD 환산)
   usd_krw_rate: number;                // 마진 KRW 환산용 고정환율
+  fx?: { rate: number; date: string; source: "exim" | "fixed" };  // KRW 환산에 쓴 매매기준율
   customer_top: StatCustomerTop;
   item_top: StatItemTop;
-  kpi: Record<CurrencyKey, StatKpiCur>;
+  kpi: Record<StatCurKey, StatKpiCur>;
   delivery_delays: number;
   alerts: {
     today_delivery: StatAlertRow[];

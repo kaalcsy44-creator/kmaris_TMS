@@ -3559,7 +3559,16 @@ table.mini.items-edit td.row-tools {
 .stat-toolbar {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
   margin-bottom: 10px;
+}
+/* 'KRW 환산'에 적용된 환율 각주 — 토글 왼쪽에 붙는다. */
+.stat-fx-note {
+  font-size: 12px;
+  color: #6b7686;
+  white-space: nowrap;
 }
 .stat-cur-toggle {
   display: inline-flex;
