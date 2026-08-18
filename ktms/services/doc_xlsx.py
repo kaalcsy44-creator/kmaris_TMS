@@ -817,8 +817,9 @@ def make_document_xlsx(
         return make_quotation_costing_xlsx(data, company)
     if doc_type == "shipping_mark":
         return make_shipping_mark_xlsx(data, company)
+    if doc_type == "purchase_order":
+        return make_purchase_order_xlsx(data, company)
     title = DOC_TITLES.get(doc_type, "DOCUMENT")
-    is_po = doc_type == "purchase_order"
     currency = (data.get("currency") or "USD").upper()
     customer = data.get("customer", {})   # PO 면 공급사(Vendor)
     vessel = data.get("vessel", {})
@@ -869,7 +870,7 @@ def make_document_xlsx(
     ws.row_dimensions[2].height = 16
 
     # ── Meta (rows 4-7): 좌측 상대방/선박, 우측 문서정보 ─────────────────
-    party = "Supplier / Seller" if is_po else "Customer / Buyer"
+    party = "Customer / Buyer"
     meta = [
         (party, customer.get("name", ""), "Document No.", data.get("doc_no", "")),
         ("Address", customer.get("address", ""), "Date", data.get("date", "")),
@@ -1269,6 +1270,294 @@ def make_quotation_costing_xlsx(
         ws.column_dimensions[col].hidden = True
     # A4 세로 1페이지 폭에 맞춰 인쇄(PDF 미리보기와 동일한 세로 규격).
     # 숨긴 원가열은 인쇄 폭 계산에서 제외되어 판매 열만 세로로 깔끔히 맞는다.
+    ws.print_area = f"A1:{get_column_letter(NCOL)}{last_row}"
+    ws.page_setup.orientation = ws.ORIENTATION_PORTRAIT
+    ws.page_setup.paperSize = ws.PAPERSIZE_A4
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 0
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+    ws.page_margins.left = 0.3
+    ws.page_margins.right = 0.3
+    ws.page_margins.top = 0.4
+    ws.page_margins.bottom = 0.4
+
+    _apply_noto_font(wb)   # 전체 글꼴 Noto Sans KR 통일(모든 문서 Excel 공통)
+    out = io.BytesIO()
+    wb.save(out)
+    return out.getvalue()
+
+
+def make_purchase_order_xlsx(
+    data: Dict[str, Any], company: Optional[Dict[str, Any]] = None
+) -> bytes:
+    """공급사 발주서(PURCHASE ORDER) Excel — kmaris_docs._make_purchase_order_pdf 와 같은 서식.
+
+    미리보기(PDF)와 칸·순서·문구가 그대로 겹치도록 구성한다:
+    레터헤드 → 타이틀 → 정보박스 2단(좌 공급사 / 우 문서정보) → 품목표(+Total 행)
+    → 합계 문장 → Terms & Conditions → Payment → 서명 → 푸터.
+    """
+    from services.kmaris_docs import _money
+
+    company = company or {}
+    vendor = data.get("customer", {}) or {}      # build_po_payload: Supplier/Seller = Vendor
+    vessel = data.get("vessel", {}) or {}
+    terms = data.get("terms", {}) or {}
+    items = normalize_items(data.get("items", []))
+    currency = (data.get("currency") or "USD").upper()
+    total = sum(_num(it.get("amount", 0)) for it in items)
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Purchase Order"
+    ws.sheet_view.showGridLines = False
+
+    navy = PatternFill("solid", fgColor="0B1D3A")
+    gray = PatternFill("solid", fgColor="F4F6F8")
+    lightblue = PatternFill("solid", fgColor="EAF3FF")
+    alt = PatternFill("solid", fgColor="FAFBFC")
+
+    white_hdr = Font(name="Calibri", color="FFFFFF", bold=True, size=9)
+    bold = Font(name="Calibri", bold=True)
+    boldsm = Font(name="Calibri", bold=True, size=9)
+    normal = Font(name="Calibri", size=9)
+    small = Font(name="Calibri", size=8)
+
+    thin = Side(style="thin", color="C8D2E0")
+    bdr = Border(top=thin, bottom=thin, left=thin, right=thin)
+    center = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    left = Alignment(horizontal="left", vertical="center", wrap_text=True)
+    left_top = Alignment(horizontal="left", vertical="top", wrap_text=True)
+    right = Alignment(horizontal="right", vertical="center")
+
+    # PDF 품목표와 같은 열 구성(Origin 열 없음 — 미리보기와 동일).
+    HEADERS = ["No.", "Part No.", "Description", "Maker", "Qty", "Unit",
+               "Unit Price", "Amount", "Lead Time / Remark"]
+    WIDTHS = [5, 15, 29, 15, 7, 8, 14, 14, 16]
+    NCOL = len(HEADERS)
+    for ci, w in enumerate(WIDTHS, start=1):
+        ws.column_dimensions[get_column_letter(ci)].width = w
+
+    def merge(r1, c1, r2, c2):
+        if (r1, c1) != (r2, c2):
+            ws.merge_cells(start_row=r1, start_column=c1, end_row=r2, end_column=c2)
+
+    def put(r, c, v="", *, fill=None, font=None, align=None, fmt=None):
+        cell = ws.cell(r, c, v)
+        if fill:
+            cell.fill = fill
+        if font:
+            cell.font = font
+        if align:
+            cell.alignment = align
+        if fmt:
+            cell.number_format = fmt
+        return cell
+
+    def box(r1, c1, r2, c2, fill=None):
+        for rr in range(r1, r2 + 1):
+            for cc in range(c1, c2 + 1):
+                ws.cell(rr, cc).border = bdr
+                if fill:
+                    ws.cell(rr, cc).fill = fill
+
+    def numfmt(value):
+        """PDF _qnum 과 같은 표기 — 정수면 소수 생략, 아니면 두 자리."""
+        try:
+            return "#,##0" if float(value) == int(float(value)) else "#,##0.00"
+        except (TypeError, ValueError):
+            return "#,##0"
+
+    # ── 레터헤드(로고 · 회사정보 · 슬로건 + 파란 구분선) ────────────────
+    logo = _find_asset("logo_icon.jpg", "logo_icon.png", "logo_K-maris.png", "logo.png", "logo.jpg")
+    if logo:
+        try:
+            from openpyxl.drawing.image import Image as XLImage
+            img = XLImage(logo)
+            img.width, img.height = 96, 58
+            ws.add_image(img, "A1")
+        except Exception:
+            pass
+    GRAYTX = "404040"
+    addr = company.get("address_en") or company.get("address") or ""
+    bits = []
+    if company.get("phone"):
+        bits.append(f"Tel: {company['phone']}")
+    if company.get("sales_email"):
+        bits.append(company["sales_email"])
+    if company.get("website"):
+        bits.append(company["website"])
+    merge(1, 2, 1, 7)
+    put(1, 2, company.get("company_name_en", "K-MARIS Energy & Solutions Co., Ltd."),
+        font=Font(name="Calibri", size=16, color=GRAYTX), align=center)
+    merge(2, 2, 2, 7)
+    put(2, 2, addr, font=Font(name="Calibri", size=8, color=GRAYTX), align=center)
+    merge(3, 2, 3, 7)
+    put(3, 2, "   |   ".join(bits), font=Font(name="Calibri", size=8, color=GRAYTX), align=center)
+    merge(1, 8, 3, NCOL)
+    put(1, 8, (company.get("tagline", "") or "").replace(". ", ".\n", 1),
+        font=Font(name="Calibri", italic=True, size=9, color="0055A8"),
+        align=Alignment(horizontal="right", vertical="center", wrap_text=True))
+    for row, height in ((1, 30), (2, 14), (3, 14), (4, 6)):
+        ws.row_dimensions[row].height = height
+    for col in range(1, NCOL + 1):
+        ws.cell(3, col).border = Border(bottom=Side(style="medium", color="0055A8"))
+
+    # ── 타이틀 ─────────────────────────────────────────────────────────
+    merge(5, 1, 5, NCOL)
+    put(5, 1, "PURCHASE ORDER",
+        font=Font(name="Calibri", bold=True, size=18, color="0B1D3A"), align=center)
+    ws.row_dimensions[5].height = 28
+    ws.row_dimensions[6].height = 5
+
+    # ── 정보 박스(2단) — PDF 와 같은 항목·순서 ──────────────────────────
+    incoterms = terms.get("incoterms", "")
+    place = terms.get("delivery_place", "")
+    incoterms_line = " · ".join([x for x in (incoterms, place) if x])
+    left_rows = [
+        ("Supplier / Seller", vendor.get("name", "")),
+        ("Address", vendor.get("address", "")),
+        ("Contact", vendor.get("contact", "")),
+        ("Email", vendor.get("email", "")),
+        ("Ship Name", vessel.get("name", "")),
+        ("Engine Type", vessel.get("engine_type", "")),
+    ]
+    right_rows = [
+        ("P/O No.", data.get("doc_no", "")),
+        ("Date", data.get("date", "")),
+        ("Currency", currency),
+        ("IMO No.", vessel.get("imo", "")),
+        ("Incoterms", incoterms_line),
+        ("Payment", terms.get("payment_terms", "")),
+    ]
+    META_ROW = 7
+    for i in range(6):
+        r = META_ROW + i
+        for (c1, c2), value, is_label in (
+            ((1, 2), left_rows[i][0], True), ((3, 4), left_rows[i][1], False),
+            ((5, 6), right_rows[i][0], True), ((7, NCOL), right_rows[i][1], False),
+        ):
+            merge(r, c1, r, c2)
+            put(r, c1, value, fill=gray if is_label else None,
+                font=boldsm if is_label else normal, align=left if is_label else left_top)
+        box(r, 1, r, NCOL)
+        # 주소처럼 긴 값은 여러 줄로 접히므로 행 높이를 내용 길이에 맞춘다(최대 3줄).
+        lines = max(1, -(-len(str(left_rows[i][1] or "")) // 44), -(-len(str(right_rows[i][1] or "")) // 44))
+        ws.row_dimensions[r].height = 13.5 * min(lines, 3) + 2
+
+    # ── 품목표 ─────────────────────────────────────────────────────────
+    HROW = META_ROW + 6 + 1          # 정보박스 아래 한 줄 띄우고 머리행
+    ws.row_dimensions[HROW - 1].height = 8
+    for ci, h in enumerate(HEADERS, start=1):
+        put(HROW, ci, h, fill=navy, font=white_hdr, align=center).border = bdr
+    ws.row_dimensions[HROW].height = 24
+
+    first = HROW + 1
+    for ri, it in enumerate(items, start=1):
+        r = HROW + ri
+        lead_remark = "\n".join(x for x in (str(it.get("lead_time", "") or "").strip(),
+                                            str(it.get("remark", "") or "").strip()) if x)
+        vals = [it["item_no"], it["part_no"], it["description"], it.get("maker", ""),
+                _num(it["qty"]), it.get("unit", ""), _num(it["unit_price"]),
+                _num(it["amount"]), lead_remark]
+        for ci, val in enumerate(vals, start=1):
+            cell = put(r, ci, val)
+            cell.border = bdr
+            cell.font = normal
+            if ri % 2 == 0:
+                cell.fill = alt
+            if ci in (5, 7, 8):                     # Qty · Unit Price · Amount
+                cell.alignment = right
+                cell.number_format = numfmt(val)
+            elif ci in (1, 6):                      # No. · Unit
+                cell.alignment = center
+            else:
+                cell.alignment = left_top
+        desc = str(it.get("description", "") or "")
+        dl = sum(max(1, -(-len(x) // 29)) for x in desc.split("\n")) if desc else 1
+        rl = sum(max(1, -(-len(x) // 16)) for x in lead_remark.split("\n")) if lead_remark else 1
+        ws.row_dimensions[r].height = 13 * max(dl, rl, 1) + 5
+    last = HROW + len(items)
+
+    # Total 행 — PDF 와 같이 Description 칸에 'Total', Amount 칸에 합계.
+    trow = last + 1
+    for ci in range(1, NCOL + 1):
+        put(trow, ci, "", fill=lightblue).border = bdr
+    put(trow, 3, "Total", fill=lightblue, font=boldsm, align=left)
+    put(trow, 8, (f"=SUM(H{first}:H{last})" if items else 0), fill=lightblue, font=boldsm,
+        align=right, fmt=numfmt(total))
+    ws.row_dimensions[trow].height = 16
+
+    # ── 합계 문장(우측 정렬) ────────────────────────────────────────────
+    r = trow + 1
+    merge(r, 1, r, NCOL)
+    put(r, 1, f"Total: {_money(total, currency)}", font=bold, align=right)
+    ws.row_dimensions[r].height = 18
+
+    def section_bar(row, title):
+        merge(row, 1, row, NCOL)
+        put(row, 1, f" {title}", fill=navy, font=white_hdr, align=left)
+        for col in range(1, NCOL + 1):
+            ws.cell(row, col).fill = navy
+        ws.row_dimensions[row].height = 16
+
+    def bullet(row, text):
+        merge(row, 1, row, NCOL)
+        put(row, 1, f"• {text}", font=normal, align=left)
+        ws.row_dimensions[row].height = 13
+
+    # ── Terms & Conditions ─────────────────────────────────────────────
+    r += 2
+    section_bar(r, "Terms & Conditions")
+    r += 1
+    term_lines = []
+    if incoterms_line:
+        term_lines.append(f"Incoterms: {incoterms_line}")
+    if terms.get("packing"):
+        term_lines.append(f"Packing: {terms.get('packing')}")
+    if terms.get("warranty"):
+        term_lines.append(f"Warranty: {terms.get('warranty')}")
+    if terms.get("remarks"):
+        term_lines.append(f"Remarks: {terms.get('remarks')}")
+    if not term_lines:
+        term_lines.append("As per the terms agreed between K-MARIS and the supplier.")
+    for line in term_lines:
+        bullet(r, line)
+        r += 1
+
+    # ── Payment ────────────────────────────────────────────────────────
+    r += 1
+    section_bar(r, "Payment")
+    r += 1
+    bullet(r, terms.get("payment_terms") or "T/T after delivery")
+    r += 1
+    bullet(r, "Please confirm this purchase order and proceed with delivery per the agreed schedule.")
+    r += 2
+
+    # ── 서명 ───────────────────────────────────────────────────────────
+    merge(r, 1, r, NCOL)
+    put(r, 1, "For and on behalf of K-MARIS Energy & Solutions Co., Ltd.", font=normal, align=left)
+    sign = _find_asset(*_SIGN_ASSET)
+    if sign:
+        try:
+            from openpyxl.drawing.image import Image as XLImage
+            img = XLImage(sign)
+            img.width, img.height = 140, 48
+            ws.add_image(img, f"C{r + 1}")
+        except Exception:
+            pass
+    for i in range(1, 4):
+        ws.row_dimensions[r + i].height = 16
+    r += 4
+    merge(r, 1, r, 2)
+    put(r, 1, "________________________", font=normal, align=left)
+    r += 1
+    put(r, 1, "Sam Cho, Managing Director", font=bold, align=left)
+    r += 1
+    merge(r, 1, r, NCOL)
+    put(r, 1, "K-MARIS Energy & Solutions | Seoul, Korea | www.k-maris.com",
+        font=small, align=center)
+    last_row = r
+
     ws.print_area = f"A1:{get_column_letter(NCOL)}{last_row}"
     ws.page_setup.orientation = ws.ORIENTATION_PORTRAIT
     ws.page_setup.paperSize = ws.PAPERSIZE_A4
