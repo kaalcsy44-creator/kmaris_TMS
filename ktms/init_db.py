@@ -42,6 +42,8 @@ _MIGRATIONS = {
         # 소개자(컨설턴트)와 이 딜만의 수수료율(%) — 비우면 컨설턴트 기본율.
         "consultant_id": "INTEGER",
         "consultant_rate": "FLOAT",
+        # 한 문의에서 갈라져 나온 딜들의 묶음 대표 id — 이 값이 같은 딜은 메일을 함께 본다.
+        "mail_group_id": "INTEGER",
     },
     "quotations": {
         "created_by": "INTEGER",
@@ -948,6 +950,51 @@ def migrate_reset_mail_sync_cursor():
     print(f"[OK] reset_mail_sync_cursor applied: {n} folder cursor(s) rewound.")
 
 
+def migrate_seed_mail_groups():
+    """한 문의에서 갈라져 나온 딜들을 메일 묶음으로 이어 준다(1회, 멱등).
+
+    고객 한 곳이 메일 한 통으로 품목 여럿을 물어 오면 제조사별로 딜을 나눠 세운다
+    (P-024 MURR / P-025 PARKER / P-026 HONEYWELL). 그런데 대화는 여전히 하나뿐이라,
+    메일은 먼저 붙은 딜 한 곳에만 남고 나머지 형제 딜은 화면에서 "메일 없음"이 된다.
+
+    같은 고객 + 같은 수신일시(분까지 동일)면 같은 문의에서 갈라진 딜로 본다. 사람이
+    한 통의 메일을 보고 딜을 나눠 세울 때 수신일시를 그대로 복사하기 때문이고, 서로
+    다른 문의가 분까지 같은 일은 사실상 없다. 이미 묶음이 정해진 딜은 건드리지 않으므로
+    사람이 화면에서 바꾼 묶음을 되돌리지 않는다."""
+    eng = get_engine()
+    insp = inspect(eng)
+    if not insp.has_table("rfqs"):
+        return
+    if "mail_group_id" not in {c["name"] for c in insp.get_columns("rfqs")}:
+        return
+    from db.models import RFQ
+    s = get_session()
+    try:
+        groups: dict[tuple, list[int]] = {}
+        for r in s.query(RFQ.id, RFQ.customer_id, RFQ.received_at, RFQ.mail_group_id).all():
+            if r.mail_group_id or not r.customer_id:
+                continue
+            at = (r.received_at or "").strip()
+            if "T" not in at:          # 분까지 없는 값은 근거가 못 된다
+                continue
+            groups.setdefault((r.customer_id, at), []).append(r.id)
+        linked = 0
+        for ids in groups.values():
+            if len(ids) < 2:
+                continue
+            root = min(ids)
+            (s.query(RFQ).filter(RFQ.id.in_(ids))
+             .update({RFQ.mail_group_id: root}, synchronize_session=False))
+            linked += len(ids)
+        if linked:
+            s.commit()
+            print(f"[OK] rfqs.mail_group_id seeded: {linked} deal(s) grouped by inquiry.")
+        else:
+            print("[SKIP] No sibling deals to group.")
+    finally:
+        s.close()
+
+
 def migrate_split_stage_dates_to_orders():
     """프로젝트(RFQ) 단위로 찍혀 있던 수동 완료 표시를 각 고객 P/O(오더)로 복사한다.
 
@@ -1002,4 +1049,5 @@ if __name__ == "__main__":
     migrate_normalize_incoterms()
     migrate_split_stage_dates_to_orders()
     migrate_backfill_price_history()
+    migrate_seed_mail_groups()
     print("Done.")

@@ -12,6 +12,7 @@ import re
 from datetime import datetime
 
 from db.models import AppSetting, Customer, EmailMessage, RFQ, Vendor
+from services.mail_sync import mail_group_of
 from services.pdf_parser import _anthropic_client
 
 MODEL = "claude-haiku-4-5-20251001"
@@ -144,7 +145,10 @@ def build_project_rollup(s, rfq_id: int, title: str = "") -> str:
     화면이 낡은 요약을 새것처럼 보여 주게 된다.
 
     재료는 통별 요약이라 AI 호출은 1회다(요약이 아직 없는 메일은 먼저 채운다)."""
-    msgs = (s.query(EmailMessage).filter_by(rfq_id=rfq_id)
+    # 한 문의에서 갈라진 형제 딜은 대화가 하나뿐이다 — 묶음 전체를 재료로 쓴다.
+    # (읽기만 함께 하고, 롤업 글은 딜마다 따로 저장한다: 딜 이름이 다르므로.)
+    group = mail_group_of(s, rfq_id)
+    msgs = (s.query(EmailMessage).filter(EmailMessage.rfq_id.in_(group))
             .order_by(EmailMessage.sent_at).all())
     if not msgs:
         return ""

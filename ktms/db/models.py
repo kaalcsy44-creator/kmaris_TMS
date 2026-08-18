@@ -341,6 +341,12 @@ class RFQ(Base):
     consultant_id    = Column(Integer, ForeignKey("consultants.id"), nullable=True)
     # 이 딜만의 수수료율(%). 비우면 컨설턴트의 기본율, 그것도 없으면 10%.
     consultant_rate  = Column(Float, nullable=True)
+    # 같은 고객 문의에서 갈라져 나온 딜들의 묶음 대표 id(자기 자신일 수 있다).
+    # 한 통의 문의에 품목이 여럿이면 제조사별로 딜을 나누는데(P-024 MURR / P-025 PARKER
+    # / P-026 HONEYWELL), 메일 대화는 여전히 **하나**다. EmailMessage.rfq_id 는 하나뿐이라
+    # 그 대화는 먼저 붙은 딜 한 곳에만 남고 나머지 형제 딜은 "메일 없음"으로 보였다.
+    # 이 열이 같은 딜들은 메일 이력을 함께 본다. NULL = 혼자 서 있는 딜.
+    mail_group_id    = Column(Integer, index=True, nullable=True)
     created_by       = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at       = Column(DateTime, default=datetime.utcnow)
 

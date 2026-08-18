@@ -63,6 +63,7 @@ from _core import (
     steps_for,
 )
 from services.item_ledger import apply_line_categories
+from services import mail_sync
 
 
 
@@ -371,7 +372,17 @@ def create_rfq(body: RfqCreate, user: dict = Depends(get_current_user)):
             source_files=src_files,
             created_by=(user.get("id") or None),   # 담당자 = 등록한 내부 직원
         )
+        # 같은 고객이 같은 시각에 보낸 문의가 이미 있으면, 이 딜은 그 문의를 품목·
+        # 제조사별로 쪼개 세운 형제다(P-024 MURR / P-025 PARKER …). 대화는 하나뿐이므로
+        # 메일 이력을 함께 보게 묶는다 — 안 묶으면 나중에 세운 딜은 늘 "메일 없음"이 된다.
+        siblings = mail_sync.group_siblings(s, cust.id, received_at)
         s.add(rfq)
+        if siblings:
+            s.flush()          # 묶음 대표를 정하려면 이 딜의 id 가 필요하다
+            mates = s.query(RFQ).filter(RFQ.id.in_([*siblings, rfq.id])).all()
+            root = min([m.mail_group_id or m.id for m in mates])
+            for m in mates:
+                m.mail_group_id = root
         # 라인에서 고른 분류(선택)를 품목 마스터에 반영 — 뒤에 다시 배정할 일을 없앤다.
         apply_line_categories(s, items)
         s.commit()

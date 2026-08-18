@@ -5,6 +5,7 @@ import {
   buildProjectMailRollup,
   fetchMailStatus,
   fetchProjectMail,
+  setProjectMailGroup,
   syncMail,
 } from "@/lib/api";
 import type { MailMessage, MailThread, ProjectMail } from "@/lib/types";
@@ -93,6 +94,9 @@ export default function ProjectMailPanel({ rfqId }: { rfqId: number }) {
 
   const threads = data?.threads ?? [];
   const missingSummary = threads.some((t) => t.messages.some((m) => !m.summary));
+  // 한 문의를 품목·제조사별로 쪼개 세운 형제 딜 — 대화는 하나뿐이라 여기 함께 실린다.
+  // 그 사실을 말해 주지 않으면 "왜 다른 딜 얘기가 섞여 있지?"가 된다.
+  const sharedWith = data?.shared_with ?? [];
 
   return (
     <section className="proj-ov-sec proj-mail">
@@ -139,6 +143,24 @@ export default function ProjectMailPanel({ rfqId }: { rfqId: number }) {
       </h2>
 
       {err || loadErr ? <div className="action-err">{err || loadErr?.message}</div> : null}
+      {sharedWith.length ? (
+        <div className="mail-note">
+          Shared conversation with{" "}
+          {sharedWith.map((x) => x.no || `#${x.rfq_id}`).join(" · ")} — these deals were split
+          from one customer inquiry, so their mail is listed here too.{" "}
+          {/* 잘못 묶였을 때 되돌릴 자리. 묶음은 수신일시가 같다는 근거로 자동으로 서므로,
+              사람이 아니라고 말할 수 있어야 한다. */}
+          <button
+            type="button"
+            className="linklike"
+            disabled={!!busy}
+            title="Show only this deal's own mail"
+            onClick={() => run("unshare", "Unshare", () => setProjectMailGroup(rfqId, null))}
+          >
+            {busy === "unshare" ? "Unsharing…" : "Unshare"}
+          </button>
+        </div>
+      ) : null}
       {note ? <div className="mail-note">{note}</div> : null}
       {statusNote ? <div className="mail-note">{statusNote}</div> : null}
 

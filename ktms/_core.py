@@ -201,7 +201,8 @@ def _sync_schema() -> None:
         from db.engine import Base
         from init_db import (
             migrate_columns, migrate_normalize_incoterms, migrate_backfill_price_history,
-            migrate_reset_mail_sync_cursor, migrate_split_stage_dates_to_orders,
+            migrate_reset_mail_sync_cursor, migrate_seed_mail_groups,
+            migrate_split_stage_dates_to_orders,
         )
 
         Base.metadata.create_all(bind=get_engine())
@@ -210,6 +211,7 @@ def _sync_schema() -> None:
         migrate_split_stage_dates_to_orders()  # 단계 완료 표시를 프로젝트 → 고객 P/O 단위로 이관
         migrate_backfill_price_history()  # 품목 구매/판매가 이력 초기 백필(마커 가드 1회)
         migrate_reset_mail_sync_cursor()  # 메일 동기화 커서 되감기(최신부터 읽도록 고친 뒤 1회)
+        migrate_seed_mail_groups()  # 한 문의에서 갈라진 형제 딜을 메일 묶음으로 연결
     except Exception as exc:  # 스키마 동기화 실패가 앱 기동을 막지 않도록 로그만 남긴다.
         print(f"[WARN] startup schema sync skipped: {exc}", file=sys.stderr)
     try:

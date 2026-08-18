@@ -1779,6 +1779,8 @@ export type MailThread = {
 export type ProjectMail = {
   rfq_id: number;
   count: number;
+  // 한 문의에서 갈라진 형제 딜 — 이 목록의 딜과 메일 이력을 함께 본다(비면 혼자).
+  shared_with?: { rfq_id: number; no: string }[];
   threads: MailThread[];
   rollup: string;         // 딜 전체 흐름 요약(3~5줄). 빈 문자열 = 아직 만들지 않음
   rollup_stale: boolean;  // 요약을 만든 뒤 새 메일이 왔다
@@ -1804,6 +1806,8 @@ export type MailDigestRow = {
   rollup_stale: boolean;      // 요약을 만든 뒤 새 메일이 왔다(요약은 그대로 보여준다)
   new_since: number;          // 그 요약 뒤로 들어온 메일 수
   recent: MailDigestLine[];   // 최근 메일 몇 통(최신이 위)
+  // 이 카드가 메일을 함께 보는 형제 딜의 rfq_id(같은 문의에서 갈라진 것). 비면 혼자.
+  shared_with?: number[];
 };
 // 날짜별로 훑는 메일 한 줄 — 업무일지 주간 캘린더용. 본문·제목·첨부는 실리지 않는다.
 export type MailDateRow = MailDigestLine & { id: number; rfq_id: number };

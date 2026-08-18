@@ -1992,6 +1992,15 @@ export function markMailNotDeal(
 export function autoMatchMail(): Promise<MailAutoMatchResult> {
   return post<MailAutoMatchResult>("/api/admin/mail/auto-match", {});
 }
+// 한 문의에서 갈라진 형제 딜의 메일 묶음 — groupWith=null 이면 이 딜을 묶음에서 뺀다.
+// 메일 자체는 옮기지 않는다(읽을 때만 묶음이 펼쳐진다).
+export function setProjectMailGroup(
+  rfqId: number,
+  groupWith: number | null
+): Promise<{ ok: boolean; group: number[] }> {
+  return put(`/api/admin/mail/project/${rfqId}/group`, { group_with: groupWith });
+}
+
 // rfqId=null 이면 연결을 끊어 미분류로 되돌린다. 기본은 같은 스레드 전체.
 // ids 를 함께 넘기면 그 메일들(=화면에서 묶어 보여 준 대화 전체)이 같이 옮겨진다.
 export function assignMail(

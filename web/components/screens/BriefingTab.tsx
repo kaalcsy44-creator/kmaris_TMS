@@ -760,6 +760,9 @@ function BriefCard({
             ? `${card.mailCount} mail${card.mailCount === 1 ? "" : "s"}`
             : "no mail linked"}
           {card.mailCount && (!mail || mail.recent_count === 0) ? ` · none in ${DAYS}d` : ""}
+          {/* 한 문의를 쪼개 세운 형제 딜은 대화가 하나뿐이라 그 메일을 함께 센다.
+              그렇게 세었다는 걸 말해 주지 않으면 통수가 부풀어 보인다. */}
+          {mail?.shared_with?.length ? " · shared conversation" : ""}
         </span>
         {/* 이 카드만 펴고 접는 자리 — 새 버튼을 달지 않고 원래 있던 "N more" 를 누를 수
             있게 했다. 카드마다 같은 장식이 하나씩 늘면 보드가 그만큼 시끄러워진다. */}

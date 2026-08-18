@@ -16,7 +16,8 @@
   3) 선박 — 그 배가 걸린 딜이 하나뿐이고 배 이름이 제목·본문에 있으면 그 프로젝트.
 붙지 못한 메일은 rfq_id 없이 남아 '미분류' 목록에서 사람이 한 번에 배정한다.
 (추측으로 붙이면 틀린 딜의 이력이 되는데, 그건 비어 있는 것보다 나쁘다. 그래서 어느
- 근거든 후보 딜이 둘 이상이면 붙이지 않는다.)
+ 근거든 후보 딜이 둘 이상이면 붙이지 않는다 — 다만 그 후보들이 한 문의에서 갈라진
+ 형제 딜이면 어차피 같은 이력을 함께 보므로 대표 딜에 붙인다. mail_group_map 참고.)
 
 환경변수
   IMAP_HOST(기본 imap.gmail.com) · IMAP_PORT(993) · IMAP_USER · IMAP_PASSWORD
@@ -498,10 +499,25 @@ def auto_match(s, max_passes: int = 5) -> dict:
       vessel  — 그 배가 걸린 딜이 하나뿐이고, 배 이름이 제목·본문에 있다
       subject — 답장 표시를 걷어낸 제목이 그 딜의 메일과 같다(같은 기간, 후보 딜이 하나)
     후보 딜이 둘 이상이면 붙이지 않는다 — 틀린 딜의 이력은 비어 있는 것보다 나쁘다.
+    예외는 후보가 모두 한 문의에서 갈라진 형제 딜일 때뿐이다(대표에 붙인다).
     한 통이 붙으면 그 대화의 나머지가 다시 근거가 되므로 더 붙일 게 없을 때까지 돈다."""
     counts = {"thread": 0, "docno": 0, "vessel": 0, "subject": 0, "total": 0}
     docs = doc_no_index(s)
     vessels = vessel_index(s)
+    groups = mail_group_map(s)
+
+    def only_deal(cands: set[int]) -> int | None:
+        """후보가 하나면 그 딜. 여럿이면 붙이지 않는다 — 다만 후보가 모두 한 문의에서
+        갈라진 형제 딜이면 그 묶음의 대표에 붙인다(어차피 함께 보는 이력이라 어느
+        쪽에 담기든 세 딜 모두에 보인다). 그래도 대표 하나에만 담아 원본이 하나임을
+        지킨다."""
+        if len(cands) == 1:
+            return next(iter(cands))
+        if len(cands) > 1:
+            mates = groups.get(next(iter(cands)), [])
+            if len(mates) > 1 and cands <= set(mates):
+                return min(cands)
+        return None
     # 판단에 쓰는 열만 읽는다 — 본문까지 통째로 끌어오면 메일 수백 통이 그대로
     # DB 전송량이 된다. 첨부는 이름만 든 짧은 JSON 이라 함께 읽어도 가볍고,
     # 견적서·발주서의 문서번호가 거기 붙어 오는 일이 아주 많다.
@@ -544,9 +560,9 @@ def auto_match(s, max_passes: int = 5) -> dict:
             rfq_id, why = None, ""
             chain = [k for k in [m.thread_key, m.message_id, m.in_reply_to, *(m.refs or [])] if k]
             for key in chain:
-                hit = threads.get(key) or ids.get(key)
-                if hit and len(hit) == 1:
-                    rfq_id, why = next(iter(hit)), "thread"
+                hit = only_deal(threads.get(key) or ids.get(key) or set())
+                if hit:
+                    rfq_id, why = hit, "thread"
                     break
             # 제목 + 첨부 이름 + 본문 앞부분. 견적서·발주서는 문서번호를 파일 이름에
             # 달고 오는데 본문에는 "첨부 참조"만 있는 일이 흔하다 — 그런 메일이
@@ -561,16 +577,18 @@ def auto_match(s, max_passes: int = 5) -> dict:
                 # 배 이름은 이 바닥에서 가장 또렷한 단서다. 다만 같은 배로 딜이 여러 건
                 # 도는 일이 흔하므로 후보가 하나일 때만 쓴다.
                 for token, rids in vessels.items():
-                    if len(rids) == 1 and token in haystack:
-                        rfq_id, why = next(iter(rids)), "vessel"
+                    hit = only_deal(rids) if token in haystack else None
+                    if hit:
+                        rfq_id, why = hit, "vessel"
                         break
             if not rfq_id:
                 sk = subject_key(m.subject or "")
                 near = {rid for rid in subjects.get(sk, set())
                         if any(_days_apart(m.sent_at or "", d) <= SUBJECT_WINDOW_DAYS
                                for d in subject_days.get((sk, rid), []))} if sk else set()
-                if len(near) == 1:
-                    rfq_id, why = next(iter(near)), "subject"
+                hit = only_deal(near)
+                if hit:
+                    rfq_id, why = hit, "subject"
             if rfq_id:
                 decided.setdefault((rfq_id, why), []).append(m.id)
                 counts[why] += 1
@@ -583,6 +601,53 @@ def auto_match(s, max_passes: int = 5) -> dict:
         if not decided:
             break
     return counts
+
+
+# ── 한 문의에서 갈라진 딜(형제 딜) ────────────────────────────────────────────
+#
+# 고객이 메일 한 통으로 품목 여럿을 물어 오면 제조사별로 딜을 나눠 세운다
+# (P-024 MURR / P-025 PARKER / P-026 HONEYWELL). 그런데 오가는 대화는 여전히
+# **하나**다. EmailMessage.rfq_id 는 하나뿐이라 그 대화는 먼저 붙은 딜에만 남고,
+# 나머지 형제 딜은 화면에서 통째로 "메일 없음"이 된다 — 정작 그 딜의 사연이
+# 전부 담긴 대화가 옆 딜에 있는데도. 그래서 묶인 딜은 메일 이력을 함께 본다.
+#
+# 메일을 여러 딜에 복사하지 않는다(원본은 한 통뿐이고, 복사하면 어느 것이 진짜인지
+# 알 수 없어진다). 저장은 그대로 두고 **읽을 때만** 묶음을 펼친다.
+
+def mail_group_map(s) -> dict[int, list[int]]:
+    """rfq_id → 메일을 함께 보는 딜들(자기 포함, 오름차순). 혼자면 [자기 자신]."""
+    rows = s.query(RFQ.id, RFQ.mail_group_id).all()
+    groups: dict[int, list[int]] = {}
+    for r in rows:
+        if r.mail_group_id:
+            groups.setdefault(r.mail_group_id, []).append(r.id)
+    out: dict[int, list[int]] = {}
+    for r in rows:
+        mates = groups.get(r.mail_group_id or 0) or []
+        out[r.id] = sorted(mates) if len(mates) > 1 else [r.id]
+    return out
+
+
+def mail_group_of(s, rfq_id: int) -> list[int]:
+    """이 딜이 메일을 함께 보는 딜들(자기 포함). 딜 하나만 볼 때 쓰는 가벼운 길."""
+    row = s.query(RFQ.mail_group_id).filter_by(id=rfq_id).first()
+    gid = row[0] if row else None
+    if not gid:
+        return [rfq_id]
+    mates = [r.id for r in s.query(RFQ.id).filter_by(mail_group_id=gid).all()]
+    return sorted(mates) if len(mates) > 1 else [rfq_id]
+
+
+def group_siblings(s, customer_id: int | None, received_at: str) -> list[int]:
+    """같은 고객·같은 수신일시(분까지)로 이미 서 있는 딜 — 새 딜을 세울 때 묶을 상대.
+
+    사람이 한 통의 문의를 품목별로 나눠 세울 때 수신일시를 그대로 옮겨 적는다.
+    서로 다른 문의가 고객까지 같으면서 분까지 겹치는 일은 사실상 없다."""
+    at = (received_at or "").strip()
+    if not customer_id or "T" not in at:
+        return []
+    return [r.id for r in s.query(RFQ.id)
+            .filter(RFQ.customer_id == customer_id, RFQ.received_at == at).all()]
 
 
 # ── 최근에 움직인 딜 ──────────────────────────────────────────────────────────
@@ -600,6 +665,9 @@ def live_deals(s, days: int | None = 14) -> dict[int, tuple[int, str, int]]:
     기간으로 자르면 안 된다 — 마지막 메일이 3주 전이어도 단계는 이번 주에 움직이는
     딜이 흔하고(P-007 처럼), 그 카드에서 정작 사연을 담은 44통이 통째로 사라진다.
 
+    한 문의에서 갈라진 형제 딜은 묶음 전체의 집계를 나눠 갖는다 — 대화가 하나뿐인데
+    딜만 셋이면, 메일이 붙은 한 딜만 살아 있고 나머지는 '조용한 딜'로 보이기 때문이다.
+
     집계만 받아 온다 — 행을 끌어오면 딜 수십 개의 본문이 통째로 따라온다."""
     totals = (s.query(EmailMessage.rfq_id,
                       func.count(EmailMessage.id),
@@ -608,10 +676,23 @@ def live_deals(s, days: int | None = 14) -> dict[int, tuple[int, str, int]]:
               .filter(EmailMessage.rfq_id.isnot(None))
               .group_by(EmailMessage.rfq_id).all())
     closed = {r.id for r in s.query(RFQ.id, RFQ.closed_at).all() if (r.closed_at or "").strip()}
+    stats = {rid: (cnt, last_at or "", last_id) for rid, cnt, last_at, last_id in totals}
+
+    # 형제 딜에 묶음 합계를 나눠 준다. 메일이 한 통도 안 붙은 형제도 여기서 자리를 얻는다.
+    groups = mail_group_map(s)
+    shared: dict[int, tuple[int, str, int]] = {}
+    for rid, mates in groups.items():
+        if len(mates) < 2:
+            continue
+        rows = [stats[m] for m in mates if m in stats]
+        if rows:
+            shared[rid] = (sum(r[0] for r in rows), max(r[1] for r in rows),
+                           max(r[2] for r in rows))
+    merged = {**stats, **shared}
+
     cutoff = cutoff_at(days) if days else ""
-    return {rid: (cnt, last_at or "", last_id)
-            for rid, cnt, last_at, last_id in totals
-            if rid not in closed and (last_at or "") >= cutoff}
+    return {rid: v for rid, v in merged.items()
+            if rid not in closed and (v[1] or "") >= cutoff}
 
 
 # ── 후보 추천(자동으로 붙이지는 않는다) ───────────────────────────────────────

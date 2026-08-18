@@ -265,21 +265,29 @@ def mail_sync_now(summarize: bool = True):
 def project_mail(rfq_id: int, summarize: bool = False):
     """이 딜에서 오간 메일 — 스레드별로 묶어 최신순.
 
+    한 문의에서 갈라진 형제 딜(P-024 MURR / P-025 PARKER …)이 있으면 그 묶음의 메일을
+    함께 보여 준다. 대화는 하나인데 딜만 셋이라, 딜마다 따로 보면 둘은 빈 화면이 된다.
+
     요약은 기본적으로 만들지 않는다 — 화면을 여는 길목에서 AI 호출 수십 번을 기다리게
     할 수는 없다. 새 메일 요약은 동기화 때 채워지고, 그때 놓친 것(나중에 손으로 배정한
     메일 등)은 summarize=1 로 이 화면에서 채운다."""
     s = get_session()
     try:
-        msgs = (s.query(EmailMessage).filter_by(rfq_id=rfq_id)
+        group = mail_sync.mail_group_of(s, rfq_id)
+        msgs = (s.query(EmailMessage).filter(EmailMessage.rfq_id.in_(group))
                 .order_by(EmailMessage.sent_at).all())
         if summarize and msgs:
             ensure_summaries(s, msgs, limit=_AUTO_SUMMARY_LIMIT)
         rollup = (s.query(AppSetting).filter_by(key=f"{_ROLLUP_KEY}:{rfq_id}").first())
         last_id = max((m.id for m in msgs), default=0)
         cached = (rollup.value or {}) if rollup else {}
+        nos = _project_no_map(s) if len(group) > 1 else {}
         return {
             "rfq_id": rfq_id,
             "count": len(msgs),
+            # 함께 보고 있는 형제 딜 — 화면이 "이 대화는 P-024 와 공유"라고 말할 수 있게.
+            "shared_with": [{"rfq_id": rid, "no": nos.get(rid, "")}
+                            for rid in group if rid != rfq_id],
             "threads": _threads(s, msgs),
             # 롤업은 마지막 메일 id 가 같을 때만 유효 — 새 메일이 오면 다시 만들어야 한다.
             "rollup": cached.get("text", "") if cached.get("last_id") == last_id else "",
@@ -355,16 +363,29 @@ def mail_digest(days: int = 14):
         # 카드에 쓰는 열만 — body_text 는 건드리지 않는다. 조회 기간(days)이 아니라
         # 훨씬 넓은 _HISTORY_DAYS 로 읽는다: 기간은 어느 딜을 보여줄지 정할 뿐이고,
         # 카드에 실릴 대화는 그 딜의 마지막 것이어야 하기 때문이다.
+        #
+        # 카드 하나가 읽어야 할 메일은 그 딜의 것만이 아니다. 한 문의에서 갈라진 형제
+        # 딜은 대화가 하나뿐이라, 메일이 붙은 한 딜을 빼면 나머지는 빈 카드가 된다.
+        mail_groups = mail_sync.mail_group_map(s)
+        wanted = {rid for pick in picked for rid in mail_groups.get(pick, [pick])}
         rows = (s.query(EmailMessage.id, EmailMessage.rfq_id, EmailMessage.sent_at,
                         EmailMessage.direction, EmailMessage.subject, EmailMessage.summary,
                         EmailMessage.from_addr, EmailMessage.to_addrs,
                         EmailMessage.customer_id, EmailMessage.vendor_id)
-                .filter(EmailMessage.rfq_id.in_(picked),
+                .filter(EmailMessage.rfq_id.in_(wanted),
                         EmailMessage.sent_at >= mail_sync.cutoff_at(_HISTORY_DAYS))
                 .order_by(EmailMessage.sent_at).all())
-        groups: dict[int, list] = {}
+        by_deal: dict[int, list] = {}
         for m in rows:
-            groups.setdefault(m.rfq_id, []).append(m)
+            by_deal.setdefault(m.rfq_id, []).append(m)
+        # 카드마다 자기 묶음의 메일을 시간순으로 합친다(형제가 없으면 자기 것뿐).
+        groups: dict[int, list] = {}
+        for pick in picked:
+            mates = mail_groups.get(pick, [pick])
+            merged = [m for rid in mates for m in by_deal.get(rid, [])]
+            if len(mates) > 1:
+                merged.sort(key=lambda m: (m.sent_at or "", m.id))
+            groups[pick] = merged
 
         names = _party_names(s)
         cache = _rollup_cache(s, picked)
@@ -395,6 +416,8 @@ def mail_digest(days: int = 14):
             out.append({
                 "rfq_id": rid,
                 "count": count,
+                # 이 카드가 메일을 함께 보는 형제 딜(같은 문의에서 갈라진 것). 비면 혼자.
+                "shared_with": [x for x in mail_groups.get(rid, [rid]) if x != rid],
                 # 조회 기간 안에 오간 통수. 0 이면 "이 딜은 요즘 조용하다"는 뜻이고,
                 # 화면은 그래도 아래 recent 로 마지막 대화를 보여 준다.
                 "recent_count": len([m for m in msgs if (m.sent_at or "") >= cutoff]),
@@ -624,6 +647,55 @@ def auto_match_mail():
         counts = mail_sync.auto_match(s)
         return {"ok": True, **counts,
                 "unmatched": _unmatched_count(s)}
+    finally:
+        s.close()
+
+
+class MailGroupUpdate(BaseModel):
+    # 함께 볼 딜 id. None = 이 딜을 묶음에서 뺀다(자기 메일만 본다).
+    group_with: int | None = None
+
+
+@app.put("/api/admin/mail/project/{rfq_id}/group", dependencies=[Depends(require_token)])
+def set_mail_group(rfq_id: int, body: MailGroupUpdate):
+    """이 딜을 다른 딜과 같은 메일 묶음에 넣거나 뺀다.
+
+    한 문의를 품목·제조사별로 쪼개 세운 딜들은 대화가 하나뿐이라 메일 이력을 함께
+    봐야 한다. 새 딜을 세울 때 같은 고객·같은 수신일시면 자동으로 묶이지만, 그 규칙이
+    닿지 않는 경우(수신일시를 다르게 적었거나, 나중에 갈라 세운 경우)를 여기서 잇는다.
+
+    메일 자체는 옮기지 않는다 — 한 통은 한 딜의 것으로 남고, 읽을 때만 묶음이 펼쳐진다.
+    특정 메일을 정말 다른 딜의 것으로 돌리려면 /mail/{id}/assign 을 쓴다."""
+    s = get_session()
+    try:
+        rfq = s.query(RFQ).filter_by(id=rfq_id).first()
+        if not rfq:
+            raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다.")
+        if body.group_with is None:
+            old = rfq.mail_group_id
+            rfq.mail_group_id = None
+            s.flush()
+            # 묶음에 하나만 남았으면 그 표시도 지운다 — 혼자인 묶음은 묶음이 아니다.
+            if old:
+                rest = s.query(RFQ).filter_by(mail_group_id=old).all()
+                if len(rest) == 1:
+                    rest[0].mail_group_id = None
+            s.commit()
+            return {"ok": True, "group": [rfq_id]}
+        if body.group_with == rfq_id:
+            raise HTTPException(status_code=400, detail="자기 자신과는 묶을 수 없습니다.")
+        mate = s.query(RFQ).filter_by(id=body.group_with).first()
+        if not mate:
+            raise HTTPException(status_code=404, detail="함께 볼 프로젝트를 찾을 수 없습니다.")
+        # 대표는 두 묶음을 통틀어 가장 작은 id — 어느 쪽에서 이어도 같은 묶음이 된다.
+        ids = {rfq_id, mate.id}
+        for gid in {rfq.mail_group_id, mate.mail_group_id} - {None}:
+            ids |= {r.id for r in s.query(RFQ.id).filter_by(mail_group_id=gid).all()}
+        root = min(ids)
+        (s.query(RFQ).filter(RFQ.id.in_(ids))
+         .update({RFQ.mail_group_id: root}, synchronize_session=False))
+        s.commit()
+        return {"ok": True, "group": sorted(ids)}
     finally:
         s.close()
 
