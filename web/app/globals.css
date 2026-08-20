@@ -10792,6 +10792,9 @@ select.sig-owner-pick,
   border-bottom: 2px solid var(--line);
 }
 .act-mx-proj-h { border-right: 2px solid var(--line); }
+/* 프로젝트 한 줄을 묶는 상자 — 넓은 화면에서는 칸들이 매트릭스 그리드에 직접 얹혀야
+   하므로 상자 자체는 비운다(좁은 화면에서만 실제 카드가 된다). */
+.act-mx-row { display: contents; }
 .act-mx-info,
 .act-mx-cell { padding: 8px 9px; border-bottom: 1px solid var(--line); min-width: 0; }
 .act-mx-info {
@@ -10810,9 +10813,11 @@ select.sig-owner-pick,
 .act-mx-info.cancelled .act-title2 { text-decoration: line-through; color: var(--muted); }
 .act-mx-cell { background: #fcfcfd; border-right: 1px solid #eef1f5; }
 .act-mx-cell:last-child { border-right: 0; }
-/* 지나왔거나 진행 중인 단계 셀: 상단에 업무타입 색 bar(부품=블루 / 서비스=그린). */
-.act-mx-cell.cur-parts { box-shadow: inset 0 3px 0 0 #0055a8; }
-.act-mx-cell.cur-service { box-shadow: inset 0 3px 0 0 #11824a; }
+/* 지나왔거나 진행 중인 단계 셀: 상단에 업무타입 색 bar(부품=블루 / 서비스=그린).
+   프로젝트 칸의 bar 와 같은 색이되 옅게 깐다 — 같은 진하기면 단계 칸이 프로젝트와
+   대등해 보여서, 어느 것이 머리이고 어느 것이 딸린 칸인지 한눈에 갈리지 않는다. */
+.act-mx-cell.cur-parts { box-shadow: inset 0 3px 0 0 rgba(0, 85, 168, .34); }
+.act-mx-cell.cur-service { box-shadow: inset 0 3px 0 0 rgba(17, 130, 74, .34); }
 .act-mx-cell .act-list { margin: 0; }
 .act-mx-empty { color: #cbd5e1; font-size: 12px; }
 .act-mx-info-foot { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
@@ -10991,21 +10996,38 @@ select.sig-owner-pick,
     background: none;
   }
   .act-mx-hcell { display: none; }
-  /* 프로젝트 칸 = 그 딜의 머리. 아래 단계 칸들은 한 단 들여써서 딸린 것으로 읽힌다
-     (빈 단계는 접히므로, 몇 번째 칸이 바닥인지에 기대는 모양은 쓰지 않는다). */
-  .act-mx-info {
+  /* 한 프로젝트 = 한 묶음. 머리와 단계 칸이 그냥 줄줄이 쌓이면 어디서 프로젝트가
+     끝나고 다음이 시작하는지 간격만으로 가늠해야 한다 — 회색 바탕의 상자로 감싸
+     경계를 눈에 남기고, 프로젝트 사이는 넉넉히 띄운다. */
+  .act-mx-row {
+    display: block;
+    padding-bottom: 10px;
     border: 1px solid var(--line);
-    border-radius: 10px;
-    margin-top: 14px;
+    border-radius: 12px;
+    background: #f1f4f8;
+  }
+  /* 머리줄(.act-mx-hcell)이 숨겨져 있어 :first-of-type 은 그 머리줄에 걸린다 —
+     묶음과 묶음 사이에만 간격을 준다. */
+  .act-mx-row + .act-mx-row { margin-top: 22px; }
+  /* 프로젝트 칸 = 그 딜의 머리. 묶음 상자의 머리줄이 되므로 제 테두리는 벗고
+     아래 선 하나로 본문(단계 칸)과 나뉜다. */
+  .act-mx-info {
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    border-radius: 12px 12px 0 0;
+    margin-top: 0;
     padding: 10px 12px;
   }
+  /* 단계 칸은 묶음 안에서 흰 카드로 뜬다 — 회색 바탕과 대비돼 딸린 칸으로 읽힌다.
+     (빈 단계는 접히므로, 몇 번째 칸이 바닥인지에 기대는 모양은 쓰지 않는다.) */
   .act-mx-cell,
   /* 표의 맨 끝 칸은 오른쪽 선을 지우게 되어 있었다 — 카드가 된 지금은 사방이 필요하다. */
   .act-mx-cell:last-child {
     border: 1px solid var(--line);
     border-radius: 8px;
-    margin: 5px 0 0 12px;
+    margin: 8px 10px 0;
     padding: 8px 10px;
+    background: #fff;
   }
   /* 머리줄이 사라졌으니 칸마다 제 단계 이름을 단다. */
   .act-mx-cell::before {

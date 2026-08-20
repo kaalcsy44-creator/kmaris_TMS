@@ -704,7 +704,9 @@ function DealStageRow({
   const infoCls = `act-mx-info${isService ? " service" : ""}${row.cancelled ? " cancelled" : ""}`;
 
   return (
-    <>
+    // 프로젝트 한 줄(정보 칸 + 단계 칸들)을 하나로 묶는다. 넓은 화면에선 display:contents 로
+    // 비워 칸이 그리드에 그대로 얹히고, 좁은 화면에선 이 상자가 ‘프로젝트 한 묶음’이 된다.
+    <div className={`act-mx-row${isService ? " service" : ""}${row.cancelled ? " cancelled" : ""}`}>
       <div className={infoCls}>
         <div className="act-card-h">
           <button type="button" className="act-pno" onClick={onOverview} title="Project overview">{code}</button>
@@ -793,7 +795,7 @@ function DealStageRow({
         </div>
         );
       })}
-    </>
+    </div>
   );
 }
 
