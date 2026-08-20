@@ -10602,33 +10602,57 @@ select.sig-owner-pick,
 /* 탭(By deal / By date)은 Progress 와 공용인 .page-tabs 사용. 여기선 건수 라벨만. */
 .act-count { color: var(--muted); font-size: 12px; }
 
-/* ── 일자별 · 주간 캘린더(7열) ─────────────────────────────────────────
-   주(월요일 시작)가 한 행, 위=이전 주·아래=다음 주. 좁은 화면은 가로 스크롤.
-   요일 헤더 고정을 위해 .act-cal 이 직접 세로 스크롤 컨테이너가 되어야 한다.
-   (overflow-x:auto 만 있으면 세로축도 auto 로 계산돼 스크롤포트는 .act-cal 이 되는데,
-   높이 제한이 없어 세로로 스크롤될 일이 없고 실제 스크롤은 조상 .shell-main 에서 일어난다
-   → 아래 sticky 요일 헤더가 발동하지 못한다. 높이를 묶어 여기서 스크롤되게 한다.)
-   차감값 200px = topnav 58 + .page 상단 패딩 16 + .page-tabs 약 43 + 그 margin 18
-   + .act-toolbar 약 30 + 그 margin 14 + 하단 여백. */
-.act-cal { overflow: auto; max-height: calc(100vh - 200px); min-height: 320px;
-  padding-bottom: 4px; overscroll-behavior: contain; }
-.act-cal-weekdays,
-.act-cal-week { display: grid; grid-template-columns: repeat(7, minmax(150px, 1fr)); }
-.act-cal-weekdays { position: sticky; top: 0; z-index: 2; background: #eef2f7;
-  border: 1px solid var(--border, #d8dee6); border-radius: 8px 8px 0 0; }
-.act-cal-wd { padding: 6px 10px; font-size: 12px; font-weight: 700; color: #0b1d3a;
-  border-right: 1px solid #dbe2ea; }
-.act-cal-wd:last-child { border-right: 0; }
-.act-cal-wd:nth-child(6), .act-cal-wd:nth-child(7) { color: #9aa4b2; }  /* 주말 톤다운 */
-.act-cal-week { border: 1px solid var(--border, #d8dee6); border-top: 0; }
+/* ── 일자별 · 주간 캘린더(한 주씩, 한 번에 3일) ─────────────────────────
+   한 주(월~일)만 그리고 위아래 주는 화살표로 옮긴다 — 달 전체를 세로로 쌓으면
+   하루 칸이 손가락만 해져서 정작 그날 무슨 말이 오갔는지는 못 읽는다.
+   일곱 칸을 한 화면에 욱여넣는 대신 칸 너비를 화면의 1/3 로 두고 가로로 흘린다:
+   보이는 3일은 본문이 읽힐 만큼 넓고, 나머지 나흘은 옆으로 밀어 확인한다.
+   .act-cal-week 자체가 스크롤 상자다 — 가로 스크롤바가 표 바로 밑에 붙고,
+   세로로 긴 날도 그 안에서만 스크롤돼 화면 밖으로 자라지 않는다.
+   차감값 240px = topnav 58 + .page 상단 패딩 16 + .page-tabs 약 43 + 그 margin 18
+   + .act-toolbar 약 30 + 그 margin 14 + 주 이동줄 약 32 + 하단 여백. */
+.act-cal { padding-bottom: 4px; }
+/* 주 이동줄 — «(활동 있는 이전 주) ‹(한 주 전) 범위 ›(한 주 후) »(활동 있는 다음 주). */
+.act-cal-nav { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
+.act-cal-nbtn { min-width: 26px; height: 26px; padding: 0 6px; border: 1px solid var(--border, #d8dee6);
+  border-radius: 6px; background: #fff; color: var(--navy); font-size: 13px; font-weight: 800;
+  line-height: 1; cursor: pointer; }
+.act-cal-nbtn:hover:not(:disabled) { background: #eef4fb; border-color: #b7d4f2; }
+.act-cal-nbtn:disabled { color: #cbd5e1; cursor: default; }
+.act-cal-range { font-size: 13.5px; font-weight: 800; color: var(--navy); margin: 0 2px;
+  font-variant-numeric: tabular-nums; }
+.act-cal-nsub { font-size: 12px; color: var(--muted); }
+.act-cal-thisweek { margin-left: 6px; }
+.act-cal-hint { margin-left: auto; font-size: 11.5px; color: #9aa4b2; }
+.act-cal-week {
+  display: grid;
+  grid-auto-flow: column;
+  /* 보이는 칸은 늘 3개 — 나머지는 오른쪽으로 넘어간다. */
+  grid-auto-columns: calc(100% / 3);
+  overflow: auto;
+  max-height: calc(100vh - 240px);
+  min-height: 320px;
+  overscroll-behavior: contain;
+  scroll-snap-type: x proximity;
+  border: 1px solid var(--border, #d8dee6);
+  border-radius: 8px;
+  background: #fff;
+}
 .act-cal-day { border-right: 1px solid #eef1f5; padding: 6px 8px 9px; min-height: 56px;
-  background: #fff; min-width: 0; }
+  background: #fff; min-width: 0; scroll-snap-align: start; }
 .act-cal-day:last-child { border-right: 0; }
 .act-cal-day.empty { background: #fafbfc; }
 .act-cal-day.today { background: #f2f8ff; box-shadow: inset 0 0 0 2px #b7d4f2; }
-.act-cal-date { font-size: 11.5px; font-weight: 700; color: #64748b; margin-bottom: 6px;
+/* 날짜 머리는 그 칸 안에서 위에 붙어 있는다 — 하루치가 길어 아래로 내려가도
+   지금 읽는 줄이 무슨 요일 것인지 잃지 않는다(바탕은 그 칸 색을 그대로 쓴다). */
+.act-cal-date { position: sticky; top: 0; z-index: 1; background: inherit;
+  margin: -6px -8px 6px; padding: 6px 8px 4px;
+  font-size: 11.5px; font-weight: 700; color: #64748b;
   font-variant-numeric: tabular-nums; }
-.act-cal-day.today .act-cal-date { color: #0055a8; }
+.act-cal-wdname { margin-right: 5px; color: #0b1d3a; }
+.act-cal-day.weekend .act-cal-wdname { color: #9aa4b2; }
+.act-cal-day.today .act-cal-date,
+.act-cal-day.today .act-cal-wdname { color: #0055a8; }
 .act-cal-proj { margin-bottom: 8px; }
 .act-cal-proj:last-child { margin-bottom: 0; }
 .act-cal-phead { display: flex; align-items: baseline; gap: 4px; margin-bottom: 1px; }
@@ -11054,10 +11078,13 @@ select.sig-owner-pick,
   .act-mx-cell .act-seg.sm button { font-size: 11px; padding: 3px 9px; }
   .act-mx-cell .act-add-go { font-size: 11px; padding: 3px 12px; }
 
-  /* By date — 7열 달력을 하루씩 쌓는다. 활동이 없는 날은 접는다. */
+  /* By date — 3일 가로보기는 폰에서 칸이 손가락만 해진다. 그 주의 날을 하나씩
+     쌓고(활동이 없는 날은 접는다) 주 이동은 위의 화살표를 그대로 쓴다. */
   .act-cal { max-height: none; min-height: 0; overflow: visible; }
-  .act-cal-weekdays { display: none; }
-  .act-cal-week { display: block; border: 0; }
+  .act-cal-hint { display: none; }
+  .act-cal-week { display: block; border: 0; background: none;
+    max-height: none; min-height: 0; overflow: visible; }
+  .act-cal-date { position: static; margin: 0 0 6px; padding: 0; }
   .act-cal-day,
   .act-cal-day:last-child {
     border: 1px solid var(--border, #d8dee6);
@@ -11914,9 +11941,13 @@ button.ov-tl-stage:hover {
   .act-card { break-inside: avoid; }
   /* 매트릭스는 화면용 스크롤 높이 제한을 풀어야 전체 행이 인쇄된다. */
   .act-matrix { max-height: none; overflow: visible; }
-  /* 화면용 스크롤 높이 제한을 풀지 않으면 첫 화면 분량만 인쇄되고 나머지가 잘린다. */
+  /* 화면용 스크롤 높이 제한을 풀지 않으면 첫 화면 분량만 인쇄되고 나머지가 잘린다.
+     3일 가로보기도 인쇄에서는 의미가 없다 — 그 주의 이레를 세로로 쌓아 다 찍는다. */
   .act-cal { max-height: none; min-height: 0; overflow: visible; }
-  .act-cal-week { break-inside: avoid; }
+  .act-cal-nav { display: none; }
+  .act-cal-week { display: block; max-height: none; min-height: 0; overflow: visible;
+    break-inside: avoid; }
+  .act-cal-date { position: static; }
 
   /* 프로젝트 개요 — 버튼류를 빼고 인쇄한다. 단계 4칸은 A4 가로에서도 유지되므로
      Items 표와 열이 맞은 채로 나온다(2칸으로 접으면 그 대응이 깨진다). */

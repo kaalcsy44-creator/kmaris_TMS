@@ -178,6 +178,11 @@ export default function ActivityScreen() {
     () => (params.get("view") === "mail" ? "mail" : "deal"),
   );
 
+  // 일자별 탭에서 보고 있는 주(월요일 ISO). 한 번에 한 주만 그리고, 좌우 화살표로 옮긴다.
+  const [weekSel, setWeekSel] = useState(() => weekStart(todayISO()));
+  const weekRef = useRef<HTMLDivElement>(null);
+  const didInitWeek = useRef(false);
+
   const [overviewId, setOverviewId] = useState<number | null>(null);
   // 주요(자동) 활동을 클릭해 들어온 경우의 목표 단계 — 팝업을 개요 대신 그 단계 작업화면으로 연다.
   // null 이면 지금까지처럼 프로젝트 개요로 연다.
@@ -314,6 +319,49 @@ export default function ActivityScreen() {
     (s, w) => s + w.days.reduce((ds, d) => ds + d.projects.reduce((ps, p) => ps + p.acts.length, 0), 0),
     0
   );
+
+  // ── 보고 있는 주 ──────────────────────────────────────────────────────
+  // weekView 에는 활동이 있는 주만 들어 있다. 빈 주로도 넘어갈 수 있어야 하므로
+  // (그 주에 일이 없었다는 것도 정보다) 없는 주는 월~일 빈 7칸을 그 자리에서 만든다.
+  const curDays: DayCell[] = useMemo(() => {
+    const hit = weekView.find((w) => w.start === weekSel);
+    if (hit) return hit.days;
+    return Array.from({ length: 7 }, (_, i) => ({ date: addDays(weekSel, i), projects: [] }));
+  }, [weekView, weekSel]);
+  const weekActs = curDays.reduce((s, d) => s + d.projects.reduce((ps, p) => ps + p.acts.length + p.mails.length, 0), 0);
+  // 활동이 있는 이전/다음 주 — 몇 주씩 비어 있는 구간을 한 번에 건너뛴다.
+  const activeStarts = useMemo(() => weekView.map((w) => w.start), [weekView]);
+  const prevActive = useMemo(() => {
+    const before = activeStarts.filter((x) => x < weekSel);
+    return before.length ? before[before.length - 1] : null;
+  }, [activeStarts, weekSel]);
+  const nextActive = useMemo(() => activeStarts.find((x) => x > weekSel) ?? null, [activeStarts, weekSel]);
+  const thisWeek = weekStart(today);
+
+  // 날짜 필터(Today / Pick date)를 걸면 그 날이 든 주로 따라간다.
+  useEffect(() => { if (targetDate) setWeekSel(weekStart(targetDate)); }, [targetDate]);
+  // 첫 조회 때 이번 주가 비어 있으면 활동이 있는 가장 가까운 지난 주를 연다 — 빈 주로
+  // 시작하면 자료가 없는 화면처럼 보인다. 사용자가 옮기기 시작한 뒤에는 관여하지 않는다.
+  useEffect(() => {
+    if (didInitWeek.current || !weekView.length) return;
+    didInitWeek.current = true;
+    if (weekView.some((w) => w.start === weekSel)) return;
+    const before = weekView.filter((w) => w.start < weekSel);
+    setWeekSel((before.length ? before[before.length - 1] : weekView[0]).start);
+  }, [weekView, weekSel]);
+  // 한 번에 3일만 보이므로, 주를 옮길 때 어느 3일부터 보여줄지 정한다 — 이번 주면
+  // 오늘이 오른쪽 끝(=최근 3일), 아니면 그 주에서 처음 일이 있었던 날부터.
+  const focusIdx = useMemo(() => {
+    const ti = curDays.findIndex((d) => d.date === today);
+    if (ti >= 0) return Math.max(0, ti - 2);
+    const fi = curDays.findIndex((d) => d.projects.length > 0);
+    return fi < 0 ? 0 : fi;
+  }, [curDays, today]);
+  useEffect(() => {
+    const el = weekRef.current;
+    if (!el) return;
+    el.scrollLeft = focusIdx > 0 ? (el.scrollWidth / 7) * focusIdx : 0;
+  }, [weekSel, focusIdx, view]);
 
   // 매트릭스 행 = 프로젝트. 단계 버킷을 평탄화해 최근 활동순으로 정렬한다.
   const dealRows = useMemo(() => {
@@ -546,71 +594,89 @@ export default function ActivityScreen() {
           {totalActs === 0 ? <div className="state">No activity to show.</div> : null}
           {totalActs > 0 ? (
             <div className="act-cal">
-              <div className="act-cal-weekdays">
-                {WEEKDAYS.map((w) => (
-                  <div key={w} className="act-cal-wd">{w}</div>
+              {/* 주 이동 — «/» 는 활동이 있는 이전/다음 주로 건너뛴다(빈 주가 몇 주씩
+                  이어지는 자료에서 ‹/› 만으로는 한참 눌러야 한다). */}
+              <div className="act-cal-nav">
+                <button type="button" className="act-cal-nbtn" title="Jump to previous week with activity"
+                  disabled={!prevActive} onClick={() => prevActive && setWeekSel(prevActive)}>«</button>
+                <button type="button" className="act-cal-nbtn" title="Previous week"
+                  onClick={() => setWeekSel(addDays(weekSel, -7))}>‹</button>
+                <span className="act-cal-range">{weekRangeLabel(weekSel)}</span>
+                <span className="act-cal-nsub">
+                  {weekActs} {weekActs === 1 ? "entry" : "entries"}
+                  {weekSel === thisWeek ? " · This week" : ""}
+                </span>
+                <button type="button" className="act-cal-nbtn" title="Next week"
+                  onClick={() => setWeekSel(addDays(weekSel, 7))}>›</button>
+                <button type="button" className="act-cal-nbtn" title="Jump to next week with activity"
+                  disabled={!nextActive} onClick={() => nextActive && setWeekSel(nextActive)}>»</button>
+                {weekSel !== thisWeek ? (
+                  <button type="button" className="btn sm act-cal-thisweek"
+                    onClick={() => setWeekSel(thisWeek)}>This week</button>
+                ) : null}
+                <span className="act-cal-hint">3 days shown · scroll sideways for the rest of the week</span>
+              </div>
+              <div className="act-cal-week" ref={weekRef}>
+                {curDays.map((day, di) => (
+                  <div
+                    key={day.date}
+                    className={`act-cal-day${day.date === today ? " today" : ""}${day.projects.length === 0 ? " empty" : ""}${di >= 5 ? " weekend" : ""}`}
+                  >
+                    <div className="act-cal-date">
+                      <span className="act-cal-wdname">{WEEKDAYS[di]}</span>
+                      {md(day.date)}
+                    </div>
+                    {day.projects.map((p) => (
+                      <div
+                        key={p.row.rfq_id}
+                        className={`act-cal-proj${p.row.work_type === "서비스" ? " service" : ""}`}
+                      >
+                        <div className="act-cal-phead">
+                          <button
+                            type="button"
+                            className="act-cal-pno"
+                            onClick={() => openOverview(p.row.rfq_id)}
+                            title="Project overview"
+                          >
+                            {splitProjectNo(p.row.project_no || p.row.kmaris_rfq_no || "—").code}
+                          </button>
+                          <span className="act-cal-ptitle">{p.row.project_title || "(untitled)"}</span>
+                        </div>
+                        <ul className="act-cal-acts">
+                          {p.acts.map((a, i) => (
+                            <li
+                              key={i}
+                              className={`act-cal-act ${a.kind === "note" ? "note" : a.kind === "close" ? "closed" : "auto"}${a.kind === "note" && a.note.star ? " star" : ""}`}
+                            >
+                              <ActivityDesc
+                                act={a}
+                                onOpen={a.kind === "auto" ? () => openActivityStage(p.row.rfq_id, a) : undefined}
+                              />
+                            </li>
+                          ))}
+                          {/* 그날 오간 메일 — 단계 이벤트 아래에 시각순으로. 이벤트가
+                              굵은 라벨로 하루의 뼈대를 잡고, 메일은 그 사이에 무슨 말이
+                              오갔는지를 채운다. 시각을 앞에 세워 순서가 읽히게 한다. */}
+                          {p.mails.map((m) => (
+                            <li key={`m${m.id}`} className={`act-cal-mail ${m.direction}`}>
+                              <span className="act-cal-maildir">
+                                {m.direction === "out" ? "→" : "←"}
+                              </span>
+                              {hm(m.sent_at) ? (
+                                <span className="act-cal-mailwhen">{hm(m.sent_at)}</span>
+                              ) : null}
+                              {m.party ? (
+                                <span className="act-cal-mailparty">{m.party}</span>
+                              ) : null}
+                              <span className="act-cal-mailsum">{m.summary}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
                 ))}
               </div>
-              {weekView.map((week) => (
-                <div key={week.start} className="act-cal-week">
-                  {week.days.map((day) => (
-                    <div
-                      key={day.date}
-                      className={`act-cal-day${day.date === today ? " today" : ""}${day.projects.length === 0 ? " empty" : ""}`}
-                    >
-                      <div className="act-cal-date">{md(day.date)}</div>
-                      {day.projects.map((p) => (
-                        <div
-                          key={p.row.rfq_id}
-                          className={`act-cal-proj${p.row.work_type === "서비스" ? " service" : ""}`}
-                        >
-                          <div className="act-cal-phead">
-                            <button
-                              type="button"
-                              className="act-cal-pno"
-                              onClick={() => openOverview(p.row.rfq_id)}
-                              title="Project overview"
-                            >
-                              {splitProjectNo(p.row.project_no || p.row.kmaris_rfq_no || "—").code}
-                            </button>
-                            <span className="act-cal-ptitle">{p.row.project_title || "(untitled)"}</span>
-                          </div>
-                          <ul className="act-cal-acts">
-                            {p.acts.map((a, i) => (
-                              <li
-                                key={i}
-                                className={`act-cal-act ${a.kind === "note" ? "note" : a.kind === "close" ? "closed" : "auto"}${a.kind === "note" && a.note.star ? " star" : ""}`}
-                              >
-                                <ActivityDesc
-                                  act={a}
-                                  onOpen={a.kind === "auto" ? () => openActivityStage(p.row.rfq_id, a) : undefined}
-                                />
-                              </li>
-                            ))}
-                            {/* 그날 오간 메일 — 단계 이벤트 아래에 시각순으로. 이벤트가
-                                굵은 라벨로 하루의 뼈대를 잡고, 메일은 그 사이에 무슨 말이
-                                오갔는지를 채운다. 시각을 앞에 세워 순서가 읽히게 한다. */}
-                            {p.mails.map((m) => (
-                              <li key={`m${m.id}`} className={`act-cal-mail ${m.direction}`}>
-                                <span className="act-cal-maildir">
-                                  {m.direction === "out" ? "→" : "←"}
-                                </span>
-                                {hm(m.sent_at) ? (
-                                  <span className="act-cal-mailwhen">{hm(m.sent_at)}</span>
-                                ) : null}
-                                {m.party ? (
-                                  <span className="act-cal-mailparty">{m.party}</span>
-                                ) : null}
-                                <span className="act-cal-mailsum">{m.summary}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      ))}
-                    </div>
-                  ))}
-                </div>
-              ))}
             </div>
           ) : null}
         </>
@@ -639,6 +705,14 @@ type DayCell = {
   projects: { row: PipelineRow; acts: Activity[]; mails: MailDateRow[] }[];
 };
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+// "2026-06-08" → "Jun 8 – 14, 2026" (달을 넘기면 "Jun 29 – Jul 5, 2026").
+function weekRangeLabel(ws: string): string {
+  const a = new Date(`${ws}T00:00`);
+  const b = new Date(`${addDays(ws, 6)}T00:00`);
+  const mon = (d: Date) => d.toLocaleString("en-US", { month: "short" });
+  const tail = a.getMonth() === b.getMonth() ? `${b.getDate()}` : `${mon(b)} ${b.getDate()}`;
+  return `${mon(a)} ${a.getDate()} – ${tail}, ${b.getFullYear()}`;
+}
 function actStageSort(a: Activity): number {
   return a.kind === "close" ? 99 : a.stage;
 }
