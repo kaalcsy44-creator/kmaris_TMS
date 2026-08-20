@@ -892,7 +892,7 @@ function SubHead({ title, sub }: { title: string; sub?: string }) {
    한쪽만 보면 그 달이 반쪽으로 보여서, 합계를 한 숫자로 읽을 자리를 따로 둔다.
    라벨(=사람에게 보일 이름)과 단위(=금액 앞에 붙는 통화)가 달라 둘을 나눠 쓴다. */
 const STAT_CUR_KEYS: StatCurKey[] = ["USD", "KRW", "KRWC"];
-const curLabel = (c: StatCurKey) => (c === "KRWC" ? "KRW 환산" : c);
+const curLabel = (c: StatCurKey) => (c === "KRWC" ? "KRW conv." : c);
 const curUnit = (c: StatCurKey): CurrencyKey => (c === "KRWC" ? "KRW" : c);
 
 /* 통화별 금액 포맷 — KRW 는 정수, USD 는 정수(대시보드 요약용). */
@@ -1047,12 +1047,12 @@ function StatisticsTab() {
     const p = payload[0].payload;
     return (
       <div className="stat-tip">
-        <div className="stat-tip-h">{p.month} · RFQ {p.count}건</div>
+        <div className="stat-tip-h">{p.month} · RFQ {p.count}</div>
         {p.detail.slice(0, 12).map((d, i) => (
           <div key={i} className="stat-tip-row"><b>{d.rfq_no}</b> {d.customer}{d.work_type ? ` · ${d.work_type}` : ""}</div>
         ))}
         {p.detail.length > 12 ? <div className="stat-tip-more">+{p.detail.length - 12} more…</div> : null}
-        {p.count === 0 ? <div className="stat-tip-row muted">수신 없음</div> : null}
+        {p.count === 0 ? <div className="stat-tip-row muted">None received</div> : null}
       </div>
     );
   }
@@ -1104,8 +1104,8 @@ function StatisticsTab() {
     const p = payload[0].payload;
     return (
       <div className="stat-tip">
-        <div className="stat-tip-h">{p.stage}: {p.count}건</div>
-        {p.label ? <div className="stat-tip-row">{p.label} = <b>{p.rate}%</b></div> : <div className="stat-tip-row muted">기준(전체)</div>}
+        <div className="stat-tip-h">{p.stage}: {p.count}</div>
+        {p.label ? <div className="stat-tip-row">{p.label} = <b>{p.rate}%</b></div> : <div className="stat-tip-row muted">Baseline (all)</div>}
       </div>
     );
   }
@@ -1119,8 +1119,8 @@ function StatisticsTab() {
           <span className="stat-fx-note">
             USD → KRW {fxRate.toLocaleString(undefined, { maximumFractionDigits: 2 })}
             {stat.fx?.source === "exim"
-              ? ` · 매매기준율${stat.fx.date ? ` (${stat.fx.date} 고시)` : ""}`
-              : " · 고정환율(고시 조회 실패)"}
+              ? ` · base rate${stat.fx.date ? ` (posted ${stat.fx.date})` : ""}`
+              : " · fixed rate (quote lookup failed)"}
           </span>
         ) : null}
         <div className="stat-cur-toggle">
@@ -1269,7 +1269,7 @@ function StatisticsTab() {
       <div className="stat-charts">
         {/* 월간 RFQ 수신 건수 — 호버 시 해당 월 RFQ 목록 표시 */}
         <div className="stat-chart">
-          <SubHead title="Monthly RFQ Received" sub="RFQ 수신 건수 · 호버 상세" />
+          <SubHead title="Monthly RFQ Received" sub="RFQ count received · hover for detail" />
           <ResponsiveContainer width="100%" height={240}>
             <BarChart data={rfqData} margin={{ top: 8, right: 16, bottom: 0, left: 8 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#eef1f5" />
@@ -1309,7 +1309,7 @@ function StatisticsTab() {
 
         {/* 프로젝트별 Sales/Purchase — 세로 그룹 막대. hue=단계, 채도=매출/매입. */}
         <div className="stat-chart stat-chart--wide">
-          <SubHead title="Project Sales vs Purchase" sub={`프로젝트별 매출·매입 (${curLabel(cur)}) · 호버 상세`} />
+          <SubHead title="Project Sales vs Purchase" sub={`Sales · purchase by project (${curLabel(cur)}) · hover for detail`} />
           <div className="stat-margin-controls">
             <div className="stat-cur-toggle sm">
               {(["All", ...STAGE_KEYS] as const).map((sname) => (
@@ -1323,11 +1323,11 @@ function StatisticsTab() {
               {STAGE_KEYS.map((sname) => (
                 <span key={sname} className="lg"><i style={{ background: STAGE_COLORS[sname].sales }} />{sname}</span>
               ))}
-              <span className="muted">· 진한색 = Sales, 연한색 = Purchase</span>
+              <span className="muted">· Dark = Sales, Light = Purchase</span>
             </div>
           </div>
           {marginFiltered.length === 0 ? (
-            <div className="state">해당 단계의 프로젝트가 없습니다.</div>
+            <div className="state">No projects at this stage.</div>
           ) : (
             <div style={{ width: `${Math.min(100, Math.max(30, marginFiltered.length * 5))}%` }}>
               <ResponsiveContainer width="100%" height={340}>
