@@ -1084,6 +1084,11 @@ def _bank_block(form: _DocForm, company: Dict[str, Any], currency: str, quad: Li
     return [form.band("BANK INFORMATION"), form.pairs(rows, quad, value_style=form.center)]
 
 
+SERVICE_PI_DECIMALS = 0
+"""서비스 Proforma Invoice 금액 자리수 — 출장비·기술료는 원 단위라 소수점을 쓰지 않는다.
+PDF·Excel 이 같은 값을 봐야 두 파일의 숫자가 어긋나지 않는다."""
+
+
 def is_service_doc(data: Dict[str, Any]) -> bool:
     """서비스 딜의 문서인지 — 발행 서식이 물품용과 갈린다(선적정보 대신 서비스정보)."""
     return (data.get("doc_variant") or "") == "service"
@@ -1117,7 +1122,7 @@ def _make_service_proforma_invoice_pdf(data: Dict[str, Any], company: Dict[str, 
     shipping = data.get("shipping", {}) or {}
     _, buyer = doc_parties(data)
     money = pi_charges(data)
-    dec = pi_decimals(currency)
+    dec = SERVICE_PI_DECIMALS
 
     def amount(value: Any) -> str:
         v = _num(value)

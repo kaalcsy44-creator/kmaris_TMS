@@ -18,6 +18,7 @@ from services.kmaris_docs import (
     packing_totals, consignee_mark_lines, _dim_parts, _invoice_shipping_rows,
     PI_COLUMN_UNITS, PI_MIN_ITEM_ROWS, PL_COLUMN_UNITS, PL_MIN_ITEM_ROWS,
     pi_decimals, pi_charges, pi_doc_date, is_service_doc, service_info_rows,
+    SERVICE_PI_DECIMALS,
 )
 
 _CONFIG_DIR = Path(__file__).resolve().parent.parent / "config"
@@ -117,6 +118,7 @@ class _FormSheet:
 
     NAVY = "0B1D3A"
     BAND = "1F3B66"
+    BLUE = "0055A8"   # 레터헤드 슬로건·구분선(PDF 와 같은 브랜드 블루)
     GRAY = "F4F6F8"
     LIGHTBLUE = "EAF3FF"
     ALT = "FAFBFC"
@@ -138,7 +140,10 @@ class _FormSheet:
         self.alt = PatternFill("solid", fgColor=self.ALT)
 
         self.title_font = Font(name="Noto Sans KR", color=self.NAVY, bold=True, size=19)
-        self.company_font = Font(name="Noto Sans KR", size=14)
+        # 레터헤드 — 회사명은 진회색 큰 글씨, 주소·연락처·슬로건은 작게(PDF 와 같은 인상).
+        # 가운데 칸이 전폭이 아니라 로고·슬로건 사이라, 주소 한 줄이 접히지 않게 8pt 로 둔다.
+        self.company_font = Font(name="Noto Sans KR", size=14, color="404040")
+        self.addr_font = Font(name="Noto Sans KR", size=8, color="404040")
         self.small = Font(name="Noto Sans KR", size=9)
         self.white_sec = Font(name="Noto Sans KR", color="FFFFFF", bold=True, size=10)
         self.white_hdr = Font(name="Noto Sans KR", color="FFFFFF", bold=True, size=9)
@@ -146,6 +151,7 @@ class _FormSheet:
         self.bold = Font(name="Noto Sans KR", bold=True, size=11)
         self.normal = Font(name="Noto Sans KR", size=9)
         self.item_font = Font(name="Noto Sans KR", size=11)
+        self.tag_font = Font(name="Noto Sans KR", italic=True, size=8, color=self.BLUE)
 
         self.thin = Side(style="thin", color=self.BORDER)
         self.bdr = Border(top=self.thin, bottom=self.thin, left=self.thin, right=self.thin)
@@ -153,6 +159,7 @@ class _FormSheet:
         self.left = Alignment(horizontal="left", vertical="center", wrap_text=True)
         self.right = Alignment(horizontal="right", vertical="center")
         self.left_top = Alignment(horizontal="left", vertical="top", wrap_text=True)
+        self.right_wrap = Alignment(horizontal="right", vertical="center", wrap_text=True)
 
     # ── 저수준 도우미 ─────────────────────────────────────────────────────
     def merge(self, r1, c1, r2, c2):
@@ -185,9 +192,22 @@ class _FormSheet:
         return self.put(r, c1, value, font=font, fill=fill, align=align, fmt=fmt)
 
     def add_image(self, path, anchor, w, h):
+        """이미지를 (w, h) 상자 '안에' 원본 비율 그대로 넣는다.
+
+        너비·높이를 그대로 박으면 로고가 눌린다(660×584 아이콘을 96×45 로 넣던 탓에
+        Excel 만 납작했다) — 상자에 맞춰 축소 비율을 계산해 PDF 와 같은 모양으로 만든다.
+        원본 크기를 못 읽으면 상자 크기를 그대로 쓴다."""
         try:
             from openpyxl.drawing.image import Image as XLImage
             img = XLImage(path)
+            try:
+                from PIL import Image as PILImage
+                with PILImage.open(path) as src:
+                    sw, sh = src.size
+                scale = min(w / sw, h / sh)
+                w, h = int(sw * scale), int(sh * scale)
+            except Exception:
+                pass
             img.width, img.height = w, h
             self.ws.add_image(img, anchor)
             return True
@@ -196,19 +216,32 @@ class _FormSheet:
 
     # ── 블록 ──────────────────────────────────────────────────────────────
     def letterhead(self, company, title):
-        """1~6행 — 로고 + 가운데 회사명·주소·연락처 + 문서 제목(PDF 레터헤드와 같은 내용)."""
+        """1~6행 — 좌측 로고 · 가운데 회사명/주소/연락처 · 우측 슬로건 + 파란 구분선.
+
+        PDF(_letterhead)와 같은 3단 구성이다. 예전에는 회사명을 전폭으로 합쳐 슬로건이
+        설 자리가 없었다 — 미리보기(PDF)에는 있고 내려받은 Excel 에만 없던 이유."""
+        logo_cols, org_cols, tag_cols = self.blocks["logo"], self.blocks["org"], self.blocks["tag"]
         logo = _find_asset("logo_icon.jpg", "logo_icon.png", "logo_K-maris.png", "logo.png", "logo.jpg")
         if logo:
-            self.add_image(logo, "A1", 96, 45)
-        self.cell(1, "full", company.get("company_name_en", "K-MARIS Energy & Solutions Co., Ltd."),
-                  font=self.company_font, align=self.center)
-        self.cell(2, "full", company.get("address_en") or company.get("address", ""),
-                  font=self.small, align=self.center)
+            # 로고 상자 = 1~3행 높이(65.4pt ≈ 87px)와 로고 열 폭에 맞춘다.
+            self.add_image(logo, "A1", int(sum(self.widths[logo_cols[0] - 1:logo_cols[1]]) * 7), 86)
+        for r, c1, c2 in ((1, *org_cols), (2, *org_cols), (3, *org_cols)):
+            self.merge(r, c1, r, c2)
         contact = " | ".join(x for x in [
             f"Tel: {company.get('phone', '')}" if company.get("phone") else "",
             company.get("sales_email", ""), company.get("website", ""),
         ] if x)
-        self.cell(3, "full", contact, font=self.small, align=self.center)
+        self.put(1, org_cols[0], company.get("company_name_en", "K-MARIS Energy & Solutions Co., Ltd."),
+                 font=self.company_font, align=self.center)
+        self.put(2, org_cols[0], company.get("address_en") or company.get("address", ""),
+                 font=self.addr_font, align=self.center)
+        self.put(3, org_cols[0], contact, font=self.addr_font, align=self.center)
+        # 슬로건 — 우측 1~3행, 두 줄(문장 단위 줄바꿈), 이탤릭 블루. PDF 와 같은 자리.
+        self.merge(1, tag_cols[0], 3, tag_cols[1])
+        self.put(1, tag_cols[0], (company.get("tagline", "") or "").replace(". ", ".\n", 1),
+                 font=self.tag_font, align=self.right_wrap)
+        for col in range(1, self.ncol + 1):
+            self.ws.cell(3, col).border = Border(bottom=Side(style="medium", color=self.BLUE))
         self.cell(5, "full", title, font=self.title_font, align=self.center)
         for row, height in ((1, 37.2), (2, 14.1), (3, 14.1), (4, 15.6), (5, 30), (6, 13.8)):
             self.ws.row_dimensions[row].height = height
@@ -315,16 +348,19 @@ class _FormSheet:
 
 
 # 라벨·값 네 칸의 열 위치 — 8열 문서(PI/CI)와 13열 문서(PL).
-_BLOCKS_8 = {"label1": (1, 2), "value1": (3, 4), "label2": (5, 6), "value2": (7, 8), "full": (1, 8)}
-_BLOCKS_13 = {"label1": (1, 2), "value1": (3, 5), "label2": (6, 7), "value2": (8, 13), "full": (1, 13)}
+_BLOCKS_8 = {"label1": (1, 2), "value1": (3, 4), "label2": (5, 6), "value2": (7, 8), "full": (1, 8),
+             "logo": (1, 2), "org": (3, 7), "tag": (8, 8)}
+_BLOCKS_13 = {"label1": (1, 2), "value1": (3, 5), "label2": (6, 7), "value2": (8, 13), "full": (1, 13),
+              "logo": (1, 2), "org": (3, 10), "tag": (11, 13)}
 
 _SIGN_ASSET = ("Authorized signature_Sungyeon Cho.jpg", "signature.png", "signature.jpg", "sign.png")
 _STAMP_ASSET = ("Company stamp_K-Maris Energy & Solutions.jpg", "stamp.png", "stamp.jpg", "seal.png")
 
 
-def _invoice_money_format(currency: str) -> str:
-    """금액 서식 — 0 은 '-' 로 찍히는 회계 서식(참조 양식과 같다)."""
-    if pi_decimals(currency):
+def _invoice_money_format(currency: str, decimals: int | None = None) -> str:
+    """금액 서식 — 0 은 '-' 로 찍히는 회계 서식(참조 양식과 같다).
+    decimals 를 주면 통화 규칙 대신 그 자리수로 찍는다(서비스 송장=정수)."""
+    if (pi_decimals(currency) if decimals is None else decimals):
         return '_-* #,##0.00_-;\\-* #,##0.00_-;_-* "-"_-;_-@_-'
     return '_-* #,##0_-;\\-* #,##0_-;_-* "-"_-;_-@_-'
 
@@ -465,7 +501,8 @@ def _service_pi_items_and_total(form: "_FormSheet", data: Dict[str, Any], r: int
     """서비스 Proforma Invoice 품목표 — No./Description/Qty/Unit/Unit Price/Amount.
     용역엔 품번·HS 코드가 없어 그 두 칸이 빠지고 Unit 이 선다. 합계는 TOTAL 한 줄."""
     items = normalize_items(data.get("items", []))
-    num_fmt = _invoice_money_format(currency)
+    # 용역 금액은 원 단위로 떨어진다(출장비·기술료) — 참조 양식대로 소수 자리를 쓰지 않는다.
+    num_fmt = _invoice_money_format(currency, SERVICE_PI_DECIMALS)
 
     r = form.item_header(r, [("No.", 1, 1), ("Description", 2, 4), ("Qty", 5, 5),
                              ("Unit", 6, 6), ("Unit Price", 7, 7), (f"Amount ({currency})", 8, 8)])
