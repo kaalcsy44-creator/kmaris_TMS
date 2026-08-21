@@ -71,9 +71,11 @@ type StageTab = "s7" | "s8" | "s9";
 type WorkView = "parts" | "service";
 
 // 문서 종류 → 표시 라벨(작업 모달 제목 등).
-type DocKind = "pi" | "ci" | "sm" | "pl" | "pod" | "tax";
+type DocKind = "pi" | "spi" | "ci" | "sm" | "pl" | "pod" | "tax";
 const KIND_CFG: Record<DocKind, { label: string }> = {
   pi: { label: "Proforma Invoice" },
+  // 서비스 딜의 Proforma Invoice — 같은 저장 자리(오더당 PI 1건)에 서비스 서식으로 입력한다.
+  spi: { label: "Proforma Invoice" },
   ci: { label: "Commercial Invoice" },
   sm: { label: "Shipping Mark" },
   pl: { label: "Packing List" },
@@ -102,6 +104,7 @@ export function DocumentsOverview({
   const [workView, setWorkView] = useState<WorkView>(initialView === "service" ? "service" : "parts");
   const [stage, setStage] = useState<StageTab>(stageFromProp(initialStage));
   const [readyDoc, setReadyDoc] = useState<"pi" | "ci" | "sm" | "pl">("ci"); // 7단계 하위(Proforma(선택)/CI/PL/Shipping Mark)
+  const [svcDoc, setSvcDoc] = useState<"ready" | "pi">("ready"); // 서비스 7단계 하위(준비사항/Proforma)
 
   const { data: overview, refresh } = useCachedData(
     "documents:overview",
@@ -138,16 +141,40 @@ export function DocumentsOverview({
   }
   const projectNo = orders.find((o) => o.id === orderId)?.project_no;
   if (workView === "service") {
+    // 7단계는 준비 사항 입력과 선(先)청구용 Proforma Invoice 두 갈래 —
+    // 물품 딜의 7단계가 CI·PL·Shipping Mark 로 갈리는 것과 같은 자리다.
     return (
       <div className="action-tabs embedded">
-        <ServiceEditorModal
-          orderId={orderId}
-          svc={svcStage}
-          projectNo={projectNo}
-          onClose={load}
-          onChanged={load}
-          inline
-        />
+        {svcStage === 7 ? (
+          <div className="pane-tabs" role="tablist" aria-label="Service readiness">
+            <button className={svcDoc === "ready" ? "on" : ""} onClick={() => setSvcDoc("ready")}>
+              Service Readiness
+            </button>
+            <button className={svcDoc === "pi" ? "on" : ""} onClick={() => setSvcDoc("pi")}>
+              Proforma Invoice
+            </button>
+          </div>
+        ) : null}
+        {svcStage === 7 && svcDoc === "pi" ? (
+          <DocEditorModal
+            key="spi"
+            orderId={orderId}
+            kind="spi"
+            projectNo={projectNo}
+            onClose={load}
+            onChanged={load}
+            inline
+          />
+        ) : (
+          <ServiceEditorModal
+            orderId={orderId}
+            svc={svcStage}
+            projectNo={projectNo}
+            onClose={load}
+            onChanged={load}
+            inline
+          />
+        )}
       </div>
     );
   }
@@ -682,6 +709,8 @@ function DocEditorContent({
           {hideInfo ? null : <DocOrderInfo order={data.order} />}
           {kind === "pi" ? (
             <ProformaInvoiceTab key={`pi-${data.order.id}-${data.pi?.id ?? 0}`} data={data} onChanged={afterChange} />
+          ) : kind === "spi" ? (
+            <ServiceProformaInvoiceTab key={`spi-${data.order.id}-${data.pi?.id ?? 0}`} data={data} onChanged={afterChange} />
           ) : kind === "ci" ? (
             <CommercialInvoiceTab key={`ci-${data.order.id}-${data.ci?.id ?? 0}`} data={data} onChanged={afterChange} />
           ) : kind === "sm" ? (
@@ -1083,6 +1112,200 @@ function ProformaInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChang
       </div>
     </div>
   );
+}
+
+// 서비스 딜의 Proforma Invoice — templates/'proforma invoice_sample_service.xlsx' 서식.
+// 저장 자리는 물품용과 같고(오더당 PI 1건), 받는 값이 다르다: 용역은 배로 부치는 물건이
+// 아니라 사람이 나가는 일이라, 선적항·B/L·Incoterms 자리에 작업 내용·장소·인원·기간·
+// 현지 대리점이 들어간다. 발행 서식(PDF·Excel)도 딜의 업무구분을 보고 서버가 갈라 준다.
+function ServiceProformaInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChanged: () => void }) {
+  // PI 번호 규칙은 물품용과 같다 — P/O 번호 + "-PI".
+  const autoPiNo = data.order.po_no ? `${data.order.po_no}-PI` : "";
+  const [piNo, setPiNo] = useState(data.pi?.pi_no || autoPiNo);
+  const [piMode, setPiMode] = useState<"auto" | "manual">(
+    data.pi?.pi_no && data.pi.pi_no !== autoPiNo ? "manual" : "auto",
+  );
+  const [date, setDate] = useState(data.pi?.date || today());
+  const [currency, setCurrency] = useState(data.pi?.currency || data.order.doc_defaults?.currency || "USD");
+  const [items, setItems] = useState<DocumentWorkItem[]>(normalizeItems(data.pi?.items || data.order.items));
+
+  // 서비스 정보의 빈 칸은 7단계 Service Readiness 에 이미 적어 둔 값으로 채운다 —
+  // 같은 내용을 두 번 입력하지 않도록. 저장된 PI 값이 있으면 언제나 그 값이 이긴다.
+  function initialShipping(): Record<string, string> {
+    return {
+      ...defaultMarkFields(data.order),
+      ...serviceInfoDefaults(data.order),
+      ...(data.pi?.shipping || {}),
+    };
+  }
+  function initialTerms(): Record<string, string> {
+    return docDefaultTerms(data.order, data.pi?.terms);
+  }
+  const [shipping, setShipping] = useState<Record<string, string>>(initialShipping());
+  const [terms, setTerms] = useState<Record<string, string>>(initialTerms());
+  const [busy, setBusy] = useState(false);
+  // 참조 양식대로 합계는 TOTAL INVOICE VALUE 한 줄 — 용역엔 운임·포장비·보험료가 없다.
+  const total = useMemo(() => includedRows(items).reduce((sum, i) => sum + num(i.amount), 0), [items]);
+  const editable = canEditDoc(data);
+
+  async function save() {
+    setBusy(true);
+    try {
+      await saveProformaInvoice(data.order.id, {
+        pi_no: piNo, date, currency, vat_rate: 0, items, shipping, terms,
+      });
+      onChanged();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function cancel() {
+    setPiNo(data.pi?.pi_no || autoPiNo);
+    setPiMode(data.pi?.pi_no && data.pi.pi_no !== autoPiNo ? "manual" : "auto");
+    setDate(data.pi?.date || today());
+    setCurrency(data.pi?.currency || data.order.doc_defaults?.currency || "USD");
+    setItems(normalizeItems(data.pi?.items || data.order.items));
+    setShipping(initialShipping());
+    setTerms(initialTerms());
+  }
+
+  async function del() {
+    if (!data.pi) return;
+    if (!confirm("Delete this Proforma Invoice?")) return;
+    setBusy(true);
+    try {
+      await deleteProformaInvoice(data.order.id);
+      onChanged();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Delete failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const setShip = (key: string) => (v: string) => setShipping({ ...shipping, [key]: v });
+
+  return (
+    <div className="doc-tab">
+      <fieldset className="form-fieldset" disabled={!editable}>
+      <div className="doc-cols">
+      <div className="doc-col">
+      {/* 입력 순서·이름은 발행되는 Proforma Invoice(서비스) 서식 그대로. */}
+      <div className="sub-h" style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+        <span>Invoice information</span>
+        <span className="hint-inline" style={{ fontWeight: 400 }}>
+          <b>Optional</b> pre-service document · issued before the job starts
+        </span>
+      </div>
+      <div className="form-grid doc-form-grid">
+        <label className="form-field">
+          <span>Invoice No.</span>
+          {piMode === "auto" ? (
+            <select value="auto" onChange={(e) => { if (e.target.value === "manual") setPiMode("manual"); }}>
+              <option value="auto">{autoPiNo ? `${autoPiNo} (auto)` : "Auto-generate"}</option>
+              <option value="manual">Manual entry…</option>
+            </select>
+          ) : (
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <input value={piNo} onChange={(e) => setPiNo(e.target.value)} placeholder="PI No.…" autoFocus style={{ flex: 1 }} />
+              <button type="button" className="btn sm" onClick={() => { setPiMode("auto"); setPiNo(autoPiNo); }} title="Use auto number">auto</button>
+            </div>
+          )}
+        </label>
+        <Field label="Invoice Date" value={date} onChange={setDate} type="date" />
+        <ReadonlyField label="PO No." value={data.order.po_no || ""} />
+      </div>
+      <PartiesSection order={data.order} shipping={shipping} setShipping={setShipping} buyerOnly />
+      <p className="hint-inline" style={{ marginTop: 6 }}>
+        Leave a buyer field empty to print the grey value — the contact registered for this deal on the RFQ, with the rest
+        from the customer master.
+      </p>
+      <div className="sub-h doc-sec-h">Service information</div>
+      <div className="form-grid doc-form-grid">
+        <Field label="Vessel / IMO No." value={shipping.sm_vessel || ""} onChange={setShip("sm_vessel")} />
+        <Field label="Service Description" value={shipping.service_description || ""} onChange={setShip("service_description")} wide />
+        <Field label="Service Location" value={shipping.service_location || ""} onChange={setShip("service_location")} />
+        <Field label="Man Power" value={shipping.man_power || ""} onChange={setShip("man_power")} placeholder="2 Engineers" />
+        {/* 확정 전에는 'TBD / On or before 01-Sep-2026' 처럼 적으므로 날짜가 아닌 자유 입력. */}
+        <Field label="Service Date" value={shipping.service_date || ""} onChange={setShip("service_date")} placeholder="TBD / On or before …" />
+        <Field label="Estimated Duration" value={shipping.duration || ""} onChange={setShip("duration")} placeholder="2 Days" />
+        <Field label="Vessel Schedule" value={shipping.vessel_schedule || ""} onChange={setShip("vessel_schedule")} placeholder="TBD" />
+        <Field label="Local Agent" value={shipping.local_agent || ""} onChange={setShip("local_agent")} placeholder="TBD" />
+        <label className="form-field">
+          <span>Currency</span>
+          <CurrencyToggle value={currency} onChange={setCurrency} />
+        </label>
+        <ComboField label="Payment Terms" value={terms.payment_terms || ""} onChange={(v) => setTerms({ ...terms, payment_terms: v })} options={PAYMENT_OPTIONS} />
+      </div>
+      <DocDefaultsHint order={data.order} />
+      <BankInfoSection currency={currency} />
+      </div>
+      </div>
+      <ItemEditor
+        items={items}
+        setItems={setItems}
+        packing={false}
+        currency={currency}
+        tableId="svc-pi-items"
+        headerActions={
+          <button className="btn sm" disabled={busy} onClick={() => setItems(normalizeItems(data.order.items))}>
+            Load order items
+          </button>
+        }
+        footerRows={[
+          { label: "Total invoice value", grand: true, value: <><DualCurrencyAmount value={total} currency={currency} /><span className="fx-note">{fxRateText()}</span></> },
+        ]}
+      />
+      </fieldset>
+      <div className="form-actions doc-actions">
+        <div className="doc-actions-left">
+          <DocPreviewButton orderId={data.order.id} kind="pi/pdf" filename="Proforma Invoice.pdf" disabled={!data.pi} xlsxKind="pi/xlsx" />
+        </div>
+        <div className="doc-actions-center">
+          <span className="hint-inline">Total invoice value {dualCurrencyText(total, currency)} · {fxRateText()}</span>
+        </div>
+        <div className="doc-actions-right">
+          {editable ? (
+            <>
+              {data.pi ? (
+                <button className="btn danger" disabled={busy} onClick={del}>
+                  Delete
+                </button>
+              ) : null}
+              <button className="btn" disabled={busy} onClick={cancel}>
+                Cancel
+              </button>
+              <button className="btn primary" disabled={busy || data.order.id === 0} onClick={save}>
+                Save
+              </button>
+            </>
+          ) : (
+            <span className="hint-inline">{editBlockReason("documents", data.order.assignee_id)}</span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** 7단계 Service Readiness 에 적어 둔 내용 → 서비스 송장의 서비스 정보 초깃값.
+ *  같은 사실을 두 번 입력하지 않게 하는 것이 목적이라, 확실히 대응되는 칸만 옮긴다. */
+function serviceInfoDefaults(order: DocumentDetail["order"]): Record<string, string> {
+  const s7 = (order.service_info?.["7"] || {}) as Record<string, unknown>;
+  const str = (k: string) => String(s7[k] ?? "").trim();
+  const from = str("scheduled_from");
+  const to = str("scheduled_to");
+  const period = from && to && from !== to ? `${from} ~ ${to}` : from || to;
+  return {
+    service_description: str("scope") || order.project_title || "",
+    service_location: str("location"),
+    man_power: str("engineers"),
+    service_date: str("confirmed_schedule") || period,
+    duration: "",
+    vessel_schedule: "",
+    local_agent: "",
+  };
 }
 
 function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChanged: () => void }) {

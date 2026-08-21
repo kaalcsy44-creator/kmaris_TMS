@@ -1084,6 +1084,97 @@ def _bank_block(form: _DocForm, company: Dict[str, Any], currency: str, quad: Li
     return [form.band("BANK INFORMATION"), form.pairs(rows, quad, value_style=form.center)]
 
 
+def is_service_doc(data: Dict[str, Any]) -> bool:
+    """서비스 딜의 문서인지 — 발행 서식이 물품용과 갈린다(선적정보 대신 서비스정보)."""
+    return (data.get("doc_variant") or "") == "service"
+
+
+def service_info_rows(data: Dict[str, Any]) -> List[tuple]:
+    """SERVICE INFORMATION 블록 — templates/'proforma invoice_sample_service.xlsx' 의 다섯 줄.
+    라벨·순서는 입력 화면(서비스 7단계 Proforma Invoice 탭)과 같다."""
+    sh = data.get("shipping", {}) or {}
+    terms = data.get("terms", {}) or {}
+    return [
+        ("Vessel / IMO No.", _vessel_imo(sh, data.get("vessel")),
+         "Service Description", sh.get("service_description", "")),
+        ("Service Location", sh.get("service_location", ""), "Man Power", sh.get("man_power", "")),
+        ("Service Date", sh.get("service_date", ""), "Estimated Duration", sh.get("duration", "")),
+        ("Vessel Schedule", sh.get("vessel_schedule", ""), "Local Agent", sh.get("local_agent", "")),
+        ("Currency", (data.get("currency") or "USD").upper(),
+         "Payment Terms", terms.get("payment_terms", "")),
+    ]
+
+
+def _make_service_proforma_invoice_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> bytes:
+    """서비스 딜의 Proforma Invoice PDF — templates/'proforma invoice_sample_service' 서식.
+
+    물품용과 다른 점만 셋이다: SHIPPING 대신 SERVICE INFORMATION, 품목표에 품번·HS 코드가
+    없고(용역엔 없는 칸이다) 대신 Unit 이 서고, 합계는 TOTAL INVOICE VALUE 한 줄뿐이다.
+    레터헤드·BUYER·은행정보·서명은 물품용과 같은 블록을 그대로 쓴다."""
+    s = _styles()
+    items = normalize_items(data.get("items", []))
+    currency = (data.get("currency") or "USD").upper()
+    shipping = data.get("shipping", {}) or {}
+    _, buyer = doc_parties(data)
+    money = pi_charges(data)
+    dec = pi_decimals(currency)
+
+    def amount(value: Any) -> str:
+        v = _num(value)
+        return "-" if abs(v) < 0.5 / (10 ** dec) else f"{v:,.{dec}f}"
+
+    buffer, doc, page_width = _form_doc("PROFORMA INVOICE")
+    form = _DocForm(PI_COLUMN_UNITS, page_width, s)
+    quad = form.cols(2, 2, 2, 2)                       # 라벨·값 4칸
+    item_w = form.cols(1, 3, 1, 1, 1, 1)               # No./Description/Qty/Unit/Unit Price/Amount
+    half = form.cols(4, 4)                             # 서명 2칸
+
+    story: List[Any] = []
+    story += _letterhead(company, "PROFORMA INVOICE", s)
+    story += [form.doc_info([("Invoice No.", data.get("doc_no", "")),
+                             ("Invoice Date", pi_doc_date(data.get("date", ""))),
+                             ("PO No.", shipping.get("po_no", ""))], quad), Spacer(1, 3 * mm)]
+    story += [form.band("BUYER"),
+              form.pairs([("Company Name", buyer.get("name", ""), "Address", buyer.get("address", "")),
+                          ("Contact", buyer.get("contact", ""), "e-mail", buyer.get("email", ""))], quad),
+              Spacer(1, 3 * mm)]
+    story += [form.band("SERVICE INFORMATION"),
+              form.pairs(service_info_rows(data), quad), Spacer(1, 3 * mm)]
+
+    headers = ["No.", "Description", "Qty", "Unit", "Unit Price", f"Amount ({currency})"]
+    rows: List[List[Any]] = [[form.p(h, form.th) for h in headers]]
+    for it in items:
+        rows.append([form.p(it["item_no"], form.center), form.p(it["description"], "base"),
+                     form.p(f"{it['qty']:g}", form.center), form.p(it.get("unit", ""), form.center),
+                     form.p(amount(it["unit_price"]), form.right),
+                     form.p(amount(it["amount"]), form.right)])
+    filler = max(0, PI_MIN_ITEM_ROWS - len(items))
+    rows += [[""] * 6 for _ in range(filler)]
+    table = Table(rows, colWidths=item_w, repeatRows=1,
+                  rowHeights=[None] * (len(items) + 1) + [16] * filler)
+    table.setStyle(form.item_style(len(rows)))
+    story.append(table)
+
+    grand = Table([[form.p("TOTAL INVOICE VALUE", form.grand),
+                    form.p(amount(money["total"]), form.grand_right)]],
+                  colWidths=[sum(item_w[:5]), item_w[5]])
+    grand.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), .35, MID_GRAY),
+                               ("BACKGROUND", (0, 0), (-1, -1), LIGHT_BLUE)] + form.CELL))
+    story.append(grand)
+
+    story += [Spacer(1, 3 * mm)] + _bank_block(form, company, currency, quad)
+    story += [form.band("DECLARATION"),
+              form.declaration("We hereby certify that this Proforma Invoice is true and correct."),
+              Spacer(1, 2 * mm)]
+    sign_img, stamp_img = _form_signature_images()
+    story += [form.signature([("Authorized Signature", sign_img, 40 * mm),
+                              (f"{company.get('company_name_en', '')}\n(Company Stamp)", stamp_img, 22 * mm)], half),
+              Spacer(1, 2 * mm), _footer_center(s)]
+
+    doc.build(story, onFirstPage=_footer, onLaterPages=_footer)
+    return buffer.getvalue()
+
+
 def _make_proforma_invoice_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> bytes:
     """Proforma Invoice PDF — templates/'proforma invoice_sample' 서식 그대로.
 
@@ -2268,6 +2359,8 @@ def make_pdf(doc_type: str, data: Dict[str, Any], company: Optional[Dict[str, An
     if doc_type == "commercial_invoice":
         return _make_commercial_invoice_pdf(payload, payload["company"])
     if doc_type == "proforma_invoice":
+        if is_service_doc(payload):
+            return _make_service_proforma_invoice_pdf(payload, payload["company"])
         return _make_proforma_invoice_pdf(payload, payload["company"])
     if doc_type == "tax_invoice":
         return _make_tax_invoice_pdf(payload, payload["company"])

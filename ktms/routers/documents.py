@@ -284,8 +284,12 @@ def save_proforma_invoice(order_id: int, body: ProformaInvoiceSave):
 
 
 def _pi_payload(s, order, pi) -> dict:
-    """Proforma Invoice 발행 payload — PDF·Excel 이 같은 값을 쓰도록 한 곳에서 만든다."""
-    return build_payload(
+    """Proforma Invoice 발행 payload — PDF·Excel 이 같은 값을 쓰도록 한 곳에서 만든다.
+
+    서비스 딜이면 doc_variant='service' 를 실어 보낸다 — 발행 서식이 갈린다
+    (선적정보 대신 서비스정보, 품목표에 품번·HS 코드 대신 Unit).
+    딜의 업무구분에서 정하므로 저장된 값과 무관하게 항상 딜 성격과 맞는 서식이 나온다."""
+    payload = build_payload(
         doc_no=pi.pi_no, date=pi.date,
         customer=_customer_for_order(s, order),
         vessel=_vessel_for_order(s, order),
@@ -294,6 +298,15 @@ def _pi_payload(s, order, pi) -> dict:
         shipping=pi.shipping or {}, po_no=order.po_no or "",
         export_ref=_project_no_for_order(s, order),
     )
+    if _is_service_deal(s, order):
+        payload["doc_variant"] = "service"
+    return payload
+
+
+def _is_service_deal(s, order) -> bool:
+    """이 오더가 속한 딜의 업무구분이 '서비스'인가."""
+    rfq = _rfq_for_order(s, order)
+    return bool(rfq) and _enum_val(rfq.work_type) == "서비스"
 
 
 @app.get("/api/admin/documents/{order_id}/pi/pdf",

@@ -17,7 +17,7 @@ from services.kmaris_docs import (
     normalize_items, calc_totals, _num, DOC_TITLES, doc_parties,
     packing_totals, consignee_mark_lines, _dim_parts, _invoice_shipping_rows,
     PI_COLUMN_UNITS, PI_MIN_ITEM_ROWS, PL_COLUMN_UNITS, PL_MIN_ITEM_ROWS,
-    pi_decimals, pi_charges, pi_doc_date,
+    pi_decimals, pi_charges, pi_doc_date, is_service_doc, service_info_rows,
 )
 
 _CONFIG_DIR = Path(__file__).resolve().parent.parent / "config"
@@ -461,6 +461,78 @@ def make_commercial_invoice_xlsx(
     return out.getvalue()
 
 
+def _service_pi_items_and_total(form: "_FormSheet", data: Dict[str, Any], r: int, currency: str) -> int:
+    """서비스 Proforma Invoice 품목표 — No./Description/Qty/Unit/Unit Price/Amount.
+    용역엔 품번·HS 코드가 없어 그 두 칸이 빠지고 Unit 이 선다. 합계는 TOTAL 한 줄."""
+    items = normalize_items(data.get("items", []))
+    num_fmt = _invoice_money_format(currency)
+
+    r = form.item_header(r, [("No.", 1, 1), ("Description", 2, 4), ("Qty", 5, 5),
+                             ("Unit", 6, 6), ("Unit Price", 7, 7), (f"Amount ({currency})", 8, 8)])
+    first = r
+    for i in range(max(len(items), PI_MIN_ITEM_ROWS)):
+        it = items[i] if i < len(items) else None
+        form.put(r, 1, it["item_no"] if it else "", font=form.item_font, align=form.center)
+        form.merge(r, 2, r, 4)
+        form.put(r, 2, it["description"] if it else "", font=form.item_font, align=form.left)
+        form.put(r, 5, _num(it["qty"]) if it else "", font=form.item_font, align=form.center)
+        form.put(r, 6, (it.get("unit") or "") if it else "", font=form.item_font, align=form.center)
+        form.put(r, 7, _num(it["unit_price"]) if it else "", font=form.item_font, align=form.right, fmt=num_fmt)
+        form.put(r, 8, f'=IF(E{r}="","",E{r}*G{r})', font=form.item_font, align=form.right, fmt=num_fmt)
+        form.bd(r, 1, r, form.ncol, None if it else form.alt)
+        # 용역 설명은 여러 줄로 길다(작업 범위·일정·제외사항). 폭이 넓은 만큼 줄당 글자 수도 넉넉히.
+        form.ws.row_dimensions[r].height = form.item_row_height(it["description"], 55) if it else 18
+        r += 1
+    last = r - 1
+
+    form.merge(r, 1, r, 7)
+    form.put(r, 1, "TOTAL INVOICE VALUE", fill=form.lightblue, font=form.bold, align=form.center)
+    form.put(r, 8, f"=SUM(H{first}:H{last})", fill=form.lightblue, font=form.bold,
+             align=form.right, fmt=num_fmt)
+    form.bd(r, 1, r, form.ncol)
+    form.ws.row_dimensions[r].height = 18
+    return r + 1
+
+
+def _make_service_proforma_invoice_xlsx(data: Dict[str, Any], company: Dict[str, Any]) -> bytes:
+    """서비스 딜의 Proforma Invoice Excel — templates/'proforma invoice_sample_service.xlsx' 서식.
+    물품용과 뼈대는 같고, SHIPPING 대신 SERVICE INFORMATION · 품목표 구성 · 합계 한 줄만 다르다."""
+    currency = (data.get("currency") or "USD").upper()
+    _, buyer = doc_parties(data)
+
+    wb, form, r = _invoice_sheet(data, company, "PROFORMA INVOICE", "Proforma Invoice")
+    r = form.band(r, "BUYER")
+    r = form.pairs(r, [("Company Name", buyer.get("name", ""), "Address", buyer.get("address", "")),
+                       ("Contact", buyer.get("contact", ""), "e-mail", buyer.get("email", ""))],
+                   heights={0: 30.6, 1: 18.6})
+    r += 1
+    r = form.band(r, "SERVICE INFORMATION")
+    r = form.pairs(r, service_info_rows(data))
+    r += 1
+    r = _service_pi_items_and_total(form, data, r, currency)
+    r = _pi_bank_block(form, company, r, currency)
+
+    last = _invoice_closing(form, company, r - 1, "Proforma Invoice")
+    form.page_setup(last)
+    _apply_noto_font(wb)
+    out = io.BytesIO()
+    wb.save(out)
+    return out.getvalue()
+
+
+def _pi_bank_block(form: "_FormSheet", company: Dict[str, Any], r: int, currency: str) -> int:
+    """BANK INFORMATION — 통화에 맞는 계좌(외화/원화)를 Settings 에서 가져온다."""
+    r += 1
+    r = form.band(r, "BANK INFORMATION")
+    foreign = currency != "KRW"
+    holder = (company.get("fx_bank_holder") if foreign else company.get("bank_holder")) or company.get("company_name_en", "")
+    bank_name = (company.get("fx_bank_name") if foreign else company.get("bank_name")) or ""
+    account = (company.get("fx_bank_account") if foreign else company.get("bank_account")) or ""
+    return form.pairs(r, [("Remittee's name", holder, "Bank Name & Address", bank_name),
+                          ("Swift Code", company.get("swift", ""), "Remittee's Account No.", account)],
+                      value_align=form.center)
+
+
 def make_proforma_invoice_xlsx(
     data: Dict[str, Any], company: Optional[Dict[str, Any]] = None
 ) -> bytes:
@@ -471,6 +543,8 @@ def make_proforma_invoice_xlsx(
     숫자를 고치면 합계가 따라 움직인다.
     """
     company = company or {}
+    if is_service_doc(data):
+        return _make_service_proforma_invoice_xlsx(data, company)
     currency = (data.get("currency") or "USD").upper()
     shipping = data.get("shipping", {}) or {}
     _, buyer = doc_parties(data)
@@ -488,16 +562,7 @@ def make_proforma_invoice_xlsx(
     r += 1
     r = _invoice_items_and_totals(form, data, r, currency)
 
-    # ── BANK INFORMATION — 통화에 맞는 계좌(외화/원화)를 Settings 에서 가져온다 ──
-    r += 1
-    r = form.band(r, "BANK INFORMATION")
-    foreign = currency != "KRW"
-    holder = (company.get("fx_bank_holder") if foreign else company.get("bank_holder")) or company.get("company_name_en", "")
-    bank_name = (company.get("fx_bank_name") if foreign else company.get("bank_name")) or ""
-    account = (company.get("fx_bank_account") if foreign else company.get("bank_account")) or ""
-    r = form.pairs(r, [("Remittee's name", holder, "Bank Name & Address", bank_name),
-                       ("Swift Code", company.get("swift", ""), "Remittee's Account No.", account)],
-                   value_align=form.center)
+    r = _pi_bank_block(form, company, r, currency)
 
     last = _invoice_closing(form, company, r - 1, "Proforma Invoice")
     form.page_setup(last)
