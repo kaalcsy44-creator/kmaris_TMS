@@ -1883,12 +1883,34 @@ const VESSEL_TYPES = [
   "Tug / Offshore",
 ];
 
-export function ItemsTab() {
+// 품목 마스터는 물품(Parts)과 용역(Service)을 한 표에 섞어 두면 서로의 빈칸만 는다 —
+// 용역엔 품번·원산지·HS 코드가 없고, 물품엔 그런 칸이 다 필요하다. 그래서 같은 마스터를
+// item_type 으로 갈라 탭 하나씩 준다. 탭마다 보여 줄 칸과 입력 칸이 다르다.
+export type ItemKind = "part" | "service";
+
+const ITEM_KIND_LABEL: Record<ItemKind, string> = { part: "Parts", service: "Service" };
+
+export function ItemsTab({ kind = "part" }: { kind?: ItemKind }) {
+  const isService = kind === "service";
+  // 고객·공급사·구매가·판매가·마진은 가격 이력에서 온 읽기전용 파생값이라 편집 폼엔 없다.
+  const trade: [keyof SettingsItem, string, ((r: SettingsItem) => React.ReactNode)?, string?][] = [
+    ["vendor", "Vendor", (r) => r.vendor || <span className="dash">—</span>, "ms-party"],
+    ["buy", "Purchase Price", (r) => fmtPrice(r.buy), "ms-num"],
+    ["sell", "Sales Price", (r) => fmtPrice(r.sell), "ms-num"],
+    ["margin_pct", "Margin", (r) => marginText(r.margin_pct, r.margin_cross), "ms-num"],
+    ["std_price", "Std Price", undefined, "ms-num"],
+  ];
+  const category: [keyof SettingsItem, string, ((r: SettingsItem) => React.ReactNode)?, string?] =
+    ["category_path", "Category", (r) => r.category_path
+      ? <span className="cat-path">{r.category_path}</span>
+      : <span className="dash">Unclassified</span>];
+
   return (
     <MasterSection<SettingsItem>
-      title="Item Master"
-      empty={{ id: 0, part_no: "", description: "", maker: "", origin: "", unit: "PCS", hs_code: "", std_price: 0, category_id: null, category_path: "", customer: "", vendor: "", buy: null, sell: null, margin_pct: null, margin_cross: false }}
-      load={fetchSettingsItems}
+      title={ITEM_KIND_LABEL[kind]}
+      empty={{ id: 0, part_no: "", description: "", maker: "", origin: "", unit: isService ? "EA" : "PCS", hs_code: "", std_price: 0, item_type: kind, category_id: null, category_path: "", customer: "", vendor: "", buy: null, sell: null, margin_pct: null, margin_cross: false }}
+      // 마스터는 한 벌이고 탭은 그중 한쪽만 본다 — 목록을 받아 이 탭의 구분만 남긴다.
+      load={() => fetchSettingsItems().then((rows) => rows.filter((r) => (r.item_type || "part") === kind))}
       // 마스터의 분류가 곧 품목표 Category 셀의 값이므로, 저장·삭제 후 공유 캐시를 비운다.
       create={async (b) => {
         const r = await createSettingsItem(b);
@@ -1906,39 +1928,64 @@ export function ItemsTab() {
         return r;
       }}
       // 앞쪽은 "누구에게 판 무엇인가"(고객·설명), 뒤쪽은 거래 조건(공급사·구매가·
-      // 판매가·마진) 순. 고객·공급사·가격 3열은 가격 이력에서 온 읽기전용 파생값이라
-      // 편집 폼(fields)에는 넣지 않는다.
-      columns={[
-        ["customer", "Customer", (r) => r.customer || <span className="dash">—</span>, "ms-party"],
-        ["description", "Description", undefined, "ms-desc"],
-        ["part_no", "Part No."],
-        ["category_path", "Category", (r) => r.category_path
-          ? <span className="cat-path">{r.category_path}</span>
-          : <span className="dash">Unclassified</span>],
-        ["maker", "Maker"],
-        ["origin", "Origin"],
-        ["unit", "Unit"],
-        ["hs_code", "HS Code"],
-        ["vendor", "Vendor", (r) => r.vendor || <span className="dash">—</span>, "ms-party"],
-        ["buy", "Purchase Price", (r) => fmtPrice(r.buy), "ms-num"],
-        ["sell", "Sales Price", (r) => fmtPrice(r.sell), "ms-num"],
-        ["margin_pct", "Margin", (r) => marginText(r.margin_pct, r.margin_cross), "ms-num"],
-        ["std_price", "Std Price", undefined, "ms-num"],
-      ]}
+      // 판매가·마진) 순. 용역 탭은 품번·제조사·원산지·HS 코드를 걷어낸다(전부 빈칸이라).
+      columns={isService
+        ? [
+            ["customer", "Customer", (r) => r.customer || <span className="dash">—</span>, "ms-party"],
+            ["description", "Service", undefined, "ms-desc"],
+            category,
+            ["unit", "Unit"],
+            ...trade,
+          ]
+        : [
+            ["customer", "Customer", (r) => r.customer || <span className="dash">—</span>, "ms-party"],
+            ["description", "Description", undefined, "ms-desc"],
+            ["part_no", "Part No."],
+            category,
+            ["maker", "Maker"],
+            ["origin", "Origin"],
+            ["unit", "Unit"],
+            ["hs_code", "HS Code"],
+            ...trade,
+          ]}
       tableClass="ms-table--items"
-      fields={[
-        ["part_no", "Part No. *"],
-        ["description", "Description"],
-        ["maker", "Maker"],
-        ["origin", "Origin"],
-        ["unit", "Unit"],
-        ["hs_code", "HS Code"],
-        ["std_price", "Std Price"],
-      ]}
-      required="part_no"
+      fields={isService
+        ? [
+            ["description", "Service Name *"],
+            ["unit", "Unit"],
+            ["std_price", "Std Price"],
+            ["item_type", "Type"],
+          ]
+        : [
+            ["part_no", "Part No. *"],
+            ["description", "Description"],
+            ["maker", "Maker"],
+            ["origin", "Origin"],
+            ["unit", "Unit"],
+            ["hs_code", "HS Code"],
+            ["std_price", "Std Price"],
+            ["item_type", "Type"],
+          ]}
+      // 용역은 품번이 없다 — 필수 칸이 설명(용역명)으로 바뀐다.
+      required={isService ? "description" : "part_no"}
       numeric={["std_price"]}
       // 검색은 화면 컬럼 기본값 대신 직접 지정 — 가격 열은 객체라 기본 문자열화가 안 된다.
       searchText={(r) => [r.customer, r.description, r.part_no, r.category_path, r.maker, r.origin, r.hs_code, r.vendor].join(" ")}
+      // Type 을 바꿔 저장하면 그 항목은 반대편 탭으로 옮겨 간다(잘못 잡힌 구분 교정용).
+      renderField={({ key, label, form, setForm }) =>
+        key === "item_type" ? (
+          <label className="form-field" key="item_type">
+            <span>{label}</span>
+            <select
+              value={form.item_type || "part"}
+              onChange={(e) => setForm({ ...form, item_type: e.target.value as ItemKind })}
+            >
+              <option value="part">Parts — 물품</option>
+              <option value="service">Service — 용역</option>
+            </select>
+          </label>
+        ) : null
+      }
       extraForm={(form, setForm) => (
         <CategoryPicker
           value={form.category_id}
@@ -1948,6 +1995,7 @@ export function ItemsTab() {
     />
   );
 }
+
 
 // 품목 분류 캐스케이딩 선택(대>중>소). value=가장 깊은 선택 노드 id. 미분류=null.
 // 저장은 항상 '가장 깊게 선택된' 노드를 value 로 둔다(대만 선택→대 id, 소까지→소 id).

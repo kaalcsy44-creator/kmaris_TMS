@@ -2912,6 +2912,7 @@ class ItemMasterSave(BaseModel):
     unit: str | None = "PCS"
     hs_code: str | None = ""
     std_price: float | None = 0.0
+    item_type: str | None = "part"   # 'part'=물품, 'service'=용역
     category_id: int | None = None   # 분류 노드 id(가장 깊은 선택). None=미분류
 
 

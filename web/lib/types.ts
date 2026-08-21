@@ -94,6 +94,7 @@ export type SettingsItem = {
   std_price: number;
   category_id: number | null;    // 분류 노드 id(가장 깊은 선택). null=미분류
   category_path: string;         // 표시용 "대 > 중 > 소" (백엔드 계산, 읽기전용)
+  item_type: "part" | "service"; // 물품 / 용역 — Parts·Service 탭을 가르는 값
   // ↓ 거래 실적(가격 이력)에서 뽑은 읽기전용 파생값 — 편집 폼에는 나오지 않는다.
   customer: string;              // 가장 최근 판매 건의 고객
   vendor: string;                // 가장 최근 구매 건의 공급사

@@ -129,6 +129,8 @@ _MIGRATIONS = {
     "item_master": {
         # 품목 분류 연결(대>중>소 트리의 가장 깊은 노드 id). FK 는 신규 DB 모델에서만 강제.
         "category_id": "INTEGER",
+        # 물품/용역 구분 — Item Master 를 Parts·Service 탭으로 가른다.
+        "item_type": "VARCHAR(10) DEFAULT 'part'",
     },
     "packing_lists": {
         # Packing List 자유 메모(예: "Cartons in 5 pallets"). DEFAULT 없이 추가.
@@ -926,6 +928,36 @@ def migrate_backfill_price_history():
     print(f"[OK] backfill_price_history applied: {n} price rows built.")
 
 
+def migrate_classify_item_types():
+    """1회성: 기존 품목 마스터를 물품/용역으로 가른다(Parts·Service 탭).
+
+    새 컬럼은 전부 'part' 로 채워지므로, 품번 없이 'Traveling Charge'·'Labor/Service
+    Charge'·'Accommodation' 처럼 용역이 분명한 항목만 'service' 로 돌려 놓는다.
+    판정은 services.item_ledger.guess_item_type 과 같다(신규 자동 생성 품목도 동일 기준).
+    이후 구분 변경은 화면 편집으로 — applied_migrations 마커로 1회만 실행."""
+    eng = get_engine()
+    insp = inspect(eng)
+    if not insp.has_table("item_master"):
+        return
+    with eng.begin() as conn:
+        conn.execute(text(
+            "CREATE TABLE IF NOT EXISTS applied_migrations (name VARCHAR(100) PRIMARY KEY)"))
+        if conn.execute(text(
+                "SELECT 1 FROM applied_migrations WHERE name='classify_item_types'")).first():
+            return
+        from services.item_ledger import guess_item_type
+        rows = conn.execute(text("SELECT id, part_no, description FROM item_master")).fetchall()
+        n = 0
+        for r in rows:
+            kind = guess_item_type(r[1], r[2])
+            conn.execute(text("UPDATE item_master SET item_type=:t WHERE id=:i"),
+                         {"t": kind, "i": r[0]})
+            n += 1 if kind == "service" else 0
+        conn.execute(text(
+            "INSERT INTO applied_migrations (name) VALUES ('classify_item_types')"))
+    print(f"[OK] classify_item_types applied: {n} service item(s) of {len(rows)}.")
+
+
 def migrate_reset_mail_sync_cursor():
     """1회성: 메일 동기화 커서를 처음으로 되돌린다.
 
@@ -1049,5 +1081,6 @@ if __name__ == "__main__":
     migrate_normalize_incoterms()
     migrate_split_stage_dates_to_orders()
     migrate_backfill_price_history()
+    migrate_classify_item_types()
     migrate_seed_mail_groups()
     print("Done.")

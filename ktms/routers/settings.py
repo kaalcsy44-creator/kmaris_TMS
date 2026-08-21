@@ -90,7 +90,7 @@ from sqlalchemy import func
 from db.models import ItemPriceHistory
 from services.item_ledger import (
     ledger_rows, item_history, rebuild_price_history, stamp_history_item, match_key,
-    master_price_summary,
+    master_price_summary, guess_item_type,
 )
 
 
@@ -716,6 +716,7 @@ def settings_items():
                 "description": i.description or "", "maker": i.maker or "",
                 "origin": i.origin or "", "unit": i.unit or "PCS",
                 "hs_code": i.hs_code or "", "std_price": i.std_price or 0.0,
+                "item_type": i.item_type or "part",
                 "category_id": i.category_id,
                 "category_path": _category_path(cat_by_id, i.category_id),
                 "customer": cust.get(sm.get("customer_id")) or "",
@@ -729,9 +730,18 @@ def settings_items():
         s.close()
 
 
+def _item_type(v: str | None) -> str:
+    """물품/용역 값 정규화 — 아는 값만 통과시키고 나머지는 물품으로 둔다."""
+    return "service" if (v or "").strip().lower() == "service" else "part"
+
+
 @app.post("/api/admin/settings/items", dependencies=[Depends(require_token)])
 def create_item(body: ItemMasterSave):
-    if not body.part_no.strip():
+    # 용역(Service)은 품번이 없다 — 대신 용역명(description)을 필수로 받는다.
+    if _item_type(body.item_type) == "service":
+        if not (body.description or "").strip():
+            raise HTTPException(status_code=400, detail="Service 이름(Description)을 입력하세요.")
+    elif not body.part_no.strip():
         raise HTTPException(status_code=400, detail="Part No.를 입력하세요.")
     s = get_session()
     try:
@@ -740,6 +750,7 @@ def create_item(body: ItemMasterSave):
             maker=body.maker or "", origin=body.origin or "",
             unit=body.unit or "PCS", hs_code=body.hs_code or "",
             std_price=body.std_price or 0.0, category_id=body.category_id,
+            item_type=_item_type(body.item_type),
         )
         s.add(item)
         s.commit()
@@ -762,6 +773,7 @@ def update_item(row_id: int, body: ItemMasterSave):
         item.unit = body.unit or "PCS"
         item.hs_code = body.hs_code or ""
         item.std_price = body.std_price or 0.0
+        item.item_type = _item_type(body.item_type)
         item.category_id = body.category_id
         s.commit()
         return {"ok": True, "id": item.id}
@@ -918,7 +930,8 @@ def _assign_one_category(s, target: "ItemLedgerAssign") -> tuple[int, int]:
         else:
             master = ItemMaster(
                 part_no=pn, description=desc, maker=(target.maker or ""),
-                unit="PCS", category_id=target.category_id,
+                unit="PCS", item_type=guess_item_type(pn, desc),
+                category_id=target.category_id,
             )
             s.add(master)
     s.flush()

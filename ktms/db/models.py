@@ -227,6 +227,9 @@ class ItemMaster(Base):
     unit        = Column(String(20), default="PCS")
     hs_code     = Column(String(20))
     std_price   = Column(Float, default=0.0)
+    # 'part'=물품, 'service'=용역(출장·기술료·숙박 등 배송할 물건이 없는 항목).
+    # 목록을 Parts/Service 탭으로 가른다. NULL 은 옛 데이터 → 'part' 로 읽는다.
+    item_type   = Column(String(10), default="part")
     # 분류(가장 깊은 선택 노드). 보통 소분류 id, 소분류 없으면 중분류 id. NULL=미분류.
     category_id = Column(Integer, ForeignKey("item_categories.id"), nullable=True)
     created_at  = Column(DateTime, default=datetime.utcnow)

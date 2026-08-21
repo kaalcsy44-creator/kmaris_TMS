@@ -40,6 +40,28 @@ def match_key(part_no, description) -> str:
     return ("D:" + dk) if dk else ""
 
 
+# 용역(service)으로 볼 만한 낱말 — 배송할 물건이 없는 청구 항목.
+# 부품명에도 흔한 낱말(repair kit, service tank 등)에 걸리지 않도록,
+# 품번이 없는 항목에만 적용한다(guess_item_type 참고).
+_SERVICE_WORDS = (
+    "charge", "fee", "labor", "labour", "accommodation", "traveling", "travelling",
+    "travel", "transportation", "attendance", "supervision", "supervisor", "technician",
+    "engineer dispatch", "man-day", "manday", "overtime", "commissioning", "inspection",
+    "출장", "숙박", "기술료", "인건비", "용역", "수수료", "운임",
+)
+
+
+def guess_item_type(part_no, description) -> str:
+    """새 품목의 물품/용역 초기 구분. 확실할 때만 'service', 나머지는 'part'.
+
+    품번이 있으면 물품으로 본다 — 'Repair Kit'·'Service Tank Valve' 처럼 부품명에
+    용역 낱말이 섞이는 일이 흔해서, 품번 없는 항목에만 낱말 판정을 건다."""
+    if _norm(part_no):
+        return "part"
+    d = str(description or "").lower()
+    return "service" if any(w in d for w in _SERVICE_WORDS) else "part"
+
+
 def _num(v, default: float = 0.0) -> float:
     try:
         return float(v)
@@ -241,6 +263,7 @@ def apply_line_categories(session, items) -> int:
                 description=(line.get("description") or "").strip(),
                 maker=(line.get("maker") or ""),
                 unit=(line.get("unit") or "PCS"),
+                item_type=guess_item_type(line.get("part_no"), line.get("description")),
                 category_id=cat_id,
             )
             session.add(master)
