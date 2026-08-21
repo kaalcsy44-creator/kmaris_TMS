@@ -90,6 +90,7 @@ from sqlalchemy import func
 from db.models import ItemPriceHistory
 from services.item_ledger import (
     ledger_rows, item_history, rebuild_price_history, stamp_history_item, match_key,
+    master_price_summary,
 )
 
 
@@ -696,18 +697,34 @@ def delete_item_category(row_id: int):
 
 
 @app.get("/api/admin/settings/items", dependencies=[Depends(require_token)])
+@cached_aggregate()
 def settings_items():
+    """품목 마스터 목록. 정적 속성에 더해 거래 실적(가격 이력)에서 뽑은
+    최근 고객·공급사·구매가·판매가·마진을 함께 준다(읽기 전용 파생값).
+    이력 전체를 훑으므로 쓰기 전까지 짧게 캐시한다."""
     s = get_session()
     try:
         cat_by_id = _category_maps(s)
-        return [{
-            "id": i.id, "part_no": i.part_no or "",
-            "description": i.description or "", "maker": i.maker or "",
-            "origin": i.origin or "", "unit": i.unit or "PCS",
-            "hs_code": i.hs_code or "", "std_price": i.std_price or 0.0,
-            "category_id": i.category_id,
-            "category_path": _category_path(cat_by_id, i.category_id),
-        } for i in s.query(ItemMaster).order_by(ItemMaster.part_no).all()]
+        summary = master_price_summary(s)
+        cust = dict(s.query(Customer.id, Customer.name).all())
+        vend = dict(s.query(Vendor.id, Vendor.name).all())
+        out = []
+        for i in s.query(ItemMaster).order_by(ItemMaster.part_no).all():
+            sm = summary.get(i.id) or {}
+            row = {
+                "id": i.id, "part_no": i.part_no or "",
+                "description": i.description or "", "maker": i.maker or "",
+                "origin": i.origin or "", "unit": i.unit or "PCS",
+                "hs_code": i.hs_code or "", "std_price": i.std_price or 0.0,
+                "category_id": i.category_id,
+                "category_path": _category_path(cat_by_id, i.category_id),
+                "customer": cust.get(sm.get("customer_id")) or "",
+                "vendor": vend.get(sm.get("vendor_id")) or "",
+                "buy": sm.get("buy"), "sell": sm.get("sell"),
+            }
+            _annotate_margin(row)   # margin_pct(USD 환산) + margin_cross
+            out.append(row)
+        return out
     finally:
         s.close()
 

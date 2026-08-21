@@ -358,3 +358,51 @@ def _history_out(rows: list) -> list[dict]:
         "amount": h.amount or 0.0,
         "doc_date": h.doc_date,
     } for h in rows]
+
+
+def master_price_summary(session) -> dict[int, dict]:
+    """item_master.id → 최근 구매가·판매가 + 최근 거래 상대(고객·공급사).
+
+    Item Master 목록의 Customer·Vendor·Purchase/Sales Price·Margin 열 값 원천.
+    가격은 마스터에 연결된(item_id) 이력만 본다(미연결 이력은 Item > Category 화면 담당).
+      · Customer = 가장 최근 '판매' 행의 고객(없으면 고객이 찍힌 가장 최근 행)
+      · Vendor   = 가장 최근 '구매' 행의 공급사(견적·오더 원가처럼 공급사가 없는
+                   구매 행도 있어, 공급사가 찍힌 가장 최근 행으로 대체)
+    """
+    cols = session.query(
+        ItemPriceHistory.item_id, ItemPriceHistory.price_type,
+        ItemPriceHistory.unit_price, ItemPriceHistory.currency, ItemPriceHistory.fx_rate,
+        ItemPriceHistory.doc_date, ItemPriceHistory.customer_id, ItemPriceHistory.vendor_id,
+        ItemPriceHistory.id,
+    ).filter(ItemPriceHistory.item_id.isnot(None)).all()
+
+    by_item: dict[int, list] = {}
+    for r in cols:
+        by_item.setdefault(r.item_id, []).append(r)
+
+    def newest(rows: list):
+        return max(rows, key=lambda r: (r.doc_date or "", r.id)) if rows else None
+
+    out: dict[int, dict] = {}
+    for item_id, rows in by_item.items():
+        buys = [r for r in rows if r.price_type == "buy"]
+        sells = [r for r in rows if r.price_type == "sell"]
+        b, sl = newest(buys), newest(sells)
+        cust = newest([r for r in sells if r.customer_id]) or newest([r for r in rows if r.customer_id])
+        vend = newest([r for r in buys if r.vendor_id]) or newest([r for r in rows if r.vendor_id])
+
+        def price(r):
+            if r is None:
+                return None
+            return {
+                "unit_price": r.unit_price or 0.0, "currency": r.currency or "USD",
+                "date": r.doc_date, "fx_rate": r.fx_rate,
+            }
+
+        out[item_id] = {
+            "buy": price(b),
+            "sell": price(sl),
+            "customer_id": cust.customer_id if cust else None,
+            "vendor_id": vend.vendor_id if vend else None,
+        }
+    return out

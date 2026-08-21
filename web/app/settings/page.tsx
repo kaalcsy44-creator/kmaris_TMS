@@ -1887,7 +1887,7 @@ export function ItemsTab() {
   return (
     <MasterSection<SettingsItem>
       title="Item Master"
-      empty={{ id: 0, part_no: "", description: "", maker: "", origin: "", unit: "PCS", hs_code: "", std_price: 0, category_id: null, category_path: "" }}
+      empty={{ id: 0, part_no: "", description: "", maker: "", origin: "", unit: "PCS", hs_code: "", std_price: 0, category_id: null, category_path: "", customer: "", vendor: "", buy: null, sell: null, margin_pct: null, margin_cross: false }}
       load={fetchSettingsItems}
       // 마스터의 분류가 곧 품목표 Category 셀의 값이므로, 저장·삭제 후 공유 캐시를 비운다.
       create={async (b) => {
@@ -1905,18 +1905,27 @@ export function ItemsTab() {
         invalidateMasterCategories();
         return r;
       }}
+      // 앞쪽은 "누구에게 판 무엇인가"(고객·설명), 뒤쪽은 거래 조건(공급사·구매가·
+      // 판매가·마진) 순. 고객·공급사·가격 3열은 가격 이력에서 온 읽기전용 파생값이라
+      // 편집 폼(fields)에는 넣지 않는다.
       columns={[
+        ["customer", "Customer", (r) => r.customer || <span className="dash">—</span>, "ms-party"],
+        ["description", "Description", undefined, "ms-desc"],
         ["part_no", "Part No."],
         ["category_path", "Category", (r) => r.category_path
           ? <span className="cat-path">{r.category_path}</span>
           : <span className="dash">Unclassified</span>],
-        ["description", "Description"],
         ["maker", "Maker"],
         ["origin", "Origin"],
         ["unit", "Unit"],
         ["hs_code", "HS Code"],
-        ["std_price", "Std Price"],
+        ["vendor", "Vendor", (r) => r.vendor || <span className="dash">—</span>, "ms-party"],
+        ["buy", "Purchase Price", (r) => fmtPrice(r.buy), "ms-num"],
+        ["sell", "Sales Price", (r) => fmtPrice(r.sell), "ms-num"],
+        ["margin_pct", "Margin", (r) => marginText(r.margin_pct, r.margin_cross), "ms-num"],
+        ["std_price", "Std Price", undefined, "ms-num"],
       ]}
+      tableClass="ms-table--items"
       fields={[
         ["part_no", "Part No. *"],
         ["description", "Description"],
@@ -1928,6 +1937,8 @@ export function ItemsTab() {
       ]}
       required="part_no"
       numeric={["std_price"]}
+      // 검색은 화면 컬럼 기본값 대신 직접 지정 — 가격 열은 객체라 기본 문자열화가 안 된다.
+      searchText={(r) => [r.customer, r.description, r.part_no, r.category_path, r.maker, r.origin, r.hs_code, r.vendor].join(" ")}
       extraForm={(form, setForm) => (
         <CategoryPicker
           value={form.category_id}
@@ -2086,8 +2097,11 @@ function fmtPrice(p: { unit_price: number; currency: string } | null): string {
 // 마진% — 백엔드가 USD 환산으로 계산해 준 margin_pct 사용. 통화가 달라 환산된
 // 값이면 '~'를 붙여 근사치임을 표시(환율 가정으로 산출).
 function marginPct(row: ItemLedgerRow): string {
-  if (row.margin_pct == null) return "—";
-  return `${row.margin_cross ? "~" : ""}${row.margin_pct.toFixed(1)}%`;
+  return marginText(row.margin_pct, row.margin_cross);
+}
+function marginText(pct: number | null | undefined, cross?: boolean): string {
+  if (pct == null) return "—";
+  return `${cross ? "~" : ""}${pct.toFixed(1)}%`;
 }
 function fmtBuiltAt(iso: string | null): string {
   return iso ? iso.replace("T", " ").slice(0, 16) : "";
@@ -2886,8 +2900,8 @@ function MasterSection<T extends { id: number }>({
   create: (body: Omit<T, "id">) => Promise<unknown>;
   update: (id: number, body: Omit<T, "id">) => Promise<unknown>;
   remove: (id: number) => Promise<unknown>;
-  // 각 컬럼: [키, 헤더라벨, (선택)셀 커스텀 렌더]
-  columns: [keyof T, string, ((row: T) => ReactNode)?][];
+  // 각 컬럼: [키, 헤더라벨, (선택)셀 커스텀 렌더, (선택)칸 클래스 — th·td 공통]
+  columns: [keyof T, string, ((row: T) => ReactNode)?, string?][];
   fields: [keyof T, string][];
   required: keyof T;
   numeric?: (keyof T)[];
@@ -3079,8 +3093,8 @@ function MasterSection<T extends { id: number }>({
       <table className={`mini wide ms-table${tableClass ? ` ${tableClass}` : ""}`}>
         <thead>
           <tr>
-            {columns.map(([, label]) => (
-              <th key={label}>{label}</th>
+            {columns.map(([, label, , cls]) => (
+              <th key={label} className={cls}>{label}</th>
             ))}
             <th className="ms-actcol"></th>
           </tr>
@@ -3115,8 +3129,8 @@ function MasterSection<T extends { id: number }>({
         className={`${sub ? "ms-sub" : ""}${row.id === editId ? " sel" : ""}`}
         onClick={() => openEdit(row)}
       >
-        {columns.map(([key, , renderCell], i) => (
-          <td key={String(key)}>
+        {columns.map(([key, , renderCell, cls], i) => (
+          <td key={String(key)} className={cls}>
             {sub && i === 0
               ? group?.subFirst?.(row) ?? null
               : renderCell

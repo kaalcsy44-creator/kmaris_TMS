@@ -1252,6 +1252,31 @@ table.mini.wide.ms-table.ms-table--even td:nth-child(n + 2):not(.ms-actcol) {
   width: auto;
   min-width: 0;
 }
+/* ── 품목 마스터 표(Customer·Description·… ·Vendor·가격 3열) ────────────────
+   회사 목록용 폭 규칙(첫 칸이 남는 폭을 독차지하고 나머지는 width:1%)을 그대로 쓰면
+   맨 앞 Customer 만 텅 빈 채 넓어지고 Description 은 한 낱말 폭까지 눌린다.
+   여기서는 폭을 내용에 맡기고(auto), 설명 칸에만 최소폭을 주며, 거래처·금액 칸은
+   중간에서 접히지 않게 한 줄로 고정한다. */
+table.mini.wide.ms-table.ms-table--items th:not(.ms-actcol),
+table.mini.wide.ms-table.ms-table--items td:not(.ms-actcol) {
+  width: auto;
+  min-width: 0;
+  white-space: normal;
+}
+table.mini.wide.ms-table.ms-table--items th.ms-desc,
+table.mini.wide.ms-table.ms-table--items td.ms-desc {
+  min-width: 220px;
+}
+table.mini.wide.ms-table.ms-table--items th.ms-party,
+table.mini.wide.ms-table.ms-table--items td.ms-party {
+  min-width: 110px;
+}
+table.mini.wide.ms-table.ms-table--items th.ms-num,
+table.mini.wide.ms-table.ms-table--items td.ms-num {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
 .ms-edit-btn {
   color: #8a97ab;
   font-size: 12px;
