@@ -14095,3 +14095,14 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
   padding: 0 6px 0 0;
   box-shadow: none;
 }
+
+/* 읽기모드 품목표 머리 — 제목만 남긴다.
+   편집 도구 묶음(.items-head-actions)을 감춰도 그 자리를 차지하는 요소가 남으면
+   제목 밴드 오른쪽에 빈 상자로 보인다. 자식을 명시적으로 정리하고 정렬도 왼쪽으로 되돌린다
+   (도구가 없으면 space-between 이 할 일이 없다). */
+.form-fieldset.vm-read .items-head {
+  justify-content: flex-start;
+}
+.form-fieldset.vm-read .items-head > *:not(.sub-h):not(.form-section-title) {
+  display: none !important;
+}
