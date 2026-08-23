@@ -13768,9 +13768,13 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 .form-fieldset.vm-read .items-head-exclude,
 .form-fieldset.vm-read .row-tools,
 .form-fieldset.vm-read .pb-apply,
-.form-fieldset.vm-read .ocr-bar,
-.form-fieldset.vm-read .item-add-row {
+.form-fieldset.vm-read .ocr-bar {
   display: none;
+}
+/* 삭제(×) 열을 감추면 그 옆 No. 열의 좌측 고정 위치(left:32px)가 어긋난다 — 0 으로 당긴다. */
+.form-fieldset.vm-read .table-wrap table.mini.wide.lead-tools th.seq,
+.form-fieldset.vm-read .table-wrap table.mini.wide.lead-tools td.seq {
+  left: 0;
 }
 /* 표 안에서 셀은 값만 남기고, 지우기 열(row-tools)이 사라진 만큼 표가 좁아진다. */
 .form-fieldset.vm-read td > input,
@@ -13807,4 +13811,74 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
   background: #16324f;
   color: #fff;
   font-weight: 600;
+}
+
+/* ── 읽기모드 2단계: 빈 항목 처리 + 품목표 압축 ─────────────────────────────
+   빈 항목은 JS 가 data-vm-empty 로 표시한다(input.value 는 속성이 아니라 프로퍼티라
+   CSS 만으로는 '비었다'를 알 수 없다). 여기서는 그 표시를 어떻게 보여줄지만 정한다. */
+
+/* 기본(숨김 끔): 빈 칸을 그냥 비워 두면 라벨만 떠 있어 값이 잘린 것처럼 보인다.
+   2단 격자의 값 칸에 옅은 대시를 겹쳐 '입력 안 함'을 분명히 한다. */
+.form-fieldset.vm-read .form-grid > .form-field[data-vm-empty]::after {
+  content: "—";
+  grid-row: 1;
+  grid-column: 2;
+  align-self: baseline;
+  color: #c4cedb;
+  pointer-events: none;
+}
+/* 숨김 켬: 채워진 항목만 남긴다. 안 쓴 칸이 많은 단계에서 세로 길이가 크게 준다. */
+.form-fieldset.vm-read.vm-hide-empty .form-field[data-vm-empty] {
+  display: none;
+}
+/* 한 줄이 통째로 비면 제목만 남은 빈 카드가 되므로, 그 카드도 같이 접는다. */
+.form-fieldset.vm-read.vm-hide-empty .form-grid:has(.form-field):not(:has(.form-field:not([data-vm-empty]))) {
+  display: none;
+}
+/* 카드는 '항목으로만 이루어져 있고 그 항목이 전부 비었을 때'만 접는다 — 표나 설명문이
+   들어 있는 카드까지 사라지면 읽기 화면에서 내용이 통째로 증발한다. */
+.form-fieldset.vm-read.vm-hide-empty
+  .stage-card:has(.form-field):not(:has(.form-field:not([data-vm-empty]))):not(:has(table)) {
+  display: none;
+}
+
+/* 품목표 — 읽기모드에선 입력 표가 아니라 명세표로 읽힌다.
+   행 높이를 줄이고, 편집 전용 열(선택·삭제)이 사라진 만큼 표를 좁힌다. */
+.form-fieldset.vm-read table td,
+.form-fieldset.vm-read table th {
+  padding-top: 3px;
+  padding-bottom: 3px;
+}
+.form-fieldset.vm-read table td > input,
+.form-fieldset.vm-read table td > select,
+.form-fieldset.vm-read table td > textarea {
+  height: 22px;
+  min-height: 22px;
+}
+.form-fieldset.vm-read table td > textarea {
+  height: auto;
+}
+/* 숫자 칸은 오른쪽 정렬을 유지해야 금액이 자릿수로 읽힌다(입력란 padding 제거분 보정). */
+.form-fieldset.vm-read table td > input.num {
+  text-align: right;
+}
+/* 품목 행은 비어 보여도 숨기지 않는다 — 빈 항목 숨김은 사용자가 켜고 끄는 폼 항목에만
+   적용한다. 저장된 표의 행을 화면이 알아서 빼면 "본 것이 전부"라는 읽기모드의 전제가 깨진다. */
+
+/* 빈 항목 숨김 체크박스 — Read/Edit 토글 옆. */
+.stage-hide-empty {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-right: 10px;
+  font-size: 12px;
+  color: var(--muted, #7b8794);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.stage-hide-empty input {
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  cursor: pointer;
 }

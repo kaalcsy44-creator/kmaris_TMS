@@ -2069,6 +2069,21 @@ export function PipelineModal({
     [r.stage]
   );
   const [stageMode, setStageMode] = useState<ViewMode>(() => defaultViewMode(initialStage || r.stage || 1));
+  /** 읽기모드에서 값이 빈 항목을 아예 빼고 채워진 것만 보여줄지.
+   *  단계마다 안 쓰는 칸이 꽤 되는데, 빈 칸까지 다 세로로 늘어서면 "한눈에" 가 무너진다. */
+  const [hideEmpty, setHideEmpty] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setHideEmpty(window.localStorage.getItem("ktms:stage-hide-empty") === "1");
+  }, []);
+  const toggleHideEmpty = useCallback(() => {
+    setHideEmpty((v) => {
+      const next = !v;
+      if (typeof window !== "undefined")
+        window.localStorage.setItem("ktms:stage-hide-empty", next ? "1" : "0");
+      return next;
+    });
+  }, []);
   // 단계(또는 프로젝트)를 옮기면 그 단계의 디폴트로 되돌린다 — 한 단계에서 편집을 켰다고
   // 나머지 열 단계까지 편집으로 열리면 "확인하러 들어간다"는 읽기모드의 취지가 사라진다.
   useEffect(() => {
@@ -2756,6 +2771,12 @@ export function PipelineModal({
                       <span aria-hidden>✎ </span>Edit
                     </button>
                   </div>
+                  {stageMode === "read" ? (
+                    <label className="stage-hide-empty" title="Show only the fields that have a value">
+                      <input type="checkbox" checked={hideEmpty} onChange={toggleHideEmpty} />
+                      Hide empty
+                    </label>
+                  ) : null}
                   <button
                     type="button"
                     className="stage-pane-prev"
@@ -2790,7 +2811,7 @@ export function PipelineModal({
                 />
               </div>
             ) : (
-              <ViewModeProvider mode={stageMode} setMode={setStageMode}>
+              <ViewModeProvider mode={stageMode} setMode={setStageMode} hideEmpty={hideEmpty}>
                 <WorkspacePanel
                   stage={selectedStage}
                   area={areaForStage(selectedStage)}
