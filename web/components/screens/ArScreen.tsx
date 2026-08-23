@@ -38,6 +38,7 @@ import {
   itemRowClass,
 } from "@/components/common/itemTable";
 import { useItemGrid, ItemGridStyle, ItemTh, ItemColsButton, type ItemCol } from "@/components/common/itemGrid";
+import { useEditGate } from "@/lib/viewMode";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -317,6 +318,8 @@ function ApAddForm({
   const ap = row.ap;
   const editing = !!ap;
   const canEdit = can("ar", "create") || can("ar", "edit");
+  // 읽기모드(단계 화면 토글)에선 권한이 있어도 폼을 잠근다.
+  const { editing: canWriteNow, readMode, fieldsetProps } = useEditGate(canEdit);
   const poItems = useMemo(() => workItemsToTax(row.items), [row.items]);
   const [form, setForm] = useState<ApForm>(() =>
     ap
@@ -455,7 +458,7 @@ function ApAddForm({
   const grid = useItemGrid("ap-bill-items", itemCols);
 
   return (
-    <fieldset className="form-fieldset" disabled={!canEdit} style={{ border: 0, padding: 0, margin: 0 }}>
+    <fieldset {...fieldsetProps} style={{ border: 0, padding: 0, margin: 0 }}>
       <div className="form-grid">
         <Field label="Bill No. (vendor)" value={form.bill_no} onChange={(v) => setForm({ ...form, bill_no: v })} />
         <Field label="Bill date" value={form.bill_date} onChange={(v) => setForm({ ...form, bill_date: v })} type="date" />
@@ -607,17 +610,19 @@ function ApAddForm({
         <div className="doc-actions-left" />
         <div className="doc-actions-center">
           {err ? <span className="action-err">{err}</span> : null}
-          {!canEdit ? <span className="hint-inline">{editBlockReason("ar", 0)}</span> : null}
+          {!canEdit && !readMode ? <span className="hint-inline">{editBlockReason("ar", 0)}</span> : null}
         </div>
         <div className="doc-actions-right">
-          {editing ? (
+          {editing && !readMode ? (
             <button className="btn danger" disabled={busy || delBusy} onClick={removeRecord}>
               {delBusy ? "Deleting…" : "Delete"}
             </button>
           ) : null}
-          <button className="btn primary" disabled={busy} onClick={save}>
-            {busy ? "Working…" : "Save"}
-          </button>
+          {canWriteNow ? (
+            <button className="btn primary" disabled={busy} onClick={save}>
+              {busy ? "Working…" : "Save"}
+            </button>
+          ) : null}
         </div>
       </div>
     </fieldset>
@@ -645,6 +650,7 @@ function ApGate({ row, stage }: { row: ArRow; stage: StageTab }) {
 
 function MilestoneBar({ row, stage, onChanged }: { row: ArRow; stage: 10 | 11; onChanged: () => void }) {
   const canEditThis = can("ar", "edit") && canEditDeal(row.assignee_id);
+  const { editing: canWriteNow, readMode, fieldsetProps } = useEditGate(canEditThis);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const done = stage === 10 ? row.tax_issued : row.paid_done;
@@ -735,7 +741,7 @@ function MilestoneBar({ row, stage, onChanged }: { row: ArRow; stage: 10 | 11; o
             (AR 만 완료 처리하고 "왜 단계가 안 넘어가지?" 로 헤매지 않게). */}
         <ApGate row={row} stage={stage} />
       </div>
-      <fieldset className="form-fieldset" disabled={!canEditThis}>
+      <fieldset {...fieldsetProps}>
         <div className="form-grid">
           {stage === 10 ? (
             <Field label="Issued at" value={issuedAt} onChange={setIssuedAt} type="datetime-local" />
@@ -778,8 +784,8 @@ function MilestoneBar({ row, stage, onChanged }: { row: ArRow; stage: 10 | 11; o
         ) : null}
       </fieldset>
       <div className="form-actions">
-        {!canEditThis ? (
-          <span className="hint-inline">{editBlockReason("ar", row.assignee_id)}</span>
+        {!canWriteNow ? (
+          readMode ? null : <span className="hint-inline">{editBlockReason("ar", row.assignee_id)}</span>
         ) : (
           <>
             <button className="btn primary" disabled={busy} onClick={() => complete(true)}>
@@ -876,6 +882,8 @@ function ArAddForm({
   onChanged: () => void;
 }) {
   const editing = !!existing;
+  // 읽기모드(단계 화면 토글)에선 권한이 있어도 폼을 잠근다.
+  const { editing: canWriteNow, readMode, fieldsetProps } = useEditGate(true);
   const [form, setForm] = useState<ArForm>(
     existing ? arRowToForm(existing) : { ...emptyForm, order_id: fallbackOrderId ?? "" }
   );
@@ -1052,7 +1060,7 @@ function ArAddForm({
   const grid = useItemGrid("ar-tax-items", itemCols);
 
   return (
-    <div>
+    <fieldset {...fieldsetProps} style={{ border: 0, padding: 0, margin: 0 }}>
       <div className="project-select">
         <label>Order *</label>
         <select
@@ -1221,18 +1229,22 @@ function ArAddForm({
           {err ? <span className="action-err">{err}</span> : null}
         </div>
         <div className="doc-actions-right">
-          {editing ? (
+          {editing && !readMode ? (
             <button className="btn danger" disabled={busy || delBusy} onClick={removeRecord}>
               {delBusy ? "Deleting…" : "Delete"}
             </button>
           ) : null}
-          <button className="btn" disabled={busy} onClick={cancel}>{editing ? "Reset" : "Cancel"}</button>
-          <button className="btn primary" disabled={form.order_id === "" || busy} onClick={save}>
-            {busy ? "Working…" : "Save"}
-          </button>
+          {canWriteNow ? (
+            <>
+              <button className="btn" disabled={busy} onClick={cancel}>{editing ? "Reset" : "Cancel"}</button>
+              <button className="btn primary" disabled={form.order_id === "" || busy} onClick={save}>
+                {busy ? "Working…" : "Save"}
+              </button>
+            </>
+          ) : null}
         </div>
       </div>
-    </div>
+    </fieldset>
   );
 }
 

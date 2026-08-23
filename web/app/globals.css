@@ -13690,3 +13690,121 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
     color: #fff;
   }
 }
+
+/* ── 단계 화면 읽기모드 (.form-fieldset.vm-read) ─────────────────────────────
+   편집 화면과 DOM 이 같다 — 입력란 껍데기만 벗겨 "무엇을 입력했나"만 남긴다.
+   같은 DOM 을 쓰는 이유: 읽기뷰가 편집폼과 어긋날 수 없고, 모드를 오가도
+   컴포넌트가 언마운트되지 않아 입력 중이던 값이 날아가지 않는다.
+   (fieldset[disabled] 이 이미 조작을 막으므로 여기서는 '표시'만 다룬다.) */
+
+/* 입력란 → 값 텍스트. 체크박스·라디오·파일은 상태 자체가 정보라 그대로 둔다. */
+.form-fieldset.vm-read input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+.form-fieldset.vm-read select,
+.form-fieldset.vm-read textarea {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  padding-left: 0;
+  padding-right: 0;
+  color: var(--ink, #16202c);
+  font-weight: 600;
+  -webkit-text-fill-color: currentColor;  /* 사파리: disabled 회색 덮어쓰기 방지 */
+  opacity: 1;
+  resize: none;
+  cursor: default;
+}
+/* select 의 드롭다운 화살표·날짜의 달력 아이콘 — 누를 수 없으니 지운다. */
+.form-fieldset.vm-read select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: none;
+}
+.form-fieldset.vm-read input::-webkit-calendar-picker-indicator,
+.form-fieldset.vm-read input::-webkit-inner-spin-button,
+.form-fieldset.vm-read input::-webkit-outer-spin-button {
+  display: none;
+}
+/* 빈 칸은 높이만 차지하고 아무 말도 안 한다 — 값이 없다는 걸 보이게 옅은 대시로. */
+.form-fieldset.vm-read input:placeholder-shown::placeholder {
+  color: #c4cedb;
+}
+.form-fieldset.vm-read textarea {
+  min-height: 0;
+  height: auto;
+}
+/* 커스텀 입력 위젯(콤보박스·고객/벤더 선택·CC 칩)도 같은 규칙으로 껍데기를 벗긴다. */
+.form-fieldset.vm-read .cc-chips,
+.form-fieldset.vm-read .combobox-toggle,
+.form-fieldset.vm-read .cust-select-btn,
+.form-fieldset.vm-read .vsel-btn {
+  border-color: transparent;
+  background: transparent;
+  padding-left: 0;
+  font-weight: 600;
+}
+
+/* 라벨 위·값 아래(2줄) → 라벨 왼쪽·값 오른쪽(1줄). 세로 길이가 절반 가까이 줄어
+   "한 화면에서 한눈에" 가 실제로 성립한다. 값 정렬 기준선은 라벨과 맞춘다. */
+.form-fieldset.vm-read .form-grid > .form-field {
+  display: grid;
+  grid-template-columns: minmax(84px, 34%) 1fr;
+  align-items: baseline;
+  column-gap: 10px;
+}
+.form-fieldset.vm-read .form-grid > .form-field > label,
+.form-fieldset.vm-read .form-grid > .form-field > span:first-child {
+  color: var(--muted, #7b8794);
+  font-weight: 400;
+  margin: 0;
+}
+.form-fieldset.vm-read .form-grid > .form-field > :not(label):not(span:first-child) {
+  min-width: 0;
+}
+
+/* 값을 바꾸는 조작만 감춘다 — 읽기 화면에 회색 버튼이 남아 있으면
+   "권한이 없나?" 로 잘못 읽힌다. 다운로드·미리보기 같은 읽기 액션은 남는다. */
+.form-fieldset.vm-read .items-head-actions,
+.form-fieldset.vm-read .items-head-del,
+.form-fieldset.vm-read .items-head-exclude,
+.form-fieldset.vm-read .row-tools,
+.form-fieldset.vm-read .pb-apply,
+.form-fieldset.vm-read .ocr-bar,
+.form-fieldset.vm-read .item-add-row {
+  display: none;
+}
+/* 표 안에서 셀은 값만 남기고, 지우기 열(row-tools)이 사라진 만큼 표가 좁아진다. */
+.form-fieldset.vm-read td > input,
+.form-fieldset.vm-read td > select,
+.form-fieldset.vm-read td > textarea {
+  font-weight: 500;
+}
+
+/* 읽기 ↔ 편집 토글 — 단계 헤더의 Prev/Next 왼쪽. */
+.stage-mode-toggle {
+  display: inline-flex;
+  border: 1px solid #d7e2ee;
+  border-radius: 8px;
+  overflow: hidden;
+  margin-right: 10px;
+}
+.stage-mode-toggle button {
+  border: 0;
+  background: #fff;
+  color: var(--muted, #7b8794);
+  font-size: 12px;
+  font-family: inherit;
+  padding: 5px 11px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.stage-mode-toggle button + button {
+  border-left: 1px solid #e6eaf0;
+}
+.stage-mode-toggle button:hover {
+  background: #f4f8fd;
+}
+.stage-mode-toggle button.on {
+  background: #16324f;
+  color: #fff;
+  font-weight: 600;
+}

@@ -73,6 +73,7 @@ import TermsEditor from "./common/TermsEditor";
 import DocSendPanel from "./common/DocSendPanel";
 import RecordStrip from "./common/RecordStrip";
 import DetailTabBar, { DetailTab } from "./common/DetailTabBar";
+import { useEditGate } from "@/lib/viewMode";
 import SourceFilesList from "./common/SourceFilesList";
 import { withDefaultTerms, TERM_TEXT_KEYS } from "@/lib/terms";
 import { sortByDocNo } from "@/lib/sort";
@@ -979,6 +980,8 @@ function VendorRfqDetailModal({
   const [editing, setEditing] = useState(!!autoEdit || !!inline);
   // 편집 권한 = 역할 권한(rfq.edit) × 담당(PIC) 소유권. 없으면 읽기전용(뷰어) 모드.
   const canEditThis = can("rfq", "edit") && canEditDeal(d?.assignee_id);
+  // 읽기모드에선 권한이 있어도 폼을 잠근다(같은 DOM, 껍데기만 CSS 로 벗김).
+  const { editing: canWriteNow, readMode, fieldsetProps } = useEditGate(canEditThis);
   const canDeleteThis = can("rfq", "delete") && canEditDeal(d?.assignee_id);
   const showEdit = editing && canEditThis;
   const [vendorId, setVendorId] = useState<number | "">("");
@@ -1147,7 +1150,7 @@ function VendorRfqDetailModal({
           {/* inline(프로젝트 팝업)에서는 다른 단계처럼 읽기전용 개요 없이 편집 화면을 기본으로.
               편집 권한이 없으면 fieldset 을 비활성화해 뷰어 모드로 보여준다. */}
           {(showEdit || inline) ? (
-            <fieldset className="form-fieldset" disabled={!canEditThis}>
+            <fieldset {...fieldsetProps}>
               {!inline ? (
                 <>
                   <div className="form-section-title">Project info</div>
@@ -1248,25 +1251,25 @@ function VendorRfqDetailModal({
             <button className="btn" onClick={openPreview} disabled={busy || dlBusy}>
               {dlBusy && !previewUrl ? "Opening…" : "Preview"}
             </button>
-            {!canEditThis ? (
+            {!canEditThis && !readMode ? (
               <span className="hint-inline">{editBlockReason("rfq", d?.assignee_id)}</span>
             ) : null}
             <span style={{ marginLeft: "auto" }} />
-            {canDeleteThis ? (
+            {canDeleteThis && !readMode ? (
               <button className="btn danger" onClick={remove} disabled={busy || (showEdit && !inline)}>Delete</button>
             ) : null}
             {/* inline 은 편집 화면이 기본(읽기전용 토글 없음) → Cancel=편집값 되돌리기(저장본 재로드). */}
-            {canEditThis && inline ? (
+            {canWriteNow && inline ? (
               <>
                 <button className="btn" onClick={() => { setErr(null); loadDetail(); }} disabled={busy}>Cancel</button>
                 <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
               </>
-            ) : canEditThis && showEdit ? (
+            ) : canWriteNow && showEdit ? (
               <>
                 <button className="btn" onClick={() => setEditing(false)} disabled={busy}>Cancel</button>
                 <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
               </>
-            ) : canEditThis ? (
+            ) : canWriteNow ? (
               <button className="btn" onClick={() => setEditing(true)}>✎ Edit</button>
             ) : null}
           </div>
@@ -1610,6 +1613,8 @@ function VendorQuoteDetailModal({
   const [showOcr, setShowOcr] = useState(false); // Auto-fill 도구 접힘/펼침(1단계와 동일 포맷)
   // 편집 권한 = 역할 권한(rfq.edit) × 담당(PIC) 소유권. 없으면 읽기전용.
   const canEditThis = can("rfq", "edit") && canEditDeal(d?.assignee_id);
+  // 읽기모드에선 권한이 있어도 폼을 잠근다(같은 DOM, 껍데기만 CSS 로 벗김).
+  const { editing: canWriteNow, readMode, fieldsetProps } = useEditGate(canEditThis);
   const canDeleteThis = can("rfq", "delete") && canEditDeal(d?.assignee_id);
 
   useEffect(() => {
@@ -1759,7 +1764,7 @@ function VendorQuoteDetailModal({
             </>
           ) : null}
 
-          <fieldset className="form-fieldset" disabled={!canEditThis}>
+          <fieldset {...fieldsetProps}>
           <div className="form-section-title">Basic Info</div>
           {/* 좌: 입력 필드 / 우: Auto-fill 도구·소스파일(CSS order 로 우측 배치). */}
           <div className="received-split">
@@ -1847,15 +1852,15 @@ function VendorQuoteDetailModal({
               currency={currency}
               rate={fxRate ?? USD_KRW_RATE}
             />
-            {!canEditThis ? (
+            {!canEditThis && !readMode ? (
               <span className="hint-inline">{editBlockReason("rfq", d?.assignee_id)}</span>
             ) : null}
             <span style={{ marginLeft: "auto" }} />
-            {canDeleteThis ? (
+            {canDeleteThis && !readMode ? (
               <button className="btn danger" onClick={remove} disabled={busy}>Delete</button>
             ) : null}
             <button className="btn" onClick={onClose} disabled={busy}>Cancel</button>
-            {canEditThis ? (
+            {canWriteNow ? (
               <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
             ) : null}
           </div>
@@ -2024,6 +2029,8 @@ function CustomerQuoteDetailModal({
   const [dlErr, setDlErr] = useState<string | null>(null);
   // 편집 권한 = 역할 권한(rfq.edit) × 담당(PIC) 소유권. 없으면 읽기전용.
   const canEditThis = can("rfq", "edit") && canEditDeal(d?.assignee_id);
+  // 읽기모드에선 권한이 있어도 폼을 잠근다(같은 DOM, 껍데기만 CSS 로 벗김).
+  const { editing: canWriteNow, readMode, fieldsetProps } = useEditGate(canEditThis);
   const canDeleteThis = can("rfq", "delete") && canEditDeal(d?.assignee_id);
 
   useEffect(() => {
@@ -2225,7 +2232,7 @@ function CustomerQuoteDetailModal({
             </>
           ) : null}
 
-          <fieldset className="form-fieldset" disabled={!canEditThis}>
+          <fieldset {...fieldsetProps}>
           {/* 문서 정보 — 견적 식별·일자. 4필드 한 줄. */}
           <div className="stage-card">
           <div className="form-section-title">Basic Info</div>
@@ -2371,14 +2378,14 @@ function CustomerQuoteDetailModal({
             <span style={{ margin: "0 auto" }}>
               <StageTotal label="Final" value={finalTotal} currency={currency} rate={effRate} />
             </span>
-            {!canEditThis ? (
+            {!canEditThis && !readMode ? (
               <span className="hint-inline">{editBlockReason("rfq", d?.assignee_id)}</span>
             ) : null}
-            {canDeleteThis ? (
+            {canDeleteThis && !readMode ? (
               <button className="btn danger" onClick={remove} disabled={busy}>Delete</button>
             ) : null}
             <button className="btn" onClick={onClose} disabled={busy}>Cancel</button>
-            {canEditThis ? (
+            {canWriteNow ? (
               <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
             ) : null}
           </div>

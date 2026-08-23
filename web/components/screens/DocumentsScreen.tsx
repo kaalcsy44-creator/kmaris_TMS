@@ -31,6 +31,7 @@ import Modal from "@/components/common/Modal";
 import { ModalTitle } from "@/components/common/BaseMeta";
 import ProjectNo from "@/components/common/ProjectNo";
 import CurrencyToggle from "@/components/common/CurrencyToggle";
+import { useEditGate } from "@/lib/viewMode";
 import {
   amountInputValue,
   DeleteSelectedButton,
@@ -430,7 +431,8 @@ function ServiceStageForm({
   const [complete, setComplete] = useState(done); // 7·8단계: 저장 시 단계 완료 여부
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const editable = canEditDoc(data);
+  // 읽기모드(단계 화면 토글)에선 권한이 있어도 폼을 잠근다 — 저장·삭제 버튼도 함께 사라진다.
+  const { editing: editable, readMode } = useEditGate(canEditDoc(data));
 
   function set(key: string, v: string) {
     setForm((p) => ({ ...p, [key]: v }));
@@ -472,7 +474,7 @@ function ServiceStageForm({
         <span className={`ar-badge${done ? "" : " overdue"}`}>{done ? "Done" : "Pending"}</span>
       </div>
 
-      <fieldset className="form-fieldset" disabled={!editable}>
+      <fieldset className={"form-fieldset" + (readMode ? " vm-read" : "")} disabled={!editable}>
       {svc === 8 ? <ServiceReportUpload data={data} onChanged={onChanged} /> : null}
 
       <div className="form-grid">
@@ -491,7 +493,7 @@ function ServiceStageForm({
 
       <div className="form-actions" style={{ marginTop: 14 }}>
         {!editable ? (
-          <span className="hint-inline">{editBlockReason("documents", data.order.assignee_id)}</span>
+          readMode ? null : <span className="hint-inline">{editBlockReason("documents", data.order.assignee_id)}</span>
         ) : (
           <button className="btn primary" disabled={busy || data.order.id === 0} onClick={save}>
             {busy ? "Working…" : "Save"}
@@ -527,7 +529,8 @@ function ServiceBillingForm({ data, onChanged, onClose }: { data: DocumentDetail
   );
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const editable = canEditDoc(data);
+  // 읽기모드(단계 화면 토글)에선 권한이 있어도 폼을 잠근다 — 저장·삭제 버튼도 함께 사라진다.
+  const { editing: editable, readMode } = useEditGate(canEditDoc(data));
 
   const itemTotal = useMemo(() => includedRows(items).reduce((sum, item) => sum + num(item.amount), 0), [items]);
   const extraTotal = useMemo(
@@ -578,7 +581,7 @@ function ServiceBillingForm({ data, onChanged, onClose }: { data: DocumentDetail
       <div className="milestone-row" style={{ marginBottom: 12 }}>
         <span className={`ar-badge${billed ? "" : " overdue"}`}>{billed ? "Billed" : "Pending"}</span>
       </div>
-      <fieldset className="form-fieldset" disabled={!editable}>
+      <fieldset className={"form-fieldset" + (readMode ? " vm-read" : "")} disabled={!editable}>
       <div className="form-grid">
         <label className="form-field">
           <span>Currency</span>
@@ -608,7 +611,7 @@ function ServiceBillingForm({ data, onChanged, onClose }: { data: DocumentDetail
       </fieldset>
       <div className="form-actions" style={{ marginTop: 14 }}>
         {!editable ? (
-          <span className="hint-inline">{editBlockReason("documents", data.order.assignee_id)}</span>
+          readMode ? null : <span className="hint-inline">{editBlockReason("documents", data.order.assignee_id)}</span>
         ) : (
           <button className="btn primary" disabled={busy || data.order.id === 0} onClick={save}>
             {busy ? "Working…" : "Save billing + register AR"}
@@ -765,7 +768,8 @@ function PodTab({
   const pod = data.pod;
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const editable = canEditDoc(data);
+  // 읽기모드(단계 화면 토글)에선 권한이 있어도 폼을 잠근다 — 저장·삭제 버튼도 함께 사라진다.
+  const { editing: editable } = useEditGate(canEditDoc(data));
   // 메모 — 파일과 독립 저장. 서버 값이 바뀌면(저장·재조회) 입력값을 맞춘다.
   const savedNotes = data.order.pod_notes || "";
   const [notes, setNotes] = useState(savedNotes);
@@ -899,7 +903,8 @@ function fmtDateTime(iso: string): string {
 
 function OrderMilestones({ data, onChanged }: { data: DocumentDetail; onChanged: () => void }) {
   const [busy, setBusy] = useState(false);
-  const editable = canEditDoc(data);
+  // 읽기모드(단계 화면 토글)에선 권한이 있어도 폼을 잠근다 — 저장·삭제 버튼도 함께 사라진다.
+  const { editing: editable } = useEditGate(canEditDoc(data));
 
   async function toggle(field: "consignee_confirmed_date" | "vendor_docs_sent_date", value: boolean) {
     setBusy(true);
@@ -968,7 +973,8 @@ function ProformaInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChang
   const extras = num(freight) + num(packing) + num(insurance);
   const vatAmount = (subtotal + extras) * (num(vatRate) / 100);
   const totalInvoiceValue = subtotal + extras + vatAmount;
-  const editable = canEditDoc(data);
+  // 읽기모드(단계 화면 토글)에선 권한이 있어도 폼을 잠근다 — 저장·삭제 버튼도 함께 사라진다.
+  const { editing: editable, readMode } = useEditGate(canEditDoc(data));
 
   async function save() {
     setBusy(true);
@@ -1013,7 +1019,7 @@ function ProformaInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChang
 
   return (
     <div className="doc-tab">
-      <fieldset className="form-fieldset" disabled={!editable}>
+      <fieldset className={"form-fieldset" + (readMode ? " vm-read" : "")} disabled={!editable}>
       <div className="doc-cols">
       <div className="doc-col">
       {/* 입력 순서·이름은 발행되는 Proforma Invoice 서식 그대로. */}
@@ -1146,7 +1152,8 @@ function ServiceProformaInvoiceTab({ data, onChanged }: { data: DocumentDetail; 
   const [busy, setBusy] = useState(false);
   // 참조 양식대로 합계는 TOTAL INVOICE VALUE 한 줄 — 용역엔 운임·포장비·보험료가 없다.
   const total = useMemo(() => includedRows(items).reduce((sum, i) => sum + num(i.amount), 0), [items]);
-  const editable = canEditDoc(data);
+  // 읽기모드(단계 화면 토글)에선 권한이 있어도 폼을 잠근다 — 저장·삭제 버튼도 함께 사라진다.
+  const { editing: editable, readMode } = useEditGate(canEditDoc(data));
 
   async function save() {
     setBusy(true);
@@ -1188,7 +1195,7 @@ function ServiceProformaInvoiceTab({ data, onChanged }: { data: DocumentDetail; 
 
   return (
     <div className="doc-tab">
-      <fieldset className="form-fieldset" disabled={!editable}>
+      <fieldset className={"form-fieldset" + (readMode ? " vm-read" : "")} disabled={!editable}>
       <div className="doc-cols">
       <div className="doc-col">
       {/* 입력 순서·이름은 발행되는 Proforma Invoice(서비스) 서식 그대로. */}
@@ -1346,7 +1353,8 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
   const extras = num(freight) + num(packing) + num(insurance);
   const vatAmount = (subtotal + extras) * (num(vatRate) / 100);
   const totalInvoiceValue = subtotal + extras + vatAmount;
-  const editable = canEditDoc(data);
+  // 읽기모드(단계 화면 토글)에선 권한이 있어도 폼을 잠근다 — 저장·삭제 버튼도 함께 사라진다.
+  const { editing: editable, readMode } = useEditGate(canEditDoc(data));
 
   async function save() {
     setBusy(true);
@@ -1394,7 +1402,7 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
 
   return (
     <div className="doc-tab">
-      <fieldset className="form-fieldset" disabled={!editable}>
+      <fieldset className={"form-fieldset" + (readMode ? " vm-read" : "")} disabled={!editable}>
       <div className="doc-cols">
       <div className="doc-col">
       {/* 입력 순서·이름은 발행되는 Commercial Invoice 서식 그대로 —
@@ -1500,7 +1508,8 @@ function ShippingMarksTab({ data, onChanged }: { data: DocumentDetail; onChanged
     ...(data.ci?.shipping || {}),
   });
   const [busy, setBusy] = useState(false);
-  const editable = canEditDoc(data);
+  // 읽기모드(단계 화면 토글)에선 권한이 있어도 폼을 잠근다 — 저장·삭제 버튼도 함께 사라진다.
+  const { editing: editable, readMode } = useEditGate(canEditDoc(data));
 
   async function save() {
     if (!data.ci) return;
@@ -1533,7 +1542,7 @@ function ShippingMarksTab({ data, onChanged }: { data: DocumentDetail; onChanged
 
   return (
     <div className="doc-tab">
-      <fieldset className="form-fieldset" disabled={!editable}>
+      <fieldset className={"form-fieldset" + (readMode ? " vm-read" : "")} disabled={!editable}>
         <ShippingMarksSection shipping={shipping} setShipping={setShipping} />
       </fieldset>
       <div className="form-actions doc-actions">
@@ -1597,7 +1606,8 @@ function PackingListTab({ data, onChanged }: { data: DocumentDetail; onChanged: 
   }
   const [shipping, setShipping] = useState<Record<string, string>>(initialShipping);
   const [busy, setBusy] = useState(false);
-  const editable = canEditDoc(data);
+  // 읽기모드(단계 화면 토글)에선 권한이 있어도 폼을 잠근다 — 저장·삭제 버튼도 함께 사라진다.
+  const { editing: editable, readMode } = useEditGate(canEditDoc(data));
 
   // 선적 전체 포장 규격(케이스 수·중량·치수·용적)은 Shipping Mark 와 같은 칸이라 CI 에 저장한다 —
   // 그래야 두 탭이 같은 값을 보고, 어느 쪽에서 고쳐도 마크와 Packing List 가 같이 움직인다.
@@ -1667,7 +1677,7 @@ function PackingListTab({ data, onChanged }: { data: DocumentDetail; onChanged: 
 
   return (
     <div className="doc-tab">
-      <fieldset className="form-fieldset" disabled={!editable}>
+      <fieldset className={"form-fieldset" + (readMode ? " vm-read" : "")} disabled={!editable}>
       <div className="doc-cols">
       <div className="doc-col">
       {/* 입력 순서·이름은 발행되는 Packing List 서식 그대로 — 서식의 머리표는 이 서류가 딸린
@@ -1761,7 +1771,8 @@ function TaxInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChanged: (
   const [busy, setBusy] = useState(false);
   const currency = data.ci?.currency || "USD";
   const total = useMemo(() => includedRows(items).reduce((sum, item) => sum + num(item.amount), 0), [items]);
-  const editable = canEditDoc(data);
+  // 읽기모드(단계 화면 토글)에선 권한이 있어도 폼을 잠근다 — 저장·삭제 버튼도 함께 사라진다.
+  const { editing: editable, readMode } = useEditGate(canEditDoc(data));
 
   async function save() {
     setBusy(true);
@@ -1786,7 +1797,7 @@ function TaxInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChanged: (
 
   return (
     <div className="doc-tab">
-      <fieldset className="form-fieldset" disabled={!editable}>
+      <fieldset className={"form-fieldset" + (readMode ? " vm-read" : "")} disabled={!editable}>
       <div className="form-grid doc-form-grid">
         <Field label="Tax No." value={taxNo} onChange={setTaxNo} />
         <Field label="Issue Date" value={date} onChange={setDate} type="date" />

@@ -17,6 +17,7 @@ import {
 import type { CustomerOption, SettingsVessel, SettingsConsultant, RfqSourceFile } from "@/lib/types";
 import { can, canEditDeal, editBlockReason } from "@/lib/auth";
 import Modal from "@/components/common/Modal";
+import { useEditGate } from "@/lib/viewMode";
 import CustomerName from "@/components/common/CustomerName";
 import CustomerSelect from "@/components/common/CustomerSelect";
 import { useColumnLayout } from "@/components/common/useColumnLayout";
@@ -283,6 +284,8 @@ export default function NewRfqForm({
       ? can("rfq", "edit") && canEditDeal(assigneeId)
       : can("rfq", "create");
   const canDeleteThis = can("rfq", "delete") && canEditDeal(assigneeId);
+  // 읽기모드(단계 화면 토글)에선 권한이 있어도 폼을 잠근다.
+  const { editing: canWriteNow, readMode, fieldsetProps } = useEditGate(canEditThis);
 
   // 캡쳐본 붙여넣기(Ctrl+V) → 이미지면 바로 OCR (편집 권한 없으면 무시)
   function handlePaste(e: React.ClipboardEvent) {
@@ -669,7 +672,7 @@ export default function NewRfqForm({
           </span>
         </div>
       ) : null}
-      <fieldset className="form-fieldset" disabled={!canEditThis}>
+      <fieldset {...fieldsetProps}>
       <div className="sub-h" style={{ marginTop: 0, marginBottom: 8 }}>
         Basic info
       </div>
@@ -1035,8 +1038,8 @@ export default function NewRfqForm({
             Cancel
           </button>
         ) : null}
-        {!canEditThis ? (
-          <span className="hint-inline">{editBlockReason("rfq", assigneeId)}</span>
+        {!canWriteNow ? (
+          readMode ? null : <span className="hint-inline">{editBlockReason("rfq", assigneeId)}</span>
         ) : (
           <button
             className="btn primary"
@@ -1047,7 +1050,7 @@ export default function NewRfqForm({
           </button>
         )}
         {/* 이 RFQ 를 새 딜로 복제 — 품목을 골라 복사하거나, 골라서 떼어내(분할) 다른 딜로 보낸다. */}
-        {editId && can("rfq", "create") ? (
+        {editId && can("rfq", "create") && !readMode ? (
           <button
             className="btn"
             onClick={openCopy}
@@ -1057,7 +1060,7 @@ export default function NewRfqForm({
             📋 Copy as new
           </button>
         ) : null}
-        {onDeleted && editId && canDeleteThis ? (
+        {onDeleted && editId && canDeleteThis && !readMode ? (
           <button className="btn danger" onClick={handleDelete} disabled={busy}>
             Delete
           </button>

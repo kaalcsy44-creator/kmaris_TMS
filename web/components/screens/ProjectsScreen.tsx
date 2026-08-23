@@ -34,6 +34,7 @@ import { INFO_FIELDS, DEFAULT_INFO_FIELDS } from "@/components/common/dealFields
 import { lastActivityISO, daysSinceISO } from "@/lib/activity";
 import { sortByDocNo } from "@/lib/sort";
 import { isOnScrollbar } from "@/lib/scrollbar";
+import { ViewModeProvider, type ViewMode } from "@/lib/viewMode";
 import { useColumnLayout } from "@/components/common/useColumnLayout";
 import { ColumnResizer, ColumnsButton, dragHandleProps } from "@/components/common/tableLayout";
 import type { PipelineRow, CustomerOption, SettingsVessel, StageNote } from "@/lib/types";
@@ -2059,6 +2060,20 @@ export function PipelineModal({
   // overview 로 굳어 있으면 작업하려던 사람이 매번 한 번 더 눌러야 한다.
   // 오래 읽는 용도는 페이지(/project/<id>)가 맡는다.
   const [modalView, setModalView] = useState<"work" | "overview">(initialView);
+
+  /** 단계 화면 표시 모드(읽기/편집).
+   *  디폴트는 "단계 기준" — 이미 지나온 단계는 읽기(어떻게 입력했는지 확인하러 열기 때문),
+   *  딜의 현재 단계는 편집(진행시키러 열기 때문). 사용자가 바꾸면 그 단계에선 그 선택을 따른다. */
+  const defaultViewMode = useCallback(
+    (no: number): ViewMode => (no < (r.stage || 1) ? "read" : "edit"),
+    [r.stage]
+  );
+  const [stageMode, setStageMode] = useState<ViewMode>(() => defaultViewMode(initialStage || r.stage || 1));
+  // 단계(또는 프로젝트)를 옮기면 그 단계의 디폴트로 되돌린다 — 한 단계에서 편집을 켰다고
+  // 나머지 열 단계까지 편집으로 열리면 "확인하러 들어간다"는 읽기모드의 취지가 사라진다.
+  useEffect(() => {
+    setStageMode(defaultViewMode(selectedStage));
+  }, [selectedStage, r.rfq_id, defaultViewMode]);
   /** 개요의 단계 줄·문서번호 클릭 → 그 단계의 작업 화면으로. 개요에서 짚은 곳을 바로 편집.
    *  vrfqId 를 주면(2단계 RFQ Sent 로그) 그 벤더 RFQ 를, orderId 를 주면(Items 묶음의
    *  P/O·C/I 번호) 그 선박의 고객 P/O 를 선택해 연다. */
@@ -2720,6 +2735,27 @@ export function PipelineModal({
               </h3>
               {!isNewProject ? (
                 <div className="stage-pane-nav">
+                  {/* 읽기 ↔ 편집. 같은 화면을 껍데기만 바꿔 보여주므로 입력 중이던 값은 유지된다. */}
+                  <div className="stage-mode-toggle" role="group" aria-label="View mode">
+                    <button
+                      type="button"
+                      className={stageMode === "read" ? "on" : ""}
+                      aria-pressed={stageMode === "read"}
+                      onClick={() => setStageMode("read")}
+                      title="Read — see what was entered, without editing"
+                    >
+                      <span aria-hidden>👁 </span>Read
+                    </button>
+                    <button
+                      type="button"
+                      className={stageMode === "edit" ? "on" : ""}
+                      aria-pressed={stageMode === "edit"}
+                      onClick={() => setStageMode("edit")}
+                      title="Edit — change and save this stage"
+                    >
+                      <span aria-hidden>✎ </span>Edit
+                    </button>
+                  </div>
                   <button
                     type="button"
                     className="stage-pane-prev"
@@ -2754,15 +2790,17 @@ export function PipelineModal({
                 />
               </div>
             ) : (
-              <WorkspacePanel
-                stage={selectedStage}
-                area={areaForStage(selectedStage)}
-                row={r}
-                focusVrfqId={focusVrfqId}
-                focusApPoId={focusApPoId}
-                focusOrderId={focusOrderId}
-                onChanged={onChanged}
-              />
+              <ViewModeProvider mode={stageMode} setMode={setStageMode}>
+                <WorkspacePanel
+                  stage={selectedStage}
+                  area={areaForStage(selectedStage)}
+                  row={r}
+                  focusVrfqId={focusVrfqId}
+                  focusApPoId={focusApPoId}
+                  focusOrderId={focusOrderId}
+                  onChanged={onChanged}
+                />
+              </ViewModeProvider>
             )}
               </section>
             </div>

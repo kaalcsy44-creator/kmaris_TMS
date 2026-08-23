@@ -73,6 +73,7 @@ import type {
 } from "@/lib/types";
 import SourceFilesList from "@/components/common/SourceFilesList";
 import { withDefaultTerms } from "@/lib/terms";
+import { useEditGate } from "@/lib/viewMode";
 
 type OrderOpt = PoWorkOptions["orders"][number];
 type PoOpt = PoWorkOptions["purchase_orders"][number];
@@ -516,6 +517,8 @@ function OrderDetailModal({
   // 편집 권한 = 역할 권한(po.edit) × 담당(PIC) 소유권. 없으면 읽기전용.
   const canEditThis = can("po", "edit") && canEditDeal(detail?.assignee_id);
   const canDeleteThis = can("po", "delete") && canEditDeal(detail?.assignee_id);
+  // 읽기모드(단계 화면 토글)에선 권한이 있어도 폼을 잠근다.
+  const { editing: canWriteNow, readMode, fieldsetProps } = useEditGate(canEditThis);
 
   // 선택 고객사에 속한 선박만 노출(고객 미선택이면 전체).
   // 고객사 기준으로 거르되, (a) 현재 선택된 선박과 (b) 이 프로젝트(RFQ)의 선박은
@@ -565,7 +568,7 @@ function OrderDetailModal({
             </>
           ) : null}
 
-          <fieldset className="form-fieldset" disabled={!canEditThis}>
+          <fieldset {...fieldsetProps}>
           {/* 좌: 입력 필드 / 우: Auto-fill 도구·소스파일(CSS order 로 우측 배치). */}
           <div className="received-split">
           <aside className="received-tools">
@@ -675,7 +678,7 @@ function OrderDetailModal({
             onChange={setItems}
             currency={currency}
             headerActions={
-              canEditThis ? (
+              canWriteNow ? (
                 <button
                   className="btn sm"
                   onClick={loadCustomerQuoteItems}
@@ -695,13 +698,13 @@ function OrderDetailModal({
               value={includedRows(items).reduce((s, it) => s + Number(it.amount || 0), 0)}
               currency={currency}
             />
-            {!canEditThis ? (
-              <span className="hint-inline">{editBlockReason("po", detail?.assignee_id)}</span>
+            {!canWriteNow ? (
+              readMode ? null : <span className="hint-inline">{editBlockReason("po", detail?.assignee_id)}</span>
             ) : (
               <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
             )}
             <button className="btn" onClick={onClose} disabled={busy}>Cancel</button>
-            {canDeleteThis ? (
+            {canDeleteThis && !readMode ? (
               <button className="btn danger" onClick={remove} disabled={busy}>Delete</button>
             ) : null}
             {err ? <span className="action-err">{err}</span> : null}
@@ -1016,6 +1019,8 @@ function VendorPoDetailModal({
   // 편집 권한 = 역할 권한(po.edit) × 담당(PIC) 소유권. 없으면 읽기전용.
   const canEditThis = can("po", "edit") && canEditDeal(d?.assignee_id);
   const canDeleteThis = can("po", "delete") && canEditDeal(d?.assignee_id);
+  // 읽기모드(단계 화면 토글)에선 권한이 있어도 폼을 잠근다.
+  const { editing: canWriteNow, readMode, fieldsetProps } = useEditGate(canEditThis);
 
   // Vendor 드롭다운은 모든 벤더를 노출(견적 제출 벤더로 제한하지 않음).
   const vendorChoices = options.vendors;
@@ -1115,7 +1120,7 @@ function VendorPoDetailModal({
             </>
           ) : null}
 
-          <fieldset className="form-fieldset" disabled={!canEditThis}>
+          <fieldset {...fieldsetProps}>
           <div className="form-grid">
             <div className="form-field">
               <label>Vendor</label>
@@ -1143,7 +1148,7 @@ function VendorPoDetailModal({
             onChange={setItems}
             currency={currency}
             headerActions={
-              canEditThis ? (
+              canWriteNow ? (
                 <LoadVendorQuoteControl
                   vendorQuotes={vendorQuotes}
                   onLoad={loadVendorQuote}
@@ -1171,12 +1176,12 @@ function VendorPoDetailModal({
               />
             </div>
             <div className="doc-actions-right">
-              {canDeleteThis ? (
+              {canDeleteThis && !readMode ? (
                 <button className="btn danger" onClick={remove} disabled={busy}>Delete</button>
               ) : null}
               <button className="btn" onClick={onClose} disabled={busy}>Cancel</button>
-              {!canEditThis ? (
-                <span className="hint-inline">{editBlockReason("po", d?.assignee_id)}</span>
+              {!canWriteNow ? (
+                readMode ? null : <span className="hint-inline">{editBlockReason("po", d?.assignee_id)}</span>
               ) : (
                 <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
               )}
