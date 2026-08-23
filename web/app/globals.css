@@ -13766,12 +13766,26 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 .form-fieldset.vm-read .items-head-actions,
 .form-fieldset.vm-read .items-head-del,
 .form-fieldset.vm-read .items-head-exclude,
-.form-fieldset.vm-read .row-tools,
 .form-fieldset.vm-read .pb-apply,
 .form-fieldset.vm-read .ocr-bar {
   display: none;
 }
-/* 삭제(×) 열을 감추면 그 옆 No. 열의 좌측 고정 위치(left:32px)가 어긋난다 — 0 으로 당긴다. */
+/* 행 선택 체크박스 열은 display:none 으로 지우면 안 된다 — 그룹 헤더행(PURCHASE·SALES)과
+   합계행은 colspan 으로 만든 행이라, 보통 행에서만 칸이 하나 빠지면 그 뒤 컬럼이 통째로
+   한 칸씩 밀린다. 칸은 남기고 폭만 0 으로 접어 자리를 지운다. */
+.form-fieldset.vm-read table.mini th.row-tools,
+.form-fieldset.vm-read table.mini td.row-tools {
+  width: 0 !important;
+  min-width: 0 !important;
+  max-width: 0 !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  overflow: hidden !important;
+}
+.form-fieldset.vm-read table.mini .row-tools > * {
+  display: none !important;
+}
+/* 체크박스 열이 폭 0 이 되었으니 그 옆 No. 열의 좌측 고정 위치도 0 으로 당긴다. */
 .form-fieldset.vm-read .table-wrap table.mini.wide.lead-tools th.seq,
 .form-fieldset.vm-read .table-wrap table.mini.wide.lead-tools td.seq {
   left: 0;
