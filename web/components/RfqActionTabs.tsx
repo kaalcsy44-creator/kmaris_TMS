@@ -1377,6 +1377,9 @@ function VendorRfqDetailModal({
             downloadName={(f) => `${d.kmaris_rfq_no || "VendorRFQ"}_${d.vendor || "vendor"}.${f}`}
             onPreview={(lang) => previewVendorRfqEmail(d.id, lang)}
             onSend={(p) => sendVendorRfqEmail({ ...p, vrfqId: d.id })}
+            rfqId={d.rfq_id}
+            docNo={d.kmaris_rfq_no}
+            sentAt={d.sent_at || d.sent_date}
             disabled={!canEditThis}
             disabledReason={!canEditThis ? editBlockReason("rfq", d?.assignee_id) : "Generated from the last saved version — save your edits first."}
             onSent={onChanged}
@@ -2492,6 +2495,9 @@ function CustomerQuoteDetailModal({
             downloadName={(f) => `${d.qtn_no || "Quotation"}.${f}`}
             onPreview={(lang) => previewQuotationEmail(id, lang)}
             onSend={(p) => sendQuotationEmail({ ...p, qtnId: id, docType: "quotation" })}
+            rfqId={d.rfq_id}
+            docNo={d.qtn_no}
+            sentAt={d.sent_at}
             disabled={!canEditThis}
             disabledReason={!canEditThis ? editBlockReason("rfq", d?.assignee_id) : "Generated from the last saved version — save your edits first."}
             onSent={onChanged}

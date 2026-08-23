@@ -1198,6 +1198,9 @@ function VendorPoDetailModal({
             downloadName={(f) => `${d.po_no || "PurchaseOrder"}.${f}`}
             onPreview={(lang) => previewVendorPo(id, lang)}
             onSend={(p) => sendVendorPo({ ...p, poId: id })}
+            rfqId={options.orders.find((o) => o.id === d.order_id)?.rfq_id ?? null}
+            docNo={d.po_no}
+            sentAt={d.sent ? d.sent_date || d.date : ""}
             disabled={!canEditThis}
             disabledReason={!canEditThis ? editBlockReason("po", d?.assignee_id) : "Generated from the last saved version — save your edits first."}
             onSent={onChanged}

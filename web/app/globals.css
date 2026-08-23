@@ -4981,6 +4981,10 @@ table.mini tfoot tr.foot-grand .total-value {
 .form-fieldset:disabled {
   opacity: 0.9;
 }
+/* 읽기모드는 권한이 없어 잠긴 상태가 아니라 읽으라고 잠근 상태다 — 흐리게 만들지 않는다. */
+.form-fieldset.vm-read:disabled {
+  opacity: 1;
+}
 .quick-create-panel {
   margin-bottom: 14px;
   border: 1px solid #e6eaf0;
@@ -13731,6 +13735,9 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 .form-fieldset.vm-read textarea {
   min-height: 0;
   height: auto;
+  max-height: none;
+  /* 읽기 화면에서 칸 안에 또 스크롤이 생기면 본문을 훑을 수가 없다 — 내용만큼 늘린다. */
+  field-sizing: content;
 }
 /* 커스텀 입력 위젯(콤보박스·고객/벤더 선택·CC 칩)도 같은 규칙으로 껍데기를 벗긴다. */
 .form-fieldset.vm-read .cc-chips,
@@ -14105,4 +14112,63 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 }
 .form-fieldset.vm-read .items-head > *:not(.sub-h):not(.form-section-title) {
   display: none !important;
+}
+
+/* ── 읽기모드: 메일 발송 패널 ───────────────────────────────────────────────
+   Email 탭도 단계 화면의 일부다 — 읽기모드에서 이 화면만 편집 상태로 남으면
+   "지금 어느 모드인가" 가 화면마다 달라진다. 읽기에서는 작성창을 통째로 내리고,
+   그 자리에 '실제로 보낸 것' 만 보여준다(작성창은 DOM 에 남아 쓰던 초안이 살아 있다). */
+.doc-send-panel.vm-read .doc-send-compose {
+  display: none;
+}
+/* 보낸 메일 기록 — 한 통이 한 덩어리. */
+.doc-send-sent {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.doc-send-sent-item {
+  border: 1px solid #e6eaf0;
+  border-radius: 10px;
+  background: #fff;
+  overflow: hidden;
+}
+.doc-send-sent-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 12px;
+  padding: 8px 12px;
+  background: #f4f8fd;
+  border-bottom: 1px solid #eef2f7;
+  font-size: 12.5px;
+}
+.doc-send-sent-when {
+  font-weight: 700;
+  color: var(--navy, #16324f);
+}
+.doc-send-sent-to {
+  color: var(--muted, #7b8794);
+}
+.doc-send-sent-subj {
+  flex: 1 1 100%;
+  font-weight: 600;
+}
+.doc-send-sent-body {
+  margin: 0;
+  padding: 12px;
+  font-family: inherit;
+  font-size: 12.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+.doc-send-sent-more {
+  padding: 0 12px 10px;
+  font-size: 11.5px;
+  color: var(--muted, #7b8794);
+}
+.doc-send-sent-none {
+  display: block;
+  margin-top: 4px;
 }

@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getToken } from "@/lib/auth";
-import { renderEmailPreview } from "@/lib/api";
+import { renderEmailPreview, fetchProjectMail } from "@/lib/api";
+import type { MailMessage, ProjectMail } from "@/lib/types";
 import CcField from "@/components/common/CcField";
 import SignaturePicker from "@/components/common/SignaturePicker";
 import { toggleBold, onBoldKey } from "@/lib/mdEdit";
+import { useEditGate } from "@/lib/viewMode";
 
 // 문서 생성(다운로드) + 이메일 미리보기 + 발송(첨부) 공통 패널.
 // 2·4·6단계 상세편집 페이지에서 공유한다. 단계별 API 차이는 콜백(onPreview/onSend/
@@ -49,6 +51,9 @@ export default function DocSendPanel({
   onSend,
   disabled = false,
   disabledReason,
+  rfqId,
+  docNo,
+  sentAt,
   onSent,
 }: {
   title?: string;
@@ -73,9 +78,19 @@ export default function DocSendPanel({
   }) => Promise<{ sent_date?: string }>;
   disabled?: boolean;
   disabledReason?: string;
+  /** 읽기모드에서 "실제로 보낸 메일" 을 찾기 위한 단서.
+   *  발송 API 는 보낸 본문을 저장하지 않는다 — 남는 기록은 딜 메일 이력(IMAP 동기화)뿐이라,
+   *  이 딜(rfqId)의 발신 메일 중 문서번호(docNo)가 들어간 것을 그 문서의 발송 기록으로 본다. */
+  rfqId?: number | null;
+  docNo?: string;
+  /** 문서에 찍힌 발송 시각. 메일 본문 기록이 없을 때 "보내긴 했다"는 사실만이라도 알린다. */
+  sentAt?: string;
   onSent?: () => void;
 }) {
   const emailEnabled = !!onPreview && !!onSend;
+  // 단계 화면의 읽기모드를 이 패널도 따른다 — 읽기 중에는 초안을 눈으로만 확인하고,
+  // 고치거나 보내려면 Edit 으로 넘어간다(disabled 는 권한, readMode 는 표시 모드).
+  const { readMode, fieldsetProps } = useEditGate(!disabled);
   // 메일 언어는 EN 고정(단계별 발송 화면에서 언어 선택 UI 제거). 서버 API 는 여전히
   // lang 을 받으므로 값만 넘긴다.
   const [lang] = useState<"en" | "ko">("en");
@@ -412,7 +427,10 @@ export default function DocSendPanel({
   );
 
   return (
-    <div className="doc-send-panel">
+    <fieldset
+      {...fieldsetProps}
+      className={`doc-send-panel ${fieldsetProps.className}`}
+    >
       <div className="sub-h">{title}</div>
       {disabled && disabledReason ? (
         <div className="hint-inline" style={{ marginBottom: 8 }}>{disabledReason}</div>
@@ -442,6 +460,10 @@ export default function DocSendPanel({
         err ? <div className="action-err" style={{ marginTop: 8 }}>{err}</div> : null
       ) : (
         <>
+        {/* 읽기모드에서는 작성창 대신 '실제로 보낸 것' 을 보여준다. 작성창은 아래에 그대로
+            남겨 CSS 로만 내린다 — 쓰다 만 초안이 모드를 오갔다고 사라지면 안 된다. */}
+        {readMode ? <SentMailRecord rfqId={rfqId} docNo={docNo} sentAt={sentAt} /> : null}
+        <div className="doc-send-compose">
         {/* 좌: 봉투(누구에게·무엇을 붙여) · 우: 내용(제목·본문·서명).
             홍보 메일 작성창과 같은 2단이다 — 세로로만 쌓으면 본문을 보려고 스크롤하는
             동안 수신자·첨부가 화면에서 사라진다. 각 칸 안에서는 1열로 쌓는다. */}
@@ -645,8 +667,88 @@ export default function DocSendPanel({
           {msg ? <span className="action-ok">{msg}</span> : null}
           {err ? <span className="action-err">{err}</span> : null}
         </div>
+        </div>
         </>
       )}
+    </fieldset>
+  );
+}
+
+/** 이 문서를 실제로 보낸 메일 — 읽기모드 Email 탭의 내용.
+ *  발송 API 는 보낸 본문을 어디에도 남기지 않는다(문서에 status=SENT · sent_at 만 찍는다).
+ *  실제로 나간 글이 남는 곳은 딜 메일 이력뿐이라, 이 딜의 발신 메일 중 제목·본문에
+ *  문서번호가 들어간 것을 이 문서의 발송 기록으로 본다. */
+function SentMailRecord({
+  rfqId,
+  docNo,
+  sentAt,
+}: {
+  rfqId?: number | null;
+  docNo?: string;
+  sentAt?: string;
+}) {
+  const [mail, setMail] = useState<ProjectMail | null>(null);
+  const [loading, setLoading] = useState(false);
+  useEffect(() => {
+    if (!rfqId) return;
+    let alive = true;
+    setLoading(true);
+    fetchProjectMail(rfqId)
+      .then((d) => { if (alive) setMail(d); })
+      .catch(() => { if (alive) setMail(null); })
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, [rfqId]);
+
+  const key = (docNo || "").trim().toLowerCase();
+  const sent = useMemo(() => {
+    if (!key) return [];
+    const out: MailMessage[] = [];
+    for (const t of mail?.threads ?? [])
+      for (const m of t.messages)
+        if (m.direction === "out" && `${m.subject}\n${m.body_text}`.toLowerCase().includes(key))
+          out.push(m);
+    out.sort((a, b) => (a.sent_at || "").localeCompare(b.sent_at || ""));
+    return out;
+  }, [mail, key]);
+
+  if (rfqId && loading) return <div className="state">Loading sent mail…</div>;
+
+  if (sent.length === 0) {
+    return (
+      <span className="hint-inline doc-send-sent-none">
+        {sentAt
+          ? `Marked as sent on ${sentAt.replace("T", " ")}, but no copy of the message is on file — ` +
+            "the mail history has not picked it up (sync it from the deal's Mail panel), or it went out another way. " +
+            "Switch to Edit to send again."
+          : "Not sent yet. Switch to Edit to write and send it."}
+      </span>
+    );
+  }
+
+  return (
+    <div className="doc-send-sent">
+      {sent.map((m) => (
+        <div className="doc-send-sent-item" key={m.id}>
+          <div className="doc-send-sent-head">
+            <span className="doc-send-sent-when">{(m.sent_at || "").replace("T", " ")}</span>
+            <span className="doc-send-sent-to">
+              To {m.to_addrs.join(", ") || "—"}
+              {m.cc_addrs.length ? ` · CC ${m.cc_addrs.join(", ")}` : ""}
+            </span>
+            <span className="doc-send-sent-subj">{m.subject}</span>
+          </div>
+          <pre className="doc-send-sent-body">{m.body_text}</pre>
+          {m.truncated ? (
+            <div className="doc-send-sent-more">Body stored in shortened form — open it in the mail client for the full text.</div>
+          ) : null}
+          {m.attachments.length ? (
+            <div className="doc-send-sent-more">
+              📎 {m.attachments.map((a) => a.name).join(", ")}
+            </div>
+          ) : null}
+        </div>
+      ))}
     </div>
   );
 }
