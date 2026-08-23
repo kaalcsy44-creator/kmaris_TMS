@@ -34,7 +34,7 @@ import { INFO_FIELDS, DEFAULT_INFO_FIELDS } from "@/components/common/dealFields
 import { lastActivityISO, daysSinceISO } from "@/lib/activity";
 import { sortByDocNo } from "@/lib/sort";
 import { isOnScrollbar } from "@/lib/scrollbar";
-import { ViewModeProvider, type ViewMode } from "@/lib/viewMode";
+import { ViewModeProvider, stagePaneText, type ViewMode } from "@/lib/viewMode";
 import { useColumnLayout } from "@/components/common/useColumnLayout";
 import { ColumnResizer, ColumnsButton, dragHandleProps } from "@/components/common/tableLayout";
 import type { PipelineRow, CustomerOption, SettingsVessel, StageNote } from "@/lib/types";
@@ -2072,6 +2072,20 @@ export function PipelineModal({
   /** 읽기모드에서 값이 빈 항목을 아예 빼고 채워진 것만 보여줄지.
    *  단계마다 안 쓰는 칸이 꽤 되는데, 빈 칸까지 다 세로로 늘어서면 "한눈에" 가 무너진다. */
   const [hideEmpty, setHideEmpty] = useState(false);
+  // 읽기 화면을 텍스트로 복사할 때의 원본 — 값이 <input> 안이라 마우스 선택으로는 안 잡힌다.
+  const stagePaneRef = useRef<HTMLElement>(null);
+  const [copied, setCopied] = useState(false);
+  const copyStageText = useCallback(async () => {
+    const text = stagePaneText(stagePaneRef.current);
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
+    } catch {
+      /* 클립보드 권한이 없으면 조용히 넘어간다 — 인쇄로도 같은 내용을 낼 수 있다. */
+    }
+  }, []);
   useEffect(() => {
     if (typeof window === "undefined") return;
     setHideEmpty(window.localStorage.getItem("ktms:stage-hide-empty") === "1");
@@ -2136,6 +2150,33 @@ export function PipelineModal({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onNavigate, isNewProject, reasonOpen]);
+
+  /** E = 편집, R·Esc = 읽기. 읽기모드는 입력란이 전부 잠겨 있어 손이 마우스로 갈 일이 없다 —
+   *  훑다가 고칠 곳을 찾았을 때 키 하나로 넘어가는 게 이 화면의 실제 동선이다.
+   *  입력 중일 땐 가로채지 않는다(Esc 는 콤보박스 닫기 등 그 칸의 몫). */
+  useEffect(() => {
+    if (isNewProject) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.altKey || e.ctrlKey || e.metaKey) return;
+      if (reasonOpen) return;
+      const t = e.target as HTMLElement | null;
+      if (
+        t &&
+        (t.tagName === "INPUT" ||
+          t.tagName === "TEXTAREA" ||
+          t.tagName === "SELECT" ||
+          t.isContentEditable)
+      )
+        return;
+      const k = e.key.toLowerCase();
+      if (k === "e") setStageMode("edit");
+      else if (k === "r" || e.key === "Escape") setStageMode("read");
+      else return;
+      e.preventDefault();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isNewProject, reasonOpen]);
   // 모바일 전용: 프로젝트 정보/단계 상세를 동시에 띄우면 좁아, 탭으로 하나씩 전환.
   // (데스크톱은 좌우 2단으로 함께 보이므로 이 값은 CSS 상 무시된다.)
   const [mobilePane, setMobilePane] = useState<"info" | "stage">("stage");
@@ -2737,7 +2778,7 @@ export function PipelineModal({
                 </button>
               </div>
 
-              <section className="project-stage-pane">
+              <section className="project-stage-pane" ref={stagePaneRef}>
             {/* 단계 상세 공통 헤더 — 모든 단계에서 동일한 위치·서체의 제목(좌) +
                 다음 단계로 이동하는 → 버튼(우상단). 11개 단계 UI 일관성의 기준. */}
             <div className="stage-pane-head">
@@ -2757,7 +2798,7 @@ export function PipelineModal({
                       className={stageMode === "read" ? "on" : ""}
                       aria-pressed={stageMode === "read"}
                       onClick={() => setStageMode("read")}
-                      title="Read — see what was entered, without editing"
+                      title="Read — see what was entered, without editing (R)"
                     >
                       <span aria-hidden>👁 </span>Read
                     </button>
@@ -2766,16 +2807,34 @@ export function PipelineModal({
                       className={stageMode === "edit" ? "on" : ""}
                       aria-pressed={stageMode === "edit"}
                       onClick={() => setStageMode("edit")}
-                      title="Edit — change and save this stage"
+                      title="Edit — change and save this stage (E)"
                     >
                       <span aria-hidden>✎ </span>Edit
                     </button>
                   </div>
                   {stageMode === "read" ? (
-                    <label className="stage-hide-empty" title="Show only the fields that have a value">
-                      <input type="checkbox" checked={hideEmpty} onChange={toggleHideEmpty} />
-                      Hide empty
-                    </label>
+                    <>
+                      <label className="stage-hide-empty" title="Show only the fields that have a value">
+                        <input type="checkbox" checked={hideEmpty} onChange={toggleHideEmpty} />
+                        Hide empty
+                      </label>
+                      <button
+                        type="button"
+                        className="stage-read-act"
+                        onClick={copyStageText}
+                        title="Copy this stage as text — values sit inside input boxes, so dragging over them copies nothing"
+                      >
+                        {copied ? "Copied" : "Copy"}
+                      </button>
+                      <button
+                        type="button"
+                        className="stage-read-act"
+                        onClick={() => window.print()}
+                        title="Print this stage"
+                      >
+                        Print
+                      </button>
+                    </>
                   ) : null}
                   <button
                     type="button"

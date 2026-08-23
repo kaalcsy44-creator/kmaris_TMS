@@ -13882,3 +13882,136 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
   margin: 0;
   cursor: pointer;
 }
+
+/* 읽기모드 보조 액션(Copy·Print) — Hide empty 옆. */
+.stage-read-act {
+  border: 1px solid #d7e2ee;
+  border-radius: 7px;
+  background: #fff;
+  color: var(--muted, #7b8794);
+  font-size: 12px;
+  font-family: inherit;
+  padding: 4px 9px;
+  margin-right: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.stage-read-act:hover {
+  background: #f4f8fd;
+  color: var(--ink, #16202c);
+}
+
+/* ── 인쇄 ─────────────────────────────────────────────────────────────────
+   단계 상세만 종이로 낸다. 팝업은 화면 안에서 스크롤하는 상자라 그대로 인쇄하면
+   첫 페이지에서 잘린다 — 조상들의 고정 위치·높이·overflow 를 인쇄에서만 풀어 준다.
+   읽기모드로 열어 두고 인쇄하면 입력란 껍데기가 없는 상태로 그대로 나온다. */
+@media print {
+  html,
+  body {
+    height: auto !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+  /* 화면 전체를 숨기고 단계 상세만 되살린다(요소를 옮기지 않고 인쇄하는 표준 수법). */
+  body * {
+    visibility: hidden !important;
+  }
+  .project-stage-pane,
+  .project-stage-pane * {
+    visibility: visible !important;
+  }
+  /* 팝업 껍데기 — 위치·크기·잘림을 모두 푼다. */
+  .pl-modal-backdrop {
+    position: static !important;
+    display: block !important;
+    background: none !important;
+    overflow: visible !important;
+  }
+  .pl-modal {
+    position: static !important;
+    width: auto !important;
+    max-width: none !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    box-shadow: none !important;
+    border: 0 !important;
+    transform: none !important;
+  }
+  .pl-modal-body,
+  .project-workspace,
+  .project-stage-pane {
+    display: block !important;
+    position: static !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+  /* 종이에서 의미 없는 것들 — 조작 버튼·좌측 정보 패널·단계 스트립. */
+  .stage-pane-nav,
+  .pl-modal-head,
+  .project-stage-tabs,
+  .project-info-pane,
+  .ws-divider,
+  .pane-tabs {
+    display: none !important;
+  }
+  /* 액션 줄과 레코드 줄은 통째로 지우지 않는다 — 합계(Final)와 문서번호가 그 안에 있고,
+     종이에서 정작 필요한 건 그 두 가지다. 누를 수 없는 버튼만 뺀다. */
+  .form-actions button,
+  .form-actions .btn,
+  .embedded-record-bar button {
+    display: none !important;
+  }
+  .stage-card,
+  table {
+    break-inside: avoid;
+  }
+}
+
+/* ── 나란히 비교(읽기모드, 레코드 2건 이상) ─────────────────────────────────
+   같은 편집기를 레코드 수만큼 나란히 세운다 — 화면은 그대로 두고 배치만 바꾸므로
+   비교 전용 화면을 따로 만들 필요가 없고, 필드가 늘어도 저절로 따라온다.
+   'Hide empty' 를 켜면 채워진 항목만 남아 열끼리 줄이 맞는다. */
+.vm-compare {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  overflow-x: auto;
+  padding-bottom: 6px;
+}
+.vm-compare-col {
+  flex: 0 0 clamp(360px, 46%, 560px);
+  min-width: 0;
+  border: 1px solid #e6eaf0;
+  border-radius: 10px;
+  background: #fff;
+}
+.vm-compare-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #eef2f7;
+  background: #f8fafc;
+  border-radius: 10px 10px 0 0;
+  font-size: 12.5px;
+  position: sticky;
+  left: 0;
+}
+.vm-compare-col > .embedded-detail {
+  padding: 10px 12px 12px;
+}
+/* 좁은 열에서는 2단 격자가 눌려 값이 잘린다 — 한 줄에 한 항목씩. */
+.vm-compare-col .form-grid {
+  grid-template-columns: 1fr !important;
+}
+/* 열마다 붙는 미리보기·취소 버튼은 비교 중엔 잡음이다. 다만 합계(Final/Total)는
+   남긴다 — 견적 여러 건을 나란히 놓는 이유가 대개 그 숫자다. */
+.vm-compare-col .form-actions button,
+.vm-compare-col .form-actions .btn {
+  display: none;
+}
+.vm-compare-col .form-actions {
+  justify-content: flex-end;
+}

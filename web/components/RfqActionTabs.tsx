@@ -73,7 +73,7 @@ import TermsEditor from "./common/TermsEditor";
 import DocSendPanel from "./common/DocSendPanel";
 import RecordStrip from "./common/RecordStrip";
 import DetailTabBar, { DetailTab } from "./common/DetailTabBar";
-import { useEditGate } from "@/lib/viewMode";
+import { useEditGate, useViewMode } from "@/lib/viewMode";
 import SourceFilesList from "./common/SourceFilesList";
 import { withDefaultTerms, TERM_TEXT_KEYS } from "@/lib/terms";
 import { sortByDocNo } from "@/lib/sort";
@@ -361,6 +361,32 @@ export default function RfqActionTabs({
 // 각 단계에서 이 프로젝트의 레코드만 조회해 상세 편집 폼을 인라인으로 렌더한다.
 // 여러 벤더가 있을 수 있는 vrfq/vquote는 컴팩트 선택기 + 인라인 상세.
 
+/** 읽기모드에서 레코드가 여럿일 때 — 하나씩 골라 넘겨 보는 대신 전부 나란히 펼친다.
+ *  벤더 견적 3건을 비교하려고 탭을 왕복하는 게 이 화면의 가장 잦은 헛수고였다.
+ *  편집모드에선 쓰지 않는다(같은 폼이 여러 벌 열려 있으면 어느 걸 저장하는지 흐려진다). */
+function useCompare(count: number) {
+  const { mode } = useViewMode();
+  const [on, setOn] = useState(false);
+  const canCompare = mode === "read" && count > 1;
+  useEffect(() => {
+    if (!canCompare) setOn(false);
+  }, [canCompare]);
+  return { canCompare, comparing: canCompare && on, toggle: () => setOn((v) => !v) };
+}
+
+function CompareButton({ on, onToggle }: { on: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      className={"btn sm" + (on ? " primary" : "")}
+      onClick={onToggle}
+      title="Lay every record out side by side instead of one at a time"
+    >
+      ⊞ Side by side
+    </button>
+  );
+}
+
 function EmptyStage({ text }: { text: string }) {
   return (
     <div className="project-work-panel">
@@ -462,6 +488,7 @@ function EmbeddedVendorRfq({
   }, [focusId, rows, rfqId]);
   // 복수 Vendor RFQ는 K-Maris RFQ 번호 오름차순(숫자 빠른 순)으로 좌→우 배치.
   const mine = sortByDocNo(rows.filter((r) => r.rfq_id === rfqId), (r) => r.kmaris_rfq_no, (r) => r.id);
+  const cmp = useCompare(mine.length);
   if (!loaded) return <div className="state">Loading details…</div>;
 
   if (adding || mine.length === 0) {
@@ -516,16 +543,37 @@ function EmbeddedVendorRfq({
               {selected.status === "견적 불가" ? "No quote ✓" : "No quote"}
             </button>
           ) : null}
+          {cmp.canCompare ? <CompareButton on={cmp.comparing} onToggle={cmp.toggle} /> : null}
           <button type="button" className="btn primary sm" onClick={() => setAdding(true)}>+ Send another</button>
         </div>
       </div>
-      <VendorRfqDetailModal
-        id={selected.id}
-        vendors={vendors}
-        onClose={() => { load(); onChanged(); }}
-        onChanged={() => { load(); onChanged(); }}
-        inline
-      />
+      {cmp.comparing ? (
+        <div className="vm-compare">
+          {mine.map((v) => (
+            <div className="vm-compare-col" key={v.id}>
+              <div className="vm-compare-head">
+                <VendorName name={v.vendor || ""} />
+                <b className="rec-doc-no">{v.kmaris_rfq_no || ""}</b>
+              </div>
+              <VendorRfqDetailModal
+                id={v.id}
+                vendors={vendors}
+                onClose={() => { load(); onChanged(); }}
+                onChanged={() => { load(); onChanged(); }}
+                inline
+              />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <VendorRfqDetailModal
+          id={selected.id}
+          vendors={vendors}
+          onClose={() => { load(); onChanged(); }}
+          onChanged={() => { load(); onChanged(); }}
+          inline
+        />
+      )}
       {declining ? (
         <NoQuoteDialog
           vendor={selected.vendor || ""}
@@ -610,6 +658,7 @@ function EmbeddedVendorQuote({ rfqId, onChanged }: { rfqId: number | null; onCha
   }, [rfqId]);
   // 복수 Vendor Quote는 벤더 견적번호 오름차순(숫자 빠른 순)으로 좌→우 배치.
   const mine = sortByDocNo(rows.filter((r) => r.rfq_id === rfqId), (r) => r.vendor_quote_no, (r) => r.id);
+  const cmp = useCompare(mine.length);
   if (!loaded) return <div className="state">Loading details…</div>;
 
   if (adding || mine.length === 0) {
@@ -648,9 +697,24 @@ function EmbeddedVendorQuote({ rfqId, onChanged }: { rfqId: number | null; onCha
             <b className="rec-doc-no">{selected.vendor_quote_no || ""}</b>
           </span>
         )}
+        {cmp.canCompare ? <CompareButton on={cmp.comparing} onToggle={cmp.toggle} /> : null}
         <button type="button" className="btn primary sm" onClick={() => setAdding(true)}>+ Register another</button>
       </div>
-      <VendorQuoteDetailModal id={selected.id} onClose={() => { load(); onChanged(); }} onChanged={() => { load(); onChanged(); }} inline />
+      {cmp.comparing ? (
+        <div className="vm-compare">
+          {mine.map((q) => (
+            <div className="vm-compare-col" key={q.id}>
+              <div className="vm-compare-head">
+                <VendorName name={q.vendor || ""} />
+                <b className="rec-doc-no">{q.vendor_quote_no || ""}</b>
+              </div>
+              <VendorQuoteDetailModal id={q.id} onClose={() => { load(); onChanged(); }} onChanged={() => { load(); onChanged(); }} inline />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <VendorQuoteDetailModal id={selected.id} onClose={() => { load(); onChanged(); }} onChanged={() => { load(); onChanged(); }} inline />
+      )}
     </div>
   );
 }
@@ -672,6 +736,7 @@ function EmbeddedCustomerQuote({ rfqId, onChanged }: { rfqId: number | null; onC
   useEffect(() => { load(); }, [load]);
   // 복수 견적서는 견적번호 오름차순(숫자 빠른 순)으로 좌→우 배치.
   const mine = sortByDocNo(rows.filter((r) => r.rfq_id === rfqId), (r) => r.qtn_no, (r) => r.id);
+  const cmp = useCompare(mine.length);
   if (!loaded) return <div className="state">Loading details…</div>;
 
   if (adding || mine.length === 0) {
@@ -699,9 +764,23 @@ function EmbeddedCustomerQuote({ rfqId, onChanged }: { rfqId: number | null; onC
             <b className="rec-doc-no">{selected.qtn_no || ""}</b>
           </span>
         )}
+        {cmp.canCompare ? <CompareButton on={cmp.comparing} onToggle={cmp.toggle} /> : null}
         <button type="button" className="btn primary sm" onClick={() => setAdding(true)}>+ New quotation</button>
       </div>
-      <CustomerQuoteDetailModal id={selected.id} onClose={() => { load(); onChanged(); }} onChanged={() => { load(); onChanged(); }} inline />
+      {cmp.comparing ? (
+        <div className="vm-compare">
+          {mine.map((q) => (
+            <div className="vm-compare-col" key={q.id}>
+              <div className="vm-compare-head">
+                <b className="rec-doc-no">{q.qtn_no || `Quote ${q.id}`}</b>
+              </div>
+              <CustomerQuoteDetailModal id={q.id} onClose={() => { load(); onChanged(); }} onChanged={() => { load(); onChanged(); }} inline />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <CustomerQuoteDetailModal id={selected.id} onClose={() => { load(); onChanged(); }} onChanged={() => { load(); onChanged(); }} inline />
+      )}
     </div>
   );
 }
