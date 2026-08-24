@@ -703,7 +703,10 @@ function OrderDetailModal({
             ) : (
               <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
             )}
-            <button className="btn" onClick={onClose} disabled={busy}>Cancel</button>
+            {/* Cancel 은 편집을 버리고 저장본을 다시 읽는 버튼이다 — 읽기모드엔 버릴 편집이 없다. */}
+            {!readMode ? (
+              <button className="btn" onClick={onClose} disabled={busy}>Cancel</button>
+            ) : null}
             {canDeleteThis && !readMode ? (
               <button className="btn danger" onClick={remove} disabled={busy}>Delete</button>
             ) : null}
@@ -1179,7 +1182,9 @@ function VendorPoDetailModal({
               {canDeleteThis && !readMode ? (
                 <button className="btn danger" onClick={remove} disabled={busy}>Delete</button>
               ) : null}
-              <button className="btn" onClick={onClose} disabled={busy}>Cancel</button>
+              {!readMode ? (
+                <button className="btn" onClick={onClose} disabled={busy}>Cancel</button>
+              ) : null}
               {!canWriteNow ? (
                 readMode ? null : <span className="hint-inline">{editBlockReason("po", d?.assignee_id)}</span>
               ) : (

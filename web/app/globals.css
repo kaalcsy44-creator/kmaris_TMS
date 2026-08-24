@@ -13737,7 +13737,8 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
   display: none;
 }
 /* 빈 칸은 높이만 차지하고 아무 말도 안 한다 — 값이 없다는 걸 보이게 옅은 대시로. */
-.form-fieldset.vm-read input:placeholder-shown::placeholder {
+.form-fieldset.vm-read input:placeholder-shown::placeholder,
+.form-fieldset.vm-read textarea:placeholder-shown::placeholder {
   color: #c4cedb;
 }
 .form-fieldset.vm-read textarea {
@@ -13801,8 +13802,15 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 .form-fieldset.vm-read .items-head-del,
 .form-fieldset.vm-read .items-head-exclude,
 .form-fieldset.vm-read .pb-apply,
+.form-fieldset.vm-read .clause-all,
 .form-fieldset.vm-read .ocr-bar {
   display: none;
+}
+/* 조항 목록도 읽기에선 상자 안에서 또 스크롤하지 않는다 — 인쇄될 문장을 훑는 게 일인데
+   10줄짜리 목록이 6줄에서 잘리면 나머지는 없는 것과 같다(textarea 와 같은 규칙). */
+.form-fieldset.vm-read .clause-list {
+  max-height: none;
+  overflow-y: visible;
 }
 /* 행 선택 체크박스 열은 display:none 으로 지우면 안 된다 — 그룹 헤더행(PURCHASE·SALES)과
    합계행은 colspan 으로 만든 행이라, 보통 행에서만 칸이 하나 빠지면 그 뒤 컬럼이 통째로

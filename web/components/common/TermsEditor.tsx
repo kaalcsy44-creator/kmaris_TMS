@@ -61,9 +61,10 @@ export default function TermsEditor({
           <div className="clause-head">
             <span className="clause-title">Clauses printed on the quotation</span>
             <span className="clause-count">{picked.size} / {QUOTATION_CLAUSES.length}</span>
+            {/* 전체 선택/해제 — 값을 바꾸는 조작이라 읽기모드에선 CSS 가 감춘다(.clause-all). */}
             <button
               type="button"
-              className="btn sm"
+              className="btn sm clause-all"
               onClick={() =>
                 onChange({ ...terms, clauses: allOn ? [] : QUOTATION_CLAUSES.map((c) => c.id) })
               }

@@ -1941,7 +1941,11 @@ function VendorQuoteDetailModal({
             {canDeleteThis && !readMode ? (
               <button className="btn danger" onClick={remove} disabled={busy}>Delete</button>
             ) : null}
-            <button className="btn" onClick={onClose} disabled={busy}>Cancel</button>
+            {/* Cancel 은 편집을 버리고 저장본을 다시 읽는 버튼이다 — 읽기모드엔 버릴 편집이
+                없으니 "취소할 게 있나?" 만 묻게 된다. 나가는 길은 단계 창의 × 다. */}
+            {!readMode ? (
+              <button className="btn" onClick={onClose} disabled={busy}>Cancel</button>
+            ) : null}
             {canWriteNow ? (
               <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
             ) : null}
@@ -2466,7 +2470,11 @@ function CustomerQuoteDetailModal({
             {canDeleteThis && !readMode ? (
               <button className="btn danger" onClick={remove} disabled={busy}>Delete</button>
             ) : null}
-            <button className="btn" onClick={onClose} disabled={busy}>Cancel</button>
+            {/* Cancel 은 편집을 버리고 저장본을 다시 읽는 버튼이다 — 읽기모드엔 버릴 편집이
+                없으니 "취소할 게 있나?" 만 묻게 된다. 나가는 길은 단계 창의 × 다. */}
+            {!readMode ? (
+              <button className="btn" onClick={onClose} disabled={busy}>Cancel</button>
+            ) : null}
             {canWriteNow ? (
               <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
             ) : null}
