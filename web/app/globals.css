@@ -5793,7 +5793,8 @@ table.mini.wide.lead-tools tbody tr.item-row-excluded.item-row-excluded textarea
   color: #7c8aa0;
 }
 /* 그날 고시 참고줄 — 매매기준율 / 살 때(TTS) / 팔 때(TTB) + 고시일.
-   입력값이 아니라 참고 정보이므로 작고 흐리게, 숫자만 또렷하게 둔다. */
+   입력값이 아니라 참고 정보다. 숫자까지 통째로 회색으로 둬야 실제로 문서에 쓰이는
+   환율(왼쪽 입력칸 값)과 '그냥 참고로 적어 둔 값'이 한눈에 구분된다. */
 .fx-ref {
   display: flex;
   flex-wrap: wrap;
@@ -5808,8 +5809,8 @@ table.mini.wide.lead-tools tbody tr.item-row-excluded.item-row-excluded textarea
 }
 .fx-ref-item b {
   margin-left: 3px;
-  color: #2b3a4d;
-  font-weight: 700;
+  color: inherit;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 .fx-ref-date,
@@ -6035,13 +6036,20 @@ table.mini.wide.lead-tools tbody tr.item-row-excluded.item-row-excluded textarea
   margin-right: var(--item-list-gutter);
 }
 /* 카드로 감싼 품목표는 카드가 곧 섹션 박스다. 위아래로 맞붙는 Pricing 밴드·Summary 줄까지
-   한 덩어리로 들이고, 카드 안쪽 요소는 카드 폭에 맞춰 되돌린다(이중 들여쓰기 방지). */
+   한 덩어리로 들이고, 카드 안쪽 요소는 카드 폭에 맞춰 되돌린다(이중 들여쓰기 방지).
+   Basic Info·Terms 같은 나머지 단계 카드도 같은 여백을 쓴다 — 품목표만 들이면 카드마다
+   오른쪽 끝선이 어긋나고, 안 들인 카드의 마지막 칸 값이 창 스크롤바에 물려 잘린다. */
+.stage-card,
 .stage-card--items,
 .pricing-band,
 .summary-strip {
   margin-right: var(--item-list-gutter);
 }
+/* 카드 안쪽 요소는 되돌린다. 머리줄은 위의 ':has(~ .table-wrap.item-box)' 규칙이 더
+   구체적이라 그 선택자를 그대로 안은 채로 이겨야 한다 — 안 그러면 카드 안에서 머리줄만
+   48px 짧아져, 제목 밴드 오른쪽 끝에 카드 바탕(흰색)이 빈칸으로 드러난다. */
 .stage-card--items > .items-head,
+.stage-card--items > .items-head:has(~ .table-wrap.item-box),
 .stage-card--items > .table-wrap.item-box {
   margin-right: 0;
 }
@@ -13767,6 +13775,25 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 .form-fieldset.vm-read .form-grid > .form-field > :not(label):not(span:first-child) {
   min-width: 0;
 }
+/* Valid until 은 한 칸에 "[일수] days from Sent at [만료일]" 세 조각이 들어가는 유일한
+   필드다. 읽기모드는 라벨이 값 왼쪽으로 오면서 값이 쓸 수 있는 폭이 3분의 1 줄어드는데,
+   편집용 최소폭(일수 58px · 날짜 130px)을 그대로 두면 칸을 넘쳐 만료일이 카드 밖으로
+   밀려 잘렸다. 읽기에선 글자 폭만큼만 쓰고, 그래도 모자라면 잘리는 대신 줄을 바꾼다. */
+.form-fieldset.vm-read .form-grid > .form-field:has(.valid-until-row) {
+  grid-template-columns: minmax(70px, max-content) 1fr;
+}
+.form-fieldset.vm-read .valid-until-row {
+  flex-wrap: wrap;
+  gap: 2px 6px;
+}
+.form-fieldset.vm-read .valid-until-row .vu-days {
+  width: 36px;
+}
+.form-fieldset.vm-read .valid-until-row .vu-date {
+  flex: 0 1 auto;
+  min-width: 0;
+  width: auto;
+}
 
 /* 값을 바꾸는 조작만 감춘다 — 읽기 화면에 회색 버튼이 남아 있으면
    "권한이 없나?" 로 잘못 읽힌다. 다운로드·미리보기 같은 읽기 액션은 남는다. */
@@ -14004,6 +14031,9 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 .vm-compare-col {
   flex: 0 0 clamp(360px, 46%, 560px);
   min-width: 0;
+  /* 단계 카드·품목표의 오른쪽 여백은 '창 스크롤바를 피하려고' 둔 것이다. 비교 열은
+     제 폭 안에서 스크롤하지 않으니 그만큼이 그냥 빈 자리로 남는다 — 열 안에서만 끈다. */
+  --item-list-gutter: 0px;
   border: 1px solid #e6eaf0;
   border-radius: 10px;
   background: #fff;
