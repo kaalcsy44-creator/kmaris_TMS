@@ -284,7 +284,11 @@ def _sort_key(h):
 
 
 def _summarize(hs: list) -> dict:
-    """이력 행 묶음 → 최근 구매가·판매가 + 거래 카운트 + 최근일."""
+    """이력 행 묶음 → 최근 구매가·판매가 + 최근 거래 상대 + 거래 카운트 + 최근일.
+
+    거래 상대는 가격과 짝을 이룬다 — 판매가는 누구에게 팔았는지(고객), 구매가는 누구에게서
+    샀는지(공급사). 견적·오더 원가처럼 공급사가 안 찍히는 구매 행도 있어, 짝이 비면
+    그 상대가 찍힌 가장 최근 행으로 대신한다(master_price_summary 와 같은 규칙)."""
     buys = sorted([h for h in hs if h.price_type == "buy"], key=_sort_key, reverse=True)
     sells = sorted([h for h in hs if h.price_type == "sell"], key=_sort_key, reverse=True)
 
@@ -296,10 +300,20 @@ def _summarize(hs: list) -> dict:
             "date": x.doc_date, "fx_rate": x.fx_rate,  # 딜 저장 환율(있으면 마진 환산에 우선 사용)
         }
 
+    def newest(rows: list):
+        return rows[0] if rows else None
+
+    cust = (newest([h for h in sells if h.customer_id])
+            or newest(sorted([h for h in hs if h.customer_id], key=_sort_key, reverse=True)))
+    vend = (newest([h for h in buys if h.vendor_id])
+            or newest(sorted([h for h in hs if h.vendor_id], key=_sort_key, reverse=True)))
+
     dates = [h.doc_date for h in hs if h.doc_date]
     return {
         "buy": one(buys[0] if buys else None),
         "sell": one(sells[0] if sells else None),
+        "customer_id": cust.customer_id if cust else None,
+        "vendor_id": vend.vendor_id if vend else None,
         "buy_count": len(buys),
         "sell_count": len(sells),
         "last_date": max(dates) if dates else None,

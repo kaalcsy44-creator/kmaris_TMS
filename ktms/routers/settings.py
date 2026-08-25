@@ -804,8 +804,14 @@ def settings_item_ledger():
     try:
         cat_by_id = _category_maps(s)
         data = ledger_rows(s)
+        # 거래 상대는 id 로 굴러온다 — 화면이 읽는 건 이름이라 여기서 한 번에 붙인다.
+        cust = dict(s.query(Customer.id, Customer.name).all())
+        vend = dict(s.query(Vendor.id, Vendor.name).all())
         for it in data["items"]:
             it["category_path"] = _category_path(cat_by_id, it.get("category_id"))
+        for it in data["items"] + data["unmatched"]:
+            it["customer"] = cust.get(it.pop("customer_id", None)) or ""
+            it["vendor"] = vend.get(it.pop("vendor_id", None)) or ""
         # 매입(buy)·매출(sell) 통화가 달라도 마진을 보이도록 USD 로 환산해 margin_pct 산출
         # (국내매입 KRW·수출 USD 케이스가 흔함). 환율은 앱 공통 상수(대시보드와 동일).
         for it in data["items"] + data["unmatched"]:

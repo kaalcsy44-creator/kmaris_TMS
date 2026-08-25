@@ -9720,8 +9720,11 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 /* 고정 폭 레이아웃 — colgroup 폭대로 렌더해 표가 패널에 딱 맞고 sticky 열이 겹치지
    않게 한다. 패널이 좁으면 min-width 로 가로 스크롤(찌그러짐 방지). */
 .ledger-table {
-  width: 100%;
-  min-width: 900px;   /* Description(가변 열)이 남는 폭을 흡수해 패널 전체를 채움 */
+  /* 패널이 좁으면 열 폭을 줄이는 게 아니라 가로로 넘긴다(감싼 .table-wrap 이 스크롤).
+     width:100% 로 두면 지정 폭 합보다 좁을 때 브라우저가 모든 열을 비례 축소해,
+     방금 넓힌 Category 가 다시 잘린다. 남는 폭이 있으면 열들이 비례해 늘어난다. */
+  width: max-content;
+  min-width: 100%;
   table-layout: fixed;
 }
 .ledger-row {
@@ -9734,6 +9737,16 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 .ledger-desc {
   white-space: normal;
   word-break: break-word;
+}
+/* 상대처(공급사·고객사) 열 — 로고 + 이름 한 줄. 좁으면 이름을 말줄임한다. */
+.ledger-party {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* 이름 묶음(로고+이름)도 칸을 넘지 않게 — 넘치면 이름 쪽이 말줄임된다. */
+.ledger-party .cust-name {
+  max-width: 100%;
 }
 /* Category(Assign) 열은 표가 가로로 넘쳐도 항상 보이도록 우측 고정(sticky).
    단 그 열이 맨 끝일 때만(.cat-sticky) — 순서를 바꿔 가운데로 오면 우측 열을 덮는다. */

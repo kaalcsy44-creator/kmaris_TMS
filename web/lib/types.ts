@@ -127,6 +127,8 @@ export type ItemLedgerRow = {
   part_no: string;
   description: string;
   maker?: string;
+  customer?: string;             // 최근 판매 상대(고객사)
+  vendor?: string;               // 최근 구매 상대(공급사 — 견적·발주를 준 곳)
   category_id?: number | null;
   category_path?: string;        // "대 > 중 > 소"
   buy: ItemLedgerPrice | null;   // 최근 구매가

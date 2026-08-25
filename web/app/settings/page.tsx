@@ -97,6 +97,9 @@ import ComboBox from "@/components/common/ComboBox";
 import { useColumnLayout } from "@/components/common/useColumnLayout";
 import { ColumnResizer, ColumnsButton, dragHandleProps } from "@/components/common/tableLayout";
 import { invalidateMasterCategories } from "@/components/common/CategoryCell";
+// 목록의 상대처는 다른 화면과 같은 모양(로고 + 이름)으로 — 같은 회사를 두 표기로 읽지 않도록.
+import CustomerName from "@/components/common/CustomerName";
+import VendorName from "@/components/common/VendorName";
 
 type Tab =
   | "company" | "users" | "permissions"
@@ -2089,7 +2092,10 @@ const LEDGER_COLS: { key: string; label: string; width: number; numeric?: boolea
   { key: "part_no", label: "Part No.", width: 100 },
   { key: "description", label: "Description", width: 200 },
   { key: "maker", label: "Maker", width: 110 },
+  // 거래 상대는 제 가격 옆에 둔다 — 공급사→구매가, 고객사→판매가 순으로 읽힌다.
+  { key: "vendor", label: "Vendor", width: 132 },
   { key: "buy", label: "Buy", width: 128, numeric: true },
+  { key: "customer", label: "Customer", width: 132 },
   { key: "sell", label: "Sell", width: 128, numeric: true },
   { key: "margin", label: "Margin", width: 72, numeric: true },
   { key: "deals", label: "Deals", width: 56, numeric: true },
@@ -2108,6 +2114,7 @@ function ledgerRowKey(it: ItemLedgerRow): string {
 function ledgerCellClass(key: string, numeric?: boolean): string {
   if (key === "description") return "ledger-desc";
   if (key === "category") return "ledger-cat";
+  if (key === "vendor" || key === "customer") return "ledger-party";
   return numeric ? "num" : "";
 }
 
@@ -2120,6 +2127,10 @@ function ledgerCellValue(key: string, it: ItemLedgerRow): React.ReactNode {
       return it.description;
     case "maker":
       return it.maker || "";
+    case "vendor":
+      return it.vendor ? <VendorName name={it.vendor} /> : <span className="dash">—</span>;
+    case "customer":
+      return it.customer ? <CustomerName name={it.customer} /> : <span className="dash">—</span>;
     case "buy":
       return fmtPrice(it.buy);
     case "sell":
