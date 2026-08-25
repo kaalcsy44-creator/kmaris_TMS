@@ -201,8 +201,9 @@ class Vessel(Base):
 class ItemCategory(Base):
     """품목 분류(대>중>소) 트리. 자기참조 parent_id 로 계층을 이룬다.
 
-    level: 1=기자재군, 2=기자재, 3=부품 기능.
-    (Engine·Deck machinery·… > 4-stroke·Crane·… > Overhaul kit·Seal & gasket·…)
+    level: 1=선박 계통, 2=계통·기기, 3=구성품.
+    (Engine Room·Deck Machinery·… > Main Engine System·Crane·… > Piston·Hoisting·…)
+    물건이 아닌 용역은 계통에 얹히지 않아 Service 대분류가 따로 있다.
     층마다 축이 하나다 — 업무구분(부품공급/서비스)은 딜의 work_type 이 갖고 있으므로
     여기 넣지 않는다. 넣으면 같은 부품이 두 가지로 갈라져 가격 이력이 쪼개진다.
     기본 트리는 init_db.ITEM_CATEGORY_TREE, 그 뒤 추가는 Settings 에서 코드 수정 없이.

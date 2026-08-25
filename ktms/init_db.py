@@ -425,42 +425,103 @@ def seed_sample_data():
         session.close()
 
 
-# 부품 기능(소분류) — 기자재를 가리지 않는 공용 어휘라 어느 기자재 밑에서나 같은 목록이다.
-# 고르는 사람이 기자재마다 다른 목록을 외우지 않아도 되고, "실링킷 매입가 추이"처럼
-# 기자재를 가로지르는 조회가 된다. 딱 맞는 기능이 없으면 중분류에서 멈추면 되므로
-# 여기에 "Other"는 두지 않는다(분류는 어느 깊이에서든 고를 수 있다).
-PART_FUNCTIONS = [
-    "Overhaul kit", "Seal & gasket", "Bearing & bushing", "Valve",
-    "Fuel & lubrication", "Electric parts", "Mechanical parts",
-]
-
-# 품목 분류 기본 트리 — 기자재군(대) > 기자재(중) > 부품 기능(소).
+# 품목 분류 기본 트리 — 선박 계통(대) > 계통·기기(중) > 구성품(소).
 #
-# 층마다 축이 하나다. 업무구분(부품공급/서비스)은 넣지 않는다 — 딜의 work_type 이 이미
-# 갖고 있고, 품목 트리에 넣으면 같은 부품이 두 가지로 갈라져 품목별 가격 이력이 쪼개진다.
-# 서비스 매출은 work_type × 분류 교차로 본다.
+# 축은 "그 물건이 배의 어디에서 무슨 계통으로 도는가"다. 부품 기능(Seal·Bearing…)으로
+# 나누던 옛 트리는 같은 이름의 소분류가 기자재마다 되풀이되면서, 정작 Generator 처럼
+# 계통을 통째로 가리키는 품목이 들어갈 자리가 없었다.
 #
-# 소분류는 물량이 있는 기자재에만 깔아 둔다 — 모든 기자재에 미리 깔면 노드만 수백 개가
-# 되고 정작 쓰이지 않는다. 필요해지면 Settings 에서 그 기자재 밑에 추가한다.
+# 층마다 축이 하나다. 업무구분(부품공급/서비스)은 딜의 work_type 이 갖고 있으므로 품목
+# 축에 넣지 않는다 — 다만 용역은 물건이 아니라 계통에 얹을 수 없어 Service 대분류를 둔다
+# (숙박·출장·기술료는 어느 계통의 부품도 아니다).
+#
+# 참고 도면의 흐름(→)은 같은 계통 안의 순서라 소분류 형제로 편다. Actuator 밑의
+# Hydraulic Motor·Cylinder 처럼 4층이 되는 자리도 3층으로 편다(트리는 3층까지다).
 ITEM_CATEGORY_TREE: dict[str, dict[str, list[str]]] = {
-    "Engine": {
-        "2-stroke": PART_FUNCTIONS,
-        "4-stroke": PART_FUNCTIONS,
+    "Bridge": {
+        "Navigation": [],
+        "Communication": [],
+        "Control": [],
+    },
+    "Engine Room": {
+        "Main Engine System": [
+            "Fuel", "Fuel Pump", "Injector", "Cylinder", "Piston", "Con. Rod",
+            "Crankshaft", "Propeller Shaft", "Propeller",
+        ],
+        "Starting Air System": [
+            "Air Compressor", "Air Receiver", "Main Starting Valve",
+            "Starting Air Distributor", "Cylinder Starting Valve", "Engine Rotation",
+        ],
+        "Fuel Oil System": [
+            "Storage Tank", "Settling Tank", "Purifier", "Service Tank",
+            "Booster Pump", "Heater", "Filter", "Fuel Pump", "Injector", "Engine",
+        ],
+        "Lubricating Oil System": [
+            "Sump", "LO Pump", "Cooler", "Filter", "Bearing", "Engine",
+        ],
+        "Cooling Water System": ["HT", "LT"],
+        "Electrical Power System": [
+            "Generator", "Switchboard", "Breaker", "Motor Starter", "Electric Motor",
+            "Pump / Compressor / Fan",
+        ],
+        "Hydraulic System": [
+            "Tank", "Pump", "Relief Valve", "Control Valve", "Actuator",
+            "Hydraulic Motor", "Hydraulic Cylinder", "Return Line",
+        ],
+    },
+    "Deck Machinery": {
+        "Crane": ["Hoisting", "Luffing", "Slewing"],
+        "Winch": [],
+        "Windlass": [],
+        "Mooring Equipment": [],
+        "Liferaft & Davit": [],
+        "Provision Crane": [],
+    },
+    "Cargo & Tank System": {
+        "Cargo Pump": [],
+        "Valve": [],
+        "Pipe Line": [],
+        "Tank": [],
+        "Vent / Inert Gas": [],
+    },
+    "Electrical & Automation": {
+        "Control Flow": [
+            "Sensor", "Transmitter", "PLC / Controller", "Relay", "Solenoid Valve",
+            "Hydraulic Valve", "Actuator", "Machine",
+        ],
+        "Power Flow": [
+            "Generator", "Switchboard", "Breaker", "Motor Starter", "Electric Motor",
+            "Pump / Compressor / Fan",
+        ],
+    },
+    # 용역 — 물건이 아니라서 계통에 얹히지 않는다. 청구 항목의 성격으로 나눈다.
+    "Service": {
+        "Technical Service": [
+            "Attendance", "Supervision", "Commissioning", "Inspection & Test",
+            "Repair & Overhaul",
+        ],
+        "Labor & Travel": [
+            "Technician", "Man-day / Overtime", "Travelling", "Accommodation", "Meal",
+        ],
+        "Workshop": ["Machining", "Welding", "Balancing", "Cleaning"],
+        "Other Service": [
+            "Transportation", "Customs & Handling", "Consulting Fee", "Misc Charge",
+        ],
+    },
+    # 참고 도면에 자리가 없는 기자재 — 옛 트리에 있던 것들을 잃지 않도록 모아 둔다.
+    # 제자리를 찾으면 Settings 에서 옮기면 된다(품목 배정은 따라 움직인다).
+    "Other Equipment": {
         "Turbocharger": [],
         "Governor": [],
+        "Boiler": [],
+        "BWTS": [],
+        "Scrubber": [],
+        "Incinerator": [],
+        "OWS": [],
+        "Elevator": [],
+        "Fire Fighting": [],
+        "Hatch Cover": [],
     },
-    "Deck machinery": {
-        "Crane": PART_FUNCTIONS,
-        "Winch": [],
-        "Hatch cover": [],
-    },
-    "Auxiliary machinery": {
-        "Purifier": [], "Pump": [], "Compressor": [], "Boiler": [], "Cooler": [],
-    },
-    "Environmental": {"BWTS": [], "Incinerator": [], "OWS": [], "Scrubber": []},
-    "Safety": {"Life boat": [], "Elevator": [], "Fire fighting": []},
-    "Electrical & automation": {},
-    "Other": {},
 }
 
 
@@ -582,6 +643,35 @@ def _remap_line_categories(s, remap: dict) -> int:
     return n
 
 
+# 2026-06 기자재 트리 스냅숏 — 그때의 마이그레이션이 세우던 모양 그대로 얼려 둔다.
+# 지금 트리(ITEM_CATEGORY_TREE)를 고칠 때마다 과거 마이그레이션이 만드는 결과가 따라
+# 바뀌면, 옛 백업에서 올린 DB 가 그 시절 경로 매핑과 어긋난 트리를 받게 된다.
+_EQUIPMENT_PART_FUNCTIONS = [
+    "Overhaul kit", "Seal & gasket", "Bearing & bushing", "Valve",
+    "Fuel & lubrication", "Electric parts", "Mechanical parts",
+]
+_EQUIPMENT_TREE_2026_06: dict[str, dict[str, list[str]]] = {
+    "Engine": {
+        "2-stroke": _EQUIPMENT_PART_FUNCTIONS,
+        "4-stroke": _EQUIPMENT_PART_FUNCTIONS,
+        "Turbocharger": [],
+        "Governor": [],
+    },
+    "Deck machinery": {
+        "Crane": _EQUIPMENT_PART_FUNCTIONS,
+        "Winch": [],
+        "Hatch cover": [],
+    },
+    "Auxiliary machinery": {
+        "Purifier": [], "Pump": [], "Compressor": [], "Boiler": [], "Cooler": [],
+    },
+    "Environmental": {"BWTS": [], "Incinerator": [], "OWS": [], "Scrubber": []},
+    "Safety": {"Life boat": [], "Elevator": [], "Fire fighting": []},
+    "Electrical & automation": {},
+    "Other": {},
+}
+
+
 def migrate_restructure_item_categories():
     """1회성: 품목 분류를 업무구분(Service/Parts) 축에서 기자재 축으로 재편한다.
 
@@ -618,9 +708,11 @@ def migrate_restructure_item_categories():
         old_by_path: dict[str, ItemCategory] = {}
         for c in cats:
             old_by_path.setdefault(_category_path_of(c, by_id), c)
-        # 구 트리가 아니면(새 트리로 시드된 DB) 할 일이 없다.
-        if "Parts" not in old_by_path and "Service" not in old_by_path:
-            done("[SKIP] restructure_item_categories: already on the equipment tree.")
+        # 구 트리(1단이 Parts/Service)가 아니면 할 일이 없다. 판단은 "Parts" 로만 한다 —
+        # 지금 트리에도 Service 대분류(용역)가 있어서, 그것까지 신호로 쓰면 새로 시드된
+        # DB 를 옛 트리로 오인한다.
+        if "Parts" not in old_by_path:
+            done("[SKIP] restructure_item_categories: not on the old work-type tree.")
             return
 
         # ── 새 트리를 세운다. 승격 대상이 있으면 그 노드를 옮겨서 쓴다(id 보존). ──
@@ -642,7 +734,7 @@ def migrate_restructure_item_categories():
             new_by_path[path] = node
             return node
 
-        for i, (l1, mids) in enumerate(ITEM_CATEGORY_TREE.items()):
+        for i, (l1, mids) in enumerate(_EQUIPMENT_TREE_2026_06.items()):
             n1 = place(l1, l1, None, 1, i)
             for j, (l2, funcs) in enumerate(mids.items()):
                 p2 = f"{l1} > {l2}"
@@ -684,6 +776,166 @@ def migrate_restructure_item_categories():
         s.close()
     done(f"[OK] restructure_item_categories applied: "
          f"{len(reused)} nodes on the new tree, {n_items} items and {n_lines} documents remapped.")
+
+
+# 기자재 트리(2026-06) → 선박 계통 트리 이동표. 왼쪽=옛 경로, 오른쪽=새 경로.
+#
+# _VESSEL_PROMOTE: 옛 노드를 "그대로 옮겨" 새 자리를 만든다 — id 가 살아남으므로 그 분류를
+#   쓰던 품목·문서 라인이 손대지 않아도 새 자리를 가리킨다. 품목이 실린 가지를 고른다.
+# _VESSEL_MOVE: 승격되지 않은 노드의 참조를 어디로 옮길지. 표에 없는 노드는 부모의 행선지를
+#   물려받는다(2-stroke 밑 'Seal & gasket' 같은 옛 소분류, 관리자가 만든 하위 분류).
+_VESSEL_PROMOTE = {
+    "Engine Room":                        "Engine",
+    # 품목이 몰려 있는 가지(4-stroke)를 주 계통으로 승격한다. 2-stroke 는 아래에서 합친다 —
+    # 새 트리에는 엔진 형식 축이 없다(계통 축 하나다).
+    "Engine Room > Main Engine System":   "Engine > 4-stroke",
+    "Deck Machinery":                     "Deck machinery",
+    "Deck Machinery > Crane":             "Deck machinery > Crane",
+    "Deck Machinery > Winch":             "Deck machinery > Winch",
+    "Deck Machinery > Liferaft & Davit":  "Safety > Life boat",
+    "Electrical & Automation":            "Electrical & automation",
+    "Other Equipment":                    "Other",
+    "Other Equipment > Turbocharger":     "Engine > Turbocharger",
+    "Other Equipment > Governor":         "Engine > Governor",
+    "Other Equipment > Boiler":           "Auxiliary machinery > Boiler",
+    "Other Equipment > BWTS":             "Environmental > BWTS",
+    "Other Equipment > Scrubber":         "Environmental > Scrubber",
+    "Other Equipment > Incinerator":      "Environmental > Incinerator",
+    "Other Equipment > OWS":              "Environmental > OWS",
+    "Other Equipment > Elevator":         "Safety > Elevator",
+    "Other Equipment > Fire Fighting":    "Safety > Fire fighting",
+    "Other Equipment > Hatch Cover":      "Deck machinery > Hatch cover",
+}
+_VESSEL_MOVE = {
+    "Engine > 2-stroke":                  "Engine Room > Main Engine System",
+    # 옛 부품 기능 소분류(Seal & gasket…)는 계통 트리에 자리가 없다. 부모로 참조를 올리고
+    # 지운다 — 안 지우면 승격된 부모(Main Engine System·Crane) 밑에 그대로 매달린다.
+    **{f"Engine > 2-stroke > {f}": "Engine Room > Main Engine System"
+       for f in _EQUIPMENT_PART_FUNCTIONS},
+    **{f"Engine > 4-stroke > {f}": "Engine Room > Main Engine System"
+       for f in _EQUIPMENT_PART_FUNCTIONS},
+    **{f"Deck machinery > Crane > {f}": "Deck Machinery > Crane"
+       for f in _EQUIPMENT_PART_FUNCTIONS},
+    "Auxiliary machinery":                "Engine Room",
+    "Auxiliary machinery > Purifier":     "Engine Room > Fuel Oil System > Purifier",
+    "Auxiliary machinery > Compressor":   "Engine Room > Starting Air System > Air Compressor",
+    "Auxiliary machinery > Cooler":       "Engine Room > Lubricating Oil System > Cooler",
+    "Auxiliary machinery > Pump":         "Engine Room",
+    "Environmental":                      "Other Equipment",
+    "Safety":                             "Other Equipment",
+}
+
+
+def migrate_vessel_system_categories():
+    """1회성: 품목 분류를 '기자재 + 부품기능' 축에서 '선박 계통' 축으로 재편한다.
+
+    옛 트리는 소분류가 부품 기능(Seal & gasket·Bearing & bushing…)이라 기자재마다 같은
+    목록이 되풀이됐고, Generator·Switchboard 처럼 계통을 이루는 기기는 들어갈 자리가
+    아예 없었다. 새 트리는 배의 계통(Bridge·Engine Room·Deck Machinery·Cargo & Tank·
+    Electrical & Automation)을 축으로 삼고, 물건이 아닌 용역은 Service 대분류로 뺀다.
+
+    이동은 id 를 최대한 살린다(_VESSEL_PROMOTE) — 품목과 저장된 문서 라인이 손대지 않아도
+    새 자리를 가리킨다. 살릴 수 없는 노드는 참조를 대응 노드로 옮긴 뒤 지운다.
+    applied_migrations 마커로 1회만 실행."""
+    eng = get_engine()
+    insp = inspect(eng)
+    if not insp.has_table("item_categories"):
+        return
+    with eng.begin() as conn:
+        conn.execute(text(
+            "CREATE TABLE IF NOT EXISTS applied_migrations (name VARCHAR(100) PRIMARY KEY)"))
+        if conn.execute(text(
+                "SELECT 1 FROM applied_migrations WHERE name='vessel_system_categories'")).first():
+            return
+
+    def done(msg: str):
+        with eng.begin() as conn:
+            conn.execute(text(
+                "INSERT INTO applied_migrations (name) VALUES ('vessel_system_categories')"))
+        print(msg)
+
+    s = get_session()
+    try:
+        cats = s.query(ItemCategory).all()
+        by_id = {c.id: c for c in cats}
+        old_by_path: dict[str, ItemCategory] = {}
+        for c in cats:
+            old_by_path.setdefault(_category_path_of(c, by_id), c)
+        # 이미 계통 트리면 할 일이 없다(새로 시드된 DB).
+        if "Engine Room" in old_by_path:
+            done("[SKIP] vessel_system_categories: already on the vessel-system tree.")
+            return
+
+        # ── 새 트리를 세운다. 승격 대상이 있으면 그 노드를 옮겨서 쓴다(id 보존). ──
+        new_by_path: dict[str, ItemCategory] = {}
+        reused: set[int] = set()
+
+        def place(path: str, name: str, parent_id, level: int, sort_order: int):
+            donor = old_by_path.get(_VESSEL_PROMOTE.get(path, ""))
+            if donor is None or donor.id in reused:
+                node = ItemCategory(name=name, parent_id=parent_id, level=level,
+                                    sort_order=sort_order, active=True)
+                s.add(node)
+                s.flush()
+            else:
+                node = donor
+                node.name, node.parent_id = name, parent_id
+                node.level, node.sort_order, node.active = level, sort_order, True
+            reused.add(node.id)
+            new_by_path[path] = node
+            return node
+
+        for i, (l1, mids) in enumerate(ITEM_CATEGORY_TREE.items()):
+            n1 = place(l1, l1, None, 1, i)
+            for j, (l2, subs) in enumerate(mids.items()):
+                p2 = f"{l1} > {l2}"
+                n2 = place(p2, l2, n1.id, 2, j)
+                for k, l3 in enumerate(subs):
+                    place(f"{p2} > {l3}", l3, n2.id, 3, k)
+        s.flush()
+
+        # ── 남은 옛 노드 → 행선지 결정. 표에 없으면 부모의 행선지를 물려받는다. ──
+        def dest_of(path: str):
+            seen = 0
+            while path and seen < 5:
+                node = new_by_path.get(_VESSEL_MOVE.get(path, ""))
+                if node is not None:
+                    return node
+                path = path.rsplit(" > ", 1)[0] if " > " in path else ""
+                seen += 1
+            return None
+
+        remap: dict[int, int] = {}
+        leftovers: list[tuple] = []
+        for path, c in old_by_path.items():
+            if c.id in reused:
+                continue
+            dest = dest_of(path)
+            if dest is None:
+                continue          # 갈 곳이 정해지지 않은 분류 — 그대로 둔다
+            remap[c.id] = dest.id
+            leftovers.append((c, dest))
+
+        n_items = n_lines = 0
+        if remap:
+            for m in s.query(ItemMaster).filter(ItemMaster.category_id.in_(list(remap))).all():
+                m.category_id = remap[m.category_id]
+                n_items += 1
+            n_lines = _remap_line_categories(s, remap)
+            s.flush()
+
+        # 깊은 것부터 지운다 — 남은 자식(관리자 추가분)은 대응 노드로 옮겨 붙인다.
+        for c, dest in sorted(leftovers, key=lambda t: -(t[0].level or 1)):
+            for child in s.query(ItemCategory).filter_by(parent_id=c.id).all():
+                child.parent_id = dest.id
+                child.level = min((dest.level or 1) + 1, 3)
+            s.flush()
+            s.delete(c)
+        s.commit()
+    finally:
+        s.close()
+    done(f"[OK] vessel_system_categories applied: {len(reused)} nodes on the vessel tree, "
+         f"{n_items} items and {n_lines} documents remapped.")
 
 
 def migrate_widen_activity_type():
@@ -1082,6 +1334,8 @@ if __name__ == "__main__":
     migrate_translate_categories()
     # 이름 변환(한글→영문) 뒤에 돌아야 경로 매핑이 맞는다.
     migrate_restructure_item_categories()
+    # 기자재 축 → 선박 계통 축(참고 도면). 위 재편이 끝난 트리를 받아 돈다.
+    migrate_vessel_system_categories()
     migrate_widen_activity_type()
     migrate_normalize_incoterms()
     migrate_split_stage_dates_to_orders()

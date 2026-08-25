@@ -458,7 +458,8 @@ def part_family(part_no) -> str:
     """품번의 계열 키 — 앞쪽 영숫자 덩어리('B6DS0939 101' → 'B6DS0939').
 
     같은 엔진·기기의 부품표는 앞부분을 공유하고 뒤가 도면번호로 갈린다. 그래서
-    계열이 같으면 대·중분류(Engine > 4-stroke)가 같다고 보아도 어긋나는 일이 드물다.
+    계열이 같으면 대·중분류(Engine Room > Main Engine System)가 같다고 보아도 어긋나는
+    일이 드물다.
     구분자가 없는 품번은 통째로 하나의 계열이 된다(길이 4 미만이면 계열로 안 본다)."""
     pk = part_key(part_no)
     if not pk:
@@ -493,7 +494,7 @@ def _pick(cats: dict, cids: list[int]) -> tuple[int | None, str]:
     """분류 후보 묶음 → (고른 분류, 근거 꼬리말).
 
     과반이면 그 분류를 쓰고, 갈리면 모두가 공유하는 가장 깊은 상위로 물러선다 —
-    같은 계열이 'Bearing & bushing' 과 'Seal & gasket' 로 갈렸어도 'Engine > 4-stroke'
+    같은 계열이 'Piston' 과 'Cylinder' 로 갈렸어도 'Engine Room > Main Engine System'
     까지는 확실하다. 뿌리부터 갈리면 근거가 없는 것으로 본다."""
     if not cids:
         return None, ""
@@ -538,6 +539,11 @@ def suggest_categories(session, *, rows: list[dict] | None = None) -> list[dict]
     # 분류 이름 낱말 색인(잎 분류 우선 — 깊을수록 구체적이다).
     cat_words = {cid: _cat_words(c.name) for cid, c in cats.items() if c.active is not False}
 
+    # 용역 가지 — 물건과 용역은 서로의 자리에 갈 수 없다. 이 울타리가 없으면
+    # "Service Charge" 가 낱말 하나로 'Fuel Oil System > Service Tank' 에 꽂힌다.
+    service_root = next((cid for cid, c in cats.items()
+                         if (c.level or 1) == 1 and _norm(c.name) == "SERVICE"), None)
+
     def ancestors(cid: int | None) -> set[int]:
         out, cur, guard = set(), cats.get(cid) if cid else None, 0
         while cur is not None and guard < 5:
@@ -546,24 +552,42 @@ def suggest_categories(session, *, rows: list[dict] | None = None) -> list[dict]
             guard += 1
         return out
 
-    def by_name(desc: str, within: int | None) -> tuple[int | None, str]:
-        """품명이 품은 분류 이름 낱말로 찾기. within 이 있으면 그 하위에서만."""
+    def in_service_branch(cid: int) -> bool:
+        return service_root is not None and service_root in ancestors(cid)
+
+    def by_name(desc: str, within: int | None, want_service: bool) -> tuple[int | None, str]:
+        """품명이 품은 분류 이름 낱말로 찾기. within 이 있으면 그 하위에서만.
+
+        계통 트리에는 같은 이름이 여러 계통에 되풀이된다(Filter 는 연료·윤활 양쪽,
+        Generator 는 Engine Room 과 Electrical & Automation 양쪽). 그래서 가장 잘 맞는
+        후보가 여럿이면 하나를 임의로 고르지 않고 _pick 에 넘긴다 — 같은 계통 안이면
+        그 계통까지, 계통이 갈리면 근거 없음으로 남긴다."""
         d = _norm(desc).lower()
         if not d:
             return None, ""
-        best, best_key = None, ()
+        best_key, tied = (), []
         for cid, words in cat_words.items():
             hit = {w for w in words if w in d}
             if not hit:
                 continue
             if within is not None and within not in ancestors(cid) - {cid}:
                 continue
+            if service_root is not None and in_service_branch(cid) != want_service:
+                continue
             c = cats[cid]
             # 더 깊은(구체적인) 분류, 더 많이 맞은 낱말, 더 긴 낱말 순.
             key = (c.level or 0, len(hit), max(len(w) for w in hit))
-            if best is None or key > best_key:
-                best, best_key = cid, key
-        return best, (", ".join(sorted(w for w in cat_words[best] if w in d)) if best else "")
+            if not tied or key > best_key:
+                best_key, tied = key, [cid]
+            elif key == best_key:
+                tied.append(cid)
+        if not tied:
+            return None, ""
+        best, _ = _pick(cats, tied) if len(tied) > 1 else (tied[0], "")
+        if best is None:
+            return None, ""
+        hits = sorted({w for cid in tied for w in cat_words[cid] if w in d})
+        return best, ", ".join(hits)
 
     if rows is None:
         # 대상 = 분류가 빈 마스터 전체(거래 이력이 아직 없는 품목도 포함) + 마스터에
@@ -571,12 +595,15 @@ def suggest_categories(session, *, rows: list[dict] | None = None) -> list[dict]
         rows = [{
             "item_id": m.id, "part_no": m.part_no or "",
             "description": m.description or "", "maker": m.maker or "",
+            "item_type": m.item_type or "",
         } for m in masters if not m.category_id]
         rows += ledger_rows(session)["unmatched"]
 
     out: list[dict] = []
     for r in rows:
         desc, pn = r.get("description") or "", r.get("part_no") or ""
+        # 물품/용역 — 마스터에 적힌 값이 있으면 그것, 없으면(미연결 이력) 품명으로 짐작.
+        is_service = (r.get("item_type") or guess_item_type(pn, desc)) == "service"
         cid: int | None = None
         reason = ""
         # 1) 같은 품명이 이미 분류돼 있다.
@@ -589,14 +616,14 @@ def suggest_categories(session, *, rows: list[dict] | None = None) -> list[dict]
             c, why = _pick(cats, by_family.get(fam) or [])
             if c:
                 # 계열이 정하는 건 보통 대·중분류다. 품명이 그 아래 소분류를 가리키면 더 깊게.
-                deeper, hit = by_name(desc, c)
+                deeper, hit = by_name(desc, c, is_service)
                 if deeper:
                     cid, reason = deeper, f"part family {fam} — {why} + name “{hit}”"
                 else:
                     cid, reason = c, f"part family {fam} — {why}"
         # 3) 품명이 분류 이름을 품는다.
         if cid is None:
-            c, hit = by_name(desc, None)
+            c, hit = by_name(desc, None, is_service)
             if c:
                 cid, reason = c, f"name contains “{hit}”"
         if cid is None:
