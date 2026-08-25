@@ -649,13 +649,14 @@ function PipelineTable({
   const [tbStatus, setTbStatus] = useState<string[]>(["active"]);
   const [tbCustomer, setTbCustomer] = useState<string[]>([]);
   const [tbVendor, setTbVendor] = useState<string[]>([]);
-  // 패싯 필터: 각 값 "전체"는 미적용. 빈 문자열("")은 "미지정" 값 자체를 의미.
-  const [fWorkType, setFWorkType] = useState("전체");
-  const [fCustomer, setFCustomer] = useState("전체");
-  const [fVendor, setFVendor] = useState("전체");
-  const [fVessel, setFVessel] = useState("전체");
-  const [fAssignee, setFAssignee] = useState("전체");
-  const [fStage, setFStage] = useState("전체"); // 단계 번호 문자열
+  // 패싯 필터: 값 여러 개를 고르면 그중 하나라도 맞는 행(OR). 빈 배열=미적용(전체).
+  // 툴바 FilterSelect 와 같은 규약 — 빈 문자열("")은 "미지정" 값 자체를 의미한다.
+  const [fWorkType, setFWorkType] = useState<string[]>([]);
+  const [fCustomer, setFCustomer] = useState<string[]>([]);
+  const [fVendor, setFVendor] = useState<string[]>([]);
+  const [fVessel, setFVessel] = useState<string[]>([]);
+  const [fAssignee, setFAssignee] = useState<string[]>([]);
+  const [fStage, setFStage] = useState<string[]>([]); // 단계 번호 문자열
   const [fFrom, setFFrom] = useState(""); // 수신일 From "YYYY-MM-DD"
   const [fTo, setFTo] = useState(""); // 수신일 To
   // 헤더 클릭 시 뜨는 컬럼 메뉴(정렬+필터). fixed 위치라 가로 스크롤에 잘리지 않는다.
@@ -680,7 +681,7 @@ function PipelineTable({
   }
 
   // 필드별 필터 값/세터/활성여부 — 메뉴에서 공통 사용
-  function fieldValue(key: FieldKey): string {
+  function fieldValue(key: FieldKey): string[] {
     switch (key) {
       case "customer": return fCustomer;
       case "vendor": return fVendor;
@@ -688,23 +689,29 @@ function PipelineTable({
       case "vessel": return fVessel;
       case "assignee": return fAssignee;
       case "stage": return fStage;
-      default: return "전체";
+      default: return [];
     }
   }
-  function setFieldValue(key: FieldKey, v: string) {
+  function setFieldValue(key: FieldKey, next: string[]) {
     switch (key) {
-      case "customer": setFCustomer(v); break;
-      case "vendor": setFVendor(v); break;
-      case "work_type": setFWorkType(v); break;
-      case "vessel": setFVessel(v); break;
-      case "assignee": setFAssignee(v); break;
-      case "stage": setFStage(v); break;
+      case "customer": setFCustomer(next); break;
+      case "vendor": setFVendor(next); break;
+      case "work_type": setFWorkType(next); break;
+      case "vessel": setFVessel(next); break;
+      case "assignee": setFAssignee(next); break;
+      case "stage": setFStage(next); break;
     }
-    setOpenCol(null);
+    // 메뉴는 열어 둔다 — 복수 선택은 한 번에 하나씩 찍어 쌓는 동작이라, 고를 때마다
+    // 닫히면 같은 메뉴를 값 수만큼 다시 열어야 한다. 닫기는 바깥 클릭/머리글 재클릭.
+  }
+  /** 값 하나를 켜고 끈다(다중 선택). */
+  function toggleFieldValue(key: FieldKey, v: string) {
+    const cur = fieldValue(key);
+    setFieldValue(key, cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v]);
   }
   function isFieldFiltered(key: FieldKey): boolean {
     if (key === "received_at") return !!(fFrom || fTo);
-    return fieldValue(key) !== "전체";
+    return fieldValue(key).length > 0;
   }
   /** 그룹 열 머리글의 '필터 걸림' 표시 — 품고 있는 필드 중 하나라도 걸려 있으면 활성. */
   function isColFiltered(key: ColKey): boolean {
@@ -724,44 +731,44 @@ function PipelineTable({
   // 단계 옵션: 데이터에 존재하는 stage 번호를 오름차순으로
   const stageOpts = Array.from(new Set(rows.map((r) => stageOf(r)))).sort((a, b) => a - b);
 
-  // 메뉴 값 목록(전체 + 데이터 고유값). 날짜·필터없는 필드는 빈 배열.
+  // 메뉴 값 목록(데이터 고유값). 날짜·필터없는 필드는 빈 배열.
+  // "All"(선택 해제) 줄은 메뉴가 목록 위에 따로 그린다 — 값이 아니라 명령이라서.
   function colOptions(key: FieldKey): { v: string; label: string }[] {
-    const all = { v: "전체", label: "All" };
     switch (key) {
       case "customer":
-        return [all, ...customerOpts.map((v) => ({ v, label: v || "Unspecified" }))];
+        return customerOpts.map((v) => ({ v, label: v || "Unspecified" }));
       case "vendor":
-        return [all, ...vendorOpts.map((v) => ({ v, label: v || "Unspecified" }))];
+        return vendorOpts.map((v) => ({ v, label: v || "Unspecified" }));
       case "work_type":
-        return [all, ...workTypeOpts.map((v) => ({ v, label: tr(v) }))];
+        return workTypeOpts.map((v) => ({ v, label: tr(v) }));
       case "vessel":
-        return [all, ...vesselOpts.map((v) => ({ v, label: v || "No vessel" }))];
+        return vesselOpts.map((v) => ({ v, label: v || "No vessel" }));
       case "assignee":
-        return [all, ...assigneeOpts.map((v) => ({ v, label: v || "Unspecified" }))];
+        return assigneeOpts.map((v) => ({ v, label: v || "Unspecified" }));
       case "stage":
-        return [all, ...stageOpts.map((s) => ({ v: String(s), label: doneStageLabel(s, steps) }))];
+        return stageOpts.map((s) => ({ v: String(s), label: doneStageLabel(s, steps) }));
       default:
         return [];
     }
   }
 
   const filtersActive =
-    fWorkType !== "전체" ||
-    fCustomer !== "전체" ||
-    fVendor !== "전체" ||
-    fVessel !== "전체" ||
-    fAssignee !== "전체" ||
-    fStage !== "전체" ||
+    fWorkType.length > 0 ||
+    fCustomer.length > 0 ||
+    fVendor.length > 0 ||
+    fVessel.length > 0 ||
+    fAssignee.length > 0 ||
+    fStage.length > 0 ||
     fFrom !== "" ||
     fTo !== "";
 
   function resetFilters() {
-    setFWorkType("전체");
-    setFCustomer("전체");
-    setFVendor("전체");
-    setFVessel("전체");
-    setFAssignee("전체");
-    setFStage("전체");
+    setFWorkType([]);
+    setFCustomer([]);
+    setFVendor([]);
+    setFVessel([]);
+    setFAssignee([]);
+    setFStage([]);
     setFFrom("");
     setFTo("");
   }
@@ -781,12 +788,12 @@ function PipelineTable({
   const rowVendors = (r: PipelineRow) => vendorOf(r).split(/[\n,]/).map((s) => s.trim()).filter(Boolean);
   let displayRows = rows.filter(
     (r) =>
-      (fWorkType === "전체" || (r.work_type || "부품공급") === fWorkType) &&
-      (fCustomer === "전체" || (r.customer || "") === fCustomer) &&
-      (fVendor === "전체" || vendorOf(r) === fVendor) &&
-      (fVessel === "전체" || (r.vessel || "") === fVessel) &&
-      (fAssignee === "전체" || (r.assignee || "") === fAssignee) &&
-      (fStage === "전체" || stageOf(r) === Number(fStage)) &&
+      (fWorkType.length === 0 || fWorkType.includes(r.work_type || "부품공급")) &&
+      (fCustomer.length === 0 || fCustomer.includes(r.customer || "")) &&
+      (fVendor.length === 0 || fVendor.includes(vendorOf(r))) &&
+      (fVessel.length === 0 || fVessel.includes(r.vessel || "")) &&
+      (fAssignee.length === 0 || fAssignee.includes(r.assignee || "")) &&
+      (fStage.length === 0 || fStage.includes(String(stageOf(r)))) &&
       // 영업 계정은 항상 자기 딜만. 그 외엔 Assignee 멀티 필터(빈 배열=전체).
       (salesScoped
         ? (r.assignee || "") === myName
@@ -901,20 +908,36 @@ function PipelineTable({
           {filters.map((f) => {
             const opts = colOptions(f);
             if (opts.length === 0) return null;
+            const sel = fieldValue(f);
             return (
               <div key={f}>
                 <div className="pl-menu-divider" />
-                {filters.length > 1 ? (
-                  <span className="pl-menu-cap">{FIELD_LABEL[f]}</span>
+                {/* 필드 이름 + 고른 개수 — 목록이 길면 스크롤에 가려 무엇을 몇 개 골랐는지
+                    안 보인다. 개수는 메뉴를 닫지 않고도 확인할 수 있어야 한다. */}
+                {filters.length > 1 || sel.length ? (
+                  <span className="pl-menu-cap">
+                    {FIELD_LABEL[f]}
+                    {sel.length ? <span className="pl-menu-cnt">{sel.length} selected</span> : null}
+                  </span>
                 ) : null}
                 <div className="pl-menu-list">
+                  {/* All = 값이 아니라 '선택 해제' 명령. 아무것도 안 골랐을 때가 곧 전체다. */}
+                  <button
+                    className={`pl-menu-opt${sel.length === 0 ? " on" : ""}`}
+                    onClick={() => setFieldValue(f, [])}
+                  >
+                    <span className="chk">{sel.length === 0 ? "✓" : ""}</span>
+                    <span className="lbl">All</span>
+                  </button>
                   {opts.map((o) => (
                     <button
                       key={o.v}
-                      className={`pl-menu-opt${fieldValue(f) === o.v ? " on" : ""}`}
-                      onClick={() => setFieldValue(f, o.v)}
+                      className={`pl-menu-opt${sel.includes(o.v) ? " on" : ""}`}
+                      onClick={() => toggleFieldValue(f, o.v)}
+                      role="menuitemcheckbox"
+                      aria-checked={sel.includes(o.v)}
                     >
-                      <span className="chk">{fieldValue(f) === o.v ? "✓" : ""}</span>
+                      <span className="chk">{sel.includes(o.v) ? "✓" : ""}</span>
                       <span className="lbl">{o.label}</span>
                     </button>
                   ))}

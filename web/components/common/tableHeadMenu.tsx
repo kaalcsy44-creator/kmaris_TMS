@@ -28,9 +28,6 @@ export type HeadCol<T> = {
 
 type SortDir = "asc" | "desc";
 
-/** 패싯 '전체' 를 나타내는 예약값 — 실제 셀 값과 겹치지 않을 모양으로 둔다. */
-const ALL_FACET = "__all__";
-
 /** 머리 칸(HeadTh)이 쓰는 부분 — 행 타입과 무관하다. */
 export type HeadMenuUi = {
   sortKey: string | null;
@@ -57,7 +54,9 @@ export type HeadMenu<T> = HeadMenuUi & {
 export function useHeadMenu<T>(cols: HeadCol<T>[], resetOn?: string): HeadMenu<T> {
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>("asc");
-  const [facets, setFacets] = useState<Record<string, string>>({});
+  // 패싯 필터는 값 여러 개를 고를 수 있다(고른 값 중 하나라도 맞으면 통과 = OR).
+  // 빈 배열/미등록 = 미적용(전체) — 따로 '전체' 예약값을 둘 필요가 없다.
+  const [facets, setFacets] = useState<Record<string, string[]>>({});
   const [dates, setDates] = useState<Record<string, { from: string; to: string }>>({});
   const [openKey, setOpenKey] = useState<string | null>(null);
   const [pos, setPos] = useState<{ left: number; top: number }>({ left: 0, top: 0 });
@@ -72,12 +71,18 @@ export function useHeadMenu<T>(cols: HeadCol<T>[], resetOn?: string): HeadMenu<T
   }
 
   const colOf = (key: string) => cols.find((c) => c.key === key);
-  const facetValue = (key: string) => facets[key] ?? ALL_FACET;
+  const facetValue = (key: string) => facets[key] ?? [];
   const dateRange = (key: string) => dates[key] ?? { from: "", to: "" };
 
-  function setFacet(key: string, v: string) {
-    setFacets((p) => ({ ...p, [key]: v }));
-    setOpenKey(null);
+  function setFacet(key: string, next: string[]) {
+    setFacets((p) => ({ ...p, [key]: next }));
+    // 메뉴는 열어 둔다 — 복수 선택은 하나씩 찍어 쌓는 동작이라, 고를 때마다 닫히면
+    // 같은 메뉴를 값 수만큼 다시 열어야 한다. 닫기는 바깥 클릭/머리 칸 재클릭.
+  }
+  /** 값 하나를 켜고 끈다(다중 선택). */
+  function toggleFacet(key: string, v: string) {
+    const cur = facetValue(key);
+    setFacet(key, cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v]);
   }
   function setDate(key: string, patch: Partial<{ from: string; to: string }>) {
     setDates((p) => ({ ...p, [key]: { ...dateRange(key), ...patch } }));
@@ -86,7 +91,7 @@ export function useHeadMenu<T>(cols: HeadCol<T>[], resetOn?: string): HeadMenu<T
   function isFiltered(key: string): boolean {
     const col = colOf(key);
     if (!col) return false;
-    if (col.filter === "facet") return facetValue(key) !== ALL_FACET;
+    if (col.filter === "facet") return facetValue(key).length > 0;
     if (col.filter === "date") {
       const d = dateRange(key);
       return !!(d.from || d.to);
@@ -97,7 +102,7 @@ export function useHeadMenu<T>(cols: HeadCol<T>[], resetOn?: string): HeadMenu<T
   function passes(col: HeadCol<T>, row: T): boolean {
     if (col.filter === "facet") {
       const sel = facetValue(col.key);
-      return sel === ALL_FACET || col.text(row) === sel;
+      return sel.length === 0 || sel.includes(col.text(row));
     }
     if (col.filter === "date") {
       const { from, to } = dateRange(col.key);
@@ -146,15 +151,14 @@ export function useHeadMenu<T>(cols: HeadCol<T>[], resetOn?: string): HeadMenu<T
   function renderMenu(): React.ReactNode {
     const col = openKey ? colOf(openKey) : undefined;
     if (!col) return null;
+    // "All"(선택 해제) 줄은 값이 아니라 명령이라 목록 밖에서 따로 그린다.
     const opts =
       col.filter === "facet"
-        ? [
-            { v: ALL_FACET, label: "All" },
-            ...Array.from(new Set(rowsRef.current.map(col.text)))
-              .sort((a, b) => a.localeCompare(b, "ko"))
-              .map((v) => ({ v, label: v || col.emptyLabel || "Unspecified" })),
-          ]
+        ? Array.from(new Set(rowsRef.current.map(col.text)))
+            .sort((a, b) => a.localeCompare(b, "ko"))
+            .map((v) => ({ v, label: v || col.emptyLabel || "Unspecified" }))
         : [];
+    const sel = facetValue(col.key);
     const d = dateRange(col.key);
     return (
       <>
@@ -203,14 +207,30 @@ export function useHeadMenu<T>(cols: HeadCol<T>[], resetOn?: string): HeadMenu<T
           ) : opts.length > 0 ? (
             <>
               <div className="pl-menu-divider" />
+              {/* 고른 개수 — 목록이 스크롤로 밀려도 몇 개가 걸렸는지 머리에 남는다. */}
+              {sel.length ? (
+                <span className="pl-menu-cap">
+                  Filter
+                  <span className="pl-menu-cnt">{sel.length} selected</span>
+                </span>
+              ) : null}
               <div className="pl-menu-list">
+                <button
+                  className={`pl-menu-opt${sel.length === 0 ? " on" : ""}`}
+                  onClick={() => setFacet(col.key, [])}
+                >
+                  <span className="chk">{sel.length === 0 ? "✓" : ""}</span>
+                  <span className="lbl">All</span>
+                </button>
                 {opts.map((o) => (
                   <button
                     key={o.v}
-                    className={`pl-menu-opt${facetValue(col.key) === o.v ? " on" : ""}`}
-                    onClick={() => setFacet(col.key, o.v)}
+                    className={`pl-menu-opt${sel.includes(o.v) ? " on" : ""}`}
+                    onClick={() => toggleFacet(col.key, o.v)}
+                    role="menuitemcheckbox"
+                    aria-checked={sel.includes(o.v)}
                   >
-                    <span className="chk">{facetValue(col.key) === o.v ? "✓" : ""}</span>
+                    <span className="chk">{sel.includes(o.v) ? "✓" : ""}</span>
                     <span className="lbl">{o.label}</span>
                   </button>
                 ))}

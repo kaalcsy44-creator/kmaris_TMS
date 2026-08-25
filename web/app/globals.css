@@ -2365,11 +2365,20 @@ table.pipeline thead th.pl-th.open .pl-th-btn {
   margin: 6px 4px;
 }
 .pl-menu-cap {
-  display: block;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
   font-size: 11px;
   font-weight: 600;
   color: #6b7686;
   padding: 2px 6px 6px;
+}
+/* 고른 개수 — 목록이 스크롤로 밀려도 몇 개가 걸려 있는지 늘 머리에 남는다. */
+.pl-menu-cnt {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--blue);
 }
 .pl-menu-list {
   display: flex;

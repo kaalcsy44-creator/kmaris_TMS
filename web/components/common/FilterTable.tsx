@@ -78,7 +78,9 @@ export default function FilterTable<T>({
 }) {
   const [sortKey, setSortKey] = useState<string | null>(defaultSortKey);
   const [sortDir, setSortDir] = useState<SortDir>(defaultSortDir);
-  const [facets, setFacets] = useState<Record<string, string>>({});
+  // 패싯 필터는 값 여러 개를 고를 수 있다(고른 값 중 하나라도 맞으면 통과 = OR).
+  // 빈 배열/미등록 = 미적용(전체).
+  const [facets, setFacets] = useState<Record<string, string[]>>({});
   const [dates, setDates] = useState<Record<string, { from: string; to: string }>>({});
   const [openCol, setOpenCol] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ left: number; top: number }>({ left: 0, top: 0 });
@@ -117,12 +119,18 @@ export default function FilterTable<T>({
   function distinct(col: ColumnDef<T>): string[] {
     return Array.from(new Set(rows.map(col.text))).sort((a, b) => a.localeCompare(b, "ko"));
   }
-  function facetValue(key: string): string {
-    return facets[key] ?? "전체";
+  function facetValue(key: string): string[] {
+    return facets[key] ?? [];
   }
-  function setFacet(key: string, v: string) {
-    setFacets((p) => ({ ...p, [key]: v }));
-    setOpenCol(null);
+  function setFacet(key: string, next: string[]) {
+    setFacets((p) => ({ ...p, [key]: next }));
+    // 메뉴는 열어 둔다 — 복수 선택은 하나씩 찍어 쌓는 동작이라, 고를 때마다 닫히면
+    // 같은 메뉴를 값 수만큼 다시 열어야 한다. 닫기는 바깥 클릭/머리글 재클릭.
+  }
+  /** 값 하나를 켜고 끈다(다중 선택). */
+  function toggleFacet(key: string, v: string) {
+    const cur = facetValue(key);
+    setFacet(key, cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v]);
   }
   function dateRange(key: string): { from: string; to: string } {
     return dates[key] ?? { from: "", to: "" };
@@ -132,7 +140,7 @@ export default function FilterTable<T>({
   }
 
   function isColFiltered(col: ColumnDef<T>): boolean {
-    if (col.filter === "facet") return facetValue(col.key) !== "전체";
+    if (col.filter === "facet") return facetValue(col.key).length > 0;
     if (col.filter === "date") {
       const d = dateRange(col.key);
       return !!(d.from || d.to);
@@ -152,7 +160,7 @@ export default function FilterTable<T>({
     columns.every((col) => {
       if (col.filter === "facet") {
         const sel = facetValue(col.key);
-        return sel === "전체" || col.text(r) === sel;
+        return sel.length === 0 || sel.includes(col.text(r));
       }
       if (col.filter === "date") {
         const { from, to } = dateRange(col.key);
@@ -204,10 +212,12 @@ export default function FilterTable<T>({
   }
 
   function renderColMenu(col: ColumnDef<T>) {
+    // "All"(선택 해제) 줄은 값이 아니라 명령이라 목록 밖에서 따로 그린다.
     const opts =
       col.filter === "facet"
-        ? [{ v: "전체", label: "All" }, ...distinct(col).map((v) => ({ v, label: v || col.emptyLabel || "Unspecified" }))]
+        ? distinct(col).map((v) => ({ v, label: v || col.emptyLabel || "Unspecified" }))
         : [];
+    const sel = facetValue(col.key);
     const d = dateRange(col.key);
     return (
       <>
@@ -256,14 +266,30 @@ export default function FilterTable<T>({
           ) : opts.length > 0 ? (
             <>
               <div className="pl-menu-divider" />
+              {/* 고른 개수 — 목록이 스크롤로 밀려도 몇 개가 걸렸는지 머리에 남는다. */}
+              {sel.length ? (
+                <span className="pl-menu-cap">
+                  {col.label}
+                  <span className="pl-menu-cnt">{sel.length} selected</span>
+                </span>
+              ) : null}
               <div className="pl-menu-list">
+                <button
+                  className={`pl-menu-opt${sel.length === 0 ? " on" : ""}`}
+                  onClick={() => setFacet(col.key, [])}
+                >
+                  <span className="chk">{sel.length === 0 ? "✓" : ""}</span>
+                  <span className="lbl">All</span>
+                </button>
                 {opts.map((o) => (
                   <button
                     key={o.v}
-                    className={`pl-menu-opt${facetValue(col.key) === o.v ? " on" : ""}`}
-                    onClick={() => setFacet(col.key, o.v)}
+                    className={`pl-menu-opt${sel.includes(o.v) ? " on" : ""}`}
+                    onClick={() => toggleFacet(col.key, o.v)}
+                    role="menuitemcheckbox"
+                    aria-checked={sel.includes(o.v)}
                   >
-                    <span className="chk">{facetValue(col.key) === o.v ? "✓" : ""}</span>
+                    <span className="chk">{sel.includes(o.v) ? "✓" : ""}</span>
                     <span className="lbl">{o.label}</span>
                   </button>
                 ))}
