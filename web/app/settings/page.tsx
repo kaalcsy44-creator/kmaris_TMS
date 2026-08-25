@@ -1901,7 +1901,12 @@ export function ItemsTab({ kind = "part" }: { kind?: ItemKind }) {
   // 고객·공급사·구매가·판매가·마진은 가격 이력에서 온 읽기전용 파생값이라 편집 폼엔 없다.
   const trade: [keyof SettingsItem, string, ((r: SettingsItem) => React.ReactNode)?, string?][] = [
     ["vendor", "Vendor", (r) => r.vendor || <span className="dash">—</span>, "ms-party"],
+    // 견적일은 각자 짝인 가격 옆에 — 공급사 견적(수신) → 구매가, 우리 견적(제출) → 판매가.
+    ["vendor_quote_at", "Vendor Quote",
+      (r) => r.vendor_quote_at || <span className="dash">—</span>, "ms-date"],
     ["buy", "Purchase Price", (r) => fmtPrice(r.buy), "ms-num"],
+    ["quoted_at", "Quote Sent",
+      (r) => r.quoted_at || <span className="dash">—</span>, "ms-date"],
     ["sell", "Sales Price", (r) => fmtPrice(r.sell), "ms-num"],
     ["margin_pct", "Margin", (r) => marginText(r.margin_pct, r.margin_cross), "ms-num"],
     ["std_price", "Std Price", undefined, "ms-num"],
@@ -1914,7 +1919,7 @@ export function ItemsTab({ kind = "part" }: { kind?: ItemKind }) {
   return (
     <MasterSection<SettingsItem>
       title={ITEM_KIND_LABEL[kind]}
-      empty={{ id: 0, part_no: "", description: "", maker: "", origin: "", unit: isService ? "EA" : "PCS", hs_code: "", std_price: 0, item_type: kind, category_id: null, category_path: "", customer: "", vendor: "", buy: null, sell: null, margin_pct: null, margin_cross: false }}
+      empty={{ id: 0, part_no: "", description: "", maker: "", origin: "", unit: isService ? "EA" : "PCS", hs_code: "", std_price: 0, item_type: kind, category_id: null, category_path: "", customer: "", vendor: "", vendor_quote_at: "", quoted_at: "", buy: null, sell: null, margin_pct: null, margin_cross: false }}
       // 마스터는 한 벌이고 탭은 그중 한쪽만 본다 — 목록을 받아 이 탭의 구분만 남긴다.
       load={() => fetchSettingsItems().then((rows) => rows.filter((r) => (r.item_type || "part") === kind))}
       // 마스터의 분류가 곧 품목표 Category 셀의 값이므로, 저장·삭제 후 공유 캐시를 비운다.

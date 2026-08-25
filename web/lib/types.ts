@@ -96,8 +96,10 @@ export type SettingsItem = {
   category_path: string;         // 표시용 "대 > 중 > 소" (백엔드 계산, 읽기전용)
   item_type: "part" | "service"; // 물품 / 용역 — Parts·Service 탭을 가르는 값
   // ↓ 거래 실적(가격 이력)에서 뽑은 읽기전용 파생값 — 편집 폼에는 나오지 않는다.
-  customer: string;              // 가장 최근 판매 건의 고객
-  vendor: string;                // 가장 최근 구매 건의 공급사
+  customer: string;              // 가장 최근 판매 건의 고객(없으면 RFQ 로 물어본 고객)
+  vendor: string;                // 가장 최근 구매 건의 공급사(없으면 견적 의뢰한 공급사)
+  vendor_quote_at?: string;      // 공급사 견적 수신일 "YYYY-MM-DD"
+  quoted_at?: string;            // 고객 견적 제출일 "YYYY-MM-DD"
   buy: ItemLedgerPrice | null;   // 최근 구매가
   sell: ItemLedgerPrice | null;  // 최근 판매가
   margin_pct?: number | null;    // 구매가 대비 판매가 마진%(USD 환산)

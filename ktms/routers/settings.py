@@ -90,8 +90,10 @@ from sqlalchemy import func
 from db.models import ItemPriceHistory
 from services.item_ledger import (
     ledger_rows, item_history, rebuild_price_history, stamp_history_item, match_key,
-    master_price_summary, guess_item_type, suggest_categories,
+    master_price_summary, master_party_fallback, ensure_price_history_fresh,
+    guess_item_type, suggest_categories,
 )
+import _core
 
 
 
@@ -704,13 +706,19 @@ def settings_items():
     이력 전체를 훑으므로 쓰기 전까지 짧게 캐시한다."""
     s = get_session()
     try:
+        # 문서가 바뀐 뒤 처음 읽는 참이면 파생 이력을 다시 세운다 — 손으로 Rebuild 를
+        # 누르기 전까지 새 견적·발주의 가격이 안 보이던 문제.
+        ensure_price_history_fresh(s, _core._DATA_GEN)
         cat_by_id = _category_maps(s)
         summary = master_price_summary(s)
+        # 아직 값이 붙는 문서가 없는 품목(RFQ 단계)은 상대만이라도 채운다.
+        parties = master_party_fallback(s)
         cust = dict(s.query(Customer.id, Customer.name).all())
         vend = dict(s.query(Vendor.id, Vendor.name).all())
         out = []
         for i in s.query(ItemMaster).order_by(ItemMaster.part_no).all():
             sm = summary.get(i.id) or {}
+            fb = parties.get(i.id) or {}
             row = {
                 "id": i.id, "part_no": i.part_no or "",
                 "description": i.description or "", "maker": i.maker or "",
@@ -719,9 +727,12 @@ def settings_items():
                 "item_type": i.item_type or "part",
                 "category_id": i.category_id,
                 "category_path": _category_path(cat_by_id, i.category_id),
-                "customer": cust.get(sm.get("customer_id")) or "",
-                "vendor": vend.get(sm.get("vendor_id")) or "",
+                "customer": cust.get(sm.get("customer_id") or fb.get("customer_id")) or "",
+                "vendor": vend.get(sm.get("vendor_id") or fb.get("vendor_id")) or "",
                 "buy": sm.get("buy"), "sell": sm.get("sell"),
+                # 견적일 — 공급사 견적 수신일 / 고객 견적 제출일.
+                "vendor_quote_at": sm.get("vendor_quote_at") or "",
+                "quoted_at": sm.get("quoted_at") or "",
             }
             _annotate_margin(row)   # margin_pct(USD 환산) + margin_cross
             out.append(row)
@@ -802,6 +813,7 @@ def settings_item_ledger():
     프론트에서 분류 트리 선택으로 필터링하도록 category_id/category_path 를 함께 준다."""
     s = get_session()
     try:
+        ensure_price_history_fresh(s, _core._DATA_GEN)
         cat_by_id = _category_maps(s)
         data = ledger_rows(s)
         # 거래 상대는 id 로 굴러온다 — 화면이 읽는 건 이름이라 여기서 한 번에 붙인다.

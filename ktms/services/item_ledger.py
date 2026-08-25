@@ -11,6 +11,7 @@ rebuild_price_history() 로 전체를 재구축한다(관리자 Rebuild / 배포
 from __future__ import annotations
 
 import re
+import threading
 
 from db.models import (
     ARRecord, CommercialInvoice, ItemCategory, ItemMaster, ItemPriceHistory, Order,
@@ -204,6 +205,27 @@ def rebuild_price_history(session) -> int:
         session.bulk_insert_mappings(ItemPriceHistory, rows)
     session.commit()
     return len(rows)
+
+
+# 파생 테이블 최신성 — 마지막으로 다시 세운 '데이터 세대'. 세대는 쓰기 요청마다 오른다.
+_FRESH_GEN: int | None = None
+_FRESH_LOCK = threading.Lock()
+
+
+def ensure_price_history_fresh(session, gen: int) -> bool:
+    """데이터가 바뀌었으면(세대 상승) 가격 이력을 다시 세운다. 반환=재구축 여부.
+
+    이 테이블은 문서에서 파생된다. 예전에는 관리자가 Rebuild 를 눌러야만 갱신돼서,
+    마지막 재구축 이후에 만들어진 견적·발주의 가격이 품목 화면에 아예 나타나지 않았다
+    ("고객사·공급사·가격이 왜 비어 있나"의 첫 번째 원인). 이제 읽는 쪽에서 세대를 보고
+    필요할 때만 다시 세운다 — 읽기가 몰려도 세대당 한 번이다."""
+    global _FRESH_GEN
+    with _FRESH_LOCK:
+        if _FRESH_GEN == gen:
+            return False
+        rebuild_price_history(session)
+        _FRESH_GEN = gen
+        return True
 
 
 def stamp_history_item(session, item_id: int) -> int:
@@ -407,7 +429,7 @@ def master_price_summary(session) -> dict[int, dict]:
                    구매 행도 있어, 공급사가 찍힌 가장 최근 행으로 대체)
     """
     cols = session.query(
-        ItemPriceHistory.item_id, ItemPriceHistory.price_type,
+        ItemPriceHistory.item_id, ItemPriceHistory.price_type, ItemPriceHistory.source_type,
         ItemPriceHistory.unit_price, ItemPriceHistory.currency, ItemPriceHistory.fx_rate,
         ItemPriceHistory.doc_date, ItemPriceHistory.customer_id, ItemPriceHistory.vendor_id,
         ItemPriceHistory.id,
@@ -427,6 +449,9 @@ def master_price_summary(session) -> dict[int, dict]:
         b, sl = newest(buys), newest(sells)
         cust = newest([r for r in sells if r.customer_id]) or newest([r for r in rows if r.customer_id])
         vend = newest([r for r in buys if r.vendor_id]) or newest([r for r in rows if r.vendor_id])
+        # 견적일 두 가지 — 공급사가 우리에게 준 견적(수신)과 우리가 고객에게 낸 견적(제출).
+        vq = newest([r for r in buys if r.source_type == "vendor_quote"])
+        cq = newest([r for r in sells if r.source_type == "quotation"])
 
         def price(r):
             if r is None:
@@ -441,8 +466,59 @@ def master_price_summary(session) -> dict[int, dict]:
             "sell": price(sl),
             "customer_id": cust.customer_id if cust else None,
             "vendor_id": vend.vendor_id if vend else None,
+            "vendor_quote_at": vq.doc_date if vq else None,
+            "quoted_at": cq.doc_date if cq else None,
         }
     return out
+
+
+def master_party_fallback(session) -> dict[int, dict]:
+    """가격 이력이 아직 없는 품목의 거래 상대 — 문서에 등장한 사실만으로 채운다.
+
+    가격 이력의 소스는 값이 붙는 문서뿐이다(벤더견적·발주·견적·오더·C/I·청구). 고객 RFQ 와
+    벤더 RFQ 는 값이 없어 이력에 남지 않는데, 그렇다고 상대가 없는 건 아니다 — 견적 전
+    단계의 품목도 "어느 고객이 물어봤고 어느 공급사에 의뢰했는지"는 문서에 분명히 적혀
+    있다("고객사·공급사가 왜 비어 있나"의 두 번째 원인).
+
+    반환 = item_master.id → {customer_id, vendor_id, rfq_at}. 가격 이력이 있는 품목도
+    포함하되, 호출부는 이력 쪽 값이 없을 때만 이걸 쓴다."""
+    idx = build_master_index(session)
+    if not idx:
+        return {}
+    rfq_by_id = {r.id: r for r in session.query(RFQ).all()}
+    seen: dict[int, dict] = {}
+
+    def note(item_id: int, *, when: str | None, customer_id=None, vendor_id=None):
+        cur = seen.setdefault(item_id, {"customer_id": None, "vendor_id": None,
+                                        "_c_at": "", "_v_at": "", "rfq_at": None})
+        w = (when or "")[:10]
+        if customer_id and w >= cur["_c_at"]:
+            cur["customer_id"], cur["_c_at"] = customer_id, w
+        if vendor_id and w >= cur["_v_at"]:
+            cur["vendor_id"], cur["_v_at"] = vendor_id, w
+        if w and (cur["rfq_at"] or "") < w:
+            cur["rfq_at"] = w
+
+    def lines_of(items):
+        for _, line in _iter_lines(items):
+            item_id = idx.get(match_key(line.get("part_no"), line.get("description")))
+            if item_id:
+                yield item_id
+
+    # 고객 RFQ — 물어본 고객.
+    for r in rfq_by_id.values():
+        for item_id in lines_of(r.items):
+            note(item_id, when=(r.received_at or ""), customer_id=r.customer_id)
+    # 벤더 RFQ — 견적을 의뢰한 공급사(고객은 그 딜의 고객).
+    for vr in session.query(VendorRFQ).all():
+        rfq = rfq_by_id.get(vr.rfq_id)
+        for item_id in lines_of(vr.items):
+            note(item_id, when=(vr.sent_date or ""), vendor_id=vr.vendor_id,
+                 customer_id=(rfq.customer_id if rfq else None))
+    for v in seen.values():
+        v.pop("_c_at", None)
+        v.pop("_v_at", None)
+    return seen
 
 
 # ── 미분류 품목 자동 분류(제안) ────────────────────────────────────────────────
