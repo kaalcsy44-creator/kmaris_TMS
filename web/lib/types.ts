@@ -142,6 +142,16 @@ export type ItemLedger = {
   unmatched: ItemLedgerRow[];    // part_no 미연결(마스터 없음)
   built_at: string | null;       // 마지막 재구축 일시(ISO)
 };
+/** 미분류 품목 자동 분류 제안 1건 — 그대로 적용 요청에 실어 보낼 수 있는 모양. */
+export type AutoCategoryProposal = {
+  item_id?: number | null;       // 마스터에 있는 품목. 없으면 배정 시 마스터가 생긴다
+  part_no: string;
+  description: string;
+  maker?: string;
+  category_id: number;
+  category_path: string;         // "대 > 중 > 소"
+  reason: string;                // 왜 이 분류인지(같은 품명 / 품번 계열 / 품명 낱말)
+};
 export type ItemPriceRow = {
   id: number;
   price_type: "buy" | "sell";

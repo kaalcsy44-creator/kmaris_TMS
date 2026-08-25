@@ -90,7 +90,7 @@ from sqlalchemy import func
 from db.models import ItemPriceHistory
 from services.item_ledger import (
     ledger_rows, item_history, rebuild_price_history, stamp_history_item, match_key,
-    master_price_summary, guess_item_type,
+    master_price_summary, guess_item_type, suggest_categories,
 )
 
 
@@ -970,6 +970,50 @@ def assign_item_ledger_category_bulk(body: ItemLedgerAssignBulk):
         for t in body.targets:
             # 목록에서 온 각 행의 category_id 는 무시하고 일괄 지정값을 쓴다.
             t.category_id = body.category_id
+            try:
+                _, n = _assign_one_category(s, t)
+            except HTTPException:
+                skipped += 1
+                continue
+            done += 1
+            stamped += n
+        s.commit()
+        return {"ok": True, "assigned": done, "stamped": stamped, "skipped": skipped}
+    finally:
+        s.close()
+
+
+class ItemLedgerAutoApply(BaseModel):
+    """자동 분류 제안 중 사용자가 고른 것들. 행마다 분류가 다르므로 일괄값을 쓰지 않는다."""
+    targets: list[ItemLedgerAssign] = []
+
+
+@app.get("/api/admin/settings/item-ledger/auto-classify", dependencies=[Depends(require_token)])
+def preview_auto_classify():
+    """미분류 품목에 대한 분류 제안(미적용). 화면에서 확인·수정 후 apply 로 반영한다."""
+    s = get_session()
+    try:
+        cat_by_id = {c.id: c for c in s.query(ItemCategory).all()}
+        rows = suggest_categories(s)
+        for r in rows:
+            r["category_path"] = _category_path(cat_by_id, r["category_id"])
+        # 아직 분류가 빈 품목 수 — 제안 대상과 같은 기준(마스터의 빈 분류 + 미연결 이력).
+        pending = (s.query(ItemMaster).filter(ItemMaster.category_id.is_(None)).count()
+                   + len(ledger_rows(s)["unmatched"]))
+        return {"proposals": rows, "pending": pending}
+    finally:
+        s.close()
+
+
+@app.post("/api/admin/settings/item-ledger/auto-classify", dependencies=[Depends(require_token)])
+def apply_auto_classify(body: ItemLedgerAutoApply):
+    """고른 제안을 그대로 반영한다 — 행마다 제 분류로. 마스터에 없던 품목은 등록된다.
+
+    분류할 수 없는 행(Part No.·설명이 모두 없음)은 건너뛰고 수만 센다."""
+    s = get_session()
+    try:
+        done = stamped = skipped = 0
+        for t in body.targets:
             try:
                 _, n = _assign_one_category(s, t)
             except HTTPException:

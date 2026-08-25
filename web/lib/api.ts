@@ -54,6 +54,7 @@ import type {
   SettingsItem,
   ItemCategory,
   ItemLedger,
+  AutoCategoryProposal,
   ItemPriceRow,
   SettingsUser,
   CompanyProfile,
@@ -1369,6 +1370,26 @@ export function assignItemLedgerCategoryBulk(body: {
   }[];
 }): Promise<{ ok: boolean; assigned: number; stamped: number; skipped: number }> {
   return post("/api/admin/settings/item-ledger/assign-bulk", body);
+}
+
+/** 미분류 품목의 분류 제안(적용 전 미리보기). pending = 아직 분류가 빈 품목 수. */
+export function previewAutoClassify(): Promise<{
+  proposals: AutoCategoryProposal[];
+  pending: number;
+}> {
+  return get("/api/admin/settings/item-ledger/auto-classify");
+}
+/** 고른 제안을 반영한다 — 행마다 제 분류로(일괄 배정과 달리 하나의 분류가 아니다). */
+export function applyAutoClassify(body: {
+  targets: {
+    item_id?: number | null;
+    part_no?: string;
+    description?: string;
+    maker?: string;
+    category_id: number;
+  }[];
+}): Promise<{ ok: boolean; assigned: number; stamped: number; skipped: number }> {
+  return post("/api/admin/settings/item-ledger/auto-classify", body);
 }
 
 export function createSettingsUser(body: {

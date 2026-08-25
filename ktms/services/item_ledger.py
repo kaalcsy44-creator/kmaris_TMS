@@ -13,7 +13,7 @@ from __future__ import annotations
 import re
 
 from db.models import (
-    ARRecord, CommercialInvoice, ItemMaster, ItemPriceHistory, Order,
+    ARRecord, CommercialInvoice, ItemCategory, ItemMaster, ItemPriceHistory, Order,
     PurchaseOrder, Quotation, RFQ, VendorQuote, VendorRFQ,
 )
 
@@ -428,4 +428,186 @@ def master_price_summary(session) -> dict[int, dict]:
             "customer_id": cust.customer_id if cust else None,
             "vendor_id": vend.vendor_id if vend else None,
         }
+    return out
+
+
+# ── 미분류 품목 자동 분류(제안) ────────────────────────────────────────────────
+# 규칙을 새로 만들지 않는다. 이미 분류해 둔 품목과 분류 이름이 근거다 —
+# 회사마다 다른 분류 체계를 코드에 박아 두면 트리를 고칠 때마다 코드가 따라 죽는다.
+#
+# 근거는 셋, 확신이 큰 순서대로 먼저 잡히는 하나를 쓴다:
+#   1) same-desc  — 같은 품명이 이미 분류돼 있다(품번만 다른 같은 물건).
+#   2) part-family— 같은 품번 계열(앞부분)의 분류가 하나로 모여 있다.
+#   3) name-word  — 품명이 분류 이름의 낱말을 품는다(Ball Bearing → Bearing & bushing).
+#                   계열이 정해졌으면 그 계열 아래 소분류에서만 찾는다.
+
+# 분류 이름에서 지워도 뜻이 남는 낱말 — 이런 낱말로 붙는 매칭은 근거가 되지 않는다.
+_CAT_STOPWORDS = {
+    "and", "or", "etc", "other", "others", "misc", "general", "parts", "part",
+    "kit", "kits", "item", "items", "기타", "부품", "일반",
+}
+
+
+def _cat_words(name: str) -> set[str]:
+    """분류 이름 → 판정에 쓸 낱말 집합('Seal & gasket' → {seal, gasket})."""
+    words = re.split(r"[^0-9a-zA-Z가-힣]+", (name or "").lower())
+    return {w for w in words if len(w) > 2 and w not in _CAT_STOPWORDS}
+
+
+def part_family(part_no) -> str:
+    """품번의 계열 키 — 앞쪽 영숫자 덩어리('B6DS0939 101' → 'B6DS0939').
+
+    같은 엔진·기기의 부품표는 앞부분을 공유하고 뒤가 도면번호로 갈린다. 그래서
+    계열이 같으면 대·중분류(Engine > 4-stroke)가 같다고 보아도 어긋나는 일이 드물다.
+    구분자가 없는 품번은 통째로 하나의 계열이 된다(길이 4 미만이면 계열로 안 본다)."""
+    pk = part_key(part_no)
+    if not pk:
+        return ""
+    head = re.split(r"[ \-_/]", pk)[0]
+    return head if len(head) >= 4 else ""
+
+
+def _majority(cids: list[int]) -> tuple[int | None, int, int]:
+    """가장 많이 나온 분류 id 와 (그 개수, 전체 개수). 비어 있으면 (None, 0, 0)."""
+    if not cids:
+        return None, 0, 0
+    best, n = None, 0
+    for c in set(cids):
+        k = cids.count(c)
+        if k > n:
+            best, n = c, k
+    return best, n, len(cids)
+
+
+def _chain(cats: dict, cid: int) -> list[int]:
+    """분류 id → 뿌리부터 그 노드까지의 id 사슬([대, 중, 소])."""
+    out, cur, guard = [], cats.get(cid), 0
+    while cur is not None and guard < 5:
+        out.append(cur.id)
+        cur = cats.get(cur.parent_id) if cur.parent_id else None
+        guard += 1
+    return list(reversed(out))
+
+
+def _pick(cats: dict, cids: list[int]) -> tuple[int | None, str]:
+    """분류 후보 묶음 → (고른 분류, 근거 꼬리말).
+
+    과반이면 그 분류를 쓰고, 갈리면 모두가 공유하는 가장 깊은 상위로 물러선다 —
+    같은 계열이 'Bearing & bushing' 과 'Seal & gasket' 로 갈렸어도 'Engine > 4-stroke'
+    까지는 확실하다. 뿌리부터 갈리면 근거가 없는 것으로 본다."""
+    if not cids:
+        return None, ""
+    best, n, tot = _majority(cids)
+    if best and n * 2 > tot:
+        return best, f"{n} item(s)"
+    prefix = _chain(cats, cids[0])
+    for c in cids[1:]:
+        ch = _chain(cats, c)
+        i = 0
+        while i < len(prefix) and i < len(ch) and prefix[i] == ch[i]:
+            i += 1
+        prefix = prefix[:i]
+        if not prefix:
+            return None, ""
+    return (prefix[-1], f"{len(cids)} item(s), common parent") if prefix else (None, "")
+
+
+def suggest_categories(session, *, rows: list[dict] | None = None) -> list[dict]:
+    """미분류 품목별 분류 제안 목록.
+
+    대상 = (1) 마스터에 있으나 분류가 빈 품목, (2) 마스터에 없는 미연결 품목.
+    반환 행은 assign 엔드포인트가 그대로 먹을 수 있는 모양(item_id 또는 part_no)에
+    제안 분류와 근거를 붙인 것. 근거를 못 찾은 품목은 목록에서 뺀다 —
+    아무 데나 넣는 것보다 비워 두는 편이 낫다."""
+    cats = {c.id: c for c in session.query(ItemCategory).all()}
+    masters = session.query(ItemMaster).all()
+
+    # 이미 분류된 품목에서 배운다.
+    by_desc: dict[str, list[int]] = {}
+    by_family: dict[str, list[int]] = {}
+    for m in masters:
+        if not m.category_id or m.category_id not in cats:
+            continue
+        d = _norm(m.description)
+        if d:
+            by_desc.setdefault(d, []).append(m.category_id)
+        fam = part_family(m.part_no)
+        if fam:
+            by_family.setdefault(fam, []).append(m.category_id)
+
+    # 분류 이름 낱말 색인(잎 분류 우선 — 깊을수록 구체적이다).
+    cat_words = {cid: _cat_words(c.name) for cid, c in cats.items() if c.active is not False}
+
+    def ancestors(cid: int | None) -> set[int]:
+        out, cur, guard = set(), cats.get(cid) if cid else None, 0
+        while cur is not None and guard < 5:
+            out.add(cur.id)
+            cur = cats.get(cur.parent_id) if cur.parent_id else None
+            guard += 1
+        return out
+
+    def by_name(desc: str, within: int | None) -> tuple[int | None, str]:
+        """품명이 품은 분류 이름 낱말로 찾기. within 이 있으면 그 하위에서만."""
+        d = _norm(desc).lower()
+        if not d:
+            return None, ""
+        best, best_key = None, ()
+        for cid, words in cat_words.items():
+            hit = {w for w in words if w in d}
+            if not hit:
+                continue
+            if within is not None and within not in ancestors(cid) - {cid}:
+                continue
+            c = cats[cid]
+            # 더 깊은(구체적인) 분류, 더 많이 맞은 낱말, 더 긴 낱말 순.
+            key = (c.level or 0, len(hit), max(len(w) for w in hit))
+            if best is None or key > best_key:
+                best, best_key = cid, key
+        return best, (", ".join(sorted(w for w in cat_words[best] if w in d)) if best else "")
+
+    if rows is None:
+        # 대상 = 분류가 빈 마스터 전체(거래 이력이 아직 없는 품목도 포함) + 마스터에
+        # 없는 미연결 이력. 앞은 Item Master 목록의 빈칸, 뒤는 이 화면의 Unmatched 다.
+        rows = [{
+            "item_id": m.id, "part_no": m.part_no or "",
+            "description": m.description or "", "maker": m.maker or "",
+        } for m in masters if not m.category_id]
+        rows += ledger_rows(session)["unmatched"]
+
+    out: list[dict] = []
+    for r in rows:
+        desc, pn = r.get("description") or "", r.get("part_no") or ""
+        cid: int | None = None
+        reason = ""
+        # 1) 같은 품명이 이미 분류돼 있다.
+        c, why = _pick(cats, by_desc.get(_norm(desc)) or [])
+        if c:
+            cid, reason = c, f"same description — {why}"
+        # 2) 같은 품번 계열이 한 분류(또는 한 상위)로 모여 있다.
+        fam = part_family(pn)
+        if cid is None and fam:
+            c, why = _pick(cats, by_family.get(fam) or [])
+            if c:
+                # 계열이 정하는 건 보통 대·중분류다. 품명이 그 아래 소분류를 가리키면 더 깊게.
+                deeper, hit = by_name(desc, c)
+                if deeper:
+                    cid, reason = deeper, f"part family {fam} — {why} + name “{hit}”"
+                else:
+                    cid, reason = c, f"part family {fam} — {why}"
+        # 3) 품명이 분류 이름을 품는다.
+        if cid is None:
+            c, hit = by_name(desc, None)
+            if c:
+                cid, reason = c, f"name contains “{hit}”"
+        if cid is None:
+            continue
+        out.append({
+            "item_id": r.get("item_id"),
+            "part_no": pn,
+            "description": desc,
+            "maker": r.get("maker") or "",
+            "category_id": cid,
+            "reason": reason,
+        })
+    out.sort(key=lambda r: (r["part_no"], r["description"]))
     return out

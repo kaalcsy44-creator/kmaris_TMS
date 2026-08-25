@@ -46,6 +46,8 @@ import {
   rebuildItemLedger,
   assignItemLedgerCategory,
   assignItemLedgerCategoryBulk,
+  previewAutoClassify,
+  applyAutoClassify,
   fetchEmailTemplates,
   saveEmailTemplate,
   deleteEmailTemplate,
@@ -77,6 +79,7 @@ import type {
   ItemCategory,
   ItemLedger,
   ItemLedgerRow,
+  AutoCategoryProposal,
   ItemPriceRow,
   SettingsUser,
   SettingsVendor,
@@ -2177,6 +2180,13 @@ export function CategoriesTab() {
   // Shift+클릭 구간 선택의 기준점(마지막으로 직접 누른 행의 key).
   const [anchorKey, setAnchorKey] = useState<string | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
+  // 자동 분류 — 제안을 먼저 보여 주고, 고른 것만 반영한다(바로 쓰지 않는다).
+  const [autoOpen, setAutoOpen] = useState(false);
+  const [autoRows, setAutoRows] = useState<AutoCategoryProposal[] | null>(null);
+  const [autoPending, setAutoPending] = useState(0);
+  const [autoSkip, setAutoSkip] = useState<Set<number>>(() => new Set());
+  const [autoBusy, setAutoBusy] = useState(false);
+  const [note, setNote] = useState("");
   // 목록표 컬럼 폭·순서·표시(브라우저에 저장).
   const ledgerCols = useColumnLayout("item-ledger", LEDGER_COLS);
   const [dragCol, setDragCol] = useState<string | null>(null);
@@ -2360,6 +2370,48 @@ export function CategoriesTab() {
       return next;
     });
     setAnchorKey(keys[to]);
+  }
+
+  async function openAuto() {
+    setAutoOpen(true);
+    setAutoRows(null);
+    setAutoSkip(new Set());
+    setErr("");
+    setNote("");
+    try {
+      const r = await previewAutoClassify();
+      setAutoRows(r.proposals);
+      setAutoPending(r.pending);
+    } catch (e) {
+      setAutoRows([]);
+      setErr(e instanceof Error ? e.message : "Auto-assign preview failed");
+    }
+  }
+  async function applyAuto() {
+    const picks = (autoRows ?? []).filter((_, i) => !autoSkip.has(i));
+    if (picks.length === 0) return;
+    setAutoBusy(true);
+    setErr("");
+    try {
+      const r = await applyAutoClassify({
+        targets: picks.map((p) => ({
+          item_id: p.item_id ?? undefined,
+          part_no: p.part_no,
+          description: p.description,
+          maker: p.maker,
+          category_id: p.category_id,
+        })),
+      });
+      setAutoOpen(false);
+      invalidateMasterCategories();
+      refresh();
+      loadLedger();
+      setNote(`${r.assigned} item(s) classified${r.skipped ? `, ${r.skipped} skipped` : ""}.`);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Auto-assign failed");
+    } finally {
+      setAutoBusy(false);
+    }
   }
 
   function openBulk() {
@@ -2587,6 +2639,7 @@ export function CategoriesTab() {
       </p>
 
       {err ? <div className="action-err" style={{ marginBottom: 10 }}>{err}</div> : null}
+      {note ? <div className="action-ok" style={{ marginBottom: 10 }}>{note}</div> : null}
 
       <div className="cat-layout" style={{ "--tree-w": `${treeW}px` } as React.CSSProperties}>
         <div className="cat-tree-pane">
@@ -2636,6 +2689,11 @@ export function CategoriesTab() {
               {canEdit && pickedRows.length > 0 ? (
                 <button className="btn tiny primary" onClick={openBulk}>
                   Assign category ({pickedRows.length})
+                </button>
+              ) : null}
+              {canEdit ? (
+                <button className="btn tiny" onClick={openAuto} title="Suggest categories for items that have none">
+                  ✦ Auto-assign
                 </button>
               ) : null}
               {ledger?.built_at ? (
@@ -2829,6 +2887,100 @@ export function CategoriesTab() {
               </table>
             </div>
           )}
+        </Modal>
+      ) : null}
+
+      {autoOpen ? (
+        <Modal
+          title="Auto-assign categories"
+          onClose={() => setAutoOpen(false)}
+          form
+        >
+          <p className="hint-inline" style={{ display: "block", marginBottom: 10 }}>
+            Categories are guessed from what is already classified — an identical description,
+            a shared part-number family, or a category name the description contains. Each line
+            says which. Untick anything that looks wrong; items with no clear match are left
+            alone rather than filed somewhere plausible.
+          </p>
+          {autoRows === null ? (
+            <div className="state">Reading items…</div>
+          ) : autoRows.length === 0 ? (
+            <div className="state">
+              Nothing to suggest{autoPending ? ` — ${autoPending} item(s) still unclassified, none with a clear match` : ""}.
+            </div>
+          ) : (
+            <>
+              <div className="table-wrap auto-cat-wrap">
+                <table className="mini wide">
+                  <thead>
+                    <tr>
+                      <th className="row-tools">
+                        <input
+                          type="checkbox"
+                          className="row-check"
+                          aria-label="Select all suggestions"
+                          checked={autoSkip.size === 0}
+                          onChange={(e) =>
+                            setAutoSkip(e.target.checked ? new Set() : new Set(autoRows.map((_, i) => i)))
+                          }
+                        />
+                      </th>
+                      <th>Part No.</th>
+                      <th>Description</th>
+                      <th>Category</th>
+                      <th>Why</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {autoRows.map((p, i) => (
+                      <tr key={`${p.item_id ?? "u"}-${p.part_no}-${p.description}`}
+                          className={autoSkip.has(i) ? "auto-cat-off" : ""}>
+                        <td className="row-tools">
+                          <input
+                            type="checkbox"
+                            className="row-check"
+                            aria-label={`Apply ${p.part_no || p.description}`}
+                            checked={!autoSkip.has(i)}
+                            onChange={() =>
+                              setAutoSkip((prev) => {
+                                const next = new Set(prev);
+                                if (next.has(i)) next.delete(i);
+                                else next.add(i);
+                                return next;
+                              })
+                            }
+                          />
+                        </td>
+                        <td>{p.part_no || <span className="dash">—</span>}</td>
+                        <td>{p.description}</td>
+                        <td className="auto-cat-path">
+                          {p.category_path}
+                          {p.item_id == null ? <span className="auto-cat-new">new item</span> : null}
+                        </td>
+                        <td className="auto-cat-why">{p.reason}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="hint-inline" style={{ display: "block", marginTop: 8 }}>
+                {autoPending - autoRows.length > 0
+                  ? `${autoPending - autoRows.length} item(s) had no clear match and stay unclassified.`
+                  : "Every unclassified item got a suggestion."}
+              </p>
+            </>
+          )}
+          <div className="form-actions">
+            <button
+              className="btn primary"
+              disabled={autoBusy || !autoRows || autoRows.length - autoSkip.size === 0}
+              onClick={applyAuto}
+            >
+              {autoBusy ? "Applying…" : `Apply ${autoRows ? autoRows.length - autoSkip.size : 0}`}
+            </button>
+            <button className="btn" disabled={autoBusy} onClick={() => setAutoOpen(false)}>Cancel</button>
+            {err ? <span className="action-err">{err}</span> : null}
+          </div>
         </Modal>
       ) : null}
 
