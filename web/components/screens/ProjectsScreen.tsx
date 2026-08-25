@@ -2062,11 +2062,15 @@ export function PipelineModal({
   const [modalView, setModalView] = useState<"work" | "overview">(initialView);
 
   /** 단계 화면 표시 모드(읽기/편집).
-   *  디폴트는 "단계 기준" — 이미 지나온 단계는 읽기(어떻게 입력했는지 확인하러 열기 때문),
-   *  딜의 현재 단계는 편집(진행시키러 열기 때문). 사용자가 바꾸면 그 단계에선 그 선택을 따른다. */
+   *  디폴트는 "저장한 적 있나" 기준 — 한 번이라도 저장한 단계(스트립 카드에 일시가 찍히는 단계)와
+   *  이미 지나온 단계는 읽기로 연다(무엇을 입력했는지 확인하러 열기 때문). 아직 빈 단계만
+   *  편집으로 연다(채우러 열기 때문). 사용자가 바꾸면 그 단계에선 그 선택을 따른다. */
+  // 단계별 저장 흔적을 11자리 문자열("11000…")로 굳혀 둔다 — 목록이 갱신돼 r 이 새 객체로 와도
+  // 내용이 같으면 defaultViewMode 의 정체성이 유지돼, 편집 중인 사람이 읽기모드로 밀려나지 않는다.
+  const savedStages = Array.from({ length: 11 }, (_, i) => (stageDateOf(r, i + 1) ? "1" : "0")).join("");
   const defaultViewMode = useCallback(
-    (no: number): ViewMode => (no < (r.stage || 1) ? "read" : "edit"),
-    [r.stage]
+    (no: number): ViewMode => (no < (r.stage || 1) || savedStages[no - 1] === "1" ? "read" : "edit"),
+    [r.stage, savedStages]
   );
   const [stageMode, setStageMode] = useState<ViewMode>(() => defaultViewMode(initialStage || r.stage || 1));
   /** 읽기모드에서 값이 빈 항목을 아예 빼고 채워진 것만 보여줄지.
