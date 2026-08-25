@@ -1066,6 +1066,8 @@ body {
 .intl-bar {
   display: flex;
   gap: 2px;
+  /* 표의 단계 바와 같은 이유(픽셀 반올림)로 페인트 단위를 묶는다 — pl-stage-segs 주석 참고. */
+  contain: paint;
 }
 .intl-bar .seg {
   flex: 1;
@@ -2762,6 +2764,12 @@ table.pipeline td.pl-td-stage {
   display: flex;
   gap: 2px;
   min-width: 96px;
+  /* 바 하나를 독립된 페인트 단위로 묶는다. 이게 없으면 브라우저가 4px 박스의 위·아래
+     모서리를 각각 물리 픽셀로 반올림하는데, 행마다 바가 놓이는 소수 위치가 달라(배율
+     110%·120% 처럼 1/4 배수가 아닌 화면에서) 어떤 행은 4px, 어떤 행은 5px 로 떨어진다.
+     묶어 두면 반올림이 바 단위로 한 번만 일어나 모든 행이 같은 두께로 찍힌다.
+     (측정: 배율 0.9·1.1·1.125·1.2·1.3 에서 4/5px 뒤섞임 → 전부 동일) */
+  contain: paint;
 }
 /* 얇은 바 — 목록에서 단계는 훑어보는 정보다. 두꺼우면 행의 무게중심을 가져간다. */
 .pl-stage-segs .seg {
@@ -7907,6 +7915,8 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   display: flex;
   gap: 2px;
   margin: 6px 0 4px;
+  /* 표의 단계 바와 같은 이유(픽셀 반올림)로 페인트 단위를 묶는다 — pl-stage-segs 주석 참고. */
+  contain: paint;
 }
 .pl-card-bar .seg {
   flex: 1;
