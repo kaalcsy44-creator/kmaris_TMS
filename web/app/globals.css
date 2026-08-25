@@ -2556,16 +2556,19 @@ table.pipeline td.pl-td-vendor {
 }
 table.pipeline th,
 table.pipeline td {
-  padding: 9px 14px;
+  /* 위 8 + 아래 7 + 행 경계선 1 = 16 — 아래 '4px 격자' 참고. */
+  padding: 8px 14px 7px;
   text-align: left;
   /* 셀 안이 여러 줄이라 위로 붙여야 각 칸의 첫 줄끼리 나란히 읽힌다(Stage 포함). */
   vertical-align: top;
   border-bottom: 1px solid var(--line);
-  /* 줄 높이는 배수(1.35)가 아니라 정수 px 로 준다. 11px×1.35=14.85 처럼 소수 줄이 쌓이면
-     행의 높이와 시작 위치가 소수가 되고, 그 위에 놓인 4px 진행 바가 행마다 물리 픽셀
-     경계에 어긋나게 떨어져 어떤 행은 5px 로 번져 보인다(=두께가 달라 보인다).
-     아래 pl-title·pl-received 등 글자 크기가 다른 자리도 같은 이유로 정수 px 를 준다. */
-  line-height: 15px;
+  /* ── 4px 세로 격자 ─────────────────────────────────────────────────────
+     이 표의 세로 치수(줄 높이·여백·바깥여백·로고)는 모두 4의 배수로 둔다. 그래야 행
+     높이가 4의 배수가 되고, 화면 배율이 125%·150% 여도 모든 행이 물리 픽셀 위 같은
+     자리에서 시작한다. 한 행이라도 소수(예: 11px×1.35=14.85)면 그 아래 행들이 반 픽셀씩
+     밀리고, 4px 진행 바가 행마다 다르게 뭉개져 두께가 달라 보인다.
+     세로 치수를 건드릴 땐 4의 배수를 유지할 것. */
+  line-height: 16px;
 }
 
 /* ── 그룹 열(다행 셀) ────────────────────────────────────────────────────
@@ -2575,14 +2578,19 @@ table.pipeline td {
 table.pipeline td.pl-td-project .pl-idline {
   display: flex;
   align-items: center;
-  gap: 7px;
+  /* 줄이 접히면 세로 간격도 격자에 맞아야 한다(가로 7 · 세로 4). */
+  gap: 4px 7px;
   flex-wrap: wrap;
+}
+/* 업무타입 배지 — 표 안에서는 16px(10 + 3·3)로 격자에 맞춘다. */
+table.pipeline .wt-badge {
+  line-height: 10px;
 }
 table.pipeline td.pl-td-project .pl-vessel {
   color: #47536b;
 }
 table.pipeline td.pl-td-project .pl-title {
-  margin-top: 3px;
+  margin-top: 4px;
   line-height: 16px;
   /* 프로젝트명은 훑는 기준선이라 한 단계(1px) 키워 번호줄과 위계를 준다. */
   font-size: 12px;
@@ -2597,14 +2605,25 @@ table.pipeline tbody tr.service td.pl-td-project .pl-project-no-btn {
 }
 /* 수신일시 — 정렬 기본값이라 값은 필요하지만, 훑을 때 먼저 걸리면 안 되는 보조 정보. */
 table.pipeline td.pl-td-project .pl-received {
-  margin-top: 2px;
+  margin-top: 4px;
   font-size: 10px;
-  line-height: 13px;
+  line-height: 12px;
   color: var(--muted);
 }
 table.pipeline td.pl-td-customer .pl-contact {
-  margin-top: 3px;
+  margin-top: 4px;
   color: #47536b;
+}
+/* 고객·벤더 이름(로고 + 글자)은 인라인 묶음이라 기본이 베이스라인 정렬이다. 그러면 줄상자
+   높이가 "로고 20px + 글자 하강폭"이 되어 소수로 떨어진다 — 위 4px 격자가 깨지는 자리.
+   위쪽 정렬로 바꾸면 줄상자가 로고 높이(20px) 그대로라 격자에 맞는다. */
+table.pipeline td .cust-name,
+table.pipeline td .cust-name-multi {
+  vertical-align: top;
+}
+/* 벤더 여러 곳을 쌓을 때의 줄 간격도 격자에 맞춘다. */
+table.pipeline td .cust-name-multi {
+  gap: 4px;
 }
 /* 단계 칸도 위로 붙인다. 가운데 정렬이면 (행높이 − 내용높이) / 2 가 행마다 0.5px 씩
    남아, 4px 짜리 바가 어떤 행에서는 5px 로 번져 두께가 들쭉날쭉해 보인다. 위로 붙이면
@@ -2644,7 +2663,7 @@ table.pipeline td.pl-td-amounts .pl-amt-row {
 /* 둘째 줄 = 같은 금액의 환산 통화. 참고값이므로 회색으로 한 단계 낮춘다. */
 table.pipeline td.pl-td-amounts .pl-amt-row.sub {
   color: var(--muted);
-  margin-top: 3px;
+  margin-top: 4px;
 }
 table.pipeline td.pl-td-amounts .pl-amt-pct {
   font-weight: 700;
@@ -2737,7 +2756,7 @@ table.pipeline td.pl-td-stage {
 .pl-stage {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 4px;
 }
 .pl-stage-segs {
   display: flex;
@@ -2770,7 +2789,7 @@ table.pipeline td.pl-td-stage {
   align-items: center;
   gap: 6px;
   font-size: 11.5px;
-  line-height: 15px;
+  line-height: 16px;
 }
 .pl-stage-done {
   flex: 0 1 auto;
