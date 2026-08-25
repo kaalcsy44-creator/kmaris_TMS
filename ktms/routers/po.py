@@ -56,6 +56,7 @@ from _core import (
     _total_amount,
     _vendor_po_email_body,
     _vrfq_sent_iso,
+    adopt_project_pi,
     app,
     build_po_payload,
     clean_source_files,
@@ -474,6 +475,10 @@ def create_order(body: OrderCreate):
             source_files=clean_source_files(body.source_files),
         )
         s.add(order)
+        s.flush()   # order.id 확보 — 아래 PI 승계가 이 오더에 붙는다.
+        # 4단계(견적)에서 선급금 청구용으로 미리 만들어 둔 Proforma Invoice 를 이 오더로
+        # 승계한다. 안 하면 7단계(오더로만 찾는다)에서 그 PI 가 사라진 것처럼 보인다.
+        adopt_project_pi(s, order)
         if qtn:
             qtn.status = QuotationStatus.WON
         # 라인에서 고른 분류(선택)를 품목 마스터에 반영.

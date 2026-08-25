@@ -639,6 +639,8 @@ export type DocumentDetail = {
     assignee_id: number; // 담당자(PIC) = RFQ.created_by (0 = 미지정)
     po_no: string;
     kms_order_no: string; // K-Maris (Vendor) P/O No.(KMS-ORD-…) — Shipping Marks Reference No. 자동입력
+    /** 고객 견적번호 — 오더가 아직 없는 4단계 문서 문맥에서만 채워진다(PI 번호 자동채번용). */
+    quotation_no?: string;
     date: string;
     status: string;
     customer: string;

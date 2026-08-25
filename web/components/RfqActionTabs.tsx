@@ -73,6 +73,7 @@ import TermsEditor from "./common/TermsEditor";
 import DocSendPanel from "./common/DocSendPanel";
 import RecordStrip from "./common/RecordStrip";
 import DetailTabBar, { DetailTab } from "./common/DetailTabBar";
+import { ProjectProformaInvoice } from "./screens/DocumentsScreen";
 import { useEditGate, useViewMode } from "@/lib/viewMode";
 import SourceFilesList from "./common/SourceFilesList";
 import { withDefaultTerms, TERM_TEXT_KEYS } from "@/lib/terms";
@@ -2304,7 +2305,11 @@ function CustomerQuoteDetailModal({
         <div className="state">Loading details…</div>
       ) : (
         <>
-          <DetailTabBar tab={tab} onTab={setTab} />
+          {/* 4단계는 견적서(Detail·Email) 옆에 Proforma Invoice 한 칸이 더 붙는다 —
+              선급금을 먼저 받아야 하는 거래에서 P/O 전에 내보내는 청구서다.
+              7단계(Delivery Readiness)의 Proforma Invoice 와 같은 한 장이라,
+              어느 쪽에서 고쳐도 다른 쪽에 그대로 보인다. */}
+          <DetailTabBar tab={tab} onTab={setTab} pi={!!d.rfq_id} />
           {tab === "edit" ? (
           <>
           {!inline ? (
@@ -2494,6 +2499,8 @@ function CustomerQuoteDetailModal({
             />
           ) : null}
           </>
+          ) : tab === "pi" && d.rfq_id ? (
+          <ProjectProformaInvoice rfqId={d.rfq_id} onChanged={onChanged} />
           ) : (
           /* 견적서 파일 생성(PDF/Excel) + 고객 이메일 발송(선택 포맷 첨부). 저장본 기준. */
           <DocSendPanel

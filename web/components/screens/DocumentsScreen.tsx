@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import {
   documentDownloadUrl,
   fetchDocumentDetail,
+  fetchProjectDocContext,
   saveProformaInvoice,
   deleteProformaInvoice,
   saveCommercialInvoice,
@@ -23,6 +24,7 @@ import {
 } from "@/lib/api";
 import { getToken, can, canEditDeal, editBlockReason } from "@/lib/auth";
 import { useResizable } from "@/lib/useResizable";
+import type { DocTarget } from "@/lib/api";
 import type { DocRow, DocumentDetail, DocumentWorkItem } from "@/lib/types";
 import { fetchDocumentsOverview } from "@/lib/api";
 import { useCachedData, invalidateCache } from "@/lib/useCachedData";
@@ -711,9 +713,9 @@ function DocEditorContent({
         <>
           {hideInfo ? null : <DocOrderInfo order={data.order} />}
           {kind === "pi" ? (
-            <ProformaInvoiceTab key={`pi-${data.order.id}-${data.pi?.id ?? 0}`} data={data} onChanged={afterChange} />
+            <ProformaInvoiceTab key={`pi-${data.order.id}-${data.pi?.id ?? 0}`} data={data} onChanged={afterChange} target={{ orderId: data.order.id }} />
           ) : kind === "spi" ? (
-            <ServiceProformaInvoiceTab key={`spi-${data.order.id}-${data.pi?.id ?? 0}`} data={data} onChanged={afterChange} />
+            <ServiceProformaInvoiceTab key={`spi-${data.order.id}-${data.pi?.id ?? 0}`} data={data} onChanged={afterChange} target={{ orderId: data.order.id }} />
           ) : kind === "ci" ? (
             <CommercialInvoiceTab key={`ci-${data.order.id}-${data.ci?.id ?? 0}`} data={data} onChanged={afterChange} />
           ) : kind === "sm" ? (
@@ -752,6 +754,57 @@ function DocEditorModal({
     <Modal title={<ModalTitle label={title} projectNo={projectNo} />} onClose={onClose} wide inline={inline}>
       <DocEditorContent orderId={orderId} kind={kind} onChanged={onChanged} hideInfo={inline} />
     </Modal>
+  );
+}
+
+/** 4단계(Quote Sent)의 Proforma Invoice 탭 — 7단계와 **같은 한 장**을 같은 편집기로 연다.
+ *
+ *  고객이 선급금을 치르려면 P/O 를 내기 전에 PI 부터 필요할 때가 있어 견적 단계에도 둔다.
+ *  그때는 아직 오더가 없으므로 저장 대상이 오더가 아니라 프로젝트(딜)다 — 서버가 그 PI 를
+ *  딜에 달아 두었다가 고객 P/O 가 등록되면 오더에 붙이므로, 7단계에서 열면 여기서 쓰던
+ *  문서가 그대로 나온다(반대도 같다). 편집 권한은 7단계와 같은 문서 권한을 따른다 —
+ *  단계가 다를 뿐 만지는 문서가 같기 때문이다. */
+export function ProjectProformaInvoice({
+  rfqId,
+  onChanged,
+}: {
+  rfqId: number;
+  /** 상위(프로젝트 팝업)의 새로고침 — 저장이 단계 칩·목록에 바로 반영되게 한다. */
+  onChanged?: () => void;
+}) {
+  const [data, setData] = useState<DocumentDetail | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function load() {
+    if (!rfqId) return;
+    setLoading(true);
+    setError(null);
+    fetchProjectDocContext(rfqId)
+      .then(setData)
+      .catch((e) => setError(e instanceof Error ? e.message : "Error"))
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(load, [rfqId]);
+
+  function afterChange() {
+    invalidateCache("dashboard");
+    invalidateCache("pipeline");
+    invalidateCache("documents:overview");
+    load();
+    onChanged?.();
+  }
+
+  if (error) return <div className="state error">API error: {error}</div>;
+  if (!data) return <div className="state">{loading ? "Loading details…" : ""}</div>;
+  // 서비스 딜은 7단계와 마찬가지로 서비스 서식(작업 내용·장소·인원)으로 받는다.
+  const service = data.order.work_type === "서비스";
+  const key = `ppi-${data.order.id}-${data.pi?.id ?? 0}`;
+  return service ? (
+    <ServiceProformaInvoiceTab key={key} data={data} onChanged={afterChange} target={{ rfqId }} />
+  ) : (
+    <ProformaInvoiceTab key={key} data={data} onChanged={afterChange} target={{ rfqId }} />
   );
 }
 
@@ -936,11 +989,28 @@ function OrderMilestones({ data, onChanged }: { data: DocumentDetail; onChanged:
   );
 }
 
+/** PI 번호 자동값 — 앞 단계 문서번호 + "-PI".
+ *  7단계는 고객 P/O 번호, 4단계는 아직 P/O 가 없으므로 고객 견적번호를 앞에 세운다. */
+function docAutoPiNo(data: DocumentDetail): string {
+  const base = data.order.po_no || data.order.quotation_no || "";
+  return base ? `${base}-PI` : "";
+}
+
 // Proforma Invoice(선택) — 선적 전 발행하는 견적성 송장. Commercial Invoice 와 동일한
 // Basic info + Item list 구성이나 별도 레코드(pi)에 저장되며 하위 문서를 만들지 않는다.
-function ProformaInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChanged: () => void }) {
+function ProformaInvoiceTab({
+  data,
+  onChanged,
+  target,
+}: {
+  data: DocumentDetail;
+  onChanged: () => void;
+  /** 저장·발행 대상 — 7단계는 오더, 4단계는 아직 오더가 없어 프로젝트(딜). 서버가 같은 한 장으로 잇는다. */
+  target: DocTarget;
+}) {
   // PI 번호 자동생성 규칙 = P/O 번호 + "-PI" (Commercial Invoice 의 "-CI" 와 같은 방식).
-  const autoPiNo = data.order.po_no ? `${data.order.po_no}-PI` : "";
+  // 4단계에선 아직 P/O 가 없어 견적번호를 대신 쓴다 — 규칙("<앞 문서번호>-PI")은 그대로다.
+  const autoPiNo = docAutoPiNo(data);
   const [piNo, setPiNo] = useState(data.pi?.pi_no || autoPiNo);
   const [piMode, setPiMode] = useState<"auto" | "manual">(
     data.pi?.pi_no && data.pi.pi_no !== autoPiNo ? "manual" : "auto",
@@ -975,6 +1045,8 @@ function ProformaInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChang
   const totalInvoiceValue = subtotal + extras + vatAmount;
   // 읽기모드(단계 화면 토글)에선 권한이 있어도 폼을 잠근다 — 저장·삭제 버튼도 함께 사라진다.
   const { editing: editable, readMode, fieldsetProps } = useEditGate(canEditDoc(data));
+  // 저장 가능 대상인가 — 7단계는 오더가 있어야 하고, 4단계(프로젝트 대상)는 오더 전에도 저장한다.
+  const canSave = "rfqId" in target || data.order.id > 0;
 
   async function save() {
     setBusy(true);
@@ -982,7 +1054,7 @@ function ProformaInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChang
       const outItems = items.map((it) => ({ ...it, hs_code: shipping.hs_code || it.hs_code || "" }));
       const outShipping = { ...shipping, shipping_marks: composeShippingMarks(shipping) };
       const outTerms = { ...terms, freight, packing, insurance };
-      await saveProformaInvoice(data.order.id, { pi_no: piNo, date, currency, vat_rate: vatRate, items: outItems, shipping: outShipping, terms: outTerms });
+      await saveProformaInvoice(target, { pi_no: piNo, date, currency, vat_rate: vatRate, items: outItems, shipping: outShipping, terms: outTerms });
       onChanged();
     } finally {
       setBusy(false);
@@ -1008,7 +1080,7 @@ function ProformaInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChang
     if (!confirm("Delete this Proforma Invoice?")) return;
     setBusy(true);
     try {
-      await deleteProformaInvoice(data.order.id);
+      await deleteProformaInvoice(target);
       onChanged();
     } catch (e) {
       alert(e instanceof Error ? e.message : "Delete failed");
@@ -1074,7 +1146,7 @@ function ProformaInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChang
         tableId="pi-items"
         headerActions={
           <button className="btn sm" disabled={busy} onClick={() => setItems(normalizeItems(data.order.items))}>
-            Load order items
+            {data.order.id ? "Load order items" : "Load quote items"}
           </button>
         }
         // Freight/Packing/Insurance/VAT 를 품목표 tfoot 안에 넣는다(참조 양식).
@@ -1091,7 +1163,7 @@ function ProformaInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChang
       </fieldset>
       <div className="form-actions doc-actions">
         <div className="doc-actions-left">
-          <DocPreviewButton orderId={data.order.id} kind="pi/pdf" filename="Proforma Invoice.pdf" disabled={!data.pi} xlsxKind="pi/xlsx" />
+          <DocPreviewButton target={target} kind="pi/pdf" filename="Proforma Invoice.pdf" disabled={!data.pi} xlsxKind="pi/xlsx" />
         </div>
         <div className="doc-actions-center">
           <span className="hint-inline">Total invoice value {dualCurrencyText(totalInvoiceValue, currency)} · {fxRateText()}</span>
@@ -1107,7 +1179,7 @@ function ProformaInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChang
               <button className="btn" disabled={busy} onClick={cancel}>
                 Cancel
               </button>
-              <button className="btn primary" disabled={busy || data.order.id === 0} onClick={save}>
+              <button className="btn primary" disabled={busy || !canSave} onClick={save}>
                 Save
               </button>
             </>
@@ -1124,9 +1196,17 @@ function ProformaInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChang
 // 저장 자리는 물품용과 같고(오더당 PI 1건), 받는 값이 다르다: 용역은 배로 부치는 물건이
 // 아니라 사람이 나가는 일이라, 선적항·B/L·Incoterms 자리에 작업 내용·장소·인원·기간·
 // 현지 대리점이 들어간다. 발행 서식(PDF·Excel)도 딜의 업무구분을 보고 서버가 갈라 준다.
-function ServiceProformaInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChanged: () => void }) {
-  // PI 번호 규칙은 물품용과 같다 — P/O 번호 + "-PI".
-  const autoPiNo = data.order.po_no ? `${data.order.po_no}-PI` : "";
+function ServiceProformaInvoiceTab({
+  data,
+  onChanged,
+  target,
+}: {
+  data: DocumentDetail;
+  onChanged: () => void;
+  target: DocTarget;
+}) {
+  // PI 번호 규칙은 물품용과 같다 — P/O 번호(4단계는 견적번호) + "-PI".
+  const autoPiNo = docAutoPiNo(data);
   const [piNo, setPiNo] = useState(data.pi?.pi_no || autoPiNo);
   const [piMode, setPiMode] = useState<"auto" | "manual">(
     data.pi?.pi_no && data.pi.pi_no !== autoPiNo ? "manual" : "auto",
@@ -1154,11 +1234,13 @@ function ServiceProformaInvoiceTab({ data, onChanged }: { data: DocumentDetail; 
   const total = useMemo(() => includedRows(items).reduce((sum, i) => sum + num(i.amount), 0), [items]);
   // 읽기모드(단계 화면 토글)에선 권한이 있어도 폼을 잠근다 — 저장·삭제 버튼도 함께 사라진다.
   const { editing: editable, readMode, fieldsetProps } = useEditGate(canEditDoc(data));
+  // 저장 가능 대상인가 — 7단계는 오더가 있어야 하고, 4단계(프로젝트 대상)는 오더 전에도 저장한다.
+  const canSave = "rfqId" in target || data.order.id > 0;
 
   async function save() {
     setBusy(true);
     try {
-      await saveProformaInvoice(data.order.id, {
+      await saveProformaInvoice(target, {
         pi_no: piNo, date, currency, vat_rate: 0, items, shipping, terms,
       });
       onChanged();
@@ -1182,7 +1264,7 @@ function ServiceProformaInvoiceTab({ data, onChanged }: { data: DocumentDetail; 
     if (!confirm("Delete this Proforma Invoice?")) return;
     setBusy(true);
     try {
-      await deleteProformaInvoice(data.order.id);
+      await deleteProformaInvoice(target);
       onChanged();
     } catch (e) {
       alert(e instanceof Error ? e.message : "Delete failed");
@@ -1257,7 +1339,7 @@ function ServiceProformaInvoiceTab({ data, onChanged }: { data: DocumentDetail; 
         tableId="svc-pi-items"
         headerActions={
           <button className="btn sm" disabled={busy} onClick={() => setItems(normalizeItems(data.order.items))}>
-            Load order items
+            {data.order.id ? "Load order items" : "Load quote items"}
           </button>
         }
         footerRows={[
@@ -1267,7 +1349,7 @@ function ServiceProformaInvoiceTab({ data, onChanged }: { data: DocumentDetail; 
       </fieldset>
       <div className="form-actions doc-actions">
         <div className="doc-actions-left">
-          <DocPreviewButton orderId={data.order.id} kind="pi/pdf" filename="Proforma Invoice.pdf" disabled={!data.pi} xlsxKind="pi/xlsx" />
+          <DocPreviewButton target={target} kind="pi/pdf" filename="Proforma Invoice.pdf" disabled={!data.pi} xlsxKind="pi/xlsx" />
         </div>
         <div className="doc-actions-center">
           <span className="hint-inline">Total invoice value {dualCurrencyText(total, currency)} · {fxRateText()}</span>
@@ -1283,7 +1365,7 @@ function ServiceProformaInvoiceTab({ data, onChanged }: { data: DocumentDetail; 
               <button className="btn" disabled={busy} onClick={cancel}>
                 Cancel
               </button>
-              <button className="btn primary" disabled={busy || data.order.id === 0} onClick={save}>
+              <button className="btn primary" disabled={busy || !canSave} onClick={save}>
                 Save
               </button>
             </>
@@ -1471,7 +1553,7 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
       </fieldset>
       <div className="form-actions doc-actions">
         <div className="doc-actions-left">
-          <DocPreviewButton orderId={data.order.id} kind="ci/pdf" filename="Commercial Invoice.pdf" disabled={!data.ci} xlsxKind="ci/xlsx" />
+          <DocPreviewButton target={{ orderId: data.order.id }} kind="ci/pdf" filename="Commercial Invoice.pdf" disabled={!data.ci} xlsxKind="ci/xlsx" />
         </div>
         <div className="doc-actions-center">
           <span className="hint-inline">Total invoice value {dualCurrencyText(totalInvoiceValue, currency)} · {fxRateText()}</span>
@@ -1547,7 +1629,7 @@ function ShippingMarksTab({ data, onChanged }: { data: DocumentDetail; onChanged
       </fieldset>
       <div className="form-actions doc-actions">
         <div className="doc-actions-left">
-          <DocPreviewButton orderId={data.order.id} kind="sm/pdf" filename="Shipping Mark.pdf" disabled={!data.ci} xlsxKind="sm/xlsx" />
+          <DocPreviewButton target={{ orderId: data.order.id }} kind="sm/pdf" filename="Shipping Mark.pdf" disabled={!data.ci} xlsxKind="sm/xlsx" />
         </div>
         <div className="doc-actions-center" />
         <div className="doc-actions-right">
@@ -1734,7 +1816,7 @@ function PackingListTab({ data, onChanged }: { data: DocumentDetail; onChanged: 
       </fieldset>
       <div className="form-actions doc-actions">
         <div className="doc-actions-left">
-          <DocPreviewButton orderId={data.order.id} kind="pl/pdf" filename="Packing List.pdf" disabled={!data.pl} xlsxKind="pl/xlsx" />
+          <DocPreviewButton target={{ orderId: data.order.id }} kind="pl/pdf" filename="Packing List.pdf" disabled={!data.pl} xlsxKind="pl/xlsx" />
         </div>
         <div className="doc-actions-center" />
         <div className="doc-actions-right">
@@ -2779,7 +2861,7 @@ function DownloadButton({
   disabled: boolean;
 }) {
   async function download() {
-    const res = await fetch(documentDownloadUrl(orderId, kind), {
+    const res = await fetch(documentDownloadUrl({ orderId }, kind), {
       headers: getToken() ? { Authorization: `Bearer ${getToken()}` } : {},
     });
     if (!res.ok) throw new Error("download failed");
@@ -2805,13 +2887,13 @@ function DownloadButton({
 // 문서 미리보기 — 다운로드와 동일한 PDF 를 받아 모달 iframe 으로 인라인 표시한다.
 // PDF 는 저장된 문서 기준으로 생성되므로 저장 전에는 비활성(Download 와 동일 규약).
 function DocPreviewButton({
-  orderId,
+  target,
   kind,
   filename,
   disabled,
   xlsxKind,
 }: {
-  orderId: number;
+  target: DocTarget;
   kind: "pi/pdf" | "ci/pdf" | "sm/pdf" | "pl/pdf";
   filename: string;
   disabled: boolean;
@@ -2825,7 +2907,7 @@ function DocPreviewButton({
   async function open() {
     setBusy(true);
     try {
-      const res = await fetch(documentDownloadUrl(orderId, kind), {
+      const res = await fetch(documentDownloadUrl(target, kind), {
         headers: getToken() ? { Authorization: `Bearer ${getToken()}` } : {},
       });
       if (!res.ok) throw new Error("preview failed");
@@ -2853,7 +2935,7 @@ function DocPreviewButton({
   async function saveExcel() {
     if (!xlsxKind) return;
     try {
-      const res = await fetch(documentDownloadUrl(orderId, xlsxKind), {
+      const res = await fetch(documentDownloadUrl(target, xlsxKind), {
         headers: getToken() ? { Authorization: `Bearer ${getToken()}` } : {},
       });
       if (!res.ok) throw new Error("Excel download failed");

@@ -484,7 +484,9 @@ def _route_module(path: str) -> str | None:
     if path.startswith(("/api/admin/po-", "/api/admin/orders", "/api/admin/order/",
                         "/api/admin/vendor-po")):
         return "po"
-    if path.startswith("/api/admin/documents"):
+    # /projects/{rfq_id}/... 는 딜 단위로 여는 문서(4단계 Proforma Invoice) —
+    # 만지는 것이 문서이므로 7단계와 같은 documents 권한으로 지킨다.
+    if path.startswith(("/api/admin/documents", "/api/admin/projects")):
         return "documents"
     if path.startswith("/api/admin/ar"):
         return "ar"
@@ -577,6 +579,9 @@ def _deal_owner_from_path(path: str) -> int | None:
         elif res in ("orders", "order", "documents"):
             o = s.query(Order).filter_by(id=rid).first()
             rfq_id = o.rfq_id if o else None
+        elif res == "projects":
+            # /projects/{rfq_id}/... — 경로의 id 가 곧 딜이다.
+            rfq_id = rid
         elif res == "vendor-pos":
             vp = s.query(PurchaseOrder).filter_by(id=rid).first()
             if vp:
@@ -2107,7 +2112,16 @@ def _doc_defaults(session, order: Order) -> dict:
     q = None
     if getattr(order, "quotation_id", None):
         q = session.query(Quotation).filter_by(id=order.quotation_id).first()
-    ot = order.terms if isinstance(getattr(order, "terms", None), dict) else {}
+    return _doc_defaults_from(getattr(order, "terms", None),
+                              getattr(order, "currency", ""), q)
+
+
+def _doc_defaults_from(order_terms, order_currency, q) -> dict:
+    """`_doc_defaults` 의 본체 — 오더 쪽 값(terms·통화)과 견적을 합친다.
+
+    오더가 아직 없는 단계(4단계 Proforma Invoice)에서는 오더 쪽을 비워 부르면
+    견적 값만으로 같은 모양의 기본값이 나온다."""
+    ot = order_terms if isinstance(order_terms, dict) else {}
     qt = (q.terms if (q and isinstance(q.terms, dict)) else {}) or {}
     out: dict = {}
     sources: dict = {}
@@ -2128,7 +2142,7 @@ def _doc_defaults(session, order: Order) -> dict:
         out[k] = v
         if v:
             sources[k] = "order" if pair_from_order else "quotation"
-    cur = str(getattr(order, "currency", "") or "").strip()
+    cur = str(order_currency or "").strip()
     if cur:
         sources["currency"] = "order"
     elif q and (q.currency or "").strip():
@@ -2259,6 +2273,153 @@ def _document_detail_payload(session, order: Order) -> dict:
             "date": tax.date or "",
             "items": tax.items or [],
         },
+        "smtp_configured": bool(os.getenv("SMTP_USER") and os.getenv("SMTP_PASSWORD")),
+    }
+
+
+# ── 프로젝트 단위 Proforma Invoice — 4단계(견적 발송)와 7단계(선적 준비)의 같은 한 장 ──
+#
+# PI 는 원래 고객 P/O(오더)에 달린다. 그런데 고객이 선급금을 치르려면 P/O 를 내기 전에
+# PI 부터 필요할 때가 있어(선불 거래·신규 거래처) 4단계에서도 같은 문서를 만든다.
+# 그때는 오더가 없으므로 order_id 없이 rfq_id 만 달고 저장되고, 그 딜에 고객 P/O 가
+# 등록되는 순간 오더에 붙는다(create_order). 두 단계가 한 장을 나눠 쓰는 방식이다.
+
+def _project_pi(session, rfq_id: int):
+    """이 프로젝트(딜)의 Proforma Invoice — 4·7단계가 같은 문서를 보게 하는 해석기.
+
+    대표 오더에 달린 PI 가 있으면 그것, 없으면 오더 없이 이 딜에 달린 PI.
+    (고객 P/O 가 여럿인 딜은 오더마다 PI 를 따로 둘 수 있는데, 4단계는 P/O 가 갈리기
+    전의 자리라 대표 오더의 PI 를 그 딜의 PI 로 본다.)"""
+    order = _order_for_rfq(session, rfq_id)
+    if order:
+        pi = _latest_pi(session, order.id)
+        if pi:
+            return pi
+    return (session.query(ProformaInvoice)
+            .filter(ProformaInvoice.rfq_id == rfq_id, ProformaInvoice.order_id.is_(None))
+            .order_by(ProformaInvoice.id.desc()).first())
+
+
+def adopt_project_pi(session, order: Order) -> None:
+    """고객 P/O 등록 시, 오더보다 먼저 만들어 둔 PI 를 이 오더에 붙인다.
+
+    이걸 하지 않으면 4단계에서 쓴 PI 가 7단계에서 안 보인다 — 7단계는 오더로만 찾기
+    때문이다. 붙이고 나면 이후 조회·발행·단계 판정이 모두 기존 경로(order_id) 그대로
+    같은 문서를 가리킨다."""
+    rfq_id = getattr(order, "rfq_id", None)
+    if not rfq_id:
+        q = (session.query(Quotation).filter_by(id=order.quotation_id).first()
+             if getattr(order, "quotation_id", None) else None)
+        rfq_id = q.rfq_id if q else None
+    if not rfq_id:
+        return
+    orphan = (session.query(ProformaInvoice)
+              .filter(ProformaInvoice.rfq_id == rfq_id, ProformaInvoice.order_id.is_(None))
+              .order_by(ProformaInvoice.id.desc()).first())
+    if orphan is not None:
+        orphan.order_id = order.id
+
+
+def _project_quotation(session, rfq_id: int):
+    """딜의 대표 고객 견적 — 발송된 것 중 최신, 없으면 초안까지 포함한 최신.
+    4단계 PI 의 품목·거래조건·통화를 여기서 물려받는다(그 견적으로 청구하는 것이므로)."""
+    base = session.query(Quotation).filter(Quotation.rfq_id == rfq_id)
+    return (base.filter(Quotation.status != QuotationStatus.DRAFT)
+            .order_by(Quotation.created_at.desc()).first()
+            or base.order_by(Quotation.created_at.desc()).first())
+
+
+def _doc_items_from_quotation(quo) -> list[dict]:
+    """견적 품목 → 문서 품목. 판매가(단가·금액)만 넘긴다 — PI 는 고객에게 나가는 청구서라
+    원가(cost_price)·마진은 실리지 않는다."""
+    out: list[dict] = []
+    for it in (quo.items or []) if quo else []:
+        if not isinstance(it, dict):
+            continue
+        out.append({
+            "part_no": it.get("part_no") or "",
+            "description": it.get("description") or "",
+            "qty": it.get("qty") or 0,
+            "unit": it.get("unit") or "PCS",
+            "unit_price": it.get("unit_price"),
+            "amount": it.get("amount"),
+            "remark": it.get("remark") or "",
+            "excluded": bool(it.get("excluded")),
+        })
+    return out
+
+
+def _project_doc_context(session, rfq: RFQ) -> dict:
+    """4단계 Proforma Invoice 화면이 쓰는 문서 문맥 — `_document_detail_payload` 와 같은 모양.
+
+    오더가 있으면 그 오더의 문맥을 그대로 돌려준다(7단계와 완전히 같은 값 = 한 장 공유).
+    아직 없으면 오더 자리에 딜·견적에서 모은 값을 채운 '오더 없는 문맥'을 세운다:
+    id 0, P/O 번호 없음, 품목은 고객 견적의 품목."""
+    order = _order_for_rfq(session, rfq.id)
+    if order is not None:
+        return _document_detail_payload(session, order)
+
+    cust = session.query(Customer).filter_by(id=rfq.customer_id).first() if rfq.customer_id else None
+    vessel = session.query(Vessel).filter_by(id=rfq.vessel_id).first() if rfq.vessel_id else None
+    quo = _project_quotation(session, rfq.id)
+    pi = _project_pi(session, rfq.id)
+    items = _doc_items_from_quotation(quo)
+    return {
+        "order": {
+            "id": 0,
+            "rfq_id": rfq.id,
+            "assignee_id": rfq.created_by or 0,
+            "po_no": "",
+            "kms_order_no": "",
+            # 이 딜의 고객 견적번호 — 오더가 없어 P/O 번호로 PI 번호를 못 만드는 4단계에서
+            # "<견적번호>-PI" 로 자동 채번한다(7단계의 "<P/O 번호>-PI" 와 같은 규칙).
+            "quotation_no": (quo.qtn_no or "") if quo else "",
+            "date": (quo.date if quo else "") or rfq.date or "",
+            "status": "",
+            "customer": cust.name if cust else "",
+            "customer_email": (cust.email or "") if cust else "",
+            "customer_address": (cust.address or "") if cust else "",
+            "customer_addresses": (cust.addresses or []) if cust else [],
+            "customer_tax_id": (cust.tax_id or "") if cust else "",
+            "customer_contact": (cust.contact or "") if cust else "",
+            "customer_tax_invoice_email": (getattr(cust, "tax_invoice_email", None) or "") if cust else "",
+            "customer_emails": (cust.emails or []) if cust else [],
+            "customer_phones": (cust.phones or []) if cust else [],
+            "customer_contacts": _customer_contacts_brief(session, cust.id) if cust else [],
+            "vessel": vessel.name if vessel else "",
+            "project_title": rfq.project_title or "",
+            "project_no": _project_no_map(session).get(rfq.id, ""),
+            "first_rfq_at": _first_rfq_iso(rfq),
+            "work_type": _enum_val(rfq.work_type) if rfq.work_type else "부품공급",
+            "vendor": "",
+            # 거래구분은 고객 P/O 에서 정해진다 — 그전엔 기본값(수출)으로 서식만 맞춘다.
+            "trade_type": "수출",
+            "service_info": {},
+            "tracking_token": rfq.tracking_token or "",
+            "consignee_confirmed_date": "",
+            "vendor_docs_sent_date": "",
+            "pod_notes": "",
+            "items": items,
+            "doc_defaults": _doc_defaults_from(None, "", quo),
+        },
+        "pod": None,
+        "stage_done": {k: False for k in ("7", "8", "10", "11")},
+        "pi": None if not pi else {
+            "id": pi.id,
+            "pi_no": pi.pi_no or "",
+            "date": pi.date or "",
+            "currency": pi.currency or "USD",
+            "vat_rate": pi.vat_rate or 0.0,
+            "items": pi.items or [],
+            "shipping": pi.shipping or {},
+            "terms": pi.terms or {},
+            "missing": _missing_items(items, pi.items or []),
+        },
+        # 나머지 문서는 오더가 생긴 뒤의 것들 — 이 문맥에선 언제나 비어 있다.
+        "ci": None,
+        "pl": None,
+        "sa": None,
+        "tax": None,
         "smtp_configured": bool(os.getenv("SMTP_USER") and os.getenv("SMTP_PASSWORD")),
     }
 
@@ -3537,6 +3698,8 @@ __all__ = [
     "_date_iso",
     "_doc_file_response",
     "_document_detail_payload",
+    "_doc_defaults_from",
+    "_doc_items_from_quotation",
     "_dual_money",
     "_enum_val",
     "_first_rfq_iso",
@@ -3560,8 +3723,12 @@ __all__ = [
     "_normalize_perms",
     "_ocr_image_media_type",
     "_order_for_rfq",
+    "_project_doc_context",
+    "_project_pi",
+    "_project_quotation",
     "_perms_for",
     "_pipeline_stage",
+    "adopt_project_pi",
     "_project_no_for_order",
     "_project_no_map",
     "_quotation_total",

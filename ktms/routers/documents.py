@@ -20,6 +20,7 @@ from _core import (
     ProformaInvoiceSave,
     PurchaseOrder,
     Quotation,
+    RFQ,
     Response,
     ServiceStageSave,
     ShippingAdvice,
@@ -45,8 +46,11 @@ from _core import (
     _latest_sa,
     _latest_tax,
     _manual_doc_no,
+    _order_for_rfq,
+    _project_doc_context,
     _project_no_for_order,
     _project_no_map,
+    _project_pi,
     _rfq_for_order,
     _total_amount,
     _tracking_url,
@@ -253,6 +257,39 @@ def document_milestone(order_id: int, body: DocumentMilestoneUpdate):
 
 
 # ── Proforma Invoice (선택) — 선적 전 견적성 송장. CI 와 독립적으로 오더당 최신 1건. ──
+#
+# 같은 한 장을 두 단계가 나눠 쓴다: 4단계(견적 발송 — 선급금 청구용, 오더 이전)와
+# 7단계(선적 준비). 그래서 저장 경로가 오더(/documents/{order_id})와 프로젝트
+# (/projects/{rfq_id}) 두 갈래이고, 둘 다 아래 `_apply_pi` 한 곳으로 모인다.
+def _apply_pi(s, pi, body: ProformaInvoiceSave, *, order_id, rfq_id):
+    """PI 레코드 생성/갱신 — 오더 경로와 프로젝트 경로가 함께 쓰는 본체.
+
+    order_id·rfq_id 는 '아직 비어 있으면 채운다'로만 쓴다. 4단계에서 오더 없이 만든 PI 가
+    P/O 등록 뒤 오더에 붙는 것과 같은 이유로, 이미 매인 곳을 옮기지는 않는다."""
+    if not pi:
+        pi = ProformaInvoice(
+            pi_no=_manual_doc_no(s, ProformaInvoice, "pi_no", body.pi_no, None),
+            order_id=order_id,
+            rfq_id=rfq_id,
+            date=body.date or date.today().isoformat(),
+        )
+        s.add(pi)
+    else:
+        if body.pi_no is not None:
+            pi.pi_no = _manual_doc_no(s, ProformaInvoice, "pi_no", body.pi_no, pi.id)
+        if order_id and not pi.order_id:
+            pi.order_id = order_id
+        if rfq_id and not pi.rfq_id:
+            pi.rfq_id = rfq_id
+    pi.date = body.date or pi.date or date.today().isoformat()
+    pi.currency = body.currency or "USD"
+    pi.vat_rate = body.vat_rate or 0.0
+    pi.items = body.items or []
+    pi.shipping = body.shipping or {}
+    pi.terms = body.terms or {}
+    return pi
+
+
 @app.post("/api/admin/documents/{order_id}/pi",
           dependencies=[Depends(require_token)])
 def save_proforma_invoice(order_id: int, body: ProformaInvoiceSave):
@@ -261,22 +298,9 @@ def save_proforma_invoice(order_id: int, body: ProformaInvoiceSave):
         order = s.query(Order).filter_by(id=order_id).first()
         if not order:
             raise HTTPException(status_code=404, detail="Order를 찾을 수 없습니다.")
-        pi = _latest_pi(s, order_id)
-        if not pi:
-            pi = ProformaInvoice(
-                pi_no=_manual_doc_no(s, ProformaInvoice, "pi_no", body.pi_no, None),
-                order_id=order.id,
-                date=body.date or date.today().isoformat(),
-            )
-            s.add(pi)
-        elif body.pi_no is not None:
-            pi.pi_no = _manual_doc_no(s, ProformaInvoice, "pi_no", body.pi_no, pi.id)
-        pi.date = body.date or pi.date or date.today().isoformat()
-        pi.currency = body.currency or "USD"
-        pi.vat_rate = body.vat_rate or 0.0
-        pi.items = body.items or []
-        pi.shipping = body.shipping or {}
-        pi.terms = body.terms or {}
+        rfq = _rfq_for_order(s, order)
+        pi = _apply_pi(s, _latest_pi(s, order_id), body,
+                       order_id=order.id, rfq_id=rfq.id if rfq else None)
         s.commit()
         return {"ok": True, "id": pi.id, "pi_no": pi.pi_no}
     finally:
@@ -289,16 +313,27 @@ def _pi_payload(s, order, pi) -> dict:
     서비스 딜이면 doc_variant='service' 를 실어 보낸다 — 발행 서식이 갈린다
     (선적정보 대신 서비스정보, 품목표에 품번·HS 코드 대신 Unit).
     딜의 업무구분에서 정하므로 저장된 값과 무관하게 항상 딜 성격과 맞는 서식이 나온다."""
-    payload = build_payload(
-        doc_no=pi.pi_no, date=pi.date,
+    return _pi_doc_payload(
+        pi,
         customer=_customer_for_order(s, order),
         vessel=_vessel_for_order(s, order),
+        po_no=order.po_no or "",
+        export_ref=_project_no_for_order(s, order),
+        is_service=_is_service_deal(s, order),
+    )
+
+
+def _pi_doc_payload(pi, *, customer, vessel, po_no, export_ref, is_service) -> dict:
+    """`_pi_payload` 의 본체 — 오더가 없는 4단계 발행도 같은 서식으로 나오게 한다."""
+    payload = build_payload(
+        doc_no=pi.pi_no, date=pi.date,
+        customer=customer, vessel=vessel,
         items=pi.items or [], terms=pi.terms or {},
         currency=pi.currency or "USD", vat_rate=pi.vat_rate or 0.0,
-        shipping=pi.shipping or {}, po_no=order.po_no or "",
-        export_ref=_project_no_for_order(s, order),
+        shipping=pi.shipping or {}, po_no=po_no,
+        export_ref=export_ref,
     )
-    if _is_service_deal(s, order):
+    if is_service:
         payload["doc_variant"] = "service"
     return payload
 
@@ -354,6 +389,99 @@ def delete_proforma_invoice(order_id: int):
         s.delete(pi)
         s.commit()
         return {"ok": True}
+    finally:
+        s.close()
+
+
+# ── 프로젝트(딜) 단위 Proforma Invoice — 4단계에서 여는 같은 한 장 ──────────────
+#
+# 오더가 이미 있으면 위의 오더 경로와 정확히 같은 레코드를 만지고, 아직 없으면(보통의
+# 4단계) 오더 없이 딜에 달아 둔다. 그 딜에 고객 P/O 가 등록되면 오더에 붙는다
+# (adopt_project_pi) — 그래서 7단계에서 열어도 4단계에서 쓰던 그 문서가 나온다.
+def _rfq_or_404(s, rfq_id: int) -> RFQ:
+    rfq = s.query(RFQ).filter_by(id=rfq_id).first()
+    if not rfq:
+        raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다.")
+    return rfq
+
+
+@app.get("/api/admin/projects/{rfq_id}/doc-context",
+         dependencies=[Depends(require_token)])
+def project_doc_context(rfq_id: int):
+    """4단계 Proforma Invoice 화면의 문서 문맥 — 오더 상세와 같은 모양(오더 없으면 id 0)."""
+    s = get_session()
+    try:
+        return _project_doc_context(s, _rfq_or_404(s, rfq_id))
+    finally:
+        s.close()
+
+
+@app.post("/api/admin/projects/{rfq_id}/pi", dependencies=[Depends(require_token)])
+def save_project_proforma_invoice(rfq_id: int, body: ProformaInvoiceSave):
+    s = get_session()
+    try:
+        _rfq_or_404(s, rfq_id)
+        order = _order_for_rfq(s, rfq_id)
+        pi = _apply_pi(s, _project_pi(s, rfq_id), body,
+                       order_id=order.id if order else None, rfq_id=rfq_id)
+        s.commit()
+        return {"ok": True, "id": pi.id, "pi_no": pi.pi_no}
+    finally:
+        s.close()
+
+
+@app.delete("/api/admin/projects/{rfq_id}/pi", dependencies=[Depends(require_token)])
+def delete_project_proforma_invoice(rfq_id: int):
+    s = get_session()
+    try:
+        pi = _project_pi(s, rfq_id)
+        if not pi:
+            raise HTTPException(status_code=404, detail="Proforma Invoice가 없습니다.")
+        s.delete(pi)
+        s.commit()
+        return {"ok": True}
+    finally:
+        s.close()
+
+
+def _project_pi_or_404(s, rfq_id: int):
+    """딜의 PI + 발행 payload — 오더가 있으면 오더 기준, 없으면 딜(고객·선박)에서 모은다."""
+    rfq = _rfq_or_404(s, rfq_id)
+    pi = _project_pi(s, rfq_id)
+    if not pi:
+        raise HTTPException(status_code=404, detail="Proforma Invoice가 없습니다.")
+    order = _order_for_rfq(s, rfq_id)
+    if order is not None:
+        return pi, _pi_payload(s, order, pi)
+    cust = s.query(Customer).filter_by(id=rfq.customer_id).first() if rfq.customer_id else None
+    vessel = s.query(Vessel).filter_by(id=rfq.vessel_id).first() if rfq.vessel_id else None
+    return pi, _pi_doc_payload(
+        pi, customer=cust, vessel=vessel, po_no="",
+        export_ref=_project_no_map(s).get(rfq.id, ""),
+        is_service=_enum_val(rfq.work_type) == "서비스",
+    )
+
+
+@app.get("/api/admin/projects/{rfq_id}/pi/pdf", dependencies=[Depends(require_token)])
+def project_proforma_invoice_pdf(rfq_id: int):
+    s = get_session()
+    try:
+        pi, payload = _project_pi_or_404(s, rfq_id)
+        return _doc_file_response(generate_pdf("proforma_invoice", payload),
+                                  f"{pi.pi_no}_PI.pdf", "application/pdf")
+    finally:
+        s.close()
+
+
+@app.get("/api/admin/projects/{rfq_id}/pi/xlsx", dependencies=[Depends(require_token)])
+def project_proforma_invoice_xlsx(rfq_id: int):
+    s = get_session()
+    try:
+        pi, payload = _project_pi_or_404(s, rfq_id)
+        return _doc_file_response(
+            generate_pi_xlsx(payload), f"{pi.pi_no}_ProformaInvoice.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
     finally:
         s.close()
 

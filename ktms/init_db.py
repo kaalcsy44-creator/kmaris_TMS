@@ -178,6 +178,11 @@ _MIGRATIONS = {
         "accrual_from":    "VARCHAR(7)",
         "accrual_to":      "VARCHAR(7)",
     },
+    "proforma_invoices": {
+        # 오더보다 먼저 만들어진 PI(4단계 견적 단계 발행)의 소속 딜.
+        # 오더가 생기면 order_id 가 채워지고, 이후로는 order_id 로 찾는다.
+        "rfq_id":          "INTEGER",
+    },
     "email_messages": {
         # 어느 딜에도 속할 수 없는 메일(회사 소개·인사·자동회신). 미분류 함에서 내린다.
         "not_deal":        "BOOLEAN DEFAULT FALSE",

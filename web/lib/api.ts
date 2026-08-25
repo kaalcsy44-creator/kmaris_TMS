@@ -608,8 +608,22 @@ export function updateDocumentMilestone(
   return post(`/api/admin/documents/${orderId}/milestone`, { field, value });
 }
 
+/** 문서 API 의 대상 — 고객 P/O(오더) 단위이거나, 아직 오더가 없는 프로젝트(딜) 단위.
+ *  Proforma Invoice 는 4단계(견적 발송·선급금 청구)에서도 만드는데 그때는 오더가 없어
+ *  딜에 달아 둔다. 서버가 같은 한 장으로 이어 주므로 화면은 어느 쪽으로 불러도 된다. */
+export type DocTarget = { orderId: number } | { rfqId: number };
+
+export function docApiBase(t: DocTarget): string {
+  return "orderId" in t ? `/api/admin/documents/${t.orderId}` : `/api/admin/projects/${t.rfqId}`;
+}
+
+/** 4단계 Proforma Invoice 화면의 문서 문맥 — 오더 상세와 같은 모양(오더 없으면 order.id = 0). */
+export function fetchProjectDocContext(rfqId: number): Promise<DocumentDetail> {
+  return get<DocumentDetail>(`/api/admin/projects/${rfqId}/doc-context`);
+}
+
 export function saveProformaInvoice(
-  orderId: number,
+  target: DocTarget,
   body: {
     pi_no?: string;
     date?: string;
@@ -620,11 +634,11 @@ export function saveProformaInvoice(
     terms?: Record<string, string>;
   }
 ): Promise<{ ok: boolean; id: number; pi_no: string }> {
-  return post(`/api/admin/documents/${orderId}/pi`, body);
+  return post(`${docApiBase(target)}/pi`, body);
 }
 
-export function deleteProformaInvoice(orderId: number): Promise<{ ok: boolean }> {
-  return del(`/api/admin/documents/${orderId}/pi`);
+export function deleteProformaInvoice(target: DocTarget): Promise<{ ok: boolean }> {
+  return del(`${docApiBase(target)}/pi`);
 }
 
 export function saveCommercialInvoice(
@@ -696,10 +710,10 @@ export function saveTaxInvoice(
 }
 
 export function documentDownloadUrl(
-  orderId: number,
+  target: DocTarget,
   kind: "pi/pdf" | "pi/xlsx" | "ci/pdf" | "ci/xlsx" | "sm/pdf" | "sm/xlsx" | "pl/pdf" | "pl/xlsx" | "tax/xlsx"
 ): string {
-  return `${API_BASE}/api/admin/documents/${orderId}/${kind}`;
+  return `${API_BASE}${docApiBase(target)}/${kind}`;
 }
 
 // ── 9) POD(인도 증빙) 파일 + 단계 완료 콜 ─────────────────────────────────────

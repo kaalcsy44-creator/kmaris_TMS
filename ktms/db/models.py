@@ -479,11 +479,18 @@ class PurchaseOrder(Base):
 
 
 class ProformaInvoice(Base):
-    """선적 전 발행하는 견적성 송장(선택). CI 와 독립적으로 오더당 최신 1건을 편집한다."""
+    """선적 전 발행하는 견적성 송장(선택). CI 와 독립적으로 오더당 최신 1건을 편집한다.
+
+    견적 단계(4)에서도 같은 문서를 쓴다 — 고객이 선급금을 치르려면 P/O 를 내기 전에
+    PI 부터 필요할 때가 있어서다. 그때는 아직 오더가 없으므로 order_id 가 비고 rfq_id 만
+    달린 채로 태어나며, 그 프로젝트에 고객 P/O 가 등록되는 순간 오더에 붙는다
+    (create_order). 그래서 4단계에서 만든 PI 와 7단계에서 여는 PI 는 같은 한 장이다."""
     __tablename__ = "proforma_invoices"
     id         = Column(Integer, primary_key=True)
     pi_no      = Column(String(40), unique=True)
     order_id   = Column(Integer, ForeignKey("orders.id"))
+    # 오더보다 먼저 만들어진 PI 가 어느 딜의 것인지 — 오더가 생기기 전의 유일한 소속.
+    rfq_id     = Column(Integer, ForeignKey("rfqs.id"), nullable=True)
     date       = Column(String(10))
     currency   = Column(String(10), default="USD")
     vat_rate   = Column(Float, default=0.0)
