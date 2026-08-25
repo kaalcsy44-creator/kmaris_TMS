@@ -59,6 +59,8 @@ export function useHeadMenu<T>(cols: HeadCol<T>[], resetOn?: string): HeadMenu<T
   const [facets, setFacets] = useState<Record<string, string[]>>({});
   const [dates, setDates] = useState<Record<string, { from: string; to: string }>>({});
   const [openKey, setOpenKey] = useState<string | null>(null);
+  // 값 목록이 길 때 쓰는 메뉴 안 검색어. 메뉴를 새로 열면 비운다.
+  const [query, setQuery] = useState("");
   const [pos, setPos] = useState<{ left: number; top: number }>({ left: 0, top: 0 });
   // 패싯 후보는 '지금 이 표에 들어온 행'에서 뽑는다 — apply() 가 받아 둔 것.
   const rowsRef = useRef<T[]>([]);
@@ -129,6 +131,7 @@ export function useHeadMenu<T>(cols: HeadCol<T>[], resetOn?: string): HeadMenu<T
   }
 
   function toggleMenu(key: string, e: React.MouseEvent<HTMLElement>) {
+    setQuery("");
     if (openKey === key) {
       setOpenKey(null);
       return;
@@ -160,6 +163,10 @@ export function useHeadMenu<T>(cols: HeadCol<T>[], resetOn?: string): HeadMenu<T
         : [];
     const sel = facetValue(col.key);
     const d = dateRange(col.key);
+    // 검색칸은 목록이 길 때만 — 값이 몇 개뿐인 열에서는 읽을 것만 한 줄 늘린다.
+    const searchable = opts.length > 8;
+    const q = query.trim().toLowerCase();
+    const shownOpts = q ? opts.filter((o) => o.label.toLowerCase().includes(q)) : opts;
     return (
       <>
         <div className="pl-menu-backdrop" onClick={() => setOpenKey(null)} />
@@ -214,6 +221,17 @@ export function useHeadMenu<T>(cols: HeadCol<T>[], resetOn?: string): HeadMenu<T
                   <span className="pl-menu-cnt">{sel.length} selected</span>
                 </span>
               ) : null}
+              {searchable ? (
+                <input
+                  className="pl-menu-search"
+                  type="search"
+                  value={query}
+                  autoFocus
+                  placeholder={`Search ${opts.length} values`}
+                  onChange={(e) => setQuery(e.target.value)}
+                  aria-label="Search values"
+                />
+              ) : null}
               <div className="pl-menu-list">
                 <button
                   className={`pl-menu-opt${sel.length === 0 ? " on" : ""}`}
@@ -222,7 +240,10 @@ export function useHeadMenu<T>(cols: HeadCol<T>[], resetOn?: string): HeadMenu<T
                   <span className="chk">{sel.length === 0 ? "✓" : ""}</span>
                   <span className="lbl">All</span>
                 </button>
-                {opts.map((o) => (
+                {shownOpts.length === 0 ? (
+                  <div className="pl-menu-none">No match</div>
+                ) : null}
+                {shownOpts.map((o) => (
                   <button
                     key={o.v}
                     className={`pl-menu-opt${sel.includes(o.v) ? " on" : ""}`}

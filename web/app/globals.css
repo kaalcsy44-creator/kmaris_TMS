@@ -2442,6 +2442,34 @@ table.pipeline thead th.pl-th.open .pl-th-btn {
   border-color: var(--blue);
   box-shadow: 0 0 0 2px rgba(0, 85, 168, 0.12);
 }
+/* 값 목록 검색칸 — 목록이 길 때만 뜬다(적요·고객·벤더처럼 값 종류가 많은 열). */
+.pl-menu-search {
+  /* 메뉴(.pl-col-menu)가 통째로 스크롤되므로, 목록을 내려도 검색칸은 붙어 있게 한다. */
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  width: 100%;
+  height: 30px;
+  margin: 0 0 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: #fff;
+  font: inherit;
+  font-size: 12px;
+  color: var(--ink);
+  padding: 0 8px;
+}
+.pl-menu-search:focus {
+  outline: none;
+  border-color: var(--blue);
+  box-shadow: 0 0 0 2px rgba(0, 85, 168, 0.12);
+}
+/* 검색어에 걸리는 값이 없을 때 — 빈 목록이 그냥 사라지면 고장으로 읽힌다. */
+.pl-menu-none {
+  padding: 7px 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
 .pl-menu-tilde {
   text-align: center;
   color: var(--muted);

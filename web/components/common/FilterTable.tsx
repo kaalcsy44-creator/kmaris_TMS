@@ -83,6 +83,8 @@ export default function FilterTable<T>({
   const [facets, setFacets] = useState<Record<string, string[]>>({});
   const [dates, setDates] = useState<Record<string, { from: string; to: string }>>({});
   const [openCol, setOpenCol] = useState<string | null>(null);
+  // 값 목록이 길 때 쓰는 메뉴 안 검색어. 메뉴를 새로 열면 비운다.
+  const [query, setQuery] = useState("");
   const [menuPos, setMenuPos] = useState<{ left: number; top: number }>({ left: 0, top: 0 });
   const [dragKey, setDragKey] = useState<string | null>(null);
 
@@ -99,6 +101,7 @@ export default function FilterTable<T>({
   const drag = { active: dragKey, set: setDragKey };
 
   function openMenu(key: string, e: React.MouseEvent<HTMLElement>) {
+    setQuery("");
     if (openCol === key) {
       setOpenCol(null);
       return;
@@ -219,6 +222,10 @@ export default function FilterTable<T>({
         : [];
     const sel = facetValue(col.key);
     const d = dateRange(col.key);
+    // 검색칸은 목록이 길 때만 — 값이 몇 개뿐인 열에서는 읽을 것만 한 줄 늘린다.
+    const searchable = opts.length > 8;
+    const q = query.trim().toLowerCase();
+    const shownOpts = q ? opts.filter((o) => o.label.toLowerCase().includes(q)) : opts;
     return (
       <>
         <div className="pl-menu-backdrop" onClick={() => setOpenCol(null)} />
@@ -273,6 +280,17 @@ export default function FilterTable<T>({
                   <span className="pl-menu-cnt">{sel.length} selected</span>
                 </span>
               ) : null}
+              {searchable ? (
+                <input
+                  className="pl-menu-search"
+                  type="search"
+                  value={query}
+                  autoFocus
+                  placeholder={`Search ${opts.length} values`}
+                  onChange={(e) => setQuery(e.target.value)}
+                  aria-label="Search values"
+                />
+              ) : null}
               <div className="pl-menu-list">
                 <button
                   className={`pl-menu-opt${sel.length === 0 ? " on" : ""}`}
@@ -281,7 +299,8 @@ export default function FilterTable<T>({
                   <span className="chk">{sel.length === 0 ? "✓" : ""}</span>
                   <span className="lbl">All</span>
                 </button>
-                {opts.map((o) => (
+                {shownOpts.length === 0 ? <div className="pl-menu-none">No match</div> : null}
+                {shownOpts.map((o) => (
                   <button
                     key={o.v}
                     className={`pl-menu-opt${sel.includes(o.v) ? " on" : ""}`}

@@ -1585,12 +1585,13 @@ function OutflowTab() {
   }, [rows, view, st, from, to, cur]);
 
   // 머리행에서 거는 정렬·필터 — 위쪽 갈래/기간/통화 필터가 고른 목록을 다시 자른다.
-  // 분류·상대처·상태·반복은 값이 몇 개 안 되니 고르는 목록으로, 날짜 둘은 기간으로,
-  // 금액 셋은 숫자로 정렬한다. 적요는 값이 행마다 달라 필터 없이 정렬만 준다.
+  // 분류·상대처·적요·상태·반복은 고르는 목록(복수 선택)으로, 날짜 둘은 기간으로,
+  // 금액 셋은 숫자로 정렬한다. 적요는 값 종류가 많지만 "공동인증수수료"·"6월 급여"처럼
+  // 되풀이되는 항목이라 고르는 값이 된다 — 목록이 길어지면 메뉴가 검색칸을 띄운다.
   const headCols = useMemo<HeadCol<FinancePayable>[]>(() => [
     { key: "category", text: (p) => CATEGORY_LABEL[p.category] || p.category, filter: "facet" },
     { key: "party", text: (p) => p.counterparty || "", filter: "facet", emptyLabel: "Unspecified" },
-    { key: "desc", text: (p) => p.description || "" },
+    { key: "desc", text: (p) => p.description || "", filter: "facet", emptyLabel: "No description" },
     { key: "bill_date", text: (p) => p.bill_date || "", filter: "date" },
     { key: "due_date", text: (p) => p.due_date || "", filter: "date" },
     { key: "amount", text: (p) => String(p.invoice_amount), sortValue: (p) => p.invoice_amount },

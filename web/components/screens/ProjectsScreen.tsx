@@ -661,9 +661,12 @@ function PipelineTable({
   const [fTo, setFTo] = useState(""); // 수신일 To
   // 헤더 클릭 시 뜨는 컬럼 메뉴(정렬+필터). fixed 위치라 가로 스크롤에 잘리지 않는다.
   const [openCol, setOpenCol] = useState<ColKey | null>(null);
+  // 값 목록이 길 때(고객·벤더·선박) 쓰는 메뉴 안 검색어. 메뉴를 새로 열면 비운다.
+  const [menuQuery, setMenuQuery] = useState("");
   const [menuPos, setMenuPos] = useState<{ left: number; top: number }>({ left: 0, top: 0 });
 
   function openMenu(key: ColKey, e: React.MouseEvent<HTMLElement>) {
+    setMenuQuery("");
     if (openCol === key) {
       setOpenCol(null);
       return;
@@ -909,6 +912,10 @@ function PipelineTable({
             const opts = colOptions(f);
             if (opts.length === 0) return null;
             const sel = fieldValue(f);
+            // 검색칸은 목록이 길 때만 — 값이 몇 개뿐인 열에서는 읽을 것만 한 줄 늘린다.
+            const searchable = opts.length > 8;
+            const q = menuQuery.trim().toLowerCase();
+            const shownOpts = q ? opts.filter((o) => o.label.toLowerCase().includes(q)) : opts;
             return (
               <div key={f}>
                 <div className="pl-menu-divider" />
@@ -920,6 +927,17 @@ function PipelineTable({
                     {sel.length ? <span className="pl-menu-cnt">{sel.length} selected</span> : null}
                   </span>
                 ) : null}
+                {searchable ? (
+                  <input
+                    className="pl-menu-search"
+                    type="search"
+                    value={menuQuery}
+                    autoFocus
+                    placeholder={`Search ${opts.length} values`}
+                    onChange={(e) => setMenuQuery(e.target.value)}
+                    aria-label="Search values"
+                  />
+                ) : null}
                 <div className="pl-menu-list">
                   {/* All = 값이 아니라 '선택 해제' 명령. 아무것도 안 골랐을 때가 곧 전체다. */}
                   <button
@@ -929,7 +947,8 @@ function PipelineTable({
                     <span className="chk">{sel.length === 0 ? "✓" : ""}</span>
                     <span className="lbl">All</span>
                   </button>
-                  {opts.map((o) => (
+                  {shownOpts.length === 0 ? <div className="pl-menu-none">No match</div> : null}
+                  {shownOpts.map((o) => (
                     <button
                       key={o.v}
                       className={`pl-menu-opt${sel.includes(o.v) ? " on" : ""}`}
