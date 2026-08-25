@@ -2464,11 +2464,13 @@ table.pipeline {
   /* Stage 칼럼이 충분한 폭을 갖도록 전체 최소폭 확보(부족하면 wrap이 가로 스크롤) */
   /* 본문(목록 데이터) 글씨 크기 — 헤더(11px)와 동일하게 맞춰 밀도 확보. */
   font-size: 11px;
-  /* 고정 레이아웃 — 컬럼 폭은 colgroup으로 제어. 폭 없는 'Stage'가 남는 폭을 모두 흡수. */
+  /* 고정 레이아웃 — 컬럼 폭은 colgroup으로 제어. 폭 없는 'Amounts'가 남는 폭을 모두 흡수. */
   table-layout: fixed;
 }
-/* 그룹 열 기본폭 — Stage(plc-stage)만 폭 미지정 → 남는 폭 전부 흡수.
-   한 칸에 여러 줄이 들어가므로 예전 단일 필드 열보다 넉넉하게 준다. */
+/* 그룹 열 기본폭 — Amounts(plc-amounts)만 폭 미지정 → 남는 폭 전부 흡수.
+   한 칸에 여러 줄이 들어가므로 예전 단일 필드 열보다 넉넉하게 준다.
+   Stage 는 진행바 + '완료 → 다음' 한 줄이면 충분해 고정폭으로 묶고(예전에 남는 폭을
+   전부 먹던 열), 그만큼을 이중통화 금액이 한 줄에 들어가야 하는 Amounts 로 넘긴다. */
 table.pipeline col.plc-project {
   width: 260px;
 }
@@ -2478,8 +2480,8 @@ table.pipeline col.plc-customer {
 table.pipeline col.plc-vendor {
   width: 150px;
 }
-table.pipeline col.plc-amounts {
-  width: 210px;
+table.pipeline col.plc-stage {
+  width: 500px;
 }
 table.pipeline col.plc-assignee {
   width: 84px;

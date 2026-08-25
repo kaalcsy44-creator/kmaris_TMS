@@ -478,6 +478,7 @@ const FIELD_LABEL: Partial<Record<FieldKey, string>> = {
 };
 
 // 컬럼 key → 기본 폭 CSS 클래스(table-layout: fixed 기준폭).
+// 폭을 지정하지 않은 열(Amounts)이 남는 폭을 모두 흡수한다 — globals.css 의 col.plc-* 참고.
 const PLC_CLASS: Record<ColKey, string> = {
   project: "plc-project",
   customer: "plc-customer",
