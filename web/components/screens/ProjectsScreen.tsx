@@ -106,6 +106,12 @@ function fmtYYMMDD(iso: string): string {
   return m ? m[1].slice(2) + m[2] + m[3] : "";
 }
 
+/** ISO('YYYY-MM-DD…') → "yy-mm-dd". 시각까지는 필요 없는 자리(단계 저장일)에 쓴다. */
+function fmtYMD(iso: string): string {
+  const m = (iso || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? `${m[1].slice(2)}-${m[2]}-${m[3]}` : "";
+}
+
 type Tab = "customer" | "internal";
 type WorkspaceArea = "rfq" | "po" | "documents" | "ar";
 type StageTabKey = number;
@@ -340,68 +346,59 @@ function doneStageLabel(stage: number, steps: string[]): string {
   return `${stage}. ${steps[stage - 1] ?? ""}`;
 }
 
-/** 다음 단계 라벨: stage+1 (12단계 완료면 "완료"). */
-function nextStageLabel(stage: number, steps: string[]): string {
-  if (stage >= steps.length) return "Done";
-  const n = Math.max(stage, 0);
-  return `${n + 1}. ${steps[n] ?? ""}`;
-}
-
-/** 단계 시각화 — steps.length 칸 세그먼트 바(현재 단계까지 채움) + 아래에 완료/다음 단계. */
-function StageBar({ stage, steps }: { stage: number; steps: string[] }) {
+/**
+ * 단계 시각화 — 얇은 진행 바 한 줄 + "완료 단계 · 저장일 · 경과일" 한 줄.
+ *
+ * 구간 이름표(RFQ·Quote·…)·N/11 카운터·다음 단계 안내는 뺐다. 목록에서 실제로 묻는 건
+ * "어디까지 왔나 · 그게 언제였나 · 얼마나 멈춰 있나" 셋이고, 앞의 셋은 바와 완료 라벨이
+ * 이미 답한다. 나머지 안내는 행을 눌러 여는 상세 팝업이 맡는다.
+ */
+function StageBar({ stage, steps, savedAt }: { stage: number; steps: string[]; savedAt: string }) {
   const total = steps.length;
   const filled = Math.max(0, Math.min(stage, total));
   const done = doneStageLabel(stage, steps);
-  const next = nextStageLabel(stage, steps);
-  // 내부 12단계에서만 4개 중분류로 그룹핑(고객확인용 7단계는 기존 평면 바 유지).
+  // 내부 11단계에서만 4개 중분류로 그룹핑(고객확인용 7단계는 기존 평면 바 유지).
   const grouped = total === 11;
-  const curPhase = grouped ? phaseIndexOfStage(stage) : -1;
+  // 경과일 = 이 단계를 저장한 날로부터 오늘까지. 오래 멈춘 딜은 배지 색이 앰버→레드로 짙어진다.
+  const age = daysSinceISO(savedAt);
+  const day = fmtYMD(savedAt);
+  const lv = ageLevel(age);
   return (
     <div className="pl-stage">
-      <div className="pl-stage-top">
-        {grouped ? (
-          <span className="pl-stage-segwrap">
-            <span className="pl-stage-phases">
-              {STAGE_PHASES.map((p, pi) => (
-                <span
-                  key={p.label}
-                  className={`ph${pi === curPhase ? " on" : ""}`}
-                  style={{ flexGrow: p.count }}
-                  title={p.label}
-                >
-                  {p.label}
-                </span>
-              ))}
-            </span>
-            <span className="pl-stage-segs grouped">
-              {STAGE_PHASES.map((p, pi) => {
-                const start = STAGE_PHASES.slice(0, pi).reduce((s, x) => s + x.count, 0);
-                return (
-                  <span key={p.label} className="seg-group" style={{ flexGrow: p.count }}>
-                    {Array.from({ length: p.count }).map((_, k) => {
-                      const gi = start + k;
-                      return <span key={gi} className={`seg${gi < filled ? " on" : ""}`} />;
-                    })}
-                  </span>
-                );
-              })}
-            </span>
-          </span>
-        ) : (
-          <span className="pl-stage-segs">
-            {Array.from({ length: total }).map((_, i) => (
-              <span key={i} className={`seg${i < filled ? " on" : ""}`} />
-            ))}
-          </span>
-        )}
-        <span className="pl-stage-num">
-          {filled}/{total}
+      {grouped ? (
+        <span className="pl-stage-segs grouped">
+          {STAGE_PHASES.map((p, pi) => {
+            const start = STAGE_PHASES.slice(0, pi).reduce((s, x) => s + x.count, 0);
+            return (
+              <span key={p.label} className="seg-group" style={{ flexGrow: p.count }} title={p.label}>
+                {Array.from({ length: p.count }).map((_, k) => {
+                  const gi = start + k;
+                  return <span key={gi} className={`seg${gi < filled ? " on" : ""}`} />;
+                })}
+              </span>
+            );
+          })}
         </span>
-      </div>
+      ) : (
+        <span className="pl-stage-segs">
+          {Array.from({ length: total }).map((_, i) => (
+            <span key={i} className={`seg${i < filled ? " on" : ""}`} />
+          ))}
+        </span>
+      )}
       <div className="pl-stage-meta">
         <span className="pl-stage-done" title={done}>{done}</span>
-        <span className="pl-stage-arrow">→</span>
-        <span className="pl-stage-next" title={next}>{next}</span>
+        {day ? (
+          <span className="pl-stage-when" title={fmtStageDate(savedAt)}>{day}</span>
+        ) : null}
+        {age != null ? (
+          <span
+            className={`pl-stage-age${lv ? ` lv-${lv}` : ""}`}
+            title={`${age} days since this stage was saved`}
+          >
+            {age}d
+          </span>
+        ) : null}
       </div>
     </div>
   );
@@ -1098,6 +1095,17 @@ function PipelineTable({
                         {sorted ? (sortDir === "asc" ? "▲" : "▼") : "▾"}
                       </span>
                     </button>
+                    {/* 금액 열 머리 아래의 소제목 — 셀과 같은 4열 그리드라 숫자와 줄이 맞는다.
+                        줄마다 이름표를 붙이면 한 화면에 같은 단어가 수십 번 반복되므로,
+                        머리글에 한 번만 둔다. */}
+                    {c.key === "amounts" ? (
+                      <div className="pl-amt-row pl-amt-head">
+                        <span>Purchase</span>
+                        <span>Sales</span>
+                        <span>Margin</span>
+                        <span className="pl-amt-pct">Rate</span>
+                      </div>
+                    ) : null}
                     <ColumnResizer onResize={(px) => layout.setWidth(c.key, px)} onResizeEnd={layout.commitWidths} />
                   </th>
                 );
@@ -1755,48 +1763,25 @@ function BoardCard({
 
 /** 파이프라인 테이블 셀 — 컬럼 key 에 따라 내용/클래스를 렌더(순서 변경에 대응). */
 /**
- * 이중통화 금액("USD 8,000 KRW 12,347,280")을 통화 단위로 끊어 각 조각을 한 덩어리로
- * 유지한다. 그냥 wrap 시키면 "12,347,280" 같은 숫자 한가운데가 잘리는데, 통화 코드
- * (대문자 3글자) 앞에서만 끊으면 "USD 8,000" / "KRW 12,347,280" 이 각각 붙어 있다.
- * 폭이 남으면 한 줄에 나란히, 좁으면 접힌다(CSS flex-wrap).
+ * 이중통화 금액("USD 8,000 KRW 12,347,280")을 통화코드 → 표시 조각으로 흩는다.
+ * 매입·매출·마진은 같은 딜을 같은 환율로 환산한 값이라, 통화를 키로 잡아야 세 값이
+ * 한 줄에서 서로 맞는 짝끼리 선다(서버가 내려주는 통화 순서는 필드마다 다르다).
  */
-function DualAmount({ value }: { value: string }) {
-  const parts = value.trim().split(/\s+(?=[A-Z]{3}\s)/);
-  return (
-    <span className="pl-amt">
-      {parts.map((p, i) => (
-        <span key={i} className="pl-amt-cur">
-          {p}
-        </span>
-      ))}
-    </span>
-  );
+function amountByCur(v?: string | null): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const part of (v || "").trim().split(/\s+(?=[A-Z]{3}\s)/)) {
+    const m = part.match(/^([A-Z]{3})\s/);
+    if (m) out[m[1]] = part;
+  }
+  return out;
 }
 
-/** 금액 한 줄 — 왼쪽 이름표, 오른쪽 금액. 세 줄이 한 셀에 쌓이므로 이름표가 있어야
- *  어느 숫자가 매출·매입·마진인지 열 머리글 없이도 읽힌다. */
-function MoneyLine({
-  label,
-  value,
-  pct,
-}: {
-  label: string;
-  value?: string | null;
-  pct?: number | null;
-}) {
-  return (
-    <div className="pl-money-line">
-      <span className="pl-money-label">{label}</span>
-      {value ? (
-        <span className="pl-money-val">
-          <DualAmount value={value} />
-          {pct != null ? <span className="pl-margin-pct">{pct}%</span> : null}
-        </span>
-      ) : (
-        <span className="muted">—</span>
-      )}
-    </div>
-  );
+/** 금액 줄의 통화 순서 — 먼저 넘긴 필드(매출)의 순서를 따르고, 거기 없는 통화를 뒤에 잇는다.
+ *  앞선 통화가 그 딜의 기준 통화이고, 뒤따르는 통화는 환산값이라 회색으로 낮춰 쓴다. */
+function currencyOrder(...maps: Record<string, string>[]): string[] {
+  const out: string[] = [];
+  for (const m of maps) for (const k of Object.keys(m)) if (!out.includes(k)) out.push(k);
+  return out;
 }
 
 /**
@@ -1861,17 +1846,40 @@ function PipelineCell({
     case "stage":
       return (
         <td className="pl-td-stage">
-          <StageBar stage={stage} steps={resolveSteps(steps, r.work_type)} />
+          {/* 저장일 조회는 내부 단계번호(r.stage) 기준 — Customer 탭에서 바가 7단계로
+              재매핑돼도 "이 딜이 마지막으로 움직인 날"은 같아야 한다. */}
+          <StageBar
+            stage={stage}
+            steps={resolveSteps(steps, r.work_type)}
+            savedAt={stageDateOf(r, r.stage)}
+          />
         </td>
       );
-    case "amounts":
+    case "amounts": {
+      // 통화 한 줄 = 매입 · 매출 · 마진 · 마진율. 기준 통화가 첫 줄, 환산 통화가 회색 둘째 줄.
+      const pur = amountByCur(r.purchase_total);
+      const sal = amountByCur(r.sales_total);
+      const mar = amountByCur(r.margin_amount);
+      const curs = currencyOrder(sal, pur, mar);
       return (
         <td className="pl-td-amounts">
-          <MoneyLine label="Sales" value={r.sales_total} />
-          <MoneyLine label="Purchase" value={r.purchase_total} />
-          <MoneyLine label="Margin" value={r.margin_amount} pct={r.margin_pct} />
+          {curs.length === 0 ? (
+            <span className="muted">—</span>
+          ) : (
+            curs.map((c, i) => (
+              <div key={c} className={`pl-amt-row${i ? " sub" : ""}`}>
+                <span>{pur[c] || "—"}</span>
+                <span>{sal[c] || "—"}</span>
+                <span>{mar[c] || "—"}</span>
+                <span className="pl-amt-pct">
+                  {r.margin_pct != null ? `${r.margin_pct}%` : "—"}
+                </span>
+              </div>
+            ))
+          )}
         </td>
       );
+    }
     case "assignee":
       return <td className="pl-td-pic">{r.assignee || <span className="muted">—</span>}</td>;
     default:
