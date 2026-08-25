@@ -9836,8 +9836,10 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   color: var(--muted);
   font-size: 11.5px;
 }
+/* 분류 칩 — 열 폭까지 꽉 쓰고 거기서 자른다. 고정 폭으로 묶어 두면 열을 넓혀도
+   칩만 좁은 채로 남아 경로 가운데가 잘린다(전체 경로는 title 로 읽는다). */
 .ledger-cat button {
-  max-width: 106px;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

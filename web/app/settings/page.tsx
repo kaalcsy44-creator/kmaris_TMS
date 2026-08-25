@@ -2083,16 +2083,21 @@ type LedgerFilter = { kind: "all" } | { kind: "cat"; id: number } | { kind: "unm
 
 // 가격 목록표의 컬럼 정의 — 폭 조절·숨김·순서 변경(useColumnLayout, localStorage) 대상.
 // 좌측 선택 체크박스 열은 구조 컬럼이라 여기 넣지 않는다.
+// 기본 폭(px). 품명은 두 줄로 접히지만 분류는 한 줄이라, 접히지 않는 쪽에 폭을 준다 —
+// 계통 트리의 경로는 "Engine Room > Main Engine System" 처럼 길다.
 const LEDGER_COLS: { key: string; label: string; width: number; numeric?: boolean }[] = [
   { key: "part_no", label: "Part No.", width: 100 },
-  { key: "description", label: "Description", width: 320 },
+  { key: "description", label: "Description", width: 200 },
   { key: "maker", label: "Maker", width: 110 },
   { key: "buy", label: "Buy", width: 128, numeric: true },
   { key: "sell", label: "Sell", width: 128, numeric: true },
   { key: "margin", label: "Margin", width: 72, numeric: true },
   { key: "deals", label: "Deals", width: 56, numeric: true },
   { key: "last", label: "Last", width: 84 },
-  { key: "category", label: "Category", width: 120 },
+  // 300px = 측정값 기준. "Engine Room > Main Engine System"(241px)처럼 흔한 2단 경로와
+  // "Service > Labor & Travel > Accommodation"(280px)까지 온전히 들어간다. 더 긴 3단
+  // 경로는 말줄임 + title 로 읽는다.
+  { key: "category", label: "Category", width: 300 },
 ];
 
 /** 목록 행의 안정적 식별자 — 마스터 연결 행은 item_id, 미연결 행은 품목 식별키. */
@@ -2813,9 +2818,12 @@ export function CategoriesTab() {
                                   className="btn tiny"
                                   disabled={!classifiable}
                                   title={
-                                    classifiable
-                                      ? "Assign / change category"
-                                      : "No Part No. or description — cannot classify"
+                                    !classifiable
+                                      ? "No Part No. or description — cannot classify"
+                                      : it.category_path
+                                        // 잘려도 전체 경로를 읽을 수 있게 — 계통 경로는 길다.
+                                        ? `${it.category_path} — click to change`
+                                        : "Assign category"
                                   }
                                   onClick={() => openAssign(it)}
                                 >
