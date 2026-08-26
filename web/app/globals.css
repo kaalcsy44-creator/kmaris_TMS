@@ -12229,6 +12229,18 @@ th.uaddr-c-attach, td.uaddr-c-attach { width: 260px; white-space: nowrap; }
   td.uaddr-c-attach { white-space: normal; }
   .uaddr-c-attach .btn.sm { margin: 6px 0 0; }
 }
+/* 줄 끝의 Register·Dismiss — 둘은 서로 다른 결론이라 붙여 두되 간격을 준다. */
+td.uaddr-c-end { white-space: nowrap; }
+td.uaddr-c-end .btn.sm + .btn.sm { margin-left: 6px; }
+/* 펼친 등록 폼 — 그 주소 줄 바로 아래. 한 줄로 흐르다가 좁아지면 접힌다. */
+.uaddr-regrow > td { background: #f4f7fb; }
+.uaddr-reg { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 4px 0; }
+.uaddr-reg-addr { font-weight: 600; color: var(--navy); }
+.uaddr-reg-kind { display: inline-flex; gap: 4px; }
+.uaddr-reg-party { max-width: 320px; }
+.uaddr-reg-name { min-width: 200px; }
+/* 무엇이 만들어지는지 한 줄로 말해 준다 — 새 레코드인지, 주소만 더하는 것인지. */
+.uaddr-reg-hint { flex: 1 1 240px; }
 /* "Not a deal" — 배정만큼 자주 쓰는 자리지만 주된 동작은 아니다. Assign 옆에 두되
    눈에 먼저 들어오지 않게 옅게 둔다(누르면 그 대화가 함에서 내려간다). */
 .umail-notdeal { margin-left: 6px; color: #6b7c93; }

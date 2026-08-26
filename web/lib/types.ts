@@ -1885,6 +1885,18 @@ export type MailAddrLink = {
   linked_at: string;
   stored: number;               // 붙인 뒤로 실제 담긴 통수(0 이면 아직 안 들어왔다)
 };
+// 미등록 주소를 고객·벤더로 올린 결과. created=false 면 이미 있던 레코드에 주소만 더한 것.
+export type MailRegisterResult = {
+  ok: boolean;
+  created: boolean;
+  kind: "customer" | "vendor";
+  party: { id: number; name: string };
+  fetched: { scanned: number; stored: number; dup: number; skipped: number };
+  spread: number;
+  warn: string;
+  rows: MailUnknownAddr[];
+  links: MailAddrLink[];
+};
 export type MailAttachResult = {
   ok: boolean;
   adopted: number;              // 이미 담겨 있던 미분류 메일 중 이 딜로 옮긴 통수

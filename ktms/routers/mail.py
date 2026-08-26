@@ -301,6 +301,87 @@ def mail_attach_unknown(body: MailAddrLink):
         s.close()
 
 
+class MailAddrRegister(BaseModel):
+    addr: str
+    kind: str                      # customer | vendor
+    party_id: int | None = None    # 있으면 그 레코드에 주소를 더한다(새로 만들지 않는다)
+    name: str = ""                 # 새로 만들 때 회사명
+    contact: str = ""              # 새로 만들 때 담당자 이름(메일 표시이름)
+
+
+@app.post("/api/admin/mail/unknown-addresses/register", dependencies=[Depends(require_token)])
+def mail_register_unknown(body: MailAddrRegister):
+    """이 주소를 고객·벤더로 등록한다 — 목록에서 바로.
+
+    지금까지는 "Customer/Vendor 탭에서 등록하세요"라고 안내만 했다. 그러면 사람은 탭을
+    옮겨 회사명을 다시 치고, 주소를 손으로 옮겨 붙이고, 돌아와서 다시 이 목록을 봐야
+    한다 — 한 줄 처리하는 데 화면을 셋 오간다. 여기서 끝내게 한다.
+
+    길은 둘이다.
+      · party_id 를 주면 **이미 있는 레코드에 주소를 더한다.** 한 회사에 메일 주소가
+        여럿인 경우(대표 주소 + 담당자 주소)가 대부분이라 이쪽이 흔하다. 대표(첫 값)는
+        건드리지 않고 뒤에 붙인다 — 문서·메일이 쓰는 주소가 말없이 바뀌면 안 된다.
+      · 비우면 name 으로 **새 레코드를 만든다.** KTMS 의 거래처는 레코드 1건 = 담당자
+        1명이므로, 메일 표시이름을 담당자로 넣어 둔다.
+    등록한 뒤에는 그 주소의 지난 메일을 메일함에서 찾아 담는다(정기 동기화는 이미
+    지나친 구간을 다시 읽지 않는다). 딜 연결은 근거대로만 한다 — 거래처로 등록했다는
+    사실은 "담아라"까지고 "어느 딜이다"는 아니다."""
+    kind = (body.kind or "").strip().lower()
+    if kind not in ("customer", "vendor"):
+        raise HTTPException(status_code=400, detail="고객 또는 벤더 중에서 고르세요.")
+    addr = (body.addr or "").strip().lower()
+    if "@" not in addr:
+        raise HTTPException(status_code=400, detail="메일 주소가 아닙니다.")
+    Model = Customer if kind == "customer" else Vendor
+    s = get_session()
+    try:
+        if body.party_id:
+            party = s.query(Model).filter_by(id=body.party_id).first()
+            if not party:
+                raise HTTPException(status_code=404, detail="등록된 거래처를 찾을 수 없습니다.")
+            mails = [m for m in (party.emails or []) if str(m).strip()]
+            # 다중값이 비어 있는 옛 레코드는 flat 주소를 첫 값으로 올려 둔다 — 안 그러면
+            # 새 주소가 리스트의 첫 값(=대표 자리)이 되어 flat 값과 어긋난다.
+            if not mails and (party.email or "").strip():
+                mails = [party.email.strip()]
+            if addr not in [str(m).strip().lower() for m in mails]:
+                mails.append(addr)
+            party.emails = mails
+            # 대표는 언제나 첫 값 — 비어 있던 레코드에서만 이 주소가 대표가 된다.
+            party.email = mails[0]
+            created = False
+        else:
+            name = (body.name or "").strip()
+            if not name:
+                raise HTTPException(status_code=400, detail="회사명을 입력하세요.")
+            party = Model(name=name, contact=(body.contact or "").strip()[:100],
+                          email=addr, emails=[addr], phones=[], regions=[], addresses=[])
+            s.add(party)
+            created = True
+        s.commit()
+        s.refresh(party)
+
+        # 등록했으니 이 주소는 이제 '아는 상대'다 — 붙여 뒀던 딜 링크가 있으면 뗀다
+        # (둘 다 있으면 같은 주소를 두 규칙이 다루게 되어 나중에 읽기 어려워진다).
+        mail_sync.unlink_address(s, addr)
+        fetched, warn = {"scanned": 0, "stored": 0, "dup": 0, "skipped": 0}, ""
+        running = mail_sync.is_syncing()
+        if running:
+            warn = f"A sync is running (since {running}) — past mail arrives with it."
+        else:
+            try:
+                fetched = mail_sync.fetch_address(s, addr)
+            except Exception as exc:
+                warn = f"Registered, but the mailbox search failed: {exc}"
+        spread = mail_sync.auto_match(s)["total"] if fetched["stored"] else 0
+        return {"ok": True, "created": created, "kind": kind,
+                "party": {"id": party.id, "name": party.name or ""},
+                "fetched": fetched, "spread": spread, "warn": warn,
+                "rows": mail_sync.unknown_addresses(s), "links": _address_link_rows(s)}
+    finally:
+        s.close()
+
+
 class MailAddrDetach(BaseModel):
     addr: str
 

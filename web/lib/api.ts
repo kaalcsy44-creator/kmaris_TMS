@@ -77,6 +77,7 @@ import type {
   MailUnknownAddr,
   MailAddrLink,
   MailAttachResult,
+  MailRegisterResult,
   MailSyncResult,
   MailAutoMatchResult,
   UnmatchedMailGroup,
@@ -1997,6 +1998,17 @@ export function attachMailAddressToProject(
   rfqId: number
 ): Promise<MailAttachResult> {
   return post("/api/admin/mail/unknown-addresses/attach", { addr, rfq_id: rfqId });
+}
+// 미등록 주소를 고객·벤더로 올린다. partyId 를 주면 이미 있는 레코드에 주소만 더하고,
+// 비우면 name 으로 새 레코드를 만든다. 등록 즉시 그 주소의 지난 메일을 찾아 담는다.
+export function registerMailAddress(body: {
+  addr: string;
+  kind: "customer" | "vendor";
+  party_id?: number;
+  name?: string;
+  contact?: string;
+}): Promise<MailRegisterResult> {
+  return post("/api/admin/mail/unknown-addresses/register", body);
 }
 // 붙여 둔 주소를 뗀다 — 앞으로 오는 메일만 멈추고, 이미 담은 이력은 지우지 않는다.
 export function detachMailAddress(

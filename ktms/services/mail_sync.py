@@ -346,12 +346,15 @@ def adopt_stored_mail(s, addr: str, rfq_id: int) -> int:
 _ADDR_SAFE = re.compile(r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+$")
 
 
-def fetch_address(s, addr: str, rfq_id: int, limit: int = 300) -> dict:
+def fetch_address(s, addr: str, rfq_id: int | None = None, limit: int = 300) -> dict:
     """이 주소와 오간 메일을 지금 메일함에서 찾아 담는다(과거분 채우기).
 
     보통의 동기화는 폴더를 UID 순서로 훑기 때문에, 이미 지나친 구간에 있는 메일은
-    주소를 붙였다고 다시 읽히지 않는다. 그래서 여기서는 주소로 직접 검색한다 —
-    IMAP_SINCE_DAYS 안의 메일 중 그 주소가 From·To·Cc 에 있는 것 전부.
+    주소를 붙이거나 거래처로 등록했다고 다시 읽히지 않는다. 그래서 여기서는 주소로
+    직접 검색한다 — IMAP_SINCE_DAYS 안의 메일 중 그 주소가 From·To·Cc 에 있는 것 전부.
+
+    rfq_id 를 주면 근거가 없는 메일을 그 딜에 붙인다(주소를 딜에 맨 경우). 비우면
+    거래처로 등록된 주소라는 뜻이라, 담기만 하고 딜은 근거대로만 정한다.
 
     반환: {scanned, stored, dup, skipped}"""
     a = _clean_addr(addr)
@@ -364,7 +367,7 @@ def fetch_address(s, addr: str, rfq_id: int, limit: int = 300) -> dict:
     parties = party_index(s)
     docs = doc_no_index(s)
     vessels = vessel_index(s)
-    linked = {a: int(rfq_id)}
+    linked = {a: int(rfq_id)} if rfq_id else {}
     since = (datetime.now(timezone.utc) - timedelta(days=cfg["since_days"])).strftime("%d-%b-%Y")
     crit = f'(SINCE {since} OR OR FROM "{a}" TO "{a}" CC "{a}")'
     out = {"scanned": 0, "stored": 0, "dup": 0, "skipped": 0}
