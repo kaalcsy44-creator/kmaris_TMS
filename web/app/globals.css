@@ -7341,6 +7341,174 @@ table.mini .num {
   border-top: 1px solid #eaf0f7;
 }
 
+/* 거래선 추천(2단계 RFQ Sent) — 품목 분류·거래이력·취급품목으로 고른 후보.
+   결정을 대신하지 않는다는 뜻이 보이도록 입력 필드가 아니라 '메모지'처럼 둔다. */
+.vsug {
+  border: 1px solid #cfe0fb;
+  background: #f5f9ff;
+  border-radius: 8px;
+  padding: 10px 12px 12px;
+  margin-bottom: 14px;
+}
+.vsug-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.vsug-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--navy);
+  cursor: pointer;
+}
+.vsug-caret {
+  font-size: 10px;
+  color: #6f8bb0;
+}
+.vsug-count {
+  min-width: 16px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #dbe8fb;
+  color: #234a7d;
+  font-size: 10px;
+  font-weight: 800;
+  text-align: center;
+}
+/* 무엇을 근거로 골랐는지 — 품목에서 읽어 낸 분류. guess = 마스터에 없어 추론한 것. */
+.vsug-basis {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-left: auto;
+}
+.vsug-cat {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border: 1px solid #cddef3;
+  border-radius: 999px;
+  background: #fff;
+  font-size: 10.5px;
+  color: #47597a;
+}
+.vsug-cat.guess {
+  border-style: dashed;
+  color: #7b8aa3;
+}
+.vsug-cat i {
+  font-style: normal;
+  font-weight: 800;
+  color: #234a7d;
+  font-variant-numeric: tabular-nums;
+}
+.vsug-empty {
+  margin-top: 8px;
+  font-size: 11.5px;
+  color: #6b7a90;
+}
+.vsug-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 8px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.vsug-card {
+  display: block;
+  width: 100%;
+  padding: 8px 10px 9px;
+  border: 1px solid #d7e2ee;
+  border-radius: 8px;
+  background: #fff;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.vsug-card:hover {
+  border-color: var(--blue, #0055a8);
+}
+.vsug-card.on {
+  border-color: var(--blue, #0055a8);
+  background: #eef4fb;
+  box-shadow: inset 0 0 0 1px var(--blue, #0055a8);
+}
+.vsug-card-top {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.vsug-logo {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  object-fit: contain;
+}
+.vsug-logo-blank {
+  display: inline-block;
+}
+.vsug-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--navy);
+}
+/* 근거의 세기 — 1등 대비 상대값이라 이 목록 안에서만 뜻이 있다. */
+.vsug-dots {
+  flex-shrink: 0;
+  font-size: 9px;
+  letter-spacing: 1px;
+  color: #b6c4d6;
+}
+.vsug-dots.high { color: #1d7a4c; }
+.vsug-dots.medium { color: #3f7fd0; }
+.vsug-pick {
+  flex-shrink: 0;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--blue, #0055a8);
+}
+.vsug-card.on .vsug-pick {
+  color: #1d7a4c;
+}
+.vsug-why {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+.vsug-reason {
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: #f1f5fa;
+  font-size: 10.5px;
+  color: #4d5f79;
+}
+/* 같은 품번을 다뤄 본 곳이 가장 센 근거 — 한눈에 먼저 읽히게. */
+.vsug-reason.part {
+  background: #e6f2ea;
+  color: #1d6b45;
+  font-weight: 600;
+}
+.vsug-reason.category {
+  background: #e9f0fa;
+  color: #2c5487;
+}
+
 /* 명함 스캔 패널 — Customer/Vendor 등록 폼 맨 위. 붙여넣기·파일선택으로 자동 입력. */
 .bc-scan {
   border: 1px solid #cfe0fb;

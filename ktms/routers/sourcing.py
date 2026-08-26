@@ -41,8 +41,10 @@ from _core import (
     default_from,
 )
 from services.mail_compose import build_attachments, compose_body, compose_parts
+from services.vendor_match import suggest_vendors
 from _core import (
     _base_meta,
+    cached_aggregate,
     _date_iso,
     _enum_val,
     _first_rfq_iso,
@@ -158,6 +160,28 @@ def vendor_quote_overview():
                 "status": (_status_label(_pipeline_stage(s, rfq.id), rfq.work_type) if rfq else ""),
             })
         return {"rows": rows}
+    finally:
+        s.close()
+
+
+@app.get("/api/admin/rfq/{rfq_id}/vendor-suggestions",
+         dependencies=[Depends(require_token)])
+@cached_aggregate()
+def rfq_vendor_suggestions(rfq_id: int, limit: int = 6):
+    """이 딜의 품목에 맞는 거래선 추천 — 2단계에서 "어디에 물어볼까"의 밑그림.
+
+    근거는 1단계 품목의 분류·품번과 벤더의 취급품목·거래이력이다(services.vendor_match).
+    이미 이 딜에서 RFQ 를 보낸 벤더는 뺀다 — 그 벤더들은 화면에 탭으로 이미 서 있다."""
+    s = get_session()
+    try:
+        rfq = s.query(RFQ).filter_by(id=rfq_id).first()
+        if not rfq:
+            raise HTTPException(status_code=404, detail="RFQ를 찾을 수 없습니다.")
+        sent = [v.vendor_id for v in s.query(VendorRFQ).filter_by(rfq_id=rfq_id).all()
+                if v.vendor_id]
+        return suggest_vendors(s, rfq.items or [],
+                               limit=max(1, min(int(limit or 6), 12)),
+                               exclude_ids=sent)
     finally:
         s.close()
 

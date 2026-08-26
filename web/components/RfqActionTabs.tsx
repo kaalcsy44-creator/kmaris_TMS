@@ -63,6 +63,7 @@ import FilterTable, { ColumnDef } from "./common/FilterTable";
 import { identityColumns, projectNoColumn, statusColumns } from "./common/identityColumns";
 import VendorName from "./common/VendorName";
 import VendorSelect from "./common/VendorSelect";
+import VendorSuggest from "./common/VendorSuggest";
 import CustomerName from "./common/CustomerName";
 import { imageFromClipboard } from "@/lib/imagePaste";
 import Modal from "./common/Modal";
@@ -2872,6 +2873,16 @@ function VendorRfqAction({
       <DetailTabBar tab={tab} onTab={setTab} />
       {tab === "edit" ? (
       <>
+      {/* 벤더를 고르기 전에 "이 품목을 다루는 곳"을 먼저 짚어 준다(근거는 카드에 적힌다). */}
+      <VendorSuggest
+        rfqId={rfqId}
+        value={vendorId}
+        onPick={(v) => {
+          setVendorId(v.id);
+          setTo(v.email || vendors.find((x) => x.id === v.id)?.email || "");
+        }}
+      />
+
       <div className="form-section-title">This vendor send info</div>
 
       <div className="form-grid">

@@ -1600,6 +1600,36 @@ export function createVendorRfq(
   return post(`/api/admin/rfq/${rfqId}/vendor-rfq`, { vendor_id: vendorId });
 }
 
+// 2단계 거래선 추천 — 1단계 품목의 분류·품번을 벤더의 취급품목·거래이력에 맞춰 본 결과.
+// reasons 는 순위의 근거를 사람이 읽을 수 있게 풀어 놓은 것(고르는 건 사람이 한다).
+export type VendorSuggestReason = {
+  kind: "part" | "category" | "spec";
+  text: string;
+};
+export type VendorSuggestion = {
+  id: number;
+  name: string;
+  email: string;
+  logo?: string;
+  specialization?: string;
+  score: number;
+  strength?: "high" | "medium" | "low";
+  deals: number;
+  last_date: string;
+  reasons: VendorSuggestReason[];
+};
+export type VendorSuggestData = {
+  // 품목에서 읽어 낸 분류(guessed = 마스터에 없어 추론한 것).
+  categories: { id: number; name: string; path: string; items: number; guessed: boolean }[];
+  vendors: VendorSuggestion[];
+  items: number;
+  already_sent: number;
+};
+
+export function fetchVendorSuggestions(rfqId: number): Promise<VendorSuggestData> {
+  return get<VendorSuggestData>(`/api/admin/rfq/${rfqId}/vendor-suggestions`);
+}
+
 // 발신 화면에서 선택·편집한 품목(오버라이드). 없으면 RFQ 원본을 사용.
 export type VendorRfqItemOverride = {
   part_no: string;
