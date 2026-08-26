@@ -1013,7 +1013,6 @@ function CustomersTab() {
       empty={EMPTY_CUSTOMER}
       reloadKey={reloadKey}
       searchText={contactSearchText}
-      twoCol
       group={{
         by: (r) => r.name,
         cells: (rs, open) => [
@@ -1048,7 +1047,7 @@ function CustomersTab() {
       remove={deleteSettingsCustomer}
       onSaved={invalidateCustomerLogos}
       columns={[
-        ["name", "Customer", (r) => (
+        ["name", "Company name", (r) => (
           <span className="cust-name">
             {r.logo ? <img className="cust-logo" src={r.logo} alt="" /> : null}
             <span className="cust-name-text">{r.name || "—"}</span>
@@ -1686,7 +1685,6 @@ function VendorsTab() {
       empty={EMPTY_VENDOR}
       reloadKey={reloadKey}
       searchText={contactSearchText}
-      twoCol
       group={{
         by: (r) => r.name,
         cells: (rs, open) => [
@@ -1724,7 +1722,7 @@ function VendorsTab() {
       remove={deleteSettingsVendor}
       onSaved={invalidateVendorLogos}
       columns={[
-        ["name", "Vendor", (r) => (
+        ["name", "Company name", (r) => (
           <span className="cust-name">
             {r.logo ? <img className="cust-logo" src={r.logo} alt="" /> : null}
             <span className="cust-name-text">{r.name || "—"}</span>
@@ -1732,7 +1730,7 @@ function VendorsTab() {
         )],
         ["country", "Region", (r) => <MultiCell values={r.regions} flat={r.country} />],
         ["contact", "Contact"],
-        ["specialization", "Specialization"],
+        ["specialization", "Specialization", undefined, "ms-spec"],
       ]}
       fields={[
         ["name", "Vendor *"],
@@ -3409,8 +3407,10 @@ function MasterSection<T extends { id: number }>({
               list.map((g) => (
                 <Fragment key={g.key}>
                   <tr className="ms-group" onClick={() => toggleGroup(g.key)}>
+                    {/* 그룹(회사) 행도 데이터 행과 같은 칸 클래스를 쓴다 — 폭 규칙이
+                        한 칸에만 걸리면 열이 들쭉날쭉해진다. */}
                     {group?.cells(g.rows, isOpen(g.key)).map((node, i) => (
-                      <td key={i}>{node}</td>
+                      <td key={i} className={columns[i]?.[3]}>{node}</td>
                     ))}
                     <td className="ms-actcol" onClick={(e) => e.stopPropagation()}>
                       {group?.actions?.(g.rows, () => openNewIn(g.rows))}
