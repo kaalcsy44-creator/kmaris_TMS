@@ -73,6 +73,8 @@ _MIGRATIONS = {
         "emails": "JSON",
         "phones": "JSON",
         "regions": "JSON",
+        # 회사 소개 요약(Company info 창에서 회사 단위로 편집).
+        "note": "TEXT",
     },
     "vessels": {
         "vessel_type": "VARCHAR(60)",
@@ -1284,6 +1286,57 @@ def migrate_seed_mail_groups():
         s.close()
 
 
+def migrate_seed_vendor_profiles():
+    """1회성: 거래선의 취급품목(specialization)과 회사 소개(note)를 초기 시드.
+
+    거래선 이름만으로는 무엇을 파는 곳인지 알 수 없어 견적을 어디에 던질지 매번 사람
+    기억에 기댔다. vendor_profiles.VENDOR_PROFILES 에 각 회사 홈페이지에서 정리해 둔
+    한 줄 취급품목과 몇 문장 소개를 회사 단위로(같은 이름의 담당자 레코드 전부) 넣는다.
+
+    비어 있는 칸만 채운다 — 사람이 이미 적어 둔 값은 절대 덮어쓰지 않는다.
+    applied_migrations 마커로 1회만 실행."""
+    eng = get_engine()
+    insp = inspect(eng)
+    if not insp.has_table("vendors"):
+        return
+    if "note" not in {c["name"] for c in insp.get_columns("vendors")}:
+        return   # migrate_columns 가 아직 안 돈 경우(호출 순서 안전장치)
+    with eng.begin() as conn:
+        conn.execute(text(
+            "CREATE TABLE IF NOT EXISTS applied_migrations (name VARCHAR(100) PRIMARY KEY)"))
+        if conn.execute(text(
+                "SELECT 1 FROM applied_migrations WHERE name='seed_vendor_profiles'")).first():
+            return
+
+    from vendor_profiles import VENDOR_PROFILES
+    table = {k.strip().lower(): v for k, v in VENDOR_PROFILES.items()}
+    s = get_session()
+    n_spec = n_note = 0
+    unmatched = set(table)
+    try:
+        for v in s.query(Vendor).all():
+            hit = table.get((v.name or "").strip().lower())
+            if not hit:
+                continue
+            unmatched.discard((v.name or "").strip().lower())
+            spec, note = hit
+            if spec and not (v.specialization or "").strip():
+                v.specialization = spec
+                n_spec += 1
+            if note and not (getattr(v, "note", None) or "").strip():
+                v.note = note
+                n_note += 1
+        s.commit()
+    finally:
+        s.close()
+    with eng.begin() as conn:
+        conn.execute(text(
+            "INSERT INTO applied_migrations (name) VALUES ('seed_vendor_profiles')"))
+    print(f"[OK] seed_vendor_profiles applied: {n_spec} specializations, {n_note} notes.")
+    if unmatched:
+        print(f"[WARN] no vendor row matched: {sorted(unmatched)}")
+
+
 def migrate_split_stage_dates_to_orders():
     """프로젝트(RFQ) 단위로 찍혀 있던 수동 완료 표시를 각 고객 P/O(오더)로 복사한다.
 
@@ -1342,4 +1395,6 @@ if __name__ == "__main__":
     migrate_backfill_price_history()
     migrate_classify_item_types()
     migrate_seed_mail_groups()
+    # 취급품목·회사 소개 시드 — note 컬럼이 생긴(migrate_columns) 뒤에 돌아야 한다.
+    migrate_seed_vendor_profiles()
     print("Done.")

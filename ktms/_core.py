@@ -2966,6 +2966,9 @@ class VendorCreate(BaseModel):
     contact_phone: str | None = ""
     email: str | None = ""
     specialization: str | None = ""
+    # 회사 소개 요약(회사 단위 — Company info 창에서 편집). None = 건드리지 않음:
+    # 담당자 편집 폼처럼 이 칸을 보내지 않는 곳에서 기존 소개글이 지워지지 않게 한다.
+    note: str | None = None
     country: str | None = ""
     address: str | None = ""
     payment_terms: str | None = ""   # 기본 결제조건

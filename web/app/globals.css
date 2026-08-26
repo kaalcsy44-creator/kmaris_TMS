@@ -2998,6 +2998,16 @@ table.pipeline tbody tr.service .pl-stage-segs .seg.on {
 .pl-modal--form .form-grid .logo-field {
   grid-column: 1 / -1;
 }
+/* 회사 소개(여러 줄) — 문장을 적는 칸이라 반 칸에 가두지 않고 한 줄을 통째로 쓴다. */
+.pl-modal--form .form-grid .company-note-field {
+  grid-column: 1 / -1;
+}
+.company-note-field textarea {
+  width: 100%;
+  min-height: 88px;
+  resize: vertical;
+  line-height: 1.5;
+}
 /* 하단 액션 영역 — 본문 맨 아래에 달라붙어 스크롤과 무관하게 항상 보임. 우측 정렬. */
 .pl-modal-body .form-actions,
 .pl-modal-body .pl-actions {

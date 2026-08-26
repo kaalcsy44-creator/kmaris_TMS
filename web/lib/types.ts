@@ -62,6 +62,7 @@ export type SettingsVendor = {
   contact_phone: string;
   email: string;
   specialization: string;
+  note: string;      // 회사 소개 요약(회사 단위 — Company info 창에서 편집)
   country: string;
   address: string;   // 대표 주소(addresses[0] 미러링)
   payment_terms: string;

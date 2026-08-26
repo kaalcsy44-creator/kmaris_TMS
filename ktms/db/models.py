@@ -128,6 +128,9 @@ class Vendor(Base):
     phones         = Column(JSON, default=list)   # 다중 연락처(첫 값=대표)
     regions        = Column(JSON, default=list)   # 다중 지역(첫 값=대표)
     specialization = Column(String(200))
+    # 회사 소개 요약(무엇을 만드는 회사인지, 어떤 브랜드를 대리하는지). 담당자가 아니라
+    # 회사에 딸린 정보라 Company info 창에서 같은 회사 전 레코드에 한 번에 반영한다.
+    note           = Column(Text)
     payment_terms  = Column(String(200))  # 기본 결제조건(견적 작성 시 기본값으로 사용)
     logo           = Column(Text)          # 회사 로고 이미지(data URL, 캡쳐 붙여넣기)
     created_at     = Column(DateTime, default=datetime.utcnow)

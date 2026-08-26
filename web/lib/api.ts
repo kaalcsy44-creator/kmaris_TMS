@@ -1156,6 +1156,7 @@ export type CompanyInfoSave = {
   tax_invoice_email?: string;
   payment_terms?: string;
   specialization?: string;
+  note?: string;
   logo?: string;
 };
 export function updateCustomerCompanyInfo(
@@ -1174,6 +1175,7 @@ export function createSettingsVendor(body: {
   contact_phone?: string;
   email?: string;
   specialization?: string;
+  note?: string;
   country?: string;
   address?: string;
   payment_terms?: string;

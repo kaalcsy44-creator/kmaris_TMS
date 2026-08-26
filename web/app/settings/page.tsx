@@ -1172,12 +1172,12 @@ function summarize(list: string[], sep: string, max: number): string {
 
 // 검색 대상 — 표에 접혀 있는 값(2번째 이메일·전화·주소)까지 포함해 찾을 수 있게 한다.
 function contactSearchText(r: {
-  name: string; contact: string; address?: string; specialization?: string;
+  name: string; contact: string; address?: string; specialization?: string; note?: string;
   addresses?: string[]; emails?: string[]; phones?: string[]; regions?: string[];
   email?: string; contact_phone?: string; country?: string;
 }): string {
   return [
-    r.name, r.contact, r.address ?? "", r.specialization ?? "",
+    r.name, r.contact, r.address ?? "", r.specialization ?? "", r.note ?? "",
     ...(r.addresses ?? []), ...(r.emails ?? []), ...(r.phones ?? []), ...(r.regions ?? []),
     r.email ?? "", r.contact_phone ?? "", r.country ?? "",
   ].join(" ");
@@ -1193,12 +1193,15 @@ function CompanyInfoModal<
 >({
   rows,
   fields,
+  note,
   save,
   onClose,
   onSaved,
 }: {
   rows: T[];
   fields: [keyof T & keyof CompanyInfoSave, string][];
+  /** 여러 줄로 적는 회사 소개 — 한 줄 칸들과 성격이 달라 폼 아래에 전폭으로 따로 둔다. */
+  note?: [keyof T & keyof CompanyInfoSave, string, string?];
   save: (body: CompanyInfoSave) => Promise<{ ok: boolean; updated: number }>;
   onClose: () => void;
   onSaved: () => void;
@@ -1210,6 +1213,7 @@ function CompanyInfoModal<
   const [vals, setVals] = useState<Record<string, string>>(() => {
     const out: Record<string, string> = { payment_terms: initial("payment_terms" as keyof T), logo: initial("logo" as keyof T) };
     for (const [key] of fields) out[String(key)] = initial(key as keyof T);
+    if (note) out[String(note[0])] = initial(note[0] as keyof T);
     return out;
   });
   // 주소는 회사 단위 다중값(본사·지사) — 담당자별로 갈라져 있어도 여기서 한 목록으로 모은다.
@@ -1218,7 +1222,8 @@ function CompanyInfoModal<
   const [err, setErr] = useState("");
 
   // 담당자별로 값이 다른 필드 — 저장하면 하나로 통일된다는 걸 미리 알린다.
-  const mixed = [...fields, ["payment_terms", "Payment terms"] as (typeof fields)[number]]
+  const mixed = [...fields, ["payment_terms", "Payment terms"] as (typeof fields)[number],
+                 ...(note ? [[note[0], note[1]] as (typeof fields)[number]] : [])]
     .filter(([k]) => uniqStrings(rows.map((r) => String(r[k as keyof T] ?? ""))).length > 1)
     .map(([, label]) => label);
 
@@ -1263,6 +1268,17 @@ function CompanyInfoModal<
           onChange={(v) => setVals({ ...vals, payment_terms: v })}
         />
         <LogoPasteField value={vals.logo ?? ""} onChange={(v) => setVals({ ...vals, logo: v })} />
+        {note ? (
+          <label className="form-field company-note-field">
+            <span>{note[1]}</span>
+            <textarea
+              rows={5}
+              placeholder={note[2] ?? ""}
+              value={vals[String(note[0])] ?? ""}
+              onChange={(e) => setVals({ ...vals, [String(note[0])]: e.target.value })}
+            />
+          </label>
+        ) : null}
       </div>
       <div className="form-actions">
         <button className="btn primary" onClick={submit} disabled={busy || !name.trim()}>
@@ -1326,7 +1342,8 @@ function withCompanyDefaults<T extends { name: string }>(form: T, rows: T[], nam
   const rec = { ...form, name } as Record<string, unknown>;
   const mates = sameCompanyRows(rows, name);
   if (!mates.length) return rec as unknown as T;
-  for (const key of ["tax_id", "tax_invoice_email", "payment_terms", "logo"]) {
+  // 회사 단위 값 — 같은 회사에 담당자를 하나 더 넣을 때 회사 소개·결제조건까지 물려준다.
+  for (const key of ["tax_id", "tax_invoice_email", "payment_terms", "logo", "specialization", "note"]) {
     if (!(key in rec) || String(rec[key] ?? "").trim()) continue;
     const first = uniqStrings(mates.map((r) => String((r as Record<string, unknown>)[key] ?? "")))[0];
     if (first) rec[key] = first;
@@ -1607,7 +1624,7 @@ function LogoPasteField({
 }
 
 const EMPTY_VENDOR: SettingsVendor = {
-  id: 0, name: "", contact: "", contact_phone: "", email: "", specialization: "",
+  id: 0, name: "", contact: "", contact_phone: "", email: "", specialization: "", note: "",
   country: "", address: "", payment_terms: "", logo: "",
   addresses: [], emails: [], phones: [], regions: [],
 };
@@ -1625,6 +1642,8 @@ function VendorsTab({ half = false }: { half?: boolean }) {
         fields={[
           ["specialization", "Specialization"],
         ]}
+        note={["note", "About this company",
+               "What they make or represent, which brands they carry, where they are based…"]}
         save={updateVendorCompanyInfo}
         onClose={() => setCompany(null)}
         onSaved={() => {

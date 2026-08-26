@@ -221,6 +221,7 @@ class CompanyInfoSave(BaseModel):
     tax_invoice_email: str | None = None
     payment_terms: str | None = None
     specialization: str | None = None    # Vendor 전용(고객사에서는 무시)
+    note: str | None = None              # Vendor 전용 — 회사 소개 요약
     logo: str | None = None
 
 
@@ -330,6 +331,7 @@ def settings_vendors():
         return [{"id": v.id, "name": v.name, "contact": v.contact or "",
                  "contact_phone": getattr(v, "contact_phone", None) or "",
                  "email": v.email or "", "specialization": v.specialization or "",
+                 "note": getattr(v, "note", None) or "",
                  "country": v.country or "", "address": v.address or "",
                  "payment_terms": getattr(v, "payment_terms", None) or "",
                  "logo": getattr(v, "logo", None) or "",
@@ -351,6 +353,7 @@ def create_vendor(body: VendorCreate):
         v = Vendor(name=body.name.strip(), contact=body.contact or "",
                    contact_phone=body.contact_phone or "",
                    email=body.email or "", specialization=body.specialization or "",
+                   note=body.note or "",
                    country=body.country or "", address=body.address or "",
                    payment_terms=body.payment_terms or "",
                    logo=body.logo or "")
@@ -370,7 +373,7 @@ def update_vendor_company(body: CompanyInfoSave):
         if not rows:
             raise HTTPException(status_code=404, detail="해당 회사로 등록된 공급사가 없습니다.")
         name = _apply_company_info(
-            rows, body, ("specialization", "payment_terms", "logo"))
+            rows, body, ("specialization", "note", "payment_terms", "logo"))
         s.commit()
         return {"ok": True, "updated": len(rows), "name": name}
     finally:
@@ -389,6 +392,8 @@ def update_vendor(row_id: int, body: VendorCreate):
         v.contact_phone = body.contact_phone or ""
         v.email = body.email or ""
         v.specialization = body.specialization or ""
+        if body.note is not None:
+            v.note = body.note
         v.country = body.country or ""
         v.address = body.address or ""
         v.payment_terms = body.payment_terms or ""
