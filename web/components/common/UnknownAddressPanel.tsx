@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   attachMailAddressToProject,
   detachMailAddress,
@@ -12,6 +12,7 @@ import {
 } from "@/lib/api";
 import type { CustomerOption, MailAddrLink, MailUnknownAddr, VendorOption } from "@/lib/types";
 import ProjectPicker, { type ProjectPickOption } from "@/components/common/ProjectPicker";
+import Modal from "@/components/common/Modal";
 
 // 등록되지 않은 상대 — 메일은 오갔지만 고객·벤더 어느 쪽으로도 등록돼 있지 않아
 // **한 통도 저장되지 않은** 주소들.
@@ -41,8 +42,8 @@ export default function UnknownAddressPanel({
   const [links, setLinks] = useState<MailAddrLink[]>([]);
   // 주소 줄마다 고른 딜. 아직 붙이기 전의 선택이다.
   const [picked, setPicked] = useState<Record<string, number>>({});
-  // 등록 폼을 펼쳐 둔 주소(한 번에 하나). 표 아래 줄로 펼친다 — 팝업을 띄우면
-  // 어느 주소를 등록하는 중인지 표에서 사라진다.
+  // 등록 폼(팝업)을 연 주소. 한 번에 하나 — 표 안에 펼치면 칸 폭에 눌려 입력란이
+  // 한 줄로 늘어지고, 옆의 Attach 칸과 섞여 무엇을 하는 폼인지 흐려진다.
   const [regFor, setRegFor] = useState("");
   const [busy, setBusy] = useState("");
   const [note, setNote] = useState("");
@@ -63,6 +64,9 @@ export default function UnknownAddressPanel({
       )
       .catch(() => setParties({ customer: [], vendor: [] }));
   }, [regFor, parties]);
+
+  // 팝업이 다루는 줄. 등록이 끝나 목록에서 그 주소가 빠지면 팝업도 함께 닫힌다.
+  const regRow = (rows || []).find((r) => r.addr === regFor) || null;
 
   const load = useCallback(async () => {
     try {
@@ -208,8 +212,7 @@ export default function UnknownAddressPanel({
           </thead>
           <tbody>
             {rows.map((r) => (
-              <Fragment key={r.addr}>
-              <tr>
+              <tr key={r.addr}>
                 <td>{r.addr}</td>
                 <td>{r.name || "—"}</td>
                 <td className="num">{r.count}</td>
@@ -234,12 +237,12 @@ export default function UnknownAddressPanel({
                   </button>
                 </td>
                 <td className="uaddr-c-end">
-                  {/* 진짜 거래처인 경우 — 여기서 고객·벤더로 올린다. 폼은 아래 줄에 펼친다. */}
+                  {/* 진짜 거래처인 경우 — 여기서 고객·벤더로 올린다(팝업). */}
                   <button
-                    className={`btn sm${regFor === r.addr ? " primary" : ""}`}
+                    className="btn sm"
                     disabled={!!busy}
                     title="Register this counterpart as a customer or vendor"
-                    onClick={() => setRegFor((a) => (a === r.addr ? "" : r.addr))}
+                    onClick={() => setRegFor(r.addr)}
                   >
                     Register
                   </button>
@@ -253,22 +256,6 @@ export default function UnknownAddressPanel({
                   </button>
                 </td>
               </tr>
-              {/* 펼친 등록 폼 — 그 주소 줄 바로 아래에 붙는다. 팝업으로 띄우면 어느
-                  주소를 등록하는 중인지 표에서 사라진다. */}
-              {regFor === r.addr ? (
-                <tr className="uaddr-regrow">
-                  <td colSpan={7}>
-                    <RegisterForm
-                      row={r}
-                      parties={parties}
-                      busy={busy === r.addr}
-                      onCancel={() => setRegFor("")}
-                      onSubmit={(body) => register(r.addr, body)}
-                    />
-                  </td>
-                </tr>
-              ) : null}
-              </Fragment>
             ))}
           </tbody>
         </table>
@@ -325,6 +312,18 @@ export default function UnknownAddressPanel({
           </table>
         </>
       ) : null}
+
+      {/* 등록 팝업 — 고를 것이 셋(고객/벤더 · 기존/신규 · 회사명)이라 표 칸 안에서는
+          제대로 서지 않는다. 나머지 마스터 등록 폼과 같은 모달을 쓴다. */}
+      {regRow ? (
+        <RegisterModal
+          row={regRow}
+          parties={parties}
+          busy={busy === regRow.addr}
+          onClose={() => setRegFor("")}
+          onSubmit={(body) => register(regRow.addr, body)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -355,17 +354,17 @@ function guessCompany(addr: string, displayName: string): string {
 // 한 주소를 고객·벤더로 올리는 폼. 두 길을 한 폼에 둔다 — 이미 있는 회사에 주소를
 // **더하는** 쪽이 실제로는 더 흔한데(대표 주소 + 담당자 주소), 새로 만들기만 있으면
 // 같은 회사가 두 벌 생긴다.
-function RegisterForm({
+function RegisterModal({
   row,
   parties,
   busy,
-  onCancel,
+  onClose,
   onSubmit,
 }: {
   row: MailUnknownAddr;
   parties: { customer: PartyOption[]; vendor: PartyOption[] } | null;
   busy: boolean;
-  onCancel: () => void;
+  onClose: () => void;
   onSubmit: (body: RegisterInput) => void;
 }) {
   const [kind, setKind] = useState<"customer" | "vendor">("customer");
@@ -381,62 +380,88 @@ function RegisterForm({
   const creating = partyId === 0;
 
   return (
-    <div className="uaddr-reg">
-      <span className="uaddr-reg-addr">{row.addr}</span>
-      <div className="uaddr-reg-kind">
-        {(["customer", "vendor"] as const).map((k) => (
-          <button
-            key={k}
-            type="button"
-            className={`btn sm${kind === k ? " primary" : ""}`}
-            disabled={busy}
-            onClick={() => {
-              setKind(k);
-              setPartyId(0);
-            }}
-          >
-            {k === "customer" ? "Customer" : "Vendor"}
-          </button>
-        ))}
+    <Modal title={`📇 Register — ${row.addr}`} onClose={onClose} form>
+      {/* 무엇을 등록하는지 — 통수·마지막 날짜·최근 제목. 회사명을 짐작할 유일한 단서다. */}
+      <div className="uaddr-reg-what">
+        {row.count} mail{row.count === 1 ? "" : "s"}
+        {row.last_at ? ` · last ${row.last_at.slice(0, 10)}` : ""}
+        {row.subject ? <span className="muted"> · {row.subject}</span> : null}
       </div>
-      <select
-        className="uaddr-reg-party"
-        value={partyId}
-        disabled={busy || !parties}
-        onChange={(e) => setPartyId(Number(e.target.value))}
-      >
-        <option value={0}>{parties ? "— Create a new record —" : "Loading…"}</option>
-        {sorted.map((o) => (
-          <option key={o.id} value={o.id}>
-            {o.name}
-            {o.sub ? ` · ${o.sub}` : ""}
-          </option>
-        ))}
-      </select>
-      {creating ? (
-        <input
-          className="uaddr-reg-name"
-          value={name}
-          disabled={busy}
-          placeholder="Company name"
-          onChange={(e) => setName(e.target.value)}
-        />
-      ) : null}
-      <button
-        className="btn sm primary"
-        disabled={busy || (creating && !name.trim()) || (!creating && !partyId)}
-        onClick={() => onSubmit({ kind, partyId, name: name.trim(), contact })}
-      >
-        {busy ? "Registering…" : creating ? "Create & fetch mail" : "Add address"}
-      </button>
-      <button className="btn sm" disabled={busy} onClick={onCancel}>
-        Cancel
-      </button>
-      <span className="hint-inline uaddr-reg-hint">
+      <div className="form-grid">
+        <label className="form-field">
+          <span>Register as</span>
+          {/* 고객인지 벤더인지가 첫 갈림길 — 아래 목록이 통째로 바뀐다. */}
+          <div className="uaddr-reg-kind">
+            {(["customer", "vendor"] as const).map((k) => (
+              <button
+                key={k}
+                type="button"
+                className={`btn${kind === k ? " primary" : ""}`}
+                disabled={busy}
+                onClick={() => {
+                  setKind(k);
+                  setPartyId(0);
+                }}
+              >
+                {k === "customer" ? "Customer" : "Vendor"}
+              </button>
+            ))}
+          </div>
+        </label>
+        <label className="form-field">
+          <span>Record</span>
+          <select
+            value={partyId}
+            disabled={busy || !parties}
+            onChange={(e) => setPartyId(Number(e.target.value))}
+          >
+            <option value={0}>{parties ? "— Create a new record —" : "Loading…"}</option>
+            {sorted.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.name}
+                {o.sub ? ` · ${o.sub}` : ""}
+              </option>
+            ))}
+          </select>
+        </label>
+        {/* 새로 만들 때만 회사명을 묻는다 — 기존 레코드를 골랐으면 이름은 이미 정해져 있다. */}
+        {creating ? (
+          <label className="form-field">
+            <span>Company name</span>
+            <input
+              value={name}
+              disabled={busy}
+              placeholder="Company name"
+              onChange={(e) => setName(e.target.value)}
+            />
+          </label>
+        ) : null}
+        {creating && contact ? (
+          <label className="form-field">
+            <span>Contact person</span>
+            <input value={contact} disabled readOnly />
+          </label>
+        ) : null}
+      </div>
+      <p className="hint-inline uaddr-reg-hint">
         {creating
-          ? `A new ${kind} record with this address${contact ? ` · contact ${contact}` : ""}.`
-          : "Adds this address to the record — the existing primary address is unchanged."}
-      </span>
-    </div>
+          ? `Creates a new ${kind} record whose address is ${row.addr}.`
+          : "Adds this address to the record — its existing primary address is unchanged."}
+        {" "}Past mail from this address is fetched right away. Which deal each mail belongs to is
+        still decided by evidence, so some of it may land in Unmatched.
+      </p>
+      <div className="form-actions">
+        <button
+          className="btn primary"
+          disabled={busy || (creating && !name.trim())}
+          onClick={() => onSubmit({ kind, partyId, name: name.trim(), contact })}
+        >
+          {busy ? "Registering…" : creating ? "Create & fetch mail" : "Add address & fetch mail"}
+        </button>
+        <button className="btn" disabled={busy} onClick={onClose}>
+          Cancel
+        </button>
+      </div>
+    </Modal>
   );
 }

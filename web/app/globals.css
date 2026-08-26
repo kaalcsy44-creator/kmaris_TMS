@@ -12232,15 +12232,22 @@ th.uaddr-c-attach, td.uaddr-c-attach { width: 260px; white-space: nowrap; }
 /* 줄 끝의 Register·Dismiss — 둘은 서로 다른 결론이라 붙여 두되 간격을 준다. */
 td.uaddr-c-end { white-space: nowrap; }
 td.uaddr-c-end .btn.sm + .btn.sm { margin-left: 6px; }
-/* 펼친 등록 폼 — 그 주소 줄 바로 아래. 한 줄로 흐르다가 좁아지면 접힌다. */
-.uaddr-regrow > td { background: #f4f7fb; }
-.uaddr-reg { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 4px 0; }
-.uaddr-reg-addr { font-weight: 600; color: var(--navy); }
-.uaddr-reg-kind { display: inline-flex; gap: 4px; }
-.uaddr-reg-party { max-width: 320px; }
-.uaddr-reg-name { min-width: 200px; }
-/* 무엇이 만들어지는지 한 줄로 말해 준다 — 새 레코드인지, 주소만 더하는 것인지. */
-.uaddr-reg-hint { flex: 1 1 240px; }
+/* 등록 팝업 — 나머지 마스터 등록 폼과 같은 모달(pl-modal--form)을 쓴다. */
+/* 무엇을 등록하는지 한 줄 — 통수·마지막 날짜·최근 제목. 회사명을 짐작할 단서다. */
+.uaddr-reg-what {
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line, #e3e8ef);
+  font-size: 12.5px;
+  color: #43506b;
+  overflow-wrap: anywhere;
+}
+/* Customer / Vendor — 라디오가 아니라 두 버튼. 어느 쪽인지가 폼의 첫 갈림길이라
+   눌린 상태가 또렷해야 한다(선택된 쪽만 primary). */
+.uaddr-reg-kind { display: flex; gap: 6px; }
+.uaddr-reg-kind .btn { flex: 1 1 0; }
+/* 무엇이 만들어지는지 한 문단으로 — 새 레코드인지, 있는 것에 주소만 더하는 것인지. */
+.uaddr-reg-hint { display: block; margin: 10px 0 0; }
 /* "Not a deal" — 배정만큼 자주 쓰는 자리지만 주된 동작은 아니다. Assign 옆에 두되
    눈에 먼저 들어오지 않게 옅게 둔다(누르면 그 대화가 함에서 내려간다). */
 .umail-notdeal { margin-left: 6px; color: #6b7c93; }
