@@ -75,6 +75,8 @@ import type {
   MailMessage,
   MailStatus,
   MailUnknownAddr,
+  MailAddrLink,
+  MailAttachResult,
   MailSyncResult,
   MailAutoMatchResult,
   UnmatchedMailGroup,
@@ -1975,14 +1977,32 @@ export function fetchMailStatus(): Promise<MailStatus> {
   return get<MailStatus>("/api/admin/mail/status");
 }
 // 등록되지 않은 상대 — 이 주소들의 메일은 지금 저장되지 않고 버려진다.
-export function fetchMailUnknownAddresses(): Promise<{ rows: MailUnknownAddr[] }> {
+// links 는 그중 이미 딜에 붙여 둔 주소(그 주소의 메일은 담긴다).
+export function fetchMailUnknownAddresses(): Promise<{
+  rows: MailUnknownAddr[];
+  links: MailAddrLink[];
+}> {
   return get("/api/admin/mail/unknown-addresses");
 }
 // 거래처가 아닌 주소(뉴스레터·알림)를 목록에서 내린다 — 다음 동기화에서도 세지 않는다.
 export function ignoreMailUnknownAddress(
   addr: string
-): Promise<{ ok: boolean; rows: MailUnknownAddr[] }> {
+): Promise<{ ok: boolean; rows: MailUnknownAddr[]; links: MailAddrLink[] }> {
   return post("/api/admin/mail/unknown-addresses/ignore", { addr });
+}
+// 이 주소의 메일은 이 딜의 것 — 거래처 등록 없이 붙인다. 붙이는 즉시 (1) 이미 담겨
+// 있던 미분류 메일을 이 딜로 옮기고 (2) 메일함에서 지난 메일을 주소로 찾아 담는다.
+export function attachMailAddressToProject(
+  addr: string,
+  rfqId: number
+): Promise<MailAttachResult> {
+  return post("/api/admin/mail/unknown-addresses/attach", { addr, rfq_id: rfqId });
+}
+// 붙여 둔 주소를 뗀다 — 앞으로 오는 메일만 멈추고, 이미 담은 이력은 지우지 않는다.
+export function detachMailAddress(
+  addr: string
+): Promise<{ ok: boolean; rows: MailUnknownAddr[]; links: MailAddrLink[] }> {
+  return post("/api/admin/mail/unknown-addresses/detach", { addr });
 }
 export function syncMail(): Promise<MailSyncResult> {
   return post<MailSyncResult>("/api/admin/mail/sync", {});

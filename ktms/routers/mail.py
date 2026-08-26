@@ -10,6 +10,7 @@ import sys
 from datetime import datetime
 
 from pydantic import BaseModel
+from sqlalchemy import func
 
 from db.models import AppSetting
 from _core import (
@@ -207,7 +208,7 @@ def mail_unknown_addresses():
     여기서 진짜 거래처를 골라 고객·벤더로 등록하면 다음 동기화부터 들어온다."""
     s = get_session()
     try:
-        return {"rows": mail_sync.unknown_addresses(s)}
+        return {"rows": mail_sync.unknown_addresses(s), "links": _address_link_rows(s)}
     finally:
         s.close()
 
@@ -223,7 +224,97 @@ def mail_ignore_unknown(body: MailIgnoreAddr):
     s = get_session()
     try:
         mail_sync.ignore_unknown_address(s, body.addr)
-        return {"ok": True, "rows": mail_sync.unknown_addresses(s)}
+        return {"ok": True, "rows": mail_sync.unknown_addresses(s),
+                "links": _address_link_rows(s)}
+    finally:
+        s.close()
+
+
+def _address_link_rows(s) -> list[dict]:
+    """딜에 붙여 둔 주소 — 화면이 "이 주소는 P-024 것"이라고 읽을 수 있게 번호를 붙인다."""
+    links = mail_sync.address_links(s)
+    if not links:
+        return []
+    nos = _project_no_map(s)
+    counts = dict(s.query(func.lower(EmailMessage.from_addr), func.count(EmailMessage.id))
+                  .filter(func.lower(EmailMessage.from_addr).in_(list(links)))
+                  .group_by(func.lower(EmailMessage.from_addr)).all())
+    rows = [{
+        "addr": a,
+        "name": v.get("name") or "",
+        "rfq_id": int(v["rfq_id"]),
+        "project_no": nos.get(int(v["rfq_id"]), ""),
+        "linked_at": v.get("at") or "",
+        # 붙인 뒤로 실제로 담긴 통수 — 0 이면 "붙였는데 아무것도 안 들어왔다"는 뜻이라
+        # 주소를 잘못 골랐는지 바로 보인다.
+        "stored": int(counts.get(a, 0) or 0),
+    } for a, v in links.items()]
+    rows.sort(key=lambda r: (r["project_no"], r["addr"]))
+    return rows
+
+
+class MailAddrLink(BaseModel):
+    addr: str
+    rfq_id: int
+
+
+@app.post("/api/admin/mail/unknown-addresses/attach", dependencies=[Depends(require_token)])
+def mail_attach_unknown(body: MailAddrLink):
+    """이 주소의 메일은 이 딜의 것이다 — 붙이고, 과거분을 지금 메일함에서 찾아 담는다.
+
+    미등록 상대가 늘 '등록해야 할 거래처'인 것은 아니다. 검사관·선주 대리인·조선소
+    담당자처럼 한 딜에서만 만나는 상대를 고객·벤더로 올리면 거래처 목록이 한 번 쓰고
+    버릴 이름으로 불어나고, 그렇다고 두면 그 딜의 대화 절반이 시스템 밖에 남는다.
+
+    붙이는 즉시 세 가지를 한다.
+      1) 앞으로 오는 그 주소의 메일을 담는다(거래처 등록 없이도).
+      2) 이미 담겨 있으나 딜을 못 정한 그 주소의 메일을 이 딜로 옮긴다.
+      3) IMAP_SINCE_DAYS 안의 지난 메일을 주소로 검색해 담는다 — 보통의 동기화는 이미
+         지나친 UID 구간을 다시 읽지 않으므로, 여기서 직접 찾아야 들어온다.
+    딜 지정은 근거 우선이다. 스레드·문서번호·선박이 다른 딜을 가리키면 그쪽으로 간다."""
+    s = get_session()
+    try:
+        if not s.query(RFQ.id).filter_by(id=body.rfq_id).first():
+            raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다.")
+        try:
+            mail_sync.link_address(s, body.addr, body.rfq_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        adopted = mail_sync.adopt_stored_mail(s, body.addr, body.rfq_id)
+        # 메일함을 못 읽어도 붙인 것 자체는 남는다 — 다음 동기화부터는 들어온다.
+        fetched, warn = {"scanned": 0, "stored": 0, "dup": 0, "skipped": 0}, ""
+        running = mail_sync.is_syncing()
+        if running:
+            # 동기화가 도는 중에 같은 메일함을 한 번 더 훑으면 같은 통을 두 번 집는다.
+            warn = f"A sync is running (since {running}) — past mail arrives with it."
+        else:
+            try:
+                fetched = mail_sync.fetch_address(s, body.addr, body.rfq_id)
+            except Exception as exc:
+                warn = f"Linked, but the mailbox search failed: {exc}"
+        # 방금 담은 메일이 다른 미분류 메일의 근거가 되기도 한다(같은 스레드·제목).
+        spread = mail_sync.auto_match(s)["total"] if fetched["stored"] else 0
+        return {"ok": True, "adopted": adopted, "fetched": fetched, "spread": spread,
+                "warn": warn, "rows": mail_sync.unknown_addresses(s),
+                "links": _address_link_rows(s)}
+    finally:
+        s.close()
+
+
+class MailAddrDetach(BaseModel):
+    addr: str
+
+
+@app.post("/api/admin/mail/unknown-addresses/detach", dependencies=[Depends(require_token)])
+def mail_detach_unknown(body: MailAddrDetach):
+    """붙여 둔 주소를 뗀다 — 앞으로 오는 그 주소의 메일은 다시 담지 않는다.
+    이미 담은 메일은 지우지 않는다(그건 딜의 이력이다). 잘못 붙었으면 미분류·딜
+    화면에서 옮기면 된다."""
+    s = get_session()
+    try:
+        mail_sync.unlink_address(s, body.addr)
+        return {"ok": True, "rows": mail_sync.unknown_addresses(s),
+                "links": _address_link_rows(s)}
     finally:
         s.close()
 

@@ -1875,6 +1875,25 @@ export type MailUnknownAddr = {
   name: string;                 // 메일 표시 이름(있으면)
   subject: string;              // 가장 최근 제목 한 줄
 };
+// 딜에 직접 붙여 둔 주소 — 거래처로 등록하지 않고도 그 주소의 메일을 이 딜로 담는다.
+// (검사관·선주 대리인처럼 한 딜에서만 만나는 상대를 위한 길.)
+export type MailAddrLink = {
+  addr: string;
+  name: string;
+  rfq_id: number;
+  project_no: string;
+  linked_at: string;
+  stored: number;               // 붙인 뒤로 실제 담긴 통수(0 이면 아직 안 들어왔다)
+};
+export type MailAttachResult = {
+  ok: boolean;
+  adopted: number;              // 이미 담겨 있던 미분류 메일 중 이 딜로 옮긴 통수
+  fetched: { scanned: number; stored: number; dup: number; skipped: number };
+  spread: number;               // 그 메일이 근거가 되어 따라 붙은 통수
+  warn: string;
+  rows: MailUnknownAddr[];
+  links: MailAddrLink[];
+};
 // 미분류 메일은 '대화' 단위로 다룬다 — 한 번 고르면 그 대화 전체가 같은 딜로 간다.
 // suggest 는 서버가 매긴 추천(제목 겹침·거래처·시기)일 뿐, 붙지는 않은 상태다.
 export type MailSuggest = { rfq_id: number; why: string };

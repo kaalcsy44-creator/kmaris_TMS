@@ -240,7 +240,7 @@ def unknown_addresses(s) -> list[dict]:
     """등록되지 않은 상대 주소 — 많이 온 순. 무시하기로 한 주소는 빼고 돌려준다."""
     seen = _setting(s, UNKNOWN_KEY, {}) or {}
     ignored = set(_setting(s, UNKNOWN_IGNORE_KEY, []) or [])
-    known = set(party_index(s))
+    known = set(party_index(s)) | set(_setting(s, ADDR_LINK_KEY, {}) or {})
     out = [{"addr": a, **v} for a, v in seen.items()
            if a not in ignored and a not in known]
     out.sort(key=lambda r: (-int(r.get("count") or 0), r.get("addr", "")))
@@ -260,6 +260,139 @@ def ignore_unknown_address(s, addr: str) -> None:
     seen.pop(a, None)
     _save_setting(s, UNKNOWN_KEY, seen)
     s.commit()
+
+
+# ── 주소를 딜에 붙이기 ────────────────────────────────────────────────────────
+#
+# 위 목록에서 골라낸 주소가 늘 '등록해야 할 거래처'인 것은 아니다. 선급 검사관, 선주
+# 대리인, 조선소 담당자처럼 **한 딜에서만 만나는 상대**가 있다 — 이들을 고객·벤더로
+# 등록하면 거래처 목록이 한 번 쓰고 버릴 이름으로 불어난다. 그렇다고 버리면 그 딜의
+# 대화 절반이 시스템 밖에 남는다.
+#
+# 그래서 세 번째 길을 둔다: **주소를 딜에 직접 붙인다.** 붙이는 순간 그 주소와 오간
+# 메일을 메일함에서 찾아 담고(과거분), 앞으로 오는 메일도 담는다. 딜은 근거가 있으면
+# (스레드·문서번호·선박) 그 근거를 따르고, 없을 때만 붙여 둔 딜로 간다 — 붙였다는
+# 사실이 다른 증거를 덮지는 않는다.
+ADDR_LINK_KEY = "mail_addr_links"   # {addr: {"rfq_id": int, "name": str, "at": str}}
+
+
+def _clean_addr(addr: str) -> str:
+    return (addr or "").strip().lower()
+
+
+def address_links(s) -> dict[str, dict]:
+    """딜에 붙여 둔 주소 → {rfq_id, name, at}. 딜이 사라진 줄은 걸러 낸다."""
+    raw = _setting(s, ADDR_LINK_KEY, {}) or {}
+    if not raw:
+        return {}
+    alive = {r.id for r in s.query(RFQ.id).filter(
+        RFQ.id.in_([int(v.get("rfq_id") or 0) for v in raw.values()])).all()}
+    return {a: v for a, v in raw.items() if int(v.get("rfq_id") or 0) in alive}
+
+
+def address_link_map(s) -> dict[str, int]:
+    """{주소: rfq_id} — 저장 판단과 딜 지정에 쓰는 가벼운 형태."""
+    return {a: int(v["rfq_id"]) for a, v in address_links(s).items()}
+
+
+def link_address(s, addr: str, rfq_id: int, name: str = "") -> None:
+    """이 주소의 메일은 이 딜의 것으로 담는다(이미 붙어 있으면 딜만 바꾼다)."""
+    a = _clean_addr(addr)
+    if not a or "@" not in a:
+        raise ValueError("메일 주소가 아닙니다.")
+    links = dict(_setting(s, ADDR_LINK_KEY, {}) or {})
+    seen = dict(_setting(s, UNKNOWN_KEY, {}) or {})
+    links[a] = {
+        "rfq_id": int(rfq_id),
+        # 이름은 미등록 목록에 세어 둔 표시이름을 물려받는다 — 주소만 남으면 나중에
+        # 이 줄이 누구였는지 알 수 없다.
+        "name": (name or (seen.get(a) or {}).get("name") or "")[:120],
+        "at": datetime.now(KST).strftime("%Y-%m-%d %H:%M"),
+    }
+    _save_setting(s, ADDR_LINK_KEY, links)
+    s.commit()
+
+
+def unlink_address(s, addr: str) -> None:
+    """붙여 둔 것을 뗀다. 이미 담은 메일은 그대로 둔다 — 그건 딜의 이력이고,
+    잘못 붙었다면 미분류 화면에서 한 통씩 옮기면 된다."""
+    a = _clean_addr(addr)
+    links = dict(_setting(s, ADDR_LINK_KEY, {}) or {})
+    if links.pop(a, None) is not None:
+        _save_setting(s, ADDR_LINK_KEY, links)
+        s.commit()
+
+
+def adopt_stored_mail(s, addr: str, rfq_id: int) -> int:
+    """이미 담겨 있지만 딜을 못 정한 메일 중 이 주소 것을 그 딜로 옮긴다.
+
+    주소를 붙이기 전에도 스레드를 타고 들어온 메일이 있을 수 있다(우리가 먼저 보낸
+    메일의 답장 등). 그것들이 미분류 함에 남아 있으면 사람은 같은 판단을 두 번 한다."""
+    a = _clean_addr(addr)
+    if not a:
+        return 0
+    rows = (s.query(EmailMessage)
+            .filter(EmailMessage.rfq_id.is_(None), func.lower(EmailMessage.from_addr) == a).all())
+    for m in rows:
+        m.rfq_id = rfq_id
+        m.match_by = "address"
+        m.not_deal = False
+    if rows:
+        s.commit()
+    return len(rows)
+
+
+# IMAP 검색어에 그대로 넣어도 안전한 주소만 통과시킨다(따옴표·괄호 주입 방지).
+_ADDR_SAFE = re.compile(r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+$")
+
+
+def fetch_address(s, addr: str, rfq_id: int, limit: int = 300) -> dict:
+    """이 주소와 오간 메일을 지금 메일함에서 찾아 담는다(과거분 채우기).
+
+    보통의 동기화는 폴더를 UID 순서로 훑기 때문에, 이미 지나친 구간에 있는 메일은
+    주소를 붙였다고 다시 읽히지 않는다. 그래서 여기서는 주소로 직접 검색한다 —
+    IMAP_SINCE_DAYS 안의 메일 중 그 주소가 From·To·Cc 에 있는 것 전부.
+
+    반환: {scanned, stored, dup, skipped}"""
+    a = _clean_addr(addr)
+    if not _ADDR_SAFE.match(a):
+        raise ValueError("메일 주소가 아닙니다.")
+    cfg = mail_config()
+    if not cfg["user"] or not cfg["password"]:
+        raise RuntimeError("IMAP 계정이 설정되지 않았습니다.")
+    own = own_addresses(s)
+    parties = party_index(s)
+    docs = doc_no_index(s)
+    vessels = vessel_index(s)
+    linked = {a: int(rfq_id)}
+    since = (datetime.now(timezone.utc) - timedelta(days=cfg["since_days"])).strftime("%d-%b-%Y")
+    crit = f'(SINCE {since} OR OR FROM "{a}" TO "{a}" CC "{a}")'
+    out = {"scanned": 0, "stored": 0, "dup": 0, "skipped": 0}
+
+    conn = _connect(cfg)
+    try:
+        for folder in _folders(conn, cfg):
+            typ, _ = conn.select(f'"{folder}"', readonly=True)
+            if typ != "OK":
+                continue
+            typ, data = conn.uid("SEARCH", None, crit)
+            if typ != "OK" or not data or not data[0]:
+                continue
+            uids = sorted(int(x) for x in data[0].split())[-max(1, limit):]
+            for uid in uids:
+                typ, raw = conn.uid("FETCH", str(uid), "(RFC822)")
+                if typ != "OK" or not raw or not isinstance(raw[0], tuple):
+                    continue
+                out["scanned"] += 1
+                out[_store_message(s, email.message_from_bytes(raw[0][1]), folder, own,
+                                   parties, docs, None, vessels, linked)] += 1
+            s.commit()
+    finally:
+        try:
+            conn.logout()
+        except Exception:
+            pass
+    return out
 
 
 def _merge_unknown(s, found: dict[str, dict]) -> None:
@@ -841,11 +974,14 @@ def _note_unknown(found: dict[str, dict], addrs: list[str], msg: Message, sent_a
 def _store_message(s, msg: Message, folder: str, own: set[str],
                    parties: dict[str, tuple[str, int, str]], docs: dict[str, int],
                    unknown: dict[str, dict] | None = None,
-                   vessels: dict[str, set[int]] | None = None) -> str:
+                   vessels: dict[str, set[int]] | None = None,
+                   linked: dict[str, int] | None = None) -> str:
     """메일 1통 저장. 반환: stored | skipped(관계없는 메일) | dup(이미 있음).
 
     unknown 을 넘기면 저장하지 않은 메일의 상대 주소를 거기에 세어 둔다 — 아직
-    등록하지 않은 거래처를 나중에 화면에서 찾아낼 수 있게."""
+    등록하지 않은 거래처를 나중에 화면에서 찾아낼 수 있게.
+    linked 는 사람이 딜에 붙여 둔 주소({주소: rfq_id}) — 거래처로 등록하지 않았어도
+    담고, 다른 근거가 없을 때 그 딜로 붙인다."""
     message_id = (_hdr(msg, "Message-ID") or "").strip()
     if not message_id:
         # Message-ID 없는 메일은 중복 판별을 할 수 없다 — 발신시각+제목으로 대신 만든다.
@@ -866,7 +1002,9 @@ def _store_message(s, msg: Message, folder: str, own: set[str],
     party = next((parties[a] for a in counterparts if a in parties), None)
     known_thread = bool(parents) and bool(
         s.query(EmailMessage.id).filter(EmailMessage.message_id.in_(parents)).first())
-    if not party and not known_thread:
+    # 사람이 딜에 붙여 둔 주소면 거래처로 등록되지 않았어도 담는다.
+    link_rfq = next((linked[a] for a in counterparts if a in (linked or {})), None)
+    if not party and not known_thread and link_rfq is None:
         # 등록된 거래처와도, 담아 둔 스레드와도 무관한 메일. 버리되 상대는 세어 둔다 —
         # 받은 메일이면 보낸 사람이, 보낸 메일이면 받는 사람이 '아직 모르는 거래처'다.
         if unknown is not None:
@@ -879,6 +1017,9 @@ def _store_message(s, msg: Message, folder: str, own: set[str],
     body, attachments = body_and_attachments(msg)
     truncated = len(body) > MAX_BODY_CHARS
     rfq_id, match_by = match_project(s, parents, subject, body, docs, attachments, vessels)
+    # 붙여 둔 딜은 마지막 수단이다 — 스레드·문서번호·선박이 다른 딜을 가리키면 그쪽이 옳다.
+    if rfq_id is None and link_rfq is not None:
+        rfq_id, match_by = link_rfq, "address"
 
     s.add(EmailMessage(
         message_id=message_id[:400],
@@ -931,6 +1072,7 @@ def _sync_mailbox(s, folder_limit: int | None = None) -> dict:
     parties = party_index(s)
     docs = doc_no_index(s)
     vessels = vessel_index(s)
+    linked = address_link_map(s)
     budget = folder_limit or cfg["max_per_sync"]
     # scanned = 훑은 통수. stored 가 0 일 때 "메일함을 못 읽은 것"인지 "읽었지만 등록된
     # 거래처와 오간 게 없던 것"인지 화면이 구분해 말할 수 있어야 한다.
@@ -973,7 +1115,7 @@ def _sync_mailbox(s, folder_limit: int | None = None) -> dict:
                         continue
                     outcome = _store_message(
                         s, email.message_from_bytes(data[0][1]), folder, own, parties, docs,
-                        unknown, vessels)
+                        unknown, vessels, linked)
                     counts[outcome] += 1
                     result[outcome] += 1
                 # 읽은 구간 [backfill_uid, last_uid] 를 이번에 집은 만큼 넓힌다.

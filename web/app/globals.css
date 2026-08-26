@@ -12210,6 +12210,15 @@ table.mini.wide.umail-table th.umail-c-assign,
 table.mini.wide.umail-table td.umail-c-assign { width: 340px; }
 .umail-c-assign select { width: 100%; max-width: 100%; }
 .umail-c-assign { white-space: nowrap; }
+/* Settings › Mailbox — 미등록 주소를 딜에 붙이는 칸. 고르는 것과 누르는 것이 한 줄에
+   나란히 서야 "골라서 붙인다"가 한 동작으로 읽힌다. 좁아지면 버튼이 아래로 내려간다. */
+.mbx-attach { white-space: nowrap; }
+.mbx-attach .pjpick { display: inline-block; min-width: 150px; max-width: 100%; vertical-align: middle; }
+.mbx-attach .btn.sm { margin-left: 6px; vertical-align: middle; }
+@media (max-width: 1100px) {
+  .mbx-attach { white-space: normal; }
+  .mbx-attach .btn.sm { margin: 6px 0 0; }
+}
 /* "Not a deal" — 배정만큼 자주 쓰는 자리지만 주된 동작은 아니다. Assign 옆에 두되
    눈에 먼저 들어오지 않게 옅게 둔다(누르면 그 대화가 함에서 내려간다). */
 .umail-notdeal { margin-left: 6px; color: #6b7c93; }
