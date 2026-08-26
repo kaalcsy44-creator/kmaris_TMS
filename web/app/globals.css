@@ -1181,6 +1181,25 @@ body {
   margin: 0 0 14px;
 }
 /* Settings 마스터 데이터 — 목록 + 인라인 편집 */
+/* Settings › Partners — 고객과 벤더를 좌우 반반으로. 둘은 같은 상대처 명부를 사고
+   파는 방향으로만 나눈 것이라 나란히 두면 "이 회사가 저쪽에도 있나"를 눈으로 끝낸다.
+   align-items:start — 한쪽 목록이 길어도 다른 쪽 카드가 따라 늘어나지 않게. */
+/* 역할 범례 아래 한 줄 — 이 요약이 아니라 아래 매트릭스가 진짜라고 밝힌다. */
+.role-legend-note { display: block; margin: -4px 0 14px; }
+
+.ms-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  align-items: start;
+}
+/* 반쪽 폭에서는 카드가 이미 좁다 — 안쪽 여백을 줄여 표가 먼저 자리를 갖게 한다. */
+.ms-split > .panel { min-width: 0; }
+/* 좌우로 세울 만한 폭이 아니면 위아래로 쌓는다(그때는 각 카드가 전체 폭을 쓴다). */
+@media (max-width: 1280px) {
+  .ms-split { grid-template-columns: 1fr; }
+}
+
 .ms-toolbar {
   display: flex;
   align-items: center;

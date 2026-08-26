@@ -99,9 +99,20 @@ import { invalidateMasterCategories } from "@/components/common/CategoryCell";
 import CustomerName from "@/components/common/CustomerName";
 import VendorName from "@/components/common/VendorName";
 
+// 탭. 예전에는 Users / Permissions 가 갈려 있고 Customer / Vendor 도 따로였다.
+// 둘 다 한 가지 일을 두 자리에서 하게 만들던 구분이라 합쳤다 — 계정과 그 계정이 할 수
+// 있는 일은 같은 물음이고, 고객과 벤더는 같은 상대처 명부를 사고 파는 방향으로만
+// 나눈 것이다. ?tab= 링크는 옛 이름으로 들어와도 새 탭으로 보낸다(TAB_ALIAS).
 type Tab =
-  | "company" | "users" | "permissions"
-  | "customers" | "vendors" | "vessels" | "consultants" | "email" | "mail" | "account";
+  | "company" | "users"
+  | "partners" | "vessels" | "consultants" | "email" | "mail" | "account";
+
+/** 옛 ?tab= 값 → 지금 탭. 밖에 나가 있는 링크·북마크가 죽지 않게. */
+const TAB_ALIAS: Record<string, Tab> = {
+  permissions: "users",
+  customers: "partners",
+  vendors: "partners",
+};
 
 const emptyCompany: CompanyProfile = {
   company_name_en: "",
@@ -145,10 +156,12 @@ function Settings() {
   // 회사/사용자/권한 설정은 admin 전용으로 유지한다.
   const canMaster = admin || can("settings", "view");
   const [tab, setTab] = useState<Tab>(() => {
-    const asked = params.get("tab") as Tab | null;
+    const raw = params.get("tab") || "";
+    const asked = (TAB_ALIAS[raw] ?? raw) as Tab;
     // 링크로 들어온 탭이라도 권한이 없으면 기본 탭으로 — Mailbox 는 admin 전용이다.
     if (asked === "mail" && admin) return asked;
-    return admin ? "company" : canMaster ? "customers" : "account";
+    if (asked === "partners" && (admin || canMaster)) return asked;
+    return admin ? "company" : canMaster ? "partners" : "account";
   });
 
   // 마스터 데이터 권한도 없는 사용자(예: 권한 없는 viewer)는 본인 비밀번호 변경만.
@@ -169,18 +182,15 @@ function Settings() {
   const tabs: { key: Tab; label: string }[] = admin
     ? [
         { key: "company", label: "Company" },
-        { key: "users", label: "Users" },
-        { key: "permissions", label: "Permissions" },
-        { key: "customers", label: "Customer" },
-        { key: "vendors", label: "Vendor" },
+        { key: "users", label: "Users & Permissions" },
+        { key: "partners", label: "Partners" },
         { key: "vessels", label: "Vessels" },
         { key: "consultants", label: "Consultant" },
         { key: "email", label: "Email Templates" },
         { key: "mail", label: "Mailbox" },
       ]
     : [
-        { key: "customers", label: "Customer" },
-        { key: "vendors", label: "Vendor" },
+        { key: "partners", label: "Partners" },
         { key: "vessels", label: "Vessels" },
         { key: "consultants", label: "Consultant" },
         { key: "email", label: "Email Templates" },
@@ -202,9 +212,7 @@ function Settings() {
       </div>
       {admin && tab === "company" && <CompanyTab />}
       {admin && tab === "users" && <UsersTab />}
-      {admin && tab === "permissions" && <PermissionsTab />}
-      {tab === "customers" && <CustomersTab />}
-      {tab === "vendors" && <VendorsTab />}
+      {tab === "partners" && <PartnersTab />}
       {tab === "vessels" && <VesselsTab />}
       {tab === "consultants" && <ConsultantsTab />}
       {tab === "email" && <EmailTemplatesTab />}
@@ -564,6 +572,7 @@ function UsersTab() {
   ) : null;
 
   return (
+    <>
     <div className="panel">
       <div className="ms-toolbar">
         <h3 className="form-title">User management</h3>
@@ -572,7 +581,9 @@ function UsersTab() {
         </button>
       </div>
 
-      {/* 역할별 권한 범례 — admin 이 어떤 권한을 부여하는지 한눈에 본다. */}
+      {/* 역할별 권한 범례 — 계정을 만들며 "어느 역할을 줄까"를 정할 때 읽는 요약이다.
+          손으로 적어 둔 글이라, 아래 매트릭스를 고치면 이 요약과 어긋날 수 있다.
+          그래서 같은 화면에 둔 김에 어느 쪽이 진짜인지 한 줄로 밝혀 둔다. */}
       <div className="role-legend">
         {ROLE_INFO.map((r) => (
           <div key={r.key} className="role-legend-card">
@@ -585,6 +596,9 @@ function UsersTab() {
           </div>
         ))}
       </div>
+      <p className="hint-inline role-legend-note">
+        What each role is meant for. What it can actually do is the matrix below — edit it there.
+      </p>
 
       {editor}
 
@@ -625,6 +639,11 @@ function UsersTab() {
 
       <MyPasswordChange />
     </div>
+      {/* 역할이 실제로 무엇을 할 수 있는지 — 위의 범례가 말로 요약한 것의 원본이다.
+          계정을 만드는 자리와 그 계정이 할 수 있는 일을 정하는 자리를 갈라 두면,
+          역할을 고르다 말고 다른 탭으로 건너가 확인하고 돌아와야 했다. */}
+      <PermissionsTab />
+    </>
   );
 }
 
@@ -933,7 +952,22 @@ const EMPTY_CUSTOMER: SettingsCustomer = {
   addresses: [], emails: [], phones: [], regions: [],
 };
 
-function CustomersTab() {
+/* ── Partners — 고객과 벤더를 한 화면에 좌우로 ────────────────────────────────
+   둘은 같은 상대처 명부를 사고 파는 방향으로만 나눈 것이라, 탭을 갈라 두면 한쪽을
+   보다가 "이 회사가 저쪽에도 있었나"를 확인하려고 탭을 오가게 된다. 나란히 두면
+   그 물음이 눈으로 끝난다.
+   각 절반은 예전 탭 그대로다 — 다만 폭이 반이라 목록을 다시 2열로 쪼개지는 않는다
+   (twoCol 을 끈다). 좁은 화면에서는 위아래로 쌓인다. */
+function PartnersTab() {
+  return (
+    <div className="ms-split">
+      <CustomersTab half />
+      <VendorsTab half />
+    </div>
+  );
+}
+
+function CustomersTab({ half = false }: { half?: boolean }) {
   // 회사 공통정보 편집 대상 그룹(같은 회사명의 담당자 레코드들). null = 닫힘.
   const [company, setCompany] = useState<SettingsCustomer[] | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -958,11 +992,11 @@ function CustomersTab() {
       />
     ) : null}
     <MasterSection<SettingsCustomer>
-      title="Customer Management"
+      title="Customer"
       empty={EMPTY_CUSTOMER}
       reloadKey={reloadKey}
       searchText={contactSearchText}
-      twoCol
+      twoCol={!half}
       group={{
         by: (r) => r.name,
         cells: (rs, open) => [
@@ -1578,7 +1612,7 @@ const EMPTY_VENDOR: SettingsVendor = {
   addresses: [], emails: [], phones: [], regions: [],
 };
 
-function VendorsTab() {
+function VendorsTab({ half = false }: { half?: boolean }) {
   const [company, setCompany] = useState<SettingsVendor[] | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const canCreate = can("settings", "create");
@@ -1601,11 +1635,11 @@ function VendorsTab() {
       />
     ) : null}
     <MasterSection<SettingsVendor>
-      title="Vendor Management"
+      title="Vendor"
       empty={EMPTY_VENDOR}
       reloadKey={reloadKey}
       searchText={contactSearchText}
-      twoCol
+      twoCol={!half}
       group={{
         by: (r) => r.name,
         cells: (rs, open) => [
