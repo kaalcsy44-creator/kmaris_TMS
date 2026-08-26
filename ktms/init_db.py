@@ -64,6 +64,8 @@ _MIGRATIONS = {
         "phones": "JSON",
         "regions": "JSON",
         "tax_invoice_email": "VARCHAR(200)",
+        # 회사 소개 요약(Company info 창에서 회사 단위로 편집).
+        "note": "TEXT",
     },
     "vendors": {
         "contact_phone": "VARCHAR(50)",

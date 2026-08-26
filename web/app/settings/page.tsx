@@ -948,26 +948,39 @@ function MyPasswordChange() {
 
 const EMPTY_CUSTOMER: SettingsCustomer = {
   id: 0, name: "", contact: "", contact_phone: "", email: "", country: "", address: "",
-  tax_id: "", tax_invoice_email: "", payment_terms: "", logo: "",
+  tax_id: "", tax_invoice_email: "", note: "", payment_terms: "", logo: "",
   addresses: [], emails: [], phones: [], regions: [],
 };
 
-/* ── Partners — 고객과 벤더를 한 화면에 좌우로 ────────────────────────────────
-   둘은 같은 상대처 명부를 사고 파는 방향으로만 나눈 것이라, 탭을 갈라 두면 한쪽을
-   보다가 "이 회사가 저쪽에도 있었나"를 확인하려고 탭을 오가게 된다. 나란히 두면
-   그 물음이 눈으로 끝난다.
-   각 절반은 예전 탭 그대로다 — 다만 폭이 반이라 목록을 다시 2열로 쪼개지는 않는다
-   (twoCol 을 끈다). 좁은 화면에서는 위아래로 쌓인다. */
+/* ── Partners — 고객과 벤더를 한 번에 한 쪽씩 ─────────────────────────────────
+   둘은 같은 상대처 명부를 사고 파는 방향으로만 나눈 것이라 한 탭 안에 함께 두지만,
+   좌우로 반씩 나눠 놓으면 어느 쪽도 제 폭을 못 쓴다 — 취급품목이나 담당자 이름처럼
+   길이가 있는 칸이 서너 줄로 접힌다. 한 번에 한 쪽만 전폭으로 보이고, 위의 알약
+   전환으로 넘나든다(페이지 탭 밑의 한 급 아래 계층). */
 function PartnersTab() {
+  const [side, setSide] = useState<"customers" | "vendors">("customers");
   return (
-    <div className="ms-split">
-      <CustomersTab half />
-      <VendorsTab half />
-    </div>
+    <>
+      <div className="ms-party-tabs" role="tablist" aria-label="Partner type">
+        {([["customers", "Customer"], ["vendors", "Vendor"]] as const).map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            aria-selected={side === key}
+            className={`ms-party-tab${side === key ? " on" : ""}`}
+            onClick={() => setSide(key)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {side === "customers" ? <CustomersTab /> : <VendorsTab />}
+    </>
   );
 }
 
-function CustomersTab({ half = false }: { half?: boolean }) {
+function CustomersTab() {
   // 회사 공통정보 편집 대상 그룹(같은 회사명의 담당자 레코드들). null = 닫힘.
   const [company, setCompany] = useState<SettingsCustomer[] | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -981,6 +994,10 @@ function CustomersTab({ half = false }: { half?: boolean }) {
         fields={[
           ["tax_id", "Tax ID / Business No."],
           ["tax_invoice_email", "Tax invoice email"],
+        ]}
+        areas={[
+          { key: "note", label: "About this company", rows: 5,
+            placeholder: "What they operate, which fleet or group they belong to, where they are based…" },
         ]}
         save={updateCustomerCompanyInfo}
         onClose={() => setCompany(null)}
@@ -996,7 +1013,7 @@ function CustomersTab({ half = false }: { half?: boolean }) {
       empty={EMPTY_CUSTOMER}
       reloadKey={reloadKey}
       searchText={contactSearchText}
-      twoCol={!half}
+      twoCol
       group={{
         by: (r) => r.name,
         cells: (rs, open) => [
@@ -1185,6 +1202,14 @@ function contactSearchText(r: {
 
 // 회사 공통정보 일괄 수정 — 같은 회사명으로 등록된 담당자 레코드 전체에 한 번에 반영한다.
 // (주소·사업자번호 같은 회사 단위 정보가 레코드마다 복제돼 있어 따로 고치면 어긋난다.)
+/** Company info 창의 전폭 여러 줄 칸 하나. */
+type CompanyArea<T> = {
+  key: keyof T & keyof CompanyInfoSave;
+  label: string;
+  rows?: number;
+  placeholder?: string;
+};
+
 function CompanyInfoModal<
   T extends {
     id: number; name: string; address: string; addresses: string[];
@@ -1193,15 +1218,16 @@ function CompanyInfoModal<
 >({
   rows,
   fields,
-  note,
+  areas,
   save,
   onClose,
   onSaved,
 }: {
   rows: T[];
   fields: [keyof T & keyof CompanyInfoSave, string][];
-  /** 여러 줄로 적는 회사 소개 — 한 줄 칸들과 성격이 달라 폼 아래에 전폭으로 따로 둔다. */
-  note?: [keyof T & keyof CompanyInfoSave, string, string?];
+  /** 문장으로 적는 칸(취급품목·회사 소개) — 한 줄 칸에 넣으면 앞머리만 보여 값을 확인하려면
+      캐럿을 끝까지 밀어야 한다. 폼 아래에 전폭 여러 줄 칸으로 따로 세운다. */
+  areas?: CompanyArea<T>[];
   save: (body: CompanyInfoSave) => Promise<{ ok: boolean; updated: number }>;
   onClose: () => void;
   onSaved: () => void;
@@ -1213,7 +1239,7 @@ function CompanyInfoModal<
   const [vals, setVals] = useState<Record<string, string>>(() => {
     const out: Record<string, string> = { payment_terms: initial("payment_terms" as keyof T), logo: initial("logo" as keyof T) };
     for (const [key] of fields) out[String(key)] = initial(key as keyof T);
-    if (note) out[String(note[0])] = initial(note[0] as keyof T);
+    for (const a of areas ?? []) out[String(a.key)] = initial(a.key as keyof T);
     return out;
   });
   // 주소는 회사 단위 다중값(본사·지사) — 담당자별로 갈라져 있어도 여기서 한 목록으로 모은다.
@@ -1223,7 +1249,7 @@ function CompanyInfoModal<
 
   // 담당자별로 값이 다른 필드 — 저장하면 하나로 통일된다는 걸 미리 알린다.
   const mixed = [...fields, ["payment_terms", "Payment terms"] as (typeof fields)[number],
-                 ...(note ? [[note[0], note[1]] as (typeof fields)[number]] : [])]
+                 ...(areas ?? []).map((a) => [a.key, a.label] as (typeof fields)[number])]
     .filter(([k]) => uniqStrings(rows.map((r) => String(r[k as keyof T] ?? ""))).length > 1)
     .map(([, label]) => label);
 
@@ -1268,17 +1294,17 @@ function CompanyInfoModal<
           onChange={(v) => setVals({ ...vals, payment_terms: v })}
         />
         <LogoPasteField value={vals.logo ?? ""} onChange={(v) => setVals({ ...vals, logo: v })} />
-        {note ? (
-          <label className="form-field company-note-field">
-            <span>{note[1]}</span>
+        {(areas ?? []).map((a) => (
+          <label key={String(a.key)} className="form-field company-area-field">
+            <span>{a.label}</span>
             <textarea
-              rows={5}
-              placeholder={note[2] ?? ""}
-              value={vals[String(note[0])] ?? ""}
-              onChange={(e) => setVals({ ...vals, [String(note[0])]: e.target.value })}
+              rows={a.rows ?? 4}
+              placeholder={a.placeholder ?? ""}
+              value={vals[String(a.key)] ?? ""}
+              onChange={(e) => setVals({ ...vals, [String(a.key)]: e.target.value })}
             />
           </label>
-        ) : null}
+        ))}
       </div>
       <div className="form-actions">
         <button className="btn primary" onClick={submit} disabled={busy || !name.trim()}>
@@ -1629,7 +1655,7 @@ const EMPTY_VENDOR: SettingsVendor = {
   addresses: [], emails: [], phones: [], regions: [],
 };
 
-function VendorsTab({ half = false }: { half?: boolean }) {
+function VendorsTab() {
   const [company, setCompany] = useState<SettingsVendor[] | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const canCreate = can("settings", "create");
@@ -1639,11 +1665,13 @@ function VendorsTab({ half = false }: { half?: boolean }) {
     {company ? (
       <CompanyInfoModal
         rows={company}
-        fields={[
-          ["specialization", "Specialization"],
+        fields={[]}
+        areas={[
+          { key: "specialization", label: "Specialization", rows: 2,
+            placeholder: "Engine spares, hydraulics, deck machinery…" },
+          { key: "note", label: "About this company", rows: 5,
+            placeholder: "What they make or represent, which brands they carry, where they are based…" },
         ]}
-        note={["note", "About this company",
-               "What they make or represent, which brands they carry, where they are based…"]}
         save={updateVendorCompanyInfo}
         onClose={() => setCompany(null)}
         onSaved={() => {
@@ -1658,7 +1686,7 @@ function VendorsTab({ half = false }: { half?: boolean }) {
       empty={EMPTY_VENDOR}
       reloadKey={reloadKey}
       searchText={contactSearchText}
-      twoCol={!half}
+      twoCol
       group={{
         by: (r) => r.name,
         cells: (rs, open) => [

@@ -128,6 +128,7 @@ def settings_customers():
                  "email": c.email or "", "country": c.country or "",
                  "address": c.address or "", "tax_id": c.tax_id or "",
                  "tax_invoice_email": getattr(c, "tax_invoice_email", None) or "",
+                 "note": getattr(c, "note", None) or "",
                  "payment_terms": getattr(c, "payment_terms", None) or "",
                  "logo": getattr(c, "logo", None) or "",
                  "addresses": _multi_out(getattr(c, "addresses", None), c.address),
@@ -198,6 +199,7 @@ def create_customer(body: CustomerCreate):
                      email=body.email or "", country=body.country or "",
                      address=body.address or "", tax_id=body.tax_id or "",
                      tax_invoice_email=body.tax_invoice_email or "",
+                     note=body.note or "",
                      payment_terms=body.payment_terms or "",
                      logo=body.logo or "")
         s.add(c)
@@ -221,7 +223,7 @@ class CompanyInfoSave(BaseModel):
     tax_invoice_email: str | None = None
     payment_terms: str | None = None
     specialization: str | None = None    # Vendor 전용(고객사에서는 무시)
-    note: str | None = None              # Vendor 전용 — 회사 소개 요약
+    note: str | None = None              # 회사 소개 요약(고객사·거래선 공통)
     logo: str | None = None
 
 
@@ -259,7 +261,7 @@ def update_customer_company(body: CompanyInfoSave):
         if not rows:
             raise HTTPException(status_code=404, detail="해당 회사로 등록된 고객사가 없습니다.")
         name = _apply_company_info(
-            rows, body, ("tax_id", "tax_invoice_email", "payment_terms", "logo"))
+            rows, body, ("tax_id", "tax_invoice_email", "note", "payment_terms", "logo"))
         s.commit()
         return {"ok": True, "updated": len(rows), "name": name}
     finally:
@@ -281,6 +283,8 @@ def update_customer(row_id: int, body: CustomerCreate):
         c.address = body.address or ""
         c.tax_id = body.tax_id or ""
         c.tax_invoice_email = body.tax_invoice_email or ""
+        if body.note is not None:
+            c.note = body.note
         c.payment_terms = body.payment_terms or ""
         if body.logo is not None:
             c.logo = body.logo
