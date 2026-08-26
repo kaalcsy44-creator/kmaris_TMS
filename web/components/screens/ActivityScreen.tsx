@@ -24,7 +24,7 @@ import {
   type Activity,
 } from "@/lib/activity";
 import CustomerName from "@/components/common/CustomerName";
-import UnmatchedMailPanel from "@/components/common/UnmatchedMailPanel";
+import UnmatchedMailPanel, { type MailQueue } from "@/components/common/UnmatchedMailPanel";
 import FilterSelect from "@/components/common/FilterSelect";
 import VendorMonograms from "@/components/common/VendorMonograms";
 import ActivityDesc from "@/components/common/ActivityDesc";
@@ -172,11 +172,16 @@ export default function ActivityScreen() {
   const [ageF, setAgeF] = useState<string[]>([]);
   const [custF, setCustF] = useState<string[]>([]);
   const [vendF, setVendF] = useState<string[]>([]);
-  // 탭: 딜별(카드) / 일자별(피드) / 미분류 메일. 대시보드 Mail 탭의 "N unmatched"
-  // 링크가 ?view=mail 로 넘어오므로 초기값을 주소에서 받는다.
+  // 탭: 딜별(카드) / 일자별(피드) / 메일 정리함. 대시보드의 "N unmatched" 와
+  // Settings › Mailbox 의 "N unregistered" 링크가 ?view=mail(&queue=…)로 넘어오므로
+  // 초기값을 주소에서 받는다.
   const [view, setView] = useState<"deal" | "date" | "mail">(
     () => (params.get("view") === "mail" ? "mail" : "deal"),
   );
+  const mailQueue: MailQueue =
+    params.get("queue") === "unknown" ? "unknown"
+      : params.get("queue") === "filed" ? "filed"
+      : "unmatched";
 
   // 일자별 탭에서 보고 있는 주(월요일 ISO). 한 번에 한 주만 그리고, 좌우 화살표로 옮긴다.
   const [weekSel, setWeekSel] = useState(() => weekStart(todayISO()));
@@ -504,12 +509,13 @@ export default function ActivityScreen() {
         >
           Activity (By date)
         </button>
-        {/* 메일함에서 가져왔지만 아직 어느 딜 것인지 정해지지 않은 메일 — 여기서 배정한다. */}
+        {/* 메일 정리함 — 아직 딜에 자리 잡지 못한 메일을 여기서 배정하고, 등록되지
+            않은 상대를 등록·붙이기·무시로 처리한다(탭 안의 함 줄로 갈린다). */}
         <button
           className={view === "mail" ? "on" : ""}
           onClick={() => setView("mail")}
         >
-          Mail (unmatched)
+          Mail
         </button>
         <Link href="/project" className="page-navlink">
           Projects <span className="pn-arrow">→</span>
@@ -560,7 +566,9 @@ export default function ActivityScreen() {
       </div>
       )}
 
-      {view === "mail" ? <UnmatchedMailPanel projects={mailProjects} /> : null}
+      {view === "mail" ? (
+        <UnmatchedMailPanel projects={mailProjects} initialQueue={mailQueue} />
+      ) : null}
 
       {view === "deal" ? (
         <>

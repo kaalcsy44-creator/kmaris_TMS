@@ -11,10 +11,23 @@ import {
 } from "@/lib/api";
 import type { MailMessage, MailStatus, UnmatchedMailGroup } from "@/lib/types";
 import { hm, md } from "@/lib/activity";
+import { isAdmin } from "@/lib/auth";
 import ProjectPicker, { type ProjectPickOption } from "@/components/common/ProjectPicker";
 import PartyName from "@/components/common/PartyName";
+import UnknownAddressPanel from "@/components/common/UnknownAddressPanel";
 
-// 미분류 메일 — 거래처와 오갔지만 어느 딜 것인지 아직 정해지지 않은 메일.
+// 메일 정리함 — 메일함에서 가져왔지만 아직 딜에 자리 잡지 못한 것들.
+//
+// 함은 셋이고, 하나의 깔때기를 앞에서부터 뒤로 나눈 것이다.
+//   Unmatched    — 담겼는데 어느 딜인지 못 정한 대화(기본).
+//   Not deal     — 딜이 있을 수 없어 내려 둔 대화(회사 소개·인사·자동회신).
+//   Unregistered — 상대가 등록되지 않아 **한 통도 담기지 않은** 주소(admin 전용).
+// 셋을 한 화면에 둔 이유: 같은 물음("이 메일은 어디로 가나")의 단계만 다른데, 갈라
+// 놓으면 메일함 한 번 비우려고 두 메뉴를 오가야 한다. 연결 설정(계정·매일 실행·폴더
+// 오류)만 Settings › Mailbox 에 남는다 — 그건 작업이 아니라 설정이다.
+// Unregistered 는 회사 메일함 전체의 상대 주소가 드러나는 자리라 admin 에게만 연다.
+//
+// 아래는 그중 첫 함(미분류)의 이야기다.
 //
 // 다루는 단위는 '한 통'이 아니라 '한 대화'다. 같은 제목의 회신이 열 통씩 쌓이는데
 // 판단은 어차피 한 번이라 — 한 줄에서 딜을 고르면 그 대화 전체가 함께 옮겨간다.
@@ -22,11 +35,16 @@ import PartyName from "@/components/common/PartyName";
 // 붙이고, 근거가 모자란 대화에는 추천 딜만 달아 둔다(붙이지는 않는다) — 추측으로
 // 붙은 이력은 비어 있는 것보다 나쁘기 때문이다. 확정은 사람이 한 번 누른다.
 // 화면 문구는 나머지 화면과 같이 영문으로 쓴다(주석만 국문).
+export type MailQueue = "unmatched" | "filed" | "unknown";
+
 export default function UnmatchedMailPanel({
   projects,
+  initialQueue = "unmatched",
 }: {
   /** 배정 대상 목록(최근 딜이 위). 번호만으로는 고르기 어려워 고객·프로젝트명·선박까지 함께 넘긴다. */
   projects: ProjectPickOption[];
+  /** 처음 열 함 — 주소(?queue=unknown)로 들어온 링크가 곧장 그 함을 편다. */
+  initialQueue?: MailQueue;
 }) {
   const [groups, setGroups] = useState<UnmatchedMailGroup[] | null>(null);
   const [status, setStatus] = useState<MailStatus | null>(null);
@@ -37,9 +55,12 @@ export default function UnmatchedMailPanel({
   const [picked, setPicked] = useState<Record<string, number>>({});
   // 펼쳐 놓은 대화 — 안에 어떤 메일이 들어 있는지 확인하고 고를 수 있게.
   const [open, setOpen] = useState<Record<string, boolean>>({});
-  // '딜 아님'으로 내려 둔 대화를 보는 중인가 — 되돌릴 수 있어야 마음 놓고 내린다.
-  const [showFiled, setShowFiled] = useState(false);
+  // 지금 보고 있는 함. 'filed' 는 되돌릴 수 있어야 마음 놓고 내리기 때문에,
+  // 'unknown' 은 담기지도 않는 메일이 어디로 사라지는지 보이게 하려고 둔다.
+  const [queue, setQueue] = useState<MailQueue>(initialQueue);
+  const showFiled = queue === "filed";
   const [filedCount, setFiledCount] = useState(0);
+  const admin = isAdmin();
 
   const load = useCallback(async () => {
     try {
@@ -65,6 +86,11 @@ export default function UnmatchedMailPanel({
   useEffect(() => {
     load();
   }, [load]);
+
+  // admin 이 아닌데 주소로 unknown 함을 열려 한 경우 — 조용히 기본 함으로 돌린다.
+  useEffect(() => {
+    if (queue === "unknown" && !admin) setQueue("unmatched");
+  }, [queue, admin]);
 
   async function sync() {
     setBusy(true);
@@ -146,15 +172,25 @@ export default function UnmatchedMailPanel({
   }
 
   const total = groups?.reduce((n, g) => n + g.count, 0) ?? 0;
+  const unknownCount = status?.unknown ?? 0;
 
   return (
     <div className="umail">
       <div className="umail-head">
         <span className="act-count">
-          {showFiled ? "not deal-related · " : "unmatched mail · "}
-          {showFiled ? total : status?.unmatched ?? total}
-          {status && !showFiled ? <span className="umail-total"> / {status.total} stored</span> : null}
-          {groups ? <span className="umail-total"> · {groups.length} conversations</span> : null}
+          {queue === "unknown" ? (
+            <>
+              unregistered counterparts · {unknownCount}
+              <span className="umail-total"> · none of their mail is stored</span>
+            </>
+          ) : (
+            <>
+              {showFiled ? "not deal-related · " : "unmatched mail · "}
+              {showFiled ? total : status?.unmatched ?? total}
+              {status && !showFiled ? <span className="umail-total"> / {status.total} stored</span> : null}
+              {groups ? <span className="umail-total"> · {groups.length} conversations</span> : null}
+            </>
+          )}
         </span>
         <div className="umail-actions">
           {status && !status.configured ? (
@@ -167,20 +203,42 @@ export default function UnmatchedMailPanel({
               {lastSync(status) ? ` · last sync ${lastSync(status)}` : ""}
             </span>
           )}
-          {/* 내려 둔 대화를 다시 볼 수 있어야, 내리는 판단이 되돌릴 수 있는 것이 된다. */}
-          {filedCount > 0 || showFiled ? (
+          {/* 함 고르기. 셋을 한 줄에 두면 "무엇이 얼마나 남았나"가 한눈에 보이고,
+              내려 둔 대화도 등록 안 된 상대도 되돌릴 수 있는 것이 된다. */}
+          <div className="umail-queues" role="tablist">
             <button
-              className={`btn sm${showFiled ? " primary" : ""}`}
+              className={`btn sm${queue === "unmatched" ? " primary" : ""}`}
               disabled={busy}
-              title="Conversations filed as not deal-related"
-              onClick={() => setShowFiled((v) => !v)}
+              title="Conversations we have but could not file under a deal"
+              onClick={() => setQueue("unmatched")}
             >
-              {showFiled ? "← Back to unmatched" : `Not deal-related (${filedCount})`}
+              Unmatched{status ? ` (${status.unmatched})` : ""}
             </button>
-          ) : null}
+            {filedCount > 0 || showFiled ? (
+              <button
+                className={`btn sm${showFiled ? " primary" : ""}`}
+                disabled={busy}
+                title="Conversations filed as not deal-related"
+                onClick={() => setQueue("filed")}
+              >
+                Not deal-related ({filedCount})
+              </button>
+            ) : null}
+            {/* 회사 메일함 전체의 상대 주소가 드러나는 자리 — admin 에게만 연다. */}
+            {admin ? (
+              <button
+                className={`btn sm${queue === "unknown" ? " primary" : ""}`}
+                disabled={busy}
+                title="Addresses we exchanged mail with that are registered nowhere — none of it is stored"
+                onClick={() => setQueue("unknown")}
+              >
+                Unregistered ({unknownCount})
+              </button>
+            ) : null}
+          </div>
           <button
             className="btn sm"
-            disabled={busy || !groups?.length || showFiled}
+            disabled={busy || !groups?.length || queue !== "unmatched"}
             title="File every mail whose deal is a matter of record — same thread, deal document number, or the same subject."
             onClick={autoMatch}
           >
@@ -197,7 +255,11 @@ export default function UnmatchedMailPanel({
         <div key={e} className="action-err">{e}</div>
       ))}
 
-      {!groups ? (
+      {queue === "unknown" ? (
+        // 등록되지 않은 상대 — 담기지도 않은 메일이라 표 모양이 아주 다르다(대화가
+        // 아니라 주소 단위). 같은 함 줄 아래에 두되 그리는 일은 따로 맡긴다.
+        <UnknownAddressPanel projects={projects} onChanged={load} />
+      ) : !groups ? (
         <div className="state">Loading…</div>
       ) : groups.length === 0 ? (
         <p className="mail-empty">

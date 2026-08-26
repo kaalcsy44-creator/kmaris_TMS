@@ -12210,14 +12210,24 @@ table.mini.wide.umail-table th.umail-c-assign,
 table.mini.wide.umail-table td.umail-c-assign { width: 340px; }
 .umail-c-assign select { width: 100%; max-width: 100%; }
 .umail-c-assign { white-space: nowrap; }
-/* Settings › Mailbox — 미등록 주소를 딜에 붙이는 칸. 고르는 것과 누르는 것이 한 줄에
-   나란히 서야 "골라서 붙인다"가 한 동작으로 읽힌다. 좁아지면 버튼이 아래로 내려간다. */
-.mbx-attach { white-space: nowrap; }
-.mbx-attach .pjpick { display: inline-block; min-width: 150px; max-width: 100%; vertical-align: middle; }
-.mbx-attach .btn.sm { margin-left: 6px; vertical-align: middle; }
+/* 함 고르기 — Unmatched / Not deal-related / Unregistered. 세 버튼을 붙여 한 덩이로
+   두면 "지금 어느 함을 보고 있나"가 한눈에 읽히고, 옆의 Auto-match·Sync(동작 버튼)와
+   섞이지 않는다. */
+.umail-queues { display: inline-flex; gap: 4px; margin-right: 4px; }
+
+/* Mail › Unregistered — 담기지도 않은 상대 주소를 다루는 함. 대화가 아니라 주소 단위라
+   표 모양이 달라서 클래스를 따로 둔다. */
+.uaddr { margin-top: 4px; }
+.uaddr-hint { display: block; margin-bottom: 8px; }
+.uaddr-title { margin-top: 22px; }
+/* 붙이는 칸 — 고르는 것과 누르는 것이 한 줄에 나란히 서야 "골라서 붙인다"가 한 동작으로
+   읽힌다. 좁아지면 버튼이 아래로 내려간다. */
+th.uaddr-c-attach, td.uaddr-c-attach { width: 260px; white-space: nowrap; }
+.uaddr-c-attach .pjpick { display: inline-block; min-width: 150px; max-width: 100%; vertical-align: middle; }
+.uaddr-c-attach .btn.sm { margin-left: 6px; vertical-align: middle; }
 @media (max-width: 1100px) {
-  .mbx-attach { white-space: normal; }
-  .mbx-attach .btn.sm { margin: 6px 0 0; }
+  td.uaddr-c-attach { white-space: normal; }
+  .uaddr-c-attach .btn.sm { margin: 6px 0 0; }
 }
 /* "Not a deal" — 배정만큼 자주 쓰는 자리지만 주된 동작은 아니다. Assign 옆에 두되
    눈에 먼저 들어오지 않게 옅게 둔다(누르면 그 대화가 함에서 내려간다). */

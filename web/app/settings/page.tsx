@@ -56,15 +56,9 @@ import {
   saveEmailSignature,
   previewEmailSignature,
   fetchMailStatus,
-  fetchMailUnknownAddresses,
-  ignoreMailUnknownAddress,
-  attachMailAddressToProject,
-  detachMailAddress,
-  fetchPipeline,
   syncMail,
 } from "@/lib/api";
-import type { MailAddrLink, MailStatus, MailUnknownAddr, PipelineRow } from "@/lib/types";
-import ProjectPicker, { type ProjectPickOption } from "@/components/common/ProjectPicker";
+import type { MailStatus } from "@/lib/types";
 import type {
   PermissionsConfig,
   RolePermRow,
@@ -4097,31 +4091,24 @@ function EmailTemplatesTab() {
   );
 }
 
-/* ── Mailbox — 회사 메일함 연동 상태와, 아직 등록되지 않은 상대 ─────────────────
-   메일 이력의 저장 범위는 "Settings 에 등록된 고객·벤더와 오간 메일"이다. 좁게 잡은
-   덕에 사내·개인 메일이 들어오지 않지만, 대가로 **아직 등록하지 않은 거래처의 메일은
-   통째로 버려진다.** 그동안 남는 건 skipped 통수뿐이라 무엇을 놓쳤는지 알 길이 없었고,
-   그러면 "이 대시보드가 우리 메일의 얼마를 담고 있나"에 답할 수 없다.
-   이 화면은 그 물음에 답하는 자리다 — 버린 메일의 상대를 세어 보여 주고, 진짜 거래처면
-   Customer/Vendor 탭에서 등록하게 하고, 아니면 눌러서 목록에서 내리게 한다. */
+/* ── Mailbox — 회사 메일함 연동 상태 ────────────────────────────────────────
+   여기는 **설정**만 본다: 어느 계정을 어떤 주기로 읽고 있는지, 마지막 실행이 무엇을
+   했는지, 폴더에 오류가 있는지. 지금 당장 받아 보고 싶을 때 쓰는 Sync 도 함께.
+
+   처리할 것 — 딜을 못 정한 메일(unmatched), 등록되지 않은 상대(unregistered) — 는
+   여기 있지 않고 Activity › Mail 에 함께 있다. 둘은 같은 물음("이 메일은 어디로
+   가나")의 단계만 다른 일감이라 한 자리에 있어야 하고, 그 일은 설정이 아니라 매일
+   하는 작업이라 admin 전용 화면에 가둘 것도 아니다(미등록 상대 함만 admin 전용).
+   그래서 이 표는 그리로 가는 문패 두 개를 달아 둔다. */
 function MailboxTab() {
   const [status, setStatus] = useState<MailStatus | null>(null);
-  const [rows, setRows] = useState<MailUnknownAddr[] | null>(null);
-  // 딜에 붙여 둔 주소 — 거래처로 등록하지 않고 딜 하나에 매어 둔 상대.
-  const [links, setLinks] = useState<MailAddrLink[]>([]);
-  // 딜 목록(붙일 대상). 주소 줄마다 고른 딜은 아직 붙이기 전의 선택이다.
-  const [projects, setProjects] = useState<ProjectPickOption[]>([]);
-  const [picked, setPicked] = useState<Record<string, number>>({});
   const [busy, setBusy] = useState("");
   const [note, setNote] = useState("");
   const [err, setErr] = useState("");
 
   const load = useCallback(async () => {
     try {
-      const [st, un] = await Promise.all([fetchMailStatus(), fetchMailUnknownAddresses()]);
-      setStatus(st);
-      setRows(un.rows);
-      setLinks(un.links || []);
+      setStatus(await fetchMailStatus());
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Could not load mailbox status");
     }
@@ -4130,32 +4117,6 @@ function MailboxTab() {
   useEffect(() => {
     load();
   }, [load]);
-
-  // 딜 목록은 한 번만 읽는다 — 이 탭에서는 붙일 대상을 고르는 데만 쓴다.
-  useEffect(() => {
-    let alive = true;
-    fetchPipeline()
-      .then((d) => {
-        if (!alive) return;
-        setProjects(
-          [...(d.rows ?? [])]
-            .sort((a, b) => projectNoOf(b).localeCompare(projectNoOf(a), undefined, { numeric: true }))
-            .map((r) => ({
-              rfqId: r.rfq_id,
-              no: projectNoOf(r),
-              workType: r.work_type || "부품공급",
-              customer: r.customer || "",
-              title: r.project_title || "",
-              // 여러 척이면 줄바꿈으로 온다 — 고르는 줄에는 첫 척만 싣는다.
-              vessel: (r.vessel || "").split(/\r?\n/)[0].trim(),
-            }))
-        );
-      })
-      .catch(() => setProjects([]));
-    return () => {
-      alive = false;
-    };
-  }, []);
 
   // 수동 Sync — 자동 실행이 하루 한 번이라, 지금 당장 받아 보고 싶을 때 쓴다.
   async function syncNow() {
@@ -4179,71 +4140,6 @@ function MailboxTab() {
     }
   }
 
-  async function ignore(addr: string) {
-    setBusy(addr);
-    setErr("");
-    try {
-      const r = await ignoreMailUnknownAddress(addr);
-      setRows(r.rows);
-      setLinks(r.links || []);
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "Could not ignore");
-    } finally {
-      setBusy("");
-    }
-  }
-
-  // 주소를 딜에 붙인다 — 그 자리에서 지난 메일까지 찾아 담으므로 몇 초 걸린다.
-  async function attach(addr: string) {
-    const rfqId = picked[addr];
-    if (!rfqId) return;
-    setBusy(addr);
-    setErr("");
-    setNote("");
-    try {
-      const r = await attachMailAddressToProject(addr, rfqId);
-      const no = projects.find((p) => p.rfqId === rfqId)?.no || `#${rfqId}`;
-      const parts = [`Linked ${addr} to ${no}`];
-      if (r.fetched.stored) parts.push(`fetched ${r.fetched.stored} past mails`);
-      if (r.adopted) parts.push(`moved ${r.adopted} already-stored mails`);
-      if (r.spread) parts.push(`${r.spread} more followed on the same evidence`);
-      if (!r.fetched.stored && !r.adopted) {
-        parts.push("nothing found in the mailbox window — new mail will arrive from the next sync");
-      }
-      setNote(`${parts.join(" · ")}.`);
-      if (r.warn) setErr(r.warn);
-      setRows(r.rows);
-      setLinks(r.links || []);
-      setPicked((p) => {
-        const next = { ...p };
-        delete next[addr];
-        return next;
-      });
-      // 담긴 통수가 status 의 total·unmatched 를 바꾼다 — 머리 표를 다시 읽는다.
-      fetchMailStatus().then(setStatus).catch(() => undefined);
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "Could not attach this address");
-    } finally {
-      setBusy("");
-    }
-  }
-
-  async function detach(addr: string) {
-    setBusy(addr);
-    setErr("");
-    setNote("");
-    try {
-      const r = await detachMailAddress(addr);
-      setRows(r.rows);
-      setLinks(r.links || []);
-      setNote(`${addr} is no longer linked — mail already filed under the deal stays.`);
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "Could not unlink this address");
-    } finally {
-      setBusy("");
-    }
-  }
-
   if (!status) return <div className="state">{err || "Loading…"}</div>;
 
   const auto = status.auto;
@@ -4255,6 +4151,10 @@ function MailboxTab() {
   const lastParts = resultParts(last);
   const manual = status.manual || { last_at: "", last_result: {} };
   const manualParts = resultParts(manual.last_result);
+  // 폴더별 마지막 오류 — 여기 말고는 "왜 안 들어오나"를 볼 자리가 없다.
+  const syncErrors = (status.folders ?? [])
+    .filter((f) => f.last_error)
+    .map((f) => `${f.folder}: ${f.last_error}`);
 
   return (
     <div className="panel">
@@ -4280,6 +4180,20 @@ function MailboxTab() {
               ) : null}
             </td>
           </tr>
+          {/* 담기지 **않은** 메일의 상대. 처리는 Activity › Mail 에서 하고, 여기서는
+              "얼마나 버려지고 있나"만 알려 주고 그리로 보낸다 — 이 표는 설정이지 일감이
+              아니다. 0 이면 줄 자체를 내지 않는다(할 일이 없으면 문패도 필요 없다). */}
+          {status.unknown > 0 ? (
+            <tr>
+              <th>Not stored</th>
+              <td>
+                <a href="/activity?view=mail&queue=unknown">
+                  {status.unknown} unregistered counterparts
+                </a>
+                <span className="muted"> · their mail is discarded until you register, attach, or dismiss them</span>
+              </td>
+            </tr>
+          ) : null}
           <tr>
             <th>Daily run</th>
             <td>
@@ -4330,6 +4244,16 @@ function MailboxTab() {
               )}
             </td>
           </tr>
+          {syncErrors.length ? (
+            <tr>
+              <th>Folder errors</th>
+              <td>
+                {syncErrors.map((e) => (
+                  <div key={e} className="action-err">{e}</div>
+                ))}
+              </td>
+            </tr>
+          ) : null}
         </tbody>
       </table>
       <div className="form-actions">
@@ -4346,144 +4270,10 @@ function MailboxTab() {
             Refresh status
           </button>
         ) : null}
+        <a className="btn" href="/activity?view=mail">Open Mail workspace →</a>
         {note ? <span className="action-ok">{note}</span> : null}
         {err ? <span className="action-err">{err}</span> : null}
       </div>
-
-      <h3 className="form-title" style={{ marginTop: 22 }}>
-        Unregistered counterparts
-        {rows && rows.length ? <span className="muted"> — {rows.length}</span> : null}
-      </h3>
-      <p className="hint-inline" style={{ display: "block", marginBottom: 8 }}>
-        Mail was exchanged with these addresses but they are not registered as a customer or
-        vendor, so <b>none of it is being stored.</b> Three ways out:{" "}
-        <b>register</b> the real counterparts on the Customer / Vendor tab (their mail arrives
-        from the next sync), <b>attach</b> one-deal contacts — surveyors, owner&apos;s reps,
-        yard staff — straight to the project below, or <b>dismiss</b> the rest.
-      </p>
-      {rows === null ? (
-        <div className="state">Loading…</div>
-      ) : rows.length === 0 ? (
-        <div className="state">
-          {status.total === 0
-            ? "Nothing yet — run a sync first."
-            : "Every counterpart we exchanged mail with is registered. 🎉"}
-        </div>
-      ) : (
-        <div className="table-wrap">
-          <table className="mini wide">
-            <thead>
-              <tr>
-                <th>Address</th>
-                <th>Name</th>
-                <th className="num">Mails</th>
-                <th>Last</th>
-                <th>Latest subject</th>
-                <th style={{ width: 260 }}>Attach to project</th>
-                <th style={{ width: 90 }} />
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.addr}>
-                  <td>{r.addr}</td>
-                  <td>{r.name || "—"}</td>
-                  <td className="num">{r.count}</td>
-                  <td>{(r.last_at || "").slice(0, 10) || "—"}</td>
-                  <td className="muted">{r.subject || "—"}</td>
-                  {/* 거래처로 올릴 상대는 아니지만 딜 하나에는 속하는 사람 — 여기서
-                      곧장 그 딜에 붙인다. 붙이면 지난 메일도 그 자리에서 찾아 담는다. */}
-                  <td className="mbx-attach">
-                    <ProjectPicker
-                      value={picked[r.addr] ?? ""}
-                      options={projects}
-                      onChange={(id) =>
-                        setPicked((p) => ({ ...p, [r.addr]: id === "" ? 0 : id }))
-                      }
-                      disabled={!!busy || projects.length === 0}
-                    />
-                    <button
-                      className="btn sm primary"
-                      disabled={!!busy || !picked[r.addr]}
-                      title="Store this address's mail under the chosen project — past mail included"
-                      onClick={() => attach(r.addr)}
-                    >
-                      {busy === r.addr ? "Fetching…" : "Attach"}
-                    </button>
-                  </td>
-                  <td>
-                    <button
-                      className="btn sm"
-                      disabled={!!busy}
-                      title="Not a counterpart — stop counting this address"
-                      onClick={() => ignore(r.addr)}
-                    >
-                      {busy === r.addr ? "…" : "Dismiss"}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* 붙여 둔 주소 — 되돌릴 수 있어야 사람이 마음 놓고 붙인다. Stored 가 0 이면
-          주소를 잘못 골랐거나 기간(IMAP_SINCE_DAYS) 밖의 메일이라는 뜻이다. */}
-      {links.length > 0 ? (
-        <>
-          <h3 className="form-title" style={{ marginTop: 22 }}>
-            Attached to a project<span className="muted"> — {links.length}</span>
-          </h3>
-          <p className="hint-inline" style={{ display: "block", marginBottom: 8 }}>
-            These addresses are not customers or vendors, but their mail is kept and filed under
-            the deal below. Evidence still wins — a mail carrying another deal&apos;s document
-            number goes to that deal instead.
-          </p>
-          <div className="table-wrap">
-            <table className="mini wide">
-              <thead>
-                <tr>
-                  <th>Address</th>
-                  <th>Name</th>
-                  <th>Project</th>
-                  <th className="num">Stored</th>
-                  <th>Linked</th>
-                  <th style={{ width: 90 }} />
-                </tr>
-              </thead>
-              <tbody>
-                {links.map((l) => (
-                  <tr key={l.addr}>
-                    <td>{l.addr}</td>
-                    <td>{l.name || "—"}</td>
-                    <td>
-                      <a href={`/project?rfq=${l.rfq_id}&view=overview`}>{l.project_no || `#${l.rfq_id}`}</a>
-                    </td>
-                    <td className="num">{l.stored || "—"}</td>
-                    <td className="muted">{l.linked_at || "—"}</td>
-                    <td>
-                      <button
-                        className="btn sm"
-                        disabled={!!busy}
-                        title="Stop storing this address — mail already filed under the deal stays"
-                        onClick={() => detach(l.addr)}
-                      >
-                        {busy === l.addr ? "…" : "Unlink"}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
-      ) : null}
     </div>
   );
-}
-
-/** 딜 번호 한 줄 — 번호가 아직 없는 딜(신규)은 KMS RFQ No. 로 대신한다. */
-function projectNoOf(r: PipelineRow): string {
-  return r.project_no || r.kmaris_rfq_no || "";
 }
