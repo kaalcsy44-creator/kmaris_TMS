@@ -3011,8 +3011,12 @@ table.pipeline tbody tr.service .pl-stage-segs .seg.on {
 .pl-modal--form .form-grid .company-area-field {
   grid-column: 1 / -1;
 }
-.company-area-field textarea {
+/* 높이는 각 칸의 rows 가 정한다(취급품목 3줄, 회사 소개 5줄) — 본문 편집용인 전역
+   .form-field textarea{min-height:240px} 를 이기려면 클래스 2개로 명시도를 높여야 한다.
+   그대로 두면 두 칸 모두 240px 로 벌어져 팝업이 세로로 길어진다. */
+.form-field.company-area-field textarea {
   width: 100%;
+  min-height: 0;
   resize: vertical;
   line-height: 1.5;
 }

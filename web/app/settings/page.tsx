@@ -1667,7 +1667,7 @@ function VendorsTab() {
         rows={company}
         fields={[]}
         areas={[
-          { key: "specialization", label: "Specialization", rows: 2,
+          { key: "specialization", label: "Specialization", rows: 3,
             placeholder: "Engine spares, hydraulics, deck machinery…" },
           { key: "note", label: "About this company", rows: 5,
             placeholder: "What they make or represent, which brands they carry, where they are based…" },
