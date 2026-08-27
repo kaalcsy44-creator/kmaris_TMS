@@ -2239,21 +2239,27 @@ def _make_purchase_order_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> b
     incoterms = terms.get("incoterms", "")
     place = terms.get("delivery_place", "")
     incoterms_line = " · ".join([x for x in (incoterms, place) if x])
+    # 발주서 양식(1. Order information / 2. Supplier information)과 같은 항목·순서.
+    # 6단계 편집 화면의 입력칸이 이 두 상자를 그대로 채운다.
     left_rows = [
         ("Supplier / Seller", vendor.get("name", "")),
         ("Address", vendor.get("address", "")),
         ("Contact", vendor.get("contact", "")),
+        ("Tel.", vendor.get("phone", "")),
         ("Email", vendor.get("email", "")),
         ("Ship Name", vessel.get("name", "")),
-        ("Engine Type", vessel.get("engine_type", "")),
+        ("IMO No.", vessel.get("imo", "")),
+        ("Project", data.get("project_title", "") or ""),
     ]
     right_rows = [
         ("P/O No.", data.get("doc_no", "")),
         ("Date", data.get("date", "")),
+        ("Quotation No.", terms.get("vendor_quote_no", "")),
+        ("Requested Date", terms.get("requested_date", "")),
         ("Currency", currency),
-        ("IMO No.", vessel.get("imo", "")),
         ("Incoterms", incoterms_line),
         ("Payment", terms.get("payment_terms", "")),
+        ("Engine Type", vessel.get("engine_type", "")),
     ]
 
     def meta_box(rows):

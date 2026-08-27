@@ -996,7 +996,12 @@ def vendor_options(s) -> list[dict]:
     """드롭다운용 벤더 마스터 — 이름순 + 거래 빈도(uses). 정렬(자주 거래 우선)은
     uses 를 보고 화면(VendorSelect)에서 그룹으로 나눠 처리한다."""
     uses = vendor_usage_counts(s)
+    # contact/phone/address 는 발주서(6단계) "Supplier information" 칸을 채운다 —
+    # 벤더 마스터가 원본이라 화면은 그 값을 읽기전용으로 비추기만 한다.
     return [{"id": v.id, "name": v.name, "email": v.email or "",
+             "contact": v.contact or "",
+             "phone": v.contact_phone or "",
+             "address": v.address or "",
              "logo": getattr(v, "logo", None) or "",
              "uses": uses.get(v.id, 0)}
             for v in s.query(Vendor).order_by(Vendor.name).all()]

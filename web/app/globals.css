@@ -4180,6 +4180,10 @@ a.btn.primary:hover {
 .form-grid--thirds {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
+/* 주소·프로젝트명처럼 긴 한 줄 값 — 반 칸에 가두면 앞머리만 보이므로 한 행을 통째로 쓴다. */
+.form-grid > .form-field--full {
+  grid-column: 1 / -1;
+}
 /* 견적 편집기 — 문서정보 4필드를 한 줄로 고정(3+1 로 깨져 생기던 끝칸 공백 방지).
    폭은 균등이 아니라 값 길이에 비례 배분한다 — 1번칸("2026-07-09 · Jinwoo Engineering ·
    JWE-…" 처럼 긴 벤더견적 라벨)은 넓히고 문서번호 칸은 좁힌다. 두 줄(문서정보 / Messrs·

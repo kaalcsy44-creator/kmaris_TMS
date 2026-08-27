@@ -1519,20 +1519,25 @@ def make_purchase_order_xlsx(
         ("Supplier / Seller", vendor.get("name", "")),
         ("Address", vendor.get("address", "")),
         ("Contact", vendor.get("contact", "")),
+        ("Tel.", vendor.get("phone", "")),
         ("Email", vendor.get("email", "")),
         ("Ship Name", vessel.get("name", "")),
-        ("Engine Type", vessel.get("engine_type", "")),
+        ("IMO No.", vessel.get("imo", "")),
+        ("Project", data.get("project_title", "") or ""),
     ]
     right_rows = [
         ("P/O No.", data.get("doc_no", "")),
         ("Date", data.get("date", "")),
+        ("Quotation No.", terms.get("vendor_quote_no", "")),
+        ("Requested Date", terms.get("requested_date", "")),
         ("Currency", currency),
-        ("IMO No.", vessel.get("imo", "")),
         ("Incoterms", incoterms_line),
         ("Payment", terms.get("payment_terms", "")),
+        ("Engine Type", vessel.get("engine_type", "")),
     ]
     META_ROW = 7
-    for i in range(6):
+    META_ROWS = len(left_rows)
+    for i in range(META_ROWS):
         r = META_ROW + i
         for (c1, c2), value, is_label in (
             ((1, 2), left_rows[i][0], True), ((3, 4), left_rows[i][1], False),
@@ -1547,7 +1552,7 @@ def make_purchase_order_xlsx(
         ws.row_dimensions[r].height = 13.5 * min(lines, 3) + 2
 
     # ── 품목표 ─────────────────────────────────────────────────────────
-    HROW = META_ROW + 6 + 1          # 정보박스 아래 한 줄 띄우고 머리행
+    HROW = META_ROW + META_ROWS + 1  # 정보박스 아래 한 줄 띄우고 머리행
     ws.row_dimensions[HROW - 1].height = 8
     for ci, h in enumerate(HEADERS, start=1):
         put(HROW, ci, h, fill=navy, font=white_hdr, align=center).border = bdr

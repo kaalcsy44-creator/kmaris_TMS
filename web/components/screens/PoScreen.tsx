@@ -34,9 +34,11 @@ import Modal from "@/components/common/Modal";
 import BaseMetaRows, { ModalTitle } from "@/components/common/BaseMeta";
 import CurrencyToggle from "@/components/common/CurrencyToggle";
 import TermsEditor from "@/components/common/TermsEditor";
+import ComboBox from "@/components/common/ComboBox";
 import DocSendPanel from "@/components/common/DocSendPanel";
 import DetailTabBar, { DetailTab } from "@/components/common/DetailTabBar";
 import { sortByDocNo } from "@/lib/sort";
+import { TERM_PRESETS } from "@/lib/terms";
 import {
   amountInputValue,
   DeleteSelectedButton,
@@ -70,6 +72,7 @@ import type {
   VendorQuoteForImport,
   QuotationTerms,
   RfqSourceFile,
+  VendorOption,
 } from "@/lib/types";
 import SourceFilesList from "@/components/common/SourceFilesList";
 import { withDefaultTerms } from "@/lib/terms";
@@ -994,6 +997,131 @@ function VendorPoPdfPreviewButton({
   );
 }
 
+// 발주서(PURCHASE ORDER) 문서 양식의 입력칸 — 발행 문서와 같은 순서·같은 묶음으로 묻는다.
+// 문서 머리(발주번호 · 발주일자 · 견적번호) → 1. 발주 정보 → 2. 공급자 정보.
+// 아래에 6단계의 품목표(3. 발주 품목)와 Terms & Conditions 가 이어진다.
+//
+// 선박·프로젝트는 딜에서 정해지고, 공급자 담당자·연락처·주소는 벤더 마스터가 원본이라
+// 여기선 읽기전용으로 비춘다 — 발주서에 무엇이 찍히는지는 보이되 사본이 생기지 않도록.
+function PoDocFields({
+  vendorId,
+  onVendorId,
+  vendorChoices,
+  poNoField,
+  date,
+  onDate,
+  currency,
+  onCurrency,
+  terms,
+  onTerms,
+  vessel,
+  projectTitle,
+}: {
+  vendorId: number | "";
+  onVendorId: (id: number | "") => void;
+  vendorChoices: VendorOption[];
+  // K-Maris PO No. 칸 — 신규(자동채번 토글)와 편집(직접 입력)의 생김새가 달라 주입받는다.
+  poNoField: React.ReactNode;
+  date: string;
+  onDate: (v: string) => void;
+  currency: string;
+  onCurrency: (v: string) => void;
+  terms: QuotationTerms;
+  onTerms: (t: QuotationTerms) => void;
+  vessel?: string;
+  projectTitle?: string;
+}) {
+  const vendor = vendorChoices.find((v) => v.id === vendorId);
+  const set = (patch: Partial<QuotationTerms>) => onTerms({ ...terms, ...patch });
+
+  return (
+    <>
+      <div className="form-grid form-grid--thirds">
+        {poNoField}
+        <div className="form-field">
+          <label>PO date</label>
+          <input type="date" value={date} onChange={(e) => onDate(e.target.value)} />
+        </div>
+        <div className="form-field">
+          <label>Quotation No.</label>
+          <input
+            value={terms.vendor_quote_no ?? ""}
+            onChange={(e) => set({ vendor_quote_no: e.target.value })}
+            placeholder="Vendor quotation this order is based on"
+          />
+        </div>
+      </div>
+
+      <div className="form-section-title">1. Order information</div>
+      <div className="form-grid">
+        <div className="form-field">
+          <label>Requested delivery date</label>
+          <input
+            type="date"
+            value={terms.requested_date ?? ""}
+            onChange={(e) => set({ requested_date: e.target.value })}
+          />
+        </div>
+        <div className="form-field">
+          <label>Payment terms</label>
+          <ComboBox
+            value={terms.payment_terms ?? ""}
+            onChange={(v) => set({ payment_terms: v })}
+            options={TERM_PRESETS.payment_terms}
+          />
+        </div>
+        <div className="form-field">
+          <label>Vessel name</label>
+          <input value={vessel || ""} readOnly placeholder="—" />
+        </div>
+        <div className="form-field">
+          <label>Currency</label>
+          <CurrencyToggle value={currency} onChange={onCurrency} />
+        </div>
+        <div className="form-field form-field--full">
+          <label>Project</label>
+          <input value={projectTitle || ""} readOnly placeholder="—" />
+        </div>
+      </div>
+
+      <div className="form-section-title">2. Supplier information</div>
+      <div className="form-grid">
+        <div className="form-field">
+          <label>Supplier</label>
+          <VendorSelect value={vendorId} options={vendorChoices} onChange={onVendorId} />
+        </div>
+        <div className="form-field">
+          <label>Contact</label>
+          <input value={vendor?.contact || ""} readOnly placeholder="—" />
+        </div>
+        <div className="form-field">
+          <label>Tel.</label>
+          <input value={vendor?.phone || ""} readOnly placeholder="—" />
+        </div>
+        <div className="form-field">
+          <label>Email</label>
+          <input value={vendor?.email || ""} readOnly placeholder="—" />
+        </div>
+        <div className="form-field form-field--full">
+          <label>Address</label>
+          <input value={vendor?.address || ""} readOnly placeholder="—" />
+        </div>
+        <div className="form-field form-field--full">
+          <label>Delivery place</label>
+          <ComboBox
+            value={terms.delivery_place ?? ""}
+            onChange={(v) => set({ delivery_place: v })}
+            options={TERM_PRESETS.delivery_place}
+          />
+        </div>
+      </div>
+      <span className="hint-inline">
+        Contact · Tel. · Email · Address come from the supplier record — change them in Settings › Partners.
+      </span>
+    </>
+  );
+}
+
 function VendorPoDetailModal({
   id,
   options,
@@ -1059,6 +1187,8 @@ function VendorPoDetailModal({
     setItems(poItemsFromVendorQuote(vq));
     const v = options.vendors.find((x) => x.name === vq.vendor);
     if (v) setVendorId(v.id);
+    // 발주서 머리의 Quotation No. — 이 발주의 근거가 된 견적번호를 그대로 물려받는다.
+    setTerms((t) => ({ ...t, vendor_quote_no: vq.vendor_quote_no || t.vendor_quote_no }));
     setErr(null);
   }
 
@@ -1124,29 +1254,31 @@ function VendorPoDetailModal({
           ) : null}
 
           <fieldset {...fieldsetProps}>
-          <div className="form-grid">
-            <div className="form-field">
-              <label>Vendor</label>
-              <VendorSelect value={vendorId} options={vendorChoices} onChange={setVendorId} />
-            </div>
-            <div className="form-field">
-              <label>K-Maris PO No.</label>
-              <input
-                value={poNo}
-                onChange={(e) => setPoNo(e.target.value)}
-                placeholder="KMS-ORD-…"
-              />
-            </div>
-            <div className="form-field">
-              <label>PO date</label>
-              <input type="date" value={poDate} onChange={(e) => setPoDate(e.target.value)} />
-            </div>
-            <div className="form-field">
-              <label>Currency</label>
-              <CurrencyToggle value={currency} onChange={setCurrency} />
-            </div>
-          </div>
+          <PoDocFields
+            vendorId={vendorId}
+            onVendorId={setVendorId}
+            vendorChoices={vendorChoices}
+            poNoField={
+              <div className="form-field">
+                <label>K-Maris PO No.</label>
+                <input
+                  value={poNo}
+                  onChange={(e) => setPoNo(e.target.value)}
+                  placeholder="KMS-ORD-…"
+                />
+              </div>
+            }
+            date={poDate}
+            onDate={setPoDate}
+            currency={currency}
+            onCurrency={setCurrency}
+            terms={terms}
+            onTerms={setTerms}
+            vessel={d.vessel}
+            projectTitle={d.project_title}
+          />
           <ItemEditor
+            title="3. Order items"
             items={items}
             onChange={setItems}
             currency={currency}
@@ -1160,7 +1292,8 @@ function VendorPoDetailModal({
               ) : null
             }
           />
-          <TermsEditor terms={terms} onChange={setTerms} />
+          {/* Payment Terms·Place 는 위 1·2번 칸에서 이미 물었으므로 여기선 뺀다. */}
+          <TermsEditor terms={terms} onChange={setTerms} omit={["payment_terms", "delivery_place"]} />
           </fieldset>
           {/* 하단 고정바 — 좌(Preview) / 중앙(총액) / 우(Delete·Cancel·Save) 3구역.
               7단계 문서 편집기(.doc-actions)와 동일한 규약. */}
@@ -1644,6 +1777,8 @@ function VendorPoCreate({
     setItems(poItemsFromVendorQuote(vq));
     const v = options.vendors.find((x) => x.name === vq.vendor);
     if (v) setVendorId(v.id);
+    // 발주서 머리의 Quotation No. — 이 발주의 근거가 된 견적번호를 그대로 물려받는다.
+    setTerms((t) => ({ ...t, vendor_quote_no: vq.vendor_quote_no || t.vendor_quote_no }));
     setErr(null);
     setMsg(`Loaded ${vq.items.length} item(s) from vendor quote ${vq.vendor_quote_no} (${vq.vendor}).`);
   }
@@ -1690,21 +1825,10 @@ function VendorPoCreate({
         </span>
       ) : (
       <>
-      <div className="form-grid">
-        {fixedOrder ? (
-          <>
-            {/* 대상 오더는 상단 P/O 선택기가 정한다. 여기서는 선박·프로젝트명을
-                해당 고객 P/O에서 자동으로 불러와 읽기전용으로 보여준다. */}
-            <div className="form-field">
-              <label>Vessel</label>
-              <input value={order?.vessel || "—"} readOnly />
-            </div>
-            <div className="form-field">
-              <label>Project name</label>
-              <input value={order?.project_title || order?.project_no || "—"} readOnly />
-            </div>
-          </>
-        ) : (
+      {/* 대상 오더는 상단 P/O 선택기가 정한다(embedded). 전역 "Create PO" 모달에서만
+          어느 오더에 발주하는지 직접 고른다 — 선박·프로젝트는 그 오더에서 따라온다. */}
+      {!fixedOrder ? (
+        <div className="form-grid">
           <div className="form-field">
             <label>Select target order</label>
             <select value={orderId} onChange={(e) => setOrderId(e.target.value ? Number(e.target.value) : "")}>
@@ -1716,37 +1840,41 @@ function VendorPoCreate({
               ))}
             </select>
           </div>
-        )}
-        <div className="form-field">
-          <label>Vendor</label>
-          <VendorSelect value={vendorId} options={vendorChoices} onChange={setVendorId} />
         </div>
-        <div className="form-field">
-          <label>K-Maris PO No.</label>
-          {noMode === "auto" ? (
-            <select
-              value="auto"
-              onChange={(e) => { if (e.target.value === "manual") { setNoMode("manual"); setPoNo(""); } }}
-            >
-              <option value="auto">{autoNo ? `${autoNo} (auto)` : "Auto-generate"}</option>
-              <option value="manual">Manual entry…</option>
-            </select>
-          ) : (
-            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-              <input value={poNo} onChange={(e) => setPoNo(e.target.value)} placeholder="KMS-ORD-…" autoFocus style={{ flex: 1 }} />
-              <button type="button" className="btn sm" onClick={() => { setNoMode("auto"); setPoNo(""); }} title="Use auto number">auto</button>
-            </div>
-          )}
-        </div>
-        <div className="form-field">
-          <label>PO date</label>
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-        </div>
-        <div className="form-field">
-          <label>Currency</label>
-          <CurrencyToggle value={currency} onChange={setCurrency} />
-        </div>
-      </div>
+      ) : null}
+
+      <PoDocFields
+        vendorId={vendorId}
+        onVendorId={setVendorId}
+        vendorChoices={vendorChoices}
+        poNoField={
+          <div className="form-field">
+            <label>K-Maris PO No.</label>
+            {noMode === "auto" ? (
+              <select
+                value="auto"
+                onChange={(e) => { if (e.target.value === "manual") { setNoMode("manual"); setPoNo(""); } }}
+              >
+                <option value="auto">{autoNo ? `${autoNo} (auto)` : "Auto-generate"}</option>
+                <option value="manual">Manual entry…</option>
+              </select>
+            ) : (
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <input value={poNo} onChange={(e) => setPoNo(e.target.value)} placeholder="KMS-ORD-…" autoFocus style={{ flex: 1 }} />
+                <button type="button" className="btn sm" onClick={() => { setNoMode("auto"); setPoNo(""); }} title="Use auto number">auto</button>
+              </div>
+            )}
+          </div>
+        }
+        date={date}
+        onDate={setDate}
+        currency={currency}
+        onCurrency={setCurrency}
+        terms={terms}
+        onTerms={setTerms}
+        vessel={order?.vessel}
+        projectTitle={order?.project_title || order?.project_no}
+      />
 
       {order ? (
         <div className="action-ctx">
@@ -1757,6 +1885,7 @@ function VendorPoCreate({
       ) : null}
 
       <ItemEditor
+        title="3. Order items"
         items={items}
         onChange={setItems}
         currency={currency}
@@ -1771,7 +1900,8 @@ function VendorPoCreate({
         }
       />
 
-      <TermsEditor terms={terms} onChange={setTerms} />
+      {/* Payment Terms·Place 는 위 1·2번 칸에서 이미 물었으므로 여기선 뺀다. */}
+      <TermsEditor terms={terms} onChange={setTerms} omit={["payment_terms", "delivery_place"]} />
 
       <div className="form-actions">
         <StageTotal
@@ -2021,12 +2151,15 @@ function ItemEditor({
   onChange,
   currency = "USD",
   headerActions,
+  title = "Item list",
 }: {
   items: PoWorkItem[];
   onChange: (items: PoWorkItem[]) => void;
   currency?: string;
   // 품목표 헤더의 "+ Add" 옆에 넣을 보조 액션(예: "Load order items").
   headerActions?: React.ReactNode;
+  // 품목표 제목 — 발주서 폼은 문서 양식의 절 이름("3. Order items")을 쓴다.
+  title?: string;
 }) {
   // 분류는 별도 setter — patch() 의 숫자 파싱 분기를 타지 않는다.
   function patchCategory(i: number, id: number | null) {
@@ -2081,7 +2214,7 @@ function ItemEditor({
   return (
     <div style={{ marginTop: 16 }}>
       <div className="items-head">
-        <div className="sub-h">Item list</div>
+        <div className="sub-h">{title}</div>
         <ExcludedCountNote items={items} />
         <div className="items-head-actions">
           {headerActions}

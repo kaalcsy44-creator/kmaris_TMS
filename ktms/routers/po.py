@@ -163,6 +163,12 @@ def _order_vessel(s, order):
     return s.query(Vessel).filter_by(id=vid).first() if vid else None
 
 
+def _order_project_title(s, order) -> str:
+    """발주서 양식의 "Project" 칸 — 프로젝트명은 딜(RFQ)이 들고 있다."""
+    rfq = _rfq_for_order(s, order) if order else None
+    return (getattr(rfq, "project_title", None) or "") if rfq else ""
+
+
 @app.get("/api/admin/order/{order_id}", dependencies=[Depends(require_token)])
 def order_detail(order_id: int):
     """Order 1건 상세 — 고객 P/O, Vendor P/O, 품목, 연결 문서."""
@@ -806,6 +812,7 @@ def vendor_po_pdf(po_id: int):
             items=po.items or [],
             currency=po.currency or (order.currency if order else None) or "USD",
             terms=getattr(po, "terms", None) or {},
+            project_title=_order_project_title(s, order),
         )
         pdf = generate_po_pdf(payload)
         return Response(
@@ -835,6 +842,7 @@ def vendor_po_xlsx(po_id: int):
             items=po.items or [],
             currency=po.currency or (order.currency if order else None) or "USD",
             terms=getattr(po, "terms", None) or {},
+            project_title=_order_project_title(s, order),
         )
         xlsx = make_document_xlsx("purchase_order", payload)
         return Response(
@@ -884,6 +892,7 @@ def vendor_po_send(
                 items=po.items or [],
                 currency=po.currency or (order.currency if order else None) or "USD",
                 terms=getattr(po, "terms", None) or {},
+                project_title=_order_project_title(s, order),
             )
             if format == "xlsx":
                 generated = (f"{po.po_no}_PurchaseOrder.xlsx", make_document_xlsx("purchase_order", payload))

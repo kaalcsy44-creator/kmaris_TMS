@@ -8,16 +8,21 @@ import ComboBox from "./ComboBox";
 // 각 필드는 콤보박스(선택 + 자유입력). 필수 항목은 라벨에 " *" 를 붙여 표시한다.
 // clauses=true 면 견적서에 찍히는 표준 문장 목록을 함께 보여 준다(4단계 전용) —
 // 다른 문서(벤더 견적·발주서)는 이 문장들을 쓰지 않으므로 기본은 숨김.
+// omit 은 문서 양식이 그 조건을 자기 섹션에서 이미 묻고 있을 때 쓴다(발주서의
+// Payment Terms·Place 는 "Order/Supplier information" 칸에 있으므로 여기선 뺀다).
 export default function TermsEditor({
   terms,
   onChange,
   clauses,
+  omit,
 }: {
   terms: QuotationTerms;
   onChange: (terms: QuotationTerms) => void;
   clauses?: boolean;
+  omit?: (keyof QuotationTerms)[];
 }) {
   function field(key: keyof QuotationTerms, label: string) {
+    if (omit?.includes(key)) return null;
     const presets = (TERM_PRESETS as Record<string, readonly string[]>)[key];
     const value = (terms[key] as string) ?? "";
     return (

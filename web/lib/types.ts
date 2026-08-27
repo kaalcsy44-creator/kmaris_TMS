@@ -209,7 +209,17 @@ export type CompanyProfile = {
 
 // uses = 거래 빈도(보낸 Vendor RFQ + 발행한 Vendor P/O 건수). 드롭다운에서
 // 자주 거래하는 벤더를 위쪽 그룹으로 올리는 데 쓴다.
-export type VendorOption = { id: number; name: string; email: string; logo?: string; uses?: number };
+export type VendorOption = {
+  id: number;
+  name: string;
+  email: string;
+  /** 담당자 이름 · 대표 연락처 · 대표 주소 — 발주서 "Supplier information" 칸을 채운다. */
+  contact?: string;
+  phone?: string;
+  address?: string;
+  logo?: string;
+  uses?: number;
+};
 
 export type PoRow = {
   id: number;
@@ -505,6 +515,11 @@ export type QuotationTerms = {
   messrs?: string;
   attn?: string;
   ref_no?: string;
+  // 발주서(6단계) 헤더 문서 필드 — 마찬가지로 terms JSON 에 함께 보관한다.
+  /** 견적번호 — 이 발주의 근거가 된 공급사 견적서 번호(Quotation No.). */
+  vendor_quote_no?: string;
+  /** 납기요청일 — 발주서 "Requested Delivery / Service Date"(YYYY-MM-DD). */
+  requested_date?: string;
 };
 
 // Customer Quotation 작성 시 공급사 견적에서 cost 불러오기용

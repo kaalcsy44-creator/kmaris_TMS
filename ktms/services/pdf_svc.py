@@ -111,6 +111,7 @@ def _vendor_party_dict(vendor) -> Dict[str, Any]:
         "name": vendor.name,
         "address": vendor.address or "",
         "contact": vendor.contact or "",
+        "phone": getattr(vendor, "contact_phone", "") or "",
         "email": vendor.email or "",
     }
 
@@ -123,13 +124,18 @@ def build_po_payload(
     items: list,
     currency: str = "USD",
     terms: Optional[dict] = None,
+    project_title: str = "",
 ) -> Dict[str, Any]:
-    """Vendor 발주서(Purchase Order) PDF payload. Supplier 박스에 Vendor 정보가 들어간다."""
+    """Vendor 발주서(Purchase Order) PDF payload. Supplier 박스에 Vendor 정보가 들어간다.
+
+    발주서 양식의 "1. Order information" 에 프로젝트명이 들어가므로 딜에서 받아 싣는다
+    (Vendor RFQ 도 같은 payload 를 쓰지만 그 문서엔 이 칸이 없어 기본값은 빈 문자열)."""
     return {
         "doc_no": po_no,
         "date": date,
         "currency": currency,
         "vat_rate": 0.0,
+        "project_title": project_title or "",
         "customer": _vendor_party_dict(vendor),  # rendered as 'Supplier / Seller'
         "vessel": _vessel_dict(vessel),
         "items": items,
