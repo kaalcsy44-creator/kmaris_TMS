@@ -37,12 +37,19 @@ export function splitProjectNo(pno: string): { code: string; date: string } {
   return m ? { code: m[1], date: m[2] } : { code: pno || "—", date: "" };
 }
 
-/** 최신 활동 일시(iso) — 단계 완료(수동/자동)·단계 노트 중 최신. 백엔드 _last_activity_iso 와 동일 규칙. */
+/** 최신 활동 일시(iso) — 단계 완료(수동/자동)·단계 노트·발송/수신 이력 중 최신.
+ *  백엔드 _last_activity_iso 와 동일 규칙.
+ *
+ *  2·3단계의 자동 일시는 '그 단계에 처음 도달한' 시각(최초 발송/최초 수신)이라, 같은 단계에
+ *  머문 채 벤더를 더 추가해 보낸 건은 단계 일시에 남지 않는다. 발송·수신 이력을 함께 봐야
+ *  "어제 RFQ 를 하나 더 보냈는데 31일 방치로 표시"되는 일이 없다. */
 export function lastActivityISO(row: PipelineRow): string {
   const times: string[] = [];
   for (const m of [row.stage_dates, row.stage_auto]) {
     for (const v of Object.values(m ?? {})) if (v) times.push(v);
   }
+  for (const s of row.rfq_sends ?? []) if (s.sent_at) times.push(s.sent_at);
+  for (const q of row.quote_receipts ?? []) if (q.received_at) times.push(q.received_at);
   for (const notes of Object.values(row.stage_notes ?? {})) {
     for (const n of notes ?? []) {
       const v = n.datetime || n.at || "";

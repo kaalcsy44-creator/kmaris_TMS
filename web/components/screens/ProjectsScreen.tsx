@@ -353,14 +353,21 @@ function doneStageLabel(stage: number, steps: string[]): string {
  * "어디까지 왔나 · 그게 언제였나 · 얼마나 멈춰 있나" 셋이고, 앞의 셋은 바와 완료 라벨이
  * 이미 답한다. 나머지 안내는 행을 눌러 여는 상세 팝업이 맡는다.
  */
-function StageBar({ stage, steps, savedAt }: { stage: number; steps: string[]; savedAt: string }) {
+function StageBar({
+  stage,
+  steps,
+  savedAt,
+  lastAt,
+}: { stage: number; steps: string[]; savedAt: string; lastAt?: string }) {
   const total = steps.length;
   const filled = Math.max(0, Math.min(stage, total));
   const done = doneStageLabel(stage, steps);
   // 내부 11단계에서만 4개 중분류로 그룹핑(고객확인용 7단계는 기존 평면 바 유지).
   const grouped = total === 11;
-  // 경과일 = 이 단계를 저장한 날로부터 오늘까지. 오래 멈춘 딜은 배지 색이 앰버→레드로 짙어진다.
-  const age = daysSinceISO(savedAt);
+  // 경과일 = 마지막 활동(단계 저장·노트·추가 RFQ 발송/견적 수신) 이후 오늘까지.
+  // 단계 저장일만 보면 같은 단계에 머문 채 벤더를 더 붙인 딜이 방치된 것으로 보인다.
+  // 오래 멈춘 딜은 배지 색이 앰버→레드로 짙어진다.
+  const age = daysSinceISO(lastAt || savedAt);
   const day = fmtYMD(savedAt);
   const lv = ageLevel(age);
   return (
@@ -394,7 +401,7 @@ function StageBar({ stage, steps, savedAt }: { stage: number; steps: string[]; s
         {age != null ? (
           <span
             className={`pl-stage-age${lv ? ` lv-${lv}` : ""}`}
-            title={`${age} days since this stage was saved`}
+            title={`${age} days since last activity`}
           >
             {age}d
           </span>
@@ -1894,6 +1901,7 @@ function PipelineCell({
             stage={stage}
             steps={resolveSteps(steps, r.work_type)}
             savedAt={stageDateOf(r, r.stage)}
+            lastAt={lastActivityISO(r)}
           />
         </td>
       );

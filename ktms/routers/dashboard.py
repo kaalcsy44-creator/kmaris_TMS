@@ -312,8 +312,11 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
             _auto = _stage_auto_times(s, r, o)
             _sn = getattr(r, "stage_notes", None) or {}
             _lost = _enum_val(r.status) == RFQStatus.LOST.value
+            # 2·3단계의 자동 일시는 최초 발송/수신(min)이라 벤더를 나중에 더 추가한 건이
+            # 반영되지 않는다 — 발송·수신 이력 전체를 활동 후보로 함께 넘긴다.
+            _events = [e["sent_at"] for e in rfq_sends] + [e["received_at"] for e in quote_receipts]
             _stalled = (
-                _days_since_iso(_last_activity_iso(_sd, _auto, _sn), today_iso)
+                _days_since_iso(_last_activity_iso(_sd, _auto, _sn, _events), today_iso)
                 if (stage < 12 and not _lost) else None
             )
             _na = _next_action(stage, steps_for(r.work_type), lost=_lost, stalled_days=_stalled)

@@ -1062,10 +1062,14 @@ STALL_WARN_DAYS = 7
 STALL_URGENT_DAYS = 14
 
 
-def _last_activity_iso(stage_dates, stage_auto, stage_notes) -> str:
+def _last_activity_iso(stage_dates, stage_auto, stage_notes, extra_times=()) -> str:
     """거래의 마지막 활동 일시(iso 문자열) — 단계 완료 일시(수동/자동)와 단계 노트 중 최신.
-    'YYYY-MM-DDTHH:MM' 포맷이 일관되어 문자열 비교(max)로 최신을 구한다. 없으면 ''."""
-    times: list[str] = []
+    'YYYY-MM-DDTHH:MM' 포맷이 일관되어 문자열 비교(max)로 최신을 구한다. 없으면 ''.
+
+    extra_times: 단계 일시에 잡히지 않는 반복 이벤트의 일시(추가 RFQ 발송·추가 견적 수신 등).
+    단계 일시는 그 단계에 '처음 도달한' 시각(2·3단계는 min)이라, 같은 단계에서 벤더를 더
+    추가해 보낸 건은 남지 않는다. 그것까지 활동으로 세어야 경과일이 실제 대응을 반영한다."""
+    times: list[str] = [t for t in (extra_times or ()) if t]
     for d in (stage_dates or {}, stage_auto or {}):
         times.extend(v for v in d.values() if v)
     for notes in (stage_notes or {}).values():
