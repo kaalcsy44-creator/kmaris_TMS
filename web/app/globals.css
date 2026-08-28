@@ -1407,6 +1407,42 @@ table.mini.wide.ms-table.ms-table--items td.ms-projcol .pjno-date {
   padding: 0 5px;
   cursor: help;
 }
+/* 딜의 결말 칸 — 배지 한 줄, 그 아래 까닭 한 줄(회색). 까닭은 길면 말줄임하고
+   전체는 title 로 읽는다("Overdue 42d (due 2026-07-01)", 수금 메모 등). */
+.deal-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  line-height: 1.3;
+}
+.deal-pill {
+  flex: none;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+/* 받았다 = 초록, 수주했다 = 파랑, 아직 문의·견적 = 회색/호박, 접었다 = 빨강.
+   색은 결말의 좋고 나쁨이 아니라 '돈이 어디까지 왔나'를 가리킨다. */
+.deal-paid { background: #e6f6ee; color: #0f7a52; }
+.deal-ordered { background: #e8f0fd; color: #1a5fc4; }
+.deal-quoted { background: #fdf3e2; color: #8a5a00; }
+.deal-open { background: var(--head-bg, #eef2f8); color: #5a6b85; }
+.deal-closed { background: #fdecea; color: #b42318; }
+.deal-note {
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--muted, #8a97ab);
+}
+table.mini.wide.ms-table.ms-table--items th.ms-deal,
+table.mini.wide.ms-table.ms-table--items td.ms-deal {
+  min-width: 96px;
+}
 /* 선박 — "HANJIN OSAKA" 처럼 두 낱말이 흔하다. 최소폭을 조금 줘 한 줄로 담고,
    여러 척인 품목은 "+N" 이 이름 옆에 붙는다. */
 table.mini.wide.ms-table.ms-table--items th.ms-vessel,

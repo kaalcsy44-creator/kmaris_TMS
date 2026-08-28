@@ -113,6 +113,10 @@ export type SettingsItem = {
   // 그 딜들이 다룬 선박 — 같은 부품이 여러 척에 들어가기도 한다. 규칙은 위와 같다.
   vessel?: string;               // vessels[0]
   vessels?: string[];
+  // 가장 최근 딜(project_no 와 같은 딜)의 결말. state 는 어디까지 갔는지,
+  // note 는 그 까닭 한 줄 — 종결 사유 / 미수 사유(수금 메모·연체일) / 완납일.
+  deal_state?: "open" | "quoted" | "ordered" | "paid" | "closed" | "";
+  deal_note?: string;
 };
 
 // 품목 분류 트리 노드(대>중>소). parent_id 로 계층 구성.

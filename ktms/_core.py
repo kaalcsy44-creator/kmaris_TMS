@@ -978,6 +978,87 @@ def _project_no_map(s) -> dict[int, str]:
     return out
 
 
+# 종결 사유 코드 → 목록에 붙일 짧은 말. 사유 고르는 화면의 문장(CLOSE_REASONS)은
+# 한 칸에 넣기엔 길다("Project delayed or cancelled").
+_CLOSE_REASON_SHORT = {
+    "schedule": "Project delayed",
+    "slow_response": "Slow response",
+    "no_quote": "Unable to quote",
+    "other": "Other",
+}
+
+
+def _deal_state_map(s) -> dict[int, dict]:
+    """딜(RFQ)별 성사 여부 한 줄 요약 — {rfq_id: {"state": ..., "note": ...}}.
+
+    state 는 딜이 어디까지 갔는지다:
+      open(문의만) · quoted(견적 보냄) · ordered(수주, 대금 미완) · paid(결제 완료)
+      · closed(종결 — 취소/실주)
+    note 는 그 상태를 설명하는 꼬리말이다. 종결이면 사유, 결제 완료면 완납일, 아직
+    못 받았으면 왜 아직인지(청구 전 / 청구·미수 / 일부수금 / 연체 며칠). 수금 담당이
+    적어 둔 메모(AR notes)가 있으면 그게 사유다 — 사람이 쓴 사정이 코드가 매기는
+    분류보다 정확하기 때문.
+
+    목록 한 장을 위해 딜마다 _deal_progress 를 돌리면 딜 수만큼 자식 조회가 나간다.
+    여기서는 필요한 표만 통째로 읽어 메모리에서 맞춘다(조회 4회)."""
+    orders_by_rfq: dict[int, list] = {}
+    order_rfq: dict[int, int] = {}
+    for o in s.query(Order.id, Order.rfq_id, Order.stage_dates).all():
+        if o.rfq_id:
+            orders_by_rfq.setdefault(o.rfq_id, []).append(o)
+            order_rfq[o.id] = o.rfq_id
+    ars_by_order: dict[int, list] = {}
+    for a in s.query(ARRecord.order_id, ARRecord.status, ARRecord.due_date,
+                     ARRecord.paid_date, ARRecord.notes).all():
+        if a.order_id:
+            ars_by_order.setdefault(a.order_id, []).append(a)
+    quoted_rfqs = {q.rfq_id for q in
+                   s.query(Quotation.rfq_id).filter(Quotation.status != QuotationStatus.DRAFT).all()}
+    today_str = date.today().isoformat()
+
+    def unpaid_note(ars: list) -> str:
+        """아직 못 받은 대금의 사유 — 사람이 적어 둔 메모가 있으면 그것을 먼저."""
+        memo = next((a.notes for a in ars if (a.notes or "").strip()), "")
+        if memo:
+            return " ".join(memo.split())[:60]
+        if not ars:
+            return "Not invoiced yet"
+        overdue = [a for a in ars if a.due_date and a.due_date < today_str
+                   and _enum_val(a.status) != "완납"]
+        if overdue:
+            oldest = min(a.due_date for a in overdue)
+            days = (date.fromisoformat(today_str) - date.fromisoformat(oldest)).days
+            return f"Overdue {days}d (due {oldest})"
+        if any(_enum_val(a.status) == "일부수금" for a in ars):
+            return "Partly collected"
+        due = min((a.due_date for a in ars if a.due_date), default="")
+        return f"Invoiced, due {due}" if due else "Invoiced, unpaid"
+
+    out: dict[int, dict] = {}
+    for r in s.query(RFQ.id, RFQ.status, RFQ.close_reason, RFQ.close_reason_note).all():
+        # 종결(실주/취소)은 어디까지 갔든 그것이 결말이다 — 사유를 그대로 세운다.
+        if _enum_val(r.status) == RFQStatus.LOST.value:
+            note = (r.close_reason_note or "").strip() or _CLOSE_REASON_SHORT.get(
+                (r.close_reason or "").strip(), "")
+            out[r.id] = {"state": "closed", "note": " ".join(note.split())[:60]}
+            continue
+        orders = orders_by_rfq.get(r.id) or []
+        if not orders:
+            out[r.id] = {"state": "quoted" if r.id in quoted_rfqs else "open", "note": ""}
+            continue
+        ars = [a for o in orders for a in ars_by_order.get(o.id, [])]
+        # 결제 완료 = 수금 레코드가 모두 완납이거나, 11단계(대금 결제 완료)를 손으로 표시한 것.
+        # 오더가 여럿이면 전부 끝나야 이 딜이 끝난 것이다.
+        marked_paid = all((o.stage_dates or {}).get("11") for o in orders)
+        all_paid = bool(ars) and all(_enum_val(a.status) == "완납" for a in ars)
+        if all_paid or marked_paid:
+            when = max((a.paid_date or "" for a in ars), default="")
+            out[r.id] = {"state": "paid", "note": when}
+        else:
+            out[r.id] = {"state": "ordered", "note": unpaid_note(ars)}
+    return out
+
+
 def vendor_usage_counts(s) -> dict[int, int]:
     """벤더별 거래 빈도 {vendor_id: 건수} — 보낸 Vendor RFQ + 발행한 Vendor P/O 합계.
     실제로 자주 거래하는 벤더를 드롭다운 위쪽에 모아 주는 데 쓴다(이름순 목록에서
@@ -3745,6 +3826,7 @@ __all__ = [
     "adopt_project_pi",
     "_project_no_for_order",
     "_project_no_map",
+    "_deal_state_map",
     "_quotation_total",
     "_read_company_profile",
     "_reload_perms",

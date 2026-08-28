@@ -725,6 +725,8 @@ def settings_items():
         # 프로젝트 번호 — 품목이 등장한 딜의 관리번호("P-024(260622)"). 한 품목이 여러
         # 딜에 걸치므로 전부 주고(project_nos), 목록은 가장 최근 것만 세운다.
         proj_no = _core._project_no_map(s)
+        # 딜별 성사 여부(수주·결제·종결 사유) — 품목이 붙은 가장 최근 딜의 것을 세운다.
+        deal_states = _core._deal_state_map(s)
         cust = dict(s.query(Customer.id, Customer.name).all())
         vend = dict(s.query(Vendor.id, Vendor.name).all())
         vess = dict(s.query(Vessel.id, Vessel.name).all())
@@ -748,8 +750,13 @@ def settings_items():
                 "quoted_at": sm.get("quoted_at") or "",
             }
             _annotate_margin(row)   # margin_pct(USD 환산) + margin_cross
-            row["project_nos"] = _project_nos(proj_no, sm.get("rfq_ids"), fb.get("rfq_ids"))
-            row["project_no"] = row["project_nos"][0] if row["project_nos"] else ""
+            deal_ids = _deal_ids_recent_first(proj_no, sm.get("rfq_ids"), fb.get("rfq_ids"))
+            row["project_nos"] = [proj_no[rid] for rid in deal_ids]
+            row["project_no"] = row["project_nos"][0] if deal_ids else ""
+            # 딜이 성사됐는지 — 세우는 건 가장 최근 딜 하나다(번호와 같은 딜).
+            st = deal_states.get(deal_ids[0]) if deal_ids else None
+            row["deal_state"] = st["state"] if st else ""
+            row["deal_note"] = st["note"] if st else ""
             # 이 품목이 들어간 배 — 같은 부품이 여러 척에 쓰이므로 전부 주고(vessels),
             # 목록은 가장 최근 것만 세운다(문서 있는 쪽 먼저, 그 다음 RFQ 등장분).
             row["vessels"] = _names(vess, sm.get("vessel_ids"), fb.get("vessel_ids"))
@@ -771,20 +778,21 @@ def _names(by_id: dict[int, str], *id_lists) -> list[str]:
     return out
 
 
-def _project_nos(proj_no: dict[int, str], *id_lists) -> list[str]:
-    """딜 id 목록들 → 프로젝트 번호 목록(최근 딜 먼저, 중복 제거).
+def _deal_ids_recent_first(proj_no: dict[int, str], *id_lists) -> list[int]:
+    """딜 id 목록들 → 최근 딜 먼저(중복 제거, 번호 없는 딜 제외).
 
     번호는 최초 RFQ 수신 순서로 매겨지므로("P-001(260101)" → "P-024(260622)"), 괄호 안
     수신일 + 번호를 내림차순으로 세우면 그대로 '최근 딜 순'이 된다. 문서 날짜(가격 이력)와
     RFQ 등장분을 한 자리에서 섞어야 해서, 두 갈래의 날짜를 견주는 대신 번호로 줄 세운다."""
-    seen: list[str] = []
+    seen: list[int] = []
     for ids in id_lists:
         for rid in (ids or []):
-            no = proj_no.get(rid) or ""
-            if no and no not in seen:
-                seen.append(no)
-    # "P-024(260622)" → ("260622", "P-024(260622)") 로 정렬.
-    return sorted(seen, key=lambda n: (n[n.find("(") + 1:-1] if "(" in n else "", n), reverse=True)
+            if (proj_no.get(rid) or "") and rid not in seen:
+                seen.append(rid)
+    def key(rid: int):
+        n = proj_no[rid]
+        return (n[n.find("(") + 1:-1] if "(" in n else "", n)
+    return sorted(seen, key=key, reverse=True)
 
 
 def _item_type(v: str | None) -> str:

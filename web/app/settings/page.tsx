@@ -1980,6 +1980,14 @@ const ITEM_KIND_LABEL: Record<ItemKind, string> = { part: "Parts", service: "Ser
 function itemProjects(r: SettingsItem): string[] {
   return r.project_nos?.length ? r.project_nos : r.project_no ? [r.project_no] : [];
 }
+// 딜의 결말 — 배지 글자와 줄 세우는 순서(문의 → 견적 → 수주 → 결제, 종결은 끝).
+const DEAL_LABEL: Record<string, string> = {
+  open: "Open", quoted: "Quoted", ordered: "Ordered", paid: "Paid", closed: "Closed",
+};
+const DEAL_RANK: Record<string, number> = {
+  open: 1, quoted: 2, ordered: 3, paid: 4, closed: 5,
+};
+
 /** 품목이 들어간 선박(최근 순). 같은 규칙. */
 function itemVessels(r: SettingsItem): string[] {
   return r.vessels?.length ? r.vessels : r.vessel ? [r.vessel] : [];
@@ -2008,6 +2016,9 @@ const itemHeadCols: HeadCol<SettingsItem>[] = [
   // 선박도 딜처럼 한 품목에 여럿이라 판정은 전부, 표시·정렬은 최근 한 척으로.
   { key: "vessel", text: (r) => itemVessels(r)[0] || "", filter: "facet",
     facetValues: itemVessels, emptyLabel: "No vessel" },
+  // 결말은 딜 하나에 하나뿐 — 세운 배지 그대로 고르면 된다(정렬은 진행 순서로).
+  { key: "deal_state", text: (r) => DEAL_LABEL[r.deal_state || ""] || "", filter: "facet",
+    sortValue: (r) => DEAL_RANK[r.deal_state || ""] ?? 0, emptyLabel: "No deal yet" },
   { key: "description", text: (r) => r.description || "" },
   { key: "part_no", text: (r) => r.part_no || "" },
   { key: "category_path", text: (r) => r.category_path || "", filter: "facet",
@@ -2056,6 +2067,22 @@ export function ItemsTab({ kind = "part" }: { kind?: ItemKind }) {
   const project: [keyof SettingsItem, string, ((r: SettingsItem) => React.ReactNode)?, string?] =
     ["project_no", "Project No.",
       (r) => multiCell(itemProjects(r), (v) => <ProjectNo value={v} />), "ms-projcol"];
+  // 딜의 결말 — 수주까지 갔는지, 대금까지 받았는지, 접었다면 왜인지. 배지 아래 회색
+  // 한 줄이 그 까닭이다(완납일 / 미수 사유 / 종결 사유). 품목이 여러 딜에 걸치면
+  // Project No. 가 세운 그 딜(가장 최근)의 결말이다.
+  const deal: [keyof SettingsItem, string, ((r: SettingsItem) => React.ReactNode)?, string?] =
+    ["deal_state", "Deal", (r) => {
+      const st = r.deal_state || "";
+      if (!st) return <span className="dash">—</span>;
+      return (
+        <span className="deal-cell">
+          <span className={`deal-pill deal-${st}`}>{DEAL_LABEL[st] || st}</span>
+          {r.deal_note
+            ? <span className="deal-note" title={r.deal_note}>{r.deal_note}</span>
+            : null}
+        </span>
+      );
+    }, "ms-deal"];
   // 선박 — 딜을 따라온다(그 딜이 다룬 배). 여러 척이면 최근 한 척 + "+N".
   const vessel: [keyof SettingsItem, string, ((r: SettingsItem) => React.ReactNode)?, string?] =
     ["vessel", "Vessel", (r) => multiCell(itemVessels(r)), "ms-vessel"];
@@ -2093,6 +2120,7 @@ export function ItemsTab({ kind = "part" }: { kind?: ItemKind }) {
       columns={isService
         ? [
             project,
+            deal,
             ["customer", "Customer", (r) => r.customer || <span className="dash">—</span>, "ms-party"],
             vessel,
             ["description", "Service", undefined, "ms-desc"],
@@ -2102,6 +2130,7 @@ export function ItemsTab({ kind = "part" }: { kind?: ItemKind }) {
           ]
         : [
             project,
+            deal,
             ["customer", "Customer", (r) => r.customer || <span className="dash">—</span>, "ms-party"],
             vessel,
             ["description", "Description", undefined, "ms-desc"],
@@ -2139,7 +2168,8 @@ export function ItemsTab({ kind = "part" }: { kind?: ItemKind }) {
       required={isService ? "description" : "part_no"}
       numeric={["std_price"]}
       // 검색은 화면 컬럼 기본값 대신 직접 지정 — 가격 열은 객체라 기본 문자열화가 안 된다.
-      searchText={(r) => [...itemProjects(r), ...itemVessels(r), r.customer, r.description, r.part_no, r.category_path, r.maker, r.origin, r.hs_code, r.vendor].join(" ")}
+      searchText={(r) => [...itemProjects(r), ...itemVessels(r),
+        DEAL_LABEL[r.deal_state || ""] || "", r.deal_note || "", r.customer, r.description, r.part_no, r.category_path, r.maker, r.origin, r.hs_code, r.vendor].join(" ")}
       // Type 을 바꿔 저장하면 그 항목은 반대편 탭으로 옮겨 간다(잘못 잡힌 구분 교정용).
       renderField={({ key, label, form, setForm }) =>
         key === "item_type" ? (
