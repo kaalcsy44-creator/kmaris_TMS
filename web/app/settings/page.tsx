@@ -1978,19 +1978,21 @@ export function ItemsTab({ kind = "part" }: { kind?: ItemKind }) {
   // 고객·공급사·구매가·판매가·마진은 가격 이력에서 온 읽기전용 파생값이라 편집 폼엔 없다.
   const trade: [keyof SettingsItem, string, ((r: SettingsItem) => React.ReactNode)?, string?][] = [
     ["vendor", "Vendor", (r) => r.vendor || <span className="dash">—</span>, "ms-party"],
-    // 견적일은 각자 짝인 가격 옆에 — 공급사 견적(수신) → 구매가, 우리 견적(제출) → 판매가.
-    ["vendor_quote_at", "Vendor Quote",
-      (r) => r.vendor_quote_at || <span className="dash">—</span>, "ms-date"],
-    ["buy", "Purchase Price", (r) => fmtPrice(r.buy), "ms-num"],
-    ["quoted_at", "Quote Sent",
-      (r) => r.quoted_at || <span className="dash">—</span>, "ms-date"],
-    ["sell", "Sales Price", (r) => fmtPrice(r.sell), "ms-num"],
+    // 견적일은 각자 짝인 가격과 한 칸에 위아래로 — 공급사 견적(수신) → 구매가,
+    // 우리 견적(제출) → 판매가. 날짜를 독립 열로 두면 물품 탭이 16열이 되어 오른쪽
+    // 서너 칸(판매가·마진·표준가·편집)이 화면 밖으로 밀려났다.
+    ["buy", "Purchase Price",
+      (r) => priceWithDate(r.buy, r.vendor_quote_at, "Vendor quote received"), "ms-num"],
+    ["sell", "Sales Price",
+      (r) => priceWithDate(r.sell, r.quoted_at, "Our quote sent"), "ms-num"],
     ["margin_pct", "Margin", (r) => marginText(r.margin_pct, r.margin_cross), "ms-num"],
     ["std_price", "Std Price", undefined, "ms-num"],
   ];
   const category: [keyof SettingsItem, string, ((r: SettingsItem) => React.ReactNode)?, string?] =
     ["category_path", "Category", (r) => r.category_path
-      ? <span className="cat-path">{r.category_path}</span>
+      // 3단 경로는 알약 폭을 400px 가까이 끌고 간다 — 폭을 못 박고 넘치면 말줄임,
+      // 전체 경로는 title 로 읽는다(가격 이력 표와 같은 방식).
+      ? <span className="cat-path" title={r.category_path}>{r.category_path}</span>
       : <span className="dash">Unclassified</span>];
 
   return (
@@ -2242,6 +2244,19 @@ function fmtAmt(n: number): string {
 }
 function fmtPrice(p: { unit_price: number; currency: string } | null): string {
   return p ? `${p.currency} ${fmtAmt(p.unit_price)}` : "—";
+}
+// 금액과 그 금액이 나온 견적일을 한 칸에(위=금액, 아래=회색 날짜). 날짜가 없으면 금액만.
+function priceWithDate(
+  p: { unit_price: number; currency: string } | null,
+  date: string | undefined,
+  dateTitle: string,
+): React.ReactNode {
+  return (
+    <span className="ms-price">
+      <span>{fmtPrice(p)}</span>
+      {date ? <span className="ms-price-date" title={dateTitle}>{date}</span> : null}
+    </span>
+  );
 }
 // 마진% — 백엔드가 USD 환산으로 계산해 준 margin_pct 사용. 통화가 달라 환산된
 // 값이면 '~'를 붙여 근사치임을 표시(환율 가정으로 산출).

@@ -1309,10 +1309,28 @@ table.mini.wide.ms-table.ms-table--items th.ms-party,
 table.mini.wide.ms-table.ms-table--items td.ms-party {
   min-width: 110px;
 }
-/* 견적일 — "2026-08-07" 한 줄이 접히지 않게. 값이 없으면 대시라 폭을 더 줄 이유는 없다. */
-table.mini.wide.ms-table.ms-table--items th.ms-date,
-table.mini.wide.ms-table.ms-table--items td.ms-date {
-  white-space: nowrap;
+/* 분류 경로 — "Engine Room > Starting Air System > Main Starting Valve" 같은 3단 경로는
+   알약이 줄바꿈하지 않아 이 칸 하나가 400px 가까이 가져갔고, 그만큼 오른쪽 칸들이 표
+   밖으로 밀렸다. 폭을 못 박고 넘치는 만큼만 말줄임 — 전체 경로는 title 로 읽는다
+   (가격 이력 표에서 쓰던 방식과 같다). */
+table.mini.wide.ms-table.ms-table--items .cat-path {
+  display: inline-block;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+/* 금액 칸 — 위는 금액, 아래는 그 금액이 나온 견적일(작은 회색). 날짜를 독립 열로 두면
+   물품 탭 열 수가 화면 폭을 넘겨 오른쪽 칸이 잘렸다. */
+table.mini.wide.ms-table.ms-table--items td.ms-num .ms-price {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.35;
+}
+.ms-price-date {
+  font-size: 11px;
+  color: var(--muted, #8a97ab);
   font-variant-numeric: tabular-nums;
 }
 table.mini.wide.ms-table.ms-table--items th.ms-num,
