@@ -1055,7 +1055,7 @@ function PoDocFields({
       <div className="form-section-title">1. Order information</div>
       <div className="form-grid">
         <div className="form-field">
-          <label>Requested delivery date</label>
+          <label>Requested date</label>
           <input
             type="date"
             value={terms.requested_date ?? ""}

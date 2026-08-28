@@ -14111,10 +14111,13 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 }
 
 /* 라벨 위·값 아래(2줄) → 라벨 왼쪽·값 오른쪽(1줄). 세로 길이가 절반 가까이 줄어
-   "한 화면에서 한눈에" 가 실제로 성립한다. 값 정렬 기준선은 라벨과 맞춘다. */
+   "한 화면에서 한눈에" 가 실제로 성립한다. 값 정렬 기준선은 라벨과 맞춘다.
+   라벨 칸은 글자 폭만큼만 쓴다 — 34% 처럼 비율로 잡으면 "Address" 같은 짧은 라벨의
+   값이 한 줄을 가로지른 뒤에야 시작해 가운데 떠 있는 것처럼 읽혔다(줄이 넓은
+   한 줄짜리 항목일수록 심하다). 대신 라벨이 길어도 값 칸을 삼키지 않게 38% 에서 끊는다. */
 .form-fieldset.vm-read .form-grid > .form-field {
   display: grid;
-  grid-template-columns: minmax(84px, 34%) 1fr;
+  grid-template-columns: fit-content(38%) 1fr;
   align-items: baseline;
   column-gap: 10px;
 }
@@ -14123,6 +14126,8 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
   color: var(--muted, #7b8794);
   font-weight: 400;
   margin: 0;
+  /* 짧은 라벨끼리는 값 시작점을 맞춘다 — 한 줄에 여러 항목이 놓일 때 들쭉날쭉하지 않게. */
+  min-width: 84px;
 }
 .form-fieldset.vm-read .form-grid > .form-field > :not(label):not(span:first-child) {
   min-width: 0;
@@ -14233,6 +14238,13 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
   align-self: baseline;
   color: #c4cedb;
   pointer-events: none;
+}
+/* 빈 날짜칸은 브라우저가 "년-월-일" 형식 안내를 직접 그린다 — placeholder 가 아니라서
+   위의 ::placeholder 규칙이 닿지 않는다. 그대로 두면 그 자리에 대시와 형식 안내가 함께
+   떠 값이 있는 것처럼 보이므로, 읽기모드에선 글자를 지우고 대시만 남긴다. */
+.form-fieldset.vm-read .form-grid > .form-field[data-vm-empty] input[type="date"] {
+  color: transparent;
+  -webkit-text-fill-color: transparent;
 }
 /* 숨김 켬: 채워진 항목만 남긴다. 안 쓴 칸이 많은 단계에서 세로 길이가 크게 준다. */
 .form-fieldset.vm-read.vm-hide-empty .form-field[data-vm-empty] {
