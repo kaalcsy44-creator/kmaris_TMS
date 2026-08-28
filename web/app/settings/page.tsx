@@ -2302,7 +2302,13 @@ const SOURCE_LABEL: Record<string, string> = {
   ar: "Tax Invoice",
 };
 
+// 금액은 정수로 — 품목 단가는 원 단위까지가 읽을 값이고, ".00" 은 칸 폭만 먹는다.
+// (표시만 반올림한다. 저장된 값과 마진 계산은 소수점 그대로다.)
 function fmtAmt(n: number): string {
+  return Math.round(n || 0).toLocaleString(undefined, { maximumFractionDigits: 0 });
+}
+// 환율은 금액이 아니다 — "1,384.50" 의 소수점 아래가 값의 일부라 그대로 둔다.
+function fmtRate(n: number): string {
   return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 function fmtPrice(p: { unit_price: number; currency: string } | null): string {
@@ -3059,7 +3065,7 @@ export function CategoriesTab() {
                       <td className="num">{r.currency} {fmtAmt(r.unit_price)}</td>
                       <td className="num">{r.qty}</td>
                       <td className="num">{r.currency} {fmtAmt(r.amount)}</td>
-                      <td className="num">{r.fx_rate ? `₩${fmtAmt(r.fx_rate)}` : "—"}</td>
+                      <td className="num">{r.fx_rate ? `₩${fmtRate(r.fx_rate)}` : "—"}</td>
                     </tr>
                   ))}
                 </tbody>
