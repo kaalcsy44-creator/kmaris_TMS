@@ -14114,23 +14114,37 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
    "한 화면에서 한눈에" 가 실제로 성립한다. 값 정렬 기준선은 라벨과 맞춘다.
    라벨 칸은 글자 폭만큼만 쓴다 — 34% 처럼 비율로 잡으면 "Address" 같은 짧은 라벨의
    값이 한 줄을 가로지른 뒤에야 시작해 가운데 떠 있는 것처럼 읽혔다(줄이 넓은
-   한 줄짜리 항목일수록 심하다). 대신 라벨이 길어도 값 칸을 삼키지 않게 38% 에서 끊는다. */
-.form-fieldset.vm-read .form-grid > .form-field {
+   한 줄짜리 항목일수록 심하다). 대신 라벨이 길어도 값 칸을 삼키지 않게 38% 에서 끊는다.
+
+   대상은 "여러 칸을 한 줄에 늘어놓는 격자" 둘 다 — .form-grid(대부분의 단계)와
+   .received-fields(1·3·5단계 Basic Info). 한쪽만 걸어 두면 같은 읽기모드인데 단계마다
+   제목이 값 위에 있기도 왼쪽에 있기도 해서, 훑는 눈이 단계마다 다시 적응해야 했다.
+   (.received-fields 는 그룹 래퍼 .basic-col 이 display:contents 라 자식 선택자가 못 닿는다.) */
+.form-fieldset.vm-read .form-grid > .form-field,
+.form-fieldset.vm-read .received-fields .form-field {
   display: grid;
   grid-template-columns: fit-content(38%) 1fr;
   align-items: baseline;
   column-gap: 10px;
 }
 .form-fieldset.vm-read .form-grid > .form-field > label,
-.form-fieldset.vm-read .form-grid > .form-field > span:first-child {
+.form-fieldset.vm-read .form-grid > .form-field > span:first-child,
+.form-fieldset.vm-read .received-fields .form-field > label,
+.form-fieldset.vm-read .received-fields .form-field > span:first-child {
   color: var(--muted, #7b8794);
   font-weight: 400;
   margin: 0;
   /* 짧은 라벨끼리는 값 시작점을 맞춘다 — 한 줄에 여러 항목이 놓일 때 들쭉날쭉하지 않게. */
   min-width: 84px;
 }
-.form-fieldset.vm-read .form-grid > .form-field > :not(label):not(span:first-child) {
+.form-fieldset.vm-read .form-grid > .form-field > :not(label):not(span:first-child),
+.form-fieldset.vm-read .received-fields .form-field > :not(label):not(span:first-child) {
   min-width: 0;
+}
+/* 환율칸은 한 항목 안에 [토글+입력]과 [그날 고시 참고] 두 덩이가 세로로 쌓인다.
+   둘째 덩이도 값 칸(2열)에 머물게 해, 라벨 아래로 삐져나가지 않게 한다. */
+.form-fieldset.vm-read .fx-field > .fx-ref {
+  grid-column: 2;
 }
 /* Valid until 은 한 칸에 "[일수] days from Sent at [만료일]" 세 조각이 들어가는 유일한
    필드다. 읽기모드는 라벨이 값 왼쪽으로 오면서 값이 쓸 수 있는 폭이 3분의 1 줄어드는데,
@@ -14231,7 +14245,8 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 
 /* 기본(숨김 끔): 빈 칸을 그냥 비워 두면 라벨만 떠 있어 값이 잘린 것처럼 보인다.
    2단 격자의 값 칸에 옅은 대시를 겹쳐 '입력 안 함'을 분명히 한다. */
-.form-fieldset.vm-read .form-grid > .form-field[data-vm-empty]::after {
+.form-fieldset.vm-read .form-grid > .form-field[data-vm-empty]::after,
+.form-fieldset.vm-read .received-fields .form-field[data-vm-empty]::after {
   content: "—";
   grid-row: 1;
   grid-column: 2;
@@ -14242,7 +14257,8 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 /* 빈 날짜칸은 브라우저가 "년-월-일" 형식 안내를 직접 그린다 — placeholder 가 아니라서
    위의 ::placeholder 규칙이 닿지 않는다. 그대로 두면 그 자리에 대시와 형식 안내가 함께
    떠 값이 있는 것처럼 보이므로, 읽기모드에선 글자를 지우고 대시만 남긴다. */
-.form-fieldset.vm-read .form-grid > .form-field[data-vm-empty] input[type="date"] {
+.form-fieldset.vm-read .form-grid > .form-field[data-vm-empty] input[type="date"],
+.form-fieldset.vm-read .received-fields .form-field[data-vm-empty] input[type="date"] {
   color: transparent;
   -webkit-text-fill-color: transparent;
 }
