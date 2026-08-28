@@ -11,15 +11,18 @@ import { ItemsTab, CategoriesTab } from "@/app/settings/page";
 type ItemTab = "parts" | "service" | "categories";
 
 export default function ItemPage() {
+  // 탭 상태가 여기 있는 건 껍데기(AppShell)가 알아야 하기 때문이다 — 마스터 두 탭은
+  // 표가 화면을 채우고 그 안에서 굴리는 배치(fill)를, 분류 탭은 제 길이대로 흐르는
+  // 보통 배치를 쓴다.
+  const [tab, setTab] = useState<ItemTab>("parts");
   return (
-    <AppShell active="item" perm="settings" wide>
-      <ItemManager />
+    <AppShell active="item" perm="settings" wide fill={tab !== "categories"}>
+      <ItemManager tab={tab} setTab={setTab} />
     </AppShell>
   );
 }
 
-function ItemManager() {
-  const [tab, setTab] = useState<ItemTab>("parts");
+function ItemManager({ tab, setTab }: { tab: ItemTab; setTab: (t: ItemTab) => void }) {
   const tabs: { key: ItemTab; label: string }[] = [
     { key: "parts", label: "Parts" },
     { key: "service", label: "Service" },

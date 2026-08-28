@@ -38,6 +38,7 @@ export default function AppShell({
   perm,
   children,
   wide = false,
+  fill = false,
 }: {
   active: string;
   /** 열람 가드에 쓸 권한 모듈. 생략하면 active 를 모듈로 본다(TopNav 의 perm 과 같은 규칙).
@@ -46,10 +47,14 @@ export default function AppShell({
   perm?: PermModule;
   children: React.ReactNode;
   wide?: boolean;
+  /** 화면 높이를 채우는 페이지 — 페이지가 통째로 길어지는 대신 표 상자 안에서 굴린다.
+   *  넓은 표에서 가로 스크롤 막대가 화면 안(표 아래)에 머물게 하려는 것이다: 페이지가
+   *  길면 그 막대는 문서 맨 아래라 잘린 오른쪽 칸을 굴려 볼 방법이 눈에 띄지 않는다. */
+  fill?: boolean;
 }) {
   return (
     <AuthGate>
-      <ShellInner active={active} perm={perm} wide={wide}>
+      <ShellInner active={active} perm={perm} wide={wide} fill={fill}>
         {children}
       </ShellInner>
     </AuthGate>
@@ -61,11 +66,13 @@ function ShellInner({
   active,
   perm,
   wide,
+  fill,
   children,
 }: {
   active: string;
   perm?: PermModule;
   wide: boolean;
+  fill: boolean;
   children: React.ReactNode;
 }) {
   const router = useRouter();
@@ -85,7 +92,9 @@ function ShellInner({
     <div className="shell">
       <TopNav active={active} />
       <main className="shell-main">
-        <div className={`page${wide ? " page-wide" : ""}`}>{children}</div>
+        <div className={`page${wide ? " page-wide" : ""}${fill ? " page-fill" : ""}`}>
+          {children}
+        </div>
       </main>
     </div>
   );
