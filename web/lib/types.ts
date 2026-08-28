@@ -110,6 +110,9 @@ export type SettingsItem = {
   // 가장 최근 하나(project_no)를 세우고, 머리행 필터는 전부(project_nos)를 본다.
   project_no?: string;           // "P-024(260622)" — project_nos[0]
   project_nos?: string[];
+  // 그 딜들이 다룬 선박 — 같은 부품이 여러 척에 들어가기도 한다. 규칙은 위와 같다.
+  vessel?: string;               // vessels[0]
+  vessels?: string[];
 };
 
 // 품목 분류 트리 노드(대>중>소). parent_id 로 계층 구성.

@@ -727,6 +727,7 @@ def settings_items():
         proj_no = _core._project_no_map(s)
         cust = dict(s.query(Customer.id, Customer.name).all())
         vend = dict(s.query(Vendor.id, Vendor.name).all())
+        vess = dict(s.query(Vessel.id, Vessel.name).all())
         out = []
         for i in s.query(ItemMaster).order_by(ItemMaster.part_no).all():
             sm = summary.get(i.id) or {}
@@ -749,10 +750,25 @@ def settings_items():
             _annotate_margin(row)   # margin_pct(USD 환산) + margin_cross
             row["project_nos"] = _project_nos(proj_no, sm.get("rfq_ids"), fb.get("rfq_ids"))
             row["project_no"] = row["project_nos"][0] if row["project_nos"] else ""
+            # 이 품목이 들어간 배 — 같은 부품이 여러 척에 쓰이므로 전부 주고(vessels),
+            # 목록은 가장 최근 것만 세운다(문서 있는 쪽 먼저, 그 다음 RFQ 등장분).
+            row["vessels"] = _names(vess, sm.get("vessel_ids"), fb.get("vessel_ids"))
+            row["vessel"] = row["vessels"][0] if row["vessels"] else ""
             out.append(row)
         return out
     finally:
         s.close()
+
+
+def _names(by_id: dict[int, str], *id_lists) -> list[str]:
+    """id 목록들 → 이름 목록(넘어온 순서 그대로, 빈 이름·중복 제외)."""
+    out: list[str] = []
+    for ids in id_lists:
+        for i in (ids or []):
+            name = (by_id.get(i) or "").strip()
+            if name and name not in out:
+                out.append(name)
+    return out
 
 
 def _project_nos(proj_no: dict[int, str], *id_lists) -> list[str]:

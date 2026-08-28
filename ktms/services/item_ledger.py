@@ -419,13 +419,13 @@ def _history_out(rows: list) -> list[dict]:
     } for h in rows]
 
 
-def _rfq_ids_newest_first(rows) -> list[int]:
-    """가격 이력 행 묶음 → 딜 id 목록(최근 문서 순, 중복 제거)."""
+def _ids_newest_first(rows, attr: str) -> list[int]:
+    """가격 이력 행 묶음 → 그 열의 id 목록(최근 문서 순, 중복 제거). 딜·선박에 쓴다."""
     out: list[int] = []
     for r in sorted(rows, key=lambda r: ((r.doc_date or ""), r.id), reverse=True):
-        rid = getattr(r, "rfq_id", None)
-        if rid and rid not in out:
-            out.append(rid)
+        v = getattr(r, attr, None)
+        if v and v not in out:
+            out.append(v)
     return out
 
 
@@ -442,7 +442,7 @@ def master_price_summary(session) -> dict[int, dict]:
         ItemPriceHistory.item_id, ItemPriceHistory.price_type, ItemPriceHistory.source_type,
         ItemPriceHistory.unit_price, ItemPriceHistory.currency, ItemPriceHistory.fx_rate,
         ItemPriceHistory.doc_date, ItemPriceHistory.customer_id, ItemPriceHistory.vendor_id,
-        ItemPriceHistory.rfq_id, ItemPriceHistory.id,
+        ItemPriceHistory.rfq_id, ItemPriceHistory.vessel_id, ItemPriceHistory.id,
     ).filter(ItemPriceHistory.item_id.isnot(None)).all()
 
     by_item: dict[int, list] = {}
@@ -480,7 +480,9 @@ def master_price_summary(session) -> dict[int, dict]:
             "quoted_at": cq.doc_date if cq else None,
             # 이 품목이 값과 함께 등장한 딜들(최근 문서 순, 중복 제거) — Item 목록의
             # Project No. 열이 쓴다. 한 품목이 여러 딜에 걸치는 일은 흔하다(재발주).
-            "rfq_ids": _rfq_ids_newest_first(rows),
+            "rfq_ids": _ids_newest_first(rows, "rfq_id"),
+            # 그 딜들이 다룬 선박 — 같은 부품이 여러 척에 들어가기도 한다(Vessel 열).
+            "vessel_ids": _ids_newest_first(rows, "vessel_id"),
         }
     return out
 
@@ -493,17 +495,19 @@ def master_party_fallback(session) -> dict[int, dict]:
     단계의 품목도 "어느 고객이 물어봤고 어느 공급사에 의뢰했는지"는 문서에 분명히 적혀
     있다("고객사·공급사가 왜 비어 있나"의 두 번째 원인).
 
-    반환 = item_master.id → {customer_id, vendor_id, rfq_at, rfq_ids}. 가격 이력이 있는
-    품목도 포함하되, 호출부는 이력 쪽 값이 없을 때만 이걸 쓴다."""
+    반환 = item_master.id → {customer_id, vendor_id, rfq_at, rfq_ids, vessel_ids}. 가격
+    이력이 있는 품목도 포함하되, 호출부는 이력 쪽 값이 없을 때만 이걸 쓴다."""
     idx = build_master_index(session)
     if not idx:
         return {}
     rfq_by_id = {r.id: r for r in session.query(RFQ).all()}
     seen: dict[int, dict] = {}
 
-    def note(item_id: int, *, when: str | None, customer_id=None, vendor_id=None, rfq_id=None):
+    def note(item_id: int, *, when: str | None, customer_id=None, vendor_id=None,
+             rfq_id=None, vessel_id=None):
         cur = seen.setdefault(item_id, {"customer_id": None, "vendor_id": None,
-                                        "_c_at": "", "_v_at": "", "rfq_at": None, "_rfqs": {}})
+                                        "_c_at": "", "_v_at": "", "rfq_at": None,
+                                        "_rfqs": {}, "_vessels": {}})
         w = (when or "")[:10]
         if customer_id and w >= cur["_c_at"]:
             cur["customer_id"], cur["_c_at"] = customer_id, w
@@ -511,9 +515,11 @@ def master_party_fallback(session) -> dict[int, dict]:
             cur["vendor_id"], cur["_v_at"] = vendor_id, w
         if w and (cur["rfq_at"] or "") < w:
             cur["rfq_at"] = w
-        # 같은 딜이 여러 문서에 나오면 가장 늦은 날짜만 남긴다(최근 순 정렬용).
+        # 같은 딜(선박)이 여러 문서에 나오면 가장 늦은 날짜만 남긴다(최근 순 정렬용).
         if rfq_id:
             cur["_rfqs"][rfq_id] = max(cur["_rfqs"].get(rfq_id, ""), w)
+        if vessel_id:
+            cur["_vessels"][vessel_id] = max(cur["_vessels"].get(vessel_id, ""), w)
 
     def lines_of(items):
         for _, line in _iter_lines(items):
@@ -524,19 +530,22 @@ def master_party_fallback(session) -> dict[int, dict]:
     # 고객 RFQ — 물어본 고객.
     for r in rfq_by_id.values():
         for item_id in lines_of(r.items):
-            note(item_id, when=(r.received_at or ""), customer_id=r.customer_id, rfq_id=r.id)
+            note(item_id, when=(r.received_at or ""), customer_id=r.customer_id,
+                 rfq_id=r.id, vessel_id=r.vessel_id)
     # 벤더 RFQ — 견적을 의뢰한 공급사(고객은 그 딜의 고객).
     for vr in session.query(VendorRFQ).all():
         rfq = rfq_by_id.get(vr.rfq_id)
         for item_id in lines_of(vr.items):
             note(item_id, when=(vr.sent_date or ""), vendor_id=vr.vendor_id,
-                 customer_id=(rfq.customer_id if rfq else None), rfq_id=vr.rfq_id)
+                 customer_id=(rfq.customer_id if rfq else None), rfq_id=vr.rfq_id,
+                 vessel_id=(rfq.vessel_id if rfq else None))
     for v in seen.values():
         v.pop("_c_at", None)
         v.pop("_v_at", None)
-        # 값이 붙기 전(RFQ 단계)에도 이 품목이 어느 딜에서 나왔는지는 안다 — 최근 딜 순.
-        v["rfq_ids"] = [rid for rid, _ in
-                        sorted(v.pop("_rfqs").items(), key=lambda kv: (kv[1], kv[0]), reverse=True)]
+        # 값이 붙기 전(RFQ 단계)에도 이 품목이 어느 딜·어느 배에서 나왔는지는 안다.
+        for src, dst in (("_rfqs", "rfq_ids"), ("_vessels", "vessel_ids")):
+            v[dst] = [i for i, _ in
+                      sorted(v.pop(src).items(), key=lambda kv: (kv[1], kv[0]), reverse=True)]
     return seen
 
 

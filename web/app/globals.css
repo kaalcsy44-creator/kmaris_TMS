@@ -493,7 +493,10 @@ body {
 }
 /* 세로로 굴려도 머리 칸은 남는다 — 열 이름이 사라지면 스무 칸짜리 표는 읽을 수 없다.
    (배경은 th 가 이미 갖고 있다 — 없으면 굴러 올라온 행이 글자 뒤로 비친다.) */
-.page-fill .table-wrap table.mini thead th {
+.page-fill .table-wrap table.mini thead th,
+/* 메뉴가 달린 머리 칸(.pl-th)은 제 규칙에서 position:relative 를 받는다 — 여기서 다시
+   못박지 않으면 그 칸만 굴러 올라간다(= 머리줄 전체가 안 붙는다). */
+.page-fill .table-wrap table.mini.ms-table thead th.pl-th {
   position: sticky;
   top: 0;
   z-index: 3;
@@ -1389,12 +1392,12 @@ table.mini.wide.ms-table.ms-table--items td.ms-projcol .pjno {
 table.mini.wide.ms-table.ms-table--items td.ms-projcol .pjno-date {
   margin-left: 0;
 }
-.ms-proj {
+.ms-multi {
   display: inline-flex;
   align-items: baseline;
   gap: 4px;
 }
-.ms-proj-more {
+.ms-multi-more {
   flex: none;
   font-size: 10px;
   font-weight: 700;
@@ -1403,6 +1406,12 @@ table.mini.wide.ms-table.ms-table--items td.ms-projcol .pjno-date {
   border-radius: 999px;
   padding: 0 5px;
   cursor: help;
+}
+/* 선박 — "HANJIN OSAKA" 처럼 두 낱말이 흔하다. 최소폭을 조금 줘 한 줄로 담고,
+   여러 척인 품목은 "+N" 이 이름 옆에 붙는다. */
+table.mini.wide.ms-table.ms-table--items th.ms-vessel,
+table.mini.wide.ms-table.ms-table--items td.ms-vessel {
+  min-width: 92px;
 }
 /* ── 머리 칸 정렬·필터 ────────────────────────────────────────────────────────
    칸을 누르면 진행현황·지급대장 표와 같은 메뉴(.pl-col-menu)가 열린다. 칸의 안쪽

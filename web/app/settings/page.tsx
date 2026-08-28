@@ -1980,6 +1980,24 @@ const ITEM_KIND_LABEL: Record<ItemKind, string> = { part: "Parts", service: "Ser
 function itemProjects(r: SettingsItem): string[] {
   return r.project_nos?.length ? r.project_nos : r.project_no ? [r.project_no] : [];
 }
+/** 품목이 들어간 선박(최근 순). 같은 규칙. */
+function itemVessels(r: SettingsItem): string[] {
+  return r.vessels?.length ? r.vessels : r.vessel ? [r.vessel] : [];
+}
+
+/** 값이 여럿인 칸 — 대표(가장 최근) 하나만 세우고 나머지는 "+N"(툴팁에 전체 목록).
+ *  칸을 늘리지 않으면서 "이 품목은 딜/배가 하나가 아니다"를 알리는 최소한의 표시다. */
+function multiCell(all: string[], render?: (v: string) => React.ReactNode): React.ReactNode {
+  if (!all.length) return <span className="dash">—</span>;
+  return (
+    <span className="ms-multi">
+      {render ? render(all[0]) : all[0]}
+      {all.length > 1
+        ? <span className="ms-multi-more" title={all.join(", ")}>+{all.length - 1}</span>
+        : null}
+    </span>
+  );
+}
 
 // 품목 목록의 머리 칸 정렬·필터 규칙. 표에 그리는 열(columns)과 key 로 짝지어진다.
 const itemHeadCols: HeadCol<SettingsItem>[] = [
@@ -1987,6 +2005,9 @@ const itemHeadCols: HeadCol<SettingsItem>[] = [
   { key: "project_no", text: (r) => itemProjects(r)[0] || "", filter: "facet",
     facetValues: itemProjects, emptyLabel: "No deal yet" },
   { key: "customer", text: (r) => r.customer || "", filter: "facet", emptyLabel: "Unspecified" },
+  // 선박도 딜처럼 한 품목에 여럿이라 판정은 전부, 표시·정렬은 최근 한 척으로.
+  { key: "vessel", text: (r) => itemVessels(r)[0] || "", filter: "facet",
+    facetValues: itemVessels, emptyLabel: "No vessel" },
   { key: "description", text: (r) => r.description || "" },
   { key: "part_no", text: (r) => r.part_no || "" },
   { key: "category_path", text: (r) => r.category_path || "", filter: "facet",
@@ -2033,18 +2054,11 @@ export function ItemsTab({ kind = "part" }: { kind?: ItemKind }) {
   // 필터는 보이는 번호가 아니라 걸린 딜 전부를 본다 — P-024 를 고르면 그 딜에 들어간
   // 품목이 모두 남는다(그 딜이 이 품목의 최근 딜이 아니어도).
   const project: [keyof SettingsItem, string, ((r: SettingsItem) => React.ReactNode)?, string?] =
-    ["project_no", "Project No.", (r) => {
-      const all = itemProjects(r);
-      if (!all.length) return <span className="dash">—</span>;
-      return (
-        <span className="ms-proj">
-          <ProjectNo value={all[0]} />
-          {all.length > 1
-            ? <span className="ms-proj-more" title={all.join(", ")}>+{all.length - 1}</span>
-            : null}
-        </span>
-      );
-    }, "ms-projcol"];
+    ["project_no", "Project No.",
+      (r) => multiCell(itemProjects(r), (v) => <ProjectNo value={v} />), "ms-projcol"];
+  // 선박 — 딜을 따라온다(그 딜이 다룬 배). 여러 척이면 최근 한 척 + "+N".
+  const vessel: [keyof SettingsItem, string, ((r: SettingsItem) => React.ReactNode)?, string?] =
+    ["vessel", "Vessel", (r) => multiCell(itemVessels(r)), "ms-vessel"];
   const category: [keyof SettingsItem, string, ((r: SettingsItem) => React.ReactNode)?, string?] =
     ["category_path", "Category", (r) => r.category_path
       // 3단 경로는 알약 폭을 400px 가까이 끌고 간다 — 폭을 못 박고 넘치면 말줄임,
@@ -2080,6 +2094,7 @@ export function ItemsTab({ kind = "part" }: { kind?: ItemKind }) {
         ? [
             project,
             ["customer", "Customer", (r) => r.customer || <span className="dash">—</span>, "ms-party"],
+            vessel,
             ["description", "Service", undefined, "ms-desc"],
             category,
             ["unit", "Unit"],
@@ -2088,6 +2103,7 @@ export function ItemsTab({ kind = "part" }: { kind?: ItemKind }) {
         : [
             project,
             ["customer", "Customer", (r) => r.customer || <span className="dash">—</span>, "ms-party"],
+            vessel,
             ["description", "Description", undefined, "ms-desc"],
             ["part_no", "Part No."],
             category,
@@ -2123,7 +2139,7 @@ export function ItemsTab({ kind = "part" }: { kind?: ItemKind }) {
       required={isService ? "description" : "part_no"}
       numeric={["std_price"]}
       // 검색은 화면 컬럼 기본값 대신 직접 지정 — 가격 열은 객체라 기본 문자열화가 안 된다.
-      searchText={(r) => [...itemProjects(r), r.customer, r.description, r.part_no, r.category_path, r.maker, r.origin, r.hs_code, r.vendor].join(" ")}
+      searchText={(r) => [...itemProjects(r), ...itemVessels(r), r.customer, r.description, r.part_no, r.category_path, r.maker, r.origin, r.hs_code, r.vendor].join(" ")}
       // Type 을 바꿔 저장하면 그 항목은 반대편 탭으로 옮겨 간다(잘못 잡힌 구분 교정용).
       renderField={({ key, label, form, setForm }) =>
         key === "item_type" ? (
