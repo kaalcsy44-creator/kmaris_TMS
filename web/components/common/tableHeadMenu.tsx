@@ -22,6 +22,10 @@ export type HeadCol<T> = {
   sortValue?: (row: T) => number;
   /** 필터 유형(생략 시 정렬만). date 는 text() 가 "YYYY-MM-DD…" 형태여야 한다. */
   filter?: HeadFilter;
+  /** 한 행이 값을 여러 개 갖는 열의 패싯 값들(예: 여러 딜에 걸친 품목의 프로젝트 번호).
+   *  주면 후보 목록과 통과 판정을 이 값들로 한다 — 칸에 보이는 건 대표값 하나라도,
+   *  고른 값이 그중 하나에 걸리면 그 행은 남는다. 생략하면 text() 한 값만 본다. */
+  facetValues?: (row: T) => string[];
   /** 패싯 빈값("") 표시 라벨(기본 "Unspecified"). */
   emptyLabel?: string;
 };
@@ -101,10 +105,16 @@ export function useHeadMenu<T>(cols: HeadCol<T>[], resetOn?: string): HeadMenu<T
     return false;
   }
 
+  /** 이 행이 이 열에서 갖는 패싯 값들 — 다중값 열은 그 목록, 아니면 text() 하나. */
+  function facetsOf(col: HeadCol<T>, row: T): string[] {
+    const vs = col.facetValues?.(row);
+    return vs && vs.length ? vs : [col.text(row)];
+  }
+
   function passes(col: HeadCol<T>, row: T): boolean {
     if (col.filter === "facet") {
       const sel = facetValue(col.key);
-      return sel.length === 0 || sel.includes(col.text(row));
+      return sel.length === 0 || facetsOf(col, row).some((v) => sel.includes(v));
     }
     if (col.filter === "date") {
       const { from, to } = dateRange(col.key);
@@ -157,7 +167,7 @@ export function useHeadMenu<T>(cols: HeadCol<T>[], resetOn?: string): HeadMenu<T
     // "All"(선택 해제) 줄은 값이 아니라 명령이라 목록 밖에서 따로 그린다.
     const opts =
       col.filter === "facet"
-        ? Array.from(new Set(rowsRef.current.map(col.text)))
+        ? Array.from(new Set(rowsRef.current.flatMap((r) => facetsOf(col, r))))
             .sort((a, b) => a.localeCompare(b, "ko"))
             .map((v) => ({ v, label: v || col.emptyLabel || "Unspecified" }))
         : [];

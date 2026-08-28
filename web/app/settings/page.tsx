@@ -98,6 +98,9 @@ import { invalidateMasterCategories } from "@/components/common/CategoryCell";
 // 목록의 상대처는 다른 화면과 같은 모양(로고 + 이름)으로 — 같은 회사를 두 표기로 읽지 않도록.
 import CustomerName from "@/components/common/CustomerName";
 import VendorName from "@/components/common/VendorName";
+import ProjectNo from "@/components/common/ProjectNo";
+// 머리 칸 정렬·필터 — 진행현황·지급대장 표에서 쓰는 장치를 마스터 목록에도 그대로 쓴다.
+import { HeadTh, useHeadMenu, type HeadCol } from "@/components/common/tableHeadMenu";
 
 // 탭. 예전에는 Users / Permissions 가 갈려 있고 Customer / Vendor 도 따로였다.
 // 둘 다 한 가지 일을 두 자리에서 하게 만들던 구분이라 합쳤다 — 계정과 그 계정이 할 수
@@ -1973,6 +1976,43 @@ export type ItemKind = "part" | "service";
 
 const ITEM_KIND_LABEL: Record<ItemKind, string> = { part: "Parts", service: "Service" };
 
+/** 품목이 등장한 딜의 프로젝트 번호(최근 순). 옛 응답(필드 없음)도 견디게 한다. */
+function itemProjects(r: SettingsItem): string[] {
+  return r.project_nos?.length ? r.project_nos : r.project_no ? [r.project_no] : [];
+}
+
+// 품목 목록의 머리 칸 정렬·필터 규칙. 표에 그리는 열(columns)과 key 로 짝지어진다.
+const itemHeadCols: HeadCol<SettingsItem>[] = [
+  // 한 품목이 여러 딜에 걸치므로 판정은 전부(facetValues), 정렬은 대표(최근) 번호로.
+  { key: "project_no", text: (r) => itemProjects(r)[0] || "", filter: "facet",
+    facetValues: itemProjects, emptyLabel: "No deal yet" },
+  { key: "customer", text: (r) => r.customer || "", filter: "facet", emptyLabel: "Unspecified" },
+  { key: "description", text: (r) => r.description || "" },
+  { key: "part_no", text: (r) => r.part_no || "" },
+  { key: "category_path", text: (r) => r.category_path || "", filter: "facet",
+    emptyLabel: "Unclassified" },
+  { key: "maker", text: (r) => r.maker || "", filter: "facet", emptyLabel: "Unspecified" },
+  { key: "origin", text: (r) => r.origin || "", filter: "facet", emptyLabel: "Unspecified" },
+  { key: "unit", text: (r) => r.unit || "", filter: "facet" },
+  { key: "hs_code", text: (r) => r.hs_code || "", filter: "facet", emptyLabel: "Unspecified" },
+  { key: "vendor", text: (r) => r.vendor || "", filter: "facet", emptyLabel: "Unspecified" },
+  // 금액은 통화가 섞여 있다 — USD 환산 없이 견주면 숫자가 뒤집히므로 원 통화 값으로
+  // 정렬하되 통화를 앞세운다(같은 통화끼리 모인 뒤 금액 순).
+  { key: "buy", text: (r) => priceSortText(r.buy) },
+  { key: "sell", text: (r) => priceSortText(r.sell) },
+  // 마진 없는 행은 맨 아래로 내리되 유한한 값으로 — -Infinity 끼리 빼면 NaN 이라
+  // 비교가 무너진다(값 없는 행이 대부분인 표에서 정렬이 제멋대로가 된다).
+  { key: "margin_pct", text: (r) => String(r.margin_pct ?? ""),
+    sortValue: (r) => r.margin_pct ?? -1e9 },
+  { key: "std_price", text: (r) => String(r.std_price ?? 0), sortValue: (r) => r.std_price || 0 },
+];
+
+/** 금액 정렬 키 — "USD 000000123.45"(통화 먼저, 금액은 자릿수 맞춰 문자 정렬). */
+function priceSortText(p: { unit_price: number; currency: string } | null): string {
+  if (!p) return "";
+  return `${p.currency} ${(p.unit_price || 0).toFixed(2).padStart(15, "0")}`;
+}
+
 export function ItemsTab({ kind = "part" }: { kind?: ItemKind }) {
   const isService = kind === "service";
   // 고객·공급사·구매가·판매가·마진은 가격 이력에서 온 읽기전용 파생값이라 편집 폼엔 없다.
@@ -1988,6 +2028,23 @@ export function ItemsTab({ kind = "part" }: { kind?: ItemKind }) {
     ["margin_pct", "Margin", (r) => marginText(r.margin_pct, r.margin_cross), "ms-num"],
     ["std_price", "Std Price", undefined, "ms-num"],
   ];
+  // 이 품목이 나온 딜 — 다른 화면과 같은 자리(맨 왼쪽)·같은 모양(ProjectNo)으로.
+  // 재발주 품목은 딜이 여럿이라 가장 최근 것만 세우고 나머지는 "+N" 으로 알린다.
+  // 필터는 보이는 번호가 아니라 걸린 딜 전부를 본다 — P-024 를 고르면 그 딜에 들어간
+  // 품목이 모두 남는다(그 딜이 이 품목의 최근 딜이 아니어도).
+  const project: [keyof SettingsItem, string, ((r: SettingsItem) => React.ReactNode)?, string?] =
+    ["project_no", "Project No.", (r) => {
+      const all = itemProjects(r);
+      if (!all.length) return <span className="dash">—</span>;
+      return (
+        <span className="ms-proj">
+          <ProjectNo value={all[0]} />
+          {all.length > 1
+            ? <span className="ms-proj-more" title={all.join(", ")}>+{all.length - 1}</span>
+            : null}
+        </span>
+      );
+    }, "ms-projcol"];
   const category: [keyof SettingsItem, string, ((r: SettingsItem) => React.ReactNode)?, string?] =
     ["category_path", "Category", (r) => r.category_path
       // 3단 경로는 알약 폭을 400px 가까이 끌고 간다 — 폭을 못 박고 넘치면 말줄임,
@@ -2021,6 +2078,7 @@ export function ItemsTab({ kind = "part" }: { kind?: ItemKind }) {
       // 판매가·마진) 순. 용역 탭은 품번·제조사·원산지·HS 코드를 걷어낸다(전부 빈칸이라).
       columns={isService
         ? [
+            project,
             ["customer", "Customer", (r) => r.customer || <span className="dash">—</span>, "ms-party"],
             ["description", "Service", undefined, "ms-desc"],
             category,
@@ -2028,6 +2086,7 @@ export function ItemsTab({ kind = "part" }: { kind?: ItemKind }) {
             ...trade,
           ]
         : [
+            project,
             ["customer", "Customer", (r) => r.customer || <span className="dash">—</span>, "ms-party"],
             ["description", "Description", undefined, "ms-desc"],
             ["part_no", "Part No."],
@@ -2038,6 +2097,10 @@ export function ItemsTab({ kind = "part" }: { kind?: ItemKind }) {
             ["hs_code", "HS Code"],
             ...trade,
           ]}
+      // 머리 칸을 누르면 그 열로 정렬하거나 값을 골라 거를 수 있다. 값의 가짓수가
+      // 적은 열(분류·상대처·제조사·원산지·단위·프로젝트)은 고르는 목록으로, 품명·품번처럼
+      // 행마다 다른 열과 금액 열은 정렬만 — 목록으로 만들면 행 수만큼 긴 메뉴가 된다.
+      headCols={itemHeadCols}
       tableClass="ms-table--items"
       fields={isService
         ? [
@@ -2060,7 +2123,7 @@ export function ItemsTab({ kind = "part" }: { kind?: ItemKind }) {
       required={isService ? "description" : "part_no"}
       numeric={["std_price"]}
       // 검색은 화면 컬럼 기본값 대신 직접 지정 — 가격 열은 객체라 기본 문자열화가 안 된다.
-      searchText={(r) => [r.customer, r.description, r.part_no, r.category_path, r.maker, r.origin, r.hs_code, r.vendor].join(" ")}
+      searchText={(r) => [...itemProjects(r), r.customer, r.description, r.part_no, r.category_path, r.maker, r.origin, r.hs_code, r.vendor].join(" ")}
       // Type 을 바꿔 저장하면 그 항목은 반대편 탭으로 옮겨 간다(잘못 잡힌 구분 교정용).
       renderField={({ key, label, form, setForm }) =>
         key === "item_type" ? (
@@ -3209,6 +3272,7 @@ function MasterSection<T extends { id: number }>({
   twoCol = false,
   tableClass = "",
   reloadKey = 0,
+  headCols,
 }: {
   title: string;
   empty: T;
@@ -3258,6 +3322,9 @@ function MasterSection<T extends { id: number }>({
   tableClass?: string;
   // 값이 바뀌면 목록을 다시 불러온다(바깥에서 저장했을 때 — 예: 회사 공통정보 일괄 수정).
   reloadKey?: number;
+  // 머리 칸에서 거는 정렬·필터. columns 의 키와 같은 key 를 준 열만 메뉴가 달리고,
+  // 나머지는 평범한 머리 칸으로 남는다. 안 주면 표는 지금까지와 똑같이 그려진다.
+  headCols?: HeadCol<T>[];
 }) {
   const NEW_ID = -1; // editId 센티넬: 신규 등록 편집기
   const [rows, setRows] = useState<T[]>([]);
@@ -3271,6 +3338,10 @@ function MasterSection<T extends { id: number }>({
   const canCreate = can("settings", "create");
   const canEdit = can("settings", "edit");
   const canDelete = can("settings", "delete");
+  // 표 갈래(title)가 바뀌면 걸어 둔 필터를 지운다 — 앞 갈래에서 고른 값이 새 목록에
+  // 없으면 표가 통째로 빈 것처럼 보인다.
+  const head = useHeadMenu<T>(headCols ?? [], title);
+  const headByKey = new Map((headCols ?? []).map((c) => [c.key, c]));
 
   function refresh() {
     load().then(setRows).catch((e) => setErr(e instanceof Error ? e.message : "Load failed"));
@@ -3342,13 +3413,15 @@ function MasterSection<T extends { id: number }>({
 
   const requiredValue = String(form[required] ?? "").trim();
   const ql = q.trim().toLowerCase();
-  const filtered = ql
+  const searched = ql
     ? rows.filter((r) =>
         searchText
           ? searchText(r).toLowerCase().includes(ql)
           : columns.some(([key]) => String(r[key] ?? "").toLowerCase().includes(ql))
       )
     : rows;
+  // 머리 칸 정렬·필터는 검색으로 좁힌 목록을 다시 자른다(검색 → 열 필터 → 정렬 순).
+  const filtered = head.apply(searched);
   const isEdit = !!editId && editId > 0;
 
   // 같은 키(회사)끼리 묶기 — 원래 정렬 순서를 유지한다.
@@ -3409,9 +3482,23 @@ function MasterSection<T extends { id: number }>({
       <table className={`mini wide ms-table${tableClass ? ` ${tableClass}` : ""}`}>
         <thead>
           <tr>
-            {columns.map(([, label, , cls]) => (
-              <th key={label} className={cls}>{label}</th>
-            ))}
+            {columns.map(([key, label, , cls]) => {
+              const hc = headByKey.get(String(key));
+              // 메뉴가 달린 칸은 누르면 정렬·값 고르기가 열린다(HeadTh). 나머지는 그대로.
+              return hc ? (
+                <HeadTh
+                  key={label}
+                  menu={head}
+                  col={hc.key}
+                  className={cls}
+                  numeric={(cls || "").includes("ms-num")}
+                >
+                  {label}
+                </HeadTh>
+              ) : (
+                <th key={label} className={cls}>{label}</th>
+              );
+            })}
             <th className="ms-actcol"></th>
           </tr>
         </thead>
@@ -3554,8 +3641,22 @@ function MasterSection<T extends { id: number }>({
 
       {editor}
 
+      {/* 머리 칸에 필터가 걸렸을 때만 나오는 줄 — 몇 줄이 남았는지와 한 번에 되돌리기.
+          안 걸었으면 자리도 차지하지 않는다. */}
+      {head.filtersActive ? (
+        <div className="ms-filter-bar">
+          <span className="pl-search-count">{filtered.length} / {searched.length}</span>
+          <button type="button" className="pl-filter-reset" onClick={head.resetFilters}>
+            Reset column filters
+          </button>
+        </div>
+      ) : null}
+
       {filtered.length === 0 ? (
-        <div className="state">{ql ? "No search results." : "No items registered."}</div>
+        <div className="state">
+          {head.filtersActive ? "No rows match the column filters."
+            : ql ? "No search results." : "No items registered."}
+        </div>
       ) : columnPair ? (
         // 넓은 화면에서 표가 옆으로 늘어져 빈칸만 커지는 걸 막으려고 좌우 2열로 나눈다.
         <div className="ms-2col">
@@ -3578,6 +3679,8 @@ function MasterSection<T extends { id: number }>({
       ) : (
         <div className="table-wrap">{table(group ? groups : null)}</div>
       )}
+      {/* 열린 열 메뉴는 표 바깥에 띄운다(표 안에 두면 칸 폭에 갇힌다). */}
+      {head.renderMenu()}
     </div>
   );
 }

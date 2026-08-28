@@ -722,6 +722,9 @@ def settings_items():
         summary = master_price_summary(s)
         # 아직 값이 붙는 문서가 없는 품목(RFQ 단계)은 상대만이라도 채운다.
         parties = master_party_fallback(s)
+        # 프로젝트 번호 — 품목이 등장한 딜의 관리번호("P-024(260622)"). 한 품목이 여러
+        # 딜에 걸치므로 전부 주고(project_nos), 목록은 가장 최근 것만 세운다.
+        proj_no = _core._project_no_map(s)
         cust = dict(s.query(Customer.id, Customer.name).all())
         vend = dict(s.query(Vendor.id, Vendor.name).all())
         out = []
@@ -744,10 +747,28 @@ def settings_items():
                 "quoted_at": sm.get("quoted_at") or "",
             }
             _annotate_margin(row)   # margin_pct(USD 환산) + margin_cross
+            row["project_nos"] = _project_nos(proj_no, sm.get("rfq_ids"), fb.get("rfq_ids"))
+            row["project_no"] = row["project_nos"][0] if row["project_nos"] else ""
             out.append(row)
         return out
     finally:
         s.close()
+
+
+def _project_nos(proj_no: dict[int, str], *id_lists) -> list[str]:
+    """딜 id 목록들 → 프로젝트 번호 목록(최근 딜 먼저, 중복 제거).
+
+    번호는 최초 RFQ 수신 순서로 매겨지므로("P-001(260101)" → "P-024(260622)"), 괄호 안
+    수신일 + 번호를 내림차순으로 세우면 그대로 '최근 딜 순'이 된다. 문서 날짜(가격 이력)와
+    RFQ 등장분을 한 자리에서 섞어야 해서, 두 갈래의 날짜를 견주는 대신 번호로 줄 세운다."""
+    seen: list[str] = []
+    for ids in id_lists:
+        for rid in (ids or []):
+            no = proj_no.get(rid) or ""
+            if no and no not in seen:
+                seen.append(no)
+    # "P-024(260622)" → ("260622", "P-024(260622)") 로 정렬.
+    return sorted(seen, key=lambda n: (n[n.find("(") + 1:-1] if "(" in n else "", n), reverse=True)
 
 
 def _item_type(v: str | None) -> str:

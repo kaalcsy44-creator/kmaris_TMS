@@ -106,6 +106,10 @@ export type SettingsItem = {
   sell: ItemLedgerPrice | null;  // 최근 판매가
   margin_pct?: number | null;    // 구매가 대비 판매가 마진%(USD 환산)
   margin_cross?: boolean;        // 매입·매출 통화가 달라 환산으로 계산된 값인지
+  // 이 품목이 등장한 딜의 관리번호 — 최근 딜 순. 재발주 품목은 여럿이라 목록은
+  // 가장 최근 하나(project_no)를 세우고, 머리행 필터는 전부(project_nos)를 본다.
+  project_no?: string;           // "P-024(260622)" — project_nos[0]
+  project_nos?: string[];
 };
 
 // 품목 분류 트리 노드(대>중>소). parent_id 로 계층 구성.
