@@ -2052,13 +2052,15 @@ export function ItemsTab({ kind = "part" }: { kind?: ItemKind }) {
     ["vendor", "Vendor", (r) => r.vendor || <span className="dash">—</span>, "ms-party"],
     // 견적일은 각자 짝인 가격과 한 칸에 위아래로 — 공급사 견적(수신) → 구매가,
     // 우리 견적(제출) → 판매가. 날짜를 독립 열로 두면 물품 탭이 16열이 되어 오른쪽
-    // 서너 칸(판매가·마진·표준가·편집)이 화면 밖으로 밀려났다.
+    // 서너 칸(판매가·마진·편집)이 화면 밖으로 밀려났다.
     ["buy", "Purchase Price",
       (r) => priceWithDate(r.buy, r.vendor_quote_at, "Vendor quote received"), "ms-num"],
     ["sell", "Sales Price",
       (r) => priceWithDate(r.sell, r.quoted_at, "Our quote sent"), "ms-num"],
     ["margin_pct", "Margin", (r) => marginText(r.margin_pct, r.margin_cross), "ms-num"],
-    ["std_price", "Std Price", undefined, "ms-num"],
+    // Std Price(표준가)는 아직 쓰지 않아 표에서 뺐다 — 값은 편집 폼에 그대로 있고,
+    // 다시 필요해지면 아래 한 줄을 되살리면 된다.
+    // ["std_price", "Std Price", undefined, "ms-num"],
   ];
   // 이 품목이 나온 딜 — 다른 화면과 같은 자리(맨 왼쪽)·같은 모양(ProjectNo)으로.
   // 재발주 품목은 딜이 여럿이라 가장 최근 것만 세우고 나머지는 "+N" 으로 알린다.
@@ -2116,21 +2118,21 @@ export function ItemsTab({ kind = "part" }: { kind?: ItemKind }) {
         return r;
       }}
       // 앞쪽은 "누구에게 판 무엇인가"(고객·설명), 뒤쪽은 거래 조건(공급사·구매가·
-      // 판매가·마진) 순. 용역 탭은 품번·제조사·원산지·HS 코드를 걷어낸다(전부 빈칸이라).
+      // 판매가·마진) 순이고, 딜의 결말(Deal)은 그 조건을 읽은 다음에 보는 값이라
+      // 마진 오른쪽 맨 끝에 둔다. 용역 탭은 품번·제조사·원산지·HS 코드를 걷어낸다(전부 빈칸이라).
       columns={isService
         ? [
             project,
-            deal,
             ["customer", "Customer", (r) => r.customer || <span className="dash">—</span>, "ms-party"],
             vessel,
             ["description", "Service", undefined, "ms-desc"],
             category,
             ["unit", "Unit"],
             ...trade,
+            deal,
           ]
         : [
             project,
-            deal,
             ["customer", "Customer", (r) => r.customer || <span className="dash">—</span>, "ms-party"],
             vessel,
             ["description", "Description", undefined, "ms-desc"],
@@ -2141,6 +2143,7 @@ export function ItemsTab({ kind = "part" }: { kind?: ItemKind }) {
             ["unit", "Unit"],
             ["hs_code", "HS Code"],
             ...trade,
+            deal,
           ]}
       // 머리 칸을 누르면 그 열로 정렬하거나 값을 골라 거를 수 있다. 값의 가짓수가
       // 적은 열(분류·상대처·제조사·원산지·단위·프로젝트)은 고르는 목록으로, 품명·품번처럼
