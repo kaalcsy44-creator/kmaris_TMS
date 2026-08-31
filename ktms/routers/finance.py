@@ -9,7 +9,10 @@ from __future__ import annotations
 from _core import (
     APRecord,
     ARRecord,
+    CLAIM_CATEGORY,
+    Claim,
     Consultant,
+    CreditNote,
     INBOUND_FEE_CATEGORY,
     INBOUND_FEE_KRW,
     inbound_fee_in,
@@ -568,6 +571,210 @@ def _inbound_fee_rows(s) -> list[dict]:
     return out
 
 
+def _credit_note_rows(s) -> list[dict]:
+    """크레딧 노트 한 장 = 매출 차감 한 줄. 결산·손익·클레임 대장이 함께 쓴다.
+
+    금액은 발행 통화가 아니라 **상계 대상 청구서의 통화**로 읽는다(applied_amount) —
+    깎아 준 매출과 같은 자로 재야 그 청구서의 매출에서 정확히 빠진다. 발행 통화 금액은
+    그 자체로는 장부에 설 자리가 없다(환율과 함께 근거로만 남는다).
+    """
+    ar_map = {a.id: a for a in s.query(ARRecord).all()}
+    ord_map = {o.id: o for o in s.query(Order).all()}
+    cust_names = {c.id: c.name for c in s.query(Customer).all()}
+    qtn_rfq = {q.id: q.rfq_id for q in s.query(Quotation).all()}
+    rows: list[dict] = []
+    for c in s.query(CreditNote).all():
+        if (c.status or "issued") == "void":
+            continue
+        ar = ar_map.get(c.ar_id)
+        o = ord_map.get(ar.order_id) if ar else None
+        total = float(c.applied_amount or 0)
+        vat = float(c.vat_amount or 0)
+        rid = (getattr(o, "rfq_id", None) or qtn_rfq.get(getattr(o, "quotation_id", None) or 0) or 0) if o else 0
+        rows.append({
+            "id": c.id,
+            "cn_no": c.cn_no or "",
+            "claim_id": c.claim_id or 0,
+            "ar_id": c.ar_id or 0,
+            "order_id": ar.order_id if ar else 0,
+            "rfq_id": rid,
+            "issue_date": (c.issue_date or "")[:10],
+            # 청구서 통화 — 이 행의 금액은 모두 이 통화다.
+            "currency": (ar.currency if ar else c.currency) or "USD",
+            "total": total,
+            "vat": vat,
+            "supply": round(total - vat, 2),
+            "customer": cust_names.get(o.customer_id, "—") if o else "—",
+            "invoice_no": (ar.invoice_no or ar.ci_no or "") if ar else "",
+            # 발행 통화 근거 — 대장 화면이 "USD 2,400 × 1,385.2" 를 그대로 보일 수 있게.
+            "issue_currency": c.currency or "",
+            "issue_amount": float(c.amount or 0),
+            "fx_rate": float(c.fx_rate or 1),
+        })
+    return rows
+
+
+def _claim_cost_rows(s) -> list[dict]:
+    """클레임 비용 중 **당사 부담 + 현금 지급**만 지출 행으로 세운다(등록하지 않는 파생 행).
+
+    상계(credit_note)로 정산한 몫은 여기 서지 않는다 — 그건 이미 매출 차감으로 잡혀 있어
+    비용으로 또 세면 같은 돈이 두 번 빠진다. 고객이 자기 돈으로 처리한 공임, 벤더에게
+    떠넘긴 비용도 우리 돈이 아니라 서지 않는다.
+
+    날짜는 라인의 date, 없으면 사고 발생일(없으면 접수일)이다. 납부 여부는 클레임 상태로
+    본다 — 이 행은 지급대장에서 편집할 수 없으므로(파생 행), 클레임을 Settled 로 옮기는
+    것이 곧 '정산했다'는 표시다.
+    """
+    ord_map = {o.id: o for o in s.query(Order).all()}
+    cust_names = {c.id: c.name for c in s.query(Customer).all()}
+    qtn_rfq = {q.id: q.rfq_id for q in s.query(Quotation).all()}
+    rows: list[dict] = []
+    for cl in s.query(Claim).all():
+        o = ord_map.get(cl.order_id or 0)
+        rid = cl.rfq_id or ((getattr(o, "rfq_id", None)
+                             or qtn_rfq.get(getattr(o, "quotation_id", None) or 0) or 0) if o else 0)
+        who = cust_names.get(o.customer_id, "—") if o else "—"
+        settled = (cl.status or "open") in ("settled", "closed")
+        for n, line in enumerate(cl.costs or []):
+            if (line.get("bearer") or "") != "us" or (line.get("settlement") or "") != "cash":
+                continue
+            amount = float(line.get("amount") or 0)
+            if amount <= 0:
+                continue
+            day = (str(line.get("date") or "") or cl.occurred_date or cl.reported_date or "")[:10]
+            rows.append({
+                # 파생 행 — 등록 지급 id 와 겹치지 않게 음수로 둔다(화면 key 전용).
+                "id": -(1000000 + cl.id * 100 + n),
+                "source": "claim",
+                "category": CLAIM_CATEGORY,
+                "counterparty": who,
+                "vendor_id": None,
+                "description": f"Claim · {(cl.title or cl.claim_no or '').strip() or 'site cost'}"
+                               f" · {line.get('description') or line.get('kind') or ''}".strip(" ·"),
+                "notes": cl.site or "",
+                "amount": amount,
+                # 현장 비용은 세금계산서를 받는 일이 드물어 매입세액을 세우지 않는다.
+                "vat_amount": 0.0,
+                "invoice_amount": amount,
+                "paid_amount": amount if settled else 0.0,
+                "outstanding": 0.0 if settled else amount,
+                "currency": (line.get("currency") or "USD").upper(),
+                "bill_date": day,
+                "due_date": day,
+                "recurrence": "none",
+                "recur_until": "",
+                "paid": settled,
+                "overdue": bool(day and not settled and day < date.today().isoformat()),
+                "paid_date": day if settled else "",
+                "paid_dates": [],
+                "payments": {},
+                "order_id": cl.order_id or 0,
+                "rfq_id": rid,
+                "claim_id": cl.id,
+                "owner_id": cl.owner_id or 0,
+                "owner": "",
+            })
+    return rows
+
+
+@app.get("/api/admin/finance/claims", dependencies=[Depends(require_token)])
+def finance_claims(year: int = 0):
+    """클레임 대장 — 사건별로 '얼마가 우리 몫이었고, 그중 얼마를 어떻게 정산했나'.
+
+    금액은 라인마다 통화가 다를 수 있어(현장 비용은 USD, 청구서는 KRW) 전부 KRW 로 옮겨
+    견준다 — 그 사건이 난 달의 말일 매매기준율이다(결산·손익과 같은 환산).
+
+    한 줄의 뜻:
+      ours      당사 부담 합계(bearer=us)
+      theirs    고객·벤더가 부담한 몫 — 사건의 크기는 말해 주지만 우리 손익은 아니다
+      credited  크레딧 노트로 상계한 금액(청구서 통화 기준 상계액)
+      cash      현금으로 물어 준 금액(당사 부담 + 현금 지급 라인)
+      open      아직 정산하지 않은 당사 부담분 = ours − credited − cash
+    """
+    s = get_session()
+    try:
+        fx_seen: dict[str, dict] = {}
+        ord_map = {o.id: o for o in s.query(Order).all()}
+        cust_names = {c.id: c.name for c in s.query(Customer).all()}
+        user_names = {u.id: u.username for u in s.query(User).all()}
+        proj_no = _project_no_map(s)
+        qtn_rfq = {q.id: q.rfq_id for q in s.query(Quotation).all()}
+
+        cn_by_claim: dict[int, list[dict]] = {}
+        for cn in _credit_note_rows(s):
+            cn_by_claim.setdefault(cn["claim_id"], []).append(cn)
+        cash_by_claim: dict[int, float] = {}
+        for cr in _claim_cost_rows(s):
+            ym = (cr["due_date"] or "")[:7]
+            cash_by_claim[cr["claim_id"]] = cash_by_claim.get(cr["claim_id"], 0.0) + _krw_in(
+                cr["amount"], cr["currency"], ym, fx_seen)
+
+        rows = []
+        for cl in s.query(Claim).order_by(Claim.id.desc()).all():
+            day = (cl.occurred_date or cl.reported_date or "")[:10]
+            if year and day[:4] != str(year):
+                continue
+            ym = day[:7]
+            o = ord_map.get(cl.order_id or 0)
+            rid = cl.rfq_id or ((getattr(o, "rfq_id", None)
+                                 or qtn_rfq.get(getattr(o, "quotation_id", None) or 0) or 0) if o else 0)
+            ours = theirs = 0.0
+            for line in cl.costs or []:
+                krw = _krw_in(float(line.get("amount") or 0),
+                              (line.get("currency") or "USD").upper(), ym, fx_seen)
+                if (line.get("bearer") or "") == "us":
+                    ours += krw
+                else:
+                    theirs += krw
+            cns = cn_by_claim.get(cl.id, [])
+            credited = sum(_krw_in(c["total"], c["currency"], (c["issue_date"] or ym)[:7], fx_seen)
+                           for c in cns)
+            cash = cash_by_claim.get(cl.id, 0.0)
+            rows.append({
+                "id": cl.id,
+                "rfq_id": rid,
+                "order_id": cl.order_id or 0,
+                "project_no": proj_no.get(rid, ""),
+                "customer": cust_names.get(o.customer_id, "—") if o else "—",
+                "claim_no": cl.claim_no or "",
+                "date": day,
+                "site": cl.site or "",
+                "title": cl.title or "",
+                "status": cl.status or "open",
+                "owner": user_names.get(cl.owner_id or 0, ""),
+                "ours_krw": round(ours),
+                "theirs_krw": round(theirs),
+                "credited_krw": round(credited),
+                "cash_krw": round(cash),
+                "open_krw": round(ours - credited - cash),
+                "credit_notes": [
+                    {"id": c["id"], "cn_no": c["cn_no"], "issue_date": c["issue_date"],
+                     "invoice_no": c["invoice_no"], "currency": c["currency"], "total": c["total"],
+                     "issue_currency": c["issue_currency"], "issue_amount": c["issue_amount"],
+                     "fx_rate": c["fx_rate"], "ar_id": c["ar_id"], "order_id": c["order_id"]}
+                    for c in cns
+                ],
+            })
+
+        def tot(key: str) -> int:
+            return round(sum(r[key] for r in rows))
+
+        return {
+            "rows": rows,
+            "totals": {
+                "count": len(rows),
+                "ours_krw": tot("ours_krw"),
+                "theirs_krw": tot("theirs_krw"),
+                "credited_krw": tot("credited_krw"),
+                "cash_krw": tot("cash_krw"),
+                "open_krw": tot("open_krw"),
+            },
+            "fx": _fx_note(fx_seen),
+        }
+    finally:
+        s.close()
+
+
 @app.get("/api/admin/finance/payables", dependencies=[Depends(require_token)])
 def finance_payables():
     """지급대장 목록 — 수동 등록(FinancePayable) + 매입 청구(APRecord, 읽기전용).
@@ -635,6 +842,8 @@ def finance_payables():
             })
         # 외화 수금마다 붙는 은행 수취수수료 — 계산해 세우는 읽기전용 행.
         out.extend(_inbound_fee_rows(s))
+        # 클레임 현금 부담분 — 등록하지 않는 파생 행(클레임 화면에서 편집한다).
+        out.extend(_claim_cost_rows(s))
         out.sort(key=lambda r: (r["due_date"] or "9999", r["source"] != "manual"))
         return {"rows": out, "fx": _today_usd_krw()}
     finally:
@@ -905,6 +1114,30 @@ def finance_closing(start: str = "", end: str = "", year: int = 0):
             if ys <= pd <= ye:
                 monthly_sales[int(pd[5:7]) - 1] += supply_krw
 
+        # 크레딧 노트(클레임 상계) — 발행한 달의 매출에서 뺀다. 물건값을 깎아 준 것이라
+        # 비용이 아니라 매출의 감액이고, 내수 감액이면 그만큼 매출세액도 줄어든다
+        # (수정세금계산서를 끊는 근거가 이 값이다).
+        cn_supply = cn_vat = cn_total = 0.0
+        cn_count = 0
+        for cn in _credit_note_rows(s):
+            pd = cn["issue_date"]
+            if not pd:
+                continue
+            ym = pd[:7]
+            supply_krw = _krw_in(cn["supply"], cn["currency"], ym, fx_seen)
+            vat_krw = _krw_in(cn["vat"], cn["currency"], ym, fx_seen)
+            if s0 <= pd <= s1:
+                sales_supply -= supply_krw
+                output_vat -= vat_krw
+                sales_total -= supply_krw + vat_krw
+                cn_supply += supply_krw
+                cn_vat += vat_krw
+                cn_total += supply_krw + vat_krw
+                cn_count += 1
+                by_cust[cn["customer"]] = by_cust.get(cn["customer"], 0.0) - supply_krw
+            if ys <= pd <= ye:
+                monthly_sales[int(pd[5:7]) - 1] -= supply_krw
+
         # 매입은 벤더 청구(AP) 기준 — 발주가 아니라 청구서가 비용을 만든다(_ap_period_date).
         purchase_cost = purchase_vat = 0.0
         purchase_count = 0
@@ -967,6 +1200,14 @@ def finance_closing(start: str = "", end: str = "", year: int = 0):
                 "cost_krw": round(purchase_cost),
                 "vat_krw": round(purchase_vat),
                 "count": purchase_count,
+            },
+            # 크레딧 노트로 깎아 준 매출 — 위 sales 는 이미 이만큼 뺀 값이다. 얼마를
+            # 깎았는지는 따로 보여야 한다(매출이 왜 줄었는지가 숫자 하나로는 안 보인다).
+            "credit_notes": {
+                "supply_krw": round(cn_supply),
+                "vat_krw": round(cn_vat),
+                "total_krw": round(cn_total),
+                "count": cn_count,
             },
             # 기타 지출 — 마진(매출-매입원가)에는 넣지 않고 부가세 계산에만 쓰는 값.
             "other_costs": {
@@ -1332,6 +1573,22 @@ def finance_profit(year: int = 0, detail: str = ""):
                 consulting[i] += fee
                 note("consulting", i, named_rfq(rid, f"{consultant_name.get(rid) or '—'} · {who} {rate:g}%"), fee)
 
+        # 크레딧 노트(클레임 상계) — 발행한 달의 매출에서 뺀다(결산과 같은 규칙).
+        # 소개 수수료는 건드리지 않는다: 수수료는 그 매출이 성사됐을 때 생긴 의무라,
+        # 나중에 하자로 얼마를 돌려줬다고 소급해 깎을 것이 아니다.
+        for cn in _credit_note_rows(s):
+            pd = cn["issue_date"]
+            if not pd or not (ys <= pd <= ye):
+                continue
+            i = int(pd[5:7]) - 1
+            supply_krw = _krw_in(cn["supply"], cn["currency"], pd[:7], fx_seen)
+            vat_krw = _krw_in(cn["vat"], cn["currency"], pd[:7], fx_seen)
+            sales[i] -= supply_krw
+            output_vat[i] -= vat_krw
+            label = named_rfq(cn["rfq_id"], f"{cn['customer']} · CN {cn['cn_no'] or ''}".strip())
+            note("sales", i, label, -supply_krw)
+            note("vat", i, label, -vat_krw)
+
         # 매입은 벤더 청구(AP) 기준 — 발주가 아니라 청구서가 비용을 만든다. 발주만 있고
         # 청구가 오지 않은 건은 아직 비용이 아니므로 여기 서지 않는다(견적·발주 단계에서
         # 멈춘 딜이 매입으로 잡히던 것을 없앤다). 예정 지출은 현금흐름 화면이 따로 센다.
@@ -1414,6 +1671,17 @@ def finance_profit(year: int = 0, detail: str = ""):
             # 다른 줄들과 같은 형식으로 — 프로젝트 번호와 거래선까지. 송장번호·입금일까지
             # 적으면 한 줄이 길어지기만 한다(그 건의 산출근거 전문은 Outflow 목록에 있다).
             note(f"op:{INBOUND_FEE_CATEGORY}", i, named_rfq(f.get("rfq_id") or 0, f["counterparty"]), krw)
+
+        # 클레임 현금 부담분 — 당사가 물어 준 현장 비용. 상계로 정산한 몫은 위에서 이미
+        # 매출 차감으로 잡혔으므로 여기 오지 않는다(_claim_cost_rows).
+        for cr in _claim_cost_rows(s):
+            day = cr["due_date"]
+            if not day or not (ys <= day <= ye):
+                continue
+            i = int(day[5:7]) - 1
+            krw = _krw_in(cr["amount"], cr["currency"], day[:7], fx_seen)
+            operating.setdefault(CLAIM_CATEGORY, z())[i] += krw
+            note(f"op:{CLAIM_CATEGORY}", i, named_rfq(cr["rfq_id"], cr["counterparty"]), krw)
 
         # 기타수입과 투자금 — 통장에는 나란히 들어오지만 손익에서는 갈린다. 투자금은 판 것이
         # 아니라 넣은 것이라(자본 유입) 수익이 아니고, 여기 섞이면 매출 없는 달이 흑자로 보인다.

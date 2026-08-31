@@ -903,6 +903,57 @@ export type ClaimRow = {
   credit_notes: CreditNoteRow[];
 };
 
+/** Finance 클레임 대장 한 줄 — 금액은 전부 KRW 환산(사건이 난 달의 말일 매매기준율). */
+export type FinanceClaimRow = {
+  id: number;
+  rfq_id: number;
+  order_id: number;
+  project_no: string;
+  customer: string;
+  claim_no: string;
+  date: string;
+  site: string;
+  title: string;
+  status: string;
+  owner: string;
+  /** 당사 부담 합계. */
+  ours_krw: number;
+  /** 고객·벤더가 부담한 몫 — 사건의 크기이지 우리 손익은 아니다. */
+  theirs_krw: number;
+  /** 크레딧 노트로 상계한 금액. */
+  credited_krw: number;
+  /** 현금으로 물어 준 금액. */
+  cash_krw: number;
+  /** 아직 정산하지 않은 당사 부담분 = ours − credited − cash. */
+  open_krw: number;
+  credit_notes: {
+    id: number;
+    cn_no: string;
+    issue_date: string;
+    invoice_no: string;
+    currency: string;
+    total: number;
+    issue_currency: string;
+    issue_amount: number;
+    fx_rate: number;
+    ar_id: number;
+    order_id: number;
+  }[];
+};
+
+export type FinanceClaimsData = {
+  rows: FinanceClaimRow[];
+  totals: {
+    count: number;
+    ours_krw: number;
+    theirs_krw: number;
+    credited_krw: number;
+    cash_krw: number;
+    open_krw: number;
+  };
+  fx?: { basis: string; rates: { month: string; cur: string; rate: number }[]; fallback?: boolean };
+};
+
 /** 상계 대상이 될 수 있는 청구서 — 그 고객의 청구서 전부(다른 프로젝트 건도 포함). */
 export type ArCandidate = {
   ar_id: number;
@@ -1195,6 +1246,8 @@ export type FinanceClosing = {
   purchase: { cost_krw: number; vat_krw: number; count: number };
   /** 기타 지출(수동 등록) — 마진에는 넣지 않고 매입세액 계산에만 쓰는 값. */
   other_costs?: { supply_krw: number; vat_krw: number; count: number };
+  /** 크레딧 노트로 깎아 준 매출 — 위 sales 는 이미 이만큼 뺀 값이다. */
+  credit_notes?: { supply_krw: number; vat_krw: number; total_krw: number; count: number };
   margin_krw: number;
   margin_pct: number;
   vat: {

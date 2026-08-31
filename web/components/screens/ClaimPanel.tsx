@@ -8,6 +8,7 @@ import {
   deleteCreditNote,
   fetchArCandidates,
   fetchClaims,
+  fetchCreditNotePdf,
   fetchFxRate,
   updateClaim,
 } from "@/lib/api";
@@ -130,10 +131,10 @@ export default function ClaimPanel({
   function reload() {
     // 상계는 미수 잔액을 바꾼다 — AR 화면과 재무 집계가 옛 값을 들고 있으면 안 된다.
     invalidateCache("ar:overview");
-    invalidateCache("finance:summary");
-    invalidateCache("finance:receivables");
-    invalidateCache("finance:calendar");
+    invalidateCache("finance:");
     invalidateCache("dashboard");
+    // 같은 클레임을 프로젝트 단위로도 읽는 곳이 있다(개요의 Claims 섹션) — 접두어로 함께 비운다.
+    invalidateCache("claims:");
     onChanged?.();
     return refresh();
   }
@@ -468,6 +469,22 @@ function CreditNoteSection({
   const [err, setErr] = useState<string | null>(null);
   const notes = claim.credit_notes || [];
 
+  async function openPdf(cn: CreditNoteRow) {
+    setBusy(true);
+    setErr(null);
+    try {
+      const blob = await fetchCreditNotePdf(cn.id);
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank", "noopener");
+      // 새 창이 파일을 다 읽고 난 뒤에 놓아 준다 — 바로 revoke 하면 빈 창이 뜬다.
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Could not open the PDF");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function cancelNote(cn: CreditNoteRow) {
     setBusy(true);
     setErr(null);
@@ -501,7 +518,7 @@ function CreditNoteSection({
                 <th className="num" style={{ width: 96 }}>FX</th>
                 <th className="num" style={{ width: 140 }}>Offset applied</th>
                 <th>Against invoice</th>
-                <th style={{ width: 70 }} />
+                <th style={{ width: 110 }} />
               </tr>
             </thead>
             <tbody>
@@ -519,10 +536,17 @@ function CreditNoteSection({
                     ) : null}
                   </td>
                   <td>
+                    {/* 감액 증서 — 고객에게 보내는 한 장. 발행하자마자 뽑을 수 있어야 한다. */}
+                    <button type="button" className="linklike" disabled={busy} onClick={() => openPdf(cn)}>
+                      PDF
+                    </button>
                     {canWrite ? (
-                      <button type="button" className="linklike" disabled={busy} onClick={() => cancelNote(cn)}>
-                        Cancel
-                      </button>
+                      <>
+                        {" · "}
+                        <button type="button" className="linklike" disabled={busy} onClick={() => cancelNote(cn)}>
+                          Cancel
+                        </button>
+                      </>
                     ) : null}
                   </td>
                 </tr>

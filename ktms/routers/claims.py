@@ -30,11 +30,40 @@ from _core import (
     _rfq_for_order,
     _sync_ar_credit,
     app,
+    build_payload,
     date,
+    datetime,
+    generate_pdf,
     get_current_user,
     get_session,
     require_token,
 )
+from _core import Vessel, _doc_file_response, _kst_iso, _project_no_map
+
+
+def _log_activity(s, rfq_id: int, text: str, pic: str = "") -> None:
+    """딜의 활동기록(업무일지)에 한 줄 남긴다 — 11단계(수금 완료) 칸에 붙인다.
+
+    클레임과 크레딧 노트는 돈의 흐름을 바꾸는 사건이라, 나중에 "이 청구서 잔액이 왜
+    줄었지?"를 되짚는 자리는 단계 보드다. 그 자리에 자국이 없으면 클레임 탭을 열어 볼
+    생각을 하지 못한다. 기록에 실패해도 본 작업(저장·발행)은 되돌리지 않는다 — 자국이
+    남지 않는 것이 저장이 안 되는 것보다 낫다.
+    """
+    if not rfq_id or not (text or "").strip():
+        return
+    try:
+        rfq = s.query(RFQ).filter_by(id=rfq_id).first()
+        if not rfq:
+            return
+        notes = dict(getattr(rfq, "stage_notes", None) or {})
+        log = list(notes.get("11", []))
+        now = _kst_iso(datetime.utcnow())
+        log.append({"text": text, "datetime": now, "party": "", "person": "",
+                    "channel": "", "direction": "", "star": False, "pic": pic, "at": now})
+        notes["11"] = log
+        rfq.stage_notes = notes   # JSON 컬럼은 새 dict 재할당이 필요
+    except Exception:
+        pass
 
 
 def _cn_out(c: CreditNote, ar: ARRecord | None = None) -> dict:
@@ -119,6 +148,13 @@ def list_claims(rfq_id: int = 0, order_id: int = 0):
         s.close()
 
 
+def _rfq_id_of_order(s, order_id: int | None) -> int:
+    """오더가 속한 프로젝트 id — 활동기록을 붙일 딜을 찾는 데 쓴다."""
+    o = s.query(Order).filter_by(id=order_id).first() if order_id else None
+    rfq = _rfq_for_order(s, o) if o else None
+    return rfq.id if rfq else 0
+
+
 def _resolve_deal(s, body: ClaimSave) -> tuple[int, int]:
     """저장 본문의 order_id / rfq_id 를 채워 준다 — 오더만 오면 그 오더의 프로젝트를 찾는다."""
     order_id = body.order_id or 0
@@ -156,6 +192,10 @@ def create_claim(body: ClaimSave, user: dict = Depends(get_current_user)):
             owner_id=body.owner_id or user.get("id") or None,
         )
         s.add(c)
+        s.flush()
+        _log_activity(s, rfq_id, f"클레임 등록 — {c.title or c.claim_no or '현장 클레임'}"
+                                 + (f" ({c.site})" if c.site else ""),
+                      user.get("username", ""))
         s.commit()
         return {"ok": True, "id": c.id}
     finally:
@@ -301,7 +341,7 @@ def _apply_cn_fields(s, cn: CreditNote, body: CreditNoteSave, cn_id: int | None)
 
 
 @app.post("/api/admin/credit-notes", dependencies=[Depends(require_token)])
-def create_credit_note(body: CreditNoteSave):
+def create_credit_note(body: CreditNoteSave, user: dict = Depends(get_current_user)):
     """크레딧 노트 발행 — 대상 청구서의 미수를 그만큼 깎는다."""
     s = get_session()
     try:
@@ -310,6 +350,15 @@ def create_credit_note(body: CreditNoteSave):
         s.add(cn)
         s.flush()
         credit = _sync_ar_credit(s, cn.ar_id)
+        ar = s.query(ARRecord).filter_by(id=cn.ar_id).first()
+        inv_cur = (ar.currency or "") if ar else ""
+        target = ((ar.invoice_no or ar.ci_no or "") if ar else "").strip()
+        _log_activity(
+            s, _rfq_id_of_order(s, cn.order_id),
+            f"크레딧 노트 발행 {cn.cn_no or ''} — {cn.currency} {cn.amount:,.2f}"
+            f" → {inv_cur} {cn.applied_amount:,.0f} 상계"
+            + (f" (대상 {target})" if target else ""),
+            user.get("username", ""))
         s.commit()
         return {"ok": True, "id": cn.id, "ar_credit_amount": credit}
     finally:
@@ -336,6 +385,59 @@ def update_credit_note(cn_id: int, body: CreditNoteSave):
         s.close()
 
 
+@app.get("/api/admin/credit-notes/{cn_id}/pdf", dependencies=[Depends(require_token)])
+def credit_note_pdf(cn_id: int):
+    """크레딧 노트 PDF — 고객에게 보내는 감액 증서.
+
+    금액은 두 통화로 적힌다: 발행 통화(현장 비용이 난 통화)와 청구서 통화의 상계액.
+    환율은 발행 시점에 굳은 값이라 지금 다시 계산하지 않고 저장된 것을 그대로 쓴다.
+    """
+    s = get_session()
+    try:
+        cn = s.query(CreditNote).filter_by(id=cn_id).first()
+        if not cn:
+            raise HTTPException(status_code=404, detail="크레딧 노트를 찾을 수 없습니다.")
+        ar = s.query(ARRecord).filter_by(id=cn.ar_id).first()
+        order = s.query(Order).filter_by(id=cn.order_id).first() if cn.order_id else None
+        cust = s.query(Customer).filter_by(id=order.customer_id).first() if order else None
+        vessel = (s.query(Vessel).filter_by(id=order.vessel_id).first()
+                  if order and order.vessel_id else None)
+        claim = s.query(Claim).filter_by(id=cn.claim_id).first() if cn.claim_id else None
+        rfq = _rfq_for_order(s, order) if order else None
+        payload = build_payload(
+            doc_no=cn.cn_no or f"CN-{cn.id}",
+            date=cn.issue_date or "",
+            customer=cust, vessel=vessel, items=[], terms={},
+            currency=cn.currency or "USD",
+            vat_rate=cn.vat_rate or 0.0,
+            po_no=(order.po_no or "") if order else "",
+            export_ref=_project_no_map(s).get(rfq.id, "") if rfq else "",
+            project_title=(getattr(rfq, "project_title", "") or "") if rfq else "",
+        )
+        payload.update({
+            "amount": cn.amount or 0.0,
+            "fx_rate": cn.fx_rate or 1.0,
+            "applied_amount": cn.applied_amount or 0.0,
+            "vat_amount": cn.vat_amount or 0.0,
+            "invoice_currency": (ar.currency or cn.currency) if ar else (cn.currency or "USD"),
+            "invoice_no": (ar.invoice_no or ar.ci_no or "") if ar else "",
+            "invoice_date": (ar.invoice_date or "") if ar else "",
+            "po_no": (order.po_no or "") if order else "",
+            "reason": cn.reason or "",
+            "claim": {
+                "title": (claim.title or "") if claim else "",
+                "claim_no": (claim.claim_no or "") if claim else "",
+                "site": (claim.site or "") if claim else "",
+                "occurred_date": (claim.occurred_date or "") if claim else "",
+            },
+        })
+        pdf = generate_pdf("credit_note", payload)
+        name = (cn.cn_no or f"CN-{cn.id}").replace("/", "-")
+        return _doc_file_response(pdf, f"{name}_CREDIT_NOTE.pdf", "application/pdf")
+    finally:
+        s.close()
+
+
 @app.delete("/api/admin/credit-notes/{cn_id}", dependencies=[Depends(require_token)])
 def delete_credit_note(cn_id: int):
     """크레딧 노트 취소 — 상계가 풀려 그만큼 미수가 되살아난다."""
@@ -345,9 +447,12 @@ def delete_credit_note(cn_id: int):
         if not cn:
             raise HTTPException(status_code=404, detail="크레딧 노트를 찾을 수 없습니다.")
         ar_id = cn.ar_id
+        no, cur, amt, applied, order_id = (cn.cn_no or ""), cn.currency, cn.amount or 0, cn.applied_amount or 0, cn.order_id
         s.delete(cn)
         s.flush()
         credit = _sync_ar_credit(s, ar_id)
+        _log_activity(s, _rfq_id_of_order(s, order_id),
+                      f"크레딧 노트 취소 {no} — {cur} {amt:,.2f} 상계 해제(미수 {applied:,.0f} 복원)")
         s.commit()
         return {"ok": True, "ar_credit_amount": credit}
     finally:

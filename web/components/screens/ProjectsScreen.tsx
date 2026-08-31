@@ -131,6 +131,8 @@ export default function ProjectsScreen() {
   // ?ap=<po_id> — 지급대장에서 벤더 청구서 번호를 눌러 온 경우. 9단계를 AP(지급) 탭 +
   // 그 벤더 P/O 가 선택된 상태로 연다.
   const deepAp = params.get("ap");
+  // ?claim=1 — 클레임 대장에서 눌러 온 경우. 11단계를 클레임 탭으로 연다.
+  const deepClaim = params.get("claim");
   const deepView = params.get("view");
   // ?back=<주소> — 어디서 눌러 왔는지. 팝업을 닫으면 그 자리로 되돌려 보낸다(지급대장에서
   // 청구서 번호를 누른 사람은 프로젝트 목록이 아니라 보던 대장으로 돌아가야 한다).
@@ -141,6 +143,7 @@ export default function ProjectsScreen() {
     stage: number | null;
     vrfqId: number | null;
     apPoId: number | null;
+    claim: boolean;
     view: "work" | "overview";
     back: string | null;
   } | null>(null);
@@ -153,13 +156,14 @@ export default function ProjectsScreen() {
       stage: deepStage ? Number(deepStage) : null,
       vrfqId: deepVrfq ? Number(deepVrfq) : null,
       apPoId: deepAp ? Number(deepAp) : null,
+      claim: deepClaim === "1",
       view: deepView === "overview" ? "overview" : "work",
       // 같은 사이트 안의 주소만 받는다 — 밖으로 튕겨 나갈 여지를 두지 않는다.
       back: deepBack && deepBack.startsWith("/") && !deepBack.startsWith("//") ? deepBack : null,
     });
     // URL 정리 — 새로고침마다 같은 팝업이 다시 열리지 않도록 파라미터를 제거한다.
     router.replace("/project", { scroll: false });
-  }, [deepRfq, deepOrder, deepStage, deepVrfq, deepAp, deepView, deepBack, router]);
+  }, [deepRfq, deepOrder, deepStage, deepVrfq, deepAp, deepClaim, deepView, deepBack, router]);
   // 내부확인용·고객확인용 모두 통합 파이프라인(rows) 사용. 단계 체계만 12 vs 7로 다름.
   const {
     data: pipeline,
@@ -244,6 +248,7 @@ export default function ProjectsScreen() {
               openStage={deepLink?.stage ?? null}
               openVrfqId={deepLink?.vrfqId ?? null}
               openApPoId={deepLink?.apPoId ?? null}
+              openClaim={deepLink?.claim ?? false}
               openView={deepLink?.view ?? "work"}
               openBack={deepLink?.back ?? null}
             />
@@ -544,6 +549,7 @@ function PipelineTable({
   openStage = null,
   openVrfqId = null,
   openApPoId = null,
+  openClaim = false,
   openView = "work",
   openBack = null,
 }: {
@@ -569,6 +575,8 @@ function PipelineTable({
   openVrfqId?: number | null;
   // 딥링크로 9단계 진입 시 초점 벤더 P/O id(AP 탭 + 그 P/O 선택).
   openApPoId?: number | null;
+  /** 11단계를 클레임 탭으로 연다(클레임 대장에서 눌러 온 경우). */
+  openClaim?: boolean;
   openView?: "work" | "overview";
   /** 딥링크로 왔을 때 팝업을 닫으면 돌아갈 주소(없으면 이 목록에 남는다). */
   openBack?: string | null;
@@ -581,6 +589,8 @@ function PipelineTable({
   const [deepVrfqId, setDeepVrfqId] = useState<number | null>(null);
   // 딥링크로 9단계 진입 시 초점 벤더 P/O id(지급대장에서 청구서 번호를 눌러 온 경우).
   const [deepApPoId, setDeepApPoId] = useState<number | null>(null);
+  // 딥링크로 11단계 진입 시 클레임 탭으로 열지 여부(클레임 대장에서 눌러 온 경우).
+  const [deepClaim, setDeepClaim] = useState(false);
   // 딥링크가 가리키는 고객 P/O(오더) — 한 프로젝트에 오더가 여럿일 때 그 문서의 오더를 연다.
   const [deepOrderId, setDeepOrderId] = useState<number | null>(null);
   // 딥링크 1회 소비 가드(행 로드 지연·재렌더 시 닫은 팝업이 다시 열리지 않도록).
@@ -595,6 +605,7 @@ function PipelineTable({
     setDeepStage(null);
     setDeepVrfqId(null);
     setDeepApPoId(null);
+    setDeepClaim(false);
     setDeepOrderId(null);
     backRef.current = null;
   }, []);
@@ -604,6 +615,7 @@ function PipelineTable({
     setDeepStage(null);
     setDeepVrfqId(null);
     setDeepApPoId(null);
+    setDeepClaim(false);
     setDeepOrderId(null);
     backRef.current = null;
   }, []);
@@ -621,9 +633,10 @@ function PipelineTable({
     setDeepStage(openStage && openStage > 0 ? openStage : null);
     setDeepVrfqId(openVrfqId && openVrfqId > 0 ? openVrfqId : null);
     setDeepApPoId(openApPoId && openApPoId > 0 ? openApPoId : null);
+    setDeepClaim(!!openClaim);
     setDeepOrderId(openOrderId && openOrderId > 0 ? openOrderId : null);
     backRef.current = openBack || null;
-  }, [openRfqId, openOrderId, openStage, openVrfqId, openApPoId, openView, openBack, rows]);
+  }, [openRfqId, openOrderId, openStage, openVrfqId, openApPoId, openClaim, openView, openBack, rows]);
   // 목록 표시 방식: 표(table) / 칸반 보드(board). 같은 데이터·같은 상세 모달 재사용.
   const [view, setView] = useState<"table" | "board">("board");
   // 현황판 전체 미리보기(A4 가로 이미지) 팝업 열림 여부.
@@ -1211,6 +1224,7 @@ function PipelineTable({
           initialStage={deepStage}
           initialVrfqId={deepVrfqId}
           initialApPoId={deepApPoId}
+          initialClaim={deepClaim}
           initialOrderId={deepOrderId}
           initialView={initialModalView}
           onNavigate={navigateSelected}
@@ -1977,6 +1991,7 @@ export function PipelineModal({
   initialStage = null,
   initialVrfqId = null,
   initialApPoId = null,
+  initialClaim = false,
   initialOrderId = null,
   initialView = "work",
 }: {
@@ -1998,6 +2013,8 @@ export function PipelineModal({
   initialVrfqId?: number | null;
   // 딥링크로 9단계 진입 시 초점 벤더 P/O id(AP 탭 + 그 P/O 의 청구서를 바로 연다).
   initialApPoId?: number | null;
+  // 딥링크로 11단계 진입 시 클레임 탭으로 열지 여부(클레임 대장에서 눌러 온 경우).
+  initialClaim?: boolean;
   // 딥링크가 가리키는 고객 P/O(오더) id — 6단계 이후 화면이 이 오더 기준으로 열린다.
   initialOrderId?: number | null;
   initialView?: "work" | "overview";
@@ -2112,6 +2129,8 @@ export function PipelineModal({
   const [focusVrfqId, setFocusVrfqId] = useState<number | null>(initialVrfqId ?? null);
   // 9단계 진입 시 선택할 벤더 P/O id — 지급대장(Payables)에서 청구서 번호를 눌러 온 경우.
   const [focusApPoId, setFocusApPoId] = useState<number | null>(initialApPoId ?? null);
+  // 클레임 대장에서 눌러 온 경우 — 11단계를 클레임 탭으로 연다(그 뒤엔 사용자의 선택이 우선).
+  const [focusClaim, setFocusClaim] = useState(initialClaim);
   // 딥링크가 가리키는 고객 P/O — 프로젝트에 오더가 여럿이면 이 오더를 골라 연다.
   const [focusOrderId, setFocusOrderId] = useState<number | null>(initialOrderId ?? null);
   // 팝업 안 화면 전환: 단계 작업(work) ↔ 프로젝트 개요(overview).
@@ -2173,6 +2192,7 @@ export function PipelineModal({
     setSelectedStage(Math.min(Math.max(no, 1), 11));
     setFocusVrfqId(vrfqId ?? null);
     setFocusApPoId(null);
+    setFocusClaim(false);
     setFocusOrderId(orderId ?? null);
     setModalView("work");
   }, []);
@@ -2187,6 +2207,7 @@ export function PipelineModal({
     setSelectedStage(Math.min(Math.max(r.stage || 1, 1), 11));
     setFocusVrfqId(null);
     setFocusApPoId(null);
+    setFocusClaim(false);
     setFocusOrderId(null);
   }, [r.rfq_id, r.stage]);
 
@@ -2940,6 +2961,7 @@ export function PipelineModal({
                   row={r}
                   focusVrfqId={focusVrfqId}
                   focusApPoId={focusApPoId}
+                  focusClaim={focusClaim}
                   focusOrderId={focusOrderId}
                   onChanged={onChanged}
                 />
@@ -2961,6 +2983,7 @@ function WorkspacePanel({
   row,
   focusVrfqId,
   focusApPoId,
+  focusClaim,
   focusOrderId,
   onChanged,
 }: {
@@ -2969,6 +2992,8 @@ function WorkspacePanel({
   row: PipelineRow;
   focusVrfqId?: number | null;
   focusApPoId?: number | null;
+  /** 11단계를 클레임 탭으로 열지 — 클레임 대장 딥링크. */
+  focusClaim?: boolean;
   /** 딥링크가 가리키는 고객 P/O(오더) — 이 프로젝트의 오더면 그 오더를 선택해 연다. */
   focusOrderId?: number | null;
   onChanged: () => void | Promise<unknown>;
@@ -3062,6 +3087,7 @@ function WorkspacePanel({
             initialOrderId={effectiveOrderId}
             initialStage={arStage as 9 | 10 | 11}
             initialApPoId={focusApPoId ?? null}
+            initialDocTab={focusClaim ? "claim" : undefined}
             onChanged={onChanged}
           />
         </Suspense>

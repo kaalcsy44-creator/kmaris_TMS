@@ -7,6 +7,7 @@ from _core import (
     ARRecord,
     ARSave,
     ARStatus,
+    CreditNote,
     Customer,
     Depends,
     HTTPException,
@@ -330,6 +331,13 @@ def delete_ar(ar_id: int):
         ar = s.query(ARRecord).filter_by(id=ar_id).first()
         if not ar:
             raise HTTPException(status_code=404, detail="AR 레코드를 찾을 수 없습니다.")
+        # 이 청구서를 깎아 둔 크레딧 노트가 있으면 막는다 — 지우면 상계의 상대가 사라져
+        # 그 감액이 어디에 걸린 것인지 알 수 없게 된다(PostgreSQL 은 외래키로 어차피 막는다).
+        cn = s.query(CreditNote).filter_by(ar_id=ar_id).count()
+        if cn:
+            raise HTTPException(
+                status_code=400,
+                detail=f"이 청구서에 걸린 크레딧 노트가 {cn}건 있습니다. 먼저 취소해 주세요.")
         s.delete(ar)
         s.commit()
         return {"ok": True}

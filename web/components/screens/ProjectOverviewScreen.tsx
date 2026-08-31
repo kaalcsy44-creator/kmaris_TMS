@@ -32,6 +32,7 @@ import {
 import { buildActivities, hm, md, splitProjectNo, type Activity } from "@/lib/activity";
 import type {
   ApRow,
+  ClaimRow,
   MailMessage,
   PipelineRow,
   PoWorkOptions,
@@ -45,6 +46,7 @@ import { tr } from "@/lib/labels";
 import CustomerName from "@/components/common/CustomerName";
 import ProjectMailPanel, { projectMailKey } from "@/components/common/ProjectMailPanel";
 import { FoldTitle, useSectionFold } from "@/components/common/SectionFold";
+import { fetchClaims } from "@/lib/api";
 import ActivityDesc from "@/components/common/ActivityDesc";
 import ActivityNoteForm, {
   initialNoteValue,
@@ -506,6 +508,11 @@ function Overview({
   // 누르면 단계 보드의 메일 줄까지 함께 갱신된다.
   const { data: mail } = useCachedData(projectMailKey(row.rfq_id), () =>
     fetchProjectMail(row.rfq_id));
+  // 이 딜의 클레임(납품 후 하자) — 있으면 머리 줄에 표시하고 아래 섹션에 펼친다.
+  // 클레임은 드문 사건이라 없을 때는 자리를 차지하지 않는다(섹션 자체가 서지 않는다).
+  const { data: claims } = useCachedData(`claims:rfq:${row.rfq_id}`, () =>
+    fetchClaims({ rfqId: row.rfq_id }));
+  const claimRows = claims?.rows ?? [];
   const rSteps = resolveSteps(steps, row.work_type);
   const chain = buildStageChain(row, rSteps);
   const acts = buildActivities(row, rSteps);
@@ -585,6 +592,18 @@ function Overview({
           <b>Trade</b>
           {tr(row.trade_type || "수출")}
         </span>
+        {/* 클레임은 딜의 성격을 바꾸는 사실이다 — 금액과 단계만 보다가 아래 섹션에서야
+            알게 되는 일이 없도록 상대 줄 끝에 세운다. */}
+        {claimRows.length ? (
+          <span className="ov-meta-f ov-meta-claim" title="This deal has a post-delivery claim">
+            <span className="ov-claim-badge">
+              ⚠ Claim{claimRows.length > 1 ? ` ×${claimRows.length}` : ""}
+            </span>
+            {claimRows.some((c) => c.status === "open") ? (
+              <span className="ov-claim-open">open</span>
+            ) : null}
+          </span>
+        ) : null}
       </div>
 
       <StageTimeline
@@ -610,7 +629,89 @@ function Overview({
         vendorQuoteNo={vendorQuoteNo}
         nav={{ rfqId: row.rfq_id, onOpenStage }}
       />
+
+      {/* 납품 뒤에 생긴 일 — 있을 때만 선다. 입력·발행은 11단계의 Claim 탭에서 한다. */}
+      {claimRows.length ? <ClaimsSection claims={claimRows} onOpenStage={onOpenStage} /> : null}
     </div>
+  );
+}
+
+/** 클레임 요약 — 사건과 비용 라인, 그 클레임으로 끊은 크레딧 노트를 읽기 전용으로 펼친다.
+ *  고치는 자리는 11단계의 Claim 탭이다(제목의 링크가 그리로 보낸다). */
+function ClaimsSection({
+  claims,
+  onOpenStage,
+}: {
+  claims: ClaimRow[];
+  onOpenStage?: (stage: number, vrfqId?: number, orderId?: number) => void;
+}) {
+  const fold = useSectionFold("proj-ov.claims");
+  const money = (v: number, cur: string) =>
+    `${cur} ${v.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+  return (
+    <section className={`proj-ov-sec${fold.open ? "" : " folded"}`}>
+      <h2 className="proj-ov-h">
+        <FoldTitle fold={fold} label="claims">
+          Claims
+          <span className="proj-ov-cnt">{claims.length}</span>
+        </FoldTitle>
+        {onOpenStage ? (
+          <button
+            type="button"
+            className="proj-ov-actlink"
+            onClick={() => onOpenStage(11)}
+            title="Open stage 11 · Claim · Credit Note"
+          >
+            Edit in stage 11 →
+          </button>
+        ) : null}
+      </h2>
+      <div className="ov-claims">
+        {claims.map((c) => (
+          <div key={c.id} className="ov-claim">
+            <div className="ov-claim-h">
+              <b>{c.title || c.claim_no || `Claim ${c.id}`}</b>
+              <span className="ov-claim-when">{c.occurred_date || "—"}</span>
+              {c.site ? <span className="ov-claim-site">{c.site}</span> : null}
+              <span className={`ov-claim-state ${c.status}`}>{c.status}</span>
+            </div>
+            {c.description ? <p className="ov-claim-desc">{c.description}</p> : null}
+            <ul className="ov-claim-lines">
+              {(c.costs || []).map((line, i) => (
+                <li key={i}>
+                  <span className="ov-claim-kind">{line.kind}</span>
+                  <span className="ov-claim-what">{line.description || "—"}</span>
+                  <span className="ov-claim-amt">{money(Number(line.amount) || 0, line.currency || "")}</span>
+                  {/* 부담·정산은 이 줄의 뜻 자체다 — 금액만 보면 우리 돈인지 알 수 없다. */}
+                  <span className="ov-claim-by">
+                    {line.bearer === "us" ? "ours" : line.bearer}
+                    {line.settlement && line.settlement !== "none" ? ` · ${line.settlement.replace("_", " ")}` : ""}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            {(c.credit_notes || []).length ? (
+              <ul className="ov-claim-cns">
+                {c.credit_notes.map((cn) => (
+                  <li key={cn.id}>
+                    <span className="ov-claim-kind">CN</span>
+                    <span className="ov-claim-what">
+                      {cn.cn_no || `#${cn.id}`} → {cn.invoice_no || `AR#${cn.ar_id}`}
+                    </span>
+                    <span className="ov-claim-amt">{money(cn.applied_amount, cn.invoice_currency)}</span>
+                    <span className="ov-claim-by">
+                      {cn.currency !== cn.invoice_currency
+                        ? `${money(cn.amount, cn.currency)} × ${cn.fx_rate.toLocaleString()}`
+                        : "offset"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 

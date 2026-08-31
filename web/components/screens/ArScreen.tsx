@@ -134,12 +134,15 @@ export function ArOverview({
   initialOrderId = null,
   initialStage = null,
   initialApPoId = null,
+  initialDocTab,
   onChanged,
 }: {
   initialOrderId?: number | null;
   initialStage?: StageTab | null;
   /** 지급대장(Payables)에서 벤더 청구서 번호를 눌러 온 경우 — AP 탭을 그 P/O 로 연다. */
   initialApPoId?: number | null;
+  /** 처음 열 문서 탭 — 클레임 대장에서 눌러 오면 "claim". 그 뒤엔 사용자의 선택이 우선. */
+  initialDocTab?: "ar" | "ap" | "claim";
   /** 상위(프로젝트 팝업)의 파이프라인 새로고침 — 단계 완료가 즉시 단계 칩에 반영되게 한다. */
   onChanged?: () => void;
 } = {}) {
@@ -150,7 +153,9 @@ export function ArOverview({
   );
   // 수취(AR, 고객 청구) / 지급(AP, 벤더 매입) / 클레임(납품 후 하자·상계) 문서 탭.
   // 지급대장에서 온 딥링크는 AP 로 연다.
-  const [docTab, setDocTab] = useState<"ar" | "ap" | "claim">(initialApPoId ? "ap" : "ar");
+  const [docTab, setDocTab] = useState<"ar" | "ap" | "claim">(
+    initialDocTab ?? (initialApPoId ? "ap" : "ar")
+  );
   const rows = useMemo(() => data?.rows ?? [], [data]);
   const orderId = initialOrderId ?? null;
 
@@ -165,6 +170,11 @@ export function ArOverview({
   useEffect(() => {
     if (initialApPoId) setDocTab("ap");
   }, [initialApPoId]);
+
+  // 클레임 대장 딥링크(?claim=1) — 열자마자 그 탭을 보게 한다.
+  useEffect(() => {
+    if (initialDocTab) setDocTab(initialDocTab);
+  }, [initialDocTab]);
 
   function load() {
     invalidateCache("dashboard");

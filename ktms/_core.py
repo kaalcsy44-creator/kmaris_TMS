@@ -2770,7 +2770,11 @@ def _schedule_guard(e: ScheduleEvent, user: dict) -> None:
 # ── Finance: 지급대장(payables) + 수입대장(incomes) + 재무 집계 ────────────────
 # 컨설팅비는 프로젝트 매출에서 산출되는 지급이라 나머지 운영비와 성격이 다르다 —
 # Outflow 에서도 제 갈래(Consulting fee)를 따로 갖는다.
-FINANCE_CATEGORIES = ["거래선지급", "컨설팅비", "임차료", "급여", "공과금", "수수료", "세금", "기타"]
+# 클레임 비용(당사 부담 + 현금 지급) 분류 — 손익의 운영비 줄과 지급대장에서 같은 이름으로
+# 선다. 상계로 정산한 몫은 여기 오지 않는다(그건 매출 차감이다).
+CLAIM_CATEGORY = "클레임"
+FINANCE_CATEGORIES = ["거래선지급", "컨설팅비", "임차료", "급여", "공과금", "수수료", "세금",
+                      CLAIM_CATEGORY, "기타"]
 # 기타 수입 분류 — 프로젝트 매출(AR)이 아닌 입금.
 # 투자금은 통장에 들어오지만 매출이 아니다(자본 유입) — 손익표는 이 분류를 수익에서 뺀다.
 FINANCE_INCOME_CATEGORIES = ["이자수입", "환급", "투자금", "잡수입", "기타"]
@@ -3845,6 +3849,7 @@ __all__ = [
     "ClaimSave",
     "CreditNote",
     "CreditNoteSave",
+    "CLAIM_CATEGORY",
     "CLAIM_COST_KINDS",
     "CLAIM_BEARERS",
     "CLAIM_SETTLEMENTS",

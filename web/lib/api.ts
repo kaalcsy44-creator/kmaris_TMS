@@ -6,6 +6,7 @@ import type {
   ArCandidate,
   ClaimCost,
   ClaimRow,
+  FinanceClaimsData,
   RfqOverview,
   CustomerOption,
   VendorOption,
@@ -162,6 +163,21 @@ async function postBlob(path: string, body: unknown): Promise<Blob> {
   if (!res.ok) {
     const e = (await res.json().catch(() => ({}))) as { detail?: unknown };
     throw new Error(errorDetailToString(e?.detail) || `API ${res.status} ${res.statusText} — ${path}`);
+  }
+  return res.blob();
+}
+
+/** GET 으로 파일(블롭)을 받는다 — PDF 처럼 본문 없이 내려받는 문서용. */
+async function getBlob(path: string): Promise<Blob> {
+  const res = await fetch(`${API_BASE}${path}`, { headers: authHeaders(), cache: "no-store" });
+  if (res.status === 401) {
+    clearAuth();
+    if (typeof window !== "undefined") window.location.href = "/login";
+    throw new Error("인증이 필요합니다.");
+  }
+  if (!res.ok) {
+    const e = (await res.json().catch(() => ({}))) as { detail?: unknown };
+    throw new Error(typeof e.detail === "string" ? e.detail : `요청 실패 (${res.status})`);
   }
   return res.blob();
 }
@@ -1609,6 +1625,16 @@ export function updateCreditNote(
   body: CreditNoteSaveBody
 ): Promise<{ ok: boolean; id: number; ar_credit_amount: number }> {
   return put(`/api/admin/credit-notes/${cnId}`, body);
+}
+
+/** 크레딧 노트 PDF(감액 증서) — 고객에게 보낼 한 장. */
+export function fetchCreditNotePdf(cnId: number): Promise<Blob> {
+  return getBlob(`/api/admin/credit-notes/${cnId}/pdf`);
+}
+
+/** 클레임 대장 — 사건별 당사부담·상계·현금지급·미정산(전부 KRW 환산). */
+export function fetchFinanceClaims(year = 0): Promise<FinanceClaimsData> {
+  return get<FinanceClaimsData>(`/api/admin/finance/claims${year ? `?year=${year}` : ""}`);
 }
 
 /** 크레딧 노트 취소 — 상계가 풀려 그만큼 미수가 되살아난다. */

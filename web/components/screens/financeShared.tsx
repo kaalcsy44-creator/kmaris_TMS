@@ -93,6 +93,8 @@ export function ProjectDocLink({
   label,
   hint,
   apPoId,
+  stage,
+  claim,
 }: {
   orderId?: number;
   /** 이 문서가 속한 프로젝트(RFQ). 목록에서 프로젝트를 찾는 기준값 — order_id 보다 우선. */
@@ -102,6 +104,10 @@ export function ProjectDocLink({
   hint?: boolean;
   /** 지급(AP) 행 전용 — AP 탭 + 이 벤더 P/O 가 선택된 상태로 연다. */
   apPoId?: number;
+  /** 열 단계 — 비우면 기존 규칙(AP 행은 11, 그 밖은 9). 클레임 대장은 11로 연다. */
+  stage?: number;
+  /** 11단계를 클레임 탭으로 연다(클레임 대장에서 눌러 온 경우). */
+  claim?: boolean;
 }) {
   const text = label || "—";
   // 프로젝트를 특정할 수 없는 행(오더·프로젝트 연결 없음)은 링크 없이 원래 표기로 둔다.
@@ -119,15 +125,20 @@ export function ProjectDocLink({
   const params = [
     rfqId ? `rfq=${rfqId}` : "",
     orderId ? `order=${orderId}` : "",
-    apPoId ? "stage=11" : "stage=9",
+    `stage=${stage ?? (apPoId ? 11 : 9)}`,
     apPoId ? `ap=${apPoId}` : "",
+    claim ? "claim=1" : "",
     back ? `back=${encodeURIComponent(back)}` : "",
   ].filter(Boolean).join("&");
   return (
     <Link
       className={`fin-doc-link${hint ? " hint" : ""}`}
       href={`/project?${params}`}
-      title={apPoId ? "Open this vendor bill · stage 11 Payable (AP)" : "Open this project's billing · AR/AP stage"}
+      title={claim
+        ? "Open this claim · stage 11 Claim · Credit Note"
+        : apPoId
+          ? "Open this vendor bill · stage 11 Payable (AP)"
+          : "Open this project's billing · AR/AP stage"}
     >
       {text}
     </Link>

@@ -8,6 +8,7 @@ import {
   fetchFinanceReceivables,
   fetchFinancePayables,
   fetchFinanceCalendar,
+  fetchFinanceClaims,
   fetchFinanceClosing,
   fetchFinanceConsulting,
   fetchFinanceCashflow,
@@ -29,6 +30,7 @@ import type {
   FinanceIncomeSave,
   FinanceReceivable,
   FinanceSummary,
+  FinanceClaimsData,
   FinanceClosing,
   FinanceConsultingRow,
   FinanceCashflow,
@@ -133,9 +135,11 @@ function addDays(iso: string, n: number): string {
 // 한쪽에서는 '들어올 돈', 다른 쪽에서는 'Receivables' 라 부르면 매번 옮겨 읽어야 한다.
 // Profit 은 Outflow 다음에 선다 — 들어온 돈, 나간 돈, 그래서 남은 돈. Closing · VAT 는
 // 그 뒤다(신고를 위해 한 기간을 다시 세로로 파는 화면이라 성격이 다르다).
-type Tab = "overview" | "inflow" | "outflow" | "profit" | "closing" | "calendar";
+// Claims 는 Outflow 다음에 선다 — 클레임은 나간 돈(현금 부담)과 깎아 준 매출(상계)이
+// 한 사건에 함께 있어, 어느 한쪽 목록에만 두면 나머지 절반이 보이지 않는다.
+type Tab = "overview" | "inflow" | "outflow" | "claims" | "profit" | "closing" | "calendar";
 
-const TABS: Tab[] = ["overview", "inflow", "outflow", "profit", "closing", "calendar"];
+const TABS: Tab[] = ["overview", "inflow", "outflow", "claims", "profit", "closing", "calendar"];
 /** 이름을 바꾸기 전 주소로 들어오는 링크 — 같은 자리로 보낸다. */
 const TAB_ALIAS: Record<string, Tab> = { receivables: "inflow", payables: "outflow" };
 
@@ -209,6 +213,7 @@ export default function FinanceScreen() {
         <button className={tab === "overview" ? "on" : ""} onClick={() => setTab("overview")}>Overview</button>
         <button className={tab === "inflow" ? "on" : ""} onClick={() => setTab("inflow")}>Inflow</button>
         <button className={tab === "outflow" ? "on" : ""} onClick={() => setTab("outflow")}>Outflow</button>
+        <button className={tab === "claims" ? "on" : ""} onClick={() => setTab("claims")}>Claims</button>
         <button className={tab === "profit" ? "on" : ""} onClick={() => setTab("profit")}>Profit</button>
         <button className={tab === "closing" ? "on" : ""} onClick={() => setTab("closing")}>Closing · VAT</button>
         <button className={tab === "calendar" ? "on" : ""} onClick={() => setTab("calendar")}>Calendar</button>
@@ -217,6 +222,7 @@ export default function FinanceScreen() {
       {tab === "overview" && <OverviewTab />}
       {tab === "inflow" && <InflowTab />}
       {tab === "outflow" && <OutflowTab />}
+      {tab === "claims" && <ClaimsTab />}
       {tab === "profit" && <FinanceProfitTab />}
       {tab === "closing" && <ClosingTab />}
       {tab === "calendar" && <CalendarTab />}
@@ -2776,6 +2782,132 @@ function periodRange(type: PeriodType, year: number, idx: number): { start: stri
 
 const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
+// ── Claims — 납품 후 하자 비용과 그 정산 ───────────────────────────────────────
+// 한 사건에서 돈은 세 갈래로 갈린다: 고객·벤더가 자기 돈으로 처리한 몫, 우리가 청구서를
+// 깎아 준 몫(크레딧 노트), 우리가 현금으로 물어 준 몫. 이 표는 그 셋을 한 줄에 세워
+// "이 클레임이 우리에게 얼마였나"와 "아직 정산이 남았나"를 한눈에 답한다.
+// 금액은 전부 KRW 환산이다 — 현장 비용은 USD, 깎아 준 청구서는 KRW 인 일이 흔해서
+// 통화를 섞은 채로는 더할 수가 없다(사건이 난 달의 말일 매매기준율).
+const CLAIM_STATUS_LABEL: Record<string, string> = {
+  open: "Open",
+  settled: "Settled",
+  closed: "Closed",
+};
+
+function ClaimsTab() {
+  const now = new Date();
+  const [year, setYear] = useState(now.getFullYear());
+  const { data, error } = useCachedData<FinanceClaimsData>(
+    `finance:claims:${year}`,
+    () => fetchFinanceClaims(year)
+  );
+  const years = Array.from({ length: 6 }, (_, i) => now.getFullYear() - i);
+  const rows = data?.rows ?? [];
+
+  return (
+    <div className="fin-overview">
+      <div className="fin-period-bar">
+        <select value={year} onChange={(e) => setYear(Number(e.target.value))}>
+          {years.map((y) => <option key={y} value={y}>{y}</option>)}
+        </select>
+        <span className="fin-period-range">Claims raised in {year}</span>
+      </div>
+
+      {error && !data ? <div className="state error">API error: {error.message}</div> : null}
+      {!data ? <div className="state">Loading…</div> : (
+        <>
+          <div className="fin-kpis">
+            <KpiTile label="Our share" main={won(data.totals.ours_krw)} sub={`${data.totals.count} claim(s)`} tone="amber" />
+            <KpiTile label="Offset by credit notes" main={won(data.totals.credited_krw)} sub="Deducted from receivables" tone="blue" />
+            <KpiTile label="Paid in cash" main={won(data.totals.cash_krw)} sub="Booked as a cost" tone="red" />
+            <KpiTile
+              label="Not settled yet"
+              main={won(data.totals.open_krw)}
+              sub="Our share still to be credited or paid"
+              tone={data.totals.open_krw > 0 ? "red" : "green"}
+            />
+          </div>
+
+          <div className="panel">
+            <h3 className="form-title">Claims</h3>
+            {rows.length === 0 ? (
+              <div className="muted">No claim recorded in {year}.</div>
+            ) : (
+              <div className="table-wrap">
+                <table className="mini wide">
+                  <thead>
+                    <tr>
+                      <th style={{ width: 92 }}>Date</th>
+                      <th style={{ width: 120 }}>Project</th>
+                      <th>Customer · claim</th>
+                      <th style={{ width: 80 }}>Status</th>
+                      <th className="num" style={{ width: 110 }}>Our share</th>
+                      <th className="num" style={{ width: 110 }}>Credited</th>
+                      <th className="num" style={{ width: 100 }}>Cash</th>
+                      <th className="num" style={{ width: 110 }}>Open</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((r) => (
+                      <Fragment key={r.id}>
+                        <tr>
+                          <td>{r.date || "—"}</td>
+                          <td>
+                            <ProjectDocLink rfqId={r.rfq_id} orderId={r.order_id} stage={11} claim
+                                            label={r.project_no || `#${r.rfq_id}`} />
+                          </td>
+                          <td>
+                            {r.customer}
+                            <span className="muted"> · {r.title || r.claim_no || "claim"}</span>
+                            {r.site ? <span className="muted"> · {r.site}</span> : null}
+                          </td>
+                          <td>{CLAIM_STATUS_LABEL[r.status] || r.status}</td>
+                          <td className="num">{won(r.ours_krw)}</td>
+                          <td className="num">{r.credited_krw ? won(r.credited_krw) : "—"}</td>
+                          <td className="num">{r.cash_krw ? won(r.cash_krw) : "—"}</td>
+                          <td className={`num${r.open_krw > 0 ? " fin-claim-open" : ""}`}>
+                            {r.open_krw ? won(r.open_krw) : "—"}
+                          </td>
+                        </tr>
+                        {/* 크레딧 노트는 클레임 아래 한 줄씩 — 어느 청구서를 얼마에 깎았는지가
+                            사건과 떨어져 있으면 두 표를 오가며 맞춰 봐야 한다. */}
+                        {r.credit_notes.map((cn) => (
+                          <tr key={`cn${cn.id}`} className="fin-c-subrow">
+                            <td>{cn.issue_date}</td>
+                            <td className="muted">CN</td>
+                            <td colSpan={2}>
+                              <span className="muted">
+                                {cn.cn_no || `CN#${cn.id}`} → {cn.invoice_no || `AR#${cn.ar_id}`}
+                                {cn.issue_currency && cn.issue_currency !== cn.currency
+                                  ? ` · ${cn.issue_currency} ${cn.issue_amount.toLocaleString()} × ${cn.fx_rate.toLocaleString()}`
+                                  : ""}
+                              </span>
+                            </td>
+                            <td />
+                            <td className="num">{won(cn.total)}</td>
+                            <td colSpan={2} />
+                          </tr>
+                        ))}
+                      </Fragment>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <p className="hint-inline" style={{ display: "block", marginTop: 8 }}>
+              Amounts are converted to KRW at the month-end base rate of the month the claim occurred.
+              What the customer or the vendor bore is not counted here as ours. A credited amount is a
+              deduction from sales (it already lowers that invoice and its VAT), a cash amount is a cost
+              under Outflow — never both for the same line. Claims are entered on the deal, at stage 11 →
+              Claim · Credit Note.
+            </p>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function ClosingTab() {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
@@ -2819,7 +2951,17 @@ function ClosingTab() {
       {!data ? <div className="state">Loading…</div> : (
         <>
           <div className="fin-kpis">
-            <KpiTile label="Sales (supply value)" main={won(data.sales.supply_krw)} sub={`${data.sales.count} · VAT ${won(data.sales.vat_krw)}`} tone="blue" />
+            {/* 매출은 이미 크레딧 노트만큼 깎인 값이다 — 얼마를 깎았는지 함께 적지 않으면
+                "왜 청구서 합계와 다르지?"가 된다. */}
+            <KpiTile
+              label="Sales (supply value)"
+              main={won(data.sales.supply_krw)}
+              sub={`${data.sales.count} · VAT ${won(data.sales.vat_krw)}`
+                + (data.credit_notes && data.credit_notes.count
+                    ? ` · credit notes −${won(data.credit_notes.supply_krw)}`
+                    : "")}
+              tone="blue"
+            />
             <KpiTile label="Purchases (cost)" main={won(data.purchase.cost_krw)} sub={`${data.purchase.count} · est. input VAT ${won(data.purchase.vat_krw)}`} tone="amber" />
             <KpiTile label="Gross profit (margin)" main={won(data.margin_krw)} sub={`Margin ${data.margin_pct}%`} tone="blue" />
             <KpiTile
@@ -2857,6 +2999,15 @@ function ClosingTab() {
                     </td>
                     <td className="num">− {won(data.vat.input_other_krw ?? 0)}</td>
                   </tr>
+                  {data.credit_notes && data.credit_notes.count ? (
+                    <tr>
+                      <td>
+                        Credit notes issued
+                        <span className="muted"> ({data.credit_notes.count})</span>
+                      </td>
+                      <td className="num">− {won(data.credit_notes.vat_krw)}</td>
+                    </tr>
+                  ) : null}
                   <tr className="foot-grand">
                     <td className="total-label">{data.vat.payable_krw >= 0 ? "Payable" : "Refund"}</td>
                     <td className="num total-value">{won(Math.abs(data.vat.payable_krw))}</td>

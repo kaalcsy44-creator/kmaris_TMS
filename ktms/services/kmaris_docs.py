@@ -90,6 +90,7 @@ DOC_TITLES = {
     "shipping_mark": "SHIPPING MARK",
     "packing_list": "PACKING LIST",
     "shipping_advice": "SHIPPING ADVICE",
+    "credit_note": "CREDIT NOTE",
 }
 
 DOC_PREFIX = {
@@ -101,6 +102,7 @@ DOC_PREFIX = {
     "packing_list": "PL",
     "shipping_advice": "SA",
     "tax_invoice_data": "TAX",
+    "credit_note": "CN",
 }
 
 
@@ -1437,6 +1439,96 @@ def _make_tax_invoice_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> byte
     return buffer.getvalue()
 
 
+def _make_credit_note_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> bytes:
+    """CREDIT NOTE — 클레임으로 고객 청구서를 깎아 준 사실을 한 장으로 증명하는 문서.
+
+    청구서(TAX INVOICE)와 같은 서식을 쓰되 품목표가 없다. 깎아 준 것은 물건이 아니라
+    금액이고, 이 문서가 답해야 하는 질문은 셋뿐이다 — 어느 청구서를, 얼마나, 왜.
+
+    통화가 두 개일 수 있다: 현장 비용은 USD 로 났는데 깎아 줄 청구서는 KRW 인 식이다.
+    그래서 발행 금액·적용 환율·청구서 통화 상계액을 나란히 적는다. 하나만 적으면 나중에
+    "이 금액이 어디서 나왔나"를 되짚을 수 없다.
+    """
+    s = _styles()
+    customer = data.get("customer", {}) or {}
+    vessel = data.get("vessel", {}) or {}
+    claim = data.get("claim", {}) or {}
+    cur = (data.get("currency") or "USD").upper()          # 발행 통화
+    inv_cur = (data.get("invoice_currency") or cur).upper()  # 상계 대상 청구서 통화
+    amount = _num(data.get("amount"))
+    applied = _num(data.get("applied_amount")) or amount
+    fx = _num(data.get("fx_rate")) or 1.0
+    vat = _num(data.get("vat_amount"))
+    dec = 0 if inv_cur == "KRW" else 2
+    buffer, doc, page_width = _form_doc("CREDIT NOTE")
+    form = _DocForm([1] * 8, page_width, s)
+    quad = form.cols(2, 2, 2, 2)
+    half = form.cols(4, 4)
+
+    def p(v, style="small"):
+        return _p(v, s[style])
+
+    story = []
+    story += _letterhead(company, "CREDIT NOTE", s)
+    story += [form.pairs([
+        ("Credit Note No.", data.get("doc_no", ""), "Issue Date", pi_doc_date(data.get("date", ""))),
+        ("Against Invoice No.", data.get("invoice_no", ""), "Invoice Date", pi_doc_date(data.get("invoice_date", ""))),
+        ("Customer P/O", data.get("po_no", ""), "Project No.", data.get("export_ref", "")),
+    ], quad), Spacer(1, 3 * mm)]
+
+    # ── 받는 쪽 / 보내는 쪽 ──
+    story += [form.band("TO / CUSTOMER", "FROM / SUPPLIER", widths=half)]
+    left = [("Company Name", customer.get("name", "")),
+            ("Business Reg. No.", customer.get("tax_id", "")),
+            ("Contact", customer.get("contact", "")),
+            ("Vessel", vessel.get("name", ""))]
+    right = [("Company Name", company.get("company_name_en", "")),
+             ("Business Reg. No.", company.get("business_no", "")),
+             ("Representative", company.get("representative", "") or "Sungyeon Cho"),
+             ("Tel", company.get("phone", ""))]
+    story += [form.pairs([(left[i][0], left[i][1], right[i][0], right[i][1]) for i in range(len(left))], quad),
+              Spacer(1, 3 * mm)]
+
+    # ── 금액 배너 — 청구서에서 실제로 빠지는 금액이 이 장의 결론이다. ──
+    banner_style = ParagraphStyle("KMCNTotal", parent=s["base"], fontName=DEFAULT_BOLD_FONT,
+                                  fontSize=11, leading=14)
+    words = _kor_won_amount(applied) if inv_cur == "KRW" else ""
+    banner = Table([[p("CREDIT AMOUNT", "section"), _p(words, banner_style),
+                     _p(f"{inv_cur} {applied:,.{dec}f}",
+                        ParagraphStyle("KMCNTotalR", parent=banner_style, alignment=TA_RIGHT))]],
+                   colWidths=[page_width * 0.30, page_width * 0.45, page_width * 0.25])
+    banner.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), .35, MID_GRAY),
+                                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                                ("BACKGROUND", (0, 0), (0, 0), colors.HexColor("#1F3B66")),
+                                ("TEXTCOLOR", (0, 0), (0, 0), colors.white),
+                                ("BACKGROUND", (1, 0), (-1, 0), LIGHT_BLUE),
+                                ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                                ("TOPPADDING", (0, 0), (-1, -1), 4), ("BOTTOMPADDING", (0, 0), (-1, -1), 4)]))
+    story += [banner, Spacer(1, 3 * mm)]
+
+    # ── 산출 근거 — 발행 통화 금액 → 환율 → 상계액. 환율은 통화가 다를 때만 적는다. ──
+    rows = [("Reason", data.get("reason", "") or "Claim settlement", "Claim", claim.get("title", ""))]
+    if cur != inv_cur:
+        rows.append(("Issued Amount", f"{cur} {amount:,.2f}",
+                     "Exchange Rate", f"1 {cur} = {fx:,.2f} {inv_cur}"))
+    rows.append(("Applied to Invoice", f"{inv_cur} {applied:,.{dec}f}",
+                 "of which VAT", f"{inv_cur} {vat:,.{dec}f}" if vat else "—"))
+    rows.append(("Site · Vessel", claim.get("site", ""), "Occurred", pi_doc_date(claim.get("occurred_date", ""))))
+    story += [form.band("DETAILS"), form.pairs(rows, quad), Spacer(1, 3 * mm)]
+
+    story += [form.declaration(
+        "This credit note is applied against the invoice stated above; the outstanding balance is "
+        "reduced by the credit amount. No separate remittance is required for the credited portion."
+    ), Spacer(1, 2 * mm)]
+    sign_img, stamp_img = _form_signature_images()
+    story += [form.signature([("Issued by · K-MARIS Energy & Solutions Co., Ltd.", sign_img, 40 * mm),
+                              ("Company Seal", stamp_img, 20 * mm)], half),
+              Spacer(1, 3 * mm), _footer_center(s)]
+
+    doc.build(story, onFirstPage=_footer, onLaterPages=_footer)
+    return buffer.getvalue()
+
+
 def consignee_mark_lines(sh: Dict[str, Any]) -> List[str]:
     """마크의 수하인 블록 — 'C/O 회사명' 다음에 그 회사 주소를 줄마다 이어 붙인다.
     주소는 Commercial Invoice 의 CONSIGNEE 주소(consignee_address)와 같은 칸이라
@@ -2375,6 +2467,8 @@ def make_pdf(doc_type: str, data: Dict[str, Any], company: Optional[Dict[str, An
         return _make_proforma_invoice_pdf(payload, payload["company"])
     if doc_type == "tax_invoice":
         return _make_tax_invoice_pdf(payload, payload["company"])
+    if doc_type == "credit_note":
+        return _make_credit_note_pdf(payload, payload["company"])
     if doc_type == "shipping_mark":
         return _make_shipping_mark_pdf(payload, payload["company"])
     if doc_type == "packing_list":

@@ -14175,6 +14175,37 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 .claim-costs-wrap > table { min-width: 720px; }
 /* 표 안의 입력칸은 셀에 꽉 차게 — 셀렉트가 제 글자폭만큼만 서면 열 폭이 들쭉날쭉해진다. */
 .claim-costs-wrap :is(input, select) { width: 100%; min-width: 0; }
+/* 클레임 대장(Finance) — 크레딧 노트는 그 사건 아래 딸린 줄로 눕는다. */
+.fin-c-subrow td { background: #fbfcfe; font-size: 11.5px; color: #5b6a7e; }
+/* 아직 정산이 남은 몫 — 표에서 눈이 먼저 가야 하는 칸. */
+.fin-claim-open { color: #b06a00; font-weight: 700; }
+
+/* 개요의 클레임 요약 — 읽기 전용. 고치는 자리는 11단계 Claim 탭이다. */
+.ov-claims { display: grid; gap: 10px; }
+.ov-claim { border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px; background: #fff; }
+.ov-claim-h { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px;
+  font-size: var(--ov-t-body); color: var(--ink); }
+.ov-claim-when, .ov-claim-site { font-size: var(--ov-t-meta); color: var(--muted); }
+.ov-claim-state { margin-left: auto; font-size: var(--ov-t-cap); font-weight: 800;
+  text-transform: uppercase; letter-spacing: .04em; color: #1a7a4a; }
+.ov-claim-state.open { color: #b06a00; }
+.ov-claim-desc { margin: 4px 0 0; font-size: var(--ov-t-meta); color: #43536a; }
+.ov-claim-lines, .ov-claim-cns { list-style: none; margin: 6px 0 0; padding: 0; }
+.ov-claim-lines > li, .ov-claim-cns > li { display: flex; align-items: baseline; gap: 8px;
+  padding: 2px 0; font-size: var(--ov-t-meta); color: #43536a; }
+.ov-claim-cns > li { border-top: 1px dashed var(--line); padding-top: 4px; }
+.ov-claim-kind { flex: 0 0 58px; font-weight: 700; color: var(--muted); text-transform: uppercase;
+  font-size: var(--ov-t-cap); letter-spacing: .04em; }
+.ov-claim-what { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; }
+.ov-claim-amt { flex: none; font-variant-numeric: tabular-nums; font-weight: 700; color: var(--ink); }
+.ov-claim-by { flex: 0 0 auto; min-width: 96px; text-align: right; color: var(--muted); }
+/* 머리 줄의 클레임 표식 — 금액·단계만 보다가 아래 섹션에서야 알게 되는 일이 없도록. */
+.ov-claim-badge { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px;
+  border-radius: 999px; background: #fff3e2; color: #b06a00; font-weight: 800;
+  font-size: var(--ov-t-cap); }
+.ov-claim-open { font-size: var(--ov-t-cap); font-weight: 700; color: #b06a00; }
+
 /* 발행 폼은 목록과 한 덩이로 보이지 않게 옅은 바탕에 얹는다(취소 가능한 임시 입력). */
 .claim-cn-form {
   margin-top: 10px;
