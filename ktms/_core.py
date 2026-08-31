@@ -62,6 +62,7 @@ from services.email_sig import (
 from services.pdf_svc import (
     build_payload, build_po_payload, generate_pdf, generate_po_pdf,
     generate_tax_xlsx, generate_ci_xlsx, generate_pl_xlsx, generate_pi_xlsx,
+    generate_cn_xlsx,
 )
 from services.pdf_parser import (
     extract_text_from_pdf, parse_order_fields, parse_rfq_fields,
@@ -1998,6 +1999,16 @@ class CreditNoteSave(BaseModel):
     vat_amount: float | None = None
     reason: str | None = ""
     status: str | None = "issued"
+    # ── 발행 문서(CREDIT NOTE)에 찍히는 칸 ────────────────────────────────
+    # items 는 청구서 통화로 적는 감액 내역이다. 한 줄이라도 오면 그 합이 상계액이 된다
+    # (문서에 적힌 TOTAL CREDIT 과 장부의 상계액이 어긋날 자리를 없앤다).
+    items: list[dict] | None = None
+    vessel_name: str | None = ""
+    settlement_method: str | None = ""
+    cash_refund: str | None = ""
+    rate_basis: str | None = ""
+    fx_quotation: str | None = ""
+    terms: list[str] | None = None
 
 
 def _ar_outstanding(ar) -> float:
@@ -3998,6 +4009,7 @@ __all__ = [
     "generate_ci_xlsx",
     "generate_pl_xlsx",
     "generate_pi_xlsx",
+    "generate_cn_xlsx",
     "get_current_user",
     "get_session",
     "io",

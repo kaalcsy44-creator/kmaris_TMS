@@ -863,6 +863,16 @@ export type ClaimCost = {
   settlement: string;   // credit_note(AR 상계) / cash(현금지급) / vendor_ap / none(정보성)
 };
 
+/** 크레딧 노트 문서의 감액 내역 한 줄 — 금액은 상계 대상 청구서 통화로 적는다.
+ *  실제 발행 양식의 표(No./Description/Reference/Qty/Unit Price/Amount)와 같은 칸이다. */
+export type CreditNoteItem = {
+  description: string;
+  reference: string;
+  qty: number;
+  unit_price: number;
+  amount: number;
+};
+
 /** 크레딧 노트(감액 증서) — 반드시 상계 대상 청구서(ar_id)에 붙는다. */
 export type CreditNoteRow = {
   id: number;
@@ -880,7 +890,16 @@ export type CreditNoteRow = {
   vat_amount: number;
   reason: string;
   status: string;         // issued / void
+  // ── 발행 문서(CREDIT NOTE)에 찍히는 칸 — 실제 발행 양식과 같은 항목.
+  items: CreditNoteItem[];
+  vessel_name: string;        // Reference Vessel
+  settlement_method: string;  // 예: "Set-off against outstanding balance"
+  cash_refund: string;        // "No" / "Yes"
+  rate_basis: string;         // 환율 근거(예: "Shinhan Bank Basic Exchange Rate")
+  fx_quotation: string;       // 고시 회차·시각
+  terms: string[];            // SET-OFF / OFFSET TERMS 조항(한 줄 = 한 조항)
   invoice_no: string;     // 상계 대상 청구서 번호(표시용)
+  invoice_date: string;
   invoice_currency: string;
 };
 

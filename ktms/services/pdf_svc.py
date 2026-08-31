@@ -6,7 +6,8 @@ from typing import Any, Dict, Optional
 
 from services.kmaris_docs import make_pdf, make_tax_invoice_xlsx  # type: ignore
 from services.doc_xlsx import (  # type: ignore
-    make_commercial_invoice_xlsx, make_packing_list_xlsx, make_proforma_invoice_xlsx,
+    make_commercial_invoice_xlsx, make_credit_note_xlsx, make_packing_list_xlsx,
+    make_proforma_invoice_xlsx,
 )
 
 _config_path = Path(__file__).resolve().parent.parent / "config" / "company.json"
@@ -175,3 +176,9 @@ def generate_pl_xlsx(payload: Dict[str, Any]) -> bytes:
     """Packing List 전용 Excel(회사 정보 로딩 포함)."""
     company = _load_company()
     return make_packing_list_xlsx(payload, company)
+
+
+def generate_cn_xlsx(payload: Dict[str, Any]) -> bytes:
+    """Credit Note 전용 Excel — 같은 payload 로 만드는 CN PDF 와 같은 서식."""
+    company = _load_company()
+    return make_credit_note_xlsx(payload, company)

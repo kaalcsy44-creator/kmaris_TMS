@@ -193,6 +193,16 @@ _MIGRATIONS = {
         # 어느 딜에도 속할 수 없는 메일(회사 소개·인사·자동회신). 미분류 함에서 내린다.
         "not_deal":        "BOOLEAN DEFAULT FALSE",
     },
+    "credit_notes": {
+        # 발행 문서(CREDIT NOTE) 한 장을 그대로 채우는 칸 — 실제 발행 양식과 같은 항목.
+        "items":             "JSON",
+        "vessel_name":       "VARCHAR(120)",
+        "settlement_method": "VARCHAR(120)",
+        "cash_refund":       "VARCHAR(10)",
+        "rate_basis":        "VARCHAR(120)",
+        "fx_quotation":      "VARCHAR(120)",
+        "terms":             "JSON",
+    },
 }
 
 

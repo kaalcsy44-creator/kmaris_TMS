@@ -1439,90 +1439,143 @@ def _make_tax_invoice_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> byte
     return buffer.getvalue()
 
 
+CN_MIN_ITEM_ROWS = 4   # 감액 내역이 한 줄이어도 표가 종이처럼 보이도록 빈 줄을 남긴다.
+
+
+def cn_view(data: Dict[str, Any]) -> Dict[str, Any]:
+    """CREDIT NOTE 한 장이 쓰는 값 — PDF 와 Excel 이 같은 곳에서 읽는다.
+
+    통화가 둘이라 헷갈리기 쉽다: cur 는 현장 비용이 난 통화(EUR), inv_cur 는 깎아 줄
+    청구서의 통화(KRW)다. 표와 총액은 전부 inv_cur 로 적고, 원 통화 금액은 환율 블록에서
+    한 번만 밝힌다 — 두 통화를 표 안에서 섞으면 받는 쪽이 어느 금액을 장부에 넣을지 모른다.
+    """
+    cur = (data.get("currency") or "USD").upper()
+    inv_cur = (data.get("invoice_currency") or cur).upper()
+    applied = _num(data.get("applied_amount")) or _num(data.get("amount"))
+    items = [
+        {"item_no": i, "description": str(it.get("description") or ""),
+         "reference": str(it.get("reference") or ""), "qty": _num(it.get("qty")) or 1.0,
+         "unit_price": _num(it.get("unit_price")), "amount": _num(it.get("amount"))}
+        for i, it in enumerate(data.get("cn_items") or [], start=1)
+    ]
+    if not items:
+        items = [{"item_no": 1, "description": data.get("reason", "") or "Claim settlement credit",
+                  "reference": "", "qty": 1.0, "unit_price": applied, "amount": applied}]
+    total = round(sum(it["amount"] for it in items), 2) or applied
+    rate_rows = []
+    if cur != inv_cur:
+        rate_rows.append(("Exchange Rate Applied", f"1 {cur} = {inv_cur} {_num(data.get('fx_rate')) or 1:,.2f}"))
+    for label, key in (("Rate Basis", "rate_basis"), ("Quotation", "fx_quotation")):
+        if str(data.get(key) or "").strip():
+            rate_rows.append((label, str(data[key]).strip()))
+    if cur != inv_cur:
+        rate_rows.append(("Original Amount", f"{cur} {_num(data.get('amount')):,.2f}"))
+    dec = 0 if inv_cur == "KRW" else 2
+    rate_rows.append(("Credit Amount", f"{inv_cur} {total:,.{dec}f}"))
+    if _num(data.get("vat_amount")):
+        rate_rows.append(("of which VAT", f"{inv_cur} {_num(data['vat_amount']):,.{dec}f}"))
+    return {
+        "cur": cur, "inv_cur": inv_cur, "dec": dec, "items": items, "total": total,
+        "customer": data.get("customer", {}) or {},
+        "vessel_name": (data.get("vessel_name") or (data.get("vessel", {}) or {}).get("name", "") or ""),
+        "settlement_method": data.get("settlement_method") or "Set-off against outstanding balance",
+        "cash_refund": data.get("cash_refund") or "No",
+        "terms": [str(t) for t in (data.get("terms_lines") or []) if str(t).strip()],
+        "rate_rows": rate_rows,
+    }
+
+
+def cn_contact_line(customer: Dict[str, Any]) -> str:
+    """CUSTOMER 블록의 담당자 칸 — '이름 / 전화'. 한쪽이 비면 있는 쪽만 적는다."""
+    return " / ".join(x for x in [customer.get("contact", ""), customer.get("phone", "")] if x)
+
+
 def _make_credit_note_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> bytes:
     """CREDIT NOTE — 클레임으로 고객 청구서를 깎아 준 사실을 한 장으로 증명하는 문서.
 
-    청구서(TAX INVOICE)와 같은 서식을 쓰되 품목표가 없다. 깎아 준 것은 물건이 아니라
-    금액이고, 이 문서가 답해야 하는 질문은 셋뿐이다 — 어느 청구서를, 얼마나, 왜.
-
-    통화가 두 개일 수 있다: 현장 비용은 USD 로 났는데 깎아 줄 청구서는 KRW 인 식이다.
-    그래서 발행 금액·적용 환율·청구서 통화 상계액을 나란히 적는다. 하나만 적으면 나중에
-    "이 금액이 어디서 나왔나"를 되짚을 수 없다.
+    실제로 고객에게 발행해 온 양식을 그대로 따른다: 문서정보 → CUSTOMER → 감액 내역표 →
+    TOTAL CREDIT → SET-OFF / OFFSET TERMS → EXCHANGE RATE / SETTLEMENT NOTE → 서명.
+    이 문서가 답해야 하는 질문은 넷이다 — 어느 청구서를, 무엇 때문에, 얼마나, 어떻게 정산하나.
     """
     s = _styles()
-    customer = data.get("customer", {}) or {}
-    vessel = data.get("vessel", {}) or {}
-    claim = data.get("claim", {}) or {}
-    cur = (data.get("currency") or "USD").upper()          # 발행 통화
-    inv_cur = (data.get("invoice_currency") or cur).upper()  # 상계 대상 청구서 통화
-    amount = _num(data.get("amount"))
-    applied = _num(data.get("applied_amount")) or amount
-    fx = _num(data.get("fx_rate")) or 1.0
-    vat = _num(data.get("vat_amount"))
-    dec = 0 if inv_cur == "KRW" else 2
+    v = cn_view(data)
+    customer, inv_cur, dec = v["customer"], v["inv_cur"], v["dec"]
     buffer, doc, page_width = _form_doc("CREDIT NOTE")
-    form = _DocForm([1] * 8, page_width, s)
+    form = _DocForm(PI_COLUMN_UNITS, page_width, s)
     quad = form.cols(2, 2, 2, 2)
     half = form.cols(4, 4)
+    item_w = form.cols(1, 3, 1, 1, 1, 1)
 
-    def p(v, style="small"):
-        return _p(v, s[style])
+    def p(value, style="small"):
+        return _p(value, s[style] if isinstance(style, str) else style)
 
     story = []
     story += _letterhead(company, "CREDIT NOTE", s)
     story += [form.pairs([
-        ("Credit Note No.", data.get("doc_no", ""), "Issue Date", pi_doc_date(data.get("date", ""))),
-        ("Against Invoice No.", data.get("invoice_no", ""), "Invoice Date", pi_doc_date(data.get("invoice_date", ""))),
-        ("Customer P/O", data.get("po_no", ""), "Project No.", data.get("export_ref", "")),
+        ("Credit Note No.", data.get("doc_no", ""),
+         "Reference Invoice No.", data.get("invoice_no", "")),
+        ("Issue Date", pi_doc_date(data.get("date", "")),
+         "Settlement Method", v["settlement_method"]),
+        ("Reference Vessel", v["vessel_name"], "Cash Refund", v["cash_refund"]),
+        ("Currency", inv_cur, "Customer P/O", data.get("po_no", "")),
     ], quad), Spacer(1, 3 * mm)]
 
-    # ── 받는 쪽 / 보내는 쪽 ──
-    story += [form.band("TO / CUSTOMER", "FROM / SUPPLIER", widths=half)]
-    left = [("Company Name", customer.get("name", "")),
-            ("Business Reg. No.", customer.get("tax_id", "")),
-            ("Contact", customer.get("contact", "")),
-            ("Vessel", vessel.get("name", ""))]
-    right = [("Company Name", company.get("company_name_en", "")),
-             ("Business Reg. No.", company.get("business_no", "")),
-             ("Representative", company.get("representative", "") or "Sungyeon Cho"),
-             ("Tel", company.get("phone", ""))]
-    story += [form.pairs([(left[i][0], left[i][1], right[i][0], right[i][1]) for i in range(len(left))], quad),
-              Spacer(1, 3 * mm)]
+    # ── 받는 쪽 — 이 종이를 장부에 넣을 회사와 담당자. ──
+    story += [form.band("CUSTOMER"), form.pairs([
+        ("Company Name", customer.get("name", ""), "Address", customer.get("address", "")),
+        ("Contact", cn_contact_line(customer), "Email", customer.get("email", "")),
+    ], quad), Spacer(1, 3 * mm)]
 
-    # ── 금액 배너 — 청구서에서 실제로 빠지는 금액이 이 장의 결론이다. ──
-    banner_style = ParagraphStyle("KMCNTotal", parent=s["base"], fontName=DEFAULT_BOLD_FONT,
-                                  fontSize=11, leading=14)
-    words = _kor_won_amount(applied) if inv_cur == "KRW" else ""
-    banner = Table([[p("CREDIT AMOUNT", "section"), _p(words, banner_style),
-                     _p(f"{inv_cur} {applied:,.{dec}f}",
-                        ParagraphStyle("KMCNTotalR", parent=banner_style, alignment=TA_RIGHT))]],
-                   colWidths=[page_width * 0.30, page_width * 0.45, page_width * 0.25])
-    banner.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), .35, MID_GRAY),
-                                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                                ("BACKGROUND", (0, 0), (0, 0), colors.HexColor("#1F3B66")),
-                                ("TEXTCOLOR", (0, 0), (0, 0), colors.white),
-                                ("BACKGROUND", (1, 0), (-1, 0), LIGHT_BLUE),
-                                ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
-                                ("TOPPADDING", (0, 0), (-1, -1), 4), ("BOTTOMPADDING", (0, 0), (-1, -1), 4)]))
-    story += [banner, Spacer(1, 3 * mm)]
+    # ── 감액 내역 — 무엇을 깎아 주는지. 금액은 전부 청구서 통화. ──
+    rows = [[p(h, form.th) for h in
+             ("No.", "Description", "Reference", "Qty", "Unit Price", f"Amount ({inv_cur})")]]
+    for i in range(max(len(v["items"]), CN_MIN_ITEM_ROWS)):
+        it = v["items"][i] if i < len(v["items"]) else None
+        rows.append([
+            p(it["item_no"] if it else "", form.center),
+            p(it["description"] if it else ""),
+            p(it["reference"] if it else ""),
+            p(f"{it['qty']:g}" if it else "", form.center),
+            p(f"{it['unit_price']:,.{dec}f}" if it else "", form.right),
+            p(f"{it['amount']:,.{dec}f}" if it else "", form.right),
+        ])
+    # 빈 줄은 스스로 높이를 못 가진다 — 참조 양식처럼 표가 눌리지 않게 최소 높이를 준다.
+    heights = [None] + [None if i < len(v["items"]) else 7 * mm for i in range(len(rows) - 1)]
+    table = Table(rows, colWidths=item_w, rowHeights=heights, repeatRows=1)
+    table.setStyle(form.item_style(len(rows)))
+    total_row = Table([[p("TOTAL CREDIT", form.grand),
+                        p(f"{v['total']:,.{dec}f}", form.grand_right)]],
+                      colWidths=[sum(item_w[:5]), item_w[5]])
+    total_row.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), .35, MID_GRAY),
+                                   ("BACKGROUND", (0, 0), (-1, -1), LIGHT_BLUE)] + form.CELL))
+    story += [table, total_row, Spacer(1, 3 * mm)]
 
-    # ── 산출 근거 — 발행 통화 금액 → 환율 → 상계액. 환율은 통화가 다를 때만 적는다. ──
-    rows = [("Reason", data.get("reason", "") or "Claim settlement", "Claim", claim.get("title", ""))]
-    if cur != inv_cur:
-        rows.append(("Issued Amount", f"{cur} {amount:,.2f}",
-                     "Exchange Rate", f"1 {cur} = {fx:,.2f} {inv_cur}"))
-    rows.append(("Applied to Invoice", f"{inv_cur} {applied:,.{dec}f}",
-                 "of which VAT", f"{inv_cur} {vat:,.{dec}f}" if vat else "—"))
-    rows.append(("Site · Vessel", claim.get("site", ""), "Occurred", pi_doc_date(claim.get("occurred_date", ""))))
-    story += [form.band("DETAILS"), form.pairs(rows, quad), Spacer(1, 3 * mm)]
+    # ── 상계 조항 — 받는 쪽 경리가 이 종이를 어떻게 처리할지 적는 자리. ──
+    if v["terms"]:
+        story += [form.band("SET-OFF / OFFSET TERMS")]
+        story += [Table([[p(f"{i}. {t}")] for i, t in enumerate(v["terms"], start=1)],
+                        colWidths=[page_width])]
+        story[-1].setStyle(TableStyle([("LINEBELOW", (0, -1), (-1, -1), .35, MID_GRAY),
+                                       ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                                       ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                                       ("TOPPADDING", (0, 0), (-1, -1), 2),
+                                       ("BOTTOMPADDING", (0, 0), (-1, -1), 2)]))
+        story += [Spacer(1, 3 * mm)]
 
-    story += [form.declaration(
-        "This credit note is applied against the invoice stated above; the outstanding balance is "
-        "reduced by the credit amount. No separate remittance is required for the credited portion."
-    ), Spacer(1, 2 * mm)]
+    # ── 환율·정산 근거 — 원 통화 금액이 어떻게 이 금액이 되었는지. ──
+    story += [form.band("EXCHANGE RATE / SETTLEMENT NOTE")]
+    story += [Table([[p(f"<b>{k}:</b> {val}")] for k, val in v["rate_rows"]], colWidths=[page_width])]
+    story[-1].setStyle(TableStyle([("LINEBELOW", (0, -1), (-1, -1), .35, MID_GRAY),
+                                   ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                                   ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                                   ("TOPPADDING", (0, 0), (-1, -1), 2),
+                                   ("BOTTOMPADDING", (0, 0), (-1, -1), 2)]))
+    story += [Spacer(1, 4 * mm)]
+
     sign_img, stamp_img = _form_signature_images()
-    story += [form.signature([("Issued by · K-MARIS Energy & Solutions Co., Ltd.", sign_img, 40 * mm),
-                              ("Company Seal", stamp_img, 20 * mm)], half),
+    story += [form.signature([("Authorized Signature", sign_img, 40 * mm),
+                              (f"{company.get('company_name_en', '')}" + chr(10) + "(Company Stamp)",
+                               stamp_img, 20 * mm)], half),
               Spacer(1, 3 * mm), _footer_center(s)]
 
     doc.build(story, onFirstPage=_footer, onLaterPages=_footer)

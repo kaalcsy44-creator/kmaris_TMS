@@ -38,7 +38,7 @@ from _core import (
     get_session,
     require_token,
 )
-from _core import Vessel, _doc_file_response, _kst_iso, _project_no_map
+from _core import Vessel, _doc_file_response, _kst_iso, _project_no_map, generate_cn_xlsx
 
 
 def _log_activity(s, rfq_id: int, text: str, pic: str = "") -> None:
@@ -66,6 +66,36 @@ def _log_activity(s, rfq_id: int, text: str, pic: str = "") -> None:
         pass
 
 
+def _cn_items(raw) -> list[dict]:
+    """크레딧 노트의 감액 내역 줄 — 문서 품목표에 그대로 찍힌다(금액은 청구서 통화).
+
+    실제 발행 양식의 표는 No./Description/Reference/Qty/Unit Price/Amount 여섯 칸이다.
+    금액이 비어 오면 수량×단가로 채운다 — 화면에서 단가만 고치고 금액을 안 고쳐도
+    문서의 합이 어긋나지 않게.
+    """
+    out: list[dict] = []
+    for i, r in enumerate(raw or [], start=1):
+        if not isinstance(r, dict):
+            continue
+        qty = float(r.get("qty") or 0) or 1.0
+        unit = float(r.get("unit_price") or 0)
+        amt = r.get("amount")
+        amt = float(amt) if amt not in (None, "", 0) else qty * unit
+        if not (r.get("description") or "").strip() and not amt:
+            continue
+        out.append({
+            "item_no": i,
+            "description": (r.get("description") or "").strip(),
+            "reference": (r.get("reference") or "").strip(),
+            "qty": qty,
+            "unit_price": unit if unit else (amt / qty if qty else amt),
+            "amount": round(amt, 2),
+        })
+    for i, it in enumerate(out, start=1):
+        it["item_no"] = i
+    return out
+
+
 def _cn_out(c: CreditNote, ar: ARRecord | None = None) -> dict:
     return {
         "id": c.id,
@@ -83,8 +113,17 @@ def _cn_out(c: CreditNote, ar: ARRecord | None = None) -> dict:
         "vat_amount": round(c.vat_amount or 0, 2),
         "reason": c.reason or "",
         "status": c.status or "issued",
+        # 발행 문서(CREDIT NOTE)에 찍히는 칸 — 목록에서 고른 노트를 그대로 다시 열어 고친다.
+        "items": _cn_items(c.items),
+        "vessel_name": c.vessel_name or "",
+        "settlement_method": c.settlement_method or "",
+        "cash_refund": c.cash_refund or "",
+        "rate_basis": c.rate_basis or "",
+        "fx_quotation": c.fx_quotation or "",
+        "terms": list(c.terms or []),
         # 상계 대상 청구서 표시용 — 목록에서 "어느 청구서를 깎았나"가 번호로 보여야 한다.
         "invoice_no": (ar.invoice_no or ar.ci_no or "") if ar else "",
+        "invoice_date": ((ar.invoice_date or "")[:10]) if ar else "",
         "invoice_currency": (ar.currency or "USD") if ar else "",
     }
 
@@ -317,7 +356,13 @@ def _apply_cn_fields(s, cn: CreditNote, body: CreditNoteSave, cn_id: int | None)
         raise HTTPException(
             status_code=400,
             detail=f"환율이 필요합니다 — 크레딧 노트는 {currency}, 청구서는 {inv_cur} 입니다.")
-    applied = round(float(body.applied_amount) if body.applied_amount else amount * fx, 2)
+    # 감액 내역 줄이 오면 그 합이 상계액이다 — 고객이 받는 종이의 TOTAL CREDIT 과
+    # 장부에서 깎이는 금액이 다른 곳에서 계산되면 언젠가 반드시 어긋난다.
+    items = _cn_items(body.items)
+    items_total = round(sum(i["amount"] for i in items), 2)
+    applied = round(
+        items_total if items_total > 0
+        else (float(body.applied_amount) if body.applied_amount else amount * fx), 2)
     vat_rate = float(body.vat_rate or 0)
     vat_amount = (round(float(body.vat_amount), 2) if body.vat_amount is not None
                   else round(applied - applied / (1 + vat_rate), 2) if vat_rate else 0.0)
@@ -338,6 +383,14 @@ def _apply_cn_fields(s, cn: CreditNote, body: CreditNoteSave, cn_id: int | None)
     cn.vat_amount = vat_amount
     cn.reason = body.reason or ""
     cn.status = body.status or "issued"
+    # 발행 문서의 칸. 비워 두면 문서를 만들 때 표준값으로 채운다(_cn_payload).
+    cn.items = items
+    cn.vessel_name = (body.vessel_name or "").strip()
+    cn.settlement_method = (body.settlement_method or "").strip()
+    cn.cash_refund = (body.cash_refund or "").strip()
+    cn.rate_basis = (body.rate_basis or "").strip()
+    cn.fx_quotation = (body.fx_quotation or "").strip()
+    cn.terms = [t for t in ((body.terms or []) if body.terms is not None else []) if str(t).strip()]
 
 
 @app.post("/api/admin/credit-notes", dependencies=[Depends(require_token)])
@@ -385,55 +438,126 @@ def update_credit_note(cn_id: int, body: CreditNoteSave):
         s.close()
 
 
-@app.get("/api/admin/credit-notes/{cn_id}/pdf", dependencies=[Depends(require_token)])
-def credit_note_pdf(cn_id: int):
-    """크레딧 노트 PDF — 고객에게 보내는 감액 증서.
+def _cn_default_terms(d: dict) -> list[str]:
+    """SET-OFF / OFFSET TERMS 표준 3조항 — 손으로 안 적었을 때 문서가 스스로 쓴다.
+
+    실제 발행해 온 양식의 문구를 그대로 따른다: (1) 무엇을 얼마로 발행했는가,
+    (2) 어느 청구서의 미수와 상계하는가, (3) 현금 환불은 없다. 이 세 줄이 빠지면
+    고객 경리는 이 종이를 무엇으로 처리해야 할지 알 수 없다.
+    """
+    cur, inv_cur = d["currency"], d["invoice_currency"]
+    dec = 0 if inv_cur == "KRW" else 2
+    applied, amount = d["applied_amount"], d["amount"]
+    vessel = (d.get("vessel_name") or "").strip()
+    what = (d.get("reason") or "").strip() or (d.get("claim", {}) or {}).get("title", "") or "the claim costs"
+    line1 = (f"Without prejudice and as a goodwill gesture, this Credit Note is issued for "
+             f"{inv_cur} {applied:,.{dec}f}")
+    if cur != inv_cur:
+        line1 += f", equivalent to {what} of {cur} {amount:,.2f}"
+    if vessel:
+        line1 += f" incurred in connection with {vessel}"
+    terms = [line1 + "."]
+    if d.get("invoice_no"):
+        who = (d.get("customer", {}) or {}).get("name", "") or "the customer"
+        terms.append(f"The credit amount will be offset against the outstanding amount payable by "
+                     f"{who} under Reference Invoice No. {d['invoice_no']}.")
+    terms.append("A cash refund will be made separately."
+                 if (d.get("cash_refund") or "No").strip().lower().startswith("y")
+                 else "No separate cash refund will be made.")
+    return terms
+
+
+def _cn_payload(s, cn: CreditNote) -> tuple[dict, str]:
+    """크레딧 노트 한 장의 문서 payload + 파일 이름 — PDF·Excel 이 같은 것을 받는다.
 
     금액은 두 통화로 적힌다: 발행 통화(현장 비용이 난 통화)와 청구서 통화의 상계액.
     환율은 발행 시점에 굳은 값이라 지금 다시 계산하지 않고 저장된 것을 그대로 쓴다.
+    비워 둔 칸(감액 내역·정산 방식·조항)은 여기서 표준값으로 채운다 — 종이에 빈칸이
+    남는 것보다, 늘 쓰는 문구가 찍히고 필요하면 화면에서 고치는 편이 낫다.
     """
+    ar = s.query(ARRecord).filter_by(id=cn.ar_id).first()
+    order = s.query(Order).filter_by(id=cn.order_id).first() if cn.order_id else None
+    cust = s.query(Customer).filter_by(id=order.customer_id).first() if order else None
+    vessel = (s.query(Vessel).filter_by(id=order.vessel_id).first()
+              if order and order.vessel_id else None)
+    claim = s.query(Claim).filter_by(id=cn.claim_id).first() if cn.claim_id else None
+    rfq = _rfq_for_order(s, order) if order else None
+    inv_cur = ((ar.currency or cn.currency) if ar else (cn.currency or "USD")).upper()
+    applied = round(cn.applied_amount or 0, 2)
+    payload = build_payload(
+        doc_no=cn.cn_no or f"CN-{cn.id}",
+        date=cn.issue_date or "",
+        customer=cust, vessel=vessel, items=[], terms={},
+        currency=cn.currency or "USD",
+        vat_rate=cn.vat_rate or 0.0,
+        po_no=(order.po_no or "") if order else "",
+        export_ref=_project_no_map(s).get(rfq.id, "") if rfq else "",
+        project_title=(getattr(rfq, "project_title", "") or "") if rfq else "",
+    )
+    vessel_name = (cn.vessel_name or "").strip() or (
+        (claim.site or "") if claim else "") or (vessel.name if vessel else "")
+    reason = cn.reason or ""
+    items = _cn_items(cn.items)
+    if not items:
+        # 내역 줄을 안 적었으면 상계액 한 줄로 만든다 — 표가 빈 채로 나가는 일은 없어야 한다.
+        items = [{"item_no": 1,
+                  "description": reason or (claim.title if claim else "") or "Claim settlement credit",
+                  "reference": (claim.claim_no or "") if claim else "",
+                  "qty": 1.0, "unit_price": applied, "amount": applied}]
+    payload.update({
+        "amount": cn.amount or 0.0,
+        "fx_rate": cn.fx_rate or 1.0,
+        "applied_amount": applied,
+        "vat_amount": cn.vat_amount or 0.0,
+        "invoice_currency": inv_cur,
+        "invoice_no": (ar.invoice_no or ar.ci_no or "") if ar else "",
+        "invoice_date": (ar.invoice_date or "") if ar else "",
+        "po_no": (order.po_no or "") if order else "",
+        "reason": reason,
+        "cn_items": items,
+        "vessel_name": vessel_name,
+        "settlement_method": (cn.settlement_method or "").strip() or "Set-off against outstanding balance",
+        "cash_refund": (cn.cash_refund or "").strip() or "No",
+        "rate_basis": (cn.rate_basis or "").strip(),
+        "fx_quotation": (cn.fx_quotation or "").strip(),
+        "claim": {
+            "title": (claim.title or "") if claim else "",
+            "claim_no": (claim.claim_no or "") if claim else "",
+            "site": (claim.site or "") if claim else "",
+            "occurred_date": (claim.occurred_date or "") if claim else "",
+        },
+    })
+    payload["terms_lines"] = [str(t) for t in (cn.terms or []) if str(t).strip()] or _cn_default_terms(payload)
+    return payload, (cn.cn_no or f"CN-{cn.id}").replace("/", "-")
+
+
+@app.get("/api/admin/credit-notes/{cn_id}/pdf", dependencies=[Depends(require_token)])
+def credit_note_pdf(cn_id: int):
+    """크레딧 노트 PDF — 고객에게 보내는 감액 증서(미리보기도 이 파일을 그대로 쓴다)."""
     s = get_session()
     try:
         cn = s.query(CreditNote).filter_by(id=cn_id).first()
         if not cn:
             raise HTTPException(status_code=404, detail="크레딧 노트를 찾을 수 없습니다.")
-        ar = s.query(ARRecord).filter_by(id=cn.ar_id).first()
-        order = s.query(Order).filter_by(id=cn.order_id).first() if cn.order_id else None
-        cust = s.query(Customer).filter_by(id=order.customer_id).first() if order else None
-        vessel = (s.query(Vessel).filter_by(id=order.vessel_id).first()
-                  if order and order.vessel_id else None)
-        claim = s.query(Claim).filter_by(id=cn.claim_id).first() if cn.claim_id else None
-        rfq = _rfq_for_order(s, order) if order else None
-        payload = build_payload(
-            doc_no=cn.cn_no or f"CN-{cn.id}",
-            date=cn.issue_date or "",
-            customer=cust, vessel=vessel, items=[], terms={},
-            currency=cn.currency or "USD",
-            vat_rate=cn.vat_rate or 0.0,
-            po_no=(order.po_no or "") if order else "",
-            export_ref=_project_no_map(s).get(rfq.id, "") if rfq else "",
-            project_title=(getattr(rfq, "project_title", "") or "") if rfq else "",
-        )
-        payload.update({
-            "amount": cn.amount or 0.0,
-            "fx_rate": cn.fx_rate or 1.0,
-            "applied_amount": cn.applied_amount or 0.0,
-            "vat_amount": cn.vat_amount or 0.0,
-            "invoice_currency": (ar.currency or cn.currency) if ar else (cn.currency or "USD"),
-            "invoice_no": (ar.invoice_no or ar.ci_no or "") if ar else "",
-            "invoice_date": (ar.invoice_date or "") if ar else "",
-            "po_no": (order.po_no or "") if order else "",
-            "reason": cn.reason or "",
-            "claim": {
-                "title": (claim.title or "") if claim else "",
-                "claim_no": (claim.claim_no or "") if claim else "",
-                "site": (claim.site or "") if claim else "",
-                "occurred_date": (claim.occurred_date or "") if claim else "",
-            },
-        })
-        pdf = generate_pdf("credit_note", payload)
-        name = (cn.cn_no or f"CN-{cn.id}").replace("/", "-")
-        return _doc_file_response(pdf, f"{name}_CREDIT_NOTE.pdf", "application/pdf")
+        payload, name = _cn_payload(s, cn)
+        return _doc_file_response(generate_pdf("credit_note", payload),
+                                  f"{name}_CREDIT_NOTE.pdf", "application/pdf")
+    finally:
+        s.close()
+
+
+@app.get("/api/admin/credit-notes/{cn_id}/xlsx", dependencies=[Depends(require_token)])
+def credit_note_xlsx(cn_id: int):
+    """크레딧 노트 Excel — PDF 와 같은 서식·같은 값(고객이 숫자를 옮겨 담아야 할 때)."""
+    s = get_session()
+    try:
+        cn = s.query(CreditNote).filter_by(id=cn_id).first()
+        if not cn:
+            raise HTTPException(status_code=404, detail="크레딧 노트를 찾을 수 없습니다.")
+        payload, name = _cn_payload(s, cn)
+        return _doc_file_response(
+            generate_cn_xlsx(payload), f"{name}_CREDIT_NOTE.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     finally:
         s.close()
 

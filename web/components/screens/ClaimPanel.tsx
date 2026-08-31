@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   createClaim,
   createCreditNote,
@@ -9,13 +10,15 @@ import {
   fetchArCandidates,
   fetchClaims,
   fetchCreditNotePdf,
+  fetchCreditNoteXlsx,
   fetchFxRate,
   fetchPoWorkOptions,
   updateClaim,
+  updateCreditNote,
 } from "@/lib/api";
 import { can, canEditDeal, editBlockReason } from "@/lib/auth";
 import { invalidateCache, useCachedData } from "@/lib/useCachedData";
-import type { ArCandidate, ClaimCost, ClaimRow, CreditNoteRow } from "@/lib/types";
+import type { ArCandidate, ClaimCost, ClaimRow, CreditNoteItem, CreditNoteRow } from "@/lib/types";
 import { useEditGate } from "@/lib/viewMode";
 import RecordStrip from "@/components/common/RecordStrip";
 
@@ -524,7 +527,67 @@ function ClaimForm({
   );
 }
 
-/** 이 클레임으로 발행한 크레딧 노트 목록 + 발행 폼. */
+/** 크레딧 노트 문서에 찍히는 감액 내역 한 줄 — 금액은 상계 대상 청구서 통화. */
+const emptyCnItem = (): CreditNoteItem => ({
+  description: "",
+  reference: "",
+  qty: 1,
+  unit_price: 0,
+  amount: 0,
+});
+
+const fmt = (v: number, dec: number) =>
+  v.toLocaleString("en-US", { minimumFractionDigits: dec, maximumFractionDigits: dec });
+
+/** 받은 Blob 을 파일로 내려 준다(PDF·Excel 공통). */
+function saveBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  // 브라우저가 파일을 다 읽고 난 뒤에 놓아 준다 — 바로 revoke 하면 빈 파일이 떨어진다.
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+/** SET-OFF / OFFSET TERMS 표준 3조항 — 백엔드 _cn_default_terms 와 같은 문구.
+ *
+ *  화면에서 미리 채워 두는 이유: 이 세 줄이 고객 경리가 이 종이를 무엇으로 처리할지
+ *  정하는 근거다. 빈 칸으로 두고 "안 적으면 알아서 나갑니다"라고 하면, 정작 문구를
+ *  고쳐야 할 건(현금 환불이 섞인 건 등)에서 아무도 고치지 않는다. */
+function defaultCnTerms(o: {
+  cur: string;
+  invCur: string;
+  amount: number;
+  applied: number;
+  vessel: string;
+  what: string;
+  customer: string;
+  invoiceNo: string;
+  cashRefund: string;
+}): string[] {
+  const dec = o.invCur === "KRW" ? 0 : 2;
+  let line1 =
+    "Without prejudice and as a goodwill gesture, this Credit Note is issued for " +
+    `${o.invCur} ${fmt(o.applied, dec)}`;
+  if (o.cur !== o.invCur) line1 += `, equivalent to ${o.what} of ${o.cur} ${fmt(o.amount, 2)}`;
+  if (o.vessel) line1 += ` incurred in connection with ${o.vessel}`;
+  const lines = [`${line1}.`];
+  if (o.invoiceNo) {
+    lines.push(
+      "The credit amount will be offset against the outstanding amount payable by " +
+        `${o.customer || "the customer"} under Reference Invoice No. ${o.invoiceNo}.`,
+    );
+  }
+  lines.push(
+    o.cashRefund.toLowerCase().startsWith("y")
+      ? "A cash refund will be made separately."
+      : "No separate cash refund will be made.",
+  );
+  return lines;
+}
+
+/** 이 클레임으로 발행한 크레딧 노트 목록 + 발행·수정 폼 + 미리보기. */
 function CreditNoteSection({
   claim,
   orderId,
@@ -536,26 +599,12 @@ function CreditNoteSection({
   canWrite: boolean;
   onChanged: () => void | Promise<unknown>;
 }) {
-  const [open, setOpen] = useState(false);
+  // null = 폼 닫힘, {cn:null} = 신규 발행, {cn:행} = 그 노트 수정.
+  const [form, setForm] = useState<{ cn: CreditNoteRow | null } | null>(null);
+  const [preview, setPreview] = useState<CreditNoteRow | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const notes = claim.credit_notes || [];
-
-  async function openPdf(cn: CreditNoteRow) {
-    setBusy(true);
-    setErr(null);
-    try {
-      const blob = await fetchCreditNotePdf(cn.id);
-      const url = URL.createObjectURL(blob);
-      window.open(url, "_blank", "noopener");
-      // 새 창이 파일을 다 읽고 난 뒤에 놓아 준다 — 바로 revoke 하면 빈 창이 뜬다.
-      setTimeout(() => URL.revokeObjectURL(url), 60_000);
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "Could not open the PDF");
-    } finally {
-      setBusy(false);
-    }
-  }
 
   async function cancelNote(cn: CreditNoteRow) {
     setBusy(true);
@@ -590,7 +639,7 @@ function CreditNoteSection({
                 <th className="num" style={{ width: 96 }}>FX</th>
                 <th className="num" style={{ width: 140 }}>Offset applied</th>
                 <th>Against invoice</th>
-                <th style={{ width: 110 }} />
+                <th style={{ width: 190 }} />
               </tr>
             </thead>
             <tbody>
@@ -608,12 +657,21 @@ function CreditNoteSection({
                     ) : null}
                   </td>
                   <td>
-                    {/* 감액 증서 — 고객에게 보내는 한 장. 발행하자마자 뽑을 수 있어야 한다. */}
-                    <button type="button" className="linklike" disabled={busy} onClick={() => openPdf(cn)}>
-                      PDF
+                    {/* 감액 증서 — 발행하자마자 그 자리에서 보고 PDF·Excel 로 받는다. */}
+                    <button type="button" className="linklike" onClick={() => setPreview(cn)}>
+                      Preview
                     </button>
                     {canWrite ? (
                       <>
+                        {" · "}
+                        <button
+                          type="button"
+                          className="linklike"
+                          disabled={busy}
+                          onClick={() => setForm({ cn })}
+                        >
+                          Edit
+                        </button>
                         {" · "}
                         <button type="button" className="linklike" disabled={busy} onClick={() => cancelNote(cn)}>
                           Cancel
@@ -633,54 +691,159 @@ function CreditNoteSection({
       )}
       {err ? <div className="action-err">{err}</div> : null}
       {canWrite ? (
-        open ? (
+        form ? (
           <CreditNoteForm
-            claimId={claim.id}
+            key={form.cn ? `cn${form.cn.id}` : "cn-new"}
+            claim={claim}
             orderId={orderId}
+            existing={form.cn}
             onDone={async () => {
-              setOpen(false);
+              setForm(null);
               await onChanged();
             }}
-            onCancel={() => setOpen(false)}
+            onCancel={() => setForm(null)}
           />
         ) : (
-          <button type="button" className="btn sm" style={{ marginTop: 8 }} onClick={() => setOpen(true)}>
+          <button
+            type="button"
+            className="btn sm"
+            style={{ marginTop: 8 }}
+            onClick={() => setForm({ cn: null })}
+          >
             + Issue credit note
           </button>
         )
       ) : null}
+      {preview ? <CreditNotePreview cn={preview} onClose={() => setPreview(null)} /> : null}
     </div>
   );
 }
 
-/** 크레딧 노트 발행 폼 — 상계 대상 청구서를 고르고, 통화가 다르면 환율로 환산한다. */
+/** 발행한 크레딧 노트 미리보기 — 화면에 뜬 그 PDF 를 그대로 내려받고, 같은 값의 Excel 도 받는다. */
+function CreditNotePreview({ cn, onClose }: { cn: CreditNoteRow; onClose: () => void }) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const name = (cn.cn_no || `CN-${cn.id}`).replace(/\//g, "-");
+
+  useEffect(() => {
+    let alive = true;
+    let objUrl = "";
+    fetchCreditNotePdf(cn.id)
+      .then((blob) => {
+        if (!alive) return;
+        objUrl = URL.createObjectURL(blob);
+        setUrl(objUrl);
+      })
+      .catch((e) => {
+        if (alive) setErr(e instanceof Error ? e.message : "Could not open the PDF");
+      });
+    return () => {
+      alive = false;
+      if (objUrl) URL.revokeObjectURL(objUrl);
+    };
+  }, [cn.id]);
+
+  async function saveExcel() {
+    setBusy(true);
+    setErr(null);
+    try {
+      saveBlob(await fetchCreditNoteXlsx(cn.id), `${name}_CREDIT_NOTE.xlsx`);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Excel download failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function savePdf() {
+    if (!url) return;
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${name}_CREDIT_NOTE.pdf`;
+    a.click();
+  }
+
+  if (typeof document === "undefined") return null;
+  return createPortal(
+    <div className="doc-preview-backdrop" onClick={onClose}>
+      <div className="doc-preview-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="doc-preview-head">
+          <span className="doc-preview-title">{name} · CREDIT NOTE</span>
+          <div className="doc-preview-acts">
+            <button className="btn sm" disabled={busy} onClick={saveExcel}>
+              Excel Download
+            </button>
+            <button className="btn sm doc-preview-save" disabled={!url} onClick={savePdf}>
+              PDF Download
+            </button>
+            <button className="btn sm" onClick={onClose}>
+              Close
+            </button>
+          </div>
+        </div>
+        {url ? (
+          <iframe className="doc-preview-frame" src={url} title="Credit note preview" />
+        ) : (
+          <div className="state">{err ?? "Rendering the credit note…"}</div>
+        )}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+/** 크레딧 노트 발행·수정 폼 — 실제 발행해 온 양식의 칸을 그대로 채운다.
+ *
+ *  칸이 많아 보이지만 장식은 없다. 정산 방식·현금환불 여부·환율 근거가 빠진 감액 증서는
+ *  받는 쪽에서 "그래서 이 돈을 돌려받는 건가"를 되묻게 되어 있고, 감액 내역 줄이 없으면
+ *  무엇을 깎아 준 문서인지 종이만 보고는 알 수 없다.
+ *  통화가 둘인 점만 조심하면 된다 — Original amount 는 현장 비용이 난 통화, 내역표와
+ *  총액은 상계할 청구서의 통화다. */
 function CreditNoteForm({
-  claimId,
+  claim,
   orderId,
+  existing,
   onDone,
   onCancel,
 }: {
-  claimId: number;
+  claim: ClaimRow;
   orderId: number;
+  existing: CreditNoteRow | null;
   onDone: () => void | Promise<unknown>;
   onCancel: () => void;
 }) {
   const { data } = useCachedData(`ar:candidates:${orderId}`, () => fetchArCandidates(orderId));
   const cands = useMemo(() => data?.rows ?? [], [data]);
-  const [arId, setArId] = useState<number>(0);
-  const [cnNo, setCnNo] = useState("");
-  const [cnNoTouched, setCnNoTouched] = useState(false);
-  const [issueDate, setIssueDate] = useState(today());
-  const [currency, setCurrency] = useState("USD");
-  const [amount, setAmount] = useState("");
-  const [fx, setFx] = useState("");
+  const [arId, setArId] = useState<number>(existing?.ar_id ?? 0);
+  const [cnNo, setCnNo] = useState(existing?.cn_no ?? "");
+  const [cnNoTouched, setCnNoTouched] = useState(Boolean(existing));
+  const [issueDate, setIssueDate] = useState(existing?.issue_date || today());
+  const [currency, setCurrency] = useState(existing?.currency || "USD");
+  const [amount, setAmount] = useState(existing ? String(existing.amount) : "");
+  const [fx, setFx] = useState(existing && existing.fx_rate !== 1 ? String(existing.fx_rate) : "");
   const [fxNote, setFxNote] = useState("");
-  const [vatRate, setVatRate] = useState("0");
-  const [reason, setReason] = useState("");
+  const [vatRate, setVatRate] = useState(existing ? String(existing.vat_rate) : "0");
+  const [reason, setReason] = useState(existing?.reason ?? "");
+  // ── 발행 문서에 그대로 찍히는 칸 ──
+  const [vessel, setVessel] = useState(existing?.vessel_name || claim.site || "");
+  const [settlement, setSettlement] = useState(
+    existing?.settlement_method || "Set-off against outstanding balance");
+  const [cashRefund, setCashRefund] = useState(existing?.cash_refund || "No");
+  const [rateBasis, setRateBasis] = useState(existing?.rate_basis ?? "");
+  const [quotation, setQuotation] = useState(existing?.fx_quotation ?? "");
+  const [items, setItems] = useState<CreditNoteItem[]>(
+    existing && existing.items.length ? existing.items.map((i) => ({ ...i })) : [emptyCnItem()]);
+  const [itemsTouched, setItemsTouched] = useState(Boolean(existing?.items.length));
+  const [terms, setTerms] = useState((existing?.terms ?? []).join("\n"));
+  const [termsTouched, setTermsTouched] = useState(Boolean(existing?.terms.length));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   const target = cands.find((c) => c.ar_id === arId) ?? null;
+  const invCur = (target?.currency || existing?.invoice_currency || currency).toUpperCase();
+  const dec = invCur === "KRW" ? 0 : 2;
+  const customerName = data?.customer || "";
 
   // 첫 후보(같은 오더 건이 맨 위)를 기본 선택. 대상이 정해지면 통화·부가세율도 그 청구서에 맞춘다.
   useEffect(() => {
@@ -688,7 +851,7 @@ function CreditNoteForm({
   }, [cands, arId]);
 
   useEffect(() => {
-    if (!target) return;
+    if (!target || existing) return;
     setVatRate(String(target.currency === "KRW" ? 0.1 : 0));
     // 번호 제안: <청구서번호>-CN (그 청구서에 이미 있으면 -CN2, -CN3 …). 손댄 뒤엔 건드리지 않는다.
     if (!cnNoTouched) {
@@ -696,11 +859,60 @@ function CreditNoteForm({
       const n = target.credit_count;
       setCnNo(`${base}-CN${n ? n + 1 : ""}`);
     }
-  }, [target, cnNoTouched]);
+  }, [target, cnNoTouched, existing]);
 
-  const sameCur = !target || (currency || "").toUpperCase() === (target.currency || "").toUpperCase();
-  const applied = sameCur ? num(amount) : num(amount) * num(fx);
-  const after = target ? Math.round((target.outstanding - applied) * 100) / 100 : 0;
+  const sameCur = (currency || "").toUpperCase() === invCur;
+  // 환산액 — 감액 내역 줄을 아직 손대지 않았을 때 그 줄을 채우는 값이기도 하다.
+  const converted = Math.round((sameCur ? num(amount) : num(amount) * num(fx)) * 100) / 100;
+  const itemsTotal = Math.round(items.reduce((sum, it) => sum + num(it.amount), 0) * 100) / 100;
+  const applied = itemsTotal > 0 ? itemsTotal : converted;
+  // 수정 중이면 이 노트가 이미 깎아 둔 몫을 되돌린 뒤 새 금액을 뺀다(잔액이 두 번 깎이지 않게).
+  const after = target
+    ? Math.round((target.outstanding + (existing?.applied_amount ?? 0) - applied) * 100) / 100
+    : 0;
+
+  const what = reason.trim() || claim.title || "the claim costs";
+
+  // 감액 내역은 한 줄이면 되는 경우가 대부분이라 금액·사유를 따라 저절로 채운다.
+  // 표를 한 번이라도 손대면 그때부터는 사람이 적은 것이 이긴다.
+  useEffect(() => {
+    if (itemsTouched) return;
+    setItems([{
+      description: what,
+      reference: claim.claim_no || "",
+      qty: 1,
+      unit_price: converted,
+      amount: converted,
+    }]);
+  }, [itemsTouched, converted, what, claim.claim_no]);
+
+  useEffect(() => {
+    if (termsTouched) return;
+    setTerms(defaultCnTerms({
+      cur: (currency || "").toUpperCase(),
+      invCur,
+      amount: num(amount),
+      applied,
+      vessel,
+      what,
+      customer: customerName,
+      invoiceNo: target?.invoice_no || "",
+      cashRefund,
+    }).join("\n"));
+  }, [termsTouched, currency, invCur, amount, applied, vessel, what, customerName, target, cashRefund]);
+
+  const setItem = (i: number, patch: Partial<CreditNoteItem>) => {
+    setItemsTouched(true);
+    setItems((rows) => rows.map((it, n) => {
+      if (n !== i) return it;
+      const next = { ...it, ...patch };
+      // 금액을 직접 고친 게 아니면 수량×단가를 따라간다(문서의 합이 어긋나지 않게).
+      if (patch.amount === undefined) {
+        next.amount = Math.round(num(next.qty) * num(next.unit_price) * 100) / 100;
+      }
+      return next;
+    }));
+  };
 
   async function loadRate() {
     if (!target) return;
@@ -711,6 +923,11 @@ function CreditNoteForm({
       if (rate) {
         setFx(String(rate));
         setFxNote(`매매기준율 ${q.date_used}${q.source === "fixed" ? " (fixed fallback)" : ""}`);
+        // 환율 근거는 문서에 찍히는 칸이다 — 어디서 온 값인지 여기서 함께 채워 둔다.
+        if (!rateBasis) {
+          setRateBasis(q.source === "fixed" ? "Fixed internal rate" : "Korea Eximbank Basic Exchange Rate");
+        }
+        if (!quotation) setQuotation(`Base rate of ${q.date_used}`);
       }
     } catch {
       setFxNote("Rate lookup failed — enter it by hand.");
@@ -721,8 +938,8 @@ function CreditNoteForm({
     setBusy(true);
     setErr(null);
     try {
-      await createCreditNote({
-        claim_id: claimId,
+      const body = {
+        claim_id: claim.id,
         ar_id: arId,
         cn_no: cnNo.trim(),
         issue_date: issueDate,
@@ -731,10 +948,19 @@ function CreditNoteForm({
         fx_rate: sameCur ? 1 : num(fx),
         vat_rate: num(vatRate),
         reason,
-      });
+        items: items.filter((it) => it.description.trim() !== "" || num(it.amount) > 0),
+        vessel_name: vessel.trim(),
+        settlement_method: settlement.trim(),
+        cash_refund: cashRefund,
+        rate_basis: rateBasis.trim(),
+        fx_quotation: quotation.trim(),
+        terms: terms.split("\n").map((t) => t.trim()).filter(Boolean),
+      };
+      if (existing) await updateCreditNote(existing.id, body);
+      else await createCreditNote(body);
       await onDone();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Issue failed");
+      setErr(e instanceof Error ? e.message : existing ? "Save failed" : "Issue failed");
     } finally {
       setBusy(false);
     }
@@ -745,7 +971,10 @@ function CreditNoteForm({
       <div className="form-grid">
         <label className="form-field" style={{ gridColumn: "span 2" }}>
           <span>Offset against invoice *</span>
-          <select value={arId} onChange={(e) => { setArId(Number(e.target.value)); setCnNoTouched(false); }}>
+          <select
+            value={arId}
+            onChange={(e) => { setArId(Number(e.target.value)); setCnNoTouched(Boolean(existing)); }}
+          >
             {cands.length === 0 ? <option value={0}>No invoice on this customer yet</option> : null}
             {cands.map((c: ArCandidate) => (
               <option key={c.ar_id} value={c.ar_id}>
@@ -768,7 +997,26 @@ function CreditNoteForm({
           <input type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} />
         </label>
         <label className="form-field">
-          <span>Amount</span>
+          <span>Reference vessel</span>
+          <input value={vessel} onChange={(e) => setVessel(e.target.value)} placeholder="M/V …" />
+        </label>
+        <label className="form-field">
+          <span>Settlement method</span>
+          <input
+            value={settlement}
+            onChange={(e) => setSettlement(e.target.value)}
+            placeholder="Set-off against outstanding balance"
+          />
+        </label>
+        <label className="form-field">
+          <span>Cash refund</span>
+          <select value={cashRefund} onChange={(e) => setCashRefund(e.target.value)}>
+            <option value="No">No — offset only</option>
+            <option value="Yes">Yes — refunded separately</option>
+          </select>
+        </label>
+        <label className="form-field">
+          <span>Original amount</span>
           <input
             className="num"
             inputMode="decimal"
@@ -786,21 +1034,39 @@ function CreditNoteForm({
           </select>
         </label>
         {!sameCur ? (
-          <label className="form-field">
-            <span>FX rate (1 {currency} = ? {target?.currency})</span>
-            <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          <>
+            <label className="form-field">
+              <span>FX rate (1 {currency} = ? {invCur})</span>
+              <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <input
+                  className="num"
+                  inputMode="decimal"
+                  value={fx}
+                  onChange={(e) => setFx(e.target.value.replace(/,/g, ""))}
+                  style={{ flex: 1 }}
+                />
+                <button type="button" className="btn sm" onClick={loadRate} title="Use the base rate of the issue date">
+                  base rate
+                </button>
+              </span>
+            </label>
+            <label className="form-field">
+              <span>Rate basis</span>
               <input
-                className="num"
-                inputMode="decimal"
-                value={fx}
-                onChange={(e) => setFx(e.target.value.replace(/,/g, ""))}
-                style={{ flex: 1 }}
+                value={rateBasis}
+                onChange={(e) => setRateBasis(e.target.value)}
+                placeholder="e.g. Shinhan Bank Basic Exchange Rate"
               />
-              <button type="button" className="btn sm" onClick={loadRate} title="Use the base rate of the issue date">
-                base rate
-              </button>
-            </span>
-          </label>
+            </label>
+            <label className="form-field">
+              <span>Quotation</span>
+              <input
+                value={quotation}
+                onChange={(e) => setQuotation(e.target.value)}
+                placeholder="e.g. 528th quotation at 18:28:35, 24-Aug-2026"
+              />
+            </label>
+          </>
         ) : null}
         <label className="form-field">
           <span>VAT on the deduction</span>
@@ -814,11 +1080,120 @@ function CreditNoteForm({
           <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="why we credited this" />
         </label>
       </div>
-      <p className="hint-inline" style={{ display: "block", margin: "6px 0 0" }}>
+
+      <div className="form-section-title" style={{ marginTop: 12 }}>
+        Credit lines
+        <span className="hint-inline">
+          {" "}— what the note itself lists, in {invCur} (the invoice currency). Their total is the
+          credit amount actually offset.
+        </span>
+      </div>
+      <div className="claim-costs-wrap">
+        <table className="table mini wide">
+          <thead>
+            <tr>
+              <th style={{ width: 34 }}>No.</th>
+              <th>Description</th>
+              <th style={{ width: 150 }}>Reference</th>
+              <th className="num" style={{ width: 64 }}>Qty</th>
+              <th className="num" style={{ width: 110 }}>Unit price</th>
+              <th className="num" style={{ width: 120 }}>Amount</th>
+              <th style={{ width: 32 }} />
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((it, i) => (
+              <tr key={i}>
+                <td>{i + 1}</td>
+                <td>
+                  <input value={it.description} onChange={(e) => setItem(i, { description: e.target.value })} />
+                </td>
+                <td>
+                  <input value={it.reference} onChange={(e) => setItem(i, { reference: e.target.value })} />
+                </td>
+                <td>
+                  <input
+                    className="num"
+                    inputMode="decimal"
+                    value={String(it.qty)}
+                    onChange={(e) => setItem(i, { qty: num(e.target.value.replace(/,/g, "")) })}
+                  />
+                </td>
+                <td>
+                  <input
+                    className="num"
+                    inputMode="decimal"
+                    value={it.unit_price === 0 ? "" : String(it.unit_price)}
+                    onChange={(e) => setItem(i, { unit_price: num(e.target.value.replace(/,/g, "")) })}
+                  />
+                </td>
+                <td>
+                  <input
+                    className="num"
+                    inputMode="decimal"
+                    value={it.amount === 0 ? "" : String(it.amount)}
+                    onChange={(e) => setItem(i, { amount: num(e.target.value.replace(/,/g, "")) })}
+                  />
+                </td>
+                <td>
+                  <button
+                    type="button"
+                    className="linklike"
+                    title="Remove this line"
+                    onClick={() => {
+                      setItemsTouched(true);
+                      setItems((rows) => (rows.length > 1 ? rows.filter((_, n) => n !== i) : rows));
+                    }}
+                  >
+                    ×
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <button
+        type="button"
+        className="btn sm"
+        style={{ marginTop: 6 }}
+        onClick={() => { setItemsTouched(true); setItems((rows) => [...rows, emptyCnItem()]); }}
+      >
+        + Credit line
+      </button>
+
+      <label className="form-field" style={{ marginTop: 12 }}>
+        <span>
+          Set-off / offset terms
+          <span className="hint-inline"> — one clause per line; printed as the numbered terms.</span>
+        </span>
+        <textarea
+          rows={4}
+          value={terms}
+          onChange={(e) => { setTerms(e.target.value); setTermsTouched(true); }}
+        />
+      </label>
+      {termsTouched ? (
+        <button
+          type="button"
+          className="btn sm"
+          style={{ marginTop: 6 }}
+          onClick={() => setTermsTouched(false)}
+          title="Rewrite the standard three clauses from the amounts above"
+        >
+          Standard terms
+        </button>
+      ) : null}
+
+      <p className="hint-inline" style={{ display: "block", margin: "8px 0 0" }}>
         {target ? (
           <>
-            Offset applied: <b>{money(applied, target.currency)}</b>
-            {!sameCur && fxNote ? ` (${fxNote})` : ""} · outstanding {money(target.outstanding, target.currency)} →{" "}
+            Total credit: <b>{invCur} {fmt(applied, dec)}</b>
+            {!sameCur && fxNote ? ` (${fxNote})` : ""}
+            {itemsTotal > 0 && converted > 0 && Math.abs(itemsTotal - converted) > 0.5
+              ? ` — lines total ${fmt(itemsTotal, dec)}, conversion says ${fmt(converted, dec)}`
+              : ""}
+            {" · "}outstanding {money(target.outstanding, target.currency)} →{" "}
             <b>{money(after, target.currency)}</b>
             {after < -0.01 ? " — more than what is left on this invoice." : ""}
           </>
@@ -827,8 +1202,8 @@ function CreditNoteForm({
         )}
       </p>
       <div className="form-actions">
-        <button className="btn primary" disabled={busy || !arId || num(amount) <= 0} onClick={issue}>
-          {busy ? "Issuing…" : "Issue credit note"}
+        <button className="btn primary" disabled={busy || !arId || applied <= 0} onClick={issue}>
+          {busy ? "Saving…" : existing ? "Save credit note" : "Issue credit note"}
         </button>
         <button className="btn" disabled={busy} onClick={onCancel}>
           Cancel

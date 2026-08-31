@@ -18,7 +18,7 @@ from services.kmaris_docs import (
     packing_totals, consignee_mark_lines, _dim_parts, _invoice_shipping_rows,
     PI_COLUMN_UNITS, PI_MIN_ITEM_ROWS, PL_COLUMN_UNITS, PL_MIN_ITEM_ROWS,
     pi_decimals, pi_charges, pi_doc_date, is_service_doc, service_info_rows,
-    SERVICE_PI_DECIMALS,
+    SERVICE_PI_DECIMALS, cn_view, cn_contact_line, CN_MIN_ITEM_ROWS,
 )
 
 _CONFIG_DIR = Path(__file__).resolve().parent.parent / "config"
@@ -1677,6 +1677,97 @@ def make_purchase_order_xlsx(
     ws.page_margins.bottom = 0.4
 
     _apply_noto_font(wb)   # 전체 글꼴 Noto Sans KR 통일(모든 문서 Excel 공통)
+    out = io.BytesIO()
+    wb.save(out)
+    return out.getvalue()
+
+
+def make_credit_note_xlsx(data: Dict[str, Any], company: Optional[Dict[str, Any]] = None) -> bytes:
+    """CREDIT NOTE Excel — 같은 payload 로 만드는 PDF(_make_credit_note_pdf)와 칸이 겹친다.
+
+    두 파일이 같은 cn_view() 를 읽으므로, 문구·계산이 갈라질 자리가 없다. 열 너비는
+    송장 계열과 같은 PI_COLUMN_UNITS 라 감액 내역표가 PDF 와 같은 자리에 선다.
+    """
+    company = company or {}
+    v = cn_view(data)
+    inv_cur, dec = v["inv_cur"], v["dec"]
+    customer = v["customer"]
+    num_fmt = _invoice_money_format(inv_cur, dec)
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Credit Note"
+    form = _FormSheet(ws, PI_COLUMN_UNITS, _BLOCKS_8)
+    r = form.letterhead(company, "CREDIT NOTE")
+    r = form.pairs(r, [
+        ("Credit Note No.", data.get("doc_no", ""),
+         "Reference Invoice No.", data.get("invoice_no", "")),
+        ("Issue Date", _invoice_doc_date(data.get("date", "")),
+         "Settlement Method", v["settlement_method"]),
+        ("Reference Vessel", v["vessel_name"], "Cash Refund", v["cash_refund"]),
+        ("Currency", inv_cur, "Customer P/O", data.get("po_no", "")),
+    ])
+    r += 1
+    r = form.band(r, "CUSTOMER")
+    r = form.pairs(r, [
+        ("Company Name", customer.get("name", ""), "Address", customer.get("address", "")),
+        ("Contact", cn_contact_line(customer), "Email", customer.get("email", "")),
+    ], heights={0: 30})
+    r += 1
+
+    r = form.item_header(r, [("No.", 1, 1), ("Description", 2, 4), ("Reference", 5, 5),
+                             ("Qty", 6, 6), ("Unit Price", 7, 7), (f"Amount ({inv_cur})", 8, 8)])
+    first = r
+    for i in range(max(len(v["items"]), CN_MIN_ITEM_ROWS)):
+        it = v["items"][i] if i < len(v["items"]) else None
+        form.put(r, 1, it["item_no"] if it else "", font=form.item_font, align=form.center)
+        form.merge(r, 2, r, 4)
+        form.put(r, 2, it["description"] if it else "", font=form.item_font, align=form.left)
+        form.put(r, 5, it["reference"] if it else "", font=form.item_font, align=form.left)
+        form.put(r, 6, it["qty"] if it else "", font=form.item_font, align=form.center)
+        form.put(r, 7, it["unit_price"] if it else "", font=form.item_font, align=form.right, fmt=num_fmt)
+        # 금액은 수식 — 받는 쪽이 단가를 고쳐도 총액이 따라온다(송장 Excel 과 같은 규약).
+        form.put(r, 8, f'=IF(F{r}="","",F{r}*G{r})' if it else "",
+                 font=form.item_font, align=form.right, fmt=num_fmt)
+        form.bd(r, 1, r, form.ncol, None if it else form.alt)
+        form.ws.row_dimensions[r].height = form.item_row_height(it["description"], 46) if it else 18
+        r += 1
+    last = r - 1
+    form.merge(r, 1, r, 7)
+    form.put(r, 1, "TOTAL CREDIT", fill=form.lightblue, font=form.bold, align=form.center)
+    form.put(r, 8, f"=SUM(H{first}:H{last})", fill=form.lightblue, font=form.bold,
+             align=form.right, fmt=num_fmt)
+    form.bd(r, 1, r, form.ncol)
+    form.ws.row_dimensions[r].height = 18
+    r += 2
+
+    if v["terms"]:
+        r = form.band(r, "SET-OFF / OFFSET TERMS")
+        for i, t in enumerate(v["terms"], start=1):
+            form.cell(r, "full", f"{i}. {t}", font=form.normal, align=form.left)
+            form.ws.row_dimensions[r].height = form.item_row_height(t, 120)
+            r += 1
+        r += 1
+
+    r = form.band(r, "EXCHANGE RATE / SETTLEMENT NOTE")
+    for k, val in v["rate_rows"]:
+        form.cell(r, "label1", k, fill=form.gray, font=form.boldsm, align=form.left)
+        c1 = form.blocks["value1"][0]
+        form.merge(r, c1, r, form.ncol)
+        form.put(r, c1, val, font=form.normal, align=form.left)
+        form.bd(r, 1, r, form.ncol)
+        r += 1
+    r += 1
+
+    sign = _find_asset(*_SIGN_ASSET)
+    stamp = _find_asset(*_STAMP_ASSET)
+    r = form.signature(r, [(1, 4, "Authorized Signature", sign, 130, 44),
+                           (5, 8, f"{company.get('company_name_en', '')}" + chr(10) + "(Company Stamp)", stamp, 66, 66)])
+    form.cell(r, "full", "K-MARIS Energy & Solutions | Seoul, Korea | www.k-maris.com",
+              font=form.small, align=form.center)
+    form.page_setup(r)
+
+    _apply_noto_font(wb)
     out = io.BytesIO()
     wb.save(out)
     return out.getvalue()

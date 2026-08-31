@@ -5,6 +5,7 @@ import type { PermGrid } from "./auth";
 import type {
   ArCandidate,
   ClaimCost,
+  CreditNoteItem,
   ClaimRow,
   FinanceClaimsData,
   RfqOverview,
@@ -1611,6 +1612,15 @@ export type CreditNoteSaveBody = {
   vat_rate?: number;
   vat_amount?: number;
   reason?: string;
+  /** 감액 내역 줄(청구서 통화). 한 줄이라도 보내면 그 합이 상계액이 된다. */
+  items?: CreditNoteItem[];
+  vessel_name?: string;
+  settlement_method?: string;
+  cash_refund?: string;
+  rate_basis?: string;
+  fx_quotation?: string;
+  /** SET-OFF / OFFSET TERMS — 한 줄 = 한 조항. 비우면 서버가 표준 3조항을 쓴다. */
+  terms?: string[];
 };
 
 /** 크레딧 노트 발행 — 대상 청구서의 미수가 그만큼 줄어든다. */
@@ -1627,9 +1637,14 @@ export function updateCreditNote(
   return put(`/api/admin/credit-notes/${cnId}`, body);
 }
 
-/** 크레딧 노트 PDF(감액 증서) — 고객에게 보낼 한 장. */
+/** 크레딧 노트 PDF(감액 증서) — 고객에게 보낼 한 장(미리보기도 이 파일을 쓴다). */
 export function fetchCreditNotePdf(cnId: number): Promise<Blob> {
   return getBlob(`/api/admin/credit-notes/${cnId}/pdf`);
+}
+
+/** 크레딧 노트 Excel — PDF 와 같은 서식·같은 값. */
+export function fetchCreditNoteXlsx(cnId: number): Promise<Blob> {
+  return getBlob(`/api/admin/credit-notes/${cnId}/xlsx`);
 }
 
 /** 클레임 대장 — 사건별 당사부담·상계·현금지급·미정산(전부 KRW 환산). */

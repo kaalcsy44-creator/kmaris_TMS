@@ -686,6 +686,16 @@ class CreditNote(Base):
     vat_amount     = Column(Float, default=0.0)   # applied_amount 에 포함된 부가세
     reason         = Column(Text)
     status         = Column(String(20), default="issued")  # issued/void
+    # ── 발행 문서(CREDIT NOTE)에 그대로 찍히는 칸 — 실제 발행해 온 양식과 같은 항목이다.
+    # 상계 회계(위 금액 칸)만으로는 한 장을 못 만든다: 고객이 받는 종이에는 "무엇을 왜
+    # 깎았나"가 품목 줄로 적히고, 정산 방식·현금환불 여부·적용 환율의 근거가 함께 실린다.
+    items          = Column(JSON, default=list)   # [{description, reference, qty, unit_price, amount}] — 청구서 통화
+    vessel_name    = Column(String(120))   # Reference Vessel — 문서 머리의 "M/V ON PRECIOUS"
+    settlement_method = Column(String(120))  # 예: "Set-off against outstanding balance"
+    cash_refund    = Column(String(10))    # "No"/"Yes" — 현금 환불 여부(문서에 명시한다)
+    rate_basis     = Column(String(120))   # 환율 근거(예: "Shinhan Bank Basic Exchange Rate")
+    fx_quotation   = Column(String(120))   # 고시 회차·시각(예: "528th quotation at 18:28:35, 24-Aug-2026")
+    terms          = Column(JSON, default=list)   # SET-OFF / OFFSET TERMS 조항(한 줄 = 한 조항)
     created_at     = Column(DateTime, default=datetime.utcnow)
 
 
