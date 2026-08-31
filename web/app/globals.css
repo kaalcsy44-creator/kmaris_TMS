@@ -14170,6 +14170,10 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
    표는 항목 수가 아니라 칸 수(유형·부담·정산 셀렉트)가 많아 가로로 넘친다 — 그 표만
    따로 스크롤시켜 페이지 전체가 옆으로 밀리지 않게 한다(품목표와 같은 규칙). */
 .claim-panel { min-width: 0; }
+/* 클레임 목록 줄 — 위의 P/O 번호 행·탭 행이 이미 고정돼 있어 여기는 흐름에 둔다.
+   그 두 줄 바로 아래 붙게 위 여백을 없애고, 아래는 폼과 한 칸만 띄운다. */
+.claim-bar { margin: 0 0 10px; gap: 8px; }
+.claim-bar .rec-strip { min-width: 0; }
 .claim-form .form-section-title { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px; }
 .claim-costs-wrap { overflow-x: auto; margin-top: 6px; }
 .claim-costs-wrap > table { min-width: 720px; }

@@ -10,6 +10,7 @@ import {
   fetchClaims,
   fetchCreditNotePdf,
   fetchFxRate,
+  fetchPoWorkOptions,
   updateClaim,
 } from "@/lib/api";
 import { can, canEditDeal, editBlockReason } from "@/lib/auth";
@@ -39,10 +40,10 @@ const money = (v: number, cur = "") =>
   `${cur ? `${cur} ` : ""}${v.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
 
 const KINDS: { v: string; label: string }[] = [
-  { v: "labor", label: "Labor · 공임" },
-  { v: "parts", label: "Parts · 부품" },
-  { v: "freight", label: "Freight · 운송" },
-  { v: "inspection", label: "Inspection · 검사" },
+  { v: "labor", label: "Labor" },
+  { v: "parts", label: "Parts" },
+  { v: "freight", label: "Freight" },
+  { v: "inspection", label: "Inspection" },
   { v: "other", label: "Other" },
 ];
 const BEARERS: { v: string; label: string }[] = [
@@ -107,6 +108,21 @@ const rowToForm = (r: ClaimRow): ClaimForm => ({
 
 export const claimsKey = (orderId: number) => `claims:order:${orderId}`;
 
+/** 이 P/O 가 속한 프로젝트의 선박 목록 — 클레임이 난 배를 고르는 자리.
+ *  현장 이름을 손으로 적으면 같은 배가 표기마다 달라져(ON PHOENIX / on phoenix / Phoenix)
+ *  나중에 그 배의 클레임만 모아 볼 수가 없다. 이 P/O 의 배가 맨 앞에 선다. */
+function useOrderVessels(orderId: number): string[] {
+  const { data } = useCachedData("po:work-options", fetchPoWorkOptions);
+  return useMemo(() => {
+    const orders = data?.orders ?? [];
+    const mine = orders.find((o) => o.id === orderId);
+    const names = [mine?.vessel || "", ...orders
+      .filter((o) => mine && o.rfq_id === mine.rfq_id)
+      .map((o) => o.vessel || "")];
+    return Array.from(new Set(names.map((v) => v.trim()).filter(Boolean)));
+  }, [data, orderId]);
+}
+
 export default function ClaimPanel({
   orderId,
   assigneeId = 0,
@@ -118,6 +134,7 @@ export default function ClaimPanel({
   onChanged?: () => void;
 }) {
   const { data, refresh } = useCachedData(claimsKey(orderId), () => fetchClaims({ orderId }));
+  const vessels = useOrderVessels(orderId);
   const rows = useMemo(() => data?.rows ?? [], [data]);
   // null = 목록에서 아무것도 안 고름(신규 입력 중), 숫자 = 그 클레임 편집.
   const [selId, setSelId] = useState<number | null>(null);
@@ -145,7 +162,9 @@ export default function ClaimPanel({
 
   return (
     <div className="claim-panel">
-      <div className="embedded-record-bar pane-row">
+      {/* 고정행(.pane-row)으로 두지 않는다 — 이 화면에는 이미 P/O 번호 행과 탭 행이
+          위에 붙어 있어, 한 줄을 더 고정하면 탭이 그만큼 밀리며 그 자리에 빈 띠가 남는다. */}
+      <div className="embedded-record-bar claim-bar">
         <span className="wp-po-picker-label">Claims</span>
         {rows.length ? (
           <RecordStrip ariaLabel="Claims" activeKey={adding ? -1 : selId ?? 0}>
@@ -184,6 +203,7 @@ export default function ClaimPanel({
         key={selected ? `c${selected.id}` : `new-${orderId}`}
         orderId={orderId}
         assigneeId={assigneeId}
+        vessels={vessels}
         existing={selected}
         onSaved={(id) => {
           setAdding(false);
@@ -200,22 +220,38 @@ export default function ClaimPanel({
 function ClaimForm({
   orderId,
   assigneeId,
+  vessels,
   existing,
   onSaved,
   onCancelNew,
 }: {
   orderId: number;
   assigneeId: number;
+  /** 이 프로젝트의 P/O 선박 — 고를 수 있게 목록으로 준다(첫 값이 이 P/O 의 배). */
+  vessels: string[];
   existing: ClaimRow | null;
   onSaved: (id?: number) => void | Promise<unknown>;
   onCancelNew?: () => void;
 }) {
   const canEdit = (can("ar", "edit") || can("ar", "create")) && canEditDeal(assigneeId);
   const { editing: canWriteNow, readMode, fieldsetProps } = useEditGate(canEdit);
-  const [form, setForm] = useState<ClaimForm>(() => (existing ? rowToForm(existing) : emptyForm()));
+  const [form, setForm] = useState<ClaimForm>(() =>
+    existing ? rowToForm(existing) : { ...emptyForm(), site: vessels[0] || "" });
+  // 목록에 없는 곳(부두·야드 등)은 직접 적는다 — 저장된 값이 목록 밖이면 그 상태로 연다.
+  const [vesselMode, setVesselMode] = useState<"pick" | "manual">(() => {
+    const cur = existing ? existing.site || "" : vessels[0] || "";
+    return !cur || vessels.includes(cur) ? "pick" : "manual";
+  });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const set = <K extends keyof ClaimForm>(k: K, v: ClaimForm[K]) => setForm((f) => ({ ...f, [k]: v }));
+
+  // 선박 목록은 늦게 도착할 수 있다(P/O 옵션 조회) — 신규 입력에서 아직 비어 있으면
+  // 그때 이 P/O 의 배로 채운다. 사람이 이미 고른 값은 건드리지 않는다.
+  useEffect(() => {
+    if (existing || !vessels.length) return;
+    setForm((f) => (f.site ? f : { ...f, site: vessels[0] }));
+  }, [existing, vessels]);
 
   const setCost = (i: number, patch: Partial<ClaimCost>) =>
     setForm((f) => ({ ...f, costs: f.costs.map((c, n) => (n === i ? { ...c, ...patch } : c)) }));
@@ -299,8 +335,44 @@ function ClaimForm({
             <input type="date" value={form.reported_date} onChange={(e) => set("reported_date", e.target.value)} />
           </label>
           <label className="form-field">
-            <span>Site · vessel</span>
-            <input value={form.site} onChange={(e) => set("site", e.target.value)} placeholder="port · vessel" />
+            <span>Vessel · site</span>
+            {vesselMode === "pick" ? (
+              <select
+                value={form.site}
+                onChange={(e) => {
+                  if (e.target.value === "__other") {
+                    setVesselMode("manual");
+                    set("site", "");
+                  } else set("site", e.target.value);
+                }}
+              >
+                <option value="">—</option>
+                {vessels.map((v) => (
+                  <option key={v} value={v}>{v}</option>
+                ))}
+                <option value="__other">Other…</option>
+              </select>
+            ) : (
+              <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <input
+                  value={form.site}
+                  onChange={(e) => set("site", e.target.value)}
+                  placeholder="vessel · port"
+                  autoFocus
+                  style={{ flex: 1 }}
+                />
+                {vessels.length ? (
+                  <button
+                    type="button"
+                    className="btn sm"
+                    title="Pick a vessel from this project"
+                    onClick={() => { setVesselMode("pick"); set("site", vessels[0]); }}
+                  >
+                    list
+                  </button>
+                ) : null}
+              </span>
+            )}
           </label>
           <label className="form-field">
             <span>Status</span>
