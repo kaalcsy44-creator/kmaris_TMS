@@ -17,6 +17,8 @@ from _core import (
     User,
     Vendor,
     Vessel,
+    _ar_outstanding,
+    _ar_recalc_status,
     _ar_status_from_text,
     _enum_val,
     inbound_fee_in,
@@ -82,7 +84,8 @@ def ar_overview():
         for r in s.query(ARRecord).order_by(ARRecord.id.desc()).all():
             o = ord_map.get(r.order_id)
             cust = cust_names.get(o.customer_id, "—") if o else "—"
-            outstanding = (r.invoice_amount or 0) - (r.paid_amount or 0)
+            # 받을 돈 = 청구액 − 수금액 − 크레딧(클레임 상계).
+            outstanding = _ar_outstanding(r)
             overdue = (r.status != ARStatus.PAID and r.due_date
                        and r.due_date < today_str)
             status = "연체" if overdue else _enum_val(r.status)
@@ -108,6 +111,8 @@ def ar_overview():
                 "currency": r.currency or "USD",
                 "invoice_amount": round(r.invoice_amount or 0, 2),
                 "paid_amount": round(r.paid_amount or 0, 2),
+                # 크레딧 노트(클레임 상계)로 깎아 준 금액 — 0 이면 상계 없음.
+                "credit_amount": round(float(getattr(r, "credit_amount", None) or 0), 2),
                 "outstanding": round(outstanding, 2),
                 "due_date": r.due_date or "",
                 "status": status,
@@ -286,6 +291,10 @@ def update_ar(ar_id: int, body: ARSave):
         ar.currency = body.currency or "USD"
         ar.due_date = body.due_date
         ar.status = _ar_status_from_text(body.status, ar.paid_amount or 0.0, ar.invoice_amount or 0.0)
+        # 크레딧 노트로 깎아 둔 청구서는 금액만 보면 여전히 '미수'로 보인다 — 상계까지
+        # 합쳐 다시 매긴다(청구액을 고쳐 저장했을 때도 잔액이 맞게 따라온다).
+        if float(getattr(ar, "credit_amount", None) or 0) > 0:
+            _ar_recalc_status(ar)
         ar.notes = body.notes or ""
         # 문서 필드는 전달된 값만 갱신(미전달=기존 유지) — 수금 등록 등 부분 저장과 충돌 방지.
         if body.invoice_no is not None:
@@ -369,7 +378,9 @@ def ar_payment(ar_id: int, body: ARPayment):
         # 차액은 은행이 가져간 것이다. 그러니 미수로 남겨 두면 안 된다: 받을 돈은 0 이 되고
         # (수금액을 청구액에 맞춘다), 그 차액은 우리 비용으로 Outflow 에 선다.
         fee = 0.0
-        shortfall = round((ar.invoice_amount or 0) - (ar.paid_amount or 0), 2)
+        # 이미 크레딧 노트로 깎아 준 금액은 받을 필요가 없는 돈이라, 모자란 금액을 셀 때
+        # 먼저 뺀다 — 안 그러면 상계액만큼이 늘 '수수료로 보기엔 너무 큰 차액'이 된다.
+        shortfall = _ar_outstanding(ar)
         if body.bank_fee and (ar.paid_amount or 0) > 0 and shortfall > 0:
             est, _rate, _used = inbound_fee_in(ar.currency or "USD", paid_on)
             # 예상 수수료의 3배까지만 수수료로 본다 — 은행이 쓰는 환율이 고시와 조금 다르고
@@ -381,16 +392,11 @@ def ar_payment(ar_id: int, body: ARPayment):
         # 남고, Outflow 의 수수료 행이 추정 대신 이 값을 쓴다(두 화면 숫자가 갈리지 않게).
         ar.bank_fee = round(fee, 2)
         # 오차 1센트 — 은행이 센트에서 반올림하므로 정확히 맞아떨어지지 않는다.
-        if ar.paid_amount >= (ar.invoice_amount or 0) - 0.01:
-            ar.status = ARStatus.PAID
+        # 상계(크레딧 노트)까지 합쳐 잔액이 0 이면 완납이다(_ar_recalc_status).
+        _ar_recalc_status(ar)
+        if ar.status == ARStatus.PAID:
             # 완납일은 최초로 잔액이 0이 된 날. 이미 있으면 유지(재수정 시 날짜 밀림 방지).
             ar.paid_date = ar.paid_date or paid_on
-        elif ar.paid_amount > 0:
-            ar.status = ARStatus.PARTIAL
-            ar.paid_date = None
-        else:
-            ar.status = ARStatus.OUTSTANDING
-            ar.paid_date = None
         s.commit()
         return {"ok": True, "paid_amount": ar.paid_amount, "status": _enum_val(ar.status),
                 # 화면이 "차액 얼마를 수수료로 보아 완납 처리했는지"를 그대로 알릴 수 있게.

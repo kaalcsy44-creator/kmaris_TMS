@@ -160,6 +160,8 @@ _MIGRATIONS = {
         "paid_date":       "VARCHAR(10)",
         # 이 입금에서 은행이 떼어간 수취수수료(입금 통화). 구 데이터는 0(추정으로 계산).
         "bank_fee":        "FLOAT DEFAULT 0",
+        # 크레딧 노트로 깎아 준 금액(청구서 통화). 받을 돈 = 청구액 - 수금액 - 이 값.
+        "credit_amount":   "FLOAT DEFAULT 0",
     },
     "ap_records": {
         "charges":         "JSON",

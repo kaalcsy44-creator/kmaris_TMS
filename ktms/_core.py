@@ -81,6 +81,7 @@ from db.models import (
     PackingList, TaxInvoiceData, ARRecord, APRecord, DeliveryProof,
     RFQStatus, OrderStatus, ARStatus, WorkType, MarketingActivity, ScheduleEvent,
     MarketingAsset, FinancePayable, FinanceIncome, Consultant,
+    Claim, CreditNote,
 )
 
 # ── App / CORS ────────────────────────────────────────────────────────────────
@@ -1953,6 +1954,94 @@ def _ar_status_from_text(value: str | None, paid: float, invoice: float) -> ARSt
     return ARStatus.OUTSTANDING
 
 
+# ── 클레임(납품 후 하자·사고) 과 크레딧 노트(감액 증서) ─────────────────────────
+# 비용 라인의 부담 주체와 정산 방식. 한 라인은 이 둘을 함께 가져야 한다 — 같은 비용이
+# 매출 차감(크레딧 노트)과 비용 계상(현금 지급)으로 두 번 잡히는 것을 막는 기준이다.
+CLAIM_COST_KINDS = ["labor", "parts", "freight", "inspection", "other"]
+CLAIM_BEARERS = ["us", "customer", "vendor", "shared"]
+CLAIM_SETTLEMENTS = ["credit_note", "cash", "vendor_ap", "none"]
+CLAIM_STATUSES = ["open", "settled", "closed"]
+
+
+class ClaimSave(BaseModel):
+    """클레임 저장 — 사건 헤더 + 비용 라인(costs). 라인 형식은 Claim 모델 주석 참고."""
+    rfq_id: int | None = None
+    order_id: int | None = None
+    claim_no: str | None = ""
+    occurred_date: str | None = ""
+    reported_date: str | None = ""
+    site: str | None = ""
+    title: str | None = ""
+    description: str | None = ""
+    status: str | None = "open"
+    costs: list[dict] | None = None
+    owner_id: int | None = None
+
+
+class CreditNoteSave(BaseModel):
+    """크레딧 노트 발행/수정. ar_id(상계 대상 청구서)는 필수다 — 어느 청구서에서
+    깎았는지가 없으면 미수 잔액과 맞출 수 없다.
+
+    applied_amount(청구서 통화 상계액)를 비워 보내면 amount × fx_rate 로 채운다.
+    vat_amount 를 비워 보내면 vat_rate 로 총액에서 갈라 낸다(내수 감액=수정세금계산서).
+    """
+    claim_id: int | None = None
+    ar_id: int
+    cn_no: str | None = ""
+    issue_date: str | None = ""
+    currency: str = "USD"
+    amount: float = 0.0
+    fx_rate: float | None = None
+    applied_amount: float | None = None
+    vat_rate: float | None = None
+    vat_amount: float | None = None
+    reason: str | None = ""
+    status: str | None = "issued"
+
+
+def _ar_outstanding(ar) -> float:
+    """이 청구서로 아직 받을 돈 = 청구액 − 수금액 − 크레딧(상계)."""
+    return round((ar.invoice_amount or 0) - (ar.paid_amount or 0)
+                 - float(getattr(ar, "credit_amount", None) or 0), 2)
+
+
+def _ar_recalc_status(ar) -> None:
+    """수금·상계 후 청구서 상태를 다시 매긴다(완납/일부수금/미수).
+
+    오차 1센트는 완납으로 본다 — 은행이 센트에서 반올림하고, 환산 상계액도 원 단위에서
+    떨어지지 않는다. 완납일은 처음 잔액이 0 이 된 날을 유지한다(재수정으로 밀리지 않게).
+    """
+    settled = _ar_outstanding(ar) <= 0.01 and (ar.invoice_amount or 0) > 0
+    received = (ar.paid_amount or 0) + float(getattr(ar, "credit_amount", None) or 0)
+    if settled:
+        ar.status = ARStatus.PAID
+    elif received > 0:
+        ar.status = ARStatus.PARTIAL
+        ar.paid_date = None
+    else:
+        ar.status = ARStatus.OUTSTANDING
+        ar.paid_date = None
+
+
+def _sync_ar_credit(session, ar_id: int) -> float:
+    """그 청구서에 붙은 유효한 크레딧 노트를 다시 합산해 ARRecord.credit_amount 를 채운다.
+
+    합계를 증분으로 더하지 않고 매번 다시 세는 이유 — 발행·수정·삭제·무효(void)가 섞여도
+    표 하나만 보면 답이 나오고, 어긋난 잔액이 남지 않는다.
+    """
+    ar = session.query(ARRecord).filter_by(id=ar_id).first()
+    if not ar:
+        return 0.0
+    total = sum(
+        float(c.applied_amount or 0)
+        for c in session.query(CreditNote).filter_by(ar_id=ar_id).all()
+        if (c.status or "issued") != "void"
+    )
+    ar.credit_amount = round(total, 2)
+    _ar_recalc_status(ar)
+    return ar.credit_amount
+
+
 def _quotation_total(items, discount_pct: float = 0.0) -> float:
     """견적 최종 총액 — amount 합계(없으면 unit_price*qty 보정)에 할인율 적용."""
     amt = _total_amount(items)
@@ -2924,7 +3013,10 @@ def _finance_receivable_rows(s) -> list[dict]:
         cust = cust_names.get(o.customer_id, "—") if o else "—"
         invoice = round(r.invoice_amount or 0, 2)
         paid = round(r.paid_amount or 0, 2)
-        outstanding = round(invoice - paid, 2)
+        # 크레딧 노트로 깎아 준 금액도 받을 돈에서 빠진다 — 상계는 돈이 오가지 않았을
+        # 뿐 이미 결제된 것이라, 미수로 남겨 두면 영영 못 받는 잔액으로 쌓인다.
+        credit = round(float(getattr(r, "credit_amount", None) or 0), 2)
+        outstanding = round(invoice - paid - credit, 2)
         # 상태는 저장된 enum 대신 금액·기일에서 매번 계산한다. 한 번 '연체'로 저장된 뒤
         # 기일을 미루면 옛 상태가 그대로 남는 문제가 있었다(표시가 실제와 어긋남).
         settled = invoice > 0 and outstanding <= 0
@@ -2958,6 +3050,8 @@ def _finance_receivable_rows(s) -> list[dict]:
             "paid_date": ((r.paid_date or "")[:10] or _stage11_date(o)) if settled else "",
             # 이 입금에서 은행이 실제로 떼어간 수취수수료(입금 통화). 0 = 기록 없음.
             "bank_fee": round(float(getattr(r, "bank_fee", None) or 0), 2),
+            # 크레딧 노트(클레임 상계)로 깎아 준 금액 — 0 이면 상계 없음.
+            "credit_amount": credit,
             "status": status,
             "overdue": bool(overdue),
         })
@@ -3747,6 +3841,17 @@ __all__ = [
     "_finance_payable_paid_on",
     "_finance_occurrences",
     "_finance_receivable_rows",
+    "Claim",
+    "ClaimSave",
+    "CreditNote",
+    "CreditNoteSave",
+    "CLAIM_COST_KINDS",
+    "CLAIM_BEARERS",
+    "CLAIM_SETTLEMENTS",
+    "CLAIM_STATUSES",
+    "_ar_outstanding",
+    "_ar_recalc_status",
+    "_sync_ar_credit",
     "ServiceStageSave",
     "ShippingAdvice",
     "ShippingAdviceSave",

@@ -14165,6 +14165,25 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
   color: #1a7a4a;
 }
 
+/* ── 클레임 · 크레딧 노트(11단계 세 번째 탭) ────────────────────────────────────
+   납품 뒤에 생긴 하자 비용을 적고, 그중 미수금과 상계한 몫을 크레딧 노트로 끊는 자리.
+   표는 항목 수가 아니라 칸 수(유형·부담·정산 셀렉트)가 많아 가로로 넘친다 — 그 표만
+   따로 스크롤시켜 페이지 전체가 옆으로 밀리지 않게 한다(품목표와 같은 규칙). */
+.claim-panel { min-width: 0; }
+.claim-form .form-section-title { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px; }
+.claim-costs-wrap { overflow-x: auto; margin-top: 6px; }
+.claim-costs-wrap > table { min-width: 720px; }
+/* 표 안의 입력칸은 셀에 꽉 차게 — 셀렉트가 제 글자폭만큼만 서면 열 폭이 들쭉날쭉해진다. */
+.claim-costs-wrap :is(input, select) { width: 100%; min-width: 0; }
+/* 발행 폼은 목록과 한 덩이로 보이지 않게 옅은 바탕에 얹는다(취소 가능한 임시 입력). */
+.claim-cn-form {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #f7f9fd;
+}
+
 /* ── 품목표(Item list) 폰 최적화 ───────────────────────────────────────────
    데스크톱 품목표는 컬럼 12개짜리 스프레드시트라 폰(≈360px)에 그대로 들어가면
    최소 폭 합이 화면의 두 배를 넘고, 스크롤 영역이 한 화면에 넷까지 겹친다.

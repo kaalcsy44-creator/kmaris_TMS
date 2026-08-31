@@ -568,6 +568,11 @@ class ARRecord(Base):
     # 이 입금에서 은행이 떼어간 수취수수료(입금 통화). 통장에 찍힌 금액이 청구액보다
     # 이만큼 모자랐다는 기록이다 — 수금액은 청구액으로 채워 두므로 그 차액은 여기에만 남는다.
     bank_fee       = Column(Float, default=0.0)
+    # 이 청구서에 적용된 크레딧 노트(감액) 합계 — 청구서 통화 기준. 클레임 상계로 깎인
+    # 금액이다. 수금액(paid_amount)과 절대 섞지 않는다: 그 칸은 '실제로 들어온 돈'이라
+    # 현금흐름·은행수수료 판정이 그대로 쓰고, 상계는 돈이 오가지 않은 감액이다.
+    # 받을 돈 = invoice_amount - paid_amount - credit_amount.
+    credit_amount  = Column(Float, default=0.0)
     status         = Column(SAEnum(ARStatus), default=ARStatus.OUTSTANDING)
     notes          = Column(Text)
     # 세금계산서(대금청구서) 문서 필드 — 9단계 편집창에서 입력, TAX INVOICE PDF 생성에 사용.
@@ -616,6 +621,71 @@ class APRecord(Base):
     tax_received_date = Column(String(10))              # 수취일 YYYY-MM-DD
     tax_invoice_no    = Column(String(60))              # 전자세금계산서 승인번호
     notes          = Column(Text)
+    created_at     = Column(DateTime, default=datetime.utcnow)
+
+
+class Claim(Base):
+    """납품 후 현장에서 생긴 하자·사고의 비용 처리 기록.
+
+    파이프라인 단계로 두지 않는다 — 클레임은 모든 딜이 거치는 경로가 아니라 예외 사건이고,
+    11단계(수금 완료)가 끝난 뒤 몇 달 지나 생기기도 한다. 단계로 만들면 클레임이 없는
+    딜이 영영 미완료로 남는다. 그래서 딜에 딸린 별도 기록으로 둔다.
+
+    비용 라인(costs)은 JSON 으로 담는다 — 청구서 품목(ARRecord.items)·발주 품목과 같은
+    방식이다. 라인 한 줄:
+      kind        labor(공임) / parts(부품) / freight / inspection / other
+      description 내역
+      amount      금액, currency 통화
+      bearer      부담 주체 — us(당사) / customer(고객) / vendor / shared
+      settlement  정산 방식 — credit_note(AR 상계) / cash(현금지급) /
+                  vendor_ap(벤더에 청구) / none(정보성 — 고객이 자기 돈으로 처리)
+    '누가 부담하고 어떻게 정산했는가'를 한 줄에 함께 적어야 같은 비용이 매출 차감과
+    비용 계상으로 두 번 잡히는 것을 막을 수 있다.
+    """
+    __tablename__ = "claims"
+    id            = Column(Integer, primary_key=True)
+    rfq_id        = Column(Integer, ForeignKey("rfqs.id"), nullable=True)    # 프로젝트
+    order_id      = Column(Integer, ForeignKey("orders.id"), nullable=True)  # 고객 P/O
+    claim_no      = Column(String(60))     # 사내 관리번호(수동, 비워도 됨)
+    occurred_date = Column(String(10))     # 사고 발생일 YYYY-MM-DD
+    reported_date = Column(String(10))     # 접수일(고객 통보일)
+    site          = Column(String(200))    # 현장·항구·선박
+    title         = Column(String(200))    # 한 줄 제목
+    description   = Column(Text)           # 경위·원인·조치
+    status        = Column(String(20), default="open")   # open/settled/closed
+    costs         = Column(JSON, default=list)
+    owner_id      = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at    = Column(DateTime, default=datetime.utcnow)
+
+
+class CreditNote(Base):
+    """크레딧 노트(감액 증서) — 고객에게 발행해 청구서 금액을 깎아 준 기록.
+
+    한 행 = 한 장. 반드시 상계 대상 청구서(ar_id)에 붙는다 — '얼마를 깎았나'만 있고
+    '어느 청구서에서 깎았나'가 없으면 미수 잔액과 맞출 수가 없다. 저장·삭제할 때마다
+    그 청구서의 ARRecord.credit_amount 를 이 표에서 다시 합산해 채운다(_sync_ar_credit).
+
+    통화가 청구서와 다를 수 있다(현장 비용은 USD, 청구서는 KRW). 그래서 발행 통화의
+    금액(amount)과 청구서 통화로 환산한 상계액(applied_amount)을 따로 둔다 — 환율은
+    상계한 날의 값이라 나중에 다시 계산할 수 없다.
+    """
+    __tablename__ = "credit_notes"
+    id             = Column(Integer, primary_key=True)
+    cn_no          = Column(String(60), unique=True)   # 크레딧 노트 번호(수동 확정)
+    claim_id       = Column(Integer, ForeignKey("claims.id"), nullable=True)
+    ar_id          = Column(Integer, ForeignKey("ar_records.id"))   # 상계 대상 청구서
+    order_id       = Column(Integer, ForeignKey("orders.id"), nullable=True)
+    customer_id    = Column(Integer, ForeignKey("customers.id"), nullable=True)
+    issue_date     = Column(String(10))    # 발행일 YYYY-MM-DD
+    currency       = Column(String(10), default="USD")   # 발행 통화
+    amount         = Column(Float, default=0.0)          # 발행 통화 금액(총액)
+    # 청구서 통화로 환산할 때 쓴 환율(1 발행통화 = ? 청구서통화). 같은 통화면 1.
+    fx_rate        = Column(Float, default=1.0)
+    applied_amount = Column(Float, default=0.0)   # 청구서 통화 기준 상계액
+    vat_rate       = Column(Float, default=0.0)   # 내수 감액이면 0.1(수정세금계산서용)
+    vat_amount     = Column(Float, default=0.0)   # applied_amount 에 포함된 부가세
+    reason         = Column(Text)
+    status         = Column(String(20), default="issued")  # issued/void
     created_at     = Column(DateTime, default=datetime.utcnow)
 
 

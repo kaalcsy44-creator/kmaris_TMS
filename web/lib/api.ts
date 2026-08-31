@@ -3,6 +3,9 @@ import { getToken, clearAuth } from "./auth";
 import { invalidateCache } from "./useCachedData";
 import type { PermGrid } from "./auth";
 import type {
+  ArCandidate,
+  ClaimCost,
+  ClaimRow,
   RfqOverview,
   CustomerOption,
   VendorOption,
@@ -1535,6 +1538,82 @@ export function updateArRecord(
   } & ArDocFields
 ): Promise<{ ok: boolean; id: number; status: string }> {
   return put(`/api/admin/ar/${arId}`, body);
+}
+
+// ── 클레임(납품 후 하자·사고) · 크레딧 노트 ────────────────────────────────────
+/** 이 딜(또는 이 고객 P/O)의 클레임 — 각 건에 발행한 크레딧 노트가 함께 실려 온다. */
+export function fetchClaims(params: { rfqId?: number; orderId?: number }): Promise<{ rows: ClaimRow[] }> {
+  const q = new URLSearchParams();
+  if (params.rfqId) q.set("rfq_id", String(params.rfqId));
+  if (params.orderId) q.set("order_id", String(params.orderId));
+  return get<{ rows: ClaimRow[] }>(`/api/admin/claims?${q.toString()}`);
+}
+
+export type ClaimSaveBody = {
+  rfq_id?: number;
+  order_id?: number;
+  claim_no?: string;
+  occurred_date?: string;
+  reported_date?: string;
+  site?: string;
+  title?: string;
+  description?: string;
+  status?: string;
+  costs?: ClaimCost[];
+};
+
+export function createClaim(body: ClaimSaveBody): Promise<{ ok: boolean; id: number }> {
+  return post("/api/admin/claims", body);
+}
+
+export function updateClaim(claimId: number, body: ClaimSaveBody): Promise<{ ok: boolean; id: number }> {
+  return put(`/api/admin/claims/${claimId}`, body);
+}
+
+export function deleteClaim(claimId: number): Promise<{ ok: boolean }> {
+  return del(`/api/admin/claims/${claimId}`);
+}
+
+/** 상계할 수 있는 청구서 목록 — 그 고객의 청구서 전부(같은 오더 건이 맨 위). */
+export function fetchArCandidates(
+  orderId: number
+): Promise<{ rows: ArCandidate[]; customer_id: number; customer: string }> {
+  return get(`/api/admin/claims/ar-candidates?order_id=${orderId}`);
+}
+
+export type CreditNoteSaveBody = {
+  claim_id?: number;
+  ar_id: number;
+  cn_no?: string;
+  issue_date?: string;
+  currency?: string;
+  amount: number;
+  /** 1 발행통화 = ? 청구서통화. 통화가 같으면 서버가 1 로 본다. */
+  fx_rate?: number;
+  /** 비우면 서버가 amount × fx_rate 로 채운다. */
+  applied_amount?: number;
+  vat_rate?: number;
+  vat_amount?: number;
+  reason?: string;
+};
+
+/** 크레딧 노트 발행 — 대상 청구서의 미수가 그만큼 줄어든다. */
+export function createCreditNote(
+  body: CreditNoteSaveBody
+): Promise<{ ok: boolean; id: number; ar_credit_amount: number }> {
+  return post("/api/admin/credit-notes", body);
+}
+
+export function updateCreditNote(
+  cnId: number,
+  body: CreditNoteSaveBody
+): Promise<{ ok: boolean; id: number; ar_credit_amount: number }> {
+  return put(`/api/admin/credit-notes/${cnId}`, body);
+}
+
+/** 크레딧 노트 취소 — 상계가 풀려 그만큼 미수가 되살아난다. */
+export function deleteCreditNote(cnId: number): Promise<{ ok: boolean; ar_credit_amount: number }> {
+  return del(`/api/admin/credit-notes/${cnId}`);
 }
 
 /** TAX INVOICE(대금청구서) PDF 미리보기 — 현재 편집값으로 렌더(미저장). Blob 반환. */

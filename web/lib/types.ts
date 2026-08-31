@@ -794,6 +794,8 @@ export type ArRow = {
   currency: string;
   invoice_amount: number;
   paid_amount: number;
+  /** 크레딧 노트(클레임 상계)로 깎아 준 금액 — 받을 돈 = 청구액 − 수금액 − 이 값. */
+  credit_amount?: number;
   outstanding: number;
   due_date: string;
   status: string;
@@ -848,6 +850,76 @@ export type TaxInvoiceItem = {
   amount: number;
   // 문서에서 제외한 행 — DocumentWorkItem.excluded 와 같은 규칙(표에는 남고 발행 문서·합계에서 빠짐).
   excluded?: boolean;
+};
+
+/** 클레임 비용 라인 — 누가 부담하고(bearer) 어떻게 정산했는지(settlement)를 함께 적는다.
+ *  이 둘이 있어야 같은 금액이 매출 차감과 비용 계상으로 두 번 잡히지 않는다. */
+export type ClaimCost = {
+  kind: string;         // labor(공임) / parts(부품) / freight / inspection / other
+  description: string;
+  amount: number;
+  currency: string;
+  bearer: string;       // us(당사) / customer(고객) / vendor / shared
+  settlement: string;   // credit_note(AR 상계) / cash(현금지급) / vendor_ap / none(정보성)
+};
+
+/** 크레딧 노트(감액 증서) — 반드시 상계 대상 청구서(ar_id)에 붙는다. */
+export type CreditNoteRow = {
+  id: number;
+  cn_no: string;
+  claim_id: number;
+  ar_id: number;
+  order_id: number;
+  customer_id: number;
+  issue_date: string;
+  currency: string;       // 발행 통화(현장 비용 통화 그대로)
+  amount: number;
+  fx_rate: number;        // 1 발행통화 = ? 청구서통화
+  applied_amount: number; // 청구서 통화 기준 상계액
+  vat_rate: number;
+  vat_amount: number;
+  reason: string;
+  status: string;         // issued / void
+  invoice_no: string;     // 상계 대상 청구서 번호(표시용)
+  invoice_currency: string;
+};
+
+/** 납품 후 클레임 1건 — 비용 라인(costs)과 그 클레임으로 발행한 크레딧 노트를 함께 담는다. */
+export type ClaimRow = {
+  id: number;
+  rfq_id: number;
+  order_id: number;
+  claim_no: string;
+  occurred_date: string;
+  reported_date: string;
+  site: string;
+  title: string;
+  description: string;
+  status: string;         // open / settled / closed
+  costs: ClaimCost[];
+  owner_id: number;
+  owner: string;
+  project_no: string;
+  credit_notes: CreditNoteRow[];
+};
+
+/** 상계 대상이 될 수 있는 청구서 — 그 고객의 청구서 전부(다른 프로젝트 건도 포함). */
+export type ArCandidate = {
+  ar_id: number;
+  order_id: number;
+  po_no: string;
+  invoice_no: string;
+  invoice_date: string;
+  currency: string;
+  invoice_amount: number;
+  paid_amount: number;
+  credit_amount: number;
+  outstanding: number;
+  status: string;
+  project_no: string;
+  /** 이 청구서에 이미 붙은 크레딧 노트 수 — 번호 자동 제안(-CN2)에 쓴다. */
+  credit_count: number;
+  same_order: boolean;
 };
 
 export type ArData = {

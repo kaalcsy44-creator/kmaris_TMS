@@ -39,6 +39,7 @@ import {
 } from "@/components/common/itemTable";
 import { useItemGrid, ItemGridStyle, ItemTh, ItemColsButton, type ItemCol } from "@/components/common/itemGrid";
 import { useEditGate } from "@/lib/viewMode";
+import ClaimPanel from "@/components/screens/ClaimPanel";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -147,8 +148,9 @@ export function ArOverview({
   const [stageTab, setStageTab] = useState<StageTab>(
     initialStage === 11 ? 11 : initialStage === 9 ? 9 : 10
   );
-  // 수취(AR, 고객 청구) / 지급(AP, 벤더 매입) 문서 탭. 지급대장에서 온 딥링크는 AP 로 연다.
-  const [docTab, setDocTab] = useState<"ar" | "ap">(initialApPoId ? "ap" : "ar");
+  // 수취(AR, 고객 청구) / 지급(AP, 벤더 매입) / 클레임(납품 후 하자·상계) 문서 탭.
+  // 지급대장에서 온 딥링크는 AP 로 연다.
+  const [docTab, setDocTab] = useState<"ar" | "ap" | "claim">(initialApPoId ? "ap" : "ar");
   const rows = useMemo(() => data?.rows ?? [], [data]);
   const orderId = initialOrderId ?? null;
 
@@ -196,6 +198,11 @@ export function ArOverview({
         <button className={docTab === "ap" ? "on" : ""} onClick={() => setDocTab("ap")}>
           Payable · Vendor (AP)
         </button>
+        {/* 납품 후 클레임 — 파이프라인 단계가 아니라 딜에 딸린 예외 기록이라 여기 탭으로 둔다.
+            상계할 청구서와 고객이 이미 이 화면의 맥락에 있어, 크레딧 노트를 여기서 끊는다. */}
+        <button className={docTab === "claim" ? "on" : ""} onClick={() => setDocTab("claim")}>
+          Claim · Credit Note
+        </button>
       </div>
 
       {docTab === "ar" ? (
@@ -212,8 +219,10 @@ export function ArOverview({
             <div className="ar-milestone ar-milestone--note"><ApGate row={match} stage={9} /></div>
           ) : null}
         </>
-      ) : (
+      ) : docTab === "ap" ? (
         <ApSection orderId={orderId} stage={stageTab} focusPoId={initialApPoId ?? null} onChanged={load} />
+      ) : (
+        <ClaimPanel orderId={orderId} assigneeId={match?.assignee_id ?? 0} onChanged={load} />
       )}
     </div>
   );
@@ -727,6 +736,8 @@ function MilestoneBar({ row, stage, onChanged }: { row: ArRow; stage: 10 | 11; o
         {stage === 11 ? (
           <span className="hint-inline" style={{ marginLeft: 10 }}>
             Invoice {row.invoice_amount.toLocaleString()} · received {row.paid_amount.toLocaleString()} ·
+            {/* 클레임 상계가 있으면 그만큼은 받을 돈이 아니다 — 잔액이 왜 줄었는지 여기서 밝힌다. */}
+            {row.credit_amount ? ` credit ${row.credit_amount.toLocaleString()} · ` : " "}
             outstanding {row.outstanding.toLocaleString()} {row.currency}
           </span>
         ) : null}
