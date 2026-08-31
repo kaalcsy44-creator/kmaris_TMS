@@ -12,6 +12,7 @@ import type { MailMessage, MailThread, ProjectMail } from "@/lib/types";
 import { hm, md } from "@/lib/activity";
 import { parseRollupLine } from "@/lib/rollup";
 import PartyName from "@/components/common/PartyName";
+import { FoldTitle, useSectionFold } from "@/components/common/SectionFold";
 import { useCachedData } from "@/lib/useCachedData";
 
 /** 이 딜의 메일 캐시 키 — 개요의 단계 보드도 같은 키로 읽어 한 번만 조회한다. */
@@ -28,6 +29,7 @@ export default function ProjectMailPanel({ rfqId }: { rfqId: number }) {
   // 여기서 Sync 를 눌러 새로 고치면 위 보드의 메일 줄도 함께 최신이 된다.
   const { data, error: loadErr, refresh } = useCachedData(projectMailKey(rfqId), () =>
     fetchProjectMail(rfqId));
+  const fold = useSectionFold("proj-ov.mail");
   const [configured, setConfigured] = useState<boolean | null>(null);
   const [busy, setBusy] = useState("");   // 진행 중 작업 이름(버튼 비활성 + 안내)
   const [err, setErr] = useState("");
@@ -99,10 +101,12 @@ export default function ProjectMailPanel({ rfqId }: { rfqId: number }) {
   const sharedWith = data?.shared_with ?? [];
 
   return (
-    <section className="proj-ov-sec proj-mail">
+    <section className={`proj-ov-sec proj-mail${fold.open ? "" : " folded"}`}>
       <h2 className="proj-ov-h">
-        Mail
-        <span className="proj-ov-cnt">{data?.count ?? 0}</span>
+        <FoldTitle fold={fold} label="mail">
+          Mail
+          <span className="proj-ov-cnt">{data?.count ?? 0}</span>
+        </FoldTitle>
         <span className="proj-mail-acts">
           <button
             type="button"

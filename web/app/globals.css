@@ -11712,6 +11712,19 @@ select.sig-owner-pick,
 .proj-ov-h { display: flex; align-items: baseline; gap: 8px; margin: 0 0 6px;
   font-size: var(--ov-t-sec); font-weight: 800; color: var(--navy); }
 .proj-ov-cnt { font-size: var(--ov-t-meta); font-weight: 800; color: var(--blue); }
+/* 묶음 접기 — 제목 줄 자체가 버튼이다. 접으면 제목만 남고 아래 내용은 CSS 로 감춘다
+   (DOM 에는 남긴다 — 종이는 펼칠 수가 없으니 인쇄물에는 접힌 것도 다 나온다). */
+.sec-fold { display: inline-flex; align-items: baseline; gap: 7px; padding: 0; border: 0;
+  background: transparent; font: inherit; color: inherit; cursor: pointer; }
+.sec-fold:hover { color: var(--blue); }
+.sec-fold-caret { flex: none; font-size: 10px; font-weight: 400; color: var(--muted);
+  transition: color .12s; }
+.sec-fold:hover .sec-fold-caret { color: var(--blue); }
+/* 접기는 화면에서만 — 인쇄에는 이 규칙이 아예 걸리지 않아 원래 배치(grid 등)가 산다. */
+@media screen {
+  .proj-ov-sec.folded > *:not(.proj-ov-h) { display: none; }
+  .proj-ov-sec.folded > .proj-ov-h { margin-bottom: 0; }
+}
 /* 이 프로젝트만 걸러 보는 업무일지 바로가기 — 제목 우측 끝에 붙인다. */
 .proj-ov-actlink { margin-left: auto; font-size: var(--ov-t-meta); font-weight: 700;
   color: var(--blue); white-space: nowrap; }
@@ -12484,6 +12497,8 @@ button.ov-tl-stage:hover {
      그래서 접기를 DOM 제거가 아니라 CSS 로 한다. 더보기 버튼 자체는 뺀다. */
   .ov-tl-acts > li.ov-tl-note { display: list-item !important; }
   .ov-tl-morerow { display: none !important; }
+  /* 화면에서 접어 둔 묶음도 인쇄물에는 다 나온다(접기 규칙은 @media screen 안에만 있다). */
+  .sec-fold-caret { display: none !important; }
   .proj-ov-sec, .proj-ov-tl > li, .proj-ov-items tr { break-inside: avoid; }
   /* 메일 — 정리 요약과 대화 목록은 남기고, 누를 수 없는 버튼과 펼친 원문은 뺀다.
      화면에서 접어 둔 목록도 인쇄물에는 다 나온다(활동기록과 같은 규칙 — 종이는

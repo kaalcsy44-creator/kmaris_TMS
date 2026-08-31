@@ -44,6 +44,7 @@ import { convertCurrency, USD_KRW_RATE } from "@/components/common/itemTable";
 import { tr } from "@/lib/labels";
 import CustomerName from "@/components/common/CustomerName";
 import ProjectMailPanel, { projectMailKey } from "@/components/common/ProjectMailPanel";
+import { FoldTitle, useSectionFold } from "@/components/common/SectionFold";
 import ActivityDesc from "@/components/common/ActivityDesc";
 import ActivityNoteForm, {
   initialNoteValue,
@@ -687,6 +688,7 @@ function StageTimeline({
   /** 활동기록 추가 후 데이터 갱신 콜백. 주면 각 단계에 "+ note" 입력이 열린다. */
   onActivityAdded?: () => void | Promise<unknown>;
 }) {
+  const fold = useSectionFold("proj-ov.stages");
   // 어느 단계에 활동기록 입력창을 열어 뒀는지(한 번에 하나). null 이면 모두 닫힘.
   const [addStage, setAddStage] = useState<number | null>(null);
   // 활동기록(노트)을 펼쳐 둔 단계. 기본은 모두 접힘 — 개요는 "지금 어디까지 왔나"를 한눈에
@@ -722,12 +724,14 @@ function StageTimeline({
   const done = Math.max(0, Math.min(row.stage, chain.length));
 
   return (
-    <section className="proj-ov-sec">
+    <section className={`proj-ov-sec${fold.open ? "" : " folded"}`}>
       <h2 className="proj-ov-h">
-        Stages &amp; activity
-        <span className="proj-ov-cnt">
-          {done}/{chain.length}
-        </span>
+        <FoldTitle fold={fold} label="stages & activity">
+          Stages &amp; activity
+          <span className="proj-ov-cnt">
+            {done}/{chain.length}
+          </span>
+        </FoldTitle>
         {/* 업무일지(Activity Log)에서 이 프로젝트만 걸러 보는 바로가기. 검색어에 프로젝트
             번호를 실어 By-deal 카드가 이 딜만 남게 한다. 입력·수정은 그 화면에서 한다. */}
         <Link
@@ -1202,6 +1206,7 @@ function ItemsSection({
   vendorQuoteNo: string;
   nav: DocNav;
 }) {
+  const fold = useSectionFold("proj-ov.items");
   const hasGroups = orders.length > 0 || quotations.length > 0;
   const phaseClass = (from: number) => (stage >= from ? "ov-phase-on" : "ov-phase-todo");
   const rfqPhase = phaseClass(1);
@@ -1209,9 +1214,11 @@ function ItemsSection({
   const poPhase = phaseClass(5);
   const ciPhase = phaseClass(7);
   return (
-    <section className="proj-ov-sec">
+    <section className={`proj-ov-sec${fold.open ? "" : " folded"}`}>
       <h2 className="proj-ov-h">
-        Items
+        <FoldTitle fold={fold} label="items">
+          Items
+        </FoldTitle>
         <span className="proj-ov-src">
           {hasGroups
             ? "by vessel · Quote → P/O → C/I · purchase = vendor P/O"
