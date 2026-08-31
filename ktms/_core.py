@@ -65,6 +65,7 @@ from services.pdf_svc import (
 )
 from services.pdf_parser import (
     extract_text_from_pdf, parse_order_fields, parse_rfq_fields,
+    parse_rfq_pdf_document, parse_order_pdf_document, PDF_DOC_MAX_BYTES,
     parse_rfq_image, parse_order_image,
     parse_business_card_image, parse_business_card_pdf_document,
     parse_vendor_quote_text, parse_vendor_quote_image,
@@ -3844,6 +3845,9 @@ __all__ = [
     "_finance_payable_row",
     "_finance_payable_paid_on",
     "_finance_occurrences",
+    "PDF_DOC_MAX_BYTES",
+    "parse_rfq_pdf_document",
+    "parse_order_pdf_document",
     "_finance_receivable_rows",
     "Claim",
     "ClaimSave",

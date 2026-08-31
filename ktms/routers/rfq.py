@@ -58,6 +58,8 @@ from _core import (
     get_current_user,
     get_session,
     parse_rfq_fields,
+    parse_rfq_pdf_document,
+    PDF_DOC_MAX_BYTES,
     parse_rfq_image,
     require_token,
     steps_for,
@@ -291,6 +293,15 @@ def ocr_rfq_pdf(file: UploadFile = File(...)):
         if img_media:
             return parse_rfq_image(file.file.read(), img_media, customer_names)
         if fname.endswith(".pdf"):
+            # PDF 는 파일 그대로 모델에 넘긴다 — 평문으로 옮기는 순간 표의 열이 뭉개져
+            # 품번과 수량의 짝이 어긋나고, 여러 쪽짜리 부품표는 뒤쪽이 통째로 새어 나간다.
+            data = file.file.read()
+            if len(data) <= PDF_DOC_MAX_BYTES:
+                try:
+                    return parse_rfq_pdf_document(data, customer_names)
+                except Exception:
+                    pass   # 아래 텍스트 경로로 한 번 더 — 페이지 수 초과 등
+            file.file.seek(0)
             raw_text = extract_text_from_pdf(file.file)
             if not raw_text:
                 raise HTTPException(status_code=400, detail="PDF에서 텍스트를 추출할 수 없습니다.")

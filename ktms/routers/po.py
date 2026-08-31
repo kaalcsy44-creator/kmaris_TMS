@@ -69,6 +69,8 @@ from _core import (
     get_session,
     os,
     parse_order_fields,
+    parse_order_pdf_document,
+    PDF_DOC_MAX_BYTES,
     parse_order_image,
     require_token,
     send_email,
@@ -419,6 +421,14 @@ def ocr_order_pdf(file: UploadFile = File(...)):
         if img_media:
             return parse_order_image(file.file.read(), img_media, customer_names)
         if fname.endswith(".pdf"):
+            # RFQ 자동입력과 같은 이유로 PDF 는 파일 그대로 넘긴다(표를 표로 읽게).
+            data = file.file.read()
+            if len(data) <= PDF_DOC_MAX_BYTES:
+                try:
+                    return parse_order_pdf_document(data, customer_names)
+                except Exception:
+                    pass
+            file.file.seek(0)
             raw_text = extract_text_from_pdf(file.file)
             if not raw_text:
                 raise HTTPException(status_code=400, detail="PDF에서 텍스트를 추출할 수 없습니다.")

@@ -15,7 +15,8 @@ bcrypt>=4.1.0
 PyJWT>=2.8.0
 python-multipart>=0.0.9
 pdfplumber>=0.11.0
-anthropic>=0.40.0
+# output_config(JSON 스키마 강제)·messages.stream 을 쓴다 — 0.111 이상이어야 한다.
+anthropic>=0.111.0
 openpyxl>=3.1.0
 # CI Excel(doc_xlsx) 의 로고·서명·직인 이미지 임베드에 필요(openpyxl Image → PIL).
 # pdfplumber 가 전이 설치하지만, 이미지 기능이 명시적이므로 직접 고정한다.
