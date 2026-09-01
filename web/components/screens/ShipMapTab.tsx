@@ -24,40 +24,77 @@ import type { ShipItem, ShipMap } from "@/lib/types";
  * 매입·매출·상대처)이 그 자리에서 펼쳐진다.
  */
 
-/** 갑판(위에서 아래로). 배의 단면을 그대로 층으로 세운다. */
-const DECKS = [
-  { key: "top", name: "Bridge & upper deck", sub: "선교·상부" },
-  { key: "deck", name: "Main deck", sub: "갑판·화물" },
-  { key: "hull", name: "Machinery spaces", sub: "기관·전장" },
-  { key: "quay", name: "Quay", sub: "육상·용역" },
+/**
+ * 여섯 구획, 3열 2행. 갑판을 위에서 아래로 늘어놓던 띠 구조는 배 한 척이 세 번
+ * 스크롤해야 다 보였다 — 이 화면의 요점이 '한 화면에 배 한 척'인데 그 요점이 화면
+ * 밖으로 밀려 있었던 셈이다. 그래서 갑판을 층이 아니라 칸으로 세운다:
+ *
+ *   선교·상부 Bridge │ 선교·상부 Deck machinery │ 갑판·화물 Cargo & tank
+ *   기관·전장 Engine │ 기관·전장 Electrical + Other │ 육상·용역 Quay
+ *
+ * 위 줄이 배의 위(선교·갑판), 아래 줄이 배의 아래와 뭍(기관실·부두)이라 세로로
+ * 읽으면 여전히 배의 단면이다. 한 칸이 넘치면 그 칸만 안에서 스크롤한다 — 칸이
+ * 자라 옆 칸을 밀어내면 6칸이 다시 한 화면을 넘긴다.
+ */
+const SECTORS = [
+  { key: "bridge", deck: "Bridge & upper deck", sub: "선교·상부" },
+  { key: "deck", deck: "Bridge & upper deck", sub: "선교·상부" },
+  { key: "cargo", deck: "Main deck", sub: "갑판·화물" },
+  { key: "engine", deck: "Machinery spaces", sub: "기관·전장" },
+  { key: "elec", deck: "Machinery spaces", sub: "기관·전장" },
+  { key: "quay", deck: "Quay", sub: "육상·용역" },
 ] as const;
 
 /**
- * 대분류 이름 → 갑판. 기본 트리(init_db.ITEM_CATEGORY_TREE)의 일곱 대분류를 배의
- * 제자리에 세운다. 여기 없는 이름은 부두(quay)로 간다 — 자리를 못 찾은 것이지
- * 잘못된 것이 아니므로 화면에서 빠지지는 않는다.
+ * 대분류 이름 → 구획. 기본 트리(init_db.ITEM_CATEGORY_TREE)의 일곱 대분류를 제자리에
+ * 세운다. 여기 없는 이름은 부두(마지막 칸)로 간다 — 자리를 못 찾은 것이지 잘못된 것이
+ * 아니므로 화면에서 빠지지는 않는다(관리자가 트리를 고쳐도 화면이 무너지지 않는다).
  */
 const BERTH: Record<string, number> = {
   "BRIDGE": 0,
-  "DECK MACHINERY": 0,
-  "CARGO & TANK SYSTEM": 1,
-  "CARGO AND TANK SYSTEM": 1,
-  "ENGINE ROOM": 2,
-  "ELECTRICAL & AUTOMATION": 2,
-  "OTHER EQUIPMENT": 2,
-  "SERVICE": 3,
+  "DECK MACHINERY": 1,
+  "CARGO & TANK SYSTEM": 2,
+  "CARGO AND TANK SYSTEM": 2,
+  "ENGINE ROOM": 3,
+  "ELECTRICAL & AUTOMATION": 4,
+  "OTHER EQUIPMENT": 4,
+  "SERVICE": 5,
 };
 
-/** 대분류의 표식. 글자만으로 늘어선 카드에서 어느 계통인지가 먼저 눈에 들어오게. */
-const MARK: Record<string, string> = {
-  "BRIDGE": "🧭",
-  "DECK MACHINERY": "⚓",
-  "CARGO & TANK SYSTEM": "🛢",
-  "ENGINE ROOM": "⚙",
-  "ELECTRICAL & AUTOMATION": "⚡",
-  "OTHER EQUIPMENT": "🔧",
-  "SERVICE": "🛠",
+/**
+ * 대분류의 표식 — 한 획짜리 선 그림. 색을 쓰지 않는다(글자색을 그대로 물려받는다).
+ * 이모지는 브라우저마다 다른 그림이 나오고, 저마다 제 색을 들고 와서 카드 여섯 장이
+ * 색동옷처럼 보였다. 여기서 아이콘이 할 일은 '어느 계통인가'를 반 박자 먼저 알리는
+ * 것뿐이라, 형태만 다르고 색은 하나여야 한다.
+ */
+const ICON: Record<string, React.ReactNode> = {
+  // 나침반 — 선교.
+  "BRIDGE": <><circle cx="12" cy="12" r="8.5" /><path d="M15.6 8.4 13.1 13.1 8.4 15.6l2.5-4.7z" /></>,
+  // 앵커 — 갑판 기계.
+  "DECK MACHINERY": <><circle cx="12" cy="4.6" r="2.1" /><path d="M12 6.7V21M7.2 10.2h9.6M3.8 14.4A8.2 8.2 0 0 0 20.2 14.4" /></>,
+  // 탱크(드럼) — 화물·탱크.
+  "CARGO & TANK SYSTEM": <><ellipse cx="12" cy="6" rx="6" ry="2.2" /><path d="M6 6v12c0 1.2 2.7 2.2 6 2.2s6-1 6-2.2V6" /><path d="M6 12.2c0 1.2 2.7 2.2 6 2.2s6-1 6-2.2" /></>,
+  // 톱니 — 기관실.
+  "ENGINE ROOM": <><circle cx="12" cy="12" r="3.2" /><circle cx="12" cy="12" r="7.2" /><path d="M12 2.4v2.4M12 19.2v2.4M2.4 12h2.4M19.2 12h2.4M5.2 5.2 6.9 6.9M17.1 17.1l1.7 1.7M18.8 5.2 17.1 6.9M6.9 17.1 5.2 18.8" /></>,
+  // 번개 — 전기·자동화.
+  "ELECTRICAL & AUTOMATION": <path d="M13.2 2.5 4.8 13.6h6.1l-1 7.9 8.3-11.1h-6.1z" />,
+  // 육각 너트 — 그 밖의 장비.
+  "OTHER EQUIPMENT": <><path d="M12 2.8 20 7.4v9.2L12 21.2 4 16.6V7.4z" /><circle cx="12" cy="12" r="3" /></>,
+  // 공구함 — 용역.
+  "SERVICE": <><rect x="3.2" y="8.2" width="17.6" height="11" rx="2" /><path d="M9 8.2V6.4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v1.8M3.2 13.2h17.6" /></>,
 };
+
+/** 표식 한 칸 — 선 굵기와 크기를 한 곳에서 잡는다(모두 같은 무게로 보여야 한다). */
+function Mark({ name }: { name: string }) {
+  const art = ICON[name.trim().toUpperCase()];
+  return (
+    <svg className="ship-zone-mark" viewBox="0 0 24 24" aria-hidden
+         fill="none" stroke="currentColor" strokeWidth="1.5"
+         strokeLinecap="round" strokeLinejoin="round">
+      {art ?? <rect x="4.5" y="4.5" width="15" height="15" rx="3.5" />}
+    </svg>
+  );
+}
 
 type Cat = ShipMap["categories"][number];
 
@@ -80,7 +117,7 @@ type Peek = {
 
 function berthOf(name: string): number {
   const k = (name || "").trim().toUpperCase();
-  return BERTH[k] ?? 3;
+  return BERTH[k] ?? SECTORS.length - 1;   // 모르는 계통은 부두에 내려놓는다.
 }
 
 function money(v: number | null | undefined, cur: string) {
@@ -190,21 +227,22 @@ export default function ShipMapTab() {
           않으면서 카드 뒤에서 색을 흔들었다. 배는 갑판 이름(선교·갑판·기관·부두)이
           말하고, 화면은 그 자리에 실린 숫자만 그린다. */}
       <div className="ship-board">
-        <div className="ship-decks">
-          {DECKS.map((deck, di) => {
+        <div className="ship-grid">
+          {SECTORS.map((sec, si) => {
             // 손잡이를 켜면 빈 계통은 통째로 접는다 — 소분류만 걸러 내고 껍데기 카드를
-            // 남기면, 비운다고 해 놓고 화면은 그대로인 셈이 된다.
+            // 남기면, 비운다고 해 놓고 화면은 그대로인 셈이 된다. 칸이 통째로 비면 그
+            // 칸도 접는다(격자는 남은 칸으로 다시 채워진다).
             const zones = model.roots.filter(
-              (r) => berthOf(r.name) === di && (!busyOnly || (model.roll.get(r.id) ?? []).length)
+              (r) => berthOf(r.name) === si && (!busyOnly || (model.roll.get(r.id) ?? []).length)
             );
             if (!zones.length) return null;
             return (
-              <section className={`ship-deck ship-deck--${deck.key}`} key={deck.key}>
-                <div className="ship-deck-tag">
-                  <b>{deck.name}</b>
-                  <span>{deck.sub}</span>
+              <section className={`ship-sector ship-sector--${sec.key}`} key={sec.key}>
+                <div className="ship-sector-tag">
+                  <b>{sec.deck}</b>
+                  <span>{sec.sub}</span>
                 </div>
-                <div className="ship-zones">
+                <div className="ship-sector-body">
                   {zones.map((z) => (
                     <Zone
                       key={z.id}
@@ -267,13 +305,12 @@ function Zone({
   const mine = model.roll.get(cat.id) ?? [];
   const subs = (model.kids.get(cat.id) ?? []).filter((c) => c.active);
   const deals = dealsOf(mine);
-  const mark = MARK[cat.name.trim().toUpperCase()] ?? "▪";
   const shown = busyOnly ? subs.filter((s) => (model.roll.get(s.id) ?? []).length) : subs;
 
   return (
     <article className={`ship-zone${mine.length ? "" : " ship-zone--empty"}`}>
       <header {...hover(cat.name, `${mine.length} item(s) on this system`, mine)}>
-        <span className="ship-zone-mark" aria-hidden>{mark}</span>
+        <Mark name={cat.name} />
         <h3>{cat.name}</h3>
         <span className="ship-zone-n">{mine.length}</span>
       </header>
