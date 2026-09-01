@@ -549,6 +549,80 @@ def master_party_fallback(session) -> dict[int, dict]:
     return seen
 
 
+# ── 분류 지도(선박 도면 보기) ───────────────────────────────────────────────────
+def category_ship_map(session) -> dict:
+    """분류 트리 + 각 품목이 어느 딜(프로젝트)에서 나왔는지. 선박 도면 화면의 원천.
+
+    목록 화면은 분류를 하나 골라 그 안을 보지만, 이 화면은 배 한 척을 통째로 펼쳐
+    어느 계통에 어느 프로젝트가 걸려 있는지를 한눈에 본다. 그래서 필요한 것이 목록과
+    다르다 — 품목마다 '어느 딜에서 몇 줄로 나왔는가'가 붙어야 한다.
+    이름(고객·선박·공급사)은 id 로 돌려주고 라우터가 붙인다(다른 엔드포인트와 같은 규칙)."""
+    cats = session.query(ItemCategory).all()
+    masters = session.query(ItemMaster).all()
+    hist = [h for h in session.query(ItemPriceHistory).all() if h.item_id]
+    rfqs = {r.id: r for r in session.query(RFQ).all()}
+
+    by_item: dict[int, list] = {}
+    for h in hist:
+        by_item.setdefault(h.item_id, []).append(h)
+
+    items = []
+    for m in masters:
+        hs = by_item.get(m.id, [])
+        # 딜은 최근 문서 순 — 화면의 프로젝트 칩이 늘 최근 것부터 서게 된다.
+        deals: dict[int, dict] = {}
+        for h in sorted(hs, key=_sort_key, reverse=True):
+            r = rfqs.get(h.rfq_id) if h.rfq_id else None
+            if r is None:
+                continue
+            d = deals.setdefault(r.id, {
+                "rfq_id": r.id,
+                "rfq_no": r.rfq_no or "",
+                "title": r.project_title or "",
+                "customer_id": r.customer_id,
+                "vessel_id": r.vessel_id,
+                "date": r.date or "",
+                "status": _enum_text(r.status),
+                "_lines": set(),
+                "amount": 0.0,
+            })
+            # 한 견적 줄은 매입가·매출가 두 이력으로 갈라져 저장된다 — 줄 수를 그대로
+            # 세면 실제보다 두 배가 된다. 문서·줄번호로 묶어 사람이 세는 줄 수와 맞춘다.
+            d["_lines"].add((h.source_type, h.source_id, h.source_line_idx))
+            if h.price_type == "sell":
+                d["amount"] += h.amount or 0.0
+        for d in deals.values():
+            d["lines"] = len(d.pop("_lines"))
+        items.append({
+            "item_id": m.id,
+            "part_no": m.part_no or "",
+            "description": m.description or "",
+            "maker": m.maker or "",
+            "unit": m.unit or "",
+            "item_type": m.item_type or "part",
+            "category_id": m.category_id,
+            "deals": list(deals.values()),
+            **_summarize(hs),
+        })
+    items.sort(key=lambda r: (not r["deals"], r["part_no"], r["description"]))
+
+    return {
+        "categories": [{
+            "id": c.id, "parent_id": c.parent_id, "level": c.level or 1,
+            "name": c.name, "sort_order": c.sort_order or 0,
+            "active": c.active is not False,
+        } for c in sorted(cats, key=lambda c: (c.level or 1, c.sort_order or 0, c.id))],
+        "items": items,
+        # 마스터에 아직 연결되지 않은 이력 — 배에 실을 자리조차 없는 줄이라 수만 알린다.
+        "unmatched": len(ledger_rows(session)["unmatched"]),
+    }
+
+
+def _enum_text(v) -> str:
+    """Enum 컬럼 → 화면에 실을 문자열."""
+    return getattr(v, "value", v) or "" if v is not None else ""
+
+
 # ── 미분류 품목 자동 분류(제안) ────────────────────────────────────────────────
 # 규칙을 새로 만들지 않는다. 이미 분류해 둔 품목과 분류 이름이 근거다 —
 # 회사마다 다른 분류 체계를 코드에 박아 두면 트리를 고칠 때마다 코드가 따라 죽는다.

@@ -59,6 +59,7 @@ import type {
   SettingsItem,
   ItemCategory,
   ItemLedger,
+  ShipMap,
   AutoCategoryProposal,
   ItemPriceRow,
   SettingsUser,
@@ -1396,6 +1397,12 @@ export function assignItemLedgerCategoryBulk(body: {
   }[];
 }): Promise<{ ok: boolean; assigned: number; stamped: number; skipped: number }> {
   return post("/api/admin/settings/item-ledger/assign-bulk", body);
+}
+
+/** 선박 도면 보기 — 분류 트리 전부 + 품목 + 각 품목이 나온 프로젝트를 한 번에.
+    화면이 한 페이지에 배 한 척을 그리므로 분류별로 나눠 받지 않는다. */
+export function fetchItemShipMap(): Promise<ShipMap> {
+  return get<ShipMap>("/api/admin/settings/item-ledger/ship-map");
 }
 
 /** 미분류 품목의 분류 제안(적용 전 미리보기). pending = 아직 분류가 빈 품목 수. */

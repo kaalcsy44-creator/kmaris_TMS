@@ -169,6 +169,53 @@ export type AutoCategoryProposal = {
   category_path: string;         // "대 > 중 > 소"
   reason: string;                // 왜 이 분류인지(같은 품명 / 품번 계열 / 품명 낱말)
 };
+/* 선박 도면 보기(Item > Ship View) — 분류 트리 한 장에 품목과 그 품목이 나온 딜을 얹는다.
+   목록(ItemLedgerRow)과 달리 품목마다 프로젝트가 딸려 온다: 이 화면의 물음이
+   "이 계통에 어느 프로젝트가 걸려 있나"라서, 분류가 아니라 딜이 잎이 된다. */
+export type ShipDeal = {
+  rfq_id: number;
+  rfq_no: string;                // 프로젝트 번호 KMS-RFQ-yymm-NNN
+  title: string;                 // 프로젝트 제목(있으면)
+  customer: string;
+  vessel: string;
+  date: string;
+  status: string;
+  lines: number;                 // 이 딜에서 이 품목이 나온 줄 수
+  amount: number;                // 그중 매출 금액 합
+};
+export type ShipItem = {
+  item_id: number;
+  part_no: string;
+  description: string;
+  maker: string;
+  unit: string;
+  item_type: string;             // part | service
+  category_id: number | null;    // null = 아직 미분류(배에 싣지 못한 품목)
+  deals: ShipDeal[];
+  buy: ItemLedgerPrice | null;
+  sell: ItemLedgerPrice | null;
+  customer: string;
+  vendor: string;
+  buy_count: number;
+  sell_count: number;
+  last_date: string | null;
+  margin_pct?: number | null;
+  margin_cross?: boolean;
+};
+export type ShipMap = {
+  categories: {
+    id: number;
+    parent_id: number | null;
+    level: number;
+    name: string;
+    sort_order: number;
+    active: boolean;
+  }[];
+  items: ShipItem[];
+  unmatched: number;             // 마스터에 연결조차 안 된 이력 줄 수(안내용)
+  built_at: string | null;
+};
+
 export type ItemPriceRow = {
   id: number;
   price_type: "buy" | "sell";

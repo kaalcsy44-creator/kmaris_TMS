@@ -91,7 +91,7 @@ from db.models import ItemPriceHistory
 from services.item_ledger import (
     ledger_rows, item_history, rebuild_price_history, stamp_history_item, match_key,
     master_price_summary, master_party_fallback, ensure_price_history_fresh,
-    guess_item_type, suggest_categories,
+    guess_item_type, suggest_categories, category_ship_map,
 )
 import _core
 
@@ -882,6 +882,35 @@ def settings_item_ledger():
         # (국내매입 KRW·수출 USD 케이스가 흔함). 환율은 앱 공통 상수(대시보드와 동일).
         for it in data["items"] + data["unmatched"]:
             _annotate_margin(it)
+        built = s.query(func.max(ItemPriceHistory.created_at)).scalar()
+        data["built_at"] = built.isoformat() if built else None
+        return data
+    finally:
+        s.close()
+
+
+@app.get("/api/admin/settings/item-ledger/ship-map", dependencies=[Depends(require_token)])
+@cached_aggregate()
+def settings_item_ship_map():
+    """선박 도면 보기의 원천 — 분류 트리 전체 + 품목 + 품목이 나온 딜(프로젝트).
+
+    목록 엔드포인트와 달리 한 번에 전부 준다. 이 화면의 요점이 '한 페이지에 배 한 척'
+    이라 분류를 골라 받아 오는 방식으로는 그릴 수가 없다. 대신 읽기 전용 집계라
+    캐시에 얹는다(쓰기가 있으면 세대가 올라 즉시 무효)."""
+    s = get_session()
+    try:
+        ensure_price_history_fresh(s, _core._DATA_GEN)
+        data = category_ship_map(s)
+        cust = dict(s.query(Customer.id, Customer.name).all())
+        vend = dict(s.query(Vendor.id, Vendor.name).all())
+        vess = dict(s.query(Vessel.id, Vessel.name).all())
+        for it in data["items"]:
+            it["customer"] = cust.get(it.pop("customer_id", None)) or ""
+            it["vendor"] = vend.get(it.pop("vendor_id", None)) or ""
+            _annotate_margin(it)
+            for d in it["deals"]:
+                d["customer"] = cust.get(d.pop("customer_id", None)) or ""
+                d["vessel"] = vess.get(d.pop("vessel_id", None)) or ""
         built = s.query(func.max(ItemPriceHistory.created_at)).scalar()
         data["built_at"] = built.isoformat() if built else None
         return data

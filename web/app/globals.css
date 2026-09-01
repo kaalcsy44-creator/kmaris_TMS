@@ -14933,3 +14933,302 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
   display: block;
   margin-top: 4px;
 }
+
+
+/* ── Ship View(Item > Ship View) ────────────────────────────────────────────────
+   분류 트리를 배 한 척으로 펼친 화면. 판(.ship-board)이 곧 선체이고, 그 안의 띠
+   (.ship-deck)가 갑판이며, 띠 위의 카드(.ship-zone)가 그 갑판에 얹힌 계통이다.
+   선체 윤곽은 SVG 로 뒤에 깔리고 카드가 그 위에 놓인다 — 카드 높이는 내용을 따라
+   변하므로 그림이 배치를 잡게 두지 않는다(그림은 배경, 배치는 흐름). */
+.ship-view { padding: 4px 2px 24px; }
+.ship-hdr {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-bottom: 34px;
+}
+.ship-hdr h2 { margin: 0 0 4px; font-size: 18px; }
+.ship-hdr p { margin: 0; max-width: 640px; }
+.ship-stats {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--muted);
+}
+.ship-stats b { color: var(--ink); font-size: 14px; }
+.ship-toggle { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+
+.ship-board {
+  position: relative;
+  padding: 26px 26px 54px;
+  isolation: isolate;
+}
+/* 선체 — 판 전체에 늘려 붙인 배경. 클릭·마우스를 먹지 않게 뒤로 물린다. */
+.ship-hull {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  pointer-events: none;
+  filter: drop-shadow(0 8px 18px rgba(31, 62, 102, 0.10));
+}
+/* 굴뚝과 마스트 — 판 위쪽 오른편(선수 쪽)에 세운다. 그림 하나로 '배'가 읽힌다. */
+.ship-rig {
+  position: absolute;
+  top: -30px;
+  right: 46px;
+  display: flex;
+  align-items: flex-end;
+  gap: 26px;
+  pointer-events: none;
+}
+.ship-mast {
+  width: 3px;
+  height: 40px;
+  background: linear-gradient(#8aa2bd, #b9c9dd);
+  border-radius: 2px;
+}
+.ship-mast::before {
+  content: "";
+  display: block;
+  width: 22px;
+  height: 3px;
+  margin-left: -10px;
+  margin-top: 8px;
+  background: #a7bbd2;
+  border-radius: 2px;
+}
+.ship-funnel {
+  width: 26px;
+  height: 32px;
+  border-radius: 4px 4px 0 0;
+  background: linear-gradient(#2f5c93, #1f3e66);
+  box-shadow: inset 0 6px 0 #e8b93a;
+}
+
+.ship-decks { display: flex; flex-direction: column; gap: 14px; }
+/* 갑판 한 층 — 왼쪽에 층 이름표를 세우고 오른쪽에 그 층의 계통 카드를 늘어놓는다. */
+.ship-deck {
+  display: grid;
+  grid-template-columns: 108px 1fr;
+  gap: 12px;
+  align-items: start;
+  padding: 12px 0;
+  border-top: 1px dashed #b9c9dd;
+}
+.ship-deck:first-child { border-top: 0; }
+.ship-deck-tag {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 4px;
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.ship-deck-tag b { font-size: 11.5px; color: #35516f; }
+.ship-deck-tag span { text-transform: none; letter-spacing: 0; }
+/* 부두는 배가 아니다 — 물 밖의 자리라 경계를 실선으로 바꿔 선체와 가른다. */
+.ship-deck--quay { border-top-style: solid; border-top-color: #9fb6cf; }
+
+.ship-zones { display: flex; flex-wrap: wrap; gap: 12px; }
+.ship-zone {
+  flex: 1 1 300px;
+  min-width: 280px;
+  max-width: 520px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px 12px;
+  box-shadow: 0 1px 2px rgba(31, 62, 102, 0.06);
+}
+/* 비어 있는 계통도 지우지 않는다 — 무엇이 비었는지가 이 화면의 절반이다. 대신 물린다. */
+.ship-zone--empty { background: rgba(255, 255, 255, 0.55); border-style: dashed; }
+.ship-zone > header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+  cursor: default;
+}
+.ship-zone > header h3 { margin: 0; font-size: 14px; flex: 1 1 auto; }
+.ship-zone-mark { font-size: 15px; }
+.ship-zone-n {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  font-size: 13px;
+  color: #2456a6;
+}
+.ship-zone--empty .ship-zone-n { color: var(--muted); font-weight: 400; }
+
+/* 프로젝트 번호 — 이 화면의 요점. 계통 바로 밑에 줄지어 서서 "이 계통에 지금 무엇이
+   걸려 있는가"를 먼저 말한다. */
+.ship-projects { display: flex; flex-wrap: wrap; gap: 5px; padding: 8px 0; }
+.ship-projects--none { color: var(--muted); font-size: 11px; padding: 8px 0 4px; }
+.ship-proj {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #eef4ff;
+  border: 1px solid #d3e0f7;
+  color: #2456a6;
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.ship-proj:hover { background: #dfeaff; border-color: #b7ccef; }
+
+.ship-subs { display: flex; flex-direction: column; gap: 6px; }
+.ship-sub { padding-top: 4px; border-top: 1px solid #eef2f7; }
+.ship-sub-hd {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+  cursor: default;
+}
+.ship-sub-hd b { font-variant-numeric: tabular-nums; color: #2456a6; }
+.ship-sub--empty .ship-sub-hd,
+.ship-sub--empty .ship-sub-hd b { color: var(--muted); font-weight: 400; }
+.ship-leaves { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 2px; }
+.ship-leaf {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: #f2f6fb;
+  border: 1px solid #e2eaf4;
+  font-size: 10.5px;
+  color: #45526a;
+  cursor: default;
+}
+.ship-leaf b { font-variant-numeric: tabular-nums; color: #2456a6; }
+/* 아직 아무것도 안 실린 소분류 — 자리는 지키되 뒤로 물린다. */
+.ship-leaf--empty { background: transparent; border-color: #eef2f7; color: #a8b3c4; }
+
+/* 부두 옆에 쌓인 것 — 분류가 없어 배에 오르지 못한 품목. */
+.ship-dock {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+  padding: 10px 14px;
+  border: 1px dashed #c9b48a;
+  border-radius: 10px;
+  background: #fdf8ee;
+}
+.ship-dock-tag {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #8a6d2f;
+}
+.ship-dock-body { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ship-chip {
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid #e2cd9f;
+  background: #fff6e2;
+  color: #7a5c1e;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: default;
+}
+
+/* 흘수선 — 판 바닥에 붙는 물. 판이 물에 잠긴 것처럼 보이면 그것이 배다. */
+.ship-water {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 34px;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: -1;
+}
+.ship-water svg { width: 100%; height: 100%; display: block; }
+
+/* 마우스를 따라 펴지는 내역 — 표가 아니라 쪽지다. 마우스가 지나는 길을 막지 않도록
+   자기 자신은 마우스를 먹지 않는다(쪽지 위에 올라가 붙잡을 일이 없다). */
+.ship-peek {
+  position: fixed;
+  z-index: 60;
+  pointer-events: none;
+  background: #fff;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  box-shadow: 0 10px 28px rgba(20, 40, 70, 0.18);
+  padding: 10px 12px;
+  max-height: 340px;
+  overflow: hidden;
+}
+.ship-peek-hd {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding-bottom: 6px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+}
+.ship-peek-hd b { font-size: 13px; }
+.ship-peek-hd span { font-size: 11px; color: var(--muted); }
+.ship-peek ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+.ship-peek li { border-left: 2px solid #dbe6f3; padding-left: 8px; }
+.ship-peek-t { display: flex; gap: 6px; align-items: baseline; font-size: 12px; }
+.ship-peek-t code {
+  font-size: 11px;
+  font-weight: 700;
+  color: #2456a6;
+  white-space: nowrap;
+}
+/* 품명은 견적서 문장이 통째로 들어오기도 한다 — 두 줄에서 자른다(쪽지는 요약이다). */
+.ship-peek-t span {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.ship-peek-m {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.ship-peek-mg { color: #1e7a46; font-weight: 700; }
+.ship-peek-d { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+.ship-peek-d span {
+  padding: 0 5px;
+  border-radius: 4px;
+  background: #eef4ff;
+  color: #2456a6;
+  font-size: 10.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.ship-peek-more { margin-top: 6px; font-size: 11px; color: var(--muted); }
+
+/* 좁은 화면 — 갑판 이름표를 위로 올리고 카드는 한 줄에 하나로. */
+@media (max-width: 860px) {
+  .ship-deck { grid-template-columns: 1fr; }
+  .ship-deck-tag { flex-direction: row; align-items: baseline; gap: 8px; }
+  .ship-zone { min-width: 0; max-width: none; flex-basis: 100%; }
+  .ship-rig { display: none; }
+}
