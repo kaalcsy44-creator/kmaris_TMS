@@ -1439,6 +1439,14 @@ export type FinanceCashflowItem = {
   /** 상계 줄에만 — 깎인 청구서의 청구액과 그 청구서에 남은 잔액. */
   target_amount?: number;
   target_outstanding?: number;
+  /** 상계 줄에만 — 그 입금에서 덜어 낸 몫이라 같은 날 입금 줄 옆에 서는 줄. */
+  paired?: boolean;
+  /**
+   * 입금(ar·actual) 줄에만 — 청구액 중 상계로 깎여 통장에 들어오지 않은 몫과 원래 청구액.
+   * amount 는 이미 그만큼 덜어 낸 '통장에 꽂힌 금액'이다. 0 이면 청구액이 그대로 들어왔다.
+   */
+  set_off?: number;
+  invoiced?: number;
   row_id: number;
   order_id: number;
   rfq_id: number;

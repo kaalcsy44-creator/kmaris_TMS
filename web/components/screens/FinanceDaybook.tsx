@@ -226,14 +226,14 @@ export default function FinanceDaybook({ start, end, label, opening, currency, i
           </p>
           {/* 상계 줄이 서 있을 때만, 그 줄이 어느 갈래인지에 따라. 보아서는 알 수 없는
               것들이다: 입금 옆의 줄은 왜 유출인지, 잔고 밖의 줄은 왜 잔고를 안 움직이는지. */}
-          {rows.some((r) => r.item.kind === "credit" && !r.item.noncash) ? (
+          {rows.some((r) => r.item.paired) ? (
             <p className="hint-inline" style={{ display: "block", marginTop: 4 }}>
-              A set-off beside a receipt is the part of that invoice the bank never received — the invoice is
-              recorded whole, so the credited amount leaves on the same day and the two together are what
-              actually landed.
+              A receipt is the amount that reached the bank. Where a credit note settled part of the invoice, that
+              part is not in the receipt — it stands beside it on the same day, and the two together come to the
+              invoice.
             </p>
           ) : null}
-          {rows.some((r) => r.item.noncash) ? (
+          {rows.some((r) => r.item.noncash && !r.item.paired) ? (
             <p className="hint-inline" style={{ display: "block", marginTop: 4 }}>
               A set-off standing on its own clears a receivable that was never collected. No money moved and the
               receivable already dropped by it, so it shows — for balance; the reference is the invoice credited.
@@ -262,19 +262,26 @@ function DaybookLine({ row, start, end, currency }: {
       <div className="fin-db-desc">{descOf(r)}</div>
       <div className="hint-inline">
         {tagOf(r)}
-        {/* 상계는 '아직 안 온 돈'이 아니다 — 이미 끝난 정산이라 expected 로 적으면
-            거짓말이 된다. 대신 그 금액이 어느 청구서의 무엇인지를 적는다. 두 갈래다:
-            입금 옆에 선 줄은 '그 입금에서 통장에 안 들어온 몫'이고(그날 유입과 나란히
-            서서 잔고를 제 값으로 되돌린다), 잔고 밖에 선 줄은 아직 안 받은 청구서에서
-            지워진 몫이라 '얼마가 남았나'로 닫는다. */}
-        {r.kind === "credit"
+        {/* 두 줄이 서로를 설명한다.
+            입금 줄 — 금액은 통장에 꽂힌 돈이라 청구액과 다를 수 있다. 그 이유(상계로 얼마를
+              덜어 냈나)를 그 줄에 적는다: 청구서 번호를 들고 금액을 맞춰 보는 사람이 여기서
+              멈추지 않게.
+            상계 줄 — '아직 안 온 돈'이 아니다. 이미 끝난 정산이라 expected 로 적으면 거짓말이
+              되므로, 그 금액이 어느 청구서의 무엇인지로 닫는다. 입금 옆에 선 줄(paired)은
+              '그 청구서의 나머지', 홀로 선 줄은 '그 청구서에 얼마가 남았나'. */}
+        {r.kind === "ar" && r.actual && (r.set_off ?? 0) > 0
+          ? <>
+              <span className="fin-db-done"> · ✓ received</span>
+              <span> · {cash(r.set_off ?? 0)} of the {cash(r.invoiced ?? 0)} invoice set off</span>
+            </>
+          : r.kind === "credit"
           ? <>
               <span className="fin-db-done"> · ✓ credited</span>
               {r.target_amount
                 ? <span>
                     {" · "}
-                    {!r.noncash
-                      ? `deducted from the ${cash(r.target_amount)} receipt`
+                    {r.paired
+                      ? `the rest of the ${cash(r.target_amount)} invoice — settled, but not in cash`
                       : (r.target_outstanding ?? 0) > 0
                         ? `${cash(r.target_outstanding ?? 0)} left of ${cash(r.target_amount)}`
                         // 잔액이 음수 = 그 청구서는 이미 현금으로 다 받았다는 뜻이다.
