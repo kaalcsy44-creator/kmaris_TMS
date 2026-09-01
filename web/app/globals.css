@@ -14943,10 +14943,12 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 
 
 /* ── Ship View(Item > Ship View) ────────────────────────────────────────────────
-   분류 트리를 배 한 척으로 펼친 화면. 판(.ship-board) 위에 구획(.ship-sector) 여섯 칸을
-   3열 2행으로 세우고, 칸마다 그 자리의 계통 카드(.ship-zone)가 들어간다. 배를 그리지는
-   않는다 — 선체 윤곽·마스트·굴뚝·흘수선은 값을 하나도 나르지 않으면서 카드 뒤 색만
-   흔들었다. '어느 갑판인가'는 칸 머리의 이름표가 말하면 충분하다. */
+   분류 트리를 배 한 척으로 펼친 화면. 판(.ship-board)은 세 단(column)이고, 계통 카드
+   (.ship-zone)가 갑판 순서대로 그 단에 흘러 들어간다. 칸을 미리 잘라 배정하지 않는
+   까닭은 부피가 계통마다 열 배씩 다르기 때문이다 — 자리를 못 박으면 기관실 칸은
+   넘치고 선교 칸은 절반이 빈다. 단 높이 맞추기는 브라우저가 한다.
+   배를 그리지는 않는다 — 선체 윤곽·마스트·굴뚝·흘수선은 값을 하나도 나르지 않으면서
+   카드 뒤 색만 흔들었다. '어느 갑판인가'는 카드가 제 이름표로 말한다. */
 .ship-view { padding: 4px 2px 24px; }
 .ship-hdr {
   display: flex;
@@ -14971,49 +14973,37 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 
 .ship-board { position: relative; padding: 2px 0 8px; }
 
-/* 여섯 칸 — 3열 2행. 높이를 화면에 맞춰 잡는 것이 이 격자의 요점이다: 칸이 제 내용만큼
-   자라게 두면 기관실 한 칸 때문에 나머지 다섯 칸이 화면 밖으로 밀려난다. 넘치는 칸은
-   그 칸 안에서만 스크롤한다. */
+/* 세 단 — 카드를 순서대로 흘려 넣고 단 높이는 브라우저가 맞춘다(multi-column).
+   격자 칸에 계통을 배정하던 앞 판은 칸마다 부피가 달라 한쪽은 스크롤, 한쪽은 여백이
+   됐다. 카드는 쪼개지지 않고(break-inside) 통째로 한 단에 실린다. */
 .ship-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  grid-auto-rows: minmax(0, 1fr);
-  gap: 12px;
-  height: calc(100dvh - 268px);
-  min-height: 520px;
+  columns: 3;
+  column-gap: 12px;
 }
-.ship-sector { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
-.ship-sector-tag {
+.ship-zone {
+  break-inside: avoid;
+  -webkit-column-break-inside: avoid;
+  margin: 0 0 12px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 12px 12px;
+  box-shadow: 0 1px 2px rgba(31, 62, 102, 0.06);
+}
+/* 갑판 이름표 — 카드마다 제 자리를 달고 다닌다. 값이 아니라 자리 표시이므로 제목보다
+   한 단 작고 옅게, 제목 바로 위에. */
+.ship-zone-deck {
   display: flex;
   align-items: baseline;
-  gap: 8px;
-  padding: 0 2px 5px;
-  font-size: 11px;
+  gap: 6px;
+  padding-bottom: 4px;
+  font-size: 10px;
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
-.ship-sector-tag b { font-size: 11.5px; color: #35516f; }
-.ship-sector-tag span { text-transform: none; letter-spacing: 0; }
-/* 칸 안의 계통 카드 — 한 칸에 둘이 들어가면(전장+그 밖의 장비) 위아래로 쌓는다. */
-.ship-sector-body {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding-right: 2px;
-}
-.ship-zone {
-  flex: 0 0 auto;
-  min-width: 0;
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 10px 12px 12px;
-  box-shadow: 0 1px 2px rgba(31, 62, 102, 0.06);
-}
+.ship-zone-deck b { color: #6b7f99; font-weight: 700; }
+.ship-zone-deck span { text-transform: none; letter-spacing: 0; }
 /* 비어 있는 계통도 지우지 않는다 — 무엇이 비었는지가 이 화면의 절반이다. 대신 물린다. */
 .ship-zone--empty { background: rgba(255, 255, 255, 0.55); border-style: dashed; }
 .ship-zone > header {
@@ -15063,6 +15053,10 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 .ship-proj:hover { background: #dfeaff; border-color: #b7ccef; }
 
 .ship-subs { display: flex; flex-direction: column; gap: 6px; }
+/* 계열이 많은 카드는 안에서 두 단으로 — 기관실 아홉 계열이 한 줄로 서면 그 카드
+   하나가 다른 카드 서너 장 높이가 되어, 세 단의 균형을 그 카드 혼자 정해 버린다. */
+.ship-subs--two { display: block; columns: 2; column-gap: 14px; }
+.ship-subs--two .ship-sub { break-inside: avoid; -webkit-column-break-inside: avoid; margin-bottom: 6px; }
 .ship-sub { padding-top: 4px; border-top: 1px solid #eef2f7; }
 .ship-sub-hd {
   display: flex;
@@ -15193,9 +15187,9 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 /* 좁은 화면 — 3열이 무너진다. 열을 줄이면 6칸이 한 화면에 못 들어가므로 높이 고정도
    함께 푼다(칸 안에서 스크롤하는 대신 페이지가 스크롤한다). */
 @media (max-width: 1180px) {
-  .ship-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: auto; height: auto; min-height: 0; }
-  .ship-sector-body { overflow: visible; }
+  .ship-grid { columns: 2; }
+  .ship-subs--two { columns: 1; }
 }
 @media (max-width: 760px) {
-  .ship-grid { grid-template-columns: 1fr; }
+  .ship-grid { columns: 1; }
 }

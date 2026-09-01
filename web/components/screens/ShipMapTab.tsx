@@ -25,41 +25,36 @@ import type { ShipItem, ShipMap } from "@/lib/types";
  */
 
 /**
- * 여섯 구획, 3열 2행. 갑판을 위에서 아래로 늘어놓던 띠 구조는 배 한 척이 세 번
- * 스크롤해야 다 보였다 — 이 화면의 요점이 '한 화면에 배 한 척'인데 그 요점이 화면
- * 밖으로 밀려 있었던 셈이다. 그래서 갑판을 층이 아니라 칸으로 세운다:
- *
- *   선교·상부 Bridge │ 선교·상부 Deck machinery │ 갑판·화물 Cargo & tank
- *   기관·전장 Engine │ 기관·전장 Electrical + Other │ 육상·용역 Quay
- *
- * 위 줄이 배의 위(선교·갑판), 아래 줄이 배의 아래와 뭍(기관실·부두)이라 세로로
- * 읽으면 여전히 배의 단면이다. 한 칸이 넘치면 그 칸만 안에서 스크롤한다 — 칸이
- * 자라 옆 칸을 밀어내면 6칸이 다시 한 화면을 넘긴다.
+ * 갑판 — 카드가 스스로 달고 다니는 이름표. 자리(격자 칸)로 갑판을 나누지 않는다:
+ * 계통마다 부피가 열 배씩 차이 나서(기관실 아홉 계열 vs 선교 셋), 칸을 갑판으로
+ * 못 박으면 어떤 칸은 안에서 스크롤하고 어떤 칸은 절반이 빈 채로 남는다.
+ * 이름표를 카드에 붙여 두면 카드는 어느 열에 놓여도 제 갑판을 말한다.
  */
-const SECTORS = [
-  { key: "bridge", deck: "Bridge & upper deck", sub: "선교·상부" },
-  { key: "deck", deck: "Bridge & upper deck", sub: "선교·상부" },
-  { key: "cargo", deck: "Main deck", sub: "갑판·화물" },
-  { key: "engine", deck: "Machinery spaces", sub: "기관·전장" },
-  { key: "elec", deck: "Machinery spaces", sub: "기관·전장" },
-  { key: "quay", deck: "Quay", sub: "육상·용역" },
+const DECKS = [
+  { name: "Bridge & upper deck", sub: "선교·상부" },
+  { name: "Main deck", sub: "갑판·화물" },
+  { name: "Machinery spaces", sub: "기관·전장" },
+  { name: "Quay", sub: "육상·용역" },
 ] as const;
 
 /**
- * 대분류 이름 → 구획. 기본 트리(init_db.ITEM_CATEGORY_TREE)의 일곱 대분류를 제자리에
- * 세운다. 여기 없는 이름은 부두(마지막 칸)로 간다 — 자리를 못 찾은 것이지 잘못된 것이
- * 아니므로 화면에서 빠지지는 않는다(관리자가 트리를 고쳐도 화면이 무너지지 않는다).
+ * 대분류 이름 → 갑판. 기본 트리(init_db.ITEM_CATEGORY_TREE)의 일곱 대분류를 제자리에
+ * 세운다. 여기 없는 이름은 부두로 간다 — 자리를 못 찾은 것이지 잘못된 것이 아니므로
+ * 화면에서 빠지지는 않는다(관리자가 트리를 고쳐도 화면이 무너지지 않는다).
  */
 const BERTH: Record<string, number> = {
   "BRIDGE": 0,
-  "DECK MACHINERY": 1,
-  "CARGO & TANK SYSTEM": 2,
-  "CARGO AND TANK SYSTEM": 2,
-  "ENGINE ROOM": 3,
-  "ELECTRICAL & AUTOMATION": 4,
-  "OTHER EQUIPMENT": 4,
-  "SERVICE": 5,
+  "DECK MACHINERY": 0,
+  "CARGO & TANK SYSTEM": 1,
+  "CARGO AND TANK SYSTEM": 1,
+  "ENGINE ROOM": 2,
+  "ELECTRICAL & AUTOMATION": 2,
+  "OTHER EQUIPMENT": 2,
+  "SERVICE": 3,
 };
+
+/** 소분류를 두 단으로 접을 기준 — 이보다 계열이 많은 카드(기관실)는 안에서 나눈다. */
+const WIDE_SUBS = 6;
 
 /**
  * 대분류의 표식 — 한 획짜리 선 그림. 색을 쓰지 않는다(글자색을 그대로 물려받는다).
@@ -117,7 +112,7 @@ type Peek = {
 
 function berthOf(name: string): number {
   const k = (name || "").trim().toUpperCase();
-  return BERTH[k] ?? SECTORS.length - 1;   // 모르는 계통은 부두에 내려놓는다.
+  return BERTH[k] ?? DECKS.length - 1;   // 모르는 계통은 부두에 내려놓는다.
 }
 
 function money(v: number | null | undefined, cur: string) {
@@ -168,7 +163,10 @@ export default function ShipMapTab() {
     };
     for (const c of cats) gather(c.id);
 
-    const roots = (kids.get(null) ?? []).filter((c) => c.active);
+    // 카드가 흘러 들어가는 순서 = 배를 읽는 순서(선교·상부 → 갑판 → 기관 → 부두).
+    const roots = (kids.get(null) ?? [])
+      .filter((c) => c.active)
+      .sort((a, b) => berthOf(a.name) - berthOf(b.name) || a.sort_order - b.sort_order || a.id - b.id);
     return { kids, roll, roots, loose };
   }, [data]);
 
@@ -227,36 +225,23 @@ export default function ShipMapTab() {
           않으면서 카드 뒤에서 색을 흔들었다. 배는 갑판 이름(선교·갑판·기관·부두)이
           말하고, 화면은 그 자리에 실린 숫자만 그린다. */}
       <div className="ship-board">
+        {/* 세 단에 카드를 흘려 넣는다 — 칸을 미리 잘라 계통을 배정하지 않는다.
+            부피가 계통마다 열 배씩 다르므로(기관실 77건 vs 선교 0건) 자리를 못 박으면
+            한 칸은 넘쳐서 스크롤하고 옆 칸은 절반이 빈다. 단 높이는 브라우저가 맞추고,
+            카드는 갑판 순서(선교→갑판→기관→부두)대로 흘러 들어간다. */}
         <div className="ship-grid">
-          {SECTORS.map((sec, si) => {
-            // 손잡이를 켜면 빈 계통은 통째로 접는다 — 소분류만 걸러 내고 껍데기 카드를
-            // 남기면, 비운다고 해 놓고 화면은 그대로인 셈이 된다. 칸이 통째로 비면 그
-            // 칸도 접는다(격자는 남은 칸으로 다시 채워진다).
-            const zones = model.roots.filter(
-              (r) => berthOf(r.name) === si && (!busyOnly || (model.roll.get(r.id) ?? []).length)
-            );
-            if (!zones.length) return null;
-            return (
-              <section className={`ship-sector ship-sector--${sec.key}`} key={sec.key}>
-                <div className="ship-sector-tag">
-                  <b>{sec.deck}</b>
-                  <span>{sec.sub}</span>
-                </div>
-                <div className="ship-sector-body">
-                  {zones.map((z) => (
-                    <Zone
-                      key={z.id}
-                      cat={z}
-                      model={model}
-                      busyOnly={busyOnly}
-                      dealsOf={dealsOf}
-                      hover={hover}
-                    />
-                  ))}
-                </div>
-              </section>
-            );
-          })}
+          {model.roots
+            .filter((r) => !busyOnly || (model.roll.get(r.id) ?? []).length)
+            .map((z) => (
+              <Zone
+                key={z.id}
+                cat={z}
+                model={model}
+                busyOnly={busyOnly}
+                dealsOf={dealsOf}
+                hover={hover}
+              />
+            ))}
         </div>
       </div>
 
@@ -307,8 +292,12 @@ function Zone({
   const deals = dealsOf(mine);
   const shown = busyOnly ? subs.filter((s) => (model.roll.get(s.id) ?? []).length) : subs;
 
+  const deck = DECKS[berthOf(cat.name)];
+
   return (
     <article className={`ship-zone${mine.length ? "" : " ship-zone--empty"}`}>
+      {/* 갑판 이름표는 카드 안에 있다 — 카드가 어느 단에 놓이든 제자리를 말하도록. */}
+      <div className="ship-zone-deck"><b>{deck.name}</b><span>{deck.sub}</span></div>
       <header {...hover(cat.name, `${mine.length} item(s) on this system`, mine)}>
         <Mark name={cat.name} />
         <h3>{cat.name}</h3>
@@ -332,7 +321,9 @@ function Zone({
         <div className="ship-projects ship-projects--none">no project yet</div>
       )}
 
-      <div className="ship-subs">
+      {/* 계열이 많은 카드(기관실)는 소분류를 두 단으로 접는다 — 한 줄로 세우면 카드
+          하나가 다른 카드 서너 장 높이가 되어 화면의 균형이 그 카드 하나로 결정된다. */}
+      <div className={`ship-subs${shown.length > WIDE_SUBS ? " ship-subs--two" : ""}`}>
         {shown.map((s) => {
           const items = model.roll.get(s.id) ?? [];
           const leaves = (model.kids.get(s.id) ?? []).filter((c) => c.active);
