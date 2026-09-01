@@ -614,6 +614,52 @@ def _credit_note_rows(s) -> list[dict]:
     return rows
 
 
+def _credit_note_lines(s, ar_rows: list[dict] | None = None) -> list[dict]:
+    """크레딧 노트 한 장을 장부에 세울 두 갈래로 가른다 — 현금 보정분(cash)과 자국(memo).
+
+    상계는 돈이 오가지 않는다. 그런데 수금은 **청구액 그대로** 적는 것이 이 장부의 규약이다
+    (은행 수취수수료와 같은 규약 — ar_payment 참고). 그래서 상계한 청구서를 총액으로 수금
+    처리하면, 통장에 실제로 들어온 돈은 상계액만큼 적은데 유입은 총액으로 서 있게 된다.
+    그 차액이 어디에도 없으면 그날부터 잔고가 상계액만큼 부풀어 그 뒤 모든 구간이 함께 틀린다.
+
+    그래서 '청구액보다 더 정산된 몫'(수금 + 상계 − 청구액)만큼은 **입금일에 유출로** 세워
+    그 자리에서 상쇄한다(cash) — 입금과 상계가 같은 날 나란히 서고, 둘의 차가 통장에 찍힌
+    금액이 된다. 아직 안 받은 청구서라면 상계는 이미 받을 돈(미수)에서 빠져 있으므로 잔고를
+    건드리면 안 된다 — 그 몫은 발행일에 잔고 밖의 자국으로만 남긴다(memo).
+
+    한 청구서에 노트가 여러 장이면 발행 순서대로 그 차액을 채운다.
+
+    입금보다 **나중에** 발행한 노트는 현금을 보정하지 않는다 — 그때는 청구액이 실제로 다
+    들어온 것이고, 그 노트는 다음 청구서에 쓸 고객의 크레딧으로 남는다. 여기서 굳이
+    입금일로 거슬러 유출을 세우면 이미 지나간 달의 잔고가 뒤늦게 바뀐다.
+    """
+    rows = ar_rows if ar_rows is not None else _finance_receivable_rows(s)
+    ar_by_id = {r["id"]: r for r in rows}
+    by_ar: dict[int, list[dict]] = {}
+    for cn in _credit_note_rows(s):
+        by_ar.setdefault(cn["ar_id"], []).append(cn)
+    out: list[dict] = []
+    for ar_id, cns in by_ar.items():
+        ar = ar_by_id.get(ar_id)
+        over = max(0.0, round(ar["paid_amount"] + ar["credit_amount"] - ar["invoice_amount"], 2)) if ar else 0.0
+        paid_on = ((ar or {}).get("paid_date") or "")[:10]
+        for cn in sorted(cns, key=lambda c: (c["issue_date"] or "", c["id"])):
+            total = round(float(cn["total"] or 0), 2)
+            issued = (cn["issue_date"] or "")[:10]
+            cash = round(min(over, total), 2) if (paid_on and issued and issued <= paid_on) else 0.0
+            over = round(over - cash, 2)
+            out.append({
+                "cn": cn,
+                "ar": ar,
+                "cash": cash,
+                # 그 돈이 통장에 덜 들어온 날 = 그 청구서가 입금된 날.
+                "cash_date": paid_on,
+                "memo": round(total - cash, 2),
+                "memo_date": cn["issue_date"] or "",
+            })
+    return out
+
+
 def _claim_cost_rows(s) -> list[dict]:
     """클레임 비용 중 **당사 부담 + 현금 지급**만 지출 행으로 세운다(등록하지 않는 파생 행).
 
@@ -685,7 +731,9 @@ def finance_claims(year: int = 0):
     견준다 — 그 사건이 난 달의 말일 매매기준율이다(결산·손익과 같은 환산).
 
     한 줄의 뜻:
-      ours      당사 부담 합계(bearer=us)
+      ours      당사 부담 합계(bearer=us). 상계로 정산한 줄은 그 크레딧 노트에 적어 둔
+                환율로 옮긴다 — 정산에 쓴 자가 곧 그 돈의 원화값이라, 다 정산한 클레임의
+                open 이 환율 차이로 0 이 아니게 되는 일을 없앤다.
       theirs    고객·벤더가 부담한 몫 — 사건의 크기는 말해 주지만 우리 손익은 아니다
       credited  크레딧 노트로 상계한 금액(청구서 통화 기준 상계액)
       cash      현금으로 물어 준 금액(당사 부담 + 현금 지급 라인)
@@ -718,15 +766,36 @@ def finance_claims(year: int = 0):
             o = ord_map.get(cl.order_id or 0)
             rid = cl.rfq_id or ((getattr(o, "rfq_id", None)
                                  or qtn_rfq.get(getattr(o, "quotation_id", None) or 0) or 0) if o else 0)
+            cns = cn_by_claim.get(cl.id, [])
+            # 이 클레임을 상계한 크레딧 노트에 적어 둔 환율(발행통화 → 청구서 통화).
+            # 같은 돈을 두 자로 재면 안 된다: 비용 줄은 그달 말일 고시로, 상계액은 발행할
+            # 때 굳힌 환율로 옮기면 다 정산한 클레임에도 잔액이 남는다(ours ≠ credited).
+            # 상계로 정산한 줄의 원화값은 '우리가 실제로 상계한 그 환율'이다.
+            settle = {}
+            for c in cns:
+                icur = (c["issue_currency"] or "").upper()
+                if icur and c["fx_rate"] > 0:
+                    settle.setdefault(icur, (float(c["fx_rate"]), c["currency"],
+                                             (c["issue_date"] or day)[:7]))
             ours = theirs = 0.0
             for line in cl.costs or []:
-                krw = _krw_in(float(line.get("amount") or 0),
-                              (line.get("currency") or "USD").upper(), ym, fx_seen)
+                amount = float(line.get("amount") or 0)
+                cur = (line.get("currency") or "USD").upper()
+                rate = settle.get(cur) if (line.get("settlement") or "") == "credit_note" else None
+                if rate:
+                    fx, inv_cur, cn_ym = rate
+                    if (inv_cur or "KRW").upper() != cur:
+                        # 화면 각주가 이 환율도 밝힐 수 있게 — 고시가 아니라 사람이 적은 값이다.
+                        fx_seen[f"{cn_ym}:{cur}:cn"] = {"month": cn_ym, "cur": cur,
+                                                        "rate": round(fx, 4), "date": "",
+                                                        "entered": True}
+                    krw = _krw_in(amount * fx, inv_cur, cn_ym, fx_seen)
+                else:
+                    krw = _krw_in(amount, cur, ym, fx_seen)
                 if (line.get("bearer") or "") == "us":
                     ours += krw
                 else:
                     theirs += krw
-            cns = cn_by_claim.get(cl.id, [])
             credited = sum(_krw_in(c["total"], c["currency"], (c["issue_date"] or ym)[:7], fx_seen)
                            for c in cns)
             cash = cash_by_claim.get(cl.id, 0.0)
@@ -1832,9 +1901,12 @@ def finance_cashflow(unit: str = "month", count: int = 6, opening: float = 0.0,
     '그중 연체분'으로 그대로 온다). 연체는 예정의 부분집합이므로 include_expected=0 이면
     이 손잡이는 뜻을 잃는다 — 아래에서 함께 꺼 버린다.
 
-    클레임 상계(크레딧 노트)는 돈이 오가지 않고 미수만 지우므로 유입에 넣지 않는다 —
-    구간별 offset_in 으로 따로 실어 보내, 화면이 유입 칸 아래에 '현금 대신 상계로 사라진
-    미수'로 적을 수 있게 한다(건별 내역은 /cashflow/items 의 set-off 줄).
+    클레임 상계(크레딧 노트)는 돈이 오가지 않으므로 유입에 넣지 않는다. 다만 상계한
+    청구서를 총액으로 수금 처리했으면 통장에 그만큼 덜 들어온 것이라, 그 몫은 입금일에
+    유출로 세워 그날 유입과 상쇄한다(_credit_note_lines). 아직 안 받은 청구서의 상계분은
+    이미 미수에서 빠져 있어 잔고 밖이고, 구간별 offset_in 으로 따로 실어 보낸다 — 화면이
+    유입 칸 아래에 '현금 대신 상계로 사라진 미수'로 적을 수 있게(건별 내역은
+    /cashflow/items 의 set-off 줄).
 
     구간(월/주)별로 유입/유출을 집계하고 opening(기초잔고)부터 누적잔고를 굴린다.
     각 구간은 '아직 안 온 예정'과 '이미 오간 실적'을 함께 담는다 — 이번 달에 이미 받은
@@ -1900,9 +1972,11 @@ def finance_cashflow(unit: str = "month", count: int = 6, opening: float = 0.0,
         # include_expected=0 이면 이 돈도 흐름 밖에 서고, 화면은 잔고 옆에 따로 적는다.
         exp_in = [0.0] * count
         exp_out = [0.0] * count
-        # 상계(크레딧 노트) — 돈은 오가지 않았는데 미수가 지워진 금액. 유입에도 유출에도
-        # 들지 않고(통장이 움직이지 않았다) 이 칸에만 담긴다. 화면은 유입 칸 아래에
-        # '그달에 현금 대신 상계로 사라진 미수'로 적는다.
+        # 상계(크레딧 노트) 중 **잔고를 건드리지 않는 몫** — 아직 안 받은 청구서에서
+        # 지워진 미수다. 유입에도 유출에도 들지 않고 이 칸에만 담긴다(화면은 유입 칸
+        # 아래에 '현금 대신 상계로 사라진 미수'로 적는다). 이미 총액으로 수금 처리한
+        # 청구서의 상계분은 여기가 아니라 그날 유출로 선다 — 통장이 실제로 그만큼 덜
+        # 받았기 때문이다.
         offset_in = [0.0] * count
         today_iso = date.today().isoformat()
 
@@ -1956,20 +2030,26 @@ def finance_cashflow(unit: str = "month", count: int = 6, opening: float = 0.0,
                     inflow[idx] += amt
                     act_in[idx] += amt
                     act_in_income[idx] += amt
-        # 상계 — 크레딧 노트로 지워진 미수. 흐름(유입·유출·잔고)에는 한 푼도 넣지 않는다.
-        # 넣으면 있지도 않은 입금이 잔고를 밀어 올리고, 아예 빼 두면 미수가 왜 줄었는지가
-        # 장부 어디에도 남지 않는다. 그래서 제 칸(offset_in)에 따로 세운다.
-        for cn in _credit_note_rows(s):
-            if (cn["currency"] or "KRW").upper() != cur_sel:
+        # 상계 — 크레딧 노트. 두 갈래로 갈라 담는다(_credit_note_lines):
+        #  · cash — 총액으로 수금 처리한 청구서에서 통장에 덜 들어온 몫. 입금일에 유출로
+        #    세워 그날 유입과 나란히 놓는다(둘의 차가 통장에 찍힌 금액이다).
+        #  · memo — 아직 안 받은 청구서의 상계분. 이미 미수에서 빠져 있어 잔고를 건드리면
+        #    안 되므로 제 칸(offset_in)에만 담는다.
+        for ln in _credit_note_lines(s, ar_rows):
+            if (ln["cn"]["currency"] or "KRW").upper() != cur_sel:
                 continue
-            day = cn["issue_date"]
-            # 발행일이 곧 상계일 — 실적과 같은 규칙으로 창 안의 것만 담는다(첫 칸이라고
-            # 지난 상계까지 끌어오면 그 달 미수가 두 번 줄어든 것처럼 읽힌다).
-            if not day or not (win_start.isoformat() <= day <= win_end.isoformat()):
-                continue
-            idx = bucket_index(day)
-            if idx >= 0:
-                offset_in[idx] += cn["total"]
+            # 실적과 같은 규칙으로 창 안의 것만 담는다(첫 칸이라고 지난 상계까지 끌어오면
+            # 그 달 미수가 두 번 줄어든 것처럼 읽힌다).
+            if ln["cash"] > 0 and win_start.isoformat() <= ln["cash_date"] <= win_end.isoformat():
+                idx = bucket_index(ln["cash_date"])
+                if idx >= 0:
+                    outflow[idx] += ln["cash"]
+                    act_out[idx] += ln["cash"]
+                    act_out_other[idx] += ln["cash"]
+            if ln["memo"] > 0 and win_start.isoformat() <= ln["memo_date"] <= win_end.isoformat():
+                idx = bucket_index(ln["memo_date"])
+                if idx >= 0:
+                    offset_in[idx] += ln["memo"]
         # 유출 — 지급대장. 미납 회차는 예정일에, 납부된 회차는 실제 납부일에 담는다.
         # 첫 구간이 연체를 흡수하도록 과거 1년까지 회차를 펼쳐 담는다.
         scan_start = date.fromordinal(win_start.toordinal() - 400)
@@ -2079,8 +2159,9 @@ def finance_cashflow(unit: str = "month", count: int = 6, opening: float = 0.0,
                 # 이면 위 inflow/outflow 밖에 있고, 1 이면 그 안에 든 금액 중 예정분이다.
                 "expected_in": round(exp_in[i]),
                 "expected_out": round(exp_out[i]),
-                # 현금 대신 상계로 지워진 미수 — 위 inflow 밖의 금액이다(잔고를 움직이지
-                # 않는다). 내역은 장부(/cashflow/items)의 set-off 줄에 그대로 있다.
+                # 현금 대신 상계로 지워진 미수(아직 안 받은 청구서 몫) — 위 inflow 밖의
+                # 금액이고 잔고를 움직이지 않는다. 이미 수금한 청구서의 상계분은 여기가
+                # 아니라 outflow 에 들어 있다. 내역은 장부의 set-off 줄에 그대로 있다.
                 "offset_in": round(offset_in[i]),
                 "net": round(net),
                 "cumulative": round(cumulative),
@@ -2141,8 +2222,10 @@ def finance_cashflow_items(start: str = "", end: str = "", currency: str = "KRW"
     예정일(수금 due·지급 회차일), 실적은 실제로 오간 날. first=1 이면 그 구간이 창의
     첫 칸이라는 뜻이고, 앞선 과거(연체·지난 회차)를 여기로 흡수한다.
 
-    클레임 상계(크레딧 노트)는 유입 목록에 함께 서되 noncash=True 로 표시한다 — 미수를
-    지운 사건이라 장부에 남아야 하지만, 통장은 움직이지 않았으므로 합계·잔고 밖이다.
+    클레임 상계(크레딧 노트)는 통장을 움직였는지에 따라 자리가 갈린다: 총액으로 수금
+    처리한 청구서의 상계분은 그만큼 통장에 덜 들어온 돈이라 **입금일 유출**로 서고(합계에
+    든다), 아직 안 받은 청구서의 상계분은 이미 미수에서 빠져 있어 유입 목록에 noncash=True
+    로만 선다(합계·잔고 밖).
 
     bucket 을 주면 그 갈래만 남긴다 — 화면의 여섯 줄(receivables/income/collected/
     payables/other/paid)이 각각 자기 몫만 열어 볼 수 있도록. 남은 합계는 /cashflow 행의
@@ -2207,29 +2290,33 @@ def finance_cashflow_items(start: str = "", end: str = "", currency: str = "KRW"
                     "row_id": inc.id, "order_id": 0, "rfq_id": 0, "po_id": 0,
                 })
 
-        # 상계 — 크레딧 노트 한 장이 미수 한 건을 지운 줄. 유입 칸에 서지만 돈이 오간
-        # 적이 없어(noncash) 합계에도 잔고에도 들지 않는다. 대상 청구서를 ref 로 달고
-        # 그 청구액·남은 잔액을 함께 실어, "어느 미수에서 얼마가 어떻게 사라졌나"가
-        # 한 줄에서 읽히게 한다 — 이 줄이 없으면 미수가 조용히 줄어든 것으로만 보인다.
-        ar_by_id = {r["id"]: r for r in ar_rows}
-        for cn in _credit_note_rows(s):
+        # 상계 — 크레딧 노트 한 장이 미수 한 건을 지운 줄. 대상 청구서를 ref 로 달고 그
+        # 청구액·남은 잔액을 함께 실어, "어느 미수에서 얼마가 어떻게 사라졌나"가 한 줄에서
+        # 읽히게 한다. 서는 자리는 그 상계가 통장을 움직였는지에 따라 갈린다
+        # (_credit_note_lines):
+        #  · 총액으로 수금 처리한 청구서 — 통장에 그만큼 덜 들어왔다. 입금일 유출로 서서
+        #    그날 유입 바로 옆에 놓인다(합계·잔고에 그대로 든다).
+        #  · 아직 안 받은 청구서 — 상계는 이미 미수에서 빠져 있다. 유입 칸에 서되
+        #    noncash 로 표시해 합계·잔고 밖에 둔다.
+        for ln in _credit_note_lines(s, ar_rows):
+            cn, ar = ln["cn"], ln["ar"]
             if (cn["currency"] or "KRW").upper() != cur_sel:
                 continue
-            day = cn["issue_date"]
-            if not day or not (lo <= day <= hi):
-                continue
-            ar = ar_by_id.get(cn["ar_id"])
-            inflow.append({
-                "kind": "credit", "date": day, "party": cn["customer"],
+            base = {
+                "kind": "credit", "party": cn["customer"],
                 "ref": cn["invoice_no"], "memo": cn["cn_no"] or "Credit note",
-                "amount": cn["total"], "actual": False, "overdue": False,
-                # 통장이 움직이지 않은 줄 — 합계·잔고 밖이라는 표시.
-                "noncash": True,
+                "overdue": False,
                 # 상계 대상 — 얼마짜리 청구서를 깎았고, 그 청구서에 얼마가 남았나.
                 "target_amount": ar["invoice_amount"] if ar else 0.0,
                 "target_outstanding": ar["outstanding"] if ar else 0.0,
                 "row_id": cn["id"], "order_id": cn["order_id"], "rfq_id": cn["rfq_id"], "po_id": 0,
-            })
+            }
+            if ln["cash"] > 0 and lo <= ln["cash_date"] <= hi:
+                outflow.append({**base, "date": ln["cash_date"], "amount": ln["cash"],
+                                "actual": True})
+            if ln["memo"] > 0 and lo <= ln["memo_date"] <= hi:
+                inflow.append({**base, "date": ln["memo_date"], "amount": ln["memo"],
+                               "actual": False, "noncash": True})
 
         # 유출 — 지급대장(예정 회차 + 실제 납부), 매입 청구(AP), 선택적 벤더 P/O 추정.
         vendor_names = {v.id: v.name for v in s.query(Vendor).all()}

@@ -2903,12 +2903,32 @@ function ClaimsTab() {
               </div>
             )}
             <p className="hint-inline" style={{ display: "block", marginTop: 8 }}>
-              Amounts are converted to KRW at the month-end base rate of the month the claim occurred.
+              Amounts are converted to KRW at the month-end base rate of the month the claim occurred —
+              except a line settled by a credit note, which is worth what that note settled it at (its own
+              rate), so a fully credited claim closes at zero instead of leaving a rounding tail.
               What the customer or the vendor bore is not counted here as ours. A credited amount is a
               deduction from sales (it already lowers that invoice and its VAT), a cash amount is a cost
               under Outflow — never both for the same line. Claims are entered on the deal, at stage 11 →
               Claim · Credit Note.
             </p>
+            {/* 어떤 환율로 옮겼는지 — 이 줄이 없으면 표를 검산할 수가 없고, 고시를 못 받아
+                1:1 로 선 통화가 섞여 있어도(EUR 390 이 ₩390 으로 서는 식) 알 길이 없다. */}
+            {data.fx && data.fx.rates.length ? (
+              <p className="hint-inline" style={{ display: "block", marginTop: 4 }}>
+                Converted at:{" "}
+                {data.fx.rates.map((r, i) => (
+                  <span key={`${r.month}-${r.cur}-${i}`}>
+                    {i ? " · " : ""}
+                    {r.month} {r.cur} ₩{r.rate.toLocaleString()}
+                    {r.entered ? " (as credited)" : r.date ? ` (매매기준율 ${r.date})` : ""}
+                  </span>
+                ))}
+                {data.fx.fallback
+                  ? " — a rate without a quote date fell back to the fixed one, and any currency other than USD"
+                    + " falls back to 1:1, which is not a real conversion. Set EXIM_API_KEY to quote them."
+                  : "."}
+              </p>
+            ) : null}
           </div>
         </>
       )}

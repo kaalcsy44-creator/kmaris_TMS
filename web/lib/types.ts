@@ -970,7 +970,8 @@ export type FinanceClaimsData = {
     cash_krw: number;
     open_krw: number;
   };
-  fx?: { basis: string; rates: { month: string; cur: string; rate: number }[]; fallback?: boolean };
+  /** 원화로 옮길 때 쓴 환율 — entered=true 는 고시가 아니라 크레딧 노트에 적어 둔 값이다. */
+  fx?: FxNote;
 };
 
 /** 상계 대상이 될 수 있는 청구서 — 그 고객의 청구서 전부(다른 프로젝트 건도 포함). */
