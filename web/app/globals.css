@@ -14943,10 +14943,10 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 
 
 /* ── Ship View(Item > Ship View) ────────────────────────────────────────────────
-   분류 트리를 배 한 척으로 펼친 화면. 판(.ship-board)이 곧 선체이고, 그 안의 띠
-   (.ship-deck)가 갑판이며, 띠 위의 카드(.ship-zone)가 그 갑판에 얹힌 계통이다.
-   선체 윤곽은 SVG 로 뒤에 깔리고 카드가 그 위에 놓인다 — 카드 높이는 내용을 따라
-   변하므로 그림이 배치를 잡게 두지 않는다(그림은 배경, 배치는 흐름). */
+   분류 트리를 배 한 척으로 펼친 화면. 판(.ship-board) 안의 띠(.ship-deck)가 갑판이고,
+   띠 위의 카드(.ship-zone)가 그 갑판에 얹힌 계통이다. 배를 그리지는 않는다 — 선체
+   윤곽·마스트·굴뚝·흘수선은 값을 하나도 나르지 않으면서 카드 뒤 색만 흔들었다.
+   '어느 갑판인가'는 왼쪽 이름표가 말하면 충분하다. */
 .ship-view { padding: 4px 2px 24px; }
 .ship-hdr {
   display: flex;
@@ -14969,54 +14969,7 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 .ship-stats b { color: var(--ink); font-size: 14px; }
 .ship-toggle { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
 
-.ship-board {
-  position: relative;
-  padding: 26px 26px 54px;
-  isolation: isolate;
-}
-/* 선체 — 판 전체에 늘려 붙인 배경. 클릭·마우스를 먹지 않게 뒤로 물린다. */
-.ship-hull {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  z-index: -1;
-  pointer-events: none;
-  filter: drop-shadow(0 8px 18px rgba(31, 62, 102, 0.10));
-}
-/* 굴뚝과 마스트 — 판 위쪽 오른편(선수 쪽)에 세운다. 그림 하나로 '배'가 읽힌다. */
-.ship-rig {
-  position: absolute;
-  top: -30px;
-  right: 46px;
-  display: flex;
-  align-items: flex-end;
-  gap: 26px;
-  pointer-events: none;
-}
-.ship-mast {
-  width: 3px;
-  height: 40px;
-  background: linear-gradient(#8aa2bd, #b9c9dd);
-  border-radius: 2px;
-}
-.ship-mast::before {
-  content: "";
-  display: block;
-  width: 22px;
-  height: 3px;
-  margin-left: -10px;
-  margin-top: 8px;
-  background: #a7bbd2;
-  border-radius: 2px;
-}
-.ship-funnel {
-  width: 26px;
-  height: 32px;
-  border-radius: 4px 4px 0 0;
-  background: linear-gradient(#2f5c93, #1f3e66);
-  box-shadow: inset 0 6px 0 #e8b93a;
-}
+.ship-board { position: relative; padding: 4px 0 8px; }
 
 .ship-decks { display: flex; flex-direction: column; gap: 14px; }
 /* 갑판 한 층 — 왼쪽에 층 이름표를 세우고 오른쪽에 그 층의 계통 카드를 늘어놓는다. */
@@ -15157,19 +15110,6 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
   cursor: default;
 }
 
-/* 흘수선 — 판 바닥에 붙는 물. 판이 물에 잠긴 것처럼 보이면 그것이 배다. */
-.ship-water {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 34px;
-  overflow: hidden;
-  pointer-events: none;
-  z-index: -1;
-}
-.ship-water svg { width: 100%; height: 100%; display: block; }
-
 /* 마우스를 따라 펴지는 내역 — 표가 아니라 쪽지다. 마우스가 지나는 길을 막지 않도록
    자기 자신은 마우스를 먹지 않는다(쪽지 위에 올라가 붙잡을 일이 없다). */
 .ship-peek {
@@ -15220,6 +15160,9 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
   font-variant-numeric: tabular-nums;
 }
 .ship-peek-mg { color: #1e7a46; font-weight: 700; }
+/* 가격이 실려 온 문서 — 금액 바로 뒤에 붙어 그 숫자의 출처가 된다. 값이 아니라
+   출처이므로 금액보다 한 단 옅게 두고, 번호가 없으면 문서 이름만 남는다. */
+.ship-peek-src { color: #7b879b; font-weight: 600; }
 .ship-peek-d { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
 .ship-peek-d span {
   padding: 0 5px;
@@ -15237,5 +15180,4 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
   .ship-deck { grid-template-columns: 1fr; }
   .ship-deck-tag { flex-direction: row; align-items: baseline; gap: 8px; }
   .ship-zone { min-width: 0; max-width: none; flex-basis: 100%; }
-  .ship-rig { display: none; }
 }

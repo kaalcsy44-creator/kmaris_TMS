@@ -305,22 +305,61 @@ def _sort_key(h):
     return (h.doc_date or "", h.id)
 
 
-def _summarize(hs: list) -> dict:
+# 가격 이력의 source_type → 사람이 읽는 문서 이름. 번호는 수동 입력이라 비어 있을 수
+# 있으므로(문서 번호 정책), 번호가 없으면 이 이름만으로도 어느 문서인지는 남는다.
+_DOC_KIND = {
+    "vendor_quote": "Vendor quote",
+    "po": "P/O",
+    "quotation": "Quotation",
+    "order": "Customer P/O",
+    "ci": "Invoice",
+    "ar": "Invoice (AR)",
+}
+
+
+def _doc_labels(session) -> dict[tuple[str, int], dict]:
+    """(source_type, source_id) → {kind, no}. 가격이 실려 온 문서의 이름과 번호."""
+    out: dict[tuple[str, int], dict] = {}
+
+    def take(kind_key, rows, attr):
+        kind = _DOC_KIND[kind_key]
+        for r in rows:
+            out[(kind_key, r.id)] = {"kind": kind, "no": (getattr(r, attr, "") or "").strip()}
+
+    take("vendor_quote", session.query(VendorQuote).all(), "vendor_quote_no")
+    take("po", session.query(PurchaseOrder).all(), "po_no")
+    take("quotation", session.query(Quotation).all(), "qtn_no")
+    take("order", session.query(Order).all(), "po_no")
+    take("ci", session.query(CommercialInvoice).all(), "ci_no")
+    take("ar", session.query(ARRecord).all(), "ci_no")
+    return out
+
+
+def _summarize(hs: list, docs: dict | None = None) -> dict:
     """이력 행 묶음 → 최근 구매가·판매가 + 최근 거래 상대 + 거래 카운트 + 최근일.
 
     거래 상대는 가격과 짝을 이룬다 — 판매가는 누구에게 팔았는지(고객), 구매가는 누구에게서
     샀는지(공급사). 견적·오더 원가처럼 공급사가 안 찍히는 구매 행도 있어, 짝이 비면
-    그 상대가 찍힌 가장 최근 행으로 대신한다(master_price_summary 와 같은 규칙)."""
+    그 상대가 찍힌 가장 최근 행으로 대신한다(master_price_summary 와 같은 규칙).
+
+    docs 를 주면(=_doc_labels) 가격마다 '어느 문서에서 나온 값인가'를 함께 싣는다.
+    금액과 마진은 프로젝트가 아니라 문서(견적·발주·인보이스)가 낳는 값이라, 프로젝트
+    번호만으로는 그 숫자의 출처를 되짚을 수가 없다."""
     buys = sorted([h for h in hs if h.price_type == "buy"], key=_sort_key, reverse=True)
     sells = sorted([h for h in hs if h.price_type == "sell"], key=_sort_key, reverse=True)
 
     def one(x):
         if not x:
             return None
-        return {
+        out = {
             "unit_price": x.unit_price, "currency": x.currency,
             "date": x.doc_date, "fx_rate": x.fx_rate,  # 딜 저장 환율(있으면 마진 환산에 우선 사용)
         }
+        if docs is not None:
+            out["doc"] = docs.get((x.source_type, x.source_id)) or {
+                "kind": _DOC_KIND.get(x.source_type, x.source_type or ""), "no": "",
+            }
+        return out
 
     def newest(rows: list):
         return rows[0] if rows else None
@@ -566,6 +605,8 @@ def category_ship_map(session) -> dict:
     for h in hist:
         by_item.setdefault(h.item_id, []).append(h)
 
+    docs = _doc_labels(session)
+
     items = []
     for m in masters:
         hs = by_item.get(m.id, [])
@@ -602,7 +643,7 @@ def category_ship_map(session) -> dict:
             "item_type": m.item_type or "part",
             "category_id": m.category_id,
             "deals": list(deals.values()),
-            **_summarize(hs),
+            **_summarize(hs, docs),
         })
     items.sort(key=lambda r: (not r["deals"], r["part_no"], r["description"]))
 

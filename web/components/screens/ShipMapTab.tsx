@@ -186,30 +186,10 @@ export default function ShipMapTab() {
         </div>
       </div>
 
+      {/* 판에는 그림을 깔지 않는다 — 선체 윤곽·마스트·굴뚝·흘수선은 아무 값도 나르지
+          않으면서 카드 뒤에서 색을 흔들었다. 배는 갑판 이름(선교·갑판·기관·부두)이
+          말하고, 화면은 그 자리에 실린 숫자만 그린다. */}
       <div className="ship-board">
-        {/* 배의 윤곽 — 뒤에 깔리는 그림이다. 카드 높이가 내용에 따라 변하므로 비율을
-            고정하지 않고 판 전체에 늘려 붙인다(선수는 오른쪽, 선미는 왼쪽). */}
-        <svg className="ship-hull" viewBox="0 0 1000 400" preserveAspectRatio="none" aria-hidden>
-          <defs>
-            <linearGradient id="ship-plate" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#f4f8fd" />
-              <stop offset="60%" stopColor="#e8eff8" />
-              <stop offset="100%" stopColor="#dbe6f3" />
-            </linearGradient>
-          </defs>
-          <path
-            d="M8,10 L992,10 L992,300 C992,340 966,372 918,386 L120,386 C56,378 12,344 8,300 Z"
-            fill="url(#ship-plate)"
-            stroke="#b9c9dd"
-            strokeWidth="2"
-          />
-        </svg>
-        {/* 상부 구조 — 굴뚝과 마스트. 이것 하나로 판이 '배'로 읽힌다. */}
-        <div className="ship-rig" aria-hidden>
-          <span className="ship-mast" />
-          <span className="ship-funnel" />
-        </div>
-
         <div className="ship-decks">
           {DECKS.map((deck, di) => {
             // 손잡이를 켜면 빈 계통은 통째로 접는다 — 소분류만 걸러 내고 껍데기 카드를
@@ -239,20 +219,6 @@ export default function ShipMapTab() {
               </section>
             );
           })}
-        </div>
-
-        {/* 흘수선 — 판의 바닥을 물에 담근다. */}
-        <div className="ship-water" aria-hidden>
-          <svg viewBox="0 0 1200 40" preserveAspectRatio="none">
-            <path
-              d="M0,22 C100,10 200,34 300,22 C400,10 500,34 600,22 C700,10 800,34 900,22 C1000,10 1100,34 1200,22 L1200,40 L0,40 Z"
-              fill="#cfe0f2"
-            />
-            <path
-              d="M0,30 C100,18 200,42 300,30 C400,18 500,42 600,30 C700,18 800,42 900,30 C1000,18 1100,42 1200,30 L1200,40 L0,40 Z"
-              fill="#b9d2ea"
-            />
-          </svg>
         </div>
       </div>
 
@@ -369,6 +335,17 @@ function Zone({
   );
 }
 
+/**
+ * 가격 뒤에 붙는 출처 — 그 숫자가 실려 온 문서(견적·발주·인보이스)와 번호.
+ * 프로젝트 번호(KMS-RFQ-…)는 '어느 딜인가'까지만 말한다. 매입가·매출가·마진을 낳은
+ * 것은 그 딜 안의 문서라, 숫자를 되짚으려면 문서 이름이 숫자 옆에 있어야 한다.
+ * 번호는 수동 입력이라 비어 있을 수 있고, 그때는 문서 이름만 남는다.
+ */
+function Src({ doc }: { doc?: { kind: string; no: string } | null }) {
+  if (!doc?.kind) return null;
+  return <span className="ship-peek-src"> · {doc.no ? `${doc.kind} ${doc.no}` : doc.kind}</span>;
+}
+
 /** 마우스를 따라다니는 내역 — 그 자리에 걸린 품목을 자세히 편다. */
 function Peeker({ peek }: { peek: NonNullable<Peek> }) {
   const MAX = 8;
@@ -396,8 +373,8 @@ function Peeker({ peek }: { peek: NonNullable<Peek> }) {
             </div>
             <div className="ship-peek-m">
               {it.maker ? <span>{it.maker}</span> : null}
-              {it.buy ? <span>buy {money(it.buy.unit_price, it.buy.currency)}</span> : null}
-              {it.sell ? <span>sell {money(it.sell.unit_price, it.sell.currency)}</span> : null}
+              {it.buy ? <span>buy {money(it.buy.unit_price, it.buy.currency)}<Src doc={it.buy.doc} /></span> : null}
+              {it.sell ? <span>sell {money(it.sell.unit_price, it.sell.currency)}<Src doc={it.sell.doc} /></span> : null}
               {it.margin_pct != null ? <span className="ship-peek-mg">{it.margin_pct}%</span> : null}
               {it.vendor ? <span>← {it.vendor}</span> : null}
               {it.customer ? <span>→ {it.customer}</span> : null}

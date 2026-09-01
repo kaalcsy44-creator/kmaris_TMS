@@ -136,6 +136,9 @@ export type ItemLedgerPrice = {
   currency: string;
   date: string | null;
   fx_rate?: number | null;   // 딜 저장 환율(1 USD=? KRW) — 마진 환산에 사용
+  // 이 가격이 실려 온 문서 — 견적·발주·인보이스. 금액과 마진은 프로젝트가 아니라
+  // 문서가 낳은 값이라, 어느 문서인지가 붙어야 숫자를 되짚을 수 있다(Ship View 만 채운다).
+  doc?: { kind: string; no: string } | null;
 };
 export type ItemLedgerRow = {
   item_id?: number;              // 마스터 연결 시. unmatched 행은 없음
