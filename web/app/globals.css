@@ -13439,19 +13439,22 @@ table.mini tfoot .fin-foot-name { text-align: left; }
   font-size: 11px; line-height: 1.2; min-width: 0;
 }
 /* 칸 색은 두 계열뿐이다 — 파랑 = 들어오는 돈(수금·기타수입), 주황 = 나가는 돈(지급).
-   상태는 색을 갈아끼우지 않고 같은 계열의 농도로 말한다: 옅음 = 예정, 진함 = 결제됨,
-   꽉 찬 색 = 연체. 그래야 돈의 방향이 먼저 읽히고 상태가 그 다음에 읽힌다.
-   (예전엔 결제됨이 초록, 연체가 빨강이라 색만 네 가지였고 방향이 지워졌다.) */
+   농도는 '실제로 오간 돈인가'를 말한다: 옅음 = 예정일(결제 여부와 무관), 진함 = 실입출금.
+   꽉 찬 색은 그 위의 경보 하나 — 예정일이 지나도록 오지 않은 돈(연체)이다.
+   그래야 돈의 방향이 먼저 읽히고, 진한 칸만 세면 실제 오간 돈이 나온다. */
 .fin-ev--receivable { background: #e7f0fa; color: #1f4e79; }
 .fin-ev--payable { background: #fdf1dd; color: #8a5a00; }
 /* 프로젝트 단계에서 관리하는 건(수금·매입청구) — 캘린더에서 못 누르므로 커서로 알린다. */
 .fin-ev.readonly { cursor: default; }
-/* 결제됨 — 같은 계열 한 단계 진하게. 예정일 자리는 취소선으로 '이미 지난 예정'임을 알린다. */
-.fin-ev--receivable.paid { background: #cfe1f4; color: #17618f; }
-.fin-ev--payable.paid { background: #fae0b8; color: #7a4f00; }
+/* 예정일 자리는 결제 여부와 상관없이 옅게 둔다 — 그 칸이 말하는 것은 '언제 오갈
+   돈이었나'이지 오간 돈 자체가 아니다. 이미 결제된 예정 칸은 취소선으로 지난 예정임을
+   알리고, 실제로 오간 금액은 아래 .actual 칸이 진하게 받는다. */
 .fin-ev.paid { text-decoration: line-through; }
-/* 실제 결제일 자리 — 예정(취소선)과 달리 실제로 오간 돈이라 취소선 없이 테두리로 세운다. */
-.fin-ev.paid.actual {
+/* 실입출금 자리 — 실제로 돈이 오간 칸만 계열을 한 단계 진하게 채우고 테두리를 두른다.
+   취소선도 없다. 그래야 달력에서 '진한 칸 = 실제 오간 돈, 옅은 칸 = 예정일'로 읽힌다. */
+.fin-ev--receivable.actual { background: #bcd6f0; color: #14507c; }
+.fin-ev--payable.actual { background: #f7d49c; color: #6f4700; }
+.fin-ev.actual {
   text-decoration: none;
   font-weight: 600;
   border: 1px solid color-mix(in srgb, currentColor 45%, transparent);
