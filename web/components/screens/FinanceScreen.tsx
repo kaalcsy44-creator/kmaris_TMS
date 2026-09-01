@@ -3215,11 +3215,12 @@ function CalendarTab() {
           <h3 className="form-title fin-cal-month">{monthLabel}</h3>
           <button className="btn sm fin-cal-arrow" onClick={() => shift(1)} aria-label="Next month">›</button>
         </div>
-        {/* 색은 돈의 방향 두 가지뿐 — 예정일이냐 실입출금이냐는 같은 계열의 농도가 말하므로
-            범례는 계열 이름만 적고, 농도 규칙은 표 아래 설명이 받는다. */}
+        {/* 색은 돈의 방향 두 가지뿐 — 어느 쪽이 무엇을 담는지까지 적는다. 파랑에만 출처를
+            적고 주황은 'Payables' 한 마디로 두면, 달력 주황 칸의 절반인 매입청구(AP)와
+            회사 자체 비용이 범례에 없는 셈이 된다. 농도 규칙은 표 아래 설명이 받는다. */}
         <div className="fin-legend fin-cal-legend">
-          <span className="fin-legend-item"><span className="fin-dot fin-dot--rec" /> Sales (AR) · other income</span>
-          <span className="fin-legend-item"><span className="fin-dot fin-dot--pay" /> Payables</span>
+          <span className="fin-legend-item"><span className="fin-dot fin-dot--rec" /> Money in — sales (AR) · other income</span>
+          <span className="fin-legend-item"><span className="fin-dot fin-dot--pay" /> Money out — vendor bills (AP) · own costs</span>
         </div>
       </div>
       {error && !data ? <div className="state error">API error: {error.message}</div> : null}
