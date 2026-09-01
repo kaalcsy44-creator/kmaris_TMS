@@ -3217,10 +3217,12 @@ function CalendarTab() {
         </div>
         {/* 색은 돈의 방향 두 가지뿐 — 어느 쪽이 무엇을 담는지까지 적는다. 파랑에만 출처를
             적고 주황은 'Payables' 한 마디로 두면, 달력 주황 칸의 절반인 매입청구(AP)와
-            회사 자체 비용이 범례에 없는 셈이 된다. 농도 규칙은 표 아래 설명이 받는다. */}
+            나머지 비용이 범례에 없는 셈이 된다. 이름은 Outflow 갈래(Purchases / Other
+            costs)와 같은 말로 적는다 — 범례에만 있는 말을 지어내지 않는다.
+            농도 규칙은 표 아래 설명이 받는다. */}
         <div className="fin-legend fin-cal-legend">
           <span className="fin-legend-item"><span className="fin-dot fin-dot--rec" /> Money in — sales (AR) · other income</span>
-          <span className="fin-legend-item"><span className="fin-dot fin-dot--pay" /> Money out — vendor bills (AP) · own costs</span>
+          <span className="fin-legend-item"><span className="fin-dot fin-dot--pay" /> Money out — vendor bills (AP) · other costs</span>
         </div>
       </div>
       {error && !data ? <div className="state error">API error: {error.message}</div> : null}
