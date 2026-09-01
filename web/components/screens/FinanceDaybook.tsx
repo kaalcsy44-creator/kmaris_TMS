@@ -73,10 +73,10 @@ function tagOf(r: FinanceCashflowItem): string {
       return INCOME_CATEGORY_LABEL[r.memo] || r.memo || "Other income";
     case "payable":
       return CATEGORY_LABEL[r.memo] || r.memo || "Other cost";
-    // 크레딧 노트 번호가 있으면 그것까지 — 통장에 안 찍힌 줄이라, 무엇을 근거로 미수가
-    // 지워졌는지는 이 한 줄이 아니면 장부에서 찾을 데가 없다.
+    // 근거가 된 크레딧 노트 번호는 Reference 칸이 들고 있다 — 여기 또 적으면 같은 번호가
+    // 한 줄에 두 번 선다.
     case "credit":
-      return r.memo ? `Set-off · ${r.memo}` : "Set-off";
+      return "Set-off";
   }
 }
 
@@ -133,9 +133,12 @@ export default function FinanceDaybook({ start, end, label, opening, currency, i
 
   const rows: DaybookRow[] = useMemo(() => {
     if (!data) return [];
+    // 입금에서 덜어 낸 상계(paired)는 줄을 세우지 않는다 — 그 내역은 입금 줄 아래에
+    // "청구액 − 상계 = 실입금"으로 펼쳐져 있다. 한 번 오간 돈에는 줄 하나가 맞고,
+    // 두 줄이면 같은 숫자가 같은 날 두 번 서서 어느 쪽이 통장인지 흐려진다.
     const merged = [
-      ...data.inflow.map((item) => ({ item, side: "in" as const })),
-      ...data.outflow.map((item) => ({ item, side: "out" as const })),
+      ...data.inflow.filter((item) => !item.paired).map((item) => ({ item, side: "in" as const })),
+      ...data.outflow.filter((item) => !item.paired).map((item) => ({ item, side: "out" as const })),
     ].sort((a, b) =>
       a.item.date.localeCompare(b.item.date) ||
       // 같은 날이면 들어온 돈을 먼저 — 그날 잔고가 바닥을 쳤는지 순서대로 읽히게.
@@ -226,11 +229,10 @@ export default function FinanceDaybook({ start, end, label, opening, currency, i
           </p>
           {/* 상계 줄이 서 있을 때만, 그 줄이 어느 갈래인지에 따라. 보아서는 알 수 없는
               것들이다: 입금 옆의 줄은 왜 유출인지, 잔고 밖의 줄은 왜 잔고를 안 움직이는지. */}
-          {rows.some((r) => r.item.paired) ? (
+          {data.inflow.some((i) => i.paired) ? (
             <p className="hint-inline" style={{ display: "block", marginTop: 4 }}>
-              A receipt is the amount that reached the bank. Where a credit note settled part of the invoice, that
-              part is not in the receipt — it stands beside it on the same day, and the two together come to the
-              invoice.
+              A receipt is the amount that reached the bank. Where a credit note settled part of the invoice, the
+              two lines under it are that arithmetic: the invoice, less what the note credited.
             </p>
           ) : null}
           {rows.some((r) => r.item.noncash && !r.item.paired) ? (
@@ -262,33 +264,23 @@ function DaybookLine({ row, start, end, currency }: {
       <div className="fin-db-desc">{descOf(r)}</div>
       <div className="hint-inline">
         {tagOf(r)}
-        {/* 두 줄이 서로를 설명한다.
-            입금 줄 — 금액은 통장에 꽂힌 돈이라 청구액과 다를 수 있다. 그 이유(상계로 얼마를
-              덜어 냈나)를 그 줄에 적는다: 청구서 번호를 들고 금액을 맞춰 보는 사람이 여기서
-              멈추지 않게.
-            상계 줄 — '아직 안 온 돈'이 아니다. 이미 끝난 정산이라 expected 로 적으면 거짓말이
-              되므로, 그 금액이 어느 청구서의 무엇인지로 닫는다. 입금 옆에 선 줄(paired)은
-              '그 청구서의 나머지', 홀로 선 줄은 '그 청구서에 얼마가 남았나'. */}
-        {r.kind === "ar" && r.actual && (r.set_off ?? 0) > 0
-          ? <>
-              <span className="fin-db-done"> · ✓ received</span>
-              <span> · {cash(r.set_off ?? 0)} of the {cash(r.invoiced ?? 0)} invoice set off</span>
-            </>
-          : r.kind === "credit"
+        {/* 홀로 선 상계 줄 — 아직 안 받은 청구서를 깎은 노트다. '아직 안 온 돈'이 아니라
+            이미 끝난 정산이라 expected 로 적으면 거짓말이 되므로, 그 청구서에 얼마가
+            남았는지로 닫는다(입금에서 덜어 낸 상계는 여기 오지 않는다 — 그 내역은 입금
+            줄 아래 산식이다). */}
+        {r.kind === "credit"
           ? <>
               <span className="fin-db-done"> · ✓ credited</span>
               {r.target_amount
                 ? <span>
                     {" · "}
-                    {r.paired
-                      ? `the rest of the ${cash(r.target_amount)} invoice — settled, but not in cash`
-                      : (r.target_outstanding ?? 0) > 0
-                        ? `${cash(r.target_outstanding ?? 0)} left of ${cash(r.target_amount)}`
-                        // 잔액이 음수 = 그 청구서는 이미 현금으로 다 받았다는 뜻이다.
-                        // 이 노트는 그 청구서를 지운 게 아니라 고객에게 남은 크레딧이다.
-                        : (r.target_outstanding ?? 0) < 0
-                          ? `stands as credit — the ${cash(r.target_amount)} invoice was already settled`
-                          : `cleared the ${cash(r.target_amount)} invoice in full`}
+                    {(r.target_outstanding ?? 0) > 0
+                      ? `${cash(r.target_outstanding ?? 0)} left of the ${cash(r.target_amount)} ${r.invoice_ref || "invoice"}`
+                      // 잔액이 음수 = 그 청구서는 이미 현금으로 다 받았다는 뜻이다.
+                      // 이 노트는 그 청구서를 지운 게 아니라 고객에게 남은 크레딧이다.
+                      : (r.target_outstanding ?? 0) < 0
+                        ? `stands as credit — ${r.invoice_ref || "that invoice"} was already settled`
+                        : `cleared the ${cash(r.target_amount)} ${r.invoice_ref || "invoice"} in full`}
                   </span>
                 : null}
             </>
@@ -300,6 +292,15 @@ function DaybookLine({ row, start, end, currency }: {
             ? <b className="fin-db-late"> · {daysLate(r.date)} days overdue</b>
             : <span> · expected</span>}
       </div>
+      {/* 청구액과 다른 금액이 들어온 줄은 그 산식을 자기 밑에 편다 — 어느 청구서 얼마에서
+          어느 크레딧 노트로 얼마가 빠져 이 금액이 되었는지. 주인공은 위의 실입금액이고
+          이 두 줄은 근거라, 옅은 글자로 물려 둔다. */}
+      {r.kind === "ar" && r.actual && (r.set_off ?? 0) > 0 ? (
+        <div className="fin-db-split">
+          <div>{cash(r.invoiced ?? 0)} · {r.ref || "invoice"}</div>
+          <div>− {cash(r.set_off ?? 0)} · {r.set_off_ref || "credit note"}</div>
+        </div>
+      ) : null}
     </>
   );
   const ref = linked ? (

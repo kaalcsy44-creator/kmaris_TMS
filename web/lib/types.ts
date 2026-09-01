@@ -1439,14 +1439,21 @@ export type FinanceCashflowItem = {
   /** 상계 줄에만 — 깎인 청구서의 청구액과 그 청구서에 남은 잔액. */
   target_amount?: number;
   target_outstanding?: number;
-  /** 상계 줄에만 — 그 입금에서 덜어 낸 몫이라 같은 날 입금 줄 옆에 서는 줄. */
-  paired?: boolean;
   /**
-   * 입금(ar·actual) 줄에만 — 청구액 중 상계로 깎여 통장에 들어오지 않은 몫과 원래 청구액.
-   * amount 는 이미 그만큼 덜어 낸 '통장에 꽂힌 금액'이다. 0 이면 청구액이 그대로 들어왔다.
+   * 상계 줄에만 — 그 입금에서 덜어 낸 몫. 입금 줄이 그 내역을 이미 펼치므로 장부는 이
+   * 줄을 접는다(한 번 오간 돈에 줄 하나). 건별 목록처럼 줄을 다 세우는 화면은 그대로 쓴다.
+   */
+  paired?: boolean;
+  /** 상계 줄에만 — 깎아 준 청구서 번호. ref 자리는 이 줄의 문서(크레딧 노트 번호)다. */
+  invoice_ref?: string;
+  /**
+   * 입금(ar·actual) 줄에만 — 청구액 중 상계로 깎여 통장에 들어오지 않은 몫과 원래 청구액,
+   * 그리고 그 몫을 깎은 크레딧 노트 번호. amount 는 이미 그만큼 덜어 낸 '통장에 꽂힌
+   * 금액'이다. set_off=0 이면 청구액이 그대로 들어왔다.
    */
   set_off?: number;
   invoiced?: number;
+  set_off_ref?: string;
   row_id: number;
   order_id: number;
   rfq_id: number;

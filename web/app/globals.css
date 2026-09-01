@@ -14118,6 +14118,14 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 /* 상계 줄 — 예정의 회색으로 물리지 않는다(끝난 정산이다). 대신 왼쪽에 초록 실선을 세워
    '이 줄은 통장을 거치지 않았다'를 자리로 표시한다. */
 .fin-daybook tbody tr.fin-db-noncash > td:nth-child(2) { box-shadow: inset 2px 0 0 #1e7a46; }
+/* 입금 줄 밑의 산식 — 청구액에서 상계를 뺀 값이 위 금액이라는 근거 두 줄. 주인공은
+   위의 실입금액이므로 옅게 물리고, 숫자는 고정폭으로 자리를 맞춰 뺄셈이 눈에 서게 한다. */
+.fin-daybook .fin-db-split {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
 .fin-daybook .fin-db-done { color: #1e7a46; font-weight: 600; }
 .fin-daybook .fin-db-late { color: #c0392b; }
 /* 전월 이월 줄 — 본문이 아니라 출발점이라 옅게 눕힌다. */

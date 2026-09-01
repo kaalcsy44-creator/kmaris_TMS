@@ -2240,9 +2240,12 @@ def finance_cashflow_items(start: str = "", end: str = "", currency: str = "KRW"
     첫 칸이라는 뜻이고, 앞선 과거(연체·지난 회차)를 여기로 흡수한다.
 
     입금 줄의 금액은 **그날 통장에 꽂힌 금액**이다 — 수금액에 상계로 깎아 준 몫이 섞여
-    있으면 덜어 내고(set_off 로 얼마를 덜었는지 함께 보낸다), 덜어 낸 몫은 같은 날 상계
-    줄(noncash=True, paired=True)로 그 옆에 세운다. 둘을 더하면 청구액이 된다. 아직 안 받은
-    청구서의 상계분도 noncash 로 발행일에 선다 — 어느 쪽이든 합계·잔고 밖이다.
+    있으면 덜어 내고, 그 내역(set_off·invoiced·set_off_ref)을 함께 보낸다. 화면은 그 줄
+    아래에 "청구액 − 상계 = 실입금"을 문서 번호와 함께 펼친다. 덜어 낸 몫은 같은 날
+    상계 줄(noncash=True, paired=True)로도 실려 나가므로, 그 내역을 이미 펼친 화면은
+    paired 줄을 접어 한 줄로 둔다(장부는 통장이 움직인 만큼만 줄을 세운다).
+    아직 안 받은 청구서의 상계분도 noncash 로 발행일에 선다 — 어느 쪽이든 합계·잔고 밖이고,
+    ref 는 그 크레딧 노트 번호다(깎아 준 청구서는 invoice_ref).
 
     bucket 을 주면 그 갈래만 남긴다 — 화면의 여섯 줄(receivables/income/collected/
     payables/other/paid)이 각각 자기 몫만 열어 볼 수 있도록. 남은 합계는 /cashflow 행의
@@ -2270,7 +2273,16 @@ def finance_cashflow_items(start: str = "", end: str = "", currency: str = "KRW"
         # 유입 — 미수 잔액(예정)과 실제 입금(실적).
         ar_rows = _finance_receivable_rows(s)
         # 수금액 안에 섞여 있는 상계액 — 입금 줄에서 덜어 내 통장 금액만 남기는 데 쓴다.
-        setoff_cash = _setoff_in_receipts(s, ar_rows)
+        # 근거가 된 크레딧 노트 번호도 함께 들고 간다: 덜어 낸 금액만 적어 두면 "이 입금이
+        # 왜 청구액과 다른가"에 답할 문서가 장부에 없다.
+        cn_lines = _credit_note_lines(s, ar_rows)
+        setoff_cash: dict[int, float] = {}
+        setoff_refs: dict[int, list[str]] = {}
+        for ln in cn_lines:
+            if ln["cash"] > 0 and ln["ar"]:
+                i = ln["ar"]["id"]
+                setoff_cash[i] = round(setoff_cash.get(i, 0.0) + ln["cash"], 2)
+                setoff_refs.setdefault(i, []).append(ln["cn"]["cn_no"] or f"CN#{ln['cn']['id']}")
         for r in ar_rows:
             if (r["currency"] or "KRW").upper() != cur_sel:
                 continue
@@ -2293,7 +2305,10 @@ def finance_cashflow_items(start: str = "", end: str = "", currency: str = "KRW"
                         "ref": r["invoice_no"] or r["ci_no"] or "", "memo": "Receipt",
                         "amount": landed, "actual": True, "overdue": False,
                         # 청구액에서 상계로 덜어 낸 몫 — 0 이면 청구액이 그대로 들어왔다.
+                        # 그 몫을 깎은 크레딧 노트 번호까지 함께: 화면이 입금 줄 아래에
+                        # "청구액 − 상계 = 실입금"을 문서 번호와 함께 펼친다.
                         "set_off": less, "invoiced": round(r["invoice_amount"], 2),
+                        "set_off_ref": " · ".join(setoff_refs.get(r["id"], [])),
                         "row_id": r["id"], "order_id": r["order_id"], "rfq_id": r["rfq_id"], "po_id": 0,
                     })
         for r in _finance_income_rows(s):
@@ -2322,13 +2337,18 @@ def finance_cashflow_items(start: str = "", end: str = "", currency: str = "KRW"
         # 읽히게 한다. 둘 다 잔고 밖(noncash)이고, 서는 날이 갈린다(_credit_note_lines):
         #  · paired — 그 입금에 섞여 있던 몫. 입금일에, 덜어 낸 그 줄 옆에 선다.
         #  · 그 밖  — 아직 안 받은 청구서의 상계분. 발행일에 선다.
-        for ln in _credit_note_lines(s, ar_rows):
+        for ln in cn_lines:
             cn, ar = ln["cn"], ln["ar"]
             if (cn["currency"] or "KRW").upper() != cur_sel:
                 continue
             base = {
                 "kind": "credit", "party": cn["customer"],
-                "ref": cn["invoice_no"], "memo": cn["cn_no"] or "Credit note",
+                # 이 줄의 문서는 크레딧 노트다 — 다른 줄이 자기 문서 번호를 다는 자리에
+                # 남의 청구서 번호를 달면, 같은 날 입금 줄과 번호가 겹쳐 둘이 한 문서처럼
+                # 읽힌다. 깎아 준 청구서는 invoice_ref 로 따로 싣는다.
+                "ref": cn["cn_no"] or f"CN#{cn['id']}",
+                "invoice_ref": cn["invoice_no"],
+                "memo": cn["cn_no"] or "Credit note",
                 "overdue": False,
                 # 상계 대상 — 얼마짜리 청구서를 깎았고, 그 청구서에 얼마가 남았나.
                 "target_amount": ar["invoice_amount"] if ar else 0.0,

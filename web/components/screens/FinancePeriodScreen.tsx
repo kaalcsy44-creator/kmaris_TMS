@@ -27,8 +27,8 @@ function typeLabel(r: FinanceCashflowItem): string {
     case "po": return "P/O cost (est.)";
     case "income": return `Other income · ${INCOME_CATEGORY_LABEL[r.memo] || r.memo}`;
     case "payable": return `Payable · ${CATEGORY_LABEL[r.memo] || r.memo}`;
-    // 상계 — 돈이 오간 적 없이 미수를 지운 줄. 근거가 된 크레딧 노트 번호까지 적는다.
-    case "credit": return r.memo ? `Set-off · ${r.memo}` : "Set-off";
+    // 상계 — 돈이 오간 적 없이 미수를 지운 줄(크레딧 노트 번호는 Reference 칸에 선다).
+    case "credit": return "Set-off";
   }
 }
 
