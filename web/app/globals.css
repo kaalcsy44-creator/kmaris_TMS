@@ -14118,23 +14118,27 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 /* 상계 줄 — 예정의 회색으로 물리지 않는다(끝난 정산이다). 대신 왼쪽에 초록 실선을 세워
    '이 줄은 통장을 거치지 않았다'를 자리로 표시한다. */
 .fin-daybook tbody tr.fin-db-noncash > td:nth-child(2) { box-shadow: inset 2px 0 0 #1e7a46; }
-/* 입금 줄 밑의 산식 — 청구액에서 상계를 뺀 값이 위 금액이라는 근거 두 줄. 주인공은
-   위의 실입금액이므로 옅게 물리고, 숫자는 고정폭으로 자리를 맞춰 뺄셈이 눈에 서게 한다. */
-.fin-daybook .fin-db-split {
-  margin-top: 2px;
+/* 입금 줄 밑의 산식 — 청구액에서 상계를 뺀 값이 위 금액이라는 근거 두 줄. 적요 칸 안에
+   접어 두지 않고 줄로 세운 것은 자리 때문이다: 번호는 Reference 칸, 금액은 Amount 칸에
+   그대로 내려서서 위 줄과 세로로 맞는다. 주인공은 위의 실입금액이므로 옅게 물리고,
+   숫자는 고정폭으로 자리를 맞춰 뺄셈이 눈에 서게 한다. */
+.fin-daybook tbody tr.fin-db-sub > td {
+  padding-top: 0;
+  padding-bottom: 0;
   font-size: 11px;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
+  /* 위 줄과 한 건으로 읽혀야 하므로 사이에 가로줄을 두지 않는다 — 건과 건을 가르는
+     밑줄은 마지막 산식 줄 하나만 긋는다. */
+  border-bottom: 0;
 }
-/* 한 줄에 번호(왼쪽) + 금액(오른쪽) — 위 표의 Reference·Amount 순서 그대로라, 눈이
-   가로로 한 번만 움직여도 "어느 문서에서 얼마"가 읽힌다. */
-.fin-daybook .fin-db-split > div {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
+.fin-daybook tbody tr.fin-db-hassplit > td { border-bottom: 0; padding-bottom: 0; }
+.fin-daybook tbody tr.fin-db-sub--last > td {
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
 }
-.fin-daybook .fin-db-split .fin-doc-link { font-size: 11px; }
+.fin-daybook tbody tr.fin-db-sub .num { text-align: right; }
+.fin-daybook tbody tr.fin-db-sub .fin-doc-link { font-size: 11px; }
 .fin-daybook .fin-db-done { color: #1e7a46; font-weight: 600; }
 .fin-daybook .fin-db-late { color: #c0392b; }
 /* 전월 이월 줄 — 본문이 아니라 출발점이라 옅게 눕힌다. */
@@ -14201,6 +14205,29 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
   .fin-daybook .fin-db-c-desc::before { display: none; }
   .fin-daybook .fin-db-c-ref { grid-column: 1 / -1; }
   .fin-daybook tr.fin-db-carry td { grid-column: 1 / -1; }
+  /* 산식 줄은 제 카드가 아니다 — 위 카드의 아래를 열어 두고, 그 자리에 테를 지운 채
+     이어 붙여 한 장으로 읽히게 한다(번호는 왼쪽, 금액은 오른쪽 — 넓은 화면의 두 칸이
+     여기서는 한 줄의 양끝이 된다). */
+  .fin-daybook tbody tr.fin-db-hassplit {
+    margin-bottom: 0;
+    border-bottom: 0;
+    border-radius: 10px 10px 0 0;
+  }
+  .fin-daybook tbody tr.fin-db-sub {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    padding-top: 0;
+    padding-bottom: 0;
+    border-top: 0;
+    border-radius: 0;
+  }
+  .fin-daybook tbody tr.fin-db-sub::before { border-radius: 0; }
+  .fin-daybook tbody tr.fin-db-sub--last {
+    padding-bottom: 8px;
+    border-radius: 0 0 10px 10px;
+  }
+  .fin-daybook tbody tr.fin-db-sub--last::before { border-radius: 0 0 0 10px; }
+  .fin-daybook tbody tr.fin-db-sub .fin-db-c-ref { grid-column: 1; }
 }
 
 /* AR 9~11단계: 대금청구서 편집(ArAddForm) 아래 발행/수금 완료 바 */

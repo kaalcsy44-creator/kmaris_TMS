@@ -295,18 +295,22 @@ function DaybookLine({ row, start, end, currency }: {
             ? <b className="fin-db-late"> · {daysLate(r.date)} days overdue</b>
             : <span> · expected</span>}
       </div>
-      {/* 청구액과 다른 금액이 들어온 줄은 그 산식을 자기 밑에 편다 — 어느 청구서 얼마에서
-          어느 크레딧 노트로 얼마가 빠져 이 금액이 되었는지. 주인공은 위의 실입금액이고
-          이 두 줄은 근거라, 옅은 글자로 물려 둔다. 두 번호는 각자의 자리로 열린다 —
-          청구서는 그 딜의 청구 단계, 노트는 11단계 Claim 탭. 위 금액에는 링크가 없다:
-          그 숫자는 어느 문서의 금액도 아니라 둘의 차이라서, 문서 번호를 달 자리가 없다. */}
-      {netted ? (
-        <div className="fin-db-split">
-          <div>
-            <ProjectDocLink orderId={r.order_id} rfqId={r.rfq_id} label={r.ref || "invoice"} />
-            <span>{cash(r.invoiced ?? 0)}</span>
-          </div>
-          <div>
+    </>
+  );
+  // 청구액과 다른 금액이 들어온 줄은 그 산식을 자기 밑에 편다 — 어느 청구서 얼마에서
+  // 어느 크레딧 노트로 얼마가 빠져 이 금액이 되었는지. 적요 칸 안에 접어 두지 않고 줄을
+  // 따로 세우는 건 자리 때문이다: 번호는 위 줄의 Reference 칸, 금액은 Amount 칸에 그대로
+  // 내려서야, 번호를 들고 금액을 맞춰 보는 눈이 가로로 헤매지 않고 세로로 내려간다.
+  // 주인공은 위의 실입금액이고 이 두 줄은 근거라, 옅은 글자로 물려 둔다. 두 번호는 각자의
+  // 자리로 열린다 — 청구서는 그 딜의 청구 단계, 노트는 11단계 Claim 탭.
+  const splits = netted
+    ? [
+        {
+          ref: <ProjectDocLink orderId={r.order_id} rfqId={r.rfq_id} label={r.ref || "invoice"} />,
+          amount: cash(r.invoiced ?? 0),
+        },
+        {
+          ref: (
             <ProjectDocLink
               orderId={r.order_id}
               rfqId={r.rfq_id}
@@ -314,12 +318,11 @@ function DaybookLine({ row, start, end, currency }: {
               claim
               label={r.set_off_ref || "credit note"}
             />
-            <span>− {cash(r.set_off ?? 0)}</span>
-          </div>
-        </div>
-      ) : null}
-    </>
-  );
+          ),
+          amount: `− ${cash(r.set_off ?? 0)}`,
+        },
+      ]
+    : [];
   // 순액 줄에 청구서 번호를 달면 그 번호의 금액이 이것이라는 뜻이 되어, 번호를 들고
   // 금액을 맞춰 보는 사람을 틀리게 한다. 두 문서 번호는 위 산식 줄이 각자 들고 있다.
   const ref = netted ? "" : linked ? (
@@ -341,9 +344,12 @@ function DaybookLine({ row, start, end, currency }: {
     r.actual || r.noncash ? "" : "fin-db-expected",
     r.noncash ? "fin-db-noncash" : "",
     r.overdue ? "fin-overdue" : "",
+    // 산식 줄을 거느린 줄은 자기 밑줄을 내려놓는다 — 밑줄은 마지막 산식 줄이 긋는다.
+    splits.length ? "fin-db-hassplit" : "",
   ].filter(Boolean).join(" ");
 
   return (
+    <>
     <tr className={cls}>
       {/* 날짜는 줄마다 빠짐없이 적는다. 같은 날의 두 번째 줄부터를 비워 두면 눈이 위로
           거슬러 올라가야 날짜를 알 수 있고, 통장과 한 줄씩 대조할 때는 그 한 번이 매번의
@@ -389,5 +395,33 @@ function DaybookLine({ row, start, end, currency }: {
         </td>
       )}
     </tr>
+    {/* 산식 줄 — 자기 편의 Reference·Amount 두 칸만 채우고 나머지는 비운다. 날짜와 잔고를
+        비우는 건 이 줄이 새 건이 아니라 위 건의 속내이기 때문이다: 날짜는 위에 이미 적혔고,
+        잔고는 위 줄의 실입금액이 이미 움직였다. */}
+    {splits.map((s, i) => {
+      const amtCell = <td className="num">{s.amount}</td>;
+      const refCell = <td className="fin-db-c-ref">{s.ref}</td>;
+      return (
+        <tr
+          key={i}
+          className={`fin-db-row fin-db-row--${side} fin-db-sub${i === splits.length - 1 ? " fin-db-sub--last" : ""}`}
+        >
+          <td className="fin-db-date" />
+          {side === "in" ? (
+            <>
+              <td className="fin-db-c-desc" />{refCell}{amtCell}
+              <td className="fin-db-c-desc" /><td className="fin-db-c-ref" /><td className="num" />
+            </>
+          ) : (
+            <>
+              <td className="fin-db-c-desc" /><td className="fin-db-c-ref" /><td className="num" />
+              <td className="fin-db-c-desc" />{refCell}{amtCell}
+            </>
+          )}
+          <td className="num fin-db-bal" />
+        </tr>
+      );
+    })}
+    </>
   );
 }
