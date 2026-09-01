@@ -26,6 +26,11 @@
      본문 글꼴 12px 기준 알파벳 예닐곱 글자쯤 되는 폭. 모든 단계의 품목표가 이 값을 공유하므로
      여백을 조절할 일이 생기면 여기 한 곳만 고치면 된다. */
   --item-list-gutter: 48px;
+  /* 팝업 스크롤 칸이 창 밑변에 닿기 전에 비워 두는 한 칸. 끝까지 내렸을 때 마지막 줄이
+     테두리에 붙어 서면 내용이 거기서 끝난 것인지 잘린 것인지가 구분되지 않고, 창의 둥근
+     모서리도 글자에 물린다. 카드 안쪽 여백(.project-work-panel 의 14px)과 같은 값이라
+     둘이 겹쳐도 한 박자로 읽힌다. 여백을 조절할 일이 생기면 여기 한 곳만 고친다. */
+  --modal-foot-gap: 14px;
 }
 
 * {
@@ -3165,6 +3170,12 @@ table.pipeline tbody tr.service .pl-stage-segs .seg.on {
   display: block;
   overflow-y: auto;
   overflow-x: hidden;
+}
+/* 바닥에 고정된 액션 바가 없는 폼(안내·확인만 있는 창)은 본문이 곧 밑변이라, 마지막
+   줄이 창 테두리에 붙는다 — 그때만 한 칸을 비운다. 액션 바가 있으면 그 바가 밑변이고,
+   여기에 패딩을 주면 끝까지 내렸을 때 바가 그만큼 떠올라 흔들린다. */
+.pl-modal--form .pl-modal-body:not(:has(.form-actions)):not(:has(.pl-actions)) {
+  padding-bottom: var(--modal-foot-gap);
 }
 /* 폼 변형 푸터는 본문(입력칸) 폭에 맞춰 정렬 — 전체 폭 full-bleed 음수마진 상쇄. */
 .pl-modal--form .pl-modal-body .form-actions {
@@ -8030,8 +8041,9 @@ table.mini .num {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  /* 좌우 여백은 .pl-modal 이 이미 갖고 있다(padding: 18px 22px 0) — 여기서 또 주면 겹친다. */
-  padding: 0 0 12px;
+  /* 좌우 여백은 .pl-modal 이 이미 갖고 있다(padding: 18px 22px 0) — 여기서 또 주면 겹친다.
+     아래 한 칸은 다른 팝업 스크롤 칸과 같은 자를 쓴다(--modal-foot-gap). */
+  padding: 0 0 var(--modal-foot-gap);
 }
 /* 페이지용 개요는 화면 폭을 채우는 문서라 자체 여백을 갖는데, 팝업 안에서는
    팝업이 이미 여백을 갖고 있어 위쪽만 덜어낸다. */
@@ -8675,6 +8687,25 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   overflow-x: hidden;
   overflow-y: auto;
   padding-left: 18px;
+}
+/* 두 패널 모두 팝업 밑변 바로 위에서 끝난다 — 마지막 줄이 테두리에 닿아 서지 않도록
+   아래 한 칸을 비운다(--modal-foot-gap).
+   단계 패널은 단계마다 스크롤을 맡는 자리가 달라, 주는 자리도 달라진다:
+   · 안쪽 편집창(.stage-fill)이 스크롤하는 단계(2~4·9~11) — 패널은 스크롤하지 않으므로
+     이 여백은 편집창 아래에 늘 놓인 띠가 된다(편집창 바닥에 고정된 저장바도 그 위에 선다).
+   · 패널 자신이 스크롤하는 단계(5~8) — 바닥에 고정된 저장바가 없을 때만 준다. 있으면
+     그 바가 곧 밑변이고, 여기에 패딩을 주면 끝까지 내렸을 때 바가 그만큼 떠오른다. */
+/* (:has 안에 :has 를 넣을 수 없어 '저장바 안의 주 버튼'은 자손 조합자로 찾는다.
+   선택자를 한 줄에 몰지 않고 규칙을 나눠 두는 것도 같은 이유다 — 목록 중 하나가
+   무효면 목록 전체가 버려져 왼쪽 패널의 여백까지 함께 사라진다.) */
+.project-stage-pane:has(> .stage-fill) {
+  padding-bottom: var(--modal-foot-gap);
+}
+.project-stage-pane:not(:has(.form-actions .btn.primary)) {
+  padding-bottom: var(--modal-foot-gap);
+}
+.project-info-pane {
+  padding-bottom: var(--modal-foot-gap);
 }
 /* 단계 상세 공통 헤더 — 모든 단계에서 동일한 제목(좌) + 다음단계 이동(우상단).
    스크롤 컨테이너 상단에 고정해 어느 위치로 스크롤해도 제목·이동이 보인다. */
@@ -10984,6 +11015,9 @@ select.sig-owner-pick,
   justify-content: center;
   align-items: flex-start;
   background: #eef1f5;
+  /* 아래로만 한 칸 — A4 한 장의 밑변이 창 테두리에 붙지 않게. 좌우는 건드리지 않는다
+     (배율을 창 너비로 계산하므로, 좌우를 줄이면 가로 스크롤이 생긴다). */
+  padding-bottom: var(--modal-foot-gap);
 }
 .board-prev-vp {
   flex: none;
