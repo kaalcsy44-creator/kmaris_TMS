@@ -3132,9 +3132,11 @@ export function CategoriesTab() {
         >
           <p className="hint-inline" style={{ display: "block", marginBottom: 10 }}>
             Categories are guessed from what is already classified — an identical description,
-            a shared part-number family, or a category name the description contains. Each line
-            says which. Untick anything that looks wrong; items with no clear match are left
-            alone rather than filed somewhere plausible.
+            a shared part-number family, a description that is nearly the same as a classified
+            one, or a category name the description contains (shipyard shorthand is read too:
+            V/V is a valve, L.O. is lubricating oil). Each line says which. Untick anything that
+            looks wrong; items with no clear match are left alone rather than filed somewhere
+            plausible.
           </p>
           {autoRows === null ? (
             <div className="state">Reading items…</div>
@@ -3186,7 +3188,9 @@ export function CategoriesTab() {
                           />
                         </td>
                         <td>{p.part_no || <span className="dash">—</span>}</td>
-                        <td>{p.description}</td>
+                        <td className="auto-cat-desc">
+                          <span title={p.description}>{p.description}</span>
+                        </td>
                         <td className="auto-cat-path">
                           {p.category_path}
                           {p.item_id == null ? <span className="auto-cat-new">new item</span> : null}

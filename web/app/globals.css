@@ -10284,6 +10284,19 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   color: var(--muted);
   font-size: 11.5px;
 }
+/* 품명 칸 — 견적서의 품명은 규격·조건이 문장으로 딸려 붙어 한 건이 열 줄을 넘기기도
+   한다. 그 한 줄이 표를 통째로 옆으로 밀어 정작 읽어야 할 Category·Why 가 화면 밖으로
+   나가므로, 세 줄에서 자르고 전문은 title 로 남긴다. */
+.auto-cat-desc {
+  max-width: 360px;
+  white-space: normal;
+}
+.auto-cat-desc span {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 /* 분류 칩 — 열 폭까지 꽉 쓰고 거기서 자른다. 고정 폭으로 묶어 두면 열을 넓혀도
    칩만 좁은 채로 남아 경로 가운데가 잘린다(전체 경로는 title 로 읽는다). */
 .ledger-cat button {

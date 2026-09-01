@@ -553,10 +553,11 @@ def master_party_fallback(session) -> dict[int, dict]:
 # 규칙을 새로 만들지 않는다. 이미 분류해 둔 품목과 분류 이름이 근거다 —
 # 회사마다 다른 분류 체계를 코드에 박아 두면 트리를 고칠 때마다 코드가 따라 죽는다.
 #
-# 근거는 셋, 확신이 큰 순서대로 먼저 잡히는 하나를 쓴다:
+# 근거는 넷, 확신이 큰 순서대로 먼저 잡히는 하나를 쓴다:
 #   1) same-desc  — 같은 품명이 이미 분류돼 있다(품번만 다른 같은 물건).
 #   2) part-family— 같은 품번 계열(앞부분)의 분류가 하나로 모여 있다.
-#   3) name-word  — 품명이 분류 이름의 낱말을 품는다(Ball Bearing → Bearing & bushing).
+#   3) like-desc  — 품명이 이미 분류된 품목과 거의 같다(꼬리표만 다른 같은 물건).
+#   4) name-word  — 품명이 분류 이름의 낱말을 품는다(Ball Bearing → Bearing & bushing).
 #                   계열이 정해졌으면 그 계열 아래 소분류에서만 찾는다.
 
 # 분류 이름에서 지워도 뜻이 남는 낱말 — 이런 낱말로 붙는 매칭은 근거가 되지 않는다.
@@ -565,11 +566,74 @@ _CAT_STOPWORDS = {
     "kit", "kits", "item", "items", "기타", "부품", "일반",
 }
 
+# 품명에만 있는 군더더기 — 어느 품목에나 붙는 말이라 둘이 닮았다는 근거가 못 된다.
+# (분류 이름 쪽에는 쓰지 않는다 — 'Set'·'Type' 같은 분류가 생길 수 있으므로.)
+_DESC_STOPWORDS = _CAT_STOPWORDS | {
+    "for", "with", "the", "each", "per", "qty", "pcs", "set", "sets", "new", "old",
+    "one", "two", "three", "same", "spec", "specification", "size", "type", "types",
+    "required", "offered", "quoted", "including", "include", "incl", "available",
+    "not", "non", "all", "any", "from", "into", "out", "off", "used", "use",
+}
+
+# 선박 부품 문서의 줄임말 — 사람은 'V/V'라 쓰고 분류 트리는 'Valve'라 적는다.
+# 이 표가 없으면 그 둘은 영영 만나지 못한다(자동 분류가 늘 빈손인 가장 큰 까닭이었다).
+# 왼쪽은 '/'·'.'로 끊어 쓰는 관용 표기만 잡는다 — 맨 낱말 FO·SW 까지 펴면
+# 'FOR'·'SWITCH' 같은 멀쩡한 말이 엉뚱한 계통으로 끌려간다.
+_ABBREV: tuple[tuple[str, str], ...] = (
+    (r"\bV\s*[./]\s*V\b\.?", " VALVE "),
+    (r"\bM\s*[./]\s*E\b\.?", " MAIN ENGINE "),
+    (r"\bG\s*[./]\s*E\b\.?", " GENERATOR ENGINE "),
+    (r"\bA\s*[./]\s*E\b\.?", " AUXILIARY ENGINE "),
+    (r"\bT\s*[./]\s*C\b\.?", " TURBOCHARGER "),
+    (r"\bE\s*[./]\s*R\b\.?", " ENGINE ROOM "),
+    (r"\bP\s*[./]\s*P\b\.?", " PUMP "),
+    (r"\bO\s*[./]\s*H\b\.?", " OVERHAUL "),
+    (r"\bF\s*[./]\s*O\b\.?", " FUEL OIL "),
+    (r"\bD\s*[./]\s*O\b\.?", " DIESEL OIL "),
+    (r"\bL\s*[./]\s*O\b\.?", " LUBRICATING OIL "),
+    (r"\bC\s*[./]\s*W\b\.?", " COOLING WATER "),
+    (r"\bS\s*[./]\s*W\b\.?", " SEA WATER "),
+    (r"\bF\s*[./]\s*W\b\.?", " FRESH WATER "),
+    (r"\bH\s*[./]\s*T\b\.?", " HIGH TEMPERATURE "),
+    (r"\bL\s*[./]\s*T\b\.?", " LOW TEMPERATURE "),
+    (r"\bCYL\b\.?", " CYLINDER "),
+    (r"\bGEN\b\.?", " GENERATOR "),
+    (r"\bHYD\b\.?", " HYDRAULIC "),
+    (r"\bCOMP\b\.?", " COMPRESSOR "),
+    (r"\bT\s*/\s*G\b\.?", " TURBINE GENERATOR "),
+)
+
+
+def _expand(text) -> str:
+    """품명의 관용 줄임말을 펴서 분류 이름과 같은 말로 만든다('BALL V/V' → 'BALL VALVE')."""
+    t = _norm(text)
+    for pat, rep in _ABBREV:
+        t = re.sub(pat, rep, t)
+    return _norm(t)
+
+
+def _stem(w: str) -> str:
+    """복수형 꼬리만 떼는 최소한의 어간('VALVES'→'VALVE'). 짧은 낱말은 건드리지 않는다."""
+    return w[:-1] if len(w) > 3 and w.endswith("s") else w
+
+
+def _tokens(text: str) -> set[str]:
+    """글자 → 낱말 집합. 낱말 경계로 끊는다 — 이어붙은 조각으로는 맞다고 보지 않는다.
+
+    예전에는 부분문자열로 봤다: 그래서 'REPAIR KIT'의 repair 안에 든 air 가 Starting Air
+    System 을, 'GASKET'의 gas 가 Vent / Inert Gas 를 물어 왔다. 그렇게 붙은 근거는
+    사람이 보면 바로 틀린 것이라 제안 전체의 신뢰를 깎는다."""
+    return {_stem(w) for w in re.split(r"[^0-9a-zA-Z가-힣]+", text.lower()) if len(w) > 2}
+
 
 def _cat_words(name: str) -> set[str]:
     """분류 이름 → 판정에 쓸 낱말 집합('Seal & gasket' → {seal, gasket})."""
-    words = re.split(r"[^0-9a-zA-Z가-힣]+", (name or "").lower())
-    return {w for w in words if len(w) > 2 and w not in _CAT_STOPWORDS}
+    return {w for w in _tokens(name or "") if w not in _CAT_STOPWORDS}
+
+
+def _desc_words(desc) -> set[str]:
+    """품명 → 판정에 쓸 낱말 집합. 줄임말을 편 뒤 군더더기를 뺀다."""
+    return {w for w in _tokens(_expand(desc)) if w not in _DESC_STOPWORDS}
 
 
 def part_family(part_no) -> str:
@@ -631,6 +695,27 @@ def _pick(cats: dict, cids: list[int]) -> tuple[int | None, str]:
     return (prefix[-1], f"{len(cids)} item(s), common parent") if prefix else (None, "")
 
 
+def _like(a: set[str], b: set[str]) -> float:
+    """두 품명이 얼마나 같은 물건인지 — 0(남남)~1(같은 말).
+
+    자카드만 쓰면 한쪽이 길 때 늘 0 에 가깝다: 견적서의 품명에는 규격·조건이 문장으로
+    딸려 붙는 일이 흔해서(같은 케이블인데 한쪽만 세 줄), 짧은 쪽이 긴 쪽에 통째로
+    들어앉는 경우를 따로 본다. 대신 그때는 겹친 낱말이 셋은 되어야 한다 — 둘이면
+    'BALL' 'VALVE' 같은 흔한 말 둘로 남남이 닮아 보인다."""
+    if not a or not b:
+        return 0.0
+    inter = len(a & b)
+    if inter < 2:
+        return 0.0
+    jac = inter / len(a | b)
+    cover = inter / min(len(a), len(b))
+    return max(jac, cover if inter >= 3 else 0.0)
+
+
+# 닮았다고 볼 최소선. 이보다 낮으면 근거로 치지 않는다.
+_LIKE_MIN = 0.6
+
+
 def suggest_categories(session, *, rows: list[dict] | None = None) -> list[dict]:
     """미분류 품목별 분류 제안 목록.
 
@@ -644,12 +729,16 @@ def suggest_categories(session, *, rows: list[dict] | None = None) -> list[dict]
     # 이미 분류된 품목에서 배운다.
     by_desc: dict[str, list[int]] = {}
     by_family: dict[str, list[int]] = {}
+    learned: list[tuple[set[str], int, str]] = []   # (품명 낱말, 분류, 품명) — 닮은꼴 찾기용
     for m in masters:
         if not m.category_id or m.category_id not in cats:
             continue
         d = _norm(m.description)
         if d:
             by_desc.setdefault(d, []).append(m.category_id)
+            w = _desc_words(m.description)
+            if len(w) >= 2:
+                learned.append((w, m.category_id, m.description or ""))
         fam = part_family(m.part_no)
         if fam:
             by_family.setdefault(fam, []).append(m.category_id)
@@ -673,39 +762,87 @@ def suggest_categories(session, *, rows: list[dict] | None = None) -> list[dict]
     def in_service_branch(cid: int) -> bool:
         return service_root is not None and service_root in ancestors(cid)
 
-    def by_name(desc: str, within: int | None, want_service: bool) -> tuple[int | None, str]:
-        """품명이 품은 분류 이름 낱말로 찾기. within 이 있으면 그 하위에서만.
+    def ranked(toks: set[str], within: int | None, want_service: bool,
+               levels: set[int] | None = None) -> list[tuple[list[int], set[str]]]:
+        """품명 낱말과 겹치는 분류들을 '맞은 정도'가 같은 것끼리 묶어 좋은 순으로.
 
-        계통 트리에는 같은 이름이 여러 계통에 되풀이된다(Filter 는 연료·윤활 양쪽,
-        Generator 는 Engine Room 과 Electrical & Automation 양쪽). 그래서 가장 잘 맞는
-        후보가 여럿이면 하나를 임의로 고르지 않고 _pick 에 넘긴다 — 같은 계통 안이면
-        그 계통까지, 계통이 갈리면 근거 없음으로 남긴다."""
-        d = _norm(desc).lower()
-        if not d:
-            return None, ""
-        best_key, tied = (), []
+        한 묶음 안이 갈리면(같은 이름이 여러 계통에 있는 경우) 그 묶음을 버리고 다음
+        묶음으로 내려간다 — 예전에는 첫 묶음이 갈리면 거기서 끝나, 'Actuator' 가 두 계통에
+        있다는 이유만으로 같은 품명이 들고 있던 'Valve' 까지 함께 버려졌다."""
+        groups: dict[tuple, list[int]] = {}
+        hits: dict[tuple, set[str]] = {}
         for cid, words in cat_words.items():
-            hit = {w for w in words if w in d}
+            hit = words & toks
             if not hit:
+                continue
+            c = cats[cid]
+            if levels is not None and (c.level or 1) not in levels:
                 continue
             if within is not None and within not in ancestors(cid) - {cid}:
                 continue
-            if service_root is not None and in_service_branch(cid) != want_service:
+            svc = in_service_branch(cid)
+            # 용역이라고 품명이 말한 항목은 용역 가지 안에서만 찾는다(적극적 근거).
+            # 반대로 '물품'은 용역이라는 증거가 없다는 뜻일 뿐이라 울타리를 세우지 않고
+            # 순위만 뒤로 미룬다 — 그래야 품명이 용역을 가리키는데 낱말표에 없는 항목
+            # ('T/C OVERHAUL SERVICE')이 갈 곳을 잃지 않는다.
+            if want_service and service_root is not None and not svc:
                 continue
-            c = cats[cid]
-            # 더 깊은(구체적인) 분류, 더 많이 맞은 낱말, 더 긴 낱말 순.
-            key = (c.level or 0, len(hit), max(len(w) for w in hit))
-            if not tied or key > best_key:
-                best_key, tied = key, [cid]
-            elif key == best_key:
-                tied.append(cid)
-        if not tied:
+            key = (
+                0 if (svc and not want_service) else 1,   # 갈래가 맞는 쪽이 먼저
+                len(hit),                                 # 많이 맞은 쪽
+                1 if hit == words else 0,                 # 이름을 통째로 맞춘 쪽
+                max(len(w) for w in hit),                 # 긴(구체적인) 낱말
+                c.level or 0,                             # 깊은(구체적인) 분류
+            )
+            groups.setdefault(key, []).append(cid)
+            hits.setdefault(key, set()).update(hit)
+        return [(groups[k], hits[k]) for k in sorted(groups, reverse=True)]
+
+    def resolve(groups: list[tuple[list[int], set[str]]]) -> tuple[int | None, str]:
+        for cids, hit in groups:
+            best = cids[0] if len(cids) == 1 else _pick(cats, cids)[0]
+            if best is not None:
+                return best, ", ".join(sorted(hit))
+        return None, ""
+
+    def by_name(desc: str, within: int | None, want_service: bool) -> tuple[int | None, str]:
+        """품명이 품은 분류 이름 낱말로 찾기. within 이 있으면 그 하위에서만.
+
+        계통(대·중분류)이 먼저 잡히면 그 안에서 한 번 더 내려간다 — 'L.O. PUMP' 는
+        Lubricating Oil System 을 맞히고, 그 안에서 다시 LO Pump 를 맞힌다. 계통 밖에서
+        고르면 같은 'Pump' 가 여섯 군데라 늘 갈려 아무것도 못 고른다."""
+        toks = _desc_words(desc)
+        if not toks:
             return None, ""
-        best, _ = _pick(cats, tied) if len(tied) > 1 else (tied[0], "")
-        if best is None:
+        best, hit = resolve(ranked(toks, within, want_service))
+        if best is not None and within is None and (cats[best].level or 1) <= 2:
+            deep, dhit = resolve(ranked(toks, best, want_service))
+            if deep is not None:
+                return deep, dhit
+        return best, hit
+
+    def like_desc(words: set[str], want_service: bool) -> tuple[int | None, str]:
+        """이미 분류된 품목 중 품명이 가장 닮은 것들의 분류."""
+        if len(words) < 2:
             return None, ""
-        hits = sorted({w for cid in tied for w in cat_words[cid] if w in d})
-        return best, ", ".join(hits)
+        top, hits = 0.0, []
+        for w, cid, d in learned:
+            if service_root is not None and want_service and not in_service_branch(cid):
+                continue
+            sc = _like(words, w)
+            if sc < _LIKE_MIN:
+                continue
+            if sc > top + 1e-9:
+                top, hits = sc, [(cid, d)]
+            elif sc > top - 1e-9:
+                hits.append((cid, d))
+        if not hits:
+            return None, ""
+        cid, why = _pick(cats, [c for c, _ in hits])
+        if cid is None:
+            return None, ""
+        sample = hits[0][1]
+        return cid, f"“{sample[:60]}”{why and ' — ' + why}"
 
     if rows is None:
         # 대상 = 분류가 빈 마스터 전체(거래 이력이 아직 없는 품목도 포함) + 마스터에
@@ -739,7 +876,13 @@ def suggest_categories(session, *, rows: list[dict] | None = None) -> list[dict]
                     cid, reason = deeper, f"part family {fam} — {why} + name “{hit}”"
                 else:
                     cid, reason = c, f"part family {fam} — {why}"
-        # 3) 품명이 분류 이름을 품는다.
+        # 3) 품명이 이미 분류된 품목과 거의 같다 — 견적서 품명은 같은 물건도 꼬리표가
+        #    달라(‘, KK’ / ‘, MT.H’) 글자 그대로는 좀처럼 맞지 않는다.
+        if cid is None:
+            c, why = like_desc(_desc_words(desc), is_service)
+            if c:
+                cid, reason = c, f"like {why}"
+        # 4) 품명이 분류 이름을 품는다.
         if cid is None:
             c, hit = by_name(desc, None, is_service)
             if c:
