@@ -1832,6 +1832,10 @@ def finance_cashflow(unit: str = "month", count: int = 6, opening: float = 0.0,
     '그중 연체분'으로 그대로 온다). 연체는 예정의 부분집합이므로 include_expected=0 이면
     이 손잡이는 뜻을 잃는다 — 아래에서 함께 꺼 버린다.
 
+    클레임 상계(크레딧 노트)는 돈이 오가지 않고 미수만 지우므로 유입에 넣지 않는다 —
+    구간별 offset_in 으로 따로 실어 보내, 화면이 유입 칸 아래에 '현금 대신 상계로 사라진
+    미수'로 적을 수 있게 한다(건별 내역은 /cashflow/items 의 set-off 줄).
+
     구간(월/주)별로 유입/유출을 집계하고 opening(기초잔고)부터 누적잔고를 굴린다.
     각 구간은 '아직 안 온 예정'과 '이미 오간 실적'을 함께 담는다 — 이번 달에 이미 받은
     돈이 어디에도 안 보이면 그 달 유입이 0 으로 읽히기 때문이다. 따라서 opening 은
@@ -1896,6 +1900,10 @@ def finance_cashflow(unit: str = "month", count: int = 6, opening: float = 0.0,
         # include_expected=0 이면 이 돈도 흐름 밖에 서고, 화면은 잔고 옆에 따로 적는다.
         exp_in = [0.0] * count
         exp_out = [0.0] * count
+        # 상계(크레딧 노트) — 돈은 오가지 않았는데 미수가 지워진 금액. 유입에도 유출에도
+        # 들지 않고(통장이 움직이지 않았다) 이 칸에만 담긴다. 화면은 유입 칸 아래에
+        # '그달에 현금 대신 상계로 사라진 미수'로 적는다.
+        offset_in = [0.0] * count
         today_iso = date.today().isoformat()
 
         def listed(overdue: bool) -> bool:
@@ -1948,6 +1956,20 @@ def finance_cashflow(unit: str = "month", count: int = 6, opening: float = 0.0,
                     inflow[idx] += amt
                     act_in[idx] += amt
                     act_in_income[idx] += amt
+        # 상계 — 크레딧 노트로 지워진 미수. 흐름(유입·유출·잔고)에는 한 푼도 넣지 않는다.
+        # 넣으면 있지도 않은 입금이 잔고를 밀어 올리고, 아예 빼 두면 미수가 왜 줄었는지가
+        # 장부 어디에도 남지 않는다. 그래서 제 칸(offset_in)에 따로 세운다.
+        for cn in _credit_note_rows(s):
+            if (cn["currency"] or "KRW").upper() != cur_sel:
+                continue
+            day = cn["issue_date"]
+            # 발행일이 곧 상계일 — 실적과 같은 규칙으로 창 안의 것만 담는다(첫 칸이라고
+            # 지난 상계까지 끌어오면 그 달 미수가 두 번 줄어든 것처럼 읽힌다).
+            if not day or not (win_start.isoformat() <= day <= win_end.isoformat()):
+                continue
+            idx = bucket_index(day)
+            if idx >= 0:
+                offset_in[idx] += cn["total"]
         # 유출 — 지급대장. 미납 회차는 예정일에, 납부된 회차는 실제 납부일에 담는다.
         # 첫 구간이 연체를 흡수하도록 과거 1년까지 회차를 펼쳐 담는다.
         scan_start = date.fromordinal(win_start.toordinal() - 400)
@@ -2057,6 +2079,9 @@ def finance_cashflow(unit: str = "month", count: int = 6, opening: float = 0.0,
                 # 이면 위 inflow/outflow 밖에 있고, 1 이면 그 안에 든 금액 중 예정분이다.
                 "expected_in": round(exp_in[i]),
                 "expected_out": round(exp_out[i]),
+                # 현금 대신 상계로 지워진 미수 — 위 inflow 밖의 금액이다(잔고를 움직이지
+                # 않는다). 내역은 장부(/cashflow/items)의 set-off 줄에 그대로 있다.
+                "offset_in": round(offset_in[i]),
                 "net": round(net),
                 "cumulative": round(cumulative),
             })
@@ -2078,6 +2103,8 @@ def finance_cashflow(unit: str = "month", count: int = 6, opening: float = 0.0,
             # 창 전체의 예정(아직 예정일 전) — 잔고 밖에 세워 두었을 때 그 크기.
             "expected_in": round(sum(exp_in)),
             "expected_out": round(sum(exp_out)),
+            # 창 전체에서 상계로 지워진 미수 — 유입 합계 밖의 금액.
+            "offset_in": round(sum(offset_in)),
             # 화면이 '이 집계가 예정을 굴렸나'를 스위치가 아니라 응답으로 보고 정하게 한다
             # (배포 시차 — 옛 백엔드는 이 필드가 없고, 그때는 늘 굴린 값이다).
             "expected_included": bool(include_expected),
@@ -2090,6 +2117,8 @@ def finance_cashflow(unit: str = "month", count: int = 6, opening: float = 0.0,
 # 현금흐름 한 칸을 이루는 여섯 갈래. /cashflow 행의 in_ar·in_income·actual_inflow /
 # out_ap·out_other·actual_outflow 와 1:1 로 맞물린다(예정과 실적은 겹치지 않는다).
 # 지급대장의 '거래선지급'은 벤더 청구와 같은 성격이라 payables 쪽에서 센다.
+# 상계 줄(kind="credit")은 어느 갈래에도 들지 않는다 — 여섯 갈래는 저 여섯 숫자를 그대로
+# 펼친 것이고, 상계는 그 숫자들 밖에 있다(offset_in 으로 따로 센다).
 _INFLOW_BUCKETS = {"receivables", "income", "collected"}
 _CASHFLOW_BUCKETS = {
     "receivables": lambda x: x["kind"] == "ar" and not x["actual"],
@@ -2111,6 +2140,10 @@ def finance_cashflow_items(start: str = "", end: str = "", currency: str = "KRW"
     합계가 /cashflow 의 그 행과 정확히 맞아야 하므로 같은 규칙으로 담는다: 예정은
     예정일(수금 due·지급 회차일), 실적은 실제로 오간 날. first=1 이면 그 구간이 창의
     첫 칸이라는 뜻이고, 앞선 과거(연체·지난 회차)를 여기로 흡수한다.
+
+    클레임 상계(크레딧 노트)는 유입 목록에 함께 서되 noncash=True 로 표시한다 — 미수를
+    지운 사건이라 장부에 남아야 하지만, 통장은 움직이지 않았으므로 합계·잔고 밖이다.
+
     bucket 을 주면 그 갈래만 남긴다 — 화면의 여섯 줄(receivables/income/collected/
     payables/other/paid)이 각각 자기 몫만 열어 볼 수 있도록. 남은 합계는 /cashflow 행의
     같은 이름 필드(in_ar·in_income·actual_inflow·out_ap·out_other·actual_outflow)와 맞는다.
@@ -2173,6 +2206,30 @@ def finance_cashflow_items(start: str = "", end: str = "", currency: str = "KRW"
                     "amount": amt, "actual": True, "overdue": False,
                     "row_id": inc.id, "order_id": 0, "rfq_id": 0, "po_id": 0,
                 })
+
+        # 상계 — 크레딧 노트 한 장이 미수 한 건을 지운 줄. 유입 칸에 서지만 돈이 오간
+        # 적이 없어(noncash) 합계에도 잔고에도 들지 않는다. 대상 청구서를 ref 로 달고
+        # 그 청구액·남은 잔액을 함께 실어, "어느 미수에서 얼마가 어떻게 사라졌나"가
+        # 한 줄에서 읽히게 한다 — 이 줄이 없으면 미수가 조용히 줄어든 것으로만 보인다.
+        ar_by_id = {r["id"]: r for r in ar_rows}
+        for cn in _credit_note_rows(s):
+            if (cn["currency"] or "KRW").upper() != cur_sel:
+                continue
+            day = cn["issue_date"]
+            if not day or not (lo <= day <= hi):
+                continue
+            ar = ar_by_id.get(cn["ar_id"])
+            inflow.append({
+                "kind": "credit", "date": day, "party": cn["customer"],
+                "ref": cn["invoice_no"], "memo": cn["cn_no"] or "Credit note",
+                "amount": cn["total"], "actual": False, "overdue": False,
+                # 통장이 움직이지 않은 줄 — 합계·잔고 밖이라는 표시.
+                "noncash": True,
+                # 상계 대상 — 얼마짜리 청구서를 깎았고, 그 청구서에 얼마가 남았나.
+                "target_amount": ar["invoice_amount"] if ar else 0.0,
+                "target_outstanding": ar["outstanding"] if ar else 0.0,
+                "row_id": cn["id"], "order_id": cn["order_id"], "rfq_id": cn["rfq_id"], "po_id": 0,
+            })
 
         # 유출 — 지급대장(예정 회차 + 실제 납부), 매입 청구(AP), 선택적 벤더 P/O 추정.
         vendor_names = {v.id: v.name for v in s.query(Vendor).all()}
@@ -2245,14 +2302,18 @@ def finance_cashflow_items(start: str = "", end: str = "", currency: str = "KRW"
             keep = _CASHFLOW_BUCKETS[bucket]
             inflow = [x for x in inflow if keep(x)] if bucket in _INFLOW_BUCKETS else []
             outflow = [] if bucket in _INFLOW_BUCKETS else [x for x in outflow if keep(x)]
+        # 합계는 현금만 센다 — 상계 줄은 목록에 서지만 통장을 움직이지 않았으므로,
+        # 여기 더하면 이 화면의 합계가 /cashflow 그 행의 유입과 어긋난다.
         return {
             "start": lo, "end": hi, "currency": cur_sel, "bucket": bucket,
             "inflow": inflow,
             "outflow": outflow,
-            "total_inflow": round(sum(x["amount"] for x in inflow)),
-            "total_outflow": round(sum(x["amount"] for x in outflow)),
+            "total_inflow": round(sum(x["amount"] for x in inflow if not x.get("noncash"))),
+            "total_outflow": round(sum(x["amount"] for x in outflow if not x.get("noncash"))),
             "actual_inflow": round(sum(x["amount"] for x in inflow if x["actual"])),
             "actual_outflow": round(sum(x["amount"] for x in outflow if x["actual"])),
+            # 그 목록에 함께 선 '돈이 오가지 않은' 금액(상계) — 합계 밖이라 따로 적는다.
+            "noncash_inflow": round(sum(x["amount"] for x in inflow if x.get("noncash"))),
         }
     finally:
         s.close()

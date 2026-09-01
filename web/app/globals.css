@@ -13114,6 +13114,9 @@ td.uaddr-c-end .btn.sm + .btn.sm { margin-left: 6px; }
    아니라 제 색을 준다. 다만 연체의 붉은색과는 갈라야 한다: 밀린 돈이 아니라 아직 날이
    오지 않은 돈이고, 둘이 한 칸에 나란히 설 수 있어 색이 같으면 구분이 사라진다. */
 .fin-cf-parked { font-size: 11px; font-weight: 600; color: #5b6b82; margin-top: 2px; }
+/* 상계로 사라진 미수 — 역시 합계 '밖'의 돈이지만, 밀린 돈(붉은색)도 아직 안 온 돈(회청색)도
+   아니다. 이미 끝난 정산이라 초록 계열로 갈라 둔다(장부의 ✓ credited 와 같은 색계). */
+.fin-cf-offset { font-size: 11px; font-weight: 600; color: #1e7a46; margin-top: 2px; }
 /* 세 기둥에서 합계에 들지 않은 갈래 — 줄을 지우지 않고 눕힌다(무엇이 예정되어 있는지는
    남기되, 더해서 합계가 나오지 않는 줄임을 알린다). */
 .fin-bucket-card tr.fin-bucket-off > td,
@@ -13984,7 +13987,7 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
     color: var(--muted);
   }
   /* '이미 오간 돈'·'잔고 밖 예정' 줄은 값 아래가 아니라 그 줄 오른쪽 끝에 매달린다. */
-  .fin-cf-actual, .fin-cf-parked { width: 100%; text-align: right; margin-top: 0; }
+  .fin-cf-actual, .fin-cf-parked, .fin-cf-offset { width: 100%; text-align: right; margin-top: 0; }
   /* 펼친 장부는 또 하나의 카드가 아니라 바로 '아래' 카드에 딸린 서랍이다 — 격자·테두리를
      걷어내고 카드와 붙여, 어느 구간의 안쪽인지 자리로 읽히게 한다. */
   .fin-cf-table tr.fin-cf-detail {
@@ -14019,6 +14022,8 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 /* 합계 바로 위에 붙는 '뺀 금액' 줄 — 합계의 일부가 아니라 합계를 읽는 단서라, 굵기 없이
    붉게만 적는다. */
 .fin-period-overdue td { color: #a03227; background: #fdf1ef; }
+/* 같은 자리의 상계 줄 — 밀린 돈이 아니라 이미 끝난 정산이라 붉게 적지 않는다. */
+.fin-period-offset td { color: #1e7a46; background: #f1f8f3; }
 
 /* ── Daybook — Cash Flow 표의 한 줄을 그 자리에서 날짜순으로 펼친 장부 ────────
    가운데를 세로선으로 갈라 왼쪽은 들어온 돈, 오른쪽은 나간 돈(위 표와 같은 순서).
@@ -14076,6 +14081,9 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 /* 잔고를 움직이지 않은 줄의 잔고 칸 — 줄표 하나. 옅게 두어 그 위아래 잔고가 이어져
    읽히게 한다(이 줄에서 잔고는 멈춰 있는 것이 아니라 관여하지 않는다). */
 .fin-daybook tbody td.fin-db-parked { color: #b9c3d1; }
+/* 상계 줄 — 예정의 회색으로 물리지 않는다(끝난 정산이다). 대신 왼쪽에 초록 실선을 세워
+   '이 줄은 통장을 거치지 않았다'를 자리로 표시한다. */
+.fin-daybook tbody tr.fin-db-noncash > td:nth-child(2) { box-shadow: inset 2px 0 0 #1e7a46; }
 .fin-daybook .fin-db-done { color: #1e7a46; font-weight: 600; }
 .fin-daybook .fin-db-late { color: #c0392b; }
 /* 전월 이월 줄 — 본문이 아니라 출발점이라 옅게 눕힌다. */

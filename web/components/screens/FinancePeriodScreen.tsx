@@ -27,12 +27,14 @@ function typeLabel(r: FinanceCashflowItem): string {
     case "po": return "P/O cost (est.)";
     case "income": return `Other income · ${INCOME_CATEGORY_LABEL[r.memo] || r.memo}`;
     case "payable": return `Payable · ${CATEGORY_LABEL[r.memo] || r.memo}`;
+    // 상계 — 돈이 오간 적 없이 미수를 지운 줄. 근거가 된 크레딧 노트 번호까지 적는다.
+    case "credit": return r.memo ? `Set-off · ${r.memo}` : "Set-off";
   }
 }
 
 const EMPTY_ITEMS: FinanceCashflowItems = {
   start: "", end: "", currency: "KRW", bucket: "", inflow: [], outflow: [],
-  total_inflow: 0, total_outflow: 0, actual_inflow: 0, actual_outflow: 0,
+  total_inflow: 0, total_outflow: 0, actual_inflow: 0, actual_outflow: 0, noncash_inflow: 0,
 };
 
 /** 여섯 갈래의 화면 이름 — Overview 의 세 기둥에 적힌 것과 같은 말을 쓴다. */
@@ -141,15 +143,18 @@ export default function FinancePeriodScreen() {
       rows.reduce((t, r) => t + (keep(r) ? r.amount : 0), 0);
     // 연체 = 예정 중 날짜가 지난 것. 예정을 통째로 뺄 때는 '연체가 아닌 예정'을 따로 세어
     // 둘을 각각 적는다(합쳐 적으면 어느 쪽이 밀린 돈인지가 사라진다).
-    const odIn = data ? add(data.inflow, (r) => !!r.overdue) : 0;
-    const odOut = data ? add(data.outflow, (r) => !!r.overdue) : 0;
-    const expIn = data ? add(data.inflow, (r) => !r.actual && !r.overdue) : 0;
-    const expOut = data ? add(data.outflow, (r) => !r.actual && !r.overdue) : 0;
+    // 상계 줄(noncash)은 어느 쪽도 아니다 — 서버 합계에서 이미 빠져 있으므로, 여기서
+    // '예정'으로 한 번 더 빼면 그만큼 합계가 두 번 깎인다.
+    const odIn = data ? add(data.inflow, (r) => !!r.overdue && !r.noncash) : 0;
+    const odOut = data ? add(data.outflow, (r) => !!r.overdue && !r.noncash) : 0;
+    const expIn = data ? add(data.inflow, (r) => !r.actual && !r.overdue && !r.noncash) : 0;
+    const expOut = data ? add(data.outflow, (r) => !r.actual && !r.overdue && !r.noncash) : 0;
     const offIn = (includeOverdue ? 0 : odIn) + (includeExpected ? 0 : expIn);
     const offOut = (includeOverdue ? 0 : odOut) + (includeExpected ? 0 : expOut);
     const inflow = (data?.total_inflow ?? 0) - offIn;
     const outflow = (data?.total_outflow ?? 0) - offOut;
-    return { inflow, outflow, odIn, odOut, expIn, expOut, net: inflow - outflow };
+    const setOff = data ? add(data.inflow, (r) => !!r.noncash) : 0;
+    return { inflow, outflow, odIn, odOut, expIn, expOut, setOff, net: inflow - outflow };
   }, [data, includeOverdue, includeExpected]);
   const net = sums.net;
   const backHref = "/finance";
@@ -224,6 +229,7 @@ export default function FinancePeriodScreen() {
               total={s === "in" ? sums.inflow : sums.outflow}
               overdue={s === "in" ? sums.odIn : sums.odOut}
               expected={s === "in" ? sums.expIn : sums.expOut}
+              setOff={s === "in" ? sums.setOff : 0}
               includeOverdue={includeOverdue}
               includeExpected={includeExpected}
               currency={currency}
@@ -241,7 +247,7 @@ export default function FinancePeriodScreen() {
   );
 }
 
-function ItemPanel({ side, title, rows, total, overdue, expected, includeOverdue, includeExpected, currency }: {
+function ItemPanel({ side, title, rows, total, overdue, expected, setOff, includeOverdue, includeExpected, currency }: {
   side: "in" | "out";
   /** 갈래를 걸고 들어왔을 때의 제목(비우면 Inflow/Outflow). */
   title?: string;
@@ -252,6 +258,8 @@ function ItemPanel({ side, title, rows, total, overdue, expected, includeOverdue
   overdue: number;
   /** 그중 아직 예정일이 오지 않은 미정산(연체와 겹치지 않는다). 같은 이유로 따로 적는다. */
   expected: number;
+  /** 그중 상계(크레딧 노트) — 돈이 오간 적이 없어 어떤 손잡이로도 합계에 들지 않는다. */
+  setOff: number;
   includeOverdue: boolean;
   includeExpected: boolean;
   currency: string;
@@ -277,8 +285,10 @@ function ItemPanel({ side, title, rows, total, overdue, expected, includeOverdue
                 <td>{typeLabel(r)}</td>
                 <td>{r.party || "—"}</td>
                 <td>
-                  {/* 프로젝트에서 관리하는 건(AR·AP·P/O)은 그 단계로 바로 건너뛴다. */}
-                  {r.kind === "ar" || r.kind === "ap" || r.kind === "po" ? (
+                  {/* 프로젝트에서 관리하는 건(AR·AP·P/O)은 그 단계로 바로 건너뛴다.
+                      상계 줄은 자기 문서가 아니라 '깎아 준 청구서'를 가리킨다 — 그 청구서가
+                      이 줄의 뜻이라, 눌러 가야 할 곳도 거기다. */}
+                  {r.kind === "ar" || r.kind === "ap" || r.kind === "po" || r.kind === "credit" ? (
                     <ProjectDocLink
                       orderId={r.order_id}
                       rfqId={r.rfq_id}
@@ -288,7 +298,9 @@ function ItemPanel({ side, title, rows, total, overdue, expected, includeOverdue
                   ) : (r.ref || "—")}
                 </td>
                 <td>
-                  {r.actual
+                  {r.kind === "credit"
+                    ? <span className="fin-cf-actual" title="Settled by set-off — no money moved">Credited</span>
+                    : r.actual
                     ? <span className="fin-cf-actual">{side === "in" ? "Received" : "Paid"}</span>
                     // 며칠 늦었는지까지 — Date 칸이 원래 결제일이므로 둘이 한 줄에서 읽힌다.
                     : r.overdue
@@ -298,6 +310,15 @@ function ItemPanel({ side, title, rows, total, overdue, expected, includeOverdue
                 <td className="num">{cash(r.amount)}</td>
               </tr>
             ))}
+            {/* 상계는 예정·연체와 달리 손잡이로 넣을 수 있는 돈이 아니다 — 통장이 움직인
+                적이 없어 어느 설정에서도 합계 밖이다. 그래도 줄은 위에 서 있으므로,
+                더해 보는 사람을 위해 얼마가 밖인지 여기서 밝힌다. */}
+            {setOff ? (
+              <tr className="fin-period-offset">
+                <td colSpan={5}>Set-off (credit notes) — no cash, not counted in the total</td>
+                <td className="num">−{cash(setOff)}</td>
+              </tr>
+            ) : null}
             {/* 예정·연체를 빼고 셀 때는 합계가 위 줄들의 단순 합이 아니다 — 얼마를 빼고
                 센 것인지 그 자리에서 밝힌다(안 밝히면 더해 보는 사람이 틀렸다고 읽는다).
                 예정이 큰 덩어리이고 연체는 그중 날짜가 지난 몫이라 예정을 먼저 적는다. */}

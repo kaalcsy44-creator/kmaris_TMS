@@ -890,6 +890,14 @@ function OverviewTab() {
                             {cash(r.overdue_in)} overdue
                           </div>
                         ) : null}
+                        {/* 그달에 현금 대신 상계로 사라진 미수 — 유입 '밖'의 금액이라
+                            잔고를 움직이지 않는다. 이 줄이 없으면 미수가 조용히 줄어든
+                            것으로만 보인다(건별 내역은 아래 장부의 set-off 줄). */}
+                        {r.offset_in ? (
+                          <div className="fin-cf-offset" title="Cleared by credit note — no cash moved, so it is not in the balance">
+                            {cash(r.offset_in)} set off
+                          </div>
+                        ) : null}
                       </td>
                       <td className="num" data-label="Outflow">
                         {cash(r.outflow)}

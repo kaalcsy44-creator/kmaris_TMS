@@ -1377,6 +1377,12 @@ export type FinanceCashflowRow = {
    */
   expected_in?: number;
   expected_out?: number;
+  /**
+   * 클레임 상계(크레딧 노트)로 지워진 미수 — 돈이 오간 적이 없어 inflow **밖**이고
+   * 잔고를 움직이지 않는다. 이 줄이 없으면 미수가 왜 줄었는지가 표에서 사라진다.
+   * 건별 내역은 장부(/cashflow/items)의 set-off 줄. 옛 백엔드는 보내지 않는다.
+   */
+  offset_in?: number;
   net: number;
   cumulative: number;
 };
@@ -1410,9 +1416,12 @@ export type FinanceCashflow = {
 
 /** 현금흐름 한 구간을 건별로 펼친 내역 — 표의 한 칸을 눌러 들어가는 화면용. */
 export type FinanceCashflowItem = {
-  /** ar=매출채권, income=기타수입, payable=지급대장, ap=벤더청구, po=발주원가(추정) */
-  kind: "ar" | "income" | "payable" | "ap" | "po";
-  /** 예정분은 예정일, 실적분은 실제로 오간 날. */
+  /**
+   * ar=매출채권, income=기타수입, payable=지급대장, ap=벤더청구, po=발주원가(추정),
+   * credit=클레임 상계(크레딧 노트로 지운 미수 — 돈은 오가지 않았다).
+   */
+  kind: "ar" | "income" | "payable" | "ap" | "po" | "credit";
+  /** 예정분은 예정일, 실적분은 실제로 오간 날, 상계는 크레딧 노트 발행일. */
   date: string;
   party: string;
   ref: string;
@@ -1421,6 +1430,14 @@ export type FinanceCashflowItem = {
   /** true = 이미 오간 돈(실적), false = 아직 안 온 예정. */
   actual: boolean;
   overdue: boolean;
+  /**
+   * 통장이 움직이지 않은 줄(상계). 목록에는 서지만 합계·잔고 밖이라, 더해 보는 쪽에서
+   * 반드시 걸러야 한다. 옛 백엔드는 보내지 않는다(그때는 이런 줄 자체가 없었다).
+   */
+  noncash?: boolean;
+  /** 상계 줄에만 — 깎인 청구서의 청구액과 그 청구서에 남은 잔액. */
+  target_amount?: number;
+  target_outstanding?: number;
   row_id: number;
   order_id: number;
   rfq_id: number;
@@ -1438,10 +1455,13 @@ export type FinanceCashflowItems = {
   bucket: CashBucket | "";
   inflow: FinanceCashflowItem[];
   outflow: FinanceCashflowItem[];
+  /** 현금만 센 합계 — 상계(noncash) 줄은 목록에 서 있어도 여기에는 들지 않는다. */
   total_inflow: number;
   total_outflow: number;
   actual_inflow: number;
   actual_outflow: number;
+  /** 그 목록에 함께 선 상계 금액 — 합계 밖이라 화면이 따로 적는다. */
+  noncash_inflow?: number;
 };
 
 export type FinanceCalendarEvent = {

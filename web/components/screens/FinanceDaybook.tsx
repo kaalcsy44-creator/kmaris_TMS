@@ -55,6 +55,8 @@ function descOf(r: FinanceCashflowItem): string {
       return r.ref || INCOME_CATEGORY_LABEL[r.memo] || r.memo || "Other income";
     case "payable":
       return r.ref || CATEGORY_LABEL[r.memo] || r.memo || "Other cost";
+    case "credit":
+      return r.party || "Credit note";
   }
 }
 
@@ -71,6 +73,10 @@ function tagOf(r: FinanceCashflowItem): string {
       return INCOME_CATEGORY_LABEL[r.memo] || r.memo || "Other income";
     case "payable":
       return CATEGORY_LABEL[r.memo] || r.memo || "Other cost";
+    // 크레딧 노트 번호가 있으면 그것까지 — 통장에 안 찍힌 줄이라, 무엇을 근거로 미수가
+    // 지워졌는지는 이 한 줄이 아니면 장부에서 찾을 데가 없다.
+    case "credit":
+      return r.memo ? `Set-off · ${r.memo}` : "Set-off";
   }
 }
 
@@ -145,13 +151,15 @@ export default function FinanceDaybook({ start, end, label, opening, currency, i
       //  · parkExpected — 예정 전부. 잔고를 '통장에 찍힌 것'으로 볼 때.
       //  · parkOverdue  — 그중 날짜가 지난 것만. 예정으로 앞을 내다보되, 오지 않은 돈으로
       //    굴린 잔고가 그 아래 전부와 다음 구간까지 함께 틀어지는 것은 막을 때.
-      const parked = (!item.actual && parkExpected) || (item.overdue && parkOverdue);
+      // 상계(noncash)는 어느 손잡이와도 무관하게 늘 세워 둔다 — 예정이라서가 아니라
+      // 통장이 움직인 적이 없어서다. 나머지 둘은 '아직 안 온 돈'을 세우는 손잡이다.
+      const parked = !!item.noncash || (!item.actual && parkExpected) || (item.overdue && parkOverdue);
       if (!parked) balance += side === "in" ? item.amount : -item.amount;
       const dayStart = item.date !== prevDay;
       prevDay = item.date;
       // 예측 표시는 '잔고를 움직인 예정'만 센다 — 세워 둔 연체는 잔고를 건드리지 않아
       // 그 아래 잔고를 예측으로 만들지 않는다.
-      metExpected = metExpected || (!item.actual && !parked);
+      metExpected = metExpected || (!item.actual && !parked && !item.noncash);
       return { item, side, balance: parked ? null : balance, dayStart, projected: metExpected };
     });
   }, [data, opening, parkOverdue, parkExpected]);
@@ -216,6 +224,14 @@ export default function FinanceDaybook({ start, end, label, opening, currency, i
                     : ""}
                 </>}
           </p>
+          {/* 상계 줄이 하나라도 서 있을 때만 — 통장을 안 거친 줄이 장부에 섞여 있다는 건
+              보아서는 알 수 없고, 그 줄을 유입에 더해 보면 이 달 합계가 안 맞는다. */}
+          {rows.some((r) => r.item.noncash) ? (
+            <p className="hint-inline" style={{ display: "block", marginTop: 4 }}>
+              Set-off lines clear a receivable with a credit note. No money moved, so they show — for balance
+              and stay outside this period&apos;s inflow; the reference is the invoice that was credited.
+            </p>
+          ) : null}
         </>
       )}
     </div>
@@ -231,13 +247,30 @@ function DaybookLine({ row, start, end, currency }: {
 }) {
   const { item: r, side, balance, dayStart, projected } = row;
   const cash = (n: number) => money(n, currency);
-  const linked = r.kind === "ar" || r.kind === "ap" || r.kind === "po";
+  // 상계 줄의 ref 는 '깎아 준 청구서'다 — 다른 줄이 자기 문서를 가리키는 자리에 이 줄만
+  // 남의 문서를 세우는 셈인데, 그 남의 문서가 곧 이 줄의 뜻이다(무엇에서 지웠는가).
+  const linked = r.kind === "ar" || r.kind === "ap" || r.kind === "po" || r.kind === "credit";
   const desc = (
     <>
       <div className="fin-db-desc">{descOf(r)}</div>
       <div className="hint-inline">
         {tagOf(r)}
-        {r.actual
+        {/* 상계는 '아직 안 온 돈'이 아니다 — 이미 끝난 정산인데 통장만 안 거쳤을 뿐이라
+            expected 로 적으면 거짓말이 된다. 대신 그 청구서에서 얼마가 지워졌고 얼마가
+            남았는지를 적는다: 이 줄의 금액이 어느 미수의 어느 만큼인지가 여기서 닫힌다. */}
+        {r.kind === "credit"
+          ? <>
+              <span className="fin-db-done"> · ✓ credited</span>
+              {r.target_amount
+                ? <span>
+                    {" · "}
+                    {(r.target_outstanding ?? 0) > 0
+                      ? `${cash(r.target_outstanding ?? 0)} left of ${cash(r.target_amount)}`
+                      : `cleared the ${cash(r.target_amount)} invoice in full`}
+                  </span>
+                : null}
+            </>
+          : r.actual
           ? <span className="fin-db-done"> · ✓ {side === "in" ? "received" : "paid"}</span>
           // 연체는 '늦었다'로 끝내지 않고 며칠인지까지 적는다 — 사흘 늦은 건과 석 달 늦은
           // 건은 같은 말로 부를 수 없다. 날짜 칸이 원래 결제일이므로 둘이 한 줄에서 읽힌다.
@@ -261,8 +294,10 @@ function DaybookLine({ row, start, end, currency }: {
     `fin-db-row--${side}`,
     dayStart ? "fin-db-daystart" : "",
     // 아직 오지 않은 돈은 글자를 낮춘다 — 실제로 오간 건과 나란히 놓였을 때 어느 쪽이
-    // 사실이고 어느 쪽이 아직 예정인지가 읽기 전에 갈리도록.
-    r.actual ? "" : "fin-db-expected",
+    // 사실이고 어느 쪽이 아직 예정인지가 읽기 전에 갈리도록. 상계는 그 회색을 쓰지
+    // 않는다: 통장을 안 거쳤을 뿐 이미 끝난 정산이라 예정과 한 색으로 묶으면 안 된다.
+    r.actual || r.noncash ? "" : "fin-db-expected",
+    r.noncash ? "fin-db-noncash" : "",
     r.overdue ? "fin-overdue" : "",
   ].filter(Boolean).join(" ");
 
@@ -293,7 +328,13 @@ function DaybookLine({ row, start, end, currency }: {
           잔고를 움직이지 않은 줄(세워 둔 연체)은 숫자 대신 줄표 — 앞줄의 잔고를 한 번 더
           적으면 이 건으로 잔고가 움직인 것처럼 읽힌다. */}
       {balance === null ? (
-        <td className="num fin-db-bal fin-db-parked" data-label="Balance" title="Unsettled — not counted in the balance">
+        <td
+          className="num fin-db-bal fin-db-parked"
+          data-label="Balance"
+          title={r.noncash
+            ? "Set-off — settled without cash, so the balance does not move"
+            : "Unsettled — not counted in the balance"}
+        >
           —
         </td>
       ) : (
