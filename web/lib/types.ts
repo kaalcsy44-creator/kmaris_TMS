@@ -956,7 +956,9 @@ export type FinanceClaimRow = {
     issue_amount: number;
     fx_rate: number;
     ar_id: number;
+    /** 깎아 준 청구서가 속한 딜 — 클레임의 딜과 다를 수 있다(다른 프로젝트의 미수 상계). */
     order_id: number;
+    rfq_id: number;
   }[];
 };
 

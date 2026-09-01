@@ -14126,6 +14126,15 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
+/* 한 줄에 번호(왼쪽) + 금액(오른쪽) — 위 표의 Reference·Amount 순서 그대로라, 눈이
+   가로로 한 번만 움직여도 "어느 문서에서 얼마"가 읽힌다. */
+.fin-daybook .fin-db-split > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.fin-daybook .fin-db-split .fin-doc-link { font-size: 11px; }
 .fin-daybook .fin-db-done { color: #1e7a46; font-weight: 600; }
 .fin-daybook .fin-db-late { color: #c0392b; }
 /* 전월 이월 줄 — 본문이 아니라 출발점이라 옅게 눕힌다. */

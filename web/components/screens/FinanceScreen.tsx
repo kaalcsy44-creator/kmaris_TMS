@@ -2884,8 +2884,24 @@ function ClaimsTab() {
                             <td>{cn.issue_date}</td>
                             <td className="muted">CN</td>
                             <td colSpan={2}>
+                              {/* 두 문서 번호는 각자의 자리로 간다 — 노트는 이 클레임의
+                                  11단계 Claim 탭, 청구서는 그 청구서가 선 딜의 9단계.
+                                  상계 대상은 다른 프로젝트의 미수일 수 있어(cn.rfq_id)
+                                  둘이 서로 다른 딜을 가리킬 수 있다. */}
+                              <ProjectDocLink
+                                rfqId={r.rfq_id}
+                                orderId={r.order_id}
+                                stage={11}
+                                claim
+                                label={cn.cn_no || `CN#${cn.id}`}
+                              />
+                              <span className="muted"> → </span>
+                              <ProjectDocLink
+                                rfqId={cn.rfq_id}
+                                orderId={cn.order_id}
+                                label={cn.invoice_no || `AR#${cn.ar_id}`}
+                              />
                               <span className="muted">
-                                {cn.cn_no || `CN#${cn.id}`} → {cn.invoice_no || `AR#${cn.ar_id}`}
                                 {cn.issue_currency && cn.issue_currency !== cn.currency
                                   ? ` · ${cn.issue_currency} ${cn.issue_amount.toLocaleString()} × ${cn.fx_rate.toLocaleString()}`
                                   : ""}

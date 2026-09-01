@@ -844,7 +844,11 @@ def finance_claims(year: int = 0):
                     {"id": c["id"], "cn_no": c["cn_no"], "issue_date": c["issue_date"],
                      "invoice_no": c["invoice_no"], "currency": c["currency"], "total": c["total"],
                      "issue_currency": c["issue_currency"], "issue_amount": c["issue_amount"],
-                     "fx_rate": c["fx_rate"], "ar_id": c["ar_id"], "order_id": c["order_id"]}
+                     "fx_rate": c["fx_rate"], "ar_id": c["ar_id"], "order_id": c["order_id"],
+                     # 깎아 준 청구서가 속한 딜 — 다른 프로젝트의 미수를 상계할 수 있어
+                     # (claim_ar_candidates 참고) 클레임의 딜과 다를 수 있다. 화면이
+                     # 청구서 번호를 그 청구서의 자리로 보내려면 이 값이 필요하다.
+                     "rfq_id": c["rfq_id"]}
                     for c in cns
                 ],
             })

@@ -259,6 +259,9 @@ function DaybookLine({ row, start, end, currency }: {
   // 상계 줄의 ref 는 '깎아 준 청구서'다 — 다른 줄이 자기 문서를 가리키는 자리에 이 줄만
   // 남의 문서를 세우는 셈인데, 그 남의 문서가 곧 이 줄의 뜻이다(무엇에서 지웠는가).
   const linked = r.kind === "ar" || r.kind === "ap" || r.kind === "po" || r.kind === "credit";
+  // 상계를 덜어 낸 입금 — 금액이 청구액이 아니라 둘의 차이인 줄. 산식을 밑에 펴고,
+  // Reference 칸은 비운다(그 숫자는 어느 문서의 금액도 아니다).
+  const netted = r.kind === "ar" && r.actual && (r.set_off ?? 0) > 0;
   const desc = (
     <>
       <div className="fin-db-desc">{descOf(r)}</div>
@@ -294,16 +297,32 @@ function DaybookLine({ row, start, end, currency }: {
       </div>
       {/* 청구액과 다른 금액이 들어온 줄은 그 산식을 자기 밑에 편다 — 어느 청구서 얼마에서
           어느 크레딧 노트로 얼마가 빠져 이 금액이 되었는지. 주인공은 위의 실입금액이고
-          이 두 줄은 근거라, 옅은 글자로 물려 둔다. */}
-      {r.kind === "ar" && r.actual && (r.set_off ?? 0) > 0 ? (
+          이 두 줄은 근거라, 옅은 글자로 물려 둔다. 두 번호는 각자의 자리로 열린다 —
+          청구서는 그 딜의 청구 단계, 노트는 11단계 Claim 탭. 위 금액에는 링크가 없다:
+          그 숫자는 어느 문서의 금액도 아니라 둘의 차이라서, 문서 번호를 달 자리가 없다. */}
+      {netted ? (
         <div className="fin-db-split">
-          <div>{cash(r.invoiced ?? 0)} · {r.ref || "invoice"}</div>
-          <div>− {cash(r.set_off ?? 0)} · {r.set_off_ref || "credit note"}</div>
+          <div>
+            <ProjectDocLink orderId={r.order_id} rfqId={r.rfq_id} label={r.ref || "invoice"} />
+            <span>{cash(r.invoiced ?? 0)}</span>
+          </div>
+          <div>
+            <ProjectDocLink
+              orderId={r.order_id}
+              rfqId={r.rfq_id}
+              stage={11}
+              claim
+              label={r.set_off_ref || "credit note"}
+            />
+            <span>− {cash(r.set_off ?? 0)}</span>
+          </div>
         </div>
       ) : null}
     </>
   );
-  const ref = linked ? (
+  // 순액 줄에 청구서 번호를 달면 그 번호의 금액이 이것이라는 뜻이 되어, 번호를 들고
+  // 금액을 맞춰 보는 사람을 틀리게 한다. 두 문서 번호는 위 산식 줄이 각자 들고 있다.
+  const ref = netted ? "" : linked ? (
     <ProjectDocLink
       orderId={r.order_id}
       rfqId={r.rfq_id}
