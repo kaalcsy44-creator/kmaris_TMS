@@ -7047,7 +7047,8 @@ table.mini .num {
     align-items: start;
   }
   .page-fill .cat-tree-pane,
-  .page-fill .cat-ledger-pane {
+  .page-fill .cat-ledger-pane,
+  .page-fill .cat-tree-pane > .cat-tree {
     overflow: visible;
     display: block;
   }
@@ -10164,7 +10165,19 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   min-height: 0;
   align-items: stretch;
 }
+/* 나무 판은 머리(All items · Unmatched)를 붙박이로 두고 나무만 굴린다 — 그 둘은 지금
+   보고 있는 것이 무엇인지 고르는 자리라, 나무를 내리다 사라지면 무엇을 보고 있었는지도
+   같이 사라진다(오른쪽 목록 판이 제 머리줄을 붙박이로 두는 것과 같은 이유). */
 .page-fill .cat-tree-pane {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.page-fill .cat-tree-pane > .cat-quickfilter { flex: 0 0 auto; }
+.page-fill .cat-tree-pane > .cat-tree,
+.page-fill .cat-tree-pane > .state {
+  flex: 1;
   min-height: 0;
   overflow-y: auto;
 }
