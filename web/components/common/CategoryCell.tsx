@@ -15,7 +15,21 @@ import type { ItemCategory } from "@/lib/types";
 //     (services/item_ledger.apply_line_categories).
 // 입력은 선택 사항이다 — 비워 두면 아무 것도 하지 않는다.
 
-export type CategoryOption = { id: number; path: string; depth: number };
+export type CategoryOption = {
+  id: number;
+  path: string;
+  depth: number;
+  /** 이 노드가 달린 대분류(1층) id — 용역인지 선박 계통인지를 가르는 데 쓴다. */
+  rootId: number;
+  /** 그 대분류 이름(대문자). 이름이 바뀌어도 트리가 무너지지 않게 이름으로만 판별한다. */
+  rootName: string;
+};
+
+/**
+ * 용역 대분류의 이름. Ship View 의 BERTH 와 같은 방식이다 — 아는 이름은 알아보고,
+ * 모르는 이름은 그냥 선박 계통으로 둔다(관리자가 트리를 고쳐도 화면이 무너지지 않는다).
+ */
+const SERVICE_ROOT = "SERVICE";
 
 /** 품목 식별키 — 백엔드 services.item_ledger.match_key 와 같은 규칙이어야 한다. */
 export function itemMatchKey(partNo?: string | null, description?: string | null): string {
@@ -36,15 +50,22 @@ export function useCategoryOptions(): CategoryOption[] {
     cats
       .filter((c) => (c.parent_id ?? null) === pid && c.active)
       .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name));
-  const walk = (pid: number | null, prefix: string, depth: number) => {
+  const walk = (pid: number | null, prefix: string, depth: number, root: CategoryOption | null) => {
     if (depth > 3) return;
     for (const c of childrenOf(pid)) {
       const path = prefix ? `${prefix} > ${c.name}` : c.name;
-      out.push({ id: c.id, path, depth });
-      walk(c.id, path, depth + 1);
+      const opt: CategoryOption = {
+        id: c.id,
+        path,
+        depth,
+        rootId: root?.rootId ?? c.id,
+        rootName: root?.rootName ?? (c.name || "").trim().toUpperCase(),
+      };
+      out.push(opt);
+      walk(c.id, path, depth + 1, root ?? opt);
     }
   };
-  walk(null, "", 1);
+  walk(null, "", 1, null);
   return out;
 }
 
@@ -64,10 +85,22 @@ export function invalidateMasterCategories(): void {
   invalidateCache("item-category-map");
 }
 
-/** 품목표 셀용 분류 선택. 라인에 저장된 값이 없으면 품목 마스터의 분류를 보여준다. */
+/**
+ * 품목표 셀용 분류 선택. 라인에 저장된 값이 없으면 품목 마스터의 분류를 보여준다.
+ *
+ * 용역 줄은 칸이 하나로는 모자란다. 'Repair & Overhaul' 은 무엇을 했는가일 뿐이고,
+ * 어디에 했는가(주기관 피스톤인지 갑판 크레인 호이스트인지)는 건마다 다르다. 그래서
+ * 고른 분류가 용역 밑이면 그 아래로 '부위' 칸이 한 줄 더 열린다 — 늘 두 칸을 벌려
+ * 두면 부품 줄에서는 쓰지 않을 칸이 표를 넓히기만 한다.
+ *
+ * 부위는 품목 마스터로 올리지 않는다. 마스터는 품목 하나에 값 하나인데 부위는 건마다
+ * 달라서, 올리면 마지막 저장이 앞 건의 부위를 덮어 쓴다. 라인에만 남는다.
+ */
 export default function CategoryCell({
   value,
   onChange,
+  appliedTo,
+  onAppliedToChange,
   partNo,
   description,
   disabled,
@@ -75,6 +108,9 @@ export default function CategoryCell({
   /** 이 라인에 저장된 분류. null/undefined 면 마스터 분류로 대체 표시. */
   value: number | null | undefined;
   onChange: (id: number | null) => void;
+  /** 용역이 닿은 선박 계통(라인 전용). 넘기지 않으면 부위 칸은 아예 뜨지 않는다. */
+  appliedTo?: number | null;
+  onAppliedToChange?: (id: number | null) => void;
   /** 마스터 분류를 찾는 식별키 재료(품목표의 Part No.·Description 셀 값). */
   partNo?: string | null;
   description?: string | null;
@@ -86,7 +122,14 @@ export default function CategoryCell({
   const effective = value ?? masterCategory(partNo, description);
   const hit = effective != null ? opts.find((o) => o.id === effective) : undefined;
   const inherited = value == null && effective != null;
-  return (
+  // 용역 줄인가 — 고른 분류가 용역 대분류 밑이면. 부위 칸은 그때만 연다.
+  const isService = hit?.rootName === SERVICE_ROOT;
+  const showApplied = isService && !!onAppliedToChange;
+  // 부위로 고를 수 있는 것은 배 위의 계통뿐이다(용역에 용역을 걸 수는 없다).
+  const partOpts = opts.filter((o) => o.rootName !== SERVICE_ROOT);
+  const appliedHit = appliedTo != null ? opts.find((o) => o.id === appliedTo) : undefined;
+
+  const cat = (
     <select
       className={`cat-cell${inherited ? " inherited" : ""}`}
       value={effective != null ? String(effective) : ""}
@@ -110,5 +153,27 @@ export default function CategoryCell({
         </option>
       ))}
     </select>
+  );
+
+  if (!showApplied) return cat;
+  return (
+    <div className="cat-cell-2">
+      {cat}
+      <select
+        className="cat-cell cat-cell--applied"
+        value={appliedTo != null ? String(appliedTo) : ""}
+        disabled={disabled}
+        title={appliedHit ? `Applied to ${appliedHit.path}` : "Where on board this service was done (optional)"}
+        onChange={(e) => onAppliedToChange?.(e.target.value ? Number(e.target.value) : null)}
+      >
+        <option value="">on: —</option>
+        {appliedTo != null && !appliedHit ? <option value={String(appliedTo)}>(#{appliedTo})</option> : null}
+        {partOpts.map((o) => (
+          <option key={o.id} value={o.id}>
+            on: {o.path}
+          </option>
+        ))}
+      </select>
+    </div>
   );
 }

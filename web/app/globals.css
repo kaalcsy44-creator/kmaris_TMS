@@ -3857,6 +3857,18 @@ select.cat-cell.inherited {
   color: #5a6b85;
   border-style: dashed;
 }
+/* 용역 줄의 분류 칸 — 위는 무엇을 했는가(Repair & Overhaul), 아래는 어디에 했는가.
+   칸을 새로 벌리지 않고 한 칸 안에 위아래로 세운다: 부품 줄에는 아래 칸이 아예 뜨지
+   않으므로, 열을 늘리면 쓰지 않는 폭이 모든 표에 남는다. */
+.cat-cell-2 { display: flex; flex-direction: column; gap: 3px; }
+/* 아래 칸은 딸린 값이라 한 단 물러서 보인다 — 위가 정본이고 이것은 그 위에 붙는 단서다. */
+select.cat-cell.cat-cell--applied {
+  height: 26px;
+  font-size: 11px;
+  color: #5a6b85;
+  background: #fbfcfe;
+  border-color: #e2eaf4;
+}
 /* 맨 좌측 행 삭제열 — items-edit 변형도 통일 포맷(가운데 정렬). */
 table.mini.items-edit th.row-tools,
 table.mini.items-edit td.row-tools {

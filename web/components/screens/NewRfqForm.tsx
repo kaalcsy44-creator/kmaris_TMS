@@ -71,6 +71,8 @@ type ItemRow = {
   remark: string;
   /** 품목 분류(선택). 저장 시 품목 마스터 분류로 반영된다. */
   category_id: number | null;
+  /** 용역이 닿은 선박 계통(선택). 건마다 달라 품목 마스터로는 올리지 않고 라인에만 남는다. */
+  applied_to?: number | null;
 };
 
 // 빈 품목 행 1개(초기값·+Add·reset 공용).
@@ -246,6 +248,10 @@ export default function NewRfqForm({
   }
   function setItemCategory(i: number, id: number | null) {
     setItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, category_id: id } : it)));
+  }
+  /** 용역이 닿은 계통 — 분류와 달리 품목 마스터로 올리지 않는다(건마다 달라서). */
+  function setItemApplied(i: number, id: number | null) {
+    setItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, applied_to: id } : it)));
   }
   function addItem() {
     setItems((prev) => [...prev, { ...EMPTY_ITEM }]);
@@ -984,6 +990,8 @@ export default function NewRfqForm({
                         partNo={it.part_no}
                         description={it.description}
                         onChange={(id) => setItemCategory(i, id)}
+                        appliedTo={it.applied_to}
+                        onAppliedToChange={(id) => setItemApplied(i, id)}
                         disabled={!canEditThis}
                       />
                     </td>

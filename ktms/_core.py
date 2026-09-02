@@ -1273,6 +1273,8 @@ def _item_view(it: dict) -> dict:
         "remark": it.get("remark") or "",
         # 입력 단계에서 고른 품목 분류(선택). 편집기에서 다시 보여주기 위해 그대로 실어 보낸다.
         "category_id": it.get("category_id"),
+        # 용역이 닿은 계통(선택) — 마찬가지로 왕복시킨다.
+        "applied_to": it.get("applied_to"),
         # "문서에서 제외" 표식 — 다시 열었을 때도 제외 상태로 보여야 한다.
         "excluded": bool(it.get("excluded")),
     }
@@ -1799,6 +1801,10 @@ class PoWorkItem(BaseModel):
     remark: str | None = ""
     # 품목 분류(선택) — 입력 단계에서 고르면 저장 시 품목 마스터 분류로 반영된다.
     category_id: int | None = None
+    # 용역이 닿은 선박 계통(선택). 같은 'Repair & Overhaul' 이라도 이번엔 주기관, 다음엔
+    # 갑판 크레인이라 건마다 달라진다 — 그래서 품목 마스터로 올리지 않고 라인에만 둔다
+    # (올리면 마스터 하나가 건마다 다른 값을 갖게 되어 마지막 저장이 앞을 덮는다).
+    applied_to: int | None = None
     # "문서에서 제외" 표식 — 행은 남기고 발행 P/O·합계에서만 뺀다(kmaris_docs.normalize_items).
     excluded: bool = False
 
@@ -3556,6 +3562,8 @@ class RfqItemIn(BaseModel):
     remark: str | None = ""
     # 품목 분류(선택) — 입력 단계에서 고르면 저장 시 품목 마스터 분류로 반영된다.
     category_id: int | None = None
+    # 용역이 닿은 선박 계통(선택) — 건마다 달라지므로 라인에만 둔다(PoWorkItem 참고).
+    applied_to: int | None = None
 
 
 class RfqSourceFileIn(BaseModel):

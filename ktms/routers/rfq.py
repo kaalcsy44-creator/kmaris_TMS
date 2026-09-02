@@ -346,6 +346,7 @@ def create_rfq(body: RfqCreate, user: dict = Depends(get_current_user)):
             "qty": it.qty or 1,
             "remark": (it.remark or "").strip(),
             "category_id": it.category_id,   # 입력 시 고른 품목 분류(선택). 없으면 None
+            "applied_to": it.applied_to,   # 용역이 닿은 계통(선택)
         } for it in body.items if (it.part_no or it.description)]
         src_files = _clean_source_files(body.source_files)
 
@@ -489,6 +490,7 @@ def update_rfq(rfq_id: int, body: RfqUpdate):
                 "qty": it.qty or 1,
                 "remark": (it.remark or "").strip(),
                 "category_id": it.category_id,   # 입력 시 고른 품목 분류(선택)
+                "applied_to": it.applied_to,   # 용역이 닿은 계통(선택)
             } for it in body.items if (it.part_no or it.description)]
             apply_line_categories(s, rfq.items)
         if body.source_files is not None:

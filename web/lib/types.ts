@@ -386,6 +386,8 @@ export type PoWorkItem = {
   remark?: string;
   /** 품목 분류(선택). 저장 시 품목 마스터 분류로 반영된다. */
   category_id?: number | null;
+  /** 용역이 닿은 선박 계통(선택). 건마다 달라 품목 마스터로는 올리지 않고 라인에만 남는다. */
+  applied_to?: number | null;
   /** 문서에서 제외한 행 — DocumentWorkItem.excluded 와 같은 규칙(표에는 남고 발행 문서·합계에서 빠짐). */
   excluded?: boolean;
 };
@@ -570,6 +572,8 @@ export type CustomerQuoteItem = {
   remark?: string;
   /** 품목 분류(선택). 저장 시 품목 마스터 분류로 반영된다. */
   category_id?: number | null;
+  /** 용역이 닿은 선박 계통(선택). 건마다 달라 품목 마스터로는 올리지 않고 라인에만 남는다. */
+  applied_to?: number | null;
   /** 문서에서 제외한 행 — 서버 _item_view 가 늘 실어 보낸다. 금액 0 과 다른 상태다
    *  (0 = 이 문서에 들어 있고 값이 0, 제외 = 이 문서에 나가지 않음). */
   excluded?: boolean;
@@ -1738,6 +1742,8 @@ export type RfqItem = {
   remark?: string;
   /** 품목 분류(선택). 저장 시 품목 마스터 분류로 반영된다. */
   category_id?: number | null;
+  /** 용역이 닿은 선박 계통(선택). 건마다 달라 품목 마스터로는 올리지 않고 라인에만 남는다. */
+  applied_to?: number | null;
 };
 
 export type RfqStep = {

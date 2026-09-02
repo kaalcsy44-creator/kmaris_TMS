@@ -4044,6 +4044,10 @@ function CustomerQuoteItemEditor({
   function patchCategory(i: number, id: number | null) {
     onChange(items.map((it, idx) => (idx === i ? { ...it, category_id: id } : it)));
   }
+  /** 용역이 닿은 계통 — 분류와 달리 품목 마스터로 올리지 않는다(건마다 달라서). */
+  function patchApplied(i: number, id: number | null) {
+    onChange(items.map((it, idx) => (idx === i ? { ...it, applied_to: id } : it)));
+  }
   // 새 품목은 마지막 행의 단위·마진을 이어받아 견적 기준과 맞춘다.
   const blank = (): CustomerQuoteItem => {
     const last = items[items.length - 1];
@@ -4312,7 +4316,14 @@ function CustomerQuoteItemEditor({
                       </label>
                       <span className="isr-f">
                         <span className="isr-l">3. Category</span>
-                        <CategoryCell value={it.category_id} partNo={it.part_no} description={it.description} onChange={(id) => patchCategory(i, id)} />
+                        <CategoryCell
+                          value={it.category_id}
+                          partNo={it.part_no}
+                          description={it.description}
+                          onChange={(id) => patchCategory(i, id)}
+                          appliedTo={it.applied_to}
+                          onAppliedToChange={(id) => patchApplied(i, id)}
+                        />
                       </span>
                     </div>
                   </td>
