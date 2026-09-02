@@ -7039,6 +7039,18 @@ table.mini .num {
   .page-fill .table-wrap {
     overflow: auto;
   }
+  /* 분류 탭의 두 판도 함께 되돌린다 — 못 박은 높이가 없으니 판 안에서 굴릴 것도 없고,
+     남겨 두면 목록 판의 overflow:hidden 이 내용을 자를 수 있다. */
+  .page-fill .cat-layout {
+    flex: none;
+    min-height: 0;
+    align-items: start;
+  }
+  .page-fill .cat-tree-pane,
+  .page-fill .cat-ledger-pane {
+    overflow: visible;
+    display: block;
+  }
 
   /* 가로 메뉴 → 햄버거 토글 드롭다운 */
   .topnav-burger {
@@ -10143,7 +10155,11 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
    문서 맨 아래 — 스무 칸짜리 표에서 오른쪽이 잘려 있는데, 굴릴 손잡이를 잡으려면
    화면 몇 번을 내려가야 했다. 높이를 화면에 못 박아 두면 그 막대가 표 바로 밑에 선다.
    왼쪽 나무도 제 안에서 굴러, 긴 분류를 펴 놓아도 오른쪽 목록이 따라 밀리지 않는다. */
-.page-fill > .cat-layout {
+/* 직계(>)가 아니라 후손이어야 한다 — 이 탭은 .panel 로 한 번 감싸고 그 안에 나무와
+   목록을 넣는다(.page-fill > .panel 이 그 판을 세로 flex 로 만들어 준다). 직계로
+   적었더니 어디에도 걸리지 않아, 페이지는 화면에 못 박힌 채 안에서 굴릴 곳은 없는
+   상태가 됐다 — 스크롤이 통째로 사라진 것처럼 보였다. */
+.page-fill .cat-layout {
   flex: 1;
   min-height: 0;
   align-items: stretch;
