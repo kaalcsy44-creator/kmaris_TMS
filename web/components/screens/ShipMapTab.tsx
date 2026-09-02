@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { fetchItemShipMap } from "@/lib/api";
 import { useCachedData } from "@/lib/useCachedData";
@@ -101,11 +101,22 @@ type ShipModel = {
   loose: ShipItem[];               // 분류가 없어 배에 못 실은 품목
 };
 
-/** 마우스가 올라간 자리에 펼칠 내역 — 무엇의 내역인지(제목)와 그 품목들. */
-type Peek = {
+/**
+ * 올렸을 때와 눌렀을 때가 답하는 것이 다르다.
+ *
+ * 앞서는 올리기만 해도 품목 내역이 통째로 펴졌고, 거기에 브라우저 기본 툴팁(title)까지
+ * 겹쳐 두 가지가 같은 자리에서 서로를 가렸다. 올리는 것은 지나가는 손짓이고 누르는 것은
+ * 들여다보겠다는 손짓이니 나오는 것도 그만큼 달라야 한다 — 올리면 '무엇인가' 한 줄,
+ * 누르면 '무엇이 들었나' 전부.
+ */
+type Hint = { text: string; x: number; y: number } | null;
+
+/** 눌러서 펴는 판 — 그 자리에 걸린 품목 전부. href 가 있으면 그리로 가는 길도 함께. */
+type Panel = {
   title: string;
   sub: string;
   items: ShipItem[];
+  href?: string;
   x: number;
   y: number;
 } | null;
@@ -141,9 +152,18 @@ function money(v: number | null | undefined, cur: string) {
 
 export default function ShipMapTab() {
   const { data, error } = useCachedData<ShipMap>("item:ship-map", fetchItemShipMap);
-  const [peek, setPeek] = useState<Peek>(null);
+  const [hint, setHint] = useState<Hint>(null);
+  const [panel, setPanel] = useState<Panel>(null);
   // 프로젝트가 걸린 계통만 볼 것인가 — 배가 커질수록 빈 칸이 화면을 먹는다.
   const [busyOnly, setBusyOnly] = useState(false);
+
+  // 펴 둔 판은 Esc 로도 닫힌다 — 어디를 눌러야 닫히는지 모를 때의 퇴로.
+  useEffect(() => {
+    if (!panel) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setPanel(null); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [panel]);
 
   const model: ShipModel | null = useMemo(() => {
     if (!data) return null;
@@ -209,12 +229,26 @@ export default function ShipMapTab() {
       || (b.deal.project_no || "").localeCompare(a.deal.project_no || ""));
   };
 
-  // 마우스를 올리면 펴고 떼면 접는다 — 두 손잡이를 한 벌로 묶어 두면 붙이는 자리마다
-  // 짝이 어긋나지 않는다(한쪽만 붙으면 내역이 화면에 눌어붙는다).
-  const hover = (title: string, sub: string, items: ShipItem[]) => ({
-    onMouseEnter: (e: React.MouseEvent) =>
-      setPeek(items.length ? { title, sub, items, x: e.clientX, y: e.clientY } : null),
-    onMouseLeave: () => setPeek(null),
+  /** 올리면 뜨는 한 줄 — 그 자리가 무엇인지만. */
+  const spot = (text: string) => ({
+    onMouseEnter: (e: React.MouseEvent) => setHint({ text, x: e.clientX, y: e.clientY }),
+    onMouseLeave: () => setHint(null),
+  });
+
+  /**
+   * 누르면 펴지는 판. 빈 자리는 열지 않는다 — 아무것도 답하지 않는 판이 뜨면 누른 사람은
+   * 자기가 잘못 눌렀는지 화면이 고장 났는지 알 수 없다.
+   * 링크 위에 얹을 때는(프로젝트 칩) 기본 이동을 막되, 새 탭으로 열려는 손짓
+   * (Ctrl·Cmd·Shift)은 건드리지 않고 그대로 흘려보낸다.
+   */
+  const opens = (title: string, sub: string, items: ShipItem[], href?: string) => ({
+    onClick: (e: React.MouseEvent) => {
+      if (!items.length) return;
+      if (e.metaKey || e.ctrlKey || e.shiftKey) return;
+      if (href) e.preventDefault();
+      setHint(null);
+      setPanel({ title, sub, items, href, x: e.clientX, y: e.clientY });
+    },
   });
 
   const totals = {
@@ -224,7 +258,7 @@ export default function ShipMapTab() {
   };
 
   return (
-    <div className="ship-view" onMouseLeave={() => setPeek(null)}>
+    <div className="ship-view" onMouseLeave={() => setHint(null)}>
       <div className="ship-hdr">
         <div>
           {/* 제목은 탭 이름(Ship View)을 되풀이하지 않는다. 이 앱은 진짜 선박도 관리하므로
@@ -267,7 +301,8 @@ export default function ShipMapTab() {
                 model={model}
                 busyOnly={busyOnly}
                 dealsOf={dealsOf}
-                hover={hover}
+                spot={spot}
+                opens={opens}
               />
             ))}
         </div>
@@ -282,7 +317,8 @@ export default function ShipMapTab() {
               <button
                 type="button"
                 className="ship-chip ship-chip--loose"
-                {...hover("Unclassified", "no category assigned yet", model.loose)}
+                {...spot(`${model.loose.length} item(s) with no category yet`)}
+                {...opens("Unclassified", "no category assigned yet", model.loose)}
               >
                 {model.loose.length} item(s) with no category
               </button>
@@ -297,22 +333,26 @@ export default function ShipMapTab() {
         </div>
       ) : null}
 
-      {peek ? <Peeker peek={peek} /> : null}
+      {hint ? <Hinter hint={hint} /> : null}
+      {panel ? <Peeker panel={panel} onClose={() => setPanel(null)} /> : null}
     </div>
   );
 }
 
 /** 대분류 한 칸 — 배 위의 한 구역. 그 아래 중·소분류와 프로젝트 번호가 모두 들어간다. */
 function Zone({
-  cat, model, busyOnly, dealsOf, hover,
+  cat, model, busyOnly, dealsOf, spot, opens,
 }: {
   cat: Cat;
   model: ShipModel;
   busyOnly: boolean;
   dealsOf: (items: ShipItem[]) => { deal: ShipDeal; items: ShipItem[] }[];
-  hover: (title: string, sub: string, items: ShipItem[]) => {
+  spot: (text: string) => {
     onMouseEnter: (e: React.MouseEvent) => void;
     onMouseLeave: () => void;
+  };
+  opens: (title: string, sub: string, items: ShipItem[], href?: string) => {
+    onClick: (e: React.MouseEvent) => void;
   };
 }) {
   const mine = model.roll.get(cat.id) ?? [];
@@ -332,7 +372,10 @@ function Zone({
     >
       {/* 갑판 이름표는 카드 안에 있다 — 카드가 어느 단에 놓이든 제자리를 말하도록. */}
       <div className="ship-zone-deck"><b>{deck.name}</b><span>{deck.sub}</span></div>
-      <header {...hover(cat.name, `${mine.length} item(s) on this system`, mine)}>
+      <header
+        {...spot(`${cat.name} — ${mine.length} item(s) on this system`)}
+        {...opens(cat.name, `${mine.length} item(s) on this system`, mine)}
+      >
         <Mark name={cat.name} />
         <h3>{cat.name}</h3>
         <span className="ship-zone-n">{mine.length}</span>
@@ -340,22 +383,26 @@ function Zone({
 
       {deals.length ? (
         <div className="ship-projects">
-          {deals.map(({ deal, items }) => (
-            <Link
-              key={deal.rfq_no}
-              className="ship-proj"
-              href={`/project?rfq=${deal.rfq_id}&view=overview&back=${encodeURIComponent("/item")}`}
-              title={dealLabel(deal)}
-              {...hover(
-                deal.project_no || deal.rfq_no,
-                [[deal.customer, deal.vessel, deal.rfq_no].filter(Boolean).join(" · "),
-                 `${items.length} item(s) on ${cat.name}`].filter(Boolean).join(" — "),
-                items,
-              )}
-            >
-              {chipNo(deal)}
-            </Link>
-          ))}
+          {deals.map(({ deal, items }) => {
+            const href = `/project?rfq=${deal.rfq_id}&view=overview&back=${encodeURIComponent("/item")}`;
+            return (
+              <Link
+                key={deal.rfq_no}
+                className="ship-proj"
+                href={href}
+                {...spot(dealLabel(deal))}
+                {...opens(
+                  deal.project_no || deal.rfq_no,
+                  [[deal.customer, deal.vessel, deal.rfq_no].filter(Boolean).join(" · "),
+                   `${items.length} item(s) on ${cat.name}`].filter(Boolean).join(" — "),
+                  items,
+                  href,
+                )}
+              >
+                {chipNo(deal)}
+              </Link>
+            );
+          })}
         </div>
       ) : (
         <div className="ship-projects ship-projects--none">no project yet</div>
@@ -371,7 +418,8 @@ function Zone({
             <div className={`ship-sub${items.length ? "" : " ship-sub--empty"}`} key={s.id}>
               <div
                 className="ship-sub-hd"
-                {...hover(s.name, `${cat.name} · ${items.length} item(s)`, items)}
+                {...spot(`${cat.name} · ${s.name} — ${items.length} item(s)`)}
+                {...opens(s.name, `${cat.name} · ${items.length} item(s)`, items)}
               >
                 <span>{s.name}</span>
                 <b>{items.length}</b>
@@ -385,7 +433,8 @@ function Zone({
                         <span
                           key={l.id}
                           className={`ship-leaf${li.length ? "" : " ship-leaf--empty"}`}
-                          {...hover(l.name, `${cat.name} > ${s.name}`, li)}
+                          {...spot(`${s.name} > ${l.name} — ${li.length} item(s)`)}
+                          {...opens(l.name, `${cat.name} > ${s.name}`, li)}
                         >
                           {l.name}
                           {li.length ? <b>{li.length}</b> : null}
@@ -414,26 +463,46 @@ function Src({ doc }: { doc?: { kind: string; no: string } | null }) {
   return <span className="ship-peek-src"> · {doc.no ? `${doc.kind} ${doc.no}` : doc.kind}</span>;
 }
 
-/** 마우스를 따라다니는 내역 — 그 자리에 걸린 품목을 자세히 편다. */
-function Peeker({ peek }: { peek: NonNullable<Peek> }) {
+/** 마우스를 따라 뜨는 한 줄 — 그 자리가 무엇인지만. 마우스를 먹지 않는다. */
+function Hinter({ hint }: { hint: NonNullable<Hint> }) {
+  const w = 340;
+  const left = typeof window !== "undefined" && hint.x + w + 20 > window.innerWidth
+    ? Math.max(8, hint.x - w - 12)
+    : hint.x + 14;
+  const top = typeof window !== "undefined"
+    ? Math.min(hint.y + 18, Math.max(8, window.innerHeight - 60))
+    : hint.y + 18;
+  return <div className="ship-hint" style={{ left, top, maxWidth: w }}>{hint.text}</div>;
+}
+
+/**
+ * 눌러서 펴는 판 — 그 자리에 걸린 품목을 자세히. 이제 마우스를 따라 스치듯 뜨는 것이
+ * 아니라 누른 자리에 머무르므로, 마우스를 먹고(안의 링크를 누를 수 있어야 한다) 닫는
+ * 길을 세 갈래로 둔다: 판 밖 아무 곳, 닫기 단추, Esc.
+ */
+function Peeker({ panel, onClose }: { panel: NonNullable<Panel>; onClose: () => void }) {
   const MAX = 8;
-  const rest = peek.items.length - MAX;
+  const rest = panel.items.length - MAX;
   // 화면 밖으로 나가지 않게 — 오른쪽·아래로 넘칠 자리면 반대편에 붙인다.
   const w = 420;
-  const left = typeof window !== "undefined" && peek.x + w + 24 > window.innerWidth
-    ? Math.max(12, peek.x - w - 16)
-    : peek.x + 16;
+  const left = typeof window !== "undefined" && panel.x + w + 24 > window.innerWidth
+    ? Math.max(12, panel.x - w - 16)
+    : panel.x + 16;
   const top = typeof window !== "undefined"
-    ? Math.min(Math.max(12, peek.y - 40), Math.max(12, window.innerHeight - 340))
-    : peek.y;
+    ? Math.min(Math.max(12, panel.y - 40), Math.max(12, window.innerHeight - 360))
+    : panel.y;
   return (
-    <div className="ship-peek" style={{ left, top, width: w }}>
+    <>
+      {/* 판 밖 아무 데나 눌러도 닫힌다 — 닫기 단추를 찾아 마우스를 옮기지 않도록. */}
+      <div className="ship-peek-veil" onClick={onClose} />
+      <div className="ship-peek" style={{ left, top, width: w }}>
       <div className="ship-peek-hd">
-        <b>{peek.title}</b>
-        <span>{peek.sub}</span>
+        <b>{panel.title}</b>
+        <span>{panel.sub}</span>
+        <button type="button" className="ship-peek-x" onClick={onClose} aria-label="Close">×</button>
       </div>
       <ul>
-        {peek.items.slice(0, MAX).map((it) => (
+        {panel.items.slice(0, MAX).map((it) => (
           <li key={it.item_id}>
             <div className="ship-peek-t">
               {it.part_no ? <code>{it.part_no}</code> : null}
@@ -465,6 +534,12 @@ function Peeker({ peek }: { peek: NonNullable<Peek> }) {
         ))}
       </ul>
       {rest > 0 ? <div className="ship-peek-more">+{rest} more item(s)</div> : null}
-    </div>
+      {/* 프로젝트에서 편 판이면 그 프로젝트로 가는 길을 남긴다 — 칩을 누르면 판이 뜨게
+          되었으므로, 예전처럼 눌러서 바로 넘어가던 길이 여기 대신 서야 한다. */}
+      {panel.href ? (
+        <Link className="ship-peek-go" href={panel.href}>Open this project →</Link>
+      ) : null}
+      </div>
+    </>
   );
 }

@@ -15090,8 +15090,9 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
   gap: 8px;
   padding-bottom: 8px;
   border-bottom: 1px solid var(--z-line);
-  cursor: default;
+  cursor: pointer;
 }
+.ship-zone--empty > header { cursor: default; }
 .ship-zone > header h3 { margin: 0; font-size: 14px; flex: 1 1 auto; }
 /* 표식 — 글자색을 물려받는 선 그림 하나. 제목과 같은 줄에 서므로 baseline 정렬 대신
    살짝 내려 붙인다(선 그림은 글자와 달리 baseline 이 없다). */
@@ -15144,8 +15145,9 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
   font-size: 12px;
   font-weight: 600;
   color: var(--ink);
-  cursor: default;
+  cursor: pointer;
 }
+.ship-sub--empty .ship-sub-hd { cursor: default; }
 .ship-sub-hd b { font-variant-numeric: tabular-nums; color: var(--z-ink); }
 .ship-sub--empty .ship-sub-hd,
 .ship-sub--empty .ship-sub-hd b { color: var(--muted); font-weight: 400; }
@@ -15160,8 +15162,9 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
   border: 1px solid var(--z-leaf-line);
   font-size: 10.5px;
   color: #45526a;
-  cursor: default;
+  cursor: pointer;
 }
+.ship-leaf--empty { cursor: default; }
 .ship-leaf b { font-variant-numeric: tabular-nums; color: var(--z-ink); }
 /* 아직 아무것도 안 실린 소분류 — 자리는 지키되 뒤로 물린다. */
 .ship-leaf--empty { background: transparent; border-color: #eef2f7; color: #a8b3c4; }
@@ -15194,15 +15197,14 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
   color: #7a5c1e;
   font-size: 11.5px;
   font-weight: 600;
-  cursor: default;
+  cursor: pointer;
 }
 
 /* 마우스를 따라 펴지는 내역 — 표가 아니라 쪽지다. 마우스가 지나는 길을 막지 않도록
    자기 자신은 마우스를 먹지 않는다(쪽지 위에 올라가 붙잡을 일이 없다). */
 .ship-peek {
   position: fixed;
-  z-index: 60;
-  pointer-events: none;
+  z-index: 61;
   background: #fff;
   border: 1px solid var(--line-strong);
   border-radius: 10px;
@@ -15220,7 +15222,18 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
   border-bottom: 1px solid var(--line);
 }
 .ship-peek-hd b { font-size: 13px; }
-.ship-peek-hd span { font-size: 11px; color: var(--muted); }
+.ship-peek-hd span { font-size: 11px; color: var(--muted); flex: 1 1 auto; }
+.ship-peek-x {
+  flex: none;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 2px;
+  cursor: pointer;
+}
+.ship-peek-x:hover { color: var(--ink); }
 .ship-peek ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
 .ship-peek li { border-left: 2px solid #dbe6f3; padding-left: 8px; }
 .ship-peek-t { display: flex; gap: 6px; align-items: baseline; font-size: 12px; }
@@ -15261,6 +15274,34 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
   font-variant-numeric: tabular-nums;
 }
 .ship-peek-more { margin-top: 6px; font-size: 11px; color: var(--muted); }
+/* 판을 연 뒤 그 프로젝트로 넘어가는 길 — 칩을 누르면 판이 뜨게 되어, 바로 넘어가던
+   길이 여기 대신 선다. */
+.ship-peek-go {
+  display: inline-block;
+  margin-top: 8px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #2456a6;
+  text-decoration: none;
+}
+.ship-peek-go:hover { text-decoration: underline; }
+/* 판 밖을 덮는 투명한 장 — 아무 데나 눌러 닫는 길. 판보다 한 겹 아래에 깔린다. */
+.ship-peek-veil { position: fixed; inset: 0; z-index: 60; }
+
+/* 마우스를 올렸을 때 뜨는 한 줄 — 판과 달리 스치듯 지나가는 것이라 작고 어둡게,
+   그리고 마우스를 먹지 않는다(올려 둔 자리를 이 쪽지가 가로채면 안 된다). */
+.ship-hint {
+  position: fixed;
+  z-index: 62;
+  pointer-events: none;
+  padding: 4px 9px;
+  border-radius: 6px;
+  background: rgba(28, 37, 48, 0.94);
+  color: #fff;
+  font-size: 11.5px;
+  line-height: 1.45;
+  box-shadow: 0 4px 14px rgba(20, 40, 70, 0.22);
+}
 
 /* 좁은 화면 — 3열이 무너진다. 열을 줄이면 6칸이 한 화면에 못 들어가므로 높이 고정도
    함께 푼다(칸 안에서 스크롤하는 대신 페이지가 스크롤한다). */
