@@ -590,9 +590,12 @@ function Peeker({ panel, onClose }: { panel: NonNullable<Panel>; onClose: () => 
                   sell {money(it.sell.unit_price, it.sell.currency)}
                   <Src doc={it.sell.doc} />
                   {it.sell.party ? <span className="ship-peek-pt"> → {it.sell.party}</span> : null}
-                  {it.margin_pct != null ? <span className="ship-peek-mg"> {it.margin_pct}%</span> : null}
                 </span>
               ) : null}
+              {/* 마진은 늘 제 줄에 선다. 매출 줄 꼬리에 붙여 두면 줄 길이에 따라 어떤
+                  품목은 그 줄 끝에, 어떤 품목은 다음 줄로 넘어가 — 품목 여럿을 위아래로
+                  견줄 때 눈이 매번 다른 자리에서 숫자를 찾아야 했다. */}
+              {it.margin_pct != null ? <span className="ship-peek-mg">{it.margin_pct}%</span> : null}
             </div>
           </li>
         ))}

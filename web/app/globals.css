@@ -15313,7 +15313,9 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 .ship-peek-mk { display: block; width: 100%; }
 /* 상대 이름 — 금액·문서보다 한 단 옅게. 값이 아니라 그 값이 누구와의 것인가다. */
 .ship-peek-pt { color: #6b7684; font-weight: 600; }
-.ship-peek-mg { color: #1e7a46; font-weight: 700; }
+/* 마진 — 한 줄을 통째로 차지해 늘 왼쪽 끝에서 시작한다. 품목을 위아래로 견주는 값이라
+   자리가 고정돼야 세로로 훑을 수 있다(줄 꼬리에 붙으면 매출 줄 길이가 자리를 정한다). */
+.ship-peek-mg { display: block; width: 100%; color: #1e7a46; font-weight: 700; }
 /* 가격이 실려 온 문서 — 금액 바로 뒤에 붙어 그 숫자의 출처가 된다. 값이 아니라
    출처이므로 금액보다 한 단 옅게 두고, 번호가 없으면 문서 이름만 남는다. */
 .ship-peek-src { color: #7b879b; font-weight: 600; }
