@@ -48,6 +48,7 @@ export type SettingsCustomer = {
   address: string;   // 대표 주소(addresses[0] 미러링 — 문서·PDF 가 쓰는 값)
   tax_id: string;
   tax_invoice_email: string;
+  specialization: string;   // 주로 무엇을 사는 곳인가(벤더의 취급품목과 같은 자리)
   note: string;      // 회사 소개 요약(회사 단위 — Company info 창에서 편집)
   payment_terms: string;
   logo: string;

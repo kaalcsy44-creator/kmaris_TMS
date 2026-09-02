@@ -110,6 +110,10 @@ class Customer(Base):
     phones     = Column(JSON, default=list)
     regions    = Column(JSON, default=list)
     payment_terms = Column(String(200))  # 기본 결제조건(견적 작성 시 기본값으로 사용)
+    # 무엇을 사는 곳인가 — 벤더의 '취급품목'과 같은 자리다. 벤더 쪽이 파는 물건을 적는
+    # 칸이라면 여기는 사는 쪽의 결: 어떤 선종을 굴리고 주로 무엇을 찾는지 한 줄 요약.
+    # 목록에서 두 표가 같은 칸을 같은 자리에 두어 나란히 읽히게 한다.
+    specialization = Column(String(200))
     # 회사 소개 요약(어떤 선단을 굴리는지, 어디 소속인지). 담당자가 아니라 회사에 딸린
     # 정보라 Company info 창에서 같은 회사 전 레코드에 한 번에 반영한다.
     note       = Column(Text)

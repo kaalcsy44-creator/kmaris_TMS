@@ -951,7 +951,7 @@ function MyPasswordChange() {
 
 const EMPTY_CUSTOMER: SettingsCustomer = {
   id: 0, name: "", contact: "", contact_phone: "", email: "", country: "", address: "",
-  tax_id: "", tax_invoice_email: "", note: "", payment_terms: "", logo: "",
+  tax_id: "", tax_invoice_email: "", specialization: "", note: "", payment_terms: "", logo: "",
   addresses: [], emails: [], phones: [], regions: [],
 };
 
@@ -999,6 +999,8 @@ function CustomersTab() {
           ["tax_invoice_email", "Tax invoice email"],
         ]}
         areas={[
+          { key: "specialization", label: "Specialization", rows: 3,
+            placeholder: "What they run and usually buy — bulk carriers, engine spares, deck machinery…" },
           { key: "note", label: "About this company", rows: 5,
             placeholder: "What they operate, which fleet or group they belong to, where they are based…" },
         ]}
@@ -1030,6 +1032,9 @@ function CustomersTab() {
             won={sumBy(rs, (r) => r.won)}
             lost={sumBy(rs, (r) => r.lost)}
           />,
+          <span key="s" className="ms-group-sub">
+            {summarize(uniqStrings(rs.map((r) => r.specialization)), " · ", 2)}
+          </span>,
         ],
         subFirst: () => <span className="ms-sub-mark">↳</span>,
         actions: (rs, addNew) => (
@@ -1076,11 +1081,13 @@ function CustomersTab() {
             />
           ),
           "ms-deals"],
+        ["specialization", "Specialization", undefined, "ms-spec"],
       ]}
       fields={[
         ["name", "Customer *"],
         ["contact", "Contact name"],
         ["address", "Address"],
+        ["specialization", "Specialization"],
         ["tax_id", "Tax ID / Business No."],
         ["tax_invoice_email", "Tax invoice email"],
       ]}
