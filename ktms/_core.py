@@ -939,6 +939,38 @@ def _kst_iso(dt) -> str:
     return (dt + timedelta(hours=9)).strftime("%Y-%m-%dT%H:%M")
 
 
+def log_stage_note(s, rfq_id: int, text: str, pic: str = "",
+                   stage: int | None = None, system: str = "") -> None:
+    """딜의 활동기록(stage_notes)에 시스템이 한 줄 남긴다.
+
+    사람이 손으로 적는 기록과 같은 자리·같은 모양으로 남긴다 — 활동 로그를 읽는 사람은
+    "누가 언제 무엇을 했나"를 한 줄기로 보고 싶지, 사건 종류마다 다른 화면을 뒤지고
+    싶지 않다. system 은 그 줄을 누가 만들었는지(close/reopen/claim …)를 적어 두는
+    표식이다 — 화면이 같은 사건을 두 번 그리지 않게 알아볼 수 있어야 한다.
+
+    stage 를 비우면 그 딜이 지금 서 있는 단계에 붙인다(사건이 일어난 자리).
+    기록에 실패해도 본 작업은 되돌리지 않는다 — 자국이 남지 않는 것이 저장이 안 되는
+    것보다 낫다. 커밋은 부르는 쪽의 몫이다.
+    """
+    if not rfq_id or not (text or "").strip():
+        return
+    try:
+        rfq = s.query(RFQ).filter_by(id=rfq_id).first()
+        if not rfq:
+            return
+        key = str(stage or _pipeline_stage(s, rfq_id))
+        notes = dict(getattr(rfq, "stage_notes", None) or {})
+        log = list(notes.get(key, []))
+        now = _kst_iso(datetime.utcnow())
+        log.append({"text": text, "datetime": now, "party": "", "person": "",
+                    "channel": "", "direction": "", "star": False, "pic": pic,
+                    "at": now, "system": system})
+        notes[key] = log
+        rfq.stage_notes = notes   # JSON 컬럼은 새 dict 재할당이 필요
+    except Exception:
+        pass
+
+
 def _fmt_received(iso: str) -> str:
     """'YYYY-MM-DDTHH:MM' → 'yy-mm-dd HH:MM' (목록 표시용). 빈값이면 ''."""
     if not iso or len(iso) < 16:

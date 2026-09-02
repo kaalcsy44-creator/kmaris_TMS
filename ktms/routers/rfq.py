@@ -33,6 +33,7 @@ from _core import (
     USD_KRW_RATE,
     _apply_owner_filter,
     _assign_rfq_no,
+    _CLOSE_REASON_SHORT,
     _next_kmaris_rfq_no,
     _coerce_work_type,
     _dual_money,
@@ -57,6 +58,7 @@ from _core import (
     extract_text_from_pdf,
     get_current_user,
     get_session,
+    log_stage_note,
     parse_rfq_fields,
     parse_rfq_pdf_document,
     PDF_DOC_MAX_BYTES,
@@ -523,15 +525,22 @@ def update_rfq_level(rfq_id: int, body: RfqLevelUpdate):
 
 
 @app.put("/api/admin/rfq/{rfq_id}/cancel", dependencies=[Depends(require_token)])
-def update_rfq_cancel(rfq_id: int, body: RfqCancelUpdate):
+def update_rfq_cancel(rfq_id: int, body: RfqCancelUpdate,
+                      user: dict = Depends(get_current_user)):
     """딜을 종결(취소/실주)로 표시하거나 재활성화한다.
     종결 → status=LOST (보드에서 Cancelled 존으로 분류), 재활성 → status=RECEIVED.
-    진행 단계(stage)는 레코드 기반 자동 산출이라 건드리지 않는다."""
+    진행 단계(stage)는 레코드 기반 자동 산출이라 건드리지 않는다.
+
+    종결·재활성은 활동기록에도 한 줄 남긴다. 사유·종결일시는 딜의 **현재 상태**일 뿐이라
+    재활성하면 지워진다 — 그러면 "한 번 접었다가 되살린 건"이라는 사실이 통째로 사라진다.
+    닫은 사람과 사유는 나중에 같은 고객을 다시 만났을 때 가장 먼저 찾는 것이라, 상태와
+    별개로 시간순 기록에 남겨 둔다."""
     s = get_session()
     try:
         rfq = s.query(RFQ).filter_by(id=rfq_id).first()
         if not rfq:
             raise HTTPException(status_code=404, detail="RFQ를 찾을 수 없습니다.")
+        was_cancelled = _enum_val(rfq.status) == RFQStatus.LOST.value
         rfq.status = RFQStatus.LOST if body.cancelled else RFQStatus.RECEIVED
         if body.cancelled:
             # 종결 사유 기록. reason 코드 + 기타 직접입력(note)은 other 일 때만 의미.
@@ -544,6 +553,17 @@ def update_rfq_cancel(rfq_id: int, body: RfqCancelUpdate):
             rfq.close_reason = None
             rfq.close_reason_note = None
             rfq.closed_at = None
+        # 상태가 실제로 바뀐 때만 남긴다 — 사유만 고쳐 다시 저장하는 일에 같은 줄이 쌓이면
+        # 로그가 아니라 소음이 된다.
+        if bool(body.cancelled) != was_cancelled:
+            if body.cancelled:
+                reason = (rfq.close_reason_note or "").strip() or _CLOSE_REASON_SHORT.get(
+                    (rfq.close_reason or "").strip(), "")
+                log_stage_note(s, rfq_id, "딜 종결" + (f" — {reason}" if reason else ""),
+                               user.get("username", ""), system="close")
+            else:
+                log_stage_note(s, rfq_id, "딜 재활성 — 종결 해제",
+                               user.get("username", ""), system="reopen")
         s.commit()
         return {"ok": True, "cancelled": body.cancelled,
                 "close_reason": rfq.close_reason,

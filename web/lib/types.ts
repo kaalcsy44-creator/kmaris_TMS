@@ -1727,6 +1727,9 @@ export type StageNote = {
   direction?: "in" | "out" | ""; // in=수신(Received) / out=발신(Sent) / 빈값=해당없음
   star?: boolean; // ★ 우선(회의/후속 표시)
   pic?: string; // 담당자(작성자) username
+  // 사람이 아니라 시스템이 남긴 줄이라는 표식 — close(종결) / reopen(재활성) / claim(클레임·CN).
+  // 화면이 같은 사건을 두 번 그리지 않게 알아보는 데 쓴다(buildActivities).
+  system?: string;
 };
 
 export type PipelineData = {

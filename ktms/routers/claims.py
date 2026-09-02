@@ -38,7 +38,8 @@ from _core import (
     get_session,
     require_token,
 )
-from _core import Vessel, _doc_file_response, _kst_iso, _project_no_map, generate_cn_xlsx
+from _core import (Vessel, _doc_file_response, _kst_iso, _project_no_map,
+                   generate_cn_xlsx, log_stage_note)
 
 
 def _log_activity(s, rfq_id: int, text: str, pic: str = "") -> None:
@@ -46,24 +47,9 @@ def _log_activity(s, rfq_id: int, text: str, pic: str = "") -> None:
 
     클레임과 크레딧 노트는 돈의 흐름을 바꾸는 사건이라, 나중에 "이 청구서 잔액이 왜
     줄었지?"를 되짚는 자리는 단계 보드다. 그 자리에 자국이 없으면 클레임 탭을 열어 볼
-    생각을 하지 못한다. 기록에 실패해도 본 작업(저장·발행)은 되돌리지 않는다 — 자국이
-    남지 않는 것이 저장이 안 되는 것보다 낫다.
+    생각을 하지 못한다.
     """
-    if not rfq_id or not (text or "").strip():
-        return
-    try:
-        rfq = s.query(RFQ).filter_by(id=rfq_id).first()
-        if not rfq:
-            return
-        notes = dict(getattr(rfq, "stage_notes", None) or {})
-        log = list(notes.get("11", []))
-        now = _kst_iso(datetime.utcnow())
-        log.append({"text": text, "datetime": now, "party": "", "person": "",
-                    "channel": "", "direction": "", "star": False, "pic": pic, "at": now})
-        notes["11"] = log
-        rfq.stage_notes = notes   # JSON 컬럼은 새 dict 재할당이 필요
-    except Exception:
-        pass
+    log_stage_note(s, rfq_id, text, pic, stage=11, system="claim")
 
 
 def _cn_items(raw) -> list[dict]:

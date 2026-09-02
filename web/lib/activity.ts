@@ -159,7 +159,12 @@ export function buildActivities(row: PipelineRow, steps: string[]): Activity[] {
     return da < db ? -1 : da > db ? 1 : 0;
   });
   // 종결 이벤트 — 항상 맨 아래에 붙인다(날짜 없으면 날짜칸 비움).
-  if (row.cancelled) {
+  // 2026-09 이후의 종결은 서버가 활동기록(stage_notes)에 시각과 함께 남기므로, 그 줄이
+  // 있으면 여기서 또 그리지 않는다 — 같은 사건이 두 줄로 보이지 않게. 그 전에 닫힌 딜은
+  // 기록이 없으니 상태(cancelled)에서 만들어 붙인다.
+  const loggedClose = Object.values(row.stage_notes ?? {}).some((list) =>
+    (list ?? []).some((n) => n.system === "close"));
+  if (row.cancelled && !loggedClose) {
     const reason = closeReasonLabel(row.close_reason);
     const note = (row.close_reason_note || "").trim();
     out.push({
