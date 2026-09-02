@@ -10138,6 +10138,28 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   min-width: 0;
   padding-right: 6px;
 }
+/* 두 판은 각자 구른다(page-fill 안에서만).
+   앞서는 나무와 목록이 한 문서에 얹혀 함께 늘어났다. 그러면 오른쪽 표의 가로 막대는
+   문서 맨 아래 — 스무 칸짜리 표에서 오른쪽이 잘려 있는데, 굴릴 손잡이를 잡으려면
+   화면 몇 번을 내려가야 했다. 높이를 화면에 못 박아 두면 그 막대가 표 바로 밑에 선다.
+   왼쪽 나무도 제 안에서 굴러, 긴 분류를 펴 놓아도 오른쪽 목록이 따라 밀리지 않는다. */
+.page-fill > .cat-layout {
+  flex: 1;
+  min-height: 0;
+  align-items: stretch;
+}
+.page-fill .cat-tree-pane {
+  min-height: 0;
+  overflow-y: auto;
+}
+/* 목록 판은 머리줄(제목·버튼)을 붙박이로 두고 표만 굴린다 — 위의 .page-fill .table-wrap
+   규칙이 그 표를 남은 높이에 맞춰 주고, 머리 칸 고정(sticky)도 함께 따라온다. */
+.page-fill .cat-ledger-pane {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
 /* 트리↔목록 폭 조절 구분선(드래그) */
 .cat-splitter {
   align-self: stretch;

@@ -14,12 +14,14 @@ import ShipMapTab from "@/components/screens/ShipMapTab";
 type ItemTab = "parts" | "service" | "categories" | "ship";
 
 export default function ItemPage() {
-  // 탭 상태가 여기 있는 건 껍데기(AppShell)가 알아야 하기 때문이다 — 마스터 두 탭은
-  // 표가 화면을 채우고 그 안에서 굴리는 배치(fill)를, 분류·도면 탭은 제 길이대로
+  // 탭 상태가 여기 있는 건 껍데기(AppShell)가 알아야 하기 때문이다 — 표를 가진 세 탭은
+  // 화면을 채우고 그 안에서 굴리는 배치(fill)를 쓴다. 분류 탭도 그래야 하는 건 같은
+  // 이유다: 보통 배치에서는 오른쪽 표의 가로 막대가 문서 맨 아래에 생겨, 잘린 칸을
+  // 굴려 보려면 페이지를 끝까지 내려가야 했다. 도면(Ship View)만 카드가 제 길이대로
   // 흐르는 보통 배치를 쓴다.
   const [tab, setTab] = useState<ItemTab>("parts");
   return (
-    <AppShell active="item" perm="settings" wide fill={tab === "parts" || tab === "service"}>
+    <AppShell active="item" perm="settings" wide fill={tab !== "ship"}>
       <ItemManager tab={tab} setTab={setTab} />
     </AppShell>
   );
