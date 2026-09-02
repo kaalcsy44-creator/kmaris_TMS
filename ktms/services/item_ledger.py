@@ -415,7 +415,14 @@ def _summarize(hs: list, docs: dict | None = None) -> dict:
 
 
 def ledger_rows(session) -> dict:
-    """분류별 품목 롤업. matched(마스터 연결) + unmatched(part_no 미연결) 로 분리."""
+    """분류별 품목 롤업. matched(마스터 연결) + unmatched(part_no 미연결) 로 분리.
+
+    마스터에 있는 품목은 가격 이력이 아직 없어도 목록에 세운다. 예전에는 이력을 돌며
+    묶었기 때문에 값이 한 번도 붙지 않은 품목은 이 화면에 아예 나타나지 않았다 —
+    그런데 그런 품목이야말로 분류가 어긋나 있기 쉽고(단가 없는 줄에서 마스터만 생기는
+    길이 있다), 여기 안 보이면 분류를 고칠 자리도 없었다. Ship View·품목 마스터는
+    처음부터 마스터 전체를 보고 있어서, 같은 분류를 두고 화면마다 품목 수가 달랐다.
+    """
     masters = {m.id: m for m in session.query(ItemMaster).all()}
     matched: dict[int, list] = {}
     unmatched: dict[str, list] = {}
@@ -436,6 +443,18 @@ def ledger_rows(session) -> dict:
             "maker": (m.maker if m else "") or "",
             "category_id": (m.category_id if m else None),
             **_summarize(hs),
+        })
+    # 아직 값이 붙지 않은 품목 — 가격 칸은 비지만 이름과 분류는 여기서 다룰 수 있어야 한다.
+    for m in masters.values():
+        if m.id in matched:
+            continue
+        items.append({
+            "item_id": m.id,
+            "part_no": m.part_no or "",
+            "description": m.description or "",
+            "maker": m.maker or "",
+            "category_id": m.category_id,
+            **_summarize([]),
         })
     items.sort(key=lambda r: r["part_no"])
 
