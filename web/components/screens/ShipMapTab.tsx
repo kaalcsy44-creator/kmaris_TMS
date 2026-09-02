@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { fetchItemShipMap } from "@/lib/api";
 import { useCachedData } from "@/lib/useCachedData";
-import type { ShipItem, ShipMap } from "@/lib/types";
+import type { ShipDeal, ShipItem, ShipMap } from "@/lib/types";
 
 /**
  * Ship View — 분류 트리를 목록이 아니라 배 한 척으로 펼친 화면.
@@ -115,6 +115,22 @@ function berthOf(name: string): number {
   return BERTH[k] ?? DECKS.length - 1;   // 모르는 계통은 부두에 내려놓는다.
 }
 
+/**
+ * 칩에 적는 프로젝트 번호 — 앞머리(KMS-RFQ-)를 뗀다.
+ *
+ * 번호 자체는 그대로 둘 값이다. 이 화면에서 프로젝트를 여는 열쇠이고, 연·월·일련이라
+ * 정렬이 곧 시간순이며, 사람들이 실제로 이 번호로 서로에게 말한다. 문제는 길이다 —
+ * 기관실 한 칸에 열두 개가 서면 서로 다른 곳은 뒤 두 마디뿐인데 같은 앞머리가 칸의
+ * 절반을 먹고, 그 줄들이 정작 이 카드의 본문(계통과 숫자)을 아래로 밀어낸다.
+ * 그래서 칩에는 구별되는 부분만 적고, 온전한 번호와 고객·선박은 마우스를 올릴 때 준다.
+ * 번호는 수동 입력이라 이 꼴이 아닐 수도 있는데, 그때는 손대지 않고 그대로 적는다.
+ */
+const shortNo = (no: string) => no.replace(/^KMS-RFQ-/i, "");
+
+/** 칩 하나가 무엇인지 한 줄로 — 온전한 번호에 고객·선박·제목을 잇는다. */
+const dealLabel = (d: ShipDeal) =>
+  [d.rfq_no, d.customer, d.vessel, d.title].filter(Boolean).join(" · ");
+
 function money(v: number | null | undefined, cur: string) {
   if (v == null) return "—";
   const n = Math.round(v);
@@ -173,17 +189,18 @@ export default function ShipMapTab() {
   if (error && !data) return <div className="state error">API error: {error.message}</div>;
   if (!data || !model) return <div className="state">Loading the ship…</div>;
 
+  // 딜을 통째로 들고 다닌다 — 칩은 번호만 적지만 마우스를 올리면 고객·선박까지 말해야 한다.
   const dealsOf = (items: ShipItem[]) => {
-    const seen = new Map<string, { no: string; rfq_id: number; items: ShipItem[] }>();
+    const seen = new Map<string, { deal: ShipDeal; items: ShipItem[] }>();
     for (const it of items) {
       for (const d of it.deals) {
-        const e = seen.get(d.rfq_no) ?? { no: d.rfq_no, rfq_id: d.rfq_id, items: [] };
+        const e = seen.get(d.rfq_no) ?? { deal: d, items: [] };
         e.items.push(it);
         seen.set(d.rfq_no, e);
       }
     }
     // 번호는 연도·월·일련이 그대로 정렬이 된다 — 최근 것이 앞에 서도록 내림차순.
-    return Array.from(seen.values()).sort((a, b) => b.no.localeCompare(a.no));
+    return Array.from(seen.values()).sort((a, b) => b.deal.rfq_no.localeCompare(a.deal.rfq_no));
   };
 
   // 마우스를 올리면 펴고 떼면 접는다 — 두 손잡이를 한 벌로 묶어 두면 붙이는 자리마다
@@ -204,11 +221,16 @@ export default function ShipMapTab() {
     <div className="ship-view" onMouseLeave={() => setPeek(null)}>
       <div className="ship-hdr">
         <div>
-          <h2>Ship View</h2>
+          {/* 제목은 탭 이름(Ship View)을 되풀이하지 않는다. 이 앱은 진짜 선박도 관리하므로
+              (Settings · Vessels, 딜마다 붙는 선명) 'Ship View' 만 크게 적혀 있으면 어느
+              배의 화면인가로 읽힌다. 여기 실린 것은 배가 아니라 품목 분류다 — 배는 그
+              분류를 눕혀 놓는 자리일 뿐이라, 제목은 실린 것을 말하고 배는 탭이 말한다. */}
+          <h2>Item categories on board</h2>
           <p className="hint-inline">
             The whole classification laid out as one vessel — every category, where it sits on
             board, and which projects are hanging on it. Hover a category or a project number to
-            read the items behind it.
+            read the items behind it. No real vessel is involved; the decks are just where each
+            group of categories belongs.
           </p>
         </div>
         <div className="ship-stats">
@@ -281,7 +303,7 @@ function Zone({
   cat: Cat;
   model: ShipModel;
   busyOnly: boolean;
-  dealsOf: (items: ShipItem[]) => { no: string; rfq_id: number; items: ShipItem[] }[];
+  dealsOf: (items: ShipItem[]) => { deal: ShipDeal; items: ShipItem[] }[];
   hover: (title: string, sub: string, items: ShipItem[]) => {
     onMouseEnter: (e: React.MouseEvent) => void;
     onMouseLeave: () => void;
@@ -295,7 +317,13 @@ function Zone({
   const deck = DECKS[berthOf(cat.name)];
 
   return (
-    <article className={`ship-zone${mine.length ? "" : " ship-zone--empty"}`}>
+    <article
+      className={`ship-zone${mine.length ? "" : " ship-zone--empty"}`}
+      /* 색은 카드가 아니라 갑판의 것이다 — 같은 구역 카드끼리 한 계열로 묶여야 세 단에
+         흩어져 놓여도 "이 셋은 한 구역"이 먼저 읽힌다. 자리(열)는 부피가 정하므로
+         구역을 자리로는 말할 수 없고, 남는 수단이 색이다. */
+      data-deck={berthOf(cat.name)}
+    >
       {/* 갑판 이름표는 카드 안에 있다 — 카드가 어느 단에 놓이든 제자리를 말하도록. */}
       <div className="ship-zone-deck"><b>{deck.name}</b><span>{deck.sub}</span></div>
       <header {...hover(cat.name, `${mine.length} item(s) on this system`, mine)}>
@@ -306,14 +334,20 @@ function Zone({
 
       {deals.length ? (
         <div className="ship-projects">
-          {deals.map((d) => (
+          {deals.map(({ deal, items }) => (
             <Link
-              key={d.no}
+              key={deal.rfq_no}
               className="ship-proj"
-              href={`/project?rfq=${d.rfq_id}&view=overview&back=${encodeURIComponent("/item")}`}
-              {...hover(d.no, `${cat.name} — ${d.items.length} item(s) in this project`, d.items)}
+              href={`/project?rfq=${deal.rfq_id}&view=overview&back=${encodeURIComponent("/item")}`}
+              title={dealLabel(deal)}
+              {...hover(
+                deal.rfq_no,
+                [[deal.customer, deal.vessel].filter(Boolean).join(" · "),
+                 `${items.length} item(s) on ${cat.name}`].filter(Boolean).join(" — "),
+                items,
+              )}
             >
-              {d.no}
+              {shortNo(deal.rfq_no)}
             </Link>
           ))}
         </div>
@@ -412,10 +446,10 @@ function Peeker({ peek }: { peek: NonNullable<Peek> }) {
                 {it.deals.slice(0, 4).map((d) => (
                   <span
                     key={d.rfq_id}
-                    title={[d.title, d.vessel, d.customer, d.date, `${d.lines} line(s)`]
+                    title={[dealLabel(d), d.date, `${d.lines} line(s)`]
                       .filter(Boolean).join(" · ")}
                   >
-                    {d.rfq_no}
+                    {shortNo(d.rfq_no)}
                   </span>
                 ))}
                 {it.deals.length > 4 ? <span>+{it.deals.length - 4}</span> : null}

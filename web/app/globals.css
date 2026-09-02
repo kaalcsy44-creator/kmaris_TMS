@@ -15019,15 +15019,53 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
   columns: 3;
   column-gap: 12px;
 }
+/* 카드의 색은 전부 이 변수 다섯에서 나온다 — 갑판마다 값만 갈아 끼우면 카드·칩·숫자가
+   한꺼번에 그 구역의 계열이 된다. 값을 곳곳에 흩어 적으면 구역이 하나 늘 때마다 다섯
+   군데를 고쳐야 하고, 그러다 한 곳을 빠뜨리면 그 칩만 남의 색으로 남는다.
+   전부 옅은 톤이다. 카드가 색으로 앞서 나오면 정작 읽어야 할 숫자가 뒤로 밀린다 —
+   색이 할 일은 "이 셋은 한 구역"을 곁눈으로 알리는 것까지다. */
 .ship-zone {
+  --z-bg: rgba(255, 255, 255, 0.92);
+  --z-line: var(--line);
+  --z-ink: #2456a6;          /* 숫자·강조 */
+  --z-mark: #5c718c;         /* 표식(선 그림) */
+  --z-chip-bg: #eef4ff;      /* 프로젝트 칩 */
+  --z-chip-line: #d3e0f7;
+  --z-chip-hover: #dfeaff;
+  --z-leaf-bg: #f2f6fb;      /* 소분류 칩 */
+  --z-leaf-line: #e2eaf4;
   break-inside: avoid;
   -webkit-column-break-inside: avoid;
   margin: 0 0 12px;
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid var(--line);
+  background: var(--z-bg);
+  border: 1px solid var(--z-line);
   border-radius: 10px;
   padding: 8px 12px 12px;
   box-shadow: 0 1px 2px rgba(31, 62, 102, 0.06);
+}
+/* 선교·상부 — 푸른 계열(항해). */
+.ship-zone[data-deck="0"] {
+  --z-bg: #f6f9fe; --z-line: #dbe6f6; --z-ink: #2456a6; --z-mark: #5b7793;
+  --z-chip-bg: #e9f1fd; --z-chip-line: #cfe0f8; --z-chip-hover: #dbe8fb;
+  --z-leaf-bg: #f1f6fd; --z-leaf-line: #dfe9f7;
+}
+/* 갑판·화물 — 청록 계열(물·화물창). */
+.ship-zone[data-deck="1"] {
+  --z-bg: #f4faf8; --z-line: #d3e7e0; --z-ink: #16705c; --z-mark: #5c8a80;
+  --z-chip-bg: #e6f5f0; --z-chip-line: #c6e3da; --z-chip-hover: #d8ede7;
+  --z-leaf-bg: #f0f8f5; --z-leaf-line: #dcebe6;
+}
+/* 기관·전장 — 구릿빛 계열(열·기계). 카드가 가장 많은 구역이라 가장 옅게 둔다. */
+.ship-zone[data-deck="2"] {
+  --z-bg: #fdf8f4; --z-line: #eddfd2; --z-ink: #9a5a28; --z-mark: #8f6f55;
+  --z-chip-bg: #fbeee3; --z-chip-line: #ecd8c5; --z-chip-hover: #f6e3d3;
+  --z-leaf-bg: #fbf5ef; --z-leaf-line: #eee2d6;
+}
+/* 육상·용역 — 자줏빛 계열(배 밖). */
+.ship-zone[data-deck="3"] {
+  --z-bg: #f9f7fd; --z-line: #e3ddf3; --z-ink: #58459c; --z-mark: #7b6fa3;
+  --z-chip-bg: #efeafb; --z-chip-line: #ddd3f2; --z-chip-hover: #e5ddf8;
+  --z-leaf-bg: #f5f2fc; --z-leaf-line: #e6e0f4;
 }
 /* 갑판 이름표 — 카드마다 제 자리를 달고 다닌다. 값이 아니라 자리 표시이므로 제목보다
    한 단 작고 옅게, 제목 바로 위에. */
@@ -15041,16 +15079,17 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
-.ship-zone-deck b { color: #6b7f99; font-weight: 700; }
+.ship-zone-deck b { color: var(--z-ink); font-weight: 700; }
 .ship-zone-deck span { text-transform: none; letter-spacing: 0; }
 /* 비어 있는 계통도 지우지 않는다 — 무엇이 비었는지가 이 화면의 절반이다. 대신 물린다. */
-.ship-zone--empty { background: rgba(255, 255, 255, 0.55); border-style: dashed; }
+/* 빈 계통 — 구역 색은 테두리에만 남기고 바탕은 뺀다(자리는 지키되 뒤로 물러서게). */
+.ship-zone--empty { background: rgba(255, 255, 255, 0.62); border-style: dashed; }
 .ship-zone > header {
   display: flex;
   align-items: baseline;
   gap: 8px;
   padding-bottom: 8px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--z-line);
   cursor: default;
 }
 .ship-zone > header h3 { margin: 0; font-size: 14px; flex: 1 1 auto; }
@@ -15060,7 +15099,7 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
   width: 16px;
   height: 16px;
   flex: none;
-  color: #5c718c;
+  color: var(--z-mark);
   align-self: center;
 }
 .ship-zone--empty .ship-zone-mark { color: #a8b3c4; }
@@ -15068,7 +15107,7 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
   font-variant-numeric: tabular-nums;
   font-weight: 700;
   font-size: 13px;
-  color: #2456a6;
+  color: var(--z-ink);
 }
 .ship-zone--empty .ship-zone-n { color: var(--muted); font-weight: 400; }
 
@@ -15080,16 +15119,16 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
   display: inline-block;
   padding: 2px 7px;
   border-radius: 999px;
-  background: #eef4ff;
-  border: 1px solid #d3e0f7;
-  color: #2456a6;
+  background: var(--z-chip-bg);
+  border: 1px solid var(--z-chip-line);
+  color: var(--z-ink);
   font-size: 11px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   text-decoration: none;
   white-space: nowrap;
 }
-.ship-proj:hover { background: #dfeaff; border-color: #b7ccef; }
+.ship-proj:hover { background: var(--z-chip-hover); border-color: var(--z-ink); }
 
 .ship-subs { display: flex; flex-direction: column; gap: 6px; }
 /* 계열이 많은 카드는 안에서 두 단으로 — 기관실 아홉 계열이 한 줄로 서면 그 카드
@@ -15107,7 +15146,7 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
   color: var(--ink);
   cursor: default;
 }
-.ship-sub-hd b { font-variant-numeric: tabular-nums; color: #2456a6; }
+.ship-sub-hd b { font-variant-numeric: tabular-nums; color: var(--z-ink); }
 .ship-sub--empty .ship-sub-hd,
 .ship-sub--empty .ship-sub-hd b { color: var(--muted); font-weight: 400; }
 .ship-leaves { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 2px; }
@@ -15117,13 +15156,13 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
   gap: 4px;
   padding: 1px 6px;
   border-radius: 6px;
-  background: #f2f6fb;
-  border: 1px solid #e2eaf4;
+  background: var(--z-leaf-bg);
+  border: 1px solid var(--z-leaf-line);
   font-size: 10.5px;
   color: #45526a;
   cursor: default;
 }
-.ship-leaf b { font-variant-numeric: tabular-nums; color: #2456a6; }
+.ship-leaf b { font-variant-numeric: tabular-nums; color: var(--z-ink); }
 /* 아직 아무것도 안 실린 소분류 — 자리는 지키되 뒤로 물린다. */
 .ship-leaf--empty { background: transparent; border-color: #eef2f7; color: #a8b3c4; }
 
