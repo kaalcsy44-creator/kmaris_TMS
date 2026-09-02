@@ -70,6 +70,32 @@ def _num(v, default: float = 0.0) -> float:
         return default
 
 
+# 이력·마스터가 실제로 담을 수 있는 길이(db.models 의 컬럼 정의와 같아야 한다).
+# 키를 만들 때도 저장할 때도 이 길이로 자른 값을 쓴다 — 둘이 어긋나면 긴 설명을 가진
+# 품목은 영영 마스터에 붙지 못한다(아래 fit_desc 주석 참고).
+PART_MAX, DESC_MAX = 200, 400
+
+
+def fit_part(v) -> str:
+    """이력·마스터에 담을 수 있는 길이로 자른 품번."""
+    return (v or "")[:PART_MAX]
+
+
+def fit_desc(v) -> str:
+    """이력·마스터에 담을 수 있는 길이로 자른 설명.
+
+    자르는 것 자체보다 **어디서 자르느냐가 같아야 한다**는 것이 요점이다. 예전에는
+    이력 행을 세울 때 키는 원문으로 만들고 저장은 400자로 잘라 넣었다. 그러면 설명이
+    400자를 넘는 품목(품번 없는 용역이 흔히 그렇다)은:
+      · 화면에는 잘린 설명이 보이고, 사람은 그것으로 분류를 배정한다
+      · 마스터는 잘린 설명으로 만들어진다
+      · 그런데 다음 재구축이 원문으로 키를 만들어 그 마스터를 못 찾는다
+      · 배정한 품목이 미분류로 되돌아온다 — 몇 번을 배정해도 같다
+    양쪽이 같은 값을 보게 해서 그 고리를 끊는다.
+    """
+    return (v or "")[:DESC_MAX]
+
+
 def build_master_index(session) -> dict[str, int]:
     """식별키(part_no 또는 description) → item_master.id. 중복 시 가장 낮은 id."""
     idx: dict[str, int] = {}
@@ -112,15 +138,17 @@ def rebuild_price_history(session) -> int:
         qty = _num(line.get("qty"), 1.0)
         amt = line.get("amount")
         amount = _num(amt) if amt not in (None, "") else unit * qty
-        desc = (line.get("description") or "")
+        # 저장할 값 그대로 키를 만든다(자르기 전 원문으로 만들면 저장된 행과 어긋난다).
+        desc = fit_desc(line.get("description"))
+        pn = fit_part(pn)
         rows.append({
             "item_id": master.get(match_key(pn, desc)),
             "price_type": price_type,
             "source_type": source_type,
             "source_id": source_id,
             "source_line_idx": idx,
-            "part_no": pn[:200],
-            "description": (line.get("description") or "")[:400],
+            "part_no": pn,
+            "description": desc,
             "rfq_id": rfq_id,
             "customer_id": customer_id,
             "vendor_id": vendor_id,
@@ -281,8 +309,8 @@ def apply_line_categories(session, items) -> int:
         master = by_key.get(key)
         if master is None:
             master = ItemMaster(
-                part_no=(line.get("part_no") or "").strip(),
-                description=(line.get("description") or "").strip(),
+                part_no=fit_part((line.get("part_no") or "").strip()),
+                description=fit_desc((line.get("description") or "").strip()),
                 maker=(line.get("maker") or ""),
                 unit=(line.get("unit") or "PCS"),
                 item_type=guess_item_type(line.get("part_no"), line.get("description")),

@@ -92,7 +92,7 @@ from db.models import ItemPriceHistory
 from services.item_ledger import (
     ledger_rows, item_history, rebuild_price_history, stamp_history_item, match_key,
     master_price_summary, master_party_fallback, ensure_price_history_fresh,
-    guess_item_type, suggest_categories, category_ship_map,
+    guess_item_type, suggest_categories, category_ship_map, fit_part, fit_desc,
 )
 import _core
 
@@ -1128,7 +1128,7 @@ def _assign_one_category(s, target: "ItemLedgerAssign") -> tuple[int, int]:
             master.category_id = target.category_id
         else:
             master = ItemMaster(
-                part_no=pn, description=desc, maker=(target.maker or ""),
+                part_no=fit_part(pn), description=fit_desc(desc), maker=(target.maker or ""),
                 unit="PCS", item_type=guess_item_type(pn, desc),
                 category_id=target.category_id,
             )
