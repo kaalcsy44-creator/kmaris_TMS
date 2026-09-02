@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import ProjectNo from "@/components/common/ProjectNo";
 import { fetchItemShipMap } from "@/lib/api";
 import { useCachedData } from "@/lib/useCachedData";
 import type { ShipDeal, ShipItem, ShipMap } from "@/lib/types";
@@ -111,9 +112,16 @@ type ShipModel = {
  */
 type Hint = { text: string; x: number; y: number } | null;
 
-/** 눌러서 펴는 판 — 그 자리에 걸린 품목 전부. href 가 있으면 그리로 가는 길도 함께. */
+/**
+ * 눌러서 펴는 판 — 그 자리에 걸린 품목 전부. href 가 있으면 그리로 가는 길도 함께.
+ *
+ * 제목이 글자가 아니라 조각(ReactNode)인 까닭은 프로젝트 번호 때문이다. P-013 과
+ * (260721) 은 무게가 달라야 한다 — 앞은 이름이고 뒤는 언제 들어온 건인지를 덧붙인
+ * 것이라, 같은 굵기로 붙어 있으면 번호가 여섯 자리 더 긴 것처럼 읽힌다. 다른 목록이
+ * 쓰는 ProjectNo 가 그 둘을 갈라 놓으므로 여기서도 그대로 쓴다.
+ */
 type Panel = {
-  title: string;
+  title: React.ReactNode;
   sub: string;
   items: ShipItem[];
   href?: string;
@@ -140,9 +148,9 @@ function berthOf(name: string): number {
  */
 const chipNo = (d: ShipDeal) => (d.project_no || d.rfq_no || "—").replace(/\s*\(.*$/, "");
 
-/** 칩 하나가 무엇인지 한 줄로 — 번호·문서번호·고객·선박·제목. */
+/** 칩 하나가 무엇인지 한 줄로 — 번호·고객·선박·제목. */
 const dealLabel = (d: ShipDeal) =>
-  [d.project_no, d.rfq_no, d.customer, d.vessel, d.title].filter(Boolean).join(" · ");
+  [d.project_no, d.customer, d.vessel, d.title].filter(Boolean).join(" · ");
 
 function money(v: number | null | undefined, cur: string) {
   if (v == null) return "—";
@@ -241,7 +249,7 @@ export default function ShipMapTab() {
    * 링크 위에 얹을 때는(프로젝트 칩) 기본 이동을 막되, 새 탭으로 열려는 손짓
    * (Ctrl·Cmd·Shift)은 건드리지 않고 그대로 흘려보낸다.
    */
-  const opens = (title: string, sub: string, items: ShipItem[], href?: string) => ({
+  const opens = (title: React.ReactNode, sub: string, items: ShipItem[], href?: string) => ({
     onClick: (e: React.MouseEvent) => {
       if (!items.length) return;
       if (e.metaKey || e.ctrlKey || e.shiftKey) return;
@@ -351,7 +359,7 @@ function Zone({
     onMouseEnter: (e: React.MouseEvent) => void;
     onMouseLeave: () => void;
   };
-  opens: (title: string, sub: string, items: ShipItem[], href?: string) => {
+  opens: (title: React.ReactNode, sub: string, items: ShipItem[], href?: string) => {
     onClick: (e: React.MouseEvent) => void;
   };
 }) {
@@ -392,8 +400,8 @@ function Zone({
                 href={href}
                 {...spot(dealLabel(deal))}
                 {...opens(
-                  deal.project_no || deal.rfq_no,
-                  [[deal.customer, deal.vessel, deal.rfq_no].filter(Boolean).join(" · "),
+                  <ProjectNo value={deal.project_no || deal.rfq_no} />,
+                  [[deal.customer, deal.vessel].filter(Boolean).join(" · "),
                    `${items.length} item(s) on ${cat.name}`].filter(Boolean).join(" — "),
                   items,
                   href,

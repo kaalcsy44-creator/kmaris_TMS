@@ -15221,7 +15221,9 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
   margin-bottom: 6px;
   border-bottom: 1px solid var(--line);
 }
-.ship-peek-hd b { font-size: 13px; }
+/* 제목은 줄이지 않는다 — 옆의 부제가 길면 flex 가 제목부터 줄여 "P-" / "013(260721)"
+   로 접혔다. 이름이 두 줄로 갈리면 무엇의 판인지가 한눈에 안 들어온다. */
+.ship-peek-hd b { font-size: 13px; flex: 0 0 auto; }
 .ship-peek-hd span { font-size: 11px; color: var(--muted); flex: 1 1 auto; }
 .ship-peek-x {
   flex: none;
