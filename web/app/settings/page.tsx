@@ -987,7 +987,9 @@ function PartnersTab() {
 function CustomersTab() {
   // 회사 공통정보 편집 대상 그룹(같은 회사명의 담당자 레코드들). null = 닫힘.
   // 회사 목록 전체와 지금 보고 있는 자리 — 창 안에서 옆 회사로 건너뛰려면 이웃을 알아야 한다.
-  const [company, setCompany] = useState<{ groups: SettingsCustomer[][]; index: number } | null>(null);
+  const [company, setCompany] = useState<
+    { groups: SettingsCustomer[][]; index: number; editRow: (row: SettingsCustomer) => void } | null
+  >(null);
   const [reloadKey, setReloadKey] = useState(0);
   const canCreate = can("settings", "create");
 
@@ -1006,6 +1008,9 @@ function CustomersTab() {
           />
         )]}
         {...companyNav(company, setCompany)}
+        // 담당자를 고치러 갈 때는 이 창을 먼저 닫는다 — 편집 창이 그 자리에 열리므로
+        // 두 창이 겹쳐 서면 어느 쪽을 닫는 손짓인지 흐려진다.
+        onEditContact={(row) => { const go = company.editRow; setCompany(null); go(row); }}
         fields={[
           ["tax_id", "Tax ID / Business No."],
           ["tax_invoice_email", "Tax invoice email"],
@@ -1055,7 +1060,7 @@ function CustomersTab() {
               type="button"
               className="ms-mini"
               title="Company info — applies to all contacts of this company"
-              onClick={() => setCompany({ groups: nav.groups, index: nav.index })}
+              onClick={() => setCompany(nav)}
             >
               <CompanyIcon />
             </button>
@@ -1347,9 +1352,9 @@ function contactValues(multi: string[] | undefined, flat: string | undefined): s
 type CompanyNav = { name: string; go: () => void };
 
 /** 회사 목록에서 앞뒤 한 걸음을 만든다(두 탭이 같은 모양으로 쓴다). */
-function companyNav<T extends { name: string }>(
-  st: { groups: T[][]; index: number },
-  set: (s: { groups: T[][]; index: number }) => void,
+function companyNav<T extends { name: string }, S extends { groups: T[][]; index: number }>(
+  st: S,
+  set: (s: S) => void,
 ): { prev?: CompanyNav; next?: CompanyNav } {
   const nameAt = (i: number) => st.groups[i]?.[0]?.name ?? "";
   return {
@@ -1378,6 +1383,7 @@ function CompanyInfoModal<
   stats,
   prev,
   next,
+  onEditContact,
 }: {
   rows: T[];
   fields: [keyof T & keyof CompanyInfoSave, string][];
@@ -1392,6 +1398,8 @@ function CompanyInfoModal<
   /** 표의 앞뒤 회사로 건너뛰기. 이름을 함께 받아 어디로 가는지 미리 보인다. */
   prev?: CompanyNav;
   next?: CompanyNav;
+  /** 담당자 한 명을 고치러 간다(바깥 목록의 편집 창을 연다). 없으면 단추도 없다. */
+  onEditContact?: (row: T) => void;
 }) {
   // 저장 뒤에도 창이 남으므로 회사명을 상태로 든다. 이름을 바꿔 저장하면 제목·읽기
   // 화면이 새 이름이 되어야 하고, 그 다음 저장의 조회 키도 새 이름이어야 한다.
@@ -1505,7 +1513,10 @@ function CompanyInfoModal<
             </div>
             <table className="mini">
               <thead>
-                <tr><th>Name</th><th>Email</th><th>Phone</th><th>Region</th></tr>
+                <tr>
+                  <th>Name</th><th>Email</th><th>Phone</th><th>Region</th>
+                  {onEditContact ? <th className="co-edit-col" /> : null}
+                </tr>
               </thead>
               <tbody>
                 {rows.map((r) => {
@@ -1528,6 +1539,18 @@ function CompanyInfoModal<
                           : <span className="dash">—</span>}
                       </td>
                       <td>{regions.join(" · ") || <span className="dash">—</span>}</td>
+                      {onEditContact ? (
+                        <td className="co-edit-col">
+                          <button
+                            type="button"
+                            className="btn tiny"
+                            onClick={() => onEditContact(r)}
+                            title={`Edit ${r.contact || "this contact"}`}
+                          >
+                            ✎
+                          </button>
+                        </td>
+                      ) : null}
                     </tr>
                   );
                 })}
@@ -1940,7 +1963,9 @@ const EMPTY_VENDOR: SettingsVendor = {
 };
 
 function VendorsTab() {
-  const [company, setCompany] = useState<{ groups: SettingsVendor[][]; index: number } | null>(null);
+  const [company, setCompany] = useState<
+    { groups: SettingsVendor[][]; index: number; editRow: (row: SettingsVendor) => void } | null
+  >(null);
   const [reloadKey, setReloadKey] = useState(0);
   const canCreate = can("settings", "create");
 
@@ -1957,6 +1982,7 @@ function VendorsTab() {
           />
         )]}
         {...companyNav(company, setCompany)}
+        onEditContact={(row) => { const go = company.editRow; setCompany(null); go(row); }}
         fields={[["website", "Website"]]}
         areas={[
           { key: "specialization", label: "Specialization", rows: 3,
@@ -1995,7 +2021,7 @@ function VendorsTab() {
               type="button"
               className="ms-mini"
               title="Company info — applies to all contacts of this company"
-              onClick={() => setCompany({ groups: nav.groups, index: nav.index })}
+              onClick={() => setCompany(nav)}
             >
               <CompanyIcon />
             </button>
@@ -3821,7 +3847,11 @@ function MasterSection<T extends { id: number }>({
     // 헤더 우측 버튼. addNew() = 그룹 공통정보가 채워진 신규 등록 폼 열기.
     /** 헤더 우측 버튼. addNew() = 그룹 공통정보가 채워진 신규 등록 폼 열기.
      *  nav = 같은 표의 회사 목록과 이 회사의 자리 — 회사 정보 창이 옆 회사로 건너뛰는 데 쓴다. */
-    actions?: (rows: T[], addNew: () => void, nav: { groups: T[][]; index: number }) => ReactNode;
+    actions?: (
+      rows: T[],
+      addNew: () => void,
+      nav: { groups: T[][]; index: number; editRow: (row: T) => void },
+    ) => ReactNode;
     newRow?: (rows: T[]) => T;
     summary?: (groups: number, items: number) => string;
   };
@@ -4032,7 +4062,7 @@ function MasterSection<T extends { id: number }>({
                     ))}
                     <td className="ms-actcol" onClick={(e) => e.stopPropagation()}>
                       {group?.actions?.(g.rows, () => openNewIn(g.rows),
-                        { groups: groupRows, index: groupIndex.get(g.key) ?? 0 })}
+                        { groups: groupRows, index: groupIndex.get(g.key) ?? 0, editRow: openEdit })}
                     </td>
                   </tr>
                   {isOpen(g.key) ? g.rows.map((row) => dataRow(row, true)) : null}
