@@ -524,13 +524,26 @@ function Peeker({ panel, onClose }: { panel: NonNullable<Panel>; onClose: () => 
               {it.part_no ? <code>{it.part_no}</code> : null}
               <span>{it.description || "(no description)"}</span>
             </div>
+            {/* 상대는 금액 줄 안에 있어야 한다 — 산 값에는 판 쪽이, 판 값에는 산 쪽이
+                붙는다. 앞서는 넷을 한 줄에 나란히 흘려 놓아, 줄바꿈이 어디서 걸리느냐에
+                따라 공급사가 판매가 옆에 서곤 했다(판 적 없는 곳에 판 것처럼 읽혔다). */}
             <div className="ship-peek-m">
-              {it.maker ? <span>{it.maker}</span> : null}
-              {it.buy ? <span>buy {money(it.buy.unit_price, it.buy.currency)}<Src doc={it.buy.doc} /></span> : null}
-              {it.sell ? <span>sell {money(it.sell.unit_price, it.sell.currency)}<Src doc={it.sell.doc} /></span> : null}
-              {it.margin_pct != null ? <span className="ship-peek-mg">{it.margin_pct}%</span> : null}
-              {it.vendor ? <span>← {it.vendor}</span> : null}
-              {it.customer ? <span>→ {it.customer}</span> : null}
+              {it.maker ? <span className="ship-peek-mk">{it.maker}</span> : null}
+              {it.buy ? (
+                <span className="ship-peek-p">
+                  buy {money(it.buy.unit_price, it.buy.currency)}
+                  <Src doc={it.buy.doc} />
+                  {it.buy.party ? <span className="ship-peek-pt"> ← {it.buy.party}</span> : null}
+                </span>
+              ) : null}
+              {it.sell ? (
+                <span className="ship-peek-p">
+                  sell {money(it.sell.unit_price, it.sell.currency)}
+                  <Src doc={it.sell.doc} />
+                  {it.sell.party ? <span className="ship-peek-pt"> → {it.sell.party}</span> : null}
+                  {it.margin_pct != null ? <span className="ship-peek-mg"> {it.margin_pct}%</span> : null}
+                </span>
+              ) : null}
             </div>
             {it.deals.length ? (
               <div className="ship-peek-d">

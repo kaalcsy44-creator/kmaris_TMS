@@ -953,6 +953,7 @@ def settings_item_ledger():
         for it in data["items"] + data["unmatched"]:
             it["customer"] = cust.get(it.pop("customer_id", None)) or ""
             it["vendor"] = vend.get(it.pop("vendor_id", None)) or ""
+            _attach_price_party(it, cust, vend)
         # 매입(buy)·매출(sell) 통화가 달라도 마진을 보이도록 USD 로 환산해 margin_pct 산출
         # (국내매입 KRW·수출 USD 케이스가 흔함). 환율은 앱 공통 상수(대시보드와 동일).
         for it in data["items"] + data["unmatched"]:
@@ -963,6 +964,22 @@ def settings_item_ledger():
     finally:
         s.close()
 
+
+def _attach_price_party(it: dict, cust: dict, vend: dict) -> None:
+    """구매가·판매가 옆에 그 가격의 상대 이름을 붙인다(buy=공급사, sell=고객).
+
+    그 이력 행에 상대가 안 찍혀 있으면(견적 원가처럼 공급사가 없는 행) 품목 단위의
+    가장 최근 상대로 대신한다 — 비워 두는 것보다 낫고, 그 규칙은 _summarize 가 이미
+    품목 단위 값을 고를 때 쓰던 것과 같다. it["customer"]·it["vendor"] 가 이미
+    이름으로 채워진 뒤에 부른다.
+    """
+    for side, names, fallback in (("buy", vend, it.get("vendor")),
+                                  ("sell", cust, it.get("customer"))):
+        price = it.get(side)
+        if not price:
+            continue
+        pid = price.pop("party_id", None)
+        price["party"] = (names.get(pid) if pid else "") or (fallback or "")
 
 @app.get("/api/admin/settings/item-ledger/ship-map", dependencies=[Depends(require_token)])
 @cached_aggregate()
@@ -986,6 +1003,7 @@ def settings_item_ship_map():
         for it in data["items"]:
             it["customer"] = cust.get(it.pop("customer_id", None)) or ""
             it["vendor"] = vend.get(it.pop("vendor_id", None)) or ""
+            _attach_price_party(it, cust, vend)
             _annotate_margin(it)
             for d in it["deals"]:
                 d["customer"] = cust.get(d.pop("customer_id", None)) or ""

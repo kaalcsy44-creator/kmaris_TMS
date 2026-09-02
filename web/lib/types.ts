@@ -153,6 +153,8 @@ export type ItemLedgerPrice = {
   // 이 가격이 실려 온 문서 — 견적·발주·인보이스. 금액과 마진은 프로젝트가 아니라
   // 문서가 낳은 값이라, 어느 문서인지가 붙어야 숫자를 되짚을 수 있다(Ship View 만 채운다).
   doc?: { kind: string; no: string } | null;
+  /** 이 가격의 상대 — buy 면 공급사, sell 이면 고객. 그 행에 없으면 품목의 최근 상대. */
+  party?: string;
 };
 export type ItemLedgerRow = {
   item_id?: number;              // 마스터 연결 시. unmatched 행은 없음

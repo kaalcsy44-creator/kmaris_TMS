@@ -348,12 +348,17 @@ def _summarize(hs: list, docs: dict | None = None) -> dict:
     buys = sorted([h for h in hs if h.price_type == "buy"], key=_sort_key, reverse=True)
     sells = sorted([h for h in hs if h.price_type == "sell"], key=_sort_key, reverse=True)
 
-    def one(x):
+    def one(x, kind: str):
         if not x:
             return None
         out = {
             "unit_price": x.unit_price, "currency": x.currency,
             "date": x.doc_date, "fx_rate": x.fx_rate,  # 딜 저장 환율(있으면 마진 환산에 우선 사용)
+            # 이 가격을 만든 상대 — 산 값이면 공급사, 판 값이면 고객. 아래 vendor_id·
+            # customer_id 는 품목 단위의 '가장 최근 상대'라 이 가격의 상대와 다를 수 있다
+            # (그 행에 상대가 안 찍혀 있으면 다른 행으로 대신하므로). 화면이 금액 옆에
+            # 붙여 읽는 값은 그 금액의 상대여야 하니 행에서 직접 가져온다.
+            "party_id": (x.vendor_id if kind == "buy" else x.customer_id),
         }
         if docs is not None:
             out["doc"] = docs.get((x.source_type, x.source_id)) or {
@@ -371,8 +376,8 @@ def _summarize(hs: list, docs: dict | None = None) -> dict:
 
     dates = [h.doc_date for h in hs if h.doc_date]
     return {
-        "buy": one(buys[0] if buys else None),
-        "sell": one(sells[0] if sells else None),
+        "buy": one(buys[0] if buys else None, "buy"),
+        "sell": one(sells[0] if sells else None, "sell"),
         "customer_id": cust.customer_id if cust else None,
         "vendor_id": vend.vendor_id if vend else None,
         "buy_count": len(buys),

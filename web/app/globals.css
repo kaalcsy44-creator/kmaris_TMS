@@ -15302,6 +15302,10 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
+.ship-peek-p { display: block; width: 100%; }
+.ship-peek-mk { display: block; width: 100%; }
+/* 상대 이름 — 금액·문서보다 한 단 옅게. 값이 아니라 그 값이 누구와의 것인가다. */
+.ship-peek-pt { color: #6b7684; font-weight: 600; }
 .ship-peek-mg { color: #1e7a46; font-weight: 700; }
 /* 가격이 실려 온 문서 — 금액 바로 뒤에 붙어 그 숫자의 출처가 된다. 값이 아니라
    출처이므로 금액보다 한 단 옅게 두고, 번호가 없으면 문서 이름만 남는다. */
