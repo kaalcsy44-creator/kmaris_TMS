@@ -24,6 +24,11 @@ services:
     # init_db.py is idempotent (create-if-missing tables/admin), so it is safe
     # to run on every boot. Then start uvicorn bound to Render's $PORT.
     startCommand: python init_db.py && uvicorn admin_api:app --host 0.0.0.0 --port $PORT
+    # /health 는 DB 를 건드리지 않는다 — 여기에 SELECT 1 을 다시 넣지 말 것.
+    # Render 헬스체크와 외부 keep-alive 핑이 수 분 간격으로 때리는 자리라, DB 를
+    # 건드리면 Neon 유휴 타이머가 영원히 리셋돼 컴퓨트가 24시간 깨어 있게 된다
+    # (그 상태의 실측: 월 372 CU-h ≈ $39, 그중 실제 쿼리 몫은 $0.02).
+    # DB 까지 보려면 /health?db=1 로 부른다.
     healthCheckPath: /health
     envVars:
       # Neon Postgres connection string — paste at blueprint setup.

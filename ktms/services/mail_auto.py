@@ -39,6 +39,10 @@ STATE_KEY = "mail_auto_sync"      # {last_run_date, last_run_at, result, error}
 _SUMMARY_LIMIT = 60
 
 _thread: threading.Thread | None = None
+# 이 프로세스가 오늘 몫을 끝낸 날짜(KST, 'YYYY-MM-DD'). DB 조회를 아끼기 위한 기억일
+# 뿐이고, "두 번 돌지 않는다"의 근거는 여전히 DB(state)다 — 재시작하면 비어 있으므로
+# 다시 DB 에 물어보고, 다른 인스턴스가 이미 돌렸으면 거기서 걸러진다.
+_ran_on = ""
 
 
 # ── 설정 ──────────────────────────────────────────────────────────────────────
@@ -210,17 +214,37 @@ def _write_digests(s, limit: int) -> int:
 # ── 스레드 ────────────────────────────────────────────────────────────────────
 
 def _loop() -> None:
+    """10 분마다 깨어나 "오늘 몫을 했나"를 본다 — 단, DB 는 정말 필요할 때만 연다.
+
+    Neon 은 조회가 있을 때마다 컴퓨트가 깨어나고 깨어 있는 시간으로 과금된다. 예전에는
+    이 루프가 매 주기 DB 에 "오늘 돌았나"를 물어, 06 시에 그날 일이 끝난 뒤로도 밤새
+    하루 100 번 넘게 컴퓨트를 깨워 뒀다. 그래서 확인을 싼 것부터 한다 — 실행 시각 전
+    (아직 오늘 몫이 아님)과 오늘 몫을 이미 끝낸 뒤(하루의 대부분)는 DB 를 열지 않는다.
+    깨어나는 주기는 그대로 두므로 06 시 정시성은 예전과 같다.
+    """
+    global _ran_on
     from _core import get_session
 
     cfg = config()
     while True:
         try:
-            s = get_session()
-            try:
-                if due(s):
-                    run_once(s)
-            finally:
-                s.close()
+            now = datetime.now(mail_sync.KST)
+            today = now.strftime("%Y-%m-%d")
+            # due() 가 DB 없이 판정하는 조건들을 먼저 본다. 세션을 열 값어치가
+            # 있는지부터 가리는 것이라, 판정 자체는 아래 due() 가 그대로 한다.
+            worth_asking = (cfg["enabled"] and mail_sync.is_configured()
+                            and now.strftime("%H:%M") >= cfg["at"]
+                            and _ran_on != today)
+            if worth_asking:
+                s = get_session()
+                try:
+                    if due(s):
+                        run_once(s)     # 실패해도 _finish 가 오늘 날짜를 DB 에 남긴다
+                    # 여기까지 왔으면 오늘 몫은 끝났다 — 내가 돌렸든, 다른 인스턴스가
+                    # 이미 돌렸든(due() 가 False). 남은 하루 동안 다시 묻지 않는다.
+                    _ran_on = today
+                finally:
+                    s.close()
         except Exception as exc:      # 어떤 이유로도 이 스레드는 죽지 않는다
             print(f"[WARN] mail auto-sync tick failed: {exc}", file=sys.stderr)
         # 설정은 매번 다시 읽는다 — 재배포 없이 환경변수만 바꿔도 다음 주기에 반영된다.

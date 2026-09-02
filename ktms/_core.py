@@ -1202,30 +1202,41 @@ def _next_action(stage: int, steps: list[str], *, lost: bool = False,
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 @app.get("/health")
-def health():
+def health(db: bool = False):
+    """서버가 살아 있는가. DB 확인은 /health?db=1 로 물었을 때만 한다.
+
+    예전에는 여기서 늘 SELECT 1 을 돌려 DB 까지 같이 깨웠다(Neon 콜드 스타트 예방).
+    그런데 이 자리는 Render 헬스체크와 외부 keep-alive 핑이 수 분 간격으로 때리는
+    자리다. 매번 DB 를 건드리면 Neon 의 유휴 타이머가 영원히 리셋돼 컴퓨트가 한 달
+    내내 깨어 있게 된다 — 8월 청구서의 컴퓨트 372 CU-h 는 744 시간 × 0.5 CU, 즉
+    사실상 전부가 아무 일도 안 하며 켜져 있던 시간이었다.
+
+    서버가 살아 있는지 판정하는 데 DB 는 필요 없다(DB 가 죽어도 앱은 떠 있어야 하고,
+    그래서 아래도 예외를 삼킨다). 그러니 기본은 DB 를 건드리지 않고, DB 까지 보고
+    싶을 때만 db=1 을 붙인다. 그러면 컴퓨트는 사람이 실제로 쓰는 시간에만 깨어난다.
+    """
     # DB 백엔드 종류만 노출(자격증명 X). sqlite 면 임시 디스크일 수 있어 재배포 시
     # 데이터가 사라질 수 있으므로 persistent=false 로 경고.
     backend = get_engine().url.get_backend_name()
-    # 가벼운 SELECT 1 으로 DB를 함께 깨운다(Neon 은 유휴 시 컴퓨트를 잠재우므로,
-    # keep-alive 핑이 백엔드뿐 아니라 DB 콜드 스타트까지 예방하게 한다).
+    out = {
+        "status": "ok",
+        "db": backend,
+        "persistent": backend != "sqlite",
+        "build": API_BUILD,
+    }
+    if not db:
+        return out          # db_ok 키가 없으면 "확인 안 함"이라는 뜻이다
     # DB 장애가 서버 liveness(=Render health check)를 깨뜨리지 않도록 예외는 삼킨다.
-    db_ok = False
     try:
         s = get_session()
         try:
             s.execute(text("SELECT 1"))
-            db_ok = True
+            out["db_ok"] = True
         finally:
             s.close()
     except Exception:
-        db_ok = False
-    return {
-        "status": "ok",
-        "db": backend,
-        "db_ok": db_ok,
-        "persistent": backend != "sqlite",
-        "build": API_BUILD,
-    }
+        out["db_ok"] = False
+    return out
 
 
 def _search_href(stage: int, rfq_id: int, order_id: int, is_service: bool) -> str:
