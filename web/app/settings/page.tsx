@@ -1334,6 +1334,15 @@ type CompanyArea<T> = {
   placeholder?: string;
 };
 
+/**
+ * 담당자 한 명의 이메일·연락처·지역 — 다중값이 있으면 그것, 없으면 대표값 하나.
+ * 목록의 칸에서는 "+N" 으로 접지만 이 창은 확인하러 오는 자리라 전부 펼친다.
+ */
+function contactValues(multi: string[] | undefined, flat: string | undefined): string[] {
+  const src = multi?.length ? multi : [flat ?? ""];
+  return src.map((v) => (v ?? "").trim()).filter(Boolean);
+}
+
 /** 회사 정보 창이 옆 회사로 건너뛸 때 쓰는 한 걸음 — 어디로 가는지(name)와 가는 법(go). */
 type CompanyNav = { name: string; go: () => void };
 
@@ -1355,6 +1364,9 @@ function CompanyInfoModal<
   T extends {
     id: number; name: string; address: string; addresses: string[];
     payment_terms: string; logo: string;
+    // 담당자 명단을 창 안에서 함께 읽는다 — 고객·거래선 두 표가 같은 칸을 갖고 있다.
+    contact: string; email: string; contact_phone: string;
+    emails: string[]; phones: string[]; regions: string[]; country: string;
   }
 >({
   rows,
@@ -1485,9 +1497,46 @@ function CompanyInfoModal<
               </div>
             ))}
           </dl>
+          {/* 담당자 명단 — 위 값들이 회사 단위인 데 반해 이쪽은 사람마다 다른 값이라,
+              같은 표에 섞지 않고 아래에 따로 세운다. 고치는 자리는 바깥 목록이다. */}
+          <div className="co-contacts">
+            <div className="co-contacts-hd">
+              Contacts<span className="ms-badge">{rows.length}</span>
+            </div>
+            <table className="mini">
+              <thead>
+                <tr><th>Name</th><th>Email</th><th>Phone</th><th>Region</th></tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => {
+                  const mails = contactValues(r.emails, r.email);
+                  const tels = contactValues(r.phones, r.contact_phone);
+                  const regions = contactValues(r.regions, r.country);
+                  return (
+                    <tr key={r.id}>
+                      <td>{r.contact || <span className="dash">—</span>}</td>
+                      <td>
+                        {mails.length ? (
+                          <span className="co-lines">
+                            {mails.map((m) => <a key={m} href={`mailto:${m}`}>{m}</a>)}
+                          </span>
+                        ) : <span className="dash">—</span>}
+                      </td>
+                      <td>
+                        {tels.length
+                          ? <span className="co-lines">{tels.map((t) => <span key={t}>{t}</span>)}</span>
+                          : <span className="dash">—</span>}
+                      </td>
+                      <td>{regions.join(" · ") || <span className="dash">—</span>}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
           <p className="hint-inline" style={{ display: "block", marginTop: 10 }}>
-            These are company-level values — editing them applies to all {rows.length} contacts
-            of this company at once.
+            The values above are company-level — editing them applies to all {rows.length} contacts
+            at once. Contacts themselves are edited from the list behind this dialog.
           </p>
         </div>
         <div className="form-actions">

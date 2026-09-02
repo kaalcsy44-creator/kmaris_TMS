@@ -10046,6 +10046,31 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   object-fit: contain;
 }
 .company-read a { color: var(--blue); }
+/* 담당자 명단 — 위 회사 값들과 성격이 달라(사람마다 다른 값) 선 하나로 갈라 세운다. */
+.co-contacts { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line-strong); }
+.co-contacts-hd {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.co-contacts table.mini { width: 100%; }
+.co-contacts table.mini th {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  text-align: left;
+}
+.co-contacts table.mini td {
+  font-size: 12.5px;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
 
 /* 하위를 여닫는 손잡이 — 이름 앞에 선다. 3층(하위 없음)에서는 보이지 않게 두되 자리는
    차지해, 같은 층 이름들의 시작점이 어긋나지 않는다. */
