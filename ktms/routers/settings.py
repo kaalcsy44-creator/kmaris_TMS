@@ -13,6 +13,7 @@ from _core import (
     RFQ,
     ScheduleEvent,
     VendorContact,
+    VendorQuote,
     VendorRFQ,
     _apply_multi,
     _multi_out,
@@ -332,6 +333,18 @@ def delete_customer(row_id: int):
 def settings_vendors():
     s = get_session()
     try:
+        asked, answered = _vendor_deal_counts(s)
+        vendors = s.query(Vendor).order_by(Vendor.name).all()
+        # 회사 단위 합계 — 목록이 회사로 묶여 보이는데, 한 회사의 담당자 둘에게 같은
+        # 프로젝트를 물었으면 담당자별 수를 더한 값은 그 프로젝트를 두 번 센다. 그래서
+        # 회사 칸은 더하지 않고 프로젝트 id 를 합집합으로 모아 다시 센다.
+        co_asked: dict[str, set] = {}
+        co_answered: dict[str, set] = {}
+        for v in vendors:
+            key = (v.name or "").strip()
+            co_asked.setdefault(key, set()).update(asked.get(v.id, ()))
+            co_answered.setdefault(key, set()).update(answered.get(v.id, ()))
+
         return [{"id": v.id, "name": v.name, "contact": v.contact or "",
                  "contact_phone": getattr(v, "contact_phone", None) or "",
                  "email": v.email or "", "specialization": v.specialization or "",
@@ -342,10 +355,37 @@ def settings_vendors():
                  "addresses": _multi_out(getattr(v, "addresses", None), v.address),
                  "emails": _multi_out(getattr(v, "emails", None), v.email),
                  "phones": _multi_out(getattr(v, "phones", None), getattr(v, "contact_phone", None)),
-                 "regions": _multi_out(getattr(v, "regions", None), v.country)}
-                for v in s.query(Vendor).order_by(Vendor.name).all()]
+                 "regions": _multi_out(getattr(v, "regions", None), v.country),
+                 # 이 담당자에게 물은 프로젝트 수와 그중 견적이 돌아온 수.
+                 "deals": len(asked.get(v.id, ())),
+                 "deals_answered": len(answered.get(v.id, ())),
+                 # 같은 회사 전체의 값(위 합집합) — 목록의 회사 줄이 쓴다.
+                 "co_deals": len(co_asked.get((v.name or "").strip(), ())),
+                 "co_deals_answered": len(co_answered.get((v.name or "").strip(), ()))}
+                for v in vendors]
     finally:
         s.close()
+
+
+def _vendor_deal_counts(s) -> tuple[dict, dict]:
+    """벤더별 {물어본 프로젝트}, {답이 온 프로젝트}. 값은 rfq_id 집합이다.
+
+    같은 프로젝트에 같은 벤더로 RFQ 가 두 번 나가는 일이 있어(품목이 갈리거나 다시
+    물어서) 건수가 아니라 프로젝트로 센다 — 목록이 답하려는 질문이 "이 벤더와 몇 건
+    해 봤나"이지 "메일을 몇 번 보냈나"가 아니라서다. 답변은 그 Vendor RFQ 에 견적이
+    한 건이라도 달렸는지로 본다(_core 의 벤더 견적 저장과 같은 기준).
+    """
+    quoted = {r[0] for r in s.query(VendorQuote.vendor_rfq_id).all() if r[0]}
+    asked: dict[int, set] = {}
+    answered: dict[int, set] = {}
+    for vid, rfq_id, vendor_id in s.query(
+            VendorRFQ.id, VendorRFQ.rfq_id, VendorRFQ.vendor_id).all():
+        if not vendor_id or not rfq_id:
+            continue
+        asked.setdefault(vendor_id, set()).add(rfq_id)
+        if vid in quoted:
+            answered.setdefault(vendor_id, set()).add(rfq_id)
+    return asked, answered
 
 
 @app.post("/api/admin/settings/vendors", dependencies=[Depends(require_token)])

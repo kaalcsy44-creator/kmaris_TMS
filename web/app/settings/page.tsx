@@ -1173,6 +1173,35 @@ function GroupNameCell({
   );
 }
 
+/**
+ * 프로젝트·답변 배지 — 이 벤더에 몇 건 물었고, 그중 몇 건이 답으로 돌아왔나.
+ *
+ * 두 조각을 나란히 둔다. 왼쪽(회색)은 물어본 프로젝트 수로 세기만 하는 값이고, 색은
+ * 오른쪽에만 준다 — 목록을 훑을 때 판단이 필요한 건 "몇 건 했나"가 아니라 "답이 안 온
+ * 데가 어디인가"라서다. 전부 답이 왔으면 초록, 일부면 주황, 하나도 안 왔으면 빨강이다.
+ * 물어본 적이 없는 벤더는 0 대신 줄표로 둔다(0 은 '답이 없다'로 잘못 읽힌다).
+ */
+function DealBadge({ total, answered, sub = false }: { total: number; answered: number; sub?: boolean }) {
+  if (!total) return <span className="ms-group-sub">—</span>;
+  const tone = answered === 0 ? "none" : answered < total ? "part" : "all";
+  const waiting = total - answered;
+  return (
+    <span
+      className={`vd-deal${sub ? " vd-deal--sub" : ""}`}
+      title={
+        `${total} project${total > 1 ? "s" : ""} asked · ${answered} quoted back`
+        + (waiting ? ` · ${waiting} still waiting` : "")
+      }
+    >
+      <span className="vd-deal-n">{total}</span>
+      <span className={`vd-reply vd-reply--${tone}`}>
+        <span className="vd-reply-dot" aria-hidden />
+        {answered}/{total}
+      </span>
+    </span>
+  );
+}
+
 // 그룹 헤더의 지역 칸 — 담당자들의 지역을 중복 없이 모아 보여준다.
 function regionSummary(rows: { regions?: string[]; country?: string }[]): string {
   const all = rows.flatMap((r) => (r.regions?.length ? r.regions : [r.country ?? ""]));
@@ -1694,6 +1723,7 @@ function VendorsTab() {
           <GroupNameCell key="n" rows={rs} open={open} />,
           <span key="r" className="ms-group-sub">{regionSummary(rs)}</span>,
           <span key="c" className="ms-group-sub">{nameSummary(rs)}</span>,
+          <DealBadge key="d" total={rs[0].co_deals ?? 0} answered={rs[0].co_deals_answered ?? 0} />,
           <span key="s" className="ms-group-sub">
             {summarize(uniqStrings(rs.map((r) => r.specialization)), " · ", 2)}
           </span>,
@@ -1733,6 +1763,10 @@ function VendorsTab() {
         )],
         ["country", "Region", (r) => <MultiCell values={r.regions} flat={r.country} />],
         ["contact", "Contact"],
+        // 담당자 줄은 그 담당자 몫만 — 회사 합계는 위 그룹 줄이 든다.
+        ["deals", "Projects",
+          (r) => <DealBadge total={r.deals ?? 0} answered={r.deals_answered ?? 0} sub />,
+          "ms-deals"],
         ["specialization", "Specialization", undefined, "ms-spec"],
       ]}
       fields={[

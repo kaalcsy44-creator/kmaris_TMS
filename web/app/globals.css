@@ -1328,6 +1328,42 @@ table.mini.wide.ms-table td.ms-spec:not(.ms-actcol) {
   width: auto;
   min-width: 320px;
 }
+/* Projects — 배지 두 조각이 한 줄에 담기는 폭만. 위 nth-child(n+4) 의 120px 를 이겨야
+   하므로 .ms-spec 과 같은 모양으로 쓰고 그 뒤에 둔다(클래스 수가 같아 순서로 이긴다). */
+table.mini.wide.ms-table th.ms-deals:not(.ms-actcol),
+table.mini.wide.ms-table td.ms-deals:not(.ms-actcol) {
+  width: 1%;
+  min-width: 96px;
+  white-space: nowrap;
+}
+/* Vendor 목록의 프로젝트·답변 배지 — 왼쪽은 물어본 프로젝트 수, 오른쪽은 그중 답이 온 수. */
+.vd-deal { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.vd-deal-n {
+  min-width: 22px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #eef2f7;
+  color: #45526a;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+}
+.vd-reply {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 7px 0 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+}
+/* 점은 글자색을 그대로 쓴다 — 색을 한 곳에서만 정하면 상태가 늘어도 어긋나지 않는다. */
+.vd-reply-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.vd-reply--all { background: #e3f4ea; color: #1e7a46; }
+.vd-reply--part { background: #fdf1dc; color: #96650f; }
+.vd-reply--none { background: #fbe6e4; color: #b23c30; }
+/* 담당자 줄은 회사 줄보다 한 톤 낮춘다 — 회사 합계가 먼저 읽혀야 한다. */
+.vd-deal--sub { opacity: 0.75; }
 /* ── 칸마다 값이 짧고 고른 표(선박) ────────────────────────────────────────────
    위 규칙들은 회사 목록에 맞춘 것이다: 이름 한 칸이 길고 나머지는 '담당자 3명'·'지역 2곳'
    같은 요약이라, 남는 폭을 전부 이름 칸에 몰아주고 나머지는 최소폭으로 오른쪽에 붙였다.

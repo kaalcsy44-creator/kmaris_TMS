@@ -72,6 +72,13 @@ export type SettingsVendor = {
   emails: string[];
   phones: string[];
   regions: string[];
+  /** 이 담당자에게 Vendor RFQ 를 보낸 프로젝트 수(중복 문의는 한 건으로). */
+  deals?: number;
+  /** 그중 벤더 견적이 돌아온 프로젝트 수. */
+  deals_answered?: number;
+  /** 같은 회사 전체의 값 — 담당자별 수를 더하면 같은 프로젝트를 겹쳐 세므로 따로 받는다. */
+  co_deals?: number;
+  co_deals_answered?: number;
 };
 export type SettingsVessel = {
   id: number;
