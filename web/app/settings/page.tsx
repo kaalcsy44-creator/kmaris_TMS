@@ -1930,6 +1930,7 @@ function VesselsTab() {
       // 칸마다 값이 한 낱말(IMO·선종·선적·고객)이라, 남는 폭을 이름 칸에 몰아주는 기본
       // 배분은 이 표에 맞지 않는다 — 칸마다 내용에 비례해 나눠 갖게 한다.
       tableClass="ms-table--even"
+      headCols={vesselHeadCols}
       empty={{ id: 0, name: "", imo: "", vessel_type: "", ais_flag: "", engine_type: "", hull_no: "", customer_id: null, customer: "" }}
       load={fetchSettingsVessels}
       create={(body) => {
@@ -2123,6 +2124,22 @@ function multiCell(all: string[], render?: (v: string) => React.ReactNode): Reac
     </span>
   );
 }
+
+/**
+ * 선박 목록의 머리 칸 규칙.
+ *
+ * 이름과 IMO 는 배마다 다른 값이라 고르는 목록으로 만들면 행 수만큼 긴 메뉴가 된다 —
+ * 정렬만 둔다. 선종·선적·고객은 값이 몇 가지로 모이므로 골라서 거를 수 있게 한다.
+ * 두 열로 잘라 그리는 표지만, 자르는 것은 이미 거르고 정렬한 뒤라 그대로 맞물린다.
+ */
+const vesselHeadCols: HeadCol<SettingsVessel>[] = [
+  { key: "name", text: (r) => r.name || "" },
+  { key: "imo", text: (r) => r.imo || "", emptyLabel: "No IMO" },
+  { key: "vessel_type", text: (r) => r.vessel_type || "", filter: "facet",
+    emptyLabel: "Unspecified" },
+  { key: "ais_flag", text: (r) => r.ais_flag || "", filter: "facet", emptyLabel: "Unspecified" },
+  { key: "customer", text: (r) => r.customer || "", filter: "facet", emptyLabel: "No customer" },
+];
 
 /** 담당자 한 명이 여러 지역을 가질 수 있다 — 패싯 판정은 그 전부로 한다. */
 const partyRegions = (r: { regions?: string[]; country?: string }): string[] =>
