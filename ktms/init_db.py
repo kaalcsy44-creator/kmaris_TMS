@@ -68,8 +68,10 @@ _MIGRATIONS = {
         "note": "TEXT",
         # 무엇을 사는 곳인가 — 벤더의 취급품목과 같은 자리(목록에서 나란히 읽히게).
         "specialization": "VARCHAR(200)",
+        "website": "VARCHAR(300)",
     },
     "vendors": {
+        "website": "VARCHAR(300)",
         "contact_phone": "VARCHAR(50)",
         "payment_terms": "VARCHAR(200)",
         "logo": "TEXT",

@@ -1178,6 +1178,7 @@ export type CompanyInfoSave = {
   tax_invoice_email?: string;
   payment_terms?: string;
   specialization?: string;
+  website?: string;
   note?: string;
   logo?: string;
 };

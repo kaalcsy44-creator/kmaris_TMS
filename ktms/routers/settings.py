@@ -130,6 +130,7 @@ def settings_customers():
                  "email": c.email or "", "country": c.country or "",
                  "address": c.address or "", "tax_id": c.tax_id or "",
                  "specialization": c.specialization or "",
+                 "website": getattr(c, "website", None) or "",
                  "tax_invoice_email": getattr(c, "tax_invoice_email", None) or "",
                  "note": getattr(c, "note", None) or "",
                  "payment_terms": getattr(c, "payment_terms", None) or "",
@@ -257,6 +258,7 @@ class CompanyInfoSave(BaseModel):
     tax_invoice_email: str | None = None
     payment_terms: str | None = None
     specialization: str | None = None    # 취급품목(벤더) · 주로 사는 것(고객사)
+    website: str | None = None           # 회사 홈페이지
     note: str | None = None              # 회사 소개 요약(고객사·거래선 공통)
     logo: str | None = None
 
@@ -296,7 +298,8 @@ def update_customer_company(body: CompanyInfoSave):
             raise HTTPException(status_code=404, detail="해당 회사로 등록된 고객사가 없습니다.")
         name = _apply_company_info(
             rows, body,
-            ("tax_id", "tax_invoice_email", "specialization", "note", "payment_terms", "logo"))
+            ("tax_id", "tax_invoice_email", "specialization", "website", "note",
+             "payment_terms", "logo"))
         s.commit()
         return {"ok": True, "updated": len(rows), "name": name}
     finally:
@@ -383,6 +386,7 @@ def settings_vendors():
         return [{"id": v.id, "name": v.name, "contact": v.contact or "",
                  "contact_phone": getattr(v, "contact_phone", None) or "",
                  "email": v.email or "", "specialization": v.specialization or "",
+                 "website": getattr(v, "website", None) or "",
                  "note": getattr(v, "note", None) or "",
                  "country": v.country or "", "address": v.address or "",
                  "payment_terms": getattr(v, "payment_terms", None) or "",
@@ -452,7 +456,7 @@ def update_vendor_company(body: CompanyInfoSave):
         if not rows:
             raise HTTPException(status_code=404, detail="해당 회사로 등록된 공급사가 없습니다.")
         name = _apply_company_info(
-            rows, body, ("specialization", "note", "payment_terms", "logo"))
+            rows, body, ("specialization", "website", "note", "payment_terms", "logo"))
         s.commit()
         return {"ok": True, "updated": len(rows), "name": name}
     finally:

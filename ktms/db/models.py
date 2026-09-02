@@ -114,6 +114,7 @@ class Customer(Base):
     # 칸이라면 여기는 사는 쪽의 결: 어떤 선종을 굴리고 주로 무엇을 찾는지 한 줄 요약.
     # 목록에서 두 표가 같은 칸을 같은 자리에 두어 나란히 읽히게 한다.
     specialization = Column(String(200))
+    website        = Column(String(300))   # 회사 홈페이지(회사 단위)
     # 회사 소개 요약(어떤 선단을 굴리는지, 어디 소속인지). 담당자가 아니라 회사에 딸린
     # 정보라 Company info 창에서 같은 회사 전 레코드에 한 번에 반영한다.
     note       = Column(Text)
@@ -135,6 +136,7 @@ class Vendor(Base):
     phones         = Column(JSON, default=list)   # 다중 연락처(첫 값=대표)
     regions        = Column(JSON, default=list)   # 다중 지역(첫 값=대표)
     specialization = Column(String(200))
+    website        = Column(String(300))   # 회사 홈페이지(회사 단위)
     # 회사 소개 요약(무엇을 만드는 회사인지, 어떤 브랜드를 대리하는지). 담당자가 아니라
     # 회사에 딸린 정보라 Company info 창에서 같은 회사 전 레코드에 한 번에 반영한다.
     note           = Column(Text)

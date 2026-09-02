@@ -952,7 +952,7 @@ function MyPasswordChange() {
 
 const EMPTY_CUSTOMER: SettingsCustomer = {
   id: 0, name: "", contact: "", contact_phone: "", email: "", country: "", address: "",
-  tax_id: "", tax_invoice_email: "", specialization: "", note: "", payment_terms: "", logo: "",
+  tax_id: "", tax_invoice_email: "", specialization: "", website: "", note: "", payment_terms: "", logo: "",
   addresses: [], emails: [], phones: [], regions: [],
 };
 
@@ -998,6 +998,7 @@ function CustomersTab() {
         fields={[
           ["tax_id", "Tax ID / Business No."],
           ["tax_invoice_email", "Tax invoice email"],
+          ["website", "Website"],
         ]}
         areas={[
           { key: "specialization", label: "Specialization", rows: 3,
@@ -1359,6 +1360,11 @@ function CompanyInfoModal<
   const [addresses, setAddresses] = useState<string[]>(() => companyAddresses(rows));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  // 열면 읽기부터 — 이 창은 대개 "이 회사가 뭐 하는 곳이었지"를 확인하러 연다. 곧장
+  // 입력칸으로 열어 두면 확인하러 들어왔다가 잘못 눌러 회사 전 담당자의 값을 한꺼번에
+  // 바꾸는 일이 생긴다(이 창의 저장은 한 명이 아니라 회사 전체에 닿는다).
+  const [editing, setEditing] = useState(false);
+  const canEditCompany = can("settings", "edit");
 
   // 담당자별로 값이 다른 필드 — 저장하면 하나로 통일된다는 걸 미리 알린다.
   const mixed = [...fields, ["payment_terms", "Payment terms"] as (typeof fields)[number],
@@ -1378,6 +1384,52 @@ function CompanyInfoModal<
       setErr(e instanceof Error ? e.message : "Save failed");
       setBusy(false);
     }
+  }
+
+  if (!editing) {
+    const shown: [string, React.ReactNode][] = [
+      ["Company name", origName],
+      ["Address", addresses.length
+        ? <span className="co-lines">{addresses.map((a, i) => <span key={i}>{a}</span>)}</span>
+        : null],
+      ...fields.map(([key, label]) => {
+        const v = vals[String(key)] ?? "";
+        // 홈페이지는 눌러서 갈 수 있어야 쓸모가 있다 — 주소 앞머리를 빼먹고 적는 일이
+        // 흔해서, 없으면 붙여서 연다.
+        const node = !v ? null : String(key) === "website"
+          ? <a href={/^https?:\/\//i.test(v) ? v : `https://${v}`} target="_blank" rel="noreferrer">{v}</a>
+          : v;
+        return [label, node] as [string, React.ReactNode];
+      }),
+      ["Payment terms", vals.payment_terms || null],
+      ...(areas ?? []).map((a) => [a.label, vals[String(a.key)]
+        ? <span className="co-para">{vals[String(a.key)]}</span> : null] as [string, React.ReactNode]),
+    ];
+    return (
+      <Modal title={`🏢 Company info — ${origName}`} onClose={onClose} form>
+        <div className="company-read">
+          {vals.logo ? <img className="co-logo" src={vals.logo} alt="" /> : null}
+          <dl>
+            {shown.map(([label, node]) => (
+              <div key={label} className="co-row">
+                <dt>{label}</dt>
+                <dd>{node ?? <span className="dash">—</span>}</dd>
+              </div>
+            ))}
+          </dl>
+          <p className="hint-inline" style={{ display: "block", marginTop: 10 }}>
+            These are company-level values — editing them applies to all {rows.length} contacts
+            of this company at once.
+          </p>
+        </div>
+        <div className="form-actions">
+          {canEditCompany ? (
+            <button className="btn primary" onClick={() => setEditing(true)}>✎ Edit</button>
+          ) : null}
+          <button className="btn" onClick={onClose}>Close</button>
+        </div>
+      </Modal>
+    );
   }
 
   return (
@@ -1423,7 +1475,9 @@ function CompanyInfoModal<
         <button className="btn primary" onClick={submit} disabled={busy || !name.trim()}>
           {busy ? "Saving…" : `Save to ${rows.length} contacts`}
         </button>
-        <button className="btn" onClick={onClose}>Cancel</button>
+        {/* 고치다 그만두는 것과 창을 닫는 것은 다른 일이다 — 확인하러 온 김에 잠깐
+            고쳐 보다 그만두면 읽기로 돌아오는 편이 자연스럽다. */}
+        <button className="btn" onClick={() => { setEditing(false); setErr(""); }}>Cancel</button>
         {err ? <span className="action-err">{err}</span> : null}
       </div>
     </Modal>
@@ -1763,7 +1817,7 @@ function LogoPasteField({
 }
 
 const EMPTY_VENDOR: SettingsVendor = {
-  id: 0, name: "", contact: "", contact_phone: "", email: "", specialization: "", note: "",
+  id: 0, name: "", contact: "", contact_phone: "", email: "", specialization: "", website: "", note: "",
   country: "", address: "", payment_terms: "", logo: "",
   addresses: [], emails: [], phones: [], regions: [],
 };
@@ -1778,7 +1832,7 @@ function VendorsTab() {
     {company ? (
       <CompanyInfoModal
         rows={company}
-        fields={[]}
+        fields={[["website", "Website"]]}
         areas={[
           { key: "specialization", label: "Specialization", rows: 3,
             placeholder: "Engine spares, hydraulics, deck machinery…" },
