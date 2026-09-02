@@ -1377,6 +1377,10 @@ export function fetchItemPriceHistory(params: {
 export function rebuildItemLedger(): Promise<{ ok: boolean; rows: number }> {
   return post("/api/admin/settings/item-ledger/rebuild", {});
 }
+/** 거래 이력이 한 번도 없는 품목 마스터를 일괄 삭제. 되돌릴 수 없다. */
+export function purgeUnusedItems(): Promise<{ ok: boolean; removed: number }> {
+  return post("/api/admin/settings/items/purge-unused", {});
+}
 export function assignItemLedgerCategory(body: {
   category_id: number | null;
   item_id?: number;      // 기존 마스터 재분류

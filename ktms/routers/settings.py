@@ -1137,6 +1137,34 @@ def _assign_one_category(s, target: "ItemLedgerAssign") -> tuple[int, int]:
     return master.id, stamp_history_item(s, master.id)
 
 
+@app.post("/api/admin/settings/items/purge-unused", dependencies=[Depends(require_token)])
+def purge_unused_items():
+    """거래 이력이 한 번도 없는 품목 마스터를 지운다.
+
+    금액도 거래선도 없는 품목은 어느 문서에서도 값이 잡힌 적이 없다는 뜻이다. 그런
+    행이 남는 길은 둘이다 — 분류만 골라 둔 초기 단계의 줄, 그리고 나중에 품명·품번이
+    고쳐지면서 뒤에 남겨진 옛 마스터. 뒤엣것은 아무도 다시 찾지 않으면서 목록과 계통별
+    개수에만 얹혀, 있지도 않은 품목이 배 위에 실려 있는 것처럼 보이게 한다.
+
+    지우기 전에 이력을 먼저 다시 세운다. 문서가 바뀐 뒤 아직 재구축이 안 된 참이라면
+    '이력이 없는' 것이 아니라 '아직 안 세운' 것이라, 그대로 지우면 멀쩡한 품목이
+    사라진다. 이력이 가리키는 마스터는 어느 것도 지우지 않으므로 끊어지는 연결은 없다
+    (item_master 를 참조하는 곳은 item_price_history.item_id 하나뿐이다).
+    """
+    s = get_session()
+    try:
+        ensure_price_history_fresh(s, _core._DATA_GEN)
+        used = {r[0] for r in s.query(ItemPriceHistory.item_id)
+                .filter(ItemPriceHistory.item_id.isnot(None)).all()}
+        doomed = [m for m in s.query(ItemMaster).all() if m.id not in used]
+        for m in doomed:
+            s.delete(m)
+        s.commit()
+        return {"ok": True, "removed": len(doomed)}
+    finally:
+        s.close()
+
+
 @app.post("/api/admin/settings/item-ledger/assign", dependencies=[Depends(require_token)])
 def assign_item_ledger_category(body: ItemLedgerAssign):
     """가격 이력 화면에서 품목 1건에 분류를 배정한다(전체 rebuild 불필요)."""

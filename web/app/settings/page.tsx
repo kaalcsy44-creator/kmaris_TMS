@@ -43,6 +43,7 @@ import {
   deleteItemCategory,
   fetchItemLedger,
   fetchItemPriceHistory,
+  purgeUnusedItems,
   rebuildItemLedger,
   assignItemLedgerCategory,
   assignItemLedgerCategoryBulk,
@@ -2515,6 +2516,7 @@ export function CategoriesTab() {
   const [ledger, setLedger] = useState<ItemLedger | null>(null);
   const [filter, setFilter] = useState<LedgerFilter>({ kind: "all" });
   const [rebuilding, setRebuilding] = useState(false);
+  const [purging, setPurging] = useState(false);
   const [histRow, setHistRow] = useState<ItemLedgerRow | null>(null);
   const [hist, setHist] = useState<ItemPriceRow[] | null>(null);
   const [assignRow, setAssignRow] = useState<ItemLedgerRow | null>(null);
@@ -2532,6 +2534,11 @@ export function CategoriesTab() {
   const [autoSkip, setAutoSkip] = useState<Set<number>>(() => new Set());
   const [autoBusy, setAutoBusy] = useState(false);
   const [note, setNote] = useState("");
+  // 거래 이력이 한 번도 없는 품목 수 — 지울 대상. 서버가 다시 세지만, 버튼에 개수를
+  // 보이려면 화면도 알아야 한다(매입·매출 이력 건수가 둘 다 0인 행).
+  const unusedCount = (ledger?.items ?? []).filter(
+    (r) => (r.buy_count ?? 0) === 0 && (r.sell_count ?? 0) === 0,
+  ).length;
   // 목록표 컬럼 폭·순서·표시(브라우저에 저장).
   const ledgerCols = useColumnLayout("item-ledger", LEDGER_COLS);
   const [dragCol, setDragCol] = useState<string | null>(null);
@@ -2670,6 +2677,38 @@ export function CategoriesTab() {
       setErr(e instanceof Error ? e.message : "Rebuild failed");
     } finally {
       setRebuilding(false);
+    }
+  }
+
+  /**
+   * 거래 이력이 한 번도 없는 품목을 지운다. 되돌릴 수 없어 개수를 보이고 한 번 묻는다.
+   *
+   * 금액도 거래선도 없는 행은 대개 품명이 고쳐지면서 뒤에 남겨진 옛 마스터다 — 아무도
+   * 다시 찾지 않으면서 목록과 계통별 개수에만 얹혀, 배 위에 있지도 않은 품목이 실려
+   * 있는 것처럼 보이게 한다.
+   */
+  async function purgeUnused() {
+    if (!unusedCount) return;
+    const ok = window.confirm(
+      `Remove ${unusedCount} item(s) that have never carried a price?
+
+`
+      + "These have no buy, no sell and no counterparty on any document. "
+      + "This cannot be undone.",
+    );
+    if (!ok) return;
+    setPurging(true);
+    setErr("");
+    setNote("");
+    try {
+      const r = await purgeUnusedItems();
+      setNote(`Removed ${r.removed} item(s) with no transactions.`);
+      invalidateMasterCategories();
+      loadLedger();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Remove failed");
+    } finally {
+      setPurging(false);
     }
   }
 
@@ -3093,6 +3132,16 @@ export function CategoriesTab() {
                 <span className="hint-inline">Built {fmtBuiltAt(ledger.built_at)}</span>
               ) : null}
               <ColumnsButton cols={LEDGER_COLS} layout={ledgerCols} />
+              {canDelete && unusedCount > 0 ? (
+                <button
+                  className="btn tiny"
+                  disabled={purging}
+                  onClick={purgeUnused}
+                  title="Remove items that have never carried a price on any document"
+                >
+                  {purging ? "Removing…" : `🗑 Unused (${unusedCount})`}
+                </button>
+              ) : null}
               {canEdit ? (
                 <button className="btn tiny" disabled={rebuilding} onClick={rebuild}>
                   {rebuilding ? "Rebuilding…" : "↻ Rebuild"}
