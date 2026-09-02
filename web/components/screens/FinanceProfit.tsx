@@ -4,7 +4,7 @@ import { Fragment, useMemo, useState } from "react";
 import { fetchFinanceProfit } from "@/lib/api";
 import { useCachedData } from "@/lib/useCachedData";
 import type { FinanceProfit } from "@/lib/types";
-import { CATEGORY_LABEL, KpiTile, monthLabel } from "@/components/screens/financeShared";
+import { CATEGORY_LABEL, KpiTile, cell, monthLabel, sumOf } from "@/components/screens/financeShared";
 
 /**
  * Profit — 한 해의 월별 손익을 한 장으로. 매출 − 비용 − 세금 = 순수익.
@@ -23,14 +23,6 @@ import { CATEGORY_LABEL, KpiTile, monthLabel } from "@/components/screens/financ
 /** 12칸 배열끼리 더하기 — 손익 줄들의 소계는 전부 이 한 가지 모양이다. */
 function addRows(...rows: number[][]): number[] {
   return Array.from({ length: 12 }, (_, i) => rows.reduce((s, r) => s + (r[i] || 0), 0));
-}
-const sumOf = (row: number[]) => row.reduce((s, n) => s + n, 0);
-
-/** 표 칸의 금액 — 0은 점 하나로 눕힌다(열두 칸 중 대부분이 0인 줄이 많다). */
-function cell(n: number): React.ReactNode {
-  if (!Math.round(n)) return <span className="zero">–</span>;
-  const s = Math.abs(Math.round(n)).toLocaleString();
-  return n < 0 ? <span className="neg">−{s}</span> : s;
 }
 
 /**

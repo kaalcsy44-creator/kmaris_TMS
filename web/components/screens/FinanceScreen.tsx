@@ -53,11 +53,13 @@ import {
   KpiTile,
   MONTH_NAMES,
   ProjectDocLink,
+  cell,
   localDayStr,
   money,
   monthBounds,
   monthLabel,
   startYears,
+  sumOf,
   sym,
 } from "@/components/screens/financeShared";
 
@@ -2790,6 +2792,14 @@ function periodRange(type: PeriodType, year: number, idx: number): { start: stri
 
 const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
+/** 월별 내역 표의 한 줄 — Profit 의 손익 줄과 같은 모양(kind 가 소계·총계를 가른다). */
+type ClosingLine = {
+  name: string;
+  values: number[];
+  kind?: "sum" | "grand";
+  hint?: string;
+};
+
 // ── Claims — 납품 후 하자 비용과 그 정산 ───────────────────────────────────────
 // 한 사건에서 돈은 세 갈래로 갈린다: 고객·벤더가 자기 돈으로 처리한 몫, 우리가 청구서를
 // 깎아 준 몫(크레딧 노트), 우리가 현금으로 물어 준 몫. 이 표는 그 셋을 한 줄에 세워
@@ -2970,6 +2980,30 @@ function ClosingTab() {
   const key = `finance:closing:${range.start}:${range.end}:${year}`;
   const { data, error } = useCachedData<FinanceClosing>(key, () => fetchFinanceClosing(range.start, range.end, year));
 
+  // 월별 내역의 줄 — 위 그래프가 그린 매출·매입 위에 마진과 부가세를 얹는다. 그래프는
+  // 크기를 견주는 자리고 이 표는 값을 확인하는 자리라, 같은 열두 달을 두 방식으로 읽는다.
+  // 부가세 계열은 백엔드가 나중에 붙은 값이라(배포 시차) 없으면 그 세 줄만 접는다.
+  const monthlyLines = useMemo<ClosingLine[]>(() => {
+    const m = data?.monthly;
+    if (!m) return [];
+    const n = m.labels.length;
+    const at = (a: number[] | undefined, i: number) => a?.[i] ?? 0;
+    const lines: ClosingLine[] = [
+      { name: "Sales (supply value)", values: m.sales },
+      { name: "Purchases (cost)", values: m.purchase },
+      { name: "Gross profit", kind: "sum",
+        values: Array.from({ length: n }, (_, i) => at(m.sales, i) - at(m.purchase, i)) },
+    ];
+    if (m.output_vat && m.input_vat) {
+      const out = m.output_vat, inp = m.input_vat;
+      lines.push({ name: "Output VAT", values: out });
+      lines.push({ name: "Input VAT", values: inp, hint: "purchases + other costs" });
+      lines.push({ name: "VAT payable", hint: "− is a refund", kind: "grand",
+                   values: Array.from({ length: n }, (_, i) => at(out, i) - at(inp, i)) });
+    }
+    return lines;
+  }, [data]);
+
   const years = Array.from({ length: 6 }, (_, i) => now.getFullYear() - i);
 
   return (
@@ -3026,6 +3060,43 @@ function ClosingTab() {
               </div>
             </div>
             <MonthlyBars labels={data.monthly.labels} sales={data.monthly.sales} purchase={data.monthly.purchase} />
+          </div>
+
+          {/* 월별 내역 — 줄이 항목, 칸이 달. Profit 의 손익 장표와 같은 표를 쓴다(같은
+              모양이라 두 화면을 오가도 눈이 다시 적응하지 않는다). 위 그래프와 달리
+              마진과 부가세까지 한 장에 서므로, 어느 달에 세금이 몰렸는지가 여기서 보인다. */}
+          <div className="panel">
+            <h3 className="form-title">Monthly breakdown ({year}, ₩)</h3>
+            <div className="fin-pl-scroll">
+              <table className={`mini fin-pl${data.monthly.labels.length <= 6 ? " fin-pl--few" : ""}`}>
+                <thead>
+                  <tr>
+                    <th className="fin-pl-name">Line</th>
+                    {data.monthly.labels.map((m) => <th key={m} className="num">{m}</th>)}
+                    <th className="num tot">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {monthlyLines.map((l) => (
+                    <tr key={l.name} className={l.kind ? `fin-pl-${l.kind}` : ""}>
+                      <td className="fin-pl-name">
+                        {l.name}
+                        {l.hint ? <span className="hint-inline"> {l.hint}</span> : null}
+                      </td>
+                      {l.values.map((v, i) => <td key={i} className="num">{cell(v)}</td>)}
+                      <td className="num tot">{cell(sumOf(l.values))}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="hint-inline" style={{ display: "block", marginTop: 8 }}>
+              계산 규약은 위 카드와 같다 — 매출은 고객 청구서, 매입은 9단계에 등록한 벤더
+              청구서, 기타 지출의 매입세액은 지급 건에 입력한 부가세다. 크레딧 노트는 매출과
+              매출세액에서 이미 빠져 있다. 이 표는 위에서 고른 기간으로 좁혀지지 않고 늘
+              {" "}{year}년 열두 달을 편다 — 고른 기간이 나머지 달들 사이에서 어디쯤인지를
+              함께 보라고 둔 자리다.
+            </p>
           </div>
 
           <div className="fin-overview-cols">

@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import Link from "next/link";
 
 /**
@@ -29,6 +30,16 @@ export const CATEGORY_LABEL: Record<string, string> = {
   세금: "Tax",
   기타: "Other",
 };
+
+/** 열두 칸짜리 줄의 합계 — 월별 장표의 Total 칸은 전부 이 한 가지 모양이다. */
+export const sumOf = (row: number[]) => row.reduce((s, n) => s + n, 0);
+
+/** 표 칸의 금액 — 0은 점 하나로 눕힌다(열두 칸 중 대부분이 0인 줄이 많다). */
+export function cell(n: number): ReactNode {
+  if (!Math.round(n)) return <span className="zero">–</span>;
+  const s = Math.abs(Math.round(n)).toLocaleString();
+  return n < 0 ? <span className="neg">−{s}</span> : s;
+}
 
 export function sym(currency: string): string {
   return currency === "KRW" ? "₩" : currency === "USD" ? "$" : `${currency} `;

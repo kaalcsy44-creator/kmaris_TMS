@@ -1189,6 +1189,11 @@ def finance_closing(start: str = "", end: str = "", year: int = 0):
         by_cust: dict[str, float] = {}
         monthly_sales = [0.0] * 12
         monthly_purchase = [0.0] * 12
+        # 월별 부가세 — 화면의 월별 내역 표가 그 해 열두 달을 한 줄로 읽는다. 규약은
+        # 기간 합계와 같다: 매출세액은 크레딧 노트만큼 깎이고, 매입세액은 프로젝트
+        # 매입(벤더 청구)과 기타 지출(임차료·공과금 등)을 함께 센다.
+        monthly_output_vat = [0.0] * 12
+        monthly_input_vat = [0.0] * 12
         sales_count = 0
 
         for r in s.query(ARRecord).all():
@@ -1210,6 +1215,7 @@ def finance_closing(start: str = "", end: str = "", year: int = 0):
                 by_cust[cname] = by_cust.get(cname, 0.0) + supply_krw
             if ys <= pd <= ye:
                 monthly_sales[int(pd[5:7]) - 1] += supply_krw
+                monthly_output_vat[int(pd[5:7]) - 1] += vat_krw
 
         # 크레딧 노트(클레임 상계) — 발행한 달의 매출에서 뺀다. 물건값을 깎아 준 것이라
         # 비용이 아니라 매출의 감액이고, 내수 감액이면 그만큼 매출세액도 줄어든다
@@ -1234,6 +1240,7 @@ def finance_closing(start: str = "", end: str = "", year: int = 0):
                 by_cust[cn["customer"]] = by_cust.get(cn["customer"], 0.0) - supply_krw
             if ys <= pd <= ye:
                 monthly_sales[int(pd[5:7]) - 1] -= supply_krw
+                monthly_output_vat[int(pd[5:7]) - 1] -= vat_krw
 
         # 매입은 벤더 청구(AP) 기준 — 발주가 아니라 청구서가 비용을 만든다(_ap_period_date).
         purchase_cost = purchase_vat = 0.0
@@ -1253,6 +1260,7 @@ def finance_closing(start: str = "", end: str = "", year: int = 0):
                 purchase_count += 1
             if ys <= pd <= ye:
                 monthly_purchase[int(pd[5:7]) - 1] += cost_krw
+                monthly_input_vat[int(pd[5:7]) - 1] += vat_krw
 
         # 기타 지출(수동 등록 지급대장)의 매입세액 — 임차료·공과금처럼 프로젝트와 무관한
         # 비용도 세금계산서를 받으면 매입세액이 된다. 등록할 때 공급가액과 나눠 받은
@@ -1269,15 +1277,21 @@ def finance_closing(start: str = "", end: str = "", year: int = 0):
                 # 세금계산서를 받은 날 기준 — 없으면 지급 예정일로 본다.
                 pdt = (p.bill_date or "")[:10] or (p.due_date or "")[:10]
                 hits = [pdt] if pdt and s0 <= pdt <= s1 else []
+                year_hits = [pdt] if pdt and ys <= pdt <= ye else []
             else:
                 # 반복 항목(월 임차료 등)은 구간에 든 회차 수만큼 잡는다.
                 hits = _finance_occurrences(p, d0, d1)
+                year_hits = _finance_occurrences(p, date(year, 1, 1), date(year, 12, 31))
             # 회차마다 그 달의 환율로 옮긴다 — 여러 달에 걸친 반복 외화 건이 한 환율로
             # 뭉치지 않게(원화 건은 어느 쪽이든 같은 값이라 달라지는 것이 없다).
             for occ in hits:
                 other_vat += _payable_krw(p, vat, occ[:7], fx_seen)
                 other_supply += _payable_krw(p, supply, occ[:7], fx_seen)
                 other_count += 1
+            # 월별 표는 고른 기간이 아니라 그 해 열두 달을 읽는다 — 기간이 9월 한 달이어도
+            # 표는 1~12월을 채워야 하므로 같은 항목을 연 단위로 한 번 더 편다.
+            for occ in year_hits:
+                monthly_input_vat[int(occ[5:7]) - 1] += _payable_krw(p, vat, occ[:7], fx_seen)
         input_vat = purchase_vat + other_vat
 
         by_customer = [
@@ -1328,6 +1342,8 @@ def finance_closing(start: str = "", end: str = "", year: int = 0):
                            "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
                 "sales": [round(x) for x in monthly_sales],
                 "purchase": [round(x) for x in monthly_purchase],
+                "output_vat": [round(x) for x in monthly_output_vat],
+                "input_vat": [round(x) for x in monthly_input_vat],
             },
             "fx": _fx_note(fx_seen),
             "usd_krw": USD_KRW_RATE,

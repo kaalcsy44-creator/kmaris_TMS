@@ -1331,7 +1331,14 @@ export type FinanceClosing = {
     payable_krw: number;
   };
   by_customer: { name: string; sales_krw: number }[];
-  monthly: { labels: string[]; sales: number[]; purchase: number[] };
+  monthly: {
+    labels: string[];
+    sales: number[];
+    purchase: number[];
+    /** 월별 매출세액·매입세액. 구 API 에는 없으므로 없으면 표에서 부가세 줄을 접는다. */
+    output_vat?: number[];
+    input_vat?: number[];
+  };
   fx?: FxNote;
   usd_krw: number;
 };
