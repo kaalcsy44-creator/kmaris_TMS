@@ -1058,6 +1058,7 @@ function CustomersTab() {
         newRow: (rs) => withCompanyDefaults(EMPTY_CUSTOMER, rs, rs[0].name),
         summary: (g, n) => `${g} companies · ${n} contacts`,
       }}
+      headCols={customerHeadCols}
       load={fetchSettingsCustomers}
       create={createSettingsCustomer}
       update={updateSettingsCustomer}
@@ -1830,6 +1831,7 @@ function VendorsTab() {
         newRow: (rs) => withCompanyDefaults(EMPTY_VENDOR, rs, rs[0].name),
         summary: (g, n) => `${g} vendors · ${n} contacts`,
       }}
+      headCols={vendorHeadCols}
       load={fetchSettingsVendors}
       create={createSettingsVendor}
       update={updateSettingsVendor}
@@ -2121,6 +2123,49 @@ function multiCell(all: string[], render?: (v: string) => React.ReactNode): Reac
     </span>
   );
 }
+
+/** 담당자 한 명이 여러 지역을 가질 수 있다 — 패싯 판정은 그 전부로 한다. */
+const partyRegions = (r: { regions?: string[]; country?: string }): string[] =>
+  (r.regions?.length ? r.regions : [r.country ?? ""]).filter((v) => v !== undefined);
+
+/**
+ * 거래관계 배지 열의 패싯 값 — 숫자가 아니라 상태로 고른다.
+ *
+ * 건수로 목록을 만들면 "1", "2", "19" 가 늘어설 뿐이고, 정작 찾고 싶은 것은
+ * "답이 한 번도 안 온 벤더"·"한 건도 성사 안 된 고객"이다. 정렬은 건수로 하고
+ * (sortValue), 고르는 목록은 이 상태 이름으로 낸다.
+ */
+function relationState(total: number, hit: number, kind: "reply" | "win"): string {
+  if (!total) return "";
+  if (hit === 0) return kind === "reply" ? "No reply yet" : "Never ordered";
+  if (hit >= total) return "All replied";
+  if (kind === "reply") return "Partly replied";
+  return hit / total >= 0.5 ? "Half or more" : "Under half";
+}
+
+/** 고객 목록의 머리 칸 정렬·필터 규칙. 표에 그리는 열(columns)과 key 로 짝지어진다. */
+const customerHeadCols: HeadCol<SettingsCustomer>[] = [
+  { key: "name", text: (r) => r.name || "" },
+  { key: "country", text: (r) => r.country || "", filter: "facet",
+    facetValues: partyRegions, emptyLabel: "No region" },
+  { key: "contact", text: (r) => r.contact || "", emptyLabel: "No contact" },
+  { key: "inquiries", text: (r) => relationState(r.inquiries ?? 0, r.won ?? 0, "win"),
+    sortValue: (r) => r.inquiries ?? 0, filter: "facet", emptyLabel: "No inquiry yet" },
+  { key: "specialization", text: (r) => r.specialization || "", filter: "facet",
+    emptyLabel: "Unspecified" },
+];
+
+/** 공급사 목록의 머리 칸 규칙. 고객과 같은 얼개에 배지 열의 뜻만 다르다. */
+const vendorHeadCols: HeadCol<SettingsVendor>[] = [
+  { key: "name", text: (r) => r.name || "" },
+  { key: "country", text: (r) => r.country || "", filter: "facet",
+    facetValues: partyRegions, emptyLabel: "No region" },
+  { key: "contact", text: (r) => r.contact || "", emptyLabel: "No contact" },
+  { key: "deals", text: (r) => relationState(r.deals ?? 0, r.deals_answered ?? 0, "reply"),
+    sortValue: (r) => r.deals ?? 0, filter: "facet", emptyLabel: "Never asked" },
+  { key: "specialization", text: (r) => r.specialization || "", filter: "facet",
+    emptyLabel: "Unspecified" },
+];
 
 // 품목 목록의 머리 칸 정렬·필터 규칙. 표에 그리는 열(columns)과 key 로 짝지어진다.
 const itemHeadCols: HeadCol<SettingsItem>[] = [
