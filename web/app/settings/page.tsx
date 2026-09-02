@@ -1022,6 +1022,14 @@ function CustomersTab() {
           <GroupNameCell key="n" rows={rs} open={open} />,
           <span key="r" className="ms-group-sub">{regionSummary(rs)}</span>,
           <span key="c" className="ms-group-sub">{nameSummary(rs)}</span>,
+          // 회사 합계 = 담당자들의 단순 합. RFQ 는 고객 담당자 하나에만 매이므로 같은
+          // 문의가 두 번 세어지지 않는다(벤더 쪽은 겹칠 수 있어 서버가 합집합을 센다).
+          <CustomerWinBadge
+            key="d"
+            inquiries={sumBy(rs, (r) => r.inquiries)}
+            won={sumBy(rs, (r) => r.won)}
+            lost={sumBy(rs, (r) => r.lost)}
+          />,
         ],
         subFirst: () => <span className="ms-sub-mark">↳</span>,
         actions: (rs, addNew) => (
@@ -1058,6 +1066,16 @@ function CustomersTab() {
         )],
         ["country", "Region", (r) => <MultiCell values={r.regions} flat={r.country} />],
         ["contact", "Contact"],
+        ["inquiries", "Inquiries → Orders",
+          (r) => (
+            <CustomerWinBadge
+              inquiries={r.inquiries ?? 0}
+              won={r.won ?? 0}
+              lost={r.lost ?? 0}
+              sub
+            />
+          ),
+          "ms-deals"],
       ]}
       fields={[
         ["name", "Customer *"],
@@ -1174,31 +1192,86 @@ function GroupNameCell({
 }
 
 /**
- * 프로젝트·답변 배지 — 이 벤더에 몇 건 물었고, 그중 몇 건이 답으로 돌아왔나.
+ * 거래관계 배지 — 왼쪽 회색은 건수, 오른쪽은 그 결과를 색으로. Customer·Vendor 목록이
+ * 같은 모양을 쓴다(두 표를 오가며 읽어도 눈이 다시 적응하지 않게).
  *
- * 두 조각을 나란히 둔다. 왼쪽(회색)은 물어본 프로젝트 수로 세기만 하는 값이고, 색은
- * 오른쪽에만 준다 — 목록을 훑을 때 판단이 필요한 건 "몇 건 했나"가 아니라 "답이 안 온
- * 데가 어디인가"라서다. 전부 답이 왔으면 초록, 일부면 주황, 하나도 안 왔으면 빨강이다.
- * 물어본 적이 없는 벤더는 0 대신 줄표로 둔다(0 은 '답이 없다'로 잘못 읽힌다).
+ * 색은 오른쪽에만 준다. 목록을 훑을 때 판단이 필요한 건 "몇 건 했나"가 아니라 "결과가
+ * 어떤가"라서다. 이력이 없으면 0 대신 줄표다 — 0 은 '결과가 나빴다'로 잘못 읽히는데
+ * 실제로는 '아직 없다'이다.
  */
-function DealBadge({ total, answered, sub = false }: { total: number; answered: number; sub?: boolean }) {
+function CountBadge({ total, hit, tone, title, sub = false }: {
+  total: number;
+  hit: number;
+  tone: "all" | "mid" | "part" | "none";
+  title: string;
+  sub?: boolean;
+}) {
   if (!total) return <span className="ms-group-sub">—</span>;
-  const tone = answered === 0 ? "none" : answered < total ? "part" : "all";
-  const waiting = total - answered;
   return (
-    <span
-      className={`vd-deal${sub ? " vd-deal--sub" : ""}`}
-      title={
-        `${total} project${total > 1 ? "s" : ""} asked · ${answered} quoted back`
-        + (waiting ? ` · ${waiting} still waiting` : "")
-      }
-    >
-      <span className="vd-deal-n">{total}</span>
-      <span className={`vd-reply vd-reply--${tone}`}>
-        <span className="vd-reply-dot" aria-hidden />
-        {answered}/{total}
+    <span className={`pt-deal${sub ? " pt-deal--sub" : ""}`} title={title}>
+      <span className="pt-deal-n">{total}</span>
+      <span className={`pt-stat pt-stat--${tone}`}>
+        <span className="pt-stat-dot" aria-hidden />
+        {hit}/{total}
       </span>
     </span>
+  );
+}
+
+/** "1 inquiry" / "20 inquiries" — 복수형이 -s 가 아닌 낱말은 두 번째 인자로 준다. */
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+/** 회사 줄의 합계 — 담당자 행들의 값을 더한다(빈 값은 0). */
+function sumBy<T>(rows: T[], pick: (row: T) => number | undefined): number {
+  return rows.reduce((acc, r) => acc + (pick(r) ?? 0), 0);
+}
+
+/**
+ * 벤더 — 물어본 프로젝트 중 견적이 돌아온 몫. 답은 다 오는 것이 정상이라, 하나라도
+ * 빠지면 주황이고 하나도 안 왔으면 빨강이다.
+ */
+function VendorReplyBadge({ total, answered, sub = false }: { total: number; answered: number; sub?: boolean }) {
+  const waiting = total - answered;
+  return (
+    <CountBadge
+      total={total}
+      hit={answered}
+      sub={sub}
+      tone={answered === 0 ? "none" : answered < total ? "part" : "all"}
+      title={`${plural(total, "project")} asked · ${answered} quoted back`
+        + (waiting ? ` · ${waiting} still waiting` : "")}
+    />
+  );
+}
+
+/**
+ * 고객 — 준 문의 중 오더로 이어진 몫, 곧 거래관계의 등급.
+ *
+ * 벤더와 색 규칙이 다르다. 무역에서 문의가 전부 오더가 되는 일은 없으므로 "하나라도
+ * 빠지면 주황"을 그대로 쓰면 거의 모든 고객이 주황이 되어 등급 구실을 못 한다. 그래서
+ * 비율로 층을 나눈다 — 절반 넘으면 초록, 4분의 1 넘으면 파랑, 그 아래는 주황, 한 건도
+ * 성사된 적 없으면 빨강.
+ *
+ * 분모는 아직 진행 중인 문의까지 포함한 전체다(사용자가 물은 것이 "문의를 얼마나 줬고
+ * 그중 얼마나 성사됐나"라서). 그래서 이 값은 최종 승률이 아니라 지금까지의 결과이며,
+ * 진행 중·실주 내역은 툴팁에서 갈라 보여 준다.
+ */
+function CustomerWinBadge({ inquiries, won, lost, sub = false }: {
+  inquiries: number; won: number; lost: number; sub?: boolean;
+}) {
+  const pct = inquiries ? won / inquiries : 0;
+  const open = inquiries - won - lost;
+  return (
+    <CountBadge
+      total={inquiries}
+      hit={won}
+      sub={sub}
+      tone={won === 0 ? "none" : pct < 0.25 ? "part" : pct < 0.5 ? "mid" : "all"}
+      title={`${plural(inquiries, "inquiry", "inquiries")} · `
+        + `${won} became ${plural(won, "order")} (${Math.round(pct * 100)}%)`
+        + (lost ? ` · ${lost} lost` : "")
+        + (open > 0 ? ` · ${open} still open` : "")}
+    />
   );
 }
 
@@ -1723,7 +1796,7 @@ function VendorsTab() {
           <GroupNameCell key="n" rows={rs} open={open} />,
           <span key="r" className="ms-group-sub">{regionSummary(rs)}</span>,
           <span key="c" className="ms-group-sub">{nameSummary(rs)}</span>,
-          <DealBadge key="d" total={rs[0].co_deals ?? 0} answered={rs[0].co_deals_answered ?? 0} />,
+          <VendorReplyBadge key="d" total={rs[0].co_deals ?? 0} answered={rs[0].co_deals_answered ?? 0} />,
           <span key="s" className="ms-group-sub">
             {summarize(uniqStrings(rs.map((r) => r.specialization)), " · ", 2)}
           </span>,
@@ -1765,7 +1838,7 @@ function VendorsTab() {
         ["contact", "Contact"],
         // 담당자 줄은 그 담당자 몫만 — 회사 합계는 위 그룹 줄이 든다.
         ["deals", "Projects",
-          (r) => <DealBadge total={r.deals ?? 0} answered={r.deals_answered ?? 0} sub />,
+          (r) => <VendorReplyBadge total={r.deals ?? 0} answered={r.deals_answered ?? 0} sub />,
           "ms-deals"],
         ["specialization", "Specialization", undefined, "ms-spec"],
       ]}

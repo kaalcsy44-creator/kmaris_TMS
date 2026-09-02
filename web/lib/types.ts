@@ -55,6 +55,12 @@ export type SettingsCustomer = {
   emails: string[];
   phones: string[];
   regions: string[];
+  /** 이 담당자가 준 문의(RFQ) 수. */
+  inquiries?: number;
+  /** 그중 오더(고객 P/O)까지 간 수. */
+  won?: number;
+  /** 그중 실주로 닫힌 수(나머지는 아직 진행 중). */
+  lost?: number;
 };
 export type SettingsVendor = {
   id: number;

@@ -124,6 +124,7 @@ def vendors():
 def settings_customers():
     s = get_session()
     try:
+        deals = _customer_deal_counts(s)
         return [{"id": c.id, "name": c.name, "contact": c.contact or "",
                  "contact_phone": getattr(c, "contact_phone", None) or "",
                  "email": c.email or "", "country": c.country or "",
@@ -135,10 +136,40 @@ def settings_customers():
                  "addresses": _multi_out(getattr(c, "addresses", None), c.address),
                  "emails": _multi_out(getattr(c, "emails", None), c.email),
                  "phones": _multi_out(getattr(c, "phones", None), getattr(c, "contact_phone", None)),
-                 "regions": _multi_out(getattr(c, "regions", None), c.country)}
+                 "regions": _multi_out(getattr(c, "regions", None), c.country),
+                 # 이 담당자가 준 문의와 그 결과. 회사 줄의 합계는 화면에서 더한다 —
+                 # RFQ 는 고객 담당자 하나에만 매이므로 담당자별 수를 더해도 겹치지 않는다
+                 # (벤더 쪽은 한 프로젝트가 담당자 둘에 걸릴 수 있어 서버에서 합집합을 센다).
+                 **deals.get(c.id, _EMPTY_DEALS)}
                 for c in s.query(Customer).order_by(Customer.name).all()]
     finally:
         s.close()
+
+
+_EMPTY_DEALS = {"inquiries": 0, "won": 0, "lost": 0}
+
+
+def _customer_deal_counts(s) -> dict:
+    """고객 담당자별 {문의 수, 성사, 실주}. 문의는 RFQ 1건이 1건이다.
+
+    성사는 그 RFQ 에 오더(고객 P/O)가 등록됐는지로 본다. RFQ.status 로도 알 수 있지만
+    그 값은 사람이 단계를 밟는 사이 뒤늦게 바뀌곤 해서, 실제로 P/O 를 받았다는 증거인
+    orders 행을 기준으로 삼는다 — 벤더 쪽에서 답변을 VendorQuote 존재로 본 것과 같다.
+    실주는 상태가 '실주'인 것만 세고, 성사도 실주도 아닌 것은 아직 진행 중이다(그래서
+    성사/문의 는 지금까지의 결과일 뿐, 최종 승률이 아니다 — 화면 설명도 그렇게 적는다).
+    """
+    ordered = {r[0] for r in s.query(Order.rfq_id).all() if r[0]}
+    out: dict[int, dict] = {}
+    for rid, cid, status in s.query(RFQ.id, RFQ.customer_id, RFQ.status).all():
+        if not cid:
+            continue
+        d = out.setdefault(cid, {"inquiries": 0, "won": 0, "lost": 0})
+        d["inquiries"] += 1
+        if rid in ordered:
+            d["won"] += 1
+        elif _enum_val(status) == "실주":
+            d["lost"] += 1
+    return out
 
 
 @app.post("/api/admin/ocr/business-card", dependencies=[Depends(require_token)])

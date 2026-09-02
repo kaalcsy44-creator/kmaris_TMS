@@ -1336,9 +1336,10 @@ table.mini.wide.ms-table td.ms-deals:not(.ms-actcol) {
   min-width: 96px;
   white-space: nowrap;
 }
-/* Vendor 목록의 프로젝트·답변 배지 — 왼쪽은 물어본 프로젝트 수, 오른쪽은 그중 답이 온 수. */
-.vd-deal { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
-.vd-deal-n {
+/* Customer·Vendor 목록의 거래관계 배지 — 왼쪽은 건수(고객=문의, 벤더=물어본 프로젝트),
+   오른쪽은 그 결과(고객=오더로 간 수, 벤더=견적이 돌아온 수). 두 목록이 같은 모양을 쓴다. */
+.pt-deal { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.pt-deal-n {
   min-width: 22px;
   padding: 0 6px;
   border-radius: 999px;
@@ -1348,7 +1349,7 @@ table.mini.wide.ms-table td.ms-deals:not(.ms-actcol) {
   font-weight: 700;
   text-align: center;
 }
-.vd-reply {
+.pt-stat {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -1358,12 +1359,14 @@ table.mini.wide.ms-table td.ms-deals:not(.ms-actcol) {
   font-weight: 600;
 }
 /* 점은 글자색을 그대로 쓴다 — 색을 한 곳에서만 정하면 상태가 늘어도 어긋나지 않는다. */
-.vd-reply-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-.vd-reply--all { background: #e3f4ea; color: #1e7a46; }
-.vd-reply--part { background: #fdf1dc; color: #96650f; }
-.vd-reply--none { background: #fbe6e4; color: #b23c30; }
+.pt-stat-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+/* 고객은 비율로 층이 하나 더 있다 — 절반 넘으면 초록, 4분의 1 넘으면 파랑. */
+.pt-stat--all { background: #e3f4ea; color: #1e7a46; }
+.pt-stat--mid { background: #e6eefb; color: #2b5ea8; }
+.pt-stat--part { background: #fdf1dc; color: #96650f; }
+.pt-stat--none { background: #fbe6e4; color: #b23c30; }
 /* 담당자 줄은 회사 줄보다 한 톤 낮춘다 — 회사 합계가 먼저 읽혀야 한다. */
-.vd-deal--sub { opacity: 0.75; }
+.pt-deal--sub { opacity: 0.75; }
 /* ── 칸마다 값이 짧고 고른 표(선박) ────────────────────────────────────────────
    위 규칙들은 회사 목록에 맞춘 것이다: 이름 한 칸이 길고 나머지는 '담당자 3명'·'지역 2곳'
    같은 요약이라, 남는 폭을 전부 이름 칸에 몰아주고 나머지는 최소폭으로 오른쪽에 붙였다.
