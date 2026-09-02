@@ -41,6 +41,7 @@ from email.utils import getaddresses, parsedate_to_datetime
 from typing import Iterable
 
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 
 from db.models import (
     AppSetting, Customer, CustomerContact, EmailMessage, EmailSyncState, Order,
@@ -50,6 +51,11 @@ from db.models import (
 # 본문 보관 상한 — 요약과 원문 확인에는 충분하고, 첨부 인용문이 통째로 들어오는
 # 메일에 DB 를 내주지 않을 만큼. 넘으면 잘라 두고 truncated 로 표시한다.
 MAX_BODY_CHARS = 20_000
+# Message-ID 보관 상한 — EmailMessage.message_id / in_reply_to / thread_key 칼럼 폭과
+# 같아야 한다. 이보다 긴 헤더를 다는 메일함이 있다(GroupWise 가 대표적이다). 저장할 때만
+# 자르고 찾을 때는 원문으로 찾으면, 이미 담아 둔 메일을 못 알아보고 다시 넣다가 유일
+# 제약에서 터진다 — 그래서 들어오는 즉시 한 번 잘라 그 값만 쓴다.
+MAX_ID_CHARS = 400
 KST = timezone(timedelta(hours=9))
 
 
@@ -119,9 +125,14 @@ def _addr_list(msg: Message, *names: str) -> list[str]:
     return out
 
 
+def _fit_id(value: str) -> str:
+    """Message-ID 를 보관 폭에 맞춘다 — 저장·조회가 늘 같은 값을 보게."""
+    return (value or "").strip()[:MAX_ID_CHARS]
+
+
 def _msg_ids(value: str) -> list[str]:
     """Message-ID 형태(<...>)를 골라낸다. References 는 여러 개가 공백으로 붙어 온다."""
-    return re.findall(r"<[^<>\s]+>", value or "")
+    return [_fit_id(m) for m in re.findall(r"<[^<>\s]+>", value or "")]
 
 
 def _decode_part(part: Message) -> str:
@@ -985,10 +996,11 @@ def _store_message(s, msg: Message, folder: str, own: set[str],
     등록하지 않은 거래처를 나중에 화면에서 찾아낼 수 있게.
     linked 는 사람이 딜에 붙여 둔 주소({주소: rfq_id}) — 거래처로 등록하지 않았어도
     담고, 다른 근거가 없을 때 그 딜로 붙인다."""
-    message_id = (_hdr(msg, "Message-ID") or "").strip()
+    message_id = _fit_id(_hdr(msg, "Message-ID"))
     if not message_id:
         # Message-ID 없는 메일은 중복 판별을 할 수 없다 — 발신시각+제목으로 대신 만든다.
-        message_id = f"<no-id-{sent_at_kst(msg)}-{abs(hash(_hdr(msg, 'Subject')))}@ktms>"
+        message_id = _fit_id(
+            f"<no-id-{sent_at_kst(msg)}-{abs(hash(_hdr(msg, 'Subject')))}@ktms>")
     if s.query(EmailMessage.id).filter_by(message_id=message_id).first():
         return "dup"
 
@@ -1024,11 +1036,11 @@ def _store_message(s, msg: Message, folder: str, own: set[str],
     if rfq_id is None and link_rfq is not None:
         rfq_id, match_by = link_rfq, "address"
 
-    s.add(EmailMessage(
-        message_id=message_id[:400],
-        in_reply_to=in_reply_to[:400],
+    row = EmailMessage(
+        message_id=message_id,
+        in_reply_to=in_reply_to,
         refs=refs[:20],
-        thread_key=thread_key_of(parents, message_id)[:400],
+        thread_key=thread_key_of(parents, message_id),
         direction=direction,
         from_addr=from_addr[:320],
         from_name=(getaddresses([msg.get("From") or ""])[0][0] or "")[:200],
@@ -1043,7 +1055,16 @@ def _store_message(s, msg: Message, folder: str, own: set[str],
         customer_id=party[1] if party and party[0] == "customer" else None,
         vendor_id=party[1] if party and party[0] == "vendor" else None,
         match_by=match_by,
-    ))
+    )
+    # 유일 제약은 마지막 방어선으로 남겨 둔다 — 앞의 조회를 빠져나간 중복(같은 메일이
+    # 두 폴더에 있거나, 잘린 Message-ID 가 겹치는 경우)이 한 통이라도 있으면 폴더 전체가
+    # 롤백돼 그때까지 담은 메일을 다 잃는다. 세이브포인트로 그 한 통만 되돌린다.
+    try:
+        with s.begin_nested():
+            s.add(row)
+            s.flush()
+    except IntegrityError:
+        return "dup"
     return "stored"
 
 
@@ -1094,6 +1115,7 @@ def _sync_mailbox(s, folder_limit: int | None = None) -> dict:
             if not state:
                 state = EmailSyncState(folder=folder, last_uid=0)
                 s.add(state)
+                s.flush()   # 아래 세이브포인트가 되돌려 버리지 않게 먼저 확정한다
             try:
                 typ, _ = conn.select(f'"{folder}"', readonly=True)
                 if typ != "OK":
