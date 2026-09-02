@@ -929,6 +929,20 @@ def suggest_categories(session, *, rows: list[dict] | None = None) -> list[dict]
     def in_service_branch(cid: int) -> bool:
         return service_root is not None and service_root in ancestors(cid)
 
+    def fenced(cids: list[int], want_service: bool) -> list[int]:
+        """후보에서 반대편 가지를 걷어낸다 — 물건과 용역은 서로의 자리에 갈 수 없다.
+
+        이 울타리는 아래 이름 짐작(ranked·like_desc)에만 걸려 있었다. 그런데 '같은 품명'과
+        '같은 품번 계열'로 찾는 앞 두 갈래는 이미 분류된 품목을 그대로 따라가므로, 한 번
+        잘못 들어간 품목이 같은 품명을 타고 계속 번졌다 — 'Traveling Charge' 하나가 배의
+        계통에 꽂혀 있으면 그 뒤로 들어오는 같은 이름이 전부 그리로 따라갔다.
+        걷어내고 남는 것이 없으면 그 갈래는 포기하고 다음 갈래로 간다. 근거가 끝내 없으면
+        제안하지 않는 것이 이 함수의 규약이다(아무 데나 넣는 것보다 비워 두는 편이 낫다).
+        """
+        if service_root is None:
+            return cids
+        return [c for c in cids if in_service_branch(c) == want_service]
+
     def ranked(toks: set[str], within: int | None, want_service: bool,
                levels: set[int] | None = None) -> list[tuple[list[int], set[str]]]:
         """품명 낱말과 겹치는 분류들을 '맞은 정도'가 같은 것끼리 묶어 좋은 순으로.
@@ -1029,13 +1043,13 @@ def suggest_categories(session, *, rows: list[dict] | None = None) -> list[dict]
         cid: int | None = None
         reason = ""
         # 1) 같은 품명이 이미 분류돼 있다.
-        c, why = _pick(cats, by_desc.get(_norm(desc)) or [])
+        c, why = _pick(cats, fenced(by_desc.get(_norm(desc)) or [], is_service))
         if c:
             cid, reason = c, f"same description — {why}"
         # 2) 같은 품번 계열이 한 분류(또는 한 상위)로 모여 있다.
         fam = part_family(pn)
         if cid is None and fam:
-            c, why = _pick(cats, by_family.get(fam) or [])
+            c, why = _pick(cats, fenced(by_family.get(fam) or [], is_service))
             if c:
                 # 계열이 정하는 건 보통 대·중분류다. 품명이 그 아래 소분류를 가리키면 더 깊게.
                 deeper, hit = by_name(desc, c, is_service)
