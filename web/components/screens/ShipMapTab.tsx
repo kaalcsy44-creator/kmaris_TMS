@@ -125,6 +125,12 @@ type Panel = {
   sub: React.ReactNode;
   items: ShipItem[];
   href?: string;
+  /**
+   * 프로젝트 칩에서 편 판이면 그 프로젝트. 품목마다 붙는 프로젝트 번호에서 이것만 뺀다 —
+   * 이 판에 실린 품목은 전부 그 프로젝트의 것이라, 줄마다 같은 번호를 되풀이하면
+   * 나머지 번호(그 품목이 함께 걸린 다른 건)가 그 안에 묻힌다.
+   */
+  dealId?: number;
   x: number;
   y: number;
 } | null;
@@ -249,13 +255,16 @@ export default function ShipMapTab() {
    * 링크 위에 얹을 때는(프로젝트 칩) 기본 이동을 막되, 새 탭으로 열려는 손짓
    * (Ctrl·Cmd·Shift)은 건드리지 않고 그대로 흘려보낸다.
    */
-  const opens = (title: React.ReactNode, sub: React.ReactNode, items: ShipItem[], href?: string) => ({
+  const opens = (
+    title: React.ReactNode, sub: React.ReactNode, items: ShipItem[],
+    href?: string, dealId?: number,
+  ) => ({
     onClick: (e: React.MouseEvent) => {
       if (!items.length) return;
       if (e.metaKey || e.ctrlKey || e.shiftKey) return;
       if (href) e.preventDefault();
       setHint(null);
-      setPanel({ title, sub, items, href, x: e.clientX, y: e.clientY });
+      setPanel({ title, sub, items, href, dealId, x: e.clientX, y: e.clientY });
     },
   });
 
@@ -359,9 +368,10 @@ function Zone({
     onMouseEnter: (e: React.MouseEvent) => void;
     onMouseLeave: () => void;
   };
-  opens: (title: React.ReactNode, sub: React.ReactNode, items: ShipItem[], href?: string) => {
-    onClick: (e: React.MouseEvent) => void;
-  };
+  opens: (
+    title: React.ReactNode, sub: React.ReactNode, items: ShipItem[],
+    href?: string, dealId?: number,
+  ) => { onClick: (e: React.MouseEvent) => void };
 }) {
   const mine = model.roll.get(cat.id) ?? [];
   const subs = (model.kids.get(cat.id) ?? []).filter((c) => c.active);
@@ -409,6 +419,7 @@ function Zone({
                   </>,
                   items,
                   href,
+                  deal.rfq_id,
                 )}
               >
                 {chipNo(deal)}
@@ -473,6 +484,34 @@ function Zone({
 function Src({ doc }: { doc?: { kind: string; no: string } | null }) {
   if (!doc?.kind) return null;
   return <span className="ship-peek-src"> · {doc.no ? `${doc.kind} ${doc.no}` : doc.kind}</span>;
+}
+
+/**
+ * 품목 한 줄에 붙는 프로젝트 번호 — 이 품목이 어느 건에서 나왔는가.
+ *
+ * 계통에서 편 판(Engine Room·Main Engine System…)에서는 줄마다 다른 건이 서므로 이
+ * 번호가 그 줄의 출처를 말하는 유일한 값이다. 그런데 프로젝트 칩에서 편 판에서는
+ * 실린 품목이 전부 그 프로젝트의 것이라 같은 번호가 줄 수만큼 되풀이된다 — 아무것도
+ * 답하지 않으면서, 그 품목이 함께 걸린 다른 건까지 그 반복 속에 묻는다.
+ * 그래서 판을 연 그 프로젝트만 빼고 나머지를 보인다. 남는 것이 없으면 줄도 없다.
+ */
+function ItemDeals({ deals, except }: { deals: ShipDeal[]; except?: number }) {
+  const MAX = 4;
+  const rest = except != null ? deals.filter((d) => d.rfq_id !== except) : deals;
+  if (!rest.length) return null;
+  return (
+    <div className="ship-peek-d">
+      {rest.slice(0, MAX).map((d) => (
+        <span
+          key={d.rfq_id}
+          title={[dealLabel(d), d.date, `${d.lines} line(s)`].filter(Boolean).join(" · ")}
+        >
+          {chipNo(d)}
+        </span>
+      ))}
+      {rest.length > MAX ? <span>+{rest.length - MAX}</span> : null}
+    </div>
+  );
 }
 
 /** 마우스를 따라 뜨는 한 줄 — 그 자리가 무엇인지만. 마우스를 먹지 않는다. */
@@ -545,20 +584,7 @@ function Peeker({ panel, onClose }: { panel: NonNullable<Panel>; onClose: () => 
                 </span>
               ) : null}
             </div>
-            {it.deals.length ? (
-              <div className="ship-peek-d">
-                {it.deals.slice(0, 4).map((d) => (
-                  <span
-                    key={d.rfq_id}
-                    title={[dealLabel(d), d.date, `${d.lines} line(s)`]
-                      .filter(Boolean).join(" · ")}
-                  >
-                    {chipNo(d)}
-                  </span>
-                ))}
-                {it.deals.length > 4 ? <span>+{it.deals.length - 4}</span> : null}
-              </div>
-            ) : null}
+            <ItemDeals deals={it.deals} except={panel.dealId} />
           </li>
         ))}
       </ul>
