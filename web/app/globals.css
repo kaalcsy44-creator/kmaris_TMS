@@ -15290,7 +15290,9 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
    같은 무게로 서면, 품목 다섯이 열다섯 줄로 이어져 어디서 다음 품목이 시작하는지가
    보이지 않는다. 굵기로 머리와 몸을 가른다.
    품명은 견적서 문장이 통째로 들어오기도 해서 두 줄에서 자른다(쪽지는 요약이다). */
-.ship-peek-t span {
+.ship-peek-t > span {
+  flex: 1 1 auto;
+  min-width: 0;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -15315,7 +15317,8 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 /* 가격이 실려 온 문서 — 금액 바로 뒤에 붙어 그 숫자의 출처가 된다. 값이 아니라
    출처이므로 금액보다 한 단 옅게 두고, 번호가 없으면 문서 이름만 남는다. */
 .ship-peek-src { color: #7b879b; font-weight: 600; }
-.ship-peek-d { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+/* 품명 옆에 서는 프로젝트 번호 — 이름이 길어도 밀려나거나 줄지 않는다. */
+.ship-peek-d { display: flex; flex-wrap: wrap; gap: 4px; flex: 0 0 auto; }
 .ship-peek-d span {
   padding: 0 5px;
   border-radius: 4px;

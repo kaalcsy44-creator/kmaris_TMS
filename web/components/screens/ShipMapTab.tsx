@@ -559,9 +559,13 @@ function Peeker({ panel, onClose }: { panel: NonNullable<Panel>; onClose: () => 
       <ul>
         {panel.items.slice(0, MAX).map((it) => (
           <li key={it.item_id}>
+            {/* 번호는 품목의 신원에 딸린 값이다 — 이 줄이 어느 건에서 나왔는가. 값(매입·
+                매출) 뒤에 두면 품명과 번호 사이에 금액 두 줄이 끼어, 무엇이 어느 건 것인지
+                되짚으려면 눈이 위아래로 오간다. 이름 옆에 붙여 한 번에 읽히게 한다. */}
             <div className="ship-peek-t">
               {it.part_no ? <code>{it.part_no}</code> : null}
               <span>{it.description || "(no description)"}</span>
+              <ItemDeals deals={it.deals} except={panel.dealId} />
             </div>
             {/* 상대는 금액 줄 안에 있어야 한다 — 산 값에는 판 쪽이, 판 값에는 산 쪽이
                 붙는다. 앞서는 넷을 한 줄에 나란히 흘려 놓아, 줄바꿈이 어디서 걸리느냐에
@@ -584,7 +588,6 @@ function Peeker({ panel, onClose }: { panel: NonNullable<Panel>; onClose: () => 
                 </span>
               ) : null}
             </div>
-            <ItemDeals deals={it.deals} except={panel.dealId} />
           </li>
         ))}
       </ul>
