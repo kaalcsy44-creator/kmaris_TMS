@@ -1020,7 +1020,6 @@ function CustomersTab() {
         save={updateCustomerCompanyInfo}
         onClose={() => setCompany(null)}
         onSaved={() => {
-          setCompany(null);
           setReloadKey((k) => k + 1);
           invalidateCustomerLogos();
         }}
@@ -1382,7 +1381,10 @@ function CompanyInfoModal<
   prev?: CompanyNav;
   next?: CompanyNav;
 }) {
-  const origName = rows[0].name;
+  // 저장 뒤에도 창이 남으므로 회사명을 상태로 든다. 이름을 바꿔 저장하면 제목·읽기
+  // 화면이 새 이름이 되어야 하고, 그 다음 저장의 조회 키도 새 이름이어야 한다.
+  const [baseName, setBaseName] = useState(rows[0].name);
+  const origName = baseName;
   // 각 필드의 시작값 = 등록된 값 중 첫 번째(비어 있지 않은 것).
   const initial = (key: keyof T) => uniqStrings(rows.map((r) => String(r[key] ?? "")))[0] ?? "";
   const [name, setName] = useState(origName);
@@ -1427,6 +1429,11 @@ function CompanyInfoModal<
       const body: CompanyInfoSave = { name: origName, ...vals, addresses };
       if (name.trim() && name.trim() !== origName) body.rename = name.trim();
       await save(body);
+      // 저장하면 읽기로 돌아온다 — 창을 닫아 버리면 방금 무엇을 저장했는지 확인할
+      // 자리가 없고, 이어서 옆 회사로 넘어가려면 목록에서 그 회사를 다시 찾아야 한다.
+      setBaseName(name.trim() || origName);
+      setEditing(false);
+      setBusy(false);
       onSaved();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Save failed");
@@ -1911,7 +1918,6 @@ function VendorsTab() {
         save={updateVendorCompanyInfo}
         onClose={() => setCompany(null)}
         onSaved={() => {
-          setCompany(null);
           setReloadKey((k) => k + 1);
           invalidateVendorLogos();
         }}
