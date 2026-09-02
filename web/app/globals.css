@@ -2566,10 +2566,12 @@ table.pipeline thead th.pl-th.open .pl-th-btn {
   inset: 0;
   z-index: 90;
 }
+/* 폭은 여기서 정하지 않는다 — 자리 계산과 같은 값이어야 해서 tableHeadMenu 의
+   COL_MENU_W 가 style 로 직접 준다(둘로 나뉘면 한쪽만 고쳤을 때 화면 밖으로 밀린다). */
 .pl-col-menu {
   position: fixed;
   z-index: 91;
-  width: 240px;
+  max-width: calc(100vw - 24px);
   max-height: 360px;
   overflow-y: auto;
   background: #fff;

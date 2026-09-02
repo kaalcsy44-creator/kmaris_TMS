@@ -1,5 +1,7 @@
 "use client";
 
+import { COL_MENU_W } from "@/components/common/tableHeadMenu";
+
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import Link from "next/link";
@@ -692,7 +694,7 @@ function PipelineTable({
       return;
     }
     const rect = e.currentTarget.getBoundingClientRect();
-    const width = 240;
+    const width = COL_MENU_W;
     const left = Math.max(12, Math.min(rect.left, window.innerWidth - width - 12));
     setMenuPos({ left, top: rect.bottom + 4 });
     setOpenCol(key);
@@ -906,7 +908,7 @@ function PipelineTable({
         <div className="pl-menu-backdrop" onClick={() => setOpenCol(null)} />
         <div
           className="pl-col-menu"
-          style={{ left: menuPos.left, top: menuPos.top }}
+          style={{ left: menuPos.left, top: menuPos.top, width: COL_MENU_W }}
           role="menu"
         >
           {sorts.map((s) => (

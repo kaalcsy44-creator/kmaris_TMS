@@ -3,6 +3,20 @@
 import { useRef, useState } from "react";
 
 /**
+ * 컬럼 필터 토글메뉴의 폭(px).
+ *
+ * 자리 계산(화면 오른쪽으로 넘치지 않게 왼쪽을 당기는 계산)과 실제 그려지는 폭이 같은
+ * 값이어야 한다. 예전에는 CSS 가 폭을, 스크립트가 계산용 숫자를 따로 들고 있어 한쪽만
+ * 고치면 메뉴가 화면 밖으로 밀려났다. 그래서 여기서만 정하고 style 로 직접 준다
+ * (같은 메뉴를 쓰는 FilterTable·ProjectsScreen 도 이 값을 가져다 쓴다).
+ *
+ * 240px 에서 넓힌 이유는 분류 경로다 — "Engine Room > Electrical Power System >
+ * Generator" 처럼 세 마디짜리 값이 한 줄에 들어와야 서로를 가르는 소분류가 보인다.
+ * 그보다 긴 값은 접혀서 이어진다(.pl-menu-opt .lbl).
+ */
+export const COL_MENU_W = 380;
+
+/**
  * 이미 그려 놓은 표의 머리 칸에 정렬·필터만 얹는 장치.
  *
  * FilterTable 은 표 전체를 대신 그려 준다. 지급대장처럼 한 칸이 여러 줄인 표
@@ -147,7 +161,7 @@ export function useHeadMenu<T>(cols: HeadCol<T>[], resetOn?: string): HeadMenu<T
       return;
     }
     const rect = e.currentTarget.getBoundingClientRect();
-    const width = 240;
+    const width = COL_MENU_W;
     setPos({
       left: Math.max(12, Math.min(rect.left, window.innerWidth - width - 12)),
       top: rect.bottom + 4,
@@ -180,7 +194,7 @@ export function useHeadMenu<T>(cols: HeadCol<T>[], resetOn?: string): HeadMenu<T
     return (
       <>
         <div className="pl-menu-backdrop" onClick={() => setOpenKey(null)} />
-        <div className="pl-col-menu" style={{ left: pos.left, top: pos.top }} role="menu">
+        <div className="pl-col-menu" style={{ left: pos.left, top: pos.top, width: COL_MENU_W }} role="menu">
           <div className="pl-menu-sort">
             <button
               className={sortKey === col.key && sortDir === "asc" ? "on" : ""}

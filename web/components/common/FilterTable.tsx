@@ -1,5 +1,7 @@
 "use client";
 
+import { COL_MENU_W } from "@/components/common/tableHeadMenu";
+
 import { useState } from "react";
 import { useColumnLayout } from "./useColumnLayout";
 import { ColumnResizer, ColumnsButton, dragHandleProps } from "./tableLayout";
@@ -107,7 +109,7 @@ export default function FilterTable<T>({
       return;
     }
     const rect = e.currentTarget.getBoundingClientRect();
-    const width = 240;
+    const width = COL_MENU_W;
     const left = Math.max(12, Math.min(rect.left, window.innerWidth - width - 12));
     setMenuPos({ left, top: rect.bottom + 4 });
     setOpenCol(key);
@@ -229,7 +231,7 @@ export default function FilterTable<T>({
     return (
       <>
         <div className="pl-menu-backdrop" onClick={() => setOpenCol(null)} />
-        <div className="pl-col-menu" style={{ left: menuPos.left, top: menuPos.top }} role="menu">
+        <div className="pl-col-menu" style={{ left: menuPos.left, top: menuPos.top, width: COL_MENU_W }} role="menu">
           <div className="pl-menu-sort">
             <button
               className={sortKey === col.key && sortDir === "asc" ? "on" : ""}
