@@ -976,6 +976,10 @@ def settings_item_ship_map():
     try:
         ensure_price_history_fresh(s, _core._DATA_GEN)
         data = category_ship_map(s)
+        # 화면이 프로젝트를 부르는 이름 — 다른 모든 목록(진행현황·대시보드·전역검색·
+        # 문서·미수)이 쓰는 P-001/S-001 과 같아야 한다. 저장값이 아니라 산출값이라
+        # 이름(고객·선박)과 같은 자리에서 붙인다.
+        pno = _core._project_no_map(s)
         cust = dict(s.query(Customer.id, Customer.name).all())
         vend = dict(s.query(Vendor.id, Vendor.name).all())
         vess = dict(s.query(Vessel.id, Vessel.name).all())
@@ -986,6 +990,7 @@ def settings_item_ship_map():
             for d in it["deals"]:
                 d["customer"] = cust.get(d.pop("customer_id", None)) or ""
                 d["vessel"] = vess.get(d.pop("vessel_id", None)) or ""
+                d["project_no"] = pno.get(d["rfq_id"], "")
         built = s.query(func.max(ItemPriceHistory.created_at)).scalar()
         data["built_at"] = built.isoformat() if built else None
         return data

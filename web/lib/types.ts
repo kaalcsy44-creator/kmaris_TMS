@@ -191,7 +191,8 @@ export type AutoCategoryProposal = {
    "이 계통에 어느 프로젝트가 걸려 있나"라서, 분류가 아니라 딜이 잎이 된다. */
 export type ShipDeal = {
   rfq_id: number;
-  rfq_no: string;                // 프로젝트 번호 KMS-RFQ-yymm-NNN
+  rfq_no: string;                // RFQ 문서번호 KMS-RFQ-yymm-NNN(수동 입력이라 빌 수 있다)
+  project_no: string;            // 화면이 부르는 이름 P-001(yymmdd) / S-001(yymmdd)
   title: string;                 // 프로젝트 제목(있으면)
   customer: string;
   vessel: string;

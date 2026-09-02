@@ -116,20 +116,22 @@ function berthOf(name: string): number {
 }
 
 /**
- * 칩에 적는 프로젝트 번호 — 앞머리(KMS-RFQ-)를 뗀다.
+ * 칩에 적는 이름 — 프로젝트 번호(P-001)다.
  *
- * 번호 자체는 그대로 둘 값이다. 이 화면에서 프로젝트를 여는 열쇠이고, 연·월·일련이라
- * 정렬이 곧 시간순이며, 사람들이 실제로 이 번호로 서로에게 말한다. 문제는 길이다 —
- * 기관실 한 칸에 열두 개가 서면 서로 다른 곳은 뒤 두 마디뿐인데 같은 앞머리가 칸의
- * 절반을 먹고, 그 줄들이 정작 이 카드의 본문(계통과 숫자)을 아래로 밀어낸다.
- * 그래서 칩에는 구별되는 부분만 적고, 온전한 번호와 고객·선박은 마우스를 올릴 때 준다.
- * 번호는 수동 입력이라 이 꼴이 아닐 수도 있는데, 그때는 손대지 않고 그대로 적는다.
+ * 이 화면만 RFQ 문서번호(KMS-RFQ-2608-027)를 적고 있었다. 나머지는 전부 P-001/S-001
+ * 로 부른다(진행현황·대시보드·전역검색·문서·미수·품목분류). 한 프로젝트가 화면마다
+ * 다른 이름으로 불리면 같은 것인지 알아보는 일이 사람 몫이 된다.
+ *
+ * 번호에 붙은 (yymmdd) 는 칩에서 뗀다 — 칩이 답할 것은 '어느 프로젝트인가'까지고,
+ * 날짜·문서번호·고객·선박은 마우스를 올리면 나온다. RFQ 번호도 거기서 함께 준다:
+ * 버릴 값이 아니라(문서에 찍히고 메일에 오르내린다) 칩에 적을 값이 아닐 뿐이다.
+ * 번호가 아직 없는 딜은 문서번호로, 그것도 없으면 줄표로 물러선다.
  */
-const shortNo = (no: string) => no.replace(/^KMS-RFQ-/i, "");
+const chipNo = (d: ShipDeal) => (d.project_no || d.rfq_no || "—").replace(/\s*\(.*$/, "");
 
-/** 칩 하나가 무엇인지 한 줄로 — 온전한 번호에 고객·선박·제목을 잇는다. */
+/** 칩 하나가 무엇인지 한 줄로 — 번호·문서번호·고객·선박·제목. */
 const dealLabel = (d: ShipDeal) =>
-  [d.rfq_no, d.customer, d.vessel, d.title].filter(Boolean).join(" · ");
+  [d.project_no, d.rfq_no, d.customer, d.vessel, d.title].filter(Boolean).join(" · ");
 
 function money(v: number | null | undefined, cur: string) {
   if (v == null) return "—";
@@ -199,8 +201,12 @@ export default function ShipMapTab() {
         seen.set(d.rfq_no, e);
       }
     }
-    // 번호는 연도·월·일련이 그대로 정렬이 된다 — 최근 것이 앞에 서도록 내림차순.
-    return Array.from(seen.values()).sort((a, b) => b.deal.rfq_no.localeCompare(a.deal.rfq_no));
+    // 최근 것이 앞에. 프로젝트 번호는 Parts(P)·Service(S) 가 각자 세는 두 계열이라
+    // 번호끼리 견주면 시간순이 되지 않는다(S-001 이 P-050 뒤에 선다). 수신일로 세우고
+    // 같은 날이면 번호가 뒤를 가른다.
+    return Array.from(seen.values()).sort((a, b) =>
+      (b.deal.date || "").localeCompare(a.deal.date || "")
+      || (b.deal.project_no || "").localeCompare(a.deal.project_no || ""));
   };
 
   // 마우스를 올리면 펴고 떼면 접는다 — 두 손잡이를 한 벌로 묶어 두면 붙이는 자리마다
@@ -341,13 +347,13 @@ function Zone({
               href={`/project?rfq=${deal.rfq_id}&view=overview&back=${encodeURIComponent("/item")}`}
               title={dealLabel(deal)}
               {...hover(
-                deal.rfq_no,
-                [[deal.customer, deal.vessel].filter(Boolean).join(" · "),
+                deal.project_no || deal.rfq_no,
+                [[deal.customer, deal.vessel, deal.rfq_no].filter(Boolean).join(" · "),
                  `${items.length} item(s) on ${cat.name}`].filter(Boolean).join(" — "),
                 items,
               )}
             >
-              {shortNo(deal.rfq_no)}
+              {chipNo(deal)}
             </Link>
           ))}
         </div>
@@ -449,7 +455,7 @@ function Peeker({ peek }: { peek: NonNullable<Peek> }) {
                     title={[dealLabel(d), d.date, `${d.lines} line(s)`]
                       .filter(Boolean).join(" · ")}
                   >
-                    {shortNo(d.rfq_no)}
+                    {chipNo(d)}
                   </span>
                 ))}
                 {it.deals.length > 4 ? <span>+{it.deals.length - 4}</span> : null}
