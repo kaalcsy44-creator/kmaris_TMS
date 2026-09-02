@@ -2640,7 +2640,8 @@ table.pipeline thead th.pl-th.open .pl-th-btn {
 }
 .pl-menu-opt {
   display: flex;
-  align-items: center;
+  /* 값이 두 줄로 접힐 수 있으므로 체크 표시는 가운데가 아니라 첫 줄에 맞춘다. */
+  align-items: flex-start;
   gap: 7px;
   width: 100%;
   padding: 7px 10px;
@@ -2663,15 +2664,20 @@ table.pipeline thead th.pl-th.open .pl-th-btn {
 .pl-menu-opt .chk {
   flex: none;
   width: 12px;
+  margin-top: 1px;
   font-size: 11px;
   color: var(--blue);
 }
+/* 값은 접어서 끝까지 보인다 — 한 줄로 눌러 두면 긴 값의 뒷부분이 잘리는데, 하필 그
+   뒷부분이 고르는 근거인 경우가 있다. 분류 경로가 그렇다: "Engine Room > Electrical
+   Power System > Generator" 에서 앞 두 마디는 여러 값이 공유하고 정작 서로를 가르는
+   것은 잘려 나간 소분류다. 짧은 값(제조사·단위·원산지)은 접힐 일이 없어 그대로다. */
 .pl-menu-opt .lbl {
   flex: 1;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
 }
 .pl-menu-date {
   display: flex;
