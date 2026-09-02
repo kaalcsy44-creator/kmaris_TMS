@@ -986,7 +986,8 @@ function PartnersTab() {
 
 function CustomersTab() {
   // 회사 공통정보 편집 대상 그룹(같은 회사명의 담당자 레코드들). null = 닫힘.
-  const [company, setCompany] = useState<SettingsCustomer[] | null>(null);
+  // 회사 목록 전체와 지금 보고 있는 자리 — 창 안에서 옆 회사로 건너뛰려면 이웃을 알아야 한다.
+  const [company, setCompany] = useState<{ groups: SettingsCustomer[][]; index: number } | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const canCreate = can("settings", "create");
 
@@ -994,7 +995,17 @@ function CustomersTab() {
     <>
     {company ? (
       <CompanyInfoModal
-        rows={company}
+        // 회사가 바뀌면 창 안의 값도 새로 잡혀야 한다(안의 상태는 첫 렌더에 굳는다).
+        key={company.groups[company.index]?.[0]?.name ?? company.index}
+        rows={company.groups[company.index] ?? []}
+        stats={["Inquiries → Orders", (
+          <CustomerWinBadge
+            inquiries={sumBy(company.groups[company.index] ?? [], (r) => r.inquiries)}
+            won={sumBy(company.groups[company.index] ?? [], (r) => r.won)}
+            lost={sumBy(company.groups[company.index] ?? [], (r) => r.lost)}
+          />
+        )]}
+        {...companyNav(company, setCompany)}
         fields={[
           ["tax_id", "Tax ID / Business No."],
           ["tax_invoice_email", "Tax invoice email"],
@@ -1039,13 +1050,13 @@ function CustomersTab() {
           </span>,
         ],
         subFirst: () => <span className="ms-sub-mark">↳</span>,
-        actions: (rs, addNew) => (
+        actions: (rs, addNew, nav) => (
           <>
             <button
               type="button"
               className="ms-mini"
               title="Company info — applies to all contacts of this company"
-              onClick={() => setCompany(rs)}
+              onClick={() => setCompany({ groups: nav.groups, index: nav.index })}
             >
               <CompanyIcon />
             </button>
@@ -1324,6 +1335,23 @@ type CompanyArea<T> = {
   placeholder?: string;
 };
 
+/** 회사 정보 창이 옆 회사로 건너뛸 때 쓰는 한 걸음 — 어디로 가는지(name)와 가는 법(go). */
+type CompanyNav = { name: string; go: () => void };
+
+/** 회사 목록에서 앞뒤 한 걸음을 만든다(두 탭이 같은 모양으로 쓴다). */
+function companyNav<T extends { name: string }>(
+  st: { groups: T[][]; index: number },
+  set: (s: { groups: T[][]; index: number }) => void,
+): { prev?: CompanyNav; next?: CompanyNav } {
+  const nameAt = (i: number) => st.groups[i]?.[0]?.name ?? "";
+  return {
+    prev: st.index > 0
+      ? { name: nameAt(st.index - 1), go: () => set({ ...st, index: st.index - 1 }) } : undefined,
+    next: st.index < st.groups.length - 1
+      ? { name: nameAt(st.index + 1), go: () => set({ ...st, index: st.index + 1 }) } : undefined,
+  };
+}
+
 function CompanyInfoModal<
   T extends {
     id: number; name: string; address: string; addresses: string[];
@@ -1336,6 +1364,9 @@ function CompanyInfoModal<
   save,
   onClose,
   onSaved,
+  stats,
+  prev,
+  next,
 }: {
   rows: T[];
   fields: [keyof T & keyof CompanyInfoSave, string][];
@@ -1345,6 +1376,11 @@ function CompanyInfoModal<
   save: (body: CompanyInfoSave) => Promise<{ ok: boolean; updated: number }>;
   onClose: () => void;
   onSaved: () => void;
+  /** 이 회사와의 거래 요약(문의·수주 / 프로젝트·회신) — 표에 선 배지를 그대로 들여온다. */
+  stats?: [string, ReactNode];
+  /** 표의 앞뒤 회사로 건너뛰기. 이름을 함께 받아 어디로 가는지 미리 보인다. */
+  prev?: CompanyNav;
+  next?: CompanyNav;
 }) {
   const origName = rows[0].name;
   // 각 필드의 시작값 = 등록된 값 중 첫 번째(비어 있지 않은 것).
@@ -1371,6 +1407,18 @@ function CompanyInfoModal<
                  ...(areas ?? []).map((a) => [a.key, a.label] as (typeof fields)[number])]
     .filter(([k]) => uniqStrings(rows.map((r) => String(r[k as keyof T] ?? ""))).length > 1)
     .map(([, label]) => label);
+
+  // 읽는 중에는 ←→ 로도 옆 회사로 넘어간다. 편집 중에는 걸지 않는다 — 칸에 글자를
+  // 치는 중이라 커서를 옮기려던 손짓이 창을 통째로 바꿔 버린다.
+  useEffect(() => {
+    if (editing) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "ArrowLeft") prev?.go();
+      else if (e.key === "ArrowRight") next?.go();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [editing, prev, next]);
 
   async function submit() {
     setBusy(true);
@@ -1402,11 +1450,24 @@ function CompanyInfoModal<
         return [label, node] as [string, React.ReactNode];
       }),
       ["Payment terms", vals.payment_terms || null],
+      ...(stats ? [stats] : []),
       ...(areas ?? []).map((a) => [a.label, vals[String(a.key)]
         ? <span className="co-para">{vals[String(a.key)]}</span> : null] as [string, React.ReactNode]),
     ];
     return (
       <Modal title={`🏢 Company info — ${origName}`} onClose={onClose} form>
+        {prev || next ? (
+          <div className="co-nav">
+            <button type="button" className="btn tiny" disabled={!prev}
+                    onClick={() => prev?.go()} title={prev ? `← ${prev.name}` : ""}>
+              ◀ {prev ? prev.name : "—"}
+            </button>
+            <button type="button" className="btn tiny" disabled={!next}
+                    onClick={() => next?.go()} title={next ? `${next.name} →` : ""}>
+              {next ? next.name : "—"} ▶
+            </button>
+          </div>
+        ) : null}
         <div className="company-read">
           {vals.logo ? <img className="co-logo" src={vals.logo} alt="" /> : null}
           <dl>
@@ -1823,7 +1884,7 @@ const EMPTY_VENDOR: SettingsVendor = {
 };
 
 function VendorsTab() {
-  const [company, setCompany] = useState<SettingsVendor[] | null>(null);
+  const [company, setCompany] = useState<{ groups: SettingsVendor[][]; index: number } | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const canCreate = can("settings", "create");
 
@@ -1831,7 +1892,15 @@ function VendorsTab() {
     <>
     {company ? (
       <CompanyInfoModal
-        rows={company}
+        key={company.groups[company.index]?.[0]?.name ?? company.index}
+        rows={company.groups[company.index] ?? []}
+        stats={["Projects → Quoted back", (
+          <VendorReplyBadge
+            total={company.groups[company.index]?.[0]?.co_deals ?? 0}
+            answered={company.groups[company.index]?.[0]?.co_deals_answered ?? 0}
+          />
+        )]}
+        {...companyNav(company, setCompany)}
         fields={[["website", "Website"]]}
         areas={[
           { key: "specialization", label: "Specialization", rows: 3,
@@ -1865,13 +1934,13 @@ function VendorsTab() {
           </span>,
         ],
         subFirst: () => <span className="ms-sub-mark">↳</span>,
-        actions: (rs, addNew) => (
+        actions: (rs, addNew, nav) => (
           <>
             <button
               type="button"
               className="ms-mini"
               title="Company info — applies to all contacts of this company"
-              onClick={() => setCompany(rs)}
+              onClick={() => setCompany({ groups: nav.groups, index: nav.index })}
             >
               <CompanyIcon />
             </button>
@@ -3695,7 +3764,9 @@ function MasterSection<T extends { id: number }>({
     // 하위 행의 첫 칸 — 기본은 빈칸(회사명·로고 반복을 없앤다).
     subFirst?: (row: T) => ReactNode;
     // 헤더 우측 버튼. addNew() = 그룹 공통정보가 채워진 신규 등록 폼 열기.
-    actions?: (rows: T[], addNew: () => void) => ReactNode;
+    /** 헤더 우측 버튼. addNew() = 그룹 공통정보가 채워진 신규 등록 폼 열기.
+     *  nav = 같은 표의 회사 목록과 이 회사의 자리 — 회사 정보 창이 옆 회사로 건너뛰는 데 쓴다. */
+    actions?: (rows: T[], addNew: () => void, nav: { groups: T[][]; index: number }) => ReactNode;
     newRow?: (rows: T[]) => T;
     summary?: (groups: number, items: number) => string;
   };
@@ -3820,6 +3891,10 @@ function MasterSection<T extends { id: number }>({
       else groups.push({ key: k, rows: [r] });
     }
   }
+  // 회사 목록을 순서 그대로 — 2열로 잘라 그려도 '다음 회사'는 자른 조각이 아니라
+  // 전체 순서를 따라야 한다(회사 정보 창의 좌우 이동).
+  const groupRows = groups.map((g) => g.rows);
+  const groupIndex = new Map(groups.map((g, i) => [g.key, i]));
   // 검색 중에는 매칭된 담당자가 보여야 하므로 전부 펼친다.
   const expandAll = !!ql;
   const isOpen = (key: string) => expandAll || openKeys.has(key);
@@ -3901,7 +3976,8 @@ function MasterSection<T extends { id: number }>({
                       <td key={i} className={columns[i]?.[3]}>{node}</td>
                     ))}
                     <td className="ms-actcol" onClick={(e) => e.stopPropagation()}>
-                      {group?.actions?.(g.rows, () => openNewIn(g.rows))}
+                      {group?.actions?.(g.rows, () => openNewIn(g.rows),
+                        { groups: groupRows, index: groupIndex.get(g.key) ?? 0 })}
                     </td>
                   </tr>
                   {isOpen(g.key) ? g.rows.map((row) => dataRow(row, true)) : null}

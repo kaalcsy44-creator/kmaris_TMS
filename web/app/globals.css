@@ -9997,6 +9997,20 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 .cat-node-row:hover {
   background: #f4f7fc;
 }
+/* 앞뒤 회사로 건너뛰는 띠 — 어디로 가는지 이름을 달고 있다. 회사를 훑어볼 때 창을
+   닫았다 다시 여는 왕복을 없앤다(읽는 중에는 ←→ 키로도 넘어간다). */
+.co-nav {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.co-nav .btn {
+  max-width: 46%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 /* 회사 정보 읽기 화면 — 값을 확인하러 여는 자리라 입력칸이 아니라 그대로 읽히게 둔다.
    고칠 때만 아래 Edit 로 폼으로 넘어간다(저장이 회사 전 담당자에 닿으므로). */
 .company-read dl { margin: 0; }
