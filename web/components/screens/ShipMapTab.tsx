@@ -533,6 +533,12 @@ function Hinter({ hint }: { hint: NonNullable<Hint> }) {
  */
 function Peeker({ panel, onClose }: { panel: NonNullable<Panel>; onClose: () => void }) {
   const MAX = 8;
+  // 처음에는 여덟만 편다 — 스물셋이 통째로 들어오면 첫 화면이 목록에 잠긴다. 다만
+  // 접어 둔 나머지를 세어 보이기만 하고 펼 길이 없으면 그 수는 알림이 아니라 벽이다.
+  const [all, setAll] = useState(false);
+  // 다른 자리를 눌러 판이 바뀌면 다시 접는다(판마다 처음은 여덟이어야 한다).
+  useEffect(() => setAll(false), [panel]);
+  const shown = all ? panel.items : panel.items.slice(0, MAX);
   const rest = panel.items.length - MAX;
   // 화면 밖으로 나가지 않게 — 오른쪽·아래로 넘칠 자리면 반대편에 붙인다.
   const w = 420;
@@ -557,7 +563,7 @@ function Peeker({ panel, onClose }: { panel: NonNullable<Panel>; onClose: () => 
         <button type="button" className="ship-peek-x" onClick={onClose} aria-label="Close">×</button>
       </div>
       <ul>
-        {panel.items.slice(0, MAX).map((it) => (
+        {shown.map((it) => (
           <li key={it.item_id}>
             {/* 번호는 품목의 신원에 딸린 값이다 — 이 줄이 어느 건에서 나왔는가. 값(매입·
                 매출) 뒤에 두면 품명과 번호 사이에 금액 두 줄이 끼어, 무엇이 어느 건 것인지
@@ -591,7 +597,11 @@ function Peeker({ panel, onClose }: { panel: NonNullable<Panel>; onClose: () => 
           </li>
         ))}
       </ul>
-      {rest > 0 ? <div className="ship-peek-more">+{rest} more item(s)</div> : null}
+      {rest > 0 ? (
+        <button type="button" className="ship-peek-more" onClick={() => setAll((v) => !v)}>
+          {all ? "Show first 8" : `+${rest} more item(s)`}
+        </button>
+      ) : null}
       {/* 프로젝트에서 편 판이면 그 프로젝트로 가는 길을 남긴다 — 칩을 누르면 판이 뜨게
           되었으므로, 예전처럼 눌러서 바로 넘어가던 길이 여기 대신 서야 한다. */}
       {panel.href ? (

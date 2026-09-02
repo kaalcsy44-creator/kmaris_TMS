@@ -15328,7 +15328,21 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
-.ship-peek-more { flex: 0 0 auto; margin-top: 6px; font-size: 11px; color: var(--muted); }
+/* 접어 둔 나머지를 펴는 손잡이 — 세어 보이기만 하던 자리를 누를 수 있게 했다.
+   펴도 목록만 늘어나고 판은 그대로다(가운데가 구른다). */
+.ship-peek-more {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  margin-top: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: 11px;
+  font-weight: 600;
+  color: #2456a6;
+  cursor: pointer;
+}
+.ship-peek-more:hover { text-decoration: underline; }
 /* 판을 연 뒤 그 프로젝트로 넘어가는 길 — 칩을 누르면 판이 뜨게 되어, 바로 넘어가던
    길이 여기 대신 선다. */
 .ship-peek-go {
