@@ -122,7 +122,7 @@ type Hint = { text: string; x: number; y: number } | null;
  */
 type Panel = {
   title: React.ReactNode;
-  sub: string;
+  sub: React.ReactNode;
   items: ShipItem[];
   href?: string;
   x: number;
@@ -249,7 +249,7 @@ export default function ShipMapTab() {
    * 링크 위에 얹을 때는(프로젝트 칩) 기본 이동을 막되, 새 탭으로 열려는 손짓
    * (Ctrl·Cmd·Shift)은 건드리지 않고 그대로 흘려보낸다.
    */
-  const opens = (title: React.ReactNode, sub: string, items: ShipItem[], href?: string) => ({
+  const opens = (title: React.ReactNode, sub: React.ReactNode, items: ShipItem[], href?: string) => ({
     onClick: (e: React.MouseEvent) => {
       if (!items.length) return;
       if (e.metaKey || e.ctrlKey || e.shiftKey) return;
@@ -359,7 +359,7 @@ function Zone({
     onMouseEnter: (e: React.MouseEvent) => void;
     onMouseLeave: () => void;
   };
-  opens: (title: React.ReactNode, sub: string, items: ShipItem[], href?: string) => {
+  opens: (title: React.ReactNode, sub: React.ReactNode, items: ShipItem[], href?: string) => {
     onClick: (e: React.MouseEvent) => void;
   };
 }) {
@@ -401,8 +401,12 @@ function Zone({
                 {...spot(dealLabel(deal))}
                 {...opens(
                   <ProjectNo value={deal.project_no || deal.rfq_no} />,
-                  [[deal.customer, deal.vessel].filter(Boolean).join(" · "),
-                   `${items.length} item(s) on ${cat.name}`].filter(Boolean).join(" — "),
+                  <>
+                    {/* 누구의 무슨 배인가와, 여기 몇 건이 걸렸는가는 다른 이야기다 —
+                        한 줄에 붙여 놓으면 긴 고객명 뒤에 숫자가 묻힌다. */}
+                    <span>{[deal.customer, deal.vessel].filter(Boolean).join(" · ")}</span>
+                    <span>— {items.length} item(s) on {cat.name}</span>
+                  </>,
                   items,
                   href,
                 )}
@@ -496,8 +500,12 @@ function Peeker({ panel, onClose }: { panel: NonNullable<Panel>; onClose: () => 
   const left = typeof window !== "undefined" && panel.x + w + 24 > window.innerWidth
     ? Math.max(12, panel.x - w - 16)
     : panel.x + 16;
+  // 판이 화면 밖으로 흘러나가면 아래가 잘린다 — 앞서 품목 셋째 줄과 프로젝트로 가는
+  // 길이 그렇게 사라졌다. CSS 의 max-height 와 같은 값으로 위치를 잡아 바닥이 늘 화면
+  // 안에 서게 한다(넘치는 것은 목록이 스스로 구른다).
+  const maxH = typeof window !== "undefined" ? Math.min(window.innerHeight * 0.72, 460) : 460;
   const top = typeof window !== "undefined"
-    ? Math.min(Math.max(12, panel.y - 40), Math.max(12, window.innerHeight - 360))
+    ? Math.min(Math.max(12, panel.y - 40), Math.max(12, window.innerHeight - maxH - 12))
     : panel.y;
   return (
     <>

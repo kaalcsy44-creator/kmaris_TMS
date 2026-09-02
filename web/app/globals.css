@@ -15202,29 +15202,49 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 
 /* 마우스를 따라 펴지는 내역 — 표가 아니라 쪽지다. 마우스가 지나는 길을 막지 않도록
    자기 자신은 마우스를 먹지 않는다(쪽지 위에 올라가 붙잡을 일이 없다). */
+/* 판은 머리(제목)와 바닥(프로젝트로 가는 길)을 붙박이로 두고 가운데 목록만 구른다.
+   앞서는 통째로 max-height 에 잘려 품목 셋째 줄부터 아래가 통째로 사라졌다 — 무엇이
+   더 있는지도, 프로젝트로 가는 길도 보이지 않았다. 높이 값은 ShipMapTab 의 maxH 와
+   같아야 한다(자리 계산이 그 값으로 바닥을 화면 안에 붙든다). */
 .ship-peek {
   position: fixed;
   z-index: 61;
+  display: flex;
+  flex-direction: column;
   background: #fff;
   border: 1px solid var(--line-strong);
   border-radius: 10px;
   box-shadow: 0 10px 28px rgba(20, 40, 70, 0.18);
   padding: 10px 12px;
-  max-height: 340px;
-  overflow: hidden;
+  max-height: min(72vh, 460px);
 }
 .ship-peek-hd {
+  flex: 0 0 auto;
   display: flex;
-  align-items: baseline;
-  gap: 8px;
+  align-items: flex-start;
+  gap: 12px;
   padding-bottom: 6px;
   margin-bottom: 6px;
   border-bottom: 1px solid var(--line);
 }
+/* 번호와 날짜를 위아래로 — 이름(P-022)이 먼저 읽히고 언제 들어온 건인지가 그 밑에
+   붙는다. 품목표의 좁은 칸에서 쓰던 것과 같은 모양이다. */
+.ship-peek-hd .pjno { display: flex; flex-direction: column; line-height: 1.3; }
+.ship-peek-hd .pjno-date { margin-left: 0; }
 /* 제목은 줄이지 않는다 — 옆의 부제가 길면 flex 가 제목부터 줄여 "P-" / "013(260721)"
    로 접혔다. 이름이 두 줄로 갈리면 무엇의 판인지가 한눈에 안 들어온다. */
-.ship-peek-hd b { font-size: 13px; flex: 0 0 auto; }
-.ship-peek-hd span { font-size: 11px; color: var(--muted); flex: 1 1 auto; }
+.ship-peek-hd b { font-size: 13px; flex: 0 0 auto; color: var(--ink); }
+.ship-peek-hd > span {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--muted);
+  padding-top: 1px;
+}
 .ship-peek-x {
   flex: none;
   border: 0;
@@ -15236,7 +15256,16 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
   cursor: pointer;
 }
 .ship-peek-x:hover { color: var(--ink); }
-.ship-peek ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+.ship-peek ul {
+  list-style: none;
+  margin: 0;
+  padding: 0 2px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  flex: 1 1 auto;
+  overflow-y: auto;
+}
 .ship-peek li { border-left: 2px solid #dbe6f3; padding-left: 8px; }
 .ship-peek-t { display: flex; gap: 6px; align-items: baseline; font-size: 12px; }
 .ship-peek-t code {
@@ -15275,11 +15304,12 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
-.ship-peek-more { margin-top: 6px; font-size: 11px; color: var(--muted); }
+.ship-peek-more { flex: 0 0 auto; margin-top: 6px; font-size: 11px; color: var(--muted); }
 /* 판을 연 뒤 그 프로젝트로 넘어가는 길 — 칩을 누르면 판이 뜨게 되어, 바로 넘어가던
    길이 여기 대신 선다. */
 .ship-peek-go {
-  display: inline-block;
+  flex: 0 0 auto;
+  align-self: flex-start;
   margin-top: 8px;
   font-size: 11.5px;
   font-weight: 700;
