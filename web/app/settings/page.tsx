@@ -2541,24 +2541,29 @@ export function CategoriesTab() {
   // Category 열 우측 고정(sticky)은 그 열이 맨 끝일 때만 — 순서를 바꿔 가운데로 오면
   // 오른쪽 열들을 덮어버리므로 고정을 끈다.
   const catSticky = shownCols[shownCols.length - 1]?.key === "category";
-  // 접어 둔 분류(노드 id). 나무가 일곱 뿌리에 3층이라 다 펴 두면 화면 몇 번을 내려야
-  // 아래쪽 계통에 닿는다. 무엇을 접어 뒀는지는 브라우저에 남긴다 — 탭을 옮겼다 오거나
-  // 새로 고칠 때마다 도로 펴져 있으면 접는 일이 매번 처음부터가 된다.
-  const [collapsed, setCollapsed] = useState<Set<number>>(() => {
+  // 펴 둔 분류(노드 id). 담는 것이 '접은 것'이 아니라 '편 것'인 데는 이유가 있다 —
+  // 처음 열었을 때는 전부 접혀 있어야 하는데, 그 시점에는 분류가 아직 도착하지 않아
+  // 접을 id 목록을 만들 수가 없다. 비어 있는 것이 곧 '전부 접힘'이 되게 뒤집어 둔다.
+  // 나무는 일곱 뿌리에 3층이라 다 펴 두면 화면 몇 번을 내려야 아래쪽 계통에 닿는다.
+  // 무엇을 펴 뒀는지는 브라우저에 남긴다(폭 조절 treeW 와 같은 자리) — 새로 고칠 때마다
+  // 도로 접혀 있으면 펴는 일이 매번 처음부터가 된다.
+  const [expanded, setExpanded] = useState<Set<number>>(() => {
     if (typeof window === "undefined") return new Set();
     try {
-      const raw = window.localStorage.getItem("ktms.catCollapsed");
+      // 뜻이 뒤집힌 옛 키는 남겨 두면 헷갈리기만 하므로 치운다.
+      window.localStorage.removeItem("ktms.catCollapsed");
+      const raw = window.localStorage.getItem("ktms.catExpanded");
       return new Set<number>(raw ? (JSON.parse(raw) as number[]) : []);
     } catch {
       return new Set();
     }
   });
   function toggleNode(id: number) {
-    setCollapsed((prev) => {
+    setExpanded((prev) => {
       const next = new Set(prev);
       if (!next.delete(id)) next.add(id);
       try {
-        window.localStorage.setItem("ktms.catCollapsed", JSON.stringify([...next]));
+        window.localStorage.setItem("ktms.catExpanded", JSON.stringify([...next]));
       } catch {
         /* 저장을 못 해도 이번 화면에서 접고 펴는 것은 그대로 된다. */
       }
@@ -2933,7 +2938,7 @@ export function CategoriesTab() {
     const isFirst = pos <= 0;
     const isLast = pos >= sibs.length - 1;
     const canHaveKids = node.level < 3;
-    const isCollapsed = collapsed.has(node.id);
+    const isOpen = expanded.has(node.id);
     return (
       <li className={`cat-node cat-l${node.level}${node.active ? "" : " off"}`}>
         <div
@@ -2949,10 +2954,10 @@ export function CategoriesTab() {
               type="button"
               className="cat-caret"
               onClick={() => toggleNode(node.id)}
-              aria-expanded={!isCollapsed}
-              title={isCollapsed ? "Expand" : "Collapse"}
+              aria-expanded={isOpen}
+              title={isOpen ? "Collapse" : "Expand"}
             >
-              {isCollapsed ? "▶" : "▼"}
+              {isOpen ? "▼" : "▶"}
             </button>
           ) : (
             <span className="cat-caret cat-caret--none" aria-hidden />
@@ -2985,7 +2990,7 @@ export function CategoriesTab() {
             ) : null}
           </span>
         </div>
-        {canHaveKids && !isCollapsed ? (
+        {canHaveKids && isOpen ? (
           // 하위 그룹(세로선). 자식들 + 맨 끝에 '+ 하위레벨 추가' 버튼 1개.
           <ul className="cat-children">
             {kids.map((k) => <NodeRow key={k.id} node={k} />)}
