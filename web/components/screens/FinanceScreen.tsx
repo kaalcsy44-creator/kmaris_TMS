@@ -22,6 +22,7 @@ import {
   deleteFinanceIncome,
   receiveFinanceIncome,
   fetchVendors,
+  fetchPipeline,
 } from "@/lib/api";
 import { useCachedData, invalidateCache } from "@/lib/useCachedData";
 import type {
@@ -70,6 +71,9 @@ import {
 const CATEGORIES = ["거래선지급", "컨설팅비", "임차료", "급여", "공과금", "수수료", "세금", "기타"];
 /** 소개 수수료 분류 — 금액이 프로젝트 매출에서 계산되는 유일한 지급이라 이름을 상수로 둔다. */
 const CONSULTING = "컨설팅비";
+/** 거래선 지급 — 벤더에게 나가는 돈. 딜을 지목하면 그 딜의 매입 원가로 집계된다
+ *  (벤더 P/O 없이 나간 지급. 서버의 _is_deal_purchase 와 같은 규약). */
+const VENDOR_PAY = "거래선지급";
 const RECURRENCE_LABEL: Record<string, string> = {
   none: "One-time",
   monthly: "Monthly",
@@ -2399,6 +2403,20 @@ function PayableForm({
     fetchFinanceConsulting
   );
   const isConsulting = form.category === CONSULTING;
+  const isVendorPay = form.category === VENDOR_PAY;
+  // 거래선지급을 딜에 걸 때 고르는 목록 — 소개자가 걸린 딜만 담는 consulting 과 달리
+  // 모든 딜이 후보다(발주서 없이 협력사에 바로 지급하는 건은 업무 타입을 가리지 않는다).
+  const { data: pipeline } = useCachedData("pipeline", () => fetchPipeline());
+  const dealOptions = useMemo(
+    () =>
+      [...(pipeline?.rows ?? [])]
+        .sort((a, b) => (b.project_no || "").localeCompare(a.project_no || ""))
+        .map((r) => ({
+          rfqId: r.rfq_id,
+          label: `${r.project_no || r.kmaris_rfq_no || `#${r.rfq_id}`} · ${r.customer}${r.project_title ? ` · ${r.project_title}` : ""}`,
+        })),
+    [pipeline]
+  );
 
   // 이 지급이 매인 딜의 매출 청구서 — 우리 쪽 두 날짜가 무엇에 기대고 있는지 옆에
   // 세워 둔다. 고쳐 쓰라는 값이 아니라 견주라는 값이다: 소개비의 기일은 저쪽 청구가
@@ -2502,9 +2520,12 @@ function PayableForm({
   /** 분류·통화를 바꿨을 때 — 직접 입력이 아니면 그쪽 기본율(급여·외화는 0)로 따라간다.
    *  세율 선택도 함께 옮겨 화면에 보이는 값과 실제 계산이 어긋나지 않게 한다. */
   function applyCategoryOrCurrency(next: FinancePayableSave) {
-    // 수수료가 아닌 분류로 옮기면 프로젝트 연결은 뜻을 잃는다 — 남겨 두면 임차료가
-    // 어느 딜에 매인 것처럼 저장된다.
-    if (next.category !== CONSULTING) next = { ...next, rfq_id: null };
+    // 프로젝트 연결이 뜻을 갖는 분류는 둘뿐이다 — 소개 수수료(어느 딜의 매출에서 나왔나)와
+    // 거래선지급(어느 딜의 매입인가). 그 밖으로 옮기면 연결을 지운다: 남겨 두면 임차료가
+    // 어느 딜에 매인 것처럼 저장되고, 손익이 그것을 그 딜의 원가로 센다.
+    if (next.category !== CONSULTING && next.category !== VENDOR_PAY) {
+      next = { ...next, rfq_id: null };
+    }
     let vatRate: number | null = null;
     let out = next;
     if (vatChoice !== "custom") {
@@ -2591,6 +2612,27 @@ function PayableForm({
             </select>
           </label>
         )}
+        {/* 벤더 P/O 없이 나간 지급 — 딜을 지목하면 그 딜의 매입 원가가 된다. 비워 두면
+            지금까지처럼 합계 밖(어느 P/O 의 매입을 손으로 한 번 더 적은 것으로 본다). */}
+        {isVendorPay ? (
+          <label className="form-field">
+            <span>Project (optional)</span>
+            <select
+              value={form.rfq_id ?? ""}
+              onChange={(e) => set("rfq_id", e.target.value ? Number(e.target.value) : null)}
+            >
+              <option value="">— Not tied to a deal —</option>
+              {dealOptions.map((d) => (
+                <option key={d.rfqId} value={d.rfqId}>{d.label}</option>
+              ))}
+            </select>
+            <span className="hint-inline">
+              {form.rfq_id
+                ? "Counted as this deal's purchase cost in Profit and Closing · VAT — use it for money paid without a vendor P/O."
+                : "Leave empty if a vendor P/O already carries this cost (stage 9 AP), or it would be counted twice."}
+            </span>
+          </label>
+        ) : null}
         <label className="form-field">
           <span>{isConsulting ? "Consultant" : "Vendor / payee"}</span>
           <input

@@ -1179,11 +1179,21 @@ export type FinancePayable = {
   rfq_id?: number;
 };
 
+/** 한 딜에 직접 걸린 지급(벤더 P/O 없는 매입) — 프로젝트 9~11단계 Payable 탭이 읽는다. */
+export type DealPayables = {
+  rfq_id: number;
+  project_no: string;
+  /** 이 오더의 벤더 P/O 수 — 0 이 아니면 같은 원가를 두 번 세고 있을 수 있다. */
+  ap_count: number;
+  rows: FinancePayable[];
+};
+
 export type FinancePayableSave = {
   category?: string;
   counterparty?: string;
   vendor_id?: number | null;
-  /** 이 지급이 걸린 프로젝트(RFQ) — 컨설팅 수수료가 어느 딜의 매출에서 나왔는지. */
+  /** 이 지급이 걸린 프로젝트(RFQ). 컨설팅 수수료는 어느 딜의 매출에서 나왔는지,
+   *  거래선지급은 어느 딜의 매입 원가인지(벤더 P/O 없이 나간 지급). */
   rfq_id?: number | null;
   description?: string;
   amount?: number;      // 지급 총액(공급가액 + 부가세)

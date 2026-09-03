@@ -16,10 +16,16 @@ import {
   createApRecord,
   updateApRecord,
   deleteApRecord,
+  fetchDealPayables,
+  createFinancePayable,
+  updateFinancePayable,
+  deleteFinancePayable,
+  payFinancePayable,
+  fetchVendors,
 } from "@/lib/api";
 import { can, canEditDeal, editBlockReason } from "@/lib/auth";
 import { useCachedData, invalidateCache } from "@/lib/useCachedData";
-import type { ApByOrderRow, ArRow, DocCharges, DocumentDetail, DocumentWorkItem, PoWorkOptions, TaxInvoiceItem } from "@/lib/types";
+import type { ApByOrderRow, ArRow, DocCharges, DocumentDetail, DocumentWorkItem, FinancePayable, PoWorkOptions, TaxInvoiceItem } from "@/lib/types";
 import { createPortal } from "react-dom";
 import CurrencyToggle from "@/components/common/CurrencyToggle";
 import {
@@ -278,10 +284,16 @@ function ApSection({
 
   if (error && !data) return <div className="state error">API error: {error.message}</div>;
   if (!data) return <div className="state">Loading…</div>;
+  // 벤더 P/O 가 없어도 막다른 길이 아니다 — 발주서를 끊지 않고 협력사에 바로 보낸 돈이
+  // 그대로 이 딜의 매입이라, 아래 패널에서 그것을 등록한다(서비스 딜이 대개 그렇다).
   if (poRows.length === 0) {
     return (
-      <div className="project-work-empty">
-        No vendor P/O on this order yet — send the Vendor P/O (stage 6) first. Vendor bills are recorded per P/O.
+      <div>
+        <div className="project-work-empty">
+          No vendor P/O on this order — vendor bills are recorded per P/O, so there is nothing to bill here.
+          Money paid without a P/O goes below.
+        </div>
+        <DirectPaymentPanel orderId={orderId} onChanged={reload} />
       </div>
     );
   }
@@ -301,6 +313,274 @@ function ApSection({
         </select>
       </div>
       <ApAddForm key={current.po_id} row={current} orderId={orderId} stage={stage} onChanged={reload} />
+      <DirectPaymentPanel orderId={orderId} onChanged={reload} />
+    </div>
+  );
+}
+
+/** 이 딜에 직접 걸린 지급 — 벤더 P/O 없이 나간 매입.
+ *
+ * AP 레코드는 벤더 P/O 1건당 1건이라 P/O 가 없으면 만들 자리조차 없다. 그런데 서비스 딜은
+ * 발주서를 끊지 않고 협력사에 바로 지급하는 일이 흔하고(현장 작업·기술자 파견처럼 살 물건이
+ * 없는 건), 그 돈은 어디에도 안 잡힌 채 매출만 남아 딜이 원가 없이 통째로 이익으로 보였다.
+ *
+ * 여기 등록한 건은 지급대장(Finance → Outflow)의 '거래선지급 + 이 딜' 로 서고, 서버가 그것을
+ * 이 딜의 매입 원가로 센다(_is_deal_purchase) — 손익의 매입 줄, 결산의 매입·마진, 현금흐름의
+ * 지급 예정·실적까지 벤더 청구(AP)와 같은 자리에 놓인다.
+ */
+function DirectPaymentPanel({ orderId, onChanged }: { orderId: number; onChanged: () => void }) {
+  const cacheKey = `finance:deal-payables:${orderId}`;
+  const { data, refresh } = useCachedData(cacheKey, () => fetchDealPayables(orderId));
+  const { data: vendors } = useCachedData("settings:vendors-opt", fetchVendors);
+  const [editing, setEditing] = useState<FinancePayable | null>(null);
+  const [adding, setAdding] = useState(false);
+  const canEdit = can("ar", "edit");
+
+  function reload() {
+    invalidateCache("finance:summary");
+    invalidateCache("finance:payables");
+    invalidateCache("finance:calendar");
+    onChanged();
+    setAdding(false);
+    setEditing(null);
+    return refresh();
+  }
+
+  if (!data) return null;
+  const rows = data.rows;
+  const total = rows.reduce((a, r) => a + (r.amount || 0), 0);
+  const cur = rows[0]?.currency || "KRW";
+  // 통화가 섞이면 한 숫자로 더할 수 없다 — 그때는 합계를 접는다(줄마다 제 통화로 읽는다).
+  const oneCurrency = rows.every((r) => (r.currency || "KRW") === cur);
+
+  return (
+    <div className="ar-milestone">
+      <div className="form-section-title">Direct payment (no vendor P/O)</div>
+      <p className="hint-inline" style={{ display: "block", margin: "0 0 8px" }}>
+        Money paid on this deal without a vendor P/O — a subcontractor invoice on a service job, for instance.
+        It is booked in Finance → Outflow as a vendor payment tied to this deal, and counts as this deal&apos;s
+        purchase cost in Profit, Closing · VAT and Cash Flow.
+        {data.ap_count > 0 ? (
+          <>
+            {" "}This order also has {data.ap_count} vendor P/O{data.ap_count > 1 ? "s" : ""} — only add costs here
+            that no P/O already carries, or they are counted twice.
+          </>
+        ) : null}
+      </p>
+
+      {rows.length === 0 ? (
+        <div className="hint-inline" style={{ display: "block", marginBottom: 8 }}>Nothing recorded yet.</div>
+      ) : (
+        <table className="mini">
+          <thead>
+            <tr>
+              <th>Payee</th><th>Description</th><th className="num">Amount</th>
+              <th>Due</th><th>Paid</th><th />
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.id}>
+                <td>{r.counterparty || "—"}</td>
+                <td>{r.description || "—"}</td>
+                <td className="num">{(r.amount || 0).toLocaleString()} {r.currency}</td>
+                <td>{r.due_date || "—"}</td>
+                <td>
+                  <span className={`ar-badge${r.paid ? "" : " overdue"}`}>
+                    {r.paid ? `Paid${r.paid_date ? ` (${r.paid_date})` : ""}` : "Unpaid"}
+                  </span>
+                </td>
+                <td className="num">
+                  {canEdit ? (
+                    <button type="button" className="btn sm" onClick={() => { setEditing(r); setAdding(false); }}>
+                      Edit
+                    </button>
+                  ) : null}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+          {rows.length > 1 && oneCurrency ? (
+            <tfoot>
+              <tr className="foot-grand">
+                <td /><td className="total-label">Total</td>
+                <td className="num total-value">{total.toLocaleString()} {cur}</td>
+                <td /><td /><td />
+              </tr>
+            </tfoot>
+          ) : null}
+        </table>
+      )}
+
+      {!data.rfq_id ? (
+        <div className="hint-inline" style={{ display: "block", marginTop: 8 }}>
+          This order is not linked to a project yet, so a payment cannot be tied to a deal.
+        </div>
+      ) : adding || editing ? (
+        <DirectPaymentForm
+          key={editing?.id ?? "new"}
+          rfqId={data.rfq_id}
+          row={editing}
+          vendors={vendors ?? []}
+          onDone={reload}
+          onCancel={() => { setAdding(false); setEditing(null); }}
+        />
+      ) : canEdit ? (
+        <button type="button" className="btn sm" onClick={() => setAdding(true)}>Add a payment</button>
+      ) : null}
+    </div>
+  );
+}
+
+type DirectForm = {
+  vendor_id: number | null;
+  counterparty: string;
+  description: string;
+  supply: string;
+  vat: string;
+  currency: string;
+  bill_date: string;
+  due_date: string;
+  paid: boolean;
+  paid_date: string;
+};
+
+/** 딜 직결 지급 1건의 등록·수정 폼. 저장은 지급대장(FinancePayable)으로 나간다 —
+ *  분류는 '거래선지급' 고정, 프로젝트는 이 딜 고정이라 화면에 묻지 않는다. */
+function DirectPaymentForm({
+  rfqId,
+  row,
+  vendors,
+  onDone,
+  onCancel,
+}: {
+  rfqId: number;
+  row: FinancePayable | null;
+  vendors: { id: number; name: string }[];
+  onDone: () => void;
+  onCancel: () => void;
+}) {
+  const [f, setF] = useState<DirectForm>(() => ({
+    vendor_id: row?.vendor_id ?? null,
+    counterparty: row?.counterparty || "",
+    description: row?.description || "",
+    // 저장값은 총액과 그 안의 부가세다 — 폼은 공급가액으로 받는다(총액 = 공급가액 + 부가세).
+    supply: String(Math.round(((row?.amount || 0) - (row?.vat_amount || 0)) * 100) / 100 || ""),
+    vat: String(row?.vat_amount || ""),
+    currency: row?.currency || "KRW",
+    bill_date: row?.bill_date || "",
+    due_date: row?.due_date || today(),
+    paid: !!row?.paid,
+    paid_date: row?.paid_date || "",
+  }));
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const set = <K extends keyof DirectForm>(k: K, v: DirectForm[K]) => setF((p) => ({ ...p, [k]: v }));
+  const supply = num(f.supply);
+  const vat = num(f.vat);
+
+  async function save() {
+    if (!f.counterparty.trim() && !f.description.trim()) {
+      setErr("Enter a payee or a description.");
+      return;
+    }
+    if (!f.due_date) {
+      setErr("Enter a due date.");
+      return;
+    }
+    setBusy(true);
+    setErr(null);
+    try {
+      const body = {
+        category: "거래선지급",
+        rfq_id: rfqId,
+        vendor_id: f.vendor_id,
+        counterparty: f.counterparty.trim(),
+        description: f.description.trim(),
+        amount: Math.round((supply + vat) * 100) / 100,
+        vat_amount: vat,
+        currency: f.currency,
+        bill_date: f.bill_date,
+        due_date: f.due_date,
+        recurrence: "none",
+      };
+      const id = row ? (await updateFinancePayable(row.id, body)).id : (await createFinancePayable(body)).id;
+      // 납부 여부는 저장 본문이 아니라 전용 엔드포인트로 옮긴다(지급대장과 같은 규약) —
+      // 실제 납부일이 예정일과 다를 수 있어 그 날짜를 함께 넘긴다.
+      if (f.paid !== !!row?.paid || (f.paid && (f.paid_date || f.due_date) !== (row?.paid_date || ""))) {
+        await payFinancePayable(id, f.paid, undefined, f.paid ? (f.paid_date || f.due_date) : undefined);
+      }
+      onDone();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove() {
+    if (!row) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      await deleteFinancePayable(row.id);
+      onDone();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Delete failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div style={{ marginTop: 10 }}>
+      <div className="form-grid">
+        <label className="form-field">
+          <span>Vendor link (optional)</span>
+          <select
+            value={f.vendor_id ?? ""}
+            onChange={(e) => {
+              const id = e.target.value ? Number(e.target.value) : null;
+              const v = vendors.find((x) => x.id === id);
+              setF((p) => ({ ...p, vendor_id: id, counterparty: v ? v.name : p.counterparty }));
+            }}
+          >
+            <option value="">— Manual entry —</option>
+            {vendors.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+          </select>
+        </label>
+        <Field label="Payee" value={f.counterparty} onChange={(v) => set("counterparty", v)} />
+        <Field label="Description" value={f.description} onChange={(v) => set("description", v)} />
+        <label className="form-field">
+          <span>Currency</span>
+          <select value={f.currency} onChange={(e) => set("currency", e.target.value)}>
+            <option value="KRW">KRW</option>
+            <option value="USD">USD</option>
+          </select>
+        </label>
+        <MoneyField label="Supply value" value={f.supply} onChange={(v) => set("supply", v)} />
+        <MoneyField label="VAT" value={f.vat} onChange={(v) => set("vat", v)} />
+        <Field label="Bill date" value={f.bill_date} onChange={(v) => set("bill_date", v)} type="date" />
+        <Field label="Due date" value={f.due_date} onChange={(v) => set("due_date", v)} type="date" />
+      </div>
+      <div className="milestone-row" style={{ marginTop: 8 }}>
+        <label className="check-chip" style={{ cursor: "pointer" }}>
+          <input type="checkbox" checked={f.paid} onChange={(e) => set("paid", e.target.checked)} /> Paid
+        </label>
+        {f.paid ? (
+          <Field label="Paid date" value={f.paid_date || f.due_date} onChange={(v) => set("paid_date", v)} type="date" />
+        ) : null}
+        <span className="hint-inline">
+          Total {(Math.round((supply + vat) * 100) / 100).toLocaleString()} {f.currency}
+          {vat ? ` (VAT ${vat.toLocaleString()} included)` : ""}
+        </span>
+      </div>
+      <div className="form-actions">
+        {err ? <span className="action-err">{err}</span> : null}
+        <button className="btn primary" disabled={busy} onClick={save}>{busy ? "Working…" : "Save"}</button>
+        <button className="btn" disabled={busy} onClick={onCancel}>Cancel</button>
+        {row ? <button className="btn danger" disabled={busy} onClick={remove}>Delete</button> : null}
+      </div>
     </div>
   );
 }

@@ -161,6 +161,27 @@ def _vat_within(amount: float | None, vat: float | None) -> float:
     return min(v, abs(total)) if total else 0.0
 
 
+# 지급대장의 '거래선지급' — 벤더에게 나가는 돈. 벤더 P/O 를 끊은 건은 매입 청구(APRecord)로
+# 잡히므로, 여기 손으로 등록되는 것은 대개 그 AP 와 같은 돈을 한 번 더 적은 것이다. 그래서
+# 손익·결산의 매입 합계 밖에 세워 왔다.
+VENDOR_CATEGORY = "거래선지급"
+
+
+def _is_deal_purchase(p) -> bool:
+    """이 지급이 **딜의 매입 원가 그 자체**인가 — 벤더 P/O 없이 나간 돈.
+
+    서비스 딜은 발주서를 끊지 않고 협력사에 바로 지급하는 일이 흔하다(현장 작업·기술자
+    파견처럼 살 물건이 없는 건). 그러면 벤더 P/O 가 없어 AP 레코드를 만들 자리조차 없고
+    (AP 는 P/O 1건당 1건이다), 그 지급은 어느 집계에도 안 잡힌 채 매출만 남아 딜이 원가
+    없이 통째로 이익으로 보인다.
+
+    딜을 지목해 등록한 '거래선지급'은 그 구멍을 메우려고 사람이 명시적으로 "이건 이 딜의
+    매입이다" 라고 적은 것이므로, AP 와 나란히 매입 원가로 센다. 딜을 지목하지 않은 건은
+    지금까지처럼 합계 밖이다 — 그쪽은 AP 와 겹칠지 아닐지 알 도리가 없다.
+    """
+    return (p.category or "") == VENDOR_CATEGORY and bool(getattr(p, "rfq_id", None))
+
+
 def _today_usd_krw() -> dict:
     """오늘자 USD 매매기준율(수출입은행). 실패하면 고정환율로 폴백한다."""
     rate, used = get_deal_base_rate(date.today().isoformat(), "USD")
@@ -947,6 +968,55 @@ def finance_payables():
         s.close()
 
 
+@app.get("/api/admin/finance/deal-payables/{order_id}", dependencies=[Depends(require_token)])
+def finance_deal_payables(order_id: int):
+    """이 오더가 속한 딜에 직접 걸린 지급 — 벤더 P/O 없이 나간 매입.
+
+    프로젝트 9~11단계의 Payable 탭이 쓴다. 벤더 P/O 를 끊은 매입은 P/O 단위 AP 레코드로
+    잡히지만(ap_by_order), 발주서 없이 협력사에 바로 보낸 돈은 걸어 둘 P/O 가 없다. 그런
+    지급은 지급대장에 '거래선지급 + 이 딜' 로 등록되며, 여기서 그 목록을 돌려준다.
+
+    ap_count 는 이 오더의 벤더 P/O 수다 — 0 이 아니면 같은 원가를 P/O 쪽에도 적어 두 번
+    세고 있을 수 있어, 화면이 그 사실을 알릴 수 있어야 한다.
+    """
+    s = get_session()
+    try:
+        order = s.query(Order).filter_by(id=order_id).first()
+        if not order:
+            raise HTTPException(status_code=404, detail="Order not found.")
+        rfq_id = getattr(order, "rfq_id", None)
+        if not rfq_id:
+            qid = getattr(order, "quotation_id", None) or 0
+            q = s.query(Quotation).filter_by(id=qid).first() if qid else None
+            rfq_id = getattr(q, "rfq_id", None) or 0
+        vendor_names = {v.id: v.name for v in s.query(Vendor).all()}
+        user_names = {u.id: u.username for u in s.query(User).all()}
+        rows = []
+        if rfq_id:
+            today_str = date.today().isoformat()
+            linked = (s.query(FinancePayable)
+                       .filter(FinancePayable.rfq_id == rfq_id,
+                               FinancePayable.category == VENDOR_CATEGORY)
+                       .order_by(FinancePayable.due_date, FinancePayable.id).all())
+            for p in linked:
+                row = {**_finance_payable_row(p, vendor_names, user_names), "source": "manual"}
+                settled = (row["paid"] if row["recurrence"] == "none"
+                           else row["due_date"] in row["paid_dates"])
+                row["invoice_amount"] = row["amount"]
+                row["paid_amount"] = row["amount"] if settled else 0.0
+                row["outstanding"] = 0.0 if settled else row["amount"]
+                row["overdue"] = _payable_overdue(p, settled, today_str)
+                rows.append(row)
+        return {
+            "rfq_id": rfq_id or 0,
+            "project_no": _project_no_map(s).get(rfq_id or 0, ""),
+            "ap_count": s.query(PurchaseOrder).filter_by(order_id=order_id).count(),
+            "rows": rows,
+        }
+    finally:
+        s.close()
+
+
 @app.post("/api/admin/finance/payables", dependencies=[Depends(require_token)])
 def create_finance_payable(body: FinancePayableIn, user: dict = Depends(get_current_user)):
     if not (body.description or "").strip() and not (body.counterparty or "").strip():
@@ -1166,6 +1236,8 @@ def finance_closing(start: str = "", end: str = "", year: int = 0):
     매출세액 0으로 본다.
     프로젝트 매입세액은 내수 매입 원가의 10% 로 추정(매입 세액 별도 저장이 없음)하고,
     기타 지출은 등록 시 공급가액과 나눠 받은 부가세를 그대로 매입세액에 더한다.
+    매입은 벤더 청구(AP)와 **딜을 지목해 등록한 거래선지급**을 함께 센다 — 후자는 벤더 P/O
+    없이 나간 지급이라 AP 로 만들 자리가 없는 원가다(_is_deal_purchase).
     year 를 주면 그 해 12개월 매출/매입 추이(KRW)도 반환한다.
     """
     try:
@@ -1269,7 +1341,13 @@ def finance_closing(start: str = "", end: str = "", year: int = 0):
         other_count = 0
         for p in s.query(FinancePayable).all():
             vat = float(getattr(p, "vat_amount", None) or 0.0)
-            if vat <= 0:
+            # 딜을 지목한 거래선지급은 기타 지출이 아니라 그 딜의 매입 원가다 — 벤더 P/O 가
+            # 없어 AP 를 만들 자리가 없었던 지급이라, 여기서 매입에 넣지 않으면 마진에서
+            # 통째로 빠진다(_is_deal_purchase).
+            deal_purchase = _is_deal_purchase(p)
+            # 부가세가 없는 건은 매입세액에 보탤 것이 없어 건너뛴다(급여·면세). 딜의 매입은
+            # 예외다: 영세율 지급은 세액이 0이어도 원가는 그대로 서야 한다.
+            if vat <= 0 and not deal_purchase:
                 continue
             supply = float(p.amount or 0.0) - vat
             cur = p.currency or "KRW"
@@ -1285,13 +1363,22 @@ def finance_closing(start: str = "", end: str = "", year: int = 0):
             # 회차마다 그 달의 환율로 옮긴다 — 여러 달에 걸친 반복 외화 건이 한 환율로
             # 뭉치지 않게(원화 건은 어느 쪽이든 같은 값이라 달라지는 것이 없다).
             for occ in hits:
-                other_vat += _payable_krw(p, vat, occ[:7], fx_seen)
-                other_supply += _payable_krw(p, supply, occ[:7], fx_seen)
-                other_count += 1
+                vat_krw = _payable_krw(p, vat, occ[:7], fx_seen)
+                supply_krw = _payable_krw(p, supply, occ[:7], fx_seen)
+                if deal_purchase:
+                    purchase_cost += supply_krw
+                    purchase_vat += vat_krw
+                    purchase_count += 1
+                else:
+                    other_vat += vat_krw
+                    other_supply += supply_krw
+                    other_count += 1
             # 월별 표는 고른 기간이 아니라 그 해 열두 달을 읽는다 — 기간이 9월 한 달이어도
             # 표는 1~12월을 채워야 하므로 같은 항목을 연 단위로 한 번 더 편다.
             for occ in year_hits:
                 monthly_input_vat[int(occ[5:7]) - 1] += _payable_krw(p, vat, occ[:7], fx_seen)
+                if deal_purchase:
+                    monthly_purchase[int(occ[5:7]) - 1] += _payable_krw(p, supply, occ[:7], fx_seen)
         input_vat = purchase_vat + other_vat
 
         by_customer = [
@@ -1595,7 +1682,9 @@ def finance_profit(year: int = 0, detail: str = ""):
       이익이 부풀고 낸 달이 갑자기 적자로 보이던 것을 없앤다. 그래서 등록된 지급 건은
       같은 의무를 또 세지 않도록 합계 밖(consulting_booked)에 정산분으로 따로 둔다.
     - 운영비: 수동 지급대장의 공급가액(부가세 제외 — 매입세액은 세금 줄에서 환급된다).
-      '거래선지급' 분류는 벤더 P/O 원가와 겹치므로 합계 밖에 따로 세운다.
+      '거래선지급' 분류는 벤더 P/O 원가와 겹치므로 합계 밖에 따로 세운다. 다만 **딜을 지목해
+      등록한** 거래선지급은 그 딜의 매입 원가로 매입 줄에 든다 — 벤더 P/O 없이 나간 지급이라
+      겹칠 AP 가 아예 없다(서비스 딜의 협력사 지급 등, _is_deal_purchase).
     - 투자금: 통장에는 들어오지만 매출이 아니다(자본 유입) — 수익에서 빼고 따로 보인다.
     - 세금: 그 달의 추정 부가세(매출세액 − 매입세액), '세금' 분류 지급액, 그리고 연간
       법인세 추정액을 이익이 난 달에 나눠 실은 값.
@@ -1724,7 +1813,8 @@ def finance_profit(year: int = 0, detail: str = ""):
             # 그대로 더하면 그 칸의 값이 나온다.
             note("vat", i, who, -vat_krw)
 
-        # 수동 지급대장 — 분류별로 나눈다. 세금은 세금 줄로, 거래선지급은 합계 밖으로.
+        # 수동 지급대장 — 분류별로 나눈다. 세금은 세금 줄로, 거래선지급은 합계 밖으로
+        # (딜을 지목한 건만 예외 — 그것은 매입 원가다. _is_deal_purchase).
         operating: dict[str, list[float]] = {}
         tax_payments, input_vat_other, vendor_manual, consulting_booked = z(), z(), z(), z()
         for p in s.query(FinancePayable).all():
@@ -1741,11 +1831,15 @@ def finance_profit(year: int = 0, detail: str = ""):
                 getattr(p, "rfq_id", None) or 0,
                 (p.counterparty or "").strip() or (p.description or "").strip() or "—",
             )
+            # 딜을 지목한 거래선지급은 벤더 청구(AP)와 같은 자리에 선다 — 매입 원가로도,
+            # 매입세액으로도. 그 딜에 P/O 가 없어 AP 가 못 만들어진 건이라, 여기서 세지
+            # 않으면 매출만 있고 원가는 없는 딜이 된다.
+            deal_purchase = _is_deal_purchase(p)
             # 매입세액은 나누지 않는다 — 공제 시기는 세금계산서를 받은 날 하나로 정해지고,
             # 비용을 여러 달에 나눠 실었다고 해서 그 공제까지 나뉘지는 않는다.
             for occ in _payable_occurrences_in_year(p, y0, y1):
                 vat_krw = _payable_krw(p, vat, occ[:7], fx_seen)
-                input_vat_other[int(occ[5:7]) - 1] += vat_krw
+                (input_vat_purchase if deal_purchase else input_vat_other)[int(occ[5:7]) - 1] += vat_krw
                 # 기타 지출의 매입세액도 그 항목 이름으로 — 임차료·공과금이 각자 제 이름으로
                 # 부가세 줄에 선다(무엇을 사면서 낸 세금인지가 곧 답이라서).
                 note("vat", int(occ[5:7]) - 1, who, -vat_krw)
@@ -1760,7 +1854,11 @@ def finance_profit(year: int = 0, detail: str = ""):
                     paid = _payable_krw(p, amount * share, occ[:7], fx_seen)
                     tax_payments[i] += paid
                     note("tax_payments", i, who, paid)
-                elif cat == "거래선지급":
+                elif deal_purchase:
+                    # 딜의 매입 원가 — AP 와 같은 줄(purchase)에 선다.
+                    purchase[i] += supply_krw
+                    note("purchase", i, who, supply_krw)
+                elif cat == VENDOR_CATEGORY:
                     vendor_manual[i] += supply_krw
                     note("vendor_manual", i, who, supply_krw)
                 elif cat == CONSULTING_CATEGORY:

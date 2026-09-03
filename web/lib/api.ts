@@ -39,6 +39,7 @@ import type {
   ArData,
   ApByOrderRow,
   ApSave,
+  DealPayables,
   FinancePayable,
   FinancePayableSave,
   FinanceIncomeSave,
@@ -800,6 +801,10 @@ export function fetchFinanceReceivables(): Promise<{ rows: FinanceReceivable[]; 
 }
 export function fetchFinancePayables(): Promise<{ rows: FinancePayable[]; fx: FxQuote }> {
   return get<{ rows: FinancePayable[]; fx: FxQuote }>("/api/admin/finance/payables");
+}
+/** 이 오더가 속한 딜에 직접 걸린 지급(벤더 P/O 없는 매입) — 프로젝트 9~11단계 Payable 탭용. */
+export function fetchDealPayables(orderId: number): Promise<DealPayables> {
+  return get<DealPayables>(`/api/admin/finance/deal-payables/${orderId}`);
 }
 export function createFinancePayable(body: FinancePayableSave): Promise<{ ok: boolean; id: number }> {
   return post("/api/admin/finance/payables", body);
