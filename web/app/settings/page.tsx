@@ -73,6 +73,7 @@ import type {
   CompanyInfoSave,
   SignatureFields,
   VendorCategorySuggestion,
+  PrintBook,
 } from "@/lib/api";
 import type { PermGrid } from "@/lib/auth";
 import { toggleBold, onBoldKey } from "@/lib/mdEdit";
@@ -95,6 +96,7 @@ import type {
 import { getUser, isAdmin, can } from "@/lib/auth";
 import AppShell, { SectionHead } from "@/components/AppShell";
 import Modal from "@/components/common/Modal";
+import PrintListButton from "@/components/common/PrintListModal";
 import { invalidateCustomerLogos } from "@/lib/customerLogos";
 import { invalidateVendorLogos } from "@/lib/vendorLogos";
 import { downscaleImageFile, fileToLogoDataUrl, imageFromClipboard } from "@/lib/imagePaste";
@@ -103,7 +105,7 @@ import ComboBox from "@/components/common/ComboBox";
 import { useColumnLayout } from "@/components/common/useColumnLayout";
 import { ColumnResizer, ColumnsButton, dragHandleProps } from "@/components/common/tableLayout";
 import { invalidateMasterCategories } from "@/components/common/CategoryCell";
-import { CategoryBadges, CategoryTagPicker } from "@/components/common/CategoryTags";
+import { CategoryBadges, CategoryTagPicker, useVendorCategoryOptions } from "@/components/common/CategoryTags";
 // 목록의 상대처는 다른 화면과 같은 모양(로고 + 이름)으로 — 같은 회사를 두 표기로 읽지 않도록.
 import CustomerName from "@/components/common/CustomerName";
 import VendorName from "@/components/common/VendorName";
@@ -1012,6 +1014,7 @@ const EMPTY_MAKER: SettingsMaker = {
  * 봤는가. 메이커는 딜의 상대가 아니라 품목의 출처라, 관계의 두께를 재는 자가 그것이다.
  */
 function MakersTab() {
+  const catText = useCategoryText();
   return (
     <MasterSection<SettingsMaker>
       title="Maker"
@@ -1023,6 +1026,7 @@ function MakersTab() {
       remove={deleteSettingsMaker}
       searchText={(r) => [r.name, r.specialization, r.note, r.country,
                           r.regions.join(" "), r.website].join(" ")}
+      printCols={makerPrintCols(catText)}
       columns={[
         ["name", "Company name", (r) => (
           <span className="cust-name">
@@ -1138,6 +1142,7 @@ function CustomersTab() {
       empty={EMPTY_CUSTOMER}
       reloadKey={reloadKey}
       searchText={contactSearchText}
+      printCols={customerPrintCols}
       group={{
         by: (r) => r.name,
         cells: (rs, open) => [
@@ -2090,6 +2095,7 @@ const EMPTY_VENDOR: SettingsVendor = {
 };
 
 function VendorsTab() {
+  const catText = useCategoryText();
   const [company, setCompany] = useState<
     { groups: SettingsVendor[][]; index: number; editRow: (row: SettingsVendor) => void } | null
   >(null);
@@ -2143,6 +2149,7 @@ function VendorsTab() {
       empty={EMPTY_VENDOR}
       reloadKey={reloadKey}
       searchText={contactSearchText}
+      printCols={vendorPrintCols(catText)}
       group={{
         by: (r) => r.name,
         cells: (rs, open) => [
@@ -2541,6 +2548,70 @@ const makerHeadCols: HeadCol<SettingsMaker>[] = [
     filter: "facet", emptyLabel: "No item yet" },
   { key: "specialization", text: (r) => r.specialization || "", filter: "facet",
     emptyLabel: "Unspecified" },
+];
+
+/* ── 인쇄용 칸 — 종이는 화면보다 넓다 ─────────────────────────────────────────
+   목록 화면은 한 줄에 다섯 칸까지가 한계라 이메일·전화·주소를 접어 두고, 관계의
+   두께는 배지(도형)로 줄인다. 명부를 종이로 뽑는 까닭은 대개 그 접어 둔 것들을
+   보려는 것이므로, 인쇄물에는 연락처를 모두 펴고 배지는 글자로 풀어 적는다. */
+
+/** 관계 배지의 글자판 — "3/23 · 2 lost" 처럼 배지가 담고 있던 두 수를 그대로. */
+function ratioText(total: number, hit: number, tail = ""): string {
+  if (!total) return "";
+  return `${hit}/${total}${tail}`;
+}
+
+/** 분류 태그를 인쇄용 글자로. 배지에 적히던 마지막 마디를 가운뎃점으로 잇는다. */
+function useCategoryText(): (ids?: number[] | null) => string {
+  const options = useVendorCategoryOptions();
+  return (ids) => {
+    const by = new Map(options.map((o) => [o.id, o.path]));
+    return (ids ?? [])
+      .map((id) => by.get(id))
+      .filter((p): p is string => !!p)
+      .map((path) => path.split(">").pop()?.trim() || path)
+      .join(" · ");
+  };
+}
+
+/** 취급품목 칸 — 태그와 자유 문장을 한 칸에 잇는다(둘 다 화면에서 한 칸이었다). */
+const withTags = (tags: string, text: string): string =>
+  [tags, (text || "").trim()].filter(Boolean).join(" — ");
+
+const customerPrintCols: PrintCol<SettingsCustomer>[] = [
+  { label: "Company", value: (r) => r.name, width: 2.4 },
+  { label: "Region", value: (r) => partyRegions(r).filter(Boolean).join(" · "), width: 1.3 },
+  { label: "Contact", value: (r) => r.contact, width: 1.6 },
+  { label: "Email", value: (r) => contactValues(r.emails, r.email).join(", "), width: 2.4 },
+  { label: "Phone", value: (r) => contactValues(r.phones, r.contact_phone).join(", "), width: 1.6 },
+  { label: "Address", value: (r) => contactValues(r.addresses, r.address).join(" / "), width: 3 },
+  { label: "Tax ID", value: (r) => r.tax_id, width: 1.2 },
+  { label: "Specialization", value: (r) => r.specialization, width: 2.2 },
+  { label: "Inquiries → Orders", align: "right", width: 1.1,
+    value: (r) => ratioText(r.inquiries ?? 0, r.won ?? 0, r.lost ? ` · ${r.lost} lost` : "") },
+];
+
+const vendorPrintCols = (cat: (ids?: number[] | null) => string): PrintCol<SettingsVendor>[] => [
+  { label: "Company", value: (r) => r.name, width: 2.4 },
+  { label: "Region", value: (r) => partyRegions(r).filter(Boolean).join(" · "), width: 1.3 },
+  { label: "Contact", value: (r) => r.contact, width: 1.6 },
+  { label: "Email", value: (r) => contactValues(r.emails, r.email).join(", "), width: 2.4 },
+  { label: "Phone", value: (r) => contactValues(r.phones, r.contact_phone).join(", "), width: 1.6 },
+  { label: "Address", value: (r) => contactValues(r.addresses, r.address).join(" / "), width: 3 },
+  { label: "Specialization", value: (r) => withTags(cat(r.category_ids), r.specialization), width: 2.6 },
+  { label: "Projects → Quoted", align: "right", width: 1.1,
+    value: (r) => ratioText(r.deals ?? 0, r.deals_answered ?? 0) },
+];
+
+const makerPrintCols = (cat: (ids?: number[] | null) => string): PrintCol<SettingsMaker>[] => [
+  { label: "Maker", value: (r) => r.name, width: 2.4 },
+  { label: "Region", value: (r) => partyRegions(r).filter(Boolean).join(" · "), width: 1.3 },
+  { label: "Email", value: (r) => contactValues(r.emails, r.email).join(", "), width: 2.4 },
+  { label: "Phone", value: (r) => contactValues(r.phones, r.contact_phone).join(", "), width: 1.6 },
+  { label: "Address", value: (r) => contactValues(r.addresses, r.address).join(" / "), width: 3 },
+  { label: "Website", value: (r) => r.website, width: 1.8 },
+  { label: "Makes", value: (r) => withTags(cat(r.category_ids), r.specialization), width: 2.8 },
+  { label: "Items", align: "right", width: 0.8, value: (r) => (r.items ? String(r.items) : "") },
 ];
 
 // 품목 목록의 머리 칸 정렬·필터 규칙. 표에 그리는 열(columns)과 key 로 짝지어진다.
@@ -4007,6 +4078,31 @@ export function CategoriesTab() {
   );
 }
 
+/** 인쇄물 한 칸 — 화면 표와 달리 값은 반드시 글자다(도형은 종이에 옮길 수 없다). */
+export type PrintCol<T> = {
+  label: string;
+  value: (row: T) => string;
+  /** PDF 칸 폭 가중치. 한 칸이라도 주면 나머지는 1 로 친다(안 주면 서버가 글자 길이로 나눈다). */
+  width?: number;
+  align?: "left" | "center" | "right";
+};
+
+/** 지금 보이는 줄들을 인쇄용 표로 옮긴다 — 맨 앞에 일련번호 칸을 세운다. */
+function printBook<T>(
+  title: string,
+  cols: PrintCol<T>[],
+  rows: T[],
+  subtitle?: string,
+): PrintBook {
+  return {
+    title,
+    subtitle: subtitle ?? "",
+    columns: [{ label: "No.", width: 0.5, align: "right" as const },
+              ...cols.map((c) => ({ label: c.label, width: c.width, align: c.align }))],
+    rows: rows.map((r, i) => [String(i + 1), ...cols.map((c) => (c.value(r) ?? "").trim())]),
+  };
+}
+
 function MasterSection<T extends { id: number }>({
   title,
   empty,
@@ -4030,6 +4126,7 @@ function MasterSection<T extends { id: number }>({
   tableClass = "",
   reloadKey = 0,
   headCols,
+  printCols,
 }: {
   title: string;
   empty: T;
@@ -4089,6 +4186,10 @@ function MasterSection<T extends { id: number }>({
   // 머리 칸에서 거는 정렬·필터. columns 의 키와 같은 key 를 준 열만 메뉴가 달리고,
   // 나머지는 평범한 머리 칸으로 남는다. 안 주면 표는 지금까지와 똑같이 그려진다.
   headCols?: HeadCol<T>[];
+  // 인쇄용 칸. 주면 도구줄에 🖨 Print 가 서고, 누르면 미리보기 창에서 Excel·PDF 를 받는다.
+  // 화면 표와 따로 두는 이유: 종이는 화면보다 넓어 이메일·전화·주소처럼 화면에서 접어 둔
+  // 값까지 실을 수 있고, 배지(도형)로 보여 주던 값은 글자로 풀어 적어야 한다.
+  printCols?: PrintCol<T>[];
 }) {
   const NEW_ID = -1; // editId 센티넬: 신규 등록 편집기
   const [rows, setRows] = useState<T[]>([]);
@@ -4418,6 +4519,13 @@ function MasterSection<T extends { id: number }>({
           >
             {allOpen ? "⊟ Collapse" : "⊞ Expand"}
           </button>
+        ) : null}
+        {printCols ? (
+          <PrintListButton
+            build={() =>
+              printBook(title, printCols, filtered, group?.summary?.(groups.length, filtered.length))
+            }
+          />
         ) : null}
         {canCreate ? (
           <button className="btn primary" onClick={openNew} disabled={editId === NEW_ID}>

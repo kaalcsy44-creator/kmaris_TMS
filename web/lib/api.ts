@@ -1144,6 +1144,20 @@ export function deleteSettingsMaker(id: number): Promise<{ ok: boolean }> {
   return del(`/api/admin/settings/makers/${id}`);
 }
 
+/** 인쇄할 표 — 화면이 보고 있는 목록 그대로(검색·필터로 좁힌 결과 포함)를 넘긴다. */
+export type PrintBook = {
+  title: string;
+  subtitle?: string;
+  columns: { label: string; width?: number; align?: "left" | "center" | "right" }[];
+  rows: string[][];
+};
+export function printBookXlsx(book: PrintBook): Promise<Blob> {
+  return postBlob("/api/admin/settings/partners/print.xlsx", book);
+}
+export function printBookPdf(book: PrintBook): Promise<Blob> {
+  return postBlob("/api/admin/settings/partners/print.pdf", book);
+}
+
 export function fetchSettingsVessels(): Promise<SettingsVessel[]> {
   return get<SettingsVessel[]>("/api/admin/settings/vessels");
 }

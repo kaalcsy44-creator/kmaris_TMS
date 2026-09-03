@@ -61,6 +61,7 @@ from _core import (
     _reload_perms,
     _scope_for,
     _write_company_profile,
+    _doc_file_response,
     app,
     bcrypt,
     cached_aggregate,
@@ -847,6 +848,56 @@ def delete_maker(row_id: int):
         return {"ok": True}
     finally:
         s.close()
+
+
+class PartnerBookCol(BaseModel):
+    label: str = ""
+    # 인쇄 폭 가중치(없으면 서버가 글자 길이로 나눈다)와 정렬.
+    width: float | None = None
+    align: str | None = None
+
+
+class PartnerBookPrint(BaseModel):
+    """인쇄할 표 그 자체 — 화면이 보고 있는 목록을 그대로 넘긴다.
+
+    서버가 DB 를 다시 읽지 않는 이유: 명부 화면은 검색어와 열 필터로 목록을 좁힐 수
+    있는데, 서버가 제 나름대로 전체를 다시 그리면 미리보기와 받은 파일이 서로 다른
+    목록이 된다. 눈에 보이는 것이 곧 종이가 되게 한다."""
+    title: str = "List"
+    subtitle: str = ""
+    columns: list[PartnerBookCol] = []
+    rows: list[list[str]] = []
+
+
+def _partner_book(body: PartnerBookPrint) -> dict:
+    return {
+        "title": body.title,
+        "subtitle": body.subtitle,
+        "columns": [c.model_dump() for c in body.columns],
+        "rows": body.rows,
+    }
+
+
+@app.post("/api/admin/settings/partners/print.xlsx", dependencies=[Depends(require_token)])
+def partners_print_xlsx(body: PartnerBookPrint):
+    """거래선 명부(Customer·Vendor·Maker) 목록 인쇄 — Excel."""
+    from services.partner_book import make_book_xlsx, filename
+    return _doc_file_response(
+        make_book_xlsx(_partner_book(body)),
+        filename(body.title, "xlsx"),
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+@app.post("/api/admin/settings/partners/print.pdf", dependencies=[Depends(require_token)])
+def partners_print_pdf(body: PartnerBookPrint):
+    """같은 목록의 PDF — 다른 문서와 같은 레터헤드·가로 A4."""
+    from services.partner_book import make_book_pdf, filename
+    return _doc_file_response(
+        make_book_pdf(_partner_book(body)),
+        filename(body.title, "pdf"),
+        "application/pdf",
+    )
 
 
 @app.get("/api/admin/settings/vessels", dependencies=[Depends(require_token)])

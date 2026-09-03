@@ -15686,3 +15686,81 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 @media (max-width: 760px) {
   .ship-grid { columns: 1; }
 }
+
+/* ── 목록 인쇄 미리보기(PrintListModal) ──────────────────────────────────────
+   창 안에 종이 한 장을 세운다. 화면 표를 그대로 보여 주지 않고 흰 바탕에 격자만 남긴
+   표로 다시 그리는 이유: 여기서 확인할 것은 "어떤 줄이 어떤 칸으로 나가는가"이고,
+   목록 화면의 배지·로고·행 강조는 종이에 없는 것들이라 미리보기에 있으면 거짓이 된다. */
+.plist {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.plist-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.plist-sub {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  color: #6b7684;
+}
+.plist-page {
+  border: 1px solid #dfe5ee;
+  border-radius: 9px;
+  background: #fff;
+  padding: 14px 14px 10px;
+  min-width: 0;
+}
+.plist-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 9px;
+  margin-bottom: 10px;
+  border-bottom: 2px solid #0b1d3a;
+}
+.plist-head b {
+  font-size: 14px;
+  letter-spacing: 0.06em;
+  color: #0b1d3a;
+}
+.plist-head span {
+  font-size: 11.5px;
+  color: #6b7684;
+}
+/* 줄이 많으면 창 안에서만 굴린다 — 창 밖 페이지가 따라 움직이면 단추가 사라진다. */
+.plist-wrap {
+  max-height: 56vh;
+  overflow: auto;
+}
+.plist-table {
+  table-layout: auto;
+}
+.plist-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #0b1d3a;
+  color: #fff;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.plist-table td {
+  font-size: 11.5px;
+  vertical-align: top;
+  white-space: normal;
+  word-break: break-word;
+}
+.plist-table tbody tr:nth-child(even) td {
+  background: #f6f8fa;
+}
+.plist-more {
+  margin-top: 8px;
+  font-size: 11.5px;
+  color: #6b7684;
+}
