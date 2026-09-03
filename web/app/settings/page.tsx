@@ -74,6 +74,7 @@ import type {
   SignatureFields,
   VendorCategorySuggestion,
   PrintBook,
+  PartnerImportKind,
 } from "@/lib/api";
 import type { PermGrid } from "@/lib/auth";
 import { toggleBold, onBoldKey } from "@/lib/mdEdit";
@@ -97,6 +98,7 @@ import { getUser, isAdmin, can } from "@/lib/auth";
 import AppShell, { SectionHead } from "@/components/AppShell";
 import Modal from "@/components/common/Modal";
 import PrintListButton from "@/components/common/PrintListModal";
+import PartnerImportButton from "@/components/common/PartnerImportModal";
 import { invalidateCustomerLogos } from "@/lib/customerLogos";
 import { invalidateVendorLogos } from "@/lib/vendorLogos";
 import { downscaleImageFile, fileToLogoDataUrl, imageFromClipboard } from "@/lib/imagePaste";
@@ -1027,6 +1029,7 @@ function MakersTab() {
       searchText={(r) => [r.name, r.specialization, r.note, r.country,
                           r.regions.join(" "), r.website].join(" ")}
       printCols={makerPrintCols(catText)}
+      importKind="makers"
       columns={[
         ["name", "Company name", (r) => (
           <span className="cust-name">
@@ -1143,6 +1146,7 @@ function CustomersTab() {
       reloadKey={reloadKey}
       searchText={contactSearchText}
       printCols={customerPrintCols}
+      importKind="customers"
       group={{
         by: (r) => r.name,
         cells: (rs, open) => [
@@ -2150,6 +2154,7 @@ function VendorsTab() {
       reloadKey={reloadKey}
       searchText={contactSearchText}
       printCols={vendorPrintCols(catText)}
+      importKind="vendors"
       group={{
         by: (r) => r.name,
         cells: (rs, open) => [
@@ -4127,6 +4132,7 @@ function MasterSection<T extends { id: number }>({
   reloadKey = 0,
   headCols,
   printCols,
+  importKind,
 }: {
   title: string;
   empty: T;
@@ -4186,6 +4192,9 @@ function MasterSection<T extends { id: number }>({
   // 머리 칸에서 거는 정렬·필터. columns 의 키와 같은 key 를 준 열만 메뉴가 달리고,
   // 나머지는 평범한 머리 칸으로 남는다. 안 주면 표는 지금까지와 똑같이 그려진다.
   headCols?: HeadCol<T>[];
+  // 엑셀 업로드. 주면 도구줄에 ⬆ Import 가 선다(마스터 입력·수정 권한이 있을 때만) —
+  // 파일 한 장이 명부 전체를 건드릴 수 있어, 만드는 권한과 고치는 권한을 둘 다 본다.
+  importKind?: PartnerImportKind;
   // 인쇄용 칸. 주면 도구줄에 🖨 Print 가 서고, 누르면 미리보기 창에서 Excel·PDF 를 받는다.
   // 화면 표와 따로 두는 이유: 종이는 화면보다 넓어 이메일·전화·주소처럼 화면에서 접어 둔
   // 값까지 실을 수 있고, 배지(도형)로 보여 주던 값은 글자로 풀어 적어야 한다.
@@ -4519,6 +4528,12 @@ function MasterSection<T extends { id: number }>({
           >
             {allOpen ? "⊟ Collapse" : "⊞ Expand"}
           </button>
+        ) : null}
+        {importKind && canCreate && canEdit ? (
+          <PartnerImportButton
+            kind={importKind}
+            onDone={() => { refresh(); onSaved?.(); }}
+          />
         ) : null}
         {printCols ? (
           <PrintListButton

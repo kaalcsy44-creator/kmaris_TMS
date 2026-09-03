@@ -15764,3 +15764,165 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
   font-size: 11.5px;
   color: #6b7684;
 }
+
+/* ── 명부 엑셀 업로드(PartnerImportModal) ────────────────────────────────────
+   네 걸음이 한 창에 세로로 선다. 걸음을 나눠 창을 갈아 끼우지 않는 이유: 열을 잘못
+   맞췄다는 것은 대개 아래 판정표를 보고서야 안다 — 두 곳을 오가며 고쳐야 하므로
+   둘이 한 화면에 함께 있어야 한다. */
+.pimp {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+.pimp-step h4 {
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: #0b1d3a;
+}
+.pimp-hint {
+  margin: 0 0 8px;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: #6b7684;
+}
+.pimp-hint b { color: #33415a; }
+.pimp-file {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.pimp-file-name {
+  font-size: 12px;
+  color: #33415a;
+}
+/* 열 맞추기 — 열 하나가 카드 하나. 원래 열 이름 · 고를 칸 · 첫 줄 값(무슨 열인지
+   이름만으로 애매할 때 값이 알려 준다). */
+.pimp-map {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  gap: 8px;
+}
+.pimp-map-col {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 7px 8px;
+  border: 1px solid #dfe5ee;
+  border-radius: 7px;
+  background: #fbfcfe;
+  min-width: 0;
+}
+.pimp-map-head {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #0b1d3a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pimp-map-col select {
+  font-size: 12px;
+  padding: 4px 6px;
+  border: 1px solid #c7d0de;
+  border-radius: 6px;
+  background: #fff;
+  min-width: 0;
+}
+.pimp-map-eg {
+  font-size: 10.5px;
+  color: #97a1b0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-height: 13px;
+}
+.pimp-ow {
+  margin-top: 10px;
+  font-size: 12px;
+}
+.pimp-ow .pimp-hint { display: inline; margin: 0; }
+/* 판정 요약 — 숫자가 0인 갈래는 흐리게 둔다(색이 넷 다 켜지면 어디를 볼지 모른다). */
+.pimp-sum {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.pimp-tally {
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  border: 1px solid transparent;
+}
+.pimp-tally b { font-size: 12.5px; }
+.pimp-tally--new { background: #e7f7ed; color: #1c7a43; border-color: #b7e3c8; }
+.pimp-tally--update { background: #fef4e2; color: #96620d; border-color: #f2ddb4; }
+.pimp-tally--same { background: #f1f3f6; color: #6b7684; border-color: #dfe4ec; }
+.pimp-tally--error { background: #fdeceb; color: #b3251c; border-color: #f5c9c5; }
+.pimp-tally.zero { opacity: 0.42; }
+.pimp-skip { font-size: 11.5px; color: #96620d; }
+.pimp-wrap {
+  max-height: 46vh;
+  overflow: auto;
+}
+.pimp-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #0b1d3a;
+  color: #fff;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.pimp-table td {
+  font-size: 11.5px;
+  vertical-align: top;
+}
+.pimp-table th.pimp-ck, .pimp-table td.pimp-ck { width: 30px; text-align: center; }
+.pimp-table th.pimp-rn, .pimp-table td.pimp-rn { width: 38px; text-align: right; color: #97a1b0; }
+.pimp-table th.pimp-ac, .pimp-table td.pimp-ac { width: 68px; }
+.pimp-row--same td, .pimp-row.off td { opacity: 0.5; }
+.pimp-row--error { background: #fdf6f5; }
+.pimp-badge {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+.pimp-badge--new { background: #e7f7ed; color: #1c7a43; }
+.pimp-badge--update { background: #fef4e2; color: #96620d; }
+.pimp-badge--same { background: #f1f3f6; color: #6b7684; }
+.pimp-badge--error { background: #fdeceb; color: #b3251c; }
+.pimp-person { color: #6b7684; }
+.pimp-inh {
+  margin-left: 7px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #eef3fb;
+  color: #3b5c92;
+  font-size: 10px;
+}
+/* 바뀌는 것 한 줄: 칸 이름 · 기존값 · → · 새값. 기존값이 비었으면 화살표부터 시작한다. */
+.pimp-chg {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+  line-height: 1.7;
+}
+.pimp-chg-f {
+  min-width: 84px;
+  color: #6b7684;
+  font-size: 10.5px;
+}
+.pimp-chg-o { color: #97a1b0; text-decoration: line-through; }
+.pimp-chg-a { color: #c2cad6; }
+.pimp-chg-n { color: #16304f; font-weight: 600; }
+.pimp-actions {
+  align-items: center;
+  flex-wrap: wrap;
+}

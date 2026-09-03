@@ -1158,6 +1158,68 @@ export function printBookPdf(book: PrintBook): Promise<Blob> {
   return postBlob("/api/admin/settings/partners/print.pdf", book);
 }
 
+/* ── 명부 엑셀 업로드 ────────────────────────────────────────────────────── */
+export type PartnerImportKind = "customers" | "vendors" | "makers";
+export type PartnerImportField = { key: string; label: string; multi: boolean };
+/** 파일에서 꺼낸 표 그대로 — 열의 뜻(mapping)은 화면에서 고칠 수 있다. */
+export type PartnerImportSheet = {
+  kind: PartnerImportKind;
+  title: string;
+  filename: string;
+  header_row: number;
+  headers: string[];
+  rows: string[][];
+  mapping: string[];
+  fields: PartnerImportField[];
+};
+export type PartnerImportChange = {
+  field: string; label: string; multi: boolean; from: string; to: string;
+};
+export type PartnerImportRow = {
+  i: number;
+  name: string;
+  contact: string;
+  action: "new" | "update" | "same" | "error";
+  target_id: number | null;
+  error: string;
+  changes: PartnerImportChange[];
+  /** 같은 회사의 기존 줄에서 물려받은 회사 단위 칸(사업자번호·홈페이지 등). */
+  inherited: string[];
+  /** 이미 등록된 회사에 담당자로 합류 — 회사명은 명부에 적힌 철자를 그대로 쓴다. */
+  joined: boolean;
+};
+export type PartnerImportPlan = {
+  kind: PartnerImportKind;
+  title: string;
+  rows: PartnerImportRow[];
+  summary: { new: number; update: number; same: number; error: number };
+  fields: PartnerImportField[];
+  applied?: {
+    created: number; updated: number; skipped: number;
+    failed: { i: number; name: string; error: string }[];
+  };
+};
+
+export function readPartnerImport(file: File, kind: PartnerImportKind): Promise<PartnerImportSheet> {
+  const fd = new FormData();
+  fd.append("file", file);
+  fd.append("kind", kind);
+  return postForm<PartnerImportSheet>("/api/admin/settings/partners/import/read", fd);
+}
+
+/** dry_run=true 면 계산만(미리보기), false 면 accept 한 줄을 저장한다. */
+export function applyPartnerImport(body: {
+  kind: PartnerImportKind;
+  headers: string[];
+  rows: string[][];
+  mapping: string[];
+  overwrite: boolean;
+  dry_run: boolean;
+  accept?: number[];
+}): Promise<PartnerImportPlan> {
+  return post<PartnerImportPlan>("/api/admin/settings/partners/import/apply", body);
+}
+
 export function fetchSettingsVessels(): Promise<SettingsVessel[]> {
   return get<SettingsVessel[]>("/api/admin/settings/vessels");
 }

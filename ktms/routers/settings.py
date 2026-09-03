@@ -24,6 +24,7 @@ from _core import (
     EmailTemplatePreviewReq,
     EmailSignatureSave,
     File,
+    Form,
     UploadFile,
     _ocr_image_media_type,
     parse_business_card_image,
@@ -898,6 +899,155 @@ def partners_print_pdf(body: PartnerBookPrint):
         filename(body.title, "pdf"),
         "application/pdf",
     )
+
+
+# ── 명부 엑셀 업로드 ─────────────────────────────────────────────────────────
+# 두 걸음이다. read 는 파일에서 표를 꺼내 열의 뜻을 짐작해 돌려주고, apply 는 그 표를
+# 지금 명부에 겹쳐 무슨 일이 생기는지 계산한다. dry_run 이 참이면 계산까지만 하고
+# 멈춘다 — 미리보기와 저장이 같은 계산을 쓰므로, 화면에서 본 것이 곧 저장되는 것이다.
+
+_IMPORT_MODEL = {"customers": Customer, "vendors": Vendor, "makers": Maker}
+
+
+def _import_kind(kind: str) -> str:
+    if kind not in _IMPORT_MODEL:
+        raise HTTPException(status_code=400, detail="알 수 없는 명부 갈래입니다.")
+    return kind
+
+
+def _import_existing(s, kind: str) -> list[dict]:
+    """지금 명부 — 겹쳐 볼 대상. 업로드가 건드리는 칸만 꺼낸다."""
+    from services import partner_import as pi
+    Model = _IMPORT_MODEL[kind]
+    flat_of = {"emails": "email", "phones": "contact_phone",
+               "regions": "country", "addresses": "address"}
+    out = []
+    for r in s.query(Model).all():
+        d: dict = {"id": r.id}
+        for key, _label, multi, _co in pi.FIELDS[kind]:
+            if multi:
+                d[key] = _multi_out(getattr(r, key, None), getattr(r, flat_of[key], None))
+            else:
+                d[key] = getattr(r, key, None) or ""
+        out.append(d)
+    return out
+
+
+class PartnerImportApply(BaseModel):
+    """읽어 둔 표 + 열 지정. 파일을 다시 올리지 않고 매핑만 고쳐 다시 계산할 수 있게
+    표 자체를 들고 다닌다(명부는 커야 수천 줄이라 오가는 값이 문제가 되지 않는다)."""
+    kind: str
+    headers: list[str] = []
+    rows: list[list[str]] = []
+    mapping: list[str] = []
+    overwrite: bool = False
+    dry_run: bool = True
+    # 저장할 줄(rows 인덱스). None 이면 바뀔 것이 있는 줄 전부.
+    accept: list[int] | None = None
+
+
+@app.post("/api/admin/settings/partners/import/read", dependencies=[Depends(require_token)])
+def partners_import_read(file: UploadFile = File(...), kind: str = Form("customers")):
+    """올린 엑셀·CSV 에서 표를 꺼내고 열의 뜻을 짐작한다(저장하지 않는다)."""
+    from services import partner_import as pi
+    _import_kind(kind)
+    try:
+        file.file.seek(0)
+        sheet = pi.read_sheet(file.file.read(), file.filename or "", kind)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"파일을 읽지 못했습니다: {exc}") from exc
+    return {
+        "kind": kind, "title": pi.TITLE[kind],
+        "filename": file.filename or "", "header_row": sheet["header_row"],
+        "headers": sheet["headers"], "rows": sheet["rows"],
+        "mapping": pi.auto_map(sheet["headers"], kind),
+        "fields": pi.field_specs(kind),
+    }
+
+
+@app.post("/api/admin/settings/partners/import/apply", dependencies=[Depends(require_token)])
+def partners_import_apply(body: PartnerImportApply):
+    """표를 명부에 겹쳐 본다(dry_run) 또는 고른 줄을 저장한다.
+
+    지우는 일은 하지 않는다 — 엑셀에 없는 줄은 '지우라'가 아니라 그 파일에 없는 것이다."""
+    from services import partner_import as pi
+    kind = _import_kind(body.kind)
+    s = get_session()
+    try:
+        try:
+            plan = pi.build_plan(kind, body.headers, body.rows, body.mapping,
+                                 _import_existing(s, kind), body.overwrite)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        if body.dry_run:
+            return plan
+
+        wanted = set(body.accept) if body.accept is not None else None
+        created = updated = skipped = 0
+        failed: list[dict] = []
+        for entry in plan["rows"]:
+            if entry["action"] not in ("new", "update") or not entry["changes"]:
+                skipped += 1
+                continue
+            if wanted is not None and entry["i"] not in wanted:
+                skipped += 1
+                continue
+            try:
+                if entry["action"] == "new":
+                    _import_create(s, kind, entry)
+                    created += 1
+                else:
+                    _import_update(s, kind, entry)
+                    updated += 1
+            except Exception as exc:  # 한 줄이 엎어져도 나머지는 들어간다
+                s.rollback()
+                failed.append({"i": entry["i"], "name": entry["name"], "error": str(exc)})
+        s.commit()
+        plan["applied"] = {"created": created, "updated": updated,
+                           "skipped": skipped, "failed": failed}
+        return plan
+    finally:
+        s.close()
+
+
+def _import_create(s, kind: str, entry: dict) -> None:
+    from services import partner_import as pi
+    Model = _IMPORT_MODEL[kind]
+    vals = entry["values"]
+    obj = Model(name=vals["name"])
+    for key, _label, multi, _co in pi.FIELDS[kind]:
+        if multi or key == "name":
+            continue
+        setattr(obj, key, vals.get(key) or "")
+    s.add(obj)
+    _apply_multi(obj, vals.get("emails"), vals.get("phones"),
+                 vals.get("regions"), vals.get("addresses"))
+
+
+def _import_update(s, kind: str, entry: dict) -> None:
+    Model = _IMPORT_MODEL[kind]
+    obj = s.query(Model).filter_by(id=entry["target_id"]).first()
+    if not obj:
+        raise ValueError("대상 레코드를 찾을 수 없습니다(그 사이 지워졌을 수 있습니다).")
+    multi_new: dict = {}
+    for ch in entry["changes"]:
+        if ch["multi"]:
+            multi_new[ch["field"]] = ch["value"]
+        else:
+            setattr(obj, ch["field"], ch["value"])
+    if multi_new:
+        # 안 바뀐 목록은 지금 값을 그대로 다시 넣는다 — None 을 넘기면 _apply_multi 가
+        # flat 대표값 하나로 리스트를 되접어, 두 번째 이메일·주소가 조용히 사라진다.
+        keep = lambda key, flat: _multi_out(getattr(obj, key, None), flat)
+        _apply_multi(
+            obj,
+            multi_new.get("emails", keep("emails", obj.email)),
+            multi_new.get("phones", keep("phones", obj.contact_phone)),
+            multi_new.get("regions", keep("regions", obj.country)),
+            multi_new.get("addresses", keep("addresses", obj.address)),
+        )
 
 
 @app.get("/api/admin/settings/vessels", dependencies=[Depends(require_token)])
