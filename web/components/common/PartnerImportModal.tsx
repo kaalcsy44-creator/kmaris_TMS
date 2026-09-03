@@ -158,26 +158,41 @@ function ImportWizard({
             and uploaded straight back.
           </p>
           <div className="pimp-file">
+            {/* 파일 칸은 브라우저가 제 나름대로 그리고 그 글자는 OS 언어를 따른다 —
+                한국어 윈도에서는 "파일 선택 / 선택된 파일 없음"이 나와 이 창만 두 말을
+                쓰게 된다. 진짜 input 은 숨기고 우리 단추로 두드린다. */}
             <input
               ref={fileRef}
+              className="pimp-file-input"
               type="file"
               accept=".xlsx,.xlsm,.xls,.csv"
-              disabled={!!busy}
               onChange={(e) => { pick(e.target.files?.[0] ?? null); e.target.value = ""; }}
             />
-            {sheet ? (
-              <span className="pimp-file-name">
-                {sheet.filename} — {sheet.headers.length} columns · {sheet.rows.length} rows
-                {sheet.header_row > 1 ? ` (header on row ${sheet.header_row})` : ""}
-              </span>
-            ) : null}
+            <button
+              type="button"
+              className="btn"
+              disabled={!!busy}
+              onClick={() => fileRef.current?.click()}
+            >
+              {sheet ? "Choose another file…" : "Choose file…"}
+            </button>
+            <span className={`pimp-file-name${sheet ? "" : " none"}`}>
+              {sheet
+                ? `${sheet.filename} — ${sheet.headers.length} columns · ${sheet.rows.length} rows`
+                  + (sheet.header_row > 1 ? ` (header on row ${sheet.header_row})` : "")
+                : "No file selected"}
+            </span>
           </div>
         </section>
 
-        {/* ② 열 맞추기 */}
-        {sheet ? (
-          <section className="pimp-step">
-            <h4>② Match the columns</h4>
+        {/* ② 열 맞추기 — 아직 못 가는 걸음도 자리를 지킨다. 걸음이 셋이라고 번호를
+            매겨 놓고 하나만 보이면, 나머지가 어디 갔는지가 먼저 궁금해진다. */}
+        <section className={`pimp-step${sheet ? "" : " pimp-step--wait"}`}>
+          <h4>② Match the columns</h4>
+          {!sheet ? (
+            <p className="pimp-wait">Waiting for a file — the columns appear here once one is loaded.</p>
+          ) : (
+          <>
             <p className="pimp-hint">
               Change anything guessed wrong. Columns left as <b>Ignore</b> are not read —
               counts that come from your deal history (inquiries, projects, items) are never
@@ -216,13 +231,20 @@ function ImportWizard({
               <span className="pimp-hint"> — off: fill only the empty ones, and add only the
               emails and phones that are not there yet.</span>
             </label>
-          </section>
-        ) : null}
+          </>
+          )}
+        </section>
 
         {/* ③ 판정 */}
-        {plan ? (
-          <section className="pimp-step">
-            <h4>③ What will change</h4>
+        <section className={`pimp-step${plan ? "" : " pimp-step--wait"}`}>
+          <h4>③ Review what will change</h4>
+          {!plan ? (
+            <p className="pimp-wait">
+              Every row is checked against the current list — new, to update, unchanged or
+              in error — before anything is saved.
+            </p>
+          ) : (
+          <>
             <div className="pimp-sum">
               <Tally tone="new" n={plan.summary.new} label="new" />
               <Tally tone="update" n={plan.summary.update} label="to update" />
@@ -299,10 +321,10 @@ function ImportWizard({
                 </tbody>
               </table>
             </div>
-          </section>
-        ) : null}
+          </>
+          )}
+        </section>
 
-        {/* ④ 저장 */}
         <div className="form-actions pimp-actions">
           {done ? (
             <>
