@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import ProjectNo from "@/components/common/ProjectNo";
-import { fetchItemShipMap } from "@/lib/api";
-import { useCachedData } from "@/lib/useCachedData";
+import { assignItemLedgerCategory, fetchItemShipMap } from "@/lib/api";
+import { invalidateCache, useCachedData } from "@/lib/useCachedData";
 import type { ShipDeal, ShipItem, ShipMap } from "@/lib/types";
 
 /**
@@ -100,6 +100,13 @@ type ShipModel = {
   roll: Map<number, ShipItem[]>;   // 그 분류와 그 아래 전부의 품목
   roots: Cat[];
   loose: ShipItem[];               // 분류가 없어 배에 못 실은 품목
+  /**
+   * 판에서 자리를 옮길 때 고르는 목록 — '대 > 중 > 소' 전체 경로다.
+   * 이름만 적으면 못 고른다: 'Filter'·'Pump'·'Engine' 처럼 여러 계통에 같은 이름이
+   * 있어(Fuel Oil System·Lubricating Oil System 둘 다 Filter 를 갖는다) 어느 쪽인지
+   * 경로 없이는 갈리지 않는다. 배 읽는 순서(roots)를 그대로 물려받아 늘어놓는다.
+   */
+  places: { id: number; path: string }[];
 };
 
 /**
@@ -165,7 +172,7 @@ function money(v: number | null | undefined, cur: string) {
 }
 
 export default function ShipMapTab() {
-  const { data, error } = useCachedData<ShipMap>("item:ship-map", fetchItemShipMap);
+  const { data, error, refresh } = useCachedData<ShipMap>("item:ship-map", fetchItemShipMap);
   const [hint, setHint] = useState<Hint>(null);
   const [panel, setPanel] = useState<Panel>(null);
   // 프로젝트가 걸린 계통만 볼 것인가 — 배가 커질수록 빈 칸이 화면을 먹는다.
@@ -219,7 +226,18 @@ export default function ShipMapTab() {
     const roots = (kids.get(null) ?? [])
       .filter((c) => c.active)
       .sort((a, b) => berthOf(a.name) - berthOf(b.name) || a.sort_order - b.sort_order || a.id - b.id);
-    return { kids, roll, roots, loose };
+
+    // 옮겨 갈 수 있는 자리 — 화면에 선 순서 그대로 훑어 내려가며 경로를 쌓는다.
+    // 잎만 담지 않는다: 품목은 지금도 2단(Deck Machinery > Crane)에 걸린 것이 있고,
+    // 어느 소분류인지 아직 모를 때 중간에 걸어 두는 것이 미분류로 두는 것보다 낫다.
+    const places: { id: number; path: string }[] = [];
+    const walk = (c: Cat, prefix: string) => {
+      const path = prefix ? `${prefix} > ${c.name}` : c.name;
+      places.push({ id: c.id, path });
+      for (const k of kids.get(c.id) ?? []) if (k.active) walk(k, path);
+    };
+    for (const r of roots) walk(r, "");
+    return { kids, roll, roots, loose, places };
   }, [data]);
 
   if (error && !data) return <div className="state error">API error: {error.message}</div>;
@@ -351,7 +369,29 @@ export default function ShipMapTab() {
       ) : null}
 
       {hint ? <Hinter hint={hint} /> : null}
-      {panel ? <Peeker panel={panel} onClose={() => setPanel(null)} /> : null}
+      {panel ? (
+        <Peeker
+          panel={panel}
+          places={model.places}
+          onClose={() => setPanel(null)}
+          /**
+           * 자리를 옮긴 뒤 — 판은 열어 둔 채 그 줄만 새 자리로 고쳐 준다.
+           * 옮길 때마다 판이 닫히면 잘못 실린 품목 서넛을 잇달아 바로잡을 수 없고,
+           * 판을 그대로 두면 방금 고친 줄이 옛 자리를 그대로 말한다.
+           * 뒤에 선 배(카드의 숫자·프로젝트 칩)는 다시 받아 온 자료로 맞춰진다 —
+           * 품목표·분류 화면도 같은 자료를 보므로 그쪽 캐시까지 비운다.
+           */
+          onMoved={(itemId, categoryId) => {
+            setPanel((p) => (p ? {
+              ...p,
+              items: p.items.map((it) =>
+                it.item_id === itemId ? { ...it, category_id: categoryId } : it),
+            } : p));
+            invalidateCache("item:");
+            refresh();
+          }}
+        />
+      ) : null}
     </div>
   );
 }
@@ -527,17 +567,78 @@ function Hinter({ hint }: { hint: NonNullable<Hint> }) {
 }
 
 /**
+ * 품목 한 줄의 자리를 고르는 칸 — '대 > 중 > 소' 전체 경로 목록.
+ *
+ * 고른 값이 곧 저장이다(따로 확인 단추를 두지 않는다). 자리를 고르는 일은 한 번에
+ * 끝나는 손짓이고, 되돌리는 길은 같은 자리에서 다시 고르는 것이라 확인을 한 겹
+ * 더 두면 손만 늘어난다. 잘못 눌렀을 때의 퇴로는 Cancel 이다.
+ *
+ * 'Unclassified' 를 목록 맨 위에 남긴다 — 자리를 잘못 잡은 것을 알겠는데 어디로
+ * 보낼지는 아직 모를 때, 배에서 내려놓는 것이 엉뚱한 계통에 실어 두는 것보다 낫다
+ * (미분류는 Item Category 탭이 따로 세어 보여 준다).
+ */
+function PlacePicker({ places, current, saving, failed, onPick, onCancel }: {
+  places: { id: number; path: string }[];
+  current: number | null;
+  saving: boolean;
+  failed: string | null;
+  onPick: (categoryId: number | null) => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="ship-peek-mvbox">
+      <select
+        className="ship-peek-mvsel"
+        defaultValue={current == null ? "" : String(current)}
+        disabled={saving}
+        autoFocus
+        onChange={(e) => onPick(e.target.value === "" ? null : Number(e.target.value))}
+      >
+        <option value="">— Unclassified</option>
+        {places.map((pl) => (
+          <option key={pl.id} value={pl.id}>{pl.path}</option>
+        ))}
+      </select>
+      <button type="button" className="ship-peek-mvx" onClick={onCancel} disabled={saving}>
+        {saving ? "Saving…" : "Cancel"}
+      </button>
+      {/* 실패는 그 줄에 남는다 — 판이 닫히면 무엇을 옮기려다 실패했는지가 함께 사라진다. */}
+      {failed ? <span className="ship-peek-mverr">{failed}</span> : null}
+    </div>
+  );
+}
+
+/**
  * 눌러서 펴는 판 — 그 자리에 걸린 품목을 자세히. 이제 마우스를 따라 스치듯 뜨는 것이
  * 아니라 누른 자리에 머무르므로, 마우스를 먹고(안의 링크를 누를 수 있어야 한다) 닫는
  * 길을 세 갈래로 둔다: 판 밖 아무 곳, 닫기 단추, Esc.
  */
-function Peeker({ panel, onClose }: { panel: NonNullable<Panel>; onClose: () => void }) {
+function Peeker({ panel, places, onClose, onMoved }: {
+  panel: NonNullable<Panel>;
+  places: { id: number; path: string }[];
+  onClose: () => void;
+  onMoved: (itemId: number, categoryId: number | null) => void;
+}) {
   const MAX = 8;
+  /**
+   * 자리를 고치는 줄 — 한 번에 하나만 연다(열어 둔 select 가 여럿이면 어느 것을
+   * 저장하는 중인지 알 수 없다). null 이면 아무 줄도 고치는 중이 아니다.
+   *
+   * 이 판이 잘못 실린 품목이 눈에 띄는 자리라서 여기서 고칠 수 있어야 한다 —
+   * 'Shore crane service ...' 가 Engine Room > Fuel Oil System > Service Tank 에
+   * 실려 있는 것은 여기서 보이는데, 고치러 가려면 Item Category 탭으로 건너가
+   * 그 품목을 다시 찾아야 했다.
+   */
+  const [editing, setEditing] = useState<number | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [failed, setFailed] = useState<string | null>(null);
   // 처음에는 여덟만 편다 — 스물셋이 통째로 들어오면 첫 화면이 목록에 잠긴다. 다만
   // 접어 둔 나머지를 세어 보이기만 하고 펼 길이 없으면 그 수는 알림이 아니라 벽이다.
   const [all, setAll] = useState(false);
   // 다른 자리를 눌러 판이 바뀌면 다시 접는다(판마다 처음은 여덟이어야 한다).
   useEffect(() => setAll(false), [panel]);
+  // 판을 옮겨 다니는 동안 고치던 줄이 따라다니지 않도록 — 판이 바뀌면 함께 접는다.
+  useEffect(() => { setEditing(null); setFailed(null); }, [panel.title, panel.sub]);
   const shown = all ? panel.items : panel.items.slice(0, MAX);
   const rest = panel.items.length - MAX;
   // 화면 밖으로 나가지 않게 — 오른쪽·아래로 넘칠 자리면 반대편에 붙인다.
@@ -596,7 +697,42 @@ function Peeker({ panel, onClose }: { panel: NonNullable<Panel>; onClose: () => 
                   품목은 그 줄 끝에, 어떤 품목은 다음 줄로 넘어가 — 품목 여럿을 위아래로
                   견줄 때 눈이 매번 다른 자리에서 숫자를 찾아야 했다. */}
               {it.margin_pct != null ? <span className="ship-peek-mg">{it.margin_pct}%</span> : null}
+              {/* 자리를 고치는 손잡이 — 값(매입·매출·마진)을 다 읽은 뒤 맨 끝에 선다.
+                  평소에는 옅게 물러나 있다가 그 줄에 마우스를 올리면 또렷해진다:
+                  판은 읽는 자리가 먼저고 고치는 자리는 그 다음이다. */}
+              {editing === it.item_id ? null : (
+                <button
+                  type="button"
+                  className="ship-peek-mv"
+                  onClick={() => { setEditing(it.item_id); setFailed(null); }}
+                >
+                  {it.category_id == null ? "Classify…" : "Move…"}
+                </button>
+              )}
             </div>
+            {editing === it.item_id ? (
+              <PlacePicker
+                places={places}
+                current={it.category_id}
+                saving={saving}
+                failed={failed}
+                onCancel={() => { setEditing(null); setFailed(null); }}
+                onPick={async (cid) => {
+                  if (cid === it.category_id) { setEditing(null); return; }
+                  setSaving(true);
+                  setFailed(null);
+                  try {
+                    await assignItemLedgerCategory({ item_id: it.item_id, category_id: cid });
+                    onMoved(it.item_id, cid);
+                    setEditing(null);
+                  } catch (e) {
+                    setFailed(e instanceof Error ? e.message : String(e));
+                  } finally {
+                    setSaving(false);
+                  }
+                }}
+              />
+            ) : null}
           </li>
         ))}
       </ul>
