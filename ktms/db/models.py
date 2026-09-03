@@ -155,6 +155,42 @@ class Vendor(Base):
     created_at     = Column(DateTime, default=datetime.utcnow)
 
 
+class Maker(Base):
+    """제조사(메이커) — 물건을 만든 회사.
+
+    거래선(Vendor)과 다른 축이다. 같은 MAN B&W 부품을 여러 거래선이 판다 — 거래선은
+    '어디서 사는가'이고 메이커는 '누가 만들었는가'라, 하나가 다른 하나를 대신하지
+    못한다. 품목 마스터의 maker 칸이 지금까지 자유 텍스트로 들고 있던 자리다.
+
+    담당자를 따로 두지 않는다. 거래선은 레코드 1건 = 담당자 1명이지만(같은 회사에 영업
+    담당이 여럿이고 우리가 그 사람에게 메일을 보낸다), 메이커에는 우리가 직접 두드리는
+    창구가 없다 — 부품은 거래선을 통해 산다. 그래서 회사 한 곳 = 한 줄이고, 회사 단위
+    정보를 여러 레코드에 복제해 두었다가 한꺼번에 고치는 장치(Company info)도 없다.
+    """
+    __tablename__ = "makers"
+    id             = Column(Integer, primary_key=True)
+    name           = Column(String(200), nullable=False)
+    # 본사 소재지 — 품목의 원산지(origin)를 정할 때 근거가 되는 값이라 첫 칸에 둔다.
+    country        = Column(String(100))   # 대표 지역(regions[0] 미러링)
+    address        = Column(String(400))   # 대표 주소(addresses[0] 미러링)
+    # 담당자가 없어도 회사 대표 연락처는 있다(기술문의 창구·본사 대표번호).
+    # 이름이 contact_phone 인 것은 고객·거래선과 같은 헬퍼(_apply_multi)를 쓰기 때문이다.
+    email          = Column(String(200))
+    contact_phone  = Column(String(50))
+    addresses      = Column(JSON, default=list)
+    emails         = Column(JSON, default=list)
+    phones         = Column(JSON, default=list)
+    regions        = Column(JSON, default=list)
+    website        = Column(String(300))
+    specialization = Column(String(200))   # 무엇을 만드는 회사인가(브랜드·기종 한 줄)
+    # 이 회사가 만드는 품목 분류(item_categories.id, 중분류까지) — 거래선의 같은 칸과
+    # 규약이 같다. 다만 뜻이 다르다: 거래선은 '물어볼 수 있는 곳', 메이커는 '만든 곳'.
+    category_ids   = Column(JSON, default=list)
+    note           = Column(Text)          # 회사 소개 요약
+    logo           = Column(Text)          # 회사 로고(data URL)
+    created_at     = Column(DateTime, default=datetime.utcnow)
+
+
 class Consultant(Base):
     """소개자(컨설턴트) — 딜을 물어다 준 사람. 프로젝트 매출의 몇 %를 수수료로 지급한다.
 

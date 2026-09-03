@@ -20,6 +20,10 @@ import {
   fetchSettingsCustomers,
   fetchSettingsItems,
   fetchSettingsUsers,
+  fetchSettingsMakers,
+  createSettingsMaker,
+  updateSettingsMaker,
+  deleteSettingsMaker,
   fetchSettingsVendors,
   fetchVendorCategorySuggestions,
   fetchSettingsVessels,
@@ -61,6 +65,7 @@ import {
   syncMail,
 } from "@/lib/api";
 import type { MailStatus } from "@/lib/types";
+import type { SettingsMaker } from "@/lib/types";
 import type {
   PermissionsConfig,
   RolePermRow,
@@ -965,11 +970,11 @@ const EMPTY_CUSTOMER: SettingsCustomer = {
    길이가 있는 칸이 서너 줄로 접힌다. 한 번에 한 쪽만 전폭으로 보이고, 위의 알약
    전환으로 넘나든다(페이지 탭 밑의 한 급 아래 계층). */
 function PartnersTab() {
-  const [side, setSide] = useState<"customers" | "vendors">("customers");
+  const [side, setSide] = useState<"customers" | "vendors" | "makers">("customers");
   return (
     <>
       <div className="ms-party-tabs" role="tablist" aria-label="Partner type">
-        {([["customers", "Customer"], ["vendors", "Vendor"]] as const).map(([key, label]) => (
+        {([["customers", "Customer"], ["vendors", "Vendor"], ["makers", "Maker"]] as const).map(([key, label]) => (
           <button
             key={key}
             type="button"
@@ -982,8 +987,103 @@ function PartnersTab() {
           </button>
         ))}
       </div>
-      {side === "customers" ? <CustomersTab /> : <VendorsTab />}
+      {side === "customers" ? <CustomersTab />
+        : side === "vendors" ? <VendorsTab />
+          : <MakersTab />}
     </>
+  );
+}
+
+const EMPTY_MAKER: SettingsMaker = {
+  id: 0, name: "", email: "", contact_phone: "", country: "", address: "",
+  website: "", specialization: "", note: "", logo: "",
+  addresses: [], emails: [], phones: [], regions: [], category_ids: [],
+};
+
+/**
+ * Maker — 물건을 만든 회사. 거래선과 같은 얼개를 쓰되 **담당자를 두지 않는다.**
+ *
+ * 거래선 목록이 회사로 묶여 있고 그 밑에 담당자 줄이 달리는 것은, 같은 회사에 영업
+ * 담당이 여럿이고 우리가 그 사람 앞으로 메일을 보내기 때문이다. 메이커에는 그 창구가
+ * 없다 — 부품은 거래선을 통해 산다. 그래서 회사 한 곳 = 한 줄이고, 묶음 행도 담당자별
+ * 복제(Copy as new)도 회사 단위 일괄편집(Company info)도 여기엔 없다.
+ *
+ * 대신 거래선의 'Projects' 자리에 Items 를 세운다 — 이 회사 물건을 우리가 몇 개나 다뤄
+ * 봤는가. 메이커는 딜의 상대가 아니라 품목의 출처라, 관계의 두께를 재는 자가 그것이다.
+ */
+function MakersTab() {
+  return (
+    <MasterSection<SettingsMaker>
+      title="Maker"
+      empty={EMPTY_MAKER}
+      headCols={makerHeadCols}
+      load={fetchSettingsMakers}
+      create={createSettingsMaker}
+      update={updateSettingsMaker}
+      remove={deleteSettingsMaker}
+      searchText={(r) => [r.name, r.specialization, r.note, r.country,
+                          r.regions.join(" "), r.website].join(" ")}
+      columns={[
+        ["name", "Company name", (r) => (
+          <span className="cust-name">
+            {r.logo ? <img className="cust-logo" src={r.logo} alt="" /> : null}
+            <span className="cust-name-text">{r.name || "—"}</span>
+          </span>
+        )],
+        ["country", "Region", (r) => <MultiCell values={r.regions} flat={r.country} />],
+        ["items", "Items", (r) => (
+          r.items ? <span className="ms-badge">{r.items}</span> : <span className="dash">—</span>
+        ), "ms-deals"],
+        ["specialization", "Makes", (r) => (
+          <>
+            <CategoryBadges ids={r.category_ids} max={3} />
+            {r.specialization || ""}
+          </>
+        ), "ms-spec"],
+      ]}
+      fields={[
+        ["name", "Maker *"],
+        ["address", "Address"],
+        ["website", "Website"],
+        ["specialization", "Makes"],
+      ]}
+      required="name"
+      renderField={({ key, label, form, setForm }) =>
+        // 주소는 본사·공장이 여럿일 수 있어 다중값(거래선과 같은 규칙).
+        key === "address" ? (
+          <MultiValueField
+            label={label}
+            placeholder="Head office / plant address"
+            values={form.addresses}
+            onChange={(addresses) => setForm({ ...form, addresses, address: addresses[0] ?? "" })}
+          />
+        ) : null
+      }
+      extraForm={(form, setForm) => (
+        <>
+          <MultiValueField label="Email" placeholder="info@maker.com" values={form.emails}
+                           onChange={(emails) => setForm({ ...form, emails })} />
+          <MultiValueField label="Phone" placeholder="+49 30 1234 5678" values={form.phones}
+                           onChange={(phones) => setForm({ ...form, phones })} />
+          <MultiValueField label="Region" placeholder="Germany" values={form.regions}
+                           onChange={(regions) => setForm({ ...form, regions })} />
+          <CategoryTagPicker
+            value={form.category_ids}
+            onChange={(category_ids) => setForm({ ...form, category_ids })}
+          />
+          <label className="form-field company-area-field">
+            <span>About this maker</span>
+            <textarea
+              rows={4}
+              placeholder="What they build, which engines or equipment they are known for…"
+              value={form.note}
+              onChange={(e) => setForm({ ...form, note: e.target.value })}
+            />
+          </label>
+          <LogoPasteField value={form.logo} onChange={(logo) => setForm({ ...form, logo })} />
+        </>
+      )}
+    />
   );
 }
 
@@ -2428,6 +2528,17 @@ const vendorHeadCols: HeadCol<SettingsVendor>[] = [
   { key: "contact", text: (r) => r.contact || "", emptyLabel: "No contact" },
   { key: "deals", text: (r) => relationState(r.deals ?? 0, r.deals_answered ?? 0, "reply"),
     sortValue: (r) => r.deals ?? 0, filter: "facet", emptyLabel: "Never asked" },
+  { key: "specialization", text: (r) => r.specialization || "", filter: "facet",
+    emptyLabel: "Unspecified" },
+];
+
+/** 제조사 목록의 머리 칸 규칙 — 거래선과 같은 얼개에서 담당자 열만 빠졌다. */
+const makerHeadCols: HeadCol<SettingsMaker>[] = [
+  { key: "name", text: (r) => r.name || "" },
+  { key: "country", text: (r) => r.country || "", filter: "facet",
+    facetValues: partyRegions, emptyLabel: "No region" },
+  { key: "items", text: (r) => String(r.items ?? 0), sortValue: (r) => r.items ?? 0,
+    filter: "facet", emptyLabel: "No item yet" },
   { key: "specialization", text: (r) => r.specialization || "", filter: "facet",
     emptyLabel: "Unspecified" },
 ];

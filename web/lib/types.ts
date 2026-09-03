@@ -92,6 +92,32 @@ export type SettingsVendor = {
   co_deals?: number;
   co_deals_answered?: number;
 };
+/**
+ * 제조사(메이커) — 물건을 만든 회사. 거래선과 다른 축이다: 같은 MAN B&W 부품을 여러
+ * 거래선이 판다. 거래선과 달리 담당자를 두지 않으므로 레코드 한 줄 = 회사 한 곳이고,
+ * 그래서 목록에 회사 묶음(그룹 행)도 Company info 창도 없다.
+ */
+export type SettingsMaker = {
+  id: number;
+  name: string;
+  email: string;
+  contact_phone: string;   // 회사 대표 연락처(담당자가 아니다)
+  country: string;         // 대표 지역(regions[0] 미러링)
+  address: string;
+  website: string;
+  specialization: string;  // 무엇을 만드는 회사인가
+  note: string;            // 회사 소개 요약
+  logo: string;
+  addresses: string[];
+  emails: string[];
+  phones: string[];
+  regions: string[];
+  /** 이 회사가 만드는 품목 분류(중분류까지). 거래선의 같은 칸과 규약이 같다. */
+  category_ids: number[];
+  /** 품목 마스터에 이 회사 이름으로 등록된 품목 수(읽기전용). */
+  items?: number;
+};
+
 export type SettingsVessel = {
   id: number;
   name: string;

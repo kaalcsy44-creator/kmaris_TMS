@@ -33,6 +33,8 @@ from _core import (
     save_signature,
     Consultant,
     ConsultantCreate,
+    Maker,
+    MakerCreate,
     HTTPException,
     ItemCategory,
     ItemCategorySave,
@@ -725,6 +727,122 @@ def delete_vendor(row_id: int):
         s.query(VendorContact).filter_by(vendor_id=v.id).delete(synchronize_session=False)
         s.flush()
         s.delete(v)
+        s.commit()
+        return {"ok": True}
+    finally:
+        s.close()
+
+
+# ── Maker(제조사) ─────────────────────────────────────────────────────────────
+# 거래선과 나란한 또 하나의 상대처지만 담당자를 두지 않는다 — 부품은 거래선을 통해 사고
+# 메이커에는 우리가 직접 두드리는 창구가 없다. 회사 한 곳 = 한 줄이라, 고객·거래선 쪽의
+# 회사 단위 일괄편집(company-info)도 여기엔 없다.
+
+
+def _maker_item_counts(s) -> dict[str, int]:
+    """메이커 이름 → 그 이름으로 등록된 품목 수.
+
+    품목 마스터의 maker 칸은 자유 텍스트라 대소문자·앞뒤 공백이 제각각이다. 명부와
+    맞춰 세려면 양쪽을 같은 방식으로 눕혀야 한다 — 이 숫자가 목록에서 "이 회사 물건을
+    우리가 몇 개나 다뤄 봤나"를 답하는 유일한 칸이라서다."""
+    out: dict[str, int] = {}
+    for (mk,) in s.query(ItemMaster.maker).all():
+        k = " ".join((mk or "").split()).lower()
+        if k:
+            out[k] = out.get(k, 0) + 1
+    return out
+
+
+def _maker_row(m, counts: dict[str, int]) -> dict:
+    return {
+        "id": m.id, "name": m.name,
+        "email": m.email or "",
+        "contact_phone": getattr(m, "contact_phone", None) or "",
+        "country": m.country or "", "address": m.address or "",
+        "website": getattr(m, "website", None) or "",
+        "specialization": m.specialization or "",
+        "note": getattr(m, "note", None) or "",
+        "logo": getattr(m, "logo", None) or "",
+        "addresses": _multi_out(getattr(m, "addresses", None), m.address),
+        "emails": _multi_out(getattr(m, "emails", None), m.email),
+        "phones": _multi_out(getattr(m, "phones", None), getattr(m, "contact_phone", None)),
+        "regions": _multi_out(getattr(m, "regions", None), m.country),
+        "category_ids": [int(x) for x in (getattr(m, "category_ids", None) or [])
+                         if isinstance(x, (int, float, str)) and str(x).isdigit()],
+        # 이 회사가 만든 것으로 등록된 품목 수 — 거래선 목록의 'Projects' 자리에 선다.
+        "items": counts.get(" ".join((m.name or "").split()).lower(), 0),
+    }
+
+
+@app.get("/api/admin/settings/makers", dependencies=[Depends(require_token)])
+def settings_makers():
+    s = get_session()
+    try:
+        counts = _maker_item_counts(s)
+        return [_maker_row(m, counts) for m in s.query(Maker).order_by(Maker.name).all()]
+    finally:
+        s.close()
+
+
+@app.post("/api/admin/settings/makers", dependencies=[Depends(require_token)])
+def create_maker(body: MakerCreate):
+    if not body.name.strip():
+        raise HTTPException(status_code=400, detail="이름을 입력하세요.")
+    s = get_session()
+    try:
+        m = Maker(name=body.name.strip(), email=body.email or "",
+                  contact_phone=body.contact_phone or "",
+                  country=body.country or "", address=body.address or "",
+                  website=body.website or "", specialization=body.specialization or "",
+                  note=body.note or "", logo=body.logo or "",
+                  category_ids=list(body.category_ids or []))
+        s.add(m)
+        _apply_multi(m, body.emails, body.phones, body.regions, body.addresses)
+        s.commit()
+        return {"ok": True, "id": m.id}
+    finally:
+        s.close()
+
+
+@app.put("/api/admin/settings/makers/{row_id}", dependencies=[Depends(require_token)])
+def update_maker(row_id: int, body: MakerCreate):
+    s = get_session()
+    try:
+        m = s.query(Maker).filter_by(id=row_id).first()
+        if not m:
+            raise HTTPException(status_code=404, detail="Maker를 찾을 수 없습니다.")
+        m.name = body.name.strip()
+        m.email = body.email or ""
+        m.contact_phone = body.contact_phone or ""
+        m.country = body.country or ""
+        m.address = body.address or ""
+        m.website = body.website or ""
+        m.specialization = body.specialization or ""
+        if body.note is not None:
+            m.note = body.note
+        if body.logo is not None:
+            m.logo = body.logo
+        if body.category_ids is not None:
+            m.category_ids = list(body.category_ids)
+        _apply_multi(m, body.emails, body.phones, body.regions, body.addresses)
+        s.commit()
+        return {"ok": True, "id": m.id}
+    finally:
+        s.close()
+
+
+@app.delete("/api/admin/settings/makers/{row_id}", dependencies=[Depends(require_token)])
+def delete_maker(row_id: int):
+    """명부에서만 지운다 — 품목의 maker 칸(자유 텍스트)은 그대로 남는다.
+
+    지운다고 그 부품을 그 회사가 만들지 않은 것이 되지는 않는다. 명부는 '아는 회사의
+    목록'이고 품목에 적힌 이름은 그 부품의 사실이라, 둘의 수명이 다르다."""
+    s = get_session()
+    try:
+        m = s.query(Maker).filter_by(id=row_id).first()
+        if not m:
+            raise HTTPException(status_code=404, detail="Maker를 찾을 수 없습니다.")
+        s.delete(m)
         s.commit()
         return {"ok": True}
     finally:

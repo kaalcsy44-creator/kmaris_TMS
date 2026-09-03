@@ -82,7 +82,7 @@ from db.models import (
     Order, PurchaseOrder, ShippingAdvice, ProformaInvoice, CommercialInvoice,
     PackingList, TaxInvoiceData, ARRecord, APRecord, DeliveryProof,
     RFQStatus, OrderStatus, ARStatus, WorkType, MarketingActivity, ScheduleEvent,
-    MarketingAsset, FinancePayable, FinanceIncome, Consultant,
+    MarketingAsset, FinancePayable, FinanceIncome, Consultant, Maker,
     Claim, CreditNote,
 )
 
@@ -3234,6 +3234,24 @@ class VendorCreate(BaseModel):
     category_ids: list[int] | None = None
 
 
+class MakerCreate(BaseModel):
+    """제조사 등록·수정. 거래선과 같은 칸을 쓰되 담당자(contact)가 없다."""
+    name: str
+    email: str | None = ""
+    contact_phone: str | None = ""
+    country: str | None = ""
+    address: str | None = ""
+    website: str | None = ""
+    specialization: str | None = ""
+    note: str | None = None     # None = 건드리지 않음(거래선 note 와 같은 규약)
+    logo: str | None = ""       # None = 변경 안 함(수정 시)
+    addresses: list[str] | None = None
+    emails: list[str] | None = None
+    phones: list[str] | None = None
+    regions: list[str] | None = None
+    category_ids: list[int] | None = None
+
+
 class ConsultantCreate(BaseModel):
     """소개자(컨설턴트) 등록·수정. 계좌는 수수료를 낼 때 그대로 쓰는 값이라 함께 받는다."""
     name: str
@@ -3833,6 +3851,8 @@ __all__ = [
     "_sync_contacts",
     "_apply_multi",
     "_multi_out",
+    "Maker",
+    "MakerCreate",
     "_mv_list",
     "ProformaInvoice",
     "ProformaInvoiceSave",

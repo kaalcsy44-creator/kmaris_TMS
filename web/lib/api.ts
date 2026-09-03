@@ -56,6 +56,7 @@ import type {
   FinanceCalendarEvent,
   SettingsCustomer,
   SettingsVendor,
+  SettingsMaker,
   SettingsVessel,
   SettingsItem,
   ItemCategory,
@@ -1129,6 +1130,20 @@ export function fetchSettingsCustomers(): Promise<SettingsCustomer[]> {
 export function fetchSettingsVendors(): Promise<SettingsVendor[]> {
   return get<SettingsVendor[]>("/api/admin/settings/vendors");
 }
+// ── Maker(제조사) — 담당자가 없어 회사 단위 일괄편집도 없다(거래선과 다른 점). ──
+export function fetchSettingsMakers(): Promise<SettingsMaker[]> {
+  return get<SettingsMaker[]>("/api/admin/settings/makers");
+}
+export function createSettingsMaker(body: Omit<SettingsMaker, "id">): Promise<{ ok: boolean; id: number }> {
+  return post("/api/admin/settings/makers", body);
+}
+export function updateSettingsMaker(id: number, body: Omit<SettingsMaker, "id">): Promise<{ ok: boolean; id: number }> {
+  return put(`/api/admin/settings/makers/${id}`, body);
+}
+export function deleteSettingsMaker(id: number): Promise<{ ok: boolean }> {
+  return del(`/api/admin/settings/makers/${id}`);
+}
+
 export function fetchSettingsVessels(): Promise<SettingsVessel[]> {
   return get<SettingsVessel[]>("/api/admin/settings/vessels");
 }
