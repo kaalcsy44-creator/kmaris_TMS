@@ -8,7 +8,12 @@
 근거는 센 것부터:
   1) 같은 품번을 이미 산 곳 > 견적을 준 곳 > 물어본 곳
   2) 같은 분류(대>중>소)에서 거래한 이력이 있는 곳
-  3) 취급품목·회사소개 글귀가 품목 낱말(제조사명 포함)과 겹치는 곳
+  3) 그 분류를 취급한다고 **밝혀 둔** 곳(Settings > Vendor 의 Item categories)
+  4) 취급품목·회사소개 글귀가 품목 낱말(제조사명 포함)과 겹치는 곳
+
+3) 이 없으면 아직 거래가 없는 곳은 오직 글귀로만 걸린다 — 새로 등록한 벤더는 우리가
+그 회사 소개에 무슨 낱말을 적어 두었는지에 운을 맡기게 된다. 태그는 그 회사가 스스로
+말한 것이라 글귀보다 세지만, 실제로 거래해 본 것보다는 약하다.
 
 낱말 매칭에서 '흔한 말'은 미리 적어 두지 않고 df(그 낱말이 등장하는 벤더 수)로 걸러
 낸다 — 우리 벤더 목록에서 무엇이 흔한 말인지는 그 목록 자신이 안다. 거의 모든 벤더가
@@ -47,8 +52,13 @@ _TOKEN_RE = re.compile(r"[A-Za-z][A-Za-z0-9&+]{2,}|[가-힣]{2,}")
 # 근거 종류별 가중치. 같은 품번은 분류보다 세고, 실제 구매는 문의보다 세다.
 _W_PART = {"bought": 45.0, "quoted": 30.0, "asked": 16.0}
 _W_CAT = {"bought": 18.0, "quoted": 12.0, "asked": 7.0}
+# 취급한다고 밝혀 둔 분류. 실제로 사 본 것(18)·값을 받아 본 것(12)보다는 약하고,
+# 우리가 한 번 물어본 것(7)보다는 세다 — 물어본 것은 우리 짐작이지만 태그는 그 회사가
+# 스스로 밝힌 것이라서다. 상위 분류만 맞으면 거래 이력과 같은 규칙으로 절반만 센다.
+_W_DECLARED = 10.0
 _PART_MAX = 2          # 품번 근거는 두 건까지만 점수에 센다(한 벤더가 독식하지 않도록)
 _CAT_MAX = 2
+_DECLARED_MAX = 2      # 태그 근거도 두 개까지 — 널리 태그한 벤더가 독식하지 않도록
 _TEXT_CAP = 40.0       # 글귀 매칭 상한 — 글로만 1등이 되지는 않게
 _TEXT_UNIT = 14.0      # 한 벤더만 적어 둔 낱말(브랜드명 등)이 취급품목에서 맞았을 때의 값
 _SPEC_W = 1.0          # 취급품목 한 줄은 회사소개 문단보다 무겁게 본다
@@ -317,7 +327,36 @@ def suggest_vendors(session, items, *, limit: int = 6, exclude_ids=()) -> dict:
             near = "related to " if indirect else ""
             reasons.append({"kind": "category", "text": f"{n} deal(s) in {near}{name}"})
 
-        # 3) 취급품목·회사소개 글귀가 품목 낱말과 겹친다.
+        # 3) 그 분류를 취급한다고 밝혀 둔 곳. 거래 이력이 있으면 그쪽이 이미 세었으므로
+        #    여기서는 아직 안 세어진 분류만 본다 — 같은 계통을 두 번 세면 태그만 널리
+        #    달아 둔 벤더가 실제로 납품해 본 벤더를 앞지른다.
+        counted = {c[3] for c in cat_hits[:_CAT_MAX]}
+        dec_hits = []
+        for cid in (getattr(v, "category_ids", None) or []):
+            try:
+                cid = int(cid)
+            except (TypeError, ValueError):
+                continue
+            if cid in counted or cid not in cats:
+                continue
+            # 거래 이력과 판정이 다르다. 이력의 분류는 '그 벤더가 실제로 다룬 그 물건'
+            # 이라 잎이 어긋나면 옆 가지일 뿐이지만, 태그는 중분류까지만 달기로 한
+            # 값이다(VENDOR_TAG_LEVEL) — 'Main Engine System' 을 달아 둔 회사에게
+            # 그 밑 'Piston' 은 옆 가지가 아니라 정확히 제 물건이다. 그래서 태그가
+            # 품목 분류의 **조상이거나 그 자신**이면(= 품목의 뿌리→잎 사슬 위에 있으면)
+            # 온전히 세고, 같은 계통의 다른 가지일 때만 절반으로 깎는다.
+            if cid in want:
+                dec_hits.append((_W_DECLARED, cid, False))
+            elif any(c in want for c in _chain(cats, cid)):
+                dec_hits.append((_W_DECLARED * 0.5, cid, True))
+        dec_hits.sort(key=lambda d: -d[0])
+        for w, cid, indirect in dec_hits[:_DECLARED_MAX]:
+            score += w
+            near = "related to " if indirect else ""
+            reasons.append({"kind": "declared",
+                            "text": f"Lists {near}{cats[cid].name} as their category"})
+
+        # 4) 취급품목·회사소개 글귀가 품목 낱말과 겹친다.
         tw = per_tokens.get(v.id) or {}
         matched = []
         text_score = 0.0

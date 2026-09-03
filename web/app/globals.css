@@ -7797,6 +7797,14 @@ table.mini .num {
   background: #e9f0fa;
   color: #2c5487;
 }
+/* 스스로 밝힌 취급 분류 — 거래 이력(category)보다 한 톤 옅다. 근거의 세기가 곧
+   색의 세기여야, 목록을 훑는 눈이 무엇이 실적이고 무엇이 신고인지 갈라 읽는다. */
+.vsug-reason.declared {
+  background: #f2f6fb;
+  color: #5b7099;
+  border: 1px dashed #d3ddeb;
+  padding: 1px 6px;
+}
 
 /* 명함 스캔 패널 — Customer/Vendor 등록 폼 맨 위. 붙여넣기·파일선택으로 자동 입력. */
 .bc-scan {
@@ -15312,6 +15320,34 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
   color: var(--z-ink);
 }
 .ship-zone--empty .ship-zone-n { color: var(--muted); font-weight: 400; }
+
+/* ── 계통 옆 거래선 마크 ───────────────────────────────────────────────────
+   "이 계통은 누구에게 물어볼 수 있나". 한 줄만 쓴다 — 넘치면 자른다(개수를 미리
+   잘라 접으면 넓은 화면에서 자리가 남는데도 늘 몇 개에서 멈춘다). 거래한 곳부터
+   오므로 잘리는 쪽은 늘 근거가 약한 쪽이다. */
+.ship-pins {
+  display: inline-flex; gap: 2px; align-items: center;
+  flex: 0 1 auto; min-width: 0; overflow: hidden; max-height: 18px;
+}
+.ship-pin {
+  flex: none; width: 17px; height: 17px; border-radius: 50%;
+  border: 1px solid var(--z-chip-line); background: #fff;
+  object-fit: contain;
+}
+/* 로고가 없는 곳 — 이름에서 뽑은 색 이니셜(VendorMonograms 와 같은 규칙). */
+.ship-pin--mono {
+  display: inline-flex; align-items: center; justify-content: center;
+  background: hsl(var(--h) 62% 93%);
+  border-color: hsl(var(--h) 45% 78%);
+  color: hsl(var(--h) 55% 30%);
+  font-size: 8.5px; font-weight: 800; letter-spacing: -0.2px;
+}
+/* 취급한다고 적어만 둔 곳 — 물어볼 수는 있지만 아직 산 적은 없다. 사 본 곳과 같은
+   무게로 세우면 그 차이가 지워지는데, 그 차이가 곧 이 마크를 보는 이유다. */
+.ship-pin--soft { opacity: 0.45; filter: grayscale(0.55); }
+/* 중분류 줄에서는 이름과 개수 사이가 아니라 개수 옆에 붙는다 — 이름이 왼쪽 끝에
+   그대로 서야 계열 목록이 세로로 읽힌다(.ship-sub-hd 는 space-between 이다). */
+.ship-sub-hd .ship-pins { margin-left: auto; }
 
 /* 프로젝트 번호 — 이 화면의 요점. 계통 바로 밑에 줄지어 서서 "이 계통에 지금 무엇이
    걸려 있는가"를 먼저 말한다. */

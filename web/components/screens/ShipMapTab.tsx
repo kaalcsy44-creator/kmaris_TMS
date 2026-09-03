@@ -6,6 +6,7 @@ import ProjectNo from "@/components/common/ProjectNo";
 import { assignItemLedgerCategory, fetchItemShipMap } from "@/lib/api";
 import { invalidateCache, useCachedData } from "@/lib/useCachedData";
 import type { ShipDeal, ShipItem, ShipMap } from "@/lib/types";
+import { useVendorLogo } from "@/lib/vendorLogos";
 
 /**
  * Ship View — 분류 트리를 목록이 아니라 배 한 척으로 펼친 화면.
@@ -93,6 +94,7 @@ function Mark({ name }: { name: string }) {
 }
 
 type Cat = ShipMap["categories"][number];
+type VendorMark = NonNullable<ShipMap["vendor_marks"]>[number];
 
 /** 화면이 쓰는 모양으로 한 번 갈아 둔 트리 — 부모·자식, 분류별 품목, 롤업. */
 type ShipModel = {
@@ -100,6 +102,14 @@ type ShipModel = {
   roll: Map<number, ShipItem[]>;   // 그 분류와 그 아래 전부의 품목
   roots: Cat[];
   loose: ShipItem[];               // 분류가 없어 배에 못 실은 품목
+  /**
+   * 계통 → 그 계통을 다루는 거래선. 이 판이 지금까지 말하지 못한 것을 말하게 한다.
+   *
+   * 'Cooling Water System 0' 은 두 가지 중 하나다 — 아직 일이 없었거나, 물어볼 데가
+   * 없거나. 전자는 그냥 조용한 것이고 후자는 소싱의 구멍인데, 숫자 0 으로는 갈리지
+   * 않는다. 옆에 거래선이 서 있으면 갈린다.
+   */
+  marks: Map<number, VendorMark[]>;
   /**
    * 판에서 자리를 옮길 때 고르는 목록 — '대 > 중 > 소' 전체 경로다.
    * 이름만 적으면 못 고른다: 'Filter'·'Pump'·'Engine' 처럼 여러 계통에 같은 이름이
@@ -237,7 +247,15 @@ export default function ShipMapTab() {
       for (const k of kids.get(c.id) ?? []) if (k.active) walk(k, path);
     };
     for (const r of roots) walk(r, "");
-    return { kids, roll, roots, loose, places };
+
+    const marks = new Map<number, VendorMark[]>();
+    for (const v of data.vendor_marks ?? []) {
+      if (!byId.has(v.category_id)) continue;   // 지워진 분류에 남은 태그는 안 그린다
+      const arr = marks.get(v.category_id) ?? [];
+      arr.push(v);
+      marks.set(v.category_id, arr);
+    }
+    return { kids, roll, roots, loose, places, marks };
   }, [data]);
 
   if (error && !data) return <div className="state error">API error: {error.message}</div>;
@@ -396,6 +414,53 @@ export default function ShipMapTab() {
   );
 }
 
+/**
+ * 계통 옆에 서는 거래선 — 로고가 있으면 로고, 없으면 색 이니셜.
+ *
+ * 두 신호를 모양으로 가른다: 그 계통에서 **실제로 사 본 곳**은 진하게, 취급한다고
+ * 적어만 둔 곳은 흐리게. 둘을 같은 무게로 세우면 "여기서 산 적이 있다"와 "여기에
+ * 물어볼 수는 있다"가 구별되지 않는데, 그 차이가 곧 이 마크를 보는 이유다.
+ * (프로젝트 카드의 벤더 배지가 견적 제출·미제출을 가르는 규칙과 같다.)
+ *
+ * 넘치는 것은 CSS 가 한 줄로 자른다 — 개수를 미리 잘라 "+N" 으로 접으면 넓은 화면에서
+ * 자리가 남는데도 늘 세 개에서 멈춘다. 거래한 곳부터 오므로 잘리는 쪽은 늘 약한 쪽이다.
+ */
+function VendorPins({ marks }: { marks: VendorMark[] }) {
+  const logoFor = useVendorLogo();
+  if (!marks.length) return null;
+  return (
+    <span className="ship-pins">
+      {marks.map((v) => {
+        const logo = logoFor(v.name);
+        const title = `${v.name} — ${v.traded ? "supplied on this system" : "listed as their category"}`;
+        return logo ? (
+          <img key={v.name} className={`ship-pin${v.traded ? "" : " ship-pin--soft"}`}
+               src={logo} alt="" title={title} />
+        ) : (
+          <span key={v.name} className={`ship-pin ship-pin--mono${v.traded ? "" : " ship-pin--soft"}`}
+                style={{ ["--h" as string]: hueOf(v.name) }} title={title}>
+            {initialsOf(v.name)}
+          </span>
+        );
+      })}
+    </span>
+  );
+}
+
+/** 이름 → 1~2글자 이니셜(VendorMonograms 와 같은 규칙 — 같은 회사는 어디서나 같게). */
+function initialsOf(name: string): string {
+  const w = name.replace(/[()[\]]/g, " ").split(/\s+/).filter(Boolean);
+  if (!w.length) return "?";
+  return w.length === 1 ? w[0].slice(0, 2).toUpperCase() : (w[0][0] + w[1][0]).toUpperCase();
+}
+
+/** 이름 → 늘 같은 색. */
+function hueOf(name: string): number {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % 360;
+  return h;
+}
+
 /** 대분류 한 칸 — 배 위의 한 구역. 그 아래 중·소분류와 프로젝트 번호가 모두 들어간다. */
 function Zone({
   cat, model, busyOnly, dealsOf, spot, opens,
@@ -436,6 +501,9 @@ function Zone({
       >
         <Mark name={cat.name} />
         <h3>{cat.name}</h3>
+        {/* 계통 전체를 다룬다고 적어 둔 거래선 — 대분류에 직접 달린 태그만 선다.
+            아래 중분류의 마크를 여기로 끌어올리면 큰 계통 하나가 스무 개를 달게 된다. */}
+        <VendorPins marks={model.marks.get(cat.id) ?? []} />
         <span className="ship-zone-n">{mine.length}</span>
       </header>
 
@@ -485,6 +553,7 @@ function Zone({
                 {...opens(s.name, `${cat.name} · ${items.length} item(s)`, items)}
               >
                 <span>{s.name}</span>
+                <VendorPins marks={model.marks.get(s.id) ?? []} />
                 <b>{items.length}</b>
               </div>
               {leaves.length ? (

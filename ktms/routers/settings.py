@@ -459,6 +459,59 @@ def _up_to_level2(cats: dict, cid: int | None) -> int | None:
     return None
 
 
+def _vendor_marks(s) -> list[dict]:
+    """분류 → 그 분류를 다루는 거래선. Ship View 가 계통마다 세우는 마크의 원천.
+
+    지금까지 이 판은 "이 계통에 품목이 몇 개 걸려 있나"만 말했다. 그런데 계통이 비어
+    있다는 사실은 두 가지 중 하나다 — 아직 일이 없었거나, **물어볼 데가 없거나**.
+    둘은 전혀 다른 문제인데 숫자 0 으로는 갈리지 않는다. 벤더를 함께 세우면 갈린다.
+
+    두 신호를 섞지 않고 함께 준다:
+      declared  거래선이 "이거 다룬다"고 적어 둔 것(vendors.category_ids).
+                아직 한 번도 안 사 봤어도 선다 — 물어볼 수 있다는 뜻이라 그게 요점이다.
+      traded    그 분류에서 실제로 산 이력이 있는 것. 화면이 이쪽을 진하게 세운다.
+    한 회사가 둘 다면 traded 로 친다(더 센 근거가 이긴다).
+
+    회사명으로 묶는다 — 레코드 1건 = 담당자 1명이라 담당자 수만큼 같은 마크가 서면
+    한 회사가 계통 하나를 혼자 덮는다."""
+    cats = {c.id: c for c in s.query(ItemCategory).all()}
+    cat_of_item = {m.id: m.category_id for m in s.query(ItemMaster).all()}
+    vendors = s.query(Vendor).all()
+    name_of = {v.id: (v.name or "").strip() for v in vendors}
+
+    # {분류 id: {회사명: traded 여부}}
+    marks: dict[int, dict[str, bool]] = {}
+
+    def put(cid, company: str, traded: bool):
+        if not cid or not company or cid not in cats:
+            return
+        slot = marks.setdefault(cid, {})
+        slot[company] = slot.get(company, False) or traded
+
+    for v in vendors:
+        co = (v.name or "").strip()
+        for cid in (getattr(v, "category_ids", None) or []):
+            try:
+                put(int(cid), co, False)
+            except (TypeError, ValueError):
+                continue
+
+    for h in (s.query(ItemPriceHistory)
+              .filter(ItemPriceHistory.price_type == "buy",
+                      ItemPriceHistory.vendor_id.isnot(None)).all()):
+        if not h.item_id:
+            continue
+        put(_up_to_level2(cats, cat_of_item.get(h.item_id)),
+            name_of.get(h.vendor_id, ""), True)
+
+    out: list[dict] = []
+    for cid, companies in marks.items():
+        # 실제로 거래한 곳부터 — 잘려 나가는 쪽은 늘 근거가 약한 쪽이어야 한다.
+        for co, traded in sorted(companies.items(), key=lambda kv: (not kv[1], kv[0].lower())):
+            out.append({"category_id": cid, "name": co, "traded": traded})
+    return out
+
+
 @app.get("/api/admin/settings/vendors/category-suggestions",
          dependencies=[Depends(require_token)])
 def vendor_category_suggestions():
@@ -1130,6 +1183,9 @@ def settings_item_ship_map():
                 d["customer"] = cust.get(d.pop("customer_id", None)) or ""
                 d["vessel"] = vess.get(d.pop("vessel_id", None)) or ""
                 d["project_no"] = pno.get(d["rfq_id"], "")
+        # 계통마다 '누구에게 물어볼 수 있나' — 품목 수만으로는 빈 계통이 조용한
+        # 것인지 물어볼 데가 없는 것인지 갈리지 않는다.
+        data["vendor_marks"] = _vendor_marks(s)
         built = s.query(func.max(ItemPriceHistory.created_at)).scalar()
         data["built_at"] = built.isoformat() if built else None
         return data

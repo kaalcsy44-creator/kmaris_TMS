@@ -237,6 +237,9 @@ export type ShipMap = {
     active: boolean;
   }[];
   items: ShipItem[];
+  /** 분류마다 '누구에게 물어볼 수 있나'. traded=그 계통에서 실제로 산 이력이 있는 곳,
+   *  아니면 취급한다고 적어만 둔 곳(Settings > Vendor 의 Item categories). */
+  vendor_marks?: { category_id: number; name: string; traded: boolean }[];
   unmatched: number;             // 마스터에 연결조차 안 된 이력 줄 수(안내용)
   built_at: string | null;
 };
