@@ -132,6 +132,10 @@ export type SettingsItem = {
   // 그 딜들이 다룬 선박 — 같은 부품이 여러 척에 들어가기도 한다. 규칙은 위와 같다.
   vessel?: string;               // vessels[0]
   vessels?: string[];
+  /** 이 품목과 **식별키가 같은** 다른 품목들의 id. 품번이 없으면 품명이 키라
+   *  (services/item_ledger.match_key), 메이커만 다른 두 줄은 시스템이 구별하지 못한다.
+   *  비어 있지 않으면 위 거래 기록(프로젝트·상대처·가격)은 그 줄들과 함께 보는 값이다. */
+  twin_ids?: number[];
   // 가장 최근 딜(project_no 와 같은 딜)의 결말. state 는 어디까지 갔는지,
   // note 는 그 까닭 한 줄 — 종결 사유 / 미수 사유(수금 메모·연체일) / 완납일.
   deal_state?: "open" | "quoted" | "ordered" | "paid" | "closed" | "";

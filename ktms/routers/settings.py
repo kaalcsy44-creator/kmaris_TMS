@@ -1031,10 +1031,28 @@ def settings_items():
         cust = dict(s.query(Customer.id, Customer.name).all())
         vend = dict(s.query(Vendor.id, Vendor.name).all())
         vess = dict(s.query(Vessel.id, Vessel.name).all())
+        # 같은 식별키를 가진 마스터들. 품번이 없으면 품명이 키라(match_key), 메이커만
+        # 다른 두 줄을 시스템은 같은 품목으로 본다. 그런데 이력은 그중 한 줄(가장 낮은
+        # id)에만 붙어서(build_master_index) 나머지는 프로젝트·상대처·가격이 통째로 빈
+        # 채로 남았다 — 화면에서는 "저장했더니 프로젝트와 연결이 끊긴" 것으로 보인다.
+        #
+        # 이력이 어느 줄에 붙었는지는 이 줄들 사이에서 아무 뜻이 없다(우연히 먼저 만들어진
+        # 쪽이다). 같은 품목으로 취급하는 이상 거래 기록도 같아야 하므로, 키를 공유하는
+        # 줄들은 그 기록을 함께 본다. 대신 '함께 보고 있다'는 사실을 twin_ids 로 밝힌다 —
+        # 구별하고 싶으면 품번을 넣어야 한다는 것이 그 다음 질문의 답이라서다.
+        twins: dict[str, list[int]] = {}
+        for i in s.query(ItemMaster).order_by(ItemMaster.id).all():
+            k = match_key(i.part_no, i.description)
+            if k:
+                twins.setdefault(k, []).append(i.id)
+
         out = []
         for i in s.query(ItemMaster).order_by(ItemMaster.part_no).all():
-            sm = summary.get(i.id) or {}
-            fb = parties.get(i.id) or {}
+            mates = twins.get(match_key(i.part_no, i.description) or "", [i.id])
+            # 기록이 실제로 붙은 줄 — 없으면 제 id 로 두어 빈 값을 그대로 쓴다.
+            src = next((x for x in mates if x in summary or x in parties), i.id)
+            sm = summary.get(src) or {}
+            fb = parties.get(src) or {}
             row = {
                 "id": i.id, "part_no": i.part_no or "",
                 "description": i.description or "", "maker": i.maker or "",
@@ -1062,6 +1080,8 @@ def settings_items():
             # 목록은 가장 최근 것만 세운다(문서 있는 쪽 먼저, 그 다음 RFQ 등장분).
             row["vessels"] = _names(vess, sm.get("vessel_ids"), fb.get("vessel_ids"))
             row["vessel"] = row["vessels"][0] if row["vessels"] else ""
+            # 이 줄과 식별키가 같은 다른 줄들 — 있으면 위 거래 기록은 그들과 공유한 것이다.
+            row["twin_ids"] = [x for x in mates if x != i.id]
             out.append(row)
         return out
     finally:

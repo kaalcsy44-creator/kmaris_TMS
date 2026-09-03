@@ -1567,6 +1567,22 @@ table.mini.wide.ms-table thead th.pl-th.open .pl-th-btn {
   font-size: 11px;
   font-weight: 700;
 }
+/* 품목 편집 창의 거래 기록 — 고치는 칸이 아니라 '무엇에 손대는지' 보라고 두는 자리라,
+   입력칸과 같은 무게로 서면 안 된다. 폼 아래 전폭으로 눕히고 한 톤 죽인다. */
+.item-link-note { grid-column: 1 / -1; }
+.item-link-body {
+  display: flex; flex-direction: column; gap: 5px;
+  padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px;
+  background: #f8fafc;
+}
+.item-link-line { display: flex; gap: 8px; font-size: 11.5px; line-height: 1.5; }
+.item-link-line b { flex: 0 0 96px; color: #5c6b7d; font-weight: 700; }
+.item-link-line span { color: var(--ink); min-width: 0; }
+.item-link-empty b { color: #8a94a3; }
+.item-link-empty span { color: var(--muted); }
+.item-link-warn b { color: #b45309; }
+.item-link-warn span { color: #7a5310; }
+
 /* ── 취급 분류 배지 ─────────────────────────────────────────────────────────
    거래선이 다루는 품목 분류. 배지는 계통을, 그 옆의 글(Specialization)은 브랜드를
    말한다 — 한 칸에 나란히 서므로 배지는 글보다 작고 조용해야 한다(글을 밀어내지

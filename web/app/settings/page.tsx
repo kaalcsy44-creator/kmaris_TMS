@@ -2617,12 +2617,75 @@ export function ItemsTab({ kind = "part" }: { kind?: ItemKind }) {
         ) : null
       }
       extraForm={(form, setForm) => (
-        <CategoryPicker
-          value={form.category_id}
-          onChange={(category_id) => setForm({ ...form, category_id })}
-        />
+        <>
+          <CategoryPicker
+            value={form.category_id}
+            onChange={(category_id) => setForm({ ...form, category_id })}
+          />
+          <ItemLinkNote row={form} />
+        </>
       )}
     />
+  );
+}
+
+/**
+ * 편집 창에 함께 세우는 거래 기록 — 이 품목이 어느 딜에 걸려 있고 누구와 거래됐는지.
+ *
+ * 고칠 수 있는 값이 아니라 보라고 두는 값이다. 이 창에서 고치는 것(분류·메이커·품번)은
+ * 마스터의 속성일 뿐이고 딜과의 연결은 문서에서 나오는데, 창에 그 연결이 안 보이니
+ * 저장한 뒤 목록에서 프로젝트 칸이 비면 "저장했더니 연결이 끊겼다"로 읽힌다. 무엇에
+ * 손대는지가 창 안에 있어야 그 오해가 생기지 않는다.
+ *
+ * 연결이 없을 때는 그 까닭을 말한다. 까닭은 둘 중 하나다 — 같은 식별키를 가진 다른 줄이
+ * 있어 기록을 함께 보고 있거나, 어느 문서에도 이 품목의 줄이 없거나.
+ */
+function ItemLinkNote({ row }: { row: SettingsItem }) {
+  const projects = row.project_nos ?? [];
+  const twins = row.twin_ids ?? [];
+  // 신규 등록 창에는 볼 기록이 없다(아직 아무 문서에도 없는 품목이다).
+  if (!row.id) return null;
+  return (
+    <div className="form-field item-link-note">
+      <span>Where this item is used</span>
+      <div className="item-link-body">
+        {projects.length ? (
+          <div className="item-link-line">
+            <b>Projects</b>
+            <span>{projects.join(" · ")}</span>
+          </div>
+        ) : null}
+        {row.customer || row.vendor ? (
+          <div className="item-link-line">
+            <b>Parties</b>
+            <span>
+              {[row.customer, row.vendor].filter(Boolean).join("  ←→  ") || "—"}
+            </span>
+          </div>
+        ) : null}
+        {!projects.length ? (
+          <div className="item-link-line item-link-empty">
+            <b>Not linked</b>
+            <span>
+              No document line matches this item yet. The link is made by Part No., or by
+              Description when there is no Part No. — editing the category or maker never
+              changes it.
+            </span>
+          </div>
+        ) : null}
+        {twins.length ? (
+          <div className="item-link-line item-link-warn">
+            <b>Shared identity</b>
+            <span>
+              {twins.length} other item{twins.length > 1 ? "s" : ""} {twins.length > 1 ? "have" : "has"} the
+              same {row.part_no ? "Part No." : "Description"}, so they all show the trade record above —
+              a different Maker alone does not tell them apart. Give each one its own Part No. to
+              separate them.
+            </span>
+          </div>
+        ) : null}
+      </div>
+    </div>
   );
 }
 
