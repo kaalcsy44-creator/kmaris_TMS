@@ -503,11 +503,16 @@ function Zone({
       >
         <Mark name={cat.name} />
         <h3>{cat.name}</h3>
-        {/* 계통 전체를 다룬다고 적어 둔 거래선 — 대분류에 직접 달린 태그만 선다.
-            아래 중분류의 마크를 여기로 끌어올리면 큰 계통 하나가 스무 개를 달게 된다. */}
-        <VendorPins marks={model.marks.get(cat.id) ?? []} />
         <span className="ship-zone-n">{mine.length}</span>
       </header>
+
+      {/* 계통 전체를 다룬다고 적어 둔 거래선 — 제목 줄이 아니라 그 아래 제 줄에 선다.
+          이름과 개수 사이에 끼우면 로고가 이름을 밀어 계통 이름이 먼저 잘리고, 카드마다
+          로고 수가 달라 제목이 끝나는 자리도 카드마다 달라진다. 한 줄을 내주면 이름은
+          늘 같은 자리에서 끝나고 로고는 폭을 통째로 쓴다.
+          대분류에 직접 달린 것만 세운다 — 아래 중분류의 마크를 끌어올리면 큰 계통
+          하나가 스무 개를 달게 된다. */}
+      <VendorPins marks={model.marks.get(cat.id) ?? []} />
 
       {deals.length ? (
         <div className="ship-projects">
@@ -555,9 +560,9 @@ function Zone({
                 {...opens(s.name, `${cat.name} · ${items.length} item(s)`, items)}
               >
                 <span>{s.name}</span>
-                <VendorPins marks={model.marks.get(s.id) ?? []} />
                 <b>{items.length}</b>
               </div>
+              <VendorPins marks={model.marks.get(s.id) ?? []} />
               {leaves.length ? (
                 <div className="ship-leaves">
                   {(busyOnly ? leaves.filter((l) => (model.roll.get(l.id) ?? []).length) : leaves)
