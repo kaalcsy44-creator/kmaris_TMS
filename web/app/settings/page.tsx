@@ -2583,7 +2583,7 @@ export function ItemsTab({ kind = "part" }: { kind?: ItemKind }) {
             ["item_type", "Type"],
           ]
         : [
-            ["part_no", "Part No. *"],
+            ["part_no", "Part No."],
             ["description", "Description"],
             ["maker", "Maker"],
             ["origin", "Origin"],
@@ -2592,8 +2592,11 @@ export function ItemsTab({ kind = "part" }: { kind?: ItemKind }) {
             ["std_price", "Std Price"],
             ["item_type", "Type"],
           ]}
-      // 용역은 품번이 없다 — 필수 칸이 설명(용역명)으로 바뀐다.
-      required={isService ? "description" : "part_no"}
+      // 용역은 품번이 없다 — 필수 칸이 설명(용역명)으로 바뀐다. 물품 쪽도 품번을 홀로
+      // 요구하지 않는다: 품번 없이 들어온 줄이 있고(현장 작업처럼 살 물건이 없는 항목),
+      // 품번을 필수로 두면 그 줄은 분류도 구분도 고칠 수 없는 막다른 길이 된다.
+      // 식별키 규칙(match_key)과도 같은 말이다 — 품번이 없으면 품명이 그 자리를 맡는다.
+      required={isService ? "description" : ["part_no", "description"]}
       numeric={["std_price"]}
       // 검색은 화면 컬럼 기본값 대신 직접 지정 — 가격 열은 객체라 기본 문자열화가 안 된다.
       searchText={(r) => [...itemProjects(r), ...itemVessels(r),
@@ -3863,7 +3866,8 @@ function MasterSection<T extends { id: number }>({
   // 각 컬럼: [키, 헤더라벨, (선택)셀 커스텀 렌더, (선택)칸 클래스 — th·td 공통]
   columns: [keyof T, string, ((row: T) => ReactNode)?, string?][];
   fields: [keyof T, string][];
-  required: keyof T;
+  /** 저장에 반드시 필요한 칸. 배열이면 **그중 하나만** 있으면 된다. */
+  required: keyof T | (keyof T)[];
   numeric?: (keyof T)[];
   extraForm?: (form: T, setForm: (next: T) => void) => ReactNode;
   // 폼 상단(입력 칸 위) 영역 — 명함 스캔 같은 자동 입력 도구를 넣는다.
@@ -3997,7 +4001,20 @@ function MasterSection<T extends { id: number }>({
     }
   }
 
-  const requiredValue = String(form[required] ?? "").trim();
+  // 필수 칸 — 배열이면 그중 하나만 채워도 된다.
+  //
+  // 품목이 그렇다. 이 시스템이 품목을 알아보는 키 자체가 '품번이 있으면 P:품번,
+  // 없으면 D:품명'이라(services/item_ledger.match_key) 둘 중 하나면 충분하다. 품번을
+  // 홀로 필수로 두면, 품번 없이 들어온 줄(현장 작업처럼 살 물건이 없는 항목)은 저장
+  // 단추가 영영 꺼진 채로 남는다 — 분류를 고칠 수도, 구분(Type)을 용역으로 바꿔 제
+  // 탭으로 보낼 수도 없는 막다른 길이 된다.
+  const requiredKeys = (Array.isArray(required) ? required : [required]) as (keyof T)[];
+  const requiredValue =
+    requiredKeys.map((k) => String(form[k] ?? "").trim()).find(Boolean) ?? "";
+  // 저장이 막혔을 때 무엇을 적어야 하는지 — 별표만으로는 '둘 중 하나'가 안 읽힌다.
+  const requiredLabels = requiredKeys.map(
+    (k) => (fields.find(([f]) => f === k)?.[1] ?? String(k)).replace(/\s*\*$/, "")
+  );
   const ql = q.trim().toLowerCase();
   const searched = ql
     ? rows.filter((r) =>
@@ -4150,9 +4167,9 @@ function MasterSection<T extends { id: number }>({
   }
 
   const editorTitle = isEdit
-    ? `✎ Edit ${String(form[required] ?? "") || "item"}`
+    ? `✎ Edit ${requiredValue || "item"}`
     : copying
-    ? `📋 Copy as new${String(form[required] ?? "") ? ` — ${String(form[required])}` : ""}`
+    ? `📋 Copy as new${requiredValue ? ` — ${requiredValue}` : ""}`
     : "+ New";
   const editor = editId !== null ? (
     <Modal title={editorTitle} onClose={cancel} form>
@@ -4179,6 +4196,11 @@ function MasterSection<T extends { id: number }>({
           <button className="btn primary" disabled={!requiredValue} onClick={save}>
             {isEdit ? "Save" : "Add"}
           </button>
+        ) : null}
+        {(isEdit ? canEdit : canCreate) && !requiredValue ? (
+          <span className="hint-inline">
+            Enter {requiredLabels.join(" or ")} to save.
+          </span>
         ) : null}
         {isEdit && allowCopy && canCreate ? (
           <button className="btn" onClick={copyAsNew} title="Copy this info into a new record">

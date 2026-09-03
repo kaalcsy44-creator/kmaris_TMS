@@ -1107,8 +1107,10 @@ def create_item(body: ItemMasterSave):
     if _item_type(body.item_type) == "service":
         if not (body.description or "").strip():
             raise HTTPException(status_code=400, detail="Service 이름(Description)을 입력하세요.")
-    elif not body.part_no.strip():
-        raise HTTPException(status_code=400, detail="Part No.를 입력하세요.")
+    # 물품도 품번을 홀로 요구하지 않는다 — 식별키가 '품번이 있으면 P:품번, 없으면
+    # D:품명'이라(item_ledger.match_key) 둘 중 하나면 그 품목을 되찾을 수 있다.
+    elif not body.part_no.strip() and not (body.description or "").strip():
+        raise HTTPException(status_code=400, detail="Part No. 또는 Description 을 입력하세요.")
     s = get_session()
     try:
         item = ItemMaster(
