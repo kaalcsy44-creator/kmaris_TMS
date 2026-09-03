@@ -86,6 +86,7 @@ from _core import (
     normalize_sig_fields,
     html_document,
 )
+import re as _re
 from pydantic import BaseModel
 from sqlalchemy import func
 from db.models import ItemPriceHistory
@@ -459,18 +460,47 @@ def _up_to_level2(cats: dict, cid: int | None) -> int | None:
     return None
 
 
+# 취급품목 글귀에서 분류 이름을 알아볼 때 뜻을 담지 않는 말 — vendor_match 의 것을
+# 그대로 쓴다(같은 글을 두 곳이 서로 다른 기준으로 읽으면 안 된다).
+from services.vendor_match import _STOP as _SPEC_STOP   # noqa: E402
+
+_WORD_RE = _re.compile(r"[A-Za-z][A-Za-z0-9&+]{1,}|[가-힣]{2,}")
+
+
+def _words(text: str) -> set[str]:
+    return {w.lower() for w in _WORD_RE.findall(text or "")}
+
+
+def _spec_hits_category(spec_words: set[str], cat_name: str) -> bool:
+    """취급품목 글귀가 이 분류를 가리키는가.
+
+    분류 이름에서 뜻 없는 말(system·part·equipment…)을 뺀 낱말이 **전부** 글귀에
+    들어 있어야 한다. 하나만 겹쳐도 맞다고 하면 'Main Engine System' 이 'Marine
+    engine spares' 를 적어 둔 거의 모든 벤더에게 걸려, 기관실이 로고로 뒤덮인다.
+    전부를 요구하면 'Crane'·'Winch'·'Boiler' 처럼 한 낱말로 서는 분류가 정확히
+    걸리고 — 그것이 이 규칙에서 실제로 쓸모 있는 몫이다.
+    """
+    need = {w for w in _words(cat_name) if w not in _SPEC_STOP}
+    return bool(need) and need <= spec_words
+
+
 def _vendor_marks(s) -> list[dict]:
     """분류 → 그 분류를 다루는 거래선. Ship View 가 계통마다 세우는 마크의 원천.
 
     지금까지 이 판은 "이 계통에 품목이 몇 개 걸려 있나"만 말했다. 그런데 계통이 비어
     있다는 사실은 두 가지 중 하나다 — 아직 일이 없었거나, **물어볼 데가 없거나**.
-    둘은 전혀 다른 문제인데 숫자 0 으로는 갈리지 않는다. 벤더를 함께 세우면 갈린다.
+    둘은 전혀 다른 문제인데 숫자 0 으로는 갈리지 않는다. 거래선을 함께 세우면 갈린다.
 
-    두 신호를 섞지 않고 함께 준다:
-      declared  거래선이 "이거 다룬다"고 적어 둔 것(vendors.category_ids).
-                아직 한 번도 안 사 봤어도 선다 — 물어볼 수 있다는 뜻이라 그게 요점이다.
-      traded    그 분류에서 실제로 산 이력이 있는 것. 화면이 이쪽을 진하게 세운다.
-    한 회사가 둘 다면 traded 로 친다(더 센 근거가 이긴다).
+    세기가 셋이다. 섞지 않고 각자의 이름으로 돌려준다:
+      supplied  그 계통의 품목을 실제로 발주(P/O)한 곳.
+      quoted    값을 준 곳. 사지 않았어도 — 실주한 딜이라도 — 그 회사가 그것을 다룬다는
+                사실은 남는다. 다음에 물어볼 곳을 찾는 것이 이 화면의 쓸모라서다.
+      listed    거래 이력은 없고 다룬다고 밝혀 둔 곳. 분류 태그(category_ids)이거나,
+                취급품목 글귀가 그 분류 이름을 그대로 담고 있는 경우다.
+
+    **발주와 견적은 소스 문서로 갈린다.** 매입(buy) 가격 이력에는 발주(po)와 벤더
+    견적(vendor_quote)이 함께 들어 있어서(services/item_ledger), price_type 만 보고
+    세면 견적만 주고 끝난 거래선이 공급한 곳으로 찍힌다.
 
     회사명으로 묶는다 — 레코드 1건 = 담당자 1명이라 담당자 수만큼 같은 마크가 서면
     한 회사가 계통 하나를 혼자 덮는다."""
@@ -479,36 +509,53 @@ def _vendor_marks(s) -> list[dict]:
     vendors = s.query(Vendor).all()
     name_of = {v.id: (v.name or "").strip() for v in vendors}
 
-    # {분류 id: {회사명: traded 여부}}
-    marks: dict[int, dict[str, bool]] = {}
+    # 센 것이 이긴다 — 한 회사가 같은 계통에서 사기도 하고 견적도 줬으면 '샀다'로 선다.
+    _RANK = {"listed": 0, "quoted": 1, "supplied": 2}
+    # {분류 id: {회사명: (tier, 근거 한 줄)}}
+    marks: dict[int, dict[str, tuple[str, str]]] = {}
 
-    def put(cid, company: str, traded: bool):
+    def put(cid, company: str, tier: str, why: str):
         if not cid or not company or cid not in cats:
             return
         slot = marks.setdefault(cid, {})
-        slot[company] = slot.get(company, False) or traded
+        cur = slot.get(company)
+        if cur is None or _RANK[tier] > _RANK[cur[0]]:
+            slot[company] = (tier, why)
 
+    # ── listed: 밝혀 둔 것 ────────────────────────────────────────────────
     for v in vendors:
         co = (v.name or "").strip()
         for cid in (getattr(v, "category_ids", None) or []):
             try:
-                put(int(cid), co, False)
+                put(int(cid), co, "listed", "Listed as their category")
             except (TypeError, ValueError):
                 continue
+        # 태그를 아직 안 단 회사가 대부분이라, 취급품목 글귀도 함께 읽는다. 태그가 정본이고
+        # 이쪽은 그때까지의 다리다 — 그래서 같은 'listed' 지만 근거 문구가 다르다.
+        spec = _words(f"{v.specialization or ''} ")
+        if spec:
+            for c in cats.values():
+                if (c.level or 1) <= VENDOR_TAG_LEVEL and _spec_hits_category(spec, c.name):
+                    put(c.id, co, "listed", f"Specialization mentions {c.name}")
 
+    # ── quoted / supplied: 실제 거래 ──────────────────────────────────────
     for h in (s.query(ItemPriceHistory)
               .filter(ItemPriceHistory.price_type == "buy",
                       ItemPriceHistory.vendor_id.isnot(None)).all()):
         if not h.item_id:
             continue
+        supplied = h.source_type == "po"
         put(_up_to_level2(cats, cat_of_item.get(h.item_id)),
-            name_of.get(h.vendor_id, ""), True)
+            name_of.get(h.vendor_id, ""),
+            "supplied" if supplied else "quoted",
+            "Supplied on this system" if supplied else "Quoted on this system")
 
     out: list[dict] = []
     for cid, companies in marks.items():
-        # 실제로 거래한 곳부터 — 잘려 나가는 쪽은 늘 근거가 약한 쪽이어야 한다.
-        for co, traded in sorted(companies.items(), key=lambda kv: (not kv[1], kv[0].lower())):
-            out.append({"category_id": cid, "name": co, "traded": traded})
+        # 센 근거부터 — 잘려 나가는 쪽은 늘 약한 쪽이어야 한다.
+        for co, (tier, why) in sorted(companies.items(),
+                                      key=lambda kv: (-_RANK[kv[1][0]], kv[0].lower())):
+            out.append({"category_id": cid, "name": co, "tier": tier, "why": why})
     return out
 
 
@@ -524,6 +571,10 @@ def vendor_category_suggestions():
     근거는 둘뿐이다. 실제로 산 것(bought)과 값을 준 것(quoted). '물어본 것'은 넣지
     않는다 — 우리가 물었다는 사실은 그 회사가 그걸 다룬다는 뜻이 아니라서, 넣으면
     한 번 두루 물어본 벤더가 배 전체를 태그로 뒤덮는다.
+
+    산 것과 값을 준 것은 **소스 문서로 갈린다**. 매입(buy) 가격 이력에는 발주(po)와
+    벤더 견적(vendor_quote)이 함께 들어 있어서(services/item_ledger), price_type 만
+    보고 세면 견적만 주고 끝난 거래선이 '공급한 곳'이 된다.
 
     회사명으로 묶는다. 레코드 1건 = 담당자 1명이라 vendor_id 로 묶으면 같은 회사가
     담당자별로 갈려, 담당자 A 에게 산 분류가 담당자 B 에는 없는 것이 된다."""
@@ -552,7 +603,8 @@ def vendor_category_suggestions():
                   .filter(ItemPriceHistory.price_type == "buy",
                           ItemPriceHistory.vendor_id.isnot(None)).all()):
             if h.item_id:
-                touch(h.vendor_id, cat_of_item.get(h.item_id), "bought", h.doc_date or "")
+                touch(h.vendor_id, cat_of_item.get(h.item_id),
+                      "bought" if h.source_type == "po" else "quoted", h.doc_date or "")
 
         # 벤더 견적 — 값을 줬다는 것은 그것을 다룬다는 뜻이다. 품목은 견적 줄이 아니라
         # 그 견적이 답한 Vendor RFQ 의 줄에서 읽는다(견적 줄에는 분류가 안 붙어 있다).

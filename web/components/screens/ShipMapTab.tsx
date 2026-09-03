@@ -417,13 +417,15 @@ export default function ShipMapTab() {
 /**
  * 계통 옆에 서는 거래선 — 로고가 있으면 로고, 없으면 색 이니셜.
  *
- * 두 신호를 모양으로 가른다: 그 계통에서 **실제로 사 본 곳**은 진하게, 취급한다고
- * 적어만 둔 곳은 흐리게. 둘을 같은 무게로 세우면 "여기서 산 적이 있다"와 "여기에
+ * 근거의 세기를 모양으로 가른다. 셋을 같은 무게로 세우면 "여기서 사 봤다"와 "여기에
  * 물어볼 수는 있다"가 구별되지 않는데, 그 차이가 곧 이 마크를 보는 이유다.
- * (프로젝트 카드의 벤더 배지가 견적 제출·미제출을 가르는 규칙과 같다.)
+ *   supplied  실제로 발주한 곳 — 온전한 색
+ *   quoted    값을 준 곳(사지 않았어도) — 한 겹 옅게
+ *   listed    다룬다고 밝혀만 둔 곳 — 가장 옅고 테두리가 점선
+ * 무엇을 근거로 섰는지는 마우스를 올리면 나온다(why).
  *
  * 넘치는 것은 CSS 가 한 줄로 자른다 — 개수를 미리 잘라 "+N" 으로 접으면 넓은 화면에서
- * 자리가 남는데도 늘 세 개에서 멈춘다. 거래한 곳부터 오므로 잘리는 쪽은 늘 약한 쪽이다.
+ * 자리가 남는데도 늘 세 개에서 멈춘다. 센 근거부터 오므로 잘리는 쪽은 늘 약한 쪽이다.
  */
 function VendorPins({ marks }: { marks: VendorMark[] }) {
   const logoFor = useVendorLogo();
@@ -432,12 +434,12 @@ function VendorPins({ marks }: { marks: VendorMark[] }) {
     <span className="ship-pins">
       {marks.map((v) => {
         const logo = logoFor(v.name);
-        const title = `${v.name} — ${v.traded ? "supplied on this system" : "listed as their category"}`;
+        const cls = `ship-pin ship-pin--${v.tier}`;
+        const title = `${v.name} — ${v.why}`;
         return logo ? (
-          <img key={v.name} className={`ship-pin${v.traded ? "" : " ship-pin--soft"}`}
-               src={logo} alt="" title={title} />
+          <img key={v.name} className={cls} src={logo} alt="" title={title} />
         ) : (
-          <span key={v.name} className={`ship-pin ship-pin--mono${v.traded ? "" : " ship-pin--soft"}`}
+          <span key={v.name} className={`${cls} ship-pin--mono`}
                 style={{ ["--h" as string]: hueOf(v.name) }} title={title}>
             {initialsOf(v.name)}
           </span>

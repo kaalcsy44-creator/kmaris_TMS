@@ -237,9 +237,19 @@ export type ShipMap = {
     active: boolean;
   }[];
   items: ShipItem[];
-  /** 분류마다 '누구에게 물어볼 수 있나'. traded=그 계통에서 실제로 산 이력이 있는 곳,
-   *  아니면 취급한다고 적어만 둔 곳(Settings > Vendor 의 Item categories). */
-  vendor_marks?: { category_id: number; name: string; traded: boolean }[];
+  /**
+   * 분류마다 '누구에게 물어볼 수 있나' — 근거의 세기가 셋이다.
+   *   supplied  그 계통의 품목을 실제로 발주(P/O)한 곳
+   *   quoted    값을 준 곳(사지 않았어도, 실주한 딜이라도 그 사실은 남는다)
+   *   listed    거래 이력 없이 다룬다고 밝혀 둔 곳(분류 태그 또는 취급품목 글귀)
+   * why 는 그 근거를 한 줄로 적은 것 — 마크에 마우스를 올리면 나온다.
+   */
+  vendor_marks?: {
+    category_id: number;
+    name: string;
+    tier: "supplied" | "quoted" | "listed";
+    why: string;
+  }[];
   unmatched: number;             // 마스터에 연결조차 안 된 이력 줄 수(안내용)
   built_at: string | null;
 };

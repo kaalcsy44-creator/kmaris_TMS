@@ -183,7 +183,11 @@ def _vendor_experience(session, cats: dict, idx: dict, masters: dict) -> dict[in
                       ItemPriceHistory.vendor_id.isnot(None)).all()):
         key = match_key(h.part_no, h.description)
         cid = cat_of.get(h.item_id) if h.item_id else cat_of.get(idx.get(key, 0))
-        touch(h.vendor_id, key, cid, "bought", h.doc_date or "")
+        # 매입 이력에는 발주(po)와 벤더 견적(vendor_quote)이 함께 들어 있다
+        # (services/item_ledger). 둘을 안 가르면 견적만 주고 끝난 거래선이 근거란에
+        # "Supplied …" 로 서고, bought(45)·quoted(30)의 점수 차이도 뜻을 잃는다.
+        touch(h.vendor_id, key, cid,
+              "bought" if h.source_type == "po" else "quoted", h.doc_date or "")
         if h.vendor_id:
             exp[h.vendor_id]["docs"].add((h.source_type, h.source_id))
 

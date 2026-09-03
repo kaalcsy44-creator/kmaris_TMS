@@ -15342,9 +15342,14 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
   color: hsl(var(--h) 55% 30%);
   font-size: 8.5px; font-weight: 800; letter-spacing: -0.2px;
 }
-/* 취급한다고 적어만 둔 곳 — 물어볼 수는 있지만 아직 산 적은 없다. 사 본 곳과 같은
-   무게로 세우면 그 차이가 지워지는데, 그 차이가 곧 이 마크를 보는 이유다. */
-.ship-pin--soft { opacity: 0.45; filter: grayscale(0.55); }
+/* 근거의 세기를 옅기로 말한다 — 발주한 곳(온전한 색) > 값을 준 곳(한 겹 옅게) >
+   다룬다고 밝혀만 둔 곳(가장 옅고 테두리가 점선). 셋을 같은 무게로 세우면 "여기서
+   사 봤다"와 "여기에 물어볼 수는 있다"가 지워지는데, 그 차이가 곧 이 마크를 보는 이유다. */
+.ship-pin--supplied { opacity: 1; }
+.ship-pin--quoted { opacity: 0.72; filter: grayscale(0.3); }
+.ship-pin--listed {
+  opacity: 0.45; filter: grayscale(0.55); border-style: dashed;
+}
 /* 중분류 줄에서는 이름과 개수 사이가 아니라 개수 옆에 붙는다 — 이름이 왼쪽 끝에
    그대로 서야 계열 목록이 세로로 읽힌다(.ship-sub-hd 는 space-between 이다). */
 .ship-sub-hd .ship-pins { margin-left: auto; }
