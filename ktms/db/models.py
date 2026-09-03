@@ -136,6 +136,16 @@ class Vendor(Base):
     phones         = Column(JSON, default=list)   # 다중 연락처(첫 값=대표)
     regions        = Column(JSON, default=list)   # 다중 지역(첫 값=대표)
     specialization = Column(String(200))
+    # 이 회사가 다루는 품목 분류(item_categories.id 목록). 취급품목을 글이 아니라 트리의
+    # 자리로 적어 둔 것이다 — 글로만 두면 "marine·spare"처럼 거의 모든 벤더가 쓰는 말이
+    # 되어 아무것도 가려내지 못한다(vendor_match 가 df 로 걸러내야 했던 이유).
+    #
+    # specialization 을 대신하지 않고 나란히 둔다: 저 글에는 트리에 없는 것 — 브랜드와
+    # 메이커(MAN B&W·Wärtsilä·Yanmar) — 가 들어 있고, 벤더를 고르는 축의 절반이 그것이다.
+    #
+    # 회사 단위 값이다(레코드 1 = 담당자 1 이라 같은 회사가 여러 행). note·logo 처럼
+    # Company info 창에서 같은 회사 전 레코드에 한 번에 반영한다.
+    category_ids   = Column(JSON, default=list)
     website        = Column(String(300))   # 회사 홈페이지(회사 단위)
     # 회사 소개 요약(무엇을 만드는 회사인지, 어떤 브랜드를 대리하는지). 담당자가 아니라
     # 회사에 딸린 정보라 Company info 창에서 같은 회사 전 레코드에 한 번에 반영한다.

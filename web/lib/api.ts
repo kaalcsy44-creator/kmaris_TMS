@@ -1183,10 +1183,22 @@ export type CompanyInfoSave = {
   tax_invoice_email?: string;
   payment_terms?: string;
   specialization?: string;
+  /** 취급 분류(거래선 전용) — 회사 단위 값이라 여기서 함께 저장한다. */
+  category_ids?: number[];
   website?: string;
   note?: string;
   logo?: string;
 };
+/** 이 회사가 실제로 다뤄 본 분류 — 태그의 첫 값을 제안하는 데 쓴다(거래 실적에서). */
+export type VendorCategorySuggestion = {
+  company: string;
+  categories: { id: number; path: string; kind: string; count: number; last: string }[];
+};
+export function fetchVendorCategorySuggestions(): Promise<{ rows: VendorCategorySuggestion[] }> {
+  return get<{ rows: VendorCategorySuggestion[] }>(
+    "/api/admin/settings/vendors/category-suggestions"
+  );
+}
 export function updateCustomerCompanyInfo(
   body: CompanyInfoSave
 ): Promise<{ ok: boolean; updated: number; name: string }> {

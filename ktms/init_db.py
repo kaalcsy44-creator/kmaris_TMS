@@ -81,6 +81,9 @@ _MIGRATIONS = {
         "regions": "JSON",
         # 회사 소개 요약(Company info 창에서 회사 단위로 편집).
         "note": "TEXT",
+        # 이 회사가 다루는 품목 분류 id 목록. 기존 행은 NULL = 아직 태그 없음
+        # (화면이 '실적에서 채우기'로 첫 값을 제안한다).
+        "category_ids": "JSON",
     },
     "vessels": {
         "vessel_type": "VARCHAR(60)",

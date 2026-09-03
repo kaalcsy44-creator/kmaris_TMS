@@ -90,6 +90,7 @@ from pydantic import BaseModel
 from sqlalchemy import func
 from db.models import ItemPriceHistory
 from services.item_ledger import (
+    build_master_index,
     ledger_rows, item_history, rebuild_price_history, stamp_history_item, match_key,
     master_price_summary, master_party_fallback, ensure_price_history_fresh,
     guess_item_type, category_item_type, suggest_categories, category_ship_map,
@@ -259,6 +260,8 @@ class CompanyInfoSave(BaseModel):
     tax_invoice_email: str | None = None
     payment_terms: str | None = None
     specialization: str | None = None    # 취급품목(벤더) · 주로 사는 것(고객사)
+    # 취급 분류(item_categories.id 목록) — 벤더 전용. 회사 단위라 여기서 함께 받는다.
+    category_ids: list[int] | None = None
     website: str | None = None           # 회사 홈페이지
     note: str | None = None              # 회사 소개 요약(고객사·거래선 공통)
     logo: str | None = None
@@ -389,6 +392,10 @@ def settings_vendors():
                  "email": v.email or "", "specialization": v.specialization or "",
                  "website": getattr(v, "website", None) or "",
                  "note": getattr(v, "note", None) or "",
+                 # 취급 분류 — 화면이 배지로 세운다. 트리에 없는 id(분류를 지운 뒤 남은
+                 # 값)는 화면이 무시한다: 태그를 지우자고 삭제 경로를 만들 일이 아니다.
+                 "category_ids": [int(x) for x in (getattr(v, "category_ids", None) or [])
+                                  if isinstance(x, (int, float, str)) and str(x).isdigit()],
                  "country": v.country or "", "address": v.address or "",
                  "payment_terms": getattr(v, "payment_terms", None) or "",
                  "logo": getattr(v, "logo", None) or "",
@@ -428,6 +435,106 @@ def _vendor_deal_counts(s) -> tuple[dict, dict]:
     return asked, answered
 
 
+# 배지로 세울 분류의 깊이 — 중분류까지다. 소분류(3단계)까지 태그하면 벤더 하나가
+# 스무 개를 달게 되어 배지가 이름을 덮고, 정작 "이 회사는 무엇을 하는가"가 안 읽힌다.
+# 소분류의 실적은 그 중분류로 접어 올린다(아래 _up_to_level2).
+VENDOR_TAG_LEVEL = 2
+
+
+def _up_to_level2(cats: dict, cid: int | None) -> int | None:
+    """분류 id → 그것이 속한 중분류(2단계) id. 이미 1·2단계면 그대로.
+
+    품목 마스터는 가장 깊은 노드(보통 소분류)를 들고 있는데, 벤더 태그는 중분류까지만
+    쓴다. 부모를 타고 올라가 접는다 — 트리가 망가져 부모가 끊긴 값은 버린다(무한히
+    돌지 않도록 깊이도 함께 막는다)."""
+    hop = 0
+    while cid and hop < 8:
+        c = cats.get(cid)
+        if c is None:
+            return None
+        if (c.level or 1) <= VENDOR_TAG_LEVEL:
+            return c.id
+        cid = c.parent_id
+        hop += 1
+    return None
+
+
+@app.get("/api/admin/settings/vendors/category-suggestions",
+         dependencies=[Depends(require_token)])
+def vendor_category_suggestions():
+    """거래 실적에서 뽑은 취급 분류 제안 — 회사명 → 그 회사가 다뤄 본 중분류 목록.
+
+    태그를 처음부터 손으로 채우게 하면 아무도 안 채운다. 그런데 "이 회사가 무엇을
+    다루는가"는 이미 장부에 있다 — 우리가 무엇을 샀고, 무엇에 값을 받아 봤는지.
+    그것을 첫 값으로 내밀고 사람은 확인·보정만 하게 한다.
+
+    근거는 둘뿐이다. 실제로 산 것(bought)과 값을 준 것(quoted). '물어본 것'은 넣지
+    않는다 — 우리가 물었다는 사실은 그 회사가 그걸 다룬다는 뜻이 아니라서, 넣으면
+    한 번 두루 물어본 벤더가 배 전체를 태그로 뒤덮는다.
+
+    회사명으로 묶는다. 레코드 1건 = 담당자 1명이라 vendor_id 로 묶으면 같은 회사가
+    담당자별로 갈려, 담당자 A 에게 산 분류가 담당자 B 에는 없는 것이 된다."""
+    s = get_session()
+    try:
+        cats = {c.id: c for c in s.query(ItemCategory).all()}
+        cat_of_item = {m.id: m.category_id for m in s.query(ItemMaster).all()}
+        name_of = {v.id: (v.name or "").strip() for v in s.query(Vendor).all()}
+
+        # {회사명: {중분류 id: [kind, 건수, 최근일]}} — kind 는 센 근거가 이긴다.
+        found: dict[str, dict[int, list]] = {}
+
+        def touch(vendor_id, cid, kind: str, when: str):
+            co = name_of.get(vendor_id or 0, "")
+            node = _up_to_level2(cats, cid)
+            if not co or not node:
+                return
+            slot = found.setdefault(co, {}).setdefault(node, ["quoted", 0, ""])
+            if kind == "bought":
+                slot[0] = "bought"
+            slot[1] += 1
+            if (when or "") > slot[2]:
+                slot[2] = when or ""
+
+        for h in (s.query(ItemPriceHistory)
+                  .filter(ItemPriceHistory.price_type == "buy",
+                          ItemPriceHistory.vendor_id.isnot(None)).all()):
+            if h.item_id:
+                touch(h.vendor_id, cat_of_item.get(h.item_id), "bought", h.doc_date or "")
+
+        # 벤더 견적 — 값을 줬다는 것은 그것을 다룬다는 뜻이다. 품목은 견적 줄이 아니라
+        # 그 견적이 답한 Vendor RFQ 의 줄에서 읽는다(견적 줄에는 분류가 안 붙어 있다).
+        vrfq = {v.id: v for v in s.query(VendorRFQ).all()}
+        idx = build_master_index(s)
+        for q in s.query(VendorQuote).all():
+            v = vrfq.get(q.vendor_rfq_id)
+            if v is None or not v.vendor_id:
+                continue
+            when = (getattr(q, "received_at", "") or "")[:10]
+            for it in (v.items if isinstance(v.items, list) else []):
+                if not isinstance(it, dict):
+                    continue
+                mid = idx.get(match_key(it.get("part_no"), it.get("description")))
+                if mid:
+                    touch(v.vendor_id, cat_of_item.get(mid), "quoted", when)
+
+        def path_of(cid: int) -> str:
+            c = cats.get(cid)
+            if c is None:
+                return ""
+            top = cats.get(c.parent_id) if c.parent_id else None
+            return f"{top.name} > {c.name}" if top else c.name
+
+        return {"rows": [{
+            "company": co,
+            "categories": [{
+                "id": cid, "path": path_of(cid),
+                "kind": v[0], "count": v[1], "last": v[2],
+            } for cid, v in sorted(nodes.items(), key=lambda kv: (-kv[1][1], kv[0]))],
+        } for co, nodes in sorted(found.items())]}
+    finally:
+        s.close()
+
+
 @app.post("/api/admin/settings/vendors", dependencies=[Depends(require_token)])
 def create_vendor(body: VendorCreate):
     if not body.name.strip():
@@ -440,6 +547,7 @@ def create_vendor(body: VendorCreate):
                    note=body.note or "",
                    country=body.country or "", address=body.address or "",
                    payment_terms=body.payment_terms or "",
+                   category_ids=list(body.category_ids or []),
                    logo=body.logo or "")
         s.add(v)
         _apply_multi(v, body.emails, body.phones, body.regions, body.addresses)
@@ -457,7 +565,8 @@ def update_vendor_company(body: CompanyInfoSave):
         if not rows:
             raise HTTPException(status_code=404, detail="해당 회사로 등록된 공급사가 없습니다.")
         name = _apply_company_info(
-            rows, body, ("specialization", "website", "note", "payment_terms", "logo"))
+            rows, body,
+            ("specialization", "category_ids", "website", "note", "payment_terms", "logo"))
         s.commit()
         return {"ok": True, "updated": len(rows), "name": name}
     finally:
@@ -481,6 +590,8 @@ def update_vendor(row_id: int, body: VendorCreate):
         v.country = body.country or ""
         v.address = body.address or ""
         v.payment_terms = body.payment_terms or ""
+        if body.category_ids is not None:
+            v.category_ids = list(body.category_ids)
         if body.logo is not None:
             v.logo = body.logo
         _apply_multi(v, body.emails, body.phones, body.regions, body.addresses)

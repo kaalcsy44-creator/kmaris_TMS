@@ -3229,6 +3229,9 @@ class VendorCreate(BaseModel):
     emails: list[str] | None = None
     phones: list[str] | None = None
     regions: list[str] | None = None
+    # 취급 분류(item_categories.id). None = 이 폼이 그 칸을 안 보냈다는 뜻이라 건드리지
+    # 않는다(담당자 편집 폼이 회사 단위 태그를 지우지 않게 — note 와 같은 규약).
+    category_ids: list[int] | None = None
 
 
 class ConsultantCreate(BaseModel):

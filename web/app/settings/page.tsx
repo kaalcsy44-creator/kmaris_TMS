@@ -21,6 +21,7 @@ import {
   fetchSettingsItems,
   fetchSettingsUsers,
   fetchSettingsVendors,
+  fetchVendorCategorySuggestions,
   fetchSettingsVessels,
   parseBusinessCard,
   updateCompanyProfile,
@@ -66,6 +67,7 @@ import type {
   EmailTemplatesData,
   CompanyInfoSave,
   SignatureFields,
+  VendorCategorySuggestion,
 } from "@/lib/api";
 import type { PermGrid } from "@/lib/auth";
 import { toggleBold, onBoldKey } from "@/lib/mdEdit";
@@ -96,6 +98,7 @@ import ComboBox from "@/components/common/ComboBox";
 import { useColumnLayout } from "@/components/common/useColumnLayout";
 import { ColumnResizer, ColumnsButton, dragHandleProps } from "@/components/common/tableLayout";
 import { invalidateMasterCategories } from "@/components/common/CategoryCell";
+import { CategoryBadges, CategoryTagPicker } from "@/components/common/CategoryTags";
 // 목록의 상대처는 다른 화면과 같은 모양(로고 + 이름)으로 — 같은 회사를 두 표기로 읽지 않도록.
 import CustomerName from "@/components/common/CustomerName";
 import VendorName from "@/components/common/VendorName";
@@ -1384,6 +1387,7 @@ function CompanyInfoModal<
   prev,
   next,
   onEditContact,
+  tags,
 }: {
   rows: T[];
   fields: [keyof T & keyof CompanyInfoSave, string][];
@@ -1400,6 +1404,13 @@ function CompanyInfoModal<
   next?: CompanyNav;
   /** 담당자 한 명을 고치러 간다(바깥 목록의 편집 창을 연다). 없으면 단추도 없다. */
   onEditContact?: (row: T) => void;
+  /** 취급 분류(거래선 전용). 글자가 아니라 id 목록이라 fields/areas 를 못 타고 따로 든다.
+   *  주지 않으면 이 창에 그 칸이 아예 없다(고객사 창은 분류를 쓰지 않는다). */
+  tags?: {
+    initial: number[];
+    /** 이 회사의 실적 제안 — 태그 칸의 '실적에서 채우기'가 쓴다. */
+    suggestions?: React.ComponentProps<typeof CategoryTagPicker>["suggestions"];
+  };
 }) {
   // 저장 뒤에도 창이 남으므로 회사명을 상태로 든다. 이름을 바꿔 저장하면 제목·읽기
   // 화면이 새 이름이 되어야 하고, 그 다음 저장의 조회 키도 새 이름이어야 한다.
@@ -1416,6 +1427,7 @@ function CompanyInfoModal<
   });
   // 주소는 회사 단위 다중값(본사·지사) — 담당자별로 갈라져 있어도 여기서 한 목록으로 모은다.
   const [addresses, setAddresses] = useState<string[]>(() => companyAddresses(rows));
+  const [catIds, setCatIds] = useState<number[]>(() => [...(tags?.initial ?? [])]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   // 열면 읽기부터 — 이 창은 대개 "이 회사가 뭐 하는 곳이었지"를 확인하러 연다. 곧장
@@ -1447,6 +1459,9 @@ function CompanyInfoModal<
     setErr("");
     try {
       const body: CompanyInfoSave = { name: origName, ...vals, addresses };
+      // 태그 칸이 없는 창(고객사)은 이 키를 아예 보내지 않는다 — 보내면 서버가 빈
+      // 목록으로 읽어 지워 버린다(None = 건드리지 않음이 서버의 규약이다).
+      if (tags) body.category_ids = catIds;
       if (name.trim() && name.trim() !== origName) body.rename = name.trim();
       await save(body);
       // 저장하면 읽기로 돌아온다 — 창을 닫아 버리면 방금 무엇을 저장했는지 확인할
@@ -1477,6 +1492,9 @@ function CompanyInfoModal<
         return [label, node] as [string, React.ReactNode];
       }),
       ["Payment terms", vals.payment_terms || null],
+      ...(tags ? [["Item categories",
+                   catIds.length ? <CategoryBadges ids={catIds} /> : null,
+                  ] as [string, React.ReactNode]] : []),
       ...(stats ? [stats] : []),
       ...(areas ?? []).map((a) => [a.label, vals[String(a.key)]
         ? <span className="co-para">{vals[String(a.key)]}</span> : null] as [string, React.ReactNode]),
@@ -1599,6 +1617,9 @@ function CompanyInfoModal<
           onChange={(v) => setVals({ ...vals, payment_terms: v })}
         />
         <LogoPasteField value={vals.logo ?? ""} onChange={(v) => setVals({ ...vals, logo: v })} />
+        {tags ? (
+          <CategoryTagPicker value={catIds} onChange={setCatIds} suggestions={tags.suggestions} />
+        ) : null}
         {(areas ?? []).map((a) => (
           <label key={String(a.key)} className="form-field company-area-field">
             <span>{a.label}</span>
@@ -1680,6 +1701,12 @@ function withCompanyDefaults<T extends { name: string }>(form: T, rows: T[], nam
     if (!(key in rec) || String(rec[key] ?? "").trim()) continue;
     const first = uniqStrings(mates.map((r) => String((r as Record<string, unknown>)[key] ?? "")))[0];
     if (first) rec[key] = first;
+  }
+  // 취급 분류도 회사 단위지만 글자가 아니라 id 목록이라 위 고리를 못 탄다 — 같은 회사에
+  // 이미 달린 태그를 그대로 물려준다(담당자를 더 넣었다고 태그가 비면 안 된다).
+  if ("category_ids" in rec && !((rec.category_ids as number[]) ?? []).length) {
+    const tagged = (mates as { category_ids?: number[] }[]).find((r) => (r.category_ids ?? []).length);
+    if (tagged) rec.category_ids = [...(tagged.category_ids ?? [])];
   }
   // 주소는 회사 단위 정보(본사·지사) — 등록된 곳 전부를 그대로 물려준다.
   if ("addresses" in rec && !((rec.addresses as string[]) ?? []).length) {
@@ -1959,7 +1986,7 @@ function LogoPasteField({
 const EMPTY_VENDOR: SettingsVendor = {
   id: 0, name: "", contact: "", contact_phone: "", email: "", specialization: "", website: "", note: "",
   country: "", address: "", payment_terms: "", logo: "",
-  addresses: [], emails: [], phones: [], regions: [],
+  addresses: [], emails: [], phones: [], regions: [], category_ids: [],
 };
 
 function VendorsTab() {
@@ -1968,6 +1995,14 @@ function VendorsTab() {
   >(null);
   const [reloadKey, setReloadKey] = useState(0);
   const canCreate = can("settings", "create");
+  // 실적에서 뽑은 분류 제안 — 회사명으로 찾는다(레코드 1 = 담당자 1 이라 vendor_id 로
+  // 묶으면 같은 회사가 담당자별로 갈린다). 실패해도 화면은 그대로 나와야 하므로 삼킨다.
+  const [suggest, setSuggest] = useState<VendorCategorySuggestion[]>([]);
+  useEffect(() => {
+    fetchVendorCategorySuggestions().then((d) => setSuggest(d.rows)).catch(() => setSuggest([]));
+  }, []);
+  const suggestFor = (name: string) =>
+    suggest.find((r) => r.company.trim().toLowerCase() === (name || "").trim().toLowerCase())?.categories;
 
   return (
     <>
@@ -1983,6 +2018,11 @@ function VendorsTab() {
         )]}
         {...companyNav(company, setCompany)}
         onEditContact={(row) => { const go = company.editRow; setCompany(null); go(row); }}
+        tags={{
+          initial: company.groups[company.index]?.find((r) => (r.category_ids ?? []).length)
+                     ?.category_ids ?? [],
+          suggestions: suggestFor(company.groups[company.index]?.[0]?.name ?? ""),
+        }}
         fields={[["website", "Website"]]}
         areas={[
           { key: "specialization", label: "Specialization", rows: 3,
@@ -2011,6 +2051,10 @@ function VendorsTab() {
           <span key="c" className="ms-group-sub">{nameSummary(rs)}</span>,
           <VendorReplyBadge key="d" total={rs[0].co_deals ?? 0} answered={rs[0].co_deals_answered ?? 0} />,
           <span key="s" className="ms-group-sub">
+            <CategoryBadges
+              ids={rs.find((r) => (r.category_ids ?? []).length)?.category_ids}
+              max={3}
+            />
             {summarize(uniqStrings(rs.map((r) => r.specialization)), " · ", 2)}
           </span>,
         ],
