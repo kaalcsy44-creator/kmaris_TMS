@@ -15691,11 +15691,17 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
    창 안에 종이 한 장을 세운다. 화면 표를 그대로 보여 주지 않고 흰 바탕에 격자만 남긴
    표로 다시 그리는 이유: 여기서 확인할 것은 "어떤 줄이 어떤 칸으로 나가는가"이고,
    목록 화면의 배지·로고·행 강조는 종이에 없는 것들이라 미리보기에 있으면 거짓이 된다. */
+/* 인쇄 미리보기도 같은 이유로 본문 폭을 다 쓴다(.pl-modal-body 의 좌우 2단 flex).
+   이쪽은 바닥에 고정 단추가 없어 마지막 줄이 곧 밑변이라, 한 칸을 비워 준다. */
 .plist {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 12px;
-  min-width: 0;
+  padding-bottom: var(--modal-foot-gap);
 }
 .plist-bar {
   display: flex;
@@ -15769,11 +15775,20 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
    네 걸음이 한 창에 세로로 선다. 걸음을 나눠 창을 갈아 끼우지 않는 이유: 열을 잘못
    맞췄다는 것은 대개 아래 판정표를 보고서야 안다 — 두 곳을 오가며 고쳐야 하므로
    둘이 한 화면에 함께 있어야 한다. */
+/* 팝업 본문(.pl-modal-body)은 Progress 상세용 좌우 2단 flex 라, 그 안에 그냥 놓으면
+   내용 폭만큼만 자라고 오른쪽이 통째로 빈다 — 창은 넓은데 글은 왼쪽에 몰린 꼴이 된다.
+   한 단짜리 본문이므로 남는 폭을 다 가져가고, 세로로 넘칠 때는 스스로 굴린다
+   (.pl-modal-body 는 overflow:hidden 이라 감싸는 쪽이 굴리지 않으면 잘린다).
+   아래쪽 여백은 두지 않는다 — 바닥의 form-actions 가 sticky 라, 여백을 주면 끝까지
+   내렸을 때 단추 바가 그만큼 떠올라 흔들린다. */
 .pimp {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 18px;
-  min-width: 0;
 }
 .pimp-step h4 {
   margin: 0 0 6px;
