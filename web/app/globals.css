@@ -13057,6 +13057,9 @@ td.uaddr-c-end .btn.sm + .btn.sm { margin-left: 6px; }
 .brief-card.service { border-left-color: #7c9; }
 /* 우리가 쥐고 있는 건 — 왼쪽 선만 물들인다(카드 전체를 칠하면 목록이 시끄러워진다). */
 .brief-card.waiting { border-left-color: #d97706; }
+/* 결제까지 끝난 건 — 초록 선으로 닫혔다고 말하되, 글자는 한 톤 죽인다. 아침에 눈이
+   가야 하는 것은 아직 손이 필요한 카드이고, 이 카드는 확인용이라서다. */
+.brief-card.settled { border-left-color: #11824a; background: #fcfdfc; }
 .brief-head {
   display: flex; align-items: baseline; gap: 7px; width: 100%;
   border: 0; background: none; padding: 0; text-align: left; cursor: pointer;
@@ -13117,6 +13120,8 @@ td.uaddr-c-end .btn.sm + .btn.sm { margin-left: 6px; }
 .mail-turn { font-size: 11.5px; font-weight: 700; color: #5c6b7d; }
 .mail-turn.ours { color: #b45309; }
 .mail-turn.ours::before { content: "● "; }
+.mail-turn.done { color: #11824a; }
+.mail-turn.done::before { content: "✓ "; }
 .brief-when {
   margin-left: auto; display: inline-flex; align-items: center; gap: 6px;
   font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums;
@@ -13169,6 +13174,10 @@ td.uaddr-c-end .btn.sm + .btn.sm { margin-left: 6px; }
   font-weight: 600; color: #0f2545;
 }
 .mail-card-rollup li.next .mail-card-label { color: var(--blue); font-weight: 800; }
+/* 결제 완료로 갈음한 "다음" 줄 — 요약은 메일에서 나오므로 결제를 모른다. 행동을 요구하는
+   줄이 아니게 되었으니 파란 강조를 벗고 초록으로 닫는다(원문은 title 로 남는다). */
+.mail-card-rollup li.next.settled { color: #1d5c3c; border-top-color: #cfe6d8; }
+.mail-card-rollup li.next.settled .mail-card-label { color: #11824a; }
 /* 요약을 만든 뒤 새 메일이 온 카드 — 감추지 않고 흐리게 두고, 새 메일은 아래 줄에. */
 .mail-card-rollup.stale { background: #fbfcfe; border-left-color: #c3ccd9; }
 /* 두 칸 격자를 쓰지 않는 줄 — 라벨 없이 통으로 흐른다. */

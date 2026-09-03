@@ -53,7 +53,7 @@ import {
 // 데이터는 새로 만들지 않는다. 사건은 화면이 이미 가진 pipeline 목록에서 buildActivities
 // 가 뽑고(Activity 화면과 같은 함수), 메일은 /mail/digest 집계 하나에서 온다.
 
-type Filter = "all" | "ours" | "theirs" | "nomail";
+type Filter = "all" | "ours" | "theirs" | "nomail" | "done";
 
 const DAYS = 14;              // 이 기간 안에 움직인 딜만 카드가 된다
 const SHOW_CHOICES = [1, 3, 5, 8];
@@ -74,7 +74,20 @@ type Card = {
   lines: Line[];
   lastAt: string;             // 사건·메일 통틀어 마지막 움직임
   waitingDays: number;        // 마지막 메일이 수신인 채 지난 날수(메일 없으면 0)
+  // 결제까지 끝난 딜(11단계)인가, 그리고 그 완료 일시. 끝난 건은 아무 차례도 아니다.
+  settled: boolean;
+  settledAt: string;
 };
+
+/** 결제 완료 일시 — 11단계(Payment Completed)에 찍힌 시각. 미기록이면 빈 문자열.
+ *
+ * 브리핑의 '누구 차례'는 마지막 메일의 방향에서 나온다. 그런데 그 자는 결제가 끝나는
+ * 순간 뜻을 잃는다 — 마지막 메일이 수신이었다는 이유만으로 이미 정산이 끝난 건이
+ * 아침마다 "우리 차례 5일째"로 서고, 카드의 Next 줄은 이미 한 일을 시키고 있었다.
+ * 파이프라인이 이미 아는 사실(단계 11)로 그것을 덮는다. */
+function settledDate(row: PipelineRow): string {
+  return row.stage_dates?.["11"] || row.stage_auto?.["11"] || "";
+}
 
 export default function BriefingTab() {
   const { data: digest, error: digestErr, refresh } = useCachedData("mail:digest", () =>
@@ -158,9 +171,12 @@ export default function BriefingTab() {
         })),
       ];
       lines.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
+      const settled = row.stage >= 11;
       out.push({
         row,
         mail,
+        settled,
+        settledAt: settled ? settledDate(row) : "",
         mailCount: mail?.count ?? digest?.has_mail?.[String(row.rfq_id)] ?? 0,
         lines,
         lastAt: lines[0]?.at || lastActivityISO(row),
@@ -172,6 +188,8 @@ export default function BriefingTab() {
     // 그다음이 최근에 움직인 순. 안정 정렬이라 뒤 정렬이 앞 정렬을 보존한다.
     out.sort((a, b) => (a.lastAt < b.lastAt ? 1 : a.lastAt > b.lastAt ? -1 : 0));
     out.sort((a, b) => {
+      // 끝난 건은 아무 차례도 아니다 — 아직 손이 필요한 카드를 다 지나야 나온다.
+      if (a.settled !== b.settled) return a.settled ? 1 : -1;
       const ga = a.waitingDays >= waitingAfter ? 0 : 1;
       const gb = b.waitingDays >= waitingAfter ? 0 : 1;
       return ga !== gb ? ga - gb : b.waitingDays - a.waitingDays;
@@ -181,8 +199,9 @@ export default function BriefingTab() {
 
   // 세 묶음은 서로 겹치지 않고 합이 전체다 — 칩의 수를 더하면 All 이 되어야 한다.
   const groupOf = (c: Card): Filter =>
-    !c.mail || c.mail.recent_count === 0 ? "nomail"
-      : c.waitingDays >= waitingAfter ? "ours" : "theirs";
+    c.settled ? "done"
+      : !c.mail || c.mail.recent_count === 0 ? "nomail"
+        : c.waitingDays >= waitingAfter ? "ours" : "theirs";
 
   // 다시 써야 할 **카드**의 딜 번호 — 이걸 그대로 서버에 짚어 준다. 비어 있는 것뿐
   // 아니라 라벨 없는 옛 형식도 대상이다(아래 isLabelled 주석).
@@ -191,8 +210,8 @@ export default function BriefingTab() {
     .map((c) => c.row.rfq_id);
 
   const counts = useMemo(() => {
-    const n = { all: cards.length, ours: 0, theirs: 0, nomail: 0 };
-    for (const c of cards) n[groupOf(c) as "ours" | "theirs" | "nomail"] += 1;
+    const n = { all: cards.length, ours: 0, theirs: 0, nomail: 0, done: 0 };
+    for (const c of cards) n[groupOf(c) as "ours" | "theirs" | "nomail" | "done"] += 1;
     return n;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cards, waitingAfter]);
@@ -386,6 +405,11 @@ export default function BriefingTab() {
           </Chip>
           <Chip on={filter === "theirs"} onClick={() => setFilter("theirs")}>
             Waiting on them <b>{counts.theirs}</b>
+          </Chip>
+          {/* 결제까지 끝난 건 — 아침에 손댈 것이 없다. 그래도 칩으로 남긴다: 어제 무엇이
+              닫혔는지가 오늘 아침에 알고 싶은 것이고, 칩 수의 합이 All 이어야 한다. */}
+          <Chip on={filter === "done"} onClick={() => setFilter("done")}>
+            Settled <b>{counts.done}</b>
           </Chip>
           {/* 최근 메일이 없는 딜 — 단계는 움직였는데 메일이 조용한 건들이다. 정말
               조용할 수도, 메일이 딜에 못 붙고 미분류에 쌓여 있을 수도 있다. */}
@@ -627,7 +651,7 @@ function BriefCard({
     : [];
 
   return (
-    <section className={`brief-card${waiting ? " waiting" : ""}${row.work_type === "서비스" ? " service" : ""}`}>
+    <section className={`brief-card${card.settled ? " settled" : waiting ? " waiting" : ""}${row.work_type === "서비스" ? " service" : ""}`}>
       {/* 제목 줄에는 제목만 둔다. 단계 배지가 여기 있으면 카드마다 다른 길이로 제목을
           잘라 먹어, 정작 딜을 알아보게 하는 글자가 먼저 사라졌다. 배지는 아래
           진행바 옆으로 — 몇 번째 칸까지 찼는지를 바로 그 자리에서 읽게 된다. */}
@@ -679,16 +703,20 @@ function BriefCard({
         {/* 메일이 아예 없는 것과, 있는데 요즘 조용한 것은 다른 상태다 — 뒤엣것은
             아래에 그 딜의 마지막 대화가 그대로 실려 있다. 통수는 mailCount 로 본다
             (집계 상한에 걸려 이번 응답에 안 실린 딜도 "없음"이 아니다). */}
-        <span className={`mail-turn${waiting ? " ours" : ""}`}>
-          {!card.mailCount
-            ? "No mail linked"
-            : !mail || mail.recent_count === 0
-              ? `Quiet since ${md(mail?.last_at || card.lastAt)}`
-              : waiting
-                ? `Our move · ${card.waitingDays}d`
-                : mail.last_dir === "in"
-                  ? "Just received"
-                  : "Waiting on them"}
+        <span className={`mail-turn${card.settled ? " done" : waiting ? " ours" : ""}`}>
+          {/* 결제 완료가 다른 무엇보다 앞선다 — 마지막 메일이 수신이라고 끝난 건을
+              "우리 차례"로 부르면 아침마다 없는 일이 생긴다. */}
+          {card.settled
+            ? `Settled${card.settledAt ? ` · ${md(card.settledAt)}` : ""}`
+            : !card.mailCount
+              ? "No mail linked"
+              : !mail || mail.recent_count === 0
+                ? `Quiet since ${md(mail?.last_at || card.lastAt)}`
+                : waiting
+                  ? `Our move · ${card.waitingDays}d`
+                  : mail.last_dir === "in"
+                    ? "Just received"
+                    : "Waiting on them"}
         </span>
         <span className="brief-when">
           {md(card.lastAt)}
@@ -700,7 +728,7 @@ function BriefCard({
       {lines.length ? (
         <ul className={`mail-card-rollup${mail?.rollup_stale ? " stale" : ""}`}>
           {lines.map((l, i) => (
-            <RollupLine key={i} text={l} />
+            <RollupLine key={i} text={l} settledAt={card.settled ? (card.settledAt || "done") : ""} />
           ))}
           {mail?.rollup_stale ? (
             <li className="mail-card-since">
@@ -890,17 +918,26 @@ function primaryAmount(value: string): string {
 // 네 줄은 무게가 다르다. Progress 는 이미 지나간 배경이고, Next 는 오늘 손을 대야 하는
 // 유일한 줄이다. 같은 크기·같은 검정으로 찍으면 넷이 한 덩어리로 뭉쳐 아무것도 먼저
 // 읽히지 않는다 — 그래서 라벨은 흐리게 옆으로 빼고, 본문만 종류별로 힘을 달리한다.
-function RollupLine({ text }: { text: string }) {
+/** 요약 한 줄. settledAt 이 있으면 이 딜은 결제까지 끝났다는 뜻이다.
+ *
+ *  그때 Next 줄만은 그대로 둘 수 없다 — 요약은 메일에서 만들어지고 메일은 결제 완료를
+ *  모르므로, "상대 대기 — 선결제 진행" 같은 지시가 이미 끝난 일로 남는다. 그 줄을 결제
+ *  완료로 갈음하되 원래 문장은 지우지 않는다(마우스를 올리면 나온다) — 무엇이 갈음됐는지
+ *  볼 수 있어야 요약이 낡았다는 것도 함께 읽힌다. */
+function RollupLine({ text, settledAt = "" }: { text: string; settledAt?: string }) {
   const parsed = parseRollupLine(text);
   if (!parsed) return <li className="plain">{text}</li>;
   const { kind, label, body } = parsed;
+  const superseded = kind === "next" && !!settledAt;
   return (
-    <li className={kind}>
+    <li className={superseded ? "next settled" : kind}>
       <b className="mail-card-label">{label}</b>
-      <span className="mail-card-val">
-        {kind === "flow" ? <FlowText text={body} />
-          : kind === "terms" ? <TermsText text={body} />
-            : body}
+      <span className="mail-card-val" title={superseded ? body : undefined}>
+        {superseded
+          ? `Settled${settledAt !== "done" ? ` on ${md(settledAt)}` : ""} — payment complete, nothing outstanding.`
+          : kind === "flow" ? <FlowText text={body} />
+            : kind === "terms" ? <TermsText text={body} />
+              : body}
       </span>
     </li>
   );
