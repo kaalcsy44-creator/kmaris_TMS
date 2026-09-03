@@ -1235,6 +1235,45 @@ def migrate_classify_item_types():
     print(f"[OK] classify_item_types applied: {n} service item(s) of {len(rows)}.")
 
 
+def migrate_item_type_from_category():
+    """1회성: 이미 분류가 배정된 품목의 물품/용역 구분을 그 분류에 맞춘다.
+
+    구분(item_type)은 품목이 생길 때 guess_item_type 이 설명 낱말로 한 번 정하고
+    끝이었다. 그래서 나중에 사람이 'Service > ...' 분류를 배정해도 구분은 'part' 로
+    남아, 'Air ticket from Busan to Shanghai'·'Trucking (3ton) ...' 같은 용역이
+    Parts 탭에 계속 보였다(낱말 목록에 없는 표현이라 추측이 못 맞힌다).
+
+    사람이 고른 분류가 언제나 낱말 추측보다 정확하므로, 분류가 있는 행은 분류를
+    따르게 되돌린다. 미분류 행은 건드리지 않는다 — 판정 근거가 없다.
+    앞으로 배정되는 분류는 settings._assign_one_category 가 같은 기준으로 맞춘다."""
+    eng = get_engine()
+    insp = inspect(eng)
+    if not (insp.has_table("item_master") and insp.has_table("item_categories")):
+        return
+    with eng.begin() as conn:
+        conn.execute(text(
+            "CREATE TABLE IF NOT EXISTS applied_migrations (name VARCHAR(100) PRIMARY KEY)"))
+        if conn.execute(text(
+                "SELECT 1 FROM applied_migrations WHERE name='item_type_from_category'")).first():
+            return
+        from services.item_ledger import category_item_type
+        parents = {r[0]: (r[1], r[2]) for r in conn.execute(text(
+            "SELECT id, parent_id, name FROM item_categories")).fetchall()}
+        rows = conn.execute(text(
+            "SELECT id, category_id, item_type FROM item_master "
+            "WHERE category_id IS NOT NULL")).fetchall()
+        n = 0
+        for rid, cid, cur in rows:
+            kind = category_item_type(parents, cid)
+            if kind and kind != (cur or "part"):
+                conn.execute(text("UPDATE item_master SET item_type=:t WHERE id=:i"),
+                             {"t": kind, "i": rid})
+                n += 1
+        conn.execute(text(
+            "INSERT INTO applied_migrations (name) VALUES ('item_type_from_category')"))
+    print(f"[OK] item_type_from_category applied: {n} item(s) re-typed of {len(rows)} classified.")
+
+
 def migrate_reset_mail_sync_cursor():
     """1회성: 메일 동기화 커서를 처음으로 되돌린다.
 
@@ -1412,6 +1451,8 @@ if __name__ == "__main__":
     migrate_split_stage_dates_to_orders()
     migrate_backfill_price_history()
     migrate_classify_item_types()
+    # 낱말 추측으로 갈린 구분을 사람이 고른 분류로 바로잡는다(추측보다 분류가 정확).
+    migrate_item_type_from_category()
     migrate_seed_mail_groups()
     # 취급품목·회사 소개 시드 — note 컬럼이 생긴(migrate_columns) 뒤에 돌아야 한다.
     migrate_seed_vendor_profiles()

@@ -63,6 +63,33 @@ def guess_item_type(part_no, description) -> str:
     return "service" if any(w in d for w in _SERVICE_WORDS) else "part"
 
 
+# 용역 대분류의 이름 — init_db.ITEM_CATEGORY_TREE 의 "Service" 뿌리와 같아야 한다.
+SERVICE_ROOT = "Service"
+
+
+def category_item_type(parents, cid) -> str | None:
+    """분류 id → 'part'/'service'. 분류가 없으면 None(판정하지 않음).
+
+    용역은 계통에 얹히지 않아 Service 대분류가 따로 있다(db.models.ItemCategory 주석).
+    그래서 **뿌리가 Service 인가**가 곧 물품/용역 구분이다. 사람이 고른 분류는 설명
+    낱말 추측(guess_item_type)보다 언제나 정확하다 — 'Air ticket ...', 'Trucking ...'
+    처럼 낱말 목록에 없는 용역이 Parts 탭에 남던 것이 이 때문이었다.
+
+    parents: {id: (parent_id, name)} — 호출자가 분류 트리를 한 번 읽어 넘긴다.
+    순환 방어는 _category_path 와 같은 뜻(본 id 는 다시 밟지 않는다)."""
+    if not cid or cid not in parents:
+        return None
+    seen = set()
+    cur = cid
+    while cur in parents and cur not in seen:
+        seen.add(cur)
+        pid, name = parents[cur]
+        if not pid:
+            return "service" if str(name or "").strip() == SERVICE_ROOT else "part"
+        cur = pid
+    return None
+
+
 def _num(v, default: float = 0.0) -> float:
     try:
         return float(v)

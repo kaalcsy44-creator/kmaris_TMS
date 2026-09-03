@@ -92,7 +92,8 @@ from db.models import ItemPriceHistory
 from services.item_ledger import (
     ledger_rows, item_history, rebuild_price_history, stamp_history_item, match_key,
     master_price_summary, master_party_fallback, ensure_price_history_fresh,
-    guess_item_type, suggest_categories, category_ship_map, fit_part, fit_desc,
+    guess_item_type, category_item_type, suggest_categories, category_ship_map,
+    fit_part, fit_desc,
 )
 import _core
 
@@ -704,6 +705,11 @@ def _category_path(cat_by_id, cid):
     return " > ".join(reversed(names))
 
 
+def _category_parents(s):
+    """{분류 id: (parent_id, name)} — category_item_type 에 넘길 트리 한 벌."""
+    return {c.id: (c.parent_id, c.name) for c in s.query(ItemCategory).all()}
+
+
 @app.get("/api/admin/settings/item-categories", dependencies=[Depends(require_token)])
 def settings_item_categories():
     """분류 트리 전체를 flat 리스트로 반환(프론트에서 parent_id 로 트리 구성)."""
@@ -1114,7 +1120,11 @@ def _assign_one_category(s, target: "ItemLedgerAssign") -> tuple[int, int]:
 
     - item_id 있으면: 해당 마스터의 category_id 갱신(재분류).
     - 없으면 part_no(없으면 description) 로: 정규화 일치하는 기존 마스터가 있으면
-      연결·분류, 없으면 신규 생성. 이후 같은 키의 미연결 이력 행을 즉시 스탬프."""
+      연결·분류, 없으면 신규 생성. 이후 같은 키의 미연결 이력 행을 즉시 스탬프.
+
+    분류를 배정하면 물품/용역 구분(item_type)도 그 분류를 따라간다 — 여기가 분류가
+    정해지는 유일한 길목이라(단건·일괄 모두 이 함수를 지난다) 한 곳만 고치면 된다.
+    구분을 손으로 바로잡고 싶을 때는 품목 편집 폼의 Type 이 그대로 남아 있다."""
     if target.item_id:
         master = s.query(ItemMaster).filter_by(id=target.item_id).first()
         if not master:
@@ -1137,6 +1147,9 @@ def _assign_one_category(s, target: "ItemLedgerAssign") -> tuple[int, int]:
                 category_id=target.category_id,
             )
             s.add(master)
+    kind = category_item_type(_category_parents(s), target.category_id)
+    if kind:
+        master.item_type = kind
     s.flush()
     return master.id, stamp_history_item(s, master.id)
 
