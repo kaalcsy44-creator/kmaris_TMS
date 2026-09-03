@@ -911,7 +911,7 @@ _IMPORT_MODEL = {"customers": Customer, "vendors": Vendor, "makers": Maker}
 
 def _import_kind(kind: str) -> str:
     if kind not in _IMPORT_MODEL:
-        raise HTTPException(status_code=400, detail="알 수 없는 명부 갈래입니다.")
+        raise HTTPException(status_code=400, detail="Unknown list type.")
     return kind
 
 
@@ -957,7 +957,7 @@ def partners_import_read(file: UploadFile = File(...), kind: str = Form("custome
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"파일을 읽지 못했습니다: {exc}") from exc
+        raise HTTPException(status_code=400, detail=f"Could not read the file: {exc}") from exc
     return {
         "kind": kind, "title": pi.TITLE[kind],
         "filename": file.filename or "", "header_row": sheet["header_row"],
@@ -1030,7 +1030,7 @@ def _import_update(s, kind: str, entry: dict) -> None:
     Model = _IMPORT_MODEL[kind]
     obj = s.query(Model).filter_by(id=entry["target_id"]).first()
     if not obj:
-        raise ValueError("대상 레코드를 찾을 수 없습니다(그 사이 지워졌을 수 있습니다).")
+        raise ValueError("The target record no longer exists — it may have been deleted meanwhile.")
     multi_new: dict = {}
     for ch in entry["changes"]:
         if ch["multi"]:

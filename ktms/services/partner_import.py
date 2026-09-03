@@ -204,7 +204,7 @@ def read_sheet(raw: bytes, filename: str, kind: str) -> Dict[str, Any]:
     elif name.endswith((".xlsx", ".xlsm", ".xls")):
         grid = _cells_from_xlsx(raw)
     else:
-        raise ValueError("Excel(.xlsx) 또는 CSV 파일만 올릴 수 있습니다.")
+        raise ValueError("Only Excel (.xlsx) or CSV files can be uploaded.")
 
     best_i, best_score = -1, 0
     for i, row in enumerate(grid[:HEADER_SCAN_ROWS]):
@@ -216,8 +216,8 @@ def read_sheet(raw: bytes, filename: str, kind: str) -> Dict[str, Any]:
             best_i, best_score = i, hit
     if best_i < 0 or best_score < 1:
         raise ValueError(
-            "열 이름을 못 찾았습니다. 첫 줄(또는 표 머리줄)에 회사명·담당자·이메일 같은 "
-            "칸 이름이 있는지 확인해 주세요."
+            "Could not find the column names. Check that the first row (or the table "
+            "header row) carries names such as Company, Contact or Email."
         )
 
     headers = grid[best_i]
@@ -347,9 +347,9 @@ def build_plan(kind: str, headers: List[str], rows: List[List[str]], mapping: Li
                existing: List[Dict[str, Any]], overwrite: bool) -> Dict[str, Any]:
     """엑셀 줄마다 무슨 일이 생기는지 — new / update / same / error 넷 중 하나."""
     if kind not in FIELDS:
-        raise ValueError("알 수 없는 명부 갈래입니다.")
+        raise ValueError("Unknown list type.")
     if "name" not in mapping:
-        raise ValueError("회사명 열을 지정해 주세요 — 이름 없이는 한 줄도 만들 수 없습니다.")
+        raise ValueError("Pick the company-name column — no row can be created without a name.")
 
     by_key: Dict[Tuple[str, str], Dict[str, Any]] = {}
     for rec in existing:
@@ -372,14 +372,15 @@ def build_plan(kind: str, headers: List[str], rows: List[List[str]], mapping: Li
             "inherited": [], "joined": False,
         }
         if not name:
-            entry.update(action="error", error="회사명이 비어 있습니다.")
+            entry.update(action="error", error="The company name is empty.")
             out.append(entry)
             continue
 
         key = row_key(kind, values)
         if key in seen:
-            entry.update(action="error",
-                         error=f"같은 회사·담당자가 이 파일 {seen[key] + 1}행에 이미 있습니다.")
+            entry.update(
+                action="error",
+                error=f"The same company and contact is already on row {seen[key] + 1} of this file.")
             out.append(entry)
             continue
         seen[key] = i

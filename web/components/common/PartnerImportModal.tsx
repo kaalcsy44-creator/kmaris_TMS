@@ -12,10 +12,10 @@ import {
 } from "@/lib/api";
 
 const ACTION_LABEL: Record<PartnerImportRow["action"], string> = {
-  new: "신규",
-  update: "수정",
-  same: "변화없음",
-  error: "오류",
+  new: "New",
+  update: "Update",
+  same: "No change",
+  error: "Error",
 };
 
 /**
@@ -41,7 +41,7 @@ export default function PartnerImportButton({
       <button
         type="button"
         className="btn"
-        title="Excel·CSV 파일로 명부를 한 번에 등록·갱신"
+        title="Register or update the whole list from an Excel · CSV file"
         onClick={() => setOpen(true)}
       >
         ⬆ Import
@@ -78,7 +78,7 @@ function ImportWizard({
 
   async function pick(file: File | null) {
     if (!file) return;
-    setBusy("파일을 읽는 중…");
+    setBusy("Reading the file…");
     setErr("");
     setPlan(null);
     setDone(null);
@@ -89,7 +89,7 @@ function ImportWizard({
       setMapping(s.mapping);
     } catch (e) {
       setSheet(null);
-      setErr(e instanceof Error ? e.message : "파일을 읽지 못했습니다.");
+      setErr(e instanceof Error ? e.message : "Could not read the file.");
     } finally {
       setBusy("");
     }
@@ -100,13 +100,13 @@ function ImportWizard({
   useEffect(() => {
     if (!sheet || done) return;
     let alive = true;
-    setBusy("겹쳐 보는 중…");
+    setBusy("Checking against the list…");
     applyPartnerImport({
       kind, headers: sheet.headers, rows: sheet.rows, mapping,
       overwrite, dry_run: true,
     })
       .then((p) => { if (alive) { setPlan(p); setErr(""); } })
-      .catch((e) => { if (alive) { setPlan(null); setErr(e instanceof Error ? e.message : "계산 실패"); } })
+      .catch((e) => { if (alive) { setPlan(null); setErr(e instanceof Error ? e.message : "Preview failed"); } })
       .finally(() => { if (alive) setBusy(""); });
     return () => { alive = false; };
   }, [sheet, mapping, overwrite, kind, done]);
@@ -118,7 +118,7 @@ function ImportWizard({
 
   async function save() {
     if (!sheet || !accepted.length) return;
-    setBusy("저장하는 중…");
+    setBusy("Saving…");
     setErr("");
     try {
       const res = await applyPartnerImport({
@@ -129,7 +129,7 @@ function ImportWizard({
       setDone(res.applied ?? null);
       onDone();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "저장 실패");
+      setErr(e instanceof Error ? e.message : "Save failed");
     } finally {
       setBusy("");
     }
@@ -147,14 +147,15 @@ function ImportWizard({
   const title = sheet?.title ?? (kind === "vendors" ? "Vendor" : kind === "makers" ? "Maker" : "Customer");
 
   return (
-    <Modal title={`⬆ ${title} 명부 업로드`} onClose={onClose} maxWidth={1240}>
+    <Modal title={`⬆ Import ${title} list`} onClose={onClose} maxWidth={1240}>
       <div className="pimp">
         {/* ① 파일 */}
         <section className="pimp-step">
-          <h4>① 파일 고르기</h4>
+          <h4>① Choose a file</h4>
           <p className="pimp-hint">
-            Excel(.xlsx)·CSV 를 올리면 열 이름을 보고 어떤 칸인지 짐작합니다. 이 화면의
-            <b> 🖨 Print → Excel</b> 로 내려받은 파일을 고쳐 그대로 올려도 됩니다.
+            Upload an Excel (.xlsx) or CSV file — the column names tell us which field is
+            which. A file downloaded from <b>🖨 Print → Excel</b> on this screen can be edited
+            and uploaded straight back.
           </p>
           <div className="pimp-file">
             <input
@@ -166,8 +167,8 @@ function ImportWizard({
             />
             {sheet ? (
               <span className="pimp-file-name">
-                {sheet.filename} — {sheet.headers.length}칸 · {sheet.rows.length}줄
-                {sheet.header_row > 1 ? ` (머리줄 ${sheet.header_row}행)` : ""}
+                {sheet.filename} — {sheet.headers.length} columns · {sheet.rows.length} rows
+                {sheet.header_row > 1 ? ` (header on row ${sheet.header_row})` : ""}
               </span>
             ) : null}
           </div>
@@ -176,25 +177,26 @@ function ImportWizard({
         {/* ② 열 맞추기 */}
         {sheet ? (
           <section className="pimp-step">
-            <h4>② 열 맞추기</h4>
+            <h4>② Match the columns</h4>
             <p className="pimp-hint">
-              잘못 짚었으면 바꾸세요. <b>무시</b>로 둔 열은 읽지 않습니다 — 실적에서
-              나오는 칸(문의·프로젝트·품목 수)은 사람이 적는 값이 아니라 무시합니다.
+              Change anything guessed wrong. Columns left as <b>Ignore</b> are not read —
+              counts that come from your deal history (inquiries, projects, items) are never
+              written from a file.
             </p>
             <div className="pimp-map">
               {sheet.headers.map((h, i) => (
                 <label key={i} className="pimp-map-col">
-                  <span className="pimp-map-head" title={h}>{h || `(${i + 1}번 열)`}</span>
+                  <span className="pimp-map-head" title={h}>{h || `(column ${i + 1})`}</span>
                   <select
                     value={mapping[i] ?? ""}
                     onChange={(e) =>
                       setMapping(mapping.map((m, idx) => (idx === i ? e.target.value : m)))
                     }
                   >
-                    <option value="">— 무시 —</option>
+                    <option value="">— Ignore —</option>
                     {sheet.fields.map((f) => (
                       <option key={f.key} value={f.key}>
-                        {f.label}{f.multi ? " (여러 값)" : ""}
+                        {f.label}{f.multi ? " (multiple)" : ""}
                       </option>
                     ))}
                   </select>
@@ -210,8 +212,9 @@ function ImportWizard({
                 checked={overwrite}
                 onChange={(e) => setOverwrite(e.target.checked)}
               />
-              이미 값이 있는 칸도 엑셀 값으로 덮어쓰기
-              <span className="pimp-hint"> — 꺼 두면 빈 칸만 채우고, 이메일·전화는 없는 값만 보탭니다.</span>
+              Overwrite fields that already have a value
+              <span className="pimp-hint"> — off: fill only the empty ones, and add only the
+              emails and phones that are not there yet.</span>
             </label>
           </section>
         ) : null}
@@ -219,18 +222,19 @@ function ImportWizard({
         {/* ③ 판정 */}
         {plan ? (
           <section className="pimp-step">
-            <h4>③ 무엇이 바뀌는지</h4>
+            <h4>③ What will change</h4>
             <div className="pimp-sum">
-              <Tally tone="new" n={plan.summary.new} label="신규" />
-              <Tally tone="update" n={plan.summary.update} label="수정" />
-              <Tally tone="same" n={plan.summary.same} label="변화없음" />
-              <Tally tone="error" n={plan.summary.error} label="오류" />
-              {skip.size ? <span className="pimp-skip">{skip.size}줄 제외됨</span> : null}
+              <Tally tone="new" n={plan.summary.new} label="new" />
+              <Tally tone="update" n={plan.summary.update} label="to update" />
+              <Tally tone="same" n={plan.summary.same} label="unchanged" />
+              <Tally tone="error" n={plan.summary.error} label="with errors" />
+              {skip.size ? <span className="pimp-skip">{skip.size} excluded</span> : null}
             </div>
             {!done ? (
               <p className="pimp-hint">
-                저장하기 전에 <b>🖨 Print → Excel</b> 로 지금 명부를 내려받아 두면 그게
-                곧 백업입니다. 지우는 일은 하지 않습니다 — 엑셀에 없는 줄은 그대로 남습니다.
+                Before saving, download the current list with <b>🖨 Print → Excel</b> — that
+                file is your backup. Nothing is ever deleted: rows missing from your file stay
+                as they are.
               </p>
             ) : null}
             <div className="table-wrap pimp-wrap">
@@ -238,10 +242,10 @@ function ImportWizard({
                 <thead>
                   <tr>
                     <th className="pimp-ck"></th>
-                    <th className="pimp-rn">행</th>
-                    <th className="pimp-ac">판정</th>
-                    <th>{kind === "makers" ? "Maker" : "회사 / 담당자"}</th>
-                    <th>바뀌는 것</th>
+                    <th className="pimp-rn">Row</th>
+                    <th className="pimp-ac">Action</th>
+                    <th>{kind === "makers" ? "Maker" : "Company / Contact"}</th>
+                    <th>Changes</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -265,20 +269,20 @@ function ImportWizard({
                           <b>{r.name || <span className="dash">—</span>}</b>
                           {r.contact ? <span className="pimp-person"> · {r.contact}</span> : null}
                           {r.joined ? (
-                            <span className="pimp-inh" title="이미 등록된 회사입니다 — 회사명은 명부에 적힌 철자를 씁니다">
-                              기존 회사에 합류
+                            <span className="pimp-inh" title="Already in the list — the registered spelling of the company name is used">
+                              joins existing company
                             </span>
                           ) : null}
                           {r.inherited.length ? (
-                            <span className="pimp-inh" title="같은 회사의 기존 줄에서 물려받았습니다">
-                              회사 공통정보 상속
+                            <span className="pimp-inh" title="Copied from the other contacts of this company">
+                              company info inherited
                             </span>
                           ) : null}
                         </td>
                         <td>
                           {r.error ? <span className="action-err">{r.error}</span> : null}
                           {!r.error && !r.changes.length ? (
-                            <span className="dash">바뀌는 것이 없습니다</span>
+                            <span className="dash">Nothing to change</span>
                           ) : null}
                           {r.changes.map((c) => (
                             <div key={c.field} className="pimp-chg">
@@ -303,10 +307,10 @@ function ImportWizard({
           {done ? (
             <>
               <span className="action-ok">
-                저장했습니다 — 신규 {done.created} · 수정 {done.updated} · 건너뜀 {done.skipped}
-                {done.failed.length ? ` · 실패 ${done.failed.length}` : ""}
+                Saved — {done.created} new · {done.updated} updated · {done.skipped} skipped
+                {done.failed.length ? ` · ${done.failed.length} failed` : ""}
               </span>
-              <button className="btn primary" onClick={onClose}>닫기</button>
+              <button className="btn primary" onClick={onClose}>Close</button>
             </>
           ) : (
             <>
@@ -315,16 +319,16 @@ function ImportWizard({
                 disabled={!!busy || !accepted.length}
                 onClick={save}
               >
-                {accepted.length ? `${accepted.length}줄 저장` : "저장할 줄 없음"}
+                {accepted.length ? `Save ${accepted.length} row${accepted.length === 1 ? "" : "s"}` : "Nothing to save"}
               </button>
-              <button className="btn" disabled={!!busy} onClick={onClose}>취소</button>
+              <button className="btn" disabled={!!busy} onClick={onClose}>Cancel</button>
             </>
           )}
           {busy ? <span className="hint-inline">{busy}</span> : null}
           {err ? <span className="action-err">{err}</span> : null}
           {done?.failed.length ? (
             <span className="action-err">
-              실패: {done.failed.map((f) => `${f.i + 1}행 ${f.name}`).join(", ")}
+              Failed: {done.failed.map((f) => `row ${f.i + 1} ${f.name}`).join(", ")}
             </span>
           ) : null}
         </div>
