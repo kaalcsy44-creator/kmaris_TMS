@@ -51,12 +51,16 @@ export function useMakerByName(): (name: string) => SettingsMaker | undefined {
 export default function MakerCell({
   value,
   onChange,
+  onCommit,
   disabled,
   placeholder = "Maker",
   inputProps,
 }: {
   value: string;
   onChange: (v: string) => void;
+  /** 값을 "정했다"는 순간 — 목록에서 고르거나 Enter 를 쳤을 때. 한 글자마다 무언가를
+   *  일으키면 안 되는 쓰임(선택한 줄에 일괄 적용)이 이 고리를 쓴다. */
+  onCommit?: (v: string) => void;
   disabled?: boolean;
   placeholder?: string;
   /** 엑셀식 편집 좌표·키 핸들러(useItemGridKeys 의 cell(row, col)). 그대로 input 에 붙는다. */
@@ -131,6 +135,7 @@ export default function MakerCell({
 
   function pick(name: string) {
     onChange(name);
+    onCommit?.(name);
     setOpen(false);
     setTyped(false);
   }
@@ -153,6 +158,14 @@ export default function MakerCell({
           setOpen(true);
         }}
         onFocus={() => setTyped(false)}
+        onKeyDown={(e) => {
+          (inputProps?.onKeyDown as ((ev: typeof e) => void) | undefined)?.(e);
+          if (e.key === "Enter" && onCommit) {
+            e.preventDefault();
+            setOpen(false);
+            onCommit(value);
+          }
+        }}
       />
       <button
         type="button"

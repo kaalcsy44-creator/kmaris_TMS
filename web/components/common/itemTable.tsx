@@ -13,6 +13,9 @@ export type RowSelection = {
   selected: Set<number>;
   isSelected: (i: number) => boolean;
   toggle: (i: number) => void;
+  /** Shift 를 누른 채 찍으면 직전에 찍은 행부터 여기까지를 한 번에 켠다(파일 목록과 같은 손짓).
+   *  50줄짜리 문의에서 "탁구공 15개"를 하나씩 찍게 두면 아무도 일괄 편집을 쓰지 않는다. */
+  toggleAt: (i: number, extend: boolean) => void;
   setAll: (count: number, on: boolean) => void;
   clear: () => void;
   count: number;
@@ -30,7 +33,10 @@ export function useRowSelection(rowCount?: number): RowSelection {
       return kept.length === prev.size ? prev : new Set(kept);
     });
   }, [rowCount]);
+  // 마지막으로 (Shift 없이) 찍은 행 — Shift 범위 선택의 기준점.
+  const anchor = useRef<number | null>(null);
   const toggle = useCallback((i: number) => {
+    anchor.current = i;
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(i)) next.delete(i);
@@ -38,6 +44,20 @@ export function useRowSelection(rowCount?: number): RowSelection {
       return next;
     });
   }, []);
+  const toggleAt = useCallback((i: number, extend: boolean) => {
+    if (!extend || anchor.current === null) {
+      toggle(i);
+      return;
+    }
+    // 범위는 켜기만 한다 — 파일 탐색기·스프레드시트가 그렇고, 끄는 쪽까지 겸하면
+    // 같은 손짓이 상황에 따라 반대로 굴어 예측할 수 없다.
+    const [a, b] = anchor.current <= i ? [anchor.current, i] : [i, anchor.current];
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (let k = a; k <= b; k++) next.add(k);
+      return next;
+    });
+  }, [toggle]);
   const setAll = useCallback((count: number, on: boolean) => {
     setSelected(on ? new Set(Array.from({ length: count }, (_, i) => i)) : new Set());
   }, []);
@@ -46,6 +66,7 @@ export function useRowSelection(rowCount?: number): RowSelection {
     selected,
     isSelected: (i: number) => selected.has(i),
     toggle,
+    toggleAt,
     setAll,
     clear,
     count: selected.size,
@@ -103,8 +124,13 @@ export function ItemSelectCell({ index, sel }: { index: number; sel: RowSelectio
           type="checkbox"
           className="row-check"
           aria-label={`Select row ${index + 1}`}
+          title="Shift-click to select a range"
           checked={sel.isSelected(index)}
-          onChange={() => sel.toggle(index)}
+          // Shift 범위 선택은 click 에서 읽는다 — change 이벤트에는 shiftKey 가 없다.
+          // 그래서 change 는 아무 일도 하지 않고(제어된 체크박스라 React 가 되돌린다),
+          // 실제 토글은 여기서 한 번만 일어난다.
+          onClick={(e) => sel.toggleAt(index, e.shiftKey)}
+          onChange={() => { /* onClick 이 처리한다 */ }}
         />
       </label>
     </td>

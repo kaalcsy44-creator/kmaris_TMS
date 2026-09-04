@@ -3919,6 +3919,68 @@ select.cat-cell.cat-cell--applied {
   background: #fbfcfe;
   border-color: #e2eaf4;
 }
+/* ── 선택한 줄에 한꺼번에 채우기(ItemBulkFill) ────────────────────────────
+   품목표 바로 위, 줄을 골랐을 때만 나타나는 띠. 늘 자리를 지키면 "지금 무엇에
+   적용되는가"가 흐려지므로, 선택이 있을 때만 표와 머리글 사이를 비집고 선다.
+   파란 왼쪽 선 = 지금 이 띠가 표의 일부 줄을 겨누고 있다는 표시. */
+.ibf {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 8px 0 6px;
+  padding: 8px 12px;
+  border: 1px solid #cfe0f5;
+  border-left: 3px solid var(--blue, #0055a8);
+  border-radius: 8px;
+  background: #f2f7fe;
+}
+.ibf-n {
+  font-size: 12px;
+  color: #33415a;
+  white-space: nowrap;
+}
+.ibf-n b {
+  font-size: 13px;
+  color: var(--blue, #0055a8);
+}
+.ibf-f {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.ibf-f > span {
+  font-size: 11.5px;
+  color: #6b7684;
+  white-space: nowrap;
+}
+.ibf-maker { width: 190px; }
+/* 제조사 칸은 품목표 안에서만 표 규칙(30px 높이)을 받는다 — 띠 안에서는 제 몫을 따로 준다. */
+.ibf-maker .mk-cell-in {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 28px;
+  border: 1px solid #c7d0de;
+  border-radius: 6px;
+  padding: 0 8px;
+  font-size: 12.5px;
+  box-sizing: border-box;
+}
+.ibf-maker .mk-cell-toggle { height: 28px; }
+.ibf-sel {
+  height: 28px;
+  max-width: 220px;
+  padding: 0 6px;
+  font-size: 12.5px;
+  color: var(--navy);
+  background: #fff;
+  border: 1px solid #c7d0de;
+  border-radius: 6px;
+}
+.ibf-f--wide .ibf-sel { max-width: 260px; }
+.ibf-clear { margin-left: auto; }
+
 /* 부품 등급(Genuine/OEM/…) — 분류 셀과 같은 모양으로 맞춘다. 둘 다 고르는 칸이라
    생김새가 다르면 표 안에서 한 줄이 두 가지 규칙으로 읽힌다. */
 select.grade-cell {

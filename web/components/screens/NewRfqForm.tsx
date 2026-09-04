@@ -24,6 +24,7 @@ import { useColumnLayout } from "@/components/common/useColumnLayout";
 import CategoryCell from "@/components/common/CategoryCell";
 import MakerCell from "@/components/common/MakerCell";
 import GradeCell from "@/components/common/GradeCell";
+import ItemBulkFill from "@/components/common/ItemBulkFill";
 import { ColumnResizer, ColumnsButton } from "@/components/common/tableLayout";
 import {
   CopyRowsButton,
@@ -273,6 +274,11 @@ export default function NewRfqForm({
     setItems((prev) => [...prev, { ...EMPTY_ITEM }]);
   }
   const itemSel = useRowSelection(items.length);
+  /** 고른 줄에만 같은 값을 찍는다 — 제조사·등급·분류 일괄 입력이 함께 쓴다. */
+  function fillSelected(patch: Partial<ItemRow>) {
+    if (itemSel.count === 0) return;
+    setItems((prev) => prev.map((it, idx) => (itemSel.selected.has(idx) ? { ...it, ...patch } : it)));
+  }
   function deleteSelectedItems() {
     if (itemSel.count === 0) return;
     setItems((prev) => prev.filter((_, idx) => !itemSel.selected.has(idx)));
@@ -971,6 +977,15 @@ export default function NewRfqForm({
           <button type="button" className="btn sm items-head-add" onClick={addItem}>+ Add</button>
         </div>
       </div>
+      {canEditThis ? (
+        <ItemBulkFill
+          count={itemSel.count}
+          onMaker={(v) => fillSelected({ maker: v })}
+          onGrade={(v) => fillSelected({ grade: v })}
+          onCategory={(id) => fillSelected({ category_id: id })}
+          onClear={itemSel.clear}
+        />
+      ) : null}
       <div className="table-wrap item-box">
       <table className="mini items-edit resizable-cols">
         <colgroup>
