@@ -1610,6 +1610,17 @@ table.mini.wide.ms-table thead th.pl-th.open .pl-th-btn {
   border: 1px solid #cfe0d8; background: #eef6f1; color: #2a5c46;
   font-size: 10.5px; font-weight: 700; line-height: 17px; white-space: nowrap;
 }
+/* 배지 색 = 그 계통이 배의 어디인가. Ship View 의 네 구역(.ship-zone[data-deck])과
+   같은 색을 쓴다 — 같은 것을 두 화면이 다르게 칠하면 색이 뜻을 잃는다.
+   여기서는 칩 색(--z-chip-*)과 글자색(--z-ink)만 가져온다: 카드는 넓은 바탕이지만
+   배지는 글자 한 마디라, 바탕까지 옅은 카드색을 쓰면 흰 표 위에서 구분이 안 된다. */
+.cat-tag[data-deck="0"] { background: #e9f1fd; border-color: #cfe0f8; color: #2456a6; }
+.cat-tag[data-deck="1"] { background: #e6f5f0; border-color: #c6e3da; color: #16705c; }
+.cat-tag[data-deck="2"] { background: #fbeee3; border-color: #ecd8c5; color: #9a5a28; }
+.cat-tag[data-deck="3"] { background: #efeafb; border-color: #ddd3f2; color: #58459c; }
+/* 지우는 × 는 배지 글자색을 물려받아 구역마다 함께 바뀐다(고정색이면 한 구역에서만 맞다). */
+.cat-tag--edit[data-deck] button { color: currentColor; opacity: 0.62; }
+.cat-tag--edit[data-deck] button:hover { color: #b4232a; opacity: 1; }
 .cat-tag--more { border-color: var(--line); background: #f1f3f6; color: #6b7684; }
 /* 편집 중인 배지 — × 를 안에 문다. 지우는 단추가 배지 밖에 서면 어느 배지의 것인지
    눈으로 짝지어야 한다. */

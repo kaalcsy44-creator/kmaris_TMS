@@ -18,6 +18,7 @@
 import { useMemo } from "react";
 import { useCategoryOptions, type CategoryOption } from "@/components/common/CategoryCell";
 import TagPickMenu from "@/components/common/TagPickMenu";
+import { berthOf } from "@/lib/shipZones";
 
 /** 배지로 쓸 수 있는 분류만 — 대(1)·중(2)분류. 소분류는 너무 잘다. */
 export function useVendorCategoryOptions(): CategoryOption[] {
@@ -54,8 +55,14 @@ export function CategoryBadges({
   const rest = picked.length - shown.length;
   return (
     <span className="cat-tags">
+      {/* 색은 이 계통이 배의 어디인가를 말한다 — Ship View 의 네 구역과 같은 색이다.
+          한 색으로만 세우면 'Main Engine System' 과 'Crane' 이 같은 무게로 읽히는데,
+          하나는 기관실이고 하나는 갑판이다. 화면 두 곳이 같은 것을 다르게 칠하면
+          색이 뜻을 잃는다. */}
       {shown.map((o) => (
-        <span key={o.id} className="cat-tag" title={o.path}>{leafOf(o.path)}</span>
+        <span key={o.id} className="cat-tag" data-deck={berthOf(o.rootName)} title={o.path}>
+          {leafOf(o.path)}
+        </span>
       ))}
       {rest > 0 ? (
         <span className="cat-tag cat-tag--more" title={picked.slice(shown.length).map((o) => o.path).join("\n")}>
@@ -105,7 +112,8 @@ export function CategoryTagPicker({
       <span>Item categories</span>
       <div className="cat-picker-tags">
         {picked.length ? picked.map((o) => (
-          <span key={o.id} className="cat-tag cat-tag--edit" title={o.path}>
+          <span key={o.id} className="cat-tag cat-tag--edit" data-deck={berthOf(o.rootName)}
+                title={o.path}>
             {leafOf(o.path)}
             {disabled ? null : (
               <button type="button" aria-label={`Remove ${o.path}`}

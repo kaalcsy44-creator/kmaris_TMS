@@ -7,6 +7,7 @@ import { assignItemLedgerCategory, fetchItemShipMap } from "@/lib/api";
 import { invalidateCache, useCachedData } from "@/lib/useCachedData";
 import type { ShipDeal, ShipItem, ShipMap } from "@/lib/types";
 import { useVendorLogo } from "@/lib/vendorLogos";
+import { DECKS, berthOf } from "@/lib/shipZones";
 
 /**
  * Ship View — 분류 트리를 목록이 아니라 배 한 척으로 펼친 화면.
@@ -25,35 +26,6 @@ import { useVendorLogo } from "@/lib/vendorLogos";
  * 붙고, 그 번호나 분류에 마우스를 올리면 거기 걸린 품목의 내역(품번·품명·최근
  * 매입·매출·상대처)이 그 자리에서 펼쳐진다.
  */
-
-/**
- * 갑판 — 카드가 스스로 달고 다니는 이름표. 자리(격자 칸)로 갑판을 나누지 않는다:
- * 계통마다 부피가 열 배씩 차이 나서(기관실 아홉 계열 vs 선교 셋), 칸을 갑판으로
- * 못 박으면 어떤 칸은 안에서 스크롤하고 어떤 칸은 절반이 빈 채로 남는다.
- * 이름표를 카드에 붙여 두면 카드는 어느 열에 놓여도 제 갑판을 말한다.
- */
-const DECKS = [
-  { name: "Bridge & upper deck", sub: "선교·상부" },
-  { name: "Main deck", sub: "갑판·화물" },
-  { name: "Machinery spaces", sub: "기관·전장" },
-  { name: "Quay", sub: "육상·용역" },
-] as const;
-
-/**
- * 대분류 이름 → 갑판. 기본 트리(init_db.ITEM_CATEGORY_TREE)의 일곱 대분류를 제자리에
- * 세운다. 여기 없는 이름은 부두로 간다 — 자리를 못 찾은 것이지 잘못된 것이 아니므로
- * 화면에서 빠지지는 않는다(관리자가 트리를 고쳐도 화면이 무너지지 않는다).
- */
-const BERTH: Record<string, number> = {
-  "BRIDGE": 0,
-  "DECK MACHINERY": 0,
-  "CARGO & TANK SYSTEM": 1,
-  "CARGO AND TANK SYSTEM": 1,
-  "ENGINE ROOM": 2,
-  "ELECTRICAL & AUTOMATION": 2,
-  "OTHER EQUIPMENT": 2,
-  "SERVICE": 3,
-};
 
 /** 소분류를 두 단으로 접을 기준 — 이보다 계열이 많은 카드(기관실)는 안에서 나눈다. */
 const WIDE_SUBS = 6;
@@ -151,11 +123,6 @@ type Panel = {
   x: number;
   y: number;
 } | null;
-
-function berthOf(name: string): number {
-  const k = (name || "").trim().toUpperCase();
-  return BERTH[k] ?? DECKS.length - 1;   // 모르는 계통은 부두에 내려놓는다.
-}
 
 /**
  * 칩에 적는 이름 — 프로젝트 번호(P-001)다.
