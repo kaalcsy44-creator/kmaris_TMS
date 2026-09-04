@@ -10455,6 +10455,15 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 }
 /* 담당자별 편집 단추 칸 — 값이 아니라 손잡이라 폭을 내용만큼만 준다. */
 .co-contacts .co-edit-col { width: 1%; white-space: nowrap; text-align: right; }
+/* 담당자 줄의 손잡이 둘(고치기·지우기) — 붙여 두면 잘못 누른다. */
+.co-contacts .co-edit-col .btn.tiny + .btn.tiny { margin-left: 4px; }
+/* "+ 담당자 추가" 는 머리글 오른쪽 끝으로 — 명단의 제목이지 명단의 한 줄이 아니다. */
+.co-contacts-add { margin-left: auto; text-transform: none; letter-spacing: 0; }
+.co-contacts-none {
+  padding: 12px 8px;
+  color: var(--muted);
+  text-align: center;
+}
 
 /* 하위를 여닫는 손잡이 — 이름 앞에 선다. 3층(하위 없음)에서는 보이지 않게 두되 자리는
    차지해, 같은 층 이름들의 시작점이 어긋나지 않는다. */

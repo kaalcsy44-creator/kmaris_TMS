@@ -1102,7 +1102,7 @@ function CustomersTab() {
   // 회사 공통정보 편집 대상 그룹(같은 회사명의 담당자 레코드들). null = 닫힘.
   // 회사 목록 전체와 지금 보고 있는 자리 — 창 안에서 옆 회사로 건너뛰려면 이웃을 알아야 한다.
   const [company, setCompany] = useState<
-    { groups: SettingsCustomer[][]; index: number; editRow: (row: SettingsCustomer) => void } | null
+    CompanyNavCtx<SettingsCustomer> | null
   >(null);
   const [reloadKey, setReloadKey] = useState(0);
   const canCreate = can("settings", "create");
@@ -1124,7 +1124,12 @@ function CustomersTab() {
         {...companyNav(company, setCompany)}
         // 담당자를 고치러 갈 때는 이 창을 먼저 닫는다 — 편집 창이 그 자리에 열리므로
         // 두 창이 겹쳐 서면 어느 쪽을 닫는 손짓인지 흐려진다.
+        // 담당자 편집·추가는 이 창을 먼저 닫는다 — 등록 폼이 그 자리에 열리므로 두 창이
+        // 겹쳐 서면 어느 쪽을 닫는 손짓인지 흐려진다. 삭제는 창 안에서 끝난다(명단이
+        // 곧 지운 결과를 보여 준다).
         onEditContact={(row) => { const go = company.editRow; setCompany(null); go(row); }}
+        onAddContact={() => { const go = company.addNew; setCompany(null); go(); }}
+        onDeleteContact={company.removeRow}
         fields={[
           ["tax_id", "Tax ID / Business No."],
           ["tax_invoice_email", "Tax invoice email"],
@@ -1467,6 +1472,15 @@ function contactValues(multi: string[] | undefined, flat: string | undefined): s
 /** 회사 정보 창이 옆 회사로 건너뛸 때 쓰는 한 걸음 — 어디로 가는지(name)와 가는 법(go). */
 type CompanyNav = { name: string; go: () => void };
 
+/** 회사 창이 목록에 손을 뻗는 통로 — 옆 회사로 건너뛰기, 담당자 고치기·더하기·지우기. */
+type CompanyNavCtx<T> = {
+  groups: T[][];
+  index: number;
+  editRow: (row: T) => void;
+  addNew: () => void;
+  removeRow: (row: T) => Promise<string>;
+};
+
 /** 회사 목록에서 앞뒤 한 걸음을 만든다(두 탭이 같은 모양으로 쓴다). */
 function companyNav<T extends { name: string }, S extends { groups: T[][]; index: number }>(
   st: S,
@@ -1500,6 +1514,8 @@ function CompanyInfoModal<
   prev,
   next,
   onEditContact,
+  onAddContact,
+  onDeleteContact,
   tags,
   makerTags,
 }: {
@@ -1518,6 +1534,10 @@ function CompanyInfoModal<
   next?: CompanyNav;
   /** 담당자 한 명을 고치러 간다(바깥 목록의 편집 창을 연다). 없으면 단추도 없다. */
   onEditContact?: (row: T) => void;
+  /** 이 회사에 담당자를 한 명 더한다 — 회사 공통정보가 채워진 등록 폼이 열린다. */
+  onAddContact?: () => void;
+  /** 담당자 한 명을 지운다. 빈 문자열이면 성공, 아니면 실패 사유. */
+  onDeleteContact?: (row: T) => Promise<string>;
   /** 취급 분류(거래선 전용). 글자가 아니라 id 목록이라 fields/areas 를 못 타고 따로 든다.
    *  주지 않으면 이 창에 그 칸이 아예 없다(고객사 창은 분류를 쓰지 않는다). */
   tags?: {
@@ -1547,11 +1567,33 @@ function CompanyInfoModal<
   const [makerIds, setMakerIds] = useState<number[]>(() => [...(makerTags?.initial ?? [])]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  // 방금 지운 담당자. 창이 든 rows 는 열 때 찍은 사진이라 목록이 새로 그려져도 바뀌지
+  // 않는다 — 지운 사람이 그대로 남아 있으면 지워졌는지 아닌지를 알 수 없다.
+  const [gone, setGone] = useState<Set<number>>(new Set());
   // 열면 읽기부터 — 이 창은 대개 "이 회사가 뭐 하는 곳이었지"를 확인하러 연다. 곧장
   // 입력칸으로 열어 두면 확인하러 들어왔다가 잘못 눌러 회사 전 담당자의 값을 한꺼번에
   // 바꾸는 일이 생긴다(이 창의 저장은 한 명이 아니라 회사 전체에 닿는다).
   const [editing, setEditing] = useState(false);
   const canEditCompany = can("settings", "edit");
+  const canAddContact = can("settings", "create");
+  const canDeleteContact = can("settings", "delete");
+  // 지운 사람을 뺀 명단 — 창 안의 모든 숫자·문구가 이것을 센다.
+  const contacts = rows.filter((r) => !gone.has(r.id));
+
+  async function delContact(row: T & { contact?: string }) {
+    if (!onDeleteContact) return;
+    const who = (row.contact || "").trim();
+    if (!confirm(
+      `Delete ${who ? `"${who}"` : "this contact"} from ${origName}?
+
+`
+      + "The company itself stays as long as another contact remains."
+    )) return;
+    setErr("");
+    const fail = await onDeleteContact(row);
+    if (fail) setErr(fail);
+    else setGone((prev) => new Set(prev).add(row.id));
+  }
 
   // 담당자별로 값이 다른 필드 — 저장하면 하나로 통일된다는 걸 미리 알린다.
   const mixed = [...fields, ["payment_terms", "Payment terms"] as (typeof fields)[number],
@@ -1648,17 +1690,27 @@ function CompanyInfoModal<
               같은 표에 섞지 않고 아래에 따로 세운다. 고치는 자리는 바깥 목록이다. */}
           <div className="co-contacts">
             <div className="co-contacts-hd">
-              Contacts<span className="ms-badge">{rows.length}</span>
+              Contacts<span className="ms-badge">{contacts.length}</span>
+              {onAddContact && canAddContact ? (
+                <button
+                  type="button"
+                  className="btn tiny co-contacts-add"
+                  onClick={onAddContact}
+                  title="Register one more contact for this company"
+                >
+                  ＋ Add contact
+                </button>
+              ) : null}
             </div>
             <table className="mini">
               <thead>
                 <tr>
                   <th>Name</th><th>Email</th><th>Phone</th><th>Region</th>
-                  {onEditContact ? <th className="co-edit-col" /> : null}
+                  {onEditContact || onDeleteContact ? <th className="co-edit-col" /> : null}
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => {
+                {contacts.map((r) => {
                   const mails = contactValues(r.emails, r.email);
                   const tels = contactValues(r.phones, r.contact_phone);
                   const regions = contactValues(r.regions, r.country);
@@ -1678,27 +1730,48 @@ function CompanyInfoModal<
                           : <span className="dash">—</span>}
                       </td>
                       <td>{regions.join(" · ") || <span className="dash">—</span>}</td>
-                      {onEditContact ? (
+                      {onEditContact || onDeleteContact ? (
                         <td className="co-edit-col">
-                          <button
-                            type="button"
-                            className="btn tiny"
-                            onClick={() => onEditContact(r)}
-                            title={`Edit ${r.contact || "this contact"}`}
-                          >
-                            ✎
-                          </button>
+                          {onEditContact ? (
+                            <button
+                              type="button"
+                              className="btn tiny"
+                              onClick={() => onEditContact(r)}
+                              title={`Edit ${r.contact || "this contact"}`}
+                            >
+                              ✎
+                            </button>
+                          ) : null}
+                          {onDeleteContact && canDeleteContact ? (
+                            <button
+                              type="button"
+                              className="btn tiny danger"
+                              onClick={() => delContact(r)}
+                              title={`Delete ${r.contact || "this contact"}`}
+                            >
+                              🗑
+                            </button>
+                          ) : null}
                         </td>
                       ) : null}
                     </tr>
                   );
                 })}
+                {contacts.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="co-contacts-none">
+                      No contact left — this company is gone from the list.
+                    </td>
+                  </tr>
+                ) : null}
               </tbody>
             </table>
+            {err ? <span className="action-err">{err}</span> : null}
           </div>
           <p className="hint-inline" style={{ display: "block", marginTop: 10 }}>
-            The values above are company-level — editing them applies to all {rows.length} contacts
-            at once. Contacts themselves are edited from the list behind this dialog.
+            The values above are company-level — editing them applies to all {contacts.length}{" "}
+            {contacts.length === 1 ? "contact" : "contacts"} at once. Name, email, phone and region
+            belong to each contact and are edited from the ✎ button above.
           </p>
         </div>
         <div className="form-actions">
@@ -2122,7 +2195,7 @@ function VendorsTab() {
   const makerNames = useMakerNames();
   const catNames = useCategoryNames();
   const [company, setCompany] = useState<
-    { groups: SettingsVendor[][]; index: number; editRow: (row: SettingsVendor) => void } | null
+    CompanyNavCtx<SettingsVendor> | null
   >(null);
   const [reloadKey, setReloadKey] = useState(0);
   const canCreate = can("settings", "create");
@@ -2148,7 +2221,12 @@ function VendorsTab() {
           />
         )]}
         {...companyNav(company, setCompany)}
+        // 담당자 편집·추가는 이 창을 먼저 닫는다 — 등록 폼이 그 자리에 열리므로 두 창이
+        // 겹쳐 서면 어느 쪽을 닫는 손짓인지 흐려진다. 삭제는 창 안에서 끝난다(명단이
+        // 곧 지운 결과를 보여 준다).
         onEditContact={(row) => { const go = company.editRow; setCompany(null); go(row); }}
+        onAddContact={() => { const go = company.addNew; setCompany(null); go(); }}
+        onDeleteContact={company.removeRow}
         tags={{
           initial: company.groups[company.index]?.find((r) => (r.category_ids ?? []).length)
                      ?.category_ids ?? [],
@@ -4249,11 +4327,13 @@ function MasterSection<T extends { id: number }>({
     subFirst?: (row: T) => ReactNode;
     // 헤더 우측 버튼. addNew() = 그룹 공통정보가 채워진 신규 등록 폼 열기.
     /** 헤더 우측 버튼. addNew() = 그룹 공통정보가 채워진 신규 등록 폼 열기.
-     *  nav = 같은 표의 회사 목록과 이 회사의 자리 — 회사 정보 창이 옆 회사로 건너뛰는 데 쓴다. */
+     *  nav = 같은 표의 회사 목록과 이 회사의 자리 — 회사 정보 창이 옆 회사로 건너뛰는 데
+     *  쓴다. 담당자를 더하고 지우는 길도 함께 실어 보낸다: 회사 창에 명단이 서 있는데
+     *  더하고 지우려면 창을 닫고 목록으로 돌아가야 하는 것은 명단을 보여 준 뜻이 아니다. */
     actions?: (
       rows: T[],
       addNew: () => void,
-      nav: { groups: T[][]; index: number; editRow: (row: T) => void },
+      nav: CompanyNavCtx<T>,
     ) => ReactNode;
     newRow?: (rows: T[]) => T;
     summary?: (groups: number, items: number) => string;
@@ -4347,6 +4427,19 @@ function MasterSection<T extends { id: number }>({
       onSaved?.();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Save failed");
+    }
+  }
+
+  /** 한 건을 지운다. 묻는 것은 부르는 쪽 몫이다 — 회사 창은 누구를 지우는지 이름을
+   *  알고 있어 더 나은 확인 문구를 쓸 수 있다. 실패 사유를 글로 돌려준다(빈 문자열=성공). */
+  async function removeRow(row: T): Promise<string> {
+    try {
+      await remove(row.id);
+      refresh();
+      onSaved?.();
+      return "";
+    } catch (e) {
+      return e instanceof Error ? e.message : "Delete failed";
     }
   }
 
@@ -4485,7 +4578,8 @@ function MasterSection<T extends { id: number }>({
                     ))}
                     <td className="ms-actcol" onClick={(e) => e.stopPropagation()}>
                       {group?.actions?.(g.rows, () => openNewIn(g.rows),
-                        { groups: groupRows, index: groupIndex.get(g.key) ?? 0, editRow: openEdit })}
+                        { groups: groupRows, index: groupIndex.get(g.key) ?? 0,
+                          editRow: openEdit, addNew: () => openNewIn(g.rows), removeRow })}
                     </td>
                   </tr>
                   {isOpen(g.key) ? g.rows.map((row) => dataRow(row, true)) : null}
