@@ -1798,6 +1798,8 @@ export type RfqItem = {
   description: string;
   type?: string;
   serial_no?: string;
+  /** 제조사 — 1단계에서 등록된 메이커를 고르거나 직접 적는다(명부에 없는 회사도 저장). */
+  maker?: string;
   qty: number;
   unit: string;
   unit_price: number | null;

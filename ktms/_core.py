@@ -3611,6 +3611,9 @@ class RfqItemIn(BaseModel):
     description: str = ""
     type: str | None = ""        # 엔진/부품 타입(예: H35DF)
     serial_no: str | None = ""   # 시리얼 번호
+    # 제조사 — 메이커 명부에서 고르거나 직접 적는다. 자유 텍스트로 두는 이유는 품목
+    # 마스터의 maker 칸과 같다: 고객이 물어오는 부품의 제조사가 우리 명부보다 늘 넓다.
+    maker: str | None = ""
     qty: float = 1
     remark: str | None = ""
     # 품목 분류(선택) — 입력 단계에서 고르면 저장 시 품목 마스터 분류로 반영된다.

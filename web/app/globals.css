@@ -3919,6 +3919,111 @@ select.cat-cell.cat-cell--applied {
   background: #fbfcfe;
   border-color: #e2eaf4;
 }
+/* ── 품목표 셀 안의 제조사(Maker) 입력 ────────────────────────────────────
+   등록된 메이커를 고르거나 없는 이름은 그대로 친다(MakerCell). 겉모습은 평범한 글자
+   칸이어야 한다 — 여기서 막히면 안 되는 자리라, 목록은 오른쪽 토글에 접어 둔다.
+   메뉴는 body 로 portal 되므로 이 블록 아래 .mk-menu 는 셀과 형제가 아니다. */
+.mk-cell {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+/* 적어 둔 이름이 명부의 회사와 맞을 때만 선다 — 로고가 곧 "그 회사가 맞다"는 표시다. */
+.mk-cell-logo {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+  border-radius: 3px;
+  background: #fff;
+}
+table.mini.items-edit .mk-cell-in {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.mk-cell-toggle {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid #d7e2ee;
+  border-radius: 6px;
+  background: #f7fafd;
+  color: #6b7684;
+  font-size: 10px;
+  line-height: 1;
+  cursor: pointer;
+}
+.mk-cell-toggle:hover:not(:disabled) { background: #eef3fb; color: var(--navy); }
+.mk-cell-toggle:disabled { opacity: 0.4; cursor: default; }
+.mk-menu {
+  z-index: 2000;
+  padding: 6px;
+  background: #fff;
+  border: 1px solid #c7d0de;
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(20, 35, 65, 0.22);
+}
+.mk-menu-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.mk-opt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  font-size: 13px;
+  text-align: left;
+  background: none;
+  border: 0;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.mk-opt:hover { background: #eef3fb; }
+.mk-opt.on { background: #e1ebfb; }
+.mk-opt--clear { color: #8a96a8; }
+.mk-opt-logo {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  border-radius: 3px;
+  background: #fff;
+}
+/* 로고 없는 회사도 이름이 같은 자리에서 시작해야 목록이 계단처럼 어긋나지 않는다. */
+.mk-opt-logo--none { background: transparent; }
+.mk-opt-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mk-opt-sub {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: #8a96a8;
+}
+.mk-menu-empty {
+  padding: 10px 8px;
+  font-size: 12.5px;
+  color: #8a96a8;
+  text-align: center;
+}
+.mk-menu-foot {
+  margin-top: 4px;
+  padding: 6px 8px 2px;
+  border-top: 1px solid #eef2f7;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #8a96a8;
+}
 /* 맨 좌측 행 삭제열 — items-edit 변형도 통일 포맷(가운데 정렬). */
 table.mini.items-edit th.row-tools,
 table.mini.items-edit td.row-tools {

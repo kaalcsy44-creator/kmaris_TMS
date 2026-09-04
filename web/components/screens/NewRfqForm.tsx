@@ -22,6 +22,7 @@ import CustomerName from "@/components/common/CustomerName";
 import CustomerSelect from "@/components/common/CustomerSelect";
 import { useColumnLayout } from "@/components/common/useColumnLayout";
 import CategoryCell from "@/components/common/CategoryCell";
+import MakerCell from "@/components/common/MakerCell";
 import { ColumnResizer, ColumnsButton } from "@/components/common/tableLayout";
 import {
   CopyRowsButton,
@@ -35,19 +36,23 @@ import {
 
 // 품목 표에서 폭 조절·숨김 가능한 컬럼(관리번호·순번 열 제외)과 셀 렌더 메타.
 // category 는 텍스트 입력이 아니라 분류 select 셀이다(kind: "category").
-type RfqTextColKey = "part_no" | "description" | "type" | "serial_no" | "qty" | "remark";
+type RfqTextColKey = "part_no" | "description" | "type" | "serial_no" | "maker" | "qty" | "remark";
 type RfqItemColKey = RfqTextColKey | "category";
 const RFQ_ITEM_COLS: {
   key: RfqItemColKey;
   label: string;
   cellClass: string;
   num?: boolean;
-  kind?: "category";
+  kind?: "category" | "maker";
 }[] = [
   { key: "part_no", label: "Part No.", cellClass: "wrapcell" },
   { key: "description", label: "Description", cellClass: "desc" },
   { key: "type", label: "Type", cellClass: "wrapcell" },
   { key: "serial_no", label: "Serial No.", cellClass: "wrapcell" },
+  // 제조사는 시리얼 다음 — 3단계 견적표(Part No. · Description · Type · Serial No. ·
+  // Maker · Origin …)와 같은 자리에 둔다. 같은 품목이 단계를 건너가는데 칸 순서가
+  // 바뀌면 눈이 매번 다시 자리를 찾아야 한다.
+  { key: "maker", label: "Maker", cellClass: "wrapcell", kind: "maker" },
   { key: "qty", label: "Qty", cellClass: "num", num: true },
   { key: "remark", label: "Remark", cellClass: "wrapcell" },
   { key: "category", label: "Category", cellClass: "", kind: "category" },
@@ -57,6 +62,7 @@ const RFQ_ITEM_DEFAULT_W: Record<string, number> = {
   description: 280,
   type: 96,
   serial_no: 130,
+  maker: 150,
   qty: 84,
   remark: 160,
   category: 150,
@@ -67,6 +73,8 @@ type ItemRow = {
   description: string;
   type: string;
   serial_no: string;
+  /** 제조사 — 등록된 메이커에서 고르거나 직접 적는다(명부에 없는 회사도 그대로 저장). */
+  maker: string;
   qty: string;
   remark: string;
   /** 품목 분류(선택). 저장 시 품목 마스터 분류로 반영된다. */
@@ -81,6 +89,7 @@ const EMPTY_ITEM: ItemRow = {
   description: "",
   type: "",
   serial_no: "",
+  maker: "",
   qty: "1",
   remark: "",
   category_id: null,
@@ -363,6 +372,7 @@ export default function NewRfqForm({
               description: it.description ?? "",
               type: it.type ?? "",
               serial_no: it.serial_no ?? "",
+              maker: it.maker ?? "",
               qty: String(it.qty ?? 1),
               remark: it.remark ?? "",
               category_id: null,   // OCR 은 분류를 알 수 없다 — 필요하면 수동 선택
@@ -444,6 +454,7 @@ export default function NewRfqForm({
               description: it.description || "",
               type: it.type ?? "",
               serial_no: it.serial_no ?? "",
+              maker: it.maker ?? "",
               qty: String(it.qty ?? 1),
               remark: it.remark ?? "",
               category_id: it.category_id ?? null,
@@ -468,6 +479,7 @@ export default function NewRfqForm({
         description: it.description,
         type: it.type,
         serial_no: it.serial_no,
+        maker: it.maker,
         qty: Number(it.qty) || 1,
         remark: it.remark,
         category_id: it.category_id,
@@ -993,6 +1005,18 @@ export default function NewRfqForm({
                         appliedTo={it.applied_to}
                         onAppliedToChange={(id) => setItemApplied(i, id)}
                         disabled={!canEditThis}
+                      />
+                    </td>
+                  );
+                }
+                if (c.kind === "maker") {
+                  return (
+                    <td key={c.key}>
+                      <MakerCell
+                        value={it.maker}
+                        onChange={(v) => setItem(i, "maker", v)}
+                        disabled={!canEditThis}
+                        inputProps={itemKeys.cell(i, ci)}
                       />
                     </td>
                   );
