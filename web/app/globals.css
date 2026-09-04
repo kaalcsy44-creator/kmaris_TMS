@@ -10515,6 +10515,22 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 .co-contacts .co-edit-col { width: 1%; white-space: nowrap; text-align: right; }
 /* 담당자 줄의 손잡이 둘(고치기·지우기) — 붙여 두면 잘못 누른다. */
 .co-contacts .co-edit-col .btn.tiny + .btn.tiny { margin-left: 4px; }
+/* 그 자리에서 고치는 줄 — 입력칸이 표 칸을 꽉 채우고, 고치는 줄임을 바탕색으로 알린다.
+   창을 하나 더 띄우지 않으므로 "지금 이 줄을 고치는 중"이 눈에 보여야 한다. */
+.co-contacts tr.co-row-edit > td { background: #f2f7fe; }
+.co-contacts tr.co-row-edit input {
+  width: 100%;
+  min-width: 0;
+  height: 28px;
+  padding: 0 7px;
+  font-size: 12px;
+  border: 1px solid #c7d0de;
+  border-radius: 6px;
+  background: #fff;
+  box-sizing: border-box;
+}
+/* 표 칸은 기본이 nowrap 이라 입력칸이 제 칸을 넘어선다 — 고치는 줄에서만 푼다. */
+.co-contacts tr.co-row-edit > td { white-space: normal; }
 /* "+ 담당자 추가" 는 머리글 오른쪽 끝으로 — 명단의 제목이지 명단의 한 줄이 아니다. */
 .co-contacts-add { margin-left: auto; text-transform: none; letter-spacing: 0; }
 .co-contacts-none {

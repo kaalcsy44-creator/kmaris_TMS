@@ -1125,10 +1125,10 @@ function CustomersTab() {
         {...companyNav(company, setCompany)}
         // 담당자를 고치러 갈 때는 이 창을 먼저 닫는다 — 편집 창이 그 자리에 열리므로
         // 두 창이 겹쳐 서면 어느 쪽을 닫는 손짓인지 흐려진다.
-        // 담당자 편집·추가는 이 창을 먼저 닫는다 — 등록 폼이 그 자리에 열리므로 두 창이
-        // 겹쳐 서면 어느 쪽을 닫는 손짓인지 흐려진다. 삭제는 창 안에서 끝난다(명단이
-        // 곧 지운 결과를 보여 준다).
-        onEditContact={(row) => { const go = company.editRow; setCompany(null); go(row); }}
+        // 담당자 고치기·지우기는 이 창 안에서 끝난다 — 명단이 곧 결과를 보여 준다.
+        // 추가만 창을 먼저 닫는다: 등록 폼이 그 자리에 열리므로 두 창이 겹쳐 서면
+        // 어느 쪽을 닫는 손짓인지 흐려지고, 거기엔 명함 스캔도 있다.
+        onSaveContact={company.saveRow}
         onAddContact={() => { const go = company.addNew; setCompany(null); go(); }}
         onDeleteContact={company.removeRow}
         fields={[
@@ -1477,8 +1477,9 @@ type CompanyNav = { name: string; go: () => void };
 type CompanyNavCtx<T> = {
   groups: T[][];
   index: number;
-  editRow: (row: T) => void;
   addNew: () => void;
+  /** 담당자 한 명을 그 줄에서 고쳐 저장한다. 창을 새로 띄우지 않는다. */
+  saveRow: (row: T) => Promise<string>;
   removeRow: (row: T) => Promise<string>;
 };
 
@@ -1501,7 +1502,7 @@ function CompanyInfoModal<
     id: number; name: string; address: string; addresses: string[];
     payment_terms: string; logo: string;
     // 담당자 명단을 창 안에서 함께 읽는다 — 고객·거래선 두 표가 같은 칸을 갖고 있다.
-    contact: string; email: string; contact_phone: string;
+    contact: string; duty: string; email: string; contact_phone: string;
     emails: string[]; phones: string[]; regions: string[]; country: string;
   }
 >({
@@ -1514,7 +1515,7 @@ function CompanyInfoModal<
   stats,
   prev,
   next,
-  onEditContact,
+  onSaveContact,
   onAddContact,
   onDeleteContact,
   tags,
@@ -1533,8 +1534,9 @@ function CompanyInfoModal<
   /** 표의 앞뒤 회사로 건너뛰기. 이름을 함께 받아 어디로 가는지 미리 보인다. */
   prev?: CompanyNav;
   next?: CompanyNav;
-  /** 담당자 한 명을 고치러 간다(바깥 목록의 편집 창을 연다). 없으면 단추도 없다. */
-  onEditContact?: (row: T) => void;
+  /** 담당자 한 명을 그 줄에서 고쳐 저장한다. 빈 문자열이면 성공, 아니면 실패 사유.
+   *  없으면 ✎ 단추도 없다. */
+  onSaveContact?: (row: T) => Promise<string>;
   /** 이 회사에 담당자를 한 명 더한다 — 회사 공통정보가 채워진 등록 폼이 열린다. */
   onAddContact?: () => void;
   /** 담당자 한 명을 지운다. 빈 문자열이면 성공, 아니면 실패 사유. */
@@ -1571,6 +1573,14 @@ function CompanyInfoModal<
   // 방금 지운 담당자. 창이 든 rows 는 열 때 찍은 사진이라 목록이 새로 그려져도 바뀌지
   // 않는다 — 지운 사람이 그대로 남아 있으면 지워졌는지 아닌지를 알 수 없다.
   const [gone, setGone] = useState<Set<number>>(new Set());
+  // 그 자리에서 고치는 담당자 한 명. 여러 값(메일·연락처·지역)은 쉼표로 늘어놓은 글로
+  // 든다 — 한 글자 칠 때마다 쉼표로 쪼개면 "a, b" 를 칠 수가 없다(공백이 곧 사라진다).
+  // 쪼개는 것은 저장할 때 한 번이다.
+  const [draft, setDraft] = useState<
+    { row: T; emails: string; phones: string; regions: string } | null
+  >(null);
+  // 저장한 값. rows 는 창을 열 때 찍은 사진이라, 고친 줄을 여기에 얹어 보여 준다.
+  const [edits, setEdits] = useState<Record<number, T>>({});
   // 열면 읽기부터 — 이 창은 대개 "이 회사가 뭐 하는 곳이었지"를 확인하러 연다. 곧장
   // 입력칸으로 열어 두면 확인하러 들어왔다가 잘못 눌러 회사 전 담당자의 값을 한꺼번에
   // 바꾸는 일이 생긴다(이 창의 저장은 한 명이 아니라 회사 전체에 닿는다).
@@ -1578,8 +1588,45 @@ function CompanyInfoModal<
   const canEditCompany = can("settings", "edit");
   const canAddContact = can("settings", "create");
   const canDeleteContact = can("settings", "delete");
-  // 지운 사람을 뺀 명단 — 창 안의 모든 숫자·문구가 이것을 센다.
-  const contacts = rows.filter((r) => !gone.has(r.id));
+  // 지운 사람을 빼고, 고친 사람은 고친 값으로 — 창 안의 모든 숫자·문구가 이것을 센다.
+  const contacts = rows.filter((r) => !gone.has(r.id)).map((r) => edits[r.id] ?? r);
+
+  const asText = (list: string[] | undefined, flat: string) =>
+    contactValues(list, flat).join(", ");
+  const asList = (text: string) =>
+    text.split(",").map((v) => v.trim()).filter(Boolean);
+
+  function startEditContact(row: T) {
+    setErr("");
+    setDraft({
+      row: { ...row },
+      emails: asText(row.emails, row.email),
+      phones: asText(row.phones, row.contact_phone),
+      regions: asText(row.regions, row.country),
+    });
+  }
+
+  async function saveContact() {
+    if (!draft || !onSaveContact) return;
+    const emails = asList(draft.emails);
+    const phones = asList(draft.phones);
+    const regions = asList(draft.regions);
+    // 첫 값을 대표 칸에도 넣는다 — 서버(_apply_multi)도 그렇게 하지만, 저장 직후
+    // 이 창이 보여 줄 값은 여기서 만든 것이라 둘이 어긋나면 안 된다.
+    const next: T = {
+      ...draft.row,
+      emails, phones, regions,
+      email: emails[0] ?? "",
+      contact_phone: phones[0] ?? "",
+      country: regions[0] ?? "",
+    };
+    setBusy(true);
+    const fail = await onSaveContact(next);
+    setBusy(false);
+    if (fail) { setErr(fail); return; }
+    setEdits((prev) => ({ ...prev, [next.id]: next }));
+    setDraft(null);
+  }
 
   async function delContact(row: T & { contact?: string }) {
     if (!onDeleteContact) return;
@@ -1709,18 +1756,54 @@ function CompanyInfoModal<
               <thead>
                 <tr>
                   <th>Name</th><th>In charge of</th><th>Email</th><th>Phone</th><th>Region</th>
-                  {onEditContact || onDeleteContact ? <th className="co-edit-col" /> : null}
+                  {onSaveContact || onDeleteContact ? <th className="co-edit-col" /> : null}
                 </tr>
               </thead>
               <tbody>
                 {contacts.map((r) => {
+                  // 고치는 중인 줄은 그 자리에서 입력칸이 된다 — 창을 하나 더 띄우면
+                  // 이름 하나 고치자고 이 명단을 잃는다(뒤에 누가 있었는지 다시 봐야 한다).
+                  if (draft && draft.row.id === r.id) {
+                    const set = (patch: Partial<typeof draft>) => setDraft({ ...draft, ...patch });
+                    const setRow = (patch: Partial<T>) => set({ row: { ...draft.row, ...patch } });
+                    return (
+                      <tr key={r.id} className="co-row-edit">
+                        <td>
+                          <input value={draft.row.contact} placeholder="Name"
+                                 onChange={(e) => setRow({ contact: e.target.value } as Partial<T>)} />
+                        </td>
+                        <td>
+                          <input value={draft.row.duty} placeholder="Sales · Technical…"
+                                 onChange={(e) => setRow({ duty: e.target.value } as Partial<T>)} />
+                        </td>
+                        <td>
+                          <input value={draft.emails} placeholder="a@x.com, b@x.com"
+                                 onChange={(e) => set({ emails: e.target.value })} />
+                        </td>
+                        <td>
+                          <input value={draft.phones} placeholder="+65 1234 5678"
+                                 onChange={(e) => set({ phones: e.target.value })} />
+                        </td>
+                        <td>
+                          <input value={draft.regions} placeholder="Singapore"
+                                 onChange={(e) => set({ regions: e.target.value })} />
+                        </td>
+                        <td className="co-edit-col">
+                          <button type="button" className="btn tiny primary" disabled={busy}
+                                  onClick={saveContact} title="Save this contact">✓</button>
+                          <button type="button" className="btn tiny" disabled={busy}
+                                  onClick={() => { setDraft(null); setErr(""); }} title="Cancel">✕</button>
+                        </td>
+                      </tr>
+                    );
+                  }
                   const mails = contactValues(r.emails, r.email);
                   const tels = contactValues(r.phones, r.contact_phone);
                   const regions = contactValues(r.regions, r.country);
                   return (
                     <tr key={r.id}>
                       <td>{r.contact || <span className="dash">—</span>}</td>
-                      <td>{(r as { duty?: string }).duty || <span className="dash">—</span>}</td>
+                      <td>{r.duty || <span className="dash">—</span>}</td>
                       <td>
                         {mails.length ? (
                           <span className="co-lines">
@@ -1734,13 +1817,14 @@ function CompanyInfoModal<
                           : <span className="dash">—</span>}
                       </td>
                       <td>{regions.join(" · ") || <span className="dash">—</span>}</td>
-                      {onEditContact || onDeleteContact ? (
+                      {onSaveContact || onDeleteContact ? (
                         <td className="co-edit-col">
-                          {onEditContact ? (
+                          {onSaveContact && canEditCompany ? (
                             <button
                               type="button"
                               className="btn tiny"
-                              onClick={() => onEditContact(r)}
+                              disabled={!!draft}
+                              onClick={() => startEditContact(r)}
                               title={`Edit ${r.contact || "this contact"}`}
                             >
                               ✎
@@ -1750,6 +1834,7 @@ function CompanyInfoModal<
                             <button
                               type="button"
                               className="btn tiny danger"
+                              disabled={!!draft}
                               onClick={() => delContact(r)}
                               title={`Delete ${r.contact || "this contact"}`}
                             >
@@ -1774,8 +1859,8 @@ function CompanyInfoModal<
           </div>
           <p className="hint-inline" style={{ display: "block", marginTop: 10 }}>
             The values above are company-level — editing them applies to all {contacts.length}{" "}
-            {contacts.length === 1 ? "contact" : "contacts"} at once. Name, email, phone and region
-            belong to each contact and are edited from the ✎ button above.
+            {contacts.length === 1 ? "contact" : "contacts"} at once. Name, role, email, phone and
+            region belong to each contact — press ✎ to edit that row in place.
           </p>
         </div>
         <div className="form-actions">
@@ -2225,10 +2310,10 @@ function VendorsTab() {
           />
         )]}
         {...companyNav(company, setCompany)}
-        // 담당자 편집·추가는 이 창을 먼저 닫는다 — 등록 폼이 그 자리에 열리므로 두 창이
-        // 겹쳐 서면 어느 쪽을 닫는 손짓인지 흐려진다. 삭제는 창 안에서 끝난다(명단이
-        // 곧 지운 결과를 보여 준다).
-        onEditContact={(row) => { const go = company.editRow; setCompany(null); go(row); }}
+        // 담당자 고치기·지우기는 이 창 안에서 끝난다 — 명단이 곧 결과를 보여 준다.
+        // 추가만 창을 먼저 닫는다: 등록 폼이 그 자리에 열리므로 두 창이 겹쳐 서면
+        // 어느 쪽을 닫는 손짓인지 흐려지고, 거기엔 명함 스캔도 있다.
+        onSaveContact={company.saveRow}
         onAddContact={() => { const go = company.addNew; setCompany(null); go(); }}
         onDeleteContact={company.removeRow}
         tags={{
@@ -4459,6 +4544,20 @@ function MasterSection<T extends { id: number }>({
     }
   }
 
+  /** 한 건을 통째로 저장한다(회사 정보 창의 담당자 줄 편집이 쓴다).
+   *  실패 사유를 글로 돌려준다(빈 문자열=성공) — 표 안에서 고치는 중이라 창을 띄워
+   *  알릴 자리가 없다. */
+  async function saveRow(row: T): Promise<string> {
+    try {
+      await update(row.id, stripId(row));
+      refresh();
+      onSaved?.();
+      return "";
+    } catch (e) {
+      return e instanceof Error ? e.message : "Save failed";
+    }
+  }
+
   /** 한 건을 지운다. 묻는 것은 부르는 쪽 몫이다 — 회사 창은 누구를 지우는지 이름을
    *  알고 있어 더 나은 확인 문구를 쓸 수 있다. 실패 사유를 글로 돌려준다(빈 문자열=성공). */
   async function removeRow(row: T): Promise<string> {
@@ -4619,7 +4718,7 @@ function MasterSection<T extends { id: number }>({
                     <td className="ms-actcol" onClick={(e) => e.stopPropagation()}>
                       {group?.actions?.(g.rows, () => openNewIn(g.rows),
                         { groups: groupRows, index: groupIndex.get(g.key) ?? 0,
-                          editRow: openEdit, addNew: () => openNewIn(g.rows), removeRow })}
+                          addNew: () => openNewIn(g.rows), saveRow, removeRow })}
                     </td>
                   </tr>
                   {!flatGroups && isOpen(g.key) ? g.rows.map((row) => dataRow(row, true)) : null}
