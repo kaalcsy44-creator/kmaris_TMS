@@ -1778,11 +1778,12 @@ table.mini.wide.ms-table thead th.pl-th.open .pl-th-btn {
 /* 고르는 칸은 경로("Engine Room > Main Engine System")가 통째로 보여야 고를 수 있다. */
 .cat-picker-add select { flex: 1 1 260px; min-width: 0; }
 
-/* 담당자 줄을 펼치지 않는 회사 줄 — 누를 것이 없으므로 손 모양도 접는다.
-   여닫는 화살표(GroupNameCell)도 함께 사라지는데, 그건 그 컴포넌트가 open 을 받아
-   그린다(flat 표에서는 늘 닫힌 것으로 온다). */
-.ms-table tr.ms-group--flat { cursor: default; }
+/* 담당자 줄을 펼치지 않는 회사 줄 — 여닫는 화살표는 뜻이 없으니 자리만 남기고 지운다
+   (자리를 없애면 회사명 시작점이 다른 표와 어긋난다). 줄을 누르면 회사 정보 창이
+   열리므로 손 모양은 그대로 손가락이다. */
 .ms-table tr.ms-group--flat .ms-caret { visibility: hidden; }
+/* 누를 곳이 없는 줄(회사 정보 창을 안 여는 표)에서만 손 모양을 접는다. */
+.ms-table tr.ms-group--still { cursor: default; }
 
 /* 그룹 헤더의 요약 칸(지역·담당자) — 하위 행보다 눈에 덜 띄게. */
 .ms-group-sub {

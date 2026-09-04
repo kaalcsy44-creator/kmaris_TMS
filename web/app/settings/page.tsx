@@ -1106,7 +1106,6 @@ function CustomersTab() {
     CompanyNavCtx<SettingsCustomer> | null
   >(null);
   const [reloadKey, setReloadKey] = useState(0);
-  const canCreate = can("settings", "create");
 
   return (
     <>
@@ -1177,23 +1176,7 @@ function CustomersTab() {
           </span>,
         ],
         flat: true,
-        actions: (rs, addNew, nav) => (
-          <>
-            <button
-              type="button"
-              className="ms-mini"
-              title="Company info — applies to all contacts of this company"
-              onClick={() => setCompany(nav)}
-            >
-              <CompanyIcon />
-            </button>
-            {canCreate ? (
-              <button type="button" className="ms-mini" title="Add a contact" onClick={addNew}>
-                ＋
-              </button>
-            ) : null}
-          </>
-        ),
+        onRowClick: (_rs, nav) => setCompany(nav),
         newRow: (rs) => withCompanyDefaults(EMPTY_CUSTOMER, rs, rs[0].name),
         summary: (g, n) => `${g} companies · ${n} contacts`,
       }}
@@ -1306,17 +1289,6 @@ function CustomersTab() {
   );
 }
 
-// 회사정보 버튼 아이콘 — 표 안에서 튀지 않게 선만 있는 단색(currentColor) 건물 모양.
-function CompanyIcon() {
-  return (
-    <svg className="ms-icon" viewBox="0 0 16 16" aria-hidden focusable="false">
-      <path d="M2.6 14V3.1a.6.6 0 0 1 .6-.6h6a.6.6 0 0 1 .6.6V14" />
-      <path d="M9.8 6.6h3a.6.6 0 0 1 .6.6V14" />
-      <path d="M1.3 14h13.4" />
-      <path d="M5 5.3h2M5 7.9h2M5 10.5h2M11.2 9.2h1M11.2 11.6h1" strokeLinecap="round" />
-    </svg>
-  );
-}
 
 // 그룹(회사) 헤더의 첫 칸 — 펼침 화살표 + 로고 + 회사명 + 담당자 수.
 function GroupNameCell({
@@ -2287,7 +2259,6 @@ function VendorsTab() {
     CompanyNavCtx<SettingsVendor> | null
   >(null);
   const [reloadKey, setReloadKey] = useState(0);
-  const canCreate = can("settings", "create");
   // 실적에서 뽑은 분류 제안 — 회사명으로 찾는다(레코드 1 = 담당자 1 이라 vendor_id 로
   // 묶으면 같은 회사가 담당자별로 갈린다). 실패해도 화면은 그대로 나와야 하므로 삼킨다.
   const [suggest, setSuggest] = useState<VendorCategorySuggestion[]>([]);
@@ -2368,23 +2339,7 @@ function VendorsTab() {
           </span>,
         ],
         flat: true,
-        actions: (rs, addNew, nav) => (
-          <>
-            <button
-              type="button"
-              className="ms-mini"
-              title="Company info — applies to all contacts of this company"
-              onClick={() => setCompany(nav)}
-            >
-              <CompanyIcon />
-            </button>
-            {canCreate ? (
-              <button type="button" className="ms-mini" title="Add a contact" onClick={addNew}>
-                ＋
-              </button>
-            ) : null}
-          </>
-        ),
+        onRowClick: (_rs, nav) => setCompany(nav),
         newRow: (rs) => withCompanyDefaults(EMPTY_VENDOR, rs, rs[0].name),
         summary: (g, n) => `${g} vendors · ${n} contacts`,
       }}
@@ -4432,6 +4387,9 @@ function MasterSection<T extends { id: number }>({
     ) => ReactNode;
     newRow?: (rows: T[]) => T;
     summary?: (groups: number, items: number) => string;
+    /** 회사 줄을 누르면 하는 일. 펼칠 것이 없는 표(flat)에서 줄 클릭이 갈 곳이다 —
+     *  회사 정보 창을 연다. 주지 않으면 줄은 그냥 눌리지 않는다. */
+    onRowClick?: (rows: T[], nav: CompanyNavCtx<T>) => void;
     /** 회사 줄만 세우고 담당자 줄은 펼치지 않는다. 담당자는 회사정보 창의 명단에서
      *  보고 고친다 — 목록에서까지 펼치면 같은 값(지역·프로젝트·취급품목이 회사 단위다)이
      *  두 줄로 되풀이되고, 서른다섯 회사짜리 표가 일흔 줄이 된다. */
@@ -4632,6 +4590,9 @@ function MasterSection<T extends { id: number }>({
   const groupIndex = new Map(groups.map((g, i) => [g.key, i]));
   // 담당자 줄을 아예 안 세우는 표(거래선·고객) — 회사 줄 하나가 곧 그 회사다.
   const flatGroups = !!group?.flat;
+  // 줄 끝의 손잡이 칸. 담당자 줄을 펼치지 않고 손잡이도 없는 표에서는 빈 칸만 남으므로
+  // 아예 세우지 않는다 — 표 오른쪽에 쓰지 않는 폭이 늘 붙어 있게 된다.
+  const showActCol = !flatGroups || !!group?.actions;
   // 검색 중에는 매칭된 담당자가 보여야 하므로 전부 펼친다.
   const expandAll = !!ql && !flatGroups;
   const isOpen = (key: string) => expandAll || openKeys.has(key);
@@ -4697,33 +4658,48 @@ function MasterSection<T extends { id: number }>({
                 <th key={label} className={cls}>{label}</th>
               );
             })}
-            <th className="ms-actcol"></th>
+            {showActCol ? <th className="ms-actcol"></th> : null}
           </tr>
         </thead>
         <tbody>
           {!list
             ? (only ?? filtered).map((row) => dataRow(row))
             : // 담당자가 1명이어도 똑같이 회사 행으로 묶는다(줄마다 모양이 달라지지 않게).
-              list.map((g) => (
+              list.map((g) => {
+                const nav: CompanyNavCtx<T> = {
+                  groups: groupRows,
+                  index: groupIndex.get(g.key) ?? 0,
+                  addNew: () => openNewIn(g.rows),
+                  saveRow,
+                  removeRow,
+                };
+                // 펼칠 것이 없는 표에서는 줄을 누르면 회사 정보 창이 열린다. 손잡이를
+                // 줄 끝에 따로 두지 않는 이유: 회사 줄에서 할 수 있는 일이 그것 하나뿐인데,
+                // 줄 전체가 그 일을 하면 겨냥할 것이 없다(고객·거래선 목록의 회사 줄).
+                const click = flatGroups
+                  ? group?.onRowClick && (() => group.onRowClick!(g.rows, nav))
+                  : () => toggleGroup(g.key);
+                return (
                 <Fragment key={g.key}>
                   <tr
-                    className={`ms-group${flatGroups ? " ms-group--flat" : ""}`}
-                    onClick={() => (flatGroups ? undefined : toggleGroup(g.key))}
+                    className={`ms-group${flatGroups ? " ms-group--flat" : ""}${click ? "" : " ms-group--still"}`}
+                    onClick={click}
                   >
                     {/* 그룹(회사) 행도 데이터 행과 같은 칸 클래스를 쓴다 — 폭 규칙이
                         한 칸에만 걸리면 열이 들쭉날쭉해진다. */}
                     {group?.cells(g.rows, isOpen(g.key)).map((node, i) => (
                       <td key={i} className={columns[i]?.[3]}>{node}</td>
                     ))}
-                    <td className="ms-actcol" onClick={(e) => e.stopPropagation()}>
-                      {group?.actions?.(g.rows, () => openNewIn(g.rows),
-                        { groups: groupRows, index: groupIndex.get(g.key) ?? 0,
-                          addNew: () => openNewIn(g.rows), saveRow, removeRow })}
-                    </td>
+                    {showActCol ? (
+                      <td className="ms-actcol" onClick={(e) => e.stopPropagation()}>
+                        {group?.actions?.(g.rows, () => openNewIn(g.rows), nav)}
+                      </td>
+                    ) : null}
                   </tr>
                   {!flatGroups && isOpen(g.key) ? g.rows.map((row) => dataRow(row, true)) : null}
                 </Fragment>
-              ))}
+                );
+              })}
         </tbody>
       </table>
     );
@@ -4746,17 +4722,19 @@ function MasterSection<T extends { id: number }>({
               : String(row[key] ?? "") || "—"}
           </td>
         ))}
-        <td
-          className="ms-actcol"
-          onClick={(e) => {
-            e.stopPropagation();
-            openEdit(row);
-          }}
-        >
-          <span className="ms-edit-btn" title="Edit">
-            ✎
-          </span>
-        </td>
+        {showActCol ? (
+          <td
+            className="ms-actcol"
+            onClick={(e) => {
+              e.stopPropagation();
+              openEdit(row);
+            }}
+          >
+            <span className="ms-edit-btn" title="Edit">
+              ✎
+            </span>
+          </td>
+        ) : null}
       </tr>
     );
   }
