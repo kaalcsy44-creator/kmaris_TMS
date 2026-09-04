@@ -1276,6 +1276,8 @@ export type CompanyInfoSave = {
   specialization?: string;
   /** 취급 분류(거래선 전용) — 회사 단위 값이라 여기서 함께 저장한다. */
   category_ids?: number[];
+  /** 대 줄 수 있는 제조사(거래선 전용, makers.id) — 분류와 같은 회사 단위 값. */
+  maker_ids?: number[];
   website?: string;
   note?: string;
   logo?: string;

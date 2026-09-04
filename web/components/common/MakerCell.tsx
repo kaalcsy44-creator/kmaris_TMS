@@ -231,3 +231,107 @@ export default function MakerCell({
     </div>
   );
 }
+
+/* ── 벤더가 대 줄 수 있는 제조사 ─────────────────────────────────────────────
+   분류 태그(CategoryTagPicker)와 같은 얼개이되 트리가 아니라 메이커 명부에서 고른다.
+   분류가 "무엇을 다루나"라면 이쪽은 "누구 것을 대 주나"다 — 같은 '주기관 예비품'이라도
+   MAN B&W 를 대 주는 곳과 Yanmar 를 대 주는 곳은 다른 회사다.
+
+   글(Specialization)이 지금껏 이 일을 대신해 왔지만 적힌 이름은 표기가 흔들려
+   (MAN B&W / MAN-B&W / MAN Energy Solutions) 그 이름으로 벤더를 되찾을 수 없었다. */
+
+/** 읽기용 — 고른 메이커를 로고와 함께 세운다. max 를 주면 나머지는 "+N" 으로 접는다. */
+export function MakerBadges({
+  ids,
+  max,
+  empty = null,
+}: {
+  ids?: number[] | null;
+  max?: number;
+  empty?: React.ReactNode;
+}) {
+  const makers = useMakerOptions();
+  const by = new Map(makers.map((m) => [m.id, m]));
+  const picked = (ids ?? []).map((id) => by.get(id)).filter((m): m is SettingsMaker => !!m);
+  if (!picked.length) return <>{empty}</>;
+  const shown = max ? picked.slice(0, max) : picked;
+  const rest = picked.length - shown.length;
+  return (
+    <span className="mk-tags">
+      {shown.map((m) => (
+        <span key={m.id} className="mk-tag" title={m.name}>
+          {m.logo ? <img className="mk-tag-logo" src={m.logo} alt="" /> : null}
+          {m.name}
+        </span>
+      ))}
+      {rest > 0 ? (
+        <span className="mk-tag mk-tag--more"
+              title={picked.slice(shown.length).map((m) => m.name).join("\n")}>
+          +{rest}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+/** 편집용 — 고른 배지(×로 뺀다) + 명부에서 하나씩 더하는 칸. */
+export function MakerTagPicker({
+  value,
+  onChange,
+  disabled = false,
+}: {
+  value: number[];
+  onChange: (next: number[]) => void;
+  disabled?: boolean;
+}) {
+  const makers = useMakerOptions();
+  const [adding, setAdding] = useState("");
+  const chosen = new Set(value);
+  const by = new Map(makers.map((m) => [m.id, m]));
+  const picked = value.map((id) => by.get(id)).filter((m): m is SettingsMaker => !!m);
+  const addable = makers.filter((m) => !chosen.has(m.id));
+
+  function add(id: number) {
+    if (!id || chosen.has(id)) return;
+    // 명부 순서(이름순)를 그대로 따른다 — 고른 순서로 두면 같은 회사가 볼 때마다 다르게 선다.
+    onChange(makers.filter((m) => m.id === id || chosen.has(m.id)).map((m) => m.id));
+  }
+
+  return (
+    <div className="form-field cat-picker">
+      <span>Makers supplied</span>
+      <div className="cat-picker-tags">
+        {picked.length ? picked.map((m) => (
+          <span key={m.id} className="mk-tag mk-tag--edit" title={m.name}>
+            {m.logo ? <img className="mk-tag-logo" src={m.logo} alt="" /> : null}
+            {m.name}
+            {disabled ? null : (
+              <button type="button" aria-label={`Remove ${m.name}`}
+                      onClick={() => onChange(value.filter((v) => v !== m.id))}>×</button>
+            )}
+          </span>
+        )) : <span className="hint-inline">Not registered yet.</span>}
+      </div>
+      {disabled ? null : (
+        <div className="cat-picker-add">
+          <select
+            value={adding}
+            onChange={(e) => { add(Number(e.target.value)); setAdding(""); }}
+          >
+            <option value="">— Add a maker —</option>
+            {addable.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}{m.country ? ` · ${m.country}` : ""}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+      <span className="hint-inline">
+        Whose parts this company can actually supply — the answer to “who do we ask for a
+        YANMAR spare?”. Register the maker under Partners ▸ Maker first; free-text brand
+        names still belong in Specialization.
+      </span>
+    </div>
+  );
+}

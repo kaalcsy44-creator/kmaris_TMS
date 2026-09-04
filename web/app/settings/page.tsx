@@ -108,6 +108,7 @@ import { useColumnLayout } from "@/components/common/useColumnLayout";
 import { ColumnResizer, ColumnsButton, dragHandleProps } from "@/components/common/tableLayout";
 import { invalidateMasterCategories } from "@/components/common/CategoryCell";
 import { CategoryBadges, CategoryTagPicker, useVendorCategoryOptions } from "@/components/common/CategoryTags";
+import { MakerBadges, MakerTagPicker, useMakerOptions } from "@/components/common/MakerCell";
 // 목록의 상대처는 다른 화면과 같은 모양(로고 + 이름)으로 — 같은 회사를 두 표기로 읽지 않도록.
 import CustomerName from "@/components/common/CustomerName";
 import VendorName from "@/components/common/VendorName";
@@ -1497,6 +1498,7 @@ function CompanyInfoModal<
   next,
   onEditContact,
   tags,
+  makerTags,
 }: {
   rows: T[];
   fields: [keyof T & keyof CompanyInfoSave, string][];
@@ -1520,6 +1522,8 @@ function CompanyInfoModal<
     /** 이 회사의 실적 제안 — 태그 칸의 '실적에서 채우기'가 쓴다. */
     suggestions?: React.ComponentProps<typeof CategoryTagPicker>["suggestions"];
   };
+  /** 대 줄 수 있는 제조사(거래선 전용). tags 와 같은 규약 — 안 주면 칸이 아예 없다. */
+  makerTags?: { initial: number[] };
 }) {
   // 저장 뒤에도 창이 남으므로 회사명을 상태로 든다. 이름을 바꿔 저장하면 제목·읽기
   // 화면이 새 이름이 되어야 하고, 그 다음 저장의 조회 키도 새 이름이어야 한다.
@@ -1537,6 +1541,7 @@ function CompanyInfoModal<
   // 주소는 회사 단위 다중값(본사·지사) — 담당자별로 갈라져 있어도 여기서 한 목록으로 모은다.
   const [addresses, setAddresses] = useState<string[]>(() => companyAddresses(rows));
   const [catIds, setCatIds] = useState<number[]>(() => [...(tags?.initial ?? [])]);
+  const [makerIds, setMakerIds] = useState<number[]>(() => [...(makerTags?.initial ?? [])]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   // 열면 읽기부터 — 이 창은 대개 "이 회사가 뭐 하는 곳이었지"를 확인하러 연다. 곧장
@@ -1571,6 +1576,7 @@ function CompanyInfoModal<
       // 태그 칸이 없는 창(고객사)은 이 키를 아예 보내지 않는다 — 보내면 서버가 빈
       // 목록으로 읽어 지워 버린다(None = 건드리지 않음이 서버의 규약이다).
       if (tags) body.category_ids = catIds;
+      if (makerTags) body.maker_ids = makerIds;
       if (name.trim() && name.trim() !== origName) body.rename = name.trim();
       await save(body);
       // 저장하면 읽기로 돌아온다 — 창을 닫아 버리면 방금 무엇을 저장했는지 확인할
@@ -1604,6 +1610,9 @@ function CompanyInfoModal<
       ...(tags ? [["Item categories",
                    catIds.length ? <CategoryBadges ids={catIds} /> : null,
                   ] as [string, React.ReactNode]] : []),
+      ...(makerTags ? [["Makers supplied",
+                        makerIds.length ? <MakerBadges ids={makerIds} /> : null,
+                       ] as [string, React.ReactNode]] : []),
       ...(stats ? [stats] : []),
       ...(areas ?? []).map((a) => [a.label, vals[String(a.key)]
         ? <span className="co-para">{vals[String(a.key)]}</span> : null] as [string, React.ReactNode]),
@@ -1729,6 +1738,7 @@ function CompanyInfoModal<
         {tags ? (
           <CategoryTagPicker value={catIds} onChange={setCatIds} suggestions={tags.suggestions} />
         ) : null}
+        {makerTags ? <MakerTagPicker value={makerIds} onChange={setMakerIds} /> : null}
         {(areas ?? []).map((a) => (
           <label key={String(a.key)} className="form-field company-area-field">
             <span>{a.label}</span>
@@ -1816,6 +1826,11 @@ function withCompanyDefaults<T extends { name: string }>(form: T, rows: T[], nam
   if ("category_ids" in rec && !((rec.category_ids as number[]) ?? []).length) {
     const tagged = (mates as { category_ids?: number[] }[]).find((r) => (r.category_ids ?? []).length);
     if (tagged) rec.category_ids = [...(tagged.category_ids ?? [])];
+  }
+  // 대 줄 수 있는 제조사도 회사 단위 — 담당자를 더했다고 그 명단이 비면 안 된다.
+  if ("maker_ids" in rec && !((rec.maker_ids as number[]) ?? []).length) {
+    const tagged = (mates as { maker_ids?: number[] }[]).find((r) => (r.maker_ids ?? []).length);
+    if (tagged) rec.maker_ids = [...(tagged.maker_ids ?? [])];
   }
   // 주소는 회사 단위 정보(본사·지사) — 등록된 곳 전부를 그대로 물려준다.
   if ("addresses" in rec && !((rec.addresses as string[]) ?? []).length) {
@@ -2095,11 +2110,12 @@ function LogoPasteField({
 const EMPTY_VENDOR: SettingsVendor = {
   id: 0, name: "", contact: "", contact_phone: "", email: "", specialization: "", website: "", note: "",
   country: "", address: "", payment_terms: "", logo: "",
-  addresses: [], emails: [], phones: [], regions: [], category_ids: [],
+  addresses: [], emails: [], phones: [], regions: [], category_ids: [], maker_ids: [],
 };
 
 function VendorsTab() {
   const catText = useCategoryText();
+  const makerText = useMakerText();
   const [company, setCompany] = useState<
     { groups: SettingsVendor[][]; index: number; editRow: (row: SettingsVendor) => void } | null
   >(null);
@@ -2133,6 +2149,10 @@ function VendorsTab() {
                      ?.category_ids ?? [],
           suggestions: suggestFor(company.groups[company.index]?.[0]?.name ?? ""),
         }}
+        makerTags={{
+          initial: company.groups[company.index]?.find((r) => (r.maker_ids ?? []).length)
+                     ?.maker_ids ?? [],
+        }}
         fields={[["website", "Website"]]}
         areas={[
           { key: "specialization", label: "Specialization", rows: 3,
@@ -2152,8 +2172,10 @@ function VendorsTab() {
       title="Vendor"
       empty={EMPTY_VENDOR}
       reloadKey={reloadKey}
-      searchText={contactSearchText}
-      printCols={vendorPrintCols(catText)}
+      // 검색이 제조사 이름까지 닿아야 이 명단이 쓸모가 있다 — "YANMAR 는 어디에
+      // 물어보지"가 이 칸을 만든 이유이고, 그 물음은 검색창에서 시작한다.
+      searchText={(r) => `${contactSearchText(r)} ${makerText(r.maker_ids)}`}
+      printCols={vendorPrintCols(catText, makerText)}
       importKind="vendors"
       group={{
         by: (r) => r.name,
@@ -2210,7 +2232,16 @@ function VendorsTab() {
         ["deals", "Projects",
           (r) => <VendorReplyBadge total={r.deals ?? 0} answered={r.deals_answered ?? 0} sub />,
           "ms-deals"],
-        ["specialization", "Specialization", undefined, "ms-spec"],
+        // 취급품목 칸 하나에 셋이 선다: 분류 배지 · 제조사 배지 · 자유 문장. 열을 더
+        // 벌리지 않는 이유는 셋이 한 질문의 세 결이라서다 — 무엇을 다루나, 누구 것을
+        // 대 주나, 그리고 트리에도 명부에도 없는 나머지.
+        ["specialization", "Specialization", (r) => (
+          <>
+            <CategoryBadges ids={r.category_ids} max={2} />
+            <MakerBadges ids={r.maker_ids} max={2} />
+            {r.specialization || ""}
+          </>
+        ), "ms-spec"],
       ]}
       fields={[
         ["name", "Vendor *"],
@@ -2566,6 +2597,15 @@ function ratioText(total: number, hit: number, tail = ""): string {
   return `${hit}/${total}${tail}`;
 }
 
+/** 대 줄 수 있는 제조사를 인쇄용 글자로 — 배지가 종이에서는 이름의 나열이 된다. */
+function useMakerText(): (ids?: number[] | null) => string {
+  const makers = useMakerOptions();
+  return (ids) => {
+    const by = new Map(makers.map((m) => [m.id, m.name]));
+    return (ids ?? []).map((id) => by.get(id)).filter(Boolean).join(" · ");
+  };
+}
+
 /** 분류 태그를 인쇄용 글자로. 배지에 적히던 마지막 마디를 가운뎃점으로 잇는다. */
 function useCategoryText(): (ids?: number[] | null) => string {
   const options = useVendorCategoryOptions();
@@ -2596,13 +2636,17 @@ const customerPrintCols: PrintCol<SettingsCustomer>[] = [
     value: (r) => ratioText(r.inquiries ?? 0, r.won ?? 0, r.lost ? ` · ${r.lost} lost` : "") },
 ];
 
-const vendorPrintCols = (cat: (ids?: number[] | null) => string): PrintCol<SettingsVendor>[] => [
+const vendorPrintCols = (
+  cat: (ids?: number[] | null) => string,
+  mk: (ids?: number[] | null) => string,
+): PrintCol<SettingsVendor>[] => [
   { label: "Company", value: (r) => r.name, width: 2.4 },
   { label: "Region", value: (r) => partyRegions(r).filter(Boolean).join(" · "), width: 1.3 },
   { label: "Contact", value: (r) => r.contact, width: 1.6 },
   { label: "Email", value: (r) => contactValues(r.emails, r.email).join(", "), width: 2.4 },
   { label: "Phone", value: (r) => contactValues(r.phones, r.contact_phone).join(", "), width: 1.6 },
   { label: "Address", value: (r) => contactValues(r.addresses, r.address).join(" / "), width: 3 },
+  { label: "Makers", value: (r) => mk(r.maker_ids), width: 2.0 },
   { label: "Specialization", value: (r) => withTags(cat(r.category_ids), r.specialization), width: 2.6 },
   { label: "Projects → Quoted", align: "right", width: 1.1,
     value: (r) => ratioText(r.deals ?? 0, r.deals_answered ?? 0) },

@@ -84,6 +84,9 @@ export type SettingsVendor = {
   /** 이 회사가 다루는 품목 분류(item_categories.id, 중분류까지). 회사 단위 값이라
    *  Company info 창에서 편집하고, 같은 회사의 모든 담당자 레코드에 함께 반영된다. */
   category_ids: number[];
+  /** 이 회사가 대 줄 수 있는 제조사(makers.id). 분류와 같은 규약의 회사 단위 값이다 —
+   *  분류가 "무엇을 다루나"라면 이쪽은 "누구 것을 대 주나". */
+  maker_ids: number[];
   /** 이 담당자에게 Vendor RFQ 를 보낸 프로젝트 수(중복 문의는 한 건으로). */
   deals?: number;
   /** 그중 벤더 견적이 돌아온 프로젝트 수. */

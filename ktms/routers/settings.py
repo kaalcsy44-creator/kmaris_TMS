@@ -267,6 +267,8 @@ class CompanyInfoSave(BaseModel):
     specialization: str | None = None    # 취급품목(벤더) · 주로 사는 것(고객사)
     # 취급 분류(item_categories.id 목록) — 벤더 전용. 회사 단위라 여기서 함께 받는다.
     category_ids: list[int] | None = None
+    # 대 줄 수 있는 제조사(makers.id 목록) — 벤더 전용. 분류와 짝을 이루는 다른 축이다.
+    maker_ids: list[int] | None = None
     website: str | None = None           # 회사 홈페이지
     note: str | None = None              # 회사 소개 요약(고객사·거래선 공통)
     logo: str | None = None
@@ -401,6 +403,10 @@ def settings_vendors():
                  # 값)는 화면이 무시한다: 태그를 지우자고 삭제 경로를 만들 일이 아니다.
                  "category_ids": [int(x) for x in (getattr(v, "category_ids", None) or [])
                                   if isinstance(x, (int, float, str)) and str(x).isdigit()],
+                 # 대 줄 수 있는 제조사 — 명부에서 지운 메이커의 id 가 남아 있어도
+                 # 화면이 무시한다(분류 태그와 같은 취급).
+                 "maker_ids": [int(x) for x in (getattr(v, "maker_ids", None) or [])
+                               if isinstance(x, (int, float, str)) and str(x).isdigit()],
                  "country": v.country or "", "address": v.address or "",
                  "payment_terms": getattr(v, "payment_terms", None) or "",
                  "logo": getattr(v, "logo", None) or "",
@@ -657,6 +663,7 @@ def create_vendor(body: VendorCreate):
                    country=body.country or "", address=body.address or "",
                    payment_terms=body.payment_terms or "",
                    category_ids=list(body.category_ids or []),
+                   maker_ids=list(body.maker_ids or []),
                    logo=body.logo or "")
         s.add(v)
         _apply_multi(v, body.emails, body.phones, body.regions, body.addresses)
@@ -675,7 +682,8 @@ def update_vendor_company(body: CompanyInfoSave):
             raise HTTPException(status_code=404, detail="해당 회사로 등록된 공급사가 없습니다.")
         name = _apply_company_info(
             rows, body,
-            ("specialization", "category_ids", "website", "note", "payment_terms", "logo"))
+            ("specialization", "category_ids", "maker_ids", "website", "note",
+             "payment_terms", "logo"))
         s.commit()
         return {"ok": True, "updated": len(rows), "name": name}
     finally:
@@ -701,6 +709,8 @@ def update_vendor(row_id: int, body: VendorCreate):
         v.payment_terms = body.payment_terms or ""
         if body.category_ids is not None:
             v.category_ids = list(body.category_ids)
+        if body.maker_ids is not None:
+            v.maker_ids = list(body.maker_ids)
         if body.logo is not None:
             v.logo = body.logo
         _apply_multi(v, body.emails, body.phones, body.regions, body.addresses)

@@ -84,6 +84,8 @@ _MIGRATIONS = {
         # 이 회사가 다루는 품목 분류 id 목록. 기존 행은 NULL = 아직 태그 없음
         # (화면이 '실적에서 채우기'로 첫 값을 제안한다).
         "category_ids": "JSON",
+        # 이 회사가 대 줄 수 있는 제조사(makers.id) 목록. 기존 행은 NULL = 아직 등록 전.
+        "maker_ids": "JSON",
     },
     "vessels": {
         "vessel_type": "VARCHAR(60)",

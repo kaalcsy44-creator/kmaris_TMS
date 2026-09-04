@@ -146,6 +146,15 @@ class Vendor(Base):
     # 회사 단위 값이다(레코드 1 = 담당자 1 이라 같은 회사가 여러 행). note·logo 처럼
     # Company info 창에서 같은 회사 전 레코드에 한 번에 반영한다.
     category_ids   = Column(JSON, default=list)
+    # 이 회사가 대 줄 수 있는 제조사(makers.id 목록). 분류가 "무엇을 다루나"라면 이것은
+    # "누구 것을 대 주나"다 — 둘은 서로를 대신하지 못한다. 같은 '주기관 예비품'이라도
+    # MAN B&W 를 대 주는 곳과 Yanmar 를 대 주는 곳은 다른 회사이고, 1단계 품목표가
+    # 제조사를 받아 두므로(rfq.items[].maker) 그 이름으로 물어볼 곳을 되찾을 수 있다.
+    #
+    # specialization 의 자유 문장이 지금껏 이 일을 대신해 왔지만, 글로 적힌 이름은
+    # 표기가 흔들려(MAN B&W / MAN-B&W / MAN Energy Solutions) 되찾는 데 쓸 수 없었다.
+    # 회사 단위 값이라 category_ids 처럼 Company info 창에서 한꺼번에 반영한다.
+    maker_ids      = Column(JSON, default=list)
     website        = Column(String(300))   # 회사 홈페이지(회사 단위)
     # 회사 소개 요약(무엇을 만드는 회사인지, 어떤 브랜드를 대리하는지). 담당자가 아니라
     # 회사에 딸린 정보라 Company info 창에서 같은 회사 전 레코드에 한 번에 반영한다.
