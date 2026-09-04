@@ -1291,25 +1291,12 @@ function CustomersTab() {
       // 주소·취급품목·사업자번호까지 고칠 수 있으면, 여기서 바꾼 값이 이 사람만의
       // 것인 줄로 읽힌다 — 실은 그 회사 담당자 전원의 값이다.
       companyFields={["name", "address", "specialization", "tax_id", "tax_invoice_email"]}
-      extraForm={(form, setForm, { isEdit }) => (
+      // 결제조건·로고는 회사의 것이라 이 폼에 두지 않는다 — 🏢 Company info 가 든다.
+      extraForm={(form, setForm) => (
         <>
           <MultiValueField label="Email" placeholder="name@company.com" values={form.emails} onChange={(emails) => setForm({ ...form, emails })} />
           <MultiValueField label="Phone" placeholder="+65 1234 5678" values={form.phones} onChange={(phones) => setForm({ ...form, phones })} />
           <MultiValueField label="Region" placeholder="Singapore" values={form.regions} onChange={(regions) => setForm({ ...form, regions })} />
-          {/* 결제조건과 로고는 회사의 것이다 — 담당자를 고칠 때는 내리고, 새로 등록할
-              때만 남긴다(그때는 회사도 함께 만들어지는 중이다). */}
-          {isEdit ? null : (
-            <>
-              <PaymentTermsField
-                value={form.payment_terms}
-                onChange={(payment_terms) => setForm({ ...form, payment_terms })}
-              />
-              <LogoPasteField
-                value={form.logo}
-                onChange={(logo) => setForm({ ...form, logo })}
-              />
-            </>
-          )}
         </>
       )}
       allowCopy
@@ -2385,25 +2372,12 @@ function VendorsTab() {
       }}
       // 고객과 같은 규칙 — 회사 것은 🏢 Company info 에서 고친다.
       companyFields={["name", "address", "specialization"]}
-      extraForm={(form, setForm, { isEdit }) => (
+      // 결제조건·로고는 회사의 것이라 이 폼에 두지 않는다 — 🏢 Company info 가 든다.
+      extraForm={(form, setForm) => (
         <>
           <MultiValueField label="Email" placeholder="name@company.com" values={form.emails} onChange={(emails) => setForm({ ...form, emails })} />
           <MultiValueField label="Phone" placeholder="+65 1234 5678" values={form.phones} onChange={(phones) => setForm({ ...form, phones })} />
           <MultiValueField label="Region" placeholder="Singapore" values={form.regions} onChange={(regions) => setForm({ ...form, regions })} />
-          {/* 결제조건과 로고는 회사의 것이다 — 담당자를 고칠 때는 내리고, 새로 등록할
-              때만 남긴다(그때는 회사도 함께 만들어지는 중이다). */}
-          {isEdit ? null : (
-            <>
-              <PaymentTermsField
-                value={form.payment_terms}
-                onChange={(payment_terms) => setForm({ ...form, payment_terms })}
-              />
-              <LogoPasteField
-                value={form.logo}
-                onChange={(logo) => setForm({ ...form, logo })}
-              />
-            </>
-          )}
         </>
       )}
       allowCopy
@@ -4409,6 +4383,11 @@ function MasterSection<T extends { id: number }>({
   const [q, setQ] = useState("");
   const [err, setErr] = useState("");
   const [copying, setCopying] = useState(false); // 복사 모드(기존 정보 복제 → 새 레코드)
+  // 신규 등록이 '이미 아는 회사 안에서' 시작됐는가(회사 줄의 ＋ · 회사정보 창의 ＋ ·
+  // Copy as new). 그렇다면 회사 칸은 고칠 때와 똑같이 감춘다 — 회사는 이미 정해져
+  // 있고, 여기서 고치면 그 회사 담당자 전원의 값이 갈린다.
+  // 도구줄의 + New 만 빈 문자열로 남아 회사명 칸을 세운다(회사가 아직 없어서다).
+  const [newCompany, setNewCompany] = useState("");
   const [openKeys, setOpenKeys] = useState<Set<string>>(new Set()); // 펼쳐 둔 그룹(회사)
   // 마스터 데이터 입력·수정·삭제 권한(= "settings" 모듈). admin 은 항상 true.
   const canCreate = can("settings", "create");
@@ -4429,6 +4408,7 @@ function MasterSection<T extends { id: number }>({
     setForm(empty);
     setErr("");
     setCopying(false);
+    setNewCompany("");
     setEditId(NEW_ID);
   }
   // 그룹(회사) 헤더의 "+ 담당자" — 회사 공통정보가 채워진 상태로 신규 등록 폼을 연다.
@@ -4438,12 +4418,14 @@ function MasterSection<T extends { id: number }>({
     setForm(group?.newRow?.(rows) ?? empty);
     setErr("");
     setCopying(false);
+    setNewCompany(group ? group.by(rows[0]) : "");
     setEditId(NEW_ID);
   }
   function openEdit(row: T) {
     setForm(row);
     setErr("");
     setCopying(false);
+    setNewCompany("");
     setEditId(row.id);
   }
   // 현재 편집 중인 항목의 정보를 그대로 둔 채 '신규 등록'으로 전환한다(저장 시 새 레코드 생성).
@@ -4451,12 +4433,15 @@ function MasterSection<T extends { id: number }>({
     setForm({ ...form, id: 0 });
     setErr("");
     setCopying(true);
+    // 복사는 "회사는 그대로, 사람만 새로" 다 — 회사 칸을 다시 세울 이유가 없다.
+    setNewCompany(String(form[requiredKeys[0]] ?? ""));
     setEditId(NEW_ID);
   }
   function cancel() {
     setForm(empty);
     setErr("");
     setCopying(false);
+    setNewCompany("");
     setEditId(null);
   }
 
@@ -4525,8 +4510,9 @@ function MasterSection<T extends { id: number }>({
   // 머리 칸 정렬·필터는 검색으로 좁힌 목록을 다시 자른다(검색 → 열 필터 → 정렬 순).
   const filtered = head.apply(searched);
   const isEdit = !!editId && editId > 0;
-  // 고치는 중이고 회사 단위 칸을 일러 준 표라면, 그 칸들을 폼에서 뺀다.
-  const hideCompany = isEdit && !!companyFields?.length;
+  // 회사가 이미 정해져 있으면(고치는 중이거나, 아는 회사 안에서 새로 만드는 중이거나)
+  // 회사 단위 칸은 폼에서 뺀다. 회사 이름은 창 제목이 든다.
+  const hideCompany = !!companyFields?.length && (isEdit || !!newCompany);
   const shownFields = hideCompany
     ? fields.filter(([k]) => !companyFields!.includes(k))
     : fields;
@@ -4682,17 +4668,19 @@ function MasterSection<T extends { id: number }>({
     ? `✎ Edit ${hideCompany ? "contact — " : ""}${requiredValue || "item"}`
     : copying
     ? `📋 Copy as new${requiredValue ? ` — ${requiredValue}` : ""}`
+    : hideCompany
+    ? `＋ New contact — ${requiredValue}`
     : "+ New";
   const editor = editId !== null ? (
     <Modal title={editorTitle} onClose={cancel} form>
       {copying && copyHint ? <div className="ms-copy-hint">{copyHint}</div> : null}
       {topForm?.(form, setForm, rows)}
       {hideCompany ? (
-        // 어느 회사의 담당자를 고치고 있는지는 남긴다 — 이름 칸을 통째로 빼면 창만
-        // 보고는 알 수 없다. 고치는 자리가 따로 있다는 것도 여기서 밝힌다.
+        // 회사 이름은 창 제목이 들었다 — 여기서는 무엇이 이 창에 없는지와 어디서
+        // 고치는지만 밝힌다. 없는 칸을 찾아 헤매지 않게.
         <div className="ms-of-company">
-          <span>{String(form[requiredKeys[0]] ?? "")}</span>
-          <span className="hint-inline">Company-level details are edited in 🏢 Company info.</span>
+          Address, specialization, terms and logo belong to the company —
+          edit them in 🏢 Company info.
         </div>
       ) : null}
       <div className="form-grid">

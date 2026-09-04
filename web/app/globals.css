@@ -1759,23 +1759,17 @@ table.mini.wide.ms-table thead th.pl-th.open .pl-th-btn {
 }
 .tpm-count { font-size: 11.5px; color: #6b7684; }
 
-/* 담당자 편집 창 머리 — 어느 회사 사람을 고치는 중인지. 값이 아니라 자리 표시라
-   입력칸 모양을 주지 않는다(고칠 수 있는 것처럼 보이면 안 된다). */
+/* 담당자 폼 머리의 안내 — 회사 이름은 창 제목이 들고, 여기서는 이 창에 없는 칸이
+   어디서 고쳐지는지만 말한다. 값이 아니라 안내라 입력칸 모양을 주지 않는다. */
 .ms-of-company {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  flex-wrap: wrap;
   margin-bottom: 14px;
   padding: 8px 12px;
-  border-left: 3px solid var(--blue, #0055a8);
+  border-left: 3px solid #cfe0f5;
   border-radius: 0 7px 7px 0;
-  background: #f2f7fe;
-}
-.ms-of-company > span:first-child {
-  font-size: 13.5px;
-  font-weight: 700;
-  color: var(--navy);
+  background: #f6f9fe;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: #6b7684;
 }
 
 .cat-picker { gap: 6px; }
