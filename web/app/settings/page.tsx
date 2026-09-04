@@ -1018,11 +1018,12 @@ const EMPTY_MAKER: SettingsMaker = {
  */
 function MakersTab() {
   const catText = useCategoryText();
+  const catNames = useCategoryNames();
   return (
     <MasterSection<SettingsMaker>
       title="Maker"
       empty={EMPTY_MAKER}
-      headCols={makerHeadCols}
+      headCols={makerHeadCols(catNames)}
       load={fetchSettingsMakers}
       create={createSettingsMaker}
       update={updateSettingsMaker}
@@ -1042,12 +1043,14 @@ function MakersTab() {
         ["items", "Items", (r) => (
           r.items ? <span className="ms-badge">{r.items}</span> : <span className="dash">—</span>
         ), "ms-deals"],
-        ["specialization", "Makes", (r) => (
-          <>
-            <CategoryBadges ids={r.category_ids} max={3} />
-            {r.specialization || ""}
-          </>
-        ), "ms-spec"],
+        // 분류(트리의 자리)와 Makes(자유 문장)를 가른다 — 한 칸에 뭉쳐 있으면 머리 칸
+        // 필터가 둘 중 어느 것으로도 고르지 못한다(공급사 표와 같은 이유).
+        ["category_ids", "Category", (r) => (
+          <CategoryBadges ids={r.category_ids} max={4} empty={<span className="dash">—</span>} />
+        ), "ms-cat"],
+        // Makes = 이 회사가 무엇을 만드는가. 트리에 자리가 없는 것(기종·브랜드 이름)이
+        // 여기 적힌다 — "HiMSEN Engine", "2 Stroke Engine".
+        ["specialization", "Makes", undefined, "ms-spec"],
       ]}
       fields={[
         ["name", "Maker *"],
@@ -2585,12 +2588,16 @@ const vendorHeadCols = (
 ];
 
 /** 제조사 목록의 머리 칸 규칙 — 거래선과 같은 얼개에서 담당자 열만 빠졌다. */
-const makerHeadCols: HeadCol<SettingsMaker>[] = [
+const makerHeadCols = (
+  catNames: (ids?: number[] | null) => string[],
+): HeadCol<SettingsMaker>[] => [
   { key: "name", text: (r) => r.name || "" },
   { key: "country", text: (r) => r.country || "", filter: "facet",
     facetValues: partyRegions, emptyLabel: "No region" },
   { key: "items", text: (r) => String(r.items ?? 0), sortValue: (r) => r.items ?? 0,
     filter: "facet", emptyLabel: "No item yet" },
+  { key: "category_ids", text: (r) => joinNames(catNames(r.category_ids)), filter: "facet",
+    facetValues: (r) => catNames(r.category_ids), emptyLabel: "Untagged" },
   { key: "specialization", text: (r) => r.specialization || "", filter: "facet",
     emptyLabel: "Unspecified" },
 ];
@@ -2648,10 +2655,6 @@ function useCategoryText(): (ids?: number[] | null) => string {
   return (ids) => joinNames(names(ids));
 }
 
-/** 취급품목 칸 — 태그와 자유 문장을 한 칸에 잇는다(둘 다 화면에서 한 칸이었다). */
-const withTags = (tags: string, text: string): string =>
-  [tags, (text || "").trim()].filter(Boolean).join(" — ");
-
 const customerPrintCols: PrintCol<SettingsCustomer>[] = [
   { label: "Company", value: (r) => r.name, width: 2.4 },
   { label: "Region", value: (r) => partyRegions(r).filter(Boolean).join(" · "), width: 1.3 },
@@ -2675,8 +2678,9 @@ const vendorPrintCols = (
   { label: "Email", value: (r) => contactValues(r.emails, r.email).join(", "), width: 2.4 },
   { label: "Phone", value: (r) => contactValues(r.phones, r.contact_phone).join(", "), width: 1.6 },
   { label: "Address", value: (r) => contactValues(r.addresses, r.address).join(" / "), width: 3 },
-  { label: "Makers", value: (r) => mk(r.maker_ids), width: 2.0 },
-  { label: "Specialization", value: (r) => withTags(cat(r.category_ids), r.specialization), width: 2.6 },
+  { label: "Maker", value: (r) => mk(r.maker_ids), width: 2.0 },
+  { label: "Category", value: (r) => cat(r.category_ids), width: 1.8 },
+  { label: "Specialization", value: (r) => r.specialization, width: 2.2 },
   { label: "Projects → Quoted", align: "right", width: 1.1,
     value: (r) => ratioText(r.deals ?? 0, r.deals_answered ?? 0) },
 ];
@@ -2688,7 +2692,8 @@ const makerPrintCols = (cat: (ids?: number[] | null) => string): PrintCol<Settin
   { label: "Phone", value: (r) => contactValues(r.phones, r.contact_phone).join(", "), width: 1.6 },
   { label: "Address", value: (r) => contactValues(r.addresses, r.address).join(" / "), width: 3 },
   { label: "Website", value: (r) => r.website, width: 1.8 },
-  { label: "Makes", value: (r) => withTags(cat(r.category_ids), r.specialization), width: 2.8 },
+  { label: "Category", value: (r) => cat(r.category_ids), width: 1.8 },
+  { label: "Makes", value: (r) => r.specialization, width: 2.0 },
   { label: "Items", align: "right", width: 0.8, value: (r) => (r.items ? String(r.items) : "") },
 ];
 
