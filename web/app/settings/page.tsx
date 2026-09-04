@@ -1287,19 +1287,29 @@ function CustomersTab() {
         }
         return null;
       }}
-      extraForm={(form, setForm) => (
+      // 회사 것과 사람 것이 한 폼에 섞여 있었다. 담당자를 고치러 연 창에서 회사명·
+      // 주소·취급품목·사업자번호까지 고칠 수 있으면, 여기서 바꾼 값이 이 사람만의
+      // 것인 줄로 읽힌다 — 실은 그 회사 담당자 전원의 값이다.
+      companyFields={["name", "address", "specialization", "tax_id", "tax_invoice_email"]}
+      extraForm={(form, setForm, { isEdit }) => (
         <>
           <MultiValueField label="Email" placeholder="name@company.com" values={form.emails} onChange={(emails) => setForm({ ...form, emails })} />
           <MultiValueField label="Phone" placeholder="+65 1234 5678" values={form.phones} onChange={(phones) => setForm({ ...form, phones })} />
           <MultiValueField label="Region" placeholder="Singapore" values={form.regions} onChange={(regions) => setForm({ ...form, regions })} />
-          <PaymentTermsField
-            value={form.payment_terms}
-            onChange={(payment_terms) => setForm({ ...form, payment_terms })}
-          />
-          <LogoPasteField
-            value={form.logo}
-            onChange={(logo) => setForm({ ...form, logo })}
-          />
+          {/* 결제조건과 로고는 회사의 것이다 — 담당자를 고칠 때는 내리고, 새로 등록할
+              때만 남긴다(그때는 회사도 함께 만들어지는 중이다). */}
+          {isEdit ? null : (
+            <>
+              <PaymentTermsField
+                value={form.payment_terms}
+                onChange={(payment_terms) => setForm({ ...form, payment_terms })}
+              />
+              <LogoPasteField
+                value={form.logo}
+                onChange={(logo) => setForm({ ...form, logo })}
+              />
+            </>
+          )}
         </>
       )}
       allowCopy
@@ -2373,19 +2383,27 @@ function VendorsTab() {
         }
         return null;
       }}
-      extraForm={(form, setForm) => (
+      // 고객과 같은 규칙 — 회사 것은 🏢 Company info 에서 고친다.
+      companyFields={["name", "address", "specialization"]}
+      extraForm={(form, setForm, { isEdit }) => (
         <>
           <MultiValueField label="Email" placeholder="name@company.com" values={form.emails} onChange={(emails) => setForm({ ...form, emails })} />
           <MultiValueField label="Phone" placeholder="+65 1234 5678" values={form.phones} onChange={(phones) => setForm({ ...form, phones })} />
           <MultiValueField label="Region" placeholder="Singapore" values={form.regions} onChange={(regions) => setForm({ ...form, regions })} />
-          <PaymentTermsField
-            value={form.payment_terms}
-            onChange={(payment_terms) => setForm({ ...form, payment_terms })}
-          />
-          <LogoPasteField
-            value={form.logo}
-            onChange={(logo) => setForm({ ...form, logo })}
-          />
+          {/* 결제조건과 로고는 회사의 것이다 — 담당자를 고칠 때는 내리고, 새로 등록할
+              때만 남긴다(그때는 회사도 함께 만들어지는 중이다). */}
+          {isEdit ? null : (
+            <>
+              <PaymentTermsField
+                value={form.payment_terms}
+                onChange={(payment_terms) => setForm({ ...form, payment_terms })}
+              />
+              <LogoPasteField
+                value={form.logo}
+                onChange={(logo) => setForm({ ...form, logo })}
+              />
+            </>
+          )}
         </>
       )}
       allowCopy
@@ -4287,6 +4305,7 @@ function MasterSection<T extends { id: number }>({
   required,
   numeric = [],
   extraForm,
+  companyFields,
   topForm,
   renderField,
   allowCopy = false,
@@ -4314,7 +4333,12 @@ function MasterSection<T extends { id: number }>({
   /** 저장에 반드시 필요한 칸. 배열이면 **그중 하나만** 있으면 된다. */
   required: keyof T | (keyof T)[];
   numeric?: (keyof T)[];
-  extraForm?: (form: T, setForm: (next: T) => void) => ReactNode;
+  extraForm?: (form: T, setForm: (next: T) => void, ctx: { isEdit: boolean }) => ReactNode;
+  /** 회사 단위 칸의 키. 이미 있는 레코드를 고칠 때는 폼에서 감춘다 — 그 값들은 회사
+   *  전체의 것이고 고치는 자리가 따로 있는데(Company info), 담당자 한 명을 고치러 연
+   *  창에 함께 서 있으면 여기서 고친 값이 그 사람만의 것인 줄로 읽힌다.
+   *  새로 등록할 때는 다 보인다 — 그때는 회사도 함께 만들어지는 중이라서다. */
+  companyFields?: (keyof T)[];
   // 폼 상단(입력 칸 위) 영역 — 명함 스캔 같은 자동 입력 도구를 넣는다.
   topForm?: (form: T, setForm: (next: T) => void, rows: T[]) => ReactNode;
   // fields 중 일부를 커스텀 입력으로 대체(예: 기존 값 목록에서 고르는 콤보박스).
@@ -4501,6 +4525,11 @@ function MasterSection<T extends { id: number }>({
   // 머리 칸 정렬·필터는 검색으로 좁힌 목록을 다시 자른다(검색 → 열 필터 → 정렬 순).
   const filtered = head.apply(searched);
   const isEdit = !!editId && editId > 0;
+  // 고치는 중이고 회사 단위 칸을 일러 준 표라면, 그 칸들을 폼에서 뺀다.
+  const hideCompany = isEdit && !!companyFields?.length;
+  const shownFields = hideCompany
+    ? fields.filter(([k]) => !companyFields!.includes(k))
+    : fields;
 
   // 같은 키(회사)끼리 묶기 — 원래 정렬 순서를 유지한다.
   const groups: { key: string; rows: T[] }[] = [];
@@ -4647,8 +4676,10 @@ function MasterSection<T extends { id: number }>({
     );
   }
 
+  // 회사 칸을 감춘 표에서 고치는 대상은 회사가 아니라 그 회사의 담당자다 — 제목이
+  // 회사 이름만 말하면 창을 잘못 연 것처럼 읽힌다.
   const editorTitle = isEdit
-    ? `✎ Edit ${requiredValue || "item"}`
+    ? `✎ Edit ${hideCompany ? "contact — " : ""}${requiredValue || "item"}`
     : copying
     ? `📋 Copy as new${requiredValue ? ` — ${requiredValue}` : ""}`
     : "+ New";
@@ -4656,8 +4687,16 @@ function MasterSection<T extends { id: number }>({
     <Modal title={editorTitle} onClose={cancel} form>
       {copying && copyHint ? <div className="ms-copy-hint">{copyHint}</div> : null}
       {topForm?.(form, setForm, rows)}
+      {hideCompany ? (
+        // 어느 회사의 담당자를 고치고 있는지는 남긴다 — 이름 칸을 통째로 빼면 창만
+        // 보고는 알 수 없다. 고치는 자리가 따로 있다는 것도 여기서 밝힌다.
+        <div className="ms-of-company">
+          <span>{String(form[requiredKeys[0]] ?? "")}</span>
+          <span className="hint-inline">Company-level details are edited in 🏢 Company info.</span>
+        </div>
+      ) : null}
       <div className="form-grid">
-        {fields.map(([key, label]) => {
+        {shownFields.map(([key, label]) => {
           const custom = renderField?.({ key, label, form, setForm, rows });
           if (custom) return <Fragment key={String(key)}>{custom}</Fragment>;
           return (
@@ -4670,7 +4709,7 @@ function MasterSection<T extends { id: number }>({
             />
           );
         })}
-        {extraForm?.(form, setForm)}
+        {extraForm?.(form, setForm, { isEdit })}
       </div>
       <div className="form-actions">
         {(isEdit ? canEdit : canCreate) ? (

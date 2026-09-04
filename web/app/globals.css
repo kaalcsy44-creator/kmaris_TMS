@@ -1759,6 +1759,25 @@ table.mini.wide.ms-table thead th.pl-th.open .pl-th-btn {
 }
 .tpm-count { font-size: 11.5px; color: #6b7684; }
 
+/* 담당자 편집 창 머리 — 어느 회사 사람을 고치는 중인지. 값이 아니라 자리 표시라
+   입력칸 모양을 주지 않는다(고칠 수 있는 것처럼 보이면 안 된다). */
+.ms-of-company {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+  padding: 8px 12px;
+  border-left: 3px solid var(--blue, #0055a8);
+  border-radius: 0 7px 7px 0;
+  background: #f2f7fe;
+}
+.ms-of-company > span:first-child {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--navy);
+}
+
 .cat-picker { gap: 6px; }
 .cat-picker-tags { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; min-height: 20px; }
 .cat-picker-add { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
