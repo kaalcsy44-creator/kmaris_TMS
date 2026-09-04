@@ -2147,6 +2147,19 @@ table.perm-matrix tr.perm-group:first-child td {
   word-break: break-word;
 }
 
+/* Company 탭 머리의 회사 로고 — 이 화면이 누구의 회사 정보인지 한눈에 보이게. */
+.company-logo {
+  margin: 0 0 18px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e6eaf0;
+}
+.company-logo img {
+  display: block;
+  height: 46px;
+  width: auto;
+  max-width: 100%;
+}
+
 /* ── Company profile: 국문(좌)·영문(우) 이중언어 레이아웃 ─────────────────── */
 .bilingual-cols {
   display: grid;

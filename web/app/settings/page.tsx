@@ -331,6 +331,9 @@ function CompanyTab() {
   if (!editing) {
     return (
       <div className="panel">
+        <div className="company-logo">
+          <img src="/brand/kmaris-logo.png" alt="K-MARIS Energy & Solutions" />
+        </div>
         <div className="bilingual-cols">
           {BILINGUAL_COLS.map((col) => (
             <section className="bl-col" key={col.title}>
@@ -357,16 +360,6 @@ function CompanyTab() {
               <dd>{saved[f.key] ? saved[f.key] : <span className="dash">—</span>}</dd>
             </div>
           ))}
-          <div>
-            <dt>Email signature</dt>
-            <dd>
-              {saved.email_signature ? (
-                <span style={{ whiteSpace: "pre-wrap" }}>{saved.email_signature}</span>
-              ) : (
-                <span className="dash">— (default signature)</span>
-              )}
-            </dd>
-          </div>
         </dl>
         <div className="form-actions">
           <button className="btn primary" onClick={startEdit}>
@@ -381,6 +374,9 @@ function CompanyTab() {
   // 수정: 입력 폼
   return (
     <div className="panel">
+      <div className="company-logo">
+        <img src="/brand/kmaris-logo.png" alt="K-MARIS Energy & Solutions" />
+      </div>
       <div className="bilingual-cols">
         {BILINGUAL_COLS.map((col) => (
           <section className="bl-col" key={col.title}>
@@ -408,15 +404,6 @@ function CompanyTab() {
             onChange={(v) => setForm({ ...form, [f.key]: v })}
           />
         ))}
-      </div>
-      <div className="form-field" style={{ marginTop: 12 }}>
-        <label>Email signature</label>
-        <textarea
-          className="po-textarea"
-          value={form.email_signature || ""}
-          onChange={(e) => setForm({ ...form, email_signature: e.target.value })}
-          placeholder="Signature appended to the bottom of outgoing emails. Leave blank to use the default."
-        />
       </div>
       <div className="form-actions">
         <button className="btn primary" disabled={busy} onClick={save}>
