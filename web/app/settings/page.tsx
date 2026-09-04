@@ -1124,11 +1124,10 @@ function CustomersTab() {
         {...companyNav(company, setCompany)}
         // 담당자를 고치러 갈 때는 이 창을 먼저 닫는다 — 편집 창이 그 자리에 열리므로
         // 두 창이 겹쳐 서면 어느 쪽을 닫는 손짓인지 흐려진다.
-        // 담당자 고치기·지우기는 이 창 안에서 끝난다 — 명단이 곧 결과를 보여 준다.
-        // 추가만 창을 먼저 닫는다: 등록 폼이 그 자리에 열리므로 두 창이 겹쳐 서면
-        // 어느 쪽을 닫는 손짓인지 흐려지고, 거기엔 명함 스캔도 있다.
+        // 담당자를 더하고 고치고 지우는 일이 모두 이 창 안에서 끝난다 — 명단이 곧
+        // 결과를 보여 준다. 창을 하나 더 띄우면 그 명단을 잃는다.
         onSaveContact={company.saveRow}
-        onAddContact={() => { const go = company.addNew; setCompany(null); go(); }}
+        onCreateContact={company.createRow}
         onDeleteContact={company.removeRow}
         fields={[
           ["tax_id", "Tax ID / Business No."],
@@ -1452,6 +1451,8 @@ type CompanyNavCtx<T> = {
   addNew: () => void;
   /** 담당자 한 명을 그 줄에서 고쳐 저장한다. 창을 새로 띄우지 않는다. */
   saveRow: (row: T) => Promise<string>;
+  /** 담당자 한 명을 새로 만든다. 만들어진 id 를 돌려준다(창이 그 줄을 그려야 한다). */
+  createRow: (row: T) => Promise<{ error: string; id: number }>;
   removeRow: (row: T) => Promise<string>;
 };
 
@@ -1488,7 +1489,7 @@ function CompanyInfoModal<
   prev,
   next,
   onSaveContact,
-  onAddContact,
+  onCreateContact,
   onDeleteContact,
   tags,
   makerTags,
@@ -1509,8 +1510,8 @@ function CompanyInfoModal<
   /** 담당자 한 명을 그 줄에서 고쳐 저장한다. 빈 문자열이면 성공, 아니면 실패 사유.
    *  없으면 ✎ 단추도 없다. */
   onSaveContact?: (row: T) => Promise<string>;
-  /** 이 회사에 담당자를 한 명 더한다 — 회사 공통정보가 채워진 등록 폼이 열린다. */
-  onAddContact?: () => void;
+  /** 이 회사에 담당자를 한 명 더한다 — 명단 맨 아래 빈 줄에서 바로 만든다. */
+  onCreateContact?: (row: T) => Promise<{ error: string; id: number }>;
   /** 담당자 한 명을 지운다. 빈 문자열이면 성공, 아니면 실패 사유. */
   onDeleteContact?: (row: T) => Promise<string>;
   /** 취급 분류(거래선 전용). 글자가 아니라 id 목록이라 fields/areas 를 못 타고 따로 든다.
@@ -1553,6 +1554,11 @@ function CompanyInfoModal<
   >(null);
   // 저장한 값. rows 는 창을 열 때 찍은 사진이라, 고친 줄을 여기에 얹어 보여 준다.
   const [edits, setEdits] = useState<Record<number, T>>({});
+  // 이 창에서 새로 만든 담당자. 같은 이유로 명단 끝에 얹는다.
+  const [added, setAdded] = useState<T[]>([]);
+  // 명함으로 채우는 중 — 새 줄에서만 쓴다.
+  const [scanning, setScanning] = useState(false);
+  const cardRef = useRef<HTMLInputElement>(null);
   // 열면 읽기부터 — 이 창은 대개 "이 회사가 뭐 하는 곳이었지"를 확인하러 연다. 곧장
   // 입력칸으로 열어 두면 확인하러 들어왔다가 잘못 눌러 회사 전 담당자의 값을 한꺼번에
   // 바꾸는 일이 생긴다(이 창의 저장은 한 명이 아니라 회사 전체에 닿는다).
@@ -1561,12 +1567,59 @@ function CompanyInfoModal<
   const canAddContact = can("settings", "create");
   const canDeleteContact = can("settings", "delete");
   // 지운 사람을 빼고, 고친 사람은 고친 값으로 — 창 안의 모든 숫자·문구가 이것을 센다.
-  const contacts = rows.filter((r) => !gone.has(r.id)).map((r) => edits[r.id] ?? r);
+  const contacts = [
+    ...rows.filter((r) => !gone.has(r.id)).map((r) => edits[r.id] ?? r),
+    ...added.filter((r) => !gone.has(r.id)),
+  ];
+  // 새 줄인가 — id 가 아직 없다(만들어지면 서버가 준다).
+  const addingNew = !!draft && draft.row.id === 0;
 
   const asText = (list: string[] | undefined, flat: string) =>
     contactValues(list, flat).join(", ");
   const asList = (text: string) =>
     text.split(",").map((v) => v.trim()).filter(Boolean);
+
+  /** 새 담당자 한 줄 — 회사 것은 첫 담당자에게서 그대로 물려받고 사람 것만 비운다.
+   *  목록에서 담당자를 더할 때와 같은 규칙이다(withCompanyDefaults). */
+  function startAddContact() {
+    const seed = rows[0];
+    if (!seed) return;
+    setErr("");
+    setDraft({
+      row: {
+        ...seed, id: 0,
+        contact: "", duty: "",
+        emails: [], phones: [], regions: [],
+        email: "", contact_phone: "", country: "",
+      },
+      emails: "", phones: "", regions: "",
+    });
+  }
+
+  /** 명함으로 새 줄을 채운다 — 회사는 이미 정해져 있으므로 사람 것만 받는다. */
+  async function scanCard(file: File | null) {
+    if (!file || !draft) return;
+    setScanning(true);
+    setErr("");
+    try {
+      const card = await parseBusinessCard(await downscaleImageFile(file));
+      setDraft((d) => d && ({
+        ...d,
+        row: {
+          ...d.row,
+          contact: card.contact_name || d.row.contact,
+          duty: card.job_title || d.row.duty,
+        },
+        emails: (card.emails ?? []).join(", ") || d.emails,
+        phones: (card.phones ?? []).join(", ") || d.phones,
+        regions: (card.regions ?? []).join(", ") || d.regions,
+      }));
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Could not read the card");
+    } finally {
+      setScanning(false);
+    }
+  }
 
   function startEditContact(row: T) {
     setErr("");
@@ -1579,7 +1632,8 @@ function CompanyInfoModal<
   }
 
   async function saveContact() {
-    if (!draft || !onSaveContact) return;
+    if (!draft) return;
+    if (!addingNew && !onSaveContact) return;
     const emails = asList(draft.emails);
     const phones = asList(draft.phones);
     const regions = asList(draft.regions);
@@ -1593,7 +1647,16 @@ function CompanyInfoModal<
       country: regions[0] ?? "",
     };
     setBusy(true);
-    const fail = await onSaveContact(next);
+    if (addingNew) {
+      if (!onCreateContact) { setBusy(false); return; }
+      const { error, id } = await onCreateContact(next);
+      setBusy(false);
+      if (error) { setErr(error); return; }
+      setAdded((prev) => [...prev, { ...next, id }]);
+      setDraft(null);
+      return;
+    }
+    const fail = onSaveContact ? await onSaveContact(next) : "";
     setBusy(false);
     if (fail) { setErr(fail); return; }
     setEdits((prev) => ({ ...prev, [next.id]: next }));
@@ -1713,12 +1776,13 @@ function CompanyInfoModal<
           <div className="co-contacts">
             <div className="co-contacts-hd">
               Contacts<span className="ms-badge">{contacts.length}</span>
-              {onAddContact && canAddContact ? (
+              {onCreateContact && canAddContact ? (
                 <button
                   type="button"
                   className="btn tiny co-contacts-add"
-                  onClick={onAddContact}
-                  title="Register one more contact for this company"
+                  disabled={!!draft}
+                  onClick={startAddContact}
+                  title="Add one more contact for this company"
                 >
                   ＋ Add contact
                 </button>
@@ -1818,7 +1882,50 @@ function CompanyInfoModal<
                     </tr>
                   );
                 })}
-                {contacts.length === 0 ? (
+                {addingNew && draft ? (
+                  // 새 담당자는 명단 끝의 빈 줄에서 만든다. 창을 하나 더 띄우지 않는
+                  // 이유는 고칠 때와 같다 — 몇 명이 있는지 보면서 더해야 한다.
+                  <tr className="co-row-edit co-row-new">
+                    <td>
+                      <input value={draft.row.contact} placeholder="Name" autoFocus
+                             onChange={(e) => setDraft({ ...draft, row: { ...draft.row, contact: e.target.value } })} />
+                    </td>
+                    <td>
+                      <input value={draft.row.duty} placeholder="Sales · Technical…"
+                             onChange={(e) => setDraft({ ...draft, row: { ...draft.row, duty: e.target.value } })} />
+                    </td>
+                    <td>
+                      <input value={draft.emails} placeholder="a@x.com, b@x.com"
+                             onChange={(e) => setDraft({ ...draft, emails: e.target.value })} />
+                    </td>
+                    <td>
+                      <input value={draft.phones} placeholder="+65 1234 5678"
+                             onChange={(e) => setDraft({ ...draft, phones: e.target.value })} />
+                    </td>
+                    <td>
+                      <input value={draft.regions} placeholder="Singapore"
+                             onChange={(e) => setDraft({ ...draft, regions: e.target.value })} />
+                    </td>
+                    <td className="co-edit-col">
+                      {/* 명함 스캔은 남긴다 — 새 사람을 만드는 가장 빠른 길이고, 창을
+                          없앴다고 그 길까지 없앨 이유는 없다. 회사는 이미 정해져 있으므로
+                          이름·직책·연락처만 받아 온다. */}
+                      <input ref={cardRef} className="pimp-file-input" type="file"
+                             accept="image/png,image/jpeg,image/webp,application/pdf"
+                             onChange={(e) => { scanCard(e.target.files?.[0] ?? null); e.target.value = ""; }} />
+                      <button type="button" className="btn tiny" disabled={busy || scanning}
+                              onClick={() => cardRef.current?.click()}
+                              title="Fill from a business card">
+                        {scanning ? "…" : "📇"}
+                      </button>
+                      <button type="button" className="btn tiny primary" disabled={busy || scanning}
+                              onClick={saveContact} title="Add this contact">✓</button>
+                      <button type="button" className="btn tiny" disabled={busy}
+                              onClick={() => { setDraft(null); setErr(""); }} title="Cancel">✕</button>
+                    </td>
+                  </tr>
+                ) : null}
+                {contacts.length === 0 && !addingNew ? (
                   <tr>
                     <td colSpan={6} className="co-contacts-none">
                       No contact left — this company is gone from the list.
@@ -2281,11 +2388,10 @@ function VendorsTab() {
           />
         )]}
         {...companyNav(company, setCompany)}
-        // 담당자 고치기·지우기는 이 창 안에서 끝난다 — 명단이 곧 결과를 보여 준다.
-        // 추가만 창을 먼저 닫는다: 등록 폼이 그 자리에 열리므로 두 창이 겹쳐 서면
-        // 어느 쪽을 닫는 손짓인지 흐려지고, 거기엔 명함 스캔도 있다.
+        // 담당자를 더하고 고치고 지우는 일이 모두 이 창 안에서 끝난다 — 명단이 곧
+        // 결과를 보여 준다. 창을 하나 더 띄우면 그 명단을 잃는다.
         onSaveContact={company.saveRow}
-        onAddContact={() => { const go = company.addNew; setCompany(null); go(); }}
+        onCreateContact={company.createRow}
         onDeleteContact={company.removeRow}
         tags={{
           initial: company.groups[company.index]?.find((r) => (r.category_ids ?? []).length)
@@ -4502,6 +4608,20 @@ function MasterSection<T extends { id: number }>({
     }
   }
 
+  /** 한 건을 새로 만든다(회사 정보 창의 담당자 줄 추가가 쓴다). 만든 id 를 함께
+   *  돌려주는 이유: 창이 든 명단은 열 때 찍은 사진이라, 새 줄을 거기 얹으려면
+   *  그 줄이 무엇인지 알아야 한다. */
+  async function createRow(row: T): Promise<{ error: string; id: number }> {
+    try {
+      const res = (await create(stripId(row))) as { id?: number } | undefined;
+      refresh();
+      onSaved?.();
+      return { error: "", id: Number(res?.id) || 0 };
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : "Save failed", id: 0 };
+    }
+  }
+
   /** 한 건을 통째로 저장한다(회사 정보 창의 담당자 줄 편집이 쓴다).
    *  실패 사유를 글로 돌려준다(빈 문자열=성공) — 표 안에서 고치는 중이라 창을 띄워
    *  알릴 자리가 없다. */
@@ -4671,6 +4791,7 @@ function MasterSection<T extends { id: number }>({
                   index: groupIndex.get(g.key) ?? 0,
                   addNew: () => openNewIn(g.rows),
                   saveRow,
+                  createRow,
                   removeRow,
                 };
                 // 펼칠 것이 없는 표에서는 줄을 누르면 회사 정보 창이 열린다. 손잡이를

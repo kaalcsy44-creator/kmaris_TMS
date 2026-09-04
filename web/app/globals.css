@@ -10532,6 +10532,14 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 }
 /* 표 칸은 기본이 nowrap 이라 입력칸이 제 칸을 넘어선다 — 고치는 줄에서만 푼다. */
 .co-contacts tr.co-row-edit > td { white-space: normal; }
+/* 새로 만드는 줄 — 있던 것을 고치는 것과 없던 것을 만드는 것은 다른 일이라 색을 가른다.
+   점선 테두리 = 아직 명단에 든 줄이 아니다. */
+.co-contacts tr.co-row-new > td {
+  background: #f4fbf6;
+  border-top: 1px dashed #b7e3c8;
+  border-bottom: 1px dashed #b7e3c8;
+}
+.co-contacts tr.co-row-new input { border-color: #c6e3d4; }
 /* "+ 담당자 추가" 는 머리글 오른쪽 끝으로 — 명단의 제목이지 명단의 한 줄이 아니다. */
 .co-contacts-add { margin-left: auto; text-transform: none; letter-spacing: 0; }
 .co-contacts-none {
