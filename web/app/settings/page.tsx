@@ -964,7 +964,7 @@ function MyPasswordChange() {
 }
 
 const EMPTY_CUSTOMER: SettingsCustomer = {
-  id: 0, name: "", contact: "", contact_phone: "", email: "", country: "", address: "",
+  id: 0, name: "", contact: "", duty: "", contact_phone: "", email: "", country: "", address: "",
   tax_id: "", tax_invoice_email: "", specialization: "", website: "", note: "", payment_terms: "", logo: "",
   addresses: [], emails: [], phones: [], regions: [],
 };
@@ -1176,7 +1176,7 @@ function CustomersTab() {
             {summarize(uniqStrings(rs.map((r) => r.specialization)), " · ", 2)}
           </span>,
         ],
-        subFirst: () => <span className="ms-sub-mark">↳</span>,
+        flat: true,
         actions: (rs, addNew, nav) => (
           <>
             <button
@@ -1227,6 +1227,7 @@ function CustomersTab() {
       fields={[
         ["name", "Customer *"],
         ["contact", "Contact name"],
+        ["duty", "In charge of"],
         ["address", "Address"],
         ["specialization", "Specialization"],
         ["tax_id", "Tax ID / Business No."],
@@ -1441,12 +1442,13 @@ function summarize(list: string[], sep: string, max: number): string {
 
 // 검색 대상 — 표에 접혀 있는 값(2번째 이메일·전화·주소)까지 포함해 찾을 수 있게 한다.
 function contactSearchText(r: {
-  name: string; contact: string; address?: string; specialization?: string; note?: string;
+  name: string; contact: string; duty?: string;
+  address?: string; specialization?: string; note?: string;
   addresses?: string[]; emails?: string[]; phones?: string[]; regions?: string[];
   email?: string; contact_phone?: string; country?: string;
 }): string {
   return [
-    r.name, r.contact, r.address ?? "", r.specialization ?? "", r.note ?? "",
+    r.name, r.contact, r.duty ?? "", r.address ?? "", r.specialization ?? "", r.note ?? "",
     ...(r.addresses ?? []), ...(r.emails ?? []), ...(r.phones ?? []), ...(r.regions ?? []),
     r.email ?? "", r.contact_phone ?? "", r.country ?? "",
   ].join(" ");
@@ -1664,8 +1666,10 @@ function CompanyInfoModal<
       ...(areas ?? []).map((a) => [a.label, vals[String(a.key)]
         ? <span className="co-para">{vals[String(a.key)]}</span> : null] as [string, React.ReactNode]),
     ];
+    // 폼 팝업 기본폭(560px)보다 넓게 — 아래 담당자 표가 이름·담당분야·메일·연락처·
+    // 지역 다섯 칸이라 기본폭에서는 칸마다 두세 줄로 접힌다.
     return (
-      <Modal title={`🏢 Company info — ${origName}`} onClose={onClose} form>
+      <Modal title={`🏢 Company info — ${origName}`} onClose={onClose} form maxWidth={960}>
         {prev || next ? (
           <div className="co-nav">
             <button type="button" className="btn tiny" disabled={!prev}
@@ -1707,7 +1711,7 @@ function CompanyInfoModal<
             <table className="mini">
               <thead>
                 <tr>
-                  <th>Name</th><th>Email</th><th>Phone</th><th>Region</th>
+                  <th>Name</th><th>In charge of</th><th>Email</th><th>Phone</th><th>Region</th>
                   {onEditContact || onDeleteContact ? <th className="co-edit-col" /> : null}
                 </tr>
               </thead>
@@ -1719,6 +1723,7 @@ function CompanyInfoModal<
                   return (
                     <tr key={r.id}>
                       <td>{r.contact || <span className="dash">—</span>}</td>
+                      <td>{(r as { duty?: string }).duty || <span className="dash">—</span>}</td>
                       <td>
                         {mails.length ? (
                           <span className="co-lines">
@@ -1761,7 +1766,7 @@ function CompanyInfoModal<
                 })}
                 {contacts.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="co-contacts-none">
+                    <td colSpan={6} className="co-contacts-none">
                       No contact left — this company is gone from the list.
                     </td>
                   </tr>
@@ -1787,7 +1792,7 @@ function CompanyInfoModal<
   }
 
   return (
-    <Modal title={`🏢 Company info — ${origName}`} onClose={onClose} form>
+    <Modal title={`🏢 Company info — ${origName}`} onClose={onClose} form maxWidth={960}>
       <div className="ms-copy-hint">
         Applies to all {rows.length} contacts of this company at once.
         {mixed.length ? ` Currently different per contact: ${mixed.join(", ")} — saving will make them the same.` : ""}
@@ -2186,7 +2191,7 @@ function LogoPasteField({
 }
 
 const EMPTY_VENDOR: SettingsVendor = {
-  id: 0, name: "", contact: "", contact_phone: "", email: "", specialization: "", website: "", note: "",
+  id: 0, name: "", contact: "", duty: "", contact_phone: "", email: "", specialization: "", website: "", note: "",
   country: "", address: "", payment_terms: "", logo: "",
   addresses: [], emails: [], phones: [], regions: [], category_ids: [], maker_ids: [],
 };
@@ -2280,7 +2285,7 @@ function VendorsTab() {
             {summarize(uniqStrings(rs.map((r) => r.specialization)), " · ", 2)}
           </span>,
         ],
-        subFirst: () => <span className="ms-sub-mark">↳</span>,
+        flat: true,
         actions: (rs, addNew, nav) => (
           <>
             <button
@@ -2329,6 +2334,7 @@ function VendorsTab() {
       fields={[
         ["name", "Vendor *"],
         ["contact", "Contact name"],
+        ["duty", "In charge of"],
         ["address", "Address"],
         ["specialization", "Specialization"],
       ]}
@@ -2740,6 +2746,7 @@ const customerPrintCols: PrintCol<SettingsCustomer>[] = [
   { label: "Company", value: (r) => r.name, width: 2.4 },
   { label: "Region", value: (r) => partyRegions(r).filter(Boolean).join(" · "), width: 1.3 },
   { label: "Contact", value: (r) => r.contact, width: 1.6 },
+  { label: "In charge of", value: (r) => r.duty, width: 1.3 },
   { label: "Email", value: (r) => contactValues(r.emails, r.email).join(", "), width: 2.4 },
   { label: "Phone", value: (r) => contactValues(r.phones, r.contact_phone).join(", "), width: 1.6 },
   { label: "Address", value: (r) => contactValues(r.addresses, r.address).join(" / "), width: 3 },
@@ -2756,6 +2763,7 @@ const vendorPrintCols = (
   { label: "Company", value: (r) => r.name, width: 2.4 },
   { label: "Region", value: (r) => partyRegions(r).filter(Boolean).join(" · "), width: 1.3 },
   { label: "Contact", value: (r) => r.contact, width: 1.6 },
+  { label: "In charge of", value: (r) => r.duty, width: 1.3 },
   { label: "Email", value: (r) => contactValues(r.emails, r.email).join(", "), width: 2.4 },
   { label: "Phone", value: (r) => contactValues(r.phones, r.contact_phone).join(", "), width: 1.6 },
   { label: "Address", value: (r) => contactValues(r.addresses, r.address).join(" / "), width: 3 },
@@ -4341,6 +4349,10 @@ function MasterSection<T extends { id: number }>({
     ) => ReactNode;
     newRow?: (rows: T[]) => T;
     summary?: (groups: number, items: number) => string;
+    /** 회사 줄만 세우고 담당자 줄은 펼치지 않는다. 담당자는 회사정보 창의 명단에서
+     *  보고 고친다 — 목록에서까지 펼치면 같은 값(지역·프로젝트·취급품목이 회사 단위다)이
+     *  두 줄로 되풀이되고, 서른다섯 회사짜리 표가 일흔 줄이 된다. */
+    flat?: boolean;
   };
   // 검색 대상 텍스트(기본: 표시 컬럼 값). 화면에 접혀 있는 값(2번째 이메일·전화·주소)까지 넓힐 때.
   searchText?: (row: T) => string;
@@ -4504,8 +4516,10 @@ function MasterSection<T extends { id: number }>({
   // 전체 순서를 따라야 한다(회사 정보 창의 좌우 이동).
   const groupRows = groups.map((g) => g.rows);
   const groupIndex = new Map(groups.map((g, i) => [g.key, i]));
+  // 담당자 줄을 아예 안 세우는 표(거래선·고객) — 회사 줄 하나가 곧 그 회사다.
+  const flatGroups = !!group?.flat;
   // 검색 중에는 매칭된 담당자가 보여야 하므로 전부 펼친다.
-  const expandAll = !!ql;
+  const expandAll = !!ql && !flatGroups;
   const isOpen = (key: string) => expandAll || openKeys.has(key);
   const allOpen = groups.length > 0 && groups.every((g) => openKeys.has(g.key));
   function toggleGroup(key: string) {
@@ -4578,7 +4592,10 @@ function MasterSection<T extends { id: number }>({
             : // 담당자가 1명이어도 똑같이 회사 행으로 묶는다(줄마다 모양이 달라지지 않게).
               list.map((g) => (
                 <Fragment key={g.key}>
-                  <tr className="ms-group" onClick={() => toggleGroup(g.key)}>
+                  <tr
+                    className={`ms-group${flatGroups ? " ms-group--flat" : ""}`}
+                    onClick={() => (flatGroups ? undefined : toggleGroup(g.key))}
+                  >
                     {/* 그룹(회사) 행도 데이터 행과 같은 칸 클래스를 쓴다 — 폭 규칙이
                         한 칸에만 걸리면 열이 들쭉날쭉해진다. */}
                     {group?.cells(g.rows, isOpen(g.key)).map((node, i) => (
@@ -4590,7 +4607,7 @@ function MasterSection<T extends { id: number }>({
                           editRow: openEdit, addNew: () => openNewIn(g.rows), removeRow })}
                     </td>
                   </tr>
-                  {isOpen(g.key) ? g.rows.map((row) => dataRow(row, true)) : null}
+                  {!flatGroups && isOpen(g.key) ? g.rows.map((row) => dataRow(row, true)) : null}
                 </Fragment>
               ))}
         </tbody>
@@ -4700,7 +4717,7 @@ function MasterSection<T extends { id: number }>({
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
-        {group && groups.length > 0 ? (
+        {group && !group.flat && groups.length > 0 ? (
           <button
             className="btn"
             onClick={() => setOpenKeys(allOpen ? new Set() : new Set(groups.map((g) => g.key)))}

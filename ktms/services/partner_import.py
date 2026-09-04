@@ -33,6 +33,7 @@ FIELDS: Dict[str, List[Field]] = {
     "customers": [
         ("name", "Company", False, False),
         ("contact", "Contact", False, False),
+        ("duty", "In charge of", False, False),
         ("emails", "Email", True, False),
         ("phones", "Phone", True, False),
         ("regions", "Region", True, False),
@@ -47,6 +48,7 @@ FIELDS: Dict[str, List[Field]] = {
     "vendors": [
         ("name", "Company", False, False),
         ("contact", "Contact", False, False),
+        ("duty", "In charge of", False, False),
         ("emails", "Email", True, False),
         ("phones", "Phone", True, False),
         ("regions", "Region", True, False),
@@ -89,6 +91,10 @@ _HEADERS: List[Tuple[str, List[str], List[str]]] = [
     ("tax_id",
      ["tax id", "taxid", "business no", "business number", "brn", "사업자번호", "사업자등록번호", "사업자"],
      ["tax id", "business registration", "business no", "사업자등록", "사업자번호"]),
+    ("duty",
+     ["duty", "role", "in charge of", "charge", "field", "department", "dept",
+      "담당분야", "담당업무", "분야", "직무", "부서", "직책"],
+     ["in charge of", "담당분야", "담당업무", "직무"]),
     ("contact",
      ["contact", "contact name", "contact person", "person in charge", "pic", "p i c",
       "attn", "attention", "rep", "담당자", "담당", "담당자명", "성명", "이름", "책임자"],

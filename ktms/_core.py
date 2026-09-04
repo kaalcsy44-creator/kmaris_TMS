@@ -3195,6 +3195,7 @@ class ContactIn(BaseModel):
 class CustomerCreate(BaseModel):
     name: str
     contact: str | None = ""
+    duty: str | None = ""            # 담당 분야(영업·기술·구매…) — 사람에게 붙는 값
     contact_phone: str | None = ""
     email: str | None = ""
     country: str | None = ""
@@ -3217,6 +3218,7 @@ class CustomerCreate(BaseModel):
 class VendorCreate(BaseModel):
     name: str
     contact: str | None = ""
+    duty: str | None = ""            # 담당 분야(영업·기술·구매…) — 사람에게 붙는 값
     contact_phone: str | None = ""
     email: str | None = ""
     specialization: str | None = ""

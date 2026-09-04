@@ -133,6 +133,7 @@ def settings_customers():
     try:
         deals = _customer_deal_counts(s)
         return [{"id": c.id, "name": c.name, "contact": c.contact or "",
+                 "duty": getattr(c, "duty", None) or "",
                  "contact_phone": getattr(c, "contact_phone", None) or "",
                  "email": c.email or "", "country": c.country or "",
                  "address": c.address or "", "tax_id": c.tax_id or "",
@@ -236,6 +237,7 @@ def create_customer(body: CustomerCreate):
     s = get_session()
     try:
         c = Customer(name=body.name.strip(), contact=body.contact or "",
+                     duty=body.duty or "",
                      contact_phone=body.contact_phone or "",
                      email=body.email or "", country=body.country or "",
                      address=body.address or "", tax_id=body.tax_id or "",
@@ -326,6 +328,7 @@ def update_customer(row_id: int, body: CustomerCreate):
             raise HTTPException(status_code=404, detail="Customer를 찾을 수 없습니다.")
         c.name = body.name.strip()
         c.contact = body.contact or ""
+        c.duty = body.duty or ""
         c.contact_phone = body.contact_phone or ""
         c.email = body.email or ""
         c.country = body.country or ""
@@ -395,6 +398,7 @@ def settings_vendors():
             co_answered.setdefault(key, set()).update(answered.get(v.id, ()))
 
         return [{"id": v.id, "name": v.name, "contact": v.contact or "",
+                 "duty": getattr(v, "duty", None) or "",
                  "contact_phone": getattr(v, "contact_phone", None) or "",
                  "email": v.email or "", "specialization": v.specialization or "",
                  "website": getattr(v, "website", None) or "",
@@ -657,6 +661,7 @@ def create_vendor(body: VendorCreate):
     s = get_session()
     try:
         v = Vendor(name=body.name.strip(), contact=body.contact or "",
+                   duty=body.duty or "",
                    contact_phone=body.contact_phone or "",
                    email=body.email or "", specialization=body.specialization or "",
                    note=body.note or "",
@@ -699,6 +704,7 @@ def update_vendor(row_id: int, body: VendorCreate):
             raise HTTPException(status_code=404, detail="Vendor를 찾을 수 없습니다.")
         v.name = body.name.strip()
         v.contact = body.contact or ""
+        v.duty = body.duty or ""
         v.contact_phone = body.contact_phone or ""
         v.email = body.email or ""
         v.specialization = body.specialization or ""

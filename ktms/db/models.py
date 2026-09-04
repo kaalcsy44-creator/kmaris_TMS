@@ -97,6 +97,11 @@ class Customer(Base):
     name       = Column(String(200), nullable=False)
     address    = Column(String(400))   # 대표 주소(addresses[0] 미러링)
     contact    = Column(String(100))   # 담당자 이름
+    # 담당 분야 — 이 사람이 그 회사 안에서 무엇을 맡고 있는가(영업·기술·구매·경리).
+    # 회사가 아니라 사람에게 붙는 값이라 회사 공통정보(Company info)에 들어가지 않는다:
+    # 같은 회사에 영업 담당과 기술 담당이 따로 있고, 무엇을 물어보느냐에 따라 메일을
+    # 보낼 사람이 갈린다.
+    duty          = Column(String(100))
     contact_phone = Column(String(50)) # 대표 연락처(phones[0] 미러링)
     email      = Column(String(200))   # 대표 이메일(emails[0] 미러링)
     tax_id     = Column(String(100))
@@ -128,6 +133,11 @@ class Vendor(Base):
     name           = Column(String(200), nullable=False)
     address        = Column(String(400))   # 대표 주소(addresses[0] 미러링)
     contact        = Column(String(100))   # 담당자 이름
+    # 담당 분야 — 이 사람이 그 회사 안에서 무엇을 맡고 있는가(영업·기술·구매·경리).
+    # 회사가 아니라 사람에게 붙는 값이라 회사 공통정보(Company info)에 들어가지 않는다:
+    # 같은 회사에 영업 담당과 기술 담당이 따로 있고, 무엇을 물어보느냐에 따라 메일을
+    # 보낼 사람이 갈린다.
+    duty           = Column(String(100))
     contact_phone  = Column(String(50))    # 대표 연락처(phones[0] 미러링)
     email          = Column(String(200))   # 대표 이메일(emails[0] 미러링)
     country        = Column(String(100))   # 대표 지역(regions[0] 미러링)

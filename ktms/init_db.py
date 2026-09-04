@@ -69,6 +69,8 @@ _MIGRATIONS = {
         # 무엇을 사는 곳인가 — 벤더의 취급품목과 같은 자리(목록에서 나란히 읽히게).
         "specialization": "VARCHAR(200)",
         "website": "VARCHAR(300)",
+        # 담당자의 담당 분야(영업·기술·구매…). 기존 행은 NULL = 아직 안 적음.
+        "duty": "VARCHAR(100)",
     },
     "vendors": {
         "website": "VARCHAR(300)",
@@ -86,6 +88,8 @@ _MIGRATIONS = {
         "category_ids": "JSON",
         # 이 회사가 대 줄 수 있는 제조사(makers.id) 목록. 기존 행은 NULL = 아직 등록 전.
         "maker_ids": "JSON",
+        # 담당자의 담당 분야(영업·기술·구매…). 기존 행은 NULL = 아직 안 적음.
+        "duty": "VARCHAR(100)",
     },
     "vessels": {
         "vessel_type": "VARCHAR(60)",

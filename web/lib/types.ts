@@ -42,6 +42,9 @@ export type SettingsCustomer = {
   id: number;
   name: string;
   contact: string;
+  /** 담당 분야 — 이 사람이 회사 안에서 무엇을 맡는가(영업·기술·구매). 회사가 아니라
+   *  사람에게 붙는 값이라 회사 공통정보에 들어가지 않는다. */
+  duty: string;
   contact_phone: string;
   email: string;
   country: string;
@@ -68,6 +71,9 @@ export type SettingsVendor = {
   id: number;
   name: string;
   contact: string;
+  /** 담당 분야 — 이 사람이 회사 안에서 무엇을 맡는가(영업·기술·구매). 회사가 아니라
+   *  사람에게 붙는 값이라 회사 공통정보에 들어가지 않는다. */
+  duty: string;
   contact_phone: string;
   email: string;
   specialization: string;
