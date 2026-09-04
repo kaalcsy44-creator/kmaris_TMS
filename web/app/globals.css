@@ -1287,12 +1287,15 @@ body {
 .ms-table tbody tr {
   cursor: pointer;
 }
-/* 회사명 열은 줄바꿈하지 않는다(두 줄로 접히면 목록을 훑기 어렵다) — 남는 폭도
-   이 열이 가져가고, 나머지 열은 내용 폭 + 최소폭만 차지해 오른쪽으로 붙는다.
+/* 회사명 열은 줄바꿈하지 않는다(두 줄로 접히면 목록을 훑기 어렵다). 다만 남는 폭까지
+   가져가지는 않는다 — 이름은 nowrap 이라 제 길이면 충분한데, 그 열이 여백을 다 물고
+   있으면 정작 길이가 필요한 오른쪽 글 칸(취급품목)이 잘린다. width:1% 로 제 내용만큼만
+   차지하게 두고, 남는 폭은 아래 width:auto 를 준 글·배지 칸들이 내용 비례로 나눠 갖는다.
    table.mini.wide 의 일반 컬럼 규칙(2번째 140px·3번째 180px 등)을 이기려고
    선택자에 .ms-table 을 더해 구체성을 높였다. */
 table.mini.wide.ms-table th:first-child,
 table.mini.wide.ms-table td:first-child {
+  width: 1%;
   white-space: nowrap;
 }
 table.mini.wide.ms-table th:nth-child(n + 2):not(.ms-actcol),
@@ -1305,14 +1308,16 @@ table.mini.wide.ms-table td:nth-child(2):not(.ms-actcol) {
   min-width: 0;
   white-space: nowrap;
 }
-/* Contact — "Edwin T. K. Fung, Dennis H.N. Chung +8" 처럼 담당자 두 명 + "+N" 요약이
-   기본이라 150px 로는 거의 모든 행이 두 줄로 접혔다. 폭을 내용에 맡기고(auto — 남는
-   폭을 회사명 칸이 전부 가져가지 않게) 넉넉한 최소폭을 준다: 두 명 + "+N" 이 한 줄에
-   담기는 폭(≈260px)에 여유를 얹은 값. */
+/* Contact — 폭을 내용에 맡긴다(auto). 최소폭을 300px 로 못 박아 두었었는데, 그것이
+   담당자가 "PIC" 한 단어뿐인 공급사 표에서도 300px 를 통째로 물고 있어 오른쪽 취급품목
+   칸이 화면 밖으로 밀렸다. 고객 표처럼 "Edwin T. K. Fung, Stephen M.H. Chan +8" 이
+   들어가는 곳에서는 auto 분배가 내용 길이에 비례해 알아서 폭을 준다 — 회사명 칸이 남는
+   폭을 독차지하지 않게 된 지금은(위 width:1%) 그 분배가 실제로 작동한다.
+   최소폭은 한 사람 이름이 한 줄에 담기는 정도만 남긴다. */
 table.mini.wide.ms-table th:nth-child(3):not(.ms-actcol),
 table.mini.wide.ms-table td:nth-child(3):not(.ms-actcol) {
   width: auto;
-  min-width: 300px;
+  min-width: 150px;
 }
 /* 그 뒤 열(Vendor 의 Specialization 등). */
 table.mini.wide.ms-table th:nth-child(n + 4):not(.ms-actcol),
