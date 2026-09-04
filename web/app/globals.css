@@ -1826,6 +1826,34 @@ table.mini.wide td.ms-actcol {
   gap: 0 20px;
   align-items: start;
 }
+/* ── 표만 굴리기(ms-scroll) ────────────────────────────────────────────────
+   거래선 명부는 서른다섯 줄이 넘는다. 페이지째 굴리면 아래로 갈수록 열 이름이 사라져,
+   어느 칸이 지역이고 어느 칸이 제조사인지 확인하려고 매번 맨 위로 되올라가야 했다.
+   표 상자에 높이를 주어 그 안에서만 굴리고, 머리줄은 상자 위에 붙여 둔다.
+
+   높이는 화면에서 위쪽 붙박이(상단바·설정 탭·거래선 갈래·도구줄)를 뺀 만큼이다.
+   화면이 짧으면 그 뺄셈이 음수에 가까워지므로 바닥(min-height)을 깔아 둔다 — 그때는
+   페이지가 대신 굴러가는 편이 표가 세 줄만 보이는 것보다 낫다. */
+.ms-scroll {
+  max-height: calc(100vh - 296px);
+  min-height: 280px;
+  overflow: auto;
+}
+/* 세로로 굴려도 머리 칸은 남는다(page-fill 이 쓰는 규칙과 같다).
+   메뉴가 달린 머리 칸(.pl-th)은 제 규칙에서 position:relative 를 받으므로 여기서 다시
+   못 박지 않으면 그 칸만 굴러 올라간다 = 머리줄이 반쪽만 붙는다. */
+.ms-scroll table.mini thead th,
+.ms-scroll table.mini.ms-table thead th.pl-th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  /* border-collapse 표에서 아래 테두리는 칸이 아니라 표 격자에 그려져 함께 붙어 오지
+     않는다 — 굴리면 머리줄 밑줄만 사라진다. 그림자로 같은 자리에 한 줄 더 긋는다. */
+  box-shadow: inset 0 -1px 0 var(--line);
+}
+/* 굴리는 상자 안에서는 표가 제 아래 모서리를 둥글게 가질 수 없다(잘린다) — 상자가 든다. */
+.ms-scroll table.mini { border-radius: 0; }
+
 .ms-2col > .table-wrap {
   min-width: 0;
 }

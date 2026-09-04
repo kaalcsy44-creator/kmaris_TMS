@@ -1032,6 +1032,7 @@ function MakersTab() {
                           r.regions.join(" "), r.website].join(" ")}
       printCols={makerPrintCols(catText)}
       importKind="makers"
+      scrollBody
       columns={[
         ["name", "Company name", (r) => (
           <span className="cust-name">
@@ -1156,6 +1157,7 @@ function CustomersTab() {
       searchText={contactSearchText}
       printCols={customerPrintCols}
       importKind="customers"
+      scrollBody
       group={{
         by: (r) => r.name,
         cells: (rs, open) => [
@@ -2260,6 +2262,7 @@ function VendorsTab() {
       searchText={(r) => `${contactSearchText(r)} ${makerText(r.maker_ids)}`}
       printCols={vendorPrintCols(catText, makerText)}
       importKind="vendors"
+      scrollBody
       group={{
         by: (r) => r.name,
         cells: (rs, open) => [
@@ -4289,6 +4292,7 @@ function MasterSection<T extends { id: number }>({
   headCols,
   printCols,
   importKind,
+  scrollBody = false,
 }: {
   title: string;
   empty: T;
@@ -4350,6 +4354,10 @@ function MasterSection<T extends { id: number }>({
   // 머리 칸에서 거는 정렬·필터. columns 의 키와 같은 key 를 준 열만 메뉴가 달리고,
   // 나머지는 평범한 머리 칸으로 남는다. 안 주면 표는 지금까지와 똑같이 그려진다.
   headCols?: HeadCol<T>[];
+  // 표만 굴린다 — 화면 위쪽(페이지 탭·거래선 갈래·도구줄)과 표의 머리줄은 그 자리에
+  // 남는다. 서른다섯 줄짜리 목록에서 아래로 내려가면 열 이름이 사라져, 어느 칸이
+  // 무엇인지 확인하려고 매번 맨 위로 되올라가야 했다.
+  scrollBody?: boolean;
   // 엑셀 업로드. 주면 도구줄에 ⬆ Import 가 선다(마스터 입력·수정 권한이 있을 때만) —
   // 파일 한 장이 명부 전체를 건드릴 수 있어, 만드는 권한과 고치는 권한을 둘 다 본다.
   importKind?: PartnerImportKind;
@@ -4759,7 +4767,9 @@ function MasterSection<T extends { id: number }>({
           ))}
         </div>
       ) : (
-        <div className="table-wrap">{table(group ? groups : null)}</div>
+        <div className={`table-wrap${scrollBody ? " ms-scroll" : ""}`}>
+          {table(group ? groups : null)}
+        </div>
       )}
       {/* 열린 열 메뉴는 표 바깥에 띄운다(표 안에 두면 칸 폭에 갇힌다). */}
       {head.renderMenu()}
