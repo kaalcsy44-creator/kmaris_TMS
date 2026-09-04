@@ -330,7 +330,7 @@ function CompanyTab() {
   // 저장 후/기본: 정리된 읽기 화면
   if (!editing) {
     return (
-      <div className="panel">
+      <div className="panel company-panel">
         <div className="company-logo">
           <img src="/brand/kmaris-logo.png" alt="K-MARIS Energy & Solutions" />
         </div>
@@ -373,7 +373,7 @@ function CompanyTab() {
 
   // 수정: 입력 폼
   return (
-    <div className="panel">
+    <div className="panel company-panel">
       <div className="company-logo">
         <img src="/brand/kmaris-logo.png" alt="K-MARIS Energy & Solutions" />
       </div>

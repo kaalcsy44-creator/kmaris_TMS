@@ -2126,36 +2126,40 @@ table.perm-matrix tr.perm-group:first-child td {
 .company-view {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px 28px;
-  margin: 4px 0 18px;
+  gap: 7px 28px;
+  margin: 2px 0 10px;
 }
+/* 라벨을 값 위가 아니라 왼쪽에 둔다 — 항목마다 두 줄을 쓰면 읽을 것보다 빈칸이
+   더 많아진다. 라벨 폭을 고정해 값의 시작선이 세로로 맞는다. */
 .company-view > div {
   display: flex;
-  flex-direction: column;
-  gap: 3px;
+  align-items: baseline;
+  gap: 10px;
   min-width: 0;
 }
 .company-view dt {
+  flex: 0 0 112px;
   font-size: 11px;
   color: #8a95a5;
   font-weight: 600;
 }
 .company-view dd {
   margin: 0;
-  font-size: 13.5px;
+  min-width: 0;
+  font-size: 13px;
   color: #1f2b3d;
   word-break: break-word;
 }
 
 /* Company 탭 머리의 회사 로고 — 이 화면이 누구의 회사 정보인지 한눈에 보이게. */
 .company-logo {
-  margin: 0 0 18px;
-  padding-bottom: 16px;
+  margin: 0 0 12px;
+  padding-bottom: 12px;
   border-bottom: 1px solid #e6eaf0;
 }
 .company-logo img {
   display: block;
-  height: 46px;
+  height: 69px;
   width: auto;
   max-width: 100%;
 }
@@ -2164,31 +2168,31 @@ table.perm-matrix tr.perm-group:first-child td {
 .bilingual-cols {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 28px;
-  margin: 4px 0 18px;
+  gap: 12px 28px;
+  margin: 2px 0 12px;
 }
 .bl-col {
   min-width: 0;
 }
 .bl-col-title {
-  margin: 0 0 12px;
-  padding-bottom: 6px;
+  margin: 0 0 8px;
+  padding-bottom: 5px;
   border-bottom: 1px solid #e6eaf0;
   font-size: 12px;
   font-weight: 700;
   color: #45526a;
 }
 .bl-common-title {
-  margin-top: 6px;
+  margin-top: 2px;
 }
 /* 이중언어 컬럼 안에서는 필드를 1열로 세로 정렬(company-view 3열을 덮어씀) */
 .bl-view {
   grid-template-columns: 1fr;
-  gap: 12px 0;
+  gap: 7px 0;
   margin: 0;
 }
 .bl-group-label {
-  margin-top: 8px;
+  margin-top: 6px;
   font-size: 10.5px;
   font-weight: 700;
   color: #8a95a5;
@@ -2197,7 +2201,18 @@ table.perm-matrix tr.perm-group:first-child td {
 }
 /* 편집 폼에서 이중언어 컬럼의 입력란 간 간격 */
 .bl-col .form-field {
-  margin-bottom: 10px;
+  margin-bottom: 7px;
+}
+/* Company 탭은 읽기 전용 정보 화면이라 여백을 다른 편집 폼보다 좁게 쓴다. */
+.company-panel {
+  padding: 14px 16px;
+}
+.company-panel .form-grid {
+  gap: 7px 10px;
+}
+.company-panel .form-actions {
+  margin-top: 12px;
+  padding-top: 12px;
 }
 @media (max-width: 720px) {
   .bilingual-cols {
