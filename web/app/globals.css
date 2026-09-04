@@ -1561,12 +1561,15 @@ table.mini.wide.ms-table thead th.pl-th.open .pl-th-btn {
   color: var(--muted, #7c8aa0);
   flex-shrink: 0;
 }
+/* 회사 줄에 바탕색을 깔지 않는다. 담당자 줄을 함께 세우던 시절에는 그 색이 "이 줄은
+   묶음의 머리다" 를 말했지만, 이제 표에 회사 줄뿐이라 모든 줄이 같은 색이 된다 —
+   무엇도 가리지 않는 색은 읽는 데 방해만 된다. 머리줄만 색을 갖는다.
+   마우스가 얹힌 줄은 그대로 남긴다: 눌리는 줄이라 어디를 누르는지는 보여야 한다. */
 .ms-table tr.ms-group > td {
-  background: #f5f8fd;
   font-weight: 600;
 }
 .ms-table tr.ms-group:hover > td {
-  background: #eaf1fb;
+  background: #eef4fc;
 }
 .ms-caret {
   flex: 0 0 auto;
