@@ -1441,6 +1441,51 @@ function contactValues(multi: string[] | undefined, flat: string | undefined): s
   return src.map((v) => (v ?? "").trim()).filter(Boolean);
 }
 
+/**
+ * 담당자 줄 안의 여러 값 칸 — 이메일·연락처·지역. 칸을 줄줄이 세우고 아래에 "+" 를 둔다.
+ *
+ * 한 칸에 쉼표로 늘어놓게 두면 값이 몇 개인지가 글자 사이에 숨고, 무엇보다 "하나 더
+ * 넣을 수 있다"는 것이 화면에 드러나지 않는다 — 담당자 한 명이 회사 메일과 개인 메일을
+ * 함께 쓰는 일은 흔한데, 쉼표를 찍어도 된다는 걸 아는 사람만 그렇게 적게 된다.
+ *
+ * 첫 값이 대표다(문서·메일이 그것을 쓴다). 그 규칙은 등록 폼의 MultiValueField 와 같고,
+ * 여기서는 표 칸에 들어가야 하므로 이름표 없이 자리 순서로만 말한다.
+ */
+function ContactMultiCell({
+  values,
+  onChange,
+  placeholder,
+  label,
+}: {
+  values: string[];
+  onChange: (next: string[]) => void;
+  placeholder: string;
+  label: string;
+}) {
+  const rows = values.length ? values : [""];
+  const set = (i: number, v: string) => onChange(rows.map((x, k) => (k === i ? v : x)));
+  return (
+    <div className="co-mv">
+      {rows.map((v, i) => (
+        <div key={i} className="co-mv-row">
+          <input
+            value={v}
+            placeholder={i === 0 ? placeholder : ""}
+            title={i === 0 ? `Primary ${label} — used on documents and emails` : label}
+            onChange={(e) => set(i, e.target.value)}
+          />
+          {rows.length > 1 ? (
+            <button type="button" className="co-mv-del" title={`Remove this ${label}`}
+                    onClick={() => onChange(rows.filter((_, k) => k !== i))}>✕</button>
+          ) : null}
+        </div>
+      ))}
+      <button type="button" className="co-mv-add"
+              onClick={() => onChange([...rows, ""])}>＋ {label}</button>
+    </div>
+  );
+}
+
 /** 회사 정보 창이 옆 회사로 건너뛸 때 쓰는 한 걸음 — 어디로 가는지(name)와 가는 법(go). */
 type CompanyNav = { name: string; go: () => void };
 
@@ -1546,11 +1591,11 @@ function CompanyInfoModal<
   // 방금 지운 담당자. 창이 든 rows 는 열 때 찍은 사진이라 목록이 새로 그려져도 바뀌지
   // 않는다 — 지운 사람이 그대로 남아 있으면 지워졌는지 아닌지를 알 수 없다.
   const [gone, setGone] = useState<Set<number>>(new Set());
-  // 그 자리에서 고치는 담당자 한 명. 여러 값(메일·연락처·지역)은 쉼표로 늘어놓은 글로
-  // 든다 — 한 글자 칠 때마다 쉼표로 쪼개면 "a, b" 를 칠 수가 없다(공백이 곧 사라진다).
-  // 쪼개는 것은 저장할 때 한 번이다.
+  // 그 자리에서 고치는 담당자 한 명. 여러 값(메일·연락처·지역)은 칸을 줄줄이 세워
+  // 받는다 — 쉼표로 늘어놓게 두면 값이 몇 개인지가 글자 사이에 숨고, 무엇보다 "하나 더
+  // 넣을 수 있다"는 것이 화면에 드러나지 않는다. 첫 값이 대표다(문서·메일이 그것을 쓴다).
   const [draft, setDraft] = useState<
-    { row: T; emails: string; phones: string; regions: string } | null
+    { row: T; emails: string[]; phones: string[]; regions: string[] } | null
   >(null);
   // 저장한 값. rows 는 창을 열 때 찍은 사진이라, 고친 줄을 여기에 얹어 보여 준다.
   const [edits, setEdits] = useState<Record<number, T>>({});
@@ -1574,10 +1619,12 @@ function CompanyInfoModal<
   // 새 줄인가 — id 가 아직 없다(만들어지면 서버가 준다).
   const addingNew = !!draft && draft.row.id === 0;
 
-  const asText = (list: string[] | undefined, flat: string) =>
-    contactValues(list, flat).join(", ");
-  const asList = (text: string) =>
-    text.split(",").map((v) => v.trim()).filter(Boolean);
+  // 빈 칸이 하나는 있어야 새 값을 칠 자리가 생긴다.
+  const asRows = (list: string[] | undefined, flat: string) => {
+    const v = contactValues(list, flat);
+    return v.length ? v : [""];
+  };
+  const asList = (rows: string[]) => rows.map((v) => v.trim()).filter(Boolean);
 
   /** 새 담당자 한 줄 — 회사 것은 첫 담당자에게서 그대로 물려받고 사람 것만 비운다.
    *  목록에서 담당자를 더할 때와 같은 규칙이다(withCompanyDefaults). */
@@ -1592,7 +1639,7 @@ function CompanyInfoModal<
         emails: [], phones: [], regions: [],
         email: "", contact_phone: "", country: "",
       },
-      emails: "", phones: "", regions: "",
+      emails: [""], phones: [""], regions: [""],
     });
   }
 
@@ -1610,9 +1657,9 @@ function CompanyInfoModal<
           contact: card.contact_name || d.row.contact,
           duty: card.job_title || d.row.duty,
         },
-        emails: (card.emails ?? []).join(", ") || d.emails,
-        phones: (card.phones ?? []).join(", ") || d.phones,
-        regions: (card.regions ?? []).join(", ") || d.regions,
+        emails: card.emails?.length ? [...card.emails] : d.emails,
+        phones: card.phones?.length ? [...card.phones] : d.phones,
+        regions: card.regions?.length ? [...card.regions] : d.regions,
       }));
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Could not read the card");
@@ -1625,9 +1672,9 @@ function CompanyInfoModal<
     setErr("");
     setDraft({
       row: { ...row },
-      emails: asText(row.emails, row.email),
-      phones: asText(row.phones, row.contact_phone),
-      regions: asText(row.regions, row.country),
+      emails: asRows(row.emails, row.email),
+      phones: asRows(row.phones, row.contact_phone),
+      regions: asRows(row.regions, row.country),
     });
   }
 
@@ -1806,16 +1853,19 @@ function CompanyInfoModal<
                                  onChange={(e) => setRow({ duty: e.target.value } as Partial<T>)} />
                         </td>
                         <td>
-                          <input value={draft.emails} placeholder="a@x.com, b@x.com"
-                                 onChange={(e) => set({ emails: e.target.value })} />
+                          <ContactMultiCell label="email" placeholder="name@company.com"
+                                            values={draft.emails}
+                                            onChange={(emails) => set({ emails })} />
                         </td>
                         <td>
-                          <input value={draft.phones} placeholder="+65 1234 5678"
-                                 onChange={(e) => set({ phones: e.target.value })} />
+                          <ContactMultiCell label="phone" placeholder="+65 1234 5678"
+                                            values={draft.phones}
+                                            onChange={(phones) => set({ phones })} />
                         </td>
                         <td>
-                          <input value={draft.regions} placeholder="Singapore"
-                                 onChange={(e) => set({ regions: e.target.value })} />
+                          <ContactMultiCell label="region" placeholder="Singapore"
+                                            values={draft.regions}
+                                            onChange={(regions) => set({ regions })} />
                         </td>
                         {/* 손잡이는 아래 한 줄로 내린다 — 마지막 칸에 밀어 넣으면
                             칸이 좁아 단추가 세로로 쌓인다. */}
@@ -1896,16 +1946,19 @@ function CompanyInfoModal<
                              onChange={(e) => setDraft({ ...draft, row: { ...draft.row, duty: e.target.value } })} />
                     </td>
                     <td>
-                      <input value={draft.emails} placeholder="a@x.com, b@x.com"
-                             onChange={(e) => setDraft({ ...draft, emails: e.target.value })} />
+                      <ContactMultiCell label="email" placeholder="name@company.com"
+                                        values={draft.emails}
+                                        onChange={(emails) => setDraft({ ...draft, emails })} />
                     </td>
                     <td>
-                      <input value={draft.phones} placeholder="+65 1234 5678"
-                             onChange={(e) => setDraft({ ...draft, phones: e.target.value })} />
+                      <ContactMultiCell label="phone" placeholder="+65 1234 5678"
+                                        values={draft.phones}
+                                        onChange={(phones) => setDraft({ ...draft, phones })} />
                     </td>
                     <td>
-                      <input value={draft.regions} placeholder="Singapore"
-                             onChange={(e) => setDraft({ ...draft, regions: e.target.value })} />
+                      <ContactMultiCell label="region" placeholder="Singapore"
+                                        values={draft.regions}
+                                        onChange={(regions) => setDraft({ ...draft, regions })} />
                     </td>
                     <td className="co-edit-col" />
                   </tr>
