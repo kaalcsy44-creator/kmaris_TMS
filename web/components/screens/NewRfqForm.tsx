@@ -23,6 +23,7 @@ import CustomerSelect from "@/components/common/CustomerSelect";
 import { useColumnLayout } from "@/components/common/useColumnLayout";
 import CategoryCell from "@/components/common/CategoryCell";
 import MakerCell from "@/components/common/MakerCell";
+import GradeCell from "@/components/common/GradeCell";
 import { ColumnResizer, ColumnsButton } from "@/components/common/tableLayout";
 import {
   CopyRowsButton,
@@ -37,13 +38,13 @@ import {
 // 품목 표에서 폭 조절·숨김 가능한 컬럼(관리번호·순번 열 제외)과 셀 렌더 메타.
 // category 는 텍스트 입력이 아니라 분류 select 셀이다(kind: "category").
 type RfqTextColKey = "part_no" | "description" | "type" | "serial_no" | "maker" | "qty" | "remark";
-type RfqItemColKey = RfqTextColKey | "category";
+type RfqItemColKey = RfqTextColKey | "category" | "grade";
 const RFQ_ITEM_COLS: {
   key: RfqItemColKey;
   label: string;
   cellClass: string;
   num?: boolean;
-  kind?: "category" | "maker";
+  kind?: "category" | "maker" | "grade";
 }[] = [
   { key: "part_no", label: "Part No.", cellClass: "wrapcell" },
   { key: "description", label: "Description", cellClass: "desc" },
@@ -53,6 +54,8 @@ const RFQ_ITEM_COLS: {
   // Maker · Origin …)와 같은 자리에 둔다. 같은 품목이 단계를 건너가는데 칸 순서가
   // 바뀌면 눈이 매번 다시 자리를 찾아야 한다.
   { key: "maker", label: "Maker", cellClass: "wrapcell", kind: "maker" },
+  // 제조사 바로 옆 — 둘은 한 질문의 두 쪽이다("누가 만들었나" / "그 상표를 달고 있나").
+  { key: "grade", label: "Grade", cellClass: "", kind: "grade" },
   { key: "qty", label: "Qty", cellClass: "num", num: true },
   { key: "remark", label: "Remark", cellClass: "wrapcell" },
   { key: "category", label: "Category", cellClass: "", kind: "category" },
@@ -63,6 +66,7 @@ const RFQ_ITEM_DEFAULT_W: Record<string, number> = {
   type: 96,
   serial_no: 130,
   maker: 150,
+  grade: 120,
   qty: 84,
   remark: 160,
   category: 150,
@@ -75,6 +79,8 @@ type ItemRow = {
   serial_no: string;
   /** 제조사 — 등록된 메이커에서 고르거나 직접 적는다(명부에 없는 회사도 그대로 저장). */
   maker: string;
+  /** 부품 등급 — Genuine / OEM / Aftermarket / Reconditioned / Used(선택). */
+  grade: string;
   qty: string;
   remark: string;
   /** 품목 분류(선택). 저장 시 품목 마스터 분류로 반영된다. */
@@ -90,6 +96,7 @@ const EMPTY_ITEM: ItemRow = {
   type: "",
   serial_no: "",
   maker: "",
+  grade: "",
   qty: "1",
   remark: "",
   category_id: null,
@@ -273,12 +280,12 @@ export default function NewRfqForm({
   }
   // 엑셀식 편집. 이 표는 숨긴 컬럼이 렌더에서 아예 빠지므로, 열 번호 = visibleItemCols 위치이고
   // fields 도 거기서 그대로 뽑으면 된다. 값은 전부 문자열로 담기므로 numeric 은 없다.
-  // 분류(select) 컬럼은 텍스트 필드가 아니므로 빈 키로 둔다 — 붙여넣기·Ctrl+D·Copy 가
+  // 분류·등급(select) 컬럼은 텍스트 필드가 아니므로 빈 키로 둔다 — 붙여넣기·Ctrl+D·Copy 가
   // 그 자리를 건너뛴다(useItemGridKeys 가 falsy 필드 키를 무시).
   const itemKeys = useItemGridKeys<ItemRow>({
     items,
     onChange: setItems,
-    fields: visibleItemCols.map((c) => (c.kind === "category" ? "" : c.key)),
+    fields: visibleItemCols.map((c) => (c.kind === "category" || c.kind === "grade" ? "" : c.key)),
     blank: () => ({ ...EMPTY_ITEM }),
     headers: visibleItemCols.map((c) => c.label),
     sel: itemSel,
@@ -373,6 +380,7 @@ export default function NewRfqForm({
               type: it.type ?? "",
               serial_no: it.serial_no ?? "",
               maker: it.maker ?? "",
+              grade: "",   // 등급은 문서에 적혀 오는 값이 아니다 — 필요하면 수동 선택
               qty: String(it.qty ?? 1),
               remark: it.remark ?? "",
               category_id: null,   // OCR 은 분류를 알 수 없다 — 필요하면 수동 선택
@@ -455,6 +463,7 @@ export default function NewRfqForm({
               type: it.type ?? "",
               serial_no: it.serial_no ?? "",
               maker: it.maker ?? "",
+              grade: it.grade ?? "",
               qty: String(it.qty ?? 1),
               remark: it.remark ?? "",
               category_id: it.category_id ?? null,
@@ -480,6 +489,7 @@ export default function NewRfqForm({
         type: it.type,
         serial_no: it.serial_no,
         maker: it.maker,
+        grade: it.grade,
         qty: Number(it.qty) || 1,
         remark: it.remark,
         category_id: it.category_id,
@@ -1004,6 +1014,17 @@ export default function NewRfqForm({
                         onChange={(id) => setItemCategory(i, id)}
                         appliedTo={it.applied_to}
                         onAppliedToChange={(id) => setItemApplied(i, id)}
+                        disabled={!canEditThis}
+                      />
+                    </td>
+                  );
+                }
+                if (c.kind === "grade") {
+                  return (
+                    <td key={c.key}>
+                      <GradeCell
+                        value={it.grade}
+                        onChange={(v) => setItem(i, "grade", v)}
                         disabled={!canEditThis}
                       />
                     </td>

@@ -1800,6 +1800,8 @@ export type RfqItem = {
   serial_no?: string;
   /** 제조사 — 1단계에서 등록된 메이커를 고르거나 직접 적는다(명부에 없는 회사도 저장). */
   maker?: string;
+  /** 부품 등급 — Genuine / OEM / Aftermarket / Reconditioned / Used(선택). */
+  grade?: string;
   qty: number;
   unit: string;
   unit_price: number | null;

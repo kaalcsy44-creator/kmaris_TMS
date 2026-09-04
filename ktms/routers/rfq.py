@@ -346,6 +346,7 @@ def create_rfq(body: RfqCreate, user: dict = Depends(get_current_user)):
             "type": (it.type or "").strip(),
             "serial_no": (it.serial_no or "").strip(),
             "maker": (it.maker or "").strip(),
+            "grade": (it.grade or "").strip(),
             "qty": it.qty or 1,
             "remark": (it.remark or "").strip(),
             "category_id": it.category_id,   # 입력 시 고른 품목 분류(선택). 없으면 None
@@ -491,6 +492,7 @@ def update_rfq(rfq_id: int, body: RfqUpdate):
                 "type": (it.type or "").strip(),
                 "serial_no": (it.serial_no or "").strip(),
                 "maker": (it.maker or "").strip(),
+                "grade": (it.grade or "").strip(),
                 "qty": it.qty or 1,
                 "remark": (it.remark or "").strip(),
                 "category_id": it.category_id,   # 입력 시 고른 품목 분류(선택)

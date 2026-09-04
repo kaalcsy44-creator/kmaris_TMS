@@ -1298,6 +1298,8 @@ def _item_view(it: dict) -> dict:
         "serial_no": it.get("serial_no") or "",
         # 제조사 — 저장은 되는데 여기서 빠져 있어 편집기로 돌아오면 늘 빈 칸이었다.
         "maker": it.get("maker") or "",
+        # 부품 등급(Genuine/OEM/…) — 제조사와 짝이라 같이 왕복한다.
+        "grade": it.get("grade") or "",
         "qty": qty,
         "unit": it.get("unit") or "",
         "unit_price": unit,
@@ -3614,6 +3616,9 @@ class RfqItemIn(BaseModel):
     # 제조사 — 메이커 명부에서 고르거나 직접 적는다. 자유 텍스트로 두는 이유는 품목
     # 마스터의 maker 칸과 같다: 고객이 물어오는 부품의 제조사가 우리 명부보다 늘 넓다.
     maker: str | None = ""
+    # 부품 등급 — Genuine / OEM / Aftermarket / Reconditioned / Used. 화면은 닫힌 목록에서
+    # 고르게 하지만 서버는 값을 강제하지 않는다: 목록이 늘어날 때 옛 딜이 막히지 않게.
+    grade: str | None = ""
     qty: float = 1
     remark: str | None = ""
     # 품목 분류(선택) — 입력 단계에서 고르면 저장 시 품목 마스터 분류로 반영된다.
