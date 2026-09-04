@@ -2116,6 +2116,8 @@ const EMPTY_VENDOR: SettingsVendor = {
 function VendorsTab() {
   const catText = useCategoryText();
   const makerText = useMakerText();
+  const makerNames = useMakerNames();
+  const catNames = useCategoryNames();
   const [company, setCompany] = useState<
     { groups: SettingsVendor[][]; index: number; editRow: (row: SettingsVendor) => void } | null
   >(null);
@@ -2184,7 +2186,15 @@ function VendorsTab() {
           <span key="r" className="ms-group-sub">{regionSummary(rs)}</span>,
           <span key="c" className="ms-group-sub">{nameSummary(rs)}</span>,
           <VendorReplyBadge key="d" total={rs[0].co_deals ?? 0} answered={rs[0].co_deals_answered ?? 0} />,
-          <VendorSpecCell key="s" rows={rs} />,
+          <span key="mk" className="ms-group-sub">
+            <MakerBadges ids={companyIds(rs, "maker_ids")} max={4} empty={<span className="dash">—</span>} />
+          </span>,
+          <span key="ct" className="ms-group-sub">
+            <CategoryBadges ids={companyIds(rs, "category_ids")} max={4} empty={<span className="dash">—</span>} />
+          </span>,
+          <span key="s" className="ms-group-sub">
+            {summarize(uniqStrings(rs.map((r) => r.specialization)), " · ", 2)}
+          </span>,
         ],
         subFirst: () => <span className="ms-sub-mark">↳</span>,
         actions: (rs, addNew, nav) => (
@@ -2207,7 +2217,7 @@ function VendorsTab() {
         newRow: (rs) => withCompanyDefaults(EMPTY_VENDOR, rs, rs[0].name),
         summary: (g, n) => `${g} vendors · ${n} contacts`,
       }}
-      headCols={vendorHeadCols}
+      headCols={vendorHeadCols(makerNames, catNames)}
       load={fetchSettingsVendors}
       create={createSettingsVendor}
       update={updateSettingsVendor}
@@ -2226,8 +2236,10 @@ function VendorsTab() {
         ["deals", "Projects",
           (r) => <VendorReplyBadge total={r.deals ?? 0} answered={r.deals_answered ?? 0} sub />,
           "ms-deals"],
-        // 분류·제조사 배지는 회사 줄이 든다(아래 group.cells) — 회사 단위 값이라
-        // 담당자마다 되풀이하면 세 담당자가 있는 회사는 같은 말을 세 번 한다.
+        // 셋 다 회사 줄이 든다(아래 group.cells) — 회사 단위 값이라 담당자마다
+        // 되풀이하면 세 담당자가 있는 회사는 같은 말을 세 번 한다.
+        ["maker_ids", "Maker", undefined, "ms-maker"],
+        ["category_ids", "Category", undefined, "ms-cat"],
         ["specialization", "Specialization", undefined, "ms-spec"],
       ]}
       fields={[
@@ -2550,14 +2562,24 @@ const customerHeadCols: HeadCol<SettingsCustomer>[] = [
     emptyLabel: "Unspecified" },
 ];
 
-/** 공급사 목록의 머리 칸 규칙. 고객과 같은 얼개에 배지 열의 뜻만 다르다. */
-const vendorHeadCols: HeadCol<SettingsVendor>[] = [
+/** 공급사 목록의 머리 칸 규칙. 고객과 같은 얼개에 배지 열의 뜻만 다르다.
+ *
+ *  제조사·분류는 값이 여러 개라 facetValues 로 하나하나를 내민다 — "YANMAR 를 대 주는
+ *  곳만" 이 이 열을 만든 이유이고, 그건 값 하나를 고르는 일이지 글귀를 찾는 일이 아니다. */
+const vendorHeadCols = (
+  makerNames: (ids?: number[] | null) => string[],
+  catNames: (ids?: number[] | null) => string[],
+): HeadCol<SettingsVendor>[] => [
   { key: "name", text: (r) => r.name || "" },
   { key: "country", text: (r) => r.country || "", filter: "facet",
     facetValues: partyRegions, emptyLabel: "No region" },
   { key: "contact", text: (r) => r.contact || "", emptyLabel: "No contact" },
   { key: "deals", text: (r) => relationState(r.deals ?? 0, r.deals_answered ?? 0, "reply"),
     sortValue: (r) => r.deals ?? 0, filter: "facet", emptyLabel: "Never asked" },
+  { key: "maker_ids", text: (r) => joinNames(makerNames(r.maker_ids)), filter: "facet",
+    facetValues: (r) => makerNames(r.maker_ids), emptyLabel: "No maker" },
+  { key: "category_ids", text: (r) => joinNames(catNames(r.category_ids)), filter: "facet",
+    facetValues: (r) => catNames(r.category_ids), emptyLabel: "Untagged" },
   { key: "specialization", text: (r) => r.specialization || "", filter: "facet",
     emptyLabel: "Unspecified" },
 ];
@@ -2573,28 +2595,14 @@ const makerHeadCols: HeadCol<SettingsMaker>[] = [
     emptyLabel: "Unspecified" },
 ];
 
-/**
- * 공급사 목록의 회사 줄 '취급품목' 칸 — 분류 배지 · 제조사 배지 · 자유 문장 셋이 선다.
- *
- * 셋 다 회사 단위 값이라 담당자 줄이 아니라 여기 선다. 배지의 값은 "가진 담당자 줄 중
- * 첫 번째" 에서 읽는다 — 회사정보 창이 그렇게 읽고 그렇게 저장하므로 같은 규칙이어야
- * 화면과 창이 다른 말을 하지 않는다.
- *
- * 배지가 하나라도 서면 빈 글에 "—" 를 찍지 않는다. 적어 둔 것이 있는데 없다고 말하는
- * 꼴이 되어서다("YANMAR —").
- */
-function VendorSpecCell({ rows }: { rows: SettingsVendor[] }) {
-  const catIds = rows.find((r) => (r.category_ids ?? []).length)?.category_ids ?? [];
-  const makerIds = rows.find((r) => (r.maker_ids ?? []).length)?.maker_ids ?? [];
-  const spec = uniqStrings(rows.map((r) => r.specialization));
-  const hasBadge = catIds.length > 0 || makerIds.length > 0;
-  return (
-    <span className="ms-group-sub">
-      <CategoryBadges ids={catIds} max={3} />
-      <MakerBadges ids={makerIds} max={3} />
-      {spec.length ? summarize(spec, " · ", 2) : hasBadge ? "" : "—"}
-    </span>
-  );
+/** 회사 단위 태그(분류·제조사)를 담당자 줄들에서 읽는다 — 가진 줄 중 첫 번째.
+ *  회사정보 창이 그렇게 읽고 그렇게 저장하므로, 목록도 같은 규칙이어야 둘이 다른 말을
+ *  하지 않는다(담당자마다 값이 갈려 있어도 저장하면 하나로 통일된다). */
+function companyIds(
+  rows: SettingsVendor[],
+  key: "category_ids" | "maker_ids",
+): number[] {
+  return rows.find((r) => (r[key] ?? []).length)?.[key] ?? [];
 }
 
 /* ── 인쇄용 칸 — 종이는 화면보다 넓다 ─────────────────────────────────────────
@@ -2608,26 +2616,36 @@ function ratioText(total: number, hit: number, tail = ""): string {
   return `${hit}/${total}${tail}`;
 }
 
-/** 대 줄 수 있는 제조사를 인쇄용 글자로 — 배지가 종이에서는 이름의 나열이 된다. */
-function useMakerText(): (ids?: number[] | null) => string {
+/** 대 줄 수 있는 제조사의 이름 목록. 머리 칸 필터(값 하나하나로 고르기)가 쓴다. */
+function useMakerNames(): (ids?: number[] | null) => string[] {
   const makers = useMakerOptions();
   return (ids) => {
     const by = new Map(makers.map((m) => [m.id, m.name]));
-    return (ids ?? []).map((id) => by.get(id)).filter(Boolean).join(" · ");
+    return (ids ?? []).map((id) => by.get(id)).filter((n): n is string => !!n);
   };
 }
 
-/** 분류 태그를 인쇄용 글자로. 배지에 적히던 마지막 마디를 가운뎃점으로 잇는다. */
-function useCategoryText(): (ids?: number[] | null) => string {
+/** 분류 태그의 이름 목록 — 배지에 적히는 마지막 마디만(경로 전체는 좁은 칸에 안 든다). */
+function useCategoryNames(): (ids?: number[] | null) => string[] {
   const options = useVendorCategoryOptions();
   return (ids) => {
     const by = new Map(options.map((o) => [o.id, o.path]));
     return (ids ?? [])
       .map((id) => by.get(id))
       .filter((p): p is string => !!p)
-      .map((path) => path.split(">").pop()?.trim() || path)
-      .join(" · ");
+      .map((path) => path.split(">").pop()?.trim() || path);
   };
+}
+
+/** 위 두 목록을 한 줄로 — 인쇄물과 검색이 쓴다(배지는 종이에서 이름의 나열이 된다). */
+const joinNames = (list: string[]) => list.join(" · ");
+function useMakerText(): (ids?: number[] | null) => string {
+  const names = useMakerNames();
+  return (ids) => joinNames(names(ids));
+}
+function useCategoryText(): (ids?: number[] | null) => string {
+  const names = useCategoryNames();
+  return (ids) => joinNames(names(ids));
 }
 
 /** 취급품목 칸 — 태그와 자유 문장을 한 칸에 잇는다(둘 다 화면에서 한 칸이었다). */

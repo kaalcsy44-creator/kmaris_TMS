@@ -1326,7 +1326,18 @@ table.mini.wide.ms-table td:nth-child(n + 4):not(.ms-actcol) {
 table.mini.wide.ms-table th.ms-spec:not(.ms-actcol),
 table.mini.wide.ms-table td.ms-spec:not(.ms-actcol) {
   width: auto;
-  min-width: 320px;
+  min-width: 240px;
+}
+/* 제조사·분류 — 배지가 서는 칸. 취급품목(문장)과 달리 낱말 배지라 폭이 덜 필요하지만,
+   120px 로는 배지 하나에 한 줄씩 접혀 회사 줄이 세로로 길어진다. 배지 두 개가 한 줄에
+   담기는 폭을 최소로 잡고 나머지는 내용에 맡긴다(앞 nth-child 규칙과 클래스 수를 맞춰야
+   이긴다 — :not 포함 5개). */
+table.mini.wide.ms-table th.ms-maker:not(.ms-actcol),
+table.mini.wide.ms-table td.ms-maker:not(.ms-actcol),
+table.mini.wide.ms-table th.ms-cat:not(.ms-actcol),
+table.mini.wide.ms-table td.ms-cat:not(.ms-actcol) {
+  width: auto;
+  min-width: 180px;
 }
 /* Projects — 배지 두 조각이 한 줄에 담기는 폭만. 위 nth-child(n+4) 의 120px 를 이겨야
    하므로 .ms-spec 과 같은 모양으로 쓰고 그 뒤에 둔다(클래스 수가 같아 순서로 이긴다). */
