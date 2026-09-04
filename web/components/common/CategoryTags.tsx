@@ -15,8 +15,9 @@
 // 깊이는 중분류(2단계)까지다. 소분류까지 태그하면 벤더 하나가 스무 개를 달아 배지가
 // 회사 이름을 덮는다. 소분류의 실적은 서버가 중분류로 접어 올린다(VENDOR_TAG_LEVEL).
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useCategoryOptions, type CategoryOption } from "@/components/common/CategoryCell";
+import TagPickMenu from "@/components/common/TagPickMenu";
 
 /** 배지로 쓸 수 있는 분류만 — 대(1)·중(2)분류. 소분류는 너무 잘다. */
 export function useVendorCategoryOptions(): CategoryOption[] {
@@ -94,21 +95,10 @@ export function CategoryTagPicker({
   disabled?: boolean;
 }) {
   const options = useVendorCategoryOptions();
-  const [adding, setAdding] = useState("");
   const picked = pick(options, value);
   const chosen = new Set(value);
-
-  // 아직 안 고른 것만 고르는 칸에 남긴다 — 이미 단 배지를 또 고르게 할 이유가 없다.
-  const addable = options.filter((o) => !chosen.has(o.id));
   // 제안 중 아직 안 단 것. 이미 다 달았으면 단추를 흐리게 두지 않고 그 사실을 적는다.
   const fresh = (suggestions ?? []).filter((s) => !chosen.has(s.id));
-
-  function add(id: number) {
-    if (!id || chosen.has(id)) return;
-    // 트리 순서를 그대로 따라 세운다 — 고른 순서로 두면 같은 회사가 볼 때마다 다르게 선다.
-    const next = options.filter((o) => o.id === id || chosen.has(o.id)).map((o) => o.id);
-    onChange(next);
-  }
 
   return (
     <div className="form-field cat-picker">
@@ -126,15 +116,14 @@ export function CategoryTagPicker({
       </div>
       {disabled ? null : (
         <div className="cat-picker-add">
-          <select
-            value={adding}
-            onChange={(e) => { add(Number(e.target.value)); setAdding(""); }}
-          >
-            <option value="">— Add a category —</option>
-            {addable.map((o) => (
-              <option key={o.id} value={o.id}>{o.path}</option>
-            ))}
-          </select>
+          {/* 한 번에 여러 개. 분류는 한 회사에 서너 개가 보통이라, 고를 때마다 목록이
+              닫히면 같은 트리를 그 횟수만큼 다시 훑게 된다. */}
+          <TagPickMenu
+            label="— Add categories —"
+            options={options.map((o) => ({ id: o.id, name: o.path }))}
+            value={value}
+            onChange={onChange}
+          />
           {suggestions?.length ? (
             <button
               type="button"

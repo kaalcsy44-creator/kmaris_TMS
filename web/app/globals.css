@@ -1641,6 +1641,113 @@ table.mini.wide.ms-table thead th.pl-th.open .pl-th-btn {
   width: 13px; height: 13px; object-fit: contain;
   border-radius: 2px; background: #fff;
 }
+/* ── 태그 여러 개 고르는 메뉴(TagPickMenu) ───────────────────────────────
+   분류·제조사 태그 칸이 함께 쓴다. 겉은 네이티브 select 처럼 보이되(같은 자리에 있던
+   것이라 모양이 바뀌면 다른 칸으로 읽힌다) 안은 체크 목록이라 골라도 닫히지 않는다. */
+.tpm { flex: 1 1 260px; min-width: 0; }
+.tpm-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  font-size: 13px;
+  text-align: left;
+  color: var(--navy);
+  background: #fff;
+  border: 1px solid #c7d0de;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.tpm-btn:hover:not(:disabled) { border-color: #9fb4d0; }
+.tpm-btn:disabled { background: #f4f6f9; color: var(--muted); cursor: default; }
+.tpm-btn > span:first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tpm-caret { flex: 0 0 auto; color: #8a96a8; font-size: 10px; }
+.tpm-menu {
+  z-index: 2000;
+  min-width: 300px;
+  padding: 6px;
+  background: #fff;
+  border: 1px solid #c7d0de;
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(20, 35, 65, 0.22);
+}
+.tpm-search {
+  width: 100%;
+  padding: 6px 9px;
+  margin-bottom: 6px;
+  font-size: 13px;
+  border: 1px solid var(--line-strong, #cbd8e8);
+  border-radius: 6px;
+}
+.tpm-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 300px;
+  overflow-y: auto;
+}
+.tpm-opt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 8px;
+  font-size: 13px;
+  text-align: left;
+  background: none;
+  border: 0;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.tpm-opt:hover { background: #eef3fb; }
+.tpm-opt.on { background: #e1ebfb; }
+/* 체크 자리는 켜지지 않아도 폭을 지킨다 — 없으면 고를 때마다 글자가 옆으로 밀린다. */
+.tpm-check {
+  flex: 0 0 auto;
+  width: 14px; height: 14px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid #c7d0de;
+  border-radius: 3px;
+  background: #fff;
+  color: #fff;
+  font-size: 10px;
+  line-height: 1;
+}
+.tpm-check.on { background: var(--blue, #0055a8); border-color: var(--blue, #0055a8); }
+.tpm-logo {
+  flex: 0 0 auto;
+  width: 18px; height: 18px;
+  object-fit: contain;
+  border-radius: 3px;
+  background: #fff;
+}
+.tpm-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tpm-sub { flex: 0 0 auto; font-size: 11px; color: #8a96a8; }
+.tpm-empty { padding: 10px 8px; font-size: 12.5px; color: #8a96a8; text-align: center; }
+.tpm-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px solid #eef2f7;
+}
+.tpm-count { font-size: 11.5px; color: #6b7684; }
+
 .cat-picker { gap: 6px; }
 .cat-picker-tags { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; min-height: 20px; }
 .cat-picker-add { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }

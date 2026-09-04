@@ -17,6 +17,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import TagPickMenu from "@/components/common/TagPickMenu";
 import { fetchSettingsMakers } from "@/lib/api";
 import { useCachedData } from "@/lib/useCachedData";
 import type { SettingsMaker } from "@/lib/types";
@@ -285,17 +286,8 @@ export function MakerTagPicker({
   disabled?: boolean;
 }) {
   const makers = useMakerOptions();
-  const [adding, setAdding] = useState("");
-  const chosen = new Set(value);
   const by = new Map(makers.map((m) => [m.id, m]));
   const picked = value.map((id) => by.get(id)).filter((m): m is SettingsMaker => !!m);
-  const addable = makers.filter((m) => !chosen.has(m.id));
-
-  function add(id: number) {
-    if (!id || chosen.has(id)) return;
-    // 명부 순서(이름순)를 그대로 따른다 — 고른 순서로 두면 같은 회사가 볼 때마다 다르게 선다.
-    onChange(makers.filter((m) => m.id === id || chosen.has(m.id)).map((m) => m.id));
-  }
 
   return (
     <div className="form-field cat-picker">
@@ -314,17 +306,15 @@ export function MakerTagPicker({
       </div>
       {disabled ? null : (
         <div className="cat-picker-add">
-          <select
-            value={adding}
-            onChange={(e) => { add(Number(e.target.value)); setAdding(""); }}
-          >
-            <option value="">— Add a maker —</option>
-            {addable.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name}{m.country ? ` · ${m.country}` : ""}
-              </option>
-            ))}
-          </select>
+          {/* 분류 태그와 같은 메뉴 — 한 벤더가 대 주는 제조사도 대개 여럿이다. */}
+          <TagPickMenu
+            label="— Add makers —"
+            options={makers.map((m) => ({
+              id: m.id, name: m.name, sub: m.country || undefined, logo: m.logo || undefined,
+            }))}
+            value={value}
+            onChange={onChange}
+          />
         </div>
       )}
       <span className="hint-inline">
