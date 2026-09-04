@@ -10540,6 +10540,29 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   border-bottom: 1px dashed #b7e3c8;
 }
 .co-contacts tr.co-row-new input { border-color: #c6e3d4; }
+/* 고치는·만드는 줄의 손잡이 — 입력칸 아래 한 줄로 나란히. 마지막 칸에 밀어 넣으면
+   그 칸이 좁아 단추가 세로로 쌓이고, 표 오른쪽만 위아래로 길어진다. */
+.co-contacts tr.co-row-tools > td {
+  padding-top: 0;
+  border-bottom: 1px solid var(--line);
+  background: #f2f7fe;
+  white-space: normal;
+}
+.co-contacts tr.co-row-tools--new > td {
+  background: #f4fbf6;
+  border-top: 0;
+  border-bottom: 1px dashed #b7e3c8;
+}
+/* 고치는 줄의 아래 테두리는 손잡이 줄이 든다 — 둘은 한 덩어리다. */
+.co-contacts tr.co-row-edit > td { border-bottom: 0; }
+.co-tools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+/* 명함 스캔과 저장·취소를 갈라 놓는다 — 채우는 일과 끝내는 일은 다른 손짓이다. */
+.co-tools-gap { flex: 1 1 auto; }
 /* "+ 담당자 추가" 는 머리글 오른쪽 끝으로 — 명단의 제목이지 명단의 한 줄이 아니다. */
 .co-contacts-add { margin-left: auto; text-transform: none; letter-spacing: 0; }
 .co-contacts-none {

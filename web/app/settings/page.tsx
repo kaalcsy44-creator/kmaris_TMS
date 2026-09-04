@@ -1803,7 +1803,8 @@ function CompanyInfoModal<
                     const set = (patch: Partial<typeof draft>) => setDraft({ ...draft, ...patch });
                     const setRow = (patch: Partial<T>) => set({ row: { ...draft.row, ...patch } });
                     return (
-                      <tr key={r.id} className="co-row-edit">
+                      <Fragment key={r.id}>
+                      <tr className="co-row-edit">
                         <td>
                           <input value={draft.row.contact} placeholder="Name"
                                  onChange={(e) => setRow({ contact: e.target.value } as Partial<T>)} />
@@ -1824,13 +1825,21 @@ function CompanyInfoModal<
                           <input value={draft.regions} placeholder="Singapore"
                                  onChange={(e) => set({ regions: e.target.value })} />
                         </td>
-                        <td className="co-edit-col">
-                          <button type="button" className="btn tiny primary" disabled={busy}
-                                  onClick={saveContact} title="Save this contact">✓</button>
-                          <button type="button" className="btn tiny" disabled={busy}
-                                  onClick={() => { setDraft(null); setErr(""); }} title="Cancel">✕</button>
+                        {/* 손잡이는 아래 한 줄로 내린다 — 마지막 칸에 밀어 넣으면
+                            칸이 좁아 단추가 세로로 쌓인다. */}
+                        <td className="co-edit-col" />
+                      </tr>
+                      <tr key={`${r.id}-tools`} className="co-row-tools">
+                        <td colSpan={6}>
+                          <div className="co-tools">
+                            <button type="button" className="btn sm primary" disabled={busy}
+                                    onClick={saveContact}>✓ Save</button>
+                            <button type="button" className="btn sm" disabled={busy}
+                                    onClick={() => { setDraft(null); setErr(""); }}>✕ Cancel</button>
+                          </div>
                         </td>
                       </tr>
+                      </Fragment>
                     );
                   }
                   const mails = contactValues(r.emails, r.email);
@@ -1906,22 +1915,30 @@ function CompanyInfoModal<
                       <input value={draft.regions} placeholder="Singapore"
                              onChange={(e) => setDraft({ ...draft, regions: e.target.value })} />
                     </td>
-                    <td className="co-edit-col">
-                      {/* 명함 스캔은 남긴다 — 새 사람을 만드는 가장 빠른 길이고, 창을
-                          없앴다고 그 길까지 없앨 이유는 없다. 회사는 이미 정해져 있으므로
-                          이름·직책·연락처만 받아 온다. */}
-                      <input ref={cardRef} className="pimp-file-input" type="file"
-                             accept="image/png,image/jpeg,image/webp,application/pdf"
-                             onChange={(e) => { scanCard(e.target.files?.[0] ?? null); e.target.value = ""; }} />
-                      <button type="button" className="btn tiny" disabled={busy || scanning}
-                              onClick={() => cardRef.current?.click()}
-                              title="Fill from a business card">
-                        {scanning ? "…" : "📇"}
-                      </button>
-                      <button type="button" className="btn tiny primary" disabled={busy || scanning}
-                              onClick={saveContact} title="Add this contact">✓</button>
-                      <button type="button" className="btn tiny" disabled={busy}
-                              onClick={() => { setDraft(null); setErr(""); }} title="Cancel">✕</button>
+                    <td className="co-edit-col" />
+                  </tr>
+                ) : null}
+                {addingNew && draft ? (
+                  <tr className="co-row-tools co-row-tools--new">
+                    <td colSpan={6}>
+                      <div className="co-tools">
+                        {/* 명함 스캔은 남긴다 — 새 사람을 만드는 가장 빠른 길이고, 창을
+                            없앴다고 그 길까지 없앨 이유는 없다. 회사는 이미 정해져 있으므로
+                            이름·직책·연락처만 받아 온다. */}
+                        <input ref={cardRef} className="pimp-file-input" type="file"
+                               accept="image/png,image/jpeg,image/webp,application/pdf"
+                               onChange={(e) => { scanCard(e.target.files?.[0] ?? null); e.target.value = ""; }} />
+                        <button type="button" className="btn sm" disabled={busy || scanning}
+                                onClick={() => cardRef.current?.click()}
+                                title="Fill this row from a business card photo or PDF">
+                          {scanning ? "📇 Reading…" : "📇 Scan card"}
+                        </button>
+                        <span className="co-tools-gap" />
+                        <button type="button" className="btn sm primary" disabled={busy || scanning}
+                                onClick={saveContact}>✓ Add</button>
+                        <button type="button" className="btn sm" disabled={busy}
+                                onClick={() => { setDraft(null); setErr(""); }}>✕ Cancel</button>
+                      </div>
                     </td>
                   </tr>
                 ) : null}
