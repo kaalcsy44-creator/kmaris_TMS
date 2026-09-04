@@ -2184,13 +2184,7 @@ function VendorsTab() {
           <span key="r" className="ms-group-sub">{regionSummary(rs)}</span>,
           <span key="c" className="ms-group-sub">{nameSummary(rs)}</span>,
           <VendorReplyBadge key="d" total={rs[0].co_deals ?? 0} answered={rs[0].co_deals_answered ?? 0} />,
-          <span key="s" className="ms-group-sub">
-            <CategoryBadges
-              ids={rs.find((r) => (r.category_ids ?? []).length)?.category_ids}
-              max={3}
-            />
-            {summarize(uniqStrings(rs.map((r) => r.specialization)), " · ", 2)}
-          </span>,
+          <VendorSpecCell key="s" rows={rs} />,
         ],
         subFirst: () => <span className="ms-sub-mark">↳</span>,
         actions: (rs, addNew, nav) => (
@@ -2232,16 +2226,9 @@ function VendorsTab() {
         ["deals", "Projects",
           (r) => <VendorReplyBadge total={r.deals ?? 0} answered={r.deals_answered ?? 0} sub />,
           "ms-deals"],
-        // 취급품목 칸 하나에 셋이 선다: 분류 배지 · 제조사 배지 · 자유 문장. 열을 더
-        // 벌리지 않는 이유는 셋이 한 질문의 세 결이라서다 — 무엇을 다루나, 누구 것을
-        // 대 주나, 그리고 트리에도 명부에도 없는 나머지.
-        ["specialization", "Specialization", (r) => (
-          <>
-            <CategoryBadges ids={r.category_ids} max={2} />
-            <MakerBadges ids={r.maker_ids} max={2} />
-            {r.specialization || ""}
-          </>
-        ), "ms-spec"],
+        // 분류·제조사 배지는 회사 줄이 든다(아래 group.cells) — 회사 단위 값이라
+        // 담당자마다 되풀이하면 세 담당자가 있는 회사는 같은 말을 세 번 한다.
+        ["specialization", "Specialization", undefined, "ms-spec"],
       ]}
       fields={[
         ["name", "Vendor *"],
@@ -2585,6 +2572,30 @@ const makerHeadCols: HeadCol<SettingsMaker>[] = [
   { key: "specialization", text: (r) => r.specialization || "", filter: "facet",
     emptyLabel: "Unspecified" },
 ];
+
+/**
+ * 공급사 목록의 회사 줄 '취급품목' 칸 — 분류 배지 · 제조사 배지 · 자유 문장 셋이 선다.
+ *
+ * 셋 다 회사 단위 값이라 담당자 줄이 아니라 여기 선다. 배지의 값은 "가진 담당자 줄 중
+ * 첫 번째" 에서 읽는다 — 회사정보 창이 그렇게 읽고 그렇게 저장하므로 같은 규칙이어야
+ * 화면과 창이 다른 말을 하지 않는다.
+ *
+ * 배지가 하나라도 서면 빈 글에 "—" 를 찍지 않는다. 적어 둔 것이 있는데 없다고 말하는
+ * 꼴이 되어서다("YANMAR —").
+ */
+function VendorSpecCell({ rows }: { rows: SettingsVendor[] }) {
+  const catIds = rows.find((r) => (r.category_ids ?? []).length)?.category_ids ?? [];
+  const makerIds = rows.find((r) => (r.maker_ids ?? []).length)?.maker_ids ?? [];
+  const spec = uniqStrings(rows.map((r) => r.specialization));
+  const hasBadge = catIds.length > 0 || makerIds.length > 0;
+  return (
+    <span className="ms-group-sub">
+      <CategoryBadges ids={catIds} max={3} />
+      <MakerBadges ids={makerIds} max={3} />
+      {spec.length ? summarize(spec, " · ", 2) : hasBadge ? "" : "—"}
+    </span>
+  );
+}
 
 /* ── 인쇄용 칸 — 종이는 화면보다 넓다 ─────────────────────────────────────────
    목록 화면은 한 줄에 다섯 칸까지가 한계라 이메일·전화·주소를 접어 두고, 관계의
