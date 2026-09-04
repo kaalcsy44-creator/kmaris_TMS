@@ -1684,17 +1684,9 @@ function CompanyInfoModal<
     .filter(([k]) => uniqStrings(rows.map((r) => String(r[k as keyof T] ?? ""))).length > 1)
     .map(([, label]) => label);
 
-  // 읽는 중에는 ←→ 로도 옆 회사로 넘어간다. 편집 중에는 걸지 않는다 — 칸에 글자를
-  // 치는 중이라 커서를 옮기려던 손짓이 창을 통째로 바꿔 버린다.
-  useEffect(() => {
-    if (editing) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "ArrowLeft") prev?.go();
-      else if (e.key === "ArrowRight") next?.go();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [editing, prev, next]);
+  // ←→ 로 옆 회사로 넘어가는 손짓은 없앴다. 창 밖에서 읽기만 할 때는 편했지만, 이제
+  // 담당자를 이 창 안에서 고친다 — 이름 칸에서 커서를 한 칸 옮기려는 손짓이 창을 통째로
+  // 옆 회사로 바꿔 버리고, 치던 값은 그대로 사라진다. 회사 사이 이동은 ◀ ▶ 단추가 든다.
 
   async function submit() {
     setBusy(true);
@@ -1752,11 +1744,11 @@ function CompanyInfoModal<
         {prev || next ? (
           <div className="co-nav">
             <button type="button" className="btn tiny" disabled={!prev}
-                    onClick={() => prev?.go()} title={prev ? `← ${prev.name}` : ""}>
+                    onClick={() => prev?.go()} title={prev ? `Previous company — ${prev.name}` : ""}>
               ◀ {prev ? prev.name : "—"}
             </button>
             <button type="button" className="btn tiny" disabled={!next}
-                    onClick={() => next?.go()} title={next ? `${next.name} →` : ""}>
+                    onClick={() => next?.go()} title={next ? `Next company — ${next.name}` : ""}>
               {next ? next.name : "—"} ▶
             </button>
           </div>
