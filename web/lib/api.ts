@@ -1238,12 +1238,15 @@ export function updateCompanyProfile(body: CompanyProfile): Promise<{ ok: boolea
 export function createSettingsCustomer(body: {
   name: string;
   contact?: string;
+  duty?: string;
   contact_phone?: string;
   email?: string;
   country?: string;
   address?: string;
   tax_id?: string;
   tax_invoice_email?: string;
+  specialization?: string;
+  website?: string;
   note?: string;
   payment_terms?: string;
   logo?: string;

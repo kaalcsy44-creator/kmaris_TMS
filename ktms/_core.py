@@ -3204,6 +3204,8 @@ class CustomerCreate(BaseModel):
     tax_invoice_email: str | None = ""   # 세금계산서 수신 전용 메일
     payment_terms: str | None = ""   # 기본 결제조건
     specialization: str | None = ""  # 주로 무엇을 사는 곳인가(벤더의 취급품목과 같은 자리)
+    # 회사 홈페이지(회사 단위). note 와 같은 규약 — None = 건드리지 않음.
+    website: str | None = None
     # 회사 소개 요약(회사 단위 — Company info 창에서 편집). None = 건드리지 않음.
     note: str | None = None
     logo: str | None = ""    # 회사 로고 data URL(붙여넣기). None=변경 안 함(수정 시)

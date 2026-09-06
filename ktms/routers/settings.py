@@ -243,7 +243,7 @@ def create_customer(body: CustomerCreate):
                      address=body.address or "", tax_id=body.tax_id or "",
                      tax_invoice_email=body.tax_invoice_email or "",
                      specialization=body.specialization or "",
-                     note=body.note or "",
+                     website=body.website or "", note=body.note or "",
                      payment_terms=body.payment_terms or "",
                      logo=body.logo or "")
         s.add(c)
@@ -336,6 +336,8 @@ def update_customer(row_id: int, body: CustomerCreate):
         c.tax_id = body.tax_id or ""
         c.tax_invoice_email = body.tax_invoice_email or ""
         c.specialization = body.specialization or ""
+        if body.website is not None:
+            c.website = body.website
         if body.note is not None:
             c.note = body.note
         c.payment_terms = body.payment_terms or ""

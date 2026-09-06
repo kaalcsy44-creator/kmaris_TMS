@@ -1193,14 +1193,24 @@ function CustomersTab() {
           "ms-deals"],
         ["specialization", "Specialization", undefined, "ms-spec"],
       ]}
+      // 처음 등록할 때 보이는 칸 = 🏢 Company info 창이 든 칸 그대로, 그 차례대로
+      // (거래선 쪽과 같은 규칙). 둘이 달랐던 동안에는 고객사를 새로 만들면서 홈페이지·
+      // 결제조건·로고·회사 소개를 적을 자리가 없어, 등록을 마치자마자 같은 회사를 다시
+      // 찾아 회사 정보 창을 열고 방금 손에 들고 있던 값을 처음부터 다시 적어야 했다.
       fields={[
         ["name", "Customer *"],
-        ["contact", "Contact name"],
-        ["duty", "In charge of"],
         ["address", "Address"],
-        ["specialization", "Specialization"],
         ["tax_id", "Tax ID / Business No."],
         ["tax_invoice_email", "Tax invoice email"],
+        ["website", "Website"],
+        ["payment_terms", "Payment Terms"],
+        ["logo", "Company logo"],
+        ["specialization", "Specialization"],
+        ["note", "About this company"],
+        // 여기서부터는 사람의 것 — 회사가 이미 정해진 창(담당자 추가·수정)에서는
+        // 위의 회사 칸이 통째로 빠지고 이 아래만 남는다.
+        ["contact", "Contact name"],
+        ["duty", "In charge of"],
       ]}
       required="name"
       topForm={(form, setForm) => (
@@ -1254,13 +1264,46 @@ function CustomersTab() {
             />
           );
         }
+        // 아래 넷은 회사 정보 창이 쓰는 그 부품 그대로다 — 같은 값을 받는 자리가
+        // 등록과 편집에서 다르게 생기면 무엇을 적는 칸인지 두 번 배워야 한다.
+        if (key === "payment_terms") {
+          return (
+            <PaymentTermsField
+              value={form.payment_terms}
+              onChange={(payment_terms) => setForm({ ...form, payment_terms })}
+            />
+          );
+        }
+        if (key === "logo") {
+          return <LogoPasteField value={form.logo} onChange={(logo) => setForm({ ...form, logo })} />;
+        }
+        // 취급품목·회사 소개는 문장으로 적는 칸이다 — 한 줄 칸에 넣으면 앞머리만
+        // 보여, 적어 둔 값을 확인하려면 캐럿을 끝까지 밀어야 한다(회사 정보 창과 같다).
+        if (key === "specialization" || key === "note") {
+          const area = key === "specialization"
+            ? { rows: 3, placeholder: "What they run and usually buy — bulk carriers, engine spares, deck machinery…" }
+            : { rows: 5, placeholder: "What they operate, which fleet or group they belong to, where they are based…" };
+          return (
+            <label className="form-field company-area-field">
+              <span>{label}</span>
+              <textarea
+                rows={area.rows}
+                placeholder={area.placeholder}
+                value={String(form[key] ?? "")}
+                onChange={(e) => setForm({ ...form, [key]: e.target.value })}
+              />
+            </label>
+          );
+        }
         return null;
       }}
       // 회사 것과 사람 것이 한 폼에 섞여 있었다. 담당자를 고치러 연 창에서 회사명·
       // 주소·취급품목·사업자번호까지 고칠 수 있으면, 여기서 바꾼 값이 이 사람만의
-      // 것인 줄로 읽힌다 — 실은 그 회사 담당자 전원의 값이다.
-      companyFields={["name", "address", "specialization", "tax_id", "tax_invoice_email"]}
-      // 결제조건·로고는 회사의 것이라 이 폼에 두지 않는다 — 🏢 Company info 가 든다.
+      // 것인 줄로 읽힌다 — 실은 그 회사 담당자 전원의 값이다. 그래서 회사가 이미
+      // 정해진 창에서는 이 칸들이 통째로 빠지고, 회사를 새로 만드는 + New 에서만
+      // 선다 — 그때는 회사도 함께 만들어지는 중이라서다.
+      companyFields={["name", "address", "tax_id", "tax_invoice_email", "website",
+                      "payment_terms", "logo", "specialization", "note"]}
       extraForm={(form, setForm) => (
         <>
           <MultiValueField label="Email" placeholder="name@company.com" values={form.emails} onChange={(emails) => setForm({ ...form, emails })} />
