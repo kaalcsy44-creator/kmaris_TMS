@@ -664,7 +664,7 @@ def create_vendor(body: VendorCreate):
                    duty=body.duty or "",
                    contact_phone=body.contact_phone or "",
                    email=body.email or "", specialization=body.specialization or "",
-                   note=body.note or "",
+                   website=body.website or "", note=body.note or "",
                    country=body.country or "", address=body.address or "",
                    payment_terms=body.payment_terms or "",
                    category_ids=list(body.category_ids or []),
@@ -708,6 +708,8 @@ def update_vendor(row_id: int, body: VendorCreate):
         v.contact_phone = body.contact_phone or ""
         v.email = body.email or ""
         v.specialization = body.specialization or ""
+        if body.website is not None:
+            v.website = body.website
         if body.note is not None:
             v.note = body.note
         v.country = body.country or ""

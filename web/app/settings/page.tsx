@@ -2109,7 +2109,8 @@ function withCompanyDefaults<T extends { name: string }>(form: T, rows: T[], nam
   const mates = sameCompanyRows(rows, name);
   if (!mates.length) return rec as unknown as T;
   // 회사 단위 값 — 같은 회사에 담당자를 하나 더 넣을 때 회사 소개·결제조건까지 물려준다.
-  for (const key of ["tax_id", "tax_invoice_email", "payment_terms", "logo", "specialization", "note"]) {
+  for (const key of ["tax_id", "tax_invoice_email", "payment_terms", "logo", "specialization",
+                     "note", "website"]) {
     if (!(key in rec) || String(rec[key] ?? "").trim()) continue;
     const first = uniqStrings(mates.map((r) => String((r as Record<string, unknown>)[key] ?? "")))[0];
     if (first) rec[key] = first;
@@ -2523,12 +2524,24 @@ function VendorsTab() {
         ["category_ids", "Category", undefined, "ms-cat"],
         ["specialization", "Specialization", undefined, "ms-spec"],
       ]}
+      // 처음 등록할 때 보이는 칸 = 🏢 Company info 창이 든 칸 그대로, 그 차례대로.
+      // 둘이 달랐던 동안에는 회사를 새로 만들면서 홈페이지·결제조건·로고·취급 분류·
+      // 제조사·회사 소개를 적을 자리가 없어, 등록을 마치자마자 같은 회사를 다시 열어
+      // 회사 정보 창에서 처음부터 채워야 했다.
       fields={[
         ["name", "Vendor *"],
+        ["address", "Address"],
+        ["website", "Website"],
+        ["payment_terms", "Payment Terms"],
+        ["logo", "Company logo"],
+        ["category_ids", "Item categories"],
+        ["maker_ids", "Makers supplied"],
+        ["specialization", "Specialization"],
+        ["note", "About this company"],
+        // 여기서부터는 사람의 것 — 회사가 이미 정해진 창(담당자 추가·수정)에서는
+        // 위의 회사 칸이 통째로 빠지고 이 아래만 남는다.
         ["contact", "Contact name"],
         ["duty", "In charge of"],
-        ["address", "Address"],
-        ["specialization", "Specialization"],
       ]}
       required="name"
       topForm={(form, setForm) => (
@@ -2563,11 +2576,62 @@ function VendorsTab() {
             />
           );
         }
+        // 아래 넷은 회사 정보 창이 쓰는 그 부품 그대로다 — 같은 값을 받는 자리가
+        // 등록과 편집에서 다르게 생기면 무엇을 적는 칸인지 두 번 배워야 한다.
+        if (key === "payment_terms") {
+          return (
+            <PaymentTermsField
+              value={form.payment_terms}
+              onChange={(payment_terms) => setForm({ ...form, payment_terms })}
+            />
+          );
+        }
+        if (key === "logo") {
+          return <LogoPasteField value={form.logo} onChange={(logo) => setForm({ ...form, logo })} />;
+        }
+        if (key === "category_ids") {
+          return (
+            <CategoryTagPicker
+              value={form.category_ids}
+              onChange={(category_ids) => setForm({ ...form, category_ids })}
+              // 이미 아는 회사라면 실적에서 뽑은 제안을 함께 내민다(회사 정보 창과 같다).
+              suggestions={suggestFor(form.name)}
+            />
+          );
+        }
+        if (key === "maker_ids") {
+          return (
+            <MakerTagPicker
+              value={form.maker_ids}
+              onChange={(maker_ids) => setForm({ ...form, maker_ids })}
+            />
+          );
+        }
+        // 취급품목·회사 소개는 문장으로 적는 칸이다 — 한 줄 칸에 넣으면 앞머리만
+        // 보여, 적어 둔 값을 확인하려면 캐럿을 끝까지 밀어야 한다(회사 정보 창과 같다).
+        if (key === "specialization" || key === "note") {
+          const area = key === "specialization"
+            ? { rows: 3, placeholder: "Engine spares, hydraulics, deck machinery…" }
+            : { rows: 5, placeholder: "What they make or represent, which brands they carry, where they are based…" };
+          return (
+            <label className="form-field company-area-field">
+              <span>{label}</span>
+              <textarea
+                rows={area.rows}
+                placeholder={area.placeholder}
+                value={String(form[key] ?? "")}
+                onChange={(e) => setForm({ ...form, [key]: e.target.value })}
+              />
+            </label>
+          );
+        }
         return null;
       }}
-      // 고객과 같은 규칙 — 회사 것은 🏢 Company info 에서 고친다.
-      companyFields={["name", "address", "specialization"]}
-      // 결제조건·로고는 회사의 것이라 이 폼에 두지 않는다 — 🏢 Company info 가 든다.
+      // 고객과 같은 규칙 — 회사 것은 🏢 Company info 에서 고친다. 회사가 이미 정해진
+      // 창(담당자 추가·수정)에서는 이 칸들이 통째로 빠지고, 회사를 새로 만드는 + New
+      // 에서만 선다 — 그때는 회사도 함께 만들어지는 중이라서다.
+      companyFields={["name", "address", "website", "payment_terms", "logo",
+                      "category_ids", "maker_ids", "specialization", "note"]}
       extraForm={(form, setForm) => (
         <>
           <MultiValueField label="Email" placeholder="name@company.com" values={form.emails} onChange={(emails) => setForm({ ...form, emails })} />
@@ -4926,8 +4990,8 @@ function MasterSection<T extends { id: number }>({
         // 회사 이름은 창 제목이 들었다 — 여기서는 무엇이 이 창에 없는지와 어디서
         // 고치는지만 밝힌다. 없는 칸을 찾아 헤매지 않게.
         <div className="ms-of-company">
-          Address, specialization, terms and logo belong to the company —
-          edit them in 🏢 Company info.
+          Address, website, terms, logo and the rest of the company details belong to the
+          company — edit them in 🏢 Company info.
         </div>
       ) : null}
       <div className="form-grid">

@@ -1305,9 +1305,11 @@ export function updateVendorCompanyInfo(
 export function createSettingsVendor(body: {
   name: string;
   contact?: string;
+  duty?: string;
   contact_phone?: string;
   email?: string;
   specialization?: string;
+  website?: string;
   note?: string;
   country?: string;
   address?: string;
@@ -1317,6 +1319,8 @@ export function createSettingsVendor(body: {
   emails?: string[];
   phones?: string[];
   regions?: string[];
+  category_ids?: number[];
+  maker_ids?: number[];
 }): Promise<{ ok: boolean; id: number }> {
   return post("/api/admin/settings/vendors", body);
 }
