@@ -266,8 +266,8 @@ function ImportWizard({
                     <th className="pimp-ck"></th>
                     <th className="pimp-rn">Row</th>
                     <th className="pimp-ac">Action</th>
-                    <th>{kind === "makers" ? "Maker" : "Company / Contact"}</th>
-                    <th>Changes</th>
+                    <th className="pimp-who">{kind === "makers" ? "Maker" : "Company / Contact"}</th>
+                    <th className="pimp-chgcol">Changes</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -287,7 +287,7 @@ function ImportWizard({
                         <td className="pimp-ac">
                           <span className={`pimp-badge pimp-badge--${act}`}>{ACTION_LABEL[act]}</span>
                         </td>
-                        <td>
+                        <td className="pimp-who">
                           <b>{r.name || <span className="dash">—</span>}</b>
                           {r.contact ? <span className="pimp-person"> · {r.contact}</span> : null}
                           {r.joined ? (
@@ -301,7 +301,7 @@ function ImportWizard({
                             </span>
                           ) : null}
                         </td>
-                        <td>
+                        <td className="pimp-chgcol">
                           {r.error ? <span className="action-err">{r.error}</span> : null}
                           {!r.error && !r.changes.length ? (
                             <span className="dash">Nothing to change</span>
@@ -311,7 +311,9 @@ function ImportWizard({
                               <span className="pimp-chg-f">{c.label}</span>
                               {c.from ? <span className="pimp-chg-o">{c.from}</span> : null}
                               <span className="pimp-chg-a">→</span>
-                              <span className="pimp-chg-n">{c.to}</span>
+                              {/* 회사 소개처럼 긴 값은 세 줄까지만 — 한 줄이 화면을 다 먹으면
+                                  표를 훑을 수가 없다. 전문은 마우스를 올리면 보인다. */}
+                              <span className="pimp-chg-n" title={c.to}>{c.to}</span>
                             </div>
                           ))}
                         </td>
