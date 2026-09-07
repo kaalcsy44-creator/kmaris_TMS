@@ -153,19 +153,26 @@ const emptyCompany: CompanyProfile = {
   email_signature: "",
 };
 
+/** 화면을 채우고 그 안에서 굴리는 배치(fill)를 쓰는 탭 — 표가 본문인 탭들이다.
+ *  보통 배치에서는 표 상자와 페이지가 각자 굴러 스크롤 막대가 둘이 된다. */
+const FILL_TABS = new Set<Tab>(["partners"]);
+
 export default function SettingsPage() {
+  // 껍데기(AppShell)가 알아야 하는 값이라 여기 둔다. 탭 상태 자체를 올리지 않는 것은
+  // 초기 탭이 권한과 주소(?tab=)를 봐야 정해지고, 그건 AuthGate 안에서만 알 수 있어서다.
+  const [fill, setFill] = useState(false);
   return (
     // Projects 페이지와 동일하게 전체 폭 사용(wide) — 목록/가격표가 넓게 보이도록.
-    <AppShell active="settings" wide>
+    <AppShell active="settings" wide fill={fill}>
       {/* Settings 가 useSearchParams(?tab=) 를 쓰므로 Suspense 로 감싼다. */}
       <Suspense fallback={<div className="state">Loading…</div>}>
-        <Settings />
+        <Settings onFill={setFill} />
       </Suspense>
     </AppShell>
   );
 }
 
-function Settings() {
+function Settings({ onFill }: { onFill: (v: boolean) => void }) {
   const admin = isAdmin();
   // 다른 화면에서 특정 탭으로 곧장 보내는 링크(?tab=mail 등)를 받는다.
   const params = useSearchParams();
@@ -180,6 +187,8 @@ function Settings() {
     if (asked === "partners" && (admin || canMaster)) return asked;
     return admin ? "company" : canMaster ? "partners" : "account";
   });
+
+  useEffect(() => { onFill(FILL_TABS.has(tab)); }, [tab, onFill]);
 
   // 마스터 데이터 권한도 없는 사용자(예: 권한 없는 viewer)는 본인 비밀번호 변경만.
   if (!admin && !canMaster) {

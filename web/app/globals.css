@@ -1862,6 +1862,13 @@ table.mini.wide td.ms-actcol {
   min-height: 280px;
   overflow: auto;
 }
+/* 화면을 채우는 배치(page-fill) 안에서는 그 어림값을 쓰지 않는다 — 남은 높이는 flex 가
+   정확히 알고 있고, 어림값이 실제보다 크면 페이지가 그만큼 길어져 바깥에 세로 막대가
+   하나 더 생긴다(표 상자에 하나, 문서에 하나). 굴리는 자리는 하나여야 한다. */
+.page-fill .table-wrap.ms-scroll {
+  max-height: none;
+  min-height: 0;
+}
 /* 세로로 굴려도 머리 칸은 남는다(page-fill 이 쓰는 규칙과 같다).
    메뉴가 달린 머리 칸(.pl-th)은 제 규칙에서 position:relative 를 받으므로 여기서 다시
    못 박지 않으면 그 칸만 굴러 올라간다 = 머리줄이 반쪽만 붙는다. */
@@ -7510,6 +7517,12 @@ table.mini .num {
   }
   .page-fill .table-wrap {
     overflow: auto;
+  }
+  /* 못 박은 높이가 없으니 .ms-scroll 은 제 어림값을 도로 쓴다 — 안 그러면 표가 제
+     길이대로 늘어나 머리줄 고정이 무의미해진다(굴릴 상자가 없다). */
+  .page-fill .table-wrap.ms-scroll {
+    max-height: calc(100vh - 296px);
+    min-height: 280px;
   }
   /* 분류 탭의 두 판도 함께 되돌린다 — 못 박은 높이가 없으니 판 안에서 굴릴 것도 없고,
      남겨 두면 목록 판의 overflow:hidden 이 내용을 자를 수 있다. */
