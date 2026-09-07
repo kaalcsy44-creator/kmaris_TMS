@@ -8067,6 +8067,24 @@ table.mini .num {
   margin-top: 4px;
   border-top: 1px solid #eaf0f7;
 }
+/* 담당자 칸(VendorContactFields) — 벤더 칸과 같은 드롭다운 꼴을 쓰되, 여럿을 고를 수
+   있어 체크 자리와 주소 줄이 더 붙는다. */
+.vcon-sub, .vcon-more { color: #8a96a8; font-weight: 400; }
+.vcon-item { align-items: flex-start; gap: 7px; }
+/* 체크 자리는 늘 잡아 둔다 — 켜고 끌 때 이름이 좌우로 흔들리지 않게. */
+.vcon-check {
+  flex: 0 0 auto; width: 13px; margin-top: 1px;
+  font-size: 11px; font-weight: 800; color: var(--blue);
+}
+.vcon-lines { display: flex; flex-direction: column; min-width: 0; }
+.vcon-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 주소는 곁들이는 정보지만 담당자를 실제로 가르는 열쇠라 함께 보여 준다. */
+.vcon-mail { font-size: 11px; color: #7c8aa0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vcon-foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  margin-top: 4px; padding: 6px 8px 2px; border-top: 1px solid #eaf0f7;
+  font-size: 11px; color: #7c8aa0;
+}
 
 /* 거래선 추천(2단계 RFQ Sent) — 품목 분류·거래이력·취급품목으로 고른 후보.
    결정을 대신하지 않는다는 뜻이 보이도록 입력 필드가 아니라 '메모지'처럼 둔다. */

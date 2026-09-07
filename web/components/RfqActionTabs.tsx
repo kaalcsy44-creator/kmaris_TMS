@@ -63,6 +63,10 @@ import FilterTable, { ColumnDef } from "./common/FilterTable";
 import { identityColumns, projectNoColumn, statusColumns } from "./common/identityColumns";
 import VendorName from "./common/VendorName";
 import VendorSelect from "./common/VendorSelect";
+import VendorContactFields, {
+  contactIdsFromEmail,
+  vendorContactEmails,
+} from "./common/VendorContactFields";
 import VendorSuggest from "./common/VendorSuggest";
 import CustomerName from "./common/CustomerName";
 import { imageFromClipboard } from "@/lib/imagePaste";
@@ -1066,6 +1070,8 @@ function VendorRfqDetailModal({
   const canDeleteThis = can("rfq", "delete") && canEditDeal(d?.assignee_id);
   const showEdit = editing && canEditThis;
   const [vendorId, setVendorId] = useState<number | "">("");
+  // 고른 담당자들(레코드 id). 첫 사람이 대표 = 저장되는 vendor_id, 나머지는 받는 사람에 함께.
+  const [contactIds, setContactIds] = useState<number[]>([]);
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState("");
   const [sentAt, setSentAt] = useState("");
@@ -1107,6 +1113,12 @@ function VendorRfqDetailModal({
   }, [id]);
 
   useEffect(() => { loadDetail(); }, [loadDetail]);
+
+  // 저장본과 벤더 목록이 모두 오면 그때 고른 담당자를 되살린다(목록이 늦게 와도, 편집을
+  // 되돌려도 저장본 기준으로 돌아온다).
+  useEffect(() => {
+    setContactIds(contactIdsFromEmail(vendors, d?.vendor_id || "", d?.vendor_email || ""));
+  }, [vendors, d]);
 
   async function loadCustomerRfqItems() {
     if (!d?.rfq_id) return;
@@ -1246,19 +1258,17 @@ function VendorRfqDetailModal({
 
               <div className="form-section-title">This vendor send info</div>
               <div className="form-grid">
-                <div className="form-field">
-                  <label>Vendor</label>
-                  <VendorSelect
-                    value={vendorId}
-                    options={vendors}
-                    onChange={(id) => {
-                      setVendorId(id);
-                      // 벤더 선택 시 저장된 해당 벤더 이메일로 자동 변경.
-                      const v = vendors.find((x) => x.id === id);
-                      if (v) setEmail(v.email || "");
-                    }}
-                  />
-                </div>
+                {/* 벤더는 회사로 한 번, 담당자는 그 안에서 따로(여럿 가능) 고른다. */}
+                <VendorContactFields
+                  vendors={vendors}
+                  value={contactIds}
+                  onChange={(ids) => {
+                    setContactIds(ids);
+                    setVendorId(ids[0] ?? "");
+                    // 고른 담당자들의 주소로 받는 사람을 채운다(그대로 고쳐 쓸 수 있다).
+                    setEmail(vendorContactEmails(vendors, ids));
+                  }}
+                />
                 <div className="form-field">
                   <label>K-Maris RFQ No.</label>
                   {d.kmaris_rfq_no && d.kmaris_rfq_no !== "-" ? (
@@ -2656,6 +2666,8 @@ function VendorRfqAction({
   const [tab, setTab] = useState<DetailTab>("edit");
   // 편집 뷰와 동일하게 Vendor 는 1개씩 선택(여러 곳은 발신 후 "+ Send another" 로 반복).
   const [vendorId, setVendorId] = useState<number | "">("");
+  // 고른 담당자들(레코드 id). 첫 사람이 대표 = 저장되는 vendor_id, 나머지는 받는 사람에 함께.
+  const [contactIds, setContactIds] = useState<number[]>([]);
   const [to, setTo] = useState("");   // Recipient email(벤더 선택 시 자동 채움, 편집 가능)
   const [lang, setLang] = useState<"en" | "ko">("en");
   const [notes, setNotes] = useState("");
@@ -2765,11 +2777,13 @@ function VendorRfqAction({
     itemSel.clear();
   }
 
-  // 벤더 선택 → 저장된 벤더 이메일을 Recipient email 로 자동 채움(편집 뷰와 동일 동작).
-  function selectVendor(id: number | "") {
-    setVendorId(id);
-    const v = id === "" ? undefined : vendors.find((x) => x.id === id);
-    setTo(v?.email || "");
+  // 담당자 선택 → 그 사람들의 주소를 Recipient email 로 자동 채움(편집 뷰와 동일 동작).
+  // 여럿을 골라도 발신은 한 건이다 — 대표(첫 사람)가 이 Vendor RFQ 의 벤더로 저장되고,
+  // 나머지는 받는 사람 주소에 함께 실린다.
+  function pickContacts(ids: number[]) {
+    setContactIds(ids);
+    setVendorId(ids[0] ?? "");
+    setTo(vendorContactEmails(vendors, ids));
   }
 
   // RFQ 생성 — 케이마리스 RFQ No. 단독 발번(자동생성 / 직접 입력)
@@ -2802,7 +2816,9 @@ function VendorRfqAction({
     setErr(null);
     try {
       const r = await previewVendorRfq(rfqId, [vendorId], lang, notes, rfqNoArg, effectiveItems);
-      setPreviews(r.previews);
+      // 받는 사람은 이 화면에서 고른 담당자들이 정본이다 — 서버 미리보기는 대표 한 명의
+      // 주소만 알고 있어, 그대로 두면 함께 고른 담당자가 발송에서 조용히 빠진다.
+      setPreviews(r.previews.map((p) => (p.vendor_id === vendorId && to.trim() ? { ...p, to } : p)));
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Preview generation failed");
     } finally {
@@ -2859,7 +2875,7 @@ function VendorRfqAction({
       const r = await sendVendorRfq(rfqId, items, rfqNoArg, sentAt || undefined, effectiveItems);
       setMsg(`K-Maris RFQ No. ${r.rfq_no || "-"} · sent (${r.saved} Vendor RFQ recorded)`);
       setPreviews([]);
-      selectVendor("");
+      pickContacts([]);
       onDone();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Send failed");
@@ -2877,19 +2893,14 @@ function VendorRfqAction({
       <VendorSuggest
         rfqId={rfqId}
         value={vendorId}
-        onPick={(v) => {
-          setVendorId(v.id);
-          setTo(v.email || vendors.find((x) => x.id === v.id)?.email || "");
-        }}
+        onPick={(v) => pickContacts([v.id])}
       />
 
       <div className="form-section-title">This vendor send info</div>
 
       <div className="form-grid">
-        <div className="form-field">
-          <label>Vendor</label>
-          <VendorSelect value={vendorId} options={vendors} onChange={selectVendor} />
-        </div>
+        {/* 벤더는 회사로 한 번, 담당자는 그 안에서 따로(여럿 가능) 고른다. */}
+        <VendorContactFields vendors={vendors} value={contactIds} onChange={pickContacts} />
         <div className="form-field">
           <label>K-Maris RFQ No.</label>
           {noMode === "auto" ? (
