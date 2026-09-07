@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
+  assignMail,
   buildProjectMailRollup,
   fetchMailStatus,
+  fetchPipeline,
   fetchProjectMail,
   setProjectMailGroup,
   syncMail,
@@ -12,8 +14,9 @@ import type { MailMessage, MailThread, ProjectMail } from "@/lib/types";
 import { hm, md } from "@/lib/activity";
 import { parseRollupLine } from "@/lib/rollup";
 import PartyName from "@/components/common/PartyName";
+import ProjectPicker, { toPickOptions, type ProjectPickOption } from "@/components/common/ProjectPicker";
 import { FoldTitle, useSectionFold } from "@/components/common/SectionFold";
-import { useCachedData } from "@/lib/useCachedData";
+import { invalidateCache, useCachedData } from "@/lib/useCachedData";
 
 /** 이 딜의 메일 캐시 키 — 개요의 단계 보드도 같은 키로 읽어 한 번만 조회한다. */
 export const projectMailKey = (rfqId: number) => `mail:project:${rfqId}`;
@@ -36,6 +39,11 @@ export default function ProjectMailPanel({ rfqId }: { rfqId: number }) {
   const [note, setNote] = useState("");   // 마지막 Sync 결과 한 줄
   const [statusNote, setStatusNote] = useState("");  // 미분류 안내(있을 때만)
   const [open, setOpen] = useState<string[]>([]);   // 펼친 스레드 키
+  // 메일을 옮길 딜 목록. 개요 화면이 이미 같은 키로 받아 둔 것을 나눠 쓴다(요청이 늘지 않는다).
+  const { data: pipeline } = useCachedData("pipeline", () => fetchPipeline());
+  const projects = useMemo(() => toPickOptions(pipeline?.rows ?? []), [pipeline]);
+  // 지금 옮기려고 펼쳐 둔 줄 — "t:<thread_key>"(대화 전체) 또는 "m:<id>"(한 통).
+  const [moveKey, setMoveKey] = useState<string | null>(null);
   // 목록 자체를 접어 둔다. 개요에서 먼저 읽어야 하는 건 위 단계 보드와 AI 정리이고,
   // 메일 목록은 15~40줄로 길어 그 아래 것(품목·금액)을 화면 밖으로 밀어낸다. 근황은
   // 정리 네 줄이 이미 말해 주니, 한 통씩 확인하고 싶을 때만 펼친다.
@@ -93,6 +101,52 @@ export default function ProjectMailPanel({ rfqId }: { rfqId: number }) {
       setBusy("");
     }
   }
+
+  // 잘못 붙은 메일을 제자리로 — 다른 딜로 옮기거나(rfqId) 연결을 끊는다(null).
+  // 자동 배정은 근거(같은 대화·문서번호·같은 제목)로 붙이는데, 근거가 사람의 판단과
+  // 어긋나는 일이 있다. 그때 고칠 자리가 없으면 틀린 이력이 그대로 남는다.
+  // 옮긴 뒤에는 메일을 읽는 다른 화면(대시보드 Mail·업무일지·미분류함)의 캐시도 함께
+  // 비운다 — 한 통이 두 딜에 동시에 보이면 어느 쪽이 맞는지 알 수 없다.
+  async function move(msgId: number, rfqId: number | null, wholeThread: boolean, ids: number[]) {
+    setBusy("move");
+    setErr("");
+    setNote("");
+    try {
+      const r = await assignMail(msgId, rfqId, wholeThread, ids);
+      const n = `${r.updated} mail${r.updated === 1 ? "" : "s"}`;
+      if (rfqId) {
+        const to = projects.find((p) => p.rfqId === rfqId)?.no || `#${rfqId}`;
+        setNote(
+          `Moved ${n} to ${to}.`
+          + (r.spread ? ` ${r.spread} more followed on the same evidence.` : "")
+        );
+      } else {
+        setNote(
+          `Unlinked ${n} — pick a deal for them in Activity › Mail (unmatched).`
+          // 한 통만 뗀 경우의 경고. 같은 대화의 나머지가 이 딜에 남아 있으면 그것이
+          // 근거가 되어 다음 자동 배정 때 다시 끌려 들어온다.
+          + (wholeThread ? "" : " The rest of this conversation stays here, so auto-match may pull it back —"
+             + " move it to the right deal instead of unlinking.")
+        );
+      }
+      setMoveKey(null);
+      invalidateCache("mail:");
+      await refresh();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Move failed");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  const moveCtl: MoveCtl = {
+    openKey: moveKey,
+    busy: !!busy,
+    projects,
+    toggle: (key) => setMoveKey((cur) => (cur === key ? null : key)),
+    cancel: () => setMoveKey(null),
+    run: move,
+  };
 
   const threads = data?.threads ?? [];
   const missingSummary = threads.some((t) => t.messages.some((m) => !m.summary));
@@ -217,6 +271,7 @@ export default function ProjectMailPanel({ rfqId }: { rfqId: number }) {
               <MailThreadRow
                 key={t.thread_key}
                 thread={t}
+                ctl={moveCtl}
                 open={open.includes(t.thread_key)}
                 onToggle={() =>
                   setOpen((prev) =>
@@ -234,33 +289,67 @@ export default function ProjectMailPanel({ rfqId }: { rfqId: number }) {
   );
 }
 
+// 옮기기 조작을 줄마다 넘기는 묶음 — 상태는 패널 하나가 갖는다(한 번에 한 줄만 편다).
+type MoveCtl = {
+  openKey: string | null;
+  busy: boolean;
+  projects: ProjectPickOption[];
+  toggle: (key: string) => void;
+  cancel: () => void;
+  run: (msgId: number, rfqId: number | null, wholeThread: boolean, ids: number[]) => Promise<void>;
+};
+
 // 대화 한 묶음 — 머리줄(상대·제목·통수·마지막 시각)만 보이고, 펼치면 메일이 시간순으로.
 function MailThreadRow({
   thread,
+  ctl,
   open,
   onToggle,
 }: {
   thread: MailThread;
+  ctl: MoveCtl;
   open: boolean;
   onToggle: () => void;
 }) {
   const last = thread.messages[thread.messages.length - 1];
+  const key = `t:${thread.thread_key}`;
+  const moving = ctl.openKey === key;
   return (
     <li className={`mail-thread${open ? " open" : ""}`}>
-      <button type="button" className="mail-thread-h" onClick={onToggle}>
-        <span className="mail-caret" aria-hidden>{open ? "▾" : "▸"}</span>
-        <PartyName name={thread.party} kind={thread.party_kind} />
-        <span className="mail-subject">{thread.subject || "(no subject)"}</span>
-        {thread.count > 1 ? <span className="mail-count">{thread.count} mails</span> : null}
-        <span className="mail-when">{when(thread.last_at)}</span>
-        <span className="mail-dir" title={last?.direction === "out" ? "Sent" : "Received"}>
-          {last?.direction === "out" ? "→" : "←"}
-        </span>
-      </button>
+      {/* 머리줄 전체가 펼침 버튼이라 옮기기 버튼은 그 바깥에 나란히 둔다(버튼 안의 버튼은 없다). */}
+      <div className="mail-thread-hrow">
+        <button type="button" className="mail-thread-h" onClick={onToggle}>
+          <span className="mail-caret" aria-hidden>{open ? "▾" : "▸"}</span>
+          <PartyName name={thread.party} kind={thread.party_kind} />
+          <span className="mail-subject">{thread.subject || "(no subject)"}</span>
+          {thread.count > 1 ? <span className="mail-count">{thread.count} mails</span> : null}
+          <span className="mail-when">{when(thread.last_at)}</span>
+          <span className="mail-dir" title={last?.direction === "out" ? "Sent" : "Received"}>
+            {last?.direction === "out" ? "→" : "←"}
+          </span>
+        </button>
+        <button
+          type="button"
+          className={`mail-move-btn${moving ? " on" : ""}`}
+          disabled={ctl.busy}
+          title="This conversation belongs to another deal — move it"
+          onClick={() => ctl.toggle(key)}
+        >
+          ↪ Move
+        </button>
+      </div>
+      {moving ? (
+        <MailMoveBar
+          ctl={ctl}
+          label={`Move this conversation (${thread.count} mail${thread.count === 1 ? "" : "s"}) to`}
+          hint="One conversation belongs to one deal, so every mail in it moves together."
+          onRun={(to) => ctl.run(last.id, to, true, thread.messages.map((m) => m.id))}
+        />
+      ) : null}
       {open ? (
         <ol className="mail-msgs">
           {thread.messages.map((m) => (
-            <MailRow key={m.id} msg={m} />
+            <MailRow key={m.id} msg={m} ctl={ctl} />
           ))}
         </ol>
       ) : (
@@ -272,8 +361,10 @@ function MailThreadRow({
 }
 
 // 메일 1통 — 방향·시각·상대가 한 줄, 그 아래 요약. 원문은 눌러서 편다.
-function MailRow({ msg }: { msg: MailMessage }) {
+function MailRow({ msg, ctl }: { msg: MailMessage; ctl: MoveCtl }) {
   const [raw, setRaw] = useState(false);
+  const key = `m:${msg.id}`;
+  const moving = ctl.openKey === key;
   return (
     <li className={`mail-msg ${msg.direction}`}>
       <div className="mail-msg-h">
@@ -291,10 +382,29 @@ function MailRow({ msg }: { msg: MailMessage }) {
             📎 {msg.attachments.length}
           </span>
         ) : null}
+        {/* 한 대화 안에 다른 딜의 메일이 한 통 섞여 들어오는 일이 있다(같은 제목으로
+            다른 건을 물어 온 회신). 그 한 통만 떼어 옮긴다. */}
+        <button
+          type="button"
+          className={`mail-move-btn${moving ? " on" : ""}`}
+          disabled={ctl.busy}
+          title="Move just this mail to another deal"
+          onClick={() => ctl.toggle(key)}
+        >
+          ↪ Move
+        </button>
         <button type="button" className="mail-raw-btn" onClick={() => setRaw((v) => !v)}>
           {raw ? "Hide original" : "Original"}
         </button>
       </div>
+      {moving ? (
+        <MailMoveBar
+          ctl={ctl}
+          label="Move this mail only to"
+          hint="Only this one moves — the rest of the conversation stays in this deal."
+          onRun={(to) => ctl.run(msg.id, to, false, [])}
+        />
+      ) : null}
       <p className="mail-sum">{msg.summary || snippet(msg)}</p>
       {raw ? (
         <pre className="mail-raw">
@@ -303,6 +413,58 @@ function MailRow({ msg }: { msg: MailMessage }) {
         </pre>
       ) : null}
     </li>
+  );
+}
+
+// 옮길 딜을 고르는 줄 — 머리줄 바로 아래에 편다.
+//
+// 고를 것은 둘이다. Move 는 갈 곳이 분명할 때(대개 이쪽이다), Unassign 은 어느 딜인지
+// 아직 모를 때 — 미분류함으로 되돌려 놓고 나중에 정한다. 지우는 문은 두지 않는다:
+// 메일은 오간 사실이라 여기서 없앨 것이 아니고, 자리를 잘못 잡았을 뿐이다.
+function MailMoveBar({
+  ctl,
+  label,
+  hint,
+  onRun,
+}: {
+  ctl: MoveCtl;
+  label: string;
+  hint: string;
+  onRun: (rfqId: number | null) => void;
+}) {
+  const [target, setTarget] = useState<number | "">("");
+  return (
+    <div className="mail-movebar">
+      <span className="mail-movebar-l">{label}</span>
+      <ProjectPicker
+        value={target}
+        options={ctl.projects}
+        onChange={setTarget}
+        disabled={ctl.busy}
+        placeholder="— Select deal —"
+      />
+      <button
+        type="button"
+        className="btn sm primary"
+        disabled={ctl.busy || target === ""}
+        onClick={() => onRun(target as number)}
+      >
+        {ctl.busy ? "Moving…" : "Move"}
+      </button>
+      <button
+        type="button"
+        className="btn sm"
+        disabled={ctl.busy}
+        title="Unlink from this deal and put it back in the unmatched mail box"
+        onClick={() => onRun(null)}
+      >
+        Unassign
+      </button>
+      <button type="button" className="btn sm" disabled={ctl.busy} onClick={ctl.cancel}>
+        Cancel
+      </button>
+      <p className="mail-movebar-hint">{hint}</p>
+    </div>
   );
 }
 

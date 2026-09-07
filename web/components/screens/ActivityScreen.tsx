@@ -25,6 +25,7 @@ import {
 } from "@/lib/activity";
 import CustomerName from "@/components/common/CustomerName";
 import UnmatchedMailPanel, { type MailQueue } from "@/components/common/UnmatchedMailPanel";
+import { toPickOptions } from "@/components/common/ProjectPicker";
 import FilterSelect from "@/components/common/FilterSelect";
 import VendorMonograms from "@/components/common/VendorMonograms";
 import ActivityDesc from "@/components/common/ActivityDesc";
@@ -43,16 +44,6 @@ import { useCachedData } from "@/lib/useCachedData";
 function vendorStatusesFor(r: PipelineRow): { name: string; quoted: boolean }[] | undefined {
   if (r.vendor) return undefined;
   return r.rfq_vendors && r.rfq_vendors.length ? r.rfq_vendors : undefined;
-}
-
-// 딜에 걸린 선박 한 줄 — 오더별로 여러 척이면 첫 척에 "+N" 을 붙인다(줄바꿈 목록이 온다).
-function vesselLabel(r: PipelineRow): string {
-  const list = (r.vessels || r.vessel || "")
-    .split("\n")
-    .map((v) => v.trim())
-    .filter(Boolean);
-  if (!list.length) return "";
-  return list.length > 1 ? `${list[0]} +${list.length - 1}` : list[0];
 }
 
 // 내부 11단계 → 5개 버킷(RFQ 1–2 / Quote 3–4 / PO 5–6 / Documents 7–9 / AR 10–11).
@@ -457,24 +448,9 @@ export default function ActivityScreen() {
     return [...rows].sort(byProjectNo).map((r) => r.rfq_id);
   }, [view, buckets, weekView]);
 
-  // 미분류 메일을 붙일 딜 목록 — 화면 필터와 무관하게 전부(닫힌 딜의 옛 메일도 배정한다).
-  // 번호 내림차순이라 최근 딜이 위에 온다. 번호만으로는 어느 건인지 떠올리기 어려워
-  // 업무 타입·고객·프로젝트명·선박을 함께 넘긴다(ProjectPicker 가 한 줄로 보여준다).
-  const mailProjects = useMemo(
-    () =>
-      [...(data?.rows ?? [])]
-        .sort(byProjectNo)
-        .reverse()
-        .map((r) => ({
-          rfqId: r.rfq_id,
-          no: r.project_no || r.kmaris_rfq_no || "",
-          workType: r.work_type || "부품공급",
-          customer: r.customer || "",
-          title: r.project_title || "",
-          vessel: vesselLabel(r),
-        })),
-    [data]
-  );
+  // 미분류 메일을 붙일 딜 목록. 딜 화면의 메일 이력에서 옮길 때와 같은 목록·같은 차례를
+  // 써야 해서 만드는 규칙은 ProjectPicker 가 갖고 있다(toPickOptions).
+  const mailProjects = useMemo(() => toPickOptions(data?.rows ?? []), [data]);
 
   // 마지막에서 다음은 처음, 처음에서 이전은 마지막으로 순환(ProjectsScreen 과 동일).
   const navigateOverview = useCallback(

@@ -13314,7 +13314,8 @@ button.ov-tl-stage:hover {
   /* 메일 — 정리 요약과 대화 목록은 남기고, 누를 수 없는 버튼과 펼친 원문은 뺀다.
      화면에서 접어 둔 목록도 인쇄물에는 다 나온다(활동기록과 같은 규칙 — 종이는
      펼칠 수가 없다). 여는 버튼 자체는 뺀다. */
-  .proj-mail-acts, .mail-raw-btn, .mail-raw, .mail-listtoggle { display: none !important; }
+  .proj-mail-acts, .mail-raw-btn, .mail-raw, .mail-listtoggle,
+  .mail-move-btn, .mail-movebar { display: none !important; }
   .mail-threads { display: block !important; border-radius: 9px !important; }
   .mail-thread { break-inside: avoid; }
   .proj-ov-tlcols { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
@@ -13371,10 +13372,31 @@ button.ov-tl-stage:hover {
 .mail-threads.open { display: block; }
 .mail-thread + .mail-thread { border-top: 1px solid var(--line); }
 .mail-thread.open { background: #fbfcfe; }
-/* 머리줄 전체가 펼침 버튼 — 줄 어디를 눌러도 열린다. */
-.mail-thread-h { display: flex; align-items: center; gap: 8px; width: 100%;
+/* 머리줄 전체가 펼침 버튼 — 줄 어디를 눌러도 열린다. 옮기기 버튼은 그 바깥에
+   나란히 서므로(버튼 안의 버튼은 없다) 배경은 두 조각을 함께 감싸는 줄이 칠한다. */
+.mail-thread-hrow { display: flex; align-items: center; }
+.mail-thread-hrow:hover { background: #f3f7fc; }
+.mail-thread-h { display: flex; align-items: center; gap: 8px; flex: 1 1 auto; min-width: 0;
   border: 0; background: transparent; cursor: pointer; text-align: left; padding: 7px 10px; }
-.mail-thread-h:hover { background: #f3f7fc; }
+/* 잘못 붙은 메일을 제자리로 보내는 자리. 평소에는 물러나 있다가 줄에 손이 닿을 때
+   드러난다 — 늘 보이면 정작 읽어야 할 제목·요약보다 먼저 눈에 띈다. */
+.mail-move-btn { flex: 0 0 auto; margin-right: 10px; border: 1px solid var(--line);
+  border-radius: 6px; background: #fff; cursor: pointer; padding: 1px 7px;
+  font-size: 11px; color: #5c6b7d; opacity: 0; transition: opacity .12s, color .12s, border-color .12s; }
+.mail-thread-hrow:hover .mail-move-btn, .mail-msg-h:hover .mail-move-btn,
+.mail-move-btn:focus-visible, .mail-move-btn.on { opacity: 1; }
+.mail-move-btn:hover { background: #f3f7fc; border-color: var(--blue); color: var(--blue); }
+.mail-move-btn.on { background: #f2f8ff; border-color: var(--blue); color: var(--blue); }
+.mail-move-btn:disabled { cursor: not-allowed; color: #a8b3c2; }
+.mail-msg-h .mail-move-btn { margin-right: 0; }
+/* 옮길 딜을 고르는 줄 — 고른 뒤 Move, 갈 곳을 아직 모르면 Unassign(미분류함으로). */
+.mail-movebar { display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
+  margin: 0 10px 8px 26px; padding: 8px 10px;
+  border: 1px solid var(--line-strong); border-radius: 8px; background: #f7fafe; }
+.mail-movebar-l { flex: 0 0 auto; font-size: 11.5px; font-weight: 700; color: #43536a; }
+.mail-movebar .pjpick { flex: 1 1 260px; min-width: 200px; }
+.mail-movebar-hint { flex: 1 0 100%; margin: 0; font-size: 11px; line-height: 1.45; color: #6b7c93; }
+.mail-msg .mail-movebar { margin: 6px 0 4px 21px; }
 .mail-caret { color: var(--muted); font-size: 10px; }
 /* 상대 — 고객은 파랑, 벤더는 초록. 어느 쪽과의 대화인지 색으로 먼저 읽힌다. */
 /* 메일 상대 — 로고 + 이름. 색 배지·굵은 글씨를 걷어냈다(눈은 제목에 먼저 가야 한다). */

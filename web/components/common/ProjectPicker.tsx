@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useCustomerLogo } from "@/lib/customerLogos";
+import type { PipelineRow } from "@/lib/types";
 import ProjectNo from "@/components/common/ProjectNo";
 
 export type ProjectPickOption = {
@@ -18,6 +19,39 @@ export type ProjectPickOption = {
   title: string;
   vessel: string;     // 여러 척이면 "MV A 외 2"
 };
+
+/** 딜 목록(pipeline) → 고를 수 있는 줄. 최근 딜이 위에 온다 — 메일을 붙이거나 옮길 때
+ *  찾는 것은 거의 늘 최근 딜이다. 화면 필터와 무관하게 전부 담는다(닫힌 딜의 옛 메일도
+ *  제자리를 찾아야 한다). 번호가 없는 딜(신규)은 견줄 것이 없어 맨 뒤로 보낸다. */
+export function toPickOptions(rows: PipelineRow[]): ProjectPickOption[] {
+  return [...rows]
+    .sort((a, b) => {
+      const an = a.project_no || a.kmaris_rfq_no || "";
+      const bn = b.project_no || b.kmaris_rfq_no || "";
+      if (!an && !bn) return 0;
+      if (!an) return 1;
+      if (!bn) return -1;
+      return bn.localeCompare(an, undefined, { numeric: true });
+    })
+    .map((r) => ({
+      rfqId: r.rfq_id,
+      no: r.project_no || r.kmaris_rfq_no || "",
+      workType: r.work_type || "부품공급",
+      customer: r.customer || "",
+      title: r.project_title || "",
+      vessel: vesselLabel(r),
+    }));
+}
+
+/** 딜에 걸린 선박 한 줄 — 오더별로 여러 척이면 첫 척에 "+N" 을 붙인다(줄바꿈 목록이 온다). */
+function vesselLabel(r: PipelineRow): string {
+  const list = (r.vessels || r.vessel || "")
+    .split("\n")
+    .map((v) => v.trim())
+    .filter(Boolean);
+  if (!list.length) return "";
+  return list.length > 1 ? `${list[0]} +${list.length - 1}` : list[0];
+}
 
 type MenuPos = { left: number; width: number; top?: number; bottom?: number };
 
