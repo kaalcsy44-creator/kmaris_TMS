@@ -38,6 +38,7 @@ from _core import (
     render_marketing_tokens,
     require_token,
     send_email,
+    sync_bounced_email,
     SIGNATURE_DOC_TYPE,
     signature_html_for,
     text_to_html_fragment,
@@ -79,10 +80,14 @@ def create_marketing(body: MarketingActivityCreate, user: dict = Depends(get_cur
             subject=body.subject or "",
             notes=body.notes or "",
             next_action_date=body.next_action_date or "",
+            email_bounced=bool(body.email_bounced),
             # 담당자(PIC): 지정값 우선, 없으면 작성자 본인.
             owner_id=body.owner_id or user.get("id") or None,
         )
         s.add(m)
+        s.flush()
+        # 반송 표시는 고객 담당자 명부(customers.bad_emails)에도 옮겨 붙는다.
+        sync_bounced_email(s, m.recipient_email)
         s.commit()
         return {"ok": True, "id": m.id}
     finally:
@@ -98,6 +103,7 @@ def update_marketing(row_id: int, body: MarketingActivityCreate):
         m = s.query(MarketingActivity).filter_by(id=row_id).first()
         if not m:
             raise HTTPException(status_code=404, detail="마케팅 활동을 찾을 수 없습니다.")
+        prev_email = m.recipient_email or ""
         m.customer_id = body.customer_id or None
         m.prospect_name = (body.prospect_name or "").strip()
         m.contact_person = body.contact_person or ""
@@ -108,7 +114,13 @@ def update_marketing(row_id: int, body: MarketingActivityCreate):
         m.subject = body.subject or ""
         m.notes = body.notes or ""
         m.next_action_date = body.next_action_date or ""
+        m.email_bounced = bool(body.email_bounced)
         m.owner_id = body.owner_id or None   # 담당자(PIC) 재지정(미지정 허용)
+        s.flush()
+        # 주소를 바꿔 적었다면 옛 주소도 다시 셈한다 — 그 주소에 걸려 있던 반송 표시가
+        # 이 활동 하나뿐이었다면 이제 풀려야 한다.
+        for addr in {(prev_email or "").strip(), (m.recipient_email or "").strip()}:
+            sync_bounced_email(s, addr)
         s.commit()
         return {"ok": True, "id": m.id}
     finally:
@@ -122,7 +134,11 @@ def delete_marketing(row_id: int):
         m = s.query(MarketingActivity).filter_by(id=row_id).first()
         if not m:
             raise HTTPException(status_code=404, detail="마케팅 활동을 찾을 수 없습니다.")
+        addr = m.recipient_email or ""
         s.delete(m)
+        s.flush()
+        # 지운 활동이 그 주소의 유일한 반송 표시였다면 명부에서도 함께 풀린다.
+        sync_bounced_email(s, addr)
         s.commit()
         return {"ok": True}
     finally:

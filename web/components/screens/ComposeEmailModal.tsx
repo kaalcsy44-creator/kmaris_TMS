@@ -18,6 +18,7 @@ import Modal from "@/components/common/Modal";
 import CcField from "@/components/common/CcField";
 import CustomerSelect from "@/components/common/CustomerSelect";
 import SignaturePicker from "@/components/common/SignaturePicker";
+import { BounceBadge } from "@/components/common/BouncedEmail";
 import { toggleBold, onBoldKey } from "@/lib/mdEdit";
 
 type TplKind = "intro" | "brochure";
@@ -153,6 +154,21 @@ export default function ComposeEmailModal({
     for (const c of fullCustomers ?? []) m.set(c.id, c);
     return m;
   }, [fullCustomers]);
+
+  // 반송(Address not found)으로 되돌아온 적이 있는 주소들. 마케팅 활동 창에서 찍은
+  // 표시가 담당자 명부를 거쳐 여기까지 온다 — 같은 주소로 또 보내면 또 되돌아오므로,
+  // 수신자 줄에 담기는 그 순간에 보여야 한다(막지는 않는다: 상대가 고쳤을 수 있다).
+  const badEmails = useMemo(() => {
+    const out = new Set<string>();
+    for (const c of fullCustomers ?? []) {
+      for (const b of c.bad_emails ?? []) {
+        const k = (b || "").trim().toLowerCase();
+        if (k) out.add(k);
+      }
+    }
+    return out;
+  }, [fullCustomers]);
+  const bounced = (email: string) => badEmails.has((email || "").trim().toLowerCase());
 
   // 제목·본문 화면 표시는 첫 번째 수신자 기준 — 나머지 수신자에게는 서버가 각자
   // 이름으로 다시 치환해 보낸다(미리보기는 "첫 수신자가 받을 모습"이다).
@@ -478,6 +494,7 @@ export default function ComposeEmailModal({
                     <span className="recip-name">
                       {r.name || (r.customerId ? "(unnamed)" : "(prospect)")}
                     </span>
+                    {bounced(r.email) ? <BounceBadge /> : null}
                     {i === 0 ? <span className="recip-lead">preview uses this</span> : null}
                     <button
                       type="button"
@@ -496,6 +513,7 @@ export default function ComposeEmailModal({
                     />
                     <input
                       type="email"
+                      className={bounced(r.email) ? "mail-bad" : ""}
                       value={r.email}
                       placeholder="email@company.com"
                       onChange={(e) => editRecip(r.key, { email: e.target.value })}

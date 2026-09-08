@@ -20,6 +20,7 @@ import CustomerSelect from "@/components/common/CustomerSelect";
 import Modal from "@/components/common/Modal";
 import ComposeEmailModal from "@/components/screens/ComposeEmailModal";
 import BrochuresPanel from "@/components/screens/BrochuresPanel";
+import { BounceBadge } from "@/components/common/BouncedEmail";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -49,6 +50,7 @@ export type Form = {
   subject: string;
   notes: string;
   next_action_date: string;
+  email_bounced: boolean;
   owner_id: number | "";
 };
 
@@ -63,6 +65,7 @@ export const emptyForm: Form = {
   subject: "",
   notes: "",
   next_action_date: "",
+  email_bounced: false,
   owner_id: "",
 };
 
@@ -79,6 +82,7 @@ function rowToForm(r: MarketingRow): Form {
     subject: r.subject ?? "",
     notes: r.notes ?? "",
     next_action_date: r.next_action_date ?? "",
+    email_bounced: r.email_bounced ?? false,
     owner_id: r.owner_id || "",
   };
 }
@@ -95,6 +99,7 @@ function formToBody(f: Form): MarketingSave {
     subject: f.subject,
     notes: f.notes,
     next_action_date: f.next_action_date,
+    email_bounced: f.email_bounced,
     owner_id: f.owner_id === "" ? null : f.owner_id,
   };
 }
@@ -126,6 +131,9 @@ export default function MarketingScreen() {
   function reload() {
     invalidateCache("marketing-overview");
     invalidateCache("home:marketing");
+    // 반송 표시는 고객 담당자 명부에도 옮겨 붙는다 — 홍보 메일 작성 화면이 들고 있는
+    // 담당자 목록을 버려야 방금 찍은 표시가 다음에 열 때 바로 보인다.
+    invalidateCache("settings:customers-full");
     return refresh();
   }
 
@@ -154,7 +162,17 @@ export default function MarketingScreen() {
       ),
     },
     { key: "contact_person", label: "Contact", text: (r) => r.contact_person || "" },
-    { key: "recipient_email", label: "Email", text: (r) => r.recipient_email || "" },
+    {
+      key: "recipient_email",
+      label: "Email",
+      text: (r) => r.recipient_email || "",
+      render: (r) => (
+        <span className={`mail-addr${r.email_bounced ? " bounced" : ""}`}>
+          <span>{r.recipient_email || "—"}</span>
+          {r.email_bounced ? <BounceBadge /> : null}
+        </span>
+      ),
+    },
     { key: "activity_type", label: "Activity", text: (r) => r.activity_type || "", filter: "facet" },
     { key: "channel", label: "Channel", text: (r) => r.channel || "", filter: "facet" },
     { key: "subject", label: "Subject", text: (r) => r.subject || "" },
@@ -346,12 +364,32 @@ export function MarketingForm({
             value={form.contact_person}
             onChange={(v) => setForm({ ...form, contact_person: v })}
           />
-          <Field
-            label="Recipient email"
-            type="email"
-            value={form.recipient_email}
-            onChange={(v) => setForm({ ...form, recipient_email: v })}
-          />
+          {/* 수신 주소와 그 주소의 사정(반송)을 한 칸에 둔다 — 반송은 발송 건이 아니라
+              주소에 붙는 사실이라, 체크하면 같은 주소를 쓰는 고객 담당자 명부와 홍보
+              메일 작성 화면에도 그대로 표시된다. */}
+          <div className="form-field">
+            <span>Recipient email</span>
+            <input
+              type="email"
+              className={form.email_bounced ? "mail-bad" : ""}
+              value={form.recipient_email}
+              onChange={(e) => setForm({ ...form, recipient_email: e.target.value })}
+            />
+            <label className={`bounce-check${form.email_bounced ? " on" : ""}`}>
+              <input
+                type="checkbox"
+                checked={form.email_bounced}
+                disabled={!canEdit}
+                onChange={(e) => setForm({ ...form, email_bounced: e.target.checked })}
+              />
+              ⚠ Address not found (bounced)
+            </label>
+            {form.email_bounced ? (
+              <span className="hint-inline">
+                Also flagged on this address in the customer contact list.
+              </span>
+            ) : null}
+          </div>
           <Field
             label="Activity date"
             type="date"

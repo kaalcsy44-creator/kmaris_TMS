@@ -2761,6 +2761,8 @@ class MarketingActivityCreate(BaseModel):
     notes: str | None = ""
     next_action_date: str | None = ""
     owner_id: int | None = None      # 담당자(PIC). None/0=미지정(생성 시 작성자로 대체)
+    # 반송(Address not found) 표시. 저장할 때 그 주소가 고객 담당자 명부에도 옮겨 붙는다.
+    email_bounced: bool | None = False
 
 
 def _marketing_target_name(m: MarketingActivity, cust_names: dict) -> str:
@@ -2785,6 +2787,7 @@ def _marketing_row(m: MarketingActivity, cust_names: dict, user_names: dict) -> 
         "subject": m.subject or "",
         "notes": m.notes or "",
         "next_action_date": m.next_action_date or "",
+        "email_bounced": bool(getattr(m, "email_bounced", False)),
         "owner_id": m.owner_id or 0,
         "owner": user_names.get(m.owner_id, "") if m.owner_id else "",
     }
@@ -2797,6 +2800,52 @@ def _marketing_scoped(s, user: dict):
     if role != UserRole.ADMIN.value and _scope_for(role) == "own":
         q = q.filter(MarketingActivity.owner_id == (user.get("id") or 0))
     return q
+
+
+def _contact_emails(c: Customer) -> list[str]:
+    """그 담당자 레코드에 적힌 주소 전부(다중값 + 대표 컬럼)."""
+    out = [str(x).strip() for x in (getattr(c, "emails", None) or []) if str(x).strip()]
+    flat = (c.email or "").strip()
+    if flat and flat.lower() not in {m.lower() for m in out}:
+        out.append(flat)
+    return out
+
+
+def sync_bounced_email(s, email: str) -> int:
+    """반송(Address not found) 표시를 고객 담당자 명부로 옮긴다.
+
+    반송은 활동 한 건의 사정이 아니라 그 **주소**의 사정이다 — 어느 활동에서 표시했든,
+    다음에 누가 그 사람에게 보내려 할 때 명부에서 보여야 한다. 그래서 붙는 자리는
+    보낸 활동이 가리킨 고객 레코드가 아니라 그 주소를 적어 둔 모든 레코드다(같은
+    주소가 회사 안 여러 담당자 줄에 적혀 있을 수 있다).
+
+    상태는 매번 마케팅 활동 표시들로부터 다시 셈한다 — 한 건이라도 반송으로 남아
+    있으면 반송 주소이고, 마지막 표시를 지우면 명부에서도 풀린다. 호출 전에 방금
+    바꾼 활동을 flush 해 둬야 그 표시가 셈에 든다. 돌려주는 값은 손댄 레코드 수."""
+    addr = (email or "").strip()
+    if not addr:
+        return 0
+    key = addr.lower()
+    bounced = any(
+        (m.recipient_email or "").strip().lower() == key
+        for m in s.query(MarketingActivity)
+                  .filter(MarketingActivity.email_bounced.is_(True)).all()
+    )
+    touched = 0
+    for c in s.query(Customer).all():
+        # 명부에 적힌 철자 그대로를 담는다 — 활동에 대문자로 적혔더라도 명부 줄과 같은
+        # 글자로 남아야 두 목록을 눈으로 맞춰 볼 수 있다(비교는 어차피 소문자로 한다).
+        same = next((m for m in _contact_emails(c) if m.lower() == key), "")
+        if not same:
+            continue
+        bad = [str(x).strip() for x in (getattr(c, "bad_emails", None) or []) if str(x).strip()]
+        marked = key in {b.lower() for b in bad}
+        if bounced == marked:
+            continue
+        # JSON 컬럼은 새 리스트로 갈아 끼워야 변경이 감지된다(제자리 수정 금지).
+        c.bad_emails = (bad + [same]) if bounced else [b for b in bad if b.lower() != key]
+        touched += 1
+    return touched
 
 
 # ── 일정(Schedule) — 대시보드 카드 내에서 직접 관리 ──────────────────────────
@@ -4126,6 +4175,7 @@ __all__ = [
     "default_from",
     "shipping_advice_email_body",
     "steps_for",
+    "sync_bounced_email",
     "text",
     "timedelta",
     "timezone",

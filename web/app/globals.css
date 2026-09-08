@@ -16544,3 +16544,51 @@ table.mini.wide.pimp-table th.pimp-chgcol, table.mini.wide.pimp-table td.pimp-ch
   align-items: center;
   flex-wrap: wrap;
 }
+
+/* ── 반송 주소(Address not found) ─────────────────────────────────────────────
+   보냈다가 되돌아온 주소. 지우지 않고 줄을 그어 남긴다 — 명함·서명에 적혀 있던 값이라
+   지우면 다음 사람이 같은 주소를 다시 적어 넣고 또 반송을 맞는다. 마케팅 활동 창에서
+   한 번 찍은 표시가 고객 담당자 명부와 홍보 메일 작성 화면까지 같은 모양으로 따라간다. */
+.mail-addr {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.mail-addr.bounced > a,
+.mail-addr.bounced > span:first-child {
+  color: #a33a3a;
+  text-decoration: line-through;
+}
+.bounce-badge {
+  flex: 0 0 auto;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #fdeaea;
+  color: #b03535;
+  border: 1px solid #f0c9c9;
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+/* 반송으로 표시된 주소를 담고 있는 입력칸 — 고쳐 적으라는 자리다. */
+input.mail-bad {
+  border-color: #e7b4b4;
+  background: #fff7f7;
+  color: #a33a3a;
+}
+/* 주소 칸 바로 밑의 반송 체크 — 주소에 붙는 사실이라 별도 줄로 떼지 않는다. */
+.bounce-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 5px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #6b7684;
+  cursor: pointer;
+  user-select: none;
+}
+.bounce-check.on { color: #b03535; }
+.bounce-check input { margin: 0; }

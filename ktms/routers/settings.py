@@ -147,6 +147,9 @@ def settings_customers():
                  "emails": _multi_out(getattr(c, "emails", None), c.email),
                  "phones": _multi_out(getattr(c, "phones", None), getattr(c, "contact_phone", None)),
                  "regions": _multi_out(getattr(c, "regions", None), c.country),
+                 # 반송(Address not found)으로 되돌아온 주소들 — 목록·작성 화면이
+                 # emails 와 겹치는 것만 붉게 표시한다(주소를 고치면 표시도 사라진다).
+                 "bad_emails": [str(x).strip() for x in (getattr(c, "bad_emails", None) or []) if str(x).strip()],
                  # 이 담당자가 준 문의와 그 결과. 회사 줄의 합계는 화면에서 더한다 —
                  # RFQ 는 고객 담당자 하나에만 매이므로 담당자별 수를 더해도 겹치지 않는다
                  # (벤더 쪽은 한 프로젝트가 담당자 둘에 걸릴 수 있어 서버에서 합집합을 센다).

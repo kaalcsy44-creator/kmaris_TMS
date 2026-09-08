@@ -71,6 +71,8 @@ _MIGRATIONS = {
         "website": "VARCHAR(300)",
         # 담당자의 담당 분야(영업·기술·구매…). 기존 행은 NULL = 아직 안 적음.
         "duty": "VARCHAR(100)",
+        # 반송(Address not found)으로 되돌아온 주소들. 기존 행은 NULL = 아직 없음.
+        "bad_emails": "JSON",
     },
     "vendors": {
         "website": "VARCHAR(300)",
@@ -142,6 +144,8 @@ _MIGRATIONS = {
     "marketing_activities": {
         "contact_person": "VARCHAR(100)",
         "recipient_email": "VARCHAR(200)",
+        # 이 발송이 "Address not found"로 반송됐는가(기존 행은 FALSE = 정상 발송).
+        "email_bounced": "BOOLEAN DEFAULT FALSE",
     },
     "item_master": {
         # 품목 분류 연결(대>중>소 트리의 가장 깊은 노드 id). FK 는 신규 DB 모델에서만 강제.

@@ -114,6 +114,11 @@ class Customer(Base):
     emails     = Column(JSON, default=list)
     phones     = Column(JSON, default=list)
     regions    = Column(JSON, default=list)
+    # 보냈다가 "Address not found"(반송)로 되돌아온 주소들. emails 에서 지우지 않고
+    # 따로 표시만 해 두는 이유는, 그 주소가 명함·서명에 적혀 있던 값이라 지워 버리면
+    # 다음 사람이 같은 주소를 다시 적어 넣고 또 반송을 맞기 때문이다. 주소 자체를
+    # 고치면(emails 에서 빠지면) 표시도 함께 사라진다 — 화면은 두 목록의 교집합만 본다.
+    bad_emails = Column(JSON, default=list)
     payment_terms = Column(String(200))  # 기본 결제조건(견적 작성 시 기본값으로 사용)
     # 무엇을 사는 곳인가 — 벤더의 '취급품목'과 같은 자리다. 벤더 쪽이 파는 물건을 적는
     # 칸이라면 여기는 사는 쪽의 결: 어떤 선종을 굴리고 주로 무엇을 찾는지 한 줄 요약.
@@ -788,6 +793,10 @@ class MarketingActivity(Base):
     subject          = Column(String(200))   # 제목·요약
     notes            = Column(Text)          # 상세 내용
     next_action_date = Column(String(10))    # 후속 예정일 YYYY-MM-DD (대시보드 Follow-up)
+    # 이 발송이 "Address not found"로 반송됐는가. 체크하면 그 주소가 고객사 담당자
+    # 명부(customers.bad_emails)에도 반송 표시로 옮겨 붙는다 — 반송은 이 활동 한 건의
+    # 사정이 아니라 그 주소의 사정이라, 다음에 누가 그 사람에게 보내려 할 때 보여야 한다.
+    email_bounced    = Column(Boolean, default=False)
     owner_id         = Column(Integer, ForeignKey("users.id"), nullable=True)  # 담당자(PIC)
     created_at       = Column(DateTime, default=datetime.utcnow)
 

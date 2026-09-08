@@ -111,6 +111,7 @@ import { CategoryBadges, CategoryTagPicker, useVendorCategoryOptions } from "@/c
 import { MakerBadges, MakerTagPicker, useMakerOptions } from "@/components/common/MakerCell";
 // 목록의 상대처는 다른 화면과 같은 모양(로고 + 이름)으로 — 같은 회사를 두 표기로 읽지 않도록.
 import CustomerName from "@/components/common/CustomerName";
+import { BounceBadge, MailAddress, hasBounced, isBounced } from "@/components/common/BouncedEmail";
 import VendorName from "@/components/common/VendorName";
 import ProjectNo from "@/components/common/ProjectNo";
 // 머리 칸 정렬·필터 — 진행현황·지급대장 표에서 쓰는 장치를 마스터 목록에도 그대로 쓴다.
@@ -962,7 +963,7 @@ function MyPasswordChange() {
 const EMPTY_CUSTOMER: SettingsCustomer = {
   id: 0, name: "", contact: "", duty: "", contact_phone: "", email: "", country: "", address: "",
   tax_id: "", tax_invoice_email: "", specialization: "", website: "", note: "", payment_terms: "", logo: "",
-  addresses: [], emails: [], phones: [], regions: [],
+  addresses: [], emails: [], phones: [], regions: [], bad_emails: [],
 };
 
 /* ── Partners — 고객과 벤더를 한 번에 한 쪽씩 ─────────────────────────────────
@@ -1189,7 +1190,14 @@ function CustomersTab() {
           </span>
         )],
         ["country", "Region", (r) => <MultiCell values={r.regions} flat={r.country} />],
-        ["contact", "Contact"],
+        // 담당자 이름 옆의 반송 꼬리표 — 이 사람 주소로 보낸 메일이 되돌아왔다는 표시다.
+        // 명부를 훑다가 바로 보여야 한다: 주소는 접혀 있어도 이름은 늘 이 자리에 있다.
+        ["contact", "Contact", (r) => (
+          <span className="mail-addr">
+            <span>{r.contact || <span className="dash">—</span>}</span>
+            {hasBounced(r.emails.length ? r.emails : [r.email], r.bad_emails) ? <BounceBadge /> : null}
+          </span>
+        )],
         ["inquiries", "Inquiries → Orders",
           (r) => (
             <CustomerWinBadge
@@ -1561,6 +1569,8 @@ function CompanyInfoModal<
     // 담당자 명단을 창 안에서 함께 읽는다 — 고객·거래선 두 표가 같은 칸을 갖고 있다.
     contact: string; duty: string; email: string; contact_phone: string;
     emails: string[]; phones: string[]; regions: string[]; country: string;
+    // 반송된 주소들(고객사 전용). 거래선 표에는 이 칸이 없어 선택 항목으로 둔다.
+    bad_emails?: string[];
   }
 >({
   rows,
@@ -1933,7 +1943,9 @@ function CompanyInfoModal<
                       <td>
                         {mails.length ? (
                           <span className="co-lines">
-                            {mails.map((m) => <a key={m} href={`mailto:${m}`}>{m}</a>)}
+                            {mails.map((m) => (
+                              <MailAddress key={m} email={m} bounced={isBounced(m, r.bad_emails)} />
+                            ))}
                           </span>
                         ) : <span className="dash">—</span>}
                       </td>

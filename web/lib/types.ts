@@ -60,6 +60,9 @@ export type SettingsCustomer = {
   emails: string[];
   phones: string[];
   regions: string[];
+  /** 보냈다가 "Address not found"로 반송된 주소들. emails 와 겹치는 것만 화면에서
+   *  반송 표시가 붙는다 — 주소를 고쳐 적으면 표시도 함께 사라진다. */
+  bad_emails: string[];
   /** 이 담당자가 준 문의(RFQ) 수. */
   inquiries?: number;
   /** 그중 오더(고객 P/O)까지 간 수. */
@@ -2007,6 +2010,8 @@ export type MarketingRow = {
   subject: string;
   notes: string;
   next_action_date: string;
+  /** 이 발송이 "Address not found"로 반송됐는가(수신 거부·없는 주소). */
+  email_bounced: boolean;
   owner_id: number;
   owner: string;
 };

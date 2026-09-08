@@ -924,6 +924,7 @@ export type MarketingSave = {
   subject?: string;
   notes?: string;
   next_action_date?: string;
+  email_bounced?: boolean;
   owner_id?: number | null;
 };
 
