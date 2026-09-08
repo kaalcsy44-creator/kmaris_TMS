@@ -13,7 +13,7 @@ import {
   deleteRfqStageNote,
 } from "@/lib/api";
 import type { MailDateRow, PipelineData, PipelineRow, StageNote } from "@/lib/types";
-import { vendorOf, activityParties, activityPersons } from "@/lib/deal";
+import { vendorOf, vendorBadgesOf, activityParties, activityPersons } from "@/lib/deal";
 import {
   buildActivities,
   daysSinceISO,
@@ -38,13 +38,6 @@ import ActivityNoteForm, {
 import { PipelineModal, byProjectNo } from "@/components/screens/ProjectsScreen";
 import Modal from "@/components/common/Modal";
 import { useCachedData } from "@/lib/useCachedData";
-
-// 벤더 모노그램 상태 — 발주 벤더 확정 시 문자열 fallback, 아니면 RFQ 발송 벤더의 견적 수신여부.
-// (ProjectsScreen 과 동일 규칙.)
-function vendorStatusesFor(r: PipelineRow): { name: string; quoted: boolean }[] | undefined {
-  if (r.vendor) return undefined;
-  return r.rfq_vendors && r.rfq_vendors.length ? r.rfq_vendors : undefined;
-}
 
 // 내부 11단계 → 5개 버킷(RFQ 1–2 / Quote 3–4 / PO 5–6 / Documents 7–9 / AR 10–11).
 const PHASES: { label: string; from: number; to: number }[] = [
@@ -783,7 +776,7 @@ function DealStageRow({
             {row.customer ? <CustomerName name={row.customer} /> : null}
             {row.contact_person ? <span className="act-sub-contact">· {row.contact_person}</span> : null}
             {vend ? <span className="act-sub-sep">/</span> : null}
-            {vend ? <VendorMonograms value={vendorOf(row)} statuses={vendorStatusesFor(row)} /> : null}
+            {vend ? <VendorMonograms value={vendorOf(row)} statuses={vendorBadgesOf(row)} /> : null}
           </div>
         ) : null}
         {closeAct ? (

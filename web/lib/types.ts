@@ -1766,7 +1766,11 @@ export type PipelineRow = {
   vendor_email: string;
   // RFQ 발송 벤더 + 상태. quoted=견적 수신, declined=견적 불가 통보(수동 표시).
   // 표시 규칙: 견적 수신=선명, 대기=회색, (견적불가 통보 || 견적단계 넘긴 미수신)=취소선.
-  rfq_vendors?: { name: string; quoted: boolean; declined?: boolean; contact?: string }[];
+  // sent_at = 그 벤더에게 마지막으로 RFQ 를 보낸 일시(ISO). 견적 단계를 넘긴 딜에서
+  // "지난 라운드의 미회신"과 "다시 열고 새로 물어본 곳"을 가르는 근거다.
+  rfq_vendors?: {
+    name: string; quoted: boolean; declined?: boolean; contact?: string; sent_at?: string;
+  }[];
   // RFQ 발송 이력 — 벤더 RFQ 1건 = 발송 1건(중복제거 없음). 업무일지에서 발송별 별도 행 표시.
   rfq_sends?: { id: number; vendor: string; sent_at: string }[];
   // 견적 수신 이력 — 벤더 견적 1건 = 수신 1건. 견적을 실제로 준 벤더는 이 목록이 근거다

@@ -7,7 +7,7 @@
 
 import type { PipelineRow, StageNote } from "@/lib/types";
 import { closeReasonLabel } from "@/lib/api";
-import { vendorOf, quotedVendorsOf } from "@/lib/deal";
+import { poVendorsOf, rfqVendorsOf, vendorOf, quotedVendorsOf } from "@/lib/deal";
 
 export type Activity =
   // at: 정렬용 전체 일시(iso). 같은 날 여러 발송을 시각순으로 잇는다. 없으면 date(YYYY-MM-DD)로 정렬.
@@ -69,16 +69,19 @@ export function daysSinceISO(iso: string): number | null {
 /** 자동 단계 이벤트의 From/To 상대 — 단계별로 고객/벤더를 붙인다. */
 export function autoParty(stage: number, row: PipelineRow): string {
   const cust = row.customer || "";
-  const vend = vendorOf(row);
+  // 단계마다 상대가 다르다 — 물어본 곳과 발주한 곳을 한 이름으로 뭉치면, 열한 곳에
+  // 물어본 딜의 P/O 가 "열한 곳에 발주"로 읽힌다.
+  const asked = rfqVendorsOf(row).join(", ");
+  const ordered = poVendorsOf(row).join(", ") || vendorOf(row).split("\n").join(", ");
   switch (stage) {
     case 1: return cust ? `from ${cust}` : "";   // RFQ Received
-    case 2: return vend ? `to ${vend}` : "";     // RFQ Sent
+    case 2: return asked ? `to ${asked}` : "";   // RFQ Sent
     // Quote Received — 견적을 실제로 준 벤더만. RFQ 를 보낸 벤더 전체(vendorOf)를 쓰면
     // 한 곳에서만 받은 견적이 "모든 벤더에서 받음"으로 보인다.
     case 3: { const q = quotedVendorsOf(row); return q ? `from ${q}` : ""; }
     case 4: return cust ? `to ${cust}` : "";     // Quote Sent
     case 5: return cust ? `from ${cust}` : "";   // P/O Received
-    case 6: return vend ? `to ${vend}` : "";     // P/O Sent
+    case 6: return ordered ? `to ${ordered}` : "";  // P/O Sent
     case 8: return cust ? `to ${cust}` : "";     // Delivery Complete
     case 9: return cust ? `to ${cust}` : "";     // Tax Invoice · Billing
     case 10: return cust ? `to ${cust}` : "";    // Tax Invoice Issued

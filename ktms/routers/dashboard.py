@@ -147,13 +147,19 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
                 nm = vendor_names.get(x.vendor_id, "—")
                 q = x.id in _quoted_vrfq_ids
                 dec = (x.status or "") == "견적 불가"   # 수동 '견적 불가' 표시(취소선)
+                # 언제 물어봤는가 — 같은 벤더에 여러 번 보냈으면 가장 나중 것.
+                # 딜이 견적을 낸 뒤에 보낸 RFQ 는 지난 라운드의 낙오가 아니라 새 라운드다
+                # (공급사가 공급을 거절해 다시 소싱하는 경우). 프런트가 이 날짜로 가른다.
+                sent = _vrfq_sent_iso(x) or ""
                 if nm in _seen_v:
                     if q:
                         _seen_v[nm]["quoted"] = True
                     if dec:
                         _seen_v[nm]["declined"] = True
+                    if sent > (_seen_v[nm].get("sent_at") or ""):
+                        _seen_v[nm]["sent_at"] = sent
                 else:
-                    e = {"name": nm, "quoted": q, "declined": dec,
+                    e = {"name": nm, "quoted": q, "declined": dec, "sent_at": sent,
                          "contact": vendor_contacts.get(x.vendor_id, "")}
                     _seen_v[nm] = e
                     rfq_vendors_status.append(e)

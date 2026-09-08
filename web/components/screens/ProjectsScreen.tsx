@@ -24,6 +24,8 @@ import {
 import { useCachedData, invalidateCache } from "@/lib/useCachedData";
 import {
   vendorOf,
+  vendorBadgesOf,
+  vendorsOf,
   resolveSteps,
   fmtStageDate,
   stageDateOf,
@@ -499,13 +501,6 @@ const PLC_CLASS: Record<ColKey, string> = {
   assignee: "plc-assignee",
 };
 
-// 보드 카드 벤더 배지: P/O 발주 벤더가 정해지기 전에는 RFQ 발송 벤더 + 견적 수신여부를
-// 넘겨 미제출 벤더를 고스트로 표시한다. P/O 이후엔(문자열) 그대로 정상 표시.
-function vendorStatusesFor(r: PipelineRow): { name: string; quoted: boolean }[] | undefined {
-  if (r.vendor) return undefined; // 발주 벤더 확정 → 문자열 fallback(모두 정상)
-  return r.rfq_vendors && r.rfq_vendors.length ? r.rfq_vendors : undefined;
-}
-
 /** 한 행에서 필드별 텍스트 값(검색·문자열 정렬용). */
 function cellText(r: PipelineRow, key: FieldKey, steps: string[]): string {
   switch (key) {
@@ -750,7 +745,15 @@ function PipelineTable({
   }
   const workTypeOpts = distinct((r) => r.work_type || "부품공급");
   const customerOpts = distinct((r) => r.customer || "");
-  const vendorOpts = distinct(vendorOf);
+  // 벤더는 한 딜에 여럿이다(물어본 곳 + 발주한 곳). 칸 값 전체를 한 항목으로 세우면
+  // 고를 수 있는 것이 그 조합뿐이라 "A 가 낀 딜"을 고르는 길이 없다 — 이름 하나가 한
+  // 항목이고, 한 이름이라도 걸리면 그 딜이 남는다(툴바 필터가 이미 그렇게 센다).
+  const rowVendors = (r: PipelineRow) => {
+    const v = vendorsOf(r);
+    return v.length ? v : [""];   // 벤더가 없는 딜도 "미지정"으로 고를 수 있어야 한다
+  };
+  const vendorOpts = Array.from(new Set(rows.flatMap(rowVendors)))
+    .sort((a, b) => a.localeCompare(b, "ko"));
   const vesselOpts = distinct((r) => r.vessel || "");
   const assigneeOpts = distinct((r) => r.assignee || "");
   // 단계 옵션: 데이터에 존재하는 stage 번호를 오름차순으로
@@ -810,12 +813,11 @@ function PipelineTable({
 
   // 1) 필터: 선택한 조건들의 교집합(AND). 툴바 멀티 선택(tb*)은 배열 안 값 중 하나라도 일치(OR).
   const myName = me?.username || "";
-  const rowVendors = (r: PipelineRow) => vendorOf(r).split(/[\n,]/).map((s) => s.trim()).filter(Boolean);
   let displayRows = rows.filter(
     (r) =>
       (fWorkType.length === 0 || fWorkType.includes(r.work_type || "부품공급")) &&
       (fCustomer.length === 0 || fCustomer.includes(r.customer || "")) &&
-      (fVendor.length === 0 || fVendor.includes(vendorOf(r))) &&
+      (fVendor.length === 0 || rowVendors(r).some((v) => fVendor.includes(v))) &&
       (fVessel.length === 0 || fVessel.includes(r.vessel || "")) &&
       (fAssignee.length === 0 || fAssignee.includes(r.assignee || "")) &&
       (fStage.length === 0 || fStage.includes(String(stageOf(r)))) &&
@@ -1769,7 +1771,7 @@ function BoardCard({
         </div>
         {vendorOf(r) ? (
           <div className="pl-card-vrow">
-            <VendorMonograms value={vendorOf(r)} statuses={vendorStatusesFor(r)} />
+            <VendorMonograms value={vendorOf(r)} statuses={vendorBadgesOf(r)} />
           </div>
         ) : null}
       </div>
@@ -1806,7 +1808,7 @@ function BoardCard({
           <span className="pl-card-contact" title={r.contact_person || undefined}>
             {r.contact_person || ""}
           </span>
-          <VendorMonograms value={vendorOf(r)} statuses={vendorStatusesFor(r)} />
+          <VendorMonograms value={vendorOf(r)} statuses={vendorBadgesOf(r)} />
         </div>
       ) : null}
       <div className="pl-card-bar" title={barTitle}>

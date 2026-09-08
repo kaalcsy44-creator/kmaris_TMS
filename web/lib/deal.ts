@@ -3,9 +3,70 @@
 
 import type { PipelineRow } from "@/lib/types";
 
-/** 딜의 벤더 표시값 — 확정 벤더(P/O) 우선, 없으면 RFQ 발송 벤더 목록. */
+/** 백엔드가 줄바꿈으로 이어 보낸 벤더 문자열을 이름 목록으로. 쉼표로는 자르지 않는다 —
+ *  "ABC Marine, Ltd." 같은 이름이 두 곳으로 쪼개진다. */
+function splitLines(value: string | undefined): string[] {
+  return (value || "").split("\n").map((s) => s.trim()).filter(Boolean);
+}
+
+/** 발주(P/O)를 실제로 낸 벤더들. */
+export function poVendorsOf(r: PipelineRow): string[] {
+  return splitLines(r.vendor);
+}
+
+/** RFQ 를 보낸 벤더들(견적 수신 여부와 무관). */
+export function rfqVendorsOf(r: PipelineRow): string[] {
+  const list = (r.rfq_vendors ?? []).map((v) => (v.name || "").trim()).filter(Boolean);
+  return list.length ? list : splitLines(r.vrfq_vendors);   // 옛 응답 폴백
+}
+
+/**
+ * 이 딜의 벤더들 — 발주한 곳이 앞, 그 뒤로 물어본 곳.
+ *
+ * 예전에는 P/O 가 나가면 그 한 곳만 보여 줬다. 발주까지 갔으면 벤더는 정해진 것이니
+ * 나머지는 지난 이야기라고 본 것이다. 그런데 끝나지 않는 딜이 있다 — 공급사가 공급을
+ * 거절해 닫았다가 다시 열고 여러 곳에 새로 물어보는 건이다. 그때 목록은 "한 곳"이라고
+ * 말했지만 실제로는 열한 곳에 RFQ 가 나가 있었다.
+ *
+ * 발주한 곳과 물어본 곳은 서로를 대신하지 못한다. 둘 다 세우되 순서로 무게를 준다.
+ */
+export function vendorsOf(r: PipelineRow): string[] {
+  const out: string[] = [];
+  for (const n of poVendorsOf(r)) pushUnique(out, n);
+  for (const n of rfqVendorsOf(r)) pushUnique(out, n);
+  return out;
+}
+
+/** 딜의 벤더 표시값 — 화면 한 칸에 넣는 줄바꿈 문자열(VendorName 이 줄마다 로고를 붙인다). */
 export function vendorOf(r: PipelineRow): string {
-  return (r.vendor || "").trim() || (r.vrfq_vendors || "").trim();
+  return vendorsOf(r).join("\n");
+}
+
+/**
+ * 보드 카드의 벤더 배지 — 이름과 '진하게 볼 것인가'.
+ *
+ * 발주한 곳과 견적을 준 곳은 선명하게, 물어봐 놓고 아직 답이 없는 곳은 흐리게 둔다.
+ * 배지는 카드 한 줄에 들어가는 만큼만 보이므로(넘치면 잘린다) 진한 것이 앞에 서야
+ * 한다 — 잘려 나가는 쪽은 늘 덜 중요한 쪽이어야 한다.
+ */
+export function vendorBadgesOf(r: PipelineRow): { name: string; quoted: boolean }[] {
+  const out: { name: string; quoted: boolean }[] = [];
+  const seen = new Set<string>();
+  for (const n of poVendorsOf(r)) {
+    if (seen.has(n)) continue;
+    seen.add(n);
+    out.push({ name: n, quoted: true });
+  }
+  for (const v of r.rfq_vendors ?? []) {
+    const n = (v.name || "").trim();
+    if (!n || seen.has(n)) continue;
+    seen.add(n);
+    out.push({ name: n, quoted: !!v.quoted });
+  }
+  // 옛 응답(벤더별 상태 없음)은 이름만 있다 — 전부 선명하게 둔다(모르는 것을 흐리게
+  // 칠하면 '견적 미수신'이라는 없는 사실을 말하게 된다).
+  if (!out.length) for (const n of rfqVendorsOf(r)) out.push({ name: n, quoted: true });
+  return out;
 }
 
 // 빈값·중복·자리표시("—")를 걸러 순서대로 담는다(활동로그 드롭다운 후보 조립용).

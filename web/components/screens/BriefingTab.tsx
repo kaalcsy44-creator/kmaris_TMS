@@ -34,6 +34,7 @@ import {
   resolveSteps,
   stageForNote,
   vendorOf,
+  vendorBadgesOf,
 } from "@/lib/deal";
 
 // Briefing — 아침에 가장 먼저 여는 화면. 프로젝트 하나가 카드 하나다.
@@ -668,7 +669,7 @@ function BriefCard({
             {row.contact_person ? <span className="brief-contact"> · {row.contact_person}</span> : null}
           </span>
         ) : null}
-        {vend ? <VendorMonograms value={vend} statuses={row.vendor ? undefined : row.rfq_vendors} /> : null}
+        {vend ? <VendorMonograms value={vend} statuses={vendorBadgesOf(row)} /> : null}
         {vessel ? <span className="brief-vessel" title={vessel}>{vessel}</span> : null}
       </div>
 
