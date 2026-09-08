@@ -1016,9 +1016,28 @@ const EMPTY_MAKER: SettingsMaker = {
 function MakersTab() {
   const catText = useCategoryText();
   const catNames = useCategoryNames();
+  // 열면 읽기부터 — 메이커 줄을 누르는 손짓은 대개 "이 회사가 뭘 만드는 곳이었지"를
+  // 확인하려는 것이다(고객·거래선의 회사 줄과 같은 규칙). 곧장 입력칸으로 열어 두면
+  // 확인하러 들어왔다가 잘못 눌러 값을 흘리게 된다. 고치는 길은 창 안의 ✎ 와 줄 끝의
+  // ✎ 두 갈래로 남는다. 편집 창을 여는 일은 목록이 쥐고 있어(edit) 그대로 건네받는다 —
+  // 읽기 창이 폼을 다시 만들면 같은 칸이 두 벌이 된다.
+  const [info, setInfo] = useState<{ row: SettingsMaker; edit: () => void } | null>(null);
   return (
+    <>
+    {info ? (
+      <MakerInfoModal
+        row={info.row}
+        onEdit={() => {
+          const go = info.edit;
+          setInfo(null);
+          go();
+        }}
+        onClose={() => setInfo(null)}
+      />
+    ) : null}
     <MasterSection<SettingsMaker>
       title="Maker"
+      onRowOpen={(row, edit) => setInfo({ row, edit })}
       empty={EMPTY_MAKER}
       headCols={makerHeadCols(catNames)}
       load={fetchSettingsMakers}
@@ -1093,6 +1112,75 @@ function MakersTab() {
         </>
       )}
     />
+    </>
+  );
+}
+
+/**
+ * 메이커 한 곳을 읽는 창 — 회사 정보 창(🏢)이 고객·거래선에게 하는 일을 메이커에게.
+ *
+ * 메이커에는 담당자 명단이 없어 그 창을 그대로 쓸 수 없다(그 창의 아래 절반이
+ * 담당자 표다). 대신 읽는 쪽 절반만 같은 모양으로 세운다 — 같은 값을 확인하는 자리가
+ * 표마다 다르게 생기면 무엇을 보는 창인지 두 번 배워야 한다.
+ *
+ * 고치는 폼은 만들지 않는다. 목록이 이미 그 폼을 들고 있어 ✎ 는 그것을 열 뿐이다.
+ */
+function MakerInfoModal({
+  row,
+  onEdit,
+  onClose,
+}: {
+  row: SettingsMaker;
+  onEdit: () => void;
+  onClose: () => void;
+}) {
+  const site = (row.website || "").trim();
+  const mails = contactValues(row.emails, row.email);
+  const tels = contactValues(row.phones, row.contact_phone);
+  const regions = contactValues(row.regions, row.country);
+  const addrs = contactValues(row.addresses, row.address);
+  const lines = (values: string[]) =>
+    values.length ? <span className="co-lines">{values.map((v, i) => <span key={i}>{v}</span>)}</span> : null;
+
+  const shown: [string, React.ReactNode][] = [
+    ["Maker", row.name],
+    ["Region", regions.join(" · ") || null],
+    ["Address", lines(addrs)],
+    ["Website", site
+      ? <a href={/^https?:\/\//i.test(site) ? site : `https://${site}`} target="_blank" rel="noreferrer">{site}</a>
+      : null],
+    ["Email", mails.length
+      ? <span className="co-lines">{mails.map((m) => <a key={m} href={`mailto:${m}`}>{m}</a>)}</span>
+      : null],
+    ["Phone", lines(tels)],
+    ["Item categories", row.category_ids.length ? <CategoryBadges ids={row.category_ids} /> : null],
+    ["Makes", row.specialization || null],
+    // 이 회사 물건을 우리가 몇 개나 다뤄 봤는가 — 메이커에게는 이것이 관계의 두께다
+    // (고객·거래선의 '문의 → 오더' 자리와 같다).
+    ["Items", row.items ? <span className="ms-badge">{row.items}</span> : null],
+    ["About this maker", row.note ? <span className="co-para">{row.note}</span> : null],
+  ];
+
+  return (
+    <Modal title={`🏭 Maker — ${row.name}`} onClose={onClose} form maxWidth={720}>
+      <div className="company-read">
+        {row.logo ? <img className="co-logo" src={row.logo} alt="" /> : null}
+        <dl>
+          {shown.map(([label, node]) => (
+            <div key={label} className="co-row">
+              <dt>{label}</dt>
+              <dd>{node ?? <span className="dash">—</span>}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+      <div className="form-actions">
+        {can("settings", "edit") ? (
+          <button className="btn primary" onClick={onEdit}>✎ Edit</button>
+        ) : null}
+        <button className="btn" onClick={onClose}>Close</button>
+      </div>
+    </Modal>
   );
 }
 
@@ -4617,6 +4705,7 @@ function MasterSection<T extends { id: number }>({
   printCols,
   importKind,
   scrollBody = false,
+  onRowOpen,
 }: {
   title: string;
   empty: T;
@@ -4701,6 +4790,10 @@ function MasterSection<T extends { id: number }>({
   // 화면 표와 따로 두는 이유: 종이는 화면보다 넓어 이메일·전화·주소처럼 화면에서 접어 둔
   // 값까지 실을 수 있고, 배지(도형)로 보여 주던 값은 글자로 풀어 적어야 한다.
   printCols?: PrintCol<T>[];
+  /** 줄을 누르면 읽기 창부터 연다(고객·거래선의 회사 줄과 같은 규칙 — 대개 "이 회사가
+   *  뭐 하는 곳이었지"를 확인하러 누른다). 고치는 길은 함께 건네는 edit() 과 줄 끝의
+   *  ✎ 두 갈래로 남는다. 주지 않으면 지금까지처럼 줄을 누르면 곧장 편집 창이 열린다. */
+  onRowOpen?: (row: T, edit: () => void) => void;
 }) {
   const NEW_ID = -1; // editId 센티넬: 신규 등록 편집기
   const [rows, setRows] = useState<T[]>([]);
@@ -5009,7 +5102,7 @@ function MasterSection<T extends { id: number }>({
       <tr
         key={row.id}
         className={`${sub ? "ms-sub" : ""}${row.id === editId ? " sel" : ""}`}
-        onClick={() => openEdit(row)}
+        onClick={() => (onRowOpen ? onRowOpen(row, () => openEdit(row)) : openEdit(row))}
       >
         {columns.map(([key, , renderCell, cls], i) => (
           <td key={String(key)} className={cls}>
