@@ -2262,23 +2262,19 @@ table.perm-matrix tr.perm-group:first-child td {
 .vendor-out { text-decoration: line-through; color: #9aa7b8; }
 /* .vendor-noquote: 옛 클래스(하위호환) — out 과 동일. */
 .vendor-noquote { text-decoration: line-through; color: #9aa7b8; }
-/* 견적 불가 통보한 벤더 — 프로젝트 Vendor 필드뿐 아니라 벤더 칩(2단계 레코드 탭·
-   비교 헤더)에서도 "빠진 상대"임을 알린다. 회색 글자에 회색 선은 멀리서 보면 선이
-   있는지조차 모르므로, 선은 붉게 굵게 긋고 칩 자체도 옅은 붉은 배경으로 물린다. */
+/* 견적 불가 통보한 벤더 — 프로젝트 Vendor 필드·목록 표·벤더 칩(2단계 레코드 탭,
+   비교 헤더)에서 "빠진 상대"임을 알린다. 선은 검정 보통 굵기로 긋되 글자와 로고는
+   흐리게 물린다 — 이 칸에서 눈이 먼저 가야 하는 쪽은 아직 답을 기다리는 유효한
+   거래선이지, 이미 못 준다고 한 곳이 아니다. */
 .vendor-out-chip .cust-name-text {
   text-decoration: line-through;
-  text-decoration-color: #d64545;
-  text-decoration-thickness: 2px;
-  color: #7b8494;
+  text-decoration-color: #1f2937;
+  color: #98a3b3;
 }
-.vendor-out-chip .cust-logo { opacity: 0.5; filter: grayscale(1); }
-.embedded-record-picker button.vendor-out-chip {
-  background: #fdf2f2;
-  border-color: #f0c9c9;
-}
-.embedded-record-picker button.vendor-out-chip.on {
-  background: #fbe6e6;
-  border-color: #d64545;
+.vendor-out-chip .cust-logo { opacity: 0.45; filter: grayscale(1); }
+.embedded-record-picker button.vendor-out-chip:not(.on) {
+  background: #f5f7f9;
+  border-color: #e3e8ee;
 }
 .intl-steplist {
   list-style: none;
