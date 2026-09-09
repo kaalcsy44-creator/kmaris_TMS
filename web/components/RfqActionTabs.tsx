@@ -407,11 +407,14 @@ function RecordPicker<T extends { id: number }>({
   rows,
   selectedId,
   label,
+  rowClass,
   onSelect,
 }: {
   rows: T[];
   selectedId: number;
   label: (r: T) => React.ReactNode;
+  // 레코드별 상태를 칩에도 실어 보낸다(예: 견적 불가 벤더는 취소선).
+  rowClass?: (r: T) => string;
   onSelect: (id: number) => void;
 }) {
   if (rows.length <= 1) return null;
@@ -421,7 +424,7 @@ function RecordPicker<T extends { id: number }>({
         <button
           key={r.id}
           type="button"
-          className={r.id === selectedId ? "on" : ""}
+          className={[r.id === selectedId ? "on" : "", rowClass?.(r) || ""].filter(Boolean).join(" ")}
           onClick={() => onSelect(r.id)}
         >
           {label(r)}
@@ -520,9 +523,17 @@ function EmbeddedVendorRfq({
       <div className="embedded-record-bar pane-row">
         <div className="vrfq-head-left">
           {mine.length > 1 ? (
-            <RecordPicker rows={mine} selectedId={selected.id} label={(r) => r.vendor ? <VendorName name={r.vendor} /> : `RFQ ${r.id}`} onSelect={setSelId} />
+            <RecordPicker
+              rows={mine}
+              selectedId={selected.id}
+              label={(r) => r.vendor ? <VendorName name={r.vendor} /> : `RFQ ${r.id}`}
+              rowClass={(r) => (r.status === "견적 불가" ? "vendor-out-chip" : "")}
+              onSelect={setSelId}
+            />
           ) : (
-            <span className="embedded-record-current"><VendorName name={selected.vendor || ""} /></span>
+            <span className={`embedded-record-current${selected.status === "견적 불가" ? " vendor-out-chip" : ""}`}>
+              <VendorName name={selected.vendor || ""} />
+            </span>
           )}
           {/* 배지는 선택된 Vendor RFQ 고유 번호(001·002…). 프로젝트 공통 번호가 아님. */}
           <b className="rec-doc-no">{selected.kmaris_rfq_no || project?.vrfq_kmaris_no || ""}</b>
@@ -557,7 +568,7 @@ function EmbeddedVendorRfq({
         <div className="vm-compare">
           {mine.map((v) => (
             <div className="vm-compare-col" key={v.id}>
-              <div className="vm-compare-head">
+              <div className={`vm-compare-head${v.status === "견적 불가" ? " vendor-out-chip" : ""}`}>
                 <VendorName name={v.vendor || ""} />
                 <b className="rec-doc-no">{v.kmaris_rfq_no || ""}</b>
               </div>
