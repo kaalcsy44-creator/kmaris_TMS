@@ -2263,14 +2263,23 @@ table.perm-matrix tr.perm-group:first-child td {
 /* .vendor-noquote: 옛 클래스(하위호환) — out 과 동일. */
 .vendor-noquote { text-decoration: line-through; color: #9aa7b8; }
 /* 견적 불가 통보한 벤더 — 프로젝트 Vendor 필드뿐 아니라 벤더 칩(2단계 레코드 탭·
-   비교 헤더)에서도 같은 취소선으로 "빠진 상대"임을 알린다. 선택 중인 칩은 색까지
-   흐려지면 지금 보고 있는 레코드가 어디인지 놓쳐서 취소선만 남긴다. */
+   비교 헤더)에서도 "빠진 상대"임을 알린다. 회색 글자에 회색 선은 멀리서 보면 선이
+   있는지조차 모르므로, 선은 붉게 굵게 긋고 칩 자체도 옅은 붉은 배경으로 물린다. */
 .vendor-out-chip .cust-name-text {
   text-decoration: line-through;
-  text-decoration-color: #b6c0cd;
+  text-decoration-color: #d64545;
+  text-decoration-thickness: 2px;
+  color: #7b8494;
 }
-.vendor-out-chip:not(.on) .cust-name-text { color: #9aa7b8; }
-.vendor-out-chip .cust-logo { opacity: 0.55; }
+.vendor-out-chip .cust-logo { opacity: 0.5; filter: grayscale(1); }
+.embedded-record-picker button.vendor-out-chip {
+  background: #fdf2f2;
+  border-color: #f0c9c9;
+}
+.embedded-record-picker button.vendor-out-chip.on {
+  background: #fbe6e6;
+  border-color: #d64545;
+}
 .intl-steplist {
   list-style: none;
   margin: 0 0 12px;
