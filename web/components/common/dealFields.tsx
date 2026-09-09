@@ -49,13 +49,18 @@ export function vendorList(r: PipelineRow): ReactNode {
       ...list,
       ...poVendorsOf(r)
         .filter((n) => !list.some((v) => v.name === n))
-        .map((n) => ({ name: n, quoted: true })),
+        .map((n) => ({ name: n, quoted: true, declined: false })),
     ];
-    return shown.map((v, i) => (
-      <div key={i} className={`vendor-${vendorState(v, r)}`}>
-        <VendorName name={v.name} />
-      </div>
-    ));
+    // '견적 불가'를 통보받은 곳은 목록 표와 같은 표시(붉은 취소선)로 세운다 — 답이
+    // 없어 흐려진 곳(waiting/out)과 "못 준다고 말한 곳"은 다른 사실이다.
+    return shown.map((v, i) => {
+      const declined = !!v.declined && !v.quoted;
+      return (
+        <div key={i} className={declined ? "" : `vendor-${vendorState(v, r)}`}>
+          <VendorName name={v.name} outNames={declined ? [v.name] : undefined} />
+        </div>
+      );
+    });
   }
   return r.vendor ? <VendorName name={r.vendor} /> : "—";
 }

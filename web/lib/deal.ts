@@ -69,6 +69,15 @@ export function vendorBadgesOf(r: PipelineRow): { name: string; quoted: boolean 
   return out;
 }
 
+/** '견적 불가'를 통보해 온 벤더들 — 목록 표·상세에서 취소선으로 세울 이름.
+ *  견적을 준 적이 있으면(quoted) 제외한다 — 답이 온 곳까지 지워 버리면 표시가
+ *  사실과 어긋난다. */
+export function declinedVendorsOf(r: PipelineRow): string[] {
+  const out: string[] = [];
+  for (const v of r.rfq_vendors ?? []) if (v.declined && !v.quoted) pushUnique(out, v.name);
+  return out;
+}
+
 // 빈값·중복·자리표시("—")를 걸러 순서대로 담는다(활동로그 드롭다운 후보 조립용).
 function pushUnique(out: string[], v: string | undefined) {
   const t = (v || "").trim();

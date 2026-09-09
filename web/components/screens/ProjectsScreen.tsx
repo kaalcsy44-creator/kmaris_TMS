@@ -26,6 +26,7 @@ import {
   vendorOf,
   vendorBadgesOf,
   vendorsOf,
+  declinedVendorsOf,
   resolveSteps,
   fmtStageDate,
   stageDateOf,
@@ -1907,7 +1908,13 @@ function PipelineCell({
     case "vendor":
       return (
         <td className="pl-td-vendor">
-          {vendorOf(r) ? <VendorName name={vendorOf(r)} /> : <span className="muted">—</span>}
+          {/* '견적 불가'를 통보해 온 곳은 이름 위에 취소선 — 목록에서도 "물어봤지만
+              빠진 상대"가 바로 보여야 딜 상세를 열지 않고 남은 곳을 셀 수 있다. */}
+          {vendorOf(r) ? (
+            <VendorName name={vendorOf(r)} outNames={declinedVendorsOf(r)} />
+          ) : (
+            <span className="muted">—</span>
+          )}
         </td>
       );
     case "stage":
