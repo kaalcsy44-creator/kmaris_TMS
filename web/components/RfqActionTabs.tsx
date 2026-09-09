@@ -617,7 +617,7 @@ function NoQuoteDialog({
   return (
     <Modal title={`No quote — ${vendor || "Vendor"}`} onClose={onCancel} form>
       <div className="form-field">
-        <label>통보 일시 (Notified at)</label>
+        <label>Notified at</label>
         <input
           type="datetime-local"
           value={datetime}
@@ -625,11 +625,11 @@ function NoQuoteDialog({
         />
       </div>
       <div className="form-field">
-        <label>사유 (Reason)</label>
+        <label>Reason</label>
         <textarea
           rows={3}
           value={reason}
-          placeholder="예: 재고 없음 / 단종 / 취급 품목 아님"
+          placeholder="e.g. Out of stock / Discontinued / Not our product line"
           onChange={(e) => setReason(e.target.value)}
           autoFocus
         />
