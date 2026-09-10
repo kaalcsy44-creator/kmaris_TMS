@@ -354,6 +354,30 @@ def update_customer(row_id: int, body: CustomerCreate):
         s.close()
 
 
+def _customer_block_reason(s, c) -> str:
+    """이 고객사를 지울 수 없게 붙잡는 거래 기록 — 없으면 빈 문자열.
+    지우기와 옮기기가 같은 규칙을 보게 한 곳에 둔다(옮기기 = 복사 + 원본 지우기)."""
+    n_rfq = s.query(RFQ).filter_by(customer_id=c.id).count()
+    n_qtn = s.query(Quotation).filter_by(customer_id=c.id).count()
+    n_ord = s.query(Order).filter_by(customer_id=c.id).count()
+    parts = []
+    if n_rfq: parts.append(f"RFQ {n_rfq}건")
+    if n_qtn: parts.append(f"견적 {n_qtn}건")
+    if n_ord: parts.append(f"오더 {n_ord}건")
+    return " · ".join(parts)
+
+
+def _delete_customer_row(s, c) -> None:
+    """고객사 한 줄을 지운다(가드는 부르는 쪽이 이미 봤다는 전제).
+    소프트 링크(선박·마케팅·일정)는 연결만 풀고, 자식 담당자는 함께 지운다."""
+    s.query(Vessel).filter_by(customer_id=c.id).update({Vessel.customer_id: None}, synchronize_session=False)
+    s.query(MarketingActivity).filter_by(customer_id=c.id).update({MarketingActivity.customer_id: None}, synchronize_session=False)
+    s.query(ScheduleEvent).filter_by(customer_id=c.id).update({ScheduleEvent.customer_id: None}, synchronize_session=False)
+    s.query(CustomerContact).filter_by(customer_id=c.id).delete(synchronize_session=False)
+    s.flush()
+    s.delete(c)
+
+
 @app.delete("/api/admin/settings/customers/{row_id}", dependencies=[Depends(require_token)])
 def delete_customer(row_id: int):
     s = get_session()
@@ -362,24 +386,11 @@ def delete_customer(row_id: int):
         if not c:
             raise HTTPException(status_code=404, detail="Customer를 찾을 수 없습니다.")
         # 거래 기록(RFQ·견적·오더)이 있으면 삭제 불가 — 데이터 손상 방지, 명확히 안내.
-        n_rfq = s.query(RFQ).filter_by(customer_id=c.id).count()
-        n_qtn = s.query(Quotation).filter_by(customer_id=c.id).count()
-        n_ord = s.query(Order).filter_by(customer_id=c.id).count()
-        if n_rfq or n_qtn or n_ord:
-            parts = []
-            if n_rfq: parts.append(f"RFQ {n_rfq}건")
-            if n_qtn: parts.append(f"견적 {n_qtn}건")
-            if n_ord: parts.append(f"오더 {n_ord}건")
+        blocked = _customer_block_reason(s, c)
+        if blocked:
             raise HTTPException(status_code=400,
-                detail=f"이 고객사에 연결된 {' · '.join(parts)}이(가) 있어 삭제할 수 없습니다. 거래 기록이 있는 고객사는 삭제 대신 보관하세요.")
-        # 소프트 링크(선택 참조: 선박·마케팅·일정)는 연결만 해제하고 고객사를 삭제한다.
-        s.query(Vessel).filter_by(customer_id=c.id).update({Vessel.customer_id: None}, synchronize_session=False)
-        s.query(MarketingActivity).filter_by(customer_id=c.id).update({MarketingActivity.customer_id: None}, synchronize_session=False)
-        s.query(ScheduleEvent).filter_by(customer_id=c.id).update({ScheduleEvent.customer_id: None}, synchronize_session=False)
-        # 자식 담당자 삭제(FK 제약 회피) 후 고객사 삭제.
-        s.query(CustomerContact).filter_by(customer_id=c.id).delete(synchronize_session=False)
-        s.flush()
-        s.delete(c)
+                detail=f"이 고객사에 연결된 {blocked}이(가) 있어 삭제할 수 없습니다. 거래 기록이 있는 고객사는 삭제 대신 보관하세요.")
+        _delete_customer_row(s, c)
         s.commit()
         return {"ok": True}
     finally:
@@ -735,6 +746,22 @@ def update_vendor(row_id: int, body: VendorCreate):
         s.close()
 
 
+def _vendor_block_reason(s, v) -> str:
+    """이 거래선을 지울 수 없게 붙잡는 거래 기록 — 없으면 빈 문자열."""
+    n_vrfq = s.query(VendorRFQ).filter_by(vendor_id=v.id).count()
+    n_po = s.query(PurchaseOrder).filter_by(vendor_id=v.id).count()
+    parts = []
+    if n_vrfq: parts.append(f"발주 RFQ {n_vrfq}건")
+    if n_po: parts.append(f"발주서 {n_po}건")
+    return " · ".join(parts)
+
+
+def _delete_vendor_row(s, v) -> None:
+    s.query(VendorContact).filter_by(vendor_id=v.id).delete(synchronize_session=False)
+    s.flush()
+    s.delete(v)
+
+
 @app.delete("/api/admin/settings/vendors/{row_id}", dependencies=[Depends(require_token)])
 def delete_vendor(row_id: int):
     s = get_session()
@@ -743,17 +770,11 @@ def delete_vendor(row_id: int):
         if not v:
             raise HTTPException(status_code=404, detail="Vendor를 찾을 수 없습니다.")
         # 거래 기록(발주 RFQ·발주서)이 있으면 삭제 불가.
-        n_vrfq = s.query(VendorRFQ).filter_by(vendor_id=v.id).count()
-        n_po = s.query(PurchaseOrder).filter_by(vendor_id=v.id).count()
-        if n_vrfq or n_po:
-            parts = []
-            if n_vrfq: parts.append(f"발주 RFQ {n_vrfq}건")
-            if n_po: parts.append(f"발주서 {n_po}건")
+        blocked = _vendor_block_reason(s, v)
+        if blocked:
             raise HTTPException(status_code=400,
-                detail=f"이 공급사에 연결된 {' · '.join(parts)}이(가) 있어 삭제할 수 없습니다. 거래 기록이 있는 공급사는 삭제 대신 보관하세요.")
-        s.query(VendorContact).filter_by(vendor_id=v.id).delete(synchronize_session=False)
-        s.flush()
-        s.delete(v)
+                detail=f"이 공급사에 연결된 {blocked}이(가) 있어 삭제할 수 없습니다. 거래 기록이 있는 공급사는 삭제 대신 보관하세요.")
+        _delete_vendor_row(s, v)
         s.commit()
         return {"ok": True}
     finally:
@@ -872,6 +893,165 @@ def delete_maker(row_id: int):
         s.delete(m)
         s.commit()
         return {"ok": True}
+    finally:
+        s.close()
+
+
+# ── 명부 사이 옮기기·복사 ──────────────────────────────────────────────────────
+# 같은 회사가 갈래를 바꾸거나 두 갈래에 함께 서는 일은 흔하다. SENDA 처럼 사 오던 곳에
+# 팔기 시작하고, 대리점이던 곳에서 직접 만들기도 한다. 그때까지 길은 하나뿐이었다 —
+# 저쪽 탭에서 회사를 처음부터 다시 입력하는 것. 주소·전화·로고·담당자를 손으로 옮겨
+# 적는 동안 두 명부의 같은 회사가 조금씩 다른 회사가 되었다.
+#
+# 그래서 명부를 옮기는 일 자체를 한 자리에 둔다. 복사는 원본을 그대로 두고 저쪽에도
+# 세우는 것이고(한 회사가 사 가기도 팔기도 한다), 옮기기는 복사한 뒤 원본을 지우는
+# 것이다 — 지우기의 규칙을 그대로 따르므로, 거래 기록이 걸린 회사는 옮겨지지 않는다.
+
+_PARTNER_KINDS = {"customers": Customer, "vendors": Vendor, "makers": Maker}
+
+# 회사에 딸린 값 — 어느 명부에 서든 같은 뜻이다(주소·홈페이지·로고·소개…).
+_PARTNER_COMPANY_FIELDS = ("address", "website", "specialization", "note", "logo",
+                           "country", "contact_phone", "email")
+_PARTNER_MULTI_FIELDS = ("addresses", "emails", "phones", "regions")
+# 사람에 딸린 값 — 메이커에는 이 자리가 없다(담당자를 두지 않는 명부라서).
+_PARTNER_CONTACT_FIELDS = ("contact", "duty", "payment_terms")
+
+
+def _partner_new_row(src_row, to_kind: str, with_contact: bool):
+    """원본 한 줄을 저쪽 명부의 새 줄로 옮겨 담는다. 저쪽에 없는 칸은 조용히 버린다
+    (고객의 사업자번호는 거래선 명부에 자리가 없고, 메이커에는 담당자가 없다)."""
+    obj = _PARTNER_KINDS[to_kind](name=(src_row.name or "").strip())
+    for f in _PARTNER_COMPANY_FIELDS:
+        if hasattr(obj, f):
+            setattr(obj, f, getattr(src_row, f, None) or "")
+    for f in _PARTNER_MULTI_FIELDS:
+        if hasattr(obj, f):
+            setattr(obj, f, list(getattr(src_row, f, None) or []))
+    if with_contact:
+        for f in _PARTNER_CONTACT_FIELDS:
+            if hasattr(obj, f) and hasattr(src_row, f):
+                setattr(obj, f, getattr(src_row, f) or "")
+    # 취급/제조 분류는 두 명부가 같은 트리를 쓴다 — 뜻은 다르지만("다루나" ↔ "만드나")
+    # 옮겨 온 값이 있는 편이 빈 칸보다 낫다. 고객 명부에는 이 칸이 없어 그냥 버려진다.
+    for f in ("category_ids", "maker_ids"):
+        if hasattr(obj, f) and hasattr(src_row, f):
+            setattr(obj, f, list(getattr(src_row, f, None) or []))
+    return obj
+
+
+def _partner_contact_key(row) -> str:
+    """저쪽에 이미 같은 사람이 서 있는지 가리는 열쇠 — 담당자 이름 + 대표 주소."""
+    return (_norm_company(getattr(row, "contact", "") or "") + "|"
+            + (getattr(row, "email", "") or "").strip().lower())
+
+
+class PartnerTransfer(BaseModel):
+    """어느 명부의 어느 회사들을, 어디로, 어떻게."""
+    source: str
+    target: str
+    names: list[str] = []
+    mode: str = "copy"     # copy | move
+
+
+@app.post("/api/admin/settings/partners/transfer", dependencies=[Depends(require_token)])
+def partners_transfer(body: PartnerTransfer):
+    """고른 회사를 다른 명부로 복사하거나 옮긴다(회사 단위, 여러 곳 한꺼번에).
+
+    회사 단위인 이유: 명부의 한 줄은 담당자 한 명이고, 그 사람만 저쪽으로 보내는 것은
+    뜻이 없다 — 갈래를 바꾸는 것은 언제나 회사다. 그래서 고른 회사에 딸린 담당자는
+    모두 함께 간다(메이커로 갈 때는 담당자 자리가 없어 회사 한 줄로 접힌다).
+
+    이미 저쪽에 서 있는 사람은 건너뛴다. 옮기기는 원본을 지우는데, 거래 기록이 걸려
+    삭제가 막힌 회사는 복사도 하지 않고 통째로 건너뛴다 — 반만 옮겨 두 명부에 같은
+    회사가 남는 것이 가장 나쁜 결과라서다."""
+    if body.source not in _PARTNER_KINDS or body.target not in _PARTNER_KINDS:
+        raise HTTPException(status_code=400, detail="알 수 없는 명부입니다.")
+    if body.source == body.target:
+        raise HTTPException(status_code=400, detail="같은 명부로는 옮길 수 없습니다.")
+    if body.mode not in ("copy", "move"):
+        raise HTTPException(status_code=400, detail="copy 또는 move 만 됩니다.")
+    names = [n for n in (body.names or []) if (n or "").strip()]
+    if not names:
+        raise HTTPException(status_code=400, detail="옮길 회사를 고르세요.")
+
+    Src = _PARTNER_KINDS[body.source]
+    Dst = _PARTNER_KINDS[body.target]
+    to_maker = body.target == "makers"
+    move = body.mode == "move"
+
+    s = get_session()
+    try:
+        src_all = s.query(Src).order_by(Src.id).all()
+        by_name: dict[str, list] = {}
+        for r in src_all:
+            by_name.setdefault(_norm_company(r.name or ""), []).append(r)
+
+        dst_all = s.query(Dst).order_by(Dst.id).all()
+        dst_names = {_norm_company(r.name or "") for r in dst_all}
+        dst_people = {(_norm_company(r.name or ""), _partner_contact_key(r)) for r in dst_all}
+
+        done: list[str] = []
+        skipped: list[dict] = []
+        created = 0
+
+        for raw in names:
+            key = _norm_company(raw)
+            rows = by_name.get(key) or []
+            if not rows:
+                skipped.append({"name": raw, "reason": "not found"})
+                continue
+            label = (rows[0].name or raw).strip()
+
+            # 옮기기라면 먼저 원본을 지울 수 있는지부터 본다 — 복사해 놓고 못 지우면
+            # 같은 회사가 두 명부에 남는다.
+            if move:
+                blocked = ""
+                for r in rows:
+                    reason = (_customer_block_reason(s, r) if body.source == "customers"
+                              else _vendor_block_reason(s, r) if body.source == "vendors"
+                              else "")
+                    if reason:
+                        blocked = reason
+                        break
+                if blocked:
+                    skipped.append({"name": label, "reason": blocked})
+                    continue
+
+            made = 0
+            if to_maker:
+                # 메이커 명부는 회사 한 곳 = 한 줄이라 담당자별로 세우지 않는다.
+                if key not in dst_names:
+                    s.add(_partner_new_row(rows[0], body.target, with_contact=False))
+                    dst_names.add(key)
+                    made = 1
+            else:
+                for r in rows:
+                    ck = (key, _partner_contact_key(r))
+                    if ck in dst_people:
+                        continue           # 저쪽에 이미 서 있는 사람
+                    s.add(_partner_new_row(r, body.target, with_contact=True))
+                    dst_people.add(ck)
+                    made += 1
+            # 저쪽에 이미 다 서 있었다. 복사라면 할 일이 없고, 옮기기라면 아직 남았다 —
+            # 옮긴다는 것은 '저쪽에 세운다'가 아니라 '이쪽에서 뺀다'까지다.
+            if made == 0 and not move:
+                skipped.append({"name": label, "reason": "already there"})
+                continue
+
+            created += made
+            if move:
+                for r in rows:
+                    if body.source == "customers":
+                        _delete_customer_row(s, r)
+                    elif body.source == "vendors":
+                        _delete_vendor_row(s, r)
+                    else:
+                        s.delete(r)
+            done.append(label)
+
+        s.commit()
+        return {"ok": True, "mode": body.mode, "done": done,
+                "created": created, "skipped": skipped}
     finally:
         s.close()
 

@@ -1228,6 +1228,29 @@ export function applyPartnerImport(body: {
   return post<PartnerImportPlan>("/api/admin/settings/partners/import/apply", body);
 }
 
+/* ── 명부 사이 옮기기·복사 ───────────────────────────────────────────────── */
+export type PartnerTransferResult = {
+  ok: boolean;
+  mode: "copy" | "move";
+  /** 실제로 옮겨지거나 복사된 회사 이름. */
+  done: string[];
+  /** 새로 만들어진 줄 수(담당자 단위 — 메이커로 갈 때는 회사당 1). */
+  created: number;
+  /** 건너뛴 회사와 그 까닭(거래 기록이 걸렸거나, 저쪽에 이미 있거나). */
+  skipped: { name: string; reason: string }[];
+};
+
+/** 고른 회사를 다른 명부로 복사(원본 유지)하거나 옮긴다(원본 삭제). 회사 단위다 —
+ *  그 회사의 담당자는 모두 함께 간다. */
+export function transferPartners(body: {
+  source: PartnerImportKind;
+  target: PartnerImportKind;
+  names: string[];
+  mode: "copy" | "move";
+}): Promise<PartnerTransferResult> {
+  return post<PartnerTransferResult>("/api/admin/settings/partners/transfer", body);
+}
+
 export function fetchSettingsVessels(): Promise<SettingsVessel[]> {
   return get<SettingsVessel[]>("/api/admin/settings/vessels");
 }

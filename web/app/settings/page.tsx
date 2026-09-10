@@ -25,6 +25,7 @@ import {
   updateSettingsMaker,
   deleteSettingsMaker,
   fetchSettingsVendors,
+  transferPartners,
   fetchVendorCategorySuggestions,
   fetchSettingsVessels,
   parseBusinessCard,
@@ -101,6 +102,7 @@ import PrintListButton from "@/components/common/PrintListModal";
 import PartnerImportButton from "@/components/common/PartnerImportModal";
 import { invalidateCustomerLogos } from "@/lib/customerLogos";
 import { invalidateVendorLogos } from "@/lib/vendorLogos";
+import { invalidateCache } from "@/lib/useCachedData";
 import { downscaleImageFile, fileToLogoDataUrl, imageFromClipboard } from "@/lib/imagePaste";
 import { PAYMENT_TERMS_PRESETS } from "@/lib/terms";
 import ComboBox from "@/components/common/ComboBox";
@@ -966,6 +968,21 @@ const EMPTY_CUSTOMER: SettingsCustomer = {
   addresses: [], emails: [], phones: [], regions: [], bad_emails: [],
 };
 
+/** 세 명부의 이름 — 화면에 쓰는 말과 서버가 쓰는 열쇠를 한 곳에서 잇는다. */
+const PARTNER_KINDS: PartnerImportKind[] = ["customers", "vendors", "makers"];
+const PARTNER_KIND_LABEL: Record<PartnerImportKind, string> = {
+  customers: "Customer",
+  vendors: "Vendor",
+  makers: "Maker",
+};
+
+/** 명부 사이를 옮기고 나면 양쪽이 다 낡는다 — 로고 캐시도, 메이커 목록도. */
+function invalidatePartnerCaches() {
+  invalidateCustomerLogos();
+  invalidateVendorLogos();
+  invalidateCache("settings-makers");
+}
+
 /* ── Partners — 고객과 벤더를 한 번에 한 쪽씩 ─────────────────────────────────
    둘은 같은 상대처 명부를 사고 파는 방향으로만 나눈 것이라 한 탭 안에 함께 두지만,
    좌우로 반씩 나눠 놓으면 어느 쪽도 제 폭을 못 쓴다 — 취급품목이나 담당자 이름처럼
@@ -1044,6 +1061,7 @@ function MakersTab() {
       create={createSettingsMaker}
       update={updateSettingsMaker}
       remove={deleteSettingsMaker}
+      transfer={{ kind: "makers", nameOf: (r) => r.name, onDone: invalidatePartnerCaches }}
       searchText={(r) => [r.name, r.specialization, r.note, r.country,
                           r.regions.join(" "), r.website].join(" ")}
       printCols={makerPrintCols(catText)}
@@ -1270,6 +1288,7 @@ function CustomersTab() {
       update={updateSettingsCustomer}
       remove={deleteSettingsCustomer}
       onSaved={invalidateCustomerLogos}
+      transfer={{ kind: "customers", nameOf: (r) => r.name, onDone: invalidatePartnerCaches }}
       columns={[
         ["name", "Company name", (r) => (
           <span className="cust-name">
@@ -2657,6 +2676,7 @@ function VendorsTab() {
       update={updateSettingsVendor}
       remove={deleteSettingsVendor}
       onSaved={invalidateVendorLogos}
+      transfer={{ kind: "vendors", nameOf: (r) => r.name, onDone: invalidatePartnerCaches }}
       columns={[
         ["name", "Company name", (r) => (
           <span className="cust-name">
@@ -4706,6 +4726,7 @@ function MasterSection<T extends { id: number }>({
   importKind,
   scrollBody = false,
   onRowOpen,
+  transfer,
 }: {
   title: string;
   empty: T;
@@ -4794,6 +4815,15 @@ function MasterSection<T extends { id: number }>({
    *  뭐 하는 곳이었지"를 확인하러 누른다). 고치는 길은 함께 건네는 edit() 과 줄 끝의
    *  ✎ 두 갈래로 남는다. 주지 않으면 지금까지처럼 줄을 누르면 곧장 편집 창이 열린다. */
   onRowOpen?: (row: T, edit: () => void) => void;
+  /** 다른 명부로 복사·이동. 주면 줄마다 체크칸이 서고, 고른 회사를 한꺼번에 보낸다.
+   *  고르는 단위는 언제나 회사다 — 갈래를 바꾸는 것은 담당자가 아니라 회사라서. */
+  transfer?: {
+    kind: PartnerImportKind;
+    /** 이 줄이 속한 회사 이름(= 고르는 열쇠이자 서버에 보내는 이름). */
+    nameOf: (row: T) => string;
+    /** 보내고 난 뒤 — 양쪽 명부의 캐시(로고·메이커 목록)를 함께 씻어 낸다. */
+    onDone?: () => void;
+  };
 }) {
   const NEW_ID = -1; // editId 센티넬: 신규 등록 편집기
   const [rows, setRows] = useState<T[]>([]);
@@ -4808,6 +4838,12 @@ function MasterSection<T extends { id: number }>({
   // 도구줄의 + New 만 빈 문자열로 남아 회사명 칸을 세운다(회사가 아직 없어서다).
   const [newCompany, setNewCompany] = useState("");
   const [openKeys, setOpenKeys] = useState<Set<string>>(new Set()); // 펼쳐 둔 그룹(회사)
+  // 다른 명부로 보내려고 고른 회사들(이름). 줄이 아니라 회사를 고른다 — 담당자 한 명만
+  // 저쪽 명부로 보내는 것은 뜻이 없어서다.
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [tbusy, setTbusy] = useState(false);
+  const [tmsg, setTmsg] = useState("");
+  const [terr, setTerr] = useState(false);
   // 마스터 데이터 입력·수정·삭제 권한(= "settings" 모듈). admin 은 항상 true.
   const canCreate = can("settings", "create");
   const canEdit = can("settings", "edit");
@@ -4996,6 +5032,74 @@ function MasterSection<T extends { id: number }>({
     });
   }
 
+  // 지금 화면에 서 있는 회사들 — 전체선택과 '몇 개 골랐나'가 보는 목록이다.
+  // 묶음이 있는 표는 회사 줄이 곧 회사이고, 아닌 표(메이커)는 줄 하나가 회사다.
+  const pickKeys = !transfer
+    ? []
+    : group
+    ? groups.map((g) => g.key)
+    : Array.from(new Set(filtered.map((r) => transfer.nameOf(r)).filter(Boolean)));
+  const allPicked = pickKeys.length > 0 && pickKeys.every((k) => picked.has(k));
+  const somePicked = pickKeys.some((k) => picked.has(k));
+
+  function togglePick(key: string) {
+    setPicked((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+    setTmsg("");
+  }
+  function togglePickAll() {
+    // 화면에 보이는 것만 다룬다 — 검색·필터로 좁혀 놓고 전체선택을 눌렀는데 안 보이는
+    // 회사까지 딸려 가면, 무엇을 보냈는지 화면으로는 알 수 없게 된다.
+    setPicked(allPicked ? new Set() : new Set(pickKeys));
+    setTmsg("");
+  }
+
+  /** 고른 회사를 저쪽 명부로 — copy 는 원본을 두고, move 는 원본을 지운다. */
+  async function runTransfer(mode: "copy" | "move", target: PartnerImportKind) {
+    if (!transfer || picked.size === 0) return;
+    const names = [...picked];
+    const label = PARTNER_KIND_LABEL[target];
+    const what = `${names.length} ${names.length === 1 ? "company" : "companies"}`;
+    if (mode === "move" &&
+        !confirm(`Move ${what} to ${label}?
+
+They will be removed from ${title}. ` +
+                 `A company with deal history cannot be removed — it will be left where it is.`)) {
+      return;
+    }
+    setTbusy(true);
+    setTmsg("");
+    setTerr(false);
+    try {
+      const r = await transferPartners({ source: transfer.kind, target, names, mode });
+      const said: string[] = [];
+      if (r.done.length) {
+        said.push(`${r.done.length} ${mode === "move" ? "moved" : "copied"} to ${label}` +
+                  (r.created ? ` (${r.created} record${r.created === 1 ? "" : "s"})` : ""));
+      }
+      // 건너뛴 회사는 이름과 까닭을 그대로 밝힌다 — 숫자만 말하면 어느 회사가 왜
+      // 남았는지 알 길이 없어 명부를 눈으로 뒤져야 한다.
+      if (r.skipped.length) {
+        said.push(`skipped ${r.skipped.map((x) => `${x.name} — ${x.reason}`).join("; ")}`);
+      }
+      setTmsg(said.join(" · ") || "Nothing to do.");
+      setTerr(r.done.length === 0);
+      setPicked(new Set());
+      refresh();
+      onSaved?.();
+      transfer.onDone?.();
+    } catch (e) {
+      setTmsg(e instanceof Error ? e.message : "Transfer failed");
+      setTerr(true);
+    } finally {
+      setTbusy(false);
+    }
+  }
+
   // 2열 배치 — 그룹을 위에서부터 채워 좌우 높이가 비슷해지게 자른다(신문 단 조판).
   // 펼친 그룹은 담당자 행만큼 높아지므로 그만큼 무게를 더 준다.
   const columnPair = (() => {
@@ -5028,9 +5132,23 @@ function MasterSection<T extends { id: number }>({
   // 2열로 자른 한쪽), 아니면 넘겨받은 그룹만 그린다.
   function table(list: { key: string; rows: T[] }[] | null, only?: T[]) {
     return (
-      <table className={`mini wide ms-table${tableClass ? ` ${tableClass}` : ""}`}>
+      <table className={`mini wide ms-table${transfer ? " ms-table--sel" : ""}${tableClass ? ` ${tableClass}` : ""}`}>
         <thead>
           <tr>
+            {transfer ? (
+              <th className="ms-selcol">
+                <label className="row-check-hit">
+                  <input
+                    type="checkbox"
+                    className="row-check"
+                    aria-label="Select all companies"
+                    checked={allPicked}
+                    ref={(el) => { if (el) el.indeterminate = !allPicked && somePicked; }}
+                    onChange={togglePickAll}
+                  />
+                </label>
+              </th>
+            ) : null}
             {columns.map(([key, label, , cls]) => {
               const hc = headByKey.get(String(key));
               // 메뉴가 달린 칸은 누르면 정렬·값 고르기가 열린다(HeadTh). 나머지는 그대로.
@@ -5073,9 +5191,22 @@ function MasterSection<T extends { id: number }>({
                 return (
                 <Fragment key={g.key}>
                   <tr
-                    className={`ms-group${flatGroups ? " ms-group--flat" : ""}${click ? "" : " ms-group--still"}`}
+                    className={`ms-group${flatGroups ? " ms-group--flat" : ""}${click ? "" : " ms-group--still"}${picked.has(g.key) ? " ms-picked" : ""}`}
                     onClick={click}
                   >
+                    {transfer ? (
+                      <td className="ms-selcol" onClick={(e) => e.stopPropagation()}>
+                        <label className="row-check-hit">
+                          <input
+                            type="checkbox"
+                            className="row-check"
+                            aria-label={`Select ${g.key}`}
+                            checked={picked.has(g.key)}
+                            onChange={() => togglePick(g.key)}
+                          />
+                        </label>
+                      </td>
+                    ) : null}
                     {/* 그룹(회사) 행도 데이터 행과 같은 칸 클래스를 쓴다 — 폭 규칙이
                         한 칸에만 걸리면 열이 들쭉날쭉해진다. */}
                     {group?.cells(g.rows, isOpen(g.key)).map((node, i) => (
@@ -5101,9 +5232,28 @@ function MasterSection<T extends { id: number }>({
     return (
       <tr
         key={row.id}
-        className={`${sub ? "ms-sub" : ""}${row.id === editId ? " sel" : ""}`}
+        className={`${sub ? "ms-sub" : ""}${row.id === editId ? " sel" : ""}${
+          transfer && !group && picked.has(transfer.nameOf(row)) ? " ms-picked" : ""
+        }`}
         onClick={() => (onRowOpen ? onRowOpen(row, () => openEdit(row)) : openEdit(row))}
       >
+        {transfer ? (
+          <td className="ms-selcol" onClick={(e) => e.stopPropagation()}>
+            {/* 묶음이 있는 표에서 이 줄은 담당자다 — 고르는 것은 회사(위 줄)라 여기는
+                자리만 지킨다. 묶음이 없는 표(메이커)는 줄 하나가 곧 회사다. */}
+            {group ? null : (
+              <label className="row-check-hit">
+                <input
+                  type="checkbox"
+                  className="row-check"
+                  aria-label={`Select ${transfer.nameOf(row)}`}
+                  checked={picked.has(transfer.nameOf(row))}
+                  onChange={() => togglePick(transfer.nameOf(row))}
+                />
+              </label>
+            )}
+          </td>
+        ) : null}
         {columns.map(([key, , renderCell, cls], i) => (
           <td key={String(key)} className={cls}>
             {sub && i === 0
@@ -5242,6 +5392,50 @@ function MasterSection<T extends { id: number }>({
       </div>
 
       {editor}
+
+      {/* 고른 회사를 다른 명부로 — 고른 것이 있을 때만(또는 방금 보낸 결과를 알릴 때만)
+          선다. 복사는 원본을 두고 저쪽에도 세우고, 이동은 저쪽에 세운 뒤 이쪽에서 뺀다. */}
+      {transfer && (picked.size > 0 || tmsg) ? (
+        <div className="ms-pick-bar">
+          {picked.size > 0 ? (
+            <>
+              <span className="ms-pick-count">{picked.size} selected</span>
+              {PARTNER_KINDS.filter((k) => k !== transfer.kind).map((k) => (
+                <Fragment key={k}>
+                  {canCreate ? (
+                    <button
+                      className="btn sm"
+                      disabled={tbusy}
+                      title={`Add them to ${PARTNER_KIND_LABEL[k]} and keep them here too`}
+                      onClick={() => runTransfer("copy", k)}
+                    >
+                      📋 Copy to {PARTNER_KIND_LABEL[k]}
+                    </button>
+                  ) : null}
+                  {canCreate && canDelete ? (
+                    <button
+                      className="btn sm"
+                      disabled={tbusy}
+                      title={`Add them to ${PARTNER_KIND_LABEL[k]} and remove them from ${title}`}
+                      onClick={() => runTransfer("move", k)}
+                    >
+                      → Move to {PARTNER_KIND_LABEL[k]}
+                    </button>
+                  ) : null}
+                </Fragment>
+              ))}
+              <button
+                className="btn sm"
+                disabled={tbusy}
+                onClick={() => { setPicked(new Set()); setTmsg(""); }}
+              >
+                Clear
+              </button>
+            </>
+          ) : null}
+          {tmsg ? <span className={terr ? "action-err" : "action-ok"}>{tmsg}</span> : null}
+        </div>
+      ) : null}
 
       {/* 머리 칸에 필터가 걸렸을 때만 나오는 줄 — 몇 줄이 남았는지와 한 번에 되돌리기.
           안 걸었으면 자리도 차지하지 않는다. */}

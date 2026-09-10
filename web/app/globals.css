@@ -1546,6 +1546,89 @@ table.mini.wide.ms-table thead th.pl-th.open .pl-th-btn {
 .ms-filter-bar .pl-search-count {
   margin-left: 0;
 }
+/* ── 명부 사이 옮기기 — 고른 회사가 있을 때만 서는 줄 ─────────────────────────
+   목록 위 도구줄과 표 사이에 든다. 고른 것이 없으면 자리도 차지하지 않는다:
+   늘 서 있는 빈 줄은 표를 아래로 밀기만 하고 아무것도 알려 주지 않는다. */
+.ms-pick-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: #f4f8ff;
+}
+.ms-pick-count {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--navy);
+}
+/* 고른 회사 줄은 옅게 칠해 둔다 — 표를 굴려 내려가도 무엇을 골랐는지 보이게. */
+.ms-table tbody tr.ms-picked > td {
+  background: #eef5ff;
+}
+/* 체크 칸 자체 — 내용은 체크박스 하나뿐이라 제 폭만 지킨다. */
+table.mini.wide.ms-table th.ms-selcol,
+table.mini.wide.ms-table td.ms-selcol {
+  width: 32px;
+  min-width: 32px;
+  padding-left: 4px;
+  padding-right: 4px;
+  white-space: nowrap;
+}
+/* 앞에 체크 칸이 서면 열 차례가 하나씩 밀린다. 위의 폭 규칙들은 자리(nth-child)로
+   매겨져 있어 그대로 두면 회사명 칸이 Region 몫을, Region 이 Contact 몫을 받는다 —
+   이름 칸이 접히고 오른쪽 글 칸이 잘리는 것이 그 증상이다. 밀린 만큼 같은 뜻을 다시
+   매긴다(차례만 +1, 뜻은 위 규칙 그대로). */
+table.mini.wide.ms-table.ms-table--sel th:nth-child(2):not(.ms-actcol),
+table.mini.wide.ms-table.ms-table--sel td:nth-child(2):not(.ms-actcol) {
+  width: 1%;
+  min-width: 0;
+  white-space: nowrap;
+}
+table.mini.wide.ms-table.ms-table--sel th:nth-child(3):not(.ms-actcol),
+table.mini.wide.ms-table.ms-table--sel td:nth-child(3):not(.ms-actcol) {
+  width: 1%;
+  min-width: 0;
+  white-space: nowrap;
+}
+table.mini.wide.ms-table.ms-table--sel th:nth-child(4):not(.ms-actcol),
+table.mini.wide.ms-table.ms-table--sel td:nth-child(4):not(.ms-actcol) {
+  width: auto;
+  min-width: 150px;
+  white-space: normal;
+}
+table.mini.wide.ms-table.ms-table--sel th:nth-child(n + 5):not(.ms-actcol),
+table.mini.wide.ms-table.ms-table--sel td:nth-child(n + 5):not(.ms-actcol) {
+  width: 1%;
+  min-width: 120px;
+  white-space: normal;
+}
+/* 클래스로 매긴 칸(취급품목·제조사·분류·건수)은 자리와 무관하다 — 다만 바로 위에서
+   차례로 다시 매긴 규칙이 그것들보다 구체적이라 그대로 두면 덮어 버린다. 같은 무게로
+   한 번 더 세워 뒤에 둔다(원래 값 그대로). */
+table.mini.wide.ms-table.ms-table--sel th.ms-spec:not(.ms-actcol),
+table.mini.wide.ms-table.ms-table--sel td.ms-spec:not(.ms-actcol) {
+  width: auto;
+  min-width: 240px;
+  white-space: normal;
+}
+table.mini.wide.ms-table.ms-table--sel th.ms-maker:not(.ms-actcol),
+table.mini.wide.ms-table.ms-table--sel td.ms-maker:not(.ms-actcol),
+table.mini.wide.ms-table.ms-table--sel th.ms-cat:not(.ms-actcol),
+table.mini.wide.ms-table.ms-table--sel td.ms-cat:not(.ms-actcol) {
+  width: auto;
+  min-width: 180px;
+  white-space: normal;
+}
+table.mini.wide.ms-table.ms-table--sel th.ms-deals:not(.ms-actcol),
+table.mini.wide.ms-table.ms-table--sel td.ms-deals:not(.ms-actcol) {
+  width: 1%;
+  min-width: 96px;
+  white-space: nowrap;
+}
 .ms-edit-btn {
   color: #8a97ab;
   font-size: 12px;
