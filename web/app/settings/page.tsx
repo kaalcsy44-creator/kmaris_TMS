@@ -1075,6 +1075,7 @@ function MakersTab() {
           </span>
         )],
         ["country", "Region", (r) => <MultiCell values={r.regions} flat={r.country} />],
+        ["website", "Website", (r) => <SiteCell value={r.website} />, "ms-site"],
         ["items", "Items", (r) => (
           r.items ? <span className="ms-badge">{r.items}</span> : <span className="dash">—</span>
         ), "ms-deals"],
@@ -1165,7 +1166,7 @@ function MakerInfoModal({
     ["Region", regions.join(" · ") || null],
     ["Address", lines(addrs)],
     ["Website", site
-      ? <a href={/^https?:\/\//i.test(site) ? site : `https://${site}`} target="_blank" rel="noreferrer">{site}</a>
+      ? <a href={siteHref(site)} target="_blank" rel="noreferrer">{site}</a>
       : null],
     ["Email", mails.length
       ? <span className="co-lines">{mails.map((m) => <a key={m} href={`mailto:${m}`}>{m}</a>)}</span>
@@ -1265,6 +1266,7 @@ function CustomersTab() {
           <GroupNameCell key="n" rows={rs} open={open} />,
           <span key="r" className="ms-group-sub">{regionSummary(rs)}</span>,
           <span key="c" className="ms-group-sub">{nameSummary(rs)}</span>,
+          <span key="w" className="ms-group-sub"><SiteCell value={companySite(rs)} /></span>,
           // 회사 합계 = 담당자들의 단순 합. RFQ 는 고객 담당자 하나에만 매이므로 같은
           // 문의가 두 번 세어지지 않는다(벤더 쪽은 겹칠 수 있어 서버가 합집합을 센다).
           <CustomerWinBadge
@@ -1305,6 +1307,7 @@ function CustomersTab() {
             {hasBounced(r.emails.length ? r.emails : [r.email], r.bad_emails) ? <BounceBadge /> : null}
           </span>
         )],
+        ["website", "Website", (r) => <SiteCell value={r.website} />, "ms-site"],
         ["inquiries", "Inquiries → Orders",
           (r) => (
             <CustomerWinBadge
@@ -1565,14 +1568,14 @@ function summarize(list: string[], sep: string, max: number): string {
 // 검색 대상 — 표에 접혀 있는 값(2번째 이메일·전화·주소)까지 포함해 찾을 수 있게 한다.
 function contactSearchText(r: {
   name: string; contact: string; duty?: string;
-  address?: string; specialization?: string; note?: string;
+  address?: string; specialization?: string; note?: string; website?: string;
   addresses?: string[]; emails?: string[]; phones?: string[]; regions?: string[];
   email?: string; contact_phone?: string; country?: string;
 }): string {
   return [
     r.name, r.contact, r.duty ?? "", r.address ?? "", r.specialization ?? "", r.note ?? "",
     ...(r.addresses ?? []), ...(r.emails ?? []), ...(r.phones ?? []), ...(r.regions ?? []),
-    r.email ?? "", r.contact_phone ?? "", r.country ?? "",
+    r.email ?? "", r.contact_phone ?? "", r.country ?? "", r.website ?? "",
   ].join(" ");
 }
 
@@ -1593,6 +1596,45 @@ type CompanyArea<T> = {
 function contactValues(multi: string[] | undefined, flat: string | undefined): string[] {
   const src = multi?.length ? multi : [flat ?? ""];
   return src.map((v) => (v ?? "").trim()).filter(Boolean);
+}
+
+/** 홈페이지 주소를 눌러서 열 수 있는 꼴로 — 앞머리(https://)를 빼먹고 적는 일이 흔해서,
+ *  없으면 붙여서 연다(회사 정보 창이 오래 쓰던 규칙을 목록도 같이 쓴다). */
+function siteHref(site: string): string {
+  const v = site.trim();
+  return /^https?:\/\//i.test(v) ? v : `https://${v}`;
+}
+
+/** 목록 칸에 적는 짧은 꼴 — 앞머리와 www., 끝의 빗금을 걷어 도메인만 남긴다.
+ *  "https://www.acevalve.co.kr/" 를 통째로 적으면 한 칸을 다 먹는데, 어느 회사의
+ *  홈페이지인지는 도메인만 봐도 안다(주소 전체는 칸에 손을 얹으면 나온다). */
+function siteLabel(site: string): string {
+  return site.trim().replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/+$/, "");
+}
+
+/** 목록의 홈페이지 칸. 줄을 누르면 회사 정보 창이 열리는 표들이라(고객·거래선·제조사)
+ *  링크를 누른 것이 줄을 누른 것으로 번지지 않게 막는다 — 창과 새 탭이 함께 열린다. */
+function SiteCell({ value }: { value: string }) {
+  const site = (value || "").trim();
+  if (!site) return <span className="dash">—</span>;
+  return (
+    <a
+      className="ms-site-link"
+      href={siteHref(site)}
+      target="_blank"
+      rel="noreferrer"
+      title={site}
+      onClick={(e) => e.stopPropagation()}
+    >
+      {siteLabel(site)}
+    </a>
+  );
+}
+
+/** 회사 단위 값인 홈페이지를 담당자 줄들에서 읽는다 — 값이 있는 첫 줄(분류·제조사를
+ *  읽는 companyIds 와 같은 규칙). 회사 정보 창이 그렇게 저장하므로 목록도 같아야 한다. */
+function companySite(rows: { website?: string }[]): string {
+  return rows.find((r) => (r.website || "").trim())?.website ?? "";
 }
 
 /**
@@ -1925,7 +1967,7 @@ function CompanyInfoModal<
         // 홈페이지는 눌러서 갈 수 있어야 쓸모가 있다 — 주소 앞머리를 빼먹고 적는 일이
         // 흔해서, 없으면 붙여서 연다.
         const node = !v ? null : String(key) === "website"
-          ? <a href={/^https?:\/\//i.test(v) ? v : `https://${v}`} target="_blank" rel="noreferrer">{v}</a>
+          ? <a href={siteHref(v)} target="_blank" rel="noreferrer">{v}</a>
           : v;
         return [label, node] as [string, React.ReactNode];
       }),
@@ -2654,6 +2696,7 @@ function VendorsTab() {
           <GroupNameCell key="n" rows={rs} open={open} />,
           <span key="r" className="ms-group-sub">{regionSummary(rs)}</span>,
           <span key="c" className="ms-group-sub">{nameSummary(rs)}</span>,
+          <span key="w" className="ms-group-sub"><SiteCell value={companySite(rs)} /></span>,
           <VendorReplyBadge key="d" total={rs[0].co_deals ?? 0} answered={rs[0].co_deals_answered ?? 0} />,
           <span key="mk" className="ms-group-sub">
             <MakerBadges ids={companyIds(rs, "maker_ids")} max={4} empty={<span className="dash">—</span>} />
@@ -2686,6 +2729,7 @@ function VendorsTab() {
         )],
         ["country", "Region", (r) => <MultiCell values={r.regions} flat={r.country} />],
         ["contact", "Contact"],
+        ["website", "Website", (r) => <SiteCell value={r.website} />, "ms-site"],
         // 담당자 줄은 그 담당자 몫만 — 회사 합계는 위 그룹 줄이 든다.
         ["deals", "Projects",
           (r) => <VendorReplyBadge total={r.deals ?? 0} answered={r.deals_answered ?? 0} sub />,
@@ -3069,6 +3113,9 @@ const customerHeadCols: HeadCol<SettingsCustomer>[] = [
   { key: "country", text: (r) => r.country || "", filter: "facet",
     facetValues: partyRegions, emptyLabel: "No region" },
   { key: "contact", text: (r) => r.contact || "", emptyLabel: "No contact" },
+  // 정렬만 — 주소는 회사마다 다 달라 값 고르기 목록으로는 쓸모가 없다(값이 없는 곳끼리
+  // 모으는 일은 오름차순 정렬이 이미 해 준다).
+  { key: "website", text: (r) => siteLabel(r.website || "") },
   { key: "inquiries", text: (r) => relationState(r.inquiries ?? 0, r.won ?? 0, "win"),
     sortValue: (r) => r.inquiries ?? 0, filter: "facet", emptyLabel: "No inquiry yet" },
   { key: "specialization", text: (r) => r.specialization || "", filter: "facet",
@@ -3087,6 +3134,7 @@ const vendorHeadCols = (
   { key: "country", text: (r) => r.country || "", filter: "facet",
     facetValues: partyRegions, emptyLabel: "No region" },
   { key: "contact", text: (r) => r.contact || "", emptyLabel: "No contact" },
+  { key: "website", text: (r) => siteLabel(r.website || "") },
   { key: "deals", text: (r) => relationState(r.deals ?? 0, r.deals_answered ?? 0, "reply"),
     sortValue: (r) => r.deals ?? 0, filter: "facet", emptyLabel: "Never asked" },
   { key: "maker_ids", text: (r) => joinNames(makerNames(r.maker_ids)), filter: "facet",
@@ -3104,6 +3152,7 @@ const makerHeadCols = (
   { key: "name", text: (r) => r.name || "" },
   { key: "country", text: (r) => r.country || "", filter: "facet",
     facetValues: partyRegions, emptyLabel: "No region" },
+  { key: "website", text: (r) => siteLabel(r.website || "") },
   { key: "items", text: (r) => String(r.items ?? 0), sortValue: (r) => r.items ?? 0,
     filter: "facet", emptyLabel: "No item yet" },
   { key: "category_ids", text: (r) => joinNames(catNames(r.category_ids)), filter: "facet",
@@ -3173,6 +3222,7 @@ const customerPrintCols: PrintCol<SettingsCustomer>[] = [
   { label: "Email", value: (r) => contactValues(r.emails, r.email).join(", "), width: 2.4 },
   { label: "Phone", value: (r) => contactValues(r.phones, r.contact_phone).join(", "), width: 1.6 },
   { label: "Address", value: (r) => contactValues(r.addresses, r.address).join(" / "), width: 3 },
+  { label: "Website", value: (r) => r.website, width: 1.8 },
   { label: "Tax ID", value: (r) => r.tax_id, width: 1.2 },
   { label: "Specialization", value: (r) => r.specialization, width: 2.2 },
   { label: "Inquiries → Orders", align: "right", width: 1.1,
@@ -3190,6 +3240,7 @@ const vendorPrintCols = (
   { label: "Email", value: (r) => contactValues(r.emails, r.email).join(", "), width: 2.4 },
   { label: "Phone", value: (r) => contactValues(r.phones, r.contact_phone).join(", "), width: 1.6 },
   { label: "Address", value: (r) => contactValues(r.addresses, r.address).join(" / "), width: 3 },
+  { label: "Website", value: (r) => r.website, width: 1.8 },
   { label: "Maker", value: (r) => mk(r.maker_ids), width: 2.0 },
   { label: "Category", value: (r) => cat(r.category_ids), width: 1.8 },
   { label: "Specialization", value: (r) => r.specialization, width: 2.2 },
