@@ -11159,6 +11159,10 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 .seg-toggle button + button { border-left: 1px solid var(--line); }
 .seg-toggle button.on { background: var(--navy); color: #fff; }
 
+/* 수신처 종류(Vendor / Maker) 토글이 제목과 한 줄에 서는 자리 — 줄 자체가 위아래
+   여백을 들고 있어, 제목이 제 여백을 또 얹으면 토글만 홀로 아래로 처져 보인다. */
+.party-head .form-section-title { margin: 0; }
+
 /* 이메일 종류 탭(Vendor RFQ / Company Introduction / Brochure) — 페이지 탭(밑줄)보다
    한 단계 아래 계층이라 알약형으로 구분한다. */
 .email-tpl-types {

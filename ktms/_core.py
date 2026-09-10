@@ -1119,6 +1119,9 @@ def vendor_options(s) -> list[dict]:
              "phone": v.contact_phone or "",
              "address": v.address or "",
              "logo": getattr(v, "logo", None) or "",
+             # 메이커 직거래로 심어진 줄이면 그 메이커 id — 목록에서 왜 제조사 이름이
+             # 거래선 자리에 서 있는지 화면이 한 마디로 밝힐 수 있게 함께 내린다.
+             "maker_id": getattr(v, "maker_id", None),
              "uses": uses.get(v.id, 0)}
             for v in s.query(Vendor).order_by(Vendor.name).all()]
 

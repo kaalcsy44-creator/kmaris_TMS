@@ -21,6 +21,9 @@ type Company = {
   repId: number;        // 회사를 고르면 기본으로 잡히는 담당자
   logo?: string;
   uses: number;         // 회사 전체 거래 건수(담당자별 합) — VendorSelect 의 Frequent 판정
+  /** 제조사 명부에서 옮겨 심은 회사(메이커 직거래). 목록에서 제조사 이름이 거래선
+   *  자리에 서 있는 까닭을 한 마디로 밝히려고 들고 있는다. */
+  maker: boolean;
   contacts: VendorOption[];
 };
 
@@ -35,6 +38,7 @@ export function groupVendorContacts(vendors: VendorOption[]): Company[] {
       cur.contacts.push(v);
       cur.uses += v.uses ?? 0;
       if (!cur.logo && v.logo) cur.logo = v.logo;
+      if (v.maker_id) cur.maker = true;
     } else {
       map.set(key, {
         key,
@@ -42,6 +46,7 @@ export function groupVendorContacts(vendors: VendorOption[]): Company[] {
         repId: v.id,
         logo: v.logo,
         uses: v.uses ?? 0,
+        maker: !!v.maker_id,
         contacts: [v],
       });
     }
@@ -119,11 +124,16 @@ export default function VendorContactFields({
         logo: c.logo,
         uses: c.uses,
         // 담당자가 여럿인 회사는 그 사실을 여기서 미리 알려 준다 — 옆 칸을 열어 보기 전에.
+        // 제조사 직거래로 심어진 줄도 같은 자리에서 밝힌다(담당자가 없는 것이 흠이 아니라
+        // 그 회사의 성격이라는 것을 고르기 전에 알아야 한다).
         label:
-          c.contacts.length > 1 ? (
+          c.contacts.length > 1 || c.maker ? (
             <>
               {c.name}
-              <span className="vcon-sub"> · {c.contacts.length} contacts</span>
+              {c.maker ? <span className="vcon-sub"> · maker</span> : null}
+              {c.contacts.length > 1 ? (
+                <span className="vcon-sub"> · {c.contacts.length} contacts</span>
+              ) : null}
             </>
           ) : undefined,
       })),

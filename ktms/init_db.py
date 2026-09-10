@@ -92,6 +92,9 @@ _MIGRATIONS = {
         "maker_ids": "JSON",
         # 담당자의 담당 분야(영업·기술·구매…). 기존 행은 NULL = 아직 안 적음.
         "duty": "VARCHAR(100)",
+        # 이 거래선이 곧 그 제조사(makers.id) — 메이커에 직접 물어보고 사는 경우.
+        # 기존 행은 NULL = 보통의 거래선.
+        "maker_id": "INTEGER",
     },
     "vessels": {
         "vessel_type": "VARCHAR(60)",

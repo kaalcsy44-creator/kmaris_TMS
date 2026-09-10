@@ -30,6 +30,7 @@ import {
   updateVendorRfq,
   deleteVendorRfq,
   toggleVendorRfqDecline,
+  registerMakerAsVendor,
   fetchVendorQuoteDetail,
   updateVendorQuote,
   deleteVendorQuote,
@@ -107,6 +108,7 @@ import {
 import FxRateControl, { FxMode } from "./common/FxRateControl";
 import { useItemGrid, ItemTh, ItemGridStyle, ItemColsButton, igSpan, type ItemCol } from "./common/itemGrid";
 import CategoryCell from "./common/CategoryCell";
+import { useMakerOptions } from "./common/MakerCell";
 import QuotationPreview from "./QuotationPreview";
 
 /** 현재 시각 "YYYY-MM-DDTHH:MM" (datetime-local 기본값). */
@@ -2679,6 +2681,12 @@ function VendorRfqAction({
   const [vendorId, setVendorId] = useState<number | "">("");
   // 고른 담당자들(레코드 id). 첫 사람이 대표 = 저장되는 vendor_id, 나머지는 받는 사람에 함께.
   const [contactIds, setContactIds] = useState<number[]>([]);
+  // 물어보는 곳이 거래선이 아니라 제조사일 때가 있다 — 대리점이 없는 브랜드나 단종품은
+  // 메이커에 직접 묻는다. 그때 수신처는 거래선 명부가 아니라 메이커 명부에서 고른다.
+  const [party, setParty] = useState<"vendor" | "maker">("vendor");
+  const [makerId, setMakerId] = useState<number | "">("");
+  const makers = useMakerOptions();
+  const maker = makerId === "" ? null : makers.find((m) => m.id === makerId) ?? null;
   const [to, setTo] = useState("");   // Recipient email(벤더 선택 시 자동 채움, 편집 가능)
   const [lang, setLang] = useState<"en" | "ko">("en");
   const [notes, setNotes] = useState("");
@@ -2797,6 +2805,45 @@ function VendorRfqAction({
     setTo(vendorContactEmails(vendors, ids));
   }
 
+  // 수신처 종류를 바꾸면 반대쪽 선택은 지운다 — 화면에 보이지 않는 선택이 남아 있다가
+  // 엉뚱한 곳으로 발신되지 않도록.
+  function switchParty(next: "vendor" | "maker") {
+    if (next === party) return;
+    setParty(next);
+    setContactIds([]);
+    setVendorId("");
+    setMakerId("");
+    setTo("");
+    setPreviews([]);
+  }
+
+  // 메이커 선택 — 여기서는 명부만 고른다(거래선으로 심는 것은 실제로 필요해지는 순간).
+  function pickMaker(id: number | "") {
+    setMakerId(id);
+    setVendorId("");          // 앞서 심어 둔 거래선이 있으면 다시 해석한다
+    setContactIds([]);
+    setPreviews([]);
+    const m = id === "" ? null : makers.find((x) => x.id === id) ?? null;
+    setTo((m?.emails?.[0] || m?.email || "").trim());
+  }
+
+  /** 발신에 쓸 거래선 id. 메이커를 골랐으면 그 회사를 거래선 명부에도 세우고(멱등)
+   *  그 id 를 돌려준다 — 견적 수신·P/O·지급이 모두 거래선을 타고 흐르기 때문이다.
+   *  고르기만 한 단계에서는 아무것도 심지 않는다: 마음을 바꾼 선택이 명부에 남지 않게. */
+  async function ensureVendorId(): Promise<number | null> {
+    if (vendorId !== "") return vendorId;
+    if (party === "maker" && makerId !== "") {
+      const r = await registerMakerAsVendor(makerId);
+      setVendorId(r.vendor.id);
+      setContactIds([]);
+      return r.vendor.id;
+    }
+    return null;
+  }
+
+  // 고른 것이 무엇이든 "물어볼 곳"이 정해졌는가 — 버튼을 열고 닫는 기준.
+  const hasRecipient = party === "maker" ? makerId !== "" : vendorId !== "";
+
   // RFQ 생성 — 케이마리스 RFQ No. 단독 발번(자동생성 / 직접 입력)
   async function generateRfqNo() {
     if (noMode === "manual" && !manualNo.trim()) {
@@ -2821,15 +2868,20 @@ function VendorRfqAction({
   }
 
   async function makePreview() {
-    if (vendorId === "") return;
+    if (!hasRecipient) return;
     setBusy(true);
     setMsg(null);
     setErr(null);
     try {
-      const r = await previewVendorRfq(rfqId, [vendorId], lang, notes, rfqNoArg, effectiveItems);
+      const vid = await ensureVendorId();
+      if (vid === null) {
+        setErr("Select a vendor or a maker.");
+        return;
+      }
+      const r = await previewVendorRfq(rfqId, [vid], lang, notes, rfqNoArg, effectiveItems);
       // 받는 사람은 이 화면에서 고른 담당자들이 정본이다 — 서버 미리보기는 대표 한 명의
       // 주소만 알고 있어, 그대로 두면 함께 고른 담당자가 발송에서 조용히 빠진다.
-      setPreviews(r.previews.map((p) => (p.vendor_id === vendorId && to.trim() ? { ...p, to } : p)));
+      setPreviews(r.previews.map((p) => (p.vendor_id === vid && to.trim() ? { ...p, to } : p)));
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Preview generation failed");
     } finally {
@@ -2868,17 +2920,24 @@ function VendorRfqAction({
 
   // 발신 완료 — 선택한 Vendor의 RFQ 발신을 기록(이메일 생성 여부와 무관). 초안이 있으면 그 내용을 함께 보낸다.
   async function sendAll() {
-    if (vendorId === "") {
-      setErr("Select a vendor.");
+    if (!hasRecipient) {
+      setErr("Select a vendor or a maker.");
       return;
     }
     setBusy(true);
     setMsg(null);
     setErr(null);
     try {
-      const p = previews.find((x) => x.vendor_id === vendorId);
+      // 메이커에 직접 보낸 건이면 이 순간 그 회사가 거래선 명부에도 선다 — 다음 단계
+      // (견적 수신·P/O·지급)가 딛고 설 자리가 그것뿐이라서다.
+      const vid = await ensureVendorId();
+      if (vid === null) {
+        setErr("Select a vendor or a maker.");
+        return;
+      }
+      const p = previews.find((x) => x.vendor_id === vid);
       const items = [{
-        vendor_id: vendorId,
+        vendor_id: vid,
         to: p?.to ?? to ?? "",
         subject: p?.subject ?? "",
         body: p?.body ?? "",
@@ -2887,6 +2946,7 @@ function VendorRfqAction({
       setMsg(`K-Maris RFQ No. ${r.rfq_no || "-"} · sent (${r.saved} Vendor RFQ recorded)`);
       setPreviews([]);
       pickContacts([]);
+      setMakerId("");
       onDone();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Send failed");
@@ -2900,18 +2960,67 @@ function VendorRfqAction({
       <DetailTabBar tab={tab} onTab={setTab} />
       {tab === "edit" ? (
       <>
-      {/* 벤더를 고르기 전에 "이 품목을 다루는 곳"을 먼저 짚어 준다(근거는 카드에 적힌다). */}
-      <VendorSuggest
-        rfqId={rfqId}
-        value={vendorId}
-        onPick={(v) => pickContacts([v.id])}
-      />
+      {/* 벤더를 고르기 전에 "이 품목을 다루는 곳"을 먼저 짚어 준다(근거는 카드에 적힌다).
+          메이커에 직접 묻는 자리에서는 뜻이 없어 내리고, 대신 아래 안내가 선다. */}
+      {party === "vendor" ? (
+        <VendorSuggest
+          rfqId={rfqId}
+          value={vendorId}
+          onPick={(v) => pickContacts([v.id])}
+        />
+      ) : null}
 
-      <div className="form-section-title">This vendor send info</div>
+      {/* 물어보는 곳이 늘 거래선인 것은 아니다 — 대리점이 없는 브랜드나 단종품은
+          제조사에 직접 묻는다. 두 명부는 서로를 대신하지 못해 고르는 자리를 나눈다. */}
+      <div className="items-head party-head">
+        <div className="form-section-title">
+          {party === "maker" ? "This maker send info" : "This vendor send info"}
+        </div>
+        <div className="seg-toggle" role="group" aria-label="Who we ask">
+          <button
+            type="button"
+            className={party === "vendor" ? "on" : ""}
+            onClick={() => switchParty("vendor")}
+          >
+            Vendor
+          </button>
+          <button
+            type="button"
+            className={party === "maker" ? "on" : ""}
+            onClick={() => switchParty("maker")}
+          >
+            Maker
+          </button>
+        </div>
+      </div>
 
       <div className="form-grid">
-        {/* 벤더는 회사로 한 번, 담당자는 그 안에서 따로(여럿 가능) 고른다. */}
-        <VendorContactFields vendors={vendors} value={contactIds} onChange={pickContacts} />
+        {party === "maker" ? (
+          /* 메이커는 회사 한 곳 = 한 줄이라 담당자 칸이 없다. 받는 사람은 명부에 적힌
+             주소가 기본이고, 아래 Recipient email 에서 그대로 고쳐 쓴다. */
+          <div className="form-field">
+            <label>Maker</label>
+            <VendorSelect
+              value={makerId}
+              options={makers.map((m) => ({
+                id: m.id,
+                name: m.name,
+                logo: m.logo || undefined,
+                label: m.country ? (
+                  <>
+                    {m.name}
+                    <span className="vcon-sub"> · {m.country}</span>
+                  </>
+                ) : undefined,
+              }))}
+              onChange={pickMaker}
+              placeholder="Select a maker…"
+            />
+          </div>
+        ) : (
+          /* 벤더는 회사로 한 번, 담당자는 그 안에서 따로(여럿 가능) 고른다. */
+          <VendorContactFields vendors={vendors} value={contactIds} onChange={pickContacts} />
+        )}
         <div className="form-field">
           <label>K-Maris RFQ No.</label>
           {noMode === "auto" ? (
@@ -2928,7 +3037,19 @@ function VendorRfqAction({
         </div>
         <div className="form-field">
           <label>Recipient email</label>
-          <input value={to} onChange={(e) => setTo(e.target.value)} />
+          <input
+            value={to}
+            onChange={(e) => setTo(e.target.value)}
+            list={party === "maker" && maker ? "vrfq-maker-emails" : undefined}
+          />
+          {/* 메이커는 담당자 칸이 없어 주소가 여럿이면 여기서 고른다(기술문의 창구·본사). */}
+          {party === "maker" && maker ? (
+            <datalist id="vrfq-maker-emails">
+              {(maker.emails || []).map((a) => (
+                <option key={a} value={a} />
+              ))}
+            </datalist>
+          ) : null}
         </div>
         <div className="form-field">
           <label>Sent at</label>
@@ -2939,6 +3060,16 @@ function VendorRfqAction({
           />
         </div>
       </div>
+      {/* 제조사에 직접 물으면 그 회사가 거래선 명부에도 한 줄 선다 — 견적 수신·P/O·
+          지급이 거래선을 타고 흐르기 때문이다. 실제로 이 딜에 쓰이는 순간(초안 생성·
+          발신 기록)에 심어지므로, 고르기만 하고 그만두면 명부는 그대로다. */}
+      {party === "maker" ? (
+        <span className="hint-inline">
+          {maker
+            ? `${maker.name} joins the vendor list once you draft the email or mark this as sent — the quote, P/O and payment that follow all run through a vendor. Picking it here alone changes nothing.`
+            : "Pick the manufacturer you are asking directly. Register it under Settings ▸ Partners ▸ Maker first if it is not listed."}
+        </span>
+      ) : null}
       {rfqId ? (
         <>
           <div className="items-head">
@@ -3008,7 +3139,7 @@ function VendorRfqAction({
         <button className="btn" onClick={generateRfqNo} disabled={busy || !unassigned}>
           Create RFQ
         </button>
-        <button className="btn primary" onClick={sendAll} disabled={busy || vendorId === ""}>
+        <button className="btn primary" onClick={sendAll} disabled={busy || !hasRecipient}>
           Mark as sent
         </button>
         <span className="hint-inline">
@@ -3020,7 +3151,7 @@ function VendorRfqAction({
       <>
       <div className="po-work-note">
         <b>Generate &amp; send the email yourself</b>
-        <span>Pick a Vendor in the Detail tab, choose the language, generate the draft, copy subject/body, attach the Excel form, send it, then Mark as sent. The system does not send mail.</span>
+        <span>Pick a Vendor (or a Maker) in the Detail tab, choose the language, generate the draft, copy subject/body, attach the Excel form, send it, then Mark as sent. The system does not send mail.</span>
       </div>
       <div className="form-grid">
         <div className="form-field">
@@ -3032,7 +3163,7 @@ function VendorRfqAction({
         </div>
       </div>
       <div className="form-actions">
-        <button className="btn primary" onClick={makePreview} disabled={busy || vendorId === ""}>
+        <button className="btn primary" onClick={makePreview} disabled={busy || !hasRecipient}>
           Generate email
         </button>
       </div>

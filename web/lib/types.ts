@@ -356,6 +356,8 @@ export type VendorOption = {
   phone?: string;
   address?: string;
   logo?: string;
+  /** 이 거래선이 곧 그 제조사일 때의 메이커 id(메이커 직거래). 보통은 null. */
+  maker_id?: number | null;
   uses?: number;
 };
 

@@ -416,6 +416,8 @@ def settings_vendors():
                  # 화면이 무시한다(분류 태그와 같은 취급).
                  "maker_ids": [int(x) for x in (getattr(v, "maker_ids", None) or [])
                                if isinstance(x, (int, float, str)) and str(x).isdigit()],
+                 # 메이커 명부에서 옮겨 심은 줄이면 그 메이커 id(직거래 제조사).
+                 "maker_id": getattr(v, "maker_id", None),
                  "country": v.country or "", "address": v.address or "",
                  "payment_terms": getattr(v, "payment_terms", None) or "",
                  "logo": getattr(v, "logo", None) or "",
@@ -870,6 +872,74 @@ def delete_maker(row_id: int):
         s.delete(m)
         s.commit()
         return {"ok": True}
+    finally:
+        s.close()
+
+
+def _norm_company(name: str) -> str:
+    """회사 이름 비교용 — 대소문자·군더더기 공백을 지운다(MakerCell 의 norm 과 같은 뜻)."""
+    return " ".join((name or "").split()).strip().lower()
+
+
+@app.post("/api/admin/settings/makers/{row_id}/as-vendor",
+          dependencies=[Depends(require_token)])
+def maker_as_vendor(row_id: int):
+    """이 메이커를 거래선 명부에도 세운다(멱등) — 메이커에 직접 RFQ 를 보낼 때.
+
+    대리점이 없는 브랜드나 단종품은 제조사에 직접 물어본다. 그런데 견적 수신(3단계)·
+    P/O(6단계)·지급은 모두 거래선을 타고 흐르게 되어 있어, 수신처가 메이커 명부에만
+    있으면 발신 다음 칸부터 딜이 갈 곳을 잃는다. 그래서 '물어본 곳'이 정해지는 순간
+    그 회사를 거래선으로도 한 줄 심고(maker_id 가 두 명부를 잇는다), 이후 단계는
+    지금까지와 똑같이 흐르게 한다.
+
+    이미 심어 둔 줄이 있으면 그것을 돌려준다. 이름이 같은 거래선이 이미 있으면
+    새로 만들지 않고 그 줄에 메이커를 이어 붙인다 — 같은 회사를 둘로 만드는 일이
+    여기서 시작되기 때문이다."""
+    s = get_session()
+    try:
+        m = s.query(Maker).filter_by(id=row_id).first()
+        if not m:
+            raise HTTPException(status_code=404, detail="Maker를 찾을 수 없습니다.")
+
+        v = (s.query(Vendor).filter_by(maker_id=m.id).order_by(Vendor.id).first())
+        created = False
+        if v is None:
+            # 이름이 같은 거래선이 이미 있으면 그 줄을 쓴다(담당자가 여럿이면 첫 줄).
+            key = _norm_company(m.name)
+            v = next((x for x in s.query(Vendor).order_by(Vendor.id).all()
+                      if _norm_company(x.name) == key), None)
+            if v is not None:
+                v.maker_id = m.id
+        if v is None:
+            v = Vendor(
+                name=(m.name or "").strip(),
+                specialization=m.specialization or "",
+                website=getattr(m, "website", None) or "",
+                note=getattr(m, "note", None) or "",
+                logo=getattr(m, "logo", None) or "",
+                category_ids=list(getattr(m, "category_ids", None) or []),
+                # 제조사 자신이니 '대 줄 수 있는 제조사'도 자기 자신이다 — 다음번
+                # 벤더 추천(vendor_match)이 이 회사를 그 이름으로 찾아낸다.
+                maker_ids=[m.id],
+                maker_id=m.id,
+            )
+            s.add(v)
+            _apply_multi(v, _mv_list(getattr(m, "emails", None)) or [m.email or ""],
+                         _mv_list(getattr(m, "phones", None)) or [getattr(m, "contact_phone", None) or ""],
+                         _mv_list(getattr(m, "regions", None)) or [m.country or ""],
+                         _mv_list(getattr(m, "addresses", None)) or [m.address or ""])
+            created = True
+        s.commit()
+        return {
+            "ok": True,
+            "created": created,
+            "vendor": {"id": v.id, "name": v.name, "email": v.email or "",
+                       "contact": v.contact or "",
+                       "phone": getattr(v, "contact_phone", None) or "",
+                       "address": v.address or "",
+                       "logo": getattr(v, "logo", None) or "",
+                       "maker_id": m.id, "uses": 0},
+        }
     finally:
         s.close()
 

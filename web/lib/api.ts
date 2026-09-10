@@ -1138,6 +1138,13 @@ export function fetchSettingsMakers(): Promise<SettingsMaker[]> {
 export function createSettingsMaker(body: Omit<SettingsMaker, "id">): Promise<{ ok: boolean; id: number }> {
   return post("/api/admin/settings/makers", body);
 }
+/** 이 메이커를 거래선 명부에도 세우고(멱등) 그 거래선을 돌려준다 — 메이커에 직접
+ *  RFQ 를 보낼 때. 견적 수신·P/O·지급이 모두 거래선을 타고 흐르기 때문이다. */
+export function registerMakerAsVendor(
+  id: number
+): Promise<{ ok: boolean; created: boolean; vendor: VendorOption }> {
+  return post(`/api/admin/settings/makers/${id}/as-vendor`, {});
+}
 export function updateSettingsMaker(id: number, body: Omit<SettingsMaker, "id">): Promise<{ ok: boolean; id: number }> {
   return put(`/api/admin/settings/makers/${id}`, body);
 }
