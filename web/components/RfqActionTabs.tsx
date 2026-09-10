@@ -63,6 +63,7 @@ import WorkTypeBadge from "./WorkTypeBadge";
 import FilterTable, { ColumnDef } from "./common/FilterTable";
 import { identityColumns, projectNoColumn, statusColumns } from "./common/identityColumns";
 import VendorName from "./common/VendorName";
+import type { VendorState } from "@/lib/deal";
 import VendorSelect from "./common/VendorSelect";
 import VendorContactFields, {
   contactIdsFromEmail,
@@ -499,6 +500,10 @@ function EmbeddedVendorRfq({
   }, [focusId, rows, rfqId]);
   // 복수 Vendor RFQ는 K-Maris RFQ 번호 오름차순(숫자 빠른 순)으로 좌→우 배치.
   const mine = sortByDocNo(rows.filter((r) => r.rfq_id === rfqId), (r) => r.kmaris_rfq_no, (r) => r.id);
+  // 보낸 곳 중 답이 온 곳 — 견적이 걸린 RFQ 는 이름 뒤에 체크(✓), 못 준다고 한 곳은
+  // 취소선. 목록 표의 Vendor 칸과 같은 표시를 쓴다(deal.VendorState).
+  const vstate = (r: VrfqRow): VendorState =>
+    r.quote_count > 0 ? "quoted" : r.status === "견적 불가" ? "declined" : "plain";
   const cmp = useCompare(mine.length);
   if (!loaded) return <div className="state">Loading details…</div>;
 
@@ -528,13 +533,13 @@ function EmbeddedVendorRfq({
             <RecordPicker
               rows={mine}
               selectedId={selected.id}
-              label={(r) => r.vendor ? <VendorName name={r.vendor} /> : `RFQ ${r.id}`}
+              label={(r) => r.vendor ? <VendorName entries={[{ name: r.vendor, state: vstate(r) }]} /> : `RFQ ${r.id}`}
               rowClass={(r) => (r.status === "견적 불가" ? "vendor-out-chip" : "")}
               onSelect={setSelId}
             />
           ) : (
-            <span className={`embedded-record-current${selected.status === "견적 불가" ? " vendor-out-chip" : ""}`}>
-              <VendorName name={selected.vendor || ""} />
+            <span className="embedded-record-current">
+              <VendorName entries={[{ name: selected.vendor || "", state: vstate(selected) }]} />
             </span>
           )}
           {/* 배지는 선택된 Vendor RFQ 고유 번호(001·002…). 프로젝트 공통 번호가 아님. */}
@@ -570,8 +575,8 @@ function EmbeddedVendorRfq({
         <div className="vm-compare">
           {mine.map((v) => (
             <div className="vm-compare-col" key={v.id}>
-              <div className={`vm-compare-head${v.status === "견적 불가" ? " vendor-out-chip" : ""}`}>
-                <VendorName name={v.vendor || ""} />
+              <div className="vm-compare-head">
+                <VendorName entries={[{ name: v.vendor || "", state: vstate(v) }]} />
                 <b className="rec-doc-no">{v.kmaris_rfq_no || ""}</b>
               </div>
               <VendorRfqDetailModal

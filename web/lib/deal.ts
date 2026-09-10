@@ -69,12 +69,58 @@ export function vendorBadgesOf(r: PipelineRow): { name: string; quoted: boolean 
   return out;
 }
 
-/** '견적 불가'를 통보해 온 벤더들 — 목록 표·상세에서 취소선으로 세울 이름.
- *  견적을 준 적이 있으면(quoted) 제외한다 — 답이 온 곳까지 지워 버리면 표시가
- *  사실과 어긋난다. */
-export function declinedVendorsOf(r: PipelineRow): string[] {
-  const out: string[] = [];
-  for (const v of r.rfq_vendors ?? []) if (v.declined && !v.quoted) pushUnique(out, v.name);
+/**
+ * 벤더 한 곳의 표시 상태 — 이 딜에서 그 거래선이 지금 어디에 서 있는가.
+ *
+ *  quoted   견적을 받은 곳 — 선명 + 체크 표시
+ *  waiting  물어보고 답을 기다리는 곳 — 회색
+ *  out      견적 단계를 넘겼는데도 끝내 답이 없던 곳 — 회색 취소선
+ *  declined '견적 불가'를 통보해 온 곳 — 검정 취소선(말이 있었던 곳과 없던 곳은 다르다)
+ *  plain    표시할 근거가 없는 곳(RFQ 없이 발주만 나간 직발주·벤더별 상태가 없는 옛 데이터)
+ */
+export type VendorState = "quoted" | "waiting" | "out" | "declined" | "plain";
+
+export type RfqVendor = { name: string; quoted: boolean; declined?: boolean; sent_at?: string };
+
+/** stage 4 = Quote Sent. 고객에게 견적을 낸 뒤라면 미회신 벤더는 사실상 제외로 본다. */
+export function vendorState(v: RfqVendor, r: PipelineRow): VendorState {
+  if (v.quoted) return "quoted";
+  if (v.declined) return "declined";
+  if (r.stage < 4) return "waiting";
+  // 고객 견적을 낸 뒤에 물어본 곳은 지난 라운드의 낙오가 아니라 새 라운드다 — 공급사가
+  // 공급을 거절해 딜을 닫았다 다시 열고 여러 곳에 새 RFQ 를 보내는 일이 있다. 단계
+  // 번호만 보고 지워 버리면, 지금 답을 기다리는 곳이 이미 끝난 곳으로 읽힌다.
+  const quoteSent = stageDateOf(r, 4);
+  if (quoteSent && (v.sent_at || "") > quoteSent) return "waiting";
+  return "out";
+}
+
+export type VendorEntry = { name: string; state: VendorState };
+
+/**
+ * 이 딜의 벤더들 + 표시 상태 — 목록 표와 상세 Vendor 칸이 이 한 목록을 함께 쓴다.
+ *
+ * 순서는 vendorsOf() 와 같다(발주한 곳이 앞, 그 뒤로 물어본 곳). 발주까지 간 곳이 RFQ
+ * 명부에도 있으면 그 곳의 상태(대개 quoted)를 그대로 쓴다 — 발주는 견적을 지우지 않는다.
+ */
+export function vendorEntriesOf(r: PipelineRow): VendorEntry[] {
+  const byName = new Map<string, RfqVendor>();
+  for (const v of r.rfq_vendors ?? []) {
+    const n = (v.name || "").trim();
+    if (n && !byName.has(n)) byName.set(n, v);
+  }
+  const out: VendorEntry[] = [];
+  const push = (name: string, state: VendorState) => {
+    if (name && !out.some((e) => e.name === name)) out.push({ name, state });
+  };
+  for (const n of poVendorsOf(r)) {
+    const v = byName.get(n);
+    push(n, v ? vendorState(v, r) : "plain");   // RFQ 없이 발주만 나간 곳(직발주)
+  }
+  for (const [n, v] of byName) push(n, vendorState(v, r));
+  // 벤더별 상태가 없는 옛 응답은 이름만 있다 — 전부 기본색으로 둔다(모르는 것을 흐리게
+  // 칠하면 '견적 미수신'이라는 없는 사실을 말하게 된다).
+  if (!out.length) for (const n of rfqVendorsOf(r)) push(n, "plain");
   return out;
 }
 

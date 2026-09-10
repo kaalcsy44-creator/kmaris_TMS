@@ -26,7 +26,7 @@ import {
   vendorOf,
   vendorBadgesOf,
   vendorsOf,
-  declinedVendorsOf,
+  vendorEntriesOf,
   resolveSteps,
   fmtStageDate,
   stageDateOf,
@@ -1905,18 +1905,17 @@ function PipelineCell({
           </div>
         </td>
       );
-    case "vendor":
+    case "vendor": {
+      // 물어본 곳들을 상태대로 세운다 — 견적을 준 곳은 체크(✓), 아직 기다리는 곳은
+      // 회색, 못 준다고 한 곳·끝내 답이 없던 곳은 취소선. 견적을 낸 딜에서 "이 값이
+      // 어느 곳 견적으로 만들어졌나"를 딜을 열지 않고 셀 수 있어야 한다.
+      const vends = vendorEntriesOf(r);
       return (
         <td className="pl-td-vendor">
-          {/* '견적 불가'를 통보해 온 곳은 이름 위에 취소선 — 목록에서도 "물어봤지만
-              빠진 상대"가 바로 보여야 딜 상세를 열지 않고 남은 곳을 셀 수 있다. */}
-          {vendorOf(r) ? (
-            <VendorName name={vendorOf(r)} outNames={declinedVendorsOf(r)} />
-          ) : (
-            <span className="muted">—</span>
-          )}
+          {vends.length ? <VendorName entries={vends} /> : <span className="muted">—</span>}
         </td>
       );
+    }
     case "stage":
       return (
         <td className="pl-td-stage">

@@ -5,7 +5,7 @@ import type { PipelineRow } from "@/lib/types";
 import CustomerName from "@/components/common/CustomerName";
 import VendorName from "@/components/common/VendorName";
 import { tr } from "@/lib/labels";
-import { poVendorsOf, stageDateOf } from "@/lib/deal";
+import { vendorEntriesOf } from "@/lib/deal";
 
 // 프로젝트 정보 항목 정의 — 상세 모달 좌측 패널(사용자가 표시 여부 선택)과
 // 프로젝트 개요 페이지(전체 표시)가 함께 쓴다. render 는 표시값.
@@ -18,51 +18,17 @@ export function multiText(s: string): ReactNode {
   return parts.map((p, i) => <div key={i}>{p}</div>);
 }
 
-// Vendor 한 곳의 표시 상태:
-//  quoted  견적 수신    → 선명(기본색)
-//  out     견적 불가 통보(declined) 또는 견적단계(4)를 넘겼는데도 미수신 → 취소선
-//  waiting 아직 견적 대기(발송 후 진행 중) → 회색
-// stage 4 = Quote Sent. 그 단계를 넘기면 미회신 벤더는 사실상 제외로 본다.
-export type VendorState = "quoted" | "out" | "waiting";
-export function vendorState(
-  v: { quoted: boolean; declined?: boolean; sent_at?: string },
-  r: PipelineRow,
-): VendorState {
-  if (v.quoted) return "quoted";
-  if (v.declined) return "out";
-  if (r.stage < 4) return "waiting";
-  // 고객 견적을 낸 뒤에 물어본 곳은 지난 라운드의 낙오가 아니라 새 라운드다 — 공급사가
-  // 공급을 거절해 딜을 닫았다 다시 열고 여러 곳에 새로 RFQ 를 보내는 일이 있다. 단계
-  // 번호만 보고 지워 버리면, 지금 답을 기다리는 곳이 이미 끝난 곳으로 읽힌다.
-  const quoteSent = stageDateOf(r, 4);
-  if (quoteSent && (v.sent_at || "") > quoteSent) return "waiting";
-  return "out";
-}
-
-// Vendor 필드: RFQ를 보낸 모든 벤더를 위 규칙대로 색/취소선으로 나열한다.
+// Vendor 필드: RFQ를 보낸 모든 벤더를 상태(vendorEntriesOf)대로 나열한다 — 견적을 받은
+// 곳에는 체크, 기다리는 곳은 회색, 못 준다고 한 곳·끝내 답이 없던 곳은 취소선.
 // RFQ 발송 전이면 발주(P/O) 벤더 또는 —. 벤더명 좌측 로고는 VendorName 이 붙인다.
 export function vendorList(r: PipelineRow): ReactNode {
-  const list = r.rfq_vendors;
-  if (list && list.length) {
-    // RFQ 없이 발주만 나간 벤더(직발주)는 목록에 없다 — 뒤에 붙여 준다.
-    const shown = [
-      ...list,
-      ...poVendorsOf(r)
-        .filter((n) => !list.some((v) => v.name === n))
-        .map((n) => ({ name: n, quoted: true, declined: false })),
-    ];
-    // '견적 불가'를 통보받은 곳은 목록 표와 같은 표시(붉은 취소선)로 세운다 — 답이
-    // 없어 흐려진 곳(waiting/out)과 "못 준다고 말한 곳"은 다른 사실이다.
-    return shown.map((v, i) => {
-      const declined = !!v.declined && !v.quoted;
-      return (
-        <div key={i} className={declined ? "" : `vendor-${vendorState(v, r)}`}>
-          <VendorName name={v.name} outNames={declined ? [v.name] : undefined} />
-        </div>
-      );
-    });
-  }
-  return r.vendor ? <VendorName name={r.vendor} /> : "—";
+  const entries = vendorEntriesOf(r);
+  if (!entries.length) return r.vendor ? <VendorName name={r.vendor} /> : "—";
+  return entries.map((e, i) => (
+    <div key={i}>
+      <VendorName entries={[e]} />
+    </div>
+  ));
 }
 
 export const INFO_FIELDS: { key: string; label: string; render: (r: PipelineRow) => ReactNode }[] = [
