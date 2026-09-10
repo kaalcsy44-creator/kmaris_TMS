@@ -6162,10 +6162,10 @@ function MailboxTab() {
           server (they fall back to SMTP_USER / SMTP_PASSWORD), then press Sync.
         </p>
       ) : null}
-      <table className="mini wide">
+      <table className="mini wide kv-table">
         <tbody>
           <tr>
-            <th style={{ width: 200 }}>Account</th>
+            <th>Account</th>
             <td>{status.account || "—"} <span className="muted">@ {status.host}</span></td>
           </tr>
           <tr>

@@ -3994,6 +3994,21 @@ table.mini.wide td:last-child {
   min-width: 44px;
   width: 44px;
 }
+/* ── 문패-값 2열 표(.kv-table) ────────────────────────────────────────────────
+   Mailbox 설정처럼 왼쪽이 문패, 오른쪽이 값인 표. 위 규칙(마지막 칸 44px)은 품목표의
+   삭제 아이콘 열을 겨냥한 것인데, 2열짜리 이 표에서는 그 마지막 칸이 곧 "값" 칸이라
+   값 칸이 44px 로 눌리고 남는 폭을 문패 칸이 전부 가져갔다 — 그래서 값이 화면 오른쪽
+   끝까지 밀려 문패와 한 눈에 이어지지 않았다. 문패 칸은 낱말 폭만 쓰게 좁히고, 남는
+   폭은 값 칸에 준다. */
+table.mini.wide.kv-table th {
+  width: 17%;
+  min-width: 110px;
+  white-space: nowrap;
+}
+table.mini.wide.kv-table td:last-child {
+  width: auto;
+  min-width: 0;
+}
 
 /* ── 품목표 컬럼 커스터마이즈(폭 조절 핸들 + 헤더 숨김 버튼) ─────────────── */
 table.mini.wide th.ig-th,
