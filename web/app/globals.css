@@ -4315,9 +4315,18 @@ table.mini tbody tr.ig-option-row td {
   font-weight: 600;
 }
 table.mini tbody tr.ig-subtotal-row td {
+  background: #f4f6f8;
   font-weight: 700;
   color: var(--navy, #0b1d3a);
   font-variant-numeric: tabular-nums;
+}
+/* 합계행(tfoot)과 같은 정렬 — 소계는 tbody 에 있어 tfoot 규칙이 닿지 않는다. */
+table.mini tbody tr.ig-subtotal-row .total-label {
+  text-align: right;
+}
+table.mini tbody tr.ig-subtotal-row .total-value .dual-line,
+table.mini tbody tr.ig-subtotal-row .total-value .fx-note {
+  text-align: right;
 }
 table.mini tbody tr.ig-subtotal-row .dual-amount {
   align-items: flex-end;

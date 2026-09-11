@@ -2288,7 +2288,32 @@ function ItemEditor({
           </thead>
           <tbody>
             {optionPlan(items).map((entry) => {
-              if (entry.kind === "total") return null;   // 소계는 발행 P/O 에서 옵션마다 선다
+              // 옵션 소계행 — 그 옵션의 금액만 세어 합계행과 같은 칸(Amount)에 세운다.
+              // 첫 옵션 앞의 덩어리는 건너뛴다(맨 아래 Total 과 같은 숫자가 두 번 찍힌다).
+              if (entry.kind === "total") {
+                if (entry.block.no === null) return null;
+                const sub = includedRows(entry.block.items)
+                  .reduce((s, it) => s + Number(it.amount || 0), 0);
+                return (
+                  <tr className="ig-subtotal-row" key={`t${entry.block.headerIndex}`}>
+                    <td />{/* 1 sel */}
+                    <td />{/* 2 No. */}
+                    <td />{/* 3 part_no */}
+                    <td />{/* 4 description */}
+                    <td />{/* 5 type */}
+                    <td />{/* 6 serial_no */}
+                    <td />{/* 7 maker */}
+                    <td />{/* 8 qty */}
+                    <td />{/* 9 unit */}
+                    <td className="total-label">{entry.label}</td>{/* 10 unit_price */}
+                    <td className="num total-value">{/* 11 amount */}
+                      <DualCurrencyAmount value={sub} currency={currency} />
+                    </td>
+                    <td />{/* 12 remark */}
+                    <td />{/* 13 category */}
+                  </tr>
+                );
+              }
               const i = entry.index;
               const it = entry.item;
               if (entry.kind === "option")
