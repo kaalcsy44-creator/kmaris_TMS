@@ -125,9 +125,13 @@ _HEADERS: List[Tuple[str, List[str], List[str]]] = [
       "items", "scope", "취급품목", "취급", "전문분야", "품목", "생산품목", "주력"],
      ["specialization", "취급품목", "전문분야", "생산품목"]),
     ("note",
-     ["note", "notes", "about", "remark", "remarks", "description", "memo", "comment",
+     # "About this company"·"About this maker" 는 이 칸의 이름표 그 자체다(폼·미리보기가
+     # 그렇게 부른다). 그 이름으로 적어 온 열을 못 알아보면, 화면에서 본 이름을 그대로
+     # 열 제목에 쓴 사람이 열 지정을 손으로 다시 해야 한다.
+     ["note", "notes", "about", "about this company", "about this maker", "remark",
+      "remarks", "description", "memo", "comment",
       "메모", "비고", "설명", "소개", "회사소개"],
-     ["remark", "비고", "메모", "회사소개"]),
+     ["remark", "about this", "비고", "메모", "회사소개"]),
     ("name",
      ["company", "company name", "customer", "vendor", "supplier", "maker",
       "manufacturer", "name", "firm", "party", "회사", "회사명", "거래처", "거래처명",
