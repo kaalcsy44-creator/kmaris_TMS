@@ -1275,16 +1275,21 @@ def make_quotation_costing_xlsx(
     # "Total" 라벨 — A~E 병합, 가운데. 행 전체 글자 크기 12.
     bold16 = Font(name="Noto Sans KR", bold=True, size=12)
 
-    def write_total(r: int, label: str, f: int, l: int) -> None:
-        """합계행 — 원가합(G)·마진(H)·매출합(J)을 f..l 행 범위의 수식으로 쓴다."""
+    def write_total(r: int, label: str, f: int, l: int, *, add_rows=None) -> None:
+        """합계행 — 원가합(G)·마진(H)·매출합(J) 수식. f..l 행 범위를 더하고, add_rows 를
+        주면 그 행들(옵션 Subtotal 행)을 더한다 — 총계는 소계를 더해야 겹쳐 세지 않는다."""
         merge(r, 1, r, 5)
         tc = ws.cell(r, 1, label); tc.font = bold16; tc.alignment = center
         for col in (1, 2, 3, 4, 5, 11, 12):
             ws.cell(r, col).border = bdr
         ws.row_dimensions[r].height = 16
-        has_rows = l >= f
-        cost_sum = f"=SUM(G{f}:G{l})" if has_rows else 0
-        amt_sum = f"=SUM(J{f}:J{l})" if has_rows else 0
+        has_rows = bool(add_rows) if add_rows is not None else l >= f
+        if add_rows:
+            cost_sum = "=" + "+".join(f"G{x}" for x in add_rows)
+            amt_sum = "=" + "+".join(f"J{x}" for x in add_rows)
+        else:
+            cost_sum = f"=SUM(G{f}:G{l})" if has_rows else 0
+            amt_sum = f"=SUM(J{f}:J{l})" if has_rows else 0
         margin_tot = f"=IF(J{r}=0,0,(J{r}-G{r}*{fx_str})/J{r})" if has_rows else 0
         for col, val, fill in [(6, "", cost_fill), (7, cost_sum, cost_fill), (8, margin_tot, cost_fill),
                                (9, "", lightblue), (10, amt_sum, lightblue)]:
@@ -1306,21 +1311,24 @@ def make_quotation_costing_xlsx(
         ws.row_dimensions[r].height = 18
 
     # ── 품목 행 ────────────────────────────────────────────────────────
-    # 옵션(대안)이 있으면 옵션 제목행으로 끊고 옵션마다 Total 을 붙인다. 택일하는 안이라
-    # 맨 아래 총계는 내지 않는다(services.kmaris_docs.option_blocks 참고).
+    # 옵션(대안)이 있으면 옵션 제목행으로 끊고 옵션마다 Subtotal 을 붙인다. 맨 아래 Total 은
+    # 그 Subtotal 들을 모두 더한 값이다(services.kmaris_docs.option_blocks 참고).
     first = HROW + 1
     has_options = any(is_option_row(it) for it in raw_items)
     r = HROW
     ri = 0          # 품목 번호 — 옵션 제목행은 번호를 받지 않는다
     opt_no = 0
     blk_first: Optional[int] = None
+    sub_rows: list[int] = []     # 옵션 Subtotal 행 번호 — 맨 아래 Total 이 이들을 더한다
     trow = HROW
 
     def close_block(r: int) -> int:
         """열려 있는 옵션 블록을 소계행으로 닫는다 → 소계행 번호."""
         nonlocal blk_first
         r += 1
-        write_total(r, f"Total (Option {opt_no})" if opt_no else "Total", blk_first or r, r - 1)
+        write_total(r, f"Subtotal (Option {opt_no})" if opt_no else "Subtotal",
+                    blk_first or r, r - 1)
+        sub_rows.append(r)
         blk_first = None
         return r
 
@@ -1340,7 +1348,9 @@ def make_quotation_costing_xlsx(
         write_item(r, ri, it)
     if has_options:
         if blk_first is not None:
-            trow = r = close_block(r)
+            r = close_block(r)
+        trow = r = r + 1
+        write_total(trow, "Total", first, r - 1, add_rows=sub_rows)
         last = r
     else:
         # 샘플처럼 최소 5줄의 폼 형태 — 품목이 적어도 빈 줄로 표 높이를 유지(Total 위치 고정).
@@ -1648,14 +1658,15 @@ def make_purchase_order_xlsx(
             ws.cell(r, ci).border = bdr
         ws.row_dimensions[r].height = 16
 
-    # 옵션(대안)이 있으면 옵션 제목행으로 끊고 옵션마다 Total 을 붙인다 — 택일하는 안이라
-    # 맨 아래 총계는 내지 않는다(services.kmaris_docs.item_row_plan 참고).
+    # 옵션(대안)이 있으면 옵션 제목행으로 끊고 옵션마다 Subtotal 을 붙인다. 맨 아래 Total 은
+    # 그 Subtotal 들을 모두 더한 값이다(services.kmaris_docs.item_row_plan 참고).
     first = HROW + 1
     plan = item_row_plan(data.get("items", []))
     has_options = any(e["kind"] == "option" for e in plan)
     r = HROW
     zebra = 0
     blk_first = first
+    sub_rows = []               # 옵션 Subtotal 행 번호 — 맨 아래 Total 이 이들을 더한다
     for entry in plan:
         if entry["kind"] == "total" and not has_options:
             continue            # 옵션이 없으면 총계는 아래에서 한 번만 적는다
@@ -1667,6 +1678,7 @@ def make_purchase_order_xlsx(
         if entry["kind"] == "total":
             write_total_row(r, entry["label"],
                             f"=SUM(H{blk_first}:H{r - 1})" if r > blk_first else 0)
+            sub_rows.append(r)
             blk_first = r + 1
             continue
         zebra += 1
@@ -1674,21 +1686,19 @@ def make_purchase_order_xlsx(
     last = r
 
     # Total 행 — PDF 와 같이 Description 칸에 'Total', Amount 칸에 합계.
-    # 옵션을 쓰면 옵션별 Total 로 끝난다(총계 없음).
-    trow = last
-    if not has_options:
-        trow = last + 1
+    # 옵션을 쓰면 소계행들을 더한다(품목 범위를 통째로 더하면 소계와 겹쳐 두 배가 된다).
+    trow = last + 1
+    if has_options:
+        write_total_row(trow, "Total",
+                        ("=" + "+".join(f"H{x}" for x in sub_rows)) if sub_rows else 0)
+    else:
         write_total_row(trow, "Total", (f"=SUM(H{first}:H{last})" if last >= first else 0))
 
     # ── 합계 문장(우측 정렬) ────────────────────────────────────────────
-    # 옵션(택일하는 안)이 있으면 한 줄짜리 총계는 적지 않는다 — 어느 안의 금액인지
-    # 말할 수 없는 숫자라, 표의 옵션별 Total 로만 읽히게 둔다.
-    r = trow
-    if not has_options:
-        r = trow + 1
-        merge(r, 1, r, NCOL)
-        put(r, 1, f"Total: {_money(total, currency)}", font=bold, align=right)
-        ws.row_dimensions[r].height = 18
+    r = trow + 1
+    merge(r, 1, r, NCOL)
+    put(r, 1, f"Total: {_money(total, currency)}", font=bold, align=right)
+    ws.row_dimensions[r].height = 18
 
     def section_bar(row, title):
         merge(row, 1, row, NCOL)

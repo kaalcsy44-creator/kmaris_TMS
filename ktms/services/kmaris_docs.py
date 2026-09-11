@@ -134,8 +134,7 @@ def _num(value: Any) -> float:
 
 # ── 견적 옵션(Option) ────────────────────────────────────────────────────
 # 한 건에 대안이 여럿일 때(수리 키트 / 완제품 교체 …) 품목표를 옵션별로 끊어 적고 옵션마다
-# Total 을 붙인다. 옵션은 고객이 택일하는 안이므로 전체 합계는 내지 않는다 — 더하면 팔지도
-# 않을 금액이 견적 총액이 된다.
+# Subtotal 을 붙인다. 맨 아래 Total 은 그 Subtotal 들을 모두 더한 값이다.
 #
 # 표시는 품목 사이에 끼워 넣은 '옵션 표시행'(row_kind="option", description=옵션 제목)으로
 # 한다. 소계는 저장하지 않고 읽을 때마다 다시 센다 — 저장해 두면 품목을 고친 뒤에도 옛 숫자가
@@ -172,18 +171,12 @@ def option_blocks(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return blocks
 
 
-def representative_items(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """집계(딜 금액·마진·목록)에 쓸 품목 — 옵션이 있으면 **첫 옵션**의 품목만.
+def counted_items(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """금액을 세는 품목 — 옵션 구분행(제목 줄)만 뺀 나머지 전부.
 
-    옵션을 다 더하면 하나만 팔 금액이 두 배로 잡히고, 뺄 수도 없다(어느 쪽을 택할지는
-    고객이 정한다). 견적서에 먼저 적은 안을 우리가 미는 안으로 보고 그것을 집계 기준으로
-    삼는다. 수주(P/O)가 들어오면 그때부터는 오더 금액이 집계를 대신하므로 이 추정은 견적
-    단계에서만 쓰인다."""
-    norm = normalize_items(items)
-    blocks = option_blocks(norm)
-    if not blocks:
-        return norm
-    return list(blocks[0]["items"])
+    옵션은 표에서 Subtotal 로 끊어 보이고, 총계(Total)는 그것들을 모두 더한 값이다
+    (_core._counted_rows 와 같은 규칙 — 화면 Final·목록 금액이 문서와 한 값이 되게)."""
+    return [it for it in normalize_items(items) if not is_option_row(it)]
 
 
 def item_row_plan(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -191,8 +184,8 @@ def item_row_plan(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
     반환하는 행: {"kind": "item"|"option"|"total", ...}
       option — {"label": "Option 1. Repair kit"}
-      total  — {"label": "Total (Option 1)", "amount": 2400.0}
-    옵션이 없으면 품목 행만 돌려준다(문서 쪽에서 지금처럼 총계 한 줄을 붙이면 된다)."""
+      total  — {"label": "Subtotal (Option 1)", "amount": 2400.0}
+    옵션이 없으면 품목 행만 돌려준다. 맨 아래 총계(Total)는 어느 쪽이든 문서가 따로 붙인다."""
     norm = normalize_items(items)
     blocks = option_blocks(norm)
     if not blocks:
@@ -206,7 +199,7 @@ def item_row_plan(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             plan.append({"kind": "item", "item": it})
         plan.append({
             "kind": "total",
-            "label": f'Total (Option {b["no"]})' if b["no"] else "Total",
+            "label": f'Subtotal (Option {b["no"]})' if b["no"] else "Subtotal",
             "amount": b["amount"],
         })
     return plan
@@ -260,7 +253,7 @@ def normalize_items(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 def calc_totals(
     items: List[Dict[str, Any]], vat_rate: float = 0.0, discount_pct: float = 0.0
 ) -> Dict[str, float]:
-    subtotal = sum(_num(item.get("amount", 0)) for item in representative_items(items))
+    subtotal = sum(_num(item.get("amount", 0)) for item in counted_items(items))
     discount = subtotal * (_num(discount_pct) / 100.0)
     discounted = subtotal - discount
     vat = discounted * _num(vat_rate)
@@ -2155,8 +2148,8 @@ def _make_quotation_costing_pdf(data: Dict[str, Any], company: Dict[str, Any]) -
     headers = ["No.", "Part No.", "Description", "Qty", "Unit", "U/Price", "Amount", "Lead Time", "Remark"]
     widths = [8, 24, 50, 11, 12, 22, 22, 18, 23]
     rows = [[_p(h, s["th"]) for h in headers]]
-    # 옵션(대안)이 있으면 옵션 제목행 + 옵션별 Total 로 끊어 적고, 맨 아래 총계는 붙이지
-    # 않는다 — 택일하는 안을 더한 숫자는 팔 금액이 아니다(item_row_plan 참고).
+    # 옵션(대안)이 있으면 옵션 제목행 + 옵션별 Subtotal 로 끊어 적는다. 맨 아래 Total 은
+    # 옵션이 있든 없든 늘 붙는다 — 그 Subtotal 들을 모두 더한 값이다(item_row_plan 참고).
     plan = item_row_plan(data.get("items", []))
     option_rows: List[int] = []
     total_rows: List[int] = []
@@ -2192,12 +2185,13 @@ def _make_quotation_costing_pdf(data: Dict[str, Any], company: Dict[str, Any]) -
     if not option_rows:
         for _pad in range(max(0, 6 - len(items))):
             rows.append([_p("", s["tiny"]) for _ in range(9)])
-        total_rows.append(len(rows))
-        rows.append([
-            _p("<b>Total</b>", s["tiny"]), _p("", s["tiny"]), _p("", s["tiny"]),
-            _p("", s["tiny"]), _p("", s["tiny"]), _p("", s["tiny"]),
-            _p(f"<b>{_qnum(total)}</b>", s["tiny"]), _p("", s["tiny"]), _p("", s["tiny"]),
-        ])
+    grand_row = len(rows)
+    total_rows.append(grand_row)
+    rows.append([
+        _p("<b>Total</b>", s["tiny"]), _p("", s["tiny"]), _p("", s["tiny"]),
+        _p("", s["tiny"]), _p("", s["tiny"]), _p("", s["tiny"]),
+        _p(f"<b>{_qnum(total)}</b>", s["tiny"]), _p("", s["tiny"]), _p("", s["tiny"]),
+    ])
     items_table = Table(rows, colWidths=[w * mm for w in widths], repeatRows=1)
     tcmds = [
         ("BACKGROUND", (0, 0), (-1, 0), NAVY), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
@@ -2565,7 +2559,7 @@ def _make_purchase_order_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> b
     headers = ["No.", "Part No.", "Description", "Maker", "Qty", "Unit", "Unit Price", "Amount", "Lead Time / Remark"]
     widths = [8, 24, 44, 26, 12, 14, 22, 22, 18]
     rows = [[_p(h, s["th"]) for h in headers]]
-    # 옵션(대안)이 있으면 옵션 제목행으로 끊고 옵션마다 Total 을 붙인다(총계 없음).
+    # 옵션(대안)이 있으면 옵션 제목행으로 끊고 옵션마다 Subtotal 을 붙인다(총계는 그 아래).
     plan = item_row_plan(data.get("items", []))
     has_options = any(e["kind"] == "option" for e in plan)
     option_rows: List[int] = []
@@ -2587,6 +2581,7 @@ def _make_purchase_order_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> b
                 _p(f"<b>{_qnum(entry['amount'])}</b>", s["tiny"]), _p("", s["tiny"]),
             ])
             continue
+
         it = entry["item"]
         item_rows.append(r)
         lead_remark = f"{it.get('lead_time', '')}\n{it.get('remark', '')}".strip()
@@ -2601,13 +2596,12 @@ def _make_purchase_order_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> b
             _p(_qnum(it["amount"]), s["tiny"]),
             _p(lead_remark, s["tiny"]),
         ])
-    if not has_options:
-        total_rows.append(len(rows))
-        rows.append([
-            _p("", s["tiny"]), _p("", s["tiny"]), _p("<b>Total</b>", s["tiny"]),
-            _p("", s["tiny"]), _p("", s["tiny"]), _p("", s["tiny"]), _p("", s["tiny"]),
-            _p(f"<b>{_qnum(total)}</b>", s["tiny"]), _p("", s["tiny"]),
-        ])
+    total_rows.append(len(rows))
+    rows.append([
+        _p("", s["tiny"]), _p("", s["tiny"]), _p("<b>Total</b>", s["tiny"]),
+        _p("", s["tiny"]), _p("", s["tiny"]), _p("", s["tiny"]), _p("", s["tiny"]),
+        _p(f"<b>{_qnum(total)}</b>", s["tiny"]), _p("", s["tiny"]),
+    ])
     items_table = Table(rows, colWidths=[w * mm for w in widths], repeatRows=1)
     tcmds = [
         ("BACKGROUND", (0, 0), (-1, 0), NAVY), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
@@ -2630,8 +2624,7 @@ def _make_purchase_order_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> b
             tcmds.append(("BACKGROUND", (0, r), (-1, r), colors.HexColor("#FAFBFC")))
     items_table.setStyle(TableStyle(tcmds))
     story += [items_table, Spacer(1, 2 * mm)]
-    if not has_options:
-        story.append(_p(f"<b>Total: {_money(total, currency)}</b>", s["right"]))
+    story.append(_p(f"<b>Total: {_money(total, currency)}</b>", s["right"]))
     story.append(Spacer(1, 5 * mm))
 
     # ── Terms & Conditions ────────────────────────────────────────────

@@ -111,7 +111,7 @@ import {
 } from "./common/itemTable";
 import FxRateControl, { FxMode } from "./common/FxRateControl";
 import { useItemGrid, ItemTh, ItemGridStyle, ItemColsButton, igSpan, type ItemCol } from "./common/itemGrid";
-import { OPTION_ROW_KIND, isOptionRow, countedItems, hasOptions, optionPlan, totalLabel } from "../lib/quoteOptions";
+import { OPTION_ROW_KIND, isOptionRow, countedItems, hasOptions, optionPlan } from "../lib/quoteOptions";
 import CategoryCell from "./common/CategoryCell";
 import { useMakerOptions } from "./common/MakerCell";
 import QuotationPreview from "./QuotationPreview";
@@ -2004,7 +2004,7 @@ function VendorQuoteDetailModal({
           </fieldset>
           <div className="form-actions">
             <StageTotal
-              label={totalLabel(items)}
+              label="Total"
               value={countedItems(items).reduce((s, it) => s + Number(it.cost_price || 0) * Number(it.qty || 1), 0)}
               currency={currency}
               rate={fxRate ?? USD_KRW_RATE}
@@ -3582,7 +3582,7 @@ function VendorQuoteAction({
 
           <div className="form-actions">
             <StageTotal
-              label={totalLabel(items)}
+              label="Total"
               value={countedItems(items).reduce((s, it) => s + Number(it.cost_price || 0) * Number(it.qty || 1), 0)}
               currency={currency}
               rate={fxRate ?? USD_KRW_RATE}
@@ -3789,7 +3789,7 @@ function VendorQuoteItemEditor({
               <td></td>{/* 8 origin */}
               <td></td>{/* 9 qty */}
               <td></td>{/* 10 unit */}
-              <td className="total-label">{totalLabel(items)}</td>{/* 11 unit_price */}
+              <td className="total-label">Total</td>{/* 11 unit_price */}
               <td className="num total-value">{/* 12 amount */}
                 <DualCurrencyAmount value={total} currency={currency} rate={rate} />
                 <span className="fx-note">{fxRateText(rate)}</span>
@@ -4423,8 +4423,8 @@ function CustomerQuoteItemEditor({
     const profit = sales - purchaseInSale;
     return { purchase, sales, purchaseInSale, profit, marginPct: sales > 0 ? (profit / sales) * 100 : null };
   };
-  // 옵션(대안)이 있으면 표는 옵션별로 끊기고, 합계행은 **첫 옵션**만 센다 — 택일하는 안을
-  // 더한 숫자는 팔 금액이 아니다(lib/quoteOptions.ts · 서버 _counted_rows 와 같은 규칙).
+  // 옵션(대안)이 있으면 표는 옵션별 Subtotal 로 끊기고, 맨 아래 합계행은 그것들을 모두
+  // 더한 Total 이다(lib/quoteOptions.ts · 서버 _counted_rows 와 같은 규칙).
   const plan = optionPlan(items);
   const foot = sumsOf(countedItems(items));
   const purchaseTotal = foot.purchase;
@@ -4688,7 +4688,7 @@ function CustomerQuoteItemEditor({
             {plan.map((entry) => {
               // 옵션 소계행 — 그 옵션의 품목만 세어 매입·마진·매출을 합계행과 같은 칸에 세운다.
               // 첫 옵션 앞에 놓인(=아직 어느 안에도 속하지 않은) 품목 덩어리는 소계를 달지
-              // 않는다 — 표 맨 아래 합계행이 세는 것이 바로 그 덩어리라, 같은 숫자가 한
+              // 않는다: 옵션이 하나뿐일 때 그 값이 맨 아래 Total 과 같은 숫자가 되어 한
               // 화면에 두 번 찍힌다.
               if (entry.kind === "total")
                 return entry.block.no === null ? null : (
@@ -4784,10 +4784,10 @@ function CustomerQuoteItemEditor({
           </tbody>
           {/* 합계행 — colspan 세그먼트(.ig-foot)로 구성. 라벨은 No.~Unit 통합셀 가운데,
               매입 합계는 Cost Amount 칸, 매출 합계는 Amount 칸. 숨김 컬럼은 건너뛰어 정렬 유지.
-              옵션이 있으면 라벨이 "Total (Option 1)" 이 된다 — 이 줄이 세는 것은 대표(첫)
-              옵션뿐이고, 화면의 Final·목록의 금액도 같은 값이다. */}
+              옵션이 있으면 이 줄은 옵션 Subtotal 을 모두 더한 값이고, 화면의 Final·목록의
+              금액도 같은 값이다. */}
           <tfoot>
-            <tr>{summaryCells(totalLabel(items), foot, true, "ig-foot")}</tr>
+            <tr>{summaryCells("Total", foot, true, "ig-foot")}</tr>
           </tfoot>
         </table>
       </div>

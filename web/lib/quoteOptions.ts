@@ -67,22 +67,12 @@ export function optionBlocks<T extends OptionRowLike>(items: readonly T[] | null
   return blocks;
 }
 
-/** 집계(견적 금액·마진·딜 금액)에 쓸 품목 — 옵션이 있으면 **첫 옵션**의 품목만.
+/** 집계(견적 금액·마진·딜 금액)에 쓸 품목 — 옵션 구분행만 뺀 **전체** 품목.
  *
- *  옵션을 다 더하면 하나만 팔 금액이 겹쳐 잡힌다(고객은 그중 하나를 고른다). 서버의
+ *  옵션마다 Subtotal 을 세우고 맨 아래 Total 은 그것들을 모두 더한 값이다. 서버의
  *  _counted_rows 와 같은 규칙이라, 화면의 Final 과 목록·마진의 숫자가 한 값이 된다. */
 export function countedItems<T extends OptionRowLike>(items: readonly T[] | null | undefined): T[] {
-  const blocks = optionBlocks(items);
-  if (blocks.length === 0) return (items || []).slice();
-  return blocks[0].items.slice();
-}
-
-/** 옵션이 있을 때 합계행에 붙일 이름 — 어느 안의 금액인지 적어 둔다. */
-export function totalLabel(items: readonly OptionRowLike[] | null | undefined): string {
-  const blocks = optionBlocks(items);
-  if (blocks.length === 0) return "Total";
-  const first = blocks[0];
-  return first.no ? `Total (Option ${first.no})` : "Total";
+  return (items || []).filter((it) => !isOptionRow(it));
 }
 
 export type PlanEntry<T> =
@@ -107,7 +97,8 @@ export function optionPlan<T extends OptionRowLike>(items: readonly T[] | null |
       seq += 1;
       plan.push({ kind: "item", index, item: b.items[n], seq });
     });
-    plan.push({ kind: "total", label: b.no ? `Total (Option ${b.no})` : "Total", block: b });
+    // 옵션 줄은 Subtotal — 표 맨 아래 Total(모든 옵션의 합)과 구별되어야 한다.
+    plan.push({ kind: "total", label: b.no ? `Subtotal (Option ${b.no})` : "Subtotal", block: b });
   }
   return plan;
 }

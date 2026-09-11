@@ -63,7 +63,7 @@ import {
   StageTotal,
   useRowSelection,
 } from "@/components/common/itemTable";
-import { OPTION_ROW_KIND, isOptionRow, countedItems, hasOptions, optionPlan, totalLabel } from "@/lib/quoteOptions";
+import { OPTION_ROW_KIND, isOptionRow, countedItems, hasOptions, optionPlan } from "@/lib/quoteOptions";
 import { useItemGrid, ItemTh, ItemGridStyle, ItemColsButton, type ItemCol } from "@/components/common/itemGrid";
 import CategoryCell from "@/components/common/CategoryCell";
 import { tr } from "@/lib/labels";
@@ -2187,7 +2187,7 @@ function ItemEditor({
     );
   }
   // 합계·행번호는 "문서에서 제외"한 행을 뺀 값 — 발행 P/O(PDF)와 같은 숫자가 되게.
-  // 옵션(대안)이 있으면 합계는 대표(첫) 옵션만 센다(lib/quoteOptions.ts).
+  // 옵션(대안)이 있으면 옵션마다 Subtotal 이 서고, 이 합계는 그것들을 모두 더한 값이다.
   const total = countedItems(includedRows(items)).reduce((sum, it) => sum + Number(it.amount || 0), 0);
   const seqNos = includedSeqNos(items);
   const sel = useRowSelection(items.length);
@@ -2382,7 +2382,7 @@ function ItemEditor({
               <td></td>{/* 7 maker */}
               <td></td>{/* 8 qty */}
               <td></td>{/* 9 unit */}
-              <td className="total-label">{totalLabel(items)}</td>{/* 10 unit_price */}
+              <td className="total-label">Total</td>{/* 10 unit_price */}
               <td className="num total-value">{/* 11 amount */}
                 <DualCurrencyAmount value={total} currency={currency} />
                 <span className="fx-note">{fxRateText()}</span>

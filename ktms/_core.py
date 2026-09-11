@@ -660,14 +660,14 @@ def _kst(dt) -> str:
 
 
 def _counted_rows(items) -> list:
-    """금액을 셀 때 실제로 세는 행 — 제외행을 빼고, 옵션이 있으면 **첫 옵션**의 품목만.
+    """금액을 셀 때 실제로 세는 행 — 제외행과 옵션 구분행(제목 줄)을 뺀 나머지 전부.
 
-    옵션(대안)은 고객이 택일하는 안이라 다 더하면 하나만 팔 금액이 겹쳐 잡힌다. 문서에는
-    옵션별 Total 만 찍고(총계 없음), 목록·마진 같은 집계에는 먼저 적은 안을 대표로 쓴다 —
-    services.kmaris_docs.representative_items 와 같은 규칙이다."""
-    rows = [i for i in (items or []) if isinstance(i, dict) and not i.get("excluded")]
-    blocks = option_blocks(rows)
-    return list(blocks[0]["items"]) if blocks else rows
+    옵션(대안)은 문서에서 옵션별 Subtotal 로 끊어 보이고, 총계(Total)는 그 Subtotal 들을
+    모두 더한 값이다 — services.kmaris_docs.counted_items 와 같은 규칙."""
+    return [
+        i for i in (items or [])
+        if isinstance(i, dict) and not i.get("excluded") and not is_option_row(i)
+    ]
 
 
 def _items_cost_total(items) -> float:
@@ -705,7 +705,7 @@ def cheapest_vendor_quote(quotes) -> tuple[float | None, str]:
 def _total_amount(items) -> float:
     # 문서에서 제외(excluded)한 행은 발행 문서에 나가지 않으므로 금액에서도 뺀다
     # (services.kmaris_docs.normalize_items 와 같은 규칙 — 화면 합계·PDF·청구액이 한 값이 되게).
-    # 옵션이 여럿이면 대표(첫) 옵션만 센다 — _counted_rows 참고.
+    # 옵션 구분행(제목 줄)은 금액이 없다 — _counted_rows 참고.
     return sum(float(i.get("amount", 0) or 0) for i in _counted_rows(items))
 
 
