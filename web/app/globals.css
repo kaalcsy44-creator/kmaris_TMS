@@ -3393,6 +3393,52 @@ table.pipeline td.pl-td-amounts .pl-amt-pct {
 table.pipeline td.pl-td-amounts .pl-amt-row.sub .pl-amt-pct {
   font-weight: 400;
 }
+/* 여러 곳에서 받은 견적 — 곳마다 한 덩이(이름 한 줄 + 그 아래 금액 줄들). 이름을 금액
+   그리드 안에 끼우지 않고 위에 따로 세우는 이유: 벤더 이름은 "ACE-RMS Marine Service"
+   처럼 길어서 4칸 눈금 안에 넣으면 숫자 칸이 그만큼 좁아지고, 머리글 소제목과 줄이
+   어긋난다. 덩이 사이는 한 칸 띄워 어느 금액이 누구 것인지 묶음으로 읽히게 한다. */
+table.pipeline td.pl-td-amounts .pl-amt-group + .pl-amt-group {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--line, #e3e8f0);
+}
+/* 이름은 왼쪽 — 바로 아래 첫 칸(Purchase)이 그 곳이 부른 값이다. 오른쪽에 붙이면
+   이름이 마진율 칸 위에 서서 엉뚱한 숫자와 짝지어 읽힌다. */
+table.pipeline td.pl-td-amounts .pl-amt-vend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 2px;
+  font-size: 10px;
+  line-height: 14px;
+  color: var(--muted);
+  text-align: left;
+}
+/* 긴 이름은 …으로 줄인다. flex 안에서는 min-width:auto 가 기본이라 이것이 없으면
+   칸을 밀어내며 넘친다(전체 이름은 덩이에 손을 얹으면 title 로 나온다). */
+table.pipeline td.pl-td-amounts .pl-amt-vend-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* 가장 싼 줄 — 딜의 매입·마진으로 잡히는 값이 이 줄에서 나온다. 이름을 한 단계
+   진하게 하고 꼬리표를 붙인다(다른 줄의 마진이 목록의 마진율과 다른 이유가 여기 있다). */
+table.pipeline td.pl-td-amounts .pl-amt-vend.low {
+  color: var(--navy);
+  font-weight: 700;
+}
+table.pipeline td.pl-td-amounts .pl-amt-low {
+  flex: none;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #eef5ff;
+  color: var(--blue);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
 /* 종결 프로젝트 — 목록에 남기되(Show closed) 눈에 먼저 걸리지 않게. */
 table.pipeline tbody tr.closed td {
   color: var(--muted);

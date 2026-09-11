@@ -1757,6 +1757,19 @@ export type PipelineRow = {
   purchase_total: string;     // 프로젝트 발주 합산. 없으면 벤더 견적금액
   margin_amount: string;      // 마진(수주−발주 합산) 이중통화 문자열. 없으면 ""
   margin_pct: number | null;  // 마진율(%). 계산 불가 시 null
+  /** 벤더 견적마다 한 줄 — 두 곳 이상에서 견적을 받았고 아직 발주 전인 딜에서만 온다.
+   *  목록의 매입 한 칸(purchase_total)은 그중 가장 싼 것 하나라, 이 목록이 없으면
+   *  "얼마 차이로 그 곳을 골랐나"가 화면에서 사라진다. 매출은 그 벤더 견적을 원가로
+   *  삼은 고객 견적(vendor_quote_id)이고, 잇는 곳이 없는 고객 견적은 lowest 줄이 든다. */
+  quote_lines?: {
+    vendor: string;
+    quote_no: string;
+    purchase: string;           // 이중통화 문자열("USD 4,859 KRW 7,500,000")
+    sales: string;              // 이은 고객 견적 합계. 없으면 ""
+    margin: string;             // 매출−매입. 매출이 없으면 ""
+    margin_pct: number | null;
+    lowest: boolean;            // 가장 싼 줄 — 딜의 매입(purchase_total)·마진이 이 값이다
+  }[];
   vessels: string;            // 오더별 선박 목록(줄바꿈). 단일이면 1개
   customer_po_nos: string;    // 고객 P/O No. 목록(줄바꿈)
   order_amount: string;

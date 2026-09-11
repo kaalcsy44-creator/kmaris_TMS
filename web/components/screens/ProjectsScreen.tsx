@@ -1853,6 +1853,42 @@ function currencyOrder(...maps: Record<string, string>[]): string[] {
 }
 
 /**
+ * 금액 한 덩이 — 매입 · 매출 · 마진 · 마진율을 통화마다 한 줄로 쌓는다.
+ * 기준 통화가 첫 줄, 환산 통화가 회색 둘째 줄(머리글의 4칸 눈금과 줄이 맞는다).
+ * 딜 한 줄과 벤더별 줄이 같은 부품을 쓴다 — 같은 숫자가 자리마다 다르게 생기면
+ * 무엇을 보고 있는지 두 번 읽어야 한다.
+ */
+function MoneyLines({
+  purchase,
+  sales,
+  margin,
+  pct,
+}: {
+  purchase?: string | null;
+  sales?: string | null;
+  margin?: string | null;
+  pct?: number | null;
+}) {
+  const pur = amountByCur(purchase);
+  const sal = amountByCur(sales);
+  const mar = amountByCur(margin);
+  const curs = currencyOrder(sal, pur, mar);
+  if (curs.length === 0) return <span className="muted">—</span>;
+  return (
+    <>
+      {curs.map((c, i) => (
+        <div key={c} className={`pl-amt-row${i ? " sub" : ""}`}>
+          <span>{pur[c] || "—"}</span>
+          <span>{sal[c] || "—"}</span>
+          <span>{mar[c] || "—"}</span>
+          <span className="pl-amt-pct">{pct != null ? `${pct}%` : "—"}</span>
+        </div>
+      ))}
+    </>
+  );
+}
+
+/**
  * 그룹 열 한 칸 — 묶인 필드를 여러 줄로 쌓는다.
  * 관리번호·타입·선박이 윗줄, 프로젝트명이 아랫줄인 식으로 "무엇인가"를 한 덩어리로 읽게 한다.
  */
@@ -1930,27 +1966,46 @@ function PipelineCell({
         </td>
       );
     case "amounts": {
-      // 통화 한 줄 = 매입 · 매출 · 마진 · 마진율. 기준 통화가 첫 줄, 환산 통화가 회색 둘째 줄.
-      const pur = amountByCur(r.purchase_total);
-      const sal = amountByCur(r.sales_total);
-      const mar = amountByCur(r.margin_amount);
-      const curs = currencyOrder(sal, pur, mar);
+      // 두 곳 이상에서 견적을 받은 딜(발주 전)은 곳마다 한 덩이 — 값이 다를 것이 뻔한데
+      // 목록이 가장 싼 것 하나로 접어 버리면 얼마 차이인지 보려고 딜을 열어야 한다.
+      const lines = r.quote_lines ?? [];
+      if (lines.length >= 2) {
+        return (
+          <td className="pl-td-amounts">
+            {lines.map((ln, i) => (
+              <div key={i} className="pl-amt-group">
+                <div
+                  className={`pl-amt-vend${ln.lowest ? " low" : ""}`}
+                  title={ln.quote_no ? `${ln.vendor} · quote ${ln.quote_no}` : ln.vendor}
+                >
+                  <span className="pl-amt-vend-name">{ln.vendor}</span>
+                  {/* 딜의 매입·마진으로 잡히는 값이 어느 줄에서 나왔는지 — 가장 싼 곳이다.
+                      표시가 없으면 나머지 줄의 마진이 왜 목록 숫자와 다른지 읽히지 않는다. */}
+                  {ln.lowest ? (
+                    <span className="pl-amt-low" title="Lowest quote — the deal's purchase and margin use this one">
+                      lowest
+                    </span>
+                  ) : null}
+                </div>
+                <MoneyLines
+                  purchase={ln.purchase}
+                  sales={ln.sales}
+                  margin={ln.margin}
+                  pct={ln.margin_pct}
+                />
+              </div>
+            ))}
+          </td>
+        );
+      }
       return (
         <td className="pl-td-amounts">
-          {curs.length === 0 ? (
-            <span className="muted">—</span>
-          ) : (
-            curs.map((c, i) => (
-              <div key={c} className={`pl-amt-row${i ? " sub" : ""}`}>
-                <span>{pur[c] || "—"}</span>
-                <span>{sal[c] || "—"}</span>
-                <span>{mar[c] || "—"}</span>
-                <span className="pl-amt-pct">
-                  {r.margin_pct != null ? `${r.margin_pct}%` : "—"}
-                </span>
-              </div>
-            ))
-          )}
+          <MoneyLines
+            purchase={r.purchase_total}
+            sales={r.sales_total}
+            margin={r.margin_amount}
+            pct={r.margin_pct}
+          />
         </td>
       );
     }

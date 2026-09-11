@@ -76,6 +76,65 @@ from _core import (
 
 
 
+def _vendor_quote_lines(vqs, qtns, vendor_of) -> list[dict]:
+    """여러 곳에서 견적을 받은 딜 — 곳마다 한 줄로 매입·매출·마진을 따로 세운다.
+
+    목록의 매입 칸은 받은 견적 중 **가장 싼 것 하나**다(cheapest_vendor_quote). 합치지
+    않는 것은 옳지만, 그 바람에 두 곳에서 받은 딜도 숫자가 하나로 접혀 "얼마 차이로
+    이 곳을 골랐나"는 딜을 열어야만 알 수 있었다 — 값이 다를 것이 뻔한데 목록에서
+    견줄 수가 없었다.
+
+    매출은 고객 견적이 원가로 삼은 벤더 견적(Quotation.vendor_quote_id)으로 잇는다.
+    어디에도 잇지 않은 고객 견적(수동 입력)은 그 딜의 매입이 된 견적, 곧 가장 싼 줄에
+    얹는다 — 지금 목록에 찍히는 마진이 바로 그 조합(총매출 − 최저 매입)으로 나온 값이라,
+    그 줄에 얹어야 목록의 숫자와 한 말이 된다.
+
+    돌려주는 줄이 둘 미만이면 빈 목록 — 견줄 것이 없으면 지금까지처럼 한 줄로 적는다.
+    """
+    priced: list[tuple] = []
+    for vq in vqs or []:
+        cur = (getattr(vq, "currency", None) or "USD").upper()
+        total = _items_cost_total(getattr(vq, "items", None))
+        if not total:
+            continue   # 값이 안 적힌 견적은 견줄 수가 없다(가장 싼 것을 고를 때도 뺀다)
+        priced.append((vq, cur, total, (total / USD_KRW_RATE) if cur == "KRW" else total))
+    if len(priced) < 2:
+        return []
+
+    cheapest_id = min(priced, key=lambda t: t[3])[0].id
+    ids = {t[0].id for t in priced}
+    by_quote: dict[int, list] = {}
+    for q in qtns or []:
+        vid = getattr(q, "vendor_quote_id", None)
+        by_quote.setdefault(vid if vid in ids else cheapest_id, []).append(q)
+
+    lines: list[dict] = []
+    for vq, cur, total, usd in sorted(priced, key=lambda t: t[3]):
+        line = {
+            "vendor": vendor_of.get(vq.vendor_rfq_id, "—"),
+            "quote_no": getattr(vq, "vendor_quote_no", None) or "",
+            "purchase": _dual_money(total, cur),
+            "sales": "", "margin": "", "margin_pct": None,
+            # 가장 싼 줄 — 딜의 매입(purchase_total)과 마진이 이 줄에서 나온 값이다.
+            # 어느 줄이 그것인지 프런트가 표시할 수 있게 함께 보낸다.
+            "lowest": vq.id == cheapest_id,
+        }
+        qs = by_quote.get(vq.id) or []
+        if qs:
+            s_cur = (getattr(qs[0], "currency", None) or "USD").upper()
+            s_usd = 0.0
+            for q in qs:
+                qc = (getattr(q, "currency", None) or "USD").upper()
+                t = _total_amount(q.items or [])
+                s_usd += (t / USD_KRW_RATE) if qc == "KRW" else t
+            m_usd = s_usd - usd
+            line["sales"] = _dual_money(s_usd * USD_KRW_RATE if s_cur == "KRW" else s_usd, s_cur)
+            line["margin"] = _dual_money(m_usd * USD_KRW_RATE if s_cur == "KRW" else m_usd, s_cur)
+            line["margin_pct"] = round(m_usd / s_usd * 100, 1) if s_usd else None
+        lines.append(line)
+    return lines
+
+
 @app.get("/api/admin/pipeline", dependencies=[Depends(require_token)])
 @cached_aggregate()
 def pipeline_overview(customer_id: int | None = None, work_type: str | None = None,
@@ -303,6 +362,11 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
             else:
                 margin_amount, margin_pct = "", None
 
+            # 여러 곳에서 견적을 받았으면 곳마다 한 줄 — 목록에서 값을 견주려면 접힌
+            # 숫자를 펴야 한다. 발주가 나간 뒤에는 세우지 않는다: 그때의 매입은 추정이
+            # 아니라 실제로 산 값(P/O)이고, 어디서 살지 고르는 일은 이미 끝났다.
+            quote_lines = [] if _has_po else _vendor_quote_lines(vqs, qtns, _vrfq_vendor)
+
             vessels_disp = "\n".join(_vessels)
             customer_po_nos_disp = "\n".join(_po_nos)
 
@@ -365,6 +429,8 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
                 # 마진(수주−발주 합산) — 이중통화 문자열 + 마진율(%). 한쪽이라도 없으면 빈 값/None.
                 "margin_amount": margin_amount,
                 "margin_pct": margin_pct,
+                # 벤더 견적마다 한 줄(매입·매출·마진) — 두 곳 이상에서 받았을 때만 채운다.
+                "quote_lines": quote_lines,
                 "vessels": vessels_disp,               # 오더별 선박 목록(줄바꿈)
                 "customer_po_nos": customer_po_nos_disp, # 고객 P/O No. 목록(줄바꿈)
                 # 딜 총액(고객 P/O 여러 건 합산) — PO 이후 단계 카드 금액에 사용.
