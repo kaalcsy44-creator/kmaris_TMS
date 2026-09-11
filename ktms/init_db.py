@@ -998,6 +998,37 @@ def migrate_widen_activity_type():
     print("[OK] marketing_activities.activity_type widened to VARCHAR(200).")
 
 
+def migrate_widen_specialization():
+    """고객·거래선·제조사의 취급품목(specialization)을 TEXT 로 — 200자 제한을 푼다.
+
+    이 칸은 "무엇을 다루는 곳인가"를 문장으로 적는 자리다. 밸브 상사 한 곳의 품목을
+    적기에도 200자는 모자라서("Butterfly Valve, Globe Valve (Globe Check Valve), …
+    Fitting (IMPA)" 가 320자다), 넘치는 뒷부분을 회사 소개(note) 칸에 잘라 넣은 레코드가
+    생겼다 — 한 문장이 뜻이 다른 두 칸에 나뉘어, 목록의 취급품목은 중간에서 끊기고 회사
+    소개는 문장 중간부터 시작했다. 적는 쪽이 아니라 재는 쪽이 잘못이라 칸을 연다.
+
+    Postgres 만 VARCHAR 길이를 강제하므로 대상. SQLite 는 길이를 무시해 no-op.
+    applied_migrations 마커로 1회만 실행."""
+    eng = get_engine()
+    if eng.dialect.name != "postgresql":
+        return
+    insp = inspect(eng)
+    tables = [t for t in ("customers", "vendors", "makers") if insp.has_table(t)]
+    if not tables:
+        return
+    with eng.begin() as conn:
+        conn.execute(text(
+            "CREATE TABLE IF NOT EXISTS applied_migrations (name VARCHAR(100) PRIMARY KEY)"))
+        if conn.execute(text(
+                "SELECT 1 FROM applied_migrations WHERE name='widen_specialization'")).first():
+            return
+        for t in tables:
+            conn.execute(text(f"ALTER TABLE {t} ALTER COLUMN specialization TYPE TEXT"))
+        conn.execute(text(
+            "INSERT INTO applied_migrations (name) VALUES ('widen_specialization')"))
+    print(f"[OK] specialization widened to TEXT on {', '.join(tables)}.")
+
+
 def migrate_translate_categories():
     """1회성: 기존 한글 품목 분류명을 영문으로 변환. applied_migrations 마커로 가드.
 
@@ -1463,6 +1494,7 @@ if __name__ == "__main__":
     # 기자재 축 → 선박 계통 축(참고 도면). 위 재편이 끝난 트리를 받아 돈다.
     migrate_vessel_system_categories()
     migrate_widen_activity_type()
+    migrate_widen_specialization()
     migrate_normalize_incoterms()
     migrate_split_stage_dates_to_orders()
     migrate_backfill_price_history()

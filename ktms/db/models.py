@@ -123,7 +123,7 @@ class Customer(Base):
     # 무엇을 사는 곳인가 — 벤더의 '취급품목'과 같은 자리다. 벤더 쪽이 파는 물건을 적는
     # 칸이라면 여기는 사는 쪽의 결: 어떤 선종을 굴리고 주로 무엇을 찾는지 한 줄 요약.
     # 목록에서 두 표가 같은 칸을 같은 자리에 두어 나란히 읽히게 한다.
-    specialization = Column(String(200))
+    specialization = Column(Text)
     website        = Column(String(300))   # 회사 홈페이지(회사 단위)
     # 회사 소개 요약(어떤 선단을 굴리는지, 어디 소속인지). 담당자가 아니라 회사에 딸린
     # 정보라 Company info 창에서 같은 회사 전 레코드에 한 번에 반영한다.
@@ -150,7 +150,7 @@ class Vendor(Base):
     emails         = Column(JSON, default=list)   # 다중 이메일(첫 값=대표)
     phones         = Column(JSON, default=list)   # 다중 연락처(첫 값=대표)
     regions        = Column(JSON, default=list)   # 다중 지역(첫 값=대표)
-    specialization = Column(String(200))
+    specialization = Column(Text)
     # 이 회사가 다루는 품목 분류(item_categories.id 목록). 취급품목을 글이 아니라 트리의
     # 자리로 적어 둔 것이다 — 글로만 두면 "marine·spare"처럼 거의 모든 벤더가 쓰는 말이
     # 되어 아무것도 가려내지 못한다(vendor_match 가 df 로 걸러내야 했던 이유).
@@ -217,7 +217,7 @@ class Maker(Base):
     phones         = Column(JSON, default=list)
     regions        = Column(JSON, default=list)
     website        = Column(String(300))
-    specialization = Column(String(200))   # 무엇을 만드는 회사인가(브랜드·기종 한 줄)
+    specialization = Column(Text)          # 무엇을 만드는 회사인가(브랜드·기종 한 줄)
     # 이 회사가 만드는 품목 분류(item_categories.id, 중분류까지) — 거래선의 같은 칸과
     # 규약이 같다. 다만 뜻이 다르다: 거래선은 '물어볼 수 있는 곳', 메이커는 '만든 곳'.
     category_ids   = Column(JSON, default=list)
