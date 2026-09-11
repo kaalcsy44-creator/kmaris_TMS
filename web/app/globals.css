@@ -4288,6 +4288,64 @@ table.mini.wide.lead-tools tfoot .fx-note {
   overflow-wrap: anywhere;
 }
 
+/* ── 견적 옵션(Option) — 한 견적에 대안이 여럿일 때 품목표를 끊는 줄들 ───────
+   옵션 제목행(.ig-option-row)은 표 폭을 다 쓰는 한 칸이고, 그 옵션의 마지막 품목
+   아래에 소계행(.ig-subtotal-row)이 선다. 소계행은 표 아래 합계행(tfoot)과 같은
+   칸·같은 색을 쓴다 — 같은 자로 재야 옵션끼리 견줄 수 있다. */
+table.mini tbody tr.ig-option-row td {
+  background: #eef2f7;
+  border-top: 2px solid var(--navy, #0b1d3a);
+  padding: 5px 8px;
+}
+.ig-option-cell-inner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ig-option-no {
+  font-weight: 800;
+  color: var(--navy, #0b1d3a);
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+}
+.ig-option-cell-inner textarea.desc {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: #fff;
+  font-weight: 600;
+}
+table.mini tbody tr.ig-subtotal-row td {
+  font-weight: 700;
+  color: var(--navy, #0b1d3a);
+  font-variant-numeric: tabular-nums;
+}
+table.mini tbody tr.ig-subtotal-row .dual-amount {
+  align-items: flex-end;
+  text-align: right;
+}
+.ig-cquote-items tbody tr.ig-subtotal-row td.ig-foot {
+  background: #f4f6f8;
+}
+.ig-cquote-items tbody tr.ig-subtotal-row td.foot-total-label {
+  text-align: center;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+.ig-cquote-items tbody tr.ig-subtotal-row td.foot-purchase { background: #f8f2e6; }
+.ig-cquote-items tbody tr.ig-subtotal-row td.foot-sales { background: #e2ecfb; }
+.ig-cquote-items tbody tr.ig-subtotal-row td.foot-margin {
+  background: #f2f6f3;
+  color: #12734a;
+}
+.ig-cquote-items tbody tr.ig-subtotal-row td.foot-margin .dual-line.converted {
+  color: #5d7a6b;
+  font-weight: 500;
+}
+.ig-cquote-items tbody tr.ig-subtotal-row td.foot-margin.loss {
+  background: #fdf1f0;
+  color: #b42318;
+}
+
 /* ── RFQ 품목 편집 표(팝업 내) — 컨테이너 폭에 맞춰 넘치지 않게. ──────── */
 table.mini.items-edit {
   width: 100%;

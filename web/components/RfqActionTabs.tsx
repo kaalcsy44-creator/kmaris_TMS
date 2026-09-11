@@ -99,6 +99,7 @@ import {
   ItemGridHint,
   ItemSelectCell,
   ItemSelectHeaderCell,
+  OptionTitleRow,
   itemRowClass,
   parseAmountInput,
   roundUp,
@@ -108,6 +109,7 @@ import {
 } from "./common/itemTable";
 import FxRateControl, { FxMode } from "./common/FxRateControl";
 import { useItemGrid, ItemTh, ItemGridStyle, ItemColsButton, igSpan, type ItemCol } from "./common/itemGrid";
+import { OPTION_ROW_KIND, isOptionRow, countedItems, optionPlan, totalLabel } from "../lib/quoteOptions";
 import CategoryCell from "./common/CategoryCell";
 import { useMakerOptions } from "./common/MakerCell";
 import QuotationPreview from "./QuotationPreview";
@@ -1474,7 +1476,7 @@ function VendorRfqItemEditor({
         idx === i
           ? {
               ...it,
-              [key]: key === "qty" ? parseAmountInput(value) || 0 : value,
+              [key]: key === "qty" && !isOptionRow(it) ? parseAmountInput(value) || 0 : value,
             }
           : it
       )
@@ -1494,6 +1496,13 @@ function VendorRfqItemEditor({
     onChange([...items, blank()]);
   }
   const sel = useRowSelection(items.length);
+  // 옵션(대안) 구분행 — 고른 행이 있으면 그 위, 없으면 맨 아래(lib/quoteOptions.ts).
+  function addOption() {
+    const row: RfqItem = { ...blank(), row_kind: OPTION_ROW_KIND, description: "", qty: 0, unit: "" };
+    const at = sel.count > 0 ? Math.min(...Array.from(sel.selected)) : items.length;
+    onChange([...items.slice(0, at), row, ...items.slice(at)]);
+    sel.clear();
+  }
   const cols: ItemCol[] = [
     { key: "__sel", fixed: true },
     { key: "__seq", fixed: true, className: "seq" },
@@ -1506,6 +1515,8 @@ function VendorRfqItemEditor({
     { key: "remark", label: "Remark" },
   ];
   const grid = useItemGrid("vrfq-items", cols);
+  // 옵션 제목행 <td colSpan> 이 덮을 칸 수 — 숨긴 컬럼을 빼고 센다.
+  const visibleColSpan = grid.cols.filter((c) => c.fixed || !grid.layout.hidden.has(c.key)).length;
   // fields 순서 = 아래 keys.cell(i, 0..6) 열 번호.
   const keys = useItemGridKeys<RfqItem>({
     items,
@@ -1527,6 +1538,14 @@ function VendorRfqItemEditor({
           <ItemGridHint />
           <CopyRowsButton grid={keys} sel={sel} />
           <DeleteSelectedButton sel={sel} onDelete={() => deleteSelectedRows(items, sel, onChange)} />
+          <button
+            type="button"
+            className="btn sm"
+            title="Insert an option divider — above the selected row, or at the end."
+            onClick={addOption}
+          >
+            + Option
+          </button>
           <button className="btn sm items-head-add" onClick={add}>+ Add</button>
         </div>
       </div>
@@ -1552,10 +1571,27 @@ function VendorRfqItemEditor({
                 <td colSpan={9} className="mini-empty">No items (service request).</td>
               </tr>
             ) : (
-              items.map((it, i) => (
+              optionPlan(items).map((entry) => {
+                if (entry.kind === "total") return null;   // 값이 없는 표라 소계는 두지 않는다
+                const i = entry.index;
+                const it = entry.item;
+                if (entry.kind === "option")
+                  return (
+                    <OptionTitleRow
+                      key={`o${i}`}
+                      index={i}
+                      sel={sel}
+                      label={`${entry.label.split(".")[0]}.`}
+                      value={it.description || ""}
+                      colSpan={visibleColSpan - 1}
+                      onChange={(v) => patch(i, "description", v)}
+                      cellProps={keys.cell(i, 1)}
+                    />
+                  );
+                return (
                 <tr key={i} className={itemRowClass(i)}>
                   <ItemSelectCell index={i} sel={sel} />
-                  <td className="seq">{i + 1}</td>
+                  <td className="seq">{entry.seq}</td>
                   <td><textarea {...keys.cell(i, 0)} className="wrapcell" rows={1} value={it.part_no || ""} onChange={(e) => patch(i, "part_no", e.target.value)} /></td>
                   <td><textarea {...keys.cell(i, 1)} className="desc" rows={1} value={it.description || ""} onChange={(e) => patch(i, "description", e.target.value)} /></td>
                   <td><textarea {...keys.cell(i, 2)} className="wrapcell" rows={1} value={it.type ?? ""} onChange={(e) => patch(i, "type", e.target.value)} /></td>
@@ -1564,7 +1600,8 @@ function VendorRfqItemEditor({
                   <td><input {...keys.cell(i, 5)} value={it.unit || ""} onChange={(e) => patch(i, "unit", e.target.value)} /></td>
                   <td><textarea {...keys.cell(i, 6)} className="wrapcell" rows={1} value={it.remark ?? ""} onChange={(e) => patch(i, "remark", e.target.value)} /></td>
                 </tr>
-              ))
+                );
+              })
             )}
           </tbody>
         </table>
@@ -1959,8 +1996,8 @@ function VendorQuoteDetailModal({
           </fieldset>
           <div className="form-actions">
             <StageTotal
-              label="Total"
-              value={items.reduce((s, it) => s + Number(it.cost_price || 0) * Number(it.qty || 1), 0)}
+              label={totalLabel(items)}
+              value={countedItems(items).reduce((s, it) => s + Number(it.cost_price || 0) * Number(it.qty || 1), 0)}
               currency={currency}
               rate={fxRate ?? USD_KRW_RATE}
             />
@@ -2193,7 +2230,8 @@ function CustomerQuoteDetailModal({
       .catch((e) => setErr(e instanceof Error ? e.message : "Error"));
   }, [id]);
 
-  const total = items.reduce((sum, it) => sum + Number(it.amount || 0), 0);
+  // 옵션(대안)이 있으면 대표(첫) 옵션만 센다 — 택일하는 안을 더한 금액은 팔 값이 아니다.
+  const total = countedItems(items).reduce((sum, it) => sum + Number(it.amount || 0), 0);
   const finalTotal = total * (1 - Number(discountPct || 0) / 100);
 
   // 헤더 문서 필드(Attn/Messrs/Ref No.)는 terms JSON 에 함께 저장한다.
@@ -2748,7 +2786,7 @@ function VendorRfqAction({
 
   // 실제 내용이 있는 품목만 벤더에게 보낸다(행을 삭제해 제외).
   const effectiveItems = rfqItems
-    .map(({ part_no, description, type, serial_no, qty, unit, remark }) => ({
+    .map(({ part_no, description, type, serial_no, qty, unit, remark, row_kind }) => ({
       part_no: part_no || "",
       description: description || "",
       type: type || "",
@@ -2756,13 +2794,17 @@ function VendorRfqAction({
       qty: qty || 0,
       unit: unit || "",
       remark: remark || "",
+      // 옵션 구분행 표식 — 빠뜨리면 나눠 둔 옵션이 발신 문서에서 풀린다.
+      row_kind: row_kind || "",
     }))
     .filter((it) => it.part_no || it.description || it.qty);
 
   function patchItem(i: number, key: keyof RfqItem, value: string) {
     setRfqItems((prev) =>
       prev.map((it, idx) =>
-        idx === i ? { ...it, [key]: key === "qty" ? parseAmountInput(value) || 0 : value } : it
+        idx === i
+          ? { ...it, [key]: key === "qty" && !isOptionRow(it) ? parseAmountInput(value) || 0 : value }
+          : it
       )
     );
   }
@@ -2773,6 +2815,13 @@ function VendorRfqAction({
     setRfqItems((prev) => [...prev, blankItem()]);
   }
   const itemSel = useRowSelection(rfqItems.length);
+  // 옵션(대안) 구분행 — 고른 행이 있으면 그 위, 없으면 맨 아래(lib/quoteOptions.ts).
+  function addItemOption() {
+    const row: RfqItem = { ...blankItem(), row_kind: OPTION_ROW_KIND, description: "", qty: 0, unit: "" };
+    const at = itemSel.count > 0 ? Math.min(...Array.from(itemSel.selected)) : rfqItems.length;
+    setRfqItems((prev) => [...prev.slice(0, at), row, ...prev.slice(at)]);
+    itemSel.clear();
+  }
   const itemGridCols: ItemCol[] = [
     { key: "__sel", fixed: true },
     { key: "__seq", fixed: true, className: "seq" },
@@ -2785,6 +2834,8 @@ function VendorRfqAction({
     { key: "remark", label: "Remark" },
   ];
   const grid = useItemGrid("vrfq-items", itemGridCols);
+  // 옵션 제목행 <td colSpan> 이 덮을 칸 수 — 숨긴 컬럼을 빼고 센다.
+  const itemColSpan = grid.cols.filter((c) => c.fixed || !grid.layout.hidden.has(c.key)).length;
   // fields 순서 = 아래 itemKeys.cell(i, 0..6) 열 번호.
   const itemKeys = useItemGridKeys<RfqItem>({
     items: rfqItems,
@@ -3085,6 +3136,14 @@ function VendorRfqAction({
               <ItemGridHint />
           <CopyRowsButton grid={itemKeys} sel={itemSel} />
               <DeleteSelectedButton sel={itemSel} onDelete={deleteSelectedItems} />
+              <button
+                type="button"
+                className="btn sm"
+                title="Insert an option divider — above the selected row, or at the end."
+                onClick={addItemOption}
+              >
+                + Option
+              </button>
               <button className="btn sm items-head-add" onClick={addItem}>+ Add</button>
             </div>
           </div>
@@ -3110,10 +3169,27 @@ function VendorRfqAction({
                     <td colSpan={9} className="mini-empty">No items (service request).</td>
                   </tr>
                 ) : (
-                  rfqItems.map((it, i) => (
+                  optionPlan(rfqItems).map((entry) => {
+                    if (entry.kind === "total") return null;   // 값이 없는 표라 소계는 두지 않는다
+                    const i = entry.index;
+                    const it = entry.item;
+                    if (entry.kind === "option")
+                      return (
+                        <OptionTitleRow
+                          key={`o${i}`}
+                          index={i}
+                          sel={itemSel}
+                          label={`${entry.label.split(".")[0]}.`}
+                          value={it.description || ""}
+                          colSpan={itemColSpan - 1}
+                          onChange={(v) => patchItem(i, "description", v)}
+                          cellProps={itemKeys.cell(i, 1)}
+                        />
+                      );
+                    return (
                     <tr key={i} className={itemRowClass(i)}>
                       <ItemSelectCell index={i} sel={itemSel} />
-                      <td className="seq">{i + 1}</td>
+                      <td className="seq">{entry.seq}</td>
                       <td><textarea {...itemKeys.cell(i, 0)} className="wrapcell" rows={1} value={it.part_no || ""} onChange={(e) => patchItem(i, "part_no", e.target.value)} /></td>
                       <td><textarea {...itemKeys.cell(i, 1)} className="desc" rows={1} value={it.description || ""} onChange={(e) => patchItem(i, "description", e.target.value)} /></td>
                       <td><textarea {...itemKeys.cell(i, 2)} className="wrapcell" rows={1} value={it.type ?? ""} onChange={(e) => patchItem(i, "type", e.target.value)} /></td>
@@ -3122,7 +3198,8 @@ function VendorRfqAction({
                       <td><input {...itemKeys.cell(i, 5)} value={it.unit || ""} onChange={(e) => patchItem(i, "unit", e.target.value)} /></td>
                       <td><textarea {...itemKeys.cell(i, 6)} className="wrapcell" rows={1} value={it.remark ?? ""} onChange={(e) => patchItem(i, "remark", e.target.value)} /></td>
                     </tr>
-                  ))
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -3491,8 +3568,8 @@ function VendorQuoteAction({
 
           <div className="form-actions">
             <StageTotal
-              label="Total"
-              value={items.reduce((s, it) => s + Number(it.cost_price || 0) * Number(it.qty || 1), 0)}
+              label={totalLabel(items)}
+              value={countedItems(items).reduce((s, it) => s + Number(it.cost_price || 0) * Number(it.qty || 1), 0)}
               currency={currency}
               rate={fxRate ?? USD_KRW_RATE}
             />
@@ -3543,6 +3620,8 @@ function VendorQuoteItemEditor({
     onChange(
       items.map((it, idx) => {
         if (idx !== i) return it;
+        // 옵션 구분행은 제목(description)만 있는 줄이라 수량·단가를 받지 않는다.
+        if (isOptionRow(it)) return key === "description" ? { ...it, description: value } : it;
         if (key === "qty" || key === "cost_price") {
           return { ...it, [key]: parseAmountInput(value) };
         }
@@ -3551,11 +3630,20 @@ function VendorQuoteItemEditor({
     );
   }
 
-  const total = items.reduce(
+  const total = countedItems(items).reduce(
     (sum, it) => sum + Number(it.cost_price || 0) * Number(it.qty || 1),
     0
   );
   const sel = useRowSelection(items.length);
+  // 옵션(대안) 구분행 — 고른 행이 있으면 그 위, 없으면 맨 아래(lib/quoteOptions.ts).
+  function addOption() {
+    const row: VendorQuoteItem = {
+      ...blank(), row_kind: OPTION_ROW_KIND, description: "", qty: 0, unit: "", cost_price: null,
+    };
+    const at = sel.count > 0 ? Math.min(...Array.from(sel.selected)) : items.length;
+    onChange([...items.slice(0, at), row, ...items.slice(at)]);
+    sel.clear();
+  }
   const cur = (currency || "USD").toUpperCase();
   const cols: ItemCol[] = [
     { key: "__sel", fixed: true },
@@ -3574,6 +3662,8 @@ function VendorQuoteItemEditor({
     { key: "remark", label: "Remark" },
   ];
   const grid = useItemGrid("vquote-items", cols, { phoneHideFoot: true });
+  // 옵션 제목행 <td colSpan> 이 덮을 칸 수 — 숨긴 컬럼을 빼고 센다.
+  const visibleColSpan = grid.cols.filter((c) => c.fixed || !grid.layout.hidden.has(c.key)).length;
   // 엑셀식 편집 — fields 는 아래 keys.cell(i, 0..10) 열 번호와 순서가 같아야 한다.
   // Amount 는 계산 컬럼이라 입력이 없고 열 번호도 차지하지 않으므로 뺀다.
   const keys = useItemGridKeys<VendorQuoteItem>({
@@ -3596,6 +3686,14 @@ function VendorQuoteItemEditor({
           <ItemGridHint />
           <CopyRowsButton grid={keys} sel={sel} />
           <DeleteSelectedButton sel={sel} onDelete={() => deleteSelectedRows(items, sel, onChange)} />
+          <button
+            type="button"
+            className="btn sm"
+            title="Insert an option divider — above the selected row, or at the end."
+            onClick={addOption}
+          >
+            + Option
+          </button>
           <button className="btn sm items-head-add" onClick={add}>+ Add</button>
         </div>
       </div>
@@ -3621,10 +3719,27 @@ function VendorQuoteItemEditor({
             </tr>
           </thead>
           <tbody>
-            {items.map((it, i) => (
+            {optionPlan(items).map((entry) => {
+              if (entry.kind === "total") return null;   // 소계는 발행 문서에서 옵션마다 선다
+              const i = entry.index;
+              const it = entry.item;
+              if (entry.kind === "option")
+                return (
+                  <OptionTitleRow
+                    key={`o${i}`}
+                    index={i}
+                    sel={sel}
+                    label={`${entry.label.split(".")[0]}.`}
+                    value={it.description || ""}
+                    colSpan={visibleColSpan - 1}
+                    onChange={(v) => patch(i, "description", v)}
+                    cellProps={keys.cell(i, 1)}
+                  />
+                );
+              return (
               <tr key={i} className={itemRowClass(i)}>
                 <ItemSelectCell index={i} sel={sel} />
-                <td className="seq">{i + 1}</td>
+                <td className="seq">{entry.seq}</td>
                 <td><textarea {...keys.cell(i, 0)} className="wrapcell" rows={1} value={it.part_no} onChange={(e) => patch(i, "part_no", e.target.value)} /></td>
                 <td><textarea {...keys.cell(i, 1)} className="desc" rows={1} value={it.description} onChange={(e) => patch(i, "description", e.target.value)} /></td>
                 <td><textarea {...keys.cell(i, 2)} className="wrapcell" rows={1} value={it.type ?? ""} onChange={(e) => patch(i, "type", e.target.value)} /></td>
@@ -3638,7 +3753,8 @@ function VendorQuoteItemEditor({
                 <td><textarea {...keys.cell(i, 9)} className="wrapcell" rows={1} value={it.lead_time ?? ""} onChange={(e) => patch(i, "lead_time", e.target.value)} /></td>
                 <td><textarea {...keys.cell(i, 10)} className="wrapcell" rows={1} value={it.remark ?? ""} onChange={(e) => patch(i, "remark", e.target.value)} /></td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
           {/* 합계행 — 컬럼당 1셀(숨김/폭 조절 정렬 유지). Total=Unit Price(11열), 값=Amount(12열). */}
           <tfoot>
@@ -3653,7 +3769,7 @@ function VendorQuoteItemEditor({
               <td></td>{/* 8 origin */}
               <td></td>{/* 9 qty */}
               <td></td>{/* 10 unit */}
-              <td className="total-label">Total</td>{/* 11 unit_price */}
+              <td className="total-label">{totalLabel(items)}</td>{/* 11 unit_price */}
               <td className="num total-value">{/* 12 amount */}
                 <DualCurrencyAmount value={total} currency={currency} rate={rate} />
                 <span className="fx-note">{fxRateText(rate)}</span>
@@ -3698,6 +3814,10 @@ function mergeParsedItems(
 }
 
 function normalizeVendorQuoteItem(raw: Partial<VendorQuoteItem> & { manufacturer?: string }): VendorQuoteItem {
+  // 옵션 구분행은 제목만 있는 줄 — 기본 수량 1·단가 0 을 채워 넣으면 품목으로 되살아난다.
+  if (isOptionRow(raw))
+    return { part_no: "", description: raw.description ?? "", qty: 0, unit: "",
+             cost_price: null, row_kind: OPTION_ROW_KIND };
   return {
     item_no: raw.item_no,
     part_no: raw.part_no ?? "",
@@ -3743,6 +3863,11 @@ function customerQuoteItemsFromVendorQuote(
 ): CustomerQuoteItem[] {
   // 원가는 공급사 견적 통화(vq.currency), 단가는 판매 통화 기준으로 환산해 계산.
   return vq.items.map((it) => {
+    // 옵션 구분행은 제목만 있는 줄이라 원가·단가를 계산하지 않고 그대로 옮긴다.
+    if (isOptionRow(it))
+      return { part_no: "", description: it.description || "", qty: 0, unit: "",
+               cost_price: null, margin_pct: null, unit_price: null, amount: null,
+               row_kind: OPTION_ROW_KIND };
     const cost = Number(it.cost_price ?? 0);
     const unit = calcUnitPrice(cost, defaultMargin, vq.currency, saleCurrency, roundDigits, rate);
     const qty = Number(it.qty || 1);
@@ -3879,7 +4004,8 @@ function CustomerQuoteAction({
     setMsg(pricingAppliedMsg(items.length, defaultMargin, costCurrency, currency, roundDigits, effRate));
   }
 
-  const total = items.reduce((sum, it) => sum + Number(it.amount || 0), 0);
+  // 옵션(대안)이 있으면 대표(첫) 옵션만 센다 — 택일하는 안을 더한 금액은 팔 값이 아니다.
+  const total = countedItems(items).reduce((sum, it) => sum + Number(it.amount || 0), 0);
   const finalTotal = total * (1 - Number(discountPct || 0) / 100);
 
   async function submit() {
@@ -4181,6 +4307,11 @@ function CustomerQuoteItemEditor({
       items.map((it, idx) => {
         if (idx !== i) return it;
         const next: CustomerQuoteItem = { ...it };
+        // 옵션 표시행은 제목(description)만 있는 행이라 금액 재계산 분기를 타지 않는다.
+        if (isOptionRow(it)) {
+          if (key === "description") next.description = value;
+          return next;
+        }
         if (key === "qty" || key === "cost_price" || key === "margin_pct" || key === "unit_price" || key === "amount") {
           (next[key] as number | null) = parseAmountInput(value);
         } else {
@@ -4226,8 +4357,31 @@ function CustomerQuoteItemEditor({
   function add() {
     onChange([...items, blank()]);
   }
+  // 옵션(대안) 구분행 — 이 줄부터 다음 옵션 전까지가 한 안이고, 끝에 그 안의 Total 이 선다.
+  // 제목만 있는 행이라 수량·금액은 두지 않는다(lib/quoteOptions.ts).
+  //
+  // 넣는 자리: 고른 행이 있으면 그 위, 없으면 맨 아래. 표에는 행을 옮기는 손잡이가 없어
+  // 늘 맨 아래에만 붙이면 이미 적어 둔 품목을 옵션으로 나눌 방법이 없다 — 나눌 자리의
+  // 첫 품목을 찍고 누르면 그 앞에 선이 그어진다.
+  function addOption() {
+    const row: CustomerQuoteItem = {
+      ...blank(),
+      row_kind: OPTION_ROW_KIND,
+      description: "",
+      qty: 0,
+      unit: "",
+      cost_price: null,
+      margin_pct: null,
+      unit_price: null,
+      amount: null,
+    };
+    const at = sel.count > 0 ? Math.min(...Array.from(sel.selected)) : items.length;
+    onChange([...items.slice(0, at), row, ...items.slice(at)]);
+    sel.clear();
+  }
   // 붙여넣기·Ctrl+D 도 손으로 친 것과 같은 결과가 되도록 patch() 의 재계산 분기를 그대로 옮긴 것.
   const normalizeRow = (it: CustomerQuoteItem, changed: string[]): CustomerQuoteItem => {
+    if (isOptionRow(it)) return it;
     const next: CustomerQuoteItem = { ...it };
     if (changed.includes("cost_price") || changed.includes("margin_pct") || changed.includes("qty")) {
       const unit = calcUnitPrice(Number(next.cost_price || 0), Number(next.margin_pct || 0), costCurrency, currency, roundDigits, rate);
@@ -4242,15 +4396,26 @@ function CustomerQuoteItemEditor({
   const costCur = (costCurrency || "USD").toUpperCase();
   const saleCur = (currency || "USD").toUpperCase();
   // 매입 합계(원가×수량, 원가 통화) · 매출 합계(판매 Amount, 판매 통화)를 각각 표기.
-  const purchaseTotal = items.reduce((sum, it) => sum + Number(it.cost_price || 0) * Number(it.qty || 1), 0);
-  const total = items.reduce((sum, it) => sum + Number(it.amount || 0), 0);
   // 이 견적이 실제로 남기는 마진 — 행마다 입력한 마진%가 아니라 합계끼리의 결과다.
   // 둘은 자주 어긋난다: 단가를 올림 단위로 올리고(40% → 40.5%), 행마다 마진을 달리
   // 주고, 어떤 행은 단가를 손으로 고친다. 행 값만 보이면 "40%짜리 견적"이라고 읽지만
   // 정작 확인해야 하는 건 이 한 숫자다. 매입은 판매 통화로 환산해 같은 자로 잰다.
-  const purchaseInSale = convertCurrency(purchaseTotal, costCurrency, currency, rate);
-  const profit = total - purchaseInSale;
-  const marginPct = total > 0 ? (profit / total) * 100 : null;
+  const sumsOf = (list: CustomerQuoteItem[]) => {
+    const purchase = list.reduce((sum, it) => sum + Number(it.cost_price || 0) * Number(it.qty || 1), 0);
+    const sales = list.reduce((sum, it) => sum + Number(it.amount || 0), 0);
+    const purchaseInSale = convertCurrency(purchase, costCurrency, currency, rate);
+    const profit = sales - purchaseInSale;
+    return { purchase, sales, purchaseInSale, profit, marginPct: sales > 0 ? (profit / sales) * 100 : null };
+  };
+  // 옵션(대안)이 있으면 표는 옵션별로 끊기고, 합계행은 **첫 옵션**만 센다 — 택일하는 안을
+  // 더한 숫자는 팔 금액이 아니다(lib/quoteOptions.ts · 서버 _counted_rows 와 같은 규칙).
+  const plan = optionPlan(items);
+  const foot = sumsOf(countedItems(items));
+  const purchaseTotal = foot.purchase;
+  const total = foot.sales;
+  const purchaseInSale = foot.purchaseInSale;
+  const profit = foot.profit;
+  const marginPct = foot.marginPct;
   const sel = useRowSelection(items.length);
   // 상세(서브행) 펼침 상태 — 품목 인덱스 기준. 행이 지워지면 인덱스가 밀리므로 함께 초기화한다.
   const [openRows, setOpenRows] = useState<Set<number>>(() => new Set());
@@ -4363,6 +4528,69 @@ function CustomerQuoteItemEditor({
   // 지나치게 높아진다. 그 컬럼이 좁을 때는 주석을 접어 둔다(환율은 표 위 컨트롤에도 보인다).
   const footFxVisible = (k: string) => (grid.layout.widths[k] ?? 999) >= 130;
 
+  // 합계 칸(매입 · 마진 · 매출) — 표 아래 합계행과 옵션별 소계행이 같은 함수를 쓴다.
+  // 두 줄이 같은 칸에 같은 자로 서야 "이 옵션이 전체에서 얼마인지"를 눈으로 견줄 수 있다.
+  const summaryCells = (
+    label: React.ReactNode,
+    v: ReturnType<typeof sumsOf>,
+    fx: boolean,
+    cls: string
+  ) =>
+    footSegments.map((s, fi) => {
+      if (s.role === "label")
+        return (
+          <td key={fi} className={`${cls} foot-total-label`} colSpan={s.span} {...igSpan(s.keys)}>
+            {label}
+          </td>
+        );
+      if (s.role === "purchase")
+        return (
+          <td key={fi} className={`${cls} num total-value foot-purchase`} colSpan={s.span} {...igSpan(s.keys)}>
+            <DualCurrencyAmount value={v.purchase} currency={costCurrency} rate={rate} />
+            {fx && footFxVisible("cost_amount") ? (
+              <span className="fx-note">Purchase · {fxRateText(rate)}</span>
+            ) : null}
+          </td>
+        );
+      // 최종 마진 — 매출 합계 기준(= (매출 − 매입) ÷ 매출). 행에 적은 마진%가 아니라
+      // 올림·개별 수정까지 반영된 결과라, 손실이면 붉게 세운다.
+      if (s.role === "margin")
+        return (
+          <td
+            key={fi}
+            className={`${cls} num total-value foot-margin${v.profit < 0 ? " loss" : ""}`}
+            colSpan={s.span}
+            {...igSpan(s.keys)}
+            title={
+              v.marginPct == null
+                ? undefined
+                : `Final margin on the sale total — (${dualCurrencyText(v.sales, currency, rate)}`
+                  + ` − ${dualCurrencyText(v.purchaseInSale, currency, rate)}) ÷ sales`
+            }
+          >
+            {v.marginPct == null ? null : (
+              <span className="dual-amount">
+                <span className="dual-line primary">{v.marginPct.toFixed(1)}%</span>
+                <span className="dual-line converted">
+                  {moneyText(v.profit)} {saleCur}
+                </span>
+              </span>
+            )}
+          </td>
+        );
+      if (s.role === "sales")
+        return (
+          <td key={fi} className={`${cls} num total-value foot-sales`} colSpan={s.span} {...igSpan(s.keys)}>
+            <DualCurrencyAmount value={v.sales} currency={currency} rate={rate} />
+            {fx && footFxVisible("amount") ? (
+              <span className="fx-note">Sales · {fxRateText(rate)}</span>
+            ) : null}
+          </td>
+        );
+      return <td key={fi} className={cls} colSpan={s.span} {...igSpan(s.keys)} />;
+    });
+
+
   return (
     <div className="stage-card stage-card--items">
       <div className="items-head">
@@ -4385,6 +4613,14 @@ function CustomerQuoteItemEditor({
             sel={sel}
             onDelete={() => { deleteSelectedRows(items, sel, onChange); setOpenRows(new Set()); }}
           />
+          <button
+            type="button"
+            className="btn sm"
+            title="Insert an option divider — above the selected row, or at the end. Items under it are totalled on their own."
+            onClick={addOption}
+          >
+            + Option
+          </button>
           <button className="btn sm items-head-add" onClick={add}>+ Add</button>
         </div>
       </div>
@@ -4421,8 +4657,32 @@ function CustomerQuoteItemEditor({
             </tr>
           </thead>
           <tbody>
-            {items.map((it, i) => (
-              <Fragment key={i}>
+            {plan.map((entry) => {
+              // 옵션 소계행 — 그 옵션의 품목만 세어 매입·마진·매출을 합계행과 같은 칸에 세운다.
+              if (entry.kind === "total")
+                return (
+                  <tr className="ig-subtotal-row" key={`t${entry.block.headerIndex}`}>
+                    {summaryCells(entry.label, sumsOf(entry.block.items), false, "ig-foot ig-subtotal")}
+                  </tr>
+                );
+              const i = entry.index;
+              const it = entry.item;
+              // 옵션 구분행 — 제목 한 칸이 표 폭을 다 쓴다(이 줄부터 다음 옵션 전까지가 한 안).
+              if (entry.kind === "option")
+                return (
+                  <OptionTitleRow
+                    key={`o${i}`}
+                    index={i}
+                    sel={sel}
+                    label={`${entry.label.split(".")[0]}.`}
+                    value={it.description}
+                    colSpan={mainColSpan - 1}
+                    onChange={(v) => patch(i, "description", v)}
+                    cellProps={keys.cell(i, 1)}
+                  />
+                );
+              return (
+                <Fragment key={i}>
               <tr className={itemRowClass(i)}>
                 <ItemSelectCell index={i} sel={sel} />
                 <td className="seq">
@@ -4434,7 +4694,7 @@ function CustomerQuoteItemEditor({
                   >
                     ▸
                   </button>
-                  {i + 1}
+                  {entry.seq}
                 </td>
                 <td><textarea {...keys.cell(i, 0)} className="wrapcell" rows={1} value={it.part_no} onChange={(e) => patch(i, "part_no", e.target.value)} /></td>
                 <td><textarea {...keys.cell(i, 1)} className="desc" rows={1} value={it.description} onChange={(e) => patch(i, "description", e.target.value)} /></td>
@@ -4487,67 +4747,16 @@ function CustomerQuoteItemEditor({
                   </td>
                 </tr>
               ) : null}
-              </Fragment>
-            ))}
+                </Fragment>
+              );
+            })}
           </tbody>
-          {/* 합계행 — colspan 세그먼트(.ig-foot)로 구성. "Total" 은 No.~Unit 통합셀 가운데,
-              매입 합계는 Cost Amount 칸, 매출 합계는 Amount 칸. 숨김 컬럼은 건너뛰어 정렬 유지. */}
+          {/* 합계행 — colspan 세그먼트(.ig-foot)로 구성. 라벨은 No.~Unit 통합셀 가운데,
+              매입 합계는 Cost Amount 칸, 매출 합계는 Amount 칸. 숨김 컬럼은 건너뛰어 정렬 유지.
+              옵션이 있으면 라벨이 "Total (Option 1)" 이 된다 — 이 줄이 세는 것은 대표(첫)
+              옵션뿐이고, 화면의 Final·목록의 금액도 같은 값이다. */}
           <tfoot>
-            <tr>
-              {footSegments.map((s, fi) => {
-                if (s.role === "label")
-                  return (
-                    <td key={fi} className="ig-foot foot-total-label" colSpan={s.span} {...igSpan(s.keys)}>
-                      Total
-                    </td>
-                  );
-                if (s.role === "purchase")
-                  return (
-                    <td key={fi} className="ig-foot num total-value foot-purchase" colSpan={s.span} {...igSpan(s.keys)}>
-                      <DualCurrencyAmount value={purchaseTotal} currency={costCurrency} rate={rate} />
-                      {footFxVisible("cost_amount") ? (
-                        <span className="fx-note">Purchase · {fxRateText(rate)}</span>
-                      ) : null}
-                    </td>
-                  );
-                {/* 최종 마진 — 매출 합계 기준(= (매출 − 매입) ÷ 매출). 행에 적은 마진%가
-                    아니라 올림·개별 수정까지 반영된 결과라, 손실이면 붉게 세운다. */}
-                if (s.role === "margin")
-                  return (
-                    <td
-                      key={fi}
-                      className={`ig-foot num total-value foot-margin${profit < 0 ? " loss" : ""}`}
-                      colSpan={s.span}
-                      {...igSpan(s.keys)}
-                      title={
-                        marginPct == null
-                          ? undefined
-                          : `Final margin on the sale total — (${dualCurrencyText(total, currency, rate)}`
-                            + ` − ${dualCurrencyText(purchaseInSale, currency, rate)}) ÷ sales`
-                      }
-                    >
-                      {marginPct == null ? null : (
-                        <span className="dual-amount">
-                          <span className="dual-line primary">{marginPct.toFixed(1)}%</span>
-                          <span className="dual-line converted">
-                            {moneyText(profit)} {(currency || "USD").toUpperCase()}
-                          </span>
-                        </span>
-                      )}
-                    </td>
-                  );
-                if (s.role === "sales")
-                  return (
-                    <td key={fi} className="ig-foot num total-value foot-sales" colSpan={s.span} {...igSpan(s.keys)}>
-                      <DualCurrencyAmount value={total} currency={currency} rate={rate} />
-                      {footFxVisible("amount") ? (
-                        <span className="fx-note">Sales · {fxRateText(rate)}</span>
-                      ) : null}
-                    </td>
-                  );
-                return <td key={fi} className="ig-foot" colSpan={s.span} {...igSpan(s.keys)} />;
-              })}
-            </tr>
+            <tr>{summaryCells(totalLabel(items), foot, true, "ig-foot")}</tr>
           </tfoot>
         </table>
       </div>
@@ -4627,7 +4836,7 @@ const DEFAULT_SALE_CURRENCY = "USD";
 // 화면에 기본 마진이 찍혀 실제 단가와 어긋나 보이던 걸 막으려고 품목에서 되살린다.
 // 행마다 마진이 다르면 가장 많이 쓰인 값을 쓴다(같은 수면 첫 행 기준).
 function itemsMargin(items: CustomerQuoteItem[] | undefined | null): number | null {
-  const values = (items || []).map((it) => Number(it.margin_pct || 0));
+  const values = (items || []).filter((it) => !isOptionRow(it)).map((it) => Number(it.margin_pct || 0));
   if (values.length === 0) return null;
   const tally = new Map<number, number>();
   for (const v of values) tally.set(v, (tally.get(v) ?? 0) + 1);
@@ -4720,6 +4929,7 @@ function applyMarginToAll(
   rate: number = USD_KRW_RATE
 ): CustomerQuoteItem[] {
   return items.map((it) => {
+    if (isOptionRow(it)) return it;   // 옵션 구분행에는 단가·마진이 없다
     const unit = calcUnitPrice(Number(it.cost_price || 0), marginPct, costCur, saleCur, roundDigits, rate);
     return { ...it, margin_pct: marginPct, unit_price: unit, amount: unit * Number(it.qty || 1) };
   });
@@ -4734,6 +4944,7 @@ function recomputeCustomerQuoteItems(
   rate: number = USD_KRW_RATE
 ): CustomerQuoteItem[] {
   return items.map((it) => {
+    if (isOptionRow(it)) return it;   // 옵션 구분행에는 단가·마진이 없다
     const unit = calcUnitPrice(Number(it.cost_price || 0), Number(it.margin_pct || 0), costCur, saleCur, roundDigits, rate);
     return { ...it, unit_price: unit, amount: unit * Number(it.qty || 1) };
   });

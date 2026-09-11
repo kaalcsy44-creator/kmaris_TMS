@@ -579,6 +579,8 @@ def create_vendor_rfq(rfq_id: int, body: VendorRfqCreate):
             "type": it.get("type", ""),
             "serial_no": it.get("serial_no", ""),
             "qty": it.get("qty", 1),
+            # 옵션 표시행 표식 — 나눠 둔 옵션이 공급사 요청서에서도 그대로 서게 한다.
+            "row_kind": it.get("row_kind", "") or "",
         } for it in (rfq.items or [])]
 
         vrfq = VendorRFQ(
@@ -687,6 +689,7 @@ def update_vendor_rfq(vrfq_id: int, body: VendorRfqUpdate):
                 "qty": it.get("qty", 1) or 1,
                 "unit": (it.get("unit") or "").strip(),
                 "remark": (it.get("remark") or "").strip(),
+                "row_kind": it.get("row_kind", "") or "",
             } for it in body.items if (it.get("part_no") or it.get("description"))]
         s.commit()
         return {"ok": True, "id": vr.id}

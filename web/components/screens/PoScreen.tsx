@@ -55,11 +55,13 @@ import {
   ItemGridHint,
   ItemSelectCell,
   ItemSelectHeaderCell,
+  OptionTitleRow,
   itemRowClass,
   parseAmountInput,
   StageTotal,
   useRowSelection,
 } from "@/components/common/itemTable";
+import { OPTION_ROW_KIND, isOptionRow, countedItems, optionPlan, totalLabel } from "@/lib/quoteOptions";
 import { useItemGrid, ItemTh, ItemGridStyle, ItemColsButton, type ItemCol } from "@/components/common/itemGrid";
 import CategoryCell from "@/components/common/CategoryCell";
 import { tr } from "@/lib/labels";
@@ -2173,6 +2175,8 @@ function ItemEditor({
     onChange(
       items.map((it, idx) => {
         if (idx !== i) return it;
+        // 옵션 구분행은 제목(description)만 있는 줄이라 수량·금액을 받지 않는다.
+        if (isOptionRow(it)) return key === "description" ? { ...it, description: value } : it;
         if (key === "qty" || key === "unit_price" || key === "amount") {
           return { ...it, [key]: parseAmountInput(value) };
         }
@@ -2181,9 +2185,20 @@ function ItemEditor({
     );
   }
   // 합계·행번호는 "문서에서 제외"한 행을 뺀 값 — 발행 P/O(PDF)와 같은 숫자가 되게.
-  const total = includedRows(items).reduce((sum, it) => sum + Number(it.amount || 0), 0);
+  // 옵션(대안)이 있으면 합계는 대표(첫) 옵션만 센다(lib/quoteOptions.ts).
+  const total = countedItems(includedRows(items)).reduce((sum, it) => sum + Number(it.amount || 0), 0);
   const seqNos = includedSeqNos(items);
   const sel = useRowSelection(items.length);
+  // 옵션(대안) 구분행 — 고른 행이 있으면 그 위, 없으면 맨 아래.
+  function addOption() {
+    const row: PoWorkItem = {
+      ...blankItem(), row_kind: OPTION_ROW_KIND, description: "", qty: 0, unit: "",
+      unit_price: null, amount: null,
+    };
+    const at = sel.count > 0 ? Math.min(...Array.from(sel.selected)) : items.length;
+    onChange([...items.slice(0, at), row, ...items.slice(at)]);
+    sel.clear();
+  }
   const cur = (currency || "USD").toUpperCase();
   const cols: ItemCol[] = [
     { key: "__sel", fixed: true },
@@ -2203,6 +2218,8 @@ function ItemEditor({
     { key: "category", label: "Category" },
   ];
   const grid = useItemGrid("po-items", cols, { phoneHideFoot: true });
+  // 옵션 제목행 <td colSpan> 이 덮을 칸 수 — 숨긴 컬럼을 빼고 센다.
+  const visibleColSpan = grid.cols.filter((c) => c.fixed || !grid.layout.hidden.has(c.key)).length;
   // fields 순서 = 아래 keys.cell(i, 0..9) 열 번호. 여기 Amount 는 계산 컬럼이 아니라 직접 입력이라
   // fields 에 포함하고 재계산(normalizeRow)도 두지 않는다 — patch() 도 다시 계산하지 않는다.
   const keys = useItemGridKeys<PoWorkItem>({
@@ -2227,6 +2244,14 @@ function ItemEditor({
           <CopyRowsButton grid={keys} sel={sel} />
           <ExcludeSelectedButton items={items} sel={sel} onChange={onChange} />
           <DeleteSelectedButton sel={sel} onDelete={() => deleteSelectedRows(items, sel, onChange)} />
+          <button
+            type="button"
+            className="btn sm"
+            title="Insert an option divider — above the selected row, or at the end."
+            onClick={addOption}
+          >
+            + Option
+          </button>
           <button className="btn sm items-head-add" onClick={() => onChange([...items, blankItem()])}>+ Add</button>
         </div>
       </div>
@@ -2251,7 +2276,24 @@ function ItemEditor({
             </tr>
           </thead>
           <tbody>
-            {items.map((it, i) => (
+            {optionPlan(items).map((entry) => {
+              if (entry.kind === "total") return null;   // 소계는 발행 P/O 에서 옵션마다 선다
+              const i = entry.index;
+              const it = entry.item;
+              if (entry.kind === "option")
+                return (
+                  <OptionTitleRow
+                    key={`o${i}`}
+                    index={i}
+                    sel={sel}
+                    label={`${entry.label.split(".")[0]}.`}
+                    value={it.description || ""}
+                    colSpan={visibleColSpan - 1}
+                    onChange={(v) => patch(i, "description", v)}
+                    cellProps={keys.cell(i, 1)}
+                  />
+                );
+              return (
               <tr key={i} className={itemRowClass(i, isRowExcluded(it))}>
                 <ItemSelectCell index={i} sel={sel} />
                 {/* 제외 행은 번호를 비운다 — 발행 P/O 에는 그 줄이 없기 때문. */}
@@ -2314,7 +2356,8 @@ function ItemEditor({
                         />
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
           {/* 합계행 — 컬럼당 1셀(숨김/폭 조절 정렬 유지). Total=Unit price(10열), 값=Amount(11열). */}
           <tfoot>
@@ -2328,7 +2371,7 @@ function ItemEditor({
               <td></td>{/* 7 maker */}
               <td></td>{/* 8 qty */}
               <td></td>{/* 9 unit */}
-              <td className="total-label">Total</td>{/* 10 unit_price */}
+              <td className="total-label">{totalLabel(items)}</td>{/* 10 unit_price */}
               <td className="num total-value">{/* 11 amount */}
                 <DualCurrencyAmount value={total} currency={currency} />
                 <span className="fx-note">{fxRateText()}</span>

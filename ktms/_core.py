@@ -74,6 +74,7 @@ from services.pdf_parser import (
 )
 from services.vendor_xlsx import make_vendor_rfq_quote_xlsx
 from services.doc_xlsx import make_document_xlsx
+from services.kmaris_docs import is_option_row, option_blocks
 from services.quote_response_parser import parse_vendor_quote_bytes, excel_to_text
 from db.models import (
     RFQ, Customer, CustomerContact, Vessel, Vendor, VendorContact, User, UserRole, RolePermission, ItemMaster, ItemCategory, DocSequence,
@@ -658,12 +659,20 @@ def _kst(dt) -> str:
     return (dt + timedelta(hours=9)).strftime("%y-%m-%d %H:%M")
 
 
+def _counted_rows(items) -> list:
+    """금액을 셀 때 실제로 세는 행 — 제외행을 빼고, 옵션이 있으면 **첫 옵션**의 품목만.
+
+    옵션(대안)은 고객이 택일하는 안이라 다 더하면 하나만 팔 금액이 겹쳐 잡힌다. 문서에는
+    옵션별 Total 만 찍고(총계 없음), 목록·마진 같은 집계에는 먼저 적은 안을 대표로 쓴다 —
+    services.kmaris_docs.representative_items 와 같은 규칙이다."""
+    rows = [i for i in (items or []) if isinstance(i, dict) and not i.get("excluded")]
+    blocks = option_blocks(rows)
+    return list(blocks[0]["items"]) if blocks else rows
+
+
 def _items_cost_total(items) -> float:
     tot = 0.0
-    for it in (items or []):
-        # 문서에서 제외한 행은 발주서에 나가지 않으므로 원가에서도 뺀다(_total_amount 와 같은 규칙).
-        if it.get("excluded"):
-            continue
+    for it in _counted_rows(items):
         try:
             tot += float(it.get("cost_price", 0) or 0) * float(it.get("qty", 1) or 1)
         except (TypeError, ValueError):
@@ -696,9 +705,8 @@ def cheapest_vendor_quote(quotes) -> tuple[float | None, str]:
 def _total_amount(items) -> float:
     # 문서에서 제외(excluded)한 행은 발행 문서에 나가지 않으므로 금액에서도 뺀다
     # (services.kmaris_docs.normalize_items 와 같은 규칙 — 화면 합계·PDF·청구액이 한 값이 되게).
-    return sum(
-        float(i.get("amount", 0) or 0) for i in (items or []) if not i.get("excluded")
-    )
+    # 옵션이 여럿이면 대표(첫) 옵션만 센다 — _counted_rows 참고.
+    return sum(float(i.get("amount", 0) or 0) for i in _counted_rows(items))
 
 
 def _enum_val(v) -> str:
@@ -1314,19 +1322,31 @@ def _item_view(it: dict) -> dict:
         "applied_to": it.get("applied_to"),
         # "문서에서 제외" 표식 — 다시 열었을 때도 제외 상태로 보여야 한다.
         "excluded": bool(it.get("excluded")),
+        # 옵션 표시행 표식(row_kind="option") — 빠뜨리면 편집기로 돌아왔을 때 옵션 제목이
+        # 빈 품목 한 줄로 풀려 버린다.
+        "row_kind": str(it.get("row_kind") or ""),
     }
 
 
 def _po_item_lines(items, korean: bool) -> str:
+    """메일 본문의 품목 목록. 옵션 구분행은 번호를 받지 않고 제목 한 줄로 선다 —
+    품목처럼 적으면 수량 0 짜리 빈 줄이 되어 무엇을 주문하는지 흐려진다."""
     qty_label = "수량" if korean else "Qty"
     desc_label = "품명" if korean else "Desc"
-    return "\n".join(
-        f"  {i+1:>2}. Part No.: {str(it.get('part_no','—')):<20s}"
-        f"  {qty_label}: {it.get('qty','—')} {str(it.get('unit','')):<5s}"
-        f"  Maker: {it.get('maker','—')}\n"
-        f"       {desc_label}: {it.get('description','—')}"
-        for i, it in enumerate(items or [])
-    )
+    lines = []
+    n = 0
+    for it in (items or []):
+        if str((it or {}).get("row_kind") or "") == "option":
+            lines.append(f"  [Option] {it.get('description','')}".rstrip())
+            continue
+        n += 1
+        lines.append(
+            f"  {n:>2}. Part No.: {str(it.get('part_no','—')):<20s}"
+            f"  {qty_label}: {it.get('qty','—')} {str(it.get('unit','')):<5s}"
+            f"  Maker: {it.get('maker','—')}\n"
+            f"       {desc_label}: {it.get('description','—')}"
+        )
+    return "\n".join(lines)
 
 
 def _vendor_po_email_body(po, vendor, order, vessel, notes: str, lang: str, project_no: str = "",
@@ -1844,6 +1864,9 @@ class PoWorkItem(BaseModel):
     applied_to: int | None = None
     # "문서에서 제외" 표식 — 행은 남기고 발행 P/O·합계에서만 뺀다(kmaris_docs.normalize_items).
     excluded: bool = False
+    # 옵션 표시행(row_kind="option") — 품목이 아니라 그 아래 품목들을 묶는 제목 행.
+    # 값을 흘려보내지 않으면 견적에서 나눠 둔 옵션이 발주·요청서로 넘어오며 풀린다.
+    row_kind: str | None = ""
 
 
 class OrderCreate(BaseModel):
@@ -3685,6 +3708,9 @@ class RfqItemIn(BaseModel):
     category_id: int | None = None
     # 용역이 닿은 선박 계통(선택) — 건마다 달라지므로 라인에만 둔다(PoWorkItem 참고).
     applied_to: int | None = None
+    # 옵션 표시행(row_kind="option") — 품목이 아니라 그 아래 품목들을 묶는 제목 행.
+    # 값을 흘려보내지 않으면 견적에서 나눠 둔 옵션이 발주·요청서로 넘어오며 풀린다.
+    row_kind: str | None = ""
 
 
 class RfqSourceFileIn(BaseModel):
@@ -4070,6 +4096,8 @@ __all__ = [
     "_full_perms",
     "_item_view",
     "_items_cost_total",
+    "is_option_row",
+    "option_blocks",
     "_kst",
     "_kst_iso",
     "_latest_ci",

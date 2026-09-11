@@ -3,6 +3,7 @@
 import type { ClipboardEvent, KeyboardEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cellText, parseClipboardGrid, tsvCell } from "./itemClipboard";
+import { isOptionRow, type OptionRowLike } from "../../lib/quoteOptions";
 
 export const USD_KRW_RATE = 1543.41;
 
@@ -83,6 +84,52 @@ export function deleteSelectedRows<T>(
   if (sel.count === 0) return;
   onChange(items.filter((_, idx) => !sel.selected.has(idx)));
   sel.clear();
+}
+
+// ── 옵션(Option) 제목행 ────────────────────────────────────────────────────
+// 한 건에 대안이 여럿일 때 품목표를 옵션별로 끊는 줄. 표마다 컬럼 수가 달라 colSpan 은
+// 부르는 쪽에서 센 값을 받는다. 규칙과 번호 매김은 lib/quoteOptions.ts 한 곳에 있다.
+export function OptionTitleRow({
+  index,
+  sel,
+  label,
+  value,
+  colSpan,
+  onChange,
+  cellProps,
+}: {
+  index: number;
+  sel?: RowSelection;
+  /** "Option 1." — 번호는 표에서 세어 붙인다(행에 저장하지 않는다). */
+  label: string;
+  value: string;
+  colSpan: number;
+  onChange?: (v: string) => void;
+  /** 붙여넣기·Ctrl+D 를 쓰는 표에서는 그 칸의 키보드 핸들러를 그대로 넘긴다. */
+  cellProps?: Record<string, unknown>;
+}) {
+  return (
+    <tr className="ig-option-row">
+      {sel ? <ItemSelectCell index={index} sel={sel} /> : null}
+      <td className="ig-option-cell" colSpan={Math.max(1, colSpan)}>
+        <div className="ig-option-cell-inner">
+          <span className="ig-option-no">{label}</span>
+          {onChange ? (
+            <textarea
+              {...(cellProps || {})}
+              className="desc"
+              rows={1}
+              placeholder="Option title — e.g. Repair kit"
+              value={value}
+              onChange={(e) => onChange(e.target.value)}
+            />
+          ) : (
+            <span className="ig-option-title">{value}</span>
+          )}
+        </div>
+      </td>
+    </tr>
+  );
 }
 
 // 품목표 헤더 좌측(row-tools) 열의 전체 선택 체크박스.
@@ -173,10 +220,13 @@ export function includedRows<T extends ExcludableItem>(items: T[]): T[] {
 }
 
 /** 표시용 행 번호 — 제외 행은 번호를 건너뛰고(null) 나머지가 1..n 으로 이어진다.
+ *  옵션 구분행도 품목이 아니라 제목이므로 번호를 받지 않는다.
  *  발행 문서의 No. 와 같은 번호가 되도록 서버 renumber 규칙과 맞춘 계산이다. */
 export function includedSeqNos<T extends ExcludableItem>(items: T[]): (number | null)[] {
   let n = 0;
-  return (items || []).map((it) => (isRowExcluded(it) ? null : ++n));
+  return (items || []).map((it) =>
+    isRowExcluded(it) || isOptionRow(it as OptionRowLike) ? null : ++n
+  );
 }
 
 /** 선택 행을 문서에서 제외/복원하는 토글 버튼. 선택이 모두 제외 상태면 "Restore" 가 된다. */

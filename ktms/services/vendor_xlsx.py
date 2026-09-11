@@ -9,6 +9,8 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
 
+from services.kmaris_docs import is_option_row
+
 
 def _num(value: Any) -> float:
     try:
@@ -18,9 +20,23 @@ def _num(value: Any) -> float:
 
 
 def _normalize_items(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """옵션(대안)으로 나눠 묻는 건이면 옵션 표시행을 제목행으로 함께 내려보낸다 —
+    번호는 품목에만 매긴다(services.kmaris_docs.option_blocks 와 같은 규칙)."""
     result = []
-    for i, raw in enumerate(items, start=1):
+    i = 0
+    opt_no = 0
+    for raw in items or []:
+        if is_option_row(raw):
+            opt_no += 1
+            title = str(raw.get("description", "") or "").strip()
+            result.append({
+                "option": True,
+                "label": f"Option {opt_no}." + (f" {title}" if title else ""),
+            })
+            continue
+        i += 1
         result.append({
+            "option": False,
             "item_no": raw.get("item_no") or i,
             "part_no": raw.get("part_no", ""),
             "description": raw.get("description", ""),
@@ -135,14 +151,28 @@ def make_vendor_rfq_quote_xlsx(
 
     # ── Data rows ─────────────────────────────────────────────────────────────
     normalized = _normalize_items(items)
+    zebra = 0
     for r_offset, item in enumerate(normalized, start=1):
         r = 11 + r_offset
+        # 옵션 제목행 — 표 폭 전체를 한 칸으로 써서 어느 안의 품목인지 보이게 한다.
+        if item.get("option"):
+            merge(r, 1, r, NUM_COLS)
+            c = ws.cell(r, 1, f" {item['label']}")
+            c.fill = light_blue_fill
+            c.font = Font(name="Calibri", bold=True, size=10)
+            c.alignment = Alignment(horizontal="left", vertical="center")
+            for col in range(1, NUM_COLS + 1):
+                ws.cell(r, col).border = bdr
+                ws.cell(r, col).fill = light_blue_fill
+            ws.row_dimensions[r].height = 18
+            continue
+        zebra += 1
         row_values = [
             item["item_no"], item["part_no"], item["description"],
             item["maker"], item["qty"], item["unit"],
             "", "", "", "", "",
         ]
-        is_alt = r_offset % 2 == 0
+        is_alt = zebra % 2 == 0
         for c_idx, val in enumerate(row_values, start=1):
             cell = ws.cell(r, c_idx, val)
             cell.border = bdr

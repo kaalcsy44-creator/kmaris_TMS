@@ -454,6 +454,9 @@ export type PoWorkItem = {
   applied_to?: number | null;
   /** 문서에서 제외한 행 — DocumentWorkItem.excluded 와 같은 규칙(표에는 남고 발행 문서·합계에서 빠짐). */
   excluded?: boolean;
+  /** 옵션 표시행(row_kind="option") — 품목이 아니라 그 아래 품목들을 묶는 제목 행이다.
+   *  description 이 옵션 제목이고 금액은 세지 않는다(lib/quoteOptions.ts). */
+  row_kind?: string;
 };
 
 export type RfqOcrResult = {
@@ -619,6 +622,9 @@ export type VendorQuoteItem = {
   cost_price: number | null;
   lead_time?: string;
   remark?: string;
+  /** 옵션 표시행(row_kind="option") — 품목이 아니라 그 아래 품목들을 묶는 제목 행이다.
+   *  description 이 옵션 제목이고 금액은 세지 않는다(lib/quoteOptions.ts). */
+  row_kind?: string;
 };
 
 export type CustomerQuoteItem = {
@@ -641,6 +647,9 @@ export type CustomerQuoteItem = {
   /** 문서에서 제외한 행 — 서버 _item_view 가 늘 실어 보낸다. 금액 0 과 다른 상태다
    *  (0 = 이 문서에 들어 있고 값이 0, 제외 = 이 문서에 나가지 않음). */
   excluded?: boolean;
+  /** 옵션 표시행(row_kind="option") — 품목이 아니라 그 아래 품목들을 묶는 제목 행이다.
+   *  description 이 옵션 제목이고 금액은 세지 않는다(lib/quoteOptions.ts). */
+  row_kind?: string;
 };
 
 export type QuotationTerms = {
@@ -1842,6 +1851,9 @@ export type RfqItem = {
   category_id?: number | null;
   /** 용역이 닿은 선박 계통(선택). 건마다 달라 품목 마스터로는 올리지 않고 라인에만 남는다. */
   applied_to?: number | null;
+  /** 옵션 표시행(row_kind="option") — 품목이 아니라 그 아래 품목들을 묶는 제목 행이다.
+   *  description 이 옵션 제목이고 금액은 세지 않는다(lib/quoteOptions.ts). */
+  row_kind?: string;
 };
 
 export type RfqStep = {

@@ -19,6 +19,7 @@ from services.kmaris_docs import (
     PI_COLUMN_UNITS, PI_MIN_ITEM_ROWS, PL_COLUMN_UNITS, PL_MIN_ITEM_ROWS,
     pi_decimals, pi_charges, pi_doc_date, is_service_doc, service_info_rows,
     SERVICE_PI_DECIMALS, cn_view, cn_contact_line, CN_MIN_ITEM_ROWS,
+    is_option_row, item_row_plan,
 )
 
 _CONFIG_DIR = Path(__file__).resolve().parent.parent / "config"
@@ -1224,9 +1225,8 @@ def make_quotation_costing_xlsx(
 
     # 컬럼: A No · B Part · C Desc · D Qty · E Unit · F Cost U/P · G Cost Amount
     #       · H Margin% · I U/Price · J Amount · K Lead · L Remark
-    first = HROW + 1
-    for ri, it in enumerate(raw_items, start=1):
-        r = HROW + ri
+    # 품목 한 줄 쓰기 — 옵션 제목행·소계행을 사이에 끼울 수 있게 함수로 뺐다.
+    def write_item(r: int, ri: int, it: Dict[str, Any]) -> None:
         qty = _num(it.get("qty", 0))
         unit_price = _num(it.get("unit_price", 0))
         cost = _num(it.get("cost_price", 0))
@@ -1271,39 +1271,90 @@ def make_quotation_costing_xlsx(
         _dl = sum(max(1, (len(x) + 39) // 40) for x in _desc.split("\n")) if _desc else 1
         _rl = sum(max(1, (len(x) + 25) // 26) for x in _rmk.split("\n")) if _rmk else 1
         ws.row_dimensions[r].height = 14 * max(_dl, _rl, 1) + 5
-    # 샘플처럼 최소 5줄의 폼 형태 — 품목이 적어도 빈 줄로 표 높이를 유지(Total 위치 고정).
-    MIN_ITEM_ROWS = 5
-    for ri in range(len(raw_items) + 1, MIN_ITEM_ROWS + 1):
-        r = HROW + ri
-        for ci in range(1, NCOL + 1):
-            cell = ws.cell(r, ci); cell.border = bdr
-            if ci in (6, 7, 8):
-                cell.fill = cost_fill
-        ws.row_dimensions[r].height = 18
-    last = HROW + max(len(raw_items), MIN_ITEM_ROWS)
 
-    # ── Totals (수식) ──────────────────────────────────────────────────
-    trow = last + 1
-    has_rows = len(raw_items) > 0
     # "Total" 라벨 — A~E 병합, 가운데. 행 전체 글자 크기 12.
     bold16 = Font(name="Noto Sans KR", bold=True, size=12)
-    merge(trow, 1, trow, 5)
-    tc = ws.cell(trow, 1, "Total"); tc.font = bold16; tc.alignment = center
-    for col in (1, 2, 3, 4, 5, 11, 12):
-        ws.cell(trow, col).border = bdr
-    ws.row_dimensions[trow].height = 16
-    cost_sum = f"=SUM(G{first}:G{last})" if has_rows else 0
-    amt_sum = f"=SUM(J{first}:J{last})" if has_rows else 0
-    margin_tot = f"=IF(J{trow}=0,0,(J{trow}-G{trow}*{fx_str})/J{trow})" if has_rows else 0
-    for col, val, fill in [(6, "", cost_fill), (7, cost_sum, cost_fill), (8, margin_tot, cost_fill),
-                           (9, "", lightblue), (10, amt_sum, lightblue)]:
-        cell = ws.cell(trow, col, val); cell.border = bdr; cell.fill = fill; cell.font = bold16; cell.alignment = right
-        if col == 7:
-            cell.number_format = cost_fmt
-        if col == 10:
-            cell.number_format = num_fmt
-        if col == 8:
-            cell.number_format = '0.0%'
+
+    def write_total(r: int, label: str, f: int, l: int) -> None:
+        """합계행 — 원가합(G)·마진(H)·매출합(J)을 f..l 행 범위의 수식으로 쓴다."""
+        merge(r, 1, r, 5)
+        tc = ws.cell(r, 1, label); tc.font = bold16; tc.alignment = center
+        for col in (1, 2, 3, 4, 5, 11, 12):
+            ws.cell(r, col).border = bdr
+        ws.row_dimensions[r].height = 16
+        has_rows = l >= f
+        cost_sum = f"=SUM(G{f}:G{l})" if has_rows else 0
+        amt_sum = f"=SUM(J{f}:J{l})" if has_rows else 0
+        margin_tot = f"=IF(J{r}=0,0,(J{r}-G{r}*{fx_str})/J{r})" if has_rows else 0
+        for col, val, fill in [(6, "", cost_fill), (7, cost_sum, cost_fill), (8, margin_tot, cost_fill),
+                               (9, "", lightblue), (10, amt_sum, lightblue)]:
+            cell = ws.cell(r, col, val); cell.border = bdr; cell.fill = fill
+            cell.font = bold16; cell.alignment = right
+            if col == 7:
+                cell.number_format = cost_fmt
+            if col == 10:
+                cell.number_format = num_fmt
+            if col == 8:
+                cell.number_format = '0.0%'
+
+    def write_option_title(r: int, label: str) -> None:
+        """옵션 제목행 — 표 폭 전체를 한 칸으로 써서 품목표를 옵션별로 끊는다."""
+        merge(r, 1, r, NCOL)
+        c = ws.cell(r, 1, f" {label}"); c.font = bold; c.alignment = left
+        for col in range(1, NCOL + 1):
+            ws.cell(r, col).fill = gray; ws.cell(r, col).border = bdr
+        ws.row_dimensions[r].height = 18
+
+    # ── 품목 행 ────────────────────────────────────────────────────────
+    # 옵션(대안)이 있으면 옵션 제목행으로 끊고 옵션마다 Total 을 붙인다. 택일하는 안이라
+    # 맨 아래 총계는 내지 않는다(services.kmaris_docs.option_blocks 참고).
+    first = HROW + 1
+    has_options = any(is_option_row(it) for it in raw_items)
+    r = HROW
+    ri = 0          # 품목 번호 — 옵션 제목행은 번호를 받지 않는다
+    opt_no = 0
+    blk_first: Optional[int] = None
+    trow = HROW
+
+    def close_block(r: int) -> int:
+        """열려 있는 옵션 블록을 소계행으로 닫는다 → 소계행 번호."""
+        nonlocal blk_first
+        r += 1
+        write_total(r, f"Total (Option {opt_no})" if opt_no else "Total", blk_first or r, r - 1)
+        blk_first = None
+        return r
+
+    for it in raw_items:
+        if is_option_row(it):
+            if blk_first is not None:
+                trow = r = close_block(r)
+            opt_no += 1
+            title = str(it.get("description", "") or "").strip()
+            r += 1
+            write_option_title(r, f"Option {opt_no}." + (f" {title}" if title else ""))
+            continue
+        ri += 1
+        r += 1
+        if blk_first is None:
+            blk_first = r
+        write_item(r, ri, it)
+    if has_options:
+        if blk_first is not None:
+            trow = r = close_block(r)
+        last = r
+    else:
+        # 샘플처럼 최소 5줄의 폼 형태 — 품목이 적어도 빈 줄로 표 높이를 유지(Total 위치 고정).
+        MIN_ITEM_ROWS = 5
+        for pad in range(ri + 1, MIN_ITEM_ROWS + 1):
+            r = HROW + pad
+            for ci in range(1, NCOL + 1):
+                cell = ws.cell(r, ci); cell.border = bdr
+                if ci in (6, 7, 8):
+                    cell.fill = cost_fill
+            ws.row_dimensions[r].height = 18
+        last = HROW + max(ri, MIN_ITEM_ROWS)
+        trow = last + 1
+        write_total(trow, "Total", first, last if ri else first - 1)
 
     # 섹션 헤더(네이비 바) 헬퍼.
     def section_bar(r, title):
@@ -1558,11 +1609,9 @@ def make_purchase_order_xlsx(
         put(HROW, ci, h, fill=navy, font=white_hdr, align=center).border = bdr
     ws.row_dimensions[HROW].height = 24
 
-    first = HROW + 1
-    for ri, it in enumerate(items, start=1):
-        r = HROW + ri
-        lead_remark = "\n".join(x for x in (str(it.get("lead_time", "") or "").strip(),
-                                            str(it.get("remark", "") or "").strip()) if x)
+    def write_item(r: int, it: Dict[str, Any], zebra: bool) -> None:
+        lead_remark = chr(10).join(x for x in (str(it.get("lead_time", "") or "").strip(),
+                                               str(it.get("remark", "") or "").strip()) if x)
         vals = [it["item_no"], it["part_no"], it["description"], it.get("maker", ""),
                 _num(it["qty"]), it.get("unit", ""), _num(it["unit_price"]),
                 _num(it["amount"]), lead_remark]
@@ -1570,7 +1619,7 @@ def make_purchase_order_xlsx(
             cell = put(r, ci, val)
             cell.border = bdr
             cell.font = normal
-            if ri % 2 == 0:
+            if zebra:
                 cell.fill = alt
             if ci in (5, 7, 8):                     # Qty · Unit Price · Amount
                 cell.alignment = right
@@ -1583,22 +1632,63 @@ def make_purchase_order_xlsx(
         dl = sum(max(1, -(-len(x) // 29)) for x in desc.split("\n")) if desc else 1
         rl = sum(max(1, -(-len(x) // 16)) for x in lead_remark.split("\n")) if lead_remark else 1
         ws.row_dimensions[r].height = 13 * max(dl, rl, 1) + 5
-    last = HROW + len(items)
+
+    def write_total_row(r: int, label: str, amount) -> None:
+        for ci in range(1, NCOL + 1):
+            put(r, ci, "", fill=lightblue).border = bdr
+        put(r, 3, label, fill=lightblue, font=boldsm, align=left)
+        put(r, 8, amount, fill=lightblue, font=boldsm, align=right, fmt=numfmt(total))
+        ws.row_dimensions[r].height = 16
+
+    def write_option_title(r: int, label: str) -> None:
+        merge(r, 1, r, NCOL)
+        put(r, 1, f" {label}", fill=gray, font=boldsm, align=left)
+        for ci in range(1, NCOL + 1):
+            ws.cell(r, ci).fill = gray
+            ws.cell(r, ci).border = bdr
+        ws.row_dimensions[r].height = 16
+
+    # 옵션(대안)이 있으면 옵션 제목행으로 끊고 옵션마다 Total 을 붙인다 — 택일하는 안이라
+    # 맨 아래 총계는 내지 않는다(services.kmaris_docs.item_row_plan 참고).
+    first = HROW + 1
+    plan = item_row_plan(data.get("items", []))
+    has_options = any(e["kind"] == "option" for e in plan)
+    r = HROW
+    zebra = 0
+    blk_first = first
+    for entry in plan:
+        if entry["kind"] == "total" and not has_options:
+            continue            # 옵션이 없으면 총계는 아래에서 한 번만 적는다
+        r += 1
+        if entry["kind"] == "option":
+            write_option_title(r, entry["label"])
+            blk_first = r + 1
+            continue
+        if entry["kind"] == "total":
+            write_total_row(r, entry["label"],
+                            f"=SUM(H{blk_first}:H{r - 1})" if r > blk_first else 0)
+            blk_first = r + 1
+            continue
+        zebra += 1
+        write_item(r, entry["item"], zebra % 2 == 0)
+    last = r
 
     # Total 행 — PDF 와 같이 Description 칸에 'Total', Amount 칸에 합계.
-    trow = last + 1
-    for ci in range(1, NCOL + 1):
-        put(trow, ci, "", fill=lightblue).border = bdr
-    put(trow, 3, "Total", fill=lightblue, font=boldsm, align=left)
-    put(trow, 8, (f"=SUM(H{first}:H{last})" if items else 0), fill=lightblue, font=boldsm,
-        align=right, fmt=numfmt(total))
-    ws.row_dimensions[trow].height = 16
+    # 옵션을 쓰면 옵션별 Total 로 끝난다(총계 없음).
+    trow = last
+    if not has_options:
+        trow = last + 1
+        write_total_row(trow, "Total", (f"=SUM(H{first}:H{last})" if last >= first else 0))
 
     # ── 합계 문장(우측 정렬) ────────────────────────────────────────────
-    r = trow + 1
-    merge(r, 1, r, NCOL)
-    put(r, 1, f"Total: {_money(total, currency)}", font=bold, align=right)
-    ws.row_dimensions[r].height = 18
+    # 옵션(택일하는 안)이 있으면 한 줄짜리 총계는 적지 않는다 — 어느 안의 금액인지
+    # 말할 수 없는 숫자라, 표의 옵션별 Total 로만 읽히게 둔다.
+    r = trow
+    if not has_options:
+        r = trow + 1
+        merge(r, 1, r, NCOL)
+        put(r, 1, f"Total: {_money(total, currency)}", font=bold, align=right)
+        ws.row_dimensions[r].height = 18
 
     def section_bar(row, title):
         merge(row, 1, row, NCOL)

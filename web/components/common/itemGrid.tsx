@@ -155,12 +155,14 @@ export function ItemGridStyle({ grid, spans }: { grid: ItemGridApi; spans?: stri
   const css = useMemo(() => {
     const rules: string[] = [];
     const colSel = (i: number) =>
-      `.${tableClass} thead th:not(.ig-group):nth-child(${i}),.${tableClass} tbody td:nth-child(${i}),.${tableClass} tfoot td:not(.ig-foot):nth-child(${i})`;
+      `.${tableClass} thead th:not(.ig-group):nth-child(${i}),`
+      + `.${tableClass} tbody td:not(.ig-foot):not(.ig-option-cell):nth-child(${i}),`
+      + `.${tableClass} tfoot td:not(.ig-foot):nth-child(${i})`;
     for (const c of cols) {
       const i = colIndex[c.key];
-      // thead 는 그룹 헤더행(.ig-group)을, tfoot 은 colspan 으로 직접 구성한 합계행(.ig-foot)을
-      // 제외한다 — 둘 다 컬럼당 1셀이 아니라 물리 nth-child 가 어긋나므로(자체적으로 숨김 컬럼을
-      // 건너뛰어 정렬을 유지한다).
+      // thead 는 그룹 헤더행(.ig-group)을, tbody·tfoot 은 colspan 으로 직접 구성한 행
+      // (합계행 .ig-foot · 옵션 제목행 .ig-option-cell)을 제외한다 — 컬럼당 1셀이 아니라
+      // 물리 nth-child 가 어긋나므로(자체적으로 숨김 컬럼을 건너뛰어 정렬을 유지한다).
       const sel = colSel(i);
       if (!c.fixed && layout.hidden.has(c.key)) {
         rules.push(`${sel}{display:none!important}`);

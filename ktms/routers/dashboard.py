@@ -35,6 +35,7 @@ from _core import (
     _first_rfq_iso,
     _fmt_received,
     _items_cost_total,
+    is_option_row,
     cheapest_vendor_quote,
     day_base_rate,
     _kst,
@@ -373,7 +374,10 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
             customer_po_nos_disp = "\n".join(_po_nos)
 
             # 품목 요약 — 카드/사이드바에 "(첫 품목) 외 N unit" 형태로 표기하기 위한 첫 품목명.
-            _row_items = (o.items if o else None) or r.items or []
+            # 옵션 구분행은 품목이 아니라 제목이라 세지 않는다(안 그러면 "외 N개"가 부풀고,
+            # 옵션 제목이 첫 품목 이름으로 찍힌다).
+            _row_items = [it for it in ((o.items if o else None) or r.items or [])
+                          if not is_option_row(it)]
             item_count = len(_row_items)
             _it0 = _row_items[0] if _row_items else {}
             first_item = (_it0.get("description") or _it0.get("part_no") or "").strip()
@@ -748,7 +752,7 @@ def dashboard():
                 order_row = {
                     "customer_vessel": _cv(o.customer_id, o.vessel_id),
                     "status": _enum_val(o.status),
-                    "item_count": len(o.items or []),
+                    "item_count": len([i for i in (o.items or []) if not is_option_row(i)]),
                     "date": o.date or "—",
                     "step": order_tracking_step(_enum_val(o.status))[0],
                 }
