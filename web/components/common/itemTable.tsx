@@ -74,6 +74,33 @@ export function useRowSelection(rowCount?: number): RowSelection {
   };
 }
 
+// ── 행을 "원하는 자리"에 끼우기 ────────────────────────────────────────────
+// 표에는 행을 끌어 옮기는 손잡이가 없다. 그래서 새 행은 늘 맨 끝에만 붙었고, 중간에
+// 한 줄을 넣으려면 끝에 만들어 값을 하나씩 밀어 옮겨야 했다. 체크박스로 고른 행을
+// 기준으로 끼우면 그 일이 없어진다 — 고르는 손짓은 이미 삭제·제외에 쓰던 것 그대로다.
+
+/** 고른 행 **바로 아래**에 새 행을 끼운다(여러 줄을 골랐으면 그 아래). 선택이 없으면 맨 끝.
+ *  고른 행의 인덱스는 그대로라 선택 상태를 털지 않아도 된다. */
+export function insertRowBelowSelection<T>(items: T[], sel: RowSelection, row: T): T[] {
+  const list = items || [];
+  const at = sel.count > 0 ? Math.max(...Array.from(sel.selected)) + 1 : list.length;
+  return [...list.slice(0, at), row, ...list.slice(at)];
+}
+
+/** 옵션 구분행을 끼운다 — 제목이 묶을 품목들보다 **위**에 서야 한다.
+ *   · 고른 행이 있으면 그 행 위(그 행부터 이 옵션에 들어간다)
+ *   · 선택이 없고 아직 옵션이 하나도 없으면 **맨 위** — 이미 적어 둔 품목이 통째로
+ *     첫 옵션 안에 들어간다. 맨 끝에 붙이면 품목은 이름 없는 덩어리로 남고 옵션만 빈 채
+ *     서 있게 된다(실제로 그렇게 찍혔다).
+ *   · 그 밖에는 맨 끝 — 두 번째 안을 새로 시작하는 자리다. */
+export function insertOptionRow<T>(items: T[], sel: RowSelection, row: T, hasAnyOption: boolean): T[] {
+  const list = items || [];
+  const at = sel.count > 0
+    ? Math.min(...Array.from(sel.selected))
+    : (list.length && !hasAnyOption ? 0 : list.length);
+  return [...list.slice(0, at), row, ...list.slice(at)];
+}
+
 // 선택된 행을 제거하고 선택 상태를 초기화. onChange 로 남은 행을 전달한다.
 // 빈 결과를 허용하려면 allowEmpty=true (마지막 1행까지 삭제 가능).
 export function deleteSelectedRows<T>(

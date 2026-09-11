@@ -99,6 +99,8 @@ import {
   ItemGridHint,
   ItemSelectCell,
   ItemSelectHeaderCell,
+  insertOptionRow,
+  insertRowBelowSelection,
   OptionTitleRow,
   itemRowClass,
   parseAmountInput,
@@ -109,7 +111,7 @@ import {
 } from "./common/itemTable";
 import FxRateControl, { FxMode } from "./common/FxRateControl";
 import { useItemGrid, ItemTh, ItemGridStyle, ItemColsButton, igSpan, type ItemCol } from "./common/itemGrid";
-import { OPTION_ROW_KIND, isOptionRow, countedItems, optionPlan, totalLabel } from "../lib/quoteOptions";
+import { OPTION_ROW_KIND, isOptionRow, countedItems, hasOptions, optionPlan, totalLabel } from "../lib/quoteOptions";
 import CategoryCell from "./common/CategoryCell";
 import { useMakerOptions } from "./common/MakerCell";
 import QuotationPreview from "./QuotationPreview";
@@ -1492,15 +1494,15 @@ function VendorRfqItemEditor({
     amount: null,
     remark: "",
   });
-  function add() {
-    onChange([...items, blank()]);
-  }
   const sel = useRowSelection(items.length);
-  // 옵션(대안) 구분행 — 고른 행이 있으면 그 위, 없으면 맨 아래(lib/quoteOptions.ts).
+  // 새 품목은 고른 행 바로 아래에 — 선택이 없으면 맨 끝(insertRowBelowSelection).
+  function add() {
+    onChange(insertRowBelowSelection(items, sel, blank()));
+  }
+  // 옵션(대안) 구분행 — 제목이 묶을 품목들보다 위에 선다(insertOptionRow).
   function addOption() {
     const row: RfqItem = { ...blank(), row_kind: OPTION_ROW_KIND, description: "", qty: 0, unit: "" };
-    const at = sel.count > 0 ? Math.min(...Array.from(sel.selected)) : items.length;
-    onChange([...items.slice(0, at), row, ...items.slice(at)]);
+    onChange(insertOptionRow(items, sel, row, hasOptions(items)));
     sel.clear();
   }
   const cols: ItemCol[] = [
@@ -1541,12 +1543,18 @@ function VendorRfqItemEditor({
           <button
             type="button"
             className="btn sm"
-            title="Insert an option divider — above the selected row, or at the end."
+            title="Insert an option divider — above the selected row, or at the top of the list."
             onClick={addOption}
           >
-            + Option
+            {sel.count > 0 ? "+ Option above" : "+ Option"}
           </button>
-          <button className="btn sm items-head-add" onClick={add}>+ Add</button>
+          <button
+            className="btn sm items-head-add"
+            title={sel.count > 0 ? "Insert a row below the selected row" : "Add a row at the end"}
+            onClick={add}
+          >
+            {sel.count > 0 ? "+ Add below" : "+ Add"}
+          </button>
         </div>
       </div>
       <div className="table-wrap compact item-box">
@@ -2811,15 +2819,15 @@ function VendorRfqAction({
   const blankItem = (): RfqItem => ({
     part_no: "", description: "", qty: 1, unit: "", unit_price: null, amount: null, remark: "",
   });
-  function addItem() {
-    setRfqItems((prev) => [...prev, blankItem()]);
-  }
   const itemSel = useRowSelection(rfqItems.length);
-  // 옵션(대안) 구분행 — 고른 행이 있으면 그 위, 없으면 맨 아래(lib/quoteOptions.ts).
+  // 새 품목은 고른 행 바로 아래에 — 선택이 없으면 맨 끝(insertRowBelowSelection).
+  function addItem() {
+    setRfqItems((prev) => insertRowBelowSelection(prev, itemSel, blankItem()));
+  }
+  // 옵션(대안) 구분행 — 제목이 묶을 품목들보다 위에 선다(insertOptionRow).
   function addItemOption() {
     const row: RfqItem = { ...blankItem(), row_kind: OPTION_ROW_KIND, description: "", qty: 0, unit: "" };
-    const at = itemSel.count > 0 ? Math.min(...Array.from(itemSel.selected)) : rfqItems.length;
-    setRfqItems((prev) => [...prev.slice(0, at), row, ...prev.slice(at)]);
+    setRfqItems((prev) => insertOptionRow(prev, itemSel, row, hasOptions(prev)));
     itemSel.clear();
   }
   const itemGridCols: ItemCol[] = [
@@ -3139,12 +3147,18 @@ function VendorRfqAction({
               <button
                 type="button"
                 className="btn sm"
-                title="Insert an option divider — above the selected row, or at the end."
+                title="Insert an option divider — above the selected row, or at the top of the list."
                 onClick={addItemOption}
               >
-                + Option
+                {itemSel.count > 0 ? "+ Option above" : "+ Option"}
               </button>
-              <button className="btn sm items-head-add" onClick={addItem}>+ Add</button>
+              <button
+                className="btn sm items-head-add"
+                title={itemSel.count > 0 ? "Insert a row below the selected row" : "Add a row at the end"}
+                onClick={addItem}
+              >
+                {itemSel.count > 0 ? "+ Add below" : "+ Add"}
+              </button>
             </div>
           </div>
           <div className="table-wrap compact item-box">
@@ -3613,9 +3627,6 @@ function VendorQuoteItemEditor({
     lead_time: "",
     remark: "",
   });
-  function add() {
-    onChange([...items, blank()]);
-  }
   function patch(i: number, key: keyof VendorQuoteItem, value: string) {
     onChange(
       items.map((it, idx) => {
@@ -3635,13 +3646,16 @@ function VendorQuoteItemEditor({
     0
   );
   const sel = useRowSelection(items.length);
-  // 옵션(대안) 구분행 — 고른 행이 있으면 그 위, 없으면 맨 아래(lib/quoteOptions.ts).
+  // 새 품목은 고른 행 바로 아래에 — 선택이 없으면 맨 끝(insertRowBelowSelection).
+  function add() {
+    onChange(insertRowBelowSelection(items, sel, blank()));
+  }
+  // 옵션(대안) 구분행 — 제목이 묶을 품목들보다 위에 선다(insertOptionRow).
   function addOption() {
     const row: VendorQuoteItem = {
       ...blank(), row_kind: OPTION_ROW_KIND, description: "", qty: 0, unit: "", cost_price: null,
     };
-    const at = sel.count > 0 ? Math.min(...Array.from(sel.selected)) : items.length;
-    onChange([...items.slice(0, at), row, ...items.slice(at)]);
+    onChange(insertOptionRow(items, sel, row, hasOptions(items)));
     sel.clear();
   }
   const cur = (currency || "USD").toUpperCase();
@@ -3689,12 +3703,18 @@ function VendorQuoteItemEditor({
           <button
             type="button"
             className="btn sm"
-            title="Insert an option divider — above the selected row, or at the end."
+            title="Insert an option divider — above the selected row, or at the top of the list."
             onClick={addOption}
           >
-            + Option
+            {sel.count > 0 ? "+ Option above" : "+ Option"}
           </button>
-          <button className="btn sm items-head-add" onClick={add}>+ Add</button>
+          <button
+            className="btn sm items-head-add"
+            title={sel.count > 0 ? "Insert a row below the selected row" : "Add a row at the end"}
+            onClick={add}
+          >
+            {sel.count > 0 ? "+ Add below" : "+ Add"}
+          </button>
         </div>
       </div>
       <div className="table-wrap item-box">
@@ -4354,15 +4374,12 @@ function CustomerQuoteItemEditor({
       category_id: null,
     };
   };
+  // 새 품목은 고른 행 바로 아래에 — 선택이 없으면 맨 끝(insertRowBelowSelection).
   function add() {
-    onChange([...items, blank()]);
+    onChange(insertRowBelowSelection(items, sel, blank()));
   }
   // 옵션(대안) 구분행 — 이 줄부터 다음 옵션 전까지가 한 안이고, 끝에 그 안의 Total 이 선다.
   // 제목만 있는 행이라 수량·금액은 두지 않는다(lib/quoteOptions.ts).
-  //
-  // 넣는 자리: 고른 행이 있으면 그 위, 없으면 맨 아래. 표에는 행을 옮기는 손잡이가 없어
-  // 늘 맨 아래에만 붙이면 이미 적어 둔 품목을 옵션으로 나눌 방법이 없다 — 나눌 자리의
-  // 첫 품목을 찍고 누르면 그 앞에 선이 그어진다.
   function addOption() {
     const row: CustomerQuoteItem = {
       ...blank(),
@@ -4375,8 +4392,7 @@ function CustomerQuoteItemEditor({
       unit_price: null,
       amount: null,
     };
-    const at = sel.count > 0 ? Math.min(...Array.from(sel.selected)) : items.length;
-    onChange([...items.slice(0, at), row, ...items.slice(at)]);
+    onChange(insertOptionRow(items, sel, row, hasOptions(items)));
     sel.clear();
   }
   // 붙여넣기·Ctrl+D 도 손으로 친 것과 같은 결과가 되도록 patch() 의 재계산 분기를 그대로 옮긴 것.
@@ -4616,12 +4632,24 @@ function CustomerQuoteItemEditor({
           <button
             type="button"
             className="btn sm"
-            title="Insert an option divider — above the selected row, or at the end. Items under it are totalled on their own."
+            title={
+              sel.count > 0
+                ? "Insert an option divider above the selected row — that row and the ones under it become this option."
+                : hasOptions(items)
+                  ? "Start another option at the end of the list."
+                  : "Put an option divider at the top — the items below become Option 1."
+            }
             onClick={addOption}
           >
-            + Option
+            {sel.count > 0 ? "+ Option above" : "+ Option"}
           </button>
-          <button className="btn sm items-head-add" onClick={add}>+ Add</button>
+          <button
+            className="btn sm items-head-add"
+            title={sel.count > 0 ? "Insert a row below the selected row" : "Add a row at the end"}
+            onClick={add}
+          >
+            {sel.count > 0 ? "+ Add below" : "+ Add"}
+          </button>
         </div>
       </div>
       <div className="table-wrap item-box">
@@ -4659,8 +4687,11 @@ function CustomerQuoteItemEditor({
           <tbody>
             {plan.map((entry) => {
               // 옵션 소계행 — 그 옵션의 품목만 세어 매입·마진·매출을 합계행과 같은 칸에 세운다.
+              // 첫 옵션 앞에 놓인(=아직 어느 안에도 속하지 않은) 품목 덩어리는 소계를 달지
+              // 않는다 — 표 맨 아래 합계행이 세는 것이 바로 그 덩어리라, 같은 숫자가 한
+              // 화면에 두 번 찍힌다.
               if (entry.kind === "total")
-                return (
+                return entry.block.no === null ? null : (
                   <tr className="ig-subtotal-row" key={`t${entry.block.headerIndex}`}>
                     {summaryCells(entry.label, sumsOf(entry.block.items), false, "ig-foot ig-subtotal")}
                   </tr>

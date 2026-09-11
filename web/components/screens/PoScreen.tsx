@@ -55,13 +55,15 @@ import {
   ItemGridHint,
   ItemSelectCell,
   ItemSelectHeaderCell,
+  insertOptionRow,
+  insertRowBelowSelection,
   OptionTitleRow,
   itemRowClass,
   parseAmountInput,
   StageTotal,
   useRowSelection,
 } from "@/components/common/itemTable";
-import { OPTION_ROW_KIND, isOptionRow, countedItems, optionPlan, totalLabel } from "@/lib/quoteOptions";
+import { OPTION_ROW_KIND, isOptionRow, countedItems, hasOptions, optionPlan, totalLabel } from "@/lib/quoteOptions";
 import { useItemGrid, ItemTh, ItemGridStyle, ItemColsButton, type ItemCol } from "@/components/common/itemGrid";
 import CategoryCell from "@/components/common/CategoryCell";
 import { tr } from "@/lib/labels";
@@ -2189,14 +2191,17 @@ function ItemEditor({
   const total = countedItems(includedRows(items)).reduce((sum, it) => sum + Number(it.amount || 0), 0);
   const seqNos = includedSeqNos(items);
   const sel = useRowSelection(items.length);
-  // 옵션(대안) 구분행 — 고른 행이 있으면 그 위, 없으면 맨 아래.
+  // 새 품목은 고른 행 바로 아래에 — 선택이 없으면 맨 끝(insertRowBelowSelection).
+  function addRow() {
+    onChange(insertRowBelowSelection(items, sel, blankItem()));
+  }
+  // 옵션(대안) 구분행 — 제목이 묶을 품목들보다 위에 선다(insertOptionRow).
   function addOption() {
     const row: PoWorkItem = {
       ...blankItem(), row_kind: OPTION_ROW_KIND, description: "", qty: 0, unit: "",
       unit_price: null, amount: null,
     };
-    const at = sel.count > 0 ? Math.min(...Array.from(sel.selected)) : items.length;
-    onChange([...items.slice(0, at), row, ...items.slice(at)]);
+    onChange(insertOptionRow(items, sel, row, hasOptions(items)));
     sel.clear();
   }
   const cur = (currency || "USD").toUpperCase();
@@ -2247,12 +2252,18 @@ function ItemEditor({
           <button
             type="button"
             className="btn sm"
-            title="Insert an option divider — above the selected row, or at the end."
+            title="Insert an option divider — above the selected row, or at the top of the list."
             onClick={addOption}
           >
-            + Option
+            {sel.count > 0 ? "+ Option above" : "+ Option"}
           </button>
-          <button className="btn sm items-head-add" onClick={() => onChange([...items, blankItem()])}>+ Add</button>
+          <button
+            className="btn sm items-head-add"
+            title={sel.count > 0 ? "Insert a row below the selected row" : "Add a row at the end"}
+            onClick={addRow}
+          >
+            {sel.count > 0 ? "+ Add below" : "+ Add"}
+          </button>
         </div>
       </div>
       <div className="table-wrap item-box">
