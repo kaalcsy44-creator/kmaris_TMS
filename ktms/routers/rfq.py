@@ -49,6 +49,7 @@ from _core import (
     _ocr_image_media_type,
     _pipeline_stage,
     _project_no_map,
+    _quotation_total,
     _rfq_no_disp,
     _status_label,
     _total_amount,
@@ -138,7 +139,7 @@ def rfq_overview(customer_id: int | None = None, work_type: str | None = None,
                 _cust_usd_sum = 0.0
                 for _q in qtns:
                     _qc = (getattr(_q, "currency", None) or "USD").upper()
-                    _qt = _total_amount(_q.items or [])
+                    _qt = _quotation_total(_q.items or [], getattr(_q, "discount_pct", 0) or 0)
                     _cust_usd_sum += (_qt / USD_KRW_RATE) if _qc == "KRW" else _qt
                 customer_amount = (
                     _dual_money(_cust_usd_sum * USD_KRW_RATE, "KRW")
@@ -229,7 +230,7 @@ def rfq_detail(rfq_id: int):
         if qtn:
             qtn_view = {
                 "qtn_no": qtn.qtn_no,
-                "amount": _dual_money(_total_amount(qtn.items or []), qtn.currency),
+                "amount": _dual_money(_quotation_total(qtn.items or [], getattr(qtn, "discount_pct", 0) or 0), qtn.currency),
                 "status": _enum_val(qtn.status),
                 "at": _kst(qtn.created_at),
             }

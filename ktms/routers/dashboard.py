@@ -125,7 +125,7 @@ def _vendor_quote_lines(vqs, qtns, vendor_of) -> list[dict]:
             s_usd = 0.0
             for q in qs:
                 qc = (getattr(q, "currency", None) or "USD").upper()
-                t = _total_amount(q.items or [])
+                t = _quotation_total(q.items or [], getattr(q, "discount_pct", 0) or 0)
                 s_usd += (t / USD_KRW_RATE) if qc == "KRW" else t
             m_usd = s_usd - usd
             line["sales"] = _dual_money(s_usd * USD_KRW_RATE if s_cur == "KRW" else s_usd, s_cur)
@@ -254,11 +254,13 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
                 # 매출(견적) 금액은 발행한 모든 고객 견적을 합산한다(견적이 여러 건이면
                 # 각 견적이 서로 다른 품목을 담당 → 전체 매출). 통화 혼재 시 USD 환산 합산
                 # 후 대표(최신) 견적 통화로 표기.
+                # 합산 단위는 품목 합이 아니라 할인까지 끝난 최종 금액(_quotation_total)이다
+                # — 고객에게 나간 값이 그것이고, 목록의 마진율도 그 값으로 나와야 한다.
                 _c_disp = (qtn.currency or "USD").upper()
                 _customer_usd_sum = 0.0
                 for _q in qtns:
                     _qc = (getattr(_q, "currency", None) or "USD").upper()
-                    _qt = _total_amount(_q.items or [])
+                    _qt = _quotation_total(_q.items or [], getattr(_q, "discount_pct", 0) or 0)
                     _customer_usd_sum += (_qt / USD_KRW_RATE) if _qc == "KRW" else _qt
                 customer_usd = _customer_usd_sum
                 customer_amount = (
@@ -1178,7 +1180,7 @@ def statistics(months: int = 12):
             cust_usd = 0.0
             for q in qtns_by_rfq.get(r.id, []):
                 qc = (getattr(q, "currency", None) or "USD").upper()
-                qt = _total_amount(q.items or [])
+                qt = _quotation_total(q.items or [], getattr(q, "discount_pct", 0) or 0)
                 cust_usd += (qt / USD_KRW_RATE) if qc == "KRW" else qt
             # 벤더 견적 합(USD)
             vend_usd = 0.0

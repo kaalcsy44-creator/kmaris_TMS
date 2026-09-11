@@ -50,6 +50,7 @@ from _core import (
     _pipeline_stage,
     _project_no_for_order,
     _project_no_map,
+    _quotation_total,
     _rfq_for_order,
     _rfq_no_disp,
     _status_label,
@@ -319,7 +320,7 @@ def po_work_options():
                 "vessel": vessel_names.get(q.vessel_id, "") if q.vessel_id else "",
                 "status": _enum_val(q.status),
                 "currency": q.currency or "USD",
-                "amount": round(_total_amount(q.items or []), 2),
+                "amount": round(_quotation_total(q.items or [], getattr(q, "discount_pct", 0) or 0), 2),
                 # 이 견적이 링크한 벤더 견적번호(미링크면 ""). 개요에서 매입측 표기에 쓴다.
                 "vendor_quote_no": vq_no_by_id.get(_vq_id, "") if _vq_id else "",
                 "items": [_item_view(it) for it in (q.items or [])],
