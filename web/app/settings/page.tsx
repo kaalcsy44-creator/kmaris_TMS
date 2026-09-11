@@ -1054,6 +1054,12 @@ function MakersTab() {
     ) : null}
     <MasterSection<SettingsMaker>
       title="Maker"
+      // 고객·거래선 제목 옆에는 "59 vendors · 74 contacts" 가 서 있는데 제조사만
+      // 비어 있었다 — 묶음(회사·담당자)이 없는 표라 그 셈을 다는 자리가 없었다.
+      countText={(shown, total) => {
+        const unit = `maker${total === 1 ? "" : "s"}`;
+        return shown === total ? `${total} ${unit}` : `${shown} of ${total} ${unit}`;
+      }}
       onRowOpen={(row, edit) => setInfo({ row, edit })}
       empty={EMPTY_MAKER}
       headCols={makerHeadCols(catNames)}
@@ -4773,6 +4779,7 @@ function MasterSection<T extends { id: number }>({
   tableClass = "",
   reloadKey = 0,
   headCols,
+  countText,
   printCols,
   importKind,
   scrollBody = false,
@@ -4855,6 +4862,11 @@ function MasterSection<T extends { id: number }>({
   // 남는다. 서른다섯 줄짜리 목록에서 아래로 내려가면 열 이름이 사라져, 어느 칸이
   // 무엇인지 확인하려고 매번 맨 위로 되올라가야 했다.
   scrollBody?: boolean;
+  /** 제목 옆에 적는 셈 — 묶음이 없는 표(제조사·선박·품목)가 쓴다. 묶는 표는 회사·담당자
+   *  두 수를 group.summary 가 이미 적고 있다. 좁혀 보는 중이면(검색·열 필터) 보이는
+   *  수와 전체 수가 갈리므로 둘 다 받는다 — "12 of 59" 를 적을 수 있어야 지금 보는 것이
+   *  명부 전체가 아니라는 사실이 드러난다. */
+  countText?: (shown: number, total: number) => string;
   // 엑셀 업로드. 주면 도구줄에 ⬆ Import 가 선다(마스터 입력·수정 권한이 있을 때만) —
   // 파일 한 장이 명부 전체를 건드릴 수 있어, 만드는 권한과 고치는 권한을 둘 다 본다.
   importKind?: PartnerImportKind;
@@ -5406,6 +5418,8 @@ They will be removed from ${title}. ` +
         <h3 className="form-title">{title}</h3>
         {group ? (
           <span className="ms-count">{group.summary?.(groups.length, filtered.length)}</span>
+        ) : countText ? (
+          <span className="ms-count">{countText(filtered.length, rows.length)}</span>
         ) : null}
         <input
           className="ms-search"
